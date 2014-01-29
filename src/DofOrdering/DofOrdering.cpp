@@ -150,9 +150,13 @@ int DofOrdering::getDofIndex(int varID, int basisDofOrdinal, int sideIndex, int 
   map< pair<int,int>, vector<int> >::iterator entryIt = indices.find(key);
   if ( entryIt != indices.end() ) {
     int dofIndex = ((*entryIt).second)[basisDofOrdinal];
-    TEUCHOS_TEST_FOR_EXCEPTION( (dofIndex < 0) || (dofIndex >= _nextIndex), std::invalid_argument, "dofIndex out of bounds.");
+    if ((dofIndex < 0) || (dofIndex >= _nextIndex)) {
+      cout << "dofIndex out of bounds.\n";
+      TEUCHOS_TEST_FOR_EXCEPTION( (dofIndex < 0) || (dofIndex >= _nextIndex), std::invalid_argument, "dofIndex out of bounds.");
+    }
     return dofIndex;
   } else {
+    cout << "No entry found for dofIndex\n";
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "No entry found for DofIndex.");
     return -1;
   }

@@ -40,9 +40,8 @@ class MeshTopology {
   vector< map< set<unsigned>, unsigned > > _knownEntities; // map keys are sets of vertices, values are entity indices in _entities[d]
   vector< map< unsigned, vector<unsigned> > > _canonicalEntityOrdering; // since we'll have one of these for each entity, could replace map with a vector
   vector< map< unsigned, set< pair<unsigned, unsigned> > > > _activeCellsForEntities; // set entries are (cellIndex, entityIndexInCell) (entityIndexInCell aka subcord)--I'm vascillating on whether this should contain entries for active ancestral cells.  Today, I think it should not.  I think we should have another set of activeEntities.  Things in that list either themselves have active cells or an ancestor that has an active cell.  So if your parent is inactive and you don't have any active cells of your own, then you know you can deactivate.
-  vector< set< unsigned > > _entitiesWithActiveAncestors; // see note above -- this includes the active entities themselves
-  vector< map< unsigned, unsigned > > _constrainingEntities; // map from broken entity to the whole (constraining) one.  May be "virtual" in the sense that there are no active cells that have the constraining entity as a subcell topology.
-  vector< map< unsigned, set< unsigned > > > _constrainedEntities; // map from constraining entity to all broken ones constrained by it.
+  vector< map<unsigned, set<unsigned> > > _activeSidesForEntities; // map keys are entity indices of dimension d (the outer vector index); map values are entities of dimension _spaceDim-1 belonging to active cells that contain the entity indicated by the map key.
+  set<unsigned> _boundarySides; // entities of dimension _spaceDim-1 on the mesh boundary
   vector< map< unsigned, vector< pair<unsigned, unsigned> > > > _parentEntities; // map from entity to its possible parents.  Not every entity has a parent.  We support entities having multiple parents.  Such things will be useful in the context of anisotropic refinements.  The pair entries here are (parentEntityIndex, refinementIndex), where the refinementIndex is the index into the _childEntities[d][parentEntityIndex] vector.
   vector< map< unsigned, vector< pair< RefinementPatternPtr, vector<unsigned> > > > > _childEntities; // map from parent to child entities, together with the RefinementPattern to get from one to the other.
   vector< map< unsigned, unsigned > > _entityCellTopologyKeys;
@@ -58,27 +57,27 @@ class MeshTopology {
   
   map< unsigned, shards::CellTopology > _knownTopologies; // key -> topo.  Might want to move this to a CellTopoFactory, but it is fairly simple
   
-  set<unsigned> activeDescendants(unsigned d, unsigned entityIndex);
-  set<unsigned> activeDescendantsNotInSet(unsigned d, unsigned entityIndex, const set<unsigned> &excludedSet);
-  unsigned eldestActiveAncestor(unsigned d, unsigned entityIndex);
-  unsigned addCell(CellTopoPtr cellTopo, const vector<unsigned> &cellVertices);
+//  set<unsigned> activeDescendants(unsigned d, unsigned entityIndex);
+//  set<unsigned> activeDescendantsNotInSet(unsigned d, unsigned entityIndex, const set<unsigned> &excludedSet);
+  unsigned addCell(CellTopoPtr cellTopo, const vector<unsigned> &cellVertices, unsigned parentCellIndex = -1);
   void addEdgeCurve(pair<unsigned,unsigned> edge, ParametricCurvePtr curve);
   unsigned addEntity(const shards::CellTopology &entityTopo, const vector<unsigned> &entityVertices, unsigned &entityPermutation); // returns the entityIndex
   void deactivateCell(CellPtr cell);
   set<unsigned> descendants(unsigned d, unsigned entityIndex);
-  pair< unsigned, set<unsigned> > determineEntityConstraints(unsigned d, unsigned entityIndex);
+//  pair< unsigned, set<unsigned> > determineEntityConstraints(unsigned d, unsigned entityIndex);
   void addChildren(CellPtr cell, const vector< CellTopoPtr > &childTopos, const vector< vector<unsigned> > &childVertices);
+  vector< pair<unsigned,unsigned> > getConstrainingSideAncestry(unsigned int sideEntityIndex);   // pair: first is the sideEntityIndex of the ancestor; second is the refinementIndex of the refinement to get from parent to child (see _parentEntities and _childEntities)
   unsigned getVertexIndexAdding(const vector<double> &vertex, double tol);
   vector<unsigned> getVertexIndices(const FieldContainer<double> &vertices);
   vector<unsigned> getVertexIndices(const vector< vector<double> > &vertices);
   map<unsigned, unsigned> getVertexIndicesMap(const FieldContainer<double> &vertices);
-  bool entityHasActiveParent(unsigned spaceDim, unsigned entityIndex);
-  bool entityIsActive(unsigned spaceDim, unsigned entityIndex);
+  set<unsigned> getEntitiesForSide(unsigned sideEntityIndex, unsigned d);
+  bool entityIsAncestor(unsigned d, unsigned ancestor, unsigned descendent);
   void init(unsigned spaceDim);
+  unsigned maxConstraint(unsigned d, unsigned entityIndex1, unsigned entityIndex2);
   void printVertex(unsigned vertexIndex);
   void printVertices(set<unsigned> vertexIndices);
   void refineCellEntities(CellPtr cell, RefinementPatternPtr refPattern); // ensures that the appropriate child entities exist, and parental relationships are recorded in _parentEntities
-  void updateConstraintsForCells(const set<unsigned> &cellIndices);
 public:
   MeshTopology(unsigned spaceDim);
   MeshTopology(MeshGeometryPtr meshGeometry);
@@ -87,14 +86,15 @@ public:
   unsigned getActiveCellCount(unsigned d, unsigned entityIndex);
   const set< pair<unsigned,unsigned> > &getActiveCellIndices(unsigned d, unsigned entityIndex); // first entry in pair is the cellIndex, the second is the index of the entity in that cell (the subcord).
   CellPtr getCell(unsigned cellIndex);
-  vector< pair< unsigned, unsigned > > getCellNeighbors(unsigned cellIndex, unsigned sideIndex); // second entry in return is the sideIndex in neighbor (note that in context of h-refinements, one or both of the sides may be broken)
-  pair< CellPtr, unsigned > getCellAncestralNeighbor(unsigned cellIndex, unsigned sideIndex);
+//  vector< pair< unsigned, unsigned > > getCellNeighbors(unsigned cellIndex, unsigned sideIndex); // second entry in return is the sideIndex in neighbor (note that in context of h-refinements, one or both of the sides may be broken)
+//  pair< CellPtr, unsigned > getCellAncestralNeighbor(unsigned cellIndex, unsigned sideIndex);
   bool cellHasCurvedEdges(unsigned cellIndex);
   vector<unsigned> getChildEntities(unsigned d, unsigned entityIndex);
   set<unsigned> getChildEntitiesSet(unsigned d, unsigned entityIndex);
   unsigned getConstrainingEntityIndex(unsigned d, unsigned entityIndex);
   unsigned getEntityCount(unsigned d);
   unsigned getEntityParent(unsigned d, unsigned entityIndex, unsigned parentOrdinal=0);
+  unsigned getEntityParentForSide(unsigned d, unsigned entityIndex, unsigned parentSideEntityIndex);   // returns the entity index for the parent (which might be the entity itself) of entity (d,entityIndex) that is a subcell of side parentSideEntityIndex
   const vector<unsigned> &getEntityVertexIndices(unsigned d, unsigned entityIndex);
   unsigned getFaceEdgeIndex(unsigned faceIndex, unsigned edgeOrdinalInFace);
   unsigned getSpaceDim();

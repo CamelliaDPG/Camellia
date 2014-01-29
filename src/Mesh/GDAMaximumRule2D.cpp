@@ -135,6 +135,15 @@ void GDAMaximumRule2D::addDofPairing(int cellID1, int dofIndex1, int cellID2, in
   }
 }
 
+void GDAMaximumRule2D::assignInitialElementType( unsigned cellID ) {
+  int testDegree = _initialH1OrderTrial + _testOrderEnhancement;
+  CellPtr cell = _meshTopology->getCell(cellID);
+  DofOrderingPtr trialOrdering = _dofOrderingFactory->trialOrdering(_initialH1OrderTrial, *cell->topology());
+  DofOrderingPtr testOrdering = _dofOrderingFactory->testOrdering(testDegree, *cell->topology());
+  ElementTypePtr elemType = _elementTypeFactory.getElementType(trialOrdering,testOrdering,cell->topology());
+  _elementTypeForCell[cellID] = elemType;
+}
+
 void GDAMaximumRule2D::buildLocalToGlobalMap() {
   _localToGlobalMap.clear();
   set<unsigned>::iterator cellIDIt;
@@ -360,11 +369,14 @@ void GDAMaximumRule2D::determineDofPairings() {
         int numSides = cell->topology()->getSideCount();
         for (int sideIndex=0; sideIndex<numSides; sideIndex++) {
           int myNumDofs = elemTypePtr->trialOrderPtr->getBasisCardinality(trialID,sideIndex);
-          pair<CellPtr, unsigned> neighborInfo = _meshTopology->getCellAncestralNeighbor(cellID, sideIndex);
-          CellPtr neighbor = neighborInfo.first;
-          int mySideIndexInNeighbor = neighborInfo.second;
+          pair<unsigned, unsigned> neighborInfo = cell->getNeighbor(sideIndex);
+          unsigned neighborCellID = neighborInfo.first;
+          unsigned mySideIndexInNeighbor = neighborInfo.second;
           
-          if (neighbor.get() != NULL) {
+          bool neighborIsPeer = (neighborCellID != -1) && (_meshTopology->getCell(neighborCellID)->getNeighbor(mySideIndexInNeighbor).first==cellID);
+          
+          if (neighborIsPeer) {
+            CellPtr neighbor = _meshTopology->getCell(neighborCellID);
             // check that the bases agree in #dofs:
             bool hasMultiBasis = neighbor->isParent();
             
@@ -372,6 +384,7 @@ void GDAMaximumRule2D::determineDofPairings() {
             if ( ! neighbor->isParent() ) {
               int neighborNumDofs = _elementTypeForCell[neighborCellID]->trialOrderPtr->getBasisCardinality(trialID,mySideIndexInNeighbor);
               if ( !hasMultiBasis && (myNumDofs != neighborNumDofs) ) { // neither a multi-basis, and we differ: a problem
+                cout << "Element and neighbor don't agree on basis along shared side.\n";
                 TEUCHOS_TEST_FOR_EXCEPTION(myNumDofs != neighborNumDofs,
                                            std::invalid_argument,
                                            "Element and neighbor don't agree on basis along shared side.");
@@ -502,17 +515,68 @@ void GDAMaximumRule2D::didChangePartitionPolicy() {
   rebuildLookups();
 }
 
-void GDAMaximumRule2D::didHRefine(set<int> &parentCellIDs) {
-  rebuildLookups();
-}
-
-void GDAMaximumRule2D::didPRefine(set<int> &cellIDs, int deltaP) {
+void GDAMaximumRule2D::didHRefine(const set<int> &parentCellIDs) {
+  for (set<int>::iterator parentCellIt = parentCellIDs.begin(); parentCellIt != parentCellIDs.end(); parentCellIt++) {
+    unsigned parentCellID = *parentCellIt;
+    CellPtr parent = _meshTopology->getCell(parentCellID);
+    vector< CellPtr > children = parent->children();
+    for (vector< CellPtr >::iterator childIt = children.begin(); childIt != children.end(); childIt++) {
+      CellPtr child = *childIt;
+      assignInitialElementType(child->cellIndex());
+    }
+    for (vector< CellPtr >::iterator childIt = children.begin(); childIt != children.end(); childIt++) {
+      CellPtr child = *childIt;
+      int sideCount = child->topology()->getSideCount();
+      _cellSideParitiesForCellID[child->cellIndex()] = vector<int>(sideCount); // 
+      for (int sideIndex=0; sideIndex<sideCount; sideIndex++) {
+        matchNeighbor(child->cellIndex(), sideIndex); // we'll do this more often than necessary.  Could be smarter about it.
+      }
+    }
+//    int sideCount = parent->topology()->getSideCount();
+//    for (int sideIndex=0; sideIndex<sideCount; sideIndex++) {
+//      pair<unsigned, unsigned> neighborInfo = parent->getNeighbor(sideIndex);
+//      matchNeighbor(neighborInfo.first, neighborInfo.second);
+//    }
+  }
   
-  rebuildLookups();
+//  rebuildLookups();
 }
 
-void GDAMaximumRule2D::didHUnrefine(set<int> &parentCellIDs) {
-  rebuildLookups();
+void GDAMaximumRule2D::didPRefine(const set<int> &cellIDs, int deltaP) {
+  for (set<int>::iterator cellIt = cellIDs.begin(); cellIt != cellIDs.end(); cellIt++) {
+    unsigned cellID = *cellIt;
+    ElementTypePtr elemType = _elementTypeForCell[cellID];
+    Teuchos::RCP<DofOrdering> newTrialOrdering = _dofOrderingFactory->pRefineTrial(elemType->trialOrderPtr,
+                                                                                   *elemType->cellTopoPtr,deltaP);
+    Teuchos::RCP<DofOrdering> newTestOrdering = _dofOrderingFactory->pRefineTest(elemType->testOrderPtr,
+                                                                                 *elemType->cellTopoPtr,deltaP);
+    ElementTypePtr newType = _elementTypeFactory.getElementType(newTrialOrdering, newTestOrdering, elemType->cellTopoPtr);
+    
+    _elementTypeForCell[cellID] = newType;
+    
+    CellPtr cell = _meshTopology->getCell(cellID);
+    
+    int sideCount = cell->topology()->getSideCount();
+    for (int sideIndex=0; sideIndex<sideCount; sideIndex++) {
+      matchNeighbor(cellID, sideIndex);
+    }
+  }
+  
+//  rebuildLookups();
+}
+
+void GDAMaximumRule2D::didHUnrefine(const set<int> &parentCellIDs) {
+  for (set<int>::iterator parentCellIt = parentCellIDs.begin(); parentCellIt != parentCellIDs.end(); parentCellIt++) {
+    unsigned parentCellID = *parentCellIt;
+    CellPtr parent = _meshTopology->getCell(parentCellID);
+    
+    int sideCount = parent->topology()->getSideCount();
+    for (int sideIndex=0; sideIndex<sideCount; sideIndex++) {
+      matchNeighbor(parentCellID, sideIndex);
+    }
+  }
+  
+//  rebuildLookups();
 }
 
 ElementTypePtr GDAMaximumRule2D::elementType(unsigned cellID) {
@@ -546,16 +610,43 @@ void GDAMaximumRule2D::matchNeighbor(unsigned cellID, int sideIndex) {
   CellPtr cell = _meshTopology->getCell(cellID);
   const shards::CellTopology cellTopo = *cell->topology();
   
-  pair< CellPtr, unsigned > neighborRecord = _meshTopology->getCellAncestralNeighbor(cellID, sideIndex);
-  CellPtr neighbor = neighborRecord.first;
+  pair< unsigned, unsigned > neighborRecord = cell->getNeighbor(sideIndex);
+  unsigned neighborCellID = neighborRecord.first;
   unsigned sideIndexInNeighbor = neighborRecord.second;
   
-  if (neighbor.get() == NULL) {
-    // no neighbors (boundary): return
+  if (neighborCellID == -1) {
+    // no neighbors (boundary): set parity and return
+    _cellSideParitiesForCellID[cellID][sideIndex] = 1;
     return;
   }
   
-  unsigned neighborCellID = neighbor->cellIndex();
+  CellPtr neighbor = _meshTopology->getCell(neighborCellID);
+  
+  if (_cellSideParitiesForCellID.find(cellID) == _cellSideParitiesForCellID.end()) {
+    unsigned sideCount = cell->topology()->getSideCount();
+    _cellSideParitiesForCellID[cellID] = vector<int>(sideCount);
+  }
+  if (_cellSideParitiesForCellID.find(neighborCellID) == _cellSideParitiesForCellID.end()) {
+    unsigned neighborSideCount = neighbor->topology()->getSideCount();
+    _cellSideParitiesForCellID[neighborCellID] = vector<int>(neighborSideCount);
+  }
+  if ((_cellSideParitiesForCellID[cellID][sideIndex] == 0) && (_cellSideParitiesForCellID[neighborCellID][sideIndexInNeighbor] == 0)) {
+    // then lower cellID gets positive parity
+    _cellSideParitiesForCellID[cellID][sideIndex] = (cellID < neighborCellID) ? 1 : -1;
+    _cellSideParitiesForCellID[neighborCellID][sideIndex] = (cellID < neighborCellID) ? -1 : 1;
+  } else if (_cellSideParitiesForCellID[cellID][sideIndex] == 0) {
+    _cellSideParitiesForCellID[cellID][sideIndex] = -_cellSideParitiesForCellID[neighborCellID][sideIndexInNeighbor];
+  } else {
+    _cellSideParitiesForCellID[neighborCellID][sideIndexInNeighbor] = -_cellSideParitiesForCellID[cellID][sideIndex];
+  }
+  
+  // check whether neighbor and cell are peers: this happens if the neighbor relationship commutes:
+  bool neighborIsPeer = neighbor->getNeighbor(sideIndexInNeighbor).first == cellID;
+  if ( !neighborIsPeer ) {
+    // TODO: figure out if this is correct: (I believe this will always result in a peer relationship, but if not, there'd be danger of an infinite recursion.)
+    matchNeighbor(neighborCellID, sideIndexInNeighbor);
+    return;
+  }
   
   // h-refinement handling:
   bool neighborIsBroken = (neighbor->isParent() && (neighbor->childrenForSide(sideIndexInNeighbor).size() > 1));
@@ -582,9 +673,9 @@ void GDAMaximumRule2D::matchNeighbor(unsigned cellID, int sideIndex) {
       // match all the children -- we assume RefinementPatterns are compatible (e.g. divisions always by 1/2s)
       vector< pair<unsigned,unsigned> > childrenForSide = cell->childrenForSide(sideIndex);
       for (int childIndexInSide=0; childIndexInSide < childrenForSide.size(); childIndexInSide++) {
-        int childIndex = childrenForSide[childIndexInSide].first;
+        int childCellIndex = childrenForSide[childIndexInSide].first;
         int childSideIndex = childrenForSide[childIndexInSide].second;
-        matchNeighbor(cell->children()[childIndex]->cellIndex(),childSideIndex);
+        matchNeighbor(childCellIndex,childSideIndex);
       }
       // all our children matched => we're done:
       return;
@@ -694,7 +785,7 @@ map< int, BasisPtr > GDAMaximumRule2D::multiBasisUpgradeMap(CellPtr parent, unsi
   for ( entryIt=childrenForSide.begin(); entryIt != childrenForSide.end(); entryIt++) {
     int childCellIndex = (*entryIt).first;
     int childSideIndex = (*entryIt).second;
-    CellPtr childCell = parent->children()[childCellIndex];
+    CellPtr childCell = _meshTopology->getCell(childCellIndex);
     
     while (childCell->isParent() && (childCell->childrenForSide(childSideIndex).size() == 1) ) {
       pair<unsigned, unsigned> childEntry = childCell->childrenForSide(childSideIndex)[0];

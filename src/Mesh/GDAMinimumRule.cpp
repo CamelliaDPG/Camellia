@@ -20,16 +20,16 @@ void GDAMinimumRule::didChangePartitionPolicy() {
 //  rebuildLookups();
 }
 
-void GDAMinimumRule::didHRefine(set<int> &parentCellIDs) {
+void GDAMinimumRule::didHRefine(const set<int> &parentCellIDs) {
 //  rebuildLookups();
 }
 
-void GDAMinimumRule::didPRefine(set<int> &cellIDs, int deltaP) {
+void GDAMinimumRule::didPRefine(const set<int> &cellIDs, int deltaP) {
   
 //  rebuildLookups();
 }
 
-void GDAMinimumRule::didHUnrefine(set<int> &parentCellIDs) {
+void GDAMinimumRule::didHUnrefine(const set<int> &parentCellIDs) {
 //  rebuildLookups();
 }
 
@@ -48,4 +48,8 @@ unsigned GDAMinimumRule::localDofCount() {
   // TODO: implement this
   cout << "WARNING: localDofCount() unimplemented.\n";
   return 0;
+}
+
+void GDAMinimumRule::rebuildLookups() {
+  
 }

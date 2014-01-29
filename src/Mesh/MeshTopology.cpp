@@ -20,9 +20,7 @@ void MeshTopology::init(unsigned spaceDim) {
   _knownEntities = vector< map< set<unsigned>, unsigned > >(_spaceDim); // map keys are sets of vertices, values are entity indices in _entities[d]
   _canonicalEntityOrdering = vector< map< unsigned, vector<unsigned> > >(_spaceDim);
   _activeCellsForEntities = vector< map< unsigned, set< pair<unsigned, unsigned> > > >(_spaceDim); // set entries are (cellIndex, entityIndexInCell) (entityIndexInCell aka subcord)
-  _entitiesWithActiveAncestors = vector< set<unsigned > >(_spaceDim);
-  _constrainingEntities = vector< map< unsigned, unsigned > >(_spaceDim); // map from broken entity to the whole (constraining) one.
-  _constrainedEntities = vector< map< unsigned, set< unsigned > > >(_spaceDim); // map from constraining entity to all broken ones constrained by it.
+  _activeSidesForEntities = vector< map< unsigned, set< unsigned > > >(_spaceDim);
   _parentEntities = vector< map< unsigned, vector< pair<unsigned, unsigned> > > >(_spaceDim); // map to possible parents
   _childEntities = vector< map< unsigned, vector< pair<RefinementPatternPtr, vector<unsigned> > > > >(_spaceDim);
   _entityCellTopologyKeys = vector< map< unsigned, unsigned > >(_spaceDim);
@@ -62,58 +60,27 @@ const set<unsigned> & MeshTopology::getActiveCellIndices() {
   return _activeCells;
 }
 
-set<unsigned> MeshTopology::activeDescendants(unsigned d, unsigned entityIndex) {
-  set<unsigned> allDescendants = descendants(d,entityIndex);
-  set<unsigned> filteredDescendants;
-  for (set<unsigned>::iterator descIt=allDescendants.begin(); descIt!=allDescendants.end(); descIt++) {
-    unsigned descIndex = *descIt;
-    if ( entityIsActive(d, descIndex) ) {
-      filteredDescendants.insert(descIndex);
-    }
-  }
-  return filteredDescendants;
-}
-
-set<unsigned> MeshTopology::activeDescendantsNotInSet(unsigned d, unsigned entityIndex, const set<unsigned> &excludedSet) {
-  set<unsigned> filteredDescendants;
-  
-  set<unsigned> activeDesc = activeDescendants(d, entityIndex);
-  for (set<unsigned>::iterator myDesc=activeDesc.begin(); myDesc !=activeDesc.end(); myDesc++) {
-    if (excludedSet.find(*myDesc)==excludedSet.end()) {
-      filteredDescendants.insert(*myDesc);
-    }
-  }
-  return filteredDescendants;
-}
-
-unsigned MeshTopology::eldestActiveAncestor(unsigned d, unsigned entityIndex) {
-  bool hasActiveParent;
-  do {
-    hasActiveParent = false;
-    map< unsigned, vector< pair<unsigned,unsigned> > >::iterator parentEntityIt = _parentEntities[d].find(entityIndex);
-    if (parentEntityIt != _parentEntities[d].end()) {
-      vector< pair<unsigned,unsigned> > possibleParents = parentEntityIt->second;
-      for (vector< pair<unsigned,unsigned> >::iterator possibleParentIt = possibleParents.begin(); possibleParentIt != possibleParents.end(); possibleParentIt++) {
-        unsigned possibleParentIndex = possibleParentIt->first;
-        if (_entitiesWithActiveAncestors[d].find(possibleParentIndex) != _entitiesWithActiveAncestors[d].end()) {
-          hasActiveParent = true;
-          entityIndex = possibleParentIndex; // the new entityIndex will be the last found active parent (which is the coarsest/eldest one)
-        }
-      }
-    } 
-  } while (hasActiveParent);
-  return entityIndex;
-}
-
 CellPtr MeshTopology::addCell(CellTopoPtr cellTopo, const vector<vector<double> > &cellVertices) {
   vector<unsigned> vertexIndices = getVertexIndices(cellVertices);
   unsigned cellIndex = addCell(cellTopo, vertexIndices);
   return _cells[cellIndex];
 }
 
-unsigned MeshTopology::addCell(CellTopoPtr cellTopo, const vector<unsigned> &cellVertices) {
+unsigned MeshTopology::addCell(CellTopoPtr cellTopo, const vector<unsigned> &cellVertices, unsigned parentCellIndex) {
   vector< map< unsigned, unsigned > > cellEntityPermutations;
   unsigned cellIndex = _cells.size();
+  
+  set<unsigned> ancestralCellIndices; // includes the cell itself
+  ancestralCellIndices.insert(cellIndex);
+  if (parentCellIndex != -1) {
+    ancestralCellIndices.insert(parentCellIndex);
+    CellPtr parent = getCell(parentCellIndex);
+    while (parent->getParent().get() != NULL) {
+      parent = parent->getParent();
+      ancestralCellIndices.insert(parent->cellIndex());
+    }
+  }
+  
   vector< vector<unsigned> > cellEntityIndices(_spaceDim); // subcdim, subcord
   for (int d=0; d<_spaceDim; d++) { // start with vertices, and go up to sides
     cellEntityPermutations.push_back(map<unsigned, unsigned>());
@@ -138,14 +105,66 @@ unsigned MeshTopology::addCell(CellTopoPtr cellTopo, const vector<unsigned> &cel
 
       cellEntityPermutations[d][entityIndex] = entityPermutation;
       _activeCellsForEntities[d][entityIndex].insert(make_pair(cellIndex,j));
-      _entitiesWithActiveAncestors[d].insert(entityIndex);
     }
   }
-  
   CellPtr cell = Teuchos::rcp( new Cell(cellTopo, cellVertices, cellEntityPermutations, cellIndex, cellEntityIndices) );
   _cells.push_back(cell);
   _activeCells.insert(cellIndex);
   _rootCells.insert(cellIndex); // will remove if a parent relationship is established
+
+  // set neighbors:
+  unsigned sideDim = _spaceDim - 1;
+  unsigned sideCount = cellTopo->getSideCount();
+  for (int sideOrdinal=0; sideOrdinal<sideCount; sideOrdinal++) {
+    unsigned sideEntityIndex = cell->entityIndex(sideDim, sideOrdinal);
+    unsigned activeCellCountForSide = getActiveCellCount(sideDim, sideEntityIndex);
+    if (activeCellCountForSide == 2) { // compatible neighbors
+      set< pair<unsigned,unsigned> >::iterator neighborIt = _activeCellsForEntities[sideDim][sideEntityIndex].begin();
+      pair<unsigned,unsigned> firstNeighbor  = *neighborIt++;
+      pair<unsigned,unsigned> secondNeighbor = *neighborIt;
+      CellPtr firstCell = _cells[firstNeighbor.first];
+      CellPtr secondCell = _cells[secondNeighbor.first];
+      firstCell->setNeighbor(firstNeighbor.second, secondNeighbor.first, secondNeighbor.second);
+      secondCell->setNeighbor(secondNeighbor.second, firstNeighbor.first, firstNeighbor.second);
+      if (_boundarySides.find(sideEntityIndex) != _boundarySides.end()) {
+        if (_childEntities[sideDim].find(sideEntityIndex) != _childEntities[sideDim].end()) {
+          cout << "Unhandled case: boundary side acquired neighbor after being refined.\n";
+          TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unhandled case: boundary side acquired neighbor after being refined");
+        }
+        _boundarySides.erase(sideEntityIndex);
+      }
+    } else if (activeCellCountForSide > 2) {
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Too many cells for side");
+    } else if (_activeCellsForEntities[sideDim][sideEntityIndex].size() == 1) { // just this side
+      if (parentCellIndex == -1) { // for now anyway, we are on the boundary...
+        _boundarySides.insert(sideEntityIndex);
+      } else {
+        vector< pair<unsigned, unsigned> > sideAncestry = getConstrainingSideAncestry(sideEntityIndex);
+        // the last entry, if any, should refer to an active cell's side...
+        if (sideAncestry.size() > 0) {
+          unsigned sideAncestorIndex = sideAncestry[sideAncestry.size()-1].first;
+          set< pair<unsigned, unsigned> > activeCellEntrySet = _activeCellsForEntities[sideDim][sideAncestorIndex];
+          if (activeCellEntrySet.size() != 1) {
+            cout << "Internal error: activeCellEntrySet does not have the expected size.\n";
+            TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument,"Internal error: activeCellEntrySet does not have the expected size.\n");
+          }
+          pair<unsigned,unsigned> activeCellEntry = *(activeCellEntrySet.begin());
+          unsigned neighborCellIndex = activeCellEntry.first;
+          unsigned sideIndexInNeighbor = activeCellEntry.second;
+          cell->setNeighbor(sideOrdinal, neighborCellIndex, sideIndexInNeighbor);
+        }
+      }
+    }
+    
+    for (int d=0; d<sideDim; d++) {
+      set<unsigned> sideSubcellIndices = getEntitiesForSide(sideEntityIndex, d);
+      for (set<unsigned>::iterator subcellIt = sideSubcellIndices.begin(); subcellIt != sideSubcellIndices.end(); subcellIt++) {
+        unsigned subcellEntityIndex = *subcellIt;
+        _activeSidesForEntities[d][subcellEntityIndex].insert(sideEntityIndex);
+      }
+    }
+  }
+  
   return cellIndex;
 }
 
@@ -238,11 +257,31 @@ void MeshTopology::addChildren(CellPtr parentCell, const vector< CellTopoPtr > &
   TEUCHOS_TEST_FOR_EXCEPTION(numChildren != childVertices.size(), std::invalid_argument, "childTopos and childVertices must be the same size");
   vector< CellPtr > children;
   for (int childIndex=0; childIndex<numChildren; childIndex++) {
-    unsigned cellIndex = addCell(childTopos[childIndex], childVertices[childIndex]);
+    unsigned cellIndex = addCell(childTopos[childIndex], childVertices[childIndex],parentCell->cellIndex());
     children.push_back(_cells[cellIndex]);
     _rootCells.erase(cellIndex);
   }
   parentCell->setChildren(children);
+  
+  // now, set children's neighbors to agree with parent, if the children don't have their own peer neighbors
+  
+//  unsigned numSides = parentCell->topology()->getSideCount();
+////  unsigned sideDim = _spaceDim - 1;
+//  for (int sideOrdinal=0; sideOrdinal<numSides; sideOrdinal++) {
+//    vector< pair<unsigned, unsigned> > childrenForSide = parentCell->childrenForSide(sideOrdinal);
+//    for (vector< pair<unsigned, unsigned> >::iterator childIt = childrenForSide.begin(); childIt != childrenForSide.end(); childIt++) {
+//      unsigned childIndex = childIt->first;
+//      unsigned childSideOrdinal = childIt->second;
+//      CellPtr child = _cells[childIndex];
+////      unsigned childSideEntityIndex = child->entityIndex(sideDim, childSideOrdinal);
+////      if (_activeCellsForEntities[sideDim][childSideEntityIndex].size()==1) {
+//      if (child->getNeighbor(childSideOrdinal).first == -1) { // i.e. child hasn't yet had a neighbor set here...
+//        // then child should inherit neighbor relationship from parent
+//        pair< unsigned, unsigned > neighborInfo = parentCell->getNeighbor(sideOrdinal);
+//        child->setNeighbor(childSideOrdinal, neighborInfo.first, neighborInfo.second);
+//      }
+//    }
+//  }
 }
 
 unsigned MeshTopology::cellCount() {
@@ -287,6 +326,7 @@ vector<double> MeshTopology::getCellCentroid(unsigned cellIndex) {
 }
 
 void MeshTopology::deactivateCell(CellPtr cell) {
+//  cout << "deactivating cell " << cell->cellIndex() << endl;
   CellTopoPtr cellTopo = cell->topology();
   for (int d=0; d<_spaceDim; d++) { // start with vertices, and go up to sides
     int entityCount = cellTopo->getSubcellCount(d);
@@ -314,6 +354,14 @@ void MeshTopology::deactivateCell(CellPtr cell) {
       unsigned eraseCount = _activeCellsForEntities[d][entityIndex].erase(make_pair(cell->cellIndex(),j));
       if (eraseCount==0) {
         cout << "WARNING: attempt was made to deactivate a non-active subcell topology...\n";
+      } else {
+//        cout << "Erased _activeCellsForEntities[" << d << "][" << entityIndex << "] entry for (";
+//        cout << cell->cellIndex() << "," << j << ").  Remaining entries: ";
+//        set< pair<unsigned,unsigned> > remainingEntries = _activeCellsForEntities[d][entityIndex];
+//        for (set< pair<unsigned,unsigned> >::iterator entryIt = remainingEntries.begin(); entryIt != remainingEntries.end(); entryIt++) {
+//          cout << "(" << entryIt->first << "," << entryIt->second << ") ";
+//        }
+//        cout << endl;
       }
     }
   }
@@ -339,95 +387,34 @@ set<unsigned> MeshTopology::descendants(unsigned d, unsigned entityIndex) {
   return allDescendants;
 }
 
-pair< unsigned, set<unsigned> > MeshTopology::determineEntityConstraints(unsigned d, unsigned entityIndex) {
-  // pair.first:  index of the constraining entity.
-  // pair.second: the set of all constrained entities (does not include the constraining entity).
-  pair< unsigned, set<unsigned> > constraints;
-  if (d==0) { // no constraints for vertices
-    constraints.first = entityIndex;
-    constraints.second = set<unsigned>();
-    return constraints;
-  }
-  
-  unsigned ancestor = eldestActiveAncestor(d,entityIndex);
-  
-  set<unsigned> markedEntities; // entities we already know about
-  set<unsigned> elderDescendants = activeDescendants(d, ancestor);
-  markedEntities.insert(elderDescendants.begin(), elderDescendants.end());
-  
-  unsigned constrainingIndex = ancestor;
-  
-  bool parentExists = true;
-  while (parentExists) {
-    map< unsigned, vector< pair<unsigned, unsigned> > >::iterator parentsEntry = _parentEntities[d].find(ancestor);
-    if (parentsEntry != _parentEntities[d].end()) {
-      vector< pair<unsigned,unsigned> > parents = parentsEntry->second;
-      for (vector< pair<unsigned,unsigned> >::iterator parentIt = parents.begin(); parentIt != parents.end(); parentIt++) {
-        unsigned parentEntityIndex = parentIt->first;
-        unsigned refinementIndex = parentIt->second;
-        vector< pair< RefinementPatternPtr, vector<unsigned> > > refinements = _childEntities[d][parentEntityIndex];
-        bool parentHasAlternateChildren = false;
-        for (unsigned refIndex=0; refIndex<refinements.size(); refIndex++) {
-          if (refIndex != refinementIndex) {
-            vector<unsigned> children = refinements[refIndex].second;
-            for (unsigned childOrdinal=0; childOrdinal<children.size(); childOrdinal++) {
-              unsigned childIndex = children[childOrdinal];
-              set<unsigned> additionalConstrainedEntities = activeDescendantsNotInSet(d, childIndex, markedEntities);
-              if (additionalConstrainedEntities.size() > 0) {
-                parentHasAlternateChildren = true;
-                markedEntities.insert(additionalConstrainedEntities.begin(),additionalConstrainedEntities.end());
-              }
-            }
-          }
-        }
-        if (parentHasAlternateChildren) {
-          // parent is the new constrainingIndex
-          constrainingIndex = parentEntityIndex;
-        }
-        ancestor = parentEntityIndex; // this will end up meaning that by the time we look up in _parentEntities again, we're pointing to the coarsest of the possible parents.  I believe that's correct...
-      }
-    }
-    else {
-      parentExists = false;
-    }
-  }
-  constraints.first = constrainingIndex;
-  // if the constraingIndex is in the constrained set, remove it:
-  markedEntities.erase(constrainingIndex);
-  constraints.second = markedEntities;
-  return constraints;
-}
-
 bool MeshTopology::entityHasParent(unsigned d, unsigned entityIndex) {
   if (_parentEntities[d].find(entityIndex) == _parentEntities[d].end()) return false;
   return _parentEntities[d][entityIndex].size() > 0;
 }
 
-bool MeshTopology::entityHasActiveParent(unsigned int d, unsigned int entityIndex) {
-  bool hasActiveParent = false;
-  map< unsigned, vector< pair<unsigned,unsigned> > >::iterator parentEntityIt = _parentEntities[d].find(entityIndex);
-  if (parentEntityIt != _parentEntities[d].end()) {
-    vector< pair<unsigned,unsigned> > possibleParents = parentEntityIt->second;
-    for (vector< pair<unsigned,unsigned> >::iterator possibleParentIt = possibleParents.begin(); possibleParentIt != possibleParents.end(); possibleParentIt++) {
-      unsigned possibleParentIndex = possibleParentIt->first;
-      if (_entitiesWithActiveAncestors[d].find(possibleParentIndex) != _entitiesWithActiveAncestors[d].end()) {
-        hasActiveParent = true;
+bool MeshTopology::entityIsAncestor(unsigned d, unsigned ancestor, unsigned descendent) {
+  map< unsigned, vector< pair<unsigned, unsigned> > >::iterator parentIt = _parentEntities[d].find(descendent);
+  while (parentIt != _parentEntities[d].end()) {
+    vector< pair<unsigned, unsigned> > parents = parentIt->second;
+    unsigned parentEntityIndex = -1;
+    for (vector< pair<unsigned, unsigned> >::iterator entryIt = parents.begin(); entryIt != parents.end(); entryIt++) {
+      parentEntityIndex = entryIt->first;
+      if (parentEntityIndex==ancestor) {
+        return true;
       }
     }
+    parentIt = _parentEntities[d].find(parentEntityIndex);
   }
-  return hasActiveParent;
-}
-
-bool MeshTopology::entityIsActive(unsigned d, unsigned entityIndex) {
-  if (_activeCellsForEntities[d].find(entityIndex) != _activeCellsForEntities[d].end() ) {
-    return _activeCellsForEntities[d][entityIndex].size() > 0;
-  } else {
-    return false;
-  }
+  return false;
 }
 
 unsigned MeshTopology::getActiveCellCount(unsigned int d, unsigned int entityIndex) {
-  return _activeCellsForEntities[d][entityIndex].size();
+  map<unsigned, set<pair<unsigned,unsigned> > >::iterator activeCellsForEntityIt = _activeCellsForEntities[d].find(entityIndex);
+  if (activeCellsForEntityIt == _activeCellsForEntities[d].end()) {
+    return 0;
+  } else {
+    return activeCellsForEntityIt->second.size();
+  }
 }
 
 const set< pair<unsigned,unsigned> > & MeshTopology::getActiveCellIndices(unsigned d, unsigned entityIndex) {
@@ -442,78 +429,6 @@ unsigned MeshTopology::getEntityCount(unsigned int d) {
   return _entities[d].size();
 }
 
-vector< pair< unsigned, unsigned > > MeshTopology::getCellNeighbors(unsigned cellIndex, unsigned sideIndex) {
-  // return is (neighborCellIndex, neighborSideIndex)--note that in context of h-refinements, neighborSideIndex might not refer to exactly the same side...
-  vector< pair< unsigned, unsigned > > neighbors;
-  
-  CellPtr cell = getCell(cellIndex);
-  unsigned sideDim = _spaceDim - 1;
-  unsigned sideEntityIndex = cell->entityIndex(sideDim, sideIndex);
-  unsigned sideAncestor = eldestActiveAncestor(sideDim, sideEntityIndex);
-  set<unsigned> sideCousins = activeDescendants(sideDim, sideAncestor); // cousins: active descendants of the eldest active ancestor
-  for (set<unsigned>::iterator sideCousinIt = sideCousins.begin(); sideCousinIt != sideCousins.end(); sideCousinIt++) {
-    unsigned sideCousinEntityIndex = *sideCousinIt;
-    set< pair<unsigned, unsigned> > activeCells = _activeCellsForEntities[sideDim][sideCousinEntityIndex];
-    for (set< pair<unsigned, unsigned> >::iterator cellEntryIt = activeCells.begin(); cellEntryIt != activeCells.end(); cellEntryIt++) {
-      unsigned neighborCellIndex = cellEntryIt->first;
-      if (neighborCellIndex != cellIndex) {
-        neighbors.push_back(*cellEntryIt);
-      }
-    }
-  }
-  return neighbors;
-}
-
-pair< CellPtr, unsigned > MeshTopology::getCellAncestralNeighbor(unsigned cellIndex, unsigned sideIndex) {
-  pair< CellPtr, unsigned > neighbor;
-  
-  vector< pair< unsigned, unsigned > > neighbors = getCellNeighbors(cellIndex, sideIndex);
-  if (neighbors.size() == 1) {
-    neighbor.first = getCell(neighbors[0].first);
-    neighbor.second = neighbors[0].second;
-  } else if (neighbors.size() == 0) {
-    neighbor.first = Teuchos::rcp( (Cell*) NULL );
-    neighbor.second = 0;
-  } else {
-    // multiple neighbors: we want to look for their common ancestor
-    pair<unsigned, unsigned> candidateAncestor = neighbors[0];
-    set<unsigned> neighborsUnaccountedFor; // cellIndices
-    for (vector< pair< unsigned, unsigned > >::iterator neighborIt = neighbors.begin(); neighborIt != neighbors.end(); neighborIt++) {
-      neighborsUnaccountedFor.insert(neighborIt->first);
-    }
-    neighborsUnaccountedFor.erase(neighbors[0].first);
-    while ( neighborsUnaccountedFor.size() > 0) {
-      CellPtr oldCandidate = getCell(candidateAncestor.first);
-      CellPtr newCandidate = oldCandidate->getParent();
-      if (newCandidate.get() == NULL) {
-        cout << "getCellAncestralNeighbor: neighbors do not have common ancestor!\n";
-        TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "getCellAncestralNeighbor: neighbors do not have common ancestor!");
-      }
-      int numChildren = newCandidate->getChildIndices().size();
-      for (int childIndex=0; childIndex < numChildren; childIndex++) {
-        if (newCandidate->getChildIndices()[childIndex] == oldCandidate->cellIndex()) {
-          candidateAncestor.first = newCandidate->cellIndex();
-          // determine shared side index
-          candidateAncestor.second = newCandidate->refinementPattern()->parentSideLookupForChild(childIndex)[candidateAncestor.second];
-        }
-      }
-      if (candidateAncestor.first == oldCandidate->cellIndex()) {
-        TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "oldCandidate not found among newCandidate's children!");
-      }
-      // otherwise, update the neighbors accounted for:
-      vector< pair< unsigned, unsigned> > sideChildEntries = newCandidate->refinementPattern()->childrenForSides()[candidateAncestor.second];
-      for (vector< pair< unsigned, unsigned> >::iterator sideChildIt = sideChildEntries.begin(); sideChildIt != sideChildEntries.end(); sideChildIt++) {
-        unsigned childIndex = sideChildIt->first;
-        unsigned childCellIndex = newCandidate->children()[childIndex]->cellIndex();
-        neighborsUnaccountedFor.erase(childCellIndex);
-      }
-    }
-    neighbor.first = getCell(candidateAncestor.first);
-    neighbor.second = candidateAncestor.second;
-  }
-  return neighbor;
-}
-
 unsigned MeshTopology::getEntityParent(unsigned d, unsigned entityIndex, unsigned parentOrdinal) {
   TEUCHOS_TEST_FOR_EXCEPTION(! entityHasParent(d, entityIndex), std::invalid_argument, "entity does not have parent");
   return _parentEntities[d][entityIndex][parentOrdinal].first;
@@ -521,6 +436,16 @@ unsigned MeshTopology::getEntityParent(unsigned d, unsigned entityIndex, unsigne
 
 const vector<unsigned> & MeshTopology::getEntityVertexIndices(unsigned d, unsigned entityIndex) {
   return _canonicalEntityOrdering[d][entityIndex];
+}
+
+set<unsigned> MeshTopology::getEntitiesForSide(unsigned sideEntityIndex, unsigned d) {
+  unsigned sideDim = _spaceDim - 1;
+  unsigned subEntityCount = getSubEntityCount(sideDim, sideEntityIndex, d);
+  set<unsigned> subEntities;
+  for (int subEntityOrdinal=0; subEntityOrdinal<subEntityCount; subEntityOrdinal++) {
+    subEntities.insert(getSubEntityIndex(sideDim, sideEntityIndex, d, subEntityOrdinal));
+  }
+  return subEntities;
 }
 
 unsigned MeshTopology::getFaceEdgeIndex(unsigned int faceIndex, unsigned int edgeOrdinalInFace) {
@@ -539,7 +464,7 @@ unsigned MeshTopology::getSubEntityCount(unsigned int d, unsigned int entityInde
 unsigned MeshTopology::getSubEntityIndex(unsigned int d, unsigned int entityIndex, unsigned int subEntityDim, unsigned int subEntityOrdinal) {
   shards::CellTopology *entityTopo = &_knownTopologies[_entityCellTopologyKeys[d][entityIndex]];
   set<unsigned> subEntityNodes;
-  unsigned nodeCount = entityTopo->getNodeCount(subEntityDim, subEntityOrdinal);
+  unsigned nodeCount = (d > 0) ? entityTopo->getNodeCount(subEntityDim, subEntityOrdinal) : entityTopo->getNodeCount();
   vector<unsigned> entityNodes = _canonicalEntityOrdering[d][entityIndex];
   for (unsigned nodeOrdinal=0; nodeOrdinal<nodeCount; nodeOrdinal++) {
     unsigned nodeIndexInEntity = entityTopo->getNodeMap(subEntityDim, subEntityOrdinal, nodeOrdinal);
@@ -671,11 +596,140 @@ set<unsigned> MeshTopology::getChildEntitiesSet(unsigned int d, unsigned int ent
 }
 
 unsigned MeshTopology::getConstrainingEntityIndex(unsigned int d, unsigned int entityIndex) {
-  if (_constrainingEntities[d].find(entityIndex) != _constrainingEntities[d].end()) {
-    return _constrainingEntities[d][entityIndex];
+  unsigned constrainingEntityIndex = entityIndex;
+  
+  set<unsigned> sidesForEntity;
+  unsigned sideDim = _spaceDim - 1;
+  if (d==sideDim) {
+    sidesForEntity.insert(entityIndex);
   } else {
+    sidesForEntity = _activeSidesForEntities[d][entityIndex];
+  }
+  for (set<unsigned>::iterator sideEntityIt = sidesForEntity.begin(); sideEntityIt != sidesForEntity.end(); sideEntityIt++) {
+    unsigned sideEntityIndex = *sideEntityIt;
+    vector< pair<unsigned,unsigned> > sideAncestry = getConstrainingSideAncestry(sideEntityIndex);
+    unsigned constrainingEntityIndexForSide = entityIndex;
+    if (sideAncestry.size() > 0) {
+      // need to find the subcellEntity for the constraining side that overlaps with the one on our present side
+      for (vector< pair<unsigned,unsigned> >::iterator entryIt=sideAncestry.begin(); entryIt != sideAncestry.end(); entryIt++) {
+        // need to map constrained entity index from the current side to its parent in sideAncestry
+        unsigned parentSideEntityIndex = entryIt->first;
+        if (_parentEntities[d].find(constrainingEntityIndexForSide) == _parentEntities[d].end()) {
+          // no parent for this entity (may be that it was a refinement-interior edge, e.g.)
+          break;
+        }
+        constrainingEntityIndexForSide = getEntityParentForSide(d,constrainingEntityIndexForSide,parentSideEntityIndex);
+        sideEntityIndex = parentSideEntityIndex;
+      }
+    }
+    constrainingEntityIndex = maxConstraint(d, constrainingEntityIndex, constrainingEntityIndexForSide);
+  }
+  return constrainingEntityIndex;
+}
+
+// pair: first is the sideEntityIndex of the ancestor; second is the refinementIndex of the refinement to get from parent to child (see _parentEntities and _childEntities)
+vector< pair<unsigned,unsigned> > MeshTopology::getConstrainingSideAncestry(unsigned int sideEntityIndex) {
+  // three possibilities: 1) compatible side, 2) side is parent, 3) side is child
+  // 1) and 2) mean unconstrained.  3) means constrained (by parent)
+  unsigned sideDim = _spaceDim - 1;
+  vector< pair<unsigned, unsigned> > ancestry;
+  if (_boundarySides.find(sideEntityIndex) != _boundarySides.end()) {
+    return ancestry; // sides on boundary are unconstrained...
+  }
+  
+  set< pair<unsigned,unsigned> > sideCellEntries = _activeCellsForEntities[sideDim][sideEntityIndex];
+  int activeCellCountForSide = sideCellEntries.size();
+  if (activeCellCountForSide == 2) {
+    // compatible side
+    return ancestry; // will be empty
+  } else if ((activeCellCountForSide == 0) || (activeCellCountForSide == 1)) {
+    // then we're either parent or child of an active side
+    // if we are a child, then we should find and return an ancestral path that ends in an active side
+    map< unsigned, vector< pair<unsigned, unsigned> > >::iterator parentIt = _parentEntities[sideDim].find(sideEntityIndex);
+    while (parentIt != _parentEntities[sideDim].end()) {
+      vector< pair<unsigned, unsigned> > parents = parentIt->second;
+      unsigned parentEntityIndex, refinementIndex;
+      for (vector< pair<unsigned, unsigned> >::iterator entryIt = parents.begin(); entryIt != parents.end(); entryIt++) {
+        parentEntityIndex = entryIt->first;
+        refinementIndex = entryIt->second;
+        if (getActiveCellCount(sideDim, parentEntityIndex) > 0) {
+          // active cell; we've found our final ancestor
+          ancestry.push_back(*entryIt);
+          return ancestry;
+        }
+      }
+      // if we get here, then (parentEntityIndex, refinementIndex) points to the last of the possible parents, which by convention must be a regular refinement (more precisely, one whose subentities are at least as fine as all previous possible parents)
+      // this is therefore an acceptable entry in our ancestry path.
+      ancestry.push_back(make_pair(parentEntityIndex, refinementIndex));
+      parentIt = _parentEntities[sideDim].find(parentEntityIndex);
+    }
+    // if no such ancestral path exists, then we are a parent, and are unconstrained (return empty ancestry)
+    ancestry.clear();
+    return ancestry;
+  } else {
+    cout << "MeshTopology internal error: # active cells for side is not 0, 1, or 2\n";
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "MeshTopology internal error: # active cells for side is not 0, 1, or 2\n");
+    return ancestry; // unreachable, but most compilers don't seem to know that.
+  }
+}
+
+unsigned MeshTopology::getEntityParentForSide(unsigned d, unsigned entityIndex,
+                                              unsigned parentSideEntityIndex) {
+  // returns the entity index for the parent (which might be the entity itself) of entity (d,entityIndex) that is
+  // a subcell of side parentSideEntityIndex
+  
+  // assuming valid input, three possibilities:
+  // 1) parent side has entity as a subcell
+  // 2) parent side has exactly one of entity's immediate parents as a subcell
+  
+  set<unsigned> entitiesForParentSide = getEntitiesForSide(parentSideEntityIndex, d);
+//  cout << "entitiesForParentSide with sideEntityIndex " << parentSideEntityIndex << ": ";
+//  for (set<unsigned>::iterator entityIt = entitiesForParentSide.begin(); entityIt != entitiesForParentSide.end(); entityIt++) {
+//    cout << *entityIt << " ";
+//  }
+//  cout << endl;
+//  for (set<unsigned>::iterator entityIt = entitiesForParentSide.begin(); entityIt != entitiesForParentSide.end(); entityIt++) {
+//    cout << "entity " << *entityIt << ":\n";
+//    printEntityVertices(d, *entityIt);
+//  }
+//  cout << "parentSide vertices:\n";
+//  printEntityVertices(_spaceDim-1, parentSideEntityIndex);
+  
+  if (entitiesForParentSide.find(entityIndex) != entitiesForParentSide.end()) {
     return entityIndex;
   }
+  vector< pair<unsigned, unsigned> > entityParents = _parentEntities[d][entityIndex];
+//  cout << "parent entities of entity " << entityIndex << ": ";
+  for (vector< pair<unsigned, unsigned> >::iterator parentIt = entityParents.begin(); parentIt != entityParents.end(); parentIt++) {
+    unsigned parentEntityIndex = parentIt->first;
+//    cout << parentEntityIndex << " ";
+    if (entitiesForParentSide.find(parentEntityIndex) != entitiesForParentSide.end()) {
+//      cout << endl;
+      return parentEntityIndex;
+    }
+  }
+  cout << endl << "entity " << entityIndex << " vertices:\n";
+  printEntityVertices(d, entityIndex);
+  
+  cout << "parent entity not found in parent side.\n";
+  TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "parent entity not found in parent side.\n");
+  return -1;
+}
+
+unsigned MeshTopology::maxConstraint(unsigned d, unsigned entityIndex1, unsigned entityIndex2) {
+  // if one of the entities is the ancestor of the other, returns that one.  Otherwise returns (unsigned) -1.
+  
+  if (entityIndex1==entityIndex2) return entityIndex1;
+  
+  // a good guess is that the entity with lower index is the ancestor
+  unsigned smallerEntityIndex = min(entityIndex1, entityIndex2);
+  unsigned largerEntityIndex = max(entityIndex1, entityIndex2);
+  if (entityIsAncestor(d,smallerEntityIndex,largerEntityIndex)) {
+    return smallerEntityIndex;
+  } else if (entityIsAncestor(d,largerEntityIndex,smallerEntityIndex)) {
+    return largerEntityIndex;
+  }
+  return -1;
 }
 
 vector< ParametricCurvePtr > MeshTopology::parametricEdgesForCell(unsigned cellIndex, bool neglectCurves) {
@@ -779,8 +833,8 @@ void MeshTopology::refineCell(unsigned cellIndex, RefinementPatternPtr refPatter
   refineCellEntities(cell, refPattern);
   cell->setRefinementPattern(refPattern);
   
-  addChildren(cell, childTopos, childVertices);
   deactivateCell(cell);
+  addChildren(cell, childTopos, childVertices);
   
   if (_edgeToCurveMap.size() > 0) {
     vector< vector< pair< unsigned, unsigned> > > childrenForSides = refPattern->childrenForSides(); // outer vector: indexed by parent's sides; inner vector: (child index in children, index of child's side shared with parent)
@@ -818,15 +872,6 @@ void MeshTopology::refineCell(unsigned cellIndex, RefinementPatternPtr refPatter
 //      _transformationFunction->updateCells(childrenWithCurvedEdges);
 //    }
   }
-
-  set<unsigned> cellsAffected;
-  cellsAffected.insert(cellIndex);
-  // first update for the deactivated cell
-  updateConstraintsForCells(cellsAffected);
-  
-  vector<unsigned> childIndices = cell->getChildIndices();
-  cellsAffected.insert(childIndices.begin(), childIndices.end());
-  updateConstraintsForCells(cellsAffected);
 }
 
 void MeshTopology::refineCellEntities(CellPtr cell, RefinementPatternPtr refPattern) {
@@ -904,6 +949,11 @@ void MeshTopology::refineCellEntities(CellPtr cell, RefinementPatternPtr refPatt
           // TODO: ?? do something with parentActiveCells?  Seems like we just trailed off here...
         }
         _childEntities[d][parentIndex] = vector< pair<RefinementPatternPtr,vector<unsigned> > >(1, make_pair(subcellRefPattern, childEntityIndices) ); // TODO: this also needs to change when we work through recipes.  Note that the correct parent will vary here...  i.e. in the anisotropic case, the child we're ultimately interested in will have an anisotropic parent, and *its* parent would be the bigger guy referred to here.
+        if (d==_spaceDim-1) { // side
+          if (_boundarySides.find(parentIndex) != _boundarySides.end()) { // parent is a boundary side, so children are, too
+            _boundarySides.insert(childEntityIndices.begin(),childEntityIndices.end());
+          }
+        }
       }
     }
   }
@@ -922,63 +972,6 @@ void MeshTopology::setEdgeToCurveMap(const map< pair<int, int>, ParametricCurveP
     addEdgeCurve(edgeIt->first, edgeIt->second);
   }
   _transformationFunction = Teuchos::rcp(new MeshTransformationFunction(mesh, _cellIDsWithCurves));
-}
-
-void MeshTopology::updateConstraintsForCells(const set<unsigned> &cellIndices) {
-  for (unsigned d=1; d<_spaceDim; d++) {
-    set<unsigned> entitiesEncountered;
-    map< unsigned, set<unsigned > > constraints;
-    for (set<unsigned>::iterator cellIt=cellIndices.begin(); cellIt != cellIndices.end(); cellIt++) {
-      CellPtr cell = _cells[*cellIt];
-      unsigned numEntities = cell->topology()->getSubcellCount(d);
-      for (unsigned entityOrdinal=0; entityOrdinal < numEntities; entityOrdinal++) {
-        unsigned entityIndex = cell->entityIndex(d, entityOrdinal);
-        if (getActiveCellCount(d, entityIndex) > 0) {
-          if (entitiesEncountered.find(entityIndex) == entitiesEncountered.end()) {
-            pair<unsigned, set<unsigned> > constraint = determineEntityConstraints(d, entityIndex);
-            constraints.insert(constraint);
-            entitiesEncountered.insert(constraint.second.begin(), constraint.second.end());
-            entitiesEncountered.insert(constraint.first);
-          }
-        } else { // entity has no active cells
-          // the entity itself has been deactivated in the sense that there are no active cells that use it,
-          // but to speed up certain checks, we only count an entity as deactivated if its ancestors are inactive.
-          // (because of this rule, we only have to check immediate parents.)
-          
-          bool hasActiveParent = entityHasActiveParent(d, entityIndex);
-          bool isConstrainingEntity = _constrainedEntities[d].find(entityIndex) != _constrainedEntities[d].end();
-          
-          // since the entity no longer has any active cells, it is no longer constrained:
-          _constrainingEntities[d].erase(entityIndex);
-          
-          if (!hasActiveParent && !isConstrainingEntity) {
-            // then we can deactivate, provided that there are no children that properly have this as a constraining entity.
-            // it's that "properly" that's the challenge.
-            _entitiesWithActiveAncestors[d].erase(entityIndex);
-          }
-        }
-      }
-    }
-    for (map< unsigned, set<unsigned > >::iterator constraintIt = constraints.begin();
-         constraintIt != constraints.end(); constraintIt++) {
-      unsigned constrainingEntity = constraintIt->first;
-      set<unsigned> *constrainedEntities = &(constraintIt->second);
-      _constrainingEntities[d].erase(constrainingEntity); // if prior to update, this entity was constrained, clear that out
-      if (constrainedEntities->size() == 0) {
-        // no entities constrained, so erase...
-        _constrainedEntities[d].erase(constrainingEntity);
-      } else {
-        _constrainedEntities[d][constrainingEntity] = *constrainedEntities;
-        for (set<unsigned>::iterator constrainedIt=constrainedEntities->begin(); constrainedIt != constrainedEntities->end(); constrainedIt++) {
-          unsigned constrainedEntityIndex = *constrainedIt;
-          // if prior to update, this entity functioned as a constraint, clear that out
-          _constrainedEntities[d].erase(constrainedEntityIndex);
-          _constrainingEntities[d][constrainedEntityIndex] = constrainingEntity;
-  //        cout << "for d=" << d << ", entity " << constrainedEntityIndex << " is constrained by " << constrainingEntity << endl;
-        }
-      }
-    }
-  }
 }
 
 Teuchos::RCP<MeshTransformationFunction> MeshTopology::transformationFunction() {

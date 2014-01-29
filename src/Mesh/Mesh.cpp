@@ -323,8 +323,8 @@ Teuchos::RCP<Mesh> Mesh::buildQuadMesh(const FieldContainer<double> &quadBoundar
     for (int i=0; i<horizontalElements; i++) {
       for (int j=0; j<verticalElements; j++) {
         // TEST CODE FOR LESZEK: match Leszek's meshes by setting diagonalUp = true here...
-        bool diagonalUp = true;
-//        bool diagonalUp = (i%2 == j%2); // criss-cross pattern
+//        bool diagonalUp = true;
+        bool diagonalUp = (i%2 == j%2); // criss-cross pattern
         
         vector<unsigned> elemVertices1, elemVertices2;
         if (diagonalUp) {
@@ -1658,6 +1658,10 @@ void Mesh::hRefine(const set<int> &cellIDs, Teuchos::RCP<RefinementPattern> refP
       _meshTopology->transformationFunction()->didHRefine(cellIDset);
     }
     
+    set<int> cellIDset;
+    cellIDset.insert(cellID);
+    _maximumRule2D->didHRefine(cellIDset);
+    
     for (vector< Solution* >::iterator solutionIt = _registeredSolutions.begin();
          solutionIt != _registeredSolutions.end(); solutionIt++) {
        // do projection
@@ -1682,6 +1686,7 @@ void Mesh::hRefine(const set<int> &cellIDs, Teuchos::RCP<RefinementPattern> refP
     _cellSideUpgrades = remainingCellSideUpgrades;
   }
   rebuildLookups();
+  _maximumRule2D->rebuildLookups();
   // now discard any old coefficients
   for (vector< Solution* >::iterator solutionIt = _registeredSolutions.begin();
        solutionIt != _registeredSolutions.end(); solutionIt++) {
@@ -1770,6 +1775,9 @@ void Mesh::hUnrefine(const set<int> &cellIDs) {
   }
 
   rebuildLookups();
+  
+  _maximumRule2D->didHUnrefine(cellIDs);
+  _maximumRule2D->rebuildLookups();
   
   // now discard any old coefficients
   for (vector< Solution* >::iterator solutionIt = _registeredSolutions.begin();
@@ -2371,6 +2379,10 @@ void Mesh::pRefine(const set<int> &cellIDsForPRefinements, int pToAdd) {
       _meshTopology->transformationFunction()->didPRefine(cellIDset);
     }
     
+    set<int> cellIDset;
+    cellIDset.insert(cellID);
+    _maximumRule2D->didPRefine(cellIDset, pToAdd); // inefficient (but safer/simpler) to do this for one cell at a time.
+    
     for (vector< Solution* >::iterator solutionIt = _registeredSolutions.begin();
          solutionIt != _registeredSolutions.end(); solutionIt++) {
       // do projection: for p-refinements, the "child" is the same cell
@@ -2380,6 +2392,7 @@ void Mesh::pRefine(const set<int> &cellIDsForPRefinements, int pToAdd) {
     }
     _cellSideUpgrades.clear(); // these have been processed by all solutions that will ever have a chance to process them.
   }
+  _maximumRule2D->rebuildLookups();
   rebuildLookups();
     
   // now discard any old coefficients
