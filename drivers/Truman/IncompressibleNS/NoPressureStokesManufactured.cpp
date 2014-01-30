@@ -43,44 +43,6 @@ class ConstantYBoundary : public SpatialFilter {
     }
 };
 
-class ExactU1 : public Function {
-  public:
-    double lambda;
-    ExactU1(double lambda) : Function(0), lambda(lambda) {}
-    void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
-      int numCells = values.dimension(0);
-      int numPoints = values.dimension(1);
-
-      const FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
-      for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
-        for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
-          double x = (*points)(cellIndex,ptIndex,0);
-          double y = (*points)(cellIndex,ptIndex,1);
-          values(cellIndex, ptIndex) = 1-exp(lambda*x)*cos(2*pi*y);
-        }
-      }
-    }
-};
-
-class ExactU2 : public Function {
-  public:
-    double lambda;
-    ExactU2(double lambda) : Function(0), lambda(lambda) {}
-    void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
-      int numCells = values.dimension(0);
-      int numPoints = values.dimension(1);
-
-      const FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
-      for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
-        for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
-          double x = (*points)(cellIndex,ptIndex,0);
-          double y = (*points)(cellIndex,ptIndex,1);
-          values(cellIndex, ptIndex) = lambda/(2*pi)*exp(lambda*x)*sin(2*pi*y);
-        }
-      }
-    }
-};
-
 int main(int argc, char *argv[]) {
 #ifdef HAVE_MPI
   Teuchos::GlobalMPISession mpiSession(&argc, &argv,0);
@@ -96,11 +58,6 @@ int main(int argc, char *argv[]) {
   int norm = args.Input<int>("--norm", "0 = graph\n    1 = robust\n    2 = coupled robust");
 
   // Optional arguments (have defaults)
-  bool enforceLocalConservation = args.Input<bool>("--conserve", "enforce local conservation", false);
-  double Re = args.Input("--Re", "Reynolds number", 40);
-  double nu = 1./Re;
-  double lambda = Re/2.-sqrt(Re*Re/4+4*pi*pi);
-  int maxNewtonIterations = args.Input("--maxIterations", "maximum number of Newton iterations", 20);
   int polyOrder = args.Input("--polyOrder", "polynomial order for field variables", 2);
   int deltaP = args.Input("--deltaP", "how much to enrich test space", 2);
   // string saveFile = args.Input<string>("--meshSaveFile", "file to which to save refinement history", "");
@@ -141,10 +98,10 @@ int main(int argc, char *argv[]) {
 
   // define nodes for mesh
   FieldContainer<double> meshBoundary(4,2);
-  double xmin = -0.5;
+  double xmin =  0.0;
   double xmax =  1.0;
-  double ymin = -0.5;
-  double ymax =  1.5;
+  double ymin =  0.0;
+  double ymax =  1.0;
 
   meshBoundary(0,0) =  xmin; // x1
   meshBoundary(0,1) =  ymin; // y1
@@ -155,7 +112,7 @@ int main(int argc, char *argv[]) {
   meshBoundary(3,0) =  xmin;
   meshBoundary(3,1) =  ymax;
 
-  int horizontalCells = 6, verticalCells = 8;
+  int horizontalCells = 4, verticalCells = 4;
 
   // create a pointer to a new mesh:
   Teuchos::RCP<Mesh> mesh = Mesh::buildQuadMesh(meshBoundary, horizontalCells, verticalCells,
@@ -170,40 +127,31 @@ int main(int argc, char *argv[]) {
   IPPtr nullIP = Teuchos::rcp((IP*)NULL);
   SolutionPtr backgroundFlow = Teuchos::rcp(new Solution(mesh, nullBC, nullRHS, nullIP) );
 
-  vector<double> e1(2); // (1,0)
-  e1[0] = 1;
-  vector<double> e2(2); // (0,1)
-  e2[1] = 1;
-
   FunctionPtr u1_prev = Function::solution(u1, backgroundFlow);
   FunctionPtr u2_prev = Function::solution(u2, backgroundFlow);
-  // FunctionPtr sigma11_prev = Function::solution(sigma11, backgroundFlow);
-  // FunctionPtr sigma12_prev = Function::solution(sigma12, backgroundFlow);
-  // FunctionPtr sigma22_prev = Function::solution(sigma22, backgroundFlow);
 
   FunctionPtr zero = Teuchos::rcp( new ConstantScalarFunction(0.0) );
   FunctionPtr one = Teuchos::rcp( new ConstantScalarFunction(1.0) );
-  FunctionPtr u1Exact     = Teuchos::rcp( new ExactU1(lambda) );
-  FunctionPtr u2Exact     = Teuchos::rcp( new ExactU2(lambda) );
+  FunctionPtr y = Function::yn(1);
 
   // ==================== SET INITIAL GUESS ==========================
-  map<int, Teuchos::RCP<Function> > functionMap;
-  functionMap[u1->ID()] = u1Exact;
-  functionMap[u2->ID()] = u2Exact;
+  // map<int, Teuchos::RCP<Function> > functionMap;
+  // functionMap[u1->ID()] = u1Exact;
+  // functionMap[u2->ID()] = u2Exact;
 
-  backgroundFlow->projectOntoMesh(functionMap);
+  // backgroundFlow->projectOntoMesh(functionMap);
 
   ////////////////////   DEFINE BILINEAR FORM   ///////////////////////
 
   // stress equation
-  bf->addTerm( 1./nu*sigma11, tau11 );
-  bf->addTerm( 1./nu*sigma12, tau12 );
-  bf->addTerm( 1./nu*sigma12, tau12 );
-  bf->addTerm( 1./nu*sigma22, tau22 );
-  bf->addTerm( -0.5/nu*sigma11, tau11 );
-  bf->addTerm( -0.5/nu*sigma22, tau11 );
-  bf->addTerm( -0.5/nu*sigma11, tau22 );
-  bf->addTerm( -0.5/nu*sigma22, tau22 );
+  bf->addTerm( sigma11, tau11 );
+  bf->addTerm( sigma12, tau12 );
+  bf->addTerm( sigma12, tau12 );
+  bf->addTerm( sigma22, tau22 );
+  bf->addTerm( -0.5*sigma11, tau11 );
+  bf->addTerm( -0.5*sigma22, tau11 );
+  bf->addTerm( -0.5*sigma11, tau22 );
+  bf->addTerm( -0.5*sigma22, tau22 );
   bf->addTerm( 2*u1, tau11->dx() );
   bf->addTerm( 2*u1, tau12->dy() );
   bf->addTerm( 2*u2, tau12->dx() );
@@ -214,12 +162,6 @@ int main(int argc, char *argv[]) {
   bf->addTerm( -2*u2hat, tau22->times_normal_y() );
 
   // momentum equation
-  bf->addTerm( -2.*u1_prev*u1, v1->dx() );
-  bf->addTerm( -u2_prev*u1, v1->dy() );
-  bf->addTerm( -u1_prev*u2, v1->dy() );
-  bf->addTerm( -u2_prev*u1, v2->dx() );
-  bf->addTerm( -u1_prev*u2, v2->dx() );
-  bf->addTerm( -2.*u2_prev*u2, v2->dy() );
   bf->addTerm( sigma11, v1->dx() );
   bf->addTerm( sigma12, v1->dy() );
   bf->addTerm( sigma12, v2->dx() );
@@ -230,17 +172,10 @@ int main(int argc, char *argv[]) {
   ////////////////////   SPECIFY RHS   ///////////////////////
   Teuchos::RCP<RHSEasy> rhs = Teuchos::rcp( new RHSEasy );
 
-  // stress equation
-  rhs->addTerm( -2*u1_prev * tau11->dx() );
-  rhs->addTerm( -2*u1_prev * tau12->dy() );
-  rhs->addTerm( -2*u2_prev * tau12->dx() );
-  rhs->addTerm( -2*u2_prev * tau22->dy() );
-
-  // momentum equation
-  rhs->addTerm( u1_prev*u1_prev * v1->dx() );
-  rhs->addTerm( u2_prev*u1_prev * v1->dy() );
-  rhs->addTerm( u2_prev*u1_prev * v2->dx() );
-  rhs->addTerm( u2_prev*u2_prev * v2->dy() );
+  // manufactured solution
+  rhs->addTerm( y*tau12 );
+  rhs->addTerm( y*tau12 );
+  rhs->addTerm( -v1 );
 
   ////////////////////   DEFINE INNER PRODUCT(S)   ///////////////////////
   IPPtr ip = Teuchos::rcp(new IP);
@@ -251,13 +186,31 @@ int main(int argc, char *argv[]) {
   else if (norm == 1)
   {
     ip = Teuchos::rcp( new IP );
-    ip->addTerm( 0.5/nu*tau11-0.5/nu*tau22 + v1->dx() );
-    ip->addTerm( 1./nu*tau12 + v1->dy() );
-    ip->addTerm( 1./nu*tau12 + v2->dx() );
-    ip->addTerm( 0.5/nu*tau22-0.5/nu*tau11 + v2->dy() );
+    ip->addTerm( 0.5*tau11-0.5*tau22 + v1->dx() );
+    ip->addTerm( tau12 + v1->dy() );
+    ip->addTerm( tau12 + v2->dx() );
+    ip->addTerm( 0.5*tau22-0.5*tau11 + v2->dy() );
 
-    ip->addTerm( 2*tau11->dx() + 2*tau12->dy() - 2*u1_prev*v1->dx() - u2_prev*v1->dy() - u2_prev*v2->dx() );
-    ip->addTerm( 2*tau12->dx() + 2*tau22->dy() - 2*u2_prev*v2->dy() - u1_prev*v1->dy() - u1_prev*v2->dx() );
+    ip->addTerm( 2*tau11->dx() + 2*tau12->dy() );
+    ip->addTerm( 2*tau12->dx() + 2*tau22->dy() );
+
+    ip->addTerm( v1 );
+    ip->addTerm( v2 );
+    ip->addTerm( tau11 );
+    ip->addTerm( tau12 );
+    ip->addTerm( tau12 );
+    ip->addTerm( tau22 );
+  }
+  else if (norm == 2)
+  {
+    ip = Teuchos::rcp( new IP );
+    ip->addTerm( 0.5*tau11-0.5*tau22 + v1->dx() );
+    ip->addTerm( tau12 + 0.5*one*(v1->dy() + v2->dx()) );
+    ip->addTerm( tau12 + 0.5*one*(v1->dy() + v2->dx()) );
+    ip->addTerm( 0.5*tau22-0.5*tau11 + v2->dy() );
+
+    ip->addTerm( 2*tau11->dx() + 2*tau12->dy() );
+    ip->addTerm( 2*tau12->dx() + 2*tau22->dy() );
 
     ip->addTerm( v1 );
     ip->addTerm( v2 );
@@ -270,32 +223,20 @@ int main(int argc, char *argv[]) {
   ////////////////////   CREATE BCs   ///////////////////////
   Teuchos::RCP<BCEasy> bc = Teuchos::rcp( new BCEasy );
   // Teuchos::RCP<PenaltyConstraints> pc = Teuchos::rcp( new PenaltyConstraints );
-  SpatialFilterPtr left = Teuchos::rcp( new ConstantXBoundary(-0.5) );
+  SpatialFilterPtr left = Teuchos::rcp( new ConstantXBoundary(0) );
   SpatialFilterPtr right = Teuchos::rcp( new ConstantXBoundary(1) );
-  SpatialFilterPtr top = Teuchos::rcp( new ConstantYBoundary(-0.5) );
-  SpatialFilterPtr bottom = Teuchos::rcp( new ConstantYBoundary(1.5) );
-  bc->addDirichlet(u1hat, left, u1Exact);
-  bc->addDirichlet(u2hat, left, u2Exact);
-  bc->addDirichlet(u1hat, right, u1Exact);
-  bc->addDirichlet(u2hat, right, u2Exact);
-  bc->addDirichlet(u1hat, top, u1Exact);
-  bc->addDirichlet(u2hat, top, u2Exact);
-  bc->addDirichlet(u1hat, bottom, u1Exact);
-  bc->addDirichlet(u2hat, bottom, u2Exact);
-  // bc->addDirichlet(u1hat, left, zero);
-  // bc->addDirichlet(u2hat, left, zero);
-  // bc->addDirichlet(u1hat, right, zero);
-  // bc->addDirichlet(u2hat, right, zero);
-  // bc->addDirichlet(u1hat, top, zero);
-  // bc->addDirichlet(u2hat, top, zero);
-  // bc->addDirichlet(u1hat, bottom, zero);
-  // bc->addDirichlet(u2hat, bottom, zero);
-
-  // pc->addConstraint(u1hat*u2hat-t1hat == zero, top);
-  // pc->addConstraint(u2hat*u2hat-t2hat == zero, top);
+  SpatialFilterPtr bottom = Teuchos::rcp( new ConstantYBoundary(0) );
+  SpatialFilterPtr top = Teuchos::rcp( new ConstantYBoundary(1) );
+  bc->addDirichlet(u1hat, left, zero);
+  bc->addDirichlet(u2hat, left, zero);
+  bc->addDirichlet(u1hat, bottom, zero);
+  bc->addDirichlet(u2hat, bottom, zero);
+  bc->addDirichlet(t1hat, right, zero);
+  bc->addDirichlet(t2hat, right, -Function::yn(1));
+  bc->addDirichlet(t1hat, top, -one);
+  bc->addDirichlet(t2hat, top, zero);
 
   Teuchos::RCP<Solution> solution = Teuchos::rcp( new Solution(mesh, bc, rhs, ip) );
-  // solution->setFilter(pc);
 
   // if (enforceLocalConservation) {
   //   solution->lagrangeConstraints()->addConstraint(u1hat->times_normal_x() + u2hat->times_normal_y() == zero);
@@ -303,7 +244,6 @@ int main(int argc, char *argv[]) {
 
   // ==================== Register Solutions ==========================
   mesh->registerSolution(solution);
-  mesh->registerSolution(backgroundFlow);
 
   // Teuchos::RCP< RefinementHistory > refHistory = Teuchos::rcp( new RefinementHistory );
   // mesh->registerObserver(refHistory);
@@ -311,50 +251,50 @@ int main(int argc, char *argv[]) {
   ////////////////////   SOLVE & REFINE   ///////////////////////
   double energyThreshold = 0.2; // for mesh refinements
   RefinementStrategy refinementStrategy( solution, energyThreshold );
-  VTKExporter exporter(backgroundFlow, mesh, varFactory);
-  stringstream outfile;
-  outfile << "kovasznay" << "_" << 0;
-  exporter.exportSolution(outfile.str());
-  set<int> nonlinearVars;
-  nonlinearVars.insert(u1->ID());
-  nonlinearVars.insert(u2->ID());
+  VTKExporter exporter(solution, mesh, varFactory);
 
   double nonlinearRelativeEnergyTolerance = 1e-5; // used to determine convergence of the nonlinear solution
   for (int refIndex=0; refIndex<=numRefs; refIndex++)
   {
-    double L2Update = 1e10;
-    int iterCount = 0;
-    while (L2Update > nonlinearRelativeEnergyTolerance && iterCount < maxNewtonIterations)
-    {
-      solution->solve(false);
-      double u1L2Update = solution->L2NormOfSolutionGlobal(u1->ID());
-      double u2L2Update = solution->L2NormOfSolutionGlobal(u2->ID());
-      L2Update = sqrt(u1L2Update*u1L2Update + u2L2Update*u2L2Update);
-
-      // Check local conservation
-      if (commRank == 0)
-      {
-        cout << "L2 Norm of Update = " << L2Update << endl;
-
-        // if (saveFile.length() > 0) {
-        //   std::ostringstream oss;
-        //   oss << string(saveFile) << refIndex ;
-        //   cout << "on refinement " << refIndex << " saving mesh file to " << oss.str() << endl;
-        //   refHistory->saveToFile(oss.str());
-        // }
-      }
-
-      // line search algorithm
-      double alpha = 1.0;
-      backgroundFlow->addSolution(solution, alpha, nonlinearVars);
-      iterCount++;
-    }
+    solution->solve(false);
 
     if (commRank == 0)
     {
       stringstream outfile;
-      outfile << "kovasznay" << "_" << refIndex+1;
+      outfile << "manufacturedStokes" << "_" << refIndex;
       exporter.exportSolution(outfile.str());
+    }
+
+    if (commRank == 0)
+    {
+      FunctionPtr u1Solution = Function::solution(u1, solution);
+      FunctionPtr u2Solution = Function::solution(u2, solution);
+      FunctionPtr sigma11Solution = Function::solution(sigma11, solution);
+      FunctionPtr sigma12Solution = Function::solution(sigma12, solution);
+      FunctionPtr sigma22Solution = Function::solution(sigma22, solution);
+      FunctionPtr u1Diff = u1Solution;
+      FunctionPtr u2Diff = u2Solution;
+      FunctionPtr sigma11Diff = sigma11Solution;
+      FunctionPtr sigma12Diff = sigma12Solution-y;
+      FunctionPtr sigma22Diff = sigma22Solution;
+      FunctionPtr u1Sqr = u1Diff*u1Diff;
+      FunctionPtr u2Sqr = u2Diff*u2Diff;
+      FunctionPtr sigma11Sqr = sigma11Diff*sigma11Diff;
+      FunctionPtr sigma12Sqr = sigma12Diff*sigma12Diff;
+      FunctionPtr sigma22Sqr = sigma22Diff*sigma22Diff;
+
+      double u1Error = u1Sqr->integrate(mesh);
+      double u2Error = u2Sqr->integrate(mesh);
+      double sigma11Error = sigma11Sqr->integrate(mesh);
+      double sigma12Error = sigma12Sqr->integrate(mesh);
+      double sigma22Error = sigma22Sqr->integrate(mesh);
+      double L2Error = sqrt(u1Error + u2Error);
+      cout << "L2 Error = " << endl
+      << sqrt(u1Error) << endl
+      << sqrt(u2Error) << endl
+      << sqrt(sigma11Error) << endl
+      << sqrt(sigma12Error) << endl
+      << sqrt(sigma22Error) << endl;
     }
 
     if (refIndex < numRefs)
@@ -364,3 +304,4 @@ int main(int argc, char *argv[]) {
   return 0;
 }
 
+  
