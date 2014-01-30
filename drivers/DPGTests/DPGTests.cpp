@@ -173,8 +173,8 @@ void DPGTests::runTests() {
   
 //  testSuites.push_back( Teuchos::rcp( new IncompressibleFormulationsTests(true) ) ); // true: turn "thorough" on
   
-  testSuites.push_back( Teuchos::rcp( new MeshTopologyTests ) );
   testSuites.push_back( Teuchos::rcp( new MeshTestSuite ) );
+  testSuites.push_back( Teuchos::rcp( new MeshTopologyTests ) );
   testSuites.push_back( Teuchos::rcp( new CurvilinearMeshTests) );
   
   testSuites.push_back( Teuchos::rcp( new BasisReconciliationTests ) );

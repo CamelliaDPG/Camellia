@@ -70,17 +70,6 @@ unsigned MeshTopology::addCell(CellTopoPtr cellTopo, const vector<unsigned> &cel
   vector< map< unsigned, unsigned > > cellEntityPermutations;
   unsigned cellIndex = _cells.size();
   
-  set<unsigned> ancestralCellIndices; // includes the cell itself
-  ancestralCellIndices.insert(cellIndex);
-  if (parentCellIndex != -1) {
-    ancestralCellIndices.insert(parentCellIndex);
-    CellPtr parent = getCell(parentCellIndex);
-    while (parent->getParent().get() != NULL) {
-      parent = parent->getParent();
-      ancestralCellIndices.insert(parent->cellIndex());
-    }
-  }
-  
   vector< vector<unsigned> > cellEntityIndices(_spaceDim); // subcdim, subcord
   for (int d=0; d<_spaceDim; d++) { // start with vertices, and go up to sides
     cellEntityPermutations.push_back(map<unsigned, unsigned>());
@@ -107,21 +96,27 @@ unsigned MeshTopology::addCell(CellTopoPtr cellTopo, const vector<unsigned> &cel
       _activeCellsForEntities[d][entityIndex].insert(make_pair(cellIndex,j));
     }
   }
-  CellPtr cell = Teuchos::rcp( new Cell(cellTopo, cellVertices, cellEntityPermutations, cellIndex, cellEntityIndices) );
+  CellPtr cell = Teuchos::rcp( new Cell(cellTopo, cellVertices, cellEntityPermutations, cellIndex, this) );
   _cells.push_back(cell);
   _activeCells.insert(cellIndex);
   _rootCells.insert(cellIndex); // will remove if a parent relationship is established
-
+  if (parentCellIndex != -1) {
+    cell->setParent(getCell(parentCellIndex));
+  }
+  
   // set neighbors:
   unsigned sideDim = _spaceDim - 1;
   unsigned sideCount = cellTopo->getSideCount();
   for (int sideOrdinal=0; sideOrdinal<sideCount; sideOrdinal++) {
     unsigned sideEntityIndex = cell->entityIndex(sideDim, sideOrdinal);
-    unsigned activeCellCountForSide = getActiveCellCount(sideDim, sideEntityIndex);
-    if (activeCellCountForSide == 2) { // compatible neighbors
-      set< pair<unsigned,unsigned> >::iterator neighborIt = _activeCellsForEntities[sideDim][sideEntityIndex].begin();
-      pair<unsigned,unsigned> firstNeighbor  = *neighborIt++;
-      pair<unsigned,unsigned> secondNeighbor = *neighborIt;
+    addCellForSide(cellIndex,sideOrdinal,sideEntityIndex);
+  }
+  for (int sideOrdinal=0; sideOrdinal<sideCount; sideOrdinal++) {
+    unsigned sideEntityIndex = cell->entityIndex(sideDim, sideOrdinal);
+    unsigned cellCountForSide = getCellCountForSide(sideEntityIndex);
+    if (cellCountForSide == 2) { // compatible neighbors
+      pair<unsigned,unsigned> firstNeighbor  = _cellsForSideEntities[sideEntityIndex].first;
+      pair<unsigned,unsigned> secondNeighbor = _cellsForSideEntities[sideEntityIndex].second;
       CellPtr firstCell = _cells[firstNeighbor.first];
       CellPtr secondCell = _cells[secondNeighbor.first];
       firstCell->setNeighbor(firstNeighbor.second, secondNeighbor.first, secondNeighbor.second);
@@ -133,9 +128,24 @@ unsigned MeshTopology::addCell(CellTopoPtr cellTopo, const vector<unsigned> &cel
         }
         _boundarySides.erase(sideEntityIndex);
       }
-    } else if (activeCellCountForSide > 2) {
-      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Too many cells for side");
-    } else if (_activeCellsForEntities[sideDim][sideEntityIndex].size() == 1) { // just this side
+      // if the pre-existing neighbor is refined, set its descendants to have the appropriate neighbor.
+      if (firstCell->isParent()) {
+        vector< pair< unsigned, unsigned> > firstCellDescendants = firstCell->getDescendantsForSide(firstNeighbor.second);
+        for (vector< pair< unsigned, unsigned> >::iterator descIt = firstCellDescendants.begin(); descIt != firstCellDescendants.end(); descIt++) {
+          unsigned childCellIndex = descIt->first;
+          unsigned childSideIndex = descIt->second;
+          getCell(childCellIndex)->setNeighbor(childSideIndex, secondNeighbor.first, secondNeighbor.second);
+        }
+      }
+      if (secondCell->isParent()) { // I don't 
+        vector< pair< unsigned, unsigned> > secondCellDescendants = secondCell->getDescendantsForSide(secondNeighbor.first);
+        for (vector< pair< unsigned, unsigned> >::iterator descIt = secondCellDescendants.begin(); descIt != secondCellDescendants.end(); descIt++) {
+          unsigned childCellIndex = descIt->second;
+          unsigned childSideIndex = descIt->first;
+          getCell(childCellIndex)->setNeighbor(childSideIndex, firstNeighbor.second, firstNeighbor.first);
+        }
+      }
+    } else if (cellCountForSide == 1) { // just this side
       if (parentCellIndex == -1) { // for now anyway, we are on the boundary...
         _boundarySides.insert(sideEntityIndex);
       } else {
@@ -166,6 +176,37 @@ unsigned MeshTopology::addCell(CellTopoPtr cellTopo, const vector<unsigned> &cel
   }
   
   return cellIndex;
+}
+
+void MeshTopology::addCellForSide(unsigned int cellIndex, unsigned int sideOrdinal, unsigned int sideEntityIndex) {
+  if (_cellsForSideEntities.find(sideEntityIndex) == _cellsForSideEntities.end()) {
+    pair< unsigned, unsigned > cell1 = make_pair(cellIndex, sideOrdinal);
+    pair< unsigned, unsigned > cell2 = make_pair(-1, -1);
+    _cellsForSideEntities[sideEntityIndex] = make_pair(cell1, cell2);
+  } else {
+    pair< unsigned, unsigned > cell1 = _cellsForSideEntities[sideEntityIndex].first;
+    pair< unsigned, unsigned > cell2 = _cellsForSideEntities[sideEntityIndex].second;
+    
+    CellPtr cellToAdd = getCell(cellIndex);
+    unsigned parentCellIndex;
+    if ( cellToAdd->getParent().get() == NULL) {
+      parentCellIndex = -1;
+    } else {
+      parentCellIndex = cellToAdd->getParent()->cellIndex();
+    }
+    if (parentCellIndex == cell1.first) {
+      // then replace cell1's entry with the new one
+      cell1.first = cellIndex;
+      cell1.second = sideOrdinal;
+    } else if ((cell2.first == -1) || (parentCellIndex == cell2.first)) {
+      cell2.first = cellIndex;
+      cell2.second = sideOrdinal;
+    } else {
+      cout << "Internal error: attempt to add 3rd cell for side with entity index " << sideEntityIndex << endl;
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Internal error: attempt to add 3rd cell for side");
+    }
+    _cellsForSideEntities[sideEntityIndex] = make_pair(cell1, cell2);
+  }
 }
 
 void MeshTopology::addEdgeCurve(pair<unsigned,unsigned> edge, ParametricCurvePtr curve) {
@@ -325,6 +366,20 @@ vector<double> MeshTopology::getCellCentroid(unsigned cellIndex) {
   return centroid;
 }
 
+unsigned MeshTopology::getCellCountForSide(unsigned sideEntityIndex) {
+  if (_cellsForSideEntities.find(sideEntityIndex) == _cellsForSideEntities.end()) {
+    return 0;
+  } else {
+    pair<unsigned,unsigned> cell1 = _cellsForSideEntities[sideEntityIndex].first;
+    pair<unsigned,unsigned> cell2 = _cellsForSideEntities[sideEntityIndex].second;
+    if (cell2.first == -1) {
+      return 1;
+    } else {
+      return 2;
+    }
+  }
+}
+
 void MeshTopology::deactivateCell(CellPtr cell) {
 //  cout << "deactivating cell " << cell->cellIndex() << endl;
   CellTopoPtr cellTopo = cell->topology();
@@ -351,17 +406,21 @@ void MeshTopology::deactivateCell(CellPtr cell) {
     
       // delete from the _activeCellsForEntities store
       unsigned entityIndex = knownEntry->second;
-      unsigned eraseCount = _activeCellsForEntities[d][entityIndex].erase(make_pair(cell->cellIndex(),j));
-      if (eraseCount==0) {
-        cout << "WARNING: attempt was made to deactivate a non-active subcell topology...\n";
+      if (_activeCellsForEntities[d].find(entityIndex) == _activeCellsForEntities[d].end()) {
+        cout << "WARNING: No entry found for _activeCellsForEntities[" << d << "][" << entityIndex << "]\n";
       } else {
-//        cout << "Erased _activeCellsForEntities[" << d << "][" << entityIndex << "] entry for (";
-//        cout << cell->cellIndex() << "," << j << ").  Remaining entries: ";
-//        set< pair<unsigned,unsigned> > remainingEntries = _activeCellsForEntities[d][entityIndex];
-//        for (set< pair<unsigned,unsigned> >::iterator entryIt = remainingEntries.begin(); entryIt != remainingEntries.end(); entryIt++) {
-//          cout << "(" << entryIt->first << "," << entryIt->second << ") ";
-//        }
-//        cout << endl;
+        unsigned eraseCount = _activeCellsForEntities[d][entityIndex].erase(make_pair(cell->cellIndex(),j));
+        if (eraseCount==0) {
+          cout << "WARNING: attempt was made to deactivate a non-active subcell topology...\n";
+        } else {
+  //        cout << "Erased _activeCellsForEntities[" << d << "][" << entityIndex << "] entry for (";
+  //        cout << cell->cellIndex() << "," << j << ").  Remaining entries: ";
+  //        set< pair<unsigned,unsigned> > remainingEntries = _activeCellsForEntities[d][entityIndex];
+  //        for (set< pair<unsigned,unsigned> >::iterator entryIt = remainingEntries.begin(); entryIt != remainingEntries.end(); entryIt++) {
+  //          cout << "(" << entryIt->first << "," << entryIt->second << ") ";
+  //        }
+  //        cout << endl;
+        }
       }
     }
   }
@@ -427,6 +486,13 @@ CellPtr MeshTopology::getCell(unsigned cellIndex) {
 
 unsigned MeshTopology::getEntityCount(unsigned int d) {
   return _entities[d].size();
+}
+
+unsigned MeshTopology::getEntityIndex(unsigned d, const set<unsigned> &nodeSet) {
+  if (_knownEntities[d].find(nodeSet) != _knownEntities[d].end()) {
+    return _knownEntities[d][nodeSet];
+  }
+  return -1;
 }
 
 unsigned MeshTopology::getEntityParent(unsigned d, unsigned entityIndex, unsigned parentOrdinal) {

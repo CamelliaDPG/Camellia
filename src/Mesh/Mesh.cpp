@@ -1497,51 +1497,6 @@ void Mesh::getMultiBasisOrdering(DofOrderingPtr &originalNonParentOrdering,
                                                               varIDsToUpgrade,parentSideIndexInNeighbor);
 }
 
-// this is likely cruft: there's a version of this in Solution...
-Epetra_Map Mesh::getPartitionMap() {
-  int rank = 0;
-#ifdef HAVE_MPI
-  rank     = Teuchos::GlobalMPISession::getRank();
-  Epetra_MpiComm Comm(MPI_COMM_WORLD);
-#else
-  Epetra_SerialComm Comm;
-#endif
-  
-  // returns map for current processor's local-to-global dof indices
-  // determine the local dofs we have, and what their global indices are:
-  int localDofsSize;
-
-  set<int> myGlobalIndicesSet = globalDofIndicesForPartition(rank);
-  
-  localDofsSize = myGlobalIndicesSet.size();
-  
-  int *myGlobalIndices;
-  if (localDofsSize!=0){
-    myGlobalIndices = new int[ localDofsSize ];      
-  }else{
-    myGlobalIndices = NULL;
-  }
-  
-  // copy from set object into the allocated array
-  int offset = 0;
-  for ( set<int>::iterator indexIt = myGlobalIndicesSet.begin();
-       indexIt != myGlobalIndicesSet.end();
-       indexIt++ ){
-    myGlobalIndices[offset++] = *indexIt;
-  }
-  
-  int numGlobalDofs = this->numGlobalDofs();
-  int indexBase = 0;
-  //cout << "process " << rank << " about to construct partMap.\n";
-  //Epetra_Map partMap(-1, localDofsSize, myGlobalIndices, indexBase, Comm);
-  Epetra_Map partMap(numGlobalDofs, localDofsSize, myGlobalIndices, indexBase, Comm);
-  
-  if (localDofsSize!=0){
-    delete[] myGlobalIndices;
-  }
-  return partMap;
-}
-
 void Mesh::getPatchBasisOrdering(DofOrderingPtr &originalChildOrdering, ElementPtr child, int sideIndex) {
   DofOrderingPtr parentTrialOrdering = child->getParent()->elementType()->trialOrderPtr;
 //  cout << "Adding PatchBasis for element " << child->cellID() << " along side " << sideIndex << "\n";
@@ -2487,6 +2442,8 @@ void Mesh::setElementType(int cellID, ElementTypePtr newType, bool sideUpgradeOn
     _cellSideUpgrades[cellID] = make_pair(oldType,newType);
   }
   elem->setElementType(newType);
+  // once we eliminate calls from inside Mesh to setElementType, can uncomment this code (for certain tests):
+//  _maximumRule2D->setElementType(cellID, newType, sideUpgradeOnly);
 }
 
 void Mesh::setEnforceMultiBasisFluxContinuity( bool value ) {
