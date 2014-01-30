@@ -1,0 +1,4 @@
+project(IncompressibleNS)
+
+add_executable(NoPressureKovasznay NoPressureKovasznay.cpp)
+add_executable(PressureKovasznay PressureKovasznay.cpp)
