@@ -23,6 +23,8 @@ public:
   
   bool testEntityConstraints();
   bool testConstraintRelaxation();
+  
+  bool testNeighborRelationships();
 };
 
 #endif

@@ -594,8 +594,21 @@ void GDAMaximumRule2D::getMultiBasisOrdering(DofOrderingPtr &originalNonParentOr
                                                               varIDsToUpgrade,parentSideIndexInNeighbor);
 }
 
+int GDAMaximumRule2D::globalDofIndex(int cellID, int localDofIndex) {
+  pair<unsigned,unsigned> key = make_pair(cellID, localDofIndex);
+  map< pair<unsigned,unsigned>, unsigned >::iterator mapEntryIt = _localToGlobalMap.find(key);
+  if ( mapEntryIt == _localToGlobalMap.end() ) {
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "entry not found.");
+  }
+  return (*mapEntryIt).second;
+}
+
 unsigned GDAMaximumRule2D::globalDofCount() {
   return _numGlobalDofs;
+}
+
+set<int> GDAMaximumRule2D::globalDofIndicesForPartition(int partitionNumber) {
+  return _partitionedGlobalDofIndices[partitionNumber];
 }
 
 unsigned GDAMaximumRule2D::localDofCount() {

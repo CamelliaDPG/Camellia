@@ -15,6 +15,7 @@
 #include "RefinementPattern.h"
 
 typedef Teuchos::RCP<shards::CellTopology> CellTopoPtr;
+class MeshTopology;
 
 using namespace std;
 
@@ -24,8 +25,9 @@ class Cell {
   unsigned _cellIndex;
   CellTopoPtr _cellTopo;
   vector< unsigned > _vertices;
-  vector< vector<unsigned> > _entityIndices;  // indices: [subcdim][subcord]
   vector< map< unsigned, unsigned > > _subcellPermutations; // permutation to get from local ordering to the canonical one
+  
+  MeshTopology* _meshTopo;
   
   // for parents:
   vector< Teuchos::RCP< Cell > > _children;
@@ -42,7 +44,7 @@ class Cell {
    */
 public:
   Cell(CellTopoPtr cellTopo, const vector<unsigned> &vertices, const vector< map< unsigned, unsigned > > &subcellPermutations,
-       unsigned cellIndex, const vector< vector<unsigned> > &entityIndices);
+       unsigned cellIndex, MeshTopology* meshTopo);
   unsigned cellIndex();
   const vector< Teuchos::RCP< Cell > > &children();
   void setChildren(vector< Teuchos::RCP< Cell > > children);
@@ -50,7 +52,7 @@ public:
   vector< pair<unsigned, unsigned> > childrenForSide(unsigned sideIndex);
   vector< pair< unsigned, unsigned> > getDescendantsForSide(int sideIndex, bool leafNodesOnly = true);
   unsigned entityIndex(unsigned subcdim, unsigned subcord);
-  const vector<unsigned>& getEntityIndices(unsigned subcdim);
+  vector<unsigned> getEntityIndices(unsigned subcdim);
   Teuchos::RCP<Cell> getParent();
   void setParent(Teuchos::RCP<Cell> parent);
   bool isParent();

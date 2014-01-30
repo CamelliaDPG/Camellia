@@ -256,9 +256,6 @@ public:
                              ElementPtr parent, int sideIndex, int parentSideIndexInNeighbor,
                              ElementPtr nonParent);
 
-  // getPartitionMap is likely cruft: there's another copy of this in Solution, and this one appears never to be called…
-  Epetra_Map getPartitionMap(); // returns map for current processor's local-to-global dof indices
-
   void getPatchBasisOrdering(DofOrderingPtr &originalChildOrdering, ElementPtr child, int sideIndex);
   FunctionPtr getTransformationFunction(); // will be NULL for meshes without edge curves defined
 

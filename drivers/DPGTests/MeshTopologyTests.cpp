@@ -8,6 +8,13 @@ MeshTopologyTests::MeshTopologyTests() {
 
 void MeshTopologyTests::runTests(int &numTestsRun, int &numTestsPassed) {
   setup();
+  if (testNeighborRelationships()) {
+    numTestsPassed++;
+  }
+  numTestsRun++;
+  teardown();
+  
+  setup();
   if (testEntityConstraints()) {
     numTestsPassed++;
   }
@@ -890,6 +897,35 @@ bool MeshTopologyTests::testConstraintRelaxation() {
   if (! checkConstraints(mesh3D, faceDim, expectedFaceConstraints3D, "compatible 3D mesh") ) {
     cout << "Failed face constraint check for compatible 3D mesh." << endl;
     success = false;
+  }
+  
+  return success;
+}
+
+bool MeshTopologyTests::testNeighborRelationships() {
+  bool success = true;
+  
+  MeshTopologyPtr mesh2D = makeRectMesh(0.0, 0.0, 1.0, 2.0,
+                                        1, 2); // 2 initial elements
+
+  // the following refinement sequence is interesting, in that the final refinement of cell 0
+  // reduces a 2-irregular mesh to a 1-irregular one.  It's a nice test of our refinement logic
+  mesh2D->refineCell(1, RefinementPattern::regularRefinementPatternQuad());
+  mesh2D->refineCell(2, RefinementPattern::regularRefinementPatternQuad());
+  mesh2D->refineCell(3, RefinementPattern::regularRefinementPatternQuad());
+  mesh2D->refineCell(0, RefinementPattern::regularRefinementPatternQuad());
+  
+  // not worth going into the details, but cell 6's side 0 should point to cell 17's side 2.  cell 17's side 2 should point to cell 2, side 0 (an inactive peer).
+  CellPtr cell6 = mesh2D->getCell(6);
+  if (cell6->getNeighbor(0).first != 17) {
+    success = false;
+    cout << "cell 6's neighbor on side 0 is not 17, as expected, but " << cell6->getNeighbor(0).first << ".\n";
+  }
+  
+  CellPtr cell17 = mesh2D->getCell(17);
+  if (cell17->getNeighbor(2).first != 2) {
+    success = false;
+    cout << "cell 17's neighbor on side 2 is not 2, as expected, but " << cell17->getNeighbor(2).first << ".\n";
   }
   
   return success;

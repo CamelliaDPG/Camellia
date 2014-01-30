@@ -426,18 +426,18 @@ bool RefinementStrategy::enforceAnisotropicOneIrregularity(vector<int> &xCells, 
         int numNeighborsOnSide = neighbor->getDescendantsForSide(mySideIndexInNeighbor).size();
         if (numNeighborsOnSide > 2) isIrregular=true;
       }
-      if (isIrregular){
-	int cellID = current_element->cellID();
-	bool isXRefined = std::find(xChildren.begin(),xChildren.end(),cellID)!=xChildren.end();
-	bool isYRefined = std::find(yChildren.begin(),yChildren.end(),cellID)!=yChildren.end();
-	bool isPreviouslyRefined = (isXRefined || isYRefined);
-	if (!isPreviouslyRefined){ // if the cell to refine has already been refined anisotropically, don't refine it again, 
-	  irregularQuadCells.push_back(cellID);
-	}else if (isXRefined){ 
-	  yUpgrades.push_back(cellID);
-	}else if (isYRefined){ 
-	  xUpgrades.push_back(cellID);
-	}
+      if (isIrregular) {
+        int cellID = current_element->cellID();
+        bool isXRefined = std::find(xChildren.begin(),xChildren.end(),cellID)!=xChildren.end();
+        bool isYRefined = std::find(yChildren.begin(),yChildren.end(),cellID)!=yChildren.end();
+        bool isPreviouslyRefined = (isXRefined || isYRefined);
+        if (!isPreviouslyRefined) { // if the cell to refine has already been refined anisotropically, don't refine it again,
+          irregularQuadCells.push_back(cellID);
+        } else if (isXRefined) {
+          yUpgrades.push_back(cellID);
+        } else if (isYRefined) {
+          xUpgrades.push_back(cellID);
+        }
       }
     }
     if (irregularQuadCells.size()>0) {

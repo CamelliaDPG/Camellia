@@ -63,12 +63,12 @@ vector< pair< unsigned, unsigned> > Cell::getDescendantsForSide(int sideIndex, b
 }
 
 Cell::Cell(CellTopoPtr cellTopo, const vector<unsigned> &vertices, const vector< map< unsigned, unsigned > > &subcellPermutations,
-     unsigned cellIndex, const vector< vector<unsigned> > &entityIndices) {
+     unsigned cellIndex, MeshTopology* meshTopo) {
   _cellTopo = cellTopo;
   _vertices = vertices;
   _subcellPermutations = subcellPermutations;
   _cellIndex = cellIndex;
-  _entityIndices = entityIndices;
+  _meshTopo = meshTopo;
   _neighbors = vector< pair<unsigned, unsigned> >(_cellTopo->getSideCount(),make_pair(-1,-1));
 }
 unsigned Cell::cellIndex() {
@@ -94,11 +94,39 @@ vector<unsigned> Cell::getChildIndices() {
 }
 
 unsigned Cell::entityIndex(unsigned subcdim, unsigned subcord) {
-  return _entityIndices[subcdim][subcord];
+  set< unsigned > nodes;
+  if (subcdim != 0) {
+    int entityNodeCount = _cellTopo->getNodeCount(subcdim, subcord);
+    for (int node=0; node<entityNodeCount; node++) {
+      unsigned nodeIndexInCell = _cellTopo->getNodeMap(subcdim, subcord, node);
+      nodes.insert(_vertices[nodeIndexInCell]);
+    }
+  } else {
+    nodes.insert(_vertices[subcord]);
+  }
+  return _meshTopo->getEntityIndex(subcdim, nodes);
 }
 
-const vector<unsigned>& Cell::getEntityIndices(unsigned subcdim) {
-  return _entityIndices[subcdim];
+vector<unsigned> Cell::getEntityIndices(unsigned subcdim) {
+  int entityCount = _cellTopo->getSubcellCount(subcdim);
+  vector<unsigned> cellEntityIndices(entityCount);
+  for (int j=0; j<entityCount; j++) {
+    unsigned entityIndex;
+    set< unsigned > nodes;
+    if (subcdim != 0) {
+      int entityNodeCount = _cellTopo->getNodeCount(subcdim, j);
+      for (int node=0; node<entityNodeCount; node++) {
+        unsigned nodeIndexInCell = _cellTopo->getNodeMap(subcdim, j, node);
+        nodes.insert(_vertices[nodeIndexInCell]);
+      }
+    } else {
+      nodes.insert(_vertices[j]);
+    }
+    
+    entityIndex = _meshTopo->getEntityIndex(subcdim, nodes);
+    cellEntityIndices[j] = entityIndex;
+  }
+  return cellEntityIndices;
 }
 
 Teuchos::RCP<Cell> Cell::getParent() {

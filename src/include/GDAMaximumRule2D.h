@@ -67,8 +67,6 @@ class GDAMaximumRule2D : public GlobalDofAssignment {
   void matchNeighbor(unsigned cellID, int sideIndex);
   map< int, BasisPtr > multiBasisUpgradeMap(CellPtr parent, unsigned sideIndex, unsigned bigNeighborPolyOrder);
   
-  void setElementType(unsigned cellID, ElementTypePtr newType, bool sideUpgradeOnly);
-  
   void verticesForCells(FieldContainer<double>& vertices, vector<int> &cellIDs);
   void verticesForCell(FieldContainer<double>& vertices, int cellID);
   
@@ -89,11 +87,17 @@ public:
   void didChangePartitionPolicy();
   
   ElementTypePtr elementType(unsigned cellID);
+  
+  int globalDofIndex(int cellID, int localDofIndex);
+  set<int> globalDofIndicesForPartition(int partitionNumber);
 
   unsigned globalDofCount();
   unsigned localDofCount(); // local to the MPI node
   
   void rebuildLookups();
+  
+  // used in some tests...
+  void setElementType(unsigned cellID, ElementTypePtr newType, bool sideUpgradeOnly);
 };
 
 #endif /* defined(__Camellia_debug__GDAMaximumRule2D__) */
