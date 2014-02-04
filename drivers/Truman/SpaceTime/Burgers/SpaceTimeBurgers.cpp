@@ -198,7 +198,10 @@ int main(int argc, char *argv[]) {
     }
 
     if (refIndex < numRefs)
+    {
       refinementStrategy.refine(commRank==0); // print to console on commRank 0
+      backgroundFlow->projectOntoMesh(initialConditions);
+    }
   }
 
   return 0;

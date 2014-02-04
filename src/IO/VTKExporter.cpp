@@ -92,7 +92,7 @@ void VTKExporter::exportFields(const string& filePath, unsigned int num1DPts)
     unsigned cellTopoKey = cellTopoPtr->getKey();
     int numPoints = 0;
     if (defaultPts)
-      num1DPts = pow(2.0, pOrder-1);
+      num1DPts = pow(2.0, pOrder);
 
     switch (cellTopoKey)
     {
@@ -346,7 +346,7 @@ void VTKExporter::exportTraces(const string& filePath, unsigned int num1DPts)
     int numVertices = vertexPoints.dimension(1);
     unsigned cellTopoKey = cellTopoPtr->getKey();
     if (defaultPts)
-      num1DPts = pow(2.0, pOrder-1);
+      num1DPts = pow(2.0, pOrder);
 
     basisCache->setPhysicalCellNodes(physicalCellNodes, cellIDs, true); // true: create side caches
 
@@ -483,7 +483,7 @@ void VTKExporter::exportFunction(FunctionPtr function, const string& functionNam
     unsigned cellTopoKey = cellTopoPtr->getKey();
     int numPoints = 0;
     if (defaultPts)
-      num1DPts = pow(2.0, pOrder-1);
+      num1DPts = pow(2.0, pOrder);
 
     switch (cellTopoKey)
     {
@@ -689,7 +689,7 @@ void VTKExporter::exportBoundaryValuedFunctions(vector< FunctionPtr > &functions
 
     int pOrder = _mesh->cellPolyOrder(cellIDs[0]);
     if (defaultPts)
-      num1DPts = pow(2.0, pOrder-1);
+      num1DPts = pow(2.0, pOrder);
 
     basisCache->setPhysicalCellNodes(physicalCellNodes, cellIDs, true); // true: create side caches
 
