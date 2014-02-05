@@ -104,7 +104,7 @@ private:
   // the  values of this map have dimensions (numCells, numTrialDofs)
 
   void initialize();
-  void integrateBasisFunctions(FieldContainer<GlobalIndexType> &globalIndices, FieldContainer<double> &values, int trialID);
+  void integrateBasisFunctions(FieldContainer<GlobalIndexTypeToCast> &globalIndices, FieldContainer<double> &values, int trialID);
   void integrateBasisFunctions(FieldContainer<double> &values, ElementTypePtr elemTypePtr, int trialID);
 
   // statistics for the last solve:

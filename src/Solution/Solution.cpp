@@ -493,11 +493,15 @@ void Solution::populateStiffnessAndLoad() {
       
       FieldContainer<GlobalIndexType> globalDofIndices;
       
+      FieldContainer<GlobalIndexTypeToCast> globalDofIndicesCast;
+      
       Teuchos::Array<int> localStiffnessDim(2,numTrialDofs);
       Teuchos::Array<int> localRHSDim(1,numTrialDofs);
       
       FieldContainer<double> interpretedStiffness;
       FieldContainer<double> interpretedRHS;
+      
+      Teuchos::Array<int> dim;
       
       for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
         GlobalIndexType cellID = _mesh->cellID(elemTypePtr,cellIndex+startCellIndexForBatch,rank);
@@ -506,9 +510,17 @@ void Solution::populateStiffnessAndLoad() {
         // we have the same local-to-global map for both rows and columns
         _mesh->interpretLocalDofs(cellID, localStiffness, interpretedStiffness, globalDofIndices);
         _mesh->interpretLocalDofs(cellID, localRHS, interpretedRHS, globalDofIndices);
-        _globalStiffMatrix->InsertGlobalValues(globalDofIndices.size(),(GlobalIndexTypeToCast *)&globalDofIndices(0),
-                                               globalDofIndices.size(),(GlobalIndexTypeToCast *)&globalDofIndices(0),&interpretedStiffness[0]);
-        _rhsVector->SumIntoGlobalValues(globalDofIndices.size(),(GlobalIndexTypeToCast *)&globalDofIndices(0),&localRHS[0]);
+        
+        // cast whatever the global index type is to a type that Epetra supports
+        globalDofIndices.dimensions(dim);
+        globalDofIndicesCast.resize(dim);
+        for (int dofOrdinal = 0; dofOrdinal < globalDofIndices.size(); dofOrdinal++) {
+          globalDofIndicesCast[dofOrdinal] = globalDofIndices[dofOrdinal];
+        }
+        
+        _globalStiffMatrix->InsertGlobalValues(globalDofIndices.size(),&globalDofIndicesCast(0),
+                                               globalDofIndices.size(),&globalDofIndicesCast(0),&interpretedStiffness[0]);
+        _rhsVector->SumIntoGlobalValues(globalDofIndices.size(),&globalDofIndicesCast(0),&localRHS[0]);
       }
       startCellIndexForBatch += numCells;
     }
@@ -547,7 +559,7 @@ void Solution::populateStiffnessAndLoad() {
       _lagrangeConstraints->getCoefficients(lhs,rhs,elementConstraintIndex,
                                             elemTypePtr->trialOrderPtr,basisCache);
       
-      FieldContainer<GlobalIndexType> globalDofIndices(numTrialDofs+1); // max # of nonzeros
+      FieldContainer<GlobalIndexTypeToCast> globalDofIndices(numTrialDofs+1); // max # of nonzeros
       FieldContainer<double> nonzeroValues(numTrialDofs+1);
       Teuchos::Array<int> localLHSDim(numTrialDofs);
       FieldContainer<double> interpretedLHS;
@@ -555,7 +567,7 @@ void Solution::populateStiffnessAndLoad() {
       FieldContainer<GlobalIndexType> interpretedGlobalDofIndices;
       
       for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
-        GlobalIndexType globalRowIndex = partMap.GID(localRowIndex);
+        GlobalIndexTypeToCast globalRowIndex = partMap.GID(localRowIndex);
         int nnz = 0;
         FieldContainer<double> localLHS(localLHSDim,&lhs(cellIndex,0)); // shallow copy
         _mesh->interpretLocalDofs(cellIDs[cellIndex], localLHS, interpretedLHS, interpretedGlobalDofIndices);
@@ -575,12 +587,12 @@ void Solution::populateStiffnessAndLoad() {
           nonzeroValues(nnz) = 1.0; // just put a 1 in the diagonal to avoid singular matrix
         }
         // insert row:
-        _globalStiffMatrix->InsertGlobalValues(1,(GlobalIndexTypeToCast *)&globalRowIndex,nnz+1,(GlobalIndexTypeToCast *)&globalDofIndices(0),
+        _globalStiffMatrix->InsertGlobalValues(1,&globalRowIndex,nnz+1,&globalDofIndices(0),
                                                &nonzeroValues(0));
         // insert column:
-        _globalStiffMatrix->InsertGlobalValues(nnz+1,(GlobalIndexTypeToCast *)&globalDofIndices(0),1,(GlobalIndexTypeToCast *)&globalRowIndex,
+        _globalStiffMatrix->InsertGlobalValues(nnz+1,&globalDofIndices(0),1,&globalRowIndex,
                                                &nonzeroValues(0));
-        _rhsVector->ReplaceGlobalValues(1,(GlobalIndexTypeToCast *)&globalRowIndex,&rhs(cellIndex));
+        _rhsVector->ReplaceGlobalValues(1,&globalRowIndex,&rhs(cellIndex));
         
         localRowIndex++;
       }
@@ -635,10 +647,10 @@ void Solution::populateStiffnessAndLoad() {
         TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Zero-mean constraint imposition assumes a nodal basis, and this basis isn't nodal.");
       }
       
-      int zmcIndex = partMap.GID(localRowIndex);
+      GlobalIndexTypeToCast zmcIndex = partMap.GID(localRowIndex);
       //      cout << "Imposing zero-mean constraint for variable " << _mesh->bilinearForm()->trialName(trialID) << endl;
       FieldContainer<double> basisIntegrals;
-      FieldContainer<GlobalIndexType> globalIndices;
+      FieldContainer<GlobalIndexTypeToCast> globalIndices;
       integrateBasisFunctions(globalIndices,basisIntegrals, trialID);
       int numValues = globalIndices.size();
       
@@ -657,12 +669,12 @@ void Solution::populateStiffnessAndLoad() {
             product(i,j) = _zmcRho * basisIntegrals(i) * basisIntegrals(j) / denominator;
           }
         }
-        _globalStiffMatrix->SumIntoGlobalValues(numValues, (GlobalIndexTypeToCast *)&globalIndices(0), numValues, (GlobalIndexTypeToCast *)&globalIndices(0), &product(0,0));
+        _globalStiffMatrix->SumIntoGlobalValues(numValues, &globalIndices(0), numValues, &globalIndices(0), &product(0,0));
       } else { // otherwise, we increase the size of the system to accomodate the zmc...
         // insert row:
-        _globalStiffMatrix->InsertGlobalValues(1,(GlobalIndexTypeToCast *)&zmcIndex,numValues,(GlobalIndexTypeToCast *)&globalIndices(0),&basisIntegrals(0));
+        _globalStiffMatrix->InsertGlobalValues(1,&zmcIndex,numValues,&globalIndices(0),&basisIntegrals(0));
         // insert column:
-        _globalStiffMatrix->InsertGlobalValues(numValues,(GlobalIndexTypeToCast *)&globalIndices(0),1,(GlobalIndexTypeToCast *)&zmcIndex,&basisIntegrals(0));
+        _globalStiffMatrix->InsertGlobalValues(numValues,&globalIndices(0),1,&zmcIndex,&basisIntegrals(0));
         
         //      cout << "in zmc, diagonal entry: " << rho << endl;
         //rho /= numValues;
@@ -696,13 +708,22 @@ void Solution::populateStiffnessAndLoad() {
   
   _mesh->boundary().bcsToImpose(bcGlobalIndices,bcGlobalValues,*(_bc.get()), myGlobalIndicesSet);
   int numBCs = bcGlobalIndices.size();
+  
+  FieldContainer<GlobalIndexTypeToCast> bcGlobalIndicesCast;
+  // cast whatever the global index type is to a type that Epetra supports
+  Teuchos::Array<int> dim;
+  bcGlobalIndices.dimensions(dim);
+  bcGlobalIndicesCast.resize(dim);
+  for (int dofOrdinal = 0; dofOrdinal < bcGlobalIndices.size(); dofOrdinal++) {
+    bcGlobalIndicesCast[dofOrdinal] = bcGlobalIndices[dofOrdinal];
+  }
   //    cout << "bcGlobalIndices:" << endl << bcGlobalIndices;
   //    cout << "bcGlobalValues:" << endl << bcGlobalValues;
   
   Epetra_MultiVector v(partMap,1);
   v.PutScalar(0.0);
   for (int i = 0; i < numBCs; i++) {
-    v.ReplaceGlobalValue((GlobalIndexTypeToCast)bcGlobalIndices(i), 0, bcGlobalValues(i));
+    v.ReplaceGlobalValue(bcGlobalIndicesCast(i), 0, bcGlobalValues(i));
   }
   
   Epetra_MultiVector rhsDirichlet(partMap,1);
@@ -714,7 +735,7 @@ void Solution::populateStiffnessAndLoad() {
   if (numBCs == 0) {
     //cout << "Solution: Warning: Imposing no BCs." << endl;
   } else {
-    int err = _rhsVector->ReplaceGlobalValues(numBCs,(GlobalIndexTypeToCast*)&bcGlobalIndices(0),&bcGlobalValues(0));
+    int err = _rhsVector->ReplaceGlobalValues(numBCs,&bcGlobalIndicesCast(0),&bcGlobalValues(0));
     if (err != 0) {
       cout << "ERROR: rhsVector.ReplaceGlobalValues(): some indices non-local...\n";
     }
@@ -723,7 +744,7 @@ void Solution::populateStiffnessAndLoad() {
   //  and add one to diagonal.
   FieldContainer<int> bcLocalIndices(bcGlobalIndices.dimension(0));
   for (int i=0; i<bcGlobalIndices.dimension(0); i++) {
-    bcLocalIndices(i) = _globalStiffMatrix->LRID((GlobalIndexTypeToCast)bcGlobalIndices(i));
+    bcLocalIndices(i) = _globalStiffMatrix->LRID(bcGlobalIndicesCast(i));
   }
   if (numBCs == 0) {
     ML_Epetra::Apply_OAZToMatrix(NULL, 0, *_globalStiffMatrix);
@@ -1013,7 +1034,7 @@ double Solution::globalCondEstLastSolve() {
   return _globalSystemConditionEstimate;
 }
 
-void Solution::integrateBasisFunctions(FieldContainer<GlobalIndexType> &globalIndices, FieldContainer<double> &values, int trialID) {
+void Solution::integrateBasisFunctions(FieldContainer<GlobalIndexTypeToCast> &globalIndices, FieldContainer<double> &values, int trialID) {
   // only supports scalar-valued field bases right now...
   int sideIndex = 0; // field variables only
   vector<ElementTypePtr> elemTypes = _mesh->elementTypes();
@@ -3044,12 +3065,12 @@ void Solution::condensedSolve(Teuchos::RCP<Solver> globalSolver, bool reduceMemo
       if (!trialBasis->isNodal()) {
         TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Zero-mean constraint imposition assumes a nodal basis, and this basis isn't nodal.");
       }
-      GlobalIndexType zmcIndex = fluxPartMap.GID(localRowIndex);
+      GlobalIndexTypeToCast zmcIndex = fluxPartMap.GID(localRowIndex);
       //      cout << "Imposing zero-mean constraint for variable " << _mesh->bilinearForm()->trialName(trialID) << endl;
-      FieldContainer<double> basisIntegrals; FieldContainer<GlobalIndexType> globalIndices;
+      FieldContainer<double> basisIntegrals; FieldContainer<GlobalIndexTypeToCast> globalIndices;
       integrateBasisFunctions(globalIndices,basisIntegrals, trialID);
       GlobalIndexType numValues = globalIndices.size();
-      FieldContainer<GlobalIndexType> condensedGlobalIndices(numValues);
+      FieldContainer<GlobalIndexTypeToCast> condensedGlobalIndices(numValues);
       for (GlobalIndexType i = 0;i<numValues;i++){
         condensedGlobalIndices(i) = globalToCondensedMap[globalIndices(i)];
         //      cout << "zmc constraint on condensed entry " << globalToCondensedMap[globalIndices(i)] << endl;
@@ -3057,15 +3078,15 @@ void Solution::condensedSolve(Teuchos::RCP<Solver> globalSolver, bool reduceMemo
       
       //      cout << "zmcIndex: " << zmcIndex << endl;
       // insert row:
-      K_cond.InsertGlobalValues(1,(GlobalIndexTypeToCast*)&zmcIndex,numValues,(GlobalIndexTypeToCast*)&condensedGlobalIndices(0),&basisIntegrals(0));
+      K_cond.InsertGlobalValues(1,&zmcIndex,numValues,&condensedGlobalIndices(0),&basisIntegrals(0));
       // insert column:
-      K_cond.InsertGlobalValues(numValues,(GlobalIndexTypeToCast*)&condensedGlobalIndices(0),1,(GlobalIndexTypeToCast*)&zmcIndex,&basisIntegrals(0));
+      K_cond.InsertGlobalValues(numValues,&condensedGlobalIndices(0),1,&zmcIndex,&basisIntegrals(0));
       
       //      cout << "in zmc, diagonal entry: " << rho << endl;
       //rho /= numValues;
       // define stabilizing parameter for zero-mean constraints
       double rho_entry = - 1.0 / _zmcRho;
-      K_cond.InsertGlobalValues(1,(GlobalIndexTypeToCast*)&zmcIndex,1,(GlobalIndexTypeToCast*)&zmcIndex,&rho_entry);
+      K_cond.InsertGlobalValues(1,&zmcIndex,1,&zmcIndex,&rho_entry);
       localRowIndex++;
     }
   }
@@ -3748,9 +3769,9 @@ Epetra_Map Solution::getPartitionMap(PartitionIndexType rank, set<GlobalIndexTyp
     localDofsSize += zeroMeanConstraintsSize + numGlobalLagrange;
   }
   
-  GlobalIndexType *myGlobalIndices;
+  GlobalIndexTypeToCast *myGlobalIndices;
   if (localDofsSize!=0){
-    myGlobalIndices = new GlobalIndexType[ localDofsSize ];
+    myGlobalIndices = new GlobalIndexTypeToCast[ localDofsSize ];
   } else {
     myGlobalIndices = NULL;
   }
@@ -3783,7 +3804,7 @@ Epetra_Map Solution::getPartitionMap(PartitionIndexType rank, set<GlobalIndexTyp
   int indexBase = 0;
   //cout << "process " << rank << " about to construct partMap.\n";
   //Epetra_Map partMap(-1, localDofsSize, myGlobalIndices, indexBase, Comm);
-  Epetra_Map partMap(totalRows, localDofsSize, (GlobalIndexTypeToCast*)myGlobalIndices, indexBase, *Comm);
+  Epetra_Map partMap(totalRows, localDofsSize, myGlobalIndices, indexBase, *Comm);
   
   if (localDofsSize!=0){
     delete[] myGlobalIndices;
