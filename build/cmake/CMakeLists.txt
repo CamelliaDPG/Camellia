@@ -177,6 +177,10 @@ set( LSQR_CONDITIONING_EXPERIMENT_DRIVER
   "${DRIVERS_DIR}/ConditioningExperiment/LSQREpetraExFile.cpp"
 )
 
+set( SCALING_EXPERIMENT
+  "${DRIVERS_DIR}/ScalingExperiment/ScalingExperiment.cpp"
+)
+
 set( SCALING_EXPERIMENT_ML
   "${DRIVERS_DIR}/ScalingExperiment/ScalingExperimentML.cpp"
 )
@@ -325,6 +329,7 @@ add_library(${CAMELLIA_LIBRARY_NAME} ${SOURCES} ${HEADERS})
 add_executable(ConditioningExperimentDriver ${CONDITIONING_EXPERIMENT_DRIVER})
 add_executable(KrylovSchurConditioningDriver ${KRYLOV_SCHUR_CONDITIONING_EXPERIMENT_DRIVER})
 add_executable(LOBPCGConditioningDriver ${LOBPCG_CONDITIONING_EXPERIMENT_DRIVER})
+add_executable(ScalingExperiment ${CONFUSION_SOURCES} ${SCALING_EXPERIMENT})
 add_executable(ScalingExperimentML ${CONFUSION_SOURCES} ${SCALING_EXPERIMENT_ML})
 add_executable(LSQRConditioningDriver ${LSQR_CONDITIONING_EXPERIMENT_DRIVER})
 add_executable(LaplaceCurvilinear ${LAPLACE_CURVILINEAR_DRIVER})
@@ -376,6 +381,11 @@ target_link_libraries(LOBPCGConditioningDriver
   ${CAMELLIA_LIBRARY_NAME}
   )
 target_link_libraries(LSQRConditioningDriver
+  ${Trilinos_LIBRARIES} 
+  ${Trilinos_TPL_LIBRARIES}
+  ${CAMELLIA_LIBRARY_NAME}
+  )
+target_link_libraries(ScalingExperiment
   ${Trilinos_LIBRARIES} 
   ${Trilinos_TPL_LIBRARIES}
   ${CAMELLIA_LIBRARY_NAME}
