@@ -153,6 +153,10 @@ set(STOKES_DIR "${DRIVERS_DIR}/Stokes" )
 set(TEST_DIR "${DRIVERS_DIR}/DPGTests" )
 FILE(GLOB TEST_SOURCES "${TEST_DIR}/*.cpp")
 
+set( SCRATCH_DRIVER
+  "${DRIVERS_DIR}/ScratchDriver/ScratchDriver.cpp"
+)
+
 set( NEW_BURGERS_DRIVER
   "${SCRATCHPAD_DRIVER_DIR}/NewBurgersDriver.cpp"
 )
@@ -340,6 +344,7 @@ add_executable(StokesCavityFlowDriver ${STOKES_SOURCES} ${STOKES_CAVITY_FLOW_DRI
 add_executable(ConfusionIterationExperiment ${CONFUSION_ITERATION_EXPERIMENT})
 add_executable(NewConfusionDriver ${NEW_CONFUSION_DRIVER})
 add_executable(NewBurgersDriver ${NEW_BURGERS_DRIVER})
+add_executable(ScratchDriver ${SCRATCH_DRIVER})
 add_executable(DPGTests ${TEST_SOURCES} ${POISSON_SOURCES} ${CONFUSION_SOURCES})
 add_executable(FlatPlateINS ${TRUMAN_FLAT_PLATE_INS})
 add_executable(ublas_cholesky ${uBLAS_CHOLESKY_TEST})
@@ -376,6 +381,11 @@ target_link_libraries(LSQRConditioningDriver
   ${CAMELLIA_LIBRARY_NAME}
   )
 target_link_libraries(ScalingExperimentML
+  ${Trilinos_LIBRARIES} 
+  ${Trilinos_TPL_LIBRARIES}
+  ${CAMELLIA_LIBRARY_NAME}
+  )
+target_link_libraries(ScratchDriver
   ${Trilinos_LIBRARIES} 
   ${Trilinos_TPL_LIBRARIES}
   ${CAMELLIA_LIBRARY_NAME}
