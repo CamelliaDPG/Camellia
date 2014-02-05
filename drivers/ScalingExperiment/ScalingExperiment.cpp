@@ -113,9 +113,9 @@ int main(int argc, char *argv[]) {
         
         for (int i=0; i<numFinalUniformRefinements; i++) {
           cellsToRefine.clear();
-          int numActiveElements = mesh->activeElements().size();
-          for (int j=0; j<numActiveElements; j++) {
-            cellsToRefine.push_back(mesh->activeElements()[j]->cellID());
+          set<GlobalIndexType> activeCellIDs = mesh->getActiveCellIDs();
+          for (set<GlobalIndexType>::iterator cellIDIt = activeCellIDs.begin(); cellIDIt != activeCellIDs.end(); cellIDIt++) {
+            cellsToRefine.push_back(*cellIDIt);
           }
           mesh->hRefine(cellsToRefine, RefinementPattern::regularRefinementPatternQuad());
         }
@@ -123,7 +123,7 @@ int main(int argc, char *argv[]) {
         double wallTimeForMeshConstruction = timer.WallTime() - wallTimeStart;
         if (rank==0) cout << "time to construct mesh: " << wallTimeForMeshConstruction << endl;
         if (rank==0) cout << "Mesh globalDofs: " << mesh->numGlobalDofs() << endl;
-        if (rank==0) cout << "Mesh activeElement count: " << mesh->activeElements().size() << endl;
+        if (rank==0) cout << "Mesh activeElement count: " << mesh->getActiveCellIDs().size() << endl;
         
         // the following line should not be necessary, but if Solution's data structures aren't rebuilt properly, it might be...
         Solution solution = Solution(mesh, exactSolution.bc(), exactSolution.ExactSolution::rhs(), ip);
