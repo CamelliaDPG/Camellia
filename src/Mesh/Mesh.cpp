@@ -105,7 +105,7 @@ GlobalIndexType Mesh::numInitialElements(){
 }
 
 GlobalIndexType Mesh::activeCellOffset() {
-  return _activeCellOffset;
+  return _maximumRule2D->activeCellOffset();
 }
 
 vector< ElementPtr > Mesh::activeElements() {

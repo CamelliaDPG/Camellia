@@ -758,8 +758,7 @@ bool MeshTestSuite::testMeshSolvePointwise() {
   
   solution.solve();
   
-  solution.solutionValues(solnValues,myMesh->getElement(0)->elementType(),PHI,
-                          testPoints);
+  solution.solutionValues(solnValues,PHI,testPoints);
   
   for (int i=0; i<numPoints; i++) {
     double diff = abs(expectedSolnValues(0,i) - solnValues(0,i));
@@ -802,39 +801,32 @@ bool MeshTestSuite::testMeshSolvePointwise() {
    testPoints(3,0,0) = 1.0;
    testPoints(3,0,1) = -1.0;*/
   
-  // diagonosing failure in Solution: do we succeed if all the refPoints are the same?
-  // (picking point at top right of each element)
-  testPoints(0,0,0) = 0.0;
-  testPoints(0,0,1) = 0.0;
-  testPoints(1,0,0) = 0.0;
-  testPoints(1,0,1) = 1.0;
-  testPoints(2,0,0) = 1.0;
-  testPoints(2,0,1) = 0.0;
-  testPoints(3,0,0) = 1.0;
-  testPoints(3,0,1) = 1.0;
+  // diagnosing failure in Solution: do we succeed if all the refPoints are the same?
+  // (picking point in middle of each element)
+  testPoints(0,0,0) = -0.5;
+  testPoints(0,0,1) = -0.5;
+  testPoints(1,0,0) = -0.5;
+  testPoints(1,0,1) = 0.5;
+  testPoints(2,0,0) = 0.5;
+  testPoints(2,0,1) = -0.5;
+  testPoints(3,0,0) = 0.5;
+  testPoints(3,0,1) = 0.5;
   
   expectedSolnValues.resize(numElements,numPointsPerElement);
-  /*for (int elemIndex=0; elemIndex<numElements; elemIndex++) {
-   for (int ptIndex=0; ptIndex<numPointsPerElement; ptIndex++) {
-   double x = testPoints(elemIndex,ptIndex,0);
-   double y = testPoints(elemIndex,ptIndex,1);
-   expectedSolnValues(elemIndex,ptIndex) = x + y;
-   }
-   }*/
+
   PoissonExactSolutionLinear exactSolution;
-  exactSolution.solutionValues(expectedSolnValues, PoissonBilinearForm::PHI,
-                               testPoints);
+  exactSolution.solutionValues(expectedSolnValues, PoissonBilinearForm::PHI, testPoints);
   
   solution2x2.solve();
   solnValues.resize(numElements,numPointsPerElement); // four elements, one test point each
-  solution2x2.solutionValues(solnValues,myMesh2x2->getElement(0)->elementType(),PoissonBilinearForm::PHI,
-                             testPoints);
+  solution2x2.solutionValues(solnValues,PoissonBilinearForm::PHI,testPoints);
   
   for (int elemIndex=0; elemIndex<numElements; elemIndex++) {
     for (int ptIndex=0; ptIndex<numPointsPerElement; ptIndex++) {
       double diff = abs(expectedSolnValues(elemIndex,ptIndex) - solnValues(elemIndex,ptIndex));
       if ( diff > tol ) {
-        cout << "Solve 4-element Poisson: expected " << expectedSolnValues(elemIndex,ptIndex) << ", but soln was " << solnValues(elemIndex,ptIndex) << endl;
+        cout << "Solve 4-element Poisson: expected " << expectedSolnValues(elemIndex,ptIndex) << " at point (";
+        cout << testPoints(elemIndex,0,0) << "," << testPoints(elemIndex,0,1) << "), but soln was " << solnValues(elemIndex,ptIndex) << endl;
         success = false;
       }
     }

@@ -130,7 +130,6 @@ private:
   static double conditionNumberEstimate( Epetra_LinearProblem & problem );
 
   void gatherSolutionData(); // get all solution data onto every node (not what we should do in the end)
-  
 protected:
   FieldContainer<double> solutionForElementTypeGlobal(ElementTypePtr elemType); // probably should be deprecated…
   ElementTypePtr getEquivalentElementType(Teuchos::RCP<Mesh> otherMesh, ElementTypePtr elemType);
@@ -174,20 +173,19 @@ public:
 
   void setSolution(Teuchos::RCP<Solution> soln); // thisSoln = soln
 
-  virtual void solutionValues(FieldContainer<double> &values,
-                              ElementTypePtr elemTypePtr,
-                              int trialID,
-                              const FieldContainer<double> &physicalPoints);
+//  void solutionValues(FieldContainer<double> &values,
+//                      ElementTypePtr elemTypePtr,
+//                      int trialID,
+//                      const FieldContainer<double> &physicalPoints);
   void solutionValues(FieldContainer<double> &values,
                       ElementTypePtr elemTypePtr,
                       int trialID,
                       const FieldContainer<double> &physicalPoints,
                       const FieldContainer<double> &sideRefCellPoints,
                       int sideIndex);
-  void solutionValues(FieldContainer<double> &values, int trialID, const FieldContainer<double> &physicalPoints);
+  void solutionValues(FieldContainer<double> &values, int trialID, const FieldContainer<double> &physicalPoints); // searches for the elements that match the points provided
   void solutionValues(FieldContainer<double> &values, int trialID, BasisCachePtr basisCache,
                       bool weightForCubature = false, EOperatorExtended op = OP_VALUE);
-  void solutionValuesOverCells(FieldContainer<double> &values, int trialID, const FieldContainer<double> &physicalPoints);
 
   void solnCoeffsForCellID(FieldContainer<double> &solnCoeffs, GlobalIndexType cellID, int trialID, int sideIndex=0);
   void setSolnCoeffsForCellID(FieldContainer<double> &solnCoeffsToSet, GlobalIndexType cellID, int trialID, int sideIndex=0);

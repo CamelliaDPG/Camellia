@@ -18,6 +18,7 @@ class Solution;
 
 class GDAMaximumRule2D : public GlobalDofAssignment {
   // much of this code copied from Mesh
+  GlobalIndexType _activeCellOffset; // among active cells, an offset to allow the current partition to identify unique cell indices
   
   map< GlobalIndexType, vector<int> > _cellSideParitiesForCellID;
   
@@ -81,6 +82,8 @@ public:
   GDAMaximumRule2D(MeshTopologyPtr meshTopology, VarFactory varFactory, DofOrderingFactoryPtr dofOrderingFactory, MeshPartitionPolicyPtr partitionPolicy,
                    unsigned initialH1OrderTrial, unsigned testOrderEnhancement, bool enforceMBFluxContinuity = false);
   
+  GlobalIndexType activeCellOffset();
+  
   FieldContainer<double> & cellSideParities( ElementTypePtr elemTypePtr );
   FieldContainer<double> cellSideParitiesForCell( GlobalIndexType cellID );
   
@@ -117,7 +120,7 @@ public:
   PartitionIndexType partitionForGlobalDofIndex( GlobalIndexType globalDofIndex );
   GlobalIndexType partitionLocalIndexForGlobalDofIndex( GlobalIndexType globalDofIndex );
   
-  FieldContainer<double> & physicalCellNodes( ElementTypePtr elemTypePtr);
+  FieldContainer<double> & physicalCellNodes( ElementTypePtr elemTypePtr );
   FieldContainer<double> & physicalCellNodesGlobal( ElementTypePtr elemTypePtr );
   
   void rebuildLookups();

@@ -92,8 +92,6 @@ class Mesh : public RefinementObserver {
   // for now, just a uniform mesh, with a rectangular boundary and elements.
   Boundary _boundary;
 
-  GlobalIndexType _activeCellOffset; // among active cells, an offset to allow the current partition to identify unique cell indices
-
   //set< pair<int,int> > _edges;
   map< pair<GlobalIndexType,GlobalIndexType>, vector< pair<GlobalIndexType, GlobalIndexType> > > _edgeToCellIDs; //keys are (vertexIndex1, vertexIndex2)
                                                                   //values are (cellID, sideIndex)

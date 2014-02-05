@@ -100,6 +100,8 @@
 
 #include "Var.h"
 
+#include "CamelliaCellTools.h"
+
 #include "AztecOO_ConditionNumber.h"
 
 double Solution::conditionNumberEstimate( Epetra_LinearProblem & problem ) {
@@ -2035,63 +2037,6 @@ void Solution::discardInactiveCellCoefficients() {
   }
 }
 
-void Solution::solutionValuesOverCells(FieldContainer<double> &values, int trialID, const FieldContainer<double> &physicalPoints) {
-  int numTotalCells = physicalPoints.dimension(0);
-  int numPoints = physicalPoints.dimension(1);
-  int spaceDim = physicalPoints.dimension(2);
-  for (int cellIndex=0;cellIndex<numTotalCells;cellIndex++){
-    
-    FieldContainer<double> cellPoint(1,spaceDim); // a single point to find elem we're in
-    for (int i=0;i<spaceDim;i++){cellPoint(0,i) = physicalPoints(cellIndex,0,i);}
-    vector< ElementPtr > elements = _mesh->elementsForPoints(cellPoint); // operate under assumption that all points for a given cell index are in that cell
-    ElementPtr elem = elements[0];
-    ElementTypePtr elemTypePtr = elem->elementType();
-    int cellID = elem->cellID();
-    
-    if ( _solutionForCellIDGlobal.find(cellID) == _solutionForCellIDGlobal.end() ) {
-      // cellID not known -- default to 0
-      continue;
-    }
-    
-    FieldContainer<double> solnCoeffs = _solutionForCellIDGlobal[cellID];
-    int numCells = 1; // do one cell at a time
-    
-    FieldContainer<double> physicalCellNodes = _mesh->physicalCellNodesForCell(cellID);
-    
-    // store points in local container
-    FieldContainer<double> physicalPointsForCell(numCells,numPoints,spaceDim);
-    for (int ptIndex=0;ptIndex<numPoints;ptIndex++){
-      for (int dim=0; dim<spaceDim; dim++) {
-        physicalPointsForCell(0,ptIndex,dim) = physicalPoints(cellIndex,ptIndex,dim);
-      }
-    }
-    
-    typedef CellTools<double>  CellTools;
-    typedef FunctionSpaceTools fst;
-    
-    // 1. compute refElemPoints, the evaluation points mapped to reference cell:
-    FieldContainer<double> refElemPoints(numCells,numPoints, spaceDim);
-    CellTools::mapToReferenceFrame(refElemPoints,physicalPointsForCell,physicalCellNodes,*(elemTypePtr->cellTopoPtr.get()));
-    refElemPoints.resize(numPoints,spaceDim);
-    
-    Teuchos::RCP<DofOrdering> trialOrder = elemTypePtr->trialOrderPtr;
-    
-    BasisPtr basis = trialOrder->getBasis(trialID,0); // 0 assumes field var
-    int basisCardinality = basis->getCardinality();
-    
-    Teuchos::RCP< FieldContainer<double> > basisValues;
-    basisValues = BasisEvaluation::getValues(basis,  OP_VALUE, refElemPoints);
-    
-    // now, apply coefficient weights:
-    for (int ptIndex=0;ptIndex<numPoints;ptIndex++){
-      for (int dofOrdinal=0; dofOrdinal < basisCardinality; dofOrdinal++) {
-        int localDofIndex = trialOrder->getDofIndex(trialID, dofOrdinal, 0); // 0 assumes field var
-        values(cellIndex,ptIndex) += (*basisValues)(dofOrdinal,ptIndex) * solnCoeffs(localDofIndex);
-      }
-    }
-  }
-}
-
 void Solution::solutionValues(FieldContainer<double> &values, int trialID, BasisCachePtr basisCache,
                               bool weightForCubature, EOperatorExtended op) {
   values.initialize(0.0);
@@ -2178,11 +2123,65 @@ void Solution::solutionValues(FieldContainer<double> &values, int trialID, Basis
 }
 
 void Solution::solutionValues(FieldContainer<double> &values, int trialID, const FieldContainer<double> &physicalPoints) {
-  if (physicalPoints.rank()==3) { // if we have dimensions (C,P,D), call a different method
-    solutionValuesOverCells(values, trialID, physicalPoints);
-    return;
-  } else {
+  // physicalPoints may have dimensions (C,P,D) or (P,D)
+  // either way, this method requires searching the mesh for the points provided
+  if (physicalPoints.rank()==3) { // dimensions (C,P,D)
+    int numTotalCells = physicalPoints.dimension(0);
+    int numPoints = physicalPoints.dimension(1);
+    int spaceDim = physicalPoints.dimension(2);
+    if (values.dimension(0) != numTotalCells) {
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "values.dimension(0) != physicalPoints.dimension(0)");
+    }
+    if (values.dimension(1) != numPoints) {
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "values.dimension(1) != physicalPoints.dimension(1)");
+    }
     
+    for (int cellIndex=0;cellIndex<numTotalCells;cellIndex++){
+      
+      FieldContainer<double> cellPoint(1,spaceDim); // a single point to find elem we're in
+      for (int i=0;i<spaceDim;i++){cellPoint(0,i) = physicalPoints(cellIndex,0,i);}
+      vector< ElementPtr > elements = _mesh->elementsForPoints(cellPoint); // operate under assumption that all points for a given cell index are in that cell
+      ElementPtr elem = elements[0];
+      ElementTypePtr elemTypePtr = elem->elementType();
+      int cellID = elem->cellID();
+      
+      if ( _solutionForCellIDGlobal.find(cellID) == _solutionForCellIDGlobal.end() ) {
+        // cellID not known -- default to 0
+        continue;
+      }
+      
+      FieldContainer<double> solnCoeffs = _solutionForCellIDGlobal[cellID];
+      int numCells = 1; // do one cell at a time
+      
+      FieldContainer<double> physicalCellNodes = _mesh->physicalCellNodesForCell(cellID);
+      
+      // store points in local container
+      FieldContainer<double> physicalPointsForCell(numCells,numPoints,spaceDim);
+      for (int ptIndex=0;ptIndex<numPoints;ptIndex++){
+        for (int dim=0; dim<spaceDim; dim++) {
+          physicalPointsForCell(0,ptIndex,dim) = physicalPoints(cellIndex,ptIndex,dim);
+        }
+      }
+      
+      // 1. compute refElemPoints, the evaluation points mapped to reference cell:
+      FieldContainer<double> refElemPoints(numCells,numPoints, spaceDim);
+      CellTools<double>::mapToReferenceFrame(refElemPoints,physicalPointsForCell,physicalCellNodes,*(elemTypePtr->cellTopoPtr.get()));
+      refElemPoints.resize(numPoints,spaceDim);
+      
+      BasisCachePtr basisCache = BasisCache::basisCacheForCell(_mesh, cellID);
+      basisCache->setRefCellPoints(refElemPoints);
+      Teuchos::Array<int> dim;
+      values.dimensions(dim);
+      dim[0] = 1; // one cell
+      Teuchos::Array<int> cellOffset = dim;
+      cellOffset[0] = cellIndex;
+      for (int containerRank=1; containerRank<cellOffset.size(); containerRank++) {
+        cellOffset[containerRank] = 0;
+      }
+      FieldContainer<double> cellValues(dim,&values[values.getEnumeration(cellOffset)]);
+      this->solutionValues(cellValues, trialID, basisCache);
+    }
+  } else {
     // the following is due to the fact that we *do not* transform basis values.
     IntrepidExtendedTypes::EFunctionSpaceExtended fs = _mesh->bilinearForm()->functionSpaceForTrial(trialID);
     TEUCHOS_TEST_FOR_EXCEPTION( (fs != IntrepidExtendedTypes::FUNCTION_SPACE_HVOL) && (fs != IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD),
@@ -2298,139 +2297,6 @@ void Solution::solutionValues(FieldContainer<double> &values, int trialID, const
   }
 }
 
-void Solution::solutionValues(FieldContainer<double> &values,
-                              ElementTypePtr elemTypePtr,
-                              int trialID,
-                              const FieldContainer<double> &physicalPoints) {
-  int sideIndex = 0;
-  // currently, we only support computing solution values on all the cells of a given type at once.
-  // values(numCellsForType,numPoints[,spaceDim (for vector-valued)])
-  // physicalPoints(numCellsForType,numPoints,spaceDim)
-  FieldContainer<double> solnCoeffs = solutionForElementTypeGlobal(elemTypePtr); // (numcells, numLocalTrialDofs)
-  FieldContainer<double> physicalCellNodes = _mesh->physicalCellNodesGlobal(elemTypePtr);
-  // 1. Map the physicalPoints from the elements specified in physicalCellNodes into reference element
-  // 2. Compute each basis on those points
-  // 3. Transform those basis evaluations back into the physical space
-  // 4. Multiply by the solnCoeffs
-  
-  int numCells = physicalCellNodes.dimension(0);
-  int numPoints = physicalPoints.dimension(1);
-  shards::CellTopology cellTopo = *(elemTypePtr->cellTopoPtr.get());
-  int spaceDim = cellTopo.getDimension();
-  
-  // TODO: add TEUCHOS_TEST_FOR_EXCEPTIONs to make sure all the FC dimensions/ranks agree with expectations
-  // TODO: work out what to do for boundary.  (May need to separate out into separate function: how do we
-  //       figure out what side we're on, e.g.?)
-  typedef CellTools<double>  CellTools;
-  typedef FunctionSpaceTools fst;
-  
-  // 1. compute refElemPoints, the evaluation points mapped to reference cell:
-  FieldContainer<double> refElemPoints(numCells, numPoints, spaceDim);
-  CellTools::mapToReferenceFrame(refElemPoints,physicalPoints,physicalCellNodes,cellTopo);
-  
-  //  cout << "physicalCellNodes: " << endl << physicalCellNodes;
-  //  cout << "physicalPoints: " << endl << physicalPoints;
-  //  cout << "refElemPoints: " << endl << refElemPoints;
-  
-  // Containers for Jacobian
-  FieldContainer<double> cellJacobian(numCells, numPoints, spaceDim, spaceDim);
-  FieldContainer<double> cellJacobInv(numCells, numPoints, spaceDim, spaceDim);
-  FieldContainer<double> cellJacobDet(numCells, numPoints);
-  
-  CellTools::setJacobian(cellJacobian, refElemPoints, physicalCellNodes, cellTopo);
-  CellTools::setJacobianInv(cellJacobInv, cellJacobian );
-  CellTools::setJacobianDet(cellJacobDet, cellJacobian );
-  
-  Teuchos::RCP<DofOrdering> trialOrder = elemTypePtr->trialOrderPtr;
-  
-  BasisPtr basis = trialOrder->getBasis(trialID,sideIndex);
-  
-  int basisRank = trialOrder->getBasisRank(trialID);
-  int basisCardinality = basis->getCardinality();
-  //cout << "num Cells = " << numCells << endl;
-  TEUCHOS_TEST_FOR_EXCEPTION( ( basisRank==0 ) && values.rank() != 2,
-                             std::invalid_argument,
-                             "for scalar values, values container should be dimensioned(numCells,numPoints).");
-  TEUCHOS_TEST_FOR_EXCEPTION( ( basisRank==1 ) && values.rank() != 3,
-                             std::invalid_argument,
-                             "for scalar values, values container should be dimensioned(numCells,numPoints,spaceDim).");
-  TEUCHOS_TEST_FOR_EXCEPTION( values.dimension(0) != numCells,
-                             std::invalid_argument,
-                             "values.dimension(0) != numCells.");
-  TEUCHOS_TEST_FOR_EXCEPTION( values.dimension(1) != numPoints,
-                             std::invalid_argument,
-                             "values.dimension(1) != numPoints.");
-  TEUCHOS_TEST_FOR_EXCEPTION( basisRank==1 && values.dimension(2) != spaceDim,
-                             std::invalid_argument,
-                             "vector values.dimension(1) != spaceDim.");
-  TEUCHOS_TEST_FOR_EXCEPTION( physicalPoints.rank() != 3,
-                             std::invalid_argument,
-                             "physicalPoints.rank() != 3.");
-  TEUCHOS_TEST_FOR_EXCEPTION( physicalPoints.dimension(2) != spaceDim,
-                             std::invalid_argument,
-                             "physicalPoints.dimension(2) != spaceDim.");
-  TEUCHOS_TEST_FOR_EXCEPTION( _mesh->bilinearForm()->isFluxOrTrace(trialID),
-                             std::invalid_argument,
-                             "call the other solutionValues (with sideCellRefPoints argument) for fluxes and traces.");
-  
-  FieldContainer<double> thisCellJacobian(1,numPoints, spaceDim, spaceDim);
-  FieldContainer<double> thisCellJacobInv(1,numPoints, spaceDim, spaceDim);
-  FieldContainer<double> thisCellJacobDet(1,numPoints);
-  FieldContainer<double> thisRefElemPoints(numPoints,spaceDim);
-  
-  values.initialize(0.0);
-  
-  for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
-    //    cout << "cellIndex: " << cellIndex << endl;
-    thisRefElemPoints.setValues(&refElemPoints(cellIndex,0,0),numPoints*spaceDim);
-    //    cout << "line 5.01" << endl;
-    thisCellJacobian.setValues(&cellJacobian(cellIndex,0,0,0),numPoints*spaceDim*spaceDim);
-    //    cout << "line 5.02" << endl;
-    thisCellJacobInv.setValues(&cellJacobInv(cellIndex,0,0,0),numPoints*spaceDim*spaceDim);
-    //    cout << "line 5.03" << endl;
-    thisCellJacobDet.setValues(&cellJacobDet(cellIndex,0),numPoints);
-    //    cout << "line 5.1" << endl;
-    Teuchos::RCP< FieldContainer<double> > transformedValues;
-    transformedValues = BasisEvaluation::getTransformedValues(basis,  OP_VALUE,
-                                                              thisRefElemPoints, thisCellJacobian,
-                                                              thisCellJacobInv, thisCellJacobDet);
-    
-    //    cout << "cellIndex " << cellIndex << " thisRefElemPoints: " << thisRefElemPoints;
-    //    cout << "cellIndex " << cellIndex << " transformedValues: " << *transformedValues;
-    
-    // now, apply coefficient weights:
-    for (int ptIndex=0; ptIndex < numPoints; ptIndex++) {
-      // local storage to accumulate solution values to:
-      double value = 0.0;
-      double vectorValue[spaceDim];
-      for (int d=0; d<spaceDim; d++) {
-        vectorValue[spaceDim] = 0.0;
-      }
-      for (int dofOrdinal=0; dofOrdinal < basisCardinality; dofOrdinal++) {
-        int localDofIndex = trialOrder->getDofIndex(trialID, dofOrdinal, sideIndex);
-        //        cout << "localDofIndex " << localDofIndex << " solnCoeffs(cellIndex,localDofIndex): " << solnCoeffs(cellIndex,localDofIndex) << endl;
-        if (basisRank == 0) {
-          // for watching in the debugger:
-          double basisValue = (*transformedValues)(0,dofOrdinal,ptIndex);
-          double weight = solnCoeffs(cellIndex,localDofIndex);
-          value += weight * basisValue;
-        } else {
-          for (int i=0; i<spaceDim; i++) {
-            vectorValue[i] += (*transformedValues)(0,dofOrdinal,ptIndex,i) * solnCoeffs(cellIndex,localDofIndex);
-          }
-        }
-      }
-      if (basisRank == 0) {
-        values(cellIndex,ptIndex) = value;
-      } else {
-        for (int i=0; i<spaceDim; i++) {
-          values(cellIndex,ptIndex,i) = vectorValue[i];
-        }
-      }
-    }
-  }
-}
-
 void determineQuadEdgeWeights(double weights[], int edgeVertexNumber, int numDivisionsPerEdge, bool xEdge) {
   if (xEdge) {
     weights[0] = ((double)(numDivisionsPerEdge - edgeVertexNumber)) / (double)numDivisionsPerEdge;
@@ -2468,26 +2334,20 @@ void Solution::writeToFile(int trialID, const string &filePath) {
   for (elemTypeIt = elementTypes.begin(); elemTypeIt != elementTypes.end(); elemTypeIt++) {
     ElementTypePtr elemTypePtr = *(elemTypeIt);
     
-    FieldContainer<double> vertexPoints, physPoints;
+    CellTopoPtr cellTopo = elemTypePtr->cellTopoPtr;
+    FieldContainer<double> vertexPoints(cellTopo->getVertexCount(),cellTopo->getDimension());
+    CamelliaCellTools::refCellNodesForTopology(vertexPoints, *cellTopo);
     
-    _mesh->verticesForElementType(vertexPoints,elemTypePtr);
-    
-    int numCells = vertexPoints.dimension(0);
     int numVertices = vertexPoints.dimension(1);
     
-    int sideIndex = 0;
-    int basisDegree = elemTypePtr->trialOrderPtr->getBasis(trialID,sideIndex)->getDegree();
     int numDivisionsPerEdge = 1; //basisDegree*basisDegree;
+    int numPatchesPerCell = numDivisionsPerEdge*numDivisionsPerEdge;
     
-    int numPatchesPerCell = 1;
+    FieldContainer<double> refPoints(numPatchesPerCell*numVertices,spaceDim);
     
     if (numVertices == 4) { // only quads supported by the multi-patch cell stuff below...
       //if (   ( elemTypePtr->cellTopoPtr->getKey() == shards::Quadrilateral<4>::key )
       //    || (elemTypePtr->cellTopoPtr->getKey() == shards::Triangle<3>::key ) ) {
-      
-      numPatchesPerCell = numDivisionsPerEdge*numDivisionsPerEdge;
-      
-      physPoints.resize(numCells,numPatchesPerCell*numVertices,spaceDim);
       
       FieldContainer<double> iVertex(spaceDim), jVertex(spaceDim);
       FieldContainer<double> v1(spaceDim), v2(spaceDim), v3(spaceDim);
@@ -2498,27 +2358,17 @@ void Solution::writeToFile(int trialID, const string &filePath) {
           for (int j=0; j<numDivisionsPerEdge; j++) {
             //cout << "weights: " << xWeights[0]*yWeights[0] << " " << xWeights[1]*yWeights[1] << " " << xWeights[2]*yWeights[2] << " " << xWeights[3]*yWeights[3] << "\n";
             int patchIndex = (i*numDivisionsPerEdge + j);
-            
-            for (int cellIndex=0; cellIndex < numCells; cellIndex++) {
-              for (int patchVertexIndex=0; patchVertexIndex < numVertices; patchVertexIndex++) {
-                int xOffset = ((patchVertexIndex==0) || (patchVertexIndex==3)) ? 0 : 1;
-                int yOffset = ((patchVertexIndex==0) || (patchVertexIndex==1)) ? 0 : 1;
-                determineQuadEdgeWeights(xWeights,i+xOffset,numDivisionsPerEdge,true);
-                determineQuadEdgeWeights(yWeights,j+yOffset,numDivisionsPerEdge,false);
-                
+            refPoints.initialize(0.0);
+            for (int patchVertexIndex=0; patchVertexIndex < numVertices; patchVertexIndex++) {
+              int xOffset = ((patchVertexIndex==0) || (patchVertexIndex==3)) ? 0 : 1;
+              int yOffset = ((patchVertexIndex==0) || (patchVertexIndex==1)) ? 0 : 1;
+              determineQuadEdgeWeights(xWeights,i+xOffset,numDivisionsPerEdge,true);
+              determineQuadEdgeWeights(yWeights,j+yOffset,numDivisionsPerEdge,false);
+              
+              for (int vertexIndex=0; vertexIndex < numVertices; vertexIndex++) {
+                double weight = xWeights[vertexIndex] * yWeights[vertexIndex];
                 for (int dim=0; dim<spaceDim; dim++) {
-                  physPoints(cellIndex,patchIndex*numVertices + patchVertexIndex, dim) = 0.0;
-                }
-                for (int vertexIndex=0; vertexIndex < numVertices; vertexIndex++) {
-                  double weight = xWeights[vertexIndex] * yWeights[vertexIndex];
-                  //cout << "weight for vertex " << vertexIndex << ": " << weight << endl;
-                  for (int dim=0; dim<spaceDim; dim++) {
-                    physPoints(cellIndex,patchIndex*numVertices + patchVertexIndex, dim) += weight*vertexPoints(cellIndex, vertexIndex, dim);
-                  }
-                }
-                for (int dim=0; dim<spaceDim; dim++) {
-                  //cout << "physPoints(cellIndex, " << patchIndex*numVertices << " + " << patchVertexIndex << "," << dim << "): ";
-                  //cout << physPoints(cellIndex,patchIndex*numVertices + patchVertexIndex, dim) << "\n";
+                  refPoints(patchIndex*numVertices + patchVertexIndex, dim) += weight*vertexPoints(vertexIndex, dim);
                 }
               }
             }
@@ -2527,12 +2377,20 @@ void Solution::writeToFile(int trialID, const string &filePath) {
       }
       
     } else {
-      physPoints = vertexPoints;
+      refPoints = vertexPoints;
       numPatchesPerCell = 1;
     }
     
+    BasisCachePtr basisCache = BasisCache::basisCacheForCellType(_mesh, elemTypePtr);
+    
+    basisCache->setPhysicalCellNodes(_mesh->physicalCellNodesGlobal(elemTypePtr), _mesh->cellIDsOfType(elemTypePtr), false);
+    basisCache->setRefCellPoints(refPoints);
+    int numCells = basisCache->cellIDs().size();
+    
     FieldContainer<double> values(numCells, numPatchesPerCell * numVertices);
-    solutionValues(values,elemTypePtr,trialID,physPoints);
+    this->solutionValues(values, trialID, basisCache);
+    
+    FieldContainer<double> physPoints = basisCache->getPhysicalCubaturePoints();
     
     for (int cellIndex=0; cellIndex < numCells; cellIndex++) {
       for (int patchIndex=0; patchIndex < numPatchesPerCell; patchIndex++) {
@@ -2607,12 +2465,15 @@ void Solution::writeQuadSolutionToFile(int trialID, const string &filePath) {
     }
     typedef CellTools<double>  CellTools;
     
-    // compute physicalCubaturePoints, the transformed cubature points on each cell:
-    FieldContainer<double> physCubPoints(numCellsOfType, numCubPoints, spaceDim);
-    CellTools::mapToPhysicalFrame(physCubPoints,cubPoints,_mesh->physicalCellNodesGlobal(elemTypePtr),*(cellTopoPtr.get()));
+    BasisCachePtr basisCache = BasisCache::basisCacheForCellType(_mesh, elemTypePtr);
+    
+    basisCache->setPhysicalCellNodes(_mesh->physicalCellNodesGlobal(elemTypePtr), _mesh->cellIDsOfType(elemTypePtr), false);
+    basisCache->setRefCellPoints(cubPoints);
+    
+    FieldContainer<double> physCubPoints = basisCache->getPhysicalCubaturePoints();
     
     FieldContainer<double> values(numCellsOfType, numCubPoints);
-    solutionValues(values,elemTypePtr,trialID,physCubPoints);
+    solutionValues(values,trialID,basisCache);
     
     map<float,int> xIndices;
     map<float,int> yIndices; // use floats to truncate insignificant digits...
@@ -3797,6 +3658,10 @@ Epetra_Map Solution::getPartitionMap(PartitionIndexType rank, set<GlobalIndexTyp
     for (int i=0; i<zeroMeanConstraintsSize; i++) {
       myGlobalIndices[offset++] = i + numGlobalDofs + globalNumElementLagrange + numGlobalLagrange;
     }
+  }
+  
+  if (offset != localDofsSize) {
+    cout << "WARNING: Apparent internal error in Solution::getPartitionMap.  # entries filled in myGlobalDofIndices does not match its size...\n";
   }
   
   int totalRows = numGlobalDofs + globalNumElementLagrange + numGlobalLagrange + zeroMeanConstraintsSize;
