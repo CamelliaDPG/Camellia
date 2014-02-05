@@ -20,11 +20,12 @@
 #
 cmake \
   -G "Xcode" \
-  -D TRILINOS_PATH:FILEPATH="/Users/nroberts/lib/trilinos/mpi-release-trimmed" \
-  -D CAMELLIA_SOURCE_DIR:FILEPATH="/Users/nroberts/Documents/Camellia/src" \
+  -D TRILINOS_PATH:FILEPATH="$HOME/lib/trilinos/mpi-release" \
+  -D CAMELLIA_SOURCE_DIR:FILEPATH="$HOME/Camellia/src" \
   -D CAMELLIA_BUILD_TYPE:STRING="mpi-release-trimmed" \
   -D CMAKE_BUILD_TYPE="Release" \
   -DVTK_DIR=/Users/nroberts/lib/vtk-5.10 \
-  -DSCALAPACK_LIB="/Users/nroberts/lib/scalapack/libscalapack.a" \
-  -DMPI_DIR="/Users/nroberts/lib/openmpi-1.4.3-built-with-llvm/" \
+  -DSCALAPACK_LIB="/Users/nroberts/lib/libscalapack.a" \
+  -DMPI_DIR="/Users/nroberts/lib/openmpi-1.6.5" \
+  -D BOOST_ROOT:FILEPATH=/usr/local \
   .
