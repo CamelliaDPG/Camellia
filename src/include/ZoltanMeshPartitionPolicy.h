@@ -23,8 +23,8 @@ class ZoltanMeshPartitionPolicy : public MeshPartitionPolicy {
 
   //helper functions for query functions
   int getNextActiveIndex(FieldContainer<int> &partitionedActiveCells);
-  static int getIndexOfGID(int myNode, FieldContainer<int> &partitionedActiveCells,int globalID);
-  vector<int> getListOfActiveGlobalIDs(FieldContainer<int> partitionedActiveCells);
+  static GlobalIndexType getIndexOfGID(int myNode, FieldContainer<GlobalIndexType> &partitionedActiveCells,GlobalIndexType globalID);
+  vector<GlobalIndexType> getListOfActiveGlobalIDs(FieldContainer<GlobalIndexType> partitionedActiveCells);
 
   //Zoltan query functions
   static int get_number_of_objects(void *data, int *ierr);
@@ -42,7 +42,7 @@ class ZoltanMeshPartitionPolicy : public MeshPartitionPolicy {
  public:  
   ZoltanMeshPartitionPolicy();
   ZoltanMeshPartitionPolicy(string partitionerName);
-  virtual void partitionMesh(MeshTopology *meshTopology, int numPartitions, FieldContainer<int> &partitionedActiveCells);
+  virtual void partitionMesh(MeshTopology *meshTopology, PartitionIndexType numPartitions, FieldContainer<GlobalIndexType> &partitionedActiveCells);
 
 };
 

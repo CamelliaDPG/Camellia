@@ -130,19 +130,19 @@ unsigned MeshTopology::addCell(CellTopoPtr cellTopo, const vector<unsigned> &cel
       }
       // if the pre-existing neighbor is refined, set its descendants to have the appropriate neighbor.
       if (firstCell->isParent()) {
-        vector< pair< unsigned, unsigned> > firstCellDescendants = firstCell->getDescendantsForSide(firstNeighbor.second);
-        for (vector< pair< unsigned, unsigned> >::iterator descIt = firstCellDescendants.begin(); descIt != firstCellDescendants.end(); descIt++) {
+        vector< pair< GlobalIndexType, unsigned> > firstCellDescendants = firstCell->getDescendantsForSide(firstNeighbor.second);
+        for (vector< pair< GlobalIndexType, unsigned> >::iterator descIt = firstCellDescendants.begin(); descIt != firstCellDescendants.end(); descIt++) {
           unsigned childCellIndex = descIt->first;
           unsigned childSideIndex = descIt->second;
           getCell(childCellIndex)->setNeighbor(childSideIndex, secondNeighbor.first, secondNeighbor.second);
         }
       }
-      if (secondCell->isParent()) { // I don't 
-        vector< pair< unsigned, unsigned> > secondCellDescendants = secondCell->getDescendantsForSide(secondNeighbor.first);
-        for (vector< pair< unsigned, unsigned> >::iterator descIt = secondCellDescendants.begin(); descIt != secondCellDescendants.end(); descIt++) {
-          unsigned childCellIndex = descIt->second;
-          unsigned childSideIndex = descIt->first;
-          getCell(childCellIndex)->setNeighbor(childSideIndex, firstNeighbor.second, firstNeighbor.first);
+      if (secondCell->isParent()) { // I don't think we should ever get here
+        vector< pair< GlobalIndexType, unsigned> > secondCellDescendants = secondCell->getDescendantsForSide(secondNeighbor.first);
+        for (vector< pair< GlobalIndexType, unsigned> >::iterator descIt = secondCellDescendants.begin(); descIt != secondCellDescendants.end(); descIt++) {
+          GlobalIndexType childCellIndex = descIt->first;
+          unsigned childSideOrdinal = descIt->second;
+          getCell(childCellIndex)->setNeighbor(childSideOrdinal, firstNeighbor.first, firstNeighbor.second);
         }
       }
     } else if (cellCountForSide == 1) { // just this side
@@ -349,7 +349,27 @@ bool MeshTopology::cellHasCurvedEdges(unsigned cellIndex) {
   return false;
 }
 
-vector<double> MeshTopology::getCellCentroid(unsigned cellIndex) {
+set< pair<IndexType, unsigned> > MeshTopology::getActiveBoundaryCells() { // (cellIndex, sideOrdinal)
+  set< pair<IndexType, unsigned> > boundaryCells;
+  for (set<IndexType>::iterator boundarySideIt = _boundarySides.begin(); boundarySideIt != _boundarySides.end(); boundarySideIt++) {
+    IndexType sideEntityIndex = *boundarySideIt;
+    int cellCount = getCellCountForSide(sideEntityIndex);
+    if (cellCount == 1) {
+      pair<IndexType, unsigned> cellInfo = _cellsForSideEntities[sideEntityIndex].first;
+      if (cellInfo.first == -1) {
+        TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Invalid cellIndex for side boundary.");
+      }
+      if (_activeCells.find(cellInfo.first) != _activeCells.end()) {
+        boundaryCells.insert(cellInfo);
+      }
+    } else if (cellCount > 1) {
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "boundary side has more than 1 cell!");
+    } // cellCount = 0 just means that the side has been refined; that's acceptable
+  }
+  return boundaryCells;
+}
+
+vector<double> MeshTopology::getCellCentroid(IndexType cellIndex) {
   // average of the cell vertices
   vector<double> centroid(_spaceDim);
   CellPtr cell = getCell(cellIndex);
@@ -366,12 +386,12 @@ vector<double> MeshTopology::getCellCentroid(unsigned cellIndex) {
   return centroid;
 }
 
-unsigned MeshTopology::getCellCountForSide(unsigned sideEntityIndex) {
+unsigned MeshTopology::getCellCountForSide(IndexType sideEntityIndex) {
   if (_cellsForSideEntities.find(sideEntityIndex) == _cellsForSideEntities.end()) {
     return 0;
   } else {
-    pair<unsigned,unsigned> cell1 = _cellsForSideEntities[sideEntityIndex].first;
-    pair<unsigned,unsigned> cell2 = _cellsForSideEntities[sideEntityIndex].second;
+    pair<IndexType, unsigned> cell1 = _cellsForSideEntities[sideEntityIndex].first;
+    pair<IndexType, unsigned> cell2 = _cellsForSideEntities[sideEntityIndex].second;
     if (cell2.first == -1) {
       return 1;
     } else {
@@ -481,6 +501,10 @@ const set< pair<unsigned,unsigned> > & MeshTopology::getActiveCellIndices(unsign
 }
 
 CellPtr MeshTopology::getCell(unsigned cellIndex) {
+  if (cellIndex > _cells.size()) {
+    cout << "MeshTopology::getCell: cellIndex " << cellIndex << " out of bounds (0, " << _cells.size() - 1 << ").\n";
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "cellIndex out of bounds.\n");
+  }
   return _cells[cellIndex];
 }
 
@@ -549,7 +573,7 @@ const vector<double>& MeshTopology::getVertex(unsigned vertexIndex) {
   return _vertices[vertexIndex];
 }
 
-bool MeshTopology::getVertexIndex(const vector<double> &vertex, unsigned &vertexIndex, double tol) {
+bool MeshTopology::getVertexIndex(const vector<double> &vertex, IndexType &vertexIndex, double tol) {
   vector<double> vertexForLowerBound;
   for (int d=0; d<_spaceDim; d++) {
     vertexForLowerBound.push_back(vertex[d]-tol);
@@ -616,9 +640,9 @@ vector<unsigned> MeshTopology::getVertexIndices(const FieldContainer<double> &ve
 }
 
 // key: index in vertices; value: index in _vertices
-map<unsigned, unsigned> MeshTopology::getVertexIndicesMap(const FieldContainer<double> &vertices) {
-  map<unsigned, unsigned> vertexMap;
-  vector<unsigned> vertexVector = getVertexIndices(vertices);
+map<unsigned, IndexType> MeshTopology::getVertexIndicesMap(const FieldContainer<double> &vertices) {
+  map<unsigned, IndexType> vertexMap;
+  vector<IndexType> vertexVector = getVertexIndices(vertices);
   unsigned numVertices = vertexVector.size();
   for (unsigned i=0; i<numVertices; i++) {
     vertexMap[i] = vertexVector[i];
@@ -626,18 +650,18 @@ map<unsigned, unsigned> MeshTopology::getVertexIndicesMap(const FieldContainer<d
   return vertexMap;
 }
 
-vector<unsigned> MeshTopology::getVertexIndices(const vector< vector<double> > &vertices) {
+vector<IndexType> MeshTopology::getVertexIndices(const vector< vector<double> > &vertices) {
   double tol = 1e-14; // tolerance for vertex equality
   
   int numVertices = vertices.size();
-  vector<unsigned> localToGlobalVertexIndex(numVertices);
+  vector<IndexType> localToGlobalVertexIndex(numVertices);
   for (int i=0; i<numVertices; i++) {
     localToGlobalVertexIndex[i] = getVertexIndexAdding(vertices[i],tol);
   }
   return localToGlobalVertexIndex;
 }
 
-vector<unsigned> MeshTopology::getChildEntities(unsigned int d, unsigned int entityIndex) {
+vector<unsigned> MeshTopology::getChildEntities(unsigned int d, IndexType entityIndex) {
   vector<unsigned> childIndices;
   if (d==0) return childIndices;
   if (_childEntities[d].find(entityIndex) == _childEntities[d].end()) return childIndices;
@@ -887,10 +911,12 @@ void MeshTopology::refineCell(unsigned cellIndex, RefinementPatternPtr refPatter
     bool changedVertices = _transformationFunction->mapRefCellPointsUsingExactGeometry(vertices, refPattern->verticesOnReferenceCell(), cellIndex);
 //    cout << "transformed vertices:\n" << vertices;
   }
-  map<unsigned, unsigned> localToGlobalVertexIndex = getVertexIndicesMap(vertices); // key: index in vertices; value: index in _vertices
+  map<unsigned, IndexType> vertexOrdinalToVertexIndex = getVertexIndicesMap(vertices); // key: index in vertices; value: index in _vertices
+  map<unsigned, GlobalIndexType> localToGlobalVertexIndex(vertexOrdinalToVertexIndex.begin(),vertexOrdinalToVertexIndex.end());
   
   // get the children, as vectors of vertex indices:
-  vector< vector<unsigned> > childVertices = refPattern->children(localToGlobalVertexIndex);
+  vector< vector<GlobalIndexType> > childVerticesGlobalType = refPattern->children(localToGlobalVertexIndex);
+  vector< vector<IndexType> > childVertices(childVerticesGlobalType.begin(),childVerticesGlobalType.end());
   
   int numChildren = childVertices.size();
   // this is where we assume all the children have same topology as parent:
@@ -1029,15 +1055,17 @@ const set<unsigned> &MeshTopology::getRootCellIndices() {
   return _rootCells;
 }
 
-void MeshTopology::setEdgeToCurveMap(const map< pair<int, int>, ParametricCurvePtr > &edgeToCurveMap, MeshPtr mesh) {
+void MeshTopology::setEdgeToCurveMap(const map< pair<IndexType, IndexType>, ParametricCurvePtr > &edgeToCurveMap, MeshPtr mesh) {
   _edgeToCurveMap.clear();
-  map< pair<int, int>, ParametricCurvePtr >::const_iterator edgeIt;
+  map< pair<IndexType, IndexType>, ParametricCurvePtr >::const_iterator edgeIt;
   _cellIDsWithCurves.clear();
   
   for (edgeIt = edgeToCurveMap.begin(); edgeIt != edgeToCurveMap.end(); edgeIt++) {
     addEdgeCurve(edgeIt->first, edgeIt->second);
   }
-  _transformationFunction = Teuchos::rcp(new MeshTransformationFunction(mesh, _cellIDsWithCurves));
+  // mesh transformation function expects global ID type
+  set<GlobalIndexType> cellIDsGlobal(_cellIDsWithCurves.begin(),_cellIDsWithCurves.end());
+  _transformationFunction = Teuchos::rcp(new MeshTransformationFunction(mesh, cellIDsGlobal));
 }
 
 Teuchos::RCP<MeshTransformationFunction> MeshTopology::transformationFunction() {

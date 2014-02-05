@@ -390,23 +390,23 @@ const FieldContainer<double> & RefinementPattern::verticesOnReferenceCell() {
   return _vertices;
 }
 
-vector< vector<unsigned> > RefinementPattern::children(map<unsigned, unsigned> &localToGlobalVertexIndex) {
+vector< vector<GlobalIndexType> > RefinementPattern::children(const map<unsigned, GlobalIndexType> &localToGlobalVertexIndex) {
   // localToGlobalVertexIndex key: index in vertices; value: index in _vertices
   // children returns a vector of global vertex indices for each child
   
   int numChildren = _subCells.size();
-  vector< vector<unsigned> > children(numChildren);
+  vector< vector<GlobalIndexType> > children(numChildren);
   vector< vector<unsigned> >::iterator subCellIt;
-  vector< vector<unsigned> >::iterator childIt = children.begin();
+  vector< vector<GlobalIndexType> >::iterator childIt = children.begin();
   for (subCellIt=_subCells.begin(); subCellIt != _subCells.end(); subCellIt++) {
 //    cout << "child global vertex indices: ";
     int numVertices = (*subCellIt).size();
-    *childIt = vector<unsigned>(numVertices);
+    *childIt = vector<GlobalIndexType>(numVertices);
     vector<unsigned>::iterator vertexIt;
-    vector<unsigned>::iterator childVertexIt = (*childIt).begin();
+    vector<GlobalIndexType>::iterator childVertexIt = (*childIt).begin();
     for (vertexIt = (*subCellIt).begin(); vertexIt != (*subCellIt).end(); vertexIt++) {
-      int localIndex = *vertexIt;
-      int globalIndex = localToGlobalVertexIndex[localIndex];
+      unsigned localIndex = *vertexIt;
+      GlobalIndexType globalIndex = localToGlobalVertexIndex.find(localIndex)->second;
       
       *childVertexIt = globalIndex;
 //      cout << globalIndex << " ";

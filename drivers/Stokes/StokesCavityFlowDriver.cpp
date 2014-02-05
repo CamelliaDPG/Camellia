@@ -439,9 +439,9 @@ int main(int argc, char *argv[]) {
   
   if ( ! singularityAvoidingInitialMesh ) {
     // create a pointer to a new mesh:
-    mesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells,
+    mesh = MeshFactory::buildQuadMesh(quadPoints, horizontalCells, verticalCells,
                                stokesBFMath, H1Order, H1Order+pToAdd, useTriangles, nonConformingTraces, trialEnhancements);
-    streamMesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells,
+    streamMesh = MeshFactory::buildQuadMesh(quadPoints, horizontalCells, verticalCells,
                                      streamBF, H1Order, H1Order+pToAddForStreamFunction, useTriangles);
   } else {
     FieldContainer<double> A(2), B(2), C(2), D(2), E(2), F(2), G(2), H(2);
@@ -726,7 +726,7 @@ int main(int argc, char *argv[]) {
   
   /////////////////// SOLVE OVERKILL //////////////////////
   if (compareWithOverkillMesh) {
-    overkillMesh = Mesh::buildQuadMesh(quadPoints, overkillMeshSize, overkillMeshSize,
+    overkillMesh = MeshFactory::buildQuadMesh(quadPoints, overkillMeshSize, overkillMeshSize,
                                        stokesBFMath, overkillH1Order, overkillH1Order+pToAdd, useTriangles);
     if ((overkillSolnFile.length() > 0) && canReadFile(overkillSolnFile)) {
       // then load solution from file, and skip solve
@@ -1105,7 +1105,7 @@ int main(int argc, char *argv[]) {
   for (vector< ElementTypePtr >::iterator elemTypeIt = elemTypes.begin(); elemTypeIt != elemTypes.end(); elemTypeIt++) {
     ElementTypePtr elemType = *elemTypeIt;
     vector< ElementPtr > elems = mesh->elementsOfTypeGlobal(elemType);
-    vector<int> cellIDs;
+    vector<GlobalIndexType> cellIDs;
     for (int i=0; i<elems.size(); i++) {
       cellIDs.push_back(elems[i]->cellID());
     }

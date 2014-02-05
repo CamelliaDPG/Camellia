@@ -37,7 +37,7 @@ class Cell {
   Teuchos::RCP<Cell> _parent; // doesn't own memory (avoid circular reference issues)
   
   //neighbors:
-  vector< pair<unsigned, unsigned> > _neighbors; // cellIndex, neighborSideIndex (which may not refer to the same side)
+  vector< pair<GlobalIndexType, unsigned> > _neighbors; // cellIndex, neighborSideIndex (which may not refer to the same side)
   /* rules for neighbors:
      - hanging node sides point to the constraining neighbor (which may not be active)
      - cells with broken neighbors point to their peer, the ancestor of the active neighbors
@@ -48,9 +48,9 @@ public:
   unsigned cellIndex();
   const vector< Teuchos::RCP< Cell > > &children();
   void setChildren(vector< Teuchos::RCP< Cell > > children);
-  vector<unsigned> getChildIndices();
-  vector< pair<unsigned, unsigned> > childrenForSide(unsigned sideIndex);
-  vector< pair< unsigned, unsigned> > getDescendantsForSide(int sideIndex, bool leafNodesOnly = true);
+  vector<IndexType> getChildIndices();
+  vector< pair<GlobalIndexType, unsigned> > childrenForSide(unsigned sideOrdinal);
+  vector< pair< GlobalIndexType, unsigned> > getDescendantsForSide(int sideOrdinal, bool leafNodesOnly = true);
   unsigned entityIndex(unsigned subcdim, unsigned subcord);
   vector<unsigned> getEntityIndices(unsigned subcdim);
   Teuchos::RCP<Cell> getParent();
@@ -62,8 +62,8 @@ public:
   
   CellTopoPtr topology();
   
-  pair<unsigned, unsigned> getNeighbor(unsigned sideIndex);
-  void setNeighbor(unsigned sideIndex, unsigned neighborCellIndex, unsigned neighborSideIndex);
+  pair<GlobalIndexType, unsigned> getNeighbor(unsigned sideOrdinal);
+  void setNeighbor(unsigned sideOrdinal, GlobalIndexType neighborCellIndex, unsigned neighborSideOrdinal);
   
   const vector< unsigned > &vertices();
 };

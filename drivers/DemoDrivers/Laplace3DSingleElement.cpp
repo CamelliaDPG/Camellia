@@ -595,7 +595,7 @@ int main(int argc, char *argv[]) {
     
     // Create BasisCache for ElementType and cubePoints
     BasisCachePtr basisCache = Teuchos::rcp( new BasisCache(elemTypePtr, Teuchos::rcp( (Mesh*) NULL ), false, cubatureEnrichment) );
-    vector<int> cellIDs;
+    vector<GlobalIndexType> cellIDs;
     cellIDs.push_back(0);
     basisCache->setPhysicalCellNodes(cubePoints, cellIDs, true);
 //    cout << "Jacobian for volume cache:\n" << basisCache->getJacobian();

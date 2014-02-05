@@ -18,15 +18,17 @@ public:
   GDAMinimumRule(MeshTopologyPtr meshTopology, VarFactory varFactory, DofOrderingFactoryPtr dofOrderingFactory, MeshPartitionPolicyPtr partitionPolicy,
                  unsigned initialH1OrderTrial, unsigned testOrderEnhancement);
   
-  void didHRefine(const set<int> &parentCellIDs);
-  void didPRefine(const set<int> &cellIDs, int deltaP);
-  void didHUnrefine(const set<int> &parentCellIDs);
+  void didHRefine(const set<GlobalIndexType> &parentCellIDs);
+  void didPRefine(const set<GlobalIndexType> &cellIDs, int deltaP);
+  void didHUnrefine(const set<GlobalIndexType> &parentCellIDs);
   
   void didChangePartitionPolicy();
   
-  ElementTypePtr elementType(unsigned cellID);
-  unsigned globalDofCount();
-  unsigned localDofCount(); // local to the MPI node
+  ElementTypePtr elementType(GlobalIndexType cellID);
+  GlobalIndexType globalDofCount();
+  void interpretLocalDofs(GlobalIndexType cellID, const FieldContainer<double> &localDofs,
+                          FieldContainer<double> &globalDofs, FieldContainer<GlobalIndexType> &globalDofIndices);
+  IndexType localDofCount(); // local to the MPI node
   
   void rebuildLookups();
 };

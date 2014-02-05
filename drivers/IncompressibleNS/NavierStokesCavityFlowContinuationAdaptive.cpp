@@ -36,6 +36,8 @@
 #include "NonlinearSolveStrategy.h"
 #include "PenaltyConstraints.h"
 
+#include "MeshFactory.h"
+
 #include "GnuPlotUtil.h"
 
 #ifdef HAVE_MPI
@@ -350,7 +352,7 @@ int main(int argc, char *argv[]) {
   
   Teuchos::RCP<Mesh> streamMesh, overkillMesh;
   
-  streamMesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells,
+  streamMesh = MeshFactory::buildQuadMesh(quadPoints, horizontalCells, verticalCells,
                                    streamBF, H1Order+pToAddForStreamFunction,
                                    H1Order+pToAdd+pToAddForStreamFunction, useTriangles);
   
@@ -514,7 +516,7 @@ int main(int argc, char *argv[]) {
   for (vector< ElementTypePtr >::iterator elemTypeIt = elemTypes.begin(); elemTypeIt != elemTypes.end(); elemTypeIt++) {
     ElementTypePtr elemType = *elemTypeIt;
     vector< ElementPtr > elems = mesh->elementsOfTypeGlobal(elemType);
-    vector<int> cellIDs;
+    vector<GlobalIndexType> cellIDs;
     for (int i=0; i<elems.size(); i++) {
       cellIDs.push_back(elems[i]->cellID());
     }

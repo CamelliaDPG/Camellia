@@ -80,10 +80,10 @@ void Solution::writeFieldsToVTK(const string& filePath, unsigned int num1DPts)
     bool createSideCacheToo = false;
     BasisCachePtr basisCache = Teuchos::rcp(new BasisCache(elemTypePtr,_mesh, createSideCacheToo));
     
-    vector<int> cellIDs;
-    for (int cellIndex=0; cellIndex<numCells; cellIndex++) 
+    vector<GlobalIndexType> cellIDs;
+    for (GlobalIndexType cellIndex=0; cellIndex<numCells; cellIndex++)
     {
-      int cellID = _mesh->cellID(elemTypePtr, cellIndex, -1); // -1: global cellID
+      GlobalIndexType cellID = _mesh->cellID(elemTypePtr, cellIndex, -1); // -1: global cellID
       cellIDs.push_back(cellID);
     }
 
@@ -146,7 +146,7 @@ void Solution::writeFieldsToVTK(const string& filePath, unsigned int num1DPts)
     }
     // cout << "After All" << endl;
 
-    for (int cellIndex=0; cellIndex<numCells; cellIndex++ )
+    for (GlobalIndexType cellIndex=0; cellIndex<numCells; cellIndex++ )
     {
       int subcellStartIndex = total_vertices;
       if (isQuad)
@@ -301,10 +301,10 @@ void Solution::writeTracesToVTK(const string& filePath)
 
     int numCells = physicalCellNodes.dimension(0);
     // determine cellIDs
-    vector<int> cellIDs;
+    vector<GlobalIndexType> cellIDs;
     for (int cellIndex=0; cellIndex<numCells; cellIndex++) 
     {
-      int cellID = _mesh->cellID(elemTypePtr, cellIndex, -1); // -1: "global" lookup (independent of MPI node)
+      GlobalIndexType cellID = _mesh->cellID(elemTypePtr, cellIndex, -1); // -1: "global" lookup (independent of MPI node)
       cellIDs.push_back(cellID);
     }
     basisCache->setPhysicalCellNodes(physicalCellNodes, cellIDs, true); // true: create side caches
@@ -461,7 +461,7 @@ void Solution::writeToVTK(const string& filePath, unsigned int num1DPts)
     bool createSideCacheToo = true;
     BasisCachePtr basisCache = Teuchos::rcp(new BasisCache(elemTypePtr,_mesh, createSideCacheToo));
     
-    vector<int> cellIDs;
+    vector<GlobalIndexType> cellIDs;
     for (int cellIndex=0; cellIndex<numCells; cellIndex++) 
     {
       int cellID = _mesh->cellID(elemTypePtr, cellIndex, -1); // -1: global cellID

@@ -69,7 +69,7 @@ public:
   const FieldContainer<double> & verticesOnReferenceCell();
   FieldContainer<double> verticesForRefinement(FieldContainer<double> &cellNodes);
   
-  vector< vector<unsigned> > children(map<unsigned, unsigned> &localToGlobalVertexIndex); // localToGlobalVertexIndex key: index in vertices; value: index in _vertices
+  vector< vector<GlobalIndexType> > children(const map<unsigned, GlobalIndexType> &localToGlobalVertexIndex); // localToGlobalVertexIndex key: index in vertices; value: index in _vertices
   // children returns a vector of global vertex indices for each child
   
   vector< vector< pair< unsigned, unsigned > > > & childrenForSides(); // outer vector: indexed by parent's sides; inner vector: (child index in children, index of child's side shared with parent)

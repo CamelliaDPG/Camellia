@@ -11,22 +11,24 @@
 
 #include "ParametricCurve.h"
 
-typedef pair<int, int> Edge;
+#include "IndexType.h"
+
+typedef pair<IndexType, IndexType> Edge;
 typedef Teuchos::RCP< shards::CellTopology > CellTopoPtr;
 
 class MeshGeometry {
   vector< vector<double> > _vertices;
-  vector< vector<unsigned> > _elementVertices;
+  vector< vector<IndexType> > _elementVertices;
   map< Edge, ParametricCurvePtr > _edgeToCurveMap;
   vector< CellTopoPtr > _cellTopos;
   
   void initializeVerticesFromFieldContainer(const vector<FieldContainer<double> > &vertices) {
-    int numVertices = vertices.size();
+    IndexType numVertices = vertices.size();
     if (numVertices == 0) return;
     int spaceDim = vertices[0].size();
     vector<double> vertex(spaceDim);
     _vertices.clear();
-    for (int i=0; i<numVertices; i++) {
+    for (IndexType i=0; i<numVertices; i++) {
       for (int d=0; d<spaceDim; d++) {
         vertex[d] = vertices[i](d);
       }
@@ -40,10 +42,10 @@ class MeshGeometry {
     CellTopoPtr quad = Teuchos::rcp(new shards::CellTopology(shards::getCellTopologyData<shards::Quadrilateral<4> >() ) );
     CellTopoPtr triangle = Teuchos::rcp(new shards::CellTopology(shards::getCellTopologyData<shards::Triangle<3> >() ) );
     CellTopoPtr hex = Teuchos::rcp(new shards::CellTopology(shards::getCellTopologyData<shards::Hexahedron<8> >() ) );
-    int numCells = _elementVertices.size();
+    IndexType numCells = _elementVertices.size();
     _cellTopos.clear();
-    for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
-      int numVertices = _elementVertices[cellIndex].size();
+    for (IndexType cellIndex=0; cellIndex<numCells; cellIndex++) {
+      IndexType numVertices = _elementVertices[cellIndex].size();
       CellTopoPtr cellTopo;
       switch (numVertices) {
         case 2:
@@ -66,7 +68,7 @@ class MeshGeometry {
   }
 public:
   MeshGeometry(const vector< vector<double> > &vertices,
-                  const vector< vector<unsigned> > &elementVertices,
+                  const vector< vector<IndexType> > &elementVertices,
                   const vector< CellTopoPtr > &cellTopos,
                   const map< Edge, ParametricCurvePtr > &edgeToCurveMap) {
     _vertices = vertices;
@@ -76,7 +78,7 @@ public:
   }
   
   MeshGeometry(const vector< vector<double> > &vertices,
-                  const vector< vector<unsigned> > &elementVertices,
+                  const vector< vector<IndexType> > &elementVertices,
                   const vector< CellTopoPtr > &cellTopos) {
     _vertices = vertices;
     _elementVertices = elementVertices;
@@ -85,7 +87,7 @@ public:
   
   // deprecated method; included for compatibility with earlier version of MeshGeometry
   MeshGeometry(const vector< vector<double> > &vertices,
-               const vector< vector<unsigned> > &elementVertices,
+               const vector< vector<IndexType> > &elementVertices,
                const map< Edge, ParametricCurvePtr > &edgeToCurveMap) {
 //    initializeVerticesFromFieldContainer(vertices);
     _vertices = vertices;
@@ -96,7 +98,7 @@ public:
 
   // deprecated method; included for compatibility with earlier version of MeshGeometry
   MeshGeometry(const vector< vector<double> > &vertices,
-               const vector< vector<unsigned> > &elementVertices) {
+               const vector< vector<IndexType> > &elementVertices) {
 //    initializeVerticesFromFieldContainer(vertices);
     _vertices = vertices;
     _elementVertices = elementVertices;
@@ -107,7 +109,7 @@ public:
     return _edgeToCurveMap;
   }
   
-  vector< vector<unsigned> > &elementVertices() {
+  vector< vector<IndexType> > &elementVertices() {
     return _elementVertices;
   }
   

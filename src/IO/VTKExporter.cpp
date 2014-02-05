@@ -85,10 +85,10 @@ void VTKExporter::exportFields(const string& filePath, unsigned int num1DPts)
     bool createSideCacheToo = false;
     BasisCachePtr basisCache = Teuchos::rcp(new BasisCache(elemTypePtr,_mesh, createSideCacheToo));
 
-    vector<int> cellIDs;
+    vector<GlobalIndexType> cellIDs;
     for (int cellIndex=0; cellIndex<numCells; cellIndex++)
     {
-      int cellID = _mesh->cellID(elemTypePtr, cellIndex, -1); // -1: global cellID
+      GlobalIndexType cellID = _mesh->cellID(elemTypePtr, cellIndex, -1); // -1: global cellID
       cellIDs.push_back(cellID);
     }
 
@@ -343,10 +343,10 @@ void VTKExporter::exportTraces(const string& filePath, unsigned int num1DPts)
     bool createSideCacheToo = true;
     BasisCachePtr basisCache = Teuchos::rcp(new BasisCache(elemTypePtr,_mesh, createSideCacheToo));
 
-    vector<int> cellIDs;
+    vector<GlobalIndexType> cellIDs;
     for (int cellIndex=0; cellIndex<numCells; cellIndex++)
     {
-      int cellID = _mesh->cellID(elemTypePtr, cellIndex, -1); // -1: global cellID
+      GlobalIndexType cellID = _mesh->cellID(elemTypePtr, cellIndex, -1); // -1: global cellID
       cellIDs.push_back(cellID);
     }
 
@@ -475,10 +475,10 @@ void VTKExporter::exportFunction(FunctionPtr function, const string& functionNam
     bool createSideCacheToo = false;
     BasisCachePtr basisCache = Teuchos::rcp(new BasisCache(elemTypePtr,_mesh, createSideCacheToo));
 
-    vector<int> cellIDs;
+    vector<GlobalIndexType> cellIDs;
     for (int cellIndex=0; cellIndex<numCells; cellIndex++)
     {
-      int cellID = _mesh->cellID(elemTypePtr, cellIndex, -1); // -1: global cellID
+      GlobalIndexType cellID = _mesh->cellID(elemTypePtr, cellIndex, -1); // -1: global cellID
       cellIDs.push_back(cellID);
     }
 
@@ -687,10 +687,10 @@ void VTKExporter::exportBoundaryValuedFunctions(vector< FunctionPtr > &functions
     bool createSideCacheToo = true;
     BasisCachePtr basisCache = Teuchos::rcp(new BasisCache(elemTypePtr,_mesh, createSideCacheToo));
 
-    vector<int> cellIDs;
+    vector<GlobalIndexType> cellIDs;
     for (int cellIndex=0; cellIndex<numCells; cellIndex++)
     {
-      int cellID = _mesh->cellID(elemTypePtr, cellIndex, -1); // -1: global cellID
+      GlobalIndexType cellID = _mesh->cellID(elemTypePtr, cellIndex, -1); // -1: global cellID
       cellIDs.push_back(cellID);
     }
 

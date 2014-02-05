@@ -197,7 +197,7 @@ SubBasisReconciliationWeights BasisReconciliation::computeConstrainedWeights(Bas
   // resize for "physical" nodes:
   unsigned oneCell = 1;
   fineVolumeRefCellNodes.resize(oneCell,fineVolumeRefCellNodes.dimension(0), fineVolumeRefCellNodes.dimension(1));
-  fineSideBasisCache->setPhysicalCellNodes(fineVolumeRefCellNodes, vector<int>(), false);
+  fineSideBasisCache->setPhysicalCellNodes(fineVolumeRefCellNodes, vector<GlobalIndexType>(), false);
 
   // create a ("volume") basis cache for the side topology--this allows us to determine the cubature points corresponding to the
   // permuted nodes.
@@ -206,7 +206,7 @@ SubBasisReconciliationWeights BasisReconciliation::computeConstrainedWeights(Bas
   CamelliaCellTools::refCellNodesForTopology(permutedSideTopoNodes, sideTopo, vertexNodePermutation);
   sideCacheForPermutation->setRefCellPoints(fineSideBasisCache->getRefCellPoints()); // these should be the same, but doesn't hurt to be sure
   permutedSideTopoNodes.resize(oneCell,permutedSideTopoNodes.dimension(0),permutedSideTopoNodes.dimension(1));
-  sideCacheForPermutation->setPhysicalCellNodes(permutedSideTopoNodes, vector<int>(), false);
+  sideCacheForPermutation->setPhysicalCellNodes(permutedSideTopoNodes, vector<GlobalIndexType>(), false);
   FieldContainer<double> permutedSideCubaturePoints = sideCacheForPermutation->getPhysicalCubaturePoints();
   // resize for reference space (no cellIndex dimension):
   permutedSideCubaturePoints.resize(permutedSideCubaturePoints.dimension(1), permutedSideCubaturePoints.dimension(2));
@@ -214,7 +214,7 @@ SubBasisReconciliationWeights BasisReconciliation::computeConstrainedWeights(Bas
   FieldContainer<double> coarseVolumeRefCellNodes(coarseTopo.getNodeCount(), d);
   CamelliaCellTools::refCellNodesForTopology(coarseVolumeRefCellNodes, coarseTopo);
   coarseVolumeRefCellNodes.resize(oneCell,coarseVolumeRefCellNodes.dimension(0), coarseVolumeRefCellNodes.dimension(1));
-  coarseSideBasisCache->setPhysicalCellNodes(coarseVolumeRefCellNodes, vector<int>(), false);
+  coarseSideBasisCache->setPhysicalCellNodes(coarseVolumeRefCellNodes, vector<GlobalIndexType>(), false);
   coarseSideBasisCache->setRefCellPoints(permutedSideCubaturePoints); // this makes computing weighted values illegal (the cubature weights are no longer valid, so they're cleared automatically)
   
   Teuchos::RCP< const FieldContainer<double> > finerBasisValues = fineSideBasisCache->getTransformedValues(finerBasis, OP_VALUE, true);
@@ -370,7 +370,7 @@ SubBasisReconciliationWeights BasisReconciliation::computeConstrainedWeights(Bas
 //  FieldContainer<double> fineVolumeRefNodes(fineTopo.getNodeCount(),spaceDim);
 //  CamelliaCellTools::refCellNodesForTopology(fineVolumeRefNodes, fineTopo);
   fineVolumeRefNodes.resize(oneCell,fineVolumeRefNodes.dimension(0),fineVolumeRefNodes.dimension(1));
-  fineSideBasisCache->setPhysicalCellNodes(fineVolumeRefNodes, vector<int>(), false);
+  fineSideBasisCache->setPhysicalCellNodes(fineVolumeRefNodes, vector<GlobalIndexType>(), false);
 //  FieldContainer<double> fineVolumeCubaturePoints = fineSideBasisCache->getPhysicalCubaturePoints(); // these are in volume coordinates
 //  fineVolumeCubaturePoints.resize(fineVolumeCubaturePoints.dimension(1),fineVolumeCubaturePoints.dimension(2));
   FieldContainer<double> fineSideCubaturePoints = fineSideBasisCache->getRefCellPoints();
@@ -391,7 +391,7 @@ SubBasisReconciliationWeights BasisReconciliation::computeConstrainedWeights(Bas
   BasisCachePtr sideBasisCacheAsVolume = Teuchos::rcp( new BasisCache(fineSideTopo, cubDegree, false) );
   sideBasisCacheAsVolume->setRefCellPoints(fineSideCubaturePoints); // should be the same, but to guard against changes in BasisCache, set these.
   fineSideNodesInCoarseSideTopology.resize(oneCell, fineSideNodesInCoarseSideTopology.dimension(0), fineSideNodesInCoarseSideTopology.dimension(1));
-  sideBasisCacheAsVolume->setPhysicalCellNodes(fineSideNodesInCoarseSideTopology, vector<int>(), false);
+  sideBasisCacheAsVolume->setPhysicalCellNodes(fineSideNodesInCoarseSideTopology, vector<GlobalIndexType>(), false);
   FieldContainer<double> coarseSideCubaturePoints = sideBasisCacheAsVolume->getPhysicalCubaturePoints();
   coarseSideCubaturePoints.resize(coarseSideCubaturePoints.dimension(1), coarseSideCubaturePoints.dimension(2));
   
@@ -403,7 +403,7 @@ SubBasisReconciliationWeights BasisReconciliation::computeConstrainedWeights(Bas
   FieldContainer<double> coarseVolumeRefNodes(coarseTopo.getNodeCount(),spaceDim);
   CamelliaCellTools::refCellNodesForTopology(coarseVolumeRefNodes, coarseTopo);
   coarseVolumeRefNodes.resize(oneCell,coarseVolumeRefNodes.dimension(0),coarseVolumeRefNodes.dimension(1));
-  coarseSideBasisCache->setPhysicalCellNodes(coarseVolumeRefNodes, vector<int>(), false);
+  coarseSideBasisCache->setPhysicalCellNodes(coarseVolumeRefNodes, vector<GlobalIndexType>(), false);
 //  FieldContainer<double> coarseVolumeCubaturePoints = coarseSideBasisCache->getPhysicalCubaturePoints();
 //  coarseVolumeCubaturePoints.resize(coarseVolumeCubaturePoints.dimension(1),coarseVolumeCubaturePoints.dimension(2));
   

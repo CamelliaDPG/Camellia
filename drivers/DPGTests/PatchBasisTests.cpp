@@ -20,6 +20,7 @@
 
 #include "MeshTestUtility.h" // used for checkMeshConsistency
 #include "MeshTestSuite.h"
+#include "MeshFactory.h"
 
 #include "BCEasy.h"
 #include "RHSEasy.h"
@@ -38,7 +39,7 @@ class PatchBasisInflowFunction : public Function {
 public:
   void values(FieldContainer<double> &values, BasisCachePtr basisCache){
     double tol = 1e-11;
-    vector<int> cellIDs = basisCache->cellIDs();
+    vector<GlobalIndexType> cellIDs = basisCache->cellIDs();
     int numPoints = values.dimension(1);
     FieldContainer<double> points = basisCache->getPhysicalCubaturePoints();
     for (int i = 0;i<cellIDs.size();i++){
@@ -150,7 +151,7 @@ bool PatchBasisTests::doPRefinementAndTestIt(ElementPtr elem, const string &test
 //  cout << "trialOrdering for cell " << elem->cellID() << " before p-refinement:\n";
 //  cout << *(elem->elementType()->trialOrderPtr);
   
-  vector<int> cellsToRefine;
+  vector<GlobalIndexType> cellsToRefine;
   cellsToRefine.push_back(elem->cellID());
   _mesh->pRefine(cellsToRefine);
   
@@ -228,7 +229,7 @@ void PatchBasisTests::getPolyOrdersAlongSharedSides(vector< map<int, int> > &chi
                                                     ElementPtr child) {
   childPOrderMapForSide.clear();
   parentPOrderMapForSide.clear();
-  Element* parent = child->getParent();
+  ElementPtr parent = child->getParent();
   int numSides = child->numSides();
   for (int sideIndex=0; sideIndex<numSides; sideIndex++) {
     int parentSideIndex = child->parentSideForSideIndex(sideIndex);
@@ -250,17 +251,12 @@ void PatchBasisTests::getPolyOrdersAlongSharedSides(vector< map<int, int> > &chi
 }
 
 void PatchBasisTests::hRefineAllActiveCells(Teuchos::RCP<Mesh> mesh) {
-  vector<int> cellIDsToRefine;
-  for (vector< ElementPtr >::const_iterator elemIt=mesh->activeElements().begin();
-       elemIt != mesh->activeElements().end(); elemIt++) {
-    int cellID = (*elemIt)->cellID();
-    cellIDsToRefine.push_back(cellID);
-  }
+  set<GlobalIndexType> cellIDsToRefine = mesh->getActiveCellIDs();
   mesh->hRefine(cellIDsToRefine,RefinementPattern::regularRefinementPatternQuad());
 }
 
 void PatchBasisTests::makeSimpleRefinement() {
-  vector<int> cellIDsToRefine;
+  vector<GlobalIndexType> cellIDsToRefine;
   //cout << "refining SW element (cellID " << _sw->cellID() << ")\n";
   cellIDsToRefine.push_back(_sw->cellID()); // this is cellID 0, as things are right now implemented
   _mesh->hRefine(cellIDsToRefine,RefinementPattern::regularRefinementPatternQuad());
@@ -288,7 +284,7 @@ void PatchBasisTests::makeSimpleRefinement() {
 void PatchBasisTests::makeMultiLevelRefinement() {
   makeSimpleRefinement();
   
-  vector<int> cellIDsToRefine;
+  vector<GlobalIndexType> cellIDsToRefine;
   // now, find the southeast element in the refined element, and refine it
   // the southeast element should have (0.375, 0.125) at its center
   FieldContainer<double> point(1,2);
@@ -361,12 +357,11 @@ bool PatchBasisTests::patchBasisCorrectlyAppliedInMesh(Teuchos::RCP<Mesh> mesh, 
         // check who the (ancestor's) neighbor is on this side:
         int sideIndexInNeighbor;
         ElementPtr neighbor = mesh->ancestralNeighborForSide(elem,sideIndex,sideIndexInNeighbor);
-        int neighborCellID = neighbor->cellID();
         
         // check whether the neighbor relationship is symmetric:
-        if (neighborCellID == -1) {
+        if (neighbor.get() == NULL) {
           shouldHavePatchBasis = false;
-        } else if (mesh->getElement(neighborCellID)->getNeighborCellID(sideIndexInNeighbor) != elem->cellID()) {
+        } else if (neighbor->getNeighborCellID(sideIndexInNeighbor) != elem->cellID()) {
           // i.e. neighbor's neighbor is our parent/ancestor--so we should have a PatchBasis
           shouldHavePatchBasis = true;
         } else {
@@ -412,7 +407,7 @@ bool PatchBasisTests::patchBasesAgreeWithParentInMesh() {
         BasisPtr basis = trialOrdering->getBasis(varID,sideIndex);
         if (BasisFactory::isPatchBasis(basis)) {
           // get parent basis:
-          Element* parent = elem->getParent();
+          ElementPtr parent = elem->getParent();
           int parentSideIndex = elem->parentSideForSideIndex(sideIndex);
           BasisPtr parentBasis = parent->elementType()->trialOrderPtr->getBasis(varID, parentSideIndex);
           
@@ -469,7 +464,7 @@ bool PatchBasisTests::polyOrdersAgree(const vector< map<int, int> > &pOrderMapVe
 }
 
 void PatchBasisTests::pRefineAllActiveCells() {
-  vector<int> cellIDsToRefine;
+  vector<GlobalIndexType> cellIDsToRefine;
   for (vector< ElementPtr >::const_iterator elemIt=_mesh->activeElements().begin();
        elemIt != _mesh->activeElements().end(); elemIt++) {
     int cellID = (*elemIt)->cellID();
@@ -595,7 +590,7 @@ void PatchBasisTests::setup() {
   convectionBF->addTerm( -u, beta * v->grad() );
   convectionBF->addTerm( beta_n_u, v);
   
-  _mesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells, convectionBF, H1Order, H1Order+delta_p);
+  _mesh = MeshFactory::buildQuadMesh(quadPoints, horizontalCells, verticalCells, convectionBF, H1Order, H1Order+delta_p);
   
   Teuchos::RCP<RHSEasy> rhs = Teuchos::rcp( new RHSEasy );
   Teuchos::RCP<BCEasy> bc = Teuchos::rcp( new BCEasy );
@@ -922,7 +917,7 @@ bool PatchBasisTests::testSolveUniformMesh() {
   double eps = 1.0, beta_x = 1.0, beta_y = 1.0;
   Teuchos::RCP<ConfusionBilinearForm> confusionBF = Teuchos::rcp( new ConfusionBilinearForm(eps,beta_x,beta_y) );
   
-  Teuchos::RCP<Mesh> multiBasisMesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells, confusionBF, H1Order, H1Order);
+  Teuchos::RCP<Mesh> multiBasisMesh = MeshFactory::buildQuadMesh(quadPoints, horizontalCells, verticalCells, confusionBF, H1Order, H1Order);
 
   hRefineAllActiveCells(multiBasisMesh);
   
@@ -940,7 +935,7 @@ bool PatchBasisTests::testSolveUniformMesh() {
 //  cout << "MultiBasis localToGlobalMap:\n";
 //  multiBasisMesh->printLocalToGlobalMap();
   
-  Teuchos::RCP<Mesh> patchBasisMesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells, confusionBF, H1Order, H1Order);
+  Teuchos::RCP<Mesh> patchBasisMesh = MeshFactory::buildQuadMesh(quadPoints, horizontalCells, verticalCells, confusionBF, H1Order, H1Order);
   patchBasisMesh->setUsePatchBasis(true);
   
   Teuchos::RCP<Solution> pbSolution = Teuchos::rcp(new Solution(patchBasisMesh, confusionProblem, confusionProblem, ip));
@@ -958,7 +953,7 @@ bool PatchBasisTests::testSolveUniformMesh() {
 //  cout << "PatchBasis localToGlobalMap:\n";
 //  patchBasisMesh->printLocalToGlobalMap();
   
-  vector<int> cellsToRefine;
+  vector<GlobalIndexType> cellsToRefine;
   // just refine first active element
   cellsToRefine.push_back(patchBasisMesh->activeElements()[0]->cellID());
   patchBasisMesh->hRefine(cellsToRefine,RefinementPattern::regularRefinementPatternQuad());

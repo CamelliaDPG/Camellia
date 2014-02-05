@@ -417,7 +417,7 @@ bool LobattoBasisTests::testSimpleStiffnessMatrix() {
   Teuchos::RCP<ElementType> elemType = Teuchos::rcp( new ElementType(trialSpace, testSpace, quad_4));
   
   BasisCachePtr basisCache = Teuchos::rcp( new BasisCache(elemType) );
-  vector<int> cellIDs;
+  vector<GlobalIndexType> cellIDs;
   cellIDs.push_back(0);
   basisCache->setPhysicalCellNodes(cellNodes, cellIDs, true);
   bf->stiffnessMatrix(stiffness, elemType, cellSideParities, basisCache);

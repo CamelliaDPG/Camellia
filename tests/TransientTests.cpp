@@ -1,5 +1,6 @@
 #include "TransientTests.h"
 #include "CamelliaConfig.h"
+#include "MeshFactory.h"
 
 #ifdef USE_VTK
 #include "SolutionExporter.h"
@@ -101,7 +102,7 @@ void TransientTests::SetUp()
   int horizontalCells = 4, verticalCells = 4;
   
   // create a pointer to a new mesh:
-  mesh = Mesh::buildQuadMesh(meshBoundary, horizontalCells, verticalCells,
+  mesh = MeshFactory::buildQuadMesh(meshBoundary, horizontalCells, verticalCells,
                                                 bf, H1Order, H1Order+pToAdd);
 
   ////////////////////////////////////////////////////////////////////
@@ -223,7 +224,7 @@ TEST_F(TransientTests, TestProjection)
 
   double energyThreshold = 0.2; // for mesh refinements
   RefinementStrategy refinementStrategy( solution, energyThreshold );
-  vector<int> cellsToRefine;
+  vector<GlobalIndexType> cellsToRefine;
   cellsToRefine.push_back(1);
   cellsToRefine.push_back(2);
   refinementStrategy.hRefineCells(mesh, cellsToRefine);

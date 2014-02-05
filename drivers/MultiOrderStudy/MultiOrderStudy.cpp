@@ -37,6 +37,7 @@
 //
 
 #include "MultiOrderStudy.h"
+#include "MeshFactory.h"
 
 Teuchos::RCP<Mesh> MultiOrderStudy::makeMultiOrderMesh16x16(const FieldContainer<double> &quadBoundaryPoints,
                                                             Teuchos::RCP<BilinearForm> bilinearForm,
@@ -44,7 +45,7 @@ Teuchos::RCP<Mesh> MultiOrderStudy::makeMultiOrderMesh16x16(const FieldContainer
                                                             bool useTriangles) {
   // first, make a vanilla 16x16 mesh:
   int horizontalElements = 16, verticalElements = 16;
-  Teuchos::RCP<Mesh> mesh = Mesh::buildQuadMesh(quadBoundaryPoints, 
+  Teuchos::RCP<Mesh> mesh = MeshFactory::buildQuadMesh(quadBoundaryPoints, 
                                                 horizontalElements, verticalElements,
                                                 bilinearForm, lowH1Order, lowH1Order + pToAdd, useTriangles);
   /* refinement pattern goes like

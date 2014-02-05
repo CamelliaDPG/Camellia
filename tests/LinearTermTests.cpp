@@ -1,5 +1,6 @@
 #include "LinearTermTests.h"
 #include "MeshUtilities.h"
+#include "MeshFactory.h"
 
 void LinearTermTests::SetUp()
 {
@@ -55,7 +56,7 @@ void LinearTermTests::SetUp()
   quadPoints(3,1) = 1.0;
   int horizontalElements = 2, verticalElements = 2;
 
-  mesh = Mesh::buildQuadMesh(quadPoints, horizontalElements, verticalElements, bf, polyOrder+1, polyOrder+1+testToAdd);
+  mesh = MeshFactory::buildQuadMesh(quadPoints, horizontalElements, verticalElements, bf, polyOrder+1, polyOrder+1+testToAdd);
 
   ElementTypePtr elemType = mesh->getElement(0)->elementType();
   trialOrder = elemType->trialOrderPtr;
@@ -63,7 +64,7 @@ void LinearTermTests::SetUp()
 
   basisCache = Teuchos::rcp(new BasisCache(elemType, mesh));
 
-  vector<int> cellIDs;
+  vector<GlobalIndexType> cellIDs;
   cellIDs.push_back(0); 
   cellIDs.push_back(1);
   cellIDs.push_back(2);
@@ -423,13 +424,13 @@ TEST_F(LinearTermTests, TestRieszInversionAsProjection)
   int nCells = 2;
   int horizontalCells = nCells, verticalCells = nCells;
   // create a pointer to a new mesh:
-  Teuchos::RCP<Mesh> myMesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells,
+  Teuchos::RCP<Mesh> myMesh = MeshFactory::buildQuadMesh(quadPoints, horizontalCells, verticalCells,
 						  confusionBF, H1Order, H1Order+pToAdd);    
 
   ElementTypePtr elemType = myMesh->getElement(0)->elementType();
   BasisCachePtr basisCache = Teuchos::rcp(new BasisCache(elemType, myMesh));
   
-  vector<int> cellIDs;
+  vector<GlobalIndexType> cellIDs;
   cellIDs.push_back(0); 
   cellIDs.push_back(1);
   cellIDs.push_back(2);
@@ -531,7 +532,7 @@ TEST_F(LinearTermTests, TestMixedTermConsistency)
   int nCells = 1;
   int horizontalCells = nCells, verticalCells = nCells;
   // create a pointer to a new mesh:
-  Teuchos::RCP<Mesh> myMesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells,
+  Teuchos::RCP<Mesh> myMesh = MeshFactory::buildQuadMesh(quadPoints, horizontalCells, verticalCells,
 						  confusionBF, H1Order, H1Order+pToAdd);    
 
   ElementTypePtr elemType = myMesh->getElement(0)->elementType();
@@ -573,7 +574,7 @@ TEST_F(LinearTermTests, TestMixedTermConsistency)
     int numTestDofs = testOrderingPtr->totalDofs();
     FieldContainer<double> physicalCellNodes = myMesh->physicalCellNodesForCell(cellID);
 
-    vector<int> cellIDs;
+    vector<GlobalIndexType> cellIDs;
     cellIDs.push_back(cellID); // just do one cell at a time
 
     BasisCachePtr basisCache = Teuchos::rcp(new BasisCache(elemTypePtr,myMesh, true));
@@ -648,13 +649,13 @@ TEST_F(LinearTermTests, TestRieszInversion)
   int nCells = 1;
   int horizontalCells = nCells, verticalCells = nCells;
   // create a pointer to a new mesh:
-  Teuchos::RCP<Mesh> myMesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells,
+  Teuchos::RCP<Mesh> myMesh = MeshFactory::buildQuadMesh(quadPoints, horizontalCells, verticalCells,
 						  confusionBF, H1Order, H1Order+pToAdd);    
 
   ElementTypePtr elemType = myMesh->getElement(0)->elementType();
   BasisCachePtr basisCache = Teuchos::rcp(new BasisCache(elemType, myMesh));
   
-  vector<int> cellIDs;
+  vector<GlobalIndexType> cellIDs;
   vector<ElementPtr> elems = myMesh->activeElements();
   vector<ElementPtr>::iterator elemIt;
   for (elemIt=elems.begin();elemIt!=elems.end();elemIt++){
@@ -746,7 +747,7 @@ TEST_F(ConvectionTests, TestIntegrateMixedBasisConstants)
   Teuchos::RCP<Mesh> mesh = MeshUtilities::buildUnitQuadMesh(nCells,convectionBF, H1Order, H1Order+pToAdd);
   ElementTypePtr elemType = mesh->getElement(0)->elementType();
   BasisCachePtr basisCache = Teuchos::rcp(new BasisCache(elemType, mesh)); 
-  vector<int> cellIDs;
+  vector<GlobalIndexType> cellIDs;
   vector< ElementPtr > allElems = mesh->activeElements();
   vector< ElementPtr >::iterator elemIt;
   for (elemIt=allElems.begin();elemIt!=allElems.end();elemIt++){
@@ -801,7 +802,7 @@ TEST_F(ConvectionTests, TestIntegrateMixedBasisLinears)
   Teuchos::RCP<Mesh> mesh = MeshUtilities::buildUnitQuadMesh(nCells,convectionBF, H1Order, H1Order+pToAdd);
   ElementTypePtr elemType = mesh->getElement(0)->elementType();
   BasisCachePtr basisCache = Teuchos::rcp(new BasisCache(elemType, mesh)); 
-  vector<int> cellIDs;
+  vector<GlobalIndexType> cellIDs;
   vector< ElementPtr > allElems = mesh->activeElements();
   vector< ElementPtr >::iterator elemIt;
   for (elemIt=allElems.begin();elemIt!=allElems.end();elemIt++){

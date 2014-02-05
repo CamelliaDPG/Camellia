@@ -12,14 +12,16 @@
 #include "Teuchos_RCP.hpp"
 #include "RefinementPattern.h"
 
+#include "IndexType.h"
+
 using namespace std;
 
 class RefinementObserver {
 public:
   virtual ~RefinementObserver() {}
-  virtual void hRefine(const set<int> &cellIDs, Teuchos::RCP<RefinementPattern> refPattern) = 0;
-  virtual void pRefine(const set<int> &cellIDs) = 0;
-  virtual void hUnrefine(const set<int> &cellIDs) = 0;
+  virtual void hRefine(const set<GlobalIndexType> &cellIDs, Teuchos::RCP<RefinementPattern> refPattern) = 0;
+  virtual void pRefine(const set<GlobalIndexType> &cellIDs) = 0;
+  virtual void hUnrefine(const set<GlobalIndexType> &cellIDs) = 0;
 };
 
 #endif

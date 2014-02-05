@@ -53,7 +53,7 @@ void DPGInnerProduct::computeInnerProductMatrix(FieldContainer<double> &innerPro
   Teuchos::RCP<ElementType> elemTypePtr = Teuchos::rcp( new ElementType(dofOrdering,dofOrdering, cellTopoPtr) );
   Teuchos::RCP<Mesh> nullMeshPtr = Teuchos::rcp( (Mesh*) NULL );
   BasisCachePtr ipBasisCache = Teuchos::rcp(new BasisCache(elemTypePtr, nullMeshPtr,true));
-  ipBasisCache->setPhysicalCellNodes(physicalCellNodes,vector<int>(), false);
+  ipBasisCache->setPhysicalCellNodes(physicalCellNodes,vector<GlobalIndexType>(), false);
   computeInnerProductMatrix(innerProduct,dofOrdering,ipBasisCache);
 }
 

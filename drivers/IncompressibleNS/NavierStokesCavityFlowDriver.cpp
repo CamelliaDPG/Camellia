@@ -22,6 +22,7 @@
 #include "ParameterFunction.h"
 
 #include "RefinementHistory.h"
+#include "MeshFactory.h"
 
 #ifdef HAVE_MPI
 #include <Teuchos_GlobalMPISession.hpp>
@@ -776,7 +777,7 @@ int main(int argc, char *argv[]) {
     q = varFactory.testVar(VGP_Q_S, HGRAD);
     
   //  // create a pointer to a new mesh:
-  //  Teuchos::RCP<Mesh> mesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells,
+  //  Teuchos::RCP<Mesh> mesh = MeshFactory::buildQuadMesh(quadPoints, horizontalCells, verticalCells,
   //                                                navierStokesBF, H1Order, H1Order+pToAdd, useTriangles);
 
   //  Teuchos::RCP<BCEasy> bc = Teuchos::rcp( new BCEasy );
@@ -883,7 +884,7 @@ int main(int argc, char *argv[]) {
     
     Teuchos::RCP<Mesh> streamMesh, overkillMesh;
     
-    streamMesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells,
+    streamMesh = MeshFactory::buildQuadMesh(quadPoints, horizontalCells, verticalCells,
                                      streamBF, H1Order+pToAddForStreamFunction,
                                      H1Order+pToAdd+pToAddForStreamFunction, useTriangles);
 
@@ -983,7 +984,7 @@ int main(int argc, char *argv[]) {
   //  if (compareWithOverkillMesh) {
   //    // TODO: fix this to make it work with Navier-Stokes
   //    cout << "WARNING: still need to switch overkill to handle nonlinear iteration...\n";
-  //    overkillMesh = Mesh::buildQuadMesh(quadPoints, overkillMeshSize, overkillMeshSize,
+  //    overkillMesh = MeshFactory::buildQuadMesh(quadPoints, overkillMeshSize, overkillMeshSize,
   //                                       stokesBFMath, overkillPolyOrder, overkillPolyOrder+pToAdd, useTriangles);
   //    
   //    if (rank == 0) {
@@ -1486,7 +1487,7 @@ int main(int argc, char *argv[]) {
     for (vector< ElementTypePtr >::iterator elemTypeIt = elemTypes.begin(); elemTypeIt != elemTypes.end(); elemTypeIt++) {
       ElementTypePtr elemType = *elemTypeIt;
       vector< ElementPtr > elems = mesh->elementsOfTypeGlobal(elemType);
-      vector<int> cellIDs;
+      vector<GlobalIndexType> cellIDs;
       for (int i=0; i<elems.size(); i++) {
         cellIDs.push_back(elems[i]->cellID());
       }

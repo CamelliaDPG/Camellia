@@ -36,7 +36,7 @@ Epetra_Map StandardAssembler::getPartMap(){
   Epetra_SerialComm Comm;
 #endif
   MeshPtr mesh = _solution->mesh();
-  set<int> myGlobalIndicesSet = mesh->globalDofIndicesForPartition(rank);
+  set<GlobalIndexType> myGlobalIndicesSet = mesh->globalDofIndicesForPartition(rank);
   return _solution->getPartitionMap(rank,myGlobalIndicesSet, mesh->numGlobalDofs(),0,&Comm);
 }
 
@@ -142,10 +142,10 @@ void StandardAssembler::applyBCs(Epetra_FECrsMatrix &globalStiffMatrix, Epetra_F
   Epetra_SerialComm Comm;
 #endif
   MeshPtr mesh = _solution->mesh();  
-  set<int> myGlobalIndicesSet = mesh->globalDofIndicesForPartition(rank);
+  set<GlobalIndexType> myGlobalIndicesSet = mesh->globalDofIndicesForPartition(rank);
   Epetra_Map partMap = _solution->getPartitionMap(rank,myGlobalIndicesSet, mesh->numGlobalDofs(),0,&Comm);
 
-  FieldContainer<int> bcGlobalIndices;
+  FieldContainer<GlobalIndexType> bcGlobalIndices;
   FieldContainer<double> bcGlobalValues;
   mesh->boundary().bcsToImpose(bcGlobalIndices,bcGlobalValues,*(_solution->bc()), myGlobalIndicesSet);
   int numBCs = bcGlobalIndices.size();
@@ -153,7 +153,7 @@ void StandardAssembler::applyBCs(Epetra_FECrsMatrix &globalStiffMatrix, Epetra_F
   Epetra_MultiVector v(partMap,1);
   v.PutScalar(0.0);
   for (int i = 0; i < numBCs; i++) {
-    v.ReplaceGlobalValue(bcGlobalIndices(i), 0, bcGlobalValues(i));
+    v.ReplaceGlobalValue((long long)bcGlobalIndices(i), 0, bcGlobalValues(i));
   }
   
   Epetra_MultiVector rhsDirichlet(partMap,1);
@@ -163,7 +163,7 @@ void StandardAssembler::applyBCs(Epetra_FECrsMatrix &globalStiffMatrix, Epetra_F
   rhsVector.Update(-1.0,rhsDirichlet,1.0);
   
   if (numBCs != 0) {
-    int err = rhsVector.ReplaceGlobalValues(numBCs,&bcGlobalIndices(0),&bcGlobalValues(0));
+    int err = rhsVector.ReplaceGlobalValues(numBCs,(long long*)&bcGlobalIndices(0),&bcGlobalValues(0));
     if (err != 0) {
       cout << "ERROR: rhsVector.ReplaceGlobalValues(): some indices non-local...\n";
     }
@@ -171,7 +171,7 @@ void StandardAssembler::applyBCs(Epetra_FECrsMatrix &globalStiffMatrix, Epetra_F
   // Zero out rows and columns of stiffness matrix corresponding to Dirichlet edges and add one to diagonal.
   FieldContainer<int> bcLocalIndices(bcGlobalIndices.dimension(0));
   for (int i=0; i<bcGlobalIndices.dimension(0); i++) {
-    bcLocalIndices(i) = globalStiffMatrix.LRID(bcGlobalIndices(i));
+    bcLocalIndices(i) = globalStiffMatrix.LRID((long long)bcGlobalIndices(i));
   }
   if (numBCs == 0) {
     ML_Epetra::Apply_OAZToMatrix(NULL, 0, globalStiffMatrix);
@@ -193,7 +193,7 @@ void StandardAssembler::distributeDofs(Epetra_FEVector lhsVector){
   Epetra_SerialComm Comm;
 #endif  
   MeshPtr mesh = _solution->mesh();  
-  set<int> myGlobalIndicesSet = mesh->globalDofIndicesForPartition(rank);
+  set<GlobalIndexType> myGlobalIndicesSet = mesh->globalDofIndicesForPartition(rank);
   Epetra_Map partMap = _solution->getPartitionMap(rank,myGlobalIndicesSet, mesh->numGlobalDofs(),0,&Comm);
 
   lhsVector.GlobalAssemble();

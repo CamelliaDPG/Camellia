@@ -7,10 +7,10 @@ void HessianFilter::filter(FieldContainer<double> &localStiffnessMatrix, FieldCo
 
   //  cout << "numCells = " << localStiffnessMatrix.dimension(0) << ", numTestDofs = " << localStiffnessMatrix.dimension(1) << ", numTrialDofs = " << localStiffnessMatrix.dimension(2) << endl;
 
-  vector<int> cellIDs = basisCache->cellIDs();
-  int numCells = cellIDs.size();
+  vector<GlobalIndexType> cellIDs = basisCache->cellIDs();
+  GlobalIndexType numCells = cellIDs.size();
   if (numCells>0){
-    ElementTypePtr elemTypePtr = mesh->elements()[cellIDs[0]]->elementType(); // assumes all elements in basisCache are of the same type.
+    ElementTypePtr elemTypePtr = mesh->getElement(cellIDs[0])->elementType(); // assumes all elements in basisCache are of the same type.
 
     int numTrialDofs = elemTypePtr->trialOrderPtr->totalDofs();
     //    cout << "num Cells = " << numCells << ",num Trial dofs = " << numTrialDofs << ", numTest = " << numTestDofs << endl;

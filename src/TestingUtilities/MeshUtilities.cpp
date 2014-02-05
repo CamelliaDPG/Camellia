@@ -5,6 +5,8 @@
 #include <Teuchos_GlobalMPISession.hpp>
 #include "MPIWrapper.h"
 
+#include "MeshFactory.h"
+
 //static const double RAMP_HEIGHT = 0.0;
 
 class RampWallBoundary : public SpatialFilter {
@@ -96,7 +98,7 @@ MeshPtr MeshUtilities::buildLongRampMesh(double rampHeight, Teuchos::RCP< Biline
   int pToAdd = pTest-H1Order;
   mesh = Teuchos::rcp( new Mesh(vertices, elementVertices, bilinearForm, H1Order, pToAdd) );  
   vector<ElementPtr> elems = mesh->activeElements();
-  vector<int> cellsToRefine;
+  vector<GlobalIndexType> cellsToRefine;
   for (vector<ElementPtr>::iterator elemIt = elems.begin();elemIt!=elems.end();elemIt++){
     cellsToRefine.push_back((*elemIt)->cellID());
   }
@@ -160,7 +162,7 @@ MeshPtr MeshUtilities::buildUnitQuadMesh(int horizontalCells, int verticalCells,
   quadPoints(3,1) = squareSize;
   
   // create a pointer to a new mesh:
-  return Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells, bilinearForm, H1Order, pTest);
+  return MeshFactory::buildQuadMesh(quadPoints, horizontalCells, verticalCells, bilinearForm, H1Order, pTest);
 }
 
 MeshPtr MeshUtilities::buildUnitQuadMesh(int nCells, Teuchos::RCP< BilinearForm > bilinearForm, int H1Order, int pTest){

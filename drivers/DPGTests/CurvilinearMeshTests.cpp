@@ -126,9 +126,9 @@ bool CurvilinearMeshTests::testCylinderMesh() {
   //  cout << "Approximate area on straight-line mesh: " << approximateArea << endl;
   //
   
-  int numCells = mesh->numElements();
-  set<int> allCells;
-  for (int i=0; i<numCells; i++) {
+  GlobalIndexType numCells = mesh->numElements();
+  set<GlobalIndexType> allCells;
+  for (GlobalIndexType i=0; i<numCells; i++) {
     allCells.insert(i);
   }
   
@@ -277,7 +277,7 @@ bool CurvilinearMeshTests::testAutomaticStraightEdgesMatchVertices() {
   int cellID = 0;
   vector<unsigned> vertices = quadMesh->vertexIndicesForCell(cellID);
   pair<int,int> edge = make_pair(vertices[0],vertices[1]);
-  map< pair<int,int>, ParametricCurvePtr > edgeToCurveMap;
+  map< pair<GlobalIndexType,GlobalIndexType>, ParametricCurvePtr > edgeToCurveMap;
   edgeToCurveMap[edge] = bottomCurve;
   
   quadMesh->setEdgeToCurveMap(edgeToCurveMap);
@@ -411,8 +411,8 @@ bool CurvilinearMeshTests::testEdgeLength() {
     
     int cellID = 0;
     vector<unsigned> vertices = quadMesh->vertexIndicesForCell(cellID);
-    pair<int,int> edge = make_pair(vertices[0],vertices[1]);
-    map< pair<int,int>, ParametricCurvePtr > edgeToCurveMap;
+    pair<GlobalIndexType,GlobalIndexType> edge = make_pair(vertices[0],vertices[1]);
+    map< pair<GlobalIndexType,GlobalIndexType>, ParametricCurvePtr > edgeToCurveMap;
     edgeToCurveMap[edge] = bottomCurve;
     
     quadMesh->setEdgeToCurveMap(edgeToCurveMap);
@@ -695,7 +695,7 @@ bool CurvilinearMeshTests::testStraightEdgeMesh() {
     mesh = MeshFactory::quadMesh(bf, H1Order, pToAdd, width, height);
     
     // now, set curves for each edge:
-    map< pair<int, int>, ParametricCurvePtr > edgeToCurveMap;
+    map< pair<GlobalIndexType, GlobalIndexType>, ParametricCurvePtr > edgeToCurveMap;
     
     int cellID = 0; // the only cell
     vector< ParametricCurvePtr > lines = mesh->parametricEdgesForCell(cellID);
@@ -704,7 +704,7 @@ bool CurvilinearMeshTests::testStraightEdgeMesh() {
     for (int i=0; i<vertices.size(); i++) {
       int vertex = vertices[i];
       int nextVertex = vertices[(i+1) % vertices.size()];
-      pair< int, int > edge = make_pair(vertex,nextVertex);
+      pair< GlobalIndexType, GlobalIndexType > edge = make_pair(vertex,nextVertex);
       edgeToCurveMap[edge] = lines[i];
     }
     
@@ -1171,9 +1171,9 @@ bool CurvilinearMeshTests::testPointsRemainInsideElement() {
     ParametricCurvePtr halfCircleTop = ParametricCurve::circularArc(width/2, width/2, height, 0, PI);
     ParametricCurvePtr halfCircleBottom = ParametricCurve::circularArc(width/2, width/2, 0, PI, 0); // PI to 0: from left vertex to right
     
-    int cellID = 0;
+    GlobalIndexType cellID = 0;
     vector< unsigned > vertices = mesh->vertexIndicesForCell(cellID);
-    map< pair<int,int>, ParametricCurvePtr > edgeToCurveMap;
+    map< pair<GlobalIndexType,GlobalIndexType>, ParametricCurvePtr > edgeToCurveMap;
     edgeToCurveMap[make_pair(vertices[0], vertices[1])] = halfCircleBottom;
     edgeToCurveMap[make_pair(vertices[2], vertices[3])] = halfCircleTop;
     
@@ -1213,7 +1213,7 @@ bool CurvilinearMeshTests::testPointsRemainInsideElement() {
     
     int cellID = 0;
     vector< unsigned > vertices = mesh->vertexIndicesForCell(cellID);
-    map< pair<int,int>, ParametricCurvePtr > edgeToCurveMap;
+    map< pair<GlobalIndexType,GlobalIndexType>, ParametricCurvePtr > edgeToCurveMap;
     edgeToCurveMap[make_pair(vertices[2], vertices[3])] = halfCircleTop;
     
     mesh->setEdgeToCurveMap(edgeToCurveMap);
@@ -1252,9 +1252,9 @@ bool CurvilinearMeshTests::testPointsRemainInsideElement() {
     
     ParametricCurvePtr quarterCircleTop = ParametricCurve::circularArc(width, 0, width+height, 2*PI, 3*PI/2);
     
-    int cellID = 0;
+    GlobalIndexType cellID = 0;
     vector< unsigned > vertices = mesh->vertexIndicesForCell(cellID);
-    map< pair<int,int>, ParametricCurvePtr > edgeToCurveMap;
+    map< pair<GlobalIndexType,GlobalIndexType>, ParametricCurvePtr > edgeToCurveMap;
     edgeToCurveMap[make_pair(vertices[3], vertices[0])] = quarterCircleTop;
     
     mesh->setEdgeToCurveMap(edgeToCurveMap);
@@ -1295,7 +1295,7 @@ bool CurvilinearMeshTests::testPointsRemainInsideElement() {
     {
       int cellID = 0;
       vector< unsigned > vertices = mesh_pRefined->vertexIndicesForCell(cellID);
-      map< pair<int,int>, ParametricCurvePtr > edgeToCurveMap;
+      map< pair<GlobalIndexType,GlobalIndexType>, ParametricCurvePtr > edgeToCurveMap;
       ParametricCurvePtr arcTop = ParametricCurve::circularArc(r, 0, 2.5 * r, 7*PI/4, 3*PI/2);
       edgeToCurveMap[make_pair(vertices[2], vertices[3])] = arcTop;
       mesh_pRefined->setEdgeToCurveMap(edgeToCurveMap);
@@ -1311,9 +1311,9 @@ bool CurvilinearMeshTests::testPointsRemainInsideElement() {
       
       ParametricCurvePtr arcTop = ParametricCurve::circularArc(r, 0, 2.5 * r, 7*PI/4, 3*PI/2);
       
-      int cellID = 0;
+      GlobalIndexType cellID = 0;
       vector< unsigned > vertices = mesh->vertexIndicesForCell(cellID);
-      map< pair<int,int>, ParametricCurvePtr > edgeToCurveMap;
+      map< pair<GlobalIndexType,GlobalIndexType>, ParametricCurvePtr > edgeToCurveMap;
       edgeToCurveMap[make_pair(vertices[2], vertices[3])] = arcTop;
       
       mesh->setEdgeToCurveMap(edgeToCurveMap);
@@ -1368,7 +1368,7 @@ bool CurvilinearMeshTests::testPointsRemainInsideElement() {
         basisCache->setRefCellPoints(refPoints);
         GnuPlotUtil::writeXYPoints("/tmp/copyHemkerSegment_horizontal_line.dat", basisCache->getPhysicalCubaturePoints());
         
-        vector<int> cellIDs;
+        vector<GlobalIndexType> cellIDs;
         cellIDs.push_back(cellID);
         mesh_pRefined->pRefine(cellIDs);
         
@@ -1408,15 +1408,15 @@ bool CurvilinearMeshTests::testTransformationJacobian() {
     BasisCachePtr standardMeshCache = BasisCache::basisCacheForCell(mesh, cellID, testVsTest, cubatureEnrichment);
     
     // now, set curves for each edge:
-    map< pair<int, int>, ParametricCurvePtr > edgeToCurveMap;
+    map< pair<GlobalIndexType, GlobalIndexType>, ParametricCurvePtr > edgeToCurveMap;
     
     vector< ParametricCurvePtr > lines = mesh->parametricEdgesForCell(cellID);
     vector< unsigned > vertices = mesh->vertexIndicesForCell(cellID);
     
     for (int i=0; i<vertices.size(); i++) {
-      int vertex = vertices[i];
-      int nextVertex = vertices[(i+1) % vertices.size()];
-      pair< int, int > edge = make_pair(vertex,nextVertex);
+      GlobalIndexType vertex = vertices[i];
+      GlobalIndexType nextVertex = vertices[(i+1) % vertices.size()];
+      pair< GlobalIndexType, GlobalIndexType > edge = make_pair(vertex,nextVertex);
       edgeToCurveMap[edge] = lines[i];
     }
     

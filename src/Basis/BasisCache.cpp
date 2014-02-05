@@ -145,7 +145,7 @@ BasisCache::BasisCache(const FieldContainer<double> &physicalCellNodes,
   _numSides = cellTopo.getSideCount();
   findMaximumDegreeBasisForSides(trialOrdering);
   init(cellTopo, trialOrdering.maxBasisDegree(), maxTestDegree, createSideCacheToo);
-  setPhysicalCellNodes(physicalCellNodes,vector<int>(),createSideCacheToo);
+  setPhysicalCellNodes(physicalCellNodes,vector<GlobalIndexType>(),createSideCacheToo);
 }
 
 BasisCache::BasisCache(shards::CellTopology &cellTopo, int cubDegree, bool createSideCacheToo) {
@@ -164,7 +164,7 @@ BasisCache::BasisCache(const FieldContainer<double> &physicalCellNodes, shards::
   DofOrdering trialOrdering; // dummy trialOrdering
   findMaximumDegreeBasisForSides(trialOrdering); // should fill with NULL ptrs
   init(cellTopo, 0, cubDegree, createSideCacheToo);
-  setPhysicalCellNodes(physicalCellNodes,vector<int>(),createSideCacheToo);
+  setPhysicalCellNodes(physicalCellNodes,vector<GlobalIndexType>(),createSideCacheToo);
 }
 
 // side constructor
@@ -210,7 +210,7 @@ BasisCache::BasisCache(int sideIndex, BasisCachePtr volumeCache, int trialDegree
   CellTools<double>::mapToReferenceSubcell(_cubPointsSideRefCell, _cubPoints, sideDim, _sideIndex, _cellTopo);
 }
 
-const vector<int> & BasisCache::cellIDs() {
+const vector<GlobalIndexType> & BasisCache::cellIDs() {
   return _cellIDs;
 }
 
@@ -688,7 +688,7 @@ void BasisCache::determineJacobian() {
 }
 
 void BasisCache::setPhysicalCellNodes(const FieldContainer<double> &physicalCellNodes, 
-                                      const vector<int> &cellIDs, bool createSideCacheToo) {
+                                      const vector<GlobalIndexType> &cellIDs, bool createSideCacheToo) {
   discardPhysicalNodeInfo(); // necessary to get rid of transformed values, which will no longer be valid
   
   _physicalCellNodes = physicalCellNodes;
@@ -829,11 +829,11 @@ BasisCachePtr BasisCache::basisCache1D(double x0, double x1, int cubatureDegree)
   return Teuchos::rcp( new BasisCache(physicalCellNodes, line_2, cubatureDegree));
 }
 
-BasisCachePtr BasisCache::basisCacheForCell(MeshPtr mesh, int cellID, bool testVsTest, int cubatureDegreeEnrichment) {
+BasisCachePtr BasisCache::basisCacheForCell(MeshPtr mesh, GlobalIndexType cellID, bool testVsTest, int cubatureDegreeEnrichment) {
   ElementTypePtr elemType = mesh->getElement(cellID)->elementType();
   BasisCachePtr basisCache = Teuchos::rcp( new BasisCache(elemType, mesh, testVsTest, cubatureDegreeEnrichment) );
   bool createSideCache = true;
-  vector<int> cellIDs(1,cellID);
+  vector<GlobalIndexType> cellIDs(1,cellID);
   basisCache->setPhysicalCellNodes(mesh->physicalCellNodesForCell(cellID), cellIDs, createSideCache);
   
   return basisCache;
@@ -842,7 +842,7 @@ BasisCachePtr BasisCache::basisCacheForCellType(MeshPtr mesh, ElementTypePtr ele
                                                 int cubatureDegreeEnrichment) { // for cells on the local MPI node
   BasisCachePtr basisCache = Teuchos::rcp( new BasisCache(elemType, mesh, testVsTest, cubatureDegreeEnrichment) );
   bool createSideCache = true;
-  vector<int> cellIDs = mesh->cellIDsOfType(elemType);
+  vector<GlobalIndexType> cellIDs = mesh->cellIDsOfType(elemType);
   if (cellIDs.size() > 0) {
     basisCache->setPhysicalCellNodes(mesh->physicalCellNodes(elemType), cellIDs, createSideCache);
   }

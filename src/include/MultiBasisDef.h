@@ -37,7 +37,7 @@
 
 #include "BasisEvaluation.h"
 
-#include "Mesh.h"
+#include "GDAMaximumRule2D.h"
 
 #include "Intrepid_CellTools.hpp"
 
@@ -370,7 +370,7 @@ void MultiBasis<Scalar, ArrayScalar>::computeCellJacobians(ArrayScalar &cellJaco
   for (int nodeIndex=0; nodeIndex<numNodesPerCell; nodeIndex++) {
     // in 3D, this will have to become the application of the neighbor's side symmetry to the points in subRefNodes
     // (i.e. a transformation of the points)
-    int permutedNodeIndex = Mesh::neighborDofPermutation(nodeIndex,numNodesPerCell);
+    int permutedNodeIndex = GDAMaximumRule2D::neighborDofPermutation(nodeIndex,numNodesPerCell);
     for (int dim=0; dim<spaceDim; dim++) {
       thisSubRefNode(0,permutedNodeIndex,dim) = _subRefNodes(subRefCellIndex,nodeIndex,dim);
     }

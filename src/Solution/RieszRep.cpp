@@ -38,6 +38,9 @@
 #include "RieszRep.h"
 #include "Epetra_Vector.h"
 #include "Epetra_Import.h"
+
+#include "IndexType.h"
+
 LinearTermPtr RieszRep::getRHS(){
   return _rhs;
 }
@@ -46,15 +49,15 @@ MeshPtr RieszRep::mesh() {
   return _mesh;
 }
 
-map<int,FieldContainer<double> > RieszRep::integrateRHS(){
+map<GlobalIndexType,FieldContainer<double> > RieszRep::integrateRHS(){
 
-  map<int,FieldContainer<double> > cellRHS;
+  map<GlobalIndexType,FieldContainer<double> > cellRHS;
   vector< ElementPtr > allElems = _mesh->activeElements(); // CHANGE TO DISTRIBUTED COMPUTATION
   vector< ElementPtr >::iterator elemIt;     
   for (elemIt=allElems.begin();elemIt!=allElems.end();elemIt++){
 
     ElementPtr elem = *elemIt;
-    int cellID = elem->cellID();
+    GlobalIndexType cellID = elem->cellID();
 
     ElementTypePtr elemTypePtr = elem->elementType();   
     DofOrderingPtr testOrderingPtr = elemTypePtr->testOrderPtr;
@@ -76,12 +79,9 @@ map<int,FieldContainer<double> > RieszRep::integrateRHS(){
 }
 
 void RieszRep::computeRieszRep(int cubatureEnrichment){
-
-  int numProcs=1;
-  int rank=0;  
+  int rank=0;
 #ifdef HAVE_MPI
   rank     = Teuchos::GlobalMPISession::getRank();
-  numProcs = Teuchos::GlobalMPISession::getNProc();
   Epetra_MpiComm Comm(MPI_COMM_WORLD);
   //cout << "rank: " << rank << " of " << numProcs << endl;
 #else
@@ -93,7 +93,7 @@ void RieszRep::computeRieszRep(int cubatureEnrichment){
   for (elemIt=allElems.begin();elemIt!=allElems.end();elemIt++){
 
     ElementPtr elem = *elemIt;
-    int cellID = elem->cellID();
+    GlobalIndexType cellID = elem->cellID();
 
     ElementTypePtr elemTypePtr = elem->elementType();   
     DofOrderingPtr testOrderingPtr = elemTypePtr->testOrderPtr;
@@ -177,16 +177,14 @@ double RieszRep::getNorm(){
   return sqrt(normSum);
 }
 
-const map<int,double> & RieszRep::getNormsSquared(){ // should be renamed getNormsSquaredGlobal()
+const map<GlobalIndexType,double> & RieszRep::getNormsSquared(){ // should be renamed getNormsSquaredGlobal()
   return _rieszRepNormSquaredGlobal;
 }
 
 void RieszRep::distributeDofs(){
-  int numProcs=1;
   int rank=0;  
 #ifdef HAVE_MPI
   rank     = Teuchos::GlobalMPISession::getRank();
-  numProcs = Teuchos::GlobalMPISession::getNProc();
   Epetra_MpiComm Comm(MPI_COMM_WORLD);
   //cout << "rank: " << rank << " of " << numProcs << endl;
 #else
@@ -235,12 +233,12 @@ void RieszRep::distributeDofs(){
   }
   
   // distribute norms as well
-  int numElems = _mesh->activeElements().size();    
-  int numMyElems = _mesh->elementsInPartition(rank).size();
-  int myElems[numMyElems];
+  GlobalIndexType numElems = _mesh->activeElements().size();
+  IndexType numMyElems = _mesh->elementsInPartition(rank).size();
+  GlobalIndexType myElems[numMyElems];
   // build cell index
-  int cellIndex = 0;
-  int myCellIndex = 0;
+  IndexType cellIndex = 0;
+  GlobalIndexType myCellIndex = 0;
 
   vector<ElementPtr> elemsInPartition = _mesh->elementsInPartition(rank);
   for (elemIt=elems.begin();elemIt!=elems.end();elemIt++){
@@ -251,7 +249,7 @@ void RieszRep::distributeDofs(){
     }
     cellIndex++;
   }
-  Epetra_Map normMap(numElems,numMyElems,myElems,0,Comm);
+  Epetra_Map normMap((GlobalIndexTypeToCast)numElems,(int)numMyElems,(GlobalIndexTypeToCast *)myElems,(GlobalIndexTypeToCast)0,Comm);
 
   Epetra_Vector distributedRieszNorms(normMap);
   cellIndex = 0;
@@ -259,7 +257,7 @@ void RieszRep::distributeDofs(){
     int cellID = (*elemIt)->cellID();
     if (rank==_mesh->partitionForCellID(cellID)){ // if cell is in partition
       int ind = cellIndex;
-      int err = distributedRieszNorms.ReplaceGlobalValues(1,&_rieszRepNormSquared[cellID],&ind);
+      int err = distributedRieszNorms.ReplaceGlobalValues(1,&_rieszRepNormSquared[cellID],(GlobalIndexTypeToCast *)&ind);
       if (err != 0) {
         cout << "RieszRep::distributeDofs(): on rank" << rank << ", ReplaceGlobalValues returned error code " << err << endl;
       }
@@ -267,7 +265,7 @@ void RieszRep::distributeDofs(){
     cellIndex++;
   }
 
-  Epetra_Map normImportMap(numElems,numElems,0,Comm);
+  Epetra_Map normImportMap((GlobalIndexTypeToCast)numElems,(GlobalIndexTypeToCast)numElems,0,Comm);
   Epetra_Import normImporter(normImportMap,normMap); 
   Epetra_Vector globalNorms(normImportMap);
   globalNorms.Import(distributedRieszNorms, normImporter, Add);  // add should be OK (everything should be zeros)
@@ -288,16 +286,14 @@ void RieszRep::computeRepresentationValues(FieldContainer<double> &values, int t
     cout << "Computing riesz rep dofs" << endl;
     computeRieszRep();
   }
-  
-  vector< ElementPtr > allElems = _mesh->elements();
 
   int spaceDim = 2; // hardcoded 2D for now
   int numCells = values.dimension(0);
   int numPoints = values.dimension(1);
-  vector<int> cellIDs = basisCache->cellIDs();
+  vector<GlobalIndexType> cellIDs = basisCache->cellIDs();
 
   // all elems coming in should be of same type
-  ElementPtr elem = allElems[cellIDs[0]];
+  ElementPtr elem = _mesh->getElement(cellIDs[0]);
   ElementTypePtr elemTypePtr = elem->elementType();   
   DofOrderingPtr testOrderingPtr = elemTypePtr->testOrderPtr;
   CellTopoPtr cellTopoPtr = elemTypePtr->cellTopoPtr;
@@ -339,11 +335,11 @@ void RieszRep::computeRepresentationValues(FieldContainer<double> &values, int t
   }
 }
 
-map<int,double> RieszRep::computeAlternativeNormSqOnCells(IPPtr ip, vector<int> cellIDs){
+map<int,double> RieszRep::computeAlternativeNormSqOnCells(IPPtr ip, vector<GlobalIndexType> cellIDs){
   map<int,double> altNorms;
   int numCells = cellIDs.size();
   for (int i = 0;i<numCells;i++){
-    altNorms[cellIDs[i]] = computeAlternativeNormSqOnCell(ip, _mesh->elements()[cellIDs[i]]);
+    altNorms[cellIDs[i]] = computeAlternativeNormSqOnCell(ip, _mesh->getElement(cellIDs[i]));
   }
   return altNorms;
   /*
@@ -392,7 +388,7 @@ map<int,double> RieszRep::computeAlternativeNormSqOnCells(IPPtr ip, vector<int> 
 }
 
 double RieszRep::computeAlternativeNormSqOnCell(IPPtr ip, ElementPtr elem){
-  int cellID = elem->cellID();
+  GlobalIndexType cellID = elem->cellID();
   Teuchos::RCP<DofOrdering> testOrdering= elem->elementType()->testOrderPtr;
   bool testVsTest = true;
   Teuchos::RCP<BasisCache> basisCache =   BasisCache::basisCacheForCell(_mesh, cellID, testVsTest,1);

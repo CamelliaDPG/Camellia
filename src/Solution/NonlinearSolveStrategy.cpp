@@ -23,7 +23,7 @@ void NonlinearSolveStrategy::setUsePicardIteration(bool value) {
 void NonlinearSolveStrategy::solve(bool printToConsole) {
   Teuchos::RCP< Mesh > mesh = _solution->mesh();
   // initialize energyError stuff
-  const map<int, double>* energyError;
+  const map<GlobalIndexType, double>* energyError;
   vector< Teuchos::RCP< Element > > activeElements = mesh->activeElements();
   vector< Teuchos::RCP< Element > >::iterator activeElemIt;
   

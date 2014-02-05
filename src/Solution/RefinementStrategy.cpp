@@ -71,12 +71,12 @@ void RefinementStrategy::refine(bool printToConsole) {
   // greedy refinement algorithm - mark cells for refinement
   MeshPtr mesh = this->mesh();
   
-  map<int, double> energyError;
+  map<GlobalIndexType, double> energyError;
   if (_rieszRep.get() != NULL) {
     _rieszRep->computeRieszRep();
     energyError = _rieszRep->getNormsSquared();
     // take square roots:
-    for (map<int, double>::iterator energyEntryIt = energyError.begin();
+    for (map<GlobalIndexType, double>::iterator energyEntryIt = energyError.begin();
          energyEntryIt != energyError.end(); energyEntryIt++) {
       energyEntryIt->second = sqrt( energyEntryIt->second );
     }
@@ -88,9 +88,9 @@ void RefinementStrategy::refine(bool printToConsole) {
   double maxError = 0.0;
   double totalEnergyError = 0.0;
   
-  map<int, double> cellMeasures;
-  set<int> cellIDs = mesh->getActiveCellIDs();
-  for (set<int>::iterator cellIt=cellIDs.begin(); cellIt != cellIDs.end(); cellIt++) {
+  map<GlobalIndexType, double> cellMeasures;
+  set<GlobalIndexType> cellIDs = mesh->getActiveCellIDs();
+  for (set<GlobalIndexType>::iterator cellIt=cellIDs.begin(); cellIt != cellIDs.end(); cellIt++) {
     int cellID = *cellIt;
     cellMeasures[cellID] = mesh->getCellMeasure(cellID);
   }
@@ -127,8 +127,8 @@ void RefinementStrategy::refine(bool printToConsole) {
   setResults(results, mesh->numElements(), mesh->numGlobalDofs(), totalEnergyError);
   _results.push_back(results);
   
-  vector<int> cellsToRefine;
-  vector<int> cellsToPRefine;
+  vector<GlobalIndexType> cellsToRefine;
+  vector<GlobalIndexType> cellsToPRefine;
   
   // do refinements on cells with error above threshold
   for (vector< Teuchos::RCP< Element > >::iterator activeElemIt = activeElements.begin();
@@ -169,10 +169,10 @@ void RefinementStrategy::refine(bool printToConsole) {
   }
 }
 
-void RefinementStrategy::getCellsAboveErrorThreshhold(vector<int> &cellsToRefine){
+void RefinementStrategy::getCellsAboveErrorThreshhold(vector<GlobalIndexType> &cellsToRefine){
   // greedy refinement algorithm - mark cells for refinement
   MeshPtr mesh = this->mesh();
-  const map<int, double>* energyError = &(_solution->energyError());
+  const map<GlobalIndexType, double>* energyError = &(_solution->energyError());
   vector< Teuchos::RCP< Element > > activeElements = mesh->activeElements();
   
   double maxError = 0.0;
@@ -201,20 +201,20 @@ void RefinementStrategy::getCellsAboveErrorThreshhold(vector<int> &cellsToRefine
 }
 
 // defaults to h-refinement
-void RefinementStrategy::refineCells(vector<int> &cellIDs) {
+void RefinementStrategy::refineCells(vector<GlobalIndexType> &cellIDs) {
   MeshPtr mesh = this->mesh();
   hRefineCells(mesh, cellIDs);
 }
 
-void RefinementStrategy::pRefineCells(Teuchos::RCP<Mesh> mesh, const vector<int> &cellIDs) {
+void RefinementStrategy::pRefineCells(Teuchos::RCP<Mesh> mesh, const vector<GlobalIndexType> &cellIDs) {
   mesh->pRefine(cellIDs);  
 }
 
-void RefinementStrategy::hRefineCells(Teuchos::RCP<Mesh> mesh, const vector<int> &cellIDs) {
-  vector<int> triangleCellsToRefine;
-  vector<int> quadCellsToRefine;
+void RefinementStrategy::hRefineCells(Teuchos::RCP<Mesh> mesh, const vector<GlobalIndexType> &cellIDs) {
+  vector<GlobalIndexType> triangleCellsToRefine;
+  vector<GlobalIndexType> quadCellsToRefine;
   
-  for (vector< int >::const_iterator cellIDIt = cellIDs.begin();
+  for (vector< GlobalIndexType >::const_iterator cellIDIt = cellIDs.begin();
        cellIDIt != cellIDs.end(); cellIDIt++){
     int cellID = *cellIDIt;
     
@@ -230,7 +230,7 @@ void RefinementStrategy::hRefineCells(Teuchos::RCP<Mesh> mesh, const vector<int>
 }
 
 void RefinementStrategy::hRefineUniformly(Teuchos::RCP<Mesh> mesh) {
-  vector<int> cellsToRefine;
+  vector<GlobalIndexType> cellsToRefine;
   vector< Teuchos::RCP< Element > > activeElements = mesh->activeElements();
   for (vector< Teuchos::RCP< Element > >::iterator activeElemIt = activeElements.begin();
        activeElemIt != activeElements.end(); activeElemIt++) {
@@ -240,7 +240,7 @@ void RefinementStrategy::hRefineUniformly(Teuchos::RCP<Mesh> mesh) {
   hRefineCells(mesh, cellsToRefine);
 }
 
-void RefinementStrategy::setResults(RefinementResults &solnResults, int numElements, int numDofs,
+void RefinementStrategy::setResults(RefinementResults &solnResults, GlobalIndexType numElements, GlobalIndexType numDofs,
                                     double totalEnergyError) {
   solnResults.numElements = numElements;
   solnResults.numDofs = numDofs;
@@ -248,11 +248,11 @@ void RefinementStrategy::setResults(RefinementResults &solnResults, int numEleme
 }
 
 // without variable anisotropic threshholding
-void RefinementStrategy::refine(bool printToConsole, map<int,double> &xErr, map<int,double> &yErr) {
+void RefinementStrategy::refine(bool printToConsole, map<GlobalIndexType,double> &xErr, map<GlobalIndexType,double> &yErr) {
   // greedy refinement algorithm - mark cells for refinement
   MeshPtr mesh = this->mesh();
 
-  vector<int> xCells, yCells, regCells;
+  vector<GlobalIndexType> xCells, yCells, regCells;
   getAnisotropicCellsToRefine(xErr,yErr,xCells,yCells,regCells);
  
   // record results prior to refinement
@@ -275,8 +275,8 @@ void RefinementStrategy::refine(bool printToConsole, map<int,double> &xErr, map<
   }
 }
 
-void RefinementStrategy::refine(bool printToConsole, map<int,double> &xErr, map<int,double> &yErr, map<int,double> &threshMap) {
-  map<int,bool> hRefMap;
+void RefinementStrategy::refine(bool printToConsole, map<GlobalIndexType,double> &xErr, map<GlobalIndexType,double> &yErr, map<GlobalIndexType,double> &threshMap) {
+  map<GlobalIndexType,bool> hRefMap;
   vector<ElementPtr> elems = _solution->mesh()->activeElements();
   for (vector<ElementPtr>::iterator elemIt = elems.begin();elemIt!=elems.end();elemIt++){    
     hRefMap[(*elemIt)->cellID()] = true; // default to h-refinement
@@ -285,12 +285,12 @@ void RefinementStrategy::refine(bool printToConsole, map<int,double> &xErr, map<
 }
 
 // with variable anisotropic threshholding and p-refinement specification
-void RefinementStrategy::refine(bool printToConsole, map<int,double> &xErr, map<int,double> &yErr, map<int,double> &threshMap, map<int, bool> useHRefMap) {
+void RefinementStrategy::refine(bool printToConsole, map<GlobalIndexType,double> &xErr, map<GlobalIndexType,double> &yErr, map<GlobalIndexType,double> &threshMap, map<GlobalIndexType, bool> useHRefMap) {
 
   // greedy refinement algorithm - mark cells for refinement
   MeshPtr mesh = this->mesh();
 
-  vector<int> xCells, yCells, regCells;
+  vector<GlobalIndexType> xCells, yCells, regCells;
   getAnisotropicCellsToRefine(xErr,yErr,xCells,yCells,regCells, threshMap);
  
   // record results prior to refinement
@@ -300,22 +300,22 @@ void RefinementStrategy::refine(bool printToConsole, map<int,double> &xErr, map<
   _results.push_back(results);
 
   // check if any cells should be marked for p-refinement
-  vector<int> pCells;
-  for (vector<int>::iterator cellIt = xCells.begin();cellIt!=xCells.end();cellIt++){
+  vector<GlobalIndexType> pCells;
+  for (vector<GlobalIndexType>::iterator cellIt = xCells.begin();cellIt!=xCells.end();cellIt++){
     int cellID = *cellIt;
     if (!useHRefMap[cellID]){
       pCells.push_back(cellID);
       xCells.erase(cellIt);
     }
   }
-  for (vector<int>::iterator cellIt = yCells.begin();cellIt!=yCells.end();cellIt++){
+  for (vector<GlobalIndexType>::iterator cellIt = yCells.begin();cellIt!=yCells.end();cellIt++){
     int cellID = *cellIt;
     if (!useHRefMap[cellID]){
       pCells.push_back(cellID);
       yCells.erase(cellIt);
     }
   }
-  for (vector<int>::iterator cellIt = regCells.begin();cellIt!=regCells.end();cellIt++){
+  for (vector<GlobalIndexType>::iterator cellIt = regCells.begin();cellIt!=regCells.end();cellIt++){
     int cellID = *cellIt;
     if (!useHRefMap[cellID]){
       pCells.push_back(cellID);
@@ -339,8 +339,8 @@ void RefinementStrategy::refine(bool printToConsole, map<int,double> &xErr, map<
   }
 }
 
-void RefinementStrategy::getAnisotropicCellsToRefine(map<int,double> &xErr, map<int,double> &yErr, vector<int> &xCells, vector<int> &yCells, vector<int> &regCells){  
-  map<int,double> threshMap;
+void RefinementStrategy::getAnisotropicCellsToRefine(map<GlobalIndexType,double> &xErr, map<GlobalIndexType,double> &yErr, vector<GlobalIndexType> &xCells, vector<GlobalIndexType> &yCells, vector<GlobalIndexType> &regCells){  
+  map<GlobalIndexType,double> threshMap;
   vector<ElementPtr> elems = _solution->mesh()->activeElements();
   for (vector<ElementPtr>::iterator elemIt = elems.begin();elemIt!=elems.end();elemIt++){    
     threshMap[(*elemIt)->cellID()] = _anisotropicThreshhold;
@@ -349,12 +349,12 @@ void RefinementStrategy::getAnisotropicCellsToRefine(map<int,double> &xErr, map<
 }
 
 // anisotropy with variable threshholding
-void RefinementStrategy::getAnisotropicCellsToRefine(map<int,double> &xErr, map<int,double> &yErr, vector<int> &xCells, vector<int> &yCells, vector<int> &regCells, map<int,double> &threshMap){  
-  map<int,double> energyError = _solution->energyError();  
+void RefinementStrategy::getAnisotropicCellsToRefine(map<GlobalIndexType,double> &xErr, map<GlobalIndexType,double> &yErr, vector<GlobalIndexType> &xCells, vector<GlobalIndexType> &yCells, vector<GlobalIndexType> &regCells, map<GlobalIndexType,double> &threshMap){
+  map<GlobalIndexType,double> energyError = _solution->energyError();
   MeshPtr mesh = this->mesh();
-  vector<int> cellsToRefine;
+  vector<GlobalIndexType> cellsToRefine;
   getCellsAboveErrorThreshhold(cellsToRefine);
-  for (vector<int>::iterator cellIt = cellsToRefine.begin();cellIt!=cellsToRefine.end();cellIt++){
+  for (vector<GlobalIndexType>::iterator cellIt = cellsToRefine.begin();cellIt!=cellsToRefine.end();cellIt++){
     int cellID = *cellIt;    
     double h1 = mesh->getCellXSize(cellID);
     double h2 = mesh->getCellYSize(cellID);
@@ -375,34 +375,34 @@ void RefinementStrategy::getAnisotropicCellsToRefine(map<int,double> &xErr, map<
     double maxAspect = _maxAspectRatio; // the conservative aspect ratio from LD's DPG III: Adaptivity paper is 100. 
     // don't refine if h is already too small
     bool doAnisotropy = (aspectRatio < maxAspect);
-    if (min_h>_min_h){
-      if (doXAnisotropy && doAnisotropy){ // if ratio is small = y err bigger than xErr
-	xCells.push_back(cellID); // cut along y-axis
-      }else if (doYAnisotropy && doAnisotropy){ // if ratio is small = y err bigger than xErr
-	yCells.push_back(cellID); // cut along x-axis
-      }else{
-	regCells.push_back(cellID);
-      }        
+    if (min_h > _min_h) {
+      if (doXAnisotropy && doAnisotropy) { // if ratio is small = y err bigger than xErr
+        xCells.push_back(cellID); // cut along y-axis
+      } else if (doYAnisotropy && doAnisotropy) { // if ratio is small = y err bigger than xErr
+        yCells.push_back(cellID); // cut along x-axis
+      } else {
+        regCells.push_back(cellID);
+      }
     }
   }
 }
 
 // enforcing one-irregularity with anisotropy - ONLY FOR QUADS RIGHT NOW.  ALSO NOT PARALLELIZED
-bool RefinementStrategy::enforceAnisotropicOneIrregularity(vector<int> &xCells, vector<int> &yCells){
+bool RefinementStrategy::enforceAnisotropicOneIrregularity(vector<GlobalIndexType> &xCells, vector<GlobalIndexType> &yCells){
   bool success = true;
   MeshPtr mesh = this->mesh();
   int maxIters = mesh->numActiveElements(); // should not refine more than the number of elements...
 
   // build children list - for use in "upgrading" refinements to prevent deadlocking
-  vector<int> xChildren,yChildren;
-  for (vector<int>::iterator cellIt = xCells.begin();cellIt!=xCells.end();cellIt++){
+  vector<GlobalIndexType> xChildren,yChildren;
+  for (vector<GlobalIndexType>::iterator cellIt = xCells.begin();cellIt!=xCells.end();cellIt++){
     ElementPtr elem = mesh->getElement(*cellIt);
     for (int i = 0;i<elem->numChildren();i++){
       xChildren.push_back(elem->getChild(i)->cellID());
     }
   }
   // build children list
-  for (vector<int>::iterator cellIt = yCells.begin();cellIt!=yCells.end();cellIt++){
+  for (vector<GlobalIndexType>::iterator cellIt = yCells.begin();cellIt!=yCells.end();cellIt++){
     ElementPtr elem = mesh->getElement(*cellIt);
     for (int i = 0;i<elem->numChildren();i++){
       yChildren.push_back(elem->getChild(i)->cellID());
@@ -412,7 +412,7 @@ bool RefinementStrategy::enforceAnisotropicOneIrregularity(vector<int> &xCells, 
   bool meshIsNotRegular = true; // assume it's not regular and check elements
   int i = 0;
   while (meshIsNotRegular && i<maxIters) {
-    vector <int> irregularQuadCells,xUpgrades,yUpgrades;
+    vector<GlobalIndexType> irregularQuadCells,xUpgrades,yUpgrades;
     vector< Teuchos::RCP< Element > > newActiveElements = mesh->activeElements();
     vector< Teuchos::RCP< Element > >::iterator newElemIt;
     
@@ -421,10 +421,11 @@ bool RefinementStrategy::enforceAnisotropicOneIrregularity(vector<int> &xCells, 
       bool isIrregular = false;
       for (int sideIndex=0; sideIndex < current_element->numSides(); sideIndex++) {
         int mySideIndexInNeighbor;
-        Element* neighbor; // may be a parent
-        current_element->getNeighbor(neighbor, mySideIndexInNeighbor, sideIndex);
-        int numNeighborsOnSide = neighbor->getDescendantsForSide(mySideIndexInNeighbor).size();
-        if (numNeighborsOnSide > 2) isIrregular=true;
+        ElementPtr neighbor = current_element->getNeighbor(mySideIndexInNeighbor, sideIndex);
+        if (neighbor.get() != NULL) {
+          int numNeighborsOnSide = neighbor->getDescendantsForSide(mySideIndexInNeighbor).size();
+          if (numNeighborsOnSide > 2) isIrregular=true;
+        }
       }
       if (isIrregular) {
         int cellID = current_element->cellID();

@@ -17,6 +17,8 @@
 #include "MeshPartitionPolicy.h"
 #include "ElementType.h"
 
+#include "IndexType.h"
+
 class GlobalDofAssignment;
 typedef Teuchos::RCP<GlobalDofAssignment> GlobalDofAssignmentPtr;
 
@@ -29,7 +31,7 @@ protected:
   unsigned _initialH1OrderTrial;
   unsigned _testOrderEnhancement;
   
-  map<unsigned, unsigned> _cellH1Orders;
+  map<GlobalIndexType, unsigned> _cellH1Orders;
   
   unsigned _numPartitions;
 public:
@@ -37,21 +39,25 @@ public:
                       MeshPartitionPolicyPtr partitionPolicy, unsigned initialH1OrderTrial, unsigned testOrderEnhancement);
   
   // after calling any of these, must call rebuildLookups
-  virtual void didHRefine(const set<int> &parentCellIDs) = 0;
-  virtual void didPRefine(const set<int> &cellIDs, int deltaP) = 0;
-  virtual void didHUnrefine(const set<int> &parentCellIDs) = 0;
+  virtual void didHRefine(const set<GlobalIndexType> &parentCellIDs) = 0;
+  virtual void didPRefine(const set<GlobalIndexType> &cellIDs, int deltaP) = 0;
+  virtual void didHUnrefine(const set<GlobalIndexType> &parentCellIDs) = 0;
   
-  virtual void didChangePartitionPolicy() = 0;
+  virtual void didChangePartitionPolicy() = 0; // called by superclass after setPartitionPolicy() is invoked
   
-  virtual ElementTypePtr elementType(unsigned cellID) = 0;
+  virtual ElementTypePtr elementType(GlobalIndexType cellID) = 0;
   
-  virtual unsigned globalDofCount() = 0;
-  virtual unsigned localDofCount() = 0; // local to the MPI node
+  virtual GlobalIndexType globalDofCount() = 0;
+  
+  virtual void interpretLocalDofs(GlobalIndexType cellID, const FieldContainer<double> &localDofs, FieldContainer<double> &globalDofs, FieldContainer<GlobalIndexType> &globalDofIndices) = 0;
+  
+  virtual IndexType localDofCount() = 0; // local to the MPI node
   
   virtual void rebuildLookups() = 0;
   
   void setPartitionPolicy( MeshPartitionPolicyPtr partitionPolicy );
   
+  // static constructors:
   static GlobalDofAssignmentPtr maximumRule2D(MeshTopologyPtr meshTopology, VarFactory varFactory, DofOrderingFactoryPtr dofOrderingFactory,
                                               MeshPartitionPolicyPtr partitionPolicy, unsigned initialH1OrderTrial, unsigned testOrderEnhancement);
   static GlobalDofAssignmentPtr minumumRule(MeshTopologyPtr meshTopology, VarFactory varFactory,

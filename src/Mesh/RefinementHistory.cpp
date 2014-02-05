@@ -47,7 +47,7 @@ string stringForRefinementType(RefinementType refType) {
   }
 }
 
-void RefinementHistory::hRefine(const set<int> &cellIDs, Teuchos::RCP<RefinementPattern> refPattern) {
+void RefinementHistory::hRefine(const set<GlobalIndexType> &cellIDs, Teuchos::RCP<RefinementPattern> refPattern) {
   if (cellIDs.size() == 0) return;
   // figure out what type of refinement we have:
   int numChildren = refPattern->numChildren();
@@ -70,13 +70,13 @@ void RefinementHistory::hRefine(const set<int> &cellIDs, Teuchos::RCP<Refinement
   _refinements.push_back(ref);
 }
 
-void RefinementHistory::pRefine(const set<int> &cellIDs) {
+void RefinementHistory::pRefine(const set<GlobalIndexType> &cellIDs) {
   if (cellIDs.size() == 0) return;
   Refinement ref = make_pair(P_REFINEMENT, cellIDs);
   _refinements.push_back(ref);
 }
 
-void RefinementHistory::hUnrefine(const set<int> &cellIDs) {
+void RefinementHistory::hUnrefine(const set<GlobalIndexType> &cellIDs) {
   if (cellIDs.size() == 0) return;
   Refinement ref = make_pair(H_UNREFINEMENT, cellIDs);
   _refinements.push_back(ref);
@@ -86,13 +86,13 @@ void RefinementHistory::playback(MeshPtr mesh) {
   for (vector< Refinement >::iterator refIt = _refinements.begin(); refIt != _refinements.end(); refIt++) {
     Refinement ref = *refIt;
     RefinementType refType = ref.first;
-    set<int> cellIDs = ref.second;
+    set<GlobalIndexType> cellIDs = ref.second;
     
     // check that the cellIDs are all active nodes
     if (refType != H_UNREFINEMENT) {
 //      cout << stringForRefinementType(refType) << " ";
-      set<int> activeIDs = mesh->getActiveCellIDs();
-      for (set<int>::iterator cellIt = cellIDs.begin(); cellIt != cellIDs.end(); cellIt++) {
+      set<GlobalIndexType> activeIDs = mesh->getActiveCellIDs();
+      for (set<GlobalIndexType>::iterator cellIt = cellIDs.begin(); cellIt != cellIDs.end(); cellIt++) {
         int cellID = *cellIt;
 //        cout << cellID << " ";
         if (activeIDs.find(cellID) == activeIDs.end()) {
@@ -101,7 +101,7 @@ void RefinementHistory::playback(MeshPtr mesh) {
       }
 //      cout << endl;
     }
-    int sampleCellID = *(cellIDs.begin());
+    GlobalIndexType sampleCellID = *(cellIDs.begin());
     bool quadCells = mesh->getElement(sampleCellID)->numSides() == 4;
     
     switch (refType) {
@@ -134,10 +134,10 @@ void RefinementHistory::saveToFile(string fileName) {
   for (vector< Refinement >::iterator refIt = _refinements.begin(); refIt != _refinements.end(); refIt++) {
     Refinement ref = *refIt;
     RefinementType refType = ref.first;
-    set<int> cellIDs = ref.second;
+    set<GlobalIndexType> cellIDs = ref.second;
     fout << stringForRefinementType(refType) << " ";
-    for (set<int>::iterator cellIt = cellIDs.begin(); cellIt != cellIDs.end(); cellIt++) {
-      int cellID = *cellIt;
+    for (set<GlobalIndexType>::iterator cellIt = cellIDs.begin(); cellIt != cellIDs.end(); cellIt++) {
+      GlobalIndexType cellID = *cellIt;
       fout << cellID << " ";
     }
     fout << endl;
@@ -149,13 +149,13 @@ void RefinementHistory::loadFromFile(string fileName) {
   
   while (fin.good()) {
     string refTypeStr;
-    int cellID;
+    GlobalIndexType cellID;
     
     string line;
     std::getline(fin, line, '\n');
     std::istringstream linestream(line);
     linestream >> refTypeStr;
-    set<int> cellIDs;
+    set<GlobalIndexType> cellIDs;
     while (linestream.good()) {
       linestream >> cellID;
       cellIDs.insert(cellID);

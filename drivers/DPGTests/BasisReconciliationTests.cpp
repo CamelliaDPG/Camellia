@@ -406,7 +406,7 @@ FieldContainer<double> cubaturePoints(shards::CellTopology cellTopo, int cubatur
   FieldContainer<double> permutedCellNodes(cellTopo.getNodeCount(),cellTopo.getDimension());
   CamelliaCellTools::refCellNodesForTopology(permutedCellNodes, cellTopo, nodePermutation);
   permutedCellNodes.resize(1, permutedCellNodes.dimension(0), permutedCellNodes.dimension(1));
-  basisCache->setPhysicalCellNodes(permutedCellNodes, vector<int>(), false);
+  basisCache->setPhysicalCellNodes(permutedCellNodes, vector<GlobalIndexType>(), false);
   FieldContainer<double> permutedCubaturePoints = basisCache->getPhysicalCubaturePoints();
   permutedCubaturePoints.resize(permutedCubaturePoints.dimension(1), permutedCubaturePoints.dimension(2));
   return permutedCubaturePoints;
@@ -420,7 +420,7 @@ FieldContainer<double> cubaturePoints(shards::CellTopology fineCellTopo, int cub
   FieldContainer<double> fineCellNodesInCoarseCell = RefinementPattern::descendantNodes(refinements,coarseCellNodes);
   fineCellNodesInCoarseCell.resize(1,fineCellNodesInCoarseCell.dimension(0),fineCellNodesInCoarseCell.dimension(1));
   
-  fineBasisCache->setPhysicalCellNodes(fineCellNodesInCoarseCell, vector<int>(), false);
+  fineBasisCache->setPhysicalCellNodes(fineCellNodesInCoarseCell, vector<GlobalIndexType>(), false);
   FieldContainer<double> fineCubPoints = fineBasisCache->getPhysicalCubaturePoints();
   fineCubPoints.resize(fineCubPoints.dimension(1), fineCubPoints.dimension(2));
   
@@ -434,7 +434,7 @@ FieldContainer<double> basisValuesAtPoints(BasisPtr basis, const FieldContainer<
   CamelliaCellTools::refCellNodesForTopology(refCellNodes, cellTopo);
   basisCache->setRefCellPoints(pointsOnRefCell);
   refCellNodes.resize(1,cellTopo.getNodeCount(),cellTopo.getDimension());
-  basisCache->setPhysicalCellNodes(refCellNodes, vector<int>(), false);
+  basisCache->setPhysicalCellNodes(refCellNodes, vector<GlobalIndexType>(), false);
   return *(basisCache->getValues(basis, OP_VALUE).get());
 }
 
@@ -685,7 +685,7 @@ FieldContainer<double> BasisReconciliationTests::permutedSidePoints(shards::Cell
   sideNodes.resize(oneCell,sideNodes.dimension(0),sideNodes.dimension(1));
   BasisCachePtr sideCache = Teuchos::rcp( new BasisCache(sideTopo, cubDegree, false) );
   sideCache->setRefCellPoints(pointsRefCell);
-  sideCache->setPhysicalCellNodes(sideNodes, vector<int>(), false);
+  sideCache->setPhysicalCellNodes(sideNodes, vector<GlobalIndexType>(), false);
   
   FieldContainer<double> permutedPoints = sideCache->getPhysicalCubaturePoints();
   permutedPoints.resize(permutedPoints.dimension(1), permutedPoints.dimension(2));

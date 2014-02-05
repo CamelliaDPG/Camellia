@@ -6,6 +6,7 @@
 #include "PreviousSolutionFunction.h"
 #include "RefinementStrategy.h"
 #include "SolutionExporter.h"
+#include "MeshFactory.h"
 
 #ifdef HAVE_MPI
 #include <Teuchos_GlobalMPISession.hpp>
@@ -118,7 +119,7 @@ int main(int argc, char *argv[]) {
   meshBoundary(3,1) =  ymax;
 
   // create a pointer to a new mesh:
-  Teuchos::RCP<Mesh> mesh = Mesh::buildQuadMesh(meshBoundary, xCells, yCells,
+  Teuchos::RCP<Mesh> mesh = MeshFactory::buildQuadMesh(meshBoundary, xCells, yCells,
       bf, H1Order, H1Order+deltaP);
 
   ////////////////////////////////////////////////////////////////////

@@ -11,6 +11,7 @@
 #include "Solution.h"
 
 #include "MeshUtilities.h"
+#include "MeshFactory.h"
 
 #include "GnuPlotUtil.h"
 
@@ -238,7 +239,7 @@ int main(int argc, char *argv[]) {
 
   
   // create a pointer to a new mesh:
-  Teuchos::RCP<Mesh> mesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells,
+  Teuchos::RCP<Mesh> mesh = MeshFactory::buildQuadMesh(quadPoints, horizontalCells, verticalCells,
                                                 confusionBF, H1Order, H1Order+pToAdd);
   
   ////////////////////   SOLVE & REFINE   ///////////////////////

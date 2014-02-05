@@ -22,7 +22,7 @@ using namespace Intrepid;
 class MeshPartitionPolicy {
 public:
   virtual ~MeshPartitionPolicy() {}
-  virtual void partitionMesh(MeshTopology *meshTopology, int numPartitions, FieldContainer<int> &partitionedActiveCells);
+  virtual void partitionMesh(MeshTopology *meshTopology, PartitionIndexType numPartitions, FieldContainer<GlobalIndexType> &partitionedActiveCells);
 };
 
 #endif

@@ -1,6 +1,7 @@
 #include "LocalConservationTests.h"
 #include "CamelliaConfig.h"
 #include "CheckConservation.h"
+#include "MeshFactory.h"
 
 #ifdef USE_VTK
 #include "SolutionExporter.h"
@@ -100,7 +101,7 @@ void OneTermConservationTests::SetUp()
   int horizontalCells = 4, verticalCells = 4;
   
   // create a pointer to a new mesh:
-  mesh = Mesh::buildQuadMesh(meshBoundary, horizontalCells, verticalCells,
+  mesh = MeshFactory::buildQuadMesh(meshBoundary, horizontalCells, verticalCells,
                                                 bf, H1Order, H1Order+pToAdd);
 
   ////////////////////   DEFINE BILINEAR FORM   ///////////////////////
@@ -160,7 +161,7 @@ void MixedTermConservationTests::SetUp()
   int horizontalCells = 2, verticalCells = 1;
   
   // create a pointer to a new mesh:
-  mesh = Mesh::buildQuadMesh(meshBoundary, horizontalCells, verticalCells,
+  mesh = MeshFactory::buildQuadMesh(meshBoundary, horizontalCells, verticalCells,
                                                 bf, H1Order, H1Order+pToAdd);
 
   ////////////////////   DEFINE BILINEAR FORM   ///////////////////////

@@ -3,6 +3,7 @@
 #include "MathInnerProduct.h"
 #include "OptimalInnerProduct.h"
 #include "Mesh.h"
+#include "MeshFactory.h"
 #include "Solution.h"
 #include "ZoltanMeshPartitionPolicy.h"
 
@@ -73,12 +74,12 @@ int main(int argc, char *argv[]) {
     // before we hRefine, compute a solution for comparison after refinement
     Teuchos::RCP<DPGInnerProduct> ip = Teuchos::rcp(new MathInnerProduct(exactSolution.bilinearForm()));
     
-    vector<int> cellsToRefine;
+    vector<GlobalIndexType> cellsToRefine;
     cellsToRefine.clear();
     
     // start with a fresh 2x1 mesh:
     horizontalCells = 1; verticalCells = 1;
-    Teuchos::RCP<Mesh> mesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells, exactSolution.bilinearForm(), H1Order, H1Order+pToAdd);
+    Teuchos::RCP<Mesh> mesh = MeshFactory::buildQuadMesh(quadPoints, horizontalCells, verticalCells, exactSolution.bilinearForm(), H1Order, H1Order+pToAdd);
     mesh->setPartitionPolicy(Teuchos::rcp(new ZoltanMeshPartitionPolicy("HSFC")));
     
     // repeatedly refine the first element along the side shared with cellID 1

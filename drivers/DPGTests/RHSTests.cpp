@@ -17,6 +17,7 @@
 #include "TestRHSOne.h"
 #include "TestRHSLinear.h"
 #include "BilinearFormUtility.h"
+#include "MeshFactory.h"
 
 #include "Intrepid_HGRAD_QUAD_Cn_FEM.hpp"
 
@@ -77,7 +78,7 @@ void RHSTests::setup() {
   Teuchos::RCP<ConfusionBilinearForm> confusionBF = Teuchos::rcp( new ConfusionBilinearForm(eps,beta_x,beta_y) );
   Teuchos::RCP<ConfusionProblemLegacy> confusionProblem = Teuchos::rcp( new ConfusionProblemLegacy(confusionBF) );
   _rhs = confusionProblem;
-  _mesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells, confusionBF, H1Order, H1Order+delta_p);
+  _mesh = MeshFactory::buildQuadMesh(quadPoints, horizontalCells, verticalCells, confusionBF, H1Order, H1Order+delta_p);
   _mesh->setUsePatchBasis(false);
   
   VarFactory varFactory; // Create test IDs that match the enum in ConfusionBilinearForm
@@ -306,7 +307,7 @@ bool RHSTests::testIntegrateAgainstStandardBasis() {
   FieldContainer<double> rhsActual(numCells,numTestDofs);
   
   // determine cellIDs
-  vector<int> cellIDs;
+  vector<GlobalIndexType> cellIDs;
   for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
     int cellID = _mesh->cellID(elemType, cellIndex, rank);
     cellIDs.push_back(cellID);
@@ -351,7 +352,7 @@ bool RHSTests::testRHSEasy() {
   FieldContainer<double> rhsActual(numCells,numTestDofs);
   
   // determine cellIDs
-  vector<int> cellIDs;
+  vector<GlobalIndexType> cellIDs;
   for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
     int cellID = _mesh->cellID(elemType, cellIndex, rank);
     cellIDs.push_back(cellID);
@@ -397,7 +398,7 @@ bool RHSTests::testTrivialRHS(){
   int numTestDofs = elemType->testOrderPtr->totalDofs();
 
   // determine cellIDs
-  vector<int> cellIDs;
+  vector<GlobalIndexType> cellIDs;
   for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
     int cellID = _mesh->cellID(elemType, cellIndex, rank);
     cellIDs.push_back(cellID);

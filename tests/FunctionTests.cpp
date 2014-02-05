@@ -1,4 +1,5 @@
 #include "FunctionTests.h"
+#include "MeshFactory.h"
 
 void FunctionTests::SetUp()
 {
@@ -52,7 +53,7 @@ void FunctionTests::SetUp()
   int horizontalCells = 1, verticalCells = 1;
   
   // create a pointer to a new mesh:
-  _spectralConfusionMesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells,
+  _spectralConfusionMesh = MeshFactory::buildQuadMesh(quadPoints, horizontalCells, verticalCells,
                                                _confusionBF, H1Order, H1Order+pToAdd);
   
   // some 2D test points:
@@ -70,7 +71,7 @@ void FunctionTests::SetUp()
   }
   
   _elemType = _spectralConfusionMesh->getElement(0)->elementType();
-  vector<int> cellIDs;
+  vector<GlobalIndexType> cellIDs;
   int cellID = 0;
   cellIDs.push_back(cellID);
   _basisCache = Teuchos::rcp( new BasisCache( _elemType, _spectralConfusionMesh ) );

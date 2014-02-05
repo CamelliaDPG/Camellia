@@ -96,7 +96,7 @@ void FunctionTests::setup() {
   int horizontalCells = 1, verticalCells = 1;
   
   // create a pointer to a new mesh:
-  _spectralConfusionMesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells,
+  _spectralConfusionMesh = MeshFactory::buildQuadMesh(quadPoints, horizontalCells, verticalCells,
                                                _confusionBF, H1Order, H1Order+pToAdd);
   
   // some 2D test points:
@@ -114,8 +114,8 @@ void FunctionTests::setup() {
   }
   
   _elemType = _spectralConfusionMesh->getElement(0)->elementType();
-  vector<int> cellIDs;
-  int cellID = 0;
+  vector<GlobalIndexType> cellIDs;
+  GlobalIndexType cellID = 0;
   cellIDs.push_back(cellID);
   _basisCache = Teuchos::rcp( new BasisCache( _elemType, _spectralConfusionMesh ) );
   _basisCache->setRefCellPoints(_testPoints);
@@ -229,7 +229,7 @@ bool FunctionTests::testBasisSumFunction() {
   int horizontalCells = 1, verticalCells = 1;
   
   // create a pointer to a new mesh:
-  MeshPtr spectralConfusionMesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells,
+  MeshPtr spectralConfusionMesh = MeshFactory::buildQuadMesh(quadPoints, horizontalCells, verticalCells,
                                                       _confusionBF, H1Order, H1Order+pToAdd);
   
   BCPtr bc = Teuchos::rcp( new BCEasy );
@@ -595,7 +595,7 @@ bool FunctionTests::testAdaptiveIntegrate(){
   // has had its ref cell points set, which basically means it's
   // opted out of having any help with integration.
   BasisCachePtr basisCache = Teuchos::rcp( new BasisCache( _elemType, _spectralConfusionMesh ) );
-  vector<int> cellIDs;
+  vector<GlobalIndexType> cellIDs;
   cellIDs.push_back(0);
   basisCache->setPhysicalCellNodes( _spectralConfusionMesh->physicalCellNodesForCell(0), cellIDs, true );
   
@@ -714,15 +714,15 @@ public:
   virtual void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
     // not the most efficient implementation
     _fxn->values(values,basisCache);
-    vector<int> contextCellIDs = basisCache->cellIDs();
+    vector<GlobalIndexType> contextCellIDs = basisCache->cellIDs();
     int cellIndex=0; // keep track of index into values
     
     int entryCount = values.size();
     int numCells = values.dimension(0);
     int numEntriesPerCell = entryCount / numCells;
     
-    for (vector<int>::iterator cellIt = contextCellIDs.begin(); cellIt != contextCellIDs.end(); cellIt++) {
-      int cellID = *cellIt;
+    for (vector<GlobalIndexType>::iterator cellIt = contextCellIDs.begin(); cellIt != contextCellIDs.end(); cellIt++) {
+      GlobalIndexType cellID = *cellIt;
       if (_cellIDs.find(cellID) == _cellIDs.end()) {
         // clear out the associated entries
         for (int j=0; j<numEntriesPerCell; j++) {
@@ -755,7 +755,7 @@ bool FunctionTests::testJumpIntegral() {
   int numSides = 4;
   
   // create a pointer to a new mesh:
-  Teuchos::RCP<Mesh> mesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells,
+  Teuchos::RCP<Mesh> mesh = MeshFactory::buildQuadMesh(quadPoints, horizontalCells, verticalCells,
                                                 _confusionBF, H1Order, H1Order+pToAdd);
   
   FieldContainer<double> points(1,2);

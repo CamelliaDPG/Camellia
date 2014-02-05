@@ -32,7 +32,7 @@ protected:
     double totalEnergyError;
   };
   
-  static void setResults(RefinementResults &solnResults, int numElements, int numDofs, double totalEnergyError);
+  static void setResults(RefinementResults &solnResults, GlobalIndexType numElements, GlobalIndexType numDofs, double totalEnergyError);
   SolutionPtr _solution;
   
   RieszRepPtr _rieszRep;
@@ -56,19 +56,20 @@ public:
   void setMaxAspectRatio(double value);
 
   virtual void refine(bool printToConsole=false);
-  virtual void refine(bool printToConsole, map<int,double> &xErr, map<int,double> &yErr);
-  void refine(bool printToConsole, map<int,double> &xErr, map<int,double> &yErr, map<int,double> &threshMap);
-  void refine(bool printToConsole, map<int,double> &xErr, map<int,double> &yErr, map<int,double> &threshMap, map<int, bool> useHRefMap);
+  virtual void refine(bool printToConsole, map<GlobalIndexType,double> &xErr, map<GlobalIndexType,double> &yErr);
+  void refine(bool printToConsole, map<GlobalIndexType,double> &xErr, map<GlobalIndexType,double> &yErr, map<GlobalIndexType,double> &threshMap);
+  void refine(bool printToConsole, map<GlobalIndexType,double> &xErr, map<GlobalIndexType,double> &yErr, map<GlobalIndexType,double> &threshMap, map<GlobalIndexType, bool> useHRefMap);
 
-  void getAnisotropicCellsToRefine(map<int,double> &xErr, map<int,double> &yErr, vector<int> &xCells, vector<int> &yCells, vector<int> &regCells);
-  void getAnisotropicCellsToRefine(map<int,double> &xErr, map<int,double> &yErr, vector<int> &xCells, vector<int> &yCells, vector<int> &regCells, map<int,double> &threshMap);
-  bool enforceAnisotropicOneIrregularity(vector<int> &xCells, vector<int> &yCells);
+  void getAnisotropicCellsToRefine(map<GlobalIndexType,double> &xErr, map<GlobalIndexType,double> &yErr, vector<GlobalIndexType> &xCells, vector<GlobalIndexType> &yCells, vector<GlobalIndexType> &regCells);
+  void getAnisotropicCellsToRefine(map<GlobalIndexType,double> &xErr, map<GlobalIndexType,double> &yErr, vector<GlobalIndexType> &xCells, vector<GlobalIndexType> &yCells, vector<GlobalIndexType> &regCells,
+                                   map<GlobalIndexType,double> &threshMap);
+  bool enforceAnisotropicOneIrregularity(vector<GlobalIndexType> &xCells, vector<GlobalIndexType> &yCells);
 
-  virtual void refineCells(vector<int> &cellIDs);
-  static void pRefineCells(Teuchos::RCP<Mesh> mesh, const vector<int> &cellIDs);
-  static void hRefineCells(Teuchos::RCP<Mesh> mesh, const vector<int> &cellIDs);
+  virtual void refineCells(vector<GlobalIndexType> &cellIDs);
+  static void pRefineCells(Teuchos::RCP<Mesh> mesh, const vector<GlobalIndexType> &cellIDs);
+  static void hRefineCells(Teuchos::RCP<Mesh> mesh, const vector<GlobalIndexType> &cellIDs);
   static void hRefineUniformly(Teuchos::RCP<Mesh> mesh);
-  void getCellsAboveErrorThreshhold(vector<int> &cellsToRefine);
+  void getCellsAboveErrorThreshhold(vector<GlobalIndexType> &cellsToRefine);
   void setMinH(double value);
   void setReportPerCellErrors(bool value);
 };

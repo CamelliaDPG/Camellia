@@ -18,6 +18,7 @@
 #include "RieszRep.h"
 #include "PreviousSolutionFunction.h"
 #include "MeshUtilities.h"
+#include "MeshFactory.h"
 #include "Teuchos_GlobalMPISession.hpp"
 
 typedef pair< FunctionPtr, VarPtr > LinearSummand;
@@ -115,7 +116,7 @@ void LinearTermTests::setup() {
   quadPoints(3,1) = 1.0;
   int horizontalElements = 2, verticalElements = 2;
   
-  mesh = Mesh::buildQuadMesh(quadPoints, horizontalElements, verticalElements, bf, polyOrder+1, polyOrder+1+testToAdd);
+  mesh = MeshFactory::buildQuadMesh(quadPoints, horizontalElements, verticalElements, bf, polyOrder+1, polyOrder+1+testToAdd);
     
   ElementTypePtr elemType = mesh->getElement(0)->elementType();
   trialOrder = elemType->trialOrderPtr;
@@ -123,7 +124,7 @@ void LinearTermTests::setup() {
   
   basisCache = Teuchos::rcp(new BasisCache(elemType, mesh));
   
-  vector<int> cellIDs;
+  vector<GlobalIndexType> cellIDs;
   cellIDs.push_back(0); 
   cellIDs.push_back(1);
   cellIDs.push_back(2);
@@ -656,12 +657,12 @@ bool LinearTermTests::testRieszInversionAsProjection() {
   int nCells = 2;
   int horizontalCells = nCells, verticalCells = nCells;
   // create a pointer to a new mesh:
-  Teuchos::RCP<Mesh> myMesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells, confusionBF, H1Order, H1Order+pToAdd);    
+  Teuchos::RCP<Mesh> myMesh = MeshFactory::buildQuadMesh(quadPoints, horizontalCells, verticalCells, confusionBF, H1Order, H1Order+pToAdd);    
 
   ElementTypePtr elemType = myMesh->getElement(0)->elementType();
   BasisCachePtr basisCache = Teuchos::rcp(new BasisCache(elemType, myMesh));
   
-  vector<int> cellIDs;
+  vector<GlobalIndexType> cellIDs;
   vector< ElementPtr> allElems = myMesh->activeElements();
   vector< ElementPtr >::iterator elemIt;     
   for (elemIt=allElems.begin();elemIt!=allElems.end();elemIt++){
@@ -768,7 +769,7 @@ bool LinearTermTests::testMixedTermConsistency() {
   int nCells = 1;
   int horizontalCells = nCells, verticalCells = nCells;
   // create a pointer to a new mesh:
-  Teuchos::RCP<Mesh> myMesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells,
+  Teuchos::RCP<Mesh> myMesh = MeshFactory::buildQuadMesh(quadPoints, horizontalCells, verticalCells,
 						  confusionBF, H1Order, H1Order+pToAdd);    
 
   ElementTypePtr elemType = myMesh->getElement(0)->elementType();
@@ -796,7 +797,7 @@ bool LinearTermTests::testMixedTermConsistency() {
   IPPtr dummyIP = Teuchos::rcp(new IP);
   dummyIP->addTerm(v);
   Teuchos::RCP<RieszRep> riesz = Teuchos::rcp(new RieszRep(myMesh, dummyIP, integrandIBP));  
-  map<int,FieldContainer<double> > rieszRHS = riesz->integrateRHS();
+  map<GlobalIndexType,FieldContainer<double> > rieszRHS = riesz->integrateRHS();
 
   vector< ElementPtr > allElems = myMesh->activeElements(); // CHANGE TO DISTRIBUTED COMPUTATION
   vector< ElementPtr >::iterator elemIt;     
@@ -810,7 +811,7 @@ bool LinearTermTests::testMixedTermConsistency() {
     int numTestDofs = testOrderingPtr->totalDofs();
     FieldContainer<double> physicalCellNodes = myMesh->physicalCellNodesForCell(cellID);
 
-    vector<int> cellIDs;
+    vector<GlobalIndexType> cellIDs;
     cellIDs.push_back(cellID); // just do one cell at a time
 
     BasisCachePtr basisCache = Teuchos::rcp(new BasisCache(elemTypePtr,myMesh, true));
@@ -892,13 +893,13 @@ bool LinearTermTests::testRieszInversion() {
   int nCells = 1;
   int horizontalCells = nCells, verticalCells = nCells;
   // create a pointer to a new mesh:
-  Teuchos::RCP<Mesh> myMesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells,
+  Teuchos::RCP<Mesh> myMesh = MeshFactory::buildQuadMesh(quadPoints, horizontalCells, verticalCells,
 						  confusionBF, H1Order, H1Order+pToAdd);    
 
   ElementTypePtr elemType = myMesh->getElement(0)->elementType();
   BasisCachePtr basisCache = Teuchos::rcp(new BasisCache(elemType, myMesh));
   
-  vector<int> cellIDs;
+  vector<GlobalIndexType> cellIDs;
   vector<ElementPtr> elems = myMesh->activeElements();
   vector<ElementPtr>::iterator elemIt;
   for (elemIt=elems.begin();elemIt!=elems.end();elemIt++){
@@ -994,7 +995,7 @@ bool LinearTermTests::testIntegrateMixedBasis() {
   Teuchos::RCP<Mesh> mesh = MeshUtilities::buildUnitQuadMesh(nCells,convectionBF, H1Order, H1Order+pToAdd);
   ElementTypePtr elemType = mesh->getElement(0)->elementType();
   BasisCachePtr basisCache = Teuchos::rcp(new BasisCache(elemType, mesh)); 
-  vector<int> cellIDs;
+  vector<GlobalIndexType> cellIDs;
   vector< ElementPtr > allElems = mesh->activeElements();
   vector< ElementPtr >::iterator elemIt;
   for (elemIt=allElems.begin();elemIt!=allElems.end();elemIt++){

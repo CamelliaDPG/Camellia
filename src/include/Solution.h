@@ -77,8 +77,8 @@ using namespace Intrepid;
 class Solution {
 private:
   int _cubatureEnrichmentDegree;
-  map< int, FieldContainer<double> > _solutionForCellIDGlobal; // eventually, replace this with a distributed _solutionForCellID
-  map< int, double > _energyErrorForCellIDGlobal;
+  map< GlobalIndexType, FieldContainer<double> > _solutionForCellIDGlobal; // eventually, replace this with a distributed _solutionForCellID
+  map< GlobalIndexType, double > _energyErrorForCellIDGlobal;
 
 //  map< ElementType*, FieldContainer<double> > _solutionForElementType; // for uniform mesh, just a single entry.
   map< ElementType*, FieldContainer<double> > _residualForElementType; // for uniform mesh, just a single entry.
@@ -104,7 +104,7 @@ private:
   // the  values of this map have dimensions (numCells, numTrialDofs)
 
   void initialize();
-  void integrateBasisFunctions(FieldContainer<int> &globalIndices, FieldContainer<double> &values, int trialID);
+  void integrateBasisFunctions(FieldContainer<GlobalIndexType> &globalIndices, FieldContainer<double> &values, int trialID);
   void integrateBasisFunctions(FieldContainer<double> &values, ElementTypePtr elemTypePtr, int trialID);
 
   // statistics for the last solve:
@@ -142,10 +142,10 @@ public:
   virtual ~Solution() {}
 //  bool equals(Solution& otherSolution, double tol=0.0);
 
-  const FieldContainer<double>& allCoefficientsForCellID(int cellID); // coefficients for all solution variables
+  const FieldContainer<double>& allCoefficientsForCellID(GlobalIndexType cellID); // coefficients for all solution variables
 
   Epetra_Map getPartitionMap();
-  Epetra_Map getPartitionMap(int rank, set<int> & myGlobalIndicesSet, int numGlobalDofs, int zeroMeanConstraintsSize, Epetra_Comm* Comm );
+  Epetra_Map getPartitionMap(PartitionIndexType rank, set<GlobalIndexType> & myGlobalIndicesSet, GlobalIndexType numGlobalDofs, int zeroMeanConstraintsSize, Epetra_Comm* Comm );
 
   // solve steps:
   void initializeStiffnessAndLoad(Teuchos::RCP<Solver> solver);
@@ -189,11 +189,11 @@ public:
                       bool weightForCubature = false, EOperatorExtended op = OP_VALUE);
   void solutionValuesOverCells(FieldContainer<double> &values, int trialID, const FieldContainer<double> &physicalPoints);
 
-  void solnCoeffsForCellID(FieldContainer<double> &solnCoeffs, int cellID, int trialID, int sideIndex=0);
-  void setSolnCoeffsForCellID(FieldContainer<double> &solnCoeffsToSet, int cellID, int trialID, int sideIndex=0);
-  void setSolnCoeffsForCellID(FieldContainer<double> &solnCoeffsToSet, int cellID);
+  void solnCoeffsForCellID(FieldContainer<double> &solnCoeffs, GlobalIndexType cellID, int trialID, int sideIndex=0);
+  void setSolnCoeffsForCellID(FieldContainer<double> &solnCoeffsToSet, GlobalIndexType cellID, int trialID, int sideIndex=0);
+  void setSolnCoeffsForCellID(FieldContainer<double> &solnCoeffsToSet, GlobalIndexType cellID);
 
-  const map< int, FieldContainer<double> > & solutionForCellIDGlobal() const;
+  const map< GlobalIndexType, FieldContainer<double> > & solutionForCellIDGlobal() const;
 
   double integrateSolution(int trialID);
   void integrateSolution(FieldContainer<double> &values, ElementTypePtr elemTypePtr, int trialID);
@@ -209,22 +209,22 @@ public:
 
   double L2NormOfSolution(int trialID);
   double L2NormOfSolutionGlobal(int trialID);
-  double L2NormOfSolutionInCell(int trialID, int cellID);
+  double L2NormOfSolutionInCell(int trialID, GlobalIndexType cellID);
 
   Teuchos::RCP<LagrangeConstraints> lagrangeConstraints() const;
 
-  void processSideUpgrades( const map<int, pair< ElementTypePtr, ElementTypePtr > > &cellSideUpgrades);
-  void processSideUpgrades( const map<int, pair< ElementTypePtr, ElementTypePtr > > &cellSideUpgrades, const set<int> &cellIDsToSkip );
+  void processSideUpgrades( const map<GlobalIndexType, pair< ElementTypePtr, ElementTypePtr > > &cellSideUpgrades);
+  void processSideUpgrades( const map<GlobalIndexType, pair< ElementTypePtr, ElementTypePtr > > &cellSideUpgrades, const set<GlobalIndexType> &cellIDsToSkip );
 
   // new projectOnto* methods:
   void projectOntoMesh(const map<int, Teuchos::RCP<Function> > &functionMap);
-  void projectOntoCell(const map<int, Teuchos::RCP<Function> > &functionMap, int cellID, int sideIndex=-1);
+  void projectOntoCell(const map<int, Teuchos::RCP<Function> > &functionMap, GlobalIndexType cellID, int sideIndex=-1);
   void projectFieldVariablesOntoOtherSolution(SolutionPtr otherSoln);
 
   // old projectOnto* methods:
   void projectOntoMesh(const map<int, Teuchos::RCP<AbstractFunction> > &functionMap);
-  void projectOntoCell(const map<int, Teuchos::RCP<AbstractFunction> > &functionMap, int cellID);
-  void projectOldCellOntoNewCells(int cellID, ElementTypePtr oldElemType, const vector<int> &childIDs);
+  void projectOntoCell(const map<int, Teuchos::RCP<AbstractFunction> > &functionMap, GlobalIndexType cellID);
+  void projectOldCellOntoNewCells(GlobalIndexType cellID, ElementTypePtr oldElemType, const vector<GlobalIndexType> &childIDs);
 
   void setLagrangeConstraints( Teuchos::RCP<LagrangeConstraints> lagrangeConstraints);
   void setFilter(Teuchos::RCP<LocalStiffnessMatrixFilter> newFilter);
@@ -238,7 +238,7 @@ public:
 
   void discardInactiveCellCoefficients();
   double energyErrorTotal();
-  const map<int,double> & energyError();
+  const map<GlobalIndexType,double> & energyError();
 
   void writeToFile(int trialID, const string &filePath);
   void writeQuadSolutionToFile(int trialID, const string &filePath);

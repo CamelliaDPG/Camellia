@@ -1249,7 +1249,7 @@ int main(int argc, char *argv[]) {
   for (vector< ElementTypePtr >::iterator elemTypeIt = elemTypes.begin(); elemTypeIt != elemTypes.end(); elemTypeIt++) {
     ElementTypePtr elemType = *elemTypeIt;
     vector< ElementPtr > elems = mesh->elementsOfTypeGlobal(elemType);
-    vector<int> cellIDs;
+    vector<GlobalIndexType> cellIDs;
     for (int i=0; i<elems.size(); i++) {
       cellIDs.push_back(elems[i]->cellID());
     }

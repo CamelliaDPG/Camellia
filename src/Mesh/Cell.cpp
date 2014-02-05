@@ -9,12 +9,11 @@
 #include "Cell.h"
 #include "RefinementPattern.h"
 
-vector< pair<unsigned, unsigned> > Cell::childrenForSide(unsigned sideIndex) {
-  vector< pair<unsigned, unsigned> > childIndicesForSide;
+vector< pair<GlobalIndexType, unsigned> > Cell::childrenForSide(unsigned sideIndex) {
+  vector< pair<GlobalIndexType, unsigned> > childIndicesForSide;
   
   if (_refPattern.get() != NULL) {
     vector< pair<unsigned, unsigned> > refinementChildIndicesForSide = _refPattern->childrenForSides()[sideIndex];
-    
     
     for( vector< pair<unsigned, unsigned> >::iterator entryIt = refinementChildIndicesForSide.begin();
         entryIt != refinementChildIndicesForSide.end(); entryIt++) {
@@ -27,14 +26,14 @@ vector< pair<unsigned, unsigned> > Cell::childrenForSide(unsigned sideIndex) {
   return childIndicesForSide;
 }
 
-vector< pair< unsigned, unsigned> > Cell::getDescendantsForSide(int sideIndex, bool leafNodesOnly) {
+vector< pair< GlobalIndexType, unsigned> > Cell::getDescendantsForSide(int sideIndex, bool leafNodesOnly) {
   // if leafNodesOnly == true,  returns a flat list of leaf nodes (descendants that are not themselves parents)
   // if leafNodesOnly == false, returns a list in descending order: immediate children, then their children, and so on.
   
   // guarantee is that if a child and its parent are both in the list, the parent will come first
   
   // pair (descendantCellIndex, descendantSideIndex)
-  vector< pair< unsigned, unsigned> > descendantsForSide;
+  vector< pair< GlobalIndexType, unsigned> > descendantsForSide;
   if ( ! isParent() ) {
     descendantsForSide.push_back( make_pair( _cellIndex, sideIndex) );
     return descendantsForSide;
@@ -51,9 +50,9 @@ vector< pair< unsigned, unsigned> > Cell::getDescendantsForSide(int sideIndex, b
       descendantsForSide.push_back( make_pair( _children[childIndex]->cellIndex(), childSideIndex) );
     }
     if ( _children[childIndex]->isParent() ) {
-      vector< pair<unsigned,unsigned> > childDescendants = _children[childIndex]->getDescendantsForSide(childSideIndex,leafNodesOnly);
+      vector< pair<GlobalIndexType,unsigned> > childDescendants = _children[childIndex]->getDescendantsForSide(childSideIndex,leafNodesOnly);
 //      descendantsForSide.insert(descendantsForSide.end(), childDescendants.begin(), childDescendants.end());
-      vector< pair<unsigned,unsigned> >::iterator childEntryIt;
+      vector< pair<GlobalIndexType,unsigned> >::iterator childEntryIt;
       for (childEntryIt=childDescendants.begin(); childEntryIt != childDescendants.end(); childEntryIt++) {
         descendantsForSide.push_back(*childEntryIt);
       }
@@ -69,7 +68,7 @@ Cell::Cell(CellTopoPtr cellTopo, const vector<unsigned> &vertices, const vector<
   _subcellPermutations = subcellPermutations;
   _cellIndex = cellIndex;
   _meshTopo = meshTopo;
-  _neighbors = vector< pair<unsigned, unsigned> >(_cellTopo->getSideCount(),make_pair(-1,-1));
+  _neighbors = vector< pair<GlobalIndexType, unsigned> >(_cellTopo->getSideCount(),make_pair(-1,-1));
 }
 unsigned Cell::cellIndex() {
   return _cellIndex;
@@ -150,15 +149,23 @@ CellTopoPtr Cell::topology() {
   return _cellTopo;
 }
 
-pair<unsigned, unsigned> Cell::getNeighbor(unsigned sideIndex) {
-  return _neighbors[sideIndex];
+pair<GlobalIndexType, unsigned> Cell::getNeighbor(unsigned sideOrdinal) {
+  if (sideOrdinal >= _cellTopo->getSideCount()) {
+    cout << "sideOrdinal " << sideOrdinal << " >= sideCount " << _cellTopo->getSideCount() << endl;
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "sideOrdinal must be less than sideCount!");
+  }
+  return _neighbors[sideOrdinal];
 }
-void Cell::setNeighbor(unsigned sideIndex, unsigned neighborCellIndex, unsigned neighborSideIndex) {
+void Cell::setNeighbor(unsigned sideOrdinal, GlobalIndexType neighborCellIndex, unsigned neighborSideOrdinal) {
   if (neighborCellIndex == _cellIndex) {
     cout << "ERROR: neighborCellIndex == _cellIndex.\n";
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "ERROR: neighborCellIndex == _cellIndex.\n");
   }
-  _neighbors[sideIndex] = make_pair(neighborCellIndex, neighborSideIndex);
+  if (sideOrdinal >= _cellTopo->getSideCount()) {
+    cout << "sideOrdinal " << sideOrdinal << " >= sideCount " << _cellTopo->getSideCount() << endl;
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "sideOrdinal must be less than sideCount!");
+  }
+  _neighbors[sideOrdinal] = make_pair(neighborCellIndex, neighborSideOrdinal);
 }
 
 const vector< unsigned > & Cell::vertices() {return _vertices;}

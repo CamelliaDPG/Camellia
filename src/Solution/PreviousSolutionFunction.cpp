@@ -66,7 +66,7 @@ void PreviousSolutionFunction::values(FieldContainer<double> &values, BasisCache
     FieldContainer<double> point(1,spaceDim);
     FieldContainer<double> refPoint(1,spaceDim);
     int combinedIndex = 0;
-    vector<int> cellID;
+    vector<GlobalIndexType> cellID;
     cellID.push_back(-1);
     BasisCachePtr basisCacheOnePoint;
     for (int cellIndex=0; cellIndex<numCells; cellIndex++) {

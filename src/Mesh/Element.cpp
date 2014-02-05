@@ -37,55 +37,21 @@
 #include "Element.h"
 
 #include "Intrepid_CellTools.hpp"
-
+#include "Mesh.h"
 
 // constructor:
-Element::Element(int cellID, Teuchos::RCP< ElementType > elemTypePtr, int cellIndex, int globalCellIndex) {
-  _cellID = cellID;
-  _numSides = elemTypePtr->cellTopoPtr->getSideCount();
+Element::Element(Mesh* mesh, GlobalIndexType cellID, Teuchos::RCP< ElementType > elemTypePtr, IndexType cellIndex, GlobalIndexType globalCellIndex) {
+  _mesh = mesh;
+  _cell = _mesh->getTopology()->getCell(cellID);
   _cellIndex = cellIndex;
   _globalCellIndex = globalCellIndex;
-  _neighbors = new pair< Element* , int >[_numSides];
-  for (int i=0; i<_numSides; i++) {
-    Element* nullNeighbor = NULL;
-    _neighbors[i] = make_pair( nullNeighbor, -1 ); // default value
-  }
-//  _subSideIndicesInNeighbors = new int[_numSides];
-//  for (int i=0; i<_numSides; i++) {
-//    _subSideIndicesInNeighbors[i] = -1; // default value
-//  }
   _elemTypePtr = elemTypePtr;
-  _parent = NULL;
+
   _deleted = false;
 }
 
-void Element::addChild(Teuchos::RCP< Element > childPtr) {
-  _children.push_back(childPtr);
-  unsigned childIndex = _children.size() - 1;
-  map<unsigned,unsigned> parentSideLookupTable = _refPattern->parentSideLookupForChild(childIndex);
-  childPtr->setParent(this, parentSideLookupTable);
-}
-
-pair<int,int> Element::ancestralNeighborCellIDForSide(int sideIndex) {
-  Element* elem = this;
-  while (elem->getNeighborCellID(sideIndex) == -1) {
-    if ( ! elem->isChild() ) {
-      return make_pair(-1,-1);
-    }
-    sideIndex = elem->parentSideForSideIndex(sideIndex);
-    if (sideIndex == -1) return make_pair(-1,-1);
-    elem = elem->getParent();
-  }
-  // once we get here, we have the appropriate ancestor:
-  int elemSideIndexInNeighbor = elem->getSideIndexInNeighbor(sideIndex);
-  if (elemSideIndexInNeighbor >= 4) {
-    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "elemSideIndex >= 4");
-  }
-  return make_pair(elem->cellID(),elemSideIndexInNeighbor);
-}
-
-Teuchos::RCP< Element > Element::getChild(int childIndex) {
-  return _children[childIndex];
+Teuchos::RCP< Element > Element::getChild(int childOrdinal) {
+  return _mesh->getElement( _cell->getChildIndices()[childOrdinal] );
 }
 
 void Element::getSidePointsInNeighborRefCoords(FieldContainer<double> &neighborRefPoints, int sideIndex,
@@ -93,7 +59,10 @@ void Element::getSidePointsInNeighborRefCoords(FieldContainer<double> &neighborR
   // assumes neighbor on the side is a peer.  For what to do if not, see MeshTestSuite::neighborBasesAgreeOnSides().
   // TODO: consider incorporating similar logic here, and reduce the amount of logic in neighborBasesAgreeOnSides().
   
-  if ((sideIndex >= _numSides) || (_neighbors[sideIndex].first == NULL) || (_neighbors[sideIndex].first->cellID() == -1) ) {
+  int mySideIndexInNeighbor;
+  ElementPtr neighbor = this->getNeighbor(mySideIndexInNeighbor, sideIndex);
+  
+  if ((sideIndex >= this->numSides()) || (neighbor.get() == NULL) || (neighbor->cellID() == -1) ) {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "neighbor is NULL.");
   }
   // 2D: assume that neighbor and element both have similarly ordered (CW or CCW) vertices, so that
@@ -117,7 +86,7 @@ void Element::getSidePointsInParentRefCoords(FieldContainer<double> &parentRefPo
    vertices are ordered counter-clockwise, then so are parent's.
    */
    
-  if (_parent == NULL) {
+  if (_cell->getParent().get() == NULL) {
     TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument,"parent is null");
   }
   
@@ -126,7 +95,7 @@ void Element::getSidePointsInParentRefCoords(FieldContainer<double> &parentRefPo
   }
   
   int parentSideIndex = parentSideForSideIndex(sideIndex);
-  int numChildrenForSide = _parent->childIndicesForSide(parentSideIndex).size();
+  int numChildrenForSide = _cell->getParent()->childrenForSide(sideIndex).size();
   if (numChildrenForSide==1) {
     // that's OK; we can just copy the childRefPoints into parentRefPoints
     int numPoints = childRefPoints.size();
@@ -152,67 +121,48 @@ void Element::getSidePointsInParentRefCoords(FieldContainer<double> &parentRefPo
   CellTools<double>::mapToPhysicalFrame(parentRefPoints,childRefPoints,childEdgeNodesInParentRef,line_2,0);
 }
 
-Element* Element::getParent() {
-  return _parent;
-}
-
-bool Element::isNeighbor(Teuchos::RCP<Element> putativeNeighbor, int &sideIndexForNeighbor) {
-  int neighborCellID = putativeNeighbor->cellID();
-  for (int sideIndex=0; sideIndex<_numSides; sideIndex++) {
-    if (_neighbors[sideIndex].first->cellID() == neighborCellID) {
-      // match
-      sideIndexForNeighbor = sideIndex;
-      return true;
-    }
-  }
-  sideIndexForNeighbor = -1;
-  return false;
+ElementPtr Element::getParent() {
+  if (_cell->getParent().get() == NULL) return Teuchos::rcp((Element*) NULL);
+  
+  CellPtr parentCell = _mesh->getTopology()->getCell(_cell->getParent()->cellIndex());
+  return _mesh->getElement(parentCell->cellIndex());
 }
 
 int Element::numChildren() {
-  return _children.size();
+  return _cell->children().size();
 }
 
-void Element::setNeighbor(int neighborsSideIndexInMe, Teuchos::RCP< Element > elemPtr, int mySideIndexInNeighbor) {
-  TEUCHOS_TEST_FOR_EXCEPTION( ( neighborsSideIndexInMe >= _numSides ) || (neighborsSideIndexInMe < 0),
-                     std::invalid_argument,
-                     "neighbor's side index in me is out of bounds.");
-  // get the raw pointer, to avoid circular references.  The Mesh owns a reference to each Element, which is good
-  // enough.  We don't need Elements to outlast the Mesh!
-  _neighbors[neighborsSideIndexInMe] = make_pair(elemPtr.get(), mySideIndexInNeighbor);
-  // for hanging nodes:
-  // _subSideIndicesInNeighbors[neighborsSideIndexInMe] = subSideIndex;
-//  cout << "set cellID " << _cellID << "'s neighbor for side ";
-//  cout << neighborsSideIndexInMe << " to cellID " << elemPtr->cellID();
-//  cout << " (neighbor's sideIndex: " << mySideIndexInNeighbor << ")" << endl;
-}
-
-void Element::setParent(Element* parent, map<unsigned,unsigned> parentSideLookupTable) {
-  _parent = parent;
-  _parentSideLookupTable = parentSideLookupTable;
-}
-
-int Element::parentSideForSideIndex(int mySideIndex) {
+int Element::parentSideForSideIndex(int mySideOrdinal) {
   // returns the sideIndex in parent of the given side
   // returns -1 if the given side isn't shared with parent
-  if (_parentSideLookupTable.find(mySideIndex) != _parentSideLookupTable.end() ) {
-    return _parentSideLookupTable[mySideIndex];
+  CellPtr parentCell = _cell->getParent();
+  if (parentCell.get()==NULL) return -1;
+  
+  int numSides = parentCell->topology()->getSideCount();
+  for (int parentSideOrdinal=0; parentSideOrdinal<numSides; parentSideOrdinal++) {
+    vector< pair<GlobalIndexType, unsigned> > childrenForSide = parentCell->childrenForSide(parentSideOrdinal);
+    for (vector< pair<GlobalIndexType, unsigned> >::iterator childIt = childrenForSide.begin();
+         childIt != childrenForSide.end(); childIt++) {
+      GlobalIndexType childCellIndex = childIt->first;
+      if (childCellIndex == _cell->cellIndex()) {
+        unsigned childSideOrdinal = childIt->second;
+        if (childSideOrdinal == mySideOrdinal) {
+          return parentSideOrdinal;
+        }
+      }
+    }
   }
   return -1;
 }
 
-void Element::setRefinementPattern(Teuchos::RCP<RefinementPattern> &refPattern) {
-  _refPattern = refPattern;
-}
-
 vector< pair<unsigned,unsigned> > & Element::childIndicesForSide(unsigned sideIndex) {
-  return _refPattern->childrenForSides()[sideIndex];
+  return _cell->refinementPattern()->childrenForSides()[sideIndex];
 }
 
 set<int> Element::getDescendants(bool leafNodesOnly) {
   set<int> descendants;
   if (( numChildren() == 0) || !leafNodesOnly) {
-    descendants.insert(_cellID);
+    descendants.insert(_cell->cellIndex());
   }
   for (int childIndex=0; childIndex<numChildren(); childIndex++) {
     set<int> childDescendants = this->getChild(childIndex)->getDescendants(leafNodesOnly);
@@ -230,7 +180,7 @@ vector< pair< int, int> > Element::getDescendantsForSide(int sideIndex, bool lea
   // pair (descendantCellID, descendantSideIndex)
   vector< pair< int, int> > descendantsForSide;
   if ( ! isParent() ) {
-    descendantsForSide.push_back( make_pair( _cellID, sideIndex) );
+    descendantsForSide.push_back( make_pair( _cell->cellIndex(), sideIndex) );
     return descendantsForSide;
   }
   
@@ -238,14 +188,16 @@ vector< pair< int, int> > Element::getDescendantsForSide(int sideIndex, bool lea
   vector< pair<unsigned,unsigned> >::iterator entryIt;
   
   for (entryIt=childIndices.begin(); entryIt != childIndices.end(); entryIt++) {
-    unsigned childIndex = (*entryIt).first;
-    unsigned childSideIndex = (*entryIt).second;
-    if ( (! _children[childIndex]->isParent()) || (! leafNodesOnly ) ) {
+    unsigned childOrdinal = (*entryIt).first;
+    unsigned childSideOrdinal = (*entryIt).second;
+    CellPtr childCell = _cell->children()[childOrdinal];
+    if ( (! childCell->isParent()) || (! leafNodesOnly ) ) {
       // (            leaf node              ) || ...
-      descendantsForSide.push_back( make_pair( _children[childIndex]->cellID(), childSideIndex) );
+      descendantsForSide.push_back( make_pair( childCell->cellIndex(), childSideOrdinal) );
     }
-    if ( _children[childIndex]->isParent() ) {
-      vector< pair<int,int> > childDescendants = _children[childIndex]->getDescendantsForSide(childSideIndex,leafNodesOnly);
+    if ( childCell->isParent() ) {
+      ElementPtr childElement = _mesh->getElement(childCell->cellIndex());
+      vector< pair<int,int> > childDescendants = childElement->getDescendantsForSide(childSideOrdinal,leafNodesOnly);
       vector< pair<int,int> >::iterator childEntryIt;
       for (childEntryIt=childDescendants.begin(); childEntryIt != childDescendants.end(); childEntryIt++) {
         descendantsForSide.push_back(*childEntryIt);
@@ -255,63 +207,51 @@ vector< pair< int, int> > Element::getDescendantsForSide(int sideIndex, bool lea
   return descendantsForSide;
 }
 
-void Element::getNeighbor(Element* &elemPtr, int & mySideIndexInNeighbor, int neighborsSideIndexInMe) {
-  TEUCHOS_TEST_FOR_EXCEPTION( ( neighborsSideIndexInMe >= _numSides ) || (neighborsSideIndexInMe < 0),
+ElementPtr Element::getNeighbor( int & mySideIndexInNeighbor, int neighborsSideIndexInMe) {
+  TEUCHOS_TEST_FOR_EXCEPTION( ( neighborsSideIndexInMe >= numSides() ) || (neighborsSideIndexInMe < 0),
                      std::invalid_argument,
                      "neighbor's side index in me is out of bounds.");
-  elemPtr = _neighbors[neighborsSideIndexInMe].first;
-  mySideIndexInNeighbor = _neighbors[neighborsSideIndexInMe].second;
+  ElementPtr elemPtr;
+  pair<IndexType, unsigned> neighborInfo = _cell->getNeighbor(neighborsSideIndexInMe);
+  
+  IndexType neighborCellID = neighborInfo.first;
+  if (neighborCellID == -1) {
+    mySideIndexInNeighbor = -1;
+    return elemPtr; // NULL
+  }
+  mySideIndexInNeighbor = neighborInfo.second;
+  return _mesh->getElement(neighborCellID);
 }
 
 int Element::getNeighborCellID(int sideIndex) {
-  // returns -1 if neighbor isn't set (or is boundary)
-  if (_neighbors[sideIndex].first == NULL) {
+  // returns -1 if neighbor isn't a peer (or is boundary)
+  pair<IndexType, unsigned> neighborInfo = _cell->getNeighbor(sideIndex);
+  if (neighborInfo.first == -1) return -1;
+  CellPtr neighborCell = _mesh->getTopology()->getCell(neighborInfo.first);
+  int sideOrdinalInNeighbor = neighborInfo.second;
+  pair<IndexType, unsigned> neighborNeighborInfo = neighborCell->getNeighbor(sideOrdinalInNeighbor);
+  if (neighborNeighborInfo.first != _cell->cellIndex()) { // they are not peers
     return -1;
-  } else {
-    return _neighbors[sideIndex].first->cellID();
   }
+  return neighborInfo.first;
 }
 
 int Element::getSideIndexInNeighbor(int sideIndex) {
-  return _neighbors[sideIndex].second;
+  pair<IndexType, unsigned> neighborInfo = _cell->getNeighbor(sideIndex);
+  return neighborInfo.second;
 }
 
 int Element::indexInParentSide(int parentSide) {
-  Element* parent = getParent();
+  ElementPtr parent = getParent();
   int numChildrenForSide = parent->childIndicesForSide(parentSide).size();
   for (int childIndexInSide = 0; childIndexInSide<numChildrenForSide; childIndexInSide++) {
     int childIndex = parent->childIndicesForSide(parentSide)[childIndexInSide].first;
     int childCellID = parent->getChild(childIndex)->cellID();
-    if (_cellID == childCellID) {
+    if (_cell->cellIndex() == childCellID) {
       return childIndexInSide;
     }
   }
   return -1; // not found
-}
-
-void Element::deleteChildrenFromMesh(set< pair<int,int> > &affectedNeighborSides, set<int> &deletedElements) {
-  for (int i=0; i<_children.size(); i++) {
-    _children[i]->deleteFromMesh(affectedNeighborSides, deletedElements);
-  }
-  _children.clear();
-}
-
-void Element::deleteFromMesh(set< pair<int,int> > &affectedNeighborSides, set<int> &deletedElements) {
-  deleteChildrenFromMesh(affectedNeighborSides, deletedElements);
-  
-  ElementPtr nullPtr = Teuchos::rcp( new Element(-1,elementType(),-1) );
-
-  for (int sideIndex=0; sideIndex<_numSides; sideIndex++) {
-    if (_neighbors[sideIndex].first->cellID() != -1) {
-      affectedNeighborSides.insert(make_pair(_neighbors[sideIndex].first->cellID(),
-                                             _neighbors[sideIndex].second));
-      Element* neighbor = _neighbors[sideIndex].first;
-      int mySideIndexInNeighbor = _neighbors[sideIndex].second;
-      neighbor->setNeighbor(sideIndex, nullPtr, mySideIndexInNeighbor);
-    }
-  }
-  deletedElements.insert(this->cellID());
-  _deleted = true;
 }
 
 //int Element::subSideIndexInNeighbor(int neighborsSideIndexInMe) {
@@ -319,7 +259,7 @@ void Element::deleteFromMesh(set< pair<int,int> > &affectedNeighborSides, set<in
 //}
 
 bool Element::isChild() {
-  return _parent != NULL;
+  return _cell->getParent().get() != NULL;
 }
 
 bool Element::isActive() {
@@ -327,10 +267,9 @@ bool Element::isActive() {
 }
 
 bool Element::isParent() {
-  return _children.size() > 0;
+  return _cell->isParent();
 }
 
 //destructor:
 Element::~Element() {
-  delete[] _neighbors;
 }

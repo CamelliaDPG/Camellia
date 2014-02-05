@@ -13,6 +13,7 @@
 #include "PreviousSolutionFunction.h"
 
 #include "MeshUtilities.h"
+#include "MeshFactory.h"
 
 #ifdef HAVE_MPI
 #include <Teuchos_GlobalMPISession.hpp>
@@ -189,11 +190,11 @@ int main(int argc, char *argv[]) {
   quadPoints(3,0) = 0.0;
   quadPoints(3,1) = 1.0;
   
-  Teuchos::RCP<Mesh> mesh1 = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells,
+  Teuchos::RCP<Mesh> mesh1 = MeshFactory::buildQuadMesh(quadPoints, horizontalCells, verticalCells,
                                                  bf1, H1Order, H1Order+pToAdd);
-  Teuchos::RCP<Mesh> mesh2 = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells,
+  Teuchos::RCP<Mesh> mesh2 = MeshFactory::buildQuadMesh(quadPoints, horizontalCells, verticalCells,
                                                  bf2, H1Order, H1Order+pToAdd);
-  Teuchos::RCP<Mesh> mesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells,
+  Teuchos::RCP<Mesh> mesh = MeshFactory::buildQuadMesh(quadPoints, horizontalCells, verticalCells,
                                                 confusionBF, H1Order, H1Order+pToAdd);
   // refine the split meshes in tandem with the combined mesh:
   mesh->registerObserver(mesh1);

@@ -42,6 +42,7 @@
 
 #include "DataIO.h"
 #include "SerialDenseMatrixUtility.h"
+#include "MeshFactory.h"
 
 HConvergenceStudy::HConvergenceStudy(Teuchos::RCP<ExactSolution> exactSolution,
                                      Teuchos::RCP<BilinearForm> bilinearForm,
@@ -105,7 +106,7 @@ Teuchos::RCP<Solution> HConvergenceStudy::getSolution(int logElements) {
 
 void HConvergenceStudy::randomlyRefine(Teuchos::RCP<Mesh> mesh) {
   int numElements = mesh->activeElements().size();
-  vector<int> elementsToRefineP;
+  vector<GlobalIndexType> elementsToRefineP;
 /*  // every third element is: untouched, refined once, refined twice
   for (int i=0; i<numElements; i++) {
     if ((i%3)==1) {
@@ -119,7 +120,7 @@ void HConvergenceStudy::randomlyRefine(Teuchos::RCP<Mesh> mesh) {
   //           if all vertices' y >= 0, refine once (more).
   // for up to two refinements.
   for (int i=0; i<numElements; i++) {
-    int cellID = mesh->activeElements()[i]->cellID();
+    GlobalIndexType cellID = mesh->activeElements()[i]->cellID();
     int numVertices = mesh->activeElements()[i]->numSides();
     int spaceDim = 2;
     FieldContainer<double> vertices(numVertices,spaceDim);
@@ -296,7 +297,10 @@ Teuchos::RCP<Mesh> HConvergenceStudy::buildMesh( Teuchos::RCP<MeshGeometry> geom
   mesh = Teuchos::rcp( new Mesh(geometry->vertices(), geometry->elementVertices(), _bilinearForm,
                                 _H1Order, _pToAdd, useConformingTraces) );
   
-  mesh->setEdgeToCurveMap(geometry->edgeToCurveMap());
+  map< pair<IndexType,IndexType>, ParametricCurvePtr > localMap = geometry->edgeToCurveMap();
+  
+  map< pair<GlobalIndexType,GlobalIndexType>, ParametricCurvePtr > globalMap(localMap.begin(),localMap.end());
+  mesh->setEdgeToCurveMap(globalMap);
   
   for (int i=0; i<numRefinements; i++) {
     RefinementStrategy::hRefineUniformly(mesh);
@@ -399,11 +403,11 @@ void HConvergenceStudy::solve(const FieldContainer<double> &quadPoints, bool use
   for (int i=_minLogElements; i<=_maxLogElements; i++) {
     Teuchos::RCP<Mesh> mesh;
     if (! _useHybrid ) {
-      mesh = Mesh::buildQuadMesh(quadPoints, numElements, numElements, 
+      mesh = MeshFactory::buildQuadMesh(quadPoints, numElements, numElements, 
                                  _bilinearForm, _H1Order, _H1Order + _pToAdd, _useTriangles, useConformingTraces,
                                  trialOrderEnhancements,testOrderEnhancements);
     } else {
-      mesh = Mesh::buildQuadMeshHybrid(quadPoints, numElements, numElements, 
+      mesh = MeshFactory::buildQuadMeshHybrid(quadPoints, numElements, numElements, 
                                        _bilinearForm, _H1Order, _H1Order + _pToAdd, useConformingTraces);
     }
     if (_randomRefinements) {

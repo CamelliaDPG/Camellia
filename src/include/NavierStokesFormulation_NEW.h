@@ -11,6 +11,8 @@
 
 #include "RieszRep.h"
 
+#include "MeshFactory.h"
+
 #include "StokesFormulation.h"
 #include "OseenFormulations.h"
 
@@ -401,7 +403,7 @@ class VGPNavierStokesProblem {
       trialOrderEnhancements[u1->ID()] = 1;
       trialOrderEnhancements[u2->ID()] = 1;
     }
-    _mesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells,
+    _mesh = MeshFactory::buildQuadMesh(quadPoints, horizontalCells, verticalCells,
                                 vgpStokesFormulation->bf(), H1Order, H1Order+pToAdd,
                                 triangulate, useConformingTraces, trialOrderEnhancements);
     
@@ -450,7 +452,7 @@ class VGPNavierStokesProblem {
       trialOrderEnhancements[u1->ID()] = 1;
       trialOrderEnhancements[u2->ID()] = 1;
     }
-    _mesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells,
+    _mesh = MeshFactory::buildQuadMesh(quadPoints, horizontalCells, verticalCells,
                                 vgpStokesFormulation->bf(), H1Order, H1Order+pToAdd,
                                 triangulate, useConformingTraces, trialOrderEnhancements);
     

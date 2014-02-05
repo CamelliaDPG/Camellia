@@ -8,7 +8,7 @@
 
 // @HEADER
 //
-// Copyright © 2011 Sandia Corporation. All Rights Reserved.
+// Original Version Copyright © 2011 Sandia Corporation. All Rights Reserved.
 //
 // Redistribution and use in source and binary forms, with or without modification, are 
 // permitted provided that the following conditions are met:
@@ -34,6 +34,7 @@
 //
 // Questions? Contact Nate Roberts (nate@nateroberts.com).
 //
+//
 // @HEADER 
 
 // only works properly with bases obtained from the BasisFactory.
@@ -57,6 +58,8 @@
 
 #include "Basis.h"
 
+#include "IndexType.h"
+
 using namespace std;
 using namespace IntrepidExtendedTypes;
 
@@ -71,7 +74,8 @@ typedef Teuchos::RCP<BasisCache> BasisCachePtr;
 
 class BasisCache {
 private:
-  int _numCells, _spaceDim;
+  IndexType _numCells;
+  int _spaceDim;
   int _numSides;
   bool _isSideCache;
   int _sideIndex;
@@ -92,7 +96,7 @@ private:
   // bool: compose with existing ref-to-mesh-cell transformation. (false means that the function goes from ref to the physical geometry;
   //                                                                true means it goes from the straight-edge mesh to the curvilinear one)
     
-  vector<int> _cellIDs; // the list of cell IDs corresponding to the physicalCellNodes
+  vector<GlobalIndexType> _cellIDs; // the list of cell IDs corresponding to the physicalCellNodes
   
   int _cubDegree;
   
@@ -158,7 +162,7 @@ public:
   Teuchos::RCP<BasisCache> getSideBasisCache(int sideOrdinal);
   Teuchos::RCP<BasisCache> getVolumeBasisCache(); // from sideCache
   
-  const vector<int> & cellIDs();
+  const vector<GlobalIndexType> & cellIDs();
   
   shards::CellTopology cellTopology();
   
@@ -180,7 +184,7 @@ public:
   
   const Intrepid::FieldContainer<double> & getSideUnitNormals(int sideOrdinal);
   
-  void setPhysicalCellNodes(const Intrepid::FieldContainer<double> &physicalCellNodes, const vector<int> &cellIDs, bool createSideCacheToo);
+  void setPhysicalCellNodes(const Intrepid::FieldContainer<double> &physicalCellNodes, const vector<GlobalIndexType> &cellIDs, bool createSideCacheToo);
   
   /*** Methods added for BC support below ***/
   // setRefCellPoints overwrites _cubPoints -- for when cubature is not your interest
@@ -211,7 +215,7 @@ public:
   static BasisCachePtr parametricQuadCache(int cubatureDegree);
   static BasisCachePtr parametricQuadCache(int cubatureDegree, const Intrepid::FieldContainer<double> &refCellPoints, int sideCacheIndex=-1);
   static BasisCachePtr basisCache1D(double x0, double x1, int cubatureDegree); // x0 and x1: physical space endpoints
-  static BasisCachePtr basisCacheForCell(Teuchos::RCP<Mesh> mesh, int cellID, bool testVsTest = false,
+  static BasisCachePtr basisCacheForCell(Teuchos::RCP<Mesh> mesh, GlobalIndexType cellID, bool testVsTest = false,
                                          int cubatureDegreeEnrichment = 0);
   static BasisCachePtr basisCacheForCellType(Teuchos::RCP<Mesh> mesh, ElementTypePtr elemType, bool testVsTest = false,
                                              int cubatureDegreeEnrichment = 0); // for cells on the local MPI node

@@ -75,8 +75,8 @@ public:
   static bool testPointContainment();
 
   // added by Jesse
-  static bool testMultiBasisCrash();
-  static bool testAnisotropicCrash();
+  static bool testJesseMultiBasisRefinement();
+  static bool testJesseAnisotropicRefinement();
   static bool testPRefinementAdjacentCells();
 };
 

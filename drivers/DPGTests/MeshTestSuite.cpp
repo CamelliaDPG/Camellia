@@ -7,31 +7,31 @@
 //
 // Copyright © 2011 Sandia Corporation. All Rights Reserved.
 //
-// Redistribution and use in source and binary forms, with or without modification, are 
+// Redistribution and use in source and binary forms, with or without modification, are
 // permitted provided that the following conditions are met:
-// 1. Redistributions of source code must retain the above copyright notice, this list of 
+// 1. Redistributions of source code must retain the above copyright notice, this list of
 // conditions and the following disclaimer.
-// 2. Redistributions in binary form must reproduce the above copyright notice, this list of 
-// conditions and the following disclaimer in the documentation and/or other materials 
+// 2. Redistributions in binary form must reproduce the above copyright notice, this list of
+// conditions and the following disclaimer in the documentation and/or other materials
 // provided with the distribution.
-// 3. The name of the author may not be used to endorse or promote products derived from 
+// 3. The name of the author may not be used to endorse or promote products derived from
 // this software without specific prior written permission.
 //
-// THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY 
-// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE 
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR 
-// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR 
-// ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR 
-// CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT 
-// OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR 
-// BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF 
-// LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING 
-// NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS 
+// THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY
+// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+// ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+// CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT
+// OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR
+// BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
+// LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
+// NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 //
 // Questions? Contact Nate Roberts (nate@nateroberts.com).
 //
-// @HEADER 
+// @HEADER
 
 #include "Intrepid_FieldContainer.hpp"
 #include "Intrepid_FunctionSpaceTools.hpp"
@@ -65,6 +65,8 @@
 #include "GnuPlotUtil.h"
 #include "RefinementStrategy.h"
 
+#include "MeshFactory.h"
+
 // just for the test to close a mesh anisotropically
 #include "SolutionExporter.h"
 #include "Solution.h"
@@ -84,10 +86,10 @@ void MeshTestSuite::runTests(int &numTestsRun, int &numTestsPassed) {
   if (rank==0)
     cout << "WARNING: skipping unrefinement test.\n";
   /*
-  numTestsRun++;
-  if (testHUnrefinementForConfusion() ) {
-    numTestsPassed++;
-  }
+   numTestsRun++;
+   if (testHUnrefinementForConfusion() ) {
+   numTestsPassed++;
+   }
    */
   numTestsRun++;
   if (testHRefinementForConfusion() ) {
@@ -113,7 +115,7 @@ void MeshTestSuite::runTests(int &numTestsRun, int &numTestsPassed) {
   if (testHRefinement() ) {
     numTestsPassed++;
   }
-
+  
   numTestsRun++;
   if (testFluxIntegration() ) {
     numTestsPassed++;
@@ -137,7 +139,7 @@ void MeshTestSuite::runTests(int &numTestsRun, int &numTestsPassed) {
   numTestsRun++;
   if (testDofOrderingFactory() ) {
     numTestsPassed++;
-  }  
+  }
   numTestsRun++;
   if (testBasisRefinement() ) {
     numTestsPassed++;
@@ -169,11 +171,11 @@ void MeshTestSuite::runTests(int &numTestsRun, int &numTestsPassed) {
     numTestsPassed++;
   }
   numTestsRun++;
-  if (testMultiBasisCrash() ) {
+  if (testJesseMultiBasisRefinement() ) {
     numTestsPassed++;
   }
   numTestsRun++;
-  if (testAnisotropicCrash() ) {
+  if (testJesseAnisotropicRefinement() ) {
     numTestsPassed++;
   }
 }
@@ -187,18 +189,19 @@ bool MeshTestSuite::neighborBasesAgreeOnSides(Teuchos::RCP<Mesh> mesh, const Fie
   
   double tol = 2e-15; // small tolerance
   double maxDiff = 0.0;
-    
+  
   int numPoints = testPointsRefCoords.dimension(0);
   
   // in 2D, the neighbor's view of the test points will be simply flipped relative to its peer
   // (which might be the ancestor of the element that we test below)
   FieldContainer<double> neighborTestPointsRefCoords(testPointsRefCoords); // alloc the right size container
   FieldContainer<double> ancestorTestPointsRefCoords(testPointsRefCoords); // alloc the right size container
-  
-  int numElements = mesh->activeElements().size();
+
   vector<int> fluxIDs = mesh->bilinearForm()->trialBoundaryIDs();
+  vector< ElementPtr > activeElements = mesh->activeElements();
+  int numElements = activeElements.size();
   for (int cellIndex=0; cellIndex<numElements; cellIndex++) {
-    Teuchos::RCP<Element> elem = mesh->activeElements()[cellIndex];
+    Teuchos::RCP<Element> elem = activeElements[cellIndex];
     DofOrderingPtr trialOrder = elem->elementType()->trialOrderPtr;
     int cellID = elem->cellID();
     int numSides = elem->numSides();
@@ -206,7 +209,7 @@ bool MeshTestSuite::neighborBasesAgreeOnSides(Teuchos::RCP<Mesh> mesh, const Fie
     for (int sideIndex=0; sideIndex < numSides; sideIndex++) {
       int neighborSideIndex;
       Teuchos::RCP<Element> neighbor = mesh->ancestralNeighborForSide(elem,sideIndex,neighborSideIndex);
-      if ( (neighbor->cellID() == -1) || neighbor->isParent() ) { // boundary or broken neighbor
+      if ( (neighbor.get() == NULL) || neighbor->isParent() ) { // boundary or broken neighbor
         // if broken neighbor, we'll handle this element when we handle neighbor's active descendants.
         continue;
       }
@@ -216,23 +219,23 @@ bool MeshTestSuite::neighborBasesAgreeOnSides(Teuchos::RCP<Mesh> mesh, const Fie
       // because of the above, we can assume, below, that elem is the small guy if the two aren't peers.
       ancestorTestPointsRefCoords = testPointsRefCoords;
       int ancestorSideIndex = sideIndex; // if necessary, we'll walk up the family tree to the real ancestor, getting the right sideIndices along the way...
-      if ( ancestorCellID != cellID ) { // i.e. the two are *not* peers: elem small, neighbor big 
+      if ( ancestorCellID != cellID ) { // i.e. the two are *not* peers: elem small, neighbor big
         // then we need to map the coords into ancestor's ref space
         // simplest (though not most efficient!) to do this by iteratively mapping into parent's space
         Teuchos::RCP<Element> currentElement = mesh->getElement(cellID);
         while (currentElement->cellID() != ancestorCellID) {
           FieldContainer<double> oldAncestorTestPointsRefCoords = ancestorTestPointsRefCoords;
-          currentElement->getSidePointsInParentRefCoords(ancestorTestPointsRefCoords, ancestorSideIndex, 
+          currentElement->getSidePointsInParentRefCoords(ancestorTestPointsRefCoords, ancestorSideIndex,
                                                          oldAncestorTestPointsRefCoords);
           ancestorSideIndex = currentElement->parentSideForSideIndex(ancestorSideIndex);
           currentElement = mesh->getElement(currentElement->getParent()->cellID());
         }
         vector< pair<int,int> > descendantsForSide = mesh->getElement(ancestorCellID)->getDescendantsForSide(ancestorSideIndex);
         int subSideIndexInAncestor = 0;
-        for (vector< pair<int,int> >::iterator descIt = descendantsForSide.begin(); descIt != descendantsForSide.end(); 
+        for (vector< pair<int,int> >::iterator descIt = descendantsForSide.begin(); descIt != descendantsForSide.end();
              descIt++, subSideIndexInAncestor++) {
           if (descIt->first == cellID) {
-            subSideIndexInNeighbor = mesh->neighborChildPermutation(subSideIndexInAncestor, descendantsForSide.size());
+            subSideIndexInNeighbor = GDAMaximumRule2D::neighborChildPermutation(subSideIndexInAncestor, descendantsForSide.size());
           }
         }
       }
@@ -250,7 +253,7 @@ bool MeshTestSuite::neighborBasesAgreeOnSides(Teuchos::RCP<Mesh> mesh, const Fie
         neighborBasis->getValues(neighborValues,neighborTestPointsRefCoords,Intrepid::OPERATOR_VALUE);
         bool failedHere = false;
         for (int dofOrdinal=0; dofOrdinal < basis->getCardinality(); dofOrdinal++) {
-          int neighborDofOrdinal = mesh->neighborDofPermutation(dofOrdinal,basis->getCardinality());
+          int neighborDofOrdinal = GDAMaximumRule2D::neighborDofPermutation(dofOrdinal,basis->getCardinality());
           if (BasisFactory::isMultiBasis(neighborBasis)) {
             neighborDofOrdinal = ((MultiBasis<>*) neighborBasis.get())->relativeToAbsoluteDofOrdinal(neighborDofOrdinal,subSideIndexInNeighbor);
           }
@@ -311,7 +314,7 @@ bool MeshTestSuite::testBasisRefinement() {
   if (basis->getDegree() != initialPolyOrder+additionalP) {  // since it's hgrad, that's a problem (hvol would be initialPolyOrder-1)
     success = false;
     cout << "testBasisRefinement: addToPolyOrder call returned a different-degree basis than expected..." << endl;
-    cout << "testBasisRefinement: expected: " << initialPolyOrder+additionalP << "; actual: " << basis->getDegree() << endl;    
+    cout << "testBasisRefinement: expected: " << initialPolyOrder+additionalP << "; actual: " << basis->getDegree() << endl;
   }
   return success;
 }
@@ -330,7 +333,7 @@ bool MeshTestSuite::testFluxIntegration() {
   quadPoints(2,0) = 1.0;
   quadPoints(2,1) = 1.0;
   quadPoints(3,0) = 0.0;
-  quadPoints(3,1) = 1.0;  
+  quadPoints(3,1) = 1.0;
   
   int pToAdd = 1;
   int horizontalCells=1,verticalCells=1;
@@ -348,8 +351,8 @@ bool MeshTestSuite::testFluxIntegration() {
     PoissonExactSolution exactSolution(PoissonExactSolution::POLYNOMIAL, polyOrders[i]);
     exactSolution.setUseSinglePointBCForPHI(true);
     int order = exactSolution.H1Order(); // matters for getting enough cubature points, and of course recovering the exact solution
-    Teuchos::RCP<Mesh> myMesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells,
-                                                      exactSolution.bilinearForm(), order, order+pToAdd, triangulate);
+    Teuchos::RCP<Mesh> myMesh = MeshFactory::buildQuadMesh(quadPoints, horizontalCells, verticalCells,
+                                                           exactSolution.bilinearForm(), order, order+pToAdd, triangulate);
     
     Teuchos::RCP<DPGInnerProduct> ip = Teuchos::rcp(new MathInnerProduct(exactSolution.bilinearForm()));
     
@@ -386,7 +389,7 @@ bool MeshTestSuite::testFluxNorm() {
   quadPoints(2,0) = 1.0;
   quadPoints(2,1) = 1.0;
   quadPoints(3,0) = 0.0;
-  quadPoints(3,1) = 1.0;  
+  quadPoints(3,1) = 1.0;
   
   int pToAdd = 1;
   int horizontalCells=1,verticalCells=1;
@@ -405,9 +408,9 @@ bool MeshTestSuite::testFluxNorm() {
     PoissonExactSolution exactSolution(PoissonExactSolution::POLYNOMIAL, polyOrders[i]);
     exactSolution.setUseSinglePointBCForPHI(true);
     int order = exactSolution.H1Order(); // matters for getting enough cubature points, and of course recovering the exact solution
-    Teuchos::RCP<Mesh> myMesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells,
-                                                      exactSolution.bilinearForm(), order, order+pToAdd, triangulate);
-      
+    Teuchos::RCP<Mesh> myMesh = MeshFactory::buildQuadMesh(quadPoints, horizontalCells, verticalCells,
+                                                           exactSolution.bilinearForm(), order, order+pToAdd, triangulate);
+    
     Teuchos::RCP<DPGInnerProduct> ip = Teuchos::rcp(new MathInnerProduct(exactSolution.bilinearForm()));
     
     Solution solution(myMesh, exactSolution.bc(), exactSolution.ExactSolution::rhs(), ip);
@@ -423,7 +426,7 @@ bool MeshTestSuite::testFluxNorm() {
       cout << "Failure: Norm of phi_hat solution of Poisson was " << L2normFlux << "; expected " << expectedValues[i] << endl;
     }
     solution.solve();
-
+    
     double fluxDiff = exactSolution.L2NormOfError(solution, PoissonBilinearForm::PHI_HAT);
     fluxDiff = fluxDiff / L2normFlux;
     
@@ -450,7 +453,7 @@ bool MeshTestSuite::testSacadoExactSolution() {
   quadPoints(2,0) = 1.0;
   quadPoints(2,1) = 1.0;
   quadPoints(3,0) = 0.0;
-  quadPoints(3,1) = 1.0;  
+  quadPoints(3,1) = 1.0;
   
   for (int cellTopoIndex=0; cellTopoIndex<2; cellTopoIndex++) {
     bool triangulate = (cellTopoIndex == 1);
@@ -459,7 +462,7 @@ bool MeshTestSuite::testSacadoExactSolution() {
       PoissonExactSolution exactSolution(PoissonExactSolution::POLYNOMIAL, i);
       exactSolution.setUseSinglePointBCForPHI(true); // otherwise, we'd be using the zero-mean condition, and the solution doesn't have zero mean on this domain...
       int order = exactSolution.H1Order(); // matters for getting enough cubature points, and of course recovering the exact solution
-      Teuchos::RCP<Mesh> myMesh = Mesh::buildQuadMesh(quadPoints, 2, 2, exactSolution.bilinearForm(), order, order+pToAdd, triangulate);
+      Teuchos::RCP<Mesh> myMesh = MeshFactory::buildQuadMesh(quadPoints, 2, 2, exactSolution.bilinearForm(), order, order+pToAdd, triangulate);
       
       Teuchos::RCP<DPGInnerProduct> ip = Teuchos::rcp(new MathInnerProduct(exactSolution.bilinearForm()));
       
@@ -467,7 +470,7 @@ bool MeshTestSuite::testSacadoExactSolution() {
       // Poisson is set up such that the solution should be x + 2y
       
       double diff;
-
+      
       double L2norm = exactSolution.L2NormOfError(solution, PoissonBilinearForm::PHI);
       double L2normFlux = exactSolution.L2NormOfError(solution, PoissonBilinearForm::PHI_HAT);
       
@@ -509,69 +512,69 @@ bool MeshTestSuite::testPoissonConvergence() {
   quadPoints(2,0) = 1.0;
   quadPoints(2,1) = 1.0;
   quadPoints(3,0) = 0.0;
-  quadPoints(3,1) = 1.0;  
+  quadPoints(3,1) = 1.0;
   
   // h-convergence
-/*  int sqrtElements = 1;
-  for (int i=1; i<3; i++) {
-    int order = 3;
-    
-    PoissonExactSolution exactSolution(PoissonExactSolution::EXPONENTIAL);
-    Teuchos::RCP<Mesh> myMesh = Mesh::buildQuadMesh(quadPoints, sqrtElements, sqrtElements, exactSolution.bilinearForm(), order, order+1);
-    
-    Teuchos::RCP<DPGInnerProduct> ip = Teuchos::rcp(new MathInnerProduct(exactSolution.bilinearForm()));
-    
-    Solution solution(myMesh, exactSolution.bc(), exactSolution.ExactSolution::rhs(), ip);
+  /*  int sqrtElements = 1;
+   for (int i=1; i<3; i++) {
+   int order = 3;
+   
+   PoissonExactSolution exactSolution(PoissonExactSolution::EXPONENTIAL);
+   Teuchos::RCP<Mesh> myMesh = MeshFactory::buildQuadMesh(quadPoints, sqrtElements, sqrtElements, exactSolution.bilinearForm(), order, order+1);
+   
+   Teuchos::RCP<DPGInnerProduct> ip = Teuchos::rcp(new MathInnerProduct(exactSolution.bilinearForm()));
+   
+   Solution solution(myMesh, exactSolution.bc(), exactSolution.ExactSolution::rhs(), ip);
+   
+   double L2norm = exactSolution.L2NormOfError(solution, PoissonBilinearForm::PHI,15); // high fidelity L2norm
+   double diff;
+   
+   solution.solve();
+   diff = exactSolution.L2NormOfError(solution, PoissonBilinearForm::PHI,15);
+   cout << "POISSON EXPONENTIAL (p=" << order-1 << "): L2 Error in solution for " << sqrtElements << "x" << sqrtElements << " mesh: " << diff << endl;
+   diff = diff / L2norm;
+   
+   cout << "Relative L2 Error: " << diff << endl;
+   //if (diff > tol) {
+   //  success = false;
+   //  cout << "Failure: Error in solution of Poisson (Sacado version) was " << diff << "; tolerance set to " << tol << endl;
+   //}
+   ostringstream fileName;
+   fileName << "PoissonPhiSolution.p=" << order-1 << "." << sqrtElements << "x" << sqrtElements << ".dat";
+   solution.writeToFile(PoissonBilinearForm::PHI, fileName.str());
+   sqrtElements *= 2;
+   }*/
   
-    double L2norm = exactSolution.L2NormOfError(solution, PoissonBilinearForm::PHI,15); // high fidelity L2norm
-    double diff;
-    
-    solution.solve();
-    diff = exactSolution.L2NormOfError(solution, PoissonBilinearForm::PHI,15);
-    cout << "POISSON EXPONENTIAL (p=" << order-1 << "): L2 Error in solution for " << sqrtElements << "x" << sqrtElements << " mesh: " << diff << endl;
-    diff = diff / L2norm;
-    
-    cout << "Relative L2 Error: " << diff << endl;
-    //if (diff > tol) {
-    //  success = false;
-    //  cout << "Failure: Error in solution of Poisson (Sacado version) was " << diff << "; tolerance set to " << tol << endl;
-    //}
-    ostringstream fileName;
-    fileName << "PoissonPhiSolution.p=" << order-1 << "." << sqrtElements << "x" << sqrtElements << ".dat";
-    solution.writeToFile(PoissonBilinearForm::PHI, fileName.str());
-    sqrtElements *= 2;
-  }*/
- 
- /*
-  // p-convergence
-  int sqrtElements = 8;
-  for (int i=1; i<6; i++) {
-    int order = i+1; // so that the field variables are of order i
-    
-    PoissonExactSolution exactSolution(PoissonExactSolution::EXPONENTIAL);
-    Teuchos::RCP<Mesh> myMesh = Mesh::buildQuadMesh(quadPoints, sqrtElements, sqrtElements, exactSolution.bilinearForm(), order, order+1);
-    
-    Teuchos::RCP<DPGInnerProduct> ip = Teuchos::rcp(new MathInnerProduct(exactSolution.bilinearForm()));
-    
-    Solution solution(myMesh, exactSolution.bc(), exactSolution.ExactSolution::rhs(), ip);
-    
-    double L2norm = exactSolution.L2NormOfError(solution, PoissonBilinearForm::PHI,15); // high fidelity L2norm
-    double diff;
-    
-    solution.solve();
-    diff = exactSolution.L2NormOfError(solution, PoissonBilinearForm::PHI,15);
-    cout << "POISSON EXPONENTIAL (p=" << order-1 << "): L2 Error in solution for " << sqrtElements << "x" << sqrtElements << " mesh: " << diff << endl;
-    diff = diff / L2norm;
-    
-    cout << "Relative L2 Error: " << diff << endl;
-    // if (diff > tol) {
-    //  success = false;
-    //  cout << "Failure: Error in solution of Poisson (Sacado version) was " << diff << "; tolerance set to " << tol << endl;
-    // }
-    ostringstream fileName;
-    fileName << "PoissonPhiSolution.p=" << order-1 << "." << sqrtElements << "x" << sqrtElements << ".dat";
-    solution.writeToFile(PoissonBilinearForm::PHI, fileName.str());
-  }*/
+  /*
+   // p-convergence
+   int sqrtElements = 8;
+   for (int i=1; i<6; i++) {
+   int order = i+1; // so that the field variables are of order i
+   
+   PoissonExactSolution exactSolution(PoissonExactSolution::EXPONENTIAL);
+   Teuchos::RCP<Mesh> myMesh = MeshFactory::buildQuadMesh(quadPoints, sqrtElements, sqrtElements, exactSolution.bilinearForm(), order, order+1);
+   
+   Teuchos::RCP<DPGInnerProduct> ip = Teuchos::rcp(new MathInnerProduct(exactSolution.bilinearForm()));
+   
+   Solution solution(myMesh, exactSolution.bc(), exactSolution.ExactSolution::rhs(), ip);
+   
+   double L2norm = exactSolution.L2NormOfError(solution, PoissonBilinearForm::PHI,15); // high fidelity L2norm
+   double diff;
+   
+   solution.solve();
+   diff = exactSolution.L2NormOfError(solution, PoissonBilinearForm::PHI,15);
+   cout << "POISSON EXPONENTIAL (p=" << order-1 << "): L2 Error in solution for " << sqrtElements << "x" << sqrtElements << " mesh: " << diff << endl;
+   diff = diff / L2norm;
+   
+   cout << "Relative L2 Error: " << diff << endl;
+   // if (diff > tol) {
+   //  success = false;
+   //  cout << "Failure: Error in solution of Poisson (Sacado version) was " << diff << "; tolerance set to " << tol << endl;
+   // }
+   ostringstream fileName;
+   fileName << "PoissonPhiSolution.p=" << order-1 << "." << sqrtElements << "x" << sqrtElements << ".dat";
+   solution.writeToFile(PoissonBilinearForm::PHI, fileName.str());
+   }*/
   return success;
 }
 
@@ -621,7 +624,7 @@ bool MeshTestSuite::testExactSolution(bool checkL2Norm) {
   for (int i=0; i<exactSolutions.size(); i++) {
     Teuchos::RCP<ExactSolution> exactSolution = exactSolutions[i];
     int order = exactSolution->H1Order(); // matters for getting enough cubature points, and of course recovering the exact solution
-    Teuchos::RCP<Mesh> myMesh = Mesh::buildQuadMesh(quadPoints, 3, 3, exactSolution->bilinearForm(), order, order+1);
+    Teuchos::RCP<Mesh> myMesh = MeshFactory::buildQuadMesh(quadPoints, 3, 3, exactSolution->bilinearForm(), order, order+1);
     
     Teuchos::RCP<DPGInnerProduct> ip = Teuchos::rcp(new MathInnerProduct(exactSolution->bilinearForm()));
     
@@ -662,18 +665,18 @@ bool MeshTestSuite::testBuildMesh() {
   
   FieldContainer<double> quadPoints(4,2);
   
-   quadPoints(0,0) = -1.0; // x1
-   quadPoints(0,1) = -1.0; // y1
-   quadPoints(1,0) = 1.0;
-   quadPoints(1,1) = -1.0;
-   quadPoints(2,0) = 1.0;
-   quadPoints(2,1) = 1.0;
-   quadPoints(3,0) = -1.0;
-   quadPoints(3,1) = 1.0;
+  quadPoints(0,0) = -1.0; // x1
+  quadPoints(0,1) = -1.0; // y1
+  quadPoints(1,0) = 1.0;
+  quadPoints(1,1) = -1.0;
+  quadPoints(2,0) = 1.0;
+  quadPoints(2,1) = 1.0;
+  quadPoints(3,0) = -1.0;
+  quadPoints(3,1) = 1.0;
   
   Teuchos::RCP<BilinearForm> bilinearForm = Teuchos::rcp( new PoissonBilinearForm() );
   
-  Teuchos::RCP<Mesh> myMesh = Mesh::buildQuadMesh(quadPoints, 1, 1, bilinearForm, order, order);
+  Teuchos::RCP<Mesh> myMesh = MeshFactory::buildQuadMesh(quadPoints, 1, 1, bilinearForm, order, order);
   // some basic sanity checks:
   int numElementsExpected = 1;
   if (myMesh->numElements() != numElementsExpected) {
@@ -681,13 +684,13 @@ bool MeshTestSuite::testBuildMesh() {
     success = false;
   }
   bool localSuccess = MeshTestUtility::checkMeshDofConnectivities(myMesh);
-
+  
   if (!localSuccess) {
     cout << "MeshTestUtility::checkMeshDofConnectivities failed for 1x1 mesh." << endl;
     success = false;
   }
   
-  Teuchos::RCP<Mesh> myMesh2x1 = Mesh::buildQuadMesh(quadPoints, 2, 1, bilinearForm, order, order);
+  Teuchos::RCP<Mesh> myMesh2x1 = MeshFactory::buildQuadMesh(quadPoints, 2, 1, bilinearForm, order, order);
   // some basic sanity checks:
   numElementsExpected = 2;
   if (myMesh2x1->numElements() != numElementsExpected) {
@@ -710,9 +713,9 @@ bool MeshTestSuite::testMeshSolvePointwise() {
   double tol = 2.5e-14;
   
   int order = 2; // linear on interior
-    
+  
   FieldContainer<double> quadPoints(4,2);
-
+  
   // instead of ref quad, use unit cell (force a transformation)
   quadPoints(0,0) = 0.0; // x1
   quadPoints(0,1) = 0.0; // y1
@@ -725,7 +728,7 @@ bool MeshTestSuite::testMeshSolvePointwise() {
   
   Teuchos::RCP<BilinearForm> bilinearForm = Teuchos::rcp( new PoissonBilinearForm() );
   
-  Teuchos::RCP<Mesh> myMesh = Mesh::buildQuadMesh(quadPoints, 1, 1, bilinearForm, order, order+1);
+  Teuchos::RCP<Mesh> myMesh = MeshFactory::buildQuadMesh(quadPoints, 1, 1, bilinearForm, order, order+1);
   // some basic sanity checks:
   int numElementsExpected = 1;
   
@@ -755,7 +758,7 @@ bool MeshTestSuite::testMeshSolvePointwise() {
   
   solution.solve();
   
-  solution.solutionValues(solnValues,myMesh->elements()[0]->elementType(),PHI,
+  solution.solutionValues(solnValues,myMesh->getElement(0)->elementType(),PHI,
                           testPoints);
   
   for (int i=0; i<numPoints; i++) {
@@ -779,10 +782,10 @@ bool MeshTestSuite::testMeshSolvePointwise() {
   quadPoints(3,0) = -1.0;
   quadPoints(3,1) = 1.0;
   int horizontalElements = 2, verticalElements = 2;
-  Teuchos::RCP<Mesh> myMesh2x2 = Mesh::buildQuadMesh(quadPoints, horizontalElements, verticalElements, bilinearForm, order, order+1);
+  Teuchos::RCP<Mesh> myMesh2x2 = MeshFactory::buildQuadMesh(quadPoints, horizontalElements, verticalElements, bilinearForm, order, order+1);
   
   Solution solution2x2(myMesh2x2, bc, rhs, ip);
-
+  
   int numPointsPerElement = 1;
   int numElements = horizontalElements * verticalElements;
   int spaceDim = 2;
@@ -791,13 +794,13 @@ bool MeshTestSuite::testMeshSolvePointwise() {
   // middle of each element (using the vertices of each element).
   // That would eliminate the dependence on the layout ordering of the mesh.
   /*testPoints(0,0,0) = 0.0;
-  testPoints(0,0,1) = 1.0;
-  testPoints(1,0,0) = -0.5;
-  testPoints(1,0,1) = -0.5;
-  testPoints(2,0,0) = 0.5;
-  testPoints(2,0,1) = 0.5;
-  testPoints(3,0,0) = 1.0;
-  testPoints(3,0,1) = -1.0;*/
+   testPoints(0,0,1) = 1.0;
+   testPoints(1,0,0) = -0.5;
+   testPoints(1,0,1) = -0.5;
+   testPoints(2,0,0) = 0.5;
+   testPoints(2,0,1) = 0.5;
+   testPoints(3,0,0) = 1.0;
+   testPoints(3,0,1) = -1.0;*/
   
   // diagonosing failure in Solution: do we succeed if all the refPoints are the same?
   // (picking point at top right of each element)
@@ -809,23 +812,23 @@ bool MeshTestSuite::testMeshSolvePointwise() {
   testPoints(2,0,1) = 0.0;
   testPoints(3,0,0) = 1.0;
   testPoints(3,0,1) = 1.0;
-
+  
   expectedSolnValues.resize(numElements,numPointsPerElement);
   /*for (int elemIndex=0; elemIndex<numElements; elemIndex++) {
-    for (int ptIndex=0; ptIndex<numPointsPerElement; ptIndex++) {
-      double x = testPoints(elemIndex,ptIndex,0);
-      double y = testPoints(elemIndex,ptIndex,1);
-      expectedSolnValues(elemIndex,ptIndex) = x + y;
-    }
-  }*/
+   for (int ptIndex=0; ptIndex<numPointsPerElement; ptIndex++) {
+   double x = testPoints(elemIndex,ptIndex,0);
+   double y = testPoints(elemIndex,ptIndex,1);
+   expectedSolnValues(elemIndex,ptIndex) = x + y;
+   }
+   }*/
   PoissonExactSolutionLinear exactSolution;
   exactSolution.solutionValues(expectedSolnValues, PoissonBilinearForm::PHI,
                                testPoints);
   
   solution2x2.solve();
   solnValues.resize(numElements,numPointsPerElement); // four elements, one test point each
-  solution2x2.solutionValues(solnValues,myMesh2x2->elements()[0]->elementType(),PoissonBilinearForm::PHI,
-                          testPoints);
+  solution2x2.solutionValues(solnValues,myMesh2x2->getElement(0)->elementType(),PoissonBilinearForm::PHI,
+                             testPoints);
   
   for (int elemIndex=0; elemIndex<numElements; elemIndex++) {
     for (int ptIndex=0; ptIndex<numPointsPerElement; ptIndex++) {
@@ -865,7 +868,7 @@ bool MeshTestSuite::testMeshSolvePointwise() {
 
 bool MeshTestSuite::testDofOrderingFactory() {
   bool success = true;
-  int polyOrder = 3; 
+  int polyOrder = 3;
   
   Teuchos::RCP<BilinearForm> bilinearForm = Teuchos::rcp(new PoissonBilinearForm());
   
@@ -893,12 +896,12 @@ bool MeshTestSuite::testDofOrderingFactory() {
     success = false;
   }
   
-  int pToAdd = 3;  
+  int pToAdd = 3;
   
   conformingOrderingCopy = dofOrderingFactory.pRefineTrial(conformingOrdering, quad_4, pToAdd);
   
   conformingOrdering = dofOrderingFactory.trialOrdering(polyOrder+pToAdd, quad_4, true);
-
+  
   if (conformingOrderingCopy.get() != conformingOrdering.get() ) {
     cout << "testDofOrderingFactory: conformingOrdering with pRefine==3 differs from fresh one with polyOrder+3." << endl;
     success = false;
@@ -921,7 +924,7 @@ bool MeshTestSuite::testDofOrderingFactory() {
                                 quad_4, conformingOrderingHigherOrder, lowerSideInHigherElementConforming, quad_4);
   
   // check that the lower-order guys have basis that agrees with the higher-order at that edge
-  BasisPtr lowerBasis = nonConformingOrderingLowerOrder->getBasis(PoissonBilinearForm::PHI_HAT,higherSideInLowerElementNonConforming); 
+  BasisPtr lowerBasis = nonConformingOrderingLowerOrder->getBasis(PoissonBilinearForm::PHI_HAT,higherSideInLowerElementNonConforming);
   BasisPtr lowerBasisOtherSide = nonConformingOrderingLowerOrder->getBasis(PoissonBilinearForm::PHI_HAT,lowerElementOtherSideNonConforming);
   if ( lowerBasis->getDegree() == lowerBasisOtherSide->getDegree() ) {
     success = false;
@@ -963,8 +966,8 @@ bool MeshTestSuite::testDofOrderingFactory() {
   if ( nonConformingOrderingHigherOrderCopy.get() != nonConformingOrderingHigherOrder.get() ) {
     success = false;
     cout << "FAILURE: After second call to matchSides (non-conforming), HigherOrder changed (matchSides not idempotent)." << endl;
-  }  
-
+  }
+  
   if ( conformingOrderingLowerOrderCopy.get() != conformingOrderingLowerOrder.get() ) {
     success = false;
     cout << "FAILURE: After second call to matchSides (conforming), LowerOrder changed (matchSides not idempotent)." << endl;
@@ -972,21 +975,21 @@ bool MeshTestSuite::testDofOrderingFactory() {
   if ( conformingOrderingHigherOrderCopy.get() != conformingOrderingHigherOrder.get() ) {
     success = false;
     cout << "FAILURE: After second call to matchSides (conforming), HigherOrder changed (matchSides not idempotent)." << endl;
-  }  
+  }
   
   // final test: take the upgraded ordering, and increase its polynomial order so that it matches that of the higher-degree guy.  Check that this is the same Ordering as a fresh one with that polynomial order.
   nonConformingOrderingLowerOrder = dofOrderingFactory.pRefineTrial(nonConformingOrderingLowerOrder, quad_4, pToAdd);
   nonConformingOrderingHigherOrder = dofOrderingFactory.trialOrdering(polyOrder+pToAdd, quad_4, false);
   if ( nonConformingOrderingLowerOrder.get() != nonConformingOrderingHigherOrder.get() ) {
     success = false;
-    cout << "FAILURE: After p-refinement of upgraded Ordering (non-conforming), DofOrdering doesn't match a fresh one with that p-order." << endl;    
+    cout << "FAILURE: After p-refinement of upgraded Ordering (non-conforming), DofOrdering doesn't match a fresh one with that p-order." << endl;
   }
   
   conformingOrderingLowerOrder = dofOrderingFactory.pRefineTrial(conformingOrderingLowerOrder, quad_4, pToAdd);
   conformingOrderingHigherOrder = dofOrderingFactory.trialOrdering(polyOrder+pToAdd, quad_4, true);
   if ( conformingOrderingLowerOrder.get() != conformingOrderingHigherOrder.get() ) {
     success = false;
-    cout << "FAILURE: After p-refinement of upgraded Ordering (conforming), DofOrdering doesn't match a fresh one with that p-order." << endl;    
+    cout << "FAILURE: After p-refinement of upgraded Ordering (conforming), DofOrdering doesn't match a fresh one with that p-order." << endl;
   }
   
   return success;
@@ -1008,7 +1011,7 @@ bool MeshTestSuite::testHRefinement() {
   quadPoints(2,0) = 1.0;
   quadPoints(2,1) = 1.0;
   quadPoints(3,0) = -1.0;
-  quadPoints(3,1) = 1.0;  
+  quadPoints(3,1) = 1.0;
   
   // h-convergence
   int sqrtElements = 2;
@@ -1020,9 +1023,9 @@ bool MeshTestSuite::testHRefinement() {
   int H1Order = exactSolution.H1Order();
   int horizontalCells = 1; int verticalCells = 1;
   
-  Teuchos::RCP<Mesh> mesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells, exactSolution.bilinearForm(), H1Order, H1Order+1);
+  Teuchos::RCP<Mesh> mesh = MeshFactory::buildQuadMesh(quadPoints, horizontalCells, verticalCells, exactSolution.bilinearForm(), H1Order, H1Order+1);
   
-  vector<int> cellsToRefine;
+  vector<GlobalIndexType> cellsToRefine;
   for (int i=0; i<horizontalCells*verticalCells; i++) {
     cellsToRefine.push_back(i);
   }
@@ -1030,7 +1033,7 @@ bool MeshTestSuite::testHRefinement() {
   quadPoints.resize(1,4,2);
   shards::CellTopology quad_4(shards::getCellTopologyData<shards::Quadrilateral<4> >() );
   Teuchos::RCP< shards::CellTopology > quad_4_ptr = Teuchos::rcp(&quad_4,false);
-
+  
   //RefinementPattern noRefinementPattern(quad_4_ptr,quadPoints);
   
   int numElementsStart = mesh->numElements();
@@ -1070,7 +1073,7 @@ bool MeshTestSuite::testHRefinement() {
   }
   
   for (int i=0; i<cellsToRefine.size(); i++) {
-    Teuchos::RCP<Element> parent = mesh->elements()[cellsToRefine[i]];
+    Teuchos::RCP<Element> parent = mesh->getElement(cellsToRefine[i]);
     Teuchos::RCP<Element> child = parent->getChild(0);
     if ( parent->elementType() != child->elementType() ) {
       success = false;
@@ -1081,7 +1084,7 @@ bool MeshTestSuite::testHRefinement() {
   // try solving --> make sure that we get the same solution before and after "refinement"
   Solution solution(mesh, exactSolution.bc(), exactSolution.ExactSolution::rhs(), ip);
   solution.solve();
-
+  
   FieldContainer<double> valuesNew(valuesOriginal.dimension(0));
   solution.solutionValues(valuesNew,trialID,testPoints);
   
@@ -1096,7 +1099,7 @@ bool MeshTestSuite::testHRefinement() {
   // TODO: try a regular refinement pattern.  Check that this is a 4x4 mesh, and try solving.
   //    --> Make sure solution is the same as when we just start with 4x4 mesh.
   quadPoints.resize(4,2);
-  Teuchos::RCP<Mesh> fineMesh = Mesh::buildQuadMesh(quadPoints, horizontalCells*2, verticalCells*2, exactSolution.bilinearForm(), H1Order, H1Order+1);
+  Teuchos::RCP<Mesh> fineMesh = MeshFactory::buildQuadMesh(quadPoints, horizontalCells*2, verticalCells*2, exactSolution.bilinearForm(), H1Order, H1Order+1);
   origSolution = Solution(fineMesh, exactSolution.bc(), exactSolution.ExactSolution::rhs(), ip);
   origSolution.solve();
   
@@ -1127,14 +1130,14 @@ bool MeshTestSuite::testHRefinement() {
   
   solution.solve();
   
-//  solution.writeToFile(PoissonBilinearForm::PHI, "phi_refined.dat");
-//  origSolution.writeToFile(PoissonBilinearForm::PHI, "phi_fine.dat");
+  //  solution.writeToFile(PoissonBilinearForm::PHI, "phi_refined.dat");
+  //  origSolution.writeToFile(PoissonBilinearForm::PHI, "phi_fine.dat");
   
   double refinedError = exactSolution.L2NormOfError(solution,PoissonBilinearForm::PHI);
   double fineError = exactSolution.L2NormOfError(origSolution,PoissonBilinearForm::PHI);
   
-//  cout << "refinedError:" << refinedError << endl;
-//  cout << "fineError:" << fineError << endl;
+  //  cout << "refinedError:" << refinedError << endl;
+  //  cout << "fineError:" << fineError << endl;
   
   double diff = abs(refinedError - fineError);
   
@@ -1145,20 +1148,20 @@ bool MeshTestSuite::testHRefinement() {
   
   // TODO: work out how to fix solution.equals to work with meshes whose cells may be in different orders...
   /*if ( ! solution.equals(origSolution, 1e-8) ) { // start with very relaxed tol... TODO: tighten this once we're passing...
-    success = false;
-    cout << "FAILURE: Expected solution of fine mesh and refined mesh to be equal. \n";
-  }*/
+   success = false;
+   cout << "FAILURE: Expected solution of fine mesh and refined mesh to be equal. \n";
+   }*/
   
   cellsToRefine.clear();
   
   // start with a fresh 2x1 mesh:
   horizontalCells = 2; verticalCells = 1;
-  mesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells, exactSolution.bilinearForm(), H1Order, H1Order+1);
+  mesh = MeshFactory::buildQuadMesh(quadPoints, horizontalCells, verticalCells, exactSolution.bilinearForm(), H1Order, H1Order+1);
   
   // repeatedly refine the first element along the side shared with cellID 1
   int numRefinements = 8; // 1 to start!
   for (int i=0; i<numRefinements; i++) {
-    vector< pair<int,int> > descendants = mesh->elements()[0]->getDescendantsForSide(1);
+    vector< pair<int,int> > descendants = mesh->getElement(0)->getDescendantsForSide(1);
     int cellID = descendants[0].first;
     cellsToRefine.clear();
     cellsToRefine.push_back(cellID);
@@ -1182,11 +1185,11 @@ bool MeshTestSuite::testHRefinement() {
     cout << "L2 error in 'deeply' refined fine mesh: " << refinedError << endl;
   }
   
-//  solution.writeToFile(PoissonBilinearForm::PHI, "phi_refined_again.dat");
+  //  solution.writeToFile(PoissonBilinearForm::PHI, "phi_refined_again.dat");
   
   // try to reproduce a parity error discovered by Jesse when enforcing 1-irregularity
   horizontalCells = 1; verticalCells = 2;
-  mesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells, exactSolution.bilinearForm(), H1Order, H1Order+1);
+  mesh = MeshFactory::buildQuadMesh(quadPoints, horizontalCells, verticalCells, exactSolution.bilinearForm(), H1Order, H1Order+1);
   
   cellsToRefine.clear();
   cellsToRefine.push_back(1); // top cell -- will refine to create 2,3,4,5 (2,3 are the bottom)
@@ -1199,7 +1202,7 @@ bool MeshTestSuite::testHRefinement() {
   mesh->hRefine(cellsToRefine, RefinementPattern::regularRefinementPatternQuad());
   cellsToRefine.clear();
   cellsToRefine.push_back(0);
-  mesh->hRefine(cellsToRefine, RefinementPattern::regularRefinementPatternQuad());  
+  mesh->hRefine(cellsToRefine, RefinementPattern::regularRefinementPatternQuad());
   if ( ! MeshTestUtility::checkMeshConsistency(mesh) ) {
     success = false;
     cout << "testHRefinement failed mesh consistency test in imitating 1-irregularity resolution" << endl;
@@ -1236,7 +1239,7 @@ bool MeshTestSuite::testHRefinementForConfusion() {
   quadPoints(2,0) = 1.0;
   quadPoints(2,1) = 1.0;
   quadPoints(3,0) = 0.0;
-  quadPoints(3,1) = 1.0;  
+  quadPoints(3,1) = 1.0;
   
   // h-convergence
   int sqrtElements = 2;
@@ -1251,17 +1254,22 @@ bool MeshTestSuite::testHRefinementForConfusion() {
   // before we hRefine, compute a solution for comparison after refinement
   Teuchos::RCP<DPGInnerProduct> ip = Teuchos::rcp(new MathInnerProduct(exactSolution.bilinearForm()));
   
-  vector<int> cellsToRefine;
+  vector<GlobalIndexType> cellsToRefine;
   cellsToRefine.clear();
   
   // start with a fresh 2x1 mesh:
   horizontalCells = 2; verticalCells = 2;
-  Teuchos::RCP<Mesh> mesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells, exactSolution.bilinearForm(), H1Order, H1Order+2);
+  Teuchos::RCP<Mesh> mesh = MeshFactory::buildQuadMesh(quadPoints, horizontalCells, verticalCells, exactSolution.bilinearForm(), H1Order, H1Order+2);
   
+  if (! MeshTestUtility::checkMeshConsistency(mesh) ) {
+    success = false;
+    cout << "FAILURE: initial mesh fails consistency check.\n";
+  }
+
   // repeatedly refine the first element along the side shared with cellID 1
   int numRefinements = 2;
   for (int i=0; i<numRefinements; i++) {
-    vector< pair<int,int> > descendants = mesh->elements()[0]->getDescendantsForSide(1);
+    vector< pair<int,int> > descendants = mesh->getElement(0)->getDescendantsForSide(1);
     int numDescendants = descendants.size();
     cellsToRefine.clear();
     for (int j=0; j<numDescendants; j++ ) {
@@ -1271,7 +1279,7 @@ bool MeshTestSuite::testHRefinementForConfusion() {
     mesh->hRefine(cellsToRefine, RefinementPattern::regularRefinementPatternQuad());
     
     // same thing for north side
-    descendants = mesh->elements()[0]->getDescendantsForSide(2);
+    descendants = mesh->getElement(0)->getDescendantsForSide(2);
     numDescendants = descendants.size();
     cellsToRefine.clear();
     for (int j=0; j<numDescendants; j++ ) {
@@ -1321,7 +1329,7 @@ bool MeshTestSuite::testHUnrefinementForConfusion() {
   quadPoints(2,0) = 1.0;
   quadPoints(2,1) = 1.0;
   quadPoints(3,0) = 0.0;
-  quadPoints(3,1) = 1.0;  
+  quadPoints(3,1) = 1.0;
   
   // h-convergence
   int sqrtElements = 2;
@@ -1334,12 +1342,12 @@ bool MeshTestSuite::testHUnrefinementForConfusion() {
   
   // before we hRefine, compute a solution for comparison after refinement
   Teuchos::RCP<DPGInnerProduct> ip = Teuchos::rcp(new MathInnerProduct(exactSolution.bilinearForm()));
-
-  set<int> cellsToRefine;
+  
+  set<GlobalIndexType> cellsToRefine;
   cellsToRefine.clear();
   
   int horizontalCells = 1; int verticalCells = 1;
-  Teuchos::RCP<Mesh> mesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells, exactSolution.bilinearForm(), H1Order, H1Order+2);
+  Teuchos::RCP<Mesh> mesh = MeshFactory::buildQuadMesh(quadPoints, horizontalCells, verticalCells, exactSolution.bilinearForm(), H1Order, H1Order+2);
   
   Solution solution = Solution(mesh, exactSolution.bc(), exactSolution.ExactSolution::rhs(), ip);
   
@@ -1348,14 +1356,14 @@ bool MeshTestSuite::testHUnrefinementForConfusion() {
   for (int i=0; i<numRefinements; i++) {
     solution.solve();
     double errorBeforeRefinement = exactSolution.L2NormOfError(solution,ConfusionBilinearForm::U);
-    vector< pair<int,int> > descendants = mesh->elements()[0]->getDescendantsForSide(1);
+    vector< pair<int,int> > descendants = mesh->getElement(0)->getDescendantsForSide(1);
     int numDescendants = descendants.size();
     cellsToRefine.clear();
     for (int j=0; j<numDescendants; j++ ) {
       int cellID = descendants[j].first;
       cellsToRefine.insert(cellID);
     }
-
+    
     cout << "b4 refining num edge cID entries = " << mesh->numEdgeToCellIDEntries() << endl;
     mesh->hRefine(cellsToRefine, RefinementPattern::regularRefinementPatternQuad());
     cout << "b4 unref num edge cID entries = " << mesh->numEdgeToCellIDEntries() << endl;
@@ -1377,7 +1385,7 @@ bool MeshTestSuite::testHUnrefinementForConfusion() {
     // same thing for north side
     solution.solve();
     errorBeforeRefinement = exactSolution.L2NormOfError(solution,ConfusionBilinearForm::U);
-    descendants = mesh->elements()[0]->getDescendantsForSide(2);
+    descendants = mesh->getElement(0)->getDescendantsForSide(2);
     numDescendants = descendants.size();
     cellsToRefine.clear();
     for (int j=0; j<numDescendants; j++ ) {
@@ -1404,7 +1412,7 @@ bool MeshTestSuite::testHUnrefinementForConfusion() {
     success = false;
     cout << "FAILURE: after unrefinement, mesh fails consistency check.\n";
   }
-    
+  
   return success;
 }
 
@@ -1423,10 +1431,10 @@ bool MeshTestSuite::testPRefinement() {
   quadPoints(2,0) = 1.0;
   quadPoints(2,1) = 1.0;
   quadPoints(3,0) = 0.0;
-  quadPoints(3,1) = 1.0;  
+  quadPoints(3,1) = 1.0;
   
   // h-convergence
-   int sqrtElements = 2;
+  int sqrtElements = 2;
   vector< PoissonExactSolution > exactSolutions;
   
   PoissonExactSolution exactExponential(PoissonExactSolution::EXPONENTIAL);
@@ -1442,18 +1450,18 @@ bool MeshTestSuite::testPRefinement() {
   // 1. create two meshes, one quadratic (linear in phi), one cubic (quadratic in phi)
   //    (both of these meshes should recover the solution exactly)
   // 2. create a third mesh, also quadratic, but p-refine one element, and then solve.
-  // 3. in the refined element, its phi dofs should be identical to those in the cubic mesh; 
+  // 3. in the refined element, its phi dofs should be identical to those in the cubic mesh;
   //    in the others, its phi dofs should be identical to those in the quadratic mesh...
   int horizontalCells = 2; int verticalCells = 2;
   int refinedCellID = 2;
   
-  Teuchos::RCP<Mesh> mesh1 = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells, exactPolynomial.bilinearForm(), H1Order, H1Order+1);
-  Teuchos::RCP<Mesh> mesh2 = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells, exactPolynomial.bilinearForm(), H1Order+1, H1Order+2);
+  Teuchos::RCP<Mesh> mesh1 = MeshFactory::buildQuadMesh(quadPoints, horizontalCells, verticalCells, exactPolynomial.bilinearForm(), H1Order, H1Order+1);
+  Teuchos::RCP<Mesh> mesh2 = MeshFactory::buildQuadMesh(quadPoints, horizontalCells, verticalCells, exactPolynomial.bilinearForm(), H1Order+1, H1Order+2);
   Teuchos::RCP<DPGInnerProduct> ip0 = Teuchos::rcp(new MathInnerProduct(exactExponential.bilinearForm()));
-  vector<int> cellsToRefine;
-  Solution solution1(mesh1, exactPolynomial.bc(), exactPolynomial.ExactSolution::rhs(), ip0);  
+  vector<GlobalIndexType> cellsToRefine;
+  Solution solution1(mesh1, exactPolynomial.bc(), exactPolynomial.ExactSolution::rhs(), ip0);
   solution1.solve();
-  Solution solution2(mesh2, exactPolynomial.bc(), exactPolynomial.ExactSolution::rhs(), ip0);  
+  Solution solution2(mesh2, exactPolynomial.bc(), exactPolynomial.ExactSolution::rhs(), ip0);
   solution2.solve();
   
   double error1 = exactPolynomial.L2NormOfError(solution1, PoissonBilinearForm::PHI,15); // high fidelity L2norm
@@ -1466,10 +1474,38 @@ bool MeshTestSuite::testPRefinement() {
     success = false;
     cout << "FAILURE: Failed to resolve exact polynomial on mesh of more than sufficiently high degree... (tol: " << tol << "; error2: " << error2 << ")" << endl;
   }
-  Teuchos::RCP<Mesh> mesh3 = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells, exactPolynomial.bilinearForm(), H1Order, H1Order+1);
+  
+  
+  Teuchos::RCP<Mesh> mesh3 = MeshFactory::buildQuadMesh(quadPoints, horizontalCells, verticalCells, exactPolynomial.bilinearForm(), H1Order, H1Order+1);
+  DofOrderingPtr trialOrdering = mesh3->getElementType(refinedCellID)->trialOrderPtr;
+  mesh3->getDofOrderingFactory().trialPolyOrder(trialOrdering);
+  int polyOrderBeforeRefinement = mesh3->getDofOrderingFactory().trialPolyOrder(trialOrdering);
   cellsToRefine.push_back(refinedCellID);
   mesh3->pRefine(cellsToRefine);
+  trialOrdering = mesh3->getElementType(refinedCellID)->trialOrderPtr;
+  int polyOrderAfterRefinement = mesh3->getDofOrderingFactory().trialPolyOrder(trialOrdering);
   
+  if (polyOrderAfterRefinement != polyOrderBeforeRefinement + 1) {
+    cout << "poly order after refinement is not 1 greater than before refinement.\n";
+    cout << "poly order before refinement: " << polyOrderBeforeRefinement << endl;
+    cout << "poly order after refinement:  " << polyOrderAfterRefinement << endl;
+    success = false;
+  }
+  
+//  MeshPtr meshes[3];
+//  meshes[0] = mesh1;
+//  meshes[1] = mesh2;
+//  meshes[2] = mesh3;
+//  for (int cellID=0; cellID<horizontalCells * verticalCells; cellID++) {
+//    cout << "cellID " << cellID << ", poly order:\n";
+//    for (int meshNumber = 1; meshNumber<=3; meshNumber++) {
+//      MeshPtr mesh = meshes[meshNumber-1];
+//      DofOrderingPtr trialOrdering = mesh->getElementType(cellID)->trialOrderPtr;
+//      int polyOrder = mesh->getDofOrderingFactory().trialPolyOrder(trialOrdering);
+//      cout << "mesh " << meshNumber << ": " << polyOrder << endl;
+//    }
+//  }
+
   if ( ! MeshTestUtility::checkMeshConsistency(mesh3) ) {
     cout << "After p-refinement, mesh consistency test FAILED." << endl;
     success = false;
@@ -1477,7 +1513,7 @@ bool MeshTestSuite::testPRefinement() {
   
   Solution solution3(mesh3, exactPolynomial.bc(), exactPolynomial.ExactSolution::rhs(),ip0);
   solution3.solve();
-  double error3 = exactPolynomial.L2NormOfError(solution3, PoissonBilinearForm::PHI,15); // high fidelity L2norm
+//  double error3 = exactPolynomial.L2NormOfError(solution3, PoissonBilinearForm::PHI,15); // high fidelity L2norm
   //cout << "refined mesh error: " << error3 << endl;
   
   for (int cellID=0; cellID< horizontalCells * verticalCells; cellID++) {
@@ -1502,20 +1538,20 @@ bool MeshTestSuite::testPRefinement() {
       }
     }
   }
-//  ostringstream fileName;
-//  fileName << "PoissonPhiSolution_Manu_LinearOnLinear.p=" << H1Order-1 << ".4x1.dat";
-//  solution1.writeToFile(PoissonBilinearForm::PHI, fileName.str());
-//  fileName.str(""); // clear out the filename
-//  fileName << "PoissonPhiSolution_Manu_LinearOnQuadratic.p=" << H1Order << ".4x1.dat";
-//  solution2.writeToFile(PoissonBilinearForm::PHI, fileName.str());
-//  fileName.str("");
-//  fileName << "PoissonPhiSolution_Manu_LinearOnQuadratic.p=1or2.4x1.dat";
-//  solution3.writeToFile(PoissonBilinearForm::PHI, fileName.str());
-//  fileName.str("");
+  //  ostringstream fileName;
+  //  fileName << "PoissonPhiSolution_Manu_LinearOnLinear.p=" << H1Order-1 << ".4x1.dat";
+  //  solution1.writeToFile(PoissonBilinearForm::PHI, fileName.str());
+  //  fileName.str(""); // clear out the filename
+  //  fileName << "PoissonPhiSolution_Manu_LinearOnQuadratic.p=" << H1Order << ".4x1.dat";
+  //  solution2.writeToFile(PoissonBilinearForm::PHI, fileName.str());
+  //  fileName.str("");
+  //  fileName << "PoissonPhiSolution_Manu_LinearOnQuadratic.p=1or2.4x1.dat";
+  //  solution3.writeToFile(PoissonBilinearForm::PHI, fileName.str());
+  //  fileName.str("");
   
   // Do a test that just refines everywhere, albeit in several steps...  Compare that with solution starting with a higher-order mesh (should be identical).
-  mesh1 = Mesh::buildQuadMesh(quadPoints, 4, 3, exactExponential.bilinearForm(), H1Order, H1Order+1);
-  mesh2 = Mesh::buildQuadMesh(quadPoints, 4, 3, exactExponential.bilinearForm(), H1Order+1, H1Order+2);
+  mesh1 = MeshFactory::buildQuadMesh(quadPoints, 4, 3, exactExponential.bilinearForm(), H1Order, H1Order+1);
+  mesh2 = MeshFactory::buildQuadMesh(quadPoints, 4, 3, exactExponential.bilinearForm(), H1Order+1, H1Order+2);
   ip0 = Teuchos::rcp(new MathInnerProduct(exactExponential.bilinearForm()));
   cellsToRefine.clear();
   for (int i=5; i<8; i++) {
@@ -1523,7 +1559,7 @@ bool MeshTestSuite::testPRefinement() {
   }
   mesh1->pRefine(cellsToRefine);
   cellsToRefine.clear();
-  for (int i=8; i<mesh1->elements().size(); i++) {
+  for (int i=8; i<mesh1->numElements(); i++) {
     cellsToRefine.push_back(i);
   }
   mesh1->pRefine(cellsToRefine);
@@ -1553,9 +1589,9 @@ bool MeshTestSuite::testPRefinement() {
     success = false;
   }
   
-  solution1 = Solution(mesh1, exactExponential.bc(), exactExponential.ExactSolution::rhs(), ip0);  
+  solution1 = Solution(mesh1, exactExponential.bc(), exactExponential.ExactSolution::rhs(), ip0);
   solution1.solve();
-  solution2 = Solution(mesh2, exactExponential.bc(), exactExponential.ExactSolution::rhs(), ip0);  
+  solution2 = Solution(mesh2, exactExponential.bc(), exactExponential.ExactSolution::rhs(), ip0);
   solution2.solve();
   
   error1 = exactExponential.L2NormOfError(solution1, PoissonBilinearForm::PHI,15); // high fidelity L2norm
@@ -1565,90 +1601,90 @@ bool MeshTestSuite::testPRefinement() {
     success = false;
     cout << "FAILURE: Refined everywhere mesh gives different solution than fresh mesh with same orders." << endl;
   }
-   for (int i=0; i<exactSolutions.size(); i++) {
-     PoissonExactSolution exactSolution = exactSolutions[i];
-     
-     Teuchos::RCP<Mesh> myMesh = Mesh::buildQuadMesh(quadPoints, sqrtElements, sqrtElements, exactSolution.bilinearForm(), H1Order, H1Order+1);
-     
-     cellsToRefine.clear();
-     cellsToRefine.push_back(2);
-     
-     Teuchos::RCP<DPGInnerProduct> ip = Teuchos::rcp(new MathInnerProduct(exactSolution.bilinearForm()));
-     Solution solution(myMesh, exactSolution.bc(), exactSolution.ExactSolution::rhs(), ip);
-     
-     double L2norm = exactSolution.L2NormOfError(solution, PoissonBilinearForm::PHI,15); // high fidelity L2norm
-     double diff;
-     double prev_error = 1.0; // relative error starts at 1
-     
-     myMesh->pRefine(cellsToRefine);
-     // now that we've refined 1 element, its 2 neighbors are also changed, but the diagonal elemnt has not.
-     // depending on how the mesh oriented the elements, we might have either 3 or 4 element types.
-     // (as presently implemented, it should be 4 types).
-     int numElementTypes = myMesh->elementTypes().size();
-     if ( (numElementTypes != 3) && (numElementTypes != 4) ) {
-       success = false;
-       cout << "FAILURE: After 1st p-refinement, expected 3 or 4 elementTypes, but had " << numElementTypes << endl;
-       // abort:
-       return success;
-     } else {
-       //cout << "numElementTypes after 1st p-refinement: " << numElementTypes << endl;
-     }
-     if ( ! MeshTestUtility::checkMeshConsistency(myMesh) ) {
-       success = false;
-       cout << "FAILURE: After 1st p-refinement, MeshTestUtility::checkMeshConsistency failed." << endl;
-     }
-
-     solution.solve();
-     diff = exactSolution.L2NormOfError(solution, PoissonBilinearForm::PHI,15);
-     //cout << "1st p-refinement test: POISSON Manuf. #" << i << " (p=" << H1Order-1 << "): L2 Error in solution for " << sqrtElements << "x" << sqrtElements << " mesh: " << diff << endl;
-     diff = diff / L2norm;
-     
-     //cout << "Relative L2 Error: " << diff << endl;
-     prev_error = diff;
-     
-     myMesh->pRefine(cellsToRefine);
-     if ( ! MeshTestUtility::checkMeshConsistency(myMesh) ) {
-       success = false;
-       cout << "FAILURE: After 2nd p-refinement, MeshTestUtility::checkMeshConsistency failed." << endl;
-     }
-     solution.solve();
-     diff = exactSolution.L2NormOfError(solution, PoissonBilinearForm::PHI,15);
-     //cout << "2nd p-refinement test: POISSON Manuf. #" << i << " (p=" << H1Order-1 << "): L2 Error in solution for " << sqrtElements << "x" << sqrtElements << " mesh: " << diff << endl;
-     diff = diff / L2norm;
-     //cout << "Relative L2 Error: " << diff << endl;
-     
-     if ( (diff / prev_error > 1.02) && (prev_error > tol) ) {
-       success = false;
-       cout << "FAILURE: relative error increased by more than 2% after 2nd p-refinement" << endl;
-     }
-     
-     cellsToRefine.push_back(0);
-     cellsToRefine.push_back(1);
-     cellsToRefine.push_back(3);
-     myMesh->pRefine(cellsToRefine);
-     if ( ! MeshTestUtility::checkMeshConsistency(myMesh) ) {
-       success = false;
-       cout << "FAILURE: After 3rd p-refinement, MeshTestUtility::checkMeshConsistency failed." << endl;
-     }
-     solution.solve();
-     diff = exactSolution.L2NormOfError(solution, PoissonBilinearForm::PHI,15);
-     //cout << "3rd p-refinement test: POISSON Manuf. #" << i << " (p=" << H1Order-1 << "): L2 Error in solution for " << sqrtElements << "x" << sqrtElements << " mesh: " << diff << endl;
-     diff = diff / L2norm;
-     //cout << "Relative L2 Error: " << diff << endl;
-     
-     if ( (diff / prev_error > 1.02) && (prev_error > tol) ) {
-       success = false;
-       cout << "FAILURE: relative error increased by more than 2% after 3rd p-refinement" << endl;
-     }
-     
-     //if (diff > tol) {
-     //  success = false;
-     //  cout << "Failure: Error in solution of Poisson (Sacado version) was " << diff << "; tolerance set to " << tol << endl;
-     //}
-//     ostringstream fileName;
-//     fileName << "PoissonPhiSolution_Manu_" << i << ".p=" << H1Order-1 << "." << sqrtElements << "x" << sqrtElements << ".dat";
-//     solution.writeToFile(PoissonBilinearForm::PHI, fileName.str());
-   } 
+  for (int i=0; i<exactSolutions.size(); i++) {
+    PoissonExactSolution exactSolution = exactSolutions[i];
+    
+    Teuchos::RCP<Mesh> myMesh = MeshFactory::buildQuadMesh(quadPoints, sqrtElements, sqrtElements, exactSolution.bilinearForm(), H1Order, H1Order+1);
+    
+    cellsToRefine.clear();
+    cellsToRefine.push_back(2);
+    
+    Teuchos::RCP<DPGInnerProduct> ip = Teuchos::rcp(new MathInnerProduct(exactSolution.bilinearForm()));
+    Solution solution(myMesh, exactSolution.bc(), exactSolution.ExactSolution::rhs(), ip);
+    
+    double L2norm = exactSolution.L2NormOfError(solution, PoissonBilinearForm::PHI,15); // high fidelity L2norm
+    double diff;
+    double prev_error = 1.0; // relative error starts at 1
+    
+    myMesh->pRefine(cellsToRefine);
+    // now that we've refined 1 element, its 2 neighbors are also changed, but the diagonal elemnt has not.
+    // depending on how the mesh oriented the elements, we might have either 3 or 4 element types.
+    // (as presently implemented, it should be 4 types).
+    int numElementTypes = myMesh->elementTypes().size();
+    if ( (numElementTypes != 3) && (numElementTypes != 4) ) {
+      success = false;
+      cout << "FAILURE: After 1st p-refinement, expected 3 or 4 elementTypes, but had " << numElementTypes << endl;
+      // abort:
+      return success;
+    } else {
+      //cout << "numElementTypes after 1st p-refinement: " << numElementTypes << endl;
+    }
+    if ( ! MeshTestUtility::checkMeshConsistency(myMesh) ) {
+      success = false;
+      cout << "FAILURE: After 1st p-refinement, MeshTestUtility::checkMeshConsistency failed." << endl;
+    }
+    
+    solution.solve();
+    diff = exactSolution.L2NormOfError(solution, PoissonBilinearForm::PHI,15);
+    //cout << "1st p-refinement test: POISSON Manuf. #" << i << " (p=" << H1Order-1 << "): L2 Error in solution for " << sqrtElements << "x" << sqrtElements << " mesh: " << diff << endl;
+    diff = diff / L2norm;
+    
+    //cout << "Relative L2 Error: " << diff << endl;
+    prev_error = diff;
+    
+    myMesh->pRefine(cellsToRefine);
+    if ( ! MeshTestUtility::checkMeshConsistency(myMesh) ) {
+      success = false;
+      cout << "FAILURE: After 2nd p-refinement, MeshTestUtility::checkMeshConsistency failed." << endl;
+    }
+    solution.solve();
+    diff = exactSolution.L2NormOfError(solution, PoissonBilinearForm::PHI,15);
+    //cout << "2nd p-refinement test: POISSON Manuf. #" << i << " (p=" << H1Order-1 << "): L2 Error in solution for " << sqrtElements << "x" << sqrtElements << " mesh: " << diff << endl;
+    diff = diff / L2norm;
+    //cout << "Relative L2 Error: " << diff << endl;
+    
+    if ( (diff / prev_error > 1.02) && (prev_error > tol) ) {
+      success = false;
+      cout << "FAILURE: relative error increased by more than 2% after 2nd p-refinement" << endl;
+    }
+    
+    cellsToRefine.push_back(0);
+    cellsToRefine.push_back(1);
+    cellsToRefine.push_back(3);
+    myMesh->pRefine(cellsToRefine);
+    if ( ! MeshTestUtility::checkMeshConsistency(myMesh) ) {
+      success = false;
+      cout << "FAILURE: After 3rd p-refinement, MeshTestUtility::checkMeshConsistency failed." << endl;
+    }
+    solution.solve();
+    diff = exactSolution.L2NormOfError(solution, PoissonBilinearForm::PHI,15);
+    //cout << "3rd p-refinement test: POISSON Manuf. #" << i << " (p=" << H1Order-1 << "): L2 Error in solution for " << sqrtElements << "x" << sqrtElements << " mesh: " << diff << endl;
+    diff = diff / L2norm;
+    //cout << "Relative L2 Error: " << diff << endl;
+    
+    if ( (diff / prev_error > 1.02) && (prev_error > tol) ) {
+      success = false;
+      cout << "FAILURE: relative error increased by more than 2% after 3rd p-refinement" << endl;
+    }
+    
+    //if (diff > tol) {
+    //  success = false;
+    //  cout << "Failure: Error in solution of Poisson (Sacado version) was " << diff << "; tolerance set to " << tol << endl;
+    //}
+    //     ostringstream fileName;
+    //     fileName << "PoissonPhiSolution_Manu_" << i << ".p=" << H1Order-1 << "." << sqrtElements << "x" << sqrtElements << ".dat";
+    //     solution.writeToFile(PoissonBilinearForm::PHI, fileName.str());
+  }
   
   return success;
 }
@@ -1674,9 +1710,9 @@ bool MeshTestSuite::testSinglePointBC() {
   quadPoints(2,0) = 1.0;
   quadPoints(2,1) = 1.0;
   quadPoints(3,0) = 0.0;
-  quadPoints(3,1) = 1.0;  
+  quadPoints(3,1) = 1.0;
   
-  Teuchos::RCP<Mesh> mesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells, exactPolynomial.bilinearForm(), order, order+pToAdd);
+  Teuchos::RCP<Mesh> mesh = MeshFactory::buildQuadMesh(quadPoints, horizontalCells, verticalCells, exactPolynomial.bilinearForm(), order, order+pToAdd);
   if ( ! MeshTestUtility::checkMeshConsistency(mesh) ) {
     cout << "In singlePointBC test, mesh consistency test FAILED for non-conforming mesh." << endl;
     success = false;
@@ -1699,21 +1735,21 @@ bool MeshTestSuite::testSinglePointBC() {
   
   exactPolynomialConforming.setUseSinglePointBCForPHI(true);
   
-  mesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells, 
-                               exactPolynomialConforming.bilinearForm(), order, order+pToAdd);
+  mesh = MeshFactory::buildQuadMesh(quadPoints, horizontalCells, verticalCells,
+                                    exactPolynomialConforming.bilinearForm(), order, order+pToAdd);
   if ( ! MeshTestUtility::checkMeshConsistency(mesh) ) {
     cout << "In singlePointBC test, mesh consistency test FAILED for conforming mesh." << endl;
     success = false;
   }
   
-  Teuchos::RCP<ElementType> elemTypePtr = mesh->elements()[0]->elementType();
+  Teuchos::RCP<ElementType> elemTypePtr = mesh->getElement(0)->elementType();
   Teuchos::RCP<DofOrdering> trialOrdering = elemTypePtr->trialOrderPtr;
   if ( checkDofOrderingHasNoOverlap(trialOrdering) ) {
     cout << "FAILURE: expected trialOrdering (which is conforming) not to be a 1-1 map, but it is." << endl;
     success = false;
   }
   ip = Teuchos::rcp(new MathInnerProduct(exactPolynomialConforming.bilinearForm()));
-  Solution solutionConforming = Solution(mesh, exactPolynomialConforming.bc(), 
+  Solution solutionConforming = Solution(mesh, exactPolynomialConforming.bc(),
                                          exactPolynomialConforming.ExactSolution::rhs(), ip);
   solutionConforming.solve();
   
@@ -1748,7 +1784,7 @@ bool MeshTestSuite::testSolutionForMultipleElementTypes() {
   quadPoints(2,0) = 1.0;
   quadPoints(2,1) = 1.0;
   quadPoints(3,0) = 0.0;
-  quadPoints(3,1) = 1.0;  
+  quadPoints(3,1) = 1.0;
   
   PoissonExactSolution exactPolynomial(PoissonExactSolution::POLYNOMIAL, 0); // 0 doesn't mean constant, but a particular solution...
   exactPolynomial.setUseSinglePointBCForPHI(true);
@@ -1756,22 +1792,22 @@ bool MeshTestSuite::testSolutionForMultipleElementTypes() {
   int order = 2; // H1 order ==> L2 order of order-1.
   int horizontalCells = 2; int verticalCells = 2;
   
-  Teuchos::RCP<Mesh> mesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells, exactPolynomial.bilinearForm(), order, order+1);
+  Teuchos::RCP<Mesh> mesh = MeshFactory::buildQuadMesh(quadPoints, horizontalCells, verticalCells, exactPolynomial.bilinearForm(), order, order+1);
   Teuchos::RCP<DPGInnerProduct> ip0 = Teuchos::rcp(new MathInnerProduct(exactPolynomial.bilinearForm()));
-  Solution solution1(mesh, exactPolynomial.bc(), exactPolynomial.ExactSolution::rhs(), ip0);  
+  Solution solution1(mesh, exactPolynomial.bc(), exactPolynomial.ExactSolution::rhs(), ip0);
   solution1.solve();
   double error1 = exactPolynomial.L2NormOfError(solution1, PoissonBilinearForm::PHI,15); // high fidelity L2norm
   if (error1 > tol) {
     success = false;
     cout << "FAILURE: Failed to resolve exact polynomial on mesh of sufficiently high degree..." << endl;
-  } 
+  }
   // give each element its own type
-  Teuchos::RCP<ElementType> elemTypePtr = mesh->elements()[0]->elementType();
-  for (int i=0; i<mesh->elements().size(); i++) {
+  Teuchos::RCP<ElementType> elemTypePtr = mesh->getElement(0)->elementType();
+  for (int i=0; i<mesh->numElements(); i++) {
     Teuchos::RCP<ElementType> newElemTypePtr = Teuchos::rcp(new ElementType(elemTypePtr->trialOrderPtr,
                                                                             elemTypePtr->testOrderPtr,
                                                                             elemTypePtr->cellTopoPtr));
-    mesh->elements()[i]->setElementType(newElemTypePtr);
+    mesh->getElement(i)->setElementType(newElemTypePtr);
   }
   // and rebuild the mesh data structures:
   mesh->rebuildLookups();
@@ -1807,9 +1843,9 @@ bool MeshTestSuite::testSolutionForSingleElementUpgradedSide() {
   quadPoints(2,0) = 1.0;
   quadPoints(2,1) = 1.0;
   quadPoints(3,0) = -1.0;
-  quadPoints(3,1) = 1.0;  
+  quadPoints(3,1) = 1.0;
   
-  Teuchos::RCP<Mesh> mesh = Mesh::buildQuadMesh(quadPoints, 1, 1, exactPolynomial.bilinearForm(), order, order);
+  Teuchos::RCP<Mesh> mesh = MeshFactory::buildQuadMesh(quadPoints, 1, 1, exactPolynomial.bilinearForm(), order, order);
   Teuchos::RCP<DPGInnerProduct> ip = Teuchos::rcp(new MathInnerProduct(exactPolynomial.bilinearForm()));
   Solution solution(mesh, exactPolynomial.bc(), exactPolynomial.ExactSolution::rhs(), ip);
   solution.solve();
@@ -1821,12 +1857,12 @@ bool MeshTestSuite::testSolutionForSingleElementUpgradedSide() {
     cout << "Single-point BC Poisson error (standard element): " << error << endl;
   }
   
-  Teuchos::RCP<ElementType> elemTypePtr = mesh->elements()[0]->elementType();
+  Teuchos::RCP<ElementType> elemTypePtr = mesh->getElement(0)->elementType();
   Teuchos::RCP<DofOrdering> trialOrdering = elemTypePtr->trialOrderPtr;
   shards::CellTopology cellTopo = *(elemTypePtr->cellTopoPtr.get());
   // create a second mesh so we can have another DofOrdering of higher order to match...
-  Teuchos::RCP<Mesh> mesh2 = Mesh::buildQuadMesh(quadPoints, 1, 1, exactPolynomial.bilinearForm(), order+1, order);
-  Teuchos::RCP<DofOrdering> trialOrderingToMatch = mesh2->elements()[0]->elementType()->trialOrderPtr;
+  Teuchos::RCP<Mesh> mesh2 = MeshFactory::buildQuadMesh(quadPoints, 1, 1, exactPolynomial.bilinearForm(), order+1, order);
+  Teuchos::RCP<DofOrdering> trialOrderingToMatch = mesh2->getElement(0)->elementType()->trialOrderPtr;
   DofOrderingFactory dofOrderingFactory(exactPolynomial.bilinearForm());
   int sideIndex1 = 0, sideIndex2 = 2; // match EAST of our true element with WEST of the fake one from the other mesh
   int upgradedOrdering = dofOrderingFactory.matchSides(trialOrdering,sideIndex1,cellTopo,
@@ -1843,8 +1879,8 @@ bool MeshTestSuite::testSolutionForSingleElementUpgradedSide() {
   
   
   elemTypePtr = Teuchos::rcp(new ElementType(trialOrdering,elemTypePtr->testOrderPtr,
-                                                  elemTypePtr->cellTopoPtr) );
-  mesh->elements()[0]->setElementType(elemTypePtr);
+                                             elemTypePtr->cellTopoPtr) );
+  mesh->getElement(0)->setElementType(elemTypePtr);
   mesh->rebuildLookups();
   solution.solve();
   
@@ -1904,7 +1940,7 @@ bool MeshTestSuite::testRefinementPattern() {
   quadPoints(2,0) = 1.0;
   quadPoints(2,1) = 1.0;
   quadPoints(3,0) = -1.0;
-  quadPoints(3,1) = 1.0;  
+  quadPoints(3,1) = 1.0;
   
   // h-convergence
   int sqrtElements = 2;
@@ -1916,13 +1952,13 @@ bool MeshTestSuite::testRefinementPattern() {
   int H1Order = 2;
   int horizontalCells = 2; int verticalCells = 1;
   
-  Teuchos::RCP<Mesh> mesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells, bilinearForm, H1Order, H1Order+1);
+  Teuchos::RCP<Mesh> mesh = MeshFactory::buildQuadMesh(quadPoints, horizontalCells, verticalCells, bilinearForm, H1Order, H1Order+1);
   
-  vector<int> cellsToRefine;
+  vector<GlobalIndexType> cellsToRefine;
   cellsToRefine.push_back(0);
   mesh->hRefine(cellsToRefine, RefinementPattern::regularRefinementPatternQuad());
   
-  Teuchos::RCP<Element> elem = mesh->elements()[0];
+  Teuchos::RCP<Element> elem = mesh->getElement(0);
   int numChildrenExpected = 4;
   if (elem->numChildren() != numChildrenExpected) {
     success = false;
@@ -1993,7 +2029,7 @@ bool MeshTestSuite::testPointContainment() {
   quadPoints(2,0) = 1.0;
   quadPoints(2,1) = 1.0;
   quadPoints(3,0) = 0.0;
-  quadPoints(3,1) = 1.0;  
+  quadPoints(3,1) = 1.0;
   
   int pToAdd = 1;
   int horizontalCells=1,verticalCells=1;
@@ -2004,8 +2040,8 @@ bool MeshTestSuite::testPointContainment() {
   PoissonExactSolution exactSolution(PoissonExactSolution::POLYNOMIAL, polyOrder);
   exactSolution.setUseSinglePointBCForPHI(true);
   int order = exactSolution.H1Order(); // matters for getting enough cubature points, and of course recovering the exact solution
-  Teuchos::RCP<Mesh> myMesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells,
-                                                  exactSolution.bilinearForm(), order, order+pToAdd, triangulate);
+  Teuchos::RCP<Mesh> myMesh = MeshFactory::buildQuadMesh(quadPoints, horizontalCells, verticalCells,
+                                                         exactSolution.bilinearForm(), order, order+pToAdd, triangulate);
   
   vector<double> x, y; vector<int> inside;
   x.push_back(0.5); y.push_back(0.5); inside.push_back(0);
@@ -2046,8 +2082,8 @@ bool MeshTestSuite::testPointContainment() {
   
   horizontalCells = 1;
   verticalCells = 1;
-  myMesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells,
-                               exactSolution.bilinearForm(), order, order+pToAdd, triangulate);
+  myMesh = MeshFactory::buildQuadMesh(quadPoints, horizontalCells, verticalCells,
+                                      exactSolution.bilinearForm(), order, order+pToAdd, triangulate);
   // two uniform refinements:
   myMesh->hRefine(myMesh->getActiveCellIDs(), RefinementPattern::regularRefinementPatternQuad());
   myMesh->hRefine(myMesh->getActiveCellIDs(), RefinementPattern::regularRefinementPatternQuad());
@@ -2061,204 +2097,204 @@ bool MeshTestSuite::testPointContainment() {
   // we don't really have anything to check at this point: if it crashes, that's the problem.
   // but even prior to fixing the instigating issue, it doesn't crash, so there must be something
   // else going on...
-//  cout << "In new mesh test, matched element " << elements[0]->cellID() << endl;
+  //  cout << "In new mesh test, matched element " << elements[0]->cellID() << endl;
   
   return success;
 }
-bool MeshTestSuite::testMultiBasisCrash(){
-  bool success = true;  
+bool MeshTestSuite::testJesseMultiBasisRefinement(){
+  bool success = true;
   int polyOrder = 2;
   PoissonExactSolution exactSolution(PoissonExactSolution::POLYNOMIAL, polyOrder);
   int order = exactSolution.H1Order();
   int pToAdd = 1;
   MeshPtr mesh = MeshUtilities::buildUnitQuadMesh(4,2, exactSolution.bilinearForm(), order, order+pToAdd);
-
+  
   ////////////////////////////////////////////////////////////////////
   // REFINE MESH TO TRIGGER EXCEPTION
   ////////////////////////////////////////////////////////////////////
   /*
-  for (int i = 0;i<3;i++){
-    vector<int> xC;
-    vector<int> yC;
-    vector<int> rC;
-    switch (i){
-    case 0:
-      rC.push_back(0);
-      rC.push_back(2);
-      yC.push_back(1);
-      yC.push_back(3);
-      break;
-    case 1:
-      yC.push_back(4);
-      yC.push_back(6);
-      yC.push_back(10);
-      rC.push_back(15);
-      break;
-    case 2:
-      break;
-    case 3:
-      
-      break;
-    }
-    mesh->hRefine(xC, RefinementPattern::xAnisotropicRefinementPatternQuad());    
-    mesh->hRefine(yC, RefinementPattern::yAnisotropicRefinementPatternQuad());    
-    mesh->hRefine(rC, RefinementPattern::regularRefinementPatternQuad());        
-    mesh->enforceOneIrregularity();
-    for (int i = 0;i<mesh->numActiveElements();i++){
-      int cellID = mesh->getActiveElement(i)->cellID();
-      vector<double> c = mesh->getCellCentroid(cellID);
-      cout << "centroid of cell " << cellID << " = " << c[0] << ", " << c[1] << endl;
-    }
-    cout << endl;      
-  }
-  */
+   for (int i = 0;i<3;i++){
+   vector<int> xC;
+   vector<int> yC;
+   vector<int> rC;
+   switch (i){
+   case 0:
+   rC.push_back(0);
+   rC.push_back(2);
+   yC.push_back(1);
+   yC.push_back(3);
+   break;
+   case 1:
+   yC.push_back(4);
+   yC.push_back(6);
+   yC.push_back(10);
+   rC.push_back(15);
+   break;
+   case 2:
+   break;
+   case 3:
+   
+   break;
+   }
+   mesh->hRefine(xC, RefinementPattern::xAnisotropicRefinementPatternQuad());
+   mesh->hRefine(yC, RefinementPattern::yAnisotropicRefinementPatternQuad());
+   mesh->hRefine(rC, RefinementPattern::regularRefinementPatternQuad());
+   mesh->enforceOneIrregularity();
+   for (int i = 0;i<mesh->numActiveElements();i++){
+   int cellID = mesh->getActiveElement(i)->cellID();
+   vector<double> c = mesh->getCellCentroid(cellID);
+   cout << "centroid of cell " << cellID << " = " << c[0] << ", " << c[1] << endl;
+   }
+   cout << endl;
+   }
+   */
   for (int i = 0;i<5;i++){
-    vector<int> xC;
-    vector<int> yC;
-    vector<int> rC;
+    vector<GlobalIndexType> xC;
+    vector<GlobalIndexType> yC;
+    vector<GlobalIndexType> rC;
     switch (i){
-    case 0:
-      rC.push_back(2);
-      rC.push_back(4);
-      rC.push_back(6);
-      break;
-    case 1:
-      rC.push_back(9);
-      rC.push_back(12);
-      rC.push_back(13);
-      rC.push_back(16);
-      rC.push_back(17);
-      break;
-    case 2:
-      rC.push_back(20);
-      rC.push_back(21);
-      rC.push_back(24);
-      rC.push_back(25);
-      rC.push_back(28);
-      rC.push_back(29);
-      rC.push_back(32);
-      yC.push_back(30);
-      break;
-    case 3:
-      rC.push_back(33);
-      rC.push_back(36);
-      rC.push_back(37);
-      rC.push_back(43);
-      rC.push_back(46);
-      rC.push_back(47);
-      rC.push_back(51);
-      rC.push_back(54);
-      rC.push_back(55);
-      rC.push_back(58);
-      rC.push_back(60);
-      rC.push_back(61);
-
-      yC.push_back(18);
-      yC.push_back(19);
-      yC.push_back(26);
-      yC.push_back(31);      
-      yC.push_back(34);
-      yC.push_back(35);
-      yC.push_back(38);
-      yC.push_back(39);
-      yC.push_back(40);
-      yC.push_back(41);
-      yC.push_back(50);
-      yC.push_back(52);
-      yC.push_back(56);
-      yC.push_back(57);
-      break;
-    case 4:
-      rC.push_back(93);  // refinement breaks on this one
-      break;
+      case 0:
+        rC.push_back(2);
+        rC.push_back(4);
+        rC.push_back(6);
+        break;
+      case 1:
+        rC.push_back(9);
+        rC.push_back(12);
+        rC.push_back(13);
+        rC.push_back(16);
+        rC.push_back(17);
+        break;
+      case 2:
+        rC.push_back(20);
+        rC.push_back(21);
+        rC.push_back(24);
+        rC.push_back(25);
+        rC.push_back(28);
+        rC.push_back(29);
+        rC.push_back(32);
+        yC.push_back(30);
+        break;
+      case 3:
+        rC.push_back(33);
+        rC.push_back(36);
+        rC.push_back(37);
+        rC.push_back(43);
+        rC.push_back(46);
+        rC.push_back(47);
+        rC.push_back(51);
+        rC.push_back(54);
+        rC.push_back(55);
+        rC.push_back(58);
+        rC.push_back(60);
+        rC.push_back(61);
+        
+        yC.push_back(18);
+        yC.push_back(19);
+        yC.push_back(26);
+        yC.push_back(31);
+        yC.push_back(34);
+        yC.push_back(35);
+        yC.push_back(38);
+        yC.push_back(39);
+        yC.push_back(40);
+        yC.push_back(41);
+        yC.push_back(50);
+        yC.push_back(52);
+        yC.push_back(56);
+        yC.push_back(57);
+        break;
+      case 4:
+        rC.push_back(93);  // refinement breaks on this one
+        break;
     }
-//    if (i==4) {
-//      FieldContainer<double> vertices(4,2);
-//      mesh->verticesForCell(vertices, 78);
-//      cout << "vertices for cell 78:\n" << vertices;
-//      mesh->verticesForCell(vertices, 91);
-//      cout << "vertices for cell 91:\n" << vertices;
-//      mesh->verticesForCell(vertices, 93);
-//      cout << "vertices for cell 93:\n" << vertices;
-//      GnuPlotUtil::writeComputationalMeshSkeleton("/tmp/multiBasisRefinementTest.dat", mesh);
-//    }
+    //    if (i==4) {
+    //      FieldContainer<double> vertices(4,2);
+    //      mesh->verticesForCell(vertices, 78);
+    //      cout << "vertices for cell 78:\n" << vertices;
+    //      mesh->verticesForCell(vertices, 91);
+    //      cout << "vertices for cell 91:\n" << vertices;
+    //      mesh->verticesForCell(vertices, 93);
+    //      cout << "vertices for cell 93:\n" << vertices;
+    //      GnuPlotUtil::writeComputationalMeshSkeleton("/tmp/multiBasisRefinementTest.dat", mesh);
+    //    }
     mesh->hRefine(xC, RefinementPattern::xAnisotropicRefinementPatternQuad());
-    mesh->hRefine(yC, RefinementPattern::yAnisotropicRefinementPatternQuad());    
-    mesh->hRefine(rC, RefinementPattern::regularRefinementPatternQuad());        
+    mesh->hRefine(yC, RefinementPattern::yAnisotropicRefinementPatternQuad());
+    mesh->hRefine(rC, RefinementPattern::regularRefinementPatternQuad());
     mesh->enforceOneIrregularity();
   }
   return success;
 }
 
 // test a second crash that is observed in anisotropic NavierStokes refinement
-bool MeshTestSuite::testAnisotropicCrash(){
+bool MeshTestSuite::testJesseAnisotropicRefinement(){
   int order = 1;
-
+  
   ////////////////////   DECLARE VARIABLES   ///////////////////////
   // define test variables
-  VarFactory varFactory; 
+  VarFactory varFactory;
   VarPtr v = varFactory.testVar("v", HGRAD);
   
   // define trial variables
   VarPtr beta_n_u = varFactory.fluxVar("\\widehat{\\beta \\cdot n }");
   VarPtr u = varFactory.fieldVar("u");
-
+  
   vector<double> beta;
   beta.push_back(1.0);
   beta.push_back(1.0);
   
   ////////////////////   DEFINE BILINEAR FORM   ///////////////////////
-
-  BFPtr convectionBF = Teuchos::rcp( new BF(varFactory) );  
+  
+  BFPtr convectionBF = Teuchos::rcp( new BF(varFactory) );
   // v terms:
   convectionBF->addTerm( -u, beta * v->grad() );
   convectionBF->addTerm( beta_n_u, v);
   
   ////////////////////   DEFINE INNER PRODUCT(S)   ///////////////////////
-
-   // robust test norm
+  
+  // robust test norm
   IPPtr ip = Teuchos::rcp(new IP);
   ip->addTerm(v);
   ip->addTerm(beta*v->grad());
   
   ////////////////////   SPECIFY RHS   ///////////////////////
-
+  
   Teuchos::RCP<RHSEasy> rhs = Teuchos::rcp( new RHSEasy );
   Teuchos::RCP<BCEasy> bc = Teuchos::rcp( new BCEasy );
-
+  
   ////////////////////   CREATE BCs   ///////////////////////
-
+  
   int pToAdd = 1;
   MeshPtr mesh = MeshUtilities::buildUnitQuadMesh(2, convectionBF, order, order+pToAdd);
   mesh->setPartitionPolicy(Teuchos::rcp(new ZoltanMeshPartitionPolicy("HSFC")));
-
+  
   Teuchos::RCP<Solution> solution;
   solution = Teuchos::rcp( new Solution(mesh, bc, rhs, ip) );
-
+  
   ////////////////////////////////////////////////////////////////////
   // REFINE MESH TO TRIGGER EXCEPTION
   ////////////////////////////////////////////////////////////////////
   vector<ElementPtr> elems = mesh->activeElements();
   
   // create "swastika" mesh
-  vector<int> xC,yC;
+  vector<GlobalIndexType> xC,yC;
   yC.push_back(1);yC.push_back(2);
   xC.push_back(0);xC.push_back(3);
   
-  mesh->hRefine(xC, RefinementPattern::xAnisotropicRefinementPatternQuad());    
-  mesh->hRefine(yC, RefinementPattern::yAnisotropicRefinementPatternQuad());        
+  mesh->hRefine(xC, RefinementPattern::xAnisotropicRefinementPatternQuad());
+  mesh->hRefine(yC, RefinementPattern::yAnisotropicRefinementPatternQuad());
   elems = mesh->activeElements();
- 
+  
   // trigger naive algorithm infinite loop (deadlock?)
   xC.clear();yC.clear();
   xC.push_back(6);
   mesh->hRefine(xC,RefinementPattern::xAnisotropicRefinementPatternQuad());
   //  mesh->hRefine(xC,RefinementPattern::regularRefinementPatternQuad());
   //  mesh->enforceOneIrregularity();
-
+  
   RefinementStrategy refinementStrategy(solution,.2);
   bool success = refinementStrategy.enforceAnisotropicOneIrregularity(xC,yC);
-
+  
   
   return success;
 }
@@ -2267,58 +2303,58 @@ bool MeshTestSuite::testAnisotropicCrash(){
 bool MeshTestSuite::testPRefinementAdjacentCells(){
   bool success = true;
   int order = 1;
-
+  
   ////////////////////   DECLARE VARIABLES   ///////////////////////
   // define test variables
-  VarFactory varFactory; 
+  VarFactory varFactory;
   VarPtr v = varFactory.testVar("v", HGRAD);
   
   // define trial variables
   VarPtr beta_n_u = varFactory.fluxVar("\\widehat{\\beta \\cdot n }");
   VarPtr u = varFactory.fieldVar("u");
-
+  
   vector<double> beta;
   beta.push_back(1.0);
   beta.push_back(1.0);
   
   ////////////////////   DEFINE BILINEAR FORM   ///////////////////////
-
-  BFPtr convectionBF = Teuchos::rcp( new BF(varFactory) );  
+  
+  BFPtr convectionBF = Teuchos::rcp( new BF(varFactory) );
   // v terms:
   convectionBF->addTerm( -u, beta * v->grad() );
   convectionBF->addTerm( beta_n_u, v);
   
   ////////////////////   DEFINE INNER PRODUCT(S)   ///////////////////////
-
+  
   IPPtr ip = Teuchos::rcp(new IP);
   ip->addTerm(v);
   ip->addTerm(beta*v->grad());
   
   ////////////////////   SPECIFY RHS   ///////////////////////
-
+  
   Teuchos::RCP<RHSEasy> rhs = Teuchos::rcp( new RHSEasy );
   Teuchos::RCP<BCEasy> bc = Teuchos::rcp( new BCEasy );
-
+  
   ////////////////////   CREATE BCs   ///////////////////////
-
+  
   int pToAdd = 1;
   MeshPtr mesh = MeshUtilities::buildUnitQuadMesh(2, convectionBF, order, order+pToAdd);
   mesh->setPartitionPolicy(Teuchos::rcp(new ZoltanMeshPartitionPolicy("HSFC")));
-
+  
   Teuchos::RCP<Solution> solution;
   solution = Teuchos::rcp( new Solution(mesh, bc, rhs, ip) );
-
+  
   ////////////////////////////////////////////////////////////////////
   // REFINE MESH TO TRIGGER EXCEPTION
   ////////////////////////////////////////////////////////////////////
-
+  
   BCPtr nullBC = Teuchos::rcp((BC*)NULL); RHSPtr nullRHS = Teuchos::rcp((RHS*)NULL); IPPtr nullIP = Teuchos::rcp((IP*)NULL);
-  SolutionPtr backgroundFlow = Teuchos::rcp(new Solution(mesh, nullBC, nullRHS, nullIP) );  
+  SolutionPtr backgroundFlow = Teuchos::rcp(new Solution(mesh, nullBC, nullRHS, nullIP) );
   mesh->registerSolution(backgroundFlow); // to trigger issue with p-refinements
   map<int, Teuchos::RCP<Function> > functionMap; functionMap[u->ID()] = Function::constant(3.14);
   backgroundFlow->projectOntoMesh(functionMap);
-
-  vector<int> ids;  
+  
+  vector<GlobalIndexType> ids;
   ids.push_back(1);
   ids.push_back(3);
   mesh->pRefine(ids); 

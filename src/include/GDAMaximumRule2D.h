@@ -14,90 +14,126 @@
 #include "GlobalDofAssignment.h"
 #include "ElementTypeFactory.h"
 
+class Solution;
+
 class GDAMaximumRule2D : public GlobalDofAssignment {
   // much of this code copied from Mesh
   
-  map< unsigned, vector<int> > _cellSideParitiesForCellID;
+  map< GlobalIndexType, vector<int> > _cellSideParitiesForCellID;
   
   ElementTypeFactory _elementTypeFactory;
   
-  vector< vector< unsigned > > _partitions; // unsigned: cellIDs
+  vector< vector< GlobalIndexType > > _partitions; // GlobalIndexType: cellIDs
   
   // keep track of upgrades to the sides of cells since the last rebuild:
   // (used to remap solution coefficients)
-  map< int, pair< ElementTypePtr, ElementTypePtr > > _cellSideUpgrades; // cellID --> (oldType, newType)
+  map< GlobalIndexType, pair< ElementTypePtr, ElementTypePtr > > _cellSideUpgrades; // cellID --> (oldType, newType)
   
-  map< pair<int,int>, pair<int,int> > _dofPairingIndex; // key/values are (cellID,localDofIndex)
+  map< pair<GlobalIndexType,IndexType>, pair<GlobalIndexType,IndexType> > _dofPairingIndex; // key/values are (cellID,localDofIndex)
   // note that the FieldContainer for cellSideParities has dimensions (numCellsForType,numSidesForType),
   // and that the values are 1.0 or -1.0.  These are weights to account for the fact that fluxes are defined in
   // terms of an outward normal, and thus one cell's idea about the flux is the negative of its neighbor's.
   // We decide parity by cellID: the neighbor with the lower cellID gets +1, the higher gets -1.
   
   // call buildTypeLookups to rebuild the elementType data structures:
-  vector< map< ElementType*, vector<int> > > _cellIDsForElementType;
-  map< ElementType*, map<int, int> > _globalCellIndexToCellID;
+  vector< map< ElementType*, vector<GlobalIndexType> > > _cellIDsForElementType;
+  map< ElementType*, map<IndexType, GlobalIndexType> > _globalCellIndexToCellID;
   vector< vector< ElementTypePtr > > _elementTypesForPartition;
-  vector< ElementTypePtr > _elementTypes;
+  vector< ElementTypePtr > _elementTypeList;
   
-  map<unsigned, ElementTypePtr> _elementTypeForCell; // keys are cellIDs
+  map<GlobalIndexType, ElementTypePtr> _elementTypeForCell; // keys are cellIDs
   
-  map<int, int> _partitionForCellID;
-  map<int, int> _partitionForGlobalDofIndex;
-  map<int, int> _partitionLocalIndexForGlobalDofIndex;
+  map<GlobalIndexType, IndexType> _partitionForCellID;
+  map<GlobalIndexType, PartitionIndexType> _partitionForGlobalDofIndex;
+  map<GlobalIndexType, IndexType> _partitionLocalIndexForGlobalDofIndex;
   vector< map< ElementType*, FieldContainer<double> > > _partitionedPhysicalCellNodesForElementType;
   vector< map< ElementType*, FieldContainer<double> > > _partitionedCellSideParitiesForElementType;
   map< ElementType*, FieldContainer<double> > _physicalCellNodesForElementType; // for uniform mesh, just a single entry..
-  vector< set<int> > _partitionedGlobalDofIndices;
-  map<unsigned, unsigned> _partitionLocalCellIndices; // keys are cellIDs; index is relative to both MPI node and ElementType
-  map<unsigned, unsigned> _globalCellIndices; // keys are cellIDs; index is relative to ElementType
+  vector< set<GlobalIndexType> > _partitionedGlobalDofIndices;
+  map<GlobalIndexType, IndexType> _partitionLocalCellIndices; // keys are cellIDs; index is relative to both MPI node and ElementType
+  map<GlobalIndexType, IndexType> _globalCellIndices; // keys are cellIDs; index is relative to ElementType
   
-  map< pair<unsigned,unsigned>, unsigned> _localToGlobalMap; // pair<cellID, localDofIndex>
+  map< pair<GlobalIndexType,IndexType>, GlobalIndexType> _localToGlobalMap; // pair<cellID, localDofIndex> --> globalDofIndex
   
-  map<unsigned, unsigned> getGlobalVertexIDs(const FieldContainer<double> &vertexCoordinates);
+  vector< Solution* > _registeredSolutions; // solutions that should be modified upon refinement
+  
+  map<unsigned, GlobalIndexType> getGlobalVertexIDs(const FieldContainer<double> &vertexCoordinates);
 
-  void addDofPairing(int cellID1, int dofIndex1, int cellID2, int dofIndex2);
-  void assignInitialElementType( unsigned cellID );
+  void addDofPairing(GlobalIndexType cellID1, IndexType dofIndex1, GlobalIndexType cellID2, IndexType dofIndex2);
+  void assignInitialElementType( GlobalIndexType cellID );
   void buildTypeLookups();
   void buildLocalToGlobalMap();
   void determineActiveElements();
   void determineDofPairings();
   void determinePartitionDofIndices();
 
-  void getMultiBasisOrdering(DofOrderingPtr &originalNonParentOrdering, CellPtr parent, unsigned sideIndex, unsigned parentSideIndexInNeighbor, CellPtr nonParent);
-  void matchNeighbor(unsigned cellID, int sideIndex);
-  map< int, BasisPtr > multiBasisUpgradeMap(CellPtr parent, unsigned sideIndex, unsigned bigNeighborPolyOrder);
+  void getMultiBasisOrdering(DofOrderingPtr &originalNonParentOrdering, CellPtr parent, unsigned sideOrdinal, unsigned parentSideOrdinalInNeighbor, CellPtr nonParent);
+  void matchNeighbor(GlobalIndexType cellID, int sideOrdinal);
+  map< int, BasisPtr > multiBasisUpgradeMap(CellPtr parent, unsigned sideOrdinal, unsigned bigNeighborPolyOrder);
   
-  void verticesForCells(FieldContainer<double>& vertices, vector<int> &cellIDs);
-  void verticesForCell(FieldContainer<double>& vertices, int cellID);
+  void verticesForCells(FieldContainer<double>& vertices, vector<GlobalIndexType> &cellIDs);
+  void verticesForCell(FieldContainer<double>& vertices, GlobalIndexType cellID);
   
   bool _enforceMBFluxContinuity;
   
-  int _numGlobalDofs;
-
-  static int neighborChildPermutation(int childIndex, int numChildrenInSide);
-  static int neighborDofPermutation(int dofIndex, int numDofsForSide);
+  GlobalIndexType _numGlobalDofs;
 public:
   GDAMaximumRule2D(MeshTopologyPtr meshTopology, VarFactory varFactory, DofOrderingFactoryPtr dofOrderingFactory, MeshPartitionPolicyPtr partitionPolicy,
                    unsigned initialH1OrderTrial, unsigned testOrderEnhancement, bool enforceMBFluxContinuity = false);
   
-  void didHRefine(const set<int> &parentCellIDs);
-  void didPRefine(const set<int> &cellIDs, int deltaP);
-  void didHUnrefine(const set<int> &parentCellIDs);
+  FieldContainer<double> & cellSideParities( ElementTypePtr elemTypePtr );
+  FieldContainer<double> cellSideParitiesForCell( GlobalIndexType cellID );
+  
+  vector< GlobalIndexType > cellsInPartition(PartitionIndexType partitionNumber);
+  
+  void didHRefine(const set<GlobalIndexType> &parentCellIDs);
+  void didPRefine(const set<GlobalIndexType> &cellIDs, int deltaP);
+  void didHUnrefine(const set<GlobalIndexType> &parentCellIDs);
   
   void didChangePartitionPolicy();
   
-  ElementTypePtr elementType(unsigned cellID);
+  ElementTypePtr elementType(GlobalIndexType cellID);
+  vector< Teuchos::RCP< ElementType > > elementTypes(PartitionIndexType partitionNumber);
   
-  int globalDofIndex(int cellID, int localDofIndex);
-  set<int> globalDofIndicesForPartition(int partitionNumber);
+  DofOrderingFactoryPtr getDofOrderingFactory();
+  ElementTypeFactory & getElementTypeFactory();
+  
+  GlobalIndexType cellID(Teuchos::RCP< ElementType > elemTypePtr, IndexType cellIndex, PartitionIndexType partitionNumber);
+  vector<GlobalIndexType> cellIDsOfElementType(PartitionIndexType partitionNumber, ElementTypePtr elemTypePtr);
+  
+  GlobalIndexType globalDofIndex(GlobalIndexType cellID, IndexType localDofIndex);
+  set<GlobalIndexType> globalDofIndicesForPartition(PartitionIndexType partitionNumber);
 
-  unsigned globalDofCount();
-  unsigned localDofCount(); // local to the MPI node
+  GlobalIndexType globalDofCount();
+  void interpretLocalDofs(GlobalIndexType cellID, const FieldContainer<double> &localDofs, FieldContainer<double> &globalDofs, FieldContainer<GlobalIndexType> &globalDofIndices);
+  IndexType localDofCount(); // local to the MPI node
+  
+  PartitionIndexType getPartitionCount();
+  
+  IndexType partitionLocalCellIndex(GlobalIndexType cellID);
+  GlobalIndexType globalCellIndex(GlobalIndexType cellID);
+  
+  PartitionIndexType partitionForCellID( GlobalIndexType cellID );
+  PartitionIndexType partitionForGlobalDofIndex( GlobalIndexType globalDofIndex );
+  GlobalIndexType partitionLocalIndexForGlobalDofIndex( GlobalIndexType globalDofIndex );
+  
+  FieldContainer<double> & physicalCellNodes( ElementTypePtr elemTypePtr);
+  FieldContainer<double> & physicalCellNodesGlobal( ElementTypePtr elemTypePtr );
   
   void rebuildLookups();
+  void registerSolution(Solution* solution);
+  void unregisterSolution(Solution* solution);
   
-  // used in some tests...
-  void setElementType(unsigned cellID, ElementTypePtr newType, bool sideUpgradeOnly);
+  // used in some tests:
+  int cellPolyOrder(GlobalIndexType cellID);
+  void setElementType(GlobalIndexType cellID, ElementTypePtr newType, bool sideUpgradeOnly);
+  const map< pair<GlobalIndexType,IndexType>, GlobalIndexType>& getLocalToGlobalMap() { // pair<cellID, localDofIndex> --> globalDofIndex
+    return _localToGlobalMap;
+  }
+  
+  // used by MultiBasis:
+  static int neighborChildPermutation(int childIndex, int numChildrenInSide);
+  static IndexType neighborDofPermutation(IndexType dofIndex, IndexType numDofsForSide);
 };
 
 #endif /* defined(__Camellia_debug__GDAMaximumRule2D__) */

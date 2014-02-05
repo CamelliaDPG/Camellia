@@ -70,7 +70,7 @@ class Uinflow : public Function {
 public:
   void values(FieldContainer<double> &values, BasisCachePtr basisCache){
     double tol = 1e-11;
-    vector<int> cellIDs = basisCache->cellIDs();
+    vector<GlobalIndexType> cellIDs = basisCache->cellIDs();
     int numPoints = values.dimension(1);
     FieldContainer<double> points = basisCache->getPhysicalCubaturePoints();
     for (int i = 0;i<cellIDs.size();i++){
@@ -93,7 +93,7 @@ public:
 class CellIDFunction : public Function {
 public:
   void values(FieldContainer<double> &values, BasisCachePtr basisCache){
-    vector<int> cellIDs = basisCache->cellIDs();
+    vector<GlobalIndexType> cellIDs = basisCache->cellIDs();
     int numPoints = values.dimension(1);
     FieldContainer<double> points = basisCache->getPhysicalCubaturePoints();
     for (int i = 0;i<cellIDs.size();i++){
@@ -112,7 +112,7 @@ public:
   } 
   void values(FieldContainer<double> &values, BasisCachePtr basisCache){
     double tol = 1e-11;
-    vector<int> cellIDs = basisCache->cellIDs();
+    vector<GlobalIndexType> cellIDs = basisCache->cellIDs();
     int numPoints = values.dimension(1);
     FieldContainer<double> points = basisCache->getPhysicalCubaturePoints();
     for (int i = 0;i<cellIDs.size();i++){
@@ -189,7 +189,7 @@ void ScratchPadTests::setup() {
   int horizontalCells = 1, verticalCells = 1;
   
   // create a pointer to a new mesh:
-  _spectralConfusionMesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells,
+  _spectralConfusionMesh = MeshFactory::buildQuadMesh(quadPoints, horizontalCells, verticalCells,
                                                _confusionBF, H1Order, H1Order+pToAdd);
   
   // some 2D test points:
@@ -207,7 +207,7 @@ void ScratchPadTests::setup() {
   }
   
   _elemType = _spectralConfusionMesh->getElement(0)->elementType();
-  vector<int> cellIDs;
+  vector<GlobalIndexType> cellIDs;
   int cellID = 0;
   cellIDs.push_back(cellID);
   _basisCache = Teuchos::rcp( new BasisCache( _elemType, _spectralConfusionMesh ) );
@@ -298,7 +298,7 @@ bool ScratchPadTests::testConstantFunctionProduct() {
   bool success = true;
   // set up basisCache (even though it won't really be used here)
   BasisCachePtr basisCache = Teuchos::rcp( new BasisCache( _elemType, _spectralConfusionMesh ) );
-  vector<int> cellIDs;
+  vector<GlobalIndexType> cellIDs;
   int cellID = 0;
   cellIDs.push_back(cellID);
   basisCache->setPhysicalCellNodes( _spectralConfusionMesh->physicalCellNodesForCell(cellID), 
@@ -521,15 +521,15 @@ public:
   }
   virtual void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
     values.initialize(1.0);
-    vector<int> contextCellIDs = basisCache->cellIDs();
+    vector<GlobalIndexType> contextCellIDs = basisCache->cellIDs();
     int cellIndex=0; // keep track of index into values
     
     int entryCount = values.size();
     int numCells = values.dimension(0);
     int numEntriesPerCell = entryCount / numCells;
     
-    for (vector<int>::iterator cellIt = contextCellIDs.begin(); cellIt != contextCellIDs.end(); cellIt++) {
-      int cellID = *cellIt;
+    for (vector<GlobalIndexType>::iterator cellIt = contextCellIDs.begin(); cellIt != contextCellIDs.end(); cellIt++) {
+      GlobalIndexType cellID = *cellIt;
       if (_cellIDs.find(cellID) == _cellIDs.end()) {
         // clear out the associated entries
         for (int j=0; j<numEntriesPerCell; j++) {
@@ -647,12 +647,13 @@ string dofInfoString(const vector<DofInfo> infoVector) {
 map< int, vector<DofInfo> > constructGlobalDofToLocalDofInfoMap(MeshPtr mesh) {
   // go through the mesh as a whole, and collect info for each dof
   map< int, vector<DofInfo> > infoMap;
-  int numCells = mesh->numActiveElements();
   DofInfo info;
-  for (int cellIndex=0; cellIndex < numCells; cellIndex++) {
-    ElementPtr cell = mesh->getActiveElement(cellIndex);
-    info.cellID = cell->cellID();
-    DofOrderingPtr trialOrder = cell->elementType()->trialOrderPtr;
+  set<GlobalIndexType> activeCellIDs = mesh->getActiveCellIDs();
+  for (set<GlobalIndexType>::iterator cellIt = activeCellIDs.begin(); cellIt != activeCellIDs.end(); cellIt++) {
+    GlobalIndexType cellID = *cellIt;
+    info.cellID = cellID;
+    ElementPtr element = mesh->getElement(cellID);
+    DofOrderingPtr trialOrder = element->elementType()->trialOrderPtr;
     set<int> trialIDs = trialOrder->getVarIDs();
     info.totalDofs = trialOrder->totalDofs();
     for (set<int>::iterator trialIt=trialIDs.begin(); trialIt != trialIDs.end(); trialIt++) {
@@ -744,7 +745,7 @@ bool ScratchPadTests::testGalerkinOrthogonality(){
 
   ////////////////////   GET BOUNDARY CONDITION DATA    ///////////////////////
 
-  FieldContainer<int> bcGlobalIndices;
+  FieldContainer<GlobalIndexType> bcGlobalIndices;
   FieldContainer<double> bcGlobalValues;
   mesh->boundary().bcsToImpose(bcGlobalIndices,bcGlobalValues,*(solution->bc()));
   set<int> bcInds;
@@ -994,6 +995,8 @@ bool ScratchPadTests::testLTResidualSimple(){
    
   ////////////////////   SOLVE & REFINE   ///////////////////////
 
+  int cubEnrich = 0;
+  
   Teuchos::RCP<Solution> solution;
   solution = Teuchos::rcp( new Solution(mesh, bc, rhs, ip) );
   solution->solve(false);
@@ -1003,25 +1006,25 @@ bool ScratchPadTests::testLTResidualSimple(){
   residual->addTerm(-confusionBF->testFunctional(solution),true); 
 
   Teuchos::RCP<RieszRep> rieszResidual = Teuchos::rcp(new RieszRep(mesh, ip, residual));
-  rieszResidual->computeRieszRep();
+  rieszResidual->computeRieszRep(cubEnrich);
   double energyErrorLT = rieszResidual->getNorm();
 
-  int cubEnrich = 0; bool testVsTest = true;
+  bool testVsTest = true;
   FunctionPtr e_v = Teuchos::rcp(new RepFunction(v,rieszResidual));
   map<int,FunctionPtr> errFxns;
   errFxns[v->ID()] = e_v;
   FunctionPtr err = (ip->evaluate(errFxns,false))->evaluate(errFxns,false); // don't need boundary terms unless they're in IP
   double energyErrorIntegrated = sqrt(err->integrate(mesh,cubEnrich,testVsTest)); 
   // check that energy error computed thru Solution and through rieszRep are the same  
-  success = abs(energyError-energyErrorLT)<tol;
-  if (success==false){
+  success = abs(energyError-energyErrorLT) < tol;
+  if (success==false) {
     if (rank==0)
       cout << "Failed testLTResidualSimple; energy error = " << energyError << ", while linearTerm error is computed to be " << energyErrorLT << endl;
     return success;
   }
   // checks that matrix-computed and integrated errors are the same
   success = abs(energyErrorLT-energyErrorIntegrated)<tol;
-  if (success==false){
+  if (success==false) {
     if (rank==0)
       cout << "Failed testLTResidualSimple; energy error = " << energyError << ", while error computed via integration is " << energyErrorIntegrated << endl;
     return success;
@@ -1036,7 +1039,7 @@ bool ScratchPadTests::testLTResidual(){
 
   bool success = true;
 
-  int nCells = 2; 
+  int nCells = 2;
   double eps = .1;
  
   ////////////////////   DECLARE VARIABLES   ///////////////////////
@@ -1077,7 +1080,7 @@ bool ScratchPadTests::testLTResidual(){
    // robust test norm
   IPPtr ip = Teuchos::rcp(new IP);
 
-  // choose the mesh-independent norm even though it may have BLs
+  // choose the mesh-independent norm even though it may have boundary layers
   ip->addTerm(v->grad());
   ip->addTerm(v);
   ip->addTerm(tau);
@@ -1094,7 +1097,7 @@ bool ScratchPadTests::testLTResidual(){
   FunctionPtr zero = Function::constant(0.0);
   Teuchos::RCP<RHSEasy> rhs = Teuchos::rcp( new RHSEasy );
   FunctionPtr f = one;
-  rhs->addTerm( f * v ); // obviously, with f = 0 adding this term is not necessary!
+  rhs->addTerm( f * v );
 
   ////////////////////   CREATE BCs   ///////////////////////
   Teuchos::RCP<BCEasy> bc = Teuchos::rcp( new BCEasy );
@@ -1133,14 +1136,16 @@ bool ScratchPadTests::testLTResidual(){
   rieszResidual->computeRieszRep();
   double energyErrorLT = rieszResidual->getNorm();
 
-  int cubEnrich = 5; bool testVsTest = true;
+  int cubEnrich = 0; bool testVsTest = true;
   FunctionPtr e_v = Teuchos::rcp(new RepFunction(v,rieszResidual));
   FunctionPtr e_tau = Teuchos::rcp(new RepFunction(tau,rieszResidual));
+  // experiment by Nate: manually specify the error (this appears to produce identical results, as it should)
+//  FunctionPtr err = e_v * e_v + e_tau * e_tau + e_v->grad() * e_v->grad() + e_tau->div() * e_tau->div();
   map<int,FunctionPtr> errFxns;
   errFxns[v->ID()] = e_v;
   errFxns[tau->ID()] = e_tau;
-  FunctionPtr err = (ip->evaluate(errFxns,false))->evaluate(errFxns,false); // don't need boundary terms unless they're in IP
-  double energyErrorIntegrated = sqrt(err->integrate(mesh,cubEnrich,testVsTest)); // enrich cubature by 25 to make up for the fact that these are test order functions
+  FunctionPtr err = (ip->evaluate(errFxns,false))->evaluate(errFxns,false); // false: no boundary terms (they're not in IP)
+  double energyErrorIntegrated = sqrt(err->integrate(mesh,cubEnrich,testVsTest));
 
   // check that energy error computed thru Solution and through rieszRep are the same
   bool success1 = abs(energyError-energyErrorLT)<tol; 
@@ -1149,7 +1154,7 @@ bool ScratchPadTests::testLTResidual(){
   success = success1==true && success2==true;
   if (!success){
     if (rank==0)
-      cout << "Failed testLTResidual; energy error = " << energyError << ", while linearTerm error is computed to be " << energyErrorLT << ", and thru integration, error = " << energyErrorIntegrated << endl;
+      cout << "Failed testLTResidual; energy error = " << energyError << ", while linearTerm error is computed to be " << energyErrorLT << ", and when computing through integration of the Riesz rep function, error = " << energyErrorIntegrated << endl;
   }
   //  VTKExporter exporter(solution, mesh, varFactory);
   //  exporter.exportSolution("testLTRes");

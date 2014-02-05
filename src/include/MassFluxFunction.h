@@ -36,7 +36,7 @@ public:
     int numPoints = values.dimension(1);
     
     MeshPtr mesh = basisCache->mesh();
-    vector<int> cellIDs = basisCache->cellIDs();
+    vector<GlobalIndexType> cellIDs = basisCache->cellIDs();
     FieldContainer<double> cellIntegrals(numCells);
     
 //    FieldContainer<double> cellIntegralsOnSide(numCells); // DEBUGGING

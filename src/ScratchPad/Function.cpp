@@ -17,7 +17,7 @@
 // for adaptive quadrature
 struct CacheInfo {
   ElementTypePtr elemType;
-  int cellID;
+  GlobalIndexType cellID;
   FieldContainer<double> subCellNodes;
 };
 
@@ -456,30 +456,28 @@ bool Function::isPositive(Teuchos::RCP<Mesh> mesh, int cubEnrich, bool testVsTes
 
 
 // added by Jesse - integrate over only one cell
-double Function::integrate(int cellID, Teuchos::RCP<Mesh> mesh, int cubatureDegreeEnrichment, bool testVsTest){
+double Function::integrate(GlobalIndexType cellID, Teuchos::RCP<Mesh> mesh, int cubatureDegreeEnrichment, bool testVsTest){
   BasisCachePtr basisCache = BasisCache::basisCacheForCell(mesh,cellID,testVsTest,cubatureDegreeEnrichment);
   FieldContainer<double> cellIntegral(1);
   this->integrate(cellIntegral,basisCache);
   return cellIntegral(0);
 }
 
-FunctionPtr Function::cellCharacteristic(int cellID) {
+FunctionPtr Function::cellCharacteristic(GlobalIndexType cellID) {
   return Teuchos::rcp( new CellCharacteristicFunction(cellID) );
 }
 
-FunctionPtr Function::cellCharacteristic(set<int> cellIDs) {
+FunctionPtr Function::cellCharacteristic(set<GlobalIndexType> cellIDs) {
   return Teuchos::rcp( new CellCharacteristicFunction(cellIDs) );
 }
 
 map<int, double> Function::cellIntegrals(Teuchos::RCP<Mesh> mesh, int cubatureDegreeEnrichment, bool testVsTest){
-  vector<int> cellIDs;
-  for (int i = 0;i<mesh->numActiveElements();i++){
-    cellIDs.push_back(mesh->getActiveElement(i)->cellID());
-  }
+  set<GlobalIndexType> activeCellIDs = mesh->getActiveCellIDs();
+  vector<GlobalIndexType> cellIDs(activeCellIDs.begin(),activeCellIDs.end());
   return cellIntegrals(cellIDs,mesh,cubatureDegreeEnrichment,testVsTest);
 }
 
-map<int, double> Function::cellIntegrals(vector<int> cellIDs, Teuchos::RCP<Mesh> mesh, int cubatureDegreeEnrichment, bool testVsTest){
+map<int, double> Function::cellIntegrals(vector<GlobalIndexType> cellIDs, Teuchos::RCP<Mesh> mesh, int cubatureDegreeEnrichment, bool testVsTest){
   int myPartition = Teuchos::GlobalMPISession::getRank();
 
   int numCells = cellIDs.size();
@@ -509,7 +507,7 @@ double Function::integrate(Teuchos::RCP<Mesh> mesh, double tol, bool testVsTest)
   // build initial list of subcells = all elements
   vector<CacheInfo> subCellCacheInfo;
   for (vector<ElementPtr>::iterator elemIt = elems.begin();elemIt!=elems.end();elemIt++){
-    int cellID = (*elemIt)->cellID();
+    GlobalIndexType cellID = (*elemIt)->cellID();
     ElementTypePtr elemType = (*elemIt)->elementType();
     CacheInfo cacheInfo = {elemType,cellID,mesh->physicalCellNodesForCell(cellID)};
     subCellCacheInfo.push_back(cacheInfo);
@@ -525,15 +523,15 @@ double Function::integrate(Teuchos::RCP<Mesh> mesh, double tol, bool testVsTest)
     ++iter;
     // check relative error, tag subcells to refine
     double tempIntegral = 0.0;
-    set<int> subCellsToRefine;
+    set<GlobalIndexType> subCellsToRefine;
     for (int i = 0;i<subCellsToCheck.size();i++){
       ElementTypePtr elemType = subCellsToCheck[i].elemType;
-      int cellID = subCellsToCheck[i].cellID;
+      GlobalIndexType cellID = subCellsToCheck[i].cellID;
       FieldContainer<double> nodes = subCellsToCheck[i].subCellNodes;
       BasisCachePtr basisCache = Teuchos::rcp(new BasisCache(elemType,mesh));
       int cubEnrich = 2; // arbitrary
       BasisCachePtr enrichedCache =  Teuchos::rcp(new BasisCache(elemType,mesh,testVsTest,cubEnrich));
-      vector<int> cellIDs;
+      vector<GlobalIndexType> cellIDs;
       cellIDs.push_back(cellID);
       basisCache->setPhysicalCellNodes(nodes,cellIDs,true);
       enrichedCache->setPhysicalCellNodes(nodes,cellIDs,true);
@@ -559,7 +557,7 @@ double Function::integrate(Teuchos::RCP<Mesh> mesh, double tol, bool testVsTest)
 
     // reconstruct subcell list
     vector<CacheInfo> newSubCells;
-    for (set<int>::iterator setIt = subCellsToRefine.begin();setIt!=subCellsToRefine.end();setIt++){
+    for (set<GlobalIndexType>::iterator setIt = subCellsToRefine.begin();setIt!=subCellsToRefine.end();setIt++){
       CacheInfo newCacheInfo = subCellsToCheck[*setIt];
       unsigned cellTopoKey = newCacheInfo.elemType->cellTopoPtr->getKey();
       switch (cellTopoKey)
@@ -700,7 +698,7 @@ double Function::integralOfJump(Teuchos::RCP<Mesh> mesh, int cubatureDegreeEnric
   return integral;
 }
 
-double Function::integralOfJump(Teuchos::RCP<Mesh> mesh, int cellID, int sideIndex, int cubatureDegreeEnrichment) {
+double Function::integralOfJump(Teuchos::RCP<Mesh> mesh, GlobalIndexType cellID, int sideIndex, int cubatureDegreeEnrichment) {
   // for boundaries, the jump is 0
   if (mesh->boundary().boundaryElement(cellID,sideIndex)) {
     return 0;
@@ -712,9 +710,9 @@ double Function::integralOfJump(Teuchos::RCP<Mesh> mesh, int cellID, int sideInd
   ElementTypePtr neighborType = mesh->getElement(neighborCellID)->elementType();
 
   // TODO: rewrite this to compute in distributed fashion
-  vector<int> myCellIDVector;
+  vector<GlobalIndexType> myCellIDVector;
   myCellIDVector.push_back(cellID);
-  vector<int> neighborCellIDVector;
+  vector<GlobalIndexType> neighborCellIDVector;
   neighborCellIDVector.push_back(neighborCellID);
 
   BasisCachePtr myCache = Teuchos::rcp(new BasisCache( myType, mesh, true, cubatureDegreeEnrichment));
@@ -748,8 +746,8 @@ double Function::integrate(Teuchos::RCP<Mesh> mesh, int cubatureDegreeEnrichment
     vector< ElementPtr > cells = mesh->elementsOfType(myPartition, elemType);
 
     int numCells = cells.size();
-    vector<int> cellIDs;
-    for (int cellIndex = 0; cellIndex < numCells; cellIndex++) {
+    vector<GlobalIndexType> cellIDs;
+    for (IndexType cellIndex = 0; cellIndex < numCells; cellIndex++) {
       cellIDs.push_back( cells[cellIndex]->cellID() );
     }
     basisCache->setPhysicalCellNodes(mesh->physicalCellNodes(elemType), cellIDs, this->boundaryValueOnly() || requireSideCache);
@@ -764,7 +762,7 @@ double Function::integrate(Teuchos::RCP<Mesh> mesh, int cubatureDegreeEnrichment
       this->integrate(cellIntegrals, basisCache);
     }
 //    cout << "cellIntegrals:\n" << cellIntegrals;
-    for (int cellIndex = 0; cellIndex < numCells; cellIndex++) {
+    for (IndexType cellIndex = 0; cellIndex < numCells; cellIndex++) {
       integral += cellIntegrals(cellIndex);
     }
   }
@@ -951,9 +949,9 @@ void Function::writeBoundaryValuesToMATLABFile(Teuchos::RCP<Mesh> mesh, const st
     FieldContainer<double> physicalCellNodes = mesh->physicalCellNodesGlobal(elemTypePtr);
     int numCells = physicalCellNodes.dimension(0);
     // determine cellIDs
-    vector<int> cellIDs;
+    vector<GlobalIndexType> cellIDs;
     for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
-      int cellID = mesh->cellID(elemTypePtr, cellIndex, -1); // -1: "global" lookup (independent of MPI node)
+      GlobalIndexType cellID = mesh->cellID(elemTypePtr, cellIndex, -1); // -1: "global" lookup (independent of MPI node)
       cellIDs.push_back(cellID);
     }
     basisCache->setPhysicalCellNodes(physicalCellNodes, cellIDs, true); // true: create side caches
@@ -1018,7 +1016,7 @@ void Function::writeValuesToMATLABFile(Teuchos::RCP<Mesh> mesh, const string &fi
   vector< ElementTypePtr > elementTypes = mesh->elementTypes();
   vector< ElementTypePtr >::iterator elemTypeIt;
 
-  fout << "numCells = " << mesh->activeElements().size() << endl;
+  fout << "numCells = " << mesh->numActiveElements() << endl;
   fout << "x=cell(numCells,1);y=cell(numCells,1);z=cell(numCells,1);" << endl;
 
   // initialize storage
@@ -1039,7 +1037,7 @@ void Function::writeValuesToMATLABFile(Teuchos::RCP<Mesh> mesh, const string &fi
     FieldContainer<double> physicalCellNodes = mesh->physicalCellNodesGlobal(elemTypePtr);
     int numCells = physicalCellNodes.dimension(0);
     // determine cellIDs
-    vector<int> cellIDs;
+    vector<GlobalIndexType> cellIDs;
     for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
       int cellID = mesh->cellID(elemTypePtr, cellIndex, -1); // -1: "global" lookup (independent of MPI node)
       cellIDs.push_back(cellID);
@@ -1761,7 +1759,7 @@ void SideParityFunction::values(FieldContainer<double> &values, BasisCachePtr si
   if (sideIndex == -1) {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "non-sideBasisCache passed into SideParityFunction");
   }
-  vector<int> cellIDs = sideBasisCache->cellIDs();
+  vector<GlobalIndexType> cellIDs = sideBasisCache->cellIDs();
   if (cellIDs.size() != numCells) {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "cellIDs.size() != numCells");
   }

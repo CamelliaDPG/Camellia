@@ -109,7 +109,7 @@ bool HConvergenceStudyTests::testBestApproximationErrorComputation() {
 //    cout << "testBestApproximationErrorComputation: l2 error of fIntegral: " << l2ErrorOfAverage << endl;
     
     ElementTypePtr elemType = mesh->elementTypes()[0];
-    vector<int> cellIDs = mesh->cellIDsOfTypeGlobal(elemType);
+    vector<GlobalIndexType> cellIDs = mesh->cellIDsOfTypeGlobal(elemType);
     
     bool testVsTest = false;
     BasisCachePtr basisCache = Teuchos::rcp( new BasisCache(elemType, mesh, testVsTest, cubatureDegreeEnrichment) );

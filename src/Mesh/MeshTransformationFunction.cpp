@@ -236,7 +236,7 @@ public:
     return Teuchos::rcp( new CellTransformationFunction(_basis,_basisCoefficients,OP_DZ) );
   }
   
-  static Teuchos::RCP<CellTransformationFunction> cellTransformation(MeshPtr mesh, int cellID, const vector< ParametricCurvePtr > edgeFunctions) {
+  static Teuchos::RCP<CellTransformationFunction> cellTransformation(MeshPtr mesh, GlobalIndexType cellID, const vector< ParametricCurvePtr > edgeFunctions) {
     return Teuchos::rcp( new CellTransformationFunction(mesh,cellID,edgeFunctions));
   }
 };
@@ -244,7 +244,7 @@ public:
 typedef Teuchos::RCP<CellTransformationFunction> CellTransformationFunctionPtr;
 
 // protected method; used for dx(), dy(), dz():
-MeshTransformationFunction::MeshTransformationFunction(MeshPtr mesh, map< int, FunctionPtr> cellTransforms, EOperatorExtended op) : Function(1) {
+MeshTransformationFunction::MeshTransformationFunction(MeshPtr mesh, map< GlobalIndexType, FunctionPtr> cellTransforms, EOperatorExtended op) : Function(1) {
   _mesh = mesh;
   _cellTransforms = cellTransforms;
   _op = op;
@@ -252,7 +252,7 @@ MeshTransformationFunction::MeshTransformationFunction(MeshPtr mesh, map< int, F
 
 }
 
-MeshTransformationFunction::MeshTransformationFunction(MeshPtr mesh, set<int> cellIDsToTransform) : Function(1) { // vector-valued Function
+MeshTransformationFunction::MeshTransformationFunction(MeshPtr mesh, set<GlobalIndexType> cellIDsToTransform) : Function(1) { // vector-valued Function
   _op = OP_VALUE;
   _mesh = mesh;
   _maxPolynomialDegree = 1; // 1 is the degree of the identity transform (x,y) -> (x,y)
@@ -263,7 +263,7 @@ int MeshTransformationFunction::maxDegree() {
   return _maxPolynomialDegree;
 }
 
-bool MeshTransformationFunction::mapRefCellPointsUsingExactGeometry(FieldContainer<double> &cellPoints, const FieldContainer<double> &refCellPoints, int cellID) {
+bool MeshTransformationFunction::mapRefCellPointsUsingExactGeometry(FieldContainer<double> &cellPoints, const FieldContainer<double> &refCellPoints, GlobalIndexType cellID) {
   // returns true if the MeshTransformationFunction handles this cell, false otherwise
   // if true, then populates cellPoints
   if (_cellTransforms.find(cellID) == _cellTransforms.end()) {
@@ -312,9 +312,9 @@ bool MeshTransformationFunction::mapRefCellPointsUsingExactGeometry(FieldContain
   return true;
 }
 
-void MeshTransformationFunction::updateCells(const set<int> &cellIDs) {
-  for (set<int>::iterator cellIDIt = cellIDs.begin(); cellIDIt != cellIDs.end(); cellIDIt++) {
-    int cellID = *cellIDIt;
+void MeshTransformationFunction::updateCells(const set<GlobalIndexType> &cellIDs) {
+  for (set<GlobalIndexType>::iterator cellIDIt = cellIDs.begin(); cellIDIt != cellIDs.end(); cellIDIt++) {
+    GlobalIndexType cellID = *cellIDIt;
     CellTransformationFunctionPtr cellTransform =  CellTransformationFunction::cellTransformation(_mesh, cellID, _mesh->parametricEdgesForCell(cellID));
     _cellTransforms[cellID] = cellTransform;
     _maxPolynomialDegree = max(_maxPolynomialDegree,cellTransform->basisDegree());
@@ -323,7 +323,7 @@ void MeshTransformationFunction::updateCells(const set<int> &cellIDs) {
 
 void MeshTransformationFunction::values(FieldContainer<double> &values, BasisCachePtr basisCache) {
   CHECK_VALUES_RANK(values);
-  vector<int> cellIDs = basisCache->cellIDs();
+  vector<GlobalIndexType> cellIDs = basisCache->cellIDs();
   // identity map is the right thing most of the time
   // we'll do something different only where necessary
   int spaceDim = basisCache->getSpaceDim();
@@ -352,7 +352,7 @@ void MeshTransformationFunction::values(FieldContainer<double> &values, BasisCac
 //    cout << "values before cellTransformation:\n" << values;
 //  }
   for (int cellIndex=0; cellIndex < cellIDs.size(); cellIndex++) {
-    int cellID = cellIDs[cellIndex];
+    GlobalIndexType cellID = cellIDs[cellIndex];
     if (_cellTransforms.find(cellID) == _cellTransforms.end()) continue;
     FunctionPtr cellTransformation = _cellTransforms[cellID];
     ((CellTransformationFunction*)cellTransformation.get())->setCellIndex(cellIndex);
@@ -363,11 +363,11 @@ void MeshTransformationFunction::values(FieldContainer<double> &values, BasisCac
 //  }
 }
 
-map< int, FunctionPtr > applyOperatorToCellTransforms(const map< int, FunctionPtr > &cellTransforms, EOperatorExtended op) {
-  map<int, FunctionPtr > newTransforms;
-  for (map< int, FunctionPtr >::const_iterator cellTransformIt = cellTransforms.begin();
+map< GlobalIndexType, FunctionPtr > applyOperatorToCellTransforms(const map< GlobalIndexType, FunctionPtr > &cellTransforms, EOperatorExtended op) {
+  map<GlobalIndexType, FunctionPtr > newTransforms;
+  for (map< GlobalIndexType, FunctionPtr >::const_iterator cellTransformIt = cellTransforms.begin();
        cellTransformIt != cellTransforms.end(); cellTransformIt++) {
-    int cellID = cellTransformIt->first;
+    GlobalIndexType cellID = cellTransformIt->first;
     newTransforms[cellID] = Function::op(cellTransformIt->second, op);
   }
   return newTransforms;
@@ -394,15 +394,15 @@ FunctionPtr MeshTransformationFunction::dz() {
   return Teuchos::rcp( new MeshTransformationFunction(_mesh, applyOperatorToCellTransforms(_cellTransforms, op),op));
 }
 
-void MeshTransformationFunction::didHRefine(const set<int> &cellIDs) {
-  set<int> childrenWithCurvedEdges;
+void MeshTransformationFunction::didHRefine(const set<GlobalIndexType> &cellIDs) {
+  set<GlobalIndexType> childrenWithCurvedEdges;
   
   MeshTopologyPtr topology = _mesh->getTopology();
   
-  for (set<int>::iterator cellIDIt = cellIDs.begin(); cellIDIt != cellIDs.end(); cellIDIt++) {
-    int parentCellID = *cellIDIt;
-    vector<unsigned> childCells = topology->getCell(parentCellID)->getChildIndices();
-    for (vector<unsigned>::iterator childCellIt = childCells.begin(); childCellIt != childCells.end(); childCellIt++) {
+  for (set<GlobalIndexType>::iterator cellIDIt = cellIDs.begin(); cellIDIt != cellIDs.end(); cellIDIt++) {
+    GlobalIndexType parentCellID = *cellIDIt;
+    vector<IndexType> childCells = topology->getCell(parentCellID)->getChildIndices();
+    for (vector<IndexType>::iterator childCellIt = childCells.begin(); childCellIt != childCells.end(); childCellIt++) {
       unsigned childCellID = *childCellIt;
       if (topology->cellHasCurvedEdges(childCellID)) {
         childrenWithCurvedEdges.insert(childCellID);
@@ -412,7 +412,7 @@ void MeshTransformationFunction::didHRefine(const set<int> &cellIDs) {
   updateCells(childrenWithCurvedEdges);
 }
 
-void MeshTransformationFunction::didPRefine(const set<int> &cellIDs) {
+void MeshTransformationFunction::didPRefine(const set<GlobalIndexType> &cellIDs) {
   updateCells(cellIDs);
 }
 

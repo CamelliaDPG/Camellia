@@ -10,6 +10,7 @@
 #define Camellia_debug_OseenFormulations_h
 
 #include "StokesFormulation.h"
+#include "MeshFactory.h"
 
 class OseenFormulation {
 protected:
@@ -308,7 +309,7 @@ class VGPOseenProblem {
         trialSpaceEnhancements[u2->ID()] = 1;
       }
       
-      _mesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells,
+      _mesh = MeshFactory::buildQuadMesh(quadPoints, horizontalCells, verticalCells,
                                   _vgpOseenFormulation->bf(), H1Order, H1Order+pToAdd, 
                                   triangulate, useConformingTraces, trialSpaceEnhancements);
     }

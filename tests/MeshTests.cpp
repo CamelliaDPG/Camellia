@@ -1,4 +1,5 @@
 #include "MeshTests.h"
+#include "MeshFactory.h"
 
 void MeshTests::SetUp()
 {
@@ -66,7 +67,7 @@ TEST_F(MeshTests, TestBuildMesh)
    quadPoints(3,0) = -1.0;
    quadPoints(3,1) = 1.0;
   
-  Teuchos::RCP<Mesh> myMesh = Mesh::buildQuadMesh(quadPoints, 1, 1, bilinearForm, order, order);
+  Teuchos::RCP<Mesh> myMesh = MeshFactory::buildQuadMesh(quadPoints, 1, 1, bilinearForm, order, order);
   // some basic sanity checks:
   int numElementsExpected = 1;
   EXPECT_EQ(numElementsExpected, myMesh->numElements())
@@ -74,7 +75,7 @@ TEST_F(MeshTests, TestBuildMesh)
   EXPECT_TRUE(MeshTestUtility::checkMeshDofConnectivities(myMesh))
     << "MeshTestUtility::checkMeshDofConnectivities failed for 1x1 mesh." << endl;
   
-  Teuchos::RCP<Mesh> myMesh2x1 = Mesh::buildQuadMesh(quadPoints, 2, 1, bilinearForm, order, order);
+  Teuchos::RCP<Mesh> myMesh2x1 = MeshFactory::buildQuadMesh(quadPoints, 2, 1, bilinearForm, order, order);
   // some basic sanity checks:
   numElementsExpected = 2;
   EXPECT_EQ(numElementsExpected, myMesh2x1->numElements())

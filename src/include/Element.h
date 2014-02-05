@@ -41,44 +41,44 @@
 #include "ElementType.h"
 #include "RefinementPattern.h"
 
+#include "Cell.h"
+
 class Element;
 typedef Teuchos::RCP< Element > ElementPtr;
+
+class Mesh;
+typedef Teuchos::RCP< Mesh > MeshPtr;
 
 using namespace std;
 
 class Element {
 private:
-  bool _deleted;
-  int _cellID; // unique ID, also the index for the Mesh into the Elements vector
+  CellPtr _cell;
+  Mesh* _mesh;
+  
   Teuchos::RCP< ElementType > _elemTypePtr;
-  int _cellIndex; // index into the Mesh's Elements vector for ElementType for a given partition
-  int _globalCellIndex; // index into a vector of *all* elements of a given type across partitions...
-  int _numSides;
-  pair< Element* , int > * _neighbors; // the int is a sideIndex in neighbor (i.e. which of neighbor's sides are we?)
-  //int * _subSideIndicesInNeighbors;    // for neighbors that have hanging nodes that we are part of...
-  Teuchos::RCP<RefinementPattern> _refPattern; // the refinement pattern that gives rise to _children
-  vector< ElementPtr > _children;
-  Element* _parent;
-  map<unsigned, unsigned> _parentSideLookupTable; // childSideIndex --> shared parentSideIndex
+  IndexType _cellIndex; // index into the Mesh's Elements vector for ElementType for a given partition
+  GlobalIndexType _globalCellIndex; // index into a vector of *all* elements of a given type across partitions...
+
+  bool _deleted;
 public:
 //constructor:
-  Element(int cellID, Teuchos::RCP< ElementType > elemType, int cellIndex, int globalCellIndex=-1);
+  Element(Mesh* mesh, GlobalIndexType cellID, Teuchos::RCP< ElementType > elemType, IndexType cellIndex, GlobalIndexType globalCellIndex=-1);
   
   Teuchos::RCP< ElementType > elementType() { return _elemTypePtr; }
   void setElementType( Teuchos::RCP< ElementType > newElementType) { _elemTypePtr = newElementType; }
   
-  pair<int,int> ancestralNeighborCellIDForSide(int sideIndex);
-  int cellID() { return _cellID; }
+  int cellID() { return _cell->cellIndex(); }
   int cellIndex() { return _cellIndex; }
   void setCellIndex(int newCellIndex) { _cellIndex = newCellIndex; }
   int globalCellIndex() { return _globalCellIndex; }
   void setGlobalCellIndex(int globalCellIndex) { _globalCellIndex = globalCellIndex; }
-  int numSides() { return _numSides; }
+  int numSides() { return _cell->topology()->getSideCount(); }
   void getSidePointsInNeighborRefCoords(FieldContainer<double> &neighborRefPoints, int sideIndex,
                                         const FieldContainer<double> &refPoints);
   void getSidePointsInParentRefCoords(FieldContainer<double> &parentRefPoints, int sideIndex, 
                                       const FieldContainer<double> &childRefPoints);
-  void getNeighbor(Element* &elemPtr, int & mySideIndexInNeighbor, int neighborsSideIndexInMe);
+  ElementPtr getNeighbor(int & mySideIndexInNeighbor, int neighborsSideIndexInMe);
   int getNeighborCellID(int sideIndex);
   int getSideIndexInNeighbor(int sideIndex);
   
@@ -90,13 +90,11 @@ public:
   void setRefinementPattern(Teuchos::RCP<RefinementPattern> &refPattern);
   vector< pair<unsigned, unsigned> > & childIndicesForSide(unsigned sideIndex); // pair( child index, sideIndex in child of the side shared with parent)
   
-  void addChild(Teuchos::RCP< Element > childPtr);
-  Element* getParent();
-  void setParent(Element* parentPtr, map<unsigned,unsigned> parentSideLookupTable);
+  ElementPtr getParent();
+
   int parentSideForSideIndex(int mySideIndex);
   int numChildren();
-  Teuchos::RCP< Element > getChild(int childIndex);
-  bool isNeighbor(Teuchos::RCP<Element> putativeNeighbor, int &sideIndexForNeighbor);
+  ElementPtr getChild(int childIndex);
   bool isActive();
   bool isParent();
   bool isChild();

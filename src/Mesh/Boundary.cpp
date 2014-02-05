@@ -50,14 +50,10 @@ Boundary::Boundary() {
 
 void Boundary::setMesh(Mesh* mesh) {
   _mesh = mesh;
+  buildLookupTables();
 }
 
-void Boundary::addElement( int cellID, int sideIndex ) {
-  //cout << "Boundary: addElement( cellID = " << cellID << ", sideIndex = " << sideIndex << " )\n";
-  _boundaryElements.insert( make_pair(cellID,sideIndex) );
-}
-
-bool Boundary::boundaryElement(int cellID) {
+bool Boundary::boundaryElement(GlobalIndexType cellID) {
   int numSides = _mesh->getElement(cellID)->numSides();
   for (int sideIndex=0; sideIndex<numSides; sideIndex++) {
     if (boundaryElement(cellID,sideIndex)) {
@@ -67,44 +63,37 @@ bool Boundary::boundaryElement(int cellID) {
   return false;
 }
 
-bool Boundary::boundaryElement( int cellID, int sideIndex ) {
+bool Boundary::boundaryElement( GlobalIndexType cellID, int sideIndex ) {
   pair<int,int> key = make_pair(cellID,sideIndex);  
   return _boundaryElements.find(key) != _boundaryElements.end();
-}
-
-void Boundary::deleteElement( int cellID, int sideIndex ) {
-  //cout << "Boundary: deleteElement( cellID = " << cellID << ", sideIndex = " << sideIndex << " )\n";
-  pair<int,int> key = make_pair(cellID,sideIndex);
-  if ( _boundaryElements.find(key) != _boundaryElements.end() ) {
-    _boundaryElements.erase( key );
-  }
 }
 
 void Boundary::buildLookupTables() {
   _boundaryElementsByType.clear();
   _boundaryCellIDs.clear();
-  set< pair< int, int > >::iterator entryIt;
+  _boundaryElements = _mesh->getTopology()->getActiveBoundaryCells();
+  set< pair< GlobalIndexType, unsigned > >::iterator entryIt;
   //cout << "# Boundary entries: " << _boundaryElements.size() << ":\n";
   for (entryIt=_boundaryElements.begin(); entryIt!=_boundaryElements.end(); entryIt++) {
-    int cellID = (*entryIt).first;
+    GlobalIndexType cellID = entryIt->first;
     TEUCHOS_TEST_FOR_EXCEPTION(cellID < 0, std::invalid_argument, "cellID should be >= 0.");
-    Teuchos::RCP< Element > elemPtr = _mesh->elements()[cellID]; 
-    int sideIndex = (*entryIt).second;
+    Teuchos::RCP< Element > elemPtr = _mesh->getElement(cellID);
+    unsigned sideIndex = entryIt->second;
     ElementTypePtr elemTypePtr = elemPtr->elementType();
     _boundaryElementsByType[elemTypePtr.get()].push_back( make_pair( elemPtr->globalCellIndex(), sideIndex ) );
     _boundaryCellIDs[elemTypePtr.get()].push_back( elemPtr->cellID() );
-    //cout << "cellID:\t" << elemPtr->cellID() << "\t sideIndex:\t" << sideIndex << endl;
+//    cout << "Boundary::buildLookupTables(): cellID:\t" << elemPtr->cellID() << "\t sideOrdinal:\t" << sideIndex << endl;
   }
 }
 
-vector< pair< int, int > > Boundary::boundaryElements(Teuchos::RCP< ElementType > elemTypePtr) {
+vector< pair< GlobalIndexType, int > > Boundary::boundaryElements(Teuchos::RCP< ElementType > elemTypePtr) {
   return _boundaryElementsByType[elemTypePtr.get()];
 }
 
-void Boundary::bcsToImpose(FieldContainer<int> &globalIndices, FieldContainer<double> &globalValues, BC &bc, 
-                           set<int> &globalIndexFilter) {
+void Boundary::bcsToImpose(FieldContainer<GlobalIndexType> &globalIndices, FieldContainer<double> &globalValues, BC &bc,
+                           set<GlobalIndexType> &globalIndexFilter) {
   // there's a more efficient way to do this--but it's probably not worth it just yet
-  FieldContainer<int> allGlobalIndices;
+  FieldContainer<GlobalIndexType> allGlobalIndices;
   FieldContainer<double> allGlobalValues;
   this->bcsToImpose(allGlobalIndices,allGlobalValues,bc);
   set<int> matchingFCIndices;
@@ -130,7 +119,7 @@ void Boundary::bcsToImpose(FieldContainer<int> &globalIndices, FieldContainer<do
   }
 }
 
-void Boundary::bcsToImpose(FieldContainer<int> &globalIndices,
+void Boundary::bcsToImpose(FieldContainer<GlobalIndexType> &globalIndices,
                            FieldContainer<double> &globalValues, BC &bc) {
   
   // first, let's check for any singletons (one-point BCs)
@@ -141,13 +130,13 @@ void Boundary::bcsToImpose(FieldContainer<int> &globalIndices,
     isSingleton[trialID] = bc.singlePointBC(trialID);
   }
   
-  map< ElementType*, map< int, double> > bcsForElementType;
+  map< ElementType*, map< GlobalIndexType, double> > bcsForElementType;
   vector< ElementTypePtr > elementTypes = _mesh->elementTypes();
   vector< ElementTypePtr >::iterator elemTypeIt;
   int numIndices = 0;
   for (elemTypeIt = elementTypes.begin(); elemTypeIt != elementTypes.end(); elemTypeIt++) {
     ElementTypePtr elemTypePtr = *(elemTypeIt);
-    map< int, double> bcGlobalIndicesAndValues;
+    map< GlobalIndexType, double> bcGlobalIndicesAndValues;
     bcsToImpose( bcGlobalIndicesAndValues, bc, elemTypePtr, isSingleton);
     bcsForElementType[elemTypePtr.get()] = bcGlobalIndicesAndValues;
     numIndices += bcGlobalIndicesAndValues.size();
@@ -160,8 +149,8 @@ void Boundary::bcsToImpose(FieldContainer<int> &globalIndices,
   int currentIndex = 0;
   for (elemTypeIt = elementTypes.begin(); elemTypeIt != elementTypes.end(); elemTypeIt++) {
     ElementTypePtr elemTypePtr = *(elemTypeIt);
-    map< int, double> bcGlobalIndicesAndValues = bcsForElementType[elemTypePtr.get()];
-    map< int, double>::iterator bcIt;
+    map< GlobalIndexType, double> bcGlobalIndicesAndValues = bcsForElementType[elemTypePtr.get()];
+    map< GlobalIndexType, double>::iterator bcIt;
     for (bcIt = bcGlobalIndicesAndValues.begin(); bcIt != bcGlobalIndicesAndValues.end(); bcIt++) {
       int index = (*bcIt).first;
       double value = (*bcIt).second;
@@ -190,7 +179,7 @@ void Boundary::bcsToImpose(FieldContainer<int> &globalIndices,
   //cout << "bcsToImpose: globalIndices:" << endl << globalIndices;
 }
 
-void Boundary::bcsToImpose( map<  int, double > &globalDofIndicesAndValues, BC &bc, 
+void Boundary::bcsToImpose( map<  GlobalIndexType, double > &globalDofIndicesAndValues, BC &bc,
                            Teuchos::RCP< ElementType > elemTypePtr, map<int,bool> &isSingleton) {
   // define a couple of important inner products:
   IPPtr ipL2 = Teuchos::rcp( new IP );
@@ -208,7 +197,7 @@ void Boundary::bcsToImpose( map<  int, double > &globalDofIndicesAndValues, BC &
   int sideDim = spaceDim - 1;
   Teuchos::RCP<Mesh> meshPtr = Teuchos::rcp(_mesh,false); // create an RCP that doesn't own the memory....
   BasisCachePtr basisCache = Teuchos::rcp( new BasisCache(elemTypePtr, meshPtr) );
-  vector< pair< int, int > > boundaryIndicesForType = _boundaryElementsByType[elemTypePtr.get()];
+  vector< pair< GlobalIndexType, int > > boundaryIndicesForType = _boundaryElementsByType[elemTypePtr.get()];
   for (vector< int >::iterator trialIt = trialIDs.begin(); trialIt != trialIDs.end(); trialIt++) {
     int trialID = *(trialIt);
     bool isTrace = _mesh->bilinearForm()->functionSpaceForTrial(trialID) == IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD;
@@ -219,19 +208,19 @@ void Boundary::bcsToImpose( map<  int, double > &globalDofIndicesAndValues, BC &
       
       // 1. Collect the physicalCellNodes according to sideIndex
       int numSides = elemTypePtr->cellTopoPtr->getSideCount();
-      vector< vector<int> > physicalCellIndicesPerSide;
-      vector< vector<int> > cellIDsPerSide;
+      vector< vector<GlobalIndexType> > physicalCellIndicesPerSide;
+      vector< vector<GlobalIndexType> > cellIDsPerSide;
       for (int sideIndex=0; sideIndex<numSides; sideIndex++) {
-        vector<int> thisSideIndices;
+        vector<GlobalIndexType> thisSideIndices;
         physicalCellIndicesPerSide.push_back(thisSideIndices);
-        vector<int> cellIDs;
+        vector<GlobalIndexType> cellIDs;
         cellIDsPerSide.push_back(cellIDs);
       }
-      vector< pair< int, int > >::iterator indexIterator;
-      vector< int >::iterator cellIDIterator = _boundaryCellIDs[elemTypePtr.get()].begin();
+      vector< pair< GlobalIndexType, int > >::iterator indexIterator;
+      vector< GlobalIndexType >::iterator cellIDIterator = _boundaryCellIDs[elemTypePtr.get()].begin();
       for (indexIterator=boundaryIndicesForType.begin(); indexIterator != boundaryIndicesForType.end(); 
            indexIterator++) {
-        int cellIndex = indexIterator->first;
+        GlobalIndexType cellIndex = indexIterator->first;
         int sideIndex = indexIterator->second;
         physicalCellIndicesPerSide[sideIndex].push_back(cellIndex);
         cellIDsPerSide[sideIndex].push_back(*cellIDIterator);
@@ -248,7 +237,7 @@ void Boundary::bcsToImpose( map<  int, double > &globalDofIndicesAndValues, BC &
         int numPoints = dimensions[1];
         int spaceDim = dimensions[2];
         for (int localCellIndex = 0; localCellIndex<numCells; localCellIndex++) {
-          int cellIndex = physicalCellIndicesPerSide[sideIndex][localCellIndex];
+          GlobalIndexType cellIndex = physicalCellIndicesPerSide[sideIndex][localCellIndex];
           for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
             for (int dim=0; dim<spaceDim; dim++) {
               physicalCellNodesForSide(localCellIndex,ptIndex,dim) = physicalCellNodes(cellIndex,ptIndex,dim);
@@ -264,8 +253,8 @@ void Boundary::bcsToImpose( map<  int, double > &globalDofIndicesAndValues, BC &
         BasisPtr basis = trialOrderingPtr->getBasis(trialID,sideIndex);
         int numDofs = basis->getCardinality();
         
-        int numCells = physicalCellNodesPerSide[sideIndex].dimension(0);
-        vector<int> cellIDs = cellIDsPerSide[sideIndex];
+        GlobalIndexType numCells = physicalCellNodesPerSide[sideIndex].dimension(0);
+        vector<GlobalIndexType> cellIDs = cellIDsPerSide[sideIndex];
         
         if (numCells > 0) {
           FieldContainer<double> dirichletValues(numCells,numDofs);
@@ -292,7 +281,7 @@ void Boundary::bcsToImpose( map<  int, double > &globalDofIndicesAndValues, BC &
 //          cout << " at points: \n" << basisCache->getSideBasisCache(sideIndex)->getPhysicalCubaturePoints();
 //          cout << "dirichletValues:" << endl << dirichletValues;
           
-          for (int localCellIndex=0; localCellIndex<numCells; localCellIndex++) {
+          for (GlobalIndexType localCellIndex=0; localCellIndex<numCells; localCellIndex++) {
             if (bcFunction->imposeOnCell(localCellIndex)) {
               for (int dofOrdinal=0; dofOrdinal<numDofs; dofOrdinal++) {
                 int cellID = cellIDsPerSide[sideIndex][localCellIndex];

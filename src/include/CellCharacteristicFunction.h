@@ -14,18 +14,18 @@
 using namespace std;
 
 class CellCharacteristicFunction : public Function {
-  set<int> _cellIDs;
+  set<GlobalIndexType> _cellIDs;
 public:
-  CellCharacteristicFunction(int cellID) : Function(0) {
+  CellCharacteristicFunction(GlobalIndexType cellID) : Function(0) {
     _cellIDs.insert(cellID);
   }
   
-  CellCharacteristicFunction(set<int> cellIDs) : Function(0) {
+  CellCharacteristicFunction(set<GlobalIndexType> cellIDs) : Function(0) {
     _cellIDs = cellIDs;
   }
   void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
     CHECK_VALUES_RANK(values);
-    vector<int> cellIDs = basisCache->cellIDs();
+    vector<GlobalIndexType> cellIDs = basisCache->cellIDs();
     int numCells = values.dimension(0);
     int numPoints = values.dimension(1);
     
@@ -36,7 +36,7 @@ public:
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "CellCharacteristicFunction requires cellIDs to be defined in BasisCache");
     }
     for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
-      int cellID = cellIDs[cellIndex];
+      GlobalIndexType cellID = cellIDs[cellIndex];
       if (_cellIDs.find(cellID) != _cellIDs.end()) {
         for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
           values(cellIndex,ptIndex) = 1;

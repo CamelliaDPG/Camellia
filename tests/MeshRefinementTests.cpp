@@ -1,9 +1,11 @@
 #include "MeshRefinementTests.h"
+#include "MeshFactory.h"
 
 void MeshRefinementTests::checkMultiElementStiffness(Teuchos::RCP<Mesh> mesh) {
-  int numElements = mesh->numActiveElements();
-  for (int cellIndex = 0; cellIndex < numElements; cellIndex++) {
-    checkMultiElementStiffness(mesh, mesh->getActiveElement(cellIndex)->cellID());
+  set<GlobalIndexType> activeCellIDs = mesh->getActiveCellIDs();
+  for (set<GlobalIndexType>::iterator cellIt = activeCellIDs.begin(); cellIt != activeCellIDs.end(); cellIt++) {
+    GlobalIndexType cellID = *cellIt;
+    checkMultiElementStiffness(mesh, cellID);
   }
 }
 
@@ -58,9 +60,10 @@ void MeshRefinementTests::checkMultiElementStiffness(Teuchos::RCP<Mesh> mesh, in
 }
 
 void MeshRefinementTests::checkPatchElementStiffness(Teuchos::RCP<Mesh> mesh) {
-  int numElements = mesh->numActiveElements();
-  for (int cellIndex = 0; cellIndex < numElements; cellIndex++) {
-    checkPatchElementStiffness(mesh, mesh->getActiveElement(cellIndex)->cellID());
+  set<GlobalIndexType> activeCellIDs = mesh->getActiveCellIDs();
+  for (set<GlobalIndexType>::iterator cellIt = activeCellIDs.begin(); cellIt != activeCellIDs.end(); cellIt++) {
+    GlobalIndexType cellID = *cellIt;
+    checkPatchElementStiffness(mesh, cellID);
   }
 }
 
@@ -100,9 +103,9 @@ void MeshRefinementTests::multiBrokenSides(set<int> &brokenSideSet, ElementPtr e
   brokenSideSet.clear();
   int numSides = elem->numSides();
   for (int sideIndex=0; sideIndex<numSides; sideIndex++) {  
-    Element* neighbor;
+    ElementPtr neighbor;
     int sideIndexInNeighbor;
-    elem->getNeighbor(neighbor, sideIndexInNeighbor, sideIndex);
+    neighbor = elem->getNeighbor(sideIndexInNeighbor, sideIndex);
     if (neighbor->cellID() == -1) {
       // boundary or this is a small side; either way, not broken
       continue;
@@ -456,9 +459,9 @@ void MeshRefinementTests::SetUp()
   
   _fluxBilinearForm = Teuchos::rcp( new TestBilinearFormFlux() );
   
-  _multiA = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells, _fluxBilinearForm, H1Order, H1Order+delta_p);
+  _multiA = MeshFactory::buildQuadMesh(quadPoints, horizontalCells, verticalCells, _fluxBilinearForm, H1Order, H1Order+delta_p);
   _multiA->setUsePatchBasis(false);
-  vector<int> cellsToRefine;
+  vector<GlobalIndexType> cellsToRefine;
   cellsToRefine.push_back(0); // hard-coding cellID: would be better to test for the point, but I'm being lazy
   _multiA->hRefine(cellsToRefine,RefinementPattern::regularRefinementPatternQuad());
   
@@ -468,14 +471,14 @@ void MeshRefinementTests::SetUp()
   _A4multi = _multiA->getElement(4);
   _A5multi = _multiA->getElement(5);
   
-  _multiB = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells, _fluxBilinearForm, H1Order, H1Order+delta_p);
+  _multiB = MeshFactory::buildQuadMesh(quadPoints, horizontalCells, verticalCells, _fluxBilinearForm, H1Order, H1Order+delta_p);
   _multiB->setUsePatchBasis(false);
   
   _B1multi = _multiB->getElement(1);
   
   cellsToRefine.clear();
   
-  _multiC = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells, _fluxBilinearForm, H1Order, H1Order+delta_p);
+  _multiC = MeshFactory::buildQuadMesh(quadPoints, horizontalCells, verticalCells, _fluxBilinearForm, H1Order, H1Order+delta_p);
   _multiC->setUsePatchBasis(false);
   
   cellsToRefine.push_back(0); // hard-coding cellID: would be better to test for the point, but I'm being lazy
@@ -491,7 +494,7 @@ void MeshRefinementTests::SetUp()
   _C5multi = _multiC->getElement(5);
   
   // PatchBasis meshes:
-  _patchA = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells, _fluxBilinearForm, H1Order, H1Order+delta_p);
+  _patchA = MeshFactory::buildQuadMesh(quadPoints, horizontalCells, verticalCells, _fluxBilinearForm, H1Order, H1Order+delta_p);
   _patchA->setUsePatchBasis(true);
   cellsToRefine.clear();
   cellsToRefine.push_back(0); // hard-coding cellID
@@ -503,14 +506,14 @@ void MeshRefinementTests::SetUp()
   _A4patch = _patchA->getElement(4);
   _A5patch = _patchA->getElement(5);
   
-  _patchB = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells, _fluxBilinearForm, H1Order, H1Order+delta_p);
+  _patchB = MeshFactory::buildQuadMesh(quadPoints, horizontalCells, verticalCells, _fluxBilinearForm, H1Order, H1Order+delta_p);
   _patchB->setUsePatchBasis(true);
   
   _B1patch = _patchB->getElement(1);
   
   cellsToRefine.clear();
   
-  _patchC = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells, _fluxBilinearForm, H1Order, H1Order+delta_p);
+  _patchC = MeshFactory::buildQuadMesh(quadPoints, horizontalCells, verticalCells, _fluxBilinearForm, H1Order, H1Order+delta_p);
   _patchC->setUsePatchBasis(true);
   cellsToRefine.push_back(0); // hard-coding cellID
   _patchC->hRefine(cellsToRefine,RefinementPattern::regularRefinementPatternQuad());

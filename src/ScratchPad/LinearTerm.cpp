@@ -1101,7 +1101,7 @@ void LinearTerm::computeRieszRep(Teuchos::RCP<Mesh> mesh, Teuchos::RCP<DPGInnerP
     FieldContainer<double> ipMatrix(numCells,numTestDofs,numTestDofs);
     
     // determine cellIDs
-    vector<int> cellIDs;
+    vector<GlobalIndexType> cellIDs;
     for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
       int cellID = mesh->cellID(elemTypePtr, cellIndex, rank);
       cellIDs.push_back(cellID);
@@ -1178,7 +1178,7 @@ void LinearTerm::computeRieszRHS(Teuchos::RCP<Mesh> mesh){
     int numCells = physicalCellNodes.dimension(0); // partition-local cells
       
     // determine cellIDs
-    vector<int> cellIDs;
+    vector<GlobalIndexType> cellIDs;
     for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
       int cellID = mesh->cellID(elemTypePtr, cellIndex, rank);
       cellIDs.push_back(cellID);

@@ -6,6 +6,7 @@
 #include "LagrangeConstraints.h"
 
 #include "SolutionExporter.h"
+#include "MeshFactory.h"
 
 IncompressibleFormulationsTests::IncompressibleFormulationsTests(bool thorough) {
   _thoroughMode = thorough;
@@ -174,15 +175,12 @@ void IncompressibleFormulationsTests::runTests(int &numTestsRun, int &numTestsPa
     cout << "Running IncompressibleFormulationsTests in non-thorough mode.  (This can still take a while...)" << endl;
   }
   
-  cout << "About to run testVGPNavierStokesLocalConservation(), which has an outstanding failure in which the solver fails with error code -22.  (In thorough mode, get 0 row warnings, presumably due to different parameters.)\n";
   setup();
   if ( testVGPNavierStokesLocalConservation() ) {
     numTestsPassed++;
   }
   numTestsRun++;
   teardown();
-  
-  
   
   setup();
   if (testVGPNavierStokesFormulationCorrectness()) {
@@ -272,7 +270,7 @@ bool IncompressibleFormulationsTests::functionsAgree(FunctionPtr f1, FunctionPtr
     vector< ElementPtr > cells = mesh->elementsOfTypeGlobal(elemType); // TODO: replace with local variant
     
     int numCells = cells.size();
-    vector<int> cellIDs;
+    vector<GlobalIndexType> cellIDs;
     for (int cellIndex = 0; cellIndex < numCells; cellIndex++) {
       cellIDs.push_back( cells[cellIndex]->cellID() );
     }
@@ -501,7 +499,7 @@ bool IncompressibleFormulationsTests::testVGPStokesFormulationConsistency() {
           Teuchos::RCP< VGPStokesFormulation > vgpStokesFormulation = Teuchos::rcp( new VGPStokesFormulation(mu) );
         
           // create a pointer to a new mesh:
-          Teuchos::RCP<Mesh> mesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells,
+          Teuchos::RCP<Mesh> mesh = MeshFactory::buildQuadMesh(quadPoints, horizontalCells, verticalCells,
                                                         vgpStokesFormulation->bf(), H1Order, H1Order+pToAdd);
           
           FunctionPtr u1_exact = exactFxns[0].first;
@@ -598,7 +596,7 @@ bool IncompressibleFormulationsTests::testVGPStokesFormulationCorrectness() {
       
       int H1Order = maxPolyOrder + 1;
       int pToAdd = 1;
-      Teuchos::RCP<Mesh> mesh = Mesh::buildQuadMesh(quadPoints, 1, 1,
+      Teuchos::RCP<Mesh> mesh = MeshFactory::buildQuadMesh(quadPoints, 1, 1,
                                                     vgpStokesFormulation->bf(), H1Order, H1Order+pToAdd);
       
       double tol = 1e-14;
@@ -656,7 +654,7 @@ bool IncompressibleFormulationsTests::testVGPStokesFormulationGraphNorm() {
     int horizontalCells = 2, verticalCells = 2;
     int H1Order = 1, pToAdd = 1;
     // create a pointer to a new mesh:
-    Teuchos::RCP<Mesh> mesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells,
+    Teuchos::RCP<Mesh> mesh = MeshFactory::buildQuadMesh(quadPoints, horizontalCells, verticalCells,
                                                   vgpStokesFormulation.bf(), H1Order, H1Order+pToAdd);
     ElementTypePtr elemType = mesh->getElement(0)->elementType(); // all elements have same type here
     BasisCachePtr basisCache = BasisCache::basisCacheForCellType(mesh, elemType);
@@ -740,7 +738,7 @@ bool IncompressibleFormulationsTests::testVVPStokesFormulationGraphNorm() {
     int horizontalCells = 2, verticalCells = 2;
     int H1Order = 1, pToAdd = 1;
     // create a pointer to a new mesh:
-    Teuchos::RCP<Mesh> mesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells,
+    Teuchos::RCP<Mesh> mesh = MeshFactory::buildQuadMesh(quadPoints, horizontalCells, verticalCells,
                                                   vvpStokesFormulation.bf(), H1Order, H1Order+pToAdd);
     ElementTypePtr elemType = mesh->getElement(0)->elementType(); // all elements have same type here
     BasisCachePtr basisCache = BasisCache::basisCacheForCellType(mesh, elemType);
@@ -945,7 +943,7 @@ bool IncompressibleFormulationsTests::testVGPNavierStokesFormulationCorrectness(
   FunctionPtr u1_k, u2_k, p_k;
   double Re_k = 10;
   // temp mesh to allow integration of the pressure:
-  Teuchos::RCP<Mesh> mesh_k = Mesh::buildQuadMesh(quadPoints, 5, 5,
+  Teuchos::RCP<Mesh> mesh_k = MeshFactory::buildQuadMesh(quadPoints, 5, 5,
                                                   VGPStokesFormulation(1.0/Re_k).bf(), 5, 6);
   NavierStokesFormulation::setKovasznay( Re_k, mesh_k, u1_k, u2_k, p_k );
   int polyOrder = 10;
@@ -1316,7 +1314,7 @@ bool IncompressibleFormulationsTests::testVGPNavierStokesLocalConservation() {
   }
   
   bool useLineSearch = false;
-  bool useCondensedSolve = true;
+  bool useCondensedSolve = false; // condensed solve doesn't support lagrange constraints right now...
   problem.iterate(useLineSearch,useCondensedSolve);
   
   problem.iterate(useLineSearch,useCondensedSolve); // get zero rows and column warnings here
@@ -1412,8 +1410,8 @@ bool IncompressibleFormulationsTests::testVGPNavierStokesFormulationLocalConserv
     solnIncrement->lagrangeConstraints()->addConstraint(u1hat->times_normal_x() + u2hat->times_normal_y()==zero);
   }
   
-  set<int> cellIDs = mesh->getActiveCellIDs();
-  for (set<int>::iterator cellIt = cellIDs.begin(); cellIt != cellIDs.end(); cellIt++) {
+  set<GlobalIndexType> cellIDs = mesh->getActiveCellIDs();
+  for (set<GlobalIndexType>::iterator cellIt = cellIDs.begin(); cellIt != cellIDs.end(); cellIt++) {
     int cellID = *cellIt;
     BasisCachePtr basisCache = BasisCache::basisCacheForCell(mesh, cellID);
     DofOrderingPtr testSpace = mesh->getElement(cellID)->elementType()->testOrderPtr;

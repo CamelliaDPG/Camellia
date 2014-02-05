@@ -69,7 +69,7 @@ public:
 
   virtual void addToValues(FieldContainer<double> &valuesToAddTo, BasisCachePtr basisCache);
 
-  double integralOfJump(Teuchos::RCP<Mesh> mesh, int cellID, int sideIndex, int cubatureDegreeEnrichment);
+  double integralOfJump(Teuchos::RCP<Mesh> mesh, GlobalIndexType cellID, int sideIndex, int cubatureDegreeEnrichment);
 
   double integralOfJump(Teuchos::RCP<Mesh> mesh, int cubatureDegreeEnrichment);
 
@@ -78,12 +78,12 @@ public:
 
   // integrate over only one cell
   //  double integrate(int cellID, Teuchos::RCP<Mesh> mesh, int cubatureDegreeEnrichment = 0);
-  double integrate(int cellID, Teuchos::RCP<Mesh> mesh, int cubatureDegreeEnrichment = 0, bool testVsTest = false);
+  double integrate(GlobalIndexType cellID, Teuchos::RCP<Mesh> mesh, int cubatureDegreeEnrichment = 0, bool testVsTest = false);
 
   // return all cell integrals
   map<int,double> cellIntegrals( Teuchos::RCP<Mesh> mesh, int cubatureDegreeEnrichment = 0, bool testVsTest = false);
   // return cell integrals specified in input argument cellIDs
-  map<int,double> cellIntegrals(vector<int> cellIDs, Teuchos::RCP<Mesh> mesh, int cubatureDegreeEnrichment = 0, bool testVsTest = false);
+  map<int,double> cellIntegrals(vector<GlobalIndexType> cellIDs, Teuchos::RCP<Mesh> mesh, int cubatureDegreeEnrichment = 0, bool testVsTest = false);
 
   double integrate( Teuchos::RCP<Mesh> mesh, int cubatureDegreeEnrichment = 0, bool testVsTest = false, bool requireSideCaches = false);
 
@@ -144,8 +144,8 @@ public:
   static FunctionPtr zn(int n=1);
 //  static FunctionPtr jump(FunctionPtr f);
 
-  static FunctionPtr cellCharacteristic(int cellID);
-  static FunctionPtr cellCharacteristic(set<int> cellIDs);
+  static FunctionPtr cellCharacteristic(GlobalIndexType cellID);
+  static FunctionPtr cellCharacteristic(set<GlobalIndexType> cellIDs);
 
   static FunctionPtr xPart(FunctionPtr vectorFunction);
   static FunctionPtr yPart(FunctionPtr vectorFunction);
@@ -186,8 +186,10 @@ class InternalBoundaryFunction : public BoundaryFunction{
   void values(FieldContainer<double> &values, BasisCachePtr basisCache){
     this->getFunction()->values(values,basisCache);
 
+    
+    // TODO: work out what was meant to happen here.  Should the following code be completed or excised?
     int sideIndex = basisCache->getSideIndex();
-    vector<int> cellIDs = basisCache->cellIDs();
+    vector<GlobalIndexType> cellIDs = basisCache->cellIDs();
     int numPoints = values.dimension(1);
     FieldContainer<double> points = basisCache->getPhysicalCubaturePoints();
     for (int i = 0;i<cellIDs.size();i++){

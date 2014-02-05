@@ -59,7 +59,9 @@ private:
   bool refinementsHaveNotIncreasedError();
   bool refinementsHaveNotIncreasedError(Teuchos::RCP<Solution> solution);
   
-  bool doPRefinementAndTestIt(ElementPtr elem, const string &testName);
+  void reportPOrders(vector< map<int,int> > &polyOrders);
+  
+  bool doPRefinementAndTestIt(CellIDType cellID, const string &testName);
   
   void makeSimpleRefinement();
   void makeMultiLevelRefinement();

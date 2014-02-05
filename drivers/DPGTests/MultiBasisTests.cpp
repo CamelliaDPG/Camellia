@@ -18,6 +18,11 @@
 
 #include "MeshTestUtility.h" // used for checkMeshConsistency
 #include "MeshTestSuite.h"
+#include "MeshFactory.h"
+
+#include "GDAMaximumRule2D.h"
+
+#include "GnuPlotUtil.h"
 
 typedef Teuchos::RCP< FieldContainer<double> > FCPtr;
 
@@ -26,69 +31,85 @@ typedef Teuchos::RCP< FieldContainer<double> > FCPtr;
 MultiBasisTests::MultiBasisTests() : _mesh(Teuchos::rcp((Mesh *)NULL)) {}
 
 void MultiBasisTests::runTests(int &numTestsRun, int &numTestsPassed) {
-  setup();
-  if (testMultiBasisLegacyTest()) {
-    numTestsPassed++;
-  }
-  numTestsRun++;
-  teardown();
   
-  try {
+//  try {
 //    setup();
 //    if (testSolveUniformMesh()) {
 //      numTestsPassed++;
 //    }
 //    numTestsRun++;
 //    teardown();
-    
-    setup();
-    if (testSimpleRefinement()) {
-      numTestsPassed++;
+  
+  setup();
+  if (testNeighborPRefinementSimple()) {
+    numTestsPassed++;
+  }
+  numTestsRun++;
+  teardown();
+  
+  setup();
+  if (testChildPRefinementSimple()) {
+    numTestsPassed++;
+  }
+  numTestsRun++;
+  teardown();
+  
+  setup();
+  if (testChildPRefinementMultiLevel()) {
+    numTestsPassed++;
+  }
+  numTestsRun++;
+  teardown();
+  
+  setup();
+  if (testNeighborPRefinementMultiLevel()) {
+    numTestsPassed++;
+  }
+  numTestsRun++;
+  teardown();
+  
+  setup();
+  if (testSimpleRefinement()) {
+    numTestsPassed++;
+  }
+  numTestsRun++;
+  teardown();
+  
+  setup();
+  if (testMultiLevelRefinement()) {
+    numTestsPassed++;
+  }
+  numTestsRun++;
+  teardown();
+  
+  setup();
+  if (testMultiBasisLegacyTest()) {
+    numTestsPassed++;
+  }
+  numTestsRun++;
+  teardown();
+
+//  } catch (...) {
+//    cout << "MultiBasisTests: caught exception while running tests.\n";
+//    teardown();
+//  }
+}
+
+void MultiBasisTests::reportPOrders(vector< map<int,int> > &polyOrders) {
+  map<int,int> fieldOrders = polyOrders[0];
+  for (map<int,int>::iterator fieldOrderIt=fieldOrders.begin(); fieldOrderIt != fieldOrders.end(); fieldOrderIt++) {
+    cout << "var ID " << fieldOrderIt->first << ": " << fieldOrderIt->second << endl;
+  }
+  for (int sideOrdinal=0; sideOrdinal<polyOrders.size()-1; sideOrdinal++) {
+    cout << "side ordinal " << sideOrdinal << ":" << endl;
+    map<int, int> sideOrders = polyOrders[sideOrdinal+1];
+    for (map<int,int>::iterator sideOrderIt=sideOrders.begin(); sideOrderIt != sideOrders.end(); sideOrderIt++) {
+      cout << "var ID " << sideOrderIt->first << ": " << sideOrderIt->second << endl;
     }
-    numTestsRun++;
-    teardown();
-    
-    setup();
-    if (testMultiLevelRefinement()) {
-      numTestsPassed++;
-    }
-    numTestsRun++;
-    teardown();
-    
-    setup();
-    if (testChildPRefinementSimple()) {
-      numTestsPassed++;
-    }
-    numTestsRun++;
-    teardown();
-    
-    setup();
-    if (testChildPRefinementMultiLevel()) {
-      numTestsPassed++;
-    }
-    numTestsRun++;
-    teardown();
-    
-    setup();
-    if (testNeighborPRefinementSimple()) {
-      numTestsPassed++;
-    }
-    numTestsRun++;
-    teardown();
-    
-    setup();
-    if (testNeighborPRefinementMultiLevel()) {
-      numTestsPassed++;
-    }
-    numTestsRun++;
-    teardown();
-  } catch (...) {
-    cout << "MultiBasisTests: caught exception while running tests.\n";
-    teardown();
   }
 }
 
-bool MultiBasisTests::basisValuesAgreeWithPermutedNeighbor(Teuchos::RCP<Mesh> mesh) {  
+bool MultiBasisTests::basisValuesAgreeWithPermutedNeighbor(Teuchos::RCP<Mesh> mesh) {
   // for every side (MultiBasis or no), compute values for that side, and values for its neighbor along
   // the same physical points.  (Imitate the comparison between parent and child, only remember that
   // the neighbor involves a flip: (-1,1) --> (1,-1).)
@@ -96,8 +117,10 @@ bool MultiBasisTests::basisValuesAgreeWithPermutedNeighbor(Teuchos::RCP<Mesh> me
   return MeshTestSuite::neighborBasesAgreeOnSides(mesh, _testPoints1D, true);
 }
 
-bool MultiBasisTests::doPRefinementAndTestIt(ElementPtr elem, const string &testName) {
+bool MultiBasisTests::doPRefinementAndTestIt(GlobalIndexType cellID, const string &testName) {
   bool success = true;
+  
+  ElementPtr elem = _mesh->getElement(cellID);
   
   if (elem->isChild()) {
     if ( ! childPolyOrdersAgreeWithParent(elem) ) {
@@ -112,9 +135,11 @@ bool MultiBasisTests::doPRefinementAndTestIt(ElementPtr elem, const string &test
 //  cout << "trialOrdering for cell " << elem->cellID() << " before p-refinement:\n";
 //  cout << *(elem->elementType()->trialOrderPtr);
   
-  vector<int> cellsToRefine;
+  vector<GlobalIndexType> cellsToRefine;
   cellsToRefine.push_back(elem->cellID());
   _mesh->pRefine(cellsToRefine);
+  
+  elem = _mesh->getElement(cellID);
   
 //  cout << "trialOrdering for cell " << elem->cellID() << " after p-refinement:\n";
 //  cout << *(elem->elementType()->trialOrderPtr);
@@ -131,8 +156,12 @@ bool MultiBasisTests::doPRefinementAndTestIt(ElementPtr elem, const string &test
   getPolyOrders(elemPOrdersAfterRefinement,elem);
   
   if ( ! pRefined( elemPOrdersBeforeRefinement, elemPOrdersAfterRefinement ) ) {
-    cout << testName << ": after p-refinement, child doesn't have increased p-order.\n";
+    cout << testName << ": after p-refinement, element doesn't have increased p-order.\n";
     success = false;
+    cout << "p-orders before refinement:\n";
+    reportPOrders(elemPOrdersBeforeRefinement);
+    cout << "p-orders after refinement:\n";
+    reportPOrders(elemPOrdersAfterRefinement);
   }
   
   if ( !meshLooksGood() ) {
@@ -190,7 +219,7 @@ void MultiBasisTests::getPolyOrdersAlongSharedSides(vector< map<int, int> > &chi
                                                     ElementPtr child) {
   childPOrderMapForSide.clear();
   parentPOrderMapForSide.clear();
-  Element* parent = child->getParent();
+  ElementPtr parent = child->getParent();
   int numSides = child->numSides();
   for (int sideIndex=0; sideIndex<numSides; sideIndex++) {
     int parentSideIndex = child->parentSideForSideIndex(sideIndex);
@@ -212,7 +241,7 @@ void MultiBasisTests::getPolyOrdersAlongSharedSides(vector< map<int, int> > &chi
 }
 
 void MultiBasisTests::hRefineAllActiveCells(Teuchos::RCP<Mesh> mesh) {
-  vector<int> cellIDsToRefine;
+  vector<GlobalIndexType> cellIDsToRefine;
   for (vector< ElementPtr >::const_iterator elemIt=mesh->activeElements().begin();
        elemIt != mesh->activeElements().end(); elemIt++) {
     int cellID = (*elemIt)->cellID();
@@ -222,7 +251,7 @@ void MultiBasisTests::hRefineAllActiveCells(Teuchos::RCP<Mesh> mesh) {
 }
 
 void MultiBasisTests::makeSimpleRefinement() {
-  vector<int> cellIDsToRefine;
+  vector<GlobalIndexType> cellIDsToRefine;
   //cout << "refining SW element (cellID " << _sw->cellID() << ")\n";
   cellIDsToRefine.push_back(_sw->cellID()); // this is cellID 0, as things are right now implemented
   // the next line will throw an exception in Mesh right now, because Mesh doesn't yet support MultiBasis
@@ -232,7 +261,7 @@ void MultiBasisTests::makeSimpleRefinement() {
 void MultiBasisTests::makeMultiLevelRefinement() {
   makeSimpleRefinement();
   
-  vector<int> cellIDsToRefine;
+  vector<GlobalIndexType> cellIDsToRefine;
   // now, find the southeast element in the refined element, and refine it
   // the southeast element should have (0.375, 0.125) at its center
   FieldContainer<double> point(1,2);
@@ -286,18 +315,17 @@ bool MultiBasisTests::multiBasisCorrectlyAppliedInMesh(Teuchos::RCP<Mesh> mesh, 
         // check who the (ancestor's) neighbor is on this side:
         int sideIndexInNeighbor;
         ElementPtr neighbor = mesh->ancestralNeighborForSide(elem,sideIndex,sideIndexInNeighbor);
-        int neighborCellID = neighbor->cellID();
         
-        if (neighborCellID != -1) {
+        if (neighbor.get() != NULL) {
           // then we'll check *neighbor's* basis instead:
           BasisPtr neighborBasis = neighbor->elementType()->trialOrderPtr->getBasis(fluxID,sideIndexInNeighbor);
           hasMultiBasis = BasisFactory::isMultiBasis(neighborBasis);
         }
         
         // check whether the neighbor relationship is symmetric:
-        if (neighborCellID == -1) {
+        if (neighbor.get() == NULL) {
           shouldHaveMultiBasis = false;
-        } else if (mesh->getElement(neighborCellID)->getNeighborCellID(sideIndexInNeighbor) != elem->cellID()) {
+        } else if (neighbor->getNeighborCellID(sideIndexInNeighbor) != elem->cellID()) {
           // i.e. neighbor's neighbor is our parent/ancestor--so we should have a MultiBasis
           shouldHaveMultiBasis = true;
         } else {
@@ -341,7 +369,7 @@ bool MultiBasisTests::polyOrdersAgree(const vector< map<int, int> > &pOrderMapVe
 }
 
 void MultiBasisTests::pRefineAllActiveCells() {
-  vector<int> cellIDsToRefine;
+  vector<GlobalIndexType> cellIDsToRefine;
   for (vector< ElementPtr >::const_iterator elemIt=_mesh->activeElements().begin();
        elemIt != _mesh->activeElements().end(); elemIt++) {
     int cellID = (*elemIt)->cellID();
@@ -360,8 +388,8 @@ bool MultiBasisTests::pRefined(const vector< map<int, int> > &pOrderMapForSideBe
     map<int, int>::iterator beforeMapIt;
     for (beforeMapIt=beforeMap.begin(); beforeMapIt != beforeMap.end(); beforeMapIt++) {
       pair<int,int> entry = *beforeMapIt;
-      int sideIndex = entry.first;
-      int pOrderAfter = afterMap[sideIndex];
+      int sideOrdinal = entry.first;
+      int pOrderAfter = afterMap[sideOrdinal];
       int pOrderBefore = entry.second;
       if (pOrderAfter != (pOrderBefore + 1)) {
         return false;
@@ -414,7 +442,7 @@ void MultiBasisTests::setup() {
 
 //  Teuchos::RCP<ConfusionBilinearForm> confusionBF = Teuchos::rcp( (ConfusionBilinearForm*) _confusionExactSolution->bilinearForm.get(), false); // false: doesn't own the memory, since the RCP _confusionExactSolution does that);
 
-  _mesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells, confusionBF, H1Order, H1Order+delta_p);
+  _mesh = MeshFactory::buildQuadMesh(quadPoints, horizontalCells, verticalCells, confusionBF, H1Order, H1Order+delta_p);
   
   Teuchos::RCP<DPGInnerProduct> ip = Teuchos::rcp( new ConfusionInnerProduct( confusionBF, _mesh ) );
   
@@ -581,9 +609,9 @@ bool MultiBasisTests::testMultiBasisLegacyTest() {
   for (int fieldIndex=0; fieldIndex<numFields; fieldIndex++) {
     for (int pointIndex=0; pointIndex<numPoints; pointIndex++) {
       for (int childIndex=0; childIndex<numChildren; childIndex++) { 
-        int childSubSideIndexInMB = Mesh::neighborChildPermutation(childIndex, numChildren);
+        int childSubSideIndexInMB = GDAMaximumRule2D::neighborChildPermutation(childIndex, numChildren);
         FieldContainer<double> values = (childIndex == 0) ? values1 : values2;
-        int permutedFieldIndex = Mesh::neighborDofPermutation(fieldIndex,numFields); // within the subbasis
+        int permutedFieldIndex = GDAMaximumRule2D::neighborDofPermutation(fieldIndex,numFields); // within the subbasis
         int mbPointIndex = childIndex*numPoints + pointIndex;
         MultiBasis<>* multiBasis = (MultiBasis<>*) mbTrialOrdering->getBasis(trialID,parentSideIndexInNeighbor).get();
         //      TODO: figure out which of the following is right, and fix whatever bug(s) are implied--
@@ -647,7 +675,7 @@ bool MultiBasisTests::testChildPRefinementSimple() {
   cellPoint(0,0) = 0.375; cellPoint(0,1) = 0.375;
   ElementPtr child = _mesh->elementsForPoints(cellPoint)[0];
   
-  return doPRefinementAndTestIt(child,"testChildPRefinementSimple");
+  return doPRefinementAndTestIt(child->cellID(),"testChildPRefinementSimple");
 }
 
 bool MultiBasisTests::testChildPRefinementMultiLevel() { 
@@ -660,7 +688,7 @@ bool MultiBasisTests::testChildPRefinementMultiLevel() {
   cellPoint(0,0) = 0.4375; cellPoint(0,1) = 0.1875;
   ElementPtr child = _mesh->elementsForPoints(cellPoint)[0];
   
-  return doPRefinementAndTestIt(child,"testChildPRefinementMultiLevel");
+  return doPRefinementAndTestIt(child->cellID(),"testChildPRefinementMultiLevel");
 }
 
 bool MultiBasisTests::testNeighborPRefinementSimple() {
@@ -673,7 +701,9 @@ bool MultiBasisTests::testNeighborPRefinementSimple() {
   cellPoint(0,0) = 0.75; cellPoint(0,1) = 0.25;
   ElementPtr neighbor = _mesh->elementsForPoints(cellPoint)[0];
   
-  return doPRefinementAndTestIt(neighbor,"testNeighborPRefinementSimple");
+//  GnuPlotUtil::writeComputationalMeshSkeleton("MultiBasisPRefinementMesh", _mesh, true); // true: label cells
+  
+  return doPRefinementAndTestIt(neighbor->cellID(),"testNeighborPRefinementSimple");
 }
 
 bool MultiBasisTests::testNeighborPRefinementMultiLevel() {
@@ -686,7 +716,7 @@ bool MultiBasisTests::testNeighborPRefinementMultiLevel() {
   cellPoint(0,0) = 0.75; cellPoint(0,1) = 0.25;
   ElementPtr neighbor = _mesh->elementsForPoints(cellPoint)[0];
   
-  return doPRefinementAndTestIt(neighbor,"testNeighborPRefinementMultiLevel");
+  return doPRefinementAndTestIt(neighbor->cellID(),"testNeighborPRefinementMultiLevel");
 } 
 
 bool MultiBasisTests::testSolveUniformMesh() {

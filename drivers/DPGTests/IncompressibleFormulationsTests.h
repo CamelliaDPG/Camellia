@@ -64,13 +64,13 @@ class IncompressibleFormulationsTests : public TestSuite {
   public:
   void runTests(int &numTestsRun, int &numTestsPassed);
   
+  bool testVGPNavierStokesLocalConservation();
+  
   bool testVGPStokesFormulationGraphNorm();
   bool testVVPStokesFormulationGraphNorm();
   
   bool testVGPStokesFormulationConsistency();
   bool testVGPStokesFormulationCorrectness();
-  
-  bool testVGPNavierStokesLocalConservation();
   
   bool testVGPNavierStokesFormulationConsistency();
   bool testVGPNavierStokesFormulationCorrectness();

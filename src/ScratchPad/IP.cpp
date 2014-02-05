@@ -17,8 +17,7 @@ IP::IP() : DPGInnerProduct( Teuchos::rcp( (BilinearForm*) NULL ) ) {}
 // added by Jesse - evaluate inner product at given varFunctions
 LinearTermPtr IP::evaluate(map< int, FunctionPtr> &varFunctions, bool boundaryPart) {
   LinearTermPtr ltEval = Teuchos::rcp(new LinearTerm);
-  for ( vector< LinearTermPtr >:: iterator ltIt = _linearTerms.begin();
-	ltIt != _linearTerms.end(); ltIt++) {
+  for ( vector< LinearTermPtr >:: iterator ltIt = _linearTerms.begin(); ltIt != _linearTerms.end(); ltIt++) {
     LinearTermPtr lt = *ltIt;
     FunctionPtr weight = lt->evaluate(varFunctions,boundaryPart);
     ltEval->addTerm(weight*lt);
@@ -26,7 +25,7 @@ LinearTermPtr IP::evaluate(map< int, FunctionPtr> &varFunctions, bool boundaryPa
   return ltEval;
 }
 
-void IP::addTerm( LinearTermPtr a) {
+void IP::addTerm( LinearTermPtr a ) {
   _linearTerms.push_back(a);
 }
 
@@ -58,7 +57,7 @@ void IP::computeInnerProductMatrix(FieldContainer<double> &innerProduct,
   
   unsigned numCells = physicalCubaturePoints.dimension(0);
   unsigned numPoints = physicalCubaturePoints.dimension(1);
-  unsigned spaceDim = physicalCubaturePoints.dimension(2);
+//  unsigned spaceDim = physicalCubaturePoints.dimension(2);
   unsigned numDofs = dofOrdering->totalDofs();
   
   shards::CellTopology cellTopo = basisCache->cellTopology();
@@ -139,8 +138,8 @@ void IP::computeInnerProductVector(FieldContainer<double> &ipVector,
   
   unsigned numCells = physicalCubaturePoints.dimension(0);
   unsigned numPoints = physicalCubaturePoints.dimension(1);
-  unsigned spaceDim = physicalCubaturePoints.dimension(2);
-  unsigned numDofs = dofOrdering->totalDofs();
+//  unsigned spaceDim = physicalCubaturePoints.dimension(2);
+//  unsigned numDofs = dofOrdering->totalDofs();
   
   shards::CellTopology cellTopo = basisCache->cellTopology();
   

@@ -20,31 +20,37 @@ void GDAMinimumRule::didChangePartitionPolicy() {
 //  rebuildLookups();
 }
 
-void GDAMinimumRule::didHRefine(const set<int> &parentCellIDs) {
+void GDAMinimumRule::didHRefine(const set<GlobalIndexType> &parentCellIDs) {
 //  rebuildLookups();
 }
 
-void GDAMinimumRule::didPRefine(const set<int> &cellIDs, int deltaP) {
+void GDAMinimumRule::didPRefine(const set<GlobalIndexType> &cellIDs, int deltaP) {
   
 //  rebuildLookups();
 }
 
-void GDAMinimumRule::didHUnrefine(const set<int> &parentCellIDs) {
+void GDAMinimumRule::didHUnrefine(const set<GlobalIndexType> &parentCellIDs) {
 //  rebuildLookups();
 }
 
-ElementTypePtr GDAMinimumRule::elementType(unsigned cellID) {
+ElementTypePtr GDAMinimumRule::elementType(GlobalIndexType cellID) {
   return Teuchos::rcp( (ElementType*) NULL);
 //  return _elementTypeForCell[cellID];
 }
 
-unsigned GDAMinimumRule::globalDofCount() {
+GlobalIndexType GDAMinimumRule::globalDofCount() {
   // TODO: implement this
   cout << "WARNING: globalDofCount() unimplemented.\n";
   return 0;
 }
 
-unsigned GDAMinimumRule::localDofCount() {
+void GDAMinimumRule::interpretLocalDofs(GlobalIndexType cellID, const FieldContainer<double> &localDofs,
+                                        FieldContainer<double> &globalDofs, FieldContainer<GlobalIndexType> &globalDofIndices) {
+  // TODO: implement this
+  cout << "WARNING: GDAMinimumRule::interpretLocalDofs() unimplemented.\n";
+}
+
+IndexType GDAMinimumRule::localDofCount() {
   // TODO: implement this
   cout << "WARNING: localDofCount() unimplemented.\n";
   return 0;

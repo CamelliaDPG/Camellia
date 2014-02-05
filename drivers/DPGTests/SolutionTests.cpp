@@ -3,6 +3,7 @@
 
 #include "Intrepid_FieldContainer.hpp"
 #include "Mesh.h"
+#include "MeshFactory.h"
 
 #ifdef HAVE_MPI
 #include <Teuchos_GlobalMPISession.hpp>
@@ -83,9 +84,7 @@ bool SolutionTests::solutionCoefficientsAreConsistent(Teuchos::RCP<Solution> sol
   Teuchos::RCP<BilinearForm> bf = soln->mesh()->bilinearForm();
   
   vector<int> trialIDs = bf->trialIDs();
-  
-  int numActiveElements = soln->mesh()->numActiveElements();
-  
+
   map<int, double> globalBasisCoefficients; // maps from globalDofID --> coefficient
   
   bool success = true;
@@ -95,9 +94,10 @@ bool SolutionTests::solutionCoefficientsAreConsistent(Teuchos::RCP<Solution> sol
     int trialID = trialIDs[i];
     if (bf->isFluxOrTrace(trialID) ) {
       // then there's a chance at inconsistency
-      for (int cellIndex=0; cellIndex<numActiveElements; cellIndex++) {
-        int cellID = soln->mesh()->getActiveElement(cellIndex)->cellID();
-        DofOrderingPtr trialSpace = soln->mesh()->getActiveElement(cellIndex)->elementType()->trialOrderPtr;
+      set<GlobalIndexType> activeCellIDs = soln->mesh()->getActiveCellIDs();
+      for (set<GlobalIndexType>::iterator cellIt = activeCellIDs.begin(); cellIt != activeCellIDs.end(); cellIt++) {
+        GlobalIndexType cellID = *cellIt;
+        DofOrderingPtr trialSpace = soln->mesh()->getElement(cellID)->elementType()->trialOrderPtr;
         int numSides = trialSpace->getNumSidesForVarID(trialID);
         for (int sideIndex=0; sideIndex<numSides; sideIndex++) {
           
@@ -171,10 +171,10 @@ void SolutionTests::setup() {
   
   // before we hRefine, compute a solution for comparison after refinement
   Teuchos::RCP<DPGInnerProduct> ip = Teuchos::rcp(new MathInnerProduct(_confusionExactSolution->bilinearForm()));
-  Teuchos::RCP<Mesh> mesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells, _confusionExactSolution->bilinearForm(), H1Order, H1Order+1);
+  Teuchos::RCP<Mesh> mesh = MeshFactory::buildQuadMesh(quadPoints, horizontalCells, verticalCells, _confusionExactSolution->bilinearForm(), H1Order, H1Order+1);
 
-  Teuchos::RCP<Mesh> poissonMesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells, _poissonExactSolution->bilinearForm(), H1Order, H1Order+2);
-  Teuchos::RCP<Mesh> poissonMesh1x1 = Mesh::buildQuadMesh(quadPoints, 1, 1, _poissonExactSolution->bilinearForm(), H1Order, H1Order+2);
+  Teuchos::RCP<Mesh> poissonMesh = MeshFactory::buildQuadMesh(quadPoints, horizontalCells, verticalCells, _poissonExactSolution->bilinearForm(), H1Order, H1Order+2);
+  Teuchos::RCP<Mesh> poissonMesh1x1 = MeshFactory::buildQuadMesh(quadPoints, 1, 1, _poissonExactSolution->bilinearForm(), H1Order, H1Order+2);
   Teuchos::RCP<DPGInnerProduct> poissonIp = Teuchos::rcp(new MathInnerProduct(_poissonExactSolution->bilinearForm()));
 
   _confusionSolution1_2x2 = Teuchos::rcp( new Solution(mesh, _confusionExactSolution->bc(), _confusionExactSolution->ExactSolution::rhs(), ip) );
@@ -305,18 +305,18 @@ void SolutionTests::runTests(int &numTestsRun, int &numTestsPassed) {
 }
 
 bool SolutionTests::storageSizesAgree(Teuchos::RCP< Solution > soln1, Teuchos::RCP< Solution > soln2) {
-  const map< int, FieldContainer<double> >* solnMap1 = &(soln1->solutionForCellIDGlobal());
-  const map< int, FieldContainer<double> >* solnMap2 = &(soln2->solutionForCellIDGlobal());
+  const map< GlobalIndexType, FieldContainer<double> >* solnMap1 = &(soln1->solutionForCellIDGlobal());
+  const map< GlobalIndexType, FieldContainer<double> >* solnMap2 = &(soln2->solutionForCellIDGlobal());
   if (solnMap1->size() != solnMap2->size() ) {
     cout << "SOLUTION 1 entries: ";
-    for(map< int, FieldContainer<double> >::const_iterator soln1It = (*solnMap1).begin();
+    for(map< GlobalIndexType, FieldContainer<double> >::const_iterator soln1It = (*solnMap1).begin();
         soln1It != (*solnMap1).end(); soln1It++) {
       int cellID = soln1It->first;
       cout << cellID << " ";
     }
     cout << endl;
     cout << "SOLUTION 2 entries: ";
-    for(map< int, FieldContainer<double> >::const_iterator soln2It = (*solnMap2).begin();
+    for(map< GlobalIndexType, FieldContainer<double> >::const_iterator soln2It = (*solnMap2).begin();
         soln2It != (*solnMap2).end(); soln2It++) {
       int cellID = soln2It->first;
       cout << cellID << " ";
@@ -332,11 +332,11 @@ bool SolutionTests::storageSizesAgree(Teuchos::RCP< Solution > soln1, Teuchos::R
     
     return false;
   }
-  for(map< int, FieldContainer<double> >::const_iterator soln1It = (*solnMap1).begin();
+  for(map< GlobalIndexType, FieldContainer<double> >::const_iterator soln1It = (*solnMap1).begin();
       soln1It != (*solnMap1).end(); soln1It++) {
-    int cellID = soln1It->first;
+    GlobalIndexType cellID = soln1It->first;
     int size = soln1It->second.size();
-    map< int, FieldContainer<double> >::const_iterator soln2It = (*solnMap2).find(cellID);
+    map< GlobalIndexType, FieldContainer<double> >::const_iterator soln2It = (*solnMap2).find(cellID);
     if (soln2It == (*solnMap2).end()) {
       return false;
     }
@@ -512,7 +512,7 @@ bool SolutionTests::testProjectVectorValuedSolution() {
   
   int H1Order = 3; // that way, L^2 space contains quadratics
   
-  Teuchos::RCP<Mesh> mesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells, confusionBF, H1Order, H1Order+1);
+  Teuchos::RCP<Mesh> mesh = MeshFactory::buildQuadMesh(quadPoints, horizontalCells, verticalCells, confusionBF, H1Order, H1Order+1);
 
   SolutionPtr confusionSoln = Teuchos::rcp( new Solution(mesh) );
   
@@ -528,11 +528,11 @@ bool SolutionTests::testProjectVectorValuedSolution() {
       // test in which we project the Solution itself
       // here, we just project the Solution onto itself, nothing terribly interesting, but should exercise the vector-valuedness anyway
       // conveniently, this means that the expected values don't change, so we can use the same verification logic below
-      set<int> activeCellIDs = confusionSoln->mesh()->getActiveCellIDs();
-      for (set<int>::iterator cellIDIt = activeCellIDs.begin(); cellIDIt != activeCellIDs.end(); cellIDIt++) {
-        int cellID = *cellIDIt;
+      set<GlobalIndexType> activeCellIDs = confusionSoln->mesh()->getActiveCellIDs();
+      for (set<GlobalIndexType>::iterator cellIDIt = activeCellIDs.begin(); cellIDIt != activeCellIDs.end(); cellIDIt++) {
+        GlobalIndexType cellID = *cellIDIt;
         ElementTypePtr elemType = confusionSoln->mesh()->getElement(cellID)->elementType();
-        vector<int> childIDs;
+        vector<GlobalIndexType> childIDs;
         childIDs.push_back(cellID);
         confusionSoln->projectOldCellOntoNewCells(cellID, elemType, childIDs);
       }
@@ -541,7 +541,7 @@ bool SolutionTests::testProjectVectorValuedSolution() {
       int numCells = 1;
       ElementPtr elem = confusionSoln->mesh()->getElement(i);
       int cellID = elem->cellID();
-      vector<int> cellIDs(1,cellID);
+      vector<GlobalIndexType> cellIDs(1,cellID);
       BasisCachePtr basisCache = Teuchos::rcp( new BasisCache(elem->elementType(),confusionSoln->mesh()) );
       
       basisCache->setPhysicalCellNodes( confusionSoln->mesh()->physicalCellNodesForCell(cellID),
@@ -647,7 +647,7 @@ bool SolutionTests::testNewProjectFunction() {
     int numCells = 1;
     ElementPtr elem = _confusionUnsolved->mesh()->getElement(i);
     int cellID = elem->cellID();
-    vector<int> cellIDs(1,cellID);
+    vector<GlobalIndexType> cellIDs(1,cellID);
     BasisCachePtr basisCache = Teuchos::rcp( new BasisCache(elem->elementType(),_confusionUnsolved->mesh()) );
         
     basisCache->setPhysicalCellNodes( _confusionUnsolved->mesh()->physicalCellNodesForCell(cellID),
@@ -721,9 +721,9 @@ bool SolutionTests::testNewProjectFunction() {
   int horizontalCells = 2, verticalCells = 2;
   int pTest = 1; // doesn't matter
   
-  Teuchos::RCP<Mesh> fineMesh = Mesh::buildQuadMesh(quadPoints, 16, 16, emptyBF, H1Order, pTest);
+  Teuchos::RCP<Mesh> fineMesh = MeshFactory::buildQuadMesh(quadPoints, 16, 16, emptyBF, H1Order, pTest);
   
-  Teuchos::RCP<Mesh> mesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells, emptyBF, H1Order, pTest);
+  Teuchos::RCP<Mesh> mesh = MeshFactory::buildQuadMesh(quadPoints, horizontalCells, verticalCells, emptyBF, H1Order, pTest);
   SolutionPtr soln = Teuchos::rcp( new Solution(mesh, bc) );
   
   // set up the functions
@@ -756,7 +756,7 @@ bool SolutionTests::testNewProjectFunction() {
     double l2ErrorOfAverage = (Function::constant(fIntegral) - f)->l2norm(fineMesh,cubatureDegreeEnrichment);
 //    cout << "testNewProjectFunction: l2 error of fIntegral: " << l2ErrorOfAverage << endl;
     
-    vector<int> cellIDs = mesh->cellIDsOfTypeGlobal(elemType);
+    vector<GlobalIndexType> cellIDs = mesh->cellIDsOfTypeGlobal(elemType);
     
     BasisCachePtr basisCache = Teuchos::rcp( new BasisCache(elemType, mesh, testVsTest, cubatureDegreeEnrichment) );
     basisCache->setPhysicalCellNodes(mesh->physicalCellNodesGlobal(elemType), cellIDs, false); // false: no side cache
@@ -861,7 +861,7 @@ bool SolutionTests::testAddRefinedSolutions() {
   _confusionSolution2_2x2->addSolution(_confusionSolution1_2x2,1.0);    // pretend confusionSolution2 is the accumulated solution
 
   // refine the mesh
-  vector<int> quadCellsToRefine;
+  vector<GlobalIndexType> quadCellsToRefine;
   quadCellsToRefine.push_back(0); // refine first cell
   _confusionSolution1_2x2->mesh()->registerSolution(_confusionSolution1_2x2);
   _confusionSolution1_2x2->mesh()->registerSolution(_confusionSolution2_2x2);
@@ -888,7 +888,7 @@ bool SolutionTests::testEnergyError(){
 
   bool success = true;
   // First test: exact solution has zero energy error:
-  map<int, double> energyError = _poissonSolution->energyError();
+  map<GlobalIndexType, double> energyError = _poissonSolution->energyError();
   vector< Teuchos::RCP< Element > > activeElements = _poissonSolution->mesh()->activeElements();
   vector< Teuchos::RCP< Element > >::iterator activeElemIt;
   
@@ -936,7 +936,7 @@ bool SolutionTests::testEnergyError(){
   int H1Order = 3;
   int pTest = H1Order;
   
-  Teuchos::RCP<Mesh> mesh = Mesh::buildQuadMesh(quadPoints, horizontalElements, verticalElements, bf, H1Order, pTest);
+  Teuchos::RCP<Mesh> mesh = MeshFactory::buildQuadMesh(quadPoints, horizontalElements, verticalElements, bf, H1Order, pTest);
   
   SolutionPtr soln = Teuchos::rcp( new Solution(mesh, bc, rhs, ip) );
   
@@ -1030,7 +1030,7 @@ bool SolutionTests::testHRefinementInitialization() {
   }
   
 //  _poissonSolution->writeFieldsToFile(PoissonBilinearForm::PHI,"phi_preRef.m");
-  vector<int> quadCellsToRefine;
+  vector<GlobalIndexType> quadCellsToRefine;
   quadCellsToRefine.push_back(1);
   mesh->registerSolution(_poissonSolution);
 //  vector< Teuchos::RCP<Solution> > solutions;
@@ -1092,7 +1092,7 @@ bool SolutionTests::testPRefinementInitialization() {
 //    cout << "expectedValues:\n" << expectedValues;
   }
   
-  vector<int> quadCellsToRefine;
+  vector<GlobalIndexType> quadCellsToRefine;
   quadCellsToRefine.push_back(0); // just refine first cell  
   
   _poissonSolution->mesh()->registerSolution(_poissonSolution);
@@ -1127,7 +1127,7 @@ bool SolutionTests::testSolutionEvaluationBasisCache() {
   
   ElementPtr elem = _poissonSolution_1x1->mesh()->getElement(0); // "spectral" mesh--just one element
   int cellID = elem->cellID();
-  vector<int> cellIDs(1,cellID);
+  vector<GlobalIndexType> cellIDs(1,cellID);
   BasisCachePtr basisCache = Teuchos::rcp( new BasisCache(elem->elementType(), _poissonSolution_1x1->mesh()) );
   
   basisCache->setRefCellPoints( _testPoints ); // don't use cubature points...
@@ -1176,20 +1176,6 @@ bool SolutionTests::testScratchPadSolution() {
 
   bool success = true;
   double tol = 1e-12;
-
-  int numProcs=1;
-  int rank=0;
-
-#ifdef HAVE_MPI
-  rank     = Teuchos::GlobalMPISession::getRank();
-  numProcs = Teuchos::GlobalMPISession::getNProc();
-//  Epetra_MpiComm Comm(MPI_COMM_WORLD);
-//  //cout << "rank: " << rank << " of " << numProcs << endl;
-#else
-//  Epetra_SerialComm Comm;
-#endif
-
-  
   double eps = .1;
   
   ////////////////////   DECLARE VARIABLES   ///////////////////////
@@ -1270,7 +1256,7 @@ bool SolutionTests::testScratchPadSolution() {
   int horizontalCells = nCells, verticalCells = nCells;
   
   // create a pointer to a new mesh:
-  Teuchos::RCP<Mesh> mesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells,
+  Teuchos::RCP<Mesh> mesh = MeshFactory::buildQuadMesh(quadPoints, horizontalCells, verticalCells,
                                                 confusionBF, H1Order, H1Order+pToAdd);
     
   ////////////////////   SOLVE & REFINE   ///////////////////////
@@ -1365,8 +1351,6 @@ bool SolutionTests::testCondensationSolve() {
 
   return success;
 }
-
-
 
 bool SolutionTests::testSolutionsAreConsistent() {
   bool success = true;

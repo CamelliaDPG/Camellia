@@ -12,30 +12,32 @@
 #ifndef Camellia_debug_MeshTransformationFunction_h
 #define Camellia_debug_MeshTransformationFunction_h
 
+#include "IndexType.h"
+
 class MeshTransformationFunction : public Function {
-  map< int, FunctionPtr > _cellTransforms; // cellID --> cell transformation function
+  map< GlobalIndexType, FunctionPtr > _cellTransforms; // cellID --> cell transformation function
   EOperatorExtended _op;
   MeshPtr _mesh;
   int _maxPolynomialDegree;
 protected:
-  MeshTransformationFunction(MeshPtr mesh, map< int, FunctionPtr > cellTransforms, EOperatorExtended op);
+  MeshTransformationFunction(MeshPtr mesh, map< GlobalIndexType, FunctionPtr > cellTransforms, EOperatorExtended op);
 public:
-  MeshTransformationFunction(MeshPtr mesh, set<int> cellIDsToTransform); // might be responsible for only a subset of the curved cells.
+  MeshTransformationFunction(MeshPtr mesh, set<GlobalIndexType> cellIDsToTransform); // might be responsible for only a subset of the curved cells.
   
   int maxDegree();
   
-  void updateCells(const set<int> &cellIDs);
+  void updateCells(const set<GlobalIndexType> &cellIDs);
   
   void values(FieldContainer<double> &values, BasisCachePtr basisCache);
   
-  bool mapRefCellPointsUsingExactGeometry(FieldContainer<double> &cellPoints, const FieldContainer<double> &refCellPoints, int cellID);
+  bool mapRefCellPointsUsingExactGeometry(FieldContainer<double> &cellPoints, const FieldContainer<double> &refCellPoints, GlobalIndexType cellID);
   
   FunctionPtr dx();
   FunctionPtr dy();
   FunctionPtr dz();
   
-  void didHRefine(const set<int> &parentCellIDs);
-  void didPRefine(const set<int> &cellIDs);
+  void didHRefine(const set<GlobalIndexType> &parentCellIDs);
+  void didPRefine(const set<GlobalIndexType> &cellIDs);
 
   ~MeshTransformationFunction();
 };

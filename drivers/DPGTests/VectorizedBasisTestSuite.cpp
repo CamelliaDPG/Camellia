@@ -5,6 +5,7 @@
 #include "InnerProductScratchPad.h"
 #include "RefinementStrategy.h"
 #include "CamelliaConfig.h"
+#include "MeshFactory.h"
 
 #include <Teuchos_GlobalMPISession.hpp>
 
@@ -322,7 +323,7 @@ bool VectorizedBasisTestSuite::testPoisson() {
   int horizontalCells = 1, verticalCells = 1;
 
   // create a pointer to a new mesh:
-  Teuchos::RCP<Mesh> mesh = Mesh::buildQuadMesh(meshBoundary, horizontalCells, verticalCells,
+  Teuchos::RCP<Mesh> mesh = MeshFactory::buildQuadMesh(meshBoundary, horizontalCells, verticalCells,
       bf, H1Order, H1Order+pToAdd, false);
 
   ////////////////////   SOLVE & REFINE   ///////////////////////

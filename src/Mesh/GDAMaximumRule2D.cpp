@@ -9,6 +9,7 @@
 #include "GDAMaximumRule2D.h"
 #include "MultiBasis.h"
 #include "BasisFactory.h" // TODO: make BasisFactory a member of DofOrderingFactory.
+#include "Solution.h"
 
 #include <Teuchos_GlobalMPISession.hpp>
 
@@ -16,18 +17,21 @@ GDAMaximumRule2D::GDAMaximumRule2D(MeshTopologyPtr meshTopology, VarFactory varF
                                    MeshPartitionPolicyPtr partitionPolicy, unsigned initialH1OrderTrial, unsigned testOrderEnhancement, bool enforceMBFluxContinuity)
 : GlobalDofAssignment(meshTopology,varFactory,dofOrderingFactory,partitionPolicy, initialH1OrderTrial, testOrderEnhancement)
 {
+//  cout << "Entered constructor of GDAMaximumRule2D.\n";
   _enforceMBFluxContinuity = enforceMBFluxContinuity;
   
   unsigned testOrder = initialH1OrderTrial + testOrderEnhancement;
   // assign some initial element types:
-  set<unsigned> activeCellIDs = _meshTopology->getActiveCellIndices();
+  set<IndexType> cellIndices = _meshTopology->getActiveCellIndices();
+  set<GlobalIndexType> activeCellIDs;
+  activeCellIDs.insert(cellIndices.begin(),cellIndices.end()); // for distributed mesh, we'd do some logic with cellID offsets for each MPI rank.  (cellID = cellIndex + cellIDOffsetForRank)
   
   unsigned spaceDim = _meshTopology->getSpaceDim();
   unsigned sideDim = spaceDim - 1;
   
-  map<unsigned, unsigned> sideIndexParityAssignmentCount; // tracks the number of times each side in the mesh has been assigned a parity.
-  for (set<unsigned>::iterator cellIDIt = activeCellIDs.begin(); cellIDIt != activeCellIDs.end(); cellIDIt++) {
-    unsigned cellID = *cellIDIt;
+  map<GlobalIndexType, unsigned> sideIndexParityAssignmentCount; // tracks the number of times each side in the mesh has been assigned a parity.
+  for (set<GlobalIndexType>::iterator cellIDIt = activeCellIDs.begin(); cellIDIt != activeCellIDs.end(); cellIDIt++) {
+    GlobalIndexType cellID = *cellIDIt;
     CellPtr cell = _meshTopology->getCell(cellID);
     if (cell->isParent() || (cell->getParent().get() != NULL)) {
       // enforcing this allows us to assume that each face that isn't on the boundary will be treated exactly twice...
@@ -43,16 +47,17 @@ GDAMaximumRule2D::GDAMaximumRule2D(MeshTopologyPtr meshTopology, VarFactory varF
     
     unsigned sideCount = cell->topology()->getSideCount();
     vector<int> cellParities(sideCount);
-    for (int sideIndex=0; sideIndex<sideCount; sideIndex++) {
-      unsigned sideEntityIndex = cell->entityIndex(sideDim, sideIndex);
+    for (int sideOrdinal=0; sideOrdinal<sideCount; sideOrdinal++) {
+      unsigned sideEntityIndex = cell->entityIndex(sideDim, sideOrdinal);
       if (sideIndexParityAssignmentCount[sideEntityIndex] == 0) {
-        cellParities[sideIndex] = 1;
+        cellParities[sideOrdinal] = 1;
       } else if (sideIndexParityAssignmentCount[sideEntityIndex] == 1) {
-        cellParities[sideIndex] = -1;
+        cellParities[sideOrdinal] = -1;
       } else {
         cout << "Internal error during GDAMaxRule2D construction: encountered side more than twice.\n";
         TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Internal error: encountered side more than twice.");
       }
+      sideIndexParityAssignmentCount[sideEntityIndex]++;
     }
     _cellSideParitiesForCellID[cellID] = cellParities;
   }
@@ -60,7 +65,7 @@ GDAMaximumRule2D::GDAMaximumRule2D(MeshTopologyPtr meshTopology, VarFactory varF
   rebuildLookups();
 }
 
-void GDAMaximumRule2D::addDofPairing(int cellID1, int dofIndex1, int cellID2, int dofIndex2) {
+void GDAMaximumRule2D::addDofPairing(GlobalIndexType cellID1, IndexType dofIndex1, GlobalIndexType cellID2, IndexType dofIndex2) {
   int firstCellID, firstDofIndex;
   int secondCellID, secondDofIndex;
   if (cellID1 < cellID2) {
@@ -90,17 +95,17 @@ void GDAMaximumRule2D::addDofPairing(int cellID1, int dofIndex1, int cellID2, in
       return; // to appease the compiler, which otherwise warns that variables will be used unset...
     }
   }
-  pair<int,int> key = make_pair(secondCellID,secondDofIndex);
-  pair<int,int> value = make_pair(firstCellID,firstDofIndex);
+  pair<GlobalIndexType,IndexType> key = make_pair(secondCellID,secondDofIndex);
+  pair<GlobalIndexType,IndexType> value = make_pair(firstCellID,firstDofIndex);
   if ( _dofPairingIndex.find(key) != _dofPairingIndex.end() ) {
     // we already have an entry for this key: need to fix the linked list so it goes from greatest to least
-    pair<int,int> existing = _dofPairingIndex[key];
-    pair<int,int> entry1, entry2, entry3;
+    pair<GlobalIndexType,IndexType> existing = _dofPairingIndex[key];
+    pair<GlobalIndexType,IndexType> entry1, entry2, entry3;
     entry3 = key; // know this is the greatest of the three
-    int existingCellID = existing.first;
-    int newCellID = value.first;
-    int existingDofIndex = existing.second;
-    int newDofIndex = value.second;
+    GlobalIndexType existingCellID = existing.first;
+    GlobalIndexType newCellID = value.first;
+    IndexType existingDofIndex = existing.second;
+    IndexType newDofIndex = value.second;
     
     if (existingCellID < newCellID) {
       entry1 = existing;
@@ -135,7 +140,7 @@ void GDAMaximumRule2D::addDofPairing(int cellID1, int dofIndex1, int cellID2, in
   }
 }
 
-void GDAMaximumRule2D::assignInitialElementType( unsigned cellID ) {
+void GDAMaximumRule2D::assignInitialElementType( GlobalIndexType cellID ) {
   int testDegree = _initialH1OrderTrial + _testOrderEnhancement;
   CellPtr cell = _meshTopology->getCell(cellID);
   DofOrderingPtr trialOrdering = _dofOrderingFactory->trialOrdering(_initialH1OrderTrial, *cell->topology());
@@ -146,17 +151,18 @@ void GDAMaximumRule2D::assignInitialElementType( unsigned cellID ) {
 
 void GDAMaximumRule2D::buildLocalToGlobalMap() {
   _localToGlobalMap.clear();
-  set<unsigned>::iterator cellIDIt;
+  set<GlobalIndexType>::iterator cellIDIt;
   
   determineDofPairings();
   
-  int globalIndex = 0;
+  GlobalIndexType globalIndex = 0;
   vector< int > trialIDs = _varFactory.trialIDs();
   
-  set<unsigned> activeCellIDs = _meshTopology->getActiveCellIndices();
+  set<IndexType> activeCellIndices = _meshTopology->getActiveCellIndices();
+  set<GlobalIndexType> activeCellIDs(activeCellIndices.begin(),activeCellIndices.end());
   
   for (cellIDIt = activeCellIDs.begin(); cellIDIt != activeCellIDs.end(); cellIDIt++) {
-    unsigned cellID = *cellIDIt;
+    GlobalIndexType cellID = *cellIDIt;
     CellPtr cell = _meshTopology->getCell(cellID);
     ElementTypePtr elemTypePtr = _elementTypeForCell[cellID];
     for (vector<int>::iterator trialIt=trialIDs.begin(); trialIt != trialIDs.end(); trialIt++) {
@@ -171,8 +177,8 @@ void GDAMaximumRule2D::buildLocalToGlobalMap() {
         for (int dofOrdinal=0; dofOrdinal<numDofs; dofOrdinal++) {
           int localDofIndex = elemTypePtr->trialOrderPtr->getDofIndex(trialID,dofOrdinal,0);
           _localToGlobalMap[make_pair(cellID,localDofIndex)] = globalIndex;
-          //          cout << "added localToGlobalMap(cellID=" << cellID << ", localDofIndex=" << localDofIndex;
-          //          cout << ") = " << globalIndex << "\n";
+//          cout << "added localToGlobalMap(cellID=" << cellID << ", localDofIndex=" << localDofIndex;
+//          cout << ") = " << globalIndex << "\n";
           globalIndex++;
         }
       } else {
@@ -184,8 +190,8 @@ void GDAMaximumRule2D::buildLocalToGlobalMap() {
             pair<int, int> myKey = make_pair(cellID,myLocalDofIndex);
             pair<int, int> myValue;
             if ( _dofPairingIndex.find(myKey) != _dofPairingIndex.end() ) {
-              int earlierCellID = _dofPairingIndex[myKey].first;
-              int earlierLocalDofIndex = _dofPairingIndex[myKey].second;
+//              GlobalIndexType earlierCellID = _dofPairingIndex[myKey].first;
+//              GlobalIndexType earlierLocalDofIndex = _dofPairingIndex[myKey].second;
               if (_localToGlobalMap.find(_dofPairingIndex[myKey]) == _localToGlobalMap.end() ) {
                 // error: we haven't processed the earlier key yet...
                 TEUCHOS_TEST_FOR_EXCEPTION( true,
@@ -193,16 +199,16 @@ void GDAMaximumRule2D::buildLocalToGlobalMap() {
                                            "global indices are being processed out of order (should be by cellID, then localDofIndex).");
               } else {
                 _localToGlobalMap[myKey] = _localToGlobalMap[_dofPairingIndex[myKey]];
-                //                cout << "added flux/trace localToGlobalMap(cellID,localDofIndex)=(" << cellID << ", " << myLocalDofIndex;
-                //                cout << ") = " << _localToGlobalMap[myKey] << "\n";
+//                cout << "added flux/trace localToGlobalMap(cellID,localDofIndex)=(" << cellID << ", " << myLocalDofIndex;
+//                cout << ") = " << _localToGlobalMap[myKey] << "\n";
               }
             } else {
               // this test is necessary because for conforming traces, getDofIndex() may not be 1-1
               // and therefore we might have already assigned a globalDofIndex to myKey....
               if ( _localToGlobalMap.find(myKey) == _localToGlobalMap.end() ) {
                 _localToGlobalMap[myKey] = globalIndex;
-                //                cout << "added flux/trace localToGlobalMap(cellID,localDofIndex)=(" << cellID << ", " << myLocalDofIndex;
-                //                cout << ") = " << globalIndex << "\n";
+//                cout << "added flux/trace localToGlobalMap(cellID,localDofIndex)=(" << cellID << ", " << myLocalDofIndex;
+//                cout << ") = " << globalIndex << "\n";
                 globalIndex++;
               }
             }
@@ -215,34 +221,48 @@ void GDAMaximumRule2D::buildLocalToGlobalMap() {
 }
 
 void GDAMaximumRule2D::buildTypeLookups() {
-  _elementTypes.clear();
+//  cout << "GDAMaximumRule2D::buildTypeLookups().\n";
   _elementTypesForPartition.clear();
   _cellIDsForElementType.clear();
   _globalCellIndexToCellID.clear();
   _partitionedCellSideParitiesForElementType.clear();
   _partitionedPhysicalCellNodesForElementType.clear();
-  set< ElementType* > elementTypeSet; // keep track of which ones we've seen globally (avoid duplicates in _elementTypes)
-  map< ElementType*, int > globalCellIndices;
+  _elementTypeList.clear();  // it appears to be important not to clear this before the guys that have ElementType* entries.  (Otherwise, we sometimes get a seg fault, presumably because the RCP has freed the memory pointed to, and the attempt to clear a map< ElementType*, blah > or whatever appears to be an attempt to access the freed memory??  I'm not sure.  What I know is that we had a crash that would occur in MeshTestSuite::testJesseAnisotropicRefinement(), and when I moved this from being the first cleared container to being the last, that crash went away...)
+  set< ElementType* > elementTypeSet; // keep track of which ones we've seen globally (avoid duplicates in _elementTypeList)
+  map< ElementType*, GlobalIndexType > globalCellIndices;
   
-  for (int partitionNumber=0; partitionNumber < _numPartitions; partitionNumber++) {
-    _cellIDsForElementType.push_back( map< ElementType*, vector<int> >() );
+//  cout << "_numPartitions = " << _numPartitions << endl;
+  
+//  int rank = Teuchos::GlobalMPISession::getRank();
+  
+  GlobalIndexType totalCellCount = _meshTopology->cellCount();
+  
+  for (PartitionIndexType partitionNumber=0; partitionNumber < _numPartitions; partitionNumber++) {
+    _cellIDsForElementType.push_back( map< ElementType*, vector<GlobalIndexType> >() );
     _elementTypesForPartition.push_back( vector< ElementTypePtr >() );
     _partitionedPhysicalCellNodesForElementType.push_back( map< ElementType*, FieldContainer<double> >() );
     _partitionedCellSideParitiesForElementType.push_back( map< ElementType*, FieldContainer<double> >() );
-    vector< unsigned >::iterator elemIterator;
+    vector< GlobalIndexType >::iterator elemIterator;
+    
+//    cout << "_partitions[" << partitionNumber << "] has " << _partitions[partitionNumber].size() << " cells.\n";
     
     // this should loop over the elements in the partition instead
     for (elemIterator=_partitions[partitionNumber].begin();
          elemIterator != _partitions[partitionNumber].end(); elemIterator++) {
-      unsigned cellID = *elemIterator;
+      GlobalIndexType cellID = *elemIterator;
+      if (cellID > totalCellCount) {
+        cout << "cellID " << cellID << " is out of range (0," << totalCellCount << ").\n";
+        TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "cellID is out of range.\n");
+      }
       ElementTypePtr elemTypePtr = _elementTypeForCell[cellID];
       if ( _cellIDsForElementType[partitionNumber].find( elemTypePtr.get() ) == _cellIDsForElementType[partitionNumber].end() ) {
         _elementTypesForPartition[partitionNumber].push_back(elemTypePtr);
       }
       if (elementTypeSet.find( elemTypePtr.get() ) == elementTypeSet.end() ) {
         elementTypeSet.insert( elemTypePtr.get() );
-        _elementTypes.push_back( elemTypePtr );
+        _elementTypeList.push_back( elemTypePtr );
       }
+//      cout << "adding cellID " << cellID << " to partition " << partitionNumber << " and element type " << elemTypePtr.get() << endl;
       _cellIDsForElementType[partitionNumber][elemTypePtr.get()].push_back(cellID);
     }
     
@@ -258,12 +278,12 @@ void GDAMaximumRule2D::buildTypeLookups() {
       int spaceDim = elemType->cellTopoPtr->getDimension();
       int numSides = elemType->cellTopoPtr->getSideCount();
       int numNodes = elemType->cellTopoPtr->getNodeCount();
-      vector<int> cellIDs = _cellIDsForElementType[partitionNumber][elemType.get()];
-      int numCells = cellIDs.size();
+      vector<GlobalIndexType> cellIDs = _cellIDsForElementType[partitionNumber][elemType.get()];
+      GlobalIndexType numCells = cellIDs.size();
       FieldContainer<double> physicalCellNodes( numCells, numNodes, spaceDim ) ;
       FieldContainer<double> cellSideParities( numCells, numSides );
-      vector<int>::iterator cellIt;
-      int cellIndex = 0;
+      vector<GlobalIndexType>::iterator cellIt;
+      GlobalIndexType cellIndex = 0;
       
       // store physicalCellNodes:
       verticesForCells(physicalCellNodes, cellIDs);
@@ -272,10 +292,11 @@ void GDAMaximumRule2D::buildTypeLookups() {
         for (int sideIndex=0; sideIndex<numSides; sideIndex++) {
           cellSideParities(cellIndex,sideIndex) = _cellSideParitiesForCellID[cellID][sideIndex];
         }
-        _partitionLocalCellIndices[cellID] = cellIndex;
+        _partitionLocalCellIndices[cellID] = cellIndex++;
         unsigned globalCellIndex = globalCellIndices[elemType.get()]++;
         _globalCellIndices[cellID] = globalCellIndex;
         _globalCellIndexToCellID[elemType.get()][globalCellIndex] = cellID;
+//        cout << "On rank " << rank << ", setting _globalCellIndexToCellID[" << elemType.get() << "][" << globalCellIndex << "] = " << cellID << endl;
       }
       _partitionedPhysicalCellNodesForElementType[partitionNumber][elemType.get()] = physicalCellNodes;
       _partitionedCellSideParitiesForElementType[partitionNumber][elemType.get()] = cellSideParities;
@@ -283,16 +304,16 @@ void GDAMaximumRule2D::buildTypeLookups() {
   }
   // finally, build _physicalCellNodesForElementType and _cellSideParitiesForElementType:
   _physicalCellNodesForElementType.clear();
-  for (vector< ElementTypePtr >::iterator elemTypeIt = _elementTypes.begin();
-       elemTypeIt != _elementTypes.end(); elemTypeIt++) {
+  for (vector< ElementTypePtr >::iterator elemTypeIt = _elementTypeList.begin();
+       elemTypeIt != _elementTypeList.end(); elemTypeIt++) {
     ElementType* elemType = elemTypeIt->get();
-    int numCells = globalCellIndices[elemType];
+    GlobalIndexType numCells = globalCellIndices[elemType];
     int spaceDim = elemType->cellTopoPtr->getDimension();
     int numSides = elemType->cellTopoPtr->getSideCount();
     _physicalCellNodesForElementType[elemType] = FieldContainer<double>(numCells,numSides,spaceDim);
   }
   // copy from the local (per-partition) FieldContainers to the global ones
-  for (int partitionNumber=0; partitionNumber < _numPartitions; partitionNumber++) {
+  for (PartitionIndexType partitionNumber=0; partitionNumber < _numPartitions; partitionNumber++) {
     vector< ElementTypePtr >::iterator elemTypeIt;
     for (elemTypeIt  = _elementTypesForPartition[partitionNumber].begin();
          elemTypeIt != _elementTypesForPartition[partitionNumber].end(); elemTypeIt++) {
@@ -300,13 +321,13 @@ void GDAMaximumRule2D::buildTypeLookups() {
       FieldContainer<double> partitionedPhysicalCellNodes = _partitionedPhysicalCellNodesForElementType[partitionNumber][elemType];
       FieldContainer<double> partitionedCellSideParities = _partitionedCellSideParitiesForElementType[partitionNumber][elemType];
       
-      int numCells = partitionedPhysicalCellNodes.dimension(0);
+      IndexType numCells = partitionedPhysicalCellNodes.dimension(0);
       int numSides = partitionedPhysicalCellNodes.dimension(1);
       int spaceDim = partitionedPhysicalCellNodes.dimension(2);
       
       // this copying can be made more efficient by copying a whole FieldContainer at a time
       // (but it's probably not worth it, for now)
-      for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
+      for (IndexType cellIndex=0; cellIndex<numCells; cellIndex++) {
         int cellID = _cellIDsForElementType[partitionNumber][elemType][cellIndex];
         int globalCellIndex = _globalCellIndices[cellID];
         TEUCHOS_TEST_FOR_EXCEPTION( cellID != _globalCellIndexToCellID[elemType][globalCellIndex],
@@ -322,23 +343,84 @@ void GDAMaximumRule2D::buildTypeLookups() {
   }
 }
 
-void GDAMaximumRule2D::determineActiveElements() {
+GlobalIndexType GDAMaximumRule2D::cellID(Teuchos::RCP< ElementType > elemTypePtr, IndexType cellIndex, PartitionIndexType partitionNumber) {
+  if (partitionNumber == -1) {
+    if (( _globalCellIndexToCellID.find( elemTypePtr.get() ) != _globalCellIndexToCellID.end() ) &&
+        ( _globalCellIndexToCellID[elemTypePtr.get()].find( cellIndex ) != _globalCellIndexToCellID[elemTypePtr.get()].end() ) )
+        
+      return _globalCellIndexToCellID[elemTypePtr.get()][ cellIndex ];
+    else {
+      cout << "did not find global cellIndex " << cellIndex << " for element type " << elemTypePtr.get() << endl;
+      return -1;
+    }
+  } else {
+    if ( ( _cellIDsForElementType[partitionNumber].find( elemTypePtr.get() ) != _cellIDsForElementType[partitionNumber].end() )
+        &&
+        (_cellIDsForElementType[partitionNumber][elemTypePtr.get()].size() > cellIndex ) ) {
+      return _cellIDsForElementType[partitionNumber][elemTypePtr.get()][cellIndex];
+    } else return -1;
+  }
+}
+
+
+vector<GlobalIndexType> GDAMaximumRule2D::cellIDsOfElementType(PartitionIndexType partitionNumber, ElementTypePtr elemTypePtr) {
+  if (partitionNumber == -1) {
+    return vector<GlobalIndexType>();
+  }
+  map<ElementType*, vector<GlobalIndexType> >::iterator cellIDsIt = _cellIDsForElementType[partitionNumber].find(elemTypePtr.get());
+  if (cellIDsIt == _cellIDsForElementType[partitionNumber].end()) {
+    return vector<GlobalIndexType>();
+  }
+  return cellIDsIt->second;
+}
+
+int GDAMaximumRule2D::cellPolyOrder(GlobalIndexType cellID) {
+  return _dofOrderingFactory->trialPolyOrder(_elementTypeForCell[cellID]->trialOrderPtr);
+}
+
+FieldContainer<double> & GDAMaximumRule2D::cellSideParities( ElementTypePtr elemTypePtr ) {
 #ifdef HAVE_MPI
   int partitionNumber     = Teuchos::GlobalMPISession::getRank();
 #else
   int partitionNumber     = 0;
 #endif
-  
+  return _partitionedCellSideParitiesForElementType[ partitionNumber ][ elemTypePtr.get() ];
+}
+
+FieldContainer<double> GDAMaximumRule2D::cellSideParitiesForCell( GlobalIndexType cellID ) {
+  vector<int> parities = _cellSideParitiesForCellID[cellID];
+  int numSides = parities.size();
+  FieldContainer<double> cellSideParities(1,numSides);
+  for (int sideIndex=0; sideIndex<numSides; sideIndex++) {
+    cellSideParities(0,sideIndex) = parities[sideIndex];
+  }
+  return cellSideParities;
+}
+
+vector< GlobalIndexType > GDAMaximumRule2D::cellsInPartition(PartitionIndexType partitionNumber) {
+  int rank     = Teuchos::GlobalMPISession::getRank();
+  if (partitionNumber == -1) {
+    partitionNumber = rank;
+  }
+  return _partitions[partitionNumber];
+}
+
+void GDAMaximumRule2D::determineActiveElements() {
   set<unsigned> activeCellIDs = _meshTopology->getActiveCellIndices();
+  
+//  cout << "determineActiveElements(): there are "  << activeCellIDs.size() << " active elements.\n";
   _partitions.clear();
   _partitionForCellID.clear();
-  FieldContainer<int> partitionedMesh(_numPartitions,activeCellIDs.size());
+  FieldContainer<GlobalIndexType> partitionedMesh(_numPartitions,activeCellIDs.size());
   _partitionPolicy->partitionMesh(_meshTopology.get(),_numPartitions,partitionedMesh);
-  for (int i=0; i<partitionedMesh.dimension(0); i++) {
-    vector< unsigned > partition;
+//  cout << "partitionedMesh:\n" << partitionedMesh;
+  
+  for (PartitionIndexType i=0; i<partitionedMesh.dimension(0); i++) {
+    vector< GlobalIndexType > partition;
     for (int j=0; j<partitionedMesh.dimension(1); j++) {
-      if (partitionedMesh(i,j) < 0) break; // no more elements in this partition
-      unsigned cellID = partitionedMesh(i,j);
+//      cout << "partitionedMesh(i,j) = " << partitionedMesh(i,j) << endl;
+      if (partitionedMesh(i,j) == -1) break; // no more elements in this partition
+      GlobalIndexType cellID = partitionedMesh(i,j);
       partition.push_back( cellID );
       _partitionForCellID[cellID] = i;
     }
@@ -393,8 +475,8 @@ void GDAMaximumRule2D::determineDofPairings() {
             
             // Here, we need to deal with the possibility that neighbor is a parent, broken along the shared side
             //  -- if so, we have a MultiBasis, and we need to match with each of neighbor's descendants along that side...
-            vector< pair<unsigned,unsigned> > descendantsForSide = neighbor->getDescendantsForSide(mySideIndexInNeighbor);
-            vector< pair<unsigned,unsigned> >:: iterator entryIt;
+            vector< pair<GlobalIndexType,unsigned> > descendantsForSide = neighbor->getDescendantsForSide(mySideIndexInNeighbor);
+            vector< pair<GlobalIndexType,unsigned> >:: iterator entryIt;
             int descendantIndex = -1;
             for (entryIt = descendantsForSide.begin(); entryIt != descendantsForSide.end(); entryIt++) {
               descendantIndex++;
@@ -478,18 +560,18 @@ void GDAMaximumRule2D::determinePartitionDofIndices() {
   _partitionedGlobalDofIndices.clear();
   _partitionForGlobalDofIndex.clear();
   _partitionLocalIndexForGlobalDofIndex.clear();
-  set<int> dofIndices;
-  set<int> previouslyClaimedDofIndices;
+  set<GlobalIndexType> dofIndices;
+  set<GlobalIndexType> previouslyClaimedDofIndices;
   for (int i=0; i<_numPartitions; i++) {
     dofIndices.clear();
-    vector< unsigned >::iterator cellIDIt;
+    vector< GlobalIndexType >::iterator cellIDIt;
     for (cellIDIt =  _partitions[i].begin(); cellIDIt != _partitions[i].end(); cellIDIt++) {
-      unsigned cellID = *cellIDIt;
+      GlobalIndexType cellID = *cellIDIt;
       ElementTypePtr elemTypePtr = _elementTypeForCell[cellID];
       int numLocalDofs = elemTypePtr->trialOrderPtr->totalDofs();
       for (int localDofIndex=0; localDofIndex < numLocalDofs; localDofIndex++) {
-        pair<unsigned,unsigned> key = make_pair(cellID, localDofIndex);
-        map< pair<unsigned,unsigned>, unsigned >::iterator mapEntryIt = _localToGlobalMap.find(key);
+        pair<GlobalIndexType,IndexType> key = make_pair(cellID, localDofIndex);
+        map< pair<GlobalIndexType,IndexType>, GlobalIndexType >::iterator mapEntryIt = _localToGlobalMap.find(key);
         if ( mapEntryIt == _localToGlobalMap.end() ) {
           TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "entry not found.");
         }
@@ -502,10 +584,10 @@ void GDAMaximumRule2D::determinePartitionDofIndices() {
       }
     }
     _partitionedGlobalDofIndices.push_back( dofIndices );
-    int partitionDofIndex = 0;
-    for (set<int>::iterator dofIndexIt = dofIndices.begin();
+    IndexType partitionDofIndex = 0;
+    for (set<GlobalIndexType>::iterator dofIndexIt = dofIndices.begin();
          dofIndexIt != dofIndices.end(); dofIndexIt++) {
-      int globalDofIndex = *dofIndexIt;
+      GlobalIndexType globalDofIndex = *dofIndexIt;
       _partitionLocalIndexForGlobalDofIndex[globalDofIndex] = partitionDofIndex++;
     }
   }
@@ -515,10 +597,18 @@ void GDAMaximumRule2D::didChangePartitionPolicy() {
   rebuildLookups();
 }
 
-void GDAMaximumRule2D::didHRefine(const set<int> &parentCellIDs) {
-  for (set<int>::iterator parentCellIt = parentCellIDs.begin(); parentCellIt != parentCellIDs.end(); parentCellIt++) {
-    unsigned parentCellID = *parentCellIt;
+void GDAMaximumRule2D::didHRefine(const set<GlobalIndexType> &parentCellIDs) {
+  for (set<GlobalIndexType>::iterator parentCellIt = parentCellIDs.begin(); parentCellIt != parentCellIDs.end(); parentCellIt++) {
+    GlobalIndexType parentCellID = *parentCellIt;
     CellPtr parent = _meshTopology->getCell(parentCellID);
+    ElementTypePtr elemType;
+    if (_cellSideUpgrades.find(parentCellID) != _cellSideUpgrades.end()) {
+      // this cell has had its sides upgraded, so the elemType Solution knows about is stored in _cellSideUpgrades
+      elemType = _cellSideUpgrades[parentCellID].first;
+    } else {
+      elemType = _elementTypeForCell[parentCellID];
+    }
+    
     vector< CellPtr > children = parent->children();
     for (vector< CellPtr >::iterator childIt = children.begin(); childIt != children.end(); childIt++) {
       CellPtr child = *childIt;
@@ -532,42 +622,95 @@ void GDAMaximumRule2D::didHRefine(const set<int> &parentCellIDs) {
         matchNeighbor(child->cellIndex(), sideIndex); // we'll do this more often than necessary.  Could be smarter about it.
       }
     }
-//    int sideCount = parent->topology()->getSideCount();
-//    for (int sideIndex=0; sideIndex<sideCount; sideIndex++) {
-//      pair<unsigned, unsigned> neighborInfo = parent->getNeighbor(sideIndex);
-//      matchNeighbor(neighborInfo.first, neighborInfo.second);
-//    }
-  }
-  
-//  rebuildLookups();
-}
-
-void GDAMaximumRule2D::didPRefine(const set<int> &cellIDs, int deltaP) {
-  for (set<int>::iterator cellIt = cellIDs.begin(); cellIt != cellIDs.end(); cellIt++) {
-    unsigned cellID = *cellIt;
-    ElementTypePtr elemType = _elementTypeForCell[cellID];
-    Teuchos::RCP<DofOrdering> newTrialOrdering = _dofOrderingFactory->pRefineTrial(elemType->trialOrderPtr,
-                                                                                   *elemType->cellTopoPtr,deltaP);
-    Teuchos::RCP<DofOrdering> newTestOrdering = _dofOrderingFactory->pRefineTest(elemType->testOrderPtr,
-                                                                                 *elemType->cellTopoPtr,deltaP);
-    ElementTypePtr newType = _elementTypeFactory.getElementType(newTrialOrdering, newTestOrdering, elemType->cellTopoPtr);
-    
-    _elementTypeForCell[cellID] = newType;
-    
-    CellPtr cell = _meshTopology->getCell(cellID);
-    
-    int sideCount = cell->topology()->getSideCount();
-    for (int sideIndex=0; sideIndex<sideCount; sideIndex++) {
-      matchNeighbor(cellID, sideIndex);
+    for (vector< Solution* >::iterator solutionIt = _registeredSolutions.begin();
+         solutionIt != _registeredSolutions.end(); solutionIt++) {
+      // do projection
+      vector<IndexType> childIDsLocalIndexType = _meshTopology->getCell(parentCellID)->getChildIndices();
+      vector<GlobalIndexType> childIDs(childIDsLocalIndexType.begin(),childIDsLocalIndexType.end());
+      (*solutionIt)->processSideUpgrades(_cellSideUpgrades,parentCellIDs); // cellIDs argument: skip these...
+      (*solutionIt)->projectOldCellOntoNewCells(parentCellID,elemType,childIDs);
     }
+    // with the exception of the cellIDs upgrades, _cellSideUpgrades have been processed,
+    // so we delete everything except those
+    // (there's probably a more sophisticated way to delete these from the map, b
+    map< GlobalIndexType, pair< ElementTypePtr, ElementTypePtr > > remainingCellSideUpgrades;
+    for (set<GlobalIndexType>::iterator cellIt=parentCellIDs.begin(); cellIt != parentCellIDs.end(); cellIt++) {
+      int cellID = *cellIt;
+      if (_cellSideUpgrades.find(cellID) != _cellSideUpgrades.end()) {
+        remainingCellSideUpgrades[cellID] = _cellSideUpgrades[cellID];
+      }
+    }
+    _cellSideUpgrades = remainingCellSideUpgrades;
   }
   
 //  rebuildLookups();
 }
 
-void GDAMaximumRule2D::didHUnrefine(const set<int> &parentCellIDs) {
-  for (set<int>::iterator parentCellIt = parentCellIDs.begin(); parentCellIt != parentCellIDs.end(); parentCellIt++) {
-    unsigned parentCellID = *parentCellIt;
+void GDAMaximumRule2D::didPRefine(const set<GlobalIndexType> &cellIDs, int deltaP) {
+  set<GlobalIndexType>::const_iterator cellIt;
+  map<GlobalIndexType, ElementTypePtr > oldTypes;
+  for (cellIt=cellIDs.begin(); cellIt != cellIDs.end(); cellIt++) {
+    GlobalIndexType cellID = *cellIt;
+    oldTypes[cellID] = _elementTypeForCell[cellID];
+  }
+  for (cellIt=cellIDs.begin(); cellIt != cellIDs.end(); cellIt++) {
+    GlobalIndexType cellID = *cellIt;
+    CellPtr cell = _meshTopology->getCell(cellID);
+    ElementTypePtr oldElemType = oldTypes[cellID];
+    const shards::CellTopology cellTopo = *(cell->topology());
+    //   a. create new DofOrderings for trial and test
+    Teuchos::RCP<DofOrdering> currentTrialOrdering, currentTestOrdering;
+    currentTrialOrdering = _elementTypeForCell[cellID]->trialOrderPtr;
+    currentTestOrdering  = _elementTypeForCell[cellID]->testOrderPtr;
+    Teuchos::RCP<DofOrdering> newTrialOrdering = _dofOrderingFactory->pRefineTrial(currentTrialOrdering,
+                                                                                   cellTopo,deltaP);
+//    cout << "in p-refinement, old poly order is " << _dofOrderingFactory->trialPolyOrder(currentTrialOrdering) << endl;
+//    cout << "in p-refinement, new poly order is " << _dofOrderingFactory->trialPolyOrder(newTrialOrdering) << endl;
+    
+    Teuchos::RCP<DofOrdering> newTestOrdering;
+    // determine what newTestOrdering should be:
+    int trialPolyOrder = _dofOrderingFactory->trialPolyOrder(newTrialOrdering);
+    int testPolyOrder = _dofOrderingFactory->testPolyOrder(currentTestOrdering);
+    if (testPolyOrder < trialPolyOrder + _testOrderEnhancement ) {
+      newTestOrdering = _dofOrderingFactory->testOrdering( trialPolyOrder + _testOrderEnhancement, cellTopo);
+    } else {
+      newTestOrdering = currentTestOrdering;
+    }
+    
+    ElementTypePtr newType = _elementTypeFactory.getElementType(newTrialOrdering, newTestOrdering,
+                                                                cell->topology() );
+    setElementType(cellID,newType,false); // false: *not* sideUpgradeOnly
+    
+    //    elem->setElementType( _elementTypeFactory.getElementType(newTrialOrdering, newTestOrdering,
+    //                                                             elem->elementType()->cellTopoPtr ) );
+    
+    int numSides = cell->topology()->getSideCount();
+    for (int sideOrdinal=0; sideOrdinal<numSides; sideOrdinal++) {
+      // get and match the big neighbor along the side, if we're a small element…
+      pair<GlobalIndexType, int> neighborInfo = cell->getNeighbor(sideOrdinal);
+      GlobalIndexType neighborToMatch = neighborInfo.first;
+      int neighborSideIndex = neighborInfo.second;
+      
+      if (neighborToMatch != -1) { // then we have a neighbor to match along that side...
+        matchNeighbor(neighborToMatch,neighborSideIndex);
+      }
+    }
+    for (vector< Solution* >::iterator solutionIt = _registeredSolutions.begin();
+         solutionIt != _registeredSolutions.end(); solutionIt++) {
+      // do projection: for p-refinements, the "child" is the same cell
+      vector<GlobalIndexType> childIDs(1,cellID);
+      (*solutionIt)->processSideUpgrades(_cellSideUpgrades,cellIDs);
+      (*solutionIt)->projectOldCellOntoNewCells(cellID,oldElemType,childIDs);
+    }
+    _cellSideUpgrades.clear(); // these have been processed by all solutions that will ever have a chance to process them.
+  }
+  
+//  rebuildLookups();
+}
+
+void GDAMaximumRule2D::didHUnrefine(const set<GlobalIndexType> &parentCellIDs) {
+  for (set<GlobalIndexType>::iterator parentCellIt = parentCellIDs.begin(); parentCellIt != parentCellIDs.end(); parentCellIt++) {
+    GlobalIndexType parentCellID = *parentCellIt;
     CellPtr parent = _meshTopology->getCell(parentCellID);
     
     int sideCount = parent->topology()->getSideCount();
@@ -579,8 +722,27 @@ void GDAMaximumRule2D::didHUnrefine(const set<int> &parentCellIDs) {
 //  rebuildLookups();
 }
 
-ElementTypePtr GDAMaximumRule2D::elementType(unsigned cellID) {
+ElementTypePtr GDAMaximumRule2D::elementType(GlobalIndexType cellID) {
   return _elementTypeForCell[cellID];
+}
+
+vector< Teuchos::RCP< ElementType > > GDAMaximumRule2D::elementTypes(PartitionIndexType partitionNumber) {
+  if ((partitionNumber != -1) && (partitionNumber < _numPartitions)) {
+    return _elementTypesForPartition[partitionNumber];
+  } else if (partitionNumber == -1) {
+    return _elementTypeList;
+  } else {
+    vector< Teuchos::RCP< ElementType > > noElementTypes;
+    return noElementTypes;
+  }
+}
+
+DofOrderingFactoryPtr GDAMaximumRule2D::getDofOrderingFactory() {
+  return _dofOrderingFactory;
+}
+
+ElementTypeFactory & GDAMaximumRule2D::getElementTypeFactory() {
+  return _elementTypeFactory;
 }
 
 void GDAMaximumRule2D::getMultiBasisOrdering(DofOrderingPtr &originalNonParentOrdering,
@@ -594,21 +756,41 @@ void GDAMaximumRule2D::getMultiBasisOrdering(DofOrderingPtr &originalNonParentOr
                                                               varIDsToUpgrade,parentSideIndexInNeighbor);
 }
 
-int GDAMaximumRule2D::globalDofIndex(int cellID, int localDofIndex) {
-  pair<unsigned,unsigned> key = make_pair(cellID, localDofIndex);
-  map< pair<unsigned,unsigned>, unsigned >::iterator mapEntryIt = _localToGlobalMap.find(key);
+PartitionIndexType GDAMaximumRule2D::getPartitionCount() {
+  return _numPartitions;
+}
+
+GlobalIndexType GDAMaximumRule2D::globalCellIndex(GlobalIndexType cellID) {
+//  int rank = Teuchos::GlobalMPISession::getRank();
+//  cout << "on rank " << rank << ", cellID " << cellID << " has globalCellIndex " << _globalCellIndices[cellID] << endl;
+  return _globalCellIndices[cellID];
+}
+
+GlobalIndexType GDAMaximumRule2D::globalDofIndex(GlobalIndexType cellID, IndexType localDofIndex) {
+  pair<GlobalIndexType,IndexType> key = make_pair(cellID, localDofIndex);
+  map< pair<GlobalIndexType,IndexType>, GlobalIndexType >::iterator mapEntryIt = _localToGlobalMap.find(key);
   if ( mapEntryIt == _localToGlobalMap.end() ) {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "entry not found.");
   }
   return (*mapEntryIt).second;
 }
 
-unsigned GDAMaximumRule2D::globalDofCount() {
+GlobalIndexType GDAMaximumRule2D::globalDofCount() {
   return _numGlobalDofs;
 }
 
-set<int> GDAMaximumRule2D::globalDofIndicesForPartition(int partitionNumber) {
+set<GlobalIndexType> GDAMaximumRule2D::globalDofIndicesForPartition(PartitionIndexType partitionNumber) {
   return _partitionedGlobalDofIndices[partitionNumber];
+}
+
+void GDAMaximumRule2D::interpretLocalDofs(GlobalIndexType cellID, const FieldContainer<double> &localDofs, FieldContainer<double> &globalDofs, FieldContainer<GlobalIndexType> &globalDofIndices) {
+  // for maximum rule, our interpretation is just a one-to-one mapping
+  globalDofs = localDofs; // copy -- this may be a vector or a (square) matrix
+  int numDofs = localDofs.dimension(0);
+  globalDofIndices.resize(numDofs);
+  for (int dofOrdinal=0; dofOrdinal<numDofs; dofOrdinal++) {
+    globalDofIndices[dofOrdinal] = globalDofIndex(cellID, dofOrdinal);
+  }
 }
 
 unsigned GDAMaximumRule2D::localDofCount() {
@@ -617,14 +799,16 @@ unsigned GDAMaximumRule2D::localDofCount() {
   return 0;
 }
 
-void GDAMaximumRule2D::matchNeighbor(unsigned cellID, int sideIndex) {
+void GDAMaximumRule2D::matchNeighbor(GlobalIndexType cellID, int sideIndex) {
   // sets new ElementType to match elem to neighbor on side sideIndex
+  
+//  cout << "matching neighbor for cell " << cellID << " with side ordinal " << sideIndex << endl;
   
   CellPtr cell = _meshTopology->getCell(cellID);
   const shards::CellTopology cellTopo = *cell->topology();
   
   pair< unsigned, unsigned > neighborRecord = cell->getNeighbor(sideIndex);
-  unsigned neighborCellID = neighborRecord.first;
+  GlobalIndexType neighborCellID = neighborRecord.first;
   unsigned sideIndexInNeighbor = neighborRecord.second;
   
   if (neighborCellID == -1) {
@@ -663,7 +847,7 @@ void GDAMaximumRule2D::matchNeighbor(unsigned cellID, int sideIndex) {
   
   // h-refinement handling:
   bool neighborIsBroken = (neighbor->isParent() && (neighbor->childrenForSide(sideIndexInNeighbor).size() > 1));
-  bool elementIsBroken  = (cell->isParent() && (neighbor->childrenForSide(sideIndex).size() > 1));
+  bool elementIsBroken  = (cell->isParent() && (cell->childrenForSide(sideIndex).size() > 1));
   if ( neighborIsBroken || elementIsBroken ) {
     bool bothBroken = ( neighborIsBroken && elementIsBroken );
     CellPtr nonParent, parent; // for the case that one is a parent and the other isn't
@@ -684,7 +868,7 @@ void GDAMaximumRule2D::matchNeighbor(unsigned cellID, int sideIndex) {
     
     if (bothBroken) {
       // match all the children -- we assume RefinementPatterns are compatible (e.g. divisions always by 1/2s)
-      vector< pair<unsigned,unsigned> > childrenForSide = cell->childrenForSide(sideIndex);
+      vector< pair<GlobalIndexType,unsigned> > childrenForSide = cell->childrenForSide(sideIndex);
       for (int childIndexInSide=0; childIndexInSide < childrenForSide.size(); childIndexInSide++) {
         int childCellIndex = childrenForSide[childIndexInSide].first;
         int childSideIndex = childrenForSide[childIndexInSide].second;
@@ -693,7 +877,7 @@ void GDAMaximumRule2D::matchNeighbor(unsigned cellID, int sideIndex) {
       // all our children matched => we're done:
       return;
     } else { // one broken
-      vector< pair< unsigned, unsigned> > childrenForSide = parent->childrenForSide(neighborSideIndexInParent);
+      vector< pair< GlobalIndexType, unsigned> > childrenForSide = parent->childrenForSide(neighborSideIndexInParent);
       
       if ( childrenForSide.size() > 1 ) { // then parent is broken along side, and neighbor isn't...
         { // MultiBasis
@@ -791,12 +975,12 @@ void GDAMaximumRule2D::matchNeighbor(unsigned cellID, int sideIndex) {
 }
 
 map< int, BasisPtr > GDAMaximumRule2D::multiBasisUpgradeMap(CellPtr parent, unsigned sideIndex, unsigned bigNeighborPolyOrder) {
-  vector< pair< unsigned, unsigned> > childrenForSide = parent->childrenForSide(sideIndex);
+  vector< pair< GlobalIndexType, unsigned> > childrenForSide = parent->childrenForSide(sideIndex);
   map< int, BasisPtr > varIDsToUpgrade;
   vector< map< int, BasisPtr > > childVarIDsToUpgrade;
-  vector< pair< unsigned, unsigned> >::iterator entryIt;
+  vector< pair< GlobalIndexType, unsigned> >::iterator entryIt;
   for ( entryIt=childrenForSide.begin(); entryIt != childrenForSide.end(); entryIt++) {
-    int childCellIndex = (*entryIt).first;
+    GlobalIndexType childCellIndex = (*entryIt).first;
     int childSideIndex = (*entryIt).second;
     CellPtr childCell = _meshTopology->getCell(childCellIndex);
     
@@ -855,24 +1039,67 @@ int GDAMaximumRule2D::neighborChildPermutation(int childIndex, int numChildrenIn
   return numChildrenInSide - childIndex - 1;
 }
 
-int GDAMaximumRule2D::neighborDofPermutation(int dofIndex, int numDofsForSide) {
+IndexType GDAMaximumRule2D::neighborDofPermutation(IndexType dofIndex, IndexType numDofsForSide) {
   // we'll need to be more sophisticated in 3D, but for now we just reverse the order
   return numDofsForSide - dofIndex - 1;
 }
 
+PartitionIndexType GDAMaximumRule2D::partitionForCellID( GlobalIndexType cellID ) {
+  return _partitionForCellID[ cellID ];
+}
+
+PartitionIndexType GDAMaximumRule2D::partitionForGlobalDofIndex( GlobalIndexType globalDofIndex ) {
+  if ( _partitionForGlobalDofIndex.find( globalDofIndex ) == _partitionForGlobalDofIndex.end() ) {
+    return -1;
+  }
+  return _partitionForGlobalDofIndex[ globalDofIndex ];
+}
+
+IndexType GDAMaximumRule2D::partitionLocalCellIndex(GlobalIndexType cellID) {
+  return _partitionLocalCellIndices[cellID];
+}
+
+GlobalIndexType GDAMaximumRule2D::partitionLocalIndexForGlobalDofIndex( GlobalIndexType globalDofIndex ) {
+  return _partitionLocalIndexForGlobalDofIndex[ globalDofIndex ];
+}
+
+FieldContainer<double> & GDAMaximumRule2D::physicalCellNodes( ElementTypePtr elemTypePtr) {
+#ifdef HAVE_MPI
+  int partitionNumber     = Teuchos::GlobalMPISession::getRank();
+#else
+  int partitionNumber     = 0;
+#endif
+  return _partitionedPhysicalCellNodesForElementType[ partitionNumber ][ elemTypePtr.get() ];
+}
+
+FieldContainer<double> & GDAMaximumRule2D::physicalCellNodesGlobal( ElementTypePtr elemTypePtr ) {
+  return _physicalCellNodesForElementType[ elemTypePtr.get() ];
+}
+
 void GDAMaximumRule2D::rebuildLookups() {
+//  cout << "GDAMaximumRule2D::rebuildLookups().\n";
   _cellSideUpgrades.clear();
   determineActiveElements();
   buildTypeLookups(); // build data structures for efficient lookup by element type
   buildLocalToGlobalMap();
   determinePartitionDofIndices();
+  
+  // now discard any old coefficients
+  for (vector< Solution* >::iterator solutionIt = _registeredSolutions.begin();
+       solutionIt != _registeredSolutions.end(); solutionIt++) {
+    (*solutionIt)->discardInactiveCellCoefficients();
+  }
 }
 
-void GDAMaximumRule2D::setElementType(unsigned cellID, ElementTypePtr newType, bool sideUpgradeOnly) {
+void GDAMaximumRule2D::registerSolution(Solution* solution) {
+  _registeredSolutions.push_back( solution );
+}
+
+void GDAMaximumRule2D::setElementType(GlobalIndexType cellID, ElementTypePtr newType, bool sideUpgradeOnly) {
   CellPtr cell = _meshTopology->getCell(cellID);
   if (sideUpgradeOnly) { // need to track in _cellSideUpgrades
     ElementTypePtr oldType;
-    map<int, pair<ElementTypePtr, ElementTypePtr> >::iterator existingEntryIt = _cellSideUpgrades.find(cellID);
+    map<GlobalIndexType, pair<ElementTypePtr, ElementTypePtr> >::iterator existingEntryIt = _cellSideUpgrades.find(cellID);
     if (existingEntryIt != _cellSideUpgrades.end() ) {
       oldType = (existingEntryIt->second).first;
     } else {
@@ -890,10 +1117,20 @@ void GDAMaximumRule2D::setElementType(unsigned cellID, ElementTypePtr newType, b
   _elementTypeForCell[cellID] = newType;
 }
 
+void GDAMaximumRule2D::unregisterSolution(Solution* solution) {
+  for (vector< Solution* >::iterator solnIt = _registeredSolutions.begin();
+       solnIt != _registeredSolutions.end(); solnIt++) {
+    if ( *solnIt == solution ) {
+      _registeredSolutions.erase(solnIt);
+      return;
+    }
+  }
+  cout << "GDAMaximumRule2D::unregisterSolution: Solution not found.\n";
+}
 
-void GDAMaximumRule2D::verticesForCell(FieldContainer<double>& vertices, int cellID) {
+void GDAMaximumRule2D::verticesForCell(FieldContainer<double>& vertices, GlobalIndexType cellID) {
   CellPtr cell = _meshTopology->getCell(cellID);
-  vector<unsigned> vertexIndices = cell->vertices();
+  vector<IndexType> vertexIndices = cell->vertices();
   int numVertices = vertexIndices.size();
   int spaceDim = _meshTopology->getSpaceDim();
   
@@ -906,16 +1143,16 @@ void GDAMaximumRule2D::verticesForCell(FieldContainer<double>& vertices, int cel
   }
 }
 
-void GDAMaximumRule2D::verticesForCells(FieldContainer<double>& vertices, vector<int> &cellIDs) {
+void GDAMaximumRule2D::verticesForCells(FieldContainer<double>& vertices, vector<GlobalIndexType> &cellIDs) {
   // all cells represented in cellIDs must have the same topology
   int spaceDim = _meshTopology->getSpaceDim();
-  int numCells = cellIDs.size();
+  GlobalIndexType numCells = cellIDs.size();
   
   if (numCells == 0) {
     vertices.resize(0,0,0);
     return;
   }
-  unsigned firstCellID = cellIDs[0];
+  GlobalIndexType firstCellID = cellIDs[0];
   int numVertices = _meshTopology->getCell(firstCellID)->vertices().size();
   
   vertices.resize(numCells,numVertices,spaceDim);

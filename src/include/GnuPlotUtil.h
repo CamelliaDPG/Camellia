@@ -21,10 +21,12 @@ class GnuPlotUtil {
     int numActiveElements = mesh->numActiveElements();
     
     FieldContainer<double> cellCentroids(numActiveElements,spaceDim); // used for labelling cells
-    vector<int> cellIDs;
+    
+    set<GlobalIndexType> cellIDset = mesh->getActiveCellIDs();
+    vector<GlobalIndexType> cellIDs(cellIDset.begin(),cellIDset.end());
     
     for (int cellIndex=0; cellIndex<numActiveElements; cellIndex++) {
-      ElementPtr cell = mesh->getActiveElement(cellIndex);
+      ElementPtr cell = mesh->getElement(cellIDs[cellIndex]);
       bool neglectCurves = true;
       vector< ParametricCurvePtr > edgeLines = ParametricCurve::referenceCellEdges(cell->elementType()->cellTopoPtr->getKey());
       int numEdges = edgeLines.size();
@@ -91,11 +93,11 @@ public:
     double minX = 1e10, minY = 1e10, maxX = -1e10, maxY = -1e10;
     
     FieldContainer<double> cellCentroids;
-    vector<int> cellIDs;
+    set<GlobalIndexType> cellIDset = mesh->getActiveCellIDs();
+    vector<GlobalIndexType> cellIDs(cellIDset.begin(),cellIDset.end());
     
     for (int cellIndex=0; cellIndex<numActiveElements; cellIndex++) {
-      ElementPtr cell = mesh->getActiveElement(cellIndex);
-      cellIDs.push_back(cell->cellID());
+      ElementPtr cell = mesh->getElement(cellIDs[cellIndex]);
       vector< ParametricCurvePtr > edgeLines = ParametricCurve::referenceCellEdges(cell->elementType()->cellTopoPtr->getKey());
       int numEdges = edgeLines.size();
       int numPointsPerEdge = max(10,cell->elementType()->testOrderPtr->maxBasisDegree() * 2); // 2 points for linear, 4 for quadratic, etc.
@@ -215,9 +217,11 @@ public:
     
     double minX = 1e10, minY = 1e10, maxX = -1e10, maxY = -1e10;
     
-    vector<int> cellIDs;
+    set<GlobalIndexType> cellIDset = mesh->getActiveCellIDs();
+    vector<GlobalIndexType> cellIDs(cellIDset.begin(),cellIDset.end());
+    
     for (int cellIndex=0; cellIndex<numActiveElements; cellIndex++) {
-      ElementPtr cell = mesh->getActiveElement(cellIndex);
+      ElementPtr cell = mesh->getElement(cellIDs[cellIndex]);
       cellIDs.push_back(cell->cellID());
       vector< ParametricCurvePtr > edgeCurves = mesh->parametricEdgesForCell(cell->cellID());
       for (int edgeIndex=0; edgeIndex < edgeCurves.size(); edgeIndex++) {
@@ -249,7 +253,7 @@ public:
     fout << "# set yrange [" << minY- 0.1*yDiff << ":" << maxY+0.1*yDiff << "] \n";
     fout << "# plot \"" << filePath << "\" using 1:2 title 'mesh' with lines\n";
     if (labelCells) {
-      for (int i=0; i<cellIDs.size(); i++) {
+      for (int i=0; i<numActiveElements; i++) {
         int cellID = cellIDs[i];
         fout << "# set label \"" << cellID << "\" at " << cellCentroids(i,0) << ",";
         fout << cellCentroids(i,1) << " center " << endl;
@@ -263,7 +267,7 @@ public:
     scriptOut << "set yrange [" << minY- 0.1*yDiff << ":" << maxY+0.1*yDiff << "] \n";
     scriptOut << "plot \"" << filePath << "\" using 1:2 title 'mesh' with lines\n";
     if (labelCells) {
-      for (int i=0; i<cellIDs.size(); i++) {
+      for (int i=0; i<numActiveElements; i++) {
         int cellID = cellIDs[i];
         scriptOut << "set label \"" << cellID << "\" at " << cellCentroids(i,0) << ",";
         scriptOut << cellCentroids(i,1) << " center " << endl;

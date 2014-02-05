@@ -19,13 +19,13 @@ enum RefinementType {
 };
 
 class RefinementHistory : public RefinementObserver {
-  typedef pair< RefinementType, set<int> > Refinement;
+  typedef pair< RefinementType, set<GlobalIndexType> > Refinement;
   vector< Refinement > _refinements;
 public:
-  void hRefine(const set<int> &cellIDs, Teuchos::RCP<RefinementPattern> refPattern);
-  void hUnrefine(const set<int> &cellIDs);
+  void hRefine(const set<GlobalIndexType> &cellIDs, Teuchos::RCP<RefinementPattern> refPattern);
+  void hUnrefine(const set<GlobalIndexType> &cellIDs);
   
-  void pRefine(const set<int> &cellIDs);
+  void pRefine(const set<GlobalIndexType> &cellIDs);
   
   void playback(MeshPtr mesh);
   

@@ -44,29 +44,29 @@
 #include "Element.h"
 #include "BC.h"
 
+#include "IndexType.h"
+
 class Mesh;
 
 using namespace Intrepid;
 
 class Boundary {
-  set< pair< int, int > > _boundaryElements; // first arg is cellID, second arg is sideIndex
+  set< pair< GlobalIndexType, unsigned > > _boundaryElements; // first arg is cellID, second arg is sideOrdinal
   // rebuild the next two structures whenever element types have changed (after mesh build or refinement)
-  map< ElementType*, vector< pair< int, int > > > _boundaryElementsByType; // entries in vector are indices into mesh's
+  map< ElementType*, vector< pair< GlobalIndexType, int > > > _boundaryElementsByType; // entries in vector are indices into mesh's
                                                                      // enumeration of elements of ElementType, paired
                                                                      // with the sideIndex of the boundary in the element
-  map< ElementType*, vector< int > > _boundaryCellIDs; // ordering matches the pairs in _boundaryElementsByType
+  map< ElementType*, vector< GlobalIndexType > > _boundaryCellIDs; // ordering matches the pairs in _boundaryElementsByType
   Mesh *_mesh;
 public:
   Boundary();
   void setMesh(Mesh* mesh);
-  void addElement( int cellID, int sideIndex ); // sideIndex: which of this element's sides is the boundary
-  void deleteElement( int cellID, int sideIndex ); // sideIndex: which of this element's sides is the boundary
-  bool boundaryElement( int cellID );
-  bool boundaryElement( int cellID, int sideIndex );
-  vector< pair<int, int > > boundaryElements(Teuchos::RCP< ElementType > elemTypePtr);
-  void bcsToImpose(FieldContainer<int> &globalIndices, FieldContainer<double> &globalValues, BC &bc, set<int>& globalIndexFilter);
-  void bcsToImpose(FieldContainer<int> &globalIndices, FieldContainer<double> &globalValues, BC &bc);
-  void bcsToImpose( map< int, double > &globalDofIndicesAndValues, BC &bc, Teuchos::RCP< ElementType > elemTypePtr,
+  bool boundaryElement( GlobalIndexType cellID );
+  bool boundaryElement( GlobalIndexType cellID, int sideIndex );
+  vector< pair<GlobalIndexType, int > > boundaryElements(Teuchos::RCP< ElementType > elemTypePtr);
+  void bcsToImpose(FieldContainer<GlobalIndexType> &globalIndices, FieldContainer<double> &globalValues, BC &bc, set<GlobalIndexType>& globalIndexFilter);
+  void bcsToImpose(FieldContainer<GlobalIndexType> &globalIndices, FieldContainer<double> &globalValues, BC &bc);
+  void bcsToImpose( map< GlobalIndexType, double > &globalDofIndicesAndValues, BC &bc, Teuchos::RCP< ElementType > elemTypePtr,
                    map <int, bool> &isSingleton);
   void buildLookupTables();
   //bool cellIsBoundaryElement(int cellID);

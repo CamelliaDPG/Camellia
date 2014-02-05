@@ -10,6 +10,7 @@
 
 #include "ElementTests.h"
 #include "ConfusionBilinearForm.h"
+#include "MeshFactory.h"
 
 std::string ElementTests::testSuiteName() {
   return "ElementTests";
@@ -86,7 +87,7 @@ void ElementTests::setup() {
   
   Teuchos::RCP<BilinearForm> confusionBF = Teuchos::rcp( new ConfusionBilinearForm(eps,beta_x,beta_y) );
   
-  _mesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells, confusionBF, H1Order, testOrder);
+  _mesh = MeshFactory::buildQuadMesh(quadPoints, horizontalCells, verticalCells, confusionBF, H1Order, testOrder);
       
   // the right way to determine the southwest element, etc. is as follows:
   FieldContainer<double> points(4,2);
@@ -105,7 +106,7 @@ void ElementTests::setup() {
   _nw = elements[2]; // as presently implemented, cellID = 1
   _ne = elements[3]; // as presently implemented, cellID = 3
 
-  vector<int> cellIDsToRefine;
+  vector<GlobalIndexType> cellIDsToRefine;
   cellIDsToRefine.push_back(_sw->cellID());
   
   _mesh->hRefine(cellIDsToRefine,RefinementPattern::regularRefinementPatternQuad());

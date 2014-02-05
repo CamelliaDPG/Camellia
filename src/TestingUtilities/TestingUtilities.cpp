@@ -3,12 +3,12 @@
 #include "Element.h"
 
 void TestingUtilities::initializeSolnCoeffs(SolutionPtr solution){
-  map< pair<int,int> , int> localToGlobalMap = solution->mesh()->getLocalToGlobalMap();    
-  map< pair<int,int> , int>::iterator it;
+  map< pair<IndexType,IndexType>, IndexType> localToGlobalMap = solution->mesh()->getLocalToGlobalMap();
+  map< pair<IndexType,IndexType>, IndexType>::iterator it;
   for (it = localToGlobalMap.begin();it!=localToGlobalMap.end();it++){
     pair<int,int> cellID_dofIndex = it->first;
     int cellID = cellID_dofIndex.first;
-    int numLocalTrialDofs = solution->mesh()->elements()[cellID]->elementType()->trialOrderPtr->totalDofs();
+    int numLocalTrialDofs = solution->mesh()->getElement(cellID)->elementType()->trialOrderPtr->totalDofs();
     FieldContainer<double> dofs(numLocalTrialDofs);
     dofs.initialize(0.0); 
     solution->setSolnCoeffsForCellID(dofs,cellID);
@@ -16,8 +16,8 @@ void TestingUtilities::initializeSolnCoeffs(SolutionPtr solution){
 }
 
 // checks if dof has a BC applied to it
-bool TestingUtilities::isBCDof(int globalDofIndex, SolutionPtr solution){  
-  FieldContainer<int> globalIndices;
+bool TestingUtilities::isBCDof(GlobalIndexType globalDofIndex, SolutionPtr solution){
+  FieldContainer<GlobalIndexType> globalIndices;
   FieldContainer<double> globalValues;
   solution->mesh()->boundary().bcsToImpose(globalIndices, globalValues, *(solution->bc()));
   for (int i = 0;i < globalIndices.size(); i++){
@@ -28,30 +28,30 @@ bool TestingUtilities::isBCDof(int globalDofIndex, SolutionPtr solution){
   return false;  
 }
 
-bool TestingUtilities::isFluxOrTraceDof(MeshPtr mesh, int globalDofIndex){
-  map<int,set<int> > fluxInds, fieldInds;
+bool TestingUtilities::isFluxOrTraceDof(MeshPtr mesh, GlobalIndexType globalDofIndex){
+  map<GlobalIndexType,set<GlobalIndexType> > fluxInds, fieldInds;
   getGlobalFieldFluxDofInds(mesh, fluxInds,fieldInds);
   bool value = false;
-  for (int index = 0;index<mesh->numActiveElements();index++){
-    ElementPtr elem = mesh->getActiveElement(index);
-    int cellID = elem->cellID();
+  set<GlobalIndexType> activeCellIDs = mesh->getActiveCellIDs();
+  for (set<GlobalIndexType>::iterator cellIt = activeCellIDs.begin(); cellIt != activeCellIDs.end(); cellIt++) {
+    GlobalIndexType cellID = *cellIt;
+    ElementPtr elem = mesh->getElement(cellID);
     if (fluxInds[cellID].find(globalDofIndex)!=fluxInds[cellID].end()){
       value = true;
     }
   }
   return value;
 }
-void TestingUtilities::setSolnCoeffForGlobalDofIndex(SolutionPtr solution, double solnCoeff, int dofIndex) {
-
-  map< pair<int,int> , int> localToGlobalMap = solution->mesh()->getLocalToGlobalMap();    
-  map< pair<int,int> , int>::iterator it;
+void TestingUtilities::setSolnCoeffForGlobalDofIndex(SolutionPtr solution, double solnCoeff, GlobalIndexType dofIndex) {
+  map< pair<GlobalIndexType,IndexType>, GlobalIndexType> localToGlobalMap = solution->mesh()->getLocalToGlobalMap();
+  map< pair<GlobalIndexType,IndexType>, GlobalIndexType>::iterator it;
   for (it = localToGlobalMap.begin();it!=localToGlobalMap.end();it++){
-    pair<int,int> cellID_dofIndex = it->first;
-    int currentGlobalDofIndex = it->second;
+    pair<IndexType,GlobalIndexType> cellID_dofIndex = it->first;
+    GlobalIndexType currentGlobalDofIndex = it->second;
     if (currentGlobalDofIndex==dofIndex) {
-      int cellID = cellID_dofIndex.first;
+      GlobalIndexType cellID = cellID_dofIndex.first;
       int localDofIndex = cellID_dofIndex.second;
-      int numLocalTrialDofs = solution->mesh()->elements()[cellID]->elementType()->trialOrderPtr->totalDofs();
+      int numLocalTrialDofs = solution->mesh()->getElement(cellID)->elementType()->trialOrderPtr->totalDofs();
       FieldContainer<double> dofs(numLocalTrialDofs);
       dofs.initialize(0.0); // inefficient; can do better.
       dofs(localDofIndex) = solnCoeff;
@@ -60,8 +60,7 @@ void TestingUtilities::setSolnCoeffForGlobalDofIndex(SolutionPtr solution, doubl
   }
 }
 
-void TestingUtilities::getGlobalFieldFluxDofInds(MeshPtr mesh, map<int,set<int> > &fluxInds, map<int,set<int> > &fieldInds){
-  
+void TestingUtilities::getGlobalFieldFluxDofInds(MeshPtr mesh, map<GlobalIndexType,set<GlobalIndexType> > &fluxIndices, map<GlobalIndexType,set<GlobalIndexType> > &fieldIndices) {
   // determine trialIDs
   vector< int > trialIDs = mesh->bilinearForm()->trialIDs();
   vector< int > fieldIDs;
@@ -83,27 +82,27 @@ void TestingUtilities::getGlobalFieldFluxDofInds(MeshPtr mesh, map<int,set<int> 
 
   // gets dof indices
   for (elemIt=activeElems.begin();elemIt!=activeElems.end();elemIt++){
-    int cellID = (*elemIt)->cellID();
+    GlobalIndexType cellID = (*elemIt)->cellID();
     int numSides = (*elemIt)->numSides();
     ElementTypePtr elemType = (*elemIt)->elementType();
     
     // get indices (for cell)
-    vector<int> inds;
+    vector<int> indices;
     for (idIt = fieldIDs.begin(); idIt != fieldIDs.end(); idIt++){
       int trialID = (*idIt);
-      inds = elemType->trialOrderPtr->getDofIndices(trialID, 0);
-      for (int i = 0;i<inds.size();++i){
-	fieldInds[cellID].insert(mesh->globalDofIndex(cellID,inds[i]));
+      indices = elemType->trialOrderPtr->getDofIndices(trialID, 0);
+      for (int i = 0;i<indices.size();++i){
+        fieldIndices[cellID].insert(mesh->globalDofIndex(cellID,indices[i]));
       }
     }
     vector<int> fInds;
     for (idIt = fluxIDs.begin(); idIt != fluxIDs.end(); idIt++){
       int trialID = (*idIt);
       for (int sideIndex = 0;sideIndex < numSides;sideIndex++){	
-	fInds = elemType->trialOrderPtr->getDofIndices(trialID, sideIndex);
-	for (int i = 0;i<fInds.size();++i){
-	  fluxInds[cellID].insert(mesh->globalDofIndex(cellID,fInds[i]));
-	}	
+        fInds = elemType->trialOrderPtr->getDofIndices(trialID, sideIndex);
+        for (int i = 0;i<fInds.size();++i){
+          fluxIndices[cellID].insert(mesh->globalDofIndex(cellID,fInds[i]));
+        }
       }
     }
   }  

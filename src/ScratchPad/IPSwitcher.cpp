@@ -31,7 +31,7 @@ void IPSwitcher::computeInnerProductMatrix(FieldContainer<double> &innerProduct,
                                    Teuchos::RCP<BasisCache> basisCache) {
   
   MeshPtr mesh = basisCache->mesh();
-  vector<int> cellIDs = basisCache->cellIDs();
+  vector<GlobalIndexType> cellIDs = basisCache->cellIDs();
   int numCells = innerProduct.dimension(0);
   unsigned numDofs = innerProduct.dimension(1);
   innerProduct.initialize(0.0);
@@ -69,7 +69,7 @@ void IPSwitcher::computeInnerProductVector(FieldContainer<double> &ipVector,
                                    Teuchos::RCP<BasisCache> basisCache) {
   
   MeshPtr mesh = basisCache->mesh();
-  vector<int> cellIDs = basisCache->cellIDs();
+  vector<GlobalIndexType> cellIDs = basisCache->cellIDs();
   int numCells = cellIDs.size();
   unsigned numDofs = dofOrdering->totalDofs();
 

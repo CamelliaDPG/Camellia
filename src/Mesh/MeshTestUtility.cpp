@@ -11,14 +11,17 @@
 #include "MeshTestUtility.h"
 #include "MultiBasis.h"
 
+#include "GDAMaximumRule2D.cpp"
+
 bool MeshTestUtility::checkMeshConsistency(Teuchos::RCP<Mesh> mesh) {
   bool success = true;
   success = checkMeshDofConnectivities(mesh);
   // now, check element types:
-  int numElements = mesh->activeElements().size();
-  for (int cellIndex=0; cellIndex<numElements; cellIndex++) {
-    Teuchos::RCP<Element> elem = mesh->activeElements()[cellIndex];
-    int cellID = mesh->elements()[elem->cellID()]->cellID();
+  vector< ElementPtr > activeElements = mesh->activeElements();
+  GlobalIndexType numElements = activeElements.size();
+  for (GlobalIndexType cellIndex=0; cellIndex<numElements; cellIndex++) {
+    Teuchos::RCP<Element> elem = activeElements[cellIndex];
+    GlobalIndexType cellID = mesh->getElement(elem->cellID())->cellID();
     if ( cellID != elem->cellID() ) {
       success = false;
       cout << "cellID for element doesn't match its index in mesh->elements() --";
@@ -26,7 +29,7 @@ bool MeshTestUtility::checkMeshConsistency(Teuchos::RCP<Mesh> mesh) {
     }
     if ( cellID != mesh->cellID(elem->elementType(), elem->globalCellIndex()) ) {
       success = false;
-      cout << "cellID index in mesh->elements() doesn't match what's reported by mesh->cellID(elemType,cellIndex) --";
+      cout << "cellID index in mesh->elements() doesn't match what's reported by mesh->cellID(elemType,cellIndex): ";
       cout <<  cellID << " != " << mesh->cellID(elem->elementType(), elem->globalCellIndex()) << endl;
     }
     // check that the vertices are lined up correctly
@@ -34,9 +37,7 @@ bool MeshTestUtility::checkMeshConsistency(Teuchos::RCP<Mesh> mesh) {
     for (int sideIndex = 0; sideIndex<numSides; sideIndex++) {
       //      Element* neighbor;
       int mySideIndexInNeighbor;
-      //       elem->getNeighbor(neighbor,mySideIndexInNeighbor,sideIndex);
       Teuchos::RCP<Element> neighbor = mesh->ancestralNeighborForSide(elem, sideIndex, mySideIndexInNeighbor);
-      int neighborCellID = neighbor->cellID();
       int myParity = mesh->parityForSide(cellID,sideIndex);
       if ( mesh->boundary().boundaryElement(cellID,sideIndex) ) { // on boundary
         if ( myParity != 1 ) {
@@ -44,6 +45,7 @@ bool MeshTestUtility::checkMeshConsistency(Teuchos::RCP<Mesh> mesh) {
           cout << "Mesh consistency FAILURE: cellID " << cellID << " has parity != 1 on boundary; sideIndex = " << sideIndex << endl;
         }
       } else { //not on boundary
+        int neighborCellID = neighbor->cellID();
         int neighborParity = mesh->parityForSide(neighborCellID,mySideIndexInNeighbor);
         if (neighborParity != -myParity) {
           success = false;
@@ -100,7 +102,7 @@ bool MeshTestUtility::checkMeshDofConnectivities(Teuchos::RCP<Mesh> mesh) {
   vector<int> globalDofIndexHitCount(numGlobalDofs,0);
   for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
     Teuchos::RCP<Element> elem = mesh->activeElements()[cellIndex];
-    int cellID = elem->cellID();
+    GlobalIndexType cellID = elem->cellID();
     DofOrdering trialOrder = *(elem->elementType()->trialOrderPtr.get());
     vector< int > trialIDs = mesh->bilinearForm()->trialIDs();
     for (vector< int >::iterator trialIt = trialIDs.begin(); trialIt != trialIDs.end(); trialIt++) {
@@ -147,10 +149,10 @@ bool MeshTestUtility::checkMeshDofConnectivities(Teuchos::RCP<Mesh> mesh) {
                 int descendantIndex = -1;
                 for (entryIt = descendantsForSide.begin(); entryIt != descendantsForSide.end(); entryIt++) {
                   descendantIndex++;
-                  int neighborSubSideIndexInMe = mesh->neighborChildPermutation(descendantIndex, descendantsForSide.size());
+                  int neighborSubSideIndexInMe = GDAMaximumRule2D::neighborChildPermutation(descendantIndex, descendantsForSide.size());
                   int neighborCellID = (*entryIt).first;
                   int mySideIndexInNeighbor = (*entryIt).second;
-                  neighbor = mesh->elements()[neighborCellID];
+                  neighbor = mesh->getElement(neighborCellID);
                   int neighborNumDofs = neighbor->elementType()->trialOrderPtr->getBasisCardinality(trialID,mySideIndexInNeighbor);
                   
                   for (int dofOrdinal=0; dofOrdinal<neighborNumDofs; dofOrdinal++) {
@@ -163,7 +165,7 @@ bool MeshTestUtility::checkMeshDofConnectivities(Teuchos::RCP<Mesh> mesh) {
                     int globalDofIndex = mesh->globalDofIndex(cellID,myLocalDofIndex);
                     
                     // neighbor's dofs are in reverse order from mine along each side
-                    int permutedDofOrdinal = mesh->neighborDofPermutation(dofOrdinal,neighborNumDofs);
+                    int permutedDofOrdinal = GDAMaximumRule2D::neighborDofPermutation(dofOrdinal,neighborNumDofs);
                     
                     int neighborLocalDofIndex = neighbor->elementType()->trialOrderPtr->getDofIndex(trialID,permutedDofOrdinal,mySideIndexInNeighbor);
                     int neighborsGlobalDofIndex = mesh->globalDofIndex(neighbor->cellID(),neighborLocalDofIndex);                
@@ -188,7 +190,7 @@ bool MeshTestUtility::checkMeshDofConnectivities(Teuchos::RCP<Mesh> mesh) {
                 for (vector< pair<int,int> >::iterator entryIt = descendantsForSide.begin(); 
                      entryIt != descendantsForSide.end();  entryIt++, descendantIndex++) {
                   if (entryIt->first == cellID) {
-                    leafIndexInNeighbor = Mesh::neighborChildPermutation(descendantIndex, descendantsForSide.size());
+                    leafIndexInNeighbor = GDAMaximumRule2D::neighborChildPermutation(descendantIndex, descendantsForSide.size());
                     break;
                   }
                 }
@@ -209,7 +211,7 @@ bool MeshTestUtility::checkMeshDofConnectivities(Teuchos::RCP<Mesh> mesh) {
                 } else {
                   // cardinalities match, check that global dofs line up
                   for (int dofOrdinal = 0; dofOrdinal < numBasisDofs; dofOrdinal++) {
-                    int permutedDofOrdinal = mesh->neighborDofPermutation(dofOrdinal, numBasisDofs);
+                    int permutedDofOrdinal = GDAMaximumRule2D::neighborDofPermutation(dofOrdinal, numBasisDofs);
                     int neighborDofOrdinal = neighborMultiBasis->relativeToAbsoluteDofOrdinal(permutedDofOrdinal, 
                                                                                               leafIndexInNeighbor);
                     int neighborLocalDofIndex = neighbor->elementType()->trialOrderPtr->getDofIndex(trialID, neighborDofOrdinal,ancestralSideIndexInNeighbor);
@@ -235,11 +237,11 @@ bool MeshTestUtility::checkMeshDofConnectivities(Teuchos::RCP<Mesh> mesh) {
             } else { // (neighborNumBasisDofs == numBasisDofs)
               if (! neighbor->isParent() ) { 
                 for (int dofOrdinal=0; dofOrdinal<numBasisDofs; dofOrdinal++) {
-                  int permutedDofOrdinal = mesh->neighborDofPermutation(dofOrdinal,numBasisDofs);
+                  int permutedDofOrdinal = GDAMaximumRule2D::neighborDofPermutation(dofOrdinal,numBasisDofs);
                   int neighborsLocalDofIndex = neighborTrialOrder->getDofIndex(trialID, permutedDofOrdinal, ancestralSideIndexInNeighbor);
-                  int neighborsGlobalDofIndex = mesh->globalDofIndex(neighbor->cellID(),neighborsLocalDofIndex); 
+                  GlobalIndexType neighborsGlobalDofIndex = mesh->globalDofIndex(neighbor->cellID(),neighborsLocalDofIndex);
                   int localDofIndex = trialOrder.getDofIndex(trialID, dofOrdinal, sideIndex);
-                  int globalDofIndex = mesh->globalDofIndex(cellID,localDofIndex);
+                  GlobalIndexType globalDofIndex = mesh->globalDofIndex(cellID,localDofIndex);
                   if (neighborsGlobalDofIndex != globalDofIndex) {
                     cout << "FAILURE: cellID " << cellID << "'s neighbor " << sideIndex << "'s globalDofIndex " << neighborsGlobalDofIndex << " doesn't match element globalDofIndex " << globalDofIndex << ". (trialID, element dofOrdinal)=(" << trialID << "," << dofOrdinal << ")" << endl;
                     success = false;
@@ -249,17 +251,17 @@ bool MeshTestUtility::checkMeshDofConnectivities(Teuchos::RCP<Mesh> mesh) {
                 // for PatchBasis:
                 for (int dofOrdinal=0; dofOrdinal<numBasisDofs; dofOrdinal++) {
                   int localDofIndex = trialOrder.getDofIndex(trialID, dofOrdinal, sideIndex);
-                  int globalDofIndex = mesh->globalDofIndex(cellID,localDofIndex);
+                  GlobalIndexType globalDofIndex = mesh->globalDofIndex(cellID,localDofIndex);
                   vector< pair<int,int> > descendantsForSide = neighbor->getDescendantsForSide(ancestralSideIndexInNeighbor);
                   vector< pair<int,int> >:: iterator entryIt;
                   for (entryIt = descendantsForSide.begin(); entryIt != descendantsForSide.end(); entryIt++) {
-                    int neighborCellID = (*entryIt).first;
+                    GlobalIndexType neighborCellID = (*entryIt).first;
                     int mySideIndexInNeighbor = (*entryIt).second;
-                    neighbor = mesh->elements()[neighborCellID];
+                    neighbor = mesh->getElement(neighborCellID);
                     neighborTrialOrder = neighbor->elementType()->trialOrderPtr;
-                    int permutedDofOrdinal = mesh->neighborDofPermutation(dofOrdinal,numBasisDofs);
+                    int permutedDofOrdinal = GDAMaximumRule2D::neighborDofPermutation(dofOrdinal,numBasisDofs);
                     int neighborsLocalDofIndex = neighborTrialOrder->getDofIndex(trialID, permutedDofOrdinal, mySideIndexInNeighbor);
-                    int neighborsGlobalDofIndex = mesh->globalDofIndex(neighbor->cellID(),neighborsLocalDofIndex);                
+                    GlobalIndexType neighborsGlobalDofIndex = mesh->globalDofIndex(neighbor->cellID(),neighborsLocalDofIndex);
                     if (neighborsGlobalDofIndex != globalDofIndex) {
                       cout << "FAILURE: cellID " << cellID << "'s neighbor on side " << sideIndex;
                       cout << " (cellID " << neighborCellID << ")'s globalDofIndex " << neighborsGlobalDofIndex;

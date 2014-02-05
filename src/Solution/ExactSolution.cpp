@@ -108,7 +108,7 @@ void ExactSolution::L2NormOfError(FieldContainer<double> &errorSquaredPerCell, S
   
   // much of this code is the same as what's in the volume integration in computeStiffness...
   FieldContainer<double> physicalCellNodes = solution.mesh()->physicalCellNodesGlobal(elemTypePtr);
-  vector<int> cellIDs = solution.mesh()->cellIDsOfTypeGlobal(elemTypePtr);
+  vector<GlobalIndexType> cellIDs = solution.mesh()->cellIDsOfTypeGlobal(elemTypePtr);
   basisCache->setPhysicalCellNodes(physicalCellNodes, cellIDs, true);
   
   if (boundaryIntegral) {

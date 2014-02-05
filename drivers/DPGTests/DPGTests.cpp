@@ -99,7 +99,7 @@ ElementTypePtr makeElemType(DofOrderingPtr trialOrdering, DofOrderingPtr testOrd
   return Teuchos::rcp( new ElementType( trialOrdering, testOrdering, cellTopoPtr) );
 }
 
-BasisCachePtr makeBasisCache(ElementTypePtr elemType, const FieldContainer<double> &physicalCellNodes, const vector<int> &cellIDs,
+BasisCachePtr makeBasisCache(ElementTypePtr elemType, const FieldContainer<double> &physicalCellNodes, const vector<GlobalIndexType> &cellIDs,
                          bool createSideCacheToo = true) {
   BasisCachePtr basisCache = Teuchos::rcp( new BasisCache(elemType) );
   basisCache->setPhysicalCellNodes(physicalCellNodes,cellIDs,createSideCacheToo);
@@ -171,9 +171,29 @@ void DPGTests::runTests() {
   // setup our TestSuite tests:
   vector< Teuchos::RCP< TestSuite > > testSuites;
   
-//  testSuites.push_back( Teuchos::rcp( new IncompressibleFormulationsTests(true) ) ); // true: turn "thorough" on
+  if (skipSlowTests) {
+    if (rank==0) {
+      cout << "skipping slow tests (IncompressibleFormulationsTests).\n";
+    }
+  } else {
+    testSuites.push_back( Teuchos::rcp( new IncompressibleFormulationsTests(false) ) ); // false: turn "thorough" off
+  }
+  
+  testSuites.push_back( Teuchos::rcp( new ScratchPadTests ) );
   
   testSuites.push_back( Teuchos::rcp( new MeshTestSuite ) );
+  
+  testSuites.push_back( Teuchos::rcp( new ElementTests ) );
+  testSuites.push_back( Teuchos::rcp( new MultiBasisTests ) );
+  
+  testSuites.push_back( Teuchos::rcp( new MeshRefinementTests ) ); // skips two PatchBasis tests
+  testSuites.push_back( Teuchos::rcp( new MPIWrapperTests) );
+  testSuites.push_back( Teuchos::rcp( new ParametricCurveTests) );
+  testSuites.push_back( Teuchos::rcp( new RHSTests ) );
+  testSuites.push_back( Teuchos::rcp( new SerialDenseMatrixUtilityTests) );
+  testSuites.push_back( Teuchos::rcp( new VectorizedBasisTestSuite ) );
+  
+  testSuites.push_back( Teuchos::rcp( new LinearTermTests ) );
   testSuites.push_back( Teuchos::rcp( new MeshTopologyTests ) );
   testSuites.push_back( Teuchos::rcp( new CurvilinearMeshTests) );
   
@@ -182,35 +202,18 @@ void DPGTests::runTests() {
   testSuites.push_back( Teuchos::rcp( new SolutionTests ) );
   testSuites.push_back( Teuchos::rcp( new FunctionTests ) );
   testSuites.push_back( Teuchos::rcp( new LobattoBasisTests ) );
-
-  testSuites.push_back( Teuchos::rcp( new ElementTests ) );
   testSuites.push_back( Teuchos::rcp( new HConvergenceStudyTests ) );
-  testSuites.push_back( Teuchos::rcp( new LinearTermTests ) );
-  testSuites.push_back( Teuchos::rcp( new LobattoBasisTests ) );
-  testSuites.push_back( Teuchos::rcp( new MeshRefinementTests ) );
-  testSuites.push_back( Teuchos::rcp( new MultiBasisTests ) );
-  testSuites.push_back( Teuchos::rcp( new MPIWrapperTests) );
-  testSuites.push_back( Teuchos::rcp( new ParametricCurveTests) );
-  testSuites.push_back( Teuchos::rcp( new PatchBasisTests ) );
-  testSuites.push_back( Teuchos::rcp( new RHSTests ) );
-  testSuites.push_back( Teuchos::rcp( new ScratchPadTests ) );
-  testSuites.push_back( Teuchos::rcp( new SerialDenseMatrixUtilityTests) );
-  testSuites.push_back( Teuchos::rcp( new VectorizedBasisTestSuite ) );
   
-  if (skipSlowTests) {
-    if (rank==0) {
-      cout << "skipping slow tests (IncompressibleFormulationsTests).\n";
-    }
-  } else {
-    testSuites.push_back( Teuchos::rcp( new IncompressibleFormulationsTests(false) ) ); // false: turn "thorough" off
-  }
+  //  testSuites.push_back( Teuchos::rcp( new IncompressibleFormulationsTests(true) ) ); // true: turn "thorough" on
+  //  testSuites.push_back( Teuchos::rcp( new PatchBasisTests ) ); // skip until we have a proper GDAMinimumRule constructed
 
   int numTestSuites = testSuites.size();
   for (int testSuiteIndex = 0; testSuiteIndex < numTestSuites; testSuiteIndex++) {
     Teuchos::RCP< TestSuite > testSuite = testSuites[testSuiteIndex];
     int numSuiteTests = 0, numSuiteTestsPassed = 0;
-    testSuite->runTests(numSuiteTests, numSuiteTestsPassed);
     string name = testSuite->testSuiteName();
+    if (rank==0) cout << "Running " << name << "." << endl;
+    testSuite->runTests(numSuiteTests, numSuiteTestsPassed);
     if (rank==0) cout << name << ": passed " << numSuiteTestsPassed << "/" << numSuiteTests << " tests." << endl;
     numTestsTotal  += numSuiteTests;
     numTestsPassed += numSuiteTestsPassed;
@@ -1129,7 +1132,7 @@ bool DPGTests::testAnalyticBoundaryIntegral(bool conforming) {
   quadPoints(0,2,1) = 1.0;
   quadPoints(0,3,0) = -1.0;
   quadPoints(0,3,1) = 1.0;
-  vector<int> quadCellIDs;
+  vector<GlobalIndexType> quadCellIDs;
   quadCellIDs.push_back(0);
   
   bool success = true;
@@ -1300,7 +1303,7 @@ bool DPGTests::testLowOrderTrialCubicTest() {
   quadPoints(0,2,1) = 1.0;
   quadPoints(0,3,0) = -1.0;
   quadPoints(0,3,1) = 1.0;
-  vector<int> quadCellIDs;
+  vector<GlobalIndexType> quadCellIDs;
   quadCellIDs.push_back(0);
   
   bool success = true;
@@ -2124,7 +2127,7 @@ bool DPGTests::testComputeOptimalTest() {
   triPoints(0,2,0) = 1.0;
   triPoints(0,2,1) = 1.0;
   
-  vector<int> cellIDs;
+  vector<GlobalIndexType> cellIDs;
   cellIDs.push_back(0);
   
   FieldContainer<double> nodePoints;
@@ -2470,7 +2473,7 @@ bool DPGTests::testComputeOptimalTestPoisson() {
       quadPoints(0,2,1) = 1.0;
       quadPoints(0,3,0) = -1.0;
       quadPoints(0,3,1) = 1.0;
-      vector<int> cellIDs;
+      vector<GlobalIndexType> cellIDs;
       cellIDs.push_back(0);
       
       FieldContainer<double> ipMatrix(numTests,numTestDofs,numTestDofs);

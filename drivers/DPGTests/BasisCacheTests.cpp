@@ -1,5 +1,7 @@
 #include "BasisCacheTests.h"
 
+#include "MeshFactory.h"
+
 FieldContainer<double> BasisCacheTests::referenceCubeNodes() {
   FieldContainer<double> cubePoints(8,3);
   cubePoints(0,0) = -1;
@@ -97,8 +99,8 @@ void BasisCacheTests::setup() {
   int horizontalCells = 1, verticalCells = 1;
   
   // create a pointer to a new mesh:
-  _spectralConfusionMesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells,
-                                               _confusionBF, H1Order, H1Order+pToAdd);
+  _spectralConfusionMesh = MeshFactory::buildQuadMesh(quadPoints, horizontalCells, verticalCells,
+                                                      _confusionBF, H1Order, H1Order+pToAdd);
   
   // some 2D test points:
   // setup test points:
@@ -115,8 +117,8 @@ void BasisCacheTests::setup() {
   }
   
   _elemType = _spectralConfusionMesh->getElement(0)->elementType();
-  vector<int> cellIDs;
-  int cellID = 0;
+  vector<GlobalIndexType> cellIDs;
+  GlobalIndexType cellID = 0;
   cellIDs.push_back(cellID);
   _basisCache = Teuchos::rcp( new BasisCache( _elemType, _spectralConfusionMesh ) ); // *will* create side caches
   _basisCache->setRefCellPoints(_testPoints);

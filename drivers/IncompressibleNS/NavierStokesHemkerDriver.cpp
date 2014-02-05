@@ -979,7 +979,7 @@ int main(int argc, char *argv[]) {
 //        printNeighbors(cell0);
 //        printNeighbors(cell7);
 //      }
-//      vector<int> cellIDs;
+//      vector<GlobalIndexType> cellIDs;
 //      cellIDs.push_back(0);
 //      cellIDs.push_back(7);
 //      mesh->hRefine(cellIDs, RefinementPattern::regularRefinementPatternQuad());
@@ -1416,7 +1416,7 @@ int main(int argc, char *argv[]) {
       for (vector< ElementTypePtr >::iterator elemTypeIt = elemTypes.begin(); elemTypeIt != elemTypes.end(); elemTypeIt++) {
         ElementTypePtr elemType = *elemTypeIt;
         vector< ElementPtr > elems = mesh->elementsOfTypeGlobal(elemType);
-        vector<int> cellIDs;
+        vector<GlobalIndexType> cellIDs;
         for (int i=0; i<elems.size(); i++) {
           cellIDs.push_back(elems[i]->cellID());
         }

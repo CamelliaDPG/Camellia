@@ -67,10 +67,10 @@ typedef Teuchos::RCP<RieszRep> RieszRepPtr;
 class RieszRep {
  private:
 
-  map<int, FieldContainer<double> > _rieszRepDofs; // from cellID to dofs of riesz representation
-  map<int, FieldContainer<double> > _rieszRepDofsGlobal; // from cellID to dofs of riesz representation
-  map<int, double > _rieszRepNormSquared; // from cellID to norm squared of riesz inversion
-  map<int, double > _rieszRepNormSquaredGlobal; // from cellID to norm squared of riesz inversion
+  map<GlobalIndexType, FieldContainer<double> > _rieszRepDofs; // from cellID to dofs of riesz representation
+  map<GlobalIndexType, FieldContainer<double> > _rieszRepDofsGlobal; // from cellID to dofs of riesz representation
+  map<GlobalIndexType, double > _rieszRepNormSquared; // from cellID to norm squared of riesz inversion
+  map<GlobalIndexType, double > _rieszRepNormSquaredGlobal; // from cellID to norm squared of riesz inversion
   
   MeshPtr _mesh;
   Teuchos::RCP< DPGInnerProduct > _ip;
@@ -100,19 +100,19 @@ class RieszRep {
   MeshPtr mesh();
 
   // for testing
-  map<int,FieldContainer<double> > integrateRHS(); // integrateFunctional()
+  map<GlobalIndexType,FieldContainer<double> > integrateRHS(); // integrateFunctional()
 
   void computeRieszRep(int cubatureEnrichment=0);
 
   double getNorm();
-  const map<int,double> &getNormsSquared();
+  const map<GlobalIndexType,double> &getNormsSquared();
 
   void distributeDofs();
 
   void computeRepresentationValues(FieldContainer<double> &values, int testID, IntrepidExtendedTypes::EOperatorExtended op, BasisCachePtr basisCache);
 
   double computeAlternativeNormSqOnCell(IPPtr ip, ElementPtr elem);
-  map<int,double> computeAlternativeNormSqOnCells(IPPtr ip, vector<int> cellIDs);
+  map<int,double> computeAlternativeNormSqOnCells(IPPtr ip, vector<GlobalIndexType> cellIDs);
   
 };
 
