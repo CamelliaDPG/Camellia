@@ -17,14 +17,10 @@
 class Solution;
 
 class GDAMaximumRule2D : public GlobalDofAssignment {
-  // much of this code copied from Mesh
-  GlobalIndexType _activeCellOffset; // among active cells, an offset to allow the current partition to identify unique cell indices
-  
+  // much of this code copied from Mesh  
   map< GlobalIndexType, vector<int> > _cellSideParitiesForCellID;
   
   ElementTypeFactory _elementTypeFactory;
-  
-  vector< vector< GlobalIndexType > > _partitions; // GlobalIndexType: cellIDs
   
   // keep track of upgrades to the sides of cells since the last rebuild:
   // (used to remap solution coefficients)
@@ -44,7 +40,6 @@ class GDAMaximumRule2D : public GlobalDofAssignment {
   
   map<GlobalIndexType, ElementTypePtr> _elementTypeForCell; // keys are cellIDs
   
-  map<GlobalIndexType, IndexType> _partitionForCellID;
   map<GlobalIndexType, PartitionIndexType> _partitionForGlobalDofIndex;
   map<GlobalIndexType, IndexType> _partitionLocalIndexForGlobalDofIndex;
   vector< map< ElementType*, FieldContainer<double> > > _partitionedPhysicalCellNodesForElementType;
@@ -64,7 +59,6 @@ class GDAMaximumRule2D : public GlobalDofAssignment {
   void assignInitialElementType( GlobalIndexType cellID );
   void buildTypeLookups();
   void buildLocalToGlobalMap();
-  void determineActiveElements();
   void determineDofPairings();
   void determinePartitionDofIndices();
 
@@ -81,9 +75,7 @@ class GDAMaximumRule2D : public GlobalDofAssignment {
 public:
   GDAMaximumRule2D(MeshTopologyPtr meshTopology, VarFactory varFactory, DofOrderingFactoryPtr dofOrderingFactory, MeshPartitionPolicyPtr partitionPolicy,
                    unsigned initialH1OrderTrial, unsigned testOrderEnhancement, bool enforceMBFluxContinuity = false);
-  
-  GlobalIndexType activeCellOffset();
-  
+    
   FieldContainer<double> & cellSideParities( ElementTypePtr elemTypePtr );
   FieldContainer<double> cellSideParitiesForCell( GlobalIndexType cellID );
   

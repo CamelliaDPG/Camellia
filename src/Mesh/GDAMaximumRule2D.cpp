@@ -65,10 +65,6 @@ GDAMaximumRule2D::GDAMaximumRule2D(MeshTopologyPtr meshTopology, VarFactory varF
   rebuildLookups();
 }
 
-GlobalIndexType GDAMaximumRule2D::activeCellOffset() {
-  return _activeCellOffset;
-}
-
 void GDAMaximumRule2D::addDofPairing(GlobalIndexType cellID1, IndexType dofIndex1, GlobalIndexType cellID2, IndexType dofIndex2) {
   int firstCellID, firstDofIndex;
   int secondCellID, secondDofIndex;
@@ -407,35 +403,6 @@ vector< GlobalIndexType > GDAMaximumRule2D::cellsInPartition(PartitionIndexType 
     partitionNumber = rank;
   }
   return _partitions[partitionNumber];
-}
-
-void GDAMaximumRule2D::determineActiveElements() {
-  set<unsigned> activeCellIDs = _meshTopology->getActiveCellIndices();
-  
-  int partitionNumber     = Teuchos::GlobalMPISession::getRank();
-  
-//  cout << "determineActiveElements(): there are "  << activeCellIDs.size() << " active elements.\n";
-  _partitions.clear();
-  _partitionForCellID.clear();
-  FieldContainer<GlobalIndexType> partitionedMesh(_numPartitions,activeCellIDs.size());
-  _partitionPolicy->partitionMesh(_meshTopology.get(),_numPartitions,partitionedMesh);
-//  cout << "partitionedMesh:\n" << partitionedMesh;
-  
-  _activeCellOffset = 0;
-  for (PartitionIndexType i=0; i<partitionedMesh.dimension(0); i++) {
-    vector< GlobalIndexType > partition;
-    for (int j=0; j<partitionedMesh.dimension(1); j++) {
-//      cout << "partitionedMesh(i,j) = " << partitionedMesh(i,j) << endl;
-      if (partitionedMesh(i,j) == -1) break; // no more elements in this partition
-      GlobalIndexType cellID = partitionedMesh(i,j);
-      partition.push_back( cellID );
-      _partitionForCellID[cellID] = i;
-    }
-    _partitions.push_back( partition );
-    if (partitionNumber > i) {
-      _activeCellOffset += partition.size();
-    }
-  }
 }
 
 void GDAMaximumRule2D::determineDofPairings() {

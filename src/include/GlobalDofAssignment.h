@@ -23,6 +23,7 @@ class GlobalDofAssignment;
 typedef Teuchos::RCP<GlobalDofAssignment> GlobalDofAssignmentPtr;
 
 class GlobalDofAssignment {
+  GlobalIndexType _activeCellOffset; // among active cells, an offset to allow the current partition to identify unique cell indices
 protected:
   MeshTopologyPtr _meshTopology;
   VarFactory _varFactory;
@@ -33,10 +34,17 @@ protected:
   
   map<GlobalIndexType, unsigned> _cellH1Orders;
   
+  vector< vector< GlobalIndexType > > _partitions; // GlobalIndexType: cellIDs
+  map<GlobalIndexType, IndexType> _partitionForCellID;
+  
   unsigned _numPartitions;
+  
+  void determineActiveElements();
 public:
   GlobalDofAssignment(MeshTopologyPtr meshTopology, VarFactory varFactory, DofOrderingFactoryPtr dofOrderingFactory,
                       MeshPartitionPolicyPtr partitionPolicy, unsigned initialH1OrderTrial, unsigned testOrderEnhancement);
+
+  GlobalIndexType activeCellOffset();
   
   // after calling any of these, must call rebuildLookups
   virtual void didHRefine(const set<GlobalIndexType> &parentCellIDs) = 0;

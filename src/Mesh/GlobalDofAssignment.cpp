@@ -30,15 +30,47 @@ GlobalDofAssignment::GlobalDofAssignment(MeshTopologyPtr meshTopology, VarFactor
     _cellH1Orders[cellID] = _initialH1OrderTrial;
   }
   
-#ifdef HAVE_MPI
-  _numPartitions = Teuchos::GlobalMPISession::getNProc();
-#else
-  _numPartitions = 1;
-#endif
+  _numPartitions = Teuchos::GlobalMPISession::getNProc();  
+  determineActiveElements();
+}
+
+
+GlobalIndexType GlobalDofAssignment::activeCellOffset() {
+  return _activeCellOffset;
+}
+
+void GlobalDofAssignment::determineActiveElements() {
+  set<unsigned> activeCellIDs = _meshTopology->getActiveCellIndices();
+  
+  int partitionNumber     = Teuchos::GlobalMPISession::getRank();
+  
+  //  cout << "determineActiveElements(): there are "  << activeCellIDs.size() << " active elements.\n";
+  _partitions.clear();
+  _partitionForCellID.clear();
+  FieldContainer<GlobalIndexType> partitionedMesh(_numPartitions,activeCellIDs.size());
+  _partitionPolicy->partitionMesh(_meshTopology.get(),_numPartitions,partitionedMesh);
+  //  cout << "partitionedMesh:\n" << partitionedMesh;
+  
+  _activeCellOffset = 0;
+  for (PartitionIndexType i=0; i<partitionedMesh.dimension(0); i++) {
+    vector< GlobalIndexType > partition;
+    for (int j=0; j<partitionedMesh.dimension(1); j++) {
+      //      cout << "partitionedMesh(i,j) = " << partitionedMesh(i,j) << endl;
+      if (partitionedMesh(i,j) == -1) break; // no more elements in this partition
+      GlobalIndexType cellID = partitionedMesh(i,j);
+      partition.push_back( cellID );
+      _partitionForCellID[cellID] = i;
+    }
+    _partitions.push_back( partition );
+    if (partitionNumber > i) {
+      _activeCellOffset += partition.size();
+    }
+  }
 }
 
 void GlobalDofAssignment::setPartitionPolicy( MeshPartitionPolicyPtr partitionPolicy ) {
   _partitionPolicy = partitionPolicy;
+  determineActiveElements();
   didChangePartitionPolicy();
 }
 
