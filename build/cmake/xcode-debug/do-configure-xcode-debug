@@ -24,4 +24,5 @@ cmake \
   -D CAMELLIA_SOURCE_DIR:FILEPATH=$HOME/Camellia/src \
   -D CAMELLIA_BUILD_TYPE:STRING="debug" \
   -D VTK_DIR:FILEPATH=$HOME/lib/vtk-5.10 \
+  -D BOOST_ROOT:FILEPATH=/usr/local \
   .
