@@ -91,6 +91,7 @@ unsigned vertexPermutation(shards::CellTopology &fineTopo, unsigned fineSideInde
   cout << "coarse side index: " << coarseSideIndex << endl;
   cout << "coarse nodes:\n" << coarseCellNodes;
   TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "matching permutation not found");
+  return -1; // just for compilers that would otherwise warn that we're missing a return value...
 }
 
 FieldContainer<double> BasisReconciliation::computeConstrainedWeights(BasisPtr finerBasis, BasisPtr coarserBasis) {
