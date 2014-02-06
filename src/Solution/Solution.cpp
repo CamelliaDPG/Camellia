@@ -133,6 +133,7 @@ static const int MIN_BATCH_SIZE_IN_CELLS = 2; // overrides the above, if it resu
 // copy constructor:
 Solution::Solution(const Solution &soln) {
   _mesh = soln.mesh();
+  _dofInterpreter = _mesh.get();
   _bc = soln.bc();
   _rhs = soln.rhs();
   _ip = soln.ip();
@@ -149,6 +150,7 @@ Solution::Solution(const Solution &soln) {
 
 Solution::Solution(Teuchos::RCP<Mesh> mesh, Teuchos::RCP<BC> bc, Teuchos::RCP<RHS> rhs, Teuchos::RCP<DPGInnerProduct> ip) {
   _mesh = mesh;
+  _dofInterpreter = mesh.get();
   _bc = bc;
   _rhs = rhs;
   _ip = ip;
@@ -510,8 +512,8 @@ void Solution::populateStiffnessAndLoad() {
         FieldContainer<double> localStiffness(localStiffnessDim,&finalStiffness(cellIndex,0,0)); // shallow copy
         FieldContainer<double> localRHS(localRHSDim,&localRHSVector(cellIndex,0)); // shallow copy
         // we have the same local-to-global map for both rows and columns
-        _mesh->interpretLocalDofs(cellID, localStiffness, interpretedStiffness, globalDofIndices);
-        _mesh->interpretLocalDofs(cellID, localRHS, interpretedRHS, globalDofIndices);
+        _dofInterpreter->interpretLocalDofs(cellID, localStiffness, interpretedStiffness, globalDofIndices);
+        _dofInterpreter->interpretLocalDofs(cellID, localRHS, interpretedRHS, globalDofIndices);
         
         // cast whatever the global index type is to a type that Epetra supports
         globalDofIndices.dimensions(dim);
@@ -572,7 +574,7 @@ void Solution::populateStiffnessAndLoad() {
         GlobalIndexTypeToCast globalRowIndex = partMap.GID(localRowIndex);
         int nnz = 0;
         FieldContainer<double> localLHS(localLHSDim,&lhs(cellIndex,0)); // shallow copy
-        _mesh->interpretLocalDofs(cellIDs[cellIndex], localLHS, interpretedLHS, interpretedGlobalDofIndices);
+        _dofInterpreter->interpretLocalDofs(cellIDs[cellIndex], localLHS, interpretedLHS, interpretedGlobalDofIndices);
         
         for (int i=0; i<interpretedLHS.size(); i++) {
           if (interpretedLHS(i) != 0.0) {
@@ -876,7 +878,7 @@ void Solution::solveWithPrepopulatedStiffnessAndLoad(Teuchos::RCP<Solver> solver
   for (set<GlobalIndexType>::iterator cellIDIt = cellIDs.begin(); cellIDIt != cellIDs.end(); cellIDIt++) {
     GlobalIndexType cellID = *cellIDIt;
     FieldContainer<double> cellDofs(_mesh->getElementType(cellID)->trialOrderPtr->totalDofs());
-    _mesh->interpretGlobalDofs(cellID,cellDofs,solnCoeff);
+    _dofInterpreter->interpretGlobalDofs(cellID,cellDofs,solnCoeff);
     _solutionForCellIDGlobal[cellID] = cellDofs;
   }
   clearComputedResiduals(); // now that we've solved, will need to recompute residuals...
@@ -1047,7 +1049,7 @@ void Solution::integrateBasisFunctions(FieldContainer<GlobalIndexTypeToCast> &gl
         IndexType dofIndex = elemTypePtr->trialOrderPtr->getDofIndex(trialID, dofOrdinal);
         localDiscreteValues(dofIndex) = valuesForType(cellIndex,dofOrdinal);
       }
-      _mesh->interpretLocalDofs(cellID, localDiscreteValues, interpretedDiscreteValues, globalDofIndices);
+      _dofInterpreter->interpretLocalDofs(cellID, localDiscreteValues, interpretedDiscreteValues, globalDofIndices);
       
       for (int dofIndex=0; dofIndex<globalDofIndices.size(); dofIndex++) {
         if (interpretedDiscreteValues(dofIndex) != 0) {

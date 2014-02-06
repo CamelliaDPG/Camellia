@@ -78,9 +78,10 @@ class Solution;
 class MeshTransformationFunction;
 class MeshPartitionPolicy;
 
+#include "DofInterpreter.h"
 #include "GDAMaximumRule2D.h"
 
-class Mesh : public RefinementObserver {
+class Mesh : public RefinementObserver, public DofInterpreter {
   MeshTopologyPtr _meshTopology;
   
   Teuchos::RCP<GDAMaximumRule2D> _maximumRule2D;

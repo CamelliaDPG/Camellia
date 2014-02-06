@@ -63,6 +63,8 @@
 #include "Epetra_SerialDenseVector.h"
 #include "Solver.h"
 
+#include "DofInterpreter.h"
+
 class Function;
 typedef Teuchos::RCP<Function> FunctionPtr;
 
@@ -90,6 +92,7 @@ private:
 
   Teuchos::RCP<Mesh> _mesh;
   Teuchos::RCP<BC> _bc;
+  DofInterpreter* _dofInterpreter; // defaults to Mesh
   Teuchos::RCP<RHS> _rhs;
   Teuchos::RCP<DPGInnerProduct> _ip;
   Teuchos::RCP<LocalStiffnessMatrixFilter> _filter;

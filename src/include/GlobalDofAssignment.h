@@ -22,11 +22,12 @@
 #include "Epetra_Vector.h"
 
 #include "IndexType.h"
+#include "DofInterpreter.h"
 
 class GlobalDofAssignment;
 typedef Teuchos::RCP<GlobalDofAssignment> GlobalDofAssignmentPtr;
 
-class GlobalDofAssignment {
+class GlobalDofAssignment : public DofInterpreter {
   GlobalIndexType _activeCellOffset; // among active cells, an offset to allow the current partition to identify unique cell indices
 protected:
   map< GlobalIndexType, vector<int> > _cellSideParitiesForCellID;
