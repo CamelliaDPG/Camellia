@@ -67,8 +67,6 @@ int main(int argc, char *argv[]) {
         quadPoints(3,1) = 1.0;
         
         // h-convergence
-        int sqrtElements = 2;
-        
         double epsilon = 1e-2;
         double beta_x = 1.0, beta_y = 1.0;
         ConfusionManufacturedSolution exactSolution(epsilon,beta_x,beta_y); // 0 doesn't mean constant, but a particular solution...
