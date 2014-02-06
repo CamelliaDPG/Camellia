@@ -63,6 +63,35 @@ class DiscontinuousInitialCondition : public Function {
       }
 };
 
+class RampedInitialCondition : public Function {
+   private:
+      double xloc;
+      double valL;
+      double valR;
+      double h;
+   public:
+      RampedInitialCondition(double xloc, double valL, double valR, double h) : Function(0), xloc(xloc), valL(valL), valR(valR), h(h) {}
+      void setH(double h_) { h = h_; }
+      void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
+         int numCells = values.dimension(0);
+         int numPoints = values.dimension(1);
+
+         const FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
+         for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
+            for (int ptIndex=0; ptIndex<numPoints; ptIndex++) 
+            {
+               double x = (*points)(cellIndex,ptIndex,0);
+               if (x <= xloc-h/2.)
+                  values(cellIndex, ptIndex) = valL;
+               else if (x >= xloc+h/2.)
+                  values(cellIndex, ptIndex) = valR;
+               else
+                  values(cellIndex, ptIndex) = valL+(valR-valL)/h*(x-xloc+h/2);
+            }
+         }
+      }
+};
+
 int main(int argc, char *argv[]) {
 #ifdef HAVE_MPI
   Teuchos::GlobalMPISession mpiSession(&argc, &argv,0);
@@ -83,7 +112,9 @@ int main(int argc, char *argv[]) {
   int deltaP = args.Input("--deltaP", "how much to enrich test space", 2);
   int xCells = args.Input("--xCells", "number of cells in the x direction", 8);
   int tCells = args.Input("--tCells", "number of cells in the t direction", 4);
-  int maxNewtonIterations = args.Input("--maxIterations", "maximum number of Newton iterations", 10);
+  int maxNewtonIterations = args.Input("--maxIterations", "maximum number of Newton iterations", 20);
+  int numPreRefs = args.Input<int>("--numPreRefs","pre-refinements on singularity",0);
+
   args.Process();
 
    ////////////////////   PROBLEM DEFINITIONS   ///////////////////////
@@ -99,65 +130,71 @@ int main(int argc, char *argv[]) {
 
   switch (problem)
   {
+    case 0:
+    // Simple problem for testing
+    problemName = "SimpleShock";
+    xmin = 0;
+    xmax = 1;
+    xint = 0.5;
+    tmax = 0.1;
+
+    // GAMMA = 1.4;
+    rhoL = 1;
+    rhoR = 1;
+    uL = 1;
+    uR = 0;
+    // pL = 0;
+    // pR = 0;
+    // eL = pL/(rhoL*(GAMMA-1));
+    // eR = pR/(rhoR*(GAMMA-1));
+    // TL = eL/Cv;
+    // TR = eR/Cv;
+    TL = 1;
+    TR = 1;
+    break;
     case 1:
+    // Simple problem for testing
+    problemName = "SimpleRarefaction";
+    xmin = 0;
+    xmax = 1;
+    xint = 0.5;
+    tmax = 0.1;
+
+    // GAMMA = 1.4;
+    rhoL = 1;
+    rhoR = 1;
+    uL = -1;
+    uR = 1;
+    // pL = 0;
+    // pR = 0;
+    // eL = pL/(rhoL*(GAMMA-1));
+    // eR = pR/(rhoR*(GAMMA-1));
+    // TL = eL/Cv;
+    // TR = eR/Cv;
+    TL = 1;
+    TR = 1;
+    break;
+    case 2:
     // Sod shock tube
     problemName = "Sod";
     xmin = 0;
     xmax = 1;
     xint = 0.5;
-    tmax = 0.2;
+    tmax = 0.1;
 
-    GAMMA = 1.4;
+    // GAMMA = 1.4;
     rhoL = 1;
-    rhoR = 0.125;
+    rhoR = .125;
     uL = 0;
     uR = 0;
-    pL = 1;
-    pR = 0.1;
-    eL = pL/(rhoL*(GAMMA-1));
-    eR = pR/(rhoR*(GAMMA-1));
-    TL = eL/Cv;
-    TR = eR/Cv;
-    break;
-    case 2:
-    // Double Rarefaction
-    problemName = "DoubleRarefaction";
-    xmin = -1;
-    xmax = 1;
-    xint = 0;
-    tmax = 0.2;
-
-    GAMMA = 1.4;
-    rhoL = 7;
-    rhoR = 7;
-    uL = -1;
-    uR = 1;
-    pL = 0.2;
-    pR = 0.2;
-    eL = pL/(rhoL*(GAMMA-1));
-    eR = pR/(rhoR*(GAMMA-1));
-    TL = eL/Cv;
-    TR = eR/Cv;
-    break;
-    case 3:
-    // Single Rarefaction
-    problemName = "SingleRarefaction";
-    xmin = -0.2;
-    xmax = 1;
-    xint = 0;
-    tmax = 0.5;
-
-    GAMMA = 1.4;
-    rhoL = 7;
-    rhoR = 7;
-    uL = 0;
-    uR = 1;
-    pL = 0.2;
-    pR = 0.2;
-    eL = pL/(rhoL*(GAMMA-1));
-    eR = pR/(rhoR*(GAMMA-1));
-    TL = eL/Cv;
-    TR = eR/Cv;
+    // pL = 0;
+    // pR = 0;
+    // eL = pL/(rhoL*(GAMMA-1));
+    // eR = pR/(rhoR*(GAMMA-1));
+    // TL = eL/Cv;
+    // TR = eR/Cv;
+    TL = 1/rhoL;
+    TR = .1/rhoR;
     break;
     default:
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "invalid problem number");
@@ -217,14 +254,25 @@ int main(int argc, char *argv[]) {
   SolutionPtr backgroundFlow = Teuchos::rcp(new Solution(mesh, nullBC, nullRHS, nullIP) );
 
   map<int, Teuchos::RCP<Function> > initialConditions;
-  initialConditions[rho->ID()] = Teuchos::rcp( new DiscontinuousInitialCondition(xint, rhoL, rhoR) ) ;
-  initialConditions[u->ID()]   = Teuchos::rcp( new DiscontinuousInitialCondition(xint, uL, uR) );
-  initialConditions[T->ID()]   = Teuchos::rcp( new DiscontinuousInitialCondition(xint, TL, TR) );
+  // initialConditions[rho->ID()] = Teuchos::rcp( new DiscontinuousInitialCondition(xint, rhoL, rhoR) ) ;
+  // initialConditions[u->ID()]   = Teuchos::rcp( new DiscontinuousInitialCondition(xint, uL, uR) );
+  // initialConditions[T->ID()]   = Teuchos::rcp( new DiscontinuousInitialCondition(xint, TL, TR) );
+  // initialConditions[rho->ID()] = Teuchos::rcp( new RampedInitialCondition(xint, rhoL, rhoR, (xmax-xmin)/xCells) ) ;
+  // initialConditions[u->ID()]   = Teuchos::rcp( new RampedInitialCondition(xint, uL, uR, (xmax-xmin)/xCells) );
+  // initialConditions[T->ID()]   = Teuchos::rcp( new RampedInitialCondition(xint, TL, TR, (xmax-xmin)/xCells) );
+  initialConditions[rho->ID()] = Teuchos::rcp( new RampedInitialCondition(xint, rhoL, rhoR, (xmax-xmin)/xCells/pow(2.,numPreRefs)) ) ;
+  initialConditions[u->ID()]   = Teuchos::rcp( new RampedInitialCondition(xint, uL, uR,     (xmax-xmin)/xCells/pow(2.,numPreRefs)) );
+  initialConditions[T->ID()]   = Teuchos::rcp( new RampedInitialCondition(xint, TL, TR,     (xmax-xmin)/xCells/pow(2.,numPreRefs)) );
 
   backgroundFlow->projectOntoMesh(initialConditions);
 
   ////////////////////   DEFINE BILINEAR FORM   ///////////////////////
   // Set up problem
+
+  R = 1;
+  Cv = 1;
+  Cp = 1;
+  Pr = 1;
 
   FunctionPtr rho_prev = Function::solution(rho, backgroundFlow);
   FunctionPtr u_prev   = Function::solution(u, backgroundFlow);
@@ -260,8 +308,8 @@ int main(int argc, char *argv[]) {
 
   // ve terms:
   bf->addTerm( -Cv*rho_prev*T_prev*u, ve->dx());
-  bf->addTerm( -Cv*rho_prev*u_prev*T, ve->dx());
-  bf->addTerm( -Cv*T_prev*rho_prev*u, ve->dx());
+  bf->addTerm( -Cv*u_prev*rho_prev*T, ve->dx());
+  bf->addTerm( -Cv*T_prev*u_prev*rho, ve->dx());
   bf->addTerm( -0.5*rho_prev*u_prev*u_prev*u, ve->dx());
   bf->addTerm( -0.5*rho_prev*u_prev*u_prev*u, ve->dx());
   bf->addTerm( -0.5*rho_prev*u_prev*u_prev*u, ve->dx());
@@ -287,7 +335,7 @@ int main(int argc, char *argv[]) {
   rhs->addTerm( -4./3*u_prev * S->dx() );
 
   // tau terms:
-  rhs->addTerm( -T_prev * tau->dx() );
+  rhs->addTerm( T_prev * tau->dx() );
 
   // vc terms:
   rhs->addTerm( rho_prev*u_prev * vc->dx() );
@@ -315,22 +363,21 @@ int main(int argc, char *argv[]) {
   SpatialFilterPtr left = Teuchos::rcp( new ConstantXBoundary(xmin) );
   SpatialFilterPtr right = Teuchos::rcp( new ConstantXBoundary(xmax) );
   SpatialFilterPtr init = Teuchos::rcp( new ConstantYBoundary(0) );
-  FunctionPtr rho0  = Teuchos::rcp( new DiscontinuousInitialCondition(xint, -rhoL, -rhoR) );
-  FunctionPtr mass0 = Teuchos::rcp( new DiscontinuousInitialCondition(xint, -uL*rhoL, -uR*rhoR) );
-  FunctionPtr E0    = Teuchos::rcp( new DiscontinuousInitialCondition(xint, -(rhoL*eL+0.5*rhoL*uL*uL), -(rhoR*eR+0.5*rhoR*uR*uR)) );
-  bc->addDirichlet(Fc, init, rho0);
-  bc->addDirichlet(Fm, init, mass0);
-  bc->addDirichlet(Fe, init, E0);
+  // FunctionPtr rho0  = Teuchos::rcp( new DiscontinuousInitialCondition(xint, rhoL, rhoR) );
+  // FunctionPtr mom0 = Teuchos::rcp( new DiscontinuousInitialCondition(xint, uL*rhoL, uR*rhoR) );
+  // FunctionPtr E0    = Teuchos::rcp( new DiscontinuousInitialCondition(xint, (rhoL*Cv*TL+0.5*rhoL*uL*uL), (rhoR*Cv*TR+0.5*rhoR*uR*uR)) );
+  FunctionPtr rho0  = Teuchos::rcp( new RampedInitialCondition(xint, rhoL, rhoR, (xmax-xmin)/xCells/pow(2.,numPreRefs)) );
+  FunctionPtr mom0 = Teuchos::rcp( new RampedInitialCondition(xint, uL*rhoL, uR*rhoR, (xmax-xmin)/xCells/pow(2.,numPreRefs)) );
+  FunctionPtr E0    = Teuchos::rcp( new RampedInitialCondition(xint, (rhoL*Cv*TL+0.5*rhoL*uL*uL), (rhoR*Cv*TR+0.5*rhoR*uR*uR), (xmax-xmin)/xCells/pow(2.,numPreRefs)) );
+  bc->addDirichlet(Fc, init, -rho0);
+  bc->addDirichlet(Fm, init, -mom0);
+  bc->addDirichlet(Fe, init, -E0);
   bc->addDirichlet(Fc, left, -rhoL*uL*one);
   bc->addDirichlet(Fc, right, rhoR*uR*one);
-  bc->addDirichlet(Fm, left, -(rhoL*uL*uL+pL)*one);
-  bc->addDirichlet(Fm, right, (rhoR*uR*uR+pR)*one);
-  bc->addDirichlet(Fe, left, -(rhoL*eL+0.5*rhoL*uL*uL+pL)*uL*one);
-  bc->addDirichlet(Fe, right, (rhoR*eR+0.5*rhoR*uR*uR+pR)*uR*one);
-  // bc->addDirichlet(uhat, left, zero);
-  // bc->addDirichlet(uhat, right, zero);
-  // bc->addDirichlet(That, left, TL*one);
-  // bc->addDirichlet(That, right, TR*one);
+  bc->addDirichlet(Fm, left, -(rhoL*uL*uL+R*rhoL*TL)*one);
+  bc->addDirichlet(Fm, right, (rhoR*uR*uR+R*rhoR*TR)*one);
+  bc->addDirichlet(Fe, left, -(rhoL*Cv*TL+0.5*rhoL*uL*uL+R*Cv*TL)*uL*one);
+  bc->addDirichlet(Fe, right, (rhoR*Cv*TR+0.5*rhoR*uR*uR+R*Cv*TL)*uR*one);
 
   ////////////////////   SOLVE & REFINE   ///////////////////////
   Teuchos::RCP<Solution> solution = Teuchos::rcp( new Solution(mesh, bc, rhs, ip) );
@@ -339,6 +386,38 @@ int main(int argc, char *argv[]) {
   double energyThreshold = 0.2; // for mesh refinements
   RefinementStrategy refinementStrategy( solution, energyThreshold );
   VTKExporter exporter(backgroundFlow, mesh, varFactory);
+  set<int> nonlinearVars;
+  nonlinearVars.insert(D->ID());
+  nonlinearVars.insert(rho->ID());
+  nonlinearVars.insert(u->ID());
+  nonlinearVars.insert(T->ID());
+
+  if (commRank==0){
+    cout << "Number of pre-refinements = " << numPreRefs << endl;
+  }
+  for (int i =0;i<=numPreRefs;i++){
+    vector<ElementPtr> elems = mesh->activeElements();
+    vector<ElementPtr>::iterator elemIt;
+    vector<int> pointCells;
+    for (elemIt=elems.begin();elemIt != elems.end();elemIt++){
+      int cellID = (*elemIt)->cellID();
+      int numSides = mesh->getElement(cellID)->numSides();
+      FieldContainer<double> vertices(numSides,2); //for quads
+
+      mesh->verticesForCell(vertices, cellID);
+      bool cellIDset = false;
+      for (int j = 0;j<numSides;j++){ // num sides = 4
+        if ((abs(vertices(j,0)-xint)<1e-7) && (abs(vertices(j,1))<1e-7) && !cellIDset)
+        {
+          pointCells.push_back(cellID);
+          cellIDset = true;
+        }
+      }
+    }
+    if (i<numPreRefs){
+      refinementStrategy.refineCells(pointCells);
+    }
+  }
 
   double nonlinearRelativeEnergyTolerance = 1e-5; // used to determine convergence of the nonlinear solution
   for (int refIndex=0; refIndex<=numRefs; refIndex++)
@@ -381,7 +460,7 @@ int main(int argc, char *argv[]) {
         }
       }
 
-      backgroundFlow->addSolution(solution, alpha, false, true);
+      backgroundFlow->addSolution(solution, alpha, nonlinearVars);
       iterCount++;
       if (commRank == 0)
         cout << "L2 Norm of Update = " << L2Update << endl;
@@ -401,6 +480,13 @@ int main(int argc, char *argv[]) {
     if (refIndex < numRefs)
     {
       refinementStrategy.refine(commRank==0);
+      // double newRamp = (xmax-xmin)/pow(xCells, refIndex);
+      // dynamic_cast< RampedInitialCondition* >(initialConditions[rho->ID()].get())->setH(newRamp);
+      // dynamic_cast< RampedInitialCondition* >(initialConditions[u->ID()].get())->setH(newRamp);
+      // dynamic_cast< RampedInitialCondition* >(initialConditions[T->ID()].get())->setH(newRamp);
+      // dynamic_cast< RampedInitialCondition* >(rho0.get())->setH(newRamp);
+      // dynamic_cast< RampedInitialCondition* >(mom0.get())->setH(newRamp);
+      // dynamic_cast< RampedInitialCondition* >(E0.get())->setH(newRamp);
       backgroundFlow->projectOntoMesh(initialConditions);
     }
   }
