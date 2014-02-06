@@ -81,7 +81,7 @@ void ZoltanMeshPartitionPolicy::partitionMesh(MeshTopology *meshTopology, Partit
       zz->Set_Param( "NUM_LID_ENTRIES", "1");  /* local ID is null */
     }
     zz->Set_Param( "OBJ_WEIGHT_DIM", "0");   
-    zz->Set_Param( "DEBUG_LEVEL", "0");
+    zz->Set_Param( "DEBUG_LEVEL", _debug_level);
     //  zz->Set_Param( "REFTREE_INITPATH", "CONNECTED"); // no SFC on coarse meshTopology
     zz->Set_Param( "RANDOM_MOVE_FRACTION", "1.0");    /* Zoltan "random" partition param */
     
@@ -128,10 +128,17 @@ void ZoltanMeshPartitionPolicy::partitionMesh(MeshTopology *meshTopology, Partit
                               numImport, importGlobalIds, importLocalIds, importProcs, importToPart,
                               numExport, exportGlobalIds, exportLocalIds, exportProcs, exportToPart);
     
-    if (rc != ZOLTAN_OK){
-      printf("Partitioning failed on process %d\n",myNode);
-      //    exit(0);
-    }else{
+    if (rc == ZOLTAN_WARN) {
+      if (numActiveElements / numPartitions > 0) // if the warning is just because not every process received an element, don't even note that the warning was issued
+        printf("Partitioning with Zoltan on process %d returned a warning.  # active elements = %d\n",myNode,numActiveElements);
+      else
+        rc = ZOLTAN_OK;
+    }
+    
+    if (rc == ZOLTAN_FATAL) {
+      printf("Partitioning failed on process %d with a fatal error.  Exiting...\n",myNode);
+      exit(1);
+    } else {
       
       /* ----------- modify output array partitionedActiveCells ------- */
       
@@ -154,12 +161,16 @@ void ZoltanMeshPartitionPolicy::partitionMesh(MeshTopology *meshTopology, Partit
         }
       }   
       // compute total number of IDs for this proc
-      int numIDsForThisNode = 0;    
+      int numIDsForThisNode = 0;
+      bool reportAssignment = (rc==ZOLTAN_WARN);
+      if (reportAssignment) cout << "For rank " << myNode << ", Zoltan assigned IDs: ";
       for (int j = 0;j<maxPartitionSize;j++){
         if (partitionedActiveCells(myNode,j)!=-1){
           numIDsForThisNode++;
+          if (reportAssignment) cout << partitionedActiveCells(myNode,j) << " ";
         }      
-      }       
+      }
+      if (reportAssignment) cout << endl;
       
       if (numNodes>1){
         // need to pass around information about partitions here thru MPI - each processors must know all other processors' partitions
