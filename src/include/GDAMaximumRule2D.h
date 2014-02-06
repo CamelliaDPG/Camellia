@@ -17,10 +17,7 @@
 class Solution;
 
 class GDAMaximumRule2D : public GlobalDofAssignment {
-  // much of this code copied from Mesh  
-  map< GlobalIndexType, vector<int> > _cellSideParitiesForCellID;
-  
-  ElementTypeFactory _elementTypeFactory;
+  // much of this code copied from Mesh    
   
   // keep track of upgrades to the sides of cells since the last rebuild:
   // (used to remap solution coefficients)
@@ -38,8 +35,6 @@ class GDAMaximumRule2D : public GlobalDofAssignment {
   vector< vector< ElementTypePtr > > _elementTypesForPartition;
   vector< ElementTypePtr > _elementTypeList;
   
-  map<GlobalIndexType, ElementTypePtr> _elementTypeForCell; // keys are cellIDs
-  
   map<GlobalIndexType, PartitionIndexType> _partitionForGlobalDofIndex;
   map<GlobalIndexType, IndexType> _partitionLocalIndexForGlobalDofIndex;
   vector< map< ElementType*, FieldContainer<double> > > _partitionedPhysicalCellNodesForElementType;
@@ -56,7 +51,6 @@ class GDAMaximumRule2D : public GlobalDofAssignment {
   map<unsigned, GlobalIndexType> getGlobalVertexIDs(const FieldContainer<double> &vertexCoordinates);
 
   void addDofPairing(GlobalIndexType cellID1, IndexType dofIndex1, GlobalIndexType cellID2, IndexType dofIndex2);
-  void assignInitialElementType( GlobalIndexType cellID );
   void buildTypeLookups();
   void buildLocalToGlobalMap();
   void determineDofPairings();
@@ -101,6 +95,7 @@ public:
 
   GlobalIndexType globalDofCount();
   void interpretLocalDofs(GlobalIndexType cellID, const FieldContainer<double> &localDofs, FieldContainer<double> &globalDofs, FieldContainer<GlobalIndexType> &globalDofIndices);
+  void interpretGlobalDofs(GlobalIndexType cellID, FieldContainer<double> &localDofs, const Epetra_Vector &globalDofs);
   IndexType localDofCount(); // local to the MPI node
   
   PartitionIndexType getPartitionCount();

@@ -17,20 +17,37 @@ GDAMinimumRule::GDAMinimumRule(MeshTopologyPtr meshTopology, VarFactory varFacto
 
 
 void GDAMinimumRule::didChangePartitionPolicy() {
-//  rebuildLookups();
+  rebuildLookups();
 }
 
 void GDAMinimumRule::didHRefine(const set<GlobalIndexType> &parentCellIDs) {
-//  rebuildLookups();
+  this->GlobalDofAssignment::didHRefine(parentCellIDs);
+  for (set<GlobalIndexType>::const_iterator cellIDIt = parentCellIDs.begin(); cellIDIt != parentCellIDs.end(); cellIDIt++) {
+    GlobalIndexType parentCellID = *cellIDIt;
+    CellPtr parentCell = _meshTopology->getCell(parentCellID);
+    vector<IndexType> childIDs = parentCell->getChildIndices();
+    int parentH1Order = _cellH1Orders[parentCellID];
+    for (vector<IndexType>::iterator childIDIt = childIDs.begin(); childIDIt != childIDs.end(); childIDIt++) {
+      _cellH1Orders[*childIDIt] = parentH1Order;
+      assignInitialElementType(*childIDIt);
+    }
+  }
+  rebuildLookups();
 }
 
 void GDAMinimumRule::didPRefine(const set<GlobalIndexType> &cellIDs, int deltaP) {
-  
-//  rebuildLookups();
+  this->GlobalDofAssignment::didPRefine(cellIDs, deltaP);
+  for (set<GlobalIndexType>::const_iterator cellIDIt = cellIDs.begin(); cellIDIt != cellIDs.end(); cellIDIt++) {
+    assignInitialElementType(*cellIDIt);
+  }
+  rebuildLookups();
 }
 
 void GDAMinimumRule::didHUnrefine(const set<GlobalIndexType> &parentCellIDs) {
-//  rebuildLookups();
+  this->GlobalDofAssignment::didHUnrefine(parentCellIDs);
+  // TODO: implement this
+  cout << "WARNING: GDAMinimumRule::didHUnrefine() unimplemented.\n";
+  rebuildLookups();
 }
 
 ElementTypePtr GDAMinimumRule::elementType(GlobalIndexType cellID) {
@@ -42,6 +59,18 @@ GlobalIndexType GDAMinimumRule::globalDofCount() {
   // TODO: implement this
   cout << "WARNING: globalDofCount() unimplemented.\n";
   return 0;
+}
+
+set<GlobalIndexType> GDAMinimumRule::globalDofIndicesForPartition(PartitionIndexType partitionNumber) {
+  // TODO: implement this
+  set<GlobalIndexType> globalDofIndices;
+  cout << "WARNING: GDAMinimumRule::globalDofIndicesForPartition() unimplemented.\n";
+  return globalDofIndices;
+}
+
+void GDAMinimumRule::interpretGlobalDofs(GlobalIndexType cellID, FieldContainer<double> &localDofs, const Epetra_Vector &globalDofs) {
+  // TODO: implement this
+  cout << "WARNING: GDAMinimumRule::interpretGlobalDofs() unimplemented.\n";
 }
 
 void GDAMinimumRule::interpretLocalDofs(GlobalIndexType cellID, const FieldContainer<double> &localDofs,
@@ -57,5 +86,6 @@ IndexType GDAMinimumRule::localDofCount() {
 }
 
 void GDAMinimumRule::rebuildLookups() {
+  determineActiveElements(); // call to super: constructs cell partitionings
   
 }

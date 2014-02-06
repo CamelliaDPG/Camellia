@@ -24,10 +24,49 @@ GlobalDofAssignment::GlobalDofAssignment(MeshTopologyPtr meshTopology, VarFactor
   _initialH1OrderTrial = initialH1OrderTrial;
   _testOrderEnhancement = testOrderEnhancement;
   
-  set<unsigned> cellIDs = meshTopology->getActiveCellIndices();
-  for (set<unsigned>::iterator cellIDIt = cellIDs.begin(); cellIDIt != cellIDs.end(); cellIDIt++) {
-    unsigned cellID = *cellIDIt;
-    _cellH1Orders[cellID] = _initialH1OrderTrial;
+//  unsigned testOrder = initialH1OrderTrial + testOrderEnhancement;
+  // assign some initial element types:
+  set<IndexType> cellIndices = _meshTopology->getActiveCellIndices();
+  set<GlobalIndexType> activeCellIDs;
+  activeCellIDs.insert(cellIndices.begin(),cellIndices.end()); // for distributed mesh, we'd do some logic with cellID offsets for each MPI rank.  (cellID = cellIndex + cellIDOffsetForRank)
+  
+  unsigned spaceDim = _meshTopology->getSpaceDim();
+  unsigned sideDim = spaceDim - 1;
+  
+  map<GlobalIndexType, unsigned> sideIndexParityAssignmentCount; // tracks the number of times each side in the mesh has been assigned a parity.
+  for (set<GlobalIndexType>::iterator cellIDIt = activeCellIDs.begin(); cellIDIt != activeCellIDs.end(); cellIDIt++) {
+    GlobalIndexType cellID = *cellIDIt;
+    CellPtr cell = _meshTopology->getCell(cellID);
+    if (cell->isParent() || (cell->getParent().get() != NULL)) {
+      // enforcing this allows us to assume that each face that isn't on the boundary will be treated exactly twice...
+      cout << "GDAMaximumRule2D constructor only supports mesh topologies that are unrefined.\n";
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "GDAMaximumRule2D constructor only supports mesh topologies that are unrefined.\n");
+    }
+//    DofOrderingPtr trialOrdering = _dofOrderingFactory->trialOrdering(initialH1OrderTrial, *cell->topology());
+//    DofOrderingPtr testOrdering = _dofOrderingFactory->testOrdering(testOrder, *cell->topology());
+//    ElementTypePtr elemType = _elementTypeFactory.getElementType(trialOrdering,testOrdering,cell->topology());
+//    _elementTypeForCell[cellID] = elemType;
+//    _cellH1Orders[cellID] = _initialH1OrderTrial;
+    
+    assignInitialElementType(cellID);
+    
+    //    cout << "Assigned trialOrdering to cell " << cellID << ":\n" << *trialOrdering;
+    
+    unsigned sideCount = cell->topology()->getSideCount();
+    vector<int> cellParities(sideCount);
+    for (int sideOrdinal=0; sideOrdinal<sideCount; sideOrdinal++) {
+      unsigned sideEntityIndex = cell->entityIndex(sideDim, sideOrdinal);
+      if (sideIndexParityAssignmentCount[sideEntityIndex] == 0) {
+        cellParities[sideOrdinal] = 1;
+      } else if (sideIndexParityAssignmentCount[sideEntityIndex] == 1) {
+        cellParities[sideOrdinal] = -1;
+      } else {
+        cout << "Internal error during GDAMaxRule2D construction: encountered side more than twice.\n";
+        TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Internal error: encountered side more than twice.");
+      }
+      sideIndexParityAssignmentCount[sideEntityIndex]++;
+    }
+    _cellSideParitiesForCellID[cellID] = cellParities;
   }
   
   _numPartitions = Teuchos::GlobalMPISession::getNProc();  
@@ -37,6 +76,19 @@ GlobalDofAssignment::GlobalDofAssignment(MeshTopologyPtr meshTopology, VarFactor
 
 GlobalIndexType GlobalDofAssignment::activeCellOffset() {
   return _activeCellOffset;
+}
+
+void GlobalDofAssignment::assignInitialElementType( GlobalIndexType cellID ) {
+  if (_cellH1Orders.find(cellID) == _cellH1Orders.end()) {
+    _cellH1Orders[cellID] = _initialH1OrderTrial;
+  }
+  
+  int testDegree = _cellH1Orders[cellID] + _testOrderEnhancement;
+  CellPtr cell = _meshTopology->getCell(cellID);
+  DofOrderingPtr trialOrdering = _dofOrderingFactory->trialOrdering(_cellH1Orders[cellID], *cell->topology());
+  DofOrderingPtr testOrdering = _dofOrderingFactory->testOrdering(testDegree, *cell->topology());
+  ElementTypePtr elemType = _elementTypeFactory.getElementType(trialOrdering,testOrdering,cell->topology());
+  _elementTypeForCell[cellID] = elemType;
 }
 
 void GlobalDofAssignment::determineActiveElements() {
@@ -66,6 +118,19 @@ void GlobalDofAssignment::determineActiveElements() {
       _activeCellOffset += partition.size();
     }
   }
+}
+
+void GlobalDofAssignment::didHRefine(const set<GlobalIndexType> &parentCellIDs) { // subclasses should call super
+  
+}
+void GlobalDofAssignment::didPRefine(const set<GlobalIndexType> &cellIDs, int deltaP) { // subclasses should call super
+  for (set<GlobalIndexType>::const_iterator cellIDIt = cellIDs.begin(); cellIDIt != cellIDs.end(); cellIDIt++) {
+    _cellH1Orders[*cellIDIt] += deltaP;
+  }
+  // the appropriate modifications to _elementTypeForCell are left to subclasses
+}
+void GlobalDofAssignment::didHUnrefine(const set<GlobalIndexType> &parentCellIDs) { // subclasses should call super
+  
 }
 
 void GlobalDofAssignment::setPartitionPolicy( MeshPartitionPolicyPtr partitionPolicy ) {

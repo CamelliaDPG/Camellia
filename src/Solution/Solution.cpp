@@ -861,10 +861,6 @@ void Solution::solveWithPrepopulatedStiffnessAndLoad(Teuchos::RCP<Solver> solver
   timeSolveVector[0] = timeSolve;
   
   timer.ResetStartTime();
-  //  int maxLhsLength = 0;
-  //  for (int i=0; i<numProcs; i++) {
-  //    maxLhsLength = std::max( (int)_mesh->globalDofIndicesForPartition(i).size(), maxLhsLength );
-  //  }
   _lhsVector->GlobalAssemble();
   
   // Import solution onto current processor
@@ -875,23 +871,13 @@ void Solution::solveWithPrepopulatedStiffnessAndLoad(Teuchos::RCP<Solver> solver
   solnCoeff.Import(*_lhsVector, solnImporter, Insert);
   
   // copy the dof coefficients into our data structure
-  // get ALL element types (not just ours)-- this is a global import that we should get rid of eventually...
-  elementTypes = _mesh->elementTypes();
-  for ( vector< ElementTypePtr >::iterator elemTypeIt = elementTypes.begin();
-       elemTypeIt != elementTypes.end(); elemTypeIt++) {
-    vector< ElementPtr > elements = _mesh->elementsOfTypeGlobal(*elemTypeIt);
-    vector< ElementPtr >::iterator elemIt;
-    int numDofs = (*elemTypeIt)->trialOrderPtr->totalDofs();
-    FieldContainer<double> elemDofs(numDofs);
-    for (elemIt = elements.begin(); elemIt != elements.end(); elemIt++) {
-      ElementPtr elemPtr = *(elemIt);
-      int cellID = elemPtr->cellID();
-      for (int dofIndex=0; dofIndex<numDofs; dofIndex++) {
-        int globalIndex = _mesh->globalDofIndex(cellID, dofIndex);
-        elemDofs(dofIndex) = solnCoeff[globalIndex];
-      }
-      _solutionForCellIDGlobal[cellID] = elemDofs;
-    }
+  // get ALL active cell IDs (not just ours)-- the above is a global import that we should get rid of eventually...
+    set<GlobalIndexType> cellIDs = _mesh->getActiveCellIDs();
+  for (set<GlobalIndexType>::iterator cellIDIt = cellIDs.begin(); cellIDIt != cellIDs.end(); cellIDIt++) {
+    GlobalIndexType cellID = *cellIDIt;
+    FieldContainer<double> cellDofs(_mesh->getElementType(cellID)->trialOrderPtr->totalDofs());
+    _mesh->interpretGlobalDofs(cellID,cellDofs,solnCoeff);
+    _solutionForCellIDGlobal[cellID] = cellDofs;
   }
   clearComputedResiduals(); // now that we've solved, will need to recompute residuals...
   

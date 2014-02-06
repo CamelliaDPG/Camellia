@@ -49,6 +49,8 @@
 #include "Epetra_SerialComm.h"
 #endif
 
+#include "Epetra_Vector.h"
+
 #include "ElementType.h"
 #include "ElementTypeFactory.h"
 #include "Element.h"
@@ -242,6 +244,7 @@ public:
   void hRefine(const vector<GlobalIndexType> &cellIDs, Teuchos::RCP<RefinementPattern> refPattern);
   void hUnrefine(const set<GlobalIndexType> &cellIDs);
   
+  void interpretGlobalDofs(GlobalIndexType cellID, FieldContainer<double> &localDofs, const Epetra_Vector &globalDofs);
   void interpretLocalDofs(GlobalIndexType cellID, const FieldContainer<double> &localDofs,
                           FieldContainer<double> &globalDofs, FieldContainer<GlobalIndexType> &globalDofIndices);
   

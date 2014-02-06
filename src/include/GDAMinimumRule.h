@@ -26,8 +26,10 @@ public:
   
   ElementTypePtr elementType(GlobalIndexType cellID);
   GlobalIndexType globalDofCount();
+  set<GlobalIndexType> globalDofIndicesForPartition(PartitionIndexType partitionNumber);
   void interpretLocalDofs(GlobalIndexType cellID, const FieldContainer<double> &localDofs,
                           FieldContainer<double> &globalDofs, FieldContainer<GlobalIndexType> &globalDofIndices);
+  void interpretGlobalDofs(GlobalIndexType cellID, FieldContainer<double> &localDofs, const Epetra_Vector &globalDofs);
   IndexType localDofCount(); // local to the MPI node
   
   void rebuildLookups();
