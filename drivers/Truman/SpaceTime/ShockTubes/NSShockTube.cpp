@@ -393,6 +393,24 @@ int main(int argc, char *argv[]) {
     ip->addTerm(vm);
     ip->addTerm(ve);
   }
+  // Decoupled Eulerian and viscous norm
+  // Might need to also elimnate D_prev term...
+  else if (norm == 3)
+  {
+    ip->addTerm(vm->dx() + u_prev*ve->dx());
+    ip->addTerm(ve->dx());
+    ip->addTerm(u_prev*vc->dx()+vc->dy()+u_prev*u_prev*vm->dx()+R*T_prev*vm->dx()+u_prev*vm->dy()
+      +Cv*T_prev*u_prev*ve->dx()+0.5*u_prev*u_prev*u_prev*ve->dx()+R*T_prev*u_prev*ve->dx()+Cv*T_prev*ve->dy()+0.5*u_prev*u_prev*ve->dy());
+    ip->addTerm(rho_prev*vc->dx()+rho_prev*u_prev*vm->dx()+rho_prev*u_prev*vm->dx()+rho_prev*vm->dy()+Cv*rho_prev*T_prev*ve->dx()
+      +0.5*rho_prev*u_prev*u_prev*ve->dx()+0.5*rho_prev*u_prev*u_prev*ve->dx()+0.5*rho_prev*u_prev*u_prev*ve->dx()
+      +R*rho_prev*T_prev*ve->dx()+0.5*rho_prev*u_prev*ve->dy()+0.5*rho_prev*u_prev*ve->dy());
+    ip->addTerm(R*rho_prev*vm->dx()+Cv*rho_prev*u_prev*ve->dx()+R*rho_prev*u_prev*ve->dx()+Cv*rho_prev*ve->dy());
+    ip->addTerm(1./mu*S);
+    ip->addTerm(Pr/(Cp*mu)*tau);
+    ip->addTerm(vc);
+    ip->addTerm(vm);
+    ip->addTerm(ve);
+  }
 
   ////////////////////   CREATE BCs   ///////////////////////
   SpatialFilterPtr left = Teuchos::rcp( new ConstantXBoundary(xmin) );
@@ -508,7 +526,7 @@ int main(int argc, char *argv[]) {
     if (commRank == 0)
     {
       stringstream outfile;
-      outfile << problemName << "_" << refIndex;
+      outfile << problemName << norm << "_" << refIndex;
       exporter.exportSolution(outfile.str());
     }
 
