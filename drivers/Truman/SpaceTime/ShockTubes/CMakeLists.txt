@@ -1,3 +1,4 @@
 project(ShockTubes)
 
-add_executable(NSSodShockTube NSSodShockTube.cpp)
+add_executable(NSShockTube NSShockTube.cpp)
+add_executable(EulerShockTube EulerShockTube.cpp)

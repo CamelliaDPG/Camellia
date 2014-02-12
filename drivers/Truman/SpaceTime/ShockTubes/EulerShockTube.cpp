@@ -107,7 +107,7 @@ int main(int argc, char *argv[]) {
 
    // Optional arguments (have defaults)
   int numRefs = args.Input("--numRefs", "number of refinement steps", 0);
-  double mu = args.Input("--mu", "viscosity", 1e-2);
+  int norm = args.Input("--norm", "norm", 0);
   int polyOrder = args.Input("--polyOrder", "polynomial order for field variables", 2);
   int deltaP = args.Input("--deltaP", "how much to enrich test space", 2);
   int xCells = args.Input("--xCells", "number of cells in the x direction", 8);
@@ -180,7 +180,7 @@ int main(int argc, char *argv[]) {
     xmin = 0;
     xmax = 1;
     xint = 0.5;
-    tmax = 0.1;
+    tmax = 0.2;
 
     // GAMMA = 1.4;
     rhoL = 1;
@@ -205,20 +205,14 @@ int main(int argc, char *argv[]) {
   ////////////////////   DECLARE VARIABLES   ///////////////////////
   // define test variables
   VarFactory varFactory;
-  VarPtr S = varFactory.testVar("S", HGRAD);
-  VarPtr tau = varFactory.testVar("tau", HGRAD);
   VarPtr vc = varFactory.testVar("vc", HGRAD);
   VarPtr vm = varFactory.testVar("vm", HGRAD);
   VarPtr ve = varFactory.testVar("ve", HGRAD);
 
   // define trial variables
-  VarPtr D = varFactory.fieldVar("D");
-  VarPtr q = varFactory.fieldVar("q");
   VarPtr rho = varFactory.fieldVar("rho");
   VarPtr u = varFactory.fieldVar("u");
   VarPtr T = varFactory.fieldVar("T");
-  VarPtr uhat = varFactory.spatialTraceVar("uhat");
-  VarPtr That = varFactory.spatialTraceVar("That");
   VarPtr Fc = varFactory.fluxVar("Fc");
   VarPtr Fm = varFactory.fluxVar("Fm");
   VarPtr Fe = varFactory.fluxVar("Fe");
@@ -257,9 +251,6 @@ int main(int argc, char *argv[]) {
   // initialConditions[rho->ID()] = Teuchos::rcp( new DiscontinuousInitialCondition(xint, rhoL, rhoR) ) ;
   // initialConditions[u->ID()]   = Teuchos::rcp( new DiscontinuousInitialCondition(xint, uL, uR) );
   // initialConditions[T->ID()]   = Teuchos::rcp( new DiscontinuousInitialCondition(xint, TL, TR) );
-  // initialConditions[rho->ID()] = Teuchos::rcp( new RampedInitialCondition(xint, rhoL, rhoR, (xmax-xmin)/xCells) ) ;
-  // initialConditions[u->ID()]   = Teuchos::rcp( new RampedInitialCondition(xint, uL, uR, (xmax-xmin)/xCells) );
-  // initialConditions[T->ID()]   = Teuchos::rcp( new RampedInitialCondition(xint, TL, TR, (xmax-xmin)/xCells) );
   initialConditions[rho->ID()] = Teuchos::rcp( new RampedInitialCondition(xint, rhoL, rhoR, (xmax-xmin)/xCells/pow(2.,numPreRefs)) ) ;
   initialConditions[u->ID()]   = Teuchos::rcp( new RampedInitialCondition(xint, uL, uR,     (xmax-xmin)/xCells/pow(2.,numPreRefs)) );
   initialConditions[T->ID()]   = Teuchos::rcp( new RampedInitialCondition(xint, TL, TR,     (xmax-xmin)/xCells/pow(2.,numPreRefs)) );
@@ -277,17 +268,6 @@ int main(int argc, char *argv[]) {
   FunctionPtr rho_prev = Function::solution(rho, backgroundFlow);
   FunctionPtr u_prev   = Function::solution(u, backgroundFlow);
   FunctionPtr T_prev   = Function::solution(T, backgroundFlow);
-  FunctionPtr D_prev   = Function::solution(D, backgroundFlow);
-
-  // S terms:
-  bf->addTerm( D/mu, S);
-  bf->addTerm( 4./3*u, S->dx());
-  bf->addTerm( -4./3*uhat, S->times_normal_x());
-
-  // tau terms:
-  bf->addTerm( Pr/(mu*Cp)*q, tau);
-  bf->addTerm( -T, tau->dx());
-  bf->addTerm( That, tau->times_normal_x());
 
   // vc terms:
   bf->addTerm( -rho_prev*u, vc->dx());
@@ -301,7 +281,6 @@ int main(int argc, char *argv[]) {
   bf->addTerm( -u_prev*u_prev*rho, vm->dx());
   bf->addTerm( -R*rho_prev*T, vm->dx());
   bf->addTerm( -R*T_prev*rho, vm->dx());
-  bf->addTerm( D, vm->dx());
   bf->addTerm( -rho_prev*u, vm->dy());
   bf->addTerm( -u_prev*rho, vm->dy());
   bf->addTerm( Fm, vm);
@@ -317,9 +296,6 @@ int main(int argc, char *argv[]) {
   bf->addTerm( -R*rho_prev*T_prev*u, ve->dx());
   bf->addTerm( -R*rho_prev*u_prev*T, ve->dx());
   bf->addTerm( -R*u_prev*T_prev*rho, ve->dx());
-  bf->addTerm( -q, ve->dx());
-  bf->addTerm( u_prev*D, ve->dx());
-  bf->addTerm( D_prev*u, ve->dx());
   bf->addTerm( -Cv*rho_prev*T, ve->dy());
   bf->addTerm( -Cv*T_prev*rho, ve->dy());
   bf->addTerm( -0.5*rho_prev*u_prev*u, ve->dy());
@@ -330,13 +306,6 @@ int main(int argc, char *argv[]) {
   ////////////////////   SPECIFY RHS   ///////////////////////
   Teuchos::RCP<RHSEasy> rhs = Teuchos::rcp( new RHSEasy );
 
-  // S terms:
-  rhs->addTerm( -1./mu*D_prev * S );
-  rhs->addTerm( -4./3*u_prev * S->dx() );
-
-  // tau terms:
-  rhs->addTerm( T_prev * tau->dx() );
-
   // vc terms:
   rhs->addTerm( rho_prev*u_prev * vc->dx() );
   rhs->addTerm( rho_prev * vc->dy() );
@@ -344,20 +313,52 @@ int main(int argc, char *argv[]) {
   // vc terms:
   rhs->addTerm( rho_prev*u_prev*u_prev * vm->dx() );
   rhs->addTerm( R*rho_prev*T_prev * vm->dx() );
-  rhs->addTerm( -D_prev * vm->dx() );
   rhs->addTerm( rho_prev*u_prev * vm->dy() );
 
   // ve terms:
   rhs->addTerm( Cv*rho_prev*u_prev*T_prev * ve->dx() );
   rhs->addTerm( 0.5*rho_prev*u_prev*u_prev*u_prev * ve->dx() );
   rhs->addTerm( R*rho_prev*u_prev*T_prev * ve->dx() );
-  rhs->addTerm( -u_prev*D_prev * ve->dx() );
   rhs->addTerm( Cv*rho_prev*T_prev * ve->dy() );
   rhs->addTerm( 0.5*rho_prev*u_prev*u_prev * ve->dy() );
 
   ////////////////////   DEFINE INNER PRODUCT(S)   ///////////////////////
-  // Graph norm
-  IPPtr ip = bf->graphNorm();
+  // Automatic graph norm
+  IPPtr ip = Teuchos::rcp(new IP);
+  if (norm == 0)
+  {
+    ip = bf->graphNorm();
+  }
+  // Manual Graph norm
+  else if (norm == 1)
+  {
+    ip->addTerm(u_prev*vc->dx()+vc->dy()+u_prev*u_prev*vm->dx()+R*T_prev*vm->dx()+u_prev*vm->dy()
+      +Cv*T_prev*u_prev*ve->dx()+0.5*u_prev*u_prev*u_prev*ve->dx()+R*T_prev*u_prev*ve->dx()+Cv*T_prev*ve->dy()+0.5*u_prev*u_prev*ve->dy());
+    ip->addTerm(rho_prev*vc->dx()+rho_prev*u_prev*vm->dx()+rho_prev*u_prev*vm->dx()+rho_prev*vm->dy()+Cv*rho_prev*T_prev*ve->dx()
+      +0.5*rho_prev*u_prev*u_prev*ve->dx()+0.5*rho_prev*u_prev*u_prev*ve->dx()+0.5*rho_prev*u_prev*u_prev*ve->dx()
+      +R*rho_prev*T_prev*ve->dx()+0.5*rho_prev*u_prev*ve->dy()+0.5*rho_prev*u_prev*ve->dy());
+    ip->addTerm(R*rho_prev*vm->dx()+Cv*rho_prev*u_prev*ve->dx()+R*rho_prev*u_prev*ve->dx()+Cv*rho_prev*ve->dy());
+    ip->addTerm(vc);
+    ip->addTerm(vm);
+    ip->addTerm(ve);
+  }
+  // // Decoupled Eulerian and viscous norm
+  // else if (norm == 2)
+  // {
+  //   ip->addTerm(vm->dx() + u_prev*ve->dx());
+  //   ip->addTerm(ve->dx());
+  //   ip->addTerm(u_prev*vc->dx()+vc->dy()+u_prev*u_prev*vm->dx()+R*T_prev*vm->dx()+u_prev*vm->dy()
+  //     +Cv*T_prev*u_prev*ve->dx()+0.5*u_prev*u_prev*u_prev*ve->dx()+R*T_prev*u_prev*ve->dx()+Cv*T_prev*ve->dy()+0.5*u_prev*u_prev*ve->dy());
+  //   ip->addTerm(rho_prev*vc->dx()+rho_prev*u_prev*vm->dx()+rho_prev*u_prev*vm->dx()+rho_prev*vm->dy()+Cv*rho_prev*T_prev*ve->dx()
+  //     +0.5*rho_prev*u_prev*u_prev*ve->dx()+0.5*rho_prev*u_prev*u_prev*ve->dx()+0.5*rho_prev*u_prev*u_prev*ve->dx()
+  //     +R*rho_prev*T_prev*ve->dx()-D_prev*ve->dx()+0.5*rho_prev*u_prev*ve->dy()+0.5*rho_prev*u_prev*ve->dy());
+  //   ip->addTerm(R*rho_prev*vm->dx()+Cv*rho_prev*u_prev*ve->dx()+R*rho_prev*u_prev*ve->dx()+Cv*rho_prev*ve->dy());
+  //   ip->addTerm(1./mu*S);
+  //   ip->addTerm(Pr/(Cp*mu)*tau);
+  //   ip->addTerm(vc);
+  //   ip->addTerm(vm);
+  //   ip->addTerm(ve);
+  // }
 
   ////////////////////   CREATE BCs   ///////////////////////
   SpatialFilterPtr left = Teuchos::rcp( new ConstantXBoundary(xmin) );
@@ -387,7 +388,6 @@ int main(int argc, char *argv[]) {
   RefinementStrategy refinementStrategy( solution, energyThreshold );
   VTKExporter exporter(backgroundFlow, mesh, varFactory);
   set<int> nonlinearVars;
-  nonlinearVars.insert(D->ID());
   nonlinearVars.insert(rho->ID());
   nonlinearVars.insert(u->ID());
   nonlinearVars.insert(T->ID());
@@ -473,21 +473,23 @@ int main(int argc, char *argv[]) {
     if (commRank == 0)
     {
       stringstream outfile;
-      outfile << problemName << "_" << refIndex;
+      outfile << "Euler_" << problemName << "_" << refIndex;
       exporter.exportSolution(outfile.str());
     }
 
     if (refIndex < numRefs)
     {
       refinementStrategy.refine(commRank==0);
-      // double newRamp = (xmax-xmin)/pow(xCells, refIndex);
-      // dynamic_cast< RampedInitialCondition* >(initialConditions[rho->ID()].get())->setH(newRamp);
-      // dynamic_cast< RampedInitialCondition* >(initialConditions[u->ID()].get())->setH(newRamp);
-      // dynamic_cast< RampedInitialCondition* >(initialConditions[T->ID()].get())->setH(newRamp);
-      // dynamic_cast< RampedInitialCondition* >(rho0.get())->setH(newRamp);
-      // dynamic_cast< RampedInitialCondition* >(mom0.get())->setH(newRamp);
-      // dynamic_cast< RampedInitialCondition* >(E0.get())->setH(newRamp);
-      backgroundFlow->projectOntoMesh(initialConditions);
+      double newRamp = (xmax-xmin)/(xCells*pow(2., numPreRefs+refIndex+1));
+      // if (commRank == 0)
+      //   cout << "New ramp width = " << newRamp << endl;
+      dynamic_cast< RampedInitialCondition* >(initialConditions[rho->ID()].get())->setH(newRamp);
+      dynamic_cast< RampedInitialCondition* >(initialConditions[u->ID()].get())->setH(newRamp);
+      dynamic_cast< RampedInitialCondition* >(initialConditions[T->ID()].get())->setH(newRamp);
+      dynamic_cast< RampedInitialCondition* >(rho0.get())->setH(newRamp);
+      dynamic_cast< RampedInitialCondition* >(mom0.get())->setH(newRamp);
+      dynamic_cast< RampedInitialCondition* >(E0.get())->setH(newRamp);
+      // backgroundFlow->projectOntoMesh(initialConditions);
     }
   }
 
