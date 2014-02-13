@@ -512,8 +512,8 @@ void Solution::populateStiffnessAndLoad() {
         FieldContainer<double> localStiffness(localStiffnessDim,&finalStiffness(cellIndex,0,0)); // shallow copy
         FieldContainer<double> localRHS(localRHSDim,&localRHSVector(cellIndex,0)); // shallow copy
         // we have the same local-to-global map for both rows and columns
-        _dofInterpreter->interpretLocalDofs(cellID, localStiffness, interpretedStiffness, globalDofIndices);
-        _dofInterpreter->interpretLocalDofs(cellID, localRHS, interpretedRHS, globalDofIndices);
+        _dofInterpreter->interpretLocalData(cellID, localStiffness, interpretedStiffness, globalDofIndices);
+        _dofInterpreter->interpretLocalData(cellID, localRHS, interpretedRHS, globalDofIndices);
         
         // cast whatever the global index type is to a type that Epetra supports
         globalDofIndices.dimensions(dim);
@@ -574,7 +574,7 @@ void Solution::populateStiffnessAndLoad() {
         GlobalIndexTypeToCast globalRowIndex = partMap.GID(localRowIndex);
         int nnz = 0;
         FieldContainer<double> localLHS(localLHSDim,&lhs(cellIndex,0)); // shallow copy
-        _dofInterpreter->interpretLocalDofs(cellIDs[cellIndex], localLHS, interpretedLHS, interpretedGlobalDofIndices);
+        _dofInterpreter->interpretLocalData(cellIDs[cellIndex], localLHS, interpretedLHS, interpretedGlobalDofIndices);
         
         for (int i=0; i<interpretedLHS.size(); i++) {
           if (interpretedLHS(i) != 0.0) {
@@ -878,7 +878,7 @@ void Solution::solveWithPrepopulatedStiffnessAndLoad(Teuchos::RCP<Solver> solver
   for (set<GlobalIndexType>::iterator cellIDIt = cellIDs.begin(); cellIDIt != cellIDs.end(); cellIDIt++) {
     GlobalIndexType cellID = *cellIDIt;
     FieldContainer<double> cellDofs(_mesh->getElementType(cellID)->trialOrderPtr->totalDofs());
-    _dofInterpreter->interpretGlobalDofs(cellID,cellDofs,solnCoeff);
+    _dofInterpreter->interpretGlobalData(cellID,cellDofs,solnCoeff);
     _solutionForCellIDGlobal[cellID] = cellDofs;
   }
   clearComputedResiduals(); // now that we've solved, will need to recompute residuals...
@@ -1049,7 +1049,7 @@ void Solution::integrateBasisFunctions(FieldContainer<GlobalIndexTypeToCast> &gl
         IndexType dofIndex = elemTypePtr->trialOrderPtr->getDofIndex(trialID, dofOrdinal);
         localDiscreteValues(dofIndex) = valuesForType(cellIndex,dofOrdinal);
       }
-      _dofInterpreter->interpretLocalDofs(cellID, localDiscreteValues, interpretedDiscreteValues, globalDofIndices);
+      _dofInterpreter->interpretLocalData(cellID, localDiscreteValues, interpretedDiscreteValues, globalDofIndices);
       
       for (int dofIndex=0; dofIndex<globalDofIndices.size(); dofIndex++) {
         if (interpretedDiscreteValues(dofIndex) != 0) {
@@ -2848,38 +2848,6 @@ void Solution::condensedSolve(Teuchos::RCP<Solver> globalSolver, bool reduceMemo
     
     condensationTime += elemTimer.ElapsedTime();
     
-    /*
-     // Impose BCs - WARNING: *may* not work with crack BCs b/c they're shared. or maybe it will.
-     vector<int> bcGlobalIndices = bcIndices[cellID];
-     vector<double> bcGlobalValues = bcValues[cellID];
-     int numBCs = bcGlobalIndices.size();
-     if (numBCs > 0){
-     // get BC values
-     Epetra_SerialDenseVector bc_lift_dofs(numElemFluxDofs);
-     for (int i = 0;i<numBCs;i++){
-     int localInd = globalToLocalMap[cellID][bcGlobalIndices[i]];
-     int condensedLocalInd = localToCondensedMap[cellID][localInd];
-     bc_lift_dofs(condensedLocalInd) = bcGlobalValues[i];
-     }
-     
-     // multiply bc dofs by elem matrix - rhsDirichlet stores resulting "lift" and update rhs (subtract from RHS)
-     b_flux.Multiply('N','N',-1.0,K_flux,bc_lift_dofs,1.0);
-     
-     // Zero out rows and columns of stiffness matrix corresponding to Dirichlet edges, 1 on diag
-     for (int i = 0;i<numBCs;i++){
-     int globalInd = bcGlobalIndices[i];
-     int ind = localToCondensedMap[cellID][globalToLocalMap[cellID][globalInd]];
-     // zero out row/column
-     for (int j = 0;j<numElemFluxDofs;j++){
-     K_flux(ind,j) = 0.0;
-     K_flux(j,ind) = 0.0;
-     }
-     K_flux(ind,ind) = 1.0;
-     b_flux(ind) = bcGlobalValues[i];
-     }
-     } // end of bc IF loop
-     */
-    
     // sum into FE matrices - all that's left is applying BCs
     elemTimer.ResetStartTime();
     
@@ -2946,8 +2914,6 @@ void Solution::condensedSolve(Teuchos::RCP<Solver> globalSolver, bool reduceMemo
   if (_reportTimingResults)
     cout << "on rank " << rank << ", time for assembly = " << timer.ElapsedTime() << endl;
   
-  // ============= MORE EFFICIENT WAY TO APPLY BCS in nate's code ===================
-  
   timer.ResetStartTime();
   
   // getting local flux rows
@@ -2981,14 +2947,14 @@ void Solution::condensedSolve(Teuchos::RCP<Solver> globalSolver, bool reduceMemo
   }
   //  cout << "on proc " << rank << ", applying oaz with " << numBCs << " bcs" << endl;
   // Zero out rows and columns of K corresponding to BC dofs, and add one to diagonal.
-  FieldContainer<GlobalIndexType> bcLocalIndices(bcGlobalIndices.dimension(0));
+  FieldContainer<GlobalIndexTypeToCast> bcLocalIndices(bcGlobalIndices.dimension(0));
   for (int i=0; i<bcGlobalIndices.dimension(0); i++) {
     bcLocalIndices(i) = K_cond.LRID((GlobalIndexTypeToCast)globalToCondensedMap[bcGlobalIndices(i)]);
   }
   if (numBCs == 0) {
     ML_Epetra::Apply_OAZToMatrix(NULL, 0, K_cond);
   }else{
-    ML_Epetra::Apply_OAZToMatrix((int*)&bcLocalIndices(0), numBCs, K_cond); // note the downcast!!  (Apply_OAZToMatrix requires it...)
+    ML_Epetra::Apply_OAZToMatrix(&bcLocalIndices(0), numBCs, K_cond);
   }
   if (_reportTimingResults){
     cout << "on rank " << rank << ", time for applying BCs = " << timer.ElapsedTime() << endl;
