@@ -20,7 +20,7 @@ void MeshTopology::init(unsigned spaceDim) {
   _knownEntities = vector< map< set<unsigned>, unsigned > >(_spaceDim); // map keys are sets of vertices, values are entity indices in _entities[d]
   _canonicalEntityOrdering = vector< map< unsigned, vector<unsigned> > >(_spaceDim);
   _activeCellsForEntities = vector< map< unsigned, set< pair<unsigned, unsigned> > > >(_spaceDim); // set entries are (cellIndex, entityIndexInCell) (entityIndexInCell aka subcord)
-  _activeSidesForEntities = vector< map< unsigned, set< unsigned > > >(_spaceDim);
+  _sidesForEntities = vector< map< unsigned, set< unsigned > > >(_spaceDim);
   _parentEntities = vector< map< unsigned, vector< pair<unsigned, unsigned> > > >(_spaceDim); // map to possible parents
   _childEntities = vector< map< unsigned, vector< pair<RefinementPatternPtr, vector<unsigned> > > > >(_spaceDim);
   _entityCellTopologyKeys = vector< map< unsigned, unsigned > >(_spaceDim);
@@ -170,7 +170,7 @@ unsigned MeshTopology::addCell(CellTopoPtr cellTopo, const vector<unsigned> &cel
       set<unsigned> sideSubcellIndices = getEntitiesForSide(sideEntityIndex, d);
       for (set<unsigned>::iterator subcellIt = sideSubcellIndices.begin(); subcellIt != sideSubcellIndices.end(); subcellIt++) {
         unsigned subcellEntityIndex = *subcellIt;
-        _activeSidesForEntities[d][subcellEntityIndex].insert(sideEntityIndex);
+        _sidesForEntities[d][subcellEntityIndex].insert(sideEntityIndex);
       }
     }
   }
@@ -398,6 +398,14 @@ unsigned MeshTopology::getCellCountForSide(IndexType sideEntityIndex) {
       return 2;
     }
   }
+}
+
+pair<IndexType, unsigned> MeshTopology::getFirstCellForSide(IndexType sideEntityIndex) {
+  return _cellsForSideEntities[sideEntityIndex].first;
+}
+
+pair<IndexType, unsigned> MeshTopology::getSecondCellForSide(IndexType sideEntityIndex) {
+  return _cellsForSideEntities[sideEntityIndex].second;
 }
 
 void MeshTopology::deactivateCell(CellPtr cell) {
@@ -693,7 +701,7 @@ unsigned MeshTopology::getConstrainingEntityIndex(unsigned int d, unsigned int e
   if (d==sideDim) {
     sidesForEntity.insert(entityIndex);
   } else {
-    sidesForEntity = _activeSidesForEntities[d][entityIndex];
+    sidesForEntity = _sidesForEntities[d][entityIndex];
   }
   for (set<unsigned>::iterator sideEntityIt = sidesForEntity.begin(); sideEntityIt != sidesForEntity.end(); sideEntityIt++) {
     unsigned sideEntityIndex = *sideEntityIt;
@@ -804,6 +812,64 @@ unsigned MeshTopology::getEntityParentForSide(unsigned d, unsigned entityIndex,
   cout << "parent entity not found in parent side.\n";
   TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "parent entity not found in parent side.\n");
   return -1;
+}
+
+set< pair<IndexType, unsigned> > MeshTopology::getCellsContainingEntity(unsigned d, unsigned entityIndex) { // not *all* cells, but within any refinement branch, the most refined cell that contains the entity will be present in this set.  The unsigned value is the ordinal of a *side* in the cell containing this entity.  There may be multiple sides in a cell that contain the entity; this method will return just one entry per cell.
+  set<IndexType> sidesForEntity = _sidesForEntities[d][entityIndex];
+  typedef pair<IndexType,unsigned> CellPair;
+  set< CellPair > cells; // we are guaranteed to have one active cell that contains a side that contains the constraining entity.  We return the one that has least cellIndex.
+  set< IndexType > cellIndices;
+  for (set<IndexType>::iterator sideEntityIt = sidesForEntity.begin(); sideEntityIt != sidesForEntity.end(); sideEntityIt++) {
+    IndexType sideEntityIndex = *sideEntityIt;
+    int numCellsForSide = getCellCountForSide(sideEntityIndex);
+    if (numCellsForSide == 2) {
+      CellPair cell1 = getFirstCellForSide(sideEntityIndex);
+      if (cellIndices.find(cell1.first) == cellIndices.end()) {
+        cells.insert(cell1);
+        cellIndices.insert(cell1.first);
+      }
+      CellPair cell2 = getSecondCellForSide(sideEntityIndex);
+      if (cellIndices.find(cell2.first) == cellIndices.end()) {
+        cells.insert(cell2);
+        cellIndices.insert(cell2.first);
+      }
+    } else if (numCellsForSide == 1) {
+      CellPair cell1 = getFirstCellForSide(sideEntityIndex);
+      if (cellIndices.find(cell1.first) == cellIndices.end()) {
+        cells.insert(cell1);
+        cellIndices.insert(cell1.first);
+      }
+    } else {
+      cout << "Unexpected cell count for side.\n";
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unexpected cell count for side.");
+    }
+  }
+  return cells;
+}
+
+IndexType MeshTopology::leastActiveCellIndexContainingEntityConstrainedByConstrainingEntity(unsigned d, unsigned constrainingEntityIndex) {
+  unsigned leastActiveCellIndex = (unsigned)-1; // unsigned cast of -1 makes maximal unsigned #
+
+  set<IndexType> constrainedEntities = descendants(d,constrainingEntityIndex);
+
+  for (set<IndexType>::iterator constrainedEntityIt = constrainedEntities.begin(); constrainedEntityIt != constrainedEntities.end(); constrainedEntityIt++) {
+    IndexType constrainedEntityIndex = *constrainedEntityIt;
+    set<IndexType> sideEntityIndices = _sidesForEntities[d][constrainedEntityIndex];
+    for (set<IndexType>::iterator sideEntityIt = sideEntityIndices.begin(); sideEntityIt != sideEntityIndices.end(); sideEntityIt++) {
+      IndexType sideEntityIndex = *sideEntityIt;
+      typedef pair<IndexType, unsigned> CellPair;
+      pair<CellPair,CellPair> cellsForSide = _cellsForSideEntities[sideEntityIndex];
+      IndexType firstCellIndex = cellsForSide.first.first;
+      if (_activeCells.find(firstCellIndex) != _activeCells.end()) {
+        leastActiveCellIndex = min(leastActiveCellIndex,firstCellIndex);
+      }
+      IndexType secondCellIndex = cellsForSide.second.first;
+      if (_activeCells.find(secondCellIndex) != _activeCells.end()) {
+        leastActiveCellIndex = min(leastActiveCellIndex,secondCellIndex);
+      }
+    }
+  }
+  return leastActiveCellIndex;
 }
 
 unsigned MeshTopology::maxConstraint(unsigned d, unsigned entityIndex1, unsigned entityIndex2) {

@@ -136,7 +136,7 @@ bool BasisReconciliationTests::testH() {
     fineBasis = bpIt->first.first;
     coarseBasis = bpIt->first.second;
     RefinementBranch refinements = bpIt->second;
-    if (! hConstraintWholeBasisSubTest(fineBasis, refinements, coarseBasis)) {
+    if (! hConstraintInternalBasisSubTest(fineBasis, refinements, coarseBasis)) {
       success = false;
     }
   }
@@ -342,6 +342,24 @@ bool BasisReconciliationTests::testHSide() {
   }
   
   return success;
+}
+
+FieldContainer<double> filterValues(FieldContainer<double> &basisValues, set<unsigned> &dofOrdinalFilter, bool includesCellDimension) {
+  Teuchos::Array<int> dim;
+  basisValues.dimensions(dim); // dimensions are ordered (C,F,P[,D,…]) if there is a cell dimension, (F,P[,D,…]) otherwise
+  int fieldDimOrdinal = includesCellDimension ? 1 : 0;
+  dim[fieldDimOrdinal] = dofOrdinalFilter.size();
+  FieldContainer<double> filteredValues(dim);
+  int valuesPerField = filteredValues.size() / dofOrdinalFilter.size();
+  double *filteredValue = &filteredValues[0];
+  for (set<unsigned>::iterator dofOrdinalIt=dofOrdinalFilter.begin(); dofOrdinalIt != dofOrdinalFilter.end(); dofOrdinalIt++) {
+    unsigned dofOrdinal = *dofOrdinalIt;
+    for (int i=0; i<valuesPerField; i++) {
+      *filteredValue = basisValues[dofOrdinal * valuesPerField + i];
+      filteredValue++;
+    }
+  }
+  return filteredValues;
 }
 
 FieldContainer<double> interpretValues(FieldContainer<double> &fineValues, FieldContainer<double> &weights) {
@@ -567,7 +585,7 @@ bool BasisReconciliationTests::hConstraintSideBasisSubTest(BasisPtr fineBasis, u
   return success;
 }
 
-bool BasisReconciliationTests::hConstraintWholeBasisSubTest(BasisPtr fineBasis, RefinementBranch &refinements, BasisPtr coarseBasis) {
+bool BasisReconciliationTests::hConstraintInternalBasisSubTest(BasisPtr fineBasis, RefinementBranch &refinements, BasisPtr coarseBasis) {
   bool success = true;
   
   BasisReconciliation br;
@@ -580,6 +598,9 @@ bool BasisReconciliationTests::hConstraintWholeBasisSubTest(BasisPtr fineBasis, 
   
   FieldContainer<double> fineBasisValues = basisValuesAtPoints(fineBasis, finePoints);
   FieldContainer<double> coarseBasisValues = basisValuesAtPoints(coarseBasis, coarsePoints);
+  
+  set<unsigned> fineBasisFilter = br.internalDofIndicesForFinerBasis(fineBasis, refinements);
+  fineBasisValues = filterValues(fineBasisValues, fineBasisFilter, false);
   
   FieldContainer<double> interpretedFineBasisValues = interpretValues(fineBasisValues, weights);
   
@@ -599,7 +620,7 @@ bool BasisReconciliationTests::hConstraintWholeBasisSubTest(BasisPtr fineBasis, 
 }
 
 
-bool BasisReconciliationTests::pConstraintWholeBasisSubTest(BasisPtr fineBasis, BasisPtr coarseBasis) {
+bool BasisReconciliationTests::pConstraintInternalBasisSubTest(BasisPtr fineBasis, BasisPtr coarseBasis) {
   bool success = true;
   
   // first question: does BasisReconciliation run to completion?
@@ -611,6 +632,12 @@ bool BasisReconciliationTests::pConstraintWholeBasisSubTest(BasisPtr fineBasis, 
   FieldContainer<double> points = cubaturePoints(fineBasis->domainTopology(), 5, 0);
   FieldContainer<double> fineBasisValues = basisValuesAtPoints(fineBasis, points);
   FieldContainer<double> coarseBasisValues = basisValuesAtPoints(coarseBasis, points);
+  
+  set<int> internalDofs = fineBasis->dofOrdinalsForInterior();
+//  cout << "fineBasis cardinality = " << fineBasis->getCardinality() << "; internal dof count is " << internalDofs.size() << endl;
+  set<unsigned> dofFilter;
+  dofFilter.insert(internalDofs.begin(),internalDofs.end());
+  fineBasisValues = filterValues(fineBasisValues, dofFilter, false);
   
   FieldContainer<double> interpretedFineBasisValues = interpretValues(fineBasisValues, weights);
   
@@ -793,7 +820,7 @@ bool BasisReconciliationTests::testP() {
   for (vector< pair< BasisPtr, BasisPtr > >::iterator bpIt = basisPairsToCheck.begin(); bpIt != basisPairsToCheck.end(); bpIt++) {
     fineBasis = bpIt->first;
     coarseBasis = bpIt->second;
-    if (! pConstraintWholeBasisSubTest(fineBasis, coarseBasis)) {
+    if (! pConstraintInternalBasisSubTest(fineBasis, coarseBasis)) {
       success = false;
     }
   }

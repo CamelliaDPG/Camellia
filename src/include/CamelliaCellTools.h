@@ -149,6 +149,7 @@ public:
     return volumePermutationCount; // an impossible (out of bounds) answer: this line just to satisfy compilers that warn about missing return values.
   }
   
+  // this caches the lookup tables it builds.  Well worth it, since we'll have just one per cell topology
   static unsigned subcellOrdinalMap(const shards::CellTopology &cellTopo, unsigned subcdim, unsigned subcord, unsigned subsubcdim, unsigned subsubcord) {
     typedef unsigned CellTopoKey;
     typedef unsigned SubcellOrdinal;
@@ -211,7 +212,23 @@ public:
     }
     SubcellIdentifier subcell = make_pair(subcdim, subcord);
     SubSubcellIdentifier subsubcell = make_pair(subsubcdim, subsubcord);
-    return ordinalMaps[key][subcell][subsubcell];
+    if (ordinalMaps[key][subcell].find(subsubcell) != ordinalMaps[key][subcell].end()) {
+      return ordinalMaps[key][subcell][subsubcell];
+    } else {
+      return -1; // NOT FOUND
+    }
+  }
+  
+  static unsigned subcellReverseOrdinalMap(const shards::CellTopology &cellTopo, unsigned subcdim, unsigned subcord, unsigned subsubcdim, unsigned subsubcordInCell) {
+    // looks for the ordinal of a sub-sub-cell in the subcell
+    const shards::CellTopology subcellTopo = cellTopo.getCellTopologyData(subcdim, subcord);
+    int subsubcCount = subcellTopo.getSubcellCount(subsubcdim);
+    for (int subsubcOrdinal = 0; subsubcOrdinal < subsubcCount; subsubcOrdinal++) {
+      if (subcellOrdinalMap(cellTopo, subcdim, subcord, subsubcdim, subsubcOrdinal) == subsubcordInCell) {
+        return subsubcOrdinal;
+      }
+    }
+    return -1; // NOT FOUND
   }
   
   // copied from Intrepid's CellTools and specialized to allow use when we have curvilinear geometry

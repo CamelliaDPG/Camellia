@@ -94,8 +94,8 @@ public:
   set<GlobalIndexType> globalDofIndicesForPartition(PartitionIndexType partitionNumber);
 
   GlobalIndexType globalDofCount();
-  void interpretLocalDofs(GlobalIndexType cellID, const FieldContainer<double> &localDofs, FieldContainer<double> &globalDofs, FieldContainer<GlobalIndexType> &globalDofIndices);
-  void interpretGlobalDofs(GlobalIndexType cellID, FieldContainer<double> &localDofs, const Epetra_Vector &globalDofs);
+  void interpretLocalData(GlobalIndexType cellID, const FieldContainer<double> &localDofs, FieldContainer<double> &globalDofs, FieldContainer<GlobalIndexType> &globalDofIndices);
+  void interpretGlobalData(GlobalIndexType cellID, FieldContainer<double> &localDofs, const Epetra_Vector &globalDofs);
   IndexType localDofCount(); // local to the MPI node
   
   PartitionIndexType getPartitionCount();

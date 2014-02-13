@@ -115,8 +115,31 @@ FieldContainer<double> BasisReconciliation::computeConstrainedWeights(BasisPtr f
   cellTopoCub->getCubature(cubPoints, cubWeights);
   
   FieldContainer<double> finerBasisValues;
-  FieldContainer<double> finerBasisValuesWeighted;
   sizeFCForBasisValues(finerBasisValues, finerBasis, numCubPoints);
+  
+  set<int> filteredDofOrdinalsForFinerBasis = finerBasis->dofOrdinalsForInterior();
+  int interiorCardinality = filteredDofOrdinalsForFinerBasis.size();
+  FieldContainer<double> constrainedWeights(interiorCardinality,coarserBasis->getCardinality());
+  
+  if (interiorCardinality==0) { // empty constraint
+    return constrainedWeights;
+  }
+  
+  FieldContainer<double> finerBasisValuesFiltered;
+  sizeFCForBasisValues(finerBasisValuesFiltered, finerBasis, numCubPoints, false, interiorCardinality);
+  // apply filter:
+  double* filteredValue = &finerBasisValuesFiltered[0];
+  unsigned valuesPerDof = finerBasisValues.size() / finerBasis->getCardinality();
+  for (set<int>::iterator filteredDofOrdinalIt = filteredDofOrdinalsForFinerBasis.begin();
+       filteredDofOrdinalIt != filteredDofOrdinalsForFinerBasis.end(); filteredDofOrdinalIt++) {
+    unsigned filteredDofOrdinal = *filteredDofOrdinalIt;
+    for (int i=0; i<valuesPerDof; i++) {
+      *filteredValue = finerBasisValues[filteredDofOrdinal*valuesPerDof + i];
+      filteredValue++;
+    }
+  }
+  
+  FieldContainer<double> finerBasisValuesFilteredWeighted;
   
   FieldContainer<double> coarserBasisValues;
   sizeFCForBasisValues(coarserBasisValues, coarserBasis, numCubPoints);
@@ -126,18 +149,16 @@ FieldContainer<double> BasisReconciliation::computeConstrainedWeights(BasisPtr f
 
   // resize things with dummy cell dimension:
   sizeFCForBasisValues(coarserBasisValues, coarserBasis, numCubPoints, true);
-  sizeFCForBasisValues(finerBasisValues, finerBasis, numCubPoints, true);
-  sizeFCForBasisValues(finerBasisValuesWeighted, finerBasis, numCubPoints, true);
+  sizeFCForBasisValues(finerBasisValuesFiltered, finerBasis, numCubPoints, true, interiorCardinality);
+  sizeFCForBasisValues(finerBasisValuesFilteredWeighted, finerBasis, numCubPoints, true, interiorCardinality);
   cubWeights.resize(1,numCubPoints); // dummy cell dimension
-  FunctionSpaceTools::multiplyMeasure<double>(finerBasisValuesWeighted, cubWeights, finerBasisValues);
+  FunctionSpaceTools::multiplyMeasure<double>(finerBasisValuesFilteredWeighted, cubWeights, finerBasisValuesFiltered);
   
-  FieldContainer<double> constrainedWeights(finerBasis->getCardinality(),coarserBasis->getCardinality());
+  FieldContainer<double> lhsValues(1,interiorCardinality,interiorCardinality);
+  FieldContainer<double> rhsValues(1,interiorCardinality,coarserBasis->getCardinality());
   
-  FieldContainer<double> lhsValues(1,finerBasis->getCardinality(),finerBasis->getCardinality());
-  FieldContainer<double> rhsValues(1,finerBasis->getCardinality(),coarserBasis->getCardinality());
-  
-  FunctionSpaceTools::integrate<double>(lhsValues,finerBasisValues,finerBasisValuesWeighted,COMP_CPP);
-  FunctionSpaceTools::integrate<double>(rhsValues,finerBasisValuesWeighted,coarserBasisValues,COMP_CPP);
+  FunctionSpaceTools::integrate<double>(lhsValues,finerBasisValuesFiltered,finerBasisValuesFilteredWeighted,COMP_CPP);
+  FunctionSpaceTools::integrate<double>(rhsValues,finerBasisValuesFilteredWeighted,coarserBasisValues,COMP_CPP);
   
   lhsValues.resize(lhsValues.dimension(1),lhsValues.dimension(2));
   rhsValues.resize(rhsValues.dimension(1),rhsValues.dimension(2));
@@ -279,8 +300,24 @@ FieldContainer<double> BasisReconciliation::computeConstrainedWeights(BasisPtr f
   cubPointsCoarseBasis.resize(numCubPoints,cubDim);
   
   FieldContainer<double> finerBasisValues;
-  FieldContainer<double> finerBasisValuesWeighted;
   sizeFCForBasisValues(finerBasisValues, finerBasis, numCubPoints);
+  
+  set<unsigned> filteredDofOrdinalsForFinerBasis = internalDofIndicesForFinerBasis(finerBasis, refinements);
+  FieldContainer<double> finerBasisValuesFiltered;
+  sizeFCForBasisValues(finerBasisValuesFiltered, finerBasis, numCubPoints, false, filteredDofOrdinalsForFinerBasis.size());
+  // apply filter:
+  double* filteredValue = &finerBasisValuesFiltered[0];
+  unsigned valuesPerDof = finerBasisValues.size() / finerBasis->getCardinality();
+  for (set<unsigned>::iterator filteredDofOrdinalIt = filteredDofOrdinalsForFinerBasis.begin();
+       filteredDofOrdinalIt != filteredDofOrdinalsForFinerBasis.end(); filteredDofOrdinalIt++) {
+    unsigned filteredDofOrdinal = *filteredDofOrdinalIt;
+    for (int i=0; i<valuesPerDof; i++) {
+      *filteredValue = finerBasisValues[filteredDofOrdinal*valuesPerDof + i];
+      filteredValue++;
+    }
+  }
+  
+  FieldContainer<double> finerBasisValuesFilteredWeighted;
   
   FieldContainer<double> coarserBasisValues;
   sizeFCForBasisValues(coarserBasisValues, coarserBasis, numCubPoints);
@@ -289,19 +326,20 @@ FieldContainer<double> BasisReconciliation::computeConstrainedWeights(BasisPtr f
   coarserBasis->getValues(coarserBasisValues, cubPointsCoarseBasis, OPERATOR_VALUE);
   
   // resize things with dummy cell dimension:
-  sizeFCForBasisValues(coarserBasisValues, coarserBasis, numCubPoints, true);
-  sizeFCForBasisValues(finerBasisValues, finerBasis, numCubPoints, true);
-  sizeFCForBasisValues(finerBasisValuesWeighted, finerBasis, numCubPoints, true);
+  bool includeCellDimension = true;
+  sizeFCForBasisValues(coarserBasisValues, coarserBasis, numCubPoints, includeCellDimension);
+  sizeFCForBasisValues(finerBasisValuesFiltered, finerBasis, numCubPoints, includeCellDimension, filteredDofOrdinalsForFinerBasis.size());
+  sizeFCForBasisValues(finerBasisValuesFilteredWeighted, finerBasis, numCubPoints, includeCellDimension, filteredDofOrdinalsForFinerBasis.size());
   cubWeights.resize(1,numCubPoints); // dummy cell dimension
-  FunctionSpaceTools::multiplyMeasure<double>(finerBasisValuesWeighted, cubWeights, finerBasisValues);
+  FunctionSpaceTools::multiplyMeasure<double>(finerBasisValuesFilteredWeighted, cubWeights, finerBasisValuesFiltered);
   
-  FieldContainer<double> constrainedWeights(finerBasis->getCardinality(),coarserBasis->getCardinality());
+  FieldContainer<double> constrainedWeights(filteredDofOrdinalsForFinerBasis.size(),coarserBasis->getCardinality());
   
-  FieldContainer<double> lhsValues(1,finerBasis->getCardinality(),finerBasis->getCardinality());
-  FieldContainer<double> rhsValues(1,finerBasis->getCardinality(),coarserBasis->getCardinality());
+  FieldContainer<double> lhsValues(1,filteredDofOrdinalsForFinerBasis.size(),filteredDofOrdinalsForFinerBasis.size());
+  FieldContainer<double> rhsValues(1,filteredDofOrdinalsForFinerBasis.size(),coarserBasis->getCardinality());
   
-  FunctionSpaceTools::integrate<double>(lhsValues,finerBasisValues,finerBasisValuesWeighted,COMP_CPP);
-  FunctionSpaceTools::integrate<double>(rhsValues,finerBasisValuesWeighted,coarserBasisValues,COMP_CPP);
+  FunctionSpaceTools::integrate<double>(lhsValues,finerBasisValuesFiltered,finerBasisValuesFilteredWeighted,COMP_CPP);
+  FunctionSpaceTools::integrate<double>(rhsValues,finerBasisValuesFilteredWeighted,coarserBasisValues,COMP_CPP);
   
   lhsValues.resize(lhsValues.dimension(1),lhsValues.dimension(2));
   rhsValues.resize(rhsValues.dimension(1),rhsValues.dimension(2));
@@ -443,7 +481,6 @@ SubBasisReconciliationWeights BasisReconciliation::computeConstrainedWeights(Bas
   return weights;
 }
 
-
 const FieldContainer<double>& BasisReconciliation::constrainedWeights(BasisPtr finerBasis, BasisPtr coarserBasis) {
   FieldContainer<double> weights;
   
@@ -505,4 +542,26 @@ const SubBasisReconciliationWeights & BasisReconciliation::constrainedWeights(Ba
   }
   
   return _sideReconcilationWeights_h[cacheKey];
+}
+
+set<unsigned> BasisReconciliation::internalDofIndicesForFinerBasis(BasisPtr finerBasis, RefinementBranch refinements) {
+  // which degrees of freedom in the finer basis have empty support on the boundary of the coarser basis's reference element? -- these are the ones for which the constrained weights are determined in computeConstrainedWeights.
+  set<unsigned> internalDofOrdinals;
+  unsigned spaceDim = finerBasis->domainTopology().getDimension();
+  
+  map<unsigned, set<unsigned> > internalSubcellOrdinals = RefinementPattern::getInternalSubcellOrdinals(refinements); // might like to cache this result (there is a repeated, inefficient call inside this method)
+  
+  for (int scDim = 0; scDim < spaceDim; scDim++) {
+    set<unsigned> internalOrdinals = internalSubcellOrdinals[scDim];
+    
+    for (set<unsigned>::iterator scOrdinalIt = internalOrdinals.begin(); scOrdinalIt != internalOrdinals.end(); scOrdinalIt++) {
+      unsigned scOrdinal = *scOrdinalIt;
+      set<int> scInternalDofs = finerBasis->dofOrdinalsForSubcell(scDim, scOrdinal, scDim);
+      internalDofOrdinals.insert(scInternalDofs.begin(),scInternalDofs.end());
+    }
+  }
+  set<int> cellInternalDofs = finerBasis->dofOrdinalsForSubcell(spaceDim, 0, spaceDim);
+  internalDofOrdinals.insert(cellInternalDofs.begin(),cellInternalDofs.end());
+  
+  return internalDofOrdinals;
 }

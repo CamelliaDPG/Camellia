@@ -44,18 +44,20 @@ class Cell {
    */
 public:
   Cell(CellTopoPtr cellTopo, const vector<unsigned> &vertices, const vector< map< unsigned, unsigned > > &subcellPermutations,
-       unsigned cellIndex, MeshTopology* meshTopo);
-  unsigned cellIndex();
+       IndexType cellIndex, MeshTopology* meshTopo);
+  IndexType cellIndex();
   const vector< Teuchos::RCP< Cell > > &children();
   void setChildren(vector< Teuchos::RCP< Cell > > children);
   vector<IndexType> getChildIndices();
-  vector< pair<GlobalIndexType, unsigned> > childrenForSide(unsigned sideOrdinal);
-  vector< pair< GlobalIndexType, unsigned> > getDescendantsForSide(int sideOrdinal, bool leafNodesOnly = true);
+  vector< pair<IndexType, unsigned> > childrenForSide(unsigned sideOrdinal);
+  vector< pair< IndexType, unsigned> > getDescendantsForSide(int sideOrdinal, bool leafNodesOnly = true);
   unsigned entityIndex(unsigned subcdim, unsigned subcord);
   vector<unsigned> getEntityIndices(unsigned subcdim);
   Teuchos::RCP<Cell> getParent();
   void setParent(Teuchos::RCP<Cell> parent);
   bool isParent();
+  
+  unsigned findSubcellOrdinal(unsigned subcdim, IndexType subcEntityIndex); // this is pretty brute force right now
   
   RefinementPatternPtr refinementPattern();
   void setRefinementPattern(RefinementPatternPtr refPattern);

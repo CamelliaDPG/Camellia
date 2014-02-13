@@ -21,7 +21,7 @@ typedef Teuchos::RCP<MeshTopology> MeshTopologyPtr;
 
 #include "MeshTopology.h"
 
-typedef vector< pair<RefinementPattern*, unsigned> > RefinementBranch;
+typedef vector< pair<RefinementPattern*, unsigned> > RefinementBranch; //unsigned: the child ordinal
 
 typedef vector< pair<RefinementPattern*, vector<unsigned> > > RefinementPatternRecipe;
 
@@ -93,6 +93,8 @@ public:
   static FieldContainer<double> descendantNodesRelativeToAncestorReferenceCell(RefinementBranch refinementBranch);
   
   static FieldContainer<double> descendantNodes(RefinementBranch refinementBranch, const FieldContainer<double> &ancestorNodes);
+  
+  static map<unsigned, set<unsigned> > getInternalSubcellOrdinals(RefinementBranch &refinements);
   
   static RefinementBranch sideRefinementBranch(RefinementBranch &volumeRefinementBranch, unsigned sideIndex);
 };

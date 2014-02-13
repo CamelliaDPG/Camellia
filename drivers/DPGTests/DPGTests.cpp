@@ -171,6 +171,8 @@ void DPGTests::runTests() {
   // setup our TestSuite tests:
   vector< Teuchos::RCP< TestSuite > > testSuites;
   
+  testSuites.push_back( Teuchos::rcp( new BasisReconciliationTests ) );
+  
   if (skipSlowTests) {
     if (rank==0) {
       cout << "skipping slow tests (IncompressibleFormulationsTests).\n";
@@ -179,9 +181,8 @@ void DPGTests::runTests() {
     testSuites.push_back( Teuchos::rcp( new IncompressibleFormulationsTests(false) ) ); // false: turn "thorough" off
   }
   
-  testSuites.push_back( Teuchos::rcp( new ScratchPadTests ) );
-  
   testSuites.push_back( Teuchos::rcp( new MeshTestSuite ) );
+  testSuites.push_back( Teuchos::rcp( new ScratchPadTests ) );
   
   testSuites.push_back( Teuchos::rcp( new ElementTests ) );
   testSuites.push_back( Teuchos::rcp( new MultiBasisTests ) );
@@ -197,7 +198,6 @@ void DPGTests::runTests() {
   testSuites.push_back( Teuchos::rcp( new MeshTopologyTests ) );
   testSuites.push_back( Teuchos::rcp( new CurvilinearMeshTests) );
   
-  testSuites.push_back( Teuchos::rcp( new BasisReconciliationTests ) );
   testSuites.push_back( Teuchos::rcp( new BasisCacheTests ) );
   testSuites.push_back( Teuchos::rcp( new SolutionTests ) );
   testSuites.push_back( Teuchos::rcp( new FunctionTests ) );

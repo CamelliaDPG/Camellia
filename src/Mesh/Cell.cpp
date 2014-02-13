@@ -128,6 +128,18 @@ vector<unsigned> Cell::getEntityIndices(unsigned subcdim) {
   return cellEntityIndices;
 }
 
+unsigned Cell::findSubcellOrdinal(unsigned subcdim, IndexType subcEntityIndex) {
+  // this is pretty brute force right now
+  int entityCount = _cellTopo->getSubcellCount(subcdim);
+  for (int scord=0; scord<entityCount; scord++) {
+    unsigned scEntityIndex = entityIndex(subcdim, scord);
+    if (scEntityIndex == subcEntityIndex) {
+      return scord;
+    }
+  }
+  return -1; // NOT FOUND
+}
+
 Teuchos::RCP<Cell> Cell::getParent() {
   return _parent;
 }

@@ -713,7 +713,7 @@ set<GlobalIndexType> GDAMaximumRule2D::globalDofIndicesForPartition(PartitionInd
   return _partitionedGlobalDofIndices[partitionNumber];
 }
 
-void GDAMaximumRule2D::interpretGlobalDofs(GlobalIndexType cellID, FieldContainer<double> &localDofs, const Epetra_Vector &globalDofs) {
+void GDAMaximumRule2D::interpretGlobalData(GlobalIndexType cellID, FieldContainer<double> &localDofs, const Epetra_Vector &globalDofs) {
   int numDofs = elementType(cellID)->trialOrderPtr->totalDofs();
   for (int dofIndex=0; dofIndex<numDofs; dofIndex++) {
     GlobalIndexType globalIndex = globalDofIndex(cellID, dofIndex);
@@ -721,7 +721,7 @@ void GDAMaximumRule2D::interpretGlobalDofs(GlobalIndexType cellID, FieldContaine
   }
 }
 
-void GDAMaximumRule2D::interpretLocalDofs(GlobalIndexType cellID, const FieldContainer<double> &localDofs, FieldContainer<double> &globalDofs, FieldContainer<GlobalIndexType> &globalDofIndices) {
+void GDAMaximumRule2D::interpretLocalData(GlobalIndexType cellID, const FieldContainer<double> &localDofs, FieldContainer<double> &globalDofs, FieldContainer<GlobalIndexType> &globalDofIndices) {
   // for maximum rule, our interpretation is just a one-to-one mapping
   globalDofs = localDofs; // copy -- this may be a vector or a (square) matrix
   int numDofs = localDofs.dimension(0);

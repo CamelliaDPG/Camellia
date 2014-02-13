@@ -41,8 +41,8 @@ class MeshTopology {
   vector< vector< set<IndexType> > > _entities; // vertices, edges, faces, solids, etc., up to dimension (_spaceDim - 1)
   vector< map< set<IndexType>, IndexType > > _knownEntities; // map keys are sets of vertices, values are entity indices in _entities[d]
   vector< map< IndexType, vector<IndexType> > > _canonicalEntityOrdering; // since we'll have one of these for each entity, could replace map with a vector
-  vector< map< IndexType, set< pair<IndexType, IndexType> > > > _activeCellsForEntities; // set entries are (cellIndex, entityIndexInCell) (entityIndexInCell aka subcord)--I'm vascillating on whether this should contain entries for active ancestral cells.  Today, I think it should not.  I think we should have another set of activeEntities.  Things in that list either themselves have active cells or an ancestor that has an active cell.  So if your parent is inactive and you don't have any active cells of your own, then you know you can deactivate.
-  vector< map<IndexType, set<IndexType> > > _activeSidesForEntities; // map keys are entity indices of dimension d (the outer vector index); map values are entities of dimension _spaceDim-1 belonging to active cells that contain the entity indicated by the map key.
+  vector< map< IndexType, set< pair<IndexType, unsigned> > > > _activeCellsForEntities; // set entries are (cellIndex, entityIndexInCell) (entityIndexInCell aka subcord)--I'm vascillating on whether this should contain entries for active ancestral cells.  Today, I think it should not.  I think we should have another set of activeEntities.  Things in that list either themselves have active cells or an ancestor that has an active cell.  So if your parent is inactive and you don't have any active cells of your own, then you know you can deactivate.
+  vector< map<IndexType, set<IndexType> > > _sidesForEntities; // map keys are entity indices of dimension d (the outer vector index); map values are entities of dimension _spaceDim-1 belonging to cells that contain the entity indicated by the map key.
   map< IndexType, pair< pair<IndexType, unsigned>, pair<IndexType, unsigned> > > _cellsForSideEntities; // key: sideEntityIndex.  value.first is (cellIndex1, sideOrdinal1), value.second is (cellIndex2, sideOrdinal2).  On initialization, (cellIndex2, sideOrdinal2) == ((IndexType)-1,(IndexType)-1).
   set<IndexType> _boundarySides; // entities of dimension _spaceDim-1 on the mesh boundary
   vector< map< IndexType, vector< pair<IndexType, unsigned> > > > _parentEntities; // map from entity to its possible parents.  Not every entity has a parent.  We support entities having multiple parents.  Such things will be useful in the context of anisotropic refinements.  The pair entries here are (parentEntityIndex, refinementOrdinal), where the refinementOrdinal is the index into the _childEntities[d][parentEntityIndex] vector.
@@ -71,7 +71,6 @@ class MeshTopology {
 
 //  pair< IndexType, set<IndexType> > determineEntityConstraints(unsigned d, IndexType entityIndex);
   void addChildren(CellPtr cell, const vector< CellTopoPtr > &childTopos, const vector< vector<IndexType> > &childVertices);
-  unsigned getCellCountForSide(IndexType sideEntityIndex);
   vector< pair<IndexType,unsigned> > getConstrainingSideAncestry(IndexType sideEntityIndex);   // pair: first is the sideEntityIndex of the ancestor; second is the refinementIndex of the refinement to get from parent to child (see _parentEntities and _childEntities)
   IndexType getVertexIndexAdding(const vector<double> &vertex, double tol);
   vector<IndexType> getVertexIndices(const FieldContainer<double> &vertices);
@@ -104,6 +103,13 @@ public:
   IndexType getEntityParentForSide(unsigned d, IndexType entityIndex, IndexType parentSideEntityIndex);   // returns the entity index for the parent (which might be the entity itself) of entity (d,entityIndex) that is a subcell of side parentSideEntityIndex
   const vector<IndexType> &getEntityVertexIndices(unsigned d, IndexType entityIndex);
   IndexType getFaceEdgeIndex(unsigned faceIndex, unsigned edgeOrdinalInFace);
+  
+  unsigned getCellCountForSide(IndexType sideEntityIndex); // 1 or 2
+  pair<IndexType, unsigned> getFirstCellForSide(IndexType sideEntityIndex);
+  pair<IndexType, unsigned> getSecondCellForSide(IndexType sideEntityIndex);
+
+  set< pair<IndexType, unsigned> > getCellsContainingEntity(unsigned d, unsigned entityIndex);
+  
   unsigned getSpaceDim();
   unsigned getSubEntityCount(unsigned int d, IndexType entityIndex, unsigned subEntityDim);
   IndexType getSubEntityIndex(unsigned d, IndexType entityIndex, unsigned subEntityDim, unsigned subEntityOrdinal);
@@ -113,6 +119,8 @@ public:
   void refineCell(IndexType cellIndex, RefinementPatternPtr refPattern);
   IndexType cellCount();
   IndexType activeCellCount();
+  
+  IndexType leastActiveCellIndexContainingEntityConstrainedByConstrainingEntity(unsigned d, unsigned constrainingEntityIndex);
   
   const set<IndexType> &getActiveCellIndices();
   set< pair<IndexType, unsigned> > getActiveBoundaryCells(); // (cellIndex, sideOrdinal)

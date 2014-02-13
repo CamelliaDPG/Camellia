@@ -33,12 +33,12 @@ public:
 private:
   bool pConstraintSideBasisSubTest(BasisPtr fineBasis, unsigned fineSideIndex, FieldContainer<double> &finePhysicalCellNodes,
                                    BasisPtr coarseBasis, unsigned coarseSideIndex, FieldContainer<double> &coarsePhysicalCellNodes);
-  bool pConstraintWholeBasisSubTest(BasisPtr fineBasis, BasisPtr coarseBasis);
+  bool pConstraintInternalBasisSubTest(BasisPtr fineBasis, BasisPtr coarseBasis);
 
   bool hConstraintSideBasisSubTest(BasisPtr fineBasis, unsigned fineSideIndex, FieldContainer<double> &fineCellAncestralNodes,
                                    RefinementBranch &volumeRefinements,
                                    BasisPtr coarseBasis, unsigned coarseSideIndex, FieldContainer<double> &coarseCellNodes);
-  bool hConstraintWholeBasisSubTest(BasisPtr fineBasis, RefinementBranch &refinements, BasisPtr coarseBasis);
+  bool hConstraintInternalBasisSubTest(BasisPtr fineBasis, RefinementBranch &refinements, BasisPtr coarseBasis);
   
   FieldContainer<double> permutedSidePoints(shards::CellTopology &sideTopo, FieldContainer<double> &pointsRefCell, unsigned permutation);
   

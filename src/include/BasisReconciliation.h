@@ -60,8 +60,9 @@ public:
   // vertexNodePermutation is an index into a structure defined by CellTopologyTraits.  See CellTopology::getNodePermutation() and CellTopology::getNodePermutationInverse().
   
   /* Broken elements: */
-  // matching the whole bases:
+  // matching the internal degrees of freedom:
   static FieldContainer<double> computeConstrainedWeights(BasisPtr finerBasis, RefinementBranch refinements, BasisPtr coarserBasis);
+  static set<unsigned> internalDofIndicesForFinerBasis(BasisPtr finerBasis, RefinementBranch refinements); // which degrees of freedom in the finer basis have empty support on the boundary of the coarser basis's reference element? -- these are the ones for which the constrained weights are determined in computeConstrainedWeights.
   // matching along sides:
   static SubBasisReconciliationWeights computeConstrainedWeights(BasisPtr finerBasis, int finerBasisSideIndex, RefinementBranch &volumeRefinements,
                                                                  RefinementBranch &sideRefinements,

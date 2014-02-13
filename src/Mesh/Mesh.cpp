@@ -550,13 +550,13 @@ void Mesh::hUnrefine(const set<GlobalIndexType> &cellIDs) {
   _boundary.buildLookupTables();
 }
 
-void Mesh::interpretGlobalDofs(GlobalIndexType cellID, FieldContainer<double> &localDofs, const Epetra_Vector &globalDofs) {
-  _maximumRule2D->interpretGlobalDofs(cellID, localDofs, globalDofs);
+void Mesh::interpretGlobalData(GlobalIndexType cellID, FieldContainer<double> &localDofs, const Epetra_Vector &globalDofs) {
+  _maximumRule2D->interpretGlobalData(cellID, localDofs, globalDofs);
 }
 
-void Mesh::interpretLocalDofs(GlobalIndexType cellID, const FieldContainer<double> &localDofs,
+void Mesh::interpretLocalData(GlobalIndexType cellID, const FieldContainer<double> &localDofs,
                               FieldContainer<double> &globalDofs, FieldContainer<GlobalIndexType> &globalDofIndices) {
-  _maximumRule2D->interpretLocalDofs(cellID, localDofs, globalDofs, globalDofIndices);
+  _maximumRule2D->interpretLocalData(cellID, localDofs, globalDofs, globalDofIndices);
 }
 
 GlobalIndexType Mesh::numActiveElements() {

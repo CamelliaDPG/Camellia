@@ -419,7 +419,7 @@ vector< vector<GlobalIndexType> > RefinementPattern::children(const map<unsigned
 }
 
 vector< vector< pair< unsigned, unsigned> > > & RefinementPattern::childrenForSides() {
-  // outer vector: indexed by parent's sides; inner vector: (child index in children, index of child's side shared with parent)
+  // outer vector: indexed by parent's sides; inner vector: (child ordinal in children, ordinal of child's side shared with parent)
   
   return _childrenForSides;
 }
@@ -493,6 +493,59 @@ void RefinementPattern::initializeAnisotropicRelationships() {
     depthCutHex->setRelatedRefinementPatterns(hexRefs);
     isotropicRefinementHex->setRelatedRefinementPatterns(hexRefs);*/
   }
+}
+
+map<unsigned, set<unsigned> > RefinementPattern::getInternalSubcellOrdinals(RefinementBranch &refinements) {
+  CellTopoPtr ancestralTopo = refinements[0].first->parentTopology();
+  CellTopoPtr childTopo;
+  set<unsigned> parentSidesToIntersect;
+  for (unsigned sideOrdinal=0; sideOrdinal < ancestralTopo->getSideCount(); sideOrdinal++) {
+    parentSidesToIntersect.insert(sideOrdinal);
+  }
+  for (int refIndex=0; refIndex<refinements.size(); refIndex++) {
+    RefinementPattern* refPattern = refinements[refIndex].first;
+    unsigned childOrdinal = refinements[refIndex].second;
+    childTopo = refPattern->childTopology(childOrdinal);
+    set<unsigned> childSidesThatMatch;
+    for (set<unsigned>::iterator parentSideIt = parentSidesToIntersect.begin(); parentSideIt != parentSidesToIntersect.end(); parentSideIt++) {
+      unsigned parentSide = *parentSideIt;
+      vector< pair<unsigned, unsigned> > childrenForSide = refPattern->childrenForSides()[parentSide];       // vector: (child ordinal in children, ordinal of child's side shared with parent)
+      for(vector< pair<unsigned, unsigned> >::iterator childForSideEntryIt = childrenForSide.begin();
+          childForSideEntryIt != childrenForSide.end(); childForSideEntryIt++) {
+        if (childForSideEntryIt->first == childOrdinal) {
+          childSidesThatMatch.insert(childForSideEntryIt->second);
+        }
+      }
+    }
+    parentSidesToIntersect = childSidesThatMatch;
+  }
+  // once we get here, the entries in parentSidesToIntersect are exactly those descendant sides that have non-empty intersection with the ancestor's boundary.
+  map<unsigned, set<unsigned> > externalSubcellOrdinals;
+  unsigned spaceDim = ancestralTopo->getDimension();
+  
+  for (set<unsigned>::iterator externalSideIt = parentSidesToIntersect.begin(); externalSideIt != parentSidesToIntersect.end(); externalSideIt++) {
+    unsigned externalSideOrdinal = *externalSideIt;
+    shards::CellTopology sideTopo = childTopo->getCellTopologyData(spaceDim-1, externalSideOrdinal);
+    for (unsigned d=0; d<spaceDim; d++) {
+      set<unsigned> subcellsForSide; // of dimension d...
+      unsigned scCount = sideTopo.getSubcellCount(d);
+      for (unsigned scOrdinal=0; scOrdinal<scCount; scOrdinal++) {
+        unsigned scOrdinalInCell = CamelliaCellTools::subcellOrdinalMap(*childTopo, spaceDim-1, externalSideOrdinal, d, scOrdinal); // this is not a particularly efficient method...
+        externalSubcellOrdinals[d].insert(scOrdinalInCell);
+      }
+    }
+  }
+  
+  map<unsigned, set<unsigned> > internalSubcellOrdinals; // complement of externalSubcellOrdinals
+  for (unsigned d=0; d<spaceDim; d++) {
+    unsigned scCount = childTopo->getSubcellCount(d);
+    for (unsigned scOrd=0; scOrd<scCount; scOrd++) {
+      if (externalSubcellOrdinals[d].find(scOrd) == externalSubcellOrdinals[d].end()) {
+        internalSubcellOrdinals[d].insert(scOrd);
+      }
+    }
+  }
+  return internalSubcellOrdinals;
 }
 
 unsigned RefinementPattern::mapSideChildIndex(unsigned sideIndex, unsigned sideRefinementChildIndex) {

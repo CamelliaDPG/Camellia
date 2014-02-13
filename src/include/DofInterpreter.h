@@ -14,11 +14,20 @@
 
 #include "IndexType.h"
 
+using namespace Intrepid;
+
 class DofInterpreter {
 public:
-  virtual void interpretLocalDofs(GlobalIndexType cellID, const FieldContainer<double> &localDofs,
-                          FieldContainer<double> &globalDofs, FieldContainer<GlobalIndexType> &globalDofIndices) = 0;
-  virtual void interpretGlobalDofs(GlobalIndexType cellID, FieldContainer<double> &localDofs, const Epetra_Vector &globalDofs) = 0;
+  virtual void interpretLocalData(GlobalIndexType cellID, const FieldContainer<double> &localDofs,
+                                  FieldContainer<double> &globalDofs, FieldContainer<GlobalIndexType> &globalDofIndices) = 0;
+  
+  virtual void interpretLocalData(GlobalIndexType cellID, const FieldContainer<double> &localStiffnessData, const FieldContainer<double> &localLoadData,
+                                  FieldContainer<double> &globalStiffnessData, FieldContainer<double> &globalLoadData, FieldContainer<GlobalIndexType> &globalDofIndices) {
+    this->interpretLocalData(cellID,localStiffnessData,globalStiffnessData,globalDofIndices);
+    this->interpretLocalData(cellID,localLoadData,globalLoadData,globalDofIndices);
+  }
+  
+  virtual void interpretGlobalData(GlobalIndexType cellID, FieldContainer<double> &localDofs, const Epetra_Vector &globalDofs) = 0;
 };
 
 #endif
