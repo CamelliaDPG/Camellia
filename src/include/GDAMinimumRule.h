@@ -13,6 +13,8 @@
 
 #include "GlobalDofAssignment.h"
 
+#include "LocalDofMapper.h"
+
 struct ConstrainingSubsideInfo {
   GlobalIndexType cellID;
   unsigned sideOrdinal;
@@ -29,11 +31,18 @@ struct CellConstraints {
   vector<ConstrainingCellInfo> sideConstraints; // one entry for each side
   vector< vector<ConstrainingSubsideInfo> > subsideConstraints; // outer vector: one entry for each side.  Inner vector: one entry for each subside.
   vector< vector<GlobalIndexType> > owningCellIDForSubcell; // outer vector indexed by subcell dimension; inner vector indexed by subcell ordinal in cell
+  LocalDofMapperPtr dofMapper;
+};
+
+struct ConstrainedDofMap {
+  set<int> localDofIndices;
+  
 };
 
 class GDAMinimumRule : public GlobalDofAssignment {
   map<GlobalIndexType, IndexType> _cellDofOffsets; // (cellID -> first partition-local dof index for that cell)  within the partition, offsets for the owned dofs in cell
   GlobalIndexType _partitionDofOffset; // add to partition-local dof indices to get a global dof index
+  GlobalIndexType _partitionDofCount; // how many dofs belong to the local partition
   GlobalIndexType _globalDofCount;
   
   CellConstraints getCellConstraints(GlobalIndexType cellID);

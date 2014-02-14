@@ -27,7 +27,7 @@ class SerialDenseWrapper {
       }
     }
   }
-  static Epetra_SerialDenseMatrix convertFCToSDM(FieldContainer<double> &A){
+  static Epetra_SerialDenseMatrix convertFCToSDM(const FieldContainer<double> &A){
     int n = A.dimension(0);
     int m = A.dimension(1);
     Epetra_SerialDenseMatrix Amatrix(n,m);
@@ -38,7 +38,7 @@ class SerialDenseWrapper {
     }
     return Amatrix;
   }
-  static void convertSDMToFC(FieldContainer<double>& A_fc, Epetra_SerialDenseMatrix &A){
+  static void convertSDMToFC(FieldContainer<double>& A_fc, const Epetra_SerialDenseMatrix &A){
     int n = A.M();    
     int m = A.N();
     A_fc.resize(n,m);
@@ -51,7 +51,7 @@ class SerialDenseWrapper {
   
 public:
   // gives X = scalarA*A+scalarB*B (overwrites A)
-  static void add(FieldContainer<double> &X, FieldContainer<double> &A, FieldContainer<double> &B, double scalarA = 1.0, double scalarB = 1.0){
+  static void add(FieldContainer<double> &X, const FieldContainer<double> &A, const FieldContainer<double> &B, double scalarA = 1.0, double scalarB = 1.0){
     int N = A.dimension(0);
     int M = A.dimension(1);
     Epetra_SerialDenseMatrix AMatrix = convertFCToSDM(A);
@@ -63,13 +63,13 @@ public:
   }
 
   // gives X = A*B.  Must pass in 2D arrays, even for vectors! 
-  static void multiply(FieldContainer<double> &X, FieldContainer<double> &A, FieldContainer<double> &B, char TransposeA = 'N', char TransposeB = 'N'){  
+  static void multiply(FieldContainer<double> &X, const FieldContainer<double> &A, const FieldContainer<double> &B, char TransposeA = 'N', char TransposeB = 'N'){
     multiplyAndAdd(X,A,B,TransposeA,TransposeB,1.0,0.0);
   }
 
   // wrapper for SDM multiply + add routine.  Must pass in 2D arrays, even for vectors! 
   // X = ScalarThis*X + ScalarAB*A*B
-  static void multiplyAndAdd(FieldContainer<double> &X, FieldContainer<double> &A, FieldContainer<double> &B, char TransposeA, char TransposeB, double ScalarAB, double ScalarThis){
+  static void multiplyAndAdd(FieldContainer<double> &X, const FieldContainer<double> &A, const FieldContainer<double> &B, char TransposeA, char TransposeB, double ScalarAB, double ScalarThis){
     int N = X.dimension(0);
     int M = X.dimension(1);
     

@@ -12,6 +12,8 @@
 
 #include "CamelliaCellTools.h"
 
+#include "SerialDenseWrapper.h"
+
 #include "Teuchos_GlobalMPISession.hpp"
 
 GDAMinimumRule::GDAMinimumRule(MeshTopologyPtr meshTopology, VarFactory varFactory, DofOrderingFactoryPtr dofOrderingFactory, MeshPartitionPolicyPtr partitionPolicy,
@@ -20,7 +22,6 @@ GDAMinimumRule::GDAMinimumRule(MeshTopologyPtr meshTopology, VarFactory varFacto
 {
   
 }
-
 
 void GDAMinimumRule::didChangePartitionPolicy() {
   rebuildLookups();
@@ -62,15 +63,19 @@ ElementTypePtr GDAMinimumRule::elementType(GlobalIndexType cellID) {
 }
 
 GlobalIndexType GDAMinimumRule::globalDofCount() {
-  // TODO: implement this
-  cout << "WARNING: globalDofCount() unimplemented.\n";
-  return 0;
+  // assumes the lookups have been rebuilt since the last change that would affect the count
+  
+  // TODO: Consider working out a way to guard against a stale value here.  E.g. could have a "dirty" flag that gets set anytime there's a change to the refinements, and cleared when lookups are rebuilt.  If we're dirty when we get here, we rebuild before returning the global dof count.
+  return _globalDofCount;
 }
 
 set<GlobalIndexType> GDAMinimumRule::globalDofIndicesForPartition(PartitionIndexType partitionNumber) {
-  // TODO: implement this
   set<GlobalIndexType> globalDofIndices;
-  cout << "WARNING: GDAMinimumRule::globalDofIndicesForPartition() unimplemented.\n";
+  // by construction, our globalDofIndices are contiguously numbered, starting with _partitionDofOffset
+  for (GlobalIndexType i=0; i<_partitionDofCount; i++) {
+    globalDofIndices.insert(_partitionDofOffset + i);
+  }
+  
   return globalDofIndices;
 }
 
@@ -84,8 +89,12 @@ void GDAMinimumRule::interpretGlobalData(GlobalIndexType cellID, FieldContainer<
   cout << "WARNING: GDAMinimumRule::interpretGlobalData() unimplemented.\n";
 }
 
-void GDAMinimumRule::interpretLocalData(GlobalIndexType cellID, const FieldContainer<double> &localDofs,
-                                        FieldContainer<double> &globalDofs, FieldContainer<GlobalIndexType> &globalDofIndices) {
+void GDAMinimumRule::interpretLocalData(GlobalIndexType cellID, const FieldContainer<double> &localData,
+                                        FieldContainer<double> &globalData, FieldContainer<GlobalIndexType> &globalDofIndices) {
+  
+  DofOrderingPtr trialOrdering = _elementTypeForCell[cellID]->trialOrderPtr;
+  set<int> varIDs = trialOrdering->getVarIDs();
+  
   // TODO: implement this
   cout << "WARNING: GDAMinimumRule::interpretLocalData() unimplemented.\n";
 }
@@ -110,6 +119,11 @@ CellConstraints GDAMinimumRule::getCellConstraints(GlobalIndexType cellID) {
   cellConstraints.subsideConstraints = vector< vector<ConstrainingSubsideInfo> >(sideCount);
   ConstrainingCellInfo sideConstraint;
   ConstrainingSubsideInfo subsideConstraint;
+  
+  // TODO: build stuff for LocalDofMapper
+//  SubBasisDofMatrixMapper(set<unsigned> &basisDofOrdinalFilter, vector<GlobalIndexType> &mappedGlobalDofOrdinals, FieldContainer<double> &constraintMatrix);
+//  typedef vector< SubBasisDofMapperPtr > BasisMap; // taken together, these maps map a whole basis
+//  LocalDofMapper(DofOrderingPtr dofOrdering, map< int, BasisMap > volumeMaps, vector< map< int, BasisMap > > sideMaps);
   
   typedef pair< IndexType, unsigned > CellPair;
   
@@ -250,7 +264,7 @@ void GDAMinimumRule::rebuildLookups() {
   
   map<int, VarPtr> trialVars = _varFactory.trialVars();
   
-  GlobalIndexType partitionDofCount = 0; // how many dofs we own locally
+  _partitionDofCount = 0; // how many dofs we own locally
   _cellDofOffsets.clear(); // within the partition, offsets for the owned dofs in cell
   
   int spaceDim = _meshTopology->getSpaceDim();
@@ -273,9 +287,9 @@ void GDAMinimumRule::rebuildLookups() {
       if ( varHasSupportOnVolume ) { // i.e. a variable with support on the volume
         BasisPtr basis = trialOrdering->getBasis(var->ID());
         if (var->space() == L2) { // unconstrained / local
-          partitionDofCount += basis->getCardinality();
+          _partitionDofCount += basis->getCardinality();
         } else {
-          partitionDofCount += basis->dofOrdinalsForInterior().size();
+          _partitionDofCount += basis->dofOrdinalsForInterior().size();
         }
       }
 
@@ -290,11 +304,11 @@ void GDAMinimumRule::rebuildLookups() {
             if (varHasSupportOnVolume) {
               BasisPtr basis = constrainingTrialOrdering->getBasis(var->ID());
               set<int> sideBasisOrdinals = basis->dofOrdinalsForSubcell(sideDim, sideConstraint.sideOrdinal, sideDim);
-              partitionDofCount += sideBasisOrdinals.size();
+              _partitionDofCount += sideBasisOrdinals.size();
             } else {
               BasisPtr basis = constrainingTrialOrdering->getBasis(var->ID(),sideConstraint.sideOrdinal);
               set<int> sideBasisOrdinals = basis->dofOrdinalsForInterior();
-              partitionDofCount += sideBasisOrdinals.size();
+              _partitionDofCount += sideBasisOrdinals.size();
             }
           }
           
@@ -331,7 +345,7 @@ void GDAMinimumRule::rebuildLookups() {
                     
                     unsigned scOrdinalInConstrainingCell = constrainingCell->findSubcellOrdinal(d,constrainingScIndex);
                     set<int> scBasisOrdinals = basis->dofOrdinalsForSubcell(d, scOrdinalInConstrainingCell, d);
-                    partitionDofCount += scBasisOrdinals.size();
+                    _partitionDofCount += scBasisOrdinals.size();
                   } else {
                     // here, we are dealing with a subside or one of its constituents.  We want to use the constraint info for that subside.
                     unsigned subsideOrdinal = subsideMap[d][scOrdinalInSide];
@@ -346,7 +360,7 @@ void GDAMinimumRule::rebuildLookups() {
                                                                                                        d, scOrdinalInConstrainingCell);
 
                     set<int> scBasisOrdinals = basis->dofOrdinalsForSubcell(d, scOrdinalInConstrainingSide, d);
-                    partitionDofCount += scBasisOrdinals.size();
+                    _partitionDofCount += scBasisOrdinals.size();
                   }
                 }
                 
@@ -357,11 +371,11 @@ void GDAMinimumRule::rebuildLookups() {
         }
       }
     }
-    _cellDofOffsets[cellID] = partitionDofCount;
+    _cellDofOffsets[cellID] = _partitionDofCount;
   }
   int numRanks = Teuchos::GlobalMPISession::getNProc();
   FieldContainer<int> partitionDofCounts(numRanks);
-  partitionDofCounts[rank] = partitionDofCount;
+  partitionDofCounts[rank] = _partitionDofCount;
   MPIWrapper::entryWiseSum(partitionDofCounts);
   _partitionDofOffset = 0; // add this to a local partition dof index to get the global dof index
   for (int i=0; i<rank; i++) {
