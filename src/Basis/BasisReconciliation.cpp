@@ -18,6 +18,8 @@
 
 #include "CamelliaCellTools.h"
 
+#include "SerialDenseWrapper.h"
+
 #include "CamelliaDebugUtility.h" // includes print() methods
 
 void sizeFCForBasisValues(FieldContainer<double> &fc, BasisPtr basis, int numPoints, bool includeCellDimension = false, int numBasisFieldsToInclude = -1) {
@@ -92,6 +94,21 @@ unsigned vertexPermutation(shards::CellTopology &fineTopo, unsigned fineSideInde
   cout << "coarse nodes:\n" << coarseCellNodes;
   TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "matching permutation not found");
   return -1; // just for compilers that would otherwise warn that we're missing a return value...
+}
+
+SubBasisReconciliationWeights BasisReconciliation::composedSubBasisReconciliationWeights(SubBasisReconciliationWeights aWeights, SubBasisReconciliationWeights bWeights) {
+  if (aWeights.coarseOrdinals.size() != bWeights.fineOrdinals.size()) {
+    cout << "aWeights and bWeights are incompatible...\n";
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "aWeights and bWeights are incompatible...");
+  }
+  SubBasisReconciliationWeights cWeights;
+  cWeights.weights = FieldContainer<double>(aWeights.fineOrdinals.size(), bWeights.coarseOrdinals.size());
+  FieldContainer<double> aMatrix = aWeights.weights;
+  FieldContainer<double> bMatrix = bWeights.weights;
+  SerialDenseWrapper::multiply(cWeights.weights, aWeights.weights, bWeights.weights);
+  cWeights.fineOrdinals = aWeights.fineOrdinals;
+  cWeights.coarseOrdinals = bWeights.coarseOrdinals;
+  return cWeights;
 }
 
 FieldContainer<double> BasisReconciliation::computeConstrainedWeights(BasisPtr finerBasis, BasisPtr coarserBasis) {
@@ -564,4 +581,46 @@ set<unsigned> BasisReconciliation::internalDofIndicesForFinerBasis(BasisPtr fine
   internalDofOrdinals.insert(cellInternalDofs.begin(),cellInternalDofs.end());
   
   return internalDofOrdinals;
+}
+
+FieldContainer<double> BasisReconciliation::subBasisReconciliationWeightsForSubcell(SubBasisReconciliationWeights &subBasisWeights, unsigned subcdim,
+                                                                                    BasisPtr fineBasis, unsigned fineSubcord,
+                                                                                    BasisPtr coarseBasis, unsigned coarseSubcord,
+                                                                                    set<unsigned> &fineBasisDofOrdinals) {
+  set<int> fineBasisSubcellOrdinals = fineBasis->dofOrdinalsForSubcell(subcdim, fineSubcord, subcdim);
+  set<int> coarseBasisSubcellOrdinals = coarseBasis->dofOrdinalsForSubcell(subcdim, coarseSubcord, subcdim);
+  
+  set<unsigned> rowFilter, colFilter;
+  
+  vector<unsigned> subBasisFineOrdinals(subBasisWeights.fineOrdinals.begin(),subBasisWeights.fineOrdinals.end());
+  vector<unsigned> subBasisCoarseOrdinals(subBasisWeights.coarseOrdinals.begin(),subBasisWeights.coarseOrdinals.end());
+  
+  fineBasisDofOrdinals.clear();
+  
+  for (int i=0; i<subBasisFineOrdinals.size(); i++) {
+    if (fineBasisSubcellOrdinals.find( subBasisFineOrdinals[i] ) != fineBasisSubcellOrdinals.end() ) {
+      rowFilter.insert(i);
+      fineBasisDofOrdinals.insert(subBasisFineOrdinals[i]);
+    }
+  }
+  
+  for (int j=0; j<subBasisCoarseOrdinals.size(); j++) {
+    if (coarseBasisSubcellOrdinals.find( subBasisCoarseOrdinals[j] ) != coarseBasisSubcellOrdinals.end() ) {
+      colFilter.insert(j);
+    }
+  }
+  
+  if (rowFilter.size() != subBasisFineOrdinals.size()) {
+    cout << "Error: some required rows aren't present in subBasisWeights.\n";
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Error: some required rows aren't present in subBasisWeights.");
+  }
+  
+  if (colFilter.size() != subBasisCoarseOrdinals.size()) {
+    cout << "Error: some required columns aren't present in subBasisWeights.\n";
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Error: some required columns aren't present in subBasisWeights.");
+  }
+  
+  FieldContainer<double> constraintMatrixSubcell = SerialDenseWrapper::getSubMatrix(subBasisWeights.weights, rowFilter, colFilter);
+  
+  return constraintMatrixSubcell;
 }

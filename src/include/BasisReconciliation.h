@@ -68,6 +68,14 @@ public:
                                                                  RefinementBranch &sideRefinements,
                                                                  BasisPtr coarserBasis, int coarserBasisSideIndex, unsigned vertexNodePermutation);
   // it's worth noting that these FieldContainer arguments are not especially susceptible to caching
+  
+
+  static FieldContainer<double> subBasisReconciliationWeightsForSubcell(SubBasisReconciliationWeights &subBasisWeights, unsigned subcdim,
+                                                                        BasisPtr fineBasis, unsigned fineSubcord,
+                                                                        BasisPtr coarseBasis, unsigned coarseSubcord,
+                                                                        set<unsigned> &fineBasisDofOrdinals);
+  
+  static SubBasisReconciliationWeights composedSubBasisReconciliationWeights(SubBasisReconciliationWeights aWeights, SubBasisReconciliationWeights bWeights);
 };
 
 /* a few ideas come up here:

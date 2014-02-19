@@ -102,17 +102,22 @@ public:
   IndexType getEntityParent(unsigned d, IndexType entityIndex, unsigned parentOrdinal=0);
   IndexType getEntityParentForSide(unsigned d, IndexType entityIndex, IndexType parentSideEntityIndex);   // returns the entity index for the parent (which might be the entity itself) of entity (d,entityIndex) that is a subcell of side parentSideEntityIndex
   const vector<IndexType> &getEntityVertexIndices(unsigned d, IndexType entityIndex);
+  const shards::CellTopology &getEntityTopology(unsigned d, IndexType entityIndex);
   IndexType getFaceEdgeIndex(unsigned faceIndex, unsigned edgeOrdinalInFace);
   
   unsigned getCellCountForSide(IndexType sideEntityIndex); // 1 or 2
   pair<IndexType, unsigned> getFirstCellForSide(IndexType sideEntityIndex);
   pair<IndexType, unsigned> getSecondCellForSide(IndexType sideEntityIndex);
 
-  set< pair<IndexType, unsigned> > getCellsContainingEntity(unsigned d, unsigned entityIndex);
+  set< pair<IndexType, unsigned> > getCellsContainingEntity(unsigned d, IndexType entityIndex);
+  set< IndexType > getSidesContainingEntity(unsigned d, IndexType entityIndex);
+  
+  RefinementBranch getSideConstraintRefinementBranch(IndexType sideEntityIndex); // Returns a RefinementBranch that goes from the constraining side to the side indicated.
   
   unsigned getSpaceDim();
   unsigned getSubEntityCount(unsigned int d, IndexType entityIndex, unsigned subEntityDim);
   IndexType getSubEntityIndex(unsigned d, IndexType entityIndex, unsigned subEntityDim, unsigned subEntityOrdinal);
+  unsigned getSubEntityPermutation(unsigned d, IndexType entityIndex, unsigned subEntityDim, unsigned subEntityOrdinal);
   bool getVertexIndex(const vector<double> &vertex, IndexType &vertexIndex, double tol=1e-14);
   const vector<double>& getVertex(IndexType vertexIndex);
   FieldContainer<double> physicalCellNodesForCell(unsigned cellIndex);
@@ -120,7 +125,7 @@ public:
   IndexType cellCount();
   IndexType activeCellCount();
   
-  IndexType leastActiveCellIndexContainingEntityConstrainedByConstrainingEntity(unsigned d, unsigned constrainingEntityIndex);
+  pair<IndexType,IndexType> leastActiveCellIndexContainingEntityConstrainedByConstrainingEntity(unsigned d, unsigned constrainingEntityIndex);
   
   const set<IndexType> &getActiveCellIndices();
   set< pair<IndexType, unsigned> > getActiveBoundaryCells(); // (cellIndex, sideOrdinal)

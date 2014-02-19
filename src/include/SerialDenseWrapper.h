@@ -84,6 +84,46 @@ public:
 
     convertSDMToFC(X,XMatrix);
   }
+  
+  static FieldContainer<double> getSubMatrix(FieldContainer<double> &A, set<unsigned> &rowIndices, set<unsigned> &colIndices,
+                                             bool warnOfNonzeroOffBlockEntries = false) {
+    FieldContainer<double> subMatrix(rowIndices.size(),colIndices.size());
+    
+    unsigned subrowIndex = 0;
+    for (set<unsigned>::iterator rowIndexIt = rowIndices.begin(); rowIndexIt != rowIndices.end(); rowIndexIt++, subrowIndex++) {
+      unsigned subcolIndex = 0;
+      for (set<unsigned>::iterator colIndexIt = colIndices.begin(); colIndexIt != colIndices.end(); colIndexIt++, subcolIndex++) {
+        subMatrix(subrowIndex,subcolIndex) = A(*rowIndexIt,*colIndexIt);
+      }
+    }
+    
+    if (warnOfNonzeroOffBlockEntries) {
+      int numRows = A.dimension(0);
+      int numCols = A.dimension(1);
+      double tol = 1e-14;
+      for (set<unsigned>::iterator rowIndexIt = rowIndices.begin(); rowIndexIt != rowIndices.end(); rowIndexIt++) {
+        for (int j=0; j<numCols; j++) {
+          if (colIndices.find(j) == colIndices.end()) {
+            double val = A(*rowIndexIt,j);
+            if (abs(val) > tol) {
+              cout << "WARNING: off-block entry (" << *rowIndexIt << "," << j << ") = " << val << " is non-zero.\n";
+            }
+          }
+        }
+      }
+      for (set<unsigned>::iterator colIndexIt = colIndices.begin(); colIndexIt != colIndices.end(); colIndexIt++) {
+        for (int i=0; i<numRows; i++) {
+          if (rowIndices.find(i) == rowIndices.end()) {
+            double val = A(i,*colIndexIt);
+            if (abs(val) > tol) {
+              cout << "WARNING: off-block entry (" << i <<  "," << *colIndexIt << ") = " << val << " is non-zero.\n";
+            }
+          }
+        }
+      }
+    }
+    return subMatrix;
+  }
 
   static void solveSystem(FieldContainer<double> &x, FieldContainer<double> &A, FieldContainer<double> &b, bool useATranspose = false) {
     // solves Ax = b, where

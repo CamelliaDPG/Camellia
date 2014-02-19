@@ -553,6 +553,22 @@ unsigned RefinementPattern::mapSideChildIndex(unsigned sideIndex, unsigned sideR
   return _sideRefinementChildIndices[sideIndex][sideRefinementChildIndex];
 }
 
+unsigned RefinementPattern::mapSideOrdinalFromLeafToAncestor(unsigned descendantSideOrdinal, RefinementBranch &refinements) {
+  // given a side ordinal in the leaf node of a branch, returns the corresponding side ordinal in the earliest ancestor in the branch.
+  // returns (unsigned)-1 if the given sideOrdinal does not have a corresponding side in the earliest ancestor, as can happen if the descendant is interior to the ancestor.
+  int numRefs = refinements.size();
+  for (int i=numRefs-1; i>=0; i--) {
+    unsigned childOrdinal = refinements[i].second;
+    RefinementPattern* parentRefPattern = refinements[i].first;
+    map<unsigned,unsigned> sideLookup = parentRefPattern->parentSideLookupForChild(childOrdinal);
+    if (sideLookup.find(descendantSideOrdinal) == sideLookup.end()) {
+      return -1;
+    }
+    descendantSideOrdinal = sideLookup[descendantSideOrdinal];
+  }
+  return descendantSideOrdinal;
+}
+
 RefinementPatternPtr RefinementPattern::noRefinementPattern(Teuchos::RCP< shards::CellTopology > cellTopoPtr) {
   static map< unsigned, RefinementPatternPtr > knownRefinementPatterns;
   unsigned key = cellTopoPtr->getKey();

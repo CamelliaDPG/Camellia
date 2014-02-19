@@ -148,13 +148,59 @@ void Cell::setParent(Teuchos::RCP<Cell> parent) {
   _parent = parent;
 }
 
-bool Cell::isParent() { return _children.size() > 0; }
+bool Cell::isParent() {
+  return _children.size() > 0;
+}
+
+RefinementBranch Cell::refinementBranchForSide(unsigned sideOrdinal) {
+  // if this cell (on this side) is the finer side of a hanging node, returns the RefinementBranch starting
+  // with the coarse neighbor's neighbor (this cell's ancestor).  (Otherwise, the RefinementBranch will be empty.)
+  RefinementBranch refBranch;
+  pair<GlobalIndexType, unsigned> neighborInfo = this->getNeighbor(sideOrdinal);
+  GlobalIndexType neighborCellIndex = neighborInfo.first;
+  unsigned sideIndexInNeighbor = neighborInfo.second;
+  CellPtr neighbor = _meshTopo->getCell(neighborCellIndex);
+  if (neighbor->getNeighbor(sideIndexInNeighbor).first == this->_cellIndex) { // peers!
+    return refBranch; // no refinements
+  } else {
+    GlobalIndexType ancestorCellIndex = neighbor->getNeighbor(sideIndexInNeighbor).first;
+    vector< CellPtr > ancestors;
+    vector< unsigned > childOrdinals;
+    CellPtr currentAncestor = _meshTopo->getCell(_cellIndex);
+    while (currentAncestor->cellIndex() != ancestorCellIndex) {
+      GlobalIndexType childCellIndex = currentAncestor->cellIndex();
+      currentAncestor = currentAncestor->getParent();
+      ancestors.push_back(currentAncestor);
+      vector< CellPtr > children = currentAncestor->children();
+      for (int i=0; i<children.size(); i++) {
+        if (children[i]->cellIndex() == childCellIndex) {
+          childOrdinals.push_back(i);
+          break;
+        }
+      }
+      if (childOrdinals.size() != ancestors.size()) {
+        cout << "ERROR: child not found.\n";
+        TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "ERROR: child not found.");
+      }
+    }
+    // now the ancestors and childOrdinals containers have the RefinementBranch info, in reverse order
+    unsigned ancestorCount = ancestors.size();
+    for (int i=ancestorCount-1; i >= 0; i--) {
+      refBranch.push_back(make_pair(ancestors[i]->refinementPattern().get(), childOrdinals[i]));
+    }
+  }
+  return refBranch;
+}
 
 RefinementPatternPtr Cell::refinementPattern() {
   return _refPattern;
 }
 void Cell::setRefinementPattern(RefinementPatternPtr refPattern) {
   _refPattern = refPattern;
+}
+
+unsigned Cell::subcellPermutation(unsigned d, unsigned scord) {
+  return _subcellPermutations[d][scord];
 }
 
 CellTopoPtr Cell::topology() {

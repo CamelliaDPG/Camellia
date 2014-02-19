@@ -62,6 +62,10 @@ public:
   RefinementPatternPtr refinementPattern();
   void setRefinementPattern(RefinementPatternPtr refPattern);
   
+  RefinementBranch refinementBranchForSide(unsigned sideOrdinal);
+  
+  unsigned subcellPermutation(unsigned d, unsigned scord);
+  
   CellTopoPtr topology();
   
   pair<GlobalIndexType, unsigned> getNeighbor(unsigned sideOrdinal);

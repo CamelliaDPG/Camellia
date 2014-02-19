@@ -15,15 +15,13 @@ using namespace Intrepid;
 
 class RefinementPattern;
 typedef Teuchos::RCP<RefinementPattern> RefinementPatternPtr;
+typedef vector< pair<RefinementPattern*, unsigned> > RefinementBranch; //unsigned: the child ordinal
+typedef vector< pair<RefinementPattern*, vector<unsigned> > > RefinementPatternRecipe;
 
 class MeshTopology;
 typedef Teuchos::RCP<MeshTopology> MeshTopologyPtr;
 
 #include "MeshTopology.h"
-
-typedef vector< pair<RefinementPattern*, unsigned> > RefinementBranch; //unsigned: the child ordinal
-
-typedef vector< pair<RefinementPattern*, vector<unsigned> > > RefinementPatternRecipe;
 
 class RefinementPattern {
   MeshTopologyPtr _refinementTopology; // ultimately, this may be able to supplant a number of structures here...
@@ -42,7 +40,7 @@ class RefinementPattern {
   
   vector< vector<unsigned> > _sideRefinementChildIndices; // maps from index of child in side refinement to the index in volume refinement pattern
   
-  // map goes from (childIndex,childSideIndex) --> parentSide (essentially the inverse of the above)
+  // map goes from (childIndex,childSideIndex) --> parentSide (essentially the inverse of the _childrenForSides)
   map< pair<unsigned,unsigned>, unsigned> _parentSideForChildSide;
   bool colinear(const vector<double> &v1_outside, const vector<double> &v2_outside, const vector<double> &v3_maybe_inside);
   
@@ -86,6 +84,8 @@ public:
   Teuchos::RCP<RefinementPattern> patternForSubcell(unsigned subcdim, unsigned subcord);
   
   unsigned mapSideChildIndex(unsigned sideIndex, unsigned sideRefinementChildIndex); // map from index of child in side refinement to the index in volume refinement pattern
+  
+  static unsigned mapSideOrdinalFromLeafToAncestor(unsigned descendantSideOrdinal, RefinementBranch &refinements); // given a side ordinal in the leaf node of a branch, returns the corresponding side ordinal in the earliest ancestor in the branch.
   
   vector< RefinementPatternRecipe > &relatedRecipes(); // e.g. the anisotropic + isotropic refinements of the quad.  This should be an exhaustive list, and should be in order of increasing fineness--i.e. the isotropic refinement should come at the end of the list.  Unless the list is empty, the current refinement pattern is required to be part of the list.  (A refinement pattern is related to itself.)  It's the job of initializeAnisotropicRelationships to initialize this list for the default refinement patterns that support it.
   void setRelatedRecipes(vector< RefinementPatternRecipe > &recipes);

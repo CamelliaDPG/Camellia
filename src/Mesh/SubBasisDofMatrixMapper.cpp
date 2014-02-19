@@ -10,7 +10,7 @@
 
 #include "SerialDenseWrapper.h"
 
-SubBasisDofMatrixMapper::SubBasisDofMatrixMapper(set<unsigned> &basisDofOrdinalFilter, vector<GlobalIndexType> &mappedGlobalDofOrdinals, FieldContainer<double> &constraintMatrix) {
+SubBasisDofMatrixMapper::SubBasisDofMatrixMapper(const set<unsigned> &basisDofOrdinalFilter, const vector<GlobalIndexType> &mappedGlobalDofOrdinals, const FieldContainer<double> &constraintMatrix) {
   _basisDofOrdinalFilter = basisDofOrdinalFilter;
   _mappedGlobalDofOrdinals = mappedGlobalDofOrdinals;
   _constraintMatrix = constraintMatrix;

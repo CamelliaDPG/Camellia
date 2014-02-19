@@ -29,6 +29,9 @@ public:
   virtual FieldContainer<double> mapData(const FieldContainer<double> &localData, bool transpose) = 0;
   virtual vector<GlobalIndexType> mappedGlobalDofOrdinals() = 0;
   
+  static SubBasisDofMapperPtr subBasisDofMapper(const set<unsigned> &dofOrdinalFilter, const vector<GlobalIndexType> &globalDofOrdinals);
+  static SubBasisDofMapperPtr subBasisDofMapper(const set<unsigned> &dofOrdinalFilter, const vector<GlobalIndexType> &globalDofOrdinals, const FieldContainer<double> &constraintMatrix);
+  
 //  static SubBasisDofMapperPtr subBasisDofMapper(); // determines if the constraint is a permutation--if it is, then 
 };
 

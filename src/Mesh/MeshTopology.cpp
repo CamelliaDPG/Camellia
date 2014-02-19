@@ -532,6 +532,11 @@ unsigned MeshTopology::getEntityParent(unsigned d, unsigned entityIndex, unsigne
   return _parentEntities[d][entityIndex][parentOrdinal].first;
 }
 
+const shards::CellTopology &MeshTopology::getEntityTopology(unsigned d, IndexType entityIndex) {
+  unsigned cellKey = _entityCellTopologyKeys[d][entityIndex];
+  return _knownTopologies[cellKey];
+}
+
 const vector<unsigned> & MeshTopology::getEntityVertexIndices(unsigned d, unsigned entityIndex) {
   return _canonicalEntityOrdering[d][entityIndex];
 }
@@ -771,6 +776,31 @@ vector< pair<unsigned,unsigned> > MeshTopology::getConstrainingSideAncestry(unsi
   }
 }
 
+RefinementBranch MeshTopology::getSideConstraintRefinementBranch(IndexType sideEntityIndex) {
+  // Returns a RefinementBranch that goes from the constraining side to the side indicated.
+  vector< pair<IndexType,unsigned> > constrainingSideAncestry = getConstrainingSideAncestry(sideEntityIndex);
+  pair< RefinementPattern*, unsigned > branchEntry;
+  unsigned sideDim = _spaceDim - 1;
+  IndexType previousChild = sideEntityIndex;
+  RefinementBranch refBranch;
+  for (vector< pair<IndexType,unsigned> >::iterator ancestorIt = constrainingSideAncestry.begin();
+       ancestorIt != constrainingSideAncestry.end(); ancestorIt++) {
+    IndexType ancestorSideEntityIndex = ancestorIt->first;
+    unsigned refinementIndex = ancestorIt->second;
+    pair<RefinementPatternPtr, vector<IndexType> > children = _childEntities[sideDim][ancestorSideEntityIndex][refinementIndex];
+    branchEntry.first = children.first.get();
+    for (int i=0; i<children.second.size(); i++) {
+      if (children.second[i]==previousChild) {
+        branchEntry.second = i;
+        break;
+      }
+    }
+    refBranch.insert(refBranch.begin(), branchEntry);
+    previousChild = ancestorSideEntityIndex;
+  }
+  return refBranch;
+}
+
 unsigned MeshTopology::getEntityParentForSide(unsigned d, unsigned entityIndex,
                                               unsigned parentSideEntityIndex) {
   // returns the entity index for the parent (which might be the entity itself) of entity (d,entityIndex) that is
@@ -847,11 +877,30 @@ set< pair<IndexType, unsigned> > MeshTopology::getCellsContainingEntity(unsigned
   return cells;
 }
 
-IndexType MeshTopology::leastActiveCellIndexContainingEntityConstrainedByConstrainingEntity(unsigned d, unsigned constrainingEntityIndex) {
+set< IndexType > MeshTopology::getSidesContainingEntity(unsigned d, unsigned entityIndex) {
+  return _sidesForEntities[d][entityIndex];
+}
+
+unsigned MeshTopology::getSubEntityPermutation(unsigned d, IndexType entityIndex, unsigned subEntityDim, unsigned subEntityOrdinal) {
+  vector<unsigned> entityNodes = getEntityVertexIndices(d,entityIndex);
+  shards::CellTopology topo = getEntityTopology(d, entityIndex);
+  vector<unsigned> subEntityNodes;
+  int subEntityNodeCount = topo.getNodeCount(subEntityDim, subEntityOrdinal);
+  for (int seNodeOrdinal = 0; seNodeOrdinal<subEntityNodeCount; seNodeOrdinal++) {
+    unsigned entityNodeOrdinal = topo.getNodeMap(subEntityDim, subEntityOrdinal, seNodeOrdinal);
+    subEntityNodes.push_back(entityNodes[entityNodeOrdinal]);
+  }
+  unsigned subEntityIndex = getSubEntityIndex(d, entityIndex, subEntityDim, subEntityOrdinal);
+  shards::CellTopology subEntityTopo = getEntityTopology(subEntityDim, subEntityIndex);
+  return CamelliaCellTools::permutationMatchingOrder(subEntityTopo, _canonicalEntityOrdering[subEntityDim][subEntityOrdinal], subEntityNodes);
+}
+
+pair<IndexType,IndexType> MeshTopology::leastActiveCellIndexContainingEntityConstrainedByConstrainingEntity(unsigned d, unsigned constrainingEntityIndex) {
   unsigned leastActiveCellIndex = (unsigned)-1; // unsigned cast of -1 makes maximal unsigned #
 
   set<IndexType> constrainedEntities = descendants(d,constrainingEntityIndex);
 
+  IndexType leastActiveCellConstrainedEntityIndex;
   for (set<IndexType>::iterator constrainedEntityIt = constrainedEntities.begin(); constrainedEntityIt != constrainedEntities.end(); constrainedEntityIt++) {
     IndexType constrainedEntityIndex = *constrainedEntityIt;
     set<IndexType> sideEntityIndices = _sidesForEntities[d][constrainedEntityIndex];
@@ -861,15 +910,19 @@ IndexType MeshTopology::leastActiveCellIndexContainingEntityConstrainedByConstra
       pair<CellPair,CellPair> cellsForSide = _cellsForSideEntities[sideEntityIndex];
       IndexType firstCellIndex = cellsForSide.first.first;
       if (_activeCells.find(firstCellIndex) != _activeCells.end()) {
-        leastActiveCellIndex = min(leastActiveCellIndex,firstCellIndex);
+        if (firstCellIndex < leastActiveCellIndex) {
+          leastActiveCellConstrainedEntityIndex = constrainedEntityIndex;
+          leastActiveCellIndex = firstCellIndex;
+        }
       }
       IndexType secondCellIndex = cellsForSide.second.first;
-      if (_activeCells.find(secondCellIndex) != _activeCells.end()) {
-        leastActiveCellIndex = min(leastActiveCellIndex,secondCellIndex);
+      if (secondCellIndex < leastActiveCellIndex) {
+        leastActiveCellConstrainedEntityIndex = constrainedEntityIndex;
+        leastActiveCellIndex = secondCellIndex;
       }
     }
   }
-  return leastActiveCellIndex;
+  return make_pair(leastActiveCellIndex, leastActiveCellConstrainedEntityIndex);
 }
 
 unsigned MeshTopology::maxConstraint(unsigned d, unsigned entityIndex1, unsigned entityIndex2) {

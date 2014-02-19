@@ -18,14 +18,14 @@
 using namespace std;
 using namespace Intrepid;
 
-class SubBasisDofMatrixMapper : SubBasisDofMapper { // subclass that multiplies by a matrix (as opposed to applying a permutation)
+class SubBasisDofMatrixMapper : public SubBasisDofMapper { // subclass that multiplies by a matrix (as opposed to applying a permutation)
   set<unsigned> _basisDofOrdinalFilter;
   vector<GlobalIndexType> _mappedGlobalDofOrdinals;
   FieldContainer<double> _constraintMatrix;
 public:
-  SubBasisDofMatrixMapper(set<unsigned> &basisDofOrdinalFilter,
-                          vector<GlobalIndexType> &mappedGlobalDofOrdinals,
-                          FieldContainer<double> &constraintMatrix);
+  SubBasisDofMatrixMapper(const set<unsigned> &basisDofOrdinalFilter,
+                          const vector<GlobalIndexType> &mappedGlobalDofOrdinals,
+                          const FieldContainer<double> &constraintMatrix);
   const set<unsigned> &basisDofOrdinalFilter();
   FieldContainer<double> mapData(const FieldContainer<double> &localData, bool transpose);
   vector<GlobalIndexType> mappedGlobalDofOrdinals();
