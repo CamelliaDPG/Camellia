@@ -24,14 +24,9 @@
 #include "Solution.h"
 
 Epetra_Map StandardAssembler::getPartMap(){
-  int numProcs=1;
-  int rank=0;
-  
+  int rank = Teuchos::GlobalMPISession::getRank();
 #ifdef HAVE_MPI
-  rank     = Teuchos::GlobalMPISession::getRank();
-  numProcs = Teuchos::GlobalMPISession::getNProc();
   Epetra_MpiComm Comm(MPI_COMM_WORLD);
-  //cout << "rank: " << rank << " of " << numProcs << endl;
 #else
   Epetra_SerialComm Comm;
 #endif
@@ -64,7 +59,6 @@ FieldContainer<double> StandardAssembler::getSubVector(Epetra_FEVector u, Elemen
 
 void StandardAssembler::getElemData(ElementPtr elem, FieldContainer<double> &K, FieldContainer<double> &f){
   int numTrialDofs = numTrialDofsForElem(elem);
-  int numTestDofs = numTestDofsForElem(elem);
 
   FieldContainer<double> B = getOverdeterminedStiffness(elem);
   FieldContainer<double> Rv = getIPMatrix(elem);
@@ -82,26 +76,13 @@ void StandardAssembler::getElemData(ElementPtr elem, FieldContainer<double> &K, 
 //Teuchos::RCP<Epetra_LinearProblem> StandardAssembler::assembleProblem(){
 //Epetra_FECrsMatrix StandardAssembler::assembleProblem(){
 void StandardAssembler::assembleProblem(Epetra_FECrsMatrix &globalStiffMatrix, Epetra_FEVector &rhsVector){
-  //void StandardAssembler::assembleProblem(Teuchos::RCP<Epetra_LinearProblem> problem){
-  int numProcs=1;
-  int rank=0;
-  
-#ifdef HAVE_MPI
-  rank     = Teuchos::GlobalMPISession::getRank();
-  numProcs = Teuchos::GlobalMPISession::getNProc();
-  Epetra_MpiComm Comm(MPI_COMM_WORLD);
-#else
-  Epetra_SerialComm Comm;
-#endif
-
   MeshPtr mesh = _solution->mesh();  
 
   vector<ElementPtr> elems = mesh->activeElements();
   for (vector<ElementPtr>::iterator elemIt = elems.begin();elemIt!=elems.end();elemIt++){
     ElementPtr elem = *elemIt;
     int numTrialDofs = numTrialDofsForElem(elem);
-    int numTestDofs = numTestDofsForElem(elem);
-    FieldContainer<double> BtRvB(numTrialDofs,numTrialDofs),BtRvl(numTrialDofs,1);     
+    FieldContainer<double> BtRvB(numTrialDofs,numTrialDofs),BtRvl(numTrialDofs,1);
     getElemData(elem,BtRvB,BtRvl);
     // apply filter(s) (e.g. penalty method, preconditioners, etc.)
     if (_solution->filter().get()) {
@@ -130,14 +111,9 @@ void StandardAssembler::assembleProblem(Epetra_FECrsMatrix &globalStiffMatrix, E
 }
 
 void StandardAssembler::applyBCs(Epetra_FECrsMatrix &globalStiffMatrix, Epetra_FEVector &rhsVector){
-  int numProcs=1;
-  int rank=0;
-  
+  int rank = Teuchos::GlobalMPISession::getRank();
 #ifdef HAVE_MPI
-  rank     = Teuchos::GlobalMPISession::getRank();
-  numProcs = Teuchos::GlobalMPISession::getNProc();
   Epetra_MpiComm Comm(MPI_COMM_WORLD);
-  //cout << "rank: " << rank << " of " << numProcs << endl;
 #else
   Epetra_SerialComm Comm;
 #endif
@@ -181,14 +157,10 @@ void StandardAssembler::applyBCs(Epetra_FECrsMatrix &globalStiffMatrix, Epetra_F
 }
 
 void StandardAssembler::distributeDofs(Epetra_FEVector lhsVector){
-  int numProcs=1;
-  int rank=0;
+  int rank = Teuchos::GlobalMPISession::getRank();
   
 #ifdef HAVE_MPI
-  rank     = Teuchos::GlobalMPISession::getRank();
-  numProcs = Teuchos::GlobalMPISession::getNProc();
   Epetra_MpiComm Comm(MPI_COMM_WORLD);
-  //cout << "rank: " << rank << " of " << numProcs << endl;
 #else
   Epetra_SerialComm Comm;
 #endif  
