@@ -48,6 +48,8 @@
 
 #include "CamelliaCellTools.h"
 
+#include "GDAMinimumRule.h"
+
 // Teuchos includes
 #include "Teuchos_RCP.hpp"
 #include <Teuchos_GlobalMPISession.hpp>
@@ -58,6 +60,22 @@ using namespace Intrepid;
 
 map<int,int> Mesh::_emptyIntIntMap;
 
+Mesh::Mesh(MeshTopologyPtr meshTopology, BilinearFormPtr bilinearForm, int H1Order, int pToAddTest,
+           map<int,int> trialOrderEnhancements, map<int,int> testOrderEnhancements) {
+  
+  _meshTopology = meshTopology;
+  
+  DofOrderingFactoryPtr dofOrderingFactoryPtr = Teuchos::rcp( new DofOrderingFactory(bilinearForm, trialOrderEnhancements,testOrderEnhancements) );
+  _enforceMBFluxContinuity = false;
+  MeshPartitionPolicyPtr partitionPolicy = Teuchos::rcp( new MeshPartitionPolicy() );
+  
+  _gda = Teuchos::rcp( new GDAMinimumRule(_meshTopology, bilinearForm->varFactory(), dofOrderingFactoryPtr,
+                                          partitionPolicy, H1Order, pToAddTest));
+  
+  setBilinearForm(bilinearForm);
+  _boundary.setMesh(this);
+}
+
 Mesh::Mesh(const vector<vector<double> > &vertices, vector< vector<unsigned> > &elementVertices,
            Teuchos::RCP< BilinearForm > bilinearForm, int H1Order, int pToAddTest, bool useConformingTraces,
            map<int,int> trialOrderEnhancements, map<int,int> testOrderEnhancements) {
@@ -66,16 +84,17 @@ Mesh::Mesh(const vector<vector<double> > &vertices, vector< vector<unsigned> > &
   _meshTopology = Teuchos::rcp( new MeshTopology(meshGeometry) );
   
   DofOrderingFactoryPtr dofOrderingFactoryPtr = Teuchos::rcp( new DofOrderingFactory(bilinearForm, trialOrderEnhancements,testOrderEnhancements) );
+  _enforceMBFluxContinuity = false;
+  MeshPartitionPolicyPtr partitionPolicy = Teuchos::rcp( new MeshPartitionPolicy() );
+  
+  _gda = Teuchos::rcp( new GDAMaximumRule2D(_meshTopology, bilinearForm->varFactory(), dofOrderingFactoryPtr,
+                                            partitionPolicy, H1Order, pToAddTest, _enforceMBFluxContinuity) );
   
   setBilinearForm(bilinearForm);
   
   _useConformingTraces = useConformingTraces;
   _usePatchBasis = false;
-  _enforceMBFluxContinuity = false;  
-  MeshPartitionPolicyPtr partitionPolicy = Teuchos::rcp( new MeshPartitionPolicy() );
 
-  _gda = Teuchos::rcp( new GDAMaximumRule2D(_meshTopology, bilinearForm->varFactory(), dofOrderingFactoryPtr,
-                                                      partitionPolicy, H1Order, pToAddTest, _enforceMBFluxContinuity) );
   // DEBUGGING: check how we did:
   int numVertices = vertices.size();
   for (int vertexIndex=0; vertexIndex<numVertices; vertexIndex++ ) {

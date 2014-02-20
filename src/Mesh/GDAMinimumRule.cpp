@@ -20,7 +20,7 @@ GDAMinimumRule::GDAMinimumRule(MeshTopologyPtr meshTopology, VarFactory varFacto
                                unsigned initialH1OrderTrial, unsigned testOrderEnhancement)
 : GlobalDofAssignment(meshTopology,varFactory,dofOrderingFactory,partitionPolicy, initialH1OrderTrial, testOrderEnhancement)
 {
-  
+  rebuildLookups();
 }
 
 void GDAMinimumRule::didChangePartitionPolicy() {
@@ -763,7 +763,7 @@ void GDAMinimumRule::rebuildLookups() {
           }
           
           int subsideCount = sideTopo.getSideCount();
-          vector< map< unsigned, unsigned > > subsideMap(subsideCount); // outer vector indexed by dimension.  map goes from scOrdinalInSide to a subside containing that subcell.  (This is not uniquely defined, but that should be OK.)
+          vector< map< unsigned, unsigned > > subsideMap(sideDim); // outer vector indexed by dimension.  map goes from scOrdinalInSide to a subside containing that subcell.  (This is not uniquely defined, but that should be OK.)
           for (int d=0; d<sideDim-1; d++) {
             for (int ssOrdinal=0; ssOrdinal<subsideCount; ssOrdinal++) {
             shards::CellTopology subside = sideTopo.getCellTopologyData(sideDim-1, ssOrdinal);

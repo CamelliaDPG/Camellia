@@ -19,6 +19,9 @@ public:
   static MeshPtr quadMesh(BilinearFormPtr bf, int H1Order, int pToAddTest=2,
                           double width=1.0, double height=1.0, int horizontalElements=1, int verticalElements=1);
   
+  static MeshPtr quadMeshMinRule(BilinearFormPtr bf, int H1Order, int pToAddTest=2,
+                                 double width=1.0, double height=1.0, int horizontalElements=1, int verticalElements=1);
+  
   static MeshPtr quadMesh(BilinearFormPtr bf, int H1Order, FieldContainer<double> &quadNodes, int pToAddTest=2);
   
   

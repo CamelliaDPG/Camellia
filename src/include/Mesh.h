@@ -148,17 +148,15 @@ class Mesh : public RefinementObserver, public DofInterpreter {
 
   static map<int,int> _emptyIntIntMap; // just defined here to implement a default argument to constructor (there's got to be a better way)
 public:
-//  Mesh(const vector<FieldContainer<double> > &vertices, vector< vector<unsigned> > &elementVertices,
-//       Teuchos::RCP< BilinearForm > bilinearForm, int H1Order, int pToAddTest, bool useConformingTraces = true,
-//       map<int,int> trialOrderEnhancements=_emptyIntIntMap, map<int,int> testOrderEnhancements=_emptyIntIntMap);
-  
-  // new constructor for compatibility with new MeshGeometry:
+  // legacy (max rule 2D) constructor:
   Mesh(const vector<vector<double> > &vertices, vector< vector<IndexType> > &elementVertices,
        Teuchos::RCP< BilinearForm > bilinearForm, int H1Order, int pToAddTest, bool useConformingTraces = true,
        map<int,int> trialOrderEnhancements=_emptyIntIntMap, map<int,int> testOrderEnhancements=_emptyIntIntMap);
-  //,
-  //     map< pair<int, int>, ParametricCurvePtr > edgeToCurveMap = map< pair<int, int>, ParametricCurvePtr >());
-
+  
+  // new constructor (min rule, n-D):
+  Mesh(MeshTopologyPtr meshTopology, BilinearFormPtr bilinearForm, int H1Order, int pToAddTest,
+       map<int,int> trialOrderEnhancements=_emptyIntIntMap, map<int,int> testOrderEnhancements=_emptyIntIntMap);
+  
   // deprecated static constructors (use MeshFactory methods instead):
   static Teuchos::RCP<Mesh> readMsh(string filePath, Teuchos::RCP< BilinearForm > bilinearForm, int H1Order, int pToAdd);
 

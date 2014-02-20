@@ -6,6 +6,15 @@
 
 #include "Epetra_Time.h"
 
+#include "MeshFactory.h"
+
+#include "BF.h"
+
+#include "BCEasy.h"
+#include "RHSEasy.h"
+
+#include "Solution.h"
+
 vector<double> makeVertex(double v0) {
   vector<double> v;
   v.push_back(v0);
@@ -69,39 +78,124 @@ void refineUniformly(MeshTopologyPtr mesh) {
   }
 }
 
-int main(int argc, char *argv[]) {
-  Epetra_SerialComm Comm;
-  
-  int nx = 100, ny = 100, nz = 10;
-  
-  cout << "creating " << nx * ny * nz << "-element mesh...\n";
-  
-  Epetra_Time timer(Comm);
-  
-  MeshTopologyPtr meshTopo = makeHexMesh(0, 0, 0, 1, 1, 1, nx, ny, nz);
-  
-  double timeMeshCreation = timer.ElapsedTime();
+// boundary value for u
+class U0 : public Function {
+public:
+  U0() : Function(0) {}
+  void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
+    int numCells = values.dimension(0);
+    int numPoints = values.dimension(1);
+    
+    const FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
+    double tol=1e-14;
+    for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
+      for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
+        double x = (*points)(cellIndex,ptIndex,0);
+        double y = (*points)(cellIndex,ptIndex,1);
+        // solution with a boundary layer (section 5.2 in DPG Part II)
+        // for x = 1, y = 1: u = 0
+        if ( ( abs(x-1.0) < tol ) || (abs(y-1.0) < tol ) ) {
+          values(cellIndex,ptIndex) = 0;
+        } else if ( abs(x) < tol ) { // for x=0: u = 1 - y
+          values(cellIndex,ptIndex) = 1.0 - y;
+        } else { // for y=0: u=1-x
+          values(cellIndex,ptIndex) = 1.0 - x;
+        }
+        
+      }
+    }
+  }
+};
 
-  cout << "...created.  Elapsed time " << timeMeshCreation << " seconds; pausing now to allow memory usage examination.  Enter a number to continue.\n";
-  int n;
-  cin >> n;
+int main(int argc, char *argv[]) {
+  bool testMeshTopoMemory = false;
   
-  int numRefs = 6;
-  cout << "Creating mesh for " << numRefs << " uniform refinements.\n";
-  timer.ResetStartTime();
-  meshTopo = makeHexMesh(0, 0, 0, 1, 1, 1, 1, 1, 1);
+  bool tryMinRule = true;
   
-  for (int ref=0; ref<numRefs; ref++) {
-    refineUniformly(meshTopo);
+  if (tryMinRule) {
+    double eps = 1e-4;
+    vector<double> beta_const;
+    beta_const.push_back(2.0);
+    beta_const.push_back(1.0);
+    
+    ////////////////////   DECLARE VARIABLES   ///////////////////////
+    // define test variables
+    VarFactory varFactory;
+    VarPtr tau = varFactory.testVar("\\tau", HDIV);
+    VarPtr v = varFactory.testVar("v", HGRAD);
+    
+    // define trial variables
+    VarPtr uhat = varFactory.traceVar("\\widehat{u}");
+    VarPtr beta_n_u_minus_sigma_n = varFactory.fluxVar("\\widehat{\\beta \\cdot n u - \\sigma_{n}}");
+    VarPtr u = varFactory.fieldVar("u");
+
+    VarPtr sigma1 = varFactory.fieldVar("\\sigma_1");
+    VarPtr sigma2 = varFactory.fieldVar("\\sigma_2");
+    
+    ////////////////////   DEFINE BILINEAR FORM   ///////////////////////
+    BFPtr confusionBF = Teuchos::rcp( new BF(varFactory) );
+    // tau terms:
+    confusionBF->addTerm(sigma1 / eps, tau->x());
+    confusionBF->addTerm(sigma2 / eps, tau->y());
+    confusionBF->addTerm(u, tau->div());
+    confusionBF->addTerm(-uhat, tau->dot_normal());
+    
+    // v terms:
+    confusionBF->addTerm( sigma1, v->dx() );
+    confusionBF->addTerm( sigma2, v->dy() );
+    confusionBF->addTerm( beta_const * u, - v->grad() );
+    confusionBF->addTerm( beta_n_u_minus_sigma_n, v);
+    
+    MeshPtr mesh = MeshFactory::quadMeshMinRule(confusionBF, 1);
+    
+    ////////////////////   SPECIFY RHS   ///////////////////////
+    Teuchos::RCP<RHSEasy> rhs = Teuchos::rcp( new RHSEasy );
+    FunctionPtr f = Function::zero();
+    rhs->addTerm( f * v ); // obviously, with f = 0 adding this term is not necessary!
+    
+    ////////////////////   CREATE BCs   ///////////////////////
+    Teuchos::RCP<BCEasy> bc = Teuchos::rcp( new BCEasy );
+    FunctionPtr u0 = Teuchos::rcp( new U0 );
+    bc->addDirichlet(uhat, SpatialFilter::allSpace(), u0);
+    
+    IPPtr ip = confusionBF->graphNorm();
+    
+    SolutionPtr soln = Teuchos::rcp( new Solution(mesh, bc, rhs, ip) );
   }
   
-  double timeMeshRefinements  = timer.ElapsedTime();
-  
-  cout << "Completed refinements in " << timeMeshRefinements << " seconds.  Final mesh has " << meshTopo->activeCellCount() << " active cells, and " << meshTopo->cellCount() << " cells total.\n";
-  
-  cout << "Paused to allow memory usage examination.  Enter a number to exit.\n";
-  
-  cin >> n;
-  
+  if (testMeshTopoMemory) {
+    Epetra_SerialComm Comm;
+    
+    int nx = 100, ny = 100, nz = 10;
+    
+    cout << "creating " << nx * ny * nz << "-element mesh...\n";
+    
+    Epetra_Time timer(Comm);
+    
+    MeshTopologyPtr meshTopo = makeHexMesh(0, 0, 0, 1, 1, 1, nx, ny, nz);
+    
+    double timeMeshCreation = timer.ElapsedTime();
+
+    cout << "...created.  Elapsed time " << timeMeshCreation << " seconds; pausing now to allow memory usage examination.  Enter a number to continue.\n";
+    int n;
+    cin >> n;
+    
+    int numRefs = 6;
+    cout << "Creating mesh for " << numRefs << " uniform refinements.\n";
+    timer.ResetStartTime();
+    meshTopo = makeHexMesh(0, 0, 0, 1, 1, 1, 1, 1, 1);
+    
+    for (int ref=0; ref<numRefs; ref++) {
+      refineUniformly(meshTopo);
+    }
+    
+    double timeMeshRefinements  = timer.ElapsedTime();
+    
+    cout << "Completed refinements in " << timeMeshRefinements << " seconds.  Final mesh has " << meshTopo->activeCellCount() << " active cells, and " << meshTopo->cellCount() << " cells total.\n";
+    
+    cout << "Paused to allow memory usage examination.  Enter a number to exit.\n";
+    
+    cin >> n;
+  }
   return 0;
 }

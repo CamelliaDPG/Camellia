@@ -100,6 +100,65 @@ MeshPtr MeshFactory::quadMesh(BilinearFormPtr bf, int H1Order, int pToAddTest,
   return MeshFactory::buildQuadMesh(quadPoints, horizontalElements, verticalElements, bf, H1Order, testOrder);
 }
 
+MeshPtr MeshFactory::quadMeshMinRule(BilinearFormPtr bf, int H1Order, int pToAddTest,
+                                            double width, double height, int horizontalElements, int verticalElements) {
+  CellTopoPtr quadTopo = Teuchos::rcp( new shards::CellTopology(shards::getCellTopologyData<shards::Quadrilateral<4> >() ));
+  int spaceDim = 2;
+  
+  vector<vector<double> > vertices;
+  vector< vector<unsigned> > allElementVertices;
+  
+  int numElements = horizontalElements * verticalElements;
+  vector< CellTopoPtr > cellTopos(numElements, quadTopo);
+  
+  
+  FieldContainer<double> quadBoundaryPoints(4,2);
+  quadBoundaryPoints(0,0) = 0;
+  quadBoundaryPoints(0,1) = 0;
+  quadBoundaryPoints(1,0) = width;
+  quadBoundaryPoints(1,1) = 0;
+  quadBoundaryPoints(2,0) = width;
+  quadBoundaryPoints(2,1) = height;
+  quadBoundaryPoints(3,0) = 0;
+  quadBoundaryPoints(3,1) = height;
+  
+  double southWest_x = quadBoundaryPoints(0,0),
+  southWest_y = quadBoundaryPoints(0,1);
+  
+  double elemWidth = width / horizontalElements;
+  double elemHeight = height / verticalElements;
+  
+  // set up vertices:
+  // vertexIndices is for easy vertex lookup by (x,y) index for our Cartesian grid:
+  vector< vector<int> > vertexIndices(horizontalElements+1, vector<int>(verticalElements+1));
+  for (int i=0; i<=horizontalElements; i++) {
+    for (int j=0; j<=verticalElements; j++) {
+      vertexIndices[i][j] = vertices.size();
+      vector<double> vertex(spaceDim);
+      vertex[0] = southWest_x + elemWidth*i;
+      vertex[1] = southWest_y + elemHeight*j;
+      vertices.push_back(vertex);
+    }
+  }
+  
+  for (int i=0; i<horizontalElements; i++) {
+    for (int j=0; j<verticalElements; j++) {
+      vector<unsigned> elemVertices;
+      elemVertices.push_back(vertexIndices[i][j]);
+      elemVertices.push_back(vertexIndices[i+1][j]);
+      elemVertices.push_back(vertexIndices[i+1][j+1]);
+      elemVertices.push_back(vertexIndices[i][j+1]);
+      allElementVertices.push_back(elemVertices);
+    }
+  }
+  
+  MeshGeometryPtr geometry = Teuchos::rcp( new MeshGeometry(vertices, allElementVertices, cellTopos));
+  
+  MeshTopologyPtr meshTopology = Teuchos::rcp( new MeshTopology(geometry) );
+  
+  return Teuchos::rcp( new Mesh(meshTopology, bf, H1Order, pToAddTest) );
+}
+
 MeshGeometryPtr MeshFactory::shiftedHemkerGeometry(double xLeft, double xRight, double meshHeight, double cylinderRadius) {
   return shiftedHemkerGeometry(xLeft, xRight, -meshHeight/2.0, meshHeight/2.0, cylinderRadius);
 }
