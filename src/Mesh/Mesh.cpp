@@ -74,7 +74,7 @@ Mesh::Mesh(const vector<vector<double> > &vertices, vector< vector<unsigned> > &
   _enforceMBFluxContinuity = false;  
   MeshPartitionPolicyPtr partitionPolicy = Teuchos::rcp( new MeshPartitionPolicy() );
 
-  _maximumRule2D = Teuchos::rcp( new GDAMaximumRule2D(_meshTopology, bilinearForm->varFactory(), dofOrderingFactoryPtr,
+  _gda = Teuchos::rcp( new GDAMaximumRule2D(_meshTopology, bilinearForm->varFactory(), dofOrderingFactoryPtr,
                                                       partitionPolicy, H1Order, pToAddTest, _enforceMBFluxContinuity) );
   // DEBUGGING: check how we did:
   int numVertices = vertices.size();
@@ -105,7 +105,7 @@ GlobalIndexType Mesh::numInitialElements(){
 }
 
 GlobalIndexType Mesh::activeCellOffset() {
-  return _maximumRule2D->activeCellOffset();
+  return _gda->activeCellOffset();
 }
 
 vector< ElementPtr > Mesh::activeElements() {
@@ -144,7 +144,7 @@ Boundary & Mesh::boundary() {
 }
 
 GlobalIndexType Mesh::cellID(Teuchos::RCP< ElementType > elemTypePtr, IndexType cellIndex, PartitionIndexType partitionNumber) {
-  return _maximumRule2D->cellID(elemTypePtr, cellIndex, partitionNumber);
+  return _gda->cellID(elemTypePtr, cellIndex, partitionNumber);
 }
 
 vector< GlobalIndexType > Mesh::cellIDsOfType(ElementTypePtr elemType) {
@@ -154,12 +154,12 @@ vector< GlobalIndexType > Mesh::cellIDsOfType(ElementTypePtr elemType) {
 
 vector< GlobalIndexType > Mesh::cellIDsOfType(int partitionNumber, ElementTypePtr elemTypePtr) {
   // returns the cell IDs for a given partition and element type
-  return _maximumRule2D->cellIDsOfElementType(partitionNumber, elemTypePtr);
+  return _gda->cellIDsOfElementType(partitionNumber, elemTypePtr);
 }
 
 vector< GlobalIndexType > Mesh::cellIDsOfTypeGlobal(ElementTypePtr elemTypePtr) {
   vector< GlobalIndexType > cellIDs;
-  int partititionCount = _maximumRule2D->getPartitionCount();
+  int partititionCount = _gda->getPartitionCount();
   for (int partitionNumber=0; partitionNumber<partititionCount; partitionNumber++) {
     vector< GlobalIndexType > cellIDsForType = cellIDsOfType(partitionNumber, elemTypePtr);
     cellIDs.insert(cellIDs.end(), cellIDsForType.begin(), cellIDsForType.end());
@@ -167,8 +167,8 @@ vector< GlobalIndexType > Mesh::cellIDsOfTypeGlobal(ElementTypePtr elemTypePtr) 
   return cellIDs;
 }
 
-int Mesh::cellPolyOrder(GlobalIndexType cellID) {
-  return _maximumRule2D->cellPolyOrder(cellID);
+int Mesh::cellPolyOrder(GlobalIndexType cellID) { // aka H1Order
+  return _gda->getH1Order(cellID);
 }
 
 bool Mesh::cellContainsPoint(GlobalIndexType cellID, vector<double> &point) {
@@ -300,12 +300,30 @@ void Mesh::enforceOneIrregularity() {
   }
 }
 
-FieldContainer<double> & Mesh::cellSideParities( ElementTypePtr elemTypePtr ) {
-  return _maximumRule2D->cellSideParities(elemTypePtr);
+FieldContainer<double> Mesh::cellSideParities( ElementTypePtr elemTypePtr ) {
+  // old version (using lookup table)
+  // return dynamic_cast<GDAMaximumRule2D*>(_gda.get())->cellSideParities(elemTypePtr);
+  
+  // new implementation below:
+  int rank = Teuchos::GlobalMPISession::getRank();
+  vector<GlobalIndexType> cellIDs = _gda->cellIDsOfElementType(rank, elemTypePtr);
+  
+  int numCells = cellIDs.size();
+  int numSides = elemTypePtr->cellTopoPtr->getSideCount();
+  
+  FieldContainer<double> sideParities(numCells, numSides);
+  for (int i=0; i<numCells; i++) {
+    FieldContainer<double> iParities = cellSideParitiesForCell(cellIDs[i]);
+    for (int sideOrdinal=0; sideOrdinal<numSides; sideOrdinal++) {
+      sideParities(i,sideOrdinal) = iParities(0,sideOrdinal);
+    }
+  }
+  
+  return sideParities;
 }
 
 FieldContainer<double> Mesh::cellSideParitiesForCell( GlobalIndexType cellID ) {
-  return _maximumRule2D->cellSideParitiesForCell(cellID);
+  return _gda->cellSideParitiesForCell(cellID);
 }
 
 vector<double> Mesh::getCellCentroid(GlobalIndexType cellID){
@@ -313,7 +331,7 @@ vector<double> Mesh::getCellCentroid(GlobalIndexType cellID){
 }
 
 vector< ElementPtr > Mesh::elementsInPartition(PartitionIndexType partitionNumber){
-  vector< GlobalIndexType > cellsInPartition = _maximumRule2D->cellsInPartition(partitionNumber);
+  vector< GlobalIndexType > cellsInPartition = _gda->cellsInPartition(partitionNumber);
   vector< ElementPtr > elements;
   for (vector< GlobalIndexType >::iterator cellIt = cellsInPartition.begin(); cellIt != cellsInPartition.end(); cellIt++) {
     GlobalIndexType cellID = *cellIt;
@@ -326,7 +344,7 @@ vector< ElementPtr > Mesh::elementsInPartition(PartitionIndexType partitionNumbe
 vector< ElementPtr > Mesh::elementsOfType(PartitionIndexType partitionNumber, ElementTypePtr elemTypePtr) {
   // returns the elements for a given partition and element type
   vector< ElementPtr > elementsOfType;
-  vector<GlobalIndexType> cellIDs = _maximumRule2D->cellIDsOfElementType(partitionNumber, elemTypePtr);
+  vector<GlobalIndexType> cellIDs = _gda->cellIDsOfElementType(partitionNumber, elemTypePtr);
   for (vector<GlobalIndexType>::iterator cellIt = cellIDs.begin(); cellIt != cellIDs.end(); cellIt++) {
     elementsOfType.push_back(getElement(*cellIt));
   }
@@ -335,7 +353,7 @@ vector< ElementPtr > Mesh::elementsOfType(PartitionIndexType partitionNumber, El
 
 vector< ElementPtr > Mesh::elementsOfTypeGlobal(ElementTypePtr elemTypePtr) {
   vector< ElementPtr > elementsOfTypeVector;
-  int partitionCount = _maximumRule2D->getPartitionCount();
+  int partitionCount = _gda->getPartitionCount();
   for (int partitionNumber=0; partitionNumber<partitionCount; partitionNumber++) {
     vector< ElementPtr > elementsOfTypeForPartition = elementsOfType(partitionNumber,elemTypePtr);
     elementsOfTypeVector.insert(elementsOfTypeVector.end(),elementsOfTypeForPartition.begin(),elementsOfTypeForPartition.end());
@@ -343,8 +361,8 @@ vector< ElementPtr > Mesh::elementsOfTypeGlobal(ElementTypePtr elemTypePtr) {
   return elementsOfTypeVector;
 }
 
-vector< Teuchos::RCP< ElementType > > Mesh::elementTypes(PartitionIndexType partitionNumber) {
-  return _maximumRule2D->elementTypes(partitionNumber);
+vector< ElementTypePtr > Mesh::elementTypes(PartitionIndexType partitionNumber) {
+  return _gda->elementTypes(partitionNumber);
 }
 
 set<GlobalIndexType> Mesh::getActiveCellIDs() {
@@ -358,17 +376,17 @@ int Mesh::getDimension() {
 }
 
 DofOrderingFactory & Mesh::getDofOrderingFactory() {
-  return *_maximumRule2D->getDofOrderingFactory().get();
+  return *_gda->getDofOrderingFactory().get();
 }
 
 ElementPtr Mesh::getElement(GlobalIndexType cellID) {
   CellPtr cell = _meshTopology->getCell(cellID);
   
-  ElementTypePtr elemType = _maximumRule2D->elementType(cellID);
+  ElementTypePtr elemType = _gda->elementType(cellID);
   
-  IndexType cellIndex = _maximumRule2D->partitionLocalCellIndex(cellID);
+  IndexType cellIndex = _gda->partitionLocalCellIndex(cellID);
   
-  GlobalIndexType globalCellIndex = _maximumRule2D->globalCellIndex(cellID);
+  GlobalIndexType globalCellIndex = _gda->globalCellIndex(cellID);
   
   ElementPtr element = Teuchos::rcp( new Element(this, cellID, elemType, cellIndex, globalCellIndex) );
   
@@ -376,11 +394,11 @@ ElementPtr Mesh::getElement(GlobalIndexType cellID) {
 }
 
 ElementTypePtr Mesh::getElementType(GlobalIndexType cellID) {
-  return _maximumRule2D->elementType(cellID);
+  return _gda->elementType(cellID);
 }
 
 ElementTypeFactory & Mesh::getElementTypeFactory() {
-  return _maximumRule2D->getElementTypeFactory();
+  return _gda->getElementTypeFactory();
 }
 
 GlobalIndexType Mesh::getVertexIndex(double x, double y, double tol) {
@@ -396,8 +414,13 @@ GlobalIndexType Mesh::getVertexIndex(double x, double y, double tol) {
   }
 }
 
-const map< pair<GlobalIndexType,IndexType> , GlobalIndexType>& Mesh::getLocalToGlobalMap() {
-  return _maximumRule2D->getLocalToGlobalMap();
+const map< pair<GlobalIndexType,IndexType>, GlobalIndexType>& Mesh::getLocalToGlobalMap() {
+  GDAMaximumRule2D* maxRule = dynamic_cast<GDAMaximumRule2D *>(_gda.get());
+  if (maxRule == NULL) {
+    cout << "getLocalToGlobalMap only supported for max rule.\n";
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "getLocalToGlobalMap only supported for max rule.");
+  }
+  return maxRule->getLocalToGlobalMap();
 }
 
 map<IndexType, GlobalIndexType> Mesh::getGlobalVertexIDs(const FieldContainer<double> &vertices) {
@@ -421,11 +444,16 @@ FunctionPtr Mesh::getTransformationFunction() {
 }
 
 GlobalIndexType Mesh::globalDofIndex(GlobalIndexType cellID, IndexType localDofIndex) {
-  return _maximumRule2D->globalDofIndex(cellID, localDofIndex);
+  GDAMaximumRule2D* maxRule = dynamic_cast<GDAMaximumRule2D *>(_gda.get());
+  if (maxRule == NULL) {
+    cout << "globalDofIndex lookup only supported fro max rule.\n";
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "globalDofIndex lookup only supported fro max rule.");
+  }
+  return maxRule->globalDofIndex(cellID, localDofIndex);
 }
 
 set<GlobalIndexType> Mesh::globalDofIndicesForPartition(PartitionIndexType partitionNumber) {
-  return _maximumRule2D->globalDofIndicesForPartition(partitionNumber);
+  return _gda->globalDofIndicesForPartition(partitionNumber);
 }
 
 //void Mesh::hRefine(vector<GlobalIndexType> cellIDs, Teuchos::RCP<RefinementPattern> refPattern) {
@@ -454,14 +482,14 @@ void Mesh::hRefine(const set<GlobalIndexType> &cellIDs, Teuchos::RCP<RefinementP
     set<GlobalIndexType> cellIDset;
     cellIDset.insert(cellID);
   
-    _maximumRule2D->didHRefine(cellIDset);
+    _gda->didHRefine(cellIDset);
     
     // let transformation function know about the refinement that just took place
     if (_meshTopology->transformationFunction().get()) {
       _meshTopology->transformationFunction()->didHRefine(cellIDset);
     }
   }
-  _maximumRule2D->rebuildLookups();
+  _gda->rebuildLookups();
   _boundary.buildLookupTables();
 }
 
@@ -545,18 +573,18 @@ void Mesh::hUnrefine(const set<GlobalIndexType> &cellIDs) {
 //    }
 //  }
   
-  _maximumRule2D->didHUnrefine(cellIDs);
-  _maximumRule2D->rebuildLookups();
+  _gda->didHUnrefine(cellIDs);
+  _gda->rebuildLookups();
   _boundary.buildLookupTables();
 }
 
 void Mesh::interpretGlobalData(GlobalIndexType cellID, FieldContainer<double> &localDofs, const Epetra_Vector &globalDofs) {
-  _maximumRule2D->interpretGlobalData(cellID, localDofs, globalDofs);
+  _gda->interpretGlobalData(cellID, localDofs, globalDofs);
 }
 
 void Mesh::interpretLocalData(GlobalIndexType cellID, const FieldContainer<double> &localDofs,
                               FieldContainer<double> &globalDofs, FieldContainer<GlobalIndexType> &globalDofIndices) {
-  _maximumRule2D->interpretLocalData(cellID, localDofs, globalDofs, globalDofIndices);
+  _gda->interpretLocalData(cellID, localDofs, globalDofs, globalDofIndices);
 }
 
 GlobalIndexType Mesh::numActiveElements() {
@@ -570,9 +598,9 @@ GlobalIndexType Mesh::numElements() {
 GlobalIndexType Mesh::numElementsOfType( Teuchos::RCP< ElementType > elemTypePtr ) {
   // returns the global total (across all MPI nodes)
   int numElements = 0;
-  PartitionIndexType partitionCount = _maximumRule2D->getPartitionCount();
+  PartitionIndexType partitionCount = _gda->getPartitionCount();
   for (PartitionIndexType partitionNumber=0; partitionNumber<partitionCount; partitionNumber++) {
-    numElements += _maximumRule2D->cellIDsOfElementType(partitionNumber, elemTypePtr).size();
+    numElements += _gda->cellIDsOfElementType(partitionNumber, elemTypePtr).size();
   }
   return numElements;
 }
@@ -586,7 +614,7 @@ GlobalIndexType Mesh::numFieldDofs(){
   set<GlobalIndexType> activeCellIDs = getActiveCellIDs();
   for (set<GlobalIndexType>::iterator cellIt = activeCellIDs.begin(); cellIt != activeCellIDs.end(); cellIt++) {
     GlobalIndexType cellID = *cellIt;
-    ElementTypePtr elemTypePtr = _maximumRule2D->elementType(cellID);
+    ElementTypePtr elemTypePtr = _gda->elementType(cellID);
     vector< int > fieldIDs = _bilinearForm->trialVolumeIDs();
     vector< int >::iterator fieldIDit;
     for (fieldIDit = fieldIDs.begin(); fieldIDit != fieldIDs.end() ; fieldIDit++){    
@@ -597,30 +625,59 @@ GlobalIndexType Mesh::numFieldDofs(){
   return numFieldDofs;
 }
 
-
 GlobalIndexType Mesh::numGlobalDofs() {
-  return _maximumRule2D->globalDofCount();
+  return _gda->globalDofCount();
 }
 
 int Mesh::parityForSide(GlobalIndexType cellID, int sideOrdinal) {
-  int parity = _maximumRule2D->cellSideParitiesForCell(cellID)[sideOrdinal];
+  int parity = _gda->cellSideParitiesForCell(cellID)[sideOrdinal];
   return parity;
 }
 
 PartitionIndexType Mesh::partitionForCellID( GlobalIndexType cellID ) {
-  return _maximumRule2D->partitionForCellID(cellID);
+  return _gda->partitionForCellID(cellID);
 }
 
 PartitionIndexType Mesh::partitionForGlobalDofIndex( GlobalIndexType globalDofIndex ) {
-  return _maximumRule2D->partitionForGlobalDofIndex(globalDofIndex);
+  GDAMaximumRule2D* maxRule = dynamic_cast<GDAMaximumRule2D *>(_gda.get());
+  if (maxRule == NULL) {
+    cout << "partitionForGlobalDofIndex only supported for max rule.\n";
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "partitionForGlobalDofIndex only supported for max rule.");
+  }
+  return maxRule->partitionForGlobalDofIndex(globalDofIndex);
 }
 
 GlobalIndexType Mesh::partitionLocalIndexForGlobalDofIndex( GlobalIndexType globalDofIndex ) {
-  return _maximumRule2D->partitionLocalIndexForGlobalDofIndex(globalDofIndex);
+  GDAMaximumRule2D* maxRule = dynamic_cast<GDAMaximumRule2D *>(_gda.get());
+  if (maxRule == NULL) {
+    cout << "partitionLocalIndexForGlobalDofIndex only supported for max rule.\n";
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "partitionLocalIndexForGlobalDofIndex only supported for max rule.");
+  }
+  return maxRule->partitionLocalIndexForGlobalDofIndex(globalDofIndex);
 }
 
-FieldContainer<double> & Mesh::physicalCellNodes( Teuchos::RCP< ElementType > elemTypePtr) {
-  return _maximumRule2D->physicalCellNodes(elemTypePtr);
+FieldContainer<double> Mesh::physicalCellNodes( Teuchos::RCP< ElementType > elemTypePtr) {
+  int rank = Teuchos::GlobalMPISession::getRank();
+  vector<GlobalIndexType> cellIDs = _gda->cellIDsOfElementType(rank, elemTypePtr);
+  
+  return physicalCellNodes(elemTypePtr, cellIDs);
+}
+
+FieldContainer<double> Mesh::physicalCellNodes( Teuchos::RCP< ElementType > elemTypePtr, vector<GlobalIndexType> &cellIDs ) {
+  int numCells = cellIDs.size();
+  int numVertices = elemTypePtr->cellTopoPtr->getVertexCount();
+  int spaceDim = _meshTopology->getSpaceDim();
+  
+  FieldContainer<double> physicalNodes(numCells, numVertices, spaceDim);
+  for (int i=0; i<numCells; i++) {
+    FieldContainer<double> iPhysicalNodes = physicalCellNodesForCell(cellIDs[i]);
+    for (int vertexOrdinal=0; vertexOrdinal<numVertices; vertexOrdinal++) {
+      for (int d=0; d<spaceDim; d++) {
+        physicalNodes(i,vertexOrdinal,d) = iPhysicalNodes(0,vertexOrdinal,d);
+      }
+    }
+  }
+  return physicalNodes;
 }
 
 FieldContainer<double> Mesh::physicalCellNodesForCell( GlobalIndexType cellID ) {
@@ -641,12 +698,20 @@ FieldContainer<double> Mesh::physicalCellNodesForCell( GlobalIndexType cellID ) 
   return physicalCellNodes;
 }
 
-FieldContainer<double> & Mesh::physicalCellNodesGlobal( Teuchos::RCP< ElementType > elemTypePtr ) {
-  return _maximumRule2D->physicalCellNodesGlobal(elemTypePtr);
+FieldContainer<double> Mesh::physicalCellNodesGlobal( Teuchos::RCP< ElementType > elemTypePtr ) {
+  int numRanks = Teuchos::GlobalMPISession::getNProc();
+  
+  vector<GlobalIndexType> globalCellIDs;
+  for (int rank=0; rank<numRanks; rank++) {
+    vector<GlobalIndexType> cellIDs = _gda->cellIDsOfElementType(rank, elemTypePtr);
+    globalCellIDs.insert(globalCellIDs.end(), cellIDs.begin(), cellIDs.end());
+  }
+  
+  return physicalCellNodes(elemTypePtr, globalCellIDs);
 }
 
 void Mesh::printLocalToGlobalMap() {
-  map< pair<GlobalIndexType,IndexType>, GlobalIndexType> localToGlobalMap = _maximumRule2D->getLocalToGlobalMap();
+  map< pair<GlobalIndexType,IndexType>, GlobalIndexType> localToGlobalMap = this->getLocalToGlobalMap();
   
   for (map< pair<GlobalIndexType,IndexType>, GlobalIndexType>::iterator entryIt = localToGlobalMap.begin();
        entryIt != localToGlobalMap.end(); entryIt++) {
@@ -672,7 +737,7 @@ void Mesh::registerObserver(Teuchos::RCP<RefinementObserver> observer) {
 }
 
 void Mesh::registerSolution(Teuchos::RCP<Solution> solution) {
-  _maximumRule2D->registerSolution(solution.get());
+  _gda->registerSolution(solution.get());
 }
 
 void Mesh::unregisterObserver(RefinementObserver* observer) {
@@ -691,7 +756,7 @@ void Mesh::unregisterObserver(Teuchos::RCP<RefinementObserver> mesh) {
 }
 
 void Mesh::unregisterSolution(Teuchos::RCP<Solution> solution) {
-  _maximumRule2D->unregisterSolution(solution.get());
+  _gda->unregisterSolution(solution.get());
 }
 
 void Mesh::pRefine(const vector<GlobalIndexType> &cellIDsForPRefinements) {
@@ -714,14 +779,14 @@ void Mesh::pRefine(const set<GlobalIndexType> &cellIDsForPRefinements, int pToAd
     (*meshIt)->pRefine(cellIDsForPRefinements);
   }
   
-  _maximumRule2D->didPRefine(cellIDsForPRefinements, pToAdd);
+  _gda->didPRefine(cellIDsForPRefinements, pToAdd);
   
   // let transformation function know about the refinement that just took place
   if (_meshTopology->transformationFunction().get()) {
     _meshTopology->transformationFunction()->didPRefine(cellIDsForPRefinements);
   }
   
-  _maximumRule2D->rebuildLookups();
+  _gda->rebuildLookups();
   _boundary.buildLookupTables();
 }
 
@@ -729,9 +794,9 @@ int Mesh::condensedRowSizeUpperBound() {
   // includes multiplicity
   vector< Teuchos::RCP< ElementType > >::iterator elemTypeIt;
   int maxRowSize = 0;
-  PartitionIndexType partitionCount = _maximumRule2D->getPartitionCount();
+  PartitionIndexType partitionCount = _gda->getPartitionCount();
   for (PartitionIndexType partitionNumber=0; partitionNumber < partitionCount; partitionNumber++) {
-    vector<ElementTypePtr> elementTypes = _maximumRule2D->elementTypes(partitionNumber);
+    vector<ElementTypePtr> elementTypes = _gda->elementTypes(partitionNumber);
     for (elemTypeIt = elementTypes.begin(); elemTypeIt != elementTypes.end(); elemTypeIt++) {
       ElementTypePtr elemTypePtr = *elemTypeIt;
       int numSides = elemTypePtr->cellTopoPtr->getSideCount();
@@ -753,7 +818,7 @@ int Mesh::condensedRowSizeUpperBound() {
 }
 
 void Mesh::rebuildLookups() {
-  _maximumRule2D->rebuildLookups();
+  _gda->rebuildLookups();
   _boundary.buildLookupTables();
 }
 
@@ -761,9 +826,9 @@ int Mesh::rowSizeUpperBound() {
   // includes multiplicity
   vector< Teuchos::RCP< ElementType > >::iterator elemTypeIt;
   int maxRowSize = 0;
-  PartitionIndexType partitionCount = _maximumRule2D->getPartitionCount();
+  PartitionIndexType partitionCount = _gda->getPartitionCount();
   for (PartitionIndexType partitionNumber=0; partitionNumber < partitionCount; partitionNumber++) {
-    vector<ElementTypePtr> elementTypes = _maximumRule2D->elementTypes(partitionNumber);
+    vector<ElementTypePtr> elementTypes = _gda->elementTypes(partitionNumber);
     for (elemTypeIt = elementTypes.begin(); elemTypeIt != elementTypes.end(); elemTypeIt++) {
       ElementTypePtr elemTypePtr = *elemTypeIt;
       int numSides = elemTypePtr->cellTopoPtr->getSideCount();
@@ -797,8 +862,12 @@ void Mesh::setEdgeToCurveMap(const map< pair<GlobalIndexType, GlobalIndexType>, 
 }
 
 void Mesh::setElementType(GlobalIndexType cellID, ElementTypePtr newType, bool sideUpgradeOnly) {
-  // once we eliminate calls from inside Mesh to setElementType, can uncomment this code (for certain tests):
-  _maximumRule2D->setElementType(cellID, newType, sideUpgradeOnly);
+  GDAMaximumRule2D* maxRule = dynamic_cast<GDAMaximumRule2D *>(_gda.get());
+  if (maxRule == NULL) {
+    cout << "setElementType only supported for max rule.\n";
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "setElementType only supported for max rule.");
+  }
+  maxRule->setElementType(cellID, newType, sideUpgradeOnly);
 }
 
 void Mesh::setEnforceMultiBasisFluxContinuity( bool value ) {
@@ -806,7 +875,7 @@ void Mesh::setEnforceMultiBasisFluxContinuity( bool value ) {
 }
 
 void Mesh::setPartitionPolicy(  Teuchos::RCP< MeshPartitionPolicy > partitionPolicy ) {
-  _maximumRule2D->setPartitionPolicy(partitionPolicy);
+  _gda->setPartitionPolicy(partitionPolicy);
 }
 
 void Mesh::setUsePatchBasis( bool value ) {
@@ -912,7 +981,7 @@ void Mesh::verticesForSide(FieldContainer<double>& vertices, GlobalIndexType cel
 void Mesh::writeMeshPartitionsToFile(const string & fileName){
   ofstream myFile;
   myFile.open(fileName.c_str());
-  PartitionIndexType partitionCount = _maximumRule2D->getPartitionCount();
+  PartitionIndexType partitionCount = _gda->getPartitionCount();
   myFile << "numPartitions="<< partitionCount <<";"<<endl;
 
   int maxNumVertices=0;
@@ -921,7 +990,7 @@ void Mesh::writeMeshPartitionsToFile(const string & fileName){
 
   //initialize verts
   for (int i=0;i<partitionCount;i++){
-    vector< GlobalIndexType > cellsInPartition = _maximumRule2D->cellsInPartition(i);
+    vector< GlobalIndexType > cellsInPartition = _gda->cellsInPartition(i);
     for (int l=0;l<spaceDim;l++){
       myFile << "verts{"<< i+1 <<","<< l+1 << "} = zeros(" << maxNumVertices << ","<< maxNumElems << ");"<< endl;
       for (int j=0;j<cellsInPartition.size();j++){
@@ -937,7 +1006,7 @@ void Mesh::writeMeshPartitionsToFile(const string & fileName){
   cout << "max number of elems = " << maxNumElems << endl;
 
   for (int i=0;i<partitionCount;i++){
-    vector< GlobalIndexType > cellsInPartition = _maximumRule2D->cellsInPartition(i);
+    vector< GlobalIndexType > cellsInPartition = _gda->cellsInPartition(i);
     for (int l=0;l<spaceDim;l++){
       for (int j=0;j<cellsInPartition.size();j++){
         CellPtr cell = _meshTopology->getCell(cellsInPartition[j]);

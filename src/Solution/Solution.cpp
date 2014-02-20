@@ -760,25 +760,6 @@ void Solution::populateStiffnessAndLoad() {
   Epetra_Vector timeBCImpositionVector(timeMap);
   timeBCImpositionVector[0] = timeBCImposition;
   
-  // debug: check the consistency of the mesh's global -> partitionLocal index map
-  for (int localIndex = partMap.MinLID(); localIndex < partMap.MaxLID(); localIndex++) {
-    int globalIndex = partMap.GID(localIndex);
-    if ( localIndex < myGlobalIndicesSet.size() ) { // a real dof
-      int meshPartitionLocalIndex = _mesh->partitionLocalIndexForGlobalDofIndex(globalIndex);
-      if (meshPartitionLocalIndex != localIndex) {
-        cout << "meshPartitionLocalIndex != localIndex (" << meshPartitionLocalIndex << " != " << localIndex << ")\n";
-        TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "");
-      }
-      int partition = _mesh->partitionForGlobalDofIndex( globalIndex );
-      if (partition != rank) {
-        cout << "partition != rank (" << partition << " != " << rank << ")\n";
-        TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "");
-      }
-    } else {
-      // a Lagrange constraint or a ZMC
-      // TODO: write some check on the map here...
-    }
-  }
   _rhsVector->GlobalAssemble();
   
   Epetra_FEVector lhsVector(partMap, true);

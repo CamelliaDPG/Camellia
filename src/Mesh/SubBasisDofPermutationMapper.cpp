@@ -15,12 +15,56 @@ SubBasisDofPermutationMapper::SubBasisDofPermutationMapper(const set<unsigned> &
   _basisDofOrdinalFilter = basisDofOrdinalFilter;
   _globalDofOrdinals = globalDofOrdinals;
 }
+
 const set<unsigned> & SubBasisDofPermutationMapper::basisDofOrdinalFilter() {
   return _basisDofOrdinalFilter;
 }
-FieldContainer<double> SubBasisDofPermutationMapper::mapData(const FieldContainer<double> &localData, bool transpose) {
-  // for the permutation mapper, localData need not change; the permutation is implicit in the globalDofOrdinals container
-  return localData;
+FieldContainer<double> SubBasisDofPermutationMapper::mapData(bool transposeConstraintMatrix, const FieldContainer<double> &data, bool transposeData) {
+  // not too sure about the right way to handle the transposes here -- absent them:
+  //     for the permutation mapper, data need not change; the permutation is implicit in the globalDofOrdinals container
+  // but with them, I'm a bit vague...  For now, I'm disabling the PermutationMapper in favor of the matrix-multiplying guy...
+
+
+//  if (!transposeData) {
+//    if (!transposeConstraintMatrix) {
+//      return data;
+//    } else {
+//      // transposing the constraint matrix is equivalent to inverting the permutation given by the globalDofOrdinals container.
+//      // (note that when the constraint matrix is transposed, caller will be using basisDofOrdinalFilter to interpret the result of this method.)
+//      return applyInversePermutation(data);
+//    }
+//  } else { // DO transpose data
+//    FieldContainer<double> dataCopy(data.dimension(1),data.dimension(0));
+//    for (int i=0; i<data.dimension(0); i++) {
+//      for (int j=0; j<data.dimension(1); j++) {
+//        dataCopy(j,i) = data(i,j);
+//      }
+//    }
+//    if (!transposeConstraintMatrix) {
+//      return dataCopy;
+//    } else {
+//      // transposing the constraint matrix is equivalent to inverting the permutation given by the globalDofOrdinals container.
+//      // (note that when the constraint matrix is transposed, caller will be using basisDofOrdinalFilter to interpret the result of this method.)
+//      return applyInversePermutation(dataCopy);
+//    }
+//  }
+  
+  if (transposeConstraintMatrix) {
+    cout << "WARNING: I'm not real sure about the transposeConstraintMatrix argument to SubBasisDofPermutationMapper::mapData().\n";
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "transposeConstraintMatrix = true in SubBasisDofPermutationMapper::mapData() not yet handled.");
+  }
+  bool dontTranspose = (transposeConstraintMatrix && transposeData) || (!transposeConstraintMatrix && !transposeData);
+  if (! dontTranspose) {
+    FieldContainer<double> dataCopy(data.dimension(1),data.dimension(0));
+    for (int i=0; i<data.dimension(0); i++) {
+      for (int j=0; j<data.dimension(1); j++) {
+        dataCopy(j,i) = data(i,j);
+      }
+    }
+    return dataCopy;
+  } else {
+    return data;
+  }
 }
 vector<GlobalIndexType> SubBasisDofPermutationMapper::mappedGlobalDofOrdinals() {
   return _globalDofOrdinals;

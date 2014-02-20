@@ -1206,7 +1206,15 @@ void ConstantScalarFunction::scalarDivideBasisValues(FieldContainer<double> &bas
   scalarDivideFunctionValues(basisValues,basisCache);
 }
 
+double ConstantScalarFunction::value(double x) {
+  return value();
+}
+
 double ConstantScalarFunction::value(double x, double y) {
+  return value();
+}
+
+double ConstantScalarFunction::value(double x, double y, double z) {
   return value();
 }
 

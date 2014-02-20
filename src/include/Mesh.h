@@ -84,7 +84,9 @@ class MeshPartitionPolicy;
 class Mesh : public RefinementObserver, public DofInterpreter {
   MeshTopologyPtr _meshTopology;
   
-  Teuchos::RCP<GDAMaximumRule2D> _maximumRule2D;
+  Teuchos::RCP<GlobalDofAssignment> _gda;
+  
+//  Teuchos::RCP<GDAMaximumRule2D> _maximumRule2D;
   
   int _pToAddToTest;
   bool _enforceMBFluxContinuity; // default to false (the historical value)
@@ -134,6 +136,8 @@ class Mesh : public RefinementObserver, public DofInterpreter {
   void addChildren(ElementPtr parent, vector< vector<IndexType> > &children,
                    vector< vector< pair< IndexType, IndexType> > > &childrenForSide);
 
+  FieldContainer<double> physicalCellNodes( Teuchos::RCP< ElementType > elemTypePtr, vector<GlobalIndexType> &cellIDs );
+  
   void setElementType(GlobalIndexType cellID, ElementTypePtr newType, bool sideUpgradeOnly);
 
   void setNeighbor(ElementPtr elemPtr, unsigned elemSide, ElementPtr neighborPtr, unsigned neighborSide);
@@ -178,7 +182,7 @@ public:
 
   bool cellContainsPoint(GlobalIndexType cellID, vector<double> &point);
   
-  FieldContainer<double> & cellSideParities( ElementTypePtr elemTypePtr);
+  FieldContainer<double> cellSideParities( ElementTypePtr elemTypePtr);
   FieldContainer<double> cellSideParitiesForCell( GlobalIndexType cellID );
 
   Teuchos::RCP<BilinearForm> bilinearForm();
@@ -245,9 +249,9 @@ public:
   void hRefine(const vector<GlobalIndexType> &cellIDs, Teuchos::RCP<RefinementPattern> refPattern);
   void hUnrefine(const set<GlobalIndexType> &cellIDs);
   
-  void interpretGlobalData(GlobalIndexType cellID, FieldContainer<double> &localDofs, const Epetra_Vector &globalDofs);
-  void interpretLocalData(GlobalIndexType cellID, const FieldContainer<double> &localDofs,
-                          FieldContainer<double> &globalDofs, FieldContainer<GlobalIndexType> &globalDofIndices);
+  void interpretGlobalData(GlobalIndexType cellID, FieldContainer<double> &localData, const Epetra_Vector &globalData);
+  void interpretLocalData(GlobalIndexType cellID, const FieldContainer<double> &localData,
+                          FieldContainer<double> &globalData, FieldContainer<GlobalIndexType> &globalDofIndices);
   
   // for the case where we want to reproject the previous mesh solution onto the new one:
 //  void hRefine(vector<GlobalIndexType> cellIDs, Teuchos::RCP<RefinementPattern> refPattern, vector< Teuchos::RCP<Solution> > solutions);
@@ -280,9 +284,9 @@ public:
   PartitionIndexType partitionForGlobalDofIndex( GlobalIndexType globalDofIndex );
   PartitionIndexType partitionLocalIndexForGlobalDofIndex( GlobalIndexType globalDofIndex );
 
-  FieldContainer<double> & physicalCellNodes( ElementTypePtr elemType);
+  FieldContainer<double> physicalCellNodes( ElementTypePtr elemType);
   FieldContainer<double> physicalCellNodesForCell(GlobalIndexType cellID);
-  FieldContainer<double> & physicalCellNodesGlobal( ElementTypePtr elemType );
+  FieldContainer<double> physicalCellNodesGlobal( ElementTypePtr elemType );
 
   void pRefine(const vector<GlobalIndexType> &cellIDsForPRefinements);
   void pRefine(const vector<GlobalIndexType> &cellIDsForPRefinements, int pToAdd);

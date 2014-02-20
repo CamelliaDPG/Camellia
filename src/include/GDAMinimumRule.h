@@ -73,6 +73,7 @@ public:
   void didChangePartitionPolicy();
   
   ElementTypePtr elementType(GlobalIndexType cellID);
+  int getH1Order(GlobalIndexType cellID);
   GlobalIndexType globalDofCount();
   set<GlobalIndexType> globalDofIndicesForPartition(PartitionIndexType partitionNumber);
   void interpretLocalData(GlobalIndexType cellID, const FieldContainer<double> &localDofs,

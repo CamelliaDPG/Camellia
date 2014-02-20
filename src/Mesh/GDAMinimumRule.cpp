@@ -61,6 +61,10 @@ ElementTypePtr GDAMinimumRule::elementType(GlobalIndexType cellID) {
   return _elementTypeForCell[cellID];
 }
 
+int GDAMinimumRule::getH1Order(GlobalIndexType cellID) {
+  return _cellH1Orders[cellID];
+}
+
 GlobalIndexType GDAMinimumRule::globalDofCount() {
   // assumes the lookups have been rebuilt since the last change that would affect the count
   
@@ -83,19 +87,31 @@ int GDAMinimumRule::H1Order(GlobalIndexType cellID, unsigned sideOrdinal) {
   return _cellH1Orders[cellID];
 }
 
-void GDAMinimumRule::interpretGlobalData(GlobalIndexType cellID, FieldContainer<double> &localDofs, const Epetra_Vector &globalDofs) {
-  // TODO: implement this
-  cout << "WARNING: GDAMinimumRule::interpretGlobalData() unimplemented.\n";
+void GDAMinimumRule::interpretGlobalData(GlobalIndexType cellID, FieldContainer<double> &localDofs, const Epetra_Vector &globalData) {
+  CellConstraints constraints = getCellConstraints(cellID);
+  LocalDofMapperPtr dofMapper = getDofMapper(cellID, constraints);
+  vector<GlobalIndexType> globalIndexVector = dofMapper->globalIndices();
+  
+  FieldContainer<double> globalDataFC(globalIndexVector.size());
+  for (int i=0; i<globalIndexVector.size(); i++) {
+    GlobalIndexType globalIndex = globalIndexVector[i];
+    globalDataFC[i] = globalData[globalIndex];
+  }
+  
+  localDofs = dofMapper->mapData(globalDataFC,false); // false: map "backwards" (global to local)
 }
 
 void GDAMinimumRule::interpretLocalData(GlobalIndexType cellID, const FieldContainer<double> &localData,
                                         FieldContainer<double> &globalData, FieldContainer<GlobalIndexType> &globalDofIndices) {
+  CellConstraints constraints = getCellConstraints(cellID);
+  LocalDofMapperPtr dofMapper = getDofMapper(cellID, constraints);
   
-  DofOrderingPtr trialOrdering = _elementTypeForCell[cellID]->trialOrderPtr;
-  set<int> varIDs = trialOrdering->getVarIDs();
-  
-  // TODO: implement this
-  cout << "WARNING: GDAMinimumRule::interpretLocalData() unimplemented.\n";
+  globalData = dofMapper->mapData(localData);
+  vector<GlobalIndexType> globalIndexVector = dofMapper->globalIndices();
+  globalDofIndices.resize(globalIndexVector.size());
+  for (int i=0; i<globalIndexVector.size(); i++) {
+    globalDofIndices(i) = globalIndexVector[i];
+  }
 }
 
 IndexType GDAMinimumRule::localDofCount() {
@@ -841,6 +857,16 @@ void GDAMinimumRule::rebuildLookups() {
       GlobalIndexType cellID = *cellIDIt;
       _globalCellDofOffsets[cellID] = globalCellIDDofOffsets[globalCellIndex];
       globalCellIndex++;
+    }
+  }
+  
+  _cellIDsForElementType = vector< map< ElementType*, vector<GlobalIndexType> > >(numRanks);
+  for (int i=0; i<numRanks; i++) {
+    vector<GlobalIndexType> cellIDs = _partitions[i];
+    for (vector<GlobalIndexType>::iterator cellIDIt = cellIDs.begin(); cellIDIt != cellIDs.end(); cellIDIt++) {
+      GlobalIndexType cellID = *cellIDIt;
+      ElementTypePtr elemType = _elementTypeForCell[cellID];
+      _cellIDsForElementType[i][elemType.get()].push_back(cellID);
     }
   }
 }

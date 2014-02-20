@@ -30,7 +30,6 @@ class GDAMaximumRule2D : public GlobalDofAssignment {
   // We decide parity by cellID: the neighbor with the lower cellID gets +1, the higher gets -1.
   
   // call buildTypeLookups to rebuild the elementType data structures:
-  vector< map< ElementType*, vector<GlobalIndexType> > > _cellIDsForElementType;
   map< ElementType*, map<IndexType, GlobalIndexType> > _globalCellIndexToCellID;
   vector< vector< ElementTypePtr > > _elementTypesForPartition;
   vector< ElementTypePtr > _elementTypeList;
@@ -45,9 +44,7 @@ class GDAMaximumRule2D : public GlobalDofAssignment {
   map<GlobalIndexType, IndexType> _globalCellIndices; // keys are cellIDs; index is relative to ElementType
   
   map< pair<GlobalIndexType,IndexType>, GlobalIndexType> _localToGlobalMap; // pair<cellID, localDofIndex> --> globalDofIndex
-  
-  vector< Solution* > _registeredSolutions; // solutions that should be modified upon refinement
-  
+    
   map<unsigned, GlobalIndexType> getGlobalVertexIDs(const FieldContainer<double> &vertexCoordinates);
 
   void addDofPairing(GlobalIndexType cellID1, IndexType dofIndex1, GlobalIndexType cellID2, IndexType dofIndex2);
@@ -69,12 +66,10 @@ class GDAMaximumRule2D : public GlobalDofAssignment {
 public:
   GDAMaximumRule2D(MeshTopologyPtr meshTopology, VarFactory varFactory, DofOrderingFactoryPtr dofOrderingFactory, MeshPartitionPolicyPtr partitionPolicy,
                    unsigned initialH1OrderTrial, unsigned testOrderEnhancement, bool enforceMBFluxContinuity = false);
-    
+  
+//  GlobalIndexType cellID(ElementTypePtr elemType, IndexType cellIndex, PartitionIndexType partitionNumber);
   FieldContainer<double> & cellSideParities( ElementTypePtr elemTypePtr );
-  FieldContainer<double> cellSideParitiesForCell( GlobalIndexType cellID );
-  
-  vector< GlobalIndexType > cellsInPartition(PartitionIndexType partitionNumber);
-  
+    
   void didHRefine(const set<GlobalIndexType> &parentCellIDs);
   void didPRefine(const set<GlobalIndexType> &cellIDs, int deltaP);
   void didHUnrefine(const set<GlobalIndexType> &parentCellIDs);
@@ -82,14 +77,10 @@ public:
   void didChangePartitionPolicy();
   
   ElementTypePtr elementType(GlobalIndexType cellID);
-  vector< Teuchos::RCP< ElementType > > elementTypes(PartitionIndexType partitionNumber);
+  vector< ElementTypePtr > elementTypes(PartitionIndexType partitionNumber);
   
-  DofOrderingFactoryPtr getDofOrderingFactory();
-  ElementTypeFactory & getElementTypeFactory();
-  
-  GlobalIndexType cellID(Teuchos::RCP< ElementType > elemTypePtr, IndexType cellIndex, PartitionIndexType partitionNumber);
-  vector<GlobalIndexType> cellIDsOfElementType(PartitionIndexType partitionNumber, ElementTypePtr elemTypePtr);
-  
+  int getH1Order(GlobalIndexType cellID);
+    
   GlobalIndexType globalDofIndex(GlobalIndexType cellID, IndexType localDofIndex);
   set<GlobalIndexType> globalDofIndicesForPartition(PartitionIndexType partitionNumber);
 
@@ -97,13 +88,10 @@ public:
   void interpretLocalData(GlobalIndexType cellID, const FieldContainer<double> &localDofs, FieldContainer<double> &globalDofs, FieldContainer<GlobalIndexType> &globalDofIndices);
   void interpretGlobalData(GlobalIndexType cellID, FieldContainer<double> &localDofs, const Epetra_Vector &globalDofs);
   IndexType localDofCount(); // local to the MPI node
-  
-  PartitionIndexType getPartitionCount();
-  
+    
   IndexType partitionLocalCellIndex(GlobalIndexType cellID);
   GlobalIndexType globalCellIndex(GlobalIndexType cellID);
   
-  PartitionIndexType partitionForCellID( GlobalIndexType cellID );
   PartitionIndexType partitionForGlobalDofIndex( GlobalIndexType globalDofIndex );
   GlobalIndexType partitionLocalIndexForGlobalDofIndex( GlobalIndexType globalDofIndex );
   
@@ -111,8 +99,6 @@ public:
   FieldContainer<double> & physicalCellNodesGlobal( ElementTypePtr elemTypePtr );
   
   void rebuildLookups();
-  void registerSolution(Solution* solution);
-  void unregisterSolution(Solution* solution);
   
   // used in some tests:
   int cellPolyOrder(GlobalIndexType cellID);

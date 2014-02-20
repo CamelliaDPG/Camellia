@@ -23,10 +23,12 @@ class LocalDofMapper { // maps a whole trial ordering
   map< GlobalIndexType, unsigned > _globalIndexToOrdinal; // maps from GlobalIndex to the ordinal in our globalData container (on the present implementation, the global indices will always be in numerical order)
   
   void filterData(const vector<int> dofIndices, const FieldContainer<double> &data, FieldContainer<double> &filteredData, int rankToFilter);
-  void addSubBasisMapContribution(int varID, BasisMap basisMap, const FieldContainer<double> &localData, FieldContainer<double> &globalData, int rankToMap);
+  void addSubBasisMapContribution(int varID, int sideIndex, BasisMap basisMap, const FieldContainer<double> &localData, FieldContainer<double> &globalData, int rankToMap);
+  void addReverseSubBasisMapContribution(int varID, int sideOrdinal, BasisMap basisMap, const FieldContainer<double> &globalData, FieldContainer<double> &localData, int rankToMap);
 public:
   LocalDofMapper(DofOrderingPtr dofOrdering, map< int, BasisMap > volumeMaps, vector< map< int, BasisMap > > sideMaps);
-  FieldContainer<double> mapData(const FieldContainer<double> &localData, int rankToMap = -1);
+  FieldContainer<double> mapData(const FieldContainer<double> &localData, bool localToGlobal = true, int rankToMap = -1); // can go global to local
+  vector<GlobalIndexType> globalIndices();
 };
 typedef Teuchos::RCP<LocalDofMapper> LocalDofMapperPtr;
 

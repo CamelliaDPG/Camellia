@@ -292,35 +292,24 @@ void GDAMaximumRule2D::buildTypeLookups() {
   }
 }
 
-GlobalIndexType GDAMaximumRule2D::cellID(Teuchos::RCP< ElementType > elemTypePtr, IndexType cellIndex, PartitionIndexType partitionNumber) {
-  if (partitionNumber == -1) {
-    if (( _globalCellIndexToCellID.find( elemTypePtr.get() ) != _globalCellIndexToCellID.end() ) &&
-        ( _globalCellIndexToCellID[elemTypePtr.get()].find( cellIndex ) != _globalCellIndexToCellID[elemTypePtr.get()].end() ) )
-        
-      return _globalCellIndexToCellID[elemTypePtr.get()][ cellIndex ];
-    else {
-      cout << "did not find global cellIndex " << cellIndex << " for element type " << elemTypePtr.get() << endl;
-      return -1;
-    }
-  } else {
-    if ( ( _cellIDsForElementType[partitionNumber].find( elemTypePtr.get() ) != _cellIDsForElementType[partitionNumber].end() )
-        &&
-        (_cellIDsForElementType[partitionNumber][elemTypePtr.get()].size() > cellIndex ) ) {
-      return _cellIDsForElementType[partitionNumber][elemTypePtr.get()][cellIndex];
-    } else return -1;
-  }
-}
-
-vector<GlobalIndexType> GDAMaximumRule2D::cellIDsOfElementType(PartitionIndexType partitionNumber, ElementTypePtr elemTypePtr) {
-  if (partitionNumber == -1) {
-    return vector<GlobalIndexType>();
-  }
-  map<ElementType*, vector<GlobalIndexType> >::iterator cellIDsIt = _cellIDsForElementType[partitionNumber].find(elemTypePtr.get());
-  if (cellIDsIt == _cellIDsForElementType[partitionNumber].end()) {
-    return vector<GlobalIndexType>();
-  }
-  return cellIDsIt->second;
-}
+//GlobalIndexType GDAMaximumRule2D::cellID(Teuchos::RCP< ElementType > elemTypePtr, IndexType cellIndex, PartitionIndexType partitionNumber) {
+//  if (partitionNumber == -1) {
+//    if (( _globalCellIndexToCellID.find( elemTypePtr.get() ) != _globalCellIndexToCellID.end() ) &&
+//        ( _globalCellIndexToCellID[elemTypePtr.get()].find( cellIndex ) != _globalCellIndexToCellID[elemTypePtr.get()].end() ) )
+//      
+//      return _globalCellIndexToCellID[elemTypePtr.get()][ cellIndex ];
+//    else {
+//      cout << "did not find global cellIndex " << cellIndex << " for element type " << elemTypePtr.get() << endl;
+//      return -1;
+//    }
+//  } else {
+//    if ( ( _cellIDsForElementType[partitionNumber].find( elemTypePtr.get() ) != _cellIDsForElementType[partitionNumber].end() )
+//        &&
+//        (_cellIDsForElementType[partitionNumber][elemTypePtr.get()].size() > cellIndex ) ) {
+//      return _cellIDsForElementType[partitionNumber][elemTypePtr.get()][cellIndex];
+//    } else return -1;
+//  }
+//}
 
 int GDAMaximumRule2D::cellPolyOrder(GlobalIndexType cellID) {
   return _dofOrderingFactory->trialPolyOrder(_elementTypeForCell[cellID]->trialOrderPtr);
@@ -333,24 +322,6 @@ FieldContainer<double> & GDAMaximumRule2D::cellSideParities( ElementTypePtr elem
   int partitionNumber     = 0;
 #endif
   return _partitionedCellSideParitiesForElementType[ partitionNumber ][ elemTypePtr.get() ];
-}
-
-FieldContainer<double> GDAMaximumRule2D::cellSideParitiesForCell( GlobalIndexType cellID ) {
-  vector<int> parities = _cellSideParitiesForCellID[cellID];
-  int numSides = parities.size();
-  FieldContainer<double> cellSideParities(1,numSides);
-  for (int sideIndex=0; sideIndex<numSides; sideIndex++) {
-    cellSideParities(0,sideIndex) = parities[sideIndex];
-  }
-  return cellSideParities;
-}
-
-vector< GlobalIndexType > GDAMaximumRule2D::cellsInPartition(PartitionIndexType partitionNumber) {
-  int rank     = Teuchos::GlobalMPISession::getRank();
-  if (partitionNumber == -1) {
-    partitionNumber = rank;
-  }
-  return _partitions[partitionNumber];
 }
 
 void GDAMaximumRule2D::determineDofPairings() {
@@ -667,12 +638,8 @@ vector< Teuchos::RCP< ElementType > > GDAMaximumRule2D::elementTypes(PartitionIn
   }
 }
 
-DofOrderingFactoryPtr GDAMaximumRule2D::getDofOrderingFactory() {
-  return _dofOrderingFactory;
-}
-
-ElementTypeFactory & GDAMaximumRule2D::getElementTypeFactory() {
-  return _elementTypeFactory;
+int GDAMaximumRule2D::getH1Order(GlobalIndexType cellID) {
+  return cellPolyOrder(cellID);
 }
 
 void GDAMaximumRule2D::getMultiBasisOrdering(DofOrderingPtr &originalNonParentOrdering,
@@ -684,10 +651,6 @@ void GDAMaximumRule2D::getMultiBasisOrdering(DofOrderingPtr &originalNonParentOr
   originalNonParentOrdering = _dofOrderingFactory->upgradeSide(originalNonParentOrdering,
                                                               *nonParent->topology(),
                                                               varIDsToUpgrade,parentSideIndexInNeighbor);
-}
-
-PartitionIndexType GDAMaximumRule2D::getPartitionCount() {
-  return _numPartitions;
 }
 
 GlobalIndexType GDAMaximumRule2D::globalCellIndex(GlobalIndexType cellID) {
@@ -982,10 +945,6 @@ IndexType GDAMaximumRule2D::neighborDofPermutation(IndexType dofIndex, IndexType
   return numDofsForSide - dofIndex - 1;
 }
 
-PartitionIndexType GDAMaximumRule2D::partitionForCellID( GlobalIndexType cellID ) {
-  return _partitionForCellID[ cellID ];
-}
-
 PartitionIndexType GDAMaximumRule2D::partitionForGlobalDofIndex( GlobalIndexType globalDofIndex ) {
   if ( _partitionForGlobalDofIndex.find( globalDofIndex ) == _partitionForGlobalDofIndex.end() ) {
     return -1;
@@ -1029,10 +988,6 @@ void GDAMaximumRule2D::rebuildLookups() {
   }
 }
 
-void GDAMaximumRule2D::registerSolution(Solution* solution) {
-  _registeredSolutions.push_back( solution );
-}
-
 void GDAMaximumRule2D::setElementType(GlobalIndexType cellID, ElementTypePtr newType, bool sideUpgradeOnly) {
   CellPtr cell = _meshTopology->getCell(cellID);
   if (sideUpgradeOnly) { // need to track in _cellSideUpgrades
@@ -1053,17 +1008,6 @@ void GDAMaximumRule2D::setElementType(GlobalIndexType cellID, ElementTypePtr new
     _cellSideUpgrades[cellID] = make_pair(oldType,newType);
   }
   _elementTypeForCell[cellID] = newType;
-}
-
-void GDAMaximumRule2D::unregisterSolution(Solution* solution) {
-  for (vector< Solution* >::iterator solnIt = _registeredSolutions.begin();
-       solnIt != _registeredSolutions.end(); solnIt++) {
-    if ( *solnIt == solution ) {
-      _registeredSolutions.erase(solnIt);
-      return;
-    }
-  }
-  cout << "GDAMaximumRule2D::unregisterSolution: Solution not found.\n";
 }
 
 void GDAMaximumRule2D::verticesForCell(FieldContainer<double>& vertices, GlobalIndexType cellID) {

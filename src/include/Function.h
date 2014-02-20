@@ -188,14 +188,14 @@ class InternalBoundaryFunction : public BoundaryFunction{
 
     
     // TODO: work out what was meant to happen here.  Should the following code be completed or excised?
-    int sideIndex = basisCache->getSideIndex();
-    vector<GlobalIndexType> cellIDs = basisCache->cellIDs();
-    int numPoints = values.dimension(1);
-    FieldContainer<double> points = basisCache->getPhysicalCubaturePoints();
-    for (int i = 0;i<cellIDs.size();i++){
-      //      for (int sideIndex = 0
-      //      }
-    }
+//    int sideIndex = basisCache->getSideIndex();
+//    vector<GlobalIndexType> cellIDs = basisCache->cellIDs();
+//    int numPoints = values.dimension(1);
+//    FieldContainer<double> points = basisCache->getPhysicalCubaturePoints();
+//    for (int i = 0;i<cellIDs.size();i++){
+//      //      for (int sideIndex = 0
+//      //      }
+//    }
 
   }
 };
@@ -249,7 +249,9 @@ public:
   void scalarMultiplyBasisValues(FieldContainer<double> &basisValues, BasisCachePtr basisCache);
   void scalarDivideBasisValues(FieldContainer<double> &basisValues, BasisCachePtr basisCache);
   double value();
-  double value(double x, double y);
+  virtual double value(double x);
+  virtual double value(double x, double y);
+  virtual double value(double x, double y, double z);
 
   FunctionPtr dx();
   FunctionPtr dy();

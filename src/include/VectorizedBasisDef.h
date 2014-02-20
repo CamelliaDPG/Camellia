@@ -98,7 +98,6 @@ void VectorizedBasis<Scalar, ArrayScalar>::getVectorizedValues(ArrayScalar& outp
   Teuchos::Array<int> dimensions;
   outputValues.dimensions(dimensions);
   outputValues.initialize(0.0);
-  int numFields = dimensions[fieldIndex];
   int numPoints = dimensions[fieldIndex+1];
   int numComponents = dimensions[fieldIndex+2];
   if (_numComponents != numComponents) {

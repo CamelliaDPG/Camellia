@@ -18,29 +18,31 @@ SubBasisDofMatrixMapper::SubBasisDofMatrixMapper(const set<unsigned> &basisDofOr
 const set<unsigned> & SubBasisDofMatrixMapper::basisDofOrdinalFilter() {
   return _basisDofOrdinalFilter;
 }
-FieldContainer<double> SubBasisDofMatrixMapper::mapData(const FieldContainer<double> &localData, bool transpose) {
-  int localDofOrdinalCount = _basisDofOrdinalFilter.size();
-  
+FieldContainer<double> SubBasisDofMatrixMapper::mapData(bool transposeConstraint, const FieldContainer<double> &localData, bool transposeData) {
   // localData must be rank 2, and must have the same size as FilteredLocalDofOrdinals in its first dimension
   if ((localData.rank() != 2)) {
     cout << "localData must have rank 2.\n";
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "localData must have rank 2");
   }
-  if ((!transpose && (localData.dimension(0) != localDofOrdinalCount))
-      || (transpose && (localData.dimension(1) != localDofOrdinalCount))) {
-    cout << "localData dimension to be transformed must match the localDofOrdinalCount.\n";
-    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "localData dimension to be transformed must match the localDofOrdinalCount");
-  }
+  int constraintRows = transposeConstraint ? _constraintMatrix.dimension(1) : _constraintMatrix.dimension(0);
+  int constraintCols = transposeConstraint ? _constraintMatrix.dimension(0) : _constraintMatrix.dimension(1);
+  int dataCols = transposeData ? localData.dimension(0) : localData.dimension(1);
+  int dataRows = transposeData ? localData.dimension(1) : localData.dimension(0);
   
-  FieldContainer<double> result;
-  
-  if (!transpose) {
-    result.resize(_constraintMatrix.dimension(0),localData.dimension(1));
-    SerialDenseWrapper::multiply(result, _constraintMatrix, localData);
-  } else {
-    result.resize(_constraintMatrix.dimension(0),localData.dimension(0));
-    SerialDenseWrapper::multiply(result, _constraintMatrix, localData,'N','T');
+  // given the multiplication we'll do, we need constraint columns = data rows
+  if (constraintCols != dataRows) {
+    cout << "Missized container in SubBasisDofMatrixMapper::mapData().\n";
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Missized container in SubBasisDofMatrixMapper::mapData().");
   }
+  // (could also test that the dimensions match what we expect in terms of the size of the mapped global dof ordinals or basisDofOrdinal filter)
+  
+  FieldContainer<double> result(constraintRows,dataCols);
+  
+  char constraintTransposeFlag = transposeConstraint ? 'T' : 'N';
+  char dataTransposeFlag = transposeData ? 'T' : 'N';
+  
+  SerialDenseWrapper::multiply(result,_constraintMatrix,localData,constraintTransposeFlag,dataTransposeFlag);
+  
   return result;
 }
 vector<GlobalIndexType> SubBasisDofMatrixMapper::mappedGlobalDofOrdinals() {

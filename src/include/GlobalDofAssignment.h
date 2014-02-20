@@ -44,10 +44,14 @@ protected:
   map<GlobalIndexType, unsigned> _cellH1Orders;
   map<GlobalIndexType, ElementTypePtr> _elementTypeForCell; // keys are cellIDs
   
+  vector< map< ElementType*, vector<GlobalIndexType> > > _cellIDsForElementType; // divided by partition
+  
   vector< vector< GlobalIndexType > > _partitions; // GlobalIndexType: cellIDs
   map<GlobalIndexType, IndexType> _partitionForCellID;
   
   unsigned _numPartitions;
+  
+  vector< Solution* > _registeredSolutions; // solutions that should be modified upon refinement (by subclasses--maximum rule has to worry about cell side upgrades, whereas minimum rule does not, so there's not a great way to do this in the abstract superclass.)
   
   void assignInitialElementType( GlobalIndexType cellID ); // this is the "natural" element type, before side modifications for constraints (when using maximum rule)
   void determineActiveElements();
@@ -57,6 +61,11 @@ public:
 
   GlobalIndexType activeCellOffset();
   
+  virtual GlobalIndexType cellID(ElementTypePtr elemTypePtr, IndexType cellIndex, PartitionIndexType partitionNumber);
+  virtual vector<GlobalIndexType> cellIDsOfElementType(unsigned partitionNumber, ElementTypePtr elemTypePtr);
+  vector< GlobalIndexType > cellsInPartition(PartitionIndexType partitionNumber);
+  FieldContainer<double> cellSideParitiesForCell( GlobalIndexType cellID );
+  
   // after calling any of these, must call rebuildLookups
   virtual void didHRefine(const set<GlobalIndexType> &parentCellIDs); // subclasses should call super
   virtual void didPRefine(const set<GlobalIndexType> &cellIDs, int deltaP); // subclasses should call super
@@ -65,7 +74,16 @@ public:
   virtual void didChangePartitionPolicy() = 0; // called by superclass after setPartitionPolicy() is invoked
   
   virtual ElementTypePtr elementType(GlobalIndexType cellID) = 0;
+  virtual vector< ElementTypePtr > elementTypes(PartitionIndexType partitionNumber);
   
+  DofOrderingFactoryPtr getDofOrderingFactory();
+  ElementTypeFactory & getElementTypeFactory();
+  
+  virtual int getH1Order(GlobalIndexType cellID) = 0;
+  
+  PartitionIndexType getPartitionCount();
+  
+  virtual GlobalIndexType globalCellIndex(GlobalIndexType cellID);
   virtual GlobalIndexType globalDofCount() = 0;
   virtual set<GlobalIndexType> globalDofIndicesForPartition(PartitionIndexType partitionNumber) = 0;
   
@@ -74,7 +92,12 @@ public:
   
   virtual IndexType localDofCount() = 0; // local to the MPI node
   
+  PartitionIndexType partitionForCellID( GlobalIndexType cellID );
+  virtual IndexType partitionLocalCellIndex(GlobalIndexType cellID);
+  
   virtual void rebuildLookups() = 0;
+  void registerSolution(Solution* solution);
+  void unregisterSolution(Solution* solution);
   
   void setPartitionPolicy( MeshPartitionPolicyPtr partitionPolicy );
   
