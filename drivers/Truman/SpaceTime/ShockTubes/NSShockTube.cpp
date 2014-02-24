@@ -114,6 +114,7 @@ int main(int argc, char *argv[]) {
   int xCells = args.Input("--xCells", "number of cells in the x direction", 8);
   int tCells = args.Input("--tCells", "number of cells in the t direction", 4);
   int maxNewtonIterations = args.Input("--maxIterations", "maximum number of Newton iterations", 20);
+  double nlTol = args.Input("--nlTol", "nonlinear tolerance", 1e-6);
   int numPreRefs = args.Input<int>("--numPreRefs","pre-refinements on singularity",0);
 
   args.Process();
@@ -122,11 +123,16 @@ int main(int argc, char *argv[]) {
   int H1Order = polyOrder+1;
 
   double xmin, xmax, xint, tmax;
-  double GAMMA, rhoL, rhoR, uL, uR, pL, pR, eL, eR, TL, TR;
-  double Cv = 718;
-  double Cp = 1010;
-  double R = 287;
+  double rhoL, rhoR, uL, uR, pL, pR, eL, eR, TL, TR;
+  double M_inf = 1;
+  double gamma = 1.4;
+  double Cv = 1/(gamma*(gamma-1)*M_inf*M_inf);
+  double Cp = gamma*Cv;
+  // double Cv = 718;
+  // double Cp = 1010;
+  double R = Cp-Cv;
   double Pr = 0.713;
+  // double gamma = Cp/Cv;
   string problemName;
 
   switch (problem)
@@ -139,17 +145,10 @@ int main(int argc, char *argv[]) {
     xint = 0.5;
     tmax = 0.1;
 
-    // GAMMA = 1.4;
     rhoL = 1;
     rhoR = 1;
     uL = 1;
     uR = 0;
-    // pL = 0;
-    // pR = 0;
-    // eL = pL/(rhoL*(GAMMA-1));
-    // eR = pR/(rhoR*(GAMMA-1));
-    // TL = eL/Cv;
-    // TR = eR/Cv;
     TL = 1;
     TR = 1;
     break;
@@ -161,17 +160,10 @@ int main(int argc, char *argv[]) {
     xint = 0.5;
     tmax = 0.1;
 
-    // GAMMA = 1.4;
     rhoL = 1;
     rhoR = 1;
     uL = -1;
     uR = 1;
-    // pL = 0;
-    // pR = 0;
-    // eL = pL/(rhoL*(GAMMA-1));
-    // eR = pR/(rhoR*(GAMMA-1));
-    // TL = eL/Cv;
-    // TR = eR/Cv;
     TL = 1;
     TR = 1;
     break;
@@ -183,19 +175,27 @@ int main(int argc, char *argv[]) {
     xint = 0.5;
     tmax = 0.2;
 
-    // GAMMA = 1.4;
     rhoL = 1;
     rhoR = .125;
     uL = 0;
     uR = 0;
-    // pL = 0;
-    // pR = 0;
-    // eL = pL/(rhoL*(GAMMA-1));
-    // eR = pR/(rhoR*(GAMMA-1));
-    // TL = eL/Cv;
-    // TR = eR/Cv;
-    TL = 1/rhoL;
-    TR = .1/rhoR;
+    TL = 1/(rhoL*R);
+    TR = .1/(rhoR*R);
+    break;
+    case 3:
+    // Strong shock tube
+    problemName = "StrongShock";
+    xmin = 0;
+    xmax = 5;
+    xint = 2.5;
+    tmax = 1e-2;
+
+    rhoL = 10;
+    rhoR = 1;
+    uL = 0;
+    uR = 0;
+    TL = 100/(rhoL*R);
+    TR = 1/(rhoR*R);
     break;
     default:
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "invalid problem number");
@@ -254,23 +254,23 @@ int main(int argc, char *argv[]) {
   IPPtr nullIP = Teuchos::rcp((IP*)NULL);
   SolutionPtr backgroundFlow = Teuchos::rcp(new Solution(mesh, nullBC, nullRHS, nullIP) );
 
-  map<int, Teuchos::RCP<Function> > initialConditions;
-  // initialConditions[rho->ID()] = Teuchos::rcp( new DiscontinuousInitialCondition(xint, rhoL, rhoR) ) ;
-  // initialConditions[u->ID()]   = Teuchos::rcp( new DiscontinuousInitialCondition(xint, uL, uR) );
-  // initialConditions[T->ID()]   = Teuchos::rcp( new DiscontinuousInitialCondition(xint, TL, TR) );
-  initialConditions[rho->ID()] = Teuchos::rcp( new RampedInitialCondition(xint, rhoL, rhoR, (xmax-xmin)/xCells/pow(2.,numPreRefs)) ) ;
-  initialConditions[u->ID()]   = Teuchos::rcp( new RampedInitialCondition(xint, uL, uR,     (xmax-xmin)/xCells/pow(2.,numPreRefs)) );
-  initialConditions[T->ID()]   = Teuchos::rcp( new RampedInitialCondition(xint, TL, TR,     (xmax-xmin)/xCells/pow(2.,numPreRefs)) );
+  map<int, Teuchos::RCP<Function> > initialGuess;
+  // initialGuess[rho->ID()] = Teuchos::rcp( new DiscontinuousInitialCondition(xint, rhoL, rhoR) ) ;
+  // initialGuess[u->ID()]   = Teuchos::rcp( new DiscontinuousInitialCondition(xint, uL, uR) );
+  // initialGuess[T->ID()]   = Teuchos::rcp( new DiscontinuousInitialCondition(xint, TL, TR) );
+  initialGuess[rho->ID()] = Teuchos::rcp( new RampedInitialCondition(xint, rhoL, rhoR, (xmax-xmin)/xCells/pow(2.,numPreRefs)) ) ;
+  initialGuess[u->ID()]   = Teuchos::rcp( new RampedInitialCondition(xint, uL, uR,     (xmax-xmin)/xCells/pow(2.,numPreRefs)) );
+  initialGuess[T->ID()]   = Teuchos::rcp( new RampedInitialCondition(xint, TL, TR,     (xmax-xmin)/xCells/pow(2.,numPreRefs)) );
 
-  backgroundFlow->projectOntoMesh(initialConditions);
+  backgroundFlow->projectOntoMesh(initialGuess);
 
   ////////////////////   DEFINE BILINEAR FORM   ///////////////////////
   // Set up problem
 
-  R = 1;
-  Cv = 1;
-  Cp = 1;
-  Pr = 1;
+  // R = 1;
+  // Cv = 1;
+  // Cp = 1;
+  // Pr = 1;
 
   FunctionPtr rho_prev = Function::solution(rho, backgroundFlow);
   FunctionPtr u_prev   = Function::solution(u, backgroundFlow);
@@ -354,15 +354,16 @@ int main(int argc, char *argv[]) {
   rhs->addTerm( 0.5*rho_prev*u_prev*u_prev * ve->dy() );
 
   ////////////////////   DEFINE INNER PRODUCT(S)   ///////////////////////
-  // Automatic graph norm
   IPPtr ip = Teuchos::rcp(new IP);
-  if (norm == 0)
+  switch (norm)
   {
+    // Automatic graph norm
+    case 0:
     ip = bf->graphNorm();
-  }
-  // Manual Graph norm
-  else if (norm == 1)
-  {
+    break;
+
+    // Manual Graph norm
+    case 1:
     ip->addTerm(1./mu*S + vm->dx() + u_prev*ve->dx());
     ip->addTerm(Pr/(Cp*mu)*tau - ve->dx());
     ip->addTerm(u_prev*vc->dx()+vc->dy()+u_prev*u_prev*vm->dx()+R*T_prev*vm->dx()+u_prev*vm->dy()
@@ -374,11 +375,11 @@ int main(int argc, char *argv[]) {
     ip->addTerm(vc);
     ip->addTerm(vm);
     ip->addTerm(ve);
-  }
-  // Decoupled Eulerian and viscous norm
-  // Might need to also elimnate D_prev term...
-  else if (norm == 2)
-  {
+    break;
+
+    // Decoupled Eulerian and viscous norm
+    // Might need to also elimnate D_prev term...
+    case 2:
     ip->addTerm(vm->dx() + u_prev*ve->dx());
     ip->addTerm(ve->dx());
     ip->addTerm(u_prev*vc->dx()+vc->dy()+u_prev*u_prev*vm->dx()+R*T_prev*vm->dx()+u_prev*vm->dy()
@@ -392,11 +393,10 @@ int main(int argc, char *argv[]) {
     ip->addTerm(vc);
     ip->addTerm(vm);
     ip->addTerm(ve);
-  }
-  // Decoupled Eulerian and viscous norm
-  // Might need to also elimnate D_prev term...
-  else if (norm == 3)
-  {
+    break;
+
+    // Alternative Decoupled Eulerian and viscous norm
+    case 3:
     ip->addTerm(vm->dx() + u_prev*ve->dx());
     ip->addTerm(ve->dx());
     ip->addTerm(u_prev*vc->dx()+vc->dy()+u_prev*u_prev*vm->dx()+R*T_prev*vm->dx()+u_prev*vm->dy()
@@ -410,6 +410,10 @@ int main(int argc, char *argv[]) {
     ip->addTerm(vc);
     ip->addTerm(vm);
     ip->addTerm(ve);
+    break;
+
+    default:
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "invalid problem number");
   }
 
   ////////////////////   CREATE BCs   ///////////////////////
@@ -472,14 +476,13 @@ int main(int argc, char *argv[]) {
     }
   }
 
-  double nonlinearRelativeEnergyTolerance = 1e-5; // used to determine convergence of the nonlinear solution
   for (int refIndex=0; refIndex<=numRefs; refIndex++)
   {
     double L2Update = 1e7;
     int iterCount = 0;
-    while (L2Update > nonlinearRelativeEnergyTolerance && iterCount < maxNewtonIterations)
+    while (L2Update > nlTol && iterCount < maxNewtonIterations)
     {
-      solution->solve(false);
+      solution->condensedSolve();
       double rhoL2Update = solution->L2NormOfSolutionGlobal(rho->ID());
       double uL2Update = solution->L2NormOfSolutionGlobal(u->ID());
       double TL2Update = solution->L2NormOfSolutionGlobal(T->ID());
@@ -536,13 +539,13 @@ int main(int argc, char *argv[]) {
       double newRamp = (xmax-xmin)/(xCells*pow(2., numPreRefs+refIndex+1));
       // if (commRank == 0)
       //   cout << "New ramp width = " << newRamp << endl;
-      dynamic_cast< RampedInitialCondition* >(initialConditions[rho->ID()].get())->setH(newRamp);
-      dynamic_cast< RampedInitialCondition* >(initialConditions[u->ID()].get())->setH(newRamp);
-      dynamic_cast< RampedInitialCondition* >(initialConditions[T->ID()].get())->setH(newRamp);
+      // dynamic_cast< RampedInitialCondition* >(initialGuess[rho->ID()].get())->setH(newRamp);
+      // dynamic_cast< RampedInitialCondition* >(initialGuess[u->ID()].get())->setH(newRamp);
+      // dynamic_cast< RampedInitialCondition* >(initialGuess[T->ID()].get())->setH(newRamp);
       // dynamic_cast< RampedInitialCondition* >(rho0.get())->setH(newRamp);
       // dynamic_cast< RampedInitialCondition* >(mom0.get())->setH(newRamp);
       // dynamic_cast< RampedInitialCondition* >(E0.get())->setH(newRamp);
-      // backgroundFlow->projectOntoMesh(initialConditions);
+      // backgroundFlow->projectOntoMesh(initialGuess);
     }
   }
 
