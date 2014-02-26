@@ -308,6 +308,10 @@ public:
   vector<int> getZeroMeanConstraints();
   void setZeroMeanConstraintRho(double value);
   double zeroMeanConstraintRho();
+  
+  static SolutionPtr solution(Teuchos::RCP<Mesh> mesh, Teuchos::RCP<BC> bc = Teuchos::rcp( (BC*) NULL),
+                              Teuchos::RCP<RHS> rhs = Teuchos::rcp( (RHS*) NULL),
+                              Teuchos::RCP<DPGInnerProduct> ip = Teuchos::rcp( (DPGInnerProduct*)NULL) );
 };
 
 #endif

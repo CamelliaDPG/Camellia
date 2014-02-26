@@ -513,6 +513,12 @@ void Solution::populateStiffnessAndLoad() {
         FieldContainer<double> localRHS(localRHSDim,&localRHSVector(cellIndex,0)); // shallow copy
         // we have the same local-to-global map for both rows and columns
         _dofInterpreter->interpretLocalData(cellID, localStiffness, interpretedStiffness, globalDofIndices);
+        
+        cout << "************* cellID " << cellID << ", interpretation report: *************" << endl;
+        cout << "localStiffness:\n" << localStiffness;
+        cout << "interpretedStiffness:\n" << interpretedStiffness;
+        cout << "globalDofIndices:\n" << globalDofIndices;
+        
         _dofInterpreter->interpretLocalData(cellID, localRHS, interpretedRHS, globalDofIndices);
         
         // cast whatever the global index type is to a type that Epetra supports
@@ -810,6 +816,7 @@ void Solution::solveWithPrepopulatedStiffnessAndLoad(Teuchos::RCP<Solver> solver
 #endif
   
   set<GlobalIndexType> myGlobalIndicesSet = _mesh->globalDofIndicesForPartition(rank);
+  cout << "rank " << rank << " has " << myGlobalIndicesSet.size() << " locally-owned dof indices.\n";
   Epetra_Map partMap = getPartitionMap();
   
   vector< ElementTypePtr > elementTypes = _mesh->elementTypes(rank);
@@ -3883,6 +3890,11 @@ void Solution::readFromFile(const string &filePath) {
   }
   fin.close();
 }
+
+SolutionPtr Solution::solution(Teuchos::RCP<Mesh> mesh, Teuchos::RCP<BC> bc, Teuchos::RCP<RHS> rhs, Teuchos::RCP<DPGInnerProduct> ip ) {
+  return Teuchos::rcp( new Solution(mesh,bc,rhs,ip) );
+}
+
 void Solution::writeToFile(const string &filePath) {
   ofstream fout(filePath.c_str());
   
