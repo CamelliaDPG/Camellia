@@ -26,7 +26,7 @@ typedef Teuchos::RCP<SubBasisDofMapper> SubBasisDofMapperPtr;
 class SubBasisDofMapper {
 public:
   virtual const set<unsigned> &basisDofOrdinalFilter() = 0;
-  virtual FieldContainer<double> mapData(bool transposeConstraint, const FieldContainer<double> &localData, bool transposeData) = 0;
+  virtual FieldContainer<double> mapData(bool transposeConstraint, FieldContainer<double> &localData) = 0;
   virtual vector<GlobalIndexType> mappedGlobalDofOrdinals() = 0;
   
   virtual ~SubBasisDofMapper();

@@ -283,25 +283,41 @@ void Boundary::bcsToImpose( map<  GlobalIndexType, double > &globalDofIndicesAnd
           
           for (GlobalIndexType localCellIndex=0; localCellIndex<numCells; localCellIndex++) {
             if (bcFunction->imposeOnCell(localCellIndex)) {
-              for (int dofOrdinal=0; dofOrdinal<numDofs; dofOrdinal++) {
-                int cellID = cellIDsPerSide[sideIndex][localCellIndex];
-                double value = dirichletValues(localCellIndex,dofOrdinal);
-                int localDofIndex = trialOrderingPtr->getDofIndex(trialID,dofOrdinal,sideIndex);
-                int globalDofIndex = _mesh->globalDofIndex(cellID,localDofIndex);
-//                cout << "BC: " << globalDofIndex << " = " << value << " @ (" << dofPointsSidePhysical(localCellIndex,localDofIndex,0) << ", " << dofPointsSidePhysical(localCellIndex,localDofIndex,1) << ")\n";
-                if (globalDofIndex < 0) {
-                  TEUCHOS_TEST_FOR_EXCEPTION( true,
-                                     std::invalid_argument,
-                                     "bcsToImpose: error: globalDofIndex < 0.");
-                }
-                globalDofIndicesAndValues[globalDofIndex] = value;
-                if ( ! impositionReported ) {
-                  //cout << "imposed BC values for variable " << _mesh->bilinearForm()->trialName(trialID) << endl;
-                  impositionReported = true;
-                }
+              FieldContainer<double> globalData;
+              FieldContainer<GlobalIndexType> globalDofIndices;
+              Teuchos::Array<int> cellDataDim(1,numDofs);
+              FieldContainer<double> cellData(cellDataDim, &dirichletValues(localCellIndex,0));
+              GlobalIndexType cellID = cellIDsPerSide[sideIndex][localCellIndex];
+              _mesh->interpretLocalBasisData(cellID, trialID, sideIndex, cellData, globalData, globalDofIndices);
+              for (int globalDofOrdinal=0; globalDofOrdinal<globalDofIndices.size(); globalDofOrdinal++) {
+                GlobalIndexType globalDofIndex = globalDofIndices(globalDofOrdinal);
+                globalDofIndicesAndValues[globalDofIndex] = globalData(globalDofOrdinal);
               }
             }
           }
+
+          // Old (pre-GDA) implementation below
+//          for (GlobalIndexType localCellIndex=0; localCellIndex<numCells; localCellIndex++) {
+//            if (bcFunction->imposeOnCell(localCellIndex)) {
+//              for (int dofOrdinal=0; dofOrdinal<numDofs; dofOrdinal++) {
+//                int cellID = cellIDsPerSide[sideIndex][localCellIndex];
+//                double value = dirichletValues(localCellIndex,dofOrdinal);
+//                int localDofIndex = trialOrderingPtr->getDofIndex(trialID,dofOrdinal,sideIndex);
+//                int globalDofIndex = _mesh->globalDofIndex(cellID,localDofIndex);
+////                cout << "BC: " << globalDofIndex << " = " << value << " @ (" << dofPointsSidePhysical(localCellIndex,localDofIndex,0) << ", " << dofPointsSidePhysical(localCellIndex,localDofIndex,1) << ")\n";
+//                if (globalDofIndex < 0) {
+//                  TEUCHOS_TEST_FOR_EXCEPTION( true,
+//                                     std::invalid_argument,
+//                                     "bcsToImpose: error: globalDofIndex < 0.");
+//                }
+//                globalDofIndicesAndValues[globalDofIndex] = value;
+//                if ( ! impositionReported ) {
+//                  //cout << "imposed BC values for variable " << _mesh->bilinearForm()->trialName(trialID) << endl;
+//                  impositionReported = true;
+//                }
+//              }
+//            }
+//          }
         }
       }
     }

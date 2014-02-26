@@ -19,7 +19,7 @@ SubBasisDofPermutationMapper::SubBasisDofPermutationMapper(const set<unsigned> &
 const set<unsigned> & SubBasisDofPermutationMapper::basisDofOrdinalFilter() {
   return _basisDofOrdinalFilter;
 }
-FieldContainer<double> SubBasisDofPermutationMapper::mapData(bool transposeConstraintMatrix, const FieldContainer<double> &data, bool transposeData) {
+FieldContainer<double> SubBasisDofPermutationMapper::mapData(bool transposeConstraintMatrix, FieldContainer<double> &data) {
   // not too sure about the right way to handle the transposes here -- absent them:
   //     for the permutation mapper, data need not change; the permutation is implicit in the globalDofOrdinals container
   // but with them, I'm a bit vague...  For now, I'm disabling the PermutationMapper in favor of the matrix-multiplying guy...
@@ -49,12 +49,11 @@ FieldContainer<double> SubBasisDofPermutationMapper::mapData(bool transposeConst
 //    }
 //  }
   
-  if (transposeConstraintMatrix) {
-    cout << "WARNING: I'm not real sure about the transposeConstraintMatrix argument to SubBasisDofPermutationMapper::mapData().\n";
-    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "transposeConstraintMatrix = true in SubBasisDofPermutationMapper::mapData() not yet handled.");
+  if (!transposeConstraintMatrix) {
+    cout << "WARNING: I'm not real sure about transposeConstraintMatrix=false in SubBasisDofPermutationMapper::mapData().\n";
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "transposeConstraintMatrix = false in SubBasisDofPermutationMapper::mapData() not yet handled.");
   }
-  bool dontTranspose = (transposeConstraintMatrix && transposeData) || (!transposeConstraintMatrix && !transposeData);
-  if (! dontTranspose) {
+  if ( ! transposeConstraintMatrix ) { // transpose data???
     FieldContainer<double> dataCopy(data.dimension(1),data.dimension(0));
     for (int i=0; i<data.dimension(0); i++) {
       for (int j=0; j<data.dimension(1); j++) {

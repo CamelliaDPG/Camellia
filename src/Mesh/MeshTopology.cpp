@@ -173,6 +173,10 @@ unsigned MeshTopology::addCell(CellTopoPtr cellTopo, const vector<unsigned> &cel
         _sidesForEntities[d][subcellEntityIndex].insert(sideEntityIndex);
       }
     }
+    // for convenience, include the side itself in the _sidesForEntities lookup:
+    set<unsigned> thisSideSet;
+    thisSideSet.insert(sideEntityIndex);
+    _sidesForEntities[sideDim][sideEntityIndex] = thisSideSet;
   }
   
   return cellIndex;
@@ -567,9 +571,9 @@ unsigned MeshTopology::getSubEntityCount(unsigned int d, unsigned int entityInde
 unsigned MeshTopology::getSubEntityIndex(unsigned int d, unsigned int entityIndex, unsigned int subEntityDim, unsigned int subEntityOrdinal) {
   shards::CellTopology *entityTopo = &_knownTopologies[_entityCellTopologyKeys[d][entityIndex]];
   set<unsigned> subEntityNodes;
-  unsigned nodeCount = (d > 0) ? entityTopo->getNodeCount(subEntityDim, subEntityOrdinal) : entityTopo->getNodeCount();
+  unsigned subEntityNodeCount = (subEntityDim > 0) ? entityTopo->getNodeCount(subEntityDim, subEntityOrdinal) : 1; // vertices are by definition just one node
   vector<unsigned> entityNodes = _canonicalEntityOrdering[d][entityIndex];
-  for (unsigned nodeOrdinal=0; nodeOrdinal<nodeCount; nodeOrdinal++) {
+  for (unsigned nodeOrdinal=0; nodeOrdinal<subEntityNodeCount; nodeOrdinal++) {
     unsigned nodeIndexInEntity = entityTopo->getNodeMap(subEntityDim, subEntityOrdinal, nodeOrdinal);
     unsigned nodeIndexInMesh = entityNodes[nodeIndexInEntity];
     subEntityNodes.insert(nodeIndexInMesh);
@@ -848,7 +852,7 @@ set< pair<IndexType, unsigned> > MeshTopology::getCellsContainingEntity(unsigned
   set<IndexType> sidesForEntity = _sidesForEntities[d][entityIndex];
   typedef pair<IndexType,unsigned> CellPair;
   set< CellPair > cells; // we are guaranteed to have one active cell that contains a side that contains the constraining entity.  We return the one that has least cellIndex.
-  set< IndexType > cellIndices;
+  set< IndexType > cellIndices;  // container to keep track of which cells we've already counted -- we only return one (cell, side) pair per cell that contains the entity...
   for (set<IndexType>::iterator sideEntityIt = sidesForEntity.begin(); sideEntityIt != sidesForEntity.end(); sideEntityIt++) {
     IndexType sideEntityIndex = *sideEntityIt;
     int numCellsForSide = getCellCountForSide(sideEntityIndex);
@@ -903,6 +907,10 @@ pair<IndexType,IndexType> MeshTopology::leastActiveCellIndexContainingEntityCons
   IndexType leastActiveCellConstrainedEntityIndex;
   for (set<IndexType>::iterator constrainedEntityIt = constrainedEntities.begin(); constrainedEntityIt != constrainedEntities.end(); constrainedEntityIt++) {
     IndexType constrainedEntityIndex = *constrainedEntityIt;
+    if (_sidesForEntities[d].find(constrainingEntityIndex) == _sidesForEntities[d].end()) {
+      cout << "ERROR: no sides found containing entityIndex " << constrainingEntityIndex << " of dimension " << d << endl;
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "ERROR: no sides found containing entity");
+    }
     set<IndexType> sideEntityIndices = _sidesForEntities[d][constrainedEntityIndex];
     for (set<IndexType>::iterator sideEntityIt = sideEntityIndices.begin(); sideEntityIt != sideEntityIndices.end(); sideEntityIt++) {
       IndexType sideEntityIndex = *sideEntityIt;
@@ -922,6 +930,11 @@ pair<IndexType,IndexType> MeshTopology::leastActiveCellIndexContainingEntityCons
       }
     }
   }
+  if (leastActiveCellIndex == -1) {
+    cout << "WARNING: least active cell index not found.\n";
+    
+  }
+  
   return make_pair(leastActiveCellIndex, leastActiveCellConstrainedEntityIndex);
 }
 

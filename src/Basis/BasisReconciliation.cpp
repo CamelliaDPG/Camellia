@@ -209,6 +209,7 @@ SubBasisReconciliationWeights BasisReconciliation::computeConstrainedWeights(Bas
       break;
     case IntrepidExtendedTypes::FUNCTION_SPACE_HVOL:
       minSubcellDimension = d; // i.e. no continuities enforced
+      break;
     default:
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unhandled functionSpace()");
       break;
@@ -216,6 +217,17 @@ SubBasisReconciliationWeights BasisReconciliation::computeConstrainedWeights(Bas
   
   weights.fineOrdinals = finerBasis->dofOrdinalsForSubcell(sideDimension, finerBasisSideIndex, minSubcellDimension);
   weights.coarseOrdinals = coarserBasis->dofOrdinalsForSubcell(sideDimension, coarserBasisSideIndex, minSubcellDimension);
+  weights.weights.resize(weights.fineOrdinals.size(), weights.coarseOrdinals.size());
+  
+  if (weights.fineOrdinals.size() == 0) {
+    if (weights.coarseOrdinals.size() != 0) {
+      cout << "ERROR in BasisReconciliation: empty fine basis (when restricted to the indicated side), but non-empty coarse basis.\n";
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "In BasisReconciliation, empty fine basis (when restricted to the indicated side), but non-empty coarse basis.");
+    } else {
+      // both empty: return empty weights container
+      return weights;
+    }
+  }
 
   int cubDegree = finerBasis->getDegree() * 2; // on LHS, will integrate finerBasis against itself
   shards::CellTopology coarseTopo = coarserBasis->domainTopology();
@@ -238,17 +250,22 @@ SubBasisReconciliationWeights BasisReconciliation::computeConstrainedWeights(Bas
   fineVolumeRefCellNodes.resize(oneCell,fineVolumeRefCellNodes.dimension(0), fineVolumeRefCellNodes.dimension(1));
   fineSideBasisCache->setPhysicalCellNodes(fineVolumeRefCellNodes, vector<GlobalIndexType>(), false);
 
-  // create a ("volume") basis cache for the side topology--this allows us to determine the cubature points corresponding to the
-  // permuted nodes.
-  BasisCachePtr sideCacheForPermutation = Teuchos::rcp( new BasisCache( sideTopo, cubDegree, false ) );
-  FieldContainer<double> permutedSideTopoNodes(sideTopo.getNodeCount(), sideTopo.getDimension());
-  CamelliaCellTools::refCellNodesForTopology(permutedSideTopoNodes, sideTopo, vertexNodePermutation);
-  sideCacheForPermutation->setRefCellPoints(fineSideBasisCache->getRefCellPoints()); // these should be the same, but doesn't hurt to be sure
-  permutedSideTopoNodes.resize(oneCell,permutedSideTopoNodes.dimension(0),permutedSideTopoNodes.dimension(1));
-  sideCacheForPermutation->setPhysicalCellNodes(permutedSideTopoNodes, vector<GlobalIndexType>(), false);
-  FieldContainer<double> permutedSideCubaturePoints = sideCacheForPermutation->getPhysicalCubaturePoints();
-  // resize for reference space (no cellIndex dimension):
-  permutedSideCubaturePoints.resize(permutedSideCubaturePoints.dimension(1), permutedSideCubaturePoints.dimension(2));
+  FieldContainer<double> permutedSideCubaturePoints;
+  if (d-1 > 0) {
+    // create a ("volume") basis cache for the side topology--this allows us to determine the cubature points corresponding to the
+    // permuted nodes.
+    BasisCachePtr sideCacheForPermutation = Teuchos::rcp( new BasisCache( sideTopo, cubDegree, false ) );
+    FieldContainer<double> permutedSideTopoNodes(sideTopo.getNodeCount(), sideTopo.getDimension());
+    CamelliaCellTools::refCellNodesForTopology(permutedSideTopoNodes, sideTopo, vertexNodePermutation);
+    sideCacheForPermutation->setRefCellPoints(fineSideBasisCache->getRefCellPoints()); // these should be the same, but doesn't hurt to be sure
+    permutedSideTopoNodes.resize(oneCell,permutedSideTopoNodes.dimension(0),permutedSideTopoNodes.dimension(1));
+    sideCacheForPermutation->setPhysicalCellNodes(permutedSideTopoNodes, vector<GlobalIndexType>(), false);
+    permutedSideCubaturePoints = sideCacheForPermutation->getPhysicalCubaturePoints();
+    // resize for reference space (no cellIndex dimension):
+    permutedSideCubaturePoints.resize(permutedSideCubaturePoints.dimension(1), permutedSideCubaturePoints.dimension(2));
+  } else { // dim-0 topologies don't change under permutation...
+    permutedSideCubaturePoints = fineSideBasisCache->getRefCellPoints();
+  }
 
   FieldContainer<double> coarseVolumeRefCellNodes(coarseTopo.getNodeCount(), d);
   CamelliaCellTools::refCellNodesForTopology(coarseVolumeRefCellNodes, coarseTopo);
@@ -288,6 +305,10 @@ SubBasisReconciliationWeights BasisReconciliation::computeConstrainedWeights(Bas
 
 
 FieldContainer<double> BasisReconciliation::computeConstrainedWeights(BasisPtr finerBasis, RefinementBranch refinements, BasisPtr coarserBasis) {
+  
+  if (refinements.size() == 0) {
+    return computeConstrainedWeights(finerBasis, coarserBasis);
+  }
   
   // there's a LOT of code duplication between this and the p-oriented computeConstrainedWeights(finerBasis,coarserBasis)
   // would be pretty easy to refactor to make them share the common code -- this one just needs an additional distinction between the cubature points for coarserBasis and those for finerBasis...
@@ -369,6 +390,7 @@ FieldContainer<double> BasisReconciliation::computeConstrainedWeights(BasisPtr f
 SubBasisReconciliationWeights BasisReconciliation::computeConstrainedWeights(BasisPtr finerBasis, int fineAncestralSideIndex, RefinementBranch &volumeRefinements,
                                                                              RefinementBranch &sideRefinements, BasisPtr coarserBasis, int coarserBasisSideIndex,
                                                                              unsigned vertexNodePermutation) {
+  
   SubBasisReconciliationWeights weights;
   
   // use the functionSpace to determine what continuities should be enforced:
@@ -543,6 +565,14 @@ const FieldContainer<double> & BasisReconciliation::constrainedWeights(BasisPtr 
 
 const SubBasisReconciliationWeights & BasisReconciliation::constrainedWeights(BasisPtr finerBasis, int finerBasisSideIndex, RefinementBranch &volumeRefinements,
                                                                               BasisPtr coarserBasis, int coarserBasisSideIndex, unsigned vertexNodePermutation) { // vertexPermutation is for the fine basis's ancestral orientation (how to permute side as seen by fine's ancestor to produce side as seen by coarse)...
+  
+//  if (finerBasis->domainTopology().getDimension()==1) { // then side topology will be a vertex
+//    // we may want to handle vertex bases specially
+//  }
+  
+  if (volumeRefinements.size()==0) {
+    return constrainedWeights(finerBasis, finerBasisSideIndex, coarserBasis, coarserBasisSideIndex, vertexNodePermutation);
+  }
   
   SideBasisRestriction fineRestriction = make_pair(finerBasis.get(), finerBasisSideIndex);
   SideBasisRestriction coarseRestriction = make_pair(coarserBasis.get(), coarserBasisSideIndex);

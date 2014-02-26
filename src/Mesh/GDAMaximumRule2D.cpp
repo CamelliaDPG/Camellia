@@ -694,6 +694,18 @@ void GDAMaximumRule2D::interpretLocalData(GlobalIndexType cellID, const FieldCon
   }
 }
 
+void GDAMaximumRule2D::interpretLocalBasisData(GlobalIndexType cellID, int varID, int sideOrdinal, const FieldContainer<double> &basisDofs,
+                                               FieldContainer<double> &globalDofs, FieldContainer<GlobalIndexType> &globalDofIndices) {
+  globalDofs = basisDofs; // copy -- this may be a vector or a (square) matrix
+  int numDofs = basisDofs.dimension(0);
+  globalDofIndices.resize(numDofs);
+  DofOrderingPtr trialOrdering = _elementTypeForCell[cellID]->trialOrderPtr;
+  for (int basisDofOrdinal=0; basisDofOrdinal<numDofs; basisDofOrdinal++) {
+    int cellDofIndex = trialOrdering->getDofIndex(varID, basisDofOrdinal, sideOrdinal);
+    globalDofIndices[basisDofOrdinal] = globalDofIndex(cellID, cellDofIndex);
+  }
+}
+
 unsigned GDAMaximumRule2D::localDofCount() {
   // TODO: implement this
   cout << "WARNING: localDofCount() unimplemented.\n";

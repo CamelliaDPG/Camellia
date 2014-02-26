@@ -17,7 +17,7 @@ class SubBasisDofPermutationMapper : public SubBasisDofMapper {
 public:
   SubBasisDofPermutationMapper(const set<unsigned> &basisDofOrdinalFilter, const vector<GlobalIndexType> &globalDofOrdinals);
   const set<unsigned> &basisDofOrdinalFilter();
-  FieldContainer<double> mapData(bool transposeConstraint, const FieldContainer<double> &localData, bool transpose);
+  FieldContainer<double> mapData(bool transposeConstraint, FieldContainer<double> &localData);
   vector<GlobalIndexType> mappedGlobalDofOrdinals();
 };
 

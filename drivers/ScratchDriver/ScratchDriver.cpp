@@ -146,7 +146,7 @@ int main(int argc, char *argv[]) {
     confusionBF->addTerm( beta_const * u, - v->grad() );
     confusionBF->addTerm( beta_n_u_minus_sigma_n, v);
     
-    MeshPtr mesh = MeshFactory::quadMeshMinRule(confusionBF, 1);
+    MeshPtr mesh = MeshFactory::quadMeshMinRule(confusionBF, 2);
     
     ////////////////////   SPECIFY RHS   ///////////////////////
     Teuchos::RCP<RHSEasy> rhs = Teuchos::rcp( new RHSEasy );
@@ -161,6 +161,12 @@ int main(int argc, char *argv[]) {
     IPPtr ip = confusionBF->graphNorm();
     
     SolutionPtr soln = Teuchos::rcp( new Solution(mesh, bc, rhs, ip) );
+    
+    cout << "soln constructed; about to solve.\n";
+    
+    soln->solve();
+    
+    cout << "...solved.\n";
   }
   
   if (testMeshTopoMemory) {

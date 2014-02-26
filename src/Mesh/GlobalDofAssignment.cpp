@@ -204,9 +204,10 @@ vector< ElementTypePtr > GlobalDofAssignment::elementTypes(PartitionIndexType pa
     for (int rank=0; rank<numRanks; rank++) {
       vector< ElementTypePtr > elemTypesForRank = elementTypes(rank);
       for (vector< ElementTypePtr >::iterator typeForRankIt = elemTypesForRank.begin(); typeForRankIt != elemTypesForRank.end(); typeForRankIt++) {
-        if (includedTypes.find((*typeForRankIt).get()) == includedTypes.end()) {
-          elemTypesForRank.push_back(*typeForRankIt);
-          includedTypes.insert((*typeForRankIt).get());
+        ElementTypePtr elemType = *typeForRankIt;
+        if (includedTypes.find(elemType.get()) == includedTypes.end()) {
+          types.push_back(elemType);
+          includedTypes.insert(elemType.get());
         }
       }
     }

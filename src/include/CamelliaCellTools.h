@@ -127,6 +127,12 @@ public:
     typedef unsigned Permutation;
     typedef pair<Permutation, Permutation> PermutationPair;
     static map< CellTopoKey, map< PermutationPair, Permutation > > compositionMap;
+    
+    if (cellTopo.getKey() == shards::Node::key) {
+      if ((a_permutation==0) && (b_permutation==0)) {
+        return 0;
+      }
+    }
 
     if (compositionMap.find(cellTopo.getKey()) == compositionMap.end()) { // build lookup table
       int permCount = cellTopo.getNodePermutationCount();
@@ -179,6 +185,11 @@ public:
         }
         inverseMap[cellTopo.getKey()][i] = permutationMatchingOrder(cellTopo, identityOrder, inverseOrder);
       }
+      if (cellTopo.getKey() == shards::Node::key) {
+        // for consistency of interface, we treat this a bit differently than shards -- we support the identity permutation
+        // (we also consider a Node to have one node, index 0)
+        inverseMap[cellTopo.getKey()][0] = 0;
+      }
     }
     
     if (inverseMap[cellTopo.getKey()].find(permutation) == inverseMap[cellTopo.getKey()].end()) {
@@ -220,6 +231,7 @@ public:
   
   // this caches the lookup tables it builds.  Well worth it, since we'll have just one per cell topology
   static unsigned subcellOrdinalMap(const shards::CellTopology &cellTopo, unsigned subcdim, unsigned subcord, unsigned subsubcdim, unsigned subsubcord) {
+    // maps from a subcell's ordering of its subcells (the sub-subcells) to the cell topology's ordering of those subcells.
     typedef unsigned CellTopoKey;
     typedef unsigned SubcellOrdinal;
     typedef unsigned SubcellDimension;
@@ -230,6 +242,15 @@ public:
     typedef pair< SubSubcellDimension, SubSubcellOrdinal > SubSubcellIdentifier; // dim, ord in subcell
     typedef map< SubcellIdentifier, map< SubSubcellIdentifier, SubSubcellOrdinalInCellTopo > > OrdinalMap;
     static map< CellTopoKey, OrdinalMap > ordinalMaps;
+    
+    if (subsubcdim==subcdim) {
+      if (subsubcord==0) { // i.e. the "subsubcell" is really just the subcell
+        return subcord;
+      } else {
+        cout << "request for subsubcell of the same dimension as subcell, but with subsubcord > 0.\n";
+        TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "request for subsubcell of the same dimension as subcell, but with subsubcord > 0.");
+      }
+    }
     
     CellTopoKey key = cellTopo.getKey();
     if (ordinalMaps.find(key) == ordinalMaps.end()) {
@@ -284,6 +305,9 @@ public:
     if (ordinalMaps[key][subcell].find(subsubcell) != ordinalMaps[key][subcell].end()) {
       return ordinalMaps[key][subcell][subsubcell];
     } else {
+      cout << "For topology " << cellTopo.getName() << " and subcell " << subcord << " of dim " << subcdim;
+      cout << ", subsubcell " << subsubcord << " of dim " << subsubcdim << " not found.\n";
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "subsubcell not found");
       return -1; // NOT FOUND
     }
   }
@@ -292,11 +316,20 @@ public:
     // looks for the ordinal of a sub-sub-cell in the subcell
     const shards::CellTopology subcellTopo = cellTopo.getCellTopologyData(subcdim, subcord);
     int subsubcCount = subcellTopo.getSubcellCount(subsubcdim);
+//    cout << "For cellTopo " << cellTopo.getName() << ", subcell dim " << subcdim << ", ordinal " << subcord;
+//    cout << ", and subsubcdim " << subsubcdim << ":\n";
     for (int subsubcOrdinal = 0; subsubcOrdinal < subsubcCount; subsubcOrdinal++) {
-      if (subcellOrdinalMap(cellTopo, subcdim, subcord, subsubcdim, subsubcOrdinal) == subsubcordInCell) {
+      unsigned mapped_subsubcOrdinal = subcellOrdinalMap(cellTopo, subcdim, subcord, subsubcdim, subsubcOrdinal);
+//      cout << "subsubcOrdinal " << subsubcOrdinal << " --> subcord " << mapped_subsubcOrdinal << endl;
+      if (mapped_subsubcOrdinal == subsubcordInCell) {
         return subsubcOrdinal;
       }
     }
+    cout << "ERROR: subcell " << subsubcordInCell << " not found in subcellReverseOrdinalMap.\n";
+    cout << "For topology " << cellTopo.getName() << ", looking for subcell of dimension " << subsubcdim << " with ordinal " << subsubcordInCell << " in cell.\n";
+    cout << "Looking in subcell of dimension " << subcdim << " with ordinal " << subcord << ".\n";
+    
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "subcell not found in subcellReverseOrdinalMap.");
     return -1; // NOT FOUND
   }
   
@@ -459,7 +492,34 @@ public:
     // Call method with initial guess
     mapToReferenceFrameInitGuess(refPoints, initGuess, physPoints, mesh, cellID);
   }
+  
+  static void mapToReferenceSubcell(FieldContainer<double>       &refSubcellPoints,
+                                    const FieldContainer<double> &paramPoints,
+                                    const int                     subcellDim,
+                                    const int                     subcellOrd,
+                                    const shards::CellTopology   &parentCell) {
+    // for cells that Intrepid's CellTools supports, we just use that
+    int cellDim = parentCell.getDimension();
+    if ((subcellDim > 0) && ((cellDim == 2) || (cellDim == 3)) ) {
+      CellTools<double>::mapToReferenceSubcell(refSubcellPoints, paramPoints, subcellDim, subcellOrd, parentCell);
+    } else if (subcellDim == 0) {
+      FieldContainer<double> refCellNodes(parentCell.getNodeCount(),cellDim);
+      refCellNodesForTopology(refCellNodes,parentCell);
+      // neglect paramPoints argument here; assume that refSubcellPoints is appropriately sized
+      int numPoints = refSubcellPoints.dimension(0);
+      for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
+        for (int d=0; d<cellDim; d++) {
+          refSubcellPoints(ptIndex,d) = refCellNodes(subcellOrd,d);
+        }
+      }
+    } else {
+      // TODO: add support for 4D elements.
+      cout << "CamelliaCellTools::mapToReferenceSubcell -- unsupported arguments.\n";
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "CamelliaCellTools::mapToReferenceSubcell -- unsupported arguments.");
+    }
+  }
 };
+
 
 #endif
 

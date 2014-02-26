@@ -8,7 +8,7 @@
 
 #include "LocalDofMapper.h"
 
-void LocalDofMapper::filterData(const vector<int> dofIndices, const FieldContainer<double> &data, FieldContainer<double> &filteredData, int rankToFilter) {
+void LocalDofMapper::filterData(const vector<int> dofIndices, const FieldContainer<double> &data, FieldContainer<double> &filteredData) {
   int dofCount = dofIndices.size();
   if (data.rank()==1) {
     filteredData.resize(dofCount);
@@ -16,66 +16,55 @@ void LocalDofMapper::filterData(const vector<int> dofIndices, const FieldContain
       filteredData(i) = data(dofIndices[i]);
     }
   } else if (data.rank()==2) {
-    if (rankToFilter==0) {
-      filteredData.resize(dofCount,filteredData.dimension(1));
-    } else if (rankToFilter==1) {
-      filteredData.resize(filteredData.dimension(0),dofCount);
-    } else {
-      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unsupported rank to filter.");
-    }
+    filteredData.resize(dofCount,dofCount);
     for (int i=0; i<filteredData.dimension(0); i++) {
       for (int j=0; j<filteredData.dimension(1); j++) {
-        if (rankToFilter==0) {
-          filteredData(i,j) = data(dofIndices[i],j);
-        } else {
-          filteredData(i,j) = data(i,dofIndices[j]);
-        }
+        filteredData(i,j) = data(dofIndices[i],dofIndices[j]);
       }
     }
   }
 }
 
-void LocalDofMapper::addSubBasisMapContribution(int varID, int sideOrdinal, BasisMap basisMap, const FieldContainer<double> &localData, FieldContainer<double> &globalData, int rankToMap) {
-  bool transposeConstraint = false;
-  vector<int> varDofIndices = _dofOrdering->getDofIndices(varID, sideOrdinal);
+void LocalDofMapper::addSubBasisMapContribution(int varID, int sideOrdinal, BasisMap basisMap, const FieldContainer<double> &localData, FieldContainer<double> &globalData) {
+  bool transposeConstraint = true; // that is, transpose the matrix constructed by BasisReconciliation.  (The untransposed one goes from global to local)
+  
   FieldContainer<double> basisData;
-  filterData(varDofIndices, localData, basisData, rankToMap);
+  if (_varIDToMap == -1) {
+    vector<int> varDofIndices = _dofOrdering->getDofIndices(varID, sideOrdinal);
+    filterData(varDofIndices, localData, basisData);
+  } else {
+    basisData = localData;
+  }
   for (vector<SubBasisDofMapperPtr>::iterator subBasisMapIt = basisMap.begin(); subBasisMapIt != basisMap.end(); subBasisMapIt++) {
-    bool transposeData = rankToMap==0;
-    int rankNotToMap = transposeData ? 0 : 1; // this would become plural (ranksNotToMap) if ever we supported more than rank 2.  But I'm not sure why we would.
     SubBasisDofMapperPtr subBasisDofMapper = *subBasisMapIt;
     FieldContainer<double> subBasisData;
     vector<int> basisOrdinalFilter(subBasisDofMapper->basisDofOrdinalFilter().begin(), subBasisDofMapper->basisDofOrdinalFilter().end());
-    filterData(basisOrdinalFilter, basisData, subBasisData, rankToMap);
-    if (basisData.rank()==1) {
-      subBasisData.resize(subBasisData.dimension(0),1); // subBasisMapper's mapData method requires rank 2.
-    }
-    FieldContainer<double> mappedSubBasisData = (*subBasisMapIt)->mapData(transposeConstraint, subBasisData, transposeData);
+    filterData(basisOrdinalFilter, basisData, subBasisData);
+    FieldContainer<double> mappedSubBasisData = (*subBasisMapIt)->mapData(transposeConstraint, subBasisData);
     vector<GlobalIndexType> globalIndices = (*subBasisMapIt)->mappedGlobalDofOrdinals();
-    for (int sbGlobalOrdinal=0; sbGlobalOrdinal<globalIndices.size(); sbGlobalOrdinal++) {
-      GlobalIndexType globalIndex = globalIndices[sbGlobalOrdinal];
-      unsigned globalOrdinal = _globalIndexToOrdinal[globalIndex];
-      if (!transposeData) {
-        if (globalData.rank()==1) {
-          globalData(globalOrdinal) += mappedSubBasisData(sbGlobalOrdinal,0);
-        } else {
-          for (int i=0; i<globalData.dimension(rankNotToMap); i++) {
-            globalData(globalOrdinal,i) += mappedSubBasisData(sbGlobalOrdinal,i);
-          }
-        }
-      } else { // transpose is true ==> globalData.rank() must be 2
-        for (int i=0; i<globalData.dimension(rankNotToMap); i++) {
-          globalData(i,globalOrdinal) += mappedSubBasisData(i,sbGlobalOrdinal);
+    for (int sbGlobalOrdinal_i=0; sbGlobalOrdinal_i<globalIndices.size(); sbGlobalOrdinal_i++) {
+      GlobalIndexType globalIndex_i = globalIndices[sbGlobalOrdinal_i];
+      unsigned globalOrdinal_i = _globalIndexToOrdinal[globalIndex_i];
+      if (globalData.rank()==1) {
+        globalData(globalOrdinal_i) += mappedSubBasisData(sbGlobalOrdinal_i);
+      } else {
+        for (int sbGlobalOrdinal_j=0; sbGlobalOrdinal_j<globalIndices.size(); sbGlobalOrdinal_j++) {
+          GlobalIndexType globalIndex_j = globalIndices[sbGlobalOrdinal_j];
+          unsigned globalOrdinal_j = _globalIndexToOrdinal[globalIndex_j];
+          globalData(globalOrdinal_i,globalOrdinal_j) += mappedSubBasisData(sbGlobalOrdinal_i,sbGlobalOrdinal_j);
         }
       }
     }
   }
 }
 
-void LocalDofMapper::addReverseSubBasisMapContribution(int varID, int sideOrdinal, BasisMap basisMap, const FieldContainer<double> &globalData, FieldContainer<double> &localData, int rankToMap) {
-  bool transposeConstraint = true;
-  bool transposeData = rankToMap==0;
-  int rankNotToMap = transposeData ? 0 : 1; // this would become plural (ranksNotToMap) if ever we supported more than rank 2.  But I'm not sure why we would.
+void LocalDofMapper::addReverseSubBasisMapContribution(int varID, int sideOrdinal, BasisMap basisMap, const FieldContainer<double> &globalData, FieldContainer<double> &localData) {
+  bool transposeConstraint = false;
+  
+  if (_varIDToMap != -1) {
+    cout << "Error: LocalDofMapper::addReverseSubBasisMapContribution not supported when _varIDToMap is specified.\n";
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Error: LocalDofMapper::addReverseSubBasisMapContribution not supported when _varIDToMap is specified.");
+  }
   
   vector<GlobalIndexType> globalIndices = this->globalIndices();
   for (vector<SubBasisDofMapperPtr>::iterator subBasisMapIt = basisMap.begin(); subBasisMapIt != basisMap.end(); subBasisMapIt++) {
@@ -86,34 +75,31 @@ void LocalDofMapper::addReverseSubBasisMapContribution(int varID, int sideOrdina
       globalOrdinalFilter.push_back(_globalIndexToOrdinal[ globalDofIndices[subBasisGlobalDofOrdinal] ]);
     }
     FieldContainer<double> filteredSubBasisData;
-    filterData(globalOrdinalFilter, globalData, filteredSubBasisData, rankToMap);
-    if (filteredSubBasisData.rank()==1) {
-      filteredSubBasisData.resize(filteredSubBasisData.dimension(0),1); // subBasisMapper's mapData method requires rank 2.
-    }
-    FieldContainer<double> mappedSubBasisData = (*subBasisMapIt)->mapData(transposeConstraint, filteredSubBasisData, transposeData);
+    filterData(globalOrdinalFilter, globalData, filteredSubBasisData);
+    FieldContainer<double> mappedSubBasisData = (*subBasisMapIt)->mapData(transposeConstraint, filteredSubBasisData);
     set<unsigned> localDofOrdinals = subBasisDofMapper->basisDofOrdinalFilter();
-    int j=0;
-    for (set<unsigned>::iterator localDofOrdinalIt = localDofOrdinals.begin(); localDofOrdinalIt != localDofOrdinals.end(); localDofOrdinalIt++, j++) {
-      unsigned localDofOrdinal = *localDofOrdinalIt;
-      unsigned localDofIndex = _dofOrdering->getDofIndex(varID, localDofOrdinal);
-      if (!transposeData) {
-        if (localData.rank()==1) {
-          localData(localDofIndex) += mappedSubBasisData(j,0);
-        } else {
-          for (int i=0; i<localData.dimension(rankNotToMap); i++) {
-            localData(localDofIndex,i) += mappedSubBasisData(j,i);
-          }
-        }
-      } else { // transpose is true ==> localData.rank() must be 2
-        for (int i=0; i<localData.dimension(rankNotToMap); i++) {
-          localData(i,localDofIndex) += mappedSubBasisData(i,j);
+    int i=0;
+    for (set<unsigned>::iterator localDofOrdinalIt_i = localDofOrdinals.begin(); localDofOrdinalIt_i != localDofOrdinals.end(); localDofOrdinalIt_i++, i++) {
+      unsigned localDofOrdinal_i = *localDofOrdinalIt_i;
+      unsigned localDofIndex_i = _dofOrdering->getDofIndex(varID, localDofOrdinal_i);
+      if (localData.rank()==1) {
+        localData(localDofIndex_i) += mappedSubBasisData(i);
+      } else {
+        int j=0;
+        for (set<unsigned>::iterator localDofOrdinalIt_j = localDofOrdinals.begin(); localDofOrdinalIt_j != localDofOrdinals.end(); localDofOrdinalIt_j++, j++) {
+          unsigned localDofOrdinal_j = *localDofOrdinalIt_j;
+          unsigned localDofIndex_j = _dofOrdering->getDofIndex(varID, localDofOrdinal_j);
+          localData(localDofIndex_i,localDofIndex_j) += mappedSubBasisData(i,j);
         }
       }
     }
   }
 }
 
-LocalDofMapper::LocalDofMapper(DofOrderingPtr dofOrdering, map< int, BasisMap > volumeMaps, vector< map< int, BasisMap > > sideMaps) {
+LocalDofMapper::LocalDofMapper(DofOrderingPtr dofOrdering, map< int, BasisMap > volumeMaps, vector< map< int, BasisMap > > sideMaps,
+                               int varIDToMap, int sideOrdinalToMap) {
+  _varIDToMap = varIDToMap;
+  _sideOrdinalToMap = sideOrdinalToMap;
   _dofOrdering = dofOrdering;
   _volumeMaps = volumeMaps;
   _sideMaps = sideMaps;
@@ -152,50 +138,60 @@ vector<GlobalIndexType> LocalDofMapper::globalIndices() {
   return indices;
 }
 
-FieldContainer<double> LocalDofMapper::mapData(const FieldContainer<double> &data, bool localToGlobal, int rankToMap) {
-  unsigned dofCount = _dofOrdering->totalDofs();
+FieldContainer<double> LocalDofMapper::mapData(const FieldContainer<double> &data, bool localToGlobal) {
+  unsigned dofCount;
+  if (_varIDToMap == -1) {
+    dofCount = _dofOrdering->totalDofs();
+  } else {
+    dofCount = _dofOrdering->getBasisCardinality(_varIDToMap, _sideOrdinalToMap);
+  }
   if ((data.rank() != 1) && (data.rank() != 2)) {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "data must be rank 1 or rank 2");
   }
-  if (rankToMap==-1) {
-    FieldContainer<double> mappedData = data;
-    for (int rank=0; rank<data.rank(); rank++) {
-      mappedData = mapData(mappedData,localToGlobal,rank);
+  if (data.dimension(0) != dofCount) {
+    cout << "data's dimension 0 must match dofCount.\n";
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "data dimension 0 must match dofCount.");
+  }
+  if (data.rank()==2) {
+    if (data.dimension(1) != dofCount) {
+      cout << "data's dimension 1, if present, must match dof ordering's totalDofs.\n";
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "data dimension 1 must match dofCount.");
     }
-    return mappedData;
   }
-  if (data.dimension(rankToMap) != dofCount) {
-    cout << "data's rankToMap dimension must match dof ordering's totalDofs.\n";
-    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "data dimension 0 must match dof ordering's totalDofs.");
-  }
-  
   int mappedDofCount = localToGlobal ? _globalIndexToOrdinal.size() : _dofOrdering->totalDofs();
   Teuchos::Array<int> dim;
   data.dimensions(dim);
-  dim[rankToMap] = mappedDofCount;
+  dim[0] = mappedDofCount;
+  if (data.rank()==2) dim[1] = mappedDofCount;
   FieldContainer<double> mappedData(dim);
   
   // map volume data
   for (map< int, BasisMap >::iterator volumeMapIt = _volumeMaps.begin(); volumeMapIt != _volumeMaps.end(); volumeMapIt++) {
     int varID = volumeMapIt->first;
+    bool skipVar = (_varIDToMap != -1) && (varID != _varIDToMap);
+    if (skipVar) continue;
     BasisMap basisMap = volumeMapIt->second;
     int volumeSideIndex = 0;
     if (localToGlobal)
-      addSubBasisMapContribution(varID, volumeSideIndex, basisMap, data, mappedData, rankToMap);
+      addSubBasisMapContribution(varID, volumeSideIndex, basisMap, data, mappedData);
     else
-      addReverseSubBasisMapContribution(varID, volumeSideIndex, basisMap, data, mappedData, rankToMap);
+      addReverseSubBasisMapContribution(varID, volumeSideIndex, basisMap, data, mappedData);
   }
   
   // map side data
   int sideCount = _sideMaps.size();
   for (unsigned sideOrdinal=0; sideOrdinal<sideCount; sideOrdinal++) {
+    bool skipSide = (_sideOrdinalToMap != -1) && (sideOrdinal != _sideOrdinalToMap);
+    if (skipSide) continue;
     for (map< int, BasisMap >::iterator sideMapIt = _sideMaps[sideOrdinal].begin(); sideMapIt != _sideMaps[sideOrdinal].end(); sideMapIt++) {
       int varID = sideMapIt->first;
+      bool skipVar = (_varIDToMap != -1) && (varID != _varIDToMap);
+      if (skipVar) continue;
       BasisMap basisMap = sideMapIt->second;
       if (localToGlobal)
-        addSubBasisMapContribution(varID, sideOrdinal, basisMap, data, mappedData, rankToMap);
+        addSubBasisMapContribution(varID, sideOrdinal, basisMap, data, mappedData);
       else
-        addReverseSubBasisMapContribution(varID, sideOrdinal, basisMap, data, mappedData, rankToMap);
+        addReverseSubBasisMapContribution(varID, sideOrdinal, basisMap, data, mappedData);
     }
   }
   return mappedData;

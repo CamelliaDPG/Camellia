@@ -21,7 +21,7 @@ struct ConstrainingSubsideInfo {
   GlobalIndexType cellID;
   unsigned sideOrdinal;
   unsigned subsideOrdinalInSide;
-  unsigned subsideVertexPermutation; // the composed inverse of the coarse side's permutation and the fine side's permutation
+//  unsigned subsideVertexPermutation; // the composed inverse of the coarse side's permutation and the fine side's permutation
 };
 
 struct ConstrainingCellInfo {
@@ -56,8 +56,10 @@ class GDAMinimumRule : public GlobalDofAssignment {
   typedef map<unsigned, VarIDToDofIndices> SubCellOrdinalToMap; // key: subcell ordinal
   typedef vector< SubCellOrdinalToMap > SubCellDofIndexInfo; // index to vector: subcell dimension
   
+  vector< map< unsigned, unsigned > > buildSubsideMap(shards::CellTopology &sideTopo);
+  
   CellConstraints getCellConstraints(GlobalIndexType cellID);
-  LocalDofMapperPtr getDofMapper(GlobalIndexType cellID, CellConstraints &constraints);
+  LocalDofMapperPtr getDofMapper(GlobalIndexType cellID, CellConstraints &constraints, int varID = -1, int sideIndex = -1);
   
   SubCellDofIndexInfo getOwnedGlobalDofIndices(GlobalIndexType cellID, CellConstraints &cellConstraints);
   
@@ -78,6 +80,8 @@ public:
   set<GlobalIndexType> globalDofIndicesForPartition(PartitionIndexType partitionNumber);
   void interpretLocalData(GlobalIndexType cellID, const FieldContainer<double> &localDofs,
                           FieldContainer<double> &globalDofs, FieldContainer<GlobalIndexType> &globalDofIndices);
+  void interpretLocalBasisData(GlobalIndexType cellID, int varID, int sideOrdinal, const FieldContainer<double> &basisDofs,
+                               FieldContainer<double> &globalDofs, FieldContainer<GlobalIndexType> &globalDofIndices);
   void interpretGlobalData(GlobalIndexType cellID, FieldContainer<double> &localDofs, const Epetra_Vector &globalDofs);
   IndexType localDofCount(); // local to the MPI node
   

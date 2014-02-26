@@ -929,6 +929,7 @@ FieldContainer<double> RefinementPattern::descendantNodes(RefinementBranch refin
 
 RefinementBranch RefinementPattern::sideRefinementBranch(RefinementBranch &volumeRefinementBranch, unsigned sideIndex) {
   RefinementBranch sideRefinements;
+  if (volumeRefinementBranch.size()==0) return sideRefinements; // side refinement branch empty, too
   CellTopoPtr volumeTopo = volumeRefinementBranch[0].first->parentTopology();
   unsigned sideDim = volumeTopo->getDimension() - 1;
   for (int refIndex=0; refIndex<volumeRefinementBranch.size(); refIndex++) {

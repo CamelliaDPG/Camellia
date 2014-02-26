@@ -27,7 +27,7 @@ public:
                           const vector<GlobalIndexType> &mappedGlobalDofOrdinals,
                           const FieldContainer<double> &constraintMatrix);
   const set<unsigned> &basisDofOrdinalFilter();
-  FieldContainer<double> mapData(bool transposeConstraint, const FieldContainer<double> &localData, bool transposeData);
+  FieldContainer<double> mapData(bool transposeConstraint, FieldContainer<double> &localData);
   vector<GlobalIndexType> mappedGlobalDofOrdinals();
 };
 

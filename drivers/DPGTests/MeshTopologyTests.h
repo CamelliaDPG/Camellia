@@ -22,6 +22,7 @@ public:
   bool test3DMesh();
   
   bool testEntityConstraints();
+  bool testCellsForEntity();
   bool testConstraintRelaxation();
   
   bool testNeighborRelationships();

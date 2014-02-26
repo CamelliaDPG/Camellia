@@ -465,7 +465,7 @@ FunctionPtr Mesh::getTransformationFunction() {
 GlobalIndexType Mesh::globalDofIndex(GlobalIndexType cellID, IndexType localDofIndex) {
   GDAMaximumRule2D* maxRule = dynamic_cast<GDAMaximumRule2D *>(_gda.get());
   if (maxRule == NULL) {
-    cout << "globalDofIndex lookup only supported fro max rule.\n";
+    cout << "globalDofIndex lookup only supported for max rule.\n";
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "globalDofIndex lookup only supported fro max rule.");
   }
   return maxRule->globalDofIndex(cellID, localDofIndex);
@@ -599,6 +599,11 @@ void Mesh::hUnrefine(const set<GlobalIndexType> &cellIDs) {
 
 void Mesh::interpretGlobalData(GlobalIndexType cellID, FieldContainer<double> &localDofs, const Epetra_Vector &globalDofs) {
   _gda->interpretGlobalData(cellID, localDofs, globalDofs);
+}
+
+void Mesh::interpretLocalBasisData(GlobalIndexType cellID, int varID, int sideOrdinal, const FieldContainer<double> &basisDofs,
+                                   FieldContainer<double> &globalDofs, FieldContainer<GlobalIndexType> &globalDofIndices) {
+  _gda->interpretLocalBasisData(cellID, varID, sideOrdinal, basisDofs, globalDofs, globalDofIndices);
 }
 
 void Mesh::interpretLocalData(GlobalIndexType cellID, const FieldContainer<double> &localDofs,

@@ -8,6 +8,13 @@ MeshTopologyTests::MeshTopologyTests() {
 
 void MeshTopologyTests::runTests(int &numTestsRun, int &numTestsPassed) {
   setup();
+  if (testCellsForEntity()) {
+    numTestsPassed++;
+  }
+  numTestsRun++;
+  teardown();
+  
+  setup();
   if (testNeighborRelationships()) {
     numTestsPassed++;
   }
@@ -448,6 +455,50 @@ bool checkConstraints( MeshTopologyPtr mesh, unsigned entityDim, map<unsigned,un
       }
     }
   }
+  return success;
+}
+
+bool MeshTopologyTests::testCellsForEntity() {
+  bool success = true;
+
+  // to begin, a simple test that cellsForEntity()'s side ordinals are consistent
+  
+  MeshTopologyPtr mesh2D = makeRectMesh(0.0, 0.0, 1.0, 1.0, 1, 1);
+  IndexType cellID = 0;
+  CellPtr cell = mesh2D->getCell(cellID); // the only cell in the mesh
+  
+  int sideCount = cell->topology()->getSideCount();
+
+  int spaceDim = mesh2D->getSpaceDim();
+  int sideDim = spaceDim - 1;
+  
+  for (int d=0; d<spaceDim; d++) {
+    int scCount = cell->topology()->getSubcellCount(d);
+    for (int scord=0; scord<scCount; scord++) {
+      IndexType scEntityIndex = cell->entityIndex(d, scord);
+      set< pair<IndexType, unsigned> > cellsContainingEntity = mesh2D->getCellsContainingEntity(d, scEntityIndex);
+      set<IndexType> sidesContainingEntity = mesh2D->getSidesContainingEntity(d, scEntityIndex);
+      if (cellsContainingEntity.size() != 1) {
+        cout << "cellsContainingEntity should have exactly one entry, but has " << cellsContainingEntity.size() << endl;
+        success = false;
+      } else {
+        pair<IndexType, unsigned> cellEntry = *(cellsContainingEntity.begin());
+//        cout << "for d " << d << ", scord " << scord << ", cell containing entity is (" << cellEntry.first << ", " << cellEntry.second << ")\n";
+        if (cellEntry.first != cellID) {
+          cout << "Expected cellEntry.first = " << cellID << ", but is " << cellEntry.first << endl;
+          success = false;
+        } else {
+          unsigned sideOrdinal = cellEntry.second;
+          IndexType sideEntityIndex = cell->entityIndex(sideDim, sideOrdinal);
+          if (sidesContainingEntity.find(sideEntityIndex) == sidesContainingEntity.end()) {
+            cout << "The side returned by getCellsContainingEntity() does not contain the specified entity.\n";
+            success = false;
+          }
+        }
+      }
+    }
+  }
+  
   return success;
 }
 

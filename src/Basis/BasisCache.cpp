@@ -40,6 +40,7 @@
 #include "Mesh.h"
 #include "Function.h"
 #include "MeshTransformationFunction.h"
+#include "CamelliaCellTools.h"
 
 typedef FunctionSpaceTools fst;
 typedef Teuchos::RCP< FieldContainer<double> > FCPtr;
@@ -63,6 +64,7 @@ int boundDegreeToMaxCubatureForCellTopo(int degree, unsigned cellTopoKey) {
 // init is for volume caches.
 void BasisCache::init(shards::CellTopology &cellTopo, int maxTrialDegree, int maxTestDegree, bool createSideCacheToo) {
   _sideIndex = -1;
+  _spaceDim = cellTopo.getDimension();
   _isSideCache = false; // VOLUME constructor
   
   _cellTopo = cellTopo;
@@ -91,7 +93,7 @@ void BasisCache::init(shards::CellTopology &cellTopo, int maxTrialDegree, int ma
 
 void BasisCache::createSideCaches() {
   _basisCacheSides.clear();
-  _numSides = _cellTopo.getSideCount();
+  _numSides = (_spaceDim > 1) ? _cellTopo.getSideCount() : _cellTopo.getVertexCount();
 
   for (int sideOrdinal=0; sideOrdinal<_numSides; sideOrdinal++) {
     BasisPtr maxDegreeBasisOnSide = _maxDegreeBasisForSide[sideOrdinal];
@@ -114,7 +116,7 @@ void BasisCache::createSideCaches() {
 BasisCache::BasisCache(ElementTypePtr elemType, Teuchos::RCP<Mesh> mesh, bool testVsTest, int cubatureDegreeEnrichment) {
   // use testVsTest=true for test space inner product (won't create side caches, and will use higher cubDegree)
   shards::CellTopology cellTopo = *(elemType->cellTopoPtr);
-  _numSides = cellTopo.getSideCount();
+  _numSides = (_spaceDim > 1) ? cellTopo.getSideCount() : cellTopo.getVertexCount();
   
   _maxTestDegree = elemType->testOrderPtr->maxBasisDegree();
   
@@ -142,7 +144,7 @@ BasisCache::BasisCache(ElementTypePtr elemType, Teuchos::RCP<Mesh> mesh, bool te
 BasisCache::BasisCache(const FieldContainer<double> &physicalCellNodes, 
                        shards::CellTopology &cellTopo,
                        DofOrdering &trialOrdering, int maxTestDegree, bool createSideCacheToo) {
-  _numSides = cellTopo.getSideCount();
+  _numSides = (_spaceDim > 1) ? cellTopo.getSideCount() : cellTopo.getVertexCount();
   findMaximumDegreeBasisForSides(trialOrdering);
   init(cellTopo, trialOrdering.maxBasisDegree(), maxTestDegree, createSideCacheToo);
   setPhysicalCellNodes(physicalCellNodes,vector<GlobalIndexType>(),createSideCacheToo);
@@ -151,7 +153,7 @@ BasisCache::BasisCache(const FieldContainer<double> &physicalCellNodes,
 BasisCache::BasisCache(shards::CellTopology &cellTopo, int cubDegree, bool createSideCacheToo) {
   // NOTE that this constructor's a bit dangerous, in that we lack information about the brokenness
   // of the sides; we may under-integrate for cells with broken sides...
-  _numSides = cellTopo.getSideCount();
+  _numSides = (_spaceDim > 1) ? cellTopo.getSideCount() : cellTopo.getVertexCount();
   DofOrdering trialOrdering; // dummy trialOrdering
   findMaximumDegreeBasisForSides(trialOrdering); // should fill with NULL ptrs
   init(cellTopo, 0, cubDegree, createSideCacheToo);
@@ -160,7 +162,7 @@ BasisCache::BasisCache(shards::CellTopology &cellTopo, int cubDegree, bool creat
 BasisCache::BasisCache(const FieldContainer<double> &physicalCellNodes, shards::CellTopology &cellTopo, int cubDegree, bool createSideCacheToo) {
   // NOTE that this constructor's a bit dangerous, in that we lack information about the brokenness
   // of the sides; we may under-integrate for cells with broken sides...
-  _numSides = cellTopo.getSideCount();
+  _numSides = (_spaceDim > 1) ? cellTopo.getSideCount() : cellTopo.getVertexCount();
   DofOrdering trialOrdering; // dummy trialOrdering
   findMaximumDegreeBasisForSides(trialOrdering); // should fill with NULL ptrs
   init(cellTopo, 0, cubDegree, createSideCacheToo);
@@ -183,31 +185,43 @@ BasisCache::BasisCache(int sideIndex, BasisCachePtr volumeCache, int trialDegree
   }
   _cellTopo = volumeCache->cellTopology(); // VOLUME cell topo.
   _spaceDim = _cellTopo.getDimension();
-  shards::CellTopology side(_cellTopo.getCellTopologyData(_spaceDim-1,sideIndex)); // create relevant subcell (side) topology
+  int sideDim = _spaceDim - 1;
+  shards::CellTopology side(_cellTopo.getCellTopologyData(sideDim,sideIndex)); // create relevant subcell (side) topology
   
   _cubDegree = testDegree + trialDegree;
   _cubDegree = boundDegreeToMaxCubatureForCellTopo(_cubDegree, side.getBaseKey());
 
-  int sideDim = side.getDimension();
-  DefaultCubatureFactory<double> cubFactory;
-  Teuchos::RCP<Cubature<double> > sideCub = cubFactory.create(side, _cubDegree);
-  int numCubPointsSide = sideCub->getNumPoints();
-  _cubPoints.resize(numCubPointsSide, sideDim); // cubature points from the pov of the side (i.e. a (d-1)-dimensional set)
-  _cubWeights.resize(numCubPointsSide);
-  
-  if ( multiBasisIfAny.get() == NULL ) {
-    sideCub->getCubature(_cubPoints, _cubWeights);
+  if (sideDim > 0) {
+    DefaultCubatureFactory<double> cubFactory;
+    Teuchos::RCP<Cubature<double> > sideCub = cubFactory.create(side, _cubDegree);
+    int numCubPointsSide = sideCub->getNumPoints();
+    _cubPoints.resize(numCubPointsSide, sideDim); // cubature points from the pov of the side (i.e. a (d-1)-dimensional set)
+    _cubWeights.resize(numCubPointsSide);
+    if ( multiBasisIfAny.get() == NULL ) {
+      sideCub->getCubature(_cubPoints, _cubWeights);
+    } else {
+      MultiBasis<>* multiBasis = (MultiBasis<>*) multiBasisIfAny.get();
+      
+      int cubatureEnrichment = (multiBasis->getDegree() < _maxTrialDegree) ? _maxTrialDegree - multiBasis->getDegree() : 0;
+      multiBasis->getCubature(_cubPoints, _cubWeights, _maxTestDegree + cubatureEnrichment);
+      
+      numCubPointsSide = _cubPoints.dimension(0);
+    }
+    
+    _cubPointsSideRefCell.resize(numCubPointsSide, _spaceDim); // cubPointsSide from the pov of the ref cell
+    CamelliaCellTools::mapToReferenceSubcell(_cubPointsSideRefCell, _cubPoints, sideDim, _sideIndex, _cellTopo);
   } else {
-    MultiBasis<>* multiBasis = (MultiBasis<>*) multiBasisIfAny.get();
+    _cubDegree = 1;
+    int numCubPointsSide = 1;
+    _cubPoints.resize(numCubPointsSide, 1); // cubature points from the pov of the side (i.e. a (d-1)-dimensional set)
+    _cubWeights.resize(numCubPointsSide);
+
+    _cubPoints.initialize(0.0);
+    _cubWeights.initialize(1.0);
     
-    int cubatureEnrichment = (multiBasis->getDegree() < _maxTrialDegree) ? _maxTrialDegree - multiBasis->getDegree() : 0;
-    multiBasis->getCubature(_cubPoints, _cubWeights, _maxTestDegree + cubatureEnrichment);
-    
-    numCubPointsSide = _cubPoints.dimension(0);
+    _cubPointsSideRefCell.resize(numCubPointsSide, _spaceDim); // cubPointsSide from the pov of the ref cell
+    CamelliaCellTools::mapToReferenceSubcell(_cubPointsSideRefCell, _cubPoints, sideDim, _sideIndex, _cellTopo);
   }
-  
-  _cubPointsSideRefCell.resize(numCubPointsSide, _spaceDim); // cubPointsSide from the pov of the ref cell
-  CellTools<double>::mapToReferenceSubcell(_cubPointsSideRefCell, _cubPoints, sideDim, _sideIndex, _cellTopo);
 }
 
 const vector<GlobalIndexType> & BasisCache::cellIDs() {
@@ -539,7 +553,7 @@ void BasisCache::setRefCellPoints(const FieldContainer<double> &pointsRefCell) {
     _cubPointsSideRefCell.resize(numPoints, _spaceDim); 
     // _cellTopo is the volume cell topology for side basis caches.
     int sideDim = _spaceDim - 1;
-    CellTools<double>::mapToReferenceSubcell(_cubPointsSideRefCell, _cubPoints, sideDim, _sideIndex, _cellTopo);
+    CamelliaCellTools::mapToReferenceSubcell(_cubPointsSideRefCell, _cubPoints, sideDim, _sideIndex, _cellTopo);
   }
   
   _knownValues.clear();
@@ -556,14 +570,16 @@ void BasisCache::setRefCellPoints(const FieldContainer<double> &pointsRefCell) {
     determineJacobian();
     
     if (isSideCache()) {
-      // recompute sideNormals
-      _sideNormals.resize(_numCells, numPoints, _spaceDim);
-      FieldContainer<double> normalLengths(_numCells, numPoints);
-      CellTools<double>::getPhysicalSideNormals(_sideNormals, _cellJacobian, _sideIndex, _cellTopo);
-      
-      // make unit length
-      RealSpaceTools<double>::vectorNorm(normalLengths, _sideNormals, NORM_TWO);
-      FunctionSpaceTools::scalarMultiplyDataData<double>(_sideNormals, normalLengths, _sideNormals, true);
+      if (_spaceDim > 1) {
+        // recompute sideNormals
+        _sideNormals.resize(_numCells, numPoints, _spaceDim);
+        FieldContainer<double> normalLengths(_numCells, numPoints);
+        CellTools<double>::getPhysicalSideNormals(_sideNormals, _cellJacobian, _sideIndex, _cellTopo);
+        
+        // make unit length
+        RealSpaceTools<double>::vectorNorm(normalLengths, _sideNormals, NORM_TWO);
+        FunctionSpaceTools::scalarMultiplyDataData<double>(_sideNormals, normalLengths, _sideNormals, true);
+      }
     }
   }
 }
@@ -714,7 +730,10 @@ void BasisCache::setPhysicalCellNodes(const FieldContainer<double> &physicalCell
     if (! isSideCache()) {
       fst::computeCellMeasure<double>(_weightedMeasure, _cellJacobDet, _cubWeights);
     } else {
-      if (_spaceDim==2) {
+      if (_spaceDim==1) {
+        // TODO: determine whether this is the right thing:
+        _weightedMeasure.initialize(1.0); // not sure this is the right thing.
+      } else if (_spaceDim==2) {
         // compute weighted edge measure
         FunctionSpaceTools::computeEdgeMeasure<double>(_weightedMeasure,
                                                        _cellJacobian,
@@ -731,15 +750,16 @@ void BasisCache::setPhysicalCellNodes(const FieldContainer<double> &physicalCell
 //        cout << "_cubWeights:\n" << _cubWeights;
 //        cout << "_weightedMeasure:\n" << _weightedMeasure;
 //      }
-      
-      // get normals
-      _sideNormals.resize(_numCells, numCubPoints, _spaceDim);
-      FieldContainer<double> normalLengths(_numCells, numCubPoints);
-      CellTools<double>::getPhysicalSideNormals(_sideNormals, _cellJacobian, _sideIndex, _cellTopo);
-      
-      // make unit length
-      RealSpaceTools<double>::vectorNorm(normalLengths, _sideNormals, NORM_TWO);
-      FunctionSpaceTools::scalarMultiplyDataData<double>(_sideNormals, normalLengths, _sideNormals, true);
+      if (_spaceDim > 1) {
+        // get normals
+        _sideNormals.resize(_numCells, numCubPoints, _spaceDim);
+        FieldContainer<double> normalLengths(_numCells, numCubPoints);
+        CellTools<double>::getPhysicalSideNormals(_sideNormals, _cellJacobian, _sideIndex, _cellTopo);
+        
+        // make unit length
+        RealSpaceTools<double>::vectorNorm(normalLengths, _sideNormals, NORM_TWO);
+        FunctionSpaceTools::scalarMultiplyDataData<double>(_sideNormals, normalLengths, _sideNormals, true);
+      }
     }
   }
   
@@ -865,20 +885,23 @@ BasisCachePtr BasisCache::quadBasisCache(double width, double height, int cubDeg
 }
 
 BasisCachePtr BasisCache::sideBasisCache(Teuchos::RCP<BasisCache> volumeCache, int sideIndex) {
-  int numSides = volumeCache->cellTopology().getSideCount();
+  int spaceDim = volumeCache->cellTopology().getDimension();
+  int numSides = (spaceDim > 1) ? volumeCache->cellTopology().getSideCount() : volumeCache->cellTopology().getVertexCount();
   
   TEUCHOS_TEST_FOR_EXCEPTION(sideIndex >= numSides, std::invalid_argument, "sideIndex out of range");
-  
-  BasisPtr maxDegreeBasisOnSide = volumeCache->_maxDegreeBasisForSide[sideIndex];
-  BasisPtr multiBasisIfAny;
-  
+
   int maxTestDegree = volumeCache->_maxTestDegree;
   int maxTrialDegreeOnSide = volumeCache->_maxTrialDegree;
-  if (maxDegreeBasisOnSide.get() != NULL) {
-    if (BasisFactory::isMultiBasis(maxDegreeBasisOnSide)) {
-      multiBasisIfAny = maxDegreeBasisOnSide;
+  BasisPtr multiBasisIfAny;
+  
+  if (spaceDim > 1) {
+    BasisPtr maxDegreeBasisOnSide = volumeCache->_maxDegreeBasisForSide[sideIndex];
+    if (maxDegreeBasisOnSide.get() != NULL) {
+      if (BasisFactory::isMultiBasis(maxDegreeBasisOnSide)) {
+        multiBasisIfAny = maxDegreeBasisOnSide;
+      }
+      maxTrialDegreeOnSide = maxDegreeBasisOnSide->getDegree();
     }
-    maxTrialDegreeOnSide = maxDegreeBasisOnSide->getDegree();
   }
   BasisCachePtr sideCache = Teuchos::rcp( new BasisCache(sideIndex, volumeCache, maxTrialDegreeOnSide, maxTestDegree, multiBasisIfAny));
   return sideCache;

@@ -159,6 +159,9 @@ RefinementBranch Cell::refinementBranchForSide(unsigned sideOrdinal) {
   pair<GlobalIndexType, unsigned> neighborInfo = this->getNeighbor(sideOrdinal);
   GlobalIndexType neighborCellIndex = neighborInfo.first;
   unsigned sideIndexInNeighbor = neighborInfo.second;
+  if (neighborCellIndex == -1) {
+    return refBranch; // no refinements
+  }
   CellPtr neighbor = _meshTopo->getCell(neighborCellIndex);
   if (neighbor->getNeighbor(sideIndexInNeighbor).first == this->_cellIndex) { // peers!
     return refBranch; // no refinements

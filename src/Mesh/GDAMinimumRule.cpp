@@ -23,6 +23,29 @@ GDAMinimumRule::GDAMinimumRule(MeshTopologyPtr meshTopology, VarFactory varFacto
   rebuildLookups();
 }
 
+vector< map< unsigned, unsigned > > GDAMinimumRule::buildSubsideMap(shards::CellTopology &sideTopo) {
+  unsigned sideDim = sideTopo.getDimension();
+  unsigned subsideDim = sideDim - 1;
+
+  int subsideCount = (subsideDim > 0) ? sideTopo.getSideCount(): sideTopo.getVertexCount();
+  vector< map< unsigned, unsigned > > subsideMap(sideDim); // outer vector indexed by dimension.  map goes from scOrdinalInSide to a subside containing that subcell.  (This is not uniquely defined, but that should be OK.)
+  for (int ssOrdinal=0; ssOrdinal<subsideCount; ssOrdinal++) {
+    for (int d=0; d<sideDim-1; d++) {
+      shards::CellTopology subside = sideTopo.getCellTopologyData(sideDim-1, ssOrdinal);
+      unsigned scCount = subside.getSubcellCount(d);
+      for (int scOrdinalInSubside=0; scOrdinalInSubside<scCount; scOrdinalInSubside++) {
+        unsigned scOrdinalInSide = CamelliaCellTools::subcellOrdinalMap(sideTopo, sideDim-1, ssOrdinal, d, scOrdinalInSubside);
+        subsideMap[d][scOrdinalInSide] = ssOrdinal;
+//        cout << "subsideMap[" << d << "][" << scOrdinalInSide << "] = " << ssOrdinal << endl;
+      }
+    }
+    // finally, enter the subside itself:
+    subsideMap[sideDim-1][ssOrdinal] = ssOrdinal;
+//    cout << "subsideMap[" << sideDim-1 << "][" << ssOrdinal << "] = " << ssOrdinal << endl;
+  }
+  return subsideMap;
+}
+
 void GDAMinimumRule::didChangePartitionPolicy() {
   rebuildLookups();
 }
@@ -107,6 +130,19 @@ void GDAMinimumRule::interpretLocalData(GlobalIndexType cellID, const FieldConta
   LocalDofMapperPtr dofMapper = getDofMapper(cellID, constraints);
   
   globalData = dofMapper->mapData(localData);
+  vector<GlobalIndexType> globalIndexVector = dofMapper->globalIndices();
+  globalDofIndices.resize(globalIndexVector.size());
+  for (int i=0; i<globalIndexVector.size(); i++) {
+    globalDofIndices(i) = globalIndexVector[i];
+  }
+}
+
+void GDAMinimumRule::interpretLocalBasisData(GlobalIndexType cellID, int varID, int sideOrdinal, const FieldContainer<double> &basisDofs,
+                             FieldContainer<double> &globalData, FieldContainer<GlobalIndexType> &globalDofIndices) {
+  CellConstraints constraints = getCellConstraints(cellID);
+  LocalDofMapperPtr dofMapper = getDofMapper(cellID, constraints, varID, sideOrdinal);
+  
+  globalData = dofMapper->mapData(basisDofs);
   vector<GlobalIndexType> globalIndexVector = dofMapper->globalIndices();
   globalDofIndices.resize(globalIndexVector.size());
   for (int i=0; i<globalIndexVector.size(); i++) {
@@ -216,7 +252,7 @@ CellConstraints GDAMinimumRule::getCellConstraints(GlobalIndexType cellID) {
     
     // next, establish subside constraints
     shards::CellTopology sideTopo = topo->getCellTopologyData(sideDim, sideOrdinal);
-    unsigned subsideCount = sideTopo.getSideCount();
+    unsigned subsideCount = (spaceDim != 2) ? sideTopo.getSideCount() : sideTopo.getVertexCount(); // we do want to treat the vertices as subside topologies in 2D
     cellConstraints.subsideConstraints[sideOrdinal] = vector<ConstrainingSubsideInfo>(subsideCount);
     for (unsigned subsideOrdinal = 0; subsideOrdinal < subsideCount; subsideOrdinal++) {
       // determine the subside's entity index
@@ -248,8 +284,8 @@ CellConstraints GDAMinimumRule::getCellConstraints(GlobalIndexType cellID) {
       // now, we need to find the subcellOrdinal within cell for the subside:
       CellPtr constrainingCell = _meshTopology->getCell(subsideConstraint.cellID);
       
-      shards::CellTopology constrainingSide = constrainingCell->topology()->getCellTopologyData(subsideConstraint.sideOrdinal, sideDim);
-      int subsideCountInConstrainingSide = constrainingSide.getSubcellCount(subsideDim);
+      shards::CellTopology constrainingSide = constrainingCell->topology()->getCellTopologyData(sideDim, subsideConstraint.sideOrdinal);
+      int subsideCountInConstrainingSide = (subsideDim > 0) ? constrainingSide.getSubcellCount(subsideDim) : constrainingSide.getVertexCount();
       constrainingSideEntityIndex = constrainingCell->entityIndex(sideDim, subsideConstraint.sideOrdinal);
       subsideConstraint.subsideOrdinalInSide = -1;
       for (int subsideOrdinalInConstrainingSide = 0; subsideOrdinalInConstrainingSide < subsideCountInConstrainingSide; subsideOrdinalInConstrainingSide++) {
@@ -262,6 +298,9 @@ CellConstraints GDAMinimumRule::getCellConstraints(GlobalIndexType cellID) {
         cout << "ERROR: Could not determine subside ordinal in side for subside constraint.\n";
         TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Could not determine subside ordinal in side for subside constraint.");
       }
+//      cout << "Setting subsideConstraint for cell " << cellID << ", side " << sideOrdinal << ", subside " << subsideOrdinal << ":\n";
+//      cout << "sideOrdinal: " << subsideConstraint.sideOrdinal << endl;
+//      cout << "subsideOrdinalInSide: " << subsideConstraint.subsideOrdinalInSide << endl;
       cellConstraints.subsideConstraints[sideOrdinal][subsideOrdinal] = subsideConstraint;
     }
   }
@@ -344,18 +383,7 @@ SubCellDofIndexInfo GDAMinimumRule::getOwnedGlobalDofIndices(GlobalIndexType cel
           scInfo[scdim][sideOrdinal][var->ID()] = globalDofOrdinals;
         }
         
-        int subsideCount = sideTopo.getSideCount();
-        vector< map< unsigned, unsigned > > subsideMap(subsideCount); // outer vector indexed by dimension.  map goes from scOrdinalInSide to a subside containing that subcell.  (This is not uniquely defined, but that should be OK.)
-        for (int d=0; d<sideDim-1; d++) {
-          for (int ssOrdinal=0; ssOrdinal<subsideCount; ssOrdinal++) {
-            shards::CellTopology subside = sideTopo.getCellTopologyData(sideDim-1, ssOrdinal);
-            unsigned scCount = subside.getSubcellCount(d);
-            for (int scOrdinalInSubside=0; scOrdinalInSubside<scCount; scOrdinalInSubside++) {
-              unsigned scOrdinalInSide = CamelliaCellTools::subcellOrdinalMap(sideTopo, sideDim-1, ssOrdinal, d, scOrdinalInSubside);
-              subsideMap[d][scOrdinalInSide] = ssOrdinal;
-            }
-          }
-        }
+        vector< map< unsigned, unsigned > > subsideMap = buildSubsideMap(sideTopo); // outer vector indexed by dimension.  map goes from scOrdinalInSide to a subside containing that subcell.  (This is not uniquely defined, but that should be OK.)
         
         for (int d=0; d<sideDim; d++) {
           unsigned scCount = sideTopo.getSubcellCount(d);
@@ -418,7 +446,7 @@ SubCellDofIndexInfo GDAMinimumRule::getOwnedGlobalDofIndices(GlobalIndexType cel
   return scInfo;
 }
 
-LocalDofMapperPtr GDAMinimumRule::getDofMapper(GlobalIndexType cellID, CellConstraints &constraints) {
+LocalDofMapperPtr GDAMinimumRule::getDofMapper(GlobalIndexType cellID, CellConstraints &constraints, int varIDToMap, int sideOrdinalToMap) {
   // assumes that the _globalCellDofOffsets are up to date
   int spaceDim = _meshTopology->getSpaceDim();
   int sideDim = spaceDim - 1;
@@ -516,6 +544,8 @@ LocalDofMapperPtr GDAMinimumRule::getDofMapper(GlobalIndexType cellID, CellConst
   
   for (map<int, VarPtr>::iterator varIt = trialVars.begin(); varIt != trialVars.end(); varIt++) {
     VarPtr var = varIt->second;
+    bool skipVar = (varIDToMap != -1) && (var->ID() != varIDToMap);
+    if (skipVar) continue;
     BasisMap volumeBasisMap;
     bool varHasSupportOnVolume = (var->varType() == FIELD) || (var->varType() == TEST);
     if ( varHasSupportOnVolume ) {
@@ -535,12 +565,16 @@ LocalDofMapperPtr GDAMinimumRule::getDofMapper(GlobalIndexType cellID, CellConst
       for (int i=0; i<count; i++) {
         globalDofOrdinals.push_back(globalDofIndex++);
       }
-      volumeBasisMap.push_back(SubBasisDofMapper::subBasisDofMapper(basisDofOrdinals, globalDofOrdinals));
+      if (basisDofOrdinals.size() > 0) {
+        volumeBasisMap.push_back(SubBasisDofMapper::subBasisDofMapper(basisDofOrdinals, globalDofOrdinals));
+      }
     }
     
     if ( ! (varHasSupportOnVolume && (var->space() == L2)) ) { // if space is L^2 on the volume, we'll have claimed all the dofs above, and we can skip further processing
       vector< set<unsigned> > processedSubcells(sideDim);
       for (int sideOrdinal=0; sideOrdinal<sideCount; sideOrdinal++) {
+        bool skipSide = (sideOrdinalToMap != -1) && (sideOrdinal != sideOrdinalToMap);
+        if (skipSide) continue;
         BasisMap sideBasisMap;
         shards::CellTopology sideTopo = topo->getCellTopologyData(sideDim, sideOrdinal);
         set<unsigned> basisDofOrdinals;
@@ -549,15 +583,21 @@ LocalDofMapperPtr GDAMinimumRule::getDofMapper(GlobalIndexType cellID, CellConst
         DofOrderingPtr constrainingTrialOrdering = _elementTypeForCell[sideConstraint.cellID]->trialOrderPtr;
         
         pair< GlobalIndexType, unsigned > ancestralCellInfo = constrainingCellForSide->getNeighbor(sideConstraint.sideOrdinal);
-        CellPtr ancestralCell = _meshTopology->getCell(ancestralCellInfo.first);
-        unsigned ancestralCellSideOrdinal = ancestralCellInfo.second;
-        
-        unsigned ancestralCellSidePermutation = ancestralCell->subcellPermutation(sideDim, ancestralCellSideOrdinal);
-        unsigned constrainingSidePermutation = _meshTopology->getCell(sideConstraint.cellID)->subcellPermutation(sideDim, sideConstraint.sideOrdinal);
-        
         IndexType constrainingSideEntityIndex = constrainingCellForSide->entityIndex(sideDim, sideConstraint.sideOrdinal);
         shards::CellTopology constrainingSideTopo = _meshTopology->getEntityTopology(sideDim, constrainingSideEntityIndex);
-        unsigned constrainingSidePermutationInverse = CamelliaCellTools::permutationInverse(constrainingSideTopo, constrainingSidePermutation);
+        
+        unsigned constrainingSidePermutationInverse, ancestralCellSidePermutation;
+        
+        if (ancestralCellInfo.first != -1) {
+          CellPtr ancestralCell = _meshTopology->getCell(ancestralCellInfo.first);
+          unsigned ancestralCellSideOrdinal = ancestralCellInfo.second;
+          ancestralCellSidePermutation = ancestralCell->subcellPermutation(sideDim, ancestralCellSideOrdinal);
+          unsigned constrainingSidePermutation = _meshTopology->getCell(sideConstraint.cellID)->subcellPermutation(sideDim, sideConstraint.sideOrdinal);
+          constrainingSidePermutationInverse = CamelliaCellTools::permutationInverse(constrainingSideTopo, constrainingSidePermutation);
+        } else {  // no neighbor
+          constrainingSidePermutationInverse = 0;
+          ancestralCellSidePermutation = 0;
+        }
         
         unsigned composedPermutation = CamelliaCellTools::permutationComposition(constrainingSideTopo, constrainingSidePermutationInverse, ancestralCellSidePermutation);
         
@@ -577,8 +617,9 @@ LocalDofMapperPtr GDAMinimumRule::getDofMapper(GlobalIndexType cellID, CellConst
           FieldContainer<double> constraintMatrixSideInterior = BasisReconciliation::subBasisReconciliationWeightsForSubcell(subBasisWeights, sideDim, basis, sideOrdinal,
                                                                                                                              constrainingBasis, sideConstraint.sideOrdinal,
                                                                                                                              basisDofOrdinals);
-          
-          volumeBasisMap.push_back(SubBasisDofMapper::subBasisDofMapper(basisDofOrdinals, globalDofOrdinals, constraintMatrixSideInterior));
+          if (basisDofOrdinals.size() > 0) {
+            volumeBasisMap.push_back(SubBasisDofMapper::subBasisDofMapper(basisDofOrdinals, globalDofOrdinals, constraintMatrixSideInterior));
+          }
         } else {
           constrainingBasis = constrainingTrialOrdering->getBasis(var->ID(),sideConstraint.sideOrdinal);
           basis = trialOrdering->getBasis(var->ID(),sideOrdinal);
@@ -587,22 +628,12 @@ LocalDofMapperPtr GDAMinimumRule::getDofMapper(GlobalIndexType cellID, CellConst
           refBranch = sideRefinementsForSideEntity[sideEntityForSubcell[sideDim][sideOrdinal]];
           FieldContainer<double> constraintMatrixSide = _br.constrainedWeights(basis, refBranch, constrainingBasis);
           
-          sideBasisMap.push_back(SubBasisDofMapper::subBasisDofMapper(basisDofOrdinals, globalDofOrdinals, constraintMatrixSide));
-        }
-        
-        int subsideCount = sideTopo.getSideCount();
-        vector< map< unsigned, unsigned > > subsideMap(sideDim); // outer vector indexed by dimension.  map goes from scOrdinalInSide to a subside containing that subcell.  (This is not uniquely defined, but that should be OK.)
-
-        for (int d=0; d<sideDim-1; d++) {
-          for (int ssOrdinal=0; ssOrdinal<subsideCount; ssOrdinal++) {
-            shards::CellTopology subside = sideTopo.getCellTopologyData(sideDim-1, ssOrdinal);
-            unsigned scCount = subside.getSubcellCount(d);
-            for (int scOrdinalInSubside=0; scOrdinalInSubside<scCount; scOrdinalInSubside++) {
-              unsigned scOrdinalInSide = CamelliaCellTools::subcellOrdinalMap(sideTopo, sideDim-1, ssOrdinal, d, scOrdinalInSubside);
-              subsideMap[d][scOrdinalInSide] = ssOrdinal;
-            }
+          if (basisDofOrdinals.size() > 0) {
+            sideBasisMap.push_back(SubBasisDofMapper::subBasisDofMapper(basisDofOrdinals, globalDofOrdinals, constraintMatrixSide));
           }
         }
+        
+        vector< map< unsigned, unsigned > > subsideMap = buildSubsideMap(sideTopo);
         
         for (int d=0; d<sideDim; d++) {
           unsigned scCount = sideTopo.getSubcellCount(d);
@@ -636,7 +667,6 @@ LocalDofMapperPtr GDAMinimumRule::getDofMapper(GlobalIndexType cellID, CellConst
                 unsigned subsideOrdinalInCellSide = subsideOrdinalInSideEntityOfInterest[sideEntityIndexInCell][subsideEntityIndex];
                 unsigned subsideOrdinalInReconciledSideEntity = subsideOrdinalInSideEntityOfInterest[sideEntityIndexForReconciliation][subsideEntityIndex];
                 subBasisWeights = _br.constrainedWeights(basis, subsideOrdinalInReconciledSideEntity, refBranch, constrainingBasis, subsideConstraint.subsideOrdinalInSide, permutation);
-                
                 
                 // Here, we consider the possibility that the subcell orientation (vertex permutation) in the cell's side differs from that used in our constraint computation.
                 if (sideEntityIndexForReconciliation != sideEntityIndexInCell) {
@@ -682,9 +712,13 @@ LocalDofMapperPtr GDAMinimumRule::getDofMapper(GlobalIndexType cellID, CellConst
               vector<GlobalIndexType> globalDofOrdinals = dofIndexInfo[d][scOrdinalInCell][var->ID()];
               
               if (varHasSupportOnVolume) {
-                volumeBasisMap.push_back(SubBasisDofMapper::subBasisDofMapper(scBasisOrdinals, globalDofOrdinals, constraintMatrixSubcell));
+                if (scBasisOrdinals.size() > 0) {
+                  volumeBasisMap.push_back(SubBasisDofMapper::subBasisDofMapper(scBasisOrdinals, globalDofOrdinals, constraintMatrixSubcell));
+                }
               } else {
-                sideBasisMap.push_back(SubBasisDofMapper::subBasisDofMapper(scBasisOrdinals, globalDofOrdinals, constraintMatrixSubcell));
+                if (scBasisOrdinals.size() > 0) {
+                  sideBasisMap.push_back(SubBasisDofMapper::subBasisDofMapper(scBasisOrdinals, globalDofOrdinals, constraintMatrixSubcell));
+                }
               }
               
               processedSubcells[d].insert(scOrdinalInCell);
@@ -701,7 +735,7 @@ LocalDofMapperPtr GDAMinimumRule::getDofMapper(GlobalIndexType cellID, CellConst
     }
   }
   
-  return Teuchos::rcp( new LocalDofMapper(trialOrdering,volumeMap,sideMaps) );
+  return Teuchos::rcp( new LocalDofMapper(trialOrdering,volumeMap,sideMaps,varIDToMap,sideOrdinalToMap) );
 }
 
 void GDAMinimumRule::rebuildLookups() {
@@ -762,18 +796,7 @@ void GDAMinimumRule::rebuildLookups() {
             }
           }
           
-          int subsideCount = sideTopo.getSideCount();
-          vector< map< unsigned, unsigned > > subsideMap(sideDim); // outer vector indexed by dimension.  map goes from scOrdinalInSide to a subside containing that subcell.  (This is not uniquely defined, but that should be OK.)
-          for (int d=0; d<sideDim-1; d++) {
-            for (int ssOrdinal=0; ssOrdinal<subsideCount; ssOrdinal++) {
-            shards::CellTopology subside = sideTopo.getCellTopologyData(sideDim-1, ssOrdinal);
-              unsigned scCount = subside.getSubcellCount(d);
-              for (int scOrdinalInSubside=0; scOrdinalInSubside<scCount; scOrdinalInSubside++) {
-                unsigned scOrdinalInSide = CamelliaCellTools::subcellOrdinalMap(sideTopo, sideDim-1, ssOrdinal, d, scOrdinalInSubside);
-                subsideMap[d][scOrdinalInSide] = ssOrdinal;
-              }
-            }
-          }
+          vector< map< unsigned, unsigned > > subsideMap = buildSubsideMap(sideTopo);
           
           for (int d=0; d<sideDim; d++) {
             unsigned scCount = sideTopo.getSubcellCount(d);
