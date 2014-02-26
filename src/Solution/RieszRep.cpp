@@ -406,3 +406,11 @@ double RieszRep::computeAlternativeNormSqOnCell(IPPtr ip, ElementPtr elem){
   
   return sum;
 }
+
+FunctionPtr RieszRep::repFunction( VarPtr var, RieszRepPtr rep ) {
+  return Teuchos::rcp( new RepFunction(var, rep) );
+}
+
+RieszRepPtr RieszRep::rieszRep(MeshPtr mesh, Teuchos::RCP< DPGInnerProduct > ip, LinearTermPtr rhs) {
+  return Teuchos::rcp( new RieszRep(mesh,ip,rhs) );
+}

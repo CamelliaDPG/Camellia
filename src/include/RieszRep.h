@@ -79,7 +79,7 @@ class RieszRep {
   bool _repsNotComputed;
  
  public:
-  RieszRep(MeshPtr mesh, Teuchos::RCP< DPGInnerProduct > ip, LinearTermPtr &rhs){
+  RieszRep(MeshPtr mesh, Teuchos::RCP< DPGInnerProduct > ip, LinearTermPtr rhs){
     _mesh = mesh;
     _ip = ip;
     _rhs = rhs;
@@ -114,7 +114,12 @@ class RieszRep {
   double computeAlternativeNormSqOnCell(IPPtr ip, ElementPtr elem);
   map<int,double> computeAlternativeNormSqOnCells(IPPtr ip, vector<GlobalIndexType> cellIDs);
   
+  static FunctionPtr repFunction( VarPtr var, RieszRepPtr rep );
+  static RieszRepPtr rieszRep(MeshPtr mesh, Teuchos::RCP< DPGInnerProduct > ip, LinearTermPtr rhs);
 };
+
+class RepFunction;
+typedef Teuchos::RCP<RepFunction> RepFunctionPtr;
 
 class RepFunction : public Function {
 private:
@@ -123,7 +128,7 @@ private:
   Teuchos::RCP<RieszRep> _rep;
   IntrepidExtendedTypes::EOperatorExtended _op;
 public:
-  RepFunction( VarPtr var, Teuchos::RCP<RieszRep> rep) : Function( var->rank() ) {
+  RepFunction( VarPtr var, RieszRepPtr rep ) : Function( var->rank() ) {
     _testID = var->ID();
     _op = var->op();
     _rep = rep;
@@ -180,7 +185,6 @@ public:
   void values(FieldContainer<double> &values, IntrepidExtendedTypes::EOperatorExtended op, BasisCachePtr basisCache){
     _rep->computeRepresentationValues(values, _testID, op, basisCache);
   }
-
 };
 
 
