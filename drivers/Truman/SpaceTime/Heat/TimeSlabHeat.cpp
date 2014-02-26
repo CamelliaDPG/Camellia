@@ -6,6 +6,7 @@
 #include "InnerProductScratchPad.h"
 #include "RefinementStrategy.h"
 #include "SolutionExporter.h"
+#include "PreviousSolutionFunction.h"
 
 #ifdef HAVE_MPI
 #include <Teuchos_GlobalMPISession.hpp>
@@ -53,8 +54,8 @@ class Forcing : public Function {
         for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
           double x = (*points)(cellIndex,ptIndex,0);
           double y = (*points)(cellIndex,ptIndex,1);
-          // if (y >= .25 && y <= 0.5 && x >= 0.5-1./8. && x <= 0.5+1./8.)
-          if (x >= 0.5-1./8. && x <= 0.5+1./8.)
+          if (y >= .25 && y <= 0.5 && x >= 0.5-1./8. && x <= 0.5+1./8.)
+          // if (x >= 0.5-1./8. && x <= 0.5+1./8.)
             values(cellIndex, ptIndex) = 1;
           // else if (y >= .5 && y <= 0.75 && x >= 0.5-1./8. && x <= 0.5+1./8.)
           //   values(cellIndex, ptIndex) = -1;
@@ -130,7 +131,6 @@ int main(int argc, char *argv[]) {
     xmax = 1.0;
     tmin = 1.0*double(i)/numSlabs;
     tmax = 1.0*double(i+1)/numSlabs;
-    cout << "Creating time slab [" << tmin << "," << tmax << "]" << endl;
 
     meshBoundary(0,0) =  xmin; // x1
     meshBoundary(0,1) =  tmin; // y1
@@ -166,13 +166,14 @@ int main(int argc, char *argv[]) {
   ////////////////////   SPECIFY RHS   ///////////////////////
   Teuchos::RCP<RHSEasy> rhs = Teuchos::rcp( new RHSEasy );
   FunctionPtr f = Teuchos::rcp( new Forcing );
-  // rhs->addTerm( f * v ); // obviously, with f = 0 adding this term is not necessary!
+  rhs->addTerm( f * v ); // obviously, with f = 0 adding this term is not necessary!
 
   ////////////////////   DEFINE INNER PRODUCT(S)   ///////////////////////
   IPPtr ip = bf->graphNorm();
 
   ////////////////////   CREATE BCs   ///////////////////////
   vector< Teuchos::RCP<BCEasy> > bcs;
+  // FunctionPtr fhat_prev;
   FunctionPtr fhat_prev;
   for (int slab=0; slab < numSlabs; slab++)
   {
@@ -200,7 +201,9 @@ int main(int argc, char *argv[]) {
     solutions.push_back(solution);
     if (slab > 0)
     {
-      fhat_prev = Function::solution(fhat, solutions[slab-1]);
+      // fhat_prev = Function::solution(fhat, solutions[slab-1]);
+      fhat_prev = Teuchos::RCP<Function>( new PreviousSolutionFunction(solutions[slab-1], u) );
+      // dynamic_cast< PreviousSolutionFunction* >(fhat_prev.get())->setOverrideMeshCheck(true);
       // fhat_prev = f;
       SpatialFilterPtr bottom = Teuchos::rcp( new ConstantYBoundary(tmins[slab]) );
       bcs[slab]->addDirichlet(fhat, bottom, -fhat_prev);
@@ -227,6 +230,8 @@ int main(int argc, char *argv[]) {
           exporter.exportSolution(outfile.str());
       }
 
+      if (solution->energyErrorTotal() < 1e-4)
+        break;
       if (refIndex < numRefs)
         refinementStrategy.refine(commRank==0); // print to console on commRank 0
     }
