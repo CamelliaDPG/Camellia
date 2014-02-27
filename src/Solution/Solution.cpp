@@ -514,10 +514,10 @@ void Solution::populateStiffnessAndLoad() {
         // we have the same local-to-global map for both rows and columns
         _dofInterpreter->interpretLocalData(cellID, localStiffness, interpretedStiffness, globalDofIndices);
         
-        cout << "************* cellID " << cellID << ", interpretation report: *************" << endl;
-        cout << "localStiffness:\n" << localStiffness;
-        cout << "interpretedStiffness:\n" << interpretedStiffness;
-        cout << "globalDofIndices:\n" << globalDofIndices;
+//        cout << "************* cellID " << cellID << ", interpretation report: *************" << endl;
+//        cout << "localStiffness:\n" << localStiffness;
+//        cout << "interpretedStiffness:\n" << interpretedStiffness;
+//        cout << "globalDofIndices:\n" << globalDofIndices;
         
         _dofInterpreter->interpretLocalData(cellID, localRHS, interpretedRHS, globalDofIndices);
         
@@ -816,7 +816,7 @@ void Solution::solveWithPrepopulatedStiffnessAndLoad(Teuchos::RCP<Solver> solver
 #endif
   
   set<GlobalIndexType> myGlobalIndicesSet = _mesh->globalDofIndicesForPartition(rank);
-  cout << "rank " << rank << " has " << myGlobalIndicesSet.size() << " locally-owned dof indices.\n";
+//  cout << "rank " << rank << " has " << myGlobalIndicesSet.size() << " locally-owned dof indices.\n";
   Epetra_Map partMap = getPartitionMap();
   
   vector< ElementTypePtr > elementTypes = _mesh->elementTypes(rank);

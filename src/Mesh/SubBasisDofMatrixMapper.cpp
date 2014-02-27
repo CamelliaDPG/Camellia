@@ -35,17 +35,17 @@ FieldContainer<double> SubBasisDofMatrixMapper::mapData(bool transposeConstraint
   int dataCols = localData.dimension(1);
   int dataRows = localData.dimension(0);
   
+  
+  if ((dataCols==0) || (dataRows==0) || (constraintRows==0) || (constraintCols==0)) {
+    cout << "degenerate matrix encountered.\n";
+  }
+  
   // given the multiplication we'll do, we need constraint columns = data rows
   if (constraintCols != dataRows) {
     cout << "Missized container in SubBasisDofMatrixMapper::mapData() for left-multiplication by constraint matrix.\n";
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Missized container in SubBasisDofMatrixMapper::mapData().");
   }
   // (could also test that the dimensions match what we expect in terms of the size of the mapped global dof ordinals or basisDofOrdinal filter)
-  
-  if ((dataCols==0) || (dataRows==0) || (constraintRows==0) || (constraintCols==0)) {
-    cout << "degenerate matrix encountered.\n";
-    
-  }
   
   FieldContainer<double> result1(constraintRows,dataCols);
   

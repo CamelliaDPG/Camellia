@@ -40,6 +40,8 @@ private:
   typedef pair< pair< SideBasisRestriction, SideBasisRestriction >, RefinementBranch > SideRefinedBasisPair;
   map< RefinedBasisPair, FieldContainer<double> > _simpleReconcilationWeights_h;
   map< pair< SideRefinedBasisPair, unsigned> , SubBasisReconciliationWeights > _sideReconcilationWeights_h;  // unsigned: the vertexPermutation
+  
+  static FieldContainer<double> filterBasisValues(const FieldContainer<double> &basisValues, set<int> &filter);
 public:
   BasisReconciliation(bool cacheResults = true) { _cacheResults = cacheResults; }
 
@@ -76,6 +78,8 @@ public:
                                                                         set<unsigned> &fineBasisDofOrdinals);
   
   static SubBasisReconciliationWeights composedSubBasisReconciliationWeights(SubBasisReconciliationWeights aWeights, SubBasisReconciliationWeights bWeights);
+  
+  static set<int> interiorDofOrdinalsForBasis(BasisPtr basis);
 };
 
 /* a few ideas come up here:

@@ -362,6 +362,11 @@ FieldContainer<double> filterValues(FieldContainer<double> &basisValues, set<uns
   return filteredValues;
 }
 
+FieldContainer<double> filterValues(FieldContainer<double> &basisValues, set<int> &dofOrdinalFilterInt, bool includesCellDimension) {
+  set<unsigned> dofOrdinalFilter(dofOrdinalFilterInt.begin(),dofOrdinalFilterInt.end());
+  return filterValues(basisValues, dofOrdinalFilter, includesCellDimension);
+}
+
 FieldContainer<double> interpretValues(FieldContainer<double> &fineValues, FieldContainer<double> &weights) {
   int fineCount = weights.dimension(0);   // number of fine ordinals
   int coarseCount = weights.dimension(1); // number of coarse ordinals
@@ -602,6 +607,9 @@ bool BasisReconciliationTests::hConstraintInternalBasisSubTest(BasisPtr fineBasi
   set<unsigned> fineBasisFilter = br.internalDofIndicesForFinerBasis(fineBasis, refinements);
   fineBasisValues = filterValues(fineBasisValues, fineBasisFilter, false);
   
+  set<int> coarseFilter = br.interiorDofOrdinalsForBasis(coarseBasis);
+  coarseBasisValues = filterValues(coarseBasisValues, coarseFilter, false);
+  
   FieldContainer<double> interpretedFineBasisValues = interpretValues(fineBasisValues, weights);
   
   double maxDiff;
@@ -638,6 +646,9 @@ bool BasisReconciliationTests::pConstraintInternalBasisSubTest(BasisPtr fineBasi
   set<unsigned> dofFilter;
   dofFilter.insert(internalDofs.begin(),internalDofs.end());
   fineBasisValues = filterValues(fineBasisValues, dofFilter, false);
+  
+  set<int> coarseFilter = br.interiorDofOrdinalsForBasis(coarseBasis);
+  coarseBasisValues = filterValues(coarseBasisValues, coarseFilter, false);
   
   FieldContainer<double> interpretedFineBasisValues = interpretValues(fineBasisValues, weights);
   

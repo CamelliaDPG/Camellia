@@ -11,7 +11,19 @@
 #include "SubBasisDofMatrixMapper.cpp"
 
 SubBasisDofMapperPtr SubBasisDofMapper::subBasisDofMapper(const set<unsigned> &dofOrdinalFilter, const vector<GlobalIndexType> &globalDofOrdinals) {
-  return Teuchos::rcp(new SubBasisDofPermutationMapper(dofOrdinalFilter, globalDofOrdinals));
+  if (dofOrdinalFilter.size() != globalDofOrdinals.size()) {
+    cout << "ERROR: cannot make a permutation mapper for dof lists of different size.\n";
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "ERROR: cannot make a permutation mapper for dof lists of different size.\n");
+  }
+  
+  // since the permutation mapper isn't quite ready for prime time (constraint transposition not yet supported), we make a simple matrix-based mapper instead
+//  return Teuchos::rcp(new SubBasisDofPermutationMapper(dofOrdinalFilter, globalDofOrdinals));
+  int n = dofOrdinalFilter.size();
+  FieldContainer<double> identityMatrix(n,n);
+  for (int i=0; i<n; i++) {
+    identityMatrix(i,i) = 1.0;
+  }
+  return subBasisDofMapper(dofOrdinalFilter, globalDofOrdinals, identityMatrix);
 }
 
 SubBasisDofMapperPtr SubBasisDofMapper::subBasisDofMapper(const set<unsigned> &dofOrdinalFilter, const vector<GlobalIndexType> &globalDofOrdinals, const FieldContainer<double> &constraintMatrix) {

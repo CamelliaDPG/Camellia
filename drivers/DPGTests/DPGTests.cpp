@@ -68,6 +68,7 @@
 #include "CurvilinearMeshTests.h"
 #include "ElementTests.h"
 #include "FunctionTests.h"
+#include "GDAMinimumRuleTests.h"
 #include "HConvergenceStudyTests.h"
 #include "IncompressibleFormulationsTests.h"
 #include "LinearTermTests.h"
@@ -172,6 +173,8 @@ void DPGTests::runTests() {
   vector< Teuchos::RCP< TestSuite > > testSuites;
 
   testSuites.push_back( Teuchos::rcp( new BasisReconciliationTests ) );
+  
+  testSuites.push_back( Teuchos::rcp( new GDAMinimumRuleTests ) );
   
   testSuites.push_back( Teuchos::rcp( new MeshTestSuite ) );
   testSuites.push_back( Teuchos::rcp( new MeshTopologyTests ) );

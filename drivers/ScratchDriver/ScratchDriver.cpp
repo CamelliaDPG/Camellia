@@ -146,7 +146,7 @@ int main(int argc, char *argv[]) {
     confusionBF->addTerm( beta_const * u, - v->grad() );
     confusionBF->addTerm( beta_n_u_minus_sigma_n, v);
     
-    MeshPtr mesh = MeshFactory::quadMeshMinRule(confusionBF, 2);
+    MeshPtr meshMinRule = MeshFactory::quadMeshMinRule(confusionBF, 2);
     
     ////////////////////   SPECIFY RHS   ///////////////////////
     Teuchos::RCP<RHSEasy> rhs = Teuchos::rcp( new RHSEasy );
@@ -159,12 +159,27 @@ int main(int argc, char *argv[]) {
     bc->addDirichlet(uhat, SpatialFilter::allSpace(), u0);
     
     IPPtr ip = confusionBF->graphNorm();
+
+    { // max rule for comparison
+      MeshPtr meshMaxRule = MeshFactory::quadMesh(confusionBF, 2);
+      SolutionPtr solnMaxRule = Teuchos::rcp( new Solution(meshMaxRule, bc, rhs, ip) );
+      string maxStiffnessFileName = "maxRuleStiffness.dat";
+      solnMaxRule->setWriteMatrixToMatrixMarketFile(true, maxStiffnessFileName);
+      
+      cout << "Will write max. rule stiffness to file " << maxStiffnessFileName << endl;
+      solnMaxRule->solve();
+    }
     
-    SolutionPtr soln = Teuchos::rcp( new Solution(mesh, bc, rhs, ip) );
+    SolutionPtr solnMinRule = Teuchos::rcp( new Solution(meshMinRule, bc, rhs, ip) );
     
     cout << "soln constructed; about to solve.\n";
+
+    string minStiffnessFileName = "minRuleStiffness.dat";
+    solnMinRule->setWriteMatrixToMatrixMarketFile(true, minStiffnessFileName);
     
-    soln->solve();
+    cout << "Will write min. rule stiffness to file " << minStiffnessFileName << endl;
+    
+    solnMinRule->solve();
     
     cout << "...solved.\n";
   }
