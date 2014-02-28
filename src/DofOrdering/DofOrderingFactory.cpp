@@ -77,7 +77,11 @@ DofOrderingPtr DofOrderingFactory::testOrdering(int polyOrder,
 DofOrderingPtr DofOrderingFactory::trialOrdering(int polyOrder, 
                                                  const shards::CellTopology &cellTopo,
                                                  bool conformingVertices) {
-  // right now, only works for 2D topologies
+  // right now, conformingVertices = true only works for 2D topologies
+  if ((cellTopo.getDimension() != 2) && conformingVertices) {
+    cout << "ERROR: DofOrderingFactory only supports conformingVertices = true for 2D topologies.\n";
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "DofOrderingFactory only supports conformingVertices = true for 2D topologies");
+  }
   vector<int> trialIDs = _bilinearForm->trialIDs();
   vector<int>::iterator trialIterator;
   

@@ -16,13 +16,14 @@
 
 GlobalDofAssignment::GlobalDofAssignment(MeshTopologyPtr meshTopology, VarFactory varFactory,
                                          DofOrderingFactoryPtr dofOrderingFactory, MeshPartitionPolicyPtr partitionPolicy,
-                                         unsigned initialH1OrderTrial, unsigned testOrderEnhancement) {
+                                         unsigned initialH1OrderTrial, unsigned testOrderEnhancement, bool enforceConformityLocally) {
   _meshTopology = meshTopology;
   _varFactory = varFactory;
   _dofOrderingFactory = dofOrderingFactory;
   _partitionPolicy = partitionPolicy;
   _initialH1OrderTrial = initialH1OrderTrial;
   _testOrderEnhancement = testOrderEnhancement;
+  _enforceConformityLocally = enforceConformityLocally;
   
 //  unsigned testOrder = initialH1OrderTrial + testOrderEnhancement;
   // assign some initial element types:
@@ -85,7 +86,7 @@ void GlobalDofAssignment::assignInitialElementType( GlobalIndexType cellID ) {
   
   int testDegree = _cellH1Orders[cellID] + _testOrderEnhancement;
   CellPtr cell = _meshTopology->getCell(cellID);
-  DofOrderingPtr trialOrdering = _dofOrderingFactory->trialOrdering(_cellH1Orders[cellID], *cell->topology());
+  DofOrderingPtr trialOrdering = _dofOrderingFactory->trialOrdering(_cellH1Orders[cellID], *cell->topology(), _enforceConformityLocally);
   DofOrderingPtr testOrdering = _dofOrderingFactory->testOrdering(testDegree, *cell->topology());
   ElementTypePtr elemType = _elementTypeFactory.getElementType(trialOrdering,testOrdering,cell->topology());
   _elementTypeForCell[cellID] = elemType;

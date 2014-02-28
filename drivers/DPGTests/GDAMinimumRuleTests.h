@@ -30,6 +30,8 @@ public:
   string testSuiteName() { return "GDAMinimumRuleTests"; }
   
   bool testSingleCellMesh();
+  bool testLocalInterpretationConsistency();
+  bool testGlobalToLocalToGlobalConsistency(); // should be able to map global to local and back, and get the same results.
 };
 
 

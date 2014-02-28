@@ -15,7 +15,7 @@
 
 GDAMaximumRule2D::GDAMaximumRule2D(MeshTopologyPtr meshTopology, VarFactory varFactory, DofOrderingFactoryPtr dofOrderingFactory,
                                    MeshPartitionPolicyPtr partitionPolicy, unsigned initialH1OrderTrial, unsigned testOrderEnhancement, bool enforceMBFluxContinuity)
-: GlobalDofAssignment(meshTopology,varFactory,dofOrderingFactory,partitionPolicy, initialH1OrderTrial, testOrderEnhancement)
+: GlobalDofAssignment(meshTopology,varFactory,dofOrderingFactory,partitionPolicy, initialH1OrderTrial, testOrderEnhancement, true)
 {
 //  cout << "Entered constructor of GDAMaximumRule2D.\n";
   _enforceMBFluxContinuity = enforceMBFluxContinuity;
@@ -676,7 +676,7 @@ set<GlobalIndexType> GDAMaximumRule2D::globalDofIndicesForPartition(PartitionInd
   return _partitionedGlobalDofIndices[partitionNumber];
 }
 
-void GDAMaximumRule2D::interpretGlobalData(GlobalIndexType cellID, FieldContainer<double> &localDofs, const Epetra_Vector &globalDofs) {
+void GDAMaximumRule2D::interpretGlobalData(GlobalIndexType cellID, FieldContainer<double> &localDofs, const Epetra_Vector &globalDofs, bool accumulate) {
   int numDofs = elementType(cellID)->trialOrderPtr->totalDofs();
   for (int dofIndex=0; dofIndex<numDofs; dofIndex++) {
     GlobalIndexType globalIndex = globalDofIndex(cellID, dofIndex);
@@ -684,8 +684,10 @@ void GDAMaximumRule2D::interpretGlobalData(GlobalIndexType cellID, FieldContaine
   }
 }
 
-void GDAMaximumRule2D::interpretLocalData(GlobalIndexType cellID, const FieldContainer<double> &localDofs, FieldContainer<double> &globalDofs, FieldContainer<GlobalIndexType> &globalDofIndices) {
+void GDAMaximumRule2D::interpretLocalData(GlobalIndexType cellID, const FieldContainer<double> &localDofs, FieldContainer<double> &globalDofs,
+                                          FieldContainer<GlobalIndexType> &globalDofIndices, bool accumulate) {
   // for maximum rule, our interpretation is just a one-to-one mapping
+  // (therefore accumulate argument is ignored)
   globalDofs = localDofs; // copy -- this may be a vector or a (square) matrix
   int numDofs = localDofs.dimension(0);
   globalDofIndices.resize(numDofs);

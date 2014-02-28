@@ -75,14 +75,15 @@ public:
   void didChangePartitionPolicy();
   
   ElementTypePtr elementType(GlobalIndexType cellID);
+  
   int getH1Order(GlobalIndexType cellID);
   GlobalIndexType globalDofCount();
   set<GlobalIndexType> globalDofIndicesForPartition(PartitionIndexType partitionNumber);
   void interpretLocalData(GlobalIndexType cellID, const FieldContainer<double> &localDofs,
-                          FieldContainer<double> &globalDofs, FieldContainer<GlobalIndexType> &globalDofIndices);
+                          FieldContainer<double> &globalDofs, FieldContainer<GlobalIndexType> &globalDofIndices, bool accumulate=true);
   void interpretLocalBasisData(GlobalIndexType cellID, int varID, int sideOrdinal, const FieldContainer<double> &basisDofs,
                                FieldContainer<double> &globalDofs, FieldContainer<GlobalIndexType> &globalDofIndices);
-  void interpretGlobalData(GlobalIndexType cellID, FieldContainer<double> &localDofs, const Epetra_Vector &globalDofs);
+  void interpretGlobalData(GlobalIndexType cellID, FieldContainer<double> &localDofs, const Epetra_Vector &globalDofs, bool accumulate=true);
   IndexType localDofCount(); // local to the MPI node
   
   void rebuildLookups();

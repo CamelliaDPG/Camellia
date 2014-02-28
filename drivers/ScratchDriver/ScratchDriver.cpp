@@ -15,6 +15,10 @@
 
 #include "Solution.h"
 
+#include "../DPGTests/TestSuite.h"
+
+#include "SolutionExporter.h"
+
 vector<double> makeVertex(double v0) {
   vector<double> v;
   v.push_back(v0);
@@ -160,14 +164,25 @@ int main(int argc, char *argv[]) {
     
     IPPtr ip = confusionBF->graphNorm();
 
+//    FieldContainer<double> maxRuleSolnCoefficients;
+    
+//    int cellID = 0;
+    
     { // max rule for comparison
       MeshPtr meshMaxRule = MeshFactory::quadMesh(confusionBF, 2);
       SolutionPtr solnMaxRule = Teuchos::rcp( new Solution(meshMaxRule, bc, rhs, ip) );
       string maxStiffnessFileName = "maxRuleStiffness.dat";
       solnMaxRule->setWriteMatrixToMatrixMarketFile(true, maxStiffnessFileName);
-      
+      string maxLoadFileName = "maxRuleLoad.dat";
+      solnMaxRule->setWriteRHSToMatrixMarketFile(true, maxLoadFileName);
       cout << "Will write max. rule stiffness to file " << maxStiffnessFileName << endl;
+      cout << "Will write max. rule load to file " << maxLoadFileName << endl;
+
       solnMaxRule->solve();
+//      maxRuleSolnCoefficients = solnMaxRule->allCoefficientsForCellID(cellID);
+      
+      VTKExporter maxExporter(solnMaxRule,meshMaxRule, varFactory);
+      maxExporter.exportSolution("confusionMaxRuleSoln");
     }
     
     SolutionPtr solnMinRule = Teuchos::rcp( new Solution(meshMinRule, bc, rhs, ip) );
@@ -176,12 +191,27 @@ int main(int argc, char *argv[]) {
 
     string minStiffnessFileName = "minRuleStiffness.dat";
     solnMinRule->setWriteMatrixToMatrixMarketFile(true, minStiffnessFileName);
-    
+    string minLoadFileName = "minRuleLoad.dat";
+    solnMinRule->setWriteRHSToMatrixMarketFile(true, minLoadFileName);
     cout << "Will write min. rule stiffness to file " << minStiffnessFileName << endl;
+    cout << "Will write max. rule load to file " << minLoadFileName << endl;
     
     solnMinRule->solve();
     
     cout << "...solved.\n";
+    
+    VTKExporter minExporter(solnMinRule,meshMinRule, varFactory);
+    minExporter.exportSolution("confusionMinRuleSoln");
+    
+//    FieldContainer<double> minRuleSolnCoefficients = solnMinRule->allCoefficientsForCellID(cellID);
+//    
+//    double tol=1e-14;
+//    double maxDiff;
+//    if (TestSuite::fcsAgree(minRuleSolnCoefficients, maxRuleSolnCoefficients, tol, maxDiff)) {
+//      cout << "solution coefficients for max and min rule AGREE; max difference is " << maxDiff << endl;
+//    } else {
+//      cout << "solution coefficients for max and min rule DISAGREE; max difference is " << maxDiff << endl;
+//    }
   }
   
   if (testMeshTopoMemory) {

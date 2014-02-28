@@ -18,7 +18,7 @@
 
 GDAMinimumRule::GDAMinimumRule(MeshTopologyPtr meshTopology, VarFactory varFactory, DofOrderingFactoryPtr dofOrderingFactory, MeshPartitionPolicyPtr partitionPolicy,
                                unsigned initialH1OrderTrial, unsigned testOrderEnhancement)
-: GlobalDofAssignment(meshTopology,varFactory,dofOrderingFactory,partitionPolicy, initialH1OrderTrial, testOrderEnhancement)
+: GlobalDofAssignment(meshTopology,varFactory,dofOrderingFactory,partitionPolicy, initialH1OrderTrial, testOrderEnhancement, false)
 {
   rebuildLookups();
 }
@@ -110,7 +110,7 @@ int GDAMinimumRule::H1Order(GlobalIndexType cellID, unsigned sideOrdinal) {
   return _cellH1Orders[cellID];
 }
 
-void GDAMinimumRule::interpretGlobalData(GlobalIndexType cellID, FieldContainer<double> &localDofs, const Epetra_Vector &globalData) {
+void GDAMinimumRule::interpretGlobalData(GlobalIndexType cellID, FieldContainer<double> &localDofs, const Epetra_Vector &globalData, bool accumulate) {
   CellConstraints constraints = getCellConstraints(cellID);
   LocalDofMapperPtr dofMapper = getDofMapper(cellID, constraints);
   vector<GlobalIndexType> globalIndexVector = dofMapper->globalIndices();
@@ -121,24 +121,28 @@ void GDAMinimumRule::interpretGlobalData(GlobalIndexType cellID, FieldContainer<
     globalDataFC[i] = globalData[globalIndex];
   }
   
-  localDofs = dofMapper->mapData(globalDataFC,false); // false: map "backwards" (global to local)
+  bool localToGlobal = false; // false: map "backwards" (global to local)
+  localDofs = dofMapper->mapData(globalDataFC,localToGlobal,accumulate);
+//  cout << "For cellID " << cellID << ", mapping globalData:\n " << globalDataFC;
+//  cout << " to localData:\n " << localDofs;
 }
 
 void GDAMinimumRule::interpretLocalData(GlobalIndexType cellID, const FieldContainer<double> &localData,
-                                        FieldContainer<double> &globalData, FieldContainer<GlobalIndexType> &globalDofIndices) {
+                                        FieldContainer<double> &globalData, FieldContainer<GlobalIndexType> &globalDofIndices, bool accumulate) {
   CellConstraints constraints = getCellConstraints(cellID);
   LocalDofMapperPtr dofMapper = getDofMapper(cellID, constraints);
   
-  globalData = dofMapper->mapData(localData);
+  bool localToGlobal = true;
+  globalData = dofMapper->mapData(localData,localToGlobal,accumulate);
   vector<GlobalIndexType> globalIndexVector = dofMapper->globalIndices();
   globalDofIndices.resize(globalIndexVector.size());
   for (int i=0; i<globalIndexVector.size(); i++) {
     globalDofIndices(i) = globalIndexVector[i];
   }
   
-  cout << "localData:\n" << localData;
-  cout << "globalData:\n" << globalData;
-  cout << "globalIndices:\n" << globalDofIndices;
+//  cout << "localData:\n" << localData;
+//  cout << "globalData:\n" << globalData;
+//  cout << "globalIndices:\n" << globalDofIndices;
 }
 
 void GDAMinimumRule::interpretLocalBasisData(GlobalIndexType cellID, int varID, int sideOrdinal, const FieldContainer<double> &basisDofs,
@@ -146,7 +150,9 @@ void GDAMinimumRule::interpretLocalBasisData(GlobalIndexType cellID, int varID, 
   CellConstraints constraints = getCellConstraints(cellID);
   LocalDofMapperPtr dofMapper = getDofMapper(cellID, constraints, varID, sideOrdinal);
   
-  globalData = dofMapper->mapData(basisDofs);
+  bool localToGlobal = true;
+  bool accumulate = false; // not really relevant for this variant
+  globalData = dofMapper->mapData(basisDofs,localToGlobal,accumulate);
   vector<GlobalIndexType> globalIndexVector = dofMapper->globalIndices();
   globalDofIndices.resize(globalIndexVector.size());
   for (int i=0; i<globalIndexVector.size(); i++) {
@@ -457,8 +463,6 @@ LocalDofMapperPtr GDAMinimumRule::getDofMapper(GlobalIndexType cellID, CellConst
   int spaceDim = _meshTopology->getSpaceDim();
   int sideDim = spaceDim - 1;
   
-  cout << "Entered GDAMinimumRule::getDofMapper.\n";
-  
   CellTopoPtr topo = _elementTypeForCell[cellID]->cellTopoPtr;
   
   CellPtr cell = _meshTopology->getCell(cellID);
@@ -570,23 +574,23 @@ LocalDofMapperPtr GDAMinimumRule::getDofMapper(GlobalIndexType cellID, CellConst
       if (!omitVarEntry) {
         if (basisDofOrdinals.size() > 0) {
           volumeBasisMap.push_back(SubBasisDofMapper::subBasisDofMapper(basisDofOrdinals, globalDofOrdinals));
-          cout << "getDofMapper: for var " << var->ID() << ", adding volume sub-basis dofMapper for " << basisDofOrdinals.size() << "  local dofOrdinals";
-          cout << ", mapping to " << globalDofOrdinals.size() << " global dof ordinals.\n";
-          cout << "( ";
-          for (set<unsigned>::iterator ordIt=basisDofOrdinals.begin(); ordIt != basisDofOrdinals.end(); ordIt++) {
-            cout << *ordIt << " ";
-          }
-          cout << ") ---> ( ";
-          for (vector<unsigned>::iterator ordIt=globalDofOrdinals.begin(); ordIt != globalDofOrdinals.end(); ordIt++) {
-            cout << *ordIt << " ";
-          }
-          cout << ")\n";
+//          cout << "getDofMapper: for var " << var->ID() << ", adding volume sub-basis dofMapper for " << basisDofOrdinals.size() << "  local dofOrdinals";
+//          cout << ", mapping to " << globalDofOrdinals.size() << " global dof ordinals.\n";
+//          cout << "( ";
+//          for (set<unsigned>::iterator ordIt=basisDofOrdinals.begin(); ordIt != basisDofOrdinals.end(); ordIt++) {
+//            cout << *ordIt << " ";
+//          }
+//          cout << ") ---> ( ";
+//          for (vector<unsigned>::iterator ordIt=globalDofOrdinals.begin(); ordIt != globalDofOrdinals.end(); ordIt++) {
+//            cout << *ordIt << " ";
+//          }
+//          cout << ")\n";
         }
       }
     }
     
     if ( ! (varHasSupportOnVolume && (var->space() == L2)) ) { // if space is L^2 on the volume, we'll have claimed all the dofs above, and we can skip further processing
-      vector< set<unsigned> > processedSubcells(sideDim);
+//      vector< set<unsigned> > processedSubcells(sideDim);
       for (int sideOrdinal=0; sideOrdinal<sideCount; sideOrdinal++) {
         bool omitSideEntry = (sideOrdinalToMap != -1) && (sideOrdinal != sideOrdinalToMap);
         BasisMap sideBasisMap;
@@ -640,17 +644,17 @@ LocalDofMapperPtr GDAMinimumRule::getDofMapper(GlobalIndexType cellID, CellConst
             if (!omitSideEntry && !omitVarEntry) {
               volumeBasisMap.push_back(SubBasisDofMapper::subBasisDofMapper(basisDofOrdinals, globalDofOrdinals, constraintMatrixSideInterior));
             }
-            cout << "getDofMapper: for var " << var->ID() << " on side " << sideOrdinal << ", adding volume sub-basis dofMapper for " << basisDofOrdinals.size() << "  local dofOrdinals";
-            cout << ", mapping to " << globalDofOrdinals.size() << " global dof ordinals.\n";
-            cout << "( ";
-            for (set<unsigned>::iterator ordIt=basisDofOrdinals.begin(); ordIt != basisDofOrdinals.end(); ordIt++) {
-              cout << *ordIt << " ";
-            }
-            cout << ") ---> ( ";
-            for (vector<unsigned>::iterator ordIt=globalDofOrdinals.begin(); ordIt != globalDofOrdinals.end(); ordIt++) {
-              cout << *ordIt << " ";
-            }
-            cout << ")\n";
+//            cout << "getDofMapper: for var " << var->ID() << " on side " << sideOrdinal << ", adding volume sub-basis dofMapper for " << basisDofOrdinals.size() << "  local dofOrdinals";
+//            cout << ", mapping to " << globalDofOrdinals.size() << " global dof ordinals.\n";
+//            cout << "( ";
+//            for (set<unsigned>::iterator ordIt=basisDofOrdinals.begin(); ordIt != basisDofOrdinals.end(); ordIt++) {
+//              cout << *ordIt << " ";
+//            }
+//            cout << ") ---> ( ";
+//            for (vector<unsigned>::iterator ordIt=globalDofOrdinals.begin(); ordIt != globalDofOrdinals.end(); ordIt++) {
+//              cout << *ordIt << " ";
+//            }
+//            cout << ")\n";
           }
         } else {
           constrainingBasis = constrainingTrialOrdering->getBasis(var->ID(),sideConstraint.sideOrdinal);
@@ -670,18 +674,18 @@ LocalDofMapperPtr GDAMinimumRule::getDofMapper(GlobalIndexType cellID, CellConst
             if (!omitSideEntry && !omitVarEntry) {
               sideBasisMap.push_back(SubBasisDofMapper::subBasisDofMapper(basisDofOrdinals, globalDofOrdinals, constraintMatrixSide));
             }
-            cout << "getDofMapper: for var " << var->ID() << " on side " << sideOrdinal << ", adding side sub-basis dofMapper for " << basisDofOrdinals.size() << "  local dofOrdinals";
-            cout << ", mapping to " << globalDofOrdinals.size() << " global dof ordinals.\n";
-            cout << "( ";
-            for (set<unsigned>::iterator ordIt=basisDofOrdinals.begin(); ordIt != basisDofOrdinals.end(); ordIt++) {
-              cout << *ordIt << " ";
-            }
-            cout << ") ---> ( ";
-            for (vector<unsigned>::iterator ordIt=globalDofOrdinals.begin(); ordIt != globalDofOrdinals.end(); ordIt++) {
-              cout << *ordIt << " ";
-            }
-            cout << ")\n";
-            cout << "constraintMatrixSide:\n" << constraintMatrixSide;
+//            cout << "getDofMapper: for var " << var->ID() << " on side " << sideOrdinal << ", adding side sub-basis dofMapper for " << basisDofOrdinals.size() << "  local dofOrdinals";
+//            cout << ", mapping to " << globalDofOrdinals.size() << " global dof ordinals.\n";
+//            cout << "( ";
+//            for (set<unsigned>::iterator ordIt=basisDofOrdinals.begin(); ordIt != basisDofOrdinals.end(); ordIt++) {
+//              cout << *ordIt << " ";
+//            }
+//            cout << ") ---> ( ";
+//            for (vector<unsigned>::iterator ordIt=globalDofOrdinals.begin(); ordIt != globalDofOrdinals.end(); ordIt++) {
+//              cout << *ordIt << " ";
+//            }
+//            cout << ")\n";
+//            cout << "constraintMatrixSide:\n" << constraintMatrixSide;
           }
         }
         
@@ -693,7 +697,7 @@ LocalDofMapperPtr GDAMinimumRule::getDofMapper(GlobalIndexType cellID, CellConst
             unsigned scCount = sideTopo.getSubcellCount(d);
             for (unsigned scOrdinalInSide = 0; scOrdinalInSide < scCount; scOrdinalInSide++) {
               unsigned scOrdinalInCell = CamelliaCellTools::subcellOrdinalMap(*topo, sideDim, sideOrdinal, d, scOrdinalInSide);
-              if (processedSubcells[d].find(scOrdinalInCell) == processedSubcells[d].end()) { // haven't processed this one yet
+//              if (processedSubcells[d].find(scOrdinalInCell) == processedSubcells[d].end()) { // haven't processed this one yet
                 // determine the subcell index in _meshTopology (will be used below to determine the subcell ordinal of the constraining subcell in the constraining cell)
                 IndexType scIndex = cell->entityIndex(d, scOrdinalInCell);
                 IndexType constrainingScIndex = _meshTopology->getConstrainingEntityIndex(d, scIndex);
@@ -775,39 +779,40 @@ LocalDofMapperPtr GDAMinimumRule::getDofMapper(GlobalIndexType cellID, CellConst
                     if (!omitSideEntry && !omitVarEntry) {
                       volumeBasisMap.push_back(SubBasisDofMapper::subBasisDofMapper(scBasisOrdinals, globalDofOrdinals, constraintMatrixSubcell));
                     }
-                    cout << "getDofMapper: for var " << var->ID() << " on side " << sideOrdinal << ", adding volume sub-basis dofMapper (for subcell) for " << basisDofOrdinals.size() << "  local dofOrdinals";
-                    cout << ", mapping to " << globalDofOrdinals.size() << " global dof ordinals.\n";
-                    cout << "( ";
-                    for (set<unsigned>::iterator ordIt=scBasisOrdinals.begin(); ordIt != scBasisOrdinals.end(); ordIt++) {
-                      cout << *ordIt << " ";
-                    }
-                    cout << ") ---> ( ";
-                    for (vector<unsigned>::iterator ordIt=globalDofOrdinals.begin(); ordIt != globalDofOrdinals.end(); ordIt++) {
-                      cout << *ordIt << " ";
-                    }
-                    cout << ")\n";
+//                    cout << "getDofMapper: for var " << var->ID() << " on side " << sideOrdinal << ", adding volume sub-basis dofMapper (for subcell) for " << basisDofOrdinals.size() << "  local dofOrdinals";
+//                    cout << ", mapping to " << globalDofOrdinals.size() << " global dof ordinals.\n";
+//                    cout << "( ";
+//                    for (set<unsigned>::iterator ordIt=scBasisOrdinals.begin(); ordIt != scBasisOrdinals.end(); ordIt++) {
+//                      cout << *ordIt << " ";
+//                    }
+//                    cout << ") ---> ( ";
+//                    for (vector<unsigned>::iterator ordIt=globalDofOrdinals.begin(); ordIt != globalDofOrdinals.end(); ordIt++) {
+//                      cout << *ordIt << " ";
+//                    }
+//                    cout << ")\n";
                   }
                 } else {
                   if (scBasisOrdinals.size() > 0) {
                     if (!omitSideEntry && !omitVarEntry) {
                       sideBasisMap.push_back(SubBasisDofMapper::subBasisDofMapper(scBasisOrdinals, globalDofOrdinals, constraintMatrixSubcell));
                     }
-                    cout << "getDofMapper: for var " << var->ID() << " on side " << sideOrdinal << ", adding side sub-basis dofMapper (for subcell) for " << basisDofOrdinals.size() << "  local dofOrdinals";
-                    cout << ", mapping to " << globalDofOrdinals.size() << " global dof ordinals.\n";
-                    cout << "( ";
-                    for (set<unsigned>::iterator ordIt=scBasisOrdinals.begin(); ordIt != scBasisOrdinals.end(); ordIt++) {
-                      cout << *ordIt << " ";
-                    }
-                    cout << ") ---> ( ";
-                    for (vector<unsigned>::iterator ordIt=globalDofOrdinals.begin(); ordIt != globalDofOrdinals.end(); ordIt++) {
-                      cout << *ordIt << " ";
-                    }
-                    cout << ")\n";
+//                    cout << "getDofMapper: for var " << var->ID() << " on side " << sideOrdinal << ", adding side sub-basis dofMapper (for subcell) for " << basisDofOrdinals.size() << "  local dofOrdinals";
+//                    cout << ", mapping to " << globalDofOrdinals.size() << " global dof ordinals.\n";
+//                    cout << "( ";
+//                    for (set<unsigned>::iterator ordIt=scBasisOrdinals.begin(); ordIt != scBasisOrdinals.end(); ordIt++) {
+//                      cout << *ordIt << " ";
+//                    }
+//                    cout << ") ---> ( ";
+//                    for (vector<unsigned>::iterator ordIt=globalDofOrdinals.begin(); ordIt != globalDofOrdinals.end(); ordIt++) {
+//                      cout << *ordIt << " ";
+//                    }
+//                    cout << ")\n";
                   }
                 }
                 
-                processedSubcells[d].insert(scOrdinalInCell);
-              }
+                //processedSubcells[d].insert(scOrdinalInCell);
+              
+              //}
             }
           }
         }
@@ -949,7 +954,7 @@ void GDAMinimumRule::rebuildLookups() {
   for (int i=rank; i<numRanks; i++) {
     _globalDofCount += partitionDofCounts[i];
   }
-  if (rank==0) cout << "globalDofCount: " << _globalDofCount << endl;
+//  if (rank==0) cout << "globalDofCount: " << _globalDofCount << endl;
   // collect and communicate global cell dof offsets:
   int activeCellCount = _meshTopology->getActiveCellIndices().size();
   FieldContainer<int> globalCellIDDofOffsets(activeCellCount);

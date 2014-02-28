@@ -520,6 +520,9 @@ void Solution::populateStiffnessAndLoad() {
 //        cout << "globalDofIndices:\n" << globalDofIndices;
         
         _dofInterpreter->interpretLocalData(cellID, localRHS, interpretedRHS, globalDofIndices);
+//        cout << "localRHS:\n" << localRHS;
+//        cout << "interpretedRHS:\n" << interpretedRHS;
+//        cout << "globalDofIndices:\n" << globalDofIndices;
         
         // cast whatever the global index type is to a type that Epetra supports
         globalDofIndices.dimensions(dim);
@@ -530,7 +533,7 @@ void Solution::populateStiffnessAndLoad() {
         
         _globalStiffMatrix->InsertGlobalValues(globalDofIndices.size(),&globalDofIndicesCast(0),
                                                globalDofIndices.size(),&globalDofIndicesCast(0),&interpretedStiffness[0]);
-        _rhsVector->SumIntoGlobalValues(globalDofIndices.size(),&globalDofIndicesCast(0),&localRHS[0]);
+        _rhsVector->SumIntoGlobalValues(globalDofIndices.size(),&globalDofIndicesCast(0),&interpretedRHS[0]);
       }
       startCellIndexForBatch += numCells;
     }
@@ -576,11 +579,12 @@ void Solution::populateStiffnessAndLoad() {
 
       FieldContainer<GlobalIndexType> interpretedGlobalDofIndices;
       
+      bool accumulate = true;
       for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
         GlobalIndexTypeToCast globalRowIndex = partMap.GID(localRowIndex);
         int nnz = 0;
         FieldContainer<double> localLHS(localLHSDim,&lhs(cellIndex,0)); // shallow copy
-        _dofInterpreter->interpretLocalData(cellIDs[cellIndex], localLHS, interpretedLHS, interpretedGlobalDofIndices);
+        _dofInterpreter->interpretLocalData(cellIDs[cellIndex], localLHS, interpretedLHS, interpretedGlobalDofIndices, accumulate);
         
         for (int i=0; i<interpretedLHS.size(); i++) {
           if (interpretedLHS(i) != 0.0) {
@@ -727,8 +731,8 @@ void Solution::populateStiffnessAndLoad() {
   for (int dofOrdinal = 0; dofOrdinal < bcGlobalIndices.size(); dofOrdinal++) {
     bcGlobalIndicesCast[dofOrdinal] = bcGlobalIndices[dofOrdinal];
   }
-  //    cout << "bcGlobalIndices:" << endl << bcGlobalIndices;
-  //    cout << "bcGlobalValues:" << endl << bcGlobalValues;
+//  cout << "bcGlobalIndices:" << endl << bcGlobalIndices;
+//  cout << "bcGlobalValues:" << endl << bcGlobalValues;
   
   Epetra_MultiVector v(partMap,1);
   v.PutScalar(0.0);

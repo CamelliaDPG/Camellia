@@ -215,8 +215,9 @@ public:
   //  map< int, pair<int,int> > getGlobalToLocalMap();
 
   GlobalIndexType globalDofIndex(GlobalIndexType cellID, IndexType localDofIndex);
-
   set<GlobalIndexType> globalDofIndicesForPartition(PartitionIndexType partitionNumber);
+  
+  GlobalDofAssignmentPtr globalDofAssignment();
 
   set<GlobalIndexType> getActiveCellIDs();
   vector< ElementPtr > activeElements();  // deprecated -- use getActiveElement instead
@@ -247,11 +248,11 @@ public:
   void hRefine(const vector<GlobalIndexType> &cellIDs, Teuchos::RCP<RefinementPattern> refPattern);
   void hUnrefine(const set<GlobalIndexType> &cellIDs);
   
-  void interpretGlobalData(GlobalIndexType cellID, FieldContainer<double> &localData, const Epetra_Vector &globalData);
+  void interpretGlobalData(GlobalIndexType cellID, FieldContainer<double> &localData, const Epetra_Vector &globalData, bool accumulate=true);
   void interpretLocalBasisData(GlobalIndexType cellID, int varID, int sideOrdinal, const FieldContainer<double> &basisDofs,
                                        FieldContainer<double> &globalDofs, FieldContainer<GlobalIndexType> &globalDofIndices);
   void interpretLocalData(GlobalIndexType cellID, const FieldContainer<double> &localData,
-                          FieldContainer<double> &globalData, FieldContainer<GlobalIndexType> &globalDofIndices);
+                          FieldContainer<double> &globalData, FieldContainer<GlobalIndexType> &globalDofIndices, bool accumulate=true);
   
   // for the case where we want to reproject the previous mesh solution onto the new one:
 //  void hRefine(vector<GlobalIndexType> cellIDs, Teuchos::RCP<RefinementPattern> refPattern, vector< Teuchos::RCP<Solution> > solutions);
