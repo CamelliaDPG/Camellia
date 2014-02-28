@@ -26,8 +26,11 @@ class LocalDofMapper { // maps a whole trial ordering
   int _varIDToMap;
   
   void filterData(const vector<int> dofIndices, const FieldContainer<double> &data, FieldContainer<double> &filteredData);
-  void addSubBasisMapContribution(int varID, int sideIndex, BasisMap basisMap, const FieldContainer<double> &localData, FieldContainer<double> &globalData);
-  void addReverseSubBasisMapContribution(int varID, int sideOrdinal, BasisMap basisMap, const FieldContainer<double> &globalData, FieldContainer<double> &localData);
+  void addSubBasisMapVectorContribution(int varID, int sideIndex, BasisMap basisMap, const FieldContainer<double> &localData, FieldContainer<double> &globalData);
+//  void addSubBasisMapMatrixContribution(int varID, int sideOrdinal, BasisMap basisMap, const FieldContainer<double> &localData, FieldContainer<double> &globalData);
+  void addReverseSubBasisMapVectorContribution(int varID, int sideOrdinal, BasisMap basisMap, const FieldContainer<double> &globalData, FieldContainer<double> &localData);
+//  void addReverseSubBasisMapMatrixContribution(int varID, int sideOrdinal, BasisMap basisMap, const FieldContainer<double> &globalData, FieldContainer<double> &localData);
+  FieldContainer<double> mapDataMatrix(const FieldContainer<double> &localData, bool localToGlobal);
 public:
   LocalDofMapper(DofOrderingPtr dofOrdering, map< int, BasisMap > volumeMaps, vector< map< int, BasisMap > > sideMaps, int varIDToMap = -1, int sideOrdinalToMap = -1);
   FieldContainer<double> mapData(const FieldContainer<double> &localData, bool localToGlobal = true); // can go global to local

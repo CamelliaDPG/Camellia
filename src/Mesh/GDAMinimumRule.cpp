@@ -135,6 +135,10 @@ void GDAMinimumRule::interpretLocalData(GlobalIndexType cellID, const FieldConta
   for (int i=0; i<globalIndexVector.size(); i++) {
     globalDofIndices(i) = globalIndexVector[i];
   }
+  
+  cout << "localData:\n" << localData;
+  cout << "globalData:\n" << globalData;
+  cout << "globalIndices:\n" << globalDofIndices;
 }
 
 void GDAMinimumRule::interpretLocalBasisData(GlobalIndexType cellID, int varID, int sideOrdinal, const FieldContainer<double> &basisDofs,
