@@ -43,6 +43,8 @@ private:
   map< pair< SideRefinedBasisPair, Permutation> , SubBasisReconciliationWeights > _sideReconcilationWeights_h;
   
   static FieldContainer<double> filterBasisValues(const FieldContainer<double> &basisValues, set<int> &filter);
+  
+  static FieldContainer<double> permutedCubaturePoints(BasisCachePtr basisCache, Permutation cellTopoNodePermutation);
 public:
   BasisReconciliation(bool cacheResults = true) { _cacheResults = cacheResults; }
 

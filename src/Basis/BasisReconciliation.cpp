@@ -96,6 +96,24 @@ unsigned vertexPermutation(shards::CellTopology &fineTopo, unsigned fineSideInde
   return -1; // just for compilers that would otherwise warn that we're missing a return value...
 }
 
+FieldContainer<double> BasisReconciliation::permutedCubaturePoints(BasisCachePtr basisCache, Permutation cellTopoNodePermutation) { // permutation is for side nodes if the basisCache is a side cache
+  shards::CellTopology volumeTopo = basisCache->cellTopology();
+  int spaceDim = volumeTopo.getDimension();
+  shards::CellTopology cellTopo = basisCache->isSideCache() ? volumeTopo.getCellTopologyData(spaceDim-1, basisCache->getSideIndex()) : volumeTopo;
+  int cubDegree = basisCache->  cubatureDegree(); // not really an argument that matters; we'll overwrite the cubature points in basisCacheForPermutation anyway
+  BasisCachePtr basisCacheForPermutation = Teuchos::rcp( new BasisCache( cellTopo, cubDegree, false ) );
+  FieldContainer<double> permutedCellTopoNodes(cellTopo.getNodeCount(), cellTopo.getDimension());
+  CamelliaCellTools::refCellNodesForTopology(permutedCellTopoNodes, cellTopo, cellTopoNodePermutation);
+  basisCacheForPermutation->setRefCellPoints(basisCache->getRefCellPoints());
+  const int oneCell = 1;
+  permutedCellTopoNodes.resize(oneCell,permutedCellTopoNodes.dimension(0),permutedCellTopoNodes.dimension(1));
+  basisCacheForPermutation->setPhysicalCellNodes(permutedCellTopoNodes, vector<GlobalIndexType>(), false);
+  FieldContainer<double> permutedCubaturePoints = basisCacheForPermutation->getPhysicalCubaturePoints();
+  // resize for reference space (no cellIndex dimension):
+  permutedCubaturePoints.resize(permutedCubaturePoints.dimension(1), permutedCubaturePoints.dimension(2));
+  return permutedCubaturePoints;
+}
+
 SubBasisReconciliationWeights BasisReconciliation::composedSubBasisReconciliationWeights(SubBasisReconciliationWeights aWeights, SubBasisReconciliationWeights bWeights) {
   if (aWeights.coarseOrdinals.size() != bWeights.fineOrdinals.size()) {
     cout << "aWeights and bWeights are incompatible...\n";
@@ -114,31 +132,18 @@ SubBasisReconciliationWeights BasisReconciliation::composedSubBasisReconciliatio
 FieldContainer<double> BasisReconciliation::computeConstrainedWeights(BasisPtr finerBasis, BasisPtr coarserBasis, Permutation vertexPermutation) {
   // we could define things in terms of Functions, and then use Projector class.  But this is simple enough that it's probably worth it to do it more manually.
   // (also, I'm a bit concerned about the expense here, and the present implementation hopefully will be a bit lighter weight.)
-
+  
   shards::CellTopology cellTopo = finerBasis->domainTopology();
   TEUCHOS_TEST_FOR_EXCEPTION(cellTopo.getBaseKey() != coarserBasis->domainTopology().getBaseKey(), std::invalid_argument, "Bases must agree on domain topology.");
   
   int cubDegree = finerBasis->getDegree() * 2;
-
-  DefaultCubatureFactory<double> cubFactory;
-  Teuchos::RCP<Cubature<double> > cellTopoCub = cubFactory.create(cellTopo, cubDegree);
+  BasisCachePtr fineBasisCache = Teuchos::rcp( new BasisCache(cellTopo, cubDegree, false) );
+  BasisCachePtr coarseBasisCache = Teuchos::rcp( new BasisCache(cellTopo, cubDegree, false) );
   
-  int cubDim       = cellTopoCub->getDimension();
-  int numCubPoints = cellTopoCub->getNumPoints();
+  coarseBasisCache->setRefCellPoints(permutedCubaturePoints(fineBasisCache, vertexPermutation));
   
-  FieldContainer<double> cubPoints(numCubPoints, cubDim);
-  FieldContainer<double> cubWeights(numCubPoints);
-  
-  cellTopoCub->getCubature(cubPoints, cubWeights);
-  
-  FieldContainer<double> finerBasisValues;
-  sizeFCForBasisValues(finerBasisValues, finerBasis, numCubPoints);
-  
-  FieldContainer<double> coarserBasisValues;
-  sizeFCForBasisValues(coarserBasisValues, coarserBasis, numCubPoints);
-  
-  finerBasis->getValues(finerBasisValues, cubPoints, OPERATOR_VALUE);
-  coarserBasis->getValues(coarserBasisValues, cubPoints, OPERATOR_VALUE);
+  FieldContainer<double> finerBasisValues = *fineBasisCache->getValues(finerBasis, OP_VALUE);
+  FieldContainer<double> coarserBasisValues = *coarseBasisCache->getValues(coarserBasis, OP_VALUE);
   
   set<int> filteredDofOrdinalsForFinerBasis = interiorDofOrdinalsForBasis(finerBasis);
   int interiorCardinalityFine = filteredDofOrdinalsForFinerBasis.size();
@@ -155,16 +160,19 @@ FieldContainer<double> BasisReconciliation::computeConstrainedWeights(BasisPtr f
   FieldContainer<double> finerBasisValuesFiltered = filterBasisValues(finerBasisValues, filteredDofOrdinalsForFinerBasis);
   FieldContainer<double> coarserBasisValuesFiltered = filterBasisValues(coarserBasisValues, filteredDofOrdinalsForCoarserBasis);
   
-//  cout << "finerBasisValues:\n" << finerBasisValues;
-//  cout << "finerBasisValuesFiltered:\n" << finerBasisValuesFiltered;
-  
   FieldContainer<double> finerBasisValuesFilteredWeighted;
-
+  
   // resize things with dummy cell dimension:
+  int numCubPoints = fineBasisCache->getRefCellPoints().dimension(0); // (P,D)
   sizeFCForBasisValues(coarserBasisValuesFiltered, coarserBasis, numCubPoints, true, interiorCardinalityCoarse);
   sizeFCForBasisValues(finerBasisValuesFiltered, finerBasis, numCubPoints, true, interiorCardinalityFine);
   sizeFCForBasisValues(finerBasisValuesFilteredWeighted, finerBasis, numCubPoints, true, interiorCardinalityFine);
-  cubWeights.resize(1,numCubPoints); // dummy cell dimension
+  
+  FieldContainer<double> refCellNodes(cellTopo.getNodeCount(),cellTopo.getDimension());
+  CamelliaCellTools::refCellNodesForTopology(refCellNodes, cellTopo);
+  refCellNodes.resize(1,refCellNodes.dimension(0),refCellNodes.dimension(1));
+  fineBasisCache->setPhysicalCellNodes(refCellNodes, vector<GlobalIndexType>(1,0), false);
+  FieldContainer<double> cubWeights = fineBasisCache->getWeightedMeasures();
   FunctionSpaceTools::multiplyMeasure<double>(finerBasisValuesFilteredWeighted, cubWeights, finerBasisValuesFiltered);
   
   FieldContainer<double> lhsValues(1,interiorCardinalityFine,interiorCardinalityFine);
@@ -176,8 +184,6 @@ FieldContainer<double> BasisReconciliation::computeConstrainedWeights(BasisPtr f
   lhsValues.resize(lhsValues.dimension(1),lhsValues.dimension(2));
   rhsValues.resize(rhsValues.dimension(1),rhsValues.dimension(2));
   SerialDenseMatrixUtility::solveSystemMultipleRHS(constrainedWeights, lhsValues, rhsValues);
-  
-//  cout << "constrainedWeights:\n" << constrainedWeights;
   
   return constrainedWeights;
 }
@@ -250,17 +256,18 @@ SubBasisReconciliationWeights BasisReconciliation::computeConstrainedWeights(Bas
 
   FieldContainer<double> permutedSideCubaturePoints;
   if (d-1 > 0) {
+    permutedSideCubaturePoints = permutedCubaturePoints(fineSideBasisCache, vertexNodePermutation);
     // create a ("volume") basis cache for the side topology--this allows us to determine the cubature points corresponding to the
     // permuted nodes.
-    BasisCachePtr sideCacheForPermutation = Teuchos::rcp( new BasisCache( sideTopo, cubDegree, false ) );
-    FieldContainer<double> permutedSideTopoNodes(sideTopo.getNodeCount(), sideTopo.getDimension());
-    CamelliaCellTools::refCellNodesForTopology(permutedSideTopoNodes, sideTopo, vertexNodePermutation);
-    sideCacheForPermutation->setRefCellPoints(fineSideBasisCache->getRefCellPoints()); // these should be the same, but doesn't hurt to be sure
-    permutedSideTopoNodes.resize(oneCell,permutedSideTopoNodes.dimension(0),permutedSideTopoNodes.dimension(1));
-    sideCacheForPermutation->setPhysicalCellNodes(permutedSideTopoNodes, vector<GlobalIndexType>(), false);
-    permutedSideCubaturePoints = sideCacheForPermutation->getPhysicalCubaturePoints();
-    // resize for reference space (no cellIndex dimension):
-    permutedSideCubaturePoints.resize(permutedSideCubaturePoints.dimension(1), permutedSideCubaturePoints.dimension(2));
+//    BasisCachePtr sideCacheForPermutation = Teuchos::rcp( new BasisCache( sideTopo, cubDegree, false ) );
+//    FieldContainer<double> permutedSideTopoNodes(sideTopo.getNodeCount(), sideTopo.getDimension());
+//    CamelliaCellTools::refCellNodesForTopology(permutedSideTopoNodes, sideTopo, vertexNodePermutation);
+//    sideCacheForPermutation->setRefCellPoints(fineSideBasisCache->getRefCellPoints()); // these should be the same, but doesn't hurt to be sure
+//    permutedSideTopoNodes.resize(oneCell,permutedSideTopoNodes.dimension(0),permutedSideTopoNodes.dimension(1));
+//    sideCacheForPermutation->setPhysicalCellNodes(permutedSideTopoNodes, vector<GlobalIndexType>(), false);
+//    permutedSideCubaturePoints = sideCacheForPermutation->getPhysicalCubaturePoints();
+//    // resize for reference space (no cellIndex dimension):
+//    permutedSideCubaturePoints.resize(permutedSideCubaturePoints.dimension(1), permutedSideCubaturePoints.dimension(2));
   } else { // dim-0 topologies don't change under permutation...
     permutedSideCubaturePoints = fineSideBasisCache->getRefCellPoints();
   }
@@ -315,36 +322,33 @@ FieldContainer<double> BasisReconciliation::computeConstrainedWeights(BasisPtr f
   // (also, I'm a bit concerned about the expense here, and the present implementation hopefully will be a bit lighter weight.)
   
   shards::CellTopology cellTopo = finerBasis->domainTopology();
+  int spaceDim = cellTopo.getDimension();
   
   int cubDegree = finerBasis->getDegree() * 2;
   
-  DefaultCubatureFactory<double> cubFactory;
-  Teuchos::RCP<Cubature<double> > cellTopoCub = cubFactory.create(cellTopo, cubDegree);
+  BasisCachePtr fineBasisCache = Teuchos::rcp( new BasisCache(cellTopo, cubDegree, false) );
+  BasisCachePtr coarseBasisCache = Teuchos::rcp( new BasisCache(cellTopo, cubDegree, false) );
   
-  int cubDim       = cellTopoCub->getDimension();
-  int numCubPoints = cellTopoCub->getNumPoints();
-  
-  FieldContainer<double> cubPointsFineBasis(numCubPoints, cubDim);
-  FieldContainer<double> cubWeights(numCubPoints);
-  
-  cellTopoCub->getCubature(cubPointsFineBasis, cubWeights);
-  
+  FieldContainer<double> refCellNodes(cellTopo.getNodeCount(),cellTopo.getDimension());
+  CamelliaCellTools::refCellNodesForTopology(refCellNodes, cellTopo);
+  refCellNodes.resize(1,refCellNodes.dimension(0),refCellNodes.dimension(1));
+  fineBasisCache->setPhysicalCellNodes(refCellNodes, vector<GlobalIndexType>(1,0), false);
+  FieldContainer<double> cubWeights = fineBasisCache->getWeightedMeasures();
+
+  int numCubPoints = fineBasisCache->getRefCellPoints().dimension(0); // (P,D)
   FieldContainer<double> fineCellNodesInCoarseRefCell = RefinementPattern::descendantNodesRelativeToAncestorReferenceCell(refinements);
   fineCellNodesInCoarseRefCell.resize(1,fineCellNodesInCoarseRefCell.dimension(0),fineCellNodesInCoarseRefCell.dimension(1));
-  FieldContainer<double> cubPointsCoarseBasis(1,numCubPoints,cubDim);
-  CellTools<double>::mapToPhysicalFrame(cubPointsCoarseBasis,cubPointsFineBasis,fineCellNodesInCoarseRefCell,cellTopo);
-  cubPointsCoarseBasis.resize(numCubPoints,cubDim);
+  FieldContainer<double> cubPointsCoarseBasis(1,numCubPoints,spaceDim);
+  FieldContainer<double> permutedCubPointsFineBasis = permutedCubaturePoints(fineBasisCache, vertexPermutation);
+  CellTools<double>::mapToPhysicalFrame(cubPointsCoarseBasis,permutedCubPointsFineBasis,fineCellNodesInCoarseRefCell,cellTopo);
+  cubPointsCoarseBasis.resize(numCubPoints,spaceDim);
   
-  FieldContainer<double> finerBasisValues;
-  sizeFCForBasisValues(finerBasisValues, finerBasis, numCubPoints);
+  coarseBasisCache->setRefCellPoints(cubPointsCoarseBasis);
   
   FieldContainer<double> finerBasisValuesFilteredWeighted;
   
-  FieldContainer<double> coarserBasisValues;
-  sizeFCForBasisValues(coarserBasisValues, coarserBasis, numCubPoints);
-  
-  finerBasis->getValues(finerBasisValues, cubPointsFineBasis, OPERATOR_VALUE);
-  coarserBasis->getValues(coarserBasisValues, cubPointsCoarseBasis, OPERATOR_VALUE);
+  FieldContainer<double> finerBasisValues = *fineBasisCache->getValues(finerBasis, OP_VALUE);
+  FieldContainer<double> coarserBasisValues = *coarseBasisCache->getValues(coarserBasis, OP_VALUE);
   
   set<unsigned> filteredDofOrdinalsForFinerBasis = internalDofIndicesForFinerBasis(finerBasis, refinements);
   set<int> filteredDofOrdinalsForFinerBasisInt(filteredDofOrdinalsForFinerBasis.begin(),filteredDofOrdinalsForFinerBasis.end());
@@ -442,8 +446,6 @@ SubBasisReconciliationWeights BasisReconciliation::computeConstrainedWeights(Bas
 //  FieldContainer<double> fineVolumeCubaturePoints = fineSideBasisCache->getPhysicalCubaturePoints(); // these are in volume coordinates
 //  fineVolumeCubaturePoints.resize(fineVolumeCubaturePoints.dimension(1),fineVolumeCubaturePoints.dimension(2));
   FieldContainer<double> fineSideCubaturePoints = fineSideBasisCache->getRefCellPoints();
-  
-//  cout << "fineSideBasisCache->getPhysicalCubaturePoints():\n" << fineSideBasisCache->getPhysicalCubaturePoints();
   
   // now, we need to map those points into coarseSide/coarseVolume
   // coarseSide
