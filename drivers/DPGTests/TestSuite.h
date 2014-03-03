@@ -1,8 +1,9 @@
 #ifndef CAMELLIA_TEST_SUITE
 #define CAMELLIA_TEST_SUITE
 
-using namespace std;
 #include <string>
+
+using namespace std;
 
 #include "Intrepid_FieldContainer.hpp"
 

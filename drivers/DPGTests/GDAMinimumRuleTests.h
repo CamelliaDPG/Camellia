@@ -24,14 +24,17 @@ private:
   void teardown();
   
   SolutionPtr quadMeshSolution(bool useMinRule, int horizontalCells, int verticalCells);
+  bool subTestCompatibleSolutionsAgree(int horizontalCells, int verticalCells);
 public:
   GDAMinimumRuleTests();
   void runTests(int &numTestsRun, int &numTestsPassed);
   string testSuiteName() { return "GDAMinimumRuleTests"; }
   
-  bool testSingleCellMesh();
   bool testLocalInterpretationConsistency();
   bool testGlobalToLocalToGlobalConsistency(); // should be able to map global to local and back, and get the same results.
+  
+  bool testMultiCellMesh();
+  bool testSingleCellMesh();
 };
 
 

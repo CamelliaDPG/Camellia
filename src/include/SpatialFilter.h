@@ -76,6 +76,8 @@ public:
   static SpatialFilterPtr allSpace();
   static SpatialFilterPtr unionFilter(SpatialFilterPtr a, SpatialFilterPtr b);
   
+  static SpatialFilterPtr negatedFilter(SpatialFilterPtr filterToNegate);
+  
   virtual ~SpatialFilter() {}
 };
 

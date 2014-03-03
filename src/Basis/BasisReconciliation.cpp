@@ -111,7 +111,7 @@ SubBasisReconciliationWeights BasisReconciliation::composedSubBasisReconciliatio
   return cWeights;
 }
 
-FieldContainer<double> BasisReconciliation::computeConstrainedWeights(BasisPtr finerBasis, BasisPtr coarserBasis) {
+FieldContainer<double> BasisReconciliation::computeConstrainedWeights(BasisPtr finerBasis, BasisPtr coarserBasis, Permutation vertexPermutation) {
   // we could define things in terms of Functions, and then use Projector class.  But this is simple enough that it's probably worth it to do it more manually.
   // (also, I'm a bit concerned about the expense here, and the present implementation hopefully will be a bit lighter weight.)
 
@@ -302,10 +302,10 @@ SubBasisReconciliationWeights BasisReconciliation::computeConstrainedWeights(Bas
 }
 
 
-FieldContainer<double> BasisReconciliation::computeConstrainedWeights(BasisPtr finerBasis, RefinementBranch refinements, BasisPtr coarserBasis) {
+FieldContainer<double> BasisReconciliation::computeConstrainedWeights(BasisPtr finerBasis, RefinementBranch refinements, BasisPtr coarserBasis, Permutation vertexPermutation) {
   
   if (refinements.size() == 0) {
-    return computeConstrainedWeights(finerBasis, coarserBasis);
+    return computeConstrainedWeights(finerBasis, coarserBasis, vertexPermutation);
   }
   
   // there's a LOT of code duplication between this and the p-oriented computeConstrainedWeights(finerBasis,coarserBasis)
@@ -510,23 +510,24 @@ SubBasisReconciliationWeights BasisReconciliation::computeConstrainedWeights(Bas
   return weights;
 }
 
-const FieldContainer<double>& BasisReconciliation::constrainedWeights(BasisPtr finerBasis, BasisPtr coarserBasis) {
+const FieldContainer<double>& BasisReconciliation::constrainedWeights(BasisPtr finerBasis, BasisPtr coarserBasis, Permutation vertexPermutation) {
   FieldContainer<double> weights;
   
-  pair< Camellia::Basis<>*, Camellia::Basis<>* > cacheKey = make_pair(finerBasis.get(), coarserBasis.get());
+  BasisPair basisPair = make_pair(finerBasis.get(), coarserBasis.get());
+  pair< BasisPair, Permutation > cacheKey = make_pair(basisPair, vertexPermutation);
   
   if (_simpleReconciliationWeights.find(cacheKey) != _simpleReconciliationWeights.end()) {
     return _simpleReconciliationWeights.find(cacheKey)->second;
   }
 
   // compute weights
-  _simpleReconciliationWeights[cacheKey] = computeConstrainedWeights(finerBasis, coarserBasis);
+  _simpleReconciliationWeights[cacheKey] = computeConstrainedWeights(finerBasis, coarserBasis, vertexPermutation);
   
   return _simpleReconciliationWeights[cacheKey];
 }
 
 const SubBasisReconciliationWeights & BasisReconciliation::constrainedWeights(BasisPtr finerBasis, int finerBasisSideIndex, BasisPtr coarserBasis, int coarserBasisSideIndex,
-                                                                              unsigned vertexNodePermutation) {
+                                                                              Permutation vertexNodePermutation) {
   SideBasisRestriction fineSideRestriction = make_pair(finerBasis.get(), finerBasisSideIndex);
   SideBasisRestriction coarseSideRestriction = make_pair(coarserBasis.get(), coarserBasisSideIndex);
   
@@ -541,16 +542,17 @@ const SubBasisReconciliationWeights & BasisReconciliation::constrainedWeights(Ba
   return _sideReconciliationWeights[cacheKey];
 }
 
-const FieldContainer<double> & BasisReconciliation::constrainedWeights(BasisPtr finerBasis, RefinementBranch refinements, BasisPtr coarserBasis) {
+const FieldContainer<double> & BasisReconciliation::constrainedWeights(BasisPtr finerBasis, RefinementBranch refinements, BasisPtr coarserBasis, Permutation vertexNodePermutation) {
   BasisPair basisPair = make_pair(finerBasis.get(), coarserBasis.get());
   RefinedBasisPair refinedBasisPair = make_pair(basisPair, refinements);
+  pair<RefinedBasisPair, Permutation> cacheKey = make_pair(refinedBasisPair,vertexNodePermutation);
 
-  if (_simpleReconcilationWeights_h.find(refinedBasisPair) == _simpleReconcilationWeights_h.end()) {
-    FieldContainer<double> weights = computeConstrainedWeights(finerBasis,refinements,coarserBasis);
-    _simpleReconcilationWeights_h[refinedBasisPair] = weights;
+  if (_simpleReconcilationWeights_h.find(cacheKey) == _simpleReconcilationWeights_h.end()) {
+    FieldContainer<double> weights = computeConstrainedWeights(finerBasis,refinements,coarserBasis,vertexNodePermutation);
+    _simpleReconcilationWeights_h[cacheKey] = weights;
   }
 
-  return _simpleReconcilationWeights_h[refinedBasisPair];
+  return _simpleReconcilationWeights_h[cacheKey];
 }
 
 const SubBasisReconciliationWeights & BasisReconciliation::constrainedWeights(BasisPtr finerBasis, int finerBasisSideIndex, RefinementBranch &volumeRefinements,

@@ -15,3 +15,7 @@ SpatialFilterPtr SpatialFilter::allSpace() {
 SpatialFilterPtr SpatialFilter::unionFilter(SpatialFilterPtr a, SpatialFilterPtr b) {
   return Teuchos::rcp( new SpatialFilterLogicalOr(a,b) );
 }
+
+SpatialFilterPtr SpatialFilter::negatedFilter(SpatialFilterPtr filterToNegate) {
+  return Teuchos::rcp( new NegatedSpatialFilter(filterToNegate) );
+}

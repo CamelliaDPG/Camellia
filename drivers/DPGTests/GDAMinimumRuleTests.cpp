@@ -117,6 +117,13 @@ SolutionPtr GDAMinimumRuleTests::quadMeshSolution(bool useMinRule, int horizonta
 
 void GDAMinimumRuleTests::runTests(int &numTestsRun, int &numTestsPassed) {
   setup();
+  if (testMultiCellMesh()) {
+    numTestsPassed++;
+  }
+  numTestsRun++;
+  teardown();
+  
+  setup();
   if (testGlobalToLocalToGlobalConsistency()) {
     numTestsPassed++;
   }
@@ -143,6 +150,52 @@ void GDAMinimumRuleTests::setup() {
 
 void GDAMinimumRuleTests::teardown() {
   
+}
+
+bool GDAMinimumRuleTests::subTestCompatibleSolutionsAgree(int horizontalCells, int verticalCells) {
+  bool success = true;
+  
+  // up to a permutation of the rows/columns, everything should be identical for min and max rule on a single cell mesh.
+  SolutionPtr minRuleSoln = quadMeshSolution(true, horizontalCells, verticalCells);
+  SolutionPtr maxRuleSoln = quadMeshSolution(false, horizontalCells, verticalCells);
+  
+  if (minRuleSoln->mesh()->numGlobalDofs() != maxRuleSoln->mesh()->numGlobalDofs()) {
+    cout << "subTestCompatibleSolutionsAgree() failure: min rule mesh doesn't have the same # of global dofs as max rule mesh.  For a compatible mesh, these should be identical.\n";
+    success = false;
+  }
+  
+  minRuleSoln->solve();
+  maxRuleSoln->solve();
+  
+  GlobalIndexType cellID = 0; // sample cell
+  
+  DofOrderingPtr trialOrderingMaxRule = maxRuleSoln->mesh()->getElementType(cellID)->trialOrderPtr;
+  DofOrderingPtr trialOrderingMinRule = minRuleSoln->mesh()->getElementType(cellID)->trialOrderPtr;
+  
+  VarFactory vf = maxRuleSoln->mesh()->bilinearForm()->varFactory();
+  
+  set<int> varIDs = trialOrderingMaxRule->getVarIDs();
+  
+  double tol=1e-13;
+  for (set<int>::iterator varIt = varIDs.begin(); varIt != varIDs.end(); varIt++) {
+    int varID = *varIt;
+    VarPtr var = vf.trial(varID);
+    string varName = var->name();
+    
+    FunctionPtr maxRuleSolnFxn = Function::solution(var, maxRuleSoln); //Teuchos::rcp( new PreviousSolutionFunction( maxRuleSoln, var ));
+    FunctionPtr minRuleSolnFxn = Function::solution(var, minRuleSoln); //Teuchos::rcp( new PreviousSolutionFunction( minRuleSoln, var ));
+    
+    //    ((PreviousSolutionFunction*) maxRuleSolnFxn.get())->setOverrideMeshCheck(true);
+    //    ((PreviousSolutionFunction*) minRuleSolnFxn.get())->setOverrideMeshCheck(true);
+    
+    double l2diff = (maxRuleSolnFxn - minRuleSolnFxn)->l2norm(maxRuleSoln->mesh());
+    
+    if (l2diff > tol) {
+      cout << "Max and min rule solution for var " << varName << " differ; L^2 norm of difference: " << l2diff << endl;
+      success = false;
+    }
+  }
+  return success;
 }
 
 bool GDAMinimumRuleTests::testGlobalToLocalToGlobalConsistency() {
@@ -256,49 +309,12 @@ bool GDAMinimumRuleTests::testLocalInterpretationConsistency() {
   return success;
 }
 
+bool GDAMinimumRuleTests::testMultiCellMesh() {
+  int horizontalCells = 1, verticalCells = 2;
+  return subTestCompatibleSolutionsAgree(horizontalCells, verticalCells);
+}
+
 bool GDAMinimumRuleTests::testSingleCellMesh() {
-  bool success = true;
-  
-  // up to a permutation of the rows/columns, everything should be identical for min and max rule on a single cell mesh.
-  SolutionPtr minRuleSoln = quadMeshSolution(true, 1, 1);
-  SolutionPtr maxRuleSoln = quadMeshSolution(false, 1, 1);
-  
-  if (minRuleSoln->mesh()->numGlobalDofs() != maxRuleSoln->mesh()->numGlobalDofs()) {
-    cout << "testSingleCellMesh() failure: min rule mesh doesn't have the same # of global dofs as max rule mesh.  For a one-element mesh, these should be identical.\n";
-    success = false;
-  }
-
-  minRuleSoln->solve();
-  maxRuleSoln->solve();
-  
-  GlobalIndexType cellID = 0;
-  
-  DofOrderingPtr trialOrderingMaxRule = maxRuleSoln->mesh()->getElementType(cellID)->trialOrderPtr;
-  DofOrderingPtr trialOrderingMinRule = minRuleSoln->mesh()->getElementType(cellID)->trialOrderPtr;
-  
-  VarFactory vf = maxRuleSoln->mesh()->bilinearForm()->varFactory();
-  
-  set<int> varIDs = trialOrderingMaxRule->getVarIDs();
-
-  double tol=1e-13;
-  for (set<int>::iterator varIt = varIDs.begin(); varIt != varIDs.end(); varIt++) {
-    int varID = *varIt;
-    VarPtr var = vf.trial(varID);
-    string varName = var->name();
-    
-    FunctionPtr maxRuleSolnFxn = Function::solution(var, maxRuleSoln); //Teuchos::rcp( new PreviousSolutionFunction( maxRuleSoln, var ));
-    FunctionPtr minRuleSolnFxn = Function::solution(var, minRuleSoln); //Teuchos::rcp( new PreviousSolutionFunction( minRuleSoln, var ));
-    
-//    ((PreviousSolutionFunction*) maxRuleSolnFxn.get())->setOverrideMeshCheck(true);
-//    ((PreviousSolutionFunction*) minRuleSolnFxn.get())->setOverrideMeshCheck(true);
-    
-    double l2diff = (maxRuleSolnFxn - minRuleSolnFxn)->l2norm(maxRuleSoln->mesh());
-    
-    if (l2diff > tol) {
-      cout << "Max and min rule solution for var " << varName << " differ; L^2 norm of difference: " << l2diff << endl;
-      success = false;
-    }
-  }
-  
-  return success;
+  int horizontalCells = 1, verticalCells = 1;
+  return subTestCompatibleSolutionsAgree(horizontalCells, verticalCells);
 }

@@ -12,12 +12,14 @@
 #include "Solution.h"
 #include "RefinementStrategy.h"
 
+#include "IndexType.h"
+
 class LidDrivenFlowRefinementStrategy : public RefinementStrategy {
   double _hmin;
   int _maxPolyOrder;
   bool _printToConsole;
   bool _symmetricRefinements; // any refinement done on the top, do on the bottom as well
-  set<int> symmetricCellIDs(set<int> &cellIDs); // utility method for finding the symmetric counterparts for a set of cells
+  set<GlobalIndexType> symmetricCellIDs(set<GlobalIndexType> &cellIDs); // utility method for finding the symmetric counterparts for a set of cells
 public:
   LidDrivenFlowRefinementStrategy( SolutionPtr solution, double relativeEnergyThreshold, double hmin, int maxPolyOrder, bool printToConsole=false) 
   : RefinementStrategy(solution,relativeEnergyThreshold) {

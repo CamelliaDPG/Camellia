@@ -10,14 +10,16 @@
 
 #include "LidDrivenFlowRefinementStrategy.h"
 
-set<int> LidDrivenFlowRefinementStrategy::symmetricCellIDs(set<int> &cellIDs) {
+#include "IndexType.h"
+
+set<GlobalIndexType> LidDrivenFlowRefinementStrategy::symmetricCellIDs(set<GlobalIndexType> &cellIDs) {
   // find the
-  set<int> symmetricCellIDs;
+  set<GlobalIndexType> symmetricCellIDs;
   int spaceDim = 2;
   FieldContainer<double> cellPoints(cellIDs.size(), spaceDim);
   int i=0;
-  for (set<int>::iterator cellIt = cellIDs.begin(); cellIt != cellIDs.end(); cellIt++, i++) {
-    int cellID = *cellIt;
+  for (set<GlobalIndexType>::iterator cellIt = cellIDs.begin(); cellIt != cellIDs.end(); cellIt++, i++) {
+    GlobalIndexType cellID = *cellIt;
     vector<double> centroid = _solution->mesh()->getCellCentroid(cellID);
     double x = centroid[0];
     double y = centroid[1];
@@ -28,7 +30,7 @@ set<int> LidDrivenFlowRefinementStrategy::symmetricCellIDs(set<int> &cellIDs) {
   vector< ElementPtr > elements = _solution->mesh()->elementsForPoints(cellPoints);
   for (vector< ElementPtr >::iterator elementIt = elements.begin();
        elementIt != elements.end(); elementIt++) {
-    int cellID = (*elementIt)->cellID();
+    GlobalIndexType cellID = (*elementIt)->cellID();
     symmetricCellIDs.insert(cellID);
   }
   return symmetricCellIDs;
@@ -40,18 +42,18 @@ void LidDrivenFlowRefinementStrategy::setSymmetricRefinements(bool value) {
 
 void LidDrivenFlowRefinementStrategy::refineCells(vector<int> &cellIDs) {
   Teuchos::RCP< Mesh > mesh = _solution->mesh();
-  set<int> triangleCellsToRefine;
-  set<int> quadCellsToRefine;
-  set<int> pCellsToRefine;
+  set<GlobalIndexType> triangleCellsToRefine;
+  set<GlobalIndexType> quadCellsToRefine;
+  set<GlobalIndexType> pCellsToRefine;
   
   int spaceDim = 2;
   FieldContainer<double> triangleVertices(3,spaceDim);
   FieldContainer<double> quadVertices(4,spaceDim);
   
-  vector<int> cellIDVector(1);
+  vector<GlobalIndexType> cellIDVector(1);
   for (vector< int >::iterator cellIDIt = cellIDs.begin();
        cellIDIt != cellIDs.end(); cellIDIt++){
-    int cellID = *cellIDIt;
+    GlobalIndexType cellID = *cellIDIt;
     cellIDVector[0] = cellID;
     ElementTypePtr elemType = mesh->getElement(cellID)->elementType();
     BasisCachePtr basisCacheOneCell = Teuchos::rcp( new BasisCache(elemType, mesh) );
@@ -104,13 +106,13 @@ void LidDrivenFlowRefinementStrategy::refineCells(vector<int> &cellIDs) {
   }
   
   if (_symmetricRefinements) {
-    set<int> symmetricTriangleCells = symmetricCellIDs(triangleCellsToRefine);
+    set<GlobalIndexType> symmetricTriangleCells = symmetricCellIDs(triangleCellsToRefine);
     triangleCellsToRefine.insert(symmetricTriangleCells.begin(),symmetricTriangleCells.end());
     
-    set<int> symmetricQuadCells = symmetricCellIDs(quadCellsToRefine);
+    set<GlobalIndexType> symmetricQuadCells = symmetricCellIDs(quadCellsToRefine);
     quadCellsToRefine.insert(symmetricQuadCells.begin(),symmetricQuadCells.end());
     
-    set<int> symmetricPCells = symmetricCellIDs(pCellsToRefine);
+    set<GlobalIndexType> symmetricPCells = symmetricCellIDs(pCellsToRefine);
     pCellsToRefine.insert(symmetricPCells.begin(),symmetricPCells.end());
   }
   

@@ -594,7 +594,8 @@ bool BasisReconciliationTests::hConstraintInternalBasisSubTest(BasisPtr fineBasi
   bool success = true;
   
   BasisReconciliation br;
-  FieldContainer<double> weights = br.constrainedWeights(fineBasis, refinements, coarseBasis);
+  unsigned permutation = 0; // for now, just assuming the identity permutation.  TODO: try other permutations.
+  FieldContainer<double> weights = br.constrainedWeights(fineBasis, refinements, coarseBasis, permutation);
   
   //  cout << "BasisReconciliation: computed weights when matching whole bases.\n";
   
@@ -633,7 +634,8 @@ bool BasisReconciliationTests::pConstraintInternalBasisSubTest(BasisPtr fineBasi
   
   // first question: does BasisReconciliation run to completion?
   BasisReconciliation br;
-  FieldContainer<double> weights = br.constrainedWeights(fineBasis, coarseBasis);
+  unsigned permutation = 0; // for now, just assuming the identity permutation.  TODO: try other permutations.
+  FieldContainer<double> weights = br.constrainedWeights(fineBasis, coarseBasis, permutation);
   
   //  cout << "BasisReconciliation: computed weights when matching whole bases.\n";
   

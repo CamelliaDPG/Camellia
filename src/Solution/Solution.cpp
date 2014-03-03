@@ -3895,7 +3895,7 @@ void Solution::readFromFile(const string &filePath) {
   fin.close();
 }
 
-SolutionPtr Solution::solution(Teuchos::RCP<Mesh> mesh, Teuchos::RCP<BC> bc, Teuchos::RCP<RHS> rhs, Teuchos::RCP<DPGInnerProduct> ip ) {
+SolutionPtr Solution::solution(MeshPtr mesh, BCPtr bc, RHSPtr rhs, Teuchos::RCP<DPGInnerProduct> ip ) {
   return Teuchos::rcp( new Solution(mesh,bc,rhs,ip) );
 }
 

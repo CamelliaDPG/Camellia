@@ -118,6 +118,8 @@ int main(int argc, char *argv[]) {
   
   if (tryMinRule) {
     double eps = 1e-4;
+    int horizontalCells = 1, verticalCells = 2;
+    
     vector<double> beta_const;
     beta_const.push_back(2.0);
     beta_const.push_back(1.0);
@@ -150,7 +152,7 @@ int main(int argc, char *argv[]) {
     confusionBF->addTerm( beta_const * u, - v->grad() );
     confusionBF->addTerm( beta_n_u_minus_sigma_n, v);
     
-    MeshPtr meshMinRule = MeshFactory::quadMeshMinRule(confusionBF, 2);
+    MeshPtr meshMinRule = MeshFactory::quadMeshMinRule(confusionBF, 2, 1.0, 1.0, horizontalCells, verticalCells);
     
     ////////////////////   SPECIFY RHS   ///////////////////////
     Teuchos::RCP<RHSEasy> rhs = Teuchos::rcp( new RHSEasy );
@@ -168,8 +170,9 @@ int main(int argc, char *argv[]) {
     
 //    int cellID = 0;
     
+    
     { // max rule for comparison
-      MeshPtr meshMaxRule = MeshFactory::quadMesh(confusionBF, 2);
+      MeshPtr meshMaxRule = MeshFactory::quadMesh(confusionBF, 2, 1.0, 1.0, horizontalCells, verticalCells);
       SolutionPtr solnMaxRule = Teuchos::rcp( new Solution(meshMaxRule, bc, rhs, ip) );
       string maxStiffnessFileName = "maxRuleStiffness.dat";
       solnMaxRule->setWriteMatrixToMatrixMarketFile(true, maxStiffnessFileName);
