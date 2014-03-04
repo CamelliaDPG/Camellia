@@ -24,7 +24,7 @@ private:
   void teardown();
   
   SolutionPtr quadMeshSolution(bool useMinRule, int horizontalCells, int verticalCells);
-  bool subTestCompatibleSolutionsAgree(int horizontalCells, int verticalCells);
+  bool subTestCompatibleSolutionsAgree(int horizontalCells, int verticalCells, int numUniformRefinements=0);
 public:
   GDAMinimumRuleTests();
   void runTests(int &numTestsRun, int &numTestsPassed);
@@ -35,6 +35,8 @@ public:
   
   bool testMultiCellMesh();
   bool testSingleCellMesh();
+  
+  bool testHRefinements();
 };
 
 

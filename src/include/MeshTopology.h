@@ -137,6 +137,7 @@ public:
   vector< ParametricCurvePtr > parametricEdgesForCell(IndexType cellID, bool neglectCurves);
   void setEdgeToCurveMap(const map< pair<IndexType, IndexType>, ParametricCurvePtr > &edgeToCurveMap, MeshPtr mesh);
   
+  void printConstraintReport(unsigned d);
   void printEntityVertices(unsigned d, IndexType entityIndex);
   
   // not sure this should ultimately be exposed -- using it now to allow correctly timed call to updateCells()

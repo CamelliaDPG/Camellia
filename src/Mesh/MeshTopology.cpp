@@ -92,7 +92,7 @@ unsigned MeshTopology::addCell(CellTopoPtr cellTopo, const vector<unsigned> &cel
       entityIndex = addEntity(cellTopo->getCellTopologyData(d, j), nodes, entityPermutation);
       cellEntityIndices[d][j] = entityIndex;
 
-      cellEntityPermutations[d][entityIndex] = entityPermutation;
+      cellEntityPermutations[d][j] = entityPermutation;
       _activeCellsForEntities[d][entityIndex].insert(make_pair(cellIndex,j));
     }
   }
@@ -901,7 +901,6 @@ unsigned MeshTopology::getSubEntityPermutation(unsigned d, IndexType entityIndex
 
 pair<IndexType,IndexType> MeshTopology::leastActiveCellIndexContainingEntityConstrainedByConstrainingEntity(unsigned d, unsigned constrainingEntityIndex) {
   unsigned leastActiveCellIndex = (unsigned)-1; // unsigned cast of -1 makes maximal unsigned #
-
   set<IndexType> constrainedEntities = descendants(d,constrainingEntityIndex);
 
   IndexType leastActiveCellConstrainedEntityIndex;
@@ -924,15 +923,16 @@ pair<IndexType,IndexType> MeshTopology::leastActiveCellIndexContainingEntityCons
         }
       }
       IndexType secondCellIndex = cellsForSide.second.first;
-      if (secondCellIndex < leastActiveCellIndex) {
-        leastActiveCellConstrainedEntityIndex = constrainedEntityIndex;
-        leastActiveCellIndex = secondCellIndex;
+      if (_activeCells.find(secondCellIndex) != _activeCells.end()) {
+        if (secondCellIndex < leastActiveCellIndex) {
+          leastActiveCellConstrainedEntityIndex = constrainedEntityIndex;
+          leastActiveCellIndex = secondCellIndex;
+        }
       }
     }
   }
   if (leastActiveCellIndex == -1) {
     cout << "WARNING: least active cell index not found.\n";
-    
   }
   
   return make_pair(leastActiveCellIndex, leastActiveCellConstrainedEntityIndex);
@@ -988,6 +988,18 @@ vector< ParametricCurvePtr > MeshTopology::parametricEdgesForCell(unsigned cellI
     edges.push_back(edgeFxn);
   }
   return edges;
+}
+
+void MeshTopology::printConstraintReport(unsigned d) {
+  IndexType entityCount = _entities[d].size();
+  cout << "******* MeshTopology, constraints for d = " << d << " *******\n";
+  for (IndexType entityIndex=0; entityIndex<entityCount; entityIndex++) {
+    IndexType constrainingEntityIndex = getConstrainingEntityIndex(d, entityIndex);
+    if (entityIndex != constrainingEntityIndex)
+      cout << "Entity " << entityIndex << " is constrained by entity " << constrainingEntityIndex << endl;
+    else
+      cout << "Entity " << entityIndex << " is unconstrained.\n";
+  }
 }
 
 void MeshTopology::printVertex(unsigned int vertexIndex) {

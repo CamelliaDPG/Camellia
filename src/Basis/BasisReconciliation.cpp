@@ -111,6 +111,12 @@ FieldContainer<double> BasisReconciliation::permutedCubaturePoints(BasisCachePtr
   FieldContainer<double> permutedCubaturePoints = basisCacheForPermutation->getPhysicalCubaturePoints();
   // resize for reference space (no cellIndex dimension):
   permutedCubaturePoints.resize(permutedCubaturePoints.dimension(1), permutedCubaturePoints.dimension(2));
+
+//  if (cellTopoNodePermutation != 0) {
+//    cout << "For non-identity permutation, unpermuted cubature points:\n" << basisCache->getRefCellPoints();
+//    cout << "Permuted points:\n" << permutedCubaturePoints;
+//  }
+
   return permutedCubaturePoints;
 }
 
@@ -132,6 +138,13 @@ SubBasisReconciliationWeights BasisReconciliation::composedSubBasisReconciliatio
 FieldContainer<double> BasisReconciliation::computeConstrainedWeights(BasisPtr finerBasis, BasisPtr coarserBasis, Permutation vertexPermutation) {
   // we could define things in terms of Functions, and then use Projector class.  But this is simple enough that it's probably worth it to do it more manually.
   // (also, I'm a bit concerned about the expense here, and the present implementation hopefully will be a bit lighter weight.)
+  
+  // DEBUGGING: do we ever use a non-identity permutation?
+//  if (vertexPermutation != 0) {
+////    cout << "non-identity vertexPermutation.\n";
+//  } else {
+////    cout << "identity vertexPermutation.\n";
+//  }
   
   shards::CellTopology cellTopo = finerBasis->domainTopology();
   TEUCHOS_TEST_FOR_EXCEPTION(cellTopo.getBaseKey() != coarserBasis->domainTopology().getBaseKey(), std::invalid_argument, "Bases must agree on domain topology.");
@@ -313,6 +326,13 @@ FieldContainer<double> BasisReconciliation::computeConstrainedWeights(BasisPtr f
   
   if (refinements.size() == 0) {
     return computeConstrainedWeights(finerBasis, coarserBasis, vertexPermutation);
+  }
+  
+  // DEBUGGING: do we ever use a non-identity permutation?
+  if (vertexPermutation != 0) {
+    cout << "non-identity vertexPermutation.\n";
+  } else {
+//    cout << "identity vertexPermutation.\n";
   }
   
   // there's a LOT of code duplication between this and the p-oriented computeConstrainedWeights(finerBasis,coarserBasis)

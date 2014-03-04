@@ -291,7 +291,8 @@ void Boundary::bcsToImpose( map<  GlobalIndexType, double > &globalDofIndicesAnd
               _mesh->interpretLocalBasisData(cellID, trialID, sideIndex, cellData, globalData, globalDofIndices);
               
 //              cout << "For cell " << cellID << " and trial ID " << trialID << " on side " << sideIndex;
-//              cout << ", globalData is:\n" << globalData;
+//              cout << ", localData is:\n" << cellData;
+//              cout << ", globalDofIndices:\n" << globalDofIndices;
               
               for (int globalDofOrdinal=0; globalDofOrdinal<globalDofIndices.size(); globalDofOrdinal++) {
                 GlobalIndexType globalDofIndex = globalDofIndices(globalDofOrdinal);

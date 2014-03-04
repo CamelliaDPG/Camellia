@@ -52,15 +52,31 @@ void GDAMinimumRule::didChangePartitionPolicy() {
 
 void GDAMinimumRule::didHRefine(const set<GlobalIndexType> &parentCellIDs) {
   this->GlobalDofAssignment::didHRefine(parentCellIDs);
+  set<GlobalIndexType> neighborsOfNewElements;
   for (set<GlobalIndexType>::const_iterator cellIDIt = parentCellIDs.begin(); cellIDIt != parentCellIDs.end(); cellIDIt++) {
     GlobalIndexType parentCellID = *cellIDIt;
     CellPtr parentCell = _meshTopology->getCell(parentCellID);
     vector<IndexType> childIDs = parentCell->getChildIndices();
     int parentH1Order = _cellH1Orders[parentCellID];
     for (vector<IndexType>::iterator childIDIt = childIDs.begin(); childIDIt != childIDs.end(); childIDIt++) {
-      _cellH1Orders[*childIDIt] = parentH1Order;
-      assignInitialElementType(*childIDIt);
+      GlobalIndexType childCellID = *childIDIt;
+      _cellH1Orders[childCellID] = parentH1Order;
+      assignInitialElementType(childCellID);
+      assignParities(childCellID);
+      // determine neighbors, so their parities can be updated below:
+      CellPtr childCell = _meshTopology->getCell(childCellID);
+      unsigned childSideCount = childCell->topology()->getSideCount();
+      for (int childSideOrdinal=0; childSideOrdinal<childSideCount; childSideOrdinal++) {
+        GlobalIndexType neighborCellID = childCell->getNeighbor(childSideOrdinal).first;
+        if (neighborCellID != -1) {
+          neighborsOfNewElements.insert(neighborCellID);
+        }
+      }
     }
+  }
+  // this set is not as lean as it might be -- we could restrict to peer neighbors, I think -- but it's a pretty cheap operation.
+  for (set<GlobalIndexType>::iterator cellIDIt = neighborsOfNewElements.begin(); cellIDIt != neighborsOfNewElements.end(); cellIDIt++) {
+    assignParities(*cellIDIt);
   }
   rebuildLookups();
 }
@@ -77,6 +93,7 @@ void GDAMinimumRule::didHUnrefine(const set<GlobalIndexType> &parentCellIDs) {
   this->GlobalDofAssignment::didHUnrefine(parentCellIDs);
   // TODO: implement this
   cout << "WARNING: GDAMinimumRule::didHUnrefine() unimplemented.\n";
+  // will need to treat cell side parities here--probably suffices to redo those in parentCellIDs plus all their neighbors.
   rebuildLookups();
 }
 
@@ -195,8 +212,8 @@ CellConstraints GDAMinimumRule::getCellConstraints(GlobalIndexType cellID) {
     for (int scOrdinal = 0; scOrdinal < scCount; scOrdinal++) {
       IndexType entityIndex = scIndices[scOrdinal];
       IndexType constrainingEntityIndex = _meshTopology->getConstrainingEntityIndex(d, entityIndex);
-      pair<GlobalIndexType,GlobalIndexType> owningCellID = _meshTopology->leastActiveCellIndexContainingEntityConstrainedByConstrainingEntity(d, constrainingEntityIndex);
-      cellConstraints.owningCellIDForSubcell[d][scOrdinal] = owningCellID;
+      pair<GlobalIndexType,GlobalIndexType> owningCellInfo = _meshTopology->leastActiveCellIndexContainingEntityConstrainedByConstrainingEntity(d, constrainingEntityIndex);
+      cellConstraints.owningCellIDForSubcell[d][scOrdinal] = owningCellInfo;
     }
   }
   
@@ -211,8 +228,8 @@ CellConstraints GDAMinimumRule::getCellConstraints(GlobalIndexType cellID) {
       for (int scOrdinal = 0; scOrdinal < scCount; scOrdinal++) {
         IndexType entityIndex = _meshTopology->getSubEntityIndex(sideDim, sideEntityIndex, d, scOrdinal);
         IndexType constrainingEntityIndex = _meshTopology->getConstrainingEntityIndex(d, entityIndex);
-        pair<GlobalIndexType,GlobalIndexType> owningCellID = _meshTopology->leastActiveCellIndexContainingEntityConstrainedByConstrainingEntity(d, constrainingEntityIndex);
-        sideConstraint.owningCellIDForSideSubcell[d][scOrdinal] = owningCellID;
+        pair<GlobalIndexType,GlobalIndexType> owningCellInfo = _meshTopology->leastActiveCellIndexContainingEntityConstrainedByConstrainingEntity(d, constrainingEntityIndex);
+        sideConstraint.owningCellIDForSideSubcell[d][scOrdinal] = owningCellInfo;
       }
     }
     
@@ -250,13 +267,27 @@ CellConstraints GDAMinimumRule::getCellConstraints(GlobalIndexType cellID) {
       }
     } else {
       // there should be exactly one cell with the specified sideEntityIndex listed in _meshTopology::_cellsForSideEntities.
-      if (_meshTopology->getCellCountForSide(constrainingSideEntityIndex) != 1) {
-        cout << "ERROR while applying GDAMinimumRule: extra cell(s) defined for constrainingSideEntityIndex.\n";
-        TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "ERROR: extra cell(s) defined for constrainingSideEntityIndex.");
+      if (_meshTopology->getCellCountForSide(sideEntityIndex) != 1) {
+        cout << "ERROR while applying GDAMinimumRule: extra cell(s) defined for sideEntityIndex.\n";
+      
+        cout << "sideEntityIndex " << sideEntityIndex << ", vertices:\n";
+        _meshTopology->printEntityVertices(sideDim, sideEntityIndex);
+        cout << "constrainingSideEntityIndex " << constrainingSideEntityIndex << ", vertices:\n";
+        _meshTopology->printEntityVertices(sideDim, constrainingSideEntityIndex);
+        
+        CellPair firstCellPair = _meshTopology->getFirstCellForSide(sideEntityIndex);
+        CellPair secondCellPair = _meshTopology->getSecondCellForSide(sideEntityIndex);
+        
+        cout << "first  cellID: " << firstCellPair.first << ", sideOrdinal " << firstCellPair.second << endl;
+        cout << "second cellID: " << secondCellPair.first << ", sideOrdinal " << secondCellPair.second << endl;
+        
+        TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "ERROR: extra cell(s) defined for sideEntityIndex.");
       }
-      CellPair constrainingCellPair = _meshTopology->getFirstCellForSide(constrainingSideEntityIndex);
-      sideConstraint.cellID = constrainingCellPair.first;
-      sideConstraint.sideOrdinal = constrainingCellPair.second;
+      CellPair sideCellInfo = _meshTopology->getFirstCellForSide(sideEntityIndex);
+      pair<GlobalIndexType, unsigned> neighborInfo = _meshTopology->getCell(sideCellInfo.first)->getNeighbor(sideCellInfo.second);
+      
+      sideConstraint.cellID = neighborInfo.first;
+      sideConstraint.sideOrdinal = neighborInfo.second;
     }
     cellConstraints.sideConstraints[sideOrdinal] = sideConstraint;
     
@@ -272,6 +303,19 @@ CellConstraints GDAMinimumRule::getCellConstraints(GlobalIndexType cellID) {
       unsigned constrainingEntityIndex = _meshTopology->getConstrainingEntityIndex(subsideDim, subsideEntityIndex);
       // determine all sides that contain the constraining entity -- find the cell containing such a side with the lowest H^1 order (using cellID to break ties)
       set< CellPair > cellsForSubside = _meshTopology->getCellsContainingEntity(subsideDim, constrainingEntityIndex);
+      
+      if (subsideDim == 0) { // vertices: we should restrict ourselves to active cells
+        set< CellPair > cells = cellsForSubside;
+        cellsForSubside.clear();
+        set< GlobalIndexType > activeCellIDs = _meshTopology->getActiveCellIndices();
+        for (set< CellPair >::iterator cellIt = cells.begin(); cellIt != cells.end(); cellIt++) {
+          GlobalIndexType cellID = cellIt->first;
+          if (activeCellIDs.find(cellID) != activeCellIDs.end()) {
+            cellsForSubside.insert(*cellIt);
+          }
+        }
+      }
+      
       unsigned leastH1Order = (unsigned)-1;
       set< CellPair > cellsWithLeastH1Order;
       for (set< CellPair >::iterator subsideCellIt = cellsForSubside.begin(); subsideCellIt != cellsForSubside.end(); subsideCellIt++) {
@@ -428,7 +472,9 @@ SubCellDofIndexInfo GDAMinimumRule::getOwnedGlobalDofIndices(GlobalIndexType cel
                   CellPtr cell = _meshTopology->getCell(cellID);
 
                   // determine the subcell index in _meshTopology (will be used below to determine the subcell ordinal of the constraining subcell in the constraining cell)
-                  IndexType scIndex = cell->entityIndex(d, scOrdinalInCell);
+                  
+                  IndexType sideEntityIndex = cell->entityIndex(sideDim, sideOrdinal);
+                  IndexType scIndex = _meshTopology->getSubEntityIndex(sideDim, sideEntityIndex, d, scOrdinalInSide);
                   IndexType constrainingScIndex = _meshTopology->getConstrainingEntityIndex(d, scIndex);
 
                   if (varHasSupportOnVolume) {
@@ -500,15 +546,16 @@ LocalDofMapperPtr GDAMinimumRule::getDofMapper(GlobalIndexType cellID, CellConst
     int scCount = (d != spaceDim) ? topo->getSubcellCount(d) : 1; // TODO: figure out whether the spaceDim special case is needed...
     for (int scord=0; scord<scCount; scord++) {
       if (dofIndexInfo[d].find(scord) == dofIndexInfo[d].end()) { // this one not yet filled in
-        pair<GlobalIndexType, GlobalIndexType> owningCellID = constraints.owningCellIDForSubcell[d][scord];
-        CellConstraints owningConstraints = getCellConstraints(owningCellID.first);
-        if (otherDofIndexInfoCache.find(owningCellID.first) == otherDofIndexInfoCache.end()) {
-          otherDofIndexInfoCache[owningCellID.first] = getOwnedGlobalDofIndices(owningCellID.first, owningConstraints);
+        pair<GlobalIndexType, GlobalIndexType> owningCellInfo = constraints.owningCellIDForSubcell[d][scord];
+        GlobalIndexType owningCellID = owningCellInfo.first;
+        CellConstraints owningConstraints = getCellConstraints(owningCellID);
+        if (otherDofIndexInfoCache.find(owningCellID) == otherDofIndexInfoCache.end()) {
+          otherDofIndexInfoCache[owningCellID] = getOwnedGlobalDofIndices(owningCellID, owningConstraints);
         }
-        GlobalIndexType scEntityIndex = owningCellID.second;
-        CellPtr owningCell = _meshTopology->getCell(owningCellID.first);
+        GlobalIndexType scEntityIndex = owningCellInfo.second;
+        CellPtr owningCell = _meshTopology->getCell(owningCellID);
         unsigned owningCellScord = owningCell->findSubcellOrdinal(d, scEntityIndex);
-        SubCellDofIndexInfo owningDofIndexInfo = otherDofIndexInfoCache[owningCellID.first];
+        SubCellDofIndexInfo owningDofIndexInfo = otherDofIndexInfoCache[owningCellID];
         dofIndexInfo[d][scord] = owningDofIndexInfo[d][owningCellScord];
       }
     }
@@ -621,7 +668,22 @@ LocalDofMapperPtr GDAMinimumRule::getDofMapper(GlobalIndexType cellID, CellConst
         CellPtr constrainingCellForSide = _meshTopology->getCell(sideConstraint.cellID);
         DofOrderingPtr constrainingTrialOrdering = _elementTypeForCell[sideConstraint.cellID]->trialOrderPtr;
         
-        pair< GlobalIndexType, unsigned > ancestralCellInfo = constrainingCellForSide->getNeighbor(sideConstraint.sideOrdinal);
+        pair< GlobalIndexType, unsigned > ancestralCellInfo;
+        
+        bool constrainingCellIsAncestor = false;  // constraining cell will either be the ancestor or the neighbor of the ancestor of the current cell
+        CellPtr currentCell = cell;
+        while (currentCell.get() != NULL) {
+          if (currentCell->cellIndex() == sideConstraint.cellID) {
+            constrainingCellIsAncestor = true;
+          }
+          currentCell = currentCell->getParent();
+        }
+        if (constrainingCellIsAncestor) {
+          ancestralCellInfo = make_pair(sideConstraint.cellID,sideConstraint.sideOrdinal);
+        } else { // if the constraining cell is not the ancestor, then its neighbor is:
+          ancestralCellInfo = constrainingCellForSide->getNeighbor(sideConstraint.sideOrdinal);
+        }
+        
         IndexType constrainingSideEntityIndex = constrainingCellForSide->entityIndex(sideDim, sideConstraint.sideOrdinal);
         shards::CellTopology constrainingSideTopo = _meshTopology->getEntityTopology(sideDim, constrainingSideEntityIndex);
         
@@ -639,6 +701,11 @@ LocalDofMapperPtr GDAMinimumRule::getDofMapper(GlobalIndexType cellID, CellConst
         }
         
         unsigned composedPermutation = CamelliaCellTools::permutationComposition(constrainingSideTopo, constrainingSidePermutationInverse, ancestralCellSidePermutation);
+        
+        // DEBUGGING:
+//        if (ancestralCellInfo.first != -1) {
+//          cout << "on cell " << cellID << ", side " << sideOrdinal << ", composedPermutation = " << composedPermutation << endl;
+//        }
         
         RefinementBranch refBranch;
         BasisPtr basis, constrainingBasis;
@@ -851,6 +918,33 @@ LocalDofMapperPtr GDAMinimumRule::getDofMapper(GlobalIndexType cellID, CellConst
   return Teuchos::rcp( new LocalDofMapper(trialOrdering,volumeMap,sideMaps,varIDToMap,sideOrdinalToMap) );
 }
 
+void GDAMinimumRule::printConstraintInfo(GlobalIndexType cellID) {
+  CellConstraints cellConstraints = getCellConstraints(cellID);
+  cout << "***** Constraints for cell " << cellID << " ****** \n";
+  unsigned sideCount = cellConstraints.sideConstraints.size();
+  for (int sideOrdinal=0; sideOrdinal<sideCount; sideOrdinal++) {
+    cout << "Side " << sideOrdinal << ":\n";
+    ConstrainingCellInfo sideConstraint = cellConstraints.sideConstraints[sideOrdinal];
+    cout << "    constraining cell: " << sideConstraint.cellID << ", side " << sideConstraint.sideOrdinal << endl;
+    int subsideCount = cellConstraints.subsideConstraints[sideOrdinal].size();
+    for (int subsideOrdinal = 0; subsideOrdinal < subsideCount; subsideOrdinal++) {
+      ConstrainingSubsideInfo subsideConstraint = cellConstraints.subsideConstraints[sideOrdinal][subsideOrdinal];
+      cout << "        subside " << subsideOrdinal << ": cellID " << subsideConstraint.cellID << ", side " << subsideConstraint.sideOrdinal;
+      cout << ", subsideOrdinalInSide " << subsideConstraint.subsideOrdinalInSide << endl;
+    }
+  }
+  cout << "Ownership info:\n";
+  CellPtr cell = _meshTopology->getCell(cellID);
+  int spaceDim = cell->topology()->getDimension();
+  for (int d=0; d<spaceDim; d++) {
+    cout << "  dimension " << d << " subcells: " << endl;
+    int subcellCount = cell->topology()->getSubcellCount(d);
+    for (int scord=0; scord<subcellCount; scord++) {
+      cout << "    ordinal " << scord  << " owned by cell " << cellConstraints.owningCellIDForSubcell[d][scord].first << endl;
+    }
+  }
+}
+
 void GDAMinimumRule::rebuildLookups() {
   _constraintsCache.clear(); // to free up memory, could clear this again after the lookups are rebuilt.  Having the cache is most important during the construction below.
   
@@ -923,7 +1017,8 @@ void GDAMinimumRule::rebuildLookups() {
                 GlobalIndexType owningCellID = constraints.owningCellIDForSubcell[d][scOrdinalInCell].first;
                 
                 // determine the subcell index in _meshTopology (will be used below to determine the subcell ordinal of the constraining subcell in the constraining cell)
-                IndexType scIndex = cell->entityIndex(d, scOrdinalInCell);
+                IndexType sideEntityIndex = cell->entityIndex(sideDim, sideOrdinal);
+                IndexType scIndex = _meshTopology->getSubEntityIndex(sideDim, sideEntityIndex, d, scOrdinalInSide);
                 IndexType constrainingScIndex = _meshTopology->getConstrainingEntityIndex(d, scIndex);
                 
                 if (owningCellID == cellID) {

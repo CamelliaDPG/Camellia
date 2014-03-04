@@ -1,4 +1,4 @@
-#include "MeshTopology.h"
+//#include "MeshTopology.h"
 
 #include <iostream.h>
 
@@ -16,6 +16,8 @@
 #include "Solution.h"
 
 #include "../DPGTests/TestSuite.h"
+
+#include "GDAMinimumRule.h"
 
 #include "SolutionExporter.h"
 
@@ -119,6 +121,7 @@ int main(int argc, char *argv[]) {
   if (tryMinRule) {
     double eps = 1e-4;
     int horizontalCells = 1, verticalCells = 2;
+    int numRefs = 1;
     
     vector<double> beta_const;
     beta_const.push_back(2.0);
@@ -152,7 +155,21 @@ int main(int argc, char *argv[]) {
     confusionBF->addTerm( beta_const * u, - v->grad() );
     confusionBF->addTerm( beta_n_u_minus_sigma_n, v);
     
-    MeshPtr meshMinRule = MeshFactory::quadMeshMinRule(confusionBF, 2, 1.0, 1.0, horizontalCells, verticalCells);
+    int polyOrder = 2;
+    int pToAddTest = 2;
+    double width = 1.0, height = 1.0;
+    MeshPtr meshMinRule = MeshFactory::quadMeshMinRule(confusionBF, polyOrder, pToAddTest, width, height,
+                                                       horizontalCells, verticalCells);
+    
+//    cout << "Before refinements, edge constraints:\n";
+//    meshMinRule->getTopology()->printConstraintReport(1); // edges
+    
+    for (int ref=0; ref<numRefs; ref++) {
+      set<GlobalIndexType> cellIDsMinRule = meshMinRule->getActiveCellIDs();
+      meshMinRule->hRefine(cellIDsMinRule, RefinementPattern::regularRefinementPatternQuad());
+    }
+//    cout << "After refinements, edge constraints:\n";
+//    meshMinRule->getTopology()->printConstraintReport(1); // edges
     
     ////////////////////   SPECIFY RHS   ///////////////////////
     Teuchos::RCP<RHSEasy> rhs = Teuchos::rcp( new RHSEasy );
@@ -172,7 +189,14 @@ int main(int argc, char *argv[]) {
     
     
     { // max rule for comparison
-      MeshPtr meshMaxRule = MeshFactory::quadMesh(confusionBF, 2, 1.0, 1.0, horizontalCells, verticalCells);
+      MeshPtr meshMaxRule = MeshFactory::quadMesh(confusionBF, polyOrder, pToAddTest, width, height,
+                                                  horizontalCells, verticalCells);
+
+      for (int ref=0; ref<numRefs; ref++) {
+        set<GlobalIndexType> cellIDsMaxRule = meshMaxRule->getActiveCellIDs();
+        meshMaxRule->hRefine(cellIDsMaxRule, RefinementPattern::regularRefinementPatternQuad());
+      }
+      
       SolutionPtr solnMaxRule = Teuchos::rcp( new Solution(meshMaxRule, bc, rhs, ip) );
       string maxStiffnessFileName = "maxRuleStiffness.dat";
       solnMaxRule->setWriteMatrixToMatrixMarketFile(true, maxStiffnessFileName);
@@ -187,6 +211,13 @@ int main(int argc, char *argv[]) {
       VTKExporter maxExporter(solnMaxRule,meshMaxRule, varFactory);
       maxExporter.exportSolution("confusionMaxRuleSoln");
     }
+    
+//    set<IndexType> activeCells = meshMinRule->getActiveCellIDs();
+//    GDAMinimumRule* minRule = (GDAMinimumRule*) meshMinRule->globalDofAssignment().get();
+//    for (set<IndexType>::iterator cellIDIt = activeCells.begin(); cellIDIt != activeCells.end(); cellIDIt++) {
+//      IndexType cellID = *cellIDIt;
+//      minRule->printConstraintInfo(cellID);
+//    }
     
     SolutionPtr solnMinRule = Teuchos::rcp( new Solution(meshMinRule, bc, rhs, ip) );
     

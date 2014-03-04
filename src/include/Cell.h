@@ -57,6 +57,7 @@ public:
   void setParent(Teuchos::RCP<Cell> parent);
   bool isParent();
   
+  unsigned childOrdinal(IndexType childIndex);
   unsigned findSubcellOrdinal(unsigned subcdim, IndexType subcEntityIndex); // this is pretty brute force right now
   
   RefinementPatternPtr refinementPattern();

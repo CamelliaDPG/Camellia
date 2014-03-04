@@ -117,6 +117,13 @@ SolutionPtr GDAMinimumRuleTests::quadMeshSolution(bool useMinRule, int horizonta
 
 void GDAMinimumRuleTests::runTests(int &numTestsRun, int &numTestsPassed) {
   setup();
+  if (testHRefinements()) {
+    numTestsPassed++;
+  }
+  numTestsRun++;
+  teardown();
+  
+  setup();
   if (testMultiCellMesh()) {
     numTestsPassed++;
   }
@@ -152,7 +159,7 @@ void GDAMinimumRuleTests::teardown() {
   
 }
 
-bool GDAMinimumRuleTests::subTestCompatibleSolutionsAgree(int horizontalCells, int verticalCells) {
+bool GDAMinimumRuleTests::subTestCompatibleSolutionsAgree(int horizontalCells, int verticalCells, int numUniformRefinements) {
   bool success = true;
   
   // up to a permutation of the rows/columns, everything should be identical for min and max rule on a single cell mesh.
@@ -164,19 +171,27 @@ bool GDAMinimumRuleTests::subTestCompatibleSolutionsAgree(int horizontalCells, i
     success = false;
   }
   
-  minRuleSoln->solve();
-  maxRuleSoln->solve();
-  
   GlobalIndexType cellID = 0; // sample cell
   
   DofOrderingPtr trialOrderingMaxRule = maxRuleSoln->mesh()->getElementType(cellID)->trialOrderPtr;
   DofOrderingPtr trialOrderingMinRule = minRuleSoln->mesh()->getElementType(cellID)->trialOrderPtr;
   
+  for (int ref=0; ref<numUniformRefinements; ref++) {
+    set<GlobalIndexType> cellIDsMinRule = minRuleSoln->mesh()->getActiveCellIDs();
+    minRuleSoln->mesh()->hRefine(cellIDsMinRule, RefinementPattern::regularRefinementPatternQuad());
+    
+    set<GlobalIndexType> cellIDsMaxRule = maxRuleSoln->mesh()->getActiveCellIDs();
+    maxRuleSoln->mesh()->hRefine(cellIDsMaxRule, RefinementPattern::regularRefinementPatternQuad());
+  }
+  
+  minRuleSoln->solve();
+  maxRuleSoln->solve();
+  
   VarFactory vf = maxRuleSoln->mesh()->bilinearForm()->varFactory();
   
   set<int> varIDs = trialOrderingMaxRule->getVarIDs();
   
-  double tol=1e-13;
+  double tol=1e-12;
   for (set<int>::iterator varIt = varIDs.begin(); varIt != varIDs.end(); varIt++) {
     int varID = *varIt;
     VarPtr var = vf.trial(varID);
@@ -201,7 +216,12 @@ bool GDAMinimumRuleTests::subTestCompatibleSolutionsAgree(int horizontalCells, i
 bool GDAMinimumRuleTests::testGlobalToLocalToGlobalConsistency() {
   bool success = true;
   
-  SolutionPtr minRuleSoln = quadMeshSolution(true, 1, 1);
+  SolutionPtr minRuleSoln = quadMeshSolution(true, 1, 2);
+  
+  MeshPtr mesh = minRuleSoln->mesh();
+  set<GlobalIndexType> cellIDs = mesh->getActiveCellIDs();
+  mesh->hRefine(cellIDs, RefinementPattern::regularRefinementPatternQuad());
+  
   GlobalDofAssignmentPtr gda = minRuleSoln->mesh()->globalDofAssignment();
 
   int numGlobalDofs = gda->globalDofCount();
@@ -210,9 +230,8 @@ bool GDAMinimumRuleTests::testGlobalToLocalToGlobalConsistency() {
     globalData(i) = 2*i + 1; // arbitrary data
   }
   FieldContainer<double> globalDataExpected = globalData;
-  FieldContainer<double> globalDataActual;
+  FieldContainer<double> globalDataActual(numGlobalDofs);
   FieldContainer<double> localData;
-  GlobalIndexType cellID = 0;
   
   Epetra_SerialComm Comm;
   Epetra_BlockMap map(numGlobalDofs, 1, 0, Comm);
@@ -221,10 +240,18 @@ bool GDAMinimumRuleTests::testGlobalToLocalToGlobalConsistency() {
     globalDataVector[i] = globalData(i);
   }
   
-  bool dontAccumulate = false;
-  gda->interpretGlobalData(cellID, localData, globalDataVector,dontAccumulate);
-  FieldContainer<GlobalIndexType> globalDofIndices;
-  gda->interpretLocalData(cellID, localData, globalDataActual, globalDofIndices,dontAccumulate);
+  cellIDs = mesh->getActiveCellIDs();
+  for (set<GlobalIndexType>::iterator cellIDIt = cellIDs.begin(); cellIDIt != cellIDs.end(); cellIDIt++) {
+    GlobalIndexType cellID = *cellIDIt;
+    gda->interpretGlobalData(cellID, localData, globalDataVector,false); // false: don't accumulate
+    FieldContainer<GlobalIndexType> globalDofIndices;
+    FieldContainer<double> globalDataForCell;
+    gda->interpretLocalData(cellID, localData, globalDataForCell, globalDofIndices, false);
+    for (int dofOrdinal=0; dofOrdinal < globalDofIndices.size(); dofOrdinal++) {
+      GlobalIndexType dofIndex = globalDofIndices(dofOrdinal);
+      globalDataActual(dofIndex) = globalDataForCell(dofOrdinal);
+    }
+  }
   
   double tol=1e-14;
   double maxDiff;
@@ -243,75 +270,136 @@ bool GDAMinimumRuleTests::testGlobalToLocalToGlobalConsistency() {
 
 bool GDAMinimumRuleTests::testLocalInterpretationConsistency() {
   bool success = true;
-  SolutionPtr minRuleSoln = quadMeshSolution(true, 1, 1);
+  SolutionPtr minRuleSoln = quadMeshSolution(true, 1, 2);
 
+  // do a uniform refinement
+  MeshPtr mesh = minRuleSoln->mesh();
+  set<GlobalIndexType> cellIDs = mesh->getActiveCellIDs();
+  mesh->hRefine(cellIDs, RefinementPattern::regularRefinementPatternQuad());
+  
   GlobalDofAssignmentPtr gda = minRuleSoln->mesh()->globalDofAssignment();
   
-  GlobalIndexType cellID = 0;
-  DofOrderingPtr trialOrdering = gda->elementType(cellID)->trialOrderPtr;
-  FieldContainer<double> localData(trialOrdering->totalDofs());
-  // initialize with dummy data
-  for (int dofOrdinal=0; dofOrdinal<localData.size(); dofOrdinal++) {
-    localData(dofOrdinal) = dofOrdinal;
-  }
-  FieldContainer<double> globalDataExpected;
-  FieldContainer<GlobalIndexType> globalDofIndices;
-  gda->interpretLocalData(cellID, localData, globalDataExpected, globalDofIndices);
-  
-  FieldContainer<double> globalDataActual(globalDataExpected.size());
-  set<int> varIDs = trialOrdering->getVarIDs();
-  
-  set<int> indicesForMappedData;
-  
-  for (set<int>::iterator varIt = varIDs.begin(); varIt != varIDs.end(); varIt++) {
-    int varID = *varIt;
-    int sideCount = trialOrdering->getNumSidesForVarID(varID);
-    for (int sideOrdinal=0; sideOrdinal<sideCount; sideOrdinal++) {
-      BasisPtr basis = trialOrdering->getBasis(varID,sideOrdinal);
-      FieldContainer<double> basisData(basis->getCardinality());
-      // on the assumption that minimum rule does *not* enforce conformity locally, we can consistently pull basis data
-      // from the local data without worrying about "double dipping"
-      vector<int> dofIndices = trialOrdering->getDofIndices(varID, sideOrdinal);
-      int basisOrdinal = 0;
-      for (vector<int>::iterator dofIndexIt = dofIndices.begin(); dofIndexIt != dofIndices.end(); dofIndexIt++, basisOrdinal++) {
-        int dofIndex = *dofIndexIt;
-        
-        if (indicesForMappedData.find(dofIndex) != indicesForMappedData.end()) {
-          cout << "Error: local dofIndex " << dofIndex << " belongs to multiple bases.  This is not expected in the design of testLocalInterpretationConsistency().\n";
-          success = false;
+  int globalDofCount = mesh->numGlobalDofs();
+  cellIDs = mesh->getActiveCellIDs();
+  for (set<GlobalIndexType>::iterator cellIDIt = cellIDs.begin(); cellIDIt != cellIDs.end(); cellIDIt++) {
+    GlobalIndexType cellID = *cellIDIt;
+    DofOrderingPtr trialOrdering = gda->elementType(cellID)->trialOrderPtr;
+    FieldContainer<double> localData(trialOrdering->totalDofs());
+    // initialize with dummy data
+    for (int dofOrdinal=0; dofOrdinal<localData.size(); dofOrdinal++) {
+      localData(dofOrdinal) = dofOrdinal;
+    }
+    FieldContainer<double> globalDataExpected(globalDofCount);
+    FieldContainer<GlobalIndexType> globalDofIndices;
+    FieldContainer<double> globalDataForCell;
+    gda->interpretLocalData(cellID, localData, globalDataForCell, globalDofIndices);
+    for (int dofOrdinal=0; dofOrdinal < globalDofIndices.size(); dofOrdinal++) {
+      GlobalIndexType dofIndex = globalDofIndices(dofOrdinal);
+      globalDataExpected(dofIndex) += globalDataForCell(dofOrdinal);
+    }
+    
+    FieldContainer<double> globalDataActual(globalDataExpected.size());
+    set<int> varIDs = trialOrdering->getVarIDs();
+    
+    set<int> indicesForMappedData;
+    
+    for (set<int>::iterator varIt = varIDs.begin(); varIt != varIDs.end(); varIt++) {
+      int varID = *varIt;
+      int sideCount = trialOrdering->getNumSidesForVarID(varID);
+      for (int sideOrdinal=0; sideOrdinal<sideCount; sideOrdinal++) {
+        BasisPtr basis = trialOrdering->getBasis(varID,sideOrdinal);
+        FieldContainer<double> basisData(basis->getCardinality());
+        // on the assumption that minimum rule does *not* enforce conformity locally, we can consistently pull basis data
+        // from the local data without worrying about "double dipping"
+        vector<int> dofIndices = trialOrdering->getDofIndices(varID, sideOrdinal);
+        int basisOrdinal = 0;
+        for (vector<int>::iterator dofIndexIt = dofIndices.begin(); dofIndexIt != dofIndices.end(); dofIndexIt++, basisOrdinal++) {
+          int dofIndex = *dofIndexIt;
+          
+          if (indicesForMappedData.find(dofIndex) != indicesForMappedData.end()) {
+            cout << "Error: local dofIndex " << dofIndex << " belongs to multiple bases.  This is not expected in the design of testLocalInterpretationConsistency().\n";
+            success = false;
+          }
+          
+          basisData(basisOrdinal) = localData(dofIndex);
+          indicesForMappedData.insert(dofIndex);
         }
-        
-        basisData(basisOrdinal) = localData(dofIndex);
-        indicesForMappedData.insert(dofIndex);
-      }
-      FieldContainer<double> globalDataForBasis;
-      FieldContainer<GlobalIndexType> globalDofIndicesForBasis;
-      gda->interpretLocalBasisData(cellID, varID, sideOrdinal, basisData, globalDataForBasis, globalDofIndicesForBasis);
-      int globalEntryCount = globalDofIndicesForBasis.size();
-      for (int entryOrdinal=0; entryOrdinal<globalEntryCount; entryOrdinal++) {
-        GlobalIndexType entryIndex = globalDofIndicesForBasis(entryOrdinal);
-        globalDataActual(entryIndex) += globalDataForBasis(entryOrdinal);
+        FieldContainer<double> globalDataForBasis;
+        FieldContainer<GlobalIndexType> globalDofIndicesForBasis;
+        gda->interpretLocalBasisData(cellID, varID, sideOrdinal, basisData, globalDataForBasis, globalDofIndicesForBasis);
+        int globalEntryCount = globalDofIndicesForBasis.size();
+        for (int entryOrdinal=0; entryOrdinal<globalEntryCount; entryOrdinal++) {
+          GlobalIndexType entryIndex = globalDofIndicesForBasis(entryOrdinal);
+          globalDataActual(entryIndex) += globalDataForBasis(entryOrdinal);
+        }
       }
     }
-  }
-  
-  double tol=1e-14;
-  double maxDiff;
-  if (TestSuite::fcsAgree(globalDataActual, globalDataExpected, tol, maxDiff)) {
-//    cout << "global data actual and expected AGREE; max difference is " << maxDiff << endl;
-//    cout << "globalDataActual:\n" << globalDataActual;
-  } else {
-    cout << "global data actual and expected DISAGREE; max difference is " << maxDiff << endl;
-    success = false;
-  }
+    
+    double tol=1e-14;
+    double maxDiff;
+    if (TestSuite::fcsAgree(globalDataActual, globalDataExpected, tol, maxDiff)) {
+  //    cout << "global data actual and expected AGREE; max difference is " << maxDiff << endl;
+  //    cout << "globalDataActual:\n" << globalDataActual;
+    } else {
+      cout << "global data actual and expected DISAGREE; max difference is " << maxDiff << endl;
+      success = false;
+    }
+}
 
-  
+  return success;
+}
+
+bool GDAMinimumRuleTests::testHRefinements() {
+  bool success = true;
+  int horizontalCellsInitialMesh = 1, verticalCellsInitialMesh = 2;
+  SolutionPtr soln = quadMeshSolution(true, horizontalCellsInitialMesh, verticalCellsInitialMesh);
+  MeshPtr mesh = soln->mesh();
+  int numRefs = 3;
+  // this test is mostly about managing to do the h-refinements without failing some assertion along the way
+  // Once the refinement is done, we just check that it has the right number of active cells.
+  int activeCellCountExpected = horizontalCellsInitialMesh * verticalCellsInitialMesh;
+  for (int ref=0; ref<numRefs; ref++) {
+    activeCellCountExpected *= 4;
+    set<GlobalIndexType> activeCellIDs = mesh->getActiveCellIDs();
+    mesh->hRefine(activeCellIDs, RefinementPattern::regularRefinementPatternQuad());
+    int activeCellCount = mesh->getActiveCellIDs().size();
+    if (activeCellCount != activeCellCountExpected) {
+      cout << "After refinement # " << ref << ", expected " << activeCellCountExpected;
+      cout << " active cells, but had " << activeCellCount << endl;
+      success = false;
+    }
+  }
   return success;
 }
 
 bool GDAMinimumRuleTests::testMultiCellMesh() {
+  bool success = true;
   int horizontalCells = 1, verticalCells = 2;
-  return subTestCompatibleSolutionsAgree(horizontalCells, verticalCells);
+  if (! subTestCompatibleSolutionsAgree(horizontalCells, verticalCells) ) {
+    cout << "For unrefined (compatible) " << horizontalCells << " x " << verticalCells << " mesh, max and min rules disagree.\n";
+    success = false;
+  }
+  horizontalCells = 4;
+  verticalCells = 2;
+  if (! subTestCompatibleSolutionsAgree(horizontalCells, verticalCells) ) {
+    cout << "For unrefined (compatible) " << horizontalCells << " x " << verticalCells << " mesh, max and min rules disagree.\n";
+    success = false;
+  }
+  
+  // try a few uniform refinements
+  int numRefs = 1;
+  horizontalCells = 1; verticalCells = 2;
+  if (! subTestCompatibleSolutionsAgree(horizontalCells, verticalCells, numRefs) ) {
+    cout << "For compatible " << horizontalCells << " x " << verticalCells << " mesh after " << numRefs << " refinements, max and min rules disagree.\n";
+    success = false;
+  }
+  horizontalCells = 4; verticalCells = 2;
+  if (! subTestCompatibleSolutionsAgree(horizontalCells, verticalCells, numRefs) ) {
+    cout << "For compatible " << horizontalCells << " x " << verticalCells << " mesh after " << numRefs << " refinements, max and min rules disagree.\n";
+    success = false;
+  }
+  
+  return success;
 }
 
 bool GDAMinimumRuleTests::testSingleCellMesh() {

@@ -85,7 +85,8 @@ public:
                                FieldContainer<double> &globalDofs, FieldContainer<GlobalIndexType> &globalDofIndices);
   void interpretGlobalData(GlobalIndexType cellID, FieldContainer<double> &localDofs, const Epetra_Vector &globalDofs, bool accumulate=true);
   IndexType localDofCount(); // local to the MPI node
-  
+
+  void printConstraintInfo(GlobalIndexType cellID);
   void rebuildLookups();
 };
 

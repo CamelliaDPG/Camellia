@@ -43,31 +43,25 @@ GlobalDofAssignment::GlobalDofAssignment(MeshTopologyPtr meshTopology, VarFactor
       cout << "GDAMaximumRule2D constructor only supports mesh topologies that are unrefined.\n";
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "GDAMaximumRule2D constructor only supports mesh topologies that are unrefined.\n");
     }
-//    DofOrderingPtr trialOrdering = _dofOrderingFactory->trialOrdering(initialH1OrderTrial, *cell->topology());
-//    DofOrderingPtr testOrdering = _dofOrderingFactory->testOrdering(testOrder, *cell->topology());
-//    ElementTypePtr elemType = _elementTypeFactory.getElementType(trialOrdering,testOrdering,cell->topology());
-//    _elementTypeForCell[cellID] = elemType;
-//    _cellH1Orders[cellID] = _initialH1OrderTrial;
     
     assignInitialElementType(cellID);
-    
-    //    cout << "Assigned trialOrdering to cell " << cellID << ":\n" << *trialOrdering;
-    
-    unsigned sideCount = cell->topology()->getSideCount();
-    vector<int> cellParities(sideCount);
-    for (int sideOrdinal=0; sideOrdinal<sideCount; sideOrdinal++) {
-      unsigned sideEntityIndex = cell->entityIndex(sideDim, sideOrdinal);
-      if (sideIndexParityAssignmentCount[sideEntityIndex] == 0) {
-        cellParities[sideOrdinal] = 1;
-      } else if (sideIndexParityAssignmentCount[sideEntityIndex] == 1) {
-        cellParities[sideOrdinal] = -1;
-      } else {
-        cout << "Internal error during GDAMaxRule2D construction: encountered side more than twice.\n";
-        TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Internal error: encountered side more than twice.");
-      }
-      sideIndexParityAssignmentCount[sideEntityIndex]++;
-    }
-    _cellSideParitiesForCellID[cellID] = cellParities;
+    assignParities(cellID);
+//    unsigned sideCount = cell->topology()->getSideCount();
+//    
+//    vector<int> cellParities(sideCount);
+//    for (int sideOrdinal=0; sideOrdinal<sideCount; sideOrdinal++) {
+//      unsigned sideEntityIndex = cell->entityIndex(sideDim, sideOrdinal);
+//      if (sideIndexParityAssignmentCount[sideEntityIndex] == 0) {
+//        cellParities[sideOrdinal] = 1;
+//      } else if (sideIndexParityAssignmentCount[sideEntityIndex] == 1) {
+//        cellParities[sideOrdinal] = -1;
+//      } else {
+//        cout << "Internal error during GDAMaxRule2D construction: encountered side more than twice.\n";
+//        TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Internal error: encountered side more than twice.");
+//      }
+//      sideIndexParityAssignmentCount[sideEntityIndex]++;
+//    }
+//    _cellSideParitiesForCellID[cellID] = cellParities;
   }
   
   _numPartitions = Teuchos::GlobalMPISession::getNProc();  
@@ -90,6 +84,47 @@ void GlobalDofAssignment::assignInitialElementType( GlobalIndexType cellID ) {
   DofOrderingPtr testOrdering = _dofOrderingFactory->testOrdering(testDegree, *cell->topology());
   ElementTypePtr elemType = _elementTypeFactory.getElementType(trialOrdering,testOrdering,cell->topology());
   _elementTypeForCell[cellID] = elemType;
+}
+
+void GlobalDofAssignment::assignParities( GlobalIndexType cellID ) {
+  CellPtr cell = _meshTopology->getCell(cellID);
+
+  unsigned sideCount = cell->topology()->getSideCount();
+  
+  vector<int> cellParities(sideCount);
+  for (int sideOrdinal=0; sideOrdinal<sideCount; sideOrdinal++) {
+    pair<GlobalIndexType,unsigned> neighborInfo = cell->getNeighbor(sideOrdinal);
+    GlobalIndexType neighborCellID = neighborInfo.first;
+    if (neighborCellID == -1) { // boundary --> parity is 1
+      cellParities[sideOrdinal] = 1;
+    } else {
+      CellPtr neighbor = _meshTopology->getCell(neighborCellID);
+      pair<GlobalIndexType,unsigned> neighborNeighborInfo = neighbor->getNeighbor(neighborInfo.second);
+      bool neighborIsPeer = neighborNeighborInfo.first == cellID;
+      if (neighborIsPeer) { // then the lower cellID gets the positive parity
+        cellParities[sideOrdinal] = (cellID < neighborCellID) ? 1 : -1;
+      } else {
+        CellPtr parent = cell->getParent();
+        if (parent.get() == NULL) {
+          cout << "ERROR: in assignParities(), encountered cell with non-peer neighbor but without parent.\n";
+          TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "in assignParities(), encountered cell with non-peer neighbor but without parent");
+        }
+        // inherit parent's parity along the shared side:
+        unsigned childOrdinal = parent->childOrdinal(cellID);
+        unsigned parentSideOrdinal = parent->refinementPattern()->parentSideLookupForChild(childOrdinal)[sideOrdinal];
+        cellParities[sideOrdinal] = _cellSideParitiesForCellID[parent->cellIndex()][parentSideOrdinal];
+      }
+    }
+  }
+  _cellSideParitiesForCellID[cellID] = cellParities;
+  
+  // if this cell is a parent, then we should treat its children as well (children without peer neighbors will inherit any parity flips)
+  if (cell->isParent()) {
+    vector<GlobalIndexType> childIndices = cell->getChildIndices();
+    for (vector<GlobalIndexType>::iterator childIndexIt = childIndices.begin(); childIndexIt != childIndices.end(); childIndexIt++) {
+      assignParities(*childIndexIt);
+    }
+  }
 }
 
 GlobalIndexType GlobalDofAssignment::cellID(Teuchos::RCP< ElementType > elemTypePtr, IndexType cellIndex, PartitionIndexType partitionNumber) {

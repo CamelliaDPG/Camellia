@@ -74,6 +74,17 @@ unsigned Cell::cellIndex() {
   return _cellIndex;
 }
 
+unsigned Cell::childOrdinal(IndexType childIndex) {
+  for (unsigned childOrdinal=0; childOrdinal<_children.size(); childOrdinal++) {
+    if (_children[childOrdinal]->cellIndex() == childIndex) {
+      return childOrdinal;
+    }
+  }
+  cout << "ERROR: child with ID childIndex not found in parent.\n";
+  TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "child with ID childIndex not found in parent");
+  return -1; // NOT FOUND
+}
+
 const vector< Teuchos::RCP< Cell > > &Cell::children() {
   return _children;
 }
@@ -203,6 +214,10 @@ void Cell::setRefinementPattern(RefinementPatternPtr refPattern) {
 }
 
 unsigned Cell::subcellPermutation(unsigned d, unsigned scord) {
+  if (_subcellPermutations[d].find(scord) == _subcellPermutations[d].end()) {
+    cout << "ERROR: subcell permutations appear to be unset.\n";
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "ERROR: subcell permutations appear to be unset.");
+  }
   return _subcellPermutations[d][scord];
 }
 
