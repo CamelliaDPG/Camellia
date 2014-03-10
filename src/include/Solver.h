@@ -53,26 +53,41 @@ public:
   
   int solve() {
     Amesos_Mumps mumps(problem());
+    int numProcs=1;
+    int rank=0;
+    
+    int previousSize = 0;
+#ifdef HAVE_MPI
+    rank     = Teuchos::GlobalMPISession::getRank();
+    numProcs = Teuchos::GlobalMPISession::getNProc();
+//    mumps.SetICNTL(28, 2); // 2: parallel analysis
+    
+//    int minSize = max(infog[26-1], infog[16-1]);
+//    // want to set ICNTL 23 to a size "significantly larger" than minSize
+//    int sizeToSet = max(2 * minSize, previousSize*2);
+//    sizeToSet = min(sizeToSet, _maxMemoryPerCoreMB);
+//    previousSize = sizeToSet;
+    //    mumps.SetICNTL(23, sizeToSet);
+    
+    // not sure why we shouldn't just do this: (I don't think MUMPS will allocate as much as we allow it, unless it thinks it needs it)
+    mumps.SetICNTL(1,6); // set output stream for errors (this is supposed to be the default, but maybe Amesos clobbers it?)
+    int sizeToSet = _maxMemoryPerCoreMB;
+//    cout << "setting ICNTL 23 to " << sizeToSet << endl;
+    mumps.SetICNTL(23, sizeToSet);
+#else
+#endif
+
     mumps.SymbolicFactorization();
     mumps.NumericFactorization();
     int relaxationParam = 0; // the default
     int* info = mumps.GetINFO();
-    int numProcs=1;
-    int rank=0;
+    int* infog = mumps.GetINFOG();
     
-#ifdef HAVE_MPI
-    rank     = Teuchos::GlobalMPISession::getRank();
-    numProcs = Teuchos::GlobalMPISession::getNProc();
-    mumps.SetICNTL(28, 2); // 2: parallel analysis
-#else
-#endif
-    int previousSize = 0;
     int numErrors = 0;
     while (info[0] < 0) { // error occurred
       
       numErrors++;
       if (rank == 0) {
-        int* infog = mumps.GetINFOG();
         if (infog[0] == -9) {
           int minSize = infog[26-1];
           // want to set ICNTL 23 to a size "significantly larger" than minSize
