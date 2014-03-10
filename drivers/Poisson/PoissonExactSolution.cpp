@@ -43,7 +43,9 @@ typedef Sacado::Fad::SFad<double,2> F2; // FAD with # of ind. vars fixed at 2
 typedef Sacado::Fad::SFad< Sacado::Fad::SFad<double,2>, 2> F2_2; // same thing, but nested so we can take 2 derivatives
 //typedef Sacado::Fad::DFad< Sacado::Fad::DFad<double> > F2_2;
 
-PoissonExactSolution::PoissonExactSolution(PoissonExactSolutionType type, int polyOrder, bool useConformingTraces) {
+PoissonExactSolution::PoissonExactSolution(PoissonExactSolutionType type, int polyOrder, bool useConformingTraces)
+ : RHS(true) // true: legacy subclass of RHS
+{
   // poly order here means that of phi
   _polyOrder = polyOrder;
   _type = type;

@@ -13,7 +13,7 @@
 #include "Solution.h"
 
 TimeMarchingProblem::TimeMarchingProblem(Teuchos::RCP<BilinearForm> bilinearForm,
-                                                   Teuchos::RCP<RHS> rhs) {
+                                         Teuchos::RCP<RHS> rhs) : RHS(true) { // true: legacy subclass
   _bilinearForm = bilinearForm;
   _rhs = rhs;
   _dt = 1.0;

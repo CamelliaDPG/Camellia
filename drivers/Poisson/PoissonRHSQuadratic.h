@@ -40,6 +40,8 @@
 #include "RHS.h"
 
 class PoissonRHSQuadratic : public RHS {
+public:
+  PoissonRHSQuadratic() : RHS(true) {} // true: legacy subclass of RHS
   bool nonZeroRHS(int testVarID);
   void rhs(int testVarID, const FieldContainer<double> &physicalPoints, FieldContainer<double> &values);
   // physPoints (numCells,numPoints,spaceDim)

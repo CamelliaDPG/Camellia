@@ -44,6 +44,8 @@
 
 #include "BasisCache.h"
 
+#include "LinearTerm.h"
+
 #include <vector>
 
 using namespace std;
@@ -51,8 +53,13 @@ using namespace std;
 using namespace Intrepid;
 
 class RHS {
+  bool _legacySubclass;
+  
+  LinearTermPtr _lt;
+  set<int> _varIDs;
 public:
-  virtual bool nonZeroRHS(int testVarID) = 0;
+  RHS(bool legacySubclass) : _legacySubclass(legacySubclass) {}
+  virtual bool nonZeroRHS(int testVarID);
   virtual vector<EOperatorExtended> operatorsForTestID(int testID) {
     vector<EOperatorExtended> ops;
     ops.push_back( IntrepidExtendedTypes::OP_VALUE);
@@ -77,6 +84,12 @@ public:
   virtual void integrateAgainstOptimalTests(FieldContainer<double> &rhsVector, const FieldContainer<double> &optimalTestWeights,
                                             Teuchos::RCP<DofOrdering> testOrdering, BasisCachePtr basisCache);
 
+  void addTerm( LinearTermPtr rhsTerm );
+  void addTerm( VarPtr v );
+  
+  LinearTermPtr linearTerm(); // MUTABLE reference (change this, RHS will change!)
+  LinearTermPtr linearTermCopy(); // copy of RHS as a LinearTerm
+  
   virtual ~RHS() {}
 };
 

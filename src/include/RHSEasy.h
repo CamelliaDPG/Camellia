@@ -16,6 +16,9 @@ class RHSEasy : public RHS {
   LinearTermPtr _lt;
   set<int> _testIDs;
 public:
+  RHSEasy() : RHS(false) { // false: not a legacy subclass
+    cout << "WARNING: invoking RHSEasy, which is now deprecated.  (All its functionality has been moved into the RHS superclass.)\n";
+  }
   void addTerm( LinearTermPtr rhsTerm );
   void addTerm( VarPtr v );
   

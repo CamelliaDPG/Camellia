@@ -4,7 +4,7 @@
 typedef Sacado::Fad::SFad<double,2> F2;                          // FAD with # of independent vars fixed at 2 (x and y)
 typedef Sacado::Fad::SFad< Sacado::Fad::SFad<double,2>, 2> F2_2; // same thing, but nested so we can take 2 derivatives
 
-ConfusionManufacturedSolution::ConfusionManufacturedSolution(double epsilon, double beta_x, double beta_y) {
+ConfusionManufacturedSolution::ConfusionManufacturedSolution(double epsilon, double beta_x, double beta_y) : RHS(true) { // true: legacy subclass of RHS
   _epsilon = epsilon;
   _beta_x  = beta_x;
   _beta_y  = beta_y;

@@ -8,7 +8,7 @@
 
 #include "ConfusionProblemLegacy.h"
 
-ConfusionProblemLegacy::ConfusionProblemLegacy(Teuchos::RCP<ConfusionBilinearForm> cbf) : RHS(), BC() {
+ConfusionProblemLegacy::ConfusionProblemLegacy(Teuchos::RCP<ConfusionBilinearForm> cbf) : RHS(true), BC() { // true: legacy subclass of RHS
   _cbf = cbf;  
 }
 

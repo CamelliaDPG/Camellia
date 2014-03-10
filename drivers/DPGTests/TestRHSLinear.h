@@ -43,6 +43,7 @@ using namespace Intrepid;
 
 class TestRHSLinear : public RHS {
 public:
+  TestRHSLinear() : RHS(true) {} // true: legacy subclass of RHS
   bool nonZeroRHS(int testVarID) {
     return true;
   }

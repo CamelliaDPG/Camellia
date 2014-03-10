@@ -9,75 +9,119 @@
 #include "RHS.h"
 #include "BasisCache.h"
 
-void RHS::integrateAgainstStandardBasis(FieldContainer<double> &rhsVector, 
+void RHS::addTerm( LinearTermPtr rhsTerm ) {
+  TEUCHOS_TEST_FOR_EXCEPTION( rhsTerm->termType() != TEST, std::invalid_argument, "RHS should only involve test functions (no trials)");
+  TEUCHOS_TEST_FOR_EXCEPTION( rhsTerm->rank() != 0, std::invalid_argument, "RHS only handles scalar terms.");
+  if (_lt.get()) {
+    _lt = _lt + rhsTerm;
+  } else {
+    _lt = rhsTerm;
+  }
+  //  _terms.push_back( rhsTerm );
+  
+  set<int> varIDs = rhsTerm->varIDs();
+  _varIDs.insert(varIDs.begin(),varIDs.end());
+}
+
+void RHS::addTerm( VarPtr v ) {
+  addTerm( Teuchos::rcp( new LinearTerm( v ) ) );
+}
+
+// at a conceptual/design level, this method isn't necessary
+bool RHS::nonZeroRHS(int testVarID) {
+  if (!_legacySubclass) {
+    return (_varIDs.find(testVarID) != _varIDs.end());
+  } else {
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Legacy subclasses must implement nonZeroRHS!");
+  }
+}
+
+LinearTermPtr RHS::linearTerm() {
+  return _lt;
+}
+
+LinearTermPtr RHS::linearTermCopy() {
+  return Teuchos::rcp( new LinearTerm (*_lt) );
+}
+
+void RHS::integrateAgainstStandardBasis(FieldContainer<double> &rhsVector,
                                         Teuchos::RCP<DofOrdering> testOrdering, 
                                         BasisCachePtr basisCache) {
   // rhsVector dimensions are: (numCells, # testOrdering Dofs)
   
-  // steps:
-  // 0. Set up Cubature
-  // 3. For each optimalTestFunction
-  //   a. Apply the value operators to the basis in the DofOrdering, at the cubature points
-  //   b. weight with Jacobian/Piola transform and cubature weights
-  //   c. Pass the result to RHS to get resultant values at each point
-  //   d. Sum up (integrate) and place in rhsVector according to DofOrdering indices
-  
-  // 0. Set up Cubature
-  
-  shards::CellTopology cellTopo = basisCache->cellTopology();
-  
-  unsigned numCells = basisCache->getPhysicalCubaturePoints().dimension(0);
-  unsigned spaceDim = cellTopo.getDimension();
-    
-  TEUCHOS_TEST_FOR_EXCEPTION( ( testOrdering->totalDofs() != rhsVector.dimension(1) ),
-                     std::invalid_argument,
-                     "testOrdering->totalDofs() (=" << testOrdering->totalDofs() << ") and rhsVector.dimension(1) (=" << rhsVector.dimension(1) << ") do not match.");
-  
-  set<int> testIDs = testOrdering->getVarIDs();
-  set<int>::iterator testIterator;
-  
-  BasisPtr testBasis;
-  
-  FieldContainer<double> rhsPointValues; // the rhs method will resize...	
-  
-  rhsVector.initialize(0.0);
-  
-  for (testIterator = testIDs.begin(); testIterator != testIDs.end(); testIterator++) {
-    int testID = *testIterator;
-    
-    vector<EOperatorExtended> testOperators = this->operatorsForTestID(testID);
-    int operatorIndex = -1;
-    for (vector<EOperatorExtended>::iterator testOpIt=testOperators.begin();
-         testOpIt != testOperators.end(); testOpIt++) {
-      operatorIndex++;
-      IntrepidExtendedTypes::EOperatorExtended testOperator = *testOpIt;
-      bool notZero = this->nonZeroRHS(testID);
-      if (notZero) { // compute the integral(s)
+    if (!_legacySubclass) {
+      rhsVector.initialize(0.0);
+      
+      if ( _lt.get() ) {
+        _lt->integrate(rhsVector, testOrdering, basisCache);
+      }
+    } else { // legacy subclass support
+      // steps:
+      // 0. Set up Cubature
+      // 3. For each optimalTestFunction
+      //   a. Apply the value operators to the basis in the DofOrdering, at the cubature points
+      //   b. weight with Jacobian/Piola transform and cubature weights
+      //   c. Pass the result to RHS to get resultant values at each point
+      //   d. Sum up (integrate) and place in rhsVector according to DofOrdering indices
+      
+      // 0. Set up Cubature
+      
+      shards::CellTopology cellTopo = basisCache->cellTopology();
+      
+      unsigned numCells = basisCache->getPhysicalCubaturePoints().dimension(0);
+      unsigned spaceDim = cellTopo.getDimension();
+      
+      TEUCHOS_TEST_FOR_EXCEPTION( ( testOrdering->totalDofs() != rhsVector.dimension(1) ),
+                                 std::invalid_argument,
+                                 "testOrdering->totalDofs() (=" << testOrdering->totalDofs() << ") and rhsVector.dimension(1) (=" << rhsVector.dimension(1) << ") do not match.");
+      
+      set<int> testIDs = testOrdering->getVarIDs();
+      set<int>::iterator testIterator;
+      
+      BasisPtr testBasis;
+      
+      FieldContainer<double> rhsPointValues; // the rhs method will resize...
+      
+      rhsVector.initialize(0.0);
+      
+      for (testIterator = testIDs.begin(); testIterator != testIDs.end(); testIterator++) {
+        int testID = *testIterator;
         
-        testBasis = testOrdering->getBasis(testID);
-        
-        Teuchos::RCP< const FieldContainer<double> > testValuesTransformedWeighted;
-        
-        testValuesTransformedWeighted = basisCache->getTransformedWeightedValues(testBasis,testOperator);
-        FieldContainer<double> physCubPoints = basisCache->getPhysicalCubaturePoints();
-        
-        vector<int> testDofIndices = testOrdering->getDofIndices(testID,0);
-        
-        this->rhs(testID,operatorIndex,basisCache,rhsPointValues);
-        
-        //   d. Sum up (integrate)
-        // to integrate, first multiply the testValues (C,F,P) or (C,F,P,D)
-        //               by the rhsPointValues (C,P) or (C,P,D), respectively, and then sum.
-        int numPoints = rhsPointValues.dimension(1);
-        for (unsigned k=0; k < numCells; k++) {
-          for (int i=0; i < testBasis->getCardinality(); i++) {
-            int testDofIndex = testDofIndices[i];
-            for (int ptIndex=0; ptIndex < numPoints; ptIndex++) {
-              if (rhsPointValues.rank() == 2) {
-                rhsVector(k,testDofIndex) += (*testValuesTransformedWeighted)(k,i,ptIndex) * rhsPointValues(k,ptIndex);
-              } else {
-                for (int d=0; d<spaceDim; d++) {
-                  rhsVector(k,testDofIndex) += (*testValuesTransformedWeighted)(k,i,ptIndex,d) * rhsPointValues(k,ptIndex,d);
+        vector<EOperatorExtended> testOperators = this->operatorsForTestID(testID);
+        int operatorIndex = -1;
+        for (vector<EOperatorExtended>::iterator testOpIt=testOperators.begin();
+             testOpIt != testOperators.end(); testOpIt++) {
+          operatorIndex++;
+          IntrepidExtendedTypes::EOperatorExtended testOperator = *testOpIt;
+          bool notZero = this->nonZeroRHS(testID);
+          if (notZero) { // compute the integral(s)
+            
+            testBasis = testOrdering->getBasis(testID);
+            
+            Teuchos::RCP< const FieldContainer<double> > testValuesTransformedWeighted;
+            
+            testValuesTransformedWeighted = basisCache->getTransformedWeightedValues(testBasis,testOperator);
+            FieldContainer<double> physCubPoints = basisCache->getPhysicalCubaturePoints();
+            
+            vector<int> testDofIndices = testOrdering->getDofIndices(testID,0);
+            
+            this->rhs(testID,operatorIndex,basisCache,rhsPointValues);
+            
+            //   d. Sum up (integrate)
+            // to integrate, first multiply the testValues (C,F,P) or (C,F,P,D)
+            //               by the rhsPointValues (C,P) or (C,P,D), respectively, and then sum.
+            int numPoints = rhsPointValues.dimension(1);
+            for (unsigned k=0; k < numCells; k++) {
+              for (int i=0; i < testBasis->getCardinality(); i++) {
+                int testDofIndex = testDofIndices[i];
+                for (int ptIndex=0; ptIndex < numPoints; ptIndex++) {
+                  if (rhsPointValues.rank() == 2) {
+                    rhsVector(k,testDofIndex) += (*testValuesTransformedWeighted)(k,i,ptIndex) * rhsPointValues(k,ptIndex);
+                  } else {
+                    for (int d=0; d<spaceDim; d++) {
+                      rhsVector(k,testDofIndex) += (*testValuesTransformedWeighted)(k,i,ptIndex,d) * rhsPointValues(k,ptIndex,d);
+                    }
+                  }
                 }
               }
             }
@@ -85,7 +129,7 @@ void RHS::integrateAgainstStandardBasis(FieldContainer<double> &rhsVector,
         }
       }
     }
-  }
+  
   // cout << "rhsVector: " << endl << rhsVector;
 }
 
