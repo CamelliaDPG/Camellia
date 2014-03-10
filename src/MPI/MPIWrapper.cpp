@@ -122,3 +122,48 @@ int MPIWrapper::sum(int mySum) {
 #endif
   return mySum;
 }
+
+void MPIWrapper::entryWiseSum(FieldContainer<GlobalIndexType> &values) {
+#ifdef HAVE_MPI
+  // cast to long long:
+  Teuchos::Array<int> dim;
+  values.dimensions(dim);
+  FieldContainer<long long> valuesLongLong(dim);
+  for (int i=0; i<values.size(); i++) {
+    valuesLongLong[i] = (long long) values[i];
+  }
+  
+  Epetra_MpiComm Comm(MPI_COMM_WORLD);
+  FieldContainer<long long> valuesLongLongCopy = valuesLongLong; // it appears this copy is necessary
+  Comm.SumAll(&valuesLongLongCopy[0], &valuesLongLong[0], valuesLongLong.size());
+  
+  // copy back to original container:
+  for (int i=0; i<values.size(); i++) {
+    values[i] = (GlobalIndexType) valuesLongLong[i];
+  }
+#else
+#endif
+}
+// sum the contents of valuesToSum across all processors, and returns the result:
+// (valuesToSum may vary in length across processors)
+GlobalIndexType MPIWrapper::sum(const FieldContainer<GlobalIndexType> &valuesToSum) {
+  // this is fairly inefficient in the sense that the MPI overhead will dominate the cost here.
+  // insofar as it's possible to group such calls into entryWiseSum() calls, this is preferred.
+  GlobalIndexType mySum = 0;
+  for (int i=0; i<valuesToSum.size(); i++) {
+    mySum += valuesToSum[i];
+  }
+  
+  return sum(mySum);
+}
+
+GlobalIndexType MPIWrapper::sum(GlobalIndexType mySum) {
+  long long mySumLongLong = mySum;
+#ifdef HAVE_MPI
+  long long mySumCopy = mySum;
+  Epetra_MpiComm Comm(MPI_COMM_WORLD);
+  Comm.SumAll(&mySumCopy, &mySumLongLong, 1);
+#else
+#endif
+  return mySumLongLong;
+}

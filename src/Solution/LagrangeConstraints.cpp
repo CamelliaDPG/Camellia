@@ -47,3 +47,11 @@ void LagrangeConstraints::addConstraint(const Constraint &c, SpatialFilterPtr sf
   Constraint sfc = Constraint::spatiallyFilteredConstraint(c,sf);
   _constraints.push_back(sfc);
 }
+
+Constraint & LagrangeConstraints::getElementConstraint(int constraintOrdinal) {
+  return _constraints[constraintOrdinal];
+}
+
+Constraint & LagrangeConstraints::getGlobalConstraint(int constraintOrdinal) {
+  return _globalConstraints[constraintOrdinal];
+}

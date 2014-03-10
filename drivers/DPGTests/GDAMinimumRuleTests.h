@@ -23,8 +23,10 @@ private:
   void setup();
   void teardown();
   
-  SolutionPtr quadMeshSolution(bool useMinRule, int horizontalCells, int verticalCells);
-  bool subTestCompatibleSolutionsAgree(int horizontalCells, int verticalCells, int numUniformRefinements=0);
+  SolutionPtr quadMeshSolutionConfusion(bool useMinRule, int horizontalCells, int verticalCells, int H1Order);
+  SolutionPtr quadMeshSolutionStokesCavityFlow(bool useMinRule, int horizontalCells, int verticalCells, int H1Order);
+  
+  bool subTestCompatibleSolutionsAgree(int horizontalCells, int verticalCells, int H1Order, int numUniformRefinements);
 public:
   GDAMinimumRuleTests();
   void runTests(int &numTestsRun, int &numTestsPassed);

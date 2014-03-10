@@ -85,6 +85,8 @@ public:
     
     int numErrors = 0;
     while (info[0] < 0) { // error occurred
+      info = mumps.GetINFO(); // not sure if these can change locations between invocations -- just in case...
+      infog = mumps.GetINFOG();
       
       numErrors++;
       if (rank == 0) {

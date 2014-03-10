@@ -466,11 +466,15 @@ GlobalDofAssignmentPtr Mesh::globalDofAssignment() {
   return _gda;
 }
 
+GlobalIndexType Mesh::globalDofCount() {
+  return numGlobalDofs(); // TODO: eliminate numGlobalDofs in favor of globalDofCount
+}
+
 GlobalIndexType Mesh::globalDofIndex(GlobalIndexType cellID, IndexType localDofIndex) {
   GDAMaximumRule2D* maxRule = dynamic_cast<GDAMaximumRule2D *>(_gda.get());
   if (maxRule == NULL) {
     cout << "globalDofIndex lookup only supported for max rule.\n";
-    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "globalDofIndex lookup only supported fro max rule.");
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "globalDofIndex lookup only supported for max rule.");
   }
   return maxRule->globalDofIndex(cellID, localDofIndex);
 }
@@ -667,12 +671,7 @@ PartitionIndexType Mesh::partitionForCellID( GlobalIndexType cellID ) {
 }
 
 PartitionIndexType Mesh::partitionForGlobalDofIndex( GlobalIndexType globalDofIndex ) {
-  GDAMaximumRule2D* maxRule = dynamic_cast<GDAMaximumRule2D *>(_gda.get());
-  if (maxRule == NULL) {
-    cout << "partitionForGlobalDofIndex only supported for max rule.\n";
-    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "partitionForGlobalDofIndex only supported for max rule.");
-  }
-  return maxRule->partitionForGlobalDofIndex(globalDofIndex);
+  return _gda->partitionForGlobalDofIndex(globalDofIndex);
 }
 
 GlobalIndexType Mesh::partitionLocalIndexForGlobalDofIndex( GlobalIndexType globalDofIndex ) {

@@ -214,6 +214,7 @@ public:
   const map< pair<GlobalIndexType,IndexType> , GlobalIndexType>& getLocalToGlobalMap();
   //  map< int, pair<int,int> > getGlobalToLocalMap();
 
+  GlobalIndexType globalDofCount();
   GlobalIndexType globalDofIndex(GlobalIndexType cellID, IndexType localDofIndex);
   set<GlobalIndexType> globalDofIndicesForPartition(PartitionIndexType partitionNumber);
   

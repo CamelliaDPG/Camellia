@@ -100,6 +100,8 @@ public:
   PartitionIndexType partitionForCellID( GlobalIndexType cellID );
   virtual IndexType partitionLocalCellIndex(GlobalIndexType cellID);
   
+  virtual PartitionIndexType partitionForGlobalDofIndex( GlobalIndexType globalDofIndex ) = 0;
+  
   virtual void rebuildLookups() = 0;
   void registerSolution(Solution* solution);
   void unregisterSolution(Solution* solution);

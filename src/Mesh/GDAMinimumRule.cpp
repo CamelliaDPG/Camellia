@@ -407,12 +407,13 @@ SubCellDofIndexInfo GDAMinimumRule::getOwnedGlobalDofIndices(GlobalIndexType cel
   
   for (map<int, VarPtr>::iterator varIt = trialVars.begin(); varIt != trialVars.end(); varIt++) {
     VarPtr var = varIt->second;
+    bool isL2Var = (var->space() == L2) || (var->space() == VECTOR_L2);
     bool varHasSupportOnVolume = (var->varType() == FIELD) || (var->varType() == TEST);
     if ( varHasSupportOnVolume ) {
       BasisPtr basis = trialOrdering->getBasis(var->ID());
       set<unsigned> basisDofOrdinals;
       vector<GlobalIndexType> globalDofOrdinals;
-      if (var->space() == L2) { // unconstrained / local
+      if (isL2Var) { // unconstrained / local
         int cardinality = basis->getCardinality();
         for (int i=0; i<cardinality; i++) {
           basisDofOrdinals.insert(i);
@@ -429,7 +430,7 @@ SubCellDofIndexInfo GDAMinimumRule::getOwnedGlobalDofIndices(GlobalIndexType cel
       unsigned scord = 0; // only one volume
       scInfo[scdim][scord][var->ID()] = globalDofOrdinals;
     }
-    if ( ! (varHasSupportOnVolume && (var->space() == L2)) ) { // if space is L^2 on the volume, we'll have claimed all the dofs above, and we can skip further processing
+    if ( ! (varHasSupportOnVolume && isL2Var) ) { // if space is L^2 on the volume, we'll have claimed all the dofs above, and we can skip further processing
       vector< set<unsigned> > processedSubcells(sideDim);
       for (int sideOrdinal=0; sideOrdinal<sideCount; sideOrdinal++) {
         BasisMap sideBasisMap;
@@ -446,7 +447,7 @@ SubCellDofIndexInfo GDAMinimumRule::getOwnedGlobalDofIndices(GlobalIndexType cel
           basisDofOrdinals.insert(sideBasisOrdinals.begin(),sideBasisOrdinals.end());
         } else {
           BasisPtr basis = constrainingTrialOrdering->getBasis(var->ID(),sideConstraint.sideOrdinal);
-          set<int> sideBasisOrdinals = (var->space() != L2) ? basis->dofOrdinalsForInterior() : basis->dofOrdinalsForSubcells(sideDim, true);
+          set<int> sideBasisOrdinals = isL2Var ? basis->dofOrdinalsForSubcells(sideDim, true) : basis->dofOrdinalsForInterior(); // if L^2, all dofs are interior...
           basisDofOrdinals.insert(sideBasisOrdinals.begin(),sideBasisOrdinals.end());
         }
         if (owningCellIDForSide == cellID) { // then we're responsible for the assignment of global indices
@@ -458,7 +459,7 @@ SubCellDofIndexInfo GDAMinimumRule::getOwnedGlobalDofIndices(GlobalIndexType cel
           scInfo[scdim][sideOrdinal][var->ID()] = globalDofOrdinals;
         }
         
-        if (var->space() != L2) {
+        if (!isL2Var) {
           vector< map< unsigned, unsigned > > subsideMap = buildSubsideMap(sideTopo); // outer vector indexed by dimension.  map goes from scOrdinalInSide to a subside containing that subcell.  (This is not uniquely defined, but that should be OK.)
           
           for (int d=0; d<sideDim; d++) {
@@ -622,6 +623,7 @@ LocalDofMapperPtr GDAMinimumRule::getDofMapper(GlobalIndexType cellID, CellConst
   
   for (map<int, VarPtr>::iterator varIt = trialVars.begin(); varIt != trialVars.end(); varIt++) {
     VarPtr var = varIt->second;
+    bool isL2Var = (var->space() == L2) || (var->space() == VECTOR_L2);
     bool omitVarEntry = (varIDToMap != -1) && (var->ID() != varIDToMap); // don't skip processing, just omit it from the map
     BasisMap volumeBasisMap;
     bool varHasSupportOnVolume = (var->varType() == FIELD) || (var->varType() == TEST);
@@ -629,7 +631,7 @@ LocalDofMapperPtr GDAMinimumRule::getDofMapper(GlobalIndexType cellID, CellConst
       BasisPtr basis = trialOrdering->getBasis(var->ID());
       set<unsigned> basisDofOrdinals;
       
-      if (var->space() == L2) { // unconstrained / local
+      if (isL2Var) { // unconstrained / local
         int cardinality = basis->getCardinality();
         for (int i=0; i<cardinality; i++) {
           basisDofOrdinals.insert(i);
@@ -641,7 +643,6 @@ LocalDofMapperPtr GDAMinimumRule::getDofMapper(GlobalIndexType cellID, CellConst
       vector<GlobalIndexType> globalDofOrdinals = dofIndexInfo[spaceDim][0][var->ID()];
       if (!omitVarEntry) {
         if (basisDofOrdinals.size() > 0) {
-          volumeBasisMap.push_back(SubBasisDofMapper::subBasisDofMapper(basisDofOrdinals, globalDofOrdinals));
 //          cout << "getDofMapper: for var " << var->ID() << ", adding volume sub-basis dofMapper for " << basisDofOrdinals.size() << "  local dofOrdinals";
 //          cout << ", mapping to " << globalDofOrdinals.size() << " global dof ordinals.\n";
 //          cout << "( ";
@@ -653,11 +654,13 @@ LocalDofMapperPtr GDAMinimumRule::getDofMapper(GlobalIndexType cellID, CellConst
 //            cout << *ordIt << " ";
 //          }
 //          cout << ")\n";
+          
+          volumeBasisMap.push_back(SubBasisDofMapper::subBasisDofMapper(basisDofOrdinals, globalDofOrdinals));
         }
       }
     }
     
-    if ( ! (varHasSupportOnVolume && (var->space() == L2)) ) { // if space is L^2 on the volume, we'll have claimed all the dofs above, and we can skip further processing
+    if ( ! (varHasSupportOnVolume && isL2Var) ) { // if space is L^2 on the volume, we'll have claimed all the dofs above, and we can skip further processing
 //      vector< set<unsigned> > processedSubcells(sideDim);
       for (int sideOrdinal=0; sideOrdinal<sideCount; sideOrdinal++) {
         bool omitSideEntry = (sideOrdinalToMap != -1) && (sideOrdinal != sideOrdinalToMap);
@@ -748,17 +751,18 @@ LocalDofMapperPtr GDAMinimumRule::getDofMapper(GlobalIndexType cellID, CellConst
           constrainingBasis = constrainingTrialOrdering->getBasis(var->ID(),sideConstraint.sideOrdinal);
           basis = trialOrdering->getBasis(var->ID(),sideOrdinal);
           
-          set<int> sideBasisOrdinals = (var->space() != L2) ? basis->dofOrdinalsForInterior() : basis->dofOrdinalsForSubcells(sideDim, true);
+          set<int> sideBasisOrdinals = isL2Var ? basis->dofOrdinalsForSubcells(sideDim, true) : basis->dofOrdinalsForInterior(); // if L^2, all dofs are interior...
           basisDofOrdinals.insert(sideBasisOrdinals.begin(),sideBasisOrdinals.end());
-          refBranch = sideRefinementsForSideEntity[sideEntityForSubcell[sideDim][sideOrdinal]];
-          FieldContainer<double> constraintMatrixSide = _br.constrainedWeights(basis, refBranch, constrainingBasis, composedPermutation);
           
-          if (constraintMatrixSide.size() == 0) {
-            cout << "Error: empty constraint matrix encountered.\n";
-            TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Error: empty constraint matrix encountered.\n");
-          }
+          if (basisDofOrdinals.size() > 0) { // can be empty (consider a linear H^1 basis, e.g. -- there will be no middle nodes)
+            refBranch = sideRefinementsForSideEntity[sideEntityForSubcell[sideDim][sideOrdinal]];
+            FieldContainer<double> constraintMatrixSide = _br.constrainedWeights(basis, refBranch, constrainingBasis, composedPermutation);
+            
+            if (constraintMatrixSide.size() == 0) {
+              cout << "Error: empty constraint matrix encountered.\n";
+              TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Error: empty constraint matrix encountered.\n");
+            }
           
-          if (basisDofOrdinals.size() > 0) {
             if (!omitSideEntry && !omitVarEntry) {
               sideBasisMap.push_back(SubBasisDofMapper::subBasisDofMapper(basisDofOrdinals, globalDofOrdinals, constraintMatrixSide));
             }
@@ -778,7 +782,7 @@ LocalDofMapperPtr GDAMinimumRule::getDofMapper(GlobalIndexType cellID, CellConst
         }
         
         // if the space is L2, then we will have addressed all the dofs that belong to the subcells...
-        if (var->space() != L2) {
+        if (!isL2Var) {
           vector< map< unsigned, unsigned > > subsideMap = buildSubsideMap(sideTopo);
           
           for (int d=0; d<sideDim; d++) {
@@ -918,6 +922,18 @@ LocalDofMapperPtr GDAMinimumRule::getDofMapper(GlobalIndexType cellID, CellConst
   return Teuchos::rcp( new LocalDofMapper(trialOrdering,volumeMap,sideMaps,varIDToMap,sideOrdinalToMap) );
 }
 
+PartitionIndexType GDAMinimumRule::partitionForGlobalDofIndex( GlobalIndexType globalDofIndex ) {
+  PartitionIndexType numRanks = _partitionDofCounts.size();
+  GlobalIndexType totalDofCount = 0;
+  for (PartitionIndexType i=0; i<numRanks; i++) {
+    totalDofCount += _partitionDofCounts(i);
+    if (totalDofCount > globalDofIndex) {
+      return i;
+    }
+  }
+  TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Invalid globalDofIndex");
+}
+
 void GDAMinimumRule::printConstraintInfo(GlobalIndexType cellID) {
   CellConstraints cellConstraints = getCellConstraints(cellID);
   cout << "***** Constraints for cell " << cellID << " ****** \n";
@@ -975,17 +991,18 @@ void GDAMinimumRule::rebuildLookups() {
     DofOrderingPtr trialOrdering = _elementTypeForCell[cellID]->trialOrderPtr;
     for (map<int, VarPtr>::iterator varIt = trialVars.begin(); varIt != trialVars.end(); varIt++) {
       VarPtr var = varIt->second;
+      bool isL2Var = (var->space() == L2) || (var->space() == VECTOR_L2);
       bool varHasSupportOnVolume = (var->varType() == FIELD) || (var->varType() == TEST);
       if ( varHasSupportOnVolume ) { // i.e. a variable with support on the volume
         BasisPtr basis = trialOrdering->getBasis(var->ID());
-        if (var->space() == L2) { // unconstrained / local
+        if (isL2Var) { // unconstrained / local
           _partitionDofCount += basis->getCardinality();
         } else {
           _partitionDofCount += basis->dofOrdinalsForInterior().size();
         }
       }
 
-      if ( ! (varHasSupportOnVolume && (var->space() == L2)) ) { // if space is L^2 on the volume, we'll have claimed all the dofs above, and we can skip further processing
+      if ( ! (varHasSupportOnVolume && isL2Var) ) { // if space is L^2 on the volume, we'll have claimed all the dofs above, and we can skip further processing
         vector< set<unsigned> > processedSubcells(sideDim);
         for (int sideOrdinal=0; sideOrdinal<sideCount; sideOrdinal++) {
           shards::CellTopology sideTopo = topo->getCellTopologyData(sideDim, sideOrdinal);
@@ -999,7 +1016,7 @@ void GDAMinimumRule::rebuildLookups() {
               _partitionDofCount += sideBasisOrdinals.size();
             } else {
               BasisPtr basis = constrainingTrialOrdering->getBasis(var->ID(),sideConstraint.sideOrdinal);
-              if (var->space() == L2) { // unconstrained / local
+              if (isL2Var) { // unconstrained / local
                 _partitionDofCount += basis->getCardinality();
               } else {
                 _partitionDofCount += basis->dofOrdinalsForInterior().size();
@@ -1032,7 +1049,7 @@ void GDAMinimumRule::rebuildLookups() {
                     set<int> scBasisOrdinals = basis->dofOrdinalsForSubcell(d, scOrdinalInConstrainingCell, d);
                     _partitionDofCount += scBasisOrdinals.size();
                   } else {
-                    if (var->space() != L2) {
+                    if (!isL2Var) {
                       // here, we are dealing with a subside or one of its constituents.  We want to use the constraint info for that subside.
                       unsigned subsideOrdinal = subsideMap[d][scOrdinalInSide];
                       ConstrainingSubsideInfo subsideConstraint = constraints.subsideConstraints[sideOrdinal][subsideOrdinal];
@@ -1060,16 +1077,16 @@ void GDAMinimumRule::rebuildLookups() {
     }
   }
   int numRanks = Teuchos::GlobalMPISession::getNProc();
-  FieldContainer<int> partitionDofCounts(numRanks);
-  partitionDofCounts[rank] = _partitionDofCount;
-  MPIWrapper::entryWiseSum(partitionDofCounts);
+  _partitionDofCounts.resize(numRanks);
+  _partitionDofCounts[rank] = _partitionDofCount;
+  MPIWrapper::entryWiseSum(_partitionDofCounts);
   _partitionDofOffset = 0; // add this to a local partition dof index to get the global dof index
   for (int i=0; i<rank; i++) {
-    _partitionDofOffset += partitionDofCounts[i];
+    _partitionDofOffset += _partitionDofCounts[i];
   }
   _globalDofCount = _partitionDofOffset;
   for (int i=rank; i<numRanks; i++) {
-    _globalDofCount += partitionDofCounts[i];
+    _globalDofCount += _partitionDofCounts[i];
   }
 //  if (rank==0) cout << "globalDofCount: " << _globalDofCount << endl;
   // collect and communicate global cell dof offsets:

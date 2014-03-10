@@ -169,6 +169,10 @@ FieldContainer<double> BasisReconciliation::computeConstrainedWeights(BasisPtr f
     cout << "WARNING: encountered empty constraint.\n";
     return constrainedWeights;
   }
+  if (interiorCardinalityCoarse==0) {
+    cout << "WARNING: encountered empty coarse basis.\n";
+    return constrainedWeights;
+  }
   
   FieldContainer<double> finerBasisValuesFiltered = filterBasisValues(finerBasisValues, filteredDofOrdinalsForFinerBasis);
   FieldContainer<double> coarserBasisValuesFiltered = filterBasisValues(coarserBasisValues, filteredDofOrdinalsForCoarserBasis);
@@ -214,6 +218,7 @@ SubBasisReconciliationWeights BasisReconciliation::computeConstrainedWeights(Bas
   int sideDimension = d-1;
   switch (fs) {
     case IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD:
+    case IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HGRAD:
     case IntrepidExtendedTypes::FUNCTION_SPACE_TENSOR_HGRAD:
       minSubcellDimension = 0; // vertices
       break;
@@ -225,9 +230,11 @@ SubBasisReconciliationWeights BasisReconciliation::computeConstrainedWeights(Bas
       minSubcellDimension = d-1; // faces in 3D, edges in 2D.  (Unsure if this is right in 4D)
       break;
     case IntrepidExtendedTypes::FUNCTION_SPACE_HVOL:
+    case IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HVOL:
       minSubcellDimension = d; // i.e. no continuities enforced
       break;
     default:
+      cout << "ERROR: Unhandled functionSpace in BasisReconciliation.";
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unhandled functionSpace()");
       break;
   }
@@ -427,6 +434,7 @@ SubBasisReconciliationWeights BasisReconciliation::computeConstrainedWeights(Bas
       minSubcellDimension = spaceDim-1; // faces in 3D, edges in 2D.  (Unsure if this is right in 4D)
       break;
     case IntrepidExtendedTypes::FUNCTION_SPACE_HVOL:
+    case IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HVOL:
       minSubcellDimension = spaceDim; // i.e. no continuities enforced
     default:
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unhandled functionSpace()");
@@ -626,7 +634,8 @@ FieldContainer<double> BasisReconciliation::filterBasisValues(const FieldContain
 }
 
 set<int> BasisReconciliation::interiorDofOrdinalsForBasis(BasisPtr basis) {
-  bool isL2 = (basis->functionSpace() == IntrepidExtendedTypes::FUNCTION_SPACE_HVOL); // if L2, we include all dofs, not just the interior ones
+  // if L2, we include all dofs, not just the interior ones
+  bool isL2 = (basis->functionSpace() == IntrepidExtendedTypes::FUNCTION_SPACE_HVOL) || (basis->functionSpace() == IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HVOL);
   int spaceDim = basis->domainTopology().getDimension();
   set<int> filteredDofOrdinalsForFinerBasis = isL2 ? basis->dofOrdinalsForSubcells(spaceDim, true) : basis->dofOrdinalsForInterior();
   return filteredDofOrdinalsForFinerBasis;
@@ -637,7 +646,9 @@ set<unsigned> BasisReconciliation::internalDofIndicesForFinerBasis(BasisPtr fine
   set<unsigned> internalDofOrdinals;
   unsigned spaceDim = finerBasis->domainTopology().getDimension();
   
-  if (finerBasis->functionSpace() == IntrepidExtendedTypes::FUNCTION_SPACE_HVOL) {
+  bool isL2 = (finerBasis->functionSpace() == IntrepidExtendedTypes::FUNCTION_SPACE_HVOL) || (finerBasis->functionSpace() == IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HVOL);
+  
+  if (isL2) {
     // L2 basis, so everything is interior:
     set<int> dofOrdinalsInt = finerBasis->dofOrdinalsForSubcells(spaceDim,true);
     internalDofOrdinals.insert(dofOrdinalsInt.begin(),dofOrdinalsInt.end());
@@ -665,8 +676,22 @@ FieldContainer<double> BasisReconciliation::subBasisReconciliationWeightsForSubc
                                                                                     BasisPtr fineBasis, unsigned fineSubcord,
                                                                                     BasisPtr coarseBasis, unsigned coarseSubcord,
                                                                                     set<unsigned> &fineBasisDofOrdinals) {
-  set<int> fineBasisSubcellOrdinals = fineBasis->dofOrdinalsForSubcell(subcdim, fineSubcord, subcdim);
-  set<int> coarseBasisSubcellOrdinals = coarseBasis->dofOrdinalsForSubcell(subcdim, coarseSubcord, subcdim);
+  IntrepidExtendedTypes::EFunctionSpaceExtended fs = fineBasis->functionSpace();
+  bool isL2 = (fs == IntrepidExtendedTypes::FUNCTION_SPACE_HVOL) || (fs == IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HVOL);
+  
+  set<int> fineBasisSubcellOrdinals, coarseBasisSubcellOrdinals;
+  if (!isL2) {
+    fineBasisSubcellOrdinals = fineBasis->dofOrdinalsForSubcell(subcdim, fineSubcord, subcdim);
+    coarseBasisSubcellOrdinals = coarseBasis->dofOrdinalsForSubcell(subcdim, coarseSubcord, subcdim);
+  } else {
+    int spaceDim = fineBasis->domainTopology().getDimension();
+    if (subcdim==spaceDim) {
+      // L2 basis, so everything is interior:
+      fineBasisSubcellOrdinals = fineBasis->dofOrdinalsForSubcells(spaceDim,true);
+      coarseBasisSubcellOrdinals = coarseBasis->dofOrdinalsForSubcells(spaceDim,true);
+    }
+    // if L2 and subcdim != spaceDim, there are no corresponding dofs for the subcell.
+  }
   
   set<unsigned> rowFilter, colFilter;
   

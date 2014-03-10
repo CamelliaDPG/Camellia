@@ -25,6 +25,9 @@ public:
                        BasisCachePtr basisCache);
   int numElementConstraints();
   int numGlobalConstraints();
+  
+  Constraint & getElementConstraint(int constraintOrdinal);
+  Constraint & getGlobalConstraint(int constraintOrdinal);
 };
 
 #endif

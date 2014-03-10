@@ -48,6 +48,7 @@ class GDAMinimumRule : public GlobalDofAssignment {
   map<GlobalIndexType, GlobalIndexType> _globalCellDofOffsets; // (cellID -> first global dof index for that cell)
   GlobalIndexType _partitionDofOffset; // add to partition-local dof indices to get a global dof index
   GlobalIndexType _partitionDofCount; // how many dofs belong to the local partition
+  FieldContainer<IndexType> _partitionDofCounts; // how many dofs belong to all MPI ranks.
   GlobalIndexType _globalDofCount;
   
   map< GlobalIndexType, CellConstraints > _constraintsCache;
@@ -86,6 +87,7 @@ public:
   void interpretGlobalData(GlobalIndexType cellID, FieldContainer<double> &localDofs, const Epetra_Vector &globalDofs, bool accumulate=true);
   IndexType localDofCount(); // local to the MPI node
 
+  PartitionIndexType partitionForGlobalDofIndex( GlobalIndexType globalDofIndex );
   void printConstraintInfo(GlobalIndexType cellID);
   void rebuildLookups();
 };

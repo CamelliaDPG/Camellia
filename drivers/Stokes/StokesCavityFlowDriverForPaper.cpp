@@ -3,6 +3,7 @@
 #include "MeshFactory.h"
 #include "SolutionExporter.h"
 #include <Teuchos_GlobalMPISession.hpp>
+#include "GnuPlotUtil.h"
 
 class TopBoundary : public SpatialFilter {
 public:
@@ -33,26 +34,26 @@ int main(int argc, char *argv[]) {
   Teuchos::GlobalMPISession mpiSession(&argc, &argv);
   int rank = Teuchos::GlobalMPISession::getRank();
   VarFactory varFactory;
-  VarPtr tau1 = varFactory.testVar("\\tau_1", HDIV);  // tau_1
-  VarPtr tau2 = varFactory.testVar("\\tau_2", HDIV);  // tau_2
-  VarPtr v1 = varFactory.testVar("v1", HGRAD); // v_1
-  VarPtr v2 = varFactory.testVar("v2", HGRAD); // v_2
-  VarPtr q = varFactory.testVar("q", HGRAD); // q
-  
+  // traces:
   VarPtr u1hat = varFactory.traceVar("\\widehat{u}_1");
   VarPtr u2hat = varFactory.traceVar("\\widehat{u}_2");
   VarPtr t1_n = varFactory.fluxVar("\\widehat{t}_{1n}");
   VarPtr t2_n = varFactory.fluxVar("\\widehat{t}_{2n}");
-  
+  // fields:
   VarPtr u1 = varFactory.fieldVar("u_1", L2);
   VarPtr u2 = varFactory.fieldVar("u_2", L2);
   VarPtr sigma1 = varFactory.fieldVar("\\sigma_1", VECTOR_L2);
   VarPtr sigma2 = varFactory.fieldVar("\\sigma_2", VECTOR_L2);
   VarPtr p = varFactory.fieldVar("p");
+  // test functions:
+  VarPtr tau1 = varFactory.testVar("\\tau_1", HDIV);  // tau_1
+  VarPtr tau2 = varFactory.testVar("\\tau_2", HDIV);  // tau_2
+  VarPtr v1 = varFactory.testVar("v1", HGRAD);        // v_1
+  VarPtr v2 = varFactory.testVar("v2", HGRAD);        // v_2
+  VarPtr q = varFactory.testVar("q", HGRAD);          // q
   
-  double mu = 1;
-  
-  BFPtr stokesBF = Teuchos::rcp( new BF(varFactory) );  
+  BFPtr stokesBF = Teuchos::rcp( new BF(varFactory) );
+  double mu = 1.0; // viscosity
   // tau1 terms:
   stokesBF->addTerm(u1, tau1->div());
   stokesBF->addTerm(sigma1, tau1); // (sigma1, tau1)
@@ -79,10 +80,12 @@ int main(int argc, char *argv[]) {
   FunctionPtr n = Function::normal();
   stokesBF->addTerm(u1hat * n->x() + u2hat * n->y(), q);
 
-  int H1PolyOrder = 3; // cubic H^1 --> quadratic L^2 variables.
+  int k = 4; // poly order for field variables
+  int H1Order = k + 1;
+  int delta_k = 2;   // test space enrichment
   double width = 1.0, height = 1.0;
   int horizontalCells = 2, verticalCells = 2;
-  MeshPtr mesh = MeshFactory::quadMesh(stokesBF, H1PolyOrder, width, height,
+  MeshPtr mesh = MeshFactory::quadMesh(stokesBF, H1Order, delta_k, width, height,
                                        horizontalCells, verticalCells);
   
   RHSPtr rhs = Teuchos::rcp( new RHSEasy ); // zero
@@ -110,26 +113,33 @@ int main(int argc, char *argv[]) {
   double energyThreshold = 0.20;
   RefinementStrategy refinementStrategy( solution, energyThreshold );
   
-  refinementStrategy.setEnforceOneIrregularity(true);
-
-  solution->condensedSolve();
-  int refCount = 8;
+  Teuchos::RCP<Solver> mumpsSolver = Teuchos::rcp( new MumpsSolver );
+  solution->condensedSolve(mumpsSolver);
+  int refCount = 10;
   for (int refIndex=0; refIndex < refCount; refIndex++) {
-    if (rank==0) cout << "Before refinement " << refIndex << " mesh has " << mesh->numActiveElements() << " elements.\n";
+    double energyError = solution->energyErrorTotal();
+    if (rank==0) {
+      cout << "Before refinement " << refIndex << ", energy error = " << energyError;
+      cout << " (using " << mesh->numFluxDofs() << " trace degrees of freedom)." << endl;
+    }
     refinementStrategy.refine();
-    solution->condensedSolve();
+    solution->condensedSolve(mumpsSolver);
   }
-  
   double energyErrorTotal = solution->energyErrorTotal();
-  cout << "Final mesh has " << mesh->numActiveElements() << " elements and " << mesh->numGlobalDofs() << " dofs.\n";
-  cout << "Final energy error: " << energyErrorTotal << endl;
   
   FunctionPtr massFlux = Teuchos::rcp( new PreviousSolutionFunction(solution, u1hat * n->x() + u2hat * n->y()) );
-  double netMassFlux = massFlux->integrate(mesh);
-  cout << "Net mass flux: " << netMassFlux << endl;
+  double netMassFlux = massFlux->integrate(mesh); // integrate over the mesh skeleton
+
+  if (rank==0) {
+    cout << "Final mesh has " << mesh->numActiveElements() << " elements and " << mesh->numFluxDofs() << " trace dofs.\n";
+    cout << "Final energy error: " << energyErrorTotal << endl;
+    cout << "Net mass flux: " << netMassFlux << endl;
+  }
   
   VTKExporter solnExporter(solution,mesh,varFactory);
   solnExporter.exportSolution("stokesCavityFlowSolution");
+  
+  GnuPlotUtil::writeComputationalMeshSkeleton("cavityFlowRefinedMesh", mesh);
   
   return 0;
 }

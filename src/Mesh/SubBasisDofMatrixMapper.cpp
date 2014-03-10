@@ -14,6 +14,10 @@ SubBasisDofMatrixMapper::SubBasisDofMatrixMapper(const set<unsigned> &basisDofOr
   _basisDofOrdinalFilter = basisDofOrdinalFilter;
   _mappedGlobalDofOrdinals = mappedGlobalDofOrdinals;
   _constraintMatrix = constraintMatrix;
+  
+  // TODO: check that input sizes are reasonable...
+  
+  // int constraintCols = _constraintMatrix.dimension(1);
 }
 const set<unsigned> & SubBasisDofMatrixMapper::basisDofOrdinalFilter() {
   return _basisDofOrdinalFilter;

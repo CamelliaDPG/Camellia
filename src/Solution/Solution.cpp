@@ -98,6 +98,8 @@
 #include "Solution.h"
 #include "Projector.h"
 
+#include "CondensedDofInterpreter.h"
+
 #include "Var.h"
 
 #include "CamelliaCellTools.h"
@@ -511,18 +513,8 @@ void Solution::populateStiffnessAndLoad() {
         GlobalIndexType cellID = _mesh->cellID(elemTypePtr,cellIndex+startCellIndexForBatch,rank);
         FieldContainer<double> localStiffness(localStiffnessDim,&finalStiffness(cellIndex,0,0)); // shallow copy
         FieldContainer<double> localRHS(localRHSDim,&localRHSVector(cellIndex,0)); // shallow copy
-        // we have the same local-to-global map for both rows and columns
-        _dofInterpreter->interpretLocalData(cellID, localStiffness, interpretedStiffness, globalDofIndices);
         
-//        cout << "************* cellID " << cellID << ", interpretation report: *************" << endl;
-//        cout << "localStiffness:\n" << localStiffness;
-//        cout << "interpretedStiffness:\n" << interpretedStiffness;
-//        cout << "globalDofIndices:\n" << globalDofIndices;
-        
-        _dofInterpreter->interpretLocalData(cellID, localRHS, interpretedRHS, globalDofIndices);
-//        cout << "localRHS:\n" << localRHS;
-//        cout << "interpretedRHS:\n" << interpretedRHS;
-//        cout << "globalDofIndices:\n" << globalDofIndices;
+        _dofInterpreter->interpretLocalData(cellID, localStiffness, localRHS, interpretedStiffness, interpretedRHS, globalDofIndices);
         
         // cast whatever the global index type is to a type that Epetra supports
         globalDofIndices.dimensions(dim);
@@ -2614,6 +2606,29 @@ void Solution::setWriteRHSToMatrixMarketFile(bool value, const string &filePath)
   _rhsFilePath = filePath;
 }
 
+void Solution::newCondensedSolve(Teuchos::RCP<Solver> globalSolver, bool reduceMemoryFootprint) {
+  // when reduceMemoryFootprint is true, local stiffness matrices will be computed twice, rather than stored for reuse
+  vector<int> trialIDs = _mesh->bilinearForm()->trialIDs();
+  
+  set< int > zeroMeanConstraints;
+  for (vector< int >::iterator trialIt = trialIDs.begin(); trialIt != trialIDs.end(); trialIt++) {
+    int trialID = *trialIt;
+    if (_bc->imposeZeroMeanConstraint(trialID)) {
+      zeroMeanConstraints.insert(trialID);
+    }
+  }
+  
+  CondensedDofInterpreter dofInterpreter(_mesh.get(), _lagrangeConstraints.get(), zeroMeanConstraints, reduceMemoryFootprint);
+  
+  DofInterpreter* oldDofInterpreter = _dofInterpreter;
+  
+  _dofInterpreter = &dofInterpreter;
+  
+  solve(globalSolver);
+  
+  _dofInterpreter = oldDofInterpreter;
+}
+
 // Jesse's additions below:
 
 // =================================== CONDENSED SOLVE ======================================
@@ -3547,8 +3562,8 @@ Epetra_Map Solution::getPartitionMap() {
 #endif
   
   vector<int> zeroMeanConstraints = getZeroMeanConstraints();
-  GlobalIndexType numGlobalDofs = _mesh->numGlobalDofs();
-  set<GlobalIndexType> myGlobalIndicesSet = _mesh->globalDofIndicesForPartition(rank);
+  GlobalIndexType numGlobalDofs = _dofInterpreter->globalDofCount();
+  set<GlobalIndexType> myGlobalIndicesSet = _dofInterpreter->globalDofIndicesForPartition(rank);
   int numZMCDofs = _zmcsAsRankOneUpdate ? 0 : zeroMeanConstraints.size();
   
   Epetra_Map partMap = getPartitionMap(rank, myGlobalIndicesSet,numGlobalDofs,numZMCDofs,&Comm);

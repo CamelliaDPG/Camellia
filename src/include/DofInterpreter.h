@@ -14,12 +14,18 @@
 
 #include "IndexType.h"
 
+#include <set>
+
 using namespace Intrepid;
+using namespace std;
 
 class DofInterpreter {
 public:
-  virtual void interpretLocalData(GlobalIndexType cellID, const FieldContainer<double> &localDofs,
-                                  FieldContainer<double> &globalDofs, FieldContainer<GlobalIndexType> &globalDofIndices, bool accumulate=true) = 0;
+  virtual GlobalIndexType globalDofCount() = 0;
+  virtual set<GlobalIndexType> globalDofIndicesForPartition(PartitionIndexType rank) = 0;
+  
+  virtual void interpretLocalData(GlobalIndexType cellID, const FieldContainer<double> &localData,
+                                  FieldContainer<double> &globalData, FieldContainer<GlobalIndexType> &globalDofIndices, bool accumulate=true) = 0;
   
   virtual void interpretLocalData(GlobalIndexType cellID, const FieldContainer<double> &localStiffnessData, const FieldContainer<double> &localLoadData,
                                   FieldContainer<double> &globalStiffnessData, FieldContainer<double> &globalLoadData, FieldContainer<GlobalIndexType> &globalDofIndices) {
@@ -29,6 +35,8 @@ public:
   }
   
   virtual void interpretGlobalData(GlobalIndexType cellID, FieldContainer<double> &localDofs, const Epetra_Vector &globalDofs, bool accumulate=true) = 0;
+  
+  
 };
 
 #endif
