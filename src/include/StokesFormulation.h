@@ -11,7 +11,6 @@
 
 #include "BF.h"
 #include "BCEasy.h"
-#include "RHSEasy.h"
 #include "VarFactory.h"
 #include "Var.h"
 #include "ExactSolution.h"
@@ -129,7 +128,7 @@ public:
     return _graphNorm;
   }
   RHSPtr rhs(FunctionPtr f1, FunctionPtr f2) {
-    Teuchos::RCP<RHSEasy> rhs = Teuchos::rcp( new RHSEasy );
+    RHSPtr rhs = RHS::rhs();
     rhs->addTerm( f1 * v1 + f2 * v2 );
     return rhs;
   }
@@ -340,7 +339,7 @@ public:
     return _graphNorm;
   }
   RHSPtr rhs(FunctionPtr f1, FunctionPtr f2) {
-    Teuchos::RCP<RHSEasy> rhs = Teuchos::rcp( new RHSEasy );
+    RHSPtr rhs = RHS::rhs();
     rhs->addTerm( f1 * v->x() + f2 * v->y() );
     return rhs;
   }
@@ -632,7 +631,7 @@ public:
     return Teuchos::rcp( (LinearTerm*) NULL );
   }
   RHSPtr rhs(FunctionPtr f1, FunctionPtr f2) {
-    Teuchos::RCP<RHSEasy> rhs = Teuchos::rcp( new RHSEasy );
+    RHSPtr rhs = RHS::rhs();
     rhs->addTerm( f1 * v1 + f2 * v2 );
     return rhs;
   }
@@ -906,7 +905,7 @@ public:
     return compliantGraphNorm;
   }
   RHSPtr rhs(FunctionPtr f1, FunctionPtr f2) {
-    Teuchos::RCP<RHSEasy> rhs = Teuchos::rcp( new RHSEasy );
+    RHSPtr rhs = RHS::rhs();
     rhs->addTerm( f1 * v1 + f2 * v2 );
     return rhs;
   }
@@ -1052,7 +1051,7 @@ public:
     return _graphNorm;
   }
   RHSPtr rhs(FunctionPtr f1, FunctionPtr f2) {
-    Teuchos::RCP<RHSEasy> rhs = Teuchos::rcp( new RHSEasy );
+    RHSPtr rhs = RHS::rhs();
     rhs->addTerm( f1 * v1 + f2 * v2 );
     return rhs;
   }
@@ -1207,7 +1206,7 @@ public:
     return _graphNorm;
   }
   RHSPtr rhs(FunctionPtr f1, FunctionPtr f2) {
-    Teuchos::RCP<RHSEasy> rhs = Teuchos::rcp( new RHSEasy );
+    RHSPtr rhs = RHS::rhs();
     rhs->addTerm( f1 * v1 + f2 * v2 );
     return rhs;
   }
@@ -1432,7 +1431,7 @@ public:
     return _graphNorm;
   }
   RHSPtr rhs(FunctionPtr f1, FunctionPtr f2) {
-    Teuchos::RCP<RHSEasy> rhs = Teuchos::rcp( new RHSEasy );
+    RHSPtr rhs = RHS::rhs();
     rhs->addTerm( f1 * v1 + f2 * v2 );
     return rhs;
   }

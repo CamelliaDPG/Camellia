@@ -296,7 +296,7 @@ bool VectorizedBasisTestSuite::testPoisson() {
   IPPtr ip = bf->graphNorm();
 
   ////////////////////   SPECIFY RHS   ///////////////////////
-  Teuchos::RCP<RHSEasy> rhs = Teuchos::rcp( new RHSEasy );
+  RHSPtr rhs = RHS::rhs();
   FunctionPtr f = Teuchos::rcp( new ConstantScalarFunction(1.0) );
   rhs->addTerm( f * v );
 

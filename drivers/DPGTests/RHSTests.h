@@ -21,7 +21,7 @@ class RHSEasy;
 class RHSTests : public TestSuite {
   Teuchos::RCP<Mesh> _mesh;
   Teuchos::RCP<RHS> _rhs;
-  Teuchos::RCP<RHSEasy> _rhsEasy;
+  Teuchos::RCP<RHS> _rhsEasy;
   
   void setup();
   void teardown();

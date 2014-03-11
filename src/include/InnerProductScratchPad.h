@@ -9,7 +9,6 @@
 #include "LinearTerm.h"
 #include "SpatialFilter.h"
 #include "BCEasy.h"
-#include "RHSEasy.h"
 #include "IP.h"
 #include "Function.h"
 

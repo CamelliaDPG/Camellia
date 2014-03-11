@@ -250,7 +250,7 @@ int main(int argc, char *argv[]) {
       do {
         weight = problem->iterate(useLineSearch, useCondensedSolve);
         
-        LinearTermPtr rhsLT = ((RHSEasy*) problem->backgroundFlow()->rhs().get())->linearTerm();
+        LinearTermPtr rhsLT = problem->backgroundFlow()->rhs()->linearTerm();
         RieszRep rieszRep(problem->backgroundFlow()->mesh(), problem->backgroundFlow()->ip(), rhsLT);
         rieszRep.computeRieszRep();
         double costFunction = rieszRep.getNorm();
@@ -299,7 +299,7 @@ int main(int argc, char *argv[]) {
       
       // use backgroundFlow's IP so that they're comparable
       Teuchos::RCP<DPGInnerProduct> ip = problems[i].backgroundFlow()->ip();
-      LinearTermPtr rhsLT = ((RHSEasy*) exact->rhs().get())->linearTerm();
+      LinearTermPtr rhsLT = exact->rhs()->linearTerm();
       RieszRep rieszRep(bestApproximation->mesh(), ip, rhsLT);
       rieszRep.computeRieszRep();
             

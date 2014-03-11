@@ -208,7 +208,7 @@ int main(int argc, char *argv[]) {
   }
   
   ////////////////////   SPECIFY RHS   ///////////////////////
-  Teuchos::RCP<RHSEasy> rhs = Teuchos::rcp( new RHSEasy );
+  RHSPtr rhs = RHS::rhs();
   FunctionPtr f = Teuchos::rcp( new ConstantScalarFunction(0.0) );
   rhs->addTerm( f * v ); // obviously, with f = 0 adding this term is not necessary!
 

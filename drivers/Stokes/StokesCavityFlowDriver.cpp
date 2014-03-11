@@ -721,7 +721,7 @@ int main(int argc, char *argv[]) {
   bc->addZeroMeanConstraint(p);
   
   ////////////////////   CREATE RHS   ///////////////////////
-  Teuchos::RCP<RHSEasy> rhs = Teuchos::rcp( new RHSEasy ); // zero for now...
+  RHSPtr rhs = RHS::rhs(); // zero for now...
   rhs->addTerm(Function::zero() * v1); // just because goal-oriented doesn't handle empty RHS well just yet...
   
   /////////////////// SOLVE OVERKILL //////////////////////
@@ -1162,7 +1162,7 @@ int main(int argc, char *argv[]) {
     
   ///////// SET UP & SOLVE STREAM SOLUTION /////////
   //  FunctionPtr vorticity = Teuchos::rcp( new PreviousSolutionFunction(solution,sigma12 - sigma21) );
-  Teuchos::RCP<RHSEasy> streamRHS = Teuchos::rcp( new RHSEasy );
+  RHSPtr streamRHS = RHS::rhs();
   streamRHS->addTerm(vorticity * q_s);
   ((PreviousSolutionFunction*) vorticity.get())->setOverrideMeshCheck(true);
   

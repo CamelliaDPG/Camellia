@@ -72,7 +72,6 @@
 #include "Solution.h"
 #include "VarFactory.h"
 #include "BCEasy.h"
-#include "RHSEasy.h"
 #include "RHS.h"
 #include "BC.h"
 #include "BF.h"
@@ -2251,7 +2250,7 @@ bool MeshTestSuite::testJesseAnisotropicRefinement(){
   
   ////////////////////   SPECIFY RHS   ///////////////////////
   
-  Teuchos::RCP<RHSEasy> rhs = Teuchos::rcp( new RHSEasy );
+  RHSPtr rhs = RHS::rhs();
   Teuchos::RCP<BCEasy> bc = Teuchos::rcp( new BCEasy );
   
   ////////////////////   CREATE BCs   ///////////////////////
@@ -2324,7 +2323,7 @@ bool MeshTestSuite::testPRefinementAdjacentCells(){
   
   ////////////////////   SPECIFY RHS   ///////////////////////
   
-  Teuchos::RCP<RHSEasy> rhs = Teuchos::rcp( new RHSEasy );
+  RHSPtr rhs = RHS::rhs();
   Teuchos::RCP<BCEasy> bc = Teuchos::rcp( new BCEasy );
   
   ////////////////////   CREATE BCs   ///////////////////////

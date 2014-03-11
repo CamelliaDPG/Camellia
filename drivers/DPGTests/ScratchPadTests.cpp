@@ -719,7 +719,7 @@ bool ScratchPadTests::testGalerkinOrthogonality(){
   
   ////////////////////   SOLVE   ///////////////////////
 
-  Teuchos::RCP<RHSEasy> rhs = Teuchos::rcp( new RHSEasy );
+  RHSPtr rhs = RHS::rhs();
   Teuchos::RCP<BCEasy> bc = Teuchos::rcp( new BCEasy );
   SpatialFilterPtr inflowBoundary = Teuchos::rcp( new InflowSquareBoundary );
   SpatialFilterPtr outflowBoundary = Teuchos::rcp( new NegatedSpatialFilter(inflowBoundary) );
@@ -884,7 +884,7 @@ bool ScratchPadTests::testRieszIntegration(){
   FunctionPtr one = Teuchos::rcp( new ConstantScalarFunction(1.0) );
 
   FunctionPtr zero = Function::constant(0.0);
-  Teuchos::RCP<RHSEasy> rhs = Teuchos::rcp( new RHSEasy );
+  RHSPtr rhs = RHS::rhs();
   FunctionPtr f = one;
   rhs->addTerm( f * v ); // obviously, with f = 0 adding this term is not necessary!
 
@@ -975,7 +975,7 @@ bool ScratchPadTests::testLTResidualSimple(){
   FunctionPtr one = Teuchos::rcp( new ConstantScalarFunction(1.0) );
 
   FunctionPtr zero = Function::constant(0.0);
-  Teuchos::RCP<RHSEasy> rhs = Teuchos::rcp( new RHSEasy );
+  RHSPtr rhs = RHS::rhs();
   FunctionPtr f = one;
   rhs->addTerm( f * v ); 
 
@@ -1095,7 +1095,7 @@ bool ScratchPadTests::testLTResidual(){
   FunctionPtr one = Teuchos::rcp( new ConstantScalarFunction(1.0) );
 
   FunctionPtr zero = Function::constant(0.0);
-  Teuchos::RCP<RHSEasy> rhs = Teuchos::rcp( new RHSEasy );
+  RHSPtr rhs = RHS::rhs();
   FunctionPtr f = one;
   rhs->addTerm( f * v );
 
@@ -1218,7 +1218,7 @@ bool ScratchPadTests::testResidualMemoryError(){
 
   FunctionPtr zero = Function::constant(0.0);
   FunctionPtr one = Function::constant(1.0);
-  Teuchos::RCP<RHSEasy> rhs = Teuchos::rcp( new RHSEasy );
+  RHSPtr rhs = RHS::rhs();
   FunctionPtr f = zero;
   //  FunctionPtr f = one;
   rhs->addTerm( f * v ); // obviously, with f = 0 adding this term is not necessary!

@@ -912,7 +912,7 @@ bool SolutionTests::testEnergyError(){
   BFPtr bf = Teuchos::rcp( new BF(varFactory) );
   bf->addTerm(u,v); // L2 norm
   
-  Teuchos::RCP<RHSEasy> rhs = Teuchos::rcp( new RHSEasy );
+  RHSPtr rhs = RHS::rhs();
   FunctionPtr uSoln = Teuchos::rcp( new ConstantScalarFunction(3.0) );
   rhs->addTerm(uSoln * v);
   
@@ -952,7 +952,7 @@ bool SolutionTests::testEnergyError(){
   // 3rd test: much the same, but different RHS
   uSoln = Teuchos::rcp( new NewQuadraticFunction );
   
-  rhs = Teuchos::rcp( new RHSEasy );
+  rhs = RHS::rhs();
   rhs->addTerm(uSoln * v);
   
   soln = Teuchos::rcp( new Solution(mesh, bc, rhs, ip) );
@@ -968,7 +968,7 @@ bool SolutionTests::testEnergyError(){
   }
   
   // 4th test: try a non-zero solution, zero RHS
-  rhs = Teuchos::rcp( new RHSEasy );
+  rhs = RHS::rhs();
   soln = Teuchos::rcp( new Solution(mesh, bc, rhs, ip) );
 
   map<int, FunctionPtr > functionMap;
@@ -1224,7 +1224,7 @@ bool SolutionTests::testScratchPadSolution() {
   ////////////////////   SPECIFY RHS   ///////////////////////
 
   FunctionPtr zero = Function::constant(0.0);
-  Teuchos::RCP<RHSEasy> rhs = Teuchos::rcp( new RHSEasy );
+  RHSPtr rhs = RHS::rhs();
   FunctionPtr f = zero;
   rhs->addTerm( f * v ); // obviously, with f = 0 adding this term is not necessary!
 
@@ -1319,7 +1319,7 @@ bool SolutionTests::testCondensationSolve() {
   
   ////////////////////   SPECIFY RHS   ///////////////////////
 
-  Teuchos::RCP<RHSEasy> rhs = Teuchos::rcp( new RHSEasy );
+  RHSPtr rhs = RHS::rhs();
   rhs->addTerm( 1.0* v ); 
 
   ////////////////////   CREATE BCs   ///////////////////////

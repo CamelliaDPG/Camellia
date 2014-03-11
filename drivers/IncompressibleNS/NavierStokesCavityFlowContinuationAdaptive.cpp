@@ -404,7 +404,7 @@ int main(int argc, char *argv[]) {
   
   FunctionPtr vorticity = Teuchos::rcp( new PreviousSolutionFunction(solution, - u1->dy() + u2->dx() ) );
   //  FunctionPtr vorticity = Teuchos::rcp( new PreviousSolutionFunction(solution,sigma12 - sigma21) );
-  Teuchos::RCP<RHSEasy> streamRHS = Teuchos::rcp( new RHSEasy );
+  RHSPtr streamRHS = RHS::rhs();
   streamRHS->addTerm(vorticity * q_s);
   ((PreviousSolutionFunction*) vorticity.get())->setOverrideMeshCheck(true);
   ((PreviousSolutionFunction*) u1_prev.get())->setOverrideMeshCheck(true);

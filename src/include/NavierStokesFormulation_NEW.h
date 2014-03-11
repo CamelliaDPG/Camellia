@@ -190,7 +190,7 @@ public:
     return _graphNorm;
   }
   RHSPtr rhs(FunctionPtr f1, FunctionPtr f2, bool excludeFluxesAndTraces) {
-    Teuchos::RCP<RHSEasy> rhs = Teuchos::rcp( new RHSEasy );
+    RHSPtr rhs = RHS::rhs();
     rhs->addTerm( f1 * v1 + f2 * v2 );
     // add the subtraction of the stokes BF here:
     rhs->addTerm( -_stokesBF->testFunctional(_soln, excludeFluxesAndTraces) );
@@ -526,7 +526,7 @@ public:
   double lineSearchWeight() {
     double alpha = 2.0;
     double alphaMin = 1e-10;
-    LinearTermPtr rhsLT = ((RHSEasy*) _backgroundFlow->rhs().get())->linearTerm();
+    LinearTermPtr rhsLT = _backgroundFlow->rhs()->linearTerm();
     RieszRep rieszRep(_backgroundFlow->mesh(), _backgroundFlow->ip(), rhsLT);
     rieszRep.computeRieszRep();
     double costPrevious = rieszRep.getNorm();

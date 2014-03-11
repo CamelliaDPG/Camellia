@@ -590,9 +590,7 @@ bool IncompressibleFormulationsTests::testVGPStokesFormulationCorrectness() {
       vgpStokesExactSolution = vgpStokesFormulation->exactSolution(u1_exact, u2_exact, p_exact, entireBoundary);
       
       RHSPtr rhs = vgpStokesExactSolution->rhs();
-      // this is a bit ugly, in that we're assuming the RHS is actually a subclass of RHSEasy
-      // (but that's true!)
-      LinearTermPtr rhsLT = ((RHSEasy *)rhs.get())->linearTerm();
+      LinearTermPtr rhsLT = rhs->linearTerm();
       
       int H1Order = maxPolyOrder + 1;
       int pToAdd = 1;
@@ -838,7 +836,7 @@ bool IncompressibleFormulationsTests::testVGPNavierStokesFormulationConsistency(
             
             Teuchos::RCP< RieszRep > rieszRep;
             if (useHessian) {
-              LinearTermPtr rhsLT = ((RHSEasy*) exactSolution->rhs().get())->linearTerm();
+              LinearTermPtr rhsLT = exactSolution->rhs()->linearTerm();
               IPPtr ip = problem.bf()->graphNorm();
               rieszRep = Teuchos::rcp( new RieszRep(mesh,ip,rhsLT));
               FunctionPtr v1_rep = Teuchos::rcp( new RepFunction(v1_vgp, rieszRep) );
@@ -1010,9 +1008,7 @@ bool IncompressibleFormulationsTests::testVGPNavierStokesFormulationCorrectness(
       SolutionPtr solnIncrement = problem.solutionIncrement();
       RHSPtr rhs = problem.exactSolution()->rhs();
       
-      // this is a bit ugly, in that we're assuming the RHS is actually a subclass of RHSEasy
-      // (but that's true!)
-      LinearTermPtr rhsLT = ((RHSEasy *)rhs.get())->linearTerm();
+      LinearTermPtr rhsLT = rhs->linearTerm();
       
       // f = - grad p + mu delta u - u * grad u
       FunctionPtr f1 = - p_exact->dx() + mu * (u1_exact->dx()->dx() + u1_exact->dy()->dy())
@@ -1527,7 +1523,7 @@ bool IncompressibleFormulationsTests::testVGPNavierStokesFormulationKovasnayConv
           
           Teuchos::RCP< RieszRep > rieszRep;
           if (useHessian) {
-            LinearTermPtr rhsLT = ((RHSEasy*) rhs.get())->linearTerm();
+            LinearTermPtr rhsLT = rhs->linearTerm();
 
             rieszRep = Teuchos::rcp( new RieszRep(kProblem.mesh(),ip,rhsLT));
             FunctionPtr v1_rep = Teuchos::rcp( new RepFunction(v1_vgp, rieszRep) );

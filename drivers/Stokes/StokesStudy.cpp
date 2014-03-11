@@ -834,7 +834,7 @@ int main(int argc, char *argv[]) {
       LShapedDomain(vertices, elementVertices, useTriangles);
        // claim from [18] is homogeneous RHS -- we're not seeing that, so as a test,
       // let's impose that.  (If we now converge, that will give a clue where the bug is...)
-//      RHSPtr zeroRHS = Teuchos::rcp( new RHSEasy );
+//      RHSPtr zeroRHS = RHS::rhs();
 //      
 //      study = HConvergenceStudy(mySolution,
 //                              mySolution->bilinearForm(),

@@ -146,7 +146,7 @@ int main(int argc, char *argv[]) {
   Teuchos::RCP<BCEasy> bc = Teuchos::rcp( new BCEasy );
   
   ////////////////////   CREATE RHS   ///////////////////////
-  Teuchos::RCP<RHSEasy> rhs = Teuchos::rcp( new RHSEasy ); // zero for now...
+  RHSPtr rhs = RHS::rhs(); // zero for now...
   
   IPPtr ip;
   

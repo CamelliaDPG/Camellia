@@ -229,7 +229,7 @@ int main(int argc, char *argv[]) {
   ////////////////////////////////////////////////////////////////////
   // DEFINE RHS
   ////////////////////////////////////////////////////////////////////
-  Teuchos::RCP<RHSEasy> rhs = Teuchos::rcp( new RHSEasy );
+  RHSPtr rhs = RHS::rhs();
   FunctionPtr u_prev_squared_div2 = 0.5 * u_prev * u_prev;
   
   rhs->addTerm((e1 * u_prev_squared_div2 + e2 * u_prev) * v->grad() - u_prev * tau->div());

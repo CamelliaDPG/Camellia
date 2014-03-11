@@ -11,7 +11,6 @@
 #include "BF.h"
 
 #include "BCEasy.h"
-#include "RHSEasy.h"
 
 #include "Solution.h"
 
@@ -172,7 +171,7 @@ int main(int argc, char *argv[]) {
 //    meshMinRule->getTopology()->printConstraintReport(1); // edges
     
     ////////////////////   SPECIFY RHS   ///////////////////////
-    Teuchos::RCP<RHSEasy> rhs = Teuchos::rcp( new RHSEasy );
+    RHSPtr rhs = RHS::rhs();
     FunctionPtr f = Function::zero();
     rhs->addTerm( f * v ); // obviously, with f = 0 adding this term is not necessary!
     

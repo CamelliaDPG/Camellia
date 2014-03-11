@@ -215,9 +215,8 @@ int main(int argc, char *argv[]) {
       cout << "sigma12 err: " << sigma12_err << endl;
       cout << "sigma21 err: " << sigma21_err << endl;
       cout << "sigma22 err: " << sigma22_err << endl;
-      
-      RHSEasy* rhs = dynamic_cast< RHSEasy* >( problems[0].exactSolution()->rhs().get() );
-      LinearTermPtr rhsLT = rhs->linearTerm();
+     
+      LinearTermPtr rhsLT = problems[0].exactSolution()->rhs()->linearTerm();
       cout << "rhsLT has " << rhsLT->summands().size() << " summands.\n";
       cout << "rhsLT: " << rhsLT->displayString() << endl;
       if (rhsLT->isZero()) {
@@ -278,7 +277,7 @@ int main(int argc, char *argv[]) {
 //      
 //      // use backgroundFlow's IP so that they're comparable
 //      Teuchos::RCP<DPGInnerProduct> ip = problems[i].backgroundFlow()->ip();
-//      LinearTermPtr rhsLT = ((RHSEasy*) exact->rhs().get())->linearTerm();
+//      LinearTermPtr rhsLT = exact->rhs()->linearTerm();
 //      RieszRep rieszRep(bestApproximation->mesh(), ip, rhsLT);
 //      rieszRep.computeRieszRep();
 //            

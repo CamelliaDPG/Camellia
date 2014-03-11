@@ -139,7 +139,7 @@ public:
     return _graphNorm;
   }
   RHSPtr rhs(FunctionPtr f1, FunctionPtr f2, bool excludeFluxesAndTraces) {
-    Teuchos::RCP<RHSEasy> rhs = Teuchos::rcp( new RHSEasy );
+    RHSPtr rhs = RHS::rhs();
     LinearTermPtr lt = f1 * v1 + f2 * v2;
 //    if (lt->isZero() ) {
 //      cout << "RHS lt is identically zero.\n";

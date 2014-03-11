@@ -88,7 +88,7 @@ int main(int argc, char *argv[]) {
   MeshPtr mesh = MeshFactory::quadMesh(stokesBF, H1Order, delta_k, width, height,
                                        horizontalCells, verticalCells);
   
-  RHSPtr rhs = Teuchos::rcp( new RHSEasy ); // zero
+  RHSPtr rhs = RHS::rhs(); // zero
   
   Teuchos::RCP<BCEasy> bc = Teuchos::rcp( new BCEasy );
   SpatialFilterPtr topBoundary = Teuchos::rcp( new TopBoundary );

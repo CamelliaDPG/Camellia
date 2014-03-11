@@ -40,7 +40,7 @@ class TimeIntegrator
     int _commRank;
     BFPtr _steadyJacobian;
     SteadyResidual &_steadyResidual;
-    Teuchos::RCP<RHSEasy> _rhs;
+    RHSPtr _rhs;
     Teuchos::RCP<BCEasy> _bc;
     SolutionPtr _solution;
     SolutionPtr _prevTimeSolution;
@@ -97,7 +97,7 @@ class ESDIRKIntegrator : public TimeIntegrator
     vector<double> c;
     // For ESDIRK schemes, first stage is _prevTimeSolution
     vector< SolutionPtr > _stageSolution;
-    vector< Teuchos::RCP<RHSEasy> > _stageRHS;
+    vector< RHSPtr > _stageRHS;
     vector< LinearTermPtr > _steadyLinearTerm;
 
   public:

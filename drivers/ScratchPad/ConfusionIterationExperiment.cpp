@@ -236,16 +236,16 @@ int main(int argc, char *argv[]) {
   static_cast< PreviousSolutionFunction* >(uhat_prev2.get())->setOverrideMeshCheck(true);
   
   ////////////////////   SPECIFY RHSes   ///////////////////////
-  Teuchos::RCP<RHSEasy> rhs = Teuchos::rcp( new RHSEasy );
+  RHSPtr rhs = RHS::rhs();
   FunctionPtr f = Teuchos::rcp( new ConstantScalarFunction(0.0) );
   rhs->addTerm( f * v ); // obviously, with f = 0 adding this term is not necessary!
   
-  Teuchos::RCP<RHSEasy> rhs1 = Teuchos::rcp( new RHSEasy );
+  RHSPtr rhs1 = RHS::rhs();
   rhs1->addTerm( f * v );
   rhs1->addTerm( beta * u_prev2 * v->grad() - beta * n * uhat_prev2 * v );
   rhs1->addTerm( -eps * u_prev2 * tau->div() + eps * uhat_prev2 * tau->dot_normal() );
   
-  Teuchos::RCP<RHSEasy> rhs2 = Teuchos::rcp( new RHSEasy );
+  RHSPtr rhs2 = RHS::rhs();
   rhs2->addTerm( f * v );
   rhs2->addTerm( (1.0 / eps) * sigma1_prev1 * tau->x() );
   rhs2->addTerm( (1.0 / eps) * sigma2_prev1 * tau->y() );

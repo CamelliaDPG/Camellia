@@ -19,7 +19,7 @@ TimeIntegrator::TimeIntegrator(BFPtr steadyJacobian, SteadyResidual &steadyResid
   _nlIterationMax = 20;
   _commRank = Teuchos::GlobalMPISession::getRank();
 
-  _rhs = Teuchos::rcp( new RHSEasy );
+  _rhs = RHS::rhs();
   _solution = Teuchos::rcp( new Solution(mesh, _bc, _rhs, ip) );
 
   BCPtr nullBC = Teuchos::rcp((BC*)NULL);
@@ -256,7 +256,7 @@ ESDIRKIntegrator::ESDIRKIntegrator(BFPtr steadyJacobian, SteadyResidual &steadyR
   for (int k=1; k < _numStages; k++)
   {
     _stageSolution[k] = Teuchos::rcp(new Solution(mesh, nullBC, nullRHS, nullIP) );
-    _stageRHS[k] = Teuchos::rcp( new RHSEasy );
+    _stageRHS[k] = RHS::rhs();
   }
 
   for (int k=0; k < _numStages-1; k++)

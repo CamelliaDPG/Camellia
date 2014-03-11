@@ -480,7 +480,7 @@ int main(int argc, char *argv[]) {
   Teuchos::RCP<BCEasy> bc = Teuchos::rcp( new BCEasy );
   
   ////////////////////   CREATE RHS   ///////////////////////
-  Teuchos::RCP<RHSEasy> rhs = Teuchos::rcp( new RHSEasy ); // zero for now...
+  RHSPtr rhs = RHS::rhs(); // zero for now...
   
   IPPtr ip;
   
@@ -851,7 +851,7 @@ int main(int argc, char *argv[]) {
   }
   
   FunctionPtr vorticity = Teuchos::rcp( new PreviousSolutionFunction(solution, - u1->dy() + u2->dx() ) );
-  Teuchos::RCP<RHSEasy> streamRHS = Teuchos::rcp( new RHSEasy );
+  RHSPtr streamRHS = RHS::rhs();
   streamRHS->addTerm(vorticity * q_s);
   ((PreviousSolutionFunction*) vorticity.get())->setOverrideMeshCheck(true);
   

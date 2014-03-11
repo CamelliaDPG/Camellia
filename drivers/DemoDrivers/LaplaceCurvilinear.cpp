@@ -73,7 +73,7 @@ int main(int argc, char *argv[]) {
   bc->addDirichlet(phi_hat, SpatialFilter::allSpace(), phi_exact);
   
   // RHS
-  Teuchos::RCP< RHSEasy > rhs = Teuchos::rcp( new RHSEasy );
+  RHSPtr rhs = RHS::rhs();
   FunctionPtr f = phi_exact->dx()->dx() + phi_exact->dy()->dy();
   rhs->addTerm(f * v);
   

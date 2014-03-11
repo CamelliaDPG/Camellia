@@ -214,7 +214,7 @@ int main(int argc, char *argv[]) {
   bf->addTerm( u2hat, vc->times_normal_y() );
 
   ////////////////////   SPECIFY RHS   ///////////////////////
-  Teuchos::RCP<RHSEasy> rhs = Teuchos::rcp( new RHSEasy );
+  RHSPtr rhs = RHS::rhs();
 
   // // stress equation
   // rhs->addTerm( -sigma1_prev * tau1 );

@@ -14,7 +14,6 @@
 
 #include "IP.h"
 #include "BCEasy.h"
-#include "RHSEasy.h"
 #include "RieszRep.h"
 #include "PreviousSolutionFunction.h"
 #include "MeshUtilities.h"
@@ -322,7 +321,7 @@ bool LinearTermTests::testIntegration() {
   // now, same thing, but with boundary-value-only functions in the mix:
   // this next is a fairly complex test; may want to add a more granular one above...
   IPPtr ip = Teuchos::rcp(new IP);
-  Teuchos::RCP<RHS> rhs = Teuchos::rcp(new RHSEasy);
+  RHSPtr rhs = RHS::rhs();
   Teuchos::RCP<BC> bc = Teuchos::rcp(new BCEasy);
   SolutionPtr solution = Teuchos::rcp( new Solution(mesh,bc,rhs,ip) );
   // project some functions onto solution, so that something interesting is there:

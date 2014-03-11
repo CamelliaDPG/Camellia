@@ -85,7 +85,7 @@ void RHSTests::setup() {
   VarPtr tau = varFactory.testVar("\\tau",HDIV,ConfusionBilinearForm::TAU);
   VarPtr v = varFactory.testVar("v",HGRAD,ConfusionBilinearForm::V);
   
-  _rhsEasy = Teuchos::rcp(new RHSEasy());
+  _rhsEasy = RHS::rhs();
   _rhsEasy->addTerm( v );
 }
 
@@ -417,7 +417,7 @@ bool RHSTests::testTrivialRHS(){
     VarPtr v = varFactory.testVar("v",HGRAD,ConfusionBilinearForm::V);
 
     FunctionPtr zero = Function::constant(0.0);
-    Teuchos::RCP<RHSEasy> rhs = Teuchos::rcp( new RHSEasy );
+    RHSPtr rhs = RHS::rhs();
     FunctionPtr f = zero;
     rhs->addTerm( f * v ); // obviously, with f = 0 adding this term is not necessary!
     rhs->integrateAgainstStandardBasis(rhsExpected, elemType->testOrderPtr, basisCache);

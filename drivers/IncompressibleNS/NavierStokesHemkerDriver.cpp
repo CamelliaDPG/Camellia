@@ -1464,7 +1464,7 @@ int main(int argc, char *argv[]) {
     }
     
     if ( !skipPostProcessing ) {
-      Teuchos::RCP<RHSEasy> streamRHS = Teuchos::rcp( new RHSEasy );
+      RHSPtr streamRHS = RHS::rhs();
       streamRHS->addTerm(vorticity * q_s);
       ((PreviousSolutionFunction*) vorticity.get())->setOverrideMeshCheck(true);
       ((PreviousSolutionFunction*) u1_prev.get())->setOverrideMeshCheck(true);

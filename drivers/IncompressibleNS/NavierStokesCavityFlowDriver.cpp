@@ -781,7 +781,7 @@ int main(int argc, char *argv[]) {
   //                                                navierStokesBF, H1Order, H1Order+pToAdd, useTriangles);
 
   //  Teuchos::RCP<BCEasy> bc = Teuchos::rcp( new BCEasy );
-  //  Teuchos::RCP<RHSEasy> rhs = Teuchos::rcp( new RHSEasy ); // zero for now...
+  //  RHSPtr rhs = RHS::rhs(); // zero for now...
   //  IPPtr ip = initGraphInnerProductStokes(mu);
 
   //  SolutionPtr solution = Teuchos::rcp( new Solution(mesh, bc, rhs, ip) ); // accumulated solution
@@ -1006,7 +1006,7 @@ int main(int argc, char *argv[]) {
     
     FunctionPtr vorticity = Teuchos::rcp( new PreviousSolutionFunction(solution, (-Re) * sigma12 + Re * sigma21 ) );
     //  FunctionPtr vorticity = Teuchos::rcp( new PreviousSolutionFunction(solution,sigma12 - sigma21) );
-    Teuchos::RCP<RHSEasy> streamRHS = Teuchos::rcp( new RHSEasy );
+    RHSPtr streamRHS = RHS::rhs();
     streamRHS->addTerm(vorticity * q_s);
     ((PreviousSolutionFunction*) vorticity.get())->setOverrideMeshCheck(true);
     ((PreviousSolutionFunction*) u1_prev.get())->setOverrideMeshCheck(true);

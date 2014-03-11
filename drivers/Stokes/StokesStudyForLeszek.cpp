@@ -158,7 +158,7 @@ int main(int argc, char *argv[]) {
 
   int H1OrderOfExactSolution = 3;
   
-  Teuchos::RCP<RHSEasy> rhs = Teuchos::rcp(new RHSEasy );
+  RHSPtr rhs = RHS::rhs();
   FunctionPtr f1 = 0.5 * sigma11_exact - 0.5 * sigma22_exact - u1_exact->dx();
   FunctionPtr f2 = 2 * sigma12_exact - u1_exact->dy() - u2_exact->dx();
   FunctionPtr f3 = 0.5 * sigma22_exact - 0.5 * sigma11_exact - u2_exact->dy();

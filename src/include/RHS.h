@@ -91,6 +91,8 @@ public:
   LinearTermPtr linearTermCopy(); // copy of RHS as a LinearTerm
   
   virtual ~RHS() {}
+  
+  static Teuchos::RCP<RHS> rhs() { return Teuchos::rcp(new RHS(false) ); }
 };
 
 typedef Teuchos::RCP<RHS> RHSPtr;

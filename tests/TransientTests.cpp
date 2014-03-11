@@ -118,7 +118,7 @@ void TransientTests::SetUp()
   FunctionPtr u_prev_time = Teuchos::rcp( new PreviousSolutionFunction(prevTimeFlow, u) );
   
   ////////////////////   DEFINE BILINEAR FORM   ///////////////////////
-  Teuchos::RCP<RHSEasy> rhs = Teuchos::rcp( new RHSEasy );
+  RHSPtr rhs = RHS::rhs();
   FunctionPtr invDt = Teuchos::rcp(new ScalarParamFunction(1.0/dt));    
   
   // v terms:

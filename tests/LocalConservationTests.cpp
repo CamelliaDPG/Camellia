@@ -105,7 +105,7 @@ void OneTermConservationTests::SetUp()
                                                 bf, H1Order, H1Order+pToAdd);
 
   ////////////////////   DEFINE BILINEAR FORM   ///////////////////////
-  Teuchos::RCP<RHSEasy> rhs = Teuchos::rcp( new RHSEasy );
+  RHSPtr rhs = RHS::rhs();
   
   // v terms:
   bf->addTerm( beta * u, - v->grad() );
@@ -165,7 +165,7 @@ void MixedTermConservationTests::SetUp()
                                                 bf, H1Order, H1Order+pToAdd);
 
   ////////////////////   DEFINE BILINEAR FORM   ///////////////////////
-  Teuchos::RCP<RHSEasy> rhs = Teuchos::rcp( new RHSEasy );
+  RHSPtr rhs = RHS::rhs();
   invDt = Teuchos::rcp(new ScalarParamFunction(1.0/dt));    
   
   // v terms:
