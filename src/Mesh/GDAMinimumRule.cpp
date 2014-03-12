@@ -1078,8 +1078,10 @@ void GDAMinimumRule::rebuildLookups() {
   }
   int numRanks = Teuchos::GlobalMPISession::getNProc();
   _partitionDofCounts.resize(numRanks);
+  _partitionDofCounts.initialize(0.0);
   _partitionDofCounts[rank] = _partitionDofCount;
   MPIWrapper::entryWiseSum(_partitionDofCounts);
+//  if (rank==0) cout << "partitionDofCounts:\n" << _partitionDofCounts;
   _partitionDofOffset = 0; // add this to a local partition dof index to get the global dof index
   for (int i=0; i<rank; i++) {
     _partitionDofOffset += _partitionDofCounts[i];
