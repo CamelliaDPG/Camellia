@@ -302,7 +302,7 @@ int main(int argc, char *argv[]) {
   // }
 
   ////////////////////   CREATE BCs   ///////////////////////
-  Teuchos::RCP<BCEasy> bc = Teuchos::rcp( new BCEasy );
+  BCPtr bc = BC::bc();
   SpatialFilterPtr left = Teuchos::rcp( new ConstantXBoundary(xmin) );
   SpatialFilterPtr right = Teuchos::rcp( new ConstantXBoundary(xmax) );
   SpatialFilterPtr bottomFree = Teuchos::rcp( new BottomFree );

@@ -64,10 +64,10 @@ vector<long> elementCounts;
 vector<int> iterationCounts;
 vector<double> tolerances;
 
-Teuchos::RCP<BCEasy> bc;
+BCPtr bc;
 Teuchos::RCP<PenaltyConstraints> pc;
 
-Teuchos::RCP<BCEasy> streamBC;
+BCPtr streamBC;
 
 VarFactory varFactory;
 // test variables:
@@ -589,7 +589,7 @@ void recreateBCs() { // recreates both bc and pc, as necessary
   int rank     = Teuchos::GlobalMPISession::getRank();
   
   FunctionPtr zero = Function::zero();
-  bc = Teuchos::rcp( new BCEasy );
+  bc = BC::bc();
   SpatialFilterPtr nearCylinder = Teuchos::rcp( new NearCylinder(radius) );
   SpatialFilterPtr top          = Teuchos::rcp( new TopBoundary(meshHeight/2.0) );
   SpatialFilterPtr bottom       = Teuchos::rcp( new BottomBoundary(-meshHeight/2.0) );
@@ -697,7 +697,7 @@ void recreateStreamBCs() {
   SpatialFilterPtr bottom       = Teuchos::rcp( new BottomBoundary(-meshHeight/2.0) );
   SpatialFilterPtr left         = Teuchos::rcp( new LeftBoundary(xLeft) );
   SpatialFilterPtr right        = Teuchos::rcp( new RightBoundary(xRight) );
-  streamBC = Teuchos::rcp( new BCEasy );
+  streamBC = BC::bc();
   // wherever we enforce velocity BCs, enforce BCs on phi, too
   // phi, the streamfunction, can be used to measure mass flux between two points
   // reverse engineering that fact, we can use y as the BC for phi

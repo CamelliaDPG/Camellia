@@ -41,7 +41,7 @@ class TimeIntegrator
     BFPtr _steadyJacobian;
     SteadyResidual &_steadyResidual;
     RHSPtr _rhs;
-    Teuchos::RCP<BCEasy> _bc;
+    BCPtr _bc;
     SolutionPtr _solution;
     SolutionPtr _prevTimeSolution;
     SolutionPtr _prevNLSolution;
@@ -60,7 +60,7 @@ class TimeIntegrator
 
   public:
     TimeIntegrator(BFPtr steadyJacobian, SteadyResidual &steadyResidual, MeshPtr mesh,
-        Teuchos::RCP<BCEasy> bc, IPPtr ip, map<int, FunctionPtr> initialCondition, bool nonlinear);
+        BCPtr bc, IPPtr ip, map<int, FunctionPtr> initialCondition, bool nonlinear);
     SolutionPtr solution();
     SolutionPtr solutionUpdate();
     SolutionPtr prevSolution();
@@ -82,7 +82,7 @@ class ImplicitEulerIntegrator : public TimeIntegrator
 
   public:
     ImplicitEulerIntegrator(BFPtr steadyJacobian, SteadyResidual &steadyResidual, MeshPtr mesh,
-        Teuchos::RCP<BCEasy> bc, IPPtr ip, map<int, FunctionPtr> initialCondition, bool nonlinear);
+        BCPtr bc, IPPtr ip, map<int, FunctionPtr> initialCondition, bool nonlinear);
     void runToTime(double T, double dt);
 };
 
@@ -103,7 +103,7 @@ class ESDIRKIntegrator : public TimeIntegrator
   public:
 
     ESDIRKIntegrator(BFPtr steadyJacobian, SteadyResidual &steadyResidual, MeshPtr mesh,
-        Teuchos::RCP<BCEasy> bc, IPPtr ip, map<int, FunctionPtr> initialCondition, int numStages, bool nonlinear);
+        BCPtr bc, IPPtr ip, map<int, FunctionPtr> initialCondition, int numStages, bool nonlinear);
     virtual void addTimeTerm(VarPtr trialVar, VarPtr testVar, FunctionPtr multiplier);
     virtual void runToTime(double T, double dt);
     virtual void calcNextTimeStep(double dt);

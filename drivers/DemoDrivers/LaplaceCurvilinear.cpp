@@ -69,7 +69,7 @@ int main(int argc, char *argv[]) {
   FunctionPtr psi2_exact = phi_exact->dy();
   
   // set up BCs
-  Teuchos::RCP<BCEasy> bc = Teuchos::rcp( new BCEasy );
+  BCPtr bc = BC::bc();
   bc->addDirichlet(phi_hat, SpatialFilter::allSpace(), phi_exact);
   
   // RHS

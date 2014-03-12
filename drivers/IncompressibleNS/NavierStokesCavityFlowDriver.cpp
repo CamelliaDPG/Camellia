@@ -780,7 +780,7 @@ int main(int argc, char *argv[]) {
   //  Teuchos::RCP<Mesh> mesh = MeshFactory::buildQuadMesh(quadPoints, horizontalCells, verticalCells,
   //                                                navierStokesBF, H1Order, H1Order+pToAdd, useTriangles);
 
-  //  Teuchos::RCP<BCEasy> bc = Teuchos::rcp( new BCEasy );
+  //  BCPtr bc = BC::bc();
   //  RHSPtr rhs = RHS::rhs(); // zero for now...
   //  IPPtr ip = initGraphInnerProductStokes(mu);
 
@@ -1012,7 +1012,7 @@ int main(int argc, char *argv[]) {
     ((PreviousSolutionFunction*) u1_prev.get())->setOverrideMeshCheck(true);
     ((PreviousSolutionFunction*) u2_prev.get())->setOverrideMeshCheck(true);
     
-    Teuchos::RCP<BCEasy> streamBC = Teuchos::rcp( new BCEasy );
+    BCPtr streamBC = BC::bc();
   //  streamBC->addDirichlet(psin_hat, entireBoundary, u0_cross_n);
     streamBC->addDirichlet(phi_hat, entireBoundary, zero);
   //  streamBC->addZeroMeanConstraint(phi);

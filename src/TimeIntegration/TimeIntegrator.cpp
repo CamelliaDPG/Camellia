@@ -9,7 +9,7 @@
 #endif
 
 TimeIntegrator::TimeIntegrator(BFPtr steadyJacobian, SteadyResidual &steadyResidual, MeshPtr mesh,
-    Teuchos::RCP<BCEasy> bc, IPPtr ip, map<int, FunctionPtr> initialCondition, bool nonlinear) :
+    BCPtr bc, IPPtr ip, map<int, FunctionPtr> initialCondition, bool nonlinear) :
   _steadyJacobian(steadyJacobian), _steadyResidual(steadyResidual), _bc(bc), _nonlinear(nonlinear)
 {
   _t = 0;
@@ -133,7 +133,7 @@ void TimeIntegrator::printNLMessage()
 }
 
 ImplicitEulerIntegrator::ImplicitEulerIntegrator(BFPtr steadyJacobian, SteadyResidual &steadyResidual, MeshPtr mesh,
-    Teuchos::RCP<BCEasy> bc, IPPtr ip, map<int, FunctionPtr> initialCondition, bool nonlinear) :
+    BCPtr bc, IPPtr ip, map<int, FunctionPtr> initialCondition, bool nonlinear) :
   TimeIntegrator(steadyJacobian, steadyResidual, mesh, bc, ip, initialCondition, nonlinear) {}
 
 void ImplicitEulerIntegrator::runToTime(double T, double dt)
@@ -147,7 +147,7 @@ void ImplicitEulerIntegrator::runToTime(double T, double dt)
 }
 
 ESDIRKIntegrator::ESDIRKIntegrator(BFPtr steadyJacobian, SteadyResidual &steadyResidual, MeshPtr mesh,
-    Teuchos::RCP<BCEasy> bc, IPPtr ip, map<int, FunctionPtr> initialCondition, int numStages, bool nonlinear) :
+    BCPtr bc, IPPtr ip, map<int, FunctionPtr> initialCondition, int numStages, bool nonlinear) :
   TimeIntegrator(steadyJacobian, steadyResidual, mesh, bc, ip, initialCondition, nonlinear),
   _numStages(numStages)
 {

@@ -90,7 +90,7 @@ int main(int argc, char *argv[]) {
   
   RHSPtr rhs = RHS::rhs(); // zero
   
-  Teuchos::RCP<BCEasy> bc = Teuchos::rcp( new BCEasy );
+  BCPtr bc = BC::bc();
   SpatialFilterPtr topBoundary = Teuchos::rcp( new TopBoundary );
   SpatialFilterPtr otherBoundary = SpatialFilter::negatedFilter(topBoundary);
   

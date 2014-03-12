@@ -22,8 +22,6 @@
 #include "MeshTestSuite.h"
 #include "MeshFactory.h"
 
-#include "BCEasy.h"
-
 class PatchBasisInflowSquareBoundary : public SpatialFilter {
 public:
   bool matchesPoint(double x, double y) {
@@ -592,7 +590,7 @@ void PatchBasisTests::setup() {
   _mesh = MeshFactory::buildQuadMesh(quadPoints, horizontalCells, verticalCells, convectionBF, H1Order, H1Order+delta_p);
   
   RHSPtr rhs = RHS::rhs();
-  Teuchos::RCP<BCEasy> bc = Teuchos::rcp( new BCEasy );
+  BCPtr bc = BC::bc();
   SpatialFilterPtr inflowBoundary = Teuchos::rcp( new PatchBasisInflowSquareBoundary );
   SpatialFilterPtr outflowBoundary = Teuchos::rcp( new NegatedSpatialFilter(inflowBoundary) );
   

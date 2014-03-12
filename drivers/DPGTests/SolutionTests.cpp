@@ -177,13 +177,13 @@ void SolutionTests::setup() {
   Teuchos::RCP<Mesh> poissonMesh1x1 = MeshFactory::buildQuadMesh(quadPoints, 1, 1, _poissonExactSolution->bilinearForm(), H1Order, H1Order+2);
   Teuchos::RCP<DPGInnerProduct> poissonIp = Teuchos::rcp(new MathInnerProduct(_poissonExactSolution->bilinearForm()));
 
-  _confusionSolution1_2x2 = Teuchos::rcp( new Solution(mesh, _confusionExactSolution->bc(), _confusionExactSolution->ExactSolution::rhs(), ip) );
-  _confusionSolution2_2x2 = Teuchos::rcp( new Solution(mesh, _confusionExactSolution->bc(), _confusionExactSolution->ExactSolution::rhs(), ip) );
-  _poissonSolution = Teuchos::rcp( new Solution(poissonMesh, _poissonExactSolution->bc(),_poissonExactSolution->ExactSolution::rhs(), ip));
-  _poissonSolution_1x1 = Teuchos::rcp( new Solution(poissonMesh1x1, _poissonExactSolution->bc(),_poissonExactSolution->ExactSolution::rhs(), ip));
-  _poissonSolution_1x1_unsolved = Teuchos::rcp( new Solution(poissonMesh1x1, _poissonExactSolution->bc(),_poissonExactSolution->ExactSolution::rhs(), ip));
+  _confusionSolution1_2x2 = Teuchos::rcp( new Solution(mesh, _confusionExactSolution->ExactSolution::bc(), _confusionExactSolution->ExactSolution::rhs(), ip) );
+  _confusionSolution2_2x2 = Teuchos::rcp( new Solution(mesh, _confusionExactSolution->ExactSolution::bc(), _confusionExactSolution->ExactSolution::rhs(), ip) );
+  _poissonSolution = Teuchos::rcp( new Solution(poissonMesh, _poissonExactSolution->ExactSolution::bc(),_poissonExactSolution->ExactSolution::rhs(), ip));
+  _poissonSolution_1x1 = Teuchos::rcp( new Solution(poissonMesh1x1, _poissonExactSolution->ExactSolution::bc(),_poissonExactSolution->ExactSolution::rhs(), ip));
+  _poissonSolution_1x1_unsolved = Teuchos::rcp( new Solution(poissonMesh1x1, _poissonExactSolution->ExactSolution::bc(),_poissonExactSolution->ExactSolution::rhs(), ip));
   
-  _confusionUnsolved = Teuchos::rcp( new Solution(mesh, _confusionExactSolution->bc(), _confusionExactSolution->ExactSolution::rhs(), ip) );
+  _confusionUnsolved = Teuchos::rcp( new Solution(mesh, _confusionExactSolution->ExactSolution::bc(), _confusionExactSolution->ExactSolution::rhs(), ip) );
 
   _confusionSolution1_2x2->solve();
   _confusionSolution2_2x2->solve();
@@ -715,7 +715,7 @@ bool SolutionTests::testNewProjectFunction() {
   VarPtr u = varFactory.fieldVar("u");
   VarPtr v = varFactory.testVar("v", HGRAD);
   BFPtr emptyBF = Teuchos::rcp(new BF(varFactory));
-  Teuchos::RCP< BCEasy > bc = Teuchos::rcp( new BCEasy );
+  BCPtr bc = BC::bc();
   
   int H1Order = 1; // constant L^2 ==> the projection on each cell should be the L^2 norm on that cell
   int horizontalCells = 2, verticalCells = 2;
@@ -916,7 +916,7 @@ bool SolutionTests::testEnergyError(){
   FunctionPtr uSoln = Teuchos::rcp( new ConstantScalarFunction(3.0) );
   rhs->addTerm(uSoln * v);
   
-  BCPtr bc = Teuchos::rcp( new BCEasy ); // no bcs
+  BCPtr bc = BC::bc(); // no bcs
   
   IPPtr ip = Teuchos::rcp( new IP );
   ip->addTerm(v); // L^2
@@ -1229,7 +1229,7 @@ bool SolutionTests::testScratchPadSolution() {
   rhs->addTerm( f * v ); // obviously, with f = 0 adding this term is not necessary!
 
   ////////////////////   CREATE BCs   ///////////////////////
-  Teuchos::RCP<BCEasy> bc = Teuchos::rcp( new BCEasy );
+  BCPtr bc = BC::bc();
   SpatialFilterPtr squareBoundary = Teuchos::rcp( new UnitSquareBoundary );
 
   FunctionPtr n = Teuchos::rcp( new UnitNormalFunction );
@@ -1323,7 +1323,7 @@ bool SolutionTests::testCondensationSolve() {
   rhs->addTerm( 1.0* v ); 
 
   ////////////////////   CREATE BCs   ///////////////////////
-  Teuchos::RCP<BCEasy> bc = Teuchos::rcp( new BCEasy );
+  BCPtr bc = BC::bc();
   SpatialFilterPtr inflow = Teuchos::rcp( new InflowBoundary );
 
   FunctionPtr n = Teuchos::rcp( new UnitNormalFunction );

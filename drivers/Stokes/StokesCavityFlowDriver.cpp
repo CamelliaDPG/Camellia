@@ -707,7 +707,7 @@ int main(int argc, char *argv[]) {
     ip->printInteractions();
   
   ////////////////////   CREATE BCs   ///////////////////////
-  Teuchos::RCP<BCEasy> bc = Teuchos::rcp( new BCEasy );
+  BCPtr bc = BC::bc();
   SpatialFilterPtr entireBoundary = Teuchos::rcp( new UnitSquareBoundary );
   FunctionPtr u1_0 = Teuchos::rcp( new U1_0(eps) );
   FunctionPtr u2_0 = Teuchos::rcp( new U2_0 );
@@ -1166,7 +1166,7 @@ int main(int argc, char *argv[]) {
   streamRHS->addTerm(vorticity * q_s);
   ((PreviousSolutionFunction*) vorticity.get())->setOverrideMeshCheck(true);
   
-  Teuchos::RCP<BCEasy> streamBC = Teuchos::rcp( new BCEasy );
+  BCPtr streamBC = BC::bc();
   FunctionPtr zero = Teuchos::rcp( new ConstantScalarFunction(0) );
   //  streamBC->addDirichlet(psin_hat, entireBoundary, u0_cross_n);
   streamBC->addDirichlet(phi_hat, entireBoundary, zero);

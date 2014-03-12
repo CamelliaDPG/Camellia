@@ -363,7 +363,7 @@ bool ScratchPadTests::testPenaltyConstraints() {
     }
   }
   
-  Teuchos::RCP<BCEasy> bc = Teuchos::rcp( new BCEasy );
+  BCPtr bc = BC::bc();
 
   pc->filter(localStiffness, localRHSVector, _basisCache, _spectralConfusionMesh, bc);
   
@@ -720,7 +720,7 @@ bool ScratchPadTests::testGalerkinOrthogonality(){
   ////////////////////   SOLVE   ///////////////////////
 
   RHSPtr rhs = RHS::rhs();
-  Teuchos::RCP<BCEasy> bc = Teuchos::rcp( new BCEasy );
+  BCPtr bc = BC::bc();
   SpatialFilterPtr inflowBoundary = Teuchos::rcp( new InflowSquareBoundary );
   SpatialFilterPtr outflowBoundary = Teuchos::rcp( new NegatedSpatialFilter(inflowBoundary) );
   
@@ -889,7 +889,7 @@ bool ScratchPadTests::testRieszIntegration(){
   rhs->addTerm( f * v ); // obviously, with f = 0 adding this term is not necessary!
 
   ////////////////////   CREATE BCs   ///////////////////////
-  Teuchos::RCP<BCEasy> bc = Teuchos::rcp( new BCEasy );
+  BCPtr bc = BC::bc();
   SpatialFilterPtr squareBoundary = Teuchos::rcp( new SquareBoundary );
 
   bc->addDirichlet(uhat, squareBoundary, zero);
@@ -980,7 +980,7 @@ bool ScratchPadTests::testLTResidualSimple(){
   rhs->addTerm( f * v ); 
 
   ////////////////////   CREATE BCs   ///////////////////////
-  Teuchos::RCP<BCEasy> bc = Teuchos::rcp( new BCEasy );
+  BCPtr bc = BC::bc();
   SpatialFilterPtr boundary = Teuchos::rcp( new InflowSquareBoundary );
   FunctionPtr u_in = Teuchos::rcp(new Uinflow);
   bc->addDirichlet(beta_n_u, boundary, beta*n*u_in);
@@ -1100,7 +1100,7 @@ bool ScratchPadTests::testLTResidual(){
   rhs->addTerm( f * v );
 
   ////////////////////   CREATE BCs   ///////////////////////
-  Teuchos::RCP<BCEasy> bc = Teuchos::rcp( new BCEasy );
+  BCPtr bc = BC::bc();
   SpatialFilterPtr squareBoundary = Teuchos::rcp( new SquareBoundary );
 
   bc->addDirichlet(uhat, squareBoundary, zero);
@@ -1224,7 +1224,7 @@ bool ScratchPadTests::testResidualMemoryError(){
   rhs->addTerm( f * v ); // obviously, with f = 0 adding this term is not necessary!
 
   ////////////////////   CREATE BCs   ///////////////////////
-  Teuchos::RCP<BCEasy> bc = Teuchos::rcp( new BCEasy );
+  BCPtr bc = BC::bc();
   SpatialFilterPtr inflowBoundary = Teuchos::rcp( new LRInflowSquareBoundary );
   SpatialFilterPtr outflowBoundary = Teuchos::rcp( new LROutflowSquareBoundary);
 

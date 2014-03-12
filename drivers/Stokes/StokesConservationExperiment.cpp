@@ -143,7 +143,7 @@ int main(int argc, char *argv[]) {
   mesh = MeshFactory::quadMesh(stokesBF, H1Order, pToAdd);
   
   ////////////////////   CREATE BCs   ///////////////////////
-  Teuchos::RCP<BCEasy> bc = Teuchos::rcp( new BCEasy );
+  BCPtr bc = BC::bc();
   
   ////////////////////   CREATE RHS   ///////////////////////
   RHSPtr rhs = RHS::rhs(); // zero for now...

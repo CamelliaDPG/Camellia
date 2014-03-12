@@ -44,7 +44,7 @@ typedef Sacado::Fad::SFad< Sacado::Fad::SFad<double,2>, 2> F2_2; // same thing, 
 //typedef Sacado::Fad::DFad< Sacado::Fad::DFad<double> > F2_2;
 
 PoissonExactSolution::PoissonExactSolution(PoissonExactSolutionType type, int polyOrder, bool useConformingTraces)
- : RHS(true) // true: legacy subclass of RHS
+ : RHS(true), BC(true) // true: legacy subclass of RHS, BC
 {
   // poly order here means that of phi
   _polyOrder = polyOrder;

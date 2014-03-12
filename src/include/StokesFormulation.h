@@ -10,7 +10,6 @@
 #define Camellia_StokesFormulation_h
 
 #include "BF.h"
-#include "BCEasy.h"
 #include "VarFactory.h"
 #include "Var.h"
 #include "ExactSolution.h"
@@ -133,7 +132,7 @@ public:
     return rhs;
   }
   BCPtr bc(FunctionPtr u1_fxn, FunctionPtr u2_fxn, SpatialFilterPtr entireBoundary) {
-    Teuchos::RCP<BCEasy> bc = Teuchos::rcp( new BCEasy );
+    BCPtr bc = BC::bc();
     bc->addDirichlet(u1hat, entireBoundary, u1_fxn);
     bc->addDirichlet(u2hat, entireBoundary, u2_fxn);
     FunctionPtr n = Teuchos::rcp( new UnitNormalFunction );
@@ -344,7 +343,7 @@ public:
     return rhs;
   }
   BCPtr bc(FunctionPtr u1_fxn, FunctionPtr u2_fxn, SpatialFilterPtr entireBoundary) {
-    Teuchos::RCP<BCEasy> bc = Teuchos::rcp( new BCEasy );
+    BCPtr bc = BC::bc();
     if (!_trueTraces) {
       bc->addDirichlet(u1hat, entireBoundary, u1_fxn);
       bc->addDirichlet(u2hat, entireBoundary, u2_fxn);
@@ -636,7 +635,7 @@ public:
     return rhs;
   }
   BCPtr bc(FunctionPtr u1_fxn, FunctionPtr u2_fxn, SpatialFilterPtr entireBoundary) {
-    Teuchos::RCP<BCEasy> bc = Teuchos::rcp( new BCEasy );
+    BCPtr bc = BC::bc();
     bc->addDirichlet(u1hat, entireBoundary, u1_fxn);
     bc->addDirichlet(u2hat, entireBoundary, u2_fxn);
     bc->addZeroMeanConstraint(p);
@@ -910,7 +909,7 @@ public:
     return rhs;
   }
   BCPtr bc(FunctionPtr u1_fxn, FunctionPtr u2_fxn, SpatialFilterPtr entireBoundary) {
-    Teuchos::RCP<BCEasy> bc = Teuchos::rcp( new BCEasy );
+    BCPtr bc = BC::bc();
     bc->addDirichlet(u1hat, entireBoundary, u1_fxn);
     bc->addDirichlet(u2hat, entireBoundary, u2_fxn);
     bc->addZeroMeanConstraint(p);
@@ -1056,7 +1055,7 @@ public:
     return rhs;
   }
   BCPtr bc(FunctionPtr u1_fxn, FunctionPtr u2_fxn, SpatialFilterPtr entireBoundary) {
-    Teuchos::RCP<BCEasy> bc = Teuchos::rcp( new BCEasy );
+    BCPtr bc = BC::bc();
     bc->addDirichlet(u1hat, entireBoundary, u1_fxn);
     bc->addDirichlet(u2hat, entireBoundary, u2_fxn);
     //    bc->addZeroMeanConstraint(p);
@@ -1211,7 +1210,7 @@ public:
     return rhs;
   }
   BCPtr bc(FunctionPtr u1_fxn, FunctionPtr u2_fxn, SpatialFilterPtr entireBoundary) {
-    Teuchos::RCP<BCEasy> bc = Teuchos::rcp( new BCEasy );
+    BCPtr bc = BC::bc();
     bc->addDirichlet(u1hat, entireBoundary, u1_fxn);
     bc->addDirichlet(u2hat, entireBoundary, u2_fxn);
     bc->addZeroMeanConstraint(p);
@@ -1436,7 +1435,7 @@ public:
     return rhs;
   }
   BCPtr bc(FunctionPtr u1_fxn, FunctionPtr u2_fxn, SpatialFilterPtr entireBoundary) {
-    Teuchos::RCP<BCEasy> bc = Teuchos::rcp( new BCEasy );
+    BCPtr bc = BC::bc();
     FunctionPtr n = Function::normal();
     bc->addDirichlet(u1hat, entireBoundary, u1_fxn);
     bc->addDirichlet(u2hat, entireBoundary, u2_fxn);

@@ -124,7 +124,7 @@ int main(int argc, char *argv[]) {
         if (rank==0) cout << "Mesh activeElement count: " << mesh->getActiveCellIDs().size() << endl;
         
         // the following line should not be necessary, but if Solution's data structures aren't rebuilt properly, it might be...
-        Solution solution = Solution(mesh, exactSolution.bc(), exactSolution.ExactSolution::rhs(), ip);
+        Solution solution = Solution(mesh, exactSolution.ExactSolution::bc(), exactSolution.ExactSolution::rhs(), ip);
         if (!useStaticCondensation) {
           solution.solve(useMumps);
         } else {

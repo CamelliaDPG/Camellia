@@ -311,7 +311,7 @@ int main(int argc, char *argv[]) {
   int cubatureEnrichment = 5; // should be high enough to minimize error in computing the RHS and L^2 error
   
   // set up BCs
-  Teuchos::RCP<BCEasy> bc = Teuchos::rcp( new BCEasy );
+  BCPtr bc = BC::bc();
   bc->addDirichlet(phi_hat, SpatialFilter::allSpace(), phi_exact);
   
   // RHS

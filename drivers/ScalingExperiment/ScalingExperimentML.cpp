@@ -119,7 +119,7 @@ int main(int argc, char *argv[]) {
     if (rank==0) cout << "Mesh globalDofs: " << mesh->numGlobalDofs() << endl;
     if (rank==0) cout << "Mesh activeElement count: " << mesh->activeElements().size() << endl;
     
-    Solution solution = Solution(mesh, exactSolution.bc(), exactSolution.ExactSolution::rhs(), ip);
+    Solution solution = Solution(mesh, exactSolution.ExactSolution::bc(), exactSolution.ExactSolution::rhs(), ip);
 
     Teuchos::RCP<Solver> solver = Teuchos::rcp( new MLSolver );
     

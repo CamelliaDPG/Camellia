@@ -10,8 +10,6 @@
 
 #include "BF.h"
 
-#include "BCEasy.h"
-
 #include "Solution.h"
 
 #include "../DPGTests/TestSuite.h"
@@ -176,7 +174,7 @@ int main(int argc, char *argv[]) {
     rhs->addTerm( f * v ); // obviously, with f = 0 adding this term is not necessary!
     
     ////////////////////   CREATE BCs   ///////////////////////
-    Teuchos::RCP<BCEasy> bc = Teuchos::rcp( new BCEasy );
+    BCPtr bc = BC::bc();
     FunctionPtr u0 = Teuchos::rcp( new U0 );
     bc->addDirichlet(uhat, SpatialFilter::allSpace(), u0);
     

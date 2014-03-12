@@ -672,9 +672,9 @@ int main(int argc, char *argv[]) {
     stokesForm->primaryTrialIDs(fieldIDs);
     int pressureIDIndex = (formulationType==VGPF) ? 1 : 2;
     int pressureID = fieldIDs[pressureIDIndex];
-    dynamic_cast< BCEasy* >(bc.get())->removeZeroMeanConstraint(pressureID);
+    bc->removeZeroMeanConstraint(pressureID);
     // instead, use a single-point BC on pressure
-    dynamic_cast< BCEasy* >(bc.get())->addSinglePointBC(pressureID, p_exact);
+    bc->addSinglePointBC(pressureID, p_exact);
   }
   
   Teuchos::RCP<DPGInnerProduct> ip;

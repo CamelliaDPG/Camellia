@@ -120,7 +120,7 @@ TEST_F(LinearTermTests, TestIntegration)
   // this next is a fairly complex test; may want to add a more granular one above...
   IPPtr ip = Teuchos::rcp(new IP);
   RHSPtr rhs = RHS::rhs();
-  Teuchos::RCP<BC> bc = Teuchos::rcp(new BCEasy);
+  BCPtr bc = BC::bc();
   SolutionPtr solution = Teuchos::rcp( new Solution(mesh,bc,rhs,ip) );
   // project some functions onto solution, so that something interesting is there:
   FunctionPtr u1_proj = sine_x;

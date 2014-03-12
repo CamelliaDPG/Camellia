@@ -257,7 +257,7 @@ public:
   }
   
   BCPtr bc(FunctionPtr u1_fxn, FunctionPtr u2_fxn, SpatialFilterPtr entireBoundary) {
-    Teuchos::RCP<BCEasy> bc = Teuchos::rcp( new BCEasy );
+    BCPtr bc = BC::bc();
     bc->addDirichlet(u1hat, entireBoundary, u1_fxn);
     bc->addDirichlet(u2hat, entireBoundary, u2_fxn);
     bc->addZeroMeanConstraint(p);
@@ -593,7 +593,7 @@ public:
   Teuchos::RCP<Mesh> mesh() {
     return _mesh;
   }
-  void setBC( Teuchos::RCP<BCEasy> bc ) {
+  void setBC( BCPtr bc ) {
     _backgroundFlow->setBC(bc);
     _solnIncrement->setBC(bc->copyImposingZero());
   }

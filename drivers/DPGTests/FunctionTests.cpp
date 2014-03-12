@@ -232,7 +232,7 @@ bool FunctionTests::testBasisSumFunction() {
   MeshPtr spectralConfusionMesh = MeshFactory::buildQuadMesh(quadPoints, horizontalCells, verticalCells,
                                                       _confusionBF, H1Order, H1Order+pToAdd);
   
-  BCPtr bc = Teuchos::rcp( new BCEasy );
+  BCPtr bc = BC::bc();
   SolutionPtr soln = Teuchos::rcp( new Solution(spectralConfusionMesh, bc) );
   
   int cellID = 0;

@@ -301,7 +301,7 @@ bool VectorizedBasisTestSuite::testPoisson() {
   rhs->addTerm( f * v );
 
   ////////////////////   CREATE BCs   ///////////////////////
-  Teuchos::RCP<BCEasy> bc = Teuchos::rcp( new BCEasy );
+  BCPtr bc = BC::bc();
   SpatialFilterPtr boundary = SpatialFilter::allSpace();
   FunctionPtr zero = Teuchos::rcp( new ConstantScalarFunction(0.0) );
   bc->addDirichlet(uhat, boundary, zero);

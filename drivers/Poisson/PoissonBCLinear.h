@@ -46,6 +46,7 @@ using namespace Intrepid;
 
 class PoissonBCLinear : public BC {
 public:
+  PoissonBCLinear() : BC(true) {} // true: legacy subclass of BC
   bool bcsImposed(int varID); // returns true if there are any BCs anywhere imposed on varID
   void imposeBC(int varID, FieldContainer<double> &physicalPoints, 
                 FieldContainer<double> &unitNormals,

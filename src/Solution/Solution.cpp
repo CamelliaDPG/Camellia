@@ -3630,6 +3630,8 @@ Epetra_Map Solution::getPartitionMap(PartitionIndexType rank, set<GlobalIndexTyp
   int indexBase = 0;
   //cout << "process " << rank << " about to construct partMap.\n";
   //Epetra_Map partMap(-1, localDofsSize, myGlobalIndices, indexBase, Comm);
+//  cout << "process " << rank << " about to construct partMap; totalRows = " << totalRows;
+//  cout << "; localDofsSize = " << localDofsSize << ".\n";
   Epetra_Map partMap(totalRows, localDofsSize, myGlobalIndices, indexBase, *Comm);
   
   if (localDofsSize!=0){

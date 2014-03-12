@@ -812,7 +812,7 @@ int main(int argc, char *argv[]) {
   streamBF->addTerm(phi, v_s->div());
   streamBF->addTerm(-phi_hat, v_s->dot_normal());
   
-  Teuchos::RCP<BCEasy> streamBC = Teuchos::rcp( new BCEasy );
+  BCPtr streamBC = BC::bc();
   //  streamBC->addDirichlet(psin_hat, entireBoundary, u0_cross_n);
   Teuchos::RCP<SpatialFilter> wallBoundary = Teuchos::rcp( new WallBoundary );
   FunctionPtr phi0 = Teuchos::rcp( new PHI_0 );
@@ -836,8 +836,8 @@ int main(int argc, char *argv[]) {
   // will use refinement history to playback refinements on streamMesh (no need to register streamMesh)
   
   ////////////////////   CREATE BCs   ///////////////////////
-  Teuchos::RCP<BCEasy> bc = Teuchos::rcp( new BCEasy );
-
+  BCPtr bc = BC::bc();
+  
   FunctionPtr u1_0 = Teuchos::rcp( new U1_0 );
   FunctionPtr u2_0 = Teuchos::rcp( new U2_0 );
   

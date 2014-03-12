@@ -240,7 +240,7 @@ int main(int argc, char *argv[]) {
   FunctionPtr n = Teuchos::rcp( new UnitNormalFunction );
   SpatialFilterPtr outflowBoundary = Teuchos::rcp( new TopBoundary);
   SpatialFilterPtr inflowBoundary = Teuchos::rcp( new NegatedSpatialFilter(outflowBoundary) );
-  Teuchos::RCP<BCEasy> inflowBC = Teuchos::rcp( new BCEasy );
+  BCPtr inflowBC = BC::bc();
   FunctionPtr u0_squared_div_2 = 0.5 * u0 * u0;
   inflowBC->addDirichlet(beta_n_u_minus_sigma_hat,inflowBoundary, 
                          ( e1 * u0_squared_div_2 + e2 * u0) * n );

@@ -8,7 +8,6 @@
 #include "VarFactory.h"
 #include "LinearTerm.h"
 #include "SpatialFilter.h"
-#include "BCEasy.h"
 #include "IP.h"
 #include "Function.h"
 

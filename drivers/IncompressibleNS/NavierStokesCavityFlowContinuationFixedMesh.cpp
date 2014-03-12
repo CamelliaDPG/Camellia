@@ -452,7 +452,7 @@ int main(int argc, char *argv[]) {
   ((PreviousSolutionFunction*) u1_prev.get())->setOverrideMeshCheck(true);
   ((PreviousSolutionFunction*) u2_prev.get())->setOverrideMeshCheck(true);
   
-  Teuchos::RCP<BCEasy> streamBC = Teuchos::rcp( new BCEasy );
+  BCPtr streamBC = BC::bc();
   //  streamBC->addDirichlet(psin_hat, entireBoundary, u0_cross_n);
   streamBC->addDirichlet(phi_hat, entireBoundary, zero);
   //  streamBC->addZeroMeanConstraint(phi);

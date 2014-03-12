@@ -140,7 +140,7 @@ int main(int argc, char *argv[]) {
   FunctionPtr t1_exact = sigma11_exact * n1 + sigma12_exact * n2;
   FunctionPtr t2_exact = sigma12_exact * n1 + sigma22_exact * n2;
   
-  Teuchos::RCP<BCEasy> bc = Teuchos::rcp( new BCEasy );
+  BCPtr bc = BC::bc();
   SpatialFilterPtr northEast = Teuchos::rcp( new NorthOrEastBoundary );
   SpatialFilterPtr southWest = Teuchos::rcp( new SouthOrWestBoundary );
   

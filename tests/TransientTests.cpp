@@ -137,7 +137,7 @@ void TransientTests::SetUp()
   IPPtr ip = bf->graphNorm();
 
   ////////////////////   CREATE BCs   ///////////////////////
-  Teuchos::RCP<BCEasy> bc = Teuchos::rcp( new BCEasy );
+  BCPtr bc = BC::bc();
 
   SpatialFilterPtr lBoundary = Teuchos::rcp( new LeftBoundary );
   FunctionPtr u1 = Teuchos::rcp( new InletBC );

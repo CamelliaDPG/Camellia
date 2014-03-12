@@ -253,7 +253,7 @@ int main(int argc, char *argv[]) {
   rhs2->addTerm( sigma_n_prev1 * v );
   
   ////////////////////   CREATE BCs   ///////////////////////
-  Teuchos::RCP<BCEasy> bc = Teuchos::rcp( new BCEasy );
+  BCPtr bc = BC::bc();
   SpatialFilterPtr inflowBoundary = Teuchos::rcp( new InflowSquareBoundary );
   SpatialFilterPtr outflowBoundary = Teuchos::rcp( new OutflowSquareBoundary );
   FunctionPtr x = Function::xn(1);

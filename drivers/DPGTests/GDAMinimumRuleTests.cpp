@@ -12,9 +12,6 @@
 
 #include "BF.h"
 
-#include "BCEasy.h"
-#include "RHSEasy.h"
-
 #include "Solution.h"
 #include "PreviousSolutionFunction.h"
 
@@ -124,12 +121,12 @@ SolutionPtr GDAMinimumRuleTests::quadMeshSolutionConfusion(bool useMinRule, int 
   }
   
   ////////////////////   SPECIFY RHS   ///////////////////////
-  Teuchos::RCP<RHSEasy> rhs = Teuchos::rcp( new RHSEasy );
+  RHSPtr rhs = RHS::rhs();
   FunctionPtr f = Function::zero();
   rhs->addTerm( f * v ); // obviously, with f = 0 adding this term is not necessary!
   
   ////////////////////   CREATE BCs   ///////////////////////
-  Teuchos::RCP<BCEasy> bc = Teuchos::rcp( new BCEasy );
+  BCPtr bc = BC::bc();
   FunctionPtr u0 = Teuchos::rcp( new GDAMinimumRuleTests_U0 );
   bc->addDirichlet(uhat, SpatialFilter::allSpace(), u0);
   
@@ -201,9 +198,9 @@ SolutionPtr GDAMinimumRuleTests::quadMeshSolutionStokesCavityFlow(bool useMinRul
                                  horizontalCells, verticalCells);
   }
   
-  RHSPtr rhs = Teuchos::rcp( new RHSEasy ); // zero
+  RHSPtr rhs = RHS::rhs(); // zero
   
-  Teuchos::RCP<BCEasy> bc = Teuchos::rcp( new BCEasy );
+  BCPtr bc = BC::bc();
   SpatialFilterPtr topBoundary = Teuchos::rcp( new GDAMinimumRuleTests_TopBoundary );
   SpatialFilterPtr otherBoundary = SpatialFilter::negatedFilter(topBoundary);
   
@@ -228,18 +225,22 @@ SolutionPtr GDAMinimumRuleTests::quadMeshSolutionStokesCavityFlow(bool useMinRul
 
 void GDAMinimumRuleTests::runTests(int &numTestsRun, int &numTestsPassed) {
   setup();
+  if (testMultiCellMesh()) {
+    numTestsPassed++;
+  }
+  numTestsRun++;
+  teardown();
+  
+  cout << "testMultiCellMesh complete.\n";
+  
+  setup();
   if (testHRefinements()) {
     numTestsPassed++;
   }
   numTestsRun++;
   teardown();
   
-  setup();
-  if (testMultiCellMesh()) {
-    numTestsPassed++;
-  }
-  numTestsRun++;
-  teardown();
+  cout << "testHRefinements complete.\n";
   
   setup();
   if (testGlobalToLocalToGlobalConsistency()) {
@@ -247,6 +248,8 @@ void GDAMinimumRuleTests::runTests(int &numTestsRun, int &numTestsPassed) {
   }
   numTestsRun++;
   teardown();
+
+  cout << "testGlobalToLocalToGlobalConsistency complete.\n";
   
   setup();
   if (testLocalInterpretationConsistency()) {
@@ -255,12 +258,16 @@ void GDAMinimumRuleTests::runTests(int &numTestsRun, int &numTestsPassed) {
   numTestsRun++;
   teardown();
   
+  cout << "testLocalInterpretationConsistency complete.\n";
+  
   setup();
   if (testSingleCellMesh()) {
     numTestsPassed++;
   }
   numTestsRun++;
   teardown();
+  
+  cout << "testSingleCellMesh complete.\n";
 }
 void GDAMinimumRuleTests::setup() {
   
@@ -283,7 +290,7 @@ bool GDAMinimumRuleTests::subTestCompatibleSolutionsAgree(int horizontalCells, i
   for (int testIndex=0; testIndex<2; testIndex++) { // just to distinguish between Stokes and Confusion
     
     bool isStokes = (testIndex == 1);
-    
+
     SolutionPtr minRuleSoln = isStokes ? minRuleStokes : minRuleConfusion;
     SolutionPtr maxRuleSoln = isStokes ? maxRuleStokes : maxRuleConfusion;
     
@@ -306,6 +313,7 @@ bool GDAMinimumRuleTests::subTestCompatibleSolutionsAgree(int horizontalCells, i
     }
     
     minRuleSoln->solve();
+    
     maxRuleSoln->solve();
     
     VarFactory vf = maxRuleSoln->mesh()->bilinearForm()->varFactory();
@@ -522,14 +530,17 @@ bool GDAMinimumRuleTests::testMultiCellMesh() {
     int verticalCells = dim.second;
     int H1Order = meshParams.second;
     
-    for (int numRefs = 0; numRefs < 2; numRefs++) {
-    
+    for (int numRefs = 1; numRefs < 2; numRefs++) {
+//      cout << "About to run test for " << horizontalCells << " x " << verticalCells;
+//      cout << ", k=" << H1Order - 1 << " mesh with " << numRefs << " refinements.\n";
       if (! subTestCompatibleSolutionsAgree(horizontalCells, verticalCells, H1Order, numRefs) ) {
         cout << "For unrefined (compatible) " << horizontalCells << " x " << verticalCells;
         cout << " mesh with H1Order = " << H1Order;
         cout << " after " << numRefs << " refinements, max and min rules disagree.\n";
         success = false;
       }
+//      cout << "Completed test for " << horizontalCells << " x " << verticalCells;
+//      cout << ", k=" << H1Order - 1 << " mesh with " << numRefs << " refinements.\n";
     }
   }
   return success;
