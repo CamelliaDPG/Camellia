@@ -329,6 +329,7 @@ SubBasisReconciliationWeights BasisReconciliation::computeConstrainedWeights(Bas
 }
 
 
+
 FieldContainer<double> BasisReconciliation::computeConstrainedWeights(BasisPtr finerBasis, RefinementBranch refinements, BasisPtr coarserBasis, Permutation vertexPermutation) {
   
   if (refinements.size() == 0) {
@@ -337,7 +338,7 @@ FieldContainer<double> BasisReconciliation::computeConstrainedWeights(BasisPtr f
   
   // DEBUGGING: do we ever use a non-identity permutation?
   if (vertexPermutation != 0) {
-    cout << "non-identity vertexPermutation.\n";
+//    cout << "non-identity vertexPermutation.\n";
   } else {
 //    cout << "identity vertexPermutation.\n";
   }
@@ -443,13 +444,15 @@ SubBasisReconciliationWeights BasisReconciliation::computeConstrainedWeights(Bas
   
   // figure out fineSideIndex
   unsigned fineSideIndex = fineAncestralSideIndex;
-  for (int refIndex=0; refIndex<volumeRefinements.size(); refIndex++) {
-    RefinementPattern* refPattern = volumeRefinements[refIndex].first;
-    unsigned childIndex = volumeRefinements[refIndex].second;
-    vector< pair<unsigned, unsigned> > childrenForSide = refPattern->childrenForSides()[fineSideIndex];
-    for (vector< pair<unsigned, unsigned> >::iterator entryIt=childrenForSide.begin(); entryIt != childrenForSide.end(); entryIt++) {
-      if (entryIt->first == childIndex) {
-        fineSideIndex = entryIt->second;
+  if (sideDimension > 0) { // if sideDimension == 0, then "side" is a vertex, and the ancestral side index is exactly the side index
+    for (int refIndex=0; refIndex<volumeRefinements.size(); refIndex++) {
+      RefinementPattern* refPattern = volumeRefinements[refIndex].first;
+      unsigned childIndex = volumeRefinements[refIndex].second;
+      vector< pair<unsigned, unsigned> > childrenForSide = refPattern->childrenForSides()[fineSideIndex];
+      for (vector< pair<unsigned, unsigned> >::iterator entryIt=childrenForSide.begin(); entryIt != childrenForSide.end(); entryIt++) {
+        if (entryIt->first == childIndex) {
+          fineSideIndex = entryIt->second;
+        }
       }
     }
   }
@@ -475,6 +478,8 @@ SubBasisReconciliationWeights BasisReconciliation::computeConstrainedWeights(Bas
 //  fineVolumeCubaturePoints.resize(fineVolumeCubaturePoints.dimension(1),fineVolumeCubaturePoints.dimension(2));
   FieldContainer<double> fineSideCubaturePoints = fineSideBasisCache->getRefCellPoints();
   
+//  cout << "fineSideCubaturePoints:\n" << fineSideCubaturePoints;
+  
   // now, we need to map those points into coarseSide/coarseVolume
   // coarseSide
   shards::CellTopology ancestralTopo = *volumeRefinements[0].first->parentTopology();
@@ -483,25 +488,31 @@ SubBasisReconciliationWeights BasisReconciliation::computeConstrainedWeights(Bas
   FieldContainer<double> coarseSideNodes(ancestralSideTopo.getNodeCount(),sideDimension);
   CamelliaCellTools::refCellNodesForTopology(coarseSideNodes, ancestralSideTopo, vertexNodePermutation);
   
-  FieldContainer<double> fineSideNodesInCoarseSideTopology = RefinementPattern::descendantNodes(sideRefinements, coarseSideNodes);
-  
+  FieldContainer<double> fineSideNodesInCoarseSideTopology;
+  FieldContainer<double> coarseSideCubaturePoints;
   shards::CellTopology fineSideTopo = fineTopo.getCellTopologyData(sideDimension, fineSideIndex);
   BasisCachePtr sideBasisCacheAsVolume = Teuchos::rcp( new BasisCache(fineSideTopo, cubDegree, false) );
-  sideBasisCacheAsVolume->setRefCellPoints(fineSideCubaturePoints); // should be the same, but to guard against changes in BasisCache, set these.
-  fineSideNodesInCoarseSideTopology.resize(oneCell, fineSideNodesInCoarseSideTopology.dimension(0), fineSideNodesInCoarseSideTopology.dimension(1));
-  sideBasisCacheAsVolume->setPhysicalCellNodes(fineSideNodesInCoarseSideTopology, vector<GlobalIndexType>(), false);
-  FieldContainer<double> coarseSideCubaturePoints = sideBasisCacheAsVolume->getPhysicalCubaturePoints();
-  coarseSideCubaturePoints.resize(coarseSideCubaturePoints.dimension(1), coarseSideCubaturePoints.dimension(2));
-  
+
   // coarseVolume
   shards::CellTopology coarseTopo = coarserBasis->domainTopology();
-  BasisCachePtr coarseBasisVolumeCache = Teuchos::rcp( new BasisCache(coarseTopo, cubDegree, false) ); // false: don't create all the side caches, since we just want one side
-  BasisCachePtr coarseSideBasisCache = BasisCache::sideBasisCache(coarseBasisVolumeCache, coarserBasisSideIndex); // this is a leaner way to construct a side cache, but we will need to inform about physicalCellNodes manually
-  coarseSideBasisCache->setRefCellPoints(coarseSideCubaturePoints);
   FieldContainer<double> coarseVolumeRefNodes(coarseTopo.getNodeCount(),spaceDim);
   CamelliaCellTools::refCellNodesForTopology(coarseVolumeRefNodes, coarseTopo);
   coarseVolumeRefNodes.resize(oneCell,coarseVolumeRefNodes.dimension(0),coarseVolumeRefNodes.dimension(1));
+  BasisCachePtr coarseBasisVolumeCache = Teuchos::rcp( new BasisCache(coarseTopo, cubDegree, false) ); // false: don't create all the side caches, since we just want one side
+  BasisCachePtr coarseSideBasisCache = BasisCache::sideBasisCache(coarseBasisVolumeCache, coarserBasisSideIndex); // this is a leaner way to construct a side cache, but we will need to inform about physicalCellNodes manually
   coarseSideBasisCache->setPhysicalCellNodes(coarseVolumeRefNodes, vector<GlobalIndexType>(), false);
+  
+  if (coarseSideNodes.size() > 0) { // can be empty if "side" is a vertex...
+    fineSideNodesInCoarseSideTopology = RefinementPattern::descendantNodes(sideRefinements, coarseSideNodes);
+    sideBasisCacheAsVolume->setRefCellPoints(fineSideCubaturePoints); // should be the same, but to guard against changes in BasisCache, set these.
+    fineSideNodesInCoarseSideTopology.resize(oneCell, fineSideNodesInCoarseSideTopology.dimension(0), fineSideNodesInCoarseSideTopology.dimension(1));
+    sideBasisCacheAsVolume->setPhysicalCellNodes(fineSideNodesInCoarseSideTopology, vector<GlobalIndexType>(), false);
+    coarseSideCubaturePoints = sideBasisCacheAsVolume->getPhysicalCubaturePoints();
+    coarseSideCubaturePoints.resize(coarseSideCubaturePoints.dimension(1), coarseSideCubaturePoints.dimension(2));
+    coarseSideBasisCache->setRefCellPoints(coarseSideCubaturePoints);
+  } else {
+    // nothing to do, I think: the ref cell points will be degenerate...
+  }
 //  FieldContainer<double> coarseVolumeCubaturePoints = coarseSideBasisCache->getPhysicalCubaturePoints();
 //  coarseVolumeCubaturePoints.resize(coarseVolumeCubaturePoints.dimension(1),coarseVolumeCubaturePoints.dimension(2));
   
@@ -646,6 +657,12 @@ set<unsigned> BasisReconciliation::internalDofIndicesForFinerBasis(BasisPtr fine
   set<unsigned> internalDofOrdinals;
   unsigned spaceDim = finerBasis->domainTopology().getDimension();
   
+  if (refinements.size() == 0) {
+    set<int> internalDofOrdinalsInt = BasisReconciliation::interiorDofOrdinalsForBasis(finerBasis);
+    internalDofOrdinals.insert(internalDofOrdinalsInt.begin(),internalDofOrdinalsInt.end());
+    return internalDofOrdinals;
+  }
+  
   bool isL2 = (finerBasis->functionSpace() == IntrepidExtendedTypes::FUNCTION_SPACE_HVOL) || (finerBasis->functionSpace() == IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HVOL);
   
   if (isL2) {
@@ -683,6 +700,8 @@ FieldContainer<double> BasisReconciliation::subBasisReconciliationWeightsForSubc
   if (!isL2) {
     fineBasisSubcellOrdinals = fineBasis->dofOrdinalsForSubcell(subcdim, fineSubcord, subcdim);
     coarseBasisSubcellOrdinals = coarseBasis->dofOrdinalsForSubcell(subcdim, coarseSubcord, subcdim);
+//    Camellia::print("fineBasisSubcellOrdinals", fineBasisSubcellOrdinals);
+//    Camellia::print("coarseBasisSubcellOrdinals", coarseBasisSubcellOrdinals);
   } else {
     int spaceDim = fineBasis->domainTopology().getDimension();
     if (subcdim==spaceDim) {
@@ -715,11 +734,16 @@ FieldContainer<double> BasisReconciliation::subBasisReconciliationWeightsForSubc
   
   if (rowFilter.size() != subBasisFineOrdinals.size()) {
     cout << "Error: some required rows aren't present in subBasisWeights.\n";
+    Camellia::print("subBasisFineOrdinals", subBasisFineOrdinals);
+    Camellia::print("rowFilter", rowFilter);
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Error: some required rows aren't present in subBasisWeights.");
   }
   
   if (colFilter.size() != subBasisCoarseOrdinals.size()) {
     cout << "Error: some required columns aren't present in subBasisWeights.\n";
+    Camellia::print("subBasisCoarseOrdinals", subBasisCoarseOrdinals);
+    Camellia::print("coarseBasisSubcellOrdinals", coarseBasisSubcellOrdinals);
+    Camellia::print("colFilter", colFilter);
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Error: some required columns aren't present in subBasisWeights.");
   }
   

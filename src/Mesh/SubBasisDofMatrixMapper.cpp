@@ -15,8 +15,15 @@ SubBasisDofMatrixMapper::SubBasisDofMatrixMapper(const set<unsigned> &basisDofOr
   _mappedGlobalDofOrdinals = mappedGlobalDofOrdinals;
   _constraintMatrix = constraintMatrix;
   
-  // TODO: check that input sizes are reasonable...
-  
+  // The constraint matrix should have size (fine,coarse) -- which is to say (local, global)
+  if (_constraintMatrix.dimension(0) != basisDofOrdinalFilter.size()) {
+    cout << "ERROR: constraint matrix row dimension must match the local sub-basis size.\n";
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "constraint matrix row dimension must match the local sub-basis size");
+  }
+  if (_constraintMatrix.dimension(1) != mappedGlobalDofOrdinals.size()) {
+    cout << "ERROR: constraint matrix column dimension must match the number of mapped global dof ordinals.\n";
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "constraint matrix column dimension must match the number of mapped global dof ordinals");
+  }
   // int constraintCols = _constraintMatrix.dimension(1);
 }
 const set<unsigned> & SubBasisDofMatrixMapper::basisDofOrdinalFilter() {
@@ -38,7 +45,6 @@ FieldContainer<double> SubBasisDofMatrixMapper::mapData(bool transposeConstraint
   int constraintCols = transposeConstraint ? _constraintMatrix.dimension(0) : _constraintMatrix.dimension(1);
   int dataCols = localData.dimension(1);
   int dataRows = localData.dimension(0);
-  
   
   if ((dataCols==0) || (dataRows==0) || (constraintRows==0) || (constraintCols==0)) {
     cout << "degenerate matrix encountered.\n";

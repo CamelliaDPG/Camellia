@@ -224,6 +224,7 @@ SolutionPtr GDAMinimumRuleTests::quadMeshSolutionStokesCavityFlow(bool useMinRul
 }
 
 void GDAMinimumRuleTests::runTests(int &numTestsRun, int &numTestsPassed) {
+  
   setup();
   if (testMultiCellMesh()) {
     numTestsPassed++;
@@ -232,6 +233,15 @@ void GDAMinimumRuleTests::runTests(int &numTestsRun, int &numTestsPassed) {
   teardown();
   
   cout << "testMultiCellMesh complete.\n";
+  
+  setup();
+  if (testSingleCellMesh()) {
+    numTestsPassed++;
+  }
+  numTestsRun++;
+  teardown();
+  
+  cout << "testSingleCellMesh complete.\n";
   
   setup();
   if (testHRefinements()) {
@@ -259,15 +269,6 @@ void GDAMinimumRuleTests::runTests(int &numTestsRun, int &numTestsPassed) {
   teardown();
   
   cout << "testLocalInterpretationConsistency complete.\n";
-  
-  setup();
-  if (testSingleCellMesh()) {
-    numTestsPassed++;
-  }
-  numTestsRun++;
-  teardown();
-  
-  cout << "testSingleCellMesh complete.\n";
 }
 void GDAMinimumRuleTests::setup() {
   
@@ -530,7 +531,7 @@ bool GDAMinimumRuleTests::testMultiCellMesh() {
     int verticalCells = dim.second;
     int H1Order = meshParams.second;
     
-    for (int numRefs = 1; numRefs < 2; numRefs++) {
+    for (int numRefs = 0; numRefs < 2; numRefs++) {
 //      cout << "About to run test for " << horizontalCells << " x " << verticalCells;
 //      cout << ", k=" << H1Order - 1 << " mesh with " << numRefs << " refinements.\n";
       if (! subTestCompatibleSolutionsAgree(horizontalCells, verticalCells, H1Order, numRefs) ) {

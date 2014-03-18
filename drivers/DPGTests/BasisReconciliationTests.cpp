@@ -36,6 +36,13 @@ void BasisReconciliationTests::stripDummyCellDimensionFromFC(FieldContainer<doub
 
 void BasisReconciliationTests::runTests(int &numTestsRun, int &numTestsPassed) {
   setup();
+  if (testInternalSubcellOrdinals()) {
+    numTestsPassed++;
+  }
+  numTestsRun++;
+  teardown();
+  
+  setup();
   if (testHSide()) {
     numTestsPassed++;
   }
@@ -1032,6 +1039,42 @@ bool BasisReconciliationTests::testPSide() {
                                       test.coarseBasis, test.coarseSideIndex, test.coarseCellNodes) ) {
       success = false;
     }
+  }
+  
+  return success;
+}
+
+bool BasisReconciliationTests::testInternalSubcellOrdinals() {
+  bool success = true;
+  
+  BasisPtr fineBasis = Camellia::intrepidLineHGRAD(2); // quadratic
+  
+  RefinementBranch emptyBranch;
+  
+  set<unsigned> internalDofOrdinals = BasisReconciliation::internalDofIndicesForFinerBasis(fineBasis, emptyBranch);
+  if (internalDofOrdinals.size() != 1) {
+    cout << "BasisReconciliationTests: test failure.  Unrefined quadratic H^1 basis should have 1 internal dof ordinal, but has " << internalDofOrdinals.size() << endl;
+    success = false;
+  }
+  
+  RefinementBranch oneRefinement;
+  oneRefinement.push_back(make_pair(RefinementPattern::regularRefinementPatternLine().get(), 0));
+  
+  internalDofOrdinals = BasisReconciliation::internalDofIndicesForFinerBasis(fineBasis, oneRefinement);
+  // now, one vertex should lie inside the neighboring/constraining basis: two dof ordinals should now be interior
+  if (internalDofOrdinals.size() != 2) {
+    cout << "BasisReconciliationTests: test failure.  Once-refined quadratic H^1 basis should have 2 internal dof ordinals, but has " << internalDofOrdinals.size() << endl;
+    success = false;
+  }
+  
+  RefinementBranch twoRefinements = oneRefinement;
+  twoRefinements.push_back(make_pair(RefinementPattern::regularRefinementPatternLine().get(), 1)); // now the whole edge is interior to the constraining (ancestral) edge
+  
+  internalDofOrdinals = BasisReconciliation::internalDofIndicesForFinerBasis(fineBasis, twoRefinements);
+  // now, both vertices should lie inside the neighboring/constraining basis: three dof ordinals should now be interior
+  if (internalDofOrdinals.size() != 3) {
+    cout << "BasisReconciliationTests: test failure.  Twice-refined quadratic H^1 basis should have 3 internal dof ordinals, but has " << internalDofOrdinals.size() << endl;
+    success = false;
   }
   
   return success;

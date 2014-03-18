@@ -30,6 +30,8 @@ public:
   bool testH();
   bool testHSide();
   
+  bool testInternalSubcellOrdinals();
+  
 private:
   bool pConstraintSideBasisSubTest(BasisPtr fineBasis, unsigned fineSideIndex, FieldContainer<double> &finePhysicalCellNodes,
                                    BasisPtr coarseBasis, unsigned coarseSideIndex, FieldContainer<double> &coarsePhysicalCellNodes);

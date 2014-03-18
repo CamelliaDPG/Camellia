@@ -16,6 +16,8 @@
 
 #include "Teuchos_GlobalMPISession.hpp"
 
+#include "CamelliaDebugUtility.h"
+
 GDAMinimumRule::GDAMinimumRule(MeshTopologyPtr meshTopology, VarFactory varFactory, DofOrderingFactoryPtr dofOrderingFactory, MeshPartitionPolicyPtr partitionPolicy,
                                unsigned initialH1OrderTrial, unsigned testOrderEnhancement)
 : GlobalDofAssignment(meshTopology,varFactory,dofOrderingFactory,partitionPolicy, initialH1OrderTrial, testOrderEnhancement, false)
@@ -55,6 +57,7 @@ void GDAMinimumRule::didHRefine(const set<GlobalIndexType> &parentCellIDs) {
   set<GlobalIndexType> neighborsOfNewElements;
   for (set<GlobalIndexType>::const_iterator cellIDIt = parentCellIDs.begin(); cellIDIt != parentCellIDs.end(); cellIDIt++) {
     GlobalIndexType parentCellID = *cellIDIt;
+//    cout << "GDAMinimumRule: h-refining " << parentCellID << endl;
     CellPtr parentCell = _meshTopology->getCell(parentCellID);
     vector<IndexType> childIDs = parentCell->getChildIndices();
     int parentH1Order = _cellH1Orders[parentCellID];
@@ -363,8 +366,13 @@ CellConstraints GDAMinimumRule::getCellConstraints(GlobalIndexType cellID) {
       int subsideCountInConstrainingSide = (subsideDim > 0) ? constrainingSide.getSubcellCount(subsideDim) : constrainingSide.getVertexCount();
       constrainingSideEntityIndex = constrainingCell->entityIndex(sideDim, subsideConstraint.sideOrdinal);
       subsideConstraint.subsideOrdinalInSide = -1;
+      unsigned constrainingSideOrdinalInConstrainingCell = constrainingCell->findSubcellOrdinal(sideDim, constrainingSideEntityIndex);
       for (int subsideOrdinalInConstrainingSide = 0; subsideOrdinalInConstrainingSide < subsideCountInConstrainingSide; subsideOrdinalInConstrainingSide++) {
-        IndexType entityIndex =  _meshTopology->getSubEntityIndex(sideDim, constrainingSideEntityIndex, subsideDim, subsideOrdinalInConstrainingSide);
+        CellTopoPtr constrainingTopo = constrainingCell->topology();
+        unsigned subsideOrdinalInConstrainingCell = CamelliaCellTools::subcellOrdinalMap(*(constrainingTopo.get()), sideDim, constrainingSideOrdinalInConstrainingCell, subsideDim, subsideOrdinalInConstrainingSide);
+        IndexType entityIndex = constrainingCell->entityIndex(subsideDim, subsideOrdinalInConstrainingCell);
+        // old version, which stored the ordinal relative to the canonical view of the constraining side (as opposed to the constraining cell's view of it):
+//        IndexType entityIndex =  _meshTopology->getSubEntityIndex(sideDim, constrainingSideEntityIndex, subsideDim, subsideOrdinalInConstrainingSide);
         if (entityIndex == constrainingEntityIndex) {
           subsideConstraint.subsideOrdinalInSide = subsideOrdinalInConstrainingSide;
         }
@@ -419,7 +427,7 @@ SubCellDofIndexInfo GDAMinimumRule::getOwnedGlobalDofIndices(GlobalIndexType cel
           basisDofOrdinals.insert(i);
         }
       } else {
-        set<int> ordinalsInt = basis->dofOrdinalsForInterior(); // TODO: change dofOrdinalsForInterior to return set<unsigned>...
+        set<int> ordinalsInt = BasisReconciliation::interiorDofOrdinalsForBasis( basis ); // TODO: change dofOrdinalsForInterior to return set<unsigned>...
         basisDofOrdinals.insert(ordinalsInt.begin(),ordinalsInt.end());
       }
       int count = basisDofOrdinals.size();
@@ -447,7 +455,7 @@ SubCellDofIndexInfo GDAMinimumRule::getOwnedGlobalDofIndices(GlobalIndexType cel
           basisDofOrdinals.insert(sideBasisOrdinals.begin(),sideBasisOrdinals.end());
         } else {
           BasisPtr basis = constrainingTrialOrdering->getBasis(var->ID(),sideConstraint.sideOrdinal);
-          set<int> sideBasisOrdinals = isL2Var ? basis->dofOrdinalsForSubcells(sideDim, true) : basis->dofOrdinalsForInterior(); // if L^2, all dofs are interior...
+          set<int> sideBasisOrdinals = BasisReconciliation::interiorDofOrdinalsForBasis(basis); // isL2Var ? basis->dofOrdinalsForSubcells(sideDim, true) : basis->dofOrdinalsForInterior(); // if L^2, all dofs are interior...
           basisDofOrdinals.insert(sideBasisOrdinals.begin(),sideBasisOrdinals.end());
         }
         if (owningCellIDForSide == cellID) { // then we're responsible for the assignment of global indices
@@ -603,8 +611,14 @@ LocalDofMapperPtr GDAMinimumRule::getDofMapper(GlobalIndexType cellID, CellConst
     CellPtr cellForSide = _meshTopology->getCell(cellID);
     RefinementBranch refBranch = cellForSide->refinementBranchForSide(sideOrdinal);
     volumeRefinementsForSideEntity[sideEntityIndex] = refBranch;
-    unsigned neighborSideOrdinal = cellForSide->getNeighbor(sideOrdinal).second;
-    sideRefinementsForSideEntity[sideEntityIndex] = RefinementPattern::sideRefinementBranch(refBranch, neighborSideOrdinal);
+    if (refBranch.size() == 0) { // then side refinements also empty
+      sideRefinementsForSideEntity[sideEntityIndex] = refBranch;
+    } else {
+      pair<IndexType, unsigned> neighborInfo = cellForSide->getNeighbor(sideOrdinal);
+      unsigned neighborSideOrdinal = neighborInfo.second;
+      unsigned ancestorSideOrdinal = _meshTopology->getCell(neighborInfo.first)->getNeighbor(neighborSideOrdinal).second;
+      sideRefinementsForSideEntity[sideEntityIndex] = RefinementPattern::sideRefinementBranch(refBranch, ancestorSideOrdinal);
+    }
     
     shards::CellTopology sideTopo = _meshTopology->getEntityTopology(sideDim, sideEntityIndex);
     unsigned ssCount = sideTopo.getSubcellCount(sideDim-1);
@@ -637,7 +651,7 @@ LocalDofMapperPtr GDAMinimumRule::getDofMapper(GlobalIndexType cellID, CellConst
           basisDofOrdinals.insert(i);
         }
       } else {
-        set<int> ordinalsInt = basis->dofOrdinalsForInterior(); // TODO: change dofOrdinalsForInterior to return set<unsigned>...
+        set<int> ordinalsInt = BasisReconciliation::interiorDofOrdinalsForBasis(basis); // basis->dofOrdinalsForInterior(); // TODO: change dofOrdinalsForInterior to return set<unsigned>...
         basisDofOrdinals.insert(ordinalsInt.begin(),ordinalsInt.end());
       }
       vector<GlobalIndexType> globalDofOrdinals = dofIndexInfo[spaceDim][0][var->ID()];
@@ -747,20 +761,31 @@ LocalDofMapperPtr GDAMinimumRule::getDofMapper(GlobalIndexType cellID, CellConst
 //            }
 //            cout << ")\n";
           }
-        } else {
+        }
+        else
+        { // basis has support on mesh skeleton
+          // first, we want to set up a map for the "interior" of the side (below, we'll deal with subsides and their subcells)
           constrainingBasis = constrainingTrialOrdering->getBasis(var->ID(),sideConstraint.sideOrdinal);
           basis = trialOrdering->getBasis(var->ID(),sideOrdinal);
           
-          set<int> sideBasisOrdinals = isL2Var ? basis->dofOrdinalsForSubcells(sideDim, true) : basis->dofOrdinalsForInterior(); // if L^2, all dofs are interior...
-          basisDofOrdinals.insert(sideBasisOrdinals.begin(),sideBasisOrdinals.end());
+          refBranch = sideRefinementsForSideEntity[sideEntityForSubcell[sideDim][sideOrdinal]];
+          set<int> sideBasisOrdinals = BasisReconciliation::interiorDofOrdinalsForBasis(basis); // isL2Var ? basis->dofOrdinalsForSubcells(sideDim, true) : basis->dofOrdinalsForInterior(); // if L^2, all dofs are interior...
+          basisDofOrdinals = BasisReconciliation::internalDofIndicesForFinerBasis(basis, refBranch);
           
           if (basisDofOrdinals.size() > 0) { // can be empty (consider a linear H^1 basis, e.g. -- there will be no middle nodes)
-            refBranch = sideRefinementsForSideEntity[sideEntityForSubcell[sideDim][sideOrdinal]];
             FieldContainer<double> constraintMatrixSide = _br.constrainedWeights(basis, refBranch, constrainingBasis, composedPermutation);
             
             if (constraintMatrixSide.size() == 0) {
               cout << "Error: empty constraint matrix encountered.\n";
               TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Error: empty constraint matrix encountered.\n");
+            }
+            
+            if (constraintMatrixSide.dimension(0) != basisDofOrdinals.size()) {
+              cout << "GDAMinimumRule internal error. constraintMatrixSide row dimension does not match basisDofOrdinals size.\n";
+              // repeat, so we can walk through in the debugger:
+              // computeConstrainedWeights(finerBasis,refinements,coarserBasis,vertexNodePermutation);
+              FieldContainer<double> constraintMatrixSide = BasisReconciliation::computeConstrainedWeights(basis, refBranch, constrainingBasis, composedPermutation);
+              TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "constraintMatrixSide row dimension does not match basisDofOrdinals size");
             }
           
             if (!omitSideEntry && !omitVarEntry) {
@@ -847,7 +872,16 @@ LocalDofMapperPtr GDAMinimumRule::getDofMapper(GlobalIndexType cellID, CellConst
                     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "reconciledSubsideDofCount != reconciledSubsideDofCount2");
                   }
                   
+//                  print("subBasisWeights (before composition): fineOrdinals", subBasisWeights.fineOrdinals);
+//                  print("subBasisWeights (before composition): coarseOrdinals", subBasisWeights.coarseOrdinals);
+//                  
+//                  print("cellSideToSideEntityReconciliationWeights: fineOrdinals", cellSideToSideEntityReconciliationWeights.fineOrdinals);
+//                  print("cellSideToSideEntityReconciliationWeights: coarseOrdinals", cellSideToSideEntityReconciliationWeights.coarseOrdinals);
+                  
                   subBasisWeights = BasisReconciliation::composedSubBasisReconciliationWeights(cellSideToSideEntityReconciliationWeights, subBasisWeights);
+
+//                  print("subBasisWeights (after composition): fineOrdinals", subBasisWeights.fineOrdinals);
+//                  print("subBasisWeights (after composition): coarseOrdinals", subBasisWeights.coarseOrdinals);
                 }
                 
                 CellPtr constrainingCell = _meshTopology->getCell(subsideConstraint.cellID);
@@ -998,7 +1032,7 @@ void GDAMinimumRule::rebuildLookups() {
         if (isL2Var) { // unconstrained / local
           _partitionDofCount += basis->getCardinality();
         } else {
-          _partitionDofCount += basis->dofOrdinalsForInterior().size();
+          _partitionDofCount += BasisReconciliation::interiorDofOrdinalsForBasis(basis).size(); // basis->dofOrdinalsForInterior().size();
         }
       }
 
@@ -1019,7 +1053,7 @@ void GDAMinimumRule::rebuildLookups() {
               if (isL2Var) { // unconstrained / local
                 _partitionDofCount += basis->getCardinality();
               } else {
-                _partitionDofCount += basis->dofOrdinalsForInterior().size();
+                _partitionDofCount += BasisReconciliation::interiorDofOrdinalsForBasis(basis).size(); //basis->dofOrdinalsForInterior().size();
               }
             }
           }

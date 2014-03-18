@@ -26,7 +26,7 @@ typedef Teuchos::RCP<SubBasisDofMapper> SubBasisDofMapperPtr;
 class SubBasisDofMapper {
 public:
   virtual const set<unsigned> &basisDofOrdinalFilter() = 0;
-  virtual FieldContainer<double> mapData(bool transposeConstraint, FieldContainer<double> &localData) = 0;
+  virtual FieldContainer<double> mapData(bool transposeConstraint, FieldContainer<double> &data) = 0; // constraint matrix is sized "fine x coarse" -- so transposeConstraint should be true when data belongs to coarse discretization, and false when data belongs to fine discretization.  i.e. in a minimum rule, transposeConstraint is true when the map goes from global to local, and false otherwise.
   virtual vector<GlobalIndexType> mappedGlobalDofOrdinals() = 0;
   
   virtual ~SubBasisDofMapper();

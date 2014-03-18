@@ -74,16 +74,27 @@ void BasisCache::init(shards::CellTopology &cellTopo, int maxTrialDegree, int ma
   _cubDegree = boundDegreeToMaxCubatureForCellTopo(_cubDegree, cellTopo.getKey());
   _maxTestDegree = maxTestDegree;
   _maxTrialDegree = maxTrialDegree;
-  DefaultCubatureFactory<double> cubFactory;
-  Teuchos::RCP<Cubature<double> > cellTopoCub = cubFactory.create(cellTopo, _cubDegree);
   
-  int cubDim       = cellTopoCub->getDimension();
-  int numCubPoints = cellTopoCub->getNumPoints();
+  if (_spaceDim > 0) {
+    DefaultCubatureFactory<double> cubFactory;
+    Teuchos::RCP<Cubature<double> > cellTopoCub = cubFactory.create(cellTopo, _cubDegree);
+    
+    int cubDim       = cellTopoCub->getDimension();
+    int numCubPoints = cellTopoCub->getNumPoints();
+    
+    _cubPoints = FieldContainer<double>(numCubPoints, cubDim);
+    _cubWeights.resize(numCubPoints);
   
-  _cubPoints = FieldContainer<double>(numCubPoints, cubDim);
-  _cubWeights.resize(numCubPoints);
-  
-  cellTopoCub->getCubature(_cubPoints, _cubWeights);
+    cellTopoCub->getCubature(_cubPoints, _cubWeights);
+  } else {
+    _cubDegree = 1;
+    int numCubPointsSide = 1;
+    _cubPoints.resize(numCubPointsSide, 1); // cubature points from the pov of the side (i.e. a (d-1)-dimensional set)
+    _cubWeights.resize(numCubPointsSide);
+    
+    _cubPoints.initialize(0.0);
+    _cubWeights.initialize(1.0);
+  }
   
   // now, create side caches
   if ( createSideCacheToo ) {

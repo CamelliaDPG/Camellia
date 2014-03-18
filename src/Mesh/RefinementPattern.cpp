@@ -39,7 +39,7 @@
 
 using namespace Intrepid;
 
-RefinementPattern::RefinementPattern(Teuchos::RCP< shards::CellTopology > cellTopoPtr, FieldContainer<double> refinedNodes, vector< RefinementPatternPtr > sideRefinementPatterns) {
+RefinementPattern::RefinementPattern(Teuchos::RCP< shards::CellTopology > cellTopoPtr, FieldContainer<double> refinedNodes, vector< RefinementPatternPtr > sideRefinementPatterns) { 
   _cellTopoPtr = cellTopoPtr;
   _nodes = refinedNodes;
   _sideRefinementPatterns = sideRefinementPatterns;
@@ -47,7 +47,7 @@ RefinementPattern::RefinementPattern(Teuchos::RCP< shards::CellTopology > cellTo
   int numSubCells = refinedNodes.dimension(0);
   int numNodesPerCell = refinedNodes.dimension(1);
   unsigned spaceDim = refinedNodes.dimension(2);
-  unsigned sideCount = _cellTopoPtr->getSideCount();
+  unsigned sideCount = (_cellTopoPtr->getDimension() > 1) ? _cellTopoPtr->getSideCount() : _cellTopoPtr->getNodeCount();
   _childrenForSides = vector< vector< pair< unsigned, unsigned> > >(sideCount); // will populate below..
   
   if (_cellTopoPtr->getNodeCount() == numNodesPerCell) {
@@ -62,20 +62,22 @@ RefinementPattern::RefinementPattern(Teuchos::RCP< shards::CellTopology > cellTo
   
   unsigned sideDim = spaceDim - 1;
 
-  // we will fill some entries in _patternForSubcell repeatedly/redundantly
-  _patternForSubcell = vector< vector< RefinementPatternPtr > >(spaceDim);
-  for (unsigned d=1; d<spaceDim; d++) {
-    _patternForSubcell[d] = vector< RefinementPatternPtr >(_cellTopoPtr->getSubcellCount(d));
-  }
-  _patternForSubcell[sideDim] = vector< RefinementPatternPtr >(sideCount);
-  for (unsigned sideOrdinal=0; sideOrdinal<sideCount; sideOrdinal++) {
-    _patternForSubcell[sideDim][sideOrdinal] = _sideRefinementPatterns[sideOrdinal];
-    for (unsigned d=1; d<sideDim; d++) {
-      shards::CellTopology sideTopo = _cellTopoPtr->getCellTopologyData(sideDim, sideOrdinal);
-      unsigned sideSubcellCount = sideTopo.getSubcellCount(d);
-      for (unsigned sideSubcellOrdinal=0; sideSubcellOrdinal<sideSubcellCount; sideSubcellOrdinal++) {
-        unsigned subcord = CamelliaCellTools::subcellOrdinalMap(*cellTopoPtr, sideDim, sideOrdinal, d, sideSubcellOrdinal);
-        _patternForSubcell[d][subcord] = _sideRefinementPatterns[sideOrdinal]->patternForSubcell(d, sideSubcellOrdinal);
+  if (sideDim > 0) {
+    // we will fill some entries in _patternForSubcell repeatedly/redundantly
+    _patternForSubcell = vector< vector< RefinementPatternPtr > >(spaceDim);
+    for (unsigned d=1; d<spaceDim; d++) {
+      _patternForSubcell[d] = vector< RefinementPatternPtr >(_cellTopoPtr->getSubcellCount(d));
+    }
+    _patternForSubcell[sideDim] = vector< RefinementPatternPtr >(sideCount);
+    for (unsigned sideOrdinal=0; sideOrdinal<sideCount; sideOrdinal++) {
+      _patternForSubcell[sideDim][sideOrdinal] = _sideRefinementPatterns[sideOrdinal];
+      for (unsigned d=1; d<sideDim; d++) {
+        shards::CellTopology sideTopo = _cellTopoPtr->getCellTopologyData(sideDim, sideOrdinal);
+        unsigned sideSubcellCount = sideTopo.getSubcellCount(d);
+        for (unsigned sideSubcellOrdinal=0; sideSubcellOrdinal<sideSubcellCount; sideSubcellOrdinal++) {
+          unsigned subcord = CamelliaCellTools::subcellOrdinalMap(*cellTopoPtr, sideDim, sideOrdinal, d, sideSubcellOrdinal);
+          _patternForSubcell[d][subcord] = _sideRefinementPatterns[sideOrdinal]->patternForSubcell(d, sideSubcellOrdinal);
+        }
       }
     }
   }
@@ -150,7 +152,7 @@ RefinementPattern::RefinementPattern(Teuchos::RCP< shards::CellTopology > cellTo
     for (int childIndexInParent = 0; childIndexInParent<childCellIndices.size(); childIndexInParent++) {
       unsigned childCellIndex = childCellIndices[childIndexInParent];
       CellPtr childCell = _refinementTopology->getCell(childCellIndex);
-      int childSideCount = childCell->topology()->getSideCount();
+      int childSideCount = (childCell->topology()->getDimension() > 1) ? childCell->topology()->getSideCount() : childCell->topology()->getNodeCount();
       for (int childSideIndex=0; childSideIndex<childSideCount; childSideIndex++) {
         unsigned childSideEntityIndex = childCell->entityIndex(sideDim, childSideIndex);
         if (sideChildEntities.find(childSideEntityIndex) != sideChildEntities.end()) {
@@ -499,7 +501,8 @@ map<unsigned, set<unsigned> > RefinementPattern::getInternalSubcellOrdinals(Refi
   CellTopoPtr ancestralTopo = refinements[0].first->parentTopology();
   CellTopoPtr childTopo;
   set<unsigned> parentSidesToIntersect;
-  for (unsigned sideOrdinal=0; sideOrdinal < ancestralTopo->getSideCount(); sideOrdinal++) {
+  int numSides = (ancestralTopo->getDimension() > 1) ? ancestralTopo->getSideCount() : ancestralTopo->getNodeCount();
+  for (unsigned sideOrdinal=0; sideOrdinal < numSides; sideOrdinal++) {
     parentSidesToIntersect.insert(sideOrdinal);
   }
   for (int refIndex=0; refIndex<refinements.size(); refIndex++) {
@@ -932,6 +935,11 @@ RefinementBranch RefinementPattern::sideRefinementBranch(RefinementBranch &volum
   if (volumeRefinementBranch.size()==0) return sideRefinements; // side refinement branch empty, too
   CellTopoPtr volumeTopo = volumeRefinementBranch[0].first->parentTopology();
   unsigned sideDim = volumeTopo->getDimension() - 1;
+  if (sideDim == 0) {
+    // then the empty refinement branch will suffice (since the "side" is actually a vertex)
+    return sideRefinements;
+  }
+  
   for (int refIndex=0; refIndex<volumeRefinementBranch.size(); refIndex++) {
     RefinementPattern* refPattern = volumeRefinementBranch[refIndex].first;
     unsigned volumeBranchChild = volumeRefinementBranch[refIndex].second;
@@ -944,6 +952,7 @@ RefinementBranch RefinementPattern::sideRefinementBranch(RefinementBranch &volum
       }
     }
     if (sideBranchChild == -1) {
+      cout << "RefinementPattern::sideRefinementBranch: Did not find child.\n";
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Did not find child");
     }
     

@@ -25,6 +25,8 @@ public:
     }
     unsigned cellKey = cellTopo.getKey();
     switch (cellKey) {
+      case shards::Node::key:
+        break;
       case shards::Line<2>::key:
         cellNodes(0,0) = -1;
         cellNodes(1,0) =  1;
@@ -83,6 +85,7 @@ public:
         cellNodes(7,2) = 1;
         break;
       default:
+        cout << "Unhandled CellTopology.\n";
         TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unhandled CellTopology.");
     }
     

@@ -55,7 +55,7 @@ void LocalDofMapper::filterData(const vector<int> dofIndices, const FieldContain
 //}
 
 void LocalDofMapper::addSubBasisMapVectorContribution(int varID, int sideOrdinal, BasisMap basisMap, const FieldContainer<double> &localData, FieldContainer<double> &globalData, bool accumulate) {
-  bool transposeConstraint = true; // that is, transpose the matrix constructed by BasisReconciliation.  (The untransposed one goes from global to local)
+  bool transposeConstraint = true; // local to global
   
 //  cout << "adding sub-basis map contribution for var " << varID << " and sideOrdinal " << sideOrdinal << endl;
   
@@ -105,7 +105,7 @@ void LocalDofMapper::addSubBasisMapVectorContribution(int varID, int sideOrdinal
 //}
 
 void LocalDofMapper::addReverseSubBasisMapVectorContribution(int varID, int sideOrdinal, BasisMap basisMap, const FieldContainer<double> &globalData, FieldContainer<double> &localData) {
-  bool transposeConstraint = false;
+  bool transposeConstraint = false; // global to local
   
   if (_varIDToMap != -1) {
     cout << "Error: LocalDofMapper::addReverseSubBasisMapContribution not supported when _varIDToMap is specified.\n";
@@ -154,19 +154,50 @@ LocalDofMapper::LocalDofMapper(DofOrderingPtr dofOrdering, map< int, BasisMap > 
   _volumeMaps = volumeMaps;
   _sideMaps = sideMaps;
   set<GlobalIndexType> globalIndices;
+//  cout << "Creating local dof mapper.  Volume Map info:\n";
   for (map< int, BasisMap >::iterator volumeMapIt = _volumeMaps.begin(); volumeMapIt != _volumeMaps.end(); volumeMapIt++) {
     BasisMap basisMap = volumeMapIt->second;
     for (vector<SubBasisDofMapperPtr>::iterator subBasisMapIt = basisMap.begin(); subBasisMapIt != basisMap.end(); subBasisMapIt++) {
       vector<GlobalIndexType> subBasisGlobalIndices = (*subBasisMapIt)->mappedGlobalDofOrdinals();
       globalIndices.insert(subBasisGlobalIndices.begin(),subBasisGlobalIndices.end());
+      
+//      // print a little report:
+//      set<unsigned> localOrdinalFilter = (*subBasisMapIt)->basisDofOrdinalFilter();
+//      cout << "sub-basis map--local dof ordinal filter: ";
+//      for (set<unsigned>::iterator dofOrdinalIt=localOrdinalFilter.begin(); dofOrdinalIt != localOrdinalFilter.end(); dofOrdinalIt++) {
+//        cout << *dofOrdinalIt << " ";
+//      }
+//      cout << endl;
+//      cout << "sub-basis map--global dof ordinals: ";
+//      for (vector<GlobalIndexType>::iterator globalDofIndexIt=subBasisGlobalIndices.begin(); globalDofIndexIt != subBasisGlobalIndices.end(); globalDofIndexIt++) {
+//        cout << *globalDofIndexIt << " ";
+//      }
+//      cout << endl;
+//      cout << endl;
     }
   }
+//  cout << "Creating local dof mapper.  Side Map info:\n";
   for (int sideOrdinal=0; sideOrdinal<_sideMaps.size(); sideOrdinal++) {
+//    cout << "Side ordinal " << sideOrdinal << endl;
     for (map< int, BasisMap >::iterator sideMapIt = _sideMaps[sideOrdinal].begin(); sideMapIt != _sideMaps[sideOrdinal].end(); sideMapIt++) {
       BasisMap basisMap = sideMapIt->second;
       for (vector<SubBasisDofMapperPtr>::iterator subBasisMapIt = basisMap.begin(); subBasisMapIt != basisMap.end(); subBasisMapIt++) {
         vector<GlobalIndexType> subBasisGlobalIndices = (*subBasisMapIt)->mappedGlobalDofOrdinals();
         globalIndices.insert(subBasisGlobalIndices.begin(),subBasisGlobalIndices.end());
+        
+//        // print a little report:
+//        set<unsigned> localOrdinalFilter = (*subBasisMapIt)->basisDofOrdinalFilter();
+//        cout << "sub-basis map--local dof ordinal filter: ";
+//        for (set<unsigned>::iterator dofOrdinalIt=localOrdinalFilter.begin(); dofOrdinalIt != localOrdinalFilter.end(); dofOrdinalIt++) {
+//          cout << *dofOrdinalIt << " ";
+//        }
+//        cout << endl;
+//        cout << "sub-basis map--global dof ordinals: ";
+//        for (vector<GlobalIndexType>::iterator globalDofIndexIt=subBasisGlobalIndices.begin(); globalDofIndexIt != subBasisGlobalIndices.end(); globalDofIndexIt++) {
+//          cout << *globalDofIndexIt << " ";
+//        }
+//        cout << endl;
+//        cout << endl;
       }
     }
   }
@@ -176,6 +207,8 @@ LocalDofMapper::LocalDofMapper(DofOrderingPtr dofOrdering, map< int, BasisMap > 
 //    cout << *globalIndexIt << " ---> " << ordinal << endl;
     _globalIndexToOrdinal[*globalIndexIt] = ordinal++;
   }
+  
+  
 }
 
 vector<GlobalIndexType> LocalDofMapper::globalIndices() {
