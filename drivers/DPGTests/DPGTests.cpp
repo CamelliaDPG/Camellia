@@ -91,6 +91,10 @@
 
 #include <vector>
 
+//#include <fenv.h>
+
+#include <xmmintrin.h>
+
 using namespace std;
 using namespace Intrepid;
 using namespace Camellia;
@@ -161,6 +165,13 @@ void DPGTests::runTests() {
   
   int rank = Teuchos::GlobalMPISession::getRank();
   
+//  fexcept_t flag;
+//  fegetexceptflag(&flag, FE_INVALID | FE_DIVBYZERO);
+//  fesetexceptflag(&flag, FE_INVALID | FE_DIVBYZERO);
+  
+//  cout << "NOTE: enabling floating point exceptions for divide by zero.\n";
+//  _MM_SET_EXCEPTION_MASK(_MM_GET_EXCEPTION_MASK() & ~_MM_MASK_INVALID);
+  
   bool success;
   int numTestsTotal = 0;
   int numTestsPassed = 0;
@@ -172,13 +183,13 @@ void DPGTests::runTests() {
   // setup our TestSuite tests:
   vector< Teuchos::RCP< TestSuite > > testSuites;
   
-  testSuites.push_back( Teuchos::rcp( new BasisReconciliationTests ) );
   testSuites.push_back( Teuchos::rcp( new GDAMinimumRuleTests ) );
+  
+  testSuites.push_back( Teuchos::rcp( new ScratchPadTests ) );
+  testSuites.push_back( Teuchos::rcp( new BasisReconciliationTests ) );
   
   testSuites.push_back( Teuchos::rcp( new MeshTestSuite ) );
   testSuites.push_back( Teuchos::rcp( new MeshTopologyTests ) );
-  
-  testSuites.push_back( Teuchos::rcp( new ScratchPadTests ) );
   
   testSuites.push_back( Teuchos::rcp( new ElementTests ) );
   testSuites.push_back( Teuchos::rcp( new MultiBasisTests ) );

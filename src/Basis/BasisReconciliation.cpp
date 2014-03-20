@@ -200,7 +200,13 @@ FieldContainer<double> BasisReconciliation::computeConstrainedWeights(BasisPtr f
   
   lhsValues.resize(lhsValues.dimension(1),lhsValues.dimension(2));
   rhsValues.resize(rhsValues.dimension(1),rhsValues.dimension(2));
-  SerialDenseMatrixUtility::solveSystemMultipleRHS(constrainedWeights, lhsValues, rhsValues);
+  try {
+    SerialDenseMatrixUtility::solveSystemMultipleRHS(constrainedWeights, lhsValues, rhsValues);
+  } catch (...) {
+    cout << "BasisReconciliation: SerialDenseMatrixUtility::solveSystemMultipleRHS: failed with the following inputs:\n";
+    cout << "lhsValues:\n" << lhsValues;
+    cout << "rhsValues:\n" << rhsValues;
+  }
   
   return constrainedWeights;
 }
@@ -383,6 +389,12 @@ FieldContainer<double> BasisReconciliation::computeConstrainedWeights(BasisPtr f
   FieldContainer<double> finerBasisValuesFiltered = filterBasisValues(finerBasisValues, filteredDofOrdinalsForFinerBasisInt);
   
   set<int> filteredDofOrdinalsForCoarserBasis = interiorDofOrdinalsForBasis(coarserBasis);
+  if (filteredDofOrdinalsForCoarserBasis.size() == 0) {
+    cout << "error: coarse basis dof ordinals size == 0.\n";
+    Camellia::print("filteredDofOrdinalsForFinerBasis", filteredDofOrdinalsForFinerBasis);
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "coarse basis dof ordinals size == 0");
+  }
+  
   FieldContainer<double> coarserBasisValuesFiltered = filterBasisValues(coarserBasisValues, filteredDofOrdinalsForCoarserBasis);
   
   // resize things with dummy cell dimension:
@@ -403,7 +415,14 @@ FieldContainer<double> BasisReconciliation::computeConstrainedWeights(BasisPtr f
   
   lhsValues.resize(lhsValues.dimension(1),lhsValues.dimension(2));
   rhsValues.resize(rhsValues.dimension(1),rhsValues.dimension(2));
-  SerialDenseMatrixUtility::solveSystemMultipleRHS(constrainedWeights, lhsValues, rhsValues);
+  
+  try {
+    SerialDenseMatrixUtility::solveSystemMultipleRHS(constrainedWeights, lhsValues, rhsValues);
+  } catch (...) {
+    cout << "BasisReconciliation: SerialDenseMatrixUtility::solveSystemMultipleRHS: failed with the following inputs:\n";
+    cout << "lhsValues:\n" << lhsValues;
+    cout << "rhsValues:\n" << rhsValues;
+  }
   
   return constrainedWeights;
 }
@@ -630,6 +649,11 @@ FieldContainer<double> BasisReconciliation::filterBasisValues(const FieldContain
   int basisCardinality = dim[0];
   dim[0] = filter.size();
   FieldContainer<double> filteredValues(dim);
+  
+  if (filter.size() == 0) { // empty container
+    return filteredValues;
+  }
+  
   // apply filter:
   double* filteredValue = &filteredValues[0];
   unsigned valuesPerDof = basisValues.size() / basisCardinality;
@@ -648,8 +672,15 @@ set<int> BasisReconciliation::interiorDofOrdinalsForBasis(BasisPtr basis) {
   // if L2, we include all dofs, not just the interior ones
   bool isL2 = (basis->functionSpace() == IntrepidExtendedTypes::FUNCTION_SPACE_HVOL) || (basis->functionSpace() == IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HVOL);
   int spaceDim = basis->domainTopology().getDimension();
-  set<int> filteredDofOrdinalsForFinerBasis = isL2 ? basis->dofOrdinalsForSubcells(spaceDim, true) : basis->dofOrdinalsForInterior();
-  return filteredDofOrdinalsForFinerBasis;
+  set<int> interiorDofOrdinals = isL2 ? basis->dofOrdinalsForSubcells(spaceDim, true) : basis->dofOrdinalsForInterior();
+  if (interiorDofOrdinals.size() == 0) {
+    cout << "Empty interiorDofOrdinals ";
+    if (isL2)
+      cout << "(L^2 basis).\n";
+    else
+      cout << "(non-L^2 basis).\n";
+  }
+  return interiorDofOrdinals;
 }
 
 set<unsigned> BasisReconciliation::internalDofIndicesForFinerBasis(BasisPtr finerBasis, RefinementBranch refinements) {

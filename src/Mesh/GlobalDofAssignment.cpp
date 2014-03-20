@@ -10,6 +10,8 @@
 
 #include "Teuchos_GlobalMPISession.hpp"
 
+#include "CamelliaDebugUtility.h"
+
 // subclasses:
 #include "GDAMinimumRule.h"
 #include "GDAMaximumRule2D.h"
@@ -192,7 +194,6 @@ void GlobalDofAssignment::determineActiveElements() {
   _partitionForCellID.clear();
   FieldContainer<GlobalIndexType> partitionedMesh(_numPartitions,activeCellIDs.size());
   _partitionPolicy->partitionMesh(_meshTopology.get(),_numPartitions,partitionedMesh);
-  //  cout << "partitionedMesh:\n" << partitionedMesh;
   
   _activeCellOffset = 0;
   for (PartitionIndexType i=0; i<partitionedMesh.dimension(0); i++) {
@@ -205,6 +206,8 @@ void GlobalDofAssignment::determineActiveElements() {
       _partitionForCellID[cellID] = i;
     }
     _partitions.push_back( partition );
+//    if (partitionNumber==0) cout << "partition " << i << ": ";
+//    if (partitionNumber==0) print("",partition);
     if (partitionNumber > i) {
       _activeCellOffset += partition.size();
     }
@@ -260,8 +263,8 @@ ElementTypeFactory & GlobalDofAssignment::getElementTypeFactory() {
 }
 
 GlobalIndexType GlobalDofAssignment::globalCellIndex(GlobalIndexType cellID) {
-  int partitionNumber     = Teuchos::GlobalMPISession::getRank();
-  GlobalIndexType cellIndex = partitionLocalCellIndex(cellID);
+  int partitionNumber     = partitionForCellID(cellID);
+  GlobalIndexType cellIndex = partitionLocalCellIndex(cellID, partitionNumber);
   ElementType* elemType = _elementTypeForCell[cellID].get();
 
   for (PartitionIndexType i=0; i<partitionNumber; i++) {
@@ -284,8 +287,10 @@ PartitionIndexType GlobalDofAssignment::partitionForCellID( GlobalIndexType cell
   return _partitionForCellID[ cellID ];
 }
 
-IndexType GlobalDofAssignment::partitionLocalCellIndex(GlobalIndexType cellID) {
-  int partitionNumber     = Teuchos::GlobalMPISession::getRank();
+IndexType GlobalDofAssignment::partitionLocalCellIndex(GlobalIndexType cellID, int partitionNumber) {
+  if (partitionNumber == -1) {
+    partitionNumber     = Teuchos::GlobalMPISession::getRank();
+  }
 
   ElementType* elemType = _elementTypeForCell[cellID].get();
   vector<GlobalIndexType> cellIDsOfType = _cellIDsForElementType[partitionNumber][elemType];

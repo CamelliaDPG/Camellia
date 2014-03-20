@@ -41,6 +41,11 @@
 
 #include "IndexType.h"
 
+#include "Epetra_SerialSymDenseMatrix.h"
+#include "Epetra_SerialSpdDenseSolver.h"
+
+#include "SerialDenseWrapper.h"
+
 LinearTermPtr RieszRep::getRHS(){
   return _rhs;
 }
@@ -107,12 +112,13 @@ void RieszRep::computeRieszRep(int cubatureEnrichment){
     _ip->computeInnerProductMatrix(ipMatrix,testOrderingPtr, basisCache);
 
     Epetra_SerialDenseMatrix rhsVector(numTestDofs,1);
-    Epetra_SerialDenseMatrix R_V(numTestDofs,numTestDofs);
+    Epetra_SerialSymDenseMatrix R_V(Copy,
+                                    &ipMatrix(0,0,0),
+                                    ipMatrix.dimension(2), // stride -- fc stores in row-major order (a.o.t. SDM)
+                                    ipMatrix.dimension(2));
+
     for (int i = 0;i<numTestDofs;i++){
       rhsVector(i,0) = rhsValues(0,i);
-      for (int j = 0;j<numTestDofs;j++){
-        R_V(i,j) = ipMatrix(0,i,j);
-      }
     }
     Epetra_SerialDenseMatrix rhsVectorCopy = rhsVector;
     rhsValues.clear();
@@ -120,20 +126,36 @@ void RieszRep::computeRieszRep(int cubatureEnrichment){
       cout << "rhs vector values for cell " << cellID << " are = " << rhsVector << endl;
     }
     
-    Epetra_SerialDenseSolver solver;
+    Epetra_SerialSpdDenseSolver solver;
     Epetra_SerialDenseMatrix rieszRepDofs(numTestDofs,1);
     solver.SetMatrix(R_V);
     solver.SetVectors(rieszRepDofs, rhsVector);        
 
-    bool equilibrated = false;
+    
     if ( solver.ShouldEquilibrate() ) {
-      solver.EquilibrateMatrix();
-      solver.EquilibrateRHS();
-      equilibrated = true;
+      solver.FactorWithEquilibration(true);
+      solver.SolveToRefinedSolution(false);
     }
-    solver.Solve();
-    if (equilibrated) 
-      solver.UnequilibrateLHS();   
+
+    int result = solver.Factor();
+    if (result != 0) {
+      cout << "RieszRep::computeRieszRep: Factor failed with code " << result << endl;
+    }
+    
+//    {
+//      Teuchos::Array<int> dim(2);
+//      dim[0] = numTestDofs;
+//      dim[1] = numTestDofs;
+//      FieldContainer<double> ipMatrixView(dim,&ipMatrix(0,0,0));
+//      cout << "RieszRep: about to solve with numTestDofs = " << numTestDofs << ".  Debugging: outputting ip matrix to rrIPMatrix.dat.\n";
+//      SerialDenseWrapper::writeMatrixToMatlabFile("rrIPMatrix.dat", ipMatrixView);
+//    }
+    
+    int success = solver.Solve();
+    
+    if (success != 0) {
+      cout << "RieszRep::computeRieszRep: Solve FAILED with error: " << success << endl;
+    }
 
     Epetra_SerialDenseMatrix normSq(1,1);
     rieszRepDofs.Multiply(true,rhsVectorCopy, normSq); // equivalent to e^T * R_V * e    

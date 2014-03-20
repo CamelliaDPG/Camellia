@@ -411,8 +411,8 @@ SubCellDofIndexInfo GDAMinimumRule::getOwnedGlobalDofIndices(GlobalIndexType cel
   DofOrderingPtr trialOrdering = _elementTypeForCell[cellID]->trialOrderPtr;
   map<int, VarPtr> trialVars = _varFactory.trialVars();
   
-  GlobalIndexType globalDofIndex = _globalCellDofOffsets[cellID]; // our first globalDofIndex
-  
+  GlobalIndexType globalDofIndex = _globalCellDofOffsets[cellID]; // this cell's first globalDofIndex
+
   for (map<int, VarPtr>::iterator varIt = trialVars.begin(); varIt != trialVars.end(); varIt++) {
     VarPtr var = varIt->second;
     bool isL2Var = (var->space() == L2) || (var->space() == VECTOR_L2);
@@ -552,7 +552,7 @@ LocalDofMapperPtr GDAMinimumRule::getDofMapper(GlobalIndexType cellID, CellConst
   map< GlobalIndexType, SubCellDofIndexInfo > otherDofIndexInfoCache; // local lookup, to avoid a bunch of redundant calls to getOwnedGlobalDofIndices
   
   for (int d=0; d<=spaceDim; d++) {
-    int scCount = (d != spaceDim) ? topo->getSubcellCount(d) : 1; // TODO: figure out whether the spaceDim special case is needed...
+    int scCount = topo->getSubcellCount(d);
     for (int scord=0; scord<scCount; scord++) {
       if (dofIndexInfo[d].find(scord) == dofIndexInfo[d].end()) { // this one not yet filled in
         pair<GlobalIndexType, GlobalIndexType> owningCellInfo = constraints.owningCellIDForSubcell[d][scord];
@@ -567,6 +567,19 @@ LocalDofMapperPtr GDAMinimumRule::getDofMapper(GlobalIndexType cellID, CellConst
         SubCellDofIndexInfo owningDofIndexInfo = otherDofIndexInfoCache[owningCellID];
         dofIndexInfo[d][scord] = owningDofIndexInfo[d][owningCellScord];
       }
+      // DEBUGGING:
+//      if (cellID==20) {
+//        int rank = Teuchos::GlobalMPISession::getRank();
+//        cout << "RANK " << rank << ", cellID 20's global dof indices for d = " << d;
+//        cout << ", scord = " << scord << endl;
+//        map<int, VarPtr> trialVars = _varFactory.trialVars();
+//        for (map<int, VarPtr>::iterator varIt = trialVars.begin(); varIt != trialVars.end(); varIt++) {
+//          VarPtr var = varIt->second;
+//          ostringstream varLabel;
+//          varLabel << "RANK " << rank << ", var " << var->name();
+//          Camellia::print(varLabel.str(), dofIndexInfo[d][scord][var->ID()]);
+//        }
+//      }
     }
   }
   
@@ -657,8 +670,8 @@ LocalDofMapperPtr GDAMinimumRule::getDofMapper(GlobalIndexType cellID, CellConst
       vector<GlobalIndexType> globalDofOrdinals = dofIndexInfo[spaceDim][0][var->ID()];
       if (!omitVarEntry) {
         if (basisDofOrdinals.size() > 0) {
-//          cout << "getDofMapper: for var " << var->ID() << ", adding volume sub-basis dofMapper for " << basisDofOrdinals.size() << "  local dofOrdinals";
-//          cout << ", mapping to " << globalDofOrdinals.size() << " global dof ordinals.\n";
+//          cout << "RANK " << Teuchos::GlobalMPISession::getRank() << ": getDofMapper: on cell " << cellID << " for var " << var->ID() << ", adding volume sub-basis dofMapper for " << basisDofOrdinals.size() << "  local dofOrdinals";
+//          cout << ", mapping to " << globalDofOrdinals.size() << " global dof ordinals: ";
 //          cout << "( ";
 //          for (set<unsigned>::iterator ordIt=basisDofOrdinals.begin(); ordIt != basisDofOrdinals.end(); ordIt++) {
 //            cout << *ordIt << " ";
@@ -749,8 +762,8 @@ LocalDofMapperPtr GDAMinimumRule::getDofMapper(GlobalIndexType cellID, CellConst
             if (!omitSideEntry && !omitVarEntry) {
               volumeBasisMap.push_back(SubBasisDofMapper::subBasisDofMapper(basisDofOrdinals, globalDofOrdinals, constraintMatrixSideInterior));
             }
-//            cout << "getDofMapper: for var " << var->ID() << " on side " << sideOrdinal << ", adding volume sub-basis dofMapper for " << basisDofOrdinals.size() << "  local dofOrdinals";
-//            cout << ", mapping to " << globalDofOrdinals.size() << " global dof ordinals.\n";
+//            cout << "RANK " << Teuchos::GlobalMPISession::getRank() << ": getDofMapper: on cell " << cellID << " for var " << var->ID() << " on side " << sideOrdinal << ", adding volume sub-basis dofMapper for " << basisDofOrdinals.size() << "  local dofOrdinals";
+//            cout << ", mapping to " << globalDofOrdinals.size() << " global dof ordinals: ";
 //            cout << "( ";
 //            for (set<unsigned>::iterator ordIt=basisDofOrdinals.begin(); ordIt != basisDofOrdinals.end(); ordIt++) {
 //              cout << *ordIt << " ";
@@ -791,8 +804,8 @@ LocalDofMapperPtr GDAMinimumRule::getDofMapper(GlobalIndexType cellID, CellConst
             if (!omitSideEntry && !omitVarEntry) {
               sideBasisMap.push_back(SubBasisDofMapper::subBasisDofMapper(basisDofOrdinals, globalDofOrdinals, constraintMatrixSide));
             }
-//            cout << "getDofMapper: for var " << var->ID() << " on side " << sideOrdinal << ", adding side sub-basis dofMapper for " << basisDofOrdinals.size() << "  local dofOrdinals";
-//            cout << ", mapping to " << globalDofOrdinals.size() << " global dof ordinals.\n";
+//            cout << "RANK " << Teuchos::GlobalMPISession::getRank() << ": getDofMapper: on cell " << cellID << " for var " << var->ID() << " on side " << sideOrdinal << ", adding side sub-basis dofMapper for " << basisDofOrdinals.size() << "  local dofOrdinals";
+//            cout << ", mapping to " << globalDofOrdinals.size() << " global dof ordinals: ";
 //            cout << "( ";
 //            for (set<unsigned>::iterator ordIt=basisDofOrdinals.begin(); ordIt != basisDofOrdinals.end(); ordIt++) {
 //              cout << *ordIt << " ";
@@ -906,34 +919,34 @@ LocalDofMapperPtr GDAMinimumRule::getDofMapper(GlobalIndexType cellID, CellConst
                   if (!omitSideEntry && !omitVarEntry) {
                     volumeBasisMap.push_back(SubBasisDofMapper::subBasisDofMapper(scBasisOrdinals, globalDofOrdinals, constraintMatrixSubcell));
                   }
-                  //                    cout << "getDofMapper: for var " << var->ID() << " on side " << sideOrdinal << ", adding volume sub-basis dofMapper (for subcell) for " << basisDofOrdinals.size() << "  local dofOrdinals";
-                  //                    cout << ", mapping to " << globalDofOrdinals.size() << " global dof ordinals.\n";
-                  //                    cout << "( ";
-                  //                    for (set<unsigned>::iterator ordIt=scBasisOrdinals.begin(); ordIt != scBasisOrdinals.end(); ordIt++) {
-                  //                      cout << *ordIt << " ";
-                  //                    }
-                  //                    cout << ") ---> ( ";
-                  //                    for (vector<unsigned>::iterator ordIt=globalDofOrdinals.begin(); ordIt != globalDofOrdinals.end(); ordIt++) {
-                  //                      cout << *ordIt << " ";
-                  //                    }
-                  //                    cout << ")\n";
+//                  cout << "RANK " << Teuchos::GlobalMPISession::getRank() << ": getDofMapper: on cell " << cellID << " for var " << var->ID() << " on side " << sideOrdinal << ", adding volume sub-basis dofMapper (for subcell) for " << basisDofOrdinals.size() << "  local dofOrdinals";
+//                  cout << ", mapping to " << globalDofOrdinals.size() << " global dof ordinals: ";
+//                  cout << "( ";
+//                  for (set<unsigned>::iterator ordIt=scBasisOrdinals.begin(); ordIt != scBasisOrdinals.end(); ordIt++) {
+//                    cout << *ordIt << " ";
+//                  }
+//                  cout << ") ---> ( ";
+//                  for (vector<unsigned>::iterator ordIt=globalDofOrdinals.begin(); ordIt != globalDofOrdinals.end(); ordIt++) {
+//                    cout << *ordIt << " ";
+//                  }
+//                  cout << ")\n";
                 }
               } else {
                 if (scBasisOrdinals.size() > 0) {
                   if (!omitSideEntry && !omitVarEntry) {
                     sideBasisMap.push_back(SubBasisDofMapper::subBasisDofMapper(scBasisOrdinals, globalDofOrdinals, constraintMatrixSubcell));
                   }
-                  //                    cout << "getDofMapper: for var " << var->ID() << " on side " << sideOrdinal << ", adding side sub-basis dofMapper (for subcell) for " << basisDofOrdinals.size() << "  local dofOrdinals";
-                  //                    cout << ", mapping to " << globalDofOrdinals.size() << " global dof ordinals.\n";
-                  //                    cout << "( ";
-                  //                    for (set<unsigned>::iterator ordIt=scBasisOrdinals.begin(); ordIt != scBasisOrdinals.end(); ordIt++) {
-                  //                      cout << *ordIt << " ";
-                  //                    }
-                  //                    cout << ") ---> ( ";
-                  //                    for (vector<unsigned>::iterator ordIt=globalDofOrdinals.begin(); ordIt != globalDofOrdinals.end(); ordIt++) {
-                  //                      cout << *ordIt << " ";
-                  //                    }
-                  //                    cout << ")\n";
+//                  cout << "RANK " << Teuchos::GlobalMPISession::getRank() << ": getDofMapper: on cell " << cellID << " for var " << var->ID() << " on side " << sideOrdinal << ", adding side sub-basis dofMapper (for subcell) for " << basisDofOrdinals.size() << "  local dofOrdinals";
+//                  cout << ", mapping to " << globalDofOrdinals.size() << " global dof ordinals: ";
+//                  cout << "( ";
+//                  for (set<unsigned>::iterator ordIt=scBasisOrdinals.begin(); ordIt != scBasisOrdinals.end(); ordIt++) {
+//                    cout << *ordIt << " ";
+//                  }
+//                  cout << ") ---> ( ";
+//                  for (vector<unsigned>::iterator ordIt=globalDofOrdinals.begin(); ordIt != globalDofOrdinals.end(); ordIt++) {
+//                    cout << *ordIt << " ";
+//                  }
+//                  cout << ")\n";
                 }
               }
               
@@ -953,6 +966,8 @@ LocalDofMapperPtr GDAMinimumRule::getDofMapper(GlobalIndexType cellID, CellConst
     }
   }
   
+//  int rank = Teuchos::GlobalMPISession::getRank();
+//  if (rank==0) cout << "Creating LocalDofMapper for cell " << cellID << endl;
   return Teuchos::rcp( new LocalDofMapper(trialOrdering,volumeMap,sideMaps,varIDToMap,sideOrdinalToMap) );
 }
 
@@ -1001,11 +1016,11 @@ void GDAMinimumRule::rebuildLookups() {
   determineActiveElements(); // call to super: constructs cell partitionings
   
   int rank = Teuchos::GlobalMPISession::getRank();
+//  cout << "GDAMinimumRule: Rebuilding lookups on rank " << rank << endl;
   vector<GlobalIndexType> myCellIDs = _partitions[rank];
   
   map<int, VarPtr> trialVars = _varFactory.trialVars();
   
-  _partitionDofCount = 0; // how many dofs we own locally
   _cellDofOffsets.clear(); // within the partition, offsets for the owned dofs in cell
   
   int spaceDim = _meshTopology->getSpaceDim();
@@ -1015,6 +1030,8 @@ void GDAMinimumRule::rebuildLookups() {
   // and I've done a reasonable job only doing them when we need the result, but they still are brute force searches.  By tweaking
   // the design of MeshTopology and Cell to take better advantage of regularities (or just to store better lookups), we should be able to do better.
   // But in the interest of avoiding wasting development time on premature optimization, I'm leaving it as is for now...
+  
+  _partitionDofCount = 0; // how many dofs we own locally
   for (vector<GlobalIndexType>::iterator cellIDIt = myCellIDs.begin(); cellIDIt != myCellIDs.end(); cellIDIt++) {
     GlobalIndexType cellID = *cellIDIt;
     _cellDofOffsets[cellID] = _partitionDofCount;
@@ -1146,6 +1163,7 @@ void GDAMinimumRule::rebuildLookups() {
     for (vector<GlobalIndexType>::iterator cellIDIt = rankCellIDs.begin(); cellIDIt != rankCellIDs.end(); cellIDIt++) {
       GlobalIndexType cellID = *cellIDIt;
       _globalCellDofOffsets[cellID] = globalCellIDDofOffsets[globalCellIndex];
+//      if (rank==numRanks-1) cout << "global dof offset for cell " << cellID << ": " << _globalCellDofOffsets[cellID] << endl;
       globalCellIndex++;
     }
   }

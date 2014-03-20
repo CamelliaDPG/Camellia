@@ -42,6 +42,8 @@
 #include "MeshTransformationFunction.h"
 #include "CamelliaCellTools.h"
 
+#include "Teuchos_GlobalMPISession.hpp"
+
 typedef FunctionSpaceTools fst;
 typedef Teuchos::RCP< FieldContainer<double> > FCPtr;
 typedef Teuchos::RCP< const FieldContainer<double> > constFCPtr;
@@ -684,8 +686,9 @@ void BasisCache::determineJacobian() {
     }
   }
   
-  CellTools::setJacobianInv(_cellJacobInv, _cellJacobian );
   CellTools::setJacobianDet(_cellJacobDet, _cellJacobian );
+//  cout << "On rank " << Teuchos::GlobalMPISession::getRank() << ", about to compute jacobian inverse for cellJacobian of size: " << _cellJacobian.size() << endl;
+  CellTools::setJacobianInv(_cellJacobInv, _cellJacobian );
   
   if (! Function::isNull(_transformationFxn) ) {
     BasisCachePtr thisPtr = Teuchos::rcp(this,false);
@@ -708,10 +711,10 @@ void BasisCache::determineJacobian() {
     } else {
       _transformationFxn->grad()->values( _cellJacobian, thisPtr );
     }
+    
+    CellTools::setJacobianInv(_cellJacobInv, _cellJacobian );
+    CellTools::setJacobianDet(_cellJacobDet, _cellJacobian );
   }
-  
-  CellTools::setJacobianInv(_cellJacobInv, _cellJacobian );
-  CellTools::setJacobianDet(_cellJacobDet, _cellJacobian );
 }
 
 void BasisCache::setPhysicalCellNodes(const FieldContainer<double> &physicalCellNodes, 
@@ -727,7 +730,7 @@ void BasisCache::setPhysicalCellNodes(const FieldContainer<double> &physicalCell
   // Compute cell Jacobians, their inverses and their determinants
   
   int numCubPoints = isSideCache() ? _cubPointsSideRefCell.dimension(0) : _cubPoints.dimension(0);
-  
+
   // compute physicalCubaturePoints, the transformed cubature points on each cell:
   determinePhysicalPoints(); // when using _transformationFxn, important to have physical points before Jacobian is computed
 //  cout << "physicalCellNodes:\n" << physicalCellNodes;

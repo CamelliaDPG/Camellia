@@ -435,6 +435,20 @@ bool FunctionTests::functionsAgree(FunctionPtr f1, FunctionPtr f2, BasisCachePtr
 bool FunctionTests::testPolarizedFunctions() {
   bool success = true;
   
+  // redo _testPoints to avoid 0 point (which might cause a division by 0??)
+  static const int NUM_POINTS_1D = 10;
+  double xVals[NUM_POINTS_1D] = {-1.0,-0.8,-0.6,-.4,-.2,0.1,0.2,0.4,0.6,0.8};
+  double yVals[NUM_POINTS_1D] = {-0.8,-0.6,-.4,-.2,0.1,0.2,0.4,0.6,0.8,1.0};
+  
+  _testPoints = FieldContainer<double>(NUM_POINTS_1D*NUM_POINTS_1D,2);
+  for (int i=0; i<NUM_POINTS_1D; i++) {
+    for (int j=0; j<NUM_POINTS_1D; j++) {
+      _testPoints(i*NUM_POINTS_1D + j, 0) = xVals[i];
+      _testPoints(i*NUM_POINTS_1D + j, 1) = yVals[j];
+    }
+  }
+  _basisCache->setRefCellPoints(_testPoints);
+  
   // take f = r cos theta.  Then: f==x, df/dx == 1, df/dy == 0
   FunctionPtr x = Teuchos::rcp( new Xn(1) );
   FunctionPtr y = Teuchos::rcp( new Yn(1) );
@@ -551,6 +565,21 @@ bool FunctionTests::testQuotientRule() {
   FunctionPtr f_prime = f->dx();
   
   FunctionPtr f_prime_expected = f - 2 * x * exp_x / (x2 * x2);
+  
+  
+  // redo _testPoints to avoid 0 point (which would cause a division by 0)
+  static const int NUM_POINTS_1D = 10;
+  double xVals[NUM_POINTS_1D] = {-1.0,-0.8,-0.6,-.4,-.2,0.1,0.2,0.4,0.6,0.8};
+  double yVals[NUM_POINTS_1D] = {-0.8,-0.6,-.4,-.2,0.1,0.2,0.4,0.6,0.8,1.0};
+
+  _testPoints = FieldContainer<double>(NUM_POINTS_1D*NUM_POINTS_1D,2);
+  for (int i=0; i<NUM_POINTS_1D; i++) {
+    for (int j=0; j<NUM_POINTS_1D; j++) {
+      _testPoints(i*NUM_POINTS_1D + j, 0) = xVals[i];
+      _testPoints(i*NUM_POINTS_1D + j, 1) = yVals[j];
+    }
+  }
+  _basisCache->setRefCellPoints(_testPoints);
   
   if (! functionsAgree(f_prime, f_prime_expected,
                        _basisCache) ) {

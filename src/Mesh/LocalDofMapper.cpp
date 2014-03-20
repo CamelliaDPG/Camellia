@@ -7,6 +7,7 @@
 //
 
 #include "LocalDofMapper.h"
+#include <Teuchos_GlobalMPISession.hpp>
 
 void LocalDofMapper::filterData(const vector<int> dofIndices, const FieldContainer<double> &data, FieldContainer<double> &filteredData) {
   int dofCount = dofIndices.size();
@@ -154,7 +155,9 @@ LocalDofMapper::LocalDofMapper(DofOrderingPtr dofOrdering, map< int, BasisMap > 
   _volumeMaps = volumeMaps;
   _sideMaps = sideMaps;
   set<GlobalIndexType> globalIndices;
-//  cout << "Creating local dof mapper.  Volume Map info:\n";
+//  int rank = Teuchos::GlobalMPISession::getRank();
+//  int numProcs = Teuchos::GlobalMPISession::getNProc();
+//  if (rank==numProcs-1) cout << "Creating local dof mapper.  Volume Map info:\n";
   for (map< int, BasisMap >::iterator volumeMapIt = _volumeMaps.begin(); volumeMapIt != _volumeMaps.end(); volumeMapIt++) {
     BasisMap basisMap = volumeMapIt->second;
     for (vector<SubBasisDofMapperPtr>::iterator subBasisMapIt = basisMap.begin(); subBasisMapIt != basisMap.end(); subBasisMapIt++) {
@@ -162,30 +165,7 @@ LocalDofMapper::LocalDofMapper(DofOrderingPtr dofOrdering, map< int, BasisMap > 
       globalIndices.insert(subBasisGlobalIndices.begin(),subBasisGlobalIndices.end());
       
 //      // print a little report:
-//      set<unsigned> localOrdinalFilter = (*subBasisMapIt)->basisDofOrdinalFilter();
-//      cout << "sub-basis map--local dof ordinal filter: ";
-//      for (set<unsigned>::iterator dofOrdinalIt=localOrdinalFilter.begin(); dofOrdinalIt != localOrdinalFilter.end(); dofOrdinalIt++) {
-//        cout << *dofOrdinalIt << " ";
-//      }
-//      cout << endl;
-//      cout << "sub-basis map--global dof ordinals: ";
-//      for (vector<GlobalIndexType>::iterator globalDofIndexIt=subBasisGlobalIndices.begin(); globalDofIndexIt != subBasisGlobalIndices.end(); globalDofIndexIt++) {
-//        cout << *globalDofIndexIt << " ";
-//      }
-//      cout << endl;
-//      cout << endl;
-    }
-  }
-//  cout << "Creating local dof mapper.  Side Map info:\n";
-  for (int sideOrdinal=0; sideOrdinal<_sideMaps.size(); sideOrdinal++) {
-//    cout << "Side ordinal " << sideOrdinal << endl;
-    for (map< int, BasisMap >::iterator sideMapIt = _sideMaps[sideOrdinal].begin(); sideMapIt != _sideMaps[sideOrdinal].end(); sideMapIt++) {
-      BasisMap basisMap = sideMapIt->second;
-      for (vector<SubBasisDofMapperPtr>::iterator subBasisMapIt = basisMap.begin(); subBasisMapIt != basisMap.end(); subBasisMapIt++) {
-        vector<GlobalIndexType> subBasisGlobalIndices = (*subBasisMapIt)->mappedGlobalDofOrdinals();
-        globalIndices.insert(subBasisGlobalIndices.begin(),subBasisGlobalIndices.end());
-        
-//        // print a little report:
+//      if (rank==numProcs-1) {
 //        set<unsigned> localOrdinalFilter = (*subBasisMapIt)->basisDofOrdinalFilter();
 //        cout << "sub-basis map--local dof ordinal filter: ";
 //        for (set<unsigned>::iterator dofOrdinalIt=localOrdinalFilter.begin(); dofOrdinalIt != localOrdinalFilter.end(); dofOrdinalIt++) {
@@ -198,6 +178,33 @@ LocalDofMapper::LocalDofMapper(DofOrderingPtr dofOrdering, map< int, BasisMap > 
 //        }
 //        cout << endl;
 //        cout << endl;
+//      }
+    }
+  }
+//  if (rank==numProcs-1) cout << "Creating local dof mapper.  Side Map info:\n";
+  for (int sideOrdinal=0; sideOrdinal<_sideMaps.size(); sideOrdinal++) {
+//    if (rank==numProcs-1) cout << "Side ordinal " << sideOrdinal << endl;
+    for (map< int, BasisMap >::iterator sideMapIt = _sideMaps[sideOrdinal].begin(); sideMapIt != _sideMaps[sideOrdinal].end(); sideMapIt++) {
+      BasisMap basisMap = sideMapIt->second;
+      for (vector<SubBasisDofMapperPtr>::iterator subBasisMapIt = basisMap.begin(); subBasisMapIt != basisMap.end(); subBasisMapIt++) {
+        vector<GlobalIndexType> subBasisGlobalIndices = (*subBasisMapIt)->mappedGlobalDofOrdinals();
+        globalIndices.insert(subBasisGlobalIndices.begin(),subBasisGlobalIndices.end());
+        
+//        // print a little report:
+//        if (rank==numProcs-1) {
+//          set<unsigned> localOrdinalFilter = (*subBasisMapIt)->basisDofOrdinalFilter();
+//          cout << "sub-basis map--local dof ordinal filter: ";
+//          for (set<unsigned>::iterator dofOrdinalIt=localOrdinalFilter.begin(); dofOrdinalIt != localOrdinalFilter.end(); dofOrdinalIt++) {
+//            cout << *dofOrdinalIt << " ";
+//          }
+//          cout << endl;
+//          cout << "sub-basis map--global dof ordinals: ";
+//          for (vector<GlobalIndexType>::iterator globalDofIndexIt=subBasisGlobalIndices.begin(); globalDofIndexIt != subBasisGlobalIndices.end(); globalDofIndexIt++) {
+//            cout << *globalDofIndexIt << " ";
+//          }
+//          cout << endl;
+//          cout << endl;
+//        }
       }
     }
   }

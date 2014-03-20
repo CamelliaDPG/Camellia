@@ -357,6 +357,7 @@ FieldContainer<double> filterValues(FieldContainer<double> &basisValues, set<uns
   int fieldDimOrdinal = includesCellDimension ? 1 : 0;
   dim[fieldDimOrdinal] = dofOrdinalFilter.size();
   FieldContainer<double> filteredValues(dim);
+  if (dofOrdinalFilter.size() == 0) return filteredValues; // empty container
   int valuesPerField = filteredValues.size() / dofOrdinalFilter.size();
   double *filteredValue = &filteredValues[0];
   for (set<unsigned>::iterator dofOrdinalIt=dofOrdinalFilter.begin(); dofOrdinalIt != dofOrdinalFilter.end(); dofOrdinalIt++) {

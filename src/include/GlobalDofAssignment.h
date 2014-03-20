@@ -98,7 +98,7 @@ public:
   virtual IndexType localDofCount() = 0; // local to the MPI node
   
   PartitionIndexType partitionForCellID( GlobalIndexType cellID );
-  virtual IndexType partitionLocalCellIndex(GlobalIndexType cellID);
+  virtual IndexType partitionLocalCellIndex(GlobalIndexType cellID, int partitionNumber = -1); // partitionNumber == -1 means use MPI rank as partitionNumber
   
   virtual PartitionIndexType partitionForGlobalDofIndex( GlobalIndexType globalDofIndex ) = 0;
   

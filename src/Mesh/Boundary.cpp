@@ -44,6 +44,8 @@
 #include "BC.h"
 #include "BCFunction.h"
 
+#include "Teuchos_GlobalMPISession.hpp"
+
 Boundary::Boundary() {
   
 }
@@ -76,10 +78,15 @@ void Boundary::buildLookupTables() {
   //cout << "# Boundary entries: " << _boundaryElements.size() << ":\n";
   for (entryIt=_boundaryElements.begin(); entryIt!=_boundaryElements.end(); entryIt++) {
     GlobalIndexType cellID = entryIt->first;
-    TEUCHOS_TEST_FOR_EXCEPTION(cellID < 0, std::invalid_argument, "cellID should be >= 0.");
+    TEUCHOS_TEST_FOR_EXCEPTION(cellID == -1, std::invalid_argument, "cellID should != -1.");
     Teuchos::RCP< Element > elemPtr = _mesh->getElement(cellID);
     unsigned sideIndex = entryIt->second;
     ElementTypePtr elemTypePtr = elemPtr->elementType();
+    GlobalIndexType globalCellIndex = elemPtr->globalCellIndex();
+    if (globalCellIndex == -1) {
+      cout << "ERROR: globalCellIndex == -1 for cellID " << cellID << endl;
+    }
+    TEUCHOS_TEST_FOR_EXCEPTION(globalCellIndex == -1, std::invalid_argument, "globalCellIndex should != -1.");
     _boundaryElementsByType[elemTypePtr.get()].push_back( make_pair( elemPtr->globalCellIndex(), sideIndex ) );
     _boundaryCellIDs[elemTypePtr.get()].push_back( elemPtr->cellID() );
 //    cout << "Boundary::buildLookupTables(): cellID:\t" << elemPtr->cellID() << "\t sideOrdinal:\t" << sideIndex << endl;
@@ -236,11 +243,13 @@ void Boundary::bcsToImpose( map<  GlobalIndexType, double > &globalDofIndicesAnd
         int numCells = dimensions[0];
         int numPoints = dimensions[1];
         int spaceDim = dimensions[2];
+
         for (int localCellIndex = 0; localCellIndex<numCells; localCellIndex++) {
           GlobalIndexType cellIndex = physicalCellIndicesPerSide[sideIndex][localCellIndex];
           for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
             for (int dim=0; dim<spaceDim; dim++) {
-              physicalCellNodesForSide(localCellIndex,ptIndex,dim) = physicalCellNodes(cellIndex,ptIndex,dim);
+              double value = physicalCellNodes(cellIndex,ptIndex,dim); // 2 lines for debugging
+              physicalCellNodesForSide(localCellIndex,ptIndex,dim) = value;
             }
           }
         }

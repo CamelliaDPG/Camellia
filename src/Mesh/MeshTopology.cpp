@@ -365,6 +365,11 @@ set< pair<IndexType, unsigned> > MeshTopology::getActiveBoundaryCells() { // (ce
       }
       if (_activeCells.find(cellInfo.first) != _activeCells.end()) {
         boundaryCells.insert(cellInfo);
+        // DEBUGGING:
+//        if (getCell(cellInfo.first)->isParent()) {
+//          cout << "ERROR: cell is parent, but is stored as an active cell in the mesh...\n";
+//          TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "cell is parent, but is stored as an active cell in the mesh...");
+//        }
       }
     } else if (cellCount > 1) {
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "boundary side has more than 1 cell!");

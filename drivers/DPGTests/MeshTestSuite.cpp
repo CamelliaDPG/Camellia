@@ -438,7 +438,7 @@ bool MeshTestSuite::testFluxNorm() {
 }
 
 bool MeshTestSuite::testSacadoExactSolution() {
-  double tol = 1.6e-9; // had to increase for triangles, and again for single-point imposition.
+  double tol = 6.6e-9; // had to increase for triangles, and again for single-point imposition, and again after the switch to Cholesky solve.
   bool success = true;
   
   FieldContainer<double> quadPoints(4,2);
