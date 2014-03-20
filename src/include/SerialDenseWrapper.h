@@ -15,6 +15,9 @@
 #include "Epetra_SerialDenseSolver.h"
 #include "Epetra_DataAccess.h"
 
+#include "Epetra_SerialSymDenseMatrix.h"
+#include "Epetra_SerialSpdDenseSolver.h"
+
 class SerialDenseWrapper {
   static void transposeSquareMatrix(FieldContainer<double> &A) {
     int rows = A.dimension(0), cols = A.dimension(1);
@@ -137,7 +140,7 @@ public:
     }
   }
 
-  static void solveSystemMultipleRHS(FieldContainer<double> &x, FieldContainer<double> &A, FieldContainer<double> &b, bool useATranspose = false){
+  static int solveSystemMultipleRHS(FieldContainer<double> &x, FieldContainer<double> &A, FieldContainer<double> &b, bool useATranspose = false){
     // solves Ax = b, where
     // A = (N,N)
     // x, b = (N)
@@ -154,6 +157,7 @@ public:
     int info = solver.SetVectors(xVectors,bVectors);
     if (info!=0){
       cout << "solveSystem: failed to SetVectors with error " << info << endl;
+      return info;
     }
     
     bool equilibrated = false;
@@ -166,16 +170,68 @@ public:
     info = solver.Solve();
     if (info!=0){
       cout << "solveSystem: failed to solve with error " << info << endl;
+      return info;
     }
     
     if (equilibrated) {
       int successLocal = solver.UnequilibrateLHS();
       if (successLocal != 0) {
         cout << "solveSystem: unequilibration FAILED with error: " << successLocal << endl;
+        return successLocal;
       }
     }
     
     convertSDMToFC(x,xVectors);
+    return 0;
+  }
+  
+  static int solveSPDSystemMultipleRHS(FieldContainer<double> &x, FieldContainer<double> &A_SPD, FieldContainer<double> &b){
+    // solves Ax = b, where
+    // A = (N,N)
+    // x, b = (N)
+    Epetra_SerialSpdDenseSolver solver;
+    
+    int N = A_SPD.dimension(0);
+    int nRHS = b.dimension(1);
+    
+    int result = 0;
+    
+    Epetra_SerialSymDenseMatrix AMatrix(Copy, &A_SPD(0,0),
+                                          N, // stride -- fc stores in row-major order (a.o.t. SDM)
+                                          N);
+    
+    Epetra_SerialDenseMatrix bVectors = convertFCToSDM(b);
+    Epetra_SerialDenseMatrix xVectors(N,nRHS);
+    
+    solver.SetMatrix(AMatrix);
+    int info = solver.SetVectors(xVectors,bVectors);
+    if (info!=0){
+      result = info;
+      cout << "solveSPDSystemMultipleRHS: failed to SetVectors with error " << info << endl;
+      return result;
+    }
+    
+    if ( solver.ShouldEquilibrate() ) {
+      solver.FactorWithEquilibration(true);
+      solver.SolveToRefinedSolution(false); // false: don't use iterative refinements...
+    }
+    info = solver.Factor();
+    if (info != 0) {
+      result = info;
+      cout << "solveSPDSystemMultipleRHS: Factor failed with code " << result << endl;
+      return result;
+    }
+    
+    info = solver.Solve();
+    
+    if (info != 0) {
+      cout << "BilinearForm::optimalTestWeights: Solve FAILED with error: " << info << endl;
+      result = info;
+    }
+    
+    convertSDMToFC(x,xVectors);
+    
+    return result;
   }
 
   static double getMatrixConditionNumber(FieldContainer<double> &A) {
@@ -200,7 +256,7 @@ public:
     
     for (int i = 0;i<N;i++){
       for (int j = 0;j<M;j++){
-	matrixFile << A(i,j) << " ";
+        matrixFile << A(i,j) << " ";
       }
       matrixFile << endl;
     }

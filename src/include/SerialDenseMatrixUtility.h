@@ -31,7 +31,7 @@ class SerialDenseMatrixUtility {
   }
   
 public:
-  static void solveSystem(FieldContainer<double> &x, FieldContainer<double> &A, FieldContainer<double> &b, bool useATranspose = false) {
+  static int solveSystem(FieldContainer<double> &x, FieldContainer<double> &A, FieldContainer<double> &b, bool useATranspose = false) {
     // solves Ax = b, where
     // A = (N,N)
     // b = N
@@ -60,6 +60,7 @@ public:
     int info = solver.SetVectors(xVector,bVector);
     if (info!=0){
       cout << "solveSystem: failed to SetVectors with error " << info << endl;
+      return info;
     }
     
     bool equilibrated = false;
@@ -72,12 +73,14 @@ public:
     info = solver.Solve();
     if (info!=0){
       cout << "solveSystem: failed to solve with error " << info << endl;
+      return info;
     }
     
     if (equilibrated) {
       int successLocal = solver.UnequilibrateLHS();
       if (successLocal != 0) {
         cout << "solveSystem: unequilibration FAILED with error: " << successLocal << endl;
+        return successLocal;
       }
     }
     
@@ -89,6 +92,7 @@ public:
     if (! useATranspose) {
       transposeSquareMatrix(A); // FCs are in row-major order, so we swap for compatibility with SDM
     }
+    return 0;
   }
 
   static void solveSystemMultipleRHS(FieldContainer<double> &x, FieldContainer<double> &A, FieldContainer<double> &b, bool useATranspose = false){
@@ -142,6 +146,7 @@ public:
     int info = solver.SetVectors(xVectors,bVectors);
     if (info!=0){
       cout << "solveSystem: failed to SetVectors with error " << info << endl;
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "failed to SetVectors");
     }
     
     bool equilibrated = false;

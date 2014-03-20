@@ -181,184 +181,77 @@ int BilinearForm::optimalTestWeights(FieldContainer<double> &optimalTestWeights,
   this->stiffnessMatrix(stiffnessMatrix, elemType, cellSideParities, stiffnessBasisCache);
 //  cout << "trialOrdering:\n" << *trialOrdering;
   
-  BilinearFormUtility::transposeFCMatrices(stiffnessMatrixT, stiffnessMatrix);
+//  BilinearFormUtility::transposeFCMatrices(stiffnessMatrixT, stiffnessMatrix);
   
   //cout << "stiffnessMatrixT: " << stiffnessMatrixT << endl;
   //cout << "stiffnessMatrix:" << stiffnessMatrix << endl;
   
-  if ((! _useSPDSolveForOptimalTestFunctions) && (!_useExtendedPrecisionSolveForOptimalTestFunctions)) {
-    Epetra_SerialDenseSolver solver;
-    
-    int solvedAll = 0;
-    
-    for (int cellIndex=0; cellIndex < numCells; cellIndex++) {
-      // changed to Copy from View for debugging...
-      Epetra_SerialDenseMatrix ipMatrixT(Copy,
-                                         &innerProductMatrix(cellIndex,0,0),
-                                         innerProductMatrix.dimension(2), // stride -- fc stores in row-major order (a.o.t. SDM)
-                                         innerProductMatrix.dimension(2),innerProductMatrix.dimension(1));
-      
-      Epetra_SerialDenseMatrix stiffness(Copy,
-                                         &stiffnessMatrixT(cellIndex,0,0),
-                                         stiffnessMatrixT.dimension(2), // stride
-                                         stiffnessMatrixT.dimension(2),stiffnessMatrixT.dimension(1));
-      
-      Epetra_SerialDenseMatrix optimalWeightsT(numTestDofs, numTrialDofs);
-      
-      
-      solver.SetMatrix(ipMatrixT);
-      //    solver.SolveWithTranspose(true); // not that it should matter -- ipMatrix should be symmetric
-      int successLocal = solver.SetVectors(optimalWeightsT, stiffness);
-      
-      if (successLocal != 0) {
-        cout << "computeOptimalTest: failed to SetVectors with error " << successLocal << endl;
-      }
-      
-      // DEBUGGING:
-      {
-        Teuchos::Array<int> dim(2);
-        dim[0] = innerProductMatrix.dimension(1);
-        dim[1] = innerProductMatrix.dimension(2);
-        
-        FieldContainer<double> ipView(dim,&innerProductMatrix(cellIndex,0,0));
-        cout << "Debugging in optimal test weight solve.  Writing matrix to Matlab file ipMatrix.dat.\n";
-        SerialDenseWrapper::writeMatrixToMatlabFile("ipMatrix.dat", ipView);
-      }
-      
-      bool equilibrated = false;
-      if ( solver.ShouldEquilibrate() ) {
-        solver.EquilibrateMatrix();
-        solver.EquilibrateRHS();
-        equilibrated = true;
-      }
-      
-      successLocal = solver.Solve();
-
-      /*
-      bool reportConditionNumber = true;
-      if (reportConditionNumber) {
-	double rcond;
-	solver.ReciprocalConditionEstimate(rcond);
-	cout << "1-norm condition number estimate = " << 1.0/rcond << endl;
-      }
-      */
-      
-      if (successLocal != 0) {
-        cout << "computeOptimalTest: Solve FAILED with error: " << successLocal << endl;
-        solvedAll = successLocal;
-      }
-      
-      if (equilibrated) {
-        successLocal = solver.UnequilibrateLHS();
-        if (successLocal != 0) {
-          cout << "computeOptimalTest: unequilibration FAILED with error: " << successLocal << endl;
-          solvedAll = successLocal;
-        }
-      }
-      
-      for (int i=0; i<optimalTestWeights.dimension(1); i++) {
-        for (int j=0; j<optimalTestWeights.dimension(2); j++) {
-          optimalTestWeights(cellIndex,i,j) = optimalWeightsT(j,i);
-        }
-      }
-      
-      // double oneNorm = ipMatrixT.OneNorm();
-      
-      //cout << "computeOptimalTest: ipMatrix.oneNorm = " << oneNorm << endl;
-      
-    }
-    return solvedAll;
-  } else if (_useSPDSolveForOptimalTestFunctions && !_useExtendedPrecisionSolveForOptimalTestFunctions) {
-    Epetra_SerialSpdDenseSolver solver;
-    
-    int solvedAll = 0;
-    
-    for (int cellIndex=0; cellIndex < numCells; cellIndex++) {
-      // changed to Copy from View for debugging...
-      Epetra_SerialSymDenseMatrix ipMatrixT(Copy,
-                                            &innerProductMatrix(cellIndex,0,0),
-                                            innerProductMatrix.dimension(2), // stride -- fc stores in row-major order (a.o.t. SDM)
-                                            innerProductMatrix.dimension(2));
-      
-      Epetra_SerialDenseMatrix stiffness(Copy,
-                                         &stiffnessMatrixT(cellIndex,0,0),
-                                         stiffnessMatrixT.dimension(2), // stride
-                                         stiffnessMatrixT.dimension(2),stiffnessMatrixT.dimension(1));
-      
-      Epetra_SerialDenseMatrix optimalWeightsT(numTestDofs, numTrialDofs);
-      
-      
-      solver.SetMatrix(ipMatrixT);
-      //    solver.SolveWithTranspose(true); // not that it should matter -- ipMatrix should be symmetric
-      int successLocal = solver.SetVectors(optimalWeightsT, stiffness);
-      
-      if (successLocal != 0) {
-        cout << "BilinearForm::optimalTestWeights: failed to SetVectors with error " << successLocal << endl;
-      }
-      
-      if ( solver.ShouldEquilibrate() ) {
-        solver.FactorWithEquilibration(true);
-        solver.SolveToRefinedSolution(_useIterativeRefinementsWithSPDSolve);
-      }
-      int result = solver.Factor();
+  int solvedAll = 0;
+  
+  FieldContainer<double> optimalWeightsT(numTestDofs, numTrialDofs);
+  Teuchos::Array<int> localIPDim(2);
+  localIPDim[0] = numTestDofs;
+  localIPDim[1] = numTestDofs;
+  Teuchos::Array<int> localStiffnessDim(2);
+  localStiffnessDim[0] = stiffnessMatrix.dimension(1);
+  localStiffnessDim[1] = stiffnessMatrix.dimension(2);
+  
+  for (int cellIndex=0; cellIndex < numCells; cellIndex++) {
+    int result = 0;
+    FieldContainer<double> cellIPMatrix(localIPDim, &innerProductMatrix(cellIndex,0,0));
+    FieldContainer<double> cellStiffness(localStiffnessDim, &stiffnessMatrix(cellIndex,0,0));
+    if (_useSPDSolveForOptimalTestFunctions && !_useExtendedPrecisionSolveForOptimalTestFunctions) {
+      result = SerialDenseWrapper::solveSPDSystemMultipleRHS(optimalWeightsT, cellIPMatrix, cellStiffness);
       if (result != 0) {
-        cout << "BilinearForm::optimalTestWeights: Factor failed with code " << result << endl;
+        // may be that we're not SPD numerically
+        cout << "During optimal test weight solution, encountered IP matrix that's not numerically SPD.  Solving with LU factorization instead of Cholesky.\n";
+        result = SerialDenseWrapper::solveSystemMultipleRHS(optimalWeightsT, cellIPMatrix, cellStiffness);
       }
+    } else if ((! _useSPDSolveForOptimalTestFunctions) && (!_useExtendedPrecisionSolveForOptimalTestFunctions)) {
+      SerialDenseWrapper::solveSystemMultipleRHS(optimalWeightsT, cellIPMatrix, cellStiffness);
+    } else { // _useExtendedPrecisionSolveForOptimalTestFunctions == true
+      typedef long double DBL;
+      typedef ublas::row_major  ORI;
+      int gramSize = numTestDofs;
+      ublas::matrix<DBL, ORI> A (gramSize, gramSize);
+      ublas::matrix<DBL, ORI> L (gramSize, gramSize);
+      ublas::vector<DBL> x (gramSize);
       
-      successLocal = solver.Solve();
-      
-      if (successLocal != 0) {
-        cout << "BilinearForm::optimalTestWeights: Solve FAILED with error: " << successLocal << endl;
-        solvedAll = successLocal;
-      }
-      
-      for (int i=0; i<optimalTestWeights.dimension(1); i++) {
-        for (int j=0; j<optimalTestWeights.dimension(2); j++) {
-          optimalTestWeights(cellIndex,i,j) = optimalWeightsT(j,i);
-        }
-      }
-      
-      // double oneNorm = ipMatrixT.OneNorm();
-      
-      //cout << "computeOptimalTest: ipMatrix.oneNorm = " << oneNorm << endl;
-      
-    } 
-    return solvedAll;
-  } else { // _useExtendedPrecisionSolveForOptimalTestFunctions == true
-    int solvedAll = 0;
-    typedef long double DBL;
-    typedef ublas::row_major  ORI;
-    int gramSize = numTestDofs;
-    ublas::matrix<DBL, ORI> A (gramSize, gramSize);
-    ublas::matrix<DBL, ORI> L (gramSize, gramSize);
-    ublas::vector<DBL> x (gramSize);
-    
-    for (int cellIndex=0; cellIndex < numCells; cellIndex++) {
       // copy the inner product for this cell into matrix A
       // (could optimize this using pointer arithmetic)
       for (int i=0; i<gramSize; i++) {
         for (int j=0; j<gramSize; j++) {
-          A(i,j) = innerProductMatrix(cellIndex,i,j);
+          A(i,j) = cellIPMatrix(i,j);
         }
       }
       size_t res = cholesky_decompose(A, L);
-      if (res != 0) { // failure: communicate by setting solvedAll
-        solvedAll = res;
+      if (res != 0) { // failure: communicate by setting result
+        result = res;
       }
       // now solve for each rhs corresponding to the stiffness matrix columns for this cell
       for (int j=0; j<numTrialDofs; j++) {
-        // copy from transposed stiffness matrix:
+        // copy from stiffness matrix:
         for (int i=0; i<gramSize; i++) {
-          x(i) = stiffnessMatrixT(cellIndex,j,i);
+          x(i) = cellStiffness(i,j);
         }
         cholesky_solve(L, x, ublas::lower());
         for (int i=0; i<gramSize; i++) {
-          optimalTestWeights(cellIndex,j,i) = x(i);
+          optimalWeightsT(i,j) = x(i);
         }
       }
     }
-    return solvedAll;
+    // copy/transpose the optimal test weights
+    for (int i=0; i<optimalTestWeights.dimension(1); i++) {
+      for (int j=0; j<optimalTestWeights.dimension(2); j++) {
+        optimalTestWeights(cellIndex,i,j) = optimalWeightsT(j,i);
+      }
+    }
+    if (result != 0) {
+      solvedAll = result;
+    }
   }
+
+  return solvedAll;
 }
 
 void BilinearForm::stiffnessMatrix(FieldContainer<double> &stiffness, ElementTypePtr elemType,
