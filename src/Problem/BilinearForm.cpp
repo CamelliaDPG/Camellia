@@ -44,6 +44,8 @@
 
 #include "Intrepid_FunctionSpaceTools.hpp"
 
+#include "SerialDenseWrapper.h"
+
 #include "cholesky.hpp"
 
 static const string & S_OP_VALUE = "";
@@ -78,7 +80,7 @@ static const string & S_OP_UNKNOWN = "[UNKNOWN OPERATOR] ";
 set<int> BilinearForm::_normalOperators;
 
 BilinearForm::BilinearForm() {
-  _useSPDSolveForOptimalTestFunctions = false;
+  _useSPDSolveForOptimalTestFunctions = true;
   _useIterativeRefinementsWithSPDSolve = false;
   _useExtendedPrecisionSolveForOptimalTestFunctions = false;
   _warnAboutZeroRowsAndColumns = true;
@@ -210,6 +212,17 @@ int BilinearForm::optimalTestWeights(FieldContainer<double> &optimalTestWeights,
       
       if (successLocal != 0) {
         cout << "computeOptimalTest: failed to SetVectors with error " << successLocal << endl;
+      }
+      
+      // DEBUGGING:
+      {
+        Teuchos::Array<int> dim(2);
+        dim[0] = innerProductMatrix.dimension(1);
+        dim[1] = innerProductMatrix.dimension(2);
+        
+        FieldContainer<double> ipView(dim,&innerProductMatrix(cellIndex,0,0));
+        cout << "Debugging in optimal test weight solve.  Writing matrix to Matlab file ipMatrix.dat.\n";
+        SerialDenseWrapper::writeMatrixToMatlabFile("ipMatrix.dat", ipView);
       }
       
       bool equilibrated = false;
