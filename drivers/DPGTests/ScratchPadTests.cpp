@@ -223,6 +223,13 @@ void ScratchPadTests::teardown() {
 
 void ScratchPadTests::runTests(int &numTestsRun, int &numTestsPassed) {
   setup();
+  if (testIntegrateDiscontinuousFunction()) {
+    numTestsPassed++;
+  }
+  numTestsRun++;
+  teardown();
+  
+  setup();
   if (testPenaltyConstraints()) {
     numTestsPassed++;
   }
@@ -250,12 +257,6 @@ void ScratchPadTests::runTests(int &numTestsRun, int &numTestsPassed) {
   numTestsRun++;
   teardown();   
 
-  setup();
-  if (testIntegrateDiscontinuousFunction()) {
-    numTestsPassed++;
-  }
-  numTestsRun++;
-  teardown();   
      
   setup();
   if (testRieszIntegration()) {
@@ -563,7 +564,7 @@ bool ScratchPadTests::testIntegrateDiscontinuousFunction(){
 
   // for projections
   IPPtr ipL2 = Teuchos::rcp(new IP);
-  ip->addTerm(v);
+  ipL2->addTerm(v);
 
   // define trial variables
   VarPtr beta_n_u = varFactory.fluxVar("\\widehat{\\beta \\cdot n }");
