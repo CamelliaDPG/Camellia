@@ -926,7 +926,7 @@ bool LinearTermTests::testRieszInversion() {
 
   IPPtr sobolevIP = Teuchos::rcp(new IP);
   sobolevIP->addTerm(v);
-  //  sobolevIP->addTerm(tau);
+  sobolevIP->addTerm(tau);
 
   Teuchos::RCP<RieszRep> riesz = Teuchos::rcp(new RieszRep(myMesh, sobolevIP, integrand));  
   //  riesz->setPrintOption(true);
