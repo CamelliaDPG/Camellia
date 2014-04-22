@@ -35,6 +35,8 @@ public:
   LocalDofMapper(DofOrderingPtr dofOrdering, map< int, BasisMap > volumeMaps, vector< map< int, BasisMap > > sideMaps, int varIDToMap = -1, int sideOrdinalToMap = -1);
   FieldContainer<double> mapData(const FieldContainer<double> &localData, bool localToGlobal = true, bool accumulate = true); // can go global to local
   vector<GlobalIndexType> globalIndices();
+  
+  void printMappingReport();
 };
 typedef Teuchos::RCP<LocalDofMapper> LocalDofMapperPtr;
 

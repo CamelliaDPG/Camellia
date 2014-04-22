@@ -29,6 +29,8 @@ public:
   const set<unsigned> &basisDofOrdinalFilter();
   FieldContainer<double> mapData(bool transposeConstraint, FieldContainer<double> &localData);
   vector<GlobalIndexType> mappedGlobalDofOrdinals();
+  
+  const FieldContainer<double> &constraintMatrix();
 };
 
 #endif /* defined(__Camellia_debug__SubBasisDofMatrixMapper__) */

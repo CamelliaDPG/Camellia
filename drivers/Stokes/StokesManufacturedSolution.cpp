@@ -60,7 +60,7 @@ int StokesManufacturedSolution::pressureID() {
 }
 
 StokesManufacturedSolution::StokesManufacturedSolution(StokesManufacturedSolutionType type, 
-                                                       int polyOrder, StokesFormulationType formulationType) {
+                                                       int polyOrder, StokesFormulationType formulationType) : RHS(true), BC(true) { // true: legacy subclass
   // poly order here means that of u1, u2
   _polyOrder = polyOrder;
   _type = type;
@@ -389,10 +389,6 @@ void StokesManufacturedSolution::f_rhs(const FieldContainer<double> &physicalPoi
 }
 
 void StokesManufacturedSolution::rhs(int testVarID, const FieldContainer<double> &physicalPoints, FieldContainer<double> &values) {
-  int numCells = physicalPoints.dimension(0);
-  int numPoints = physicalPoints.dimension(1);
-  int spaceDim = physicalPoints.dimension(2);
-  
   if (_formulationType == VVP_CONFORMING) {
     TEUCHOS_TEST_FOR_EXCEPTION( testVarID != StokesVVPBilinearForm::Q_1, std::invalid_argument,
                        "for Stokes VVP, rhs called for testVarID other than Q_1" );
@@ -509,52 +505,4 @@ void StokesManufacturedSolution::imposeBC(int varID, FieldContainer<double> &phy
       imposeHere(cellIndex,ptIndex) = true;
     }
   }
-
-  /*bool imposeWithNormal = false;
-  if ( _formulationType == VVP_CONFORMING ) {
-    imposeWithNormal = ((varID == StokesVVPBilinearForm::U1_HAT) || (varID == StokesBilinearForm::U2_HAT)
-                        || (varID == StokesBilinearForm::P) )
-  } else {
-    imposeWithNormal = ((varID == StokesBilinearForm::U1_HAT) || (varID == StokesBilinearForm::U2_HAT)
-                        || (varID == StokesBilinearForm::P) );
-  }*/
-
-  
-  /*
-  if  {
-    for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
-      for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
-        FieldContainer<double> physicalPoint(pointDimensions,
-                                             &physicalPoints(cellIndex,ptIndex,0));
-        dirichletValues(cellIndex,ptIndex) = solutionValue(varID, physicalPoint);
-        if (varID == StokesBilinearForm::P) { // our singleton BC
-          imposeHere(cellIndex,ptIndex) = true; // let caller decide which point to use
-          // this is a bit awkward -- we need to impose at (0,0), for maximum fidelity to previous experiments
-          // (danger is that the BC won't be imposed...)
-          if (((abs(physicalPoint(0)) < 1e-12) && (abs(physicalPoint(1)) < 1e-12)) 
-              || (numCells<=2) ) {// this is REALLY cheating: using knowledge that we only fail to have node at origin if we have 1 cell (or 2, for triangles)
-            // stupid test: don't impose any pressure BC--how badly/how soon does this affect u solution?
-            imposeHere(cellIndex,ptIndex) = true;
-          } else {
-            //imposeHere(cellIndex,ptIndex) = true;
-            //cout << "not imposing pressure BC at (" << physicalPoint(0) << "," << physicalPoint(1) << ")" << endl;
-          }
-        } else {
-          imposeHere(cellIndex,ptIndex) = true; // for now, just impose everywhere...
-        }
-      }
-    }
-  } else if ((varID == StokesBilinearForm::U_N_HAT) || (varID == StokesBilinearForm::SIGMA1_N_HAT)
-             || (varID == StokesBilinearForm::SIGMA2_N_HAT) ) {
-    for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
-      for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
-        FieldContainer<double> physicalPoint(pointDimensions,
-                                             &physicalPoints(cellIndex,ptIndex,0));
-        FieldContainer<double> unitNormal(pointDimensions,
-                                          &unitNormals(cellIndex,ptIndex,0));
-        dirichletValues(cellIndex,ptIndex) = solutionValue(varID, physicalPoint, unitNormal);
-        imposeHere(cellIndex,ptIndex) = true; // for now, just impose everywhere...
-      }
-    }
-  }*/
 }

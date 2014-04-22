@@ -9,6 +9,10 @@
 #include "LocalDofMapper.h"
 #include <Teuchos_GlobalMPISession.hpp>
 
+#include "CamelliaDebugUtility.h"
+
+#include "SubBasisDofMatrixMapper.h"
+
 void LocalDofMapper::filterData(const vector<int> dofIndices, const FieldContainer<double> &data, FieldContainer<double> &filteredData) {
   int dofCount = dofIndices.size();
   if (data.rank()==1) {
@@ -328,4 +332,31 @@ FieldContainer<double> LocalDofMapper::mapData(const FieldContainer<double> &dat
     }
   }
   return mappedData;
+}
+
+void LocalDofMapper::printMappingReport() {
+//  map< int, BasisMap > _volumeMaps; // keys are var IDs (fields)
+//  vector< map< int, BasisMap > > _sideMaps; // outer index is side ordinal; map keys are var IDs
+  vector< map< int, BasisMap > > allMaps = _sideMaps; // side and volume taken together...
+  allMaps.insert(allMaps.begin(), _volumeMaps);
+  for (int i=0; i<allMaps.size(); i++)
+  {
+    map<int,BasisMap> basisMaps = allMaps[i];
+    if (i==0) cout << "###########  Volume Maps: ###########\n";
+    else cout << "###########  Side Ordinal " << i - 1 << " Maps: ###########  "<< endl;
+    for (map< int, BasisMap >::iterator mapIt = basisMaps.begin(); mapIt != basisMaps.end(); mapIt++)
+    {
+      int varID = mapIt->first;
+      cout << "***** varID " << varID << " ***** \n";
+      BasisMap basisMap = mapIt->second;
+      for (vector<SubBasisDofMapperPtr>::iterator subBasisMapIt = basisMap.begin(); subBasisMapIt != basisMap.end(); subBasisMapIt++) {
+        SubBasisDofMapperPtr subBasisDofMapper = *subBasisMapIt;
+        Camellia::print("local dof ordinals", subBasisDofMapper->basisDofOrdinalFilter());
+        Camellia::print("global ordinals   ", subBasisDofMapper->mappedGlobalDofOrdinals());
+        
+        SubBasisDofMatrixMapper * matrixMapper = (SubBasisDofMatrixMapper *) subBasisDofMapper.get();
+        cout << "constraint matrix:\n" << matrixMapper->constraintMatrix();
+      }
+    }
+  }
 }

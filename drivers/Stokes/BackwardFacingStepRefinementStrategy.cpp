@@ -20,15 +20,15 @@ void  BackwardFacingStepRefinementStrategy::clearCorners() {
 
 void BackwardFacingStepRefinementStrategy::refineCells(vector<int> &cellIDs) {
   Teuchos::RCP< Mesh > mesh = _solution->mesh();
-  set<int> triangleCellsToRefine;
-  set<int> quadCellsToRefine;
-  set<int> pCellsToRefine;
+  set<unsigned> triangleCellsToRefine;
+  set<unsigned> quadCellsToRefine;
+  set<unsigned> pCellsToRefine;
   
   int spaceDim = 2;
   FieldContainer<double> triangleVertices(3,spaceDim);
   FieldContainer<double> quadVertices(4,spaceDim);
   
-  vector<int> cellIDVector(1);
+  vector<unsigned> cellIDVector(1);
   for (vector< int >::iterator cellIDIt = cellIDs.begin();
        cellIDIt != cellIDs.end(); cellIDIt++){
     int cellID = *cellIDIt;

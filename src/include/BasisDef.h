@@ -301,93 +301,9 @@ namespace Camellia {
     this->_rangeDimension = rangeDimension;
     this->_rangeRank = rangeRank;
     this->_functionSpace = fs;
-  }
-
-  template<class Scalar, class ArrayScalar>
-  int IntrepidBasisWrapper<Scalar,ArrayScalar>::getCardinality() const {
-    return _intrepidBasis->getCardinality();
-  }
-
-  template<class Scalar, class ArrayScalar>
-  int IntrepidBasisWrapper<Scalar,ArrayScalar>::getDegree() const {
-    return _intrepidBasis->getDegree();
-  }
-
-  // domain info on which the basis is defined:
-
-  template<class Scalar, class ArrayScalar>
-  shards::CellTopology IntrepidBasisWrapper<Scalar,ArrayScalar>::domainTopology() const {
-    return _intrepidBasis->getBaseCellTopology();
-  }
-  template<class Scalar, class ArrayScalar>
-  std::set<int> IntrepidBasisWrapper<Scalar,ArrayScalar>::getSubcellDofs(int subcellDimStart, int subcellDimEnd) const {
-    shards::CellTopology cellTopo = _intrepidBasis->getBaseCellTopology();
-    std::set<int> indices;
-    for (int subcellDim = subcellDimStart; subcellDim <= subcellDimEnd; subcellDim++) {
-      int numSubcells = cellTopo.getSubcellCount(subcellDim);
-      for (int subcellIndex=0; subcellIndex<numSubcells; subcellIndex++) {
-        // check that there is at least one dof for the subcell before asking for the first one:
-        if (   (_intrepidBasis->getDofOrdinalData().size() > subcellDim)
-            && (_intrepidBasis->getDofOrdinalData()[subcellDim].size() > subcellIndex)
-            && (_intrepidBasis->getDofOrdinalData()[subcellDim][subcellIndex].size() > 0) ) {
-          int firstDofOrdinal = _intrepidBasis->getDofOrdinal(subcellDim, subcellIndex, 0);
-          int numDofs = _intrepidBasis->getDofTag(firstDofOrdinal)[3];
-          for (int dof=0; dof<numDofs; dof++) {
-            indices.insert(_intrepidBasis->getDofOrdinal(subcellDim, subcellIndex, dof));
-          }
-        }
-      }
-    }
-    return indices;
-  }
-
-  // dof ordinal subsets:
-  template<class Scalar, class ArrayScalar>
-  std::set<int> IntrepidBasisWrapper<Scalar,ArrayScalar>::dofOrdinalsForEdges(bool includeVertices) const {
-    int edgeDim = 1;
-    int subcellDimStart = includeVertices ? 0 : edgeDim;
-    return getSubcellDofs(subcellDimStart, edgeDim);
-  }
-  template<class Scalar, class ArrayScalar>
-  std::set<int> IntrepidBasisWrapper<Scalar,ArrayScalar>::dofOrdinalsForFaces(bool includeVerticesAndEdges) const {
-    int faceDim = 2;
-    int subcellDimStart = includeVerticesAndEdges ? 0 : faceDim;
-    return getSubcellDofs(subcellDimStart, faceDim);
-  }
-  template<class Scalar, class ArrayScalar>
-  std::set<int> IntrepidBasisWrapper<Scalar,ArrayScalar>::dofOrdinalsForInterior() const {
-    shards::CellTopology cellTopo = domainTopology();
-    int dim = cellTopo.getDimension();
-    return getSubcellDofs(dim, dim);
-  }
-  template<class Scalar, class ArrayScalar>
-  std::set<int> IntrepidBasisWrapper<Scalar,ArrayScalar>::dofOrdinalsForVertices() const {
-    int vertexDim = 0;
-    return getSubcellDofs(vertexDim, vertexDim);
-  }
-  
-  template<class Scalar, class ArrayScalar>
-  int IntrepidBasisWrapper<Scalar, ArrayScalar>::getDofOrdinal(const int subcDim,
-                                                const int subcOrd,
-                                                const int subcDofOrd) const {
-    return _intrepidBasis->getDofOrdinal(subcDim,subcOrd,subcDofOrd);
-  }
-  
-  template<class Scalar,class ArrayScalar>
-  const std::vector<std::vector<std::vector<int> > > & IntrepidBasisWrapper<Scalar, ArrayScalar>::getDofOrdinalData( ) const
-  {
-    return _intrepidBasis->getDofOrdinalData();
-  }
-  
-  
-  template<class Scalar, class ArrayScalar>
-  const std::vector<int>&  IntrepidBasisWrapper<Scalar, ArrayScalar>::getDofTag(int dofOrd) const {
-    return _intrepidBasis->getDofTag(dofOrd);
-  }
-  
-  template<class Scalar, class ArrayScalar>
-  const std::vector<std::vector<int> > & IntrepidBasisWrapper<Scalar, ArrayScalar>::getAllDofTags() const {
-    return _intrepidBasis->getAllDofTags();
+    this->_basisCardinality = _intrepidBasis->getCardinality();
+    this->_basisDegree = _intrepidBasis->getDegree();
+    this->_domainTopology = _intrepidBasis->getBaseCellTopology();
   }
 
   template<class Scalar, class ArrayScalar>
@@ -395,6 +311,38 @@ namespace Camellia {
     // we leave tag initialization to the _intrepidBasis object, but we'll keep a copy ourselves:
     this->_tagToOrdinal = _intrepidBasis->getDofOrdinalData();
     this->_ordinalToTag = _intrepidBasis->getAllDofTags();
+    
+    bool isL2 =  (this->_functionSpace == IntrepidExtendedTypes::FUNCTION_SPACE_HVOL)
+              || (this->_functionSpace == IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HVOL)
+              || (this->_functionSpace == IntrepidExtendedTypes::FUNCTION_SPACE_TENSOR_HVOL);
+
+    // if this is an L^2 basis (potentially wrapping a non-L^2 Intrepid basis--to date, Intrepid doesn't have any L^2 bases, so we usually use H^1 of one lower degree for L^2),
+    // then we should rework the data structures a bit...
+    if (isL2) {
+      std::vector<int> tag(4);
+      int domainDimension = this->domainTopology().getDimension();
+      this->_ordinalToTag = std::vector< std::vector<int> >(this->_basisCardinality);
+      this->_tagToOrdinal = std::vector<std::vector<std::vector<int> > >(domainDimension + 1);
+      this->_tagToOrdinal[domainDimension] = std::vector<std::vector<int> >(1);
+      this->_tagToOrdinal[domainDimension][0] = std::vector<int>(this->_basisCardinality);
+      
+      for (int d=0; d<this->_tagToOrdinal.size(); d++) {
+        for (int subcOrd=0; subcOrd < this->_tagToOrdinal[d].size(); subcOrd++) {
+          for (int subcDofOrd=0; subcDofOrd< this->_tagToOrdinal[d][subcOrd].size(); subcDofOrd++) {
+            this->_tagToOrdinal[d][subcOrd][subcDofOrd] = -1;
+          }
+        }
+      }
+      
+      for (int dofOrdinal = 0; dofOrdinal < this->_basisCardinality; dofOrdinal++) {
+        tag[0] = domainDimension; // dimension of the subcell
+        tag[1] = 0; // subcell ordinal
+        tag[2] = dofOrdinal; // ordinal of the dof relative to subcell
+        tag[3] = this->_basisCardinality; // total # of dofs associated with subcell
+        this->_ordinalToTag[dofOrdinal] = tag;
+        this->_tagToOrdinal[domainDimension][0][dofOrdinal] = dofOrdinal;
+      }
+    }
   }
   
   template<class Scalar, class ArrayScalar>

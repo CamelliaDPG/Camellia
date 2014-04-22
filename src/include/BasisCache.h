@@ -182,6 +182,8 @@ public:
   const Intrepid::FieldContainer<double> & getPhysicalCubaturePointsForSide(int sideOrdinal);
   const Intrepid::FieldContainer<double> & getCellSideParities();
   
+  const Intrepid::FieldContainer<double> & getCubatureWeights();
+  
   const Intrepid::FieldContainer<double> & getSideUnitNormals(int sideOrdinal);
   
   void setPhysicalCellNodes(const Intrepid::FieldContainer<double> &physicalCellNodes, const vector<GlobalIndexType> &cellIDs, bool createSideCacheToo);
@@ -190,6 +192,7 @@ public:
   // setRefCellPoints overwrites _cubPoints -- for when cubature is not your interest
   // (this comes up in imposeBC)
   void setRefCellPoints(const Intrepid::FieldContainer<double> &pointsRefCell);
+  void setRefCellPoints(const Intrepid::FieldContainer<double> &pointsRefCell, const Intrepid::FieldContainer<double> &cubatureWeights, const Intrepid::FieldContainer<double> &weightedMeasure);
   const Intrepid::FieldContainer<double> &getRefCellPoints();
   const Intrepid::FieldContainer<double> &getSideRefCellPointsInVolumeCoordinates();
   

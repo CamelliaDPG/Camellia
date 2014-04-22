@@ -255,6 +255,15 @@ public:
       }
     }
     
+    if (subcdim==cellTopo.getDimension()) {
+      if (subcord==0) { // i.e. the subcell is the cell itself
+        return subsubcord;
+      } else {
+        cout << "request for subcell of the same dimension as cell, but with subsubcord > 0.\n";
+        TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "request for subcell of the same dimension as cell, but with subsubcord > 0.");
+      }
+    }
+    
     CellTopoKey key = cellTopo.getKey();
     if (ordinalMaps.find(key) == ordinalMaps.end()) {
       // then we construct the map for this cellTopo

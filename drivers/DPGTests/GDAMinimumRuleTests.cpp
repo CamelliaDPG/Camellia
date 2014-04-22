@@ -17,10 +17,13 @@
 
 #include "Epetra_SerialComm.h"
 
+#include "SolutionExporter.h"
+
 #include "GnuPlotUtil.h"
 
-const static string S_GDAMinimumRule_U1 = "u_1";
-const static string S_GDAMinimumRule_U2 = "u_2";
+const static string S_GDAMinimumRuleTests_U1 = "u_1";
+const static string S_GDAMinimumRuleTests_U2 = "u_2";
+const static string S_GDAMinimumRuleTests_PHI = "\\phi";
 
 // boundary value for u
 class GDAMinimumRuleTests_U0 : public Function {
@@ -154,8 +157,8 @@ SolutionPtr GDAMinimumRuleTests::quadMeshSolutionStokesCavityFlow(bool useMinRul
   VarPtr t1_n = varFactory.fluxVar("\\widehat{t}_{1n}");
   VarPtr t2_n = varFactory.fluxVar("\\widehat{t}_{2n}");
   
-  VarPtr u1 = varFactory.fieldVar(S_GDAMinimumRule_U1, L2);
-  VarPtr u2 = varFactory.fieldVar(S_GDAMinimumRule_U2, L2);
+  VarPtr u1 = varFactory.fieldVar(S_GDAMinimumRuleTests_U1, L2);
+  VarPtr u2 = varFactory.fieldVar(S_GDAMinimumRuleTests_U2, L2);
   VarPtr sigma1 = varFactory.fieldVar("\\sigma_1", VECTOR_L2);
   VarPtr sigma2 = varFactory.fieldVar("\\sigma_2", VECTOR_L2);
   VarPtr p = varFactory.fieldVar("p");
@@ -228,6 +231,63 @@ SolutionPtr GDAMinimumRuleTests::quadMeshSolutionStokesCavityFlow(bool useMinRul
   return solution;
 }
 
+SolutionPtr GDAMinimumRuleTests::quadMeshSolutionPoissonExactSolution(bool useMinRule, int horizontalCells, int verticalCells, int H1Order, FunctionPtr phi_exact) {
+  // assumes that div u = 0, and p has zero average on the domain (a unit square).
+  
+  VarFactory varFactory;
+  VarPtr tau = varFactory.testVar("\\tau_1", HDIV);
+  VarPtr q = varFactory.testVar("q", HGRAD);
+  
+  VarPtr phi_hat = varFactory.traceVar("\\widehat{\\phi}");
+//  VarPtr phi_hat = varFactory.traceVar("\\widehat{\\phi}", L2);
+//  cout << "WARNING: temporarily using L^2 discretization for \\widehat{\\phi}.\n";
+  VarPtr psi_n = varFactory.fluxVar("\\widehat{\\psi}_{n}");
+  
+  VarPtr phi = varFactory.fieldVar(S_GDAMinimumRuleTests_PHI, L2);
+  VarPtr psi1 = varFactory.fieldVar("\\psi_1", L2);
+  VarPtr psi2 = varFactory.fieldVar("\\psi_2", L2);
+  
+  BFPtr bf = Teuchos::rcp( new BF(varFactory) );
+  
+  bf->addTerm(phi, tau->div());
+  bf->addTerm(psi1, tau->x());
+  bf->addTerm(psi2, tau->y());
+  bf->addTerm(-phi_hat, tau->dot_normal());
+  
+  bf->addTerm(-psi1, q->dx());
+  bf->addTerm(-psi2, q->dy());
+  bf->addTerm(psi_n, q);
+  
+  int testSpaceEnrichment = 2; //
+  double width = 1.0, height = 1.0;
+  
+  MeshPtr mesh;
+  if (useMinRule) {
+    mesh = MeshFactory::quadMeshMinRule(bf, H1Order, testSpaceEnrichment,
+                                        width, height,
+                                        horizontalCells, verticalCells);
+  } else {
+    mesh = MeshFactory::quadMesh(bf, H1Order, testSpaceEnrichment,
+                                 width, height,
+                                 horizontalCells, verticalCells);
+  }
+  
+  // rhs = f * v, where f = \Delta phi
+  RHSPtr rhs = RHS::rhs();
+  FunctionPtr f = phi_exact->dx()->dx() + phi_exact->dy()->dy();
+  rhs->addTerm(f * q);
+  
+  BCPtr bc = BC::bc();
+  SpatialFilterPtr boundary = SpatialFilter::allSpace();
+  bc->addDirichlet(phi_hat, boundary, phi_exact);
+
+  IPPtr graphNorm = bf->graphNorm();
+  
+  SolutionPtr solution = Solution::solution(mesh, bc, rhs, graphNorm);
+  
+  return solution;
+}
+
 SolutionPtr GDAMinimumRuleTests::quadMeshSolutionStokesExactSolution(bool useMinRule, int horizontalCells, int verticalCells, int H1Order,
                                                                      FunctionPtr u1_exact, FunctionPtr u2_exact, FunctionPtr p_exact) {
   // assumes that div u = 0, and p has zero average on the domain (a unit square).
@@ -244,8 +304,8 @@ SolutionPtr GDAMinimumRuleTests::quadMeshSolutionStokesExactSolution(bool useMin
   VarPtr t1_n = varFactory.fluxVar("\\widehat{t}_{1n}");
   VarPtr t2_n = varFactory.fluxVar("\\widehat{t}_{2n}");
   
-  VarPtr u1 = varFactory.fieldVar(S_GDAMinimumRule_U1, L2);
-  VarPtr u2 = varFactory.fieldVar(S_GDAMinimumRule_U2, L2);
+  VarPtr u1 = varFactory.fieldVar(S_GDAMinimumRuleTests_U1, L2);
+  VarPtr u2 = varFactory.fieldVar(S_GDAMinimumRuleTests_U2, L2);
   VarPtr sigma1 = varFactory.fieldVar("\\sigma_1", VECTOR_L2);
   VarPtr sigma2 = varFactory.fieldVar("\\sigma_2", VECTOR_L2);
   VarPtr p = varFactory.fieldVar("p");
@@ -316,6 +376,23 @@ SolutionPtr GDAMinimumRuleTests::quadMeshSolutionStokesExactSolution(bool useMin
 
 void GDAMinimumRuleTests::runTests(int &numTestsRun, int &numTestsPassed) {
   setup();
+  if (testHangingNodePoisson()) {
+    numTestsPassed++;
+  }
+  numTestsRun++;
+  teardown();
+  
+  //  cout << "testHangingNodePoisson complete.\n";
+  setup();
+  if (testHangingNodeStokes()) {
+    numTestsPassed++;
+  }
+  numTestsRun++;
+  teardown();
+  
+  //  cout << "testHangingNodeStokes complete.\n";
+  
+  setup();
   if (testMultiCellMesh()) {
     numTestsPassed++;
   }
@@ -325,22 +402,14 @@ void GDAMinimumRuleTests::runTests(int &numTestsRun, int &numTestsPassed) {
 //  cout << "testMultiCellMesh complete.\n";
   
   setup();
-  if (testHangingNode()) {
-    numTestsPassed++;
-  }
-  numTestsRun++;
-  teardown();
-  
-//  cout << "testHangingNode complete.\n";
-  
-  setup();
   if (testSingleCellMesh()) {
     numTestsPassed++;
   }
   numTestsRun++;
   teardown();
   
-//  cout << "testSingleCellMesh complete.\n";
+  //  cout << "testSingleCellMesh complete.\n";
+  
   
   setup();
   if (testHRefinements()) {
@@ -368,6 +437,7 @@ void GDAMinimumRuleTests::runTests(int &numTestsRun, int &numTestsPassed) {
   teardown();
   
 //  cout << "testLocalInterpretationConsistency complete.\n";
+
 }
 void GDAMinimumRuleTests::setup() {
   
@@ -415,7 +485,7 @@ bool GDAMinimumRuleTests::subTestCompatibleSolutionsAgree(int horizontalCells, i
 //    GnuPlotUtil::writeComputationalMeshSkeleton("stokesMesh", minRuleStokes->mesh());
   }
 
-  for (int testIndex=1; testIndex<2; testIndex++) { // just to distinguish between Stokes and Confusion
+  for (int testIndex=0; testIndex<2; testIndex++) { // just to distinguish between Stokes and Confusion
     
     bool isStokes = (testIndex == 1);
 
@@ -616,7 +686,46 @@ bool GDAMinimumRuleTests::testLocalInterpretationConsistency() {
   return success;
 }
 
-bool GDAMinimumRuleTests::testHangingNode() {
+bool GDAMinimumRuleTests::testHangingNodePoisson() {
+  bool success = true;
+  int horizontalCellsInitialMesh = 1, verticalCellsInitialMesh = 2;
+  int H1Order = 3;
+  
+  // exact solution: for now, we just use a linear phi
+  FunctionPtr x = Function::xn(1);
+  FunctionPtr y = Function::yn(1);
+  FunctionPtr phi_exact = x + y;
+  
+  SolutionPtr soln = quadMeshSolutionPoissonExactSolution(true, horizontalCellsInitialMesh, verticalCellsInitialMesh, H1Order, phi_exact);
+  
+  MeshPtr mesh = soln->mesh();
+  
+  set<GlobalIndexType> cellIDs;
+  cellIDs.insert(0);
+  mesh->hRefine(cellIDs, RefinementPattern::regularRefinementPatternQuad());
+  soln->solve();
+  
+  VarFactory vf = soln->mesh()->bilinearForm()->varFactory();
+  VarPtr phi = vf.fieldVar(S_GDAMinimumRuleTests_PHI);
+  
+  FunctionPtr phi_soln = Function::solution(phi, soln);
+  
+  FunctionPtr phi_err = phi_soln - phi_exact;
+  
+  VTKExporter solnExporter(soln,soln->mesh(),vf);
+  solnExporter.exportSolution("poissonSolution");
+  
+  double tol = 1e-12;
+  double phi_err_l2 = phi_err->l2norm(mesh);
+  if (phi_err_l2 > tol) {
+    success = false;
+    cout << "GDAMinimumRuleTests failure: for mesh with hanging node and exactly recoverable solution, phi error is " << phi_err_l2 << endl;
+  }
+  
+  return success;
+}
+
+bool GDAMinimumRuleTests::testHangingNodeStokes() {
   bool success = true;
   int horizontalCellsInitialMesh = 1, verticalCellsInitialMesh = 2;
   int H1Order = 3;
@@ -640,14 +749,18 @@ bool GDAMinimumRuleTests::testHangingNode() {
   soln->solve();
   
   VarFactory vf = soln->mesh()->bilinearForm()->varFactory();
-  VarPtr u1 = vf.fieldVar(S_GDAMinimumRule_U1);
-  VarPtr u2 = vf.fieldVar(S_GDAMinimumRule_U2);
+  VarPtr u1 = vf.fieldVar(S_GDAMinimumRuleTests_U1);
+  VarPtr u2 = vf.fieldVar(S_GDAMinimumRuleTests_U2);
   
   FunctionPtr u1_soln = Function::solution(u1, soln);
   FunctionPtr u2_soln = Function::solution(u2, soln);
   
   FunctionPtr u1_err = u1_soln - u1_exact;
   FunctionPtr u2_err = u2_soln - u2_exact;
+  
+  GnuPlotUtil::writeComputationalMeshSkeleton("/tmp/hangingNodeTestMesh", mesh, true); // true: label cells
+  VTKExporter solnExporter(soln,soln->mesh(),vf);
+  solnExporter.exportSolution("stokesExactSolution");
   
   double tol = 1e-13;
   double u1_err_l2 = u1_err->l2norm(mesh);
@@ -697,10 +810,10 @@ bool GDAMinimumRuleTests::testMultiCellMesh() {
   
   vector< MeshToTest > testList;
   
-  for (int polyOrder = 3; polyOrder < 5; polyOrder++) { // starting at 3 for now because that's the first one where we are getting a floating point error (divide by zero)
+  for (int polyOrder = 0; polyOrder < 3; polyOrder++) {
     int horizontalCells = 1, verticalCells = 2;
     MeshToTest meshParams = make_pair( make_pair(horizontalCells, verticalCells), polyOrder+1);
-//    testList.push_back(meshParams); // skipping this one for now
+    testList.push_back(meshParams);
     horizontalCells = 4;
     verticalCells = 2;
     meshParams = make_pair( make_pair(horizontalCells, verticalCells), polyOrder+1);
@@ -714,17 +827,17 @@ bool GDAMinimumRuleTests::testMultiCellMesh() {
     int verticalCells = dim.second;
     int H1Order = meshParams.second;
     
-    for (int numRefs = 1; numRefs < 2; numRefs++) {
-      cout << "About to run test for " << horizontalCells << " x " << verticalCells;
-      cout << ", k=" << H1Order - 1 << " mesh with " << numRefs << " refinements.\n";
+    for (int numRefs = 0; numRefs < 2; numRefs++) {
+//      cout << "About to run test for " << horizontalCells << " x " << verticalCells;
+//      cout << ", k=" << H1Order - 1 << " mesh with " << numRefs << " refinements.\n";
       if (! subTestCompatibleSolutionsAgree(horizontalCells, verticalCells, H1Order, numRefs) ) {
         cout << "For unrefined (compatible) " << horizontalCells << " x " << verticalCells;
         cout << " mesh with H1Order = " << H1Order;
         cout << " after " << numRefs << " refinements, max and min rules disagree.\n";
         success = false;
       }
-      cout << "Completed test for " << horizontalCells << " x " << verticalCells;
-      cout << ", k=" << H1Order - 1 << " mesh with " << numRefs << " refinements.\n";
+//      cout << "Completed test for " << horizontalCells << " x " << verticalCells;
+//      cout << ", k=" << H1Order - 1 << " mesh with " << numRefs << " refinements.\n";
     }
   }
   return success;

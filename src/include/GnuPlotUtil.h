@@ -14,6 +14,26 @@
 #include "ParametricCurve.h"
 
 class GnuPlotUtil {
+  static FieldContainer<double> cellCentroids(MeshTopology* meshTopo) {
+    // this only works on quads right now
+    
+    int spaceDim = meshTopo->getSpaceDim(); // not that this will really work in 3D...
+    int numActiveElements = meshTopo->activeCellCount();
+    
+    FieldContainer<double> cellCentroids(numActiveElements,spaceDim); // used for labelling cells
+    
+    set<IndexType> cellIDset = meshTopo->getActiveCellIndices();
+    vector<GlobalIndexType> cellIDs(cellIDset.begin(),cellIDset.end());
+    
+    for (int cellIndex=0; cellIndex<numActiveElements; cellIndex++) {
+      vector<double> cellCentroid = meshTopo->getCellCentroid(cellIDs[cellIndex]);
+      
+      for (int i=0; i<spaceDim; i++) {
+        cellCentroids(cellIndex,i) = cellCentroid[i];
+      }
+    }
+    return cellCentroids;
+  }
   static FieldContainer<double> cellCentroids(MeshPtr mesh) {
     // this only works on quads right now
     
@@ -72,11 +92,11 @@ class GnuPlotUtil {
   }
   
 public:
-  static void writeComputationalMeshSkeleton(const string &filePath, MeshPtr mesh, bool labelCells = false) {
+  static void writeComputationalMeshSkeleton(const string &filePath, MeshPtr mesh, bool labelCells = false, string rgbColor = "red", string title = "mesh") {
     FunctionPtr transformationFunction = mesh->getTransformationFunction();
     if (transformationFunction.get()==NULL) {
       // then the computational and exact meshes are the same: call the other method:
-      writeExactMeshSkeleton(filePath,mesh,2,labelCells);
+      writeExactMeshSkeleton(filePath,mesh,2,labelCells,rgbColor,title);
       return;
     }
     
@@ -165,7 +185,7 @@ public:
     fout << "# set size ratio -1\n";
     fout << "# set xrange [" << minX- 0.1*xDiff << ":" << maxX+0.1*xDiff << "] \n";
     fout << "# set yrange [" << minY- 0.1*yDiff << ":" << maxY+0.1*yDiff << "] \n";
-    fout << "# plot \"" << filePath << "\" using 1:2 title 'mesh' with lines\n";
+    fout << "# plot \"" << filePath << "\" using 1:2 title 'mesh' with lines lc rgb \"" << rgbColor << "\"\n";
     if (labelCells) {
       for (int i=0; i<cellIDs.size(); i++) {
         int cellID = cellIDs[i];
@@ -183,7 +203,7 @@ public:
     scriptOut << "set size ratio -1\n";
     scriptOut << "set xrange [" << minX- 0.1*xDiff << ":" << maxX+0.1*xDiff << "] \n";
     scriptOut << "set yrange [" << minY- 0.1*yDiff << ":" << maxY+0.1*yDiff << "] \n";
-    scriptOut << "plot \"" << filePath << "\" using 1:2 title 'mesh' with lines\n";
+    scriptOut << "plot \"" << filePath << "\" using 1:2 title 'mesh' with lines lc rgb \"" << rgbColor << "\"\n";
     if (labelCells) {
       for (int i=0; i<cellIDs.size(); i++) {
         int cellID = cellIDs[i];
@@ -201,8 +221,90 @@ public:
     scriptOut << "replot\n";
     scriptOut.close();
   }
+
+  static void writeExactMeshSkeleton(const string &filePath, MeshTopology* meshTopo, int numPointsPerEdge, bool labelCells=false, string rgbColor = "red", string title = "mesh") {
+    ofstream fout(filePath.c_str());
+    fout << setprecision(15);
+    
+    fout << "# Camellia GnuPlotUtil Mesh Points\n";
+    fout << "# x                  y\n";
+    
+    int numActiveElements = meshTopo->activeCellCount();
+    FieldContainer<double> cellCentroids;
+    if (labelCells) {
+      cellCentroids = GnuPlotUtil::cellCentroids(meshTopo);
+    }
+    
+    double minX = 1e10, minY = 1e10, maxX = -1e10, maxY = -1e10;
+    
+    set<IndexType> cellIDset = meshTopo->getActiveCellIndices();
+    vector<GlobalIndexType> cellIDs(cellIDset.begin(),cellIDset.end());
+    
+    for (int cellIndex=0; cellIndex<numActiveElements; cellIndex++) {
+      CellPtr cell = meshTopo->getCell(cellIDs[cellIndex]);
+      cellIDs.push_back(cell->cellIndex());
+      vector< ParametricCurvePtr > edgeCurves = meshTopo->parametricEdgesForCell(cell->cellIndex(), false);
+      for (int edgeIndex=0; edgeIndex < edgeCurves.size(); edgeIndex++) {
+        ParametricCurvePtr edge = edgeCurves[edgeIndex];
+        double t = 0;
+        double increment = 1.0 / (numPointsPerEdge - 1);
+        // last edge gets one extra point (to connect to first edge):
+        int thisEdgePoints = (edgeIndex < edgeCurves.size()-1) ? numPointsPerEdge-1 : numPointsPerEdge;
+        for (int i=0; i<thisEdgePoints; i++) {
+          double x, y;
+          edge->value(t,x,y);
+          fout << x << "   " << y << endl;
+          t += increment;
+          minX = min(x,minX);
+          minY = min(y,minY);
+          maxX = max(x,maxX);
+          maxY = max(y,maxY);
+        }
+      }
+      fout << endl; // line break to separate elements
+    }
+    
+    double xDiff = maxX - minX;
+    double yDiff = maxY - minY;
+    
+    fout << "# Plot with:\n";
+    fout << setprecision(2);
+    fout << "# set xrange [" << minX- 0.1*xDiff << ":" << maxX+0.1*xDiff << "] \n";
+    fout << "# set yrange [" << minY- 0.1*yDiff << ":" << maxY+0.1*yDiff << "] \n";
+    fout << "# plot \"" << filePath << "\" using 1:2 title '" << title << "' with lines lc rgb \"" << rgbColor << "\"\n";
+    if (labelCells) {
+      for (int i=0; i<numActiveElements; i++) {
+        int cellID = cellIDs[i];
+        fout << "# set label \"" << cellID << "\" at " << cellCentroids(i,0) << ",";
+        fout << cellCentroids(i,1) << " center " << endl;
+      }
+    }
+    fout.close();
+    
+    ofstream scriptOut((filePath + ".p").c_str());
+    scriptOut << "set size ratio -1\n";
+    scriptOut << "set xrange [" << minX- 0.1*xDiff << ":" << maxX+0.1*xDiff << "] \n";
+    scriptOut << "set yrange [" << minY- 0.1*yDiff << ":" << maxY+0.1*yDiff << "] \n";
+    scriptOut << "plot \"" << filePath << "\" using 1:2 title '" << title << "' with lines lc rgb \"" << rgbColor << "\"\n";
+    if (labelCells) {
+      for (int i=0; i<numActiveElements; i++) {
+        int cellID = cellIDs[i];
+        scriptOut << "set label \"" << cellID << "\" at " << cellCentroids(i,0) << ",";
+        scriptOut << cellCentroids(i,1) << " center " << endl;
+      }
+    }
+    scriptOut << "set terminal postscript eps color lw 1 \"Helvetica\" 20\n";
+    scriptOut << "set out '" << filePath << ".eps'\n";
+    //    scriptOut << "replot\n";
+    //    scriptOut << "set terminal png\n";
+    //    scriptOut << "set out '" << filePath << ".png'\n";
+    scriptOut << "replot\n";
+    scriptOut << "set term pop\n";
+    scriptOut << "replot\n";
+    scriptOut.close();
+  }
   
-  static void writeExactMeshSkeleton(const string &filePath, MeshPtr mesh, int numPointsPerEdge, bool labelCells=false) {
+  static void writeExactMeshSkeleton(const string &filePath, MeshPtr mesh, int numPointsPerEdge, bool labelCells=false, string rgbColor = "red", string title = "mesh") {
     ofstream fout(filePath.c_str());
     fout << setprecision(15);
     
@@ -251,7 +353,7 @@ public:
     fout << setprecision(2);
     fout << "# set xrange [" << minX- 0.1*xDiff << ":" << maxX+0.1*xDiff << "] \n";
     fout << "# set yrange [" << minY- 0.1*yDiff << ":" << maxY+0.1*yDiff << "] \n";
-    fout << "# plot \"" << filePath << "\" using 1:2 title 'mesh' with lines\n";
+    fout << "# plot \"" << filePath << "\" using 1:2 title '" << title << "' with lines lc rgb \"" << rgbColor << "\"\n";
     if (labelCells) {
       for (int i=0; i<numActiveElements; i++) {
         int cellID = cellIDs[i];
@@ -265,7 +367,7 @@ public:
     scriptOut << "set size ratio -1\n";
     scriptOut << "set xrange [" << minX- 0.1*xDiff << ":" << maxX+0.1*xDiff << "] \n";
     scriptOut << "set yrange [" << minY- 0.1*yDiff << ":" << maxY+0.1*yDiff << "] \n";
-    scriptOut << "plot \"" << filePath << "\" using 1:2 title 'mesh' with lines\n";
+    scriptOut << "plot \"" << filePath << "\" using 1:2 title '" << title << "' with lines lc rgb \"" << rgbColor << "\"\n";
     if (labelCells) {
       for (int i=0; i<numActiveElements; i++) {
         int cellID = cellIDs[i];

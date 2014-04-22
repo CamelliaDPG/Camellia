@@ -8,6 +8,9 @@
 
 #include "Cell.h"
 #include "RefinementPattern.h"
+#include "CamelliaCellTools.h"
+
+#include "GnuPlotUtil.h"
 
 vector< pair<GlobalIndexType, unsigned> > Cell::childrenForSide(unsigned sideIndex) {
   vector< pair<GlobalIndexType, unsigned> > childIndicesForSide;
@@ -88,6 +91,7 @@ unsigned Cell::childOrdinal(IndexType childIndex) {
 const vector< Teuchos::RCP< Cell > > &Cell::children() {
   return _children;
 }
+
 void Cell::setChildren(vector< Teuchos::RCP< Cell > > children) {
   _children = children;
   Teuchos::RCP< Cell > thisPtr = Teuchos::rcp( this, false ); // doesn't own memory
@@ -95,6 +99,7 @@ void Cell::setChildren(vector< Teuchos::RCP< Cell > > children) {
     (*childIt)->setParent(thisPtr);
   }
 }
+
 vector<unsigned> Cell::getChildIndices() {
   vector<unsigned> indices(_children.size());
   for (unsigned childOrdinal=0; childOrdinal<_children.size(); childOrdinal++) {
@@ -146,6 +151,18 @@ unsigned Cell::findSubcellOrdinal(unsigned subcdim, IndexType subcEntityIndex) {
     unsigned scEntityIndex = entityIndex(subcdim, scord);
     if (scEntityIndex == subcEntityIndex) {
       return scord;
+    }
+  }
+  return -1; // NOT FOUND
+}
+
+unsigned Cell::findSubcellOrdinalInSide(unsigned int subcdim, IndexType subcEntityIndex, unsigned sideOrdinal) {
+  int sideDim = _cellTopo->getDimension() - 1;
+  IndexType sideEntityIndex = entityIndex(sideDim, sideOrdinal);
+  int scCount = _meshTopo->getSubEntityCount(sideDim, sideEntityIndex, subcdim);
+  for (unsigned scordInSide=0; scordInSide < scCount; scordInSide++) {
+    if (subcEntityIndex == _meshTopo->getSubEntityIndex(sideDim, sideEntityIndex, subcdim, scordInSide)) {
+      return scordInSide;
     }
   }
   return -1; // NOT FOUND
@@ -206,11 +223,204 @@ RefinementBranch Cell::refinementBranchForSide(unsigned sideOrdinal) {
   return refBranch;
 }
 
+RefinementBranch Cell::refinementBranchForSubcell(unsigned subcdim, unsigned subcord) {
+  // if the given subcell is constrained by another cell, this method will return a RefinementBranch which has as its root
+  // this cell's ancestor that is compatible with the constraining cell, and as its leaf this cell.
+  IndexType subcellEntityIndex = entityIndex(subcdim, subcord);
+  IndexType constrainingEntityIndex = _meshTopo->getConstrainingEntityIndex(subcdim, subcellEntityIndex);
+
+  CellPtr currentAncestor = _meshTopo->getCell(_cellIndex);
+  vector< CellPtr > ancestors;
+  vector< unsigned > childOrdinals;
+  
+  while (subcellEntityIndex != constrainingEntityIndex) {
+    GlobalIndexType childCellIndex = currentAncestor->cellIndex();
+    currentAncestor = currentAncestor->getParent();
+    ancestors.push_back(currentAncestor);
+    vector< CellPtr > children = currentAncestor->children();
+    for (int i=0; i<children.size(); i++) {
+      if (children[i]->cellIndex() == childCellIndex) {
+        childOrdinals.push_back(i);
+        subcord = currentAncestor->refinementPattern()->mapSubcellOrdinalFromChildToParent(i, subcdim, subcord);
+        if (subcord==-1) {
+          cout << "Error: corresponding subcell not found in parent, even though the subcell is constrained...\n";
+          cout << "Subcell entity:\n";
+          _meshTopo->printEntityVertices(subcdim, subcellEntityIndex);
+          cout << "Constraining entity:\n";
+          _meshTopo->printEntityVertices(subcdim, constrainingEntityIndex);
+          TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "corresponding subcell not found in parent, even though the subcell is constrained...");
+        }
+        subcellEntityIndex = currentAncestor->entityIndex(subcdim, subcord);
+        break;
+      }
+    }
+    if (childOrdinals.size() != ancestors.size()) {
+      cout << "ERROR: child not found.\n";
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "ERROR: child not found.");
+    }
+  }
+  
+  RefinementBranch refBranch;
+  // now the ancestors and childOrdinals containers have the RefinementBranch info, in reverse order
+  unsigned ancestorCount = ancestors.size();
+  for (int i=ancestorCount-1; i >= 0; i--) {
+    refBranch.push_back(make_pair(ancestors[i]->refinementPattern().get(), childOrdinals[i]));
+  }
+  return refBranch;
+}
+
+unsigned Cell::ancestralPermutationForSubcell(unsigned subcdim, unsigned subcord) {
+  // if the given subcell is constrained by another cell, this method will return the subcell permutation of
+  // this cell's nearest ancestor that is compatible with the constraining cell.
+  IndexType subcellEntityIndex = entityIndex(subcdim, subcord);
+  IndexType constrainingEntityIndex = _meshTopo->getConstrainingEntityIndex(subcdim, subcellEntityIndex);
+  
+  CellPtr currentAncestor = _meshTopo->getCell(_cellIndex);
+  
+  while (subcellEntityIndex != constrainingEntityIndex) {
+    GlobalIndexType childCellIndex = currentAncestor->cellIndex();
+    currentAncestor = currentAncestor->getParent();
+    vector< CellPtr > children = currentAncestor->children();
+    for (int i=0; i<children.size(); i++) {
+      if (children[i]->cellIndex() == childCellIndex) {
+        subcord = currentAncestor->refinementPattern()->mapSubcellOrdinalFromChildToParent(i, subcdim, subcord);
+        subcellEntityIndex = currentAncestor->entityIndex(subcdim, subcord);
+        break;
+      }
+    }
+  }
+  
+  return currentAncestor->subcellPermutation(subcdim, subcord);
+}
+
+IndexType Cell::ancestralEntityIndexForSubcell(unsigned subcdim, unsigned subcord) {
+  // if the given subcell is constrained by another cell, this method will return the subcell permutation of
+  // this cell's nearest ancestor that is compatible with the constraining cell.
+  IndexType subcellEntityIndex = entityIndex(subcdim, subcord);
+  IndexType constrainingEntityIndex = _meshTopo->getConstrainingEntityIndex(subcdim, subcellEntityIndex);
+  
+  CellPtr currentAncestor = _meshTopo->getCell(_cellIndex);
+  
+  while (subcellEntityIndex != constrainingEntityIndex) {
+    GlobalIndexType childCellIndex = currentAncestor->cellIndex();
+    currentAncestor = currentAncestor->getParent();
+    vector< CellPtr > children = currentAncestor->children();
+    for (int i=0; i<children.size(); i++) {
+      if (children[i]->cellIndex() == childCellIndex) {
+        subcord = currentAncestor->refinementPattern()->mapSubcellOrdinalFromChildToParent(i, subcdim, subcord);
+        subcellEntityIndex = currentAncestor->entityIndex(subcdim, subcord);
+        break;
+      }
+    }
+  }
+  
+  return subcellEntityIndex;
+}
+
+CellPtr Cell::ancestralCellForSubcell(unsigned subcdim, unsigned subcord) {
+  // if the given subcell is constrained by another cell, this method will return this cell's nearest ancestor that is compatible with the constraining cell.
+  IndexType subcellEntityIndex = entityIndex(subcdim, subcord);
+  IndexType constrainingEntityIndex = _meshTopo->getConstrainingEntityIndex(subcdim, subcellEntityIndex);
+  
+  CellPtr currentAncestor = _meshTopo->getCell(_cellIndex);
+  
+  while (subcellEntityIndex != constrainingEntityIndex) {
+    GlobalIndexType childCellIndex = currentAncestor->cellIndex();
+    currentAncestor = currentAncestor->getParent();
+    vector< CellPtr > children = currentAncestor->children();
+    for (int i=0; i<children.size(); i++) {
+      if (children[i]->cellIndex() == childCellIndex) {
+        subcord = currentAncestor->refinementPattern()->mapSubcellOrdinalFromChildToParent(i, subcdim, subcord);
+        subcellEntityIndex = currentAncestor->entityIndex(subcdim, subcord);
+        break;
+      }
+    }
+  }
+  
+  return currentAncestor;
+}
+
+unsigned Cell::ancestralPermutationForSideSubcell(unsigned sideOrdinal, unsigned subcdim, unsigned subcordInSide) {
+  // if the given subcell is constrained by another cell, this method will return the subcell permutation of
+  // this cell's nearest ancestor that is compatible with the constraining cell.
+  
+  int sideDim = _cellTopo->getDimension() - 1;
+  unsigned subcordInCell = CamelliaCellTools::subcellOrdinalMap(*_cellTopo, sideDim, sideOrdinal, subcdim, subcordInSide);
+  
+  IndexType subcellEntityIndex = entityIndex(subcdim, subcordInCell);
+  IndexType constrainingEntityIndex = _meshTopo->getConstrainingEntityIndex(subcdim, subcellEntityIndex);
+  
+  CellPtr currentAncestor = _meshTopo->getCell(_cellIndex);
+  
+  while (subcellEntityIndex != constrainingEntityIndex) {
+    GlobalIndexType childCellIndex = currentAncestor->cellIndex();
+    currentAncestor = currentAncestor->getParent();
+    vector< CellPtr > children = currentAncestor->children();
+    for (int i=0; i<children.size(); i++) {
+      if (children[i]->cellIndex() == childCellIndex) {
+        RefinementPatternPtr sideRefinementPattern = currentAncestor->refinementPattern()->sideRefinementPatterns()[sideOrdinal];
+        unsigned sidePatternChildOrdinal = currentAncestor->refinementPattern()->mapVolumeChildOrdinalToSubcellChildOrdinal(subcdim, subcordInCell, i);
+        
+        subcordInCell = currentAncestor->refinementPattern()->mapSubcellOrdinalFromChildToParent(i, subcdim, subcordInCell);
+        subcordInSide = sideRefinementPattern->mapSubcellOrdinalFromChildToParent(sidePatternChildOrdinal, subcdim, subcordInSide);
+        
+        if (subcordInCell==-1) {
+          cout << "Error: corresponding subcell not found in parent, even though the subcell is constrained...\n";
+          cout << "Subcell entity:\n";
+          _meshTopo->printEntityVertices(subcdim, subcellEntityIndex);
+          cout << "Constraining entity:\n";
+          _meshTopo->printEntityVertices(subcdim, constrainingEntityIndex);
+          TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "corresponding subcell not found in parent, even though the subcell is constrained...");
+        }
+        
+        sideOrdinal = currentAncestor->refinementPattern()->mapSubcellOrdinalFromChildToParent(i, sideDim, sideOrdinal);
+        if (sideOrdinal==-1) {
+          cout << "Error: corresponding side not found in parent, even though the subcell is constrained...\n";
+          cout << "Subcell entity:\n";
+          _meshTopo->printEntityVertices(subcdim, subcellEntityIndex);
+          cout << "Constraining entity:\n";
+          _meshTopo->printEntityVertices(subcdim, constrainingEntityIndex);
+          
+//          writeExactMeshSkeleton(const string &filePath, MeshTopologyPtr meshTopo, int numPointsPerEdge, bool labelCells=false);
+          string filePath = "/tmp/failingMesh";
+          GnuPlotUtil::writeExactMeshSkeleton(filePath, _meshTopo, 2, true);
+          
+          TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "corresponding side not found in parent, even though the subcell is constrained...");
+        }
+        
+        subcellEntityIndex = currentAncestor->entityIndex(subcdim, subcordInCell);
+        break;
+      }
+    }
+  }
+  
+  return currentAncestor->sideSubcellPermutation(sideOrdinal,subcdim, subcordInSide);
+}
+
 RefinementPatternPtr Cell::refinementPattern() {
   return _refPattern;
 }
+
 void Cell::setRefinementPattern(RefinementPatternPtr refPattern) {
   _refPattern = refPattern;
+}
+
+unsigned Cell::sideSubcellPermutation(unsigned int sideOrdinal, unsigned int sideSubcdim, unsigned int sideSubcord) {
+  if (sideSubcdim==0) return 0; // no permutations / identity permutation for vertices
+  vector< IndexType > subcellVertexIndices; //
+  unsigned sideDim = _cellTopo->getDimension() - 1;
+  shards::CellTopology sideTopo = _cellTopo->getCellTopologyData(sideDim, sideOrdinal);
+  unsigned subcellNodeCount = sideTopo.getNodeCount(sideSubcdim, sideSubcord);
+  for (int nodeOrdinal=0; nodeOrdinal<subcellNodeCount; nodeOrdinal++) {
+    unsigned nodeInSide = sideTopo.getNodeMap(sideSubcdim, sideSubcord, nodeOrdinal);
+    unsigned nodeInCell = _cellTopo->getNodeMap(sideDim, sideOrdinal, nodeInSide);
+    subcellVertexIndices.push_back(_vertices[nodeInCell]);
+  }
+  unsigned subcellOrdinalInCell = CamelliaCellTools::subcellOrdinalMap(*_cellTopo, sideDim, sideOrdinal, sideSubcdim, sideSubcord);
+  IndexType subcellEntityIndex = entityIndex(sideSubcdim, subcellOrdinalInCell);
+  vector< IndexType > canonicalOrdering = _meshTopo->getEntityVertexIndices(sideSubcdim, subcellEntityIndex);
+  shards::CellTopology subEntityTopo = _meshTopo->getEntityTopology(sideSubcdim, subcellEntityIndex);
+  return CamelliaCellTools::permutationMatchingOrder(subEntityTopo, canonicalOrdering, subcellVertexIndices);
 }
 
 unsigned Cell::subcellPermutation(unsigned d, unsigned scord) {
@@ -232,6 +442,7 @@ pair<GlobalIndexType, unsigned> Cell::getNeighbor(unsigned sideOrdinal) {
   }
   return _neighbors[sideOrdinal];
 }
+
 void Cell::setNeighbor(unsigned sideOrdinal, GlobalIndexType neighborCellIndex, unsigned neighborSideOrdinal) {
   if (neighborCellIndex == _cellIndex) {
     cout << "ERROR: neighborCellIndex == _cellIndex.\n";

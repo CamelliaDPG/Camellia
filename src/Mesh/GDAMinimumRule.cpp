@@ -25,6 +25,14 @@ GDAMinimumRule::GDAMinimumRule(MeshTopologyPtr meshTopology, VarFactory varFacto
   rebuildLookups();
 }
 
+vector<unsigned> GDAMinimumRule::allBasisDofOrdinalsVector(int basisCardinality) {
+  vector<unsigned> ordinals(basisCardinality);
+  for (int i=0; i<basisCardinality; i++) {
+    ordinals[i] = i;
+  }
+  return ordinals;
+}
+
 vector< map< unsigned, unsigned > > GDAMinimumRule::buildSubsideMap(shards::CellTopology &sideTopo) {
   unsigned sideDim = sideTopo.getDimension();
   unsigned subsideDim = sideDim - 1;
@@ -104,6 +112,91 @@ ElementTypePtr GDAMinimumRule::elementType(GlobalIndexType cellID) {
   return _elementTypeForCell[cellID];
 }
 
+void GDAMinimumRule::filterSubBasisConstraintData(set<unsigned> &basisDofOrdinals, vector<GlobalIndexType> &globalDofOrdinals,
+                                                  FieldContainer<double> &constraintMatrix, FieldContainer<bool> &processedDofs,
+                                                  DofOrderingPtr trialOrdering, VarPtr var, int sideOrdinal) {
+  double tol = 1e-12;
+  vector<unsigned> localOrdinalsVector(basisDofOrdinals.begin(), basisDofOrdinals.end());
+  set<unsigned> zeroRows, zeroCols;
+  int numRows = constraintMatrix.dimension(0);
+  int numCols = constraintMatrix.dimension(1);
+  for (int i=0; i < numRows; i++) {
+    bool nonZeroFound = false;
+    for (int j=0; j < numCols; j++) {
+      if (abs(constraintMatrix(i,j) > tol)) {
+        nonZeroFound = true;
+      }
+    }
+    if (!nonZeroFound) {
+      zeroRows.insert(i);
+    }
+  }
+  for (int j=0; j < numCols; j++) {
+    bool nonZeroFound = false;
+    for (int i=0; i < numRows; i++) {
+      if (abs(constraintMatrix(i,j) > tol)) {
+        nonZeroFound = true;
+      }
+    }
+    if (!nonZeroFound) {
+      zeroCols.insert(j);
+    }
+  }
+  set<unsigned> rowsToSkip = zeroRows;
+  set<unsigned> colsToSkip = zeroCols;
+  for (int i=0; i<numRows; i++) {
+    unsigned localDofOrdinal = localOrdinalsVector[i];
+    unsigned localDofIndex = trialOrdering->getDofIndex(var->ID(), localDofOrdinal, sideOrdinal);
+    if (processedDofs[localDofIndex]) {
+      rowsToSkip.insert(i);
+    }
+    if (rowsToSkip.find(i) == rowsToSkip.end()) { // we will be processing this one, so mark as such
+      processedDofs[localDofIndex] = true;
+    }
+  }
+  
+  FieldContainer<double> matrixCopy = constraintMatrix;
+  constraintMatrix.resize(numRows - rowsToSkip.size(), numCols - colsToSkip.size());
+  basisDofOrdinals.clear();
+  
+  int rowOffset = 0; // decrement for each skipped row
+  for (int i=0; i<numRows; i++) {
+    if (rowsToSkip.find(i) != rowsToSkip.end()) {
+      rowOffset -= 1;
+      continue;
+    }
+    basisDofOrdinals.insert(localOrdinalsVector[i+rowOffset]);
+    int colOffset = 0;
+    for (int j=0; j<numCols; j++) {
+      if (colsToSkip.find(j) != colsToSkip.end()) {
+        colOffset -= 1;
+        continue;
+      }
+      constraintMatrix(i + rowOffset, j + colOffset) = matrixCopy(i,j);
+    }
+  }
+  
+  vector<GlobalIndexType> globalDofOrdinalsCopy = globalDofOrdinals;
+  globalDofOrdinals.clear();
+  int colOffset = 0;
+  for (int j=0; j<numCols; j++) {
+    if (colsToSkip.find(j) != colsToSkip.end()) {
+      colOffset -= 1;
+      continue;
+    }
+    globalDofOrdinals.push_back(globalDofOrdinalsCopy[j+colOffset]);
+  }
+  
+  // mark dofs corresponding to the remaining rows as processed
+  for (int i=0; i<numRows; i++) {
+    if (rowsToSkip.find(i) == rowsToSkip.end()) { // we will be processing this one, so mark as such
+      unsigned localDofOrdinal = localOrdinalsVector[i];
+      unsigned localDofIndex = trialOrdering->getDofIndex(var->ID(), localDofOrdinal, sideOrdinal);
+      processedDofs[localDofIndex] = true;
+    }
+  }
+}
+
 int GDAMinimumRule::getH1Order(GlobalIndexType cellID) {
   return _cellH1Orders[cellID];
 }
@@ -152,6 +245,11 @@ void GDAMinimumRule::interpretLocalData(GlobalIndexType cellID, const FieldConta
   CellConstraints constraints = getCellConstraints(cellID);
   LocalDofMapperPtr dofMapper = getDofMapper(cellID, constraints);
   
+//  if (Teuchos::GlobalMPISession::getRank()==0) {
+//    cout << "interpretLocalData, mapping report for cell " << cellID << ":\n";
+//    dofMapper->printMappingReport();
+//  }
+  
   bool localToGlobal = true;
   globalData = dofMapper->mapData(localData,localToGlobal,accumulate);
   vector<GlobalIndexType> globalIndexVector = dofMapper->globalIndices();
@@ -186,210 +284,581 @@ IndexType GDAMinimumRule::localDofCount() {
   return 0;
 }
 
-CellConstraints GDAMinimumRule::getCellConstraints(GlobalIndexType cellID) {
-  if (_constraintsCache.find(cellID) != _constraintsCache.end()) {
-    return _constraintsCache[cellID];
-  }
-  CellConstraints cellConstraints;
+typedef vector< SubBasisDofMapperPtr > BasisMap;
+// volume variable version
+BasisMap GDAMinimumRule::getBasisMap(GlobalIndexType cellID, SubCellDofIndexInfo& dofIndexInfo, VarPtr var) {
+  BasisMap varVolumeMap;
+  
   CellPtr cell = _meshTopology->getCell(cellID);
+  DofOrderingPtr trialOrdering = _elementTypeForCell[cellID]->trialOrderPtr;
   CellTopoPtr topo = cell->topology();
-  unsigned sideCount = topo->getSideCount();
   unsigned spaceDim = topo->getDimension();
   unsigned sideDim = spaceDim - 1;
-  unsigned subsideDim = sideDim - 1;
-  vector<IndexType> sideEntityIndices = cell->getEntityIndices(sideDim);
   
-  cellConstraints.sideConstraints = vector< ConstrainingCellInfo >(sideCount);
-  cellConstraints.subsideConstraints = vector< vector<ConstrainingSubsideInfo> >(sideCount);
-  ConstrainingCellInfo sideConstraint;
-  ConstrainingSubsideInfo subsideConstraint;
+  // assumption is that the basis is defined on the whole cell
+  BasisPtr basis = trialOrdering->getBasis(var->ID());
   
-  typedef pair< IndexType, unsigned > CellPair;
-  
-  // determine subcell ownership from the perspective of the cell (for now, we redundantly store it from the perspective of side as well, below)
-  cellConstraints.owningCellIDForSubcell = vector< vector< pair<GlobalIndexType,GlobalIndexType> > >(sideDim+1);
-  for (int d=0; d<spaceDim; d++) {
-    vector<IndexType> scIndices = cell->getEntityIndices(d);
-    unsigned scCount = scIndices.size();
-    cellConstraints.owningCellIDForSubcell[d] = vector< pair<GlobalIndexType,GlobalIndexType> >(scCount);
-    for (int scOrdinal = 0; scOrdinal < scCount; scOrdinal++) {
-      IndexType entityIndex = scIndices[scOrdinal];
-      IndexType constrainingEntityIndex = _meshTopology->getConstrainingEntityIndex(d, entityIndex);
-      pair<GlobalIndexType,GlobalIndexType> owningCellInfo = _meshTopology->leastActiveCellIndexContainingEntityConstrainedByConstrainingEntity(d, constrainingEntityIndex);
-      cellConstraints.owningCellIDForSubcell[d][scOrdinal] = owningCellInfo;
-    }
+  // to begin, let's map the volume-interior dofs:
+  vector<GlobalIndexType> globalDofOrdinals = dofIndexInfo[spaceDim][0][var->ID()];
+  set<int> ordinalsInt = BasisReconciliation::interiorDofOrdinalsForBasis(basis); // basis->dofOrdinalsForInterior(); // TODO: change dofOrdinalsForInterior to return set<unsigned>...
+  set<unsigned> basisDofOrdinals;
+  basisDofOrdinals.insert(ordinalsInt.begin(),ordinalsInt.end());
+  if (basisDofOrdinals.size() > 0) {
+    varVolumeMap.push_back(SubBasisDofMapper::subBasisDofMapper(basisDofOrdinals, globalDofOrdinals));
   }
   
-  for (unsigned sideOrdinal=0; sideOrdinal<sideCount; sideOrdinal++) {
-    IndexType sideEntityIndex = sideEntityIndices[sideOrdinal];
-    
-    // determine subcell ownership from the perspective of the side (for now, we redundantly store it from the perspective of cell as well, above)
-    sideConstraint.owningCellIDForSideSubcell = vector< vector< pair<GlobalIndexType,GlobalIndexType> > >(subsideDim + 1);
-    for (int d=0; d<sideDim; d++) {
-      unsigned scCount = _meshTopology->getSubEntityCount(sideDim, sideEntityIndex, d);
-      sideConstraint.owningCellIDForSideSubcell[d] = vector< pair<GlobalIndexType,GlobalIndexType> >(scCount);
-      for (int scOrdinal = 0; scOrdinal < scCount; scOrdinal++) {
-        IndexType entityIndex = _meshTopology->getSubEntityIndex(sideDim, sideEntityIndex, d, scOrdinal);
-        IndexType constrainingEntityIndex = _meshTopology->getConstrainingEntityIndex(d, entityIndex);
-        pair<GlobalIndexType,GlobalIndexType> owningCellInfo = _meshTopology->leastActiveCellIndexContainingEntityConstrainedByConstrainingEntity(d, constrainingEntityIndex);
-        sideConstraint.owningCellIDForSideSubcell[d][scOrdinal] = owningCellInfo;
-      }
-    }
-    
-    // first, establish side constraint
-    IndexType constrainingSideEntityIndex = _meshTopology->getConstrainingEntityIndex(sideDim, sideEntityIndex);
-    if (sideEntityIndex == constrainingSideEntityIndex) {
-      if (_meshTopology->getCellCountForSide(sideEntityIndex) == 1) { // then we know that this cell is the constraining one on the side
-        sideConstraint.cellID = cellID;
-        sideConstraint.sideOrdinal = sideOrdinal;
-      } else { // there are two cells; we need to figure out which has the lower H1 order
-        CellPair cell1 = _meshTopology->getFirstCellForSide(sideEntityIndex);
-        CellPair cell2 = _meshTopology->getSecondCellForSide(sideEntityIndex);
-        unsigned cell1Order = _cellH1Orders[cell1.first];
-        unsigned cell2Order = _cellH1Orders[cell1.first];
-        
-        int whichCell;
-        if (cell1Order < cell2Order) {
-          whichCell = 1;
-        } else if (cell2Order < cell1Order) {
-          whichCell = 2;
-        } else { // tie -- broken by cellID (lower one is the constraint)
-          if (cell1.first < cell2.first) {
-            whichCell = 1;
-          } else {
-            whichCell = 2;
-          }
-        }
-        if (whichCell==1) {
-          sideConstraint.cellID = cell1.first;
-          sideConstraint.sideOrdinal = cell1.second;
-        } else if (whichCell==2) {
-          sideConstraint.cellID = cell2.first;
-          sideConstraint.sideOrdinal = cell2.second;
-        }
-      }
-    } else {
-      // there should be exactly one cell with the specified sideEntityIndex listed in _meshTopology::_cellsForSideEntities.
-      if (_meshTopology->getCellCountForSide(sideEntityIndex) != 1) {
-        cout << "ERROR while applying GDAMinimumRule: extra cell(s) defined for sideEntityIndex.\n";
-      
-        cout << "sideEntityIndex " << sideEntityIndex << ", vertices:\n";
-        _meshTopology->printEntityVertices(sideDim, sideEntityIndex);
-        cout << "constrainingSideEntityIndex " << constrainingSideEntityIndex << ", vertices:\n";
-        _meshTopology->printEntityVertices(sideDim, constrainingSideEntityIndex);
-        
-        CellPair firstCellPair = _meshTopology->getFirstCellForSide(sideEntityIndex);
-        CellPair secondCellPair = _meshTopology->getSecondCellForSide(sideEntityIndex);
-        
-        cout << "first  cellID: " << firstCellPair.first << ", sideOrdinal " << firstCellPair.second << endl;
-        cout << "second cellID: " << secondCellPair.first << ", sideOrdinal " << secondCellPair.second << endl;
-        
-        TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "ERROR: extra cell(s) defined for sideEntityIndex.");
-      }
-      CellPair sideCellInfo = _meshTopology->getFirstCellForSide(sideEntityIndex);
-      pair<GlobalIndexType, unsigned> neighborInfo = _meshTopology->getCell(sideCellInfo.first)->getNeighbor(sideCellInfo.second);
-      
-      sideConstraint.cellID = neighborInfo.first;
-      sideConstraint.sideOrdinal = neighborInfo.second;
-    }
-    cellConstraints.sideConstraints[sideOrdinal] = sideConstraint;
-    
-    // next, establish subside constraints
-    shards::CellTopology sideTopo = topo->getCellTopologyData(sideDim, sideOrdinal);
-    unsigned subsideCount = (spaceDim != 2) ? sideTopo.getSideCount() : sideTopo.getVertexCount(); // we do want to treat the vertices as subside topologies in 2D
-    cellConstraints.subsideConstraints[sideOrdinal] = vector<ConstrainingSubsideInfo>(subsideCount);
-    for (unsigned subsideOrdinal = 0; subsideOrdinal < subsideCount; subsideOrdinal++) {
-      // determine the subside's entity index
-      GlobalIndexType subsideEntityIndex = _meshTopology->getSubEntityIndex(sideDim, sideEntityIndex, subsideDim, subsideOrdinal);
-      
-      // determine the constraining entity index
-      unsigned constrainingEntityIndex = _meshTopology->getConstrainingEntityIndex(subsideDim, subsideEntityIndex);
-      // determine all sides that contain the constraining entity -- find the cell containing such a side with the lowest H^1 order (using cellID to break ties)
-      set< CellPair > cellsForSubside = _meshTopology->getCellsContainingEntity(subsideDim, constrainingEntityIndex);
-      
-      if (subsideDim == 0) { // vertices: we should restrict ourselves to active cells
-        set< CellPair > cells = cellsForSubside;
-        cellsForSubside.clear();
-        set< GlobalIndexType > activeCellIDs = _meshTopology->getActiveCellIndices();
-        for (set< CellPair >::iterator cellIt = cells.begin(); cellIt != cells.end(); cellIt++) {
-          GlobalIndexType cellID = cellIt->first;
-          if (activeCellIDs.find(cellID) != activeCellIDs.end()) {
-            cellsForSubside.insert(*cellIt);
-          }
-        }
-      }
-      
-      unsigned leastH1Order = (unsigned)-1;
-      set< CellPair > cellsWithLeastH1Order;
-      for (set< CellPair >::iterator subsideCellIt = cellsForSubside.begin(); subsideCellIt != cellsForSubside.end(); subsideCellIt++) {
-        IndexType subsideCellID = subsideCellIt->first;
-        if (_cellH1Orders[subsideCellID] == leastH1Order) {
-          cellsWithLeastH1Order.insert(*subsideCellIt);
-        } else if (_cellH1Orders[subsideCellID] < leastH1Order) {
-          cellsWithLeastH1Order.clear();
-          leastH1Order = _cellH1Orders[subsideCellID];
-          cellsWithLeastH1Order.insert(*subsideCellIt);
-        }
-//        // DEBUGGING/TESTING:
-//        {
-//          CellPtr cell = _meshTopology->getCell(subsideCellID);
-//          unsigned scord = cell->findSubcellOrdinal(subsideDim, constrainingEntityIndex);
-//          unsigned sideOrdinal = subsideCellIt->second;
-//          unsigned scordinalInSide = CamelliaCellTools::subcellReverseOrdinalMap(*topo, sideDim, sideOrdinal, subsideDim, scord);
-//          cout << "scordinalInSide: " << scordinalInSide << endl;
+  if (globalDofOrdinals.size() != basisDofOrdinals.size()) {
+    cout << "";
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "volume getBasisMap() doesn't yet support non-L^2 bases.");
+  }
+  // TODO: reimplement the below logic in imitation of the side-oriented getBasisMap() below...
+  
+//  vector< vector< SubBasisReconciliationWeights> > weightsForSubcell(spaceDim);
+//  vector< vector< unsigned > > minProcessedDimensionForSubcell(spaceDim); // we process dimensions from high to low -- since we deal here with the volume basis case, we initialize this to spaceDim + 1
+//  vector< vector< ConstrainingSubcellInfo > > appliedSubcellConstraintInfo(spaceDim); // information about what was *last* applied to this subcell
+//  
+//  ConstrainingSubcellInfo emptyConstraintInfo;
+//  emptyConstraintInfo.cellID = -1;
+//  
+//  for (int d=0; d<spaceDim; d++) {
+//    int scCount = topo->getSubcellCount(d);
+//    weightsForSubcell[d] = vector< SubBasisReconciliationWeights>(scCount);
+//    minProcessedDimensionForSubcell[d] = vector<unsigned>(scCount, spaceDim + 1);
+//    appliedSubcellConstraintInfo[d] = vector< ConstrainingSubcellInfo >(scCount, emptyConstraintInfo);
+//  }
+//  
+//  for (int d=sideDim; d >= 0; d--) {
+//    int scCount = topo->getSubcellCount(d);
+//    for (int subcord=0; subcord < scCount; subcord++) { // subcell ordinals in cell
+//      if (minProcessedDimensionForSubcell[d][subcord] == d) {
+//        // we've already done all we need to do for this subcell, then
+//        continue;
+//      }
+//      
+//      ConstrainingSubcellInfo subcellConstraint = constraints.subcellConstraints[d][subcord];
+//      CellPtr constrainingCell = _meshTopology->getCell(subcellConstraint.cellID);
+//      
+//      DofOrderingPtr constrainingTrialOrdering = _elementTypeForCell[subcellConstraint.cellID]->trialOrderPtr;
+//      BasisPtr constrainingBasis = constrainingTrialOrdering->getBasis(var->ID());
+//      
+//      GlobalIndexType appliedConstraintCellID;
+//      appliedConstraintCellID = appliedSubcellConstraintInfo[d][subcord].cellID;
+//      unsigned appliedConstraintSubcellOrdinal;
+//      if ( appliedConstraintCellID == -1) { // no constraints yet applied
+//        appliedConstraintCellID = cellID;
+//        appliedConstraintSubcellOrdinal = subcord;
+//      } else {
+//        unsigned subcellOrdinalInSide = appliedSubcellConstraintInfo[d][subcord].subcellOrdinalInSide;
+//        CellPtr appliedConstraintCell = _meshTopology->getCell(appliedConstraintCellID);
+//        unsigned appliedConstraintSideOrdinal = appliedSubcellConstraintInfo[d][subcord].sideOrdinal;
+//        shards::CellTopology appliedConstraintSideTopo = appliedConstraintCell->topology()->getCellTopologyData(sideDim, appliedConstraintSideOrdinal);
+//        appliedConstraintSubcellOrdinal = CamelliaCellTools::subcellOrdinalMap(*appliedConstraintCell->topology(), sideDim, appliedConstraintSideOrdinal, d, subcellOrdinalInSide);
+//      }
+//      
+//      DofOrderingPtr appliedConstraintTrialOrdering = _elementTypeForCell[appliedConstraintCellID]->trialOrderPtr;
+//      BasisPtr appliedConstraintBasis = appliedConstraintTrialOrdering->getBasis(var->ID());
+//      
+//      CellPtr appliedConstraintCell = _meshTopology->getCell(appliedConstraintCellID);
+//      
+//      RefinementBranch refinements = appliedConstraintCell->refinementBranchForSubcell(d, appliedConstraintSubcellOrdinal);;
+//      unsigned ancestralPermutation = appliedConstraintCell->ancestralPermutationForSubcell(d, appliedConstraintSubcellOrdinal);// subcell permutation as seen from the perspective of the fine cell's side's ancestor
+//      
+//      unsigned subcellOrdinalInConstrainingCell = CamelliaCellTools::subcellOrdinalMap(*topo, sideDim, subcellConstraint.sideOrdinal,
+//                                                                                       d, subcellConstraint.subcellOrdinalInSide);
+//      
+//      unsigned constrainingPermutation = constrainingCell->subcellPermutation(d, subcellOrdinalInConstrainingCell);
+//      
+//      shards::CellTopology constrainingTopo = constrainingCell->topology()->getCellTopologyData(d, subcellOrdinalInConstrainingCell);
+//      unsigned constrainingPermutationInverse = CamelliaCellTools::permutationInverse(constrainingTopo, constrainingPermutation);
+//      
+//      unsigned composedPermutation = CamelliaCellTools::permutationComposition(constrainingTopo, constrainingPermutationInverse, ancestralPermutation);
+//      
+//      SubBasisReconciliationWeights newWeightsToApply = _br.constrainedWeights(d, appliedConstraintBasis, appliedConstraintSubcellOrdinal, refinements,
+//                                                                               constrainingBasis, subcellOrdinalInConstrainingCell, composedPermutation);
+//      
+//      // compose the new weights with any existing weights for this subcell
+//      SubBasisReconciliationWeights composedWeights;
+//      if (appliedSubcellConstraintInfo[d][subcord].cellID == -1) {
+//        composedWeights = newWeightsToApply;
+//      } else {
+//        SubBasisReconciliationWeights existingWeights = weightsForSubcell[d][subcord];
+//        composedWeights = BasisReconciliation::composedSubBasisReconciliationWeights(existingWeights, newWeightsToApply);
+//      }
+//      
+//      shards::CellTopology subcellTopo = topo->getCellTopologyData(d, subcord);
+//      
+//      // fine sub-subcells that are interior to the coarse subcell will be entirely reconciled by virtue of the SubBasisDofMapper we create for the subcell, below
+//      RefinementBranch subcellRefinements = RefinementPattern::subcellRefinementBranch(refinements, d, appliedConstraintSubcellOrdinal);
+//      if (subcellRefinements.size() > 0) {
+//        map<unsigned, set<unsigned> > internalSubSubcellOrdinals = RefinementPattern::getInternalSubcellOrdinals(subcellRefinements); // might like to cache this result (there is a repeated, inefficient call inside this method)
+//        for (int ssd=0; ssd<internalSubSubcellOrdinals.size(); ssd++) {
+//          for (set<unsigned>::iterator ssordIt=internalSubSubcellOrdinals[ssd].begin(); ssordIt != internalSubSubcellOrdinals[ssd].end(); ssordIt++) {
+//            unsigned ssubcordInCell = CamelliaCellTools::subcellOrdinalMap(*topo, d, subcord, ssd, *ssordIt);
+//            minProcessedDimensionForSubcell[ssd][ssubcordInCell] = ssd;
+//          }
 //        }
-      }
-      if (cellsWithLeastH1Order.size() == 0) {
-        cout << "ERROR: No cells found for constraining subside entity.\n";
-        TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "No cells found for constraining subside entity.");
-      }
-      CellPair constrainingCellPair = *cellsWithLeastH1Order.begin(); // first one will have the earliest cell ID, given the sorting of set/pair.
-      subsideConstraint.cellID = constrainingCellPair.first;
-      subsideConstraint.sideOrdinal = constrainingCellPair.second;
+//      }
+//      
+//      // populate the containers for the (d-1)-dimensional constituents of this subcell
+//      if (d-1 >=0) {
+//        int d1 = d-1;
+//        unsigned sscCount = subcellTopo.getSubcellCount(d1);
+//        for (unsigned ssubcord=0; ssubcord<sscCount; ssubcord++) {
+//          unsigned ssubcordInCell = CamelliaCellTools::subcellOrdinalMap(*topo, d, subcord, d1, ssubcord);
+//          if (minProcessedDimensionForSubcell[d1][ssubcordInCell] > d) {
+//            ConstrainingSubcellInfo ssAppliedConstraint;
+//            ssAppliedConstraint.cellID = subcellConstraint.cellID;
+//            ssAppliedConstraint.sideOrdinal = subcellConstraint.sideOrdinal;
+//            unsigned ssubcellOrdinalInConstrainingSubcell = RefinementPattern::ancestralSubcellOrdinal(subcellRefinements, d1, ssubcord);
+//
+//            IndexType ssEntityIndex = cell->ancestralEntityIndexForSubcell(d1, ssubcordInCell);
+//
+//            CellPtr constrainingCell = _meshTopology->getCell(subcellConstraint.cellID);
+//            unsigned ssubcordInConstrainingCell = constrainingCell->findSubcellOrdinal(d1, ssEntityIndex);
+//
+//            IndexType constrainingSideEntityIndex = constrainingCell->entityIndex(sideDim, subcellConstraint.sideOrdinal);
+//            
+//            shards::CellTopology constrainingSideTopo = _meshTopology->getEntityTopology(sideDim, constrainingSideEntityIndex);
+//            
+//            ssAppliedConstraint.subcellOrdinalInSide = CamelliaCellTools::subcellReverseOrdinalMap(*constrainingCell->topology(), sideDim, subcellConstraint.sideOrdinal,
+//                                                                                                   d1, ssubcordInConstrainingCell);
+//            appliedSubcellConstraintInfo[d1][ssubcordInCell] = ssAppliedConstraint;
+//            weightsForSubcell[d1][ssubcordInCell] = BasisReconciliation::weightsForCoarseSubcell(composedWeights, constrainingBasis, d1, ssubcellOrdinalInConstrainingSubcell, true);
+//            minProcessedDimensionForSubcell[d1][ssubcordInCell] = d;
+//          }
+//        }
+//      }
+//      
+//      // filter the weights whose coarse dofs are interior to this subcell, and create a SubBasisDofMapper for these (add it to varSideMap)
+//      SubBasisReconciliationWeights subcellInteriorWeights = BasisReconciliation::weightsForCoarseSubcell(composedWeights, constrainingBasis, d, subcellOrdinalInConstrainingCell, false);
+//      
+//      if (subcellInteriorWeights.coarseOrdinals.size() > 0) {
+//        vector<GlobalIndexType> globalDofOrdinals = dofIndexInfo[d][subcord][var->ID()];
+//        if (subcellInteriorWeights.coarseOrdinals.size() != globalDofOrdinals.size()) {
+//          cout << "Error: coarseOrdinals container isn't the same size as the globalDofOrdinals that it's supposed to correspond to.\n";
+//          TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "coarseOrdinals container isn't the same size as the globalDofOrdinals that it's supposed to correspond to.");
+//        }
+//        
+//        set<unsigned> basisDofOrdinals;
+//        basisDofOrdinals.insert(subcellInteriorWeights.fineOrdinals.begin(), subcellInteriorWeights.fineOrdinals.end()); // TODO: change fineOrdinals to be a set<unsigned>
+//        
+//        varVolumeMap.push_back(SubBasisDofMapper::subBasisDofMapper(basisDofOrdinals, globalDofOrdinals, subcellInteriorWeights.weights));
+//      }
+//      
+//    }
+//  }
+  return varVolumeMap;
+}
+
+// trace variable version
+BasisMap GDAMinimumRule::getBasisMap(GlobalIndexType cellID, SubCellDofIndexInfo& dofIndexInfo, VarPtr var, int sideOrdinal) {
+
+  BasisMap varSideMap;
+  
+  // TODO: move the permutation computation outside of this method -- might include in CellConstraints, e.g. -- this obviously will not change from one var to the next, but we compute it redundantly each time...
+  
+  CellPtr cell = _meshTopology->getCell(cellID);
+  DofOrderingPtr trialOrdering = _elementTypeForCell[cellID]->trialOrderPtr;
+  CellTopoPtr topo = cell->topology();
+  unsigned spaceDim = topo->getDimension();
+  unsigned sideDim = spaceDim - 1;
+  shards::CellTopology sideTopo = topo->getCellTopologyData(sideDim, sideOrdinal);
+  
+  // assumption is that the basis is defined on the side
+  BasisPtr basis = trialOrdering->getBasis(var->ID(), sideOrdinal);
+  
+  typedef pair<ConstrainingSubcellInfo, SubBasisReconciliationWeights > AppliedWeightPair;
+  typedef pair< unsigned, unsigned > SubcellForDofIndexInfo; // first: subcdim, second: subcordInCell
+  
+  vector< map< GlobalIndexType, AppliedWeightPair > > appliedWeights(sideDim+1); // map keys are the entity indices; these are used to ensure that we don't apply constraints for a given entity multiple times.
+  
+  ConstrainingSubcellInfo defaultConstraint;
+  defaultConstraint.cellID = cellID;
+  defaultConstraint.sideOrdinal = sideOrdinal;
+  defaultConstraint.subcellOrdinalInSide = 0;
+  defaultConstraint.dimension = sideDim;
+
+  SubBasisReconciliationWeights unitWeights;
+  unitWeights.weights.resize(basis->getCardinality(), basis->getCardinality());
+  set<int> allOrdinals;
+  for (int i=0; i<basis->getCardinality(); i++) {
+    allOrdinals.insert(i);
+    unitWeights.weights(i,i) = 1.0;
+  }
+  unitWeights.fineOrdinals = allOrdinals;
+  unitWeights.coarseOrdinals = allOrdinals;
+
+  GlobalIndexType sideEntityIndex = cell->entityIndex(sideDim, sideOrdinal);
+  appliedWeights[sideDim][sideEntityIndex] = make_pair(defaultConstraint, unitWeights);
+  
+  int minimumConstraintDimension = BasisReconciliation::minimumSubcellDimension(basis);
+  // populate things for the (sideDim-1)-dimensional constituents of the side
+//  if (defaultConstraint.dimension >= minimumConstraintDimension + 1) {
+//    int d1 = defaultConstraint.dimension-1;
+//    unsigned sscCount = sideTopo.getSubcellCount(d1);
+//    CellTopoPtr constrainingCellTopo = cell->topology();
+//    for (unsigned ssubcord=0; ssubcord<sscCount; ssubcord++) {
+//      unsigned ssubcordInCell = CamelliaCellTools::subcellOrdinalMap(*constrainingCellTopo, defaultConstraint.dimension, sideOrdinal, d1, ssubcord);
+//      IndexType ssEntityIndex = cell->entityIndex(d1, ssubcordInCell);
+//      
+//      if (appliedWeights[d1].find(ssEntityIndex) != appliedWeights[d1].end()) { // we've already applied d-dimensional constraints to this d1-dimensional entity
+//        continue;
+//      }
+//      
+//      ConstrainingSubcellInfo subsubcellConstraint;
+//      subsubcellConstraint.cellID = defaultConstraint.cellID;
+//      subsubcellConstraint.sideOrdinal = defaultConstraint.sideOrdinal;
+//      subsubcellConstraint.dimension = d1;
+//      
+//      CellPtr constrainingCell = _meshTopology->getCell(defaultConstraint.cellID);
+//      subsubcellConstraint.subcellOrdinalInSide = CamelliaCellTools::subcellReverseOrdinalMap(*constrainingCellTopo, sideDim, subsubcellConstraint.sideOrdinal,
+//                                                                                              d1, ssubcordInCell);
+//      
+//      SubBasisReconciliationWeights composedWeightsForSubSubcell = BasisReconciliation::weightsForCoarseSubcell(unitWeights, basis, d1,
+//                                                                                                                subsubcellConstraint.subcellOrdinalInSide, true);
+//      
+//      if ((d1==0) && (ssubcordInCell == 3) && (defaultConstraint.cellID == 4)) {
+//        cout << "blah2.\n";
+//      }
+//      appliedWeights[d1][ssEntityIndex] = make_pair(subsubcellConstraint, composedWeightsForSubSubcell);
+//    }
+//  }
+  
+// DEBUGGING:
+//  if ((cellID==1) && (sideOrdinal==0) && (var->ID() == 0)) {
+//    cout << "cellID 1, varID 0 getDofMapper() on sideOrdinal 0.\n";
+//  }
+//  if ((cellID==4) && ((sideOrdinal==2) || (sideOrdinal==3)) && (var->ID() == 0)) {
+//    cout << "cellID 4, varID 0 getDofMapper().\n";
+//  }
+//  
+  int appliedWeightsGreatestEntryDimension = sideDim; // the greatest dimension for which appliedWeights is non-empty
+  while (appliedWeightsGreatestEntryDimension >= minimumConstraintDimension)
+  {
+    int d = appliedWeightsGreatestEntryDimension; // the dimension of the subcell being constrained.
+    
+    map< GlobalIndexType, pair<ConstrainingSubcellInfo, SubBasisReconciliationWeights > > appliedWeightsForDimension = appliedWeights[d];
+    
+    // clear these out from the main container:
+    appliedWeights[d].clear();
+
+    map< GlobalIndexType, pair<ConstrainingSubcellInfo, SubBasisReconciliationWeights > >::iterator appliedWeightsIt;
+    for (appliedWeightsIt = appliedWeightsForDimension.begin(); appliedWeightsIt != appliedWeightsForDimension.end(); appliedWeightsIt++) {
+      pair<ConstrainingSubcellInfo, SubBasisReconciliationWeights > appliedWeightsForSubcell = appliedWeightsIt->second;
       
-//      {
-//        cout << "For cellID " << cellID << ", sideOrdinal " << sideOrdinal << ", subside " << subsideOrdinal << ", constraint:\n";
-//        cout << "subsideConstraint.cellID      = " << subsideConstraint.cellID << endl;
-//        cout << "subsideConstraint.sideOrdinal = " << subsideConstraint.sideOrdinal << endl;
-//        CellPtr cell = _meshTopology->getCell(subsideConstraint.cellID);
-//        unsigned scord = cell->findSubcellOrdinal(subsideDim, constrainingEntityIndex);
-//        unsigned scordinalInSide = CamelliaCellTools::subcellReverseOrdinalMap(*topo, sideDim, subsideConstraint.sideOrdinal, subsideDim, scord);
-//        cout << "constraining entity index     = " << constrainingEntityIndex << endl;
-//        cout << "scord in cell                 = " << scord << endl;
-//        cout << "scord in side                 = " << scordinalInSide << endl;
+      ConstrainingSubcellInfo subcellInfo = appliedWeightsForSubcell.first;
+      SubBasisReconciliationWeights prevWeights = appliedWeightsForSubcell.second;
+      
+      if (subcellInfo.dimension != d) {
+        cout << "INTERNAL ERROR: subcellInfo.dimension should be d!\n";
+        TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "INTERNAL ERROR: subcellInfo.dimension should be d!");
+      }
+      
+      CellPtr appliedConstraintCell = _meshTopology->getCell(subcellInfo.cellID);
+      
+      unsigned subcordInAppliedConstraintCell = CamelliaCellTools::subcellOrdinalMap(*appliedConstraintCell->topology(), sideDim,
+                                                                                     subcellInfo.sideOrdinal, d, subcellInfo.subcellOrdinalInSide);
+      
+//      if ((d==0) && (subcordInAppliedConstraintCell == 3) && (subcellInfo.cellID == 4)) {
+//        cout << "blah3.\n";
 //      }
       
-      // now, we need to find the subcellOrdinal within cell for the subside:
-      CellPtr constrainingCell = _meshTopology->getCell(subsideConstraint.cellID);
+      DofOrderingPtr appliedConstraintTrialOrdering = _elementTypeForCell[subcellInfo.cellID]->trialOrderPtr;
+      BasisPtr appliedConstraintBasis = appliedConstraintTrialOrdering->getBasis(var->ID(), subcellInfo.sideOrdinal);
       
-      shards::CellTopology constrainingSide = constrainingCell->topology()->getCellTopologyData(sideDim, subsideConstraint.sideOrdinal);
-      int subsideCountInConstrainingSide = (subsideDim > 0) ? constrainingSide.getSubcellCount(subsideDim) : constrainingSide.getVertexCount();
-      constrainingSideEntityIndex = constrainingCell->entityIndex(sideDim, subsideConstraint.sideOrdinal);
-      subsideConstraint.subsideOrdinalInSide = -1;
-      unsigned constrainingSideOrdinalInConstrainingCell = constrainingCell->findSubcellOrdinal(sideDim, constrainingSideEntityIndex);
-      for (int subsideOrdinalInConstrainingSide = 0; subsideOrdinalInConstrainingSide < subsideCountInConstrainingSide; subsideOrdinalInConstrainingSide++) {
-        CellTopoPtr constrainingTopo = constrainingCell->topology();
-        unsigned subsideOrdinalInConstrainingCell = CamelliaCellTools::subcellOrdinalMap(*(constrainingTopo.get()), sideDim, constrainingSideOrdinalInConstrainingCell, subsideDim, subsideOrdinalInConstrainingSide);
-        IndexType entityIndex = constrainingCell->entityIndex(subsideDim, subsideOrdinalInConstrainingCell);
-        // old version, which stored the ordinal relative to the canonical view of the constraining side (as opposed to the constraining cell's view of it):
-//        IndexType entityIndex =  _meshTopology->getSubEntityIndex(sideDim, constrainingSideEntityIndex, subsideDim, subsideOrdinalInConstrainingSide);
-        if (entityIndex == constrainingEntityIndex) {
-          subsideConstraint.subsideOrdinalInSide = subsideOrdinalInConstrainingSide;
+      CellConstraints cellConstraints = getCellConstraints(subcellInfo.cellID);
+      ConstrainingSubcellInfo subcellConstraint = cellConstraints.subcellConstraints[d][subcordInAppliedConstraintCell];
+      
+      CellPtr constrainingCell = _meshTopology->getCell(subcellConstraint.cellID);
+      
+      DofOrderingPtr constrainingTrialOrdering = _elementTypeForCell[subcellConstraint.cellID]->trialOrderPtr;
+      BasisPtr constrainingBasis = constrainingTrialOrdering->getBasis(var->ID(), subcellConstraint.sideOrdinal);
+      
+      
+      unsigned subcellOrdinalInConstrainingCell = CamelliaCellTools::subcellOrdinalMap(*constrainingCell->topology(), sideDim, subcellConstraint.sideOrdinal,
+                                                                                       subcellConstraint.dimension, subcellConstraint.subcellOrdinalInSide);
+      
+      shards::CellTopology constrainingTopo = constrainingCell->topology()->getCellTopologyData(subcellConstraint.dimension, subcellOrdinalInConstrainingCell);
+      
+      SubBasisReconciliationWeights composedWeights;
+      
+      if (subcellConstraint.dimension != d) {
+//        unsigned coarseSideOrdinalInNeighbor = constrainingCell->getNeighbor(subcellConstraint.sideOrdinal).second;
+        
+        // One of the applied constraint cell's sides is constrained by the constraining cell's side (NOT NECESSARILY!!)
+        // let's figure out which one
+        // (TODO: fix this to account for cases when the above claim doesn't hold!!)
+        IndexType constrainingSideEntityIndex = constrainingCell->entityIndex(sideDim, subcellConstraint.sideOrdinal);
+        int sideCount = appliedConstraintCell->topology()->getSideCount();
+        int constrainedSideOrdinal;
+        for (constrainedSideOrdinal=0; constrainedSideOrdinal<sideCount; constrainedSideOrdinal++) {
+          IndexType thisSideEntityIndex = appliedConstraintCell->entityIndex(sideDim, constrainedSideOrdinal);
+          if (_meshTopology->getConstrainingEntityIndex(sideDim,thisSideEntityIndex) == constrainingSideEntityIndex) {
+            break;
+          }
+        }
+        if (constrainedSideOrdinal == sideCount) {
+          cout << "Constrained side not found!\n";
+          TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Constrained side not found!");
+        }
+        
+        RefinementBranch volumeRefinements = appliedConstraintCell->refinementBranchForSide(constrainedSideOrdinal);
+        
+        unsigned coarseSideOrdinalInAppliedConstraintCellAncestor = RefinementPattern::ancestralSubcellOrdinal(volumeRefinements, sideDim, constrainedSideOrdinal);
+        
+        unsigned ancestralPermutation = appliedConstraintCell->ancestralPermutationForSideSubcell(constrainedSideOrdinal, sideDim, 0);// side permutation as seen from the perspective of the fine cell's side's ancestor
+        unsigned constrainingPermutation = constrainingCell->sideSubcellPermutation(subcellConstraint.sideOrdinal, sideDim, 0); // side permutation as seen from the perspective of the constraining cell's side
+        
+        shards::CellTopology constrainingSideTopo = constrainingCell->topology()->getCellTopologyData(sideDim, subcellConstraint.sideOrdinal);
+        
+        unsigned constrainingPermutationInverse = CamelliaCellTools::permutationInverse(constrainingSideTopo, constrainingPermutation);
+        
+        unsigned composedPermutation = CamelliaCellTools::permutationComposition(constrainingSideTopo, constrainingPermutationInverse, ancestralPermutation);
+        
+        SubBasisReconciliationWeights newWeightsToApply = BasisReconciliation::computeConstrainedWeights(d, appliedConstraintBasis, subcellInfo.subcellOrdinalInSide,
+                                                                                                         volumeRefinements, subcellInfo.sideOrdinal, subcellConstraint.dimension,
+                                                                                                         constrainingBasis, subcellConstraint.subcellOrdinalInSide,
+                                                                                                         coarseSideOrdinalInAppliedConstraintCellAncestor, composedPermutation);
+        
+        composedWeights = BasisReconciliation::composedSubBasisReconciliationWeights(prevWeights, newWeightsToApply);
+      } else {
+        RefinementBranch volumeRefinements = appliedConstraintCell->refinementBranchForSubcell(d, subcordInAppliedConstraintCell);
+        
+        RefinementBranch sideRefinements = RefinementPattern::subcellRefinementBranch(volumeRefinements, sideDim, subcellInfo.sideOrdinal);
+        
+        unsigned ancestralPermutation = appliedConstraintCell->ancestralPermutationForSideSubcell(subcellInfo.sideOrdinal, d, subcellInfo.subcellOrdinalInSide);// subcell permutation as seen from the perspective of the fine cell's side's ancestor
+        unsigned constrainingPermutation = constrainingCell->sideSubcellPermutation(subcellConstraint.sideOrdinal, d, subcellConstraint.subcellOrdinalInSide); // subcell permutation as seen from the perspective of the constraining cell's side
+        
+        unsigned constrainingPermutationInverse = CamelliaCellTools::permutationInverse(constrainingTopo, constrainingPermutation);
+        
+        unsigned composedPermutation = CamelliaCellTools::permutationComposition(constrainingTopo, constrainingPermutationInverse, ancestralPermutation);
+        
+        SubBasisReconciliationWeights newWeightsToApply = _br.constrainedWeights(d, appliedConstraintBasis, subcellInfo.subcellOrdinalInSide, sideRefinements,
+                                                                                 constrainingBasis, subcellConstraint.subcellOrdinalInSide, composedPermutation);
+        
+        // compose the new weights with existing weights for this subcell
+        composedWeights = BasisReconciliation::composedSubBasisReconciliationWeights(prevWeights, newWeightsToApply);
+      }
+      
+      // populate the containers for the (d-1)-dimensional constituents of the constraining subcell
+      if (subcellConstraint.dimension >= minimumConstraintDimension + 1) {
+        int d1 = subcellConstraint.dimension-1;
+        unsigned sscCount = constrainingTopo.getSubcellCount(d1);
+        CellTopoPtr constrainingCellTopo = constrainingCell->topology();
+        for (unsigned ssubcord=0; ssubcord<sscCount; ssubcord++) {
+          unsigned ssubcordInCell = CamelliaCellTools::subcellOrdinalMap(*constrainingCellTopo, subcellConstraint.dimension, subcellOrdinalInConstrainingCell, d1, ssubcord);
+          IndexType ssEntityIndex = constrainingCell->entityIndex(d1, ssubcordInCell);
+          
+          if (appliedWeights[d1].find(ssEntityIndex) != appliedWeights[d1].end()) { // we've already applied d-dimensional constraints to this d1-dimensional entity
+            continue;
+          }
+          
+          ConstrainingSubcellInfo subsubcellConstraint;
+          subsubcellConstraint.cellID = subcellConstraint.cellID;
+          subsubcellConstraint.sideOrdinal = subcellConstraint.sideOrdinal;
+          subsubcellConstraint.dimension = d1;
+          
+          CellPtr constrainingCell = _meshTopology->getCell(subcellConstraint.cellID);
+          subsubcellConstraint.subcellOrdinalInSide = CamelliaCellTools::subcellReverseOrdinalMap(*constrainingCellTopo, sideDim, subsubcellConstraint.sideOrdinal,
+                                                                                                  d1, ssubcordInCell);
+          
+          SubBasisReconciliationWeights composedWeightsForSubSubcell = BasisReconciliation::weightsForCoarseSubcell(composedWeights, constrainingBasis, d1,
+                                                                                                                    subsubcellConstraint.subcellOrdinalInSide, true);
+          
+//          if ((d1==0) && (ssubcordInCell == 3) && (subcellConstraint.cellID == 4)) {
+//            cout << "blah2.\n";
+//          }
+          appliedWeights[d1][ssEntityIndex] = make_pair(subsubcellConstraint, composedWeightsForSubSubcell);
         }
       }
-      if (subsideConstraint.subsideOrdinalInSide == -1) {
-        cout << "ERROR: Could not determine subside ordinal in side for subside constraint.\n";
-        TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Could not determine subside ordinal in side for subside constraint.");
+      
+      // add sub-basis map for dofs interior to the constraining subcell
+      // filter the weights whose coarse dofs are interior to this subcell, and create a SubBasisDofMapper for these (add it to varSideMap)
+      SubBasisReconciliationWeights subcellInteriorWeights = BasisReconciliation::weightsForCoarseSubcell(composedWeights, constrainingBasis, subcellConstraint.dimension, subcellConstraint.subcellOrdinalInSide, false);
+      
+      if (subcellInteriorWeights.coarseOrdinals.size() > 0) {
+        CellConstraints constrainingCellConstraints = getCellConstraints(subcellConstraint.cellID);
+        OwnershipInfo ownershipInfo = constrainingCellConstraints.owningCellIDForSubcell[subcellConstraint.dimension][subcellOrdinalInConstrainingCell];
+        CellConstraints owningCellConstraints = getCellConstraints(ownershipInfo.cellID);
+        SubCellDofIndexInfo owningCellDofIndexInfo = getOwnedGlobalDofIndices(ownershipInfo.cellID, owningCellConstraints);
+        unsigned owningSubcellOrdinal = _meshTopology->getCell(ownershipInfo.cellID)->findSubcellOrdinal(ownershipInfo.dimension, ownershipInfo.owningSubcellEntityIndex);
+        vector<GlobalIndexType> globalDofOrdinals = owningCellDofIndexInfo[ownershipInfo.dimension][owningSubcellOrdinal][var->ID()];
+        
+        if (subcellInteriorWeights.coarseOrdinals.size() != globalDofOrdinals.size()) {
+          cout << "Error: coarseOrdinals container isn't the same size as the globalDofOrdinals that it's supposed to correspond to.\n";
+          TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "coarseOrdinals container isn't the same size as the globalDofOrdinals that it's supposed to correspond to.");
+        }
+        
+        set<unsigned> basisDofOrdinals;
+        basisDofOrdinals.insert(subcellInteriorWeights.fineOrdinals.begin(), subcellInteriorWeights.fineOrdinals.end()); // TODO: change fineOrdinals to be a set<unsigned>
+        
+        varSideMap.push_back(SubBasisDofMapper::subBasisDofMapper(basisDofOrdinals, globalDofOrdinals, subcellInteriorWeights.weights));
       }
-//      cout << "Setting subsideConstraint for cell " << cellID << ", side " << sideOrdinal << ", subside " << subsideOrdinal << ":\n";
-//      cout << "sideOrdinal: " << subsideConstraint.sideOrdinal << endl;
-//      cout << "subsideOrdinalInSide: " << subsideConstraint.subsideOrdinalInSide << endl;
-      cellConstraints.subsideConstraints[sideOrdinal][subsideOrdinal] = subsideConstraint;
+      
     }
-  }
-  _constraintsCache[cellID] = cellConstraints;
+    
+    appliedWeightsGreatestEntryDimension = -1;
+    for (int d=sideDim; d >= minimumConstraintDimension; d--)
+    {
+      if (appliedWeights[d].size() > 0)
+      {
+        appliedWeightsGreatestEntryDimension = d;
+        break;
+      }
+    }
+  } // (appliedWeightsGreatestEntryDimension >= 0)
   
-  return cellConstraints;
+  return varSideMap;
+}
+
+CellConstraints GDAMinimumRule::getCellConstraints(GlobalIndexType cellID) {
+  
+  if (_constraintsCache.find(cellID) == _constraintsCache.end()) {
+  
+//    cout << "Getting cell constraints for cellID " << cellID << endl;
+    
+    typedef pair< IndexType, unsigned > CellPair;
+    
+    CellPtr cell = _meshTopology->getCell(cellID);
+    DofOrderingPtr trialOrdering = _elementTypeForCell[cellID]->trialOrderPtr;
+    CellTopoPtr topo = cell->topology();
+    unsigned spaceDim = topo->getDimension();
+    unsigned sideDim = spaceDim - 1;
+    
+    vector< vector< bool > > processedSubcells(spaceDim+1); // we process dimensions from high to low -- since we deal here with the volume basis case, we initialize this to spaceDim + 1
+    vector< vector< ConstrainingSubcellInfo > > constrainingSubcellInfo(spaceDim + 1);
+    
+    ConstrainingSubcellInfo emptyConstraintInfo;
+    emptyConstraintInfo.cellID = -1;
+    
+    for (int d=0; d<=spaceDim; d++) {
+      int scCount = topo->getSubcellCount(d);
+      processedSubcells[d] = vector<bool>(scCount, false);
+      constrainingSubcellInfo[d] = vector< ConstrainingSubcellInfo >(scCount, emptyConstraintInfo);
+    }
+    
+    for (int d=sideDim; d >= 0; d--) {
+      int scCount = topo->getSubcellCount(d);
+      for (int subcord=0; subcord < scCount; subcord++) { // subcell ordinals in cell
+        // DEBUGGING:
+//        if ((cellID==4) && (d==1) && (subcord==2)) {
+//          cout << "blah.\n";
+//        }
+        if (! processedSubcells[d][subcord]) { // i.e. we don't yet know the constraining entity for this subcell
+          IndexType entityIndex = cell->entityIndex(d, subcord);
+//          cout << "entity of dimension " << d << " with entity index " << entityIndex << ": " << endl;
+//          _meshTopology->printEntityVertices(d, entityIndex);
+          IndexType constrainingEntityIndex = _meshTopology->getConstrainingEntityIndex(d, entityIndex); // the constraining entity of the same dimension as this entity
+          
+//          cout << "is constrained by entity of dimension " << d << "  with entity index " << constrainingEntityIndex << ": " << endl;
+//          _meshTopology->printEntityVertices(d, constrainingEntityIndex);
+
+          set< CellPair > cellsForSubcell = _meshTopology->getCellsContainingEntity(d, constrainingEntityIndex);
+          
+          unsigned leastH1Order = (unsigned)-1;
+          set< CellPair > cellsWithLeastH1Order;
+          for (set< CellPair >::iterator cellForSubcellIt = cellsForSubcell.begin(); cellForSubcellIt != cellsForSubcell.end(); cellForSubcellIt++) {
+            IndexType subcellCellID = cellForSubcellIt->first;
+            if (_cellH1Orders[subcellCellID] == leastH1Order) {
+              cellsWithLeastH1Order.insert(*cellForSubcellIt);
+            } else if (_cellH1Orders[subcellCellID] < leastH1Order) {
+              cellsWithLeastH1Order.clear();
+              leastH1Order = _cellH1Orders[subcellCellID];
+              cellsWithLeastH1Order.insert(*cellForSubcellIt);
+            }
+            if (cellsWithLeastH1Order.size() == 0) {
+              cout << "ERROR: No cells found for constraining subside entity.\n";
+              TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "No cells found for constraining subside entity.");
+            }
+          }
+          CellPair constrainingCellPair = *cellsWithLeastH1Order.begin(); // first one will have the earliest cell ID, given the sorting of set/pair.
+          constrainingSubcellInfo[d][subcord].cellID = constrainingCellPair.first;
+          
+          unsigned constrainingCellID = constrainingCellPair.first;
+          unsigned constrainingSideOrdinal = constrainingCellPair.second;
+          
+          constrainingSubcellInfo[d][subcord].sideOrdinal = constrainingSideOrdinal;
+          CellPtr constrainingCell = _meshTopology->getCell(constrainingCellID);
+          
+          unsigned subcellOrdinalInConstrainingSide = constrainingCell->findSubcellOrdinalInSide(d, constrainingEntityIndex, constrainingSideOrdinal);
+
+          constrainingSubcellInfo[d][subcord].subcellOrdinalInSide = subcellOrdinalInConstrainingSide;
+          constrainingSubcellInfo[d][subcord].dimension = d;
+          
+//          cout << "constraining subcell of dimension " << d << ", ordinal " << subcord << " with:\n";
+//          cout << "  cellID " << constrainingSubcellInfo[d][subcord].cellID;
+//          cout << ", sideOrdinal " << constrainingSubcellInfo[d][subcord].sideOrdinal;
+//          cout << ", subcellOrdinalInSide " << constrainingSubcellInfo[d][subcord].subcellOrdinalInSide;
+//          cout << ", dimension " << constrainingSubcellInfo[d][subcord].dimension << endl;
+        }
+        
+        RefinementBranch refinements = cell->refinementBranchForSubcell(d, subcord);
+        
+        // fine sub-subcells that are interior to the coarse subcell will be constrained by whatever constrains the subcell
+        RefinementBranch subcellRefinements = RefinementPattern::subcellRefinementBranch(refinements, d, subcord);
+        if (subcellRefinements.size() > 0) {
+          map<unsigned, set<unsigned> > internalSubSubcellOrdinals = RefinementPattern::getInternalSubcellOrdinals(subcellRefinements); // might like to cache this result (there is a repeated, inefficient call inside this method)
+          for (int ssd=0; ssd<internalSubSubcellOrdinals.size(); ssd++) {
+            for (set<unsigned>::iterator ssordIt=internalSubSubcellOrdinals[ssd].begin(); ssordIt != internalSubSubcellOrdinals[ssd].end(); ssordIt++) {
+              unsigned ssubcordInCell = CamelliaCellTools::subcellOrdinalMap(*topo, d, subcord, ssd, *ssordIt);
+              processedSubcells[ssd][ssubcordInCell] = true;
+              constrainingSubcellInfo[ssd][ssubcordInCell] = constrainingSubcellInfo[d][subcord];
+              
+//              cout << "constraining subcell of dimension " << ssd << ", ordinal " << ssubcordInCell << " with:\n";
+//              cout << "  cellID " << constrainingSubcellInfo[d][subcord].cellID;
+//              cout << ", sideOrdinal " << constrainingSubcellInfo[d][subcord].sideOrdinal;
+//              cout << ", subcellOrdinalInSide " << constrainingSubcellInfo[d][subcord].subcellOrdinalInSide;
+//              cout << ", dimension " << constrainingSubcellInfo[d][subcord].dimension << endl;
+            }
+          }
+        }
+      }
+    }
+    
+    CellConstraints cellConstraints;
+    
+    constrainingSubcellInfo[spaceDim][0].cellID = cellID;
+    constrainingSubcellInfo[spaceDim][0].subcellOrdinalInSide = -1;
+    constrainingSubcellInfo[spaceDim][0].sideOrdinal = -1;
+    constrainingSubcellInfo[spaceDim][0].dimension = spaceDim;
+    cellConstraints.subcellConstraints = constrainingSubcellInfo;
+
+    // determine subcell ownership from the perspective of the cell
+    cellConstraints.owningCellIDForSubcell = vector< vector< OwnershipInfo > >(spaceDim+1);
+    for (int d=0; d<spaceDim; d++) {
+      vector<IndexType> scIndices = cell->getEntityIndices(d);
+      unsigned scCount = scIndices.size();
+      cellConstraints.owningCellIDForSubcell[d] = vector< OwnershipInfo >(scCount);
+      for (int scOrdinal = 0; scOrdinal < scCount; scOrdinal++) {
+        IndexType entityIndex = scIndices[scOrdinal];
+        unsigned constrainingDimension = constrainingSubcellInfo[d][scOrdinal].dimension;
+        IndexType constrainingEntityIndex;
+        if (d==constrainingDimension) {
+          constrainingEntityIndex = _meshTopology->getConstrainingEntityIndex(d, entityIndex);
+        } else {
+          CellPtr constrainingCell = _meshTopology->getCell(constrainingSubcellInfo[d][scOrdinal].cellID);
+          unsigned constrainingSubcellOrdinalInCell = CamelliaCellTools::subcellOrdinalMap(*constrainingCell->topology(), sideDim, constrainingSubcellInfo[d][scOrdinal].sideOrdinal,
+                                                                                           constrainingDimension, constrainingSubcellInfo[d][scOrdinal].subcellOrdinalInSide);
+          constrainingEntityIndex = constrainingCell->entityIndex(constrainingDimension, constrainingSubcellOrdinalInCell);
+        }
+        pair<GlobalIndexType,GlobalIndexType> owningCellInfo = _meshTopology->leastActiveCellIndexContainingEntityConstrainedByConstrainingEntity(constrainingDimension, constrainingEntityIndex);
+        cellConstraints.owningCellIDForSubcell[d][scOrdinal].cellID = owningCellInfo.first;
+        cellConstraints.owningCellIDForSubcell[d][scOrdinal].owningSubcellEntityIndex = owningCellInfo.second;
+        cellConstraints.owningCellIDForSubcell[d][scOrdinal].dimension = constrainingDimension;
+      }
+    }
+    // cell owns (and constrains) its interior:
+    cellConstraints.owningCellIDForSubcell[spaceDim] = vector< OwnershipInfo >(1);
+    cellConstraints.owningCellIDForSubcell[spaceDim][0].cellID = cellID;
+    cellConstraints.owningCellIDForSubcell[spaceDim][0].owningSubcellEntityIndex = cellID;
+    cellConstraints.owningCellIDForSubcell[spaceDim][0].dimension = spaceDim;
+    
+    _constraintsCache[cellID] = cellConstraints;
+    
+//    printConstraintInfo(cellID);
+  }
+  
+  return _constraintsCache[cellID];
 }
 
 typedef map<int, vector<GlobalIndexType> > VarIDToDofIndices; // key: varID
@@ -404,8 +873,6 @@ SubCellDofIndexInfo GDAMinimumRule::getOwnedGlobalDofIndices(GlobalIndexType cel
   
   CellTopoPtr topo = _elementTypeForCell[cellID]->cellTopoPtr;
   
-  int sideCount = topo->getSideCount();
-  
   typedef vector< SubBasisDofMapperPtr > BasisMap;
   
   DofOrderingPtr trialOrdering = _elementTypeForCell[cellID]->trialOrderPtr;
@@ -413,120 +880,40 @@ SubCellDofIndexInfo GDAMinimumRule::getOwnedGlobalDofIndices(GlobalIndexType cel
   
   GlobalIndexType globalDofIndex = _globalCellDofOffsets[cellID]; // this cell's first globalDofIndex
 
-  for (map<int, VarPtr>::iterator varIt = trialVars.begin(); varIt != trialVars.end(); varIt++) {
-    VarPtr var = varIt->second;
-    bool isL2Var = (var->space() == L2) || (var->space() == VECTOR_L2);
-    bool varHasSupportOnVolume = (var->varType() == FIELD) || (var->varType() == TEST);
-    if ( varHasSupportOnVolume ) {
-      BasisPtr basis = trialOrdering->getBasis(var->ID());
-      set<unsigned> basisDofOrdinals;
-      vector<GlobalIndexType> globalDofOrdinals;
-      if (isL2Var) { // unconstrained / local
-        int cardinality = basis->getCardinality();
-        for (int i=0; i<cardinality; i++) {
-          basisDofOrdinals.insert(i);
-        }
-      } else {
-        set<int> ordinalsInt = BasisReconciliation::interiorDofOrdinalsForBasis( basis ); // TODO: change dofOrdinalsForInterior to return set<unsigned>...
-        basisDofOrdinals.insert(ordinalsInt.begin(),ordinalsInt.end());
-      }
-      int count = basisDofOrdinals.size();
-      for (int i=0; i<count; i++) {
-        globalDofOrdinals.push_back(globalDofIndex++);
-      }
-      unsigned scdim = spaceDim; // volume
-      unsigned scord = 0; // only one volume
-      scInfo[scdim][scord][var->ID()] = globalDofOrdinals;
-    }
-    if ( ! (varHasSupportOnVolume && isL2Var) ) { // if space is L^2 on the volume, we'll have claimed all the dofs above, and we can skip further processing
-      vector< set<unsigned> > processedSubcells(sideDim);
-      for (int sideOrdinal=0; sideOrdinal<sideCount; sideOrdinal++) {
-        BasisMap sideBasisMap;
-        shards::CellTopology sideTopo = topo->getCellTopologyData(sideDim, sideOrdinal);
-        GlobalIndexType owningCellIDForSide = constraints.owningCellIDForSubcell[sideDim][sideOrdinal].first;
-        set<unsigned> basisDofOrdinals;
-        vector<GlobalIndexType> globalDofOrdinals;
-        
-        ConstrainingCellInfo sideConstraint = constraints.sideConstraints[sideOrdinal];
-        DofOrderingPtr constrainingTrialOrdering = _elementTypeForCell[sideConstraint.cellID]->trialOrderPtr;
-        if (varHasSupportOnVolume) {
-          BasisPtr basis = constrainingTrialOrdering->getBasis(var->ID());
-          set<int> sideBasisOrdinals = basis->dofOrdinalsForSubcell(sideDim, sideConstraint.sideOrdinal, sideDim);
-          basisDofOrdinals.insert(sideBasisOrdinals.begin(),sideBasisOrdinals.end());
-        } else {
-          BasisPtr basis = constrainingTrialOrdering->getBasis(var->ID(),sideConstraint.sideOrdinal);
-          set<int> sideBasisOrdinals = BasisReconciliation::interiorDofOrdinalsForBasis(basis); // isL2Var ? basis->dofOrdinalsForSubcells(sideDim, true) : basis->dofOrdinalsForInterior(); // if L^2, all dofs are interior...
-          basisDofOrdinals.insert(sideBasisOrdinals.begin(),sideBasisOrdinals.end());
-        }
-        if (owningCellIDForSide == cellID) { // then we're responsible for the assignment of global indices
-          int count = basisDofOrdinals.size();
-          for (int i=0; i<count; i++) {
-            globalDofOrdinals.push_back(globalDofIndex++);
-          }
-          unsigned scdim = sideDim;
-          scInfo[scdim][sideOrdinal][var->ID()] = globalDofOrdinals;
-        }
-        
-        if (!isL2Var) {
-          vector< map< unsigned, unsigned > > subsideMap = buildSubsideMap(sideTopo); // outer vector indexed by dimension.  map goes from scOrdinalInSide to a subside containing that subcell.  (This is not uniquely defined, but that should be OK.)
-          
-          for (int d=0; d<sideDim; d++) {
-            unsigned scCount = sideTopo.getSubcellCount(d);
-            for (unsigned scOrdinalInSide = 0; scOrdinalInSide < scCount; scOrdinalInSide++) {
-              unsigned scOrdinalInCell = CamelliaCellTools::subcellOrdinalMap(*topo, sideDim, sideOrdinal, d, scOrdinalInSide);
-              if (processedSubcells[d].find(scOrdinalInCell) == processedSubcells[d].end()) { // haven't processed this one yet
-                GlobalIndexType owningCellID = constraints.owningCellIDForSubcell[d][scOrdinalInCell].first;
-                
-                if (owningCellID == cellID) {
-                  CellPtr cell = _meshTopology->getCell(cellID);
-
-                  // determine the subcell index in _meshTopology (will be used below to determine the subcell ordinal of the constraining subcell in the constraining cell)
-                  
-                  IndexType sideEntityIndex = cell->entityIndex(sideDim, sideOrdinal);
-                  IndexType scIndex = _meshTopology->getSubEntityIndex(sideDim, sideEntityIndex, d, scOrdinalInSide);
-                  IndexType constrainingScIndex = _meshTopology->getConstrainingEntityIndex(d, scIndex);
-
-                  if (varHasSupportOnVolume) {
-                    ConstrainingCellInfo sideConstraint = constraints.sideConstraints[sideOrdinal];
-                    DofOrderingPtr constrainingTrialOrdering = _elementTypeForCell[sideConstraint.cellID]->trialOrderPtr;
-                    BasisPtr basis = constrainingTrialOrdering->getBasis(var->ID());
-                    CellPtr constrainingCell = _meshTopology->getCell(sideConstraint.cellID);
-                    
-                    unsigned scOrdinalInConstrainingCell = constrainingCell->findSubcellOrdinal(d,constrainingScIndex);
-                    set<int> scBasisOrdinals = basis->dofOrdinalsForSubcell(d, scOrdinalInConstrainingCell, d);
-                    
-                    globalDofOrdinals.clear();
-                    int count = basisDofOrdinals.size();
-                    for (int i=0; i<count; i++) {
-                      globalDofOrdinals.push_back(globalDofIndex++);
-                    }
-                    scInfo[d][scOrdinalInCell][var->ID()] = globalDofOrdinals;
-                  } else {
-                    // here, we are dealing with a subside or one of its constituents.  We want to use the constraint info for that subside.
-                    unsigned subsideOrdinal = subsideMap[d][scOrdinalInSide];
-                    ConstrainingSubsideInfo subsideConstraint = constraints.subsideConstraints[sideOrdinal][subsideOrdinal];
-                    DofOrderingPtr constrainingTrialOrdering = _elementTypeForCell[subsideConstraint.cellID]->trialOrderPtr;
-                    BasisPtr basis = constrainingTrialOrdering->getBasis(var->ID(),subsideConstraint.sideOrdinal);
-                    
-                    CellPtr constrainingCell = _meshTopology->getCell(subsideConstraint.cellID);
-                    unsigned scOrdinalInConstrainingCell = constrainingCell->findSubcellOrdinal(d,constrainingScIndex);
-                    unsigned scOrdinalInConstrainingSide = CamelliaCellTools::subcellReverseOrdinalMap(*constrainingCell->topology(),
-                                                                                                       sideDim, subsideConstraint.sideOrdinal,
-                                                                                                       d, scOrdinalInConstrainingCell);
-                    
-                    set<int> scBasisOrdinals = basis->dofOrdinalsForSubcell(d, scOrdinalInConstrainingSide, d);
-                    globalDofOrdinals.clear();
-                    int count = scBasisOrdinals.size();
-                    for (int i=0; i<count; i++) {
-                      globalDofOrdinals.push_back(globalDofIndex++);
-                    }
-                    scInfo[d][scOrdinalInCell][var->ID()] = globalDofOrdinals;
-                  }
-                }
-                processedSubcells[d].insert(scOrdinalInCell);
-              }
+  for (int d=0; d<=spaceDim; d++) {
+    int scCount = topo->getSubcellCount(d);
+    for (int scord=0; scord<scCount; scord++) {
+      OwnershipInfo ownershipInfo = constraints.owningCellIDForSubcell[d][scord];
+      if (ownershipInfo.cellID == cellID) { // owned by this cell: count all the constraining dofs as entries for this cell
+        GlobalIndexType constrainingCellID = constraints.subcellConstraints[d][scord].cellID;
+        unsigned constrainingDimension = constraints.subcellConstraints[d][scord].dimension;
+        DofOrderingPtr trialOrdering = _elementTypeForCell[constrainingCellID]->trialOrderPtr;
+        for (map<int, VarPtr>::iterator varIt = trialVars.begin(); varIt != trialVars.end(); varIt++) {
+          VarPtr var = varIt->second;
+          unsigned scordForBasis;
+          bool varHasSupportOnVolume = (var->varType() == FIELD) || (var->varType() == TEST);
+          BasisPtr basis; // the constraining basis for the subcell
+          if (varHasSupportOnVolume) {
+            if (d==spaceDim) {
+              // then there is only one subcell ordinal (and there will be -1's in sideOrdinal and subcellOrdinalInSide....
+              scordForBasis = 0;
+            } else {
+              scordForBasis = CamelliaCellTools::subcellOrdinalMap(*_meshTopology->getCell(constrainingCellID)->topology(), sideDim,
+                                                                   constraints.subcellConstraints[d][scord].sideOrdinal,
+                                                                   constrainingDimension, constraints.subcellConstraints[d][scord].subcellOrdinalInSide);
             }
+            basis = trialOrdering->getBasis(var->ID());
+          } else {
+            if (d==spaceDim) continue; // side bases don't have any support on the interior of the cell...
+            scordForBasis = constraints.subcellConstraints[d][scord].subcellOrdinalInSide; // the basis sees the side, so that's the view to use for subcell ordinal
+            basis = trialOrdering->getBasis(var->ID(), constraints.subcellConstraints[d][scord].sideOrdinal);
           }
+          int dofOrdinalCount = basis->dofOrdinalsForSubcell(constrainingDimension, scordForBasis).size();
+          vector<GlobalIndexType> globalDofIndices;
+          for (int i=0; i<dofOrdinalCount; i++) {
+            globalDofIndices.push_back(globalDofIndex++);
+          }
+          scInfo[d][scord][var->ID()] = globalDofIndices;
         }
       }
     }
@@ -534,440 +921,94 @@ SubCellDofIndexInfo GDAMinimumRule::getOwnedGlobalDofIndices(GlobalIndexType cel
   return scInfo;
 }
 
+void printDofIndexInfo(GlobalIndexType cellID, SubCellDofIndexInfo &dofIndexInfo) {
+  //typedef vector< SubCellOrdinalToMap > SubCellDofIndexInfo; // index to vector: subcell dimension
+  cout << "Dof Index info for cell ID " << cellID << ":\n";
+  ostringstream varIDstream;
+  for (int d=0; d<dofIndexInfo.size(); d++) {
+//    typedef map<int, vector<GlobalIndexType> > VarIDToDofIndices; // key: varID
+//    typedef map<unsigned, VarIDToDofIndices> SubCellOrdinalToMap; // key: subcell ordinal
+    cout << "****** dimension " << d << " *******\n";
+    SubCellOrdinalToMap scordMap = dofIndexInfo[d];
+    for (SubCellOrdinalToMap::iterator scordMapIt = scordMap.begin(); scordMapIt != scordMap.end(); scordMapIt++) {
+      cout << "  scord " << scordMapIt->first << ":\n";
+      VarIDToDofIndices varMap = scordMapIt->second;
+      for (VarIDToDofIndices::iterator varIt = varMap.begin(); varIt != varMap.end(); varIt++) {
+        varIDstream.str("");
+        varIDstream << "     var " << varIt->first << ", global dofs";
+        if (varIt->second.size() > 0) print(varIDstream.str(), varIt->second);
+      }
+    }
+  }
+}
+
 LocalDofMapperPtr GDAMinimumRule::getDofMapper(GlobalIndexType cellID, CellConstraints &constraints, int varIDToMap, int sideOrdinalToMap) {
-  // assumes that the _globalCellDofOffsets are up to date
-  int spaceDim = _meshTopology->getSpaceDim();
-  int sideDim = spaceDim - 1;
-  
-  CellTopoPtr topo = _elementTypeForCell[cellID]->cellTopoPtr;
-  
   CellPtr cell = _meshTopology->getCell(cellID);
-  
+  CellTopoPtr topo = _elementTypeForCell[cellID]->cellTopoPtr;
   int sideCount = topo->getSideCount();
-  
-  typedef vector< SubBasisDofMapperPtr > BasisMap;
-  
-  SubCellDofIndexInfo dofIndexInfo = getOwnedGlobalDofIndices(cellID, constraints);
-  
-  map< GlobalIndexType, SubCellDofIndexInfo > otherDofIndexInfoCache; // local lookup, to avoid a bunch of redundant calls to getOwnedGlobalDofIndices
-  
-  for (int d=0; d<=spaceDim; d++) {
-    int scCount = topo->getSubcellCount(d);
-    for (int scord=0; scord<scCount; scord++) {
-      if (dofIndexInfo[d].find(scord) == dofIndexInfo[d].end()) { // this one not yet filled in
-        pair<GlobalIndexType, GlobalIndexType> owningCellInfo = constraints.owningCellIDForSubcell[d][scord];
-        GlobalIndexType owningCellID = owningCellInfo.first;
-        CellConstraints owningConstraints = getCellConstraints(owningCellID);
-        if (otherDofIndexInfoCache.find(owningCellID) == otherDofIndexInfoCache.end()) {
-          otherDofIndexInfoCache[owningCellID] = getOwnedGlobalDofIndices(owningCellID, owningConstraints);
-        }
-        GlobalIndexType scEntityIndex = owningCellInfo.second;
-        CellPtr owningCell = _meshTopology->getCell(owningCellID);
-        unsigned owningCellScord = owningCell->findSubcellOrdinal(d, scEntityIndex);
-        SubCellDofIndexInfo owningDofIndexInfo = otherDofIndexInfoCache[owningCellID];
-        dofIndexInfo[d][scord] = owningDofIndexInfo[d][owningCellScord];
-      }
-      // DEBUGGING:
-//      if (cellID==20) {
-//        int rank = Teuchos::GlobalMPISession::getRank();
-//        cout << "RANK " << rank << ", cellID 20's global dof indices for d = " << d;
-//        cout << ", scord = " << scord << endl;
-//        map<int, VarPtr> trialVars = _varFactory.trialVars();
-//        for (map<int, VarPtr>::iterator varIt = trialVars.begin(); varIt != trialVars.end(); varIt++) {
-//          VarPtr var = varIt->second;
-//          ostringstream varLabel;
-//          varLabel << "RANK " << rank << ", var " << var->name();
-//          Camellia::print(varLabel.str(), dofIndexInfo[d][scord][var->ID()]);
-//        }
-//      }
-    }
-  }
-  
-  vector< map<unsigned, GlobalIndexType > > sideEntityForSubcell(spaceDim);
-  
-  set<GlobalIndexType> sideEntitiesOfInterest;
-  
-  for (int d=0; d<spaceDim; d++) {
-    int scCount = topo->getSubcellCount(d);
-    for (int scord=0; scord<scCount; scord++) {
-      GlobalIndexType subcellEntityIndex = cell->entityIndex(d, scord);
-      set<IndexType> sidesContainingEntity = _meshTopology->getSidesContainingEntity(d, subcellEntityIndex);
-      // we're going to look for sides that contain this entity which have as an ancestor a side that contains the constraining entity
-      
-      GlobalIndexType constrainingEntityIndex = _meshTopology->getConstrainingEntityIndex(d, subcellEntityIndex);
-      set<IndexType> sidesContainingConstrainingEntity = _meshTopology->getSidesContainingEntity(d, constrainingEntityIndex);
-      
-      for (set<IndexType>::iterator entitySideIt = sidesContainingEntity.begin(); entitySideIt != sidesContainingEntity.end(); entitySideIt++) {
-        GlobalIndexType sideEntityIndex = *entitySideIt;
-        GlobalIndexType constrainingSideEntityIndex = _meshTopology->getConstrainingEntityIndex(sideDim, sideEntityIndex);
-        if (sidesContainingConstrainingEntity.find(constrainingSideEntityIndex) != sidesContainingConstrainingEntity.end()) {
-          sideEntityForSubcell[d][scord] = sideEntityIndex;
-          sideEntitiesOfInterest.insert(sideEntityIndex);
-          
-          shards::CellTopology constrainingSideTopology = _meshTopology->getEntityTopology(sideDim, constrainingSideEntityIndex);
-          break;
-        }
-      }
-    }
-  }
-  
-  map<GlobalIndexType, RefinementBranch > volumeRefinementsForSideEntity;
-  map<GlobalIndexType, RefinementBranch > sideRefinementsForSideEntity;
-  
-  map<GlobalIndexType, map<GlobalIndexType, unsigned> > subsideOrdinalInSideEntityOfInterest;  // outer map key: sideEntityIndex.  Inner map key: subsideEntityIndex.  Inner map value: subside ordinal of the specified subside in the specified side.
-  
-  for (set<GlobalIndexType>::iterator sideEntityIt = sideEntitiesOfInterest.begin(); sideEntityIt != sideEntitiesOfInterest.end(); sideEntityIt++ ) {
-    GlobalIndexType sideEntityIndex = *sideEntityIt;
-    pair<IndexType, unsigned> cellInfo = _meshTopology->getFirstCellForSide(sideEntityIndex); // there may be a second cell for this side, but if so, they're compatible neighbors, so that the RefinementBranch will be empty--i.e. if there is a second, we'd get the same result as we do using the first
-    GlobalIndexType cellID = cellInfo.first;
-    unsigned sideOrdinal = cellInfo.second;
-    CellPtr cellForSide = _meshTopology->getCell(cellID);
-    RefinementBranch refBranch = cellForSide->refinementBranchForSide(sideOrdinal);
-    volumeRefinementsForSideEntity[sideEntityIndex] = refBranch;
-    if (refBranch.size() == 0) { // then side refinements also empty
-      sideRefinementsForSideEntity[sideEntityIndex] = refBranch;
-    } else {
-      pair<IndexType, unsigned> neighborInfo = cellForSide->getNeighbor(sideOrdinal);
-      unsigned neighborSideOrdinal = neighborInfo.second;
-      unsigned ancestorSideOrdinal = _meshTopology->getCell(neighborInfo.first)->getNeighbor(neighborSideOrdinal).second;
-      sideRefinementsForSideEntity[sideEntityIndex] = RefinementPattern::sideRefinementBranch(refBranch, ancestorSideOrdinal);
-    }
-    
-    shards::CellTopology sideTopo = _meshTopology->getEntityTopology(sideDim, sideEntityIndex);
-    unsigned ssCount = sideTopo.getSubcellCount(sideDim-1);
-    for (int subsideOrdinal=0; subsideOrdinal<ssCount; subsideOrdinal++) {
-      GlobalIndexType subsideEntityIndex = _meshTopology->getSubEntityIndex(sideDim, sideEntityIndex, sideDim-1, subsideOrdinal);
-      shards::CellTopology subsideTopo = _meshTopology->getEntityTopology(sideDim-1, subsideEntityIndex);
-      subsideOrdinalInSideEntityOfInterest[sideEntityIndex][subsideEntityIndex] = subsideOrdinal;
-    }
-  }
+  int spaceDim = topo->getDimension();
   
   DofOrderingPtr trialOrdering = _elementTypeForCell[cellID]->trialOrderPtr;
   map<int, VarPtr> trialVars = _varFactory.trialVars();
   
-  map< int, BasisMap > volumeMap;
+//  printConstraintInfo(cellID);
+  
+//  FieldContainer<bool> processedDofs(trialOrdering->totalDofs());
+//  processedDofs.initialize(false);
+  
+  typedef vector< SubBasisDofMapperPtr > BasisMap;
+  map< int, BasisMap > volumeMap; // keys are variable IDs
   vector< map< int, BasisMap > > sideMaps(sideCount);
   
-  for (map<int, VarPtr>::iterator varIt = trialVars.begin(); varIt != trialVars.end(); varIt++) {
-    VarPtr var = varIt->second;
-    bool isL2Var = (var->space() == L2) || (var->space() == VECTOR_L2);
-    bool omitVarEntry = (varIDToMap != -1) && (var->ID() != varIDToMap); // don't skip processing, just omit it from the map
-    BasisMap volumeBasisMap;
-    bool varHasSupportOnVolume = (var->varType() == FIELD) || (var->varType() == TEST);
-    if ( varHasSupportOnVolume ) {
-      BasisPtr basis = trialOrdering->getBasis(var->ID());
-      set<unsigned> basisDofOrdinals;
-      
-      if (isL2Var) { // unconstrained / local
-        int cardinality = basis->getCardinality();
-        for (int i=0; i<cardinality; i++) {
-          basisDofOrdinals.insert(i);
+  /**************** ESTABLISH OWNERSHIP ****************/
+  SubCellDofIndexInfo dofIndexInfo = getOwnedGlobalDofIndices(cellID, constraints);
+  
+  // fill in the other global dof indices (the ones not owned by this cell):
+  map< GlobalIndexType, SubCellDofIndexInfo > otherDofIndexInfoCache; // local lookup, to avoid a bunch of redundant calls to getOwnedGlobalDofIndices
+  for (int d=0; d<=spaceDim; d++) {
+    int scCount = topo->getSubcellCount(d);
+    for (int scord=0; scord<scCount; scord++) {
+      if (dofIndexInfo[d].find(scord) == dofIndexInfo[d].end()) { // this one not yet filled in
+        OwnershipInfo owningCellInfo = constraints.owningCellIDForSubcell[d][scord];
+        GlobalIndexType owningCellID = owningCellInfo.cellID;
+        CellConstraints owningConstraints = getCellConstraints(owningCellID);
+        GlobalIndexType scEntityIndex = owningCellInfo.owningSubcellEntityIndex;
+        CellPtr owningCell = _meshTopology->getCell(owningCellID);
+        unsigned owningCellScord = owningCell->findSubcellOrdinal(owningCellInfo.dimension, scEntityIndex);
+        if (otherDofIndexInfoCache.find(owningCellID) == otherDofIndexInfoCache.end()) {
+          otherDofIndexInfoCache[owningCellID] = getOwnedGlobalDofIndices(owningCellID, owningConstraints);
         }
-      } else {
-        set<int> ordinalsInt = BasisReconciliation::interiorDofOrdinalsForBasis(basis); // basis->dofOrdinalsForInterior(); // TODO: change dofOrdinalsForInterior to return set<unsigned>...
-        basisDofOrdinals.insert(ordinalsInt.begin(),ordinalsInt.end());
+        SubCellDofIndexInfo owningDofIndexInfo = otherDofIndexInfoCache[owningCellID];
+        dofIndexInfo[d][scord] = owningDofIndexInfo[d][owningCellScord];
       }
-      vector<GlobalIndexType> globalDofOrdinals = dofIndexInfo[spaceDim][0][var->ID()];
-      if (!omitVarEntry) {
-        if (basisDofOrdinals.size() > 0) {
-//          cout << "RANK " << Teuchos::GlobalMPISession::getRank() << ": getDofMapper: on cell " << cellID << " for var " << var->ID() << ", adding volume sub-basis dofMapper for " << basisDofOrdinals.size() << "  local dofOrdinals";
-//          cout << ", mapping to " << globalDofOrdinals.size() << " global dof ordinals: ";
-//          cout << "( ";
-//          for (set<unsigned>::iterator ordIt=basisDofOrdinals.begin(); ordIt != basisDofOrdinals.end(); ordIt++) {
-//            cout << *ordIt << " ";
-//          }
-//          cout << ") ---> ( ";
-//          for (vector<unsigned>::iterator ordIt=globalDofOrdinals.begin(); ordIt != globalDofOrdinals.end(); ordIt++) {
-//            cout << *ordIt << " ";
-//          }
-//          cout << ")\n";
-          
-          volumeBasisMap.push_back(SubBasisDofMapper::subBasisDofMapper(basisDofOrdinals, globalDofOrdinals));
-        }
-      }
-    }
-    
-    if ( ! (varHasSupportOnVolume && isL2Var) ) { // if space is L^2 on the volume, we'll have claimed all the dofs above, and we can skip further processing
-//      vector< set<unsigned> > processedSubcells(sideDim);
-      for (int sideOrdinal=0; sideOrdinal<sideCount; sideOrdinal++) {
-        bool omitSideEntry = (sideOrdinalToMap != -1) && (sideOrdinal != sideOrdinalToMap);
-        BasisMap sideBasisMap;
-        shards::CellTopology sideTopo = topo->getCellTopologyData(sideDim, sideOrdinal);
-        set<unsigned> basisDofOrdinals;
-        ConstrainingCellInfo sideConstraint = constraints.sideConstraints[sideOrdinal];
-        CellPtr constrainingCellForSide = _meshTopology->getCell(sideConstraint.cellID);
-        DofOrderingPtr constrainingTrialOrdering = _elementTypeForCell[sideConstraint.cellID]->trialOrderPtr;
-        
-        pair< GlobalIndexType, unsigned > ancestralCellInfo;
-        
-        bool constrainingCellIsAncestor = false;  // constraining cell will either be the ancestor or the neighbor of the ancestor of the current cell
-        CellPtr currentCell = cell;
-        while (currentCell.get() != NULL) {
-          if (currentCell->cellIndex() == sideConstraint.cellID) {
-            constrainingCellIsAncestor = true;
-          }
-          currentCell = currentCell->getParent();
-        }
-        if (constrainingCellIsAncestor) {
-          ancestralCellInfo = make_pair(sideConstraint.cellID,sideConstraint.sideOrdinal);
-        } else { // if the constraining cell is not the ancestor, then its neighbor is:
-          ancestralCellInfo = constrainingCellForSide->getNeighbor(sideConstraint.sideOrdinal);
-        }
-        
-        IndexType constrainingSideEntityIndex = constrainingCellForSide->entityIndex(sideDim, sideConstraint.sideOrdinal);
-        shards::CellTopology constrainingSideTopo = _meshTopology->getEntityTopology(sideDim, constrainingSideEntityIndex);
-        
-        unsigned constrainingSidePermutationInverse, ancestralCellSidePermutation;
-        
-        if (ancestralCellInfo.first != -1) {
-          CellPtr ancestralCell = _meshTopology->getCell(ancestralCellInfo.first);
-          unsigned ancestralCellSideOrdinal = ancestralCellInfo.second;
-          ancestralCellSidePermutation = ancestralCell->subcellPermutation(sideDim, ancestralCellSideOrdinal);
-          unsigned constrainingSidePermutation = _meshTopology->getCell(sideConstraint.cellID)->subcellPermutation(sideDim, sideConstraint.sideOrdinal);
-          constrainingSidePermutationInverse = CamelliaCellTools::permutationInverse(constrainingSideTopo, constrainingSidePermutation);
-        } else {  // no neighbor
-          constrainingSidePermutationInverse = 0;
-          ancestralCellSidePermutation = 0;
-        }
-        
-        unsigned composedPermutation = CamelliaCellTools::permutationComposition(constrainingSideTopo, constrainingSidePermutationInverse, ancestralCellSidePermutation);
-        
-        // DEBUGGING:
-//        if (ancestralCellInfo.first != -1) {
-//          cout << "on cell " << cellID << ", side " << sideOrdinal << ", composedPermutation = " << composedPermutation << endl;
-//        }
-        
-        RefinementBranch refBranch;
-        BasisPtr basis, constrainingBasis;
-        
-        vector<GlobalIndexType> globalDofOrdinals = dofIndexInfo[sideDim][sideOrdinal][var->ID()];
-        
-        SubBasisReconciliationWeights subBasisWeights;
-
-        if (varHasSupportOnVolume) {
-          constrainingBasis = constrainingTrialOrdering->getBasis(var->ID());
-          basis = trialOrdering->getBasis(var->ID());
-          refBranch = volumeRefinementsForSideEntity[sideEntityForSubcell[sideDim][sideOrdinal]];
-          subBasisWeights = _br.constrainedWeights(basis, sideOrdinal, refBranch, constrainingBasis, sideConstraint.sideOrdinal, composedPermutation);
-          
-          FieldContainer<double> constraintMatrixSideInterior = BasisReconciliation::subBasisReconciliationWeightsForSubcell(subBasisWeights, sideDim, basis, sideOrdinal,
-                                                                                                                             constrainingBasis, sideConstraint.sideOrdinal,
-                                                                                                                             basisDofOrdinals);
-          if (constraintMatrixSideInterior.size() == 0) {
-            cout << "Error: empty constraint matrix encountered.\n";
-            TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Error: empty constraint matrix encountered.\n");
-          }
-          
-          if (basisDofOrdinals.size() > 0) {
-            if (!omitSideEntry && !omitVarEntry) {
-              volumeBasisMap.push_back(SubBasisDofMapper::subBasisDofMapper(basisDofOrdinals, globalDofOrdinals, constraintMatrixSideInterior));
-            }
-//            cout << "RANK " << Teuchos::GlobalMPISession::getRank() << ": getDofMapper: on cell " << cellID << " for var " << var->ID() << " on side " << sideOrdinal << ", adding volume sub-basis dofMapper for " << basisDofOrdinals.size() << "  local dofOrdinals";
-//            cout << ", mapping to " << globalDofOrdinals.size() << " global dof ordinals: ";
-//            cout << "( ";
-//            for (set<unsigned>::iterator ordIt=basisDofOrdinals.begin(); ordIt != basisDofOrdinals.end(); ordIt++) {
-//              cout << *ordIt << " ";
-//            }
-//            cout << ") ---> ( ";
-//            for (vector<unsigned>::iterator ordIt=globalDofOrdinals.begin(); ordIt != globalDofOrdinals.end(); ordIt++) {
-//              cout << *ordIt << " ";
-//            }
-//            cout << ")\n";
-          }
-        }
-        else
-        { // basis has support on mesh skeleton
-          // first, we want to set up a map for the "interior" of the side (below, we'll deal with subsides and their subcells)
-          constrainingBasis = constrainingTrialOrdering->getBasis(var->ID(),sideConstraint.sideOrdinal);
-          basis = trialOrdering->getBasis(var->ID(),sideOrdinal);
-          
-          refBranch = sideRefinementsForSideEntity[sideEntityForSubcell[sideDim][sideOrdinal]];
-          set<int> sideBasisOrdinals = BasisReconciliation::interiorDofOrdinalsForBasis(basis); // isL2Var ? basis->dofOrdinalsForSubcells(sideDim, true) : basis->dofOrdinalsForInterior(); // if L^2, all dofs are interior...
-          basisDofOrdinals = BasisReconciliation::internalDofIndicesForFinerBasis(basis, refBranch);
-          
-          if (basisDofOrdinals.size() > 0) { // can be empty (consider a linear H^1 basis, e.g. -- there will be no middle nodes)
-            FieldContainer<double> constraintMatrixSide = _br.constrainedWeights(basis, refBranch, constrainingBasis, composedPermutation);
-            
-            if (constraintMatrixSide.size() == 0) {
-              cout << "Error: empty constraint matrix encountered.\n";
-              TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Error: empty constraint matrix encountered.\n");
-            }
-            
-            if (constraintMatrixSide.dimension(0) != basisDofOrdinals.size()) {
-              cout << "GDAMinimumRule internal error. constraintMatrixSide row dimension does not match basisDofOrdinals size.\n";
-              // repeat, so we can walk through in the debugger:
-              // computeConstrainedWeights(finerBasis,refinements,coarserBasis,vertexNodePermutation);
-              FieldContainer<double> constraintMatrixSide = BasisReconciliation::computeConstrainedWeights(basis, refBranch, constrainingBasis, composedPermutation);
-              TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "constraintMatrixSide row dimension does not match basisDofOrdinals size");
-            }
-          
-            if (!omitSideEntry && !omitVarEntry) {
-              sideBasisMap.push_back(SubBasisDofMapper::subBasisDofMapper(basisDofOrdinals, globalDofOrdinals, constraintMatrixSide));
-            }
-//            cout << "RANK " << Teuchos::GlobalMPISession::getRank() << ": getDofMapper: on cell " << cellID << " for var " << var->ID() << " on side " << sideOrdinal << ", adding side sub-basis dofMapper for " << basisDofOrdinals.size() << "  local dofOrdinals";
-//            cout << ", mapping to " << globalDofOrdinals.size() << " global dof ordinals: ";
-//            cout << "( ";
-//            for (set<unsigned>::iterator ordIt=basisDofOrdinals.begin(); ordIt != basisDofOrdinals.end(); ordIt++) {
-//              cout << *ordIt << " ";
-//            }
-//            cout << ") ---> ( ";
-//            for (vector<unsigned>::iterator ordIt=globalDofOrdinals.begin(); ordIt != globalDofOrdinals.end(); ordIt++) {
-//              cout << *ordIt << " ";
-//            }
-//            cout << ")\n";
-//            cout << "constraintMatrixSide:\n" << constraintMatrixSide;
-          }
-        }
-        
-        // if the space is L2, then we will have addressed all the dofs that belong to the subcells...
-        if (!isL2Var) {
-          vector< map< unsigned, unsigned > > subsideMap = buildSubsideMap(sideTopo);
-          
-          for (int d=0; d<sideDim; d++) {
-            unsigned scCount = sideTopo.getSubcellCount(d);
-            for (unsigned scOrdinalInSide = 0; scOrdinalInSide < scCount; scOrdinalInSide++) {
-              unsigned scOrdinalInCell = CamelliaCellTools::subcellOrdinalMap(*topo, sideDim, sideOrdinal, d, scOrdinalInSide);
-//              if (processedSubcells[d].find(scOrdinalInCell) == processedSubcells[d].end()) { // haven't processed this one yet
-                // determine the subcell index in _meshTopology (will be used below to determine the subcell ordinal of the constraining subcell in the constraining cell)
-              IndexType sideEntityIndex = cell->entityIndex(sideDim, sideOrdinal);
-              IndexType scIndex = _meshTopology->getSubEntityIndex(sideDim, sideEntityIndex, d, scOrdinalInSide);
-              IndexType constrainingScIndex = _meshTopology->getConstrainingEntityIndex(d, scIndex);
-                
-              set<unsigned> scBasisOrdinals;
-              FieldContainer<double> constraintMatrixSubcell;
-              
-              if (varHasSupportOnVolume) {
-                unsigned scOrdinalInConstrainingCell = constrainingCellForSide->findSubcellOrdinal(d,constrainingScIndex);
-                constraintMatrixSubcell = BasisReconciliation::subBasisReconciliationWeightsForSubcell(subBasisWeights, d, basis, scOrdinalInCell,
-                                                                                                       constrainingBasis, scOrdinalInConstrainingCell, scBasisOrdinals);
-              } else {
-                // here, we are dealing with a subside or one of its constituents.  We want to use the constraint info for that subside.
-                unsigned subsideOrdinal = subsideMap[d][scOrdinalInSide];
-                ConstrainingSubsideInfo subsideConstraint = constraints.subsideConstraints[sideOrdinal][subsideOrdinal];
-                DofOrderingPtr constrainingTrialOrdering = _elementTypeForCell[subsideConstraint.cellID]->trialOrderPtr;
-                BasisPtr constrainingBasis = constrainingTrialOrdering->getBasis(var->ID(),subsideConstraint.sideOrdinal);
-                
-                // by construction, side bases have the same view of the subside (we always match a side with one of its ancestors)-- the permutation is 0, the identity
-                unsigned permutation = 0; // I *think* this is right…
-                GlobalIndexType sideEntityIndexForReconciliation = sideEntityForSubcell[d][scOrdinalInCell]; // the one that was used in the above call to constrainedWeights()
-                GlobalIndexType sideEntityIndexInCell = cell->entityIndex(sideDim, sideOrdinal);
-                
-                unsigned subsideEntityIndex = _meshTopology->getSubEntityIndex(sideDim, sideEntityIndexInCell, sideDim-1, subsideOrdinal);
-                unsigned subsideOrdinalInCellSide = subsideOrdinalInSideEntityOfInterest[sideEntityIndexInCell][subsideEntityIndex];
-                unsigned subsideOrdinalInReconciledSideEntity = subsideOrdinalInSideEntityOfInterest[sideEntityIndexForReconciliation][subsideEntityIndex];
-                subBasisWeights = _br.constrainedWeights(basis, subsideOrdinalInReconciledSideEntity, refBranch, constrainingBasis, subsideConstraint.subsideOrdinalInSide, permutation);
-                
-                // Here, we consider the possibility that the subcell orientation (vertex permutation) in the cell's side differs from that used in our constraint computation.
-                if (sideEntityIndexForReconciliation != sideEntityIndexInCell) {
-                  unsigned cellSubsideEntityPermutation = _meshTopology->getSubEntityPermutation(sideDim, sideEntityIndexInCell, sideDim-1, subsideOrdinalInCellSide);
-                  unsigned reconciledSubsideEntityPermutation = _meshTopology->getSubEntityPermutation(sideDim, sideEntityIndexForReconciliation, sideDim-1, subsideOrdinalInReconciledSideEntity);
-                  
-                  shards::CellTopology subsideTopo = _meshTopology->getEntityTopology(sideDim-1, subsideEntityIndex);
-                  
-                  unsigned reconciledSubsideEntityPermutationInverse = CamelliaCellTools::permutationInverse(subsideTopo, reconciledSubsideEntityPermutation);
-                  unsigned cellSideToSideEntitySubsidePermutation = CamelliaCellTools::permutationComposition(subsideTopo, reconciledSubsideEntityPermutationInverse, cellSubsideEntityPermutation);
-                  
-                  SubBasisReconciliationWeights cellSideToSideEntityReconciliationWeights = _br.constrainedWeights(basis, subsideOrdinal, basis, subsideOrdinalInReconciledSideEntity, cellSideToSideEntitySubsidePermutation);
-                  
-                  // now, we need to fold cellSideToSideEntityReconciliationWeights into subBasisWeights
-                  // for nodal bases, cellSideToSideEntityReconciliationWeights should be a permutation matrix.
-                  // in general, it should be a square matrix that matches the fine basis cardinality in subBasisWeights.
-                  int cellSubsideDofCount = cellSideToSideEntityReconciliationWeights.fineOrdinals.size();
-                  int reconciledSubsideDofCount = cellSideToSideEntityReconciliationWeights.coarseOrdinals.size();
-                  int reconciledSubsideDofCount2 = subBasisWeights.fineOrdinals.size();
-                  
-                  if (cellSubsideDofCount != reconciledSubsideDofCount) {
-                    cout << "(cellSubsideDofCount != reconciledSubsideDofCount) : (" << cellSubsideDofCount << " != " << reconciledSubsideDofCount << ")\n";
-                    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "cellSubsideDofCount != reconciledSubsideDofCount");
-                  }
-                  if (reconciledSubsideDofCount != reconciledSubsideDofCount2) {
-                    cout << "(reconciledSubsideDofCount != reconciledSubsideDofCount2) : (" << reconciledSubsideDofCount << " != " << reconciledSubsideDofCount2 << ")\n";
-                    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "reconciledSubsideDofCount != reconciledSubsideDofCount2");
-                  }
-                  
-//                  print("subBasisWeights (before composition): fineOrdinals", subBasisWeights.fineOrdinals);
-//                  print("subBasisWeights (before composition): coarseOrdinals", subBasisWeights.coarseOrdinals);
-//                  
-//                  print("cellSideToSideEntityReconciliationWeights: fineOrdinals", cellSideToSideEntityReconciliationWeights.fineOrdinals);
-//                  print("cellSideToSideEntityReconciliationWeights: coarseOrdinals", cellSideToSideEntityReconciliationWeights.coarseOrdinals);
-                  
-                  subBasisWeights = BasisReconciliation::composedSubBasisReconciliationWeights(cellSideToSideEntityReconciliationWeights, subBasisWeights);
-
-//                  print("subBasisWeights (after composition): fineOrdinals", subBasisWeights.fineOrdinals);
-//                  print("subBasisWeights (after composition): coarseOrdinals", subBasisWeights.coarseOrdinals);
-                }
-                
-                CellPtr constrainingCell = _meshTopology->getCell(subsideConstraint.cellID);
-                unsigned scOrdinalInConstrainingCell = constrainingCell->findSubcellOrdinal(d,constrainingScIndex);
-                unsigned scOrdinalInConstrainingSide = CamelliaCellTools::subcellReverseOrdinalMap(*constrainingCell->topology(),
-                                                                                                   sideDim, subsideConstraint.sideOrdinal,
-                                                                                                   d, scOrdinalInConstrainingCell);
-                
-                constraintMatrixSubcell = BasisReconciliation::subBasisReconciliationWeightsForSubcell(subBasisWeights, d, basis, scOrdinalInSide,
-                                                                                                       constrainingBasis, scOrdinalInConstrainingSide, scBasisOrdinals);
-                
-                if (constraintMatrixSubcell.size() == 0) {
-                  cout << "Error: empty constraint matrix encountered.\n";
-                  TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Error: empty constraint matrix encountered.\n");
-                }
-              }
-              
-              vector<GlobalIndexType> globalDofOrdinals = dofIndexInfo[d][scOrdinalInCell][var->ID()];
-              
-              if (varHasSupportOnVolume) {
-                if (scBasisOrdinals.size() > 0) {
-                  if (!omitSideEntry && !omitVarEntry) {
-                    volumeBasisMap.push_back(SubBasisDofMapper::subBasisDofMapper(scBasisOrdinals, globalDofOrdinals, constraintMatrixSubcell));
-                  }
-//                  cout << "RANK " << Teuchos::GlobalMPISession::getRank() << ": getDofMapper: on cell " << cellID << " for var " << var->ID() << " on side " << sideOrdinal << ", adding volume sub-basis dofMapper (for subcell) for " << basisDofOrdinals.size() << "  local dofOrdinals";
-//                  cout << ", mapping to " << globalDofOrdinals.size() << " global dof ordinals: ";
-//                  cout << "( ";
-//                  for (set<unsigned>::iterator ordIt=scBasisOrdinals.begin(); ordIt != scBasisOrdinals.end(); ordIt++) {
-//                    cout << *ordIt << " ";
-//                  }
-//                  cout << ") ---> ( ";
-//                  for (vector<unsigned>::iterator ordIt=globalDofOrdinals.begin(); ordIt != globalDofOrdinals.end(); ordIt++) {
-//                    cout << *ordIt << " ";
-//                  }
-//                  cout << ")\n";
-                }
-              } else {
-                if (scBasisOrdinals.size() > 0) {
-                  if (!omitSideEntry && !omitVarEntry) {
-                    sideBasisMap.push_back(SubBasisDofMapper::subBasisDofMapper(scBasisOrdinals, globalDofOrdinals, constraintMatrixSubcell));
-                  }
-//                  cout << "RANK " << Teuchos::GlobalMPISession::getRank() << ": getDofMapper: on cell " << cellID << " for var " << var->ID() << " on side " << sideOrdinal << ", adding side sub-basis dofMapper (for subcell) for " << basisDofOrdinals.size() << "  local dofOrdinals";
-//                  cout << ", mapping to " << globalDofOrdinals.size() << " global dof ordinals: ";
-//                  cout << "( ";
-//                  for (set<unsigned>::iterator ordIt=scBasisOrdinals.begin(); ordIt != scBasisOrdinals.end(); ordIt++) {
-//                    cout << *ordIt << " ";
-//                  }
-//                  cout << ") ---> ( ";
-//                  for (vector<unsigned>::iterator ordIt=globalDofOrdinals.begin(); ordIt != globalDofOrdinals.end(); ordIt++) {
-//                    cout << *ordIt << " ";
-//                  }
-//                  cout << ")\n";
-                }
-              }
-              
-                //processedSubcells[d].insert(scOrdinalInCell);
-              
-              //}
-            }
-          }
-        }
-        if (!varHasSupportOnVolume) {
-          sideMaps[sideOrdinal][var->ID()] = sideBasisMap;
-        }
-      }
-    }
-    if (varHasSupportOnVolume) {
-      volumeMap[var->ID()] = volumeBasisMap;
     }
   }
   
-//  int rank = Teuchos::GlobalMPISession::getRank();
-//  if (rank==0) cout << "Creating LocalDofMapper for cell " << cellID << endl;
+//  printDofIndexInfo(cellID, dofIndexInfo);
+  
+  /**************** CREATE SUB-BASIS MAPPERS ****************/
+  
+  for (map<int, VarPtr>::iterator varIt = trialVars.begin(); varIt != trialVars.end(); varIt++) {
+    VarPtr var = varIt->second;
+    bool varHasSupportOnVolume = (var->varType() == FIELD) || (var->varType() == TEST);
+    bool omitVarEntry = (varIDToMap != -1) && (var->ID() != varIDToMap);
+    
+    if (omitVarEntry) continue;
+    
+    if ((sideOrdinalToMap != -1) && varHasSupportOnVolume) {
+      cout << "WARNING: looks like you're trying to impose BCs on a variable defined on the volume.  (For volume variables, we don't yet appropriately filter just the sides you're asking for--i.e. just the boundary--in getDofMapper).\n";
+    }
+    
+    if (varHasSupportOnVolume) {
+      volumeMap[var->ID()] = getBasisMap(cellID, dofIndexInfo, var); // this is where we should add argument to give just the side being requested...
+    } else {
+      for (int sideOrdinal=0; sideOrdinal < sideCount; sideOrdinal++) {
+        if ((sideOrdinalToMap != -1) && (sideOrdinal != sideOrdinalToMap)) continue; // skip this side...
+        sideMaps[sideOrdinal][var->ID()] = getBasisMap(cellID, dofIndexInfo, var, sideOrdinal);
+      }
+    }
+  }
+  
   return Teuchos::rcp( new LocalDofMapper(trialOrdering,volumeMap,sideMaps,varIDToMap,sideOrdinalToMap) );
 }
 
@@ -986,26 +1027,24 @@ PartitionIndexType GDAMinimumRule::partitionForGlobalDofIndex( GlobalIndexType g
 void GDAMinimumRule::printConstraintInfo(GlobalIndexType cellID) {
   CellConstraints cellConstraints = getCellConstraints(cellID);
   cout << "***** Constraints for cell " << cellID << " ****** \n";
-  unsigned sideCount = cellConstraints.sideConstraints.size();
-  for (int sideOrdinal=0; sideOrdinal<sideCount; sideOrdinal++) {
-    cout << "Side " << sideOrdinal << ":\n";
-    ConstrainingCellInfo sideConstraint = cellConstraints.sideConstraints[sideOrdinal];
-    cout << "    constraining cell: " << sideConstraint.cellID << ", side " << sideConstraint.sideOrdinal << endl;
-    int subsideCount = cellConstraints.subsideConstraints[sideOrdinal].size();
-    for (int subsideOrdinal = 0; subsideOrdinal < subsideCount; subsideOrdinal++) {
-      ConstrainingSubsideInfo subsideConstraint = cellConstraints.subsideConstraints[sideOrdinal][subsideOrdinal];
-      cout << "        subside " << subsideOrdinal << ": cellID " << subsideConstraint.cellID << ", side " << subsideConstraint.sideOrdinal;
-      cout << ", subsideOrdinalInSide " << subsideConstraint.subsideOrdinalInSide << endl;
-    }
-  }
-  cout << "Ownership info:\n";
   CellPtr cell = _meshTopology->getCell(cellID);
   int spaceDim = cell->topology()->getDimension();
   for (int d=0; d<spaceDim; d++) {
     cout << "  dimension " << d << " subcells: " << endl;
     int subcellCount = cell->topology()->getSubcellCount(d);
     for (int scord=0; scord<subcellCount; scord++) {
-      cout << "    ordinal " << scord  << " owned by cell " << cellConstraints.owningCellIDForSubcell[d][scord].first << endl;
+      ConstrainingSubcellInfo constraintInfo = cellConstraints.subcellConstraints[d][scord];
+      cout << "    ordinal " << scord  << " constrained by cell " << constraintInfo.cellID;
+      cout << ", side " << constraintInfo.sideOrdinal << "'s dimension " << constraintInfo.dimension << " subcell ordinal " << constraintInfo.subcellOrdinalInSide << endl;
+    }
+  }
+
+  cout << "Ownership info:\n";
+  for (int d=0; d<spaceDim; d++) {
+    cout << "  dimension " << d << " subcells: " << endl;
+    int subcellCount = cell->topology()->getSubcellCount(d);
+    for (int scord=0; scord<subcellCount; scord++) {
+      cout << "    ordinal " << scord  << " owned by cell " << cellConstraints.owningCellIDForSubcell[d][scord].cellID << endl;
     }
   }
 }
@@ -1037,91 +1076,38 @@ void GDAMinimumRule::rebuildLookups() {
     _cellDofOffsets[cellID] = _partitionDofCount;
     CellPtr cell = _meshTopology->getCell(cellID);
     CellTopoPtr topo = cell->topology();
-    int sideCount = topo->getSideCount();
     CellConstraints constraints = getCellConstraints(cellID);
-    DofOrderingPtr trialOrdering = _elementTypeForCell[cellID]->trialOrderPtr;
-    for (map<int, VarPtr>::iterator varIt = trialVars.begin(); varIt != trialVars.end(); varIt++) {
-      VarPtr var = varIt->second;
-      bool isL2Var = (var->space() == L2) || (var->space() == VECTOR_L2);
-      bool varHasSupportOnVolume = (var->varType() == FIELD) || (var->varType() == TEST);
-      if ( varHasSupportOnVolume ) { // i.e. a variable with support on the volume
-        BasisPtr basis = trialOrdering->getBasis(var->ID());
-        if (isL2Var) { // unconstrained / local
-          _partitionDofCount += basis->getCardinality();
-        } else {
-          _partitionDofCount += BasisReconciliation::interiorDofOrdinalsForBasis(basis).size(); // basis->dofOrdinalsForInterior().size();
-        }
-      }
-
-      if ( ! (varHasSupportOnVolume && isL2Var) ) { // if space is L^2 on the volume, we'll have claimed all the dofs above, and we can skip further processing
-        vector< set<unsigned> > processedSubcells(sideDim);
-        for (int sideOrdinal=0; sideOrdinal<sideCount; sideOrdinal++) {
-          shards::CellTopology sideTopo = topo->getCellTopologyData(sideDim, sideOrdinal);
-          GlobalIndexType owningCellIDForSide = constraints.owningCellIDForSubcell[sideDim][sideOrdinal].first;
-          if (owningCellIDForSide == cellID) {
-            ConstrainingCellInfo sideConstraint = constraints.sideConstraints[sideOrdinal];
-            DofOrderingPtr constrainingTrialOrdering = _elementTypeForCell[sideConstraint.cellID]->trialOrderPtr;
+    
+    for (int d=0; d<=spaceDim; d++) {
+      int scCount = topo->getSubcellCount(d);
+      for (int scord=0; scord<scCount; scord++) {
+        OwnershipInfo ownershipInfo = constraints.owningCellIDForSubcell[d][scord];
+        if (ownershipInfo.cellID == cellID) { // owned by this cell: count all the constraining dofs as entries for this cell
+          GlobalIndexType constrainingCellID = constraints.subcellConstraints[d][scord].cellID;
+          unsigned constrainingSubcellDimension = constraints.subcellConstraints[d][scord].dimension;
+          DofOrderingPtr trialOrdering = _elementTypeForCell[constrainingCellID]->trialOrderPtr;
+          for (map<int, VarPtr>::iterator varIt = trialVars.begin(); varIt != trialVars.end(); varIt++) {
+            VarPtr var = varIt->second;
+            unsigned scordForBasis;
+            bool varHasSupportOnVolume = (var->varType() == FIELD) || (var->varType() == TEST);
+            BasisPtr basis; // the constraining basis for the subcell
             if (varHasSupportOnVolume) {
-              BasisPtr basis = constrainingTrialOrdering->getBasis(var->ID());
-              set<int> sideBasisOrdinals = basis->dofOrdinalsForSubcell(sideDim, sideConstraint.sideOrdinal, sideDim);
-              _partitionDofCount += sideBasisOrdinals.size();
-            } else {
-              BasisPtr basis = constrainingTrialOrdering->getBasis(var->ID(),sideConstraint.sideOrdinal);
-              if (isL2Var) { // unconstrained / local
-                _partitionDofCount += basis->getCardinality();
+               // volume basis => the basis sees the cell as a whole: in constraining cell, map from side scord to the volume
+              if (constrainingSubcellDimension==spaceDim) {
+                // then there is only one subcell ordinal (and there will be -1's in sideOrdinal and subcellOrdinalInSide....
+                scordForBasis = 0;
               } else {
-                _partitionDofCount += BasisReconciliation::interiorDofOrdinalsForBasis(basis).size(); //basis->dofOrdinalsForInterior().size();
+                scordForBasis = CamelliaCellTools::subcellOrdinalMap(*_meshTopology->getCell(constrainingCellID)->topology(), sideDim,
+                                                                     constraints.subcellConstraints[d][scord].sideOrdinal,
+                                                                     constrainingSubcellDimension, constraints.subcellConstraints[d][scord].subcellOrdinalInSide);
               }
+              basis = trialOrdering->getBasis(var->ID());
+            } else {
+              if (constrainingSubcellDimension==spaceDim) continue; // side bases don't have any support on the interior of the cell...
+              scordForBasis = constraints.subcellConstraints[d][scord].subcellOrdinalInSide; // the basis sees the side, so that's the view to use for subcell ordinal
+              basis = trialOrdering->getBasis(var->ID(), constraints.subcellConstraints[d][scord].sideOrdinal);
             }
-          }
-          
-          vector< map< unsigned, unsigned > > subsideMap = buildSubsideMap(sideTopo);
-          
-          for (int d=0; d<sideDim; d++) {
-            unsigned scCount = sideTopo.getSubcellCount(d);
-            for (unsigned scOrdinalInSide = 0; scOrdinalInSide < scCount; scOrdinalInSide++) {
-              unsigned scOrdinalInCell = CamelliaCellTools::subcellOrdinalMap(*topo, sideDim, sideOrdinal, d, scOrdinalInSide);
-              if (processedSubcells[d].find(scOrdinalInCell) == processedSubcells[d].end()) { // haven't processed this one yet
-                GlobalIndexType owningCellID = constraints.owningCellIDForSubcell[d][scOrdinalInCell].first;
-                
-                // determine the subcell index in _meshTopology (will be used below to determine the subcell ordinal of the constraining subcell in the constraining cell)
-                IndexType sideEntityIndex = cell->entityIndex(sideDim, sideOrdinal);
-                IndexType scIndex = _meshTopology->getSubEntityIndex(sideDim, sideEntityIndex, d, scOrdinalInSide);
-                IndexType constrainingScIndex = _meshTopology->getConstrainingEntityIndex(d, scIndex);
-                
-                if (owningCellID == cellID) {
-                  if (varHasSupportOnVolume) {
-                    ConstrainingCellInfo sideConstraint = constraints.sideConstraints[sideOrdinal];
-                    DofOrderingPtr constrainingTrialOrdering = _elementTypeForCell[sideConstraint.cellID]->trialOrderPtr;
-                    BasisPtr basis = constrainingTrialOrdering->getBasis(var->ID());
-                    CellPtr constrainingCell = _meshTopology->getCell(sideConstraint.cellID);
-                    
-                    unsigned scOrdinalInConstrainingCell = constrainingCell->findSubcellOrdinal(d,constrainingScIndex);
-                    set<int> scBasisOrdinals = basis->dofOrdinalsForSubcell(d, scOrdinalInConstrainingCell, d);
-                    _partitionDofCount += scBasisOrdinals.size();
-                  } else {
-                    if (!isL2Var) {
-                      // here, we are dealing with a subside or one of its constituents.  We want to use the constraint info for that subside.
-                      unsigned subsideOrdinal = subsideMap[d][scOrdinalInSide];
-                      ConstrainingSubsideInfo subsideConstraint = constraints.subsideConstraints[sideOrdinal][subsideOrdinal];
-                      DofOrderingPtr constrainingTrialOrdering = _elementTypeForCell[subsideConstraint.cellID]->trialOrderPtr;
-                      BasisPtr basis = constrainingTrialOrdering->getBasis(var->ID(),subsideConstraint.sideOrdinal);
-                      
-                      CellPtr constrainingCell = _meshTopology->getCell(subsideConstraint.cellID);
-                      unsigned scOrdinalInConstrainingCell = constrainingCell->findSubcellOrdinal(d,constrainingScIndex);
-                      unsigned scOrdinalInConstrainingSide = CamelliaCellTools::subcellReverseOrdinalMap(*constrainingCell->topology(),
-                                                                                                         sideDim, subsideConstraint.sideOrdinal,
-                                                                                                         d, scOrdinalInConstrainingCell);
-
-                      set<int> scBasisOrdinals = basis->dofOrdinalsForSubcell(d, scOrdinalInConstrainingSide, d);
-                      _partitionDofCount += scBasisOrdinals.size();
-                    }
-                  }
-                }
-                
-                processedSubcells[d].insert(scOrdinalInCell);
-              }
-            }
+            _partitionDofCount += basis->dofOrdinalsForSubcell(constrainingSubcellDimension, scordForBasis).size();
           }
         }
       }

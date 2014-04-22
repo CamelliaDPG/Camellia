@@ -682,8 +682,8 @@ int main(int argc, char *argv[]) {
 
     //bool adaptForLRCornerVorticity = args.Input<bool>("--adaptForLRCornerVorticity", "do goal-oriented ", false);
     
-    bool reportStreamfunctionMax = args.Input<bool>("--reportStreamfunctionMax", "report streamfunction max value", true);
-    bool reportCenterlineVelocities = args.Input<bool>("--reportCenterlineVelocities", "report centerline velocities", true);
+    bool reportStreamfunctionMax = args.Input<bool>("--reportStreamfunctionMax", "report streamfunction max value", false);
+    bool reportCenterlineVelocities = args.Input<bool>("--reportCenterlineVelocities", "report centerline velocities", false);
     bool reportVelocityExtremeValues = args.Input<bool>("--reportVelocityExtrema", "report velocity extrema", false);
     
     double dt = args.Input<double>("--timeStep", "time step (0 for none)", 0); // 0.5 used to be the standard value
@@ -1132,6 +1132,8 @@ int main(int argc, char *argv[]) {
         + Re2 * sigma21_incr * sigma21_incr + Re2 * sigma22_incr * sigma22_incr;
       }
       
+      GnuPlotUtil::writeComputationalMeshSkeleton("nsCavityMesh_ref0", mesh, false, "red", "ref. 0");
+      
       for (int refIndex=0; refIndex<numRefs; refIndex++){
         if (startWithZeroSolutionAfterRefinement) {
           // start with a fresh (zero) initial guess for each adaptive mesh:
@@ -1252,7 +1254,7 @@ int main(int argc, char *argv[]) {
         if (induceCornerRefinements) {
           // induce refinements in bottom corner:
           vector< Teuchos::RCP<Element> > corners = mesh->elementsForPoints(bottomCornerPoints);
-          vector<int> cornerIDs;
+          vector<unsigned> cornerIDs;
           cornerIDs.push_back(corners[0]->cellID());
           mesh->hRefine(cornerIDs, RefinementPattern::regularRefinementPatternQuad());
         }
@@ -1262,6 +1264,12 @@ int main(int argc, char *argv[]) {
             refHistory->saveToFile(saveFile);
           }
         }
+        
+        ostringstream meshFileName;
+        meshFileName << "nsCavityMesh_ref" << refIndex + 1;
+        ostringstream meshTitle;
+        meshTitle << "ref. " << refIndex + 1;
+        GnuPlotUtil::writeComputationalMeshSkeleton(meshFileName.str(), mesh, false, "red", meshTitle.str());
         
         // find top corner cells:
         vector< Teuchos::RCP<Element> > topCorners = mesh->elementsForPoints(topCornerPoints);

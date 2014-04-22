@@ -45,6 +45,13 @@ class Cell {
 public:
   Cell(CellTopoPtr cellTopo, const vector<unsigned> &vertices, const vector< map< unsigned, unsigned > > &subcellPermutations,
        IndexType cellIndex, MeshTopology* meshTopo);
+
+  Teuchos::RCP<Cell> ancestralCellForSubcell(unsigned subcdim, unsigned subcord);
+  IndexType ancestralEntityIndexForSubcell(unsigned subcdim, unsigned subcord);
+  
+  unsigned ancestralPermutationForSubcell(unsigned subcdim, unsigned subcord);
+  unsigned ancestralPermutationForSideSubcell(unsigned sideOrdinal, unsigned subcdim, unsigned subcord);
+  
   IndexType cellIndex();
   const vector< Teuchos::RCP< Cell > > &children();
   void setChildren(vector< Teuchos::RCP< Cell > > children);
@@ -59,13 +66,18 @@ public:
   
   unsigned childOrdinal(IndexType childIndex);
   unsigned findSubcellOrdinal(unsigned subcdim, IndexType subcEntityIndex); // this is pretty brute force right now
+  unsigned findSubcellOrdinalInSide(unsigned subcdim, IndexType subcEntityIndex, unsigned sideOrdinal); // this is pretty brute force right now
   
   RefinementPatternPtr refinementPattern();
   void setRefinementPattern(RefinementPatternPtr refPattern);
   
   RefinementBranch refinementBranchForSide(unsigned sideOrdinal);
   
+  RefinementBranch refinementBranchForSubcell(unsigned subcdim, unsigned subcord);
+  
   unsigned subcellPermutation(unsigned d, unsigned scord);
+  
+  unsigned sideSubcellPermutation(unsigned sideOrdinal, unsigned sideSubcdim, unsigned sideSubcord);
   
   CellTopoPtr topology();
   

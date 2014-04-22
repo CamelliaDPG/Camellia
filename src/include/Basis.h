@@ -108,30 +108,11 @@ namespace Camellia {
   template<class Scalar, class ArrayScalar> class IntrepidBasisWrapper : public Basis<Scalar,ArrayScalar> {
   private:
     Teuchos::RCP< Intrepid::Basis<Scalar,ArrayScalar> > _intrepidBasis;
-    
-    std::set<int> getSubcellDofs(int subcellDimStart, int subcellDimEnd) const;
   protected:
     void initializeTags() const;
   public:
     IntrepidBasisWrapper(Teuchos::RCP< Intrepid::Basis<Scalar,ArrayScalar> > intrepidBasis, int rangeDimension, int rangeRank,
                          IntrepidExtendedTypes::EFunctionSpaceExtended functionSpace);
-    
-    int getCardinality() const;
-    int getDegree() const;
-    
-    // domain info on which the basis is defined:
-    shards::CellTopology domainTopology() const;
-    
-    // dof ordinal subsets:
-    std::set<int> dofOrdinalsForEdges(bool includeVertices = true) const;
-    std::set<int> dofOrdinalsForFaces(bool includeVerticesAndEdges = true) const;
-    std::set<int> dofOrdinalsForInterior() const;
-    std::set<int> dofOrdinalsForVertices() const;
-    
-    int getDofOrdinal(const int subcDim, const int subcOrd, const int subcDofOrd) const;
-    const std::vector<std::vector<std::vector<int> > > &getDofOrdinalData( ) const;
-    const std::vector<int>& getDofTag(int dofOrd) const;
-    const std::vector<std::vector<int> > & getAllDofTags() const;
     
     Teuchos::RCP< Intrepid::Basis<Scalar,ArrayScalar> > intrepidBasis();
     

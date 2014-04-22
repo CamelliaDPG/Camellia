@@ -75,17 +75,27 @@ public:
   static void multiplyAndAdd(FieldContainer<double> &X, const FieldContainer<double> &A, const FieldContainer<double> &B, char TransposeA, char TransposeB, double ScalarAB, double ScalarThis){
     int N = X.dimension(0);
     int M = X.dimension(1);
+    if ((N==0) || (M==0)) {
+      cout << "ERROR: empty result matrix passed in to SerialDenseWrapper::multiplyAndAdd.\n";
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "empty result matrix passed in to SerialDenseWrapper::multiplyAndAdd");
+    }
     
     Epetra_SerialDenseMatrix AMatrix = convertFCToSDM(A);
     Epetra_SerialDenseMatrix BMatrix = convertFCToSDM(B);
     Epetra_SerialDenseMatrix XMatrix = convertFCToSDM(X);
     
     int success = XMatrix.Multiply(TransposeA,TransposeB,ScalarAB,AMatrix,BMatrix,ScalarThis);
-    if (success != 0){
-      cout << "Error in SerialDenseWrapper::multiplyAndAdd with error code " << success << endl;
-    }
 
     convertSDMToFC(X,XMatrix);
+    
+    
+    if (success != 0){
+      cout << "Error in SerialDenseWrapper::multiplyAndAdd with error code " << success << endl;
+      
+      cout << "A:\n" << A;
+      cout << "B:\n" << B;
+      cout << "X:\n" << X;
+    }
   }
   
   static FieldContainer<double> getSubMatrix(FieldContainer<double> &A, set<unsigned> &rowIndices, set<unsigned> &colIndices,

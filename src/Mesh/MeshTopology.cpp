@@ -856,7 +856,7 @@ unsigned MeshTopology::getEntityParentForSide(unsigned d, unsigned entityIndex,
 set< pair<IndexType, unsigned> > MeshTopology::getCellsContainingEntity(unsigned d, unsigned entityIndex) { // not *all* cells, but within any refinement branch, the most refined cell that contains the entity will be present in this set.  The unsigned value is the ordinal of a *side* in the cell containing this entity.  There may be multiple sides in a cell that contain the entity; this method will return just one entry per cell.
   set<IndexType> sidesForEntity = _sidesForEntities[d][entityIndex];
   typedef pair<IndexType,unsigned> CellPair;
-  set< CellPair > cells; // we are guaranteed to have one active cell that contains a side that contains the constraining entity.  We return the one that has least cellIndex.
+  set< CellPair > cells;
   set< IndexType > cellIndices;  // container to keep track of which cells we've already counted -- we only return one (cell, side) pair per cell that contains the entity...
   for (set<IndexType>::iterator sideEntityIt = sidesForEntity.begin(); sideEntityIt != sidesForEntity.end(); sideEntityIt++) {
     IndexType sideEntityIndex = *sideEntityIt;

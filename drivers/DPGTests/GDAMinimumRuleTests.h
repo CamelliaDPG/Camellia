@@ -24,6 +24,7 @@ private:
   void teardown();
   
   SolutionPtr quadMeshSolutionConfusion(bool useMinRule, int horizontalCells, int verticalCells, int H1Order);
+  SolutionPtr quadMeshSolutionPoissonExactSolution(bool useMinRule, int horizontalCells, int verticalCells, int H1Order, FunctionPtr phi_exact);
   SolutionPtr quadMeshSolutionStokesExactSolution(bool useMinRule, int horizontalCells, int verticalCells, int H1Order,
                                                   FunctionPtr u1_exact, FunctionPtr u2_exact, FunctionPtr p_exact);
   SolutionPtr quadMeshSolutionStokesCavityFlow(bool useMinRule, int horizontalCells, int verticalCells, int H1Order);
@@ -42,7 +43,8 @@ public:
   
   bool testHRefinements();
   
-  bool testHangingNode();
+  bool testHangingNodePoisson();
+  bool testHangingNodeStokes();
 };
 
 

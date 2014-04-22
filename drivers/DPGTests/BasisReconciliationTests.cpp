@@ -36,14 +36,14 @@ void BasisReconciliationTests::stripDummyCellDimensionFromFC(FieldContainer<doub
 
 void BasisReconciliationTests::runTests(int &numTestsRun, int &numTestsPassed) {
   setup();
-  if (testInternalSubcellOrdinals()) {
+  if (testHSide()) {
     numTestsPassed++;
   }
   numTestsRun++;
   teardown();
   
   setup();
-  if (testHSide()) {
+  if (testInternalSubcellOrdinals()) {
     numTestsPassed++;
   }
   numTestsRun++;
@@ -90,8 +90,8 @@ RefinementBranch makeRefinementBranch( RefinementPatternPtr refPattern, vector<u
 bool BasisReconciliationTests::testH() {
   bool success = true;
   
-  int fineOrder = 3;
-  int coarseOrder = 3;
+  int fineOrder = 1;
+  int coarseOrder = 1;
   
   RefinementBranch lineRefinementsZero = makeRefinementBranch(RefinementPattern::regularRefinementPatternLine(), vector<unsigned>(4,0));
   vector<unsigned> alternatingZeroOne;
@@ -180,15 +180,15 @@ RefinementBranch demoRefinementsOnSide(shards::CellTopology cellTopo, unsigned s
 bool BasisReconciliationTests::testHSide() {
   bool success = true;
   
-  int fineOrder = 3;
-  int coarseOrder = 3;
+  int fineOrder = 1;
+  int coarseOrder = 1;
   
   shards::CellTopology line = shards::getCellTopologyData< shards::Line<2> >();
   shards::CellTopology quad = shards::getCellTopologyData< shards::Quadrilateral<4> >();
   shards::CellTopology hex = shards::getCellTopologyData< shards::Hexahedron<8> >();
   
   double width = 2;
-  double height = 4;
+  double height = 2;
   FieldContainer<double> centeredQuad(4,2);
   centeredQuad(0,0) = -width / 2;
   centeredQuad(0,1) = -height / 2;
@@ -219,6 +219,7 @@ bool BasisReconciliationTests::testHSide() {
   
   test.volumeRefinements = demoRefinementsOnSide(quad, EAST, 1);
   sideTests.push_back(test);
+  
   test.volumeRefinements = demoRefinementsOnSide(quad, EAST, 3);
   sideTests.push_back(test);
   
@@ -304,9 +305,9 @@ bool BasisReconciliationTests::testHSide() {
   test.fineSideIndex = WEST;
   test.coarseCellNodes = westHex;
   test.coarseSideIndex = EAST;
-  
   test.volumeRefinements = demoRefinementsOnSide(hex, WEST, 1);
   sideTests.push_back(test);
+  
   test.volumeRefinements = demoRefinementsOnSide(hex, WEST, 3);
   sideTests.push_back(test);
   
@@ -458,24 +459,70 @@ FieldContainer<double> cubaturePoints(shards::CellTopology fineCellTopo, int cub
   return fineCubPoints;
 }
 
-FieldContainer<double> basisValuesAtPoints(BasisPtr basis, const FieldContainer<double> &pointsOnRefCell) {
+//FieldContainer<double> basisValuesAtPoints(BasisPtr basis, const FieldContainer<double> &pointsOnRefCell) {
+//  shards::CellTopology cellTopo = basis->domainTopology();
+//  BasisCachePtr basisCache = Teuchos::rcp( new BasisCache(cellTopo, basis->getDegree(), false) );
+//  FieldContainer<double> refCellNodes(cellTopo.getNodeCount(),cellTopo.getDimension());
+//  CamelliaCellTools::refCellNodesForTopology(refCellNodes, cellTopo);
+//  basisCache->setRefCellPoints(pointsOnRefCell);
+//  refCellNodes.resize(1,cellTopo.getNodeCount(),cellTopo.getDimension());
+//  basisCache->setPhysicalCellNodes(refCellNodes, vector<GlobalIndexType>(), false);
+//  return *(basisCache->getValues(basis, OP_VALUE).get());
+//}
+//
+//FieldContainer<double> basisValuesAtSidePoints(BasisPtr basis, unsigned sideIndex, const FieldContainer<double> &pointsOnSideRefCell) {
+//  shards::CellTopology cellTopo = basis->domainTopology();
+//  BasisCachePtr basisCache = Teuchos::rcp( new BasisCache(cellTopo, basis->getDegree(), true) );
+//  basisCache->getSideBasisCache(sideIndex)->setRefCellPoints(pointsOnSideRefCell);
+//  
+//  return *(basisCache->getSideBasisCache(sideIndex)->getValues(basis, OP_VALUE, true).get());
+//}
+
+FieldContainer<double> transformedBasisValuesAtPoints(BasisPtr basis, const FieldContainer<double> &pointsOnFineCell, RefinementBranch refinements) {
   shards::CellTopology cellTopo = basis->domainTopology();
-  BasisCachePtr basisCache = Teuchos::rcp( new BasisCache(cellTopo, basis->getDegree(), false) );
-  FieldContainer<double> refCellNodes(cellTopo.getNodeCount(),cellTopo.getDimension());
-  CamelliaCellTools::refCellNodesForTopology(refCellNodes, cellTopo);
-  basisCache->setRefCellPoints(pointsOnRefCell);
+  FieldContainer<double> refCellNodes;
+  refCellNodes.resize(cellTopo.getNodeCount(),cellTopo.getDimension());
+  if (refinements.size() == 0) {
+    CamelliaCellTools::refCellNodesForTopology(refCellNodes, cellTopo);
+  } else {
+    CellTopoPtr coarseCellTopo = refinements[0].first->parentTopology();
+    FieldContainer<double> coarseCellNodes(coarseCellTopo->getNodeCount(),coarseCellTopo->getDimension());
+    CamelliaCellTools::refCellNodesForTopology(coarseCellNodes, *coarseCellTopo);
+    refCellNodes = RefinementPattern::descendantNodes(refinements,coarseCellNodes);
+  }
   refCellNodes.resize(1,cellTopo.getNodeCount(),cellTopo.getDimension());
+  
+  int dummyCubatureDegree = 1;
+  BasisCachePtr basisCache = Teuchos::rcp( new BasisCache(cellTopo, dummyCubatureDegree, false) );
+  basisCache->setRefCellPoints(pointsOnFineCell);
   basisCache->setPhysicalCellNodes(refCellNodes, vector<GlobalIndexType>(), false);
-  return *(basisCache->getValues(basis, OP_VALUE).get());
+  return *(basisCache->getTransformedValues(basis, OP_VALUE).get());
 }
 
-FieldContainer<double> basisValuesAtSidePoints(BasisPtr basis, unsigned sideIndex, const FieldContainer<double> &pointsOnSideRefCell) {
+FieldContainer<double> transformedBasisValuesAtSidePoints(BasisPtr basis, unsigned sideIndex, const FieldContainer<double> &pointsOnSideRefCell,
+                                                          RefinementBranch &refinements) {
   shards::CellTopology cellTopo = basis->domainTopology();
-  BasisCachePtr basisCache = Teuchos::rcp( new BasisCache(cellTopo, basis->getDegree(), true) );
-  basisCache->getSideBasisCache(sideIndex)->setRefCellPoints(pointsOnSideRefCell);
+  FieldContainer<double> refCellNodes;
+  refCellNodes.resize(cellTopo.getNodeCount(),cellTopo.getDimension());
+  if (refinements.size() == 0) {
+    CamelliaCellTools::refCellNodesForTopology(refCellNodes, cellTopo);
+  } else {
+    CellTopoPtr coarseCellTopo = refinements[0].first->parentTopology();
+    FieldContainer<double> coarseCellNodes(coarseCellTopo->getNodeCount(),coarseCellTopo->getDimension());
+    CamelliaCellTools::refCellNodesForTopology(coarseCellNodes, *coarseCellTopo);
+    refCellNodes = RefinementPattern::descendantNodes(refinements,coarseCellNodes);
+  }
+  refCellNodes.resize(1,cellTopo.getNodeCount(),cellTopo.getDimension());
   
-  return *(basisCache->getSideBasisCache(sideIndex)->getValues(basis, OP_VALUE, true).get());
+  int dummyCubatureDegree = 1;
+  BasisCachePtr basisCache = Teuchos::rcp( new BasisCache(cellTopo, dummyCubatureDegree, true) );
+  CamelliaCellTools::refCellNodesForTopology(refCellNodes, cellTopo);
+  basisCache->getSideBasisCache(sideIndex)->setRefCellPoints(pointsOnSideRefCell);
+  basisCache->setPhysicalCellNodes(refCellNodes, vector<GlobalIndexType>(), true);
+  
+  return *(basisCache->getSideBasisCache(sideIndex)->getTransformedValues(basis, OP_VALUE, true).get());
 }
+
 
 RefinementBranch determineSideRefinements(RefinementBranch volumeRefinements, unsigned sideIndex) {
   RefinementBranch sideRefinements;
@@ -542,12 +589,13 @@ bool BasisReconciliationTests::hConstraintSideBasisSubTest(BasisPtr fineBasis, u
   coarseCellNodes.resize(oneCell, coarseCellNodes.dimension(0), coarseCellNodes.dimension(1));
   
   unsigned permutation = vertexPermutation(ancestralTopo, fineAncestralSideIndex, fineCellAncestralNodes, coarseTopo, coarseSideIndex, coarseCellNodes);
-  
-  SubBasisReconciliationWeights weights = br.constrainedWeights(fineBasis, fineAncestralSideIndex, volumeRefinements, coarseBasis, coarseSideIndex, permutation);
+
+  SubBasisReconciliationWeights weights = br.constrainedWeights(sideDim, fineBasis, fineSideIndex, volumeRefinements, coarseBasis, coarseSideIndex, permutation);
+//  SubBasisReconciliationWeights weights = br.constrainedWeights(fineBasis, fineAncestralSideIndex, volumeRefinements, coarseBasis, coarseSideIndex, permutation);
 //  cout << "WARNING: meta-test code enabled (calls the wrong constrainedWeights to confirm that the rest of the code executes safely).\n";
 //  SubBasisReconciliationWeights weights = br.constrainedWeights(fineBasis, fineAncestralSideIndex, coarseBasis, coarseSideIndex, permutation);
   
-  int cubDegree = 5;
+  int cubDegree = 1;
   FieldContainer<double> sidePointsFine = cubaturePoints(fineSideTopo, cubDegree, 0);
   FieldContainer<double> sidePointsCoarse = cubaturePoints(fineSideTopo, cubDegree, coarseSideTopo, permutation, sideRefinements);
   
@@ -586,8 +634,12 @@ bool BasisReconciliationTests::hConstraintSideBasisSubTest(BasisPtr fineBasis, u
   
   if ( !fcsAgree(filteredCoarseBasisValues, interpretedFineBasisValues, tol, maxDiff) ) {
     success = false;
-    cout << "FAILURE: BasisReconciliation's interpreted fine basis values do not match coarse values on side.\n";
+    cout << "FAILURE: BasisReconciliation's interpreted fine basis values do not match coarse values on side, ";
+    cout << "with maxDiff = " << maxDiff << ".\n";
     cout << "fine points:\n" << finePoints;
+    cout << "coarse points:\n" << coarsePoints;
+    cout << "physical fine points:\n" << finePointsPhysical;
+    cout << "physical coarse points:\n" << coarsePointsPhysical;
     cout << "weights:\n" << weights.weights;
     cout << "fineValues:\n" << fineBasisValues;
     cout << "coarseBasisValues:\n" << coarseBasisValues;
@@ -603,35 +655,37 @@ bool BasisReconciliationTests::hConstraintInternalBasisSubTest(BasisPtr fineBasi
   
   BasisReconciliation br;
   unsigned permutation = 0; // for now, just assuming the identity permutation.  TODO: try other permutations.
-  FieldContainer<double> weights = br.constrainedWeights(fineBasis, refinements, coarseBasis, permutation);
+  SubBasisReconciliationWeights weights = br.constrainedWeights(fineBasis, refinements, coarseBasis, permutation);
   
   //  cout << "BasisReconciliation: computed weights when matching whole bases.\n";
   
-  FieldContainer<double> finePoints = cubaturePoints(fineBasis->domainTopology(), 5, 0);
-  FieldContainer<double> coarsePoints = cubaturePoints(fineBasis->domainTopology(), 5, coarseBasis->domainTopology(), 0, refinements);
+  FieldContainer<double> finePoints = cubaturePoints(fineBasis->domainTopology(), 1, 0);
+  FieldContainer<double> coarsePoints = cubaturePoints(fineBasis->domainTopology(), 1, coarseBasis->domainTopology(), 0, refinements);
   
-  FieldContainer<double> fineBasisValues = basisValuesAtPoints(fineBasis, finePoints);
-  FieldContainer<double> coarseBasisValues = basisValuesAtPoints(coarseBasis, coarsePoints);
+  // I think these values should be transformed!
+  FieldContainer<double> fineBasisValues = transformedBasisValuesAtPoints(fineBasis, finePoints, refinements);
+  RefinementBranch noRefinements;
+  FieldContainer<double> coarseBasisValues = transformedBasisValuesAtPoints(coarseBasis, coarsePoints, noRefinements);
   
-  set<unsigned> fineBasisFilter = br.internalDofIndicesForFinerBasis(fineBasis, refinements);
-  fineBasisValues = filterValues(fineBasisValues, fineBasisFilter, false);
+  stripDummyCellDimensionFromFC(fineBasisValues);
+  stripDummyCellDimensionFromFC(coarseBasisValues);
   
-  set<int> coarseFilter = br.interiorDofOrdinalsForBasis(coarseBasis);
-  coarseBasisValues = filterValues(coarseBasisValues, coarseFilter, false);
-  
-  FieldContainer<double> interpretedFineBasisValues = interpretValues(fineBasisValues, weights);
+  FieldContainer<double> interpretedFineBasisValues, filteredCoarseValues;
+  interpretSideValues(weights, fineBasisValues, coarseBasisValues, interpretedFineBasisValues, filteredCoarseValues);
   
   double maxDiff;
   double tol = 1e-14;
-  if ( !fcsAgree(coarseBasisValues, interpretedFineBasisValues, tol, maxDiff) ) {
+  if ( !fcsAgree(filteredCoarseValues, interpretedFineBasisValues, tol, maxDiff) ) {
     success = false;
-    cout << "FAILURE: BasisReconciliation's interpreted fine basis values do not match coarse values on h-refined quad.\n";
+    cout << "FAILURE: BasisReconciliation's interpreted fine basis values do not match coarse values on h-refined quad, ";
+    cout << "with maxDiff = " << maxDiff << " (tol = " << tol << ").\n";
     cout << "fine points:\n" << finePoints;
     cout << "coarse points:\n" << coarsePoints;
-    cout << "weights:\n" << weights;
+    cout << "weights:\n" << weights.weights;
     cout << "fineValues:\n" << fineBasisValues;
     cout << "coarseBasisValues:\n" << coarseBasisValues;
     cout << "interpretedFineBasisValues:\n" << interpretedFineBasisValues;
+    cout << "filteredCoarseValues:\n" << filteredCoarseValues;
   }
   return success;
 }
@@ -644,25 +698,30 @@ bool BasisReconciliationTests::pConstraintInternalBasisSubTest(BasisPtr fineBasi
   unsigned permutationCount = fineBasis->domainTopology().getNodePermutationCount();
   
   for (unsigned permutation = 0; permutation < permutationCount; permutation++) {
-    FieldContainer<double> weights = br.constrainedWeights(fineBasis, coarseBasis, permutation);
+    SubBasisReconciliationWeights weights = br.constrainedWeights(fineBasis, coarseBasis, permutation);
     
     //  cout << "BasisReconciliation: computed weights when matching whole bases.\n";
     
     FieldContainer<double> points = cubaturePoints(fineBasis->domainTopology(), 5, 0);
-    FieldContainer<double> fineBasisValues = basisValuesAtPoints(fineBasis, points);
+    RefinementBranch noRefinements;
+    FieldContainer<double> fineBasisValues = transformedBasisValuesAtPoints(fineBasis, points, noRefinements);
     FieldContainer<double> coarseBasisPoints = cubaturePoints(fineBasis->domainTopology(), 5, permutation);
-    FieldContainer<double> coarseBasisValues = basisValuesAtPoints(coarseBasis, coarseBasisPoints);
+    FieldContainer<double> coarseBasisValues = transformedBasisValuesAtPoints(coarseBasis, coarseBasisPoints, noRefinements);
     
-    set<int> internalDofs = fineBasis->dofOrdinalsForInterior();
-  //  cout << "fineBasis cardinality = " << fineBasis->getCardinality() << "; internal dof count is " << internalDofs.size() << endl;
-    set<unsigned> dofFilter;
-    dofFilter.insert(internalDofs.begin(),internalDofs.end());
-    fineBasisValues = filterValues(fineBasisValues, dofFilter, false);
+    stripDummyCellDimensionFromFC(fineBasisValues);
+    stripDummyCellDimensionFromFC(coarseBasisValues);
     
-    set<int> coarseFilter = br.interiorDofOrdinalsForBasis(coarseBasis);
-    coarseBasisValues = filterValues(coarseBasisValues, coarseFilter, false);
+//    set<int> internalDofs = fineBasis->dofOrdinalsForInterior();
+//  //  cout << "fineBasis cardinality = " << fineBasis->getCardinality() << "; internal dof count is " << internalDofs.size() << endl;
+//    set<unsigned> dofFilter;
+//    dofFilter.insert(internalDofs.begin(),internalDofs.end());
+//    fineBasisValues = filterValues(fineBasisValues, dofFilter, false);
+//    
+//    set<int> coarseFilter = br.interiorDofOrdinalsForBasis(coarseBasis);
+//    coarseBasisValues = filterValues(coarseBasisValues, coarseFilter, false);
     
-    FieldContainer<double> interpretedFineBasisValues = interpretValues(fineBasisValues, weights);
+    FieldContainer<double> interpretedFineBasisValues;
+    interpretSideValues(weights, fineBasisValues, coarseBasisValues, interpretedFineBasisValues, coarseBasisValues);
     
     double maxDiff;
     double tol = 1e-13;
@@ -672,12 +731,12 @@ bool BasisReconciliationTests::pConstraintInternalBasisSubTest(BasisPtr fineBasi
       cout << "points:\n" << points;
       cout << "permutation: " << permutation << endl;
       cout << "permuted points:\n" << coarseBasisPoints;
-      cout << "weights:\n" << weights;
+      cout << "weights:\n" << weights.weights;
       cout << "fineValues:\n" << fineBasisValues;
       cout << "coarseBasisValues:\n" << coarseBasisValues;
       cout << "interpretedFineBasisValues:\n" << interpretedFineBasisValues;
       
-      FieldContainer<double> weightsUnpermuted = br.constrainedWeights(fineBasis, coarseBasis, 0);
+      FieldContainer<double> weightsUnpermuted = br.constrainedWeights(fineBasis, coarseBasis, 0).weights;
       cout << "unpermuted weights:\n" << weightsUnpermuted;
     }
   }
@@ -797,8 +856,13 @@ bool BasisReconciliationTests::pConstraintSideBasisSubTest(BasisPtr fineBasis, u
     return success;
   }
   
-  FieldContainer<double> fineBasisValues = basisValuesAtPoints(fineBasis, finePoints);
-  FieldContainer<double> coarseBasisValues = basisValuesAtPoints(coarseBasis, coarsePoints);
+  RefinementBranch noRefinements;
+  
+  FieldContainer<double> fineBasisValues = transformedBasisValuesAtPoints(fineBasis, finePoints, noRefinements);
+  FieldContainer<double> coarseBasisValues = transformedBasisValuesAtPoints(coarseBasis, coarsePoints, noRefinements);
+  
+  stripDummyCellDimensionFromFC(fineBasisValues);
+  stripDummyCellDimensionFromFC(coarseBasisValues);
   
   FieldContainer<double> interpretedFineBasisValues, filteredCoarseBasisValues;
   interpretSideValues(weights, fineBasisValues, coarseBasisValues, interpretedFineBasisValues, filteredCoarseBasisValues);
@@ -837,10 +901,10 @@ bool BasisReconciliationTests::testP() {
   coarseBasis = Camellia::intrepidQuadHGRAD(coarseOrder);
   basisPairsToCheck.push_back( make_pair(fineBasis, coarseBasis) );
 
-  cout << "WARNING: commented out tests in BasisReconciliationTests::testP() for HDIV basis tests that fail.\n";
-//  fineBasis = Camellia::intrepidQuadHDIV(fineOrder);
-//  coarseBasis = Camellia::intrepidQuadHDIV(coarseOrder);
-//  basisPairsToCheck.push_back( make_pair(fineBasis, coarseBasis) );
+//  cout << "WARNING: commented out tests in BasisReconciliationTests::testP() for HDIV basis tests that fail.\n";
+  fineBasis = Camellia::intrepidQuadHDIV(fineOrder);
+  coarseBasis = Camellia::intrepidQuadHDIV(coarseOrder);
+  basisPairsToCheck.push_back( make_pair(fineBasis, coarseBasis) );
   
   fineBasis = Camellia::intrepidHexHGRAD(fineOrder);
   coarseBasis = Camellia::intrepidHexHGRAD(coarseOrder);
@@ -1052,7 +1116,7 @@ bool BasisReconciliationTests::testInternalSubcellOrdinals() {
   
   RefinementBranch emptyBranch;
   
-  set<unsigned> internalDofOrdinals = BasisReconciliation::internalDofIndicesForFinerBasis(fineBasis, emptyBranch);
+  set<unsigned> internalDofOrdinals = BasisReconciliation::internalDofOrdinalsForFinerBasis(fineBasis, emptyBranch);
   if (internalDofOrdinals.size() != 1) {
     cout << "BasisReconciliationTests: test failure.  Unrefined quadratic H^1 basis should have 1 internal dof ordinal, but has " << internalDofOrdinals.size() << endl;
     success = false;
@@ -1061,7 +1125,7 @@ bool BasisReconciliationTests::testInternalSubcellOrdinals() {
   RefinementBranch oneRefinement;
   oneRefinement.push_back(make_pair(RefinementPattern::regularRefinementPatternLine().get(), 0));
   
-  internalDofOrdinals = BasisReconciliation::internalDofIndicesForFinerBasis(fineBasis, oneRefinement);
+  internalDofOrdinals = BasisReconciliation::internalDofOrdinalsForFinerBasis(fineBasis, oneRefinement);
   // now, one vertex should lie inside the neighboring/constraining basis: two dof ordinals should now be interior
   if (internalDofOrdinals.size() != 2) {
     cout << "BasisReconciliationTests: test failure.  Once-refined quadratic H^1 basis should have 2 internal dof ordinals, but has " << internalDofOrdinals.size() << endl;
@@ -1071,7 +1135,7 @@ bool BasisReconciliationTests::testInternalSubcellOrdinals() {
   RefinementBranch twoRefinements = oneRefinement;
   twoRefinements.push_back(make_pair(RefinementPattern::regularRefinementPatternLine().get(), 1)); // now the whole edge is interior to the constraining (ancestral) edge
   
-  internalDofOrdinals = BasisReconciliation::internalDofIndicesForFinerBasis(fineBasis, twoRefinements);
+  internalDofOrdinals = BasisReconciliation::internalDofOrdinalsForFinerBasis(fineBasis, twoRefinements);
   // now, both vertices should lie inside the neighboring/constraining basis: three dof ordinals should now be interior
   if (internalDofOrdinals.size() != 3) {
     cout << "BasisReconciliationTests: test failure.  Twice-refined quadratic H^1 basis should have 3 internal dof ordinals, but has " << internalDofOrdinals.size() << endl;

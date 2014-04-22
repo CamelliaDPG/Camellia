@@ -29,6 +29,10 @@ SubBasisDofMatrixMapper::SubBasisDofMatrixMapper(const set<unsigned> &basisDofOr
 const set<unsigned> & SubBasisDofMatrixMapper::basisDofOrdinalFilter() {
   return _basisDofOrdinalFilter;
 }
+const FieldContainer<double> &SubBasisDofMatrixMapper::constraintMatrix() {
+  return _constraintMatrix;
+}
+
 FieldContainer<double> SubBasisDofMatrixMapper::mapData(bool transposeConstraint, FieldContainer<double> &localData) {
   // localData must be rank 2, and must have the same size as FilteredLocalDofOrdinals in its first dimension
   bool didReshape = false;

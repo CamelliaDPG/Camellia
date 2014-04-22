@@ -337,6 +337,10 @@ FieldContainer<double> BasisCache::getCellMeasures() {
   return cellMeasures;
 }
 
+const Intrepid::FieldContainer<double> & BasisCache::getCubatureWeights() {
+  return _cubWeights;
+}
+
 const FieldContainer<double> & BasisCache::getJacobian() {
   return _cellJacobian;
 }
@@ -558,6 +562,12 @@ const FieldContainer<double> &BasisCache::getSideRefCellPointsInVolumeCoordinate
 }
 
 void BasisCache::setRefCellPoints(const FieldContainer<double> &pointsRefCell) {
+  FieldContainer<double> cubWeights;
+  FieldContainer<double> weightedMeasure;
+  this->setRefCellPoints(pointsRefCell, cubWeights, weightedMeasure);
+}
+
+void BasisCache::setRefCellPoints(const FieldContainer<double> &pointsRefCell, const FieldContainer<double> &cubWeights, const Intrepid::FieldContainer<double> &weightedMeasure) {
   _cubPoints = pointsRefCell;
   int numPoints = pointsRefCell.dimension(0);
   
@@ -575,7 +585,8 @@ void BasisCache::setRefCellPoints(const FieldContainer<double> &pointsRefCell) {
   _knownValuesTransformedDottedWithNormal.clear();
   _knownValuesTransformedWeighted.clear();
   
-  _cubWeights.resize(0); // will force an exception if you try to compute weighted values.
+  _cubWeights = cubWeights;
+  _weightedMeasure = weightedMeasure;
   
   // allow reuse of physicalNode info; just map the new points...
   if (_physCubPoints.size() > 0) {

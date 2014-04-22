@@ -33,10 +33,17 @@ public:
 int main(int argc, char *argv[]) {
   Teuchos::GlobalMPISession mpiSession(&argc, &argv);
   int rank = Teuchos::GlobalMPISession::getRank();
+  
+  bool useMinRule = true;
+  bool useMumps = false;
+  
   VarFactory varFactory;
   // traces:
-  VarPtr u1hat = varFactory.traceVar("\\widehat{u}_1");
-  VarPtr u2hat = varFactory.traceVar("\\widehat{u}_2");
+//  VarPtr u1hat = varFactory.traceVar("\\widehat{u}_1");
+//  VarPtr u2hat = varFactory.traceVar("\\widehat{u}_2");
+  VarPtr u1hat = varFactory.traceVar("\\widehat{u}_1", L2); // switched to L2 just to isolate/debug
+  VarPtr u2hat = varFactory.traceVar("\\widehat{u}_2", L2);
+  cout << "WARNING/NOTE: for debugging purposes, temporarily switching traces to use L^2 discretizations (i.e. they are not conforming, and they are of lower order than they should be).\n";
   VarPtr t1_n = varFactory.fluxVar("\\widehat{t}_{1n}");
   VarPtr t2_n = varFactory.fluxVar("\\widehat{t}_{2n}");
   // fields:
@@ -80,13 +87,15 @@ int main(int argc, char *argv[]) {
   FunctionPtr n = Function::normal();
   stokesBF->addTerm(u1hat * n->x() + u2hat * n->y(), q);
 
-  int k = 4; // poly order for field variables
+  int k = 2; // poly order for field variables
   int H1Order = k + 1;
   int delta_k = 2;   // test space enrichment
   double width = 1.0, height = 1.0;
-  int horizontalCells = 2, verticalCells = 2;
-  MeshPtr mesh = MeshFactory::quadMesh(stokesBF, H1Order, delta_k, width, height,
-                                       horizontalCells, verticalCells);
+  int horizontalCells = 2, verticalCells = 1;
+  MeshPtr mesh = useMinRule ? MeshFactory::quadMeshMinRule(stokesBF, H1Order, delta_k, width, height,
+                                                           horizontalCells, verticalCells)
+                            : MeshFactory::quadMesh(stokesBF, H1Order, delta_k, width, height,
+                                                    horizontalCells, verticalCells);
   
   RHSPtr rhs = RHS::rhs(); // zero
   
@@ -95,7 +104,7 @@ int main(int argc, char *argv[]) {
   SpatialFilterPtr otherBoundary = SpatialFilter::negatedFilter(topBoundary);
   
   // top boundary:
-  FunctionPtr u1_bc_fxn = Teuchos::rcp( new RampBoundaryFunction_U1(1.0/64) );
+  FunctionPtr u1_bc_fxn = Teuchos::rcp( new RampBoundaryFunction_U1(1.0/2) );
   FunctionPtr zero = Function::zero();
   bc->addDirichlet(u1hat, topBoundary, u1_bc_fxn);
   bc->addDirichlet(u2hat, topBoundary, zero);
@@ -113,17 +122,24 @@ int main(int argc, char *argv[]) {
   double energyThreshold = 0.20;
   RefinementStrategy refinementStrategy( solution, energyThreshold );
   
-  Teuchos::RCP<Solver> mumpsSolver = Teuchos::rcp( new MumpsSolver );
-  solution->condensedSolve(mumpsSolver);
-  int refCount = 10;
+  refinementStrategy.setReportPerCellErrors(true);
+  
+  Teuchos::RCP<Solver> solver;
+  if (useMumps) {
+    solver = Teuchos::rcp( new MumpsSolver );
+  } else {
+    solver = Teuchos::rcp( new KluSolver );
+  }
+  solution->solve(solver);
+  int refCount = 3;
   for (int refIndex=0; refIndex < refCount; refIndex++) {
     double energyError = solution->energyErrorTotal();
     if (rank==0) {
       cout << "Before refinement " << refIndex << ", energy error = " << energyError;
       cout << " (using " << mesh->numFluxDofs() << " trace degrees of freedom)." << endl;
     }
-    refinementStrategy.refine();
-    solution->condensedSolve(mumpsSolver);
+    refinementStrategy.refine(rank==0);
+    solution->solve(solver);
   }
   double energyErrorTotal = solution->energyErrorTotal();
   
