@@ -18,6 +18,11 @@
 #include "Epetra_SerialSymDenseMatrix.h"
 #include "Epetra_SerialSpdDenseSolver.h"
 
+#include "Teuchos_LAPACK.hpp"
+#include "Teuchos_SerialDenseMatrix.hpp"
+#include "Teuchos_SerialDenseVector.hpp"
+#include "Teuchos_SerialQRDenseSolver.hpp"
+
 class SerialDenseWrapper {
   static void transposeSquareMatrix(FieldContainer<double> &A) {
     int rows = A.dimension(0), cols = A.dimension(1);
@@ -195,6 +200,56 @@ public:
     return 0;
   }
   
+  static int solveSystemUsingQR(FieldContainer<double> &x, FieldContainer<double> &A, FieldContainer<double> &b, bool useATranspose = false){
+    // solves Ax = b, where
+    // A = (N,N)
+    // x, b = (N,M)
+    
+    int N = A.dimension(0);
+    int nRHS = b.dimension(1); // M
+    
+    Teuchos::LAPACK<int, double> lapack;
+    
+    int numCols = N;
+    int numRows = N;
+    int rowStride = numCols;
+    Teuchos::SerialDenseMatrix<int, double> ATranspose( Teuchos::Copy, &A(0,0), rowStride, numCols, numRows); // transpose because SDM is column-major
+    Teuchos::SerialDenseMatrix<int, double> ASDM( ATranspose, Teuchos::TRANS); // as an optimization, could avoid this declaration when useATranspose = true
+
+    Teuchos::SerialDenseMatrix<int, double> bTranspose( Teuchos::Copy, &b(0,0), nRHS, nRHS, N); // transpose because SDM is column-major
+    Teuchos::SerialDenseMatrix<int, double> bSDM( bTranspose, Teuchos::TRANS);  // transpose the RHS matrix
+
+    Teuchos::SerialDenseMatrix<int, double> xSDM(N, nRHS);
+    
+    Teuchos::SerialQRDenseSolver<int,double> qrSolver;
+    
+    int info = 0;
+    if (useATranspose) {
+      qrSolver.setMatrix( Teuchos::rcp( &ATranspose, false ) );
+    } else {
+      qrSolver.setMatrix( Teuchos::rcp( &ASDM, false ) );
+    }
+    qrSolver.setVectors( Teuchos::rcp( &xSDM, false ), Teuchos::rcp( &bSDM, false ) );
+    info = qrSolver.factor();
+    if (info != 0) {
+      std::cout << "Teuchos::SerialQRDenseSolver::factor() returned : " << info << std::endl;
+      return info;
+    }
+
+    info = qrSolver.solve();
+    if (info != 0) {
+      std::cout << "Teuchos::SerialQRDenseSolver::solve() returned : " << info << std::endl;
+      return info;
+    }
+
+    Teuchos::Array<int> dim(x.rank());
+    x.dimensions(dim);
+    Teuchos::SerialDenseMatrix<int, double> xSDMTranspose(xSDM, Teuchos::TRANS);
+    x = FieldContainer<double>(dim, xSDMTranspose.values());
+    
+    return 0;
+  }
+  
   static int solveSPDSystemMultipleRHS(FieldContainer<double> &x, FieldContainer<double> &A_SPD, FieldContainer<double> &b){
     // solves Ax = b, where
     // A = (N,N)
@@ -245,8 +300,6 @@ public:
   }
 
   static double getMatrixConditionNumber(FieldContainer<double> &A) {
-    int N = A.dimension(0);
-    int M = A.dimension(1);
     Epetra_SerialDenseMatrix AMatrix = convertFCToSDM(A);
     Epetra_SerialDenseSolver solver;
     solver.SetMatrix(AMatrix); 

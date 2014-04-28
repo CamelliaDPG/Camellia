@@ -80,7 +80,8 @@ static const string & S_OP_UNKNOWN = "[UNKNOWN OPERATOR] ";
 set<int> BilinearForm::_normalOperators;
 
 BilinearForm::BilinearForm() {
-  _useSPDSolveForOptimalTestFunctions = true;
+  _useQRSolveForOptimalTestFunctions = true;
+  _useSPDSolveForOptimalTestFunctions = false;
   _useIterativeRefinementsWithSPDSolve = false;
   _useExtendedPrecisionSolveForOptimalTestFunctions = false;
   _warnAboutZeroRowsAndColumns = true;
@@ -200,7 +201,9 @@ int BilinearForm::optimalTestWeights(FieldContainer<double> &optimalTestWeights,
     int result = 0;
     FieldContainer<double> cellIPMatrix(localIPDim, &innerProductMatrix(cellIndex,0,0));
     FieldContainer<double> cellStiffness(localStiffnessDim, &stiffnessMatrix(cellIndex,0,0));
-    if (_useSPDSolveForOptimalTestFunctions && !_useExtendedPrecisionSolveForOptimalTestFunctions) {
+    if (_useQRSolveForOptimalTestFunctions) {
+      result = SerialDenseWrapper::solveSystemUsingQR(optimalWeightsT, cellIPMatrix, cellStiffness);
+    } else if (_useSPDSolveForOptimalTestFunctions && !_useExtendedPrecisionSolveForOptimalTestFunctions) {
       result = SerialDenseWrapper::solveSPDSystemMultipleRHS(optimalWeightsT, cellIPMatrix, cellStiffness);
       if (result != 0) {
         // may be that we're not SPD numerically

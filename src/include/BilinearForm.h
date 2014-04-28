@@ -126,6 +126,7 @@ protected:
   vector< int > _trialIDs, _testIDs;
   static set<int> _normalOperators;
   bool _useSPDSolveForOptimalTestFunctions, _useIterativeRefinementsWithSPDSolve, _useExtendedPrecisionSolveForOptimalTestFunctions;
+  bool _useQRSolveForOptimalTestFunctions;
   bool _warnAboutZeroRowsAndColumns;
 };
 
