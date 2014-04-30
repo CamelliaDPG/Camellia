@@ -23,13 +23,16 @@ private:
   void setup();
   void teardown();
   
-  SolutionPtr quadMeshSolutionConfusion(bool useMinRule, int horizontalCells, int verticalCells, int H1Order);
-  SolutionPtr quadMeshSolutionPoissonExactSolution(bool useMinRule, int horizontalCells, int verticalCells, int H1Order, FunctionPtr phi_exact);
-  SolutionPtr quadMeshSolutionStokesExactSolution(bool useMinRule, int horizontalCells, int verticalCells, int H1Order,
-                                                  FunctionPtr u1_exact, FunctionPtr u2_exact, FunctionPtr p_exact);
-  SolutionPtr quadMeshSolutionStokesCavityFlow(bool useMinRule, int horizontalCells, int verticalCells, int H1Order);
+  SolutionPtr confusionExactSolution(bool useMinRule, int horizontalCells, int verticalCells, int H1Order, bool divideIntoTriangles);
+  SolutionPtr poissonExactSolution(bool useMinRule, int horizontalCells, int verticalCells, int H1Order, FunctionPtr phi_exact, bool divideIntoTriangles);
+  SolutionPtr stokesExactSolution(bool useMinRule, int horizontalCells, int verticalCells, int H1Order,
+                                  FunctionPtr u1_exact, FunctionPtr u2_exact, FunctionPtr p_exact, bool divideIntoTriangles);
+  SolutionPtr stokesCavityFlowSolution(bool useMinRule, int horizontalCells, int verticalCells, int H1Order, bool divideIntoTriangles);
   
-  bool subTestCompatibleSolutionsAgree(int horizontalCells, int verticalCells, int H1Order, int numUniformRefinements);
+  bool subTestCompatibleSolutionsAgree(int horizontalCells, int verticalCells, int H1Order, int numUniformRefinements, bool divideIntoTriangles);
+  
+  bool testHangingNodePoisson(bool useQuads);
+  bool testHangingNodeStokes(bool useQuads);
 public:
   GDAMinimumRuleTests();
   void runTests(int &numTestsRun, int &numTestsPassed);
@@ -42,9 +45,13 @@ public:
   bool testSingleCellMesh();
   
   bool testHRefinements();
+
+  bool testHangingNodePoissonTriangle();
+  bool testHangingNodeStokesTriangle();
   
-  bool testHangingNodePoisson();
-  bool testHangingNodeStokes();
+  bool testHangingNodePoissonQuad();
+  bool testHangingNodeStokesQuad();
+  
 };
 
 

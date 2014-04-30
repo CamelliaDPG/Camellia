@@ -46,6 +46,8 @@ class MeshTopology {
   map< IndexType, pair< pair<IndexType, unsigned>, pair<IndexType, unsigned> > > _cellsForSideEntities; // key: sideEntityIndex.  value.first is (cellIndex1, sideOrdinal1), value.second is (cellIndex2, sideOrdinal2).  On initialization, (cellIndex2, sideOrdinal2) == ((IndexType)-1,(IndexType)-1).
   set<IndexType> _boundarySides; // entities of dimension _spaceDim-1 on the mesh boundary
   vector< map< IndexType, vector< pair<IndexType, unsigned> > > > _parentEntities; // map from entity to its possible parents.  Not every entity has a parent.  We support entities having multiple parents.  Such things will be useful in the context of anisotropic refinements.  The pair entries here are (parentEntityIndex, refinementOrdinal), where the refinementOrdinal is the index into the _childEntities[d][parentEntityIndex] vector.
+  
+  vector< map< IndexType, pair<IndexType, unsigned> > > _generalizedParentEntities; // map from entity to its nearest generalized parent.  map entries are (parentEntityIndex, parentEntityDimension).  Generalized parents may be higher-dimensional or equal-dimensional to the child entity.
   vector< map< IndexType, vector< pair< RefinementPatternPtr, vector<IndexType> > > > > _childEntities; // map from parent to child entities, together with the RefinementPattern to get from one to the other.
   vector< map< IndexType, IndexType > > _entityCellTopologyKeys;
   
@@ -71,6 +73,9 @@ class MeshTopology {
 
 //  pair< IndexType, set<IndexType> > determineEntityConstraints(unsigned d, IndexType entityIndex);
   void addChildren(CellPtr cell, const vector< CellTopoPtr > &childTopos, const vector< vector<IndexType> > &childVertices);
+  
+  void determineGeneralizedParentsForRefinement(CellPtr cell, RefinementPatternPtr refPattern);
+  
   vector< pair<IndexType,unsigned> > getConstrainingSideAncestry(IndexType sideEntityIndex);   // pair: first is the sideEntityIndex of the ancestor; second is the refinementIndex of the refinement to get from parent to child (see _parentEntities and _childEntities)
   IndexType getVertexIndexAdding(const vector<double> &vertex, double tol);
   vector<IndexType> getVertexIndices(const FieldContainer<double> &vertices);
@@ -96,9 +101,13 @@ public:
   bool cellHasCurvedEdges(IndexType cellIndex);
   vector<IndexType> getChildEntities(unsigned d, IndexType entityIndex);
   set<IndexType> getChildEntitiesSet(unsigned d, IndexType entityIndex);
-  IndexType getConstrainingEntityIndex(unsigned d, IndexType entityIndex);
+  IndexType getConstrainingEntityIndexOfLikeDimension(unsigned d, IndexType entityIndex);
+  pair<IndexType, unsigned> getConstrainingEntity(unsigned d, IndexType entityIndex);
   IndexType getEntityIndex(unsigned d, const set<IndexType> &nodeSet);
   IndexType getEntityCount(unsigned d);
+  
+  pair<IndexType,unsigned> getEntityGeneralizedParent(unsigned d, IndexType entityIndex); // returns (parentEntityIndex, parentDimension)
+  
   IndexType getEntityParent(unsigned d, IndexType entityIndex, unsigned parentOrdinal=0);
   IndexType getEntityParentForSide(unsigned d, IndexType entityIndex, IndexType parentSideEntityIndex);   // returns the entity index for the parent (which might be the entity itself) of entity (d,entityIndex) that is a subcell of side parentSideEntityIndex
   const vector<IndexType> &getEntityVertexIndices(unsigned d, IndexType entityIndex);

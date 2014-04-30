@@ -14,6 +14,8 @@
 #include "Mesh.h"
 #include "MeshTopology.h"
 
+#include "CamelliaDebugUtility.h"
+
 class CamelliaCellTools {
 public:
   static void refCellNodesForTopology(FieldContainer<double> &cellNodes, const shards::CellTopology &cellTopo, unsigned permutation = 0) { // 0 permutation is the identity
@@ -119,6 +121,10 @@ public:
       }
       if (matches) return permutation;
     }
+    cout << "No matching permutation found.\n";
+    Camellia::print("fromOrder", fromOrder);
+    Camellia::print("toOrder", toOrder);
+    
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "No matching permutation found");
     return permutationCount; // an impossible (out of bounds) answer: this line just to satisfy compilers that warn about missing return values.
   }

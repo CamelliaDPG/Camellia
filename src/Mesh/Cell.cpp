@@ -227,30 +227,49 @@ RefinementBranch Cell::refinementBranchForSubcell(unsigned subcdim, unsigned sub
   // if the given subcell is constrained by another cell, this method will return a RefinementBranch which has as its root
   // this cell's ancestor that is compatible with the constraining cell, and as its leaf this cell.
   IndexType subcellEntityIndex = entityIndex(subcdim, subcord);
-  IndexType constrainingEntityIndex = _meshTopo->getConstrainingEntityIndex(subcdim, subcellEntityIndex);
+  
+  pair<IndexType, unsigned> constrainingEntity = _meshTopo->getConstrainingEntity(subcdim, subcellEntityIndex);
+//  IndexType constrainingEntityIndex = _meshTopo->getConstrainingEntityIndex(subcdim, subcellEntityIndex);
+  IndexType constrainingEntityIndex = constrainingEntity.first;
+  unsigned constrainingEntityDim = constrainingEntity.second;
 
   CellPtr currentAncestor = _meshTopo->getCell(_cellIndex);
   vector< CellPtr > ancestors;
   vector< unsigned > childOrdinals;
   
-  while (subcellEntityIndex != constrainingEntityIndex) {
+  unsigned subcellEntityDimension = subcdim;
+  
+  while ((subcellEntityIndex != constrainingEntityIndex) || (subcellEntityDimension != constrainingEntityDim)) {
     GlobalIndexType childCellIndex = currentAncestor->cellIndex();
     currentAncestor = currentAncestor->getParent();
     ancestors.push_back(currentAncestor);
+    
     vector< CellPtr > children = currentAncestor->children();
     for (int i=0; i<children.size(); i++) {
       if (children[i]->cellIndex() == childCellIndex) {
         childOrdinals.push_back(i);
+        
         subcord = currentAncestor->refinementPattern()->mapSubcellOrdinalFromChildToParent(i, subcdim, subcord);
+        if (subcord == -1) {
+          // then it should be the case that the subcell entity has as generalized parent a higher-dimension subcell of currentAncestor
+          pair<IndexType, unsigned> generalizedParent = _meshTopo->getEntityGeneralizedParent(subcellEntityDimension, subcellEntityIndex);
+          if (generalizedParent.second <= subcellEntityDimension) {
+            cout << "Cell detected MeshTopology Internal Error: did not find higher-dimensional generalized parent...\n";
+          } else {
+            subcellEntityDimension = generalizedParent.second;
+            subcellEntityIndex = generalizedParent.first;
+            subcord = currentAncestor->findSubcellOrdinal(subcellEntityDimension, subcellEntityIndex);
+          }
+        }
         if (subcord==-1) {
           cout << "Error: corresponding subcell not found in parent, even though the subcell is constrained...\n";
           cout << "Subcell entity:\n";
-          _meshTopo->printEntityVertices(subcdim, subcellEntityIndex);
+          _meshTopo->printEntityVertices(subcellEntityDimension, subcellEntityIndex);
           cout << "Constraining entity:\n";
-          _meshTopo->printEntityVertices(subcdim, constrainingEntityIndex);
+          _meshTopo->printEntityVertices(constrainingEntityDim, constrainingEntityIndex);
           TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "corresponding subcell not found in parent, even though the subcell is constrained...");
         }
-        subcellEntityIndex = currentAncestor->entityIndex(subcdim, subcord);
+        subcellEntityIndex = currentAncestor->entityIndex(subcellEntityDimension, subcord);
         break;
       }
     }
@@ -269,132 +288,45 @@ RefinementBranch Cell::refinementBranchForSubcell(unsigned subcdim, unsigned sub
   return refBranch;
 }
 
+pair<unsigned, unsigned> Cell::ancestralSubcellOrdinalAndDimension(unsigned subcdim, unsigned subcord) {
+  IndexType subcellEntityIndex = entityIndex(subcdim, subcord);
+  pair<IndexType,unsigned> constrainingEntity = _meshTopo->getConstrainingEntity(subcdim, subcellEntityIndex);
+  
+  CellPtr ancestralCell = this->ancestralCellForSubcell(subcdim, subcord);
+  
+  unsigned constrainingSubcellOrdinal = ancestralCell->findSubcellOrdinal(constrainingEntity.second, constrainingEntity.first);
+  return make_pair(constrainingSubcellOrdinal, constrainingEntity.second);
+}
+
 unsigned Cell::ancestralPermutationForSubcell(unsigned subcdim, unsigned subcord) {
   // if the given subcell is constrained by another cell, this method will return the subcell permutation of
   // this cell's nearest ancestor that is compatible with the constraining cell.
   IndexType subcellEntityIndex = entityIndex(subcdim, subcord);
-  IndexType constrainingEntityIndex = _meshTopo->getConstrainingEntityIndex(subcdim, subcellEntityIndex);
+  pair<IndexType,unsigned> constrainingEntity = _meshTopo->getConstrainingEntity(subcdim, subcellEntityIndex);
   
-  CellPtr currentAncestor = _meshTopo->getCell(_cellIndex);
+  CellPtr ancestralCell = this->ancestralCellForSubcell(subcdim, subcord);
   
-  while (subcellEntityIndex != constrainingEntityIndex) {
-    GlobalIndexType childCellIndex = currentAncestor->cellIndex();
-    currentAncestor = currentAncestor->getParent();
-    vector< CellPtr > children = currentAncestor->children();
-    for (int i=0; i<children.size(); i++) {
-      if (children[i]->cellIndex() == childCellIndex) {
-        subcord = currentAncestor->refinementPattern()->mapSubcellOrdinalFromChildToParent(i, subcdim, subcord);
-        subcellEntityIndex = currentAncestor->entityIndex(subcdim, subcord);
-        break;
-      }
-    }
+  unsigned constrainingSubcellOrdinal = ancestralCell->findSubcellOrdinal(constrainingEntity.second, constrainingEntity.first);
+  
+  if (constrainingSubcellOrdinal == -1) {
+    cout << "constraining subcell ordinal not found.\n";
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "constraining subcell ordinal not found.");
   }
   
-  return currentAncestor->subcellPermutation(subcdim, subcord);
-}
-
-IndexType Cell::ancestralEntityIndexForSubcell(unsigned subcdim, unsigned subcord) {
-  // if the given subcell is constrained by another cell, this method will return the subcell permutation of
-  // this cell's nearest ancestor that is compatible with the constraining cell.
-  IndexType subcellEntityIndex = entityIndex(subcdim, subcord);
-  IndexType constrainingEntityIndex = _meshTopo->getConstrainingEntityIndex(subcdim, subcellEntityIndex);
-  
-  CellPtr currentAncestor = _meshTopo->getCell(_cellIndex);
-  
-  while (subcellEntityIndex != constrainingEntityIndex) {
-    GlobalIndexType childCellIndex = currentAncestor->cellIndex();
-    currentAncestor = currentAncestor->getParent();
-    vector< CellPtr > children = currentAncestor->children();
-    for (int i=0; i<children.size(); i++) {
-      if (children[i]->cellIndex() == childCellIndex) {
-        subcord = currentAncestor->refinementPattern()->mapSubcellOrdinalFromChildToParent(i, subcdim, subcord);
-        subcellEntityIndex = currentAncestor->entityIndex(subcdim, subcord);
-        break;
-      }
-    }
-  }
-  
-  return subcellEntityIndex;
+  return ancestralCell->subcellPermutation(constrainingEntity.second, constrainingSubcellOrdinal);
 }
 
 CellPtr Cell::ancestralCellForSubcell(unsigned subcdim, unsigned subcord) {
   // if the given subcell is constrained by another cell, this method will return this cell's nearest ancestor that is compatible with the constraining cell.
-  IndexType subcellEntityIndex = entityIndex(subcdim, subcord);
-  IndexType constrainingEntityIndex = _meshTopo->getConstrainingEntityIndex(subcdim, subcellEntityIndex);
+  RefinementBranch refBranch = refinementBranchForSubcell(subcdim, subcord);
   
   CellPtr currentAncestor = _meshTopo->getCell(_cellIndex);
   
-  while (subcellEntityIndex != constrainingEntityIndex) {
-    GlobalIndexType childCellIndex = currentAncestor->cellIndex();
+  for (int refOrdinal=0; refOrdinal < refBranch.size(); refOrdinal++) {
     currentAncestor = currentAncestor->getParent();
-    vector< CellPtr > children = currentAncestor->children();
-    for (int i=0; i<children.size(); i++) {
-      if (children[i]->cellIndex() == childCellIndex) {
-        subcord = currentAncestor->refinementPattern()->mapSubcellOrdinalFromChildToParent(i, subcdim, subcord);
-        subcellEntityIndex = currentAncestor->entityIndex(subcdim, subcord);
-        break;
-      }
-    }
   }
   
   return currentAncestor;
-}
-
-unsigned Cell::ancestralPermutationForSideSubcell(unsigned sideOrdinal, unsigned subcdim, unsigned subcordInSide) {
-  // if the given subcell is constrained by another cell, this method will return the subcell permutation of
-  // this cell's nearest ancestor that is compatible with the constraining cell.
-  
-  int sideDim = _cellTopo->getDimension() - 1;
-  unsigned subcordInCell = CamelliaCellTools::subcellOrdinalMap(*_cellTopo, sideDim, sideOrdinal, subcdim, subcordInSide);
-  
-  IndexType subcellEntityIndex = entityIndex(subcdim, subcordInCell);
-  IndexType constrainingEntityIndex = _meshTopo->getConstrainingEntityIndex(subcdim, subcellEntityIndex);
-  
-  CellPtr currentAncestor = _meshTopo->getCell(_cellIndex);
-  
-  while (subcellEntityIndex != constrainingEntityIndex) {
-    GlobalIndexType childCellIndex = currentAncestor->cellIndex();
-    currentAncestor = currentAncestor->getParent();
-    vector< CellPtr > children = currentAncestor->children();
-    for (int i=0; i<children.size(); i++) {
-      if (children[i]->cellIndex() == childCellIndex) {
-        RefinementPatternPtr sideRefinementPattern = currentAncestor->refinementPattern()->sideRefinementPatterns()[sideOrdinal];
-        unsigned sidePatternChildOrdinal = currentAncestor->refinementPattern()->mapVolumeChildOrdinalToSubcellChildOrdinal(subcdim, subcordInCell, i);
-        
-        subcordInCell = currentAncestor->refinementPattern()->mapSubcellOrdinalFromChildToParent(i, subcdim, subcordInCell);
-        subcordInSide = sideRefinementPattern->mapSubcellOrdinalFromChildToParent(sidePatternChildOrdinal, subcdim, subcordInSide);
-        
-        if (subcordInCell==-1) {
-          cout << "Error: corresponding subcell not found in parent, even though the subcell is constrained...\n";
-          cout << "Subcell entity:\n";
-          _meshTopo->printEntityVertices(subcdim, subcellEntityIndex);
-          cout << "Constraining entity:\n";
-          _meshTopo->printEntityVertices(subcdim, constrainingEntityIndex);
-          TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "corresponding subcell not found in parent, even though the subcell is constrained...");
-        }
-        
-        sideOrdinal = currentAncestor->refinementPattern()->mapSubcellOrdinalFromChildToParent(i, sideDim, sideOrdinal);
-        if (sideOrdinal==-1) {
-          cout << "Error: corresponding side not found in parent, even though the subcell is constrained...\n";
-          cout << "Subcell entity:\n";
-          _meshTopo->printEntityVertices(subcdim, subcellEntityIndex);
-          cout << "Constraining entity:\n";
-          _meshTopo->printEntityVertices(subcdim, constrainingEntityIndex);
-          
-//          writeExactMeshSkeleton(const string &filePath, MeshTopologyPtr meshTopo, int numPointsPerEdge, bool labelCells=false);
-          string filePath = "/tmp/failingMesh";
-          GnuPlotUtil::writeExactMeshSkeleton(filePath, _meshTopo, 2, true);
-          
-          TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "corresponding side not found in parent, even though the subcell is constrained...");
-        }
-        
-        subcellEntityIndex = currentAncestor->entityIndex(subcdim, subcordInCell);
-        break;
-      }
-    }
-  }
-  
-  return currentAncestor->sideSubcellPermutation(sideOrdinal,subcdim, subcordInSide);
 }
 
 RefinementPatternPtr Cell::refinementPattern() {

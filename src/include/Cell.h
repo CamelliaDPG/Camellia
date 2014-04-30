@@ -47,10 +47,11 @@ public:
        IndexType cellIndex, MeshTopology* meshTopo);
 
   Teuchos::RCP<Cell> ancestralCellForSubcell(unsigned subcdim, unsigned subcord);
-  IndexType ancestralEntityIndexForSubcell(unsigned subcdim, unsigned subcord);
   
   unsigned ancestralPermutationForSubcell(unsigned subcdim, unsigned subcord);
-  unsigned ancestralPermutationForSideSubcell(unsigned sideOrdinal, unsigned subcdim, unsigned subcord);
+//  unsigned ancestralPermutationForSideSubcell(unsigned sideOrdinal, unsigned subcdim, unsigned subcord);
+  
+  pair<unsigned, unsigned> ancestralSubcellOrdinalAndDimension(unsigned subcdim, unsigned subcord); // (subcord, subcdim) into the cell returned by ancestralCellForSubcell
   
   IndexType cellIndex();
   const vector< Teuchos::RCP< Cell > > &children();

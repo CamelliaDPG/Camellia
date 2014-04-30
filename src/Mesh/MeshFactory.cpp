@@ -84,7 +84,7 @@ MeshPtr MeshFactory::quadMesh(BilinearFormPtr bf, int H1Order, FieldContainer<do
 }
 
 MeshPtr MeshFactory::quadMesh(BilinearFormPtr bf, int H1Order, int pToAddTest,
-                              double width, double height, int horizontalElements, int verticalElements) {
+                              double width, double height, int horizontalElements, int verticalElements, bool divideIntoTriangles) {
   FieldContainer<double> quadPoints(4,2);
   quadPoints(0,0) = 0.0;
   quadPoints(0,1) = 0.0;
@@ -97,20 +97,26 @@ MeshPtr MeshFactory::quadMesh(BilinearFormPtr bf, int H1Order, int pToAddTest,
 
   int testOrder = pToAddTest + H1Order; // buildQuadMesh's interface asks for the order of the test space, not the delta p.  Better to be consistent in using the delta p going forward...
 
-  return MeshFactory::buildQuadMesh(quadPoints, horizontalElements, verticalElements, bf, H1Order, testOrder);
+  return MeshFactory::buildQuadMesh(quadPoints, horizontalElements, verticalElements, bf, H1Order, testOrder, divideIntoTriangles);
 }
 
 MeshPtr MeshFactory::quadMeshMinRule(BilinearFormPtr bf, int H1Order, int pToAddTest,
-                                            double width, double height, int horizontalElements, int verticalElements) {
-  CellTopoPtr quadTopo = Teuchos::rcp( new shards::CellTopology(shards::getCellTopologyData<shards::Quadrilateral<4> >() ));
+                                      double width, double height, int horizontalElements, int verticalElements,
+                                     bool divideIntoTriangles) {
   int spaceDim = 2;
   
   vector<vector<double> > vertices;
   vector< vector<unsigned> > allElementVertices;
   
-  int numElements = horizontalElements * verticalElements;
-  vector< CellTopoPtr > cellTopos(numElements, quadTopo);
+  int numElements = divideIntoTriangles ? horizontalElements * verticalElements * 2 : horizontalElements * verticalElements;
   
+  CellTopoPtr topo;
+  if (divideIntoTriangles) {
+    topo = Teuchos::rcp( new shards::CellTopology(shards::getCellTopologyData<shards::Triangle<3> >() ));
+  } else {
+    topo = Teuchos::rcp( new shards::CellTopology(shards::getCellTopologyData<shards::Quadrilateral<4> >() ));
+  }
+  vector< CellTopoPtr > cellTopos(numElements, topo);
   
   FieldContainer<double> quadBoundaryPoints(4,2);
   quadBoundaryPoints(0,0) = 0;
@@ -143,12 +149,25 @@ MeshPtr MeshFactory::quadMeshMinRule(BilinearFormPtr bf, int H1Order, int pToAdd
   
   for (int i=0; i<horizontalElements; i++) {
     for (int j=0; j<verticalElements; j++) {
-      vector<unsigned> elemVertices;
-      elemVertices.push_back(vertexIndices[i][j]);
-      elemVertices.push_back(vertexIndices[i+1][j]);
-      elemVertices.push_back(vertexIndices[i+1][j+1]);
-      elemVertices.push_back(vertexIndices[i][j+1]);
-      allElementVertices.push_back(elemVertices);
+      if (!divideIntoTriangles) {
+        vector<unsigned> elemVertices;
+        elemVertices.push_back(vertexIndices[i][j]);
+        elemVertices.push_back(vertexIndices[i+1][j]);
+        elemVertices.push_back(vertexIndices[i+1][j+1]);
+        elemVertices.push_back(vertexIndices[i][j+1]);
+        allElementVertices.push_back(elemVertices);
+      } else {
+        vector<unsigned> elemVertices1, elemVertices2; // elem1 is SE of quad, elem2 is NW
+        elemVertices1.push_back(vertexIndices[i][j]);     // SIDE1 is SOUTH side of quad
+        elemVertices1.push_back(vertexIndices[i+1][j]);   // SIDE2 is EAST
+        elemVertices1.push_back(vertexIndices[i+1][j+1]); // SIDE3 is diagonal
+        elemVertices2.push_back(vertexIndices[i][j+1]);   // SIDE1 is WEST
+        elemVertices2.push_back(vertexIndices[i][j]);     // SIDE2 is diagonal
+        elemVertices2.push_back(vertexIndices[i+1][j+1]); // SIDE3 is NORTH
+        
+        allElementVertices.push_back(elemVertices1);
+        allElementVertices.push_back(elemVertices2);
+      }
     }
   }
   

@@ -22,6 +22,7 @@ void MeshTopology::init(unsigned spaceDim) {
   _activeCellsForEntities = vector< map< unsigned, set< pair<unsigned, unsigned> > > >(_spaceDim); // set entries are (cellIndex, entityIndexInCell) (entityIndexInCell aka subcord)
   _sidesForEntities = vector< map< unsigned, set< unsigned > > >(_spaceDim);
   _parentEntities = vector< map< unsigned, vector< pair<unsigned, unsigned> > > >(_spaceDim); // map to possible parents
+  _generalizedParentEntities = vector< map<unsigned, pair<unsigned,unsigned> > >(_spaceDim);
   _childEntities = vector< map< unsigned, vector< pair<RefinementPatternPtr, vector<unsigned> > > > >(_spaceDim);
   _entityCellTopologyKeys = vector< map< unsigned, unsigned > >(_spaceDim);
 }
@@ -271,12 +272,16 @@ void MeshTopology::addEdgeCurve(pair<unsigned,unsigned> edge, ParametricCurvePtr
 unsigned MeshTopology::addEntity(const shards::CellTopology &entityTopo, const vector<unsigned> &entityVertices, unsigned &entityPermutation) {
   set< unsigned > nodeSet;
   nodeSet.insert(entityVertices.begin(),entityVertices.end());
+  
+  
   if (nodeSet.size() != entityVertices.size()) {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Entities may not have repeated vertices");
   }
   unsigned d  = entityTopo.getDimension();
   unsigned entityIndex;
-  if (_knownEntities[d].find(nodeSet) == _knownEntities[d].end()) {
+  
+  map< set<IndexType>, IndexType >::iterator knownEntityEntry = _knownEntities[d].find(nodeSet);
+  if ( knownEntityEntry == _knownEntities[d].end()) {
     // new entity
     entityIndex = _entities[d].size();
     _entities[d].push_back(nodeSet);
@@ -291,7 +296,13 @@ unsigned MeshTopology::addEntity(const shards::CellTopology &entityTopo, const v
 //    printVertices(nodeSet);
   } else {
     // existing entity
-    entityIndex = _knownEntities[d][nodeSet];
+//    Camellia::print("nodeSet", nodeSet);
+//    Camellia::print("knownEntityEntry->first", knownEntityEntry->first);
+    
+    entityIndex = knownEntityEntry->second;
+//    Camellia::print("entities entry", _entities[d][entityIndex]);
+//    
+//    Camellia::print("canonicalEntityOrdering",_canonicalEntityOrdering[d][entityIndex]);
     entityPermutation = CamelliaCellTools::permutationMatchingOrder(entityTopo, _canonicalEntityOrdering[d][entityIndex], entityVertices);
   }
   return entityIndex;
@@ -529,7 +540,18 @@ unsigned MeshTopology::getEntityCount(unsigned int d) {
   return _entities[d].size();
 }
 
+pair<IndexType, unsigned> MeshTopology::getEntityGeneralizedParent(unsigned int d, IndexType entityIndex) {
+  return _generalizedParentEntities[d][entityIndex];
+}
+
 unsigned MeshTopology::getEntityIndex(unsigned d, const set<unsigned> &nodeSet) {
+  if (d==0) {
+    if (nodeSet.size()==1) {
+      return *nodeSet.begin();
+    } else {
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "node set for vertex should not have more than one entry!");
+    }
+  }
   if (_knownEntities[d].find(nodeSet) != _knownEntities[d].end()) {
     return _knownEntities[d][nodeSet];
   }
@@ -578,14 +600,21 @@ unsigned MeshTopology::getSubEntityIndex(unsigned int d, unsigned int entityInde
   set<unsigned> subEntityNodes;
   unsigned subEntityNodeCount = (subEntityDim > 0) ? entityTopo->getNodeCount(subEntityDim, subEntityOrdinal) : 1; // vertices are by definition just one node
   vector<unsigned> entityNodes = _canonicalEntityOrdering[d][entityIndex];
+  
   for (unsigned nodeOrdinal=0; nodeOrdinal<subEntityNodeCount; nodeOrdinal++) {
-    unsigned nodeIndexInEntity = entityTopo->getNodeMap(subEntityDim, subEntityOrdinal, nodeOrdinal);
-    unsigned nodeIndexInMesh = entityNodes[nodeIndexInEntity];
+    unsigned nodeOrdinalInEntity = entityTopo->getNodeMap(subEntityDim, subEntityOrdinal, nodeOrdinal);
+    unsigned nodeIndexInMesh = entityNodes[nodeOrdinalInEntity];
+    if (subEntityDim == 0) {
+      return nodeIndexInMesh;
+    }
     subEntityNodes.insert(nodeIndexInMesh);
   }
-  if (_knownEntities[subEntityDim].find(subEntityNodes) == _knownEntities[d].end()) {
+  if (_knownEntities[subEntityDim].find(subEntityNodes) == _knownEntities[subEntityDim].end()) {
     cout << "sub-entity not found with vertices:\n";
     printVertices(subEntityNodes);
+    cout << "entity vertices:\n";
+    set<unsigned> entityNodeSet(entityNodes.begin(),entityNodes.end());
+    printVertices(entityNodeSet);
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "sub-entity not found");
   }
   return _knownEntities[subEntityDim][subEntityNodes];
@@ -642,6 +671,7 @@ unsigned MeshTopology::getVertexIndexAdding(const vector<double> &vertex, double
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Mesh error: attempting to add existing vertex");
   }
   _vertexMap[vertex] = vertexIndex;
+  
   return vertexIndex;
 }
 
@@ -707,8 +737,59 @@ set<unsigned> MeshTopology::getChildEntitiesSet(unsigned int d, unsigned int ent
   return childIndices;
 }
 
-unsigned MeshTopology::getConstrainingEntityIndex(unsigned int d, unsigned int entityIndex) {
+pair<IndexType, unsigned> MeshTopology::getConstrainingEntity(unsigned d, IndexType entityIndex) {
+  unsigned sideDim = _spaceDim - 1;
+  
+  pair<IndexType, unsigned> constrainingEntity; // we store the highest-dimensional constraint.  (This will be the maximal constraint.)
+  constrainingEntity.first = entityIndex;
+  constrainingEntity.second = d;
+  
+  IndexType generalizedAncestorEntityIndex = entityIndex;
+  for (unsigned generalizedAncestorDim=d; generalizedAncestorDim <= sideDim; ) {
+    IndexType possibleConstrainingEntityIndex = getConstrainingEntityIndexOfLikeDimension(generalizedAncestorDim, generalizedAncestorEntityIndex);
+    if (possibleConstrainingEntityIndex != generalizedAncestorEntityIndex) {
+      constrainingEntity.second = generalizedAncestorDim;
+      constrainingEntity.first = possibleConstrainingEntityIndex;
+    } else {
+      // if the generalized parent has no constraint of like dimension, then either the generalized parent is the constraint, or there is no constraint of this dimension
+      // basic rule: if there exists a side belonging to an active cell that contains the putative constraining entity, then we constrain
+      // I am a bit vague on whether this will work correctly in the context of anisotropic refinements.  (It might, but I'm not sure.)  But first we are targeting isotropic.
+      set<unsigned> sidesForEntity;
+      if (generalizedAncestorDim==sideDim) {
+        sidesForEntity.insert(generalizedAncestorEntityIndex);
+      } else {
+        sidesForEntity = _sidesForEntities[generalizedAncestorDim][generalizedAncestorEntityIndex];
+      }
+      for (set<unsigned>::iterator sideEntityIt = sidesForEntity.begin(); sideEntityIt != sidesForEntity.end(); sideEntityIt++) {
+        unsigned sideEntityIndex = *sideEntityIt;
+        if (getActiveCellCount(sideDim, sideEntityIndex) > 0) {
+          constrainingEntity.second = generalizedAncestorDim;
+          constrainingEntity.first = possibleConstrainingEntityIndex;
+          break;
+        }
+      }
+    }
+    while (entityHasParent(generalizedAncestorDim, generalizedAncestorEntityIndex)) { // parent of like dimension
+      generalizedAncestorEntityIndex = getEntityParent(generalizedAncestorDim, generalizedAncestorEntityIndex);
+    }
+    if (_generalizedParentEntities[generalizedAncestorDim].find(generalizedAncestorEntityIndex)
+        != _generalizedParentEntities[generalizedAncestorDim].end()) {
+      pair< IndexType, unsigned > generalizedParent = _generalizedParentEntities[generalizedAncestorDim][generalizedAncestorEntityIndex];
+      generalizedAncestorEntityIndex = generalizedParent.first;
+      generalizedAncestorDim = generalizedParent.second;
+    } else { // at top of refinement tree -- break out of for loop
+      break;
+    }
+  }
+  return constrainingEntity;
+}
+
+unsigned MeshTopology::getConstrainingEntityIndexOfLikeDimension(unsigned int d, unsigned int entityIndex) {
   unsigned constrainingEntityIndex = entityIndex;
+  
+  if (d==0) { // one vertex can't constrain another...
+    return entityIndex;
+  }
   
   set<unsigned> sidesForEntity;
   unsigned sideDim = _spaceDim - 1;
@@ -999,9 +1080,9 @@ void MeshTopology::printConstraintReport(unsigned d) {
   IndexType entityCount = _entities[d].size();
   cout << "******* MeshTopology, constraints for d = " << d << " *******\n";
   for (IndexType entityIndex=0; entityIndex<entityCount; entityIndex++) {
-    IndexType constrainingEntityIndex = getConstrainingEntityIndex(d, entityIndex);
-    if (entityIndex != constrainingEntityIndex)
-      cout << "Entity " << entityIndex << " is constrained by entity " << constrainingEntityIndex << endl;
+    pair<IndexType, unsigned> constrainingEntity = getConstrainingEntity(d, entityIndex);
+    if ((d != constrainingEntity.second) || (entityIndex != constrainingEntity.first))
+      cout << "Entity " << entityIndex << " is constrained by entity " << constrainingEntity.first << " of dimension " << constrainingEntity.second << endl;
     else
       cout << "Entity " << entityIndex << " is unconstrained.\n";
   }
@@ -1024,6 +1105,10 @@ void MeshTopology::printVertices(set<unsigned int> vertexIndices) {
 }
 
 void MeshTopology::printEntityVertices(unsigned int d, unsigned int entityIndex) {
+  if (d==0) {
+    printVertex(entityIndex);
+    return;
+  }
   vector<unsigned> entityVertices = _canonicalEntityOrdering[d][entityIndex];
   for (vector<unsigned>::iterator vertexIt=entityVertices.begin(); vertexIt !=entityVertices.end(); vertexIt++) {
     printVertex(*vertexIt);
@@ -1076,6 +1161,8 @@ void MeshTopology::refineCell(unsigned cellIndex, RefinementPatternPtr refPatter
   
   deactivateCell(cell);
   addChildren(cell, childTopos, childVertices);
+  
+  determineGeneralizedParentsForRefinement(cell, refPattern);
   
   if (_edgeToCurveMap.size() > 0) {
     vector< vector< pair< unsigned, unsigned> > > childrenForSides = refPattern->childrenForSides(); // outer vector: indexed by parent's sides; inner vector: (child index in children, index of child's side shared with parent)
@@ -1193,6 +1280,79 @@ void MeshTopology::refineCellEntities(CellPtr cell, RefinementPatternPtr refPatt
         if (d==_spaceDim-1) { // side
           if (_boundarySides.find(parentIndex) != _boundarySides.end()) { // parent is a boundary side, so children are, too
             _boundarySides.insert(childEntityIndices.begin(),childEntityIndices.end());
+          }
+        }
+      }
+    }
+  }
+}
+
+void MeshTopology::determineGeneralizedParentsForRefinement(CellPtr cell, RefinementPatternPtr refPattern) {
+  FieldContainer<double> cellNodes(1,cell->vertices().size(), _spaceDim);
+  
+  for (int vertexIndex=0; vertexIndex < cellNodes.dimension(1); vertexIndex++) {
+    for (int d=0; d<_spaceDim; d++) {
+      cellNodes(0,vertexIndex,d) = _vertices[cell->vertices()[vertexIndex]][d];
+    }
+  }
+  
+  vector< RefinementPatternRecipe > relatedRecipes = refPattern->relatedRecipes();
+  if (relatedRecipes.size()==0) {
+    RefinementPatternRecipe recipe;
+    vector<unsigned> initialCell;
+    recipe.push_back(make_pair(refPattern.get(),vector<unsigned>()));
+    relatedRecipes.push_back(recipe);
+  }
+  
+  // TODO generalize the below code to apply recipes instead of just the refPattern...
+  
+  CellTopoPtr cellTopo = cell->topology();
+  for (unsigned d=1; d<_spaceDim; d++) {
+    unsigned subcellCount = cellTopo->getSubcellCount(d);
+    for (unsigned subcord = 0; subcord < subcellCount; subcord++) {
+      RefinementPatternPtr subcellRefPattern = refPattern->patternForSubcell(d, subcord);
+      FieldContainer<double> refinedNodes = subcellRefPattern->refinedNodes(); // refinedNodes implicitly assumes that all child topos are the same
+      unsigned childCount = refinedNodes.dimension(0);
+      if (childCount==1) continue; // we already have the appropriate entities and parent relationships defined...
+      
+      //      cout << "Refined nodes:\n" << refinedNodes;
+      
+      unsigned parentIndex = cell->entityIndex(d, subcord);
+      
+      // now, establish generalized parent relationships
+      vector< IndexType > parentVertexIndices = this->getEntityVertexIndices(d, parentIndex);
+      set<IndexType> parentVertexIndexSet(parentVertexIndices.begin(),parentVertexIndices.end());
+      vector< pair<RefinementPatternPtr,vector<IndexType> > > childEntities = _childEntities[d][parentIndex];
+      for (vector< pair<RefinementPatternPtr,vector<IndexType> > >::iterator refIt = childEntities.begin();
+           refIt != childEntities.end(); refIt++) {
+        vector<IndexType> childEntityIndices = refIt->second;
+        for (int childOrdinal=0; childOrdinal<childEntityIndices.size(); childOrdinal++) {
+          IndexType childEntityIndex = childEntityIndices[childOrdinal];
+          if (parentIndex == childEntityIndex) { // "null" refinement pattern -- nothing to do here.
+            continue;
+          }
+          _generalizedParentEntities[d][childEntityIndex] = make_pair(parentIndex,d); // TODO: change this to consider anisotropic refinements/ recipes...  (need to choose nearest of the possible ancestors, in my view)
+          for (int subcdim=0; subcdim<d; subcdim++) {
+            int subcCount = this->getSubEntityCount(d, childEntityIndex, subcdim);
+            for (int subcord=0; subcord < subcCount; subcord++) {
+              IndexType subcellEntityIndex = this->getSubEntityIndex(d, childEntityIndex, subcdim, subcord);
+              
+              // if this is a vertex that also belongs to the parent, then its parentage will already be handled...
+              if ((subcdim==0) && (parentVertexIndexSet.find(subcellEntityIndex) != parentVertexIndexSet.end() )) {
+                continue;
+              }
+              
+              // if there was a previous entry, have a look at it...
+              if (_generalizedParentEntities[subcdim].find(subcellEntityIndex) != _generalizedParentEntities[subcdim].end()) {
+                pair<IndexType, unsigned> previousParent = _generalizedParentEntities[subcdim][subcellEntityIndex];
+                if (previousParent.second <= d) { // then the previous parent is a better (nearer) parent
+                  continue;
+                }
+              }
+              
+              // if we get here, then we're ready to establish the generalized parent relationship
+              _generalizedParentEntities[subcdim][subcellEntityIndex] = make_pair(parentIndex,d);
+            }
           }
         }
       }
