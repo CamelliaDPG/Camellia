@@ -129,6 +129,7 @@ void BasisCache::createSideCaches() {
 BasisCache::BasisCache(ElementTypePtr elemType, Teuchos::RCP<Mesh> mesh, bool testVsTest, int cubatureDegreeEnrichment) {
   // use testVsTest=true for test space inner product (won't create side caches, and will use higher cubDegree)
   shards::CellTopology cellTopo = *(elemType->cellTopoPtr);
+  _spaceDim = mesh->getTopology()->getSpaceDim();
   _numSides = (_spaceDim > 1) ? cellTopo.getSideCount() : cellTopo.getVertexCount();
   
   _maxTestDegree = elemType->testOrderPtr->maxBasisDegree();
@@ -157,6 +158,7 @@ BasisCache::BasisCache(ElementTypePtr elemType, Teuchos::RCP<Mesh> mesh, bool te
 BasisCache::BasisCache(const FieldContainer<double> &physicalCellNodes, 
                        shards::CellTopology &cellTopo,
                        DofOrdering &trialOrdering, int maxTestDegree, bool createSideCacheToo) {
+  _spaceDim = cellTopo.getDimension();
   _numSides = (_spaceDim > 1) ? cellTopo.getSideCount() : cellTopo.getVertexCount();
   findMaximumDegreeBasisForSides(trialOrdering);
   init(cellTopo, trialOrdering.maxBasisDegree(), maxTestDegree, createSideCacheToo);
@@ -166,6 +168,7 @@ BasisCache::BasisCache(const FieldContainer<double> &physicalCellNodes,
 BasisCache::BasisCache(shards::CellTopology &cellTopo, int cubDegree, bool createSideCacheToo) {
   // NOTE that this constructor's a bit dangerous, in that we lack information about the brokenness
   // of the sides; we may under-integrate for cells with broken sides...
+  _spaceDim = cellTopo.getDimension();
   _numSides = (_spaceDim > 1) ? cellTopo.getSideCount() : cellTopo.getVertexCount();
   DofOrdering trialOrdering; // dummy trialOrdering
   findMaximumDegreeBasisForSides(trialOrdering); // should fill with NULL ptrs
@@ -175,6 +178,7 @@ BasisCache::BasisCache(shards::CellTopology &cellTopo, int cubDegree, bool creat
 BasisCache::BasisCache(const FieldContainer<double> &physicalCellNodes, shards::CellTopology &cellTopo, int cubDegree, bool createSideCacheToo) {
   // NOTE that this constructor's a bit dangerous, in that we lack information about the brokenness
   // of the sides; we may under-integrate for cells with broken sides...
+  _spaceDim = cellTopo.getDimension();
   _numSides = (_spaceDim > 1) ? cellTopo.getSideCount() : cellTopo.getVertexCount();
   DofOrdering trialOrdering; // dummy trialOrdering
   findMaximumDegreeBasisForSides(trialOrdering); // should fill with NULL ptrs
