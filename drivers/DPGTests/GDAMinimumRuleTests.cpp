@@ -377,7 +377,25 @@ SolutionPtr GDAMinimumRuleTests::stokesExactSolution(bool useMinRule, int horizo
 
 
 void GDAMinimumRuleTests::runTests(int &numTestsRun, int &numTestsPassed) {
-  bool useQuads = true;
+  bool useQuads = false;
+  setup();
+  if (testHangingNodePoisson(useQuads)) {
+    numTestsPassed++;
+  }
+  numTestsRun++;
+  teardown();
+  
+  cout << "testHangingNodePoisson (triangles) complete.\n";
+  setup();
+  if (testHangingNodeStokes(useQuads)) {
+    numTestsPassed++;
+  }
+  numTestsRun++;
+  teardown();
+  
+  cout << "testHangingNodeStokes (triangles) complete.\n";
+  
+  useQuads = true;
   setup();
   if (testHangingNodePoisson(useQuads)) {
     numTestsPassed++;
@@ -394,24 +412,6 @@ void GDAMinimumRuleTests::runTests(int &numTestsRun, int &numTestsPassed) {
   teardown();
   
   //  cout << "testHangingNodeStokes (quads) complete.\n";
-  
-//  useQuads = false;
-//  setup();
-//  if (testHangingNodePoisson(useQuads)) {
-//    numTestsPassed++;
-//  }
-//  numTestsRun++;
-//  teardown();
-//  
-//  cout << "testHangingNodePoisson (triangles) complete.\n";
-//  setup();
-//  if (testHangingNodeStokes(useQuads)) {
-//    numTestsPassed++;
-//  }
-//  numTestsRun++;
-//  teardown();
-//  
-//  cout << "testHangingNodeStokes (triangles) complete.\n";
   
   setup();
   if (testMultiCellMesh()) {
@@ -713,6 +713,9 @@ bool GDAMinimumRuleTests::testHangingNodePoisson(bool useQuads) {
   bool success = true;
   int horizontalCellsInitialMesh = 1, verticalCellsInitialMesh = 2;
   bool divideIntoTriangles = !useQuads;
+  if (divideIntoTriangles) { // keep things super simple for now: just 2 triangles in the initial mesh
+    verticalCellsInitialMesh = 1;
+  }
   int H1Order = 3;
   
   // exact solution: for now, we just use a linear phi
@@ -740,6 +743,8 @@ bool GDAMinimumRuleTests::testHangingNodePoisson(bool useQuads) {
   
   FunctionPtr phi_err = phi_soln - phi_exact;
   
+  GnuPlotUtil::writeComputationalMeshSkeleton("/tmp/hangingNodeTestMesh", mesh, true); // true: label cells
+  
   VTKExporter solnExporter(soln,soln->mesh(),vf);
   solnExporter.exportSolution("poissonSolution");
   
@@ -757,6 +762,10 @@ bool GDAMinimumRuleTests::testHangingNodeStokes(bool useQuads) {
   bool success = true;
   int horizontalCellsInitialMesh = 1, verticalCellsInitialMesh = 2;
   bool divideIntoTriangles = !useQuads;
+  if (divideIntoTriangles) { // keep things super simple for now: just 2 triangles in the initial mesh
+    verticalCellsInitialMesh = 1;
+  }
+  
   int H1Order = 3;
   
   // exact solution: for now, we just use a linear u, zero p
@@ -795,7 +804,7 @@ bool GDAMinimumRuleTests::testHangingNodeStokes(bool useQuads) {
   VTKExporter solnExporter(soln,soln->mesh(),vf);
   solnExporter.exportSolution("stokesExactSolution");
   
-  double tol = 1e-13;
+  double tol = divideIntoTriangles ? 1e-10 : 1e-13; // for now, anyway, we accept a larger tolerance for triangular meshes...
   double u1_err_l2 = u1_err->l2norm(mesh);
   double u1_l2 = u1_exact->l2norm(mesh);
   double u1_rel_err = u1_err_l2 / u1_l2;

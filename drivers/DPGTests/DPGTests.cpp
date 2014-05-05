@@ -182,6 +182,8 @@ void DPGTests::runTests() {
   
   // setup our TestSuite tests:
   vector< Teuchos::RCP< TestSuite > > testSuites;
+
+  testSuites.push_back( Teuchos::rcp( new LobattoBasisTests ) );
   
   testSuites.push_back( Teuchos::rcp( new GDAMinimumRuleTests ) );
   
@@ -210,7 +212,7 @@ void DPGTests::runTests() {
   testSuites.push_back( Teuchos::rcp( new BasisCacheTests ) );
   testSuites.push_back( Teuchos::rcp( new SolutionTests ) );
   testSuites.push_back( Teuchos::rcp( new FunctionTests ) );
-  testSuites.push_back( Teuchos::rcp( new LobattoBasisTests ) );
+
   testSuites.push_back( Teuchos::rcp( new HConvergenceStudyTests ) );
   
   
@@ -518,7 +520,7 @@ bool DPGTests::testDofOrdering() {
     for (int dofOrdinal=0; dofOrdinal<dofsPerSide; dofOrdinal++) {
       int actualDofIndex = trialOrder->getDofIndex(0, dofOrdinal, sideIndex);
       int expectedDofIndex = expectedDofIndices(sideIndex,dofOrdinal);
-      if ( ! expectedDofIndex == actualDofIndex ) {
+      if ( expectedDofIndex != actualDofIndex ) {
         cout << myName << ": failed conforming vertex test for sideIndex " << sideIndex << ", dofOrdinal " << dofOrdinal << "." << endl;
         cout << "Expected " << expectedDofIndex << "; actual was " << actualDofIndex << "." << endl;
         success = false;
@@ -558,7 +560,7 @@ bool DPGTests::testDofOrdering() {
       for (int dofOrdinal=0; dofOrdinal<dofsPerSide; dofOrdinal++) {
         int actualDofIndex = trialOrder->getDofIndex(0, dofOrdinal, sideIndex);
         int expectedDofIndex = expectedDofIndices(sideIndex,dofOrdinal);
-        if ( ! expectedDofIndex == actualDofIndex ) {
+        if ( expectedDofIndex != actualDofIndex ) {
           cout << myName << ": failed conforming vertex test for sideIndex " << sideIndex << ", dofOrdinal " << dofOrdinal << "." << endl;
           cout << "Expected " << expectedDofIndex << "; actual was " << actualDofIndex << "." << endl;
           success = false;

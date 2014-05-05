@@ -129,7 +129,7 @@ void BasisCache::createSideCaches() {
 BasisCache::BasisCache(ElementTypePtr elemType, Teuchos::RCP<Mesh> mesh, bool testVsTest, int cubatureDegreeEnrichment) {
   // use testVsTest=true for test space inner product (won't create side caches, and will use higher cubDegree)
   shards::CellTopology cellTopo = *(elemType->cellTopoPtr);
-  _spaceDim = mesh->getTopology()->getSpaceDim();
+  _spaceDim = cellTopo.getDimension();
   _numSides = (_spaceDim > 1) ? cellTopo.getSideCount() : cellTopo.getVertexCount();
   
   _maxTestDegree = elemType->testOrderPtr->maxBasisDegree();

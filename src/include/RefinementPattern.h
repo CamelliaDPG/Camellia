@@ -85,9 +85,13 @@ public:
   
   unsigned mapSideChildIndex(unsigned sideIndex, unsigned sideRefinementChildIndex); // map from index of child in side refinement to the index in volume refinement pattern
   
+  pair<unsigned, unsigned> mapSubcellFromParentToChild(unsigned childOrdinal, unsigned subcdim, unsigned parentSubcord); // pair is (subcdim, subcord)
+  pair<unsigned, unsigned> mapSubcellFromChildToParent(unsigned childOrdinal, unsigned subcdim, unsigned childSubcord);  // pair is (subcdim, subcord)
+  
   unsigned mapSubcellOrdinalFromParentToChild(unsigned childOrdinal, unsigned subcdim, unsigned parentSubcord);
   unsigned mapSubcellOrdinalFromChildToParent(unsigned childOrdinal, unsigned subcdim, unsigned childSubcord);
-  
+
+  unsigned mapSubcellChildOrdinalToVolumeChildOrdinal(unsigned subcdim, unsigned subcord, unsigned subcellChildOrdinal);
   unsigned mapVolumeChildOrdinalToSubcellChildOrdinal(unsigned subcdim, unsigned subcord, unsigned volumeChildOrdinal);
   
   static unsigned mapSideOrdinalFromLeafToAncestor(unsigned descendantSideOrdinal, RefinementBranch &refinements); // given a side ordinal in the leaf node of a branch, returns the corresponding side ordinal in the earliest ancestor in the branch.
@@ -109,7 +113,7 @@ public:
   
   static RefinementBranch sideRefinementBranch(RefinementBranch &volumeRefinementBranch, unsigned sideIndex);
   
-  static RefinementBranch subcellRefinementBranch(RefinementBranch &volumeRefinementBranch, unsigned subcdim, unsigned subcord);
+  static RefinementBranch subcellRefinementBranch(RefinementBranch &volumeRefinementBranch, unsigned subcdim, unsigned subcord, bool tolerateSubcellsWithoutDescendants=false);
 };
 
 typedef Teuchos::RCP<RefinementPattern> RefinementPatternPtr;
