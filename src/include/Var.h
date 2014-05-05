@@ -19,6 +19,7 @@ namespace VarFunctionSpaces {
   enum VarType { TEST, FIELD, TRACE, FLUX, UNKNOWN_TYPE, MIXED_TYPE };
   
   IntrepidExtendedTypes::EFunctionSpaceExtended efsForSpace(Space space);
+  Space spaceForEFS(IntrepidExtendedTypes::EFunctionSpaceExtended efs);
 }
 
 using namespace VarFunctionSpaces;

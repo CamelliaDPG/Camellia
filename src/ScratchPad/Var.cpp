@@ -58,7 +58,7 @@ IntrepidExtendedTypes::EFunctionSpaceExtended VarFunctionSpaces::efsForSpace(Spa
   return IntrepidExtendedTypes::FUNCTION_SPACE_UNKNOWN;
 }
 
-/*Space VarFunctionSpaces::spaceForEFS(IntrepidExtendedTypes::EFunctionSpaceExtended efs) {
+Space VarFunctionSpaces::spaceForEFS(IntrepidExtendedTypes::EFunctionSpaceExtended efs) {
   if (efs == IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD) {
     return HGRAD;
   }
@@ -81,7 +81,7 @@ IntrepidExtendedTypes::EFunctionSpaceExtended VarFunctionSpaces::efsForSpace(Spa
     return VECTOR_L2;
   }
   TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unknown function space.");
-}*/
+}
 
 VarPtr Var::varForTrialID(int trialID, Teuchos::RCP<BilinearForm> bf) {
   IntrepidExtendedTypes::EFunctionSpaceExtended efs = bf->functionSpaceForTrial(trialID);
