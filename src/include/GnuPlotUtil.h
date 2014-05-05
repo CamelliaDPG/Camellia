@@ -45,47 +45,10 @@ class GnuPlotUtil {
     set<GlobalIndexType> cellIDset = mesh->getActiveCellIDs();
     vector<GlobalIndexType> cellIDs(cellIDset.begin(),cellIDset.end());
     
-    for (int cellIndex=0; cellIndex<numActiveElements; cellIndex++) {
-      ElementPtr cell = mesh->getElement(cellIDs[cellIndex]);
-      bool neglectCurves = true;
-      vector< ParametricCurvePtr > edgeLines = ParametricCurve::referenceCellEdges(cell->elementType()->cellTopoPtr->getKey());
-      int numEdges = edgeLines.size();
-      int numPointsPerEdge = max(10,cell->elementType()->testOrderPtr->maxBasisDegree() * 2); // 2 points for linear, 4 for quadratic, etc.
-      // to start, compute edgePoints on the reference cell
-      int numPointsTotal = numEdges*(numPointsPerEdge-1)+1; // -1 because edges share vertices, +1 because we repeat first vertex...
-      FieldContainer<double> edgePoints(numPointsTotal,spaceDim);
-      
-      int ptIndex = 0;
-      for (int edgeIndex=0; edgeIndex < edgeLines.size(); edgeIndex++) {
-        ParametricCurvePtr edge = edgeLines[edgeIndex];
-        double t = 0;
-        double increment = 1.0 / (numPointsPerEdge - 1);
-        // last edge gets one extra point (to connect to first edge):
-        int thisEdgePoints = (edgeIndex < edgeLines.size()-1) ? numPointsPerEdge-1 : numPointsPerEdge;
-        for (int i=0; i<thisEdgePoints; i++) {
-          double x, y;
-          edge->value(t,x,y);
-          edgePoints(ptIndex,0) = x;
-          edgePoints(ptIndex,1) = y;
-          ptIndex++;
-          t += increment;
-        }
-      }
-      // make a one-cell BasisCache initialized with the edgePoints on the ref cell:
-      BasisCachePtr basisCache = BasisCache::basisCacheForCell(mesh, cell->cellID());
-      basisCache->setRefCellPoints(edgePoints);
-      
-      //      cout << "transformedPoints:\n" << transformedPoints;
-      
-      // this only works on quads right now
-      FieldContainer<double> refCellCentroid(1,spaceDim);
-      for (int i=0; i<spaceDim; i++) {
-        refCellCentroid(0,i) = 0.0;
-      }
-      FieldContainer<double> transformedCentroid(1,spaceDim);
-      basisCache->setRefCellPoints(refCellCentroid);
-      for (int i=0; i<spaceDim; i++) {
-        cellCentroids(cellIndex,i) = basisCache->getPhysicalCubaturePoints()(0,0,i);
+    for (int cellOrdinal=0; cellOrdinal<numActiveElements; cellOrdinal++) {
+      vector<double> centroid = mesh->getTopology()->getCellCentroid(cellIDs[cellOrdinal]);
+      for (int d=0; d<spaceDim; d++) {
+        cellCentroids(cellOrdinal,d) = centroid[d];
       }
     }
     return cellCentroids;
