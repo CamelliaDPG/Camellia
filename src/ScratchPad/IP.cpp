@@ -10,6 +10,8 @@
 
 #include "SerialDenseMatrixUtility.h"
 
+#include "VarFactory.h"
+
 // to satisfy the compiler, call the DPGInnerProduct constructor with a null argument:
 IP::IP() : DPGInnerProduct( Teuchos::rcp( (BilinearForm*) NULL ) ) {}
 // if the terms are a1, a2, ..., then the inner product is (a1,a1) + (a2,a2) + ... 
@@ -277,4 +279,33 @@ void IP::printInteractions() {
        ltIt != _zeroMeanTerms.end(); ltIt++) {
     cout << (*ltIt)->displayString() << endl;
   }
+}
+
+IPPtr IP::standardInnerProductForFunctionSpace(EFunctionSpaceExtended fs) {
+  IPPtr ip;
+  VarFactory vf;
+  VarFunctionSpaces::Space space = VarFunctionSpaces::spaceForEFS(fs);
+  VarPtr var = vf.testVar("v", space);
+  
+  ip->addTerm(var);
+  
+  switch (fs) {
+    case IntrepidExtendedTypes::FUNCTION_SPACE_HVOL:
+      break;
+    case IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD:
+      ip->addTerm(var->grad());
+      break;
+    case IntrepidExtendedTypes::FUNCTION_SPACE_HCURL:
+      ip->addTerm(var->curl());
+      break;
+    case IntrepidExtendedTypes::FUNCTION_SPACE_HDIV:
+      ip->addTerm(var->div());
+      break;
+      
+    default:
+      cout << "Error: unhandled function space.\n";
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "unhandled function space");
+      break;
+  }
+  return ip;
 }

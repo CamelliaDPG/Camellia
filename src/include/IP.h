@@ -51,6 +51,8 @@ public:
                  vector<IntrepidExtendedTypes::EOperatorExtended> &testOp2);
   
   void printInteractions();
+  
+  static Teuchos::RCP<IP> standardInnerProductForFunctionSpace(EFunctionSpaceExtended fs);
 };
 
 typedef Teuchos::RCP<IP> IPPtr;
