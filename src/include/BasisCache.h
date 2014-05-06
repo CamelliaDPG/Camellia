@@ -133,6 +133,8 @@ private:
   void createSideCaches();
   
   void findMaximumDegreeBasisForSides(DofOrdering &trialOrdering);
+  
+  void recomputeMeasures();
 protected:
   BasisCache() { _isSideCache = false; } // for the sake of some hackish subclassing
   
@@ -192,7 +194,7 @@ public:
   // setRefCellPoints overwrites _cubPoints -- for when cubature is not your interest
   // (this comes up in imposeBC)
   void setRefCellPoints(const Intrepid::FieldContainer<double> &pointsRefCell);
-  void setRefCellPoints(const Intrepid::FieldContainer<double> &pointsRefCell, const Intrepid::FieldContainer<double> &cubatureWeights, const Intrepid::FieldContainer<double> &weightedMeasure);
+  void setRefCellPoints(const Intrepid::FieldContainer<double> &pointsRefCell, const Intrepid::FieldContainer<double> &cubatureWeights);
   const Intrepid::FieldContainer<double> &getRefCellPoints();
   const Intrepid::FieldContainer<double> &getSideRefCellPointsInVolumeCoordinates();
   

@@ -42,6 +42,8 @@ public:
   
   virtual bool imposeZeroMeanConstraint(int varID);
   
+  bool isLegacySubclass();
+  
   // basisCoefficients has dimensions (C,F)
   virtual void coefficientsForBC(FieldContainer<double> &basisCoefficients, Teuchos::RCP<BCFunction> bcFxn, BasisPtr basis, BasisCachePtr sideBasisCache);
   
@@ -56,6 +58,10 @@ public:
   
   void setTime(double time);
   double getTime() { return _time; }
+  
+  pair< SpatialFilterPtr, FunctionPtr > getDirichletBC(int varID);
+  
+  FunctionPtr getSpatiallyFilteredFunctionForDirichletBC(int varID);
   
   static Teuchos::RCP<BC> bc();
 };

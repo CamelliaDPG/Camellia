@@ -44,3 +44,23 @@ void SpatiallyFilteredFunction::values(FieldContainer<double> &values, BasisCach
     }
   }
 }
+
+FunctionPtr SpatiallyFilteredFunction::curl() {
+  return Teuchos::rcp( new SpatiallyFilteredFunction(_f->curl(), _sf));
+}
+
+FunctionPtr SpatiallyFilteredFunction::div() {
+  return Teuchos::rcp( new SpatiallyFilteredFunction(_f->div(), _sf));
+}
+
+FunctionPtr SpatiallyFilteredFunction::dx() {
+  return Teuchos::rcp( new SpatiallyFilteredFunction(_f->dx(), _sf));
+}
+
+FunctionPtr SpatiallyFilteredFunction::dy() {
+    return Teuchos::rcp( new SpatiallyFilteredFunction(_f->dy(), _sf));
+}
+
+FunctionPtr SpatiallyFilteredFunction::dz() {
+  return Teuchos::rcp( new SpatiallyFilteredFunction(_f->dz(), _sf));
+}

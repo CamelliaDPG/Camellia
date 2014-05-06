@@ -183,7 +183,7 @@ void DPGTests::runTests() {
   // setup our TestSuite tests:
   vector< Teuchos::RCP< TestSuite > > testSuites;
 
-  testSuites.push_back( Teuchos::rcp( new LobattoBasisTests ) );
+  testSuites.push_back( Teuchos::rcp( new MeshTestSuite ) );
   
   testSuites.push_back( Teuchos::rcp( new GDAMinimumRuleTests ) );
   
@@ -191,7 +191,6 @@ void DPGTests::runTests() {
   
   testSuites.push_back( Teuchos::rcp( new BasisReconciliationTests ) );
   
-  testSuites.push_back( Teuchos::rcp( new MeshTestSuite ) );
   
   testSuites.push_back( Teuchos::rcp( new CurvilinearMeshTests) );
   
@@ -214,6 +213,8 @@ void DPGTests::runTests() {
   testSuites.push_back( Teuchos::rcp( new FunctionTests ) );
 
   testSuites.push_back( Teuchos::rcp( new HConvergenceStudyTests ) );
+  
+  testSuites.push_back( Teuchos::rcp( new LobattoBasisTests ) );
   
   
   //  testSuites.push_back( Teuchos::rcp( new IncompressibleFormulationsTests(true) ) ); // true: turn "thorough" on

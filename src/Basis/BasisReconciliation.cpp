@@ -184,7 +184,6 @@ SubBasisReconciliationWeights BasisReconciliation::computeConstrainedWeights(uns
   FieldContainer<double> coarseVolumeCubaturePoints;
   FieldContainer<double> fineVolumeCubaturePoints; // points at which the fine basis will be evaluated
   FieldContainer<double> cubatureWeights;
-  FieldContainer<double> weightedMeasure;
   
   BasisCachePtr fineVolumeCache = Teuchos::rcp( new BasisCache(fineTopo, cubDegree, false) );
   BasisCachePtr coarseVolumeCache = Teuchos::rcp( new BasisCache(coarseTopo, cubDegree, false));
@@ -195,7 +194,6 @@ SubBasisReconciliationWeights BasisReconciliation::computeConstrainedWeights(uns
     fineVolumeCubaturePoints.resize(numPoints,spaceDim);
     FieldContainer<double> fineSubcellCubaturePoints = fineSubcellCache->getRefCellPoints();
     cubatureWeights = fineSubcellCache->getCubatureWeights();
-    weightedMeasure = fineSubcellCache->getWeightedMeasures();
     if (subcellDimension == spaceDim) {
       fineVolumeCubaturePoints = fineSubcellCubaturePoints;
     } else {
@@ -246,15 +244,12 @@ SubBasisReconciliationWeights BasisReconciliation::computeConstrainedWeights(uns
     cubatureWeights.resize(1);
     cubatureWeights(0) = 1.0;
     
-    weightedMeasure.resize(1, 1);
-    weightedMeasure(0,0) = 1.0;
-    
     coarseVolumeCubaturePoints.resize(1,spaceDim);
     for (int d=0; d<spaceDim; d++) {
       coarseVolumeCubaturePoints(0,d) = coarseTopoRefNodes(coarserBasisSubcellOrdinal,d);
     }
   }
-  fineVolumeCache->setRefCellPoints(fineVolumeCubaturePoints, cubatureWeights, weightedMeasure);
+  fineVolumeCache->setRefCellPoints(fineVolumeCubaturePoints, cubatureWeights);
 
   if (refinements.size() > 0) {
     FieldContainer<double> fineVolumeNodes = RefinementPattern::descendantNodesRelativeToAncestorReferenceCell(refinements);
@@ -355,7 +350,6 @@ SubBasisReconciliationWeights BasisReconciliation::computeConstrainedWeights(uns
   FieldContainer<double> coarseDomainPoints; // these are as seen from the coarse cell's neighbor -- we use the coarseDomainPermutation together with the physicalCellNodes on the coarse domain to convert...
   FieldContainer<double> fineDomainPoints; // points at which the fine basis will be evaluated
   FieldContainer<double> cubatureWeightsFineSubcell; // allows us to integrate over the fine subcell even when domain is higher-dimensioned
-  FieldContainer<double> weightedMeasureFineSubcell;
   
 //  BasisCachePtr fineDomainCache = Teuchos::rcp( new BasisCache(fineTopo, cubDegree, false) );
   BasisCachePtr coarseDomainCache = Teuchos::rcp( new BasisCache(coarseTopo, cubDegree, false));
@@ -380,7 +374,6 @@ SubBasisReconciliationWeights BasisReconciliation::computeConstrainedWeights(uns
     fineDomainPoints.resize(numPoints,domainDim);
     subcellCubaturePoints = fineSubcellCache->getRefCellPoints();
     cubatureWeightsFineSubcell = fineSubcellCache->getCubatureWeights();
-    weightedMeasureFineSubcell = fineSubcellCache->getWeightedMeasures();
     if (fineSubcellDimension == domainDim) {
       fineDomainPoints = subcellCubaturePoints;
     } else {
@@ -395,9 +388,6 @@ SubBasisReconciliationWeights BasisReconciliation::computeConstrainedWeights(uns
     }
     cubatureWeightsFineSubcell.resize(1);
     cubatureWeightsFineSubcell(0) = 1.0;
-    
-    weightedMeasureFineSubcell.resize(1,1);
-    weightedMeasureFineSubcell.initialize(1.0);
   }
   
 //  cout << "Fine domain points:\n" << fineDomainPoints;
@@ -555,7 +545,7 @@ SubBasisReconciliationWeights BasisReconciliation::computeConstrainedWeights(uns
   } else {
     fineDomainCache = fineCellCache;
   }
-  fineDomainCache->setRefCellPoints(fineDomainPoints, cubatureWeightsFineSubcell, weightedMeasureFineSubcell);
+  fineDomainCache->setRefCellPoints(fineDomainPoints, cubatureWeightsFineSubcell);
   coarseDomainCache->setRefCellPoints(coarseDomainPoints);
   
   FieldContainer<double> coarseTopoRefNodesPermuted(coarseTopo.getVertexCount(), coarseTopo.getDimension());

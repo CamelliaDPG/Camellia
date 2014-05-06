@@ -20,6 +20,13 @@ public:
   SpatiallyFilteredFunction(FunctionPtr f, SpatialFilterPtr sf);
   virtual void values(FieldContainer<double> &values, BasisCachePtr basisCache);
   bool boundaryValueOnly();
+  
+  FunctionPtr curl();
+  FunctionPtr div();
+  
+  FunctionPtr dx();
+  FunctionPtr dy();
+  FunctionPtr dz();
 };
 
 #endif

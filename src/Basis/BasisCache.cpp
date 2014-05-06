@@ -567,11 +567,10 @@ const FieldContainer<double> &BasisCache::getSideRefCellPointsInVolumeCoordinate
 
 void BasisCache::setRefCellPoints(const FieldContainer<double> &pointsRefCell) {
   FieldContainer<double> cubWeights;
-  FieldContainer<double> weightedMeasure;
-  this->setRefCellPoints(pointsRefCell, cubWeights, weightedMeasure);
+  this->setRefCellPoints(pointsRefCell, cubWeights);
 }
 
-void BasisCache::setRefCellPoints(const FieldContainer<double> &pointsRefCell, const FieldContainer<double> &cubWeights, const Intrepid::FieldContainer<double> &weightedMeasure) {
+void BasisCache::setRefCellPoints(const FieldContainer<double> &pointsRefCell, const FieldContainer<double> &cubWeights) {
   _cubPoints = pointsRefCell;
   int numPoints = pointsRefCell.dimension(0);
   
@@ -590,12 +589,13 @@ void BasisCache::setRefCellPoints(const FieldContainer<double> &pointsRefCell, c
   _knownValuesTransformedWeighted.clear();
   
   _cubWeights = cubWeights;
-  _weightedMeasure = weightedMeasure;
   
   // allow reuse of physicalNode info; just map the new points...
   if (_physCubPoints.size() > 0) {
     determinePhysicalPoints();
     determineJacobian();
+    
+    recomputeMeasures();
     
     if (isSideCache()) {
       if (_spaceDim > 1) {
@@ -741,57 +741,15 @@ void BasisCache::setPhysicalCellNodes(const FieldContainer<double> &physicalCell
   _spaceDim = physicalCellNodes.dimension(2);
   
   _cellIDs = cellIDs;
-  // 1. Determine Jacobians
   // Compute cell Jacobians, their inverses and their determinants
-  
-  int numCubPoints = isSideCache() ? _cubPointsSideRefCell.dimension(0) : _cubPoints.dimension(0);
 
   // compute physicalCubaturePoints, the transformed cubature points on each cell:
   determinePhysicalPoints(); // when using _transformationFxn, important to have physical points before Jacobian is computed
 //  cout << "physicalCellNodes:\n" << physicalCellNodes;
   determineJacobian();
   
-  // compute weighted measure
-  if (_cubWeights.size() > 0) {
-    // a bit ugly: "_cubPoints" may not be cubature points at all, but just points of interest...  If they're not cubature points, then _cubWeights will be cleared out.  See setRefCellPoints, above.
-    // TODO: rename _cubPoints and related methods...
-    _weightedMeasure.resize(_numCells, numCubPoints);
-    if (! isSideCache()) {
-      fst::computeCellMeasure<double>(_weightedMeasure, _cellJacobDet, _cubWeights);
-    } else {
-      if (_spaceDim==1) {
-        // TODO: determine whether this is the right thing:
-        _weightedMeasure.initialize(1.0); // not sure this is the right thing.
-      } else if (_spaceDim==2) {
-        // compute weighted edge measure
-        FunctionSpaceTools::computeEdgeMeasure<double>(_weightedMeasure,
-                                                       _cellJacobian,
-                                                       _cubWeights,
-                                                       _sideIndex,
-                                                       _cellTopo);
-      } else if (_spaceDim==3) {
-        FunctionSpaceTools::computeFaceMeasure<double>(_weightedMeasure, _cellJacobian, _cubWeights, _sideIndex, _cellTopo);
-      } else {
-        TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unhandled space dimension.");
-      }
-//      if (_sideIndex==0) {
-//        cout << "_cellJacobian:\n" << _cellJacobian;
-//        cout << "_cubWeights:\n" << _cubWeights;
-//        cout << "_weightedMeasure:\n" << _weightedMeasure;
-//      }
-      if (_spaceDim > 1) {
-        // get normals
-        _sideNormals.resize(_numCells, numCubPoints, _spaceDim);
-        FieldContainer<double> normalLengths(_numCells, numCubPoints);
-        CellTools<double>::getPhysicalSideNormals(_sideNormals, _cellJacobian, _sideIndex, _cellTopo);
-        
-        // make unit length
-        RealSpaceTools<double>::vectorNorm(normalLengths, _sideNormals, NORM_TWO);
-        FunctionSpaceTools::scalarMultiplyDataData<double>(_sideNormals, normalLengths, _sideNormals, true);
-      }
-    }
-  }
-  
+  // recompute weighted measure at the new physical points
+  recomputeMeasures();
   
   if ( ! isSideCache() && createSideCacheToo ) {
     // we only actually create side caches anew if they don't currently exist
@@ -805,7 +763,6 @@ void BasisCache::setPhysicalCellNodes(const FieldContainer<double> &physicalCell
     // then we have side caches whose values are going to be stale: we should delete these
     _basisCacheSides.clear();
   }
-  
 }
 
 int BasisCache::maxTestDegree() {
@@ -911,6 +868,49 @@ BasisCachePtr BasisCache::quadBasisCache(double width, double height, int cubDeg
   physicalCellNodes(0,3,1) = height;
   
   return Teuchos::rcp(new BasisCache(physicalCellNodes, quad_4, cubDegree, createSideCacheToo));
+}
+
+void BasisCache::recomputeMeasures() {
+  if (_cubWeights.size() > 0) {
+    int numCubPoints = isSideCache() ? _cubPointsSideRefCell.dimension(0) : _cubPoints.dimension(0);
+    // a bit ugly: "_cubPoints" may not be cubature points at all, but just points of interest...  If they're not cubature points, then _cubWeights will be cleared out.  See setRefCellPoints, above.
+    // TODO: rename _cubPoints and related methods...
+    _weightedMeasure.resize(_numCells, numCubPoints);
+    if (! isSideCache()) {
+      fst::computeCellMeasure<double>(_weightedMeasure, _cellJacobDet, _cubWeights);
+    } else {
+      if (_spaceDim==1) {
+        // TODO: determine whether this is the right thing:
+        _weightedMeasure.initialize(1.0); // not sure this is the right thing.
+      } else if (_spaceDim==2) {
+        // compute weighted edge measure
+        FunctionSpaceTools::computeEdgeMeasure<double>(_weightedMeasure,
+                                                       _cellJacobian,
+                                                       _cubWeights,
+                                                       _sideIndex,
+                                                       _cellTopo);
+      } else if (_spaceDim==3) {
+        FunctionSpaceTools::computeFaceMeasure<double>(_weightedMeasure, _cellJacobian, _cubWeights, _sideIndex, _cellTopo);
+      } else {
+        TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unhandled space dimension.");
+      }
+      //      if (_sideIndex==0) {
+      //        cout << "_cellJacobian:\n" << _cellJacobian;
+      //        cout << "_cubWeights:\n" << _cubWeights;
+      //        cout << "_weightedMeasure:\n" << _weightedMeasure;
+      //      }
+      if (_spaceDim > 1) {
+        // get normals
+        _sideNormals.resize(_numCells, numCubPoints, _spaceDim);
+        FieldContainer<double> normalLengths(_numCells, numCubPoints);
+        CellTools<double>::getPhysicalSideNormals(_sideNormals, _cellJacobian, _sideIndex, _cellTopo);
+        
+        // make unit length
+        RealSpaceTools<double>::vectorNorm(normalLengths, _sideNormals, NORM_TWO);
+        FunctionSpaceTools::scalarMultiplyDataData<double>(_sideNormals, normalLengths, _sideNormals, true);
+      }
+    }
+  }
 }
 
 BasisCachePtr BasisCache::sideBasisCache(Teuchos::RCP<BasisCache> volumeCache, int sideIndex) {

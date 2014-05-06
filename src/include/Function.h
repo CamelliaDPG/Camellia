@@ -60,6 +60,7 @@ public:
   virtual FunctionPtr dy();
   virtual FunctionPtr dz();
   virtual FunctionPtr div();
+  virtual FunctionPtr curl();
   virtual FunctionPtr grad(int numComponents=-1);
 
 // inverse() presently unused: and unclear how useful...

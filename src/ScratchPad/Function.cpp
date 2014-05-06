@@ -307,10 +307,36 @@ FunctionPtr Function::dy() {
 FunctionPtr Function::dz() {
   return Function::null();
 }
+FunctionPtr Function::curl() {
+  FunctionPtr dxFxn = dx();
+  FunctionPtr dyFxn = dy();
+  FunctionPtr dzFxn = dz();
+  
+  if (dxFxn.get()==NULL) {
+    return Function::null();
+  } else if (dyFxn.get()==NULL) {
+    // special case: in 1D, curl() returns a scalar
+    return dxFxn;
+  } else if (dzFxn.get() == NULL) {
+    // in 2D, the rank of the curl operator depends on the rank of the Function
+    if (_rank == 0) {
+      return Teuchos::rcp( new VectorizedFunction(dyFxn,-dxFxn) );
+    } else if (_rank == 1) {
+      return dyFxn->x() - dxFxn->y();
+    } else {
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "curl() undefined for Functions of rank > 1");
+    }
+  } else {
+    return Teuchos::rcp( new VectorizedFunction(dyFxn->z() - dzFxn->y(),
+                                                dzFxn->x() - dxFxn->z(),
+                                                dxFxn->y() - dyFxn->x()) );
+  }
+}
+
 FunctionPtr Function::grad(int numComponents) {
-    FunctionPtr dxFxn = dx();
-    FunctionPtr dyFxn = dy();
-    FunctionPtr dzFxn = dz();
+  FunctionPtr dxFxn = dx();
+  FunctionPtr dyFxn = dy();
+  FunctionPtr dzFxn = dz();
   if (numComponents==-1) { // default: just use as many non-null components as available
     if (dxFxn.get()==NULL) {
       return Function::null();

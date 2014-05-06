@@ -281,11 +281,11 @@ void IP::printInteractions() {
   }
 }
 
-IPPtr IP::standardInnerProductForFunctionSpace(EFunctionSpaceExtended fs) {
-  IPPtr ip;
+pair<IPPtr, VarPtr> IP::standardInnerProductForFunctionSpace(EFunctionSpaceExtended fs, bool useTraceVar) {
+  IPPtr ip = Teuchos::rcp( new IP );
   VarFactory vf;
   VarFunctionSpaces::Space space = VarFunctionSpaces::spaceForEFS(fs);
-  VarPtr var = vf.testVar("v", space);
+  VarPtr var = useTraceVar ? vf.traceVar("v",space) : vf.testVar("v", space);
   
   ip->addTerm(var);
   
@@ -307,5 +307,5 @@ IPPtr IP::standardInnerProductForFunctionSpace(EFunctionSpaceExtended fs) {
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "unhandled function space");
       break;
   }
-  return ip;
+  return make_pair(ip,var);
 }

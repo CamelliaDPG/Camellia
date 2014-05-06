@@ -24,6 +24,9 @@
 #include "Function.h"
 #include "VarFactory.h"
 
+#include "BasisSumFunction.h"
+#include "CamelliaCellTools.h"
+
 typedef Teuchos::RCP< const FieldContainer<double> > constFCPtr;
 
 void Projector::projectFunctionOntoBasis(FieldContainer<double> &basisCoefficients, FunctionPtr fxn, 
@@ -59,6 +62,8 @@ void Projector::projectFunctionOntoBasis(FieldContainer<double> &basisCoefficien
   
   ip->computeInnerProductMatrix(gramMatrix, dofOrdering, basisCache);
   ip->computeInnerProductVector(ipVector, v, fxn, dofOrdering, basisCache);
+  
+//  cout << "physical points for projection:\n" << basisCache->getPhysicalCubaturePoints();
 //  cout << "gramMatrix:\n" << gramMatrix;
 //  cout << "ipVector:\n" << ipVector;
   
@@ -372,5 +377,82 @@ void Projector::projectFunctionOntoBasis(FieldContainer<double> &basisCoefficien
     }   
     
   } 
+}
+
+void Projector::projectFunctionOntoBasisInterpolating(FieldContainer<double> &basisCoefficients, FunctionPtr fxn,
+                                                      BasisPtr basis, BasisCachePtr domainBasisCache) {
+  basisCoefficients.initialize(0);
+  shards::CellTopology domainTopo = basis->domainTopology();
+  unsigned domainDim = domainTopo.getDimension();
+  
+  bool traceVar = domainBasisCache->isSideCache();
+  
+  pair<IPPtr, VarPtr> ipVarPair = IP::standardInnerProductForFunctionSpace(basis->functionSpace(), traceVar);
+  IPPtr ip = ipVarPair.first;
+  VarPtr v = ipVarPair.second;
+  
+  IPPtr ip_l2 = Teuchos::rcp( new IP );
+  ip_l2->addTerm(v);
+  
+  // for now, make all projections use L^2... (having some issues with gradients and cell Jacobians--I think we need the restriction of the cell Jacobian to the subcell, e.g., and it's not clear how to do that...)
+  ip = ip_l2;
+  
+  FieldContainer<double> referenceDomainNodes(domainTopo.getVertexCount(),domainDim);
+  CamelliaCellTools::refCellNodesForTopology(referenceDomainNodes, domainTopo);
+  
+  int basisCardinality = basis->getCardinality();
+  
+  set<int> allDofs;
+  for (int i=0; i<basisCardinality; i++) {
+    allDofs.insert(i);
+  }
+  
+  for (int d=0; d<=domainDim; d++) {
+    FunctionPtr projectionThusFar = NewBasisSumFunction::basisSumFunction(basis, basisCoefficients);
+    FunctionPtr fxnToApproximate = fxn - projectionThusFar;
+    int subcellCount = domainTopo.getSubcellCount(d);
+    for (int subcord=0; subcord<subcellCount; subcord++) {
+      set<int> subcellDofOrdinals = basis->dofOrdinalsForSubcell(d, subcord);
+      if (subcellDofOrdinals.size() > 0) {
+        FieldContainer<double> refCellPoints;
+        FieldContainer<double> cubatureWeightsSubcell; // allows us to integrate over the fine subcell even when domain is higher-dimensioned
+        if (d == 0) {
+          refCellPoints.resize(1,domainDim);
+          for (int d1=0; d1<domainDim; d1++) {
+            refCellPoints(0,d1) = referenceDomainNodes(subcord,d1);
+          }
+          cubatureWeightsSubcell.resize(1);
+          cubatureWeightsSubcell(0) = 1.0;
+        } else {
+          shards::CellTopology subcellTopo = domainTopo.getBaseCellTopologyData(d, subcord);
+//          Teuchos::RCP<Cubature<double> > subcellCubature = cubFactory.create(subcellTopo, domainBasisCache->cubatureDegree());
+          BasisCachePtr subcellCache = Teuchos::rcp( new BasisCache(subcellTopo, domainBasisCache->cubatureDegree(), false) );
+          int numPoints = subcellCache->getRefCellPoints().dimension(0);
+          refCellPoints.resize(numPoints,domainDim);
+          cubatureWeightsSubcell = subcellCache->getCubatureWeights();
+          
+          if (d == domainDim) {
+            refCellPoints = subcellCache->getRefCellPoints();
+          } else {
+            CamelliaCellTools::mapToReferenceSubcell(refCellPoints, subcellCache->getRefCellPoints(), d,
+                                                     subcord, domainTopo);
+          }
+        }
+        domainBasisCache->setRefCellPoints(refCellPoints, cubatureWeightsSubcell);
+        IPPtr ipForProjection = (d==0) ? ip_l2 : ip; // just use values at vertices (ignore derivatives)
+        set<int> dofsToSkip = allDofs;
+        for (set<int>::iterator dofOrdinalIt=subcellDofOrdinals.begin(); dofOrdinalIt != subcellDofOrdinals.end(); dofOrdinalIt++) {
+          dofsToSkip.erase(*dofOrdinalIt);
+        }
+        FieldContainer<double> newBasisCoefficients;
+        projectFunctionOntoBasis(newBasisCoefficients, fxnToApproximate, basis, domainBasisCache, ipForProjection, v, dofsToSkip);
+        for (int cellOrdinal=0; cellOrdinal<newBasisCoefficients.dimension(0); cellOrdinal++) {
+          for (set<int>::iterator dofOrdinalIt=subcellDofOrdinals.begin(); dofOrdinalIt != subcellDofOrdinals.end(); dofOrdinalIt++) {
+            basisCoefficients(cellOrdinal,*dofOrdinalIt) = newBasisCoefficients(cellOrdinal,*dofOrdinalIt);
+          }
+        }
+      }
+    }
+  }
 }
 

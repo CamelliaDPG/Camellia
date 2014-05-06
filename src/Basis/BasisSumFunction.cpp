@@ -66,11 +66,17 @@ void BasisSumFunction::getValues(FieldContainer<double> &functionValues, const F
 NewBasisSumFunction::NewBasisSumFunction(BasisPtr basis, const FieldContainer<double> &basisCoefficients,
                     EOperatorExtended op, bool boundaryValueOnly) : Function( BasisFactory::getBasisRank(basis) ) {
   _coefficients = basisCoefficients;
+  if (_coefficients.rank()==1) {
+    _coefficients.resize(1,_coefficients.dimension(0));
+  } else if (_coefficients.rank() != 2) {
+    cout << "basisCoefficients must be rank 1 or 2!\n";
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "basisCoefficients must be rank 1 or 2");
+  }
   _boundaryValueOnly = boundaryValueOnly;
   _basis = basis; // note - _basis->getBaseCellTopology
   _op = op;
   int cardinality = basis->getCardinality();
-  TEUCHOS_TEST_FOR_EXCEPTION( _coefficients.dimension(0) != cardinality,
+  TEUCHOS_TEST_FOR_EXCEPTION( _coefficients.dimension(1) != cardinality,
                              std::invalid_argument,
                              "BasisSumFunction: coefficients passed in do not match cardinality of basis.");
 }
@@ -97,12 +103,13 @@ void NewBasisSumFunction::values(FieldContainer<double> &values, BasisCachePtr b
   TEUCHOS_TEST_FOR_EXCEPTION(rank != values.rank()-2, std::invalid_argument, "values rank is incorrect.");
   
   values.initialize(0.0);
+  bool singleCoefficientVector = _coefficients.dimension(0) == 1;
   int numCells = values.dimension(0);
   int numPoints = values.dimension(1);
   int entriesPerPoint = values.size() / (numCells * numPoints);
   for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
     for (int i=0;i<numDofs;i++){
-      double weight = _coefficients(i);
+      double weight = singleCoefficientVector ? _coefficients(0,i) : _coefficients(cellIndex,i);
       for (int ptIndex=0;ptIndex<numPoints;ptIndex++){
         int valueIndex = (cellIndex*numPoints + ptIndex)*entriesPerPoint;
         int basisValueIndex = (cellIndex*numPoints*numDofs + i*numPoints + ptIndex) * entriesPerPoint;
