@@ -47,7 +47,9 @@ void NewVTKExporter::exportFunction(FunctionPtr function, const string& function
     
     if (physicalCellNodes.rank() == 2)
       physicalCellNodes.resize(1,physicalCellNodes.dimension(0), physicalCellNodes.dimension(1));
-    BasisCachePtr basisCache = Teuchos::rcp( new BasisCache(physicalCellNodes, *cellTopoPtr, 1, false) );
+    BasisCachePtr basisCache = Teuchos::rcp( new BasisCache(*cellTopoPtr, 1, false) );
+    
+    basisCache->setPhysicalCellNodes(physicalCellNodes, vector<GlobalIndexType>(1,cellIndex), false);
 
     switch (cellTopoKey)
     {
