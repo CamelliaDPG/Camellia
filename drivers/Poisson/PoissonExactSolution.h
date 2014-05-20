@@ -3,7 +3,7 @@
 
 // @HEADER
 //
-// Copyright © 2011 Sandia Corporation. All Rights Reserved.
+// Copyright © 2014 Nathan V. Roberts. All Rights Reserved.
 //
 // Redistribution and use in source and binary forms, with or without modification, are 
 // permitted provided that the following conditions are met:
@@ -38,12 +38,13 @@
  *
  */
 
-#include <Sacado.hpp>		// for FAD and RAD
 #include "ExactSolution.h"
 #include "BC.h"
 #include "RHS.h"
 
-class PoissonExactSolution : public ExactSolution, public RHS, public BC {
+#include "Function.h"
+
+class PoissonExactSolution : public ExactSolution {
 public:
   enum PoissonExactSolutionType {
     POLYNOMIAL = 0,
@@ -53,55 +54,16 @@ public:
 protected:
   int _polyOrder;
   PoissonExactSolutionType _type;
-  bool _useSinglePointBCForPHI;
-  template <typename T>
-  const T phi(T &x, T &y);  // in 2 dimensions
+  
+  BFPtr _bf;
+  FunctionPtr phi();
 public:
   PoissonExactSolution(PoissonExactSolutionType type, int polyOrder=-2, bool useConformingTraces=false); // poly order here means that of phi -- -2 for non-polynomial types
 // ExactSolution
   virtual int H1Order(); // here it means the H1 order (i.e. polyOrder+1)
-  virtual double solutionValue(int trialID,
-                       FieldContainer<double> &physicalPoint);
-  virtual double solutionValue(int trialID,
-                       FieldContainer<double> &physicalPoint,
-                       FieldContainer<double> &unitNormal);
-// RHS 
-  virtual bool nonZeroRHS(int testVarID);
-  virtual void rhs(int testVarID, const FieldContainer<double> &physicalPoints, FieldContainer<double> &values);
-// BC
-  virtual bool bcsImposed(int varID); // returns true if there are any BCs anywhere imposed on varID
-  virtual void imposeBC(int varID, FieldContainer<double> &physicalPoints, 
-                FieldContainer<double> &unitNormals,
-                FieldContainer<double> &dirichletValues,
-                FieldContainer<bool> &imposeHere);
-  virtual bool imposeZeroMeanConstraint(int trialID);
-  virtual bool singlePointBC(int varID);
   virtual void setUseSinglePointBCForPHI(bool value);
-};
-
-// the following is the start of an attempt to make this generic, with an arbitrary solution 
-// passed in from somewhere.  So far, no luck...
-template<class T>
-class PoissonExactSolutionTemplate {
-public:
-  virtual const T phi(T &x, T &y);  // in 2 dimensions
-};
-
-template<class T>
-class PoissonExactSolutionPolynomial : PoissonExactSolutionTemplate<T> {
-private:
-  int _polyOrder;
-public:
-  PoissonExactSolutionPolynomial(int polyOrder) {
-    _polyOrder = polyOrder;
-  }
-  const T phi(T &x, T &y) {
-    T t = 1;
-    for (int i=0; i<_polyOrder; i++) {
-      t *= x + 2 * y;
-    }
-    return t;
-  }
+  
+  static Teuchos::RCP<ExactSolution> poissonExactPolynomialSolution(int polyOrder, bool useConformingTraces = true);
 };
 
 #endif

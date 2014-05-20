@@ -10,6 +10,8 @@
 #include "Mesh.h"
 #include "Solution.h"
 
+#include "CamelliaDebugUtility.h"
+
 RefinementStrategy::RefinementStrategy( SolutionPtr solution, double relativeEnergyThreshold, double min_h,
                                         int max_p, bool preferPRefinements) {
   _solution = solution;
@@ -156,7 +158,11 @@ void RefinementStrategy::refine(bool printToConsole) {
       }
     }
   }
-  
+
+  if (printToConsole) {
+    if (cellsToRefine.size() > 0) Camellia::print("cells for h-refinement", cellsToRefine);
+    if (cellsToPRefine.size() > 0) Camellia::print("cells for p-refinement", cellsToPRefine);
+  }
   refineCells(cellsToRefine);
   pRefineCells(mesh, cellsToPRefine);
   

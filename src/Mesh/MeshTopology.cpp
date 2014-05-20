@@ -273,7 +273,6 @@ unsigned MeshTopology::addEntity(const shards::CellTopology &entityTopo, const v
   set< unsigned > nodeSet;
   nodeSet.insert(entityVertices.begin(),entityVertices.end());
   
-  
   if (nodeSet.size() != entityVertices.size()) {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Entities may not have repeated vertices");
   }
@@ -292,15 +291,20 @@ unsigned MeshTopology::addEntity(const shards::CellTopology &entityTopo, const v
       _knownTopologies[entityTopo.getKey()] = entityTopo;
     }
     _entityCellTopologyKeys[d][entityIndex] = entityTopo.getKey();
-//    cout << "MeshTopology::addEntity: added entity of dimension " << d << " with index " << entityIndex << " and vertices:" << endl;
-//    printVertices(nodeSet);
+//    if ((_cells.size() == 2) && (d==2) && (entityIndex == 19)) {
+//      cout << "MeshTopology::addEntity: added entity of dimension " << d << " with index " << entityIndex << " and vertices:" << endl;
+//      printVertices(nodeSet);
+//    }
   } else {
     // existing entity
 //    Camellia::print("nodeSet", nodeSet);
 //    Camellia::print("knownEntityEntry->first", knownEntityEntry->first);
     
     entityIndex = knownEntityEntry->second;
-//    Camellia::print("entities entry", _entities[d][entityIndex]);
+//    if ((_cells.size() == 2) && (d==2) && (entityIndex == 19)) {
+//      Camellia::print("entities entry", _entities[d][entityIndex]);
+//    }
+    
 //    
 //    Camellia::print("canonicalEntityOrdering",_canonicalEntityOrdering[d][entityIndex]);
     entityPermutation = CamelliaCellTools::permutationMatchingOrder(entityTopo, _canonicalEntityOrdering[d][entityIndex], entityVertices);
@@ -494,6 +498,11 @@ set<unsigned> MeshTopology::descendants(unsigned d, unsigned entityIndex) {
   return allDescendants;
 }
 
+bool MeshTopology::entityHasChildren(unsigned int d, IndexType entityIndex) {
+  if (_childEntities[d].find(entityIndex) == _childEntities[d].end()) return false;
+  return _childEntities[d][entityIndex].size() > 0;
+}
+
 bool MeshTopology::entityHasParent(unsigned d, unsigned entityIndex) {
   if (_parentEntities[d].find(entityIndex) == _parentEntities[d].end()) return false;
   return _parentEntities[d][entityIndex].size() > 0;
@@ -541,6 +550,7 @@ unsigned MeshTopology::getEntityCount(unsigned int d) {
 }
 
 pair<IndexType, unsigned> MeshTopology::getEntityGeneralizedParent(unsigned int d, IndexType entityIndex) {
+  if (_generalizedParentEntities[d].find(entityIndex) == _generalizedParentEntities[d].end()) return make_pair(-1,-1);
   return _generalizedParentEntities[d][entityIndex];
 }
 
@@ -1115,6 +1125,59 @@ void MeshTopology::printEntityVertices(unsigned int d, unsigned int entityIndex)
   }
 }
 
+void MeshTopology::printAllEntities() {
+  for (int d=0; d<_spaceDim; d++) {
+    string entityTypeString;
+    if (d==0) {
+      entityTypeString = "Vertex";
+    } else if (d==1) {
+      entityTypeString = "Edge";
+    } else if (d==2) {
+      entityTypeString = "Face";
+    } else if (d==3) {
+      entityTypeString = "Solid";
+    }
+    cout << "****************************  ";
+    cout << entityTypeString << " entities:";
+    cout << "  ****************************\n";
+    
+    int entityCount = getEntityCount(d);
+    for (int entityIndex=0; entityIndex < entityCount; entityIndex++) {
+      if (d != 0) cout << entityTypeString << " " << entityIndex << ":" << endl;
+      printEntityVertices(d, entityIndex);
+    }
+  }
+  
+  cout << "****************************      ";
+  cout << "Cells:";
+  cout << "      ****************************\n";
+  
+  int numCells = cellCount();
+  for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
+    CellPtr cell = getCell(cellIndex);
+    cout << "Cell " << cellIndex << ":\n";
+    int vertexCount = cell->vertices().size();
+    for (int vertexOrdinal=0; vertexOrdinal<vertexCount; vertexOrdinal++) {
+      printVertex(cell->vertices()[vertexOrdinal]);
+    }
+    for (int d=1; d<_spaceDim; d++) {
+      int subcellCount = cell->topology()->getSubcellCount(d);
+      for (int subcord=0; subcord<subcellCount; subcord++) {
+        ostringstream labelStream;
+        if (d==1) {
+          labelStream << "Edge";
+        } else if (d==2) {
+          labelStream << "Face";
+        } else if (d==3) {
+          labelStream << "Solid";
+        }
+        labelStream << " " << subcord << " nodes";
+        Camellia::print(labelStream.str(), cell->getEntityVertexIndices(d, subcord));
+      }
+    }
+  }
+}
+
 FieldContainer<double> MeshTopology::physicalCellNodesForCell(unsigned int cellIndex) {
   CellPtr cell = getCell(cellIndex);
   unsigned vertexCount = cell->vertices().size();
@@ -1228,7 +1291,7 @@ void MeshTopology::refineCellEntities(CellPtr cell, RefinementPatternPtr refPatt
     unsigned subcellCount = cellTopo->getSubcellCount(d);
     for (unsigned subcord = 0; subcord < subcellCount; subcord++) {
       RefinementPatternPtr subcellRefPattern = refPattern->patternForSubcell(d, subcord);
-      FieldContainer<double> refinedNodes = subcellRefPattern->refinedNodes(); // refinedNodes implicitly assumes that all child topos are the same
+      FieldContainer<double> refinedNodes = subcellRefPattern->refinedNodes(); // NOTE: refinedNodes implicitly assumes that all child topos are the same
       unsigned childCount = refinedNodes.dimension(0);
       if (childCount==1) continue; // we already have the appropriate entities and parent relationships defined...
       
@@ -1255,6 +1318,16 @@ void MeshTopology::refineCellEntities(CellPtr cell, RefinementPatternPtr refPatt
           // map to physical space:
           CellTools<double>::mapToPhysicalFrame(physicalNodes, nodesOnRefCell, cellNodes, *cellTopo);
 //          cout << "physicalNodes:\n" << physicalNodes;
+          
+          
+          // debugging:
+//          if ((_cells.size() == 2) && (cell->cellIndex() == 0) && (d==2) && (subcord==2)) {
+//            cout << "cellNodes:\n" << cellNodes;
+//            cout << "For childOrdinal " << childIndex << " of face 2 on cell 0, details:\n";
+//            cout << "nodesOnSubcell:\n" << nodesOnSubcell;
+//            cout << "nodesOnRefCell:\n" << nodesOnRefCell;
+//            cout << "physicalNodes:\n" << physicalNodes;
+//          }
           
           if (_transformationFunction.get()) {
             physicalNodes.resize(nodeCount,_spaceDim);

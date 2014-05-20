@@ -153,6 +153,11 @@ SubBasisReconciliationWeights BasisReconciliation::computeConstrainedWeights(uns
   // figure out ancestralSubcellOrdinal
   unsigned ancestralSubcellOrdinal = RefinementPattern::ancestralSubcellOrdinal(refinements, subcellDimension, finerBasisSubcellOrdinal);
   
+  if (ancestralSubcellOrdinal == -1) {
+    cout << "ancestralSubcellOrdinal not found!\n";
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "ancestralSubcellOrdinal not found!");
+  }
+  
   //  set<unsigned> fineOrdinalsUnsigned = internalDofOrdinalsForFinerBasis(finerBasis, refinements, subcellDimension, finerBasisSubcellOrdinal);
   //  weights.fineOrdinals.insert(fineOrdinalsUnsigned.begin(),fineOrdinalsUnsigned.end());
   
@@ -222,7 +227,10 @@ SubBasisReconciliationWeights BasisReconciliation::computeConstrainedWeights(uns
     ancestralSubcellCache->setRefCellPoints(ancestralSubcellCubaturePoints);
     
     FieldContainer<double> coarseSubcellNodes(ancestralSubcellTopo.getNodeCount(), subcellDimension);
-    CamelliaCellTools::refCellNodesForTopology(coarseSubcellNodes, ancestralSubcellTopo, vertexNodePermutation);
+    // when you set physical cell nodes according to the coarse-to-fine permutation, then the reference-to-physical map
+    // is fine-to-coarse (which is what we want).  Because the vertexNodePermutation is fine-to-coarse, we want its inverse:
+    unsigned permutationInverse = CamelliaCellTools::permutationInverse(ancestralSubcellTopo, vertexNodePermutation);
+    CamelliaCellTools::refCellNodesForTopology(coarseSubcellNodes, ancestralSubcellTopo, permutationInverse);
     coarseSubcellNodes.resize(1,coarseSubcellNodes.dimension(0),coarseSubcellNodes.dimension(1));
     
     ancestralSubcellCache->setPhysicalCellNodes(coarseSubcellNodes, vector<GlobalIndexType>(), false);
@@ -549,7 +557,10 @@ SubBasisReconciliationWeights BasisReconciliation::computeConstrainedWeights(uns
   coarseDomainCache->setRefCellPoints(coarseDomainPoints);
   
   FieldContainer<double> coarseTopoRefNodesPermuted(coarseTopo.getVertexCount(), coarseTopo.getDimension());
-  CamelliaCellTools::refCellNodesForTopology(coarseTopoRefNodesPermuted, coarseTopo, coarseDomainPermutation);
+  // when you set physical cell nodes according to the coarse-to-fine permutation, then the reference-to-physical map
+  // is fine-to-coarse (which is what we want).  Because the coarseDomainPermutation is fine-to-coarse, we want its inverse:
+  unsigned ancestralDomainPermutation = CamelliaCellTools::permutationInverse(coarseTopo, coarseDomainPermutation);
+  CamelliaCellTools::refCellNodesForTopology(coarseTopoRefNodesPermuted, coarseTopo, ancestralDomainPermutation);
   coarseTopoRefNodesPermuted.resize(1,coarseTopoRefNodesPermuted.dimension(0),coarseTopoRefNodesPermuted.dimension(1));
   coarseDomainCache->setPhysicalCellNodes(coarseTopoRefNodesPermuted, vector<GlobalIndexType>(), false);
   

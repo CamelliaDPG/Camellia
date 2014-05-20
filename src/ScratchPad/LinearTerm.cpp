@@ -317,6 +317,9 @@ void LinearTerm::integrate(FieldContainer<double> &values,
   TEUCHOS_TEST_FOR_EXCEPTION(values.dimension(1) != uOrdering->totalDofs(), std::invalid_argument, "values.dim(1) != uOrdering->totalDofs()");
   TEUCHOS_TEST_FOR_EXCEPTION(values.dimension(2) != vOrdering->totalDofs(), std::invalid_argument, "values.dim(2) != vOrdering->totalDofs()");
   
+  bool symmetric = false; // turning off a so far buggy attempt at optimization
+//  bool symmetric = (u.get()==v.get()) && (uOrdering.get() == vOrdering.get());
+  
   // values has dimensions (numCells, uFields, vFields)
   int numCells = values.dimension(0);
   int numPoints = basisCache->getPhysicalCubaturePoints().dimension(1);
@@ -333,9 +336,12 @@ void LinearTerm::integrate(FieldContainer<double> &values,
   
   set<int> uIDs = u->varIDs();
   set<int> vIDs = v->varIDs();
-  set<int>::iterator uIt, vIt;
-  for (uIt = uIDs.begin(); uIt != uIDs.end(); uIt++) {
-    int uID = *uIt;
+  vector<int> uIDVector = vector<int>(uIDs.begin(),uIDs.end());
+  vector<int> vIDVector = vector<int>(vIDs.begin(),vIDs.end());
+  
+  for (int uOrdinal=0; uOrdinal < uIDVector.size(); uOrdinal++) {
+    int uID = uIDVector[uOrdinal];
+//    cout << "uID: " << uID << endl;
     // the DofOrdering needs a sideIndex argument; this is 0 for volume bases.
     bool uVolVar = (uOrdering->getNumSidesForVarID(uID) == 1);
     int uSideIndex = uVolVar ? 0 : basisCache->getSideIndex();
@@ -374,9 +380,12 @@ void LinearTerm::integrate(FieldContainer<double> &values,
       // that the neighboring cells have opposite normal...
       multiplyFluxValuesByParity(uValues, basisCache); // basisCache had better be a side cache!
     }
+
+    int vStartOrdinal = symmetric ? uOrdinal : 0;
     
-    for (vIt = vIDs.begin(); vIt != vIDs.end(); vIt++) {
-      int vID = *vIt;
+    for (int vOrdinal = vStartOrdinal; vOrdinal < vIDVector.size(); vOrdinal++) {
+      int vID = vIDVector[vOrdinal];
+//      cout << "vID: " << vID << endl;
       bool vVolVar = (vOrdering->getNumSidesForVarID(vID) == 1);
       int vSideIndex = vVolVar ? 0 : basisCache->getSideIndex();
       if (! vOrdering->hasBasisEntry(vID, vSideIndex) ) {
@@ -427,12 +436,16 @@ void LinearTerm::integrate(FieldContainer<double> &values,
           for (unsigned k=0; k < numCells; k++) {
             double value = miniMatrix(k,i,j); // separate line for debugger inspection
             values(k,uDofIndex,vDofIndex) += value;
+            if ((symmetric) && (uOrdinal != vOrdinal)) {
+              values(k,vDofIndex,uDofIndex) += value;
+            }
 //            cout << "values(" << k << ", " << uDofIndex << ", " << vDofIndex << ") += " << value << endl;
           }
         }
       }
     }
   }
+//  cout << "Integrate complete.\n";
 }
 
 void LinearTerm::integrate(FieldContainer<double> &values, DofOrderingPtr thisOrdering, 
@@ -451,6 +464,8 @@ void LinearTerm::integrate(FieldContainer<double> &values, DofOrderingPtr thisOr
   // we are then computing (u + du, v + dv) where e.g. (du,v) will be integrated along boundary
   // so the only non-boundary term is (u,v), and that only comes into it if forceBoundaryTerm is false.
 
+  bool symmetric = (thisOrdering.get() == otherOrdering.get()) && (this == otherTerm.get());
+  
   if (basisCache->isSideCache() && !forceBoundaryTerm) {
     // if sideCache, then we'd better forceBoundaryTerm
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Error: forceBoundaryTerm is false but basisCache is a sideBasisCache...");
@@ -472,8 +487,16 @@ void LinearTerm::integrate(FieldContainer<double> &values, DofOrderingPtr thisOr
   } else {
     LinearTermPtr thisBoundaryOnly = this->getBoundaryOnlyPart();
     LinearTermPtr thisNonBoundaryOnly = this->getNonBoundaryOnlyPart();
-    LinearTermPtr otherBoundaryOnly = otherTerm->getBoundaryOnlyPart();
-    LinearTermPtr otherNonBoundaryOnly = otherTerm->getNonBoundaryOnlyPart();
+    LinearTermPtr otherBoundaryOnly;
+    LinearTermPtr otherNonBoundaryOnly;
+
+    if (symmetric) {
+      otherBoundaryOnly = thisBoundaryOnly;
+      otherNonBoundaryOnly = thisNonBoundaryOnly;
+    } else {
+      otherBoundaryOnly = otherTerm->getBoundaryOnlyPart();
+      otherNonBoundaryOnly = otherTerm->getNonBoundaryOnlyPart();
+    }
     
     // volume integration first:  ( (u,v) from above )
     integrate(values, otherNonBoundaryOnly, otherOrdering, thisNonBoundaryOnly, thisOrdering, basisCache);

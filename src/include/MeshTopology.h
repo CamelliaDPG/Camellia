@@ -82,7 +82,6 @@ class MeshTopology {
   vector<IndexType> getVertexIndices(const vector< vector<double> > &vertices);
   map<unsigned, IndexType> getVertexIndicesMap(const FieldContainer<double> &vertices);
   set<IndexType> getEntitiesForSide(IndexType sideEntityIndex, unsigned d);
-  bool entityIsAncestor(unsigned d, IndexType ancestor, IndexType descendent);
   void init(unsigned spaceDim);
   unsigned maxConstraint(unsigned d, IndexType entityIndex1, IndexType entityIndex2);
   void printVertex(IndexType vertexIndex);
@@ -93,12 +92,16 @@ public:
   MeshTopology(MeshGeometryPtr meshGeometry);
   CellPtr addCell(CellTopoPtr cellTopo, const vector< vector<double> > &cellVertices);
   bool entityHasParent(unsigned d, IndexType entityIndex);
+  bool entityHasChildren(unsigned d, IndexType entityIndex);
   IndexType getActiveCellCount(unsigned d, IndexType entityIndex);
   const set< pair<IndexType,IndexType> > &getActiveCellIndices(unsigned d, IndexType entityIndex); // first entry in pair is the cellIndex, the second is the index of the entity in that cell (the subcord).
   CellPtr getCell(IndexType cellIndex);
 //  vector< pair< unsigned, unsigned > > getCellNeighbors(unsigned cellIndex, unsigned sideIndex); // second entry in return is the sideIndex in neighbor (note that in context of h-refinements, one or both of the sides may be broken)
 //  pair< CellPtr, unsigned > getCellAncestralNeighbor(unsigned cellIndex, unsigned sideIndex);
   bool cellHasCurvedEdges(IndexType cellIndex);
+  
+  bool entityIsAncestor(unsigned d, IndexType ancestor, IndexType descendent);
+
   vector<IndexType> getChildEntities(unsigned d, IndexType entityIndex);
   set<IndexType> getChildEntitiesSet(unsigned d, IndexType entityIndex);
   IndexType getConstrainingEntityIndexOfLikeDimension(unsigned d, IndexType entityIndex);
@@ -148,6 +151,8 @@ public:
   
   void printConstraintReport(unsigned d);
   void printEntityVertices(unsigned d, IndexType entityIndex);
+  
+  void printAllEntities();
   
   // not sure this should ultimately be exposed -- using it now to allow correctly timed call to updateCells()
   // (will be transitioning from having MeshTransformationFunction talk to Mesh to having it talk to MeshTopology)

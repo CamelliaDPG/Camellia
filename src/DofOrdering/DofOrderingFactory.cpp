@@ -77,7 +77,7 @@ DofOrderingPtr DofOrderingFactory::testOrdering(int polyOrder,
 DofOrderingPtr DofOrderingFactory::trialOrdering(int polyOrder, 
                                                  const shards::CellTopology &cellTopo,
                                                  bool conformingVertices) {
-  // right now, conformingVertices = true only works for 2D topologies
+  // conformingVertices = true only works for 2D topologies
   if ((cellTopo.getDimension() != 2) && conformingVertices) {
     cout << "ERROR: DofOrderingFactory only supports conformingVertices = true for 2D topologies.\n";
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "DofOrderingFactory only supports conformingVertices = true for 2D topologies");
@@ -99,10 +99,12 @@ DofOrderingPtr DofOrderingFactory::trialOrdering(int polyOrder,
     
     if (_bilinearForm->isFluxOrTrace(trialID)) { //lines, in 2D case (TODO: extend to arbitrary dimension)
       int numSides = cellTopo.getSideCount();
-      basis = BasisFactory::getConformingBasis( trialIDPolyOrder, shards::Line<2>::key, fs);
-      basisRank = basis->rangeRank();
-      for (int j=0; j<numSides; j++) {
-        trialOrder->addEntry(trialID,basis,basisRank,j);
+      int sideDim = cellTopo.getDimension() - 1;
+      for (int sideOrdinal=0; sideOrdinal<numSides; sideOrdinal++) {
+        shards::CellTopology sideTopo = cellTopo.getBaseCellTopologyData(sideDim, sideOrdinal);
+        basis = BasisFactory::getConformingBasis( trialIDPolyOrder, sideTopo.getKey(), fs);
+        basisRank = basis->rangeRank();
+        trialOrder->addEntry(trialID,basis,basisRank,sideOrdinal);
       }
       if ( conformingVertices
           && fs == IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD) {

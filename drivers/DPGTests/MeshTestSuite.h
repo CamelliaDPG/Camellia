@@ -53,6 +53,7 @@ public:
 //  static bool checkMeshConsistency(Teuchos::RCP<Mesh> mesh);
   static bool neighborBasesAgreeOnSides(Teuchos::RCP<Mesh> mesh, const FieldContainer<double> &testPointsRefCoords,
                                         bool reportErrors = false);
+  
   void runTests(int &numTestsRun, int &numTestsPassed);
   string testSuiteName() { return "MeshTestSuite"; }
   static bool testBuildMesh();

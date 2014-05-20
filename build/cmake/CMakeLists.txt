@@ -32,6 +32,17 @@ if (VTK_FOUND)
   endif()
 endif()
 
+if(MPI_INCLUDE)
+  include_directories(${MPI_INCLUDE})
+endif()
+if(MPI_LINK_CC)
+  link_libraries(${MPI_LINK_CC})
+endif()
+
+if (MPI_LINK_FORTRAN)
+  link_libraries(${MPI_LINK_FORTRAN})
+endif()
+
 if(MPI_DIR)
   MESSAGE("MPI_DIR = ${MPI_DIR}")
   include_directories(${MPI_DIR}/include)
@@ -273,18 +284,6 @@ set( STOKES_SOURCES
 set( POISSON_SOURCES
   "${DRIVERS_DIR}/Poisson/PoissonBilinearForm.cpp"
   "${DRIVERS_DIR}/Poisson/PoissonExactSolution.cpp"
-  "${DRIVERS_DIR}/Poisson/PoissonExactSolutionLinear.cpp"
-  "${DRIVERS_DIR}/Poisson/PoissonExactSolutionCubic.cpp"
-  "${DRIVERS_DIR}/Poisson/PoissonExactSolutionQuadratic.cpp"
-  "${DRIVERS_DIR}/Poisson/PoissonExactSolutionQuartic.cpp"
-  "${DRIVERS_DIR}/Poisson/PoissonRHSLinear.cpp"
-  "${DRIVERS_DIR}/Poisson/PoissonRHSQuadratic.cpp"
-  "${DRIVERS_DIR}/Poisson/PoissonRHSCubic.cpp"
-  "${DRIVERS_DIR}/Poisson/PoissonRHSQuartic.cpp"
-  "${DRIVERS_DIR}/Poisson/PoissonBCLinear.cpp"
-  "${DRIVERS_DIR}/Poisson/PoissonBCQuadratic.cpp"
-  "${DRIVERS_DIR}/Poisson/PoissonBCCubic.cpp"
-  "${DRIVERS_DIR}/Poisson/PoissonBCQuartic.cpp"
 )
 
 set( CONFUSION_SOURCES

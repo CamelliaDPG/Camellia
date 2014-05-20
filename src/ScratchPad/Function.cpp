@@ -1608,6 +1608,7 @@ public:
 };
 
 FunctionPtr Function::composedFunction( FunctionPtr f, FunctionPtr arg_g) {
+  cout << "WARNING: Function::composedFunction() called, but its implementation is not yet complete.\n";
   return Teuchos::rcp( new ComposedFunction(f,arg_g) );
 }
 
@@ -1821,6 +1822,10 @@ FunctionPtr UnitNormalFunction::y() {
   return Teuchos::rcp( new UnitNormalFunction(1) );
 }
 
+FunctionPtr UnitNormalFunction::z() {
+  return Teuchos::rcp( new UnitNormalFunction(2) );
+}
+
 bool UnitNormalFunction::boundaryValueOnly() {
   return true;
 }
@@ -1847,13 +1852,14 @@ void UnitNormalFunction::values(FieldContainer<double> &values, BasisCachePtr ba
   const FieldContainer<double> *sideNormals = &(basisCache->getSideNormals());
   int numCells = values.dimension(0);
   int numPoints = values.dimension(1);
+  int spaceDim = basisCache->getSpaceDim();
   for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
     for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
       if (_comp == -1) {
-        double n1 = (*sideNormals)(cellIndex,ptIndex,0);
-        double n2 = (*sideNormals)(cellIndex,ptIndex,1);
-        values(cellIndex,ptIndex,0) = n1;
-        values(cellIndex,ptIndex,1) = n2;
+        for (int d=0; d<spaceDim; d++) {
+          double nd = (*sideNormals)(cellIndex,ptIndex,d);
+          values(cellIndex,ptIndex,d) = nd;
+        }
       } else {
         double ni = (*sideNormals)(cellIndex,ptIndex,_comp);
         values(cellIndex,ptIndex) = ni;

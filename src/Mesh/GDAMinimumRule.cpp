@@ -33,29 +33,6 @@ vector<unsigned> GDAMinimumRule::allBasisDofOrdinalsVector(int basisCardinality)
   return ordinals;
 }
 
-vector< map< unsigned, unsigned > > GDAMinimumRule::buildSubsideMap(shards::CellTopology &sideTopo) {
-  unsigned sideDim = sideTopo.getDimension();
-  unsigned subsideDim = sideDim - 1;
-
-  int subsideCount = (subsideDim > 0) ? sideTopo.getSideCount(): sideTopo.getVertexCount();
-  vector< map< unsigned, unsigned > > subsideMap(sideDim); // outer vector indexed by dimension.  map goes from scOrdinalInSide to a subside containing that subcell.  (This is not uniquely defined, but that should be OK.)
-  for (int ssOrdinal=0; ssOrdinal<subsideCount; ssOrdinal++) {
-    for (int d=0; d<sideDim-1; d++) {
-      shards::CellTopology subside = sideTopo.getCellTopologyData(sideDim-1, ssOrdinal);
-      unsigned scCount = subside.getSubcellCount(d);
-      for (int scOrdinalInSubside=0; scOrdinalInSubside<scCount; scOrdinalInSubside++) {
-        unsigned scOrdinalInSide = CamelliaCellTools::subcellOrdinalMap(sideTopo, sideDim-1, ssOrdinal, d, scOrdinalInSubside);
-        subsideMap[d][scOrdinalInSide] = ssOrdinal;
-//        cout << "subsideMap[" << d << "][" << scOrdinalInSide << "] = " << ssOrdinal << endl;
-      }
-    }
-    // finally, enter the subside itself:
-    subsideMap[sideDim-1][ssOrdinal] = ssOrdinal;
-//    cout << "subsideMap[" << sideDim-1 << "][" << ssOrdinal << "] = " << ssOrdinal << endl;
-  }
-  return subsideMap;
-}
-
 void GDAMinimumRule::didChangePartitionPolicy() {
   rebuildLookups();
 }
@@ -246,8 +223,10 @@ void GDAMinimumRule::interpretLocalData(GlobalIndexType cellID, const FieldConta
   LocalDofMapperPtr dofMapper = getDofMapper(cellID, constraints);
   
 //  if (Teuchos::GlobalMPISession::getRank()==0) {
-//    cout << "interpretLocalData, mapping report for cell " << cellID << ":\n";
-//    dofMapper->printMappingReport();
+//    if ((cellID == 1) || (cellID == 9)) {
+//      cout << "interpretLocalData, mapping report for cell " << cellID << ":\n";
+//      dofMapper->printMappingReport();
+//    }
 //  }
   
   bool localToGlobal = true;
@@ -492,37 +471,7 @@ BasisMap GDAMinimumRule::getBasisMap(GlobalIndexType cellID, SubCellDofIndexInfo
   appliedWeights[sideDim][sideEntityIndex] = make_pair(defaultConstraint, unitWeights);
   
   int minimumConstraintDimension = BasisReconciliation::minimumSubcellDimension(basis);
-  // populate things for the (sideDim-1)-dimensional constituents of the side
-//  if (defaultConstraint.dimension >= minimumConstraintDimension + 1) {
-//    int d1 = defaultConstraint.dimension-1;
-//    unsigned sscCount = sideTopo.getSubcellCount(d1);
-//    CellTopoPtr constrainingCellTopo = cell->topology();
-//    for (unsigned ssubcord=0; ssubcord<sscCount; ssubcord++) {
-//      unsigned ssubcordInCell = CamelliaCellTools::subcellOrdinalMap(*constrainingCellTopo, defaultConstraint.dimension, sideOrdinal, d1, ssubcord);
-//      IndexType ssEntityIndex = cell->entityIndex(d1, ssubcordInCell);
-//      
-//      if (appliedWeights[d1].find(ssEntityIndex) != appliedWeights[d1].end()) { // we've already applied d-dimensional constraints to this d1-dimensional entity
-//        continue;
-//      }
-//      
-//      ConstrainingSubcellInfo subsubcellConstraint;
-//      subsubcellConstraint.cellID = defaultConstraint.cellID;
-//      subsubcellConstraint.sideOrdinal = defaultConstraint.sideOrdinal;
-//      subsubcellConstraint.dimension = d1;
-//      
-//      CellPtr constrainingCell = _meshTopology->getCell(defaultConstraint.cellID);
-//      subsubcellConstraint.subcellOrdinalInSide = CamelliaCellTools::subcellReverseOrdinalMap(*constrainingCellTopo, sideDim, subsubcellConstraint.sideOrdinal,
-//                                                                                              d1, ssubcordInCell);
-//      
-//      SubBasisReconciliationWeights composedWeightsForSubSubcell = BasisReconciliation::weightsForCoarseSubcell(unitWeights, basis, d1,
-//                                                                                                                subsubcellConstraint.subcellOrdinalInSide, true);
-//      
-//      if ((d1==0) && (ssubcordInCell == 3) && (defaultConstraint.cellID == 4)) {
-//        cout << "blah2.\n";
-//      }
-//      appliedWeights[d1][ssEntityIndex] = make_pair(subsubcellConstraint, composedWeightsForSubSubcell);
-//    }
-//  }
+
   
 // DEBUGGING:
 //  if ((cellID==1) && (sideOrdinal==0) && (var->ID() == 0)) {
@@ -600,19 +549,56 @@ BasisMap GDAMinimumRule::getBasisMap(GlobalIndexType cellID, SubCellDofIndexInfo
       if (ancestralSubcellDimension == sideDim) {
         ancestralSideOrdinal = ancestralSubcellOrdinal;
       } else {
-        // find some side in the ancestral cell that contains the subcell, then (there should be at least two; which one shouldn't matter)
-        
-        IndexType ancestralSubcellEntityIndex = ancestralCell->entityIndex(ancestralSubcellDimension, ancestralSubcellOrdinal);
-        
-        set<IndexType> sidesForSubcell = _meshTopology->getSidesContainingEntity(ancestralSubcellDimension, ancestralSubcellEntityIndex);
 
-        ancestralSideOrdinal = -1;
-        int sideCount = ancestralCell->topology()->getSideCount();
-        for (int side=0; side<sideCount; side++) {
-          IndexType ancestralSideEntityIndex = ancestralCell->entityIndex(sideDim, side);
-          if (sidesForSubcell.find(ancestralSideEntityIndex) != sidesForSubcell.end()) {
-            ancestralSideOrdinal = side;
-            break;
+        IndexType ancestralSubcellEntityIndex = ancestralCell->entityIndex(ancestralSubcellDimension, ancestralSubcellOrdinal);
+
+        // for subcells constrained by subcells of unlike dimension, we can handle any side that contains the ancestral subcell,
+        // but for like-dimensional constraints, we do need the ancestralSideOrdinal to be the ancestor of the side in subcellInfo...
+
+        if (subcellConstraint.dimension == d) {
+          IndexType descendantSideEntityIndex = appliedConstraintCell->entityIndex(sideDim, subcellInfo.sideOrdinal);
+          
+          ancestralSideOrdinal = -1;
+          int sideCount = ancestralCell->topology()->getSideCount();
+          for (int side=0; side<sideCount; side++) {
+            IndexType ancestralSideEntityIndex = ancestralCell->entityIndex(sideDim, side);
+            if (ancestralSideEntityIndex == descendantSideEntityIndex) {
+              ancestralSideOrdinal = side;
+              break;
+            }
+            
+            if (_meshTopology->entityIsAncestor(sideDim, ancestralSideEntityIndex, descendantSideEntityIndex)) {
+              ancestralSideOrdinal = side;
+              break;
+            }
+          }
+
+          if (ancestralSideOrdinal == -1) {
+            cout << "Error: no ancestor of side found.\n";
+            TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Error: no ancestor of side contains the ancestral subcell.");
+          }
+          
+          { // a sanity check:
+            set<IndexType> sidesForSubcell = _meshTopology->getSidesContainingEntity(ancestralSubcellDimension, ancestralSubcellEntityIndex);
+            IndexType ancestralSideEntityIndex = ancestralCell->entityIndex(sideDim, ancestralSideOrdinal);
+            if (sidesForSubcell.find(ancestralSideEntityIndex) == sidesForSubcell.end()) {
+              cout << "Error: the ancestral side does not contain the ancestral subcell.\n";
+              TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "the ancestral side does not contain the ancestral subcell.");
+            }
+          }
+          
+        } else {
+          // find some side in the ancestral cell that contains the ancestral subcell, then (there should be at least two; which one shouldn't matter)
+          set<IndexType> sidesForSubcell = _meshTopology->getSidesContainingEntity(ancestralSubcellDimension, ancestralSubcellEntityIndex);
+
+          ancestralSideOrdinal = -1;
+          int sideCount = ancestralCell->topology()->getSideCount();
+          for (int side=0; side<sideCount; side++) {
+            IndexType ancestralSideEntityIndex = ancestralCell->entityIndex(sideDim, side);
+            if (sidesForSubcell.find(ancestralSideEntityIndex) != sidesForSubcell.end()) {
+              ancestralSideOrdinal = side;
+              break;
+            }
           }
         }
       }
@@ -987,6 +973,13 @@ void printDofIndexInfo(GlobalIndexType cellID, SubCellDofIndexInfo &dofIndexInfo
 }
 
 LocalDofMapperPtr GDAMinimumRule::getDofMapper(GlobalIndexType cellID, CellConstraints &constraints, int varIDToMap, int sideOrdinalToMap) {
+  if ((varIDToMap == -1) && (sideOrdinalToMap == -1)) {
+    // a mapper for the whole dof ordering: we cache these...
+    if (_dofMapperCache.find(cellID) != _dofMapperCache.end()) {
+      return _dofMapperCache[cellID];
+    }
+  }
+  
   CellPtr cell = _meshTopology->getCell(cellID);
   CellTopoPtr topo = _elementTypeForCell[cellID]->cellTopoPtr;
   int sideCount = topo->getSideCount();
@@ -1053,7 +1046,14 @@ LocalDofMapperPtr GDAMinimumRule::getDofMapper(GlobalIndexType cellID, CellConst
     }
   }
   
-  return Teuchos::rcp( new LocalDofMapper(trialOrdering,volumeMap,sideMaps,varIDToMap,sideOrdinalToMap) );
+  LocalDofMapperPtr dofMapper = Teuchos::rcp( new LocalDofMapper(trialOrdering,volumeMap,sideMaps,varIDToMap,sideOrdinalToMap) );
+  if ((varIDToMap == -1) && (sideOrdinalToMap == -1)) {
+    // a mapper for the whole dof ordering: we cache these...
+    _dofMapperCache[cellID] = dofMapper;
+    return _dofMapperCache[cellID];
+  } else {
+    return dofMapper;
+  }
 }
 
 PartitionIndexType GDAMinimumRule::partitionForGlobalDofIndex( GlobalIndexType globalDofIndex ) {
@@ -1095,6 +1095,7 @@ void GDAMinimumRule::printConstraintInfo(GlobalIndexType cellID) {
 
 void GDAMinimumRule::rebuildLookups() {
   _constraintsCache.clear(); // to free up memory, could clear this again after the lookups are rebuilt.  Having the cache is most important during the construction below.
+  _dofMapperCache.clear();
   
   determineActiveElements(); // call to super: constructs cell partitionings
   

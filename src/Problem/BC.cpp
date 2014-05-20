@@ -252,7 +252,7 @@ void BC::imposeBC(int varID, FieldContainer<double> &physicalPoints,
     filter->matchesPoints(imposeHere,basisCache);
     f->values(dirichletValues,basisCache);
     
-    cout << "BC::imposeBC (singleton BC implementation) called for varID " << varID << endl;
+//    cout << "BC::imposeBC (singleton BC implementation) called for varID " << varID << endl;
     
     bool pointMatched = false; // make sure we just impose this once
     for (int i=0; i<imposeHere.size(); i++) {

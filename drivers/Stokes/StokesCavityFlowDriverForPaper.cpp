@@ -11,6 +11,10 @@ public:
     double tol = 1e-14;
     return (abs(y-1.0) < tol);
   }
+  
+  bool matchesPoint(double x, double y, double z) {
+    return matchesPoint(x, y);
+  }
 };
 
 class RampBoundaryFunction_U1 : public SimpleFunction {
@@ -28,35 +32,90 @@ public:
       return 1;
     }
   }
+  double value(double x, double y, double z) {
+    // bilinear interpolation with ramp of width _eps around top edges
+    double xFactor = 1.0;
+    double zFactor = 1.0;
+    if ( (abs(x) < _eps) ) { // top left
+      xFactor = x / _eps;
+    } else if ( abs(1.0-x) < _eps) { // top right
+      xFactor = (1.0-x) / _eps;
+    }
+    if ( (abs(z) < _eps) ) { // top back
+      zFactor = z / _eps;
+    } else if ( abs(1.0-z) < _eps) { // top front
+      zFactor = (1.0-z) / _eps;
+    }
+    return xFactor * zFactor;
+  }
 };
 
 int main(int argc, char *argv[]) {
   Teuchos::GlobalMPISession mpiSession(&argc, &argv);
   int rank = Teuchos::GlobalMPISession::getRank();
   
+  bool use3D = false;
+  int refCount = 3;
+  
+  int k = 3; // poly order for field variables
+  int H1Order = k + 1;
+  int delta_k = use3D ? 3 : 2;   // test space enrichment
+  
   bool useMinRule = true;
   bool useMumps = false;
   
+  bool enforceOneIrregularity = false;
+  
+  bool conformingTraces = true;
+  
   VarFactory varFactory;
   // traces:
-//  VarPtr u1hat = varFactory.traceVar("\\widehat{u}_1");
-//  VarPtr u2hat = varFactory.traceVar("\\widehat{u}_2");
-  VarPtr u1hat = varFactory.traceVar("\\widehat{u}_1", L2); // switched to L2 just to isolate/debug
-  VarPtr u2hat = varFactory.traceVar("\\widehat{u}_2", L2);
-  cout << "WARNING/NOTE: for debugging purposes, temporarily switching traces to use L^2 discretizations (i.e. they are not conforming, and they are of lower order than they should be).\n";
+  VarPtr u1hat, u2hat, u3hat;
+  
+  if (conformingTraces) {
+    u1hat = varFactory.traceVar("\\widehat{u}_1");
+    u2hat = varFactory.traceVar("\\widehat{u}_2");
+    
+    if (use3D) {
+      u3hat = varFactory.traceVar("\\widehat{u}_3");
+    }
+  } else {
+    cout << "Note: using non-conforming traces.\n";
+    u1hat = varFactory.traceVar("\\widehat{u}_1", L2);
+    u2hat = varFactory.traceVar("\\widehat{u}_2", L2);
+    
+    if (use3D) {
+      u3hat = varFactory.traceVar("\\widehat{u}_3", L2);
+    }
+  }
+//  VarPtr u1hat = varFactory.traceVar("\\widehat{u}_1", L2); // switched to L2 just to isolate/debug
+//  VarPtr u2hat = varFactory.traceVar("\\widehat{u}_2", L2);
+//  cout << "WARNING/NOTE: for debugging purposes, temporarily switching traces to use L^2 discretizations (i.e. they are not conforming, and they are of lower order than they should be).\n";
   VarPtr t1_n = varFactory.fluxVar("\\widehat{t}_{1n}");
   VarPtr t2_n = varFactory.fluxVar("\\widehat{t}_{2n}");
+  VarPtr t3_n;
+  if (use3D) {
+    t3_n = varFactory.fluxVar("\\widehat{t}_{3n}");
+  }
   // fields:
   VarPtr u1 = varFactory.fieldVar("u_1", L2);
   VarPtr u2 = varFactory.fieldVar("u_2", L2);
+  VarPtr u3;
+  if (use3D) u3 = varFactory.fieldVar("u_3", L2);
   VarPtr sigma1 = varFactory.fieldVar("\\sigma_1", VECTOR_L2);
   VarPtr sigma2 = varFactory.fieldVar("\\sigma_2", VECTOR_L2);
+  VarPtr sigma3;
+  if (use3D) sigma3 = varFactory.fieldVar("\\sigma_3", VECTOR_L2);
   VarPtr p = varFactory.fieldVar("p");
   // test functions:
   VarPtr tau1 = varFactory.testVar("\\tau_1", HDIV);  // tau_1
   VarPtr tau2 = varFactory.testVar("\\tau_2", HDIV);  // tau_2
+  VarPtr tau3;
+  if (use3D) tau3 = varFactory.testVar("\\tau_3", HDIV);  // tau_3
   VarPtr v1 = varFactory.testVar("v1", HGRAD);        // v_1
   VarPtr v2 = varFactory.testVar("v2", HGRAD);        // v_2
+  VarPtr v3;
+  if (use3D) v3 = varFactory.testVar("v3", HGRAD);
   VarPtr q = varFactory.testVar("q", HGRAD);          // q
   
   BFPtr stokesBF = Teuchos::rcp( new BF(varFactory) );
@@ -71,6 +130,13 @@ int main(int argc, char *argv[]) {
   stokesBF->addTerm(sigma2, tau2);
   stokesBF->addTerm(-u2hat, tau2->dot_normal());
   
+  // tau3:
+  if (use3D) {
+    stokesBF->addTerm(u3, tau3->div());
+    stokesBF->addTerm(sigma3, tau3);
+    stokesBF->addTerm(-u3hat, tau3->dot_normal());
+  }
+  
   // v1:
   stokesBF->addTerm(mu * sigma1, v1->grad()); // (mu sigma1, grad v1)
   stokesBF->addTerm( - p, v1->dx() );
@@ -81,21 +147,47 @@ int main(int argc, char *argv[]) {
   stokesBF->addTerm( - p, v2->dy());
   stokesBF->addTerm( t2_n, v2);
   
+  // v3:
+  if (use3D) {
+    stokesBF->addTerm(mu * sigma3, v3->grad()); // (mu sigma3, grad v3)
+    stokesBF->addTerm( - p, v3->dz());
+    stokesBF->addTerm( t3_n, v3);
+  }
+  
   // q:
   stokesBF->addTerm(-u1,q->dx()); // (-u, grad q)
   stokesBF->addTerm(-u2,q->dy());
+  if (use3D) stokesBF->addTerm(-u3, q->dz());
   FunctionPtr n = Function::normal();
-  stokesBF->addTerm(u1hat * n->x() + u2hat * n->y(), q);
-
-  int k = 2; // poly order for field variables
-  int H1Order = k + 1;
-  int delta_k = 2;   // test space enrichment
-  double width = 1.0, height = 1.0;
-  int horizontalCells = 2, verticalCells = 1;
-  MeshPtr mesh = useMinRule ? MeshFactory::quadMeshMinRule(stokesBF, H1Order, delta_k, width, height,
-                                                           horizontalCells, verticalCells)
+  if (!use3D) stokesBF->addTerm(u1hat * n->x() + u2hat * n->y(), q);
+  else stokesBF->addTerm(u1hat * n->x() + u2hat * n->y() + u3hat * n->z(), q);
+  
+  double width = 1.0, height = 1.0, depth = 1.0;
+  int horizontalCells = 2, verticalCells = 2, depthCells = 2;
+  
+  vector<double> domainDimensions;
+  domainDimensions.push_back(width);
+  domainDimensions.push_back(height);
+  
+  vector<int> elementCounts;
+  elementCounts.push_back(horizontalCells);
+  elementCounts.push_back(verticalCells);
+  
+  if (use3D) {
+    domainDimensions.push_back(depth);
+    elementCounts.push_back(depthCells);
+  }
+  
+  MeshPtr mesh;
+  
+  if (!use3D) {
+    mesh = useMinRule ? MeshFactory::quadMeshMinRule(stokesBF, H1Order, delta_k, width, height,
+                                                     horizontalCells, verticalCells)
                             : MeshFactory::quadMesh(stokesBF, H1Order, delta_k, width, height,
                                                     horizontalCells, verticalCells);
+  } else {
+    mesh = MeshFactory::rectilinearMesh(stokesBF, domainDimensions, elementCounts, H1Order, delta_k);
+  }
   
   RHSPtr rhs = RHS::rhs(); // zero
   
@@ -104,14 +196,16 @@ int main(int argc, char *argv[]) {
   SpatialFilterPtr otherBoundary = SpatialFilter::negatedFilter(topBoundary);
   
   // top boundary:
-  FunctionPtr u1_bc_fxn = Teuchos::rcp( new RampBoundaryFunction_U1(1.0/2) );
+  FunctionPtr u1_bc_fxn = Teuchos::rcp( new RampBoundaryFunction_U1(1.0/8.0) );
   FunctionPtr zero = Function::zero();
   bc->addDirichlet(u1hat, topBoundary, u1_bc_fxn);
   bc->addDirichlet(u2hat, topBoundary, zero);
+  if (use3D) bc->addDirichlet(u3hat, topBoundary, zero);
   
   // everywhere else:
   bc->addDirichlet(u1hat, otherBoundary, zero);
   bc->addDirichlet(u2hat, otherBoundary, zero);
+  if (use3D) bc->addDirichlet(u3hat, otherBoundary, zero);
   
   bc->addZeroMeanConstraint(p);
 
@@ -119,10 +213,11 @@ int main(int argc, char *argv[]) {
   
   SolutionPtr solution = Solution::solution(mesh, bc, rhs, graphNorm);
   
-  double energyThreshold = 0.20;
+  double energyThreshold = 0.2;
   RefinementStrategy refinementStrategy( solution, energyThreshold );
   
   refinementStrategy.setReportPerCellErrors(true);
+  refinementStrategy.setEnforceOneIrregularity(enforceOneIrregularity);
   
   Teuchos::RCP<Solver> solver;
   if (useMumps) {
@@ -131,7 +226,7 @@ int main(int argc, char *argv[]) {
     solver = Teuchos::rcp( new KluSolver );
   }
   solution->solve(solver);
-  int refCount = 3;
+  solution->reportTimings();
   for (int refIndex=0; refIndex < refCount; refIndex++) {
     double energyError = solution->energyErrorTotal();
     if (rank==0) {
@@ -139,11 +234,19 @@ int main(int argc, char *argv[]) {
       cout << " (using " << mesh->numFluxDofs() << " trace degrees of freedom)." << endl;
     }
     refinementStrategy.refine(rank==0);
+    
+    if (!use3D) {
+      GnuPlotUtil::writeComputationalMeshSkeleton("/tmp/stokesMesh", mesh, true); // true: label cells
+    }
+    
     solution->solve(solver);
+    solution->reportTimings();
   }
   double energyErrorTotal = solution->energyErrorTotal();
   
-  FunctionPtr massFlux = Teuchos::rcp( new PreviousSolutionFunction(solution, u1hat * n->x() + u2hat * n->y()) );
+  FunctionPtr massFlux;
+  if (!use3D) massFlux = Teuchos::rcp( new PreviousSolutionFunction(solution, u1hat * n->x() + u2hat * n->y()) );
+  else massFlux = Teuchos::rcp( new PreviousSolutionFunction(solution, u1hat * n->x() + u2hat * n->y() + u3hat * n->z()) );
   double netMassFlux = massFlux->integrate(mesh); // integrate over the mesh skeleton
 
   if (rank==0) {
@@ -152,10 +255,20 @@ int main(int argc, char *argv[]) {
     cout << "Net mass flux: " << netMassFlux << endl;
   }
   
-  VTKExporter solnExporter(solution,mesh,varFactory);
-  solnExporter.exportSolution("stokesCavityFlowSolution");
-  
-  GnuPlotUtil::writeComputationalMeshSkeleton("cavityFlowRefinedMesh", mesh);
+  if (!use3D) {
+    VTKExporter solnExporter(solution,mesh,varFactory);
+    solnExporter.exportSolution("stokesCavityFlowSolution");
+    
+    GnuPlotUtil::writeComputationalMeshSkeleton("cavityFlowRefinedMesh", mesh);
+  } else {
+    NewVTKExporter exporter(mesh->getTopology());
+    FunctionPtr u1_soln = Function::solution(u1, solution);
+    FunctionPtr u2_soln = Function::solution(u2, solution);
+    FunctionPtr u3_soln = Function::solution(u3, solution);
+    exporter.exportFunction(u1_soln, "u1_soln");
+    exporter.exportFunction(u2_soln, "u2_soln");
+    exporter.exportFunction(u3_soln, "u3_soln");
+  }
   
   return 0;
 }

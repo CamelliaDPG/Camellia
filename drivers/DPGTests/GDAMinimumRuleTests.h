@@ -33,6 +33,13 @@ private:
   
   bool testHangingNodePoisson(bool useQuads);
   bool testHangingNodeStokes(bool useQuads);
+  
+  SolutionPtr poissonExactSolution3D(int horizontalCells, int verticalCells, int depthCells, int H1Order, FunctionPtr phi_exact, bool useH1Traces);
+  
+  bool checkLocalGlobalConsistency(MeshPtr mesh);
+  
+  FieldContainer<double> _testPoints1D, _testPoints2D; // points on ref cell
+  
 public:
   GDAMinimumRuleTests();
   void runTests(int &numTestsRun, int &numTestsPassed);
@@ -40,7 +47,7 @@ public:
   
   bool testLocalInterpretationConsistency();
   bool testGlobalToLocalToGlobalConsistency(); // should be able to map global to local and back, and get the same results.
-  
+
   bool testMultiCellMesh();
   bool testSingleCellMesh();
   
@@ -51,6 +58,10 @@ public:
   
   bool testHangingNodePoissonQuad();
   bool testHangingNodeStokesQuad();
+  
+  bool testHangingNodePoisson3D();
+  
+  bool testPoissonCompatibleMeshWithHeterogeneousOrientations2D();
   
 };
 

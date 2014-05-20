@@ -49,7 +49,7 @@
 
 #include "Solution.h"
 
-#include "BilinearForm.h"
+#include "BF.h"
 #include "BasisCache.h"
 
 class Function;

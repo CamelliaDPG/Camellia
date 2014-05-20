@@ -168,7 +168,16 @@ FCPtr BasisEvaluation::getTransformedValuesWithBasisValues(BasisPtr basis, Intre
           fst::HDIVtransformVALUE<double>(*transformedValues,cellJacobian,cellJacobianDet,*referenceValues);
           break;
         case IntrepidExtendedTypes::FUNCTION_SPACE_HVOL:
+//        {
+//          static bool haveWarned = false;
+//          if (!haveWarned) {
+//            cout << "WARNING: for the moment, switching to the standard HVOLtransformVALUE method.\n";
+//            haveWarned = true;
+//          }
+//        }
+//          fst::HVOLtransformVALUE<double>(*transformedValues, cellJacobianDet, *referenceValues);
           // for the moment, use the fact that we know the HVOL basis is always an HGRAD basis:
+          // (I think using the below amounts to solving for the HVOL variables scaled by Jacobian)
           fst::HGRADtransformVALUE<double>(*transformedValues,*referenceValues);
           break;
         default:
@@ -176,7 +185,7 @@ FCPtr BasisEvaluation::getTransformedValuesWithBasisValues(BasisPtr basis, Intre
           break;
       }
       break;
-    case(IntrepidExtendedTypes::OP_GRAD):
+    case(Intrepid::OPERATOR_GRAD):
       switch(fs) {
         case IntrepidExtendedTypes::FUNCTION_SPACE_HVOL:
         case IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD: // HGRAD is the only space that supports the GRAD operator...
@@ -239,7 +248,7 @@ FCPtr BasisEvaluation::getTransformedValuesWithBasisValues(BasisPtr basis, Intre
           break;
       }
       break;
-    case(IntrepidExtendedTypes::OP_CURL):
+    case(Intrepid::OPERATOR_CURL):
       switch(fs) {
         case IntrepidExtendedTypes::FUNCTION_SPACE_HCURL:
           if (spaceDim == 2) {
@@ -265,7 +274,7 @@ FCPtr BasisEvaluation::getTransformedValuesWithBasisValues(BasisPtr basis, Intre
           break;
       }
       break;
-    case(IntrepidExtendedTypes::OP_DIV):
+    case(Intrepid::OPERATOR_DIV):
       switch(fs) {
         case IntrepidExtendedTypes::FUNCTION_SPACE_HDIV:
         case IntrepidExtendedTypes::FUNCTION_SPACE_HDIV_FREE:

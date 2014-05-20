@@ -926,6 +926,8 @@ Teuchos::RCP<RefinementPattern> RefinementPattern::regularRefinementPatternHexah
       }
     }
     
+//    cout << "regular hex refinement, hexPoints:\n" << hexPoints;
+    
     refPattern = Teuchos::rcp( new RefinementPattern(hexTopo,hexPoints,vector<RefinementPatternPtr>(6,regularRefinementPatternQuad())) );
   }
   return refPattern;
@@ -1024,6 +1026,10 @@ CellTopoPtr RefinementPattern::parentTopology() {
 }
 
 RefinementPatternPtr RefinementPattern::patternForSubcell(unsigned subcdim, unsigned subcord) {
+  if (subcdim >= _patternForSubcell.size() || subcord >= _patternForSubcell[subcdim].size()) {
+    cout << "subcell dimension/ordinal arguments are out of bounds.\n";
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "subcell dimension/ordinal arguments are out of bounds.");
+  }
   return _patternForSubcell[subcdim][subcord];
 }
 

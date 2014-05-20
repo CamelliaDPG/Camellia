@@ -60,7 +60,7 @@ public:
   const SubBasisReconciliationWeights &constrainedWeights(BasisPtr finerBasis, RefinementBranch refinements, BasisPtr coarserBasis, unsigned vertexNodePermutation); // requires these to be defined on the same topology
   const SubBasisReconciliationWeights &constrainedWeights(BasisPtr finerBasis, int finerBasisSideIndex, RefinementBranch &volumeRefinements, BasisPtr coarserBasis, int coarserBasisSideIndex, unsigned vertexNodePermutation); // vertexPermutation is for the fine basis's ancestral orientation (how to permute side as seen by fine's ancestor to produce side as seen by coarse)...
   
-  // the new bottleneck method (the others cans be reimplemented to call this one, or simply eliminated)
+  // the new bottleneck method (the others can be reimplemented to call this one, or simply eliminated)
   const SubBasisReconciliationWeights &constrainedWeights(unsigned subcellDimension,
                                                           BasisPtr finerBasis, unsigned finerBasisSubcellOrdinal,
                                                           RefinementBranch &refinements,

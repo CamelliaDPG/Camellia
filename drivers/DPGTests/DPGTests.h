@@ -48,10 +48,10 @@ public:
   static bool testComputeStiffnessFlux();
   static bool testMathInnerProductDx();
   static bool testLowOrderTrialCubicTest();
-  static bool testOptimalStiffnessByIntegrating();
+//  static bool testOptimalStiffnessByIntegrating();
   static bool testOptimalStiffnessByMultiplying();
   static bool testComputeOptimalTest();
-  static bool testComputeOptimalTestPoisson();
+//  static bool testComputeOptimalTestPoisson();
   static bool testTestBilinearFormAnalyticBoundaryIntegralExpectedConformingMatrices();
   static bool testWeightBasis();
   static bool checkOptTestWeights(FieldContainer<double> &optWeights,

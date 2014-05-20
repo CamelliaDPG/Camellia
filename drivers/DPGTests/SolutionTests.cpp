@@ -1004,9 +1004,16 @@ bool SolutionTests::testHRefinementInitialization() {
   FunctionPtr phiFxn = x;// * x * x + x * y;
   FunctionPtr psiFxn = phiFxn->grad();
   map< int, FunctionPtr > fxnMap;
-  fxnMap[ PoissonBilinearForm::PHI ] = phiFxn;
-  fxnMap[ PoissonBilinearForm::PSI_1 ] = psiFxn->x();
-  fxnMap[ PoissonBilinearForm::PSI_2 ] = psiFxn->y();
+  
+  
+  VarFactory vf = PoissonBilinearForm::poissonBilinearForm()->varFactory();
+  VarPtr phi = vf.fieldVar(PoissonBilinearForm::S_PHI);
+  VarPtr psi_1 = vf.fieldVar(PoissonBilinearForm::S_PSI_1);
+  VarPtr psi_2 = vf.fieldVar(PoissonBilinearForm::S_PSI_2);
+  
+  fxnMap[ phi->ID() ] = phiFxn;
+  fxnMap[ psi_1->ID() ] = psiFxn->x();
+  fxnMap[ psi_2->ID() ] = psiFxn->y();
   
   _poissonSolution->projectOntoMesh(fxnMap);
   
@@ -1147,7 +1154,8 @@ bool SolutionTests::testSolutionEvaluationBasisCache() {
   vector<int> fieldIDs = _poissonSolution_1x1->mesh()->bilinearForm()->trialVolumeIDs();
   for (vector<int>::iterator fieldIDIt=fieldIDs.begin(); fieldIDIt != fieldIDs.end(); fieldIDIt++) {
     int fieldID = *fieldIDIt;
-    _poissonExactSolution->solutionValues(expectedValues,fieldID,testPoints);
+    FunctionPtr exactFxn = _poissonExactSolution->exactFunctions().find(fieldID)->second;
+    exactFxn->values(expectedValues, basisCache);
     expectedMap[fieldID] = expectedValues;
   }
     

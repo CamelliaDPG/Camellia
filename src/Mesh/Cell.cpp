@@ -122,6 +122,20 @@ unsigned Cell::entityIndex(unsigned subcdim, unsigned subcord) {
   return _meshTopo->getEntityIndex(subcdim, nodes);
 }
 
+vector<unsigned> Cell::getEntityVertexIndices(unsigned int subcdim, unsigned int subcord) {
+  vector< unsigned > nodes;
+  if (subcdim != 0) {
+    int entityNodeCount = _cellTopo->getNodeCount(subcdim, subcord);
+    for (int node=0; node<entityNodeCount; node++) {
+      unsigned nodeIndexInCell = _cellTopo->getNodeMap(subcdim, subcord, node);
+      nodes.push_back(_vertices[nodeIndexInCell]);
+    }
+  } else {
+    nodes.push_back(_vertices[subcord]);
+  }
+  return nodes;
+}
+
 vector<unsigned> Cell::getEntityIndices(unsigned subcdim) {
   int entityCount = _cellTopo->getSubcellCount(subcdim);
   vector<unsigned> cellEntityIndices(entityCount);
@@ -254,7 +268,10 @@ RefinementBranch Cell::refinementBranchForSubcell(unsigned subcdim, unsigned sub
           // then it should be the case that the subcell entity has as generalized parent a higher-dimension subcell of currentAncestor
           pair<IndexType, unsigned> generalizedParent = _meshTopo->getEntityGeneralizedParent(subcellEntityDimension, subcellEntityIndex);
           if (generalizedParent.second <= subcellEntityDimension) {
-            cout << "Cell detected MeshTopology Internal Error: did not find higher-dimensional generalized parent...\n";
+            cout << "Cell detected MeshTopology Internal Error: did not find higher-dimensional generalized parent for entity of dimension " << subcellEntityDimension << " with entity index " << subcellEntityIndex << endl;
+            cout << "MeshTopology entity report:\n";
+            _meshTopo->printAllEntities();
+            TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Cell detected MeshTopology Internal Error: did not find higher-dimensional generalized parent for entity");
           } else {
             subcellEntityDimension = generalizedParent.second;
             subcellEntityIndex = generalizedParent.first;

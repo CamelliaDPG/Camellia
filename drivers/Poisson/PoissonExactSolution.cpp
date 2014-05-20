@@ -1,6 +1,6 @@
 // @HEADER
 //
-// Copyright © 2011 Sandia Corporation. All Rights Reserved.
+// Copyright © 2014 Nathan V. Roberts. All Rights Reserved.
 //
 // Redistribution and use in source and binary forms, with or without modification, are 
 // permitted provided that the following conditions are met:
@@ -37,26 +37,43 @@
 
 #include "PoissonBilinearForm.h"
 #include "PoissonExactSolution.h"
-#include "PoissonBilinearFormConformingTraces.h"
 
-typedef Sacado::Fad::SFad<double,2> F2; // FAD with # of ind. vars fixed at 2
-typedef Sacado::Fad::SFad< Sacado::Fad::SFad<double,2>, 2> F2_2; // same thing, but nested so we can take 2 derivatives
-//typedef Sacado::Fad::DFad< Sacado::Fad::DFad<double> > F2_2;
+#include "SpatialFilter.h"
 
-PoissonExactSolution::PoissonExactSolution(PoissonExactSolutionType type, int polyOrder, bool useConformingTraces)
- : RHS(true), BC(true) // true: legacy subclass of RHS, BC
-{
+PoissonExactSolution::PoissonExactSolution(PoissonExactSolutionType type, int polyOrder, bool useConformingTraces) {
   // poly order here means that of phi
   _polyOrder = polyOrder;
   _type = type;
-  _bc = Teuchos::rcp(this,false); // don't let the RCP own the memory
-  _rhs = Teuchos::rcp(this,false);
-  if ( ! useConformingTraces ) {
-    _bilinearForm = Teuchos::rcp(new PoissonBilinearForm());
-  } else {
-    _bilinearForm = Teuchos::rcp(new PoissonBilinearFormConformingTraces());
-  }
-  _useSinglePointBCForPHI = false;
+  _bf = PoissonBilinearForm::poissonBilinearForm(useConformingTraces);
+  this->_bilinearForm = _bf;
+  
+  FunctionPtr phi_exact = phi();
+  
+  VarFactory vf = _bf->varFactory();
+  VarPtr psi_hat_n = vf.fluxVar(PoissonBilinearForm::S_PSI_HAT_N);
+  VarPtr phi_hat = vf.traceVar(PoissonBilinearForm::S_PHI_HAT);
+  VarPtr phi = vf.fieldVar(PoissonBilinearForm::S_PHI);
+  VarPtr psi_1 = vf.fieldVar(PoissonBilinearForm::S_PSI_1);
+  VarPtr psi_2 = vf.fieldVar(PoissonBilinearForm::S_PSI_2);
+  
+  VarPtr q = vf.testVar(PoissonBilinearForm::S_Q, HGRAD);
+  
+  FunctionPtr psi_exact = phi_exact->grad();
+  FunctionPtr n = Function::normal();
+  
+  this->setSolutionFunction(phi, phi_exact);
+  this->setSolutionFunction(psi_1, psi_exact->x());
+  this->setSolutionFunction(psi_2, psi_exact->y());
+  this->setSolutionFunction(phi_hat, phi_exact);
+  this->setSolutionFunction(psi_hat_n, psi_exact * n);
+  
+  SpatialFilterPtr wholeBoundary = SpatialFilter::allSpace();
+  
+  _rhs = RHS::rhs();
+  FunctionPtr f = phi_exact->dx()->dx() + phi_exact->dy()->dy();
+  _rhs->addTerm(f * q);
+
+  setUseSinglePointBCForPHI(false); // sets _bc
 }
 
 int PoissonExactSolution::H1Order() {
@@ -64,24 +81,30 @@ int PoissonExactSolution::H1Order() {
   return _polyOrder + 1;
 }
 
-template <typename T> const T PoissonExactSolution::phi(T &x, T &y) {
+FunctionPtr PoissonExactSolution::phi() {
+  // a rewrite of the Sacado-based version above...
   // simple solution choice: let phi = (x + 2y)^_polyOrder
-  T t;
-  T integral; // over (0,1)^2 -- want to subtract this to make the average 0
+  FunctionPtr f;
+  double integral;
+  FunctionPtr x = Function::xn(1);
+  FunctionPtr y = Function::yn(1);
+  FunctionPtr sin_x = Teuchos::rcp( new Sin_x );
+  FunctionPtr cos_y = Teuchos::rcp( new Cos_y );
+  FunctionPtr sin_y = Teuchos::rcp( new Sin_y );
   switch (_type) {
     case POLYNOMIAL:
     {
-      t = 1;
+      f = Function::constant(1);
       if (_polyOrder == 0) {
-        t = 0;
+        f = Function::constant(0);
         integral = 0;
         break;
       }
       for (int i=0; i<_polyOrder; i++) {
-        t *= x + 2 * y;
+        f = f * (x + 2 * y);
       }
-      T two_to_power = 1; // power = _polyOrder + 2
-      T three_to_power = 1;
+      double two_to_power = 1; // power = _polyOrder + 2
+      double three_to_power = 1;
       for (int i=0; i<_polyOrder+2; i++) {
         two_to_power *= 2.0;
         three_to_power *= 3.0;
@@ -90,179 +113,47 @@ template <typename T> const T PoissonExactSolution::phi(T &x, T &y) {
     }
       break;
     case TRIGONOMETRIC:
-      t = sin(x) * y + 3.0 * cos(y) * x * x;
+      f = sin_x * y + 3.0 * cos_y * x * x;
       integral = 0;
       break;
     case EXPONENTIAL:
     {
-      integral = 4.18597023381589 / 4.0; // solution average as reported by Mathematica
-      t = exp(x * sin(y) );
+      integral = exp(1.0); // 4.18597023381589 / 4.0; // solution average as reported by Mathematica
+      FunctionPtr exp_x = Teuchos::rcp( new Exp_x );
+      // composed function expects a 2D vector argument as second argument...
+//      FunctionPtr exponent_arg = Function::vectorize(x * sin_y, Function::zero());
+//      f = Function::composedFunction(exp_x, exponent_arg);
+      f = exp_x;
     }
   }
-  t -= integral;
-  return t;
+  f = f - integral;
+  return f;
 }
 
-void PoissonExactSolution::setUseSinglePointBCForPHI(bool value) { 
-  _useSinglePointBCForPHI = value; 
-}
-
-double PoissonExactSolution::solutionValue(int trialID,
-                                           FieldContainer<double> &physicalPoint) {
+void PoissonExactSolution::setUseSinglePointBCForPHI(bool useSinglePointBCForPhi) {
+  FunctionPtr phi_exact = phi();
   
-  double x = physicalPoint(0);
-  double y = physicalPoint(1);
-  F2 sx(2,0,x), sy(2,1,y), sphi; // s for Sacado 
-  //PoissonExactSolutionPolynomial<F2> myExact(_polyOrder);
-	sphi = phi(sx,sy);
+  VarFactory vf = _bf->varFactory();
+  VarPtr psi_hat_n = vf.fluxVar(PoissonBilinearForm::S_PSI_HAT_N);
+  VarPtr q = vf.testVar(PoissonBilinearForm::S_Q, HGRAD);
   
-  switch(trialID) {
-    case PoissonBilinearForm::PHI:
-    case PoissonBilinearForm::PHI_HAT:
-      return sphi.val();
-    case PoissonBilinearForm::PSI_1:
-      return sphi.dx(0); // PSI_1 == d/dx (phi)
-    case PoissonBilinearForm::PSI_2:
-      return sphi.dx(1); // PSI_2 == d/dy (phi)
-    case PoissonBilinearForm::PSI_HAT_N:
-      TEUCHOS_TEST_FOR_EXCEPTION( trialID == PoissonBilinearForm::PSI_HAT_N,
-                         std::invalid_argument,
-                         "for fluxes, you must call solutionValue with unitNormal argument.");
-  }
-  TEUCHOS_TEST_FOR_EXCEPTION( true,
-                     std::invalid_argument,
-                     "solutionValues called with unknown trialID.");
-  return 0.0;
-}
+  VarPtr phi = vf.fieldVar(PoissonBilinearForm::S_PHI);
+  
+  SpatialFilterPtr wholeBoundary = SpatialFilter::allSpace();
+  
+  FunctionPtr n = Function::normal();
+  FunctionPtr psi_n_exact = phi_exact->grad() * n;
+  
+  _bc = BC::bc();
+  _bc->addDirichlet(psi_hat_n, wholeBoundary, psi_n_exact);
+  if (!useSinglePointBCForPhi) {
+    _bc->addZeroMeanConstraint(phi);
 
-double PoissonExactSolution::solutionValue(int trialID,
-                                           FieldContainer<double> &physicalPoint,
-                                           FieldContainer<double> &unitNormal) {
-  if ( trialID != PoissonBilinearForm::PSI_HAT_N ) {
-    return solutionValue(trialID,physicalPoint);
-  }
-  // otherwise, get PSI_1 and PSI_2, and the unit normal
-  double psi1 = solutionValue(PoissonBilinearForm::PSI_1,physicalPoint);
-  double psi2 = solutionValue(PoissonBilinearForm::PSI_2,physicalPoint);
-  double n1 = unitNormal(0);
-  double n2 = unitNormal(1);
-  return psi1*n1 + psi2*n2;
-}
-
-/********** RHS implementation **********/
-bool PoissonExactSolution::nonZeroRHS(int testVarID) {
-  if (testVarID == PoissonBilinearForm::Q_1) { // the vector test function, zero RHS
-    return false;
-  } else if (testVarID == PoissonBilinearForm::V_1) {
-    return true;
   } else {
-    return false; // could throw an exception here
+    _bc->addSinglePointBC(phi->ID(), phi_exact);
   }
 }
 
-void PoissonExactSolution::rhs(int testVarID, const FieldContainer<double> &physicalPoints, FieldContainer<double> &values) {
-  int numCells = physicalPoints.dimension(0);
-  int numPoints = physicalPoints.dimension(1);
-  int spaceDim = physicalPoints.dimension(2);
-  if (testVarID == PoissonBilinearForm::V_1) {
-    // then the value is (d^2/dx^2 + d^2/dy^2) ( phi )
-    values.resize(numCells,numPoints);
-    for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
-      for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
-        double x = physicalPoints(cellIndex,ptIndex,0);
-        double y = physicalPoints(cellIndex,ptIndex,1);
-        F2_2 sx(2,0,x), sy(2,1,y), sphi; // s for Sacado 
-        sx.val() = F2(2,0,x);
-        sy.val() = F2(2,1,y);
-        sphi = phi(sx,sy);/*
-        double val = sphi.val().val();
-        double dx = sphi.dx(0).val();
-        double dy = sphi.dx(1).val();
-        double dx2 = sphi.dx(0).dx(0);
-        double dy2 = sphi.dx(1).dx(1);*/
-        values(cellIndex,ptIndex) = sphi.dx(0).dx(0) + sphi.dx(1).dx(1);
-      }
-    }
-  }
-}
-
-/***************** BC Implementation *****************/
-bool PoissonExactSolution::bcsImposed(int varID){
-  // returns true if there are any BCs anywhere imposed on varID
-  return (varID == PoissonBilinearForm::PSI_HAT_N);
-  
-//  if ( ! _useSinglePointBCForPHI ) {
-//    // then we impose BCs everywhere for both trace and flux:
-//    return (varID == PoissonBilinearForm::PHI_HAT) || (varID == PoissonBilinearForm::PSI_HAT_N);
-//  } else {
-//    // otherwise, we just impose on PSI_HAT_N here, and then return true for PHI in singletonBC
-//    return (varID == PoissonBilinearForm::PSI_HAT_N);
-//  }  
-}
-
-bool PoissonExactSolution::singlePointBC(int varID) {
-  if ( ! _useSinglePointBCForPHI ) {
-    return false;
-  } else {
-    return (varID==PoissonBilinearForm::PHI);
-  }
-}
-
-bool PoissonExactSolution::imposeZeroMeanConstraint(int trialID) {
-  if ( _useSinglePointBCForPHI ) {
-    return false;
-  } else {
-    return (trialID==PoissonBilinearForm::PHI);
-  }
-}
-
-
-void PoissonExactSolution::imposeBC(int varID, FieldContainer<double> &physicalPoints,
-                               FieldContainer<double> &unitNormals,
-                               FieldContainer<double> &dirichletValues,
-                               FieldContainer<bool> &imposeHere) {
-  int numCells = physicalPoints.dimension(0);
-  int numPoints = physicalPoints.dimension(1);
-  int spaceDim = physicalPoints.dimension(2);
-  
-  TEUCHOS_TEST_FOR_EXCEPTION( ( spaceDim != 2  ),
-                     std::invalid_argument,
-                     "PoissonBCLinear expects spaceDim==2.");  
-  
-  TEUCHOS_TEST_FOR_EXCEPTION( ( dirichletValues.dimension(0) != numCells ) 
-                     || ( dirichletValues.dimension(1) != numPoints ) 
-                     || ( dirichletValues.rank() != 2  ),
-                     std::invalid_argument,
-                     "dirichletValues dimensions should be (numCells,numPoints).");
-  TEUCHOS_TEST_FOR_EXCEPTION( ( imposeHere.dimension(0) != numCells ) 
-                     || ( imposeHere.dimension(1) != numPoints ) 
-                     || ( imposeHere.rank() != 2  ),
-                     std::invalid_argument,
-                     "imposeHere dimensions should be (numCells,numPoints).");
-  Teuchos::Array<int> pointDimensions;
-  pointDimensions.push_back(2);
-  if ((varID == PoissonBilinearForm::PHI_HAT) || (varID == PoissonBilinearForm::PHI)) {
-    for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
-      for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
-        FieldContainer<double> physicalPoint(pointDimensions,
-                                             &physicalPoints(cellIndex,ptIndex,0));
-        dirichletValues(cellIndex,ptIndex) = solutionValue(PoissonBilinearForm::PHI_HAT,
-                                                           physicalPoint);
-        imposeHere(cellIndex,ptIndex) = true; // for now, just impose everywhere...
-      }
-    }
-  } else if (varID == PoissonBilinearForm::PSI_HAT_N) {
-    // value will be (1 1) \cdot n, the outward normal
-    for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
-      for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
-        FieldContainer<double> physicalPoint(pointDimensions,
-                                             &physicalPoints(cellIndex,ptIndex,0));
-        FieldContainer<double> unitNormal(pointDimensions,
-                                          &unitNormals(cellIndex,ptIndex,0));
-        dirichletValues(cellIndex,ptIndex) = solutionValue(PoissonBilinearForm::PSI_HAT_N,
-                                                           physicalPoint, unitNormal);
-        imposeHere(cellIndex,ptIndex) = true; // for now, just impose everywhere...
-      }
-    }
-  }
+Teuchos::RCP<ExactSolution> PoissonExactSolution::poissonExactPolynomialSolution(int polyOrder, bool useConformingTraces) {
+  return Teuchos::rcp( new PoissonExactSolution(POLYNOMIAL,polyOrder,useConformingTraces));
 }

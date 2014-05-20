@@ -349,6 +349,7 @@ public:
 
   FunctionPtr x();
   FunctionPtr y();
+  FunctionPtr z();
 
   bool boundaryValueOnly();
   string displayString();

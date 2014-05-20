@@ -2062,7 +2062,7 @@ void Solution::solutionValues(FieldContainer<double> &values, int trialID, Basis
       }
     }
     
-    //    cout << "solnCoeffs:\n" << solnCoeffs;
+//    cout << "solnCoeffs:\n" << *solnCoeffs;
     
     const vector<int> *dofIndices = fluxOrTrace ? &(trialOrder->getDofIndices(trialID,sideIndex))
     : &(trialOrder->getDofIndices(trialID));
@@ -2223,48 +2223,80 @@ void Solution::solutionValues(FieldContainer<double> &values, int trialID, const
       shards::CellTopology cellTopo = *(elemTypePtr->cellTopoPtr.get());
       CellTools::mapToReferenceFrame(refElemPoint,physicalPoint,physicalCellNodes,cellTopo);
       refElemPoint.resize(numPoints,spaceDim);
-      
-      int sideIndex = 0; // field variable assumed
-      
+
       Teuchos::RCP<DofOrdering> trialOrder = elemTypePtr->trialOrderPtr;
-      
-      BasisPtr basis = trialOrder->getBasis(trialID,sideIndex);
       int basisRank = trialOrder->getBasisRank(trialID);
-      int basisCardinality = basis->getCardinality();
       
-      TEUCHOS_TEST_FOR_EXCEPTION( ( basisRank==0 ) && values.rank() != 1,
-                                 std::invalid_argument,
-                                 "for scalar values, values container should be dimensioned(numPoints).");
-      TEUCHOS_TEST_FOR_EXCEPTION( ( basisRank==1 ) && values.rank() != 2,
-                                 std::invalid_argument,
-                                 "for scalar values, values container should be dimensioned(numPoints,spaceDim).");
-      TEUCHOS_TEST_FOR_EXCEPTION( basisRank==1 && values.dimension(1) != spaceDim,
-                                 std::invalid_argument,
-                                 "vector values.dimension(1) != spaceDim.");
-      TEUCHOS_TEST_FOR_EXCEPTION( physicalPoints.rank() != 2,
-                                 std::invalid_argument,
-                                 "physicalPoints.rank() != 2.");
-      TEUCHOS_TEST_FOR_EXCEPTION( physicalPoints.dimension(1) != spaceDim,
-                                 std::invalid_argument,
-                                 "physicalPoints.dimension(1) != spaceDim.");
-      TEUCHOS_TEST_FOR_EXCEPTION( _mesh->bilinearForm()->isFluxOrTrace(trialID),
-                                 std::invalid_argument,
-                                 "call the other solutionValues (with sideCellRefPoints argument) for fluxes and traces.");
+      BasisCachePtr basisCache = BasisCache::basisCacheForCell(_mesh, cellID);
+      basisCache->setRefCellPoints(refElemPoint);
+      Teuchos::Array<int> dim;
+      dim.push_back(1); // one cell
+      dim.push_back(1); // one point
       
-      Teuchos::RCP< FieldContainer<double> > basisValues;
-      basisValues = BasisEvaluation::getValues(basis,  OP_VALUE, refElemPoint);
+      for (int rank=0; rank<basisRank; rank++) {
+        dim.push_back(spaceDim);
+      }
       
-      // now, apply coefficient weights:
-      for (int dofOrdinal=0; dofOrdinal < basisCardinality; dofOrdinal++) {
-        int localDofIndex = trialOrder->getDofIndex(trialID, dofOrdinal, sideIndex);
-        if (basisRank == 0) {
-          values(physicalPointIndex) += (*basisValues)(dofOrdinal,0) * solnCoeffs(localDofIndex);
-        } else {
-          for (int i=0; i<spaceDim; i++) {
-            values(physicalPointIndex,i) += (*basisValues)(dofOrdinal,0,i) * solnCoeffs(localDofIndex);
+      Teuchos::Array<int> cellOffset = dim;
+      FieldContainer<double> cellValues(dim);
+      this->solutionValues(cellValues, trialID, basisCache);
+
+      if (basisRank == 0) {
+        values(physicalPointIndex) = cellValues(0,0);
+      } else if (basisRank == 1) {
+        for (int d=0; d<spaceDim; d++) {
+          values(physicalPointIndex,d) = cellValues(0,0,d);
+        }
+      } else if (basisRank == 2) {
+        for (int d0=0; d0<spaceDim; d0++) {
+          for (int d1=0; d1<spaceDim; d1++) {
+            values(physicalPointIndex,d0,d1) = cellValues(0,0,d0,d1);
           }
         }
+      } else {
+        cout << "unhandled basis rank.\n";
+        TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "unhandled basis rank.");
       }
+
+//      int sideIndex = 0; // field variable assumed
+//
+//      BasisPtr basis = trialOrder->getBasis(trialID,sideIndex);
+//      int basisRank = trialOrder->getBasisRank(trialID);
+//      int basisCardinality = basis->getCardinality();
+//      
+//      TEUCHOS_TEST_FOR_EXCEPTION( ( basisRank==0 ) && values.rank() != 1,
+//                                 std::invalid_argument,
+//                                 "for scalar values, values container should be dimensioned(numPoints).");
+//      TEUCHOS_TEST_FOR_EXCEPTION( ( basisRank==1 ) && values.rank() != 2,
+//                                 std::invalid_argument,
+//                                 "for scalar values, values container should be dimensioned(numPoints,spaceDim).");
+//      TEUCHOS_TEST_FOR_EXCEPTION( basisRank==1 && values.dimension(1) != spaceDim,
+//                                 std::invalid_argument,
+//                                 "vector values.dimension(1) != spaceDim.");
+//      TEUCHOS_TEST_FOR_EXCEPTION( physicalPoints.rank() != 2,
+//                                 std::invalid_argument,
+//                                 "physicalPoints.rank() != 2.");
+//      TEUCHOS_TEST_FOR_EXCEPTION( physicalPoints.dimension(1) != spaceDim,
+//                                 std::invalid_argument,
+//                                 "physicalPoints.dimension(1) != spaceDim.");
+//      TEUCHOS_TEST_FOR_EXCEPTION( _mesh->bilinearForm()->isFluxOrTrace(trialID),
+//                                 std::invalid_argument,
+//                                 "call the other solutionValues (with sideCellRefPoints argument) for fluxes and traces.");
+//      
+//      Teuchos::RCP< FieldContainer<double> > basisValues;
+//      basisValues = BasisEvaluation::getValues(basis,  OP_VALUE, refElemPoint);
+//      
+//      // now, apply coefficient weights:
+//      for (int dofOrdinal=0; dofOrdinal < basisCardinality; dofOrdinal++) {
+//        int localDofIndex = trialOrder->getDofIndex(trialID, dofOrdinal, sideIndex);
+//        if (basisRank == 0) {
+//          values(physicalPointIndex) += (*basisValues)(dofOrdinal,0) * solnCoeffs(localDofIndex);
+//        } else {
+//          for (int i=0; i<spaceDim; i++) {
+//            values(physicalPointIndex,i) += (*basisValues)(dofOrdinal,0,i) * solnCoeffs(localDofIndex);
+//          }
+//        }
+//      }
     }
   }
 }

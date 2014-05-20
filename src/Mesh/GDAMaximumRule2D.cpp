@@ -688,6 +688,7 @@ void GDAMaximumRule2D::interpretLocalData(GlobalIndexType cellID, const FieldCon
                                           FieldContainer<GlobalIndexType> &globalDofIndices, bool accumulate) {
   // for maximum rule, our interpretation is just a one-to-one mapping
   // (therefore accumulate argument is ignored)
+  // TODO: add some sanity checks for the arguments here.
   globalDofs = localDofs; // copy -- this may be a vector or a (square) matrix
   int numDofs = localDofs.dimension(0);
   globalDofIndices.resize(numDofs);

@@ -31,47 +31,18 @@
 //
 // @HEADER 
 
-#include "BilinearForm.h"
+#include "BF.h"
 
 using namespace std;
 using namespace Intrepid;
 
-class PoissonBilinearForm : public BilinearForm {
-
+class PoissonBilinearForm {
 public:
-  PoissonBilinearForm();
-
-  // implement the virtual methods declared in super:
-  const string & testName(int testID);
-  const string & trialName(int trialID);
+  // trial variable names:
+  static const string S_PHI, S_PSI_1, S_PSI_2, S_PHI_HAT, S_PSI_HAT_N;
+  // test variable names:
+  static const string S_Q, S_TAU;
   
-  bool trialTestOperator(int trialID, int testID, 
-       EOperatorExtended &trialOperator, EOperatorExtended &testOperator);
-       
-  void applyBilinearFormData(int trialID, int testID,
-                             FieldContainer<double> &trialValues, FieldContainer<double> &testValues,
-                             const FieldContainer<double> &points);
-                           
-  virtual EFunctionSpaceExtended functionSpaceForTest(int testID);
-  virtual EFunctionSpaceExtended functionSpaceForTrial(int trialID);
-
-  bool isFluxOrTrace(int trialID);
-  
- //  friend class PoissonBCLinear;
- //  friend class PoissonRHSLinear;
-
-  enum ETestIDs {
-    Q_1 = 0,
-    V_1
-  };
-  
-  enum ETrialIDs {
-    PHI_HAT = 0,
-    PSI_HAT_N,
-    PHI,
-    PSI_1,
-    PSI_2
-  };
-  
+  static BFPtr poissonBilinearForm(bool useConformingTraces = true);
 };
 #endif

@@ -179,6 +179,8 @@ public:
     typedef unsigned Permutation;
     static map< CellTopoKey, map< Permutation, Permutation > > inverseMap;
     
+    if (permutation==0) return 0;  // identity
+    
     if (inverseMap.find(cellTopo.getKey()) == inverseMap.end()) { // build lookup table
       int permCount = cellTopo.getNodePermutationCount();
       int nodeCount = cellTopo.getNodeCount();
@@ -206,37 +208,13 @@ public:
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Permutation not found");
     }
     
+//    // debugging line added because I suspect that in our tests we aren't running into a case where we have a permutation which is not its own inverse...
+//    if (inverseMap[cellTopo.getKey()][permutation] != permutation) {
+//      cout << "permutation encountered which is not its own inverse.\n";
+//    }
+    
     return inverseMap[cellTopo.getKey()][permutation];
   }
-  
-//  static unsigned matchingVolumePermutationForSidePermutation( const shards::CellTopology &volumeTopo, unsigned sideIndex, unsigned sidePermutation) {
-//    // brute force search for a volume permutation that will make side line up according to sidePermutation
-//    // (I believe this works for cases when the volume topology has permutations defined (not actually true even for Hexahedron<8>),
-//    //  but I'm not sure that this is actually legitimately useful--certainly it isn't the right thing in the case for which I originally
-//    //  concocted it.) -- NVR 11/25/13 -- still unused 2/18/14, so commenting out the method for now.
-//    int d = volumeTopo.getDimension();
-//    shards::CellTopology sideTopo = volumeTopo.getCellTopologyData(d-1, sideIndex);
-//    
-//    unsigned sideNodeCount = sideTopo.getNodeCount();
-//    unsigned volumePermutationCount = volumeTopo.getNodePermutationCount();
-//    for (unsigned volumePermutation=0; volumePermutation<volumePermutationCount; volumePermutation++) {
-//      bool matches = true;
-//      for (unsigned sideNodeIndex = 0; sideNodeIndex < sideNodeCount; sideNodeIndex++) {
-//        unsigned volumeNodeIndex = volumeTopo.getNodeMap(d-1, sideIndex, sideNodeIndex);
-//        unsigned permutedSideNodeIndex = sideTopo.getNodePermutation(sidePermutation, sideNodeIndex);
-//        unsigned permutedVolumeNodeIndex = volumeTopo.getNodeMap(d-1,sideIndex,permutedSideNodeIndex);
-//        if ( permutedVolumeNodeIndex != volumeTopo.getNodePermutation(volumePermutation, volumeNodeIndex) ) {
-//          matches = false;
-//          break;
-//        }
-//      }
-//      if (matches) {
-//        return volumePermutation;
-//      }
-//    }
-//    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "No matching permutation found");
-//    return volumePermutationCount; // an impossible (out of bounds) answer: this line just to satisfy compilers that warn about missing return values.
-//  }
   
   // this caches the lookup tables it builds.  Well worth it, since we'll have just one per cell topology
   static unsigned subcellOrdinalMap(const shards::CellTopology &cellTopo, unsigned subcdim, unsigned subcord, unsigned subsubcdim, unsigned subsubcord) {

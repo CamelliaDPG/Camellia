@@ -61,6 +61,9 @@ public:
   vector< pair< IndexType, unsigned> > getDescendantsForSide(int sideOrdinal, bool leafNodesOnly = true);
   unsigned entityIndex(unsigned subcdim, unsigned subcord);
   vector<unsigned> getEntityIndices(unsigned subcdim);
+  
+  vector<unsigned> getEntityVertexIndices(unsigned subcdim, unsigned subcord);
+  
   Teuchos::RCP<Cell> getParent();
   void setParent(Teuchos::RCP<Cell> parent);
   bool isParent();

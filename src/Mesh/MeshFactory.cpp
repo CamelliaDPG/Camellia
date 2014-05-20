@@ -178,6 +178,202 @@ MeshPtr MeshFactory::quadMeshMinRule(BilinearFormPtr bf, int H1Order, int pToAdd
   return Teuchos::rcp( new Mesh(meshTopology, bf, H1Order, pToAddTest) );
 }
 
+MeshPtr MeshFactory::rectilinearMesh(BilinearFormPtr bf, vector<double> dimensions, vector<int> elementCounts, int H1Order, int pToAddTest) {
+  int spaceDim = dimensions.size();
+  if (pToAddTest==-1) {
+    pToAddTest = spaceDim;
+  }
+  
+  if (elementCounts.size() != dimensions.size()) {
+    cout << "Element count container must match dimensions container in length.\n";
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Element count container must match dimensions container in length.\n");
+  }
+  
+  if (spaceDim == 2) {
+    return MeshFactory::quadMeshMinRule(bf, H1Order, dimensions[0], dimensions[1], elementCounts[0], elementCounts[1], pToAddTest);
+  }
+  
+  if (spaceDim != 3) {
+    cout << "For now, only spaceDim == 3 is supported by this MeshFactory method.\n";
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "For now, only spaceDim == 3 is supported by this MeshFactory method.");
+  }
+  
+  CellTopoPtr topo;
+  if (spaceDim==1) {
+    topo = Teuchos::rcp( new shards::CellTopology(shards::getCellTopologyData<shards::Line<2> >() ));
+  } else if (spaceDim==2) {
+    topo = Teuchos::rcp( new shards::CellTopology(shards::getCellTopologyData<shards::Quadrilateral<4> >() ));
+  } else if (spaceDim==3) {
+    topo = Teuchos::rcp( new shards::CellTopology(shards::getCellTopologyData<shards::Hexahedron<8> >() ));
+  } else {
+    cout << "Unsupported spatial dimension.\n";
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unsupported spatial dimension");
+  }
+  
+  
+  int numElements = 1;
+  vector<double> elemLinearMeasures(spaceDim);
+  vector<double> origin(spaceDim);
+  for (int d=0; d<spaceDim; d++) {
+    numElements *= elementCounts[d];
+    elemLinearMeasures[d] = 1.0 / elementCounts[d];
+    origin[d] = 0;
+  }
+  vector< CellTopoPtr > cellTopos(numElements, topo);
+    
+  map< vector<int>, unsigned> vertexLookup;
+  vector< vector<double> > vertices;
+  
+  for (int i=0; i<elementCounts[0]+1; i++) {
+    double x = origin[0] + elemLinearMeasures[0] * i;
+    
+    for (int j=0; j<elementCounts[1]+1; j++) {
+      double y = origin[1] + elemLinearMeasures[1] * j;
+      
+      for (int k=0; k<elementCounts[2]+1; k++) {
+        double z = origin[2] + elemLinearMeasures[2] * k;
+        
+        vector<int> vertexIndex;
+        vertexIndex.push_back(i);
+        vertexIndex.push_back(j);
+        vertexIndex.push_back(k);
+        
+        vector<double> vertex;
+        vertex.push_back(x);
+        vertex.push_back(y);
+        vertex.push_back(z);
+        
+        vertexLookup[vertexIndex] = vertices.size();
+        vertices.push_back(vertex);
+      }
+    }
+  }
+  
+  vector< vector<unsigned> > elementVertices;
+  for (int i=0; i<elementCounts[0]; i++) {
+    for (int j=0; j<elementCounts[1]; j++) {
+      for (int k=0; k<elementCounts[2]; k++) {
+        vector< vector<int> > vertexIntCoords(8, vector<int>(3));
+        vertexIntCoords[0][0] = i;
+        vertexIntCoords[0][1] = j;
+        vertexIntCoords[0][2] = k;
+        vertexIntCoords[1][0] = i+1;
+        vertexIntCoords[1][1] = j;
+        vertexIntCoords[1][2] = k;
+        vertexIntCoords[2][0] = i+1;
+        vertexIntCoords[2][1] = j+1;
+        vertexIntCoords[2][2] = k;
+        vertexIntCoords[3][0] = i;
+        vertexIntCoords[3][1] = j+1;
+        vertexIntCoords[3][2] = k;
+        vertexIntCoords[4][0] = i;
+        vertexIntCoords[4][1] = j;
+        vertexIntCoords[4][2] = k+1;
+        vertexIntCoords[5][0] = i+1;
+        vertexIntCoords[5][1] = j;
+        vertexIntCoords[5][2] = k+1;
+        vertexIntCoords[6][0] = i+1;
+        vertexIntCoords[6][1] = j+1;
+        vertexIntCoords[6][2] = k+1;
+        vertexIntCoords[7][0] = i;
+        vertexIntCoords[7][1] = j+1;
+        vertexIntCoords[7][2] = k+1;
+        
+        vector<unsigned> elementVertexOrdinals;
+        for (int n=0; n<8; n++) {
+          elementVertexOrdinals.push_back(vertexLookup[vertexIntCoords[n]]);
+        }
+        
+        elementVertices.push_back(elementVertexOrdinals);
+      }
+    }
+  }
+  
+  MeshGeometryPtr geometry = Teuchos::rcp( new MeshGeometry(vertices, elementVertices, cellTopos));
+
+  MeshTopologyPtr meshTopology = Teuchos::rcp( new MeshTopology(geometry) );
+  
+  return Teuchos::rcp( new Mesh(meshTopology, bf, H1Order, pToAddTest) );
+
+  // earlier attempt to handle all dimensions is below.  Part of the problem is that the quad
+  // node ordering isn't tensor-product (it's counterclockwise).  This makes dimension-independent code
+  // extra difficult.
+  
+//  vector< vector<double> > lineDivisions;
+//  vector< vector<double> > vertices;
+//
+//  vector< vector<int> > vertexIndices;
+//  
+//  // following for loop does a Cartesian product of the dimensions
+//  for (int d=0; d<spaceDim; d++) {
+//    vector<double> divisions;
+//    vector< vector<double> > newVertices;
+//    vector< vector<int> > newVertexIndices;
+//    for (int i=0; i<elementCounts[d] + 1; i++) {
+//      double xd_i = origin[d] + i * elemLinearMeasures[d];
+//      divisions.push_back(xd_i);
+//      if (d==0) {
+//        vector<int> vertexOrdinal(1,i);
+//        newVertexIndices.push_back(vertexOrdinal);
+//        newVertices.push_back(vector<double>(1,xd_i));
+//      } else {
+//        for (int j=0; j<vertices.size(); j++) { // these don't have a d-dimensional entry
+//          vector<double> vertex = vertices[j];
+//          vertex.push_back(xd_i);
+//          newVertices.push_back(vertex);
+//          
+//          vector<int> vertexIndex = vertexIndices[j];
+//          vertexIndex.push_back(i);
+//          newVertexIndices.push_back(vertexIndex);
+//        }
+//      }
+//    }
+//    vertices = newVertices;
+//    vertexIndices = newVertexIndices;
+//    lineDivisions.push_back(divisions);
+//  }
+//
+//  map< vector<int>, int> vertexOrdinalLookup;
+//  for (int i=0; i<vertexIndices.size(); i++) {
+//    vertexOrdinalLookup[vertexIndices[i]] = i;
+//  }
+//
+//  for (int i=0; i<vertexIndices.size(); i++) {
+//    vector<int> vertexIndex = vertexIndices[i];
+//    bool onMeshBackBoundary = false;
+//    for (int d=0; d<spaceDim; d++) {
+//      if (vertexIndex[d] == elementCounts[d]) {
+//        onMeshBackBoundary = true;
+//      }
+//    }
+//    if (onMeshBackBoundary) continue;
+//    // otherwise, we can build an element with this vertex as its bottom/left/near corner
+//    
+//    vector< vector<int> > elementVertexIndices;
+//    for (int d=0; d<spaceDim; d++) {
+//      vector< vector<int> > newElementVertexIndices;
+//      if (d==0) {
+//        vector<int> vi_d0(1,vertexIndex[d]);
+//        vector<int> vi_d1(1,vertexIndex[d]+1);
+//        newElementVertexIndices.push_back(vi_d0);
+//        newElementVertexIndices.push_back(vi_d1);
+//      } else {
+//        for (int j=0; j<elementVertexIndices.size(); j++) {
+//          vector<int> vj = elementVertexIndices[j];
+//          vector<int> vj_d0 = vj;
+//          vj_d0.push_back(<#const value_type &__x#>)
+//          vector<int> vj_d1 = vj;
+//          
+//        }
+//      }
+//      elementVertexIndices = newElementVertexIndices;
+//    }
+//    
+//    vector< int > elementVertexOrdinals;
+//    
+//  }
+}
+
 MeshGeometryPtr MeshFactory::shiftedHemkerGeometry(double xLeft, double xRight, double meshHeight, double cylinderRadius) {
   return shiftedHemkerGeometry(xLeft, xRight, -meshHeight/2.0, meshHeight/2.0, cylinderRadius);
 }

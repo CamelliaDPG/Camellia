@@ -38,10 +38,6 @@
 
 #include "PoissonExactSolution.h"
 #include "PoissonBilinearForm.h"
-#include "PoissonExactSolutionLinear.h"
-#include "PoissonExactSolutionQuadratic.h"
-#include "PoissonExactSolutionCubic.h"
-#include "PoissonExactSolutionQuartic.h"
 #include "ElementTypeFactory.h"
 
 #include "ConfusionBilinearForm.h"
@@ -51,8 +47,6 @@
 #include "MeshTestUtility.h"
 
 #include "Mesh.h"
-#include "PoissonRHSLinear.h"
-#include "PoissonBCLinear.h"
 #include "MathInnerProduct.h"
 #include "Solution.h"
 #include "Element.h"
@@ -75,6 +69,7 @@
 #include "BC.h"
 #include "BF.h"
 
+#include "CamelliaCellTools.h"
 
 using namespace Intrepid;
 
@@ -181,12 +176,18 @@ void MeshTestSuite::runTests(int &numTestsRun, int &numTestsPassed) {
 bool MeshTestSuite::neighborBasesAgreeOnSides(Teuchos::RCP<Mesh> mesh, const FieldContainer<double> &testPointsRefCoords,
                                               bool reportErrors) {
   // iterates through all active elements, and checks that each edge agrees with its neighbor basis.
-  // first pass is just for PatchBasis, but intent is to extend to apply to MultiBasis, too.
+  
+  // NOTE that this will fail to check certain sides in a general 3+D anisotropic mesh: specifically, where neighbors are anisotropically refined in different directions.
+  
+  // NOTE also that this only checks trace bases right now.  (Both this and the above should not be too hard to remedy.)
   
   bool success = true;
   
-  double tol = 2e-15; // small tolerance
+  double tol = 1e-12;
   double maxDiff = 0.0;
+  
+  unsigned spaceDim = mesh->getTopology()->getSpaceDim();
+  unsigned sideDim = spaceDim - 1;
   
   int numPoints = testPointsRefCoords.dimension(0);
   
@@ -195,92 +196,262 @@ bool MeshTestSuite::neighborBasesAgreeOnSides(Teuchos::RCP<Mesh> mesh, const Fie
   FieldContainer<double> neighborTestPointsRefCoords(testPointsRefCoords); // alloc the right size container
   FieldContainer<double> ancestorTestPointsRefCoords(testPointsRefCoords); // alloc the right size container
 
-  vector<int> fluxIDs = mesh->bilinearForm()->trialBoundaryIDs();
+  GlobalDofAssignmentPtr gda = mesh->globalDofAssignment();
+  
+  vector<int> traceIDs = mesh->bilinearForm()->trialBoundaryIDs();
   vector< ElementPtr > activeElements = mesh->activeElements();
   int numElements = activeElements.size();
   for (int cellIndex=0; cellIndex<numElements; cellIndex++) {
     Teuchos::RCP<Element> elem = activeElements[cellIndex];
     DofOrderingPtr trialOrder = elem->elementType()->trialOrderPtr;
     int cellID = elem->cellID();
+    
+    CellPtr cell = mesh->getTopology()->getCell(cellID);
     int numSides = elem->numSides();
     
-    for (int sideIndex=0; sideIndex < numSides; sideIndex++) {
-      int neighborSideIndex;
-      Teuchos::RCP<Element> neighbor = mesh->ancestralNeighborForSide(elem,sideIndex,neighborSideIndex);
+    BasisCachePtr cellBasisCache = BasisCache::basisCacheForCell(mesh, cellID);
+    
+    for (int sideOrdinal=0; sideOrdinal < numSides; sideOrdinal++) {
+      int neighborSideOrdinal;
+      Teuchos::RCP<Element> neighbor = mesh->ancestralNeighborForSide(elem,sideOrdinal,neighborSideOrdinal);
       if ( (neighbor.get() == NULL) || neighbor->isParent() ) { // boundary or broken neighbor
         // if broken neighbor, we'll handle this element when we handle neighbor's active descendants.
         continue;
       }
       DofOrderingPtr neighborTrialOrder = neighbor->elementType()->trialOrderPtr;
-      int ancestorCellID = neighbor->getNeighborCellID(neighborSideIndex);
-      int subSideIndexInNeighbor = -1;
-      // because of the above, we can assume, below, that elem is the small guy if the two aren't peers.
-      ancestorTestPointsRefCoords = testPointsRefCoords;
-      int ancestorSideIndex = sideIndex; // if necessary, we'll walk up the family tree to the real ancestor, getting the right sideIndices along the way...
-      if ( ancestorCellID != cellID ) { // i.e. the two are *not* peers: elem small, neighbor big
-        // then we need to map the coords into ancestor's ref space
-        // simplest (though not most efficient!) to do this by iteratively mapping into parent's space
-        Teuchos::RCP<Element> currentElement = mesh->getElement(cellID);
-        while (currentElement->cellID() != ancestorCellID) {
-          FieldContainer<double> oldAncestorTestPointsRefCoords = ancestorTestPointsRefCoords;
-          currentElement->getSidePointsInParentRefCoords(ancestorTestPointsRefCoords, ancestorSideIndex,
-                                                         oldAncestorTestPointsRefCoords);
-          ancestorSideIndex = currentElement->parentSideForSideIndex(ancestorSideIndex);
-          currentElement = mesh->getElement(currentElement->getParent()->cellID());
-        }
-        vector< pair<int,int> > descendantsForSide = mesh->getElement(ancestorCellID)->getDescendantsForSide(ancestorSideIndex);
-        int subSideIndexInAncestor = 0;
-        for (vector< pair<int,int> >::iterator descIt = descendantsForSide.begin(); descIt != descendantsForSide.end();
-             descIt++, subSideIndexInAncestor++) {
-          if (descIt->first == cellID) {
-            subSideIndexInNeighbor = GDAMaximumRule2D::neighborChildPermutation(subSideIndexInAncestor, descendantsForSide.size());
-          }
-        }
+      
+      CellPtr neighborCell = mesh->getTopology()->getCell(neighbor->cellID());
+      
+      // NEW STRATEGY (dimensionally independent, and independent of max/min rule choice):
+      /*
+       - we know here that neighbor is at least as large as the cell.
+       - therefore, we ask the cell for the RefinementBranch which will reconcile it to its neighbor on this side
+       - then we restrict said RefinementBranch to the appropriate (ancestral) side
+       - we map the test points from the leaf of the side RefinementBranch to the reference space for the ancestor
+       - we then set the "physical" cell nodes for a BasisCache on the ancestor according to their relative permutation.
+       - the "physical cubature points" on this BasisCache will then be reference points for the neighbor's side
+       - for each trace variable, evaluate both bases at the appropriate points to determine the element-local discretization along that side.
+       - use the mesh's GDA to map each set of local values to global values.
+       */
+      
+      RefinementBranch cellRefBranch = cell->refinementBranchForSide(sideOrdinal);
+      unsigned ancestralSideOrdinal = cell->ancestralSubcellOrdinalAndDimension(sideDim, sideOrdinal).first;
+      
+      CellPtr ancestralCell = cell->ancestralCellForSubcell(sideDim, sideOrdinal);
+      
+      RefinementBranch sideRefBranch = RefinementPattern::subcellRefinementBranch(cellRefBranch, sideDim, ancestralSideOrdinal);
+
+      shards::CellTopology sideTopo = cell->topology()->getBaseCellTopologyData(sideDim, sideOrdinal);
+      BasisCachePtr sideTopoCache = Teuchos::rcp( new BasisCache(sideTopo,1,false) );
+      sideTopoCache->setRefCellPoints(testPointsRefCoords);
+      
+      FieldContainer<double> fineSideRefNodes;
+      if (sideRefBranch.size() > 0) {
+        fineSideRefNodes = RefinementPattern::descendantNodesRelativeToAncestorReferenceCell(sideRefBranch);
+      } else {
+        fineSideRefNodes.resize(sideTopo.getVertexCount(),sideTopo.getDimension());
+        CamelliaCellTools::refCellNodesForTopology(fineSideRefNodes, sideTopo);
+      }
+      fineSideRefNodes.resize(1,fineSideRefNodes.dimension(0),fineSideRefNodes.dimension(1));
+      sideTopoCache->setPhysicalCellNodes(fineSideRefNodes, vector<GlobalIndexType>(), false);
+      
+      FieldContainer<double> testPointsInAncestralSide = sideTopoCache->getPhysicalCubaturePoints();
+      // strip off cell dimension:
+      testPointsInAncestralSide.resize(testPointsInAncestralSide.dimension(1),testPointsInAncestralSide.dimension(2));
+      
+      shards::CellTopology ancestralSideTopo = ancestralCell->topology()->getBaseCellTopologyData(sideDim, ancestralSideOrdinal);
+      BasisCachePtr ancestralSideTopoCache = Teuchos::rcp(new BasisCache(ancestralSideTopo,1,false));
+      ancestralSideTopoCache->setRefCellPoints(testPointsInAncestralSide);
+      
+      // determine permutation of ancestral reference space to get from ancestor's view to neighbor's:
+      unsigned ancestralPermutation = ancestralCell->subcellPermutation(sideDim, ancestralSideOrdinal);
+      unsigned neighborPermutation = neighborCell->subcellPermutation(sideDim, neighborSideOrdinal);
+      unsigned neighborPermutationInverse = CamelliaCellTools::permutationInverse(ancestralSideTopo, neighborPermutation);
+      unsigned composedPermutation = CamelliaCellTools::permutationComposition(ancestralSideTopo, neighborPermutationInverse, ancestralPermutation);
+      
+      // when you set physical cell nodes according to the coarse-to-fine permutation, then the reference-to-physical map
+      // is fine-to-coarse (which is what we want).  Because the composedPermutation is fine-to-coarse, we want its inverse:
+      unsigned composedPermutationInverse = CamelliaCellTools::permutationInverse(ancestralSideTopo, composedPermutation);
+      
+      FieldContainer<double> permutedAncestralSideReferenceNodes(ancestralSideTopo.getVertexCount(),sideDim);
+      CamelliaCellTools::refCellNodesForTopology(permutedAncestralSideReferenceNodes, ancestralSideTopo, composedPermutationInverse);
+      // add cell dimension:
+      permutedAncestralSideReferenceNodes.resize(1,permutedAncestralSideReferenceNodes.dimension(0),permutedAncestralSideReferenceNodes.dimension(1));
+      ancestralSideTopoCache->setPhysicalCellNodes(permutedAncestralSideReferenceNodes, vector<GlobalIndexType>(), false);
+      
+      FieldContainer<double> neighborRefPoints = ancestralSideTopoCache->getPhysicalCubaturePoints();
+      // strip cell dimension:
+      neighborRefPoints.resize(neighborRefPoints.dimension(1),neighborRefPoints.dimension(2));
+      
+      BasisCachePtr sideCache = cellBasisCache->getSideBasisCache(sideOrdinal);
+      sideCache->setRefCellPoints(testPointsRefCoords);
+      
+      BasisCachePtr neighborCache = BasisCache::basisCacheForCell(mesh, neighbor->cellID());
+      BasisCachePtr neighborSideCache = neighborCache->getSideBasisCache(neighborSideOrdinal);
+      neighborSideCache->setRefCellPoints(neighborRefPoints);
+      
+//      cout << "cell physicalCubature points:\n" << sideCache->getPhysicalCubaturePoints();
+//      cout << "neighbor physicalCubaturePoints:\n" << neighborSideCache->getPhysicalCubaturePoints();
+      
+      // sanity check: physicalCubaturePoints agree:
+      double maxCubatureDiff;
+      if (! fcsAgree(sideCache->getPhysicalCubaturePoints(), neighborSideCache->getPhysicalCubaturePoints(), 1e-15, maxCubatureDiff)) {
+        cout << "TEST ERROR: physical cubature points differ.\n";
+        success = false;
+        return success;
       }
       
-      mesh->getElement(ancestorCellID)->getSidePointsInNeighborRefCoords(neighborTestPointsRefCoords, ancestorSideIndex,
-                                                                         ancestorTestPointsRefCoords);
-      
-      for (vector<int>::iterator fluxIt = fluxIDs.begin(); fluxIt != fluxIDs.end(); fluxIt++) {
-        int fluxID = *fluxIt;
-        BasisPtr basis = trialOrder->getBasis(fluxID,sideIndex);
-        BasisPtr neighborBasis = neighborTrialOrder->getBasis(fluxID,neighborSideIndex);
-        FieldContainer<double> values(basis->getCardinality(),numPoints);
-        FieldContainer<double> neighborValues(neighborBasis->getCardinality(),numPoints);
-        basis->getValues(values,testPointsRefCoords,Intrepid::OPERATOR_VALUE);
-        neighborBasis->getValues(neighborValues,neighborTestPointsRefCoords,Intrepid::OPERATOR_VALUE);
-        bool failedHere = false;
-        for (int dofOrdinal=0; dofOrdinal < basis->getCardinality(); dofOrdinal++) {
-          int neighborDofOrdinal = GDAMaximumRule2D::neighborDofPermutation(dofOrdinal,basis->getCardinality());
-          if (BasisFactory::isMultiBasis(neighborBasis)) {
-            neighborDofOrdinal = ((MultiBasis<>*) neighborBasis.get())->relativeToAbsoluteDofOrdinal(neighborDofOrdinal,subSideIndexInNeighbor);
-          }
-          for (int pointIndex = 0; pointIndex < numPoints; pointIndex++) {
-            double diff = abs(neighborValues(neighborDofOrdinal,pointIndex) - values(dofOrdinal,pointIndex));
-            if (diff > tol) {
-              success = false;
-              failedHere = true;
-              if (reportErrors) {
-                cout << "values for point " << pointIndex << " and my dofOrdinal " << dofOrdinal;
-                cout << " differ from those for neighbor dofOrdinal " << neighborDofOrdinal;
-                cout << ": " << values(dofOrdinal,pointIndex) << " != " << neighborValues(neighborDofOrdinal,pointIndex) << endl;
+      for (vector<int>::iterator traceIt = traceIDs.begin(); traceIt != traceIDs.end(); traceIt++) {
+        int traceID = *traceIt;
+        BasisPtr basis = trialOrder->getBasis(traceID,sideOrdinal);
+        BasisPtr neighborBasis = neighborTrialOrder->getBasis(traceID,neighborSideOrdinal);
+        
+        FieldContainer<double> cellLocalValues = *sideCache->getTransformedValues(basis, OP_VALUE);
+        FieldContainer<double> neighborLocalValues = *neighborSideCache->getTransformedValues(neighborBasis, OP_VALUE);
+        
+//        cout << "cellLocalValues:\n" << cellLocalValues;
+//        cout << "neighborLocalValues:\n" << neighborLocalValues;
+        
+        FieldContainer<double> cellGlobalValues, neighborGlobalValues;
+        FieldContainer<GlobalIndexType> cellGlobalDofIndices, neighborGlobalDofIndices;
+        
+        Teuchos::Array<int> dim;
+        cellLocalValues.dimensions(dim); // CFP[D,D,...]
+        dim.remove(2); // CF[D,D,...]
+        dim.remove(0); // F[D,D,...]
+        int numValuesPerPoint = 1;
+        for (int i=1; i<dim.size(); i++) {
+          numValuesPerPoint *= dim[i];
+        }
+        Teuchos::Array<int> valueEnumeration;
+        cellLocalValues.dimensions(valueEnumeration);
+        for (int i=0; i<valueEnumeration.size(); i++) {
+          valueEnumeration[i] = 0;
+        }
+
+        FieldContainer<double> cellLocalValuesForPoint(trialOrder->totalDofs());
+        FieldContainer<double> neighborLocalValuesForPoint(neighborTrialOrder->totalDofs());
+        
+        for (int ptOrdinal=0; ptOrdinal < numPoints; ptOrdinal++) {
+          valueEnumeration[2] = ptOrdinal;
+          for (int i=0; i<numValuesPerPoint; i++) {
+            for (int dofOrdinal=0; dofOrdinal < basis->getCardinality(); dofOrdinal++) {
+              valueEnumeration[1] = dofOrdinal;
+              unsigned valueOffset = cellLocalValues.getEnumeration(valueEnumeration);
+              unsigned localDofIndex = trialOrder->getDofIndex(traceID, dofOrdinal, sideOrdinal);
+              cellLocalValuesForPoint[localDofIndex] = cellLocalValues[valueOffset+i];
+            }
+            for (int dofOrdinal=0; dofOrdinal < neighborBasis->getCardinality(); dofOrdinal++) {
+              valueEnumeration[1] = dofOrdinal;
+              unsigned valueOffset = neighborLocalValues.getEnumeration(valueEnumeration);
+              unsigned localDofIndex = neighborTrialOrder->getDofIndex(traceID, dofOrdinal, neighborSideOrdinal);
+              neighborLocalValuesForPoint[localDofIndex] = neighborLocalValues[valueOffset+i];
+            }
+
+//          cout << "cellLocalValuesForPoint:\n" << cellLocalValuesForPoint;
+//          cout << "neighborLocalValuesForPoint:\n" << neighborLocalValuesForPoint;
+          
+            gda->interpretLocalData(cellID, cellLocalValuesForPoint, cellGlobalValues, cellGlobalDofIndices);
+            gda->interpretLocalData(neighbor->cellID(), neighborLocalValuesForPoint, neighborGlobalValues, neighborGlobalDofIndices);
+            
+            // it's a bit hackish, but we do know that the global values we're interested in are the non-zero ones
+            // so we eliminate the zeros:
+            
+            double zeroTol = 1e-14; // anything less than this is considered to be zero
+            vector<int> nonzeroOrdinals;
+            for (int i=0; i<cellGlobalValues.size(); i++) {
+              if (abs(cellGlobalValues[i]) > zeroTol) {
+                nonzeroOrdinals.push_back(i);
               }
             }
-            maxDiff = max(diff,maxDiff);
+            FieldContainer<double> cellGlobalValuesSideRestriction(nonzeroOrdinals.size());
+            FieldContainer<GlobalIndexType> cellGlobalDofIndicesSideRestriction(nonzeroOrdinals.size());
+            for (int i=0; i<nonzeroOrdinals.size(); i++) {
+              cellGlobalValuesSideRestriction(i) = cellGlobalValues(nonzeroOrdinals[i]);
+              cellGlobalDofIndicesSideRestriction(i) = cellGlobalDofIndices(nonzeroOrdinals[i]);
+            }
+            
+            nonzeroOrdinals.clear();
+            for (int i=0; i<neighborGlobalValues.size(); i++) {
+              if (abs(neighborGlobalValues[i]) > zeroTol) {
+                nonzeroOrdinals.push_back(i);
+              }
+            }
+            FieldContainer<double> neighborGlobalValuesSideRestriction(nonzeroOrdinals.size());
+            FieldContainer<GlobalIndexType> neighborGlobalDofIndicesSideRestriction(nonzeroOrdinals.size());
+            for (int i=0; i<nonzeroOrdinals.size(); i++) {
+              neighborGlobalValuesSideRestriction(i) = neighborGlobalValues(nonzeroOrdinals[i]);
+              neighborGlobalDofIndicesSideRestriction(i) = neighborGlobalDofIndices(nonzeroOrdinals[i]);
+            }
+
+            // first, check that we agree on the number of global dof indices.
+            if (neighborGlobalDofIndicesSideRestriction.size() != cellGlobalDofIndicesSideRestriction.size()) {
+              success = false;
+              cout << "neighborBasesAgreeOnSides() failure: # of global dof indices for cell and neighbor do not match.\n";
+              cout << "cellGlobalDofIndicesSideRestriction:\n" << cellGlobalDofIndicesSideRestriction;
+              cout << "neighborGlobalDofIndicesSideRestriction:\n" << neighborGlobalDofIndicesSideRestriction;
+            
+              cout << "cellGlobalDofIndices:\n" << cellGlobalDofIndices;
+              cout << "neighborGlobalDofIndices:\n" << neighborGlobalDofIndices;
+              
+              cout << "cellGlobalValues:\n" << cellGlobalValues;
+              cout << "neighborGlobalValues:\n" << neighborGlobalValues;
+              continue;
+            }
+            
+            // replace the containers containing dofs not of interest with the side containers that have
+            cellGlobalDofIndices = cellGlobalDofIndicesSideRestriction;
+            cellGlobalValues = cellGlobalValuesSideRestriction;
+            
+            neighborGlobalDofIndices = neighborGlobalDofIndicesSideRestriction;
+            neighborGlobalValues = neighborGlobalValuesSideRestriction;
+            
+            // we do allow that the dofIndices lists are in differing order.  So we build a little lookup table here:
+            map<GlobalIndexType, double > cellValues;
+            for (int dofOrdinal=0; dofOrdinal<cellGlobalDofIndices.size(); dofOrdinal++) {
+              GlobalIndexType globalDofIndex = cellGlobalDofIndices(dofOrdinal);
+              cellValues[globalDofIndex] = cellGlobalValues(dofOrdinal);
+            }
+            
+            bool failedHere = false;
+            for (int dofOrdinal=0; dofOrdinal<neighborGlobalDofIndices.size(); dofOrdinal++) {
+              GlobalIndexType globalDofIndex = neighborGlobalDofIndices(dofOrdinal);
+              if (cellValues.find(globalDofIndex) == cellValues.end()) {
+                cout << "neighborBasesAgreeOnSides() failure: cell and neighbor do not agree on global dof indices.\n";
+                success = false;
+                continue;
+              }
+              double value = neighborGlobalValues(dofOrdinal);
+              double cellValue = cellValues[globalDofIndex];
+              double diff = abs( value - cellValue );
+              if (diff > tol) {
+                success = false;
+                failedHere = true;
+                maxDiff = max(diff,maxDiff);
+                if (reportErrors) {
+                  cout << "values for point " << ptOrdinal << " and globalDofIndex " << globalDofIndex;
+                  cout << " differ: " << value << " != " << cellValue << endl;
+                }
+              }
+            }
+            if (failedHere && reportErrors) {
+              cout << "cellID " << cellID << "'s testPoints:\n" << testPointsRefCoords;
+              
+              cout << "neighbor cellID " << neighbor->cellID() << "'s testPoints:\n" << neighborTestPointsRefCoords;
+              // for debugging, some console output:
+              cout << "values for cellID " << cellID << ", traceID " << traceID << ", side " << sideOrdinal << ":\n";
+              cout << cellGlobalValues;
+              
+              cout << "values for neighbor cellID " << neighbor->cellID() << ", traceID " << traceID << ", side " << neighborSideOrdinal << ":\n";
+              cout << neighborGlobalValues;
+              
+              cout << "cellGlobalDofIndices:\n" << cellGlobalDofIndices;
+              cout << "neighborGlobalDofIndices:\n" << neighborGlobalDofIndices;
+              cout << "**** neighborBasesAgreeOnSides suppressing further output re. disagreement ****\n\n";
+              
+              reportErrors = false;
+            }
           }
-        }
-        if (failedHere && reportErrors) {
-          cout << "cellID " << cellID << "'s testPoints:\n" << testPointsRefCoords;
-          
-          cout << "neighbor cellID " << neighbor->cellID() << "'s testPoints:\n" << neighborTestPointsRefCoords;
-          // for debugging, some console output:
-          cout << "values for cellID " << cellID << ", fluxID " << fluxID << ", side " << sideIndex << ":\n";
-          cout << values;
-          
-          cout << "values for neighbor cellID " << neighbor->cellID() << ", fluxID " << fluxID << ", side " << neighborSideIndex << ":\n";
-          cout << neighborValues;
-          cout << "**** neighborBasesAgreeOnSides suppressing further output re. disagreement ****\n\n";
-          reportErrors = false;
         }
       }
     }
@@ -361,7 +532,9 @@ bool MeshTestSuite::testFluxIntegration() {
     
     FieldContainer<double> integral(myMesh->numElements());
     
-    solution.integrateFlux(integral,PoissonBilinearForm::PHI_HAT);
+    VarPtr phi_hat = PoissonBilinearForm::poissonBilinearForm()->varFactory().traceVar(PoissonBilinearForm::S_PHI_HAT);
+    
+    solution.integrateFlux(integral,phi_hat->ID());
     
     double diff = abs(expectedValues[i] - integral(0));
     
@@ -414,7 +587,9 @@ bool MeshTestSuite::testFluxNorm() {
     Solution solution(myMesh, exactSolution.ExactSolution::bc(), exactSolution.ExactSolution::rhs(), ip);
     // Poisson is set up such that the solution should be x + 2y
     
-    double L2normFlux = exactSolution.L2NormOfError(solution, PoissonBilinearForm::PHI_HAT);
+    VarPtr phi_hat = PoissonBilinearForm::poissonBilinearForm()->varFactory().traceVar(PoissonBilinearForm::S_PHI_HAT);
+    
+    double L2normFlux = exactSolution.L2NormOfError(solution, phi_hat->ID());
     //cout << "L2 norm of phi_hat " << L2normFlux << endl;
     
     double normDiff = abs(expectedValues[i] - L2normFlux);
@@ -425,7 +600,7 @@ bool MeshTestSuite::testFluxNorm() {
     }
     solution.solve();
     
-    double fluxDiff = exactSolution.L2NormOfError(solution, PoissonBilinearForm::PHI_HAT);
+    double fluxDiff = exactSolution.L2NormOfError(solution, phi_hat->ID());
     fluxDiff = fluxDiff / L2normFlux;
     
     //cout << "Relative L2 Error in phi_hat solution of Poisson: " << fluxDiff << endl;
@@ -469,11 +644,15 @@ bool MeshTestSuite::testSacadoExactSolution() {
       
       double diff;
       
-      double L2norm = exactSolution.L2NormOfError(solution, PoissonBilinearForm::PHI);
-      double L2normFlux = exactSolution.L2NormOfError(solution, PoissonBilinearForm::PHI_HAT);
+      VarPtr phi = PoissonBilinearForm::poissonBilinearForm()->varFactory().fieldVar(PoissonBilinearForm::S_PHI);
+      
+      VarPtr phi_hat = PoissonBilinearForm::poissonBilinearForm()->varFactory().traceVar(PoissonBilinearForm::S_PHI_HAT);
+      
+      double L2norm = exactSolution.L2NormOfError(solution, phi->ID());
+      double L2normFlux = exactSolution.L2NormOfError(solution, phi_hat->ID());
       
       solution.solve();
-      diff = exactSolution.L2NormOfError(solution, PoissonBilinearForm::PHI);
+      diff = exactSolution.L2NormOfError(solution, phi->ID());
       //cout << "L2 Error in solution of phi Poisson (Sacado version): " << diff << endl;
       diff = diff / L2norm;
       
@@ -483,7 +662,7 @@ bool MeshTestSuite::testSacadoExactSolution() {
         cout << "Failure: Error in phi solution of Poisson (Sacado version) was " << diff << "; tolerance set to " << tol << endl;
       }
       //cout << "L2 norm of phi_hat " << L2normFlux << endl;
-      double fluxDiff = exactSolution.L2NormOfError(solution, PoissonBilinearForm::PHI_HAT);
+      double fluxDiff = exactSolution.L2NormOfError(solution, phi_hat->ID());
       fluxDiff = fluxDiff / L2normFlux;
       
       //cout << "Relative L2 Error in phi_hat solution of Poisson (Sacado version): " << fluxDiff << endl;
@@ -597,27 +776,22 @@ bool MeshTestSuite::testExactSolution(bool checkL2Norm) {
   quadPoints(3,0) = 0.0;
   quadPoints(3,1) = 1.0;
   
-  Teuchos::RCP<PoissonExactSolutionLinear> exactLinear = Teuchos::rcp(new PoissonExactSolutionLinear());
-  Teuchos::RCP<PoissonExactSolutionQuadratic> exactQuadratic = Teuchos::rcp(new PoissonExactSolutionQuadratic());
-  Teuchos::RCP<PoissonExactSolutionCubic> exactCubic = Teuchos::rcp(new PoissonExactSolutionCubic());
-  Teuchos::RCP<PoissonExactSolutionQuartic> exactQuartic = Teuchos::rcp(new PoissonExactSolutionQuartic());
+  Teuchos::RCP<ExactSolution> exactLinear = PoissonExactSolution::poissonExactPolynomialSolution(1);
+  Teuchos::RCP<ExactSolution> exactQuadratic = PoissonExactSolution::poissonExactPolynomialSolution(2);
+  Teuchos::RCP<ExactSolution> exactCubic = PoissonExactSolution::poissonExactPolynomialSolution(3);
+  Teuchos::RCP<ExactSolution> exactQuartic = PoissonExactSolution::poissonExactPolynomialSolution(4);
   
   //cout << "************************************************\n";
   //exactCubic->bilinearForm()->printTrialTestInteractions();
   //cout << "************************************************\n";
   
   vector<Teuchos::RCP<ExactSolution> > exactSolutions;
-  vector<double> expectedPhiNorms;
   exactSolutions.push_back(exactLinear);
-  expectedPhiNorms.push_back(sqrt(7.0/6.0)); // sqrt(integral of (x+y)^2 over (0,1)^2) -- thanks, Mathematica!
   exactSolutions.push_back(exactQuadratic);
-  expectedPhiNorms.push_back(sqrt(28.0/45.0)); // sqrt(integral of (x^2+y^2)^2 over (0,1)^2) -- thanks, Mathematica!
   exactSolutions.push_back(exactCubic);
-  expectedPhiNorms.push_back(sqrt(27.0/28.0));  // sqrt(integral of (x^3+2y^3)^2 over (0,1)^2) -- thanks, Mathematica!
   exactSolutions.push_back(exactQuartic);
-  expectedPhiNorms.push_back(sqrt(143.0/504.0)); // sqrt(integral of (x^4+x^3 y)^2 over (0,1)^2) -- thanks, Mathematica!
   
-  // TODO: figure out why the quartic and cubic fail on the unit cell but not on the ref quad
+  VarPtr phi = PoissonBilinearForm::poissonBilinearForm()->varFactory().fieldVar(PoissonBilinearForm::S_PHI);
   
   for (int i=0; i<exactSolutions.size(); i++) {
     Teuchos::RCP<ExactSolution> exactSolution = exactSolutions[i];
@@ -633,8 +807,9 @@ bool MeshTestSuite::testExactSolution(bool checkL2Norm) {
     
     if (checkL2Norm) {
       // don't solve; just compute the error compared to a 0 solution
-      double phiError = exactSolution->L2NormOfError(solution, PoissonBilinearForm::PHI);
-      double expected = expectedPhiNorms[i];
+      double phiError = exactSolution->L2NormOfError(solution, phi->ID());
+      FunctionPtr phiExact = exactSolution->exactFunctions().find(phi->ID())->second;
+      double expected = phiExact->l2norm(myMesh);
       diff = abs(phiError - expected);
       //cout << "for 1x1 mesh, L2 norm of phi for PoissonExactSolution: " << phiError << endl;
       
@@ -644,7 +819,7 @@ bool MeshTestSuite::testExactSolution(bool checkL2Norm) {
       }
     } else {
       solution.solve();
-      diff = exactSolution->L2NormOfError(solution, PoissonBilinearForm::PHI);
+      diff = exactSolution->L2NormOfError(solution, phi->ID());
       //cout << "Error in solution of Poisson exactly recoverable solution " << i << ": " << diff << endl;
       if (diff > tol) {
         success = false;
@@ -672,7 +847,7 @@ bool MeshTestSuite::testBuildMesh() {
   quadPoints(3,0) = -1.0;
   quadPoints(3,1) = 1.0;
   
-  Teuchos::RCP<BilinearForm> bilinearForm = Teuchos::rcp( new PoissonBilinearForm() );
+  Teuchos::RCP<BilinearForm> bilinearForm = PoissonBilinearForm::poissonBilinearForm();
   
   Teuchos::RCP<Mesh> myMesh = MeshFactory::buildQuadMesh(quadPoints, 1, 1, bilinearForm, order, order);
   // some basic sanity checks:
@@ -706,9 +881,10 @@ bool MeshTestSuite::testBuildMesh() {
 
 bool MeshTestSuite::testMeshSolvePointwise() {
   bool success = true;
-  int numTests = 1;
   
-  double tol = 2.5e-14;
+  double tol = 1e-14;
+  
+  double maxDiff = 0;
   
   int order = 2; // linear on interior
   
@@ -724,20 +900,21 @@ bool MeshTestSuite::testMeshSolvePointwise() {
   quadPoints(3,0) = 0.0;
   quadPoints(3,1) = 1.0;
   
-  Teuchos::RCP<BilinearForm> bilinearForm = Teuchos::rcp( new PoissonBilinearForm() );
+  Teuchos::RCP<BilinearForm> bilinearForm = PoissonBilinearForm::poissonBilinearForm();
   
   Teuchos::RCP<Mesh> myMesh = MeshFactory::buildQuadMesh(quadPoints, 1, 1, bilinearForm, order, order+1);
-  // some basic sanity checks:
-  int numElementsExpected = 1;
   
-  Teuchos::RCP<PoissonBCLinear> bc = Teuchos::rcp( new PoissonBCLinear() );
-  Teuchos::RCP<PoissonRHSLinear> rhs = Teuchos::rcp( new PoissonRHSLinear() );
+  Teuchos::RCP<ExactSolution> exactLinear = PoissonExactSolution::poissonExactPolynomialSolution(1);
+  
+  BCPtr bc = exactLinear->bc();
+  RHSPtr rhs = exactLinear->rhs();
   Teuchos::RCP<DPGInnerProduct> ip = Teuchos::rcp( new MathInnerProduct(bilinearForm) );
   
-  Solution solution(myMesh, bc, rhs, ip);
-  // Poisson is set up such that the solution should be x + y
+  VarPtr phi = PoissonBilinearForm::poissonBilinearForm()->varFactory().fieldVar(PoissonBilinearForm::S_PHI);
   
-  int PHI = 2;
+  Solution solution(myMesh, bc, rhs, ip);
+  
+  int PHI = phi->ID();
   int numPoints = 3;
   FieldContainer<double> solnValues(1,numPoints);
   FieldContainer<double> expectedSolnValues(1,numPoints);
@@ -750,9 +927,10 @@ bool MeshTestSuite::testMeshSolvePointwise() {
   testPoints(0,2,0) = 0.5;
   testPoints(0,2,1) = 0.0;
   
-  expectedSolnValues(0,0) = 1.0;
-  expectedSolnValues(0,1) = 1.0;
-  expectedSolnValues(0,2) = 0.5;
+  // Poisson is set up such that the solution should be x + 2 * y - 1.5
+  expectedSolnValues(0,0) = testPoints(0,0,0) + 2 * testPoints(0,0,1) - 1.5;
+  expectedSolnValues(0,1) = testPoints(0,1,0) + 2 * testPoints(0,1,1) - 1.5;
+  expectedSolnValues(0,2) = testPoints(0,2,0) + 2 * testPoints(0,2,1) - 1.5;
   
   solution.solve();
   
@@ -760,6 +938,7 @@ bool MeshTestSuite::testMeshSolvePointwise() {
   
   for (int i=0; i<numPoints; i++) {
     double diff = abs(expectedSolnValues(0,i) - solnValues(0,i));
+    maxDiff = max(maxDiff, diff);
     if ( diff > tol ) {
       cout << "Solve 1-element Poisson: expected " << expectedSolnValues(0,i) << ", but soln was " << solnValues(0,i) << " -- diff=" << diff << endl;
       success = false;
@@ -769,15 +948,7 @@ bool MeshTestSuite::testMeshSolvePointwise() {
   // now same thing, but larger mesh
   // in this test, we do use knowledge of the way the mesh elements get laid out
   // (they go top to bottom first, then left to right--i.e. columnwise)
-  // the whole mesh in this test is the (-1,1) square.
-  quadPoints(0,0) = -1.0; // x1
-  quadPoints(0,1) = -1.0; // y1
-  quadPoints(1,0) = 1.0;
-  quadPoints(1,1) = -1.0;
-  quadPoints(2,0) = 1.0;
-  quadPoints(2,1) = 1.0;
-  quadPoints(3,0) = -1.0;
-  quadPoints(3,1) = 1.0;
+  // the whole mesh in this test is the (0,1) square.
   int horizontalElements = 2, verticalElements = 2;
   Teuchos::RCP<Mesh> myMesh2x2 = MeshFactory::buildQuadMesh(quadPoints, horizontalElements, verticalElements, bilinearForm, order, order+1);
   
@@ -801,27 +972,35 @@ bool MeshTestSuite::testMeshSolvePointwise() {
   
   // diagnosing failure in Solution: do we succeed if all the refPoints are the same?
   // (picking point in middle of each element)
-  testPoints(0,0,0) = -0.5;
-  testPoints(0,0,1) = -0.5;
-  testPoints(1,0,0) = -0.5;
-  testPoints(1,0,1) = 0.5;
-  testPoints(2,0,0) = 0.5;
-  testPoints(2,0,1) = -0.5;
-  testPoints(3,0,0) = 0.5;
-  testPoints(3,0,1) = 0.5;
+  testPoints(0,0,0) = 0.25;
+  testPoints(0,0,1) = 0.25;
+  testPoints(1,0,0) = 0.25;
+  testPoints(1,0,1) = 0.75;
+  testPoints(2,0,0) = 0.75;
+  testPoints(2,0,1) = 0.25;
+  testPoints(3,0,0) = 0.75;
+  testPoints(3,0,1) = 0.75;
   
   expectedSolnValues.resize(numElements,numPointsPerElement);
-
-  PoissonExactSolutionLinear exactSolution;
-  exactSolution.solutionValues(expectedSolnValues, PoissonBilinearForm::PHI, testPoints);
+  
+  FunctionPtr phi_exact = exactLinear->exactFunctions().find(phi->ID())->second;
+  
+  for (int cellOrdinal=0; cellOrdinal<numElements; cellOrdinal++) {
+    for (int ptOrdinal=0; ptOrdinal<numPointsPerElement; ptOrdinal++) {
+      double x = testPoints(cellOrdinal,ptOrdinal,0);
+      double y = testPoints(cellOrdinal,ptOrdinal,1);
+      expectedSolnValues(cellOrdinal,ptOrdinal) = Function::evaluate(phi_exact, x, y);
+    }
+  }
   
   solution2x2.solve();
   solnValues.resize(numElements,numPointsPerElement); // four elements, one test point each
-  solution2x2.solutionValues(solnValues,PoissonBilinearForm::PHI,testPoints);
+  solution2x2.solutionValues(solnValues,phi->ID(),testPoints);
   
   for (int elemIndex=0; elemIndex<numElements; elemIndex++) {
     for (int ptIndex=0; ptIndex<numPointsPerElement; ptIndex++) {
       double diff = abs(expectedSolnValues(elemIndex,ptIndex) - solnValues(elemIndex,ptIndex));
+      maxDiff = max(maxDiff, diff);
       if ( diff > tol ) {
         cout << "Solve 4-element Poisson: expected " << expectedSolnValues(elemIndex,ptIndex) << " at point (";
         cout << testPoints(elemIndex,0,0) << "," << testPoints(elemIndex,0,1) << "), but soln was " << solnValues(elemIndex,ptIndex) << endl;
@@ -833,12 +1012,13 @@ bool MeshTestSuite::testMeshSolvePointwise() {
   // now try using the elementsForPoints variant of solutionValues
   solnValues.resize(numElements*numPointsPerElement); // four elements, one test point each
   testPoints.resize(numElements*numPointsPerElement,spaceDim);
-  solution2x2.solutionValues(solnValues,PoissonBilinearForm::PHI,testPoints);
+  solution2x2.solutionValues(solnValues,phi->ID(),testPoints);
   
   for (int elemIndex=0; elemIndex<numElements; elemIndex++) {
     for (int ptIndex=0; ptIndex<numPointsPerElement; ptIndex++) {
       int solnIndex = elemIndex*numPointsPerElement + ptIndex;
       double diff = abs(expectedSolnValues(elemIndex,ptIndex) - solnValues(solnIndex));
+      maxDiff = max(maxDiff, diff);
       if ( diff > tol ) {
         cout << "Solve 4-element Poisson: expected " << expectedSolnValues(elemIndex,ptIndex) << ", but soln was " << solnValues(solnIndex) << " (using elementsForPoints solutionValues)" << endl;
         success = false;
@@ -848,10 +1028,12 @@ bool MeshTestSuite::testMeshSolvePointwise() {
   
   // would be better to actually do the meshing, etc. with reference to the BC & RHS given by PoissonExactSolution,
   // but we do know that these are the same, so we'll just use the solutions we already have....
-  double phiError = exactSolution.L2NormOfError(solution, PoissonBilinearForm::PHI);
+  double phiError = exactLinear->L2NormOfError(solution, phi->ID());
   //cout << "for 1x1 mesh, L2 error in phi for PoissonExactSolutionLinear: " << phiError << endl;
-  phiError = exactSolution.L2NormOfError(solution2x2, PoissonBilinearForm::PHI);
+  phiError = exactLinear->L2NormOfError(solution2x2, phi->ID());
   //cout << "for 2x2 mesh, L2 error in phi for PoissonExactSolutionLinear: " << phiError << endl;
+  
+//  cout << "maxDiff: " << maxDiff << endl;
   
   return success;
 }
@@ -860,7 +1042,9 @@ bool MeshTestSuite::testDofOrderingFactory() {
   bool success = true;
   int polyOrder = 3;
   
-  Teuchos::RCP<BilinearForm> bilinearForm = Teuchos::rcp(new PoissonBilinearForm());
+  BFPtr bilinearForm = PoissonBilinearForm::poissonBilinearForm();
+  
+  VarPtr phi_hat = bilinearForm->varFactory().traceVar(PoissonBilinearForm::S_PHI_HAT);
   
   Teuchos::RCP<DofOrdering> conformingOrdering,nonConformingOrdering;
   shards::CellTopology quad_4(shards::getCellTopologyData<shards::Quadrilateral<4> >() );
@@ -914,25 +1098,25 @@ bool MeshTestSuite::testDofOrderingFactory() {
                                 quad_4, conformingOrderingHigherOrder, lowerSideInHigherElementConforming, quad_4);
   
   // check that the lower-order guys have basis that agrees with the higher-order at that edge
-  BasisPtr lowerBasis = nonConformingOrderingLowerOrder->getBasis(PoissonBilinearForm::PHI_HAT,higherSideInLowerElementNonConforming);
-  BasisPtr lowerBasisOtherSide = nonConformingOrderingLowerOrder->getBasis(PoissonBilinearForm::PHI_HAT,lowerElementOtherSideNonConforming);
+  BasisPtr lowerBasis = nonConformingOrderingLowerOrder->getBasis(phi_hat->ID(),higherSideInLowerElementNonConforming);
+  BasisPtr lowerBasisOtherSide = nonConformingOrderingLowerOrder->getBasis(phi_hat->ID(),lowerElementOtherSideNonConforming);
   if ( lowerBasis->getDegree() == lowerBasisOtherSide->getDegree() ) {
     success = false;
     cout << "FAILURE: After matchSides (non-conforming), the lower-order side doesn't appear to have been refined." << endl;
   }
-  BasisPtr higherBasis = nonConformingOrderingHigherOrder->getBasis(PoissonBilinearForm::PHI_HAT,lowerSideInHigherElementNonConforming);
+  BasisPtr higherBasis = nonConformingOrderingHigherOrder->getBasis(phi_hat->ID(),lowerSideInHigherElementNonConforming);
   if (lowerBasis.get() != higherBasis.get()) {
     success = false;
     cout << "FAILURE: After matchSides (non-conforming), sides have differing bases." << endl;
   }
   
-  lowerBasis = conformingOrderingLowerOrder->getBasis(PoissonBilinearForm::PHI_HAT,higherSideInLowerElementConforming);
-  lowerBasisOtherSide = conformingOrderingLowerOrder->getBasis(PoissonBilinearForm::PHI_HAT,lowerElementOtherSideConforming);
+  lowerBasis = conformingOrderingLowerOrder->getBasis(phi_hat->ID(),higherSideInLowerElementConforming);
+  lowerBasisOtherSide = conformingOrderingLowerOrder->getBasis(phi_hat->ID(),lowerElementOtherSideConforming);
   if ( lowerBasis->getDegree() == lowerBasisOtherSide->getDegree() ) {
     success = false;
     cout << "FAILURE: After matchSides (conforming), the lower-order side doesn't appear to have been refined." << endl;
   }
-  higherBasis = conformingOrderingHigherOrder->getBasis(PoissonBilinearForm::PHI_HAT,lowerSideInHigherElementConforming);
+  higherBasis = conformingOrderingHigherOrder->getBasis(phi_hat->ID(),lowerSideInHigherElementConforming);
   if (lowerBasis.get() != higherBasis.get()) {
     success = false;
     cout << "FAILURE: After matchSides (conforming), sides have differing bases." << endl;
@@ -1045,7 +1229,9 @@ bool MeshTestSuite::testHRefinement() {
       testPoints(i*NUM_POINTS_1D + j, 1) = y[i];
     }
   }
-  int trialID = PoissonBilinearForm::PHI;
+  VarPtr phi = PoissonBilinearForm::poissonBilinearForm()->varFactory().fieldVar(PoissonBilinearForm::S_PHI);
+
+  int trialID = phi->ID();
   FieldContainer<double> valuesOriginal(testPoints.dimension(0));
   origSolution.solutionValues(valuesOriginal,trialID,testPoints);
   
@@ -1123,8 +1309,8 @@ bool MeshTestSuite::testHRefinement() {
   //  solution.writeToFile(PoissonBilinearForm::PHI, "phi_refined.dat");
   //  origSolution.writeToFile(PoissonBilinearForm::PHI, "phi_fine.dat");
   
-  double refinedError = exactSolution.L2NormOfError(solution,PoissonBilinearForm::PHI);
-  double fineError = exactSolution.L2NormOfError(origSolution,PoissonBilinearForm::PHI);
+  double refinedError = exactSolution.L2NormOfError(solution,phi->ID());
+  double fineError = exactSolution.L2NormOfError(origSolution,phi->ID());
   
   //  cout << "refinedError:" << refinedError << endl;
   //  cout << "fineError:" << fineError << endl;
@@ -1167,7 +1353,7 @@ bool MeshTestSuite::testHRefinement() {
   solution = Solution(mesh, exactSolution.ExactSolution::bc(), exactSolution.ExactSolution::rhs(), ip);
   solution.solve();
   
-  refinedError = exactSolution.L2NormOfError(solution,PoissonBilinearForm::PHI);
+  refinedError = exactSolution.L2NormOfError(solution,phi->ID());
   
   if (refinedError > tol) {
     success = false;
@@ -1454,8 +1640,10 @@ bool MeshTestSuite::testPRefinement() {
   Solution solution2(mesh2, exactPolynomial.ExactSolution::bc(), exactPolynomial.ExactSolution::rhs(), ip0);
   solution2.solve();
   
-  double error1 = exactPolynomial.L2NormOfError(solution1, PoissonBilinearForm::PHI,15); // high fidelity L2norm
-  double error2 = exactPolynomial.L2NormOfError(solution2, PoissonBilinearForm::PHI,15); // high fidelity L2norm
+  VarPtr phi = PoissonBilinearForm::poissonBilinearForm()->varFactory().fieldVar(PoissonBilinearForm::S_PHI);
+  
+  double error1 = exactPolynomial.L2NormOfError(solution1, phi->ID(),15); // high fidelity L2norm
+  double error2 = exactPolynomial.L2NormOfError(solution2, phi->ID(),15); // high fidelity L2norm
   if (error1 > tol) {
     success = false;
     cout << "FAILURE: Failed to resolve exact polynomial on mesh of sufficiently high degree..." << endl;
@@ -1509,12 +1697,12 @@ bool MeshTestSuite::testPRefinement() {
   for (int cellID=0; cellID< horizontalCells * verticalCells; cellID++) {
     FieldContainer<double> expectedSolnDofs; // for phi
     if (cellID != refinedCellID) {
-      solution1.solnCoeffsForCellID(expectedSolnDofs,cellID,PoissonBilinearForm::PHI);
+      solution1.solnCoeffsForCellID(expectedSolnDofs,cellID,phi->ID());
     } else {
-      solution2.solnCoeffsForCellID(expectedSolnDofs,cellID,PoissonBilinearForm::PHI);
+      solution2.solnCoeffsForCellID(expectedSolnDofs,cellID,phi->ID());
     }
     FieldContainer<double> actualSolnDofs;
-    solution3.solnCoeffsForCellID(actualSolnDofs,cellID,PoissonBilinearForm::PHI);
+    solution3.solnCoeffsForCellID(actualSolnDofs,cellID,phi->ID());
     if ( actualSolnDofs.size() != expectedSolnDofs.size() ) {
       cout << "FAILURE: for cellID " << cellID << ", actualSolnDofs.size() != expectedSolnDofs.size() (";
       cout << actualSolnDofs.size() << " vs. " << expectedSolnDofs.size() << ")" << endl;
@@ -1584,8 +1772,8 @@ bool MeshTestSuite::testPRefinement() {
   solution2 = Solution(mesh2, exactExponential.ExactSolution::bc(), exactExponential.ExactSolution::rhs(), ip0);
   solution2.solve();
   
-  error1 = exactExponential.L2NormOfError(solution1, PoissonBilinearForm::PHI,15); // high fidelity L2norm
-  error2 = exactExponential.L2NormOfError(solution2, PoissonBilinearForm::PHI,15); // high fidelity L2norm
+  error1 = exactExponential.L2NormOfError(solution1, phi->ID(),15); // high fidelity L2norm
+  error2 = exactExponential.L2NormOfError(solution2, phi->ID(),15); // high fidelity L2norm
   double diff = abs(error1-error2);
   if (diff > tol) {
     success = false;
@@ -1602,7 +1790,7 @@ bool MeshTestSuite::testPRefinement() {
     Teuchos::RCP<DPGInnerProduct> ip = Teuchos::rcp(new MathInnerProduct(exactSolution.bilinearForm()));
     Solution solution(myMesh, exactSolution.ExactSolution::bc(), exactSolution.ExactSolution::rhs(), ip);
     
-    double L2norm = exactSolution.L2NormOfError(solution, PoissonBilinearForm::PHI,15); // high fidelity L2norm
+    double L2norm = exactSolution.L2NormOfError(solution, phi->ID(),15); // high fidelity L2norm
     double diff;
     double prev_error = 1.0; // relative error starts at 1
     
@@ -1625,7 +1813,7 @@ bool MeshTestSuite::testPRefinement() {
     }
     
     solution.solve();
-    diff = exactSolution.L2NormOfError(solution, PoissonBilinearForm::PHI,15);
+    diff = exactSolution.L2NormOfError(solution, phi->ID(),15);
     //cout << "1st p-refinement test: POISSON Manuf. #" << i << " (p=" << H1Order-1 << "): L2 Error in solution for " << sqrtElements << "x" << sqrtElements << " mesh: " << diff << endl;
     diff = diff / L2norm;
     
@@ -1638,7 +1826,7 @@ bool MeshTestSuite::testPRefinement() {
       cout << "FAILURE: After 2nd p-refinement, MeshTestUtility::checkMeshConsistency failed." << endl;
     }
     solution.solve();
-    diff = exactSolution.L2NormOfError(solution, PoissonBilinearForm::PHI,15);
+    diff = exactSolution.L2NormOfError(solution, phi->ID(),15);
     //cout << "2nd p-refinement test: POISSON Manuf. #" << i << " (p=" << H1Order-1 << "): L2 Error in solution for " << sqrtElements << "x" << sqrtElements << " mesh: " << diff << endl;
     diff = diff / L2norm;
     //cout << "Relative L2 Error: " << diff << endl;
@@ -1657,7 +1845,7 @@ bool MeshTestSuite::testPRefinement() {
       cout << "FAILURE: After 3rd p-refinement, MeshTestUtility::checkMeshConsistency failed." << endl;
     }
     solution.solve();
-    diff = exactSolution.L2NormOfError(solution, PoissonBilinearForm::PHI,15);
+    diff = exactSolution.L2NormOfError(solution, phi->ID(),15);
     //cout << "3rd p-refinement test: POISSON Manuf. #" << i << " (p=" << H1Order-1 << "): L2 Error in solution for " << sqrtElements << "x" << sqrtElements << " mesh: " << diff << endl;
     diff = diff / L2norm;
     //cout << "Relative L2 Error: " << diff << endl;
@@ -1709,10 +1897,12 @@ bool MeshTestSuite::testSinglePointBC() {
   }
   Teuchos::RCP<DPGInnerProduct> ip = Teuchos::rcp(new MathInnerProduct(exactPolynomial.bilinearForm()));
   Solution solution(mesh, exactPolynomial.ExactSolution::bc(), exactPolynomial.ExactSolution::rhs(), ip);
-  double L2norm = exactPolynomial.L2NormOfError(solution, PoissonBilinearForm::PHI);
+  VarPtr phi = PoissonBilinearForm::poissonBilinearForm()->varFactory().fieldVar(PoissonBilinearForm::S_PHI);
+
+  double L2norm = exactPolynomial.L2NormOfError(solution, phi->ID());
   solution.solve();
   
-  double error = exactPolynomial.L2NormOfError(solution, PoissonBilinearForm::PHI,15); // high fidelity L2norm
+  double error = exactPolynomial.L2NormOfError(solution, phi->ID(),15); // high fidelity L2norm
   if (error > tol) {
     success = false;
     cout << "FAILURE: When using single-point BC, failed to resolve linear polynomial... (error: " << error << ")" << endl;
@@ -1743,7 +1933,7 @@ bool MeshTestSuite::testSinglePointBC() {
                                          exactPolynomialConforming.ExactSolution::rhs(), ip);
   solutionConforming.solve();
   
-  error = exactPolynomialConforming.L2NormOfError(solutionConforming, PoissonBilinearForm::PHI,15); // high fidelity L2norm
+  error = exactPolynomialConforming.L2NormOfError(solutionConforming, phi->ID(), 15); // high fidelity L2norm
   if (error > tol) {
     success = false;
     cout << "FAILURE: When using single-point BC with conforming traces, failed to resolve linear polynomial... (error: " << error << ")" << endl;
@@ -1786,7 +1976,9 @@ bool MeshTestSuite::testSolutionForMultipleElementTypes() {
   Teuchos::RCP<DPGInnerProduct> ip0 = Teuchos::rcp(new MathInnerProduct(exactPolynomial.bilinearForm()));
   Solution solution1(mesh, exactPolynomial.ExactSolution::bc(), exactPolynomial.ExactSolution::rhs(), ip0);
   solution1.solve();
-  double error1 = exactPolynomial.L2NormOfError(solution1, PoissonBilinearForm::PHI,15); // high fidelity L2norm
+  VarPtr phi = PoissonBilinearForm::poissonBilinearForm()->varFactory().fieldVar(PoissonBilinearForm::S_PHI);
+
+  double error1 = exactPolynomial.L2NormOfError(solution1, phi->ID(),15); // high fidelity L2norm
   if (error1 > tol) {
     success = false;
     cout << "FAILURE: Failed to resolve exact polynomial on mesh of sufficiently high degree..." << endl;
@@ -1803,13 +1995,13 @@ bool MeshTestSuite::testSolutionForMultipleElementTypes() {
   mesh->rebuildLookups();
   Solution solution2(mesh, exactPolynomial.ExactSolution::bc(), exactPolynomial.ExactSolution::rhs(), ip0);
   solution2.solve();
-  double error2 = exactPolynomial.L2NormOfError(solution2, PoissonBilinearForm::PHI,15); // high fidelity L2norm
+  double error2 = exactPolynomial.L2NormOfError(solution2, phi->ID(),15); // high fidelity L2norm
   if (error2 > tol) {
     success = false;
     cout << "FAILURE: Solution failed to solve on uniform mesh with two element types..." << endl;
     ostringstream fileName;
     fileName << "PoissonPhiSolution_FAILURE.p=" << order-1 << "." << horizontalCells << "x" << verticalCells << ".dat";
-    solution2.writeToFile(PoissonBilinearForm::PHI, fileName.str());
+    solution2.writeToFile(phi->ID(), fileName.str());
     cout << "Wrote solution out to disk at: " << fileName.str() << endl;
   }
   return success;
@@ -1840,7 +2032,9 @@ bool MeshTestSuite::testSolutionForSingleElementUpgradedSide() {
   Solution solution(mesh, exactPolynomial.ExactSolution::bc(), exactPolynomial.ExactSolution::rhs(), ip);
   solution.solve();
   
-  double error = exactPolynomial.L2NormOfError(solution, PoissonBilinearForm::PHI,15); // high fidelity L2norm
+  VarPtr phi = PoissonBilinearForm::poissonBilinearForm()->varFactory().fieldVar(PoissonBilinearForm::S_PHI);
+
+  double error = exactPolynomial.L2NormOfError(solution, phi->ID(),15); // high fidelity L2norm
   if (error > tol) {
     success = false;
     cout << "FAILURE: When using single-point BC, failed to resolve linear polynomial... (error: " << error << ")" << endl;
@@ -1874,14 +2068,14 @@ bool MeshTestSuite::testSolutionForSingleElementUpgradedSide() {
   mesh->rebuildLookups();
   solution.solve();
   
-  error = exactPolynomial.L2NormOfError(solution, PoissonBilinearForm::PHI,15); // high fidelity L2norm
+  error = exactPolynomial.L2NormOfError(solution, phi->ID(),15); // high fidelity L2norm
   if (error > tol) {
     success = false;
     cout << "FAILURE: When using upgraded side, failed to resolve linear polynomial... (error: " << error << ")" << endl;
     cout << "Single-point BC Poisson error (upgraded side): " << error << endl;
     ostringstream fileName;
     fileName << "testSolutionForSingleElementUpgradedSide_FAILURE.p=" << order-1 << ".dat";
-    solution.writeToFile(PoissonBilinearForm::PHI, fileName.str());
+    solution.writeToFile(phi->ID(), fileName.str());
     cout << "Wrote solution out to disk at: " << fileName.str() << endl;
   }
   
@@ -1937,7 +2131,7 @@ bool MeshTestSuite::testRefinementPattern() {
   
   int polyOrder = 1;
   
-  Teuchos::RCP<BilinearForm> bilinearForm = Teuchos::rcp(new PoissonBilinearForm() );
+  Teuchos::RCP<BilinearForm> bilinearForm = PoissonBilinearForm::poissonBilinearForm();
   
   int H1Order = 2;
   int horizontalCells = 2; int verticalCells = 1;

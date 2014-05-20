@@ -406,7 +406,7 @@ void MultiBasisTests::setup() {
 
   // setup test points:
   static const int NUM_POINTS_1D = 10;
-  double x[NUM_POINTS_1D] = {0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1.0};
+  double x[NUM_POINTS_1D] = {0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,0.99};
   
   _testPoints1D = FieldContainer<double>(NUM_POINTS_1D,1);
   for (int i=0; i<NUM_POINTS_1D; i++) {
@@ -550,7 +550,7 @@ bool MultiBasisTests::testMultiBasisLegacyTest() {
   bool success = true;
   double tol = 1e-15;
   
-  Teuchos::RCP<PoissonBilinearForm> bilinearForm = Teuchos::rcp(new PoissonBilinearForm());
+  BFPtr bilinearForm = PoissonBilinearForm::poissonBilinearForm();
   
   int polyOrder = 2; 
   Teuchos::RCP<DofOrdering> trialOrdering;
@@ -575,7 +575,9 @@ bool MultiBasisTests::testMultiBasisLegacyTest() {
   dofOrderingFactory.assignMultiBasis( mbTrialOrdering, parentSideIndexInNeighbor, 
                                       quad_4, childTrialOrdersForSide );
   
-  int trialID = PoissonBilinearForm::PHI_HAT, sideIndex = 1;
+  VarPtr phi_hat = PoissonBilinearForm::poissonBilinearForm()->varFactory().traceVar(PoissonBilinearForm::S_PHI_HAT);
+  
+  int trialID = phi_hat->ID(), sideIndex = 1;
   int numFields = trialOrdering->getBasisCardinality(trialID,sideIndex), numPoints = 1;
   int spaceDim = 1; // along sides...
   // TODO: make the two trialOrderings different... (or maybe just add a test with multiple MB levels)

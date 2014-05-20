@@ -45,13 +45,13 @@ class GDAMinimumRule : public GlobalDofAssignment {
   GlobalIndexType _globalDofCount;
   
   map< GlobalIndexType, CellConstraints > _constraintsCache;
+  
+  map< GlobalIndexType, LocalDofMapperPtr > _dofMapperCache;
 
   typedef map<int, vector<GlobalIndexType> > VarIDToDofIndices; // key: varID
   typedef map<unsigned, VarIDToDofIndices> SubCellOrdinalToMap; // key: subcell ordinal
   typedef vector< SubCellOrdinalToMap > SubCellDofIndexInfo; // index to vector: subcell dimension
-  
-  vector< map< unsigned, unsigned > > buildSubsideMap(shards::CellTopology &sideTopo);
-  
+    
   vector<unsigned> allBasisDofOrdinalsVector(int basisCardinality);
   
   void filterSubBasisConstraintData(set<unsigned> &basisDofOrdinals,vector<GlobalIndexType> &globalDofOrdinals,
