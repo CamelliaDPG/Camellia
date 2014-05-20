@@ -7,13 +7,11 @@
  *
  */
 
-#include "StokesManufacturedSolution.h"
 #include "StokesBilinearForm.h"
 
 #include "HConvergenceStudy.h"
 #include "MathInnerProduct.h"
 #include "OptimalInnerProduct.h"
-#include "StokesManufacturedSolution.h"
 #include "StokesVVPBilinearForm.h"
 #include "StokesMathBilinearForm.h"
 

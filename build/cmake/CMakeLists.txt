@@ -273,7 +273,6 @@ set( uBLAS_CHOLESKY_TEST
 )
 
 set( STOKES_SOURCES
-  "${STOKES_DIR}/StokesManufacturedSolution.cpp"
   "${STOKES_DIR}/StokesBilinearForm.cpp"
   "${STOKES_DIR}/StokesMathBilinearForm.cpp"
   "${STOKES_DIR}/StokesVVPBilinearForm.cpp"
