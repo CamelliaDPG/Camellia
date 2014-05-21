@@ -1474,7 +1474,7 @@ bool MeshTestSuite::testHRefinementForConfusion() {
   Solution solution = Solution(mesh, exactSolution.ExactSolution::bc(), exactSolution.ExactSolution::rhs(), ip);
   solution.solve();
   
-  double refinedError = exactSolution.L2NormOfError(solution,ConfusionBilinearForm::U);
+  double refinedError = exactSolution.L2NormOfError(solution,ConfusionBilinearForm::U_ID);
   
   // relaxed tolerance
   double tol = 1e-1;
@@ -1531,7 +1531,7 @@ bool MeshTestSuite::testHUnrefinementForConfusion() {
   int numRefinements = 2;
   for (int i=0; i<numRefinements; i++) {
     solution.solve();
-    double errorBeforeRefinement = exactSolution.L2NormOfError(solution,ConfusionBilinearForm::U);
+    double errorBeforeRefinement = exactSolution.L2NormOfError(solution,ConfusionBilinearForm::U_ID);
     vector< pair<int,int> > descendants = mesh->getElement(0)->getDescendantsForSide(1);
     int numDescendants = descendants.size();
     cellsToRefine.clear();
@@ -1550,7 +1550,7 @@ bool MeshTestSuite::testHUnrefinementForConfusion() {
       cout << "FAILURE: after unrefinement, mesh fails consistency check.\n";
     }
     solution.solve();
-    double errorAfterUnrefinement = exactSolution.L2NormOfError(solution,ConfusionBilinearForm::U);
+    double errorAfterUnrefinement = exactSolution.L2NormOfError(solution,ConfusionBilinearForm::U_ID);
     if ( abs(errorAfterUnrefinement - errorBeforeRefinement) > tol) {
       success = false;
       cout << "errorAfterUnrefinement != errorBeforeRefinement: " << errorAfterUnrefinement << " != " << errorBeforeRefinement << endl;
@@ -1560,7 +1560,7 @@ bool MeshTestSuite::testHUnrefinementForConfusion() {
     
     // same thing for north side
     solution.solve();
-    errorBeforeRefinement = exactSolution.L2NormOfError(solution,ConfusionBilinearForm::U);
+    errorBeforeRefinement = exactSolution.L2NormOfError(solution,ConfusionBilinearForm::U_ID);
     descendants = mesh->getElement(0)->getDescendantsForSide(2);
     numDescendants = descendants.size();
     cellsToRefine.clear();
@@ -1575,7 +1575,7 @@ bool MeshTestSuite::testHUnrefinementForConfusion() {
       cout << "FAILURE: after unrefinement, mesh fails consistency check.\n";
     }
     solution.solve();
-    errorAfterUnrefinement = exactSolution.L2NormOfError(solution,ConfusionBilinearForm::U);
+    errorAfterUnrefinement = exactSolution.L2NormOfError(solution,ConfusionBilinearForm::U_ID);
     if ( abs(errorAfterUnrefinement - errorBeforeRefinement) > tol) {
       success = false;
       cout << "errorAfterUnrefinement != errorBeforeRefinement: " << errorAfterUnrefinement << " != " << errorBeforeRefinement << endl;

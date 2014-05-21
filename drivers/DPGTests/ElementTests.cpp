@@ -85,7 +85,7 @@ void ElementTests::setup() {
   double beta_x = 1.0;
   double beta_y = 1.0;
   
-  Teuchos::RCP<BilinearForm> confusionBF = Teuchos::rcp( new ConfusionBilinearForm(eps,beta_x,beta_y) );
+  Teuchos::RCP<BilinearForm> confusionBF = ConfusionBilinearForm::confusionBF(eps,beta_x,beta_y);
   
   _mesh = MeshFactory::buildQuadMesh(quadPoints, horizontalCells, verticalCells, confusionBF, H1Order, testOrder);
       

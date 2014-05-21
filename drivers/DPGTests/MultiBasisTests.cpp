@@ -14,7 +14,6 @@
 #include "ConfusionManufacturedSolution.h"
 #include "ConfusionProblemLegacy.h"
 #include "ConfusionBilinearForm.h"
-#include "ConfusionInnerProduct.h"
 
 #include "MeshTestUtility.h" // used for checkMeshConsistency
 #include "MeshTestSuite.h"
@@ -436,15 +435,15 @@ void MultiBasisTests::setup() {
   double beta_y = 1.0;
   // _confusionExactSolution = Teuchos::rcp( new ConfusionManufacturedSolution(eps,beta_x,beta_y) );
   
-  Teuchos::RCP<ConfusionBilinearForm> confusionBF = Teuchos::rcp( new ConfusionBilinearForm(eps,beta_x,beta_y) );
+  BFPtr confusionBF = ConfusionBilinearForm::confusionBF(eps,beta_x,beta_y);
   
-  Teuchos::RCP<ConfusionProblemLegacy> confusionProblem = Teuchos::rcp( new ConfusionProblemLegacy(confusionBF) );
+  Teuchos::RCP<ConfusionProblemLegacy> confusionProblem = Teuchos::rcp( new ConfusionProblemLegacy(confusionBF, beta_x, beta_y) );
 
 //  Teuchos::RCP<ConfusionBilinearForm> confusionBF = Teuchos::rcp( (ConfusionBilinearForm*) _confusionExactSolution->bilinearForm.get(), false); // false: doesn't own the memory, since the RCP _confusionExactSolution does that);
 
   _mesh = MeshFactory::buildQuadMesh(quadPoints, horizontalCells, verticalCells, confusionBF, H1Order, H1Order+delta_p);
   
-  Teuchos::RCP<DPGInnerProduct> ip = Teuchos::rcp( new ConfusionInnerProduct( confusionBF, _mesh ) );
+  IPPtr ip = confusionBF->graphNorm();
   
   _confusionSolution = Teuchos::rcp( new Solution(_mesh, confusionProblem, confusionProblem, ip) );
   
@@ -505,8 +504,8 @@ bool MultiBasisTests::refinementsHaveNotIncreasedError(Teuchos::RCP<Solution> so
   if (diff > tol) {
     cout << "MultiBasisTests: increase in error after refinement " << diff << " > tol " << tol << ".\n";
     
-    solution->writeFieldsToFile(ConfusionBilinearForm::U, "confusion_u_multiBasis.m");
-    solution->writeFluxesToFile(ConfusionBilinearForm::U_HAT, "confusion_u_hat_multiBasis.m");
+//    solution->writeFieldsToFile(ConfusionBilinearForm::U, "confusion_u_multiBasis.m");
+//    solution->writeFluxesToFile(ConfusionBilinearForm::U_HAT, "confusion_u_hat_multiBasis.m");
     
     success = false;
   }

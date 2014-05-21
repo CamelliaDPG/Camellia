@@ -18,10 +18,14 @@ class Mesh;
 class RHS;
 class RHSEasy;
 
+#include "Var.h"
+
 class RHSTests : public TestSuite {
   Teuchos::RCP<Mesh> _mesh;
   Teuchos::RCP<RHS> _rhs;
   Teuchos::RCP<RHS> _rhsEasy;
+  
+  VarPtr _v, _tau;
   
   void setup();
   void teardown();

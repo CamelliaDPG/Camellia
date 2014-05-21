@@ -1,48 +1,22 @@
 #ifndef DPG_CONFUSION_BILINEAR_FORM
 #define DPG_CONFUSION_BILINEAR_FORM
 
-#include "BilinearForm.h"
+#include "BF.h"
 
-class ConfusionBilinearForm : public BilinearForm {
+class ConfusionBilinearForm {
 private:
   double _epsilon, _beta_x, _beta_y;
   bool _useConstBeta;
 public:
-  ConfusionBilinearForm(double epsilon, double beta_x, double beta_y);
-  ConfusionBilinearForm(double epsilon);
+  // trial variable names:
+  static const string S_SIGMA_1, S_SIGMA_2, S_U, S_U_HAT, S_BETA_N_U_MINUS_SIGMA_HAT;
+  // test variable names:
+  static const string S_V, S_TAU;
   
-  // implement the virtual methods declared in super:
-  const string & testName(int testID);
-  const string & trialName(int trialID);
+  static BFPtr confusionBF(double epsilon, double beta_x, double beta_y);
+  static BFPtr confusionBF(double epsilon, FunctionPtr beta);
   
-  bool trialTestOperator(int trialID, int testID, 
-                         EOperatorExtended &trialOperator, EOperatorExtended &testOperator);
-  
-  void applyBilinearFormData(int trialID, int testID,
-                             FieldContainer<double> &trialValues, FieldContainer<double> &testValues, 
-                             const FieldContainer<double> &points);
-  
-  virtual EFunctionSpaceExtended functionSpaceForTest(int testID);
-  virtual EFunctionSpaceExtended functionSpaceForTrial(int trialID);
-
-  double getEpsilon();
-  void setEpsilon(double newEpsilon);
-  vector<double> getBeta(double x, double y);
-  
-  bool isFluxOrTrace(int trialID);
-  
-  enum ETestIDs {
-    TAU = 0,
-    V
-  };
-  
-  enum ETrialIDs {
-    U_HAT = 0,
-    BETA_N_U_MINUS_SIGMA_HAT,
-    U,
-    SIGMA_1,
-    SIGMA_2
-  };
+  static int U_ID, V_ID, SIGMA_1_ID, SIGMA_2_ID;
 };
 
 #endif

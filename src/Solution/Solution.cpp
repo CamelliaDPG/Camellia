@@ -473,7 +473,7 @@ void Solution::populateStiffnessAndLoad() {
       int optSuccess = _mesh->bilinearForm()->optimalTestWeights(optTestCoeffs, ipMatrix, elemTypePtr,
                                                                  cellSideParities, basisCache);
       
-      //      cout << "optTestCoeffs:\n" << optTestCoeffs;
+//      cout << "optTestCoeffs:\n" << optTestCoeffs;
       
       if ( optSuccess != 0 ) {
         cout << "**** WARNING: in Solution.solve(), optimal test function computation failed with error code " << optSuccess << ". ****\n";
@@ -484,6 +484,8 @@ void Solution::populateStiffnessAndLoad() {
       FieldContainer<double> finalStiffness(numCells,numTrialDofs,numTrialDofs);
       
       BilinearFormUtility::computeStiffnessMatrix(finalStiffness,ipMatrix,optTestCoeffs);
+      
+//      cout << "finalStiffness:\n" << finalStiffness;
       
       FieldContainer<double> localRHSVector(numCells, numTrialDofs);
       _rhs->integrateAgainstOptimalTests(localRHSVector, optTestCoeffs, testOrderingPtr, basisCache);

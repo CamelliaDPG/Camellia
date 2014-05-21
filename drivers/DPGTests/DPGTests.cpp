@@ -187,15 +187,13 @@ void DPGTests::runTests() {
   
 //  testSuites.push_back( Teuchos::rcp( new GDAMinimumRuleTests ) );
 
-  testSuites.push_back( Teuchos::rcp( new SolutionTests ) );
-  
   testSuites.push_back( Teuchos::rcp( new MeshTestSuite ) );
+  
+  testSuites.push_back( Teuchos::rcp( new SolutionTests ) );
   
   testSuites.push_back( Teuchos::rcp( new MultiBasisTests ) );
 
   testSuites.push_back( Teuchos::rcp( new BasisReconciliationTests ) );
-  
-
   
   testSuites.push_back( Teuchos::rcp( new MeshTopologyTests ) );
   

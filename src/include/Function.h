@@ -599,6 +599,28 @@ public:
   }
 };
 
+class Exp_ay : public SimpleFunction {
+  double _a;
+public:
+  Exp_ay(double a) {
+    _a = a;
+  }
+  double value(double x, double y) {
+    return exp( _a * y);
+  }
+  FunctionPtr dx() {
+    return Function::zero();
+  }
+  FunctionPtr dy() {
+    return _a * (FunctionPtr) Teuchos::rcp(new Exp_ay(_a));
+  }
+  string displayString() {
+    ostringstream ss;
+    ss << "\\exp( " << _a << " y )";
+    return ss.str();
+  }
+};
+
 class PhysicalPointCache : public BasisCache {
   FieldContainer<double> _physCubPoints;
 public:

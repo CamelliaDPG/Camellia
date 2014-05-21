@@ -82,7 +82,6 @@ int PoissonExactSolution::H1Order() {
 }
 
 FunctionPtr PoissonExactSolution::phi() {
-  // a rewrite of the Sacado-based version above...
   // simple solution choice: let phi = (x + 2y)^_polyOrder
   FunctionPtr f;
   double integral;

@@ -15,7 +15,6 @@
 #include "ConfusionManufacturedSolution.h"
 #include "ConfusionBilinearForm.h"
 #include "ConfusionProblemLegacy.h"
-#include "ConfusionInnerProduct.h"
 #include "MathInnerProduct.h"
 
 #include "MeshTestUtility.h" // used for checkMeshConsistency
@@ -659,8 +658,8 @@ bool PatchBasisTests::refinementsHaveNotIncreasedError(Teuchos::RCP<Solution> so
   if (diff > tol) {
     cout << "PatchBasisTests: increase in error after refinement " << diff << " > tol " << tol << ".\n";
     
-    solution->writeFieldsToFile(ConfusionBilinearForm::U, "confusion_u_patchBasis.m");
-    solution->writeFluxesToFile(ConfusionBilinearForm::U_HAT, "confusion_u_hat_patchBasis.m");
+//    solution->writeFieldsToFile(ConfusionBilinearForm::U, "confusion_u_patchBasis.m");
+//    solution->writeFluxesToFile(ConfusionBilinearForm::U_HAT, "confusion_u_hat_patchBasis.m");
     
     success = false;
   }
@@ -912,7 +911,7 @@ bool PatchBasisTests::testSolveUniformMesh() {
   int polyOrder = H1Order - 1;
     
   double eps = 1.0, beta_x = 1.0, beta_y = 1.0;
-  Teuchos::RCP<ConfusionBilinearForm> confusionBF = Teuchos::rcp( new ConfusionBilinearForm(eps,beta_x,beta_y) );
+  BFPtr confusionBF = ConfusionBilinearForm::confusionBF(eps,beta_x,beta_y);
   
   Teuchos::RCP<Mesh> multiBasisMesh = MeshFactory::buildQuadMesh(quadPoints, horizontalCells, verticalCells, confusionBF, H1Order, H1Order);
 
@@ -920,7 +919,7 @@ bool PatchBasisTests::testSolveUniformMesh() {
   
   Teuchos::RCP<DPGInnerProduct> ip = Teuchos::rcp( new MathInnerProduct(confusionBF) );
   
-  Teuchos::RCP<ConfusionProblemLegacy> confusionProblem = Teuchos::rcp( new ConfusionProblemLegacy(confusionBF) );
+  Teuchos::RCP<ConfusionProblemLegacy> confusionProblem = Teuchos::rcp( new ConfusionProblemLegacy(confusionBF, beta_x, beta_y) );
   
   Teuchos::RCP<Solution> mbSolution = Teuchos::rcp(new Solution(multiBasisMesh, confusionProblem, confusionProblem, ip));
 //  cout << "solving MultiBasis...\n";

@@ -8,13 +8,24 @@
 
 #include "ConfusionProblemLegacy.h"
 
-ConfusionProblemLegacy::ConfusionProblemLegacy(Teuchos::RCP<ConfusionBilinearForm> cbf) : RHS(true), BC(true) { // true: legacy subclass of RHS, legacy subclass of BC
-  _cbf = cbf;  
+#include "ConfusionBilinearForm.h"
+
+ConfusionProblemLegacy::ConfusionProblemLegacy(BFPtr cbf, double beta_x, double beta_y) : RHS(true), BC(true) { // true: legacy subclass of RHS, legacy subclass of BC
+  _cbf = cbf;
+  VarFactory vf = cbf->varFactory();
+  
+  _beta_x = beta_x;
+  _beta_y = beta_y;
+  
+  _u_hat = vf.traceVar(ConfusionBilinearForm::S_U_HAT);
+  _beta_n_u_minus_sigma_hat = vf.fluxVar(ConfusionBilinearForm::S_BETA_N_U_MINUS_SIGMA_HAT);
+  
+  _v = vf.testVar(ConfusionBilinearForm::S_V, HGRAD);
 }
 
 // RHS:
 bool ConfusionProblemLegacy::nonZeroRHS(int testVarID) {
-  return testVarID == ConfusionBilinearForm::V;
+  return testVarID == _v->ID();
 }
 
 void ConfusionProblemLegacy::rhs(int testVarID, const FieldContainer<double> &physicalPoints, FieldContainer<double> &values) {
@@ -28,7 +39,7 @@ void ConfusionProblemLegacy::rhs(int testVarID, const FieldContainer<double> &ph
 
 // BC
 bool ConfusionProblemLegacy::bcsImposed(int varID) {
-  return (varID == ConfusionBilinearForm::U_HAT || varID==ConfusionBilinearForm::BETA_N_U_MINUS_SIGMA_HAT);
+  return (varID == _u_hat->ID() || varID==_beta_n_u_minus_sigma_hat->ID());
 //  return varID == ConfusionBilinearForm::U_HAT;
 }
 
@@ -47,8 +58,8 @@ void ConfusionProblemLegacy::imposeBC(int varID, FieldContainer<double> &physica
     for (int ptIndex=0; ptIndex < numPoints; ptIndex++) {
       double x = physicalPoints(cellIndex, ptIndex, 0);
       double y = physicalPoints(cellIndex, ptIndex, 1);
-      double beta_n = unitNormals(cellIndex, ptIndex, 0)*_cbf->getBeta(x,y)[0]
-                    + unitNormals(cellIndex, ptIndex, 1)*_cbf->getBeta(x,y)[1];
+      double beta_n = unitNormals(cellIndex, ptIndex, 0)* _beta_x
+                    + unitNormals(cellIndex, ptIndex, 1)* _beta_y;
       
       double u0 = 0.0;
       if ( (abs(x) < 1e-14) && (y<y_cut) ) { // x basically 0 ==> u = 1 - y	  
@@ -58,7 +69,7 @@ void ConfusionProblemLegacy::imposeBC(int varID, FieldContainer<double> &physica
       } 
       
       imposeHere(cellIndex,ptIndex) = false;
-      if (bcsImposed(ConfusionBilinearForm::BETA_N_U_MINUS_SIGMA_HAT) && varID==ConfusionBilinearForm::BETA_N_U_MINUS_SIGMA_HAT){
+      if (bcsImposed(_beta_n_u_minus_sigma_hat->ID()) && varID==_beta_n_u_minus_sigma_hat->ID()){
         dirichletValues(cellIndex,ptIndex) = beta_n*u0;
         if (abs(y) < 1e-14 || abs(x) < 1e-14) { // only impose this var on the inflow
           imposeHere(cellIndex,ptIndex) = true;
@@ -70,7 +81,7 @@ void ConfusionProblemLegacy::imposeBC(int varID, FieldContainer<double> &physica
       
       // if outflow, always apply wall BC
       if (abs(y-1.0)<1e-14 || abs(x-1.0)<1e-14){
-        if (varID==ConfusionBilinearForm::U_HAT){
+        if (varID==_u_hat->ID()){
           dirichletValues(cellIndex,ptIndex) = 0.0;
           imposeHere(cellIndex,ptIndex) = true;
         } 

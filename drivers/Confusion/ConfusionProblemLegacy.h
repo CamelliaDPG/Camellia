@@ -4,13 +4,23 @@
 #include "BC.h"
 #include "RHS.h"
 
-#include "ConfusionBilinearForm.h"
+#include "BF.h"
+
+#include "Var.h"
+
+#include "Function.h"
 
 class ConfusionProblemLegacy : public RHS, public BC {
  private:
-  Teuchos::RCP<ConfusionBilinearForm> _cbf;
+  BFPtr _cbf;
+  
+  double _beta_x, _beta_y;
+  
+  VarPtr _u_hat, _beta_n_u_minus_sigma_hat; // trial
+  
+  VarPtr _v; // test var
  public:
-  ConfusionProblemLegacy(Teuchos::RCP<ConfusionBilinearForm> cbf);
+  ConfusionProblemLegacy(BFPtr cbf, double beta_x, double beta_y);
     
   // RHS:
   bool nonZeroRHS(int testVarID);

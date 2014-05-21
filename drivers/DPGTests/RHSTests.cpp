@@ -75,18 +75,18 @@ void RHSTests::setup() {
   double beta_x = 1.0;
   double beta_y = 1.0;
   
-  Teuchos::RCP<ConfusionBilinearForm> confusionBF = Teuchos::rcp( new ConfusionBilinearForm(eps,beta_x,beta_y) );
-  Teuchos::RCP<ConfusionProblemLegacy> confusionProblem = Teuchos::rcp( new ConfusionProblemLegacy(confusionBF) );
+  BFPtr confusionBF = ConfusionBilinearForm::confusionBF(eps,beta_x,beta_y);
+  Teuchos::RCP<ConfusionProblemLegacy> confusionProblem = Teuchos::rcp( new ConfusionProblemLegacy(confusionBF, beta_x, beta_y) );
   _rhs = confusionProblem;
   _mesh = MeshFactory::buildQuadMesh(quadPoints, horizontalCells, verticalCells, confusionBF, H1Order, H1Order+delta_p);
   _mesh->setUsePatchBasis(false);
   
-  VarFactory varFactory; // Create test IDs that match the enum in ConfusionBilinearForm
-  VarPtr tau = varFactory.testVar("\\tau",HDIV,ConfusionBilinearForm::TAU);
-  VarPtr v = varFactory.testVar("v",HGRAD,ConfusionBilinearForm::V);
+  VarFactory varFactory = confusionBF->varFactory(); // Create test IDs that match the enum in ConfusionBilinearForm
+  _tau = varFactory.testVar(ConfusionBilinearForm::S_TAU,HDIV);
+  _v = varFactory.testVar(ConfusionBilinearForm::S_V,HGRAD);
   
   _rhsEasy = RHS::rhs();
-  _rhsEasy->addTerm( v );
+  _rhsEasy->addTerm( _v );
 }
 
 bool RHSTests::testComputeRHSLegacy() {
@@ -411,15 +411,11 @@ bool RHSTests::testTrivialRHS(){
     basisCache->setPhysicalCellNodes(physicalCellNodes,cellIDs,createSideCacheToo);
     
     FieldContainer<double> rhsExpected(numCells,numTestDofs);
-    
-    VarFactory varFactory; // Create test IDs that match the enum in ConfusionBilinearForm
-    //  VarPtr tau = varFactory.testVar("\\tau",HDIV,ConfusionBilinearForm::TAU);
-    VarPtr v = varFactory.testVar("v",HGRAD,ConfusionBilinearForm::V);
 
     FunctionPtr zero = Function::constant(0.0);
     RHSPtr rhs = RHS::rhs();
     FunctionPtr f = zero;
-    rhs->addTerm( f * v ); // obviously, with f = 0 adding this term is not necessary!
+    rhs->addTerm( f * _v ); // obviously, with f = 0 adding this term is not necessary!
     rhs->integrateAgainstStandardBasis(rhsExpected, elemType->testOrderPtr, basisCache);
     
     for (int i = 0;i<numCells;i++) {

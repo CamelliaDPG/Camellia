@@ -1,37 +1,27 @@
 #ifndef DPG_CONFUSION_MANUFACTURED_SOLUTION
 #define DPG_CONFUSION_MANUFACTURED_SOLUTION
 
-#include <Sacado.hpp>  // for automatic differentiation
 #include "ExactSolution.h"
 #include "BC.h"
 #include "RHS.h"
 
-class ConfusionManufacturedSolution : public ExactSolution, public RHS, public BC {
+#include "Var.h"
+
+class ConfusionManufacturedSolution : public ExactSolution {
 private:
   double _epsilon, _beta_x, _beta_y;
+  
+  VarPtr _u_hat, _beta_n_u_minus_sigma_hat; // trial
+  
+  VarPtr _v; // test var
 protected:
-  template <typename T>
-  const T u(T &x, T &y);  // in 2 dimensions
+  FunctionPtr u();
 public:
   ConfusionManufacturedSolution(double epsilon, double beta_x, double beta_y);
   
   // ExactSolution:
   virtual int H1Order(); // polyOrder+1, for polynomial solutions...
-  virtual double solutionValue(int trialID,
-                               FieldContainer<double> &physicalPoint);
-  virtual double solutionValue(int trialID,
-                               FieldContainer<double> &physicalPoint,
-                               FieldContainer<double> &unitNormal);
   
-  // RHS:
-  virtual bool nonZeroRHS(int testVarID);
-  virtual void rhs(int testVarID, const FieldContainer<double> &physicalPoints, FieldContainer<double> &values);
-  
-  // BC
-  virtual bool bcsImposed(int varID); // returns true if there are any BCs anywhere imposed on varID
-  virtual void imposeBC(int varID, FieldContainer<double> &physicalPoints, 
-                        FieldContainer<double> &unitNormals,
-                        FieldContainer<double> &dirichletValues,
-                        FieldContainer<bool> &imposeHere);
+  static Teuchos::RCP<ExactSolution> confusionManufacturedSolution(double epsilon, double beta_x, double beta_y);
 };
 #endif

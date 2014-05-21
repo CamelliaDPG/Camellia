@@ -356,9 +356,9 @@ bool SolutionTests::testAddSolution() {
   FieldContainer<double> expectedValuesU(_testPoints.dimension(0));
   FieldContainer<double> expectedValuesSIGMA1(_testPoints.dimension(0));
   FieldContainer<double> expectedValuesSIGMA2(_testPoints.dimension(0));
-  _confusionSolution2_2x2->solutionValues(expectedValuesU, ConfusionBilinearForm::U, _testPoints);
-  _confusionSolution2_2x2->solutionValues(expectedValuesSIGMA1, ConfusionBilinearForm::SIGMA_1, _testPoints);
-  _confusionSolution2_2x2->solutionValues(expectedValuesSIGMA2, ConfusionBilinearForm::SIGMA_2, _testPoints);
+  _confusionSolution2_2x2->solutionValues(expectedValuesU, ConfusionBilinearForm::U_ID, _testPoints);
+  _confusionSolution2_2x2->solutionValues(expectedValuesSIGMA1, ConfusionBilinearForm::SIGMA_1_ID, _testPoints);
+  _confusionSolution2_2x2->solutionValues(expectedValuesSIGMA2, ConfusionBilinearForm::SIGMA_2_ID, _testPoints);
   
   BilinearForm::multiplyFCByWeight(expectedValuesU, weight+1.0);
   BilinearForm::multiplyFCByWeight(expectedValuesSIGMA1, weight+1.0);
@@ -369,9 +369,9 @@ bool SolutionTests::testAddSolution() {
   FieldContainer<double> valuesSIGMA1(_testPoints.dimension(0));
   FieldContainer<double> valuesSIGMA2(_testPoints.dimension(0));
   
-  _confusionSolution1_2x2->solutionValues(valuesU, ConfusionBilinearForm::U, _testPoints);
-  _confusionSolution1_2x2->solutionValues(valuesSIGMA1, ConfusionBilinearForm::SIGMA_1, _testPoints);
-  _confusionSolution1_2x2->solutionValues(valuesSIGMA2, ConfusionBilinearForm::SIGMA_2, _testPoints);
+  _confusionSolution1_2x2->solutionValues(valuesU, ConfusionBilinearForm::U_ID, _testPoints);
+  _confusionSolution1_2x2->solutionValues(valuesSIGMA1, ConfusionBilinearForm::SIGMA_1_ID, _testPoints);
+  _confusionSolution1_2x2->solutionValues(valuesSIGMA2, ConfusionBilinearForm::SIGMA_2_ID, _testPoints);
   
   for (int pointIndex=0; pointIndex < valuesU.size(); pointIndex++) {
     double diff = abs(valuesU[pointIndex] - expectedValuesU[pointIndex]);
@@ -401,9 +401,9 @@ bool SolutionTests::testProjectFunction() {
   double tol = 1e-14;
   Teuchos::RCP<QuadraticFunction> quadraticFunction = Teuchos::rcp(new QuadraticFunction );
   map<int, Teuchos::RCP<AbstractFunction> > functionMap;
-  functionMap[ConfusionBilinearForm::U] = quadraticFunction;
-  functionMap[ConfusionBilinearForm::SIGMA_1] = quadraticFunction;
-  functionMap[ConfusionBilinearForm::SIGMA_2] = quadraticFunction;
+  functionMap[ConfusionBilinearForm::U_ID] = quadraticFunction;
+  functionMap[ConfusionBilinearForm::SIGMA_1_ID] = quadraticFunction;
+  functionMap[ConfusionBilinearForm::SIGMA_2_ID] = quadraticFunction;
 
   _confusionUnsolved->projectOntoMesh(functionMap);  
   
@@ -411,9 +411,9 @@ bool SolutionTests::testProjectFunction() {
   FieldContainer<double> valuesSIGMA1(_testPoints.dimension(0));
   FieldContainer<double> valuesSIGMA2(_testPoints.dimension(0));
   
-  _confusionUnsolved->solutionValues(valuesU, ConfusionBilinearForm::U, _testPoints);
-  _confusionUnsolved->solutionValues(valuesSIGMA1, ConfusionBilinearForm::SIGMA_1, _testPoints);
-  _confusionUnsolved->solutionValues(valuesSIGMA2, ConfusionBilinearForm::SIGMA_2, _testPoints);
+  _confusionUnsolved->solutionValues(valuesU, ConfusionBilinearForm::U_ID, _testPoints);
+  _confusionUnsolved->solutionValues(valuesSIGMA1, ConfusionBilinearForm::SIGMA_1_ID, _testPoints);
+  _confusionUnsolved->solutionValues(valuesSIGMA2, ConfusionBilinearForm::SIGMA_2_ID, _testPoints);
 
   FieldContainer<double> allCellTestPoints = _testPoints;
   allCellTestPoints.resize(1,_testPoints.dimension(0),_testPoints.dimension(1));
@@ -849,9 +849,9 @@ bool SolutionTests::testAddRefinedSolutions() {
 
   Teuchos::RCP<QuadraticFunction> quadraticFunction = Teuchos::rcp(new QuadraticFunction );
   map<int, Teuchos::RCP<AbstractFunction> > functionMap;
-  functionMap[ConfusionBilinearForm::U] = quadraticFunction;
-  functionMap[ConfusionBilinearForm::SIGMA_1] = quadraticFunction;
-  functionMap[ConfusionBilinearForm::SIGMA_2] = quadraticFunction;
+  functionMap[ConfusionBilinearForm::U_ID] = quadraticFunction;
+  functionMap[ConfusionBilinearForm::SIGMA_1_ID] = quadraticFunction;
+  functionMap[ConfusionBilinearForm::SIGMA_2_ID] = quadraticFunction;
   _confusionSolution2_2x2->projectOntoMesh(functionMap);  // pretend confusionSolution1 is the linearized solution
 
   // solve

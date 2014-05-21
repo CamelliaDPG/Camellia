@@ -164,4 +164,6 @@ void RHS::integrateAgainstOptimalTests(FieldContainer<double> &rhsVector,
       }
     }
   }
+  
+//  cout << "RHS vector:\n" << rhsVector;
 }
