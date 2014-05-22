@@ -8,7 +8,7 @@
 
 #include "SubBasisDofMapper.h"
 #include "SubBasisDofPermutationMapper.h"
-#include "SubBasisDofMatrixMapper.cpp"
+#include "SubBasisDofMatrixMapper.h"
 
 SubBasisDofMapperPtr SubBasisDofMapper::subBasisDofMapper(const set<unsigned> &dofOrdinalFilter, const vector<GlobalIndexType> &globalDofOrdinals) {
   if (dofOrdinalFilter.size() != globalDofOrdinals.size()) {
