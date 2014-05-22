@@ -256,11 +256,14 @@ int main(int argc, char *argv[]) {
   }
   
   if (!use3D) {
+#ifdef USE_VTK
     VTKExporter solnExporter(solution,mesh,varFactory);
     solnExporter.exportSolution("stokesCavityFlowSolution");
+#endif
     
     GnuPlotUtil::writeComputationalMeshSkeleton("cavityFlowRefinedMesh", mesh);
   } else {
+#ifdef USE_VTK
     NewVTKExporter exporter(mesh->getTopology());
     FunctionPtr u1_soln = Function::solution(u1, solution);
     FunctionPtr u2_soln = Function::solution(u2, solution);
@@ -268,6 +271,7 @@ int main(int argc, char *argv[]) {
     exporter.exportFunction(u1_soln, "u1_soln");
     exporter.exportFunction(u2_soln, "u2_soln");
     exporter.exportFunction(u3_soln, "u3_soln");
+#endif
   }
   
   return 0;
