@@ -11,7 +11,7 @@
 #include "MeshTestUtility.h"
 #include "MultiBasis.h"
 
-#include "GDAMaximumRule2D.cpp"
+#include "GDAMaximumRule2D.h"
 
 bool MeshTestUtility::checkMeshConsistency(Teuchos::RCP<Mesh> mesh) {
   bool success = true;
