@@ -8,7 +8,7 @@
 
 #include "CamelliaDebugUtility.h"
 
-#include <iostream.h>
+#include <iostream>
 
 namespace Camellia {
   

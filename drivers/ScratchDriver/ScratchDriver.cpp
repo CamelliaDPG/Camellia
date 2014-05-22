@@ -1,6 +1,6 @@
 //#include "MeshTopology.h"
 
-#include <iostream.h>
+#include <iostream>
 
 #include "Epetra_SerialComm.h"
 
@@ -205,8 +205,10 @@ int main(int argc, char *argv[]) {
       solnMaxRule->solve();
 //      maxRuleSolnCoefficients = solnMaxRule->allCoefficientsForCellID(cellID);
       
+#ifdef USE_VTK
       VTKExporter maxExporter(solnMaxRule,meshMaxRule, varFactory);
       maxExporter.exportSolution("confusionMaxRuleSoln");
+#endif
     }
     
 //    set<IndexType> activeCells = meshMinRule->getActiveCellIDs();
@@ -231,8 +233,10 @@ int main(int argc, char *argv[]) {
     
     cout << "...solved.\n";
     
+#ifdef USE_VTK
     VTKExporter minExporter(solnMinRule,meshMinRule, varFactory);
     minExporter.exportSolution("confusionMinRuleSoln");
+#endif
     
 //    FieldContainer<double> minRuleSolnCoefficients = solnMinRule->allCoefficientsForCellID(cellID);
 //    

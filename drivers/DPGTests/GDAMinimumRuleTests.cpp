@@ -920,10 +920,12 @@ bool GDAMinimumRuleTests::testHangingNodePoisson3D() {
     success = false;
     cout << "GDAMinimumRuleTests failure: for 3D mesh with hanging node and exactly recoverable solution, phi error is " << phi_err_l2 << endl;
     
+#ifdef USE_VTK
     NewVTKExporter exporter(mesh->getTopology());
     exporter.exportFunction(phi_hat_soln, "phi_hat_soln3D");
     exporter.exportFunction(phi_soln, "phi_soln3D");
     exporter.exportFunction(phi_err, "phi_err3D");
+#endif
   }
   
 //  /// now try all that with a finer mesh (largely to see if refining reduces error)
@@ -995,8 +997,10 @@ bool GDAMinimumRuleTests::testHangingNodePoisson(bool useQuads) {
   
   GnuPlotUtil::writeComputationalMeshSkeleton("/tmp/hangingNodeTestMesh", mesh, true); // true: label cells
   
+#ifdef USE_VTK
   VTKExporter solnExporter(soln,soln->mesh(),vf);
   solnExporter.exportSolution("poissonSolution");
+#endif
   
   double tol = 1e-12;
   double phi_err_l2 = phi_err->l2norm(mesh);
@@ -1019,7 +1023,9 @@ bool GDAMinimumRuleTests::testHangingNodePoisson(bool useQuads) {
     
     GnuPlotUtil::writeComputationalMeshSkeleton("/tmp/hangingNodeTestMesh_2irregular", mesh, true); // true: label cells
     
+#ifdef USE_VTK
     solnExporter.exportSolution("poissonSolution_2_irregular");
+#endif
     
     tol = 1e-12;
     phi_err_l2 = phi_err->l2norm(mesh);
@@ -1081,8 +1087,10 @@ bool GDAMinimumRuleTests::testHangingNodeStokes(bool useQuads) {
   FunctionPtr u2_err = u2_soln - u2_exact;
   
   GnuPlotUtil::writeComputationalMeshSkeleton("/tmp/hangingNodeTestMesh", mesh, true); // true: label cells
+#ifdef USE_VTK
   VTKExporter solnExporter(soln,soln->mesh(),vf);
   solnExporter.exportSolution("stokesExactSolution");
+#endif
   
   double tol = divideIntoTriangles ? 1e-10 : 1e-13; // for now, anyway, we accept a larger tolerance for triangular meshes...
   double u1_err_l2 = u1_err->l2norm(mesh);
@@ -1217,9 +1225,11 @@ bool GDAMinimumRuleTests::testMultiCellMesh() {
     success = false;
     cout << "GDAMinimumRuleTests failure: for 3D 2x2x2 mesh and exactly recoverable Poisson solution, phi error is " << phi_err_l2 << endl;
     
+#ifdef USE_VTK
     NewVTKExporter exporter(mesh->getTopology());
     exporter.exportFunction(phi_soln, "phi_soln3D");
     exporter.exportFunction(phi_err, "phi_err3D");
+#endif
   }
   
   // now, construct a single-cell mesh, but then refine it
@@ -1251,9 +1261,11 @@ bool GDAMinimumRuleTests::testMultiCellMesh() {
     success = false;
     cout << "GDAMinimumRuleTests failure: for 3D 2x2x2 Poisson mesh (arrived at by refinement of single cell) and exactly recoverable Poisson solution, phi error is " << phi_err_l2 << endl;
     
+#ifdef USE_VTK
     NewVTKExporter exporter(mesh->getTopology());
     exporter.exportFunction(phi_soln, "phi_soln3D");
     exporter.exportFunction(phi_err, "phi_err3D");
+#endif
   }
   
   return success;
@@ -1351,8 +1363,10 @@ bool GDAMinimumRuleTests::testPoissonCompatibleMeshWithHeterogeneousOrientations
     
     GnuPlotUtil::writeComputationalMeshSkeleton("/tmp/heterogenouslyOrientedMesh", mesh, true); // true: label cells
     
+#ifdef USE_VTK
     VTKExporter solnExporter(solution,mesh,varFactory);
     solnExporter.exportSolution("poissonSolutionHeterogenouslyOrientedMesh");
+#endif
     
     map<int, FunctionPtr> exactSolutionMap;
     exactSolutionMap[phi->ID()] = phi_exact;
@@ -1360,7 +1374,9 @@ bool GDAMinimumRuleTests::testPoissonCompatibleMeshWithHeterogeneousOrientations
     exactSolutionMap[psi2->ID()] = phi_exact->dy();
     solution->projectOntoMesh(exactSolutionMap);
 
+#ifdef USE_VTK
     solnExporter.exportSolution("poissonProjectedExactSolutionHeterogenouslyOrientedMesh");
+#endif
     
     { // experiment: trying with the maximum rule code
       vector< vector<double> > vertices;
@@ -1392,8 +1408,10 @@ bool GDAMinimumRuleTests::testPoissonCompatibleMeshWithHeterogeneousOrientations
       
       cout << "Phi error for clockwise mesh using max rule: " << maxRuleError << endl;
       
+#ifdef USE_VTK
       VTKExporter solnExporter(maxRuleSoln,mesh,varFactory);
       solnExporter.exportSolution("phiSolnMaxRuleCWMesh");
+#endif
     }
     
     success = false;
@@ -1442,9 +1460,11 @@ bool GDAMinimumRuleTests::testSingleCellMesh() {
     success = false;
     cout << "GDAMinimumRuleTests failure: for 3D single-cell mesh and exactly recoverable Poisson solution, phi error is " << phi_err_l2 << endl;
     
+#ifdef USE_VTK
     NewVTKExporter exporter(mesh->getTopology());
     exporter.exportFunction(phi_soln, "phi_soln3D");
     exporter.exportFunction(phi_err, "phi_err3D");
+#endif
   }
   
   // this should be a trivial test:

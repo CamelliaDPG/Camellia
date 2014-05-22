@@ -93,7 +93,9 @@
 
 //#include <fenv.h>
 
+#ifdef ENABLE_INTEL_FLOATING_POINT_EXCEPTIONS
 #include <xmmintrin.h>
+#endif
 
 using namespace std;
 using namespace Intrepid;
