@@ -468,6 +468,42 @@ SolutionPtr GDAMinimumRuleTests::stokesExactSolution(bool useMinRule, int horizo
 
 
 void GDAMinimumRuleTests::runTests(int &numTestsRun, int &numTestsPassed) {
+  bool useQuads = false;
+  setup();
+  if (testHangingNodePoisson(useQuads)) {
+    numTestsPassed++;
+  }
+  numTestsRun++;
+  teardown();
+  
+  cout << "testHangingNodePoisson (triangles) complete.\n";
+  setup();
+  if (testHangingNodeStokes(useQuads)) {
+    numTestsPassed++;
+  }
+  numTestsRun++;
+  teardown();
+  
+  cout << "testHangingNodeStokes (triangles) complete.\n";
+  
+  useQuads = true;
+  setup();
+  if (testHangingNodePoisson(useQuads)) {
+    numTestsPassed++;
+  }
+  numTestsRun++;
+  teardown();
+  
+  //  cout << "testHangingNodePoisson (quads) complete.\n";
+  setup();
+  if (testHangingNodeStokes(useQuads)) {
+    numTestsPassed++;
+  }
+  numTestsRun++;
+  teardown();
+  
+  //  cout << "testHangingNodeStokes (quads) complete.\n";
+  
   setup();
   if (testHangingNodePoisson3D()) {
     numTestsPassed++;
@@ -511,42 +547,6 @@ void GDAMinimumRuleTests::runTests(int &numTestsRun, int &numTestsPassed) {
   teardown();
   
   //  cout << "testGlobalToLocalToGlobalConsistency complete.\n";
-  
-  bool useQuads = false;
-  setup();
-  if (testHangingNodePoisson(useQuads)) {
-    numTestsPassed++;
-  }
-  numTestsRun++;
-  teardown();
-  
-  cout << "testHangingNodePoisson (triangles) complete.\n";
-  setup();
-  if (testHangingNodeStokes(useQuads)) {
-    numTestsPassed++;
-  }
-  numTestsRun++;
-  teardown();
-  
-  cout << "testHangingNodeStokes (triangles) complete.\n";
-  
-  useQuads = true;
-  setup();
-  if (testHangingNodePoisson(useQuads)) {
-    numTestsPassed++;
-  }
-  numTestsRun++;
-  teardown();
-  
-  //  cout << "testHangingNodePoisson (quads) complete.\n";
-  setup();
-  if (testHangingNodeStokes(useQuads)) {
-    numTestsPassed++;
-  }
-  numTestsRun++;
-  teardown();
-  
-  //  cout << "testHangingNodeStokes (quads) complete.\n";
   
   setup();
   if (testHRefinements()) {
