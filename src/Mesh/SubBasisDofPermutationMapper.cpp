@@ -8,7 +8,7 @@
 
 #include "SubBasisDofPermutationMapper.h"
 
-#include <set.h>
+#include <set>
 using namespace std;
 
 SubBasisDofPermutationMapper::SubBasisDofPermutationMapper(const set<unsigned> &basisDofOrdinalFilter, const vector<GlobalIndexType> &globalDofOrdinals) {
