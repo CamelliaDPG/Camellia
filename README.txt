@@ -81,6 +81,7 @@ MUMPS install:
 
 Once that's done, you're ready to start on the Camellia build.
 
+Instructions for a serial debug build:
 1. Clone from repo.
 	git clone https://github.com/CamelliaDPG/Camellia.git
 2. Go to the serial-debug build directory:
@@ -88,7 +89,6 @@ Once that's done, you're ready to start on the Camellia build.
 3. Copy the do-configure-cli-mpi-debug to do-configure-cli-serial-debug.  Edit it in the following manner:
 	- set the TRILINOS_PATH to your serial-debug Trilinos installation
 	- set the VTK_DIR to match wherever you installed VTK
-	- delete the lines setting the MPI_DIR, MUMPS_DIR, and SCALAPACK_LIB
 4. Run the do-configure script:
 	./do-configure-cli-serial-debug
 5. Try building DPGTests:
