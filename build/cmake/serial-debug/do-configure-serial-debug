@@ -1,0 +1,10 @@
+rm CMakeCache.txt
+rm -r CMakeFiles
+
+cmake \
+  -D TRILINOS_PATH:FILEPATH="/Users/nroberts/lib/trilinos/serial-debug" \
+  -D CAMELLIA_SOURCE_DIR:FILEPATH="/Users/nroberts/Camellia/src" \
+  -D CAMELLIA_BUILD_TYPE:STRING="serial-debug" \
+  -D CMAKE_BUILD_TYPE="DEBUG" \
+  -DVTK_DIR=/Users/nroberts/lib/vtk-5.10 \
+  .
