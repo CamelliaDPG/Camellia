@@ -263,7 +263,7 @@ RefinementBranch Cell::refinementBranchForSubcell(unsigned subcdim, unsigned sub
       if (children[i]->cellIndex() == childCellIndex) {
         childOrdinals.push_back(i);
         
-        subcord = currentAncestor->refinementPattern()->mapSubcellOrdinalFromChildToParent(i, subcdim, subcord);
+        subcord = currentAncestor->refinementPattern()->mapSubcellOrdinalFromChildToParent(i, subcellEntityDimension, subcord);
         if (subcord == -1) {
           // then it should be the case that the subcell entity has as generalized parent a higher-dimension subcell of currentAncestor
           pair<IndexType, unsigned> generalizedParent = _meshTopo->getEntityGeneralizedParent(subcellEntityDimension, subcellEntityIndex);
