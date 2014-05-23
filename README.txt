@@ -79,9 +79,9 @@ MUMPS install:
 
 ******** BUILDING CAMELLIA **********
 
-Once that's done, you're ready to start on the Camellia build.  (There are two actively used ways of building Camellia, both of which use cmake.  I think my way (which is older) is probably the less elegant one, but I've not yet set my own stuff up for the new way of building, so I'm giving you my approach, since that's the one I'm familiar with.)
+Once that's done, you're ready to start on the Camellia build.
 
-1. Clone from repo.  (I did fix a couple issues yesterday, so it's worth doing a fresh pull if you've done one already)
+1. Clone from repo.
 	git clone https://github.com/CamelliaDPG/Camellia.git
 2. Go to the serial-debug build directory:
 	cd build/cmake/cli-debug
