@@ -1,0 +1,34 @@
+EXTRA_ARGS=$@
+
+rm -f CMakeCache.txt
+
+cmake \
+-D Trilinos_WARNINGS_AS_ERRORS_FLAGS:STRING="" \
+-D TPL_ENABLE_MPI:BOOL=ON \
+-D TPL_ENABLE_MUMPS:STRING=ON \
+-D MUMPS_LIBRARY_DIRS:FILEPATH=/Users/nroberts/lib/mumps-4.10.0 \
+-D MUMPS_LIBRARY_NAMES:STRING="dmumps; pord; mumps_common" \
+-D TPL_MUMPS_INCLUDE_DIRS:FILEPATH=/Users/nroberts/lib/mumps-4.10.0/include \
+-D CMAKE_CXX_COMPILER:FILEPATH=/Users/nroberts/lib/openmpi-1.6.5/bin/mpicxx \
+-D CMAKE_C_COMPILER:FILEPATH=/Users/nroberts/lib/openmpi-1.6.5/bin/mpicc \
+-D CMAKE_Fortran_COMPILER:FILEPATH=/Users/nroberts/lib/openmpi-1.6.5/bin/mpif90 \
+-D MPI_BASE_DIR:PATH=/Users/nroberts/lib/openmpi-1.6.5 \
+-D HAVE_GCC_ABI_DEMANGLE:BOOL=ON \
+-D DART_TESTING_TIMEOUT:STRING=600 \
+-D CMAKE_VERBOSE_MAKEFILE:BOOL=TRUE \
+-D Trilinos_ENABLE_Anasazi:BOOL=ON \
+-D Trilinos_ENABLE_Intrepid:BOOL=ON \
+-D Trilinos_ENABLE_Sacado:BOOL=ON \
+-D Trilinos_ENABLE_Epetra:BOOL=ON \
+-D Trilinos_ENABLE_EpetraExt:BOOL=ON \
+-D Trilinos_ENABLE_Teuchos:BOOL=ON \
+-D Trilinos_ENABLE_Shards:BOOL=ON \
+-D Trilinos_ENABLE_Amesos:BOOL=ON \
+-D Trilinos_ENABLE_Zoltan:BOOL=ON \
+-D Trilinos_ENABLE_ML:BOOL=ON \
+-D Trilinos_ENABLE_TESTS:BOOL=OFF	 \
+-D Trilinos_SKIP_FORTRANCINTERFACE_VERIFY_TEST:BOOL=ON \
+-D CMAKE_INSTALL_PREFIX:PATH=/Users/nroberts/lib/trilinos/mpi-release/ \
+$EXTRA_ARGS \
+../../
+
