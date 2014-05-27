@@ -1,12 +1,16 @@
 rm -f CMakeCache.txt
+rm Makefile
+rm cmake_install.cmake
+rm -rf CMakeFiles
+rm -rf tests
 
-cmake \
-  -D TRILINOS_PATH:FILEPATH="/projects/Camellia/lib/Trilinos/Versions/11.4.1-Release" \
-  -D CAMELLIA_SOURCE_DIR:FILEPATH="$HOME/Camellia/src" \
+/soft/buildtools/cmake/2.8.10.2/gcc/fen/bin/cmake \
+  -D TRILINOS_PATH:FILEPATH="/projects/Camellia/lib/Trilinos/Versions/11.8.1-Release" \
+  -D CAMELLIA_SOURCE_DIR:FILEPATH="/projects/Camellia/Camellia/src" \
   -D CAMELLIA_BUILD_TYPE:STRING="mpi-release-trimmed" \
   -D CMAKE_BUILD_TYPE="Release" \
-  -D MUMPS_DIR="/projects/Camellia/lib/MUMPS/Latest" \
+  -D MUMPS_DIR="/soft/libraries/petsc/3.3-p6/xl-opt/lib/" \
   -DBOOST_ROOT="/soft/libraries/boost/current/cnk-xl/current" \
   -DADDITIONAL_LIBRARY_DIRS="/soft/compilers/ibmcmp-may2013/vacpp/bg/12.1/lib64;/soft/compilers/ibmcmp-may2013/xlf/bg/14.1/lib64/;/soft/compilers/ibmcmp-may2013/xlsmp/bg/3.1/bglib64" \
-  -DADDITIONAL_LIBRARIES="xlopt;xl;xlf90_r;xlfmath;xlomp_ser" \
+  -DADDITIONAL_LIBRARIES="xlf90_r;xlfmath;xlomp_ser;-lxl" \
   .
