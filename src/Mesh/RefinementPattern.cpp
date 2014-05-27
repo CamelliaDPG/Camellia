@@ -700,10 +700,15 @@ pair<unsigned, unsigned> RefinementPattern::mapSubcellFromChildToParent(unsigned
   CellPtr parentCell = _refinementTopology->getCell(0);
   CellPtr childCell = parentCell->children()[childOrdinal];
   IndexType childEntityIndex = childCell->entityIndex(subcdim, childSubcord);
-  pair<IndexType,unsigned> generalizedParent = _refinementTopology->getEntityGeneralizedParent(subcdim, childEntityIndex);
-  unsigned parentSubcord = parentCell->findSubcellOrdinal(generalizedParent.second, generalizedParent.first);
-  
-  return make_pair(generalizedParent.second, parentSubcord);
+  // if parent has the child's entity as a subcell, then we should return the ordinal of that entity in the parent.
+  unsigned parentSubcord = parentCell->findSubcellOrdinal(subcdim, childEntityIndex);
+  if (parentSubcord == -1) {
+    pair<IndexType,unsigned> generalizedParent = _refinementTopology->getEntityGeneralizedParent(subcdim, childEntityIndex);
+    parentSubcord = parentCell->findSubcellOrdinal(generalizedParent.second, generalizedParent.first);
+    return make_pair(generalizedParent.second, parentSubcord);
+  } else {
+    return make_pair(subcdim, parentSubcord);
+  }
 }
 
 
