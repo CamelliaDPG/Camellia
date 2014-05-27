@@ -1,0 +1,63 @@
+#!/bin/bash
+
+TRILINOS_PATH=../../trilinos-11.8.1-Source
+EXTRA_ARGS=$@
+
+rm -f CMakeCache.txt
+rm -r CMakeFiles
+
+/soft/buildtools/cmake-2.8.7/bin/cmake \
+    -D CMAKE_BUILD_TYPE:STRING=RELEASE \
+    -D Trilinos_ENABLE_Amesos:BOOL=ON \
+    -D Trilinos_ENABLE_Anasazi:BOOL=OFF \
+    -D Trilinos_ENABLE_AztecOO:BOOL=ON \
+    -D Trilinos_ENABLE_Belos:BOOL=OFF \
+    -D Trilinos_ENABLE_Epetra:BOOL=ON \
+    -D Trilinos_ENABLE_EpetraExt:BOOL=ON \
+    -D Trilinos_ENABLE_Intrepid:BOOL=ON \
+    -D Trilinos_ENABLE_Kokkos:BOOL=OFF \
+    -D Trilinos_ENABLE_ML:BOOL=ON \
+    -D Trilinos_ENABLE_Pamgen:BOOL=OFF \
+    -D Trilinos_ENABLE_Sacado:BOOL=ON \
+    -D Trilinos_ENABLE_Shards:BOOL=ON \
+    -D Trilinos_ENABLE_Teuchos:BOOL=ON \
+    -D Trilinos_ENABLE_Thyra:BOOL=OFF \
+    -D Trilinos_ENABLE_Zoltan:BOOL=ON \
+    -D Trilinos_ENABLE_TESTS:BOOL=OFF \
+    -D Trilinos_ENABLE_EXAMPLES:BOOL=OFF \
+    -D Trilinos_ENABLE_ALL_OPTIONAL_PACKAGES:BOOL=OFF \
+    -D CTrilinos_ENABLE_TESTS:BOOL=OFF \
+    -D CTrilinos_ENABLE_EXAMPLES:BOOL=OFF \
+    -D TPL_ENABLE_MPI:BOOL=ON \
+    -D MPI_USE_COMPILER_WRAPPERS:BOOL=ON \
+    -D MPI_CXX_COMPILER:FILEPATH=mpiclang++ \
+    -D MPI_C_COMPILER:FILEPATH=mpiclang \
+    -D Trilinos_SKIP_FORTRANCINTERFACE_VERIFY_TEST:BOOL=ON \
+    -D MPI_Fortran_COMPILER:FILEPATH=/bgsys/drivers/ppcfloor/comm/xl/bin/mpixlf90_r \
+    -D CMAKE_VERBOSE_MAKEFILE:BOOL=TRUE \
+    -D Trilinos_VERBOSE_CONFIGURE:BOOL=TRUE \
+    -D TPL_ENABLE_BLAS:STRING=ON \
+    -D BLAS_LIBRARY_DIRS:FILEPATH="/soft/libraries/alcf/current/xl/BLAS/lib/" \
+    -D BLAS_LIBRARY_NAMES:STRING="libblas.a /soft/compilers/ibmcmp-aug2013/xlf/bg/14.1/bglib64/libxl.a /soft/compilers/ibmcmp-aug2013/xlf/bg/14.1/bglib64/libxlf90_r.a /soft/compilers/ibmcmp-aug2013/xlf/bg/14.1/bglib64/libxlf90_r.a /soft/compilers/ibmcmp-aug2013/xlf/bg/14.1/bglib64/libxlfmath.a /soft/compilers/ibmcmp-aug2013/xlf/bg/14.1/bglib64/libxlopt.a"\
+    -D TPL_ENABLE_MUMPS:STRING=ON \
+    -D MUMPS_LIBRARY_DIRS:FILEPATH=/soft/libraries/petsc/3.3-p6/xl-opt/lib/ \
+    -D MUMPS_LIBRARY_NAMES:STRING="dmumps; pord; mumps_common; pord" \
+    -D TPL_MUMPS_INCLUDE_DIRS:FILEPATH=/soft/libraries/petsc/3.3-p6/xl-opt/include/ \
+    -D TPL_ENABLE_LAPACK:STRING=ON \
+    -D LAPACK_LIBRARY_DIRS:FILEPATH="/soft/libraries/alcf/current/xl/LAPACK/lib" \
+    -D LAPACK_LIBRARY_NAMES:STRING="liblapack.a /soft/compilers/ibmcmp-aug2013/xlf/bg/14.1/bglib64/libxl.a /soft/compilers/ibmcmp-aug2013/xlf/bg/14.1/bglib64/libxlf90_r.a /soft/compilers/ibmcmp-aug2013/xlf/bg/14.1/bglib64/libxlf90_r.a /soft/compilers/ibmcmp-aug2013/xlf/bg/14.1/bglib64/libxlfmath.a /soft/compilers/ibmcmp-aug2013/xlf/bg/14.1/bglib64/libxlopt.a"\
+    -D TPL_ENABLE_SCALAPACK:STRING=ON \
+    -D SCALAPACK_LIBRARY_DIRS:FILEPATH="/soft/libraries/alcf/current/xl/SCALAPACK/lib" \
+    -D SCALAPACK_LIBRARY_NAMES:STRING="libscalapack.a" \
+    -D CMAKE_CXX_FLAGS_RELEASE:STRING="-g -O3" \
+    -D CMAKE_C_FLAGS_RELEASE:STRING="-g -O3" \
+    -D CMAKE_Fortran_FLAGS_RELEASE:STRING="-g -O3" \
+    -D CMAKE_INSTALL_PREFIX="/projects/Camellia/lib/Trilinos/Versions/11.8.1-Release/" \
+    -D TPL_ENABLE_METIS:STRING=ON \
+    -D METIS_LIBRARY_DIRS:FILEPATH="/soft/libraries/alcf/current/xl/METIS/lib/" \
+    -D METIS_INCLUDE_DIRS:FILEPATH="/soft/libraries/alcf/current/xl/METIS/include/" \
+    -D TPL_ENABLE_ParMETIS:STRING=ON \
+    -D ParMETIS_LIBRARY_DIRS:FILEPATH="/soft/libraries/alcf/current/xl/PARMETIS/lib/" \
+    -D ParMETIS_INCLUDE_DIRS:FILEPATH="/soft/libraries/alcf/current/xl/PARMETIS/include/" \
+    $EXTRA_ARGS \
+    ${TRILINOS_PATH}
