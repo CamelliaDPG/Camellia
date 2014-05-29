@@ -468,25 +468,7 @@ SolutionPtr GDAMinimumRuleTests::stokesExactSolution(bool useMinRule, int horizo
 
 
 void GDAMinimumRuleTests::runTests(int &numTestsRun, int &numTestsPassed) {
-  bool useQuads = false;
-  setup();
-  if (testHangingNodePoisson(useQuads)) {
-    numTestsPassed++;
-  }
-  numTestsRun++;
-  teardown();
-  
-  cout << "testHangingNodePoisson (triangles) complete.\n";
-  setup();
-  if (testHangingNodeStokes(useQuads)) {
-    numTestsPassed++;
-  }
-  numTestsRun++;
-  teardown();
-  
-  cout << "testHangingNodeStokes (triangles) complete.\n";
-  
-  useQuads = true;
+  bool useQuads = true;
   setup();
   if (testHangingNodePoisson(useQuads)) {
     numTestsPassed++;
@@ -495,6 +477,7 @@ void GDAMinimumRuleTests::runTests(int &numTestsRun, int &numTestsPassed) {
   teardown();
   
   //  cout << "testHangingNodePoisson (quads) complete.\n";
+  
   setup();
   if (testHangingNodeStokes(useQuads)) {
     numTestsPassed++;
@@ -503,6 +486,25 @@ void GDAMinimumRuleTests::runTests(int &numTestsRun, int &numTestsPassed) {
   teardown();
   
   //  cout << "testHangingNodeStokes (quads) complete.\n";
+
+  
+  useQuads = false;
+  setup();
+  if (testHangingNodePoisson(useQuads)) {
+    numTestsPassed++;
+  }
+  numTestsRun++;
+  teardown();
+  
+//  cout << "testHangingNodePoisson (triangles) complete.\n";
+  setup();
+  if (testHangingNodeStokes(useQuads)) {
+    numTestsPassed++;
+  }
+  numTestsRun++;
+  teardown();
+  
+//  cout << "testHangingNodeStokes (triangles) complete.\n";
   
   setup();
   if (testHangingNodePoisson3D()) {
@@ -511,7 +513,7 @@ void GDAMinimumRuleTests::runTests(int &numTestsRun, int &numTestsPassed) {
   numTestsRun++;
   teardown();
 
-  cout << "testHangingNodePoisson3D complete.\n";
+//  cout << "testHangingNodePoisson3D complete.\n";
   
   setup();
   if (testSingleCellMesh()) {
@@ -520,7 +522,7 @@ void GDAMinimumRuleTests::runTests(int &numTestsRun, int &numTestsPassed) {
   numTestsRun++;
   teardown();
   
-  cout << "testSingleCellMesh complete.\n";
+//  cout << "testSingleCellMesh complete.\n";
   
   setup();
   if (testMultiCellMesh()) {
@@ -529,7 +531,7 @@ void GDAMinimumRuleTests::runTests(int &numTestsRun, int &numTestsPassed) {
   numTestsRun++;
   teardown();
   
-  cout << "testMultiCellMesh complete.\n";
+//  cout << "testMultiCellMesh complete.\n";
 
   // skip this test for now--I'm not sure the failure tells us a lot...
 //  setup();
@@ -973,7 +975,7 @@ bool GDAMinimumRuleTests::testHangingNodePoisson(bool useQuads) {
   // exact solution: for now, we just use a linear phi
   FunctionPtr x = Function::xn(1);
   FunctionPtr y = Function::yn(1);
-  FunctionPtr phi_exact = x + y;
+  FunctionPtr phi_exact = x + 0.5 * y;
   
   SolutionPtr soln = poissonExactSolution(true, horizontalCellsInitialMesh, verticalCellsInitialMesh, H1Order, phi_exact, divideIntoTriangles);
   
@@ -997,16 +999,15 @@ bool GDAMinimumRuleTests::testHangingNodePoisson(bool useQuads) {
   
   GnuPlotUtil::writeComputationalMeshSkeleton("/tmp/hangingNodeTestMesh", mesh, true); // true: label cells
   
-#ifdef USE_VTK
-  VTKExporter solnExporter(soln,soln->mesh(),vf);
-  solnExporter.exportSolution("poissonSolution");
-#endif
-  
   double tol = 1e-12;
   double phi_err_l2 = phi_err->l2norm(mesh);
   if (phi_err_l2 > tol) {
     success = false;
     cout << "GDAMinimumRuleTests failure: for mesh with hanging node and exactly recoverable solution, phi error is " << phi_err_l2 << endl;
+#ifdef USE_VTK
+    VTKExporter solnExporter(soln,soln->mesh(),vf);
+    solnExporter.exportSolution("poissonSolution");
+#endif
   }
   
   if ( ! MeshTestSuite::neighborBasesAgreeOnSides(mesh, _testPoints1D)) {
@@ -1020,18 +1021,20 @@ bool GDAMinimumRuleTests::testHangingNodePoisson(bool useQuads) {
     cellIDs.clear();
     cellIDs.insert(5); // TODO: eliminate this hard-coded cell ID in favor of one that we look up in terms of physical points...
     mesh->hRefine(cellIDs, RefinementPattern::regularRefinementPatternQuad());
+    soln->solve();
     
     GnuPlotUtil::writeComputationalMeshSkeleton("/tmp/hangingNodeTestMesh_2irregular", mesh, true); // true: label cells
-    
-#ifdef USE_VTK
-    solnExporter.exportSolution("poissonSolution_2_irregular");
-#endif
     
     tol = 1e-12;
     phi_err_l2 = phi_err->l2norm(mesh);
     if (phi_err_l2 > tol) {
       success = false;
-      cout << "GDAMinimumRuleTests failure: for mesh with hanging node and exactly recoverable solution, phi error is " << phi_err_l2 << endl;
+      cout << "GDAMinimumRuleTests failure: for 2-irregular mesh with hanging node and exactly recoverable solution, phi error is " << phi_err_l2 << endl;
+      mesh->getTopology()->printAllEntities();
+#ifdef USE_VTK
+      VTKExporter solnExporter(soln,soln->mesh(),vf);
+      solnExporter.exportSolution("poissonSolution_2_irregular");
+#endif
     }
     
     if ( ! MeshTestSuite::neighborBasesAgreeOnSides(mesh, _testPoints1D)) {
@@ -1039,6 +1042,54 @@ bool GDAMinimumRuleTests::testHangingNodePoisson(bool useQuads) {
       cout << "GDAMinimumRuleTests failure: for 2D Poisson " << meshType << " mesh with 2-irregular hanging node, neighboring bases do not agree on sides." << endl;
       success = false;
     }
+    
+    // try another 2-irregular mesh, this one inspired by apparent issues in the Stokes cavity flow driver:
+    horizontalCellsInitialMesh = 2;
+    verticalCellsInitialMesh = 2;
+    H1Order = 2;
+    
+//    phi_exact = Teuchos::rcp( new Exp_ay(10)) ; // not exactly recoverable!!
+    
+    soln = poissonExactSolution(true, horizontalCellsInitialMesh, verticalCellsInitialMesh, H1Order, phi_exact, divideIntoTriangles);
+    
+    mesh = soln->mesh();
+    
+    // refine left cell:
+    set<unsigned> cellsToRefine;
+    cellsToRefine.insert(1);
+    cellsToRefine.insert(3);
+    mesh->hRefine(cellsToRefine, RefinementPattern::regularRefinementPatternQuad());
+    cellsToRefine.clear();
+    cellsToRefine.insert(7);
+    cellsToRefine.insert(10);
+    mesh->hRefine(cellsToRefine, RefinementPattern::regularRefinementPatternQuad());
+    cellsToRefine.clear();
+    cellsToRefine.insert(14);
+    cellsToRefine.insert(15);
+    cellsToRefine.insert(18);
+    cellsToRefine.insert(19);
+    mesh->hRefine(cellsToRefine, RefinementPattern::regularRefinementPatternQuad());
+    
+    soln->solve();
+    
+    FunctionPtr phi_soln = Function::solution(phi, soln);
+    
+    FunctionPtr phi_err = phi_soln - phi_exact;
+    
+    GnuPlotUtil::writeComputationalMeshSkeleton("/tmp/hangingNodeTestMesh_2_irregular_2", mesh, true); // true: label cells
+    
+    double tol = 1e-12;
+    double phi_err_l2 = phi_err->l2norm(mesh);
+    if (phi_err_l2 > tol) {
+      success = false;
+      cout << "GDAMinimumRuleTests failure: for 2nd 2-irregular mesh with hanging node and *not* exactly recoverable solution, phi error is " << phi_err_l2 << endl;
+      
+#ifdef USE_VTK
+      VTKExporter solnExporter(soln,soln->mesh(),vf);
+      solnExporter.exportSolution("poissonSolution_2_irregular_2");
+#endif
+    }
+
   }
   
   return success;
@@ -1087,10 +1138,6 @@ bool GDAMinimumRuleTests::testHangingNodeStokes(bool useQuads) {
   FunctionPtr u2_err = u2_soln - u2_exact;
   
   GnuPlotUtil::writeComputationalMeshSkeleton("/tmp/hangingNodeTestMesh", mesh, true); // true: label cells
-#ifdef USE_VTK
-  VTKExporter solnExporter(soln,soln->mesh(),vf);
-  solnExporter.exportSolution("stokesExactSolution");
-#endif
   
   double tol = divideIntoTriangles ? 1e-10 : 1e-13; // for now, anyway, we accept a larger tolerance for triangular meshes...
   double u1_err_l2 = u1_err->l2norm(mesh);
@@ -1099,6 +1146,10 @@ bool GDAMinimumRuleTests::testHangingNodeStokes(bool useQuads) {
   if (u1_rel_err > tol) {
     success = false;
     cout << "GDAMinimumRuleTests failure: for mesh with hanging node and exactly recoverable solution, relative u1 error is " << u1_rel_err << endl;
+#ifdef USE_VTK
+    VTKExporter solnExporter(soln,soln->mesh(),vf);
+    solnExporter.exportSolution("stokesExactSolution");
+#endif
   }
   
   double u2_err_l2 = u2_err->l2norm(mesh);
@@ -1107,12 +1158,79 @@ bool GDAMinimumRuleTests::testHangingNodeStokes(bool useQuads) {
   if (u2_rel_err > tol) {
     success = false;
     cout << "GDAMinimumRuleTests failure: for mesh with hanging node and exactly recoverable solution, relative u2 error is " << u2_rel_err << endl;
+#ifdef USE_VTK
+    VTKExporter solnExporter(soln,soln->mesh(),vf);
+    solnExporter.exportSolution("stokesExactSolution");
+#endif
   }
   
   if ( ! MeshTestSuite::neighborBasesAgreeOnSides(mesh, _testPoints1D)) {
     string meshType = useQuads ? "quad" : "triangle";
     cout << "GDAMinimumRuleTests failure: for 2D Stokes " << meshType << " mesh with hanging node, neighboring bases do not agree on sides." << endl;
     success = false;
+  }
+ 
+  if (useQuads) {
+    // try another 2-irregular mesh, this one inspired by apparent issues in the Stokes cavity flow driver:
+    horizontalCellsInitialMesh = 2;
+    verticalCellsInitialMesh = 2;
+    H1Order = 2;
+    
+    u1_exact = x + y; // Teuchos::rcp( new Exp_ay(10) );
+    u2_exact = x - y; // Function::zero();
+    
+    soln = stokesExactSolution(true, horizontalCellsInitialMesh, verticalCellsInitialMesh, H1Order,
+                               u1_exact, u2_exact, p_exact, divideIntoTriangles);
+    
+    mesh = soln->mesh();
+    
+    // refine left cell:
+    set<unsigned> cellsToRefine;
+    cellsToRefine.insert(1);
+    cellsToRefine.insert(3);
+    mesh->hRefine(cellsToRefine, RefinementPattern::regularRefinementPatternQuad());
+    cellsToRefine.clear();
+    cellsToRefine.insert(7);
+    cellsToRefine.insert(10);
+    mesh->hRefine(cellsToRefine, RefinementPattern::regularRefinementPatternQuad());
+    cellsToRefine.clear();
+    cellsToRefine.insert(14);
+    cellsToRefine.insert(15);
+    cellsToRefine.insert(18);
+    cellsToRefine.insert(19);
+    mesh->hRefine(cellsToRefine, RefinementPattern::regularRefinementPatternQuad());
+    
+    soln->solve();
+    
+    GnuPlotUtil::writeComputationalMeshSkeleton("/tmp/hangingNodeTestMesh_2_irregular_2", mesh, true); // true: label cells
+    
+    u1_soln = Function::solution(u1, soln);
+    u2_soln = Function::solution(u2, soln);
+    
+    u1_err = u1_soln - u1_exact;
+    u2_err = u2_soln - u2_exact;
+    
+    double tol = divideIntoTriangles ? 1e-10 : 1e-12; // for now, anyway, we accept a larger tolerance for triangular meshes...
+    double u1_err_l2 = u1_err->l2norm(mesh);
+    double u1_l2 = u1_exact->l2norm(mesh);
+    double u1_rel_err = u1_err_l2 / u1_l2;
+    if (u1_rel_err > tol) {
+      success = false;
+      cout << "GDAMinimumRuleTests failure: for mesh with hanging node and exactly recoverable solution, relative u1 error is " << u1_rel_err << endl;
+      
+#ifdef USE_VTK
+      VTKExporter solnExporter(soln,soln->mesh(),vf);
+      solnExporter.exportSolution("stokesSolution_2_irregular_2");
+#endif
+    }
+    
+    double u2_err_l2 = u2_err->l2norm(mesh);
+    double u2_l2 = u2_exact->l2norm(mesh);
+    double u2_rel_err = u2_err_l2 / u2_l2;
+    if (u2_rel_err > tol) {
+      success = false;
+      cout << "GDAMinimumRuleTests failure: for mesh with hanging node and exactly recoverable solution, relative u2 error is " << u2_rel_err << endl;
+    }
   }
   
   return success;

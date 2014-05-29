@@ -564,6 +564,15 @@ SubBasisReconciliationWeights BasisReconciliation::computeConstrainedWeights(uns
   coarseTopoRefNodesPermuted.resize(1,coarseTopoRefNodesPermuted.dimension(0),coarseTopoRefNodesPermuted.dimension(1));
   coarseDomainCache->setPhysicalCellNodes(coarseTopoRefNodesPermuted, vector<GlobalIndexType>(), false);
   
+  FieldContainer<double> coarseDomainRefCellPoints = coarseDomainCache->getPhysicalCubaturePoints();
+  // strip cell dimension:
+  coarseDomainRefCellPoints.resize(coarseDomainRefCellPoints.dimension(1),coarseDomainRefCellPoints.dimension(2));
+  // set physical nodes to coarse topo ref nodes
+  coarseDomainCache->setRefCellPoints(coarseDomainRefCellPoints);
+  // add cell dimension:
+  coarseTopoRefNodes.resize(1,coarseTopoRefNodes.dimension(0),coarseTopoRefNodes.dimension(1));
+  coarseDomainCache->setPhysicalCellNodes(coarseTopoRefNodes,  vector<GlobalIndexType>(), false);
+  
   Teuchos::RCP< const FieldContainer<double> > finerBasisValues = fineDomainCache->getTransformedValues(finerBasis, OP_VALUE, false);
   Teuchos::RCP< const FieldContainer<double> > finerBasisValuesWeighted = fineDomainCache->getTransformedWeightedValues(finerBasis, OP_VALUE, false);
   Teuchos::RCP< const FieldContainer<double> > coarserBasisValues = coarseDomainCache->getTransformedValues(coarserBasis, OP_VALUE, false);
@@ -839,5 +848,16 @@ SubBasisReconciliationWeights BasisReconciliation::weightsForCoarseSubcell(SubBa
       filteredWeights.weights(i,j) = weights.weights(i,columnOrdinalsToInclude[j]);
     }
   }
+  
+//  cout << "weights before filtering:\n";
+//  Camellia::print("fine ordinals", weights.fineOrdinals);
+//  Camellia::print("coarse ordinals", weights.coarseOrdinals);
+//  cout << "weights:\n" << weights.weights;
+//  
+//  cout << "filtered weights for coarse subcell " << subcord << " of dimension " << subcdim << endl;
+//  Camellia::print("filtered fine ordinals", filteredWeights.fineOrdinals);
+//  Camellia::print("filtered coarse ordinals", filteredWeights.coarseOrdinals);
+//  cout << "filtered weights:\n" << filteredWeights.weights;
+  
   return filteredWeights;
 }
