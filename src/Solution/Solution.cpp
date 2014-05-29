@@ -106,6 +106,8 @@
 
 #include "AztecOO_ConditionNumber.h"
 
+#include "SerialDenseWrapper.h"
+
 double Solution::conditionNumberEstimate( Epetra_LinearProblem & problem ) {
   // estimates the 2-norm condition number
   AztecOOConditionNumber conditionEstimator;
@@ -372,7 +374,7 @@ void Solution::initializeStiffnessAndLoad(Teuchos::RCP<Solver> solver) {
   
   int maxRowSize = _mesh->rowSizeUpperBound();
   
-  _globalStiffMatrix = Teuchos::rcp(new Epetra_FECrsMatrix(Copy, partMap, maxRowSize));
+  _globalStiffMatrix = Teuchos::rcp(new Epetra_FECrsMatrix(::Copy, partMap, maxRowSize));
   //  Epetra_FECrsMatrix globalStiffMatrix(Copy, partMap, partMap, maxRowSize);
   _rhsVector = Teuchos::rcp(new Epetra_FEVector(partMap));
   _lhsVector = Teuchos::rcp(new Epetra_FEVector(partMap,true));
@@ -1783,18 +1785,9 @@ const map<GlobalIndexType,double> & Solution::energyError() {
 }
 
 void Solution::computeErrorRepresentation() {
-  int numProcs=1;
-  int rank=0;
-  
-#ifdef HAVE_MPI
-  rank     = Teuchos::GlobalMPISession::getRank();
-  numProcs = Teuchos::GlobalMPISession::getNProc();
-  Epetra_MpiComm Comm(MPI_COMM_WORLD);
-  //cout << "rank: " << rank << " of " << numProcs << endl;
-#else
-  Epetra_SerialComm Comm;
-#endif
-  
+  int numProcs= Teuchos::GlobalMPISession::getNProc();
+  int rank= Teuchos::GlobalMPISession::getRank();
+
   if (!_residualsComputed) {
     computeResiduals();
   }
@@ -1830,68 +1823,24 @@ void Solution::computeErrorRepresentation() {
     _ip->computeInnerProductMatrix(ipMatrix,testOrdering, ipBasisCache);
     FieldContainer<double> errorRepresentation(numCells,numTestDofs);
     
-    bool useSPD = false;
-    //    Epetra_SerialSpdDenseSolver solver; // uncomment if useSPD = true
-    Epetra_SerialDenseSolver solver;
+    FieldContainer<double> representationMatrix(numTestDofs, 1);
+    Teuchos::Array<int> localIPDim(2);
+    localIPDim[0] = numTestDofs;
+    localIPDim[1] = numTestDofs;
+    Teuchos::Array<int> localRHSDim(2);
+    localRHSDim[0] = _residualForElementType[elemTypePtr.get()].dimension(1);
+    localRHSDim[1] = 1;
     
-    for (int localCellIndex=0; localCellIndex<numCells; localCellIndex++ ) {
-      
-      // changed to Copy from View for debugging...
-      Epetra_SerialDenseMatrix ipMatrixT_nonsym(Copy, &ipMatrix(localCellIndex,0,0),
-                                                ipMatrix.dimension(2), // stride -- fc stores in row-major order (a.o.t. SDM)
-                                                ipMatrix.dimension(2),ipMatrix.dimension(1));
-      
-      // sym matrix format for Cholesky
-      Epetra_SerialSymDenseMatrix ipMatrixT(Copy, ipMatrixT_nonsym.A(), ipMatrixT_nonsym.LDA(), numTestDofs);
-      
-      Epetra_SerialDenseMatrix rhs(Copy, & (_residualForElementType[elemTypePtr.get()](localCellIndex,0)),
-                                   _residualForElementType[elemTypePtr.get()].dimension(1), // stride
-                                   _residualForElementType[elemTypePtr.get()].dimension(1), 1);
-      
-      Epetra_SerialDenseMatrix representationMatrix(numTestDofs,1);
-      
-      if (useSPD){
-        solver.SetMatrix(ipMatrixT);
-      }else{
-        solver.SetMatrix(ipMatrixT_nonsym);
+    for (int cellOrdinal=0; cellOrdinal < numCells; cellOrdinal++) {
+      int result = 0;
+      FieldContainer<double> cellIPMatrix(localIPDim, &ipMatrix(cellOrdinal,0,0));
+      FieldContainer<double> rhsMatrix(localRHSDim, &_residualForElementType[elemTypePtr.get()](cellOrdinal,0));
+      result = SerialDenseWrapper::solveSystemUsingQR(representationMatrix, cellIPMatrix, rhsMatrix);
+      if (result != 0) {
+        cout << "WARNING: computeErrorRepresentation: call to solveSystemUsingQR failed with error code " << result << endl;
       }
-      int success = solver.SetVectors(representationMatrix, rhs);
-      if (success != 0) {
-        cout << "computeErrorRepresentation: failed to SetVectors with error " << success << endl;
-      }
-      
-      bool equilibrated = false;
-      if ( solver.ShouldEquilibrate() ) {
-        if (useSPD){
-          solver.FactorWithEquilibration(true);
-          solver.SolveToRefinedSolution(false);
-        }else{
-          solver.EquilibrateMatrix();
-          solver.EquilibrateRHS();
-        }
-        equilibrated = true;
-      }
-      
-      if (useSPD){
-        success = solver.Factor();
-        if (success!=0){
-          cout << "computeErrorRepresentation: Solver failed to factor with error: " << success << endl;
-        }
-      }
-      success = solver.Solve();
-      if (success != 0) {
-        cout << "computeErrorRepresentation: Solve FAILED with error: " << success << endl;
-      }
-      
-      if (equilibrated) {
-        success = solver.UnequilibrateLHS();
-        if (success != 0) {
-          cout << "computeErrorRepresentation: unequilibration FAILED with error: " << success << endl;
-        }
-      }
-      
       for (int i=0; i<numTestDofs; i++) {
-        errorRepresentation(localCellIndex,i) = representationMatrix(i,0);
+        errorRepresentation(cellOrdinal,i) = representationMatrix(i,0);
       }
     }
     _errorRepresentationForElementType[elemTypePtr.get()] = errorRepresentation;
@@ -2801,7 +2750,7 @@ void Solution::condensedSolve(Teuchos::RCP<Solver> globalSolver, bool reduceMemo
   
   // size/create stiffness matrix
   int maxNnzPerRow = min(_mesh->condensedRowSizeUpperBound(),numGlobalFluxDofs) + zeroMeanConstraints.size();
-  Epetra_FECrsMatrix K_cond(Copy, fluxPartMap, maxNnzPerRow); // condensed system
+  Epetra_FECrsMatrix K_cond(::Copy, fluxPartMap, maxNnzPerRow); // condensed system
   Epetra_FEVector rhs_cond(fluxPartMap);
   Epetra_FEVector lhs_cond(fluxPartMap, true);
   
