@@ -705,7 +705,8 @@ void Solution::populateStiffnessAndLoad() {
   Epetra_Vector timeGlobalAssemblyVector(timeMap);
   timeGlobalAssemblyVector[0] = timeGlobalAssembly;
   
-  //  EpetraExt::RowMatrixToMatlabFile("stiff_matrix.dat",globalStiffMatrix);
+//  cout << "debugging: outputting stiffness matrix before BC imposition to /tmp/stiffness_noBCs.dat\n";
+//  EpetraExt::RowMatrixToMatlabFile("/tmp/stiffness_noBCs.dat",*_globalStiffMatrix);
   
   // determine and impose BCs
   
