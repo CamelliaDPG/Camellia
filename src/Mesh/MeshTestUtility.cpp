@@ -592,7 +592,7 @@ bool MeshTestUtility::neighborBasesAgreeOnSides(Teuchos::RCP<Mesh> mesh, Epetra_
             
             if (abs(coarseSolutionValue - fineSolutionValue) > 1e-13) {
               success = false;
-              cout << "coarseSolutionValue and fineSolutionValue differ by " << abs(coarseSolutionValue - fineSolutionValue);
+              cout << "coarseSolutionValue (" << coarseSolutionValue << ") and fineSolutionValue (" << fineSolutionValue << ") differ by " << abs(coarseSolutionValue - fineSolutionValue);
               cout << " at point " << ptOrdinal << " for varID " << varID << ".  ";
               cout << "This may be an indication that something is amiss with the global-to-local map.\n";
             } else {
