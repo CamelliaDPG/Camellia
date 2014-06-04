@@ -937,7 +937,19 @@ bool GDAMinimumRuleTests::testHangingNodePoisson3D() {
   
   cout << "3D poisson w/hanging node solved.  About to check solution continuities.\n";
   
-  if ( ! MeshTestUtility::neighborBasesAgreeOnSides(mesh, *soln->getGlobalCoefficients())) {
+  Epetra_Vector *lhsVector = soln->getGlobalCoefficients();
+  Epetra_SerialComm Comm;
+  Epetra_Map partMap = soln->getPartitionMap();
+  
+  // Import solution onto current processor
+  GlobalIndexTypeToCast numNodesGlobal = mesh->numGlobalDofs();
+  GlobalIndexTypeToCast numMyNodes = numNodesGlobal;
+  Epetra_Map     solnMap(numNodesGlobal, numMyNodes, 0, Comm);
+  Epetra_Import  solnImporter(solnMap, partMap);
+  Epetra_Vector  solnCoeff(solnMap);
+  solnCoeff.Import(*lhsVector, solnImporter, Insert);
+  
+  if ( ! MeshTestUtility::neighborBasesAgreeOnSides(mesh, solnCoeff)) {
     cout << "GDAMinimumRuleTests failure: for 3D Poisson mesh with hanging nodes (after solving), neighboring bases do not agree on sides." << endl;
     success = false;
   }
