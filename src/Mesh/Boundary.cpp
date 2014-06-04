@@ -373,7 +373,7 @@ void Boundary::bcsToImpose( map<  GlobalIndexType, double > &globalDofIndicesAnd
                 if (basisOrdinalForPoint == -1) {
                   if (abs(basisValues(i,ptIndex)-1.0) < tol ) {
                     basisOrdinalForPoint = i;
-                  } else if (abs(basisValues(i,ptIndex) > tol) ) {
+                  } else if (abs(basisValues(i,ptIndex)) > tol ) {
                     cout << "basis value at node " << ptIndex << " is neither 1 nor 0.  Values:" << endl;
                     cout << basisValues;
                     cout << "Reference points:\n" << refPoints;
