@@ -1003,7 +1003,7 @@ bool MeshTestSuite::testMeshSolvePointwise() {
       maxDiff = max(maxDiff, diff);
       if ( diff > tol ) {
         cout << "Solve 4-element Poisson: expected " << expectedSolnValues(elemIndex,ptIndex) << " at point (";
-        cout << testPoints(elemIndex,0,0) << "," << testPoints(elemIndex,0,1) << "), but soln was " << solnValues(elemIndex,ptIndex) << endl;
+        cout << testPoints(elemIndex,0,0) << "," << testPoints(elemIndex,0,1) << "), but soln was " << solnValues(elemIndex,ptIndex) << " (diff of " << diff << ")" << endl;
         success = false;
       }
     }

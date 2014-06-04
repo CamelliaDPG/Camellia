@@ -1037,7 +1037,7 @@ bool GDAMinimumRuleTests::testHangingNodePoisson(bool useQuads) {
   
   GnuPlotUtil::writeComputationalMeshSkeleton("/tmp/hangingNodeTestMesh", mesh, true); // true: label cells
   
-  double tol = 1e-12;
+  double tol = 3e-12; // relaxed for vesta
   double phi_err_l2 = phi_err->l2norm(mesh);
   if (phi_err_l2 > tol) {
     success = false;
@@ -1190,7 +1190,7 @@ bool GDAMinimumRuleTests::testHangingNodeStokes(bool useQuads) {
   
   GnuPlotUtil::writeComputationalMeshSkeleton("/tmp/hangingNodeTestMesh", mesh, true); // true: label cells
   
-  double tol = divideIntoTriangles ? 1e-10 : 1e-13; // for now, anyway, we accept a larger tolerance for triangular meshes...
+  double tol = divideIntoTriangles ? 1e-10 : 2e-12; // for now, anyway, we accept a larger tolerance for triangular meshes...
   double u1_err_l2 = u1_err->l2norm(mesh);
   double u1_l2 = u1_exact->l2norm(mesh);
   double u1_rel_err = u1_err_l2 / u1_l2;
@@ -1267,7 +1267,7 @@ bool GDAMinimumRuleTests::testHangingNodeStokes(bool useQuads) {
     u1_err = u1_soln - u1_exact;
     u2_err = u2_soln - u2_exact;
     
-    double tol = divideIntoTriangles ? 1e-10 : 1e-12; // for now, anyway, we accept a larger tolerance for triangular meshes...
+    double tol = divideIntoTriangles ? 1e-10 : 2e-12; // for now, anyway, we accept a larger tolerance for triangular meshes...
     double u1_err_l2 = u1_err->l2norm(mesh);
     double u1_l2 = u1_exact->l2norm(mesh);
     double u1_rel_err = u1_err_l2 / u1_l2;

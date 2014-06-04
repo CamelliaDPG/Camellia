@@ -712,7 +712,7 @@ bool CurvilinearMeshTests::testStraightEdgeMesh() {
     
     // now repeat with our straight-edge curves:
     approximateArea = one->integrate(mesh);
-    tol = 1e-14;
+    tol = 2e-14;
     err = abs(trueArea-approximateArea);
     if (err > tol) {
       success = false;
