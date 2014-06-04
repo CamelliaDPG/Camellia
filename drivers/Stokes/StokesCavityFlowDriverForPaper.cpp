@@ -5,6 +5,10 @@
 #include <Teuchos_GlobalMPISession.hpp>
 #include "GnuPlotUtil.h"
 
+#ifdef ENABLE_INTEL_FLOATING_POINT_EXCEPTIONS
+#include <xmmintrin.h>
+#endif
+
 class TopBoundary : public SpatialFilter {
 public:
   bool matchesPoint(double x, double y) {
@@ -51,22 +55,29 @@ public:
 };
 
 int main(int argc, char *argv[]) {
+#ifdef ENABLE_INTEL_FLOATING_POINT_EXCEPTIONS
+  cout << "NOTE: enabling floating point exceptions for divide by zero.\n";
+  _MM_SET_EXCEPTION_MASK(_MM_GET_EXCEPTION_MASK() & ~_MM_MASK_INVALID);
+#endif
+  
   Teuchos::GlobalMPISession mpiSession(&argc, &argv);
   int rank = Teuchos::GlobalMPISession::getRank();
   
   bool use3D = false;
-  int refCount = 3;
+  int refCount = 10;
   
-  int k = 3; // poly order for field variables
+  int k = 4; // poly order for field variables
   int H1Order = k + 1;
   int delta_k = use3D ? 3 : 2;   // test space enrichment
   
-  bool useMinRule = true;
-  bool useMumps = false;
+  bool useMinRule = false;
+  bool useMumps = true;
   
-  bool enforceOneIrregularity = false;
+  bool enforceOneIrregularity = true;
   
   bool conformingTraces = true;
+  
+  bool testing_2_irregularity = false;
   
   VarFactory varFactory;
   // traces:
@@ -196,7 +207,7 @@ int main(int argc, char *argv[]) {
   SpatialFilterPtr otherBoundary = SpatialFilter::negatedFilter(topBoundary);
   
   // top boundary:
-  FunctionPtr u1_bc_fxn = Teuchos::rcp( new RampBoundaryFunction_U1(1.0/8.0) );
+  FunctionPtr u1_bc_fxn = Teuchos::rcp( new RampBoundaryFunction_U1(1.0/64.0) );
   FunctionPtr zero = Function::zero();
   bc->addDirichlet(u1hat, topBoundary, u1_bc_fxn);
   bc->addDirichlet(u2hat, topBoundary, zero);
@@ -210,6 +221,26 @@ int main(int argc, char *argv[]) {
   bc->addZeroMeanConstraint(p);
 
   IPPtr graphNorm = stokesBF->graphNorm();
+  
+  if (testing_2_irregularity) {
+    enforceOneIrregularity = false;
+    set<unsigned> cellsToRefine;
+    cellsToRefine.insert(1);
+    cellsToRefine.insert(3);
+    mesh->hRefine(cellsToRefine, RefinementPattern::regularRefinementPatternQuad());
+    cellsToRefine.clear();
+    cellsToRefine.insert(7);
+    cellsToRefine.insert(10);
+    mesh->hRefine(cellsToRefine, RefinementPattern::regularRefinementPatternQuad());
+    cellsToRefine.clear();
+    cellsToRefine.insert(14);
+    cellsToRefine.insert(15);
+    cellsToRefine.insert(18);
+    cellsToRefine.insert(19);
+    mesh->hRefine(cellsToRefine, RefinementPattern::regularRefinementPatternQuad());
+    
+    refCount = 0;
+  }
   
   SolutionPtr solution = Solution::solution(mesh, bc, rhs, graphNorm);
   
@@ -239,10 +270,16 @@ int main(int argc, char *argv[]) {
       GnuPlotUtil::writeComputationalMeshSkeleton("/tmp/stokesMesh", mesh, true); // true: label cells
     }
     
+//    solution->setWriteMatrixToFile(true, "/tmp/stiffness.dat");
+//    solution->setWriteRHSToMatrixMarketFile(true, "/tmp/rhs.dat");
+    
     solution->solve(solver);
     solution->reportTimings();
   }
   double energyErrorTotal = solution->energyErrorTotal();
+  
+//  cout << "Final Mesh, entities report:\n";
+//  solution->mesh()->getTopology()->printAllEntities();
   
   FunctionPtr massFlux;
   if (!use3D) massFlux = Teuchos::rcp( new PreviousSolutionFunction(solution, u1hat * n->x() + u2hat * n->y()) );
@@ -250,7 +287,8 @@ int main(int argc, char *argv[]) {
   double netMassFlux = massFlux->integrate(mesh); // integrate over the mesh skeleton
 
   if (rank==0) {
-    cout << "Final mesh has " << mesh->numActiveElements() << " elements and " << mesh->numFluxDofs() << " trace dofs.\n";
+    cout << "Final mesh has " << mesh->numActiveElements() << " elements and " << mesh->numFluxDofs() << " trace dofs (";
+    cout << mesh->numGlobalDofs() << " total dofs, including fields).\n";
     cout << "Final energy error: " << energyErrorTotal << endl;
     cout << "Net mass flux: " << netMassFlux << endl;
   }

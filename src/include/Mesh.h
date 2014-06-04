@@ -249,7 +249,7 @@ public:
   void hRefine(const vector<GlobalIndexType> &cellIDs, Teuchos::RCP<RefinementPattern> refPattern);
   void hUnrefine(const set<GlobalIndexType> &cellIDs);
   
-  void interpretGlobalData(GlobalIndexType cellID, FieldContainer<double> &localData, const Epetra_Vector &globalData, bool accumulate=true);
+  void interpretGlobalData(GlobalIndexType cellID, FieldContainer<double> &localData, const Epetra_Vector &globalData);
   void interpretLocalBasisData(GlobalIndexType cellID, int varID, int sideOrdinal, const FieldContainer<double> &basisDofs,
                                        FieldContainer<double> &globalDofs, FieldContainer<GlobalIndexType> &globalDofIndices);
   void interpretLocalData(GlobalIndexType cellID, const FieldContainer<double> &localData,

@@ -187,7 +187,7 @@ void DPGTests::runTests() {
   // setup our TestSuite tests:
   vector< Teuchos::RCP< TestSuite > > testSuites;
   
-//  testSuites.push_back( Teuchos::rcp( new GDAMinimumRuleTests ) );
+  testSuites.push_back( Teuchos::rcp( new GDAMinimumRuleTests ) );
 
   testSuites.push_back( Teuchos::rcp( new MeshTestSuite ) );
   

@@ -85,7 +85,7 @@ public:
   
   CellTopoPtr topology();
   
-  pair<GlobalIndexType, unsigned> getNeighbor(unsigned sideOrdinal);
+  pair<GlobalIndexType, unsigned> getNeighbor(unsigned sideOrdinal); // (neighborCellIndex, neighborSideOrdinal)
   void setNeighbor(unsigned sideOrdinal, GlobalIndexType neighborCellIndex, unsigned neighborSideOrdinal);
   
   const vector< unsigned > &vertices();

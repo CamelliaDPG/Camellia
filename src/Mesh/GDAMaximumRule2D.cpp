@@ -676,7 +676,7 @@ set<GlobalIndexType> GDAMaximumRule2D::globalDofIndicesForPartition(PartitionInd
   return _partitionedGlobalDofIndices[partitionNumber];
 }
 
-void GDAMaximumRule2D::interpretGlobalData(GlobalIndexType cellID, FieldContainer<double> &localDofs, const Epetra_Vector &globalDofs, bool accumulate) {
+void GDAMaximumRule2D::interpretGlobalData(GlobalIndexType cellID, FieldContainer<double> &localDofs, const Epetra_Vector &globalDofs) {
   int numDofs = elementType(cellID)->trialOrderPtr->totalDofs();
   for (int dofIndex=0; dofIndex<numDofs; dofIndex++) {
     GlobalIndexType globalIndex = globalDofIndex(cellID, dofIndex);

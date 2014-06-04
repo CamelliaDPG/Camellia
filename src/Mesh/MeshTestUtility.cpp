@@ -11,7 +11,14 @@
 #include "MeshTestUtility.h"
 #include "MultiBasis.h"
 
+#include "CamelliaCellTools.h"
+
 #include "GDAMaximumRule2D.h"
+
+#include "IndexType.h"
+
+#include "Epetra_SerialComm.h"
+
 
 bool MeshTestUtility::checkMeshConsistency(Teuchos::RCP<Mesh> mesh) {
   bool success = true;
@@ -286,6 +293,432 @@ bool MeshTestUtility::checkMeshDofConnectivities(Teuchos::RCP<Mesh> mesh) {
       cout << "FAILURE: meshDofConnectivity: globalDofIndex " << i << " is unreachable.\n";
     }
   }
+  return success;
+}
+
+bool MeshTestUtility::determineRefTestPointsForNeighbors(MeshTopologyPtr meshTopo, CellPtr fineCell, unsigned int sideOrdinal,
+                                                         FieldContainer<double> &fineSideRefPoints, FieldContainer<double> &fineCellRefPoints,
+                                                         FieldContainer<double> &coarseSideRefPoints, FieldContainer<double> &coarseCellRefPoints) {
+  unsigned spaceDim = meshTopo->getSpaceDim();
+  unsigned sideDim = spaceDim - 1;
+  pair<GlobalIndexType, unsigned> neighborInfo = fineCell->getNeighbor(sideOrdinal);
+  if (neighborInfo.first == -1) {
+    // boundary
+    return false;
+  }
+  CellPtr neighborCell = meshTopo->getCell(neighborInfo.first);
+  if (neighborCell->isParent()) {
+    return false; // fineCell isn't the finer of the two...
+  }
+
+  shards::CellTopology fineSideTopo = fineCell->topology()->getCellTopologyData(sideDim, sideOrdinal);
+  
+  DefaultCubatureFactory<double> cubFactory;
+  int cubDegree = 4; // fairly arbitrary choice: enough to get a decent number of test points...
+  Teuchos::RCP<Cubature<double> > fineSideTopoCub = cubFactory.create(fineSideTopo, cubDegree);
+  
+  int numCubPoints = fineSideTopoCub->getNumPoints();
+  
+  FieldContainer<double> cubPoints(numCubPoints, sideDim);
+  FieldContainer<double> cubWeights(numCubPoints); // we neglect these...
+  
+  fineSideTopoCub->getCubature(cubPoints, cubWeights);
+  
+  FieldContainer<double> sideRefCellNodes(fineSideTopo.getNodeCount(),sideDim);
+  CamelliaCellTools::refCellNodesForTopology(sideRefCellNodes, fineSideTopo);
+
+  int numTestPoints = numCubPoints + fineSideTopo.getNodeCount();
+  
+  FieldContainer<double> testPoints(numTestPoints, sideDim);
+  for (int ptOrdinal=0; ptOrdinal<testPoints.dimension(0); ptOrdinal++) {
+    if (ptOrdinal<fineSideTopo.getNodeCount()) {
+      for (int d=0; d<sideDim; d++) {
+        testPoints(ptOrdinal,d) = sideRefCellNodes(ptOrdinal,d);
+      }
+    } else {
+      for (int d=0; d<sideDim; d++) {
+        testPoints(ptOrdinal,d) = cubPoints(ptOrdinal-fineSideTopo.getNodeCount(),d);
+      }
+    }
+  }
+  
+  fineSideRefPoints = testPoints;
+  fineCellRefPoints.resize(numTestPoints, spaceDim);
+  
+  CamelliaCellTools::mapToReferenceSubcell(fineCellRefPoints, testPoints, sideDim, sideOrdinal, *fineCell->topology());
+  
+  shards::CellTopology coarseSideTopo = neighborCell->topology()->getCellTopologyData(sideDim, neighborInfo.second);
+  
+  unsigned fineSideAncestorPermutation = fineCell->ancestralPermutationForSubcell(sideDim, sideOrdinal);
+  unsigned coarseSidePermutation = neighborCell->subcellPermutation(sideDim, neighborInfo.second);
+  
+  unsigned coarseSideAncestorPermutationInverse = CamelliaCellTools::permutationInverse(coarseSideTopo, coarseSidePermutation);
+  
+  unsigned composedPermutation = CamelliaCellTools::permutationComposition(coarseSideTopo, fineSideAncestorPermutation, coarseSideAncestorPermutationInverse); // goes from coarse ordering to fine.
+  
+  RefinementBranch fineRefBranch = fineCell->refinementBranchForSide(sideOrdinal);
+  
+  FieldContainer<double> fineSideNodes(fineSideTopo.getNodeCount(), sideDim);  // relative to the ancestral cell whose neighbor is compatible
+  if (fineRefBranch.size() == 0) {
+    CamelliaCellTools::refCellNodesForTopology(fineSideNodes, coarseSideTopo, composedPermutation);
+  } else {
+    FieldContainer<double> ancestralSideNodes(coarseSideTopo.getNodeCount(), sideDim);
+    CamelliaCellTools::refCellNodesForTopology(ancestralSideNodes, coarseSideTopo, composedPermutation);
+    
+    RefinementBranch fineSideRefBranch = RefinementPattern::sideRefinementBranch(fineRefBranch, sideOrdinal);
+    fineSideNodes = RefinementPattern::descendantNodes(fineSideRefBranch, ancestralSideNodes);
+  }
+  
+  BasisCachePtr sideTopoCache = Teuchos::rcp( new BasisCache(fineSideTopo, 1, false) );
+  sideTopoCache->setRefCellPoints(testPoints);
+  
+  // add cell dimension
+  fineSideNodes.resize(1,fineSideNodes.dimension(0), fineSideNodes.dimension(1));
+  sideTopoCache->setPhysicalCellNodes(fineSideNodes, vector<GlobalIndexType>(), false);
+  coarseSideRefPoints = sideTopoCache->getPhysicalCubaturePoints();
+  
+  // strip off the cell dimension:
+  coarseSideRefPoints.resize(coarseSideRefPoints.dimension(1),coarseSideRefPoints.dimension(2));
+  
+  coarseCellRefPoints.resize(numTestPoints,spaceDim);
+  CamelliaCellTools::mapToReferenceSubcell(coarseCellRefPoints, coarseSideRefPoints, sideDim, neighborInfo.second, *neighborCell->topology());
+
+  return true; // containers filled....
+}
+
+bool MeshTestUtility::fcsAgree(const FieldContainer<double> &fc1, const FieldContainer<double> &fc2, double tol, double &maxDiff) {
+  if (fc1.size() != fc2.size()) {
+    maxDiff = -1.0; // a signal something's wrong…
+    return false;
+  }
+  maxDiff = 0.0;
+  for (int i=0; i<fc1.size(); i++) {
+    maxDiff = max(maxDiff, abs(fc1[i] - fc2[i]));
+  }
+  return (maxDiff <= tol);
+}
+
+bool MeshTestUtility::neighborBasesAgreeOnSides(Teuchos::RCP<Mesh> mesh) {
+  int numGlobalDofs = mesh->globalDofCount();
+  Epetra_SerialComm Comm;
+  Epetra_BlockMap map(numGlobalDofs, 1, 0, Comm);
+  Epetra_Vector testSolutionCoefficients(map);
+  for (int i=0; i<numGlobalDofs; i++) {
+    testSolutionCoefficients[i] =  0.1 * i;
+  }
+
+  return neighborBasesAgreeOnSides(mesh, testSolutionCoefficients);
+}
+
+bool MeshTestUtility::neighborBasesAgreeOnSides(Teuchos::RCP<Mesh> mesh, Epetra_Vector &globalSolutionCoefficients) {
+  bool success = true;
+  MeshTopologyPtr meshTopo = mesh->getTopology();
+  int spaceDim = meshTopo->getSpaceDim();
+  
+  set<IndexType> activeCellIndices = meshTopo->getActiveCellIndices();
+  for (set<IndexType>::iterator cellIt=activeCellIndices.begin(); cellIt != activeCellIndices.end(); cellIt++) {
+    IndexType cellIndex = *cellIt;
+    CellPtr cell = meshTopo->getCell(cellIndex);
+    
+    BasisCachePtr fineCellBasisCache = BasisCache::basisCacheForCell(mesh, cellIndex);
+    ElementTypePtr fineElemType = mesh->getElementType(cellIndex);
+    DofOrderingPtr fineElemTrialOrder = fineElemType->trialOrderPtr;
+    
+    FieldContainer<double> fineSolutionCoefficients(fineElemTrialOrder->totalDofs());
+    mesh->globalDofAssignment()->interpretGlobalData(cellIndex, fineSolutionCoefficients, globalSolutionCoefficients);
+//    if ((cellIndex==0) || (cellIndex==2)) {
+//      cout << "MeshTestUtility: local coefficients for cell " << cellIndex << ":\n" << fineSolutionCoefficients;
+//    }
+
+    unsigned sideCount = cell->topology()->getSideCount();
+    for (unsigned sideOrdinal=0; sideOrdinal<sideCount; sideOrdinal++) {
+      FieldContainer<double> fineSideRefPoints, fineCellRefPoints, coarseSideRefPoints, coarseCellRefPoints;
+      bool hasCoarserNeighbor = determineRefTestPointsForNeighbors(meshTopo, cell, sideOrdinal, fineSideRefPoints, fineCellRefPoints, coarseSideRefPoints, coarseCellRefPoints);
+      if (!hasCoarserNeighbor) continue;
+      
+      pair<GlobalIndexType, unsigned> neighborInfo = cell->getNeighbor(sideOrdinal);
+      
+      CellPtr neighborCell = meshTopo->getCell(neighborInfo.first);
+      
+      unsigned numTestPoints = coarseCellRefPoints.dimension(0);
+      
+      //        cout << "testing neighbor agreement between cell " << cellIndex << " and " << neighborCell->cellIndex() << endl;
+      
+      // if we get here, the cell has a neighbor on this side, and is at least as fine as that neighbor.
+      
+      BasisCachePtr fineSideBasisCache = fineCellBasisCache->getSideBasisCache(sideOrdinal);
+      
+      fineSideBasisCache->setRefCellPoints(fineSideRefPoints);
+      fineCellBasisCache->setRefCellPoints(fineCellRefPoints);
+      
+      BasisCachePtr coarseCellBasisCache = BasisCache::basisCacheForCell(mesh, neighborInfo.first);
+      BasisCachePtr coarseSideBasisCache = coarseCellBasisCache->getSideBasisCache(neighborInfo.second);
+      
+      coarseSideBasisCache->setRefCellPoints(coarseSideRefPoints);
+      coarseCellBasisCache->setRefCellPoints(coarseCellRefPoints);
+      
+      // sanity check: do physical points match?
+      FieldContainer<double> fineSidePhysicalCubaturePoints = fineSideBasisCache->getPhysicalCubaturePoints();
+      FieldContainer<double> fineCellPhysicalCubaturePoints = fineCellBasisCache->getPhysicalCubaturePoints();
+      
+      FieldContainer<double> coarseSidePhysicalCubaturePoints = coarseSideBasisCache->getPhysicalCubaturePoints();
+      FieldContainer<double> coarseCellPhysicalCubaturePoints = coarseCellBasisCache->getPhysicalCubaturePoints();
+      
+      double tol = 1e-14;
+      double maxDiff = 0;
+      if (! fcsAgree(fineSidePhysicalCubaturePoints, fineCellPhysicalCubaturePoints, tol, maxDiff) ) {
+        cout << "ERROR: MeshTestUtility::neighborBasesAgreeOnSides internal error: fine side and cell cubature points do not agree.\n";
+        success = false;
+        continue;
+      }
+      if (! fcsAgree(coarseSidePhysicalCubaturePoints, coarseCellPhysicalCubaturePoints, tol, maxDiff) ) {
+        cout << "ERROR: MeshTestUtility::neighborBasesAgreeOnSides internal error: coarse side and cell cubature points do not agree.\n";
+        success = false;
+        continue;
+      }
+      if (! fcsAgree(coarseSidePhysicalCubaturePoints, fineSidePhysicalCubaturePoints, tol, maxDiff) ) {
+        cout << "ERROR: MeshTestUtility::neighborBasesAgreeOnSides internal error: fine and coarse side cubature points do not agree.\n";
+        success = false;
+        continue;
+      }
+      
+      ElementTypePtr coarseElementType = mesh->getElementType(neighborInfo.first);
+      DofOrderingPtr coarseElemTrialOrder = coarseElementType->trialOrderPtr;
+      
+      FieldContainer<double> coarseSolutionCoefficients(coarseElemTrialOrder->totalDofs());
+      mesh->globalDofAssignment()->interpretGlobalData(neighborInfo.first, coarseSolutionCoefficients, globalSolutionCoefficients);
+      
+      set<int> varIDs = fineElemTrialOrder->getVarIDs();
+      for (set<int>::iterator varIt = varIDs.begin(); varIt != varIDs.end(); varIt++) {
+        int varID = *varIt;
+//        cout << "MeshTestUtility: varID " << varID << ":\n";
+        bool isTraceVar = mesh->bilinearForm()->isFluxOrTrace(varID);
+        BasisPtr fineBasis, coarseBasis;
+        BasisCachePtr fineCache, coarseCache;
+        if (isTraceVar) {
+          fineBasis = fineElemTrialOrder->getBasis(varID, sideOrdinal);
+          coarseBasis = coarseElemTrialOrder->getBasis(varID, neighborInfo.second);
+          fineCache = fineSideBasisCache;
+          coarseCache = coarseSideBasisCache;
+        } else {
+          fineBasis = fineElemTrialOrder->getBasis(varID);
+          coarseBasis = coarseElemTrialOrder->getBasis(varID);
+          fineCache = fineCellBasisCache;
+          coarseCache = coarseCellBasisCache;
+          
+          IntrepidExtendedTypes::EFunctionSpaceExtended fs = fineBasis->functionSpace();
+          if ((fs == IntrepidExtendedTypes::FUNCTION_SPACE_HVOL)
+              || (fs == IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HVOL)
+              || (fs == IntrepidExtendedTypes::FUNCTION_SPACE_TENSOR_HVOL)) {
+            // volume L^2 basis: no continuities expected...
+            continue;
+          }
+        }
+        FieldContainer<double> localValuesFine = *fineCache->getTransformedValues(fineBasis, OP_VALUE);
+        FieldContainer<double> localValuesCoarse = *coarseCache->getTransformedValues(coarseBasis, OP_VALUE);
+        
+        bool scalarValued = (localValuesFine.rank() == 3);
+        
+        // the following used if vector or tensor-valued:
+        Teuchos::Array<int> valueDim;
+        unsigned componentsPerValue = 1;
+        FieldContainer<double> valueContainer; // just used for enumeration computation...
+        if (!scalarValued) {
+          localValuesFine.dimensions(valueDim);
+          // clear first three:
+          valueDim.erase(valueDim.begin());
+          valueDim.erase(valueDim.begin());
+          valueDim.erase(valueDim.begin());
+          valueContainer.resize(valueDim);
+          componentsPerValue = valueContainer.size();
+        }
+        
+        //          if (localValuesFine.rank() != 3) {
+        //            cout << "WARNING: MeshTestUtility::neighborBasesAgreeOnSides() only supports scalar-valued bases right now.  Skipping check for varID " << varID << endl;
+        //            continue;
+        //          }
+        
+        FieldContainer<double> localPointValuesFine(fineElemTrialOrder->totalDofs());
+        FieldContainer<double> localPointValuesCoarse(coarseElemTrialOrder->totalDofs());
+        
+        for (int valueComponentOrdinal=0; valueComponentOrdinal<componentsPerValue; valueComponentOrdinal++) {
+          Teuchos::Array<int> valueMultiIndex(valueContainer.rank());
+          
+          if (!scalarValued)
+            valueContainer.getMultiIndex(valueMultiIndex, valueComponentOrdinal);
+          
+          Teuchos::Array<int> localValuesMultiIndex(localValuesFine.rank());
+          
+          for (int r=0; r<valueMultiIndex.size(); r++) {
+            localValuesMultiIndex[r+3] = valueMultiIndex[r];
+          }
+          
+          for (int ptOrdinal=0; ptOrdinal<numTestPoints; ptOrdinal++) {
+            localPointValuesCoarse.initialize(0);
+            localPointValuesFine.initialize(0);
+            localValuesMultiIndex[2] = ptOrdinal;
+            
+            double fineSolutionValue = 0, coarseSolutionValue = 0;
+            
+            for (int basisOrdinal=0; basisOrdinal < fineBasis->getCardinality(); basisOrdinal++) {
+              int fineDofIndex;
+              if (isTraceVar)
+                fineDofIndex = fineElemTrialOrder->getDofIndex(varID, basisOrdinal, sideOrdinal);
+              else
+                fineDofIndex = fineElemTrialOrder->getDofIndex(varID, basisOrdinal);
+              if (scalarValued) {
+                localPointValuesFine(fineDofIndex) = localValuesFine(0,basisOrdinal,ptOrdinal);
+              } else {
+                localValuesMultiIndex[1] = basisOrdinal;
+                localPointValuesFine(fineDofIndex) = localValuesFine.getValue(localValuesMultiIndex);
+              }
+              
+              fineSolutionValue += fineSolutionCoefficients(fineDofIndex) * localPointValuesFine(fineDofIndex);
+            }
+            for (int basisOrdinal=0; basisOrdinal < coarseBasis->getCardinality(); basisOrdinal++) {
+              int coarseDofIndex;
+              if (isTraceVar)
+                coarseDofIndex = coarseElemTrialOrder->getDofIndex(varID, basisOrdinal, neighborInfo.second);
+              else
+                coarseDofIndex = coarseElemTrialOrder->getDofIndex(varID, basisOrdinal);
+              if (scalarValued) {
+                localPointValuesCoarse(coarseDofIndex) = localValuesCoarse(0,basisOrdinal,ptOrdinal);
+              } else {
+                localValuesMultiIndex[1] = basisOrdinal;
+                localPointValuesCoarse(coarseDofIndex) = localValuesCoarse.getValue(localValuesMultiIndex);
+              }
+              coarseSolutionValue += coarseSolutionCoefficients(coarseDofIndex) * localPointValuesCoarse(coarseDofIndex);
+            }
+            
+            if (abs(coarseSolutionValue - fineSolutionValue) > 1e-13) {
+              success = false;
+              cout << "coarseSolutionValue and fineSolutionValue differ by " << abs(coarseSolutionValue - fineSolutionValue);
+              cout << " at point " << ptOrdinal << " for varID " << varID << ".  ";
+              cout << "This may be an indication that something is amiss with the global-to-local map.\n";
+            } else {
+//              // DEBUGGING:
+//              cout << "solution value at point (";
+//              for (int d=0; d<spaceDim-1; d++) {
+//                cout << fineSidePhysicalCubaturePoints(0,ptOrdinal,d) << ", ";
+//              }
+//              cout << fineSidePhysicalCubaturePoints(0,ptOrdinal,spaceDim-1) << "): ";
+//              cout << coarseSolutionValue << endl;
+            }
+            
+            FieldContainer<double> globalValuesFromFine, globalValuesFromCoarse;
+            FieldContainer<GlobalIndexType> globalDofIndicesFromFine, globalDofIndicesFromCoarse;
+            
+            mesh->globalDofAssignment()->interpretLocalData(cellIndex, localPointValuesFine, globalValuesFromFine, globalDofIndicesFromFine);
+            mesh->globalDofAssignment()->interpretLocalData(neighborInfo.first, localPointValuesCoarse, globalValuesFromCoarse, globalDofIndicesFromCoarse);
+            
+            std::map<GlobalIndexType, double> fineValuesMap;
+            std::map<GlobalIndexType, double> coarseValuesMap;
+            
+            for (int i=0; i<globalDofIndicesFromCoarse.size(); i++) {
+              GlobalIndexType globalDofIndex = globalDofIndicesFromCoarse[i];
+              coarseValuesMap[globalDofIndex] = globalValuesFromCoarse[i];
+            }
+            
+            double maxDiff = 0;
+            for (int i=0; i<globalDofIndicesFromFine.size(); i++) {
+              GlobalIndexType globalDofIndex = globalDofIndicesFromFine[i];
+              fineValuesMap[globalDofIndex] = globalValuesFromFine[i];
+              
+              double diff = abs( fineValuesMap[globalDofIndex] - coarseValuesMap[globalDofIndex]);
+              maxDiff = max(diff, maxDiff);
+              if (diff > tol) {
+                success = false;
+                cout << "interpreted fine and coarse disagree at point (";
+                for (int d=0; d<spaceDim; d++) {
+                  cout << fineSidePhysicalCubaturePoints(0,ptOrdinal,d);
+                  if (d==spaceDim-1)
+                    cout <<  ").\n";
+                  else
+                    cout << ", ";
+                }
+              }
+            }
+            if (maxDiff > tol) {
+              cout << "maxDiff: " << maxDiff << endl;
+              cout << "globalValuesFromFine:\n" << globalValuesFromFine;
+              cout << "globalValuesFromCoarse:\n" << globalValuesFromCoarse;
+              
+              cout << "globalDofIndicesFromFine:\n" << globalDofIndicesFromFine;
+              cout <<  "globalDofIndicesFromCoarse:\n" << globalDofIndicesFromCoarse;
+              
+              continue; // only worth testing further if we passed the above
+            }
+            
+            // the following test commented out because a) it goes a bit beyond the immediate purpose of
+            // Now, try the same thing, but instead with a "stiffness matrix"-like set of values.
+            // Populate the matrix with the outer product of the vectors we just dealt with.
+            // (This is maybe feature creep on this test; not sure)
+            
+            /*            FieldContainer<double> localPointValuesFineMatrix(fineElemTrialOrder->totalDofs(),fineElemTrialOrder->totalDofs());
+             FieldContainer<double> localPointValuesCoarseMatrix(coarseElemTrialOrder->totalDofs(),coarseElemTrialOrder->totalDofs() );
+             
+             for (int i=0; i<fineElemTrialOrder->totalDofs(); i++) {
+             for (int j=0; j<fineElemTrialOrder->totalDofs(); j++) {
+             localPointValuesFineMatrix(i,j) = localPointValuesFine(i) * localPointValuesFine(j);
+             }
+             }
+             for (int i=0; i<coarseElemTrialOrder->totalDofs(); i++) {
+             for (int j=0; j<coarseElemTrialOrder->totalDofs(); j++) {
+             localPointValuesCoarseMatrix(i,j) = localPointValuesCoarse(i) * localPointValuesCoarse(j);
+             }
+             }
+             
+             map< pair<GlobalIndexType,GlobalIndexType>, double> expectedGlobalValues;
+             
+             for (int i=0; i<globalDofIndicesFromFine.size(); i++) {
+             GlobalIndexType i_global = globalDofIndicesFromFine[i];
+             for (int j=0; j<globalDofIndicesFromFine.size(); j++) {
+             GlobalIndexType j_global = globalDofIndicesFromFine[j];
+             expectedGlobalValues[make_pair(i_global, j_global)] = fineValuesMap[i_global] * fineValuesMap[j_global];
+             }
+             }
+             
+             FieldContainer<double> globalValuesFromFineMatrix, globalValuesFromCoarseMatrix;
+             FieldContainer<GlobalIndexType> globalDofIndicesFromFineMatrix, globalDofIndicesFromCoarseMatrix;
+             
+             mesh->globalDofAssignment()->interpretLocalData(cellIndex, localPointValuesFineMatrix, globalValuesFromFineMatrix, globalDofIndicesFromFineMatrix);
+             mesh->globalDofAssignment()->interpretLocalData(neighborInfo.first, localPointValuesCoarseMatrix, globalValuesFromCoarseMatrix, globalDofIndicesFromCoarseMatrix);
+             
+             for (int i=0; i<globalDofIndicesFromFineMatrix.size(); i++) {
+             GlobalIndexType i_global = globalDofIndicesFromFineMatrix(i);
+             for (int j=0; j<globalDofIndicesFromFineMatrix.size(); j++) {
+             GlobalIndexType j_global = globalDofIndicesFromFineMatrix(j);
+             double value = globalValuesFromFineMatrix(i,j);
+             double expected_value = expectedGlobalValues[make_pair(i_global, j_global)];
+             double diff = abs(expected_value - value);
+             if (diff > tol) {
+             success = false;
+             cout << "Interpreted fine matrix differs from expected value by " << diff << " at (" << i << "," << j << ")\n";
+             }
+             }
+             }
+             
+             for (int i=0; i<globalDofIndicesFromCoarseMatrix.size(); i++) {
+             GlobalIndexType i_global = globalDofIndicesFromCoarseMatrix(i);
+             for (int j=0; j<globalDofIndicesFromCoarseMatrix.size(); j++) {
+             GlobalIndexType j_global = globalDofIndicesFromCoarseMatrix(j);
+             double value = globalValuesFromCoarseMatrix(i,j);
+             double expected_value = expectedGlobalValues[make_pair(i_global, j_global)];
+             double diff = abs(expected_value - value);
+             if (diff > tol) {
+             success = false;
+             cout << "Interpreted coarse matrix differs from expected value by " << diff << " at (" << i << "," << j << ")\n";
+             }
+             }
+             }*/
+            
+          }
+        }
+      }
+    }
+  }
+  
+//  cout << "Completed neighborBasesAgreeOnSides.\n";
   return success;
 }
 

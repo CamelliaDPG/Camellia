@@ -12,7 +12,7 @@
 #include "vtkIdList.h"
 #include "vtkVersion.h"
 
-void NewVTKExporter::exportFunction(FunctionPtr function, const string& functionName, unsigned int num1DPts)
+void NewVTKExporter::exportFunction(FunctionPtr function, const string& functionName, set<GlobalIndexType> cellIndices, unsigned int num1DPts)
 {
   bool defaultPts = (num1DPts == 0);
   vtkUnstructuredGrid* ug = vtkUnstructuredGrid::New();
@@ -29,12 +29,12 @@ void NewVTKExporter::exportFunction(FunctionPtr function, const string& function
   vals->SetName(functionName.c_str());
 
   unsigned int total_vertices = 0;
-
-  for (unsigned cellIndex=0; cellIndex<_mesh->cellCount(); cellIndex++) {
+  
+  if (cellIndices.size()==0) cellIndices = _mesh->getActiveCellIndices();
+  
+  for (set<GlobalIndexType>::iterator cellIt = cellIndices.begin(); cellIt != cellIndices.end(); cellIt++) {
+    GlobalIndexType cellIndex = *cellIt;
     CellPtr cell = _mesh->getCell(cellIndex);
-    // Skip the rest of the block if cell is a parent cell
-    if (cell->isParent())
-      continue;
 
     FieldContainer<double> physicalCellNodes = _mesh->physicalCellNodesForCell(cellIndex);
 

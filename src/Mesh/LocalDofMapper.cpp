@@ -273,6 +273,8 @@ FieldContainer<double> LocalDofMapper::mapData(const FieldContainer<double> &dat
   // if accumulate is false, then entries don't sum into their destination, but instead overwrite it.
   // (in cases where multiple data go to one entry, this pretty much amounts to an assertion that the data are identical.
   //  This case is useful when you have solution coefficients you want to map in one direction or the other.)
+  
+  // (if localToGlobal is false, then accumulate argument is ignored...)
   unsigned dofCount;
   if (_varIDToMap == -1) {
     dofCount = localToGlobal ? _dofOrdering->totalDofs() : _globalIndexToOrdinal.size();

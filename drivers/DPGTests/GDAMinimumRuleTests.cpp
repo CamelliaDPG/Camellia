@@ -21,6 +21,8 @@
 
 #include "MeshTestSuite.h"
 
+#include "MeshTestUtility.h"
+
 #include "GnuPlotUtil.h"
 
 #include "PenaltyConstraints.h"
@@ -252,7 +254,6 @@ SolutionPtr GDAMinimumRuleTests::stokesCavityFlowSolution(bool useMinRule, int h
 }
 
 SolutionPtr GDAMinimumRuleTests::poissonExactSolution3D(int horizontalCells, int verticalCells, int depthCells, int H1Order, FunctionPtr phi_exact, bool useH1Traces) {
-  
   bool usePenaltyBCs = false;
   
   VarFactory varFactory;
@@ -466,18 +467,17 @@ SolutionPtr GDAMinimumRuleTests::stokesExactSolution(bool useMinRule, int horizo
   return solution;
 }
 
-
 void GDAMinimumRuleTests::runTests(int &numTestsRun, int &numTestsPassed) {
-  bool useQuads = true;
   setup();
-  if (testHangingNodePoisson(useQuads)) {
+  if (testHangingNodePoisson3D()) {
     numTestsPassed++;
   }
   numTestsRun++;
   teardown();
   
-  //  cout << "testHangingNodePoisson (quads) complete.\n";
+  //  cout << "testHangingNodePoisson3D complete.\n";
   
+  bool useQuads = true;
   setup();
   if (testHangingNodeStokes(useQuads)) {
     numTestsPassed++;
@@ -486,8 +486,16 @@ void GDAMinimumRuleTests::runTests(int &numTestsRun, int &numTestsPassed) {
   teardown();
   
   //  cout << "testHangingNodeStokes (quads) complete.\n";
-
   
+  setup();
+  if (testHangingNodePoisson(useQuads)) {
+    numTestsPassed++;
+  }
+  numTestsRun++;
+  teardown();
+  
+  //  cout << "testHangingNodePoisson (quads) complete.\n";
+
   useQuads = false;
   setup();
   if (testHangingNodePoisson(useQuads)) {
@@ -505,15 +513,6 @@ void GDAMinimumRuleTests::runTests(int &numTestsRun, int &numTestsPassed) {
   teardown();
   
 //  cout << "testHangingNodeStokes (triangles) complete.\n";
-  
-  setup();
-  if (testHangingNodePoisson3D()) {
-    numTestsPassed++;
-  }
-  numTestsRun++;
-  teardown();
-
-//  cout << "testHangingNodePoisson3D complete.\n";
   
   setup();
   if (testSingleCellMesh()) {
@@ -567,7 +566,6 @@ void GDAMinimumRuleTests::runTests(int &numTestsRun, int &numTestsPassed) {
   teardown();
   
 //  cout << "testLocalInterpretationConsistency complete.\n";
-
 }
 void GDAMinimumRuleTests::setup() {
   // setup test points:
@@ -724,7 +722,7 @@ bool GDAMinimumRuleTests::checkLocalGlobalConsistency(MeshPtr mesh) {
   cellIDs = mesh->getActiveCellIDs();
   for (set<GlobalIndexType>::iterator cellIDIt = cellIDs.begin(); cellIDIt != cellIDs.end(); cellIDIt++) {
     GlobalIndexType cellID = *cellIDIt;
-    gda->interpretGlobalData(cellID, localData, globalDataVector,false); // false: don't accumulate
+    gda->interpretGlobalData(cellID, localData, globalDataVector);
     FieldContainer<GlobalIndexType> globalDofIndices;
     FieldContainer<double> globalDataForCell;
     gda->interpretLocalData(cellID, localData, globalDataForCell, globalDofIndices, false);
@@ -866,8 +864,10 @@ bool GDAMinimumRuleTests::testHangingNodePoisson3D() {
   
   MeshPtr mesh = soln->mesh();
 
+  cout << "about to refine to make Poisson 3D hanging node mesh.\n";
+  
   set<GlobalIndexType> cellIDs;
-  cellIDs.insert(0);
+  cellIDs.insert(1);
   mesh->hRefine(cellIDs, RefinementPattern::regularRefinementPatternHexahedron());
   
 //  Intrepid::Basis_HGRAD_QUAD_Cn_FEM<double, Intrepid::FieldContainer<double> > linearBasis(1,Intrepid::POINTTYPE_SPECTRAL);
@@ -877,11 +877,29 @@ bool GDAMinimumRuleTests::testHangingNodePoisson3D() {
   
 //  cout << "Poisson 3D hanging node mesh after one refinement:\n";
 //  mesh->getTopology()->printAllEntities();
+
+//  if ( ! MeshTestUtility::neighborBasesAgreeOnSides(mesh)) {
+//    cout << "GDAMinimumRuleTests failure: for 3D Poisson mesh with hanging nodes, neighboring bases do not agree on sides." << endl;
+//    success = false;
+//  }
+
   
-  if ( ! MeshTestSuite::neighborBasesAgreeOnSides(mesh, _testPoints2D)) {
-    cout << "GDAMinimumRuleTests failure: for 3D Poisson mesh with hanging nodes, neighboring bases do not agree on sides." << endl;
-    success = false;
-  }
+//  if ( ! MeshTestSuite::neighborBasesAgreeOnSides(mesh, _testPoints2D)) {
+//    cout << "GDAMinimumRuleTests failure: for 3D Poisson mesh with hanging nodes, neighboring bases do not agree on sides." << endl;
+//    success = false;
+//  }
+  
+//  cout << "Poisson 3D hanging node mesh:\n";
+//  mesh->getTopology()->printAllEntities();
+//  
+//  cout << "Poisson 3D hanging node mesh, vertex constraints:\n";
+//  mesh->getTopology()->printConstraintReport(0);
+//  
+//  cout << "Poisson 3D hanging node mesh, edge constraints:\n";
+//  mesh->getTopology()->printConstraintReport(1);
+//  
+//  cout << "Poisson 3D hanging node mesh, face constraints:\n";
+//  mesh->getTopology()->printConstraintReport(2);
   
   VarFactory vf = soln->mesh()->bilinearForm()->varFactory();
   VarPtr phi = vf.fieldVar(S_GDAMinimumRuleTests_PHI);
@@ -917,6 +935,15 @@ bool GDAMinimumRuleTests::testHangingNodePoisson3D() {
   soln->clear();
   soln->solve();
   
+  cout << "3D poisson w/hanging node solved.  About to check solution continuities.\n";
+  
+  if ( ! MeshTestUtility::neighborBasesAgreeOnSides(mesh, *soln->getGlobalCoefficients())) {
+    cout << "GDAMinimumRuleTests failure: for 3D Poisson mesh with hanging nodes (after solving), neighboring bases do not agree on sides." << endl;
+    success = false;
+  }
+  
+  cout << "...solution continuities checked.\n";
+  
   phi_err_l2 = phi_err->l2norm(mesh);
   if (phi_err_l2 > tol) {
     success = false;
@@ -924,6 +951,17 @@ bool GDAMinimumRuleTests::testHangingNodePoisson3D() {
     
 #ifdef USE_VTK
     NewVTKExporter exporter(mesh->getTopology());
+    
+    set<GlobalIndexType> cellIndices = mesh->getTopology()->getActiveCellIndices();
+    for (set<GlobalIndexType>::iterator cellIt = cellIndices.begin(); cellIt != cellIndices.end(); cellIt++) {
+      GlobalIndexType cellIndex = *cellIt;
+      ostringstream functionName;
+      functionName << "phi_hat_soln3D_cell_" << cellIndex;
+      set<GlobalIndexType> cellIndexSet;
+      cellIndexSet.insert(cellIndex);
+      exporter.exportFunction(phi_hat_soln, functionName.str(), cellIndexSet);
+    }
+  
     exporter.exportFunction(phi_hat_soln, "phi_hat_soln3D");
     exporter.exportFunction(phi_soln, "phi_soln3D");
     exporter.exportFunction(phi_err, "phi_err3D");
@@ -1010,11 +1048,17 @@ bool GDAMinimumRuleTests::testHangingNodePoisson(bool useQuads) {
 #endif
   }
   
-  if ( ! MeshTestSuite::neighborBasesAgreeOnSides(mesh, _testPoints1D)) {
+  if ( ! MeshTestUtility::neighborBasesAgreeOnSides(mesh)) {
     string meshType = useQuads ? "quad" : "triangle";
     cout << "GDAMinimumRuleTests failure: for 2D Poisson " << meshType << " mesh with hanging node, neighboring bases do not agree on sides." << endl;
     success = false;
   }
+//  
+//  if ( ! MeshTestSuite::neighborBasesAgreeOnSides(mesh, _testPoints1D)) {
+//    string meshType = useQuads ? "quad" : "triangle";
+//    cout << "GDAMinimumRuleTests failure: for 2D Poisson " << meshType << " mesh with hanging node, neighboring bases do not agree on sides." << endl;
+//    success = false;
+//  }
   
   if (useQuads) {
     // then let's do one more test, with a 2-irregular mesh
@@ -1036,12 +1080,19 @@ bool GDAMinimumRuleTests::testHangingNodePoisson(bool useQuads) {
       solnExporter.exportSolution("poissonSolution_2_irregular");
 #endif
     }
-    
-    if ( ! MeshTestSuite::neighborBasesAgreeOnSides(mesh, _testPoints1D)) {
+
+    if ( ! MeshTestUtility::neighborBasesAgreeOnSides(mesh)) {
       string meshType = useQuads ? "quad" : "triangle";
       cout << "GDAMinimumRuleTests failure: for 2D Poisson " << meshType << " mesh with 2-irregular hanging node, neighboring bases do not agree on sides." << endl;
       success = false;
     }
+
+//    
+//    if ( ! MeshTestSuite::neighborBasesAgreeOnSides(mesh, _testPoints1D)) {
+//      string meshType = useQuads ? "quad" : "triangle";
+//      cout << "GDAMinimumRuleTests failure: for 2D Poisson " << meshType << " mesh with 2-irregular hanging node, neighboring bases do not agree on sides." << endl;
+//      success = false;
+//    }
     
     // try another 2-irregular mesh, this one inspired by apparent issues in the Stokes cavity flow driver:
     horizontalCellsInitialMesh = 2;
@@ -1163,12 +1214,18 @@ bool GDAMinimumRuleTests::testHangingNodeStokes(bool useQuads) {
     solnExporter.exportSolution("stokesExactSolution");
 #endif
   }
-  
-  if ( ! MeshTestSuite::neighborBasesAgreeOnSides(mesh, _testPoints1D)) {
+
+  if ( ! MeshTestUtility::neighborBasesAgreeOnSides(mesh)) {
     string meshType = useQuads ? "quad" : "triangle";
     cout << "GDAMinimumRuleTests failure: for 2D Stokes " << meshType << " mesh with hanging node, neighboring bases do not agree on sides." << endl;
     success = false;
   }
+  
+//  if ( ! MeshTestSuite::neighborBasesAgreeOnSides(mesh, _testPoints1D)) {
+//    string meshType = useQuads ? "quad" : "triangle";
+//    cout << "GDAMinimumRuleTests failure: for 2D Stokes " << meshType << " mesh with hanging node, neighboring bases do not agree on sides." << endl;
+//    success = false;
+//  }
  
   if (useQuads) {
     // try another 2-irregular mesh, this one inspired by apparent issues in the Stokes cavity flow driver:
@@ -1322,11 +1379,17 @@ bool GDAMinimumRuleTests::testMultiCellMesh() {
   SolutionPtr soln = poissonExactSolution3D(horizontalCellsInitialMesh, verticalCellsInitialMesh, depthCellsInitialMesh, H1Order, phi_exact, useH1Traces);
 
   MeshPtr mesh = soln->mesh();
-  
-  if ( ! MeshTestSuite::neighborBasesAgreeOnSides(mesh, _testPoints2D)) {
+
+  if ( ! MeshTestUtility::neighborBasesAgreeOnSides(mesh)) {
     cout << "GDAMinimumRuleTests failure: for 3D 2x2x2 Poisson mesh, neighboring bases do not agree on sides." << endl;
     success = false;
   }
+//
+//  
+//  if ( ! MeshTestSuite::neighborBasesAgreeOnSides(mesh, _testPoints2D)) {
+//    cout << "GDAMinimumRuleTests failure: for 3D 2x2x2 Poisson mesh, neighboring bases do not agree on sides." << endl;
+//    success = false;
+//  }
   
   soln->solve();
   
@@ -1358,11 +1421,16 @@ bool GDAMinimumRuleTests::testMultiCellMesh() {
   set<GlobalIndexType> cellIDs;
   cellIDs.insert(0);
   mesh->hRefine(cellIDs, RefinementPattern::regularRefinementPatternHexahedron());
-  
-  if ( ! MeshTestSuite::neighborBasesAgreeOnSides(mesh, _testPoints2D)) {
+
+  if ( ! MeshTestUtility::neighborBasesAgreeOnSides(mesh)) {
     cout << "GDAMinimumRuleTests failure: for 3D 2x2x2 Poisson mesh (arrived at by refinement of single cell), neighboring bases do not agree on sides." << endl;
     success = false;
   }
+//  
+//  if ( ! MeshTestSuite::neighborBasesAgreeOnSides(mesh, _testPoints2D)) {
+//    cout << "GDAMinimumRuleTests failure: for 3D 2x2x2 Poisson mesh (arrived at by refinement of single cell), neighboring bases do not agree on sides." << endl;
+//    success = false;
+//  }
   
   soln->solve();
   
@@ -1586,10 +1654,15 @@ bool GDAMinimumRuleTests::testSingleCellMesh() {
   }
   
   // this should be a trivial test:
-  if ( ! MeshTestSuite::neighborBasesAgreeOnSides(mesh, _testPoints2D)) {
+  if ( ! MeshTestUtility::neighborBasesAgreeOnSides(mesh)) {
     cout << "GDAMinimumRuleTests failure: for single-cell (!) 3D mesh, neighboring bases do not agree on sides." << endl;
     success = false;
   }
+  
+//  if ( ! MeshTestSuite::neighborBasesAgreeOnSides(mesh, _testPoints2D)) {
+//    cout << "GDAMinimumRuleTests failure: for single-cell (!) 3D mesh, neighboring bases do not agree on sides." << endl;
+//    success = false;
+//  }
 
   return success;
 }

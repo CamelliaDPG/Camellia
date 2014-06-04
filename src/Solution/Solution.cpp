@@ -856,19 +856,24 @@ void Solution::solveWithPrepopulatedStiffnessAndLoad(Teuchos::RCP<Solver> solver
   
   // Import solution onto current processor
   GlobalIndexTypeToCast numNodesGlobal = partMap.NumGlobalElements();
-  Epetra_Map     solnMap(numNodesGlobal, numNodesGlobal, 0, Comm);
+  GlobalIndexTypeToCast numMyNodes = numNodesGlobal;
+  Epetra_Map     solnMap(numNodesGlobal, numMyNodes, 0, Comm);
   Epetra_Import  solnImporter(solnMap, partMap);
   Epetra_Vector  solnCoeff(solnMap);
   solnCoeff.Import(*_lhsVector, solnImporter, Insert);
   
   // copy the dof coefficients into our data structure
   // get ALL active cell IDs (not just ours)-- the above is a global import that we should get rid of eventually...
-    set<GlobalIndexType> cellIDs = _mesh->getActiveCellIDs();
+  set<GlobalIndexType> cellIDs = _mesh->getActiveCellIDs();
   for (set<GlobalIndexType>::iterator cellIDIt = cellIDs.begin(); cellIDIt != cellIDs.end(); cellIDIt++) {
     GlobalIndexType cellID = *cellIDIt;
     FieldContainer<double> cellDofs(_mesh->getElementType(cellID)->trialOrderPtr->totalDofs());
     _dofInterpreter->interpretGlobalData(cellID,cellDofs,solnCoeff);
     _solutionForCellIDGlobal[cellID] = cellDofs;
+//    // DEBUGGING:
+//    if ((cellID==0) || (cellID==2)) {
+//      cout << "Solution: local coefficients for cell " << cellID << ":\n" << cellDofs;
+//    }
   }
   clearComputedResiduals(); // now that we've solved, will need to recompute residuals...
   
@@ -1007,6 +1012,10 @@ ElementTypePtr Solution::getEquivalentElementType(Teuchos::RCP<Mesh> otherMesh, 
 //  //cout << "Solution maxDiff is " << maxDiff << endl;
 //  return true;
 //}
+
+Epetra_Vector* Solution::getGlobalCoefficients() {
+  return (*_lhsVector)(0);
+}
 
 double Solution::globalCondEstLastSolve() {
   // the condition # estimate for the last system matrix used in a solve, if _reportConditionNumber is true.

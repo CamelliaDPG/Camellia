@@ -100,7 +100,7 @@ void GDAMinimumRule::filterSubBasisConstraintData(set<unsigned> &basisDofOrdinal
   for (int i=0; i < numRows; i++) {
     bool nonZeroFound = false;
     for (int j=0; j < numCols; j++) {
-      if (abs(constraintMatrix(i,j) > tol)) {
+      if (abs(constraintMatrix(i,j)) > tol) {
         nonZeroFound = true;
       }
     }
@@ -111,7 +111,7 @@ void GDAMinimumRule::filterSubBasisConstraintData(set<unsigned> &basisDofOrdinal
   for (int j=0; j < numCols; j++) {
     bool nonZeroFound = false;
     for (int i=0; i < numRows; i++) {
-      if (abs(constraintMatrix(i,j) > tol)) {
+      if (abs(constraintMatrix(i,j)) > tol) {
         nonZeroFound = true;
       }
     }
@@ -200,7 +200,7 @@ int GDAMinimumRule::H1Order(GlobalIndexType cellID, unsigned sideOrdinal) {
   return _cellH1Orders[cellID];
 }
 
-void GDAMinimumRule::interpretGlobalData(GlobalIndexType cellID, FieldContainer<double> &localDofs, const Epetra_Vector &globalData, bool accumulate) {
+void GDAMinimumRule::interpretGlobalData(GlobalIndexType cellID, FieldContainer<double> &localDofs, const Epetra_Vector &globalData) {
   CellConstraints constraints = getCellConstraints(cellID);
   LocalDofMapperPtr dofMapper = getDofMapper(cellID, constraints);
   vector<GlobalIndexType> globalIndexVector = dofMapper->globalIndices();
@@ -212,6 +212,7 @@ void GDAMinimumRule::interpretGlobalData(GlobalIndexType cellID, FieldContainer<
   }
   
   bool localToGlobal = false; // false: map "backwards" (global to local)
+  bool accumulate = false; // ignored by dofMapper for global to local mappings
   localDofs = dofMapper->mapData(globalDataFC,localToGlobal,accumulate);
 //  cout << "For cellID " << cellID << ", mapping globalData:\n " << globalDataFC;
 //  cout << " to localData:\n " << localDofs;
@@ -237,6 +238,42 @@ void GDAMinimumRule::interpretLocalData(GlobalIndexType cellID, const FieldConta
   for (int i=0; i<globalIndexVector.size(); i++) {
     globalDofIndices(i) = globalIndexVector[i];
   }
+  
+//  // mostly for debugging purposes, let's sort according to global dof index:
+//  if (globalData.rank() == 1) {
+//    map<GlobalIndexType, double> globalDataMap;
+//    for (int i=0; i<globalIndexVector.size(); i++) {
+//      GlobalIndexType globalIndex = globalIndexVector[i];
+//      globalDataMap[globalIndex] = globalData(i);
+//    }
+//    int i=0;
+//    for (map<GlobalIndexType, double>::iterator mapIt = globalDataMap.begin(); mapIt != globalDataMap.end(); mapIt++) {
+//      globalDofIndices(i) = mapIt->first;
+//      globalData(i) = mapIt->second;
+//      i++;
+//    }
+//  } else if (globalData.rank() == 2) {
+//    cout << "globalData.rank() == 2.\n";
+//    FieldContainer<double> globalDataCopy = globalData;
+//    map<GlobalIndexType,int> globalIndexToOrdinalMap;
+//    for (int i=0; i<globalIndexVector.size(); i++) {
+//      GlobalIndexType globalIndex = globalIndexVector[i];
+//      globalIndexToOrdinalMap[globalIndex] = i;
+//    }
+//    int i=0;
+//    for (map<GlobalIndexType,int>::iterator i_mapIt = globalIndexToOrdinalMap.begin();
+//         i_mapIt != globalIndexToOrdinalMap.end(); i_mapIt++) {
+//      int j=0;
+//      globalDofIndices(i) = i_mapIt->first;
+//      for (map<GlobalIndexType,int>::iterator j_mapIt = globalIndexToOrdinalMap.begin();
+//           j_mapIt != globalIndexToOrdinalMap.end(); j_mapIt++) {
+//        globalData(i,j) = globalDataCopy(i_mapIt->second,j_mapIt->second);
+//        
+//        j++;
+//      }
+//      i++;
+//    }
+//  }
   
 //  cout << "localData:\n" << localData;
 //  cout << "globalData:\n" << globalData;
@@ -615,6 +652,10 @@ BasisMap GDAMinimumRule::getBasisMap(GlobalIndexType cellID, SubCellDofIndexInfo
         cout << "Error: ancestralSideOrdinal not found.\n";
         TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Error: ancestralSideOrdinal not found.");
       }
+      
+//      if ((subcellInfo.cellID==2) && (subcellInfo.dimension == 0) && (subcellInfo.sideOrdinal==0)) {
+//        cout << "DEBUGGING: (subcellInfo.cellID==2) && (subcellInfo.dimension == 0) && (subcellInfo.sideOrdinal==0).\n";
+//      }
       
       if (subcellConstraint.dimension != d) {
         unsigned ancestralPermutation = ancestralCell->sideSubcellPermutation(ancestralSideOrdinal, sideDim, 0);// side permutation as seen from the perspective of the fine cell's side's ancestor

@@ -605,8 +605,8 @@ void Mesh::hUnrefine(const set<GlobalIndexType> &cellIDs) {
   _boundary.buildLookupTables();
 }
 
-void Mesh::interpretGlobalData(GlobalIndexType cellID, FieldContainer<double> &localDofs, const Epetra_Vector &globalDofs, bool accumulate) {
-  _gda->interpretGlobalData(cellID, localDofs, globalDofs, accumulate);
+void Mesh::interpretGlobalData(GlobalIndexType cellID, FieldContainer<double> &localDofs, const Epetra_Vector &globalDofs) {
+  _gda->interpretGlobalData(cellID, localDofs, globalDofs);
 }
 
 void Mesh::interpretLocalBasisData(GlobalIndexType cellID, int varID, int sideOrdinal, const FieldContainer<double> &basisDofs,

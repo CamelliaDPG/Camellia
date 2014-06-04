@@ -77,14 +77,14 @@ protected:
 public:
   NewExporter(MeshTopologyPtr mesh) :
     _mesh(mesh) {}
-  virtual void exportFunction(FunctionPtr function, const string& functionName="function", unsigned int num1DPts=0) = 0;
+  virtual void exportFunction(FunctionPtr function, const string& functionName="function", set<GlobalIndexType> cellIndices=set<GlobalIndexType>(), unsigned int num1DPts=0) = 0;
 };
 
 class NewVTKExporter : public NewExporter {
 public:
   NewVTKExporter(MeshTopologyPtr mesh) :
     NewExporter(mesh) {}
-  void exportFunction(FunctionPtr function, const string& functionName="function", unsigned int num1DPts=0);
+  void exportFunction(FunctionPtr function, const string& functionName="function", set<GlobalIndexType> cellIndices=set<GlobalIndexType>(), unsigned int num1DPts=0);
 };
 
 #endif /* end of include guard: SOLUTIONEXPORTER_H */

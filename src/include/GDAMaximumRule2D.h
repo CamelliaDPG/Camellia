@@ -90,7 +90,7 @@ public:
   void interpretLocalData(GlobalIndexType cellID, const FieldContainer<double> &localDofs, FieldContainer<double> &globalDofs, FieldContainer<GlobalIndexType> &globalDofIndices, bool accumulate=true);
   void interpretLocalBasisData(GlobalIndexType cellID, int varID, int sideOrdinal, const FieldContainer<double> &basisDofs,
                                FieldContainer<double> &globalDofs, FieldContainer<GlobalIndexType> &globalDofIndices);
-  void interpretGlobalData(GlobalIndexType cellID, FieldContainer<double> &localDofs, const Epetra_Vector &globalDofs, bool accumulate=true);
+  void interpretGlobalData(GlobalIndexType cellID, FieldContainer<double> &localDofs, const Epetra_Vector &globalDofs);
   IndexType localDofCount(); // local to the MPI node
     
   IndexType partitionLocalCellIndex(GlobalIndexType cellID);

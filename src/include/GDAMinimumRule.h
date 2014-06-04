@@ -91,7 +91,7 @@ public:
                           FieldContainer<double> &globalDofs, FieldContainer<GlobalIndexType> &globalDofIndices, bool accumulate=true);
   void interpretLocalBasisData(GlobalIndexType cellID, int varID, int sideOrdinal, const FieldContainer<double> &basisDofs,
                                FieldContainer<double> &globalDofs, FieldContainer<GlobalIndexType> &globalDofIndices);
-  void interpretGlobalData(GlobalIndexType cellID, FieldContainer<double> &localDofs, const Epetra_Vector &globalDofs, bool accumulate=true);
+  void interpretGlobalData(GlobalIndexType cellID, FieldContainer<double> &localDofs, const Epetra_Vector &globalDofs);
   IndexType localDofCount(); // local to the MPI node
 
   PartitionIndexType partitionForGlobalDofIndex( GlobalIndexType globalDofIndex );

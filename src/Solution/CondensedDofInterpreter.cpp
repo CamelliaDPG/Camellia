@@ -349,7 +349,7 @@ void CondensedDofInterpreter::interpretLocalData(GlobalIndexType cellID, const F
   }
 }
 
-void CondensedDofInterpreter::interpretGlobalData(GlobalIndexType cellID, FieldContainer<double> &localData, const Epetra_Vector &globalData, bool accumulate) {
+void CondensedDofInterpreter::interpretGlobalData(GlobalIndexType cellID, FieldContainer<double> &localData, const Epetra_Vector &globalData) {
   // get elem data and submatrix data
   FieldContainer<double> K,rhs;
   FieldContainer<GlobalIndexType> interpretedDofIndices;
