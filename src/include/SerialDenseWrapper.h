@@ -261,7 +261,7 @@ public:
     
     int result = 0;
     
-    Epetra_SerialSymDenseMatrix AMatrix(Copy, &A_SPD(0,0),
+    Epetra_SerialSymDenseMatrix AMatrix(::Copy, &A_SPD(0,0),
                                           N, // stride -- fc stores in row-major order (a.o.t. SDM)
                                           N);
     
