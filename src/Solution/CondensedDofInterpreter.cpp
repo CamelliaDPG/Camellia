@@ -156,7 +156,7 @@ map<GlobalIndexType, IndexType> CondensedDofInterpreter::interpretedFluxMapForPa
         FieldContainer<GlobalIndexType> interpretedDofIndicesForBasis;
         vector< int > localDofIndicesForBasis = trialOrder->getDofIndices(trialID,sideOrdinal);
         
-        _mesh->interpretLocalBasisData(cellID, trialID, sideOrdinal, dummyLocalBasisData, dummyGlobalData, interpretedDofIndicesForBasis);
+        _mesh->interpretLocalBasisCoefficients(cellID, trialID, sideOrdinal, dummyLocalBasisData, dummyGlobalData, interpretedDofIndicesForBasis);
         
         if (storeFluxDofIndices) {
           pair< int, int > basisIdentifier = make_pair(trialID,sideOrdinal);
@@ -349,7 +349,7 @@ void CondensedDofInterpreter::interpretLocalData(GlobalIndexType cellID, const F
   }
 }
 
-void CondensedDofInterpreter::interpretGlobalData(GlobalIndexType cellID, FieldContainer<double> &localData, const Epetra_Vector &globalData) {
+void CondensedDofInterpreter::interpretGlobalCoefficients(GlobalIndexType cellID, FieldContainer<double> &localData, const Epetra_Vector &globalData) {
   // get elem data and submatrix data
   FieldContainer<double> K,rhs;
   FieldContainer<GlobalIndexType> interpretedDofIndices;

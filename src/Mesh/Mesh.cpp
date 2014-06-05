@@ -605,18 +605,18 @@ void Mesh::hUnrefine(const set<GlobalIndexType> &cellIDs) {
   _boundary.buildLookupTables();
 }
 
-void Mesh::interpretGlobalData(GlobalIndexType cellID, FieldContainer<double> &localDofs, const Epetra_Vector &globalDofs) {
-  _gda->interpretGlobalData(cellID, localDofs, globalDofs);
+void Mesh::interpretGlobalCoefficients(GlobalIndexType cellID, FieldContainer<double> &localCoefficients, const Epetra_Vector &globalCoefficients) {
+  _gda->interpretGlobalCoefficients(cellID, localCoefficients, globalCoefficients);
 }
 
-void Mesh::interpretLocalBasisData(GlobalIndexType cellID, int varID, int sideOrdinal, const FieldContainer<double> &basisDofs,
-                                   FieldContainer<double> &globalDofs, FieldContainer<GlobalIndexType> &globalDofIndices) {
-  _gda->interpretLocalBasisData(cellID, varID, sideOrdinal, basisDofs, globalDofs, globalDofIndices);
+void Mesh::interpretLocalBasisCoefficients(GlobalIndexType cellID, int varID, int sideOrdinal, const FieldContainer<double> &basisCoefficients,
+                                   FieldContainer<double> &globalCoefficients, FieldContainer<GlobalIndexType> &globalDofIndices) {
+  _gda->interpretLocalBasisCoefficients(cellID, varID, sideOrdinal, basisCoefficients, globalCoefficients, globalDofIndices);
 }
 
 void Mesh::interpretLocalData(GlobalIndexType cellID, const FieldContainer<double> &localDofs,
-                              FieldContainer<double> &globalDofs, FieldContainer<GlobalIndexType> &globalDofIndices, bool accumulate) {
-  _gda->interpretLocalData(cellID, localDofs, globalDofs, globalDofIndices, accumulate);
+                              FieldContainer<double> &globalDofs, FieldContainer<GlobalIndexType> &globalDofIndices) {
+  _gda->interpretLocalData(cellID, localDofs, globalDofs, globalDofIndices);
 }
 
 GlobalIndexType Mesh::numActiveElements() {

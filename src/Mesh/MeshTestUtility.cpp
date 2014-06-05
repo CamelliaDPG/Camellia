@@ -425,7 +425,7 @@ bool MeshTestUtility::neighborBasesAgreeOnSides(Teuchos::RCP<Mesh> mesh, Epetra_
     DofOrderingPtr fineElemTrialOrder = fineElemType->trialOrderPtr;
     
     FieldContainer<double> fineSolutionCoefficients(fineElemTrialOrder->totalDofs());
-    mesh->globalDofAssignment()->interpretGlobalData(cellIndex, fineSolutionCoefficients, globalSolutionCoefficients);
+    mesh->globalDofAssignment()->interpretGlobalCoefficients(cellIndex, fineSolutionCoefficients, globalSolutionCoefficients);
 //    if ((cellIndex==0) || (cellIndex==2)) {
 //      cout << "MeshTestUtility: local coefficients for cell " << cellIndex << ":\n" << fineSolutionCoefficients;
 //    }
@@ -486,7 +486,7 @@ bool MeshTestUtility::neighborBasesAgreeOnSides(Teuchos::RCP<Mesh> mesh, Epetra_
       DofOrderingPtr coarseElemTrialOrder = coarseElementType->trialOrderPtr;
       
       FieldContainer<double> coarseSolutionCoefficients(coarseElemTrialOrder->totalDofs());
-      mesh->globalDofAssignment()->interpretGlobalData(neighborInfo.first, coarseSolutionCoefficients, globalSolutionCoefficients);
+      mesh->globalDofAssignment()->interpretGlobalCoefficients(neighborInfo.first, coarseSolutionCoefficients, globalSolutionCoefficients);
       
       set<int> varIDs = fineElemTrialOrder->getVarIDs();
       for (set<int>::iterator varIt = varIDs.begin(); varIt != varIDs.end(); varIt++) {

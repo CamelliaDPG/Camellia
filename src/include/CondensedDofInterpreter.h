@@ -54,14 +54,14 @@ public:
   set<GlobalIndexType> globalDofIndicesForPartition(PartitionIndexType rank);
   
   void interpretLocalData(GlobalIndexType cellID, const FieldContainer<double> &localDofs,
-                          FieldContainer<double> &globalDofs, FieldContainer<GlobalIndexType> &globalDofIndices, bool accumulate=true) {
+                          FieldContainer<double> &globalDofs, FieldContainer<GlobalIndexType> &globalDofIndices) {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "CondensedDofInterpreter requires both stiffness and load data to be provided.");
   }
   
   void interpretLocalData(GlobalIndexType cellID, const FieldContainer<double> &localStiffnessData, const FieldContainer<double> &localLoadData,
                           FieldContainer<double> &globalStiffnessData, FieldContainer<double> &globalLoadData, FieldContainer<GlobalIndexType> &globalDofIndices);
   
-  void interpretGlobalData(GlobalIndexType cellID, FieldContainer<double> &localDofs, const Epetra_Vector &globalDofs);
+  void interpretGlobalCoefficients(GlobalIndexType cellID, FieldContainer<double> &localDofs, const Epetra_Vector &globalDofs);
 };
 
 

@@ -284,7 +284,7 @@ void Boundary::bcsToImpose( map<  GlobalIndexType, double > &globalDofIndicesAnd
               Teuchos::Array<int> cellDataDim(1,numDofs);
               FieldContainer<double> cellData(cellDataDim, &dirichletValues(localCellIndex,0));
               GlobalIndexType cellID = cellIDsPerSide[sideIndex][localCellIndex];
-              _mesh->interpretLocalBasisData(cellID, trialID, sideIndex, cellData, globalData, globalDofIndices);
+              _mesh->interpretLocalBasisCoefficients(cellID, trialID, sideIndex, cellData, globalData, globalDofIndices);
               
 //              cout << "For cell " << cellID << " and trial ID " << trialID << " on side " << sideIndex;
 //              cout << ", localData is:\n" << cellData;

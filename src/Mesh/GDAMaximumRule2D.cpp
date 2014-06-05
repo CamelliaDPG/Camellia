@@ -676,18 +676,18 @@ set<GlobalIndexType> GDAMaximumRule2D::globalDofIndicesForPartition(PartitionInd
   return _partitionedGlobalDofIndices[partitionNumber];
 }
 
-void GDAMaximumRule2D::interpretGlobalData(GlobalIndexType cellID, FieldContainer<double> &localDofs, const Epetra_Vector &globalDofs) {
+void GDAMaximumRule2D::interpretGlobalCoefficients(GlobalIndexType cellID, FieldContainer<double> &localCoefficients,
+                                                   const Epetra_Vector &globalCoefficients) {
   int numDofs = elementType(cellID)->trialOrderPtr->totalDofs();
   for (int dofIndex=0; dofIndex<numDofs; dofIndex++) {
     GlobalIndexType globalIndex = globalDofIndex(cellID, dofIndex);
-    localDofs(dofIndex) = globalDofs[globalIndex];
+    localCoefficients(dofIndex) = globalCoefficients[globalIndex];
   }
 }
 
 void GDAMaximumRule2D::interpretLocalData(GlobalIndexType cellID, const FieldContainer<double> &localDofs, FieldContainer<double> &globalDofs,
-                                          FieldContainer<GlobalIndexType> &globalDofIndices, bool accumulate) {
+                                          FieldContainer<GlobalIndexType> &globalDofIndices) {
   // for maximum rule, our interpretation is just a one-to-one mapping
-  // (therefore accumulate argument is ignored)
   // TODO: add some sanity checks for the arguments here.
   globalDofs = localDofs; // copy -- this may be a vector or a (square) matrix
   int numDofs = localDofs.dimension(0);
@@ -697,10 +697,10 @@ void GDAMaximumRule2D::interpretLocalData(GlobalIndexType cellID, const FieldCon
   }
 }
 
-void GDAMaximumRule2D::interpretLocalBasisData(GlobalIndexType cellID, int varID, int sideOrdinal, const FieldContainer<double> &basisDofs,
-                                               FieldContainer<double> &globalDofs, FieldContainer<GlobalIndexType> &globalDofIndices) {
-  globalDofs = basisDofs; // copy -- this may be a vector or a (square) matrix
-  int numDofs = basisDofs.dimension(0);
+void GDAMaximumRule2D::interpretLocalBasisCoefficients(GlobalIndexType cellID, int varID, int sideOrdinal, const FieldContainer<double> &basisCoefficients,
+                                                       FieldContainer<double> &globalCoefficients, FieldContainer<GlobalIndexType> &globalDofIndices) {
+  globalCoefficients = basisCoefficients; // copy
+  int numDofs = basisCoefficients.dimension(0);
   globalDofIndices.resize(numDofs);
   DofOrderingPtr trialOrdering = _elementTypeForCell[cellID]->trialOrderPtr;
   for (int basisDofOrdinal=0; basisDofOrdinal<numDofs; basisDofOrdinal++) {

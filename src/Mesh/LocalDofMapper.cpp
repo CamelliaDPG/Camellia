@@ -13,6 +13,8 @@
 
 #include "SubBasisDofMatrixMapper.h"
 
+#include "SerialDenseWrapper.h"
+
 void LocalDofMapper::filterData(const vector<int> dofIndices, const FieldContainer<double> &data, FieldContainer<double> &filteredData) {
   int dofCount = dofIndices.size();
   if (data.rank()==1) {
@@ -109,7 +111,8 @@ void LocalDofMapper::addSubBasisMapVectorContribution(int varID, int sideOrdinal
 //  TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "addReverseSubBasisMapMatrixContribution not yet implemented");
 //}
 
-void LocalDofMapper::addReverseSubBasisMapVectorContribution(int varID, int sideOrdinal, BasisMap basisMap, const FieldContainer<double> &globalData, FieldContainer<double> &localData) {
+void LocalDofMapper::addReverseSubBasisMapVectorContribution(int varID, int sideOrdinal, BasisMap basisMap,
+                                                             const FieldContainer<double> &globalCoefficients, FieldContainer<double> &localCoefficients) {
   bool transposeConstraint = false; // global to local
   
   if (_varIDToMap != -1) {
@@ -117,7 +120,7 @@ void LocalDofMapper::addReverseSubBasisMapVectorContribution(int varID, int side
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Error: LocalDofMapper::addReverseSubBasisMapContribution not supported when _varIDToMap is specified.");
   }
   
-//  cout << "*************  varID: " << varID << ", side " << sideOrdinal << "  *************" << endl;
+  //  cout << "*************  varID: " << varID << ", side " << sideOrdinal << "  *************" << endl;
   
   vector<GlobalIndexType> globalIndices = this->globalIndices();
   for (vector<SubBasisDofMapperPtr>::iterator subBasisMapIt = basisMap.begin(); subBasisMapIt != basisMap.end(); subBasisMapIt++) {
@@ -128,25 +131,25 @@ void LocalDofMapper::addReverseSubBasisMapVectorContribution(int varID, int side
       globalOrdinalFilter.push_back(_globalIndexToOrdinal[ globalDofIndices[subBasisGlobalDofOrdinal] ]);
     }
     FieldContainer<double> filteredSubBasisData;
-    filterData(globalOrdinalFilter, globalData, filteredSubBasisData);
+    filterData(globalOrdinalFilter, globalCoefficients, filteredSubBasisData);
     FieldContainer<double> mappedSubBasisData = (*subBasisMapIt)->mapData(transposeConstraint, filteredSubBasisData);
     set<unsigned> localDofOrdinals = subBasisDofMapper->basisDofOrdinalFilter();
     
-//    cout << "addReverseSubBasisMapVectorContribution: globalIndices ( ";
-//    for (int subBasisGlobalDofOrdinal=0; subBasisGlobalDofOrdinal<globalDofIndices.size(); subBasisGlobalDofOrdinal++) {
-//      cout << globalDofIndices[subBasisGlobalDofOrdinal] << " ";
-//    }
-//    cout << ") ---> ( ";
-//    for (set<unsigned>::iterator localDofOrdinalIt_i = localDofOrdinals.begin(); localDofOrdinalIt_i != localDofOrdinals.end(); localDofOrdinalIt_i++) {
-//      unsigned localDofIndex_i = _dofOrdering->getDofIndex(varID, *localDofOrdinalIt_i, sideOrdinal);
-//      cout << localDofIndex_i << " ";
-//    }
-//    cout << ")\n";
+    //    cout << "addReverseSubBasisMapVectorContribution: globalIndices ( ";
+    //    for (int subBasisGlobalDofOrdinal=0; subBasisGlobalDofOrdinal<globalDofIndices.size(); subBasisGlobalDofOrdinal++) {
+    //      cout << globalDofIndices[subBasisGlobalDofOrdinal] << " ";
+    //    }
+    //    cout << ") ---> ( ";
+    //    for (set<unsigned>::iterator localDofOrdinalIt_i = localDofOrdinals.begin(); localDofOrdinalIt_i != localDofOrdinals.end(); localDofOrdinalIt_i++) {
+    //      unsigned localDofIndex_i = _dofOrdering->getDofIndex(varID, *localDofOrdinalIt_i, sideOrdinal);
+    //      cout << localDofIndex_i << " ";
+    //    }
+    //    cout << ")\n";
     int i=0;
     for (set<unsigned>::iterator localDofOrdinalIt_i = localDofOrdinals.begin(); localDofOrdinalIt_i != localDofOrdinals.end(); localDofOrdinalIt_i++, i++) {
       unsigned localDofOrdinal_i = *localDofOrdinalIt_i;
       unsigned localDofIndex_i = _dofOrdering->getDofIndex(varID, localDofOrdinal_i, sideOrdinal);
-      localData(localDofIndex_i) += mappedSubBasisData(i);
+      localCoefficients(localDofIndex_i) += mappedSubBasisData(i);
     }
   }
 }
@@ -234,20 +237,20 @@ vector<GlobalIndexType> LocalDofMapper::globalIndices() {
   return indices;
 }
 
-FieldContainer<double> LocalDofMapper::mapDataMatrix(const FieldContainer<double> &data, bool localToGlobal, bool accumulate) {
-  int dataSize = data.dimension(0);
-  if (data.dimension(1) != dataSize) {
-    cout << "Error: data matrix must be square.\n";
-    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "data matrix must be square");
+FieldContainer<double> LocalDofMapper::mapLocalDataMatrix(const FieldContainer<double> &localData) {
+  int dataSize = localData.dimension(0);
+  if (localData.dimension(1) != dataSize) {
+    cout << "Error: localData matrix must be square.\n";
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "localData matrix must be square");
   }
   FieldContainer<double> dataVector(dataSize);
   FieldContainer<double> intermediateDataMatrix;
   int mappedDataSize;
   for (int i=0; i<dataSize; i++) {
     for (int j=0; j<dataSize; j++) {
-      dataVector(j) = data(i,j);
+      dataVector(j) = localData(i,j);
     }
-    FieldContainer<double> mappedDataVector = mapData(dataVector, localToGlobal, accumulate);
+    FieldContainer<double> mappedDataVector = mapLocalData(dataVector);
     if (i==0) { // size intermediateDataMatrix once we know the entry for the first row
       mappedDataSize = mappedDataVector.size();
       intermediateDataMatrix.resize(dataSize,mappedDataSize);
@@ -261,7 +264,7 @@ FieldContainer<double> LocalDofMapper::mapDataMatrix(const FieldContainer<double
     for (int i=0; i<dataSize; i++) {
       dataVector(i) = intermediateDataMatrix(i,j);
     }
-    FieldContainer<double> mappedDataVector = mapData(dataVector, localToGlobal, accumulate);
+    FieldContainer<double> mappedDataVector = mapLocalData(dataVector);
     for (int i=0; i<mappedDataSize; i++) {
       globalData(i,j) = mappedDataVector(i);
     }
@@ -269,38 +272,64 @@ FieldContainer<double> LocalDofMapper::mapDataMatrix(const FieldContainer<double
   return globalData;
 }
 
-FieldContainer<double> LocalDofMapper::mapData(const FieldContainer<double> &data, bool localToGlobal, bool accumulate) {
-  // if accumulate is false, then entries don't sum into their destination, but instead overwrite it.
-  // (in cases where multiple data go to one entry, this pretty much amounts to an assertion that the data are identical.
-  //  This case is useful when you have solution coefficients you want to map in one direction or the other.)
+FieldContainer<double> LocalDofMapper::fitLocalCoefficients(const FieldContainer<double> &localCoefficients) {
+  // solves normal equations (if the localCoefficients are in the range of the global-to-local operator, then the returned coefficients will be the preimage of localCoefficients under that operator)
+  if (_varIDToMap == -1) {
+    cout << "ERROR: for the present, fitLocalCoefficients is only supported when _varIDToMap has been specified.\n";
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "ERROR: for the present, fitLocalCoefficients is only supported when _varIDToMap has been specified.\n");
+  }
   
-  // (if localToGlobal is false, then accumulate argument is ignored...)
+  unsigned globalDofCount =  _globalIndexToOrdinal.size();
+  unsigned localDofCount = localCoefficients.size();
+
+  // this is unoptimized code!
+  FieldContainer<double> localIdentity(localDofCount,localDofCount);
+  for (int i=0; i<localDofCount; i++) {
+    localIdentity(i,i) = 1.0;
+  }
+  
+  FieldContainer<double> normalMatrix = mapLocalData(localIdentity);
+  
+  FieldContainer<double> mappedLocalCoefficients = mapLocalData(localCoefficients);
+  
+  mappedLocalCoefficients.resize(globalDofCount,1);
+  
+  FieldContainer<double> globalCoefficients(globalDofCount,1);
+  
+  SerialDenseWrapper::solveSystemUsingQR(globalCoefficients, normalMatrix, mappedLocalCoefficients);
+  
+  globalCoefficients.resize(globalDofCount);
+  
+  return globalCoefficients;
+}
+
+FieldContainer<double> LocalDofMapper::mapLocalData(const FieldContainer<double> &localData) {
   unsigned dofCount;
   if (_varIDToMap == -1) {
-    dofCount = localToGlobal ? _dofOrdering->totalDofs() : _globalIndexToOrdinal.size();
+    dofCount = _dofOrdering->totalDofs();
   } else {
     dofCount = _dofOrdering->getBasisCardinality(_varIDToMap, _sideOrdinalToMap);
   }
-  if ((data.rank() != 1) && (data.rank() != 2)) {
-    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "data must be rank 1 or rank 2");
+  if ((localData.rank() != 1) && (localData.rank() != 2)) {
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "localData must be rank 1 or rank 2");
   }
-  if (data.dimension(0) != dofCount) {
+  if (localData.dimension(0) != dofCount) {
     cout << "data's dimension 0 must match dofCount.\n";
-    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "data dimension 0 must match dofCount.");
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "localData dimension 0 must match dofCount.");
   }
-  if (data.rank()==2) {
-    if (data.dimension(1) != dofCount) {
-      cout << "data's dimension 1, if present, must match dof ordering's totalDofs.\n";
+  if (localData.rank()==2) {
+    if (localData.dimension(1) != dofCount) {
+      cout << "data's dimension 1, if present, must match dofCount.\n";
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "data dimension 1 must match dofCount.");
     }
   }
-  if (data.rank()==2) {
-    return mapDataMatrix(data, localToGlobal, accumulate);
+  if (localData.rank()==2) {
+    return mapLocalDataMatrix(localData);
   }
   
-  int mappedDofCount = localToGlobal ? _globalIndexToOrdinal.size() : _dofOrdering->totalDofs();
+  int mappedDofCount =  _globalIndexToOrdinal.size();
   Teuchos::Array<int> dim;
-  data.dimensions(dim);
+  localData.dimensions(dim);
   dim[0] = mappedDofCount;
   FieldContainer<double> mappedData(dim);
   
@@ -311,10 +340,7 @@ FieldContainer<double> LocalDofMapper::mapData(const FieldContainer<double> &dat
     if (skipVar) continue;
     BasisMap basisMap = volumeMapIt->second;
     int volumeSideIndex = 0;
-    if (localToGlobal)
-      addSubBasisMapVectorContribution(varID, volumeSideIndex, basisMap, data, mappedData, accumulate);
-    else
-      addReverseSubBasisMapVectorContribution(varID, volumeSideIndex, basisMap, data, mappedData);
+    addSubBasisMapVectorContribution(varID, volumeSideIndex, basisMap, localData, mappedData, true);
   }
   
   // map side data
@@ -327,13 +353,67 @@ FieldContainer<double> LocalDofMapper::mapData(const FieldContainer<double> &dat
       bool skipVar = (_varIDToMap != -1) && (varID != _varIDToMap);
       if (skipVar) continue;
       BasisMap basisMap = sideMapIt->second;
-      if (localToGlobal)
-        addSubBasisMapVectorContribution(varID, sideOrdinal, basisMap, data, mappedData, accumulate);
-      else
-        addReverseSubBasisMapVectorContribution(varID, sideOrdinal, basisMap, data, mappedData);
+      addSubBasisMapVectorContribution(varID, sideOrdinal, basisMap, localData, mappedData, true);
     }
   }
   return mappedData;
+}
+
+FieldContainer<double> LocalDofMapper::mapGlobalCoefficients(const FieldContainer<double> &globalCoefficients) {
+  unsigned dofCount;
+  if (_varIDToMap == -1) {
+    dofCount = _globalIndexToOrdinal.size();
+  } else {
+    dofCount = _dofOrdering->getBasisCardinality(_varIDToMap, _sideOrdinalToMap);
+  }
+  if (globalCoefficients.rank() != 1) {
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "globalCoefficients must be rank 1");
+  }
+  if (globalCoefficients.dimension(0) != dofCount) {
+    cout << "globalCoefficients's dimension 0 must match dofCount.\n";
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "globalCoefficients dimension 0 must match dofCount.");
+  }
+  
+  int mappedDofCount = _dofOrdering->totalDofs();
+  Teuchos::Array<int> dim;
+  globalCoefficients.dimensions(dim);
+  dim[0] = mappedDofCount;
+  FieldContainer<double> localCoefficients(dim);
+  
+  // map volume data
+  for (map< int, BasisMap >::iterator volumeMapIt = _volumeMaps.begin(); volumeMapIt != _volumeMaps.end(); volumeMapIt++) {
+    int varID = volumeMapIt->first;
+    bool skipVar = (_varIDToMap != -1) && (varID != _varIDToMap);
+    if (skipVar) continue;
+    BasisMap basisMap = volumeMapIt->second;
+    int volumeSideIndex = 0;
+    addReverseSubBasisMapVectorContribution(varID, volumeSideIndex, basisMap, globalCoefficients, localCoefficients);
+  }
+  
+  // map side data
+  int sideCount = _sideMaps.size();
+  for (unsigned sideOrdinal=0; sideOrdinal<sideCount; sideOrdinal++) {
+    bool skipSide = (_sideOrdinalToMap != -1) && (sideOrdinal != _sideOrdinalToMap);
+    if (skipSide) continue;
+    for (map< int, BasisMap >::iterator sideMapIt = _sideMaps[sideOrdinal].begin(); sideMapIt != _sideMaps[sideOrdinal].end(); sideMapIt++) {
+      int varID = sideMapIt->first;
+      bool skipVar = (_varIDToMap != -1) && (varID != _varIDToMap);
+      if (skipVar) continue;
+      BasisMap basisMap = sideMapIt->second;
+      addReverseSubBasisMapVectorContribution(varID, sideOrdinal, basisMap, globalCoefficients, localCoefficients);
+    }
+  }
+  return localCoefficients;
+}
+
+
+// DEPRECATED:
+FieldContainer<double> LocalDofMapper::mapData(const FieldContainer<double> &data, bool localToGlobal) {
+  if (localToGlobal) {
+    return mapLocalData(data);
+  } else {
+    return mapGlobalCoefficients(data);
+  }
 }
 
 void LocalDofMapper::printMappingReport() {

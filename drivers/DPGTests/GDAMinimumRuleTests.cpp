@@ -468,14 +468,24 @@ SolutionPtr GDAMinimumRuleTests::stokesExactSolution(bool useMinRule, int horizo
 }
 
 void GDAMinimumRuleTests::runTests(int &numTestsRun, int &numTestsPassed) {
+//  setup();
+//  if (testHangingNodePoisson3D()) {
+//    numTestsPassed++;
+//  }
+//  numTestsRun++;
+//  teardown();
+  
+  //  cout << "testHangingNodePoisson3D complete.\n";
+  
+  
   setup();
-  if (testHangingNodePoisson3D()) {
+  if (testGlobalToLocalToGlobalConsistency()) {
     numTestsPassed++;
   }
   numTestsRun++;
   teardown();
   
-  //  cout << "testHangingNodePoisson3D complete.\n";
+  //  cout << "testGlobalToLocalToGlobalConsistency complete.\n";
   
   bool useQuads = true;
   setup();
@@ -540,14 +550,6 @@ void GDAMinimumRuleTests::runTests(int &numTestsRun, int &numTestsPassed) {
 //  numTestsRun++;
 //  teardown();
 
-  setup();
-  if (testGlobalToLocalToGlobalConsistency()) {
-    numTestsPassed++;
-  }
-  numTestsRun++;
-  teardown();
-  
-  //  cout << "testGlobalToLocalToGlobalConsistency complete.\n";
   
   setup();
   if (testHRefinements()) {
@@ -704,44 +706,70 @@ bool GDAMinimumRuleTests::checkLocalGlobalConsistency(MeshPtr mesh) {
   GlobalDofAssignmentPtr gda = mesh->globalDofAssignment();
   
   int numGlobalDofs = gda->globalDofCount();
-  FieldContainer<double> globalData(numGlobalDofs);
+  FieldContainer<double> globalCoefficients(numGlobalDofs);
   for (int i=0; i<numGlobalDofs; i++) {
-    globalData(i) = 2*i + 1; // arbitrary data
+    globalCoefficients(i) = 2*i + 1; // arbitrary cofficients
   }
-  FieldContainer<double> globalDataExpected = globalData;
-  FieldContainer<double> globalDataActual(numGlobalDofs);
-  FieldContainer<double> localData;
+  FieldContainer<double> globalCoefficientsExpected = globalCoefficients;
+  FieldContainer<double> globalCoefficientsActual(numGlobalDofs);
+  FieldContainer<double> localCoefficients;
   
   Epetra_SerialComm Comm;
   Epetra_BlockMap map(numGlobalDofs, 1, 0, Comm);
-  Epetra_Vector globalDataVector(map);
+  Epetra_Vector globalCoefficientsVector(map);
   for (int i=0; i<numGlobalDofs; i++) {
-    globalDataVector[i] = globalData(i);
+    globalCoefficientsVector[i] = globalCoefficients(i);
   }
   
   cellIDs = mesh->getActiveCellIDs();
   for (set<GlobalIndexType>::iterator cellIDIt = cellIDs.begin(); cellIDIt != cellIDs.end(); cellIDIt++) {
     GlobalIndexType cellID = *cellIDIt;
-    gda->interpretGlobalData(cellID, localData, globalDataVector);
+    gda->interpretGlobalCoefficients(cellID, localCoefficients, globalCoefficientsVector);
     FieldContainer<GlobalIndexType> globalDofIndices;
-    FieldContainer<double> globalDataForCell;
-    gda->interpretLocalData(cellID, localData, globalDataForCell, globalDofIndices, false);
-    for (int dofOrdinal=0; dofOrdinal < globalDofIndices.size(); dofOrdinal++) {
-      GlobalIndexType dofIndex = globalDofIndices(dofOrdinal);
-      globalDataActual(dofIndex) = globalDataForCell(dofOrdinal);
+    FieldContainer<double> globalCoefficientsForCell;
+    
+    DofOrderingPtr trialOrder = mesh->getElementType(cellID)->trialOrderPtr;
+    set<int> varIDs = trialOrder->getVarIDs();
+    
+    for (set<int>::iterator varIt=varIDs.begin(); varIt != varIDs.end(); varIt++) {
+      int varID = *varIt;
+      int numSides = trialOrder->getNumSidesForVarID(varID);
+      for (int sideOrdinal=0; sideOrdinal<numSides; sideOrdinal++) {
+        BasisPtr basis = (numSides==1) ? trialOrder->getBasis(varID) : trialOrder->getBasis(varID,sideOrdinal);
+        
+        FieldContainer<double> basisCoefficients(basis->getCardinality());
+        
+        for (int dofOrdinal=0; dofOrdinal<basis->getCardinality(); dofOrdinal++) {
+          int localDofIndex;
+          if (numSides == 1) {
+            localDofIndex = trialOrder->getDofIndex(varID, dofOrdinal);
+          } else {
+            localDofIndex = trialOrder->getDofIndex(varID, dofOrdinal, sideOrdinal);
+          }
+          
+          basisCoefficients(dofOrdinal) = localCoefficients(localDofIndex);
+        }
+        gda->interpretLocalBasisCoefficients(cellID, varID, sideOrdinal,
+                                             basisCoefficients, globalCoefficientsForCell, globalDofIndices);
+        
+        for (int dofOrdinal=0; dofOrdinal < globalDofIndices.size(); dofOrdinal++) {
+          GlobalIndexType dofIndex = globalDofIndices(dofOrdinal);
+          globalCoefficientsActual(dofIndex) = globalCoefficientsForCell(dofOrdinal);
+        }
+      }
     }
   }
   
   double tol=1e-12;
   double maxDiff;
-  if (TestSuite::fcsAgree(globalDataActual, globalDataExpected, tol, maxDiff)) {
+  if (TestSuite::fcsAgree(globalCoefficientsActual, globalCoefficientsExpected, tol, maxDiff)) {
     //    cout << "global data actual and expected AGREE; max difference is " << maxDiff << endl;
-    //    cout << "globalDataActual:\n" << globalDataActual;
+    //    cout << "globalCoefficientsActual:\n" << globalCoefficientsActual;
   } else {
     cout << "global data actual and expected DISAGREE; max difference is " << maxDiff << endl;
     success = false;
-    cout << "Expected:\n" << globalDataExpected;
-    cout << "Actual:\n" << globalDataActual;
+    cout << "Expected:\n" << globalCoefficientsExpected;
+    cout << "Actual:\n" << globalCoefficientsActual;
   }
   
   return success;
@@ -822,7 +850,7 @@ bool GDAMinimumRuleTests::testLocalInterpretationConsistency() {
         }
         FieldContainer<double> globalDataForBasis;
         FieldContainer<GlobalIndexType> globalDofIndicesForBasis;
-        gda->interpretLocalBasisData(cellID, varID, sideOrdinal, basisData, globalDataForBasis, globalDofIndicesForBasis);
+        gda->interpretLocalBasisCoefficients(cellID, varID, sideOrdinal, basisData, globalDataForBasis, globalDofIndicesForBasis);
         int globalEntryCount = globalDofIndicesForBasis.size();
         for (int entryOrdinal=0; entryOrdinal<globalEntryCount; entryOrdinal++) {
           GlobalIndexType entryIndex = globalDofIndicesForBasis(entryOrdinal);
@@ -962,21 +990,23 @@ bool GDAMinimumRuleTests::testHangingNodePoisson3D() {
     cout << "GDAMinimumRuleTests failure: for 3D mesh with hanging node and exactly recoverable solution, phi error is " << phi_err_l2 << endl;
     
 #ifdef USE_VTK
-    NewVTKExporter exporter(mesh->getTopology());
+    if (Teuchos::GlobalMPISession::getRank()==0) {
+      NewVTKExporter exporter(mesh->getTopology());
+      
+      set<GlobalIndexType> cellIndices = mesh->getTopology()->getActiveCellIndices();
+      for (set<GlobalIndexType>::iterator cellIt = cellIndices.begin(); cellIt != cellIndices.end(); cellIt++) {
+        GlobalIndexType cellIndex = *cellIt;
+        ostringstream functionName;
+        functionName << "phi_hat_soln3D_cell_" << cellIndex;
+        set<GlobalIndexType> cellIndexSet;
+        cellIndexSet.insert(cellIndex);
+        exporter.exportFunction(phi_hat_soln, functionName.str(), cellIndexSet);
+      }
     
-    set<GlobalIndexType> cellIndices = mesh->getTopology()->getActiveCellIndices();
-    for (set<GlobalIndexType>::iterator cellIt = cellIndices.begin(); cellIt != cellIndices.end(); cellIt++) {
-      GlobalIndexType cellIndex = *cellIt;
-      ostringstream functionName;
-      functionName << "phi_hat_soln3D_cell_" << cellIndex;
-      set<GlobalIndexType> cellIndexSet;
-      cellIndexSet.insert(cellIndex);
-      exporter.exportFunction(phi_hat_soln, functionName.str(), cellIndexSet);
+      exporter.exportFunction(phi_hat_soln, "phi_hat_soln3D");
+      exporter.exportFunction(phi_soln, "phi_soln3D");
+      exporter.exportFunction(phi_err, "phi_err3D");
     }
-  
-    exporter.exportFunction(phi_hat_soln, "phi_hat_soln3D");
-    exporter.exportFunction(phi_soln, "phi_soln3D");
-    exporter.exportFunction(phi_err, "phi_err3D");
 #endif
   }
   

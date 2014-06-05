@@ -575,12 +575,11 @@ void Solution::populateStiffnessAndLoad() {
 
       FieldContainer<GlobalIndexType> interpretedGlobalDofIndices;
       
-      bool accumulate = true;
       for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
         GlobalIndexTypeToCast globalRowIndex = partMap.GID(localRowIndex);
         int nnz = 0;
         FieldContainer<double> localLHS(localLHSDim,&lhs(cellIndex,0)); // shallow copy
-        _dofInterpreter->interpretLocalData(cellIDs[cellIndex], localLHS, interpretedLHS, interpretedGlobalDofIndices, accumulate);
+        _dofInterpreter->interpretLocalData(cellIDs[cellIndex], localLHS, interpretedLHS, interpretedGlobalDofIndices);
         
         for (int i=0; i<interpretedLHS.size(); i++) {
           if (interpretedLHS(i) != 0.0) {
@@ -868,7 +867,7 @@ void Solution::solveWithPrepopulatedStiffnessAndLoad(Teuchos::RCP<Solver> solver
   for (set<GlobalIndexType>::iterator cellIDIt = cellIDs.begin(); cellIDIt != cellIDs.end(); cellIDIt++) {
     GlobalIndexType cellID = *cellIDIt;
     FieldContainer<double> cellDofs(_mesh->getElementType(cellID)->trialOrderPtr->totalDofs());
-    _dofInterpreter->interpretGlobalData(cellID,cellDofs,solnCoeff);
+    _dofInterpreter->interpretGlobalCoefficients(cellID,cellDofs,solnCoeff);
     _solutionForCellIDGlobal[cellID] = cellDofs;
 //    // DEBUGGING:
 //    if ((cellID==0) || (cellID==2)) {

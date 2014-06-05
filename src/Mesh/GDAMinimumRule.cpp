@@ -200,26 +200,23 @@ int GDAMinimumRule::H1Order(GlobalIndexType cellID, unsigned sideOrdinal) {
   return _cellH1Orders[cellID];
 }
 
-void GDAMinimumRule::interpretGlobalData(GlobalIndexType cellID, FieldContainer<double> &localDofs, const Epetra_Vector &globalData) {
+void GDAMinimumRule::interpretGlobalCoefficients(GlobalIndexType cellID, FieldContainer<double> &localCoefficients, const Epetra_Vector &globalCoefficients) {
   CellConstraints constraints = getCellConstraints(cellID);
   LocalDofMapperPtr dofMapper = getDofMapper(cellID, constraints);
   vector<GlobalIndexType> globalIndexVector = dofMapper->globalIndices();
   
-  FieldContainer<double> globalDataFC(globalIndexVector.size());
+  FieldContainer<double> globalCoefficientsFC(globalIndexVector.size());
   for (int i=0; i<globalIndexVector.size(); i++) {
     GlobalIndexType globalIndex = globalIndexVector[i];
-    globalDataFC[i] = globalData[globalIndex];
+    globalCoefficientsFC[i] = globalCoefficients[globalIndex];
   }
-  
-  bool localToGlobal = false; // false: map "backwards" (global to local)
-  bool accumulate = false; // ignored by dofMapper for global to local mappings
-  localDofs = dofMapper->mapData(globalDataFC,localToGlobal,accumulate);
+  localCoefficients = dofMapper->mapGlobalCoefficients(globalCoefficientsFC);
 //  cout << "For cellID " << cellID << ", mapping globalData:\n " << globalDataFC;
 //  cout << " to localData:\n " << localDofs;
 }
 
 void GDAMinimumRule::interpretLocalData(GlobalIndexType cellID, const FieldContainer<double> &localData,
-                                        FieldContainer<double> &globalData, FieldContainer<GlobalIndexType> &globalDofIndices, bool accumulate) {
+                                        FieldContainer<double> &globalData, FieldContainer<GlobalIndexType> &globalDofIndices) {
   CellConstraints constraints = getCellConstraints(cellID);
   LocalDofMapperPtr dofMapper = getDofMapper(cellID, constraints);
   
@@ -231,8 +228,7 @@ void GDAMinimumRule::interpretLocalData(GlobalIndexType cellID, const FieldConta
 //    }
 //  }
   
-  bool localToGlobal = true;
-  globalData = dofMapper->mapData(localData,localToGlobal,accumulate);
+  globalData = dofMapper->mapLocalData(localData);
   vector<GlobalIndexType> globalIndexVector = dofMapper->globalIndices();
   globalDofIndices.resize(globalIndexVector.size());
   for (int i=0; i<globalIndexVector.size(); i++) {
@@ -280,14 +276,16 @@ void GDAMinimumRule::interpretLocalData(GlobalIndexType cellID, const FieldConta
 //  cout << "globalIndices:\n" << globalDofIndices;
 }
 
-void GDAMinimumRule::interpretLocalBasisData(GlobalIndexType cellID, int varID, int sideOrdinal, const FieldContainer<double> &basisDofs,
-                             FieldContainer<double> &globalData, FieldContainer<GlobalIndexType> &globalDofIndices) {
+void GDAMinimumRule::interpretLocalBasisCoefficients(GlobalIndexType cellID, int varID, int sideOrdinal, const FieldContainer<double> &basisCoefficients,
+                                                     FieldContainer<double> &globalCoefficients, FieldContainer<GlobalIndexType> &globalDofIndices) {
   CellConstraints constraints = getCellConstraints(cellID);
   LocalDofMapperPtr dofMapper = getDofMapper(cellID, constraints, varID, sideOrdinal);
   
-  bool localToGlobal = true;
-  bool accumulate = false; // not really relevant for this variant
-  globalData = dofMapper->mapData(basisDofs,localToGlobal,accumulate);
+  // the old way that happened to sorta work:
+//  globalCoefficients = dofMapper->mapLocalData(basisCoefficients);
+  
+  // the new, right way to do this:
+  globalCoefficients = dofMapper->fitLocalCoefficients(basisCoefficients);
   vector<GlobalIndexType> globalIndexVector = dofMapper->globalIndices();
   globalDofIndices.resize(globalIndexVector.size());
   for (int i=0; i<globalIndexVector.size(); i++) {
@@ -471,6 +469,10 @@ BasisMap GDAMinimumRule::getBasisMap(GlobalIndexType cellID, SubCellDofIndexInfo
 BasisMap GDAMinimumRule::getBasisMap(GlobalIndexType cellID, SubCellDofIndexInfo& dofIndexInfo, VarPtr var, int sideOrdinal) {
 
   BasisMap varSideMap;
+  
+//  if ((cellID==2) && (sideOrdinal==3) && (var->ID() == 0)) {
+//    cout << "DEBUGGING: (cellID==2) && (sideOrdinal==3) && (var->ID() == 0).\n";
+//  }
   
   // TODO: move the permutation computation outside of this method -- might include in CellConstraints, e.g. -- this obviously will not change from one var to the next, but we compute it redundantly each time...
   

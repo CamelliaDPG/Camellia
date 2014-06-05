@@ -25,14 +25,13 @@ public:
   virtual set<GlobalIndexType> globalDofIndicesForPartition(PartitionIndexType rank) = 0;
   
   virtual void interpretLocalData(GlobalIndexType cellID, const FieldContainer<double> &localData,
-                                  FieldContainer<double> &globalData, FieldContainer<GlobalIndexType> &globalDofIndices, bool accumulate=true) = 0;
+                                  FieldContainer<double> &globalData, FieldContainer<GlobalIndexType> &globalDofIndices) = 0;
   
   virtual void interpretLocalData(GlobalIndexType cellID, const FieldContainer<double> &localStiffnessData, const FieldContainer<double> &localLoadData,
                                   FieldContainer<double> &globalStiffnessData, FieldContainer<double> &globalLoadData, FieldContainer<GlobalIndexType> &globalDofIndices) {
-    bool accumulate = true;
-    this->interpretLocalData(cellID,localStiffnessData,globalStiffnessData,globalDofIndices, accumulate);
+    this->interpretLocalData(cellID,localStiffnessData,globalStiffnessData,globalDofIndices);
     FieldContainer<GlobalIndexType> globalDofIndicesForStiffness = globalDofIndices; // copy (for debugging/inspection purposes)
-    this->interpretLocalData(cellID,localLoadData,globalLoadData,globalDofIndices, accumulate);
+    this->interpretLocalData(cellID,localLoadData,globalLoadData,globalDofIndices);
     for (int i=0; i<globalDofIndicesForStiffness.size(); i++) {
       if (globalDofIndicesForStiffness[i] != globalDofIndices[i]) {
         cout << "ERROR: the vector and matrix dof indices differ...\n";
@@ -41,8 +40,7 @@ public:
     }
   }
   
-  virtual void interpretGlobalData(GlobalIndexType cellID, FieldContainer<double> &localDofs, const Epetra_Vector &globalDofs) = 0;
-  
+  virtual void interpretGlobalCoefficients(GlobalIndexType cellID, FieldContainer<double> &localDofs, const Epetra_Vector &globalDofs) = 0;
   
 };
 

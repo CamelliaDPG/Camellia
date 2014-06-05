@@ -30,10 +30,17 @@ class LocalDofMapper { // maps a whole trial ordering
 //  void addSubBasisMapMatrixContribution(int varID, int sideOrdinal, BasisMap basisMap, const FieldContainer<double> &localData, FieldContainer<double> &globalData);
   void addReverseSubBasisMapVectorContribution(int varID, int sideOrdinal, BasisMap basisMap, const FieldContainer<double> &globalData, FieldContainer<double> &localData);
 //  void addReverseSubBasisMapMatrixContribution(int varID, int sideOrdinal, BasisMap basisMap, const FieldContainer<double> &globalData, FieldContainer<double> &localData);
-  FieldContainer<double> mapDataMatrix(const FieldContainer<double> &localData, bool localToGlobal, bool accumulate);
+  FieldContainer<double> mapLocalDataMatrix(const FieldContainer<double> &localData);
 public:
   LocalDofMapper(DofOrderingPtr dofOrdering, map< int, BasisMap > volumeMaps, vector< map< int, BasisMap > > sideMaps, int varIDToMap = -1, int sideOrdinalToMap = -1);
-  FieldContainer<double> mapData(const FieldContainer<double> &localData, bool localToGlobal = true, bool accumulate = true); // can go global to local
+  
+  // DEPRECATED (TODO: Remove this)
+  FieldContainer<double> mapData(const FieldContainer<double> &localData, bool localToGlobal = true); // can go global to local
+  
+  FieldContainer<double> mapLocalData(const FieldContainer<double> &localData);
+  FieldContainer<double> fitLocalCoefficients(const FieldContainer<double> &localCoefficients); // solves normal equations (if the localCoefficients are in the range of the global-to-local operator, then the returned coefficients will be the preimage of localCoefficients under that operator)
+  FieldContainer<double> mapGlobalCoefficients(const FieldContainer<double> &globalCoefficients);
+  
   vector<GlobalIndexType> globalIndices();
   
   void printMappingReport();
