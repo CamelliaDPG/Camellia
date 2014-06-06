@@ -8,6 +8,7 @@
 
 #include "Function.h"
 #include "MeshPolyOrderFunction.h"
+#include "BasisCache.h"
 
 void MeshPolyOrderFunction::values(FieldContainer<double> &values, BasisCachePtr basisCache) {
   vector<GlobalIndexType> cellIDs = basisCache->cellIDs();

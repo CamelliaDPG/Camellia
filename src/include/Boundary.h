@@ -42,11 +42,11 @@
 #include "Intrepid_FieldContainer.hpp"
 
 #include "Element.h"
-#include "BC.h"
 
 #include "IndexType.h"
 
 class Mesh;
+class BC;
 
 using namespace Intrepid;
 

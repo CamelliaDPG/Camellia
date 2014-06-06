@@ -19,6 +19,8 @@
 
 #include "Epetra_SerialComm.h"
 
+#include "BasisCache.h"
+
 
 bool MeshTestUtility::checkMeshConsistency(Teuchos::RCP<Mesh> mesh) {
   bool success = true;

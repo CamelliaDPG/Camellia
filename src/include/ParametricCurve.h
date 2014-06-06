@@ -13,6 +13,8 @@
 #include "Teuchos_TestForException.hpp"
 #include "Function.h"
 
+#include "Basis.h"
+
 using namespace std;
 
 class ParametricFunction : public Function {

@@ -24,8 +24,9 @@
 #include "Intrepid_Utils.hpp"
 #include "Intrepid_Basis.hpp"
 #include "Var.h"
-#include "BasisCache.h"
 
+
+class BasisCache;
 class LinearTerm;
 class Mesh;
 class Solution;
@@ -35,6 +36,7 @@ typedef Teuchos::RCP<LinearTerm> LinearTermPtr;
 typedef Teuchos::RCP<Solution> SolutionPtr;
 typedef Teuchos::RCP<Function> FunctionPtr;
 typedef Teuchos::RCP< const FieldContainer<double> > constFCPtr;
+typedef Teuchos::RCP<BasisCache> BasisCachePtr;
 
 class LinearTerm {
   typedef pair< FunctionPtr, VarPtr > LinearSummand;

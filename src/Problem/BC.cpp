@@ -7,6 +7,8 @@
 
 #include "SpatiallyFilteredFunction.h"
 
+#include "PhysicalPointCache.h"
+
 typedef pair< SpatialFilterPtr, FunctionPtr > DirichletBC;
 
 class BCLogicalOrFunction : public Function {

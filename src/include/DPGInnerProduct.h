@@ -38,8 +38,6 @@
 
 #include "BilinearForm.h"
 
-#include "BasisCache.h"
-
 // Teuchos includes
 #include "Teuchos_RCP.hpp"
 

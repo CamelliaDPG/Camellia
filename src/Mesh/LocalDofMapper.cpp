@@ -282,7 +282,6 @@ FieldContainer<double> LocalDofMapper::fitLocalCoefficients(const FieldContainer
   unsigned globalDofCount =  _globalIndexToOrdinal.size();
   unsigned localDofCount = localCoefficients.size();
 
-  // this is unoptimized code!
   FieldContainer<double> localIdentity(localDofCount,localDofCount);
   for (int i=0; i<localDofCount; i++) {
     localIdentity(i,i) = 1.0;
@@ -295,6 +294,8 @@ FieldContainer<double> LocalDofMapper::fitLocalCoefficients(const FieldContainer
   mappedLocalCoefficients.resize(globalDofCount,1);
   
   FieldContainer<double> globalCoefficients(globalDofCount,1);
+  
+//  cout << "normalMatrix:\n" << normalMatrix;
   
   SerialDenseWrapper::solveSystemUsingQR(globalCoefficients, normalMatrix, mappedLocalCoefficients);
   

@@ -474,9 +474,8 @@ void GDAMinimumRuleTests::runTests(int &numTestsRun, int &numTestsPassed) {
 //  }
 //  numTestsRun++;
 //  teardown();
-  
-  //  cout << "testHangingNodePoisson3D complete.\n";
-  
+//  
+//  //  cout << "testHangingNodePoisson3D complete.\n";
   
   setup();
   if (testGlobalToLocalToGlobalConsistency()) {
@@ -721,6 +720,8 @@ bool GDAMinimumRuleTests::checkLocalGlobalConsistency(MeshPtr mesh) {
     globalCoefficientsVector[i] = globalCoefficients(i);
   }
   
+  double tol=1e-9; // for hanging nodes, it seems like this needs to be fairly high...
+  
   cellIDs = mesh->getActiveCellIDs();
   for (set<GlobalIndexType>::iterator cellIDIt = cellIDs.begin(); cellIDIt != cellIDs.end(); cellIDIt++) {
     GlobalIndexType cellID = *cellIDIt;
@@ -749,28 +750,42 @@ bool GDAMinimumRuleTests::checkLocalGlobalConsistency(MeshPtr mesh) {
           
           basisCoefficients(dofOrdinal) = localCoefficients(localDofIndex);
         }
+        
         gda->interpretLocalBasisCoefficients(cellID, varID, sideOrdinal,
                                              basisCoefficients, globalCoefficientsForCell, globalDofIndices);
+        
+//        if ( (cellID==2) && (sideOrdinal==1) && (varID==0) ) {
+//          cout << "DEBUGGING: (cellID==2) && (sideOrdinal==1).\n";
+//          cout << "globalDofIndices:\n" << globalDofIndices;
+//        }
         
         for (int dofOrdinal=0; dofOrdinal < globalDofIndices.size(); dofOrdinal++) {
           GlobalIndexType dofIndex = globalDofIndices(dofOrdinal);
           globalCoefficientsActual(dofIndex) = globalCoefficientsForCell(dofOrdinal);
+          
+          double diff = abs(globalCoefficientsForCell(dofOrdinal) - globalCoefficientsExpected(dofIndex));
+          if (diff > tol) {
+            cout << "In mapping for cell " << cellID << " and var " << varID << " on side " << sideOrdinal << ", ";
+            cout << "expected coefficient for global dof index " << dofIndex << " to be " << globalCoefficientsExpected(dofIndex);
+            cout << ", but was " << globalCoefficientsForCell(dofOrdinal);
+            cout << " (diff = " << diff << "; tol = " << tol << ")\n";
+            success = false;
+          }
         }
       }
     }
   }
   
-  double tol=1e-12;
-  double maxDiff;
-  if (TestSuite::fcsAgree(globalCoefficientsActual, globalCoefficientsExpected, tol, maxDiff)) {
-    //    cout << "global data actual and expected AGREE; max difference is " << maxDiff << endl;
-    //    cout << "globalCoefficientsActual:\n" << globalCoefficientsActual;
-  } else {
-    cout << "global data actual and expected DISAGREE; max difference is " << maxDiff << endl;
-    success = false;
-    cout << "Expected:\n" << globalCoefficientsExpected;
-    cout << "Actual:\n" << globalCoefficientsActual;
-  }
+//  double maxDiff;
+//  if (TestSuite::fcsAgree(globalCoefficientsActual, globalCoefficientsExpected, tol, maxDiff)) {
+//    //    cout << "global data actual and expected AGREE; max difference is " << maxDiff << endl;
+//    //    cout << "globalCoefficientsActual:\n" << globalCoefficientsActual;
+//  } else {
+//    cout << "global data actual and expected DISAGREE; max difference is " << maxDiff << endl;
+//    success = false;
+//    cout << "Expected:\n" << globalCoefficientsExpected;
+//    cout << "Actual:\n" << globalCoefficientsActual;
+//  }
   
   return success;
 }
@@ -897,6 +912,15 @@ bool GDAMinimumRuleTests::testHangingNodePoisson3D() {
   set<GlobalIndexType> cellIDs;
   cellIDs.insert(1);
   mesh->hRefine(cellIDs, RefinementPattern::regularRefinementPatternHexahedron());
+  
+//  cout << "Poisson 3D hanging node mesh after one refinement:\n";
+//  mesh->getTopology()->printAllEntities();
+  
+  if (!checkLocalGlobalConsistency(mesh) ) {
+    cout << "FAILURE: after h-refinement, Poisson 3D mesh fails local-to-global consistency check.\n";
+    success = false;
+//    return success;
+  }
   
 //  Intrepid::Basis_HGRAD_QUAD_Cn_FEM<double, Intrepid::FieldContainer<double> > linearBasis(1,Intrepid::POINTTYPE_SPECTRAL);
 //  FieldContainer<double> dofCoords(4,2);

@@ -60,6 +60,10 @@
 
 #include "IndexType.h"
 
+#include "Mesh.h"
+
+#include "Function.h"
+
 using namespace std;
 using namespace IntrepidExtendedTypes;
 

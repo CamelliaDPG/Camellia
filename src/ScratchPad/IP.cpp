@@ -12,6 +12,8 @@
 
 #include "VarFactory.h"
 
+#include "BasisCache.h"
+
 // to satisfy the compiler, call the DPGInnerProduct constructor with a null argument:
 IP::IP() : DPGInnerProduct( Teuchos::rcp( (BilinearForm*) NULL ) ) {}
 // if the terms are a1, a2, ..., then the inner product is (a1,a1) + (a2,a2) + ... 

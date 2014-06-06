@@ -50,6 +50,8 @@
 #include "BilinearForm.h"
 #include "SpatialFilter.h"
 
+#include "DPGInnerProduct.h"
+
 class MeshUtilities {
  public:
 

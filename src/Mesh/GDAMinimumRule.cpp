@@ -205,6 +205,12 @@ void GDAMinimumRule::interpretGlobalCoefficients(GlobalIndexType cellID, FieldCo
   LocalDofMapperPtr dofMapper = getDofMapper(cellID, constraints);
   vector<GlobalIndexType> globalIndexVector = dofMapper->globalIndices();
   
+//  // DEBUGGING
+//  if (cellID==2) {
+//    cout << "interpretGlobalData, mapping report for cell " << cellID << ":\n";
+//    dofMapper->printMappingReport();
+//  }
+  
   FieldContainer<double> globalCoefficientsFC(globalIndexVector.size());
   for (int i=0; i<globalIndexVector.size(); i++) {
     GlobalIndexType globalIndex = globalIndexVector[i];
@@ -222,7 +228,7 @@ void GDAMinimumRule::interpretLocalData(GlobalIndexType cellID, const FieldConta
   
 //  if (Teuchos::GlobalMPISession::getRank()==0) {
 ////    if ((cellID == 22) || (cellID == 21) || (cellID == 35) || (cellID == 32) || (cellID == 6) || (cellID == 11)) {
-//    if (cellID==12) {
+//    if (cellID==2) {
 //      cout << "interpretLocalData, mapping report for cell " << cellID << ":\n";
 //      dofMapper->printMappingReport();
 //    }
@@ -565,6 +571,17 @@ BasisMap GDAMinimumRule::getBasisMap(GlobalIndexType cellID, SubCellDofIndexInfo
       
       CellPtr constrainingCell = _meshTopology->getCell(subcellConstraint.cellID);
       
+      // debugging
+//      if ((cellID==2) && (sideOrdinal==1) && (var->ID()==0)) {
+//        cout << "while getting basis map for cell 2, side 1: cell " << subcellInfo.cellID << ", side " << subcellInfo.sideOrdinal;
+//        cout << ", subcell " << subcellInfo.subcellOrdinalInSide << " of dimension " << subcellInfo.dimension << " is constrained by ";
+//        cout << "cell " << subcellConstraint.cellID << ", side " << subcellConstraint.sideOrdinal;
+//        cout << ", subcell " << subcellConstraint.subcellOrdinalInSide << " of dimension " << subcellConstraint.dimension << endl;
+//      }
+//      if ((cellID==2) && (sideOrdinal==1) && (subcellInfo.cellID==2) && (subcellConstraint.cellID==0)) {
+//        cout << "DEBUGGING: (cellID==2) && (sideOrdinal==1) && (subcellConstraint.cellID==0).\n";
+//      }
+      
       DofOrderingPtr constrainingTrialOrdering = _elementTypeForCell[subcellConstraint.cellID]->trialOrderPtr;
       BasisPtr constrainingBasis = constrainingTrialOrdering->getBasis(var->ID(), subcellConstraint.sideOrdinal);
       
@@ -778,6 +795,14 @@ BasisMap GDAMinimumRule::getBasisMap(GlobalIndexType cellID, SubCellDofIndexInfo
         set<unsigned> basisDofOrdinals;
         basisDofOrdinals.insert(subcellInteriorWeights.fineOrdinals.begin(), subcellInteriorWeights.fineOrdinals.end()); // TODO: change fineOrdinals to be a set<unsigned>
         
+        // DEBUGGING:
+//        if ((cellID==2) && (sideOrdinal==1) && (var->ID() == 0)) {
+//          if (subcellInteriorWeights.coarseOrdinals.find(2) != subcellInteriorWeights.coarseOrdinals.end()) {
+//            cout << "creating mapping for global dof ordinal 2.\n";
+//          }
+//          
+//        }
+        
         varSideMap.push_back(SubBasisDofMapper::subBasisDofMapper(basisDofOrdinals, globalDofOrdinals, subcellInteriorWeights.weights));
       }
       
@@ -962,7 +987,9 @@ CellConstraints GDAMinimumRule::getCellConstraints(GlobalIndexType cellID) {
     
     _constraintsCache[cellID] = cellConstraints;
     
-//    printConstraintInfo(cellID);
+//    if (cellID==2) { // DEBUGGING
+//      printConstraintInfo(cellID);
+//    }
   }
   
   return _constraintsCache[cellID];
@@ -1068,7 +1095,7 @@ void printDofIndexInfo(GlobalIndexType cellID, SubCellDofIndexInfo &dofIndexInfo
       for (VarIDToDofIndices::iterator varIt = varMap.begin(); varIt != varMap.end(); varIt++) {
         varIDstream.str("");
         varIDstream << "     var " << varIt->first << ", global dofs";
-        if (varIt->second.size() > 0) print(varIDstream.str(), varIt->second);
+        if (varIt->second.size() > 0) Camellia::print(varIDstream.str(), varIt->second);
       }
     }
   }
@@ -1123,7 +1150,10 @@ LocalDofMapperPtr GDAMinimumRule::getDofMapper(GlobalIndexType cellID, CellConst
     }
   }
   
-//  printDofIndexInfo(cellID, dofIndexInfo);
+  // DEBUGGING:
+//  if ((cellID==2) || (cellID==0)) {
+//    printDofIndexInfo(cellID, dofIndexInfo);
+//  }
   
   /**************** CREATE SUB-BASIS MAPPERS ****************/
   
@@ -1134,9 +1164,9 @@ LocalDofMapperPtr GDAMinimumRule::getDofMapper(GlobalIndexType cellID, CellConst
     
     if (omitVarEntry) continue;
     
-    if ((sideOrdinalToMap != -1) && varHasSupportOnVolume) {
-      cout << "WARNING: looks like you're trying to impose BCs on a variable defined on the volume.  (For volume variables, we don't yet appropriately filter just the sides you're asking for--i.e. just the boundary--in getDofMapper).\n";
-    }
+//    if ((sideOrdinalToMap != -1) && varHasSupportOnVolume) {
+//      cout << "WARNING: looks like you're trying to impose BCs on a variable defined on the volume.  (For volume variables, we don't yet appropriately filter just the sides you're asking for--i.e. just the boundary--in getDofMapper).\n";
+//    }
     
     if (varHasSupportOnVolume) {
       volumeMap[var->ID()] = getBasisMap(cellID, dofIndexInfo, var); // this is where we should add argument to give just the side being requested...

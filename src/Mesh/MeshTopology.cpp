@@ -12,6 +12,8 @@
 
 #include "CamelliaCellTools.h"
 
+#include "Intrepid_CellTools.hpp"
+
 void MeshTopology::init(unsigned spaceDim) {
   RefinementPattern::initializeAnisotropicRelationships(); // not sure this is the optimal place for this call
   

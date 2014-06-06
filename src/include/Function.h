@@ -9,17 +9,25 @@
 #ifndef Camellia_Function_h
 #define Camellia_Function_h
 
-#include "BasisCache.h"
-#include "BilinearForm.h"
-
-using namespace IntrepidExtendedTypes;
-
 class Mesh;
 class ExactSolution;
-class Solution;
 class Var;
+class Solution;
 class Function;
-class BasisCache; // BasisCache.h and Function.h #include each other...
+class Solution;
+
+#include "CamelliaIntrepidExtendedTypes.h"
+#include "IndexType.h"
+#include "Intrepid_FieldContainer.hpp"
+
+#include <string>
+
+using namespace IntrepidExtendedTypes;
+using namespace std;
+using namespace Intrepid;
+
+class BasisCache;
+typedef Teuchos::RCP<BasisCache> BasisCachePtr;
 
 typedef Teuchos::RCP<Function> FunctionPtr;
 typedef Teuchos::RCP<Var> VarPtr;
@@ -523,24 +531,11 @@ public:
 class Sin_ax : public SimpleFunction {
   double _a, _b;
 public:
-  Sin_ax(double a, double b=0) {
-    _a = a;
-    _b = b;
-  }
-  double value(double x) {
-    return sin( _a * x + _b);
-  }
-  FunctionPtr dx() {
-    return _a * (FunctionPtr) Teuchos::rcp(new Cos_ax(_a,_b));
-  }
-  FunctionPtr dy() {
-    return Function::zero();
-  }
-  string displayString() {
-    ostringstream ss;
-    ss << "\\sin( " << _a << " x )";
-    return ss.str();
-  }
+  Sin_ax(double a, double b=0);
+  double value(double x);
+  FunctionPtr dx();
+  FunctionPtr dy();
+  string displayString();
 };
 
 class Cos_ay : public SimpleFunction {
@@ -550,83 +545,39 @@ public:
   double value(double x, double y);
   FunctionPtr dx();
   FunctionPtr dy();
-
+  
   string displayString();
 };
 
 class Sin_ay : public SimpleFunction {
   double _a;
 public:
-  Sin_ay(double a) {
-    _a = a;
-  }
-  double value(double x, double y) {
-    return sin( _a * y);
-  }
-  FunctionPtr dx() {
-    return Function::zero();
-  }
-  FunctionPtr dy() {
-    return _a * (FunctionPtr) Teuchos::rcp(new Cos_ay(_a));
-  }
-  string displayString() {
-    ostringstream ss;
-    ss << "\\sin( " << _a << " y )";
-    return ss.str();
-  }
+  Sin_ay(double a);
+  double value(double x, double y);
+  FunctionPtr dx();
+  FunctionPtr dy();
+  string displayString();
 };
 
 
 class Exp_ax : public SimpleFunction {
   double _a;
 public:
-  Exp_ax(double a) {
-    _a = a;
-  }
-  double value(double x, double y) {
-    return exp( _a * x);
-  }
-  FunctionPtr dx() {
-    return _a * (FunctionPtr) Teuchos::rcp(new Exp_ax(_a));
-  }
-  FunctionPtr dy() {
-    return Function::zero();
-  }
-  string displayString() {
-    ostringstream ss;
-    ss << "\\exp( " << _a << " x )";
-    return ss.str();
-  }
+  Exp_ax(double a);
+  double value(double x, double y);
+  FunctionPtr dx();
+  FunctionPtr dy();
+  string displayString();
 };
 
 class Exp_ay : public SimpleFunction {
   double _a;
 public:
-  Exp_ay(double a) {
-    _a = a;
-  }
-  double value(double x, double y) {
-    return exp( _a * y);
-  }
-  FunctionPtr dx() {
-    return Function::zero();
-  }
-  FunctionPtr dy() {
-    return _a * (FunctionPtr) Teuchos::rcp(new Exp_ay(_a));
-  }
-  string displayString() {
-    ostringstream ss;
-    ss << "\\exp( " << _a << " y )";
-    return ss.str();
-  }
-};
-
-class PhysicalPointCache : public BasisCache {
-  FieldContainer<double> _physCubPoints;
-public:
-  PhysicalPointCache(const FieldContainer<double> &physCubPoints);
-  const FieldContainer<double> & getPhysicalCubaturePoints();
-  FieldContainer<double> & writablePhysicalCubaturePoints();
+  Exp_ay(double a);
+  double value(double x, double y);
+  FunctionPtr dx();
+  FunctionPtr dy();
+  string displayString();
 };
 
 #endif

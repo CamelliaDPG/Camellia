@@ -17,6 +17,9 @@
 
 #include "Projector.h"
 
+#include "BasisCache.h"
+#include "PhysicalPointCache.h"
+
 static const double PI  = 3.141592653589793238462;
 
 //  void mapRefCellPointsToParameterSpace(FieldContainer<double> &refPoints);

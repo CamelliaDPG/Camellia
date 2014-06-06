@@ -18,6 +18,11 @@
 #include "GnuPlotUtil.h"
 #include "ParametricSurface.h"
 
+#include "BasisCache.h"
+
+typedef Teuchos::RCP< const FieldContainer<double> > constFCPtr;
+
+
 // TODO: move all the stuff to do with transfinite interpolation into ParametricSurface.cpp
 
 VectorBasisPtr basisForTransformation(ElementTypePtr cellType) {

@@ -2,7 +2,6 @@
 #define CAMELLIA_BC_FUNCTION
 
 #include "Intrepid_FieldContainer.hpp"
-#include "BasisCache.h"
 #include "Projector.h"
 
 #include "Function.h"

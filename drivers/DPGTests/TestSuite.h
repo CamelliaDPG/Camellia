@@ -11,6 +11,8 @@ using namespace std;
 
 #include "Function.h"
 
+#include "BasisCache.h"
+
 using namespace Intrepid;
 
 // abstract class for tests

@@ -65,6 +65,9 @@
 
 #include "DofInterpreter.h"
 
+class Element;
+typedef Teuchos::RCP< Element > ElementPtr;
+
 class Function;
 typedef Teuchos::RCP<Function> FunctionPtr;
 

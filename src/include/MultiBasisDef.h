@@ -41,6 +41,12 @@
 
 #include "Intrepid_CellTools.hpp"
 
+#include "Intrepid_DefaultCubatureFactory.hpp"
+
+#include "Intrepid_FunctionSpaceTools.hpp"
+
+using namespace Intrepid;
+
 template<class Scalar, class ArrayScalar>
 MultiBasis<Scalar, ArrayScalar>::MultiBasis(vector< Teuchos::RCP< Camellia::Basis<Scalar,ArrayScalar> > > bases, ArrayScalar &subRefNodes, shards::CellTopology &cellTopo) {
   this -> _bases = bases;

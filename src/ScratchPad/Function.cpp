@@ -14,6 +14,11 @@
 #include "MPIWrapper.h"
 #include "CellCharacteristicFunction.h"
 
+#include "Var.h"
+#include "Solution.h"
+
+#include "PhysicalPointCache.h"
+
 // for adaptive quadrature
 struct CacheInfo {
   ElementTypePtr elemType;
@@ -2390,12 +2395,76 @@ string Cos_ay::displayString() {
   return ss.str();
 }
 
-PhysicalPointCache::PhysicalPointCache(const FieldContainer<double> &physCubPoints) : BasisCache() {
-  _physCubPoints = physCubPoints;
+
+Sin_ax::Sin_ax(double a, double b) {
+  _a = a;
+  _b = b;
 }
-const FieldContainer<double> & PhysicalPointCache::getPhysicalCubaturePoints() { // overrides super
-  return _physCubPoints;
+double Sin_ax::value(double x) {
+  return sin( _a * x + _b);
 }
-FieldContainer<double> & PhysicalPointCache::writablePhysicalCubaturePoints() { // allows overwriting the contents
-  return _physCubPoints;
+FunctionPtr Sin_ax::dx() {
+  return _a * (FunctionPtr) Teuchos::rcp(new Cos_ax(_a,_b));
+}
+FunctionPtr Sin_ax::dy() {
+  return Function::zero();
+}
+string Sin_ax::displayString() {
+  ostringstream ss;
+  ss << "\\sin( " << _a << " x )";
+  return ss.str();
+}
+
+Sin_ay::Sin_ay(double a) {
+  _a = a;
+}
+double Sin_ay::value(double x, double y) {
+  return sin( _a * y);
+}
+FunctionPtr Sin_ay::dx() {
+  return Function::zero();
+}
+FunctionPtr Sin_ay::dy() {
+  return _a * (FunctionPtr) Teuchos::rcp(new Cos_ay(_a));
+}
+string Sin_ay::displayString() {
+  ostringstream ss;
+  ss << "\\sin( " << _a << " y )";
+  return ss.str();
+}
+
+Exp_ax::Exp_ax(double a) {
+  _a = a;
+}
+double Exp_ax::value(double x, double y) {
+  return exp( _a * x);
+}
+FunctionPtr Exp_ax::dx() {
+  return _a * (FunctionPtr) Teuchos::rcp(new Exp_ax(_a));
+}
+FunctionPtr Exp_ax::dy() {
+  return Function::zero();
+}
+string Exp_ax::displayString() {
+  ostringstream ss;
+  ss << "\\exp( " << _a << " x )";
+  return ss.str();
+}
+
+Exp_ay::Exp_ay(double a) {
+  _a = a;
+}
+double Exp_ay::value(double x, double y) {
+  return exp( _a * y);
+}
+FunctionPtr Exp_ay::dx() {
+  return Function::zero();
+}
+FunctionPtr Exp_ay::dy() {
+  return _a * (FunctionPtr) Teuchos::rcp(new Exp_ay(_a));
+}
+string Exp_ay::displayString() {
+  ostringstream ss;
+  ss << "\\exp( " << _a << " y )";
+  return ss.str();
 }

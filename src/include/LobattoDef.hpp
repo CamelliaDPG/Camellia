@@ -8,6 +8,7 @@
 
 #include "Legendre.hpp"
 #include "Function.h"
+#include "BasisCache.h"
 
 namespace Camellia {
   template<class Scalar, class ArrayScalar>
