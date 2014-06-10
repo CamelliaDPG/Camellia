@@ -164,6 +164,10 @@ set(STOKES_DIR "${DRIVERS_DIR}/Stokes" )
 set(TEST_DIR "${DRIVERS_DIR}/DPGTests" )
 FILE(GLOB TEST_SOURCES "${TEST_DIR}/*.cpp")
 
+set( CONVECTING_CONE_DRIVER
+  "${DRIVERS_DIR}/Convection/ConvectingConeDriver.cpp"
+)
+
 set( SCRATCH_DRIVER
   "${DRIVERS_DIR}/ScratchDriver/ScratchDriver.cpp"
 )
@@ -329,6 +333,7 @@ link_directories(${Trilinos_TPL_LIBRARY_DIRS})
 MESSAGE( "Building project for ${CAMELLIA_LIBRARY_NAME} library." )
 add_library(${CAMELLIA_LIBRARY_NAME} ${SOURCES} ${HEADERS})
 add_executable(ConditioningExperimentDriver ${CONDITIONING_EXPERIMENT_DRIVER})
+add_executable(ConvectingConeDriver ${CONVECTING_CONE_DRIVER})
 add_executable(KrylovSchurConditioningDriver ${KRYLOV_SCHUR_CONDITIONING_EXPERIMENT_DRIVER})
 add_executable(LOBPCGConditioningDriver ${LOBPCG_CONDITIONING_EXPERIMENT_DRIVER})
 add_executable(ScalingExperiment ${CONFUSION_SOURCES} ${SCALING_EXPERIMENT})
@@ -369,6 +374,11 @@ target_link_libraries(${CAMELLIA_LIBRARY_NAME}
   )
 
 target_link_libraries(ConditioningExperimentDriver
+  ${Trilinos_LIBRARIES} 
+  ${Trilinos_TPL_LIBRARIES}
+  ${CAMELLIA_LIBRARY_NAME}
+  )
+target_link_libraries(ConvectingConeDriver
   ${Trilinos_LIBRARIES} 
   ${Trilinos_TPL_LIBRARIES}
   ${CAMELLIA_LIBRARY_NAME}
