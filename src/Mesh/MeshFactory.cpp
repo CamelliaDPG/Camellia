@@ -84,16 +84,17 @@ MeshPtr MeshFactory::quadMesh(BilinearFormPtr bf, int H1Order, FieldContainer<do
 }
 
 MeshPtr MeshFactory::quadMesh(BilinearFormPtr bf, int H1Order, int pToAddTest,
-                              double width, double height, int horizontalElements, int verticalElements, bool divideIntoTriangles) {
+                              double width, double height, int horizontalElements, int verticalElements, bool divideIntoTriangles,
+                              double x0, double y0) {
   FieldContainer<double> quadPoints(4,2);
-  quadPoints(0,0) = 0.0;
-  quadPoints(0,1) = 0.0;
-  quadPoints(1,0) = width;
-  quadPoints(1,1) = 0.0;
-  quadPoints(2,0) = width;
-  quadPoints(2,1) = height;
-  quadPoints(3,0) = 0.0;
-  quadPoints(3,1) = height;
+  quadPoints(0,0) = x0;
+  quadPoints(0,1) = y0;
+  quadPoints(1,0) = x0 + width;
+  quadPoints(1,1) = y0;
+  quadPoints(2,0) = x0 + width;
+  quadPoints(2,1) = y0 + height;
+  quadPoints(3,0) = x0;
+  quadPoints(3,1) = y0 + height;
 
   int testOrder = pToAddTest + H1Order; // buildQuadMesh's interface asks for the order of the test space, not the delta p.  Better to be consistent in using the delta p going forward...
 
@@ -102,7 +103,7 @@ MeshPtr MeshFactory::quadMesh(BilinearFormPtr bf, int H1Order, int pToAddTest,
 
 MeshPtr MeshFactory::quadMeshMinRule(BilinearFormPtr bf, int H1Order, int pToAddTest,
                                       double width, double height, int horizontalElements, int verticalElements,
-                                     bool divideIntoTriangles) {
+                                     bool divideIntoTriangles, double x0, double y0) {
   int spaceDim = 2;
   
   vector<vector<double> > vertices;
@@ -119,14 +120,16 @@ MeshPtr MeshFactory::quadMeshMinRule(BilinearFormPtr bf, int H1Order, int pToAdd
   vector< CellTopoPtr > cellTopos(numElements, topo);
   
   FieldContainer<double> quadBoundaryPoints(4,2);
-  quadBoundaryPoints(0,0) = 0;
-  quadBoundaryPoints(0,1) = 0;
-  quadBoundaryPoints(1,0) = width;
-  quadBoundaryPoints(1,1) = 0;
-  quadBoundaryPoints(2,0) = width;
-  quadBoundaryPoints(2,1) = height;
-  quadBoundaryPoints(3,0) = 0;
-  quadBoundaryPoints(3,1) = height;
+  quadBoundaryPoints(0,0) = x0;
+  quadBoundaryPoints(0,1) = y0;
+  quadBoundaryPoints(1,0) = x0 + width;
+  quadBoundaryPoints(1,1) = y0;
+  quadBoundaryPoints(2,0) = x0 + width;
+  quadBoundaryPoints(2,1) = y0 + height;
+  quadBoundaryPoints(3,0) = x0;
+  quadBoundaryPoints(3,1) = y0 + height;
+  
+  cout << "creating mesh with boundary points:\n" << quadBoundaryPoints;
   
   double southWest_x = quadBoundaryPoints(0,0),
   southWest_y = quadBoundaryPoints(0,1);

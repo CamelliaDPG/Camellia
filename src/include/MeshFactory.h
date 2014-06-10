@@ -17,10 +17,12 @@ class MeshFactory {
   static map<int,int> _emptyIntIntMap; // just defined here to implement a default argument to constructor (there's likely a better way)
 public:
   static MeshPtr quadMesh(BilinearFormPtr bf, int H1Order, int pToAddTest=2,
-                          double width=1.0, double height=1.0, int horizontalElements=1, int verticalElements=1, bool divideIntoTriangles=false);
+                          double width=1.0, double height=1.0, int horizontalElements=1, int verticalElements=1, bool divideIntoTriangles=false,
+                          double x0=0.0, double y0=0.0);
   
   static MeshPtr quadMeshMinRule(BilinearFormPtr bf, int H1Order, int pToAddTest=2,
-                                 double width=1.0, double height=1.0, int horizontalElements=1, int verticalElements=1, bool divideIntoTriangles=false);
+                                 double width=1.0, double height=1.0, int horizontalElements=1, int verticalElements=1, bool divideIntoTriangles=false,
+                                 double x0=0.0, double y0=0.0);
   
   static MeshPtr quadMesh(BilinearFormPtr bf, int H1Order, FieldContainer<double> &quadNodes, int pToAddTest=2);
   
