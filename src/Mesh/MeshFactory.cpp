@@ -129,7 +129,7 @@ MeshPtr MeshFactory::quadMeshMinRule(BilinearFormPtr bf, int H1Order, int pToAdd
   quadBoundaryPoints(3,0) = x0;
   quadBoundaryPoints(3,1) = y0 + height;
   
-  cout << "creating mesh with boundary points:\n" << quadBoundaryPoints;
+//  cout << "creating mesh with boundary points:\n" << quadBoundaryPoints;
   
   double southWest_x = quadBoundaryPoints(0,0),
   southWest_y = quadBoundaryPoints(0,1);
