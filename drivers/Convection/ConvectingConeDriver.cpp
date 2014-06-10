@@ -189,8 +189,10 @@ int main(int argc, char *argv[]) {
 #ifdef USE_VTK
     soln0Exporter.exportSolution(filename.str());
 #else
-    filename << ".soln";
-    soln0->writeToFile(filename.str());
+    if (rank==0) {
+      filename << ".soln";
+      soln0->writeToFile(filename.str());
+    }
 #endif
     if (rank==0) cout << "...exported initial solution.\n";
   }
@@ -207,8 +209,11 @@ int main(int argc, char *argv[]) {
 #ifdef USE_VTK
     soln0Exporter.exportSolution(filename.str());
 #else
-    filename << ".soln";
-    soln0->writeToFile(filename.str());
+    if (rank==0) {
+      filename << ".soln";
+      soln0->writeToFile(filename.str());
+      cout << "wrote " << filename.str() << endl;
+    }
 #endif
   }
     
@@ -233,11 +238,14 @@ int main(int argc, char *argv[]) {
         soln0Exporter.exportSolution(filename.str());
       }
 #else
-      filename << ".soln";
-      if (odd) {
-        soln1->writeToFile(filename.str());
-      } else {
-        soln0->writeToFile(filename.str());
+      if (rank==0) {
+        filename << ".soln";
+        if (odd) {
+          soln1->writeToFile(filename.str());
+        } else {
+          soln0->writeToFile(filename.str());
+        }
+        cout << "wrote " << filename.str() << endl;
       }
 #endif
     }
