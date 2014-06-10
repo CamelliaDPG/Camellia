@@ -186,7 +186,12 @@ int main(int argc, char *argv[]) {
     ostringstream filename;
     filename << filePrefix.str() << frameNumber++;
     if (rank==0) cout << "About to export initial solution.\n";
+#ifdef USE_VTK
     soln0Exporter.exportSolution(filename.str());
+#else
+    filename << ".soln";
+    soln0->writeToFile(filename.str());
+#endif
     if (rank==0) cout << "...exported initial solution.\n";
   }
   
@@ -199,7 +204,12 @@ int main(int argc, char *argv[]) {
   if (timeStepsToExport.find(1) != timeStepsToExport.end()) {
     ostringstream filename;
     filename << filePrefix.str() << frameNumber++;
+#ifdef USE_VTK
     soln0Exporter.exportSolution(filename.str());
+#else
+    filename << ".soln";
+    soln0->writeToFile(filename.str());
+#endif
   }
     
   bool reportTimings = false;
@@ -216,11 +226,20 @@ int main(int argc, char *argv[]) {
     if (timeStepsToExport.find(n+1)!=timeStepsToExport.end()) {
       ostringstream filename;
       filename << filePrefix.str() << frameNumber++;
+#ifdef USE_VTK
       if (odd) {
         soln1Exporter.exportSolution(filename.str());
       } else {
         soln0Exporter.exportSolution(filename.str());
       }
+#else
+      filename << ".soln";
+      if (odd) {
+        soln1->writeToFile(filename.str());
+      } else {
+        soln0->writeToFile(filename.str());
+      }
+#endif
     }
 //    energyErrorSum += soln_n->energyErrorTotal();
   }
