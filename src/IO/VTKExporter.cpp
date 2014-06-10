@@ -98,7 +98,7 @@ void VTKExporter::exportFields(const string& filePath, unsigned int num1DPts)
     unsigned cellTopoKey = cellTopoPtr->getKey();
     int numPoints = 0;
     if (defaultPts)
-      num1DPts = pow(2.0, pOrder);
+      num1DPts = pOrder * pOrder + 1;
 
     switch (cellTopoKey)
     {
