@@ -35,6 +35,38 @@ public:
   }
 };
 
+class InflowFilterForClockwisePlanarRotation : public SpatialFilter {
+  double _xLeft, _yBottom, _xRight, _yTop;
+  double _xMiddle, _yMiddle;
+public:
+  InflowFilterForClockwisePlanarRotation(double leftBoundary_x, double rightBoundary_x,
+                                         double bottomBoundary_y, double topBoundary_y,
+                                         double rotationCenter_x, double rotationCenter_y) {
+    _xLeft = leftBoundary_x;
+    _yBottom = bottomBoundary_y;
+    _xRight = rightBoundary_x;
+    _yTop = topBoundary_y;
+    _xMiddle = rotationCenter_x;
+    _yMiddle = rotationCenter_y;
+  }
+  bool matchesPoint(double x, double y) {
+    double tol = 1e-14;
+    bool inflow;
+    if (abs(x-_xLeft)<tol) {
+      inflow = (y > _yMiddle);
+    } else if (abs(x-_xRight)<tol) {
+      inflow = (y < _yMiddle);
+    } else if (abs(y-_yBottom)<tol) {
+      inflow = (x < _xMiddle);
+    } else if (abs(y-_yTop)<tol) {
+      inflow = (x > _xMiddle);
+    } else {
+      inflow = false; // not a boundary point at all...
+    }
+    return inflow;
+  }
+};
+
 int main(int argc, char *argv[]) {
 #ifdef ENABLE_INTEL_FLOATING_POINT_EXCEPTIONS
   cout << "NOTE: enabling floating point exceptions for divide by zero.\n";
@@ -130,8 +162,10 @@ int main(int argc, char *argv[]) {
   initialRHS->addTerm((1-theta) * u0 * c * v->grad());
   
   BCPtr bc = BC::bc();
+  
+  SpatialFilterPtr inflowFilter = Teuchos::rcp( new InflowFilterForClockwisePlanarRotation(x0,x0+width,y0,y0+height,0.5,0.5));
 //  bc->addDirichlet(u_hat, SpatialFilter::allSpace(), Function::zero());
-  bc->addDirichlet(qHat, SpatialFilter::allSpace(), Function::zero()); // zero BCs enforced at the boundary.
+  bc->addDirichlet(qHat, inflowFilter, Function::zero()); // zero BCs enforced at the inflow boundary.
   
   IPPtr ip;
   ip = Teuchos::rcp( new IP );
@@ -187,7 +221,7 @@ int main(int argc, char *argv[]) {
     filename << filePrefix.str() << frameNumber++;
     if (rank==0) cout << "About to export initial solution.\n";
 #ifdef USE_VTK
-    soln0Exporter.exportSolution(filename.str());
+    if (rank==0) soln0Exporter.exportFields(filename.str());
 #else
     if (rank==0) {
       filename << ".soln";
@@ -197,17 +231,19 @@ int main(int argc, char *argv[]) {
     if (rank==0) cout << "...exported initial solution.\n";
   }
   
+  if (rank==0) cout << "About to solve initial time step.\n";
   // first time step:
   if (useCondensedSolve) soln0->condensedSolve(solver);
   else soln0->solve(solver);
 //  energyErrorSum += soln0->energyErrorTotal();
   soln0->setRHS(rhs2);
+  if (rank==0) cout << "Solved initial time step.\n";
   
   if (timeStepsToExport.find(1) != timeStepsToExport.end()) {
     ostringstream filename;
     filename << filePrefix.str() << frameNumber++;
 #ifdef USE_VTK
-    soln0Exporter.exportSolution(filename.str());
+    if (rank==0) soln0Exporter.exportFields(filename.str());
 #else
     if (rank==0) {
       filename << ".soln";
@@ -228,14 +264,22 @@ int main(int argc, char *argv[]) {
       if (rank==0) cout << "time step " << n << ", timing report:\n";
       soln_n->reportTimings();
     }
+    if (rank==0) {
+      cout << "\x1B[2K"; // Erase the entire current line.
+      cout << "\x1B[0E"; // Move to the beginning of the current line.
+      cout << "Solved time step: " << n;
+      flush(cout);
+    }
     if (timeStepsToExport.find(n+1)!=timeStepsToExport.end()) {
       ostringstream filename;
       filename << filePrefix.str() << frameNumber++;
 #ifdef USE_VTK
-      if (odd) {
-        soln1Exporter.exportSolution(filename.str());
-      } else {
-        soln0Exporter.exportSolution(filename.str());
+      if (rank==0) {
+        if (odd) {
+          soln1Exporter.exportFields(filename.str());
+        } else {
+          soln0Exporter.exportFields(filename.str());
+        }
       }
 #else
       if (rank==0) {
