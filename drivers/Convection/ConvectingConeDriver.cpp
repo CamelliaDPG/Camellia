@@ -87,6 +87,7 @@ int main(int argc, char *argv[]) {
   int numCells = -1; // in x, y (-1 so we can set a default if unset from the command line.)
   int numFrames = 50;
   int delta_k = 2;   // test space enrichment: should be 2 for 2D
+  bool convertSolutionsToVTK = false; // when true assumes we've already run with precisely the same options, except without VTK support (so we have a bunch of .soln files)
   
   cmdp.setOption("polyOrder",&k,"polynomial order for field variable u");
   cmdp.setOption("delta_k", &delta_k, "test space polynomial order enrichment");
@@ -96,12 +97,16 @@ int main(int argc, char *argv[]) {
   cmdp.setOption("numTimeSteps",&numTimeSteps,"number of time steps");
   cmdp.setOption("numFrames",&numFrames,"number of frames for export");
   
+  cmdp.setOption("convertPreComputedSolutionsToVTK", "computeSolutions", &convertSolutionsToVTK);
+  
   if (cmdp.parse(argc,argv) != Teuchos::CommandLineProcessor::PARSE_SUCCESSFUL) {
 #ifdef HAVE_MPI
     MPI_Finalize();
 #endif
     return -1;
   }
+  
+  bool saveSolutionFiles = true;
   
   if (numCells==-1) numCells = numGridPoints / k;
   
@@ -211,6 +216,20 @@ int main(int argc, char *argv[]) {
   VTKExporter soln1Exporter(soln1,mesh,varFactory);
 #endif
 
+  if (convertSolutionsToVTK) {
+    if (rank==0) {
+      for (int frameNumber=0; frameNumber<=numFrames; frameNumber++) {
+        ostringstream filename;
+        filename << filePrefix.str() << frameNumber << ".soln";
+        soln0->readFromFile(filename.str());
+        filename.str("");
+        filename << filePrefix.str() << frameNumber;
+        soln0Exporter.exportFields(filename.str());
+      }
+    }
+    exit(0);
+  }
+  
   if (timeStepsToExport.find(0) != timeStepsToExport.end()) {
     map<int,FunctionPtr> solnMap;
     solnMap[u->ID()] = u0; // project field variables
@@ -222,12 +241,13 @@ int main(int argc, char *argv[]) {
     if (rank==0) cout << "About to export initial solution.\n";
 #ifdef USE_VTK
     if (rank==0) soln0Exporter.exportFields(filename.str());
-#else
-    if (rank==0) {
-      filename << ".soln";
-      soln0->writeToFile(filename.str());
-    }
 #endif
+    if (saveSolutionFiles) {
+      if (rank==0) {
+        filename << ".soln";
+        soln0->writeToFile(filename.str());
+      }
+    }
     if (rank==0) cout << "...exported initial solution.\n";
   }
   
@@ -244,13 +264,14 @@ int main(int argc, char *argv[]) {
     filename << filePrefix.str() << frameNumber++;
 #ifdef USE_VTK
     if (rank==0) soln0Exporter.exportFields(filename.str());
-#else
-    if (rank==0) {
-      filename << ".soln";
-      soln0->writeToFile(filename.str());
-      cout << "wrote " << filename.str() << endl;
-    }
 #endif
+    if (saveSolutionFiles) {
+      if (rank==0) {
+        filename << ".soln";
+        soln0->writeToFile(filename.str());
+        cout << "wrote " << filename.str() << endl;
+      }
+    }
   }
     
   bool reportTimings = false;
@@ -281,17 +302,18 @@ int main(int argc, char *argv[]) {
           soln0Exporter.exportFields(filename.str());
         }
       }
-#else
-      if (rank==0) {
-        filename << ".soln";
-        if (odd) {
-          soln1->writeToFile(filename.str());
-        } else {
-          soln0->writeToFile(filename.str());
-        }
-        cout << "wrote " << filename.str() << endl;
-      }
 #endif
+      if (saveSolutionFiles) {
+        if (rank==0) {
+          filename << ".soln";
+          if (odd) {
+            soln1->writeToFile(filename.str());
+          } else {
+            soln0->writeToFile(filename.str());
+          }
+          cout << "wrote " << filename.str() << endl;
+        }
+      }
     }
 //    energyErrorSum += soln_n->energyErrorTotal();
   }
