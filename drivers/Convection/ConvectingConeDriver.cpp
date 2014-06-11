@@ -250,6 +250,7 @@ int main(int argc, char *argv[]) {
       if (rank==0) {
         filename << ".soln";
         soln0->writeToFile(filename.str());
+        cout << endl << "wrote " << filename.str() << endl;
       }
     }
     if (rank==0) cout << "...exported initial solution.\n";
@@ -257,8 +258,10 @@ int main(int argc, char *argv[]) {
   
   if (rank==0) cout << "About to solve initial time step.\n";
   // first time step:
+  soln0->setReportTimingResults(true); // added to gain insight into why MPI blocks in some cases on the server...
   if (useCondensedSolve) soln0->condensedSolve(solver);
   else soln0->solve(solver);
+  soln0->setReportTimingResults(false);
 //  energyErrorSum += soln0->energyErrorTotal();
   soln0->setRHS(rhs2);
   if (rank==0) cout << "Solved initial time step.\n";
@@ -273,7 +276,7 @@ int main(int argc, char *argv[]) {
       if (rank==0) {
         filename << ".soln";
         soln0->writeToFile(filename.str());
-        cout << "wrote " << filename.str() << endl;
+        cout << endl << "wrote " << filename.str() << endl;
       }
     }
   }
