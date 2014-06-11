@@ -217,6 +217,7 @@ int main(int argc, char *argv[]) {
 #endif
 
   if (convertSolutionsToVTK) {
+#ifdef USE_VTK
     if (rank==0) {
       for (int frameNumber=0; frameNumber<=numFrames; frameNumber++) {
         ostringstream filename;
@@ -227,6 +228,9 @@ int main(int argc, char *argv[]) {
         soln0Exporter.exportFields(filename.str());
       }
     }
+#else
+    if (rank==0) cout << "Driver was built without USE_VTK defined.  This must be defined to convert solution files to VTK files.\n";
+#endif
     exit(0);
   }
   
