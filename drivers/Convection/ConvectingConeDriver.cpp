@@ -87,6 +87,7 @@ int main(int argc, char *argv[]) {
   int numCells = -1; // in x, y (-1 so we can set a default if unset from the command line.)
   int numFrames = 50;
   int delta_k = 2;   // test space enrichment: should be 2 for 2D
+  bool useMumpsIfAvailable  = true;
   bool convertSolutionsToVTK = false; // when true assumes we've already run with precisely the same options, except without VTK support (so we have a bunch of .soln files)
   
   cmdp.setOption("polyOrder",&k,"polynomial order for field variable u");
@@ -97,6 +98,8 @@ int main(int argc, char *argv[]) {
   cmdp.setOption("numTimeSteps",&numTimeSteps,"number of time steps");
   cmdp.setOption("numFrames",&numFrames,"number of frames for export");
   
+  cmdp.setOption("useCondensedSolve", "useUncondensedSolve", &useCondensedSolve, "use static condensation to reduce the size of the global solve");
+  cmdp.setOption("useMumps", "useKLU", &useMumpsIfAvailable, "use MUMPS (if available)");
   cmdp.setOption("convertPreComputedSolutionsToVTK", "computeSolutions", &convertSolutionsToVTK);
   
   if (cmdp.parse(argc,argv) != Teuchos::CommandLineProcessor::PARSE_SUCCESSFUL) {
@@ -197,12 +200,10 @@ int main(int argc, char *argv[]) {
   rhs2->addTerm(u_soln1 / dt * v);
   rhs2->addTerm((1-theta) * u_soln1 * c * v->grad());
   
-  Teuchos::RCP<Solver> solver;
+  Teuchos::RCP<Solver> solver = Teuchos::rcp( new KluSolver );
   
 #ifdef USE_MUMPS
-  solver = Teuchos::rcp( new MumpsSolver );
-#else
-  solver = Teuchos::rcp( new KluSolver );
+  if (useMumpsIfAvailable) solver = Teuchos::rcp( new MumpsSolver );
 #endif
 
 //  double energyErrorSum = 0;
