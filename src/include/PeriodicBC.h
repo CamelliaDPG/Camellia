@@ -11,7 +11,7 @@
 
 #include "Teuchos_RCP.hpp"
 
-#include <vector.h>
+#include <vector>
 
 class SpatialFilter;
 typedef Teuchos::RCP<SpatialFilter> SpatialFilterPtr;
