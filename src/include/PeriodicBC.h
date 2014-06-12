@@ -25,7 +25,7 @@ class PeriodicBC {
 public:
   PeriodicBC(SpatialFilterPtr pointFilter0, SpatialFilterPtr pointFilter1, FunctionPtr transform0to1, FunctionPtr transform1to0);
   
-  std::vector<double> getMatchingPoint(vector<double> &point, int whichSide);
+  std::vector<double> getMatchingPoint(const std::vector<double> &point, int whichSide);
   int getMatchingSide(const std::vector<double> &point); // returns 0 if the point matches pointFilter0, 1 if it matches pointFilter1, -1 otherwise.
   
   static Teuchos::RCP<PeriodicBC> periodicBC(SpatialFilterPtr pointFilter1, SpatialFilterPtr pointFilter2, FunctionPtr transform1to2, FunctionPtr transform2to1);
