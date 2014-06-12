@@ -41,6 +41,8 @@ MeshPtr MeshFactory::quadMesh(Teuchos::ParameterList &parameters) {
   map<int,int> emptyMap;
   map<int,int>* trialOrderEnhancements = parameters.get< map<int,int>* >("trialOrderEnhancements",&emptyMap);
   map<int,int>* testOrderEnhancements = parameters.get< map<int,int>* >("testOrderEnhancements",&emptyMap);
+  vector< PeriodicBCPtr > emptyPeriodicBCs;
+  vector< PeriodicBCPtr >* periodicBCs = parameters.get< vector< PeriodicBCPtr >* >("periodicBCs",&emptyPeriodicBCs);
   
   vector<vector<double> > vertices;
   vector< vector<unsigned> > allElementVertices;
@@ -111,12 +113,12 @@ MeshPtr MeshFactory::quadMesh(Teuchos::ParameterList &parameters) {
   
   MeshGeometryPtr geometry = Teuchos::rcp( new MeshGeometry(vertices, allElementVertices, cellTopos));
   
-  MeshTopologyPtr meshTopology = Teuchos::rcp( new MeshTopology(geometry) );
   if (useMinRule) {
+    MeshTopologyPtr meshTopology = Teuchos::rcp( new MeshTopology(geometry, *periodicBCs) );
     return Teuchos::rcp( new Mesh(meshTopology, bf, H1Order, delta_k, *trialOrderEnhancements, *testOrderEnhancements) );
   } else {
     bool useConformingTraces = parameters.get<bool>("useConformingTraces", true);
-    return Teuchos::rcp( new Mesh(vertices, allElementVertices, bf, H1Order, delta_k, useConformingTraces, *trialOrderEnhancements, *testOrderEnhancements) );
+    return Teuchos::rcp( new Mesh(vertices, allElementVertices, bf, H1Order, delta_k, useConformingTraces, *trialOrderEnhancements, *testOrderEnhancements, *periodicBCs) );
   }
 }
 

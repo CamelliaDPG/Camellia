@@ -20,6 +20,8 @@
 
 #include "IndexType.h"
 
+#include "PeriodicBC.h"
+
 using namespace std;
 
 class MeshTransformationFunction;
@@ -34,8 +36,12 @@ class MeshTopology {
   unsigned _spaceDim; // dimension of the mesh
   
   map< vector<double>, IndexType > _vertexMap; // maps into indices in the vertices list -- here just for vertex identification (i.e. so we don't add the same vertex twice)
-  
   vector< vector<double> > _vertices; // vertex locations
+  
+  vector< PeriodicBCPtr > _periodicBCs;
+  map<IndexType, set< pair<int, int> > > _periodicBCIndicesMatchingNode; // pair: first = index in _periodicBCs; second: 0 or 1, indicating first or second part of the identification matches.  IndexType is the vertex index.
+  map< pair<IndexType, pair<int,int> >, IndexType > _equivalentNodeViaPeriodicBC;
+  vector<IndexType> getCanonicalEntityNodesViaPeriodicBCs(unsigned d, const vector<IndexType> &myEntityNodes); // if there are periodic BCs for this entity, this converts the provided nodes to the ones listed in the canonical ordering (allows permutation determination)
   
   // the following entity vectors are indexed on dimension of the entities
   vector< vector< set<IndexType> > > _entities; // vertices, edges, faces, solids, etc., up to dimension (_spaceDim - 1)
@@ -87,9 +93,10 @@ class MeshTopology {
   void printVertex(IndexType vertexIndex);
   void printVertices(set<IndexType> vertexIndices);
   void refineCellEntities(CellPtr cell, RefinementPatternPtr refPattern); // ensures that the appropriate child entities exist, and parental relationships are recorded in _parentEntities
+  void setEntityGeneralizedParent(unsigned entityDim, IndexType entityIndex, unsigned parentDim, IndexType parentEntityIndex);
 public:
-  MeshTopology(unsigned spaceDim);
-  MeshTopology(MeshGeometryPtr meshGeometry);
+  MeshTopology(unsigned spaceDim, vector<PeriodicBCPtr> periodicBCs=vector<PeriodicBCPtr>());
+  MeshTopology(MeshGeometryPtr meshGeometry, vector<PeriodicBCPtr> periodicBCs=vector<PeriodicBCPtr>());
   CellPtr addCell(CellTopoPtr cellTopo, const vector< vector<double> > &cellVertices);
   bool entityHasParent(unsigned d, IndexType entityIndex);
   bool entityHasChildren(unsigned d, IndexType entityIndex);

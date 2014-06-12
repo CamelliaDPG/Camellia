@@ -219,6 +219,17 @@ public:
 };
 typedef Teuchos::RCP<SimpleFunction> SimpleFunctionPtr;
 
+class SimpleVectorFunction : public Function {
+public:
+  SimpleVectorFunction();
+  virtual ~SimpleVectorFunction() {}
+  virtual vector<double> value(double x);
+  virtual vector<double> value(double x, double y);
+  virtual vector<double> value(double x, double y, double z);
+  virtual void values(FieldContainer<double> &values, BasisCachePtr basisCache);
+};
+typedef Teuchos::RCP<SimpleVectorFunction> SimpleVectorFunctionPtr;
+
 class PolarizedFunction : public Function { // takes a 2D Function of x and y, interpreting it as function of r and theta
   // i.e. to implement f(r,theta) = r sin theta
   // pass in a Function f(x,y) = x sin y.
