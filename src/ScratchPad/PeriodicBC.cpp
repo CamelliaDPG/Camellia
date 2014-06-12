@@ -110,7 +110,7 @@ PeriodicBC::PeriodicBC(SpatialFilterPtr pointFilter0, SpatialFilterPtr pointFilt
   _transform1to0 = transform1to0;
 }
 
-vector<double> PeriodicBC::getMatchingPoint(const vector<double> &point, int whichSide) {
+vector<double> PeriodicBC::getMatchingPoint(const std::vector<double> &point, int whichSide) {
   FunctionPtr f;
   if (whichSide==0) {
     f = _transform0to1;
@@ -138,7 +138,7 @@ vector<double> PeriodicBC::getMatchingPoint(const vector<double> &point, int whi
   return transformedPoint;
 }
 
-int PeriodicBC::getMatchingSide(const vector<double> &point) {
+int PeriodicBC::getMatchingSide(const std::vector<double> &point) {
   // returns 0 if the point matches pointFilter0, 1 if it matches pointFilter1, -1 otherwise.
   if (point.size() == 1) {
     if (_pointFilter0->matchesPoint(point[0])) {
