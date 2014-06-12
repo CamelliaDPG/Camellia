@@ -11,11 +11,15 @@
 
 #include "Mesh.h"
 
+#include <Teuchos_ParameterList.hpp>
+
 // static class for creating meshes
 
 class MeshFactory {
   static map<int,int> _emptyIntIntMap; // just defined here to implement a default argument to constructor (there's likely a better way)
 public:
+  static MeshPtr quadMesh(Teuchos::ParameterList &parameters);
+  
   static MeshPtr quadMesh(BilinearFormPtr bf, int H1Order, int pToAddTest=2,
                           double width=1.0, double height=1.0, int horizontalElements=1, int verticalElements=1, bool divideIntoTriangles=false,
                           double x0=0.0, double y0=0.0);
