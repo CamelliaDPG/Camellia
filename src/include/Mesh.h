@@ -77,9 +77,10 @@ typedef Teuchos::RCP<Mesh> MeshPtr;
 class Solution;
 class MeshTransformationFunction;
 class MeshPartitionPolicy;
+class GlobalDofAssignment;
+typedef Teuchos::RCP<GlobalDofAssignment> GlobalDofAssignmentPtr;
 
 #include "DofInterpreter.h"
-#include "GDAMaximumRule2D.h"
 
 class Mesh : public RefinementObserver, public DofInterpreter {
   MeshTopologyPtr _meshTopology;
@@ -151,7 +152,8 @@ public:
   // legacy (max rule 2D) constructor:
   Mesh(const vector<vector<double> > &vertices, vector< vector<IndexType> > &elementVertices,
        Teuchos::RCP< BilinearForm > bilinearForm, int H1Order, int pToAddTest, bool useConformingTraces = true,
-       map<int,int> trialOrderEnhancements=_emptyIntIntMap, map<int,int> testOrderEnhancements=_emptyIntIntMap);
+       map<int,int> trialOrderEnhancements=_emptyIntIntMap, map<int,int> testOrderEnhancements=_emptyIntIntMap,
+       vector< PeriodicBCPtr > periodicBCs = vector< PeriodicBCPtr >());
   
   // new constructor (min rule, n-D):
   Mesh(MeshTopologyPtr meshTopology, BilinearFormPtr bilinearForm, int H1Order, int pToAddTest,

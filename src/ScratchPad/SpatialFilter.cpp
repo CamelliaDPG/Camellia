@@ -8,6 +8,66 @@
 
 #include "SpatialFilter.h"
 
+class SpatialFilterMatchingX : public SpatialFilter {
+  double _tol;
+  double _xToMatch;
+public:
+  SpatialFilterMatchingX(double xToMatch, double tol=1e-14) {
+    _xToMatch = xToMatch;
+    _tol = tol;
+  }
+  bool matchesPoint(double x) {
+    if (abs(x-_xToMatch)<_tol) {
+      return true;
+    } else {
+      return false;
+    }
+  }
+  bool matchesPoint(double x, double y) {
+    return matchesPoint(x);
+  }
+  bool matchesPoint(double x, double y, double z) {
+    return matchesPoint(x);
+  }
+};
+
+class SpatialFilterMatchingY : public SpatialFilter {
+  double _tol;
+  double _yToMatch;
+public:
+  SpatialFilterMatchingY(double yToMatch, double tol=1e-14) {
+    _yToMatch = yToMatch;
+    _tol = tol;
+  }
+  bool matchesPoint(double x, double y) {
+    if (abs(y-_yToMatch)<_tol) {
+      return true;
+    } else {
+      return false;
+    }
+  }
+  bool matchesPoint(double x, double y, double z) {
+    return matchesPoint(x,y);
+  }
+};
+
+class SpatialFilterMatchingZ : public SpatialFilter {
+  double _tol;
+  double _zToMatch;
+public:
+  SpatialFilterMatchingZ(double zToMatch, double tol=1e-14) {
+    _zToMatch = zToMatch;
+    _tol = tol;
+  }
+  bool matchesPoint(double x, double y, double z) {
+    if (abs(z-_zToMatch)<_tol) {
+      return true;
+    } else {
+      return false;
+    }
+  }
+};
+
 bool SpatialFilter::matchesPoint(double x) {
   TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "matchesPoint(x) unimplemented.");
   return false;
@@ -73,12 +133,21 @@ SpatialFilterPtr SpatialFilter::negatedFilter(SpatialFilterPtr filterToNegate) {
   return Teuchos::rcp( new NegatedSpatialFilter(filterToNegate) );
 }
 
-
-
 bool SpatialFilterUnfiltered::matchesPoint(vector<double> &point) {
   return true;
 }
 
+SpatialFilterPtr SpatialFilter::matchingX(double x) {
+  return Teuchos::rcp( new SpatialFilterMatchingX(x) );
+}
+
+SpatialFilterPtr SpatialFilter::matchingY(double y) {
+  return Teuchos::rcp( new SpatialFilterMatchingY(y) );
+}
+
+SpatialFilterPtr SpatialFilter::matchingZ(double z) {
+  return Teuchos::rcp( new SpatialFilterMatchingZ(z) );
+}
 
 SpatialFilterLogicalOr::SpatialFilterLogicalOr(SpatialFilterPtr sf1, SpatialFilterPtr sf2) {
   _sf1 = sf1;

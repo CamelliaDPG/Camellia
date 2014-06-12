@@ -48,6 +48,8 @@
 
 #include "CamelliaCellTools.h"
 
+#include "GlobalDofAssignment.h"
+
 #include "GDAMinimumRule.h"
 
 // Teuchos includes
@@ -78,10 +80,10 @@ Mesh::Mesh(MeshTopologyPtr meshTopology, BilinearFormPtr bilinearForm, int H1Ord
 
 Mesh::Mesh(const vector<vector<double> > &vertices, vector< vector<unsigned> > &elementVertices,
            Teuchos::RCP< BilinearForm > bilinearForm, int H1Order, int pToAddTest, bool useConformingTraces,
-           map<int,int> trialOrderEnhancements, map<int,int> testOrderEnhancements) {
+           map<int,int> trialOrderEnhancements, map<int,int> testOrderEnhancements, vector<PeriodicBCPtr> periodicBCs) {
 
-  MeshGeometryPtr meshGeometry = Teuchos::rcp( new MeshGeometry(vertices,elementVertices) );
-  _meshTopology = Teuchos::rcp( new MeshTopology(meshGeometry) );
+  MeshGeometryPtr meshGeometry = Teuchos::rcp( new MeshGeometry(vertices, elementVertices) );
+  _meshTopology = Teuchos::rcp( new MeshTopology(meshGeometry, periodicBCs) );
   
   DofOrderingFactoryPtr dofOrderingFactoryPtr = Teuchos::rcp( new DofOrderingFactory(bilinearForm, trialOrderEnhancements,testOrderEnhancements) );
   _enforceMBFluxContinuity = false;

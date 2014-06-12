@@ -29,14 +29,16 @@ void MeshTopology::init(unsigned spaceDim) {
   _entityCellTopologyKeys = vector< map< unsigned, unsigned > >(_spaceDim);
 }
 
-MeshTopology::MeshTopology(unsigned spaceDim) {
+MeshTopology::MeshTopology(unsigned spaceDim, vector<PeriodicBCPtr> periodicBCs) {
   init(spaceDim);
+  _periodicBCs = periodicBCs;
 }
 
-MeshTopology::MeshTopology(MeshGeometryPtr meshGeometry) {
+MeshTopology::MeshTopology(MeshGeometryPtr meshGeometry, vector<PeriodicBCPtr> periodicBCs) {
   unsigned spaceDim = meshGeometry->vertices()[0].size();
 
   init(spaceDim);
+  _periodicBCs = periodicBCs;
   _vertices = meshGeometry->vertices();
   
   for (int vertexIndex=0; vertexIndex<_vertices.size(); vertexIndex++) {
@@ -97,6 +99,16 @@ unsigned MeshTopology::addCell(CellTopoPtr cellTopo, const vector<unsigned> &cel
 
       cellEntityPermutations[d][j] = entityPermutation;
       _activeCellsForEntities[d][entityIndex].insert(make_pair(cellIndex,j));
+      
+      if (d == 0) { // vertex --> should set parent relationships for any vertices that are equivalent via periodic BCs
+        if (_periodicBCIndicesMatchingNode.find(entityIndex) != _periodicBCIndicesMatchingNode.end()) {
+          for (set< pair<int, int> >::iterator bcIt = _periodicBCIndicesMatchingNode[entityIndex].begin(); bcIt != _periodicBCIndicesMatchingNode[entityIndex].end(); bcIt++) {
+            IndexType equivalentNode = _equivalentNodeViaPeriodicBC[make_pair(entityIndex, *bcIt)];
+            _activeCellsForEntities[d][equivalentNode].insert(make_pair(cellIndex, j));
+          }
+        }
+      }
+
     }
   }
   CellPtr cell = Teuchos::rcp( new Cell(cellTopo, cellVertices, cellEntityPermutations, cellIndex, this) );
@@ -174,6 +186,14 @@ unsigned MeshTopology::addCell(CellTopoPtr cellTopo, const vector<unsigned> &cel
       for (set<unsigned>::iterator subcellIt = sideSubcellIndices.begin(); subcellIt != sideSubcellIndices.end(); subcellIt++) {
         unsigned subcellEntityIndex = *subcellIt;
         _sidesForEntities[d][subcellEntityIndex].insert(sideEntityIndex);
+        if (d==0) {
+          if (_periodicBCIndicesMatchingNode.find(subcellEntityIndex) != _periodicBCIndicesMatchingNode.end()) {
+            for (set< pair<int, int> >::iterator bcIt = _periodicBCIndicesMatchingNode[subcellEntityIndex].begin(); bcIt != _periodicBCIndicesMatchingNode[subcellEntityIndex].end(); bcIt++) {
+              IndexType equivalentNode = _equivalentNodeViaPeriodicBC[make_pair(subcellEntityIndex, *bcIt)];
+              _sidesForEntities[d][equivalentNode].insert(sideEntityIndex);
+            }
+          }
+        }
       }
     }
     // for convenience, include the side itself in the _sidesForEntities lookup:
@@ -279,10 +299,9 @@ unsigned MeshTopology::addEntity(const shards::CellTopology &entityTopo, const v
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Entities may not have repeated vertices");
   }
   unsigned d  = entityTopo.getDimension();
-  unsigned entityIndex;
+  unsigned entityIndex = getEntityIndex(d, nodeSet);
   
-  map< set<IndexType>, IndexType >::iterator knownEntityEntry = _knownEntities[d].find(nodeSet);
-  if ( knownEntityEntry == _knownEntities[d].end()) {
+  if ( entityIndex == -1 ) {
     // new entity
     entityIndex = _entities[d].size();
     _entities[d].push_back(nodeSet);
@@ -301,15 +320,13 @@ unsigned MeshTopology::addEntity(const shards::CellTopology &entityTopo, const v
     // existing entity
 //    Camellia::print("nodeSet", nodeSet);
 //    Camellia::print("knownEntityEntry->first", knownEntityEntry->first);
-    
-    entityIndex = knownEntityEntry->second;
 //    if ((_cells.size() == 2) && (d==2) && (entityIndex == 19)) {
 //      Camellia::print("entities entry", _entities[d][entityIndex]);
 //    }
-    
+    vector<IndexType> canonicalVertices = getCanonicalEntityNodesViaPeriodicBCs(d, entityVertices);
 //    
 //    Camellia::print("canonicalEntityOrdering",_canonicalEntityOrdering[d][entityIndex]);
-    entityPermutation = CamelliaCellTools::permutationMatchingOrder(entityTopo, _canonicalEntityOrdering[d][entityIndex], entityVertices);
+    entityPermutation = CamelliaCellTools::permutationMatchingOrder(entityTopo, _canonicalEntityOrdering[d][entityIndex], canonicalVertices);
   }
   return entityIndex;
 }
@@ -344,6 +361,51 @@ void MeshTopology::addChildren(CellPtr parentCell, const vector< CellTopoPtr > &
 //      }
 //    }
 //  }
+}
+
+vector<IndexType> MeshTopology::getCanonicalEntityNodesViaPeriodicBCs(unsigned d, const vector<IndexType> &myEntityNodes) {
+  set<IndexType> myNodeSet(myEntityNodes.begin(),myEntityNodes.end());
+  if (_knownEntities[d].find(myNodeSet) != _knownEntities[d].end()) {
+    return myEntityNodes;
+  } else {
+    // compute the intersection of the periodic BCs that match each node in nodeSet
+    set< pair<int, int> > matchingPeriodicBCsIntersection;
+    bool firstNode = true;
+    for (vector<IndexType>::const_iterator nodeIt=myEntityNodes.begin(); nodeIt!=myEntityNodes.end(); nodeIt++) {
+      if (_periodicBCIndicesMatchingNode.find(*nodeIt) == _periodicBCIndicesMatchingNode.end()) {
+        matchingPeriodicBCsIntersection.clear();
+        break;
+      }
+      if (firstNode) {
+        matchingPeriodicBCsIntersection = _periodicBCIndicesMatchingNode[*nodeIt];
+        firstNode = false;
+      } else {
+        set< pair<int, int> > newSet;
+        set< pair<int, int> > matchesForThisNode = _periodicBCIndicesMatchingNode[*nodeIt];
+        for (set< pair<int, int> >::iterator prevMatchIt=matchingPeriodicBCsIntersection.begin();
+             prevMatchIt != matchingPeriodicBCsIntersection.end(); prevMatchIt++) {
+          if (matchesForThisNode.find(*prevMatchIt) != matchesForThisNode.end()) {
+            newSet.insert(*prevMatchIt);
+          }
+        }
+        matchingPeriodicBCsIntersection = newSet;
+      }
+    }
+    // for each periodic BC that remains, convert the nodeSet using that periodic BC
+    for (set< pair<int, int> >::iterator bcIt=matchingPeriodicBCsIntersection.begin();
+         bcIt != matchingPeriodicBCsIntersection.end(); bcIt++) {
+      pair<int,int> matchingBC = *bcIt;
+      vector<IndexType> equivalentNodeVector;
+      for (vector<IndexType>::const_iterator nodeIt=myEntityNodes.begin(); nodeIt!=myEntityNodes.end(); nodeIt++) {
+        equivalentNodeVector.push_back(_equivalentNodeViaPeriodicBC[make_pair(*nodeIt, matchingBC)]);
+      }
+      set<IndexType> equivalentNodeSet(equivalentNodeVector.begin(),equivalentNodeVector.end());
+      if (_knownEntities[d].find(equivalentNodeSet) != _knownEntities[d].end()) {
+        return equivalentNodeVector;
+      }
+    }
+  }
+  return vector<IndexType>(); // empty result meant to indicate not found...
 }
 
 unsigned MeshTopology::cellCount() {
@@ -452,14 +514,13 @@ void MeshTopology::deactivateCell(CellPtr cell) {
         nodeSet.insert(cell->vertices()[j]);
       }
       
-      map< set<unsigned>, unsigned >::iterator knownEntry = _knownEntities[d].find(nodeSet);
-      if (knownEntry == _knownEntities[d].end()) {
+      unsigned entityIndex = getEntityIndex(d, nodeSet);
+      if (entityIndex == -1) {
         // entity not found: an error
         TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "cell entity not found!");
       }
     
       // delete from the _activeCellsForEntities store
-      unsigned entityIndex = knownEntry->second;
       if (_activeCellsForEntities[d].find(entityIndex) == _activeCellsForEntities[d].end()) {
         cout << "WARNING: No entry found for _activeCellsForEntities[" << d << "][" << entityIndex << "]\n";
       } else {
@@ -474,6 +535,21 @@ void MeshTopology::deactivateCell(CellPtr cell) {
   //          cout << "(" << entryIt->first << "," << entryIt->second << ") ";
   //        }
   //        cout << endl;
+        }
+      }
+      if (d == 0) { // vertex --> should delete entries for any that are equivalent via periodic BCs
+        if (_periodicBCIndicesMatchingNode.find(entityIndex) != _periodicBCIndicesMatchingNode.end()) {
+          for (set< pair<int, int> >::iterator bcIt = _periodicBCIndicesMatchingNode[entityIndex].begin(); bcIt != _periodicBCIndicesMatchingNode[entityIndex].end(); bcIt++) {
+            IndexType equivalentNode = _equivalentNodeViaPeriodicBC[make_pair(entityIndex, *bcIt)];
+            if (_activeCellsForEntities[d].find(equivalentNode) == _activeCellsForEntities[d].end()) {
+              cout << "WARNING: No entry found for _activeCellsForEntities[" << d << "][" << equivalentNode << "]\n";
+            } else {
+              unsigned eraseCount = _activeCellsForEntities[d][equivalentNode].erase(make_pair(cell->cellIndex(),j));
+              if (eraseCount==0) {
+                cout << "WARNING: attempt was made to deactivate a non-active subcell topology...\n";
+              }
+            }
+          }
         }
       }
     }
@@ -566,6 +642,17 @@ unsigned MeshTopology::getEntityIndex(unsigned d, const set<unsigned> &nodeSet) 
   }
   if (_knownEntities[d].find(nodeSet) != _knownEntities[d].end()) {
     return _knownEntities[d][nodeSet];
+  } else {
+    // look for alternative, equivalent nodeSets, arrived at via periodic BCs
+    vector<IndexType> nodeVector(nodeSet.begin(),nodeSet.end());
+    vector<IndexType> equivalentNodeVector = getCanonicalEntityNodesViaPeriodicBCs(d, nodeVector);
+    
+    if (equivalentNodeVector.size() > 0) {
+      set<IndexType> equivalentNodeSet(equivalentNodeVector.begin(),equivalentNodeVector.end());
+      if (_knownEntities[d].find(equivalentNodeSet) != _knownEntities[d].end()) {
+        return _knownEntities[d][equivalentNodeSet];
+      }
+    }
   }
   return -1;
 }
@@ -621,7 +708,8 @@ unsigned MeshTopology::getSubEntityIndex(unsigned int d, unsigned int entityInde
     }
     subEntityNodes.insert(nodeIndexInMesh);
   }
-  if (_knownEntities[subEntityDim].find(subEntityNodes) == _knownEntities[subEntityDim].end()) {
+  unsigned subEntityIndex = getEntityIndex(subEntityDim, subEntityNodes);
+  if (subEntityIndex == -1) {
     cout << "sub-entity not found with vertices:\n";
     printVertices(subEntityNodes);
     cout << "entity vertices:\n";
@@ -629,7 +717,7 @@ unsigned MeshTopology::getSubEntityIndex(unsigned int d, unsigned int entityInde
     printVertices(entityNodeSet);
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "sub-entity not found");
   }
-  return _knownEntities[subEntityDim][subEntityNodes];
+  return subEntityIndex;
 }
 
 const vector<double>& MeshTopology::getVertex(unsigned vertexIndex) {
@@ -683,6 +771,21 @@ unsigned MeshTopology::getVertexIndexAdding(const vector<double> &vertex, double
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Mesh error: attempting to add existing vertex");
   }
   _vertexMap[vertex] = vertexIndex;
+  
+  set< pair<int,int> > matchingPeriodicBCs;
+
+  for (int i=0; i<_periodicBCs.size(); i++) {
+    int matchingSide = _periodicBCs[i]->getMatchingSide(vertex);
+    if (matchingSide != -1) {
+      pair<int,int> matchingBC = make_pair(i, matchingSide);
+      matchingPeriodicBCs.insert(matchingBC);
+      vector<double> matchingPoint = _periodicBCs[i]->getMatchingPoint(vertex, matchingSide);
+      unsigned equivalentVertexIndex = getVertexIndexAdding(matchingPoint, tol);
+      _equivalentNodeViaPeriodicBC[make_pair(vertexIndex, matchingBC)] = equivalentVertexIndex;
+    }
+  }
+  
+  _periodicBCIndicesMatchingNode[vertexIndex] = matchingPeriodicBCs;
   
   return vertexIndex;
 }
@@ -992,6 +1095,7 @@ unsigned MeshTopology::getSubEntityPermutation(unsigned d, IndexType entityIndex
     unsigned entityNodeOrdinal = topo.getNodeMap(subEntityDim, subEntityOrdinal, seNodeOrdinal);
     subEntityNodes.push_back(entityNodes[entityNodeOrdinal]);
   }
+  subEntityNodes = getCanonicalEntityNodesViaPeriodicBCs(subEntityDim, subEntityNodes);
   unsigned subEntityIndex = getSubEntityIndex(d, entityIndex, subEntityDim, subEntityOrdinal);
   shards::CellTopology subEntityTopo = getEntityTopology(subEntityDim, subEntityIndex);
   return CamelliaCellTools::permutationMatchingOrder(subEntityTopo, _canonicalEntityOrdering[subEntityDim][subEntityOrdinal], subEntityNodes);
@@ -1406,7 +1510,7 @@ void MeshTopology::determineGeneralizedParentsForRefinement(CellPtr cell, Refine
           if (parentIndex == childEntityIndex) { // "null" refinement pattern -- nothing to do here.
             continue;
           }
-          _generalizedParentEntities[d][childEntityIndex] = make_pair(parentIndex,d); // TODO: change this to consider anisotropic refinements/ recipes...  (need to choose nearest of the possible ancestors, in my view)
+          setEntityGeneralizedParent(d, childEntityIndex, d, parentIndex); // TODO: change this to consider anisotropic refinements/ recipes...  (need to choose nearest of the possible ancestors, in my view)
           for (int subcdim=0; subcdim<d; subcdim++) {
             int subcCount = this->getSubEntityCount(d, childEntityIndex, subcdim);
             for (int subcord=0; subcord < subcCount; subcord++) {
@@ -1426,7 +1530,7 @@ void MeshTopology::determineGeneralizedParentsForRefinement(CellPtr cell, Refine
               }
               
               // if we get here, then we're ready to establish the generalized parent relationship
-              _generalizedParentEntities[subcdim][subcellEntityIndex] = make_pair(parentIndex,d);
+              setEntityGeneralizedParent(subcdim, subcellEntityIndex, d, parentIndex);
             }
           }
         }
@@ -1450,6 +1554,18 @@ void MeshTopology::setEdgeToCurveMap(const map< pair<IndexType, IndexType>, Para
   // mesh transformation function expects global ID type
   set<GlobalIndexType> cellIDsGlobal(_cellIDsWithCurves.begin(),_cellIDsWithCurves.end());
   _transformationFunction = Teuchos::rcp(new MeshTransformationFunction(mesh, cellIDsGlobal));
+}
+
+void MeshTopology::setEntityGeneralizedParent(unsigned entityDim, IndexType entityIndex, unsigned parentDim, IndexType parentEntityIndex) {
+  _generalizedParentEntities[entityDim][entityIndex] = make_pair(parentEntityIndex,parentDim);
+  if (entityDim == 0) { // vertex --> should set parent relationships for any vertices that are equivalent via periodic BCs
+    if (_periodicBCIndicesMatchingNode.find(entityIndex) != _periodicBCIndicesMatchingNode.end()) {
+      for (set< pair<int, int> >::iterator bcIt = _periodicBCIndicesMatchingNode[entityIndex].begin(); bcIt != _periodicBCIndicesMatchingNode[entityIndex].end(); bcIt++) {
+        IndexType equivalentNode = _equivalentNodeViaPeriodicBC[make_pair(entityIndex, *bcIt)];
+        _generalizedParentEntities[entityDim][equivalentNode] = make_pair(parentEntityIndex,parentDim);
+      }
+    }
+  }
 }
 
 Teuchos::RCP<MeshTransformationFunction> MeshTopology::transformationFunction() {

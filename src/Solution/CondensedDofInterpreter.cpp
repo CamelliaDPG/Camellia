@@ -17,6 +17,8 @@
 #include <Teuchos_GlobalMPISession.hpp>
 #include "MPIWrapper.h"
 
+#include "GlobalDofAssignment.h"
+
 CondensedDofInterpreter::CondensedDofInterpreter(Mesh* mesh, LagrangeConstraints* lagrangeConstraints, const set<int> &fieldIDsToExclude, bool storeLocalStiffnessMatrices) {
   _mesh = mesh;
   _lagrangeConstraints = lagrangeConstraints;

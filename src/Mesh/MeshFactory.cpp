@@ -25,6 +25,103 @@ static ParametricCurvePtr parametricRect(double width, double height, double x0,
   return ParametricCurve::polygon(vertices);
 }
 
+MeshPtr MeshFactory::quadMesh(Teuchos::ParameterList &parameters) {
+  bool useMinRule = parameters.get<bool>("useMinRule",true);
+  BilinearFormPtr bf = parameters.get< BilinearFormPtr >("bf");
+  int H1Order = parameters.get<int>("H1Order");
+  int spaceDim = 2;
+  int delta_k = parameters.get<int>("delta_k",spaceDim);
+  double width = parameters.get<double>("width",1.0);
+  double height = parameters.get<double>("height",1.0);
+  int horizontalElements = parameters.get<int>("horizontalElements", 1);
+  int verticalElements = parameters.get<int>("verticalElements", 1);
+  bool divideIntoTriangles = parameters.get<bool>("divideIntoTriangles",false);
+  double x0 = parameters.get<double>("x0",0.0);
+  double y0 = parameters.get<double>("y0",0.0);
+  map<int,int> emptyMap;
+  map<int,int>* trialOrderEnhancements = parameters.get< map<int,int>* >("trialOrderEnhancements",&emptyMap);
+  map<int,int>* testOrderEnhancements = parameters.get< map<int,int>* >("testOrderEnhancements",&emptyMap);
+  vector< PeriodicBCPtr > emptyPeriodicBCs;
+  vector< PeriodicBCPtr >* periodicBCs = parameters.get< vector< PeriodicBCPtr >* >("periodicBCs",&emptyPeriodicBCs);
+  
+  vector<vector<double> > vertices;
+  vector< vector<unsigned> > allElementVertices;
+  
+  int numElements = divideIntoTriangles ? horizontalElements * verticalElements * 2 : horizontalElements * verticalElements;
+  
+  CellTopoPtr topo;
+  if (divideIntoTriangles) {
+    topo = Teuchos::rcp( new shards::CellTopology(shards::getCellTopologyData<shards::Triangle<3> >() ));
+  } else {
+    topo = Teuchos::rcp( new shards::CellTopology(shards::getCellTopologyData<shards::Quadrilateral<4> >() ));
+  }
+  vector< CellTopoPtr > cellTopos(numElements, topo);
+  
+  FieldContainer<double> quadBoundaryPoints(4,2);
+  quadBoundaryPoints(0,0) = x0;
+  quadBoundaryPoints(0,1) = y0;
+  quadBoundaryPoints(1,0) = x0 + width;
+  quadBoundaryPoints(1,1) = y0;
+  quadBoundaryPoints(2,0) = x0 + width;
+  quadBoundaryPoints(2,1) = y0 + height;
+  quadBoundaryPoints(3,0) = x0;
+  quadBoundaryPoints(3,1) = y0 + height;
+  //  cout << "creating mesh with boundary points:\n" << quadBoundaryPoints;
+  
+  double southWest_x = quadBoundaryPoints(0,0),
+  southWest_y = quadBoundaryPoints(0,1);
+  
+  double elemWidth = width / horizontalElements;
+  double elemHeight = height / verticalElements;
+  
+  // set up vertices:
+  // vertexIndices is for easy vertex lookup by (x,y) index for our Cartesian grid:
+  vector< vector<int> > vertexIndices(horizontalElements+1, vector<int>(verticalElements+1));
+  for (int i=0; i<=horizontalElements; i++) {
+    for (int j=0; j<=verticalElements; j++) {
+      vertexIndices[i][j] = vertices.size();
+      vector<double> vertex(spaceDim);
+      vertex[0] = southWest_x + elemWidth*i;
+      vertex[1] = southWest_y + elemHeight*j;
+      vertices.push_back(vertex);
+    }
+  }
+  
+  for (int i=0; i<horizontalElements; i++) {
+    for (int j=0; j<verticalElements; j++) {
+      if (!divideIntoTriangles) {
+        vector<unsigned> elemVertices;
+        elemVertices.push_back(vertexIndices[i][j]);
+        elemVertices.push_back(vertexIndices[i+1][j]);
+        elemVertices.push_back(vertexIndices[i+1][j+1]);
+        elemVertices.push_back(vertexIndices[i][j+1]);
+        allElementVertices.push_back(elemVertices);
+      } else {
+        vector<unsigned> elemVertices1, elemVertices2; // elem1 is SE of quad, elem2 is NW
+        elemVertices1.push_back(vertexIndices[i][j]);     // SIDE1 is SOUTH side of quad
+        elemVertices1.push_back(vertexIndices[i+1][j]);   // SIDE2 is EAST
+        elemVertices1.push_back(vertexIndices[i+1][j+1]); // SIDE3 is diagonal
+        elemVertices2.push_back(vertexIndices[i][j+1]);   // SIDE1 is WEST
+        elemVertices2.push_back(vertexIndices[i][j]);     // SIDE2 is diagonal
+        elemVertices2.push_back(vertexIndices[i+1][j+1]); // SIDE3 is NORTH
+        
+        allElementVertices.push_back(elemVertices1);
+        allElementVertices.push_back(elemVertices2);
+      }
+    }
+  }
+  
+  MeshGeometryPtr geometry = Teuchos::rcp( new MeshGeometry(vertices, allElementVertices, cellTopos));
+  
+  if (useMinRule) {
+    MeshTopologyPtr meshTopology = Teuchos::rcp( new MeshTopology(geometry, *periodicBCs) );
+    return Teuchos::rcp( new Mesh(meshTopology, bf, H1Order, delta_k, *trialOrderEnhancements, *testOrderEnhancements) );
+  } else {
+    bool useConformingTraces = parameters.get<bool>("useConformingTraces", true);
+    return Teuchos::rcp( new Mesh(vertices, allElementVertices, bf, H1Order, delta_k, useConformingTraces, *trialOrderEnhancements, *testOrderEnhancements, *periodicBCs) );
+  }
+}
+
 /*class ParametricRect : public ParametricCurve {
   double _width, _height, _x0, _y0;
   vector< ParametricCurvePtr > _edgeLines;
@@ -78,104 +175,50 @@ MeshPtr MeshFactory::quadMesh(BilinearFormPtr bf, int H1Order, FieldContainer<do
   cell0.push_back(2);
   cell0.push_back(3);
   elementVertices.push_back(cell0);
-
+  
   MeshPtr mesh = Teuchos::rcp( new Mesh(vertices, elementVertices, bf, H1Order, pToAddTest) );
   return mesh;
 }
 
 MeshPtr MeshFactory::quadMesh(BilinearFormPtr bf, int H1Order, int pToAddTest,
-                              double width, double height, int horizontalElements, int verticalElements, bool divideIntoTriangles) {
-  FieldContainer<double> quadPoints(4,2);
-  quadPoints(0,0) = 0.0;
-  quadPoints(0,1) = 0.0;
-  quadPoints(1,0) = width;
-  quadPoints(1,1) = 0.0;
-  quadPoints(2,0) = width;
-  quadPoints(2,1) = height;
-  quadPoints(3,0) = 0.0;
-  quadPoints(3,1) = height;
+                              double width, double height, int horizontalElements, int verticalElements, bool divideIntoTriangles,
+                              double x0, double y0) {
+  
+  Teuchos::ParameterList pl;
+  
+  pl.set("useMinRule", false);
+  pl.set("bf",bf);
+  pl.set("H1Order", H1Order);
+  pl.set("delta_k", pToAddTest);
+  pl.set("horizontalElements", horizontalElements);
+  pl.set("verticalElements", verticalElements);
+  pl.set("width", width);
+  pl.set("height", height);
+  pl.set("divideIntoTriangles", divideIntoTriangles);
+  pl.set("x0",x0);
+  pl.set("y0",y0);
 
-  int testOrder = pToAddTest + H1Order; // buildQuadMesh's interface asks for the order of the test space, not the delta p.  Better to be consistent in using the delta p going forward...
-
-  return MeshFactory::buildQuadMesh(quadPoints, horizontalElements, verticalElements, bf, H1Order, testOrder, divideIntoTriangles);
+  return quadMesh(pl);
 }
 
 MeshPtr MeshFactory::quadMeshMinRule(BilinearFormPtr bf, int H1Order, int pToAddTest,
                                       double width, double height, int horizontalElements, int verticalElements,
-                                     bool divideIntoTriangles) {
-  int spaceDim = 2;
-  
-  vector<vector<double> > vertices;
-  vector< vector<unsigned> > allElementVertices;
-  
-  int numElements = divideIntoTriangles ? horizontalElements * verticalElements * 2 : horizontalElements * verticalElements;
-  
-  CellTopoPtr topo;
-  if (divideIntoTriangles) {
-    topo = Teuchos::rcp( new shards::CellTopology(shards::getCellTopologyData<shards::Triangle<3> >() ));
-  } else {
-    topo = Teuchos::rcp( new shards::CellTopology(shards::getCellTopologyData<shards::Quadrilateral<4> >() ));
-  }
-  vector< CellTopoPtr > cellTopos(numElements, topo);
-  
-  FieldContainer<double> quadBoundaryPoints(4,2);
-  quadBoundaryPoints(0,0) = 0;
-  quadBoundaryPoints(0,1) = 0;
-  quadBoundaryPoints(1,0) = width;
-  quadBoundaryPoints(1,1) = 0;
-  quadBoundaryPoints(2,0) = width;
-  quadBoundaryPoints(2,1) = height;
-  quadBoundaryPoints(3,0) = 0;
-  quadBoundaryPoints(3,1) = height;
-  
-  double southWest_x = quadBoundaryPoints(0,0),
-  southWest_y = quadBoundaryPoints(0,1);
-  
-  double elemWidth = width / horizontalElements;
-  double elemHeight = height / verticalElements;
-  
-  // set up vertices:
-  // vertexIndices is for easy vertex lookup by (x,y) index for our Cartesian grid:
-  vector< vector<int> > vertexIndices(horizontalElements+1, vector<int>(verticalElements+1));
-  for (int i=0; i<=horizontalElements; i++) {
-    for (int j=0; j<=verticalElements; j++) {
-      vertexIndices[i][j] = vertices.size();
-      vector<double> vertex(spaceDim);
-      vertex[0] = southWest_x + elemWidth*i;
-      vertex[1] = southWest_y + elemHeight*j;
-      vertices.push_back(vertex);
-    }
-  }
-  
-  for (int i=0; i<horizontalElements; i++) {
-    for (int j=0; j<verticalElements; j++) {
-      if (!divideIntoTriangles) {
-        vector<unsigned> elemVertices;
-        elemVertices.push_back(vertexIndices[i][j]);
-        elemVertices.push_back(vertexIndices[i+1][j]);
-        elemVertices.push_back(vertexIndices[i+1][j+1]);
-        elemVertices.push_back(vertexIndices[i][j+1]);
-        allElementVertices.push_back(elemVertices);
-      } else {
-        vector<unsigned> elemVertices1, elemVertices2; // elem1 is SE of quad, elem2 is NW
-        elemVertices1.push_back(vertexIndices[i][j]);     // SIDE1 is SOUTH side of quad
-        elemVertices1.push_back(vertexIndices[i+1][j]);   // SIDE2 is EAST
-        elemVertices1.push_back(vertexIndices[i+1][j+1]); // SIDE3 is diagonal
-        elemVertices2.push_back(vertexIndices[i][j+1]);   // SIDE1 is WEST
-        elemVertices2.push_back(vertexIndices[i][j]);     // SIDE2 is diagonal
-        elemVertices2.push_back(vertexIndices[i+1][j+1]); // SIDE3 is NORTH
-        
-        allElementVertices.push_back(elemVertices1);
-        allElementVertices.push_back(elemVertices2);
-      }
-    }
-  }
-  
-  MeshGeometryPtr geometry = Teuchos::rcp( new MeshGeometry(vertices, allElementVertices, cellTopos));
-  
-  MeshTopologyPtr meshTopology = Teuchos::rcp( new MeshTopology(geometry) );
-  
-  return Teuchos::rcp( new Mesh(meshTopology, bf, H1Order, pToAddTest) );
+                                     bool divideIntoTriangles, double x0, double y0) {
+  Teuchos::ParameterList pl;
+
+  pl.set("useMinRule", true);
+  pl.set("bf",bf);
+  pl.set("H1Order", H1Order);
+  pl.set("delta_k", pToAddTest);
+  pl.set("horizontalElements", horizontalElements);
+  pl.set("verticalElements", verticalElements);
+  pl.set("width", width);
+  pl.set("height", height);
+  pl.set("divideIntoTriangles", divideIntoTriangles);
+  pl.set("x0",x0);
+  pl.set("y0",y0);
+
+  return quadMesh(pl);
 }
 
 MeshPtr MeshFactory::rectilinearMesh(BilinearFormPtr bf, vector<double> dimensions, vector<int> elementCounts, int H1Order, int pToAddTest) {
@@ -496,93 +539,43 @@ MeshPtr MeshFactory::buildQuadMesh(const FieldContainer<double> &quadBoundaryPoi
                                    map<int,int> trialOrderEnhancements,
                                    map<int,int> testOrderEnhancements) {
   //  if (triangulate) cout << "Mesh: Triangulating\n" << endl;
-  int pToAddToTest = pTest - H1Order;
-  int spaceDim = 2;
+  int pToAddTest = pTest - H1Order;
   // rectBoundaryPoints dimensions: (4,2) -- and should be in counterclockwise order
   
-  vector<vector<double> > vertices;
-  vector< vector<unsigned> > allElementVertices;
-  
+  // check that inputs match the assumptions (of a rectilinear mesh)
   TEUCHOS_TEST_FOR_EXCEPTION( ( quadBoundaryPoints.dimension(0) != 4 ) || ( quadBoundaryPoints.dimension(1) != 2 ),
                              std::invalid_argument,
                              "quadBoundaryPoints should be dimensions (4,2), points in ccw order.");
-  
-  int numElements = horizontalElements * verticalElements;
-  if (triangulate) numElements *= 2;
-  int numDimensions = 2;
-  
   double southWest_x = quadBoundaryPoints(0,0),
   southWest_y = quadBoundaryPoints(0,1),
   southEast_x = quadBoundaryPoints(1,0),
-  southEast_y = quadBoundaryPoints(1,1),
-  northEast_x = quadBoundaryPoints(2,0),
-  northEast_y = quadBoundaryPoints(2,1),
-  northWest_x = quadBoundaryPoints(3,0),
+//  southEast_y = quadBoundaryPoints(1,1),
+//  northEast_x = quadBoundaryPoints(2,0),
+//  northEast_y = quadBoundaryPoints(2,1),
+//  northWest_x = quadBoundaryPoints(3,0),
   northWest_y = quadBoundaryPoints(3,1);
   
-  double elemWidth = (southEast_x - southWest_x) / horizontalElements;
-  double elemHeight = (northWest_y - southWest_y) / verticalElements;
+  double width = southEast_x - southWest_x;
+  double height = northWest_y - southWest_y;
   
-  // set up vertices:
-  // vertexIndices is for easy vertex lookup by (x,y) index for our Cartesian grid:
-  vector< vector<int> > vertexIndices(horizontalElements+1, vector<int>(verticalElements+1));
-  for (int i=0; i<=horizontalElements; i++) {
-    for (int j=0; j<=verticalElements; j++) {
-      vertexIndices[i][j] = vertices.size();
-      vector<double> vertex(spaceDim);
-      vertex[0] = southWest_x + elemWidth*i;
-      vertex[1] = southWest_y + elemHeight*j;
-      vertices.push_back(vertex);
-      //      cout << "Mesh: vertex " << vertices.size() - 1 << ": (" << vertex(0) << "," << vertex(1) << ")\n";
-    }
-  }
+  Teuchos::ParameterList pl;
   
-  if ( ! triangulate ) {
-    int SOUTH = 0, EAST = 1, NORTH = 2, WEST = 3;
-    for (int i=0; i<horizontalElements; i++) {
-      for (int j=0; j<verticalElements; j++) {
-        vector<unsigned> elemVertices;
-        elemVertices.push_back(vertexIndices[i][j]);
-        elemVertices.push_back(vertexIndices[i+1][j]);
-        elemVertices.push_back(vertexIndices[i+1][j+1]);
-        elemVertices.push_back(vertexIndices[i][j+1]);
-        allElementVertices.push_back(elemVertices);
-      }
-    }
-  } else {
-    int SIDE1 = 0, SIDE2 = 1, SIDE3 = 2;
-    for (int i=0; i<horizontalElements; i++) {
-      for (int j=0; j<verticalElements; j++) {
-        // TEST CODE FOR LESZEK: match Leszek's meshes by setting diagonalUp = true here...
-        //        bool diagonalUp = true;
-        bool diagonalUp = (i%2 == j%2); // criss-cross pattern
-        
-        vector<unsigned> elemVertices1, elemVertices2;
-        if (diagonalUp) {
-          // elem1 is SE of quad, elem2 is NW
-          elemVertices1.push_back(vertexIndices[i][j]);     // SIDE1 is SOUTH side of quad
-          elemVertices1.push_back(vertexIndices[i+1][j]);   // SIDE2 is EAST
-          elemVertices1.push_back(vertexIndices[i+1][j+1]); // SIDE3 is diagonal
-          elemVertices2.push_back(vertexIndices[i][j+1]);   // SIDE1 is WEST
-          elemVertices2.push_back(vertexIndices[i][j]);     // SIDE2 is diagonal
-          elemVertices2.push_back(vertexIndices[i+1][j+1]); // SIDE3 is NORTH
-        } else {
-          // elem1 is SW of quad, elem2 is NE
-          elemVertices1.push_back(vertexIndices[i][j]);     // SIDE1 is SOUTH side of quad
-          elemVertices1.push_back(vertexIndices[i+1][j]);   // SIDE2 is diagonal
-          elemVertices1.push_back(vertexIndices[i][j+1]);   // SIDE3 is WEST
-          elemVertices2.push_back(vertexIndices[i][j+1]);   // SIDE1 is diagonal
-          elemVertices2.push_back(vertexIndices[i+1][j]);   // SIDE2 is EAST
-          elemVertices2.push_back(vertexIndices[i+1][j+1]); // SIDE3 is NORTH
-        }
-        
-        allElementVertices.push_back(elemVertices1);
-        allElementVertices.push_back(elemVertices2);
-      }
-    }
-  }
-  return Teuchos::rcp( new Mesh(vertices,allElementVertices,bilinearForm,H1Order,pToAddToTest,useConformingTraces,
-                                trialOrderEnhancements,testOrderEnhancements));
+  pl.set("useMinRule", false);
+  pl.set("bf",bilinearForm);
+  pl.set("H1Order", H1Order);
+  pl.set("delta_k", pToAddTest);
+  pl.set("horizontalElements", horizontalElements);
+  pl.set("verticalElements", verticalElements);
+  pl.set("divideIntoTriangles", triangulate);
+  pl.set("useConformingTraces", useConformingTraces);
+  pl.set("trialOrderEnhancements", &trialOrderEnhancements);
+  pl.set("testOrderEnhancements", &testOrderEnhancements);
+  pl.set("x0",southWest_x);
+  pl.set("y0",southWest_y);
+  pl.set("width", width);
+  pl.set("height",height);
+  
+  return quadMesh(pl);
 }
 
 Teuchos::RCP<Mesh> MeshFactory::buildQuadMeshHybrid(const FieldContainer<double> &quadBoundaryPoints,

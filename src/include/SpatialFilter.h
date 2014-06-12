@@ -34,6 +34,10 @@ public:
   
   static SpatialFilterPtr negatedFilter(SpatialFilterPtr filterToNegate);
   
+  static SpatialFilterPtr matchingX(double x);
+  static SpatialFilterPtr matchingY(double y);
+  static SpatialFilterPtr matchingZ(double z);
+  
   virtual ~SpatialFilter() {}
 };
 
