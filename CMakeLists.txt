@@ -13,13 +13,17 @@ include_directories(${PROJECT_BINARY_DIR})
 set(CAMELLIA_SOURCE_DIR src)
 set(DRIVER_DIR drivers)
 
-find_package(VTK REQUIRED)
-include(${VTK_USE_FILE})
-if(VTK_LIBRARIES)
-  link_libraries(${VTK_LIBRARIES})
-else()
-  link_libraries(vtkHybrid)
-endif()
+# find_package(VTK REQUIRED)
+# include(${VTK_USE_FILE})
+# if(VTK_LIBRARIES)
+#   link_libraries(${VTK_LIBRARIES})
+# else()
+#   link_libraries(vtkHybrid)
+# endif()
+
+find_package(XDMF REQUIRED PATHS ${XDMF_PATH}/lib/XdmfCMake)
+include_directories(${XDMF_INCLUDE_DIRS})
+link_directories(${XDMF_LIBRARY_DIRS})
 
 # adding boost    
 FIND_PACKAGE(Boost)
@@ -109,10 +113,12 @@ link_libraries(
   Camellia
   ${Trilinos_LIBRARIES}
   ${Trilinos_TPL_LIBRARIES}
+  Xdmf
   #  dmumps
   #  mumps_common
   #  pord
 )
+# target_link_libraries(Camellia Xdmf)
 
 # Build Drivers
 add_subdirectory(drivers)
