@@ -87,4 +87,11 @@ public:
   void exportFunction(FunctionPtr function, const string& functionName="function", set<GlobalIndexType> cellIndices=set<GlobalIndexType>(), unsigned int num1DPts=0);
 };
 
+class XDMFExporter : public NewExporter {
+public:
+  XDMFExporter(MeshTopologyPtr mesh) :
+    NewExporter(mesh) {}
+  void exportFunction(FunctionPtr function, const string& functionName="function", set<GlobalIndexType> cellIndices=set<GlobalIndexType>(), unsigned int num1DPts=0);
+};
+
 #endif /* end of include guard: SOLUTIONEXPORTER_H */

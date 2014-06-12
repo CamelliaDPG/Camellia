@@ -34,9 +34,13 @@ void XDMFExporter::exportFunction(FunctionPtr function, const string& functionNa
   topology->SetTopologyType(XDMF_MIXED);
   
   bool defaultPts = (num1DPts == 0);
-  int pOrder = 2;
+  int pOrder = 3;
   if (defaultPts)
-    num1DPts = pow(pOrder, 2)+1;
+    if (pOrder < 2)
+      num1DPts = 2;
+    else
+      num1DPts = 2*pOrder+2;
+      // num1DPts = pOrder+1;
 
   int spaceDim = _mesh->getSpaceDim();
   // if (function->rank() == 0)
@@ -63,8 +67,11 @@ void XDMFExporter::exportFunction(FunctionPtr function, const string& functionNa
     if (cell->topology()->getKey() == shards::Hexahedron<8>::key) numHexas++;
     // cout << _mesh->cellPolyOrder(*cellIt) << endl;
   }
-  int totalSubcells = (num1DPts-1)*numLines;
-  int totalPts = num1DPts*numLines;
+  int totalSubLines = (num1DPts-1)*numLines;
+  int totalSubTriangles = (num1DPts-1)*(num1DPts-1)*numTriangles;
+  int totalSubQuads = (num1DPts-1)*(num1DPts-1)*numQuads;
+  int totalSubcells = totalSubLines + totalSubTriangles + totalSubQuads;
+  int totalPts = num1DPts*numLines + num1DPts*(num1DPts+1)/2*numTriangles + num1DPts*num1DPts*numQuads;
 
   // Topology
   topology = grid.GetTopology();
@@ -77,7 +84,7 @@ void XDMFExporter::exportFunction(FunctionPtr function, const string& functionNa
   if (spaceDim == 1)
     connArray->SetNumberOfElements(2*numLines+totalPts);
   else
-    connArray->SetNumberOfElements(totalSubcells+totalPts);
+    connArray->SetNumberOfElements(totalSubcells + 3*totalSubTriangles + 4*totalSubQuads);
   // Geometry
   geometry = grid.GetGeometry();
   if (spaceDim == 1)
@@ -94,7 +101,7 @@ void XDMFExporter::exportFunction(FunctionPtr function, const string& functionNa
   else
     ptArray->SetNumberOfElements(spaceDim * totalPts);
   // Node Data
-  nodedata.SetName("Node Scalar");
+  nodedata.SetName(functionName.c_str());
   nodedata.SetAttributeCenter(XDMF_ATTRIBUTE_CENTER_NODE);
   nodedata.SetAttributeType(XDMF_ATTRIBUTE_TYPE_SCALAR);
   valArray = nodedata.GetValues();
@@ -146,8 +153,9 @@ void XDMFExporter::exportFunction(FunctionPtr function, const string& functionNa
           numPoints = num1DPts*num1DPts;
           break;
         case shards::Triangle<3>::key:
-          for (int i=1; i <= num1DPts; i++)
-            numPoints += i;
+          numPoints = num1DPts*(num1DPts+1)/2;
+          // for (int i=1; i <= num1DPts; i++)
+          //   numPoints += i;
           break;
         case shards::Hexahedron<8>::key:
           numPoints = num1DPts*num1DPts*num1DPts;
@@ -263,6 +271,16 @@ void XDMFExporter::exportFunction(FunctionPtr function, const string& functionNa
               int ind2 = ind1 + 1;
               int ind3 = ind2 + num1DPts;
               int ind4 = ind1 + num1DPts;
+              connArray->SetValue(connIndex, 5);
+              connIndex++;
+              connArray->SetValue(connIndex, ind1);
+              connIndex++;
+              connArray->SetValue(connIndex, ind2);
+              connIndex++;
+              connArray->SetValue(connIndex, ind3);
+              connIndex++;
+              connArray->SetValue(connIndex, ind4);
+              connIndex++;
               // vtkIdType subCell[4] = {ind1, ind2, ind3, ind4};
               // ug->InsertNextCell((int)VTK_QUAD, 4, subCell);
             }
@@ -278,6 +296,14 @@ void XDMFExporter::exportFunction(FunctionPtr function, const string& functionNa
               int ind1 = subcellStartIndex;
               int ind2 = ind1 + 1;
               int ind3 = ind1 + num1DPts-j;
+              connArray->SetValue(connIndex, 4);
+              connIndex++;
+              connArray->SetValue(connIndex, ind1);
+              connIndex++;
+              connArray->SetValue(connIndex, ind2);
+              connIndex++;
+              connArray->SetValue(connIndex, ind3);
+              connIndex++;
               // vtkIdType subCell[3] = {ind1, ind2, ind3};
               // ug->InsertNextCell((int)VTK_TRIANGLE, 3, subCell);
 
@@ -286,6 +312,14 @@ void XDMFExporter::exportFunction(FunctionPtr function, const string& functionNa
                 int ind1 = subcellStartIndex+1;
                 int ind2 = ind1 + num1DPts - j;
                 int ind3 = ind1 + num1DPts -j - 1;
+                connArray->SetValue(connIndex, 4);
+                connIndex++;
+                connArray->SetValue(connIndex, ind1);
+                connIndex++;
+                connArray->SetValue(connIndex, ind2);
+                connIndex++;
+                connArray->SetValue(connIndex, ind3);
+                connIndex++;
                 // vtkIdType subCell[3] = {ind1, ind2, ind3};
                 // ug->InsertNextCell((int)VTK_TRIANGLE, 3, subCell);
               }
@@ -312,6 +346,24 @@ void XDMFExporter::exportFunction(FunctionPtr function, const string& functionNa
                 int ind6 = ind5 + 1;
                 int ind7 = ind6 + num1DPts;
                 int ind8 = ind5 + num1DPts;
+                connArray->SetValue(connIndex, 9);
+                connIndex++;
+                connArray->SetValue(connIndex, ind1);
+                connIndex++;
+                connArray->SetValue(connIndex, ind2);
+                connIndex++;
+                connArray->SetValue(connIndex, ind3);
+                connIndex++;
+                connArray->SetValue(connIndex, ind4);
+                connIndex++;
+                connArray->SetValue(connIndex, ind5);
+                connIndex++;
+                connArray->SetValue(connIndex, ind6);
+                connIndex++;
+                connArray->SetValue(connIndex, ind7);
+                connIndex++;
+                connArray->SetValue(connIndex, ind8);
+                connIndex++;
                 // vtkIdType subCell[8] = {ind1, ind2, ind3, ind4, ind5, ind6, ind7, ind8};
                 // ug->InsertNextCell((int)VTK_HEXAHEDRON, 8, subCell);
               }
@@ -333,11 +385,23 @@ void XDMFExporter::exportFunction(FunctionPtr function, const string& functionNa
             // points->InsertNextPoint((*physicalPoints)(0, pointIndex, 0), 0.0, 0.0);
           }
           else if (spaceDim == 2)
-          {}
+          {
+            ptArray->SetValue(ptIndex, (*physicalPoints)(0, pointIndex, 0));
+            ptIndex++;
+            ptArray->SetValue(ptIndex, (*physicalPoints)(0, pointIndex, 1));
+            ptIndex++;
+          }
             // points->InsertNextPoint((*physicalPoints)(0, pointIndex, 0),
             //   (*physicalPoints)(0, pointIndex, 1), 0.0);
           else
-          {}
+          {
+            ptArray->SetValue(ptIndex, (*physicalPoints)(0, pointIndex, 0));
+            ptIndex++;
+            ptArray->SetValue(ptIndex, (*physicalPoints)(0, pointIndex, 1));
+            ptIndex++;
+            ptArray->SetValue(ptIndex, (*physicalPoints)(0, pointIndex, 2));
+            ptIndex++;
+          }
           valArray->SetValue(valIndex, computedValues(0, pointIndex));
           valIndex++;
             // points->InsertNextPoint((*physicalPoints)(0, pointIndex, 0),
@@ -360,9 +424,9 @@ void XDMFExporter::exportFunction(FunctionPtr function, const string& functionNa
         }
       }
     }
-    connArray->SetHeavyDataSetName("Test.h5:/Conns");
-    ptArray->SetHeavyDataSetName("Test.h5:/Points");
-    valArray->SetHeavyDataSetName("Test.h5:/NodeData");
+    connArray->SetHeavyDataSetName((functionName+".h5:/Conns").c_str());
+    ptArray->SetHeavyDataSetName((functionName+".h5:/Points").c_str());
+    valArray->SetHeavyDataSetName((functionName+".h5:/NodeData").c_str());
     // Attach and Write
     grid.Insert(&nodedata);
     // grid.Insert(&celldata);
@@ -371,6 +435,8 @@ void XDMFExporter::exportFunction(FunctionPtr function, const string& functionNa
     root.Build();
     // Write the XML
     dom.Write((functionName+".xmf").c_str());
+
+    cout << "Wrote " <<  functionName << ".xmf" << endl;
 
 //     ug->SetPoints(points);
 //     points->Delete();
