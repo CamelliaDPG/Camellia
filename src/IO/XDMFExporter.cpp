@@ -46,6 +46,8 @@ void XDMFExporter::exportFunction(FunctionPtr function, const string& functionNa
 
   int spaceDim = _mesh->getSpaceDim();
 
+  bool boundaryOnly = function->boundaryValueOnly();
+
   unsigned int total_vertices = 0;
   
   if (cellIndices.size()==0) cellIndices = _mesh->getActiveCellIndices();
@@ -62,12 +64,25 @@ void XDMFExporter::exportFunction(FunctionPtr function, const string& functionNa
     if (cell->topology()->getKey() == shards::Hexahedron<8>::key) numHexas++;
     // cout << _mesh->cellPolyOrder(*cellIt) << endl;
   }
-  int totalSubLines = (num1DPts-1)*numLines;
-  int totalSubTriangles = (num1DPts-1)*(num1DPts-1)*numTriangles;
-  int totalSubQuads = (num1DPts-1)*(num1DPts-1)*numQuads;
-  int totalSubHexas = (num1DPts-1)*(num1DPts-1)*(num1DPts-1)*numHexas;
-  int totalSubcells = totalSubLines + totalSubTriangles + totalSubQuads + totalSubHexas;
-  int totalPts = num1DPts*numLines + num1DPts*(num1DPts+1)/2*numTriangles + num1DPts*num1DPts*numQuads + num1DPts*num1DPts*num1DPts*numHexas;
+  cout << numLines << " " << numTriangles << " " << numQuads << endl;
+  int totalSubLines, totalSubTriangles, totalSubQuads, totalSubHexas, totalSubcells, totalPts;
+  if (!boundaryOnly)
+  {
+    totalSubLines = (num1DPts-1)*numLines;
+    totalSubTriangles = (num1DPts-1)*(num1DPts-1)*numTriangles;
+    totalSubQuads = (num1DPts-1)*(num1DPts-1)*numQuads;
+    totalSubHexas = (num1DPts-1)*(num1DPts-1)*(num1DPts-1)*numHexas;
+    totalPts = num1DPts*numLines + num1DPts*(num1DPts+1)/2*numTriangles + num1DPts*num1DPts*numQuads + num1DPts*num1DPts*num1DPts*numHexas;
+  }
+  else
+  {
+    totalSubLines = 3*(num1DPts-1)*numTriangles + 4*(num1DPts-1)*numQuads;
+    totalSubTriangles = 0;
+    totalSubQuads = 6*(num1DPts-1)*(num1DPts-1)*numHexas;
+    totalSubHexas = 0;
+    totalPts = 2*numLines + 3*num1DPts*numTriangles + 4*num1DPts*numQuads + 6*num1DPts*num1DPts*numHexas;
+  }
+  totalSubcells = totalSubLines + totalSubTriangles + totalSubQuads + totalSubHexas;
 
   // Topology
   topology = grid.GetTopology();
@@ -80,7 +95,10 @@ void XDMFExporter::exportFunction(FunctionPtr function, const string& functionNa
   if (spaceDim == 1)
     connArray->SetNumberOfElements(2*numLines+totalPts);
   else
-    connArray->SetNumberOfElements(totalSubcells + 3*totalSubTriangles + 4*totalSubQuads + 8*totalSubHexas);
+    if (!boundaryOnly)
+      connArray->SetNumberOfElements(totalSubcells + 3*totalSubTriangles + 4*totalSubQuads + 8*totalSubHexas);
+    else
+      connArray->SetNumberOfElements(4*totalSubcells + 3*totalSubTriangles + 4*totalSubQuads + 8*totalSubHexas);
   // Geometry
   geometry = grid.GetGeometry();
   if (spaceDim == 1)
@@ -117,6 +135,8 @@ void XDMFExporter::exportFunction(FunctionPtr function, const string& functionNa
   else
     valArray->SetNumberOfElements(3*totalPts);
 
+  cout << connArray->GetNumberOfElements() << " " << ptArray->GetNumberOfElements() << " " << valArray->GetNumberOfElements() << endl;
+
   int connIndex = 0;
   int ptIndex = 0;
   int valIndex = 0;
@@ -142,7 +162,6 @@ void XDMFExporter::exportFunction(FunctionPtr function, const string& functionNa
     volumeBasisCache->setPhysicalCellNodes(physicalCellNodes, vector<GlobalIndexType>(1,cellIndex), createSideCache);
 
     int numSides = createSideCache ? cellTopoPtr->getSideCount() : 1;
-    cout << numSides << endl;
     
     int sideDim = spaceDim - 1;
     

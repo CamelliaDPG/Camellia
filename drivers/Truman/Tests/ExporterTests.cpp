@@ -118,10 +118,12 @@ int main(int argc, char *argv[])
     FunctionPtr y2 = Function::yn(2);
     FunctionPtr function = x2 + y2;
     FunctionPtr vect = Function::vectorize(x2, y2);
+    FunctionPtr fbdr = Function::restrictToCellBoundary(function);
 
     XDMFExporter exporter(mesh);
-    exporter.exportFunction(function, "function2");
-    exporter.exportFunction(vect, "vect2");
+    // exporter.exportFunction(function, "function2");
+    // exporter.exportFunction(vect, "vect2");
+    exporter.exportFunction(fbdr, "boundary2");
   }
 
   {
