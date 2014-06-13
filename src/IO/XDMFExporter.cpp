@@ -64,8 +64,7 @@ void XDMFExporter::exportFunction(FunctionPtr function, const string& functionNa
     if (cell->topology()->getKey() == shards::Hexahedron<8>::key) numHexas++;
     // cout << _mesh->cellPolyOrder(*cellIt) << endl;
   }
-  cout << numLines << " " << numTriangles << " " << numQuads << endl;
-  int totalSubLines, totalSubTriangles, totalSubQuads, totalSubHexas, totalSubcells, totalPts, totalBoundaryLines;
+  int totalSubLines, totalSubTriangles, totalSubQuads, totalSubHexas, totalSubcells, totalPts, totalBoundaryPts, totalBoundaryLines, totalBoundaryFaces;
   if (!boundaryOnly)
   {
     totalSubLines = (num1DPts-1)*numLines;
@@ -73,42 +72,63 @@ void XDMFExporter::exportFunction(FunctionPtr function, const string& functionNa
     totalSubQuads = (num1DPts-1)*(num1DPts-1)*numQuads;
     totalSubHexas = (num1DPts-1)*(num1DPts-1)*(num1DPts-1)*numHexas;
     totalPts = num1DPts*numLines + num1DPts*(num1DPts+1)/2*numTriangles + num1DPts*num1DPts*numQuads + num1DPts*num1DPts*num1DPts*numHexas;
+    totalSubcells = totalSubLines + totalSubTriangles + totalSubQuads + totalSubHexas;
   }
   else
   {
+    totalBoundaryPts = 2*numLines;
     totalBoundaryLines = 3*numTriangles + 4*numQuads;
+    totalBoundaryFaces = 6*numHexas;
     totalSubLines = 3*(num1DPts-1)*numTriangles + 4*(num1DPts-1)*numQuads;
     totalSubTriangles = 0;
     totalSubQuads = 6*(num1DPts-1)*(num1DPts-1)*numHexas;
     totalSubHexas = 0;
     totalPts = 2*numLines + 3*num1DPts*numTriangles + 4*num1DPts*numQuads + 6*num1DPts*num1DPts*numHexas;
+    totalSubcells = totalBoundaryPts + totalSubLines + totalSubTriangles + totalSubQuads + totalSubHexas;
   }
-  totalSubcells = totalSubLines + totalSubTriangles + totalSubQuads + totalSubHexas;
-  cout << totalSubcells << " " << totalPts << endl;
 
   // Topology
   topology = grid.GetTopology();
   topology->SetTopologyType(XDMF_MIXED);
-  if (spaceDim == 1)
-    topology->SetNumberOfElements(numLines);
-  else
-    if (!boundaryOnly)
+  if (!boundaryOnly)
+  {
+    if (spaceDim == 1)
+      topology->SetNumberOfElements(numLines);
+    else
       topology->SetNumberOfElements(totalSubcells);
-    else
-    topology->SetNumberOfElements(totalBoundaryLines);
-  connArray = topology->GetConnectivity();
-  if (spaceDim == 1)
-    connArray->SetNumberOfElements(2*numLines+totalPts);
+  }
   else
-    if (!boundaryOnly)
-      connArray->SetNumberOfElements(totalSubcells + 3*totalSubTriangles + 4*totalSubQuads + 8*totalSubHexas);
+  {
+    if (spaceDim == 1)
+    {
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "XDMFExporter does not work on 1D boundary value only functions");
+      // topology->SetNumberOfElements(totalBoundaryPts);
+    }
+    else if (spaceDim == 2)
+      topology->SetNumberOfElements(totalBoundaryLines);
+    else if (spaceDim == 3)
+      topology->SetNumberOfElements(totalSubQuads);
+  }
+  connArray = topology->GetConnectivity();
+  if (!boundaryOnly)
+  {
+    if (spaceDim == 1)
+      connArray->SetNumberOfElements(2*numLines+totalPts);
     else
+      connArray->SetNumberOfElements(totalSubcells + 3*totalSubTriangles + 4*totalSubQuads + 8*totalSubHexas);
+  }
+  else
+  {
+    if (spaceDim == 1)
+      connArray->SetNumberOfElements(3*totalBoundaryPts);
+    if (spaceDim == 2)
       connArray->SetNumberOfElements(2*totalBoundaryLines + totalPts);
+    if (spaceDim == 3)
+      connArray->SetNumberOfElements(5*totalSubQuads);
+  }
   // Geometry
   geometry = grid.GetGeometry();
-  if (spaceDim == 1)
-    geometry->SetGeometryType(XDMF_GEOMETRY_XY);
-  else if (spaceDim == 2)
+  if (spaceDim < 3)
     geometry->SetGeometryType(XDMF_GEOMETRY_XY);
   else if (spaceDim == 3)
     geometry->SetGeometryType(XDMF_GEOMETRY_XYZ);
@@ -140,7 +160,6 @@ void XDMFExporter::exportFunction(FunctionPtr function, const string& functionNa
   else
     valArray->SetNumberOfElements(3*totalPts);
 
-  cout << connArray->GetNumberOfElements() << " " << ptArray->GetNumberOfElements() << " " << valArray->GetNumberOfElements() << endl;
 
   int connIndex = 0;
   int ptIndex = 0;

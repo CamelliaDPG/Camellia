@@ -69,9 +69,11 @@ int main(int argc, char *argv[])
 
     FunctionPtr x = Function::xn(1);
     FunctionPtr function = x;
+    // FunctionPtr fbdr = Function::restrictToCellBoundary(function);
 
     XDMFExporter exporter(mesh);
     exporter.exportFunction(function, "function1");
+    // exporter.exportFunction(fbdr, "boundary1");
   }
   {
   // 2D tests
@@ -121,8 +123,8 @@ int main(int argc, char *argv[])
     FunctionPtr fbdr = Function::restrictToCellBoundary(function);
 
     XDMFExporter exporter(mesh);
-    // exporter.exportFunction(function, "function2");
-    // exporter.exportFunction(vect, "vect2");
+    exporter.exportFunction(function, "function2");
+    exporter.exportFunction(vect, "vect2");
     exporter.exportFunction(fbdr, "boundary2");
   }
 
@@ -180,10 +182,12 @@ int main(int argc, char *argv[])
     FunctionPtr y = Function::yn(1);
     FunctionPtr z = Function::zn(1);
     FunctionPtr function = x + y + z;
+    FunctionPtr fbdr = Function::restrictToCellBoundary(function);
     FunctionPtr vect = Function::vectorize(x, y, z);
 
     XDMFExporter exporter(mesh);
     exporter.exportFunction(function, "function3");
+    exporter.exportFunction(fbdr, "boundary3");
     exporter.exportFunction(vect, "vect3");
   }
 }
