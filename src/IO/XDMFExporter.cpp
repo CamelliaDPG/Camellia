@@ -1,4 +1,4 @@
-//TODO: Vector support, boundary functions, adaptive subdivision
+//TODO: boundary functions, adaptive subdivision
 // pass in vector of functions, override creates vector of one, another override packages solutions into vector
 #include "SolutionExporter.h"
 #include "CamelliaConfig.h"
@@ -36,7 +36,7 @@ void XDMFExporter::exportFunction(FunctionPtr function, const string& functionNa
   topology->SetTopologyType(XDMF_MIXED);
   
   bool defaultPts = (num1DPts == 0);
-  int pOrder = 4;
+  int pOrder = 1;
   if (defaultPts)
     if (pOrder < 2)
       num1DPts = 2;
@@ -102,10 +102,8 @@ void XDMFExporter::exportFunction(FunctionPtr function, const string& functionNa
   int numFcnComponents;
   if (function->rank() == 0)
     numFcnComponents = 1;
-    // vals->SetNumberOfComponents(1);
   else if (function->rank() == 1)
     numFcnComponents = spaceDim;
-    // vals->SetNumberOfComponents(3);
   else
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unhandled function rank");
   if (numFcnComponents == 1)
@@ -144,6 +142,7 @@ void XDMFExporter::exportFunction(FunctionPtr function, const string& functionNa
     volumeBasisCache->setPhysicalCellNodes(physicalCellNodes, vector<GlobalIndexType>(1,cellIndex), createSideCache);
 
     int numSides = createSideCache ? cellTopoPtr->getSideCount() : 1;
+    cout << numSides << endl;
     
     int sideDim = spaceDim - 1;
     
@@ -290,8 +289,6 @@ void XDMFExporter::exportFunction(FunctionPtr function, const string& functionNa
               connIndex++;
               connArray->SetValue(connIndex, ind4);
               connIndex++;
-              // vtkIdType subCell[4] = {ind1, ind2, ind3, ind4};
-              // ug->InsertNextCell((int)VTK_QUAD, 4, subCell);
             }
           }
         }
@@ -313,8 +310,6 @@ void XDMFExporter::exportFunction(FunctionPtr function, const string& functionNa
               connIndex++;
               connArray->SetValue(connIndex, ind3);
               connIndex++;
-              // vtkIdType subCell[3] = {ind1, ind2, ind3};
-              // ug->InsertNextCell((int)VTK_TRIANGLE, 3, subCell);
 
               if (i < num1DPts-2-j)
               {
@@ -329,8 +324,6 @@ void XDMFExporter::exportFunction(FunctionPtr function, const string& functionNa
                 connIndex++;
                 connArray->SetValue(connIndex, ind3);
                 connIndex++;
-                // vtkIdType subCell[3] = {ind1, ind2, ind3};
-                // ug->InsertNextCell((int)VTK_TRIANGLE, 3, subCell);
               }
 
               subcellStartIndex++;
@@ -373,8 +366,6 @@ void XDMFExporter::exportFunction(FunctionPtr function, const string& functionNa
                 connIndex++;
                 connArray->SetValue(connIndex, ind8);
                 connIndex++;
-                // vtkIdType subCell[8] = {ind1, ind2, ind3, ind4, ind5, ind6, ind7, ind8};
-                // ug->InsertNextCell((int)VTK_HEXAHEDRON, 8, subCell);
               }
             }
           }
@@ -391,7 +382,6 @@ void XDMFExporter::exportFunction(FunctionPtr function, const string& functionNa
             ptIndex++;
             ptArray->SetValue(ptIndex, 0);
             ptIndex++;
-            // points->InsertNextPoint((*physicalPoints)(0, pointIndex, 0), 0.0, 0.0);
           }
           else if (spaceDim == 2)
           {
@@ -400,8 +390,6 @@ void XDMFExporter::exportFunction(FunctionPtr function, const string& functionNa
             ptArray->SetValue(ptIndex, (*physicalPoints)(0, pointIndex, 1));
             ptIndex++;
           }
-            // points->InsertNextPoint((*physicalPoints)(0, pointIndex, 0),
-            //   (*physicalPoints)(0, pointIndex, 1), 0.0);
           else
           {
             ptArray->SetValue(ptIndex, (*physicalPoints)(0, pointIndex, 0));
@@ -411,14 +399,11 @@ void XDMFExporter::exportFunction(FunctionPtr function, const string& functionNa
             ptArray->SetValue(ptIndex, (*physicalPoints)(0, pointIndex, 2));
             ptIndex++;
           }
-            // points->InsertNextPoint((*physicalPoints)(0, pointIndex, 0),
-            //   (*physicalPoints)(0, pointIndex, 1), (*physicalPoints)(0, pointIndex, 2));
           switch(numFcnComponents)
           {
             case 1:
             valArray->SetValue(valIndex, computedValues(0, pointIndex));
             valIndex++;
-            // vals->InsertNextTuple1(computedValues(0, pointIndex));
             break;
             case 2:
             valArray->SetValue(valIndex, computedValues(0, pointIndex, 0));
@@ -427,7 +412,6 @@ void XDMFExporter::exportFunction(FunctionPtr function, const string& functionNa
             valIndex++;
             valArray->SetValue(valIndex, 0);
             valIndex++;
-            // vals->InsertNextTuple2(computedValues(0, pointIndex, 0), computedValues(0, pointIndex, 1));
             break;
             case 3:
             valArray->SetValue(valIndex, computedValues(0, pointIndex, 0));
@@ -436,7 +420,6 @@ void XDMFExporter::exportFunction(FunctionPtr function, const string& functionNa
             valIndex++;
             valArray->SetValue(valIndex, computedValues(0, pointIndex, 2));
             valIndex++;
-            // vals->InsertNextTuple3(computedValues(0, pointIndex, 0), computedValues(0, pointIndex, 1), computedValues(0, pointIndex, 2));
             break;
             default:
             TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unsupported number of components");
@@ -458,28 +441,5 @@ void XDMFExporter::exportFunction(FunctionPtr function, const string& functionNa
     dom.Write((functionName+".xmf").c_str());
 
     cout << "Wrote " <<  functionName << ".xmf" << endl;
-
-//     ug->SetPoints(points);
-//     points->Delete();
-
-//     ug->GetPointData()->AddArray(vals);
-//     vals->Delete();
-
-//     vtkXMLUnstructuredGridWriter* wr = vtkXMLUnstructuredGridWriter::New();
-// #if VTK_MAJOR_VERSION <= 5
-//     wr->SetInput(ug);
-// #else
-//     wr->SetInputData(ug);
-// #endif
-//     ug->Delete();
-//     wr->SetFileName((functionName+".vtu").c_str());
-//     wr->SetDataModeToBinary();
-//     // wr->SetDataModeToAscii();
-//     wr->Update();
-//     wr->Write();
-//     wr->Delete();
-
-//     cout << "Wrote " <<  functionName << ".vtu" << endl;
-//   }
 }
 #endif
