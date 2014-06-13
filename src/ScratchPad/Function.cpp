@@ -1146,6 +1146,10 @@ FunctionPtr Function::vectorize(FunctionPtr f1, FunctionPtr f2) {
   return Teuchos::rcp( new VectorizedFunction(f1,f2) );
 }
 
+FunctionPtr Function::vectorize(FunctionPtr f1, FunctionPtr f2, FunctionPtr f3) {
+  return Teuchos::rcp( new VectorizedFunction(f1,f2,f3) );
+}
+
 FunctionPtr Function::null() {
   static FunctionPtr _null = Teuchos::rcp( (Function*) NULL );
   return _null;

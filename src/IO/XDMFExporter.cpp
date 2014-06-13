@@ -45,13 +45,6 @@ void XDMFExporter::exportFunction(FunctionPtr function, const string& functionNa
       // num1DPts = pOrder+1;
 
   int spaceDim = _mesh->getSpaceDim();
-  // if (function->rank() == 0)
-//     vals->SetNumberOfComponents(1);
-//   else if (function->rank() == 1)
-//     vals->SetNumberOfComponents(3);
-//   else
-//     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unhandled function rank");
-//   vals->SetName(functionName.c_str());
 
   unsigned int total_vertices = 0;
   
@@ -106,10 +99,25 @@ void XDMFExporter::exportFunction(FunctionPtr function, const string& functionNa
   // Node Data
   nodedata.SetName(functionName.c_str());
   nodedata.SetAttributeCenter(XDMF_ATTRIBUTE_CENTER_NODE);
-  nodedata.SetAttributeType(XDMF_ATTRIBUTE_TYPE_SCALAR);
+  int numFcnComponents;
+  if (function->rank() == 0)
+    numFcnComponents = 1;
+    // vals->SetNumberOfComponents(1);
+  else if (function->rank() == 1)
+    numFcnComponents = spaceDim;
+    // vals->SetNumberOfComponents(3);
+  else
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unhandled function rank");
+  if (numFcnComponents == 1)
+    nodedata.SetAttributeType(XDMF_ATTRIBUTE_TYPE_SCALAR);
+  else
+    nodedata.SetAttributeType(XDMF_ATTRIBUTE_TYPE_VECTOR);
   valArray = nodedata.GetValues();
   valArray->SetNumberType(XDMF_FLOAT64_TYPE);
-  valArray->SetNumberOfElements(totalPts);
+  if (numFcnComponents == 1)
+    valArray->SetNumberOfElements(totalPts);
+  else
+    valArray->SetNumberOfElements(3*totalPts);
 
   int connIndex = 0;
   int ptIndex = 0;
@@ -403,24 +411,36 @@ void XDMFExporter::exportFunction(FunctionPtr function, const string& functionNa
             ptArray->SetValue(ptIndex, (*physicalPoints)(0, pointIndex, 2));
             ptIndex++;
           }
-          valArray->SetValue(valIndex, computedValues(0, pointIndex));
-          valIndex++;
             // points->InsertNextPoint((*physicalPoints)(0, pointIndex, 0),
             //   (*physicalPoints)(0, pointIndex, 1), (*physicalPoints)(0, pointIndex, 2));
-          // switch(vals->GetNumberOfComponents())
-          // {
-          //   case 1:
-          //   // vals->InsertNextTuple1(computedValues(0, pointIndex));
-          //   break;
-          //   case 2:
-          //   // vals->InsertNextTuple2(computedValues(0, pointIndex, 0), computedValues(0, pointIndex, 1));
-          //   break;
-          //   case 3:
-          //   // vals->InsertNextTuple3(computedValues(0, pointIndex, 0), computedValues(0, pointIndex, 1), computedValues(0, pointIndex, 2));
-          //   break;
-          //   default:
-          //   TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unsupported number of components");
-          // }
+          switch(numFcnComponents)
+          {
+            case 1:
+            valArray->SetValue(valIndex, computedValues(0, pointIndex));
+            valIndex++;
+            // vals->InsertNextTuple1(computedValues(0, pointIndex));
+            break;
+            case 2:
+            valArray->SetValue(valIndex, computedValues(0, pointIndex, 0));
+            valIndex++;
+            valArray->SetValue(valIndex, computedValues(0, pointIndex, 1));
+            valIndex++;
+            valArray->SetValue(valIndex, 0);
+            valIndex++;
+            // vals->InsertNextTuple2(computedValues(0, pointIndex, 0), computedValues(0, pointIndex, 1));
+            break;
+            case 3:
+            valArray->SetValue(valIndex, computedValues(0, pointIndex, 0));
+            valIndex++;
+            valArray->SetValue(valIndex, computedValues(0, pointIndex, 1));
+            valIndex++;
+            valArray->SetValue(valIndex, computedValues(0, pointIndex, 2));
+            valIndex++;
+            // vals->InsertNextTuple3(computedValues(0, pointIndex, 0), computedValues(0, pointIndex, 1), computedValues(0, pointIndex, 2));
+            break;
+            default:
+            TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unsupported number of components");
+          }
           total_vertices++;
         }
       }

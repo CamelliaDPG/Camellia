@@ -117,9 +117,11 @@ int main(int argc, char *argv[])
     FunctionPtr x2 = Function::xn(2);
     FunctionPtr y2 = Function::yn(2);
     FunctionPtr function = x2 + y2;
+    FunctionPtr vect = Function::vectorize(x2, y2);
 
     XDMFExporter exporter(mesh);
     exporter.exportFunction(function, "function2");
+    exporter.exportFunction(vect, "vect2");
   }
 
   {
@@ -176,8 +178,10 @@ int main(int argc, char *argv[])
     FunctionPtr y = Function::yn(1);
     FunctionPtr z = Function::zn(1);
     FunctionPtr function = x + y + z;
+    FunctionPtr vect = Function::vectorize(x, y, z);
 
     XDMFExporter exporter(mesh);
     exporter.exportFunction(function, "function3");
+    exporter.exportFunction(vect, "vect3");
   }
 }
