@@ -22,11 +22,11 @@ public:
   
   static MeshPtr quadMesh(BilinearFormPtr bf, int H1Order, int pToAddTest=2,
                           double width=1.0, double height=1.0, int horizontalElements=1, int verticalElements=1, bool divideIntoTriangles=false,
-                          double x0=0.0, double y0=0.0);
+                          double x0=0.0, double y0=0.0, vector<PeriodicBCPtr> periodicBCs=vector<PeriodicBCPtr>());
   
   static MeshPtr quadMeshMinRule(BilinearFormPtr bf, int H1Order, int pToAddTest=2,
                                  double width=1.0, double height=1.0, int horizontalElements=1, int verticalElements=1, bool divideIntoTriangles=false,
-                                 double x0=0.0, double y0=0.0);
+                                 double x0=0.0, double y0=0.0, vector<PeriodicBCPtr> periodicBCs=vector<PeriodicBCPtr>());
   
   static MeshPtr quadMesh(BilinearFormPtr bf, int H1Order, FieldContainer<double> &quadNodes, int pToAddTest=2);
   

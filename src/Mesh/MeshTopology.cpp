@@ -39,11 +39,18 @@ MeshTopology::MeshTopology(MeshGeometryPtr meshGeometry, vector<PeriodicBCPtr> p
 
   init(spaceDim);
   _periodicBCs = periodicBCs;
-  _vertices = meshGeometry->vertices();
   
-  for (int vertexIndex=0; vertexIndex<_vertices.size(); vertexIndex++) {
-    _vertexMap[_vertices[vertexIndex]] = vertexIndex;
+  vector< vector<double> > vertices = meshGeometry->vertices();
+  
+  vector<int> myVertexIndexForMeshGeometryIndex(vertices.size());
+  for (int i=0; i<vertices.size(); i++) {
+    myVertexIndexForMeshGeometryIndex[i] = getVertexIndexAdding(vertices[i], 1e-14);
   }
+//  _vertices = meshGeometry->vertices();
+  
+//  for (int vertexIndex=0; vertexIndex<_vertices.size(); vertexIndex++) {
+//    _vertexMap[_vertices[vertexIndex]] = vertexIndex;
+//  }
   
   TEUCHOS_TEST_FOR_EXCEPTION(meshGeometry->cellTopos().size() != meshGeometry->elementVertices().size(), std::invalid_argument,
                              "length of cellTopos != length of elementVertices");
@@ -52,7 +59,12 @@ MeshTopology::MeshTopology(MeshGeometryPtr meshGeometry, vector<PeriodicBCPtr> p
   
   for (int i=0; i<numElements; i++) {
     CellTopoPtr cellTopo = meshGeometry->cellTopos()[i];
-    vector< unsigned > cellVertices = meshGeometry->elementVertices()[i];
+    vector< unsigned > cellVerticesInMeshGeometry = meshGeometry->elementVertices()[i];
+    vector<unsigned> cellVertices;
+    for (int j=0; j<cellVerticesInMeshGeometry.size(); j++) {
+      cellVertices.push_back(myVertexIndexForMeshGeometryIndex[cellVerticesInMeshGeometry[j]]);
+    }
+    
     addCell(cellTopo, cellVertices);
   }
 }
@@ -782,6 +794,10 @@ unsigned MeshTopology::getVertexIndexAdding(const vector<double> &vertex, double
       vector<double> matchingPoint = _periodicBCs[i]->getMatchingPoint(vertex, matchingSide);
       unsigned equivalentVertexIndex = getVertexIndexAdding(matchingPoint, tol);
       _equivalentNodeViaPeriodicBC[make_pair(vertexIndex, matchingBC)] = equivalentVertexIndex;
+      
+//      cout << "vertex " << vertexIndex << " is equivalent to " << equivalentVertexIndex << endl;
+//      printVertex(vertexIndex);
+//      printVertex(equivalentVertexIndex);
     }
   }
   

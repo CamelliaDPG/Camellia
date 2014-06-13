@@ -31,6 +31,8 @@
 
 #include "Intrepid_HGRAD_QUAD_Cn_FEM.hpp"
 
+#include "GlobalDofAssignment.h"
+
 const static string S_GDAMinimumRuleTests_U1 = "u_1";
 const static string S_GDAMinimumRuleTests_U2 = "u_2";
 const static string S_GDAMinimumRuleTests_PHI = "\\phi";
@@ -474,8 +476,8 @@ void GDAMinimumRuleTests::runTests(int &numTestsRun, int &numTestsPassed) {
 //  }
 //  numTestsRun++;
 //  teardown();
-//  
-//  //  cout << "testHangingNodePoisson3D complete.\n";
+  
+//  cout << "testHangingNodePoisson3D complete.\n";
   
   setup();
   if (testGlobalToLocalToGlobalConsistency()) {
@@ -913,8 +915,8 @@ bool GDAMinimumRuleTests::testHangingNodePoisson3D() {
   cellIDs.insert(1);
   mesh->hRefine(cellIDs, RefinementPattern::regularRefinementPatternHexahedron());
   
-//  cout << "Poisson 3D hanging node mesh after one refinement:\n";
-//  mesh->getTopology()->printAllEntities();
+  cout << "Poisson 3D hanging node mesh after one refinement:\n";
+  mesh->getTopology()->printAllEntities();
   
   if (!checkLocalGlobalConsistency(mesh) ) {
     cout << "FAILURE: after h-refinement, Poisson 3D mesh fails local-to-global consistency check.\n";

@@ -20,14 +20,20 @@ class Cone_U0 : public SimpleFunction {
   double _r; // cone radius
   double _h; // height
   double _x0, _y0; // center
+  bool _usePeriodicData; // if true, for x > 0.5 we set x = x-1; similarly for y
 public:
-  Cone_U0(double x0 = 0, double y0 = 0.25, double r = 0.1, double h = 1.0) {
+  Cone_U0(double x0 = 0, double y0 = 0.25, double r = 0.1, double h = 1.0, bool usePeriodicData = true) {
     _x0 = x0;
     _y0 = y0;
     _r = r;
     _h = h;
+    _usePeriodicData = usePeriodicData;
   }
   double value(double x, double y) {
+    if (_usePeriodicData) {
+      if (x > 0.5) x = x - 1;
+      if (y > 0.5) y = y - 1;
+    }
     double d = sqrt( (x-_x0) * (x-_x0) + (y-_y0) * (y-_y0) );
     double u = max(0.0, _h * (1 - d/_r));
     
@@ -78,7 +84,7 @@ int main(int argc, char *argv[]) {
   
   Teuchos::CommandLineProcessor cmdp(false,true); // false: don't throw exceptions; true: do return errors for unrecognized options
 
-  bool useCondensedSolve = true; // condensed solve not yet compatible with minimum rule meshes
+  bool useCondensedSolve = false; // condensed solve not yet compatible with minimum rule meshes
   
   int numGridPoints = 32; // in x,y -- idea is to keep the overall order of approximation constant
   int k = 4; // poly order for u
@@ -89,6 +95,7 @@ int main(int argc, char *argv[]) {
   int delta_k = 2;   // test space enrichment: should be 2 for 2D
   bool useMumpsIfAvailable  = true;
   bool convertSolutionsToVTK = false; // when true assumes we've already run with precisely the same options, except without VTK support (so we have a bunch of .soln files)
+  bool usePeriodicBCs = true;
   
   cmdp.setOption("polyOrder",&k,"polynomial order for field variable u");
   cmdp.setOption("delta_k", &delta_k, "test space polynomial order enrichment");
@@ -145,7 +152,8 @@ int main(int argc, char *argv[]) {
   FunctionPtr x = Function::xn(1);
   FunctionPtr y = Function::yn(1);
   
-  FunctionPtr c = Function::vectorize(y-0.5, 0.5-x);
+  FunctionPtr c = Function::vectorize(Function::constant(0.5), Function::constant(0.5));
+//  FunctionPtr c = Function::vectorize(y-0.5, 0.5-x);
 //  FunctionPtr c = Function::vectorize(y, x);
   FunctionPtr n = Function::normal();
   
@@ -155,25 +163,41 @@ int main(int argc, char *argv[]) {
   bf->addTerm(- theta * u, c * v->grad());
 //  bf->addTerm(theta * u_hat, (c * n) * v);
   bf->addTerm(qHat, v);
-  
+
   double width = 2.0, height = 2.0;
   int horizontalCells = numCells, verticalCells = numCells;
   double x0 = -0.5; double y0 = -0.5;
   
-  MeshPtr mesh = MeshFactory::quadMesh(bf, H1Order, delta_k, width, height,
-                                       horizontalCells, verticalCells, false, x0, y0);
+  if (usePeriodicBCs) {
+    x0 = 0.0; y0 = 0.0;
+    width = 1.0; height = 1.0;
+  }
   
-  FunctionPtr u0 = Teuchos::rcp( new Cone_U0 );
+  BCPtr bc = BC::bc();
+  vector< PeriodicBCPtr > periodicBCs;
+  if (! usePeriodicBCs) {
+    SpatialFilterPtr inflowFilter = Teuchos::rcp( new InflowFilterForClockwisePlanarRotation(x0,x0+width,y0,y0+height,0.5,0.5));
+    //  bc->addDirichlet(u_hat, SpatialFilter::allSpace(), Function::zero());
+    bc->addDirichlet(qHat, inflowFilter, Function::zero()); // zero BCs enforced at the inflow boundary.
+  } else {
+    periodicBCs.push_back(PeriodicBC::xIdentification(x0, x0+width));
+    periodicBCs.push_back(PeriodicBC::yIdentification(y0, y0+height));
+  }
+  
+  MeshPtr mesh = MeshFactory::quadMeshMinRule(bf, H1Order, delta_k, width, height,
+                                              horizontalCells, verticalCells, false, x0, y0, periodicBCs);
+  
+  if (usePeriodicBCs) {
+    // check that there are no boundary elements:
+    MeshTopologyPtr meshTopo = mesh->getTopology();
+    
+  }
+  
+  FunctionPtr u0 = Teuchos::rcp( new Cone_U0(0.0, 0.25, 0.1, 1.0, usePeriodicBCs) );
   
   RHSPtr initialRHS = RHS::rhs();
   initialRHS->addTerm(u0 / dt * v);
   initialRHS->addTerm((1-theta) * u0 * c * v->grad());
-  
-  BCPtr bc = BC::bc();
-  
-  SpatialFilterPtr inflowFilter = Teuchos::rcp( new InflowFilterForClockwisePlanarRotation(x0,x0+width,y0,y0+height,0.5,0.5));
-//  bc->addDirichlet(u_hat, SpatialFilter::allSpace(), Function::zero());
-  bc->addDirichlet(qHat, inflowFilter, Function::zero()); // zero BCs enforced at the inflow boundary.
   
   IPPtr ip;
   ip = Teuchos::rcp( new IP );
