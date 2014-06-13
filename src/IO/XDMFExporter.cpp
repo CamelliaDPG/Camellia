@@ -1,3 +1,5 @@
+//TODO: Vector support, boundary functions, adaptive subdivision
+// pass in vector of functions, override creates vector of one, another override packages solutions into vector
 #include "SolutionExporter.h"
 #include "CamelliaConfig.h"
 
@@ -24,7 +26,7 @@ void XDMFExporter::exportFunction(FunctionPtr function, const string& functionNa
   // Domain
   root.Insert(&domain);
   // Grid
-  grid.SetName("Demonstration Grid");
+  grid.SetName("Grid");
   domain.Insert(&grid);
   time.SetTimeType(XDMF_TIME_SINGLE);
   time.SetValue(0);
@@ -34,7 +36,7 @@ void XDMFExporter::exportFunction(FunctionPtr function, const string& functionNa
   topology->SetTopologyType(XDMF_MIXED);
   
   bool defaultPts = (num1DPts == 0);
-  int pOrder = 3;
+  int pOrder = 4;
   if (defaultPts)
     if (pOrder < 2)
       num1DPts = 2;
@@ -70,8 +72,9 @@ void XDMFExporter::exportFunction(FunctionPtr function, const string& functionNa
   int totalSubLines = (num1DPts-1)*numLines;
   int totalSubTriangles = (num1DPts-1)*(num1DPts-1)*numTriangles;
   int totalSubQuads = (num1DPts-1)*(num1DPts-1)*numQuads;
-  int totalSubcells = totalSubLines + totalSubTriangles + totalSubQuads;
-  int totalPts = num1DPts*numLines + num1DPts*(num1DPts+1)/2*numTriangles + num1DPts*num1DPts*numQuads;
+  int totalSubHexas = (num1DPts-1)*(num1DPts-1)*(num1DPts-1)*numHexas;
+  int totalSubcells = totalSubLines + totalSubTriangles + totalSubQuads + totalSubHexas;
+  int totalPts = num1DPts*numLines + num1DPts*(num1DPts+1)/2*numTriangles + num1DPts*num1DPts*numQuads + num1DPts*num1DPts*num1DPts*numHexas;
 
   // Topology
   topology = grid.GetTopology();
@@ -84,7 +87,7 @@ void XDMFExporter::exportFunction(FunctionPtr function, const string& functionNa
   if (spaceDim == 1)
     connArray->SetNumberOfElements(2*numLines+totalPts);
   else
-    connArray->SetNumberOfElements(totalSubcells + 3*totalSubTriangles + 4*totalSubQuads);
+    connArray->SetNumberOfElements(totalSubcells + 3*totalSubTriangles + 4*totalSubQuads + 8*totalSubHexas);
   // Geometry
   geometry = grid.GetGeometry();
   if (spaceDim == 1)
@@ -154,8 +157,6 @@ void XDMFExporter::exportFunction(FunctionPtr function, const string& functionNa
           break;
         case shards::Triangle<3>::key:
           numPoints = num1DPts*(num1DPts+1)/2;
-          // for (int i=1; i <= num1DPts; i++)
-          //   numPoints += i;
           break;
         case shards::Hexahedron<8>::key:
           numPoints = num1DPts*num1DPts*num1DPts;
