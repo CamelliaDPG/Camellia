@@ -118,6 +118,7 @@ MeshPtr MeshFactory::quadMesh(Teuchos::ParameterList &parameters) {
     return Teuchos::rcp( new Mesh(meshTopology, bf, H1Order, delta_k, *trialOrderEnhancements, *testOrderEnhancements) );
   } else {
     bool useConformingTraces = parameters.get<bool>("useConformingTraces", true);
+    cout << "periodicBCs size is " << periodicBCs->size() << endl;
     return Teuchos::rcp( new Mesh(vertices, allElementVertices, bf, H1Order, delta_k, useConformingTraces, *trialOrderEnhancements, *testOrderEnhancements, *periodicBCs) );
   }
 }
@@ -182,7 +183,7 @@ MeshPtr MeshFactory::quadMesh(BilinearFormPtr bf, int H1Order, FieldContainer<do
 
 MeshPtr MeshFactory::quadMesh(BilinearFormPtr bf, int H1Order, int pToAddTest,
                               double width, double height, int horizontalElements, int verticalElements, bool divideIntoTriangles,
-                              double x0, double y0) {
+                              double x0, double y0, vector<PeriodicBCPtr> periodicBCs) {
   
   Teuchos::ParameterList pl;
   
@@ -197,13 +198,14 @@ MeshPtr MeshFactory::quadMesh(BilinearFormPtr bf, int H1Order, int pToAddTest,
   pl.set("divideIntoTriangles", divideIntoTriangles);
   pl.set("x0",x0);
   pl.set("y0",y0);
+  pl.set("periodicBCs", &periodicBCs);
 
   return quadMesh(pl);
 }
 
 MeshPtr MeshFactory::quadMeshMinRule(BilinearFormPtr bf, int H1Order, int pToAddTest,
                                       double width, double height, int horizontalElements, int verticalElements,
-                                     bool divideIntoTriangles, double x0, double y0) {
+                                     bool divideIntoTriangles, double x0, double y0, vector<PeriodicBCPtr> periodicBCs) {
   Teuchos::ParameterList pl;
 
   pl.set("useMinRule", true);
@@ -217,7 +219,8 @@ MeshPtr MeshFactory::quadMeshMinRule(BilinearFormPtr bf, int H1Order, int pToAdd
   pl.set("divideIntoTriangles", divideIntoTriangles);
   pl.set("x0",x0);
   pl.set("y0",y0);
-
+  pl.set("periodicBCs", &periodicBCs);
+  
   return quadMesh(pl);
 }
 

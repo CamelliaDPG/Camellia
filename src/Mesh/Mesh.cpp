@@ -82,6 +82,8 @@ Mesh::Mesh(const vector<vector<double> > &vertices, vector< vector<unsigned> > &
            Teuchos::RCP< BilinearForm > bilinearForm, int H1Order, int pToAddTest, bool useConformingTraces,
            map<int,int> trialOrderEnhancements, map<int,int> testOrderEnhancements, vector<PeriodicBCPtr> periodicBCs) {
 
+  cout << "in legacy mesh constructor, periodicBCs size is " << periodicBCs.size() << endl;
+  
   MeshGeometryPtr meshGeometry = Teuchos::rcp( new MeshGeometry(vertices, elementVertices) );
   _meshTopology = Teuchos::rcp( new MeshTopology(meshGeometry, periodicBCs) );
   

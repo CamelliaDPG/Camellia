@@ -369,6 +369,8 @@ unsigned Cell::sideSubcellPermutation(unsigned int sideOrdinal, unsigned int sid
   IndexType subcellEntityIndex = entityIndex(sideSubcdim, subcellOrdinalInCell);
   vector< IndexType > canonicalOrdering = _meshTopo->getEntityVertexIndices(sideSubcdim, subcellEntityIndex);
   shards::CellTopology subEntityTopo = _meshTopo->getEntityTopology(sideSubcdim, subcellEntityIndex);
+  subcellVertexIndices = _meshTopo->getCanonicalEntityNodesViaPeriodicBCs(sideSubcdim, subcellVertexIndices);
+  
   return CamelliaCellTools::permutationMatchingOrder(subEntityTopo, canonicalOrdering, subcellVertexIndices);
 }
 
