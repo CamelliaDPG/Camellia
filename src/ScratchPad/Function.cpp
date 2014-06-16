@@ -1127,6 +1127,11 @@ FunctionPtr Function::normal() { // unit outward-facing normal on each element b
   return _normal;
 }
 
+FunctionPtr Function::normal_1D() { // unit outward-facing normal on each element boundary
+  static FunctionPtr _normal_1D = Teuchos::rcp( new UnitNormalFunction(0) );
+  return _normal_1D;
+}
+
 FunctionPtr Function::sideParity() { // canonical direction on boundary (used for defining fluxes)
   static FunctionPtr _sideParity = Teuchos::rcp( new SideParityFunction );
   return _sideParity;

@@ -232,7 +232,8 @@ MeshPtr MeshFactory::intervalMesh(BilinearFormPtr bf, double xLeft, double xRigh
   vector< vector<IndexType> > elementVertices(n);
   vector<IndexType> oneElement(2);
   for (int i=0; i<n+1; i++) {
-    vertex[0] = xRight + (i * length) / n;
+    vertex[0] = xLeft + (i * length) / n;
+//    cout << "vertex " << i << ": " << vertex[0] << endl;
     vertices[i] = vertex;
     if (i != n) {
       oneElement[0] = i;

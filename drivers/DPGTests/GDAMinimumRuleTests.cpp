@@ -58,6 +58,17 @@ public:
   }
 };
 
+class GDAMinimumRuleTests_ExampleFunction : public SimpleFunction {
+public:
+  double value( double x ) {
+    return 2 * x + 1;
+  }
+  
+  FunctionPtr dx() {
+    return Function::constant(2);
+  }
+};
+
 // boundary value for u
 class GDAMinimumRuleTests_U0 : public Function {
 public:
@@ -272,8 +283,8 @@ SolutionPtr GDAMinimumRuleTests::poissonExactSolution1D(int horizontalCells, int
   VarPtr q = varFactory.testVar("q", HGRAD);
   
   Space phi_hat_space = useH1Traces ? HGRAD : L2; // should not matter
-  VarPtr phi_hat = varFactory.traceVar(S_GDAMinimumRuleTests_PHI_HAT, phi_hat_space);
-  VarPtr psi_hat = varFactory.traceVar("\\widehat{\\psi}_{n}");
+  VarPtr phi_hat = varFactory.fluxVar(S_GDAMinimumRuleTests_PHI_HAT, phi_hat_space);
+  VarPtr psi_hat = varFactory.fluxVar("\\widehat{\\psi}");
   
   VarPtr phi = varFactory.fieldVar(S_GDAMinimumRuleTests_PHI, L2);
   VarPtr psi1 = varFactory.fieldVar("\\psi_1", L2);
@@ -288,7 +299,7 @@ SolutionPtr GDAMinimumRuleTests::poissonExactSolution1D(int horizontalCells, int
   bf->addTerm(psi_hat, q);
   
   int testSpaceEnrichment = 1; //
-  double width = 1.0;
+  double width = 3.14159;
   
   vector<double> dimensions;
   dimensions.push_back(width);
@@ -297,6 +308,9 @@ SolutionPtr GDAMinimumRuleTests::poissonExactSolution1D(int horizontalCells, int
   elementCounts.push_back(horizontalCells);
   
   MeshPtr mesh = MeshFactory::rectilinearMesh(bf, dimensions, elementCounts, H1Order, testSpaceEnrichment);
+  
+//  cout << "entities for 1D mesh:\n";
+//  mesh->getTopology()->printAllEntities();
   
   // rhs = f * v, where f = \Delta phi
   RHSPtr rhs = RHS::rhs();
@@ -309,7 +323,8 @@ SolutionPtr GDAMinimumRuleTests::poissonExactSolution1D(int horizontalCells, int
   SpatialFilterPtr boundary = SpatialFilter::allSpace();
   SolutionPtr solution;
   if (!usePenaltyBCs) {
-    bc->addDirichlet(phi_hat, boundary, phi_exact);
+    FunctionPtr n = Function::normal_1D(); // normal function (-1 or 1)
+    bc->addDirichlet(phi_hat, boundary, phi_exact * n);
     solution = Solution::solution(mesh, bc, rhs, graphNorm);
   } else {
     solution = Solution::solution(mesh, bc, rhs, graphNorm);
@@ -1468,11 +1483,12 @@ bool GDAMinimumRuleTests::testMultiCellMesh() {
     vector< MeshToTest > testList;
     
     // exact solution: for now, we just use a linear phi
-    FunctionPtr x = Function::xn(1);
-    FunctionPtr phi_exact = 2 * x + 1;
+//    FunctionPtr x = Function::xn(1);
+//    FunctionPtr phi_exact = 2 * x + 1;
+    FunctionPtr phi_exact = Teuchos::rcp( new GDAMinimumRuleTests_ExampleFunction );
     
     for (int polyOrder = 1; polyOrder < 3; polyOrder++) {
-      int horizontalCells = 1;
+      int horizontalCells = 2;
       MeshToTest meshParams = make_pair( horizontalCells, polyOrder+1);
       testList.push_back(meshParams);
     }
@@ -1507,6 +1523,9 @@ bool GDAMinimumRuleTests::testMultiCellMesh() {
       double err = (phi_soln-phi_exact)->l2norm(mesh);
       if (err > tol) {
         cout << "GDAMinimumRuleTest Failure: for exactly recoverable 1D Poisson solution, err of " << err << " exceeds tol " << tol << endl;
+        
+        double energyError = soln->energyErrorTotal();
+        cout << "(energy error of soln is " << energyError << ")\n";
         
 #ifdef USE_VTK
         if (Teuchos::GlobalMPISession::getRank()==0) {

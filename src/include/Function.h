@@ -142,7 +142,8 @@ public:
   static FunctionPtr polarize(FunctionPtr f);
   static FunctionPtr vectorize(FunctionPtr f1, FunctionPtr f2);
   static FunctionPtr vectorize(FunctionPtr f1, FunctionPtr f2, FunctionPtr f3);
-  static FunctionPtr normal(); // unit outward-facing normal on each element boundary
+  static FunctionPtr normal();    // unit outward-facing normal on each element boundary
+  static FunctionPtr normal_1D(); // -1 at left side of element, +1 at right
   static FunctionPtr null();
   static FunctionPtr sideParity();
   static FunctionPtr solution(VarPtr var, SolutionPtr soln);
