@@ -931,6 +931,19 @@ void BasisCache::recomputeMeasures() {
         // make unit length
         RealSpaceTools<double>::vectorNorm(normalLengths, _sideNormals, NORM_TWO);
         FunctionSpaceTools::scalarMultiplyDataData<double>(_sideNormals, normalLengths, _sideNormals, true);
+      } else if (_spaceDim == 1) {
+        _sideNormals.resize(_numCells, numCubPoints, _spaceDim); // here, numPoints should be 1
+        unsigned thisSideOrdinal = _sideIndex;
+        unsigned otherSideOrdinal = 1 - thisSideOrdinal;
+        for (int cellOrdinal=0; cellOrdinal<_numCells; cellOrdinal++) {
+          double x_this = _physicalCellNodes(cellOrdinal,thisSideOrdinal,0);
+          double x_other = _physicalCellNodes(cellOrdinal,otherSideOrdinal,0);
+          if (x_this > x_other) {
+            _sideNormals(cellOrdinal,0,0) = 1;
+          } else {
+            _sideNormals(cellOrdinal,0,0) = -1;
+          }
+        }
       }
     }
   }
