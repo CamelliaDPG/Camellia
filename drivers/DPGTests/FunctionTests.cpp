@@ -14,6 +14,8 @@
 #include "MeshFactory.h"
 #include "StokesFormulation.h"
 
+#include "CamelliaCellTools.h"
+
 // "previous solution" value for u -- what Burgers would see, according to InitialGuess.h, in first linear step
 class UPrev : public Function {
 public:
@@ -279,7 +281,8 @@ bool FunctionTests::testBasisSumFunction() {
           }
           
           // test that the restriction to a side works
-          for (int i=0; i<volumeCache->cellTopology().getSideCount(); i++) {
+          int numSides = CamelliaCellTools::getSideCount(volumeCache->cellTopology());
+          for (int i=0; i<numSides; i++) {
             BasisCachePtr mySideCache = volumeCache->getSideBasisCache(i);
             if (! solnFxn->equals(basisSumFxn, mySideCache, tol)) {
               success = false;

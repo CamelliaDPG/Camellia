@@ -48,6 +48,8 @@
 
 #include "Solution.h"
 
+#include "CamelliaCellTools.h"
+
 bool BilinearFormUtility::_warnAboutZeroRowsAndColumns = true;
 
 void BilinearFormUtility::setWarnAboutZeroRowsAndColumns( bool value ) {
@@ -296,7 +298,7 @@ void BilinearFormUtility::computeOptimalStiffnessMatrix(FieldContainer<double> &
   
   BasisCache basisCache(physicalCellNodes, cellTopo, *trialOrdering, cubDegreeTest, true); // DO create side caches, too
   
-  unsigned numSides = cellTopo.getSideCount();
+  unsigned numSides = CamelliaCellTools::getSideCount(cellTopo);
 
   vector<int> testIDs = bilinearForm->testIDs();
   vector<int>::iterator testIterator;

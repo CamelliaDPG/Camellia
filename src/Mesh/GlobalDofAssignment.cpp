@@ -16,6 +16,8 @@
 #include "GDAMinimumRule.h"
 #include "GDAMaximumRule2D.h"
 
+#include "CamelliaCellTools.h"
+
 GlobalDofAssignment::GlobalDofAssignment(MeshTopologyPtr meshTopology, VarFactory varFactory,
                                          DofOrderingFactoryPtr dofOrderingFactory, MeshPartitionPolicyPtr partitionPolicy,
                                          unsigned initialH1OrderTrial, unsigned testOrderEnhancement, bool enforceConformityLocally) {
@@ -48,7 +50,7 @@ GlobalDofAssignment::GlobalDofAssignment(MeshTopologyPtr meshTopology, VarFactor
     
     assignInitialElementType(cellID);
     assignParities(cellID);
-//    unsigned sideCount = cell->topology()->getSideCount();
+//    unsigned sideCount = CamelliaCellTools::getSideCount(*cell->topology());
 //    
 //    vector<int> cellParities(sideCount);
 //    for (int sideOrdinal=0; sideOrdinal<sideCount; sideOrdinal++) {
@@ -91,7 +93,7 @@ void GlobalDofAssignment::assignInitialElementType( GlobalIndexType cellID ) {
 void GlobalDofAssignment::assignParities( GlobalIndexType cellID ) {
   CellPtr cell = _meshTopology->getCell(cellID);
 
-  unsigned sideCount = cell->topology()->getSideCount();
+  unsigned sideCount = CamelliaCellTools::getSideCount(*cell->topology());
   
   vector<int> cellParities(sideCount);
   for (int sideOrdinal=0; sideOrdinal<sideCount; sideOrdinal++) {

@@ -138,31 +138,33 @@ vector<double> PeriodicBC::getMatchingPoint(const std::vector<double> &point, in
   return transformedPoint;
 }
 
-int PeriodicBC::getMatchingSide(const std::vector<double> &point) {
+std::vector<int> PeriodicBC::getMatchingSides(const std::vector<double> &point) {
   // returns 0 if the point matches pointFilter0, 1 if it matches pointFilter1, -1 otherwise.
+  vector<int> matches;
   if (point.size() == 1) {
     if (_pointFilter0->matchesPoint(point[0])) {
-      return 0;
-    } else if (_pointFilter1->matchesPoint(point[0])) {
-      return 1;
+      matches.push_back(0);
+    }
+    if (_pointFilter1->matchesPoint(point[0])) {
+      matches.push_back(1);
     }
   } else if (point.size() == 2) {
     if (_pointFilter0->matchesPoint(point[0],point[1])) {
-      return 0;
+      matches.push_back(0);
     } else if (_pointFilter1->matchesPoint(point[0],point[1])) {
-      return 1;
+      matches.push_back(1);
     }
   } else if (point.size() == 3) {
     if (_pointFilter0->matchesPoint(point[0],point[1],point[2])) {
-      return 0;
+      matches.push_back(0);
     } else if (_pointFilter1->matchesPoint(point[0],point[1],point[2])) {
-      return 1;
+      matches.push_back(1);
     }
   } else {
     cout << "Unsupported point size.\n";
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unsupported point size");
   }
-  return -1;
+  return matches;
 }
 
 PeriodicBCPtr PeriodicBC::periodicBC(SpatialFilterPtr pointFilter1, SpatialFilterPtr pointFilter2, FunctionPtr transform1to2, FunctionPtr transform2to1) {

@@ -18,6 +18,8 @@
 class MeshFactory {
   static map<int,int> _emptyIntIntMap; // just defined here to implement a default argument to constructor (there's likely a better way)
 public:
+  static MeshPtr intervalMesh(BilinearFormPtr bf, double xLeft, double xRight, int numElements, int H1Order, int delta_k); // 1D equispaced
+  
   static MeshPtr quadMesh(Teuchos::ParameterList &parameters);
   
   static MeshPtr quadMesh(BilinearFormPtr bf, int H1Order, int pToAddTest=2,

@@ -49,7 +49,7 @@ IntrepidExtendedTypes::EFunctionSpaceExtended VarFunctionSpaces::efsForSpace(Spa
   if (space == L2)
     return IntrepidExtendedTypes::FUNCTION_SPACE_HVOL;
   if (space == CONSTANT_SCALAR)
-    return IntrepidExtendedTypes::FUNCTION_SPACE_ONE;
+    return IntrepidExtendedTypes::FUNCTION_SPACE_REAL_SCALAR;
   if (space == VECTOR_HGRAD)
     return IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HGRAD;
   if (space == VECTOR_L2)
@@ -71,7 +71,7 @@ Space VarFunctionSpaces::spaceForEFS(IntrepidExtendedTypes::EFunctionSpaceExtend
   if (efs == IntrepidExtendedTypes::FUNCTION_SPACE_HVOL) {
     return L2;
   }
-  if (efs == IntrepidExtendedTypes::FUNCTION_SPACE_ONE) {
+  if (efs == IntrepidExtendedTypes::FUNCTION_SPACE_REAL_SCALAR) {
     return CONSTANT_SCALAR;
   }
   if (efs == IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HGRAD) {
@@ -107,7 +107,7 @@ VarPtr Var::varForTrialID(int trialID, Teuchos::RCP<BilinearForm> bf) {
     space = L2;
     rank = 0;
   }
-  if (efs == IntrepidExtendedTypes::FUNCTION_SPACE_ONE) {
+  if (efs == IntrepidExtendedTypes::FUNCTION_SPACE_REAL_SCALAR) {
     space = CONSTANT_SCALAR;
     rank = 0;
   }

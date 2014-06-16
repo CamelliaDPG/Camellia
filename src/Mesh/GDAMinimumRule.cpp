@@ -53,7 +53,8 @@ void GDAMinimumRule::didHRefine(const set<GlobalIndexType> &parentCellIDs) {
       assignParities(childCellID);
       // determine neighbors, so their parities can be updated below:
       CellPtr childCell = _meshTopology->getCell(childCellID);
-      unsigned childSideCount = childCell->topology()->getSideCount();
+      
+      unsigned childSideCount = CamelliaCellTools::getSideCount(*childCell->topology());
       for (int childSideOrdinal=0; childSideOrdinal<childSideCount; childSideOrdinal++) {
         GlobalIndexType neighborCellID = childCell->getNeighbor(childSideOrdinal).first;
         if (neighborCellID != -1) {
@@ -604,7 +605,7 @@ BasisMap GDAMinimumRule::getBasisMap(GlobalIndexType cellID, SubCellDofIndexInfo
           IndexType descendantSideEntityIndex = appliedConstraintCell->entityIndex(sideDim, subcellInfo.sideOrdinal);
           
           ancestralSideOrdinal = -1;
-          int sideCount = ancestralCell->topology()->getSideCount();
+          int sideCount = CamelliaCellTools::getSideCount(*ancestralCell->topology());
           for (int side=0; side<sideCount; side++) {
             IndexType ancestralSideEntityIndex = ancestralCell->entityIndex(sideDim, side);
             if (ancestralSideEntityIndex == descendantSideEntityIndex) {
@@ -637,7 +638,7 @@ BasisMap GDAMinimumRule::getBasisMap(GlobalIndexType cellID, SubCellDofIndexInfo
           set<IndexType> sidesForSubcell = _meshTopology->getSidesContainingEntity(ancestralSubcellDimension, ancestralSubcellEntityIndex);
 
           ancestralSideOrdinal = -1;
-          int sideCount = ancestralCell->topology()->getSideCount();
+          int sideCount = CamelliaCellTools::getSideCount(*ancestralCell->topology());
           for (int side=0; side<sideCount; side++) {
             IndexType ancestralSideEntityIndex = ancestralCell->entityIndex(sideDim, side);
             if (sidesForSubcell.find(ancestralSideEntityIndex) != sidesForSubcell.end()) {
@@ -1094,7 +1095,7 @@ LocalDofMapperPtr GDAMinimumRule::getDofMapper(GlobalIndexType cellID, CellConst
   
   CellPtr cell = _meshTopology->getCell(cellID);
   CellTopoPtr topo = _elementTypeForCell[cellID]->cellTopoPtr;
-  int sideCount = topo->getSideCount();
+  int sideCount = CamelliaCellTools::getSideCount(*topo);
   int spaceDim = topo->getDimension();
   
   DofOrderingPtr trialOrdering = _elementTypeForCell[cellID]->trialOrderPtr;

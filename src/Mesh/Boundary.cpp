@@ -46,6 +46,8 @@
 
 #include "Teuchos_GlobalMPISession.hpp"
 
+#include "CamelliaCellTools.h"
+
 Boundary::Boundary() {
   
 }
@@ -214,7 +216,8 @@ void Boundary::bcsToImpose( map<  GlobalIndexType, double > &globalDofIndicesAnd
       // 2. Determine global dof indices and values, in one pass per side
       
       // 1. Collect the physicalCellNodes according to sideIndex
-      int numSides = elemTypePtr->cellTopoPtr->getSideCount();
+      
+      int numSides = CamelliaCellTools::getSideCount(*elemTypePtr->cellTopoPtr);
       vector< vector<GlobalIndexType> > physicalCellIndicesPerSide;
       vector< vector<GlobalIndexType> > cellIDsPerSide;
       for (int sideIndex=0; sideIndex<numSides; sideIndex++) {

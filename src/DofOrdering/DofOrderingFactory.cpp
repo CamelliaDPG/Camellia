@@ -41,6 +41,8 @@
 
 #include "Basis.h"
 
+#include "CamelliaCellTools.h"
+
 DofOrderingFactory::DofOrderingFactory(Teuchos::RCP<BilinearForm> bilinearForm) {
   _bilinearForm = bilinearForm;
 }
@@ -98,8 +100,8 @@ DofOrderingPtr DofOrderingFactory::trialOrdering(int polyOrder,
     int basisRank;
     
     if (_bilinearForm->isFluxOrTrace(trialID)) { //lines, in 2D case (TODO: extend to arbitrary dimension)
-      int numSides = cellTopo.getSideCount();
       int sideDim = cellTopo.getDimension() - 1;
+      int numSides = CamelliaCellTools::getSideCount(cellTopo);
       for (int sideOrdinal=0; sideOrdinal<numSides; sideOrdinal++) {
         shards::CellTopology sideTopo = cellTopo.getBaseCellTopologyData(sideDim, sideOrdinal);
         basis = BasisFactory::getConformingBasis( trialIDPolyOrder, sideTopo.getKey(), fs);
@@ -149,7 +151,7 @@ void DofOrderingFactory::addConformingVertexPairings(int varID, DofOrderingPtr d
                                                      const shards::CellTopology &cellTopo) {
   // then we want to identify basis dofs at the vertices...
   map< int, pair<int,int> > cellVertexOrdinalToSideVertexOrdinal; // vertexOrdinal --> pair<sideNumber, vertexNumber>
-  int numSides = cellTopo.getSideCount();
+  int numSides = CamelliaCellTools::getSideCount(cellTopo);
   for (int j=0; j<numSides; j++) {
     int numVerticesPerSide = cellTopo.getVertexCount(1,j); // should be 2
     for (int i=0; i < numVerticesPerSide; i++) {

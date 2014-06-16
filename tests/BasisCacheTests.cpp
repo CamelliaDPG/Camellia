@@ -2,6 +2,8 @@
 
 #include "MeshFactory.h"
 
+#include "CamelliaCellTools.h"
+
 void BasisCacheTests::SetUp()
 {
   ////////////////////   DECLARE VARIABLES   ///////////////////////
@@ -90,8 +92,8 @@ TEST_F(BasisCacheTests, TestSetRefCellPoints)
   // for now, we just test setting these on the side cache, since that's broken right now.
   // TODO: test for volume cache as well.
   shards::CellTopology cellTopo = *(_elemType->cellTopoPtr);
-  int numSides = cellTopo.getSideCount();
-
+  int numSides = CamelliaCellTools::getSideCount(cellTopo);
+  
   //  FieldContainer<double> refTracePoints(3, 1); // (P,D): three points, 1D
   //  refTracePoints(0, 0) =  0.0;
   //  refTracePoints(1, 0) =  0.5;

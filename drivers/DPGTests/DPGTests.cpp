@@ -188,7 +188,11 @@ void DPGTests::runTests() {
   vector< Teuchos::RCP< TestSuite > > testSuites;
   
   testSuites.push_back( Teuchos::rcp( new GDAMinimumRuleTests ) );
-
+  
+  testSuites.push_back( Teuchos::rcp( new MeshRefinementTests ) ); // skips two PatchBasis tests
+  
+  testSuites.push_back( Teuchos::rcp( new CurvilinearMeshTests) );
+  
   testSuites.push_back( Teuchos::rcp( new MeshTestSuite ) );
   
   testSuites.push_back( Teuchos::rcp( new SolutionTests ) );
@@ -199,14 +203,10 @@ void DPGTests::runTests() {
   
   testSuites.push_back( Teuchos::rcp( new MeshTopologyTests ) );
   
-  
-  testSuites.push_back( Teuchos::rcp( new CurvilinearMeshTests) );
-  
   testSuites.push_back( Teuchos::rcp( new ScratchPadTests ) );
   
   testSuites.push_back( Teuchos::rcp( new ElementTests ) );
   
-  testSuites.push_back( Teuchos::rcp( new MeshRefinementTests ) ); // skips two PatchBasis tests
   testSuites.push_back( Teuchos::rcp( new MPIWrapperTests) );
   testSuites.push_back( Teuchos::rcp( new ParametricCurveTests) );
   testSuites.push_back( Teuchos::rcp( new RHSTests ) );

@@ -82,7 +82,7 @@ Mesh::Mesh(const vector<vector<double> > &vertices, vector< vector<unsigned> > &
            Teuchos::RCP< BilinearForm > bilinearForm, int H1Order, int pToAddTest, bool useConformingTraces,
            map<int,int> trialOrderEnhancements, map<int,int> testOrderEnhancements, vector<PeriodicBCPtr> periodicBCs) {
 
-  cout << "in legacy mesh constructor, periodicBCs size is " << periodicBCs.size() << endl;
+//  cout << "in legacy mesh constructor, periodicBCs size is " << periodicBCs.size() << endl;
   
   MeshGeometryPtr meshGeometry = Teuchos::rcp( new MeshGeometry(vertices, elementVertices) );
   _meshTopology = Teuchos::rcp( new MeshTopology(meshGeometry, periodicBCs) );
@@ -332,7 +332,7 @@ FieldContainer<double> Mesh::cellSideParities( ElementTypePtr elemTypePtr ) {
   vector<GlobalIndexType> cellIDs = _gda->cellIDsOfElementType(rank, elemTypePtr);
   
   int numCells = cellIDs.size();
-  int numSides = elemTypePtr->cellTopoPtr->getSideCount();
+  int numSides = CamelliaCellTools::getSideCount(*elemTypePtr->cellTopoPtr);
   
   FieldContainer<double> sideParities(numCells, numSides);
   for (int i=0; i<numCells; i++) {
@@ -830,7 +830,7 @@ int Mesh::condensedRowSizeUpperBound() {
     vector<ElementTypePtr> elementTypes = _gda->elementTypes(partitionNumber);
     for (elemTypeIt = elementTypes.begin(); elemTypeIt != elementTypes.end(); elemTypeIt++) {
       ElementTypePtr elemTypePtr = *elemTypeIt;
-      int numSides = elemTypePtr->cellTopoPtr->getSideCount();
+      int numSides = CamelliaCellTools::getSideCount(*elemTypePtr->cellTopoPtr);
       vector< int > fluxIDs = _bilinearForm->trialBoundaryIDs();
       vector< int >::iterator fluxIDIt;
       int numFluxDofs = 0;
@@ -862,7 +862,7 @@ int Mesh::rowSizeUpperBound() {
     vector<ElementTypePtr> elementTypes = _gda->elementTypes(partitionNumber);
     for (elemTypeIt = elementTypes.begin(); elemTypeIt != elementTypes.end(); elemTypeIt++) {
       ElementTypePtr elemTypePtr = *elemTypeIt;
-      int numSides = elemTypePtr->cellTopoPtr->getSideCount();
+      int numSides = CamelliaCellTools::getSideCount(*elemTypePtr->cellTopoPtr);
       vector< int > fluxIDs = _bilinearForm->trialBoundaryIDs();
       vector< int >::iterator fluxIDIt;
       int numFluxDofs = 0;

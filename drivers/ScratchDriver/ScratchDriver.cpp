@@ -110,10 +110,88 @@ public:
   }
 };
 
+int Sort_ints_( int *vals_sort,     //  values to be sorted
+                int *vals_other,    // other array to be reordered with sort
+                int  nvals)         // length of these two arrays
+{
+  // It is primarily used to sort messages to improve communication flow.
+  // This routine will also insure that the ordering produced by the invert_map
+  // routines is deterministic.  This should make bugs more reproducible.  This
+  // is accomplished by sorting the message lists by processor ID.
+  // This is a distribution count sort algorithm (see Knuth)
+  //  This version assumes non negative integers.
+  
+  if (nvals <= 1) return 0;
+  
+  int i;                        // loop counter
+  
+  // find largest int, n, to size sorting array, then allocate and clear it
+  int n = 0;
+  for (i = 0; i < nvals; i++)
+    if (n < vals_sort[i]) n = vals_sort[i];
+  int *pos = new int [n+2];
+  for (i = 0; i < n+2; i++) pos[i] = 0;
+  
+  // copy input arrays into temporary copies to allow sorting original arrays
+  int *copy_sort  = new int [nvals];
+  int *copy_other = new int [nvals];
+  for (i = 0; i < nvals; i++)
+  {
+    copy_sort[i]  = vals_sort[i];
+    copy_other[i] = vals_other[i];
+  }
+  
+  // count the occurances of integers ("distribution count")
+  int *p = pos+1;
+  for (i = 0; i < nvals; i++) p[copy_sort[i]]++;
+  
+  // create the partial sum of distribution counts
+  for (i = 1; i < n; i++) p[i] += p[i-1];
+  
+  // the shifted partitial sum is the index to store the data  in sort order
+  p = pos;
+  for (i = 0; i < nvals; i++)
+  {
+    vals_sort  [p[copy_sort [i]]]   = copy_sort[i];
+    vals_other [p[copy_sort [i]]++] = copy_other[i];
+  }
+  
+  delete [] copy_sort;
+  delete [] copy_other;
+  delete [] pos; 
+  
+  return 0;
+}
+
 int main(int argc, char *argv[]) {
   bool testMeshTopoMemory = false;
   
-  bool tryMinRule = true;
+  bool tryMinRule = false;
+  
+  bool trySortInt = true;
+  
+  if (trySortInt) {
+    int nvals = 3;
+    int *procs_from_ = new int[nvals];
+    int *lengths_from_ = new int[nvals];
+    procs_from_[0] = 17;
+    procs_from_[1] = 16;
+    procs_from_[2] = 18;
+    lengths_from_[0] = 88;
+    lengths_from_[1] = 42;
+    lengths_from_[2] = 15;
+    Sort_ints_(procs_from_, lengths_from_, nvals);
+    cout << "After sorting";
+    for (int i=0; i<nvals; i++) {
+      cout << ", procs_from["<< i << "] = " << procs_from_[i];
+    }
+    for (int i=0; i<nvals; i++) {
+      cout << ", lengths_from["<< i << "] = " << lengths_from_[i];
+    }
+    cout << endl;
+    delete [] procs_from_;
+    delete [] lengths_from_;
+  }
   
   if (tryMinRule) {
     double eps = 1e-4;

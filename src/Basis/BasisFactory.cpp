@@ -76,7 +76,7 @@ bool BasisFactory::_useLegendreForLineHVOL = false;
 using namespace Camellia;
 
 BasisPtr BasisFactory::getBasis( int polyOrder, unsigned cellTopoKey, IntrepidExtendedTypes::EFunctionSpaceExtended fs) {
-  if (fs != IntrepidExtendedTypes::FUNCTION_SPACE_ONE) {
+  if (fs != IntrepidExtendedTypes::FUNCTION_SPACE_REAL_SCALAR) {
     TEUCHOS_TEST_FOR_EXCEPTION(polyOrder == 0, std::invalid_argument, "polyOrder = 0 unsupported");
   }
   
@@ -92,7 +92,10 @@ BasisPtr BasisFactory::getBasis( int polyOrder, unsigned cellTopoKey, IntrepidEx
   bool threeD = (cellTopoKey == shards::Hexahedron<8>::key);
   bool twoD = (cellTopoKey == shards::Quadrilateral<4>::key) || (cellTopoKey == shards::Triangle<3>::key);
   bool oneD = (cellTopoKey == shards::Line<2>::key);
-  if (oneD) {
+  bool zeroD = (cellTopoKey == shards::Node::key);
+  if (zeroD) {
+    spaceDim = 0;
+  } else if (oneD) {
     spaceDim = 1;
   } else if (twoD) {
     spaceDim = 2;
@@ -187,7 +190,7 @@ BasisPtr BasisFactory::getBasis( int polyOrder, unsigned cellTopoKey, IntrepidEx
                                   spaceDim, scalarRank, fs)
                                  );
           break;
-          case(IntrepidExtendedTypes::FUNCTION_SPACE_ONE):
+          case(IntrepidExtendedTypes::FUNCTION_SPACE_REAL_SCALAR):
             basis = Teuchos::rcp( new IntrepidBasisWrapper<>(Teuchos::rcp( new Basis_HGRAD_QUAD_C0_FEM<double, Intrepid::FieldContainer<double> >()),
                                                              spaceDim, scalarRank, fs)
                                  ) ;
@@ -289,7 +292,7 @@ BasisPtr BasisFactory::getConformingBasis( int polyOrder, unsigned cellTopoKey, 
   // this method is fairly redundant with getBasis(), but it provides the chance to offer different bases when a conforming basis is
   // required.
   
-  if (fs != IntrepidExtendedTypes::FUNCTION_SPACE_ONE) {
+  if (fs != IntrepidExtendedTypes::FUNCTION_SPACE_REAL_SCALAR) {
     TEUCHOS_TEST_FOR_EXCEPTION(polyOrder == 0, std::invalid_argument, "polyOrder = 0 unsupported");
   }
   
@@ -311,7 +314,11 @@ BasisPtr BasisFactory::getConformingBasis( int polyOrder, unsigned cellTopoKey, 
   int spaceDim;
   bool twoD = (cellTopoKey == shards::Quadrilateral<4>::key) || (cellTopoKey == shards::Triangle<3>::key);
   bool oneD = (cellTopoKey == shards::Line<2>::key);
-  if (oneD) {
+  bool zeroD = (cellTopoKey == shards::Node::key);
+
+  if (zeroD) {
+    spaceDim = 0;
+  } else if (oneD) {
     spaceDim = 1;
   } else if (twoD) {
     spaceDim = 2;
@@ -371,7 +378,7 @@ BasisPtr BasisFactory::getConformingBasis( int polyOrder, unsigned cellTopoKey, 
                                                              spaceDim, scalarRank, fs)
                                  );
             break;
-          case(IntrepidExtendedTypes::FUNCTION_SPACE_ONE):
+          case(IntrepidExtendedTypes::FUNCTION_SPACE_REAL_SCALAR):
             basis = Teuchos::rcp( new IntrepidBasisWrapper<>(Teuchos::rcp( new Basis_HGRAD_QUAD_C0_FEM<double, Intrepid::FieldContainer<double> >()),
                                                              spaceDim, scalarRank, fs)
                                  ) ;
@@ -453,12 +460,23 @@ BasisPtr BasisFactory::getConformingBasis( int polyOrder, unsigned cellTopoKey, 
                                        "Unhandled function space for line_2. Please use HGRAD or HVOL.");
         }
         break;
+      case shards::Node::key: // point topology
+        switch (fs) {
+          case IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD:
+          case IntrepidExtendedTypes::FUNCTION_SPACE_HVOL:
+            basis = Teuchos::rcp( new PointBasis<>() );
+            break;
+          default:
+            TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unsupported function space for point topology.");
+        }
+        break;
       default:
         TEUCHOS_TEST_FOR_EXCEPTION( ( (cellTopoKey != shards::Quadrilateral<4>::key)        &&
-                                     (cellTopoKey != shards::Triangle<3>::key)             &&
-                                     (cellTopoKey != shards::Line<2>::key) ),
-                                   std::invalid_argument,
-                                   "Unknown cell topology for basis selction. Please use Line_2, Quadrilateral_4, or Triangle_3.");
+                                      (cellTopoKey != shards::Triangle<3>::key)             &&
+                                      (cellTopoKey != shards::Line<2>::key)                 &&
+                                      (cellTopoKey != shards::Node::key)),
+                                    std::invalid_argument,
+                                    "Unknown cell topology for basis selction. Please use Node, Line_2, Quadrilateral_4, or Triangle_3.");
         
     }
   }

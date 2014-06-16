@@ -10,6 +10,8 @@
 #include "BasisCache.h"
 #include "DofOrdering.h"
 
+#include "CamelliaCellTools.h"
+
 PenaltyMethodFilter::PenaltyMethodFilter(Teuchos::RCP<Constraints> constraints){
   _constraints = constraints;
 }
@@ -24,7 +26,7 @@ void PenaltyMethodFilter::filter(FieldContainer<double> &localStiffnessMatrix, F
   
   DofOrderingPtr trialOrderPtr = elemTypePtr->trialOrderPtr;
   
-  unsigned numSides = elemTypePtr->cellTopoPtr->getSideCount();
+  unsigned numSides = CamelliaCellTools::getSideCount( *elemTypePtr->cellTopoPtr );
   // only allows for L2 inner products at the moment. 
   IntrepidExtendedTypes::EOperatorExtended trialOperator =  IntrepidExtendedTypes::OP_VALUE;
 	

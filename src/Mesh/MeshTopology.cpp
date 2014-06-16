@@ -133,7 +133,7 @@ unsigned MeshTopology::addCell(CellTopoPtr cellTopo, const vector<unsigned> &cel
   
   // set neighbors:
   unsigned sideDim = _spaceDim - 1;
-  unsigned sideCount = cellTopo->getSideCount();
+  unsigned sideCount = CamelliaCellTools::getSideCount(*cellTopo);
   for (int sideOrdinal=0; sideOrdinal<sideCount; sideOrdinal++) {
     unsigned sideEntityIndex = cell->entityIndex(sideDim, sideOrdinal);
     addCellForSide(cellIndex,sideOrdinal,sideEntityIndex);
@@ -356,7 +356,7 @@ void MeshTopology::addChildren(CellPtr parentCell, const vector< CellTopoPtr > &
   
   // now, set children's neighbors to agree with parent, if the children don't have their own peer neighbors
   
-//  unsigned numSides = parentCell->topology()->getSideCount();
+//  unsigned numSides = CamelliaCellTools::getSideCount(*parentCell->topology());
 ////  unsigned sideDim = _spaceDim - 1;
 //  for (int sideOrdinal=0; sideOrdinal<numSides; sideOrdinal++) {
 //    vector< pair<unsigned, unsigned> > childrenForSide = parentCell->childrenForSide(sideOrdinal);
@@ -702,11 +702,26 @@ unsigned MeshTopology::getSpaceDim() {
 }
 
 unsigned MeshTopology::getSubEntityCount(unsigned int d, unsigned int entityIndex, unsigned int subEntityDim) {
+  if (d==0) {
+    if (subEntityDim==0) {
+      return 1; // the vertex is its own sub-entity then
+    } else {
+      return 0;
+    }
+  }
   shards::CellTopology *entityTopo = &_knownTopologies[_entityCellTopologyKeys[d][entityIndex]];
   return entityTopo->getSubcellCount(subEntityDim);
 }
 
 unsigned MeshTopology::getSubEntityIndex(unsigned int d, unsigned int entityIndex, unsigned int subEntityDim, unsigned int subEntityOrdinal) {
+  if (d==0) {
+    if ((subEntityDim==0) && (subEntityOrdinal==0))  {
+      return entityIndex; // the vertex is its own sub-entity then
+    } else {
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "sub-entity not found for vertex");
+    }
+  }
+  
   shards::CellTopology *entityTopo = &_knownTopologies[_entityCellTopologyKeys[d][entityIndex]];
   set<unsigned> subEntityNodes;
   unsigned subEntityNodeCount = (subEntityDim > 0) ? entityTopo->getNodeCount(subEntityDim, subEntityOrdinal) : 1; // vertices are by definition just one node
@@ -787,8 +802,9 @@ unsigned MeshTopology::getVertexIndexAdding(const vector<double> &vertex, double
   set< pair<int,int> > matchingPeriodicBCs;
 
   for (int i=0; i<_periodicBCs.size(); i++) {
-    int matchingSide = _periodicBCs[i]->getMatchingSide(vertex);
-    if (matchingSide != -1) {
+    vector<int> matchingSides = _periodicBCs[i]->getMatchingSides(vertex);
+    for (int j=0; j<matchingSides.size(); j++) {
+      int matchingSide = matchingSides[j];
       pair<int,int> matchingBC = make_pair(i, matchingSide);
       matchingPeriodicBCs.insert(matchingBC);
       vector<double> matchingPoint = _periodicBCs[i]->getMatchingPoint(vertex, matchingSide);

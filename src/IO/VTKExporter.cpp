@@ -26,6 +26,8 @@
 #include "choice.hpp"
 #endif
 
+#include "CamelliaCellTools.h"
+
 void VTKExporter::exportSolution(const string& filePath, unsigned int num1DPts)
 {
   exportFields(filePath, num1DPts);
@@ -333,7 +335,7 @@ void VTKExporter::exportTraces(const string& filePath, unsigned int num1DPts)
   {
     ElementTypePtr elemTypePtr = *(elemTypeIt);
     Teuchos::RCP<shards::CellTopology> cellTopoPtr = elemTypePtr->cellTopoPtr;
-    int numSides = cellTopoPtr->getSideCount();
+    int numSides = CamelliaCellTools::getSideCount(*cellTopoPtr);
 
     FieldContainer<double> vertexPoints;
     _mesh->verticesForElementType(vertexPoints,elemTypePtr); //stores vertex points for this element
@@ -677,8 +679,8 @@ void VTKExporter::exportBoundaryValuedFunctions(vector< FunctionPtr > &functions
   {
     ElementTypePtr elemTypePtr = *(elemTypeIt);
     Teuchos::RCP<shards::CellTopology> cellTopoPtr = elemTypePtr->cellTopoPtr;
-    int numSides = cellTopoPtr->getSideCount();
-
+    int numSides = CamelliaCellTools::getSideCount(*cellTopoPtr);
+    
     FieldContainer<double> vertexPoints;
     _mesh->verticesForElementType(vertexPoints,elemTypePtr); //stores vertex points for this element
     FieldContainer<double> physicalCellNodes = _mesh->physicalCellNodesGlobal(elemTypePtr);

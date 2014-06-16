@@ -1,6 +1,8 @@
 #include "SolutionExporter.h"
 #include "CamelliaConfig.h"
 
+#include "CamelliaCellTools.h"
+
 #ifdef USE_VTK
 #include "vtkPointData.h"
 #include "vtkCellData.h"
@@ -51,7 +53,7 @@ void NewVTKExporter::exportFunction(FunctionPtr function, const string& function
     BasisCachePtr volumeBasisCache = Teuchos::rcp( new BasisCache(*cellTopoPtr, 1, createSideCache) );
     volumeBasisCache->setPhysicalCellNodes(physicalCellNodes, vector<GlobalIndexType>(1,cellIndex), createSideCache);
 
-    int numSides = createSideCache ? cellTopoPtr->getSideCount() : 1;
+    int numSides = createSideCache ? CamelliaCellTools::getSideCount(*cellTopoPtr) : 1;
     
     int sideDim = spaceDim - 1;
     
@@ -78,6 +80,8 @@ void NewVTKExporter::exportFunction(FunctionPtr function, const string& function
         case shards::Hexahedron<8>::key:
           numPoints = num1DPts*num1DPts*num1DPts;
           break;
+        case shards::Node::key:
+          numPoints = 1;
         default:
           TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "cellTopoKey unrecognized");
       }

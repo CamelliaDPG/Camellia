@@ -34,6 +34,8 @@ private:
   bool testHangingNodePoisson(bool useQuads);
   bool testHangingNodeStokes(bool useQuads);
   
+  SolutionPtr poissonExactSolution1D(int horizontalCells, int H1Order, FunctionPtr phi_exact, bool useH1Traces);
+  
   SolutionPtr poissonExactSolution3D(int horizontalCells, int verticalCells, int depthCells, int H1Order, FunctionPtr phi_exact, bool useH1Traces);
   
   bool checkLocalGlobalConsistency(MeshPtr mesh);

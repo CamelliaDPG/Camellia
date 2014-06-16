@@ -71,7 +71,8 @@ Cell::Cell(CellTopoPtr cellTopo, const vector<unsigned> &vertices, const vector<
   _subcellPermutations = subcellPermutations;
   _cellIndex = cellIndex;
   _meshTopo = meshTopo;
-  _neighbors = vector< pair<GlobalIndexType, unsigned> >(_cellTopo->getSideCount(),make_pair(-1,-1));
+  int sideCount = CamelliaCellTools::getSideCount(*_cellTopo);
+  _neighbors = vector< pair<GlobalIndexType, unsigned> >(sideCount,make_pair(-1,-1));
 }
 unsigned Cell::cellIndex() {
   return _cellIndex;
@@ -387,8 +388,9 @@ CellTopoPtr Cell::topology() {
 }
 
 pair<GlobalIndexType, unsigned> Cell::getNeighbor(unsigned sideOrdinal) {
-  if (sideOrdinal >= _cellTopo->getSideCount()) {
-    cout << "sideOrdinal " << sideOrdinal << " >= sideCount " << _cellTopo->getSideCount() << endl;
+  int sideCount = CamelliaCellTools::getSideCount(*_cellTopo);
+  if (sideOrdinal >= sideCount) {
+    cout << "sideOrdinal " << sideOrdinal << " >= sideCount " << sideCount << endl;
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "sideOrdinal must be less than sideCount!");
   }
   return _neighbors[sideOrdinal];
@@ -399,8 +401,9 @@ void Cell::setNeighbor(unsigned sideOrdinal, GlobalIndexType neighborCellIndex, 
     cout << "ERROR: neighborCellIndex == _cellIndex.\n";
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "ERROR: neighborCellIndex == _cellIndex.\n");
   }
-  if (sideOrdinal >= _cellTopo->getSideCount()) {
-    cout << "sideOrdinal " << sideOrdinal << " >= sideCount " << _cellTopo->getSideCount() << endl;
+  int sideCount = CamelliaCellTools::getSideCount(*_cellTopo);
+  if (sideOrdinal >= sideCount) {
+    cout << "sideOrdinal " << sideOrdinal << " >= sideCount " << sideCount << endl;
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "sideOrdinal must be less than sideCount!");
   }
   _neighbors[sideOrdinal] = make_pair(neighborCellIndex, neighborSideOrdinal);

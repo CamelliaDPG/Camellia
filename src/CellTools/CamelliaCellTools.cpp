@@ -9,6 +9,11 @@
 #include "CamelliaCellTools.h"
 #include "BasisCache.h"
 
+int CamelliaCellTools::getSideCount(const shards::CellTopology &cellTopo) {
+  // unlike shards itself, defines vertices as sides for Line topo
+  return (cellTopo.getDimension() > 1) ? cellTopo.getSideCount() : cellTopo.getVertexCount();
+}
+
 void CamelliaCellTools::refCellNodesForTopology(FieldContainer<double> &cellNodes, const shards::CellTopology &cellTopo, unsigned permutation) { // 0 permutation is the identity
   if (cellNodes.dimension(0) != cellTopo.getNodeCount()) {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "cellNodes must be sized (N,D) where N=node count, D=space dim.");

@@ -28,8 +28,6 @@ using namespace Intrepid;
 
 template<class Scalar=double, class ArrayScalar=Intrepid::FieldContainer<double> > class PointBasis;
 template<class Scalar, class ArrayScalar> class PointBasis : public Camellia::Basis<Scalar,ArrayScalar> {
-  vector< Teuchos::RCP< Camellia::Basis<Scalar,ArrayScalar> > > _bases;
-  
   void initializeTags() const;
 public:
   PointBasis();

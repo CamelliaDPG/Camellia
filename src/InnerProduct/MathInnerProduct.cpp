@@ -45,7 +45,7 @@ void MathInnerProduct::operators(int testID1, int testID2,
   testOp2.clear();
   if (testID1 == testID2) {
     IntrepidExtendedTypes::EOperatorExtended dOperator;
-    if (_bilinearForm->functionSpaceForTest(testID1) == IntrepidExtendedTypes::FUNCTION_SPACE_ONE) {
+    if (_bilinearForm->functionSpaceForTest(testID1) == IntrepidExtendedTypes::FUNCTION_SPACE_REAL_SCALAR) {
       testOp1.push_back( IntrepidExtendedTypes::OP_VALUE);
       testOp2.push_back( IntrepidExtendedTypes::OP_VALUE);
     } else {

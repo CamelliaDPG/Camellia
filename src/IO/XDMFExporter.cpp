@@ -3,6 +3,8 @@
 #include "SolutionExporter.h"
 #include "CamelliaConfig.h"
 
+#include "CamelliaCellTools.h"
+
 #ifdef USE_XDMF
 #include <Xdmf.h>
 void XDMFExporter::exportFunction(FunctionPtr function, const string& functionName, set<GlobalIndexType> cellIndices, unsigned int num1DPts)
@@ -185,7 +187,7 @@ void XDMFExporter::exportFunction(FunctionPtr function, const string& functionNa
     BasisCachePtr volumeBasisCache = Teuchos::rcp( new BasisCache(*cellTopoPtr, 1, createSideCache) );
     volumeBasisCache->setPhysicalCellNodes(physicalCellNodes, vector<GlobalIndexType>(1,cellIndex), createSideCache);
 
-    int numSides = createSideCache ? cellTopoPtr->getSideCount() : 1;
+    int numSides = createSideCache ? CamelliaCellTools::getSideCount(*cellTopoPtr) : 1;
     
     int sideDim = spaceDim - 1;
     

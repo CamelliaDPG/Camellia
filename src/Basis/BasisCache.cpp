@@ -106,7 +106,7 @@ void BasisCache::init(shards::CellTopology &cellTopo, int maxTrialDegree, int ma
 
 void BasisCache::createSideCaches() {
   _basisCacheSides.clear();
-  _numSides = (_spaceDim > 1) ? _cellTopo.getSideCount() : _cellTopo.getVertexCount();
+  _numSides = CamelliaCellTools::getSideCount(_cellTopo);
 
   for (int sideOrdinal=0; sideOrdinal<_numSides; sideOrdinal++) {
     BasisPtr maxDegreeBasisOnSide = _maxDegreeBasisForSide[sideOrdinal];
@@ -130,7 +130,7 @@ BasisCache::BasisCache(ElementTypePtr elemType, Teuchos::RCP<Mesh> mesh, bool te
   // use testVsTest=true for test space inner product (won't create side caches, and will use higher cubDegree)
   shards::CellTopology cellTopo = *(elemType->cellTopoPtr);
   _spaceDim = cellTopo.getDimension();
-  _numSides = (_spaceDim > 1) ? cellTopo.getSideCount() : cellTopo.getVertexCount();
+  _numSides = CamelliaCellTools::getSideCount(cellTopo);
   
   _maxTestDegree = elemType->testOrderPtr->maxBasisDegree();
   
@@ -159,7 +159,7 @@ BasisCache::BasisCache(const FieldContainer<double> &physicalCellNodes,
                        shards::CellTopology &cellTopo,
                        DofOrdering &trialOrdering, int maxTestDegree, bool createSideCacheToo) {
   _spaceDim = cellTopo.getDimension();
-  _numSides = (_spaceDim > 1) ? cellTopo.getSideCount() : cellTopo.getVertexCount();
+  _numSides = CamelliaCellTools::getSideCount(cellTopo);
   findMaximumDegreeBasisForSides(trialOrdering);
   init(cellTopo, trialOrdering.maxBasisDegree(), maxTestDegree, createSideCacheToo);
   setPhysicalCellNodes(physicalCellNodes,vector<GlobalIndexType>(),createSideCacheToo);
@@ -169,7 +169,7 @@ BasisCache::BasisCache(shards::CellTopology &cellTopo, int cubDegree, bool creat
   // NOTE that this constructor's a bit dangerous, in that we lack information about the brokenness
   // of the sides; we may under-integrate for cells with broken sides...
   _spaceDim = cellTopo.getDimension();
-  _numSides = (_spaceDim > 1) ? cellTopo.getSideCount() : cellTopo.getVertexCount();
+  _numSides = CamelliaCellTools::getSideCount(cellTopo);
   DofOrdering trialOrdering; // dummy trialOrdering
   findMaximumDegreeBasisForSides(trialOrdering); // should fill with NULL ptrs
   init(cellTopo, 0, cubDegree, createSideCacheToo);
@@ -179,7 +179,7 @@ BasisCache::BasisCache(const FieldContainer<double> &physicalCellNodes, shards::
   // NOTE that this constructor's a bit dangerous, in that we lack information about the brokenness
   // of the sides; we may under-integrate for cells with broken sides...
   _spaceDim = cellTopo.getDimension();
-  _numSides = (_spaceDim > 1) ? cellTopo.getSideCount() : cellTopo.getVertexCount();
+  _numSides = CamelliaCellTools::getSideCount(cellTopo);
   DofOrdering trialOrdering; // dummy trialOrdering
   findMaximumDegreeBasisForSides(trialOrdering); // should fill with NULL ptrs
   init(cellTopo, 0, cubDegree, createSideCacheToo);
@@ -636,6 +636,7 @@ void BasisCache::setTransformationFunction(FunctionPtr fxn) {
 }
 
 void BasisCache::determinePhysicalPoints() {
+  if (_spaceDim==0) return; // physical points not meaningful then...
   int numPoints = isSideCache() ? _cubPointsSideRefCell.dimension(0) : _cubPoints.dimension(0);
   if ( Function::isNull(_transformationFxn) || _composeTransformationFxnWithMeshTransformation) {
     // _spaceDim for side cache refers to the volume cache's spatial dimension
@@ -682,6 +683,8 @@ void BasisCache::determinePhysicalPoints() {
 }
 
 void BasisCache::determineJacobian() {
+  if (_spaceDim == 0) return;  // Jacobians not meaningful then...
+  
   // Compute cell Jacobians, their inverses and their determinants
   
   int numCubPoints = isSideCache() ? _cubPointsSideRefCell.dimension(0) : _cubPoints.dimension(0);
@@ -871,6 +874,13 @@ BasisCachePtr BasisCache::quadBasisCache(double width, double height, int cubDeg
 }
 
 void BasisCache::recomputeMeasures() {
+  if (_spaceDim == 0) {
+    // then we define the measure of the domain as 1...
+    int numCubPoints = isSideCache() ? _cubPointsSideRefCell.dimension(0) : _cubPoints.dimension(0);
+    _weightedMeasure.resize(_numCells, numCubPoints);
+    _weightedMeasure.initialize(1.0);
+    return;
+  }
   if (_cubWeights.size() > 0) {
     int numCubPoints = isSideCache() ? _cubPointsSideRefCell.dimension(0) : _cubPoints.dimension(0);
     // a bit ugly: "_cubPoints" may not be cubature points at all, but just points of interest...  If they're not cubature points, then _cubWeights will be cleared out.  See setRefCellPoints, above.
@@ -915,7 +925,7 @@ void BasisCache::recomputeMeasures() {
 
 BasisCachePtr BasisCache::sideBasisCache(Teuchos::RCP<BasisCache> volumeCache, int sideIndex) {
   int spaceDim = volumeCache->cellTopology().getDimension();
-  int numSides = (spaceDim > 1) ? volumeCache->cellTopology().getSideCount() : volumeCache->cellTopology().getVertexCount();
+  int numSides = CamelliaCellTools::getSideCount(volumeCache->cellTopology());
   
   TEUCHOS_TEST_FOR_EXCEPTION(sideIndex >= numSides, std::invalid_argument, "sideIndex out of range");
 

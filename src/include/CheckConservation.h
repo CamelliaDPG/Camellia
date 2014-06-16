@@ -5,6 +5,8 @@
 #include "VarFactory.h"
 #include "Mesh.h"
 
+#include "CamelliaCellTools.h"
+
 #include <Teuchos_Tuple.hpp>
 
 Teuchos::Tuple<double, 3> checkConservation(FunctionPtr flux, FunctionPtr source, Teuchos::RCP<Mesh> mesh, int cubatureEnrichment = 0)
@@ -22,7 +24,7 @@ Teuchos::Tuple<double, 3> checkConservation(FunctionPtr flux, FunctionPtr source
     BasisCachePtr basisCache = BasisCache::basisCacheForCell(mesh, cellID, cubatureEnrichment);
     FieldContainer<double> volumeIntegral(1);
     source->integrate(volumeIntegral, basisCache, true);
-    int numSides = basisCache->cellTopology().getSideCount();
+    int numSides = CamelliaCellTools::getSideCount(basisCache->cellTopology());
     double surfaceIntegral = 0;
     for (int sideIndex = 0; sideIndex < numSides; sideIndex++)
     {

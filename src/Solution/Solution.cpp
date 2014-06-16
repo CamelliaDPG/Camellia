@@ -250,7 +250,7 @@ void Solution::addSolution(Teuchos::RCP<Solution> otherSoln, double weight, bool
         ElementTypePtr elemTypePtr = _mesh->getElementType(cellID);
         DofOrderingPtr trialOrdering= elemTypePtr->trialOrderPtr;
         shards::CellTopology cellTopo = *(elemTypePtr->cellTopoPtr);
-        int numSides = cellTopo.getSideCount();
+        int numSides = CamelliaCellTools::getSideCount(cellTopo);
         for (int sideIndex=0; sideIndex < numSides; sideIndex++)
         {
           BasisPtr basis = trialOrdering->getBasis(trialID, sideIndex);
@@ -323,7 +323,7 @@ void Solution::addSolution(Teuchos::RCP<Solution> otherSoln, double weight, set<
       ElementTypePtr elemTypePtr = _mesh->getElementType(cellID);
       DofOrderingPtr trialOrdering= elemTypePtr->trialOrderPtr;
       shards::CellTopology cellTopo = *(elemTypePtr->cellTopoPtr);
-      int numSides = cellTopo.getSideCount();
+      int numSides = CamelliaCellTools::getSideCount(cellTopo);
       for (int sideIndex=0; sideIndex < numSides; sideIndex++)
       {
         BasisPtr basis = trialOrdering->getBasis(trialID, sideIndex);
@@ -1402,7 +1402,7 @@ void Solution::integrateFlux(FieldContainer<double> &values, ElementTypePtr elem
   DofOrdering dofOrdering = *(elemTypePtr->trialOrderPtr.get());
   
   shards::CellTopology cellTopo = *(elemTypePtr->cellTopoPtr);
-  int numSides = cellTopo.getSideCount();
+  int numSides = CamelliaCellTools::getSideCount(cellTopo);
   
   for (int sideIndex=0; sideIndex<numSides; sideIndex++) {
     // Get numerical integration points and weights
@@ -3388,7 +3388,7 @@ void Solution::writeFluxesToFile(int trialID, const string &filePath){
     
     ElementTypePtr elemTypePtr = *(elemTypeIt);
     shards::CellTopology cellTopo = *(elemTypePtr->cellTopoPtr);
-    int numSides = cellTopo.getSideCount();
+    int numSides = CamelliaCellTools::getSideCount(cellTopo);
     
     FieldContainer<double> vertexPoints, physPoints;
     _mesh->verticesForElementType(vertexPoints,elemTypePtr); //stores vertex points for this element
@@ -3697,7 +3697,7 @@ void Solution::projectOntoCell(const map<int, FunctionPtr > &functionMap, Global
       int firstSide, lastSide;
       if (side == -1) { // handle all sides
         firstSide = 0;
-        lastSide = elemTypePtr->cellTopoPtr->getSideCount() - 1;
+        lastSide = CamelliaCellTools::getSideCount(*elemTypePtr->cellTopoPtr) - 1;
       } else {
         firstSide = side;
         lastSide = side;
@@ -3820,7 +3820,7 @@ void Solution::projectOldCellOntoNewCells(GlobalIndexType cellID, ElementTypePtr
  // they're implicit 0s, then: projection will also be implicit 0s...
  return;
  }
- int numSides = oldElemType->cellTopoPtr->getSideCount();
+ int numSides = Camellia::getSideCount(*oldElemType->cellTopoPtr);
  map<int, FunctionPtr > functionMap;
  map<int, map<int, FunctionPtr > > sideFunctionMap;
  

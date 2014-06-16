@@ -513,8 +513,6 @@ bool MeshTopologyTests::testCellsForEntity() {
   MeshTopologyPtr mesh2D = makeRectMesh(0.0, 0.0, 1.0, 1.0, 1, 1);
   IndexType cellID = 0;
   CellPtr cell = mesh2D->getCell(cellID); // the only cell in the mesh
-  
-  int sideCount = cell->topology()->getSideCount();
 
   int spaceDim = mesh2D->getSpaceDim();
   int sideDim = spaceDim - 1;
@@ -569,7 +567,7 @@ bool MeshTopologyTests::testEntityConstraints() {
 
   for (unsigned cellIndex=0; cellIndex<mesh2D->cellCount(); cellIndex++) {
     CellPtr cell = mesh2D->getCell(cellIndex);
-    unsigned sideCount = cell->topology()->getSideCount();
+    unsigned sideCount = CamelliaCellTools::getSideCount(*cell->topology());
 
     for (unsigned sideOrdinal=0; sideOrdinal<sideCount; sideOrdinal++) {
       unsigned edgeIndex = cell->entityIndex(edgeDim, sideOrdinal);
@@ -602,7 +600,7 @@ bool MeshTopologyTests::testEntityConstraints() {
   map<unsigned, vector<unsigned> > faceToEdges;
   for (unsigned cellIndex=0; cellIndex<mesh3D->cellCount(); cellIndex++) {
     CellPtr cell = mesh3D->getCell(cellIndex);
-    unsigned sideCount = cell->topology()->getSideCount();
+    unsigned sideCount = CamelliaCellTools::getSideCount(*cell->topology());
     
     for (unsigned sideOrdinal=0; sideOrdinal<sideCount; sideOrdinal++) {
       unsigned faceIndex = cell->entityIndex(faceDim, sideOrdinal);
@@ -773,7 +771,7 @@ bool MeshTopologyTests::testEntityConstraints() {
       childCellForVertex = cellIt->first;
       // now, figure out which of the "edgeChildren2D" is shared by this cell:
       CellPtr cell = mesh2D->getCell(childCellForVertex);
-      unsigned numEdges = cell->topology()->getSideCount();
+      unsigned numEdges = CamelliaCellTools::getSideCount(*cell->topology());
       for (unsigned edgeOrdinal=0; edgeOrdinal<numEdges; edgeOrdinal++) {
         unsigned edgeIndex = cell->entityIndex(edgeDim, edgeOrdinal);
         if (edgeChildren2D.find(edgeIndex) != edgeChildren2D.end()) {
@@ -845,7 +843,7 @@ bool MeshTopologyTests::testEntityConstraints() {
   CellPtr childCell = mesh3D->getCell(childCellIndex);
   set<unsigned> childInteriorUnconstrainedFaces;
   set<unsigned> childInteriorConstrainedFaces;
-  unsigned faceCount = childCell->topology()->getSideCount();
+  unsigned faceCount = CamelliaCellTools::getSideCount(*childCell->topology());
   for (unsigned faceOrdinal=0; faceOrdinal<faceCount; faceOrdinal++) {
     unsigned faceIndex = childCell->entityIndex(faceDim, faceOrdinal);
     if (mesh3D->getActiveCellCount(faceDim, faceIndex) == 1) {

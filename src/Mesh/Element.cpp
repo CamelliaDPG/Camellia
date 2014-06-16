@@ -37,6 +37,7 @@
 #include "Element.h"
 
 #include "Intrepid_CellTools.hpp"
+#include "CamelliaCellTools.h"
 #include "Mesh.h"
 
 // constructor:
@@ -132,13 +133,20 @@ int Element::numChildren() {
   return _cell->children().size();
 }
 
+int Element::numSides() {
+  return CamelliaCellTools::getSideCount(*_cell->topology());
+}
+
 int Element::parentSideForSideIndex(int mySideOrdinal) {
   // returns the sideIndex in parent of the given side
   // returns -1 if the given side isn't shared with parent
   CellPtr parentCell = _cell->getParent();
   if (parentCell.get()==NULL) return -1;
   
-  int numSides = parentCell->topology()->getSideCount();
+  CellTopoPtr cellTopo = parentCell->topology();
+
+  int numSides = CamelliaCellTools::getSideCount(*cellTopo);
+  
   for (int parentSideOrdinal=0; parentSideOrdinal<numSides; parentSideOrdinal++) {
     vector< pair<GlobalIndexType, unsigned> > childrenForSide = parentCell->childrenForSide(parentSideOrdinal);
     for (vector< pair<GlobalIndexType, unsigned> >::iterator childIt = childrenForSide.begin();
