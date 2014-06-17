@@ -211,7 +211,7 @@ void GDAMinimumRule::interpretGlobalCoefficients(GlobalIndexType cellID, FieldCo
 //    cout << "interpretGlobalData, mapping report for cell " << cellID << ":\n";
 //    dofMapper->printMappingReport();
 //  }
-  
+
   FieldContainer<double> globalCoefficientsFC(globalIndexVector.size());
   for (int i=0; i<globalIndexVector.size(); i++) {
     GlobalIndexType globalIndex = globalIndexVector[i];
@@ -474,8 +474,9 @@ BasisMap GDAMinimumRule::getBasisMap(GlobalIndexType cellID, SubCellDofIndexInfo
 
 // trace variable version
 BasisMap GDAMinimumRule::getBasisMap(GlobalIndexType cellID, SubCellDofIndexInfo& dofIndexInfo, VarPtr var, int sideOrdinal) {
-
-  BasisMap varSideMap;
+  vector<SubBasisMapInfo> subBasisMaps;
+  
+  SubBasisMapInfo subBasisMap;
   
 //  if ((cellID==2) && (sideOrdinal==3) && (var->ID() == 0)) {
 //    cout << "DEBUGGING: (cellID==2) && (sideOrdinal==3) && (var->ID() == 0).\n";
@@ -812,8 +813,12 @@ BasisMap GDAMinimumRule::getBasisMap(GlobalIndexType cellID, SubCellDofIndexInfo
 //          Camellia::print("globalDofOrdinals mapped on cell 2, sideOrdinal 1", globalDofOrdinalsSet);
 //          cout << "weights:\n" << subcellInteriorWeights.weights;
 //        }
+  
+        subBasisMap.weights = subcellInteriorWeights.weights;
+        subBasisMap.globalDofOrdinals = globalDofOrdinals;
+        subBasisMap.basisDofOrdinals = basisDofOrdinals;
         
-        varSideMap.push_back(SubBasisDofMapper::subBasisDofMapper(basisDofOrdinals, globalDofOrdinals, subcellInteriorWeights.weights));
+        subBasisMaps.push_back(subBasisMap);
       }
       
     }
@@ -828,6 +833,127 @@ BasisMap GDAMinimumRule::getBasisMap(GlobalIndexType cellID, SubCellDofIndexInfo
       }
     }
   } // (appliedWeightsGreatestEntryDimension >= 0)
+  
+  // now, we collect the local basis coefficients corresponding to each global ordinal
+  // likely there is a more efficient way to do this, but for now this is our approach
+  map< GlobalIndexType, map<unsigned, double> > weightsForGlobalOrdinal;
+  
+  map< unsigned, set<GlobalIndexType> > globalOrdinalsForFineOrdinal;
+  
+  for (vector<SubBasisMapInfo>::iterator subBasisIt = subBasisMaps.begin(); subBasisIt != subBasisMaps.end(); subBasisIt++) {
+    subBasisMap = *subBasisIt;
+    vector<GlobalIndexType> globalDofOrdinals = subBasisMap.globalDofOrdinals;
+    set<unsigned> basisDofOrdinals = subBasisMap.basisDofOrdinals;
+    vector<unsigned> basisDofOrdinalsVector(basisDofOrdinals.begin(),basisDofOrdinals.end());
+    // weights are fine x coarse
+    for (int j=0; j<subBasisMap.weights.dimension(1); j++) {
+      GlobalIndexType globalDofOrdinal = globalDofOrdinals[j];
+      map<unsigned, double> fineOrdinalCoefficientsThusFar = weightsForGlobalOrdinal[globalDofOrdinal];
+      for (int i=0; i<subBasisMap.weights.dimension(0); i++) {
+        unsigned fineOrdinal = basisDofOrdinalsVector[i];
+        double coefficient = subBasisMap.weights(i,j);
+        if (coefficient != 0) {
+          if (fineOrdinalCoefficientsThusFar.find(fineOrdinal) != fineOrdinalCoefficientsThusFar.end()) {
+            double tol = 1e-14;
+            double previousCoefficient = fineOrdinalCoefficientsThusFar[fineOrdinal];
+            if (abs(previousCoefficient-coefficient) > tol) {
+              cout  << "ERROR: incompatible entries for fine ordinal " << fineOrdinal << " in representation of global ordinal " << globalDofOrdinal << endl;
+              TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Internal Error: incompatible entries for fine ordinal " );
+            }
+          }
+          fineOrdinalCoefficientsThusFar[fineOrdinal] = coefficient;
+          globalOrdinalsForFineOrdinal[fineOrdinal].insert(globalDofOrdinal);
+        }
+      }
+      weightsForGlobalOrdinal[globalDofOrdinal] = fineOrdinalCoefficientsThusFar;
+    }
+  }
+
+  // partition global ordinals according to which fine ordinals they interact with -- this is definitely not super-efficient
+  set<GlobalIndexType> partitionedGlobalDofOrdinals;
+  vector< set<GlobalIndexType> > globalDofOrdinalPartitions;
+  vector< set<unsigned> > fineOrdinalsForPartition;
+  
+  for (map< GlobalIndexType, map<unsigned, double> >::iterator globalWeightsIt = weightsForGlobalOrdinal.begin();
+       globalWeightsIt != weightsForGlobalOrdinal.end(); globalWeightsIt++) {
+    GlobalIndexType globalOrdinal = globalWeightsIt->first;
+    if (partitionedGlobalDofOrdinals.find(globalOrdinal) != partitionedGlobalDofOrdinals.end()) continue;
+    
+    set<GlobalIndexType> partition;
+    partition.insert(globalOrdinal);
+    
+    set<unsigned> fineOrdinals;
+    
+    set<GlobalIndexType> globalOrdinalsInPartitionWhoseFineOrdinalsHaveBeenProcessed;
+    
+    map<unsigned, double> fineCoefficients = globalWeightsIt->second;
+    for (map<unsigned, double>::iterator coefficientIt = fineCoefficients.begin(); coefficientIt != fineCoefficients.end(); coefficientIt++) {
+      unsigned fineOrdinal = coefficientIt->first;
+      fineOrdinals.insert(fineOrdinal);
+      set<GlobalIndexType> globalOrdinalsForFine = globalOrdinalsForFineOrdinal[fineOrdinal];
+      partition.insert(globalOrdinalsForFine.begin(),globalOrdinalsForFine.end());
+    }
+    
+    globalOrdinalsInPartitionWhoseFineOrdinalsHaveBeenProcessed.insert(globalOrdinal);
+    
+    while (globalOrdinalsInPartitionWhoseFineOrdinalsHaveBeenProcessed.size() != partition.size()) {
+      for (set<GlobalIndexType>::iterator globalOrdIt = partition.begin(); globalOrdIt != partition.end(); globalOrdIt++) {
+        GlobalIndexType globalOrdinal = *globalOrdIt;
+        if (globalOrdinalsInPartitionWhoseFineOrdinalsHaveBeenProcessed.find(globalOrdinal) !=
+            globalOrdinalsInPartitionWhoseFineOrdinalsHaveBeenProcessed.end()) continue;
+        map<unsigned, double> fineCoefficients = weightsForGlobalOrdinal[globalOrdinal];
+        for (map<unsigned, double>::iterator coefficientIt = fineCoefficients.begin(); coefficientIt != fineCoefficients.end(); coefficientIt++) {
+          unsigned fineOrdinal = coefficientIt->first;
+          fineOrdinals.insert(fineOrdinal);
+          set<GlobalIndexType> globalOrdinalsForFine = globalOrdinalsForFineOrdinal[fineOrdinal];
+          partition.insert(globalOrdinalsForFine.begin(),globalOrdinalsForFine.end());
+        }
+        
+        globalOrdinalsInPartitionWhoseFineOrdinalsHaveBeenProcessed.insert(globalOrdinal);
+      }
+    }
+    
+    for (set<GlobalIndexType>::iterator globalOrdIt = partition.begin(); globalOrdIt != partition.end(); globalOrdIt++) {
+      GlobalIndexType globalOrdinal = *globalOrdIt;
+      partitionedGlobalDofOrdinals.insert(globalOrdinal);
+    }
+    globalDofOrdinalPartitions.push_back(partition);
+    fineOrdinalsForPartition.push_back(fineOrdinals);
+  }
+  
+  BasisMap varSideMap;
+  for (int i=0; i<globalDofOrdinalPartitions.size(); i++) {
+    set<GlobalIndexType> partition = globalDofOrdinalPartitions[i];
+    set<unsigned> fineOrdinals = fineOrdinalsForPartition[i];
+    vector<unsigned> fineOrdinalsVector(fineOrdinals.begin(), fineOrdinals.end());
+    map<unsigned,int> fineOrdinalRowLookup;
+    for (int i=0; i<fineOrdinalsVector.size(); i++) {
+      fineOrdinalRowLookup[fineOrdinalsVector[i]] = i;
+    }
+    FieldContainer<double> weights(fineOrdinals.size(),partition.size());
+    int col=0;
+    for (set<GlobalIndexType>::iterator globalDofIt=partition.begin(); globalDofIt != partition.end(); globalDofIt++) {
+      GlobalIndexType globalOrdinal = *globalDofIt;
+      map<unsigned, double> fineCoefficients = weightsForGlobalOrdinal[globalOrdinal];
+      for (map<unsigned, double>::iterator coefficientIt = fineCoefficients.begin(); coefficientIt != fineCoefficients.end(); coefficientIt++) {
+        unsigned fineOrdinal = coefficientIt->first;
+        double coefficient = coefficientIt->second;
+        int row = fineOrdinalRowLookup[fineOrdinal];
+        weights(row,col) = coefficient;
+      }
+      col++;
+    }
+    vector<GlobalIndexType> globalOrdinals(partition.begin(),partition.end());
+    SubBasisDofMapperPtr subBasisMap = SubBasisDofMapper::subBasisDofMapper(fineOrdinals, globalOrdinals, weights);
+    varSideMap.push_back(subBasisMap);
+    
+//    if ((cellID==2) && (sideOrdinal==1) && (var->ID() ==0)) {
+//      cout << "Adding subBasisDofMapper.  Details:\n";
+//      Camellia::print("fineOrdinals", fineOrdinals);
+//      Camellia::print("globalOrdinals", globalOrdinals);
+//      cout << "weights:\n" << weights;
+//    }
+  }
   
   return varSideMap;
 }
@@ -1113,7 +1239,7 @@ LocalDofMapperPtr GDAMinimumRule::getDofMapper(GlobalIndexType cellID, CellConst
   /**************** ESTABLISH OWNERSHIP ****************/
   SubCellDofIndexInfo dofIndexInfo = getOwnedGlobalDofIndices(cellID, constraints);
 
-  // DEBUGGING
+//  // DEBUGGING
 //  if (cellID == 2) {
 //    cout << "OWNED dof indices for cell " << cellID << endl;
 //    printDofIndexInfo(cellID, dofIndexInfo);
