@@ -21,21 +21,18 @@ class Cone_U0 : public SimpleFunction {
   double _h; // height
   double _x0, _y0; // center
   bool _usePeriodicData; // if true, for x > 0.5 we set x = x-1; similarly for y
-  bool _flip_y; // if true, we do
 public:
-  Cone_U0(double x0 = 0, double y0 = 0.25, double r = 0.1, double h = 1.0, bool usePeriodicData = true, bool flip_y = true) {
+  Cone_U0(double x0 = 0, double y0 = 0.25, double r = 0.1, double h = 1.0, bool usePeriodicData = true) {
     _x0 = x0;
     _y0 = y0;
     _r = r;
     _h = h;
     _usePeriodicData = usePeriodicData;
-    _flip_y = flip_y;
   }
   double value(double x, double y) {
     if (_usePeriodicData) {
       if (x > 0.5) {
         x = x - 1;
-        y = _flip_y ? 1 - y : y;
       }
       if (y > 0.5) y = y - 1;
     }
@@ -78,6 +75,16 @@ public:
   }
 };
 
+class ConvectionField : public SimpleVectorFunction {
+public:
+  vector<double> value(double x, double y) {
+    vector<double> val(2);
+    val[0] = y-0.5;
+    val[1] = 0.5-x;
+    return val;
+  }
+};
+
 int main(int argc, char *argv[]) {
 #ifdef ENABLE_INTEL_FLOATING_POINT_EXCEPTIONS
   cout << "NOTE: enabling floating point exceptions for divide by zero.\n";
@@ -101,8 +108,7 @@ int main(int argc, char *argv[]) {
   bool useMumpsIfAvailable  = true;
   bool convertSolutionsToVTK = false; // when true assumes we've already run with precisely the same options, except without VTK support (so we have a bunch of .soln files)
   bool usePeriodicBCs = true;
-  bool useFlipsInPeriodicBCs = false;
-  bool useConstantConvection = true;
+  bool useConstantConvection = false;
   
   cmdp.setOption("polyOrder",&k,"polynomial order for field variable u");
   cmdp.setOption("delta_k", &delta_k, "test space polynomial order enrichment");
@@ -111,6 +117,9 @@ int main(int argc, char *argv[]) {
   cmdp.setOption("theta",&theta,"theta weight for time-stepping");
   cmdp.setOption("numTimeSteps",&numTimeSteps,"number of time steps");
   cmdp.setOption("numFrames",&numFrames,"number of frames for export");
+  
+  cmdp.setOption("usePeriodicBCs", "useDirichletBCs", &usePeriodicBCs);
+  cmdp.setOption("useConstantConvection", "useVariableConvection", &useConstantConvection);
   
   cmdp.setOption("useCondensedSolve", "useUncondensedSolve", &useCondensedSolve, "use static condensation to reduce the size of the global solve");
   cmdp.setOption("useMumps", "useKLU", &useMumpsIfAvailable, "use MUMPS (if available)");
@@ -160,10 +169,11 @@ int main(int argc, char *argv[]) {
   FunctionPtr y = Function::yn(1);
   
   FunctionPtr c;
-  if (useConstantConvection)
+  if (useConstantConvection) {
     c = Function::vectorize(Function::constant(0.5), Function::constant(0.5));
-  else
-    FunctionPtr c = Function::vectorize(y-0.5, 0.5-x);
+  } else {
+    c = Teuchos::rcp( new ConvectionField ); // Function::vectorize(y-0.5, 0.5-x);
+  }
 //  FunctionPtr c = Function::vectorize(y, x);
   FunctionPtr n = Function::normal();
   
@@ -184,59 +194,32 @@ int main(int argc, char *argv[]) {
   }
   
   BCPtr bc = BC::bc();
+  
+  SpatialFilterPtr inflowFilter  = Teuchos::rcp( new InflowFilterForClockwisePlanarRotation (x0,x0+width,y0,y0+height,0.5,0.5));
+  
   vector< PeriodicBCPtr > periodicBCs;
   if (! usePeriodicBCs) {
-    SpatialFilterPtr inflowFilter = Teuchos::rcp( new InflowFilterForClockwisePlanarRotation(x0,x0+width,y0,y0+height,0.5,0.5));
     //  bc->addDirichlet(u_hat, SpatialFilter::allSpace(), Function::zero());
     bc->addDirichlet(qHat, inflowFilter, Function::zero()); // zero BCs enforced at the inflow boundary.
   } else {
-    if (useFlipsInPeriodicBCs) {
-      SpatialFilterPtr leftFilter = SpatialFilter::matchingX(x0);
-      SpatialFilterPtr rightFilter = SpatialFilter::matchingX(x0+width);
-      
-      SpatialFilterPtr bottomFilter = SpatialFilter::matchingY(y0);
-      SpatialFilterPtr topFilter = SpatialFilter::matchingY(y0+height);
-      
-      FunctionPtr x = Function::xn(1);
-      FunctionPtr y = Function::yn(1);
-      FunctionPtr flip_y = 1 - y;
-      FunctionPtr flip_x = 1 - x;
-      
-      FunctionPtr leftToRight = Function::vectorize(Function::constant(x0+width), flip_y);
-      FunctionPtr rightToLeft = Function::vectorize(Function::constant(x0), flip_y);
-      
-      FunctionPtr bottomToTop = Function::vectorize(flip_x, Function::constant(y0+height));
-      FunctionPtr topToBottom = Function::vectorize(flip_x, Function::constant(y0));
-      
-      PeriodicBCPtr horizontalBC = PeriodicBC::periodicBC(leftFilter, rightFilter, leftToRight, rightToLeft);
-      PeriodicBCPtr verticalBC   = PeriodicBC::periodicBC(bottomFilter, topFilter, bottomToTop, topToBottom);
-      
-      periodicBCs.push_back(horizontalBC);
-      periodicBCs.push_back(verticalBC);
-    } else {
-      periodicBCs.push_back(PeriodicBC::xIdentification(x0, x0+width));
-      periodicBCs.push_back(PeriodicBC::yIdentification(y0, y0+height));
-    }
-    
-    // OLD VERSION (no flips):
-//    periodicBCs.push_back(PeriodicBC::xIdentification(x0, x0+width));
-//    periodicBCs.push_back(PeriodicBC::yIdentification(y0, y0+height));
+    periodicBCs.push_back(PeriodicBC::xIdentification(x0, x0+width));
+    periodicBCs.push_back(PeriodicBC::yIdentification(y0, y0+height));
   }
   
   MeshPtr mesh = MeshFactory::quadMeshMinRule(bf, H1Order, delta_k, width, height,
                                               horizontalCells, verticalCells, false, x0, y0, periodicBCs);
   
-  FunctionPtr u0 = Teuchos::rcp( new Cone_U0(0.0, 0.25, 0.1, 1.0, usePeriodicBCs, useFlipsInPeriodicBCs) );
+  FunctionPtr u0 = Teuchos::rcp( new Cone_U0(0.0, 0.25, 0.1, 1.0, usePeriodicBCs) );
   
   RHSPtr initialRHS = RHS::rhs();
   initialRHS->addTerm(u0 / dt * v);
   initialRHS->addTerm((1-theta) * u0 * c * v->grad());
   
   IPPtr ip;
-  ip = Teuchos::rcp( new IP );
-  ip->addTerm(v);
-  ip->addTerm(c * v->grad());
-//  ip = bf->graphNorm();
+//  ip = Teuchos::rcp( new IP );
+//  ip->addTerm(v);
+//  ip->addTerm(c * v->grad());
+  ip = bf->graphNorm();
   
   // create two Solution objects; we'll switch between these for time steps
   SolutionPtr soln0 = Solution::solution(mesh, bc, initialRHS, ip);
