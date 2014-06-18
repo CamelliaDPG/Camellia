@@ -77,21 +77,62 @@ protected:
 public:
   NewExporter(MeshTopologyPtr mesh) :
     _mesh(mesh) {}
-  virtual void exportFunction(FunctionPtr function, const string& functionName="function", set<GlobalIndexType> cellIndices=set<GlobalIndexType>(), unsigned int num1DPts=0) = 0;
+  virtual void exportFunction(FunctionPtr function, string functionName="function", string filename="output", set<GlobalIndexType> cellIndices=set<GlobalIndexType>(), unsigned int num1DPts=0) = 0;
 };
 
-class NewVTKExporter : public NewExporter {
-public:
-  NewVTKExporter(MeshTopologyPtr mesh) :
-    NewExporter(mesh) {}
-  void exportFunction(FunctionPtr function, const string& functionName="function", set<GlobalIndexType> cellIndices=set<GlobalIndexType>(), unsigned int num1DPts=0);
-};
+// class NewVTKExporter : public NewExporter {
+// public:
+//   NewVTKExporter(MeshTopologyPtr mesh) :
+//     NewExporter(mesh) {}
+//   void exportFunction(FunctionPtr function, const string& functionName="function", set<GlobalIndexType> cellIndices=set<GlobalIndexType>(), unsigned int num1DPts=0);
+// };
 
+#ifdef USE_XDMF
+// #include <Xdmf.h>
 class XDMFExporter : public NewExporter {
+private:
+  // XdmfDOM         dom;
+  // XdmfRoot        root;
+  // XdmfDomain      domain;
+  // XdmfGrid        grid;
+  // XdmfTime        time;
+  // XdmfTopology    *topology;
+  // XdmfGeometry    *geometry;
+  // XdmfAttribute   nodedata;
+  // XdmfAttribute   celldata;
+  // XdmfArray       *ptArray;
+  // XdmfArray       *connArray;
+  // XdmfArray       *valArray;
+
+  int spaceDim;
+  int numPoints;
+  bool exportingBoundaryValues;
+  FieldContainer<double> refPoints;
+  const FieldContainer<double> *physicalPoints;
+  BasisCachePtr basisCache;
+
 public:
   XDMFExporter(MeshTopologyPtr mesh) :
-    NewExporter(mesh) {}
-  void exportFunction(FunctionPtr function, const string& functionName="function", set<GlobalIndexType> cellIndices=set<GlobalIndexType>(), unsigned int num1DPts=0);
+    NewExporter(mesh)//, dom(), root(), domain(), grid(), time()
+    {
+      // root.SetDOM(&dom);
+      // root.SetVersion(2.0);
+      // root.Build();
+      // // Domain
+      // root.Insert(&domain);
+      // // Grid
+      // grid.SetName("Grid");
+      // domain.Insert(&grid);
+      // time.SetTimeType(XDMF_TIME_SINGLE);
+      // time.SetValue(0);
+      // grid.Insert(&time);
+    }
+  void exportFunction(FunctionPtr function, string functionName="function", string filename="output", set<GlobalIndexType> cellIndices=set<GlobalIndexType>(), unsigned int num1DPts=0);
+  void exportFunction(vector<FunctionPtr> functions, vector<string> functionNames, string filename, set<GlobalIndexType> cellIndices=set<GlobalIndexType>(), unsigned int num1DPts=0);
+private:
+  void assembleMeshValues();
+  void assembleFunctionValues(FunctionPtr function, string functionName);
 };
+#endif /* end of USE_XDMF */
 
 #endif /* end of include guard: SOLUTIONEXPORTER_H */

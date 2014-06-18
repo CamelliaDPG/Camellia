@@ -36,10 +36,10 @@ int main(int argc, char *argv[])
 #endif
 
   {
-  // 2D tests
+  // 1D tests
     CellTopoPtr line_2 = Teuchos::rcp( new shards::CellTopology(shards::getCellTopologyData<shards::Line<2> >() ) );
 
-  // let's draw a little house
+  // let's draw a line
     vector<double> v0 = makeVertex(0);
     vector<double> v1 = makeVertex(1);
     vector<double> v2 = makeVertex(2);
@@ -72,7 +72,7 @@ int main(int argc, char *argv[])
     // FunctionPtr fbdr = Function::restrictToCellBoundary(function);
 
     XDMFExporter exporter(mesh);
-    exporter.exportFunction(function, "function1");
+    exporter.exportFunction(function, "function1", "function1");
     // exporter.exportFunction(fbdr, "boundary1");
   }
   {
@@ -123,9 +123,9 @@ int main(int argc, char *argv[])
     FunctionPtr fbdr = Function::restrictToCellBoundary(function);
 
     XDMFExporter exporter(mesh);
-    exporter.exportFunction(function, "function2");
-    exporter.exportFunction(vect, "vect2");
-    exporter.exportFunction(fbdr, "boundary2");
+    exporter.exportFunction(function, "function2", "function2");
+    exporter.exportFunction(vect, "vect2", "vect2");
+    exporter.exportFunction(fbdr, "boundary2", "boundary2");
   }
 
   {
@@ -186,8 +186,8 @@ int main(int argc, char *argv[])
     FunctionPtr vect = Function::vectorize(x, y, z);
 
     XDMFExporter exporter(mesh);
-    exporter.exportFunction(function, "function3");
-    exporter.exportFunction(fbdr, "boundary3");
-    exporter.exportFunction(vect, "vect3");
+    exporter.exportFunction(function, "function3", "function3");
+    exporter.exportFunction(fbdr, "boundary3", "boundary3");
+    exporter.exportFunction(vect, "vect3", "vect3");
   }
 }

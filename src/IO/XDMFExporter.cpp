@@ -5,8 +5,23 @@
 
 #ifdef USE_XDMF
 #include <Xdmf.h>
-void XDMFExporter::exportFunction(FunctionPtr function, const string& functionName, set<GlobalIndexType> cellIndices, unsigned int num1DPts)
+
+void XDMFExporter::exportFunction(FunctionPtr function, string functionName, string filename, set<GlobalIndexType> cellIndices, unsigned int num1DPts)
 {
+  vector<FunctionPtr> functions;
+  functions.push_back(function);
+  functions.push_back(function);
+  vector<string> functionNames;
+  functionNames.push_back("function1");
+  functionNames.push_back("function2");
+  exportFunction(functions, functionNames, filename, cellIndices, num1DPts);
+}
+
+void XDMFExporter::exportFunction(vector<FunctionPtr> functions, vector<string> functionNames, string filename, set<GlobalIndexType> cellIndices, unsigned int num1DPts)
+{
+  // int nFcns = sizeof(functions)/sizeof(FunctionPtr);
+  int nFcns = 2;
+
   XdmfDOM         dom;
   XdmfRoot        root;
   XdmfDomain      domain;
@@ -14,27 +29,27 @@ void XDMFExporter::exportFunction(FunctionPtr function, const string& functionNa
   XdmfTime        time;
   XdmfTopology    *topology;
   XdmfGeometry    *geometry;
-  XdmfAttribute   nodedata;
+  XdmfAttribute   nodedata[nFcns];
   XdmfAttribute   celldata;
   XdmfArray       *ptArray;
   XdmfArray       *connArray;
-  XdmfArray       *valArray;
+  XdmfArray       *valArray[nFcns];
 
   root.SetDOM(&dom);
   root.SetVersion(2.0);
   root.Build();
-  // Domain
+      // Domain
+  // cout << domain.GetElementName() << endl;
   root.Insert(&domain);
-  // Grid
+      // Grid
   grid.SetName("Grid");
+  // cout << grid.GetElementName() << endl;
   domain.Insert(&grid);
   time.SetTimeType(XDMF_TIME_SINGLE);
   time.SetValue(0);
+  // cout << time.GetElementName() << endl;
   grid.Insert(&time);
-  // Topology
-  topology = grid.GetTopology();
-  topology->SetTopologyType(XDMF_MIXED);
-  
+
   bool defaultPts = (num1DPts == 0);
   int pOrder = 4;
   if (defaultPts)
@@ -44,9 +59,13 @@ void XDMFExporter::exportFunction(FunctionPtr function, const string& functionNa
       // num1DPts = 2*pOrder+2;
       num1DPts = pOrder+1;
 
-  int spaceDim = _mesh->getSpaceDim();
+  spaceDim = _mesh->getSpaceDim();
 
-  bool boundaryOnly = function->boundaryValueOnly();
+  exportingBoundaryValues = functions[0]->boundaryValueOnly();
+
+  // Topology
+  topology = grid.GetTopology();
+  topology->SetTopologyType(XDMF_MIXED);
 
   unsigned int total_vertices = 0;
   
@@ -62,10 +81,9 @@ void XDMFExporter::exportFunction(FunctionPtr function, const string& functionNa
     if (cell->topology()->getKey() == shards::Triangle<3>::key) numTriangles++;
     if (cell->topology()->getKey() == shards::Quadrilateral<4>::key) numQuads++;
     if (cell->topology()->getKey() == shards::Hexahedron<8>::key) numHexas++;
-    // cout << _mesh->cellPolyOrder(*cellIt) << endl;
   }
   int totalSubLines, totalSubTriangles, totalSubQuads, totalSubHexas, totalSubcells, totalPts, totalBoundaryPts, totalBoundaryLines, totalBoundaryFaces;
-  if (!boundaryOnly)
+  if (!exportingBoundaryValues)
   {
     totalSubLines = (num1DPts-1)*numLines;
     totalSubTriangles = (num1DPts-1)*(num1DPts-1)*numTriangles;
@@ -90,7 +108,7 @@ void XDMFExporter::exportFunction(FunctionPtr function, const string& functionNa
   // Topology
   topology = grid.GetTopology();
   topology->SetTopologyType(XDMF_MIXED);
-  if (!boundaryOnly)
+  if (!exportingBoundaryValues)
   {
     if (spaceDim == 1)
       topology->SetNumberOfElements(numLines);
@@ -110,7 +128,7 @@ void XDMFExporter::exportFunction(FunctionPtr function, const string& functionNa
       topology->SetNumberOfElements(totalSubQuads);
   }
   connArray = topology->GetConnectivity();
-  if (!boundaryOnly)
+  if (!exportingBoundaryValues)
   {
     if (spaceDim == 1)
       connArray->SetNumberOfElements(2*numLines+totalPts);
@@ -140,31 +158,48 @@ void XDMFExporter::exportFunction(FunctionPtr function, const string& functionNa
   else
     ptArray->SetNumberOfElements(spaceDim * totalPts);
   // Node Data
-  nodedata.SetName(functionName.c_str());
-  nodedata.SetAttributeCenter(XDMF_ATTRIBUTE_CENTER_NODE);
-  int numFcnComponents;
-  if (function->rank() == 0)
-    numFcnComponents = 1;
-  else if (function->rank() == 1)
-    numFcnComponents = spaceDim;
-  else
-    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unhandled function rank");
-  if (numFcnComponents == 1)
-    nodedata.SetAttributeType(XDMF_ATTRIBUTE_TYPE_SCALAR);
-  else
-    nodedata.SetAttributeType(XDMF_ATTRIBUTE_TYPE_VECTOR);
-  valArray = nodedata.GetValues();
-  valArray->SetNumberType(XDMF_FLOAT64_TYPE);
-  if (numFcnComponents == 1)
-    valArray->SetNumberOfElements(totalPts);
-  else
-    valArray->SetNumberOfElements(3*totalPts);
+  for (int i=0; i<nFcns; i++)
+  {
+    nodedata[i].SetName(functionNames[i].c_str());
+    nodedata[i].SetAttributeCenter(XDMF_ATTRIBUTE_CENTER_NODE);
+  }
+  int numFcnComponents[nFcns];
+  for (int i = 0; i < nFcns; i++)
+  {
+    if (functions[i]->rank() == 0)
+      numFcnComponents[i] = 1;
+    else if (functions[i]->rank() == 1)
+      numFcnComponents[i] = spaceDim;
+    else
+    {
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unhandled function rank");
+    }
+    if (numFcnComponents[i] == 1)
+    {
+      nodedata[i].SetAttributeType(XDMF_ATTRIBUTE_TYPE_SCALAR);
+    }
+    else
+    {
+      nodedata[i].SetAttributeType(XDMF_ATTRIBUTE_TYPE_VECTOR);
+    }
+    valArray[i] = nodedata[i].GetValues();
+    valArray[i]->SetNumberType(XDMF_FLOAT64_TYPE);
+    if (numFcnComponents[i] == 1)
+    {
+      valArray[i]->SetNumberOfElements(totalPts);
+    }
+    else
+    {
+      valArray[i]->SetNumberOfElements(3*totalPts);
+    }
+  }
 
 
   int connIndex = 0;
   int ptIndex = 0;
-  int valIndex = 0;
-
+  int valIndex[nFcns];
+  for (int i = 0; i < nFcns; i++)
+    valIndex[i] = 0;
   
   for (set<GlobalIndexType>::iterator cellIt = cellIndices.begin(); cellIt != cellIndices.end(); cellIt++) {
     GlobalIndexType cellIndex = *cellIt;
@@ -173,14 +208,14 @@ void XDMFExporter::exportFunction(FunctionPtr function, const string& functionNa
     FieldContainer<double> physicalCellNodes = _mesh->physicalCellNodesForCell(cellIndex);
 
     CellTopoPtr cellTopoPtr = cell->topology();
-    int numPoints = 0;
+    numPoints = 0;
     // int pOrder = 4;
     // if (defaultPts)
     //   num1DPts = pow(pOrder, 2)+1;
     
     if (physicalCellNodes.rank() == 2)
       physicalCellNodes.resize(1,physicalCellNodes.dimension(0), physicalCellNodes.dimension(1));
-    bool createSideCache = function->boundaryValueOnly();
+    bool createSideCache = functions[0]->boundaryValueOnly();
     
     BasisCachePtr volumeBasisCache = Teuchos::rcp( new BasisCache(*cellTopoPtr, 1, createSideCache) );
     volumeBasisCache->setPhysicalCellNodes(physicalCellNodes, vector<GlobalIndexType>(1,cellIndex), createSideCache);
@@ -193,7 +228,7 @@ void XDMFExporter::exportFunction(FunctionPtr function, const string& functionNa
       shards::CellTopology topo = createSideCache ? cellTopoPtr->getBaseCellTopologyData(sideDim, sideOrdinal) : *cellTopoPtr;
       unsigned cellTopoKey = topo.getKey();
       
-      BasisCachePtr basisCache = createSideCache ? volumeBasisCache->getSideBasisCache(sideOrdinal) : volumeBasisCache;
+      basisCache = createSideCache ? volumeBasisCache->getSideBasisCache(sideOrdinal) : volumeBasisCache;
       
       unsigned domainDim = createSideCache ? sideDim : spaceDim;
       
@@ -215,7 +250,7 @@ void XDMFExporter::exportFunction(FunctionPtr function, const string& functionNa
           TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "cellTopoKey unrecognized");
       }
 
-      FieldContainer<double> refPoints(numPoints,domainDim);
+      refPoints.resize(numPoints,domainDim);
       switch (cellTopoKey)
       {
         case shards::Line<2>::key:
@@ -276,17 +311,8 @@ void XDMFExporter::exportFunction(FunctionPtr function, const string& functionNa
       }
 
       basisCache->setRefCellPoints(refPoints);
-      const FieldContainer<double> *physicalPoints = &basisCache->getPhysicalCubaturePoints();
+      physicalPoints = &basisCache->getPhysicalCubaturePoints();
 
-      FieldContainer<double> computedValues;
-      if (function->rank() == 0)
-        computedValues.resize(1, numPoints);
-      else if (function->rank() == 1)
-        computedValues.resize(1, numPoints, spaceDim);
-      else
-        TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unhandled function rank");
-
-      function->values(computedValues, basisCache);
 
       int subcellStartIndex = total_vertices;
       switch (cellTopoKey)
@@ -442,47 +468,109 @@ void XDMFExporter::exportFunction(FunctionPtr function, const string& functionNa
             ptArray->SetValue(ptIndex, (*physicalPoints)(0, pointIndex, 2));
             ptIndex++;
           }
-          switch(numFcnComponents)
+          for (int i = 0; i < nFcns; i++)
           {
-            case 1:
-            valArray->SetValue(valIndex, computedValues(0, pointIndex));
-            valIndex++;
-            break;
-            case 2:
-            valArray->SetValue(valIndex, computedValues(0, pointIndex, 0));
-            valIndex++;
-            valArray->SetValue(valIndex, computedValues(0, pointIndex, 1));
-            valIndex++;
-            valArray->SetValue(valIndex, 0);
-            valIndex++;
-            break;
-            case 3:
-            valArray->SetValue(valIndex, computedValues(0, pointIndex, 0));
-            valIndex++;
-            valArray->SetValue(valIndex, computedValues(0, pointIndex, 1));
-            valIndex++;
-            valArray->SetValue(valIndex, computedValues(0, pointIndex, 2));
-            valIndex++;
-            break;
-            default:
-            TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unsupported number of components");
+          // Function Values
+            FieldContainer<double> computedValues;
+            if (functions[i]->rank() == 0)
+              computedValues.resize(1, numPoints);
+            else if (functions[i]->rank() == 1)
+              computedValues.resize(1, numPoints, spaceDim);
+            else
+              TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unhandled function rank");
+
+            functions[i]->values(computedValues, basisCache);
+
+            switch(numFcnComponents[i])
+            {
+              case 1:
+              valArray[i]->SetValue(valIndex[i], computedValues(0, pointIndex));
+              valIndex[i]++;
+              break;
+              case 2:
+              valArray[i]->SetValue(valIndex[i], computedValues(0, pointIndex, 0));
+              valIndex[i]++;
+              valArray[i]->SetValue(valIndex[i], computedValues(0, pointIndex, 1));
+              valIndex[i]++;
+              valArray[i]->SetValue(valIndex[i], 0);
+              valIndex[i]++;
+              break;
+              case 3:
+              valArray[i]->SetValue(valIndex[i], computedValues(0, pointIndex, 0));
+              valIndex[i]++;
+              valArray[i]->SetValue(valIndex[i], computedValues(0, pointIndex, 1));
+              valIndex[i]++;
+              valArray[i]->SetValue(valIndex[i], computedValues(0, pointIndex, 2));
+              valIndex[i]++;
+              break;
+              default:
+              TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unsupported number of components");
+            }
           }
           total_vertices++;
         }
       }
     }
-    connArray->SetHeavyDataSetName((functionName+".h5:/Conns").c_str());
-    ptArray->SetHeavyDataSetName((functionName+".h5:/Points").c_str());
-    valArray->SetHeavyDataSetName((functionName+".h5:/NodeData").c_str());
+    connArray->SetHeavyDataSetName((filename+".h5:/Conns").c_str());
+    ptArray->SetHeavyDataSetName((filename+".h5:/Points").c_str());
+    valArray[0]->SetHeavyDataSetName((filename+".h5:/NodeData").c_str());
+    valArray[1]->SetHeavyDataSetName((filename+".h5:/NodeData").c_str());
+    // valArray[1]->SetHeavyDataSetName((functionNames[0]+".h5:/NodeData").c_str());
     // Attach and Write
-    grid.Insert(&nodedata);
+    // nodedata[0].SetName("Test2");
+    // cout << nodedata[0].GetElementName() << endl;
+    grid.Insert(&nodedata[0]);
+    grid.Insert(&nodedata[1]);
     // grid.Insert(&celldata);
     // Build is recursive ... it will be called on all of the child nodes.
     // This updates the DOM and writes the HDF5
     root.Build();
     // Write the XML
-    dom.Write((functionName+".xmf").c_str());
+    dom.Write((filename+".xmf").c_str());
 
-    cout << "Wrote " <<  functionName << ".xmf" << endl;
+    cout << "Wrote " <<  filename << ".xmf" << endl;
+}
+
+void XDMFExporter::assembleMeshValues()
+{
+}
+
+void XDMFExporter::assembleFunctionValues(FunctionPtr function, string functionName)
+{
+  // FieldContainer<double> computedValues;
+  // if (function->rank() == 0)
+  //   computedValues.resize(1, numPoints);
+  // else if (function->rank() == 1)
+  //   computedValues.resize(1, numPoints, spaceDim);
+  // else
+  //   TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unhandled function rank");
+
+  // function->values(computedValues, basisCache);
+
+  // switch(numFcnComponents)
+  // {
+  //   case 1:
+  //   valArray->SetValue(valIndex[i], computedValues(0, pointIndex));
+  //   valIndex[i]++;
+  //   break;
+  //   case 2:
+  //   valArray->SetValue(valIndex[i], computedValues(0, pointIndex, 0));
+  //   valIndex[i]++;
+  //   valArray->SetValue(valIndex[i], computedValues(0, pointIndex, 1));
+  //   valIndex[i]++;
+  //   valArray->SetValue(valIndex[i], 0);
+  //   valIndex[i]++;
+  //   break;
+  //   case 3:
+  //   valArray->SetValue(valIndex[i], computedValues(0, pointIndex, 0));
+  //   valIndex[i]++;
+  //   valArray->SetValue(valIndex[i], computedValues(0, pointIndex, 1));
+  //   valIndex[i]++;
+  //   valArray->SetValue(valIndex[i], computedValues(0, pointIndex, 2));
+  //   valIndex[i]++;
+  //   break;
+  //   default:
+  //   TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unsupported number of components");
+  // }
 }
 #endif

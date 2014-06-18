@@ -1,6 +1,7 @@
 # Configure file for Camellia
 
 set(TRILINOS_PATH /workspace/truman/trilinos)
+# set(XDMF_PATH /workspace/truman/xdmf)
 set(XDMF_PATH /workspace/truman/xdmf)
 #set(MUMPS_PATH /opt/apps/ossw/libraries/mumps)
 #set(TRILINOS_PATH $ENV{TRILINOS_DIR})

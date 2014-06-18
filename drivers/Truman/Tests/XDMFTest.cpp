@@ -3,7 +3,6 @@
 
 int main()
 {
-  std::cout << "Hello, world!\n";
   int nel = 4;
   int npts = 9;
 
@@ -39,7 +38,7 @@ int main()
   topology->SetTopologyType(XDMF_MIXED);
   topology->SetNumberOfElements(nel+1);
   array = topology->GetConnectivity();
-  array->SetNumberOfElements(nel * 4 + 4 + 1 + 3 + 1 + 3);
+  array->SetNumberOfElements(nel * 4 + 4 + 1 + 3);
   // array->SetValues(0, Conns, nel * 4);
   array->SetValue(0, 5);
   array->SetValue(1, 0);
@@ -65,10 +64,6 @@ int main()
   array->SetValue(21, 7);
   array->SetValue(22, 8);
   array->SetValue(23, 9);
-  array->SetValue(24, 2);
-  array->SetValue(25, 7);
-  array->SetValue(26, 8);
-  array->SetValue(27, 9);
   array->SetHeavyDataSetName("Test.h5:/Conns");
   // Geometry
   geometry = grid.GetGeometry();
@@ -104,7 +99,7 @@ int main()
   nodedata.SetAttributeType(XDMF_ATTRIBUTE_TYPE_SCALAR);
   array = nodedata.GetValues();
   array->SetNumberType(XDMF_FLOAT64_TYPE);
-  array->SetNumberOfElements(npts+1+3);
+  array->SetNumberOfElements(npts+1);
   array->SetValue(0, 0);
   array->SetValue(1, 1);
   array->SetValue(2, 2);
@@ -115,9 +110,6 @@ int main()
   array->SetValue(7, 7);
   array->SetValue(8, 8);
   array->SetValue(9, 9);
-  array->SetValue(10, 10);
-  array->SetValue(11, 11);
-  array->SetValue(12, 12);
   array->SetHeavyDataSetName("Test.h5:/NodeData");
   // Cell Data
   celldata.SetName("Cell Scalar");
