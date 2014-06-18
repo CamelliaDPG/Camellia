@@ -47,7 +47,7 @@ void XDMFExporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
   grid.Insert(&time);
 
   bool defaultPts = (num1DPts == 0);
-  int pOrder = 8;
+  int pOrder = 6;
   if (defaultPts)
     if (pOrder < 2)
       num1DPts = 2;
@@ -55,9 +55,12 @@ void XDMFExporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
       // num1DPts = 2*pOrder+2;
       num1DPts = pOrder+1;
 
-  spaceDim = _mesh->getSpaceDim();
+  int spaceDim = _mesh->getSpaceDim();
 
-  exportingBoundaryValues = functions[0]->boundaryValueOnly();
+  bool exportingBoundaryValues = functions[0]->boundaryValueOnly();
+  for (int i=0; i < nFcns; i++)
+    if (exportingBoundaryValues != functions[i]->boundaryValueOnly())
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Can not export trace and field variables together");
 
   // Topology
   topology = grid.GetTopology();
@@ -204,7 +207,7 @@ void XDMFExporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
     FieldContainer<double> physicalCellNodes = _mesh->physicalCellNodesForCell(cellIndex);
 
     CellTopoPtr cellTopoPtr = cell->topology();
-    numPoints = 0;
+    int numPoints = 0;
     // int pOrder = 4;
     // if (defaultPts)
     //   num1DPts = pow(pOrder, 2)+1;
@@ -224,7 +227,7 @@ void XDMFExporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
       shards::CellTopology topo = createSideCache ? cellTopoPtr->getBaseCellTopologyData(sideDim, sideOrdinal) : *cellTopoPtr;
       unsigned cellTopoKey = topo.getKey();
       
-      basisCache = createSideCache ? volumeBasisCache->getSideBasisCache(sideOrdinal) : volumeBasisCache;
+      BasisCachePtr basisCache = createSideCache ? volumeBasisCache->getSideBasisCache(sideOrdinal) : volumeBasisCache;
       
       unsigned domainDim = createSideCache ? sideDim : spaceDim;
       
@@ -246,7 +249,7 @@ void XDMFExporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
           TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "cellTopoKey unrecognized");
       }
 
-      refPoints.resize(numPoints,domainDim);
+      FieldContainer<double> refPoints(numPoints,domainDim);
       switch (cellTopoKey)
       {
         case shards::Line<2>::key:
@@ -307,7 +310,7 @@ void XDMFExporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
       }
 
       basisCache->setRefCellPoints(refPoints);
-      physicalPoints = &basisCache->getPhysicalCubaturePoints();
+      const FieldContainer<double> *physicalPoints = &basisCache->getPhysicalCubaturePoints();
 
 
       int subcellStartIndex = total_vertices;
@@ -508,7 +511,7 @@ void XDMFExporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
       }
     }
     // mkdir("HDF5");
-    system("mkdir -p HDF5");
+    // system("mkdir -p HDF5");
     connArray->SetHeavyDataSetName(("HDF5/"+filename+".h5:/Conns").c_str());
     ptArray->SetHeavyDataSetName(("HDF5/"+filename+".h5:/Points").c_str());
     for (int i = 0; i < nFcns; i++)

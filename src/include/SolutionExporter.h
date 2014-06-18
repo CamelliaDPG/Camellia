@@ -80,56 +80,28 @@ public:
   virtual void exportFunction(FunctionPtr function, string functionName="function", string filename="output", set<GlobalIndexType> cellIndices=set<GlobalIndexType>(), unsigned int num1DPts=0) = 0;
 };
 
-// class NewVTKExporter : public NewExporter {
-// public:
-//   NewVTKExporter(MeshTopologyPtr mesh) :
-//     NewExporter(mesh) {}
-//   void exportFunction(FunctionPtr function, const string& functionName="function", set<GlobalIndexType> cellIndices=set<GlobalIndexType>(), unsigned int num1DPts=0);
-// };
-
-#ifdef USE_XDMF
-// #include <Xdmf.h>
-class XDMFExporter : public NewExporter {
-private:
-  // XdmfDOM         dom;
-  // XdmfRoot        root;
-  // XdmfDomain      domain;
-  // XdmfGrid        grid;
-  // XdmfTime        time;
-  // XdmfTopology    *topology;
-  // XdmfGeometry    *geometry;
-  // XdmfAttribute   nodedata;
-  // XdmfAttribute   celldata;
-  // XdmfArray       *ptArray;
-  // XdmfArray       *connArray;
-  // XdmfArray       *valArray;
-
-  int spaceDim;
-  int numPoints;
-  bool exportingBoundaryValues;
-  FieldContainer<double> refPoints;
-  const FieldContainer<double> *physicalPoints;
-  BasisCachePtr basisCache;
-
+class NewVTKExporter : public NewExporter {
 public:
-  XDMFExporter(MeshTopologyPtr mesh) :
-    NewExporter(mesh)//, dom(), root(), domain(), grid(), time()
+  NewVTKExporter(MeshTopologyPtr mesh) :
+    NewExporter(mesh) {}
+  void exportFunction(FunctionPtr function, string functionName="function", set<GlobalIndexType> cellIndices=set<GlobalIndexType>(), unsigned int num1DPts=0);
+};
+
+class XDMFExporter : public NewExporter {
+public:
+  XDMFExporter(MeshTopologyPtr mesh, bool deleteOldFiles=false) :
+    NewExporter(mesh)
     {
-      // root.SetDOM(&dom);
-      // root.SetVersion(2.0);
-      // root.Build();
-      // // Domain
-      // root.Insert(&domain);
-      // // Grid
-      // grid.SetName("Grid");
-      // domain.Insert(&grid);
-      // time.SetTimeType(XDMF_TIME_SINGLE);
-      // time.SetValue(0);
-      // grid.Insert(&time);
+      // Uncomment this code to delete old files before writing new ones
+      if (deleteOldFiles)
+      {
+        system("rm -rf *.xmf");
+        system("rm -rf HDF5/*");
+        system("mkdir -p HDF5");
+      }
     }
   void exportFunction(FunctionPtr function, string functionName="function", string filename="output", set<GlobalIndexType> cellIndices=set<GlobalIndexType>(), unsigned int num1DPts=0);
   void exportFunction(vector<FunctionPtr> functions, vector<string> functionNames, string filename, set<GlobalIndexType> cellIndices=set<GlobalIndexType>(), unsigned int num1DPts=0);
 };
-#endif /* end of USE_XDMF */
 
 #endif /* end of include guard: SOLUTIONEXPORTER_H */
