@@ -984,13 +984,15 @@ unsigned BasisReconciliation::minimumSubcellDimension(BasisPtr basis) {
 
 SubBasisReconciliationWeights BasisReconciliation::weightsForCoarseSubcell(SubBasisReconciliationWeights &weights, BasisPtr constrainingBasis, unsigned subcdim, unsigned subcord, bool includeSubsubcells) {
   int minSubcellDimension = includeSubsubcells ? 0 : subcdim;
-  set<int> coarseDofsToInclude = constrainingBasis->dofOrdinalsForSubcell(subcdim, subcord, minSubcellDimension);
+  set<int> coarseDofsForSubcell = constrainingBasis->dofOrdinalsForSubcell(subcdim, subcord, minSubcellDimension);
+  set<int> coarseDofsToInclude; // will be the intersection of coarseDofsForSubcell and weights.coarseOrdinals
   vector<unsigned> columnOrdinalsToInclude;
   int columnOrdinal = 0;
   for (set<int>::iterator coarseOrdinalIt = weights.coarseOrdinals.begin(); coarseOrdinalIt != weights.coarseOrdinals.end(); coarseOrdinalIt++) {
     int coarseOrdinal = *coarseOrdinalIt;
-    if (coarseDofsToInclude.find(coarseOrdinal) != coarseDofsToInclude.end()) {
+    if (coarseDofsForSubcell.find(coarseOrdinal) != coarseDofsForSubcell.end()) {
       columnOrdinalsToInclude.push_back(columnOrdinal);
+      coarseDofsToInclude.insert(coarseOrdinal);
     }
     columnOrdinal++;
   }
