@@ -15,6 +15,8 @@
 
 #include "Function.h"
 
+#include "CamelliaCellTools.h"
+
 typedef pair< FunctionPtr, VarPtr > LinearSummand;
 
 bool linearSummandIsBoundaryValueOnly(LinearSummand &ls) {
@@ -159,7 +161,7 @@ void LinearTerm::integrate(FieldContainer<double> &values, DofOrderingPtr thisOr
   // (if thisFluxOrTrace, there won't be any volume summands, so the above will hold trivially)
   // note that ! boundaryTerm does NOT imply that all terms are volume terms.  boundaryTerm means that
   // we ONLY evaluate on the boundary; !boundaryTerm allows the possibility of "mixed-type" terms
-  int numSides = basisCache->cellTopology().getSideCount();
+  int numSides = CamelliaCellTools::getSideCount(basisCache->cellTopology());
   
   Teuchos::Array<int> ltValueDim;
   ltValueDim.push_back(numCells);
@@ -480,7 +482,7 @@ void LinearTerm::integrate(FieldContainer<double> &values, DofOrderingPtr thisOr
   } else if (forceBoundaryTerm) {
     // then we don't need to worry about splitting into boundary and non-boundary parts,
     // but we do need to loop over the sides:
-    int numSides = basisCache->cellTopology().getSideCount();
+    int numSides = CamelliaCellTools::getSideCount(basisCache->cellTopology());
     for (int sideIndex=0; sideIndex<numSides; sideIndex++) {
       integrate(values, otherTerm, otherOrdering, thisPtr, thisOrdering, basisCache->getSideBasisCache(sideIndex));
     }
@@ -503,7 +505,7 @@ void LinearTerm::integrate(FieldContainer<double> &values, DofOrderingPtr thisOr
     
     // sides:
     // (u + du, v + dv) - (u,v) = (u + du, dv) + (du, v)
-    int numSides = basisCache->cellTopology().getSideCount();
+    int numSides = CamelliaCellTools::getSideCount(basisCache->cellTopology());
     for (int sideIndex=0; sideIndex<numSides; sideIndex++) {
       // (u + du, dv)
       integrate(values, otherBoundaryOnly, otherOrdering, thisPtr, thisOrdering, basisCache->getSideBasisCache(sideIndex));

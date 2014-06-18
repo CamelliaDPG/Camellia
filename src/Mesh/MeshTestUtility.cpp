@@ -303,6 +303,27 @@ bool MeshTestUtility::determineRefTestPointsForNeighbors(MeshTopologyPtr meshTop
                                                          FieldContainer<double> &coarseSideRefPoints, FieldContainer<double> &coarseCellRefPoints) {
   unsigned spaceDim = meshTopo->getSpaceDim();
   unsigned sideDim = spaceDim - 1;
+  
+  if (spaceDim == 1) {
+    fineSideRefPoints.resize(0,0);
+    coarseSideRefPoints.resize(0,0);
+    fineCellRefPoints.resize(1,1);
+    coarseCellRefPoints.resize(1,1);
+    
+    FieldContainer<double> lineRefNodes(2,1);
+    shards::CellTopology line_2(shards::getCellTopologyData<shards::Line<2> >() );
+
+    CamelliaCellTools::refCellNodesForTopology(lineRefNodes, line_2);
+    
+    fineCellRefPoints[0] = lineRefNodes[sideOrdinal];
+    unsigned neighborSideOrdinal = fineCell->getNeighbor(sideOrdinal).second;
+    if (neighborSideOrdinal != -1) {
+      coarseCellRefPoints[0] = lineRefNodes[neighborSideOrdinal];
+      return true;
+    } else {
+      return false;
+    }
+  }
   pair<GlobalIndexType, unsigned> neighborInfo = fineCell->getNeighbor(sideOrdinal);
   if (neighborInfo.first == -1) {
     // boundary
@@ -432,7 +453,7 @@ bool MeshTestUtility::neighborBasesAgreeOnSides(Teuchos::RCP<Mesh> mesh, Epetra_
 //      cout << "MeshTestUtility: local coefficients for cell " << cellIndex << ":\n" << fineSolutionCoefficients;
 //    }
 
-    unsigned sideCount = cell->topology()->getSideCount();
+    unsigned sideCount = CamelliaCellTools::getSideCount(*cell->topology());
     for (unsigned sideOrdinal=0; sideOrdinal<sideCount; sideOrdinal++) {
       FieldContainer<double> fineSideRefPoints, fineCellRefPoints, coarseSideRefPoints, coarseCellRefPoints;
       bool hasCoarserNeighbor = determineRefTestPointsForNeighbors(meshTopo, cell, sideOrdinal, fineSideRefPoints, fineCellRefPoints, coarseSideRefPoints, coarseCellRefPoints);
@@ -450,38 +471,53 @@ bool MeshTestUtility::neighborBasesAgreeOnSides(Teuchos::RCP<Mesh> mesh, Epetra_
       
       BasisCachePtr fineSideBasisCache = fineCellBasisCache->getSideBasisCache(sideOrdinal);
       
-      fineSideBasisCache->setRefCellPoints(fineSideRefPoints);
       fineCellBasisCache->setRefCellPoints(fineCellRefPoints);
       
       BasisCachePtr coarseCellBasisCache = BasisCache::basisCacheForCell(mesh, neighborInfo.first);
       BasisCachePtr coarseSideBasisCache = coarseCellBasisCache->getSideBasisCache(neighborInfo.second);
-      
-      coarseSideBasisCache->setRefCellPoints(coarseSideRefPoints);
+    
       coarseCellBasisCache->setRefCellPoints(coarseCellRefPoints);
       
+      bool hasSidePoints = (fineSideRefPoints.size() > 0);
+      if (hasSidePoints) {
+        fineSideBasisCache->setRefCellPoints(fineSideRefPoints);
+        coarseSideBasisCache->setRefCellPoints(coarseSideRefPoints);
+      }
+      
       // sanity check: do physical points match?
-      FieldContainer<double> fineSidePhysicalCubaturePoints = fineSideBasisCache->getPhysicalCubaturePoints();
+
       FieldContainer<double> fineCellPhysicalCubaturePoints = fineCellBasisCache->getPhysicalCubaturePoints();
-      
-      FieldContainer<double> coarseSidePhysicalCubaturePoints = coarseSideBasisCache->getPhysicalCubaturePoints();
       FieldContainer<double> coarseCellPhysicalCubaturePoints = coarseCellBasisCache->getPhysicalCubaturePoints();
-      
+
       double tol = 1e-14;
       double maxDiff = 0;
-      if (! fcsAgree(fineSidePhysicalCubaturePoints, fineCellPhysicalCubaturePoints, tol, maxDiff) ) {
-        cout << "ERROR: MeshTestUtility::neighborBasesAgreeOnSides internal error: fine side and cell cubature points do not agree.\n";
+      if (! fcsAgree(coarseCellPhysicalCubaturePoints, fineCellPhysicalCubaturePoints, tol, maxDiff) ) {
+        cout << "ERROR: MeshTestUtility::neighborBasesAgreeOnSides internal error: fine and coarse cell cubature points do not agree.\n";
         success = false;
         continue;
       }
-      if (! fcsAgree(coarseSidePhysicalCubaturePoints, coarseCellPhysicalCubaturePoints, tol, maxDiff) ) {
-        cout << "ERROR: MeshTestUtility::neighborBasesAgreeOnSides internal error: coarse side and cell cubature points do not agree.\n";
-        success = false;
-        continue;
-      }
-      if (! fcsAgree(coarseSidePhysicalCubaturePoints, fineSidePhysicalCubaturePoints, tol, maxDiff) ) {
-        cout << "ERROR: MeshTestUtility::neighborBasesAgreeOnSides internal error: fine and coarse side cubature points do not agree.\n";
-        success = false;
-        continue;
+      
+      if (hasSidePoints) {
+        FieldContainer<double> fineSidePhysicalCubaturePoints = fineSideBasisCache->getPhysicalCubaturePoints();
+        FieldContainer<double> coarseSidePhysicalCubaturePoints = coarseSideBasisCache->getPhysicalCubaturePoints();
+        
+        double tol = 1e-14;
+        double maxDiff = 0;
+        if (! fcsAgree(fineSidePhysicalCubaturePoints, fineCellPhysicalCubaturePoints, tol, maxDiff) ) {
+          cout << "ERROR: MeshTestUtility::neighborBasesAgreeOnSides internal error: fine side and cell cubature points do not agree.\n";
+          success = false;
+          continue;
+        }
+        if (! fcsAgree(coarseSidePhysicalCubaturePoints, coarseCellPhysicalCubaturePoints, tol, maxDiff) ) {
+          cout << "ERROR: MeshTestUtility::neighborBasesAgreeOnSides internal error: coarse side and cell cubature points do not agree.\n";
+          success = false;
+          continue;
+        }
+        if (! fcsAgree(coarseSidePhysicalCubaturePoints, fineSidePhysicalCubaturePoints, tol, maxDiff) ) {
+          cout << "ERROR: MeshTestUtility::neighborBasesAgreeOnSides internal error: fine and coarse side cubature points do not agree.\n";
+          success = false;
+          continue;
+        }
       }
       
       ElementTypePtr coarseElementType = mesh->getElementType(neighborInfo.first);
@@ -498,6 +534,7 @@ bool MeshTestUtility::neighborBasesAgreeOnSides(Teuchos::RCP<Mesh> mesh, Epetra_
         BasisPtr fineBasis, coarseBasis;
         BasisCachePtr fineCache, coarseCache;
         if (isTraceVar) {
+          if (! hasSidePoints) continue; // then nothing to do for traces
           fineBasis = fineElemTrialOrder->getBasis(varID, sideOrdinal);
           coarseBasis = coarseElemTrialOrder->getBasis(varID, neighborInfo.second);
           fineCache = fineSideBasisCache;
@@ -632,7 +669,7 @@ bool MeshTestUtility::neighborBasesAgreeOnSides(Teuchos::RCP<Mesh> mesh, Epetra_
                 success = false;
                 cout << "interpreted fine and coarse disagree at point (";
                 for (int d=0; d<spaceDim; d++) {
-                  cout << fineSidePhysicalCubaturePoints(0,ptOrdinal,d);
+                  cout << fineCellPhysicalCubaturePoints(0,ptOrdinal,d);
                   if (d==spaceDim-1)
                     cout <<  ").\n";
                   else

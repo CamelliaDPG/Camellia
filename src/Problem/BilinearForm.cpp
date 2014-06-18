@@ -48,6 +48,8 @@
 
 #include "cholesky.hpp"
 
+#include "CamelliaCellTools.h"
+
 static const string & S_OP_VALUE = "";
 static const string & S_OP_GRAD = "\\nabla ";
 static const string & S_OP_CURL = "\\nabla \\times ";
@@ -311,7 +313,7 @@ void BilinearForm::stiffnessMatrix(FieldContainer<double> &stiffness, Teuchos::R
   int cubDegreeTest = testOrdering->maxBasisDegree();
   int cubDegree = cubDegreeTrial + cubDegreeTest;
   
-  unsigned numSides = cellTopo.getSideCount();
+  unsigned numSides = CamelliaCellTools::getSideCount(cellTopo);
   
   // 3. For each (test, trial) combination:
   vector<int> testIDs = this->testIDs();
@@ -514,7 +516,7 @@ int BilinearForm::operatorRank(EOperatorExtended op, IntrepidExtendedTypes::EFun
     case  IntrepidExtendedTypes::OP_VALUE:
       if (   (fs == IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD) 
           || (fs == IntrepidExtendedTypes::FUNCTION_SPACE_HVOL)
-          || (fs == IntrepidExtendedTypes::FUNCTION_SPACE_ONE) )
+          || (fs == IntrepidExtendedTypes::FUNCTION_SPACE_REAL_SCALAR) )
         return SCALAR; 
       else
         return VECTOR;

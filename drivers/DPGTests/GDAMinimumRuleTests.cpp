@@ -49,6 +49,26 @@ public:
   }
 };
 
+class GDAMinimumRuleTests_UnitIntervalBoundary : public SpatialFilter {
+public:
+  bool matchesPoint(double x) {
+    double tol = 1e-14;
+    bool xMatch = (abs(x) < tol) || (abs(x-1.0) < tol);
+    return xMatch;
+  }
+};
+
+class GDAMinimumRuleTests_ExampleFunction : public SimpleFunction {
+public:
+  double value( double x ) {
+    return 2 * x + 1;
+  }
+  
+  FunctionPtr dx() {
+    return Function::constant(2);
+  }
+};
+
 // boundary value for u
 class GDAMinimumRuleTests_U0 : public Function {
 public:
@@ -251,6 +271,70 @@ SolutionPtr GDAMinimumRuleTests::stokesCavityFlowSolution(bool useMinRule, int h
   IPPtr graphNorm = stokesBF->graphNorm();
   
   SolutionPtr solution = Solution::solution(mesh, bc, rhs, graphNorm);
+  
+  return solution;
+}
+
+SolutionPtr GDAMinimumRuleTests::poissonExactSolution1D(int horizontalCells, int H1Order, FunctionPtr phi_exact, bool useH1Traces) {
+  bool usePenaltyBCs = false;
+  
+  VarFactory varFactory;
+  VarPtr tau = varFactory.testVar("\\tau_1", HGRAD);
+  VarPtr q = varFactory.testVar("q", HGRAD);
+  
+  Space phi_hat_space = useH1Traces ? HGRAD : L2; // should not matter
+  VarPtr phi_hat = varFactory.fluxVar(S_GDAMinimumRuleTests_PHI_HAT, phi_hat_space);
+  VarPtr psi_hat = varFactory.fluxVar("\\widehat{\\psi}");
+  
+  VarPtr phi = varFactory.fieldVar(S_GDAMinimumRuleTests_PHI, L2);
+  VarPtr psi1 = varFactory.fieldVar("\\psi_1", L2);
+  
+  BFPtr bf = Teuchos::rcp( new BF(varFactory) );
+  
+  bf->addTerm(phi, tau->dx());
+  bf->addTerm(psi1, tau);
+  bf->addTerm(-phi_hat, tau);
+  
+  bf->addTerm(-psi1, q->dx());
+  bf->addTerm(psi_hat, q);
+  
+  int testSpaceEnrichment = 1; //
+  double width = 3.14159;
+  
+  vector<double> dimensions;
+  dimensions.push_back(width);
+  
+  vector<int> elementCounts;
+  elementCounts.push_back(horizontalCells);
+  
+  MeshPtr mesh = MeshFactory::rectilinearMesh(bf, dimensions, elementCounts, H1Order, testSpaceEnrichment);
+  
+//  cout << "entities for 1D mesh:\n";
+//  mesh->getTopology()->printAllEntities();
+  
+  // rhs = f * v, where f = \Delta phi
+  RHSPtr rhs = RHS::rhs();
+  FunctionPtr f = phi_exact->dx()->dx();
+  rhs->addTerm(f * q);
+  
+  IPPtr graphNorm = bf->graphNorm();
+  
+  BCPtr bc = BC::bc();
+  SpatialFilterPtr boundary = SpatialFilter::allSpace();
+  SolutionPtr solution;
+  if (!usePenaltyBCs) {
+    FunctionPtr n = Function::normal_1D(); // normal function (-1 or 1)
+    bc->addDirichlet(phi_hat, boundary, phi_exact * n);
+    solution = Solution::solution(mesh, bc, rhs, graphNorm);
+  } else {
+    solution = Solution::solution(mesh, bc, rhs, graphNorm);
+    SpatialFilterPtr entireBoundary = Teuchos::rcp( new GDAMinimumRuleTests_UnitHexahedronBoundary );
+    
+    Teuchos::RCP<PenaltyConstraints> pc = Teuchos::rcp(new PenaltyConstraints);
+    pc->addConstraint(phi_hat==phi_exact,entireBoundary);
+    
+    solution->setFilter(pc);
+  }
   
   return solution;
 }
@@ -470,6 +554,15 @@ SolutionPtr GDAMinimumRuleTests::stokesExactSolution(bool useMinRule, int horizo
 }
 
 void GDAMinimumRuleTests::runTests(int &numTestsRun, int &numTestsPassed) {
+  setup();
+  if (testMultiCellMesh()) {
+    numTestsPassed++;
+  }
+  numTestsRun++;
+  teardown();
+  
+  cout << "testMultiCellMesh complete.\n";
+  
 //  setup();
 //  if (testHangingNodePoisson3D()) {
 //    numTestsPassed++;
@@ -533,15 +626,6 @@ void GDAMinimumRuleTests::runTests(int &numTestsRun, int &numTestsPassed) {
   teardown();
   
 //  cout << "testSingleCellMesh complete.\n";
-  
-  setup();
-  if (testMultiCellMesh()) {
-    numTestsPassed++;
-  }
-  numTestsRun++;
-  teardown();
-  
-//  cout << "testMultiCellMesh complete.\n";
 
   // skip this test for now--I'm not sure the failure tells us a lot...
 //  setup();
@@ -1391,6 +1475,71 @@ bool GDAMinimumRuleTests::testMultiCellMesh() {
   
   bool skip2Dtests = false;
 
+  // 1D tests:
+  {
+    typedef int MeshDimensions;
+    typedef pair<MeshDimensions, int> MeshToTest;
+    
+    vector< MeshToTest > testList;
+    
+    // exact solution: for now, we just use a linear phi
+//    FunctionPtr x = Function::xn(1);
+//    FunctionPtr phi_exact = 2 * x + 1;
+    FunctionPtr phi_exact = Teuchos::rcp( new GDAMinimumRuleTests_ExampleFunction );
+    
+    for (int polyOrder = 1; polyOrder < 3; polyOrder++) {
+      int horizontalCells = 2;
+      MeshToTest meshParams = make_pair( horizontalCells, polyOrder+1);
+      testList.push_back(meshParams);
+    }
+    
+    for (vector< MeshToTest >::iterator meshParamIt = testList.begin(); meshParamIt != testList.end(); meshParamIt++) {
+      MeshToTest meshParams = *meshParamIt;
+      MeshDimensions dim = meshParams.first;
+      int horizontalCells = dim;
+      int H1Order = meshParams.second;
+      
+      bool useH1Traces = true; // "true" and "false" should amount to the same thing in 1D
+      
+      SolutionPtr soln = poissonExactSolution1D(horizontalCells, H1Order, phi_exact, useH1Traces);
+      
+      MeshPtr mesh = soln->mesh();
+      
+      if ( ! MeshTestUtility::neighborBasesAgreeOnSides(mesh)) {
+        cout << "GDAMinimumRuleTests failure: for 1D 2-element Poisson mesh, neighboring bases do not agree on sides." << endl;
+        success = false;
+      }
+      
+      soln->solve();
+      
+      VarFactory vf = soln->mesh()->bilinearForm()->varFactory();
+      VarPtr phi = vf.fieldVar(S_GDAMinimumRuleTests_PHI);
+      FunctionPtr phi_soln = Function::solution(phi, soln);
+
+      VarPtr phi_hat = vf.traceVar(S_GDAMinimumRuleTests_PHI_HAT);
+      FunctionPtr phi_hat_soln = Function::solution(phi_hat, soln);
+      
+      double tol = 1e-12;
+      double err = (phi_soln-phi_exact)->l2norm(mesh);
+      if (err > tol) {
+        cout << "GDAMinimumRuleTest Failure: for exactly recoverable 1D Poisson solution, err of " << err << " exceeds tol " << tol << endl;
+        
+        double energyError = soln->energyErrorTotal();
+        cout << "(energy error of soln is " << energyError << ")\n";
+        
+#ifdef USE_VTK
+        if (Teuchos::GlobalMPISession::getRank()==0) {
+          NewVTKExporter exporter(mesh->getTopology());
+          
+//          exporter.exportFunction(phi_hat_soln, "phi_hat_soln1D");
+          exporter.exportFunction(phi_soln, "phi_soln1D");
+          exporter.exportFunction(phi_soln - phi_exact, "phi_err1D");
+        }
+#endif
+      }
+    }
+  }
+  
   if (!skip2Dtests) {
     bool divideIntoTriangles = false;
     

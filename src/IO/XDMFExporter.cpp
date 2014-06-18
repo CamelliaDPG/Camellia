@@ -3,7 +3,7 @@
 #include "SolutionExporter.h"
 #include "CamelliaConfig.h"
 
-#include <stdio.h>
+#include "CamelliaCellTools.h"
 
 #ifdef USE_XDMF
 #include <Xdmf.h>
@@ -118,8 +118,8 @@ void XDMFExporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
   {
     if (spaceDim == 1)
     {
-      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "XDMFExporter does not work on 1D boundary value only functions");
-      // topology->SetNumberOfElements(totalBoundaryPts);
+      // TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "XDMFExporter does not work on 1D boundary value only functions");
+      topology->SetNumberOfElements(totalBoundaryPts);
     }
     else if (spaceDim == 2)
       topology->SetNumberOfElements(totalBoundaryLines);
@@ -219,7 +219,7 @@ void XDMFExporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
     BasisCachePtr volumeBasisCache = Teuchos::rcp( new BasisCache(*cellTopoPtr, 1, createSideCache) );
     volumeBasisCache->setPhysicalCellNodes(physicalCellNodes, vector<GlobalIndexType>(1,cellIndex), createSideCache);
 
-    int numSides = createSideCache ? cellTopoPtr->getSideCount() : 1;
+    int numSides = createSideCache ? CamelliaCellTools::getSideCount(*cellTopoPtr) : 1;
     
     int sideDim = spaceDim - 1;
     
@@ -233,6 +233,9 @@ void XDMFExporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
       
       switch (cellTopoKey)
       {
+        case shards::Node::key:
+          numPoints = 1;
+          break;
         case shards::Line<2>::key:
           numPoints = num1DPts;
           break;
@@ -250,8 +253,15 @@ void XDMFExporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
       }
 
       FieldContainer<double> refPoints(numPoints,domainDim);
+      if (domainDim == 0)
+        refPoints.resize(numPoints);
       switch (cellTopoKey)
       {
+        case shards::Node::key:
+          {
+            refPoints(0,0) = 0;
+          }
+          break;
         case shards::Line<2>::key:
           {
             for (int i=0; i < num1DPts; i++)
@@ -316,6 +326,17 @@ void XDMFExporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
       int subcellStartIndex = total_vertices;
       switch (cellTopoKey)
       {
+        case shards::Node::key:
+        {
+          connArray->SetValue(connIndex, 1);
+          connIndex++;
+          connArray->SetValue(connIndex, 1);
+          connIndex++;
+          int ind1 = total_vertices;
+          connArray->SetValue(connIndex, ind1);
+          connIndex++;
+        }
+        break;
         case shards::Line<2>::key:
         {
           connArray->SetValue(connIndex, 2);

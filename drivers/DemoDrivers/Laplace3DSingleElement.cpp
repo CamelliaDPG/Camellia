@@ -32,6 +32,8 @@
 
 #include "BasisSumFunction.h"
 
+#include "CamelliaCellTools.h"
+
 FieldContainer<double> referenceCubeNodes() {
   FieldContainer<double> cubePoints(8,3);
   cubePoints(0,0) = -1;
@@ -635,7 +637,8 @@ int main(int argc, char *argv[]) {
     Teuchos::RCP<BCFunction> bcFunction = Teuchos::rcp(new BCFunction(bc, varID, isTrace));
     FieldContainer<double> bcVector(trialOrderPtr->totalDofs());
     set<int> bcDofIndices;
-    for (int sideIndex=0; sideIndex < cellTopoPtr->getSideCount(); sideIndex++) {
+    int sideCount = CamelliaCellTools::getSideCount(*cellTopoPtr);
+    for (int sideIndex=0; sideIndex < sideCount; sideIndex++) {
       BasisPtr basis = trialOrderPtr->getBasis(varID,sideIndex);
       FieldContainer<double> dirichletValues(numCells, basis->getCardinality());
       bc->coefficientsForBC(dirichletValues, bcFunction, basis, basisCache->getSideBasisCache(sideIndex));

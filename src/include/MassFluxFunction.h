@@ -11,6 +11,8 @@
 
 #include "Function.h"
 
+#include "CamelliaCellTools.h"
+
 // The mass flux function is single-valued within elements.
 // the input function is integrated over each element's boundary.
 // the main idea is to allow easy visualization of where mass conservation
@@ -41,7 +43,7 @@ public:
     
 //    FieldContainer<double> cellIntegralsOnSide(numCells); // DEBUGGING
     
-    int numSides = basisCache->cellTopology().getSideCount();
+    int numSides = CamelliaCellTools::getSideCount(basisCache->cellTopology());
     
     bool sumInto = true;
     for (int sideIndex = 0; sideIndex < numSides; sideIndex++) {

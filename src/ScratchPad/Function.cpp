@@ -19,6 +19,8 @@
 
 #include "PhysicalPointCache.h"
 
+#include "CamelliaCellTools.h"
+
 // for adaptive quadrature
 struct CacheInfo {
   ElementTypePtr elemType;
@@ -785,7 +787,8 @@ double Function::integrate(Teuchos::RCP<Mesh> mesh, int cubatureDegreeEnrichment
     FieldContainer<double> cellIntegrals(numCells);
     if ( this->boundaryValueOnly() ) {
       // sum the integral over the sides...
-      int numSides = elemType->cellTopoPtr->getSideCount();
+      int numSides = CamelliaCellTools::getSideCount(*elemType->cellTopoPtr);
+
       for (int i=0; i<numSides; i++) {
         this->integrate(cellIntegrals, basisCache->getSideBasisCache(i), true);
       }
@@ -975,7 +978,7 @@ void Function::writeBoundaryValuesToMATLABFile(Teuchos::RCP<Mesh> mesh, const st
     ElementTypePtr elemTypePtr = *(elemTypeIt);
     basisCache = Teuchos::rcp( new BasisCache(elemTypePtr, mesh, true) );
     shards::CellTopology cellTopo = *(elemTypePtr->cellTopoPtr);
-    int numSides = cellTopo.getSideCount();
+    int numSides = CamelliaCellTools::getSideCount(cellTopo);
 
     FieldContainer<double> physicalCellNodes = mesh->physicalCellNodesGlobal(elemTypePtr);
     int numCells = physicalCellNodes.dimension(0);
@@ -1122,6 +1125,11 @@ FunctionPtr Function::meshSkeletonCharacteristic() {
 FunctionPtr Function::normal() { // unit outward-facing normal on each element boundary
   static FunctionPtr _normal = Teuchos::rcp( new UnitNormalFunction );
   return _normal;
+}
+
+FunctionPtr Function::normal_1D() { // unit outward-facing normal on each element boundary
+  static FunctionPtr _normal_1D = Teuchos::rcp( new UnitNormalFunction(0) );
+  return _normal_1D;
 }
 
 FunctionPtr Function::sideParity() { // canonical direction on boundary (used for defining fluxes)

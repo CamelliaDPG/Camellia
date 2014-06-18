@@ -303,6 +303,8 @@ pair<IPPtr, VarPtr> IP::standardInnerProductForFunctionSpace(EFunctionSpaceExten
     case IntrepidExtendedTypes::FUNCTION_SPACE_HDIV:
       ip->addTerm(var->div());
       break;
+    case IntrepidExtendedTypes::FUNCTION_SPACE_REAL_SCALAR:
+      break;
       
     default:
       cout << "Error: unhandled function space.\n";

@@ -31,7 +31,9 @@ public:
   }
   double value(double x, double y) {
     if (_usePeriodicData) {
-      if (x > 0.5) x = x - 1;
+      if (x > 0.5) {
+        x = x - 1;
+      }
       if (y > 0.5) y = y - 1;
     }
     double d = sqrt( (x-_x0) * (x-_x0) + (y-_y0) * (y-_y0) );
@@ -73,6 +75,16 @@ public:
   }
 };
 
+class ConvectionField : public SimpleVectorFunction {
+public:
+  vector<double> value(double x, double y) {
+    vector<double> val(2);
+    val[0] = y-0.5;
+    val[1] = 0.5-x;
+    return val;
+  }
+};
+
 int main(int argc, char *argv[]) {
 #ifdef ENABLE_INTEL_FLOATING_POINT_EXCEPTIONS
   cout << "NOTE: enabling floating point exceptions for divide by zero.\n";
@@ -96,6 +108,7 @@ int main(int argc, char *argv[]) {
   bool useMumpsIfAvailable  = true;
   bool convertSolutionsToVTK = false; // when true assumes we've already run with precisely the same options, except without VTK support (so we have a bunch of .soln files)
   bool usePeriodicBCs = true;
+  bool useConstantConvection = false;
   
   cmdp.setOption("polyOrder",&k,"polynomial order for field variable u");
   cmdp.setOption("delta_k", &delta_k, "test space polynomial order enrichment");
@@ -104,6 +117,9 @@ int main(int argc, char *argv[]) {
   cmdp.setOption("theta",&theta,"theta weight for time-stepping");
   cmdp.setOption("numTimeSteps",&numTimeSteps,"number of time steps");
   cmdp.setOption("numFrames",&numFrames,"number of frames for export");
+  
+  cmdp.setOption("usePeriodicBCs", "useDirichletBCs", &usePeriodicBCs);
+  cmdp.setOption("useConstantConvection", "useVariableConvection", &useConstantConvection);
   
   cmdp.setOption("useCondensedSolve", "useUncondensedSolve", &useCondensedSolve, "use static condensation to reduce the size of the global solve");
   cmdp.setOption("useMumps", "useKLU", &useMumpsIfAvailable, "use MUMPS (if available)");
@@ -152,8 +168,12 @@ int main(int argc, char *argv[]) {
   FunctionPtr x = Function::xn(1);
   FunctionPtr y = Function::yn(1);
   
-  FunctionPtr c = Function::vectorize(Function::constant(0.5), Function::constant(0.5));
-//  FunctionPtr c = Function::vectorize(y-0.5, 0.5-x);
+  FunctionPtr c;
+  if (useConstantConvection) {
+    c = Function::vectorize(Function::constant(0.5), Function::constant(0.5));
+  } else {
+    c = Teuchos::rcp( new ConvectionField ); // Function::vectorize(y-0.5, 0.5-x);
+  }
 //  FunctionPtr c = Function::vectorize(y, x);
   FunctionPtr n = Function::normal();
   
@@ -174,9 +194,11 @@ int main(int argc, char *argv[]) {
   }
   
   BCPtr bc = BC::bc();
+  
+  SpatialFilterPtr inflowFilter  = Teuchos::rcp( new InflowFilterForClockwisePlanarRotation (x0,x0+width,y0,y0+height,0.5,0.5));
+  
   vector< PeriodicBCPtr > periodicBCs;
   if (! usePeriodicBCs) {
-    SpatialFilterPtr inflowFilter = Teuchos::rcp( new InflowFilterForClockwisePlanarRotation(x0,x0+width,y0,y0+height,0.5,0.5));
     //  bc->addDirichlet(u_hat, SpatialFilter::allSpace(), Function::zero());
     bc->addDirichlet(qHat, inflowFilter, Function::zero()); // zero BCs enforced at the inflow boundary.
   } else {
@@ -187,12 +209,6 @@ int main(int argc, char *argv[]) {
   MeshPtr mesh = MeshFactory::quadMeshMinRule(bf, H1Order, delta_k, width, height,
                                               horizontalCells, verticalCells, false, x0, y0, periodicBCs);
   
-  if (usePeriodicBCs) {
-    // check that there are no boundary elements:
-    MeshTopologyPtr meshTopo = mesh->getTopology();
-    
-  }
-  
   FunctionPtr u0 = Teuchos::rcp( new Cone_U0(0.0, 0.25, 0.1, 1.0, usePeriodicBCs) );
   
   RHSPtr initialRHS = RHS::rhs();
@@ -200,10 +216,10 @@ int main(int argc, char *argv[]) {
   initialRHS->addTerm((1-theta) * u0 * c * v->grad());
   
   IPPtr ip;
-  ip = Teuchos::rcp( new IP );
-  ip->addTerm(v);
-  ip->addTerm(c * v->grad());
-//  ip = bf->graphNorm();
+//  ip = Teuchos::rcp( new IP );
+//  ip->addTerm(v);
+//  ip->addTerm(c * v->grad());
+  ip = bf->graphNorm();
   
   // create two Solution objects; we'll switch between these for time steps
   SolutionPtr soln0 = Solution::solution(mesh, bc, initialRHS, ip);

@@ -26,7 +26,7 @@ public:
   PeriodicBC(SpatialFilterPtr pointFilter0, SpatialFilterPtr pointFilter1, FunctionPtr transform0to1, FunctionPtr transform1to0);
   
   std::vector<double> getMatchingPoint(const std::vector<double> &point, int whichSide);
-  int getMatchingSide(const std::vector<double> &point); // returns 0 if the point matches pointFilter0, 1 if it matches pointFilter1, -1 otherwise.
+  std::vector<int> getMatchingSides(const std::vector<double> &point); // includes 0 if the point matches pointFilter0, 1 if it matches pointFilter1, and empty if it matches neither.
   
   static Teuchos::RCP<PeriodicBC> periodicBC(SpatialFilterPtr pointFilter1, SpatialFilterPtr pointFilter2, FunctionPtr transform1to2, FunctionPtr transform2to1);
   static Teuchos::RCP<PeriodicBC> xIdentification(double x1, double x2);

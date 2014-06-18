@@ -1,6 +1,8 @@
 #include "Solution.h"
 #include "CamelliaConfig.h"
 
+#include "CamelliaCellTools.h"
+
 #ifdef USE_VTK
 #include "vtkPointData.h"
 #include "vtkFloatArray.h"
@@ -297,7 +299,7 @@ void Solution::writeTracesToVTK(const string& filePath)
     basisCache = Teuchos::rcp( new BasisCache( elemTypePtr, _mesh ) );
     if (basisCache.get() == NULL)
       cout << "NULL Basis" << endl;
-    int numSides = cellTopo.getSideCount();
+    int numSides = CamelliaCellTools::getSideCount(cellTopo);
 
     int numCells = physicalCellNodes.dimension(0);
     // determine cellIDs

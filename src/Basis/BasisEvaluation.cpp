@@ -139,7 +139,18 @@ FCPtr BasisEvaluation::getTransformedValuesWithBasisValues(BasisPtr basis, Intre
                                                            const FieldContainer<double> &cellJacobianDet) {
   typedef FunctionSpaceTools fst;
   int numCells = cellJacobian.dimension(0);
-  int spaceDim = cellJacobian.dimension(2);
+  
+  int spaceDim;
+  // 6-16-14 NVR: getting the spaceDim from cellJacobian's dimensioning is the way we've historically done it.
+  // I think it might be better to do this using basis->domainTopology() generally, but for now we only make the
+  // switch in case the domain topology is a Node.
+  if (basis->domainTopology().getDimension() == 0) {
+    spaceDim = 0;
+  } else {
+    spaceDim = cellJacobian.dimension(2);
+  }
+  
+  
   int componentOfInterest;
   IntrepidExtendedTypes::EFunctionSpaceExtended fs = basis->functionSpace();
   Intrepid::EOperator relatedOp = relatedOperator(op,fs, componentOfInterest);
@@ -155,8 +166,8 @@ FCPtr BasisEvaluation::getTransformedValuesWithBasisValues(BasisPtr basis, Intre
   switch(relatedOp) {
     case(Intrepid::OPERATOR_VALUE):
       switch(fs) {
-        case IntrepidExtendedTypes::FUNCTION_SPACE_ONE:
-//          cout << "Reference values for FUNCTION_SPACE_ONE: " << *referenceValues;
+        case IntrepidExtendedTypes::FUNCTION_SPACE_REAL_SCALAR:
+//          cout << "Reference values for FUNCTION_SPACE_REAL_SCALAR: " << *referenceValues;
         case IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD:
           fst::HGRADtransformVALUE<double>(*transformedValues,*referenceValues);
           break;

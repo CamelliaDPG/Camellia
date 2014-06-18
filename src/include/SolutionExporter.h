@@ -97,8 +97,8 @@ public:
       {
         system("rm -rf *.xmf");
         system("rm -rf HDF5/*");
-        system("mkdir -p HDF5");
       }
+      system("mkdir -p HDF5");
     }
   void exportFunction(FunctionPtr function, string functionName="function", string filename="output", set<GlobalIndexType> cellIndices=set<GlobalIndexType>(), unsigned int num1DPts=0);
   void exportFunction(vector<FunctionPtr> functions, vector<string> functionNames, string filename, set<GlobalIndexType> cellIndices=set<GlobalIndexType>(), unsigned int num1DPts=0);

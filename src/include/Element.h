@@ -73,7 +73,7 @@ public:
   void setCellIndex(int newCellIndex) { _cellIndex = newCellIndex; }
   int globalCellIndex() { return _globalCellIndex; }
   void setGlobalCellIndex(int globalCellIndex) { _globalCellIndex = globalCellIndex; }
-  int numSides() { return _cell->topology()->getSideCount(); }
+  int numSides();
   void getSidePointsInNeighborRefCoords(FieldContainer<double> &neighborRefPoints, int sideIndex,
                                         const FieldContainer<double> &refPoints);
   void getSidePointsInParentRefCoords(FieldContainer<double> &parentRefPoints, int sideIndex, 

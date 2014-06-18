@@ -145,8 +145,33 @@ SubBasisReconciliationWeights BasisReconciliation::composedSubBasisReconciliatio
   for (int j=0; j<bWeights.coarseOrdinals.size(); j++) {
     bAllCols.insert(j);
   }
+  
+//  if (aWeights.coarseOrdinals.size() != bWeights.fineOrdinals.size()) {
+//    cout << "DEBUGGING: aWeights and bWeights have different coarse/fine sizes before filter to intersect.\n";
+//  }
+//  
+//  cout << "aWeights, bWeights before filtering to intersect:\n";
+//  
+//  Camellia::print("a: fine ordinals", aWeights.fineOrdinals);
+//  Camellia::print("a: coarse ordinals", aWeights.coarseOrdinals);
+//  cout << "a: weights:\n" << aWeights.weights;
+//  
+//  Camellia::print("b: fine ordinals", bWeights.fineOrdinals);
+//  Camellia::print("b: coarse ordinals", bWeights.coarseOrdinals);
+//  cout << "b: weights:\n" << bWeights.weights;
+  
   aWeights = filterToInclude(aAllRows, aColOrdinalsToInclude, aWeights);
   bWeights = filterToInclude(bRowOrdinalsToInclude, bAllCols, bWeights);
+
+//  cout << "aWeights, bWeights after filtering to intersect:\n";
+//
+//  Camellia::print("a: fine ordinals", aWeights.fineOrdinals);
+//  Camellia::print("a: coarse ordinals", aWeights.coarseOrdinals);
+//  cout << "a: weights:\n" << aWeights.weights;
+//  
+//  Camellia::print("b: fine ordinals", bWeights.fineOrdinals);
+//  Camellia::print("b: coarse ordinals", bWeights.coarseOrdinals);
+//  cout << "b: weights:\n" << bWeights.weights;
   
   if (aWeights.coarseOrdinals.size() != bWeights.fineOrdinals.size()) {
     cout << "aWeights and bWeights are incompatible...\n";
@@ -183,6 +208,23 @@ SubBasisReconciliationWeights BasisReconciliation::computeConstrainedWeights(uns
   // use the functionSpace to determine what continuities should be enforced:
   IntrepidExtendedTypes::EFunctionSpaceExtended fs = finerBasis->functionSpace();
   TEUCHOS_TEST_FOR_EXCEPTION(fs != coarserBasis->functionSpace(), std::invalid_argument, "Bases must agree on functionSpace().");
+  
+  if (fs==IntrepidExtendedTypes::FUNCTION_SPACE_REAL_SCALAR) {
+    if (((finerBasisSubcellOrdinal==0) && (coarserBasisSubcellOrdinal==0)) && (subcellDimension==0) && (refinements.size()==0)
+        && (finerBasis->getCardinality()==1) && (coarserBasis->getCardinality()==1)) {
+      // then we're just matching a single scalar with another
+      set<int> zeroSet;
+      zeroSet.insert(0);
+      weights.coarseOrdinals = zeroSet;
+      weights.fineOrdinals = zeroSet;
+      weights.weights.resize(1, 1);
+      weights.weights.initialize(1.0);
+      return weights;
+    } else {
+      cout << "Encountered basis with function space FUNCTION_SPACE_REAL_SCALAR with unsupported arguments.\n";
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Encountered basis with function space FUNCTION_SPACE_REAL_SCALAR with unsupported arguments");
+    }
+  }
   
   int spaceDim = finerBasis->domainTopology().getDimension();
   
@@ -929,6 +971,9 @@ unsigned BasisReconciliation::minimumSubcellDimension(BasisPtr basis) {
     case IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HVOL:
       minSubcellDimension = d; // i.e. no continuities enforced
       break;
+    case IntrepidExtendedTypes::FUNCTION_SPACE_REAL_SCALAR:
+      minSubcellDimension = 0;
+      break;
     default:
       cout << "ERROR: Unhandled functionSpace in BasisReconciliation.";
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unhandled functionSpace()");
@@ -953,7 +998,7 @@ SubBasisReconciliationWeights BasisReconciliation::weightsForCoarseSubcell(SubBa
   SubBasisReconciliationWeights filteredWeights;
   
   filteredWeights.coarseOrdinals = coarseDofsToInclude;
-  filteredWeights.fineOrdinals = weights.fineOrdinals; // TODO: consider filtering out zero rows, too.
+  filteredWeights.fineOrdinals = weights.fineOrdinals;
   
   filteredWeights.weights = FieldContainer<double>(weights.fineOrdinals.size(), columnOrdinalsToInclude.size());
   

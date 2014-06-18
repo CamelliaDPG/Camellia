@@ -47,7 +47,7 @@ RefinementPattern::RefinementPattern(Teuchos::RCP< shards::CellTopology > cellTo
   int numSubCells = refinedNodes.dimension(0);
   int numNodesPerCell = refinedNodes.dimension(1);
   unsigned spaceDim = refinedNodes.dimension(2);
-  unsigned sideCount = (_cellTopoPtr->getDimension() > 1) ? _cellTopoPtr->getSideCount() : _cellTopoPtr->getNodeCount();
+  unsigned sideCount = CamelliaCellTools::getSideCount(*_cellTopoPtr);
   _childrenForSides = vector< vector< pair< unsigned, unsigned> > >(sideCount); // will populate below..
   
   if (_cellTopoPtr->getNodeCount() == numNodesPerCell) {
@@ -57,7 +57,7 @@ RefinementPattern::RefinementPattern(Teuchos::RCP< shards::CellTopology > cellTo
   }
   
   if (spaceDim > 1) {
-    TEUCHOS_TEST_FOR_EXCEPTION(sideRefinementPatterns.size() != sideCount, std::invalid_argument, "sideRefinementPatterns length != cellTopo.getSideCount()");
+    TEUCHOS_TEST_FOR_EXCEPTION(sideRefinementPatterns.size() != sideCount, std::invalid_argument, "sideRefinementPatterns length != sideCount");
   }
   
   unsigned sideDim = spaceDim - 1;
@@ -152,7 +152,7 @@ RefinementPattern::RefinementPattern(Teuchos::RCP< shards::CellTopology > cellTo
     for (int childIndexInParent = 0; childIndexInParent<childCellIndices.size(); childIndexInParent++) {
       unsigned childCellIndex = childCellIndices[childIndexInParent];
       CellPtr childCell = _refinementTopology->getCell(childCellIndex);
-      int childSideCount = (childCell->topology()->getDimension() > 1) ? childCell->topology()->getSideCount() : childCell->topology()->getNodeCount();
+      int childSideCount = CamelliaCellTools::getSideCount(*childCell->topology());
       for (int childSideIndex=0; childSideIndex<childSideCount; childSideIndex++) {
         unsigned childSideEntityIndex = childCell->entityIndex(sideDim, childSideIndex);
         if (sideChildEntities.find(childSideEntityIndex) != sideChildEntities.end()) {
@@ -179,7 +179,7 @@ RefinementPattern::RefinementPattern(Teuchos::RCP< shards::CellTopology > cellTo
       for (int childIndexInParent = 0; childIndexInParent<childCellIndices.size(); childIndexInParent++) {
         unsigned childCellIndex = childCellIndices[childIndexInParent];
         CellPtr childCell = _refinementTopology->getCell(childCellIndex);
-        int childSideCount = childCell->topology()->getSideCount();
+        int childSideCount = CamelliaCellTools::getSideCount(*childCell->topology());
         for (int childSideIndex=0; childSideIndex<childSideCount; childSideIndex++) {
           if ( sideChildEntityIndex == childCell->entityIndex(sideDim, childSideIndex) ) {
             _sideRefinementChildIndices[sideIndex].push_back(childIndexInParent);
@@ -358,7 +358,7 @@ map< unsigned, unsigned > RefinementPattern::parentSideLookupForChild(unsigned c
   // returns a map for the child: childSideIndex --> parentSideIndex
   // (only populated for childSideIndices that are shared with the parent)
   map<unsigned, unsigned> lookupTable;
-  int numSides = _cellTopoPtr->getSideCount();
+  int numSides = CamelliaCellTools::getSideCount(*_cellTopoPtr);
   for (unsigned childSideIndex = 0; childSideIndex<numSides; childSideIndex++) {
     pair< unsigned, unsigned > entry = make_pair(childIndex,childSideIndex);
     if ( _parentSideForChildSide.find(entry) != _parentSideForChildSide.end() ) {
@@ -530,7 +530,7 @@ map<unsigned, set<unsigned> > RefinementPattern::getInternalSubcellOrdinals(Refi
   CellTopoPtr ancestralTopo = refinements[0].first->parentTopology();
   CellTopoPtr childTopo;
   set<unsigned> parentSidesToIntersect;
-  int numSides = (ancestralTopo->getDimension() > 1) ? ancestralTopo->getSideCount() : ancestralTopo->getNodeCount();
+  int numSides = CamelliaCellTools::getSideCount(*ancestralTopo);
   for (unsigned sideOrdinal=0; sideOrdinal < numSides; sideOrdinal++) {
     parentSidesToIntersect.insert(sideOrdinal);
   }
@@ -740,7 +740,7 @@ RefinementPatternPtr RefinementPattern::noRefinementPattern(Teuchos::RCP< shards
   static map< unsigned, RefinementPatternPtr > knownRefinementPatterns;
   unsigned key = cellTopoPtr->getKey();
   if (knownRefinementPatterns.find(key) == knownRefinementPatterns.end()) {
-    unsigned numSides = cellTopoPtr->getSideCount();
+    unsigned numSides = CamelliaCellTools::getSideCount(*cellTopoPtr);
     vector< RefinementPatternPtr > sideRefPatterns;
     unsigned d = cellTopoPtr->getDimension();
     if (d > 1) {

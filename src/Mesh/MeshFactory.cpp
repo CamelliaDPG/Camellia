@@ -118,7 +118,7 @@ MeshPtr MeshFactory::quadMesh(Teuchos::ParameterList &parameters) {
     return Teuchos::rcp( new Mesh(meshTopology, bf, H1Order, delta_k, *trialOrderEnhancements, *testOrderEnhancements) );
   } else {
     bool useConformingTraces = parameters.get<bool>("useConformingTraces", true);
-    cout << "periodicBCs size is " << periodicBCs->size() << endl;
+//    cout << "periodicBCs size is " << periodicBCs->size() << endl;
     return Teuchos::rcp( new Mesh(vertices, allElementVertices, bf, H1Order, delta_k, useConformingTraces, *trialOrderEnhancements, *testOrderEnhancements, *periodicBCs) );
   }
 }
@@ -224,6 +224,31 @@ MeshPtr MeshFactory::quadMeshMinRule(BilinearFormPtr bf, int H1Order, int pToAdd
   return quadMesh(pl);
 }
 
+MeshPtr MeshFactory::intervalMesh(BilinearFormPtr bf, double xLeft, double xRight, int numElements, int H1Order, int delta_k) {
+  int n = numElements;
+  vector< vector<double> > vertices(n+1);
+  vector<double> vertex(1);
+  double length = xRight - xLeft;
+  vector< vector<IndexType> > elementVertices(n);
+  vector<IndexType> oneElement(2);
+  for (int i=0; i<n+1; i++) {
+    vertex[0] = xLeft + (i * length) / n;
+//    cout << "vertex " << i << ": " << vertex[0] << endl;
+    vertices[i] = vertex;
+    if (i != n) {
+      oneElement[0] = i;
+      oneElement[1] = i+1;
+      elementVertices[i] = oneElement;
+    }
+  }
+  CellTopoPtr topo = Teuchos::rcp( new shards::CellTopology(shards::getCellTopologyData<shards::Line<2> >() ));
+  vector< CellTopoPtr > cellTopos(numElements, topo);
+  MeshGeometryPtr geometry = Teuchos::rcp( new MeshGeometry(vertices, elementVertices, cellTopos));
+  
+  MeshTopologyPtr meshTopology = Teuchos::rcp( new MeshTopology(geometry) );
+  return Teuchos::rcp( new Mesh(meshTopology, bf, H1Order, delta_k) );
+}
+
 MeshPtr MeshFactory::rectilinearMesh(BilinearFormPtr bf, vector<double> dimensions, vector<int> elementCounts, int H1Order, int pToAddTest) {
   int spaceDim = dimensions.size();
   if (pToAddTest==-1) {
@@ -235,13 +260,19 @@ MeshPtr MeshFactory::rectilinearMesh(BilinearFormPtr bf, vector<double> dimensio
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Element count container must match dimensions container in length.\n");
   }
   
+  if (spaceDim == 1) {
+    double xLeft = 0;
+    double xRight = dimensions[0];
+    return MeshFactory::intervalMesh(bf, xLeft, xRight, elementCounts[0], H1Order, pToAddTest);
+  }
+  
   if (spaceDim == 2) {
     return MeshFactory::quadMeshMinRule(bf, H1Order, dimensions[0], dimensions[1], elementCounts[0], elementCounts[1], pToAddTest);
   }
   
   if (spaceDim != 3) {
-    cout << "For now, only spaceDim == 3 is supported by this MeshFactory method.\n";
-    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "For now, only spaceDim == 3 is supported by this MeshFactory method.");
+    cout << "For now, only spaceDim 1,2,3 are supported by this MeshFactory method.\n";
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "For now, only spaceDim 1,2,3 are is supported by this MeshFactory method.");
   }
   
   CellTopoPtr topo;
@@ -255,7 +286,6 @@ MeshPtr MeshFactory::rectilinearMesh(BilinearFormPtr bf, vector<double> dimensio
     cout << "Unsupported spatial dimension.\n";
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unsupported spatial dimension");
   }
-  
   
   int numElements = 1;
   vector<double> elemLinearMeasures(spaceDim);

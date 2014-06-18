@@ -8,6 +8,8 @@
 #include "SolutionExporter.h"
 #include "MeshFactory.h"
 
+#include "CamelliaCellTools.h"
+
 IncompressibleFormulationsTests::IncompressibleFormulationsTests(bool thorough) {
   _thoroughMode = thorough;
 }
@@ -279,7 +281,7 @@ bool IncompressibleFormulationsTests::functionsAgree(FunctionPtr f1, FunctionPtr
     
     int numSides = 1; // interior only
     if (f1->boundaryValueOnly()) {
-      numSides = elemType->cellTopoPtr->getSideCount();
+      numSides = CamelliaCellTools::getSideCount(*elemType->cellTopoPtr);
     }
     for (int sideIndex = 0; sideIndex<numSides; sideIndex++) {
       BasisCachePtr basisCacheForTest;

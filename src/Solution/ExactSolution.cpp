@@ -35,6 +35,7 @@
  */
 
 #include "Intrepid_CellTools.hpp"
+#include "CamelliaCellTools.h"
 #include "Intrepid_DefaultCubatureFactory.hpp"
 #include "Intrepid_FunctionSpaceTools.hpp"
 
@@ -67,7 +68,7 @@ double ExactSolution::L2NormOfError(Solution &solution, int trialID, int cubDegr
     if (! solution.mesh()->bilinearForm()->isFluxOrTrace(trialID)) {
       numSides = 1;
     } else {
-      numSides = elemTypePtr->cellTopoPtr->getSideCount();
+      numSides = CamelliaCellTools::getSideCount(*elemTypePtr->cellTopoPtr);
     }
 
     for (int sideIndex=0; sideIndex<numSides; sideIndex++) {
