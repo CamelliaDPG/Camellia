@@ -129,9 +129,6 @@ public:
     }
   void exportFunction(FunctionPtr function, string functionName="function", string filename="output", set<GlobalIndexType> cellIndices=set<GlobalIndexType>(), unsigned int num1DPts=0);
   void exportFunction(vector<FunctionPtr> functions, vector<string> functionNames, string filename, set<GlobalIndexType> cellIndices=set<GlobalIndexType>(), unsigned int num1DPts=0);
-private:
-  void assembleMeshValues();
-  void assembleFunctionValues(FunctionPtr function, string functionName);
 };
 #endif /* end of USE_XDMF */
 

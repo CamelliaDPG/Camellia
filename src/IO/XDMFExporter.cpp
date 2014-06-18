@@ -3,6 +3,8 @@
 #include "SolutionExporter.h"
 #include "CamelliaConfig.h"
 
+#include <stdio.h>
+
 #ifdef USE_XDMF
 #include <Xdmf.h>
 
@@ -10,17 +12,14 @@ void XDMFExporter::exportFunction(FunctionPtr function, string functionName, str
 {
   vector<FunctionPtr> functions;
   functions.push_back(function);
-  functions.push_back(function);
   vector<string> functionNames;
-  functionNames.push_back("function1");
-  functionNames.push_back("function2");
+  functionNames.push_back(functionName);
   exportFunction(functions, functionNames, filename, cellIndices, num1DPts);
 }
 
 void XDMFExporter::exportFunction(vector<FunctionPtr> functions, vector<string> functionNames, string filename, set<GlobalIndexType> cellIndices, unsigned int num1DPts)
 {
-  // int nFcns = sizeof(functions)/sizeof(FunctionPtr);
-  int nFcns = 2;
+  int nFcns = functions.size();
 
   XdmfDOM         dom;
   XdmfRoot        root;
@@ -39,19 +38,16 @@ void XDMFExporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
   root.SetVersion(2.0);
   root.Build();
       // Domain
-  // cout << domain.GetElementName() << endl;
   root.Insert(&domain);
       // Grid
   grid.SetName("Grid");
-  // cout << grid.GetElementName() << endl;
   domain.Insert(&grid);
   time.SetTimeType(XDMF_TIME_SINGLE);
   time.SetValue(0);
-  // cout << time.GetElementName() << endl;
   grid.Insert(&time);
 
   bool defaultPts = (num1DPts == 0);
-  int pOrder = 4;
+  int pOrder = 8;
   if (defaultPts)
     if (pOrder < 2)
       num1DPts = 2;
@@ -511,16 +507,21 @@ void XDMFExporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
         }
       }
     }
-    connArray->SetHeavyDataSetName((filename+".h5:/Conns").c_str());
-    ptArray->SetHeavyDataSetName((filename+".h5:/Points").c_str());
-    valArray[0]->SetHeavyDataSetName((filename+".h5:/NodeData").c_str());
-    valArray[1]->SetHeavyDataSetName((filename+".h5:/NodeData").c_str());
-    // valArray[1]->SetHeavyDataSetName((functionNames[0]+".h5:/NodeData").c_str());
-    // Attach and Write
-    // nodedata[0].SetName("Test2");
-    // cout << nodedata[0].GetElementName() << endl;
-    grid.Insert(&nodedata[0]);
-    grid.Insert(&nodedata[1]);
+    // mkdir("HDF5");
+    system("mkdir -p HDF5");
+    connArray->SetHeavyDataSetName(("HDF5/"+filename+".h5:/Conns").c_str());
+    ptArray->SetHeavyDataSetName(("HDF5/"+filename+".h5:/Points").c_str());
+    for (int i = 0; i < nFcns; i++)
+    {
+      // if (remove(("HDF5/"+filename+"-"+functionNames[i]+".h5").c_str()) != 0)
+      //   cout << "Error deleting file" << endl;
+      // else
+      //   cout << "Success" << endl;
+      // cout << "HDF5/"+filename+"-"+functionNames[i]+".h5" << endl;
+      valArray[i]->SetHeavyDataSetName(("HDF5/"+filename+"-"+functionNames[i]+".h5:/NodeData").c_str());
+      // Attach and Write
+      grid.Insert(&nodedata[i]);
+    }
     // grid.Insert(&celldata);
     // Build is recursive ... it will be called on all of the child nodes.
     // This updates the DOM and writes the HDF5
@@ -529,48 +530,5 @@ void XDMFExporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
     dom.Write((filename+".xmf").c_str());
 
     cout << "Wrote " <<  filename << ".xmf" << endl;
-}
-
-void XDMFExporter::assembleMeshValues()
-{
-}
-
-void XDMFExporter::assembleFunctionValues(FunctionPtr function, string functionName)
-{
-  // FieldContainer<double> computedValues;
-  // if (function->rank() == 0)
-  //   computedValues.resize(1, numPoints);
-  // else if (function->rank() == 1)
-  //   computedValues.resize(1, numPoints, spaceDim);
-  // else
-  //   TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unhandled function rank");
-
-  // function->values(computedValues, basisCache);
-
-  // switch(numFcnComponents)
-  // {
-  //   case 1:
-  //   valArray->SetValue(valIndex[i], computedValues(0, pointIndex));
-  //   valIndex[i]++;
-  //   break;
-  //   case 2:
-  //   valArray->SetValue(valIndex[i], computedValues(0, pointIndex, 0));
-  //   valIndex[i]++;
-  //   valArray->SetValue(valIndex[i], computedValues(0, pointIndex, 1));
-  //   valIndex[i]++;
-  //   valArray->SetValue(valIndex[i], 0);
-  //   valIndex[i]++;
-  //   break;
-  //   case 3:
-  //   valArray->SetValue(valIndex[i], computedValues(0, pointIndex, 0));
-  //   valIndex[i]++;
-  //   valArray->SetValue(valIndex[i], computedValues(0, pointIndex, 1));
-  //   valIndex[i]++;
-  //   valArray->SetValue(valIndex[i], computedValues(0, pointIndex, 2));
-  //   valIndex[i]++;
-  //   break;
-  //   default:
-  //   TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unsupported number of components");
-  // }
 }
 #endif

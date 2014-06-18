@@ -70,10 +70,17 @@ int main(int argc, char *argv[])
     FunctionPtr x = Function::xn(1);
     FunctionPtr function = x;
     // FunctionPtr fbdr = Function::restrictToCellBoundary(function);
+    vector<FunctionPtr> functions;
+    functions.push_back(function);
+    functions.push_back(function);
+    vector<string> functionNames;
+    functionNames.push_back("function1");
+    functionNames.push_back("function2");
 
     XDMFExporter exporter(mesh);
     exporter.exportFunction(function, "function1", "function1");
     // exporter.exportFunction(fbdr, "boundary1");
+    exporter.exportFunction(functions, functionNames, "functions1");
   }
   {
   // 2D tests
@@ -121,11 +128,18 @@ int main(int argc, char *argv[])
     FunctionPtr function = x2 + y2;
     FunctionPtr vect = Function::vectorize(x2, y2);
     FunctionPtr fbdr = Function::restrictToCellBoundary(function);
+    vector<FunctionPtr> functions;
+    functions.push_back(function);
+    functions.push_back(vect);
+    vector<string> functionNames;
+    functionNames.push_back("function");
+    functionNames.push_back("vect");
 
     XDMFExporter exporter(mesh);
     exporter.exportFunction(function, "function2", "function2");
     exporter.exportFunction(vect, "vect2", "vect2");
     exporter.exportFunction(fbdr, "boundary2", "boundary2");
+    exporter.exportFunction(functions, functionNames, "functions2");
   }
 
   {
@@ -184,10 +198,17 @@ int main(int argc, char *argv[])
     FunctionPtr function = x + y + z;
     FunctionPtr fbdr = Function::restrictToCellBoundary(function);
     FunctionPtr vect = Function::vectorize(x, y, z);
+    vector<FunctionPtr> functions;
+    functions.push_back(function);
+    functions.push_back(vect);
+    vector<string> functionNames;
+    functionNames.push_back("function");
+    functionNames.push_back("vect");
 
     XDMFExporter exporter(mesh);
     exporter.exportFunction(function, "function3", "function3");
     exporter.exportFunction(fbdr, "boundary3", "boundary3");
     exporter.exportFunction(vect, "vect3", "vect3");
+    exporter.exportFunction(functions, functionNames, "functions3");
   }
 }
