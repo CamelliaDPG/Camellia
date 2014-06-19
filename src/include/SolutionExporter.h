@@ -87,21 +87,4 @@ public:
   void exportFunction(FunctionPtr function, string functionName="function", set<GlobalIndexType> cellIndices=set<GlobalIndexType>(), unsigned int num1DPts=0);
 };
 
-class XDMFExporter : public NewExporter {
-public:
-  XDMFExporter(MeshTopologyPtr mesh, bool deleteOldFiles=false) :
-    NewExporter(mesh)
-    {
-      // Uncomment this code to delete old files before writing new ones
-      if (deleteOldFiles)
-      {
-        system("rm -rf *.xmf");
-        system("rm -rf HDF5/*");
-      }
-      system("mkdir -p HDF5");
-    }
-  void exportFunction(FunctionPtr function, string functionName="function", string filename="output", set<GlobalIndexType> cellIndices=set<GlobalIndexType>(), unsigned int num1DPts=0);
-  void exportFunction(vector<FunctionPtr> functions, vector<string> functionNames, string filename, set<GlobalIndexType> cellIndices=set<GlobalIndexType>(), unsigned int num1DPts=0);
-};
-
 #endif /* end of include guard: SOLUTIONEXPORTER_H */

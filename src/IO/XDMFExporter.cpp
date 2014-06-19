@@ -1,6 +1,6 @@
 //TODO: boundary functions, adaptive subdivision
 // pass in vector of functions, override creates vector of one, another override packages solutions into vector
-#include "SolutionExporter.h"
+#include "XDMFExporter.h"
 #include "CamelliaConfig.h"
 
 #include "CamelliaCellTools.h"

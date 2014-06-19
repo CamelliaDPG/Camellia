@@ -2,7 +2,7 @@
 #include "Teuchos_RCP.hpp"
 
 #include "Mesh.h"
-#include "SolutionExporter.h"
+#include "XDMFExporter.h"
 
 #ifdef HAVE_MPI
 #include <Teuchos_GlobalMPISession.hpp>
