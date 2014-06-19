@@ -1,5 +1,4 @@
-//TODO: boundary functions, adaptive subdivision
-// pass in vector of functions, override creates vector of one, another override packages solutions into vector
+//TODO: solution output
 #include "XDMFExporter.h"
 #include "CamelliaConfig.h"
 
@@ -12,16 +11,16 @@
 #include <Teuchos_GlobalMPISession.hpp>
 #endif
 
-void XDMFExporter::exportFunction(FunctionPtr function, string functionName, string filename, unsigned int defaultNum1DPts, map<int, int> cellIDToNum1DPts, set<GlobalIndexType> cellIndices)
+void XDMFExporter::exportFunction(FunctionPtr function, string filename, string functionName, unsigned int defaultNum1DPts, map<int, int> cellIDToNum1DPts, set<GlobalIndexType> cellIndices)
 {
   vector<FunctionPtr> functions;
   functions.push_back(function);
   vector<string> functionNames;
   functionNames.push_back(functionName);
-  exportFunction(functions, functionNames, filename, defaultNum1DPts, cellIDToNum1DPts, cellIndices);
+  exportFunction(functions, filename, functionNames, defaultNum1DPts, cellIDToNum1DPts, cellIndices);
 }
 
-void XDMFExporter::exportFunction(vector<FunctionPtr> functions, vector<string> functionNames, string filename, unsigned int defaultNum1DPts, map<int, int> cellIDToNum1DPts, set<GlobalIndexType> cellIndices)
+void XDMFExporter::exportFunction(vector<FunctionPtr> functions, string filename, vector<string> functionNames, unsigned int defaultNum1DPts, map<int, int> cellIDToNum1DPts, set<GlobalIndexType> cellIndices)
 {
   int nFcns = functions.size();
 
