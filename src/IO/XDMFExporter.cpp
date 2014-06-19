@@ -8,16 +8,20 @@
 #ifdef USE_XDMF
 #include <Xdmf.h>
 
-void XDMFExporter::exportFunction(FunctionPtr function, string functionName, string filename, set<GlobalIndexType> cellIndices, unsigned int num1DPts)
+#ifdef HAVE_MPI
+#include <Teuchos_GlobalMPISession.hpp>
+#endif
+
+void XDMFExporter::exportFunction(FunctionPtr function, string functionName, string filename, unsigned int defaultNum1DPts, map<int, int> cellIDToNum1DPts, set<GlobalIndexType> cellIndices)
 {
   vector<FunctionPtr> functions;
   functions.push_back(function);
   vector<string> functionNames;
   functionNames.push_back(functionName);
-  exportFunction(functions, functionNames, filename, cellIndices, num1DPts);
+  exportFunction(functions, functionNames, filename, defaultNum1DPts, cellIDToNum1DPts, cellIndices);
 }
 
-void XDMFExporter::exportFunction(vector<FunctionPtr> functions, vector<string> functionNames, string filename, set<GlobalIndexType> cellIndices, unsigned int num1DPts)
+void XDMFExporter::exportFunction(vector<FunctionPtr> functions, vector<string> functionNames, string filename, unsigned int defaultNum1DPts, map<int, int> cellIDToNum1DPts, set<GlobalIndexType> cellIndices)
 {
   int nFcns = functions.size();
 
@@ -46,14 +50,17 @@ void XDMFExporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
   time.SetValue(0);
   grid.Insert(&time);
 
-  bool defaultPts = (num1DPts == 0);
-  int pOrder = 6;
-  if (defaultPts)
-    if (pOrder < 2)
-      num1DPts = 2;
-    else
-      // num1DPts = 2*pOrder+2;
-      num1DPts = pOrder+1;
+  // int num1DPts = defaultNum1DPts;
+  // bool defaultPts = (num1DPts == 0);
+  // int pOrder = 6;
+  // if (defaultPts)
+  //   if (pOrder < 2)
+  //     num1DPts = 2;
+  //   else
+  //     // num1DPts = 2*pOrder+2;
+  //     num1DPts = pOrder+1;
+  if (defaultNum1DPts < 2)
+    defaultNum1DPts = 2;
 
   int spaceDim = _mesh->getSpaceDim();
 
@@ -69,40 +76,119 @@ void XDMFExporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
   unsigned int total_vertices = 0;
   
   if (cellIndices.size()==0) cellIndices = _mesh->getActiveCellIndices();
+  // Number of line elements in 1D mesh
   int numLines=0;
+  // Number of triangle elements in 2D mesh
   int numTriangles=0;
+  // Number of quad elements in 2D mesh
   int numQuads=0;
+  // Number of hex elements in 3D mesh
   int numHexas=0;
-  // set<GlobalIndexType> cellIDs = mesh->getTopology()->getActiveCellIndices();
+  // Number of line subdivisions in 1D mesh
+  int totalSubLines=0;
+  // Number of triangle subdivisions in 2D mesh
+  int totalSubTriangles=0;
+  // Number of quad subdivisions in 2D mesh
+  int totalSubQuads=0;
+  // Number of hex subdivisions in 3D mesh
+  int totalSubHexas=0;
+  // Total number of subdivisions
+  int totalSubcells=0;
+  // Total number of points needed to construct subdivisions
+  int totalPts=0;
+  // Total number of boundary points in 1D mesh
+  int totalBoundaryPts=0;
+  // Total number of boundary lines in 2D mesh
+  int totalBoundaryLines=0;
+  // Total number of boundary faces in 3D mesh
+  int totalBoundaryFaces=0;
   for (set<GlobalIndexType>::iterator cellIt = cellIndices.begin(); cellIt != cellIndices.end(); cellIt++) {
     CellPtr cell = _mesh->getCell(*cellIt);
-    if (cell->topology()->getKey() == shards::Line<2>::key) numLines++;
-    if (cell->topology()->getKey() == shards::Triangle<3>::key) numTriangles++;
-    if (cell->topology()->getKey() == shards::Quadrilateral<4>::key) numQuads++;
-    if (cell->topology()->getKey() == shards::Hexahedron<8>::key) numHexas++;
+    if (!cellIDToNum1DPts[cell->cellIndex()] || cellIDToNum1DPts[cell->cellIndex()] < 2)
+      cellIDToNum1DPts[cell->cellIndex()] = defaultNum1DPts;
+    int num1DPts = cellIDToNum1DPts[cell->cellIndex()];
+    if (cell->topology()->getKey() == shards::Line<2>::key) 
+    {
+      numLines++;
+      if (!exportingBoundaryValues)
+      {
+        totalSubLines += num1DPts-1;
+        totalPts += num1DPts;
+      }
+      else
+      {
+        totalBoundaryPts += 2;
+        totalPts += 2;
+      }
+    }
+    if (cell->topology()->getKey() == shards::Triangle<3>::key) 
+    {
+      numTriangles++;
+      if (!exportingBoundaryValues)
+      {
+        totalSubTriangles += (num1DPts-1)*(num1DPts-1);
+        totalPts += num1DPts*(num1DPts+1)/2;
+      }
+      else
+      {
+        totalBoundaryLines += 3;
+        totalSubLines += 3*(num1DPts-1);
+        totalPts += 3*num1DPts;
+      }
+    }
+    if (cell->topology()->getKey() == shards::Quadrilateral<4>::key) 
+    {
+      numQuads++;
+      if (!exportingBoundaryValues)
+      {
+        totalSubQuads += (num1DPts-1)*(num1DPts-1);
+        totalPts += num1DPts*num1DPts;
+      }
+      else
+      {
+        totalBoundaryLines += 4;
+        totalSubLines += 4*(num1DPts-1);
+        totalPts += 4*num1DPts;
+      }
+    }
+    if (cell->topology()->getKey() == shards::Hexahedron<8>::key) 
+    {
+      numHexas++;
+      if (!exportingBoundaryValues)
+      {
+        totalSubHexas += (num1DPts-1)*(num1DPts-1)*(num1DPts-1);
+        totalPts += num1DPts*num1DPts*num1DPts;
+      }
+      else
+      {
+        totalBoundaryFaces += 6;
+        totalSubQuads += 6*(num1DPts-1)*(num1DPts-1);
+        totalPts += 6*num1DPts*num1DPts;
+      }
+    }
   }
-  int totalSubLines, totalSubTriangles, totalSubQuads, totalSubHexas, totalSubcells, totalPts, totalBoundaryPts, totalBoundaryLines, totalBoundaryFaces;
-  if (!exportingBoundaryValues)
-  {
-    totalSubLines = (num1DPts-1)*numLines;
-    totalSubTriangles = (num1DPts-1)*(num1DPts-1)*numTriangles;
-    totalSubQuads = (num1DPts-1)*(num1DPts-1)*numQuads;
-    totalSubHexas = (num1DPts-1)*(num1DPts-1)*(num1DPts-1)*numHexas;
-    totalPts = num1DPts*numLines + num1DPts*(num1DPts+1)/2*numTriangles + num1DPts*num1DPts*numQuads + num1DPts*num1DPts*num1DPts*numHexas;
-    totalSubcells = totalSubLines + totalSubTriangles + totalSubQuads + totalSubHexas;
-  }
-  else
-  {
-    totalBoundaryPts = 2*numLines;
-    totalBoundaryLines = 3*numTriangles + 4*numQuads;
-    totalBoundaryFaces = 6*numHexas;
-    totalSubLines = 3*(num1DPts-1)*numTriangles + 4*(num1DPts-1)*numQuads;
-    totalSubTriangles = 0;
-    totalSubQuads = 6*(num1DPts-1)*(num1DPts-1)*numHexas;
-    totalSubHexas = 0;
-    totalPts = 2*numLines + 3*num1DPts*numTriangles + 4*num1DPts*numQuads + 6*num1DPts*num1DPts*numHexas;
-    totalSubcells = totalBoundaryPts + totalSubLines + totalSubTriangles + totalSubQuads + totalSubHexas;
-  }
+  totalSubcells = totalBoundaryPts + totalSubLines + totalSubTriangles + totalSubQuads + totalSubHexas;
+  // if (!exportingBoundaryValues)
+  // {
+  //   totalSubLines = (num1DPts-1)*numLines;
+  //   totalSubTriangles = (num1DPts-1)*(num1DPts-1)*numTriangles;
+  //   totalSubQuads = (num1DPts-1)*(num1DPts-1)*numQuads;
+  //   totalSubHexas = (num1DPts-1)*(num1DPts-1)*(num1DPts-1)*numHexas;
+    // totalPts = num1DPts*numLines + num1DPts*(num1DPts+1)/2*numTriangles + num1DPts*num1DPts*numQuads + num1DPts*num1DPts*num1DPts*numHexas;
+    // totalSubcells = totalSubLines + totalSubTriangles + totalSubQuads + totalSubHexas;
+  // }
+  // else
+  // {
+  //   totalBoundaryPts = 2*numLines;
+  //   totalBoundaryLines = 3*numTriangles + 4*numQuads;
+  //   totalBoundaryFaces = 6*numHexas;
+    // totalSubLines = 3*(num1DPts-1)*numTriangles + 4*(num1DPts-1)*numQuads;
+    // totalSubTriangles = 0;
+    // totalSubQuads = 6*(num1DPts-1)*(num1DPts-1)*numHexas;
+    // totalSubHexas = 0;
+    // totalPts = 2*numLines + 3*num1DPts*numTriangles + 4*num1DPts*numQuads + 6*num1DPts*num1DPts*numHexas;
+    // totalSubcells = totalBoundaryPts + totalSubLines + totalSubTriangles + totalSubQuads + totalSubHexas;
+  // }
 
   // Topology
   topology = grid.GetTopology();
@@ -207,10 +293,8 @@ void XDMFExporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
     FieldContainer<double> physicalCellNodes = _mesh->physicalCellNodesForCell(cellIndex);
 
     CellTopoPtr cellTopoPtr = cell->topology();
+    int num1DPts = cellIDToNum1DPts[cell->cellIndex()];
     int numPoints = 0;
-    // int pOrder = 4;
-    // if (defaultPts)
-    //   num1DPts = pow(pOrder, 2)+1;
     
     if (physicalCellNodes.rank() == 2)
       physicalCellNodes.resize(1,physicalCellNodes.dimension(0), physicalCellNodes.dimension(1));
@@ -531,17 +615,10 @@ void XDMFExporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
         }
       }
     }
-    // mkdir("HDF5");
-    // system("mkdir -p HDF5");
     connArray->SetHeavyDataSetName(("HDF5/"+filename+".h5:/Conns").c_str());
     ptArray->SetHeavyDataSetName(("HDF5/"+filename+".h5:/Points").c_str());
     for (int i = 0; i < nFcns; i++)
     {
-      // if (remove(("HDF5/"+filename+"-"+functionNames[i]+".h5").c_str()) != 0)
-      //   cout << "Error deleting file" << endl;
-      // else
-      //   cout << "Success" << endl;
-      // cout << "HDF5/"+filename+"-"+functionNames[i]+".h5" << endl;
       valArray[i]->SetHeavyDataSetName(("HDF5/"+filename+"-"+functionNames[i]+".h5:/NodeData").c_str());
       // Attach and Write
       grid.Insert(&nodedata[i]);
@@ -554,5 +631,5 @@ void XDMFExporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
     dom.Write((filename+".xmf").c_str());
 
     cout << "Wrote " <<  filename << ".xmf" << endl;
-}
+  }
 #endif

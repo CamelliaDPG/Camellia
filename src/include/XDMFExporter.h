@@ -28,8 +28,8 @@ public:
       }
       system("mkdir -p HDF5");
     }
-  void exportFunction(FunctionPtr function, string functionName="function", string filename="output", set<GlobalIndexType> cellIndices=set<GlobalIndexType>(), unsigned int num1DPts=0);
-  void exportFunction(vector<FunctionPtr> functions, vector<string> functionNames, string filename, set<GlobalIndexType> cellIndices=set<GlobalIndexType>(), unsigned int num1DPts=0);
+  void exportFunction(FunctionPtr function, string functionName="function", string filename="output", unsigned int defaultNum1DPts=0, map<int, int> cellIDToNum1DPts=map<int,int>(), set<GlobalIndexType> cellIndices=set<GlobalIndexType>());
+  void exportFunction(vector<FunctionPtr> functions, vector<string> functionNames, string filename, unsigned int defaultNum1DPts=0, map<int, int> cellIDToNum1DPts=map<int,int>(), set<GlobalIndexType> cellIndices=set<GlobalIndexType>());
 };
 
 #endif /* end of include guard: XDMFEXPORTER_H */

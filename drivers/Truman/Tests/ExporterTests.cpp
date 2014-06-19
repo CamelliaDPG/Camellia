@@ -135,8 +135,11 @@ int main(int argc, char *argv[])
     functionNames.push_back("function");
     functionNames.push_back("vect");
 
+    map<int, int> cellIDToNum1DPts;
+    cellIDToNum1DPts[1] = 4;
+
     XDMFExporter exporter(mesh, false);
-    exporter.exportFunction(function, "function2", "function2");
+    exporter.exportFunction(function, "function2", "function2", 10, cellIDToNum1DPts);
     exporter.exportFunction(vect, "vect2", "vect2");
     exporter.exportFunction(fbdr, "boundary2", "boundary2");
     exporter.exportFunction(functions, functionNames, "functions2");
