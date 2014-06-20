@@ -11,22 +11,22 @@
 #include <Teuchos_GlobalMPISession.hpp>
 #endif
 
-void XDMFExporter::exportFunction(FunctionPtr function, string filename, string functionName, unsigned int defaultNum1DPts, map<int, int> cellIDToNum1DPts, set<GlobalIndexType> cellIndices)
+void XDMFExporter::exportFunction(FunctionPtr function, string functionName, double timeVal, unsigned int defaultNum1DPts, map<int, int> cellIDToNum1DPts, set<GlobalIndexType> cellIndices)
 {
   vector<FunctionPtr> functions;
   functions.push_back(function);
   vector<string> functionNames;
   functionNames.push_back(functionName);
-  exportFunction(functions, filename, functionNames, defaultNum1DPts, cellIDToNum1DPts, cellIndices);
+  exportFunction(functions, functionNames, timeVal, defaultNum1DPts, cellIDToNum1DPts, cellIndices);
 }
 
-void XDMFExporter::exportFunction(vector<FunctionPtr> functions, string filename, vector<string> functionNames, unsigned int defaultNum1DPts, map<int, int> cellIDToNum1DPts, set<GlobalIndexType> cellIndices)
+void XDMFExporter::exportFunction(vector<FunctionPtr> functions, vector<string> functionNames, double timeVal, unsigned int defaultNum1DPts, map<int, int> cellIDToNum1DPts, set<GlobalIndexType> cellIndices)
 {
   int nFcns = functions.size();
 
-  XdmfDOM         dom;
-  XdmfRoot        root;
-  XdmfDomain      domain;
+  // XdmfDOM         dom;
+  // XdmfRoot        root;
+  // XdmfDomain      domain;
   XdmfGrid        grid;
   XdmfTime        time;
   XdmfTopology    *topology;
@@ -37,17 +37,14 @@ void XDMFExporter::exportFunction(vector<FunctionPtr> functions, string filename
   XdmfArray       *connArray;
   XdmfArray       *valArray[nFcns];
 
-  root.SetDOM(&dom);
-  root.SetVersion(2.0);
-  root.Build();
-      // Domain
-  root.Insert(&domain);
-      // Grid
-  grid.SetName("Grid");
-  domain.Insert(&grid);
-  time.SetTimeType(XDMF_TIME_SINGLE);
-  time.SetValue(0);
-  grid.Insert(&time);
+  // root.SetDOM(&dom);
+  // root.SetVersion(2.0);
+  // root.Build();
+  //     // Domain
+  // root.Insert(&domain);
+  //     // Grid
+  // grid.SetName("Grid");
+  // domain.Insert(&grid);
 
   // int num1DPts = defaultNum1DPts;
   // bool defaultPts = (num1DPts == 0);
@@ -64,6 +61,21 @@ void XDMFExporter::exportFunction(vector<FunctionPtr> functions, string filename
   int spaceDim = _mesh->getSpaceDim();
 
   bool exportingBoundaryValues = functions[0]->boundaryValueOnly();
+  if (!exportingBoundaryValues)
+  {
+    grid.SetName("Field Grid");
+    fieldTemporalCollection.Insert(&grid);
+  }
+  else
+  {
+    grid.SetName("Trace Grid");
+    traceTemporalCollection.Insert(&grid);
+  }
+
+  time.SetTimeType(XDMF_TIME_SINGLE);
+  time.SetValue(timeVal);
+  grid.Insert(&time);
+
   for (int i=0; i < nFcns; i++)
     if (exportingBoundaryValues != functions[i]->boundaryValueOnly())
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Can not export trace and field variables together");
