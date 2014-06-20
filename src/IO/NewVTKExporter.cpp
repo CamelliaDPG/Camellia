@@ -14,7 +14,7 @@
 #include "vtkIdList.h"
 #include "vtkVersion.h"
 
-void NewVTKExporter::exportFunction(FunctionPtr function, const string& functionName, set<GlobalIndexType> cellIndices, unsigned int num1DPts)
+void NewVTKExporter::exportFunction(FunctionPtr function, string functionName, set<GlobalIndexType> cellIndices, unsigned int num1DPts)
 {
   bool defaultPts = (num1DPts == 0);
   vtkUnstructuredGrid* ug = vtkUnstructuredGrid::New();
