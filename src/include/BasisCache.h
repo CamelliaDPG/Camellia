@@ -175,6 +175,7 @@ public:
   int cubatureDegree();
   
   Teuchos::RCP<Mesh> mesh();
+  void setMesh(Teuchos::RCP<Mesh> mesh);
   
   void discardPhysicalNodeInfo(); // discards physicalNodes and all transformed basis values.
   

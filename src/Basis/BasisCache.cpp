@@ -305,6 +305,14 @@ Teuchos::RCP<Mesh> BasisCache::mesh() {
   }
 }
 
+void BasisCache::setMesh(MeshPtr mesh) {
+  if ( ! _isSideCache ) {
+    _mesh = mesh;
+  } else {
+    _basisCacheVolume->setMesh(mesh);
+  }
+}
+
 void BasisCache::discardPhysicalNodeInfo() {
   // discard physicalNodes and all transformed basis values.
   _knownValuesTransformed.clear();
