@@ -1793,7 +1793,6 @@ const map<GlobalIndexType,double> & Solution::energyError() {
 }
 
 void Solution::computeErrorRepresentation() {
-  int numProcs= Teuchos::GlobalMPISession::getNProc();
   int rank= Teuchos::GlobalMPISession::getRank();
 
   if (!_residualsComputed) {
@@ -1808,42 +1807,32 @@ void Solution::computeErrorRepresentation() {
     BasisCachePtr ipBasisCache = Teuchos::rcp(new BasisCache(elemTypePtr,_mesh,true,_cubatureEnrichmentDegree));
     
     Teuchos::RCP<DofOrdering> testOrdering = elemTypePtr->testOrderPtr;
-    FieldContainer<double> physicalCellNodes = _mesh->physicalCellNodes(elemTypePtr);
     shards::CellTopology cellTopo = *(elemTypePtr->cellTopoPtr);
     
-    vector< Teuchos::RCP< Element > > elemsInPartitionOfType = _mesh->elementsOfType(rank, elemTypePtr);
+    vector< ElementPtr > elements = _mesh->elementsOfType(rank, elemTypePtr);
     
-    int numCells = physicalCellNodes.dimension(0);
+    int numCells = elements.size();
     int numTestDofs = testOrdering->totalDofs();
-    
-    TEUCHOS_TEST_FOR_EXCEPTION( numCells!=elemsInPartitionOfType.size(), std::invalid_argument, "In computeErrorRepresentation::numCells does not match number of elems in partition.");
-    FieldContainer<double> ipMatrix(numCells,numTestDofs,numTestDofs);
-    
-    // determine cellIDs
-    vector<GlobalIndexType> cellIDs;
-    for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
-      GlobalIndexType cellID = _mesh->cellID(elemTypePtr, cellIndex, rank);
-      cellIDs.push_back(cellID);
-    }
-    
-    ipBasisCache->setPhysicalCellNodes(physicalCellNodes,cellIDs,_ip->hasBoundaryTerms());
-    
-    _ip->computeInnerProductMatrix(ipMatrix,testOrdering, ipBasisCache);
-    FieldContainer<double> errorRepresentation(numCells,numTestDofs);
-    
-    FieldContainer<double> representationMatrix(numTestDofs, 1);
-    Teuchos::Array<int> localIPDim(2);
-    localIPDim[0] = numTestDofs;
-    localIPDim[1] = numTestDofs;
+
     Teuchos::Array<int> localRHSDim(2);
     localRHSDim[0] = _residualForElementType[elemTypePtr.get()].dimension(1);
     localRHSDim[1] = 1;
     
-    for (int cellOrdinal=0; cellOrdinal < numCells; cellOrdinal++) {
-      int result = 0;
-      FieldContainer<double> cellIPMatrix(localIPDim, &ipMatrix(cellOrdinal,0,0));
+    FieldContainer<double> representationMatrix(numTestDofs, 1);
+    FieldContainer<double> errorRepresentation(numCells,numTestDofs);
+    
+    vector<GlobalIndexType> cellIDVector(1);
+    for (int cellOrdinal=0; cellOrdinal<numCells; cellOrdinal++) {
+      GlobalIndexType cellID = _mesh->cellID(elemTypePtr, cellOrdinal, rank);
+      cellIDVector[0] = cellID;
+      FieldContainer<double> physicalCellNodes = _mesh->physicalCellNodesForCell(cellID);
+      ipBasisCache->setPhysicalCellNodes(physicalCellNodes,cellIDVector,_ip->hasBoundaryTerms());
+      FieldContainer<double> ipMatrix(1,numTestDofs,numTestDofs);
+      _ip->computeInnerProductMatrix(ipMatrix,testOrdering, ipBasisCache);
       FieldContainer<double> rhsMatrix(localRHSDim, &_residualForElementType[elemTypePtr.get()](cellOrdinal,0));
-      result = SerialDenseWrapper::solveSystemUsingQR(representationMatrix, cellIPMatrix, rhsMatrix);
+      // strip cell dimension:
+      ipMatrix.resize(ipMatrix.dimension(1),ipMatrix.dimension(2));
+      int result = SerialDenseWrapper::solveSystemUsingQR(representationMatrix, ipMatrix, rhsMatrix);
       if (result != 0) {
         cout << "WARNING: computeErrorRepresentation: call to solveSystemUsingQR failed with error code " << result << endl;
       }
