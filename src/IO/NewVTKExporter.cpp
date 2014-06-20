@@ -14,8 +14,11 @@
 #include "vtkIdList.h"
 #include "vtkVersion.h"
 
-void NewVTKExporter::exportFunction(FunctionPtr function, string functionName, set<GlobalIndexType> cellIndices, unsigned int num1DPts)
+void NewVTKExporter::exportFunction(FunctionPtr function, string functionName, string fileName, set<GlobalIndexType> cellIndices, unsigned int num1DPts)
 {
+  if (fileName.length()==0) {
+    fileName = functionName;
+  }
   bool defaultPts = (num1DPts == 0);
   vtkUnstructuredGrid* ug = vtkUnstructuredGrid::New();
   vtkFloatArray* vals = vtkFloatArray::New();
@@ -284,14 +287,14 @@ void NewVTKExporter::exportFunction(FunctionPtr function, string functionName, s
     wr->SetInputData(ug);
 #endif
     ug->Delete();
-    wr->SetFileName((functionName+".vtu").c_str());
+    wr->SetFileName((fileName+".vtu").c_str());
     wr->SetDataModeToBinary();
     // wr->SetDataModeToAscii();
     wr->Update();
     wr->Write();
     wr->Delete();
 
-    cout << "Wrote " <<  functionName << ".vtu" << endl;
+    cout << "Wrote " <<  fileName << ".vtu" << endl;
   }
 
 #endif
