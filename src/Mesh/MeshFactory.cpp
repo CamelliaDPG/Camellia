@@ -249,10 +249,16 @@ MeshPtr MeshFactory::intervalMesh(BilinearFormPtr bf, double xLeft, double xRigh
   return Teuchos::rcp( new Mesh(meshTopology, bf, H1Order, delta_k) );
 }
 
-MeshPtr MeshFactory::rectilinearMesh(BilinearFormPtr bf, vector<double> dimensions, vector<int> elementCounts, int H1Order, int pToAddTest) {
+MeshPtr MeshFactory::rectilinearMesh(BilinearFormPtr bf, vector<double> dimensions, vector<int> elementCounts, int H1Order, int pToAddTest, vector<double> x0) {
   int spaceDim = dimensions.size();
   if (pToAddTest==-1) {
     pToAddTest = spaceDim;
+  }
+  
+  if (x0.size()==0) {
+    for (int d=0; d<spaceDim; d++) {
+      x0.push_back(0.0);
+    }
   }
   
   if (elementCounts.size() != dimensions.size()) {
@@ -261,13 +267,13 @@ MeshPtr MeshFactory::rectilinearMesh(BilinearFormPtr bf, vector<double> dimensio
   }
   
   if (spaceDim == 1) {
-    double xLeft = 0;
-    double xRight = dimensions[0];
+    double xLeft = x0[0];
+    double xRight = dimensions[0] + xLeft;
     return MeshFactory::intervalMesh(bf, xLeft, xRight, elementCounts[0], H1Order, pToAddTest);
   }
   
   if (spaceDim == 2) {
-    return MeshFactory::quadMeshMinRule(bf, H1Order, dimensions[0], dimensions[1], elementCounts[0], elementCounts[1], pToAddTest);
+    return MeshFactory::quadMeshMinRule(bf, H1Order, dimensions[0], dimensions[1], elementCounts[0], elementCounts[1], pToAddTest, false, x0[0], x0[1]);
   }
   
   if (spaceDim != 3) {
@@ -289,11 +295,10 @@ MeshPtr MeshFactory::rectilinearMesh(BilinearFormPtr bf, vector<double> dimensio
   
   int numElements = 1;
   vector<double> elemLinearMeasures(spaceDim);
-  vector<double> origin(spaceDim);
+  vector<double> origin = x0;
   for (int d=0; d<spaceDim; d++) {
     numElements *= elementCounts[d];
-    elemLinearMeasures[d] = 1.0 / elementCounts[d];
-    origin[d] = 0;
+    elemLinearMeasures[d] = dimensions[d] / elementCounts[d];
   }
   vector< CellTopoPtr > cellTopos(numElements, topo);
     

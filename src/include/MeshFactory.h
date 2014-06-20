@@ -32,7 +32,7 @@ public:
   
   static MeshPtr quadMesh(BilinearFormPtr bf, int H1Order, FieldContainer<double> &quadNodes, int pToAddTest=2);
   
-  static MeshPtr rectilinearMesh(BilinearFormPtr bf, vector<double> dimensions, vector<int> elementCounts, int H1Order, int pToAddTest=-1);
+  static MeshPtr rectilinearMesh(BilinearFormPtr bf, vector<double> dimensions, vector<int> elementCounts, int H1Order, int pToAddTest=-1, vector<double> x0 = vector<double>());
   
   static MeshPtr hemkerMesh(double meshWidth, double meshHeight, double cylinderRadius, // cylinder is centered in quad mesh.
                             BilinearFormPtr bilinearForm, int H1Order, int pToAddTest)

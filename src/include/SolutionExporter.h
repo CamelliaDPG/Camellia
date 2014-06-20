@@ -84,7 +84,7 @@ class NewVTKExporter : public NewExporter {
 public:
   NewVTKExporter(MeshTopologyPtr mesh) :
     NewExporter(mesh) {}
-  void exportFunction(FunctionPtr function, string functionName="function", set<GlobalIndexType> cellIndices=set<GlobalIndexType>(), unsigned int num1DPts=0);
+  void exportFunction(FunctionPtr function, string functionName="function", string filename="", set<GlobalIndexType> cellIndices=set<GlobalIndexType>(), unsigned int num1DPts=0);
 };
 
 #endif /* end of include guard: SOLUTIONEXPORTER_H */

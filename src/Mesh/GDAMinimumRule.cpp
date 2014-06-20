@@ -67,7 +67,7 @@ void GDAMinimumRule::didHRefine(const set<GlobalIndexType> &parentCellIDs) {
   for (set<GlobalIndexType>::iterator cellIDIt = neighborsOfNewElements.begin(); cellIDIt != neighborsOfNewElements.end(); cellIDIt++) {
     assignParities(*cellIDIt);
   }
-  rebuildLookups();
+//  rebuildLookups();
 }
 
 void GDAMinimumRule::didPRefine(const set<GlobalIndexType> &cellIDs, int deltaP) {
@@ -75,7 +75,7 @@ void GDAMinimumRule::didPRefine(const set<GlobalIndexType> &cellIDs, int deltaP)
   for (set<GlobalIndexType>::const_iterator cellIDIt = cellIDs.begin(); cellIDIt != cellIDs.end(); cellIDIt++) {
     assignInitialElementType(*cellIDIt);
   }
-  rebuildLookups();
+//  rebuildLookups();
 }
 
 void GDAMinimumRule::didHUnrefine(const set<GlobalIndexType> &parentCellIDs) {
@@ -83,7 +83,7 @@ void GDAMinimumRule::didHUnrefine(const set<GlobalIndexType> &parentCellIDs) {
   // TODO: implement this
   cout << "WARNING: GDAMinimumRule::didHUnrefine() unimplemented.\n";
   // will need to treat cell side parities here--probably suffices to redo those in parentCellIDs plus all their neighbors.
-  rebuildLookups();
+//  rebuildLookups();
 }
 
 ElementTypePtr GDAMinimumRule::elementType(GlobalIndexType cellID) {
@@ -478,8 +478,8 @@ BasisMap GDAMinimumRule::getBasisMap(GlobalIndexType cellID, SubCellDofIndexInfo
   
   SubBasisMapInfo subBasisMap;
   
-//  if ((cellID==2) && (sideOrdinal==3) && (var->ID() == 0)) {
-//    cout << "DEBUGGING: (cellID==2) && (sideOrdinal==3) && (var->ID() == 0).\n";
+//  if ((cellID==2) && (sideOrdinal==1) && (var->ID() == 0)) {
+//    cout << "DEBUGGING: (cellID==2) && (sideOrdinal==1) && (var->ID() == 0).\n";
 //  }
   
   // TODO: move the permutation computation outside of this method -- might include in CellConstraints, e.g. -- this obviously will not change from one var to the next, but we compute it redundantly each time...
@@ -559,20 +559,26 @@ BasisMap GDAMinimumRule::getBasisMap(GlobalIndexType cellID, SubCellDofIndexInfo
       
       CellPtr constrainingCell = _meshTopology->getCell(subcellConstraint.cellID);
       
-      // debugging
-//      if ((cellID==2) && (sideOrdinal==1) && (var->ID()==0)) {
-//        cout << "while getting basis map for cell 2, side 1: cell " << subcellInfo.cellID << ", side " << subcellInfo.sideOrdinal;
-//        cout << ", subcell " << subcellInfo.subcellOrdinalInSide << " of dimension " << subcellInfo.dimension << " is constrained by ";
-//        cout << "cell " << subcellConstraint.cellID << ", side " << subcellConstraint.sideOrdinal;
-//        cout << ", subcell " << subcellConstraint.subcellOrdinalInSide << " of dimension " << subcellConstraint.dimension << endl;
-//      }
-      
       DofOrderingPtr constrainingTrialOrdering = _elementTypeForCell[subcellConstraint.cellID]->trialOrderPtr;
       BasisPtr constrainingBasis = constrainingTrialOrdering->getBasis(var->ID(), subcellConstraint.sideOrdinal);
       
       
       unsigned subcellOrdinalInConstrainingCell = CamelliaCellTools::subcellOrdinalMap(*constrainingCell->topology(), sideDim, subcellConstraint.sideOrdinal,
                                                                                        subcellConstraint.dimension, subcellConstraint.subcellOrdinalInSide);
+      
+      // DEBUGGING
+//      if ((cellID==2) && (sideOrdinal==1) && (var->ID()==0)) {
+//        cout << "while getting basis map for cell 2, side 1: cell " << subcellInfo.cellID << ", side " << subcellInfo.sideOrdinal;
+//        cout << ", subcell " << subcellInfo.subcellOrdinalInSide << " of dimension " << subcellInfo.dimension << " is constrained by ";
+//        cout << "cell " << subcellConstraint.cellID << ", side " << subcellConstraint.sideOrdinal;
+//        cout << ", subcell " << subcellConstraint.subcellOrdinalInSide << " of dimension " << subcellConstraint.dimension << endl;
+//        IndexType appliedConstraintSubcellEntityIndex = appliedConstraintCell->entityIndex(subcellInfo.dimension, subcordInAppliedConstraintCell);
+//        IndexType constrainingSubcellEntityIndex = constrainingCell->entityIndex(subcellConstraint.dimension, subcellOrdinalInConstrainingCell);
+//        
+//        cout << CamelliaCellTools::entityTypeString(subcellInfo.dimension) << " " << appliedConstraintSubcellEntityIndex;
+//        cout << " constrained by " << CamelliaCellTools::entityTypeString(subcellConstraint.dimension) << " " << constrainingSubcellEntityIndex;
+//        cout << endl;
+//      }
       
       shards::CellTopology constrainingTopo = constrainingCell->topology()->getCellTopologyData(subcellConstraint.dimension, subcellOrdinalInConstrainingCell);
       
@@ -656,10 +662,6 @@ BasisMap GDAMinimumRule::getBasisMap(GlobalIndexType cellID, SubCellDofIndexInfo
         cout << "Error: ancestralSideOrdinal not found.\n";
         TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Error: ancestralSideOrdinal not found.");
       }
-      
-//      if ((subcellInfo.cellID==2) && (subcellInfo.dimension == 0) && (subcellInfo.sideOrdinal==0)) {
-//        cout << "DEBUGGING: (subcellInfo.cellID==2) && (subcellInfo.dimension == 0) && (subcellInfo.sideOrdinal==0).\n";
-//      }
       
       if (subcellConstraint.dimension != d) {
         unsigned ancestralPermutation = ancestralCell->sideSubcellPermutation(ancestralSideOrdinal, sideDim, 0);// side permutation as seen from the perspective of the fine cell's side's ancestor
@@ -765,15 +767,17 @@ BasisMap GDAMinimumRule::getBasisMap(GlobalIndexType cellID, SubCellDofIndexInfo
           
           SubBasisReconciliationWeights composedWeightsForSubSubcell = BasisReconciliation::weightsForCoarseSubcell(composedWeights, constrainingBasis, d1,
                                                                                                                     subsubcellConstraint.subcellOrdinalInSide, true);
-//          if ((cellID==21) && (sideOrdinal==2) && (d1==0) && (subcellConstraint.cellID==6) && ((ssubcordInCell==3) || (ssubcordInCell==0))) {
-//            cout << "for cellID 6, coarse and fine ordinals for vertex " << ssubcordInCell << ":\n";
+          // DEBUGGING
+//          if ((cellID==2) && (sideOrdinal==1)) {
+//            if ((ssEntityIndex==12) && (d1 == 0)) {
+//              cout << "vertex 12.\n";
+//            }
+//            
 //            Camellia::print("composedWeightsForSubSubcell.coarseOrdinals", composedWeightsForSubSubcell.coarseOrdinals);
 //            Camellia::print("composedWeightsForSubSubcell.fineOrdinals", composedWeightsForSubSubcell.fineOrdinals);
 //            cout << "composed weights for subSubSubcell:\n" << composedWeightsForSubSubcell.weights;
 //          }
-//          if ((d1==0) && (ssubcordInCell == 3) && (subcellConstraint.cellID == 4)) {
-//            cout << "blah2.\n";
-//          }
+          
           if (composedWeightsForSubSubcell.weights.size() > 0) {
             appliedWeights[d1][ssEntityIndex] = make_pair(subsubcellConstraint, composedWeightsForSubSubcell);
           }
@@ -803,12 +807,12 @@ BasisMap GDAMinimumRule::getBasisMap(GlobalIndexType cellID, SubCellDofIndexInfo
 //        // DEBUGGING:
 //        if ((cellID==2) && (sideOrdinal==1)) {
 //          set<unsigned> globalDofOrdinalsSet(globalDofOrdinals.begin(),globalDofOrdinals.end());
-//          if (globalDofOrdinalsSet.find(2) != globalDofOrdinalsSet.end()) {
-//            cout << "mapping for globalDofOrdinal 2 on (cellID==2) && (sideOrdinal==1).\n";
-//          }
-//          if (globalDofOrdinalsSet.find(22) != globalDofOrdinalsSet.end()) {
-//            cout << "mapping for globalDofOrdinal 22 on (cellID==2) && (sideOrdinal==1).\n";
-//          }
+//          IndexType constrainingSubcellEntityIndex = constrainingCell->entityIndex(subcellConstraint.dimension, subcellOrdinalInConstrainingCell);
+//          
+//          cout << "Determined constraints imposed by ";
+//          cout << CamelliaCellTools::entityTypeString(subcellConstraint.dimension) << " " << constrainingSubcellEntityIndex;
+//          cout << " (owned by " << CamelliaCellTools::entityTypeString(ownershipInfo.dimension) << " " << ownershipInfo.owningSubcellEntityIndex << ")\n";
+//          
 //          Camellia::print("basisDofOrdinals mapped on cell 2, sideOrdinal 1",basisDofOrdinals);
 //          Camellia::print("globalDofOrdinals mapped on cell 2, sideOrdinal 1", globalDofOrdinalsSet);
 //          cout << "weights:\n" << subcellInteriorWeights.weights;
@@ -946,7 +950,8 @@ BasisMap GDAMinimumRule::getBasisMap(GlobalIndexType cellID, SubCellDofIndexInfo
     vector<GlobalIndexType> globalOrdinals(partition.begin(),partition.end());
     SubBasisDofMapperPtr subBasisMap = SubBasisDofMapper::subBasisDofMapper(fineOrdinals, globalOrdinals, weights);
     varSideMap.push_back(subBasisMap);
-    
+
+    // DEBUGGING
 //    if ((cellID==2) && (sideOrdinal==1) && (var->ID() ==0)) {
 //      cout << "Adding subBasisDofMapper.  Details:\n";
 //      Camellia::print("fineOrdinals", fineOrdinals);

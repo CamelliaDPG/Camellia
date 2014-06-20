@@ -476,7 +476,89 @@ SubBasisReconciliationWeights BasisReconciliation::computeConstrainedWeights(uns
     cubatureWeightsFineSubcell(0) = 1.0;
   }
   
+//  cout << "subcellCubaturePoints:\n" << subcellCubaturePoints;
+//  
 //  cout << "Fine domain points:\n" << fineDomainPoints;
+  
+  // ************************************************************************************************************
+  // TODO: determine the relative permutation of the subcell as seen by the fine domain and the subcell as seen by the
+  //       leaf of the subcell refinement branch used to generate the coarse domain's points.  Use this to permute the
+  //       subcellCubaturePoints appropriately before generating the coarse domain's points...
+  
+  if (fineSubcellTopo.getNodeCount() > 1) {
+    
+    vector<unsigned> fineDomainSubcellNodes;
+    for (int i=0; i<fineSubcellTopo.getNodeCount(); i++) {
+      unsigned nodeInFineDomain = fineTopo.getNodeMap(fineSubcellDimension, finerBasisSubcellOrdinalInFineDomain, i);
+      unsigned nodeInFineCell = leafCellTopo.getNodeMap(domainDim, fineDomainOrdinalInRefinementLeaf, nodeInFineDomain);
+      fineDomainSubcellNodes.push_back(nodeInFineCell);
+    }
+    
+    vector<unsigned> subcellParentChildNodes; // a bit complicated: ascend the ref pattern hierarchy, then descend again to get the view from which we'll start to construct cubature for the coarse domain (the subcell's parent's child may be of different dimension than the subcell).
+    {
+      // worth noting that this code is by design redundant with the first bit of the while (refOrdinal >= 0) loop below.
+      // in the interest of eliminating said redundancy, it might be worthwhile to do the permutation determination inside that loop,
+      // guarding it with an if (refOrdinal == cellRefinementBranch.size() - 1).
+      int lastRefOrdinal = cellRefinementBranch.size() - 1;
+      
+      RefinementBranch lastRefinementBranch;
+      lastRefinementBranch.push_back(cellRefinementBranch[lastRefOrdinal]);
+      
+      RefinementPattern* refPattern = lastRefinementBranch[0].first;
+      unsigned childOrdinal = lastRefinementBranch[0].second;
+
+      pair<unsigned, unsigned> subcellParent = refPattern->mapSubcellFromChildToParent(childOrdinal, fineSubcellDimension, fineSubcellOrdinalInLeafCell);
+      
+      bool tolerateSubcellsWithoutDescendants = true;
+      RefinementBranch lastSubcellRefinementBranch = RefinementPattern::subcellRefinementBranch(lastRefinementBranch, subcellParent.first, subcellParent.second,
+                                                                                                tolerateSubcellsWithoutDescendants);
+      unsigned subcellChildOrdinal = lastSubcellRefinementBranch[0].second;
+      
+      MeshTopologyPtr refTopology = refPattern->refinementMeshTopology();
+      CellPtr parentCell = refTopology->getCell(0);
+      CellPtr childCell = parentCell->children()[childOrdinal];
+      IndexType fineSubcellEntityIndex = childCell->entityIndex(fineSubcellDimension, fineSubcellOrdinalInLeafCell);
+      IndexType subcellParentEntityIndex = parentCell->entityIndex(subcellParent.first, subcellParent.second);
+      IndexType subcellParentChildEntityIndex = refTopology->getChildEntities(subcellParent.first, subcellParentEntityIndex)[subcellChildOrdinal];
+      unsigned subsubcellCount = refTopology->getSubEntityCount(subcellParent.first, subcellParentChildEntityIndex, fineSubcellDimension);
+      unsigned fineSubcellOrdinalInParentChild = -1;
+      for (unsigned ssOrdinal = 0; ssOrdinal < subsubcellCount; ssOrdinal++) {
+        if (refTopology->getSubEntityIndex(subcellParent.first, subcellParentChildEntityIndex, fineSubcellDimension, ssOrdinal) == fineSubcellEntityIndex) {
+          fineSubcellOrdinalInParentChild = ssOrdinal;
+          break;
+        }
+      }
+      if (fineSubcellOrdinalInParentChild == -1) {
+        cout << "fineSubcellOrdinalInParentChild not found.\n";
+        TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "fineSubcellOrdinalInParentChild not found.");
+      }
+      unsigned parentChildOrdinalInChildCell = childCell->findSubcellOrdinal(subcellParent.first, subcellParentChildEntityIndex);
+      shards::CellTopology parentChildTopo = refTopology->getEntityTopology(subcellParent.first, subcellParentChildEntityIndex);
+      for (int i=0; i<fineSubcellTopo.getNodeCount(); i++) {
+        unsigned nodeInParentChild = parentChildTopo.getNodeMap(fineSubcellDimension, fineSubcellOrdinalInParentChild, i);
+        unsigned nodeInCell = leafCellTopo.getNodeMap(subcellParent.first, parentChildOrdinalInChildCell, nodeInParentChild);
+        subcellParentChildNodes.push_back(nodeInCell);
+      }
+    }
+    unsigned permutation = CamelliaCellTools::permutationMatchingOrder(fineSubcellTopo, fineDomainSubcellNodes, subcellParentChildNodes);
+    if (permutation != 0) {
+      FieldContainer<double> permutedRefNodes(fineSubcellTopo.getNodeCount(),fineSubcellDimension);
+      // we could do this more efficiently by not introducing the overhead of a BasisCache--this is well-tested, reliable code, and
+      // easy to invoke, so we use this for now.  But we do this a few times in BasisReconciliation, and it may be worth adding a method
+      // that will transform a set of points in reference space according to a permutation of a topology's nodes to CamelliaCellTools
+      CamelliaCellTools::refCellNodesForTopology(permutedRefNodes, fineSubcellTopo, permutation);
+      // add cell dimension:
+      permutedRefNodes.resize(1,permutedRefNodes.dimension(0),permutedRefNodes.dimension(1));
+      BasisCachePtr fineSubcellCache = Teuchos::rcp( new BasisCache(fineSubcellTopo, 1, false) );
+      fineSubcellCache->setRefCellPoints(subcellCubaturePoints);
+      fineSubcellCache->setPhysicalCellNodes(permutedRefNodes,vector<GlobalIndexType>(), false);
+      subcellCubaturePoints = fineSubcellCache->getPhysicalCubaturePoints();
+      // eliminate cell dimension:
+      subcellCubaturePoints.resize(subcellCubaturePoints.dimension(1),subcellCubaturePoints.dimension(2));
+    }
+  }
+  
+  // ************************************************************************************************************
   
   ///////////////////////// DETERMINE COARSE DOMAIN POINTS /////////////////////////
   
@@ -527,18 +609,13 @@ SubBasisReconciliationWeights BasisReconciliation::computeConstrainedWeights(uns
       unsigned subcellChildOrdinal = subcellRefinementBranch[0].second;
       
       // HERE, need to figure out what the sub-subcell ordinal is relative to the ancestral subcell's child in the subcellRefinementBranch
-      
-//      map from subcellChildOrdinal in subcellRefPattern to the corresponding childOrdinal in the *cell* refinement branch
-      // (corresponding child is one that contains subcellAncestor as a subcell)
-      unsigned correspondingChildOrdinal = refPattern->mapSubcellChildOrdinalToVolumeChildOrdinal(subcellAncestor.first, subcellAncestor.second, subcellChildOrdinal);
-
+    
       unsigned subsubcellOrdinalInSubcellAncestorChild = -1;
       // KNOW: the sub-subcell ordinal in the child *cell* (this is fineSubcellAncestralOrdinal)
       {
         MeshTopologyPtr refTopology = refPattern->refinementMeshTopology();
         CellPtr parentCell = refTopology->getCell(0);
         CellPtr childCell = parentCell->children()[childOrdinal];
-        CellPtr correspondingChildCell = parentCell->children()[correspondingChildOrdinal];
         IndexType subsubcellEntityIndex = childCell->entityIndex(fineSubcellAncestralDimension, fineSubcellAncestralOrdinal);
         IndexType subcellAncestorEntityIndex = parentCell->entityIndex(subcellAncestor.first, subcellAncestor.second);
         IndexType subcellAncestorChildEntityIndex = refTopology->getChildEntities(subcellAncestor.first, subcellAncestorEntityIndex)[subcellChildOrdinal];
