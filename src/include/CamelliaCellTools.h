@@ -49,6 +49,8 @@ public:
                                     const int                     subcellDim,
                                     const int                     subcellOrd,
                                     const shards::CellTopology   &parentCell);
+  
+  static string entityTypeString(unsigned entityDimension); // vertex, edge, face, solid, hypersolid
 };
 
 

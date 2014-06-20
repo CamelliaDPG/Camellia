@@ -9,6 +9,23 @@
 #include "CamelliaCellTools.h"
 #include "BasisCache.h"
 
+string CamelliaCellTools::entityTypeString(unsigned entityDimension) { // vertex, edge, face, solid, hypersolid
+  switch (entityDimension) {
+    case 0:
+      return "vertex";
+    case 1:
+      return "edge";
+    case 2:
+      return "face";
+    case 3:
+      return "solid";
+    case 4:
+      return "hypersolid";
+    default:
+      return "unknown entity type";
+  }
+}
+
 int CamelliaCellTools::getSideCount(const shards::CellTopology &cellTopo) {
   // unlike shards itself, defines vertices as sides for Line topo
   return (cellTopo.getDimension() > 1) ? cellTopo.getSideCount() : cellTopo.getVertexCount();
