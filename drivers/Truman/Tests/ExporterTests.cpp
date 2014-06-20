@@ -150,6 +150,12 @@ int main(int argc, char *argv[])
     vector<string> functionNames;
     functionNames.push_back("function");
     functionNames.push_back("vect");
+    vector<FunctionPtr> bdrfunctions;
+    bdrfunctions.push_back(fbdr);
+    bdrfunctions.push_back(fbdr);
+    vector<string> bdrfunctionNames;
+    bdrfunctionNames.push_back("bdr1");
+    bdrfunctionNames.push_back("bdr2");
 
     map<int, int> cellIDToNum1DPts;
     cellIDToNum1DPts[1] = 4;
@@ -160,6 +166,13 @@ int main(int argc, char *argv[])
         // exporter.exportFunction(vect, "vect2", 1, 10, cellIDToNum1DPts);
         // exporter.exportFunction(fbdr, "boundary2", 0);
         exporter.exportFunction(functions, functionNames, 1, 10);
+    }
+    {
+        XDMFExporter exporter(meshTopology, "BdrGrid2D", false);
+        // exporter.exportFunction(function, "function2", 0, 10);
+        // exporter.exportFunction(vect, "vect2", 1, 10, cellIDToNum1DPts);
+        // exporter.exportFunction(fbdr, "boundary2", 0);
+        exporter.exportFunction(bdrfunctions, bdrfunctionNames, 1, 10);
     }
 
     ////////////////////   DECLARE VARIABLES   ///////////////////////
@@ -213,12 +226,19 @@ int main(int argc, char *argv[])
     FunctionPtr uSoln = Function::solution(u, solution);
     FunctionPtr sigmaSoln = Function::solution(sigma, solution);
     FunctionPtr uhatSoln = Function::solution(uhat, solution);
+    FunctionPtr fhatSoln = Function::solution(fhat, solution);
     {
         XDMFExporter exporter(meshTopology, "Poisson", false);
         exporter.exportFunction(uSoln, "u", 0, 4);
         exporter.exportFunction(uSoln, "u", 1, 5);
         exporter.exportFunction(uhatSoln, "uhat", 0, 4);
         exporter.exportFunction(uhatSoln, "uhat", 1, 5);
+        exporter.exportFunction(fhatSoln, "fhat", 0, 4);
+        exporter.exportFunction(fhatSoln, "fhat", 1, 5);
+    }
+    {
+        XDMFExporter exporter(meshTopology, "PoissonSolution", false);
+        exporter.exportSolution(solution, mesh, varFactory);
     }
     // exporter.exportFunction(sigmaSoln, "Poisson-s", "sigma", 0, 5);
     // exporter.exportFunction(uhatSoln, "Poisson-uhat", "uhat", 1, 6);

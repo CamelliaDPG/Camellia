@@ -27,10 +27,10 @@ private:
   string          filename;
 protected:
   // SolutionPtr _solution;
-  MeshTopologyPtr _mesh;
+  MeshTopologyPtr _meshTopology;
   // VarFactory& _varFactory;
 public:
-  XDMFExporter(MeshTopologyPtr mesh, string filename="output", bool deleteOldFiles=false) : _mesh(mesh), filename(filename)
+  XDMFExporter(MeshTopologyPtr mesh, string filename="output", bool deleteOldFiles=false) : _meshTopology(mesh), filename(filename)
     {
       if (deleteOldFiles)
       {
@@ -64,6 +64,8 @@ public:
   void exportFunction(FunctionPtr function, string functionName="function", double timeVal=0, 
     unsigned int defaultNum1DPts=4, map<int, int> cellIDToNum1DPts=map<int,int>(), set<GlobalIndexType> cellIndices=set<GlobalIndexType>());
   void exportFunction(vector<FunctionPtr> functions, vector<string> functionNames, double timeVal=0, 
+    unsigned int defaultNum1DPts=4, map<int, int> cellIDToNum1DPts=map<int,int>(), set<GlobalIndexType> cellIndices=set<GlobalIndexType>());
+  void exportSolution(SolutionPtr solution, MeshPtr mesh, VarFactory varFactory, double timeVal=0, 
     unsigned int defaultNum1DPts=4, map<int, int> cellIDToNum1DPts=map<int,int>(), set<GlobalIndexType> cellIndices=set<GlobalIndexType>());
 };
 

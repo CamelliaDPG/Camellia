@@ -11,6 +11,37 @@
 #include <Teuchos_GlobalMPISession.hpp>
 #endif
 
+void XDMFExporter::exportSolution(SolutionPtr solution, MeshPtr mesh, VarFactory varFactory, double timeVal, unsigned int defaultNum1DPts, map<int, int> cellIDToNum1DPts, set<GlobalIndexType> cellIndices)
+{
+  vector<int> fieldTrialIDs = mesh->bilinearForm()->trialVolumeIDs();
+  vector<int> traceTrialIDs = mesh->bilinearForm()->trialBoundaryIDs();
+  vector<VarPtr> fieldVars;
+  vector<VarPtr> traceVars;
+
+  vector<FunctionPtr> fieldFunctions;
+  vector<string> fieldFunctionNames;
+  for (int i=0; i < fieldTrialIDs.size(); i++)
+  {
+    fieldVars.push_back(varFactory.trial(fieldTrialIDs[i]));
+    FunctionPtr fieldFunction = Function::solution(fieldVars[i], solution);
+    string fieldFunctionName = fieldVars[i]->name();
+    fieldFunctions.push_back(fieldFunction);
+    fieldFunctionNames.push_back(fieldFunctionName);
+  }
+  vector<FunctionPtr> traceFunctions;
+  vector<string> traceFunctionNames;
+  for (int i=0; i < traceTrialIDs.size(); i++)
+  {
+    traceVars.push_back(varFactory.trial(traceTrialIDs[i]));
+    FunctionPtr traceFunction = Function::solution(traceVars[i], solution);
+    string traceFunctionName = traceVars[i]->name();
+    traceFunctions.push_back(traceFunction);
+    traceFunctionNames.push_back(traceFunctionName);
+  }
+  exportFunction(fieldFunctions, fieldFunctionNames, timeVal, defaultNum1DPts, cellIDToNum1DPts, cellIndices);
+  // exportFunction(traceFunctions, traceFunctionNames, timeVal, defaultNum1DPts, cellIDToNum1DPts, cellIndices);
+}
+
 void XDMFExporter::exportFunction(FunctionPtr function, string functionName, double timeVal, unsigned int defaultNum1DPts, map<int, int> cellIDToNum1DPts, set<GlobalIndexType> cellIndices)
 {
   vector<FunctionPtr> functions;
@@ -58,7 +89,7 @@ void XDMFExporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
   if (defaultNum1DPts < 2)
     defaultNum1DPts = 2;
 
-  int spaceDim = _mesh->getSpaceDim();
+  int spaceDim = _meshTopology->getSpaceDim();
 
   bool exportingBoundaryValues = functions[0]->boundaryValueOnly();
   if (!exportingBoundaryValues)
@@ -86,7 +117,7 @@ void XDMFExporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
 
   unsigned int total_vertices = 0;
   
-  if (cellIndices.size()==0) cellIndices = _mesh->getActiveCellIndices();
+  if (cellIndices.size()==0) cellIndices = _meshTopology->getActiveCellIndices();
   // Number of line elements in 1D mesh
   int numLines=0;
   // Number of triangle elements in 2D mesh
@@ -114,7 +145,7 @@ void XDMFExporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
   // Total number of boundary faces in 3D mesh
   int totalBoundaryFaces=0;
   for (set<GlobalIndexType>::iterator cellIt = cellIndices.begin(); cellIt != cellIndices.end(); cellIt++) {
-    CellPtr cell = _mesh->getCell(*cellIt);
+    CellPtr cell = _meshTopology->getCell(*cellIt);
     if (!cellIDToNum1DPts[cell->cellIndex()] || cellIDToNum1DPts[cell->cellIndex()] < 2)
       cellIDToNum1DPts[cell->cellIndex()] = defaultNum1DPts;
     int num1DPts = cellIDToNum1DPts[cell->cellIndex()];
@@ -299,9 +330,9 @@ void XDMFExporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
   
   for (set<GlobalIndexType>::iterator cellIt = cellIndices.begin(); cellIt != cellIndices.end(); cellIt++) {
     GlobalIndexType cellIndex = *cellIt;
-    CellPtr cell = _mesh->getCell(cellIndex);
+    CellPtr cell = _meshTopology->getCell(cellIndex);
 
-    FieldContainer<double> physicalCellNodes = _mesh->physicalCellNodesForCell(cellIndex);
+    FieldContainer<double> physicalCellNodes = _meshTopology->physicalCellNodesForCell(cellIndex);
 
     CellTopoPtr cellTopoPtr = cell->topology();
     int num1DPts = cellIDToNum1DPts[cell->cellIndex()];
