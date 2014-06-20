@@ -1845,13 +1845,10 @@ void Solution::computeErrorRepresentation() {
 }
 
 void Solution::computeResiduals() {
-  
-  int numProcs=1;
   int rank=0;
   
 #ifdef HAVE_MPI
   rank     = Teuchos::GlobalMPISession::getRank();
-  numProcs = Teuchos::GlobalMPISession::getNProc();
   Epetra_MpiComm Comm(MPI_COMM_WORLD);
   //cout << "rank: " << rank << " of " << numProcs << endl;
 #else
@@ -1865,69 +1862,48 @@ void Solution::computeResiduals() {
     
     Teuchos::RCP<DofOrdering> trialOrdering = elemTypePtr->trialOrderPtr;
     Teuchos::RCP<DofOrdering> testOrdering = elemTypePtr->testOrderPtr;
-    
     vector< Teuchos::RCP< Element > > elemsInPartitionOfType = _mesh->elementsOfType(rank, elemTypePtr);
     
-    FieldContainer<double> physicalCellNodes = _mesh->physicalCellNodes(elemTypePtr);
-    FieldContainer<double> cellSideParities  = _mesh->cellSideParities(elemTypePtr);
-    FieldContainer<double> solution = solutionForElementTypeGlobal(elemTypePtr);
-    shards::CellTopology cellTopo = *(elemTypePtr->cellTopoPtr);
-    
+    int numCells = elemsInPartitionOfType.size();
     int numTrialDofs = trialOrdering->totalDofs();
     int numTestDofs  = testOrdering->totalDofs();
-    int numCells = physicalCellNodes.dimension(0); // partition-local cells
-    
-    //    cout << "Num elems in partition " << rank << " is " << elemsInPartition.size() << endl;
-    
-    // determine cellIDs
-    vector<GlobalIndexType> cellIDs;
-    for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
-      GlobalIndexType cellID = _mesh->cellID(elemTypePtr, cellIndex, rank);
-      cellIDs.push_back(cellID);
-    }
-    
-    TEUCHOS_TEST_FOR_EXCEPTION( numCells!=elemsInPartitionOfType.size(), std::invalid_argument, "in computeResiduals::numCells does not match number of elems in partition.");
-    /*
-     cout << "Num trial/test dofs " << rank << " is " << numTrialDofs << ", " << numTestDofs << endl;
-     cout << "solution dim on " << rank << " is " << solution.dimension(0) << ", " << solution.dimension(1) << endl;
-     */
-    
-    // set up diagonal testWeights matrices so we can reuse the existing computeRHS
-    //    FieldContainer<double> testWeights(numCells,numTestDofs,numTestDofs);
-    //    for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
-    //      for (int i=0; i<numTestDofs; i++) {
-    //        testWeights(cellIndex,i,i) = 1.0;
-    //      }
-    //    }
     
     // compute l(v) and store in residuals:
     FieldContainer<double> residuals(numCells,numTestDofs);
     
-    // prepare basisCache and cellIDs
-    BasisCachePtr basisCache = Teuchos::rcp(new BasisCache(elemTypePtr,_mesh,false,_cubatureEnrichmentDegree));
-    bool createSideCacheToo = true;
-    basisCache->setPhysicalCellNodes(physicalCellNodes,cellIDs,createSideCacheToo);
-    _rhs->integrateAgainstStandardBasis(residuals, testOrdering, basisCache);
-    //    BilinearFormUtility::computeRHS(residuals, _mesh->bilinearForm(), *(_rhs.get()),
-    //                                    testWeights, testOrdering, basisCache);
-    //    BilinearFormUtility::computeRHS(residuals, _mesh->bilinearForm(), *(_rhs.get()),
-    //                                    testWeights, testOrdering, cellTopo, physicalCellNodes);
-    
     FieldContainer<double> rhs(numCells,numTestDofs);
     rhs = residuals; // copy rhs into its own separate container
     
-    // compute b(u, v):
-    FieldContainer<double> preStiffness(numCells,numTestDofs,numTrialDofs );
-    _mesh->bilinearForm()->stiffnessMatrix(preStiffness, elemTypePtr, cellSideParities, basisCache);
+    Teuchos::Array<int> oneCellDim(2);
+    oneCellDim[0] = 1;
+    oneCellDim[1] = numTestDofs;
     
-    // now, weight the entries in b(u,v) by the solution coefficients to compute:
-    // l(v) - b(u_h,v)
-    for (int localCellIndex=0; localCellIndex<numCells; localCellIndex++) {
-      int globalCellIndex = elemsInPartitionOfType[localCellIndex]->globalCellIndex();
-      //      cout << "For global cell ind = " << elemsInPartitionOfType[localCellIndex]->globalCellIndex() << " and cellID = " << elemsInPartitionOfType[localCellIndex]->cellID() << endl;
+    FieldContainer<double> solution = solutionForElementTypeGlobal(elemTypePtr);
+    
+    vector<GlobalIndexType> cellIDVector(1);
+    for (int cellOrdinal=0; cellOrdinal<numCells; cellOrdinal++) {
+      GlobalIndexType cellID = _mesh->cellID(elemTypePtr, cellOrdinal, rank);
+      cellIDVector[0] = cellID;
+      FieldContainer<double> physicalCellNodes = _mesh->physicalCellNodesForCell(cellID);
+      FieldContainer<double> cellSideParities = _mesh->cellSideParitiesForCell(cellID);
+      
+      BasisCachePtr basisCache = Teuchos::rcp(new BasisCache(elemTypePtr,_mesh,false,_cubatureEnrichmentDegree));
+      bool createSideCacheToo = true;
+      basisCache->setPhysicalCellNodes(physicalCellNodes,cellIDVector,createSideCacheToo);
+      FieldContainer<double> thisCellResidual(oneCellDim, &residuals(cellOrdinal,0));
+      _rhs->integrateAgainstStandardBasis(thisCellResidual, testOrdering, basisCache);
+      for (int i=0; i<numTestDofs; i++) {
+        rhs(cellOrdinal,i) = thisCellResidual(0,i);
+      }
+      
+      // compute b(u, v):
+      FieldContainer<double> preStiffness(1,numTestDofs,numTrialDofs );
+      _mesh->bilinearForm()->stiffnessMatrix(preStiffness, elemTypePtr, cellSideParities, basisCache);
+
+      int globalCellIndex = elemsInPartitionOfType[cellOrdinal]->globalCellIndex();
       for (int i=0; i<numTestDofs; i++) {
         for (int j=0; j<numTrialDofs; j++) {
-          residuals(localCellIndex,i) -= solution(globalCellIndex,j) * preStiffness(localCellIndex,i,j);
+          residuals(cellOrdinal,i) -= solution(globalCellIndex,j) * preStiffness(0,i,j);
         }
       }
     }
