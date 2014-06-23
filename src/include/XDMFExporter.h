@@ -9,7 +9,7 @@
  */
 
 #include "CamelliaConfig.h"
- 
+
 #ifdef USE_XDMF
 #include <Xdmf.h>
 
@@ -17,6 +17,8 @@
 #include "Mesh.h"
 #include "MeshTopology.h"
 #include "VarFactory.h"
+
+// enum SubdivisionLevel {COARSE, MEDIUM, FINE};
 
 class XDMFExporter {
 private:
@@ -71,11 +73,9 @@ public:
     unsigned int defaultNum1DPts=4, map<int, int> cellIDToNum1DPts=map<int,int>(), set<GlobalIndexType> cellIndices=set<GlobalIndexType>());
 };
 
-//Convenience functions for cellIDTONum1DPts
-map<int,int> cellIDToPolyOrder(MeshPtr mesh, set<GlobalIndexType> cellIndices=set<GlobalIndexType>());
-map<int,int> coarseSubdivisions(MeshPtr mesh, set<GlobalIndexType> cellIndices=set<GlobalIndexType>());
-map<int,int> mediumSubdivisions(MeshPtr mesh, set<GlobalIndexType> cellIndices=set<GlobalIndexType>());
-map<int,int> fineSubdivisions(MeshPtr mesh, set<GlobalIndexType> cellIndices=set<GlobalIndexType>());
+// creates a map from cell index to number of 1D points (number of subdivisions + 1)
+// num1DPts = max(subdivisionFactor*(polyOrder-1) + 1, 2)
+map<int,int> cellIDToSubdivision(MeshPtr mesh, unsigned int subdivisionFactor=2, set<GlobalIndexType> cellIndices=set<GlobalIndexType>());
 
 #endif
 

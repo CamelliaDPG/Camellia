@@ -688,55 +688,53 @@ void XDMFExporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
 }
 
 // Convenience functions for mapping from cell index to number of subdivisions
-map<int,int> cellIDToPolyOrder(MeshPtr mesh, set<GlobalIndexType> cellIndices)
+// map<int,int> cellIDToPolyOrder(MeshPtr mesh, set<GlobalIndexType> cellIndices)
+// {
+//   if (cellIndices.size()==0) cellIndices = mesh->getTopology()->getActiveCellIndices();
+//   map<int,int> cellIDToPolyOrder;
+//   for (set<GlobalIndexType>::iterator cellIt = cellIndices.begin(); cellIt != cellIndices.end(); cellIt++) 
+//   {
+//     // CellPtr cell = _meshTopology->getCell(*cellIt);
+//     cellIDToPolyOrder[*cellIt] = mesh->cellPolyOrder(*cellIt);
+//     // cout << "test" << cellIDToPolyOrder[*cellIt] << endl;
+//   }
+//   return cellIDToPolyOrder;
+// }
+
+map<int,int> cellIDToSubdivision(MeshPtr mesh, unsigned int subdivisionFactor, set<GlobalIndexType> cellIndices)
 {
   if (cellIndices.size()==0) cellIndices = mesh->getTopology()->getActiveCellIndices();
   map<int,int> cellIDToPolyOrder;
   for (set<GlobalIndexType>::iterator cellIt = cellIndices.begin(); cellIt != cellIndices.end(); cellIt++) 
   {
-    // CellPtr cell = _meshTopology->getCell(*cellIt);
-    cellIDToPolyOrder[*cellIt] = mesh->cellPolyOrder(*cellIt);
-    // cout << "test" << cellIDToPolyOrder[*cellIt] << endl;
+    cellIDToPolyOrder[*cellIt] =  (subdivisionFactor*(mesh->cellPolyOrder(*cellIt)-2)+1);
   }
   return cellIDToPolyOrder;
 }
 
-map<int,int> coarseSubdivisions(MeshPtr mesh, set<GlobalIndexType> cellIndices)
-{
-  if (cellIndices.size()==0) cellIndices = mesh->getTopology()->getActiveCellIndices();
-  map<int,int> cellIDToPolyOrder;
-  for (set<GlobalIndexType>::iterator cellIt = cellIndices.begin(); cellIt != cellIndices.end(); cellIt++) 
-  {
-    // CellPtr cell = _meshTopology->getCell(*cellIt);
-    cellIDToPolyOrder[*cellIt] = (mesh->cellPolyOrder(*cellIt)+1);
-    // cout << "test" << cellIDToPolyOrder[*cellIt] << endl;
-  }
-  return cellIDToPolyOrder;
-}
+// map<int,int> mediumSubdivisions(MeshPtr mesh, set<GlobalIndexType> cellIndices)
+// {
+//   if (cellIndices.size()==0) cellIndices = mesh->getTopology()->getActiveCellIndices();
+//   map<int,int> cellIDToPolyOrder;
+//   for (set<GlobalIndexType>::iterator cellIt = cellIndices.begin(); cellIt != cellIndices.end(); cellIt++) 
+//   {
+//     // CellPtr cell = _meshTopology->getCell(*cellIt);
+//     cellIDToPolyOrder[*cellIt] =  (2*(mesh->cellPolyOrder(*cellIt)-1)+1);
+//     // cout << "test" << cellIDToPolyOrder[*cellIt] << endl;
+//   }
+//   return cellIDToPolyOrder;
+// }
 
-map<int,int> mediumSubdivisions(MeshPtr mesh, set<GlobalIndexType> cellIndices)
-{
-  if (cellIndices.size()==0) cellIndices = mesh->getTopology()->getActiveCellIndices();
-  map<int,int> cellIDToPolyOrder;
-  for (set<GlobalIndexType>::iterator cellIt = cellIndices.begin(); cellIt != cellIndices.end(); cellIt++) 
-  {
-    // CellPtr cell = _meshTopology->getCell(*cellIt);
-    cellIDToPolyOrder[*cellIt] =  (2*(mesh->cellPolyOrder(*cellIt)-1)+1);
-    // cout << "test" << cellIDToPolyOrder[*cellIt] << endl;
-  }
-  return cellIDToPolyOrder;
-}
-
-map<int,int> fineSubdivisions(MeshPtr mesh, set<GlobalIndexType> cellIndices)
-{
-  if (cellIndices.size()==0) cellIndices = mesh->getTopology()->getActiveCellIndices();
-  map<int,int> cellIDToPolyOrder;
-  for (set<GlobalIndexType>::iterator cellIt = cellIndices.begin(); cellIt != cellIndices.end(); cellIt++) 
-  {
-    // CellPtr cell = _meshTopology->getCell(*cellIt);
-    cellIDToPolyOrder[*cellIt] =  (4*(mesh->cellPolyOrder(*cellIt)-1)+1);
-    // cout << "test" << cellIDToPolyOrder[*cellIt] << endl;
-  }
-  return cellIDToPolyOrder;
-}
+// map<int,int> fineSubdivisions(MeshPtr mesh, set<GlobalIndexType> cellIndices)
+// {
+//   if (cellIndices.size()==0) cellIndices = mesh->getTopology()->getActiveCellIndices();
+//   map<int,int> cellIDToPolyOrder;
+//   for (set<GlobalIndexType>::iterator cellIt = cellIndices.begin(); cellIt != cellIndices.end(); cellIt++) 
+//   {
+//     // CellPtr cell = _meshTopology->getCell(*cellIt);
+//     cellIDToPolyOrder[*cellIt] =  (4*(mesh->cellPolyOrder(*cellIt)-1)+1);
+//     // cout << "test" << cellIDToPolyOrder[*cellIt] << endl;
+//   }
+//   return cellIDToPolyOrder;
+// }
 #endif

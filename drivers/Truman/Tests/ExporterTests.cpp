@@ -199,7 +199,7 @@ int main(int argc, char *argv[])
     bf->addTerm( fhat, v);
 
     ////////////////////   BUILD MESH   ///////////////////////
-    int H1Order = 3, pToAdd = 2;
+    int H1Order = 1, pToAdd = 2;
     Teuchos::RCP<Mesh> mesh = Teuchos::rcp( new Mesh (meshTopology, bf, H1Order, pToAdd) );
 
     ////////////////////   DEFINE INNER PRODUCT(S)   ///////////////////////
@@ -238,7 +238,7 @@ int main(int argc, char *argv[])
     }
     {
         XDMFExporter exporter(meshTopology, "PoissonSolution", false);
-        exporter.exportSolution(solution, mesh, varFactory, 0, 2, fineSubdivisions(mesh));
+        exporter.exportSolution(solution, mesh, varFactory, 0, 2, cellIDToSubdivision(mesh, 4));
     }
     // exporter.exportFunction(sigmaSoln, "Poisson-s", "sigma", 0, 5);
     // exporter.exportFunction(uhatSoln, "Poisson-uhat", "uhat", 1, 6);
