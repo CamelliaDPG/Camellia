@@ -663,17 +663,26 @@ void XDMFExporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
   }
   if (!exportingBoundaryValues)
   {
-    connArray->SetHeavyDataSetName(("HDF5/"+filename+"-field.h5:/Conns").c_str());
-    ptArray->SetHeavyDataSetName(("HDF5/"+filename+"-field.h5:/Points").c_str());
+    stringstream connOut, ptOut;
+    connOut << "HDF5/" << filename << timeVal << "-field.h5:/Conns";
+    ptOut << "HDF5/" << filename << timeVal << "-field.h5:/Points";
+    connArray->SetHeavyDataSetName(connOut.str().c_str());
+    ptArray->SetHeavyDataSetName(ptOut.str().c_str());
   }
   else
   {
-    connArray->SetHeavyDataSetName(("HDF5/"+filename+"-trace.h5:/Conns").c_str());
-    ptArray->SetHeavyDataSetName(("HDF5/"+filename+"-trace.h5:/Points").c_str());
+    stringstream connOut, ptOut;
+    connOut << "HDF5/" << filename << timeVal << "-trace.h5:/Conns";
+    ptOut << "HDF5/" << filename << timeVal << "-trace.h5:/Points";
+    connArray->SetHeavyDataSetName(connOut.str().c_str());
+    ptArray->SetHeavyDataSetName(ptOut.str().c_str());
   }
   for (int i = 0; i < nFcns; i++)
   {
-    valArray[i]->SetHeavyDataSetName(("HDF5/"+filename+"-"+functionNames[i]+".h5:/NodeData").c_str());
+    stringstream nodeOut;
+    nodeOut << "HDF5/" << filename << timeVal << "-" << functionNames[i] << ".h5:/NodeData";
+    // valArray[i]->SetHeavyDataSetName(("HDF5/"+filename+"-"+functionNames[i]+".h5:/NodeData").c_str());
+    valArray[i]->SetHeavyDataSetName(nodeOut.str().c_str());
     // Attach and Write
     grid.Insert(&nodedata[i]);
   }
@@ -684,22 +693,8 @@ void XDMFExporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
   // Write the XML
   dom.Write((filename+".xmf").c_str());
 
-  cout << "Wrote " <<  filename << ".xmf" << endl;
+  cout << "Wrote to " <<  filename << ".xmf iteration " << timeVal << endl;
 }
-
-// Convenience functions for mapping from cell index to number of subdivisions
-// map<int,int> cellIDToPolyOrder(MeshPtr mesh, set<GlobalIndexType> cellIndices)
-// {
-//   if (cellIndices.size()==0) cellIndices = mesh->getTopology()->getActiveCellIndices();
-//   map<int,int> cellIDToPolyOrder;
-//   for (set<GlobalIndexType>::iterator cellIt = cellIndices.begin(); cellIt != cellIndices.end(); cellIt++) 
-//   {
-//     // CellPtr cell = _meshTopology->getCell(*cellIt);
-//     cellIDToPolyOrder[*cellIt] = mesh->cellPolyOrder(*cellIt);
-//     // cout << "test" << cellIDToPolyOrder[*cellIt] << endl;
-//   }
-//   return cellIDToPolyOrder;
-// }
 
 map<int,int> cellIDToSubdivision(MeshPtr mesh, unsigned int subdivisionFactor, set<GlobalIndexType> cellIndices)
 {
@@ -712,29 +707,4 @@ map<int,int> cellIDToSubdivision(MeshPtr mesh, unsigned int subdivisionFactor, s
   return cellIDToPolyOrder;
 }
 
-// map<int,int> mediumSubdivisions(MeshPtr mesh, set<GlobalIndexType> cellIndices)
-// {
-//   if (cellIndices.size()==0) cellIndices = mesh->getTopology()->getActiveCellIndices();
-//   map<int,int> cellIDToPolyOrder;
-//   for (set<GlobalIndexType>::iterator cellIt = cellIndices.begin(); cellIt != cellIndices.end(); cellIt++) 
-//   {
-//     // CellPtr cell = _meshTopology->getCell(*cellIt);
-//     cellIDToPolyOrder[*cellIt] =  (2*(mesh->cellPolyOrder(*cellIt)-1)+1);
-//     // cout << "test" << cellIDToPolyOrder[*cellIt] << endl;
-//   }
-//   return cellIDToPolyOrder;
-// }
-
-// map<int,int> fineSubdivisions(MeshPtr mesh, set<GlobalIndexType> cellIndices)
-// {
-//   if (cellIndices.size()==0) cellIndices = mesh->getTopology()->getActiveCellIndices();
-//   map<int,int> cellIDToPolyOrder;
-//   for (set<GlobalIndexType>::iterator cellIt = cellIndices.begin(); cellIt != cellIndices.end(); cellIt++) 
-//   {
-//     // CellPtr cell = _meshTopology->getCell(*cellIt);
-//     cellIDToPolyOrder[*cellIt] =  (4*(mesh->cellPolyOrder(*cellIt)-1)+1);
-//     // cout << "test" << cellIDToPolyOrder[*cellIt] << endl;
-//   }
-//   return cellIDToPolyOrder;
-// }
 #endif
