@@ -8,7 +8,7 @@
  *
  */
 
-// #ifdef USE_XDMF
+#ifdef USE_XDMF
 #include <Xdmf.h>
 
 #include "Solution.h"
@@ -69,5 +69,6 @@ public:
     unsigned int defaultNum1DPts=4, map<int, int> cellIDToNum1DPts=map<int,int>(), set<GlobalIndexType> cellIndices=set<GlobalIndexType>());
 };
 
-// #endif
+#endif
+
 #endif /* end of include guard: XDMFEXPORTER_H */
