@@ -38,20 +38,20 @@ void XDMFExporter::exportSolution(SolutionPtr solution, MeshPtr mesh, VarFactory
     traceFunctions.push_back(traceFunction);
     traceFunctionNames.push_back(traceFunctionName);
   }
-  exportFunction(fieldFunctions, fieldFunctionNames, timeVal, defaultNum1DPts, cellIDToNum1DPts, cellIndices);
-  // exportFunction(traceFunctions, traceFunctionNames, timeVal, defaultNum1DPts, cellIDToNum1DPts, cellIndices);
+  exportFunction(fieldFunctions, fieldFunctionNames, timeVal, defaultNum1DPts, cellIDToNum1DPts, mesh, cellIndices);
+  exportFunction(traceFunctions, traceFunctionNames, timeVal, defaultNum1DPts, cellIDToNum1DPts, mesh, cellIndices);
 }
 
-void XDMFExporter::exportFunction(FunctionPtr function, string functionName, double timeVal, unsigned int defaultNum1DPts, map<int, int> cellIDToNum1DPts, set<GlobalIndexType> cellIndices)
+void XDMFExporter::exportFunction(FunctionPtr function, string functionName, double timeVal, unsigned int defaultNum1DPts, map<int, int> cellIDToNum1DPts, MeshPtr mesh, set<GlobalIndexType> cellIndices)
 {
   vector<FunctionPtr> functions;
   functions.push_back(function);
   vector<string> functionNames;
   functionNames.push_back(functionName);
-  exportFunction(functions, functionNames, timeVal, defaultNum1DPts, cellIDToNum1DPts, cellIndices);
+  exportFunction(functions, functionNames, timeVal, defaultNum1DPts, cellIDToNum1DPts, mesh, cellIndices);
 }
 
-void XDMFExporter::exportFunction(vector<FunctionPtr> functions, vector<string> functionNames, double timeVal, unsigned int defaultNum1DPts, map<int, int> cellIDToNum1DPts, set<GlobalIndexType> cellIndices)
+void XDMFExporter::exportFunction(vector<FunctionPtr> functions, vector<string> functionNames, double timeVal, unsigned int defaultNum1DPts, map<int, int> cellIDToNum1DPts, MeshPtr mesh, set<GlobalIndexType> cellIndices)
 {
   int nFcns = functions.size();
 
@@ -354,6 +354,8 @@ void XDMFExporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
       unsigned cellTopoKey = topo.getKey();
       
       BasisCachePtr basisCache = createSideCache ? volumeBasisCache->getSideBasisCache(sideOrdinal) : volumeBasisCache;
+      if (mesh.get())
+        basisCache->setMesh(mesh);
       
       unsigned domainDim = createSideCache ? sideDim : spaceDim;
       

@@ -233,8 +233,8 @@ int main(int argc, char *argv[])
         exporter.exportFunction(uSoln, "u", 1, 5);
         exporter.exportFunction(uhatSoln, "uhat", 0, 4);
         exporter.exportFunction(uhatSoln, "uhat", 1, 5);
-        exporter.exportFunction(fhatSoln, "fhat", 0, 4);
-        exporter.exportFunction(fhatSoln, "fhat", 1, 5);
+        // exporter.exportFunction(fhatSoln, "fhat", 0, 4);
+        // exporter.exportFunction(fhatSoln, "fhat", 1, 5);
     }
     {
         XDMFExporter exporter(meshTopology, "PoissonSolution", false);
