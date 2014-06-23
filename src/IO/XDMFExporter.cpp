@@ -328,7 +328,8 @@ void XDMFExporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
   for (int i = 0; i < nFcns; i++)
     valIndex[i] = 0;
   
-  for (set<GlobalIndexType>::iterator cellIt = cellIndices.begin(); cellIt != cellIndices.end(); cellIt++) {
+  for (set<GlobalIndexType>::iterator cellIt = cellIndices.begin(); cellIt != cellIndices.end(); cellIt++) 
+  {
     GlobalIndexType cellIndex = *cellIt;
     CellPtr cell = _meshTopology->getCell(cellIndex);
 
@@ -349,7 +350,8 @@ void XDMFExporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
     
     int sideDim = spaceDim - 1;
     
-    for (int sideOrdinal = 0; sideOrdinal < numSides; sideOrdinal++) {
+    for (int sideOrdinal = 0; sideOrdinal < numSides; sideOrdinal++) 
+    {
       shards::CellTopology topo = createSideCache ? cellTopoPtr->getBaseCellTopologyData(sideDim, sideOrdinal) : *cellTopoPtr;
       unsigned cellTopoKey = topo.getKey();
       
@@ -592,88 +594,149 @@ void XDMFExporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
         TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "cellTopoKey unrecognized");
       }
       for (int pointIndex = 0; pointIndex < numPoints; pointIndex++)
+      {
+        if (spaceDim == 1) 
         {
-          if (spaceDim == 1) 
-          {
-            ptArray->SetValue(ptIndex, (*physicalPoints)(0, pointIndex, 0));
-            ptIndex++;
-            ptArray->SetValue(ptIndex, 0);
-            ptIndex++;
-          }
-          else if (spaceDim == 2)
-          {
-            ptArray->SetValue(ptIndex, (*physicalPoints)(0, pointIndex, 0));
-            ptIndex++;
-            ptArray->SetValue(ptIndex, (*physicalPoints)(0, pointIndex, 1));
-            ptIndex++;
-          }
-          else
-          {
-            ptArray->SetValue(ptIndex, (*physicalPoints)(0, pointIndex, 0));
-            ptIndex++;
-            ptArray->SetValue(ptIndex, (*physicalPoints)(0, pointIndex, 1));
-            ptIndex++;
-            ptArray->SetValue(ptIndex, (*physicalPoints)(0, pointIndex, 2));
-            ptIndex++;
-          }
-          for (int i = 0; i < nFcns; i++)
-          {
-          // Function Values
-            FieldContainer<double> computedValues;
-            if (functions[i]->rank() == 0)
-              computedValues.resize(1, numPoints);
-            else if (functions[i]->rank() == 1)
-              computedValues.resize(1, numPoints, spaceDim);
-            else
-              TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unhandled function rank");
-
-            functions[i]->values(computedValues, basisCache);
-
-            switch(numFcnComponents[i])
-            {
-              case 1:
-              valArray[i]->SetValue(valIndex[i], computedValues(0, pointIndex));
-              valIndex[i]++;
-              break;
-              case 2:
-              valArray[i]->SetValue(valIndex[i], computedValues(0, pointIndex, 0));
-              valIndex[i]++;
-              valArray[i]->SetValue(valIndex[i], computedValues(0, pointIndex, 1));
-              valIndex[i]++;
-              valArray[i]->SetValue(valIndex[i], 0);
-              valIndex[i]++;
-              break;
-              case 3:
-              valArray[i]->SetValue(valIndex[i], computedValues(0, pointIndex, 0));
-              valIndex[i]++;
-              valArray[i]->SetValue(valIndex[i], computedValues(0, pointIndex, 1));
-              valIndex[i]++;
-              valArray[i]->SetValue(valIndex[i], computedValues(0, pointIndex, 2));
-              valIndex[i]++;
-              break;
-              default:
-              TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unsupported number of components");
-            }
-          }
-          total_vertices++;
+          ptArray->SetValue(ptIndex, (*physicalPoints)(0, pointIndex, 0));
+          ptIndex++;
+          ptArray->SetValue(ptIndex, 0);
+          ptIndex++;
         }
+        else if (spaceDim == 2)
+        {
+          ptArray->SetValue(ptIndex, (*physicalPoints)(0, pointIndex, 0));
+          ptIndex++;
+          ptArray->SetValue(ptIndex, (*physicalPoints)(0, pointIndex, 1));
+          ptIndex++;
+        }
+        else
+        {
+          ptArray->SetValue(ptIndex, (*physicalPoints)(0, pointIndex, 0));
+          ptIndex++;
+          ptArray->SetValue(ptIndex, (*physicalPoints)(0, pointIndex, 1));
+          ptIndex++;
+          ptArray->SetValue(ptIndex, (*physicalPoints)(0, pointIndex, 2));
+          ptIndex++;
+        }
+        for (int i = 0; i < nFcns; i++)
+        {
+        // Function Values
+          FieldContainer<double> computedValues;
+          if (functions[i]->rank() == 0)
+            computedValues.resize(1, numPoints);
+          else if (functions[i]->rank() == 1)
+            computedValues.resize(1, numPoints, spaceDim);
+          else
+            TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unhandled function rank");
+
+          functions[i]->values(computedValues, basisCache);
+
+          switch(numFcnComponents[i])
+          {
+            case 1:
+            valArray[i]->SetValue(valIndex[i], computedValues(0, pointIndex));
+            valIndex[i]++;
+            break;
+            case 2:
+            valArray[i]->SetValue(valIndex[i], computedValues(0, pointIndex, 0));
+            valIndex[i]++;
+            valArray[i]->SetValue(valIndex[i], computedValues(0, pointIndex, 1));
+            valIndex[i]++;
+            valArray[i]->SetValue(valIndex[i], 0);
+            valIndex[i]++;
+            break;
+            case 3:
+            valArray[i]->SetValue(valIndex[i], computedValues(0, pointIndex, 0));
+            valIndex[i]++;
+            valArray[i]->SetValue(valIndex[i], computedValues(0, pointIndex, 1));
+            valIndex[i]++;
+            valArray[i]->SetValue(valIndex[i], computedValues(0, pointIndex, 2));
+            valIndex[i]++;
+            break;
+            default:
+            TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unsupported number of components");
+          }
+        }
+        total_vertices++;
       }
     }
-    connArray->SetHeavyDataSetName(("HDF5/"+filename+".h5:/Conns").c_str());
-    ptArray->SetHeavyDataSetName(("HDF5/"+filename+".h5:/Points").c_str());
-    for (int i = 0; i < nFcns; i++)
-    {
-      valArray[i]->SetHeavyDataSetName(("HDF5/"+filename+"-"+functionNames[i]+".h5:/NodeData").c_str());
-      // Attach and Write
-      grid.Insert(&nodedata[i]);
-    }
-    // grid.Insert(&celldata);
-    // Build is recursive ... it will be called on all of the child nodes.
-    // This updates the DOM and writes the HDF5
-    root.Build();
-    // Write the XML
-    dom.Write((filename+".xmf").c_str());
-
-    cout << "Wrote " <<  filename << ".xmf" << endl;
   }
+  if (!exportingBoundaryValues)
+  {
+    connArray->SetHeavyDataSetName(("HDF5/"+filename+"-field.h5:/Conns").c_str());
+    ptArray->SetHeavyDataSetName(("HDF5/"+filename+"-field.h5:/Points").c_str());
+  }
+  else
+  {
+    connArray->SetHeavyDataSetName(("HDF5/"+filename+"-trace.h5:/Conns").c_str());
+    ptArray->SetHeavyDataSetName(("HDF5/"+filename+"-trace.h5:/Points").c_str());
+  }
+  for (int i = 0; i < nFcns; i++)
+  {
+    valArray[i]->SetHeavyDataSetName(("HDF5/"+filename+"-"+functionNames[i]+".h5:/NodeData").c_str());
+    // Attach and Write
+    grid.Insert(&nodedata[i]);
+  }
+  // grid.Insert(&celldata);
+  // Build is recursive ... it will be called on all of the child nodes.
+  // This updates the DOM and writes the HDF5
+  root.Build();
+  // Write the XML
+  dom.Write((filename+".xmf").c_str());
+
+  cout << "Wrote " <<  filename << ".xmf" << endl;
+}
+
+// Convenience functions for mapping from cell index to number of subdivisions
+map<int,int> cellIDToPolyOrder(MeshPtr mesh, set<GlobalIndexType> cellIndices)
+{
+  if (cellIndices.size()==0) cellIndices = mesh->getTopology()->getActiveCellIndices();
+  map<int,int> cellIDToPolyOrder;
+  for (set<GlobalIndexType>::iterator cellIt = cellIndices.begin(); cellIt != cellIndices.end(); cellIt++) 
+  {
+    // CellPtr cell = _meshTopology->getCell(*cellIt);
+    cellIDToPolyOrder[*cellIt] = mesh->cellPolyOrder(*cellIt);
+    // cout << "test" << cellIDToPolyOrder[*cellIt] << endl;
+  }
+  return cellIDToPolyOrder;
+}
+
+map<int,int> coarseSubdivisions(MeshPtr mesh, set<GlobalIndexType> cellIndices)
+{
+  if (cellIndices.size()==0) cellIndices = mesh->getTopology()->getActiveCellIndices();
+  map<int,int> cellIDToPolyOrder;
+  for (set<GlobalIndexType>::iterator cellIt = cellIndices.begin(); cellIt != cellIndices.end(); cellIt++) 
+  {
+    // CellPtr cell = _meshTopology->getCell(*cellIt);
+    cellIDToPolyOrder[*cellIt] = (mesh->cellPolyOrder(*cellIt)+1);
+    // cout << "test" << cellIDToPolyOrder[*cellIt] << endl;
+  }
+  return cellIDToPolyOrder;
+}
+
+map<int,int> mediumSubdivisions(MeshPtr mesh, set<GlobalIndexType> cellIndices)
+{
+  if (cellIndices.size()==0) cellIndices = mesh->getTopology()->getActiveCellIndices();
+  map<int,int> cellIDToPolyOrder;
+  for (set<GlobalIndexType>::iterator cellIt = cellIndices.begin(); cellIt != cellIndices.end(); cellIt++) 
+  {
+    // CellPtr cell = _meshTopology->getCell(*cellIt);
+    cellIDToPolyOrder[*cellIt] =  (2*(mesh->cellPolyOrder(*cellIt)-1)+1);
+    // cout << "test" << cellIDToPolyOrder[*cellIt] << endl;
+  }
+  return cellIDToPolyOrder;
+}
+
+map<int,int> fineSubdivisions(MeshPtr mesh, set<GlobalIndexType> cellIndices)
+{
+  if (cellIndices.size()==0) cellIndices = mesh->getTopology()->getActiveCellIndices();
+  map<int,int> cellIDToPolyOrder;
+  for (set<GlobalIndexType>::iterator cellIt = cellIndices.begin(); cellIt != cellIndices.end(); cellIt++) 
+  {
+    // CellPtr cell = _meshTopology->getCell(*cellIt);
+    cellIDToPolyOrder[*cellIt] =  (4*(mesh->cellPolyOrder(*cellIt)-1)+1);
+    // cout << "test" << cellIDToPolyOrder[*cellIt] << endl;
+  }
+  return cellIDToPolyOrder;
+}
 #endif

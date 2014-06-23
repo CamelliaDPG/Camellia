@@ -238,7 +238,7 @@ int main(int argc, char *argv[])
     }
     {
         XDMFExporter exporter(meshTopology, "PoissonSolution", false);
-        exporter.exportSolution(solution, mesh, varFactory);
+        exporter.exportSolution(solution, mesh, varFactory, 0, 2, fineSubdivisions(mesh));
     }
     // exporter.exportFunction(sigmaSoln, "Poisson-s", "sigma", 0, 5);
     // exporter.exportFunction(uhatSoln, "Poisson-uhat", "uhat", 1, 6);

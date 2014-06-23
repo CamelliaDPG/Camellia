@@ -69,5 +69,11 @@ public:
     unsigned int defaultNum1DPts=4, map<int, int> cellIDToNum1DPts=map<int,int>(), set<GlobalIndexType> cellIndices=set<GlobalIndexType>());
 };
 
+//Convenience functions for cellIDTONum1DPts
+map<int,int> cellIDToPolyOrder(MeshPtr mesh, set<GlobalIndexType> cellIndices=set<GlobalIndexType>());
+map<int,int> coarseSubdivisions(MeshPtr mesh, set<GlobalIndexType> cellIndices=set<GlobalIndexType>());
+map<int,int> mediumSubdivisions(MeshPtr mesh, set<GlobalIndexType> cellIndices=set<GlobalIndexType>());
+map<int,int> fineSubdivisions(MeshPtr mesh, set<GlobalIndexType> cellIndices=set<GlobalIndexType>());
+
 // #endif
 #endif /* end of include guard: XDMFEXPORTER_H */
