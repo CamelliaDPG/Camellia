@@ -3,6 +3,7 @@
 
 #include "Mesh.h"
 #include "InnerProductScratchPad.h"
+#include "RefinementStrategy.h"
 #include "XDMFExporter.h"
 
 #ifdef HAVE_MPI
@@ -199,7 +200,7 @@ int main(int argc, char *argv[])
     bf->addTerm( fhat, v);
 
     ////////////////////   BUILD MESH   ///////////////////////
-    int H1Order = 1, pToAdd = 2;
+    int H1Order = 4, pToAdd = 2;
     Teuchos::RCP<Mesh> mesh = Teuchos::rcp( new Mesh (meshTopology, bf, H1Order, pToAdd) );
 
     ////////////////////   DEFINE INNER PRODUCT(S)   ///////////////////////
@@ -221,6 +222,7 @@ int main(int argc, char *argv[])
     ////////////////////   SOLVE & REFINE   ///////////////////////
     Teuchos::RCP<Solution> solution = Teuchos::rcp( new Solution(mesh, bc, rhs, ip) );
     solution->solve(false);
+    RefinementStrategy refinementStrategy( solution, 0.2);
 
     // Output solution
     FunctionPtr uSoln = Function::solution(u, solution);
@@ -239,6 +241,9 @@ int main(int argc, char *argv[])
     {
         XDMFExporter exporter(meshTopology, "PoissonSolution", false);
         exporter.exportSolution(solution, mesh, varFactory, 0, 2, cellIDToSubdivision(mesh, 4));
+        refinementStrategy.refine(true);
+        solution->solve(false);
+        exporter.exportSolution(solution, mesh, varFactory, 1, 2, cellIDToSubdivision(mesh, 4));
     }
     // exporter.exportFunction(sigmaSoln, "Poisson-s", "sigma", 0, 5);
     // exporter.exportFunction(uhatSoln, "Poisson-uhat", "uhat", 1, 6);

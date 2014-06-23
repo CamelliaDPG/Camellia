@@ -6,7 +6,7 @@
 #include "PreviousSolutionFunction.h"
 #include "RefinementStrategy.h"
 #include "RefinementHistory.h"
-#include "SolutionExporter.h"
+#include "XDMFExporter.h"
 #include "MeshFactory.h"
 #include "CheckConservation.h"
 #include "LagrangeConstraints.h"
@@ -158,7 +158,7 @@ int main(int argc, char *argv[]) {
   int horizontalCells = 6, verticalCells = 8;
 
   // create a pointer to a new mesh:
-  Teuchos::RCP<Mesh> mesh = Mesh::buildQuadMesh(meshBoundary, horizontalCells, verticalCells,
+  Teuchos::RCP<Mesh> mesh = MeshFactory::buildQuadMesh(meshBoundary, horizontalCells, verticalCells,
                                                 bf, H1Order, H1Order+deltaP);
 
   ////////////////////////////////////////////////////////////////////
@@ -228,7 +228,7 @@ int main(int argc, char *argv[]) {
   bf->addTerm( t2hat, v2);
 
   ////////////////////   SPECIFY RHS   ///////////////////////
-  Teuchos::RCP<RHSEasy> rhs = Teuchos::rcp( new RHSEasy );
+  RHSPtr rhs = RHS::rhs();
 
   // stress equation
   rhs->addTerm( -2*u1_prev * tau11->dx() );
@@ -268,7 +268,7 @@ int main(int argc, char *argv[]) {
   }
 
   ////////////////////   CREATE BCs   ///////////////////////
-  Teuchos::RCP<BCEasy> bc = Teuchos::rcp( new BCEasy );
+  BCPtr bc = BC::bc();
   // Teuchos::RCP<PenaltyConstraints> pc = Teuchos::rcp( new PenaltyConstraints );
   SpatialFilterPtr left = Teuchos::rcp( new ConstantXBoundary(-0.5) );
   SpatialFilterPtr right = Teuchos::rcp( new ConstantXBoundary(1) );
@@ -311,10 +311,9 @@ int main(int argc, char *argv[]) {
   ////////////////////   SOLVE & REFINE   ///////////////////////
   double energyThreshold = 0.2; // for mesh refinements
   RefinementStrategy refinementStrategy( solution, energyThreshold );
-  VTKExporter exporter(backgroundFlow, mesh, varFactory);
-  stringstream outfile;
-  outfile << "kovasznay" << "_" << 0;
-  exporter.exportSolution(outfile.str());
+  XDMFExporter exporter(mesh->getTopology(), "NoPressureKovasznay", false);
+  // if (commRank == 0)
+  //   exporter.exportSolution(backgroundFlow, mesh, varFactory, -1);
   set<int> nonlinearVars;
   nonlinearVars.insert(u1->ID());
   nonlinearVars.insert(u2->ID());
@@ -352,9 +351,7 @@ int main(int argc, char *argv[]) {
 
     if (commRank == 0)
     {
-      stringstream outfile;
-      outfile << "kovasznay" << "_" << refIndex+1;
-      exporter.exportSolution(outfile.str());
+      exporter.exportSolution(backgroundFlow, mesh, varFactory, refIndex);
     }
 
     if (refIndex < numRefs)
