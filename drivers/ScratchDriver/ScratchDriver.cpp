@@ -1,5 +1,3 @@
-//#include "MeshTopology.h"
-
 #include <iostream>
 
 #include "Epetra_SerialComm.h"
@@ -17,6 +15,16 @@
 #include "GDAMinimumRule.h"
 
 #include "SolutionExporter.h"
+
+#include "doubleBasisConstruction.h"
+
+#include "CamelliaCellTools.h"
+
+/***
+ 
+ NVR - Just a playground for me to try things without having to add a new driver to the cmake lists, etc.
+ 
+ ***/
 
 vector<double> makeVertex(double v0) {
   vector<double> v;
@@ -163,6 +171,98 @@ int Sort_ints_( int *vals_sort,     //  values to be sorted
   return 0;
 }
 
+void trumanCrashingCode() {
+  {
+    // 2D tests
+    CellTopoPtr quad_4 = Teuchos::rcp( new shards::CellTopology(shards::getCellTopologyData<shards::Quadrilateral<4> >() ) );
+    CellTopoPtr tri_3 = Teuchos::rcp( new shards::CellTopology(shards::getCellTopologyData<shards::Triangle<3> >() ) );
+    
+    // let's draw a little house
+    vector<double> v0 = makeVertex(-1,0);
+    vector<double> v1 = makeVertex(1,0);
+    vector<double> v2 = makeVertex(1,2);
+    vector<double> v3 = makeVertex(-1,2);
+    vector<double> v4 = makeVertex(0.0,3);
+    
+    vector< vector<double> > vertices;
+    vertices.push_back(v0);
+    vertices.push_back(v1);
+    vertices.push_back(v2);
+    vertices.push_back(v3);
+    vertices.push_back(v4);
+    
+    vector<unsigned> quadVertexList;
+    quadVertexList.push_back(0);
+    quadVertexList.push_back(1);
+    quadVertexList.push_back(2);
+    quadVertexList.push_back(3);
+    
+    vector<unsigned> triVertexList;
+    triVertexList.push_back(3);
+    triVertexList.push_back(2);
+    triVertexList.push_back(4);
+    
+    vector< vector<unsigned> > elementVertices;
+    elementVertices.push_back(quadVertexList);
+    elementVertices.push_back(triVertexList);
+    
+    vector< CellTopoPtr > cellTopos;
+    cellTopos.push_back(quad_4);
+    cellTopos.push_back(tri_3);
+    MeshGeometryPtr meshGeometry = Teuchos::rcp( new MeshGeometry(vertices, elementVertices, cellTopos) );
+    
+    MeshTopologyPtr meshTopology = Teuchos::rcp( new MeshTopology(meshGeometry) );
+    
+    FunctionPtr x2 = Function::xn(2);
+    FunctionPtr y2 = Function::yn(2);
+    FunctionPtr function = x2 + y2;
+    FunctionPtr vect = Function::vectorize(x2, y2);
+    FunctionPtr fbdr = Function::restrictToCellBoundary(function);
+    vector<FunctionPtr> functions;
+    functions.push_back(function);
+    functions.push_back(vect);
+    vector<string> functionNames;
+    functionNames.push_back("function");
+    functionNames.push_back("vect");
+    vector<FunctionPtr> bdrfunctions;
+    bdrfunctions.push_back(fbdr);
+    bdrfunctions.push_back(fbdr);
+    vector<string> bdrfunctionNames;
+    bdrfunctionNames.push_back("bdr1");
+    bdrfunctionNames.push_back("bdr2");
+    
+    map<int, int> cellIDToNum1DPts;
+    cellIDToNum1DPts[1] = 4;
+    
+    ////////////////////   DECLARE VARIABLES   ///////////////////////
+    // define test variables
+    VarFactory varFactory;
+    VarPtr tau = varFactory.testVar("tau", HDIV);
+    VarPtr v = varFactory.testVar("v", HGRAD);
+    
+    // define trial variables
+    VarPtr uhat = varFactory.traceVar("uhat");
+    VarPtr fhat = varFactory.fluxVar("fhat");
+    VarPtr u = varFactory.fieldVar("u");
+    VarPtr sigma = varFactory.fieldVar("sigma", VECTOR_L2);
+    
+    ////////////////////   DEFINE BILINEAR FORM   ///////////////////////
+    BFPtr bf = Teuchos::rcp( new BF(varFactory) );
+    // tau terms:
+    bf->addTerm(sigma, tau);
+    bf->addTerm(u, tau->div());
+    bf->addTerm(-uhat, tau->dot_normal());
+    
+    // v terms:
+    bf->addTerm( sigma, v->grad() );
+    bf->addTerm( fhat, v);
+    
+    ////////////////////   BUILD MESH   ///////////////////////
+    int H1Order = 1, pToAdd = 2;
+    Teuchos::RCP<Mesh> mesh = Teuchos::rcp( new Mesh (meshTopology, bf, H1Order, pToAdd) );
+  }
+}
+
 int main(int argc, char *argv[]) {
   bool testMeshTopoMemory = false;
   
@@ -170,6 +270,64 @@ int main(int argc, char *argv[]) {
   
   bool trySortInt = true;
   
+  bool tryCellToolsMapToRefSubcell = false;
+  
+  bool printQuadBasisNodes = false;
+  
+//  trumanCrashingCode();
+
+  if (tryCellToolsMapToRefSubcell) {
+    // want to confirm the order that things map from reference subcell: specifically, does
+    // the map honor the permutation of the subcell?
+    
+    shards::CellTopology quad_4(shards::getCellTopologyData<shards::Quadrilateral<4> >() );
+    
+    int numPoints = 3;
+    int edgeDim = 1, faceDim = 2;
+    FieldContainer<double> refEdgePoints(numPoints,edgeDim);
+    
+    refEdgePoints(0,0) = -1;
+    refEdgePoints(1,0) =  0;
+    refEdgePoints(2,0) =  1;
+    
+    FieldContainer<double> refQuadPoints(numPoints, faceDim);
+    
+    int edgeOrdinal = 3;
+    
+    CamelliaCellTools::mapToReferenceSubcell(refQuadPoints, refEdgePoints, edgeDim, edgeOrdinal, quad_4);
+    
+    cout << "ref. edge points for edge " << edgeOrdinal << ":\n" << refEdgePoints;
+    cout << "mapped points in quad:\n" << refQuadPoints;
+    // (it's fine, honoring the permutation as expected)
+  }
+  
+  if (printQuadBasisNodes) {
+    BasisPtr quadBasis = Camellia::intrepidQuadHGRAD(2);
+    
+    FieldContainer<double> refPoints(9,2);
+    int ptIndex = 0;
+    for (int i=0; i<3; i++) {
+      for (int j=0; j<3; j++) {
+        refPoints(ptIndex,0) = i-1.0;
+        refPoints(ptIndex,1) = j-1.0;
+        ptIndex++;
+      }
+    }
+
+    FieldContainer<double> values(quadBasis->getCardinality(), 9);
+    quadBasis->getValues(values, refPoints, OPERATOR_VALUE);
+    double tol = 1e-14;
+    for (int dofOrdinal=0; dofOrdinal<quadBasis->getCardinality(); dofOrdinal++) {
+      for (int ptIndex=0; ptIndex < values.dimension(1); ptIndex++) {
+        if (abs(values(dofOrdinal,ptIndex)-1.0) < tol) {
+          double x = refPoints(ptIndex,0);
+          double y = refPoints(ptIndex,1);
+          cout << "dofOrdinal " << dofOrdinal << " has node at point (" << x << "," << y << ")\n";
+        }
+      }
+    }
+  }
+
   if (trySortInt) {
     int nvals = 3;
     int *procs_from_ = new int[nvals];
