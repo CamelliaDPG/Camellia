@@ -8,7 +8,9 @@
  *
  */
 
-// #ifdef USE_XDMF
+#include "CamelliaConfig.h"
+ 
+#ifdef USE_XDMF
 #include <Xdmf.h>
 
 #include "Solution.h"
@@ -75,5 +77,6 @@ map<int,int> coarseSubdivisions(MeshPtr mesh, set<GlobalIndexType> cellIndices=s
 map<int,int> mediumSubdivisions(MeshPtr mesh, set<GlobalIndexType> cellIndices=set<GlobalIndexType>());
 map<int,int> fineSubdivisions(MeshPtr mesh, set<GlobalIndexType> cellIndices=set<GlobalIndexType>());
 
-// #endif
+#endif
+
 #endif /* end of include guard: XDMFEXPORTER_H */
