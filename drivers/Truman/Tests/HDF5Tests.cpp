@@ -5,7 +5,7 @@
 #include "InnerProductScratchPad.h"
 #include "RefinementStrategy.h"
 #include "Solution.h"
-// #include "XDMFExporter.h"
+#include "HDF5Exporter.h"
 
 #ifdef HAVE_MPI
 #include <Teuchos_GlobalMPISession.hpp>
@@ -230,8 +230,15 @@ int main(int argc, char *argv[])
     FunctionPtr sigmaSoln = Function::solution(sigma, solution);
     FunctionPtr uhatSoln = Function::solution(uhat, solution);
     FunctionPtr fhatSoln = Function::solution(fhat, solution);
+    vector<FunctionPtr> solnFunctions;
+    solnFunctions.push_back(uSoln);
+    solnFunctions.push_back(sigmaSoln);
+    vector<string> solnNames;
+    solnNames.push_back("u");
+    solnNames.push_back("sigma");
     {
-        // XDMFExporter exporter(meshTopology, "Poisson", false);
+        HDF5Exporter exporter(mesh, "Poisson", false);
+        exporter.exportFunction(solnFunctions, solnNames, 0, 4);
         // exporter.exportFunction(uSoln, "u", 0, 4);
         // exporter.exportFunction(uSoln, "u", 1, 5);
         // exporter.exportFunction(uhatSoln, "uhat", 0, 4);
