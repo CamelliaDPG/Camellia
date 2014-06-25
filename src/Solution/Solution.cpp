@@ -132,7 +132,7 @@ void Solution::setCubatureEnrichmentDegree(int value) {
 }
 
 static const int MAX_BATCH_SIZE_IN_BYTES = 3*1024*1024; // 3 MB
-static const int MIN_BATCH_SIZE_IN_CELLS = 2; // overrides the above, if it results in too-small batches
+static const int MIN_BATCH_SIZE_IN_CELLS = 1; // overrides the above, if it results in too-small batches
 
 // copy constructor:
 Solution::Solution(const Solution &soln) {

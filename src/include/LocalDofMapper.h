@@ -22,25 +22,29 @@ class LocalDofMapper { // maps a whole trial ordering
   vector< map< int, BasisMap > > _sideMaps; // outer index is side ordinal; map keys are var IDs
   map< GlobalIndexType, unsigned > _globalIndexToOrdinal; // maps from GlobalIndex to the ordinal in our globalData container (on the present implementation, the global indices will always be in numerical order)
   
+  vector< set<GlobalIndexType> > _fittableGlobalDofOrdinalsOnSides;
+  set<GlobalIndexType> _fittableGlobalDofOrdinalsInVolume;
+  
   int _sideOrdinalToMap;
   int _varIDToMap;
   
   void filterData(const vector<int> dofIndices, const FieldContainer<double> &data, FieldContainer<double> &filteredData);
-  void addSubBasisMapVectorContribution(int varID, int sideIndex, BasisMap basisMap, const FieldContainer<double> &localData, FieldContainer<double> &globalData, bool accumulate);
+  void addSubBasisMapVectorContribution(int varID, int sideIndex, BasisMap basisMap, const FieldContainer<double> &localData, FieldContainer<double> &globalData, bool fittableGlobalDofsOnly);
 //  void addSubBasisMapMatrixContribution(int varID, int sideOrdinal, BasisMap basisMap, const FieldContainer<double> &localData, FieldContainer<double> &globalData);
   void addReverseSubBasisMapVectorContribution(int varID, int sideOrdinal, BasisMap basisMap, const FieldContainer<double> &globalData, FieldContainer<double> &localData);
 //  void addReverseSubBasisMapMatrixContribution(int varID, int sideOrdinal, BasisMap basisMap, const FieldContainer<double> &globalData, FieldContainer<double> &localData);
-  FieldContainer<double> mapLocalDataMatrix(const FieldContainer<double> &localData);
+  FieldContainer<double> mapLocalDataMatrix(const FieldContainer<double> &localData, bool fittableGlobalDofsOnly);
 public:
-  LocalDofMapper(DofOrderingPtr dofOrdering, map< int, BasisMap > volumeMaps, vector< map< int, BasisMap > > sideMaps, int varIDToMap = -1, int sideOrdinalToMap = -1);
+  LocalDofMapper(DofOrderingPtr dofOrdering, map< int, BasisMap > volumeMaps,
+                 set<GlobalIndexType> fittableGlobalDofOrdinalsInVolume,
+                 vector< map< int, BasisMap > > sideMaps,
+                 vector< set<GlobalIndexType> > fittableGlobalDofOrdinalsOnSides, int varIDToMap = -1, int sideOrdinalToMap = -1);
   
-  // DEPRECATED (TODO: Remove this)
-  FieldContainer<double> mapData(const FieldContainer<double> &localData, bool localToGlobal = true); // can go global to local
-  
-  FieldContainer<double> mapLocalData(const FieldContainer<double> &localData);
+  FieldContainer<double> mapLocalData(const FieldContainer<double> &localData, bool fittableGlobalDofsOnly);
   FieldContainer<double> fitLocalCoefficients(const FieldContainer<double> &localCoefficients); // solves normal equations (if the localCoefficients are in the range of the global-to-local operator, then the returned coefficients will be the preimage of localCoefficients under that operator)
   FieldContainer<double> mapGlobalCoefficients(const FieldContainer<double> &globalCoefficients);
   
+  vector<GlobalIndexType> fittableGlobalIndices();
   vector<GlobalIndexType> globalIndices();
   
   void printMappingReport();

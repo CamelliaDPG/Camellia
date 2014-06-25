@@ -176,6 +176,10 @@ set( SCRATCH_DRIVER
   "${DRIVERS_DIR}/ScratchDriver/ScratchDriver.cpp"
 )
 
+set( VESTA_CRASH_DRIVER 
+  "${DRIVERS_DIR}/VestaCrashDriver/VestaCrashDriver.cpp"
+)
+
 set( NEW_BURGERS_DRIVER
   "${SCRATCHPAD_DRIVER_DIR}/NewBurgersDriver.cpp"
 )
@@ -363,6 +367,7 @@ add_executable(ConfusionIterationExperiment ${CONFUSION_ITERATION_EXPERIMENT})
 add_executable(NewConfusionDriver ${NEW_CONFUSION_DRIVER})
 add_executable(NewBurgersDriver ${NEW_BURGERS_DRIVER})
 add_executable(ScratchDriver ${SCRATCH_DRIVER})
+add_executable(VestaCrashDriver ${VESTA_CRASH_DRIVER})
 add_executable(DPGTests ${TEST_SOURCES} ${POISSON_SOURCES} ${CONFUSION_SOURCES})
 add_executable(FlatPlateINS ${TRUMAN_FLAT_PLATE_INS})
 add_executable(ublas_cholesky ${uBLAS_CHOLESKY_TEST})
@@ -422,6 +427,8 @@ target_link_libraries(ScratchDriver
   ${Trilinos_LIBRARIES} 
   ${Trilinos_TPL_LIBRARIES}
   ${CAMELLIA_LIBRARY_NAME}
+  )
+target_link_libraries(VestaCrashDriver
   )
 target_link_libraries(NewBurgersDriver
   ${Trilinos_LIBRARIES} 

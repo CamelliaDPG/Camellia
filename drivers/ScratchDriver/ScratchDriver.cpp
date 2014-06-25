@@ -1,5 +1,3 @@
-//#include "MeshTopology.h"
-
 #include <iostream>
 
 #include "Epetra_SerialComm.h"
@@ -17,6 +15,16 @@
 #include "GDAMinimumRule.h"
 
 #include "SolutionExporter.h"
+
+#include "doubleBasisConstruction.h"
+
+#include "CamelliaCellTools.h"
+
+/***
+ 
+ NVR - Just a playground for me to try things without having to add a new driver to the cmake lists, etc.
+ 
+ ***/
 
 vector<double> makeVertex(double v0) {
   vector<double> v;
@@ -163,6 +171,98 @@ int Sort_ints_( int *vals_sort,     //  values to be sorted
   return 0;
 }
 
+void trumanCrashingCode() {
+  {
+    // 2D tests
+    CellTopoPtr quad_4 = Teuchos::rcp( new shards::CellTopology(shards::getCellTopologyData<shards::Quadrilateral<4> >() ) );
+    CellTopoPtr tri_3 = Teuchos::rcp( new shards::CellTopology(shards::getCellTopologyData<shards::Triangle<3> >() ) );
+    
+    // let's draw a little house
+    vector<double> v0 = makeVertex(-1,0);
+    vector<double> v1 = makeVertex(1,0);
+    vector<double> v2 = makeVertex(1,2);
+    vector<double> v3 = makeVertex(-1,2);
+    vector<double> v4 = makeVertex(0.0,3);
+    
+    vector< vector<double> > vertices;
+    vertices.push_back(v0);
+    vertices.push_back(v1);
+    vertices.push_back(v2);
+    vertices.push_back(v3);
+    vertices.push_back(v4);
+    
+    vector<unsigned> quadVertexList;
+    quadVertexList.push_back(0);
+    quadVertexList.push_back(1);
+    quadVertexList.push_back(2);
+    quadVertexList.push_back(3);
+    
+    vector<unsigned> triVertexList;
+    triVertexList.push_back(3);
+    triVertexList.push_back(2);
+    triVertexList.push_back(4);
+    
+    vector< vector<unsigned> > elementVertices;
+    elementVertices.push_back(quadVertexList);
+    elementVertices.push_back(triVertexList);
+    
+    vector< CellTopoPtr > cellTopos;
+    cellTopos.push_back(quad_4);
+    cellTopos.push_back(tri_3);
+    MeshGeometryPtr meshGeometry = Teuchos::rcp( new MeshGeometry(vertices, elementVertices, cellTopos) );
+    
+    MeshTopologyPtr meshTopology = Teuchos::rcp( new MeshTopology(meshGeometry) );
+    
+    FunctionPtr x2 = Function::xn(2);
+    FunctionPtr y2 = Function::yn(2);
+    FunctionPtr function = x2 + y2;
+    FunctionPtr vect = Function::vectorize(x2, y2);
+    FunctionPtr fbdr = Function::restrictToCellBoundary(function);
+    vector<FunctionPtr> functions;
+    functions.push_back(function);
+    functions.push_back(vect);
+    vector<string> functionNames;
+    functionNames.push_back("function");
+    functionNames.push_back("vect");
+    vector<FunctionPtr> bdrfunctions;
+    bdrfunctions.push_back(fbdr);
+    bdrfunctions.push_back(fbdr);
+    vector<string> bdrfunctionNames;
+    bdrfunctionNames.push_back("bdr1");
+    bdrfunctionNames.push_back("bdr2");
+    
+    map<int, int> cellIDToNum1DPts;
+    cellIDToNum1DPts[1] = 4;
+    
+    ////////////////////   DECLARE VARIABLES   ///////////////////////
+    // define test variables
+    VarFactory varFactory;
+    VarPtr tau = varFactory.testVar("tau", HDIV);
+    VarPtr v = varFactory.testVar("v", HGRAD);
+    
+    // define trial variables
+    VarPtr uhat = varFactory.traceVar("uhat");
+    VarPtr fhat = varFactory.fluxVar("fhat");
+    VarPtr u = varFactory.fieldVar("u");
+    VarPtr sigma = varFactory.fieldVar("sigma", VECTOR_L2);
+    
+    ////////////////////   DEFINE BILINEAR FORM   ///////////////////////
+    BFPtr bf = Teuchos::rcp( new BF(varFactory) );
+    // tau terms:
+    bf->addTerm(sigma, tau);
+    bf->addTerm(u, tau->div());
+    bf->addTerm(-uhat, tau->dot_normal());
+    
+    // v terms:
+    bf->addTerm( sigma, v->grad() );
+    bf->addTerm( fhat, v);
+    
+    ////////////////////   BUILD MESH   ///////////////////////
+    int H1Order = 1, pToAdd = 2;
+    Teuchos::RCP<Mesh> mesh = Teuchos::rcp( new Mesh (meshTopology, bf, H1Order, pToAdd) );
+  }
+}
+
 int main(int argc, char *argv[]) {
   bool testMeshTopoMemory = false;
   
@@ -170,16 +270,71 @@ int main(int argc, char *argv[]) {
   
   bool trySortInt = true;
   
+  bool tryCellToolsMapToRefSubcell = false;
+  
+  bool printQuadBasisNodes = false;
+  
+//  trumanCrashingCode();
+
+  if (tryCellToolsMapToRefSubcell) {
+    // want to confirm the order that things map from reference subcell: specifically, does
+    // the map honor the permutation of the subcell?
+    
+    shards::CellTopology quad_4(shards::getCellTopologyData<shards::Quadrilateral<4> >() );
+    
+    int numPoints = 3;
+    int edgeDim = 1, faceDim = 2;
+    FieldContainer<double> refEdgePoints(numPoints,edgeDim);
+    
+    refEdgePoints(0,0) = -1;
+    refEdgePoints(1,0) =  0;
+    refEdgePoints(2,0) =  1;
+    
+    FieldContainer<double> refQuadPoints(numPoints, faceDim);
+    
+    int edgeOrdinal = 3;
+    
+    CamelliaCellTools::mapToReferenceSubcell(refQuadPoints, refEdgePoints, edgeDim, edgeOrdinal, quad_4);
+    
+    cout << "ref. edge points for edge " << edgeOrdinal << ":\n" << refEdgePoints;
+    cout << "mapped points in quad:\n" << refQuadPoints;
+    // (it's fine, honoring the permutation as expected)
+  }
+  
+  if (printQuadBasisNodes) {
+    BasisPtr quadBasis = Camellia::intrepidQuadHGRAD(2);
+    
+    FieldContainer<double> refPoints(9,2);
+    int ptIndex = 0;
+    for (int i=0; i<3; i++) {
+      for (int j=0; j<3; j++) {
+        refPoints(ptIndex,0) = i-1.0;
+        refPoints(ptIndex,1) = j-1.0;
+        ptIndex++;
+      }
+    }
+
+    FieldContainer<double> values(quadBasis->getCardinality(), 9);
+    quadBasis->getValues(values, refPoints, OPERATOR_VALUE);
+    double tol = 1e-14;
+    for (int dofOrdinal=0; dofOrdinal<quadBasis->getCardinality(); dofOrdinal++) {
+      for (int ptIndex=0; ptIndex < values.dimension(1); ptIndex++) {
+        if (abs(values(dofOrdinal,ptIndex)-1.0) < tol) {
+          double x = refPoints(ptIndex,0);
+          double y = refPoints(ptIndex,1);
+          cout << "dofOrdinal " << dofOrdinal << " has node at point (" << x << "," << y << ")\n";
+        }
+      }
+    }
+  }
+
   if (trySortInt) {
-    int nvals = 3;
+    int nvals = 48;
     int *procs_from_ = new int[nvals];
     int *lengths_from_ = new int[nvals];
-    procs_from_[0] = 17;
-    procs_from_[1] = 16;
-    procs_from_[2] = 18;
-    lengths_from_[0] = 88;
-    lengths_from_[1] = 42;
-    lengths_from_[2] = 15;
+    procs_from_[0] = 21; procs_from_[1] = 23; procs_from_[2] = 29; procs_from_[3] = 17; procs_from_[4] = 20; procs_from_[5] = 22; procs_from_[6] = 19; procs_from_[7] = 28; procs_from_[8] = 16; procs_from_[9] = 25; procs_from_[10] = 18; procs_from_[11] = 30; procs_from_[12] = 27; procs_from_[13] = 24; procs_from_[14] = 26; procs_from_[15] = 5; procs_from_[16] = 7; procs_from_[17] = 4; procs_from_[18] = 13; procs_from_[19] = 1; procs_from_[20] = 15; procs_from_[21] = 3; procs_from_[22] = 6; procs_from_[23] = 12; procs_from_[24] = 2; procs_from_[25] = 0; procs_from_[26] = 11; procs_from_[27] = 9; procs_from_[28] = 14; procs_from_[29] = 8; procs_from_[30] = 10; procs_from_[31] = 43; procs_from_[32] = 40; procs_from_[33] = 42; procs_from_[34] = 34; procs_from_[35] = 41; procs_from_[36] = 46; procs_from_[37] = 35; procs_from_[38] = 38; procs_from_[39] = 44; procs_from_[40] = 39; procs_from_[41] = 32; procs_from_[42] = 45; procs_from_[43] = 33; procs_from_[44] = 36; procs_from_[45] = 37; procs_from_[46] = 47; procs_from_[47] = 31;
+    lengths_from_[0] = 683; lengths_from_[1] = 683; lengths_from_[2] = 683; lengths_from_[3] = 683; lengths_from_[4] = 683; lengths_from_[5] = 683; lengths_from_[6] = 683; lengths_from_[7] = 683; lengths_from_[8] = 683; lengths_from_[9] = 683; lengths_from_[10] = 683; lengths_from_[11] = 518; lengths_from_[12] = 683; lengths_from_[13] = 683; lengths_from_[14] = 683; lengths_from_[15] = 683; lengths_from_[16] = 683; lengths_from_[17] = 683; lengths_from_[18] = 683; lengths_from_[19] = 683; lengths_from_[20] = 683; lengths_from_[21] = 683; lengths_from_[22] = 683; lengths_from_[23] = 683; lengths_from_[24] = 683; lengths_from_[25] = 683; lengths_from_[26] = 683; lengths_from_[27] = 683; lengths_from_[28] = 683; lengths_from_[29] = 683; lengths_from_[30] = 683; lengths_from_[31] = 683; lengths_from_[32] = 683; lengths_from_[33] = 683; lengths_from_[34] = 683; lengths_from_[35] = 683; lengths_from_[36] = 683; lengths_from_[37] = 683; lengths_from_[38] = 683; lengths_from_[39] = 683; lengths_from_[40] = 683; lengths_from_[41] = 683; lengths_from_[42] = 683; lengths_from_[43] = 683; lengths_from_[44] = 683; lengths_from_[45] = 683; lengths_from_[46] = 683; lengths_from_[47] = 165;
+
     Sort_ints_(procs_from_, lengths_from_, nvals);
     cout << "After sorting";
     for (int i=0; i<nvals; i++) {
