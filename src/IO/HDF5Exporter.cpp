@@ -13,15 +13,21 @@ using namespace H5;
 #include <Teuchos_GlobalMPISession.hpp>
 #endif
 
-HDF5Exporter::HDF5Exporter(MeshPtr mesh, string filename, bool deleteOldFiles) : _mesh(mesh), _filename(filename), 
+HDF5Exporter::HDF5Exporter(MeshPtr mesh, string saveDirectory, bool deleteOldFiles) : _mesh(mesh), _filename(saveDirectory), 
   _xdmf("Xdmf"), _domain("Domain"), _fieldGrids("Grid"), _traceGrids("Grid")
 {
   int commRank = Teuchos::GlobalMPISession::getRank();
   int numProcs = Teuchos::GlobalMPISession::getNProc();
 
+  if (deleteOldFiles)
+  {
+    system(("rm -rf "+_filename).c_str());
+  }
+  system(("mkdir -p "+_filename+"/HDF5").c_str());
+
   if (commRank == 0)
   {
-    _xmfFile.open((_filename+".xmf").c_str());
+    _xmfFile.open((_filename+"/"+_filename+".xmf").c_str());
     _xmfFile << "<?xml version=\"1.0\" ?>" << endl
     << "<!DOCTYPE Xdmf SYSTEM \"Xdmf.dtd\" []>" << endl;
     _xdmf.addAttribute("xmlns:xi", "http://www.w3.org/2003/XInclude");
@@ -36,13 +42,6 @@ HDF5Exporter::HDF5Exporter(MeshPtr mesh, string filename, bool deleteOldFiles) :
     _fieldGrids.addAttribute("CollectionType", "Temporal");
     _traceGrids.addAttribute("CollectionType", "Temporal");
   }
-
-  if (deleteOldFiles)
-  {
-    system("rm -rf *.xmf");
-    system("rm -rf HDF5/*");
-  }
-  system("mkdir -p HDF5");
 }
 
 HDF5Exporter::~HDF5Exporter()
@@ -158,9 +157,9 @@ void HDF5Exporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
   ofstream gridFile;
   stringstream partitionFileName;
   if (!exportingBoundaryValues)
-    partitionFileName << _filename << "Field" << "Partition" << commRank << "Time" << timeVal << ".xmf";
+    partitionFileName << _filename << "/" << _filename << "Field" << "Partition" << commRank << "Time" << timeVal << ".xmf";
   else
-    partitionFileName << _filename << "Trace" << "Partition" << commRank << "Time" << timeVal << ".xmf";
+    partitionFileName << _filename << "/" << _filename << "Trace" << "Partition" << commRank << "Time" << timeVal << ".xmf";
   gridFile.open(partitionFileName.str().c_str());
   XMLObject grid("Grid");
   grid.addAttribute("Name", "Grid");
@@ -177,25 +176,31 @@ void HDF5Exporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
     if (exportingBoundaryValues != functions[i]->boundaryValueOnly())
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Can not export trace and field variables together");
 
-  stringstream connOut, ptOut;
+  stringstream connOutRel, connOutFull, ptOutRel, ptOutFull;
   if (!exportingBoundaryValues)
   {
-    connOut << "HDF5/" << _filename << "-rank" << commRank << "-time" << timeVal << "-field-conns" << ".h5";
-    ptOut << "HDF5/" << _filename << "-rank" << commRank << "-time" << timeVal << "-field-pts" << ".h5";
+    connOutRel << "HDF5/" << "field-conns" << "-part" << commRank << "-time" << timeVal << ".h5";
+    connOutFull << _filename << "/" << connOutRel.str();
+    ptOutRel << "HDF5/" << "field-pts" << "-part" << commRank << "-time" << timeVal << ".h5";
+    ptOutFull << _filename << "/" << ptOutRel.str();
   }
   else
   {
-    connOut << "HDF5/" << _filename << "-rank" << commRank << "-time" << timeVal << "-trace-conns" << ".h5";
-    ptOut << "HDF5/" << _filename << "-rank" << commRank << "-time" << timeVal << "-trace-pts" << ".h5";
+    connOutRel << "HDF5/" << "trace-conns" << "-part" << commRank << "-time" << timeVal << ".h5";
+    connOutFull << _filename << "/" << connOutRel.str();
+    ptOutRel << "HDF5/" << "trace-pts" << "-part" << commRank << "-time" << timeVal << ".h5";
+    ptOutFull << _filename << "/" << ptOutRel.str();
   }
-  H5File connFile( connOut.str(), H5F_ACC_TRUNC );
-  H5File ptFile( ptOut.str(), H5F_ACC_TRUNC );
+  H5File connFile( connOutFull.str(), H5F_ACC_TRUNC );
+  H5File ptFile( ptOutFull.str(), H5F_ACC_TRUNC );
   vector<H5File> valFiles;
-  stringstream valOut[nFcns];
+  stringstream valOutRel[nFcns];
+  stringstream valOutFull[nFcns];
   for (int i=0; i < nFcns; i++)
   {
-    valOut[i] << "HDF5/" << _filename << "-rank" << commRank << "-time"  << timeVal << "-" << functionNames[i] << ".h5";
-    valFiles.push_back( H5File(valOut[i].str(), H5F_ACC_TRUNC) );
+    valOutRel[i] << "HDF5/" << functionNames[i] << "-part" << commRank << "-time" << timeVal << ".h5";
+    valOutFull[i] << _filename << "/" << valOutRel[i].str();
+    valFiles.push_back( H5File(valOutFull[i].str(), H5F_ACC_TRUNC) );
   }
 
   FloatType doubletype( PredType::NATIVE_DOUBLE );
@@ -346,8 +351,8 @@ void HDF5Exporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
   topoDataItem.addAttribute("NumberType", "Int");
   topoDataItem.addAttribute("Precision", "4");
   topoDataItem.addInt("Dimensions", connDimsf[0]);
-  connOut << ":/Conns";
-  topoDataItem.addContent(connOut.str());
+  connOutRel << ":/Conns";
+  topoDataItem.addContent(connOutRel.str());
 
   // Geometry
   XMLObject geometry("Geometry");
@@ -372,8 +377,8 @@ void HDF5Exporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
   geoDataItem.addAttribute("NumberType", "Float");
   geoDataItem.addAttribute("Precision", "8");
   geoDataItem.addInt("Dimensions", ptDimsf[0]);
-  ptOut << ":/Points";
-  geoDataItem.addContent(ptOut.str());
+  ptOutRel << ":/Points";
+  geoDataItem.addContent(ptOutRel.str());
 
   // Node Data
   vector<XMLObject> vals;
@@ -425,8 +430,8 @@ void HDF5Exporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
     valDataItem.addAttribute("NumberType", "Float");
     valDataItem.addAttribute("Precision", "8");
     valDataItem.addInt("Dimensions", valDimsf[0]);
-    valOut[i] << ":/NodeData";
-    valDataItem.addContent(valOut[i].str());
+    valOutRel[i] << ":/NodeData";
+    valDataItem.addContent(valOutRel[i].str());
   }
 
   int connIndex = 0;

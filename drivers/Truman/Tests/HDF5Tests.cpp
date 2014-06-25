@@ -232,7 +232,7 @@ int main(int argc, char *argv[])
         // exporter.exportFunction(fhatSoln, "fhat", 1, 5);
     }
     {
-        HDF5Exporter exporter(mesh, "HDF5PoissonSolution", false);
+        HDF5Exporter exporter(mesh, "Poisson", true);
         exporter.exportSolution(solution, varFactory, 0, 2, cellIDToSubdivision(mesh, 4));
         refinementStrategy.refine(true);
         solution->solve(false);

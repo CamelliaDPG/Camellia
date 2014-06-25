@@ -31,7 +31,7 @@ private:
   set<double> _fieldTimeVals;
   set<double> _traceTimeVals;
 public:
-  HDF5Exporter(MeshPtr mesh, string filename="output", bool deleteOldFiles=false);
+  HDF5Exporter(MeshPtr mesh, string saveDirectory="output", bool deleteOldFiles=false);
   ~HDF5Exporter();
   void exportFunction(FunctionPtr function, string functionName="function", double timeVal=0, 
     unsigned int defaultNum1DPts=4, map<int, int> cellIDToNum1DPts=map<int,int>(), set<GlobalIndexType> cellIndices=set<GlobalIndexType>());
