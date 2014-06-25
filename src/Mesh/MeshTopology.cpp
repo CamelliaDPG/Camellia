@@ -324,17 +324,8 @@ unsigned MeshTopology::addEntity(const shards::CellTopology &entityTopo, const v
       _knownTopologies[entityTopo.getKey()] = entityTopo;
     }
     _entityCellTopologyKeys[d][entityIndex] = entityTopo.getKey();
-//    if ((_cells.size() == 2) && (d==2) && (entityIndex == 19)) {
-//      cout << "MeshTopology::addEntity: added entity of dimension " << d << " with index " << entityIndex << " and vertices:" << endl;
-//      printVertices(nodeSet);
-//    }
   } else {
     // existing entity
-//    Camellia::print("nodeSet", nodeSet);
-//    Camellia::print("knownEntityEntry->first", knownEntityEntry->first);
-//    if ((_cells.size() == 2) && (d==2) && (entityIndex == 19)) {
-//      Camellia::print("entities entry", _entities[d][entityIndex]);
-//    }
     vector<IndexType> canonicalVertices = getCanonicalEntityNodesViaPeriodicBCs(d, entityVertices);
 //    
 //    Camellia::print("canonicalEntityOrdering",_canonicalEntityOrdering[d][entityIndex]);
@@ -636,6 +627,7 @@ CellPtr MeshTopology::getCell(unsigned cellIndex) {
 }
 
 unsigned MeshTopology::getEntityCount(unsigned int d) {
+  if (d==0) return _vertices.size();
   return _entities[d].size();
 }
 
@@ -798,6 +790,22 @@ unsigned MeshTopology::getVertexIndexAdding(const vector<double> &vertex, double
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Mesh error: attempting to add existing vertex");
   }
   _vertexMap[vertex] = vertexIndex;
+
+  { // update the various entity containers
+    int vertexDim = 0;
+    set<IndexType> nodeSet;
+    nodeSet.insert(vertexIndex);
+    _entities[vertexDim].push_back(nodeSet);
+    _knownEntities[vertexDim][nodeSet] = vertexIndex;
+    vector<IndexType> entityVertices;
+    entityVertices.push_back(vertexIndex);
+    _canonicalEntityOrdering[vertexDim][vertexIndex] = entityVertices;
+    shards::CellTopology nodeTopo = shards::getCellTopologyData< shards::Node >();
+    if (_knownTopologies.find(nodeTopo.getKey()) == _knownTopologies.end()) {
+      _knownTopologies[nodeTopo.getKey()] = nodeTopo;
+    }
+    _entityCellTopologyKeys[vertexDim][vertexIndex] = nodeTopo.getKey();
+  }
   
   set< pair<int,int> > matchingPeriodicBCs;
 
