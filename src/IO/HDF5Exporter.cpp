@@ -13,6 +13,57 @@ using namespace H5;
 #include <Teuchos_GlobalMPISession.hpp>
 #endif
 
+HDF5Exporter::HDF5Exporter(MeshPtr mesh, string filename, bool deleteOldFiles) : _mesh(mesh), _filename(filename), 
+  _xdmf("Xdmf"), _domain("Domain"), _fieldGrids("Grid"), _traceGrids("Grid")
+{
+  int commRank = Teuchos::GlobalMPISession::getRank();
+  int numProcs = Teuchos::GlobalMPISession::getNProc();
+
+  if (commRank == 0)
+  {
+    _xmfFile.open((_filename+".xmf").c_str());
+    _xmfFile << "<?xml version=\"1.0\" ?>" << endl
+    << "<!DOCTYPE Xdmf SYSTEM \"Xdmf.dtd\" []>" << endl;
+    _xdmf.addAttribute("xmlns:xi", "http://www.w3.org/2003/XInclude");
+    _xdmf.addAttribute("Version", "2");
+    _xdmf.addChild(_domain);
+    _domain.addChild(_fieldGrids);
+    _domain.addChild(_traceGrids);
+    _fieldGrids.addAttribute("Name", "Field Grids");
+    _traceGrids.addAttribute("Name", "Trace Grids");
+    _fieldGrids.addAttribute("GridType", "Collection");
+    _traceGrids.addAttribute("GridType", "Collection");
+    _fieldGrids.addAttribute("CollectionType", "Temporal");
+    _traceGrids.addAttribute("CollectionType", "Temporal");
+    // for (int p=0; p < numProcs; p++)
+    // {
+    //   XMLObject xiinclude("xi:include");
+    //   topLevelGrid.addChild(xiinclude);
+    //   stringstream partitionFileName;
+    //   partitionFileName << _filename << "Partition" << p << ".xmf";
+    //   xiinclude.addAttribute("href", partitionFileName.str());
+    // }
+  }
+
+  if (deleteOldFiles)
+  {
+    system("rm -rf *.xmf");
+    system("rm -rf HDF5/*");
+  }
+  system("mkdir -p HDF5");
+}
+
+HDF5Exporter::~HDF5Exporter()
+{
+  int commRank = Teuchos::GlobalMPISession::getRank();
+  int numProcs = Teuchos::GlobalMPISession::getNProc();
+  if (commRank == 0)
+  {
+    _xmfFile << _xdmf.toString();
+    _xmfFile.close();
+  }
+}
+
 // void XDMFExporter::exportSolution(SolutionPtr solution, MeshPtr mesh, VarFactory varFactory, double timeVal, unsigned int defaultNum1DPts, map<int, int> cellIDToNum1DPts, set<GlobalIndexType> cellIndices)
 // {
 //   vector<int> fieldTrialIDs = mesh->bilinearForm()->trialVolumeIDs();
@@ -56,6 +107,69 @@ using namespace H5;
 void HDF5Exporter::exportFunction(vector<FunctionPtr> functions, vector<string> functionNames, double timeVal, unsigned int defaultNum1DPts, map<int, int> cellIDToNum1DPts, MeshPtr mesh, set<GlobalIndexType> cellIndices)
 {
   int commRank = Teuchos::GlobalMPISession::getRank();
+  int numProcs = Teuchos::GlobalMPISession::getNProc();
+
+  bool exportingBoundaryValues = functions[0]->boundaryValueOnly();
+
+  XMLObject partitionCollection("Grid");
+  if (commRank == 0)
+  {
+    if (!exportingBoundaryValues)
+    {
+      if (!_fieldTimeVals.count(timeVal))
+      {
+        _fieldGrids.addChild(partitionCollection);
+        partitionCollection.addAttribute("Name", "Time");
+        partitionCollection.addAttribute("GridType", "Collection");
+        partitionCollection.addAttribute("CollectionType", "Spatial");
+        XMLObject time("Time");
+        partitionCollection.addChild(time);
+        time.addAttribute("TimeType", "Single");
+        time.addDouble("Value", timeVal);
+        for (int p=0; p < numProcs; p++)
+        {
+          XMLObject xiinclude("xi:include");
+          partitionCollection.addChild(xiinclude);
+          stringstream partitionFileName;
+          partitionFileName << _filename << "Partition" << p << "Time" << timeVal << ".xmf";
+          xiinclude.addAttribute("href", partitionFileName.str());
+        }
+      }
+      else
+        TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Field collection at timeVal already inserted");
+    }
+    else
+    {
+      if (!_traceTimeVals.count(timeVal))
+      {
+        _traceGrids.addChild(partitionCollection);
+        partitionCollection.addAttribute("Name", "Time");
+        partitionCollection.addAttribute("GridType", "Collection");
+        partitionCollection.addAttribute("CollectionType", "Spatial");
+        XMLObject time("Time");
+        partitionCollection.addChild(time);
+        time.addAttribute("TimeType", "Single");
+        time.addDouble("Value", timeVal);
+        for (int p=0; p < numProcs; p++)
+        {
+          XMLObject xiinclude("xi:include");
+          partitionCollection.addChild(xiinclude);
+          stringstream partitionFileName;
+          partitionFileName << _filename << "Partition" << p << "Time" << timeVal << ".xmf";
+          xiinclude.addAttribute("href", partitionFileName.str());
+        }
+      }
+      else
+        TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Trace collection at timeVal already inserted");
+    }
+  }
+  ofstream gridFile;
+  stringstream partitionFileName;
+  partitionFileName << _filename << "Partition" << commRank << "Time" << timeVal << ".xmf";
+  gridFile.open(partitionFileName.str().c_str());
+  XMLObject grid("Grid");
+  grid.addAttribute("Name", "Grid");
+  grid.addAttribute("GridType", "Uniform");
 
   int nFcns = functions.size();
 
@@ -73,8 +187,6 @@ void HDF5Exporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
 
   int spaceDim = _mesh->getTopology()->getSpaceDim();
 
-  bool exportingBoundaryValues = functions[0]->boundaryValueOnly();
-
   // time.SetTimeType(XDMF_TIME_SINGLE);
   // time.SetValue(timeVal);
   // grid.Insert(&time);
@@ -86,26 +198,26 @@ void HDF5Exporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
   stringstream connOut, ptOut;
   if (!exportingBoundaryValues)
   {
-    connOut << "HDF5/" << _filename << "-rank" << commRank << "-time" << timeVal << "-field-conns";
-    ptOut << "HDF5/" << _filename << "-rank" << commRank << "-time" << timeVal << "-field-pts";
+    connOut << "HDF5/" << _filename << "-rank" << commRank << "-time" << timeVal << "-field-conns" << ".h5";
+    ptOut << "HDF5/" << _filename << "-rank" << commRank << "-time" << timeVal << "-field-pts" << ".h5";
     // grid.SetName("Field Grid");
     // fieldTemporalCollection.Insert(&grid);
   }
   else
   {
-    connOut << "HDF5/" << _filename << "-rank" << commRank << "-time" << timeVal << "-trace-conns";
-    ptOut << "HDF5/" << _filename << "-rank" << commRank << "-time" << timeVal << "-trace-pts";
+    connOut << "HDF5/" << _filename << "-rank" << commRank << "-time" << timeVal << "-trace-conns" << ".h5";
+    ptOut << "HDF5/" << _filename << "-rank" << commRank << "-time" << timeVal << "-trace-pts" << ".h5";
     // grid.SetName("Trace Grid");
     // traceTemporalCollection.Insert(&grid);
   }
   H5File connFile( connOut.str(), H5F_ACC_TRUNC );
   H5File ptFile( ptOut.str(), H5F_ACC_TRUNC );
   vector<H5File> valFiles;
+  stringstream valOut[nFcns];
   for (int i=0; i < nFcns; i++)
   {
-    stringstream valOut;
-    valOut << "HDF5/" << _filename << "-rank" << commRank << "-time"  << timeVal << "-" << functionNames[i];
-    valFiles.push_back( H5File(valOut.str(), H5F_ACC_TRUNC) );
+    valOut[i] << "HDF5/" << _filename << "-rank" << commRank << "-time"  << timeVal << "-" << functionNames[i] << ".h5";
+    valFiles.push_back( H5File(valOut[i].str(), H5F_ACC_TRUNC) );
   }
 
   FloatType doubletype( PredType::NATIVE_DOUBLE );
@@ -212,23 +324,29 @@ void HDF5Exporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
   // Topology
   // topology = grid.GetTopology();
   // topology->SetTopologyType(XDMF_MIXED);
+  XMLObject topology("Topology");
+  grid.addChild(topology);
+  topology.addAttribute("TopologyType", "Mixed");
   if (!exportingBoundaryValues)
   {
-    // if (spaceDim == 1)
-    //   topology->SetNumberOfElements(numLines);
-    // else
-    //   topology->SetNumberOfElements(totalSubcells);
+    if (spaceDim == 1)
+      // topology->SetNumberOfElements(numLines);
+      topology.addInt("Dimensions", numLines);
+    else
+      // topology->SetNumberOfElements(totalSubcells);
+      topology.addInt("Dimensions", totalSubcells);
   }
   else
   {
-    // if (spaceDim == 1)
-    // {
-    //   topology->SetNumberOfElements(totalBoundaryPts);
-    // }
-    // else if (spaceDim == 2)
-    //   topology->SetNumberOfElements(totalBoundaryLines);
-    // else if (spaceDim == 3)
-    //   topology->SetNumberOfElements(totalSubQuads);
+    if (spaceDim == 1)
+      // topology->SetNumberOfElements(totalBoundaryPts);
+      topology.addInt("Dimensions", totalBoundaryPts);
+    else if (spaceDim == 2)
+      // topology->SetNumberOfElements(totalBoundaryLines);
+      topology.addInt("Dimensions", totalBoundaryLines);
+    else if (spaceDim == 3)
+      // topology->SetNumberOfElements(totalSubQuads);
+      topology.addInt("Dimensions", totalSubQuads);
   }
   // connArray = topology->GetConnectivity();
   hsize_t connDimsf[1];
@@ -256,13 +374,26 @@ void HDF5Exporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
   DataSpace connDataSpace( 1, connDimsf );
   DataSet connDataset = connFile.createDataSet( "Conns", inttype, connDataSpace );
   int connArray[connDimsf[0]];
+  XMLObject topoDataItem("DataItem");
+  topology.addChild(topoDataItem);
+  topoDataItem.addAttribute("ItemType", "Uniform");
+  topoDataItem.addAttribute("Format", "HDF");
+  topoDataItem.addAttribute("NumberType", "Int");
+  topoDataItem.addAttribute("Precision", "4");
+  topoDataItem.addInt("Dimensions", connDimsf[0]);
+  connOut << ":/Conns";
+  topoDataItem.addContent(connOut.str());
 
   // Geometry
   // geometry = grid.GetGeometry();
-  // if (spaceDim < 3)
-  //   geometry->SetGeometryType(XDMF_GEOMETRY_XY);
-  // else if (spaceDim == 3)
-  //   geometry->SetGeometryType(XDMF_GEOMETRY_XYZ);
+  XMLObject geometry("Geometry");
+  grid.addChild(geometry);
+  if (spaceDim < 3)
+    // geometry->SetGeometryType(XDMF_GEOMETRY_XY);
+    geometry.addAttribute("GeometryType", "XY");
+  else if (spaceDim == 3)
+    // geometry->SetGeometryType(XDMF_GEOMETRY_XYZ);
+    geometry.addAttribute("GeometryType", "XYZ");
   // geometry->SetNumberOfPoints(totalPts);
   hsize_t ptDimsf[1];
   // ptArray = geometry->GetPoints();
@@ -277,12 +408,27 @@ void HDF5Exporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
   DataSet ptDataset = ptFile.createDataSet( "Points", doubletype, ptDataSpace );
   double ptArray[ptDimsf[0]];
 
+  XMLObject geoDataItem("DataItem");
+  geometry.addChild(geoDataItem);
+  geoDataItem.addAttribute("ItemType", "Uniform");
+  geoDataItem.addAttribute("Format", "HDF");
+  geoDataItem.addAttribute("NumberType", "Float");
+  geoDataItem.addAttribute("Precision", "8");
+  geoDataItem.addInt("Dimensions", ptDimsf[0]);
+  ptOut << ":/Points";
+  geoDataItem.addContent(ptOut.str());
+
   // Node Data
-  // for (int i=0; i<nFcns; i++)
-  // {
-  //   nodedata[i].SetName(functionNames[i].c_str());
-  //   nodedata[i].SetAttributeCenter(XDMF_ATTRIBUTE_CENTER_NODE);
-  // }
+  vector<XMLObject> vals;
+  for (int i=0; i<nFcns; i++)
+  {
+    // nodedata[i].SetName(functionNames[i].c_str());
+    // nodedata[i].SetAttributeCenter(XDMF_ATTRIBUTE_CENTER_NODE);
+    vals.push_back( XMLObject("Attribute") );
+    grid.addChild(vals[i]);
+    vals[i].addAttribute("Name", functionNames[i].c_str());
+    vals[i].addAttribute("Center", "Node");
+  }
 
   vector<DataSet> valDatasets;
   vector< vector<double> > valArrays;
@@ -298,14 +444,16 @@ void HDF5Exporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
     {
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unhandled function rank");
     }
-    // if (numFcnComponents[i] == 1)
-    // {
-    //   nodedata[i].SetAttributeType(XDMF_ATTRIBUTE_TYPE_SCALAR);
-    // }
-    // else
-    // {
-    //   nodedata[i].SetAttributeType(XDMF_ATTRIBUTE_TYPE_VECTOR);
-    // }
+    if (numFcnComponents[i] == 1)
+    {
+      // nodedata[i].SetAttributeType(XDMF_ATTRIBUTE_TYPE_SCALAR);
+      vals[i].addAttribute("AttributeType", "Scalar");
+    }
+    else
+    {
+      // nodedata[i].SetAttributeType(XDMF_ATTRIBUTE_TYPE_VECTOR);
+      vals[i].addAttribute("AttributeType", "Vector");
+    }
     // valArray[i] = nodedata[i].GetValues();
     // valArray[i]->SetNumberType(XDMF_FLOAT64_TYPE);
     hsize_t valDimsf[1];
@@ -321,6 +469,15 @@ void HDF5Exporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
     }
     valDatasets.push_back( valFiles[i].createDataSet("NodeData", doubletype, DataSpace(1, valDimsf) ) );
     valArrays[i].resize(valDimsf[0], 0);
+    XMLObject valDataItem("DataItem");
+    vals[i].addChild(valDataItem);
+    valDataItem.addAttribute("ItemType", "Uniform");
+    valDataItem.addAttribute("Format", "HDF");
+    valDataItem.addAttribute("NumberType", "Float");
+    valDataItem.addAttribute("Precision", "8");
+    valDataItem.addInt("Dimensions", valDimsf[0]);
+    valOut[i] << ":/NodeData";
+    valDataItem.addContent(valOut[i].str());
   }
 
   int connIndex = 0;
@@ -729,6 +886,8 @@ void HDF5Exporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
   // Write the XML
   // dom.Write((_filename+".xmf").c_str());
 
+  gridFile << grid.toString();
+  gridFile.close();
   cout << "Wrote to " <<  _filename << ".xmf iteration " << timeVal << endl;
 }
 

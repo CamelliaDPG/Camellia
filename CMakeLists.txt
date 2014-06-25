@@ -24,6 +24,7 @@ set(DRIVER_DIR drivers)
 # find_package(XDMF REQUIRED PATHS ${XDMF_PATH}/lib/XdmfCMake)
 # include_directories(${XDMF_INCLUDE_DIRS})
 # link_directories(${XDMF_LIBRARY_DIRS})
+
 find_package(HDF5 REQUIRED NAMES hdf5 PATHS ${HDF5_PATH})
 include_directories(${HDF5_INCLUDE_DIR})
 
@@ -115,6 +116,7 @@ link_libraries(
   Camellia
   ${Trilinos_LIBRARIES}
   ${Trilinos_TPL_LIBRARIES}
+  # Xdmf
   hdf5_cpp
   #  dmumps
   #  mumps_common

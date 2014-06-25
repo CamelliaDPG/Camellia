@@ -237,7 +237,7 @@ int main(int argc, char *argv[])
     solnNames.push_back("u");
     solnNames.push_back("sigma");
     {
-        HDF5Exporter exporter(mesh, "Poisson", false);
+        HDF5Exporter exporter(mesh, "HDF5Poisson", false);
         exporter.exportFunction(solnFunctions, solnNames, 0, 4);
         // exporter.exportFunction(uSoln, "u", 0, 4);
         // exporter.exportFunction(uSoln, "u", 1, 5);

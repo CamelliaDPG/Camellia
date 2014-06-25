@@ -240,10 +240,10 @@ int main(int argc, char *argv[])
     }
     {
         XDMFExporter exporter(meshTopology, "PoissonSolution", false);
-        exporter.exportSolution(solution, mesh, varFactory, 0, 2, cellIDToSubdivision(mesh, 4));
+        exporter.exportSolution(solution, mesh, varFactory, 0, 2, cellIDToSubdivision(mesh, 10));
         refinementStrategy.refine(true);
         solution->solve(false);
-        exporter.exportSolution(solution, mesh, varFactory, 1, 2, cellIDToSubdivision(mesh, 4));
+        exporter.exportSolution(solution, mesh, varFactory, 1, 2, cellIDToSubdivision(mesh, 10));
     }
     // exporter.exportFunction(sigmaSoln, "Poisson-s", "sigma", 0, 5);
     // exporter.exportFunction(uhatSoln, "Poisson-uhat", "uhat", 1, 6);
