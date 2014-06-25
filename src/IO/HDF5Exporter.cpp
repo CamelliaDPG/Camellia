@@ -35,14 +35,6 @@ HDF5Exporter::HDF5Exporter(MeshPtr mesh, string filename, bool deleteOldFiles) :
     _traceGrids.addAttribute("GridType", "Collection");
     _fieldGrids.addAttribute("CollectionType", "Temporal");
     _traceGrids.addAttribute("CollectionType", "Temporal");
-    // for (int p=0; p < numProcs; p++)
-    // {
-    //   XMLObject xiinclude("xi:include");
-    //   topLevelGrid.addChild(xiinclude);
-    //   stringstream partitionFileName;
-    //   partitionFileName << _filename << "Partition" << p << ".xmf";
-    //   xiinclude.addAttribute("href", partitionFileName.str());
-    // }
   }
 
   if (deleteOldFiles)
@@ -64,47 +56,47 @@ HDF5Exporter::~HDF5Exporter()
   }
 }
 
-// void XDMFExporter::exportSolution(SolutionPtr solution, MeshPtr mesh, VarFactory varFactory, double timeVal, unsigned int defaultNum1DPts, map<int, int> cellIDToNum1DPts, set<GlobalIndexType> cellIndices)
-// {
-//   vector<int> fieldTrialIDs = mesh->bilinearForm()->trialVolumeIDs();
-//   vector<int> traceTrialIDs = mesh->bilinearForm()->trialBoundaryIDs();
-//   vector<VarPtr> fieldVars;
-//   vector<VarPtr> traceVars;
+void HDF5Exporter::exportSolution(SolutionPtr solution, VarFactory varFactory, double timeVal, unsigned int defaultNum1DPts, map<int, int> cellIDToNum1DPts, set<GlobalIndexType> cellIndices)
+{
+  vector<int> fieldTrialIDs = _mesh->bilinearForm()->trialVolumeIDs();
+  vector<int> traceTrialIDs = _mesh->bilinearForm()->trialBoundaryIDs();
+  vector<VarPtr> fieldVars;
+  vector<VarPtr> traceVars;
 
-//   vector<FunctionPtr> fieldFunctions;
-//   vector<string> fieldFunctionNames;
-//   for (int i=0; i < fieldTrialIDs.size(); i++)
-//   {
-//     fieldVars.push_back(varFactory.trial(fieldTrialIDs[i]));
-//     FunctionPtr fieldFunction = Function::solution(fieldVars[i], solution);
-//     string fieldFunctionName = fieldVars[i]->name();
-//     fieldFunctions.push_back(fieldFunction);
-//     fieldFunctionNames.push_back(fieldFunctionName);
-//   }
-//   vector<FunctionPtr> traceFunctions;
-//   vector<string> traceFunctionNames;
-//   for (int i=0; i < traceTrialIDs.size(); i++)
-//   {
-//     traceVars.push_back(varFactory.trial(traceTrialIDs[i]));
-//     FunctionPtr traceFunction = Function::solution(traceVars[i], solution);
-//     string traceFunctionName = traceVars[i]->name();
-//     traceFunctions.push_back(traceFunction);
-//     traceFunctionNames.push_back(traceFunctionName);
-//   }
-//   exportFunction(fieldFunctions, fieldFunctionNames, timeVal, defaultNum1DPts, cellIDToNum1DPts, mesh, cellIndices);
-//   exportFunction(traceFunctions, traceFunctionNames, timeVal, defaultNum1DPts, cellIDToNum1DPts, mesh, cellIndices);
-// }
+  vector<FunctionPtr> fieldFunctions;
+  vector<string> fieldFunctionNames;
+  for (int i=0; i < fieldTrialIDs.size(); i++)
+  {
+    fieldVars.push_back(varFactory.trial(fieldTrialIDs[i]));
+    FunctionPtr fieldFunction = Function::solution(fieldVars[i], solution);
+    string fieldFunctionName = fieldVars[i]->name();
+    fieldFunctions.push_back(fieldFunction);
+    fieldFunctionNames.push_back(fieldFunctionName);
+  }
+  vector<FunctionPtr> traceFunctions;
+  vector<string> traceFunctionNames;
+  for (int i=0; i < traceTrialIDs.size(); i++)
+  {
+    traceVars.push_back(varFactory.trial(traceTrialIDs[i]));
+    FunctionPtr traceFunction = Function::solution(traceVars[i], solution);
+    string traceFunctionName = traceVars[i]->name();
+    traceFunctions.push_back(traceFunction);
+    traceFunctionNames.push_back(traceFunctionName);
+  }
+  exportFunction(fieldFunctions, fieldFunctionNames, timeVal, defaultNum1DPts, cellIDToNum1DPts, cellIndices);
+  exportFunction(traceFunctions, traceFunctionNames, timeVal, defaultNum1DPts, cellIDToNum1DPts, cellIndices);
+}
 
-// void XDMFExporter::exportFunction(FunctionPtr function, string functionName, double timeVal, unsigned int defaultNum1DPts, map<int, int> cellIDToNum1DPts, MeshPtr mesh, set<GlobalIndexType> cellIndices)
-// {
-//   vector<FunctionPtr> functions;
-//   functions.push_back(function);
-//   vector<string> functionNames;
-//   functionNames.push_back(functionName);
-//   exportFunction(functions, functionNames, timeVal, defaultNum1DPts, cellIDToNum1DPts, mesh, cellIndices);
-// }
+void HDF5Exporter::exportFunction(FunctionPtr function, string functionName, double timeVal, unsigned int defaultNum1DPts, map<int, int> cellIDToNum1DPts, set<GlobalIndexType> cellIndices)
+{
+  vector<FunctionPtr> functions;
+  functions.push_back(function);
+  vector<string> functionNames;
+  functionNames.push_back(functionName);
+  exportFunction(functions, functionNames, timeVal, defaultNum1DPts, cellIDToNum1DPts, cellIndices);
+}
 
-void HDF5Exporter::exportFunction(vector<FunctionPtr> functions, vector<string> functionNames, double timeVal, unsigned int defaultNum1DPts, map<int, int> cellIDToNum1DPts, MeshPtr mesh, set<GlobalIndexType> cellIndices)
+void HDF5Exporter::exportFunction(vector<FunctionPtr> functions, vector<string> functionNames, double timeVal, unsigned int defaultNum1DPts, map<int, int> cellIDToNum1DPts, set<GlobalIndexType> cellIndices)
 {
   int commRank = Teuchos::GlobalMPISession::getRank();
   int numProcs = Teuchos::GlobalMPISession::getNProc();
@@ -131,7 +123,7 @@ void HDF5Exporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
           XMLObject xiinclude("xi:include");
           partitionCollection.addChild(xiinclude);
           stringstream partitionFileName;
-          partitionFileName << _filename << "Partition" << p << "Time" << timeVal << ".xmf";
+          partitionFileName << _filename << "Field" << "Partition" << p << "Time" << timeVal << ".xmf";
           xiinclude.addAttribute("href", partitionFileName.str());
         }
       }
@@ -155,7 +147,7 @@ void HDF5Exporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
           XMLObject xiinclude("xi:include");
           partitionCollection.addChild(xiinclude);
           stringstream partitionFileName;
-          partitionFileName << _filename << "Partition" << p << "Time" << timeVal << ".xmf";
+          partitionFileName << _filename << "Trace" << "Partition" << p << "Time" << timeVal << ".xmf";
           xiinclude.addAttribute("href", partitionFileName.str());
         }
       }
@@ -165,7 +157,10 @@ void HDF5Exporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
   }
   ofstream gridFile;
   stringstream partitionFileName;
-  partitionFileName << _filename << "Partition" << commRank << "Time" << timeVal << ".xmf";
+  if (!exportingBoundaryValues)
+    partitionFileName << _filename << "Field" << "Partition" << commRank << "Time" << timeVal << ".xmf";
+  else
+    partitionFileName << _filename << "Trace" << "Partition" << commRank << "Time" << timeVal << ".xmf";
   gridFile.open(partitionFileName.str().c_str());
   XMLObject grid("Grid");
   grid.addAttribute("Name", "Grid");
@@ -514,8 +509,7 @@ void HDF5Exporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
       unsigned cellTopoKey = topo.getKey();
       
       BasisCachePtr basisCache = createSideCache ? volumeBasisCache->getSideBasisCache(sideOrdinal) : volumeBasisCache;
-      if (mesh.get())
-        basisCache->setMesh(mesh);
+      basisCache->setMesh(_mesh);
       
       unsigned domainDim = createSideCache ? sideDim : spaceDim;
       

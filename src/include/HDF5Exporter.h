@@ -36,10 +36,10 @@ public:
   HDF5Exporter(MeshPtr mesh, string filename="output", bool deleteOldFiles=false);
   ~HDF5Exporter();
   void exportFunction(FunctionPtr function, string functionName="function", double timeVal=0, 
-    unsigned int defaultNum1DPts=4, map<int, int> cellIDToNum1DPts=map<int,int>(), MeshPtr mesh=Teuchos::rcp((Mesh*)NULL),  set<GlobalIndexType> cellIndices=set<GlobalIndexType>());
+    unsigned int defaultNum1DPts=4, map<int, int> cellIDToNum1DPts=map<int,int>(), set<GlobalIndexType> cellIndices=set<GlobalIndexType>());
   void exportFunction(vector<FunctionPtr> functions, vector<string> functionNames, double timeVal=0, 
-    unsigned int defaultNum1DPts=4, map<int, int> cellIDToNum1DPts=map<int,int>(), MeshPtr mesh=Teuchos::rcp((Mesh*)NULL), set<GlobalIndexType> cellIndices=set<GlobalIndexType>());
-  void exportSolution(SolutionPtr solution, MeshPtr mesh, VarFactory varFactory, double timeVal=0, 
+    unsigned int defaultNum1DPts=4, map<int, int> cellIDToNum1DPts=map<int,int>(), set<GlobalIndexType> cellIndices=set<GlobalIndexType>());
+  void exportSolution(SolutionPtr solution, VarFactory varFactory, double timeVal=0, 
     unsigned int defaultNum1DPts=4, map<int, int> cellIDToNum1DPts=map<int,int>(), set<GlobalIndexType> cellIndices=set<GlobalIndexType>());
 };
 

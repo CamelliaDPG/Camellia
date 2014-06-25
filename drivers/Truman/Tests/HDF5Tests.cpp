@@ -87,18 +87,18 @@ int main(int argc, char *argv[])
     functionNames.push_back("function1");
     functionNames.push_back("function2");
 
-    {
-        // XDMFExporter exporter(meshTopology, "function1", false);
-        // exporter.exportFunction(function, "function1");
-    }
-    {
-        // XDMFExporter exporter(meshTopology, "boundary1", false);
-        // exporter.exportFunction(fbdr, "boundary1");
-    }
-    {
-        // XDMFExporter exporter(meshTopology, "functions1", false);
-        // exporter.exportFunction(functions, functionNames);
-    }
+    // {
+    //     HDF5Exporter exporter(mesh, "function1", false);
+    //     exporter.exportFunction(function, "function1");
+    // }
+    // {
+    //     HDF5Exporter exporter(mesh, "boundary1", false);
+    //     exporter.exportFunction(fbdr, "boundary1");
+    // }
+    // {
+    //     HDF5Exporter exporter(mesh, "functions1", false);
+    //     exporter.exportFunction(functions, functionNames);
+    // }
   }
   {
   // 2D tests
@@ -162,21 +162,6 @@ int main(int argc, char *argv[])
     map<int, int> cellIDToNum1DPts;
     cellIDToNum1DPts[1] = 4;
 
-    {
-        // XDMFExporter exporter(meshTopology, "Grid2D", false);
-        // // exporter.exportFunction(function, "function2", 0, 10);
-        // exporter.exportFunction(vect, "vect2", 1, 10, cellIDToNum1DPts);
-        // exporter.exportFunction(fbdr, "boundary2", 0);
-        // exporter.exportFunction(functions, functionNames, 1, 10);
-    }
-    {
-        // XDMFExporter exporter(meshTopology, "BdrGrid2D", false);
-        // exporter.exportFunction(function, "function2", 0, 10);
-        // exporter.exportFunction(vect, "vect2", 1, 10, cellIDToNum1DPts);
-        // exporter.exportFunction(fbdr, "boundary2", 0);
-        // exporter.exportFunction(bdrfunctions, bdrfunctionNames, 1, 10);
-    }
-
     ////////////////////   DECLARE VARIABLES   ///////////////////////
     // define test variables
     VarFactory varFactory;
@@ -237,8 +222,8 @@ int main(int argc, char *argv[])
     solnNames.push_back("u");
     solnNames.push_back("sigma");
     {
-        HDF5Exporter exporter(mesh, "HDF5Poisson", false);
-        exporter.exportFunction(solnFunctions, solnNames, 0, 4);
+        // HDF5Exporter exporter(mesh, "HDF5Poisson", false);
+        // exporter.exportFunction(solnFunctions, solnNames, 0, 4);
         // exporter.exportFunction(uSoln, "u", 0, 4);
         // exporter.exportFunction(uSoln, "u", 1, 5);
         // exporter.exportFunction(uhatSoln, "uhat", 0, 4);
@@ -247,14 +232,29 @@ int main(int argc, char *argv[])
         // exporter.exportFunction(fhatSoln, "fhat", 1, 5);
     }
     {
-        // XDMFExporter exporter(meshTopology, "PoissonSolution", false);
-        // exporter.exportSolution(solution, mesh, varFactory, 0, 2, cellIDToSubdivision(mesh, 4));
-        // refinementStrategy.refine(true);
-        // solution->solve(false);
-        // exporter.exportSolution(solution, mesh, varFactory, 1, 2, cellIDToSubdivision(mesh, 4));
+        HDF5Exporter exporter(mesh, "HDF5PoissonSolution", false);
+        exporter.exportSolution(solution, varFactory, 0, 2, cellIDToSubdivision(mesh, 4));
+        refinementStrategy.refine(true);
+        solution->solve(false);
+        exporter.exportSolution(solution, varFactory, 1, 2, cellIDToSubdivision(mesh, 4));
     }
     // exporter.exportFunction(sigmaSoln, "Poisson-s", "sigma", 0, 5);
     // exporter.exportFunction(uhatSoln, "Poisson-uhat", "uhat", 1, 6);
+
+    {
+        HDF5Exporter exporter(mesh, "Grid2D", false);
+        // exporter.exportFunction(function, "function2", 0, 10);
+        exporter.exportFunction(vect, "vect2", 1, 10, cellIDToNum1DPts);
+        exporter.exportFunction(fbdr, "boundary2", 0);
+        exporter.exportFunction(functions, functionNames, 1, 10);
+    }
+    {
+        HDF5Exporter exporter(mesh, "BdrGrid2D", false);
+        exporter.exportFunction(function, "function2", 0, 10);
+        exporter.exportFunction(vect, "vect2", 1, 10, cellIDToNum1DPts);
+        exporter.exportFunction(fbdr, "boundary2", 0);
+        exporter.exportFunction(bdrfunctions, bdrfunctionNames, 1, 10);
+    }
 }
 
   {
@@ -320,21 +320,21 @@ int main(int argc, char *argv[])
     functionNames.push_back("function");
     functionNames.push_back("vect");
 
-    {
-        // XDMFExporter exporter(meshTopology, "function3", false);
-        // exporter.exportFunction(function, "function3");
-    }
-    {
-        // XDMFExporter exporter(meshTopology, "boundary3", false);
-        // exporter.exportFunction(fbdr, "boundary3");
-    }
-    {
-        // XDMFExporter exporter(meshTopology, "vect3", false);
-        // exporter.exportFunction(vect, "vect3");
-    }
-    {
-        // XDMFExporter exporter(meshTopology, "functions3", false);
-        // exporter.exportFunction(functions, functionNames);
-    }
+    // {
+    //     HDF5Exporter exporter(mesh, "function3", false);
+    //     exporter.exportFunction(function, "function3");
+    // }
+    // {
+    //     HDF5Exporter exporter(mesh, "boundary3", false);
+    //     exporter.exportFunction(fbdr, "boundary3");
+    // }
+    // {
+    //     HDF5Exporter exporter(mesh, "vect3", false);
+    //     exporter.exportFunction(vect, "vect3");
+    // }
+    // {
+    //     HDF5Exporter exporter(mesh, "functions3", false);
+    //     exporter.exportFunction(functions, functionNames);
+    // }
   }
 }
