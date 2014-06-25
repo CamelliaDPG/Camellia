@@ -168,23 +168,10 @@ void HDF5Exporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
 
   int nFcns = functions.size();
 
-  // XdmfGrid        grid;
-  // XdmfTime        time;
-  // XdmfTopology    *topology;
-  // XdmfGeometry    *geometry;
-  // XdmfAttribute   nodedata[nFcns];
-  // XdmfAttribute   celldata;
-  // XdmfArray       *ptArray;
-  // XdmfArray       *connArray;
-  // XdmfArray       *valArray[nFcns];
   if (defaultNum1DPts < 2)
     defaultNum1DPts = 2;
 
   int spaceDim = _mesh->getTopology()->getSpaceDim();
-
-  // time.SetTimeType(XDMF_TIME_SINGLE);
-  // time.SetValue(timeVal);
-  // grid.Insert(&time);
 
   for (int i=0; i < nFcns; i++)
     if (exportingBoundaryValues != functions[i]->boundaryValueOnly())
@@ -195,15 +182,11 @@ void HDF5Exporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
   {
     connOut << "HDF5/" << _filename << "-rank" << commRank << "-time" << timeVal << "-field-conns" << ".h5";
     ptOut << "HDF5/" << _filename << "-rank" << commRank << "-time" << timeVal << "-field-pts" << ".h5";
-    // grid.SetName("Field Grid");
-    // fieldTemporalCollection.Insert(&grid);
   }
   else
   {
     connOut << "HDF5/" << _filename << "-rank" << commRank << "-time" << timeVal << "-trace-conns" << ".h5";
     ptOut << "HDF5/" << _filename << "-rank" << commRank << "-time" << timeVal << "-trace-pts" << ".h5";
-    // grid.SetName("Trace Grid");
-    // traceTemporalCollection.Insert(&grid);
   }
   H5File connFile( connOut.str(), H5F_ACC_TRUNC );
   H5File ptFile( ptOut.str(), H5F_ACC_TRUNC );
@@ -317,54 +300,41 @@ void HDF5Exporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
   totalSubcells = totalBoundaryPts + totalSubLines + totalSubTriangles + totalSubQuads + totalSubHexas;
 
   // Topology
-  // topology = grid.GetTopology();
-  // topology->SetTopologyType(XDMF_MIXED);
   XMLObject topology("Topology");
   grid.addChild(topology);
   topology.addAttribute("TopologyType", "Mixed");
   if (!exportingBoundaryValues)
   {
     if (spaceDim == 1)
-      // topology->SetNumberOfElements(numLines);
       topology.addInt("Dimensions", numLines);
     else
-      // topology->SetNumberOfElements(totalSubcells);
       topology.addInt("Dimensions", totalSubcells);
   }
   else
   {
     if (spaceDim == 1)
-      // topology->SetNumberOfElements(totalBoundaryPts);
       topology.addInt("Dimensions", totalBoundaryPts);
     else if (spaceDim == 2)
-      // topology->SetNumberOfElements(totalBoundaryLines);
       topology.addInt("Dimensions", totalBoundaryLines);
     else if (spaceDim == 3)
-      // topology->SetNumberOfElements(totalSubQuads);
       topology.addInt("Dimensions", totalSubQuads);
   }
-  // connArray = topology->GetConnectivity();
   hsize_t connDimsf[1];
   if (!exportingBoundaryValues)
   {
     if (spaceDim == 1)
       connDimsf[0] = 2*numLines+totalPts;
-      // connArray->SetNumberOfElements(2*numLines+totalPts);
     else
       connDimsf[0] = totalSubcells + 3*totalSubTriangles + 4*totalSubQuads + 8*totalSubHexas;
-      // connArray->SetNumberOfElements(totalSubcells + 3*totalSubTriangles + 4*totalSubQuads + 8*totalSubHexas);
   }
   else
   {
     if (spaceDim == 1)
       connDimsf[0] = 3*totalBoundaryPts;
-      // connArray->SetNumberOfElements(3*totalBoundaryPts);
     if (spaceDim == 2)
       connDimsf[0] = 2*totalBoundaryLines + totalPts;
-      // connArray->SetNumberOfElements(2*totalBoundaryLines + totalPts);
     if (spaceDim == 3)
       connDimsf[0] = 5*totalSubQuads;
-      // connArray->SetNumberOfElements(5*totalSubQuads);
   }
   DataSpace connDataSpace( 1, connDimsf );
   DataSet connDataset = connFile.createDataSet( "Conns", inttype, connDataSpace );
@@ -380,25 +350,17 @@ void HDF5Exporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
   topoDataItem.addContent(connOut.str());
 
   // Geometry
-  // geometry = grid.GetGeometry();
   XMLObject geometry("Geometry");
   grid.addChild(geometry);
   if (spaceDim < 3)
-    // geometry->SetGeometryType(XDMF_GEOMETRY_XY);
     geometry.addAttribute("GeometryType", "XY");
   else if (spaceDim == 3)
-    // geometry->SetGeometryType(XDMF_GEOMETRY_XYZ);
     geometry.addAttribute("GeometryType", "XYZ");
-  // geometry->SetNumberOfPoints(totalPts);
   hsize_t ptDimsf[1];
-  // ptArray = geometry->GetPoints();
-  // ptArray->SetNumberType(XDMF_FLOAT64_TYPE);
   if (spaceDim == 1)
     ptDimsf[0] = 2 * totalPts;
-    // ptArray->SetNumberOfElements(2 * totalPts);
   else
     ptDimsf[0] = spaceDim * totalPts;
-    // ptArray->SetNumberOfElements(spaceDim * totalPts);
   DataSpace ptDataSpace( 1, ptDimsf );
   DataSet ptDataset = ptFile.createDataSet( "Points", doubletype, ptDataSpace );
   double ptArray[ptDimsf[0]];
@@ -417,8 +379,6 @@ void HDF5Exporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
   vector<XMLObject> vals;
   for (int i=0; i<nFcns; i++)
   {
-    // nodedata[i].SetName(functionNames[i].c_str());
-    // nodedata[i].SetAttributeCenter(XDMF_ATTRIBUTE_CENTER_NODE);
     vals.push_back( XMLObject("Attribute") );
     grid.addChild(vals[i]);
     vals[i].addAttribute("Name", functionNames[i].c_str());
@@ -441,26 +401,20 @@ void HDF5Exporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
     }
     if (numFcnComponents[i] == 1)
     {
-      // nodedata[i].SetAttributeType(XDMF_ATTRIBUTE_TYPE_SCALAR);
       vals[i].addAttribute("AttributeType", "Scalar");
     }
     else
     {
-      // nodedata[i].SetAttributeType(XDMF_ATTRIBUTE_TYPE_VECTOR);
       vals[i].addAttribute("AttributeType", "Vector");
     }
-    // valArray[i] = nodedata[i].GetValues();
-    // valArray[i]->SetNumberType(XDMF_FLOAT64_TYPE);
     hsize_t valDimsf[1];
     if (numFcnComponents[i] == 1)
     {
       valDimsf[0] = totalPts;
-      // valArray[i]->SetNumberOfElements(totalPts);
     }
     else
     {
       valDimsf[0] = 3*totalPts;
-      // valArray[i]->SetNumberOfElements(3*totalPts);
     }
     valDatasets.push_back( valFiles[i].createDataSet("NodeData", doubletype, DataSpace(1, valDimsf) ) );
     valArrays[i].resize(valDimsf[0], 0);
@@ -610,30 +564,24 @@ void HDF5Exporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
       {
         case shards::Node::key:
         {
-          // connArray->SetValue(connIndex, 1);
           connArray[connIndex] = 1;
           connIndex++;
-          // connArray->SetValue(connIndex, 1);
           connArray[connIndex] = 1;
           connIndex++;
           int ind1 = total_vertices;
-          // connArray->SetValue(connIndex, ind1);
           connArray[connIndex] = ind1;
           connIndex++;
         }
         break;
         case shards::Line<2>::key:
         {
-          // connArray->SetValue(connIndex, 2);
           connArray[connIndex] = 2;
           connIndex++;
-          // connArray->SetValue(connIndex, num1DPts);
           connArray[connIndex] = num1DPts;
           connIndex++;
           for (int i=0; i < num1DPts; i++)
           {
             int ind1 = total_vertices + i;
-            // connArray->SetValue(connIndex, ind1);
             connArray[connIndex] = ind1;
             connIndex++;
           }
@@ -649,19 +597,14 @@ void HDF5Exporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
               int ind2 = ind1 + 1;
               int ind3 = ind2 + num1DPts;
               int ind4 = ind1 + num1DPts;
-              // connArray->SetValue(connIndex, 5);
               connArray[connIndex] = 5;
               connIndex++;
-              // connArray->SetValue(connIndex, ind1);
               connArray[connIndex] = ind1;
               connIndex++;
-              // connArray->SetValue(connIndex, ind2);
               connArray[connIndex] = ind2;
               connIndex++;
-              // connArray->SetValue(connIndex, ind3);
               connArray[connIndex] = ind3;
               connIndex++;
-              // connArray->SetValue(connIndex, ind4);
               connArray[connIndex] = ind4;
               connIndex++;
             }
@@ -677,16 +620,12 @@ void HDF5Exporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
               int ind1 = subcellStartIndex;
               int ind2 = ind1 + 1;
               int ind3 = ind1 + num1DPts-j;
-              // connArray->SetValue(connIndex, 4);
               connArray[connIndex] = 4;
               connIndex++;
-              // connArray->SetValue(connIndex, ind1);
               connArray[connIndex] = ind1;
               connIndex++;
-              // connArray->SetValue(connIndex, ind2);
               connArray[connIndex] = ind2;
               connIndex++;
-              // connArray->SetValue(connIndex, ind3);
               connArray[connIndex] = ind3;
               connIndex++;
 
@@ -695,16 +634,12 @@ void HDF5Exporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
                 int ind1 = subcellStartIndex+1;
                 int ind2 = ind1 + num1DPts - j;
                 int ind3 = ind1 + num1DPts -j - 1;
-                // connArray->SetValue(connIndex, 4);
                 connArray[connIndex] = 4;
                 connIndex++;
-                // connArray->SetValue(connIndex, ind1);
                 connArray[connIndex] = ind1;
                 connIndex++;
-                // connArray->SetValue(connIndex, ind2);
                 connArray[connIndex] = ind2;
                 connIndex++;
-                // connArray->SetValue(connIndex, ind3);
                 connArray[connIndex] = ind3;
                 connIndex++;
               }
@@ -731,31 +666,22 @@ void HDF5Exporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
                 int ind6 = ind5 + 1;
                 int ind7 = ind6 + num1DPts;
                 int ind8 = ind5 + num1DPts;
-                // connArray->SetValue(connIndex, 9);
                 connArray[connIndex] = 9;
                 connIndex++;
-                // connArray->SetValue(connIndex, ind1);
                 connArray[connIndex] = ind1;
                 connIndex++;
-                // connArray->SetValue(connIndex, ind2);
                 connArray[connIndex] = ind2;
                 connIndex++;
-                // connArray->SetValue(connIndex, ind3);
                 connArray[connIndex] = ind3;
                 connIndex++;
-                // connArray->SetValue(connIndex, ind4);
                 connArray[connIndex] = ind4;
                 connIndex++;
-                // connArray->SetValue(connIndex, ind5);
                 connArray[connIndex] = ind5;
                 connIndex++;
-                // connArray->SetValue(connIndex, ind6);
                 connArray[connIndex] = ind6;
                 connIndex++;
-                // connArray->SetValue(connIndex, ind7);
                 connArray[connIndex] = ind7;
                 connIndex++;
-                // connArray->SetValue(connIndex, ind8);
                 connArray[connIndex] = ind8;
                 connIndex++;
               }
@@ -770,37 +696,30 @@ void HDF5Exporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
       {
         if (spaceDim == 1) 
         {
-          // ptArray->SetValue(ptIndex, (*physicalPoints)(0, pointIndex, 0));
           ptArray[ptIndex] = (*physicalPoints)(0, pointIndex, 0);
           ptIndex++;
-          // ptArray->SetValue(ptIndex, 0);
           ptArray[ptIndex] = 0;
           ptIndex++;
         }
         else if (spaceDim == 2)
         {
-          // ptArray->SetValue(ptIndex, (*physicalPoints)(0, pointIndex, 0));
           ptArray[ptIndex] = (*physicalPoints)(0, pointIndex, 0);
           ptIndex++;
-          // ptArray->SetValue(ptIndex, (*physicalPoints)(0, pointIndex, 1));
           ptArray[ptIndex] = (*physicalPoints)(0, pointIndex, 1);
           ptIndex++;
         }
         else
         {
-          // ptArray->SetValue(ptIndex, (*physicalPoints)(0, pointIndex, 0));
           ptArray[ptIndex] = (*physicalPoints)(0, pointIndex, 0);
           ptIndex++;
-          // ptArray->SetValue(ptIndex, (*physicalPoints)(0, pointIndex, 1));
           ptArray[ptIndex] = (*physicalPoints)(0, pointIndex, 1);
           ptIndex++;
-          // ptArray->SetValue(ptIndex, (*physicalPoints)(0, pointIndex, 2));
           ptArray[ptIndex] = (*physicalPoints)(0, pointIndex, 2);
           ptIndex++;
         }
         for (int i = 0; i < nFcns; i++)
         {
-        // Function Values
+          // Function Values
           FieldContainer<double> computedValues;
           if (functions[i]->rank() == 0)
             computedValues.resize(1, numPoints);
@@ -814,29 +733,22 @@ void HDF5Exporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
           switch(numFcnComponents[i])
           {
             case 1:
-            // valArray[i]->SetValue(valIndex[i], computedValues(0, pointIndex));
             valArrays[i][valIndex[i]] = computedValues(0, pointIndex);
             valIndex[i]++;
             break;
             case 2:
-            // valArray[i]->SetValue(valIndex[i], computedValues(0, pointIndex, 0));
             valArrays[i][valIndex[i]] = computedValues(0, pointIndex, 0);
             valIndex[i]++;
-            // valArray[i]->SetValue(valIndex[i], computedValues(0, pointIndex, 1));
             valArrays[i][valIndex[i]] = computedValues(0, pointIndex, 1);
             valIndex[i]++;
-            // valArray[i]->SetValue(valIndex[i], 0);
             valArrays[i][valIndex[i]] = 0;
             valIndex[i]++;
             break;
             case 3:
-            // valArray[i]->SetValue(valIndex[i], computedValues(0, pointIndex, 0));
             valArrays[i][valIndex[i]] = computedValues(0, pointIndex, 0);
             valIndex[i]++;
-            // valArray[i]->SetValue(valIndex[i], computedValues(0, pointIndex, 1));
             valArrays[i][valIndex[i]] = computedValues(0, pointIndex, 1);
             valIndex[i]++;
-            // valArray[i]->SetValue(valIndex[i], computedValues(0, pointIndex, 2));
             valArrays[i][valIndex[i]] = computedValues(0, pointIndex, 2);
             valIndex[i]++;
             break;
@@ -848,41 +760,13 @@ void HDF5Exporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
       }
     }
   }
-  if (!exportingBoundaryValues)
-  {
-    // stringstream connOut, ptOut;
-    // connOut << "HDF5/" << _filename << timeVal << "-field.h5:/Conns";
-    // ptOut << "HDF5/" << _filename << timeVal << "-field.h5:/Points";
-    // connArray->SetHeavyDataSetName(connOut.str().c_str());
-    // ptArray->SetHeavyDataSetName(ptOut.str().c_str());
-  }
-  else
-  {
-    // stringstream connOut, ptOut;
-    // connOut << "HDF5/" << _filename << timeVal << "-trace.h5:/Conns";
-    // ptOut << "HDF5/" << _filename << timeVal << "-trace.h5:/Points";
-    // connArray->SetHeavyDataSetName(connOut.str().c_str());
-    // ptArray->SetHeavyDataSetName(ptOut.str().c_str());
-  }
   connDataset.write( connArray, PredType::NATIVE_INT );
   ptDataset.write( ptArray, PredType::NATIVE_DOUBLE );
   for (int i = 0; i < nFcns; i++)
-  {
     valDatasets[i].write( &valArrays[i][0], PredType::NATIVE_DOUBLE );
-    // stringstream nodeOut;
-    // nodeOut << "HDF5/" << _filename << timeVal << "-" << functionNames[i] << ".h5:/NodeData";
-    // valArray[i]->SetHeavyDataSetName(nodeOut.str().c_str());
-    // // Attach and Write
-    // grid.Insert(&nodedata[i]);
-  }
-  // This updates the DOM and writes the HDF5
-  // root.Build();
-  // Write the XML
-  // dom.Write((_filename+".xmf").c_str());
 
   gridFile << grid.toString();
   gridFile.close();
-  cout << "Wrote to " <<  _filename << ".xmf iteration " << timeVal << endl;
 }
 
 map<int,int> cellIDToSubdivision(MeshPtr mesh, unsigned int subdivisionFactor, set<GlobalIndexType> cellIndices)

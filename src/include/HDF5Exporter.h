@@ -30,8 +30,6 @@ private:
   XMLObject _traceGrids;
   set<double> _fieldTimeVals;
   set<double> _traceTimeVals;
-  // SolutionPtr _solution;
-  // VarFactory& _varFactory;
 public:
   HDF5Exporter(MeshPtr mesh, string filename="output", bool deleteOldFiles=false);
   ~HDF5Exporter();
