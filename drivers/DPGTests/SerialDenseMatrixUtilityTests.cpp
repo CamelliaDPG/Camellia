@@ -219,27 +219,27 @@ bool SerialDenseMatrixUtilityTests::testSolveMultipleRHS() {
   
   // A = [ 1 1 ]
   //     [ 0 1 ]
-  // x = [ 3 ]
-  //     [ 4 ]
-  // b = [ 7 ]
-  //     [ 4 ]
+  // x = [ 3 1 5 ]
+  //     [ 4 2 6 ]
+  // b = [ 7 3 11 ]
+  //     [ 4 2  6 ]
   A(0,0) = 1.0;
   A(0,1) = 1.0;
   A(1,0) = 0.0;
   A(1,1) = 1.0;
   expected_x(0,0) = 3.0;
   expected_x(1,0) = 4.0;
-  expected_x(0,1) = 3.0;
-  expected_x(1,1) = 4.0;
-  expected_x(0,2) = 3.0;
-  expected_x(1,2) = 4.0;
+  expected_x(0,1) = 1.0;
+  expected_x(1,1) = 2.0;
+  expected_x(0,2) = 5.0;
+  expected_x(1,2) = 6.0;
 
   b(0,0) = 7.0;
   b(1,0) = 4.0;
-  b(0,1) = 7.0;
-  b(1,1) = 4.0;
-  b(0,2) = 7.0;
-  b(1,2) = 4.0;
+  b(0,1) = 3.0;
+  b(1,1) = 2.0;
+  b(0,2) = 11.0;
+  b(1,2) = 6.0;
 
   SerialDenseWrapper::solveSystemMultipleRHS(x, A, b);
   
