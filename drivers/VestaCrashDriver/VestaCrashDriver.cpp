@@ -1,8 +1,36 @@
 #include <iostream>
 
+#include <map>
+#include <vector>
+
 using namespace std;
 
 int Sort_ints_( int *vals_sort,     //  values to be sorted
+               int *vals_other,    // other array to be reordered with sort
+               int  nvals)         // length of these two arrays
+{
+  // a somewhat less efficient, but easy to write, reimplementation, which I hope will
+  // work around a bug in the bgclang compiler
+  if (nvals <= 1) return 0;
+  
+  map<int, vector<int> > sorter;
+  for (int i=0; i<nvals; i++) {
+    sorter[vals_sort[i]].push_back(vals_other[i]);
+  }
+  
+  int i=0;
+  for (map<int, vector<int> >::iterator sortIt = sorter.begin(); sortIt != sorter.end(); sortIt++) {
+    for (vector<int>::iterator otherValIt = sortIt->second.begin(); otherValIt != sortIt->second.end(); otherValIt++) {
+      vals_sort[i] = sortIt->first;
+      vals_other[i] = *otherValIt;
+      i++;
+    }
+  }
+  
+  return 0;
+}
+
+int Old_Sort_ints_( int *vals_sort,     //  values to be sorted
                 int *vals_other,    // other array to be reordered with sort
                 int  nvals)         // length of these two arrays
 {
