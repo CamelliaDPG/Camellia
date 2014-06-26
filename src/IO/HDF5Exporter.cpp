@@ -176,32 +176,18 @@ void HDF5Exporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
     if (exportingBoundaryValues != functions[i]->boundaryValueOnly())
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Can not export trace and field variables together");
 
-  stringstream connOutRel, connOutFull, ptOutRel, ptOutFull;
+  stringstream h5OutRel, h5OutFull, connOutRel2, connOutFull2;//, ptOutRel, ptOutFull;
   if (!exportingBoundaryValues)
   {
-    connOutRel << "HDF5/" << "field-conns" << "-part" << commRank << "-time" << timeVal << ".h5";
-    connOutFull << _filename << "/" << connOutRel.str();
-    ptOutRel << "HDF5/" << "field-pts" << "-part" << commRank << "-time" << timeVal << ".h5";
-    ptOutFull << _filename << "/" << ptOutRel.str();
+    h5OutRel << "HDF5/" << "field-part" << commRank << "-time" << timeVal << ".h5";
+    h5OutFull << _filename << "/" << h5OutRel.str();
   }
   else
   {
-    connOutRel << "HDF5/" << "trace-conns" << "-part" << commRank << "-time" << timeVal << ".h5";
-    connOutFull << _filename << "/" << connOutRel.str();
-    ptOutRel << "HDF5/" << "trace-pts" << "-part" << commRank << "-time" << timeVal << ".h5";
-    ptOutFull << _filename << "/" << ptOutRel.str();
+    h5OutRel << "HDF5/" << "trace-part" << commRank << "-time" << timeVal << ".h5";
+    h5OutFull << _filename << "/" << h5OutRel.str();
   }
-  H5File connFile( connOutFull.str(), H5F_ACC_TRUNC );
-  H5File ptFile( ptOutFull.str(), H5F_ACC_TRUNC );
-  vector<H5File> valFiles;
-  stringstream valOutRel[nFcns];
-  stringstream valOutFull[nFcns];
-  for (int i=0; i < nFcns; i++)
-  {
-    valOutRel[i] << "HDF5/" << functionNames[i] << "-part" << commRank << "-time" << timeVal << ".h5";
-    valOutFull[i] << _filename << "/" << valOutRel[i].str();
-    valFiles.push_back( H5File(valOutFull[i].str(), H5F_ACC_TRUNC) );
-  }
+  H5File h5File( h5OutFull.str(), H5F_ACC_TRUNC );
 
   FloatType doubletype( PredType::NATIVE_DOUBLE );
   IntType inttype( PredType::NATIVE_INT );
@@ -342,7 +328,7 @@ void HDF5Exporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
       connDimsf[0] = 5*totalSubQuads;
   }
   DataSpace connDataSpace( 1, connDimsf );
-  DataSet connDataset = connFile.createDataSet( "Conns", inttype, connDataSpace );
+  DataSet connDataset = h5File.createDataSet( "Conns", inttype, connDataSpace );
   int connArray[connDimsf[0]];
   XMLObject topoDataItem("DataItem");
   topology.addChild(topoDataItem);
@@ -351,7 +337,8 @@ void HDF5Exporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
   topoDataItem.addAttribute("NumberType", "Int");
   topoDataItem.addAttribute("Precision", "4");
   topoDataItem.addInt("Dimensions", connDimsf[0]);
-  connOutRel << ":/Conns";
+  stringstream connOutRel;
+  connOutRel << h5OutRel.str() << ":/Conns";
   topoDataItem.addContent(connOutRel.str());
 
   // Geometry
@@ -367,7 +354,7 @@ void HDF5Exporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
   else
     ptDimsf[0] = spaceDim * totalPts;
   DataSpace ptDataSpace( 1, ptDimsf );
-  DataSet ptDataset = ptFile.createDataSet( "Points", doubletype, ptDataSpace );
+  DataSet ptDataset = h5File.createDataSet( "Points", doubletype, ptDataSpace );
   double ptArray[ptDimsf[0]];
 
   XMLObject geoDataItem("DataItem");
@@ -377,7 +364,8 @@ void HDF5Exporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
   geoDataItem.addAttribute("NumberType", "Float");
   geoDataItem.addAttribute("Precision", "8");
   geoDataItem.addInt("Dimensions", ptDimsf[0]);
-  ptOutRel << ":/Points";
+  stringstream ptOutRel;
+  ptOutRel << h5OutRel.str() << ":/Points";
   geoDataItem.addContent(ptOutRel.str());
 
   // Node Data
@@ -421,7 +409,7 @@ void HDF5Exporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
     {
       valDimsf[0] = 3*totalPts;
     }
-    valDatasets.push_back( valFiles[i].createDataSet("NodeData", doubletype, DataSpace(1, valDimsf) ) );
+    valDatasets.push_back( h5File.createDataSet(functionNames[i], doubletype, DataSpace(1, valDimsf) ) );
     valArrays[i].resize(valDimsf[0], 0);
     XMLObject valDataItem("DataItem");
     vals[i].addChild(valDataItem);
@@ -430,8 +418,9 @@ void HDF5Exporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
     valDataItem.addAttribute("NumberType", "Float");
     valDataItem.addAttribute("Precision", "8");
     valDataItem.addInt("Dimensions", valDimsf[0]);
-    valOutRel[i] << ":/NodeData";
-    valDataItem.addContent(valOutRel[i].str());
+    stringstream valOutRel;
+    valOutRel << h5OutRel.str() << ":/" << functionNames[i];
+    valDataItem.addContent(valOutRel.str());
   }
 
   int connIndex = 0;
@@ -769,6 +758,7 @@ void HDF5Exporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
   ptDataset.write( ptArray, PredType::NATIVE_DOUBLE );
   for (int i = 0; i < nFcns; i++)
     valDatasets[i].write( &valArrays[i][0], PredType::NATIVE_DOUBLE );
+  h5File.close();
 
   gridFile << grid.toString();
   gridFile.close();
