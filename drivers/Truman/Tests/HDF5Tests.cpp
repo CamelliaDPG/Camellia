@@ -221,6 +221,8 @@ int main(int argc, char *argv[])
     vector<string> solnNames;
     solnNames.push_back("u");
     solnNames.push_back("sigma");
+    // set<GlobalIndexType> cellIndices;
+    // cellIndices.insert(0);
     {
         // HDF5Exporter exporter(mesh, "HDF5Poisson", false);
         // exporter.exportFunction(solnFunctions, solnNames, 0, 4);
