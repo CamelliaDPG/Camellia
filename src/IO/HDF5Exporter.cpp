@@ -758,6 +758,7 @@ void HDF5Exporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
   ptDataset.write( ptArray, PredType::NATIVE_DOUBLE );
   for (int i = 0; i < nFcns; i++)
     valDatasets[i].write( &valArrays[i][0], PredType::NATIVE_DOUBLE );
+  h5File.close();
 
   gridFile << grid.toString();
   gridFile.close();
