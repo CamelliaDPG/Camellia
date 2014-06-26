@@ -806,7 +806,7 @@ bool GDAMinimumRuleTests::checkLocalGlobalConsistency(MeshPtr mesh) {
     globalCoefficientsVector[i] = globalCoefficients(i);
   }
   
-  double tol=1e-6; // for hanging nodes, it seems like this needs to be fairly high...
+  double tol=1e-10; // for hanging nodes, it seems like this needs to be fairly high...
   
   cellIDs = mesh->getActiveCellIDs();
   for (set<GlobalIndexType>::iterator cellIDIt = cellIDs.begin(); cellIDIt != cellIDs.end(); cellIDIt++) {

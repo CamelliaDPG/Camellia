@@ -47,7 +47,7 @@ void NewVTKExporter::exportFunction(FunctionPtr function, string functionName, s
     int numPoints = 0;
     int pOrder = 4;
     if (defaultPts)
-      num1DPts = pOrder + 1;
+      num1DPts = 2 * pOrder + 1;
     
     if (physicalCellNodes.rank() == 2)
       physicalCellNodes.resize(1,physicalCellNodes.dimension(0), physicalCellNodes.dimension(1));
