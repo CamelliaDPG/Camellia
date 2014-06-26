@@ -31,6 +31,7 @@ public:
   vector<GlobalIndexType> mappedGlobalDofOrdinals();
   
   const FieldContainer<double> &constraintMatrix();
+  FieldContainer<double> getConstraintMatrix();
 };
 
 #endif /* defined(__Camellia_debug__SubBasisDofMatrixMapper__) */

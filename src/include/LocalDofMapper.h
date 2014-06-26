@@ -15,6 +15,8 @@
 #include "SubBasisDofMapper.h"
 #include "IndexType.h"
 
+#include <Epetra_CrsMatrix.h>
+
 class LocalDofMapper { // maps a whole trial ordering
   DofOrderingPtr _dofOrdering;
   typedef vector< SubBasisDofMapperPtr > BasisMap; // taken together, these maps map a whole basis
@@ -34,6 +36,7 @@ class LocalDofMapper { // maps a whole trial ordering
   void addReverseSubBasisMapVectorContribution(int varID, int sideOrdinal, BasisMap basisMap, const FieldContainer<double> &globalData, FieldContainer<double> &localData);
 //  void addReverseSubBasisMapMatrixContribution(int varID, int sideOrdinal, BasisMap basisMap, const FieldContainer<double> &globalData, FieldContainer<double> &localData);
   FieldContainer<double> mapLocalDataMatrix(const FieldContainer<double> &localData, bool fittableGlobalDofsOnly);
+  
 public:
   LocalDofMapper(DofOrderingPtr dofOrdering, map< int, BasisMap > volumeMaps,
                  set<GlobalIndexType> fittableGlobalDofOrdinalsInVolume,

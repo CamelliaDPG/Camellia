@@ -17,17 +17,17 @@ SubBasisDofMapperPtr SubBasisDofMapper::subBasisDofMapper(const set<unsigned> &d
   }
   
   // since the permutation mapper isn't quite ready for prime time (constraint transposition not yet supported), we make a simple matrix-based mapper instead
-//  return Teuchos::rcp(new SubBasisDofPermutationMapper(dofOrdinalFilter, globalDofOrdinals));
-  int n = dofOrdinalFilter.size();
-  FieldContainer<double> identityMatrix(n,n);
-  for (int i=0; i<n; i++) {
-    identityMatrix(i,i) = 1.0;
-  }
-  return subBasisDofMapper(dofOrdinalFilter, globalDofOrdinals, identityMatrix);
+  return Teuchos::rcp(new SubBasisDofPermutationMapper(dofOrdinalFilter, globalDofOrdinals));
+//  int n = dofOrdinalFilter.size();
+//  FieldContainer<double> identityMatrix(n,n);
+//  for (int i=0; i<n; i++) {
+//    identityMatrix(i,i) = 1.0;
+//  }
+//  return subBasisDofMapper(dofOrdinalFilter, globalDofOrdinals, identityMatrix);
 }
 
 SubBasisDofMapperPtr SubBasisDofMapper::subBasisDofMapper(const set<unsigned> &dofOrdinalFilter, const vector<GlobalIndexType> &globalDofOrdinals, const FieldContainer<double> &constraintMatrix) {
-  bool checkForPermutation = false;
+  bool checkForPermutation = true;
   
   if (checkForPermutation) {
     // check the constraint matrix to see if it's a permutation

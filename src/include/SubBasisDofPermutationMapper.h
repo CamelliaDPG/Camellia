@@ -14,11 +14,13 @@
 class SubBasisDofPermutationMapper : public SubBasisDofMapper {
   set<unsigned> _basisDofOrdinalFilter;
   vector<GlobalIndexType> _globalDofOrdinals;
+  vector<int> _inversePermutation;
 public:
   SubBasisDofPermutationMapper(const set<unsigned> &basisDofOrdinalFilter, const vector<GlobalIndexType> &globalDofOrdinals);
   const set<unsigned> &basisDofOrdinalFilter();
   FieldContainer<double> mapData(bool transposeConstraint, FieldContainer<double> &localData);
   vector<GlobalIndexType> mappedGlobalDofOrdinals();
+  FieldContainer<double> getConstraintMatrix();
 };
 
 
