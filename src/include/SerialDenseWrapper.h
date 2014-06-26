@@ -35,27 +35,33 @@ class SerialDenseWrapper {
       }
     }
   }
-  static Epetra_SerialDenseMatrix convertFCToSDM(const FieldContainer<double> &A, Epetra_DataAccess CV = ::Copy){
-    //  FC is row major, SDM expects column major data, so the roles of rows and columns get swapped
-    // distance between rows in FC is the column length (dimension 1)
+  static Epetra_SerialDenseMatrix convertFCToSDM(const FieldContainer<double> &A){
     int n = A.dimension(0);
     int m = A.dimension(1);
-    double *firstEntry = (double *) &A[0]; // a bit dangerous: cast away the const.  Not dangerous if we're doing Copy, of course.
-    Epetra_SerialDenseMatrix Amatrix(CV,firstEntry,m,m,n);
+    Epetra_SerialDenseMatrix Amatrix(n,m);
+    for (int i = 0;i<n;i++){
+      for (int j = 0;j<m;j++){
+        Amatrix(i,j) = A(i,j);
+      }
+    }
     return Amatrix;
   }
   static void convertSDMToFC(FieldContainer<double>& A_fc, const Epetra_SerialDenseMatrix &A){
     int n = A.M();    
     int m = A.N();
-    Teuchos::Array<int> dim(2);
-    dim[0] = n;
-    dim[1] = m;
-    double * firstEntry = (double *) &A(0,0); // again, casting away the const.  OK since we copy below.
-    A_fc = FieldContainer<double>(dim,firstEntry,true); // true: copy
+    A_fc.resize(n,m);
+    for (int i = 0;i<n;i++){
+      for (int j = 0;j<m;j++){
+        A_fc(i,j) = A(i,j);
+      }
+    }
   }
+  
 public:
   // gives X = scalarA*A+scalarB*B (overwrites A)
   static void add(FieldContainer<double> &X, const FieldContainer<double> &A, const FieldContainer<double> &B, double scalarA = 1.0, double scalarB = 1.0){
+    int N = A.dimension(0);
+    int M = A.dimension(1);
     Epetra_SerialDenseMatrix AMatrix = convertFCToSDM(A);
     Epetra_SerialDenseMatrix BMatrix = convertFCToSDM(B);
     AMatrix.Scale(scalarA);
@@ -79,17 +85,14 @@ public:
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "empty result matrix passed in to SerialDenseWrapper::multiplyAndAdd");
     }
     
-    Epetra_SerialDenseMatrix AMatrix = convertFCToSDM(A,::View);
-    Epetra_SerialDenseMatrix BMatrix = convertFCToSDM(B,::View);
-    Epetra_SerialDenseMatrix XMatrix = convertFCToSDM(X,::View);
+    Epetra_SerialDenseMatrix AMatrix = convertFCToSDM(A);
+    Epetra_SerialDenseMatrix BMatrix = convertFCToSDM(B);
+    Epetra_SerialDenseMatrix XMatrix = convertFCToSDM(X);
     
-    // since SDMs are transposed relative to FCs, reverse the transposal
-    char transposeAMatrix = (TransposeA=='T') ? 'N' : 'T';
-    char transposeBMatrix = (TransposeB=='T') ? 'N' : 'T';
-    
-    int success = XMatrix.Multiply(transposeAMatrix,transposeBMatrix,ScalarAB,AMatrix,BMatrix,ScalarThis);
+    int success = XMatrix.Multiply(TransposeA,TransposeB,ScalarAB,AMatrix,BMatrix,ScalarThis);
 
-//    convertSDMToFC(X,XMatrix); // not needed when using View.
+    convertSDMToFC(X,XMatrix);
+    
     
     if (success != 0){
       cout << "Error in SerialDenseWrapper::multiplyAndAdd with error code " << success << endl;
