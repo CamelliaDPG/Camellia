@@ -6,7 +6,7 @@
 #include "PreviousSolutionFunction.h"
 #include "RefinementStrategy.h"
 #include "RefinementHistory.h"
-#include "XDMFExporter.h"
+#include "HDF5Exporter.h"
 #include "MeshFactory.h"
 #include "CheckConservation.h"
 #include "LagrangeConstraints.h"
@@ -311,7 +311,7 @@ int main(int argc, char *argv[]) {
   ////////////////////   SOLVE & REFINE   ///////////////////////
   double energyThreshold = 0.2; // for mesh refinements
   RefinementStrategy refinementStrategy( solution, energyThreshold );
-  XDMFExporter exporter(mesh->getTopology(), "NoPressureKovasznay", false);
+  HDF5Exporter exporter(mesh, "Kovasznay_np", false);
   // if (commRank == 0)
   //   exporter.exportSolution(backgroundFlow, mesh, varFactory, -1);
   set<int> nonlinearVars;
@@ -349,10 +349,7 @@ int main(int argc, char *argv[]) {
       iterCount++;
     }
 
-    if (commRank == 0)
-    {
-      exporter.exportSolution(backgroundFlow, mesh, varFactory, refIndex);
-    }
+    exporter.exportSolution(backgroundFlow, varFactory, refIndex, 2, cellIDToSubdivision(mesh, 4));
 
     if (refIndex < numRefs)
       refinementStrategy.refine(commRank==0); // print to console on commRank 0
