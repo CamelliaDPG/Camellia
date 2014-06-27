@@ -332,21 +332,17 @@ BasisMap GDAMinimumRule::getBasisMap(GlobalIndexType cellID, SubCellDofIndexInfo
   // to begin, let's map the volume-interior dofs:
   vector<GlobalIndexType> globalDofOrdinals = dofIndexInfo[spaceDim][0][var->ID()];
   set<int> ordinalsInt = BasisReconciliation::interiorDofOrdinalsForBasis(basis); // basis->dofOrdinalsForInterior(); // TODO: change dofOrdinalsForInterior to return set<unsigned>...
-  if (globalDofOrdinals.size() != ordinalsInt.size()) {
+  set<unsigned> basisDofOrdinals;
+  basisDofOrdinals.insert(ordinalsInt.begin(),ordinalsInt.end());
+  
+  if (basisDofOrdinals.size() > 0) {
+    varVolumeMap.push_back(SubBasisDofMapper::subBasisDofMapper(basisDofOrdinals, globalDofOrdinals));
+  }
+  
+  if (globalDofOrdinals.size() != basisDofOrdinals.size()) {
     cout << "";
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "volume getBasisMap() doesn't yet support non-L^2 bases.");
   }
-
-  int i=0;
-  vector<GlobalIndexType> oneGlobalDofOrdinal(1);
-  for (set<int>::iterator interiorDofOrdinalIt = ordinalsInt.begin(); interiorDofOrdinalIt != ordinalsInt.end(); interiorDofOrdinalIt++) {
-    oneGlobalDofOrdinal[0] = globalDofOrdinals[i];
-    set<unsigned> oneBasisDofOrdinal;
-    oneBasisDofOrdinal.insert((*interiorDofOrdinalIt));
-    varVolumeMap.push_back(SubBasisDofMapper::subBasisDofMapper(oneBasisDofOrdinal, oneGlobalDofOrdinal));
-    i++;
-  }
-  
   // TODO: reimplement the below logic in imitation of the side-oriented getBasisMap() below...
   
 //  vector< vector< SubBasisReconciliationWeights> > weightsForSubcell(spaceDim);

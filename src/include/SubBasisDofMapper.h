@@ -33,7 +33,8 @@ class SubBasisDofMapper {
 public:
   virtual FieldContainer<double> mapData(bool transposeConstraint, FieldContainer<double> &data) = 0; // constraint matrix is sized "fine x coarse" -- so transposeConstraint should be true when data belongs to coarse discretization, and false when data belongs to fine discretization.  i.e. in a minimum rule, transposeConstraint is true when the map goes from global to local, and false otherwise.
 
-// not sure I have these right yet:
+//  virtual FieldContainer<double> getConstraintMatrix();
+  
   virtual FieldContainer<double> mapCoarseCoefficients(FieldContainer<double> &coarseCoefficients) {
     return mapData(true,coarseCoefficients);
   }
