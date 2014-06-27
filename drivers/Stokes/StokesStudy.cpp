@@ -401,13 +401,15 @@ int main(int argc, char *argv[]) {
   
   bool computeMaxGramConditionNumber = true; // for Gram matrices
   
+  bool useLobattoBasis = true;
+  
   bool useTrueTracesForVVP = true;
   
   bool dontImposeZeroMeanPressure = false;
   
   bool writeGlobalStiffnessMatrixToFile = true;  // also computes 2-norm condition number of global stiffness matrix (expensive!)
   
-  bool useCondensedSolve = false;
+  bool useCondensedSolve = true;
   
   bool useCG = false;
   bool useMumps = true;
@@ -477,6 +479,8 @@ int main(int argc, char *argv[]) {
     cout << "useTriangles = "    << (useTriangles   ? "true" : "false") << "\n";
     cout << "test space norm: "  << normChoiceStr << "\n";
     cout << "exact solution choice: "  << exactSolnChoiceStr << "\n";
+    cout << "useLobattoBasis: " << (useLobattoBasis ? "true" : "false") << "\n";
+    cout << "useCondensedSolve: " << (useCondensedSolve ? "true" : "false") << "\n";
     cout << "computeGlobalConditionNumber = " << (computeGlobalConditionNumber ? "true" : "false") << "\n";
     cout << "useMumps = " << (useMumps ? "true" : "false") << "\n";
     cout << "useTrueTracesForVVP = " << (useTrueTracesForVVP ? "true" : "false") << endl;
@@ -484,6 +488,9 @@ int main(int argc, char *argv[]) {
     cout << "dontImposeZeroMeanPressure = " << (dontImposeZeroMeanPressure ? "true" : "false") << endl;
     cout << "writeGlobalStiffnessMatrixToFile = " << (writeGlobalStiffnessMatrixToFile ? "true" : "false") << endl;
     cout << "computeMaxGramConditionNumber = " << (computeMaxGramConditionNumber ? "true" : "false") << endl;
+    if (writeGlobalStiffnessMatrixToFile) {
+      cout << "NOTE: global stiffness matrix file is written in a format that needs tweaking for MATLAB.  Delete the comment line at top, and replace the final number on the second line with a 0.\n";
+    }
   }
   
   if ((normChoice == UnitCompliantGraphNorm) && (formulationType != VGP)) {
@@ -493,6 +500,11 @@ int main(int argc, char *argv[]) {
   if ((normChoice == UnitCompliantGraphNormQScaled) && (formulationType != VGP)) {
     cout << "Error: unit-compliant graph norm with q scaling only supported for VGP right now.\n";
     exit(1);
+  }
+  
+  if (useLobattoBasis) {
+    BasisFactory::setUseLobattoForQuadHDiv(true);
+    BasisFactory::setUseLobattoForQuadHGrad(true);
   }
   
   double mu = 1.0;

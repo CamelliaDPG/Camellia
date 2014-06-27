@@ -193,6 +193,7 @@ public:
   
   const Intrepid::FieldContainer<double> & getSideUnitNormals(int sideOrdinal);
   
+  const Intrepid::FieldContainer<double> &getPhysicalCellNodes();
   void setPhysicalCellNodes(const Intrepid::FieldContainer<double> &physicalCellNodes, const vector<GlobalIndexType> &cellIDs, bool createSideCacheToo);
   
   /*** Methods added for BC support below ***/

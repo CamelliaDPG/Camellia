@@ -333,6 +333,10 @@ FieldContainer<double> & BasisCache::getWeightedMeasures() {
   return _weightedMeasure;
 }
 
+const Intrepid::FieldContainer<double> &BasisCache::getPhysicalCellNodes() {
+  return _physicalCellNodes;
+}
+
 const FieldContainer<double> & BasisCache::getPhysicalCubaturePoints() {
   return _physCubPoints;
 }

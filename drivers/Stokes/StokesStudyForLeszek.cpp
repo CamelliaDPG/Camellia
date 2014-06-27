@@ -50,7 +50,7 @@ int main(int argc, char *argv[]) {
   
   bool useTriangles = true;
   
-  bool useEnhancedFluxes = false;
+  bool useEnhancedFluxes = true;
   
   bool useConformingTraces = true;
   
@@ -238,7 +238,7 @@ int main(int argc, char *argv[]) {
   double f2Integral = (f2-2*x)->integrate(minMesh);
   double f3Integral = f3->integrate(minMesh);
   double f4Integral = f4->integrate(minMesh);
-  double f5Integral = (f5-Function::constant(1.0))->integrate(minMesh);
+  double f5Integral = (f5-1)->integrate(minMesh);
   if (rank == 0) {
     cout << "Errors in load (assuming exact solution of sigma12 = x) on minimal mesh:\n";
     cout << "f1: " << f1Integral << endl;

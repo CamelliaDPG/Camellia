@@ -37,8 +37,10 @@ class NewBasisSumFunction : public Function {
   FieldContainer<double> _coefficients;
   EOperatorExtended _op;
   bool _boundaryValueOnly;
+  BasisCachePtr _overridingBasisCache;
  public:
   NewBasisSumFunction(BasisPtr basis, const FieldContainer<double> &basisCoefficients,
+                      BasisCachePtr overridingBasisCache = Teuchos::rcp((BasisCache*)NULL),
                       EOperatorExtended op = OP_VALUE, bool boundaryValueOnly = false);
   void values(FieldContainer<double> &values, BasisCachePtr basisCache);
   

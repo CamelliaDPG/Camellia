@@ -3750,7 +3750,9 @@ void Solution::projectOldCellOntoNewCells(GlobalIndexType cellID, ElementTypePtr
   TEUCHOS_TEST_FOR_EXCEPTION(oldTrialOrdering->totalDofs() != solutionCoeffs->size(), std::invalid_argument,
                              "oldElemType trial space does not match stored solution size");
   // TODO: rewrite this method using Functions instead of AbstractFunctions
-  map<int, Teuchos::RCP<AbstractFunction> > functionMap;
+  map<int, FunctionPtr > functionMap;
+  
+  BasisCachePtr oldCellCache = BasisCache::basisCacheForCell(_mesh, cellID);
   
   for (set<int>::iterator trialIDIt = trialIDs.begin(); trialIDIt != trialIDs.end(); trialIDIt++) {
     int trialID = *trialIDIt;
@@ -3763,7 +3765,7 @@ void Solution::projectOldCellOntoNewCells(GlobalIndexType cellID, ElementTypePtr
         int dofIndex = oldElemType->trialOrderPtr->getDofIndex(trialID, dofOrdinal);
         basisCoefficients(dofOrdinal) = (*solutionCoeffs)(dofIndex);
       }
-      Teuchos::RCP<BasisSumFunction> oldTrialFunction = Teuchos::rcp( new BasisSumFunction(basis, basisCoefficients, physicalCellNodes) );
+      FunctionPtr oldTrialFunction = Teuchos::rcp( new NewBasisSumFunction(basis, basisCoefficients, oldCellCache) );
       functionMap[trialID] = oldTrialFunction;
     }
   }
