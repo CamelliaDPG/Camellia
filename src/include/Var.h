@@ -14,6 +14,9 @@
 class Var;
 typedef Teuchos::RCP<Var> VarPtr;
 
+class LinearTerm;
+typedef Teuchos::RCP<LinearTerm> LinearTermPtr;
+
 namespace VarFunctionSpaces {
   enum Space { HGRAD, HCURL, HDIV, HDIV_FREE, L2, CONSTANT_SCALAR, VECTOR_HGRAD, VECTOR_L2, UNKNOWN_FS };
   enum VarType { TEST, FIELD, TRACE, FLUX, UNKNOWN_TYPE, MIXED_TYPE };
@@ -31,10 +34,11 @@ class Var { // really Var x Operator
   Space _fs;
   IntrepidExtendedTypes::EOperatorExtended _op; // default is OP_VALUE
   VarType _varType;
+  LinearTermPtr _termTraced; // for trace variables, optionally allows identification with fields
   //  map< IntrepidExtendedTypes::EOperatorExtended, VarPtr > _relatedVars; // grad, div, etc. could be cached here
 public:
   Var(int ID, int rank, string name, IntrepidExtendedTypes::EOperatorExtended op =  IntrepidExtendedTypes::OP_VALUE,
-      Space fs = UNKNOWN_FS, VarType varType = UNKNOWN_TYPE);
+      Space fs = UNKNOWN_FS, VarType varType = UNKNOWN_TYPE, LinearTermPtr termTraced = Teuchos::rcp((LinearTerm*) NULL));
   
   int ID();
   const string & name();
@@ -60,6 +64,8 @@ public:
   VarPtr times_normal_x();
   VarPtr times_normal_y();
   VarPtr times_normal_z();
+  
+  LinearTermPtr termTraced();
   
   static VarPtr varForTrialID(int trialID, Teuchos::RCP<BilinearForm> bf);
 };

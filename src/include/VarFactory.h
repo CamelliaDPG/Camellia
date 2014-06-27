@@ -137,6 +137,7 @@ public:
     _trialVarsByID[ID] = _trialVars[name];
     return _trialVarsByID[ID];
   }
+  
   VarPtr fluxVar(string name, Space fs = L2, int ID = -1) { // trace of HDIV  (implemented as L2 on boundary)
     if (_trialVars.find(name) != _trialVars.end()) {
       return _trialVars[name];
