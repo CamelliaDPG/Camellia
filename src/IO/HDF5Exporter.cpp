@@ -27,9 +27,6 @@ HDF5Exporter::HDF5Exporter(MeshPtr mesh, string saveDirectory, bool deleteOldFil
 
   if (commRank == 0)
   {
-    _xmfFile.open((_filename+"/"+_filename+".xmf").c_str());
-    _xmfFile << "<?xml version=\"1.0\" ?>" << endl
-    << "<!DOCTYPE Xdmf SYSTEM \"Xdmf.dtd\" []>" << endl;
     _xdmf.addAttribute("xmlns:xi", "http://www.w3.org/2003/XInclude");
     _xdmf.addAttribute("Version", "2");
     _xdmf.addChild(_domain);
@@ -46,13 +43,6 @@ HDF5Exporter::HDF5Exporter(MeshPtr mesh, string saveDirectory, bool deleteOldFil
 
 HDF5Exporter::~HDF5Exporter()
 {
-  int commRank = Teuchos::GlobalMPISession::getRank();
-  int numProcs = Teuchos::GlobalMPISession::getNProc();
-  if (commRank == 0)
-  {
-    _xmfFile << _xdmf.toString();
-    _xmfFile.close();
-  }
 }
 
 void HDF5Exporter::exportSolution(SolutionPtr solution, VarFactory varFactory, double timeVal, unsigned int defaultNum1DPts, map<int, int> cellIDToNum1DPts, set<GlobalIndexType> cellIndices)
@@ -762,6 +752,16 @@ void HDF5Exporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
 
   gridFile << grid.toString();
   gridFile.close();
+
+  if (commRank == 0)
+  {
+    ofstream xmfFile;
+    xmfFile.open((_filename+"/"+_filename+".xmf").c_str());
+    xmfFile << "<?xml version=\"1.0\" ?>" << endl
+    << "<!DOCTYPE Xdmf SYSTEM \"Xdmf.dtd\" []>" << endl;
+    xmfFile << _xdmf.toString();
+    xmfFile.close();
+  }
 }
 
 map<int,int> cellIDToSubdivision(MeshPtr mesh, unsigned int subdivisionFactor, set<GlobalIndexType> cellIndices)

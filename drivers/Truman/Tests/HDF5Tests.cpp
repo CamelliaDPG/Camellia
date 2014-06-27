@@ -44,6 +44,8 @@ int main(int argc, char *argv[])
 #ifdef HAVE_MPI
   Teuchos::GlobalMPISession mpiSession(&argc, &argv,0);
 #endif
+  int commRank = Teuchos::GlobalMPISession::getRank();
+  int numProcs = Teuchos::GlobalMPISession::getNProc();
 
   {
   // 1D tests
@@ -236,9 +238,13 @@ int main(int argc, char *argv[])
     {
         HDF5Exporter exporter(mesh, "Poisson", true);
         exporter.exportSolution(solution, varFactory, 0, 2, cellIDToSubdivision(mesh, 4));
-        refinementStrategy.refine(true);
-        solution->solve(false);
-        exporter.exportSolution(solution, varFactory, 1, 2, cellIDToSubdivision(mesh, 4));
+        int numRefs = 10;
+        for (int ref = 1; ref <= numRefs; ref++)
+        {
+            refinementStrategy.refine(commRank==0);
+            solution->solve(false);
+            exporter.exportSolution(solution, varFactory, ref, 2, cellIDToSubdivision(mesh, 4));
+        }
     }
     // exporter.exportFunction(sigmaSoln, "Poisson-s", "sigma", 0, 5);
     // exporter.exportFunction(uhatSoln, "Poisson-uhat", "uhat", 1, 6);
