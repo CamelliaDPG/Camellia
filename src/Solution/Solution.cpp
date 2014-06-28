@@ -3749,7 +3749,6 @@ void Solution::projectOldCellOntoNewCells(GlobalIndexType cellID, ElementTypePtr
   FieldContainer<double>* solutionCoeffs = &(_solutionForCellIDGlobal[cellID]);
   TEUCHOS_TEST_FOR_EXCEPTION(oldTrialOrdering->totalDofs() != solutionCoeffs->size(), std::invalid_argument,
                              "oldElemType trial space does not match stored solution size");
-  // TODO: rewrite this method using Functions instead of AbstractFunctions
   map<int, FunctionPtr > functionMap;
   
   BasisCachePtr oldCellCache = BasisCache::basisCacheForCell(_mesh, cellID);
@@ -3769,11 +3768,42 @@ void Solution::projectOldCellOntoNewCells(GlobalIndexType cellID, ElementTypePtr
       functionMap[trialID] = oldTrialFunction;
     }
   }
-  for (vector<GlobalIndexType>::const_iterator childIDIt=childIDs.begin(); childIDIt != childIDs.end(); childIDIt++) {
-    GlobalIndexType childID = *childIDIt;
+  int sideDim = _mesh->getTopology()->getSpaceDim() - 1;
+  
+  for (int childOrdinal=0; childOrdinal < childIDs.size(); childOrdinal++) {
+    GlobalIndexType childID = childIDs[childOrdinal];
     // (re)initialize the FieldContainer storing the solution--element type may have changed (in case of p-refinement)
     _solutionForCellIDGlobal[childID] = FieldContainer<double>(_mesh->getElement(childID)->elementType()->trialOrderPtr->totalDofs());
+    // project fields
     projectOntoCell(functionMap,childID);
+    
+//    // project traces and fluxes
+//    CellPtr childCell = _mesh->getTopology()->getCell(childID);
+//    for (int sideOrdinal=0; sideOrdinal<childCell->topology()->getSideCount(); sideOrdinal++) {
+//      map<int, FunctionPtr> sideFunctionMap;
+//      unsigned parentSideOrdinal = childCell->refinementPattern()->mapSubcellOrdinalFromChildToParent(childOrdinal, sideDim, sideOrdinal);
+//      
+//      for (set<int>::iterator trialIDIt = trialIDs.begin(); trialIDIt != trialIDs.end(); trialIDIt++) {
+//        int trialID = *trialIDIt;
+//        if (oldTrialOrdering->getNumSidesForVarID(trialID) != 1) { // flux/trace variable
+//          if (parentSideOrdinal != -1) { // then parent has dofs for this trace on this side
+//            BasisPtr basis = oldTrialOrdering->getBasis(trialID, parentSideOrdinal);
+//            int basisCardinality = basis->getCardinality();
+//            FieldContainer<double> basisCoefficients(basisCardinality);
+//            
+//            for (int dofOrdinal=0; dofOrdinal<basisCardinality; dofOrdinal++) {
+//              int dofIndex = oldElemType->trialOrderPtr->getDofIndex(trialID, dofOrdinal, sideOrdinal);
+//              basisCoefficients(dofOrdinal) = (*solutionCoeffs)(dofIndex);
+//            }
+//            FunctionPtr oldTrialFunction = Teuchos::rcp( new NewBasisSumFunction(basis, basisCoefficients, oldCellCache) );
+//            sideFunctionMap[trialID] = oldTrialFunction;
+//          } else {
+//            // TODO: do something with the termTraced LinearTermPtr in Var...
+//          }
+//        }
+//      }
+//      projectOntoCell(sideFunctionMap, childID, sideOrdinal);
+//    }
   }
   
   clearComputedResiduals(); // force recomputation of energy error (could do something more incisive, just computing the energy error for the new cells)

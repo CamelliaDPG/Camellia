@@ -11,6 +11,7 @@
 
 #include "Var.h"
 #include "BilinearForm.h"
+#include "LinearTerm.h"
 
 class VarFactory {
   map< string, VarPtr > _testVars;
@@ -138,27 +139,44 @@ public:
     return _trialVarsByID[ID];
   }
   
-  VarPtr fluxVar(string name, Space fs = L2, int ID = -1) { // trace of HDIV  (implemented as L2 on boundary)
+  VarPtr fluxVar(string name, LinearTermPtr termTraced, Space fs = L2, int ID = -1) { // trace of HDIV  (implemented as L2 on boundary)
     if (_trialVars.find(name) != _trialVars.end()) {
       return _trialVars[name];
     }
     int rank = ((fs == HGRAD) || (fs == L2) || (fs == CONSTANT_SCALAR)) ? 0 : 1;
     ID = getTrialID(ID);
-    _trialVars[name] = Teuchos::rcp( new Var( ID, rank, name, 
-                                              IntrepidExtendedTypes::OP_VALUE, fs, FLUX) );
+    _trialVars[name] = Teuchos::rcp( new Var( ID, rank, name,
+                                             IntrepidExtendedTypes::OP_VALUE, fs, FLUX, termTraced) );
     _trialVarsByID[ID] = _trialVars[name];
     return _trialVarsByID[ID];
   }
-  VarPtr traceVar(string name, Space fs = HGRAD, int ID = -1) { // trace of HGRAD (implemented as HGRAD on boundary)
+
+  VarPtr fluxVar(string name, VarPtr termTraced, Space fs = L2, int ID = -1) { // trace of HDIV  (implemented as L2 on boundary)
+    return fluxVar(name, 1.0 * termTraced, fs, ID);
+  }
+  
+  VarPtr fluxVar(string name, Space fs = L2, int ID = -1) { // trace of HDIV  (implemented as L2 on boundary)
+    return fluxVar(name, Teuchos::rcp((LinearTerm*)NULL), fs, ID);
+  }
+  
+  VarPtr traceVar(string name, LinearTermPtr termTraced, Space fs = HGRAD, int ID = -1) { // trace of HGRAD (implemented as HGRAD on boundary)
     if (_trialVars.find(name) != _trialVars.end() ) {
       return _trialVars[name];
     }
     int rank = ((fs == HGRAD) || (fs == L2) || (fs == CONSTANT_SCALAR)) ? 0 : 1;
     ID = getTrialID(ID);
     _trialVars[name] = Teuchos::rcp( new Var( ID, rank, name, 
-                                              IntrepidExtendedTypes::OP_VALUE, fs, TRACE) );
+                                              IntrepidExtendedTypes::OP_VALUE, fs, TRACE, termTraced) );
     _trialVarsByID[ID] = _trialVars[name];
     return _trialVarsByID[ID];
+  }
+
+  VarPtr traceVar(string name, VarPtr termTraced, Space fs = HGRAD, int ID = -1) {
+    return traceVar(name, 1.0 * termTraced, fs, ID);
+  }
+  
+  VarPtr traceVar(string name, Space fs = HGRAD, int ID = -1) {
+    return traceVar(name, Teuchos::rcp((LinearTerm*)NULL), fs, ID);
   }
   
   const map< int, VarPtr > & testVars() {

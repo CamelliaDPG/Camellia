@@ -5,6 +5,8 @@
 #include <Teuchos_GlobalMPISession.hpp>
 #include "GnuPlotUtil.h"
 
+#include "CGSolver.h"
+
 #ifdef ENABLE_INTEL_FLOATING_POINT_EXCEPTIONS
 #include <xmmintrin.h>
 #endif
@@ -64,14 +66,15 @@ int main(int argc, char *argv[]) {
   int rank = Teuchos::GlobalMPISession::getRank();
   
   bool use3D = false;
-  int refCount = 10;
+  int refCount = 5;
   
   int k = 4; // poly order for field variables
   int H1Order = k + 1;
   int delta_k = use3D ? 3 : 2;   // test space enrichment
   
   bool useMinRule = false;
-  bool useMumps = true;
+  bool useMumps = false;
+  bool useCGSolver = true;
   
   bool enforceOneIrregularity = true;
   
@@ -80,34 +83,6 @@ int main(int argc, char *argv[]) {
   bool testing_2_irregularity = false;
   
   VarFactory varFactory;
-  // traces:
-  VarPtr u1hat, u2hat, u3hat;
-  
-  if (conformingTraces) {
-    u1hat = varFactory.traceVar("\\widehat{u}_1");
-    u2hat = varFactory.traceVar("\\widehat{u}_2");
-    
-    if (use3D) {
-      u3hat = varFactory.traceVar("\\widehat{u}_3");
-    }
-  } else {
-    cout << "Note: using non-conforming traces.\n";
-    u1hat = varFactory.traceVar("\\widehat{u}_1", L2);
-    u2hat = varFactory.traceVar("\\widehat{u}_2", L2);
-    
-    if (use3D) {
-      u3hat = varFactory.traceVar("\\widehat{u}_3", L2);
-    }
-  }
-//  VarPtr u1hat = varFactory.traceVar("\\widehat{u}_1", L2); // switched to L2 just to isolate/debug
-//  VarPtr u2hat = varFactory.traceVar("\\widehat{u}_2", L2);
-//  cout << "WARNING/NOTE: for debugging purposes, temporarily switching traces to use L^2 discretizations (i.e. they are not conforming, and they are of lower order than they should be).\n";
-  VarPtr t1_n = varFactory.fluxVar("\\widehat{t}_{1n}");
-  VarPtr t2_n = varFactory.fluxVar("\\widehat{t}_{2n}");
-  VarPtr t3_n;
-  if (use3D) {
-    t3_n = varFactory.fluxVar("\\widehat{t}_{3n}");
-  }
   // fields:
   VarPtr u1 = varFactory.fieldVar("u_1", L2);
   VarPtr u2 = varFactory.fieldVar("u_2", L2);
@@ -118,6 +93,37 @@ int main(int argc, char *argv[]) {
   VarPtr sigma3;
   if (use3D) sigma3 = varFactory.fieldVar("\\sigma_3", VECTOR_L2);
   VarPtr p = varFactory.fieldVar("p");
+  
+  FunctionPtr n = Function::normal();
+  // traces:
+  VarPtr u1hat, u2hat, u3hat;
+  
+  if (conformingTraces) {
+    u1hat = varFactory.traceVar("\\widehat{u}_1", u1);
+    u2hat = varFactory.traceVar("\\widehat{u}_2", u2);
+    
+    if (use3D) {
+      u3hat = varFactory.traceVar("\\widehat{u}_3", u3);
+    }
+  } else {
+    cout << "Note: using non-conforming traces.\n";
+    u1hat = varFactory.traceVar("\\widehat{u}_1", u1, L2);
+    u2hat = varFactory.traceVar("\\widehat{u}_2", u2, L2);
+    
+    if (use3D) {
+      u3hat = varFactory.traceVar("\\widehat{u}_3", u3, L2);
+    }
+  }
+  //  VarPtr u1hat = varFactory.traceVar("\\widehat{u}_1", L2); // switched to L2 just to isolate/debug
+  //  VarPtr u2hat = varFactory.traceVar("\\widehat{u}_2", L2);
+  //  cout << "WARNING/NOTE: for debugging purposes, temporarily switching traces to use L^2 discretizations (i.e. they are not conforming, and they are of lower order than they should be).\n";
+  VarPtr t1_n = varFactory.fluxVar("\\widehat{t}_{1n}", sigma1 * n + p * n->x());
+  VarPtr t2_n = varFactory.fluxVar("\\widehat{t}_{2n}", sigma2 * n + p * n->y());
+  VarPtr t3_n;
+  if (use3D) {
+    t3_n = varFactory.fluxVar("\\widehat{t}_{3n}", sigma3 * n + p * n->z());
+  }
+  
   // test functions:
   VarPtr tau1 = varFactory.testVar("\\tau_1", HDIV);  // tau_1
   VarPtr tau2 = varFactory.testVar("\\tau_2", HDIV);  // tau_2
@@ -169,7 +175,6 @@ int main(int argc, char *argv[]) {
   stokesBF->addTerm(-u1,q->dx()); // (-u, grad q)
   stokesBF->addTerm(-u2,q->dy());
   if (use3D) stokesBF->addTerm(-u3, q->dz());
-  FunctionPtr n = Function::normal();
   if (!use3D) stokesBF->addTerm(u1hat * n->x() + u2hat * n->y(), q);
   else stokesBF->addTerm(u1hat * n->x() + u2hat * n->y() + u3hat * n->z(), q);
   
@@ -250,13 +255,25 @@ int main(int argc, char *argv[]) {
   refinementStrategy.setReportPerCellErrors(true);
   refinementStrategy.setEnforceOneIrregularity(enforceOneIrregularity);
   
-  Teuchos::RCP<Solver> solver;
+  Teuchos::RCP<Solver> coarseSolver, fineSolver;
   if (useMumps) {
-    solver = Teuchos::rcp( new MumpsSolver );
+#ifdef USE_MUMPS
+    coarseSolver = Teuchos::rcp( new MumpsSolver );
+#else
+    cout << "useMumps=true, but MUMPS is not available!\n";
+    exit(0);
+#endif
   } else {
-    solver = Teuchos::rcp( new KluSolver );
+    coarseSolver = Teuchos::rcp( new KluSolver );
   }
-  solution->solve(solver);
+  if (useCGSolver) {
+    int maxIters = 80000;
+    double tol = 1e-8;
+    fineSolver = Teuchos::rcp( new CGSolver(maxIters, tol) );
+  } else {
+    fineSolver = coarseSolver;
+  }
+  solution->solve(coarseSolver);
   solution->reportTimings();
   for (int refIndex=0; refIndex < refCount; refIndex++) {
     double energyError = solution->energyErrorTotal();
@@ -273,7 +290,7 @@ int main(int argc, char *argv[]) {
 //    solution->setWriteMatrixToFile(true, "/tmp/stiffness.dat");
 //    solution->setWriteRHSToMatrixMarketFile(true, "/tmp/rhs.dat");
     
-    solution->solve(solver);
+    solution->solve(fineSolver);
     solution->reportTimings();
   }
   double energyErrorTotal = solution->energyErrorTotal();
