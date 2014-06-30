@@ -7,6 +7,7 @@
 //
 
 #include "Var.h"
+#include "LinearTerm.h"
 
 static const string & S_OP_VALUE = "";
 static const string & S_OP_GRAD = "\\nabla ";
@@ -136,13 +137,14 @@ VarPtr Var::varForTrialID(int trialID, Teuchos::RCP<BilinearForm> bf) {
   return Teuchos::rcp(new Var(trialID, rank, "trial", OP_VALUE, space, varType));
 }
 
-Var::Var(int ID, int rank, string name, IntrepidExtendedTypes::EOperatorExtended op, Space fs, VarType varType) {
+Var::Var(int ID, int rank, string name, IntrepidExtendedTypes::EOperatorExtended op, Space fs, VarType varType, LinearTermPtr termTraced) {
   _id = ID;
   _rank = rank;
   _name = name;
   _op = op;
   _fs = fs;
   _varType = varType;
+  _termTraced = termTraced;
 }
 
 int Var::ID() { 
@@ -277,6 +279,10 @@ Space Var::space() {
 
 VarType Var::varType() { 
   return _varType; 
+}
+
+LinearTermPtr Var::termTraced() {
+  return _termTraced;
 }
 
 VarPtr Var::grad() {

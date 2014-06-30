@@ -261,7 +261,7 @@ bool FunctionTests::testBasisSumFunction() {
         
         VarPtr v = Var::varForTrialID(trialID, spectralConfusionMesh->bilinearForm());
         FunctionPtr solnFxn = Function::solution(v, soln);
-        FunctionPtr basisSumFxn = Teuchos::rcp( new NewBasisSumFunction(basis, basisCoefficients, OP_VALUE, boundaryValued) );
+        FunctionPtr basisSumFxn = Teuchos::rcp( new NewBasisSumFunction(basis, basisCoefficients, Teuchos::rcp((BasisCache*)NULL), OP_VALUE, boundaryValued) );
         if (!boundaryValued) {
           double l2diff = (solnFxn - basisSumFxn)->l2norm(spectralConfusionMesh);
 //          cout << "l2diff = " << l2diff << endl;

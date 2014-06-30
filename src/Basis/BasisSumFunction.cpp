@@ -64,8 +64,10 @@ void BasisSumFunction::getValues(FieldContainer<double> &functionValues, const F
 }
 
 NewBasisSumFunction::NewBasisSumFunction(BasisPtr basis, const FieldContainer<double> &basisCoefficients,
-                    EOperatorExtended op, bool boundaryValueOnly) : Function( BasisFactory::getBasisRank(basis) ) {
+                                         BasisCachePtr overridingBasisCache, EOperatorExtended op, bool boundaryValueOnly) : Function( BasisFactory::getBasisRank(basis) ) {
+  // TODO: fix the rank setter here to take into account rank-changing ops (e.g. DIV, GRAD)
   _coefficients = basisCoefficients;
+  _overridingBasisCache = overridingBasisCache;
   if (_coefficients.rank()==1) {
     _coefficients.resize(1,_coefficients.dimension(0));
   } else if (_coefficients.rank() != 2) {
@@ -83,6 +85,33 @@ NewBasisSumFunction::NewBasisSumFunction(BasisPtr basis, const FieldContainer<do
 
 void NewBasisSumFunction::values(FieldContainer<double> &values, BasisCachePtr basisCache) {
   CHECK_VALUES_RANK(values);
+  if (_overridingBasisCache.get() != NULL) {
+    // we want to transform the physical "cubature" points given by basisCache into reference points on the _overridingBasisCache,
+    // set the points there, and then replace basisCache with _overridingBasisCache
+    // we implicitly assume that the points given lie inside the physical cell nodes for _overridingBasisCache
+    // Note that this transformation does not take curvilinearity into account.
+    
+    const FieldContainer<double>* physicalCellNodes = &basisCache->getPhysicalCellNodes();
+    int numCells = physicalCellNodes->dimension(0);
+    int numNodes = physicalCellNodes->dimension(1);
+    int spaceDim = physicalCellNodes->dimension(2);
+    FieldContainer<double> relativeReferenceCellNodes(numCells, numNodes, spaceDim);
+    typedef CellTools<double>  CellTools;
+    CellTools::mapToReferenceFrame(relativeReferenceCellNodes,*physicalCellNodes,_overridingBasisCache->getPhysicalCellNodes(),_basis->domainTopology());
+    
+    FieldContainer<double> oneCellRelativeReferenceNodes(1,numNodes,spaceDim);
+    for (int n=0; n<numNodes; n++) {
+      for (int d=0; d<spaceDim; d++) {
+        oneCellRelativeReferenceNodes(0,n,d) = relativeReferenceCellNodes(0,n,d);
+      }
+    }
+    FieldContainer<double> relativeReferencePoints = basisCache->getRefCellPoints();
+    FieldContainer<double> refPoints(1,relativeReferencePoints.dimension(0),relativeReferencePoints.dimension(1));
+    CellTools::mapToPhysicalFrame(refPoints, relativeReferencePoints, oneCellRelativeReferenceNodes, basisCache->cellTopology());
+    refPoints.resize(refPoints.dimension(1),refPoints.dimension(2)); // strip cell dimension
+    _overridingBasisCache->setRefCellPoints(refPoints, basisCache->getCubatureWeights());
+    basisCache = _overridingBasisCache;
+  }
   
   int numDofs = _basis->getCardinality();
   
@@ -127,33 +156,33 @@ FunctionPtr NewBasisSumFunction::x() {
   if (_op != OP_VALUE) {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "component evaluation only supported for NewBasisSumFunction with op = OP_VALUE");
   }
-  return Teuchos::rcp( new NewBasisSumFunction(_basis, _coefficients, OP_X));
+  return Teuchos::rcp( new NewBasisSumFunction(_basis, _coefficients, _overridingBasisCache, OP_X));
 }
 FunctionPtr NewBasisSumFunction::y() {
   if (_op != OP_VALUE) {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "component evaluation only supported for NewBasisSumFunction with op = OP_VALUE");
   }
-  return Teuchos::rcp( new NewBasisSumFunction(_basis, _coefficients, OP_Y));
+  return Teuchos::rcp( new NewBasisSumFunction(_basis, _coefficients, _overridingBasisCache, OP_Y));
 }
 FunctionPtr NewBasisSumFunction::z() {
   if (_op != OP_VALUE) {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "component evaluation only supported for NewBasisSumFunction with op = OP_VALUE");
   }
-  return Teuchos::rcp( new NewBasisSumFunction(_basis, _coefficients, OP_Z));
+  return Teuchos::rcp( new NewBasisSumFunction(_basis, _coefficients, _overridingBasisCache, OP_Z));
 }
 
 FunctionPtr NewBasisSumFunction::dx() {
   if (_op != OP_VALUE) {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "derivatives only supported for NewBasisSumFunction with op = OP_VALUE");
   }
-  return Teuchos::rcp( new NewBasisSumFunction(_basis, _coefficients, OP_DX));
+  return Teuchos::rcp( new NewBasisSumFunction(_basis, _coefficients, _overridingBasisCache, OP_DX));
 }
 
 FunctionPtr NewBasisSumFunction::dy() {
   if (_op != OP_VALUE) {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "derivatives only supported for NewBasisSumFunction with op = OP_VALUE");
   }
-  return Teuchos::rcp( new NewBasisSumFunction(_basis, _coefficients, OP_DY));
+  return Teuchos::rcp( new NewBasisSumFunction(_basis, _coefficients, _overridingBasisCache, OP_DY));
 }
 
 FunctionPtr NewBasisSumFunction::dz() {
@@ -162,7 +191,7 @@ FunctionPtr NewBasisSumFunction::dz() {
   }
   // a bit of a hack: if the topology defined in 3D, then we'll define a derivative there...
   if (_basis->domainTopology().getDimension() > 2) {
-    return Teuchos::rcp( new NewBasisSumFunction(_basis, _coefficients, OP_DZ));
+    return Teuchos::rcp( new NewBasisSumFunction(_basis, _coefficients, _overridingBasisCache, OP_DZ));
   } else {
     return Function::null();
   }

@@ -404,6 +404,11 @@ void Solution::populateStiffnessAndLoad() {
   int indexBase = 0;
   Epetra_Map timeMap(numProcs,indexBase,Comm);
   Epetra_Time timer(Comm);
+  Epetra_Time subTimer(Comm);
+  
+  double testMatrixAssemblyTime = 0, testMatrixInversionTime = 0, localStiffnessDeterminationFromTestsTime = 0;
+  double localStiffnessInterpretationTime = 0, rhsIntegrationAgainstOptimalTestsTime = 0, filterApplicationTime = 0;
+  
   //  cout << "Computing local matrices" << endl;
   for (elemTypeIt = elementTypes.begin(); elemTypeIt != elementTypes.end(); elemTypeIt++) {
     //cout << "Solution: elementType loop, iteration: " << elemTypeNumber++ << endl;
@@ -464,17 +469,23 @@ void Solution::populateStiffnessAndLoad() {
       //
       ////        cout << "preStiffness:\n" << preStiffness;
       //      }
+      
+      subTimer.ResetStartTime();
+      
       FieldContainer<double> ipMatrix(numCells,numTestDofs,numTestDofs);
       
       _ip->computeInnerProductMatrix(ipMatrix,testOrderingPtr, ipBasisCache);
       
+      testMatrixAssemblyTime += subTimer.ElapsedTime();
+      
       //      cout << "ipMatrix:\n" << ipMatrix;
       
+      subTimer.ResetStartTime();
       FieldContainer<double> optTestCoeffs(numCells,numTrialDofs,numTestDofs);
       
       int optSuccess = _mesh->bilinearForm()->optimalTestWeights(optTestCoeffs, ipMatrix, elemTypePtr,
                                                                  cellSideParities, basisCache);
-      
+      testMatrixInversionTime += subTimer.ElapsedTime();
 //      cout << "optTestCoeffs:\n" << optTestCoeffs;
       
       if ( optSuccess != 0 ) {
@@ -483,23 +494,30 @@ void Solution::populateStiffnessAndLoad() {
       
       //cout << "optTestCoeffs\n" << optTestCoeffs;
       
+      subTimer.ResetStartTime();
       FieldContainer<double> finalStiffness(numCells,numTrialDofs,numTrialDofs);
       
       BilinearFormUtility::computeStiffnessMatrix(finalStiffness,ipMatrix,optTestCoeffs);
-      
+      localStiffnessDeterminationFromTestsTime += subTimer.ElapsedTime();
 //      cout << "finalStiffness:\n" << finalStiffness;
       
+      subTimer.ResetStartTime();
       FieldContainer<double> localRHSVector(numCells, numTrialDofs);
       _rhs->integrateAgainstOptimalTests(localRHSVector, optTestCoeffs, testOrderingPtr, basisCache);
+      rhsIntegrationAgainstOptimalTestsTime += subTimer.ElapsedTime();
       
       // apply filter(s) (e.g. penalty method, preconditioners, etc.)
       if (_filter.get()) {
+        subTimer.ResetStartTime();
         _filter->filter(finalStiffness,localRHSVector,basisCache,_mesh,_bc);
+        filterApplicationTime += subTimer.ElapsedTime();
         //        _filter->filter(localRHSVector,physicalCellNodes,cellIDs,_mesh,_bc);
       }
       
       //      cout << "local stiffness matrices:\n" << finalStiffness;
       //      cout << "local loads:\n" << localRHSVector;
+      
+      subTimer.ResetStartTime();
       
       FieldContainer<GlobalIndexType> globalDofIndices;
       
@@ -531,9 +549,20 @@ void Solution::populateStiffnessAndLoad() {
                                                globalDofIndices.size(),&globalDofIndicesCast(0),&interpretedStiffness[0]);
         _rhsVector->SumIntoGlobalValues(globalDofIndices.size(),&globalDofIndicesCast(0),&interpretedRHS[0]);
       }
+      localStiffnessInterpretationTime += subTimer.ElapsedTime();
+      
       startCellIndexForBatch += numCells;
     }
   }
+  {
+/*    cout << "testMatrixAssemblyTime: " << testMatrixAssemblyTime << " seconds.\n";
+    cout << "testMatrixInversionTime: " << testMatrixInversionTime << " seconds.\n";
+    cout << "localStiffnessDeterminationFromTestsTime: " << localStiffnessDeterminationFromTestsTime << " seconds.\n";
+    cout << "localStiffnessInterpretationTime: " << localStiffnessInterpretationTime << " seconds.\n";
+    cout << "rhsIntegrationAgainstOptimalTestsTime: " << rhsIntegrationAgainstOptimalTestsTime << " seconds.\n";
+    cout << "filterApplicationTime: " << filterApplicationTime << " seconds.\n";*/
+  }
+  
   double timeLocalStiffness = timer.ElapsedTime();
   //  cout << "Done computing local matrices" << endl;
   Epetra_Vector timeLocalStiffnessVector(timeMap);
@@ -3749,8 +3778,9 @@ void Solution::projectOldCellOntoNewCells(GlobalIndexType cellID, ElementTypePtr
   FieldContainer<double>* solutionCoeffs = &(_solutionForCellIDGlobal[cellID]);
   TEUCHOS_TEST_FOR_EXCEPTION(oldTrialOrdering->totalDofs() != solutionCoeffs->size(), std::invalid_argument,
                              "oldElemType trial space does not match stored solution size");
-  // TODO: rewrite this method using Functions instead of AbstractFunctions
-  map<int, Teuchos::RCP<AbstractFunction> > functionMap;
+  map<int, FunctionPtr > functionMap;
+  
+  BasisCachePtr oldCellCache = BasisCache::basisCacheForCell(_mesh, cellID);
   
   for (set<int>::iterator trialIDIt = trialIDs.begin(); trialIDIt != trialIDs.end(); trialIDIt++) {
     int trialID = *trialIDIt;
@@ -3763,15 +3793,46 @@ void Solution::projectOldCellOntoNewCells(GlobalIndexType cellID, ElementTypePtr
         int dofIndex = oldElemType->trialOrderPtr->getDofIndex(trialID, dofOrdinal);
         basisCoefficients(dofOrdinal) = (*solutionCoeffs)(dofIndex);
       }
-      Teuchos::RCP<BasisSumFunction> oldTrialFunction = Teuchos::rcp( new BasisSumFunction(basis, basisCoefficients, physicalCellNodes) );
+      FunctionPtr oldTrialFunction = Teuchos::rcp( new NewBasisSumFunction(basis, basisCoefficients, oldCellCache) );
       functionMap[trialID] = oldTrialFunction;
     }
   }
-  for (vector<GlobalIndexType>::const_iterator childIDIt=childIDs.begin(); childIDIt != childIDs.end(); childIDIt++) {
-    GlobalIndexType childID = *childIDIt;
+  int sideDim = _mesh->getTopology()->getSpaceDim() - 1;
+  
+  for (int childOrdinal=0; childOrdinal < childIDs.size(); childOrdinal++) {
+    GlobalIndexType childID = childIDs[childOrdinal];
     // (re)initialize the FieldContainer storing the solution--element type may have changed (in case of p-refinement)
     _solutionForCellIDGlobal[childID] = FieldContainer<double>(_mesh->getElement(childID)->elementType()->trialOrderPtr->totalDofs());
+    // project fields
     projectOntoCell(functionMap,childID);
+    
+//    // project traces and fluxes
+//    CellPtr childCell = _mesh->getTopology()->getCell(childID);
+//    for (int sideOrdinal=0; sideOrdinal<childCell->topology()->getSideCount(); sideOrdinal++) {
+//      map<int, FunctionPtr> sideFunctionMap;
+//      unsigned parentSideOrdinal = childCell->refinementPattern()->mapSubcellOrdinalFromChildToParent(childOrdinal, sideDim, sideOrdinal);
+//      
+//      for (set<int>::iterator trialIDIt = trialIDs.begin(); trialIDIt != trialIDs.end(); trialIDIt++) {
+//        int trialID = *trialIDIt;
+//        if (oldTrialOrdering->getNumSidesForVarID(trialID) != 1) { // flux/trace variable
+//          if (parentSideOrdinal != -1) { // then parent has dofs for this trace on this side
+//            BasisPtr basis = oldTrialOrdering->getBasis(trialID, parentSideOrdinal);
+//            int basisCardinality = basis->getCardinality();
+//            FieldContainer<double> basisCoefficients(basisCardinality);
+//            
+//            for (int dofOrdinal=0; dofOrdinal<basisCardinality; dofOrdinal++) {
+//              int dofIndex = oldElemType->trialOrderPtr->getDofIndex(trialID, dofOrdinal, sideOrdinal);
+//              basisCoefficients(dofOrdinal) = (*solutionCoeffs)(dofIndex);
+//            }
+//            FunctionPtr oldTrialFunction = Teuchos::rcp( new NewBasisSumFunction(basis, basisCoefficients, oldCellCache) );
+//            sideFunctionMap[trialID] = oldTrialFunction;
+//          } else {
+//            // TODO: do something with the termTraced LinearTermPtr in Var...
+//          }
+//        }
+//      }
+//      projectOntoCell(sideFunctionMap, childID, sideOrdinal);
+//    }
   }
   
   clearComputedResiduals(); // force recomputation of energy error (could do something more incisive, just computing the energy error for the new cells)
