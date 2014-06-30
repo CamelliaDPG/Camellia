@@ -2,6 +2,9 @@
 #include "HDF5Exporter.h"
 #include "CamelliaConfig.h"
 
+#include "EpetraExt_ConfigDefs.h"
+#ifdef HAVE_EPETRAEXT_HDF5
+
 #include "CamelliaCellTools.h"
 #include "GlobalDofAssignment.h"
 
@@ -765,3 +768,6 @@ map<int,int> cellIDToSubdivision(MeshPtr mesh, unsigned int subdivisionFactor, s
   }
   return cellIDToPolyOrder;
 }
+
+// end HAVE_EPETRAEXT_HDF5 include guard
+#endif

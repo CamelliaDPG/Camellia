@@ -16,6 +16,17 @@
 #include <xmmintrin.h>
 #endif
 
+#include "EpetraExt_ConfigDefs.h"
+#ifdef HAVE_EPETRAEXT_HDF5
+#define USE_HDF5
+#else
+#undef USE_HDF5
+#endif
+
+#ifdef USE_HDF5
+#include "HDF5Exporter.h"
+#endif
+
 class Cone_U0 : public SimpleFunction {
   double _r; // cone radius
   double _h; // height
@@ -75,16 +86,6 @@ public:
   }
 };
 
-class ConvectionField : public SimpleVectorFunction {
-public:
-  vector<double> value(double x, double y) {
-    vector<double> val(2);
-    val[0] = y-0.5;
-    val[1] = 0.5-x;
-    return val;
-  }
-};
-
 int main(int argc, char *argv[]) {
 #ifdef ENABLE_INTEL_FLOATING_POINT_EXCEPTIONS
   cout << "NOTE: enabling floating point exceptions for divide by zero.\n";
@@ -107,7 +108,7 @@ int main(int argc, char *argv[]) {
   int delta_k = 2;   // test space enrichment: should be 2 for 2D
   bool useMumpsIfAvailable  = true;
   bool convertSolutionsToVTK = false; // when true assumes we've already run with precisely the same options, except without VTK support (so we have a bunch of .soln files)
-  bool usePeriodicBCs = true;
+  bool usePeriodicBCs = false;
   bool useConstantConvection = false;
   
   cmdp.setOption("polyOrder",&k,"polynomial order for field variable u");
@@ -172,7 +173,7 @@ int main(int argc, char *argv[]) {
   if (useConstantConvection) {
     c = Function::vectorize(Function::constant(0.5), Function::constant(0.5));
   } else {
-    c = Teuchos::rcp( new ConvectionField ); // Function::vectorize(y-0.5, 0.5-x);
+    c = Function::vectorize(y-0.5, 0.5-x);
   }
 //  FunctionPtr c = Function::vectorize(y, x);
   FunctionPtr n = Function::normal();
@@ -252,6 +253,13 @@ int main(int argc, char *argv[]) {
   filePrefix << "convectingCone_k" << k << "_t";
   int frameNumber = 0;
   
+#ifdef USE_HDF5
+  ostringstream dir_name;
+  dir_name << "convectingCone_k" << k;
+  bool deleteOldFiles = true;
+  HDF5Exporter exporter(mesh,dir_name.str(),deleteOldFiles);
+#endif
+  
 #ifdef USE_VTK
   VTKExporter soln0Exporter(soln0,mesh,varFactory);
   VTKExporter soln1Exporter(soln1,mesh,varFactory);
@@ -260,6 +268,7 @@ int main(int argc, char *argv[]) {
   if (convertSolutionsToVTK) {
 #ifdef USE_VTK
     if (rank==0) {
+      cout << "Converting .soln files to VTK.\n";
       for (int frameNumber=0; frameNumber<=numFrames; frameNumber++) {
         ostringstream filename;
         filename << filePrefix.str() << frameNumber << ".soln";
@@ -287,6 +296,9 @@ int main(int argc, char *argv[]) {
 #ifdef USE_VTK
     if (rank==0) soln0Exporter.exportFields(filename.str());
 #endif
+#ifdef USE_HDF5
+    exporter.exportSolution(soln0, varFactory,0);
+#endif
     if (saveSolutionFiles) {
       if (rank==0) {
         filename << ".soln";
@@ -312,6 +324,9 @@ int main(int argc, char *argv[]) {
     filename << filePrefix.str() << frameNumber++;
 #ifdef USE_VTK
     if (rank==0) soln0Exporter.exportFields(filename.str());
+#endif
+#ifdef USE_HDF5
+    exporter.exportSolution(soln0, varFactory);
 #endif
     if (saveSolutionFiles) {
       if (rank==0) {
@@ -351,6 +366,14 @@ int main(int argc, char *argv[]) {
         }
       }
 #endif
+#ifdef USE_HDF5
+      double t = n * dt;
+      if (odd) {
+        exporter.exportSolution(soln1, varFactory, t);
+      } else {
+        exporter.exportSolution(soln0, varFactory, t);
+      }
+#endif
       if (saveSolutionFiles) {
         if (rank==0) {
           filename << ".soln";
@@ -359,7 +382,7 @@ int main(int argc, char *argv[]) {
           } else {
             soln0->writeToFile(filename.str());
           }
-          cout << "wrote " << filename.str() << endl;
+          cout << endl << "wrote " << filename.str() << endl;
         }
       }
     }

@@ -10,7 +10,8 @@
 
 #include "CamelliaConfig.h"
 
-#ifdef USE_HDF5
+#include "EpetraExt_ConfigDefs.h"
+#ifdef HAVE_EPETRAEXT_HDF5
 
 #include "Solution.h"
 #include "Mesh.h"

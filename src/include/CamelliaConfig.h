@@ -1,5 +1,3 @@
 //#define USE_MUMPS
 //#define USE_VTK
-// #define USE_XDMF
-#define USE_HDF5
 //#define ENABLE_INTEL_FLOATING_POINT_EXCEPTIONS
