@@ -404,6 +404,11 @@ void Solution::populateStiffnessAndLoad() {
   int indexBase = 0;
   Epetra_Map timeMap(numProcs,indexBase,Comm);
   Epetra_Time timer(Comm);
+  Epetra_Time subTimer(Comm);
+  
+  double testMatrixAssemblyTime = 0, testMatrixInversionTime = 0, localStiffnessDeterminationFromTestsTime = 0;
+  double localStiffnessInterpretationTime = 0, rhsIntegrationAgainstOptimalTestsTime = 0, filterApplicationTime = 0;
+  
   //  cout << "Computing local matrices" << endl;
   for (elemTypeIt = elementTypes.begin(); elemTypeIt != elementTypes.end(); elemTypeIt++) {
     //cout << "Solution: elementType loop, iteration: " << elemTypeNumber++ << endl;
@@ -464,17 +469,23 @@ void Solution::populateStiffnessAndLoad() {
       //
       ////        cout << "preStiffness:\n" << preStiffness;
       //      }
+      
+      subTimer.ResetStartTime();
+      
       FieldContainer<double> ipMatrix(numCells,numTestDofs,numTestDofs);
       
       _ip->computeInnerProductMatrix(ipMatrix,testOrderingPtr, ipBasisCache);
       
+      testMatrixAssemblyTime += subTimer.ElapsedTime();
+      
       //      cout << "ipMatrix:\n" << ipMatrix;
       
+      subTimer.ResetStartTime();
       FieldContainer<double> optTestCoeffs(numCells,numTrialDofs,numTestDofs);
       
       int optSuccess = _mesh->bilinearForm()->optimalTestWeights(optTestCoeffs, ipMatrix, elemTypePtr,
                                                                  cellSideParities, basisCache);
-      
+      testMatrixInversionTime += subTimer.ElapsedTime();
 //      cout << "optTestCoeffs:\n" << optTestCoeffs;
       
       if ( optSuccess != 0 ) {
@@ -483,23 +494,30 @@ void Solution::populateStiffnessAndLoad() {
       
       //cout << "optTestCoeffs\n" << optTestCoeffs;
       
+      subTimer.ResetStartTime();
       FieldContainer<double> finalStiffness(numCells,numTrialDofs,numTrialDofs);
       
       BilinearFormUtility::computeStiffnessMatrix(finalStiffness,ipMatrix,optTestCoeffs);
-      
+      localStiffnessDeterminationFromTestsTime += subTimer.ElapsedTime();
 //      cout << "finalStiffness:\n" << finalStiffness;
       
+      subTimer.ResetStartTime();
       FieldContainer<double> localRHSVector(numCells, numTrialDofs);
       _rhs->integrateAgainstOptimalTests(localRHSVector, optTestCoeffs, testOrderingPtr, basisCache);
+      rhsIntegrationAgainstOptimalTestsTime += subTimer.ElapsedTime();
       
       // apply filter(s) (e.g. penalty method, preconditioners, etc.)
       if (_filter.get()) {
+        subTimer.ResetStartTime();
         _filter->filter(finalStiffness,localRHSVector,basisCache,_mesh,_bc);
+        filterApplicationTime += subTimer.ElapsedTime();
         //        _filter->filter(localRHSVector,physicalCellNodes,cellIDs,_mesh,_bc);
       }
       
       //      cout << "local stiffness matrices:\n" << finalStiffness;
       //      cout << "local loads:\n" << localRHSVector;
+      
+      subTimer.ResetStartTime();
       
       FieldContainer<GlobalIndexType> globalDofIndices;
       
@@ -531,9 +549,20 @@ void Solution::populateStiffnessAndLoad() {
                                                globalDofIndices.size(),&globalDofIndicesCast(0),&interpretedStiffness[0]);
         _rhsVector->SumIntoGlobalValues(globalDofIndices.size(),&globalDofIndicesCast(0),&interpretedRHS[0]);
       }
+      localStiffnessInterpretationTime += subTimer.ElapsedTime();
+      
       startCellIndexForBatch += numCells;
     }
   }
+  {
+/*    cout << "testMatrixAssemblyTime: " << testMatrixAssemblyTime << " seconds.\n";
+    cout << "testMatrixInversionTime: " << testMatrixInversionTime << " seconds.\n";
+    cout << "localStiffnessDeterminationFromTestsTime: " << localStiffnessDeterminationFromTestsTime << " seconds.\n";
+    cout << "localStiffnessInterpretationTime: " << localStiffnessInterpretationTime << " seconds.\n";
+    cout << "rhsIntegrationAgainstOptimalTestsTime: " << rhsIntegrationAgainstOptimalTestsTime << " seconds.\n";
+    cout << "filterApplicationTime: " << filterApplicationTime << " seconds.\n";*/
+  }
+  
   double timeLocalStiffness = timer.ElapsedTime();
   //  cout << "Done computing local matrices" << endl;
   Epetra_Vector timeLocalStiffnessVector(timeMap);
