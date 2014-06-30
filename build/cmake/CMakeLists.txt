@@ -32,6 +32,10 @@ if (VTK_FOUND)
   endif()
 endif()
 
+if (ZLIB_LIB)
+  link_libraries(${ZLIB_LIB})
+endif()
+
 if(MPI_INCLUDE)
   include_directories(${MPI_INCLUDE})
 endif()

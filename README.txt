@@ -21,6 +21,21 @@ Boost install:
 5. Install
 	./b2 install
 
+HDF5 install:
+1. Download source for hdf5-1.8.X from http://www.hdfgroup.org/HDF5/release/obtainsrc.html#conf.
+2. Untar.
+3. Configure:
+   CC=mpicc ./configure --prefix=/Users/nroberts/lib/hdf5
+4. Make and install:
+   make -j6
+   make install
+5. In the Trilinos do-configure, you'll want to include lines like the following:
+   -D TPL_ENABLE_HDF5:STRING=ON \
+   -D HDF5_LIBRARY_DIRS:FILEPATH=/Users/nroberts/lib/hdf5/lib \
+   -D HDF5_LIBRARY_NAMES:STRING="hdf5" \
+   -D TPL_HDF5_INCLUDE_DIRS:FILEPATH=/Users/nroberts/lib/hdf5/include \
+   -D EpetraExt_USING_HDF5:BOOL=ON \
+
 VTK install:
 1. Download source from http://www.vtk.org/files/release/5.10/vtk-5.10.1.tar.gz.
 2. Untar:
@@ -89,6 +104,7 @@ Instructions for a serial debug build:
 3. Copy the do-configure-cli-mpi-debug to do-configure-cli-serial-debug.  Edit it in the following manner:
 	- set the TRILINOS_PATH to your serial-debug Trilinos installation
 	- set the VTK_DIR to match wherever you installed VTK
+        - set the ZLIB_LIB to the path to the zlib library (for HDF5 support)
 4. Run the do-configure script:
 	./do-configure-cli-serial-debug
 5. Try building DPGTests:
