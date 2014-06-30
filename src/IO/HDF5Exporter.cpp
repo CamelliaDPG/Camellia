@@ -5,13 +5,12 @@
 #include "CamelliaCellTools.h"
 #include "GlobalDofAssignment.h"
 
-#ifdef USE_HDF5
-#include "H5Cpp.h"
-using namespace H5;
-
 #ifdef HAVE_MPI
 #include <Teuchos_GlobalMPISession.hpp>
 #endif
+
+#include <Epetra_SerialComm.h>
+#include <EpetraExt_HDF5.h>
 
 HDF5Exporter::HDF5Exporter(MeshPtr mesh, string saveDirectory, bool deleteOldFiles) : _mesh(mesh), _filename(saveDirectory), 
   _xdmf("Xdmf"), _domain("Domain"), _fieldGrids("Grid"), _traceGrids("Grid")
@@ -177,14 +176,12 @@ void HDF5Exporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
     h5OutRel << "HDF5/" << "trace-part" << commRank << "-time" << timeVal << ".h5";
     h5OutFull << _filename << "/" << h5OutRel.str();
   }
-  H5File h5File( h5OutFull.str(), H5F_ACC_TRUNC );
-
-  FloatType doubletype( PredType::NATIVE_DOUBLE );
-  IntType inttype( PredType::NATIVE_INT );
+  Epetra_SerialComm Comm;
+  EpetraExt::HDF5 hdf5(Comm);
+  hdf5.Create(h5OutFull.str());
 
   unsigned int total_vertices = 0;
   
-  // if (cellIndices.size()==0) cellIndices = _mesh->getTopology()->getActiveCellIndices();
   vector< GlobalIndexType > cellIndicesVector = _mesh->globalDofAssignment()->cellsInPartition(commRank);
   if (cellIndices.size()==0) cellIndices = set<GlobalIndexType>(cellIndicesVector.begin(), cellIndicesVector.end());
   // Number of line elements in 1D mesh
@@ -300,35 +297,33 @@ void HDF5Exporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
     else if (spaceDim == 3)
       topology.addInt("Dimensions", totalSubQuads);
   }
-  hsize_t connDimsf[1];
+  hsize_t connDimsf;
   if (!exportingBoundaryValues)
   {
     if (spaceDim == 1)
-      connDimsf[0] = 2*numLines+totalPts;
+      connDimsf = 2*numLines+totalPts;
     else
-      connDimsf[0] = totalSubcells + 3*totalSubTriangles + 4*totalSubQuads + 8*totalSubHexas;
+      connDimsf = totalSubcells + 3*totalSubTriangles + 4*totalSubQuads + 8*totalSubHexas;
   }
   else
   {
     if (spaceDim == 1)
-      connDimsf[0] = 3*totalBoundaryPts;
+      connDimsf = 3*totalBoundaryPts;
     if (spaceDim == 2)
-      connDimsf[0] = 2*totalBoundaryLines + totalPts;
+      connDimsf = 2*totalBoundaryLines + totalPts;
     if (spaceDim == 3)
-      connDimsf[0] = 5*totalSubQuads;
+      connDimsf = 5*totalSubQuads;
   }
-  DataSpace connDataSpace( 1, connDimsf );
-  DataSet connDataset = h5File.createDataSet( "Conns", inttype, connDataSpace );
-  int connArray[connDimsf[0]];
+  int connArray[connDimsf];
   XMLObject topoDataItem("DataItem");
   topology.addChild(topoDataItem);
   topoDataItem.addAttribute("ItemType", "Uniform");
   topoDataItem.addAttribute("Format", "HDF");
   topoDataItem.addAttribute("NumberType", "Int");
   topoDataItem.addAttribute("Precision", "4");
-  topoDataItem.addInt("Dimensions", connDimsf[0]);
+  topoDataItem.addInt("Dimensions", connDimsf);
   stringstream connOutRel;
-  connOutRel << h5OutRel.str() << ":/Conns";
+  connOutRel << h5OutRel.str() << ":/Data/Conns";
   topoDataItem.addContent(connOutRel.str());
 
   // Geometry
@@ -338,14 +333,12 @@ void HDF5Exporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
     geometry.addAttribute("GeometryType", "XY");
   else if (spaceDim == 3)
     geometry.addAttribute("GeometryType", "XYZ");
-  hsize_t ptDimsf[1];
+  hsize_t ptDimsf;
   if (spaceDim == 1)
-    ptDimsf[0] = 2 * totalPts;
+    ptDimsf = 2 * totalPts;
   else
-    ptDimsf[0] = spaceDim * totalPts;
-  DataSpace ptDataSpace( 1, ptDimsf );
-  DataSet ptDataset = h5File.createDataSet( "Points", doubletype, ptDataSpace );
-  double ptArray[ptDimsf[0]];
+    ptDimsf = spaceDim * totalPts;
+  double ptArray[ptDimsf];
 
   XMLObject geoDataItem("DataItem");
   geometry.addChild(geoDataItem);
@@ -353,9 +346,9 @@ void HDF5Exporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
   geoDataItem.addAttribute("Format", "HDF");
   geoDataItem.addAttribute("NumberType", "Float");
   geoDataItem.addAttribute("Precision", "8");
-  geoDataItem.addInt("Dimensions", ptDimsf[0]);
+  geoDataItem.addInt("Dimensions", ptDimsf);
   stringstream ptOutRel;
-  ptOutRel << h5OutRel.str() << ":/Points";
+  ptOutRel << h5OutRel.str() << ":/Data/Points";
   geoDataItem.addContent(ptOutRel.str());
 
   // Node Data
@@ -368,9 +361,9 @@ void HDF5Exporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
     vals[i].addAttribute("Center", "Node");
   }
 
-  vector<DataSet> valDatasets;
   vector< vector<double> > valArrays;
   valArrays.resize(nFcns);
+  hsize_t valDimsf[nFcns];
   int numFcnComponents[nFcns];
   for (int i = 0; i < nFcns; i++)
   {
@@ -390,26 +383,24 @@ void HDF5Exporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
     {
       vals[i].addAttribute("AttributeType", "Vector");
     }
-    hsize_t valDimsf[1];
     if (numFcnComponents[i] == 1)
     {
-      valDimsf[0] = totalPts;
+      valDimsf[i] = totalPts;
     }
     else
     {
-      valDimsf[0] = 3*totalPts;
+      valDimsf[i] = 3*totalPts;
     }
-    valDatasets.push_back( h5File.createDataSet(functionNames[i], doubletype, DataSpace(1, valDimsf) ) );
-    valArrays[i].resize(valDimsf[0], 0);
+    valArrays[i].resize(valDimsf[i], 0);
     XMLObject valDataItem("DataItem");
     vals[i].addChild(valDataItem);
     valDataItem.addAttribute("ItemType", "Uniform");
     valDataItem.addAttribute("Format", "HDF");
     valDataItem.addAttribute("NumberType", "Float");
     valDataItem.addAttribute("Precision", "8");
-    valDataItem.addInt("Dimensions", valDimsf[0]);
+    valDataItem.addInt("Dimensions", valDimsf[i]);
     stringstream valOutRel;
-    valOutRel << h5OutRel.str() << ":/" << functionNames[i];
+    valOutRel << h5OutRel.str() << ":/Data/" << functionNames[i];
     valDataItem.addContent(valOutRel.str());
   }
 
@@ -744,11 +735,11 @@ void HDF5Exporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
       }
     }
   }
-  connDataset.write( connArray, PredType::NATIVE_INT );
-  ptDataset.write( ptArray, PredType::NATIVE_DOUBLE );
+  hdf5.Write("Data", "Conns", H5T_NATIVE_INT, connDimsf, &connArray[0]);
+  hdf5.Write("Data", "Points", H5T_NATIVE_DOUBLE, ptDimsf, &ptArray[0]);
   for (int i = 0; i < nFcns; i++)
-    valDatasets[i].write( &valArrays[i][0], PredType::NATIVE_DOUBLE );
-  h5File.close();
+    hdf5.Write("Data", functionNames[i], H5T_NATIVE_DOUBLE, valDimsf[i], &valArrays[i][0]);
+  hdf5.Close();
 
   gridFile << grid.toString();
   gridFile.close();
@@ -774,5 +765,3 @@ map<int,int> cellIDToSubdivision(MeshPtr mesh, unsigned int subdivisionFactor, s
   }
   return cellIDToPolyOrder;
 }
-
-#endif

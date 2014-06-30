@@ -238,7 +238,7 @@ int main(int argc, char *argv[])
     {
         HDF5Exporter exporter(mesh, "Poisson", true);
         exporter.exportSolution(solution, varFactory, 0, 2, cellIDToSubdivision(mesh, 4));
-        int numRefs = 10;
+        int numRefs = 1;
         for (int ref = 1; ref <= numRefs; ref++)
         {
             refinementStrategy.refine(commRank==0);
