@@ -3790,6 +3790,8 @@ void Solution::projectOldCellOntoNewCells(GlobalIndexType cellID,
    int dummyCubatureDegree = 1;
    BasisCachePtr parentRefCellCache = BasisCache::basisCacheForReferenceCell(*parentCell->topology(), dummyCubatureDegree);
    
+//   cout << "projecting from cell " << cellID << " onto its children.\n";
+   
    for (set<int>::iterator trialIDIt = trialIDs.begin(); trialIDIt != trialIDs.end(); trialIDIt++) {
      int trialID = *trialIDIt;
      if (oldTrialOrdering->getNumSidesForVarID(trialID) == 1) { // field variable, the only kind we honor right now
@@ -3801,6 +3803,9 @@ void Solution::projectOldCellOntoNewCells(GlobalIndexType cellID,
          int dofIndex = oldElemType->trialOrderPtr->getDofIndex(trialID, dofOrdinal);
          basisCoefficients(dofOrdinal) = oldData(dofIndex);
        }
+       
+//       cout << "basisCoefficients for parent volume trialID " << trialID << ":\n" << basisCoefficients;
+       
        FunctionPtr oldTrialFunction = Teuchos::rcp( new NewBasisSumFunction(basis, basisCoefficients, parentRefCellCache) );
        fieldMap[trialID] = oldTrialFunction;
      }
@@ -3820,7 +3825,7 @@ void Solution::projectOldCellOntoNewCells(GlobalIndexType cellID,
          FieldContainer<double> basisCoefficients(basisCardinality);
          
          for (int dofOrdinal=0; dofOrdinal<basisCardinality; dofOrdinal++) {
-           int dofIndex = oldElemType->trialOrderPtr->getDofIndex(trialID, dofOrdinal);
+           int dofIndex = oldElemType->trialOrderPtr->getDofIndex(trialID, dofOrdinal, sideOrdinal);
            basisCoefficients(dofOrdinal) = oldData(dofIndex);
          }
          FunctionPtr oldTrialFunction = Teuchos::rcp( new NewBasisSumFunction(basis, basisCoefficients, parentSideTopoBasisCache) );
@@ -3847,7 +3852,7 @@ void Solution::projectOldCellOntoNewCells(GlobalIndexType cellID,
       RefinementBranch refBranch(1,make_pair(parentCell->refinementPattern().get(), childOrdinal));
       volumeBasisCache = BasisCache::basisCacheForRefinedReferenceCell(*childCell->topology(), cubatureDegree, refBranch);
       for (int sideOrdinal = 0; sideOrdinal < childSideCount; sideOrdinal++) {
-        shards::CellTopology sideTopo = parentCell->topology()->getCellTopologyData(sideDim, sideOrdinal);
+        shards::CellTopology sideTopo = childCell->topology()->getCellTopologyData(sideDim, sideOrdinal);
         unsigned parentSideOrdinal = (childID==cellID) ? sideOrdinal
                                    : parentCell->refinementPattern()->mapSubcellOrdinalFromChildToParent(childOrdinal, sideDim, sideOrdinal);
 
@@ -3863,7 +3868,7 @@ void Solution::projectOldCellOntoNewCells(GlobalIndexType cellID,
     } else {
       volumeBasisCache = BasisCache::basisCacheForReferenceCell(*childCell->topology(), cubatureDegree);
       for (int sideOrdinal = 0; sideOrdinal < childSideCount; sideOrdinal++) {
-        shards::CellTopology sideTopo = parentCell->topology()->getCellTopologyData(sideDim, sideOrdinal);
+        shards::CellTopology sideTopo = childCell->topology()->getCellTopologyData(sideDim, sideOrdinal);
         sideBasisCache[sideOrdinal] = BasisCache::basisCacheForReferenceCell(sideTopo, cubatureDegree);
       }
     }
@@ -3878,6 +3883,9 @@ void Solution::projectOldCellOntoNewCells(GlobalIndexType cellID,
       BasisPtr childBasis = childType->trialOrderPtr->getBasis(varID);
       basisCoefficients.resize(1,childBasis->getCardinality());
       Projector::projectFunctionOntoBasisInterpolating(basisCoefficients, fieldFxn, childBasis, volumeBasisCache);
+      
+//      cout << "projected basisCoefficients for child volume trialID " << varID << ":\n" << basisCoefficients;
+      
       for (int basisOrdinal=0; basisOrdinal<basisCoefficients.size(); basisOrdinal++) {
         int dofIndex = childType->trialOrderPtr->getDofIndex(varID, basisOrdinal);
         _solutionForCellIDGlobal[childID][dofIndex] = basisCoefficients[basisOrdinal];
@@ -3889,7 +3897,7 @@ void Solution::projectOldCellOntoNewCells(GlobalIndexType cellID,
       unsigned parentSideOrdinal = (childID==cellID) ? sideOrdinal
                                  : parentCell->refinementPattern()->mapSubcellOrdinalFromChildToParent(childOrdinal, sideDim, sideOrdinal);
       if (parentSideOrdinal != -1) { // then parent has dofs for this trace on this side
-        for (map<int,FunctionPtr>::iterator traceFxnIt=traceMap[sideOrdinal].begin(); traceFxnIt != traceMap[sideOrdinal].end(); traceFxnIt++) {
+        for (map<int,FunctionPtr>::iterator traceFxnIt=traceMap[parentSideOrdinal].begin(); traceFxnIt != traceMap[parentSideOrdinal].end(); traceFxnIt++) {
           int varID = traceFxnIt->first;
           FunctionPtr traceFxn = traceFxnIt->second;
           BasisPtr childBasis = childType->trialOrderPtr->getBasis(varID, sideOrdinal);
