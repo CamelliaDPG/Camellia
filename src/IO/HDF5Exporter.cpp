@@ -16,7 +16,7 @@
 #include <EpetraExt_HDF5.h>
 
 HDF5Exporter::HDF5Exporter(MeshPtr mesh, string saveDirectory, bool deleteOldFiles) : _mesh(mesh), _filename(saveDirectory), 
-  _xdmf("Xdmf"), _domain("Domain"), _fieldGrids("Grid"), _traceGrids("Grid")
+  _xdmf("Xdmf"), _domain("Domain"), _rootGrid("Grid"), _fieldGrids("Grid"), _traceGrids("Grid")
 {
   int commRank = Teuchos::GlobalMPISession::getRank();
   int numProcs = Teuchos::GlobalMPISession::getNProc();
@@ -26,14 +26,19 @@ HDF5Exporter::HDF5Exporter(MeshPtr mesh, string saveDirectory, bool deleteOldFil
     system(("rm -rf "+_filename).c_str());
   }
   system(("mkdir -p "+_filename+"/HDF5").c_str());
+  system(("mkdir -p "+_filename+"/XMF").c_str());
 
   if (commRank == 0)
   {
     _xdmf.addAttribute("xmlns:xi", "http://www.w3.org/2003/XInclude");
     _xdmf.addAttribute("Version", "2");
     _xdmf.addChild(_domain);
-    _domain.addChild(_fieldGrids);
-    _domain.addChild(_traceGrids);
+    _domain.addChild(_rootGrid);
+    _rootGrid.addAttribute("Name", "Root Grid");
+    _rootGrid.addAttribute("GridType", "Tree");
+    // _rootGrid.addAttribute("CollectionType", "Temporal");
+    _rootGrid.addChild(_fieldGrids);
+    _rootGrid.addChild(_traceGrids);
     _fieldGrids.addAttribute("Name", "Field Grids");
     _traceGrids.addAttribute("Name", "Trace Grids");
     _fieldGrids.addAttribute("GridType", "Collection");
@@ -114,7 +119,7 @@ void HDF5Exporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
           XMLObject xiinclude("xi:include");
           partitionCollection.addChild(xiinclude);
           stringstream partitionFileName;
-          partitionFileName << _filename << "Field" << "Partition" << p << "Time" << timeVal << ".xmf";
+          partitionFileName << "XMF/field" << "-part" << p << "-time" << timeVal << ".xmf";
           xiinclude.addAttribute("href", partitionFileName.str());
         }
       }
@@ -138,7 +143,7 @@ void HDF5Exporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
           XMLObject xiinclude("xi:include");
           partitionCollection.addChild(xiinclude);
           stringstream partitionFileName;
-          partitionFileName << _filename << "Trace" << "Partition" << p << "Time" << timeVal << ".xmf";
+          partitionFileName << "XMF/trace" << "-part" << p << "-time" << timeVal << ".xmf";
           xiinclude.addAttribute("href", partitionFileName.str());
         }
       }
@@ -149,9 +154,9 @@ void HDF5Exporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
   ofstream gridFile;
   stringstream partitionFileName;
   if (!exportingBoundaryValues)
-    partitionFileName << _filename << "/" << _filename << "Field" << "Partition" << commRank << "Time" << timeVal << ".xmf";
+    partitionFileName << _filename << "/XMF/field" << "-part" << commRank << "-time" << timeVal << ".xmf";
   else
-    partitionFileName << _filename << "/" << _filename << "Trace" << "Partition" << commRank << "Time" << timeVal << ".xmf";
+    partitionFileName << _filename << "/XMF/trace" << "-part" << commRank << "-time" << timeVal << ".xmf";
   gridFile.open(partitionFileName.str().c_str());
   XMLObject grid("Grid");
   grid.addAttribute("Name", "Grid");

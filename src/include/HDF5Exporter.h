@@ -27,6 +27,7 @@ private:
   // ofstream _xmfFile;
   XMLObject _xdmf;
   XMLObject _domain;
+  XMLObject _rootGrid;
   XMLObject _fieldGrids;
   XMLObject _traceGrids;
   set<double> _fieldTimeVals;
