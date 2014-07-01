@@ -2,3 +2,5 @@ project(IncompressibleNS)
 
 add_executable(NoPressureKovasznay NoPressureKovasznay.cpp)
 add_executable(NoPressureStokesManufactured NoPressureStokesManufactured.cpp)
+
+add_executable(BlasiusDriver BlasiusDriver.cpp)

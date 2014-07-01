@@ -738,10 +738,13 @@ void HDF5Exporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
       }
     }
   }
-  hdf5.Write("Data", "Conns", H5T_NATIVE_INT, connDimsf, &connArray[0]);
-  hdf5.Write("Data", "Points", H5T_NATIVE_DOUBLE, ptDimsf, &ptArray[0]);
-  for (int i = 0; i < nFcns; i++)
-    hdf5.Write("Data", functionNames[i], H5T_NATIVE_DOUBLE, valDimsf[i], &valArrays[i][0]);
+  if (connDimsf > 0)
+  {
+    hdf5.Write("Data", "Conns", H5T_NATIVE_INT, connDimsf, &connArray[0]);
+    hdf5.Write("Data", "Points", H5T_NATIVE_DOUBLE, ptDimsf, &ptArray[0]);
+    for (int i = 0; i < nFcns; i++)
+      hdf5.Write("Data", functionNames[i], H5T_NATIVE_DOUBLE, valDimsf[i], &valArrays[i][0]);
+  }
   hdf5.Close();
 
   gridFile << grid.toString();
