@@ -883,6 +883,25 @@ BasisCachePtr BasisCache::basisCacheForCellType(MeshPtr mesh, ElementTypePtr ele
   
   return basisCache;
 }
+
+BasisCachePtr BasisCache::basisCacheForReferenceCell(shards::CellTopology &cellTopo, int cubatureDegree, bool createSideCacheToo) {
+  FieldContainer<double> cellNodes(cellTopo.getNodeCount(),cellTopo.getDimension());
+  CamelliaCellTools::refCellNodesForTopology(cellNodes, cellTopo);
+  cellNodes.resize(1,cellNodes.dimension(0),cellNodes.dimension(1));
+  
+  BasisCachePtr basisCache = Teuchos::rcp(new BasisCache(cellNodes,cellTopo,cubatureDegree,createSideCacheToo));
+  return basisCache;
+}
+
+BasisCachePtr BasisCache::basisCacheForRefinedReferenceCell(shards::CellTopology &cellTopo, int cubatureDegree,
+                                                            RefinementBranch refinementBranch, bool createSideCacheToo) {
+  FieldContainer<double> cellNodes = RefinementPattern::descendantNodesRelativeToAncestorReferenceCell(refinementBranch);
+  
+  cellNodes.resize(1,cellNodes.dimension(0),cellNodes.dimension(1));
+  BasisCachePtr basisCache = Teuchos::rcp(new BasisCache(cellNodes,cellTopo,cubatureDegree,createSideCacheToo));
+  return basisCache;
+}
+
 BasisCachePtr BasisCache::quadBasisCache(double width, double height, int cubDegree, bool createSideCacheToo) {
   shards::CellTopology quad_4(shards::getCellTopologyData<shards::Quadrilateral<4> >() );
   FieldContainer<double> physicalCellNodes(1,4,2);

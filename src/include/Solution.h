@@ -230,8 +230,15 @@ public:
   // old projectOnto* methods:
   void projectOntoMesh(const map<int, Teuchos::RCP<AbstractFunction> > &functionMap);
   void projectOntoCell(const map<int, Teuchos::RCP<AbstractFunction> > &functionMap, GlobalIndexType cellID);
-  void projectOldCellOntoNewCells(GlobalIndexType cellID, ElementTypePtr oldElemType, const vector<GlobalIndexType> &childIDs);
-
+  
+  void projectOldCellOntoNewCells(GlobalIndexType cellID,
+                                  ElementTypePtr oldElemType,
+                                  const vector<GlobalIndexType> &childIDs);
+  void projectOldCellOntoNewCells(GlobalIndexType cellID,
+                                  ElementTypePtr oldElemType,
+                                  const FieldContainer<double> &oldData,
+                                  const vector<GlobalIndexType> &childIDs);
+  
   void setLagrangeConstraints( Teuchos::RCP<LagrangeConstraints> lagrangeConstraints);
   void setFilter(Teuchos::RCP<LocalStiffnessMatrixFilter> newFilter);
   void setReportConditionNumber(bool value);

@@ -3764,75 +3764,146 @@ void Solution::projectOntoCell(const map<int, Teuchos::RCP<AbstractFunction> > &
   }
 }
 
-void Solution::projectOldCellOntoNewCells(GlobalIndexType cellID, ElementTypePtr oldElemType, const vector<GlobalIndexType> &childIDs) {
-  // NOTE: this only projects field variables for now.
-  DofOrderingPtr oldTrialOrdering = oldElemType->trialOrderPtr;
-  set<int> trialIDs = oldTrialOrdering->getVarIDs();
-  FieldContainer<double> physicalCellNodes = _mesh->physicalCellNodesForCell(cellID);
+void Solution::projectOldCellOntoNewCells(GlobalIndexType cellID,
+                                          ElementTypePtr oldElemType,
+                                          const vector<GlobalIndexType> &childIDs) {
+  if (_solutionForCellIDGlobal.find(cellID) == _solutionForCellIDGlobal.end()) return; // zero solution on cell
+  const FieldContainer<double>* oldData = &_solutionForCellIDGlobal[cellID];
+  projectOldCellOntoNewCells(cellID, oldElemType, *oldData, childIDs);
+}
+
+void Solution::projectOldCellOntoNewCells(GlobalIndexType cellID,
+                                          ElementTypePtr oldElemType,
+                                          const FieldContainer<double> &oldData,
+                                          const vector<GlobalIndexType> &childIDs)
+ {
+   // NOTE: this only projects field variables for now.
+   DofOrderingPtr oldTrialOrdering = oldElemType->trialOrderPtr;
+   set<int> trialIDs = oldTrialOrdering->getVarIDs();
+   FieldContainer<double> physicalCellNodes = _mesh->physicalCellNodesForCell(cellID);
+   
+   TEUCHOS_TEST_FOR_EXCEPTION(oldTrialOrdering->totalDofs() != oldData.size(), std::invalid_argument,
+                              "oldElemType trial space does not match old data coefficients size");
+   map<int, FunctionPtr > fieldMap;
+   
+   CellPtr parentCell = _mesh->getTopology()->getCell(cellID);
+   int dummyCubatureDegree = 1;
+   BasisCachePtr parentRefCellCache = BasisCache::basisCacheForReferenceCell(*parentCell->topology(), dummyCubatureDegree);
+   
+   for (set<int>::iterator trialIDIt = trialIDs.begin(); trialIDIt != trialIDs.end(); trialIDIt++) {
+     int trialID = *trialIDIt;
+     if (oldTrialOrdering->getNumSidesForVarID(trialID) == 1) { // field variable, the only kind we honor right now
+       BasisPtr basis = oldTrialOrdering->getBasis(trialID);
+       int basisCardinality = basis->getCardinality();
+       FieldContainer<double> basisCoefficients(basisCardinality);
+       
+       for (int dofOrdinal=0; dofOrdinal<basisCardinality; dofOrdinal++) {
+         int dofIndex = oldElemType->trialOrderPtr->getDofIndex(trialID, dofOrdinal);
+         basisCoefficients(dofOrdinal) = oldData(dofIndex);
+       }
+       FunctionPtr oldTrialFunction = Teuchos::rcp( new NewBasisSumFunction(basis, basisCoefficients, parentRefCellCache) );
+       fieldMap[trialID] = oldTrialFunction;
+     }
+   }
+   int sideDim = _mesh->getTopology()->getSpaceDim() - 1;
   
-  if (_solutionForCellIDGlobal.find(cellID) == _solutionForCellIDGlobal.end() ) {
-    // they're implicit 0s, then: projection will also be implicit 0s...
-    return;
-  }
-  
-  FieldContainer<double>* solutionCoeffs = &(_solutionForCellIDGlobal[cellID]);
-  TEUCHOS_TEST_FOR_EXCEPTION(oldTrialOrdering->totalDofs() != solutionCoeffs->size(), std::invalid_argument,
-                             "oldElemType trial space does not match stored solution size");
-  map<int, FunctionPtr > functionMap;
-  
-  BasisCachePtr oldCellCache = BasisCache::basisCacheForCell(_mesh, cellID);
-  
-  for (set<int>::iterator trialIDIt = trialIDs.begin(); trialIDIt != trialIDs.end(); trialIDIt++) {
-    int trialID = *trialIDIt;
-    if (oldTrialOrdering->getNumSidesForVarID(trialID) == 1) { // field variable, the only kind we honor right now
-      BasisPtr basis = oldTrialOrdering->getBasis(trialID);
-      int basisCardinality = basis->getCardinality();
-      FieldContainer<double> basisCoefficients(basisCardinality);
-      
-      for (int dofOrdinal=0; dofOrdinal<basisCardinality; dofOrdinal++) {
-        int dofIndex = oldElemType->trialOrderPtr->getDofIndex(trialID, dofOrdinal);
-        basisCoefficients(dofOrdinal) = (*solutionCoeffs)(dofIndex);
-      }
-      FunctionPtr oldTrialFunction = Teuchos::rcp( new NewBasisSumFunction(basis, basisCoefficients, oldCellCache) );
-      functionMap[trialID] = oldTrialFunction;
-    }
-  }
-  int sideDim = _mesh->getTopology()->getSpaceDim() - 1;
-  
+   int sideCount = parentCell->topology()->getSideCount();
+   vector< map<int, FunctionPtr> > traceMap(sideCount);
+   for (int sideOrdinal=0; sideOrdinal<sideCount; sideOrdinal++) {
+     shards::CellTopology sideTopo = parentCell->topology()->getCellTopologyData(sideDim, sideOrdinal);
+     BasisCachePtr parentSideTopoBasisCache = BasisCache::basisCacheForReferenceCell(sideTopo, dummyCubatureDegree);
+     for (set<int>::iterator trialIDIt = trialIDs.begin(); trialIDIt != trialIDs.end(); trialIDIt++) {
+       int trialID = *trialIDIt;
+       if (oldTrialOrdering->getNumSidesForVarID(trialID) != 1) { // trace (flux) variable
+         BasisPtr basis = oldTrialOrdering->getBasis(trialID, sideOrdinal);
+         int basisCardinality = basis->getCardinality();
+         FieldContainer<double> basisCoefficients(basisCardinality);
+         
+         for (int dofOrdinal=0; dofOrdinal<basisCardinality; dofOrdinal++) {
+           int dofIndex = oldElemType->trialOrderPtr->getDofIndex(trialID, dofOrdinal);
+           basisCoefficients(dofOrdinal) = oldData(dofIndex);
+         }
+         FunctionPtr oldTrialFunction = Teuchos::rcp( new NewBasisSumFunction(basis, basisCoefficients, parentSideTopoBasisCache) );
+         traceMap[sideOrdinal][trialID] = oldTrialFunction;
+       }
+     }
+   }
+   
+   int parent_p_order = _mesh->getElementType(cellID)->trialOrderPtr->maxBasisDegree();
+   
   for (int childOrdinal=0; childOrdinal < childIDs.size(); childOrdinal++) {
     GlobalIndexType childID = childIDs[childOrdinal];
-    // (re)initialize the FieldContainer storing the solution--element type may have changed (in case of p-refinement)
-    _solutionForCellIDGlobal[childID] = FieldContainer<double>(_mesh->getElement(childID)->elementType()->trialOrderPtr->totalDofs());
-    // project fields
-    projectOntoCell(functionMap,childID);
+    CellPtr childCell = _mesh->getTopology()->getCell(childID);
+    ElementTypePtr childType = _mesh->getElementType(childID);
+    int childSideCount = childCell->topology()->getSideCount();
+
+    int child_p_order = _mesh->getElementType(childID)->trialOrderPtr->maxBasisDegree();
+    int cubatureDegree = parent_p_order + child_p_order;
     
-//    // project traces and fluxes
-//    CellPtr childCell = _mesh->getTopology()->getCell(childID);
-//    for (int sideOrdinal=0; sideOrdinal<childCell->topology()->getSideCount(); sideOrdinal++) {
-//      map<int, FunctionPtr> sideFunctionMap;
-//      unsigned parentSideOrdinal = childCell->refinementPattern()->mapSubcellOrdinalFromChildToParent(childOrdinal, sideDim, sideOrdinal);
-//      
-//      for (set<int>::iterator trialIDIt = trialIDs.begin(); trialIDIt != trialIDs.end(); trialIDIt++) {
-//        int trialID = *trialIDIt;
-//        if (oldTrialOrdering->getNumSidesForVarID(trialID) != 1) { // flux/trace variable
-//          if (parentSideOrdinal != -1) { // then parent has dofs for this trace on this side
-//            BasisPtr basis = oldTrialOrdering->getBasis(trialID, parentSideOrdinal);
-//            int basisCardinality = basis->getCardinality();
-//            FieldContainer<double> basisCoefficients(basisCardinality);
-//            
-//            for (int dofOrdinal=0; dofOrdinal<basisCardinality; dofOrdinal++) {
-//              int dofIndex = oldElemType->trialOrderPtr->getDofIndex(trialID, dofOrdinal, sideOrdinal);
-//              basisCoefficients(dofOrdinal) = (*solutionCoeffs)(dofIndex);
-//            }
-//            FunctionPtr oldTrialFunction = Teuchos::rcp( new NewBasisSumFunction(basis, basisCoefficients, oldCellCache) );
-//            sideFunctionMap[trialID] = oldTrialFunction;
-//          } else {
-//            // TODO: do something with the termTraced LinearTermPtr in Var...
-//          }
-//        }
-//      }
-//      projectOntoCell(sideFunctionMap, childID, sideOrdinal);
-//    }
+    BasisCachePtr volumeBasisCache;
+    vector<BasisCachePtr> sideBasisCache(childSideCount);
+    
+    if (parentCell->children().size() > 0) {
+      RefinementBranch refBranch(1,make_pair(parentCell->refinementPattern().get(), childOrdinal));
+      volumeBasisCache = BasisCache::basisCacheForRefinedReferenceCell(*childCell->topology(), cubatureDegree, refBranch);
+      for (int sideOrdinal = 0; sideOrdinal < childSideCount; sideOrdinal++) {
+        shards::CellTopology sideTopo = parentCell->topology()->getCellTopologyData(sideDim, sideOrdinal);
+        unsigned parentSideOrdinal = (childID==cellID) ? sideOrdinal
+                                   : parentCell->refinementPattern()->mapSubcellOrdinalFromChildToParent(childOrdinal, sideDim, sideOrdinal);
+
+        RefinementBranch sideBranch;
+        if (parentSideOrdinal != -1)
+          sideBranch = RefinementPattern::subcellRefinementBranch(refBranch, sideDim, parentSideOrdinal);
+        if (sideBranch.size()==0) {
+          sideBasisCache[sideOrdinal] = BasisCache::basisCacheForReferenceCell(sideTopo, cubatureDegree);
+        } else {
+          sideBasisCache[sideOrdinal] = BasisCache::basisCacheForRefinedReferenceCell(sideTopo, cubatureDegree, sideBranch);
+        }
+      }
+    } else {
+      volumeBasisCache = BasisCache::basisCacheForReferenceCell(*childCell->topology(), cubatureDegree);
+      for (int sideOrdinal = 0; sideOrdinal < childSideCount; sideOrdinal++) {
+        shards::CellTopology sideTopo = parentCell->topology()->getCellTopologyData(sideDim, sideOrdinal);
+        sideBasisCache[sideOrdinal] = BasisCache::basisCacheForReferenceCell(sideTopo, cubatureDegree);
+      }
+    }
+  
+    // (re)initialize the FieldContainer storing the solution--element type may have changed (in case of p-refinement)
+    _solutionForCellIDGlobal[childID] = FieldContainer<double>(childType->trialOrderPtr->totalDofs());
+    // project fields
+    FieldContainer<double> basisCoefficients;
+    for (map<int,FunctionPtr>::iterator fieldFxnIt=fieldMap.begin(); fieldFxnIt != fieldMap.end(); fieldFxnIt++) {
+      int varID = fieldFxnIt->first;
+      FunctionPtr fieldFxn = fieldFxnIt->second;
+      BasisPtr childBasis = childType->trialOrderPtr->getBasis(varID);
+      basisCoefficients.resize(1,childBasis->getCardinality());
+      Projector::projectFunctionOntoBasisInterpolating(basisCoefficients, fieldFxn, childBasis, volumeBasisCache);
+      for (int basisOrdinal=0; basisOrdinal<basisCoefficients.size(); basisOrdinal++) {
+        int dofIndex = childType->trialOrderPtr->getDofIndex(varID, basisOrdinal);
+        _solutionForCellIDGlobal[childID][dofIndex] = basisCoefficients[basisOrdinal];
+      }
+    }
+    
+    // project traces and fluxes
+    for (int sideOrdinal=0; sideOrdinal<childSideCount; sideOrdinal++) {
+      unsigned parentSideOrdinal = (childID==cellID) ? sideOrdinal
+                                 : parentCell->refinementPattern()->mapSubcellOrdinalFromChildToParent(childOrdinal, sideDim, sideOrdinal);
+      if (parentSideOrdinal != -1) { // then parent has dofs for this trace on this side
+        for (map<int,FunctionPtr>::iterator traceFxnIt=traceMap[sideOrdinal].begin(); traceFxnIt != traceMap[sideOrdinal].end(); traceFxnIt++) {
+          int varID = traceFxnIt->first;
+          FunctionPtr traceFxn = traceFxnIt->second;
+          BasisPtr childBasis = childType->trialOrderPtr->getBasis(varID, sideOrdinal);
+          basisCoefficients.resize(1,childBasis->getCardinality());
+          Projector::projectFunctionOntoBasisInterpolating(basisCoefficients, traceFxn, childBasis, sideBasisCache[sideOrdinal]);
+          for (int basisOrdinal=0; basisOrdinal<basisCoefficients.size(); basisOrdinal++) {
+            int dofIndex = childType->trialOrderPtr->getDofIndex(varID, basisOrdinal, sideOrdinal);
+            _solutionForCellIDGlobal[childID][dofIndex] = basisCoefficients[basisOrdinal];
+          }
+        }
+      } else {
+        // TODO: do something with the termTraced LinearTermPtr in Var...
+      }
+    }
   }
   
   clearComputedResiduals(); // force recomputation of energy error (could do something more incisive, just computing the energy error for the new cells)
