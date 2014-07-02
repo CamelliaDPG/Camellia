@@ -69,7 +69,7 @@ int main(int argc, char *argv[]) {
         // h-convergence
         double epsilon = 1e-2;
         double beta_x = 1.0, beta_y = 1.0;
-        ConfusionManufacturedSolution exactSolution(epsilon,beta_x,beta_y); // 0 doesn't mean constant, but a particular solution...
+        ConfusionManufacturedSolution exactSolution(epsilon,beta_x,beta_y);
         
         int pOrder = 3;
         int H1Order = pOrder+1; int pToAdd = 2;
@@ -81,7 +81,7 @@ int main(int argc, char *argv[]) {
         vector<GlobalIndexType> cellsToRefine;
         cellsToRefine.clear();
         
-        // start with a fresh 2x1 mesh:
+        // start with a fresh 1x1 mesh:
         horizontalCells = 1; verticalCells = 1;
         Teuchos::RCP<Mesh> mesh = MeshFactory::buildQuadMesh(quadPoints, horizontalCells, verticalCells, exactSolution.bilinearForm(), H1Order, H1Order+pToAdd);
         mesh->setPartitionPolicy(Teuchos::rcp(new ZoltanMeshPartitionPolicy("HSFC")));
