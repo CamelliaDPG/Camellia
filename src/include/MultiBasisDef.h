@@ -390,62 +390,74 @@ void MultiBasis<Scalar, ArrayScalar>::computeCellJacobians(ArrayScalar &cellJaco
 
 template <class Scalar, class ArrayScalar>
 void MultiBasis<Scalar,ArrayScalar>::initializeTags() const {
-  // TODO: finish implementing this
   // TODO: generalize to 2D multiBasis
-  
-  //cout << "MultiBasis::initializeTags() called.\n";
-  
-  // we need to at least set this up for the first and last vertices
-  int firstVertexDofOrdinal, secondVertexDofOrdinal;
-  firstVertexDofOrdinal = _bases[0]->getDofOrdinal(0,0,0);
-  BasisPtr lastBasis = _bases[_bases.size() - 1];
-  int lastBasisOrdinalOffset = this->_basisCardinality - lastBasis->getCardinality();
-  secondVertexDofOrdinal = lastBasis->getDofOrdinal(0,1,0) + lastBasisOrdinalOffset;
-  
-  // The following adapted from Basis_HGRAD_LINE_Cn_FEM
-  // unlike there, we do assume that the edge's endpoints are included in the first and last bases...
   
   // Basis-dependent initializations
   int tagSize  = 4;        // size of DoF tag, i.e., number of fields in the tag
   int posScDim = 0;        // position in the tag, counting from 0, of the subcell dim
   int posScOrd = 1;        // position in the tag, counting from 0, of the subcell ordinal
   int posDfOrd = 2;        // position in the tag, counting from 0, of DoF ordinal relative to the subcell
+  int posScCnt = 3;        // position in the tag, counting from 0, of DoF count for the subcell
   
   // An array with local DoF tags assigned to the basis functions, in the order of their local enumeration
-  
+
   int N = this->getCardinality();
-  
-  // double-check that our assumptions about the sub-bases have not been violated:
-  if (firstVertexDofOrdinal != 0) {
-    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "sub-basis has first vertex dofOrdinal in unexpected spot." );
-  }
-  if (secondVertexDofOrdinal != N-1) {
-    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "sub-basis has second vertex dofOrdinal in unexpected spot." );
-  }
-  
   int *tags = new int[ tagSize * N ];
+
   
-  int internal_dof = N - 2; // all but the endpoints
-  int edge_dof;
-  
-  tags[0] = 0;
-  tags[1] = 0;
-  tags[2] = 0;
-  tags[3] = 1;
-  edge_dof = 1;
-  
-  int n = N-1;
-  
-  for (int i=1;i < n;i++) {
-    tags[4*i] = 1;
-    tags[4*i+1] = 0;
-    tags[4*i+2] = -edge_dof + i;
-    tags[4*i+3] = internal_dof;
+  if ((this->_functionSpace==IntrepidExtendedTypes::FUNCTION_SPACE_HVOL)
+      || (this->_functionSpace==IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HVOL)
+      || (this->_functionSpace==IntrepidExtendedTypes::FUNCTION_SPACE_TENSOR_HVOL)) {
+    int internal_dof = N; // all dofs are internal
+    
+    for (int i=0;i < N;i++) {
+      tags[4*i+posScDim] = 1;
+      tags[4*i+posScOrd] = 0;
+      tags[4*i+posDfOrd] = i-1;
+      tags[4*i+posScCnt] = internal_dof;
+    }
+  } else {
+    // we need to at least set this up for the first and last vertices
+    int firstVertexDofOrdinal, secondVertexDofOrdinal;
+    firstVertexDofOrdinal = _bases[0]->getDofOrdinal(0,0,0);
+    BasisPtr lastBasis = _bases[_bases.size() - 1];
+    int lastBasisOrdinalOffset = this->_basisCardinality - lastBasis->getCardinality();
+    secondVertexDofOrdinal = lastBasis->getDofOrdinal(0,1,0) + lastBasisOrdinalOffset;
+    
+    // The following adapted from Basis_HGRAD_LINE_Cn_FEM
+    // unlike there, we do assume that the edge's endpoints are included in the first and last bases...
+    
+    
+    // double-check that our assumptions about the sub-bases have not been violated:
+    if (firstVertexDofOrdinal != 0) {
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "sub-basis has first vertex dofOrdinal in unexpected spot." );
+    }
+    if (secondVertexDofOrdinal != N-1) {
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "sub-basis has second vertex dofOrdinal in unexpected spot." );
+    }
+    
+    int internal_dof = N - 2; // all but the endpoints
+    int edge_dof;
+    
+    tags[posScDim] = 0;
+    tags[posScOrd] = 0;
+    tags[posDfOrd] = 0;
+    tags[posScCnt] = 1;
+    edge_dof = 1;
+    
+    int n = N-1;
+    
+    for (int i=1;i < n;i++) {
+      tags[4*i+posScDim] = 1;
+      tags[4*i+posScOrd] = 0;
+      tags[4*i+posDfOrd] = i-1;
+      tags[4*i+posScCnt] = internal_dof;
+    }
+    tags[4*n+posScDim] = 0;
+    tags[4*n+posScOrd] = 1;
+    tags[4*n+posDfOrd] = 0;
+    tags[4*n+posScCnt] = 1;
   }
-  tags[4*n] = 0;
-  tags[4*n+1] = 1;
-  tags[4*n+2] = 0;
-  tags[4*n+3] = 1;
   
   Intrepid::setOrdinalTagData(this -> _tagToOrdinal,
                               this -> _ordinalToTag,
