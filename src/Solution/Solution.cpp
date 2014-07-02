@@ -377,7 +377,19 @@ void Solution::initializeStiffnessAndLoad(Teuchos::RCP<Solver> solver) {
   _globalStiffMatrix = Teuchos::rcp(new Epetra_FECrsMatrix(::Copy, partMap, maxRowSize));
   //  Epetra_FECrsMatrix globalStiffMatrix(Copy, partMap, partMap, maxRowSize);
   _rhsVector = Teuchos::rcp(new Epetra_FEVector(partMap));
-  _lhsVector = Teuchos::rcp(new Epetra_FEVector(partMap,true));
+  _lhsVector = Teuchos::rcp(new Epetra_FEVector(partMap,1,true));
+  
+  // set initial _lhsVector (initial guess for iterative solvers)
+  // (Note that our approach here depends on the fact that we store the local data for each cell;
+  //  once we move to a distributed solution representation *using* _lhsVector, we'll want to manage
+  //  some sort of remapping when the partition map changes, and probably not to create a new _lhsVector on each solve.)
+  set<GlobalIndexType> cellIDs = _mesh->getActiveCellIDs();
+  for (set<GlobalIndexType>::iterator cellIDIt = cellIDs.begin(); cellIDIt != cellIDs.end(); cellIDIt++) {
+    GlobalIndexType cellID = *cellIDIt;
+    if (_solutionForCellIDGlobal.find(cellID) != _solutionForCellIDGlobal.end()) {
+      _mesh->globalDofAssignment()->interpretLocalCoefficients(cellID, _solutionForCellIDGlobal[cellID], *_lhsVector);
+    }
+  }
   
   Teuchos::RCP<Epetra_LinearProblem> problem = Teuchos::rcp( new Epetra_LinearProblem(&*_globalStiffMatrix, &*_lhsVector, &*_rhsVector));
   solver->setProblem(problem);
@@ -1041,7 +1053,7 @@ ElementTypePtr Solution::getEquivalentElementType(Teuchos::RCP<Mesh> otherMesh, 
 //  return true;
 //}
 
-Epetra_Vector* Solution::getGlobalCoefficients() {
+Epetra_MultiVector* Solution::getGlobalCoefficients() {
   return (*_lhsVector)(0);
 }
 
@@ -3912,7 +3924,11 @@ void Solution::projectOldCellOntoNewCells(GlobalIndexType cellID,
         // TODO: do something with the termTraced LinearTermPtr in Var...
       }
     }
+    
+//    cout << "After projection, solution coefficients for child are:\n" << _solutionForCellIDGlobal[childID];
   }
+   
+   
   
   clearComputedResiduals(); // force recomputation of energy error (could do something more incisive, just computing the energy error for the new cells)
 }

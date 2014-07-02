@@ -22,7 +22,7 @@ public:
   static bool fcsAgree(const FieldContainer<double> &fc1, const FieldContainer<double> &fc2, double tol, double &maxDiff); // redundant with / copied from TestSuite::fcsAgree()
   static bool neighborBasesAgreeOnSides(Teuchos::RCP<Mesh> mesh);
   
-  static bool neighborBasesAgreeOnSides(Teuchos::RCP<Mesh> mesh, Epetra_Vector &globalSolutionCoefficients);
+  static bool neighborBasesAgreeOnSides(Teuchos::RCP<Mesh> mesh, Epetra_MultiVector &globalSolutionCoefficients);
 };
 
 #endif

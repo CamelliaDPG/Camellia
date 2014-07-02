@@ -678,11 +678,11 @@ set<GlobalIndexType> GDAMaximumRule2D::globalDofIndicesForPartition(PartitionInd
 }
 
 void GDAMaximumRule2D::interpretGlobalCoefficients(GlobalIndexType cellID, FieldContainer<double> &localCoefficients,
-                                                   const Epetra_Vector &globalCoefficients) {
+                                                   const Epetra_MultiVector &globalCoefficients) {
   int numDofs = elementType(cellID)->trialOrderPtr->totalDofs();
   for (int dofIndex=0; dofIndex<numDofs; dofIndex++) {
     GlobalIndexType globalIndex = globalDofIndex(cellID, dofIndex);
-    localCoefficients(dofIndex) = globalCoefficients[globalIndex];
+    localCoefficients(dofIndex) = globalCoefficients[0][globalIndex];
   }
 }
 

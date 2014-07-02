@@ -433,7 +433,7 @@ bool MeshTestUtility::neighborBasesAgreeOnSides(Teuchos::RCP<Mesh> mesh) {
   return neighborBasesAgreeOnSides(mesh, testSolutionCoefficients);
 }
 
-bool MeshTestUtility::neighborBasesAgreeOnSides(Teuchos::RCP<Mesh> mesh, Epetra_Vector &globalSolutionCoefficients) {
+bool MeshTestUtility::neighborBasesAgreeOnSides(Teuchos::RCP<Mesh> mesh, Epetra_MultiVector &globalSolutionCoefficients) {
   bool success = true;
   MeshTopologyPtr meshTopo = mesh->getTopology();
   int spaceDim = meshTopo->getSpaceDim();

@@ -152,7 +152,7 @@ public:
   Epetra_Map getPartitionMap();
   Epetra_Map getPartitionMap(PartitionIndexType rank, set<GlobalIndexType> & myGlobalIndicesSet, GlobalIndexType numGlobalDofs, int zeroMeanConstraintsSize, Epetra_Comm* Comm );
   
-  Epetra_Vector* getGlobalCoefficients();
+  Epetra_MultiVector* getGlobalCoefficients();
 
   // solve steps:
   void initializeStiffnessAndLoad(Teuchos::RCP<Solver> solver);

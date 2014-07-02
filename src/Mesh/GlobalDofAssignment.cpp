@@ -287,6 +287,31 @@ int GlobalDofAssignment::getTestOrderEnrichment() {
   return _testOrderEnhancement;
 }
 
+void GlobalDofAssignment::interpretLocalCoefficients(GlobalIndexType cellID, const FieldContainer<double> &localCoefficients, Epetra_MultiVector &globalCoefficients) {
+  DofOrderingPtr trialOrder = elementType(cellID)->trialOrderPtr;
+  FieldContainer<double> basisCoefficients; // declared here so that we can sometimes avoid mallocs, if we get lucky in terms of the resize()
+  for (set<int>::iterator trialIDIt = trialOrder->getVarIDs().begin(); trialIDIt != trialOrder->getVarIDs().end(); trialIDIt++) {
+    int trialID = *trialIDIt;
+    int sideCount = trialOrder->getNumSidesForVarID(trialID);
+    for (int sideOrdinal=0; sideOrdinal < sideCount; sideOrdinal++) {
+      int basisCardinality = trialOrder->getBasisCardinality(trialID, sideOrdinal);
+      basisCoefficients.resize(basisCardinality);
+      vector<int> localDofIndices = trialOrder->getDofIndices(trialID, sideOrdinal);
+      for (int basisOrdinal=0; basisOrdinal<basisCardinality; basisOrdinal++) {
+        int localDofIndex = localDofIndices[basisOrdinal];
+        basisCoefficients[basisOrdinal] = localCoefficients[localDofIndex];
+      }
+      FieldContainer<double> fittedGlobalCoefficients;
+      FieldContainer<GlobalIndexType> fittedGlobalDofIndices;
+      interpretLocalBasisCoefficients(cellID, trialID, sideOrdinal, basisCoefficients, fittedGlobalCoefficients, fittedGlobalDofIndices);
+      for (int i=0; i<fittedGlobalCoefficients.size(); i++) {
+        GlobalIndexType globalDofIndex = fittedGlobalDofIndices[i];
+        globalCoefficients.ReplaceGlobalValue((GlobalIndexTypeToCast)globalDofIndex, 0, fittedGlobalCoefficients[i]);
+      }
+    }
+  }
+}
+
 void GlobalDofAssignment::setPartitionPolicy( MeshPartitionPolicyPtr partitionPolicy ) {
   _partitionPolicy = partitionPolicy;
   determineActiveElements();
