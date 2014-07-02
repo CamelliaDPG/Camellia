@@ -6,6 +6,7 @@
 #include "GnuPlotUtil.h"
 
 #include "CGSolver.h"
+#include "MLSolver.h"
 
 #ifdef ENABLE_INTEL_FLOATING_POINT_EXCEPTIONS
 #include <xmmintrin.h>
@@ -80,7 +81,8 @@ int main(int argc, char *argv[]) {
   
   bool useMinRule = false;
   bool useMumps = false;
-  bool useCGSolver = true;
+  bool useCGSolver = false;
+  bool useMLSolver = true;
   bool clearSolution = false;
   
   bool enforceOneIrregularity = true;
@@ -325,6 +327,10 @@ int main(int argc, char *argv[]) {
     int maxIters = 80000;
     double tol = 1e-6;
     fineSolver = Teuchos::rcp( new CGSolver(maxIters, tol) );
+  } else if (useMLSolver) {
+    int maxIters = 80000;
+    double tol = 1e-6;
+    fineSolver = Teuchos::rcp( new MLSolver(tol, maxIters) );
   } else {
     fineSolver = coarseSolver;
   }
@@ -341,7 +347,7 @@ int main(int argc, char *argv[]) {
 #ifdef HAVE_EPETRAEXT_HDF5
     ostringstream dir_name;
     dir_name << "stokesCavityFlow_k" << k << "_after_ref" << refIndex << "_projection";
-    bool deleteOldFiles = true;
+    bool deleteOldFiles = false;
     HDF5Exporter exporter(mesh,dir_name.str(),deleteOldFiles);
     exporter.exportSolution(solution,varFactory,0);
 #endif
@@ -384,7 +390,7 @@ int main(int argc, char *argv[]) {
 #ifdef HAVE_EPETRAEXT_HDF5
   ostringstream dir_name;
   dir_name << "stokesCavityFlow_k" << k << "_final";
-  bool deleteOldFiles = true;
+  bool deleteOldFiles = false;
   HDF5Exporter exporter(mesh,dir_name.str(),deleteOldFiles);
   exporter.exportSolution(solution,varFactory,0);
 #endif

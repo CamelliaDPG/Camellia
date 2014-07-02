@@ -60,7 +60,7 @@ public:
     ML_Epetra::MultiLevelPreconditioner* MLPrec;
     bool useAztecAsSolver = false;
     bool useNSSADefaults = false;
-    bool useSADefaults = false;
+    bool useSADefaults = true;
     if (useAztecAsSolver) {
       ML_Epetra::SetDefaults("SA",MLList);
       int iters = 5;
@@ -105,7 +105,7 @@ public:
       
       AZ_defaults(options,params);
       options[AZ_graph_fill] = fillin;
-      options[AZ_precond] = AZ_Neumann; // AZ_Jacobi; // AZ_ls; // AZ_sym_GS; // AZ_dom_decomp;
+      options[AZ_precond] = AZ_Neumann; // AZ_Jacobi // AZ_ls; // AZ_sym_GS; // AZ_dom_decomp;
       options[AZ_subdomain_solve] = AZ_ilu;
       
       int k = 20; // 20th order Neumann
@@ -156,7 +156,7 @@ public:
     timeVec[precBuild].value = MPI_Wtime() - timeVec[precBuild].value;
 #endif
     
-    //    MLPrec->TestSmoothers(MLList);
+//    MLPrec->TestSmoothers(MLList);
     
     // ML allows the user to cheaply recompute the preconditioner. You can
     // simply uncomment the following line:
