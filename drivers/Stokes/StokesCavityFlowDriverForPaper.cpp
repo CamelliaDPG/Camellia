@@ -11,6 +11,12 @@
 #include <xmmintrin.h>
 #endif
 
+#include "EpetraExt_ConfigDefs.h"
+#ifdef HAVE_EPETRAEXT_HDF5
+#include "HDF5Exporter.h"
+#endif
+
+
 class TopBoundary : public SpatialFilter {
 public:
   bool matchesPoint(double x, double y) {
@@ -66,7 +72,7 @@ int main(int argc, char *argv[]) {
   int rank = Teuchos::GlobalMPISession::getRank();
   
   bool use3D = false;
-  int refCount = 5;
+  int refCount = 10;
   
   int k = 4; // poly order for field variables
   int H1Order = k + 1;
@@ -75,6 +81,7 @@ int main(int argc, char *argv[]) {
   bool useMinRule = false;
   bool useMumps = false;
   bool useCGSolver = true;
+  bool clearSolution = false;
   
   bool enforceOneIrregularity = true;
   
@@ -249,6 +256,54 @@ int main(int argc, char *argv[]) {
   
   SolutionPtr solution = Solution::solution(mesh, bc, rhs, graphNorm);
   
+  mesh->registerSolution(solution); // sign up for projection of old solution onto refined cells.
+  
+  bool debuggingCrashInMultiBasis = false;
+  if (debuggingCrashInMultiBasis) {
+    // some initial refinements to get us to the issue in the debugger faster:
+    vector<GlobalIndexType> cellsToRefine;
+    cellsToRefine.push_back(1);
+    cellsToRefine.push_back(3);
+    mesh->hRefine(cellsToRefine, RefinementPattern::regularRefinementPatternQuad());
+    
+    cellsToRefine.clear();
+    cellsToRefine.push_back(7);
+    cellsToRefine.push_back(10);
+    mesh->hRefine(cellsToRefine, RefinementPattern::regularRefinementPatternQuad());
+    
+    cellsToRefine.clear();
+    cellsToRefine.push_back(15);
+    cellsToRefine.push_back(18);
+    mesh->hRefine(cellsToRefine, RefinementPattern::regularRefinementPatternQuad());
+    
+    cellsToRefine.clear();
+    cellsToRefine.push_back(23);
+    cellsToRefine.push_back(26);
+    mesh->hRefine(cellsToRefine, RefinementPattern::regularRefinementPatternQuad());
+    
+    cellsToRefine.clear();
+    cellsToRefine.push_back(31);
+    cellsToRefine.push_back(34);
+    mesh->hRefine(cellsToRefine, RefinementPattern::regularRefinementPatternQuad());
+    
+//    // set up zero solution data (to trigger bona fide projection on refinement)
+//    set<GlobalIndexType> cellIDs = mesh->getActiveCellIDs();
+//    for (set<GlobalIndexType>::iterator cellIDIt = cellIDs.begin(); cellIDIt != cellIDs.end(); cellIDIt++) {
+//      GlobalIndexType cellID = *cellIDIt;
+//      DofOrderingPtr trialOrdering = mesh->getElementType(cellID)->trialOrderPtr;
+//      FieldContainer<double> zeroCoefficients(trialOrdering->totalDofs());
+//      solution->setSolnCoeffsForCellID(zeroCoefficients, cellID);
+//    }
+//    
+//    cellsToRefine.clear();
+//    cellsToRefine.push_back(38);
+//    cellsToRefine.push_back(39);
+//    cellsToRefine.push_back(42);
+//    cellsToRefine.push_back(43);
+//    mesh->hRefine(cellsToRefine, RefinementPattern::regularRefinementPatternQuad());
+  }
+  
+  
   double energyThreshold = 0.2;
   RefinementStrategy refinementStrategy( solution, energyThreshold );
   
@@ -268,7 +323,7 @@ int main(int argc, char *argv[]) {
   }
   if (useCGSolver) {
     int maxIters = 80000;
-    double tol = 1e-8;
+    double tol = 1e-6;
     fineSolver = Teuchos::rcp( new CGSolver(maxIters, tol) );
   } else {
     fineSolver = coarseSolver;
@@ -283,6 +338,14 @@ int main(int argc, char *argv[]) {
     }
     refinementStrategy.refine(rank==0);
     
+#ifdef HAVE_EPETRAEXT_HDF5
+    ostringstream dir_name;
+    dir_name << "stokesCavityFlow_k" << k << "_after_ref" << refIndex << "_projection";
+    bool deleteOldFiles = true;
+    HDF5Exporter exporter(mesh,dir_name.str(),deleteOldFiles);
+    exporter.exportSolution(solution,varFactory,0);
+#endif
+    
     if (!use3D) {
       GnuPlotUtil::writeComputationalMeshSkeleton("/tmp/stokesMesh", mesh, true); // true: label cells
     }
@@ -290,8 +353,16 @@ int main(int argc, char *argv[]) {
 //    solution->setWriteMatrixToFile(true, "/tmp/stiffness.dat");
 //    solution->setWriteRHSToMatrixMarketFile(true, "/tmp/rhs.dat");
     
+    if (clearSolution) solution->clear();
+    
     solution->solve(fineSolver);
     solution->reportTimings();
+#ifdef HAVE_EPETRAEXT_HDF5
+    dir_name.clear();
+    dir_name << "stokesCavityFlow_k" << k << "_ref" << refIndex;
+    HDF5Exporter exporter2(mesh,dir_name.str(),deleteOldFiles);
+    exporter2.exportSolution(solution,varFactory,0);
+#endif
   }
   double energyErrorTotal = solution->energyErrorTotal();
   
@@ -309,6 +380,14 @@ int main(int argc, char *argv[]) {
     cout << "Final energy error: " << energyErrorTotal << endl;
     cout << "Net mass flux: " << netMassFlux << endl;
   }
+  
+#ifdef HAVE_EPETRAEXT_HDF5
+  ostringstream dir_name;
+  dir_name << "stokesCavityFlow_k" << k << "_final";
+  bool deleteOldFiles = true;
+  HDF5Exporter exporter(mesh,dir_name.str(),deleteOldFiles);
+  exporter.exportSolution(solution,varFactory,0);
+#endif
   
   if (!use3D) {
 #ifdef USE_VTK

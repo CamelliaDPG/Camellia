@@ -3691,10 +3691,6 @@ void Solution::projectOntoCell(const map<int, FunctionPtr > &functionMap, Global
     ElementPtr element = _mesh->getElement(cellID);
     ElementTypePtr elemTypePtr = element->elementType();
     
-    //    if (trialID == 10) {
-    //      cout << "Projecting function " << function->displayString() << " onto variable ID " << trialID << endl;
-    //    }
-    
     bool testVsTest = false; // in fact it's more trial vs trial, but this just means we'll over-integrate a bit
     BasisCachePtr basisCache = Teuchos::rcp( new BasisCache(elemTypePtr,_mesh,testVsTest,_cubatureEnrichmentDegree) );
     basisCache->setPhysicalCellNodes(physicalCellNodes,cellIDs,fluxOrTrace); // create side cache if it's a trace or flux
@@ -3727,10 +3723,6 @@ void Solution::projectOntoCell(const map<int, FunctionPtr > &functionMap, Global
       BasisPtr basis = elemTypePtr->trialOrderPtr->getBasis(trialID);
       FieldContainer<double> basisCoefficients(1,basis->getCardinality());
       Projector::projectFunctionOntoBasis(basisCoefficients, function, basis, basisCache);
-      //      if (trialID == 10) {
-      //        cout << "setting solnCoeffs for cellID " << cellID << " and trialID " << trialID << endl;
-      //        cout << basisCoefficients;
-      //      }
       setSolnCoeffsForCellID(basisCoefficients,cellID,trialID);
     }
   }
@@ -3789,6 +3781,8 @@ void Solution::projectOldCellOntoNewCells(GlobalIndexType cellID,
                                           const FieldContainer<double> &oldData,
                                           const vector<GlobalIndexType> &childIDs)
  {
+   VarFactory vf = _mesh->bilinearForm()->varFactory();
+   
    // NOTE: this only projects field variables for now.
    DofOrderingPtr oldTrialOrdering = oldElemType->trialOrderPtr;
    set<int> trialIDs = oldTrialOrdering->getVarIDs();
@@ -3822,6 +3816,25 @@ void Solution::projectOldCellOntoNewCells(GlobalIndexType cellID,
        fieldMap[trialID] = oldTrialFunction;
      }
    }
+   
+   FunctionPtr sideParity = Function::sideParity();
+   map<int,FunctionPtr> interiorTraceMap; // functions to use on parent interior to represent traces there
+   for (set<int>::iterator trialIDIt = trialIDs.begin(); trialIDIt != trialIDs.end(); trialIDIt++) {
+     int trialID = *trialIDIt;
+     if (oldTrialOrdering->getNumSidesForVarID(trialID) != 1) { // trace (flux) variable
+       VarPtr var = vf.trialVars().find(trialID)->second;
+       
+       LinearTermPtr termTraced = var->termTraced();
+       if (termTraced.get() != NULL) {
+         FunctionPtr fieldTrace = termTraced->evaluate(fieldMap, true) + termTraced->evaluate(fieldMap, false);
+         if (var->varType() == FLUX) { // then we do need to include side parity here
+           fieldTrace = sideParity * fieldTrace;
+         }
+         interiorTraceMap[trialID] = fieldTrace;
+       }
+     }
+   }
+
    int sideDim = _mesh->getTopology()->getSpaceDim() - 1;
   
    int sideCount = parentCell->topology()->getSideCount();
@@ -3862,7 +3875,7 @@ void Solution::projectOldCellOntoNewCells(GlobalIndexType cellID,
     
     if (parentCell->children().size() > 0) {
       RefinementBranch refBranch(1,make_pair(parentCell->refinementPattern().get(), childOrdinal));
-      volumeBasisCache = BasisCache::basisCacheForRefinedReferenceCell(*childCell->topology(), cubatureDegree, refBranch);
+      volumeBasisCache = BasisCache::basisCacheForRefinedReferenceCell(*childCell->topology(), cubatureDegree, refBranch, true);
       for (int sideOrdinal = 0; sideOrdinal < childSideCount; sideOrdinal++) {
         shards::CellTopology sideTopo = childCell->topology()->getCellTopologyData(sideDim, sideOrdinal);
         unsigned parentSideOrdinal = (childID==cellID) ? sideOrdinal
@@ -3878,7 +3891,7 @@ void Solution::projectOldCellOntoNewCells(GlobalIndexType cellID,
         }
       }
     } else {
-      volumeBasisCache = BasisCache::basisCacheForReferenceCell(*childCell->topology(), cubatureDegree);
+      volumeBasisCache = BasisCache::basisCacheForReferenceCell(*childCell->topology(), cubatureDegree, true);
       for (int sideOrdinal = 0; sideOrdinal < childSideCount; sideOrdinal++) {
         shards::CellTopology sideTopo = childCell->topology()->getCellTopologyData(sideDim, sideOrdinal);
         sideBasisCache[sideOrdinal] = BasisCache::basisCacheForReferenceCell(sideTopo, cubatureDegree);
@@ -3908,78 +3921,33 @@ void Solution::projectOldCellOntoNewCells(GlobalIndexType cellID,
     for (int sideOrdinal=0; sideOrdinal<childSideCount; sideOrdinal++) {
       unsigned parentSideOrdinal = (childID==cellID) ? sideOrdinal
                                  : parentCell->refinementPattern()->mapSubcellOrdinalFromChildToParent(childOrdinal, sideDim, sideOrdinal);
-      if (parentSideOrdinal != -1) { // then parent has dofs for this trace on this side
-        for (map<int,FunctionPtr>::iterator traceFxnIt=traceMap[parentSideOrdinal].begin(); traceFxnIt != traceMap[parentSideOrdinal].end(); traceFxnIt++) {
-          int varID = traceFxnIt->first;
-          FunctionPtr traceFxn = traceFxnIt->second;
-          BasisPtr childBasis = childType->trialOrderPtr->getBasis(varID, sideOrdinal);
-          basisCoefficients.resize(1,childBasis->getCardinality());
-          Projector::projectFunctionOntoBasisInterpolating(basisCoefficients, traceFxn, childBasis, sideBasisCache[sideOrdinal]);
-          for (int basisOrdinal=0; basisOrdinal<basisCoefficients.size(); basisOrdinal++) {
-            int dofIndex = childType->trialOrderPtr->getDofIndex(varID, basisOrdinal, sideOrdinal);
-            _solutionForCellIDGlobal[childID][dofIndex] = basisCoefficients[basisOrdinal];
-          }
+      
+      map<int,FunctionPtr>* traceMapForSide = (parentSideOrdinal != -1) ? &traceMap[parentSideOrdinal] : &interiorTraceMap;
+      // which BasisCache to use depends on whether we want the BasisCache's notion of "physical" space to be in the volume or on the side:
+      // we want it to be on the side if parent shares the side (and we therefore have proper trace data)
+      // and on the volume in parent doesn't share the side (in which case we use the interior trace map).
+      BasisCachePtr basisCacheForSide = (parentSideOrdinal != -1) ? sideBasisCache[sideOrdinal] : volumeBasisCache->getSideBasisCache(sideOrdinal);
+      
+      basisCacheForSide->setCellSideParities(_mesh->cellSideParitiesForCell(childID));
+      
+      for (map<int,FunctionPtr>::iterator traceFxnIt=traceMapForSide->begin(); traceFxnIt != traceMapForSide->end(); traceFxnIt++) {
+        int varID = traceFxnIt->first;
+        FunctionPtr traceFxn = traceFxnIt->second;
+        BasisPtr childBasis = childType->trialOrderPtr->getBasis(varID, sideOrdinal);
+        basisCoefficients.resize(1,childBasis->getCardinality());
+        Projector::projectFunctionOntoBasisInterpolating(basisCoefficients, traceFxn, childBasis, basisCacheForSide);
+        for (int basisOrdinal=0; basisOrdinal<basisCoefficients.size(); basisOrdinal++) {
+          int dofIndex = childType->trialOrderPtr->getDofIndex(varID, basisOrdinal, sideOrdinal);
+          _solutionForCellIDGlobal[childID][dofIndex] = basisCoefficients[basisOrdinal];
+          // worth noting that as now set up, the "field traces" may stomp on the true traces, depending on in what order the sides
+          // are mapped to global dof ordinals.  For right now, I'm not too worried about this.
         }
-      } else {
-        // TODO: do something with the termTraced LinearTermPtr in Var...
       }
     }
-    
-//    cout << "After projection, solution coefficients for child are:\n" << _solutionForCellIDGlobal[childID];
   }
    
-   
-  
   clearComputedResiduals(); // force recomputation of energy error (could do something more incisive, just computing the energy error for the new cells)
 }
-
-/*void Solution::projectOldCellOntoNewCells(int cellID, ElementTypePtr oldElemType, const vector<int> &childIDs) {
- vector<int> trialVolumeIDs = _mesh->bilinearForm()->trialVolumeIDs();
- vector<int> fluxTraceIDs = _mesh->bilinearForm()->trialBoundaryIDs();
- 
- if (_solutionForCellIDGlobal.find(cellID) == _solutionForCellIDGlobal.end() ) {
- // they're implicit 0s, then: projection will also be implicit 0s...
- return;
- }
- int numSides = Camellia::getSideCount(*oldElemType->cellTopoPtr);
- map<int, FunctionPtr > functionMap;
- map<int, map<int, FunctionPtr > > sideFunctionMap;
- 
- int sideIndexForFields = 0; // someday, will probably want to make this -1, but DofOrdering doesn't yet support this
- 
- for (vector<int>::iterator trialIDIt = trialVolumeIDs.begin(); trialIDIt != trialVolumeIDs.end(); trialIDIt++) {
- int trialID = *trialIDIt;
- BasisPtr basis = oldElemType->trialOrderPtr->getBasis(trialID);
- FieldContainer<double> basisCoefficients(basis->getCardinality());
- basisCoeffsForTrialOrder(basisCoefficients, oldElemType->trialOrderPtr, _solutionForCellIDGlobal[cellID], trialID, sideIndexForFields);
- functionMap[trialID] = Teuchos::rcp( new NewBasisSumFunction(basis, basisCoefficients));
- }
- for (vector<int>::iterator trialIDIt = fluxTraceIDs.begin(); trialIDIt != fluxTraceIDs.end(); trialIDIt++) {
- int trialID = *trialIDIt;
- for (int sideIndex=0; sideIndex<numSides; sideIndex++) {
- map<int, FunctionPtr> thisSideFunctions;
- BasisPtr basis = oldElemType->trialOrderPtr->getBasis(trialID,sideIndex);
- FieldContainer<double> basisCoefficients(basis->getCardinality());
- basisCoeffsForTrialOrder(basisCoefficients, oldElemType->trialOrderPtr, _solutionForCellIDGlobal[cellID], trialID, sideIndex);
- bool boundaryValued = true;
- thisSideFunctions[trialID] = Teuchos::rcp( new NewBasisSumFunction(basis, basisCoefficients, OP_VALUE, boundaryValued) );
- sideFunctionMap[sideIndex] = thisSideFunctions;
- }
- }
- 
- for (vector<int>::const_iterator childIDIt=childIDs.begin(); childIDIt != childIDs.end(); childIDIt++) {
- int childID = *childIDIt;
- // (re)initialize the FieldContainer storing the solution--element type may have changed (in case of p-refinement)
- _solutionForCellIDGlobal[childID] = FieldContainer<double>(_mesh->getElement(childID)->elementType()->trialOrderPtr->totalDofs());
- cout << "projecting from cell ID " << cellID << " onto " << " cell ID " << childID << endl;
- projectOntoCell(functionMap,childID);
- for (int sideIndex=0; sideIndex<numSides; sideIndex++) {
- projectOntoCell(sideFunctionMap[sideIndex], childID);
- }
- }
- 
- clearComputedResiduals(); // force recomputation of energy error (could do something more incisive, just computing the energy error for the new cells)
- }*/
 
 void Solution::readFromFile(const string &filePath) {
   ifstream fin(filePath.c_str());
