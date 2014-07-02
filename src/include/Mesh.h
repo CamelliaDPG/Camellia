@@ -257,6 +257,9 @@ public:
   void interpretLocalData(GlobalIndexType cellID, const FieldContainer<double> &localData,
                           FieldContainer<double> &globalData, FieldContainer<GlobalIndexType> &globalDofIndices);
   
+  bool meshUsesMaximumRule();
+  bool meshUsesMinimumRule();
+  
   // for the case where we want to reproject the previous mesh solution onto the new one:
 //  void hRefine(vector<GlobalIndexType> cellIDs, Teuchos::RCP<RefinementPattern> refPattern, vector< Teuchos::RCP<Solution> > solutions);
 

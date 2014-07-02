@@ -446,6 +446,16 @@ const map< pair<GlobalIndexType,IndexType>, GlobalIndexType>& Mesh::getLocalToGl
   return maxRule->getLocalToGlobalMap();
 }
 
+bool Mesh::meshUsesMaximumRule() {
+  GDAMaximumRule2D* maxRule = dynamic_cast<GDAMaximumRule2D *>(_gda.get());
+  return (maxRule != NULL);
+}
+
+bool Mesh::meshUsesMinimumRule() {
+  GDAMinimumRule* minRule = dynamic_cast<GDAMinimumRule *>(_gda.get());
+  return (minRule != NULL);
+}
+
 map<IndexType, GlobalIndexType> Mesh::getGlobalVertexIDs(const FieldContainer<double> &vertices) {
   double tol = 1e-12; // tolerance for vertex equality
   

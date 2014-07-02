@@ -275,8 +275,16 @@ GlobalIndexType GlobalDofAssignment::globalCellIndex(GlobalIndexType cellID) {
   return cellIndex;
 }
 
+int GlobalDofAssignment::getInitialH1Order() {
+  return _initialH1OrderTrial;
+}
+
 PartitionIndexType GlobalDofAssignment::getPartitionCount() {
   return _numPartitions;
+}
+
+int GlobalDofAssignment::getTestOrderEnrichment() {
+  return _testOrderEnhancement;
 }
 
 void GlobalDofAssignment::setPartitionPolicy( MeshPartitionPolicyPtr partitionPolicy ) {

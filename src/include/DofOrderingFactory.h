@@ -125,6 +125,10 @@ public:
   DofOrderingPtr setSidePolyOrder(DofOrderingPtr dofOrdering, int sideIndexToSet, int newPolyOrder, bool replacePatchBasis);
   DofOrderingPtr getTrialOrdering(DofOrdering &ordering);
   DofOrderingPtr getTestOrdering(DofOrdering &ordering);
+  
+  map<int, int> getTestOrderEnhancements();
+  map<int, int> getTrialOrderEnhancements();
+  
   int matchSides(DofOrderingPtr &firstOrdering, int firstSideIndex, 
                  const shards::CellTopology &firstCellTopo,
                  DofOrderingPtr &secondOrdering, int secondSideIndex,
@@ -148,6 +152,8 @@ public:
                                              const DofOrderingPtr parentTrialOrdering, int parentSideIndex,
                                              int childIndexInParentSide);
   bool sideHasMultiBasis(DofOrderingPtr &trialOrdering, int sideIndex);
+
+
   
 //  DofOrderingPtr trialOrdering(int polyOrder, int* sidePolyOrder, const shards::CellTopology &cellTopo,
 //                                          bool conformingVertices = true);

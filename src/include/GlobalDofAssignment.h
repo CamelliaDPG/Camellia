@@ -83,8 +83,11 @@ public:
   ElementTypeFactory & getElementTypeFactory();
   
   virtual int getH1Order(GlobalIndexType cellID) = 0;
+  int getInitialH1Order();
   
   PartitionIndexType getPartitionCount();
+
+  int getTestOrderEnrichment();
   
   virtual GlobalIndexType globalCellIndex(GlobalIndexType cellID);
   virtual GlobalIndexType globalDofCount() = 0;
