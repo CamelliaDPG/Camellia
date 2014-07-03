@@ -75,7 +75,7 @@ int main(int argc, char *argv[]) {
 
   // Optional arguments (have defaults)
   bool enforceLocalConservation = args.Input<bool>("--conserve", "enforce local conservation", false);
-  double Re = args.Input("--Re", "Reynolds number", 40);
+  double Re = args.Input("--Re", "Reynolds number", 1000);
   double nu = 1./Re;
   int maxNewtonIterations = args.Input("--maxIterations", "maximum number of Newton iterations", 20);
   int polyOrder = args.Input("--polyOrder", "polynomial order for field variables", 2);
@@ -252,11 +252,17 @@ int main(int argc, char *argv[]) {
   SpatialFilterPtr upstream = Teuchos::rcp( new UpstreamBoundary );
   bc->addDirichlet(t1hat, left, -one);
   bc->addDirichlet(t2hat, left, zero);
-  bc->addDirichlet(t1hat, upstream, zero);
-  bc->addDirichlet(t2hat, upstream, zero);
+  // bc->addDirichlet(u1hat, left, one);
+  // bc->addDirichlet(u2hat, left, zero);
   bc->addDirichlet(u1hat, plate, zero);
   bc->addDirichlet(u2hat, plate, zero);
-  bc->addDirichlet(u1hat, top, one);
+  bc->addDirichlet(u2hat, upstream, zero);
+  bc->addDirichlet(t2hat, upstream, zero);
+  // bc->addDirichlet(t2hat, upstream, zero);
+  bc->addDirichlet(u2hat, top, zero);
+  bc->addDirichlet(t1hat, top, zero);
+  // bc->addDirichlet(t2hat, top, zero);
+  // bc->addDirichlet(u2hat, right, zero);
 
   // pc->addConstraint(u1hat*u2hat-t1hat == zero, top);
   // pc->addConstraint(u2hat*u2hat-t2hat == zero, top);
@@ -278,7 +284,7 @@ int main(int argc, char *argv[]) {
   ////////////////////   SOLVE & REFINE   ///////////////////////
   double energyThreshold = 0.2; // for mesh refinements
   RefinementStrategy refinementStrategy( solution, energyThreshold );
-  HDF5Exporter exporter(mesh, "Blasius_soln", false);
+  HDF5Exporter exporter(mesh, "Blasius", false);
   set<int> nonlinearVars;
   nonlinearVars.insert(u1->ID());
   nonlinearVars.insert(u2->ID());

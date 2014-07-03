@@ -42,6 +42,7 @@
 #include "Intrepid_FieldContainer.hpp"
 
 // Epetra includes
+#include "EpetraExt_ConfigDefs.h"
 #include <Epetra_Map.h>
 #ifdef HAVE_MPI
 #include "Epetra_MpiComm.h"
@@ -61,6 +62,7 @@
 #include "MeshPartitionPolicy.h"
 
 #include "RefinementObserver.h"
+#include "RefinementHistory.h"
 
 #include "Function.h"
 #include "ParametricCurve.h"
@@ -129,6 +131,7 @@ class Mesh : public RefinementObserver, public DofInterpreter {
 
   vector< Teuchos::RCP<RefinementObserver> > _registeredObservers; // meshes that should be modified upon refinement (must differ from this only in bilinearForm; must have identical geometry & cellIDs)
 
+
   map<IndexType, GlobalIndexType> getGlobalVertexIDs(const FieldContainer<double> &vertexCoordinates);
 
   ElementPtr _nullPtr;
@@ -149,6 +152,7 @@ class Mesh : public RefinementObserver, public DofInterpreter {
 
   static map<int,int> _emptyIntIntMap; // just defined here to implement a default argument to constructor (there's got to be a better way)
 public:
+  RefinementHistory _refinementHistory;
   // legacy (max rule 2D) constructor:
   Mesh(const vector<vector<double> > &vertices, vector< vector<IndexType> > &elementVertices,
        Teuchos::RCP< BilinearForm > bilinearForm, int H1Order, int pToAddTest, bool useConformingTraces = true,
@@ -158,12 +162,16 @@ public:
   // new constructor (min rule, n-D):
   Mesh(MeshTopologyPtr meshTopology, BilinearFormPtr bilinearForm, int H1Order, int pToAddTest,
        map<int,int> trialOrderEnhancements=_emptyIntIntMap, map<int,int> testOrderEnhancements=_emptyIntIntMap);
-  
-  // deprecated static constructors (use MeshFactory methods instead):
+
+#ifdef HAVE_EPETRAEXT_HDF5
+  void saveToHDF5(string filename);
+#endif
+
   static Teuchos::RCP<Mesh> readMsh(string filePath, Teuchos::RCP< BilinearForm > bilinearForm, int H1Order, int pToAdd);
 
   static Teuchos::RCP<Mesh> readTriangle(string filePath, Teuchos::RCP< BilinearForm > bilinearForm, int H1Order, int pToAdd);
 
+  // deprecated static constructors (use MeshFactory methods instead):
   static Teuchos::RCP<Mesh> buildQuadMesh(const FieldContainer<double> &quadBoundaryPoints,
                                           int horizontalElements, int verticalElements,
                                           Teuchos::RCP< BilinearForm > bilinearForm,

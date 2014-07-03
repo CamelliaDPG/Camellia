@@ -10,7 +10,14 @@
 #define Camellia_debug_RefinementHistory_h
 
 #include "RefinementObserver.h"
-#include "Mesh.h"
+
+#include "EpetraExt_ConfigDefs.h"
+#ifdef HAVE_EPETRAEXT_HDF5
+#include <EpetraExt_HDF5.h>
+#endif
+
+class Mesh;
+typedef Teuchos::RCP<Mesh> MeshPtr;
 
 using namespace std;
 
@@ -32,6 +39,9 @@ public:
   // file I/O
   void saveToFile(string fileName);
   void loadFromFile(string fileName);
+#ifdef HAVE_EPETRAEXT_HDF5
+  void saveToHDF5(EpetraExt::HDF5 &hdf5);
+#endif
 };
 
 #endif

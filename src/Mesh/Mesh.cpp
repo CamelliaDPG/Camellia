@@ -56,6 +56,11 @@
 #include "Teuchos_RCP.hpp"
 #include <Teuchos_GlobalMPISession.hpp>
 
+#ifdef HAVE_EPETRAEXT_HDF5
+#include <EpetraExt_HDF5.h>
+#include <Epetra_SerialComm.h>
+#endif
+
 #include "MeshFactory.h"
 
 using namespace Intrepid;
@@ -76,6 +81,11 @@ Mesh::Mesh(MeshTopologyPtr meshTopology, BilinearFormPtr bilinearForm, int H1Ord
   
   setBilinearForm(bilinearForm);
   _boundary.setMesh(this);
+
+  // Teuchos::RCP< RefinementHistory > refHist = Teuchos::rcp( &_refinementHistory, false );
+  // cout << "Has ownership " << refHist.has_ownership() << endl;
+  // this->registerObserver(refHist);
+  this->registerObserver(Teuchos::rcp( &_refinementHistory, false ));
 }
 
 Mesh::Mesh(const vector<vector<double> > &vertices, vector< vector<unsigned> > &elementVertices,
@@ -121,6 +131,11 @@ Mesh::Mesh(const vector<vector<double> > &vertices, vector< vector<unsigned> > &
   _boundary.setMesh(this);
   
   _pToAddToTest = pToAddTest;
+
+  // Teuchos::RCP< RefinementHistory > refHist = Teuchos::rcp( &_refinementHistory, false );
+  // cout << "Has ownership " << refHist.has_ownership() << endl;
+  // this->registerObserver(refHist);
+  this->registerObserver(Teuchos::rcp( &_refinementHistory, false ));
 }
 
 GlobalIndexType Mesh::numInitialElements(){
@@ -1104,6 +1119,48 @@ vector<double> Mesh::getCellOrientation(GlobalIndexType cellID){
   orientation.push_back(yDist);
   return orientation;
 }
+
+
+#ifdef HAVE_EPETRAEXT_HDF5
+void Mesh::saveToHDF5(string filename)
+{
+  int commRank = Teuchos::GlobalMPISession::getRank();
+  if (commRank == 0)
+  {
+    cout << "Writing mesh" << endl;
+    Epetra_SerialComm Comm;
+    EpetraExt::HDF5 hdf5(Comm);
+    hdf5.Create(filename);
+    // for (vector< Refinement >::iterator refIt = _refinements.begin(); refIt != _refinements.end(); refIt++) {
+    //   Refinement ref = *refIt;
+    //   RefinementType refType = ref.first;
+    //   set<GlobalIndexType> cellIDs = ref.second;
+    //   cout << stringForRefinementType(refType) << " ";
+    //   for (set<GlobalIndexType>::iterator cellIt = cellIDs.begin(); cellIt != cellIDs.end(); cellIt++) {
+    //     GlobalIndexType cellID = *cellIt;
+    //     cout << cellID << " ";
+    //   }
+    //   cout << endl;
+    // }
+    // _refinementHistory.saveToFile("Test.txt");
+    // hdf5.CreateGroup("RefinementHistory");
+
+    set<IndexType> rootCellIndicesSet = getTopology()->getRootCellIndices();
+    vector<IndexType> rootCellIndices(rootCellIndicesSet.begin(), rootCellIndicesSet.end());
+    // copy(rootCellIndicesSet.begin(), rootCellIndicesSet.end(), std::back_inserter(rootCellIndices);
+    FieldContainer<double> rootVertices;
+    verticesForCells(rootVertices, rootCellIndices);
+    cout << rootVertices << endl;
+    hdf5.Write("RootCells", "Vertices", H5T_NATIVE_DOUBLE, rootVertices.size(), &rootVertices[0]);
+    hdf5.Write("RootCells", "Indices", H5T_NATIVE_INT, rootCellIndices.size(), &rootCellIndices[0]);
+
+    _refinementHistory.saveToHDF5(hdf5);
+    // hdf5.Write("Parameters", "Test6", 6);
+    hdf5.Close();
+  }
+}
+// end HAVE_EPETRAEXT_HDF5 include guard
+#endif
 
 
 Teuchos::RCP<Mesh> Mesh::readMsh(string filePath, Teuchos::RCP< BilinearForm > bilinearForm, int H1Order, int pToAdd)
