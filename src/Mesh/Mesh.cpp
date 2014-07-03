@@ -1137,35 +1137,55 @@ void Mesh::saveToHDF5(string filename)
   int commRank = Teuchos::GlobalMPISession::getRank();
   if (commRank == 0)
   {
-    cout << "Writing mesh" << endl;
+    set<IndexType> rootCellIndicesSet = getTopology()->getRootCellIndices();
+    vector<IndexType> rootCellIndices(rootCellIndicesSet.begin(), rootCellIndicesSet.end());
+    vector<IndexType> rootVertexIndices;
+    vector<unsigned> rootKeys;
+    vector<double> rootVertices;
+    for (int i=0; i < rootCellIndices.size(); i++)
+    {
+      CellPtr cell = getTopology()->getCell(rootCellIndices[i]);
+      vector< unsigned > vertexIndices = cell->vertices(); 
+      rootKeys.push_back(cell->topology()->getKey());
+      rootVertexIndices.insert(rootVertexIndices.end(), vertexIndices.begin(), vertexIndices.end());
+    }
+    for (int i=0; i <= *max_element(rootVertexIndices.begin(), rootVertexIndices.end()); i++)
+    {
+      vector< double > vertex = getTopology()->getVertex(i);
+      rootVertices.insert(rootVertices.end(), vertex.begin(), vertex.end());
+    }
+    map<int, int> trialOrderEnhancements = getDofOrderingFactory().getTrialOrderEnhancements();
+    map<int, int> testOrderEnhancements = getDofOrderingFactory().getTestOrderEnhancements();
+    vector<int> trialOrderEnhancementVec;
+    vector<int> testOrderEnhancementVec;
+    for (map<int,int>::iterator it=trialOrderEnhancements.begin(); it!=trialOrderEnhancements.end(); ++it)
+    {
+      trialOrderEnhancementVec.push_back(it->first);
+      trialOrderEnhancementVec.push_back(it->second);
+    }
+    for (map<int,int>::iterator it=testOrderEnhancements.begin(); it!=testOrderEnhancements.end(); ++it)
+    {
+      testOrderEnhancementVec.push_back(it->first);
+      testOrderEnhancementVec.push_back(it->second);
+    }
+
     Epetra_SerialComm Comm;
     EpetraExt::HDF5 hdf5(Comm);
     hdf5.Create(filename);
-    // for (vector< Refinement >::iterator refIt = _refinements.begin(); refIt != _refinements.end(); refIt++) {
-    //   Refinement ref = *refIt;
-    //   RefinementType refType = ref.first;
-    //   set<GlobalIndexType> cellIDs = ref.second;
-    //   cout << stringForRefinementType(refType) << " ";
-    //   for (set<GlobalIndexType>::iterator cellIt = cellIDs.begin(); cellIt != cellIDs.end(); cellIt++) {
-    //     GlobalIndexType cellID = *cellIt;
-    //     cout << cellID << " ";
-    //   }
-    //   cout << endl;
-    // }
-    // _refinementHistory.saveToFile("Test.txt");
-    // hdf5.CreateGroup("RefinementHistory");
-
-    set<IndexType> rootCellIndicesSet = getTopology()->getRootCellIndices();
-    vector<IndexType> rootCellIndices(rootCellIndicesSet.begin(), rootCellIndicesSet.end());
-    // copy(rootCellIndicesSet.begin(), rootCellIndicesSet.end(), std::back_inserter(rootCellIndices);
-    FieldContainer<double> rootVertices;
-    verticesForCells(rootVertices, rootCellIndices);
-    cout << rootVertices << endl;
-    hdf5.Write("RootCells", "Vertices", H5T_NATIVE_DOUBLE, rootVertices.size(), &rootVertices[0]);
-    hdf5.Write("RootCells", "Indices", H5T_NATIVE_INT, rootCellIndices.size(), &rootCellIndices[0]);
-
+    hdf5.Write("Mesh", "VertexIndices", H5T_NATIVE_INT, rootVertexIndices.size(), &rootVertexIndices[0]);
+    hdf5.Write("Mesh", "TopoKeys", H5T_NATIVE_INT, rootKeys.size(), &rootKeys[0]);
+    hdf5.Write("Mesh", "Vertices", H5T_NATIVE_DOUBLE, rootVertices.size(), &rootVertices[0]);
+    hdf5.Write("Mesh", "H1Order", globalDofAssignment()->getInitialH1Order());
+    hdf5.Write("Mesh", "deltaP", globalDofAssignment()->getTestOrderEnrichment());
+    if (meshUsesMaximumRule())
+      hdf5.Write("Mesh", "GDARule", "max");
+    else if(meshUsesMinimumRule())
+      hdf5.Write("Mesh", "GDARule", "min");
+    else
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Invalid GDA");
+    hdf5.Write("Mesh", "TrialOrderEnhancements", H5T_NATIVE_INT, trialOrderEnhancementVec.size(), &trialOrderEnhancementVec[0]);
+    hdf5.Write("Mesh", "TestOrderEnhancements", H5T_NATIVE_INT, testOrderEnhancementVec.size(), &testOrderEnhancementVec[0]);
     _refinementHistory.saveToHDF5(hdf5);
-    // hdf5.Write("Parameters", "Test6", 6);
     hdf5.Close();
   }
 }

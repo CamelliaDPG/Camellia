@@ -193,7 +193,7 @@ int main(int argc, char *argv[])
     // set<GlobalIndexType> cellIndices;
     // cellIndices.insert(0);
     {
-        HDF5Exporter exporter(mesh, "Poisson", true);
+        HDF5Exporter exporter(mesh, "Poisson");
         exporter.exportSolution(solution, varFactory, 0, 2, cellIDToSubdivision(mesh, 4));
         // Teuchos::RCP< RefinementHistory > refHistory = Teuchos::rcp( new RefinementHistory );
         // mesh->_refinementHistory = Teuchos::rcp( new RefinementHistory );
