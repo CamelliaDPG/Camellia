@@ -94,7 +94,7 @@ public:
                           FieldContainer<GlobalIndexType> &globalDofIndices);
   void interpretLocalBasisCoefficients(GlobalIndexType cellID, int varID, int sideOrdinal, const FieldContainer<double> &basisCoefficients,
                                FieldContainer<double> &globalCoefficients, FieldContainer<GlobalIndexType> &globalDofIndices);
-  void interpretGlobalCoefficients(GlobalIndexType cellID, FieldContainer<double> &localCoefficients, const Epetra_Vector &globalCoefficients);
+  void interpretGlobalCoefficients(GlobalIndexType cellID, FieldContainer<double> &localCoefficients, const Epetra_MultiVector &globalCoefficients);
   IndexType localDofCount(); // local to the MPI node
 
   PartitionIndexType partitionForGlobalDofIndex( GlobalIndexType globalDofIndex );

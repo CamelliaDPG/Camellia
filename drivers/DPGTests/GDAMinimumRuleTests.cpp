@@ -1077,7 +1077,7 @@ bool GDAMinimumRuleTests::testHangingNodePoisson3D() {
   
   cout << "3D poisson w/hanging node solved.  About to check solution continuities.\n";
   
-  Epetra_Vector *lhsVector = soln->getGlobalCoefficients();
+  Epetra_MultiVector *lhsVector = soln->getGlobalCoefficients();
   Epetra_SerialComm Comm;
   Epetra_Map partMap = soln->getPartitionMap();
   

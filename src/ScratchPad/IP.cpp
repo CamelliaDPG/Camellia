@@ -293,8 +293,10 @@ pair<IPPtr, VarPtr> IP::standardInnerProductForFunctionSpace(EFunctionSpaceExten
   
   switch (fs) {
     case IntrepidExtendedTypes::FUNCTION_SPACE_HVOL:
+    case IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HVOL:
       break;
     case IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD:
+    case IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HGRAD:
       ip->addTerm(var->grad());
       break;
     case IntrepidExtendedTypes::FUNCTION_SPACE_HCURL:

@@ -1474,8 +1474,6 @@ FunctionPtr QuotientFunction::dz() {
 
 SumFunction::SumFunction(FunctionPtr f1, FunctionPtr f2) : Function(f1->rank()) {
   TEUCHOS_TEST_FOR_EXCEPTION( f1->rank() != f2->rank(), std::invalid_argument, "summands must be of like rank.");
-  TEUCHOS_TEST_FOR_EXCEPTION( f1->boundaryValueOnly() != f2->boundaryValueOnly(), std::invalid_argument,
-                              "f1 and f2 must agree on their boundary-valuedness");
   _f1 = f1;
   _f2 = f2;
 }
@@ -1855,18 +1853,32 @@ void SideParityFunction::values(FieldContainer<double> &values, BasisCachePtr si
   if (sideIndex == -1) {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "non-sideBasisCache passed into SideParityFunction");
   }
-  vector<GlobalIndexType> cellIDs = sideBasisCache->cellIDs();
-  if (cellIDs.size() != numCells) {
-    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "cellIDs.size() != numCells");
-  }
-  Teuchos::RCP<Mesh> mesh = sideBasisCache->mesh();
-  if (! mesh.get()) {
-    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "mesh unset in BasisCache.");
-  }
-  for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
-    int parity = mesh->cellSideParitiesForCell(cellIDs[cellIndex])(0,sideIndex);
-    for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
-      values(cellIndex,ptIndex) = parity;
+  if (sideBasisCache->getCellSideParities().size() > 0) {
+    // then we'll use this, and won't require that mesh and cellIDs are set
+    if (sideBasisCache->getCellSideParities().dimension(0) != numCells) {
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "sideBasisCache->getCellSideParities() is non-empty, but the cell dimension doesn't match that of the values FieldContainer.");
+    }
+    
+    for (int cellOrdinal=0; cellOrdinal<numCells; cellOrdinal++) {
+      int parity = sideBasisCache->getCellSideParities()(cellOrdinal,sideIndex);
+      for (int ptOrdinal=0; ptOrdinal<numPoints; ptOrdinal++) {
+        values(cellOrdinal,ptOrdinal) = parity;
+      }
+    }
+  } else {
+    vector<GlobalIndexType> cellIDs = sideBasisCache->cellIDs();
+    if (cellIDs.size() != numCells) {
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "cellIDs.size() != numCells");
+    }
+    Teuchos::RCP<Mesh> mesh = sideBasisCache->mesh();
+    if (! mesh.get()) {
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "mesh unset in BasisCache.");
+    }
+    for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
+      int parity = mesh->cellSideParitiesForCell(cellIDs[cellIndex])(0,sideIndex);
+      for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
+        values(cellIndex,ptIndex) = parity;
+      }
     }
   }
 }

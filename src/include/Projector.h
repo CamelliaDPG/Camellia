@@ -31,6 +31,5 @@ class Projector{
   
   static void projectFunctionOntoBasisInterpolating(FieldContainer<double> &basisCoefficients, Teuchos::RCP<Function> fxn,
                                                     BasisPtr basis, BasisCachePtr domainBasisCache);
-  
 };
 #endif

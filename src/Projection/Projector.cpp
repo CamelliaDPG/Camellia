@@ -385,10 +385,12 @@ void Projector::projectFunctionOntoBasisInterpolating(FieldContainer<double> &ba
   shards::CellTopology domainTopo = basis->domainTopology();
   unsigned domainDim = domainTopo.getDimension();
   
+  IPPtr ip;
+  
   bool traceVar = domainBasisCache->isSideCache();
   
   pair<IPPtr, VarPtr> ipVarPair = IP::standardInnerProductForFunctionSpace(basis->functionSpace(), traceVar);
-  IPPtr ip = ipVarPair.first;
+  ip = ipVarPair.first;
   VarPtr v = ipVarPair.second;
   
   IPPtr ip_l2 = Teuchos::rcp( new IP );

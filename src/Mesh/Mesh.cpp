@@ -461,6 +461,16 @@ const map< pair<GlobalIndexType,IndexType>, GlobalIndexType>& Mesh::getLocalToGl
   return maxRule->getLocalToGlobalMap();
 }
 
+bool Mesh::meshUsesMaximumRule() {
+  GDAMaximumRule2D* maxRule = dynamic_cast<GDAMaximumRule2D *>(_gda.get());
+  return (maxRule != NULL);
+}
+
+bool Mesh::meshUsesMinimumRule() {
+  GDAMinimumRule* minRule = dynamic_cast<GDAMinimumRule *>(_gda.get());
+  return (minRule != NULL);
+}
+
 map<IndexType, GlobalIndexType> Mesh::getGlobalVertexIDs(const FieldContainer<double> &vertices) {
   double tol = 1e-12; // tolerance for vertex equality
   
@@ -624,7 +634,7 @@ void Mesh::hUnrefine(const set<GlobalIndexType> &cellIDs) {
   _boundary.buildLookupTables();
 }
 
-void Mesh::interpretGlobalCoefficients(GlobalIndexType cellID, FieldContainer<double> &localCoefficients, const Epetra_Vector &globalCoefficients) {
+void Mesh::interpretGlobalCoefficients(GlobalIndexType cellID, FieldContainer<double> &localCoefficients, const Epetra_MultiVector &globalCoefficients) {
   _gda->interpretGlobalCoefficients(cellID, localCoefficients, globalCoefficients);
 }
 

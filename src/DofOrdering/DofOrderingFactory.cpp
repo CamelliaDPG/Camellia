@@ -147,6 +147,14 @@ DofOrderingPtr DofOrderingFactory::getTestOrdering(DofOrdering &ordering) {
   return Teuchos::rcp((DofOrdering*) NULL);
 }
 
+map<int, int> DofOrderingFactory::getTestOrderEnhancements() {
+  return _testOrderEnhancements;
+}
+
+map<int, int> DofOrderingFactory::getTrialOrderEnhancements() {
+  return _trialOrderEnhancements;
+}
+
 void DofOrderingFactory::addConformingVertexPairings(int varID, DofOrderingPtr dofOrdering,
                                                      const shards::CellTopology &cellTopo) {
   // then we want to identify basis dofs at the vertices...

@@ -105,7 +105,8 @@ void NewBasisSumFunction::values(FieldContainer<double> &values, BasisCachePtr b
         oneCellRelativeReferenceNodes(0,n,d) = relativeReferenceCellNodes(0,n,d);
       }
     }
-    FieldContainer<double> relativeReferencePoints = basisCache->getRefCellPoints();
+    bool cachesAgreeOnSideness = basisCache->isSideCache() == _overridingBasisCache->isSideCache();
+    FieldContainer<double> relativeReferencePoints = cachesAgreeOnSideness ? basisCache->getRefCellPoints() : basisCache->getSideRefCellPointsInVolumeCoordinates();
     FieldContainer<double> refPoints(1,relativeReferencePoints.dimension(0),relativeReferencePoints.dimension(1));
     CellTools::mapToPhysicalFrame(refPoints, relativeReferencePoints, oneCellRelativeReferenceNodes, basisCache->cellTopology());
     refPoints.resize(refPoints.dimension(1),refPoints.dimension(2)); // strip cell dimension

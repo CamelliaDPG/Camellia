@@ -201,7 +201,7 @@ int GDAMinimumRule::H1Order(GlobalIndexType cellID, unsigned sideOrdinal) {
   return _cellH1Orders[cellID];
 }
 
-void GDAMinimumRule::interpretGlobalCoefficients(GlobalIndexType cellID, FieldContainer<double> &localCoefficients, const Epetra_Vector &globalCoefficients) {
+void GDAMinimumRule::interpretGlobalCoefficients(GlobalIndexType cellID, FieldContainer<double> &localCoefficients, const Epetra_MultiVector &globalCoefficients) {
   CellConstraints constraints = getCellConstraints(cellID);
   LocalDofMapperPtr dofMapper = getDofMapper(cellID, constraints);
   vector<GlobalIndexType> globalIndexVector = dofMapper->globalIndices();
@@ -215,7 +215,7 @@ void GDAMinimumRule::interpretGlobalCoefficients(GlobalIndexType cellID, FieldCo
   FieldContainer<double> globalCoefficientsFC(globalIndexVector.size());
   for (int i=0; i<globalIndexVector.size(); i++) {
     GlobalIndexType globalIndex = globalIndexVector[i];
-    globalCoefficientsFC[i] = globalCoefficients[globalIndex];
+    globalCoefficientsFC[i] = globalCoefficients[0][globalIndex];
   }
   localCoefficients = dofMapper->mapGlobalCoefficients(globalCoefficientsFC);
 //  cout << "For cellID " << cellID << ", mapping globalData:\n " << globalDataFC;
