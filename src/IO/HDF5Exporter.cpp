@@ -15,16 +15,12 @@
 #include <Epetra_SerialComm.h>
 #include <EpetraExt_HDF5.h>
 
-HDF5Exporter::HDF5Exporter(MeshPtr mesh, string saveDirectory, bool deleteOldFiles) : _mesh(mesh), _filename(saveDirectory), 
+HDF5Exporter::HDF5Exporter(MeshPtr mesh, string saveDirectory) : _mesh(mesh), _filename(saveDirectory), 
   _xdmf("Xdmf"), _domain("Domain"), _rootGrid("Grid"), _fieldGrids("Grid"), _traceGrids("Grid")
 {
   int commRank = Teuchos::GlobalMPISession::getRank();
   int numProcs = Teuchos::GlobalMPISession::getNProc();
 
-  if (deleteOldFiles)
-  {
-    system(("rm -rf "+_filename).c_str());
-  }
   system(("mkdir -p "+_filename+"/HDF5").c_str());
   system(("mkdir -p "+_filename+"/XMF").c_str());
 

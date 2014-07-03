@@ -236,7 +236,7 @@ int main(int argc, char *argv[])
         // exporter.exportFunction(fhatSoln, "fhat", 1, 5);
     }
     {
-        HDF5Exporter exporter(mesh, "Poisson", true);
+        HDF5Exporter exporter(mesh, "Poisson");
         exporter.exportSolution(solution, varFactory, 0, 2, cellIDToSubdivision(mesh, 4));
         int numRefs = 1;
         for (int ref = 1; ref <= numRefs; ref++)
@@ -250,14 +250,14 @@ int main(int argc, char *argv[])
     // exporter.exportFunction(uhatSoln, "Poisson-uhat", "uhat", 1, 6);
 
     {
-        HDF5Exporter exporter(mesh, "Grid2D", false);
+        HDF5Exporter exporter(mesh, "Grid2D");
         // exporter.exportFunction(function, "function2", 0, 10);
         exporter.exportFunction(vect, "vect2", 1, 10, cellIDToNum1DPts);
         exporter.exportFunction(fbdr, "boundary2", 0);
         exporter.exportFunction(functions, functionNames, 1, 10);
     }
     {
-        HDF5Exporter exporter(mesh, "BdrGrid2D", false);
+        HDF5Exporter exporter(mesh, "BdrGrid2D");
         exporter.exportFunction(function, "function2", 0, 10);
         exporter.exportFunction(vect, "vect2", 1, 10, cellIDToNum1DPts);
         exporter.exportFunction(fbdr, "boundary2", 0);
