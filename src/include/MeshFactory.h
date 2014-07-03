@@ -12,12 +12,16 @@
 #include "Mesh.h"
 
 #include <Teuchos_ParameterList.hpp>
+#include "EpetraExt_ConfigDefs.h"
 
 // static class for creating meshes
 
 class MeshFactory {
   static map<int,int> _emptyIntIntMap; // just defined here to implement a default argument to constructor (there's likely a better way)
 public:
+#ifdef HAVE_EPETRAEXT_HDF5
+  static MeshPtr loadFromHDF5(BilinearFormPtr bf, string filename);
+#endif
   static MeshPtr intervalMesh(BilinearFormPtr bf, double xLeft, double xRight, int numElements, int H1Order, int delta_k); // 1D equispaced
   
   static MeshPtr quadMesh(Teuchos::ParameterList &parameters);

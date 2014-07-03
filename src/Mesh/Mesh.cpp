@@ -1156,25 +1156,36 @@ void Mesh::saveToHDF5(string filename)
     }
     map<int, int> trialOrderEnhancements = getDofOrderingFactory().getTrialOrderEnhancements();
     map<int, int> testOrderEnhancements = getDofOrderingFactory().getTestOrderEnhancements();
-    vector<int> trialOrderEnhancementVec;
-    vector<int> testOrderEnhancementVec;
+    vector<int> trialOrderEnhancementsVec;
+    vector<int> testOrderEnhancementsVec;
     for (map<int,int>::iterator it=trialOrderEnhancements.begin(); it!=trialOrderEnhancements.end(); ++it)
     {
-      trialOrderEnhancementVec.push_back(it->first);
-      trialOrderEnhancementVec.push_back(it->second);
+      trialOrderEnhancementsVec.push_back(it->first);
+      trialOrderEnhancementsVec.push_back(it->second);
     }
     for (map<int,int>::iterator it=testOrderEnhancements.begin(); it!=testOrderEnhancements.end(); ++it)
     {
-      testOrderEnhancementVec.push_back(it->first);
-      testOrderEnhancementVec.push_back(it->second);
+      testOrderEnhancementsVec.push_back(it->first);
+      testOrderEnhancementsVec.push_back(it->second);
     }
+    int vertexIndicesSize = rootVertexIndices.size();
+    int topoKeysSize = rootKeys.size();
+    int verticesSize = rootVertices.size();
+    int trialOrderEnhancementsSize = trialOrderEnhancementsVec.size();
+    int testOrderEnhancementsSize = testOrderEnhancementsVec.size();
 
     Epetra_SerialComm Comm;
     EpetraExt::HDF5 hdf5(Comm);
     hdf5.Create(filename);
-    hdf5.Write("Mesh", "VertexIndices", H5T_NATIVE_INT, rootVertexIndices.size(), &rootVertexIndices[0]);
-    hdf5.Write("Mesh", "TopoKeys", H5T_NATIVE_INT, rootKeys.size(), &rootKeys[0]);
-    hdf5.Write("Mesh", "Vertices", H5T_NATIVE_DOUBLE, rootVertices.size(), &rootVertices[0]);
+    hdf5.Write("Mesh", "vertexIndicesSize", vertexIndicesSize);
+    hdf5.Write("Mesh", "topoKeysSize", topoKeysSize);
+    hdf5.Write("Mesh", "verticesSize", verticesSize);
+    hdf5.Write("Mesh", "trialOrderEnhancementsSize", trialOrderEnhancementsSize);
+    hdf5.Write("Mesh", "testOrderEnhancementsSize", testOrderEnhancementsSize);
+    hdf5.Write("Mesh", "dimension", getDimension());
+    hdf5.Write("Mesh", "vertexIndices", H5T_NATIVE_INT, rootVertexIndices.size(), &rootVertexIndices[0]);
+    hdf5.Write("Mesh", "topoKeys", H5T_NATIVE_INT, rootKeys.size(), &rootKeys[0]);
+    hdf5.Write("Mesh", "vertices", H5T_NATIVE_DOUBLE, rootVertices.size(), &rootVertices[0]);
     hdf5.Write("Mesh", "H1Order", globalDofAssignment()->getInitialH1Order());
     hdf5.Write("Mesh", "deltaP", globalDofAssignment()->getTestOrderEnrichment());
     if (meshUsesMaximumRule())
@@ -1183,8 +1194,8 @@ void Mesh::saveToHDF5(string filename)
       hdf5.Write("Mesh", "GDARule", "min");
     else
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Invalid GDA");
-    hdf5.Write("Mesh", "TrialOrderEnhancements", H5T_NATIVE_INT, trialOrderEnhancementVec.size(), &trialOrderEnhancementVec[0]);
-    hdf5.Write("Mesh", "TestOrderEnhancements", H5T_NATIVE_INT, testOrderEnhancementVec.size(), &testOrderEnhancementVec[0]);
+    hdf5.Write("Mesh", "trialOrderEnhancements", H5T_NATIVE_INT, trialOrderEnhancementsVec.size(), &trialOrderEnhancementsVec[0]);
+    hdf5.Write("Mesh", "testOrderEnhancements", H5T_NATIVE_INT, testOrderEnhancementsVec.size(), &testOrderEnhancementsVec[0]);
     _refinementHistory.saveToHDF5(hdf5);
     hdf5.Close();
   }

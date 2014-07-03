@@ -184,6 +184,8 @@ void RefinementHistory::saveToHDF5(EpetraExt::HDF5 &hdf5) {
       histArray.push_back(cellID);
     }
   }
-  hdf5.Write("Mesh", "RefinementHistory", H5T_NATIVE_INT, histArray.size(), &histArray[0]);
+  int histArraySize = histArray.size();
+  hdf5.Write("Mesh", "histArraySize", histArraySize);
+  hdf5.Write("Mesh", "refinementHistory", H5T_NATIVE_INT, histArray.size(), &histArray[0]);
 }
 #endif

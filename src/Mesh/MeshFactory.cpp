@@ -12,6 +12,13 @@
 
 #include "GnuPlotUtil.h"
 
+#include "RefinementHistory.h"
+
+#ifdef HAVE_EPETRAEXT_HDF5
+#include <EpetraExt_HDF5.h>
+#include <Epetra_SerialComm.h>
+#endif
+
 map<int,int> MeshFactory::_emptyIntIntMap;
 
 static ParametricCurvePtr parametricRect(double width, double height, double x0, double y0) {
@@ -24,6 +31,167 @@ static ParametricCurvePtr parametricRect(double width, double height, double x0,
   vertices.push_back(make_pair(x0 + width/2.0, y0 - height/2.0));
   return ParametricCurve::polygon(vertices);
 }
+
+#ifdef HAVE_EPETRAEXT_HDF5
+  MeshPtr MeshFactory::loadFromHDF5(BilinearFormPtr bf, string filename) {
+    cout << "Reading Mesh" << endl;
+    Epetra_SerialComm Comm;
+    EpetraExt::HDF5 hdf5(Comm);
+    hdf5.Open(filename);
+    int vertexIndicesSize, topoKeysSize, verticesSize, trialOrderEnhancementsSize, testOrderEnhancementsSize, histArraySize;
+    hdf5.Read("Mesh", "vertexIndicesSize", vertexIndicesSize);
+    hdf5.Read("Mesh", "topoKeysSize", topoKeysSize);
+    hdf5.Read("Mesh", "verticesSize", verticesSize);
+    hdf5.Read("Mesh", "trialOrderEnhancementsSize", trialOrderEnhancementsSize);
+    hdf5.Read("Mesh", "testOrderEnhancementsSize", testOrderEnhancementsSize);
+    hdf5.Read("Mesh", "histArraySize", histArraySize);
+
+    int dimension, H1Order, deltaP;
+    vector<int> vertexIndices(vertexIndicesSize);
+    vector<int> topoKeys(topoKeysSize);
+    vector<int> trialOrderEnhancementsVec(trialOrderEnhancementsSize);
+    vector<int> testOrderEnhancementsVec(testOrderEnhancementsSize);
+    vector<double> vertices(verticesSize);
+    vector<int> histArray(histArraySize);
+    string GDARule;
+    hdf5.Read("Mesh", "dimension", dimension);
+    hdf5.Read("Mesh", "vertexIndices", H5T_NATIVE_INT, vertexIndicesSize, &vertexIndices[0]);
+    hdf5.Read("Mesh", "topoKeys", H5T_NATIVE_INT, topoKeysSize, &topoKeys[0]);
+    hdf5.Read("Mesh", "vertices", H5T_NATIVE_DOUBLE, verticesSize, &vertices[0]);
+    hdf5.Read("Mesh", "H1Order", H1Order);
+    hdf5.Read("Mesh", "deltaP", deltaP);
+    hdf5.Read("Mesh", "GDARule", GDARule);
+    if (GDARule == "min")
+    {
+    }
+    else if(GDARule == "max")
+    {
+    }
+    else
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Invalid GDA");
+    hdf5.Read("Mesh", "trialOrderEnhancements", H5T_NATIVE_INT, trialOrderEnhancementsSize, &trialOrderEnhancementsVec[0]);
+    hdf5.Read("Mesh", "testOrderEnhancements", H5T_NATIVE_INT, testOrderEnhancementsSize, &testOrderEnhancementsVec[0]);
+    hdf5.Read("Mesh", "refinementHistory", H5T_NATIVE_INT, histArraySize, &histArray[0]);
+    hdf5.Close();
+
+    CellTopoPtr line_2 = Teuchos::rcp( new shards::CellTopology(shards::getCellTopologyData<shards::Line<2> >() ) );
+    CellTopoPtr quad_4 = Teuchos::rcp( new shards::CellTopology(shards::getCellTopologyData<shards::Quadrilateral<4> >() ) );
+    CellTopoPtr tri_3 = Teuchos::rcp( new shards::CellTopology(shards::getCellTopologyData<shards::Triangle<3> >() ) );
+    CellTopoPtr hex_8 = Teuchos::rcp( new shards::CellTopology(shards::getCellTopologyData<shards::Hexahedron<8> >() ) );
+
+    vector< CellTopoPtr > cellTopos;
+    vector< vector<unsigned> > elementVertices;
+    int vindx = 0;
+    for (unsigned cellNumber = 0; cellNumber < topoKeysSize; cellNumber++)
+    {
+      vector<unsigned> elemVertices;
+      switch (topoKeys[cellNumber])
+      {
+        case shards::Line<2>::key:
+          cellTopos.push_back(line_2);
+          for (int i=0; i < 2; i++)
+          {
+            elemVertices.push_back(vertexIndices[vindx]);
+            vindx++;
+          }
+          break;
+        case shards::Quadrilateral<4>::key:
+          cellTopos.push_back(quad_4);
+          for (int i=0; i < 4; i++)
+          {
+            elemVertices.push_back(vertexIndices[vindx]);
+            vindx++;
+          }
+          break;
+        case shards::Triangle<3>::key:
+          cellTopos.push_back(tri_3);
+          for (int i=0; i < 3; i++)
+          {
+            elemVertices.push_back(vertexIndices[vindx]);
+            vindx++;
+          }
+          break;
+        case shards::Hexahedron<8>::key:
+          cellTopos.push_back(hex_8);
+          for (int i=0; i < 8; i++)
+          {
+            elemVertices.push_back(vertexIndices[vindx]);
+            vindx++;
+          }
+          break;
+        default:
+          TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "cellTopoKey unrecognized");
+      }
+      elementVertices.push_back(elemVertices);
+    }
+
+    vector< vector<double> > verticesList;
+    for (int i=0; i < vertices.size()/dimension; i++)
+    {
+      vector<double> vertex;
+      vertex.push_back(vertices[2*i]);
+      vertex.push_back(vertices[2*i+1]);
+      verticesList.push_back(vertex);
+    }
+
+    map<int, int> trialOrderEnhancements;
+    map<int, int> testOrderEnhancements;
+    for (int i=0; i < trialOrderEnhancementsVec.size()/2; i++)
+      trialOrderEnhancements[2*i] = 2*i+1;
+    for (int i=0; i < testOrderEnhancementsVec.size()/2; i++)
+      testOrderEnhancements[2*i] = 2*i+1;
+
+    MeshGeometryPtr meshGeometry = Teuchos::rcp( new MeshGeometry(verticesList, elementVertices, cellTopos) );
+    MeshTopologyPtr meshTopology = Teuchos::rcp( new MeshTopology(meshGeometry) );
+    MeshPtr mesh = Teuchos::rcp( new Mesh (meshTopology, bf, H1Order, deltaP, trialOrderEnhancements, testOrderEnhancements) );
+
+    // for (int i=0; i < histArraySize;)
+    // {
+    //   int refType = histArray[i];
+    //   i++;
+    //   int numCells = histArray[i];
+    //   i++;
+    //   for (int c=0; c < numCells; c++)
+    //   {
+    //     GlobalIndexType cellID = histArray[i];
+    //     i++;
+    //     set<GlobalIndexType> cellIDs;
+    //     cellIDs.insert(cellID);
+    //     // check that the cellIDs are all active nodes
+    //     if (refType != H_UNREFINEMENT) {
+    //       set<GlobalIndexType> activeIDs = mesh->getActiveCellIDs();
+    //       if (activeIDs.find(cellID) == activeIDs.end()) {
+    //         TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "cellID for refinement is not an active cell of the mesh");
+    //       }
+    //     }
+    //     bool quadCells = mesh->getElement(cellID)->numSides() == 4;
+    //     switch (refType) {
+    //       case H_REFINEMENT:
+    //         if (quadCells)
+    //           mesh->hRefine(cellIDs, RefinementPattern::regularRefinementPatternQuad());
+    //         else
+    //           mesh->hRefine(cellIDs, RefinementPattern::regularRefinementPatternTriangle());
+    //         break;
+    //       case H_X_REFINEMENT:
+    //         mesh->hRefine(cellIDs, RefinementPattern::xAnisotropicRefinementPatternQuad());
+    //         break;
+    //       case H_Y_REFINEMENT:
+    //         mesh->hRefine(cellIDs, RefinementPattern::yAnisotropicRefinementPatternQuad());
+    //         break;
+    //       case P_REFINEMENT:
+    //         mesh->pRefine(cellIDs);
+    //         break;
+    //       case H_UNREFINEMENT:
+    //         mesh->hUnrefine(cellIDs);
+    //         break;
+    //       default:
+    //         TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unhandled refinement type");
+    //     }
+    //   }
+    // }
+    return mesh;
+  }
+#endif
 
 MeshPtr MeshFactory::quadMesh(Teuchos::ParameterList &parameters) {
   bool useMinRule = parameters.get<bool>("useMinRule",true);
