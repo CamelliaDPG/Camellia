@@ -2,6 +2,7 @@
 #include "Teuchos_RCP.hpp"
 
 #include "Mesh.h"
+#include "MeshFactory.h"
 #include "InnerProductScratchPad.h"
 #include "RefinementStrategy.h"
 #include "Solution.h"
@@ -166,10 +167,6 @@ int main(int argc, char *argv[])
     bf->addTerm( sigma, v->grad() );
     bf->addTerm( fhat, v);
 
-    ////////////////////   BUILD MESH   ///////////////////////
-    int H1Order = 4, pToAdd = 2;
-    Teuchos::RCP<Mesh> mesh = Teuchos::rcp( new Mesh (meshTopology, bf, H1Order, pToAdd) );
-
     ////////////////////   DEFINE INNER PRODUCT(S)   ///////////////////////
     IPPtr ip = bf->graphNorm();
 
@@ -185,30 +182,39 @@ int main(int argc, char *argv[])
     bc->addDirichlet(uhat, entireBoundary, zero);
 
     ////////////////////   SOLVE & REFINE   ///////////////////////
-    Teuchos::RCP<Solution> solution = Teuchos::rcp( new Solution(mesh, bc, rhs, ip) );
-    solution->solve(false);
-    RefinementStrategy refinementStrategy( solution, 0.2);
 
     // Output solution
-    // set<GlobalIndexType> cellIndices;
-    // cellIndices.insert(0);
     {
-        HDF5Exporter exporter(mesh, "Poisson");
-        exporter.exportSolution(solution, varFactory, 0, 2, cellIDToSubdivision(mesh, 4));
+      ////////////////////   BUILD MESH   ///////////////////////
+      int H1Order = 4, pToAdd = 2;
+      Teuchos::RCP<Mesh> mesh = Teuchos::rcp( new Mesh (meshTopology, bf, H1Order, pToAdd) );
+
+      Teuchos::RCP<Solution> solution = Teuchos::rcp( new Solution(mesh, bc, rhs, ip) );
+      solution->solve(false);
+      RefinementStrategy refinementStrategy( solution, 0.2);
+      HDF5Exporter exporter(mesh, "Poisson");
+      exporter.exportSolution(solution, varFactory, 0, 2, cellIDToSubdivision(mesh, 4));
         // Teuchos::RCP< RefinementHistory > refHistory = Teuchos::rcp( new RefinementHistory );
         // mesh->_refinementHistory = Teuchos::rcp( new RefinementHistory );
         // mesh->registerObserver(refHistory);
         // refHistory->saveToFile("Test3.txt");
-        int numRefs = 1;
-        for (int ref = 1; ref <= numRefs; ref++)
-        {
-            refinementStrategy.refine(commRank==0);
-            solution->solve(false);
-            mesh->saveToHDF5("Test0.h5");
-            exporter.exportSolution(solution, varFactory, ref, 2, cellIDToSubdivision(mesh, 4));
-        }
+      int numRefs = 0;
+      for (int ref = 1; ref <= numRefs; ref++)
+      {
+        refinementStrategy.refine(commRank==0);
+        solution->solve(false);
+        mesh->saveToHDF5("Test0.h5");
+        exporter.exportSolution(solution, varFactory, ref, 2, cellIDToSubdivision(mesh, 4));
+      }
     }
-}
+    {
+      MeshPtr loadedMesh = MeshFactory::loadFromHDF5(bf, "Test0.h5");
+      Teuchos::RCP<Solution> loadedSolution = Teuchos::rcp( new Solution(loadedMesh, bc, rhs, ip) );
+      loadedSolution->solve(false);
+      HDF5Exporter exporter(loadedMesh, "PoissonLoaded");
+      exporter.exportSolution(loadedSolution, varFactory, 0, 2, cellIDToSubdivision(loadedMesh, 4));
+    }
+  }
 
   // {
   // // 3D tests

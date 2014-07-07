@@ -137,58 +137,62 @@ static ParametricCurvePtr parametricRect(double width, double height, double x0,
     map<int, int> trialOrderEnhancements;
     map<int, int> testOrderEnhancements;
     for (int i=0; i < trialOrderEnhancementsVec.size()/2; i++)
-      trialOrderEnhancements[2*i] = 2*i+1;
+    {
+      trialOrderEnhancements[trialOrderEnhancementsVec[2*i]] = trialOrderEnhancementsVec[2*i+1];
+    }
     for (int i=0; i < testOrderEnhancementsVec.size()/2; i++)
-      testOrderEnhancements[2*i] = 2*i+1;
+    {
+      testOrderEnhancements[testOrderEnhancementsVec[2*i]] = testOrderEnhancementsVec[2*i+1];
+    }
 
     MeshGeometryPtr meshGeometry = Teuchos::rcp( new MeshGeometry(verticesList, elementVertices, cellTopos) );
     MeshTopologyPtr meshTopology = Teuchos::rcp( new MeshTopology(meshGeometry) );
     MeshPtr mesh = Teuchos::rcp( new Mesh (meshTopology, bf, H1Order, deltaP, trialOrderEnhancements, testOrderEnhancements) );
 
-    // for (int i=0; i < histArraySize;)
-    // {
-    //   int refType = histArray[i];
-    //   i++;
-    //   int numCells = histArray[i];
-    //   i++;
-    //   for (int c=0; c < numCells; c++)
-    //   {
-    //     GlobalIndexType cellID = histArray[i];
-    //     i++;
-    //     set<GlobalIndexType> cellIDs;
-    //     cellIDs.insert(cellID);
-    //     // check that the cellIDs are all active nodes
-    //     if (refType != H_UNREFINEMENT) {
-    //       set<GlobalIndexType> activeIDs = mesh->getActiveCellIDs();
-    //       if (activeIDs.find(cellID) == activeIDs.end()) {
-    //         TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "cellID for refinement is not an active cell of the mesh");
-    //       }
-    //     }
-    //     bool quadCells = mesh->getElement(cellID)->numSides() == 4;
-    //     switch (refType) {
-    //       case H_REFINEMENT:
-    //         if (quadCells)
-    //           mesh->hRefine(cellIDs, RefinementPattern::regularRefinementPatternQuad());
-    //         else
-    //           mesh->hRefine(cellIDs, RefinementPattern::regularRefinementPatternTriangle());
-    //         break;
-    //       case H_X_REFINEMENT:
-    //         mesh->hRefine(cellIDs, RefinementPattern::xAnisotropicRefinementPatternQuad());
-    //         break;
-    //       case H_Y_REFINEMENT:
-    //         mesh->hRefine(cellIDs, RefinementPattern::yAnisotropicRefinementPatternQuad());
-    //         break;
-    //       case P_REFINEMENT:
-    //         mesh->pRefine(cellIDs);
-    //         break;
-    //       case H_UNREFINEMENT:
-    //         mesh->hUnrefine(cellIDs);
-    //         break;
-    //       default:
-    //         TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unhandled refinement type");
-    //     }
-    //   }
-    // }
+    for (int i=0; i < histArraySize;)
+    {
+      int refType = histArray[i];
+      i++;
+      int numCells = histArray[i];
+      i++;
+      for (int c=0; c < numCells; c++)
+      {
+        GlobalIndexType cellID = histArray[i];
+        i++;
+        set<GlobalIndexType> cellIDs;
+        cellIDs.insert(cellID);
+        // check that the cellIDs are all active nodes
+        if (refType != H_UNREFINEMENT) {
+          set<GlobalIndexType> activeIDs = mesh->getActiveCellIDs();
+          if (activeIDs.find(cellID) == activeIDs.end()) {
+            TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "cellID for refinement is not an active cell of the mesh");
+          }
+        }
+        bool quadCells = mesh->getElement(cellID)->numSides() == 4;
+        switch (refType) {
+          case H_REFINEMENT:
+            if (quadCells)
+              mesh->hRefine(cellIDs, RefinementPattern::regularRefinementPatternQuad());
+            else
+              mesh->hRefine(cellIDs, RefinementPattern::regularRefinementPatternTriangle());
+            break;
+          case H_X_REFINEMENT:
+            mesh->hRefine(cellIDs, RefinementPattern::xAnisotropicRefinementPatternQuad());
+            break;
+          case H_Y_REFINEMENT:
+            mesh->hRefine(cellIDs, RefinementPattern::yAnisotropicRefinementPatternQuad());
+            break;
+          case P_REFINEMENT:
+            mesh->pRefine(cellIDs);
+            break;
+          case H_UNREFINEMENT:
+            mesh->hUnrefine(cellIDs);
+            break;
+          default:
+            TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unhandled refinement type");
+        }
+      }
+    }
     return mesh;
   }
 #endif
