@@ -30,6 +30,8 @@ public:
   FieldContainer<double> mapData(bool transposeConstraint, FieldContainer<double> &localData);
   vector<GlobalIndexType> mappedGlobalDofOrdinals();
   
+  SubBasisDofMapperPtr negatedDofMapper();
+  
   const FieldContainer<double> &constraintMatrix();
   FieldContainer<double> getConstraintMatrix();
 };

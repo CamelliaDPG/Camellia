@@ -11,7 +11,8 @@
 #include <set>
 using namespace std;
 
-SubBasisDofPermutationMapper::SubBasisDofPermutationMapper(const set<unsigned> &basisDofOrdinalFilter, const vector<GlobalIndexType> &globalDofOrdinals) {
+SubBasisDofPermutationMapper::SubBasisDofPermutationMapper(const set<unsigned> &basisDofOrdinalFilter, const vector<GlobalIndexType> &globalDofOrdinals,
+                                                           bool negate) {
   _basisDofOrdinalFilter = basisDofOrdinalFilter;
   _globalDofOrdinals = globalDofOrdinals;
   _inversePermutation = vector<int>(_basisDofOrdinalFilter.size());
@@ -23,6 +24,7 @@ SubBasisDofPermutationMapper::SubBasisDofPermutationMapper(const set<unsigned> &
   for (map<GlobalIndexType,int>::iterator permIt = permutation_map.begin(); permIt != permutation_map.end(); permIt++) {
     _inversePermutation[i++] = permIt->second;
   }
+  _negate = negate;
 }
 
 const set<unsigned> & SubBasisDofPermutationMapper::basisDofOrdinalFilter() {
@@ -41,12 +43,18 @@ FieldContainer<double> SubBasisDofPermutationMapper::mapData(bool transposeConst
     FieldContainer<double> dataPermuted(dim);
     if (dim.size() == 1) {
       for (int i=0; i<dim[0]; i++) {
-        dataPermuted(_inversePermutation[i]) = data(i);
+        if (!_negate)
+          dataPermuted(_inversePermutation[i]) = data(i);
+        else
+          dataPermuted(_inversePermutation[i]) = -data(i);
       }
     } else if (dim.size() == 2) {
       for (int i=0; i<dim[0]; i++) {
         for (int j=0; j<dim[1]; j++) {
-          dataPermuted(_inversePermutation[i],_inversePermutation[j]) = data(i,j);
+          if (!_negate)
+            dataPermuted(_inversePermutation[i],_inversePermutation[j]) = data(i,j);
+          else
+            dataPermuted(_inversePermutation[i],_inversePermutation[j]) = -data(i,j);
         }
       }
     }
@@ -57,11 +65,18 @@ FieldContainer<double> SubBasisDofPermutationMapper::getConstraintMatrix() {
   // identity (permutation comes by virtue of ordering in globalDofOrdinals)
   FieldContainer<double> matrix(_basisDofOrdinalFilter.size(),_globalDofOrdinals.size());
   for (int i=0;i<_basisDofOrdinalFilter.size(); i++) {
-    matrix(i,i) = 1;
+    if (!_negate)
+      matrix(i,i) = 1;
+    else
+      matrix(i,i) = -1;
   }
   return matrix;
 }
 
 vector<GlobalIndexType> SubBasisDofPermutationMapper::mappedGlobalDofOrdinals() {
   return _globalDofOrdinals;
+}
+
+SubBasisDofMapperPtr SubBasisDofPermutationMapper::negatedDofMapper() {
+  return Teuchos::rcp( new SubBasisDofPermutationMapper(_basisDofOrdinalFilter, _globalDofOrdinals, !_negate) );
 }

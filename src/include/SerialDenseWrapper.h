@@ -84,6 +84,15 @@ public:
   static void multiply(FieldContainer<double> &X, const FieldContainer<double> &A, const FieldContainer<double> &B, char TransposeA = 'N', char TransposeB = 'N'){
     multiplyAndAdd(X,A,B,TransposeA,TransposeB,1.0,0.0);
   }
+  
+  static void multiplyFCByWeight(FieldContainer<double> & fc, double weight) {
+    int size = fc.size();
+    double *valuePtr = &fc[0]; // to make this as fast as possible, do some pointer arithmetic...
+    for (int i=0; i<size; i++) {
+      *valuePtr *= weight;
+      valuePtr++;
+    }
+  }
 
   // wrapper for SDM multiply + add routine.  Must pass in 2D arrays, even for vectors! 
   // X = ScalarThis*X + ScalarAB*A*B

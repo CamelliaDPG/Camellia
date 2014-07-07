@@ -18,6 +18,8 @@
 #include "BasisReconciliation.h"
 #include "LocalDofMapper.h"
 
+#include "Solver.h"
+
 #include <map>
 
 using namespace std;
@@ -26,9 +28,13 @@ class GMGOperator : public Epetra_Operator {
   SolutionPtr _coarseSolution;
   MeshPtr _fineMesh, _coarseMesh;
   Epetra_Map _finePartitionMap;
-  mutable BasisReconciliation _br;
   
+  Teuchos::RCP<Solver> _coarseSolver;
+  
+  mutable BasisReconciliation _br;
   mutable map< pair< pair<int,int>, RefinementBranch >, LocalDofMapperPtr > _localCoefficientMap; // pair(fineH1Order,coarseH1Order)
+  
+  Teuchos::RCP<Epetra_MultiVector> _diag; // diagonal of the fine (global) stiffness matrix
   
   LocalDofMapperPtr getLocalCoefficientMap(GlobalIndexType fineCellID) const;
   GlobalIndexType getCoarseCellID(GlobalIndexType fineCellID) const;
@@ -42,7 +48,7 @@ public:
   //! @name Constructor
   //@{
   //! Constructor
-  GMGOperator(MeshPtr coarseMesh, IPPtr coarseIP, MeshPtr fineMesh, Epetra_Map &finePartitionMap);
+  GMGOperator(MeshPtr coarseMesh, IPPtr coarseIP, MeshPtr fineMesh, Epetra_Map finePartitionMap, Teuchos::RCP<Solver> coarseSolver);
   //@}
   
   //! @name Attribute set methods
@@ -59,6 +65,16 @@ public:
    \return Integer error code, set to 0 if successful.  Set to -1 if this implementation does not support transpose.
    */
   int SetUseTranspose(bool UseTranspose);
+  //@}
+  
+  //! Diagonal of the stiffness matrix
+  /*!
+   
+   \param In
+   diagonal - diagonal of the stiffness matrix
+   
+   */
+  void setStiffnessDiagonal(Teuchos::RCP<Epetra_MultiVector> diagonal);
   //@}
 
   

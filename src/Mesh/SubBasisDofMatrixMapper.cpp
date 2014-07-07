@@ -93,3 +93,9 @@ FieldContainer<double> SubBasisDofMatrixMapper::mapData(bool transposeConstraint
 vector<GlobalIndexType> SubBasisDofMatrixMapper::mappedGlobalDofOrdinals() {
   return _mappedGlobalDofOrdinals;
 }
+
+SubBasisDofMapperPtr SubBasisDofMatrixMapper::negatedDofMapper() {
+  FieldContainer<double> negatedConstraintMatrix = _constraintMatrix;
+  SerialDenseWrapper::multiplyFCByWeight(negatedConstraintMatrix, -1);
+  return Teuchos::rcp( new SubBasisDofMatrixMapper(_basisDofOrdinalFilter, _mappedGlobalDofOrdinals, negatedConstraintMatrix) );
+}

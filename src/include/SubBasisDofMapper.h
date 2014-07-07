@@ -45,6 +45,8 @@ public:
   virtual const set<unsigned> &basisDofOrdinalFilter() = 0;
   virtual vector<GlobalIndexType> mappedGlobalDofOrdinals() = 0;
   
+  virtual SubBasisDofMapperPtr negatedDofMapper() = 0; // this dof mapper, but with negated coefficients (useful for fluxes)
+  
   virtual ~SubBasisDofMapper();
   
   static SubBasisDofMapperPtr subBasisDofMapper(const set<unsigned> &dofOrdinalFilter, const vector<GlobalIndexType> &globalDofOrdinals);

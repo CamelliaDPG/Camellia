@@ -391,3 +391,18 @@ void LocalDofMapper::printMappingReport() {
     }
   }
 }
+
+void LocalDofMapper::reverseParity(set<int> fluxVarIDs, set<unsigned int> sideOrdinals) {
+  for (set<int>::iterator fluxIt = fluxVarIDs.begin(); fluxIt != fluxVarIDs.end(); fluxIt++) {
+    int fluxID = *fluxIt;
+    for (set<unsigned>::iterator sideOrdinalIt = sideOrdinals.begin(); sideOrdinalIt != sideOrdinals.end(); sideOrdinalIt++) {
+      unsigned sideOrdinal = *sideOrdinalIt;
+      BasisMap basisMap = _sideMaps[sideOrdinal][fluxID];
+      BasisMap negatedBasisMap;
+      for (BasisMap::iterator subMapIt = basisMap.begin(); subMapIt != basisMap.end(); subMapIt++) {
+        negatedBasisMap.push_back((*subMapIt)->negatedDofMapper());
+      }
+      _sideMaps[sideOrdinal][fluxID] = negatedBasisMap;
+    }
+  }
+}

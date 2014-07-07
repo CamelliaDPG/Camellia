@@ -51,6 +51,8 @@ public:
   vector<GlobalIndexType> globalIndices();
   
   void printMappingReport();
+  
+  void reverseParity(set<int> fluxVarIDs, set<unsigned> sideOrdinals); // multiplies corresponding sideMaps by -1
 };
 typedef Teuchos::RCP<LocalDofMapper> LocalDofMapperPtr;
 
