@@ -155,7 +155,9 @@ void HDF5Exporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
     partitionFileName << _filename << "/XMF/trace" << "-part" << commRank << "-time" << timeVal << ".xmf";
   gridFile.open(partitionFileName.str().c_str());
   XMLObject grid("Grid");
-  grid.addAttribute("Name", "Grid");
+  stringstream gridName;
+  gridName << "Time" << timeVal << "Partition" << commRank;
+  grid.addAttribute("Name", gridName.str());
   grid.addAttribute("GridType", "Uniform");
 
   int nFcns = functions.size();

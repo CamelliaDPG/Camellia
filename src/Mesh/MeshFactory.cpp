@@ -34,7 +34,6 @@ static ParametricCurvePtr parametricRect(double width, double height, double x0,
 
 #ifdef HAVE_EPETRAEXT_HDF5
   MeshPtr MeshFactory::loadFromHDF5(BilinearFormPtr bf, string filename) {
-    cout << "Reading Mesh" << endl;
     Epetra_SerialComm Comm;
     EpetraExt::HDF5 hdf5(Comm);
     hdf5.Open(filename);
