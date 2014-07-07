@@ -18,7 +18,7 @@
 #include "BasisReconciliation.h"
 #include "LocalDofMapper.h"
 
-#include <map.h>
+#include <map>
 
 using namespace std;
 
