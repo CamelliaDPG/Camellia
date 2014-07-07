@@ -942,6 +942,8 @@ Teuchos::RCP<RefinementPattern> RefinementPattern::regularRefinementPattern(unsi
   switch (cellTopoKey) {
     case shards::Line<2>::key :
       return regularRefinementPatternLine();
+    case shards::Triangle<3>::key :
+      return regularRefinementPatternTriangle();
     case shards::Quadrilateral<4>::key :
       return regularRefinementPatternQuad();
     case shards::Hexahedron<8>::key :
