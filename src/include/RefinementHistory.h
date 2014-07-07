@@ -22,7 +22,7 @@ typedef Teuchos::RCP<Mesh> MeshPtr;
 using namespace std;
 
 enum RefinementType {
-  H_REFINEMENT, P_REFINEMENT, H_X_REFINEMENT, H_Y_REFINEMENT, H_UNREFINEMENT, UNKNOWN_REFINEMENT // X: cut vertically, Y: cut horizontally
+  H_REFINEMENT, P_REFINEMENT, H_X_REFINEMENT, H_Y_REFINEMENT, H_Z_REFINEMENT, H_UNREFINEMENT, NULL_REFINEMENT, UNKNOWN_REFINEMENT // X: cut vertically, Y: cut horizontally
 };
 
 class RefinementHistory : public RefinementObserver {

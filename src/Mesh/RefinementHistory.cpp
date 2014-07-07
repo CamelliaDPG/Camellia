@@ -23,6 +23,8 @@ RefinementType refinementTypeForString(string refTypeStr) {
     return H_Y_REFINEMENT;
   } else if (refTypeStr == "hu") {
     return H_UNREFINEMENT;
+  } else if (refTypeStr == "hn") {
+    return NULL_REFINEMENT;
   } else if (refTypeStr == "p") {
     return P_REFINEMENT;
   } else {
@@ -43,9 +45,23 @@ string stringForRefinementType(RefinementType refType) {
       return "p";
     case H_UNREFINEMENT:
       return "hu";
+    case NULL_REFINEMENT:
+      return "hn";
     case UNKNOWN_REFINEMENT:
     default:
       return "UNKNOWN";
+  }
+}
+
+RefinementPatternPtr refPatternForRefType(RefinementType refType, CellTopoPtr cellTopo) {
+  if (refType==H_REFINEMENT) return RefinementPattern::regularRefinementPattern(cellTopo->getKey());
+  else if (refType==NULL_REFINEMENT) return RefinementPattern::noRefinementPattern(cellTopo);
+  else if ((refType==H_X_REFINEMENT) && (cellTopo->getKey() == shards::Quadrilateral<4>::key)) {
+    return RefinementPattern::xAnisotropicRefinementPatternQuad();
+  } else if ((refType==H_Y_REFINEMENT) && (cellTopo->getKey() == shards::Quadrilateral<4>::key)) {
+    return RefinementPattern::yAnisotropicRefinementPatternQuad();
+  } else {
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unhandled refinement type");
   }
 }
 
@@ -53,20 +69,39 @@ void RefinementHistory::hRefine(const set<GlobalIndexType> &cellIDs, Teuchos::RC
   if (cellIDs.size() == 0) return;
   // figure out what type of refinement we have:
   int numChildren = refPattern->numChildren();
+  int spaceDim = refPattern->verticesOnReferenceCell().dimension(1);
   RefinementType refType;
-  if (numChildren == 4) {
+  if (numChildren == 1) {
+    refType = NULL_REFINEMENT;
+  } else if (spaceDim==1) {
     refType = H_REFINEMENT;
-  } else if (numChildren == 2) {
-    if (refPattern->refinedNodes()(0,3,1) == 0.0) {
-      // yAnisotropic: horizontal cut
-      refType = H_Y_REFINEMENT;
-    } else if (refPattern->refinedNodes()(1,0,0)==0.0) {
-      refType = H_X_REFINEMENT;
+  } else if (spaceDim==2) {
+    if (numChildren == 4) {
+      refType = H_REFINEMENT;
+    } else if (numChildren == 2) {
+      if (refPattern->refinedNodes()(0,3,1) == 0.0) {
+        // yAnisotropic: horizontal cut
+        refType = H_Y_REFINEMENT;
+      } else if (refPattern->refinedNodes()(1,0,0)==0.0) {
+        refType = H_X_REFINEMENT;
+      } else {
+        TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unsupported refinement pattern");
+      }
     } else {
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unsupported refinement pattern");
     }
+  } else if (spaceDim==3) {
+    if (numChildren==8) {
+      refType = H_REFINEMENT;
+    } else {
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "RefinementHistory does not yet support anisotropic refinements in 3D.");
+    }
   } else {
-    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unsupported refinement pattern");
+    if ((spaceDim==4) && (numChildren==16)) {
+      refType = H_REFINEMENT;
+    } else {
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "RefinementHistory does not yet support this h-refinement and spaceDim combination.");
+    }
   }
   Refinement ref = make_pair(refType, cellIDs);
   _refinements.push_back(ref);
@@ -92,41 +127,26 @@ void RefinementHistory::playback(MeshPtr mesh) {
     
     // check that the cellIDs are all active nodes
     if (refType != H_UNREFINEMENT) {
-//      cout << stringForRefinementType(refType) << " ";
       set<GlobalIndexType> activeIDs = mesh->getActiveCellIDs();
       for (set<GlobalIndexType>::iterator cellIt = cellIDs.begin(); cellIt != cellIDs.end(); cellIt++) {
         int cellID = *cellIt;
-//        cout << cellID << " ";
         if (activeIDs.find(cellID) == activeIDs.end()) {
           TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "cellID for refinement is not an active cell of the mesh");
         }
       }
-//      cout << endl;
     }
     GlobalIndexType sampleCellID = *(cellIDs.begin());
-    bool quadCells = mesh->getElement(sampleCellID)->numSides() == 4;
+    CellTopoPtr cellTopo = mesh->getElementType(sampleCellID)->cellTopoPtr;
     
     switch (refType) {
-      case H_REFINEMENT:
-        if (quadCells)
-          mesh->hRefine(cellIDs, RefinementPattern::regularRefinementPatternQuad());
-        else
-          mesh->hRefine(cellIDs, RefinementPattern::regularRefinementPatternTriangle());
-        break;
-      case H_X_REFINEMENT:
-        mesh->hRefine(cellIDs, RefinementPattern::xAnisotropicRefinementPatternQuad());
-        break;
-      case H_Y_REFINEMENT:
-        mesh->hRefine(cellIDs, RefinementPattern::yAnisotropicRefinementPatternQuad());
-        break;
       case P_REFINEMENT:
         mesh->pRefine(cellIDs);
         break;
       case H_UNREFINEMENT:
         mesh->hUnrefine(cellIDs);
         break;
-      default:
-        TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unhandled refinement type");
+      default: // if we get here, it should be an h-refinement with a ref pattern
+        mesh->hRefine(cellIDs, refPatternForRefType(refType, cellTopo));
     }
   }
 }

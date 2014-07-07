@@ -155,9 +155,11 @@ public:
   Epetra_MultiVector* getGlobalCoefficients();
 
   // solve steps:
-  void initializeStiffnessAndLoad(Teuchos::RCP<Solver> solver);
+  void initializeStiffnessAndLoad();
   void populateStiffnessAndLoad();
+  void setProblem(Teuchos::RCP<Solver> solver);
   void solveWithPrepopulatedStiffnessAndLoad(Teuchos::RCP<Solver> solver);
+  void importSolution();
   
   void solve(); // could add arguments to allow different solution algorithms to be selected...
 
@@ -268,6 +270,8 @@ public:
 
   void setBC( Teuchos::RCP<BC> );
   void setRHS( Teuchos::RCP<RHS> );
+  Teuchos::RCP<Epetra_FEVector> getRHSVector();
+  Teuchos::RCP<Epetra_FEVector> getLHSVector();
   void setIP( Teuchos::RCP<DPGInnerProduct>);
 
   // Jesse's additions:

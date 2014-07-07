@@ -369,13 +369,12 @@ void Solution::setSolution(Teuchos::RCP<Solution> otherSoln) {
   clearComputedResiduals();
 }
 
-void Solution::initializeStiffnessAndLoad(Teuchos::RCP<Solver> solver) {
+void Solution::initializeStiffnessAndLoad() {
   Epetra_Map partMap = getPartitionMap();
   
   int maxRowSize = _mesh->rowSizeUpperBound();
   
   _globalStiffMatrix = Teuchos::rcp(new Epetra_FECrsMatrix(::Copy, partMap, maxRowSize));
-  //  Epetra_FECrsMatrix globalStiffMatrix(Copy, partMap, partMap, maxRowSize);
   _rhsVector = Teuchos::rcp(new Epetra_FEVector(partMap));
   _lhsVector = Teuchos::rcp(new Epetra_FEVector(partMap,1,true));
   
@@ -387,12 +386,12 @@ void Solution::initializeStiffnessAndLoad(Teuchos::RCP<Solver> solver) {
   for (set<GlobalIndexType>::iterator cellIDIt = cellIDs.begin(); cellIDIt != cellIDs.end(); cellIDIt++) {
     GlobalIndexType cellID = *cellIDIt;
     if (_solutionForCellIDGlobal.find(cellID) != _solutionForCellIDGlobal.end()) {
-      _mesh->globalDofAssignment()->interpretLocalCoefficients(cellID, _solutionForCellIDGlobal[cellID], *_lhsVector);
+      int localTrialDofCount = _mesh->getElementType(cellID)->trialOrderPtr->totalDofs();
+      if (localTrialDofCount==_solutionForCellIDGlobal[cellID].size()) { // guard against cases when solutions not registered with their meshes have their meshes p-refined beneath them.  In such a case, we'll just ignore the previous solution coefficients on the cell.
+        _mesh->globalDofAssignment()->interpretLocalCoefficients(cellID, _solutionForCellIDGlobal[cellID], *_lhsVector);
+      }
     }
   }
-  
-  Teuchos::RCP<Epetra_LinearProblem> problem = Teuchos::rcp( new Epetra_LinearProblem(&*_globalStiffMatrix, &*_lhsVector, &*_rhsVector));
-  solver->setProblem(problem);
 }
 
 void Solution::populateStiffnessAndLoad() {
@@ -845,6 +844,11 @@ void Solution::populateStiffnessAndLoad() {
   err = timeBCImpositionVector.MaxValue( &_maxTimeBCImposition );
 }
 
+void Solution::setProblem(Teuchos::RCP<Solver> solver) {
+  Teuchos::RCP<Epetra_LinearProblem> problem = Teuchos::rcp( new Epetra_LinearProblem(&*_globalStiffMatrix, &*_lhsVector, &*_rhsVector));
+  solver->setProblem(problem);
+}
+
 void Solution::solveWithPrepopulatedStiffnessAndLoad(Teuchos::RCP<Solver> solver) {
   int rank = Teuchos::GlobalMPISession::getRank();
   int numProcs = Teuchos::GlobalMPISession::getNProc();
@@ -891,53 +895,20 @@ void Solution::solveWithPrepopulatedStiffnessAndLoad(Teuchos::RCP<Solver> solver
   Epetra_Vector timeSolveVector(timeMap);
   timeSolveVector[0] = timeSolve;
   
-  timer.ResetStartTime();
-  _lhsVector->GlobalAssemble();
-  
-  // Import solution onto current processor
-  GlobalIndexTypeToCast numNodesGlobal = partMap.NumGlobalElements();
-  GlobalIndexTypeToCast numMyNodes = numNodesGlobal;
-  Epetra_Map     solnMap(numNodesGlobal, numMyNodes, 0, Comm);
-  Epetra_Import  solnImporter(solnMap, partMap);
-  Epetra_Vector  solnCoeff(solnMap);
-  solnCoeff.Import(*_lhsVector, solnImporter, Insert);
-  
-  // copy the dof coefficients into our data structure
-  // get ALL active cell IDs (not just ours)-- the above is a global import that we should get rid of eventually...
-  set<GlobalIndexType> cellIDs = _mesh->getActiveCellIDs();
-  for (set<GlobalIndexType>::iterator cellIDIt = cellIDs.begin(); cellIDIt != cellIDs.end(); cellIDIt++) {
-    GlobalIndexType cellID = *cellIDIt;
-    FieldContainer<double> cellDofs(_mesh->getElementType(cellID)->trialOrderPtr->totalDofs());
-    _dofInterpreter->interpretGlobalCoefficients(cellID,cellDofs,solnCoeff);
-    _solutionForCellIDGlobal[cellID] = cellDofs;
-//    // DEBUGGING:
-//    if ((cellID==0) || (cellID==2)) {
-//      cout << "Solution: local coefficients for cell " << cellID << ":\n" << cellDofs;
-//    }
-  }
-  clearComputedResiduals(); // now that we've solved, will need to recompute residuals...
-  
-  double timeDistributeSolution = timer.ElapsedTime();
-  Epetra_Vector timeDistributeSolutionVector(timeMap);
-  timeDistributeSolutionVector[0] = timeDistributeSolution;
-  
   int err = timeSolveVector.Norm1( &_totalTimeSolve );
-  err = timeDistributeSolutionVector.Norm1( &_totalTimeDistributeSolution );
-  
   err = timeSolveVector.MeanValue( &_meanTimeSolve );
-  err = timeDistributeSolutionVector.MeanValue( &_meanTimeDistributeSolution );
-  
   err = timeSolveVector.MinValue( &_minTimeSolve );
-  err = timeDistributeSolutionVector.MinValue( &_minTimeDistributeSolution );
-  
   err = timeSolveVector.MaxValue( &_maxTimeSolve );
-  err = timeDistributeSolutionVector.MaxValue( &_maxTimeDistributeSolution );
 }
 
 void Solution::solve(Teuchos::RCP<Solver> solver) {
-  initializeStiffnessAndLoad(solver);
+  initializeStiffnessAndLoad();
+  setProblem(solver);
   populateStiffnessAndLoad();
   solveWithPrepopulatedStiffnessAndLoad(solver);
+  importSolution();
+  
+  clearComputedResiduals(); // now that we've solved, will need to recompute residuals...
   
   if (_reportTimingResults ) {
     reportTimings();
@@ -994,6 +965,47 @@ Teuchos::RCP<BC> Solution::bc() const {
 }
 Teuchos::RCP<RHS> Solution::rhs() const {
   return _rhs;
+}
+
+void Solution::importSolution() {
+#ifdef HAVE_MPI
+  Epetra_MpiComm Comm(MPI_COMM_WORLD);
+  //cout << "rank: " << rank << " of " << numProcs << endl;
+#else
+  Epetra_SerialComm Comm;
+#endif
+  Epetra_Time timer(Comm);
+
+  // Import solution onto current processor
+  Epetra_Map partMap = getPartitionMap();
+  GlobalIndexTypeToCast numNodesGlobal = partMap.NumGlobalElements();
+  GlobalIndexTypeToCast numMyNodes = numNodesGlobal;
+  Epetra_Map     solnMap(numNodesGlobal, numMyNodes, 0, Comm);
+  Epetra_Import  solnImporter(solnMap, partMap);
+  Epetra_Vector  solnCoeff(solnMap);
+  solnCoeff.Import(*_lhsVector, solnImporter, Insert);
+  
+  // copy the dof coefficients into our data structure
+  // get ALL active cell IDs (not just ours)-- the above is a global import that we should get rid of eventually...
+  set<GlobalIndexType> cellIDs = _mesh->getActiveCellIDs();
+  for (set<GlobalIndexType>::iterator cellIDIt = cellIDs.begin(); cellIDIt != cellIDs.end(); cellIDIt++) {
+    GlobalIndexType cellID = *cellIDIt;
+    FieldContainer<double> cellDofs(_mesh->getElementType(cellID)->trialOrderPtr->totalDofs());
+    _dofInterpreter->interpretGlobalCoefficients(cellID,cellDofs,solnCoeff);
+    _solutionForCellIDGlobal[cellID] = cellDofs;
+  }
+  double timeDistributeSolution = timer.ElapsedTime();
+
+  int numProcs = Teuchos::GlobalMPISession::getNProc();
+  int indexBase = 0;
+  Epetra_Map timeMap(numProcs,indexBase,Comm);
+  Epetra_Vector timeDistributeSolutionVector(timeMap);
+  timeDistributeSolutionVector[0] = timeDistributeSolution;
+  
+  int err = timeDistributeSolutionVector.Norm1( &_totalTimeDistributeSolution );
+  err = timeDistributeSolutionVector.MeanValue( &_meanTimeDistributeSolution );
+  err = timeDistributeSolutionVector.MinValue( &_minTimeDistributeSolution );
+  err = timeDistributeSolutionVector.MaxValue( &_maxTimeDistributeSolution );
 }
 
 Teuchos::RCP<DPGInnerProduct> Solution::ip() const {
@@ -1355,6 +1367,10 @@ double Solution::L2NormOfSolution(int trialID){
 
 Teuchos::RCP<LagrangeConstraints> Solution::lagrangeConstraints() const {
   return _lagrangeConstraints;
+}
+
+Teuchos::RCP<Epetra_FEVector> Solution::getLHSVector() {
+  return _lhsVector;
 }
 
 double Solution::integrateSolution(int trialID) {
@@ -1973,6 +1989,10 @@ void Solution::discardInactiveCellCoefficients() {
   for (vector<GlobalIndexType>::iterator it = cellIDsToErase.begin();it !=cellIDsToErase.end();it++){
     _solutionForCellIDGlobal.erase(*it);
   }
+}
+
+Teuchos::RCP<Epetra_FEVector> Solution::getRHSVector() {
+  return _rhsVector;
 }
 
 void Solution::solutionValues(FieldContainer<double> &values, int trialID, BasisCachePtr basisCache,
@@ -3783,10 +3803,8 @@ void Solution::projectOldCellOntoNewCells(GlobalIndexType cellID,
  {
    VarFactory vf = _mesh->bilinearForm()->varFactory();
    
-   // NOTE: this only projects field variables for now.
    DofOrderingPtr oldTrialOrdering = oldElemType->trialOrderPtr;
    set<int> trialIDs = oldTrialOrdering->getVarIDs();
-   FieldContainer<double> physicalCellNodes = _mesh->physicalCellNodesForCell(cellID);
    
    TEUCHOS_TEST_FOR_EXCEPTION(oldTrialOrdering->totalDofs() != oldData.size(), std::invalid_argument,
                               "oldElemType trial space does not match old data coefficients size");

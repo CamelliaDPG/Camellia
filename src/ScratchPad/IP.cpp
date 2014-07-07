@@ -80,6 +80,17 @@ void IP::computeInnerProductMatrix(FieldContainer<double> &innerProduct,
     lt->integrate(innerProduct,dofOrdering,lt,dofOrdering,basisCache,basisCache->isSideCache());
   }
   
+  bool enforceNumericalSymmetry = false;
+  if (enforceNumericalSymmetry) {
+    for (unsigned int c=0; c < numCells; c++)
+      for (unsigned int i=0; i < numDofs; i++)
+        for (unsigned int j=i+1; j < numDofs; j++)
+        {
+          innerProduct(c,i,j) = (innerProduct(c,i,j) + innerProduct(c,j,i)) / 2.0;
+          innerProduct(c,j,i) = innerProduct(c,i,j);
+        }
+  }
+  
   // boundary terms:
   for ( vector< LinearTermPtr >:: iterator btIt = _boundaryTerms.begin();
        btIt != _boundaryTerms.end(); btIt++) {

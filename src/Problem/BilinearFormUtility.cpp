@@ -213,6 +213,17 @@ void BilinearFormUtility::computeStiffnessMatrix(FieldContainer<double> &stiffne
   if ( ! checkForZeroRowsAndColumns("stiffness",stiffness) ) {
     //cout << "stiffness: " << stiffness;
   }
+  
+  bool enforceNumericalSymmetry = false;
+  if (enforceNumericalSymmetry) {
+    for (unsigned int c=0; c < numCells; c++)
+      for (unsigned int i=0; i < numTrialDofs; i++)
+        for (unsigned int j=i+1; j < numTrialDofs; j++)
+        {
+          stiffness(c,i,j) = (stiffness(c,i,j) + stiffness(c,j,i)) / 2.0;
+          stiffness(c,j,i) = stiffness(c,i,j);
+        }
+  }
 }
 
 void BilinearFormUtility::computeStiffnessMatrixForCell(FieldContainer<double> &stiffness, Teuchos::RCP<Mesh> mesh, int cellID) {

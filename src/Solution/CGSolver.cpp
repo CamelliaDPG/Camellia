@@ -40,14 +40,17 @@ int CGSolver::solve() {
   AztecOO solver(problem());
 
   // COMBO KNOWN TO WORK FOR STOKES (at least): GMRES + Jacobi.  It can be slow to converge, though.
-  // (I've used a tol of 1e-8.)
+  // (I've used a tol of 1e-6.)
+  // The default AZ_precond (i.e. what you get if you don't set anything), which I think is AZ_ilut,
+  // also works quite well on meshes with a few refinements, but after several refinements, the iteration count begins to grow quite a bit.
   
 //  solver.SetAztecOption(AZ_solver, AZ_cg);        
   solver.SetAztecOption(AZ_solver, AZ_gmres);
+//  solver.SetAztecOption(AZ_solver, AZ_fixed_pt);
+//  solver.SetAztecOption(AZ_scaling, AZ_Jacobi);
 //  solver.SetAztecOption(AZ_precond, AZ_none);     // no preconditioner
-  solver.SetAztecOption(AZ_precond, AZ_Jacobi);   // Jacobi preconditioner
-//  solver.SetAztecOption(AZ_precond, AZ_sym_GS);   // Gauss-Seidel preconditioner
-    
+//  solver.SetAztecOption(AZ_precond, AZ_Jacobi);   // Jacobi preconditioner
+  
   int solveResult = solver.Iterate(_maxIters,_tol);
   
   const double* status = solver.GetAztecStatus();
