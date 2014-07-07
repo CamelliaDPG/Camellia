@@ -198,7 +198,7 @@ int main(int argc, char *argv[])
         // mesh->_refinementHistory = Teuchos::rcp( new RefinementHistory );
         // mesh->registerObserver(refHistory);
         // refHistory->saveToFile("Test3.txt");
-      int numRefs = 0;
+      int numRefs = 1;
       for (int ref = 1; ref <= numRefs; ref++)
       {
         refinementStrategy.refine(commRank==0);

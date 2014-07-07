@@ -150,7 +150,7 @@ static ParametricCurvePtr parametricRect(double width, double height, double x0,
 
     for (int i=0; i < histArraySize;)
     {
-      int refType = histArray[i];
+      RefinementType refType = RefinementType(histArray[i]);
       i++;
       int numCells = histArray[i];
       i++;
@@ -167,28 +167,18 @@ static ParametricCurvePtr parametricRect(double width, double height, double x0,
             TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "cellID for refinement is not an active cell of the mesh");
           }
         }
-        bool quadCells = mesh->getElement(cellID)->numSides() == 4;
+        CellTopoPtr cellTopo = mesh->getElementType(cellID)->cellTopoPtr;
+
         switch (refType) {
-          case H_REFINEMENT:
-            if (quadCells)
-              mesh->hRefine(cellIDs, RefinementPattern::regularRefinementPatternQuad());
-            else
-              mesh->hRefine(cellIDs, RefinementPattern::regularRefinementPatternTriangle());
-            break;
-          case H_X_REFINEMENT:
-            mesh->hRefine(cellIDs, RefinementPattern::xAnisotropicRefinementPatternQuad());
-            break;
-          case H_Y_REFINEMENT:
-            mesh->hRefine(cellIDs, RefinementPattern::yAnisotropicRefinementPatternQuad());
-            break;
           case P_REFINEMENT:
             mesh->pRefine(cellIDs);
             break;
           case H_UNREFINEMENT:
             mesh->hUnrefine(cellIDs);
             break;
-          default:
-            TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unhandled refinement type");
+          default: 
+            // if we get here, it should be an h-refinement with a ref pattern
+            mesh->hRefine(cellIDs, refPatternForRefType(refType, cellTopo));
         }
       }
     }

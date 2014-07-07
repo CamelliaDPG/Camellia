@@ -25,6 +25,8 @@ enum RefinementType {
   H_REFINEMENT, P_REFINEMENT, H_X_REFINEMENT, H_Y_REFINEMENT, H_Z_REFINEMENT, H_UNREFINEMENT, NULL_REFINEMENT, UNKNOWN_REFINEMENT // X: cut vertically, Y: cut horizontally
 };
 
+RefinementPatternPtr refPatternForRefType(RefinementType refType, CellTopoPtr cellTopo);
+
 class RefinementHistory : public RefinementObserver {
   typedef pair< RefinementType, set<GlobalIndexType> > Refinement;
   vector< Refinement > _refinements;
