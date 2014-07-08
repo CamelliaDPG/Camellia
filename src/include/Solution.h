@@ -157,6 +157,7 @@ public:
   // solve steps:
   void initializeStiffnessAndLoad();
   void populateStiffnessAndLoad();
+  void imposeBCs();
   void setProblem(Teuchos::RCP<Solver> solver);
   void solveWithPrepopulatedStiffnessAndLoad(Teuchos::RCP<Solver> solver);
   void importSolution();

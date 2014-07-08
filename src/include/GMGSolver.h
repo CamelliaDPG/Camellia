@@ -22,7 +22,7 @@ class GMGSolver : public Solver {
   
   GMGOperator _gmgOperator;
 public:
-  GMGSolver( MeshPtr coarseMesh, IPPtr coarseIP, MeshPtr fineMesh, Epetra_Map finePartitionMap, int maxIters, double tol, Teuchos::RCP<Solver> coarseSolver);
+  GMGSolver(BCPtr zeroBCs, MeshPtr coarseMesh, IPPtr coarseIP, MeshPtr fineMesh, Epetra_Map finePartitionMap, int maxIters, double tol, Teuchos::RCP<Solver> coarseSolver);
   void setPrintToConsole(bool printToConsole);
   int solve();
   void setTolerance(double tol);

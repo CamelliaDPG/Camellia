@@ -753,54 +753,7 @@ void Solution::populateStiffnessAndLoad() {
   
   timer.ResetStartTime();
   
-  FieldContainer<GlobalIndexType> bcGlobalIndices;
-  FieldContainer<double> bcGlobalValues;
-  
-  _mesh->boundary().bcsToImpose(bcGlobalIndices,bcGlobalValues,*(_bc.get()), myGlobalIndicesSet);
-  int numBCs = bcGlobalIndices.size();
-  
-  FieldContainer<GlobalIndexTypeToCast> bcGlobalIndicesCast;
-  // cast whatever the global index type is to a type that Epetra supports
-  Teuchos::Array<int> dim;
-  bcGlobalIndices.dimensions(dim);
-  bcGlobalIndicesCast.resize(dim);
-  for (int dofOrdinal = 0; dofOrdinal < bcGlobalIndices.size(); dofOrdinal++) {
-    bcGlobalIndicesCast[dofOrdinal] = bcGlobalIndices[dofOrdinal];
-  }
-//  cout << "bcGlobalIndices:" << endl << bcGlobalIndices;
-//  cout << "bcGlobalValues:" << endl << bcGlobalValues;
-  
-  Epetra_MultiVector v(partMap,1);
-  v.PutScalar(0.0);
-  for (int i = 0; i < numBCs; i++) {
-    v.ReplaceGlobalValue(bcGlobalIndicesCast(i), 0, bcGlobalValues(i));
-  }
-  
-  Epetra_MultiVector rhsDirichlet(partMap,1);
-  _globalStiffMatrix->Apply(v,rhsDirichlet);
-  
-  // Update right-hand side
-  _rhsVector->Update(-1.0,rhsDirichlet,1.0);
-  
-  if (numBCs == 0) {
-    //cout << "Solution: Warning: Imposing no BCs." << endl;
-  } else {
-    int err = _rhsVector->ReplaceGlobalValues(numBCs,&bcGlobalIndicesCast(0),&bcGlobalValues(0));
-    if (err != 0) {
-      cout << "ERROR: rhsVector.ReplaceGlobalValues(): some indices non-local...\n";
-    }
-  }
-  // Zero out rows and columns of stiffness matrix corresponding to Dirichlet edges
-  //  and add one to diagonal.
-  FieldContainer<int> bcLocalIndices(bcGlobalIndices.dimension(0));
-  for (int i=0; i<bcGlobalIndices.dimension(0); i++) {
-    bcLocalIndices(i) = _globalStiffMatrix->LRID(bcGlobalIndicesCast(i));
-  }
-  if (numBCs == 0) {
-    ML_Epetra::Apply_OAZToMatrix(NULL, 0, *_globalStiffMatrix);
-  } else {
-    ML_Epetra::Apply_OAZToMatrix(&bcLocalIndices(0), numBCs, *_globalStiffMatrix);
-  }
+  imposeBCs();
   
   double timeBCImposition = timer.ElapsedTime();
   Epetra_Vector timeBCImpositionVector(timeMap);
@@ -872,9 +825,9 @@ void Solution::solveWithPrepopulatedStiffnessAndLoad(Teuchos::RCP<Solver> solver
   Epetra_Map timeMap(numProcs,indexBase,Comm);
   Epetra_Time timer(Comm);
   
-  Teuchos::RCP<Epetra_LinearProblem> problem = Teuchos::rcp( new Epetra_LinearProblem(&*_globalStiffMatrix, &*_lhsVector, &*_rhsVector));
   if (_reportConditionNumber) {
     //    double oneNorm = globalStiffMatrix.NormOne();
+    Teuchos::RCP<Epetra_LinearProblem> problem = Teuchos::rcp( new Epetra_LinearProblem(&*_globalStiffMatrix, &*_lhsVector, &*_rhsVector));
     double condest = conditionNumberEstimate(*problem);
     if (rank == 0) {
       // cout << "(one-norm) of global stiffness matrix: " << oneNorm << endl;
@@ -1010,6 +963,63 @@ void Solution::importSolution() {
 
 Teuchos::RCP<DPGInnerProduct> Solution::ip() const {
   return _ip;
+}
+
+void Solution::imposeBCs() {
+  int rank     = Teuchos::GlobalMPISession::getRank();
+  
+  FieldContainer<GlobalIndexType> bcGlobalIndices;
+  FieldContainer<double> bcGlobalValues;
+  
+  set<GlobalIndexType> myGlobalIndicesSet = _mesh->globalDofIndicesForPartition(rank);
+  //  cout << "rank " << rank << " has " << myGlobalIndicesSet.size() << " locally-owned dof indices.\n";
+  Epetra_Map partMap = getPartitionMap();
+
+  _mesh->boundary().bcsToImpose(bcGlobalIndices,bcGlobalValues,*(_bc.get()), myGlobalIndicesSet);
+  int numBCs = bcGlobalIndices.size();
+  
+  FieldContainer<GlobalIndexTypeToCast> bcGlobalIndicesCast;
+  // cast whatever the global index type is to a type that Epetra supports
+  Teuchos::Array<int> dim;
+  bcGlobalIndices.dimensions(dim);
+  bcGlobalIndicesCast.resize(dim);
+  for (int dofOrdinal = 0; dofOrdinal < bcGlobalIndices.size(); dofOrdinal++) {
+    bcGlobalIndicesCast[dofOrdinal] = bcGlobalIndices[dofOrdinal];
+  }
+  //  cout << "bcGlobalIndices:" << endl << bcGlobalIndices;
+  //  cout << "bcGlobalValues:" << endl << bcGlobalValues;
+  
+  Epetra_MultiVector v(partMap,1);
+  v.PutScalar(0.0);
+  for (int i = 0; i < numBCs; i++) {
+    v.ReplaceGlobalValue(bcGlobalIndicesCast(i), 0, bcGlobalValues(i));
+  }
+  
+  Epetra_MultiVector rhsDirichlet(partMap,1);
+  _globalStiffMatrix->Apply(v,rhsDirichlet);
+  
+  // Update right-hand side
+  _rhsVector->Update(-1.0,rhsDirichlet,1.0);
+  
+  if (numBCs == 0) {
+    //cout << "Solution: Warning: Imposing no BCs." << endl;
+  } else {
+    int err = _rhsVector->ReplaceGlobalValues(numBCs,&bcGlobalIndicesCast(0),&bcGlobalValues(0));
+    if (err != 0) {
+      cout << "ERROR: rhsVector.ReplaceGlobalValues(): some indices non-local...\n";
+    }
+  }
+  // Zero out rows and columns of stiffness matrix corresponding to Dirichlet edges
+  //  and add one to diagonal.
+  FieldContainer<int> bcLocalIndices(bcGlobalIndices.dimension(0));
+  for (int i=0; i<bcGlobalIndices.dimension(0); i++) {
+    bcLocalIndices(i) = _globalStiffMatrix->LRID(bcGlobalIndicesCast(i));
+  }
+  if (numBCs == 0) {
+    ML_Epetra::Apply_OAZToMatrix(NULL, 0, *_globalStiffMatrix);
+  } else {
+    ML_Epetra::Apply_OAZToMatrix(&bcLocalIndices(0), numBCs, *_globalStiffMatrix);
+  }
 }
 
 Teuchos::RCP<LocalStiffnessMatrixFilter> Solution::filter() const{
@@ -1176,12 +1186,10 @@ double Solution::meshMeasure() {
 }
 
 double Solution::InfNormOfSolutionGlobal(int trialID){
-  int numProcs=1;
-  int rank=0;
+  int numProcs = Teuchos::GlobalMPISession::getNProc();
+  int rank     = Teuchos::GlobalMPISession::getRank();
   
 #ifdef HAVE_MPI
-  rank     = Teuchos::GlobalMPISession::getRank();
-  numProcs = Teuchos::GlobalMPISession::getNProc();
   Epetra_MpiComm Comm(MPI_COMM_WORLD);
   //cout << "rank: " << rank << " of " << numProcs << endl;
 #else

@@ -134,7 +134,7 @@ map< int, DirichletBC > & BC::dirichletBCs() {
 
 BCPtr BC::copyImposingZero() {
   //returns a copy of this BC object, except with all zero Functions
-  BCPtr zeroBC = BC::bc();
+  BCPtr zeroBC = Teuchos::rcp( new BC(*this) );
   map< int, DirichletBC >* dirichletBCs = &(zeroBC->dirichletBCs());
   for (map< int, DirichletBC >::iterator bcIt = dirichletBCs->begin();
        bcIt != dirichletBCs->end(); ++bcIt) {

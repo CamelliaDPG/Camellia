@@ -7,6 +7,7 @@
 
 #include "CGSolver.h"
 #include "MLSolver.h"
+#include "GMGSolver.h"
 
 #ifdef ENABLE_INTEL_FLOATING_POINT_EXCEPTIONS
 #include <xmmintrin.h>
@@ -82,7 +83,8 @@ int main(int argc, char *argv[]) {
   bool useMinRule = false;
   bool useMumps = false;
   bool useCGSolver = false;
-  bool useMLSolver = true;
+  bool useMLSolver = false;
+  bool useGMGSolver = true;
   bool clearSolution = false;
   
   bool enforceOneIrregularity = true;
@@ -203,15 +205,20 @@ int main(int argc, char *argv[]) {
     elementCounts.push_back(depthCells);
   }
   
-  MeshPtr mesh;
+  MeshPtr mesh, coarseMesh;
   
   if (!use3D) {
     mesh = useMinRule ? MeshFactory::quadMeshMinRule(stokesBF, H1Order, delta_k, width, height,
                                                      horizontalCells, verticalCells)
                             : MeshFactory::quadMesh(stokesBF, H1Order, delta_k, width, height,
                                                     horizontalCells, verticalCells);
+    coarseMesh = useMinRule ? MeshFactory::quadMeshMinRule(stokesBF, H1Order, delta_k, width, height,
+                                                     horizontalCells, verticalCells)
+                            : MeshFactory::quadMesh(stokesBF, H1Order, delta_k, width, height,
+                                                     horizontalCells, verticalCells);
   } else {
     mesh = MeshFactory::rectilinearMesh(stokesBF, domainDimensions, elementCounts, H1Order, delta_k);
+    coarseMesh = MeshFactory::rectilinearMesh(stokesBF, domainDimensions, elementCounts, H1Order, delta_k);
   }
   
   RHSPtr rhs = RHS::rhs(); // zero
@@ -260,52 +267,6 @@ int main(int argc, char *argv[]) {
   
   mesh->registerSolution(solution); // sign up for projection of old solution onto refined cells.
   
-  bool debuggingCrashInMultiBasis = false;
-  if (debuggingCrashInMultiBasis) {
-    // some initial refinements to get us to the issue in the debugger faster:
-    vector<GlobalIndexType> cellsToRefine;
-    cellsToRefine.push_back(1);
-    cellsToRefine.push_back(3);
-    mesh->hRefine(cellsToRefine, RefinementPattern::regularRefinementPatternQuad());
-    
-    cellsToRefine.clear();
-    cellsToRefine.push_back(7);
-    cellsToRefine.push_back(10);
-    mesh->hRefine(cellsToRefine, RefinementPattern::regularRefinementPatternQuad());
-    
-    cellsToRefine.clear();
-    cellsToRefine.push_back(15);
-    cellsToRefine.push_back(18);
-    mesh->hRefine(cellsToRefine, RefinementPattern::regularRefinementPatternQuad());
-    
-    cellsToRefine.clear();
-    cellsToRefine.push_back(23);
-    cellsToRefine.push_back(26);
-    mesh->hRefine(cellsToRefine, RefinementPattern::regularRefinementPatternQuad());
-    
-    cellsToRefine.clear();
-    cellsToRefine.push_back(31);
-    cellsToRefine.push_back(34);
-    mesh->hRefine(cellsToRefine, RefinementPattern::regularRefinementPatternQuad());
-    
-//    // set up zero solution data (to trigger bona fide projection on refinement)
-//    set<GlobalIndexType> cellIDs = mesh->getActiveCellIDs();
-//    for (set<GlobalIndexType>::iterator cellIDIt = cellIDs.begin(); cellIDIt != cellIDs.end(); cellIDIt++) {
-//      GlobalIndexType cellID = *cellIDIt;
-//      DofOrderingPtr trialOrdering = mesh->getElementType(cellID)->trialOrderPtr;
-//      FieldContainer<double> zeroCoefficients(trialOrdering->totalDofs());
-//      solution->setSolnCoeffsForCellID(zeroCoefficients, cellID);
-//    }
-//    
-//    cellsToRefine.clear();
-//    cellsToRefine.push_back(38);
-//    cellsToRefine.push_back(39);
-//    cellsToRefine.push_back(42);
-//    cellsToRefine.push_back(43);
-//    mesh->hRefine(cellsToRefine, RefinementPattern::regularRefinementPatternQuad());
-  }
-  
-  
   double energyThreshold = 0.2;
   RefinementStrategy refinementStrategy( solution, energyThreshold );
   
@@ -331,6 +292,12 @@ int main(int argc, char *argv[]) {
     int maxIters = 80000;
     double tol = 1e-6;
     fineSolver = Teuchos::rcp( new MLSolver(tol, maxIters) );
+  } else if (useGMGSolver) {
+    double tol = 1e-6;
+    int maxIters = 80000;
+    BCPtr zeroBCs = bc->copyImposingZero();
+    fineSolver = Teuchos::rcp( new GMGSolver(zeroBCs, coarseMesh, graphNorm, mesh,
+                                             solution->getPartitionMap(), maxIters, tol, coarseSolver) );
   } else {
     fineSolver = coarseSolver;
   }
@@ -347,8 +314,7 @@ int main(int argc, char *argv[]) {
 #ifdef HAVE_EPETRAEXT_HDF5
     ostringstream dir_name;
     dir_name << "stokesCavityFlow_k" << k << "_after_ref" << refIndex << "_projection";
-    bool deleteOldFiles = false;
-    HDF5Exporter exporter(mesh,dir_name.str(),deleteOldFiles);
+    HDF5Exporter exporter(mesh,dir_name.str());
     exporter.exportSolution(solution,varFactory,0);
 #endif
     
@@ -366,7 +332,7 @@ int main(int argc, char *argv[]) {
 #ifdef HAVE_EPETRAEXT_HDF5
     dir_name.clear();
     dir_name << "stokesCavityFlow_k" << k << "_ref" << refIndex;
-    HDF5Exporter exporter2(mesh,dir_name.str(),deleteOldFiles);
+    HDF5Exporter exporter2(mesh,dir_name.str());
     exporter2.exportSolution(solution,varFactory,0);
 #endif
   }
@@ -390,8 +356,7 @@ int main(int argc, char *argv[]) {
 #ifdef HAVE_EPETRAEXT_HDF5
   ostringstream dir_name;
   dir_name << "stokesCavityFlow_k" << k << "_final";
-  bool deleteOldFiles = false;
-  HDF5Exporter exporter(mesh,dir_name.str(),deleteOldFiles);
+  HDF5Exporter exporter(mesh,dir_name.str());
   exporter.exportSolution(solution,varFactory,0);
 #endif
   

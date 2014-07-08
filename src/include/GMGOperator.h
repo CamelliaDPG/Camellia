@@ -28,6 +28,7 @@ class GMGOperator : public Epetra_Operator {
   SolutionPtr _coarseSolution;
   MeshPtr _fineMesh, _coarseMesh;
   Epetra_Map _finePartitionMap;
+  BCPtr _bc;
   
   Teuchos::RCP<Solver> _coarseSolver;
   
@@ -48,7 +49,7 @@ public:
   //! @name Constructor
   //@{
   //! Constructor
-  GMGOperator(MeshPtr coarseMesh, IPPtr coarseIP, MeshPtr fineMesh, Epetra_Map finePartitionMap, Teuchos::RCP<Solver> coarseSolver);
+  GMGOperator(BCPtr zeroBCs, MeshPtr coarseMesh, IPPtr coarseIP, MeshPtr fineMesh, Epetra_Map finePartitionMap, Teuchos::RCP<Solver> coarseSolver);
   //@}
   
   //! @name Attribute set methods

@@ -8,12 +8,12 @@
 
 #include "GMGSolver.h"
 
-GMGSolver::GMGSolver( MeshPtr coarseMesh, IPPtr coarseIP, MeshPtr fineMesh,
-                     Epetra_Map finePartitionMap, int maxIters, double tol, Teuchos::RCP<Solver> coarseSolver) : _gmgOperator(coarseMesh,coarseIP,fineMesh,finePartitionMap,coarseSolver),
+GMGSolver::GMGSolver( BCPtr zeroBCs, MeshPtr coarseMesh, IPPtr coarseIP, MeshPtr fineMesh,
+                     Epetra_Map finePartitionMap, int maxIters, double tol, Teuchos::RCP<Solver> coarseSolver) : _gmgOperator(zeroBCs,coarseMesh,coarseIP,fineMesh,finePartitionMap,coarseSolver),
                     _finePartitionMap(finePartitionMap) {
   _maxIters = maxIters;
   _printToConsole = false;
-  _tol = tol;
+  _tol = tol;         
 }
 
 void GMGSolver::setPrintToConsole(bool printToConsole) {
@@ -35,11 +35,12 @@ int GMGSolver::solve() {
   Teuchos::RCP<Epetra_MultiVector> diagA_ptr = Teuchos::rcp( &diagA, false );
   
   _gmgOperator.setStiffnessDiagonal(diagA_ptr);
-  
-  solver.SetAztecOption(AZ_solver, AZ_gmres);
+
+  solver.SetAztecOption(AZ_solver, AZ_cg);
+//  solver.SetAztecOption(AZ_solver, AZ_gmres);
   solver.SetPrecOperator(&_gmgOperator);
   solver.SetAztecOption(AZ_precond, AZ_user_precond);
-  solver.SetAztecOption(AZ_scaling, AZ_Jacobi);
+  solver.SetAztecOption(AZ_scaling, AZ_none);
   
   int solveResult = solver.Iterate(_maxIters,_tol);
   
