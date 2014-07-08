@@ -80,7 +80,7 @@ int main(int argc, char *argv[]) {
   int H1Order = k + 1;
   int delta_k = use3D ? 3 : 2;   // test space enrichment
   
-  bool useMinRule = false;
+  bool useMinRule = true;
   bool useMumps = false;
   bool useCGSolver = false;
   bool useMLSolver = false;
@@ -296,8 +296,13 @@ int main(int argc, char *argv[]) {
     double tol = 1e-6;
     int maxIters = 80000;
     BCPtr zeroBCs = bc->copyImposingZero();
-    fineSolver = Teuchos::rcp( new GMGSolver(zeroBCs, coarseMesh, graphNorm, mesh,
+    // as a test, do "multi" grid between fine and fine meshes.
+    fineSolver = Teuchos::rcp( new GMGSolver(zeroBCs, mesh, graphNorm, mesh,
                                              solution->getPartitionMap(), maxIters, tol, coarseSolver) );
+
+//    fineSolver = Teuchos::rcp( new GMGSolver(zeroBCs, coarseMesh, graphNorm, mesh,
+//                                             solution->getPartitionMap(), maxIters, tol, coarseSolver) );
+
   } else {
     fineSolver = coarseSolver;
   }

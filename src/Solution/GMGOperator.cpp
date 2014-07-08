@@ -20,7 +20,7 @@ GMGOperator::GMGOperator(BCPtr zeroBCs, MeshPtr coarseMesh, IPPtr coarseIP, Mesh
   _coarseSolution = Teuchos::rcp( new Solution(coarseMesh, zeroBCs, zeroRHS, coarseIP) );
   _coarseSolver = coarseSolver;
   
-  if ((!  coarseMesh->meshUsesMaximumRule()) && (fineMesh->meshUsesMinimumRule()) ) {
+  if (( coarseMesh->meshUsesMaximumRule()) || (! fineMesh->meshUsesMinimumRule()) ) {
     cout << "GMGOperator only supports minimum rule.\n";
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "GMGOperator only supports minimum rule.");
   }
@@ -311,7 +311,7 @@ double GMGOperator::NormInf() const {
 }
 
 const char * GMGOperator::Label() const {
-  return "Camellia Geometric Multi-Grid operator";
+  return "Camellia Geometric Multi-Grid Preconditioner";
 }
 
 int GMGOperator::SetUseTranspose(bool UseTranspose) {

@@ -36,8 +36,8 @@ int GMGSolver::solve() {
   
   _gmgOperator.setStiffnessDiagonal(diagA_ptr);
 
-  solver.SetAztecOption(AZ_solver, AZ_cg);
-//  solver.SetAztecOption(AZ_solver, AZ_gmres);
+//  solver.SetAztecOption(AZ_solver, AZ_cg);
+  solver.SetAztecOption(AZ_solver, AZ_gmres);
   solver.SetPrecOperator(&_gmgOperator);
   solver.SetAztecOption(AZ_precond, AZ_user_precond);
   solver.SetAztecOption(AZ_scaling, AZ_none);
