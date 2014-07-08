@@ -256,8 +256,7 @@ int main(int argc, char *argv[]) {
 #ifdef USE_HDF5
   ostringstream dir_name;
   dir_name << "convectingCone_k" << k;
-  bool deleteOldFiles = true;
-  HDF5Exporter exporter(mesh,dir_name.str(),deleteOldFiles);
+  HDF5Exporter exporter(mesh,dir_name.str());
 #endif
   
 #ifdef USE_VTK

@@ -10,11 +10,19 @@
 
 #include "Solver.h"
 
+#include "ErrorPercentageRefinementStrategy.h"
+
 #include "CamelliaConfig.h"
 
 #ifdef ENABLE_INTEL_FLOATING_POINT_EXCEPTIONS
 #include <xmmintrin.h>
 #endif
+
+#include "EpetraExt_ConfigDefs.h"
+#ifdef HAVE_EPETRAEXT_HDF5
+#include "HDF5Exporter.h"
+#endif
+
 
 class Cone_U0 : public SimpleFunction {
   double _r; // cone radius
@@ -86,15 +94,18 @@ int main(int argc, char *argv[]) {
   
   Teuchos::CommandLineProcessor cmdp(false,true); // false: don't throw exceptions; true: do return errors for unrecognized options
 
+  const static double PI  = 3.141592653589793238462;
+  
   bool useCondensedSolve = false; // condensed solve not yet compatible with minimum rule meshes
   
   int k = 2; // poly order for u
-  int numCells = 2; // in x, y (-1 so we can set a default if unset from the command line.)
-  int numTimeCells = 6;
+  int numCells = 32; // in x, y (-1 so we can set a default if unset from the command line.)
+  int numTimeCells = 1;
+  int numTimeSlabs = -1;
   int numFrames = 50;
   int delta_k = 3;   // test space enrichment: should be 3 for 3D
+  int maxRefinements = 0; // maximum # of refinements on each time slab
   bool useMumpsIfAvailable  = true;
-  bool usePeriodicBCs = false;
   bool useConstantConvection = false;
   double refinementTolerance = 0.1;
   
@@ -105,13 +116,13 @@ int main(int argc, char *argv[]) {
   cmdp.setOption("numTimeCells",&numTimeCells,"number of time axis cells");
   cmdp.setOption("numFrames",&numFrames,"number of frames for export");
   
-  cmdp.setOption("usePeriodicBCs", "useDirichletBCs", &usePeriodicBCs);
   cmdp.setOption("useConstantConvection", "useVariableConvection", &useConstantConvection);
   
   cmdp.setOption("useCondensedSolve", "useUncondensedSolve", &useCondensedSolve, "use static condensation to reduce the size of the global solve");
   cmdp.setOption("useMumps", "useKLU", &useMumpsIfAvailable, "use MUMPS (if available)");
   
   cmdp.setOption("refinementTolerance", &refinementTolerance, "relative error beyond which to stop refining");
+  cmdp.setOption("maxRefinements", &maxRefinements, "maximum # of refinements on each time slab");
   
   if (cmdp.parse(argc,argv) != Teuchos::CommandLineProcessor::PARSE_SUCCESSFUL) {
 #ifdef HAVE_MPI
@@ -122,10 +133,6 @@ int main(int argc, char *argv[]) {
   
   int H1Order = k + 1;
   
-  const static double PI  = 3.141592653589793238462;
-  
-  double timeLength = 2 * PI;
-
   VarFactory varFactory;
   // traces:
   VarPtr qHat = varFactory.fluxVar("\\widehat{q}");
@@ -158,10 +165,13 @@ int main(int argc, char *argv[]) {
   double x0 = -0.5; double y0 = -0.5;
   double t0 = 0;
   
-  if (usePeriodicBCs) {
-    x0 = 0.0; y0 = 0.0;
-    width = 1.0; height = 1.0;
+  double totalTime = 2.0 * PI;
+  
+  if (numTimeSlabs==-1) {
+    double h = width / horizontalCells; // want t approx equal to h
+    numTimeSlabs = (int) totalTime / h;
   }
+  double timeLengthPerSlab = totalTime / numTimeSlabs;
   
   if (rank==0) {
     cout << "solving on " << numCells << " x " << numCells << " x " << numTimeCells << " mesh " << "of order " << k << ".\n";
@@ -174,7 +184,7 @@ int main(int argc, char *argv[]) {
   vector<double> dimensions;
   dimensions.push_back(width);
   dimensions.push_back(height);
-  dimensions.push_back(timeLength);
+  dimensions.push_back(timeLengthPerSlab);
   
   vector<int> elementCounts(3);
   elementCounts[0] = horizontalCells;
@@ -188,17 +198,11 @@ int main(int argc, char *argv[]) {
   
   MeshPtr mesh = MeshFactory::rectilinearMesh(bf, dimensions, elementCounts, H1Order, delta_k, origin);
   
-  FunctionPtr u0 = Teuchos::rcp( new Cone_U0(0.0, 0.25, 0.1, 1.0, usePeriodicBCs) );
+  FunctionPtr u0 = Teuchos::rcp( new Cone_U0(0.0, 0.25, 0.1, 1.0, false) );
   
-  vector< PeriodicBCPtr > periodicBCs;
-  if (! usePeriodicBCs) {
-    bc->addDirichlet(qHat, inflowFilter, Function::zero()); // zero BCs enforced at the inflow boundary.
-    bc->addDirichlet(qHat, SpatialFilter::matchingZ(t0), u0);
-  } else {
-    periodicBCs.push_back(PeriodicBC::xIdentification(x0, x0+width));
-    periodicBCs.push_back(PeriodicBC::yIdentification(y0, y0+height));
-  }
-  
+  bc->addDirichlet(qHat, inflowFilter, Function::zero()); // zero BCs enforced at the inflow boundary.
+  bc->addDirichlet(qHat, SpatialFilter::matchingZ(t0), u0);
+
   IPPtr ip;
   ip = bf->graphNorm();
   
@@ -215,45 +219,86 @@ int main(int argc, char *argv[]) {
   NewVTKExporter exporter(mesh->getTopology());
 #endif
   
-  double energyThreshold = 0.20; // for mesh refinements
+//  double errorPercentage = 0.5; // for mesh refinements: ask to refine elements that account for 80% of the error in each step
+//  Teuchos::RCP<RefinementStrategy> refinementStrategy;
+//  refinementStrategy = Teuchos::rcp( new ErrorPercentageRefinementStrategy( soln, errorPercentage ));
+
+  double energyThreshold = 0.2; // for mesh refinements: ask to refine elements that account for 80% of the error in each step
   Teuchos::RCP<RefinementStrategy> refinementStrategy;
   refinementStrategy = Teuchos::rcp( new RefinementStrategy( soln, energyThreshold ));
   
-  FunctionPtr u_soln = Function::solution(u, soln);
   
   if (rank==0) cout << "Initial mesh has " << mesh->getTopology()->activeCellCount() << " active (leaf) cells " << "and " << mesh->globalDofCount() << " degrees of freedom.\n";
   
-  int refNumber = 0;
-  double relativeEnergyError;
-  do {
-    soln->solve(solver);
-    soln->reportTimings();
-    
-//    LinearTermPtr solnFunctional = bf->testFunctional(soln);
-//    RieszRep solnRieszRep(mesh, ip, solnFunctional);
-//    
-//    solnRieszRep.computeRieszRep();
-//    double solnEnergyNorm = solnRieszRep.getNorm();
-    
-    double solnNorm = u_soln->l2norm(mesh);
-    
-    double energyError = soln->energyErrorTotal();
-    relativeEnergyError = energyError / solnNorm;
-    
-    if (rank==0) {
-      cout << "Relative energy error for refinement " << refNumber++ << ": " << energyError << endl;
-    }
-    
-    refinementStrategy->refine();
-    if (rank==0) {
-      cout << "After refinement, mesh has " << mesh->getTopology()->activeCellCount() << " active (leaf) cells " << "and " << mesh->globalDofCount() << " degrees of freedom.\n";
-    }
-    
-  } while (relativeEnergyError > refinementTolerance);
+  FunctionPtr sideParity = Function::sideParity();
   
-#ifdef USE_VTK
-  if (rank==0) exporter.exportFunction(u_soln, "u_soln");
-#endif
+  for(int timeStep = 0; timeStep<numTimeSlabs; timeStep++) {
+    double relativeEnergyError;
+    int refNumber = 0;
+    do {
+      soln->solve(solver);
+      soln->reportTimings();
+      
+  #ifdef HAVE_EPETRAEXT_HDF5
+      ostringstream dir_name;
+      dir_name << "spacetime_convectingCone_k" << k << "_t" << timeStep;
+      HDF5Exporter exporter(soln->mesh(),dir_name.str());
+      exporter.exportSolution(soln, varFactory);
+      
+      ostringstream file_name;
+      file_name << dir_name.str();
+      
+      dir_name << ".soln";
+      soln->writeToFile(dir_name.str());
+      if (rank==0) cout << endl << "wrote " << dir_name.str() << endl;
+      
+      file_name << ".mesh";
+      soln->mesh()->saveToHDF5(file_name.str());
+  #endif
+      FunctionPtr u_soln = Function::solution(u, soln);
+  #ifdef USE_VTK
+      ostringstream fileName;
+      fileName << "u_soln_ref_" << refNumber;
+      if (rank==0) exporter.exportFunction(u_soln, "u_soln", fileName.str());
+  #endif
+      
+
+  //    LinearTermPtr solnFunctional = bf->testFunctional(soln);
+  //    RieszRep solnRieszRep(mesh, ip, solnFunctional);
+  //    
+  //    solnRieszRep.computeRieszRep();
+  //    double solnEnergyNorm = solnRieszRep.getNorm();
+      
+      double solnNorm = u_soln->l2norm(mesh);
+      
+      double energyError = soln->energyErrorTotal();
+      relativeEnergyError = energyError / solnNorm;
+      
+      if (rank==0) {
+        cout << "Relative energy error for refinement " << refNumber++ << ": " << relativeEnergyError << endl;
+      }
+      
+      if ((relativeEnergyError > refinementTolerance) && (refNumber < maxRefinements)) {
+        refinementStrategy->refine();
+        if (rank==0) {
+          cout << "After refinement, mesh has " << mesh->getTopology()->activeCellCount() << " active (leaf) cells " << "and " << mesh->globalDofCount() << " degrees of freedom.\n";
+        }
+      }
+      
+    } while ((relativeEnergyError > refinementTolerance) && (refNumber < maxRefinements));
+    
+    // set up next mesh/solution:
+    FunctionPtr q_prev = Function::solution(qHat, soln);
+    
+    double tn = (timeStep+1) * timeLengthPerSlab;
+    origin[2] = tn;
+    mesh = MeshFactory::rectilinearMesh(bf, dimensions, elementCounts, H1Order, delta_k, origin);
+    bc = BC::bc();
+    bc->addDirichlet(qHat, inflowFilter, Function::zero()); // zero BCs enforced at the inflow boundary.
+    bc->addDirichlet(qHat, SpatialFilter::matchingZ(tn), q_prev * sideParity);
+
+    soln = Solution::solution(mesh, bc, RHS::rhs(), ip);
+  }
   
   return 0;
 }
