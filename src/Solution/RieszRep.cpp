@@ -357,8 +357,8 @@ void RieszRep::computeRepresentationValues(FieldContainer<double> &values, int t
   }
 }
 
-map<int,double> RieszRep::computeAlternativeNormSqOnCells(IPPtr ip, vector<GlobalIndexType> cellIDs){
-  map<int,double> altNorms;
+map<GlobalIndexType,double> RieszRep::computeAlternativeNormSqOnCells(IPPtr ip, vector<GlobalIndexType> cellIDs){
+  map<GlobalIndexType,double> altNorms;
   int numCells = cellIDs.size();
   for (int i = 0;i<numCells;i++){
     altNorms[cellIDs[i]] = computeAlternativeNormSqOnCell(ip, _mesh->getElement(cellIDs[i]));
