@@ -12,6 +12,8 @@
 
 #include "CamelliaCellTools.h"
 
+#include "BasisCache.h"
+
 #include "EpetraExt_ConfigDefs.h"
 #ifdef HAVE_EPETRAEXT_HDF5
 #include "HDF5Exporter.h"
