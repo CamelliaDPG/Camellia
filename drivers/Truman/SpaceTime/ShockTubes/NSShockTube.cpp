@@ -291,24 +291,24 @@ int main(int argc, char *argv[]) {
     FieldContainer<double> meshBoundary(4,2);
     xmin = 0.0;
     xmax = 1.0;
-    tmin = 1.0*double(slab)/numSlabs;
-    tmax = 1.0*double(slab+1)/numSlabs;
+    double tminslab = tmax*double(slab)/numSlabs;
+    double tmaxslab = tmax*double(slab+1)/numSlabs;
 
     meshBoundary(0,0) =  xmin; // x1
-    meshBoundary(0,1) =  tmin; // y1
+    meshBoundary(0,1) =  tminslab; // y1
     meshBoundary(1,0) =  xmax;
-    meshBoundary(1,1) =  tmin;
+    meshBoundary(1,1) =  tminslab;
     meshBoundary(2,0) =  xmax;
-    meshBoundary(2,1) =  tmax;
+    meshBoundary(2,1) =  tmaxslab;
     meshBoundary(3,0) =  xmin;
-    meshBoundary(3,1) =  tmax;
+    meshBoundary(3,1) =  tmaxslab;
 
     // create a pointer to a new mesh:
     Teuchos::RCP<Mesh> mesh = Mesh::buildQuadMesh(meshBoundary, numX, numT,
       bfs[slab], H1Order, H1Order+pToAdd);
     meshes.push_back(mesh);
-    tmins.push_back(tmin);
-    tmaxs.push_back(tmax);
+    tmins.push_back(tminslab);
+    tmaxs.push_back(tmaxslab);
   }
 
   ////////////////////   SET INITIAL CONDITIONS   ///////////////////////

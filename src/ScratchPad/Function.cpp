@@ -128,6 +128,37 @@ public:
   bool boundaryValueOnly();
 };
 
+
+class PiecewiseConstantFunction : public Function {
+  map<int,double> _cellIDToValueMap;
+public:
+  
+  PiecewiseConstantFunction(map<int,double> cellIDToValueMap) : Function(0) {
+    _cellIDToValueMap = cellIDToValueMap;
+  }
+  void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
+    CHECK_VALUES_RANK(values);
+    vector<int> cellIDs = basisCache->cellIDs();
+    int numCells = values.dimension(0);
+    int numPoints = values.dimension(1);
+    
+    values.initialize(0);
+    
+    if (numCells != cellIDs.size()) {
+      cout << "ERROR: PiecewiseConstantFunction requires cellIDs to be defined in BasisCache\n";
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "PiecewiseConstantFunction requires cellIDs to be defined in BasisCache");
+    }
+    for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
+      int cellID = cellIDs[cellIndex];
+      if (_cellIDToValueMap.find(cellID) != _cellIDToValueMap.end()) {
+        for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
+          values(cellIndex,ptIndex) = _cellIDToValueMap[cellID];
+        }
+      }
+    }
+  }
+};
+
 // private class JumpFunction:
 //class JumpFunction : public Function {
 //  FunctionPtr _fxn; // function defined cell-wise
@@ -469,6 +500,10 @@ FunctionPtr Function::cellCharacteristic(int cellID) {
 
 FunctionPtr Function::cellCharacteristic(set<int> cellIDs) {
   return Teuchos::rcp( new CellCharacteristicFunction(cellIDs) );
+}
+
+FunctionPtr Function::piecewiseConstant(map<int,double> cellIDToValueMap) {
+  return Teuchos::rcp( new PiecewiseConstantFunction(cellIDToValueMap) );
 }
 
 map<int, double> Function::cellIntegrals(Teuchos::RCP<Mesh> mesh, int cubatureDegreeEnrichment, bool testVsTest){

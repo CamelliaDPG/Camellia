@@ -146,6 +146,8 @@ public:
   static FunctionPtr cellCharacteristic(int cellID);
   static FunctionPtr cellCharacteristic(set<int> cellIDs);
 
+  static FunctionPtr piecewiseConstant(map<int,double> cellIDToValueMap);
+
   static FunctionPtr xPart(FunctionPtr vectorFunction);
   static FunctionPtr yPart(FunctionPtr vectorFunction);
   static FunctionPtr zPart(FunctionPtr vectorFunction);
