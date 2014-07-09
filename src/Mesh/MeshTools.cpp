@@ -241,3 +241,7 @@ void MeshTools::timeSliceExport(std::string dirPath, MeshPtr mesh, FunctionPtr s
   cout << "timeSliceExport requires Trilinos/Epetra to be built with HDF5 support.\n";
 #endif
 }
+
+FunctionPtr MeshTools::timeSliceFunction(MeshPtr spaceTimeMesh, map<GlobalIndexType, GlobalIndexType> &cellIDMap, FunctionPtr spaceTimeFunction, double t) {
+  return Teuchos::rcp(new SliceFunction(spaceTimeMesh, cellIDMap, spaceTimeFunction, t) );
+}

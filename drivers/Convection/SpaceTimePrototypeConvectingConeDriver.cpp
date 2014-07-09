@@ -235,11 +235,23 @@ int main(int argc, char *argv[]) {
   Teuchos::RCP<RefinementStrategy> refinementStrategy;
   refinementStrategy = Teuchos::rcp( new RefinementStrategy( soln, energyThreshold ));
   
-  
   if (rank==0) cout << "Initial mesh has " << mesh->getTopology()->activeCellCount() << " active (leaf) cells " << "and " << mesh->globalDofCount() << " degrees of freedom.\n";
   
+  if (maxRefinements != 0) {
+    cout << "Warning: maxRefinements is not 0, but the slice exporter implicitly assumes there won't be any refinements.\n";
+  }
+  
+#ifdef HAVE_EPETRAEXT_HDF5
+  ostringstream dir_name;
+  dir_name << "spacetime_slice_convectingCone_k" << k;
+  map<GlobalIndexType,GlobalIndexType> cellMap;
+  MeshPtr meshSlice = MeshTools::timeSliceMesh(mesh, 0, cellMap, H1Order);
+  HDF5Exporter sliceExporter(meshSlice,dir_name.str());
+#endif
+  
   FunctionPtr sideParity = Function::sideParity();
-
+  FunctionPtr u_spacetime = Function::solution(u, soln);
+  
   int lastFrameOutputted = -1;
   
   for(int timeStep = 0; timeStep<numTimeSlabs; timeStep++) {
@@ -318,19 +330,28 @@ int main(int argc, char *argv[]) {
     
     
     // just to try running the time slicing:
+//    double t_slab_final = (timeStep+1) * timeLengthPerSlab;
+//    int frameOrdinal = lastFrameOutputted + 1;
+//    vector<double> timesForSlab;
+//    while (frameTimes[frameOrdinal] < t_slab_final) {
+//      timesForSlab.push_back(frameTimes[frameOrdinal]);
+//      lastFrameOutputted = frameOrdinal++;
+//    }
+//    if (timesForSlab.size() > 0) {
+//      FunctionPtr u_spacetime = Function::solution(u, soln);
+//      ostringstream dir_name;
+//      dir_name << "spacetime_slice_convectingCone_k" << k << "_timeSlab" << timeStep;
+//      MeshTools::timeSliceExport(dir_name.str(), mesh, u_spacetime, timesForSlab, "u_slice");
+//      cout << "Exported frames for t=" << timesForSlab[0] << " - " << timesForSlab[timesForSlab.size()-1] << endl;
+//    }
     double t_slab_final = (timeStep+1) * timeLengthPerSlab;
     int frameOrdinal = lastFrameOutputted + 1;
     vector<double> timesForSlab;
     while (frameTimes[frameOrdinal] < t_slab_final) {
-      timesForSlab.push_back(frameTimes[frameOrdinal]);
+      double t = frameTimes[frameOrdinal];
+      FunctionPtr sliceFunction = MeshTools::timeSliceFunction(mesh, cellMap, u_spacetime, t);
+      sliceExporter.exportFunction(sliceFunction, "u_slice", t);
       lastFrameOutputted = frameOrdinal++;
-    }
-    if (timesForSlab.size() > 0) {
-      FunctionPtr u_spacetime = Function::solution(u, soln);
-      ostringstream dir_name;
-      dir_name << "spacetime_slice_convectingCone_k" << k << "_timeSlab" << timeStep;
-      MeshTools::timeSliceExport(dir_name.str(), mesh, u_spacetime, timesForSlab, "u_slice");
-      cout << "Exported frames for t=" << timesForSlab[0] << " - " << timesForSlab[timesForSlab.size()-1] << endl;
     }
     
     // set up next mesh/solution:
