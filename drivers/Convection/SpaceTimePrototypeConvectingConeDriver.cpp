@@ -101,7 +101,7 @@ int main(int argc, char *argv[]) {
   bool useCondensedSolve = false; // condensed solve not yet compatible with minimum rule meshes
   
   int k = 2; // poly order for u
-  int numCells = 2; //32; // in x, y
+  int numCells = 32; // in x, y
   int numTimeCells = 1;
   int numTimeSlabs = -1;
   int numFrames = 200;
