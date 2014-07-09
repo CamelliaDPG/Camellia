@@ -435,6 +435,47 @@ bool MeshTopology::cellHasCurvedEdges(unsigned cellIndex) {
   return false;
 }
 
+CellPtr MeshTopology::findCellWithVertices(const vector< vector<double> > &cellVertices) {
+  CellPtr cell;
+  vector<IndexType> vertexIndices;
+  bool firstVertex = true;
+  unsigned vertexDim = 0;
+  set<IndexType> matchingCells;
+  for (vector< vector<double> >::const_iterator vertexIt = cellVertices.begin(); vertexIt != cellVertices.end(); vertexIt++) {
+    vector<double> vertex = *vertexIt;
+    IndexType vertexIndex;
+    if (! getVertexIndex(vertex, vertexIndex) ) {
+      cout << "vertex not found. returning NULL.\n";
+      return cell;
+    }
+    // otherwise, vertexIndex has been populated
+    vertexIndices.push_back(vertexIndex);
+   
+    set< pair<IndexType, unsigned> > matchingCellPairs = getCellsContainingEntity(vertexDim, vertexIndex);
+    set<IndexType> matchingCellsIntersection;
+    for (set< pair<IndexType, unsigned> >::iterator cellPairIt = matchingCellPairs.begin(); cellPairIt != matchingCellPairs.end(); cellPairIt++) {
+      IndexType cellID = cellPairIt->first;
+      if (firstVertex) {
+        matchingCellsIntersection.insert(cellID);
+      } else {
+        if (matchingCells.find(cellID) != matchingCells.end()) {
+          matchingCellsIntersection.insert(cellID);
+        }
+      }
+    }
+    matchingCells = matchingCellsIntersection;
+    firstVertex = false;
+  }
+  if (matchingCells.size() == 0) {
+    return cell; // null
+  }
+  if (matchingCells.size() > 1) {
+    cout << "WARNING: multiple matching cells found.  Returning first one that matches.\n";
+  }
+  cell = getCell(*matchingCells.begin());
+  return cell;
+}
+
 set< pair<IndexType, unsigned> > MeshTopology::getActiveBoundaryCells() { // (cellIndex, sideOrdinal)
   set< pair<IndexType, unsigned> > boundaryCells;
   for (set<IndexType>::iterator boundarySideIt = _boundarySides.begin(); boundarySideIt != _boundarySides.end(); boundarySideIt++) {

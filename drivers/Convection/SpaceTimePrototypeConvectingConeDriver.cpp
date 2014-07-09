@@ -14,6 +14,8 @@
 
 #include "CamelliaConfig.h"
 
+#include "MeshTools.h"
+
 #ifdef ENABLE_INTEL_FLOATING_POINT_EXCEPTIONS
 #include <xmmintrin.h>
 #endif
@@ -99,10 +101,10 @@ int main(int argc, char *argv[]) {
   bool useCondensedSolve = false; // condensed solve not yet compatible with minimum rule meshes
   
   int k = 2; // poly order for u
-  int numCells = 32; // in x, y (-1 so we can set a default if unset from the command line.)
+  int numCells = 2; //32; // in x, y
   int numTimeCells = 1;
   int numTimeSlabs = -1;
-  int numFrames = 50;
+  int numFrames = 200;
   int delta_k = 3;   // test space enrichment: should be 3 for 3D
   int maxRefinements = 0; // maximum # of refinements on each time slab
   bool useMumpsIfAvailable  = true;
@@ -167,14 +169,20 @@ int main(int argc, char *argv[]) {
   
   double totalTime = 2.0 * PI;
   
+  vector<double> frameTimes;
+  for (int i=0; i<numFrames; i++) {
+    frameTimes.push_back((totalTime*i) / (numFrames-1));
+  }
+  
   if (numTimeSlabs==-1) {
     double h = width / horizontalCells; // want t approx equal to h
-    numTimeSlabs = (int) totalTime / h;
+    numTimeSlabs = (int) totalTime / h / numTimeCells;
   }
   double timeLengthPerSlab = totalTime / numTimeSlabs;
   
   if (rank==0) {
     cout << "solving on " << numCells << " x " << numCells << " x " << numTimeCells << " mesh " << "of order " << k << ".\n";
+    cout << "numTimeSlabs: " << numTimeSlabs << endl;
   }
   
   BCPtr bc = BC::bc();
@@ -231,10 +239,28 @@ int main(int argc, char *argv[]) {
   if (rank==0) cout << "Initial mesh has " << mesh->getTopology()->activeCellCount() << " active (leaf) cells " << "and " << mesh->globalDofCount() << " degrees of freedom.\n";
   
   FunctionPtr sideParity = Function::sideParity();
+
+  int lastFrameOutputted = -1;
   
   for(int timeStep = 0; timeStep<numTimeSlabs; timeStep++) {
     double relativeEnergyError;
     int refNumber = 0;
+   
+//    {
+//      // DEBUGGING: just to try running the time slicing:
+//      double t_slab_final = (timeStep+1) * timeLengthPerSlab;
+//      int frameOrdinal = lastFrameOutputted + 1;
+//      while (frameTimes[frameOrdinal] < t_slab_final) {
+//        FunctionPtr u_spacetime = Function::solution(u, soln);
+//        ostringstream dir_name;
+//        dir_name << "spacetime_slice_convectingCone_k" << k;
+//        MeshTools::timeSliceExport(dir_name.str(), mesh, u_spacetime, frameTimes[frameOrdinal], "u_slice");
+//        
+//        cout << "Exported frame " << frameOrdinal << ", t=" << frameTimes[frameOrdinal] << endl;
+//        frameOrdinal++;
+//      }
+//    }
+    
     do {
       soln->solve(solver);
       soln->reportTimings();
@@ -244,6 +270,9 @@ int main(int argc, char *argv[]) {
       dir_name << "spacetime_convectingCone_k" << k << "_t" << timeStep;
       HDF5Exporter exporter(soln->mesh(),dir_name.str());
       exporter.exportSolution(soln, varFactory);
+      
+      FunctionPtr testFunction = Function::constant(3);
+      exporter.exportFunction(testFunction, "constant (3)");
       
       ostringstream file_name;
       file_name << dir_name.str();
@@ -286,6 +315,23 @@ int main(int argc, char *argv[]) {
       }
       
     } while ((relativeEnergyError > refinementTolerance) && (refNumber < maxRefinements));
+    
+    
+    // just to try running the time slicing:
+    double t_slab_final = (timeStep+1) * timeLengthPerSlab;
+    int frameOrdinal = lastFrameOutputted + 1;
+    vector<double> timesForSlab;
+    while (frameTimes[frameOrdinal] < t_slab_final) {
+      timesForSlab.push_back(frameTimes[frameOrdinal]);
+      lastFrameOutputted = frameOrdinal++;
+    }
+    if (timesForSlab.size() > 0) {
+      FunctionPtr u_spacetime = Function::solution(u, soln);
+      ostringstream dir_name;
+      dir_name << "spacetime_slice_convectingCone_k" << k << "_timeSlab" << timeStep;
+      MeshTools::timeSliceExport(dir_name.str(), mesh, u_spacetime, timesForSlab, "u_slice");
+      cout << "Exported frames for t=" << timesForSlab[0] << " - " << timesForSlab[timesForSlab.size()-1] << endl;
+    }
     
     // set up next mesh/solution:
     FunctionPtr q_prev = Function::solution(qHat, soln);
