@@ -1,0 +1,3 @@
+project(CompressibleNS)
+
+add_executable(DisplacementThickness DisplacementThickness.cpp)

@@ -112,7 +112,7 @@ class RieszRep {
   void computeRepresentationValues(FieldContainer<double> &values, int testID, IntrepidExtendedTypes::EOperatorExtended op, BasisCachePtr basisCache);
 
   double computeAlternativeNormSqOnCell(IPPtr ip, ElementPtr elem);
-  map<int,double> computeAlternativeNormSqOnCells(IPPtr ip, vector<GlobalIndexType> cellIDs);
+  map<GlobalIndexType,double> computeAlternativeNormSqOnCells(IPPtr ip, vector<GlobalIndexType> cellIDs);
   
   static FunctionPtr repFunction( VarPtr var, RieszRepPtr rep );
   static RieszRepPtr rieszRep(MeshPtr mesh, Teuchos::RCP< DPGInnerProduct > ip, LinearTermPtr rhs);
