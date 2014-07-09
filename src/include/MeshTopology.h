@@ -108,6 +108,8 @@ public:
   bool cellHasCurvedEdges(IndexType cellIndex);
   
   bool entityIsAncestor(unsigned d, IndexType ancestor, IndexType descendent);
+  
+  CellPtr findCellWithVertices(const vector< vector<double> > &cellVertices);
 
   vector<IndexType> getChildEntities(unsigned d, IndexType entityIndex);
   set<IndexType> getChildEntitiesSet(unsigned d, IndexType entityIndex);
