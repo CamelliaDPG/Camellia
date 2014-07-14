@@ -48,6 +48,8 @@
 
 #include "CamelliaCellTools.h"
 
+#include "GlobalDofAssignment.h"
+
 Boundary::Boundary() {
   
 }
@@ -77,10 +79,13 @@ void Boundary::buildLookupTables() {
   _boundaryCellIDs.clear();
   _boundaryElements = _mesh->getTopology()->getActiveBoundaryCells();
   set< pair< GlobalIndexType, unsigned > >::iterator entryIt;
+  vector< GlobalIndexType > rankLocalCellsVector = _mesh->globalDofAssignment()->cellsInPartition(-1); // -1: this rank's partition
+  set< GlobalIndexType > rankLocalCells(rankLocalCellsVector.begin(), rankLocalCellsVector.end());
   //cout << "# Boundary entries: " << _boundaryElements.size() << ":\n";
   for (entryIt=_boundaryElements.begin(); entryIt!=_boundaryElements.end(); entryIt++) {
     GlobalIndexType cellID = entryIt->first;
     TEUCHOS_TEST_FOR_EXCEPTION(cellID == -1, std::invalid_argument, "cellID should != -1.");
+    if (rankLocalCells.find(cellID) == rankLocalCells.end()) continue; // not our cell: skip
     Teuchos::RCP< Element > elemPtr = _mesh->getElement(cellID);
     unsigned sideIndex = entryIt->second;
     ElementTypePtr elemTypePtr = elemPtr->elementType();
@@ -130,6 +135,7 @@ void Boundary::bcsToImpose(FieldContainer<GlobalIndexType> &globalIndices, Field
 
 void Boundary::bcsToImpose(FieldContainer<GlobalIndexType> &globalIndices,
                            FieldContainer<double> &globalValues, BC &bc) {
+  int rank = Teuchos::GlobalMPISession::getRank();
   
   // first, let's check for any singletons (one-point BCs)
   map<int,bool> isSingleton;
@@ -178,7 +184,7 @@ void Boundary::bcsToImpose(FieldContainer<GlobalIndexType> &globalIndices,
   // check to make sure all our singleton BCs got imposed:
   for (vector< int >::iterator trialIt = trialIDs.begin(); trialIt != trialIDs.end(); trialIt++) {
     int trialID = *trialIt;
-    if (isSingleton[trialID]) {
+    if ((isSingleton[trialID]) && (rank==0)) {
       // that means that it was NOT imposed: warn the user
       cout << "WARNING: singleton BC requested for trial variable " << _mesh->bilinearForm()->trialName(trialID);
       cout << ", but no BC was imposed for this variable (imposeHere never returned true for any point)." << endl;
@@ -190,6 +196,8 @@ void Boundary::bcsToImpose(FieldContainer<GlobalIndexType> &globalIndices,
 
 void Boundary::bcsToImpose( map<  GlobalIndexType, double > &globalDofIndicesAndValues, BC &bc,
                            Teuchos::RCP< ElementType > elemTypePtr, map<int,bool> &isSingleton) {
+  int rank = Teuchos::GlobalMPISession::getRank();
+
   // define a couple of important inner products:
   IPPtr ipL2 = Teuchos::rcp( new IP );
   IPPtr ipH1 = Teuchos::rcp( new IP );
@@ -412,7 +420,7 @@ void Boundary::bcsToImpose( map<  GlobalIndexType, double > &globalDofIndicesAnd
             FieldContainer<bool> imposeHere(numCells,numPoints);
             bc.imposeBC(trialID, physicalCellNodes, sideNormals, dirichletValues, imposeHere);
             for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
-              if ( imposeHere(cellIndex,ptIndex) && isSingleton[trialID] ) {
+              if ( imposeHere(cellIndex,ptIndex) && isSingleton[trialID] && (rank==0) ) { // only impose singleton BCs on rank 0
                 int cellID = _mesh->cellID(elemTypePtr, cellIndex);
                 int localDofIndex = trialOrderingPtr->getDofIndex(trialID,basisOrdinalForPointFC(ptIndex));
                 int globalDofIndex = _mesh->globalDofIndex(cellID, localDofIndex);
