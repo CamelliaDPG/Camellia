@@ -260,6 +260,10 @@ set( STOKES_CAVITY_FLOW_DRIVER
   "${STOKES_DIR}/StokesCavityFlowDriver.cpp"
   )
   
+set( STOKES_CAVITY_FLOW_DRIVER_3D
+  "${STOKES_DIR}/StokesCavityFlowDriver3D.cpp"
+  )
+  
 set( STOKES_CAVITY_FLOW_DRIVER_FOR_PAPER
   "${STOKES_DIR}/StokesCavityFlowDriverForPaper.cpp"
   )
@@ -366,6 +370,7 @@ add_executable(NavierStokesCavityFlowContinuationAdaptive ${NAVIER_STOKES_CAVITY
 add_executable(NavierStokesCavityFlowContinuationFixedMesh ${NAVIER_STOKES_CAVITY_FLOW_CONTINUATION_FIXED_MESH})
 add_executable(NavierStokesHemkerDriver ${NAVIER_STOKES_HEMKER_DRIVER})
 add_executable(StokesCavityFlowDriver ${STOKES_SOURCES} ${STOKES_CAVITY_FLOW_DRIVER})
+add_executable(StokesCavityFlowDriver3D ${STOKES_CAVITY_FLOW_DRIVER_3D})
 add_executable(StokesCavityFlowDriverForPaper ${STOKES_CAVITY_FLOW_DRIVER_FOR_PAPER})
 add_executable(ConfusionIterationExperiment ${CONFUSION_ITERATION_EXPERIMENT})
 add_executable(NewConfusionDriver ${NEW_CONFUSION_DRIVER})
@@ -485,6 +490,11 @@ target_link_libraries(NavierStokesHemkerDriver
   ${CAMELLIA_LIBRARY_NAME}
   )
 target_link_libraries(StokesCavityFlowDriver
+  ${Trilinos_LIBRARIES} 
+  ${Trilinos_TPL_LIBRARIES}
+  ${CAMELLIA_LIBRARY_NAME}
+  )
+target_link_libraries(StokesCavityFlowDriver3D
   ${Trilinos_LIBRARIES} 
   ${Trilinos_TPL_LIBRARIES}
   ${CAMELLIA_LIBRARY_NAME}
