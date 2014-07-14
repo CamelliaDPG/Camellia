@@ -21,9 +21,20 @@ HDF5Exporter::HDF5Exporter(MeshPtr mesh, string saveDirectory) : _mesh(mesh), _f
   int commRank = Teuchos::GlobalMPISession::getRank();
   int numProcs = Teuchos::GlobalMPISession::getNProc();
 
-  system(("mkdir -p "+_filename+"/HDF5").c_str());
-  system(("mkdir -p "+_filename+"/XMF").c_str());
+#ifdef HAVE_MPI
+  Epetra_MpiComm Comm(MPI_COMM_WORLD);
+  //cout << "rank: " << rank << " of " << numProcs << endl;
+#else
+  Epetra_SerialComm Comm;
+#endif
+  
+  if (commRank==0) {
+    system(("mkdir -p "+_filename+"/HDF5").c_str());
+    system(("mkdir -p "+_filename+"/XMF").c_str());
+  }
 
+  Comm.Barrier(); // everyone should wait until rank 0 has created the directories
+  
   if (commRank == 0)
   {
     _xdmf.addAttribute("xmlns:xi", "http://www.w3.org/2003/XInclude");
