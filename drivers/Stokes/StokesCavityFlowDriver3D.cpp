@@ -94,8 +94,6 @@ int main(int argc, char *argv[]) {
   
   bool conformingTraces = true;
   
-  bool testing_2_irregularity = false;
-  
   double width = 1.0, height = 1.0, depth = 1.0;
   int horizontalCells = 2, verticalCells = 2, depthCells = 2;
   
@@ -234,26 +232,6 @@ int main(int argc, char *argv[]) {
   bc->addZeroMeanConstraint(p);
 
   IPPtr graphNorm = stokesBF->graphNorm();
-  
-  if (testing_2_irregularity) {
-    enforceOneIrregularity = false;
-    set<unsigned> cellsToRefine;
-    cellsToRefine.insert(1);
-    cellsToRefine.insert(3);
-    mesh->hRefine(cellsToRefine, RefinementPattern::regularRefinementPatternQuad());
-    cellsToRefine.clear();
-    cellsToRefine.insert(7);
-    cellsToRefine.insert(10);
-    mesh->hRefine(cellsToRefine, RefinementPattern::regularRefinementPatternQuad());
-    cellsToRefine.clear();
-    cellsToRefine.insert(14);
-    cellsToRefine.insert(15);
-    cellsToRefine.insert(18);
-    cellsToRefine.insert(19);
-    mesh->hRefine(cellsToRefine, RefinementPattern::regularRefinementPatternQuad());
-    
-    refCount = 0;
-  }
   
   SolutionPtr solution = Solution::solution(mesh, bc, rhs, graphNorm);
   
