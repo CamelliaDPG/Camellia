@@ -41,6 +41,11 @@
 #include "choice.hpp"
 #include "mpi_choice.hpp"
 
+#include "EpetraExt_ConfigDefs.h"
+#ifdef HAVE_EPETRAEXT_HDF5
+#include "HDF5Exporter.h"
+#endif
+
 using namespace std;
 
 const static double PI  = 3.141592653589793238462;
@@ -201,7 +206,7 @@ FieldContainer<double> solutionDataFromRefPoints(FieldContainer<double> &refPoin
     BasisCachePtr basisCache = Teuchos::rcp(new BasisCache(elemTypePtr, mesh));
     basisCache->setRefCellPoints(refPoints);
     
-    vector<int> globalCellIDs = mesh->cellIDsOfTypeGlobal(elemTypePtr);
+    vector<GlobalIndexType> globalCellIDs = mesh->cellIDsOfTypeGlobal(elemTypePtr);
     
     FieldContainer<double> solutionValues(globalCellIDs.size(),numPointsPerCell);
     FieldContainer<double> physicalCellNodesForType = mesh->physicalCellNodesGlobal(elemTypePtr);
@@ -476,7 +481,7 @@ void makeRoughlyIsotropic(MeshPtr hemkerMeshNoCurves, double radius, bool enforc
 //    cout << "xDiff: " << xDiff << endl;
 //    cout << "yDiff: " << yDiff << endl;
     
-    set<int> cellIDsToRefine;
+    set<GlobalIndexType> cellIDsToRefine;
     cellIDsToRefine.insert(cellID);
     double aspect = xDiff / yDiff;
     while (aspect > 2.0) {
@@ -484,8 +489,8 @@ void makeRoughlyIsotropic(MeshPtr hemkerMeshNoCurves, double radius, bool enforc
       hemkerMeshNoCurves->hRefine(cellIDsToRefine, verticalCut);
       
       // the next set of cellIDsToRefine are the children of the ones just refined
-      set<int> childCellIDs;
-      for (set<int>::iterator refinedCellIDIt = cellIDsToRefine.begin();
+      set<GlobalIndexType> childCellIDs;
+      for (set<GlobalIndexType>::iterator refinedCellIDIt = cellIDsToRefine.begin();
            refinedCellIDIt != cellIDsToRefine.end(); refinedCellIDIt++) {
         int refinedCellID = *refinedCellIDIt;
         set<int> refinedCellChildren = hemkerMeshNoCurves->getElement(refinedCellID)->getDescendants();
@@ -509,15 +514,15 @@ void makeRoughlyIsotropic(MeshPtr hemkerMeshNoCurves, double radius, bool enforc
     double xDiff = abs(vertices(1,0)-vertices(0,0));
     double yDiff = abs(vertices(2,1)-vertices(1,1));
     
-    set<int> cellIDsToRefine;
+    set<GlobalIndexType> cellIDsToRefine;
     cellIDsToRefine.insert(cellID);
     double aspect = yDiff / xDiff;
     while (aspect > 2.0) {
       hemkerMeshNoCurves->hRefine(cellIDsToRefine, horizontalCut);
       
       // the next set of cellIDsToRefine are the children of the ones just refined
-      set<int> childCellIDs;
-      for (set<int>::iterator refinedCellIDIt = cellIDsToRefine.begin();
+      set<GlobalIndexType> childCellIDs;
+      for (set<GlobalIndexType>::iterator refinedCellIDIt = cellIDsToRefine.begin();
            refinedCellIDIt != cellIDsToRefine.end(); refinedCellIDIt++) {
         int refinedCellID = *refinedCellIDIt;
         set<int> refinedCellChildren = hemkerMeshNoCurves->getElement(refinedCellID)->getDescendants();
@@ -762,8 +767,8 @@ int main(int argc, char *argv[]) {
     bool makeMeshRoughlyIsotropic = args.Input<bool>("--isotropicMesh", "make starting mesh roughly isotropic", true);
     bool enforceOneIrregularity = args.Input<bool>("--oneIrregular", "enforce 1-irregularity", true);
     
-    xLeft = args.Input<double>("--xLeft", "x coordinate of the leftmost boundary", -7.5);
-    xRight = args.Input<double>("--xRight", "x coordinate of the rightmost boundary", 22.5);
+    xLeft = args.Input<double>("--xLeft", "x coordinate of the leftmost boundary", -15);
+    xRight = args.Input<double>("--xRight", "x coordinate of the rightmost boundary", 45);
     
     bool refineInPFirst = args.Input<bool>("--pFirst", "prefer p-refinements", false);
     
@@ -1266,23 +1271,18 @@ int main(int argc, char *argv[]) {
           }
         }
         
+#ifdef HAVE_EPETRAEXT_HDF5
+        ostringstream dir_name;
+        dir_name << "cylinder_flow_k_" << polyOrder << "_ref_" << refIndex;
+        HDF5Exporter exporter(solution->mesh(),dir_name.str());
+        exporter.exportSolution(solution, varFactory);
+#endif
+        
         refinementStrategy->refine(false); // don't print to console // (rank==0); // print to console on rank 0
         if (rank==0) {
           cout << "After refinement, mesh has " << mesh->numActiveElements() << " elements and " << mesh->numGlobalDofs() << " global dofs" << endl;
         }
         
-//        if (rank==0) { // DEBUGGING code
-//          ElementPtr cell0 = mesh->getElement(0);
-//          int cornerCellID = cornerDescendantID(cell0, 0, 3); // side 0: cell7, side 3: cylinder
-//          cout << "cell0 cornerCellID = " << cornerCellID << endl;
-//          printNeighbors(mesh->getElement(cornerCellID));
-//
-//          ElementPtr cell7 = mesh->getElement(7);
-//          cornerCellID = cornerDescendantID(cell7, 2, 3); // side 2: cell0, side 3: cylinder
-//          cout << "cell7 cornerCellID = " << cornerCellID << endl;
-//          printNeighbors(mesh->getElement(cornerCellID));
-//        }
-//        
         if (saveFile.length() > 0) {
           if (rank == 0) {
             refHistory->saveToFile(saveFile);
