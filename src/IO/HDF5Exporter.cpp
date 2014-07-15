@@ -456,6 +456,9 @@ void HDF5Exporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
       
       BasisCachePtr basisCache = createSideCache ? volumeBasisCache->getSideBasisCache(sideOrdinal) : volumeBasisCache;
       basisCache->setMesh(_mesh);
+      FunctionPtr transformFxn = _mesh->getTransformationFunction();
+      if (transformFxn.get())
+        basisCache->setTransformationFunction(transformFxn);
       
       unsigned domainDim = createSideCache ? sideDim : spaceDim;
       
