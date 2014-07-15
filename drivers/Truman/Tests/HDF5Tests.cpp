@@ -1,7 +1,7 @@
 
 #include "Teuchos_RCP.hpp"
 
-#include "Mesh.h"
+#include "MeshFactory.h"
 #include "InnerProductScratchPad.h"
 #include "RefinementStrategy.h"
 #include "Solution.h"
@@ -35,6 +35,13 @@ vector<double> makeVertex(double v0, double v1, double v2) {
 class EntireBoundary : public SpatialFilter {
   public:
     bool matchesPoint(double x, double y) {
+        return true;
+    }
+};
+
+class EntireBoundary3D : public SpatialFilter {
+  public:
+    bool matchesPoint(double x, double y, double z) {
         return true;
     }
 };
@@ -189,7 +196,8 @@ int main(int argc, char *argv[])
 
     ////////////////////   BUILD MESH   ///////////////////////
     int H1Order = 4, pToAdd = 2;
-    Teuchos::RCP<Mesh> mesh = Teuchos::rcp( new Mesh (meshTopology, bf, H1Order, pToAdd) );
+    // Teuchos::RCP<Mesh> mesh = Teuchos::rcp( new Mesh (meshTopology, bf, H1Order, pToAdd) );
+    MeshPtr mesh = MeshFactory::hemkerMesh(4, 4, 1, bf, H1Order, pToAdd);
 
     ////////////////////   DEFINE INNER PRODUCT(S)   ///////////////////////
     IPPtr ip = bf->graphNorm();
@@ -314,6 +322,59 @@ int main(int argc, char *argv[])
     MeshGeometryPtr meshGeometry = Teuchos::rcp( new MeshGeometry(vertices, elementVertices, cellTopos) );
 
     MeshTopologyPtr meshTopology = Teuchos::rcp( new MeshTopology(meshGeometry) );
+
+    // ////////////////////   DECLARE VARIABLES   ///////////////////////
+    // // define test variables
+    // VarFactory varFactory;
+    // VarPtr tau = varFactory.testVar("tau", HDIV);
+    // VarPtr v = varFactory.testVar("v", HGRAD);
+
+    // // define trial variables
+    // VarPtr uhat = varFactory.traceVar("uhat");
+    // VarPtr fhat = varFactory.fluxVar("fhat");
+    // VarPtr u = varFactory.fieldVar("u");
+    // VarPtr sigma = varFactory.fieldVar("sigma", VECTOR_L2);
+
+    // ////////////////////   DEFINE BILINEAR FORM   ///////////////////////
+    // BFPtr bf = Teuchos::rcp( new BF(varFactory) );
+    // // tau terms:
+    // bf->addTerm(sigma, tau);
+    // bf->addTerm(u, tau->div());
+    // bf->addTerm(-uhat, tau->dot_normal());
+
+    // // v terms:
+    // bf->addTerm( sigma, v->grad() );
+    // bf->addTerm( fhat, v);
+
+    // ////////////////////   BUILD MESH   ///////////////////////
+    // int H1Order = 4, pToAdd = 2;
+    // Teuchos::RCP<Mesh> mesh = Teuchos::rcp( new Mesh (meshTopology, bf, H1Order, pToAdd) );
+
+    // ////////////////////   DEFINE INNER PRODUCT(S)   ///////////////////////
+    // IPPtr ip = bf->graphNorm();
+
+    // ////////////////////   SPECIFY RHS   ///////////////////////
+    // RHSPtr rhs = RHS::rhs();
+    // // Teuchos::RCP<RHS> rhs = Teuchos::rcp( new RHS );
+    // FunctionPtr one = Function::constant(1.0);
+    // rhs->addTerm( one * v );
+
+    // ////////////////////   CREATE BCs   ///////////////////////
+    // // Teuchos::RCP<BC> bc = Teuchos::rcp( new BCEasy );
+    // BCPtr bc = BC::bc();
+    // FunctionPtr zero = Function::zero();
+    // SpatialFilterPtr entireBoundary = Teuchos::rcp( new EntireBoundary3D );
+    // bc->addDirichlet(uhat, entireBoundary, Function::xn(1));
+
+    // ////////////////////   SOLVE & REFINE   ///////////////////////
+    // Teuchos::RCP<Solution> solution = Teuchos::rcp( new Solution(mesh, bc, rhs, ip) );
+    // solution->solve(false);
+
+    // {
+    //     HDF5Exporter exporter(mesh, "Poisson3D");
+    //     exporter.exportSolution(solution, varFactory, 0, 2, cellIDToSubdivision(mesh, 4));
+    // }
+
 
     FunctionPtr x = Function::xn(1);
     FunctionPtr y = Function::yn(1);

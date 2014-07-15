@@ -252,16 +252,13 @@ int main(int argc, char *argv[]) {
   SpatialFilterPtr upstream = Teuchos::rcp( new UpstreamBoundary );
   bc->addDirichlet(t1hat, left, -one);
   bc->addDirichlet(t2hat, left, zero);
-  // bc->addDirichlet(u1hat, left, one);
-  // bc->addDirichlet(u2hat, left, zero);
-  bc->addDirichlet(u1hat, plate, zero);
-  bc->addDirichlet(u2hat, plate, zero);
+  bc->addDirichlet(t1hat, upstream, zero);
   bc->addDirichlet(u2hat, upstream, zero);
-  bc->addDirichlet(t2hat, upstream, zero);
-  // bc->addDirichlet(t2hat, upstream, zero);
+  bc->addDirichlet(u1hat, plate, one);
+  bc->addDirichlet(u2hat, plate, zero);
+  bc->addDirichlet(u1hat, top, zero);
   bc->addDirichlet(u2hat, top, zero);
-  bc->addDirichlet(t1hat, top, zero);
-  // bc->addDirichlet(t2hat, top, zero);
+  // bc->addDirichlet(t1hat, right, one);
   // bc->addDirichlet(u2hat, right, zero);
 
   // pc->addConstraint(u1hat*u2hat-t1hat == zero, top);
@@ -284,7 +281,7 @@ int main(int argc, char *argv[]) {
   ////////////////////   SOLVE & REFINE   ///////////////////////
   double energyThreshold = 0.2; // for mesh refinements
   RefinementStrategy refinementStrategy( solution, energyThreshold );
-  HDF5Exporter exporter(mesh, "Blasius", false);
+  HDF5Exporter exporter(mesh, "Blasius");
   set<int> nonlinearVars;
   nonlinearVars.insert(u1->ID());
   nonlinearVars.insert(u2->ID());
