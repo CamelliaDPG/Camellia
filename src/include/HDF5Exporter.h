@@ -24,10 +24,10 @@ class HDF5Exporter {
 private:
   string _filename;
   MeshPtr _mesh;
-  // ofstream _xmfFile;
-  XMLObject _xdmf;
-  XMLObject _domain;
-  XMLObject _rootGrid;
+  XMLObject _fieldXdmf;
+  XMLObject _traceXdmf;
+  XMLObject _fieldDomain;
+  XMLObject _traceDomain;
   XMLObject _fieldGrids;
   XMLObject _traceGrids;
   set<double> _fieldTimeVals;

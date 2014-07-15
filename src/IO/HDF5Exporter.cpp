@@ -16,14 +16,13 @@
 #include <EpetraExt_HDF5.h>
 
 HDF5Exporter::HDF5Exporter(MeshPtr mesh, string saveDirectory) : _mesh(mesh), _filename(saveDirectory), 
-  _xdmf("Xdmf"), _domain("Domain"), _rootGrid("Grid"), _fieldGrids("Grid"), _traceGrids("Grid")
+  _fieldXdmf("Xdmf"), _traceXdmf("Xdmf"), _fieldDomain("Domain"), _traceDomain("Domain"), _fieldGrids("Grid"), _traceGrids("Grid")
 {
   int commRank = Teuchos::GlobalMPISession::getRank();
   int numProcs = Teuchos::GlobalMPISession::getNProc();
 
 #ifdef HAVE_MPI
   Epetra_MpiComm Comm(MPI_COMM_WORLD);
-  //cout << "rank: " << rank << " of " << numProcs << endl;
 #else
   Epetra_SerialComm Comm;
 #endif
@@ -37,15 +36,14 @@ HDF5Exporter::HDF5Exporter(MeshPtr mesh, string saveDirectory) : _mesh(mesh), _f
   
   if (commRank == 0)
   {
-    _xdmf.addAttribute("xmlns:xi", "http://www.w3.org/2003/XInclude");
-    _xdmf.addAttribute("Version", "2");
-    _xdmf.addChild(_domain);
-    _domain.addChild(_rootGrid);
-    _rootGrid.addAttribute("Name", "Root Grid");
-    _rootGrid.addAttribute("GridType", "Tree");
-    // _rootGrid.addAttribute("CollectionType", "Temporal");
-    _rootGrid.addChild(_fieldGrids);
-    _rootGrid.addChild(_traceGrids);
+    _fieldXdmf.addAttribute("xmlns:xi", "http://www.w3.org/2003/XInclude");
+    _traceXdmf.addAttribute("xmlns:xi", "http://www.w3.org/2003/XInclude");
+    _fieldXdmf.addAttribute("Version", "2");
+    _traceXdmf.addAttribute("Version", "2");
+    _fieldXdmf.addChild(_fieldDomain);
+    _traceXdmf.addChild(_traceDomain);
+    _fieldDomain.addChild(_fieldGrids);
+    _traceDomain.addChild(_traceGrids);
     _fieldGrids.addAttribute("Name", "Field Grids");
     _traceGrids.addAttribute("Name", "Trace Grids");
     _fieldGrids.addAttribute("GridType", "Collection");
@@ -114,7 +112,9 @@ void HDF5Exporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
       if (!_fieldTimeVals.count(timeVal))
       {
         _fieldGrids.addChild(partitionCollection);
-        partitionCollection.addAttribute("Name", "Time");
+        stringstream timeName;
+        timeName << "Time" << timeVal;
+        partitionCollection.addAttribute("Name", timeName.str());
         partitionCollection.addAttribute("GridType", "Collection");
         partitionCollection.addAttribute("CollectionType", "Spatial");
         XMLObject time("Time");
@@ -138,7 +138,9 @@ void HDF5Exporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
       if (!_traceTimeVals.count(timeVal))
       {
         _traceGrids.addChild(partitionCollection);
-        partitionCollection.addAttribute("Name", "Time");
+        stringstream timeName;
+        timeName << "Time" << timeVal;
+        partitionCollection.addAttribute("Name", timeName.str());
         partitionCollection.addAttribute("GridType", "Collection");
         partitionCollection.addAttribute("CollectionType", "Spatial");
         XMLObject time("Time");
@@ -769,12 +771,18 @@ void HDF5Exporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
 
   if (commRank == 0)
   {
-    ofstream xmfFile;
-    xmfFile.open((_filename+"/"+_filename+".xmf").c_str());
-    xmfFile << "<?xml version=\"1.0\" ?>" << endl
+    ofstream xmfFieldFile;
+    ofstream xmfTraceFile;
+    xmfFieldFile.open((_filename+"/"+_filename+"-field.xmf").c_str());
+    xmfTraceFile.open((_filename+"/"+_filename+"-trace.xmf").c_str());
+    xmfFieldFile << "<?xml version=\"1.0\" ?>" << endl
     << "<!DOCTYPE Xdmf SYSTEM \"Xdmf.dtd\" []>" << endl;
-    xmfFile << _xdmf.toString();
-    xmfFile.close();
+    xmfTraceFile << "<?xml version=\"1.0\" ?>" << endl
+    << "<!DOCTYPE Xdmf SYSTEM \"Xdmf.dtd\" []>" << endl;
+    xmfFieldFile << _fieldXdmf.toString();
+    xmfTraceFile << _traceXdmf.toString();
+    xmfFieldFile.close();
+    xmfTraceFile.close();
   }
 }
 
