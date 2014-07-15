@@ -219,7 +219,7 @@ public:
   
   void setMaxCubatureDegree(int value);
   
-  void setTransformationFunction(FunctionPtr fxn);
+  void setTransformationFunction(FunctionPtr fxn, bool composeWithMeshTransformation = true);
     
   // static convenience constructors:
   static BasisCachePtr parametric1DCache(int cubatureDegree);

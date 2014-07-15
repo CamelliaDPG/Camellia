@@ -653,8 +653,9 @@ void BasisCache::setCellSideParities(const FieldContainer<double> &cellSideParit
   _cellSideParities = cellSideParities;
 }
 
-void BasisCache::setTransformationFunction(FunctionPtr fxn) {
+void BasisCache::setTransformationFunction(FunctionPtr fxn, bool composeWithMeshTransformation) {
   _transformationFxn = fxn;
+  _composeTransformationFxnWithMeshTransformation = composeWithMeshTransformation;
   // recompute physical points and jacobian values
   determinePhysicalPoints();
   determineJacobian();
