@@ -188,8 +188,10 @@ int main(int argc, char *argv[]) {
 
   // ==================== SET INITIAL GUESS ==========================
   map<int, Teuchos::RCP<Function> > functionMap;
-  functionMap[u1->ID()] = u1Exact;
-  functionMap[u2->ID()] = u2Exact;
+  // functionMap[u1->ID()] = u1Exact;
+  // functionMap[u2->ID()] = u2Exact;
+  functionMap[u1->ID()] = zero;
+  functionMap[u2->ID()] = zero;
 
   backgroundFlow->projectOntoMesh(functionMap);
 
@@ -311,7 +313,7 @@ int main(int argc, char *argv[]) {
   ////////////////////   SOLVE & REFINE   ///////////////////////
   double energyThreshold = 0.2; // for mesh refinements
   RefinementStrategy refinementStrategy( solution, energyThreshold );
-  HDF5Exporter exporter(mesh, "Kovasznay_np", false);
+  HDF5Exporter exporter(mesh, "Kovasznay_np");
   // if (commRank == 0)
   //   exporter.exportSolution(backgroundFlow, mesh, varFactory, -1);
   set<int> nonlinearVars;
