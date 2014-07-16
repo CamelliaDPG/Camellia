@@ -79,8 +79,7 @@ void Boundary::buildLookupTables() {
   _boundaryCellIDs.clear();
   _boundaryElements = _mesh->getTopology()->getActiveBoundaryCells();
   set< pair< GlobalIndexType, unsigned > >::iterator entryIt;
-  vector< GlobalIndexType > rankLocalCellsVector = _mesh->globalDofAssignment()->cellsInPartition(-1); // -1: this rank's partition
-  set< GlobalIndexType > rankLocalCells(rankLocalCellsVector.begin(), rankLocalCellsVector.end());
+  set< GlobalIndexType > rankLocalCells = _mesh->globalDofAssignment()->cellsInPartition(-1); // -1: this rank's partition
   //cout << "# Boundary entries: " << _boundaryElements.size() << ":\n";
   for (entryIt=_boundaryElements.begin(); entryIt!=_boundaryElements.end(); entryIt++) {
     GlobalIndexType cellID = entryIt->first;
@@ -106,8 +105,7 @@ vector< pair< GlobalIndexType, int > > Boundary::boundaryElements(Teuchos::RCP< 
 
 void Boundary::bcsToImpose(FieldContainer<GlobalIndexType> &globalIndices, FieldContainer<double> &globalValues, BC &bc,
                            set<GlobalIndexType> &globalIndexFilter) {
-  // there's a more efficient way to do this--but it's probably not worth it just yet
-  FieldContainer<GlobalIndexType> allGlobalIndices;
+  FieldContainer<GlobalIndexType> allGlobalIndices; // "all" belonging to cells that belong to us...
   FieldContainer<double> allGlobalValues;
   this->bcsToImpose(allGlobalIndices,allGlobalValues,bc);
   set<int> matchingFCIndices;
@@ -369,67 +367,90 @@ void Boundary::bcsToImpose( map<  GlobalIndexType, double > &globalDofIndicesAnd
         FieldContainer<double> basisValues(basisCardinality,numPoints);
         for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
           if ( isSingleton[trialID] ) {
-            Teuchos::Array<int> dimensions;
-            refPoints.dimensions(dimensions);
-            //strip off the cellIndex dimension:
-            dimensions.erase(dimensions.begin());
-            FieldContainer<double> cellRefPoints(dimensions, &refPoints(cellIndex,0,0));
-            basis->getValues(basisValues, cellRefPoints, Intrepid::OPERATOR_VALUE);
-            
-            FieldContainer<int> basisOrdinalForPointFC(numPoints);
-            for (int ptIndex=0; ptIndex < numPoints; ptIndex++) {
-              int basisOrdinalForPoint = -1;
-              double tol = 1e-12;
-              for (int i=0; i< basisCardinality; i++) {
-                if (basisOrdinalForPoint == -1) {
-                  if (abs(basisValues(i,ptIndex)-1.0) < tol ) {
-                    basisOrdinalForPoint = i;
-                  } else if (abs(basisValues(i,ptIndex)) > tol ) {
-                    cout << "basis value at node " << ptIndex << " is neither 1 nor 0.  Values:" << endl;
-                    cout << basisValues;
-                    cout << "Reference points:\n" << refPoints;
-                    cout << "Physical cell nodes:\n" << physicalCellNodes;
-                    
-                    TEUCHOS_TEST_FOR_EXCEPTION(true,
-                                       std::invalid_argument,
-                                       "basis value at node neither 1.0 nor 0.0"); 
+            if (_mesh->meshUsesMaximumRule()) {
+              Teuchos::Array<int> dimensions;
+              refPoints.dimensions(dimensions);
+              //strip off the cellIndex dimension:
+              dimensions.erase(dimensions.begin());
+              FieldContainer<double> cellRefPoints(dimensions, &refPoints(cellIndex,0,0));
+              basis->getValues(basisValues, cellRefPoints, Intrepid::OPERATOR_VALUE);
+              
+              FieldContainer<int> basisOrdinalForPointFC(numPoints);
+              for (int ptIndex=0; ptIndex < numPoints; ptIndex++) {
+                int basisOrdinalForPoint = -1;
+                double tol = 1e-12;
+                for (int i=0; i< basisCardinality; i++) {
+                  if (basisOrdinalForPoint == -1) {
+                    if (abs(basisValues(i,ptIndex)-1.0) < tol ) {
+                      basisOrdinalForPoint = i;
+                    } else if (abs(basisValues(i,ptIndex)) > tol ) {
+                      cout << "basis value at node " << ptIndex << " is neither 1 nor 0.  Values:" << endl;
+                      cout << basisValues;
+                      cout << "Reference points:\n" << refPoints;
+                      cout << "Physical cell nodes:\n" << physicalCellNodes;
+                      
+                      TEUCHOS_TEST_FOR_EXCEPTION(true,
+                                                 std::invalid_argument,
+                                                 "basis value at node neither 1.0 nor 0.0");
+                    }
+                  } else {
+                    if (abs(basisValues(i,ptIndex)-1.0) < tol ) {
+                      TEUCHOS_TEST_FOR_EXCEPTION(true,
+                                                 std::invalid_argument,
+                                                 "multiple basis values at node == 1.0");
+                    } else if (abs(basisValues(i,ptIndex)) > tol) {
+                      cout << "error: basisValue at node neither 1 nor 0: " << basisValues(i,ptIndex) << endl;
+                      TEUCHOS_TEST_FOR_EXCEPTION(true,
+                                                 std::invalid_argument,
+                                                 "basis value at node neither 1.0 nor 0.0");
+                    }
                   }
-                } else {
-                  if (abs(basisValues(i,ptIndex)-1.0) < tol ) {
-                    TEUCHOS_TEST_FOR_EXCEPTION(true,
-                                       std::invalid_argument,
-                                       "multiple basis values at node == 1.0"); 
-                  } else if (abs(basisValues(i,ptIndex)) > tol) {
-                    cout << "error: basisValue at node neither 1 nor 0: " << basisValues(i,ptIndex) << endl;
-                    TEUCHOS_TEST_FOR_EXCEPTION(true,
-                                       std::invalid_argument,
-                                       "basis value at node neither 1.0 nor 0.0");               
-                  }            
+                }
+                if (basisOrdinalForPoint == -1) {
+                  TEUCHOS_TEST_FOR_EXCEPTION(true,
+                                             std::invalid_argument,
+                                             "no nonzero basis function found at node");
+                }
+                // otherwise, we have our basis ordinal...
+                basisOrdinalForPointFC(ptIndex) = basisOrdinalForPoint;
+              }
+              FieldContainer<double> sideNormals;
+              FieldContainer<double> dirichletValues(numCells,numPoints);
+              FieldContainer<bool> imposeHere(numCells,numPoints);
+              bc.imposeBC(trialID, physicalCellNodes, sideNormals, dirichletValues, imposeHere);
+
+              for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
+                if ( imposeHere(cellIndex,ptIndex) && isSingleton[trialID] && (rank==0) ) { // only impose singleton BCs on rank 0
+                  int cellID = _mesh->cellID(elemTypePtr, cellIndex);
+                  int localDofIndex = trialOrderingPtr->getDofIndex(trialID,basisOrdinalForPointFC(ptIndex));
+                  int globalDofIndex = _mesh->globalDofIndex(cellID, localDofIndex);
+                  globalDofIndicesAndValues[globalDofIndex] = dirichletValues(cellIndex,ptIndex);
+                  isSingleton[trialID] = false; // we've imposed it...
+  //                cout << "imposed singleton BC value " << dirichletValues(cellIndex,ptIndex);
+  //                cout << " for variable " << _mesh->bilinearForm()->trialName(trialID) << " at point: (";
+  //                cout << physicalCellNodes(cellIndex,ptIndex,0) << "," << physicalCellNodes(cellIndex,ptIndex,1);
+  //                cout << ")" << endl;
                 }
               }
-              if (basisOrdinalForPoint == -1) {
-                TEUCHOS_TEST_FOR_EXCEPTION(true,
-                                   std::invalid_argument,
-                                   "no nonzero basis function found at node");
-              }
-              // otherwise, we have our basis ordinal...
-              basisOrdinalForPointFC(ptIndex) = basisOrdinalForPoint;
-            }
-            FieldContainer<double> sideNormals;
-            FieldContainer<double> dirichletValues(numCells,numPoints);
-            FieldContainer<bool> imposeHere(numCells,numPoints);
-            bc.imposeBC(trialID, physicalCellNodes, sideNormals, dirichletValues, imposeHere);
-            for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
-              if ( imposeHere(cellIndex,ptIndex) && isSingleton[trialID] && (rank==0) ) { // only impose singleton BCs on rank 0
-                int cellID = _mesh->cellID(elemTypePtr, cellIndex);
-                int localDofIndex = trialOrderingPtr->getDofIndex(trialID,basisOrdinalForPointFC(ptIndex));
-                int globalDofIndex = _mesh->globalDofIndex(cellID, localDofIndex);
-                globalDofIndicesAndValues[globalDofIndex] = dirichletValues(cellIndex,ptIndex);
-                isSingleton[trialID] = false; // we've imposed it...
-//                cout << "imposed singleton BC value " << dirichletValues(cellIndex,ptIndex);
-//                cout << " for variable " << _mesh->bilinearForm()->trialName(trialID) << " at point: (";
-//                cout << physicalCellNodes(cellIndex,ptIndex,0) << "," << physicalCellNodes(cellIndex,ptIndex,1);
-//                cout << ")" << endl;
+            } else {
+              // a bit less nice than the maximum rule singleton BC imposition; we don't impose a non-zero value (because
+              // we don't figure out physical points, etc.), and we also neglect any spatial filtering.
+              // We just find some GlobalDofIndex that belongs to the variable in question, and impose zero on it.
+              GlobalIndexType cellID = _mesh->cellID(elemTypePtr, cellIndex);
+              set<GlobalIndexType> globalIndicesForVariable;
+              int sideOrdinal = 0;
+              int basisCardinality = basis->getCardinality();
+              FieldContainer<double> basisCoefficients(basisCardinality);
+              FieldContainer<double> globalCoefficients; // we'll ignore this
+              FieldContainer<GlobalIndexType> globalDofIndices;
+              _mesh->interpretLocalBasisCoefficients(cellID, trialID, sideOrdinal, basisCoefficients, globalCoefficients, globalDofIndices);
+              set<GlobalIndexType> rankLocalDofIndices = _mesh->globalDofAssignment()->globalDofIndicesForPartition(-1); // current rank
+              for (int i=0; i<globalDofIndices.size(); i++) {
+                if (rankLocalDofIndices.find(globalDofIndices[i]) != rankLocalDofIndices.end()) {
+                  globalDofIndicesAndValues[globalDofIndices[i]] = 0.0;
+                  isSingleton[trialID] = false; // we've imposed it...
+                  break;
+                }
               }
             }
           }
