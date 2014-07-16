@@ -79,7 +79,8 @@ void Boundary::buildLookupTables() {
   _boundaryCellIDs.clear();
   _boundaryElements = _mesh->getTopology()->getActiveBoundaryCells();
   set< pair< GlobalIndexType, unsigned > >::iterator entryIt;
-  set< GlobalIndexType > rankLocalCells = _mesh->globalDofAssignment()->cellsInPartition(-1); // -1: this rank's partition
+  vector< GlobalIndexType > rankLocalCellsVector = _mesh->globalDofAssignment()->cellsInPartition(-1); // -1: this rank's partition
+  set< GlobalIndexType > rankLocalCells(rankLocalCellsVector.begin(), rankLocalCellsVector.end());
   //cout << "# Boundary entries: " << _boundaryElements.size() << ":\n";
   for (entryIt=_boundaryElements.begin(); entryIt!=_boundaryElements.end(); entryIt++) {
     GlobalIndexType cellID = entryIt->first;
@@ -445,7 +446,7 @@ void Boundary::bcsToImpose( map<  GlobalIndexType, double > &globalDofIndicesAnd
               FieldContainer<GlobalIndexType> globalDofIndices;
               _mesh->interpretLocalBasisCoefficients(cellID, trialID, sideOrdinal, basisCoefficients, globalCoefficients, globalDofIndices);
               vector<GlobalIndexType> rankLocalDofIndicesVector = _mesh->globalDofAssignment()->globalDofIndicesForPartition(-1); // current rank
-              set<GlobalIndexType> rankLocalDofIndices(rankLocalDofIndices.begin(),rankLocalDofIndices.end());
+              set<GlobalIndexType> rankLocalDofIndices(rankLocalDofIndicesVector.begin(),rankLocalDofIndicesVector.end());
               for (int i=0; i<globalDofIndices.size(); i++) {
                 if (rankLocalDofIndices.find(globalDofIndices[i]) != rankLocalDofIndices.end()) {
                   globalDofIndicesAndValues[globalDofIndices[i]] = 0.0;
