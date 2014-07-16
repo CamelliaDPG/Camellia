@@ -445,8 +445,7 @@ void Boundary::bcsToImpose( map<  GlobalIndexType, double > &globalDofIndicesAnd
               FieldContainer<double> globalCoefficients; // we'll ignore this
               FieldContainer<GlobalIndexType> globalDofIndices;
               _mesh->interpretLocalBasisCoefficients(cellID, trialID, sideOrdinal, basisCoefficients, globalCoefficients, globalDofIndices);
-              vector<GlobalIndexType> rankLocalDofIndicesVector = _mesh->globalDofAssignment()->globalDofIndicesForPartition(-1); // current rank
-              set<GlobalIndexType> rankLocalDofIndices(rankLocalDofIndicesVector.begin(),rankLocalDofIndicesVector.end());
+              set<GlobalIndexType> rankLocalDofIndices = _mesh->globalDofAssignment()->globalDofIndicesForPartition(-1); // current rank
               for (int i=0; i<globalDofIndices.size(); i++) {
                 if (rankLocalDofIndices.find(globalDofIndices[i]) != rankLocalDofIndices.end()) {
                   globalDofIndicesAndValues[globalDofIndices[i]] = 0.0;
