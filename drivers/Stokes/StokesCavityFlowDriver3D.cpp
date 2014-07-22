@@ -222,8 +222,11 @@ int main(int argc, char *argv[]) {
   
   MeshPtr mesh, coarseMesh;
   
+  Epetra_Time timer(Comm);
   mesh = MeshFactory::rectilinearMesh(stokesBF, domainDimensions, elementCounts, H1Order, delta_k);
   coarseMesh = MeshFactory::rectilinearMesh(stokesBF, domainDimensions, elementCounts, H1Order, delta_k);
+  double meshConstructionTime = timer.ElapsedTime();
+  cout << "On rank " << rank << ", mesh construction time: " << meshConstructionTime << endl;
   
   RHSPtr rhs = RHS::rhs(); // zero
   
@@ -290,7 +293,11 @@ int main(int argc, char *argv[]) {
   } else {
     fineSolver = coarseSolver;
   }
+  if (rank==0) cout << "About to start solve.\n";
+  timer.ResetStartTime();
   solution->solve(coarseSolver);
+  double totalSolveTime = timer.ElapsedTime();
+  if (rank==0) cout << "total solve time (as seen by rank 0) " << totalSolveTime << " seconds.\n";
   solution->reportTimings();
   
 #ifdef HAVE_EPETRAEXT_HDF5
