@@ -46,52 +46,6 @@ vector< vector<double> > timeSliceForCell(FieldContainer<double> &physicalCellNo
   return sliceVertices;
 }
 
-CellTopoPtr cellTopoForKey(unsigned key) {
-  static CellTopoPtr node, line, triangle, quad, tet, hex;
-  
-  switch (key) {
-    case shards::Node::key:
-      if (node.get()==NULL) {
-        node = Teuchos::rcp( new shards::CellTopology(shards::getCellTopologyData< shards::Node >() ));
-      }
-      return node;
-      break;
-    case shards::Line<2>::key:
-      if (line.get()==NULL) {
-        line = Teuchos::rcp( new shards::CellTopology(shards::getCellTopologyData< shards::Line<2> >() ));
-      }
-      return line;
-      break;
-    case shards::Triangle<3>::key:
-      if (triangle.get()==NULL) {
-        triangle = Teuchos::rcp( new shards::CellTopology(shards::getCellTopologyData< shards::Triangle<3> >() ));
-      }
-      return triangle;
-      break;
-    case shards::Quadrilateral<4>::key:
-      if (quad.get()==NULL) {
-        quad = Teuchos::rcp( new shards::CellTopology(shards::getCellTopologyData< shards::Quadrilateral<4> >() ));
-      }
-      return quad;
-      break;
-    case shards::Tetrahedron<4>::key:
-      if (tet.get()==NULL) {
-        tet = Teuchos::rcp( new shards::CellTopology(shards::getCellTopologyData< shards::Tetrahedron<4> >() ));
-      }
-      return tet;
-      break;
-    case shards::Hexahedron<8>::key:
-      if (hex.get()==NULL) {
-        hex = Teuchos::rcp( new shards::CellTopology(shards::getCellTopologyData< shards::Hexahedron<8> >() ));
-      }
-      return hex;
-      break;
-    default:
-      cout << "Unhandled CellTopology.\n";
-      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unhandled CellTopology.");
-  }
-}
-
 bool cellMatches(FieldContainer<double> physicalNodes, double t) {
   int nodeCount = physicalNodes.dimension(1);
   int spaceDim = physicalNodes.dimension(2) - 1; // # of true spatial dimensions
@@ -118,7 +72,7 @@ CellTopoPtr getBottomTopology(MeshTopologyPtr meshTopo, IndexType cellID) {
   }
   IndexType bottomEntityIndex = meshTopo->getEntityIndex(spaceDim, bottomVertexIndices);
   unsigned bottomCellTopoKey = meshTopo->getEntityTopology(spaceDim, bottomEntityIndex).getKey();
-  CellTopoPtr cellTopo = cellTopoForKey(bottomCellTopoKey);
+  CellTopoPtr cellTopo = CamelliaCellTools::cellTopoForKey(bottomCellTopoKey);
   return cellTopo;
 }
 

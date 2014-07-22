@@ -196,7 +196,7 @@ public:
   Teuchos::RCP<BilinearForm> bilinearForm();
   void setBilinearForm( Teuchos::RCP<BilinearForm>);
 
-  vector<ElementPtr> elementsForPoints(const FieldContainer<double> &physicalPoints);
+  vector<ElementPtr> elementsForPoints(const FieldContainer<double> &physicalPoints, bool nullElementsIfOffRank=true);
 
   vector< Teuchos::RCP< ElementType > > elementTypes(PartitionIndexType partitionNumber=-1); // returns *all* elementTypes by default
 
@@ -207,6 +207,8 @@ public:
   vector< GlobalIndexType > cellIDsOfType(ElementTypePtr elemType); // for current MPI node.
   vector< GlobalIndexType > cellIDsOfType(int partitionNumber, ElementTypePtr elemTypePtr);
   vector< GlobalIndexType > cellIDsOfTypeGlobal(ElementTypePtr elemTypePtr);
+  
+  set<GlobalIndexType> cellIDsInPartition(); // rank-local cellIDs
 
   int cellPolyOrder(GlobalIndexType cellID);
 
@@ -231,6 +233,7 @@ public:
   GlobalDofAssignmentPtr globalDofAssignment();
 
   set<GlobalIndexType> getActiveCellIDs();
+  
   vector< ElementPtr > activeElements();  // deprecated -- use getActiveElement instead
   ElementPtr ancestralNeighborForSide(ElementPtr elem, int sideOrdinal, int &elemSideOrdinalInNeighbor);
 
@@ -244,6 +247,7 @@ public:
   vector< ElementPtr > elementsInPartition(PartitionIndexType partitionNumber = -1);
 
   int getDimension(); // spatial dimension of the mesh
+  set<GlobalIndexType> globalDofIndicesForCell(GlobalIndexType cellID);
   DofOrderingFactory & getDofOrderingFactory();
 
   ElementTypeFactory & getElementTypeFactory();

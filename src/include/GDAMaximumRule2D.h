@@ -64,7 +64,7 @@ class GDAMaximumRule2D : public GlobalDofAssignment {
   
   GlobalIndexType _numGlobalDofs;
 public:
-  GDAMaximumRule2D(MeshTopologyPtr meshTopology, VarFactory varFactory, DofOrderingFactoryPtr dofOrderingFactory, MeshPartitionPolicyPtr partitionPolicy,
+  GDAMaximumRule2D(MeshPtr mesh, VarFactory varFactory, DofOrderingFactoryPtr dofOrderingFactory, MeshPartitionPolicyPtr partitionPolicy,
                    unsigned initialH1OrderTrial, unsigned testOrderEnhancement, bool enforceMBFluxContinuity = false);
   
 //  GlobalIndexType cellID(ElementTypePtr elemType, IndexType cellIndex, PartitionIndexType partitionNumber);
@@ -84,6 +84,7 @@ public:
   int getH1Order(GlobalIndexType cellID);
     
   GlobalIndexType globalDofIndex(GlobalIndexType cellID, IndexType localDofIndex);
+  set<GlobalIndexType> globalDofIndicesForCell(GlobalIndexType cellID);
   set<GlobalIndexType> globalDofIndicesForPartition(PartitionIndexType partitionNumber);
 
   GlobalIndexType globalDofCount();
@@ -98,6 +99,10 @@ public:
   
   PartitionIndexType partitionForGlobalDofIndex( GlobalIndexType globalDofIndex );
   GlobalIndexType partitionLocalIndexForGlobalDofIndex( GlobalIndexType globalDofIndex );
+  
+  set<GlobalIndexType> partitionOwnedGlobalFieldIndices();
+  set<GlobalIndexType> partitionOwnedGlobalFluxIndices();
+  set<GlobalIndexType> partitionOwnedGlobalTraceIndices();
   
   FieldContainer<double> & physicalCellNodes( ElementTypePtr elemTypePtr );
   FieldContainer<double> & physicalCellNodesGlobal( ElementTypePtr elemTypePtr );

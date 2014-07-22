@@ -40,6 +40,8 @@ public:
 
   double computeMaxConditionNumber(DofOrderingPtr testSpace, BasisCachePtr basisCache);
   
+  // added by Nate
+  LinearTermPtr evaluate(map< int, FunctionPtr> &varFunctions);
   // added by Jesse
   LinearTermPtr evaluate(map< int, FunctionPtr> &varFunctions, bool boundaryPart);
   //  FunctionPtr evaluate(map< int, FunctionPtr> &varFunctions1, map< int, FunctionPtr> &varFunctions2, bool boundaryPart);

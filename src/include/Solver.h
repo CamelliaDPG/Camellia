@@ -71,9 +71,9 @@ public:
     
     // not sure why we shouldn't just do this: (I don't think MUMPS will allocate as much as we allow it, unless it thinks it needs it)
     mumps.SetICNTL(1,6); // set output stream for errors (this is supposed to be the default, but maybe Amesos clobbers it?)
-    int sizeToSet = _maxMemoryPerCoreMB;
+//    int sizeToSet = _maxMemoryPerCoreMB;
 //    cout << "setting ICNTL 23 to " << sizeToSet << endl;
-    mumps.SetICNTL(23, sizeToSet);
+//    mumps.SetICNTL(23, sizeToSet);
 #else
 #endif
 

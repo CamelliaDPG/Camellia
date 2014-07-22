@@ -147,20 +147,24 @@ public:
   virtual ~Solution() {}
 //  bool equals(Solution& otherSolution, double tol=0.0);
 
-  const FieldContainer<double>& allCoefficientsForCellID(GlobalIndexType cellID); // coefficients for all solution variables
+  const FieldContainer<double>& allCoefficientsForCellID(GlobalIndexType cellID, bool warnAboutOffRankImports=true); // coefficients for all solution variables
 
   Epetra_Map getPartitionMap();
   Epetra_Map getPartitionMap(PartitionIndexType rank, set<GlobalIndexType> & myGlobalIndicesSet, GlobalIndexType numGlobalDofs, int zeroMeanConstraintsSize, Epetra_Comm* Comm );
   
   Epetra_MultiVector* getGlobalCoefficients();
 
+  bool cellHasCoefficientsAssigned(GlobalIndexType cellID);
+  
   // solve steps:
+  void initializeLHSVector();
   void initializeStiffnessAndLoad();
   void populateStiffnessAndLoad();
   void imposeBCs();
   void setProblem(Teuchos::RCP<Solver> solver);
   void solveWithPrepopulatedStiffnessAndLoad(Teuchos::RCP<Solver> solver);
-  void importSolution();
+  void importSolution(); // imports for all rank-local cellIDs
+  void importGlobalSolution(); // imports (and interprets!) global solution.  NOT scalable.
   
   void solve(); // could add arguments to allow different solution algorithms to be selected...
 

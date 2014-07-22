@@ -113,6 +113,11 @@ void CondensedDofInterpreter::getSubvectors(set<int> fieldIndices, set<int> flux
   }
 }
 
+set<GlobalIndexType> CondensedDofInterpreter::globalDofIndicesForCell(GlobalIndexType cellID)  {
+  cout << "WARNING: CondensedDofInterpreter::globalDofIndicesForCell() isn't yet implemented!!\n";
+  return set<GlobalIndexType>();
+}
+
 bool CondensedDofInterpreter::varDofsAreCondensible(int varID, int sideOrdinal, DofOrderingPtr dofOrdering) {
   int sideCount = dofOrdering->getNumSidesForVarID(varID);
   BasisPtr basis = dofOrdering->getBasis(varID, sideOrdinal);
@@ -130,14 +135,14 @@ map<GlobalIndexType, IndexType> CondensedDofInterpreter::interpretedFluxMapForPa
   
   map<GlobalIndexType, IndexType> interpretedFluxMap;
   
-  vector< GlobalIndexType > localCellIDs = _mesh->globalDofAssignment()->cellsInPartition(partition);
+  set< GlobalIndexType > localCellIDs = _mesh->globalDofAssignment()->cellsInPartition(partition);
   
   set<GlobalIndexType> innerGlobalFluxDofs;
   
   set<GlobalIndexType> globalDofIndicesForPartition = _mesh->globalDofIndicesForPartition(partition);
   
   vector<int> trialIDs = _mesh->bilinearForm()->trialIDs();
-  vector< GlobalIndexType >::iterator cellIDIt;
+  set< GlobalIndexType >::iterator cellIDIt;
   
   IndexType partitionLocalDofIndex = 0;
   

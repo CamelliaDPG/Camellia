@@ -45,6 +45,8 @@
 
 #include "Function.h"
 
+#include "MPIWrapper.h"
+
 double ExactSolution::L2NormOfError(Solution &solution, int trialID, int cubDegree) {
   Teuchos::RCP<Mesh> mesh = solution.mesh();
   double totalErrorSquared = 0.0;
@@ -56,11 +58,13 @@ double ExactSolution::L2NormOfError(Solution &solution, int trialID, int cubDegr
 //    cout << "solutionLift for trialID " << trialID << ": " << solutionLift << endl;
 //  }
   
-  vector<ElementTypePtr> elemTypes = mesh->elementTypes();
+  int rank = Teuchos::GlobalMPISession::getRank();
+  
+  vector<ElementTypePtr> elemTypes = mesh->elementTypes(rank);
   vector<ElementTypePtr>::iterator elemTypeIt;
   for (elemTypeIt = elemTypes.begin(); elemTypeIt != elemTypes.end(); elemTypeIt++) {
     ElementTypePtr elemTypePtr = *(elemTypeIt);
-    int numCells = mesh->numElementsOfType(elemTypePtr);
+    int numCells = mesh->cellIDsOfType(elemTypePtr).size();
     FieldContainer<double> errorSquaredPerCell(numCells);
     
     int numSides;
@@ -79,6 +83,7 @@ double ExactSolution::L2NormOfError(Solution &solution, int trialID, int cubDegr
       }
     }
   }
+  totalErrorSquared = MPIWrapper::sum(totalErrorSquared);
   return sqrt(totalErrorSquared);
 }
 
@@ -108,8 +113,8 @@ void ExactSolution::L2NormOfError(FieldContainer<double> &errorSquaredPerCell, S
   }
   
   // much of this code is the same as what's in the volume integration in computeStiffness...
-  FieldContainer<double> physicalCellNodes = solution.mesh()->physicalCellNodesGlobal(elemTypePtr);
-  vector<GlobalIndexType> cellIDs = solution.mesh()->cellIDsOfTypeGlobal(elemTypePtr);
+  FieldContainer<double> physicalCellNodes = solution.mesh()->physicalCellNodes(elemTypePtr);
+  vector<GlobalIndexType> cellIDs = solution.mesh()->cellIDsOfType(elemTypePtr);
   basisCache->setPhysicalCellNodes(physicalCellNodes, cellIDs, true);
   
   if (boundaryIntegral) {

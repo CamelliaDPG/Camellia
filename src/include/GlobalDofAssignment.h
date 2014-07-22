@@ -35,6 +35,7 @@ protected:
   ElementTypeFactory _elementTypeFactory;
   bool _enforceConformityLocally; // whether the local DofOrdering should e.g. identify vertex dofs belonging to trace bases on sides -- currently true for max rule, false for min rule.  (Min rule will still enforce conformity, but this does not depend on it being enforced locally).  Set in base class constructor
   
+  MeshPtr _mesh;
   MeshTopologyPtr _meshTopology;
   VarFactory _varFactory;
   DofOrderingFactoryPtr _dofOrderingFactory;
@@ -47,7 +48,7 @@ protected:
   
   vector< map< ElementType*, vector<GlobalIndexType> > > _cellIDsForElementType; // divided by partition
   
-  vector< vector< GlobalIndexType > > _partitions; // GlobalIndexType: cellIDs
+  vector< set< GlobalIndexType > > _partitions; // GlobalIndexType: cellIDs
   map<GlobalIndexType, IndexType> _partitionForCellID;
   
   unsigned _numPartitions;
@@ -55,10 +56,11 @@ protected:
   vector< Solution* > _registeredSolutions; // solutions that should be modified upon refinement (by subclasses--maximum rule has to worry about cell side upgrades, whereas minimum rule does not, so there's not a great way to do this in the abstract superclass.)
   
   void assignInitialElementType( GlobalIndexType cellID ); // this is the "natural" element type, before side modifications for constraints (when using maximum rule)
-  void assignParities( GlobalIndexType cellID ); 
-  void determineActiveElements();
+  void assignParities( GlobalIndexType cellID );
+  
+  virtual void rebuildLookups() = 0;
 public:
-  GlobalDofAssignment(MeshTopologyPtr meshTopology, VarFactory varFactory, DofOrderingFactoryPtr dofOrderingFactory,
+  GlobalDofAssignment(MeshPtr mesh, VarFactory varFactory, DofOrderingFactoryPtr dofOrderingFactory,
                       MeshPartitionPolicyPtr partitionPolicy, unsigned initialH1OrderTrial, unsigned testOrderEnhancement,
                       bool enforceConformityLocally);
 
@@ -66,7 +68,7 @@ public:
   
   virtual GlobalIndexType cellID(ElementTypePtr elemTypePtr, IndexType cellIndex, PartitionIndexType partitionNumber);
   virtual vector<GlobalIndexType> cellIDsOfElementType(unsigned partitionNumber, ElementTypePtr elemTypePtr);
-  vector< GlobalIndexType > cellsInPartition(PartitionIndexType partitionNumber);
+  const set< GlobalIndexType > &cellsInPartition(PartitionIndexType partitionNumber);
   FieldContainer<double> cellSideParitiesForCell( GlobalIndexType cellID );
   
   // after calling any of these, must call rebuildLookups
@@ -85,6 +87,7 @@ public:
   virtual int getH1Order(GlobalIndexType cellID) = 0;
   int getInitialH1Order();
   
+  bool getPartitions(FieldContainer<GlobalIndexType> &partitions);
   PartitionIndexType getPartitionCount();
 
   int getTestOrderEnrichment();
@@ -92,6 +95,9 @@ public:
   virtual GlobalIndexType globalCellIndex(GlobalIndexType cellID);
   virtual GlobalIndexType globalDofCount() = 0;
   virtual set<GlobalIndexType> globalDofIndicesForPartition(PartitionIndexType partitionNumber) = 0;
+  virtual set<GlobalIndexType> partitionOwnedGlobalFieldIndices() = 0;
+  virtual set<GlobalIndexType> partitionOwnedGlobalFluxIndices() = 0;
+  virtual set<GlobalIndexType> partitionOwnedGlobalTraceIndices() = 0;
   
   virtual void interpretLocalData(GlobalIndexType cellID, const FieldContainer<double> &localData, FieldContainer<double> &globalData,
                                   FieldContainer<GlobalIndexType> &globalDofIndices) = 0;
@@ -100,6 +106,8 @@ public:
                                                FieldContainer<double> &globalCoefficients, FieldContainer<GlobalIndexType> &globalDofIndices) = 0;
   virtual void interpretGlobalCoefficients(GlobalIndexType cellID, FieldContainer<double> &localCoefficients, const Epetra_MultiVector &globalCoefficients) = 0;
 
+  virtual set<GlobalIndexType> globalDofIndicesForCell(GlobalIndexType cellID) = 0;
+  
   virtual IndexType localDofCount() = 0; // local to the MPI node
   
   PartitionIndexType partitionForCellID( GlobalIndexType cellID );
@@ -107,16 +115,19 @@ public:
   
   virtual PartitionIndexType partitionForGlobalDofIndex( GlobalIndexType globalDofIndex ) = 0;
   
-  virtual void rebuildLookups() = 0;
+  void repartitionAndMigrate();
+
   void registerSolution(Solution* solution);
+  vector<Solution *> getRegisteredSolutions();
   void unregisterSolution(Solution* solution);
   
+  void setPartitions(FieldContainer<GlobalIndexType> &partitions);
   void setPartitionPolicy( MeshPartitionPolicyPtr partitionPolicy );
   
   // static constructors:
-  static GlobalDofAssignmentPtr maximumRule2D(MeshTopologyPtr meshTopology, VarFactory varFactory, DofOrderingFactoryPtr dofOrderingFactory,
+  static GlobalDofAssignmentPtr maximumRule2D(MeshPtr mesh, VarFactory varFactory, DofOrderingFactoryPtr dofOrderingFactory,
                                               MeshPartitionPolicyPtr partitionPolicy, unsigned initialH1OrderTrial, unsigned testOrderEnhancement);
-  static GlobalDofAssignmentPtr minumumRule(MeshTopologyPtr meshTopology, VarFactory varFactory,
+  static GlobalDofAssignmentPtr minimumRule(MeshPtr mesh, VarFactory varFactory,
                                             DofOrderingFactoryPtr dofOrderingFactory, MeshPartitionPolicyPtr partitionPolicy,
                                             unsigned initialH1OrderTrial, unsigned testOrderEnhancement);
 };

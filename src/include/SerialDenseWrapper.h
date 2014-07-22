@@ -80,6 +80,34 @@ public:
     convertSDMToFC(X,AMatrix);
   }
 
+  static double dot(const FieldContainer<double> &a, const FieldContainer<double> &b) {
+    if (((a.rank() != 1) && (a.rank() != 2)) || ((b.rank() != 1) && (b.rank() != 2))) {
+      cout << "a and b must have rank 1 or 2; if rank 2, one of the two ranks' dimensions must be 1.  (I.e. a and b must both be vectors.)\n";
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "a and b must have rank 1 or 2; if rank 2, one of the two ranks' dimensions must be 1.  (I.e. a and b must both be vectors.)");
+    }
+    if (a.rank()==2) {
+      if ((a.dimension(0) != 1) && (a.dimension(1) != 1)) {
+        cout << "a and b must have rank 1 or 2; if rank 2, one of the two ranks' dimensions must be 1.  (I.e. a and b must both be vectors.)\n";
+        TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "a and b must have rank 1 or 2; if rank 2, one of the two ranks' dimensions must be 1.  (I.e. a and b must both be vectors.)");
+      }
+    }
+    if (b.rank()==2) {
+      if ((b.dimension(0) != 1) && (b.dimension(1) != 1)) {
+        cout << "a and b must have rank 1 or 2; if rank 2, one of the two ranks' dimensions must be 1.  (I.e. a and b must both be vectors.)\n";
+        TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "a and b must have rank 1 or 2; if rank 2, one of the two ranks' dimensions must be 1.  (I.e. a and b must both be vectors.)");
+      }
+    }
+    if (b.size() != a.size()) {
+      cout << "a and b vectors must have the same length.\n";
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "a and b vectors must have the same length.");
+    }
+    double sum = 0.0;
+    for (int i=0; i<a.size(); i++) {
+      sum += a[i] * b[i];
+    }
+    return sum;
+  }
+  
   // gives X = A*B.  Must pass in 2D arrays, even for vectors! 
   static void multiply(FieldContainer<double> &X, const FieldContainer<double> &A, const FieldContainer<double> &B, char TransposeA = 'N', char TransposeB = 'N'){
     multiplyAndAdd(X,A,B,TransposeA,TransposeB,1.0,0.0);
@@ -245,6 +273,17 @@ public:
     // solves Ax = b, where
     // A = (N,N)
     // x, b = (N,M)
+    if ((x.rank() != 2) || (A.rank() != 2) || (b.rank() != 2)) {
+      cout << "x, A, and b must each be a rank 2 FieldContainer!!\n";
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "x, A, and b must each be a rank 2 FieldContainer!!");
+    }
+    if (A.dimension(0) != A.dimension(1)) {
+      cout << "A must be square!\n";
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "A must be square!");
+    }
+    if ((A.dimension(0) != b.dimension(0)) || (A.dimension(0) != x.dimension(0))) {
+      cout << "x and b's first dimension must match the dimension of A!\n";
+    }
     
     int N = A.dimension(0);
     int nRHS = b.dimension(1); // M

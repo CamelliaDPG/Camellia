@@ -18,10 +18,12 @@
 
 #include "CamelliaCellTools.h"
 
-GlobalDofAssignment::GlobalDofAssignment(MeshTopologyPtr meshTopology, VarFactory varFactory,
+GlobalDofAssignment::GlobalDofAssignment(MeshPtr mesh, VarFactory varFactory,
                                          DofOrderingFactoryPtr dofOrderingFactory, MeshPartitionPolicyPtr partitionPolicy,
                                          unsigned initialH1OrderTrial, unsigned testOrderEnhancement, bool enforceConformityLocally) {
-  _meshTopology = meshTopology;
+
+  _mesh = mesh;
+  _meshTopology = mesh->getTopology();
   _varFactory = varFactory;
   _dofOrderingFactory = dofOrderingFactory;
   _partitionPolicy = partitionPolicy;
@@ -68,8 +70,10 @@ GlobalDofAssignment::GlobalDofAssignment(MeshTopologyPtr meshTopology, VarFactor
 //    _cellSideParitiesForCellID[cellID] = cellParities;
   }
   
-  _numPartitions = Teuchos::GlobalMPISession::getNProc();  
-  determineActiveElements();
+  _numPartitions = Teuchos::GlobalMPISession::getNProc();
+  _partitions = vector<set<GlobalIndexType> >(_numPartitions);
+  // before repartitioning (which should happen immediately), put all active cells on rank 0
+  _partitions[0] = _mesh->getActiveCellIDs();
 }
 
 
@@ -168,7 +172,7 @@ vector<GlobalIndexType> GlobalDofAssignment::cellIDsOfElementType(PartitionIndex
   return cellIDsIt->second;
 }
 
-vector< GlobalIndexType > GlobalDofAssignment::cellsInPartition(PartitionIndexType partitionNumber) {
+const set< GlobalIndexType > & GlobalDofAssignment::cellsInPartition(PartitionIndexType partitionNumber) {
   int rank     = Teuchos::GlobalMPISession::getRank();
   if (partitionNumber == -1) {
     partitionNumber = rank;
@@ -186,38 +190,22 @@ FieldContainer<double> GlobalDofAssignment::cellSideParitiesForCell( GlobalIndex
   return cellSideParities;
 }
 
-void GlobalDofAssignment::determineActiveElements() {
-  set<unsigned> activeCellIDs = _meshTopology->getActiveCellIndices();
-  
-  int partitionNumber     = Teuchos::GlobalMPISession::getRank();
-  
-  //  cout << "determineActiveElements(): there are "  << activeCellIDs.size() << " active elements.\n";
-  _partitions.clear();
-  _partitionForCellID.clear();
-  FieldContainer<GlobalIndexType> partitionedMesh(_numPartitions,activeCellIDs.size());
-  _partitionPolicy->partitionMesh(_meshTopology.get(),_numPartitions,partitionedMesh);
-  
-  _activeCellOffset = 0;
-  for (PartitionIndexType i=0; i<partitionedMesh.dimension(0); i++) {
-    vector< GlobalIndexType > partition;
-    for (int j=0; j<partitionedMesh.dimension(1); j++) {
-      //      cout << "partitionedMesh(i,j) = " << partitionedMesh(i,j) << endl;
-      if (partitionedMesh(i,j) == -1) break; // no more elements in this partition
-      GlobalIndexType cellID = partitionedMesh(i,j);
-      partition.push_back( cellID );
-      _partitionForCellID[cellID] = i;
-    }
-    _partitions.push_back( partition );
-//    if (partitionNumber==0) cout << "partition " << i << ": ";
-//    if (partitionNumber==0) print("",partition);
-    if (partitionNumber > i) {
-      _activeCellOffset += partition.size();
-    }
-  }
+void GlobalDofAssignment::repartitionAndMigrate() {
+  _partitionPolicy->partitionMesh(_mesh.get(),_numPartitions);
 }
 
 void GlobalDofAssignment::didHRefine(const set<GlobalIndexType> &parentCellIDs) { // subclasses should call super
-  
+  int rank     = Teuchos::GlobalMPISession::getRank();
+  // until we repartition, assign the new children to the parent's partition
+  for (set<GlobalIndexType>::const_iterator cellIDIt=parentCellIDs.begin(); cellIDIt != parentCellIDs.end(); cellIDIt++) {
+    GlobalIndexType parentID = *cellIDIt;
+    if (_partitions[rank].find(parentID) != _partitions[rank].end()) {
+      _partitions[rank].erase(parentID);
+      CellPtr parent = _meshTopology->getCell(parentID);
+      vector<GlobalIndexType> childIDs = parent->getChildIndices();
+      _partitions[rank].insert(childIDs.begin(),childIDs.end());
+    }
+  }
 }
 
 void GlobalDofAssignment::didPRefine(const set<GlobalIndexType> &cellIDs, int deltaP) { // subclasses should call super
@@ -226,8 +214,10 @@ void GlobalDofAssignment::didPRefine(const set<GlobalIndexType> &cellIDs, int de
   }
   // the appropriate modifications to _elementTypeForCell are left to subclasses
 }
+
 void GlobalDofAssignment::didHUnrefine(const set<GlobalIndexType> &parentCellIDs) { // subclasses should call super
-  
+  cout << "WARNING: GlobalDofAssignment::didHUnrefine unimplemented.  At minimum, should update partition to drop children, and add parent.\n";
+  // TODO: address this -- of course, Mesh doesn't yet support h-unrefinements, so might want to do that first.
 }
 
 vector< ElementTypePtr > GlobalDofAssignment::elementTypes(PartitionIndexType partitionNumber) {
@@ -279,6 +269,26 @@ int GlobalDofAssignment::getInitialH1Order() {
   return _initialH1OrderTrial;
 }
 
+bool GlobalDofAssignment::getPartitions(FieldContainer<GlobalIndexType> &partitions) {
+  if (_partitions.size() == 0) return false; // false: no partitions set
+  int numPartitions = _partitions.size();
+  int maxSize = 0;
+  for (int i=0; i<numPartitions; i++) {
+    maxSize = max((int)_partitions[i].size(),maxSize);
+  }
+  partitions.resize(numPartitions,maxSize);
+  partitions.initialize(-1);
+  for (int i=0; i<numPartitions; i++) {
+    int j=0;
+    for (set<GlobalIndexType>::iterator cellIDIt = _partitions[i].begin();
+         cellIDIt != _partitions[i].end(); cellIDIt++) {
+      partitions(i,j) = *cellIDIt;
+      j++;
+    }
+  }
+  return true; // true: partitions container filled
+}
+
 PartitionIndexType GlobalDofAssignment::getPartitionCount() {
   return _numPartitions;
 }
@@ -312,14 +322,46 @@ void GlobalDofAssignment::interpretLocalCoefficients(GlobalIndexType cellID, con
   }
 }
 
+void GlobalDofAssignment::setPartitions(FieldContainer<GlobalIndexType> &partitionedMesh) {
+  set<unsigned> activeCellIDs = _meshTopology->getActiveCellIndices();
+  
+  int partitionNumber     = Teuchos::GlobalMPISession::getRank();
+  
+  //  cout << "determineActiveElements(): there are "  << activeCellIDs.size() << " active elements.\n";
+  _partitions.clear();
+  _partitionForCellID.clear();
+  
+  _activeCellOffset = 0;
+  for (PartitionIndexType i=0; i<partitionedMesh.dimension(0); i++) {
+    set< GlobalIndexType > partition;
+    for (int j=0; j<partitionedMesh.dimension(1); j++) {
+      //      cout << "partitionedMesh(i,j) = " << partitionedMesh(i,j) << endl;
+      if (partitionedMesh(i,j) == -1) break; // no more elements in this partition
+      GlobalIndexType cellID = partitionedMesh(i,j);
+      partition.insert( cellID );
+      _partitionForCellID[cellID] = i;
+    }
+    _partitions.push_back( partition );
+    //    if (partitionNumber==0) cout << "partition " << i << ": ";
+    //    if (partitionNumber==0) print("",partition);
+    if (partitionNumber > i) {
+      _activeCellOffset += partition.size();
+    }
+  }
+  rebuildLookups();
+}
+
 void GlobalDofAssignment::setPartitionPolicy( MeshPartitionPolicyPtr partitionPolicy ) {
   _partitionPolicy = partitionPolicy;
-  determineActiveElements();
-  didChangePartitionPolicy();
+  repartitionAndMigrate();
 }
 
 PartitionIndexType GlobalDofAssignment::partitionForCellID( GlobalIndexType cellID ) {
-  return _partitionForCellID[ cellID ];
+  if (_partitionForCellID.find(cellID) != _partitionForCellID.end()) {
+    return _partitionForCellID[ cellID ];
+  } else {
+    return -1;
+  }
 }
 
 IndexType GlobalDofAssignment::partitionLocalCellIndex(GlobalIndexType cellID, int partitionNumber) {
@@ -335,6 +377,10 @@ IndexType GlobalDofAssignment::partitionLocalCellIndex(GlobalIndexType cellID, i
     }
   }
   return -1;
+}
+
+vector<Solution*> GlobalDofAssignment::getRegisteredSolutions() {
+  return _registeredSolutions;
 }
 
 void GlobalDofAssignment::registerSolution(Solution* solution) {
@@ -353,14 +399,14 @@ void GlobalDofAssignment::unregisterSolution(Solution* solution) {
 }
 
 // maximumRule2D provides support for legacy (MultiBasis) meshes
-GlobalDofAssignmentPtr GlobalDofAssignment::maximumRule2D(MeshTopologyPtr meshTopology, VarFactory varFactory,
+GlobalDofAssignmentPtr GlobalDofAssignment::maximumRule2D(MeshPtr mesh, VarFactory varFactory,
                                                           DofOrderingFactoryPtr dofOrderingFactory, MeshPartitionPolicyPtr partitionPolicy,
                                                           unsigned initialH1OrderTrial, unsigned testOrderEnhancement) {
-  return Teuchos::rcp( new GDAMaximumRule2D(meshTopology,varFactory,dofOrderingFactory,partitionPolicy, initialH1OrderTrial, testOrderEnhancement) );
+  return Teuchos::rcp( new GDAMaximumRule2D(mesh,varFactory,dofOrderingFactory,partitionPolicy, initialH1OrderTrial, testOrderEnhancement) );
 }
 
-GlobalDofAssignmentPtr GlobalDofAssignment::minumumRule(MeshTopologyPtr meshTopology, VarFactory varFactory,
+GlobalDofAssignmentPtr GlobalDofAssignment::minimumRule(MeshPtr mesh, VarFactory varFactory,
                                                         DofOrderingFactoryPtr dofOrderingFactory, MeshPartitionPolicyPtr partitionPolicy,
                                                         unsigned initialH1OrderTrial, unsigned testOrderEnhancement) {
-  return Teuchos::rcp( new GDAMinimumRule(meshTopology,varFactory,dofOrderingFactory,partitionPolicy, initialH1OrderTrial, testOrderEnhancement) );
+  return Teuchos::rcp( new GDAMinimumRule(mesh,varFactory,dofOrderingFactory,partitionPolicy, initialH1OrderTrial, testOrderEnhancement) );
 }

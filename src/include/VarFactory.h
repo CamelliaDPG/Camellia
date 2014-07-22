@@ -187,6 +187,18 @@ public:
     return _trialVarsByID;
   }
   
+  vector< VarPtr > fieldVars() {
+    vector< VarPtr > vars;
+    
+    for ( map< int, VarPtr >::iterator trialIt = _trialVarsByID.begin();
+         trialIt != _trialVarsByID.end(); trialIt++) {
+      if (trialIt->second->varType() == FIELD) {
+        vars.push_back(trialIt->second);
+      }
+    }
+    return vars;
+  }
+  
   vector< VarPtr > fluxVars() {
     vector< VarPtr > vars;
     

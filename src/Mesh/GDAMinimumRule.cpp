@@ -20,11 +20,11 @@
 
 #include "Solution.h"
 
-GDAMinimumRule::GDAMinimumRule(MeshTopologyPtr meshTopology, VarFactory varFactory, DofOrderingFactoryPtr dofOrderingFactory, MeshPartitionPolicyPtr partitionPolicy,
+GDAMinimumRule::GDAMinimumRule(MeshPtr mesh, VarFactory varFactory, DofOrderingFactoryPtr dofOrderingFactory, MeshPartitionPolicyPtr partitionPolicy,
                                unsigned initialH1OrderTrial, unsigned testOrderEnhancement)
-: GlobalDofAssignment(meshTopology,varFactory,dofOrderingFactory,partitionPolicy, initialH1OrderTrial, testOrderEnhancement, false)
+: GlobalDofAssignment(mesh,varFactory,dofOrderingFactory,partitionPolicy, initialH1OrderTrial, testOrderEnhancement, false)
 {
-  rebuildLookups();
+
 }
 
 vector<unsigned> GDAMinimumRule::allBasisDofOrdinalsVector(int basisCardinality) {
@@ -40,7 +40,6 @@ void GDAMinimumRule::didChangePartitionPolicy() {
 }
 
 void GDAMinimumRule::didHRefine(const set<GlobalIndexType> &parentCellIDs) {
-  this->GlobalDofAssignment::didHRefine(parentCellIDs);
   set<GlobalIndexType> neighborsOfNewElements;
   for (set<GlobalIndexType>::const_iterator cellIDIt = parentCellIDs.begin(); cellIDIt != parentCellIDs.end(); cellIDIt++) {
     GlobalIndexType parentCellID = *cellIDIt;
@@ -81,7 +80,7 @@ void GDAMinimumRule::didHRefine(const set<GlobalIndexType> &parentCellIDs) {
     }
   }
   
-//  rebuildLookups();
+  this->GlobalDofAssignment::didHRefine(parentCellIDs);
 }
 
 void GDAMinimumRule::didPRefine(const set<GlobalIndexType> &cellIDs, int deltaP) {
@@ -207,7 +206,25 @@ GlobalIndexType GDAMinimumRule::globalDofCount() {
   return _globalDofCount;
 }
 
+set<GlobalIndexType> GDAMinimumRule::globalDofIndicesForCell(GlobalIndexType cellID) {
+  set<GlobalIndexType> globalDofIndices;
+  
+  CellConstraints constraints = getCellConstraints(cellID);
+  LocalDofMapperPtr dofMapper = getDofMapper(cellID, constraints);
+  vector<GlobalIndexType> globalIndexVector = dofMapper->globalIndices();
+  
+  globalDofIndices.insert(globalIndexVector.begin(),globalIndexVector.end());
+  return globalDofIndices;
+}
+
 set<GlobalIndexType> GDAMinimumRule::globalDofIndicesForPartition(PartitionIndexType partitionNumber) {
+  // Added this exception because I suspect that in our usage, partitionNumber is always -1 and therefore we can/should
+  // dispense with the argument...
+  int rank = Teuchos::GlobalMPISession::getRank();
+  
+  if (partitionNumber==-1) partitionNumber = rank;
+  
+  TEUCHOS_TEST_FOR_EXCEPTION(partitionNumber != rank, std::invalid_argument, "partitionNumber must be -1 or the current MPI rank");
   set<GlobalIndexType> globalDofIndices;
   // by construction, our globalDofIndices are contiguously numbered, starting with _partitionDofOffset
   for (GlobalIndexType i=0; i<_partitionDofCount; i++) {
@@ -215,6 +232,35 @@ set<GlobalIndexType> GDAMinimumRule::globalDofIndicesForPartition(PartitionIndex
   }
   
   return globalDofIndices;
+}
+
+set<GlobalIndexType> GDAMinimumRule::partitionOwnedGlobalFieldIndices() {
+  // compute complement of fluxes and traces
+  set<GlobalIndexType> fieldDofIndices;
+  // by construction, our globalDofIndices are contiguously numbered, starting with _partitionDofOffset
+  for (GlobalIndexType i=0; i<_partitionDofCount; i++) {
+    if ((_partitionTraceIndexOffsets.find(i) == _partitionTraceIndexOffsets.end()) &&
+        (_partitionFluxIndexOffsets.find(i) == _partitionFluxIndexOffsets.end()) ) {
+          fieldDofIndices.insert(_partitionDofOffset + i);
+    }
+  }
+  return fieldDofIndices;
+}
+
+set<GlobalIndexType> GDAMinimumRule::partitionOwnedGlobalFluxIndices() {
+  set<GlobalIndexType> fluxIndices;
+  for (set<IndexType>::iterator fluxOffsetIt=_partitionFluxIndexOffsets.begin(); fluxOffsetIt != _partitionFluxIndexOffsets.end(); fluxOffsetIt++) {
+    fluxIndices.insert(*fluxOffsetIt + _partitionDofOffset);
+  }
+  return fluxIndices;
+}
+
+set<GlobalIndexType> GDAMinimumRule::partitionOwnedGlobalTraceIndices() {
+  set<GlobalIndexType> traceIndices;
+  for (set<IndexType>::iterator traceOffsetIt=_partitionTraceIndexOffsets.begin(); traceOffsetIt != _partitionTraceIndexOffsets.end(); traceOffsetIt++) {
+    traceIndices.insert(*traceOffsetIt + _partitionDofOffset);
+  }
+  return traceIndices;
 }
 
 int GDAMinimumRule::H1Order(GlobalIndexType cellID, unsigned sideOrdinal) {
@@ -234,9 +280,11 @@ void GDAMinimumRule::interpretGlobalCoefficients(GlobalIndexType cellID, FieldCo
 //  }
 
   FieldContainer<double> globalCoefficientsFC(globalIndexVector.size());
+  Epetra_BlockMap partMap = globalCoefficients.Map();
   for (int i=0; i<globalIndexVector.size(); i++) {
-    GlobalIndexType globalIndex = globalIndexVector[i];
-    globalCoefficientsFC[i] = globalCoefficients[0][globalIndex];
+    GlobalIndexTypeToCast globalIndex = globalIndexVector[i];
+    int localIndex = partMap.LID(globalIndex);
+    globalCoefficientsFC[i] = globalCoefficients[0][localIndex];
   }
   localCoefficients = dofMapper->mapGlobalCoefficients(globalCoefficientsFC);
 //  cout << "For cellID " << cellID << ", mapping globalData:\n " << globalDataFC;
@@ -1473,11 +1521,12 @@ void GDAMinimumRule::rebuildLookups() {
   _constraintsCache.clear(); // to free up memory, could clear this again after the lookups are rebuilt.  Having the cache is most important during the construction below.
   _dofMapperCache.clear();
   
-  determineActiveElements(); // call to super: constructs cell partitionings
+  _partitionFluxIndexOffsets.clear();
+  _partitionTraceIndexOffsets.clear();
   
   int rank = Teuchos::GlobalMPISession::getRank();
 //  cout << "GDAMinimumRule: Rebuilding lookups on rank " << rank << endl;
-  vector<GlobalIndexType> myCellIDs = _partitions[rank];
+  set<GlobalIndexType> myCellIDs = _partitions[rank];
   
   map<int, VarPtr> trialVars = _varFactory.trialVars();
   
@@ -1492,7 +1541,7 @@ void GDAMinimumRule::rebuildLookups() {
   // But in the interest of avoiding wasting development time on premature optimization, I'm leaving it as is for now...
   
   _partitionDofCount = 0; // how many dofs we own locally
-  for (vector<GlobalIndexType>::iterator cellIDIt = myCellIDs.begin(); cellIDIt != myCellIDs.end(); cellIDIt++) {
+  for (set<GlobalIndexType>::iterator cellIDIt = myCellIDs.begin(); cellIDIt != myCellIDs.end(); cellIDIt++) {
     GlobalIndexType cellID = *cellIDIt;
     _cellDofOffsets[cellID] = _partitionDofCount;
     CellPtr cell = _meshTopology->getCell(cellID);
@@ -1535,6 +1584,17 @@ void GDAMinimumRule::rebuildLookups() {
               if (constrainingSubcellDimension==spaceDim) continue; // side bases don't have any support on the interior of the cell...
               scordForBasis = constraints.subcellConstraints[d][scord].subcellOrdinalInSide; // the basis sees the side, so that's the view to use for subcell ordinal
               basis = trialOrdering->getBasis(var->ID(), constraints.subcellConstraints[d][scord].sideOrdinal);
+
+              int ordinalCount = basis->dofOrdinalsForSubcell(constrainingSubcellDimension, scordForBasis).size();
+              if (var->varType()==FLUX) {
+                for (int ordinal=0; ordinal<ordinalCount; ordinal++) {
+                  _partitionFluxIndexOffsets.insert(ordinal+_partitionDofCount);
+                }
+              } else if (var->varType() == TRACE) {
+                for (int ordinal=0; ordinal<ordinalCount; ordinal++) {
+                  _partitionTraceIndexOffsets.insert(ordinal+_partitionDofCount);
+                }
+              }
             }
             _partitionDofCount += basis->dofOrdinalsForSubcell(constrainingSubcellDimension, scordForBasis).size();
           }
@@ -1565,8 +1625,11 @@ void GDAMinimumRule::rebuildLookups() {
     partitionCellOffset += _partitions[i].size();
   }
   // fill in our _cellDofOffsets:
-  for (int i=0; i<myCellIDs.size(); i++) {
-    globalCellIDDofOffsets[partitionCellOffset+i] = _cellDofOffsets[myCellIDs[i]] + _partitionDofOffset;
+
+  int i=0;
+  for (set<GlobalIndexType>::iterator cellIDIt = myCellIDs.begin(); cellIDIt != myCellIDs.end(); cellIDIt++) {
+    globalCellIDDofOffsets[partitionCellOffset+i] = _cellDofOffsets[*cellIDIt] + _partitionDofOffset;
+    i++;
   }
   // global copy:
   MPIWrapper::entryWiseSum(globalCellIDDofOffsets);
@@ -1574,8 +1637,8 @@ void GDAMinimumRule::rebuildLookups() {
   _globalCellDofOffsets.clear();
   int globalCellIndex = 0;
   for (int i=0; i<numRanks; i++) {
-    vector<GlobalIndexType> rankCellIDs = _partitions[i];
-    for (vector<GlobalIndexType>::iterator cellIDIt = rankCellIDs.begin(); cellIDIt != rankCellIDs.end(); cellIDIt++) {
+    set<GlobalIndexType> rankCellIDs = _partitions[i];
+    for (set<GlobalIndexType>::iterator cellIDIt = rankCellIDs.begin(); cellIDIt != rankCellIDs.end(); cellIDIt++) {
       GlobalIndexType cellID = *cellIDIt;
       _globalCellDofOffsets[cellID] = globalCellIDDofOffsets[globalCellIndex];
 //      if (rank==numRanks-1) cout << "global dof offset for cell " << cellID << ": " << _globalCellDofOffsets[cellID] << endl;
@@ -1585,8 +1648,8 @@ void GDAMinimumRule::rebuildLookups() {
   
   _cellIDsForElementType = vector< map< ElementType*, vector<GlobalIndexType> > >(numRanks);
   for (int i=0; i<numRanks; i++) {
-    vector<GlobalIndexType> cellIDs = _partitions[i];
-    for (vector<GlobalIndexType>::iterator cellIDIt = cellIDs.begin(); cellIDIt != cellIDs.end(); cellIDIt++) {
+    set<GlobalIndexType> cellIDs = _partitions[i];
+    for (set<GlobalIndexType>::iterator cellIDIt = cellIDs.begin(); cellIDIt != cellIDs.end(); cellIDIt++) {
       GlobalIndexType cellID = *cellIDIt;
       ElementTypePtr elemType = _elementTypeForCell[cellID];
       _cellIDsForElementType[i][elemType.get()].push_back(cellID);

@@ -265,7 +265,7 @@ void MultiBasisTests::makeMultiLevelRefinement() {
   // the southeast element should have (0.375, 0.125) at its center
   FieldContainer<double> point(1,2);
   point(0,0) = 0.375; point(0,1) = 0.125;
-  ElementPtr elem = _mesh->elementsForPoints(point)[0];
+  ElementPtr elem = _mesh->elementsForPoints(point,false)[0];
   cellIDsToRefine.push_back(elem->cellID());
   _mesh->hRefine(cellIDsToRefine,RefinementPattern::regularRefinementPatternQuad());
 }
@@ -457,7 +457,7 @@ void MultiBasisTests::setup() {
   points(2,0) = 0.25; points(2,1) = 0.75;
   // northeast center:
   points(3,0) = 0.75; points(3,1) = 0.75;
-  vector<ElementPtr> elements = _mesh->elementsForPoints(points);
+  vector<ElementPtr> elements = _mesh->elementsForPoints(points, false);
   
   _sw = elements[0];
   _se = elements[1];
@@ -674,7 +674,7 @@ bool MultiBasisTests::testChildPRefinementSimple() {
   // since we're on a unit square, that element contains the point (0.375, 0.375)
   FieldContainer<double> cellPoint(1,2);
   cellPoint(0,0) = 0.375; cellPoint(0,1) = 0.375;
-  ElementPtr child = _mesh->elementsForPoints(cellPoint)[0];
+  ElementPtr child = _mesh->elementsForPoints(cellPoint,false)[0];
   
   return doPRefinementAndTestIt(child->cellID(),"testChildPRefinementSimple");
 }
@@ -687,7 +687,7 @@ bool MultiBasisTests::testChildPRefinementMultiLevel() {
   // since we're on a unit square, that element contains the point (0.4375, 0.1875)
   FieldContainer<double> cellPoint(1,2);
   cellPoint(0,0) = 0.4375; cellPoint(0,1) = 0.1875;
-  ElementPtr child = _mesh->elementsForPoints(cellPoint)[0];
+  ElementPtr child = _mesh->elementsForPoints(cellPoint,false)[0];
   
   return doPRefinementAndTestIt(child->cellID(),"testChildPRefinementMultiLevel");
 }
@@ -700,7 +700,7 @@ bool MultiBasisTests::testNeighborPRefinementSimple() {
   // since we're on a unit square, that element contains the point (0.75, 0.25)
   FieldContainer<double> cellPoint(1,2);
   cellPoint(0,0) = 0.75; cellPoint(0,1) = 0.25;
-  ElementPtr neighbor = _mesh->elementsForPoints(cellPoint)[0];
+  ElementPtr neighbor = _mesh->elementsForPoints(cellPoint,false)[0];
   
 //  GnuPlotUtil::writeComputationalMeshSkeleton("MultiBasisPRefinementMesh", _mesh, true); // true: label cells
   
@@ -715,7 +715,7 @@ bool MultiBasisTests::testNeighborPRefinementMultiLevel() {
   // since we're on a unit square, that element contains the point (0.75, 0.25)
   FieldContainer<double> cellPoint(1,2);
   cellPoint(0,0) = 0.75; cellPoint(0,1) = 0.25;
-  ElementPtr neighbor = _mesh->elementsForPoints(cellPoint)[0];
+  ElementPtr neighbor = _mesh->elementsForPoints(cellPoint,false)[0];
   
   return doPRefinementAndTestIt(neighbor->cellID(),"testNeighborPRefinementMultiLevel");
 } 

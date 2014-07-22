@@ -137,7 +137,7 @@ int main(int argc, char *argv[]) {
         
         //cout << "Processor " << rank << " returned from solve()." << endl;
         
-        double refinedError = exactSolution.L2NormOfError(solution,ConfusionBilinearForm::U);
+        double refinedError = exactSolution.L2NormOfError(solution,ConfusionBilinearForm::U_ID);
         
         double wallTimeTotal = timer.WallTime() - wallTimeStart;
         if (rank==0) {

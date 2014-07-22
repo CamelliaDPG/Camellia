@@ -79,8 +79,7 @@ void Boundary::buildLookupTables() {
   _boundaryCellIDs.clear();
   _boundaryElements = _mesh->getTopology()->getActiveBoundaryCells();
   set< pair< GlobalIndexType, unsigned > >::iterator entryIt;
-  vector< GlobalIndexType > rankLocalCellsVector = _mesh->globalDofAssignment()->cellsInPartition(-1); // -1: this rank's partition
-  set< GlobalIndexType > rankLocalCells(rankLocalCellsVector.begin(), rankLocalCellsVector.end());
+  set< GlobalIndexType > rankLocalCells = _mesh->globalDofAssignment()->cellsInPartition(-1); // -1: this rank's partition
   //cout << "# Boundary entries: " << _boundaryElements.size() << ":\n";
   for (entryIt=_boundaryElements.begin(); entryIt!=_boundaryElements.end(); entryIt++) {
     GlobalIndexType cellID = entryIt->first;

@@ -20,6 +20,32 @@
 
 #include "CamelliaCellTools.h"
 
+void testSerialDenseMatrix() {
+  int n = 5, m = 3;
+  FieldContainer<double> A(n,m);
+  
+  double *firstEntry = (double *) &A[0]; // a bit dangerous: cast away the const.  Not dangerous if we're doing Copy, of course.
+  Epetra_SerialDenseMatrix Amatrix(::View,firstEntry,m,m,n);
+  
+  for (int i=0; i<n; i++) {
+    for (int j=0; j<m; j++) {
+      A(i,j) = i - j + 1;
+    }
+  }
+  
+  Amatrix.SetUseTranspose(true); // only affects multiply, not the () operator
+  
+  for (int i=0; i<n; i++) {
+    for (int j=0; j<m; j++) {
+      double diff = abs(Amatrix(j,i) - A(i,j));
+      if (diff > 1e-14) {
+        cout << "SDM and FC differ in entry (" << i << "," << j << ")\n";
+      }
+    }
+  }
+  
+}
+
 /***
  
  NVR - Just a playground for me to try things without having to add a new driver to the cmake lists, etc.
@@ -273,6 +299,8 @@ int main(int argc, char *argv[]) {
   bool tryCellToolsMapToRefSubcell = false;
   
   bool printQuadBasisNodes = false;
+  
+  testSerialDenseMatrix();
   
 //  trumanCrashingCode();
 

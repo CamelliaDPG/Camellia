@@ -78,7 +78,8 @@ public:
   
   void evaluate(FieldContainer<double> &values, SolutionPtr solution, BasisCachePtr basisCache, 
                 bool applyCubatureWeights = false);
-  
+
+  FunctionPtr evaluate(map< int, FunctionPtr> &varFunctions);
   FunctionPtr evaluate(map< int, FunctionPtr> &varFunctions, bool boundaryPart);
   
   LinearTermPtr getBoundaryOnlyPart();

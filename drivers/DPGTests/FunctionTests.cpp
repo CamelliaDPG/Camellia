@@ -237,6 +237,8 @@ bool FunctionTests::testBasisSumFunction() {
   BCPtr bc = BC::bc();
   SolutionPtr soln = Teuchos::rcp( new Solution(spectralConfusionMesh, bc) );
   
+  soln->initializeLHSVector();
+  
   int cellID = 0;
   double tol = 1e-16; // overly restrictive, just for now.
   
@@ -793,7 +795,7 @@ bool FunctionTests::testJumpIntegral() {
   FieldContainer<double> points(1,2);
   // southwest center:
   points(0,0) = 0.25; points(0,1) = 0.25;
-  vector< Teuchos::RCP<Element> > elements = mesh->elementsForPoints(points);
+  vector< Teuchos::RCP<Element> > elements = mesh->elementsForPoints(points, false);
   
   int swCellID = elements[0]->cellID();
   

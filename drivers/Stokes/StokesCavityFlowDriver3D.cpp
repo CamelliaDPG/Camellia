@@ -76,12 +76,20 @@ int main(int argc, char *argv[]) {
   Teuchos::GlobalMPISession mpiSession(&argc, &argv);
   int rank = Teuchos::GlobalMPISession::getRank();
   
+#ifdef HAVE_MPI
+  Epetra_MpiComm Comm(MPI_COMM_WORLD);
+  //cout << "rank: " << rank << " of " << numProcs << endl;
+#else
+  Epetra_SerialComm Comm;
+#endif
+  
+  Comm.Barrier(); // set breakpoint here to allow debugger attachment to other MPI processes than the one you automatically attached to.
+  
   Teuchos::CommandLineProcessor cmdp(false,true); // false: don't throw exceptions; true: do return errors for unrecognized options
   
   int refCount = 1;
   
   int k = 1; // poly order for field variables
-  int H1Order = k + 1;
   int delta_k = 3;   // test space enrichment
   
   bool useMumps = true;
@@ -99,11 +107,15 @@ int main(int argc, char *argv[]) {
   
   int numCells = -1;
   
+  double eps = 1.0/64.0;
+  
   cmdp.setOption("polyOrder",&k,"polynomial order for field variable u");
   cmdp.setOption("delta_k", &delta_k, "test space polynomial order enrichment");
   cmdp.setOption("numCells",&numCells,"number of cells in x/y/z directions");
   cmdp.setOption("useMumps", "useKLU", &useMumps, "use MUMPS (if available)");
   cmdp.setOption("numRefs",&refCount,"number of refinements");
+  cmdp.setOption("eps", &eps, "ramp width (set to 0 for no ramp in BCs)");
+  cmdp.setOption("useConformingTraces", "useNonConformingTraces", &conformingTraces);
   
   if (cmdp.parse(argc,argv) != Teuchos::CommandLineProcessor::PARSE_SUCCESSFUL) {
 #ifdef HAVE_MPI
@@ -111,6 +123,8 @@ int main(int argc, char *argv[]) {
 #endif
     return -1;
   }
+  
+  int H1Order = k + 1;
   
   if (numCells != -1) {
     horizontalCells = numCells;
@@ -218,7 +232,7 @@ int main(int argc, char *argv[]) {
   SpatialFilterPtr otherBoundary = SpatialFilter::negatedFilter(topBoundary);
   
   // top boundary:
-  FunctionPtr u1_bc_fxn = Teuchos::rcp( new RampBoundaryFunction_U1(1.0/64.0) );
+  FunctionPtr u1_bc_fxn = Teuchos::rcp( new RampBoundaryFunction_U1(eps) );
   FunctionPtr zero = Function::zero();
   bc->addDirichlet(u1hat, topBoundary, u1_bc_fxn);
   bc->addDirichlet(u2hat, topBoundary, zero);
@@ -280,85 +294,92 @@ int main(int argc, char *argv[]) {
   solution->reportTimings();
   
 #ifdef HAVE_EPETRAEXT_HDF5
+  if (rank==0) cout << "Beginning export of initial solution.\n";
   ostringstream dir_name;
   dir_name << "stokesCavityFlow3D_k" << k << "_ref" << 0;
   HDF5Exporter exporter2(mesh,dir_name.str());
   exporter2.exportSolution(solution,varFactory,0);
+  if (rank==0) cout << "...completed.  Beginning export of initial mesh.\n";
   // straight-line mesh
   dir_name.str("");
   dir_name << "stokesCavityFlow3D_k" << k << "_ref" << 0 << "_mesh";
   HDF5Exporter meshExporter(mesh,dir_name.str());
   meshExporter.exportFunction(Function::normal(),"mesh",0,2);
+  if (rank==0) cout << "...completed.\n";
 #endif
   
   for (int refIndex=0; refIndex < refCount; refIndex++) {
     double energyError = solution->energyErrorTotal();
+    int numFluxDofs = mesh->numFluxDofs();
     if (rank==0) {
       cout << "Before refinement " << refIndex << ", energy error = " << energyError;
-      cout << " (using " << mesh->numFluxDofs() << " trace degrees of freedom)." << endl;
+      cout << " (using " << numFluxDofs << " trace degrees of freedom)." << endl;
     }
     refinementStrategy.refine(rank==0);
-    
-#ifdef HAVE_EPETRAEXT_HDF5
-    ostringstream dir_name;
-    dir_name << "stokesCavityFlow3D_k" << k << "_after_ref" << refIndex << "_projection";
-    HDF5Exporter exporter(mesh,dir_name.str());
-    exporter.exportSolution(solution,varFactory,0);
-#endif
     
     if (clearSolution) solution->clear();
     
     solution->solve(fineSolver);
     solution->reportTimings();
 #ifdef HAVE_EPETRAEXT_HDF5
+    if (rank==0) cout << "Beginning export of refinement " << refIndex << " solution.\n";
     dir_name.str("");
     dir_name << "stokesCavityFlow3D_k" << k << "_ref" << refIndex;
     HDF5Exporter exporter2(mesh,dir_name.str());
     exporter2.exportSolution(solution,varFactory,0);
+    if (rank==0) cout << "...completed.  Beginning export of refinement " << refIndex << " mesh.\n";
     // straight-line mesh
     dir_name.str("");
     dir_name << "stokesCavityFlow3D_k" << k << "_ref" << refIndex << "_mesh";
     HDF5Exporter meshExporter(mesh,dir_name.str());
     meshExporter.exportFunction(Function::normal(),"mesh",0,2);
-
+    if (rank==0) cout << "Finished export of refinement " << refIndex << " solution.\n";
 #endif
   }
+  if (rank==0) cout << "Beginning computation of energy error.\n";
   double energyErrorTotal = solution->energyErrorTotal();
+  if (rank==0) cout << "...completed.\n";
   
 //  cout << "Final Mesh, entities report:\n";
 //  solution->mesh()->getTopology()->printAllEntities();
   
+  if (rank==0) cout << "Beginning computation of mass flux.\n";
   FunctionPtr massFlux = Teuchos::rcp( new PreviousSolutionFunction(solution, u1hat * n->x() + u2hat * n->y() + u3hat * n->z()) );
   double netMassFlux = massFlux->integrate(mesh); // integrate over the mesh skeleton
+  if (rank==0) cout << "...completed.\n";
 
+  int numFluxDofs = mesh->numFluxDofs();
   if (rank==0) {
-    cout << "Final mesh has " << mesh->numActiveElements() << " elements and " << mesh->numFluxDofs() << " trace dofs (";
+    cout << "Final mesh has " << mesh->numActiveElements() << " elements and " << numFluxDofs << " trace dofs (";
     cout << mesh->numGlobalDofs() << " total dofs, including fields).\n";
     cout << "Final energy error: " << energyErrorTotal << endl;
     cout << "Net mass flux: " << netMassFlux << endl;
   }
   
 #ifdef HAVE_EPETRAEXT_HDF5
+  if (rank==0) cout << "Beginning export of final solution.\n";
   dir_name.str("");
   dir_name << "stokesCavityFlow3D_k" << k << "_final";
   HDF5Exporter exporter(mesh,dir_name.str());
   exporter.exportSolution(solution,varFactory,0);
   // straight-line mesh
+  if (rank==0) cout << "...completed.  Beginning export of final mesh.\n";
   dir_name.str("");
   dir_name << "stokesCavityFlow3D_k" << k << "_finalMesh";
   HDF5Exporter meshExporter2(mesh,dir_name.str());
   meshExporter2.exportFunction(Function::normal(),"mesh",0,2);
+  if (rank==0) cout << "...completed.\n";
 #endif
   
-#ifdef USE_VTK
-    NewVTKExporter vtkExporter(mesh->getTopology());
-    FunctionPtr u1_soln = Function::solution(u1, solution);
-    FunctionPtr u2_soln = Function::solution(u2, solution);
-    FunctionPtr u3_soln = Function::solution(u3, solution);
-    vtkExporter.exportFunction(u1_soln, "u1_soln");
-    vtkExporter.exportFunction(u2_soln, "u2_soln");
-    vtkExporter.exportFunction(u3_soln, "u3_soln");
-#endif
+//#ifdef USE_VTK
+//    NewVTKExporter vtkExporter(mesh->getTopology());
+//    FunctionPtr u1_soln = Function::solution(u1, solution);
+//    FunctionPtr u2_soln = Function::solution(u2, solution);
+//    FunctionPtr u3_soln = Function::solution(u3, solution);
+//    vtkExporter.exportFunction(u1_soln, "u1_soln");
+//    vtkExporter.exportFunction(u2_soln, "u2_soln");
+//    vtkExporter.exportFunction(u3_soln, "u3_soln");
+//#endif
   
   return 0;
 }

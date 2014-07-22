@@ -710,6 +710,10 @@ LinearTermPtr LinearTerm::getPartMatchingVariable( VarPtr varToMatch ) {
   return lt;
 }
 
+FunctionPtr LinearTerm::evaluate(map< int, FunctionPtr> &varFunctions) {
+  return evaluate(varFunctions,false) + evaluate(varFunctions, true);
+}
+
 FunctionPtr LinearTerm::evaluate(map< int, FunctionPtr> &varFunctions, bool boundaryPart) {
   // NOTE that if boundaryPart is false, then we exclude terms that are defined only on the boundary
   // and if boundaryPart is true, then we exclude terms that are defined everywhere

@@ -104,7 +104,7 @@ int main(int argc, char *argv[]) {
   int numCells = 32; // in x, y
   int numTimeCells = 1;
   int numTimeSlabs = -1;
-  int numFrames = 200;
+  int numFrames = 201;
   int delta_k = 3;   // test space enrichment: should be 3 for 3D
   int maxRefinements = 0; // maximum # of refinements on each time slab
   bool useMumpsIfAvailable  = true;
@@ -224,7 +224,7 @@ int main(int argc, char *argv[]) {
 #endif
   
 #ifdef USE_VTK
-  NewVTKExporter exporter(mesh->getTopology());
+  NewVTKExporter vtkExporter(mesh->getTopology());
 #endif
   
 //  double errorPercentage = 0.5; // for mesh refinements: ask to refine elements that account for 80% of the error in each step
@@ -254,7 +254,7 @@ int main(int argc, char *argv[]) {
   
   int lastFrameOutputted = -1;
   
-  for(int timeStep = 0; timeStep<numTimeSlabs; timeStep++) {
+  for(int timeSlab = 0; timeSlab<numTimeSlabs; timeSlab++) {
     double relativeEnergyError;
     int refNumber = 0;
    
@@ -279,12 +279,11 @@ int main(int argc, char *argv[]) {
       
   #ifdef HAVE_EPETRAEXT_HDF5
       ostringstream dir_name;
-      dir_name << "spacetime_convectingCone_k" << k << "_t" << timeStep;
+      dir_name << "spacetime_convectingCone_k" << k << "_t" << timeSlab;
       HDF5Exporter exporter(soln->mesh(),dir_name.str());
       exporter.exportSolution(soln, varFactory);
-      
-      FunctionPtr testFunction = Function::constant(3);
-      exporter.exportFunction(testFunction, "constant (3)");
+//      string u_name = "u_spacetime";
+//      exporter.exportFunction(u_spacetime, u_name);
       
       ostringstream file_name;
       file_name << dir_name.str();
@@ -300,7 +299,7 @@ int main(int argc, char *argv[]) {
   #ifdef USE_VTK
       ostringstream fileName;
       fileName << "u_soln_ref_" << refNumber;
-      if (rank==0) exporter.exportFunction(u_soln, "u_soln", fileName.str());
+      if (rank==0) vtkExporter.exportFunction(u_soln, "u_soln", fileName.str());
   #endif
       
 
@@ -327,28 +326,13 @@ int main(int argc, char *argv[]) {
       }
       
     } while ((relativeEnergyError > refinementTolerance) && (refNumber < maxRefinements));
-    
-    
-    // just to try running the time slicing:
-//    double t_slab_final = (timeStep+1) * timeLengthPerSlab;
-//    int frameOrdinal = lastFrameOutputted + 1;
-//    vector<double> timesForSlab;
-//    while (frameTimes[frameOrdinal] < t_slab_final) {
-//      timesForSlab.push_back(frameTimes[frameOrdinal]);
-//      lastFrameOutputted = frameOrdinal++;
-//    }
-//    if (timesForSlab.size() > 0) {
-//      FunctionPtr u_spacetime = Function::solution(u, soln);
-//      ostringstream dir_name;
-//      dir_name << "spacetime_slice_convectingCone_k" << k << "_timeSlab" << timeStep;
-//      MeshTools::timeSliceExport(dir_name.str(), mesh, u_spacetime, timesForSlab, "u_slice");
-//      cout << "Exported frames for t=" << timesForSlab[0] << " - " << timesForSlab[timesForSlab.size()-1] << endl;
-//    }
-    double t_slab_final = (timeStep+1) * timeLengthPerSlab;
+  
+    double t_slab_final = (timeSlab+1) * timeLengthPerSlab;
     int frameOrdinal = lastFrameOutputted + 1;
     vector<double> timesForSlab;
     while (frameTimes[frameOrdinal] < t_slab_final) {
       double t = frameTimes[frameOrdinal];
+      if (rank==0) cout << "exporting t=" << t << " on slab " << timeSlab << endl;
       FunctionPtr sliceFunction = MeshTools::timeSliceFunction(mesh, cellMap, u_spacetime, t);
       sliceExporter.exportFunction(sliceFunction, "u_slice", t);
       lastFrameOutputted = frameOrdinal++;
@@ -356,8 +340,9 @@ int main(int argc, char *argv[]) {
     
     // set up next mesh/solution:
     FunctionPtr q_prev = Function::solution(qHat, soln);
+    cout << "Error in setup of q_prev: simple solution doesn't know about the map from the previous time slab to the current one. (TODO: fix this.)\n";
     
-    double tn = (timeStep+1) * timeLengthPerSlab;
+    double tn = (timeSlab+1) * timeLengthPerSlab;
     origin[2] = tn;
     mesh = MeshFactory::rectilinearMesh(bf, dimensions, elementCounts, H1Order, delta_k, origin);
     bc = BC::bc();

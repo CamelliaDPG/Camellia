@@ -9,6 +9,52 @@
 #include "CamelliaCellTools.h"
 #include "BasisCache.h"
 
+CellTopoPtr CamelliaCellTools::cellTopoForKey(unsigned key) {
+  static CellTopoPtr node, line, triangle, quad, tet, hex;
+  
+  switch (key) {
+    case shards::Node::key:
+      if (node.get()==NULL) {
+        node = Teuchos::rcp( new shards::CellTopology(shards::getCellTopologyData< shards::Node >() ));
+      }
+      return node;
+      break;
+    case shards::Line<2>::key:
+      if (line.get()==NULL) {
+        line = Teuchos::rcp( new shards::CellTopology(shards::getCellTopologyData< shards::Line<2> >() ));
+      }
+      return line;
+      break;
+    case shards::Triangle<3>::key:
+      if (triangle.get()==NULL) {
+        triangle = Teuchos::rcp( new shards::CellTopology(shards::getCellTopologyData< shards::Triangle<3> >() ));
+      }
+      return triangle;
+      break;
+    case shards::Quadrilateral<4>::key:
+      if (quad.get()==NULL) {
+        quad = Teuchos::rcp( new shards::CellTopology(shards::getCellTopologyData< shards::Quadrilateral<4> >() ));
+      }
+      return quad;
+      break;
+    case shards::Tetrahedron<4>::key:
+      if (tet.get()==NULL) {
+        tet = Teuchos::rcp( new shards::CellTopology(shards::getCellTopologyData< shards::Tetrahedron<4> >() ));
+      }
+      return tet;
+      break;
+    case shards::Hexahedron<8>::key:
+      if (hex.get()==NULL) {
+        hex = Teuchos::rcp( new shards::CellTopology(shards::getCellTopologyData< shards::Hexahedron<8> >() ));
+      }
+      return hex;
+      break;
+    default:
+      cout << "Unhandled CellTopology.\n";
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unhandled CellTopology.");
+  }
+}
+
 string CamelliaCellTools::entityTypeString(unsigned entityDimension) { // vertex, edge, face, solid, hypersolid
   switch (entityDimension) {
     case 0:

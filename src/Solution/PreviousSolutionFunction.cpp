@@ -68,7 +68,7 @@ void PreviousSolutionFunction::values(FieldContainer<double> &values, BasisCache
     int numPoints = physicalPoints.dimension(1);
     int spaceDim = physicalPoints.dimension(2);
     physicalPoints.resize(numCells*numPoints,spaceDim);
-    vector< ElementPtr > elements = _soln->mesh()->elementsForPoints(physicalPoints);
+    vector< ElementPtr > elements = _soln->mesh()->elementsForPoints(physicalPoints, false); // false: don't make elements null just because they're off-rank.
     FieldContainer<double> point(1,spaceDim);
     FieldContainer<double> refPoint(1,spaceDim);
     int combinedIndex = 0;
@@ -77,6 +77,7 @@ void PreviousSolutionFunction::values(FieldContainer<double> &values, BasisCache
     BasisCachePtr basisCacheOnePoint;
     for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
       for (int ptIndex=0; ptIndex<numPoints; ptIndex++, combinedIndex++) {
+        if (elements[combinedIndex].get()==NULL) continue; // no element found for point; skip it…
         ElementTypePtr elemType = elements[combinedIndex]->elementType();
         for (int d=0; d<spaceDim; d++) {
           point(0,d) = physicalPoints(combinedIndex,d);

@@ -400,7 +400,10 @@ FunctionPtr Function::div() {
 
 void Function::CHECK_VALUES_RANK(FieldContainer<double> &values) { // throws exception on bad values rank
   // values should have shape (C,P,D,D,D,...) where the # of D's = _rank
-  TEUCHOS_TEST_FOR_EXCEPTION( values.rank() != _rank + 2, std::invalid_argument, "values has incorrect rank." );
+  if (values.rank() != _rank + 2) {
+    cout << "values has incorrect rank.\n";
+    TEUCHOS_TEST_FOR_EXCEPTION( values.rank() != _rank + 2, std::invalid_argument, "values has incorrect rank." );
+  }
 }
 
 void Function::addToValues(FieldContainer<double> &valuesToAddTo, BasisCachePtr basisCache) {
@@ -784,6 +787,7 @@ double Function::integrate(Teuchos::RCP<Mesh> mesh, int cubatureDegreeEnrichment
       cellIDs.push_back( cells[cellIndex]->cellID() );
     }
     basisCache->setPhysicalCellNodes(mesh->physicalCellNodes(elemType), cellIDs, this->boundaryValueOnly() || requireSideCache);
+//    cout << "Function::integrate: basisCache has " << basisCache->getPhysicalCubaturePoints().dimension(1) << " cubature points per cell.\n";
     FieldContainer<double> cellIntegrals(numCells);
     if ( this->boundaryValueOnly() ) {
       // sum the integral over the sides...

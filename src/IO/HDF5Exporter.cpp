@@ -28,8 +28,12 @@ HDF5Exporter::HDF5Exporter(MeshPtr mesh, string saveDirectory) : _mesh(mesh), _f
 #endif
   
   if (commRank==0) {
-    system(("mkdir -p "+_filename+"/HDF5").c_str());
-    system(("mkdir -p "+_filename+"/XMF").c_str());
+    ostringstream mkdirCommand;
+    mkdirCommand << "mkdir -p " << _filename <<"/HDF5";
+    system(mkdirCommand.str().c_str());
+    mkdirCommand.str("");
+    mkdirCommand << "mkdir -p " << _filename <<"/XMF";
+    system(mkdirCommand.str().c_str());
   }
 
   Comm.Barrier(); // everyone should wait until rank 0 has created the directories
@@ -201,8 +205,7 @@ void HDF5Exporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
 
   unsigned int total_vertices = 0;
   
-  vector< GlobalIndexType > cellIndicesVector = _mesh->globalDofAssignment()->cellsInPartition(commRank);
-  if (cellIndices.size()==0) cellIndices = set<GlobalIndexType>(cellIndicesVector.begin(), cellIndicesVector.end());
+  if (cellIndices.size()==0) cellIndices = _mesh->globalDofAssignment()->cellsInPartition(commRank);
   // Number of line elements in 1D mesh
   int numLines=0;
   // Number of triangle elements in 2D mesh

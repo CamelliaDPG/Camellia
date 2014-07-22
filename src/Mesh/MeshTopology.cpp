@@ -110,6 +110,9 @@ unsigned MeshTopology::addCell(CellTopoPtr cellTopo, const vector<unsigned> &cel
       cellEntityIndices[d][j] = entityIndex;
 
       cellEntityPermutations[d][j] = entityPermutation;
+      if (_activeCellsForEntities[d].find(entityIndex) == _activeCellsForEntities[d].end()) {
+        _activeCellsForEntities[d].insert(make_pair(entityIndex,set< pair<IndexType, unsigned> >()));
+      }
       _activeCellsForEntities[d][entityIndex].insert(make_pair(cellIndex,j));
       
       if (d == 0) { // vertex --> should set parent relationships for any vertices that are equivalent via periodic BCs
@@ -317,13 +320,13 @@ unsigned MeshTopology::addEntity(const shards::CellTopology &entityTopo, const v
     // new entity
     entityIndex = _entities[d].size();
     _entities[d].push_back(nodeSet);
-    _knownEntities[d][nodeSet] = entityIndex;
-    _canonicalEntityOrdering[d][entityIndex] = entityVertices;
+    _knownEntities[d].insert(make_pair(nodeSet, entityIndex));
+    _canonicalEntityOrdering[d].insert(make_pair(entityIndex, entityVertices));
     entityPermutation = 0;
     if (_knownTopologies.find(entityTopo.getKey()) == _knownTopologies.end()) {
       _knownTopologies[entityTopo.getKey()] = entityTopo;
     }
-    _entityCellTopologyKeys[d][entityIndex] = entityTopo.getKey();
+    _entityCellTopologyKeys[d].insert(make_pair(entityIndex, entityTopo.getKey()) );
   } else {
     // existing entity
     vector<IndexType> canonicalVertices = getCanonicalEntityNodesViaPeriodicBCs(d, entityVertices);

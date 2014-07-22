@@ -63,6 +63,10 @@
 
 #include "MeshFactory.h"
 
+#include "MPIWrapper.h"
+
+#include "ZoltanMeshPartitionPolicy.h"
+
 using namespace Intrepid;
 
 map<int,int> Mesh::_emptyIntIntMap;
@@ -74,10 +78,13 @@ Mesh::Mesh(MeshTopologyPtr meshTopology, BilinearFormPtr bilinearForm, int H1Ord
   
   DofOrderingFactoryPtr dofOrderingFactoryPtr = Teuchos::rcp( new DofOrderingFactory(bilinearForm, trialOrderEnhancements,testOrderEnhancements) );
   _enforceMBFluxContinuity = false;
-  MeshPartitionPolicyPtr partitionPolicy = Teuchos::rcp( new MeshPartitionPolicy() );
+//  MeshPartitionPolicyPtr partitionPolicy = Teuchos::rcp( new MeshPartitionPolicy() );
+  MeshPartitionPolicyPtr partitionPolicy = Teuchos::rcp( new ZoltanMeshPartitionPolicy() );
   
-  _gda = Teuchos::rcp( new GDAMinimumRule(_meshTopology, bilinearForm->varFactory(), dofOrderingFactoryPtr,
+  MeshPtr thisPtr = Teuchos::rcp(this, false);
+  _gda = Teuchos::rcp( new GDAMinimumRule(thisPtr, bilinearForm->varFactory(), dofOrderingFactoryPtr,
                                           partitionPolicy, H1Order, pToAddTest));
+  _gda->repartitionAndMigrate();
   
   setBilinearForm(bilinearForm);
   _boundary.setMesh(this);
@@ -99,10 +106,12 @@ Mesh::Mesh(const vector<vector<double> > &vertices, vector< vector<unsigned> > &
   
   DofOrderingFactoryPtr dofOrderingFactoryPtr = Teuchos::rcp( new DofOrderingFactory(bilinearForm, trialOrderEnhancements,testOrderEnhancements) );
   _enforceMBFluxContinuity = false;
-  MeshPartitionPolicyPtr partitionPolicy = Teuchos::rcp( new MeshPartitionPolicy() );
+  MeshPartitionPolicyPtr partitionPolicy = Teuchos::rcp( new ZoltanMeshPartitionPolicy() );
   
-  _gda = Teuchos::rcp( new GDAMaximumRule2D(_meshTopology, bilinearForm->varFactory(), dofOrderingFactoryPtr,
+  MeshPtr thisPtr = Teuchos::rcp(this, false);
+  _gda = Teuchos::rcp( new GDAMaximumRule2D(thisPtr, bilinearForm->varFactory(), dofOrderingFactoryPtr,
                                             partitionPolicy, H1Order, pToAddTest, _enforceMBFluxContinuity) );
+  _gda->repartitionAndMigrate();
   
   setBilinearForm(bilinearForm);
   
@@ -205,6 +214,10 @@ vector< GlobalIndexType > Mesh::cellIDsOfTypeGlobal(ElementTypePtr elemTypePtr) 
   return cellIDs;
 }
 
+set<GlobalIndexType> Mesh::cellIDsInPartition() {
+  return _gda->cellsInPartition(-1);
+}
+
 int Mesh::cellPolyOrder(GlobalIndexType cellID) { // aka H1Order
   return _gda->getH1Order(cellID);
 }
@@ -228,7 +241,7 @@ bool Mesh::cellContainsPoint(GlobalIndexType cellID, vector<double> &point) {
   return result == 1;
 }
 
-vector<ElementPtr> Mesh::elementsForPoints(const FieldContainer<double> &physicalPoints) {
+vector<ElementPtr> Mesh::elementsForPoints(const FieldContainer<double> &physicalPoints, bool nullElementsIfOffRank) {
   // returns a vector of an active element per point, or null if there is no element including that point
   vector<ElementPtr> elemsForPoints;
 //  cout << "entered elementsForPoints: \n" << physicalPoints;
@@ -237,6 +250,7 @@ vector<ElementPtr> Mesh::elementsForPoints(const FieldContainer<double> &physica
   // figure out the last element of the original mesh:
 
   set<GlobalIndexType> rootCellIndices = _meshTopology->getRootCellIndices();
+  set<GlobalIndexType> rankLocalCellIDs = cellIDsInPartition();
   
   // NOTE: the above does depend on the domain of the mesh remaining fixed after refinements begin.
   
@@ -292,6 +306,9 @@ vector<ElementPtr> Mesh::elementsForPoints(const FieldContainer<double> &physica
         }
       }
     }
+    if (nullElementsIfOffRank && (elem.get() != NULL) && (rankLocalCellIDs.find(elem->cellID()) == rankLocalCellIDs.end())) {
+      elem = Teuchos::rcp( (Element*) NULL);
+    }
     elemsForPoints.push_back(elem);
   }
 //  cout << "Returning from elementsForPoints\n";
@@ -301,37 +318,46 @@ vector<ElementPtr> Mesh::elementsForPoints(const FieldContainer<double> &physica
 void Mesh::enforceOneIrregularity() {
   bool meshIsNotRegular = true; // assume it's not regular and check elements
   while (meshIsNotRegular) {
-    vector <GlobalIndexType> irregularTriangleCells;
-    vector <GlobalIndexType> irregularQuadCells;
-    vector< Teuchos::RCP< Element > > newActiveElements = activeElements();
-    vector< Teuchos::RCP< Element > >::iterator newElemIt;
+    int spaceDim = _meshTopology->getSpaceDim();
+    if (spaceDim == 1) return;
     
-    for (newElemIt = newActiveElements.begin(); newElemIt != newActiveElements.end(); newElemIt++) {
-      Teuchos::RCP< Element > current_element = *(newElemIt);
+    map< unsigned, set<GlobalIndexType> > irregularCellIDs; // key is CellTopology key
+    set< GlobalIndexType > activeCellIDs = _meshTopology->getActiveCellIndices();
+    set< GlobalIndexType >::iterator cellIDIt;
+    
+    for (cellIDIt = activeCellIDs.begin(); cellIDIt != activeCellIDs.end(); cellIDIt++) {
+      GlobalIndexType cellID = *cellIDIt;
+      
+      CellPtr cell = _meshTopology->getCell(cellID);
       bool isIrregular = false;
-      for (int sideIndex=0; sideIndex < current_element->numSides(); sideIndex++) {
-        int mySideIndexInNeighbor;
-        ElementPtr neighbor = current_element->getNeighbor(mySideIndexInNeighbor, sideIndex);
-        if (neighbor.get() != NULL) {
+      for (int sideOrdinal=0; sideOrdinal < cell->topology()->getSideCount(); sideOrdinal++) {
+        pair<GlobalIndexType, unsigned> neighborInfo = cell->getNeighbor(sideOrdinal);
+        unsigned mySideIndexInNeighbor = neighborInfo.second;
+        
+        if (neighborInfo.first != -1) {
+          CellPtr neighbor = _meshTopology->getCell(neighborInfo.first);
           int numNeighborsOnSide = neighbor->getDescendantsForSide(mySideIndexInNeighbor).size();
-          if (numNeighborsOnSide > 2) isIrregular=true;
+          if (spaceDim==2) {
+            if (numNeighborsOnSide > 2) isIrregular=true;
+          } else if (spaceDim==3) {
+            // TODO: fix this criterion so that it will be correct for anisotropic refinements (consider two vertical cuts: could have as few as 3 neighbors and still be 2-irregular).  The right criterion is the depth of the side's refinement tree: this should be at most 1.  (This holds in general dimensions, not just 3.)
+            if (numNeighborsOnSide > 4) isIrregular=true;
+          }
         }
       }
       
-      if (isIrregular){
-        if ( 3 == current_element->numSides() ) {
-          irregularTriangleCells.push_back(current_element->cellID());
-        }
-        else if (4 == current_element->numSides() ) {
-          irregularQuadCells.push_back(current_element->cellID());
-        }
+      if (isIrregular) {
+        cout << "cellID " << cellID << " is irregular.\n";
+        irregularCellIDs[cell->topology()->getKey()].insert(cellID);
       }
     }
-    if ((irregularQuadCells.size()>0) || (irregularTriangleCells.size()>0)) {
-      hRefine(irregularTriangleCells,RefinementPattern::regularRefinementPatternTriangle());
-      hRefine(irregularQuadCells,RefinementPattern::regularRefinementPatternQuad());
-      irregularTriangleCells.clear();
-      irregularQuadCells.clear();
+    if (irregularCellIDs.size() > 0) {
+      for (map< unsigned, set<GlobalIndexType> >::iterator mapIt = irregularCellIDs.begin();
+           mapIt != irregularCellIDs.end(); mapIt++) {
+        unsigned int cellKey = mapIt->first;
+        hRefine(mapIt->second, RefinementPattern::regularRefinementPattern(cellKey));
+      }
+      irregularCellIDs.clear();
     } else {
       meshIsNotRegular=false;
     }
@@ -369,9 +395,9 @@ vector<double> Mesh::getCellCentroid(GlobalIndexType cellID){
 }
 
 vector< ElementPtr > Mesh::elementsInPartition(PartitionIndexType partitionNumber){
-  vector< GlobalIndexType > cellsInPartition = _gda->cellsInPartition(partitionNumber);
+  set< GlobalIndexType > cellsInPartition = _gda->cellsInPartition(partitionNumber);
   vector< ElementPtr > elements;
-  for (vector< GlobalIndexType >::iterator cellIt = cellsInPartition.begin(); cellIt != cellsInPartition.end(); cellIt++) {
+  for (set< GlobalIndexType >::iterator cellIt = cellsInPartition.begin(); cellIt != cellsInPartition.end(); cellIt++) {
     GlobalIndexType cellID = *cellIt;
     ElementPtr element = getElement(cellID);
     elements.push_back(element);
@@ -508,6 +534,10 @@ GlobalIndexType Mesh::globalDofIndex(GlobalIndexType cellID, IndexType localDofI
   return maxRule->globalDofIndex(cellID, localDofIndex);
 }
 
+set<GlobalIndexType> Mesh::globalDofIndicesForCell(GlobalIndexType cellID) {
+  return _gda->globalDofIndicesForCell(cellID);
+}
+
 set<GlobalIndexType> Mesh::globalDofIndicesForPartition(PartitionIndexType partitionNumber) {
   return _gda->globalDofIndicesForPartition(partitionNumber);
 }
@@ -545,7 +575,7 @@ void Mesh::hRefine(const set<GlobalIndexType> &cellIDs, Teuchos::RCP<RefinementP
       _meshTopology->transformationFunction()->didHRefine(cellIDset);
     }
   }
-  _gda->rebuildLookups();
+  _gda->repartitionAndMigrate();
   _boundary.buildLookupTables();
 }
 
@@ -630,7 +660,7 @@ void Mesh::hUnrefine(const set<GlobalIndexType> &cellIDs) {
 //  }
   
   _gda->didHUnrefine(cellIDs);
-  _gda->rebuildLookups();
+  _gda->repartitionAndMigrate();
   _boundary.buildLookupTables();
 }
 
@@ -667,23 +697,15 @@ GlobalIndexType Mesh::numElementsOfType( Teuchos::RCP< ElementType > elemTypePtr
 }
 
 GlobalIndexType Mesh::numFluxDofs(){
-  return numGlobalDofs()-numFieldDofs();
+  GlobalIndexType fluxDofsForPartition = _gda->partitionOwnedGlobalFluxIndices().size();
+  GlobalIndexType traceDofsForPartition = _gda->partitionOwnedGlobalTraceIndices().size();
+  
+  return MPIWrapper::sum(fluxDofsForPartition + traceDofsForPartition);
 }
 
 GlobalIndexType Mesh::numFieldDofs(){
-  GlobalIndexType numFieldDofs = 0;
-  set<GlobalIndexType> activeCellIDs = getActiveCellIDs();
-  for (set<GlobalIndexType>::iterator cellIt = activeCellIDs.begin(); cellIt != activeCellIDs.end(); cellIt++) {
-    GlobalIndexType cellID = *cellIt;
-    ElementTypePtr elemTypePtr = _gda->elementType(cellID);
-    vector< int > fieldIDs = _bilinearForm->trialVolumeIDs();
-    vector< int >::iterator fieldIDit;
-    for (fieldIDit = fieldIDs.begin(); fieldIDit != fieldIDs.end() ; fieldIDit++){    
-      int numDofs = elemTypePtr->trialOrderPtr->getBasisCardinality(*fieldIDit,0);
-      numFieldDofs += numDofs;
-    }
-  }
-  return numFieldDofs;
+  GlobalIndexType fieldDofsForPartition = _gda->partitionOwnedGlobalFieldIndices().size();
+  return MPIWrapper::sum(fieldDofsForPartition);
 }
 
 GlobalIndexType Mesh::numGlobalDofs() {
@@ -755,13 +777,15 @@ FieldContainer<double> Mesh::physicalCellNodesForCell( GlobalIndexType cellID ) 
 }
 
 FieldContainer<double> Mesh::physicalCellNodesGlobal( Teuchos::RCP< ElementType > elemTypePtr ) {
-  int numRanks = Teuchos::GlobalMPISession::getNProc();
+//  int numRanks = Teuchos::GlobalMPISession::getNProc();
+
+  // user should call cellIDsOfTypeGlobal() to get the corresponding cell IDs (the cell nodes are *NOT* sorted by cell ID)
   
-  vector<GlobalIndexType> globalCellIDs;
-  for (int rank=0; rank<numRanks; rank++) {
-    vector<GlobalIndexType> cellIDs = _gda->cellIDsOfElementType(rank, elemTypePtr);
-    globalCellIDs.insert(globalCellIDs.end(), cellIDs.begin(), cellIDs.end());
-  }
+  vector<GlobalIndexType> globalCellIDs = cellIDsOfTypeGlobal(elemTypePtr);
+//  for (int rank=0; rank<numRanks; rank++) {
+//    vector<GlobalIndexType> cellIDs = _gda->cellIDsOfElementType(rank, elemTypePtr);
+//    globalCellIDs.insert(globalCellIDs.end(), cellIDs.begin(), cellIDs.end());
+//  }
   
   return physicalCellNodes(elemTypePtr, globalCellIDs);
 }
@@ -842,7 +866,7 @@ void Mesh::pRefine(const set<GlobalIndexType> &cellIDsForPRefinements, int pToAd
     _meshTopology->transformationFunction()->didPRefine(cellIDsForPRefinements);
   }
   
-  _gda->rebuildLookups();
+  _gda->repartitionAndMigrate();
   _boundary.buildLookupTables();
 }
 
@@ -874,7 +898,7 @@ int Mesh::condensedRowSizeUpperBound() {
 }
 
 void Mesh::rebuildLookups() {
-  _gda->rebuildLookups();
+  _gda->repartitionAndMigrate();
   _boundary.buildLookupTables();
 }
 
@@ -1035,6 +1059,8 @@ void Mesh::verticesForSide(FieldContainer<double>& vertices, GlobalIndexType cel
 }
 
 void Mesh::writeMeshPartitionsToFile(const string & fileName){
+  // TODO: rewrite this code to only talk to rank-local cells.
+  
   ofstream myFile;
   myFile.open(fileName.c_str());
   PartitionIndexType partitionCount = _gda->getPartitionCount();
@@ -1046,14 +1072,14 @@ void Mesh::writeMeshPartitionsToFile(const string & fileName){
 
   //initialize verts
   for (int i=0;i<partitionCount;i++){
-    vector< GlobalIndexType > cellsInPartition = _gda->cellsInPartition(i);
+    set< GlobalIndexType > cellsInPartition = _gda->cellsInPartition(i);
     for (int l=0;l<spaceDim;l++){
       myFile << "verts{"<< i+1 <<","<< l+1 << "} = zeros(" << maxNumVertices << ","<< maxNumElems << ");"<< endl;
-      for (int j=0;j<cellsInPartition.size();j++){
-        CellPtr cell = _meshTopology->getCell(cellsInPartition[j]);
+      for (set< GlobalIndexType >::iterator cellIt = cellsInPartition.begin(); cellIt != cellsInPartition.end(); cellIt++) {
+        CellPtr cell = _meshTopology->getCell(*cellIt);
         int numVertices = cell->topology()->getVertexCount();
         FieldContainer<double> verts(numVertices,spaceDim); // gets resized inside verticesForCell
-        verticesForCell(verts, cellsInPartition[j]);  //verts(numVertsForCell,dim)
+        verticesForCell(verts, *cellIt);  //verts(numVertsForCell,dim)
         maxNumVertices = max(maxNumVertices,verts.dimension(0));
         maxNumElems = max(maxNumElems,(int)cellsInPartition.size());
       }
@@ -1062,18 +1088,20 @@ void Mesh::writeMeshPartitionsToFile(const string & fileName){
   cout << "max number of elems = " << maxNumElems << endl;
 
   for (int i=0;i<partitionCount;i++){
-    vector< GlobalIndexType > cellsInPartition = _gda->cellsInPartition(i);
+    set< GlobalIndexType > cellsInPartition = _gda->cellsInPartition(i);
     for (int l=0;l<spaceDim;l++){
-      for (int j=0;j<cellsInPartition.size();j++){
-        CellPtr cell = _meshTopology->getCell(cellsInPartition[j]);
+      int j=0;
+      for (set< GlobalIndexType >::iterator cellIt = cellsInPartition.begin(); cellIt != cellsInPartition.end(); cellIt++) {
+        CellPtr cell = _meshTopology->getCell(*cellIt);
         int numVertices = cell->topology()->getVertexCount();
         FieldContainer<double> vertices(numVertices,spaceDim);
-        verticesForCell(vertices, cellsInPartition[j]);  //vertices(numVertsForCell,dim)
+        verticesForCell(vertices, *cellIt);  //vertices(numVertsForCell,dim)
         
         // write vertex coordinates to file
         for (int k=0;k<numVertices;k++){
           myFile << "verts{"<< i+1 <<","<< l+1 <<"}("<< k+1 <<","<< j+1 <<") = "<< vertices(k,l) << ";"<<endl; // verts{numPartitions,spaceDim}
         }
+        j++;
       }
       
     }

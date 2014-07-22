@@ -136,6 +136,13 @@ void LinearTermTests::teardown() {
 
 void LinearTermTests::runTests(int &numTestsRun, int &numTestsPassed) {
   setup();
+  if (testRieszInversionAsProjection()) {
+    numTestsPassed++;
+  }
+  numTestsRun++;
+  teardown();
+  
+  setup();
   if (testBoundaryPlusVolumeTerms()) {
     numTestsPassed++;
   }
@@ -151,13 +158,6 @@ void LinearTermTests::runTests(int &numTestsRun, int &numTestsPassed) {
 
   setup();
   if (testMixedTermConsistency()) {
-    numTestsPassed++;
-  }
-  numTestsRun++;
-  teardown();
-
-  setup();
-  if (testRieszInversionAsProjection()) {
     numTestsPassed++;
   }
   numTestsRun++;
@@ -652,63 +652,57 @@ bool LinearTermTests::testRieszInversionAsProjection() {
  
   int nCells = 2;
   int horizontalCells = nCells, verticalCells = nCells;
-  // create a pointer to a new mesh:
-  Teuchos::RCP<Mesh> myMesh = MeshFactory::buildQuadMesh(quadPoints, horizontalCells, verticalCells, confusionBF, H1Order, H1Order+pToAdd);    
+  // create a new mesh:
+  MeshPtr myMesh = MeshFactory::buildQuadMesh(quadPoints, horizontalCells, verticalCells, confusionBF, H1Order, H1Order+pToAdd);
 
   ElementTypePtr elemType = myMesh->getElement(0)->elementType();
   BasisCachePtr basisCache = Teuchos::rcp(new BasisCache(elemType, myMesh));
   
-  vector<GlobalIndexType> cellIDs;
-  vector< ElementPtr> allElems = myMesh->activeElements();
-  vector< ElementPtr >::iterator elemIt;     
-  for (elemIt=allElems.begin();elemIt!=allElems.end();elemIt++){
-    ElementPtr elem = *elemIt;
-    int cellID = elem->cellID();
-    cellIDs.push_back(cellID); 
-  }
+  vector<GlobalIndexType> cellIDs = myMesh->cellIDsOfTypeGlobal(elemType);
   bool createSideCacheToo = true;
   
   basisCache->setPhysicalCellNodes(myMesh->physicalCellNodesGlobal(elemType), cellIDs, createSideCacheToo);
 
-  LinearTermPtr integrand = Teuchos::rcp(new LinearTerm);// residual
-  LinearTermPtr integrandIBP = Teuchos::rcp(new LinearTerm);// residual
+  LinearTermPtr integrand = Teuchos::rcp(new LinearTerm); // residual
 
-  vector<double> e1(2); // (1,0)
-  vector<double> e2(2); // (0,1)
-  e1[0] = 1;
-  e2[1] = 1;  
-  FunctionPtr n = Teuchos::rcp( new UnitNormalFunction );
-  FunctionPtr X = Teuchos::rcp(new Xn(1));
-  FunctionPtr Y = Teuchos::rcp(new Yn(1));
-  FunctionPtr testFxn1 = X;
-  FunctionPtr testFxn2 = Y;
-  FunctionPtr fxnToProject = X*Y + Function::constant(1.0);
+  FunctionPtr x = Teuchos::rcp(new Xn(1));
+  FunctionPtr y = Teuchos::rcp(new Yn(1));
+  FunctionPtr testFxn1 = x;
+  FunctionPtr testFxn2 = y;
+  FunctionPtr fxnToProject = x * y + 1.0;
 
-  integrand->addTerm(fxnToProject*v);
+  integrand->addTerm(fxnToProject * v);
 
-  IPPtr sobolevIP = Teuchos::rcp(new IP);
-  sobolevIP->addTerm(v);
-  sobolevIP->addTerm(tau);
+  IPPtr ip_L2 = Teuchos::rcp(new IP);
+  ip_L2->addTerm(v);
+  ip_L2->addTerm(tau);
 
-  Teuchos::RCP<RieszRep> riesz = Teuchos::rcp(new RieszRep(myMesh, sobolevIP, integrand));
+  Teuchos::RCP<RieszRep> riesz = Teuchos::rcp(new RieszRep(myMesh, ip_L2, integrand));
   riesz->computeRieszRep();
 
   FunctionPtr rieszFxn = Teuchos::rcp(new RepFunction(v,riesz));
   int numCells = basisCache->getPhysicalCubaturePoints().dimension(0);
   int numPts = basisCache->getPhysicalCubaturePoints().dimension(1);
 
-  FieldContainer<double> valProject( numCells, numPts);
-  FieldContainer<double> valExpected( numCells, numPts);
+  FieldContainer<double> valProject( numCells, numPts );
+  FieldContainer<double> valExpected( numCells, numPts );
+
   rieszFxn->values(valProject,basisCache);
   fxnToProject->values(valExpected,basisCache);
+  
+//  int rank = Teuchos::GlobalMPISession::getRank();
+//  if (rank==0) cout << "physicalCubaturePoints:\n" << basisCache->getPhysicalCubaturePoints();
   
   double maxDiff;
   double tol = 1e-12;
   success = TestSuite::fcsAgree(valProject,valExpected,tol,maxDiff);
   if (success==false){
     cout << "Failed Riesz Inversion Projection test with maxDiff = " << maxDiff << endl;
+    serializeOutput("valExpected", valExpected);
+    serializeOutput("valProject", valProject);
+    serializeOutput("physicalPoints", basisCache->getPhysicalCubaturePoints());
   }
-  return success;
+  return allSuccess(success);
 }
 
 bool LinearTermTests::testMixedTermConsistency() {
@@ -795,23 +789,15 @@ bool LinearTermTests::testMixedTermConsistency() {
   Teuchos::RCP<RieszRep> riesz = Teuchos::rcp(new RieszRep(myMesh, dummyIP, integrandIBP));  
   map<GlobalIndexType,FieldContainer<double> > rieszRHS = riesz->integrateRHS();
 
-  vector< ElementPtr > allElems = myMesh->activeElements(); // CHANGE TO DISTRIBUTED COMPUTATION
-  vector< ElementPtr >::iterator elemIt;     
-  for (elemIt=allElems.begin();elemIt!=allElems.end();elemIt++){
+  set<GlobalIndexType> cellIDs = myMesh->cellIDsInPartition();
+  for (set<GlobalIndexType>::iterator cellIDIt=cellIDs.begin(); cellIDIt !=cellIDs.end(); cellIDIt++){
+    GlobalIndexType cellID = *cellIDIt;
 
-    ElementPtr elem = *elemIt;
-    int cellID = elem->cellID();
-
-    ElementTypePtr elemTypePtr = elem->elementType();   
+    ElementTypePtr elemTypePtr = myMesh->getElementType(cellID);
     DofOrderingPtr testOrderingPtr = elemTypePtr->testOrderPtr;
     int numTestDofs = testOrderingPtr->totalDofs();
-    FieldContainer<double> physicalCellNodes = myMesh->physicalCellNodesForCell(cellID);
 
-    vector<GlobalIndexType> cellIDs;
-    cellIDs.push_back(cellID); // just do one cell at a time
-
-    BasisCachePtr basisCache = Teuchos::rcp(new BasisCache(elemTypePtr,myMesh, true));
-    basisCache->setPhysicalCellNodes(physicalCellNodes,cellIDs,true); // create side cache if ip has boundary values 
+    BasisCachePtr basisCache = BasisCache::basisCacheForCell(myMesh, cellID, true);
 
     FieldContainer<double> rhsIBPValues(1,numTestDofs);
     integrandIBP->integrate(rhsIBPValues, testOrderingPtr, basisCache);
@@ -830,7 +816,7 @@ bool LinearTermTests::testMixedTermConsistency() {
       cout << "Failed mixed term consistency test with maxDiff = " << maxDiff << " on cellID " << cellID<< endl; 
     }
   }
-  return success;
+  return allSuccess(success);
  
 }
 

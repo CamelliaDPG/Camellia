@@ -176,7 +176,9 @@ const vector<int> & DofOrdering::getDofIndices(int varID, int sideIndex) {
 }
 
 int DofOrdering::getBasisCardinality(int varID, int sideIndex) {
-  return getBasis(varID,sideIndex)->getCardinality();
+  BasisPtr basis = getBasis(varID,sideIndex);
+  return basis->getCardinality();
+//  return getBasis(varID,sideIndex)->getCardinality();
 }
 
 int DofOrdering::getNumSidesForVarID(int varID) {

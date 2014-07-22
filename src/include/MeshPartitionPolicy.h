@@ -17,12 +17,12 @@ typedef Teuchos::RCP<MeshPartitionPolicy> MeshPartitionPolicyPtr;
 
 using namespace Intrepid;
 
-#include "MeshTopology.h"
+#include "Mesh.h"
 
 class MeshPartitionPolicy {
 public:
   virtual ~MeshPartitionPolicy() {}
-  virtual void partitionMesh(MeshTopology *meshTopology, PartitionIndexType numPartitions, FieldContainer<GlobalIndexType> &partitionedActiveCells);
+  virtual void partitionMesh(Mesh *mesh, PartitionIndexType numPartitions);
 };
 
 #endif

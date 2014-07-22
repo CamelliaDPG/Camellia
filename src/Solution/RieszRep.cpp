@@ -45,6 +45,10 @@
 #include "Epetra_SerialSpdDenseSolver.h"
 
 #include "SerialDenseWrapper.h"
+#include "CamelliaDebugUtility.h"
+#include "GlobalDofAssignment.h"
+
+#include "../../drivers/DPGTests/TestSuite.h"
 
 LinearTermPtr RieszRep::getRHS(){
   return _rhs;
@@ -54,21 +58,18 @@ MeshPtr RieszRep::mesh() {
   return _mesh;
 }
 
-map<GlobalIndexType,FieldContainer<double> > RieszRep::integrateRHS(){
+map<GlobalIndexType,FieldContainer<double> > RieszRep::integrateRHS() {
+  // NVR: changed this to only return integrated values for rank-local cells.
 
   map<GlobalIndexType,FieldContainer<double> > cellRHS;
-  vector< ElementPtr > allElems = _mesh->activeElements(); // CHANGE TO DISTRIBUTED COMPUTATION
-  vector< ElementPtr >::iterator elemIt;     
-  for (elemIt=allElems.begin();elemIt!=allElems.end();elemIt++){
-
-    ElementPtr elem = *elemIt;
-    GlobalIndexType cellID = elem->cellID();
-
-    ElementTypePtr elemTypePtr = elem->elementType();   
+  set<GlobalIndexType> cellIDs = _mesh->cellIDsInPartition();
+  for (set<GlobalIndexType>::iterator cellIDIt=cellIDs.begin(); cellIDIt !=cellIDs.end(); cellIDIt++){
+    GlobalIndexType cellID = *cellIDIt;
+    ElementTypePtr elemTypePtr = _mesh->getElementType(cellID);
     DofOrderingPtr testOrderingPtr = elemTypePtr->testOrderPtr;
     int numTestDofs = testOrderingPtr->totalDofs();
 
-    int cubEnrich = 5; // set to zero for release
+    int cubEnrich = 0; // set to zero for release
     BasisCachePtr basisCache = BasisCache::basisCacheForCell(_mesh,cellID,true,cubEnrich);
 
     FieldContainer<double> rhsValues(1,numTestDofs);
@@ -84,23 +85,18 @@ map<GlobalIndexType,FieldContainer<double> > RieszRep::integrateRHS(){
 }
 
 void RieszRep::computeRieszRep(int cubatureEnrichment){
-  int rank=0;
 #ifdef HAVE_MPI
-  rank     = Teuchos::GlobalMPISession::getRank();
   Epetra_MpiComm Comm(MPI_COMM_WORLD);
   //cout << "rank: " << rank << " of " << numProcs << endl;
 #else
   Epetra_SerialComm Comm;
 #endif  
 
-  vector< ElementPtr > allElems = _mesh->elementsInPartition(rank);
-  vector< ElementPtr >::iterator elemIt;     
-  for (elemIt=allElems.begin();elemIt!=allElems.end();elemIt++){
+  set<GlobalIndexType> cellIDs = _mesh->cellIDsInPartition();
+  for (set<GlobalIndexType>::iterator cellIDIt=cellIDs.begin(); cellIDIt !=cellIDs.end(); cellIDIt++){
+    GlobalIndexType cellID = *cellIDIt;
 
-    ElementPtr elem = *elemIt;
-    GlobalIndexType cellID = elem->cellID();
-
-    ElementTypePtr elemTypePtr = elem->elementType();   
+    ElementTypePtr elemTypePtr = _mesh->getElementType(cellID);
     DofOrderingPtr testOrderingPtr = elemTypePtr->testOrderPtr;
     int numTestDofs = testOrderingPtr->totalDofs();
 
@@ -108,65 +104,37 @@ void RieszRep::computeRieszRep(int cubatureEnrichment){
 
     FieldContainer<double> rhsValues(1,numTestDofs);
     _rhs->integrate(rhsValues, testOrderingPtr, basisCache);
+    if (_printAll){
+      cout << "RieszRep: LinearTerm values for cell " << cellID << ":\n " << rhsValues << endl;
+    }
+  
     FieldContainer<double> ipMatrix(1,numTestDofs,numTestDofs);      
     _ip->computeInnerProductMatrix(ipMatrix,testOrderingPtr, basisCache);
 
-    Epetra_SerialDenseMatrix rhsVector(numTestDofs,1);
-    Epetra_SerialSymDenseMatrix R_V(Copy,
-                                    &ipMatrix(0,0,0),
-                                    ipMatrix.dimension(2), // stride -- fc stores in row-major order (a.o.t. SDM)
-                                    ipMatrix.dimension(2));
-
-    for (int i = 0;i<numTestDofs;i++){
-      rhsVector(i,0) = rhsValues(0,i);
-    }
-    Epetra_SerialDenseMatrix rhsVectorCopy = rhsVector;
-    rhsValues.clear();
-    if (_printAll){
-      cout << "rhs vector values for cell " << cellID << " are = " << rhsVector << endl;
+    bool printOutRiesz = false;
+    if (printOutRiesz){
+      cout << " ============================ In RIESZ ==========================" << endl;
+      cout << "matrix: \n" << ipMatrix;
     }
     
-    Epetra_SerialSpdDenseSolver solver;
-    Epetra_SerialDenseMatrix rieszRepDofs(numTestDofs,1);
-    solver.SetMatrix(R_V);
-    solver.SetVectors(rieszRepDofs, rhsVector);        
-
-    
-    if ( solver.ShouldEquilibrate() ) {
-      solver.FactorWithEquilibration(true);
-      solver.SolveToRefinedSolution(false);
-    }
-
-    int result = solver.Factor();
-    if (result != 0) {
-      cout << "RieszRep::computeRieszRep: Factor failed with code " << result << endl;
-    }
-    
-//    {
-//      Teuchos::Array<int> dim(2);
-//      dim[0] = numTestDofs;
-//      dim[1] = numTestDofs;
-//      FieldContainer<double> ipMatrixView(dim,&ipMatrix(0,0,0));
-//      cout << "RieszRep: about to solve with numTestDofs = " << numTestDofs << ".  Debugging: outputting ip matrix to rrIPMatrix.dat.\n";
-//      SerialDenseWrapper::writeMatrixToMatlabFile("rrIPMatrix.dat", ipMatrixView);
-//    }
-    
-    int success = solver.Solve();
+    FieldContainer<double> rieszRepDofs(numTestDofs,1);
+    ipMatrix.resize(numTestDofs,numTestDofs);
+    rhsValues.resize(numTestDofs,1);
+    int success = SerialDenseWrapper::solveSystemUsingQR(rieszRepDofs, ipMatrix, rhsValues);
     
     if (success != 0) {
       cout << "RieszRep::computeRieszRep: Solve FAILED with error: " << success << endl;
     }
 
-    Epetra_SerialDenseMatrix normSq(1,1);
-    rieszRepDofs.Multiply(true,rhsVectorCopy, normSq); // equivalent to e^T * R_V * e    
-    _rieszRepNormSquared[cellID] = normSq(0,0);
+//    rieszRepDofs.Multiply(true,rhsVectorCopy, normSq); // equivalent to e^T * R_V * e
+    double normSquared = SerialDenseWrapper::dot(rieszRepDofs, rhsValues);
+    _rieszRepNormSquared[cellID] = normSquared;
 
-    bool printOutRiesz = false;
+//    cout << "normSquared for cell " << cellID << ": " << _rieszRepNormSquared[cellID] << endl;
+    
     if (printOutRiesz){
-      cout << " ============================ In RIESZ ==========================" << endl;
-      cout << "matrix = " << R_V << endl;
-      cout << "rhs = " << rhsVectorCopy << endl;
-      cout << "dofs = " << rieszRepDofs << endl;
+      cout << "rhs: \n" << rhsValues;
+      cout << "dofs: \n" << rieszRepDofs;
       cout << " ================================================================" << endl;
     }
 
@@ -204,27 +172,38 @@ const map<GlobalIndexType,double> & RieszRep::getNormsSquared(){ // should be re
 }
 
 void RieszRep::distributeDofs(){
-  int rank=0;  
+  int myRank = Teuchos::GlobalMPISession::getRank();
+  int numRanks = Teuchos::GlobalMPISession::getNProc();
 #ifdef HAVE_MPI
-  rank     = Teuchos::GlobalMPISession::getRank();
   Epetra_MpiComm Comm(MPI_COMM_WORLD);
   //cout << "rank: " << rank << " of " << numProcs << endl;
 #else
   Epetra_SerialComm Comm;
 #endif  
 
-  vector< ElementPtr > elems = _mesh->activeElements(); 
-  vector< ElementPtr >::iterator elemIt;     
-  for (elemIt=elems.begin();elemIt!=elems.end();elemIt++) {
-    
-    ElementPtr elem = *elemIt;
-    int cellID = elem->cellID();    
-    ElementTypePtr elemTypePtr = elem->elementType();   
+  // the code below could stand to be reworked; I'm pretty sure this is not the best way to distribute the data, and it would also be best to get rid of the iteration over the global set of active elements.  But a similar point could be made about this method as a whole: do we really need to distribute all the dofs to every rank?  It may be best to eliminate this method altogether.
+  
+  vector<GlobalIndexType> cellIDsByPartitionOrdering;
+  for (int rank=0; rank<numRanks; rank++) {
+    set<GlobalIndexType> cellIDsForRank = _mesh->globalDofAssignment()->cellsInPartition(rank);
+    cellIDsByPartitionOrdering.insert(cellIDsByPartitionOrdering.end(), cellIDsForRank.begin(), cellIDsForRank.end());
+  }
+  // determine inverse map:
+  map<GlobalIndexType,int> ordinalForCellID;
+  for (int ordinal=0; ordinal<cellIDsByPartitionOrdering.size(); ordinal++) {
+    GlobalIndexType cellID = cellIDsByPartitionOrdering[ordinal];
+    ordinalForCellID[cellID] = ordinal;
+//    cout << "ordinalForCellID[" << cellID << "] = " << ordinal << endl;
+  }
+  
+  for (int cellOrdinal=0; cellOrdinal<cellIDsByPartitionOrdering.size(); cellOrdinal++) {
+    GlobalIndexType cellID = cellIDsByPartitionOrdering[cellOrdinal];
+    ElementTypePtr elemTypePtr = _mesh->getElementType(cellID);
     DofOrderingPtr testOrderingPtr = elemTypePtr->testOrderPtr;
     int numDofs = testOrderingPtr->totalDofs();
     
     int cellIDPartition = _mesh->partitionForCellID(cellID);
-    bool isInPartition = (cellIDPartition == rank);
+    bool isInPartition = (cellIDPartition == myRank);
 
     int numMyDofs;
     FieldContainer<double> dofs(numDofs);
@@ -251,40 +230,36 @@ void RieszRep::distributeDofs(){
         dofs(i) = globalRieszDofs[i];
       }      
     }
-    _rieszRepDofsGlobal[cellID] = dofs;    
+    _rieszRepDofsGlobal[cellID] = dofs;
+//    { // debugging
+//      ostringstream cellIDlabel;
+//      cellIDlabel << "cell " << cellID << " _rieszRepDofsGlobal, after global import";
+//      TestSuite::serializeOutput(cellIDlabel.str(), _rieszRepDofsGlobal[cellID]);
+//    }
   }
   
   // distribute norms as well
-  GlobalIndexType numElems = _mesh->activeElements().size();
-  IndexType numMyElems = _mesh->elementsInPartition(rank).size();
+  GlobalIndexType numElems = _mesh->numActiveElements();
+  set<GlobalIndexType> rankLocalCellIDs = _mesh->cellIDsInPartition();
+  IndexType numMyElems = rankLocalCellIDs.size();
   GlobalIndexType myElems[numMyElems];
   // build cell index
-  IndexType cellIndex = 0;
-  GlobalIndexType myCellIndex = 0;
+  GlobalIndexType myCellOrdinal = 0;
 
-  vector<ElementPtr> elemsInPartition = _mesh->elementsInPartition(rank);
-  for (elemIt=elems.begin();elemIt!=elems.end();elemIt++){
-    int cellID = (*elemIt)->cellID();
-    if (rank==_mesh->partitionForCellID(cellID)){ // if cell is in partition
-      myElems[myCellIndex] = cellIndex;
-      myCellIndex++;
-    }
-    cellIndex++;
+  double rankLocalRieszNorms[numMyElems];
+  
+  for (set<GlobalIndexType>::iterator cellIDIt = rankLocalCellIDs.begin(); cellIDIt != rankLocalCellIDs.end(); cellIDIt++) {
+    GlobalIndexType cellID = *cellIDIt;
+    myElems[myCellOrdinal] = ordinalForCellID[cellID];
+    rankLocalRieszNorms[myCellOrdinal] = _rieszRepNormSquared[cellID];
+    myCellOrdinal++;
   }
   Epetra_Map normMap((GlobalIndexTypeToCast)numElems,(int)numMyElems,(GlobalIndexTypeToCast *)myElems,(GlobalIndexTypeToCast)0,Comm);
 
   Epetra_Vector distributedRieszNorms(normMap);
-  cellIndex = 0;
-  for (elemIt=elems.begin();elemIt!=elems.end();elemIt++){
-    int cellID = (*elemIt)->cellID();
-    if (rank==_mesh->partitionForCellID(cellID)){ // if cell is in partition
-      int ind = cellIndex;
-      int err = distributedRieszNorms.ReplaceGlobalValues(1,&_rieszRepNormSquared[cellID],(GlobalIndexTypeToCast *)&ind);
-      if (err != 0) {
-        cout << "RieszRep::distributeDofs(): on rank" << rank << ", ReplaceGlobalValues returned error code " << err << endl;
-      }
-    }
-    cellIndex++;
+  int err = distributedRieszNorms.ReplaceGlobalValues(numMyElems,rankLocalRieszNorms,(GlobalIndexTypeToCast *)myElems);
+  if (err != 0) {
+    cout << "RieszRep::distributeDofs(): on rank" << myRank << ", ReplaceGlobalValues returned error code " << err << endl;
   }
 
   Epetra_Map normImportMap((GlobalIndexTypeToCast)numElems,(GlobalIndexTypeToCast)numElems,0,Comm);
@@ -292,11 +267,10 @@ void RieszRep::distributeDofs(){
   Epetra_Vector globalNorms(normImportMap);
   globalNorms.Import(distributedRieszNorms, normImporter, Add);  // add should be OK (everything should be zeros)
 
-  cellIndex = 0;
-  for (elemIt=elems.begin();elemIt!=elems.end();elemIt++){
-    int cellID = (*elemIt)->cellID();
-    _rieszRepNormSquaredGlobal[cellID] = globalNorms[cellIndex];          
-    cellIndex++;
+  for (int cellOrdinal=0; cellOrdinal<cellIDsByPartitionOrdering.size(); cellOrdinal++) {
+    GlobalIndexType cellID = cellIDsByPartitionOrdering[cellOrdinal];
+    _rieszRepNormSquaredGlobal[cellID] = globalNorms[cellOrdinal];
+//    if (myRank==0) cout << "_rieszRepNormSquaredGlobal[" << cellID << "] = " << globalNorms[cellOrdinal] << endl;
   }
  
 }
@@ -309,7 +283,7 @@ void RieszRep::computeRepresentationValues(FieldContainer<double> &values, int t
     computeRieszRep();
   }
 
-  int spaceDim = 2; // hardcoded 2D for now
+  int spaceDim = _mesh->getTopology()->getSpaceDim();
   int numCells = values.dimension(0);
   int numPoints = values.dimension(1);
   vector<GlobalIndexType> cellIDs = basisCache->cellIDs();
@@ -333,28 +307,33 @@ void RieszRep::computeRepresentationValues(FieldContainer<double> &values, int t
   
   Teuchos::RCP< const FieldContainer<double> > transformedBasisValues = basisCache->getTransformedValues(testBasis,op,useCubPointsSideRefCell);
   
-  int rank = 0; // scalar
-  if (values.rank()>2) { // if values != (C,P)
-    rank = spaceDim;
+  int rank = values.rank() - 2; // if values are shaped as (C,P), scalar...
+  if (rank > 1) {
+    cout << "ranks greater than 1 not presently supported...\n";
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "ranks greater than 1 not presently supported...");
   }
+  
+//  Camellia::print("cellIDs",cellIDs);
+  
   values.initialize(0.0);
   for (int cellIndex = 0;cellIndex<numCells;cellIndex++){
     int cellID = cellIDs[cellIndex];
     for (int j = 0;j<numTestDofsForVarID;j++) {
+      int dofIndex = testOrderingPtr->getDofIndex(testID, j);
       for (int i = 0;i<numPoints;i++) {
-        int dofIndex = testOrderingPtr->getDofIndex(testID, j); // to index into total test dof vector	
         if (rank==0) {
           double basisValue = (*transformedBasisValues)(cellIndex,j,i);
           values(cellIndex,i) += basisValue*_rieszRepDofsGlobal[cellID](dofIndex);
         } else {
-          for (int r = 0;r<rank-1;r++) {
-            double basisValue = (*transformedBasisValues)(cellIndex,j,i,r);
-            values(cellIndex,i,r) += basisValue*_rieszRepDofsGlobal[cellID](dofIndex);
+          for (int d = 0; d<spaceDim; d++) {
+            double basisValue = (*transformedBasisValues)(cellIndex,j,i,d);
+            values(cellIndex,i,d) += basisValue*_rieszRepDofsGlobal[cellID](dofIndex);
           }
         }
       }
     }
   }
+//  TestSuite::serializeOutput("rep values", values);
 }
 
 map<GlobalIndexType,double> RieszRep::computeAlternativeNormSqOnCells(IPPtr ip, vector<GlobalIndexType> cellIDs){

@@ -653,6 +653,43 @@ VerticalLineSolutionValues computeVerticalLineSolutionValues(double xValue, Func
   return values;
 }
 
+void streamSolve(SolutionPtr streamSolution, VarPtr phi, FunctionPtr vorticity, bool useCondensedSolve, bool useMumps, bool reportStreamfunctionMax, string suffix) {
+  int rank = Teuchos::GlobalMPISession::getRank();
+  if (!useCondensedSolve){
+    streamSolution->solve(useMumps);
+  } else {
+    streamSolution->condensedSolve();
+  }
+  double energyErrorTotal = streamSolution->energyErrorTotal();
+  if (rank == 0) {
+    cout << "...stream solution solved.\n";
+    cout << "Stream mesh has energy error: " << energyErrorTotal << endl;
+  }
+  
+  if (reportStreamfunctionMax) {
+    reportStreamfunctionMaxValue(streamSolution,phi,vorticity,Re);
+  }
+  
+  if (rank==0){
+    FieldContainer<double> points = pointGrid(0, 1, 0, 1, 100);
+    FieldContainer<double> pointData = solutionData(points, streamSolution, phi);
+    ostringstream xyPointPath;
+    xyPointPath << "phi_patch_navierStokes_cavity"<< suffix << ".dat";
+    GnuPlotUtil::writeXYPoints(xyPointPath.str(), pointData);
+    set<double> patchContourLevels = diagonalContourLevels(pointData,1);
+    vector<string> patchDataPath;
+    ostringstream patchDataPathStringStream;
+    patchDataPathStringStream << "phi_patch_navierStokes_cavity" << suffix <<".dat";
+    patchDataPath.push_back(patchDataPathStringStream.str());
+    ostringstream contourPlotPath;
+    contourPlotPath << "lidCavityNavierStokes"<< suffix << ".p";
+    GnuPlotUtil::writeContourPlotScript(patchContourLevels, patchDataPath, contourPlotPath.str());
+    ostringstream meshPath;
+    meshPath << "nsCavityMesh" << suffix;
+    GnuPlotUtil::writeComputationalMeshSkeleton(meshPath.str(), streamSolution->mesh());
+  }
+}
+
 int main(int argc, char *argv[]) {
   int rank = 0;
   Teuchos::GlobalMPISession mpiSession(&argc, &argv,0);
@@ -1201,19 +1238,23 @@ int main(int argc, char *argv[]) {
             cout << "solving for approximate stream function...\n";
           }
           
-          if (!useCondensedSolve){
-            streamSolution->solve(useMumps);
-          } else {
-            streamSolution->condensedSolve();
-          }
+          ostringstream suffix;
+          suffix << "_ref" << refIndex;
+          streamSolve(streamSolution, phi, vorticity, useCondensedSolve, useMumps, reportStreamfunctionMax, suffix.str());
           
-          double energyErrorTotal = streamSolution->energyErrorTotal();
-          if (rank == 0) {
-            cout << "...solved.\n";
-            cout << "Stream mesh has energy error: " << energyErrorTotal << endl;
-          }
+//          if (!useCondensedSolve){
+//            streamSolution->solve(useMumps);
+//          } else {
+//            streamSolution->condensedSolve();
+//          }
           
-          reportStreamfunctionMaxValue(streamSolution,phi,vorticity,Re);
+//          double energyErrorTotal = streamSolution->energyErrorTotal();
+//          if (rank == 0) {
+//            cout << "...solved.\n";
+//            cout << "Stream mesh has energy error: " << energyErrorTotal << endl;
+//          }
+//          
+//          reportStreamfunctionMaxValue(streamSolution,phi,vorticity,Re);
         }
         
         double incrementalEnergyErrorTotal = solnIncrement->energyErrorTotal();

@@ -44,6 +44,9 @@ class GDAMinimumRule : public GlobalDofAssignment {
   FieldContainer<IndexType> _partitionDofCounts; // how many dofs belong to all MPI ranks.
   GlobalIndexType _globalDofCount;
   
+  set<IndexType> _partitionFluxIndexOffsets;
+  set<IndexType> _partitionTraceIndexOffsets; // field indices are the complement of the other two
+  
   map< GlobalIndexType, CellConstraints > _constraintsCache;
   
   map< GlobalIndexType, LocalDofMapperPtr > _dofMapperCache;
@@ -76,7 +79,7 @@ class GDAMinimumRule : public GlobalDofAssignment {
   
   RefinementBranch volumeRefinementsForSideEntity(IndexType sideEntityIndex);
 public:
-  GDAMinimumRule(MeshTopologyPtr meshTopology, VarFactory varFactory, DofOrderingFactoryPtr dofOrderingFactory, MeshPartitionPolicyPtr partitionPolicy,
+  GDAMinimumRule(MeshPtr mesh, VarFactory varFactory, DofOrderingFactoryPtr dofOrderingFactory, MeshPartitionPolicyPtr partitionPolicy,
                  unsigned initialH1OrderTrial, unsigned testOrderEnhancement);
   
   void didHRefine(const set<GlobalIndexType> &parentCellIDs);
@@ -89,7 +92,13 @@ public:
   
   int getH1Order(GlobalIndexType cellID);
   GlobalIndexType globalDofCount();
+  set<GlobalIndexType> globalDofIndicesForCell(GlobalIndexType cellID);
   set<GlobalIndexType> globalDofIndicesForPartition(PartitionIndexType partitionNumber);
+  
+  set<GlobalIndexType> partitionOwnedGlobalFieldIndices();
+  set<GlobalIndexType> partitionOwnedGlobalFluxIndices();
+  set<GlobalIndexType> partitionOwnedGlobalTraceIndices();
+  
   void interpretLocalData(GlobalIndexType cellID, const FieldContainer<double> &localData, FieldContainer<double> &globalData,
                           FieldContainer<GlobalIndexType> &globalDofIndices);
   void interpretLocalBasisCoefficients(GlobalIndexType cellID, int varID, int sideOrdinal, const FieldContainer<double> &basisCoefficients,

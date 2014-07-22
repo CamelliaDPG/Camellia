@@ -15,14 +15,12 @@
 
 #include <Teuchos_GlobalMPISession.hpp>
 
-GDAMaximumRule2D::GDAMaximumRule2D(MeshTopologyPtr meshTopology, VarFactory varFactory, DofOrderingFactoryPtr dofOrderingFactory,
+GDAMaximumRule2D::GDAMaximumRule2D(MeshPtr mesh, VarFactory varFactory, DofOrderingFactoryPtr dofOrderingFactory,
                                    MeshPartitionPolicyPtr partitionPolicy, unsigned initialH1OrderTrial, unsigned testOrderEnhancement, bool enforceMBFluxContinuity)
-: GlobalDofAssignment(meshTopology,varFactory,dofOrderingFactory,partitionPolicy, initialH1OrderTrial, testOrderEnhancement, true)
+: GlobalDofAssignment(mesh,varFactory,dofOrderingFactory,partitionPolicy, initialH1OrderTrial, testOrderEnhancement, true)
 {
 //  cout << "Entered constructor of GDAMaximumRule2D.\n";
   _enforceMBFluxContinuity = enforceMBFluxContinuity;
-  
-  rebuildLookups();
 }
 
 void GDAMaximumRule2D::addDofPairing(GlobalIndexType cellID1, IndexType dofIndex1, GlobalIndexType cellID2, IndexType dofIndex2) {
@@ -193,7 +191,7 @@ void GDAMaximumRule2D::buildTypeLookups() {
     _elementTypesForPartition.push_back( vector< ElementTypePtr >() );
     _partitionedPhysicalCellNodesForElementType.push_back( map< ElementType*, FieldContainer<double> >() );
     _partitionedCellSideParitiesForElementType.push_back( map< ElementType*, FieldContainer<double> >() );
-    vector< GlobalIndexType >::iterator elemIterator;
+    set< GlobalIndexType >::const_iterator elemIterator;
     
 //    cout << "_partitions[" << partitionNumber << "] has " << _partitions[partitionNumber].size() << " cells.\n";
     
@@ -462,7 +460,7 @@ void GDAMaximumRule2D::determinePartitionDofIndices() {
   set<GlobalIndexType> previouslyClaimedDofIndices;
   for (int i=0; i<_numPartitions; i++) {
     dofIndices.clear();
-    vector< GlobalIndexType >::iterator cellIDIt;
+    set< GlobalIndexType >::const_iterator cellIDIt;
     for (cellIDIt =  _partitions[i].begin(); cellIDIt != _partitions[i].end(); cellIDIt++) {
       GlobalIndexType cellID = *cellIDIt;
       ElementTypePtr elemTypePtr = _elementTypeForCell[cellID];
@@ -496,7 +494,6 @@ void GDAMaximumRule2D::didChangePartitionPolicy() {
 }
 
 void GDAMaximumRule2D::didHRefine(const set<GlobalIndexType> &parentCellIDs) {
-  this->GlobalDofAssignment::didHRefine(parentCellIDs);
   for (set<GlobalIndexType>::iterator parentCellIt = parentCellIDs.begin(); parentCellIt != parentCellIDs.end(); parentCellIt++) {
     GlobalIndexType parentCellID = *parentCellIt;
     CellPtr parent = _meshTopology->getCell(parentCellID);
@@ -541,9 +538,8 @@ void GDAMaximumRule2D::didHRefine(const set<GlobalIndexType> &parentCellIDs) {
       }
     }
     _cellSideUpgrades = remainingCellSideUpgrades;
-  }
-  
-//  rebuildLookups();
+  }  
+  this->GlobalDofAssignment::didHRefine(parentCellIDs);
 }
 
 void GDAMaximumRule2D::didPRefine(const set<GlobalIndexType> &cellIDs, int deltaP) {
@@ -673,16 +669,110 @@ GlobalIndexType GDAMaximumRule2D::globalDofCount() {
   return _numGlobalDofs;
 }
 
+set<GlobalIndexType> GDAMaximumRule2D::globalDofIndicesForCell(GlobalIndexType cellID) {
+  set<GlobalIndexType> dofIndices;
+  int localDofCount = elementType(cellID)->trialOrderPtr->totalDofs();
+  for (int localDofOrdinal=0; localDofOrdinal<localDofCount; localDofOrdinal++) {
+    dofIndices.insert(globalDofIndex(cellID, localDofOrdinal));
+  }
+  return dofIndices;
+}
+
 set<GlobalIndexType> GDAMaximumRule2D::globalDofIndicesForPartition(PartitionIndexType partitionNumber) {
   return _partitionedGlobalDofIndices[partitionNumber];
+}
+
+set<GlobalIndexType> GDAMaximumRule2D::partitionOwnedGlobalFieldIndices() {
+  int rank = Teuchos::GlobalMPISession::getRank();
+  
+  set<GlobalIndexType> fieldIndices;
+  set<GlobalIndexType> cellIDs = cellsInPartition(-1);
+  vector< VarPtr > fieldVars = _varFactory.fieldVars();
+  for (set<GlobalIndexType>::iterator cellIt = cellIDs.begin(); cellIt != cellIDs.end(); cellIt++) {
+    GlobalIndexType cellID = *cellIt;
+    ElementTypePtr elemTypePtr = elementType(cellID);
+    vector< VarPtr >::iterator fieldIt;
+    for (fieldIt = fieldVars.begin(); fieldIt != fieldVars.end() ; fieldIt++){
+      int fieldID = (*fieldIt)->ID();
+      int sideOrdinal = 0;
+      int basisCardinality = elemTypePtr->trialOrderPtr->getBasisCardinality(fieldID,sideOrdinal);
+      for (int basisOrdinal = 0; basisOrdinal<basisCardinality; basisOrdinal++) {
+        int localDofIndex = elemTypePtr->trialOrderPtr->getDofIndex(fieldID, basisOrdinal, sideOrdinal);
+        GlobalIndexType globalIndex = globalDofIndex(cellID, localDofIndex);
+        
+        if (partitionForGlobalDofIndex(globalIndex) == rank)
+          fieldIndices.insert(globalIndex);
+      }
+    }
+  }
+  return fieldIndices;
+}
+
+set<GlobalIndexType> GDAMaximumRule2D::partitionOwnedGlobalFluxIndices() {
+  int rank = Teuchos::GlobalMPISession::getRank();
+
+  set<GlobalIndexType> fluxIndices;
+  vector< VarPtr > fluxVars = _varFactory.fluxVars();
+  set<GlobalIndexType> cellIDs = cellsInPartition(-1);
+  for (set<GlobalIndexType>::iterator cellIt = cellIDs.begin(); cellIt != cellIDs.end(); cellIt++) {
+    GlobalIndexType cellID = *cellIt;
+    ElementTypePtr elemTypePtr = elementType(cellID);
+    int sideCount = elemTypePtr->cellTopoPtr->getSideCount();
+    vector< VarPtr >::iterator fluxIt;
+    for (fluxIt = fluxVars.begin(); fluxIt != fluxVars.end(); fluxIt++){
+      int fluxID = (*fluxIt)->ID();
+      for (int sideOrdinal = 0; sideOrdinal < sideCount; sideOrdinal++) {
+        int basisCardinality = elemTypePtr->trialOrderPtr->getBasisCardinality(fluxID,sideOrdinal);
+        for (int basisOrdinal = 0; basisOrdinal<basisCardinality; basisOrdinal++) {
+          int localDofIndex = elemTypePtr->trialOrderPtr->getDofIndex(fluxID, basisOrdinal, sideOrdinal);
+          GlobalIndexType globalIndex = globalDofIndex(cellID, localDofIndex);
+          
+          if (partitionForGlobalDofIndex(globalIndex) == rank)
+            fluxIndices.insert(globalIndex);
+
+        }
+      }
+    }
+  }
+  return fluxIndices;
+}
+
+set<GlobalIndexType> GDAMaximumRule2D::partitionOwnedGlobalTraceIndices() {
+  int rank = Teuchos::GlobalMPISession::getRank();
+  
+  set<GlobalIndexType> traceIndices;
+  vector< VarPtr > traceVars = _varFactory.traceVars();
+  set<GlobalIndexType> cellIDs = cellsInPartition(-1);
+  for (set<GlobalIndexType>::iterator cellIt = cellIDs.begin(); cellIt != cellIDs.end(); cellIt++) {
+    GlobalIndexType cellID = *cellIt;
+    ElementTypePtr elemTypePtr = elementType(cellID);
+    int sideCount = elemTypePtr->cellTopoPtr->getSideCount();
+    vector< VarPtr >::iterator traceIt;
+    for (traceIt = traceVars.begin(); traceIt != traceVars.end(); traceIt++){
+      int traceID = (*traceIt)->ID();
+      for (int sideOrdinal = 0; sideOrdinal < sideCount; sideOrdinal++) {
+        int basisCardinality = elemTypePtr->trialOrderPtr->getBasisCardinality(traceID,sideOrdinal);
+        for (int basisOrdinal = 0; basisOrdinal<basisCardinality; basisOrdinal++) {
+          int localDofIndex = elemTypePtr->trialOrderPtr->getDofIndex(traceID, basisOrdinal, sideOrdinal);
+          GlobalIndexType globalIndex = globalDofIndex(cellID, localDofIndex);
+          
+          if (partitionForGlobalDofIndex(globalIndex) == rank)
+            traceIndices.insert(globalIndex);
+          
+        }
+      }
+    }
+  }
+  return traceIndices;
 }
 
 void GDAMaximumRule2D::interpretGlobalCoefficients(GlobalIndexType cellID, FieldContainer<double> &localCoefficients,
                                                    const Epetra_MultiVector &globalCoefficients) {
   int numDofs = elementType(cellID)->trialOrderPtr->totalDofs();
   for (int dofIndex=0; dofIndex<numDofs; dofIndex++) {
-    GlobalIndexType globalIndex = globalDofIndex(cellID, dofIndex);
-    localCoefficients(dofIndex) = globalCoefficients[0][globalIndex];
+    GlobalIndexTypeToCast globalIndex = globalDofIndex(cellID, dofIndex);
+    int localIndex = globalCoefficients.Map().LID(globalIndex);
+    localCoefficients(dofIndex) = globalCoefficients[0][localIndex];
   }
 }
 
@@ -701,6 +791,10 @@ void GDAMaximumRule2D::interpretLocalData(GlobalIndexType cellID, const FieldCon
 void GDAMaximumRule2D::interpretLocalBasisCoefficients(GlobalIndexType cellID, int varID, int sideOrdinal, const FieldContainer<double> &basisCoefficients,
                                                        FieldContainer<double> &globalCoefficients, FieldContainer<GlobalIndexType> &globalDofIndices) {
   globalCoefficients = basisCoefficients; // copy
+  if (basisCoefficients.rank() != 1) {
+    cout << "basisCoefficients must be a rank 1 container.\n";
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "basisCoefficients must be a rank 1 container.");
+  }
   int numDofs = basisCoefficients.dimension(0);
   globalDofIndices.resize(numDofs);
   DofOrderingPtr trialOrdering = _elementTypeForCell[cellID]->trialOrderPtr;
@@ -992,7 +1086,6 @@ FieldContainer<double> & GDAMaximumRule2D::physicalCellNodesGlobal( ElementTypeP
 void GDAMaximumRule2D::rebuildLookups() {
 //  cout << "GDAMaximumRule2D::rebuildLookups().\n";
   _cellSideUpgrades.clear();
-  determineActiveElements();
   buildTypeLookups(); // build data structures for efficient lookup by element type
   buildLocalToGlobalMap();
   determinePartitionDofIndices();

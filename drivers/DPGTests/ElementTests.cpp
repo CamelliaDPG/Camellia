@@ -99,7 +99,7 @@ void ElementTests::setup() {
   points(2,0) = 0.25; points(2,1) = 0.75;
   // northeast center:
   points(3,0) = 0.75; points(3,1) = 0.75;
-  vector<ElementPtr> elements = _mesh->elementsForPoints(points);
+  vector<ElementPtr> elements = _mesh->elementsForPoints(points, false);
   
   _sw = elements[0]; // as presently implemented, cellID = 0
   _se = elements[1]; // as presently implemented, cellID = 2
@@ -121,7 +121,7 @@ void ElementTests::setup() {
   // northeast center:
   points(3,0) = 0.375; points(3,1) = 0.375;
   
-  elements = _mesh->elementsForPoints(points);
+  elements = _mesh->elementsForPoints(points, false);
   _sw_se = elements[1]; // as presently implemented, cellID = 5
   _sw_ne = elements[3]; // as presently implemented, cellID = 6
   
@@ -140,7 +140,7 @@ void ElementTests::setup() {
   // northeast center:
   points(3,0) = 0.4375; points(3,1) = 0.4375;  
   
-  elements = _mesh->elementsForPoints(points);
+  elements = _mesh->elementsForPoints(points, false);
   _sw_se_se = elements[1]; // as presently implemented, cellID =  9
   _sw_se_ne = elements[3]; // as presently implemented, cellID = 10
   

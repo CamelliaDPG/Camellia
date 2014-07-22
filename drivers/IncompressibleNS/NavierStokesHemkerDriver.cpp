@@ -1275,9 +1275,17 @@ int main(int argc, char *argv[]) {
         ostringstream dir_name;
         dir_name << "cylinder_flow_k_" << polyOrder << "_ref_" << refIndex;
         HDF5Exporter exporter(solution->mesh(),dir_name.str());
-        exporter.exportSolution(solution, varFactory);
+        exporter.exportSolution(solution, varFactory, 0, 4, cellIDToSubdivision(mesh, 4));
+//        exporter.exportSolution(solution, varFactory);
 #endif
         
+#ifdef USE_VTK
+        ostringstream vtk_name;
+        vtk_name << "cylinder_flow_k_" << polyOrder << "_ref_" << refIndex;
+
+        VTKExporter vtkExporter(solution, mesh, varFactory);
+        vtkExporter.exportSolution(vtk_name.str(), H1Order*2);
+#endif
         refinementStrategy->refine(false); // don't print to console // (rank==0); // print to console on rank 0
         if (rank==0) {
           cout << "After refinement, mesh has " << mesh->numActiveElements() << " elements and " << mesh->numGlobalDofs() << " global dofs" << endl;
@@ -1336,6 +1344,14 @@ int main(int argc, char *argv[]) {
       }
     }
 
+#ifdef HAVE_EPETRAEXT_HDF5
+    ostringstream dir_name;
+    dir_name << "cylinder_flow_k_" << polyOrder << "_ref_" << numRefs;
+    HDF5Exporter exporter(solution->mesh(),dir_name.str());
+    exporter.exportSolution(solution, varFactory, 0, 4, cellIDToSubdivision(mesh, 4));
+    //        exporter.exportSolution(solution, varFactory);
+#endif
+    
     if (rank==0) {
       if (solnSaveFile.length() > 0) {
         solution->writeToFile(solnSaveFile);

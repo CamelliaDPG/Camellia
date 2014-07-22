@@ -18,6 +18,8 @@
 
 class CamelliaCellTools {
 public:
+  static CellTopoPtr cellTopoForKey(unsigned key);
+  
   static int getSideCount(const shards::CellTopology &cellTopo); // unlike shards itself, defines vertices as sides for Line topo
   
   static void refCellNodesForTopology(FieldContainer<double> &cellNodes, const shards::CellTopology &cellTopo, unsigned permutation = 0); // 0 permutation is the identity

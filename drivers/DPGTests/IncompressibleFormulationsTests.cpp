@@ -8,6 +8,8 @@
 #include "SolutionExporter.h"
 #include "MeshFactory.h"
 
+#include "GlobalDofAssignment.h"
+
 #include "CamelliaCellTools.h"
 
 IncompressibleFormulationsTests::IncompressibleFormulationsTests(bool thorough) {
@@ -178,11 +180,20 @@ void IncompressibleFormulationsTests::runTests(int &numTestsRun, int &numTestsPa
   }
   
   setup();
+  if (testVGPNavierStokesFormulationConsistency()) {
+    numTestsPassed++;
+  }
+  numTestsRun++;
+  teardown();
+  
+  setup();
   if ( testVGPNavierStokesLocalConservation() ) {
     numTestsPassed++;
   }
   numTestsRun++;
   teardown();
+
+  cout << "testVGPNavierStokesLocalConservation completed\n";
   
   setup();
   if (testVGPNavierStokesFormulationCorrectness()) {
@@ -201,13 +212,6 @@ void IncompressibleFormulationsTests::runTests(int &numTestsRun, int &numTestsPa
   teardown();
   
   cout << "testVGPStokesFormulationGraphNorm completed\n";
-  
-  setup();
-  if (testVGPNavierStokesFormulationConsistency()) {
-    numTestsPassed++;
-  }
-  numTestsRun++;
-  teardown();
   
   setup();
   if (testVGPNavierStokesFormulationKovasnayConvergence()) {
@@ -263,25 +267,18 @@ bool IncompressibleFormulationsTests::functionsAgree(FunctionPtr f1, FunctionPtr
     return false;
   }
 
-  // TODO: rewrite this to compute in distributed fashion
-  vector< ElementTypePtr > elementTypes = mesh->elementTypes();
+  set<GlobalIndexType> cellIDs = mesh->globalDofAssignment()->cellsInPartition(-1);
   
-  for (vector< ElementTypePtr >::iterator typeIt = elementTypes.begin(); typeIt != elementTypes.end(); typeIt++) {
-    ElementTypePtr elemType = *typeIt;
-    BasisCachePtr basisCache = Teuchos::rcp( new BasisCache( elemType, mesh, false) ); // all elements of same type
-    vector< ElementPtr > cells = mesh->elementsOfTypeGlobal(elemType); // TODO: replace with local variant
+  for (set<GlobalIndexType>::iterator cellIDIt = cellIDs.begin(); cellIDIt != cellIDs.end(); cellIDIt++) {
+    GlobalIndexType cellID = *cellIDIt;
+    BasisCachePtr basisCache = BasisCache::basisCacheForCell(mesh, cellID);
     
-    int numCells = cells.size();
-    vector<GlobalIndexType> cellIDs;
-    for (int cellIndex = 0; cellIndex < numCells; cellIndex++) {
-      cellIDs.push_back( cells[cellIndex]->cellID() );
-    }
-    // TODO: replace with non-global variant...
-    basisCache->setPhysicalCellNodes(mesh->physicalCellNodesGlobal(elemType), cellIDs, boundaryValueOnly);
-    
+    int numCells = 1;
+    vector<GlobalIndexType> cellIDs(1,cellID);
+
     int numSides = 1; // interior only
     if (f1->boundaryValueOnly()) {
-      numSides = CamelliaCellTools::getSideCount(*elemType->cellTopoPtr);
+      numSides = mesh->getTopology()->getCell(cellID)->topology()->getSideCount();
     }
     for (int sideIndex = 0; sideIndex<numSides; sideIndex++) {
       BasisCachePtr basisCacheForTest;
@@ -318,7 +315,7 @@ bool IncompressibleFormulationsTests::functionsAgree(FunctionPtr f1, FunctionPtr
       }
     }
   }
-  return functionsAgree;
+  return TestSuite::allSuccess(functionsAgree);
 }
 
 // tests norm of the difference
@@ -832,7 +829,6 @@ bool IncompressibleFormulationsTests::testVGPNavierStokesFormulationConsistency(
             SolutionPtr solnIncrement = problem.solutionIncrement();
             SolutionPtr backgroundFlow = problem.backgroundFlow();
             
-            // solve once:
             Teuchos::RCP<ExactSolution> exactSolution = problem.exactSolution();
             MeshPtr mesh = problem.mesh();
             
@@ -870,12 +866,15 @@ bool IncompressibleFormulationsTests::testVGPNavierStokesFormulationConsistency(
             
             FunctionPtr l2_incr = u1_incr * u1_incr + u2_incr * u2_incr + p_incr * p_incr;
             
+            double l2_incr_norm;
             do {
               problem.iterate(useLineSearch,useCondensedSolve);
               if ( rieszRep.get() ) {
                 rieszRep->computeRieszRep();
               }
-            }  while ( (sqrt(l2_incr->integrate(mesh)) > tol) && (problem.iterationCount() < maxIters) );
+              l2_incr_norm = sqrt(l2_incr->integrate(mesh));
+//              cout << "l2_incr_norm: " << l2_incr_norm << endl;
+            }  while ( (l2_incr_norm > tol) && (problem.iterationCount() < maxIters) );
             if (printToConsole) {
               string withHessian = useHessian ? "using hessian term" : "without hessian term";
               cout << "with Re = " << 1.0 / mu << " and " << withHessian;
@@ -1062,8 +1061,11 @@ bool IncompressibleFormulationsTests::testVGPNavierStokesFormulationCorrectness(
       Teuchos::RCP<RieszRep> rieszRepRHS = Teuchos::rcp( new RieszRep(mesh, problem.bf()->graphNorm(), rhsLT));
       rieszRepRHS->computeRieszRep();
       if (rieszRepRHS->getNorm() < tol) {
+        cout << "norm of RHS with zero background flow: " << rieszRepRHS->getNorm() << endl;
         cout << "norm of RHS with zero background flow should not be zero! " << rieszRepRHS->getNorm() << endl;
         success = false;
+      } else {
+//        cout << "norm of RHS with zero background flow: " << rieszRepRHS->getNorm() << endl;
       }
       
       Teuchos::RCP<RieszRep> rieszRepRHS_naiveNorm = Teuchos::rcp( new RieszRep(mesh, problem.bf()->naiveNorm(), rhsLT) );

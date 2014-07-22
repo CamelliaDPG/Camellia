@@ -93,6 +93,12 @@
 
 //#include <fenv.h>
 
+#ifdef HAVE_MPI
+#include "Epetra_MpiComm.h"
+#else
+#include "Epetra_SerialComm.h"
+#endif
+
 #ifdef ENABLE_INTEL_FLOATING_POINT_EXCEPTIONS
 #include <xmmintrin.h>
 #endif
@@ -167,7 +173,16 @@ void DPGTests::runTests() {
   
   int rank = Teuchos::GlobalMPISession::getRank();
   
-  Teuchos::TestForException_setEnableStacktrace(false); // hoping this will speed things up in debug mode...
+#ifdef HAVE_MPI
+  Epetra_MpiComm Comm(MPI_COMM_WORLD);
+  //cout << "rank: " << rank << " of " << numProcs << endl;
+#else
+  Epetra_SerialComm Comm;
+#endif
+  
+  Comm.Barrier(); // set breakpoint here to allow debugger attachment to other MPI processes than the one you automatically attached to.
+  
+  Teuchos::TestForException_setEnableStacktrace(true);
   
 //  fexcept_t flag;
 //  fegetexceptflag(&flag, FE_INVALID | FE_DIVBYZERO);
@@ -187,45 +202,18 @@ void DPGTests::runTests() {
   // setup our TestSuite tests:
   vector< Teuchos::RCP< TestSuite > > testSuites;
   
-  testSuites.push_back( Teuchos::rcp( new GDAMinimumRuleTests ) );
-  
-  testSuites.push_back( Teuchos::rcp( new MeshRefinementTests ) ); // skips two PatchBasis tests
-  
-  testSuites.push_back( Teuchos::rcp( new CurvilinearMeshTests) );
-  
-  testSuites.push_back( Teuchos::rcp( new MeshTestSuite ) );
-  
-  testSuites.push_back( Teuchos::rcp( new SolutionTests ) );
-  
-  testSuites.push_back( Teuchos::rcp( new MultiBasisTests ) );
-
-  testSuites.push_back( Teuchos::rcp( new BasisReconciliationTests ) );
-  
-  testSuites.push_back( Teuchos::rcp( new MeshTopologyTests ) );
+  testSuites.push_back( Teuchos::rcp( new LinearTermTests ) );
   
   testSuites.push_back( Teuchos::rcp( new ScratchPadTests ) );
   
   testSuites.push_back( Teuchos::rcp( new ElementTests ) );
   
-  testSuites.push_back( Teuchos::rcp( new MPIWrapperTests) );
-  testSuites.push_back( Teuchos::rcp( new ParametricCurveTests) );
-  testSuites.push_back( Teuchos::rcp( new RHSTests ) );
-  testSuites.push_back( Teuchos::rcp( new SerialDenseMatrixUtilityTests) );
-  testSuites.push_back( Teuchos::rcp( new VectorizedBasisTestSuite ) );
+  testSuites.push_back( Teuchos::rcp( new MultiBasisTests ) );
   
-  testSuites.push_back( Teuchos::rcp( new LinearTermTests ) );
-  
-  testSuites.push_back( Teuchos::rcp( new BasisCacheTests ) );
   testSuites.push_back( Teuchos::rcp( new FunctionTests ) );
-
-  testSuites.push_back( Teuchos::rcp( new HConvergenceStudyTests ) );
   
-  testSuites.push_back( Teuchos::rcp( new LobattoBasisTests ) );
+  testSuites.push_back( Teuchos::rcp( new MeshTestSuite ) );
   
-  
-  //  testSuites.push_back( Teuchos::rcp( new IncompressibleFormulationsTests(true) ) ); // true: turn "thorough" on
-  //  testSuites.push_back( Teuchos::rcp( new PatchBasisTests ) ); // skip until we have a proper GDAMinimumRule constructed
-
   if (skipSlowTests) {
     if (rank==0) {
       cout << "skipping slow tests (IncompressibleFormulationsTests).\n";
@@ -233,6 +221,34 @@ void DPGTests::runTests() {
   } else {
     testSuites.push_back( Teuchos::rcp( new IncompressibleFormulationsTests(false) ) ); // false: turn "thorough" off
   }
+  
+  testSuites.push_back( Teuchos::rcp( new GDAMinimumRuleTests ) );
+  
+  testSuites.push_back( Teuchos::rcp( new MeshRefinementTests ) ); // skips two PatchBasis tests
+  
+  testSuites.push_back( Teuchos::rcp( new CurvilinearMeshTests) );  
+  
+  testSuites.push_back( Teuchos::rcp( new SerialDenseMatrixUtilityTests) );
+
+  testSuites.push_back( Teuchos::rcp( new BasisReconciliationTests ) );
+  
+  testSuites.push_back( Teuchos::rcp( new MeshTopologyTests ) );
+  
+  testSuites.push_back( Teuchos::rcp( new MPIWrapperTests) );
+  testSuites.push_back( Teuchos::rcp( new ParametricCurveTests) );
+  testSuites.push_back( Teuchos::rcp( new RHSTests ) );
+  testSuites.push_back( Teuchos::rcp( new VectorizedBasisTestSuite ) );
+  
+  testSuites.push_back( Teuchos::rcp( new BasisCacheTests ) );
+
+  testSuites.push_back( Teuchos::rcp( new HConvergenceStudyTests ) );
+  
+  testSuites.push_back( Teuchos::rcp( new LobattoBasisTests ) );
+  
+  testSuites.push_back( Teuchos::rcp( new SolutionTests ) );
+  
+  //  testSuites.push_back( Teuchos::rcp( new IncompressibleFormulationsTests(true) ) ); // true: turn "thorough" on
+  //  testSuites.push_back( Teuchos::rcp( new PatchBasisTests ) ); // skip until we have a proper GDAMinimumRule constructed
   
   int numTestSuites = testSuites.size();
   for (int testSuiteIndex = 0; testSuiteIndex < numTestSuites; testSuiteIndex++) {

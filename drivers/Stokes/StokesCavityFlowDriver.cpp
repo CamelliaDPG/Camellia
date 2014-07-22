@@ -229,6 +229,80 @@ bool canReadFile(string fileName) {
   return canRead;
 }
 
+void streamSolve(MeshPtr streamMesh, VarPtr q_s, VarPtr v_s, VarPtr phi, VarPtr phi_hat, FunctionPtr vorticity,
+                 Teuchos::RCP<Solver> solver, bool useCondensedSolve, string refSuffix) {
+  int rank = Teuchos::GlobalMPISession::getRank();
+  
+  ///////// SET UP & SOLVE STREAM SOLUTION /////////
+  //  FunctionPtr vorticity = Teuchos::rcp( new PreviousSolutionFunction(solution,sigma12 - sigma21) );
+  RHSPtr streamRHS = RHS::rhs();
+  streamRHS->addTerm(vorticity * q_s);
+  ((PreviousSolutionFunction*) vorticity.get())->setOverrideMeshCheck(true);
+  
+  BCPtr streamBC = BC::bc();
+  FunctionPtr zero = Teuchos::rcp( new ConstantScalarFunction(0) );
+  //  streamBC->addDirichlet(psin_hat, entireBoundary, u0_cross_n);
+  streamBC->addDirichlet(phi_hat, SpatialFilter::allSpace(), zero);
+  //  streamBC->addZeroMeanConstraint(phi);
+  
+  IPPtr streamIP = Teuchos::rcp( new IP );
+  streamIP->addTerm(q_s);
+  streamIP->addTerm(q_s->grad());
+  streamIP->addTerm(v_s);
+  streamIP->addTerm(v_s->div());
+  SolutionPtr streamSolution = Teuchos::rcp( new Solution( streamMesh, streamBC, streamRHS, streamIP ) );
+  
+  //  mesh->unregisterObserver(streamMesh);
+  //  streamMesh->registerObserver(mesh);
+  //  RefinementStrategy streamRefinementStrategy( streamSolution, energyThreshold );
+  //  for (int refIndex=0; refIndex < 3; refIndex++) {
+  //    streamSolution->solve(solver);
+  //    streamRefinementStrategy.refine(rank==0);
+  //  }
+  
+  if (useCondensedSolve) {
+    streamSolution->condensedSolve(solver);
+  } else {
+    streamSolution->solve(solver);
+  }
+  double energyErrorTotal = streamSolution->energyErrorTotal();
+  if (rank == 0) {
+    cout << "...solved.\n";
+    cout << "Stream mesh has energy error: " << energyErrorTotal << endl;
+  }
+  
+  if (rank==0){
+    //    writePatchValues(0, 1, 0, 1, streamSolution, phi, "phi_patch.m");
+    //    writePatchValues(0, .1, 0, .1, streamSolution, phi, "phi_patch_detail.m");
+    //    writePatchValues(0, .01, 0, .01, streamSolution, phi, "phi_patch_minute_detail.m");
+    //    writePatchValues(0, .001, 0, .001, streamSolution, phi, "phi_patch_minute_minute_detail.m");
+    
+    map<double,string> scaleToName;
+    scaleToName[1]   = "cavityPatch";
+    scaleToName[0.1] = "cavityPatchEddy1";
+    scaleToName[0.006] = "cavityPatchEddy2";
+    scaleToName[0.0004] = "cavityPatchEddy3";
+    scaleToName[0.00004] = "cavityPatchEddy4";
+    
+    for (map<double,string>::iterator entryIt=scaleToName.begin(); entryIt != scaleToName.end(); entryIt++) {
+      double scale = entryIt->first;
+      string name = entryIt->second;
+      ostringstream fileNameStream;
+      fileNameStream << name << refSuffix << ".dat";
+      FieldContainer<double> patchPoints = pointGrid(0, scale, 0, scale, 100);
+      FieldContainer<double> patchPointData = solutionData(patchPoints, streamSolution, phi);
+      GnuPlotUtil::writeXYPoints(fileNameStream.str(), patchPointData);
+      ostringstream scriptNameStream;
+      scriptNameStream << name << ".p";
+      set<double> contourLevels = diagonalContourLevels(patchPointData,4);
+      vector<string> dataPaths;
+      dataPaths.push_back(fileNameStream.str());
+      GnuPlotUtil::writeContourPlotScript(contourLevels, dataPaths, scriptNameStream.str());
+    }
+    GnuPlotUtil::writeComputationalMeshSkeleton("cavityMesh", streamMesh);
+  }
+}
+
 int main(int argc, char *argv[]) {
   Teuchos::GlobalMPISession mpiSession(&argc, &argv);
   int rank = Teuchos::GlobalMPISession::getRank();
@@ -243,7 +317,7 @@ int main(int argc, char *argv[]) {
   bool enforceLocalConservation = false;
   bool enforceOneIrregularity = true;
   bool reportPerCellErrors  = true;
-  bool useMumps = false;
+  bool useMumps = true;
   bool useCG = false;
   bool useML = false;
   bool compareWithOverkillMesh = false;
@@ -444,19 +518,19 @@ int main(int argc, char *argv[]) {
     streamMesh = MeshFactory::buildQuadMesh(quadPoints, horizontalCells, verticalCells,
                                      streamBF, H1Order, H1Order+pToAddForStreamFunction, useTriangles);
   } else {
-    FieldContainer<double> A(2), B(2), C(2), D(2), E(2), F(2), G(2), H(2);
+    vector<double> A(2), B(2), C(2), D(2), E(2), F(2), G(2), H(2);
     // top (left to right):
-    A(0) = 0.0;            A(1) = 1.0;
-    B(0) = 1.0 / 64.0;     B(1) = 1.0;
-    C(0) = 1.0 - 1 / 64.0; C(1) = 1.0;
-    D(0) = 1.0;            D(1) = 1.0;
+    A[0] = 0.0;            A[1] = 1.0;
+    B[0] = 1.0 / 64.0;     B[1] = 1.0;
+    C[0] = 1.0 - 1 / 64.0; C[1] = 1.0;
+    D[0] = 1.0;            D[1] = 1.0;
     // bottom (right to left):
-    E(0) = 1.0;            E(1) = 0.0;
-    F(0) = 1.0 - 1/64.0;   F(1) = 0.0;
-    G(0) = 1.0 / 64.0;     G(1) = 0.0;
-    H(0) = 0;              H(1) = 0.0;
+    E[0] = 1.0;            E[1] = 0.0;
+    F[0] = 1.0 - 1/64.0;   F[1] = 0.0;
+    G[0] = 1.0 / 64.0;     G[1] = 0.0;
+    H[0] = 0;              H[1] = 0.0;
     
-    vector<FieldContainer<double> > vertices;
+    vector<vector<double> > vertices;
     vertices.push_back(A); int A_index = 0;
     vertices.push_back(B); int B_index = 1;
     vertices.push_back(C); int C_index = 2;
@@ -466,8 +540,8 @@ int main(int argc, char *argv[]) {
     vertices.push_back(G); int G_index = 6;
     vertices.push_back(H); int H_index = 7;
     
-    vector< vector<int> > elementVertices;
-    vector<int> el1, el2, el3, el4, el5;
+    vector< vector<IndexType> > elementVertices;
+    vector<IndexType> el1, el2, el3, el4, el5;
     // must go counterclockwise:
     el1.push_back(A_index); el1.push_back(H_index); el1.push_back(G_index); el1.push_back(B_index);
     el2.push_back(B_index); el2.push_back(G_index); el2.push_back(F_index); el2.push_back(C_index);
@@ -832,6 +906,7 @@ int main(int argc, char *argv[]) {
         qoiSolution->solve(solver);
       }
     }
+    streamSolve(streamMesh, q_s, v_s, phi, phi_hat, vorticity, solver, useCondensedSolve, "_ref0");
   } else {
     cout << "WARNING: cgSolver unset.\n";
   }
@@ -963,7 +1038,7 @@ int main(int argc, char *argv[]) {
     if (induceCornerRefinements) {
       // induce refinements in bottom corners:
       vector< Teuchos::RCP<Element> > corners = mesh->elementsForPoints(bottomCornerPoints);
-      vector<int> cornerIDs;
+      vector<GlobalIndexType> cornerIDs;
       cornerIDs.push_back(corners[0]->cellID());
       cornerIDs.push_back(corners[1]->cellID());
       mesh->hRefine(cornerIDs, RefinementPattern::regularRefinementPatternQuad());
@@ -984,6 +1059,9 @@ int main(int argc, char *argv[]) {
     } else {
       cout << "WARNING: cgSolver unset.\n";
     }
+    ostringstream refSuffix;
+    refSuffix << "_ref" << refIndex;
+    streamSolve(streamMesh, q_s, v_s, phi, phi_hat, vorticity, solver, useCondensedSolve, refSuffix.str());
     
     if (useDivergenceFreeVelocity) {
       FunctionPtr u1_prev = Teuchos::rcp( new PreviousSolutionFunction(solution,u->x()) );
@@ -1061,6 +1139,8 @@ int main(int argc, char *argv[]) {
     cout << "Final energy error: " << energyErrorTotal << endl;
 //    cout << "Max Gram matrix condition number: " << maxConditionNumber << endl;
   }
+  
+  streamSolve(streamMesh, q_s, v_s, phi, phi_hat, vorticity, solver, useCondensedSolve, "");
   
   FunctionPtr u_prev, u_div;
   if (useDivergenceFreeVelocity) {
@@ -1158,104 +1238,6 @@ int main(int argc, char *argv[]) {
     
     cout << "streamMesh has " << streamMesh->numActiveElements() << " elements.\n";
     cout << "solving for approximate stream function...\n";
-  }
-    
-  ///////// SET UP & SOLVE STREAM SOLUTION /////////
-  //  FunctionPtr vorticity = Teuchos::rcp( new PreviousSolutionFunction(solution,sigma12 - sigma21) );
-  RHSPtr streamRHS = RHS::rhs();
-  streamRHS->addTerm(vorticity * q_s);
-  ((PreviousSolutionFunction*) vorticity.get())->setOverrideMeshCheck(true);
-  
-  BCPtr streamBC = BC::bc();
-  FunctionPtr zero = Teuchos::rcp( new ConstantScalarFunction(0) );
-  //  streamBC->addDirichlet(psin_hat, entireBoundary, u0_cross_n);
-  streamBC->addDirichlet(phi_hat, entireBoundary, zero);
-  //  streamBC->addZeroMeanConstraint(phi);
-  
-  IPPtr streamIP = Teuchos::rcp( new IP );
-  streamIP->addTerm(q_s);
-  streamIP->addTerm(q_s->grad());
-  streamIP->addTerm(v_s);
-  streamIP->addTerm(v_s->div());
-  SolutionPtr streamSolution = Teuchos::rcp( new Solution( streamMesh, streamBC, streamRHS, streamIP ) );
-  
-  //  mesh->unregisterObserver(streamMesh);
-  //  streamMesh->registerObserver(mesh);
-  //  RefinementStrategy streamRefinementStrategy( streamSolution, energyThreshold );
-  //  for (int refIndex=0; refIndex < 3; refIndex++) {
-  //    streamSolution->solve(solver);
-  //    streamRefinementStrategy.refine(rank==0);
-  //  }
-  
-  if (useCondensedSolve) {
-    streamSolution->condensedSolve(solver);
-  } else {
-    streamSolution->solve(solver);
-  }
-  energyErrorTotal = streamSolution->energyErrorTotal();
-  if (rank == 0) {  
-    cout << "...solved.\n";
-    cout << "Stream mesh has energy error: " << energyErrorTotal << endl;
-  }
-  
-  if (rank==0){
-    if (! meshHasTriangles ) {
-//      massFlux->writeBoundaryValuesToMATLABFile(solution->mesh(), "massFlux.dat");
-//      u_mag->writeValuesToMATLABFile(solution->mesh(), "u_mag.m");
-//      u_div->writeValuesToMATLABFile(solution->mesh(), "u_div.m");
-//      if (!useDivergenceFreeVelocity) {
-//        solution->writeFieldsToFile(u1->ID(), "u1.m");
-//        solution->writeFluxesToFile(u1hat->ID(), "u1_hat.dat");
-//        solution->writeFieldsToFile(u2->ID(), "u2.m");
-//        solution->writeFluxesToFile(u2hat->ID(), "u2_hat.dat");
-//      }
-//      solution->writeFieldsToFile(p->ID(), "p.m");
-//      streamSolution->writeFieldsToFile(phi->ID(), "phi.m");
-//      
-//      streamSolution->writeFluxesToFile(phi_hat->ID(), "phi_hat.dat");
-//      streamSolution->writeFieldsToFile(psi_1->ID(), "psi1.m");
-//      streamSolution->writeFieldsToFile(psi_2->ID(), "psi2.m");
-//      vorticity->writeValuesToMATLABFile(streamMesh, "vorticity.m");
-//      
-////      FunctionPtr ten = Teuchos::rcp( new ConstantScalarFunction(10) );
-//      ten->writeBoundaryValuesToMATLABFile(solution->mesh(), "skeleton.dat");
-//      cout << "wrote files: u_mag.m, u_div.m, u1.m, u1_hat.dat, u2.m, u2_hat.dat, p.m, phi.m, vorticity.m.\n";
-    } else {
-//      solution->writeToFile(u1->ID(), "u1.dat");
-//      solution->writeToFile(u2->ID(), "u2.dat");
-//      solution->writeToFile(u2->ID(), "p.dat");
-//      cout << "wrote files: u1.dat, u2.dat, p.dat\n";
-    }
-    polyOrderFunction->writeValuesToMATLABFile(mesh, "cavityFlowPolyOrders.m");
-    
-//    writePatchValues(0, 1, 0, 1, streamSolution, phi, "phi_patch.m");
-//    writePatchValues(0, .1, 0, .1, streamSolution, phi, "phi_patch_detail.m");
-//    writePatchValues(0, .01, 0, .01, streamSolution, phi, "phi_patch_minute_detail.m");
-//    writePatchValues(0, .001, 0, .001, streamSolution, phi, "phi_patch_minute_minute_detail.m");
-    
-    map<double,string> scaleToName;
-    scaleToName[1]   = "cavityPatch";
-    scaleToName[0.1] = "cavityPatchEddy1";
-    scaleToName[0.006] = "cavityPatchEddy2";
-    scaleToName[0.0004] = "cavityPatchEddy3";
-    scaleToName[0.00004] = "cavityPatchEddy4";
-    
-    for (map<double,string>::iterator entryIt=scaleToName.begin(); entryIt != scaleToName.end(); entryIt++) {
-      double scale = entryIt->first;
-      string name = entryIt->second;
-      ostringstream fileNameStream;
-      fileNameStream << name << ".dat";
-      FieldContainer<double> patchPoints = pointGrid(0, scale, 0, scale, 100);
-      FieldContainer<double> patchPointData = solutionData(patchPoints, streamSolution, phi);
-      GnuPlotUtil::writeXYPoints(fileNameStream.str(), patchPointData);
-      ostringstream scriptNameStream;
-      scriptNameStream << name << ".p";
-      set<double> contourLevels = diagonalContourLevels(patchPointData,4);
-      vector<string> dataPaths;
-      dataPaths.push_back(fileNameStream.str());
-      GnuPlotUtil::writeContourPlotScript(contourLevels, dataPaths, scriptNameStream.str());
-    }
-    GnuPlotUtil::writeComputationalMeshSkeleton("cavityMesh", mesh);
   }
   
   if (saveFile.length() > 0) {

@@ -1093,18 +1093,18 @@ bool ScratchPadTests::testLTResidual(){
   vector<double> e1,e2;
   e1.push_back(1.0);e1.push_back(0.0);
   e2.push_back(0.0);e2.push_back(1.0);
-  FunctionPtr one = Teuchos::rcp( new ConstantScalarFunction(1.0) );
+  FunctionPtr one = Function::constant(1.0);
 
   FunctionPtr zero = Function::constant(0.0);
   RHSPtr rhs = RHS::rhs();
-  FunctionPtr f = one;
+  FunctionPtr f = one; // if this is set to zero instead, we pass the test (a clue?)
   rhs->addTerm( f * v );
 
   ////////////////////   CREATE BCs   ///////////////////////
   BCPtr bc = BC::bc();
   SpatialFilterPtr squareBoundary = Teuchos::rcp( new SquareBoundary );
 
-  bc->addDirichlet(uhat, squareBoundary, zero);
+  bc->addDirichlet(uhat, squareBoundary, one);
 
   ////////////////////   BUILD MESH   ///////////////////////
   // define nodes for mesh
@@ -1122,16 +1122,16 @@ bool ScratchPadTests::testLTResidual(){
   double energyError = solution->energyErrorTotal();
  
   LinearTermPtr residual = rhs->linearTermCopy();
-  residual->addTerm(-confusionBF->testFunctional(solution),true); 
+  residual->addTerm(-confusionBF->testFunctional(solution),true);
 
-  FunctionPtr uh = Function::solution(uhat,solution);
-  FunctionPtr fn = Function::solution(beta_n_u_minus_sigma_n,solution);
-  FunctionPtr uF = Function::solution(u,solution);
-  FunctionPtr sigma = e1*Function::solution(sigma1,solution)+e2*Function::solution(sigma2,solution);  
-  //  residual->addTerm(- (fn*v - uh*tau->dot_normal()));
-  //  residual->addTerm(- (uF*(tau->div() - beta*v->grad()) + sigma*((1/eps)*tau + v->grad())));
-  //  residual->addTerm(-(fn*v - uF*beta*v->grad() + sigma*v->grad())); // just v portion 
-  //  residual->addTerm(uh*tau->dot_normal() - uF*tau->div() - sigma*((1/eps)*tau)); // just tau portion
+//  FunctionPtr uh = Function::solution(uhat,solution);
+//  FunctionPtr fn = Function::solution(beta_n_u_minus_sigma_n,solution);
+//  FunctionPtr uF = Function::solution(u,solution);
+//  FunctionPtr sigma = e1*Function::solution(sigma1,solution)+e2*Function::solution(sigma2,solution);  
+//  residual->addTerm(- (fn*v - uh*tau->dot_normal()));
+//  residual->addTerm(- (uF*(tau->div() - beta*v->grad()) + sigma*((1/eps)*tau + v->grad())));
+//  residual->addTerm(-(fn*v - uF*beta*v->grad() + sigma*v->grad())); // just v portion 
+//  residual->addTerm(uh*tau->dot_normal() - uF*tau->div() - sigma*((1/eps)*tau)); // just tau portion
 
   Teuchos::RCP<RieszRep> rieszResidual = Teuchos::rcp(new RieszRep(mesh, ip, residual));
   rieszResidual->computeRieszRep();
@@ -1145,7 +1145,8 @@ bool ScratchPadTests::testLTResidual(){
   map<int,FunctionPtr> errFxns;
   errFxns[v->ID()] = e_v;
   errFxns[tau->ID()] = e_tau;
-  FunctionPtr err = (ip->evaluate(errFxns,false))->evaluate(errFxns,false); // false: no boundary terms (they're not in IP)
+  LinearTermPtr ipAtErrFxns = ip->evaluate(errFxns);
+  FunctionPtr err = ip->evaluate(errFxns)->evaluate(errFxns);
   double energyErrorIntegrated = sqrt(err->integrate(mesh,cubEnrich,testVsTest));
 
   // check that energy error computed thru Solution and through rieszRep are the same

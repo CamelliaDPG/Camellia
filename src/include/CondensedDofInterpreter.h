@@ -62,6 +62,8 @@ public:
                           FieldContainer<double> &globalStiffnessData, FieldContainer<double> &globalLoadData, FieldContainer<GlobalIndexType> &globalDofIndices);
   
   void interpretGlobalCoefficients(GlobalIndexType cellID, FieldContainer<double> &localDofs, const Epetra_MultiVector &globalDofs);
+
+  set<GlobalIndexType> globalDofIndicesForCell(GlobalIndexType cellID);
 };
 
 

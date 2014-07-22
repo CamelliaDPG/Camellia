@@ -10,14 +10,13 @@
 
 #include "MeshPartitionPolicy.h"
 
-void MeshPartitionPolicy::partitionMesh(MeshTopology *meshTopology, PartitionIndexType numPartitions, FieldContainer<GlobalIndexType> &partitionedActiveCells) {
+#include "GlobalDofAssignment.h"
+
+void MeshPartitionPolicy::partitionMesh(Mesh *mesh, PartitionIndexType numPartitions) {
   // default simply divides the active cells into equally-sized partitions, in the order listed in activeCells…
-  TEUCHOS_TEST_FOR_EXCEPTION(numPartitions != partitionedActiveCells.dimension(0), std::invalid_argument,
-                     "numPartitions must match the first dimension of partitionedActiveCells");
-  int maxPartitionSize = partitionedActiveCells.dimension(1);
+  MeshTopologyPtr meshTopology = mesh->getTopology();
   int numActiveCells = meshTopology->activeCellCount(); // leaf nodes
-  TEUCHOS_TEST_FOR_EXCEPTION(numActiveCells > maxPartitionSize, std::invalid_argument,
-                     "second dimension of partitionedActiveCells must be at least as large as the number of active cells.");
+  FieldContainer<GlobalIndexType> partitionedActiveCells(numPartitions,numActiveCells);
   
   partitionedActiveCells.initialize(-1); // cellID == -1 signals end of partition
   int chunkSize = numActiveCells / numPartitions;
@@ -33,4 +32,5 @@ void MeshPartitionPolicy::partitionMesh(MeshTopology *meshTopology, PartitionInd
       activeCellIndex++;
     }
   }
+  mesh->globalDofAssignment()->setPartitions(partitionedActiveCells);
 }

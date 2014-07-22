@@ -13,6 +13,8 @@ using namespace std;
 
 #include "BasisCache.h"
 
+#include "Teuchos_GlobalMPISession.hpp"
+
 using namespace Intrepid;
 
 // abstract class for tests
@@ -132,6 +134,29 @@ public:
       }
     }
   }
+  
+  static void serializeOutput(string label, const FieldContainer<double> &fc) {
+    int numProcs=Teuchos::GlobalMPISession::getNProc();;
+    int rank = Teuchos::GlobalMPISession::getRank();
+    
+#ifdef HAVE_MPI
+    Epetra_MpiComm Comm(MPI_COMM_WORLD);
+    //cout << "rank: " << rank << " of " << numProcs << endl;
+#else
+    Epetra_SerialComm Comm;
+#endif
+    // serialize output:
+    for (int i=0; i<numProcs; i++) {
+      cout.flush();
+      Comm.Barrier();
+      if (i==rank) {
+        cout << "on rank " << rank << ", " << label << " is:\n" << fc;
+        cout.flush();
+      }
+    }
+    Comm.Barrier();
+  }
+  
   virtual ~TestSuite() {}
 };
 

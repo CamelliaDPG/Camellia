@@ -3,6 +3,7 @@
 
 #include "Intrepid_FieldContainer.hpp"
 #include "Mesh.h"
+#include "GlobalDofAssignment.h"
 #include "MeshFactory.h"
 
 #ifdef HAVE_MPI
@@ -27,7 +28,10 @@
 
 #include "BC.h"
 
+#include "GlobalDofAssignment.h"
+
 #include "MeshUtilities.h"
+#include "CamelliaDebugUtility.h"
 
 class NewQuadraticFunction : public SimpleFunction {
 public:
@@ -94,8 +98,8 @@ bool SolutionTests::solutionCoefficientsAreConsistent(Teuchos::RCP<Solution> sol
     int trialID = trialIDs[i];
     if (bf->isFluxOrTrace(trialID) ) {
       // then there's a chance at inconsistency
-      set<GlobalIndexType> activeCellIDs = soln->mesh()->getActiveCellIDs();
-      for (set<GlobalIndexType>::iterator cellIt = activeCellIDs.begin(); cellIt != activeCellIDs.end(); cellIt++) {
+      set<GlobalIndexType> rankLocalCellIDs = soln->mesh()->cellIDsInPartition();
+      for (set<GlobalIndexType>::iterator cellIt = rankLocalCellIDs.begin(); cellIt != rankLocalCellIDs.end(); cellIt++) {
         GlobalIndexType cellID = *cellIt;
         DofOrderingPtr trialSpace = soln->mesh()->getElement(cellID)->elementType()->trialOrderPtr;
         int numSides = trialSpace->getNumSidesForVarID(trialID);
@@ -131,7 +135,7 @@ bool SolutionTests::solutionCoefficientsAreConsistent(Teuchos::RCP<Solution> sol
       }
     }
   }
-  return success;
+  return allSuccess(success);
 }
 
 // unclear on why these initializers are necessary but others (e.g. _confusionSolution1_2x2) are not
@@ -143,6 +147,8 @@ _poissonExactSolution(Teuchos::rcp( (PoissonExactSolution*) NULL ))
 
 void SolutionTests::setup() {
   // first, build a simple mesh
+  
+//  int rank = Teuchos::GlobalMPISession::getRank();
   
   FieldContainer<double> quadPoints(4,2);
   
@@ -157,7 +163,7 @@ void SolutionTests::setup() {
   
   double epsilon = 1e-2;
   double beta_x = 1.0, beta_y = 1.0;
-  _confusionExactSolution = Teuchos::rcp( new ConfusionManufacturedSolution(epsilon,beta_x,beta_y) ); 
+  _confusionExactSolution = Teuchos::rcp( new ConfusionManufacturedSolution(epsilon,beta_x,beta_y) );
   
   bool useConformingTraces = true;
   int polyOrder = 2; // 2 is minimum for projecting QuadraticFunction exactly
@@ -176,7 +182,7 @@ void SolutionTests::setup() {
   Teuchos::RCP<Mesh> poissonMesh = MeshFactory::buildQuadMesh(quadPoints, horizontalCells, verticalCells, _poissonExactSolution->bilinearForm(), H1Order, H1Order+2);
   Teuchos::RCP<Mesh> poissonMesh1x1 = MeshFactory::buildQuadMesh(quadPoints, 1, 1, _poissonExactSolution->bilinearForm(), H1Order, H1Order+2);
   Teuchos::RCP<DPGInnerProduct> poissonIp = Teuchos::rcp(new MathInnerProduct(_poissonExactSolution->bilinearForm()));
-
+  
   _confusionSolution1_2x2 = Teuchos::rcp( new Solution(mesh, _confusionExactSolution->ExactSolution::bc(), _confusionExactSolution->ExactSolution::rhs(), ip) );
   _confusionSolution2_2x2 = Teuchos::rcp( new Solution(mesh, _confusionExactSolution->ExactSolution::bc(), _confusionExactSolution->ExactSolution::rhs(), ip) );
   _poissonSolution = Teuchos::rcp( new Solution(poissonMesh, _poissonExactSolution->ExactSolution::bc(),_poissonExactSolution->ExactSolution::rhs(), ip));
@@ -184,11 +190,11 @@ void SolutionTests::setup() {
   _poissonSolution_1x1_unsolved = Teuchos::rcp( new Solution(poissonMesh1x1, _poissonExactSolution->ExactSolution::bc(),_poissonExactSolution->ExactSolution::rhs(), ip));
   
   _confusionUnsolved = Teuchos::rcp( new Solution(mesh, _confusionExactSolution->ExactSolution::bc(), _confusionExactSolution->ExactSolution::rhs(), ip) );
-
+  
+  _poissonSolution_1x1->solve();
   _confusionSolution1_2x2->solve();
   _confusionSolution2_2x2->solve();
   _poissonSolution->solve();
-  _poissonSolution_1x1->solve();
   
   // setup test points:
   static const int NUM_POINTS_1D = 10;
@@ -202,6 +208,7 @@ void SolutionTests::setup() {
       _testPoints(i*NUM_POINTS_1D + j, 1) = y[j];
     }
   }
+//  cout << "completed setup() on rank " << rank << endl;
 }
 
 void SolutionTests::teardown() {
@@ -211,21 +218,10 @@ void SolutionTests::teardown() {
 }
 
 void SolutionTests::runTests(int &numTestsRun, int &numTestsPassed) {
-  setup();
   
-  if (testProjectVectorValuedSolution()) {
-    numTestsPassed++;
-  }
-  numTestsRun++;
-  teardown();
-  
-  setup();
-  if (testHRefinementInitialization()) {
-    numTestsPassed++;
-  }
-  numTestsRun++;
-  teardown();
-  
+  int rank = Teuchos::GlobalMPISession::getRank();
+  cout << "Starting SolutionTests::runTests on rank " << rank << endl;
+
   setup();
   if (testNewProjectFunction()) {
     numTestsPassed++;
@@ -234,11 +230,33 @@ void SolutionTests::runTests(int &numTestsRun, int &numTestsPassed) {
   teardown();
   
   setup();
+  
+  if (testProjectVectorValuedSolution()) {
+    numTestsPassed++;
+  }
+  numTestsRun++;
+  teardown();
+  
+  cout << "finished test testProjectVectorValuedSolution() on rank " << rank << ".\n";
+  
+  setup();
+  if (testHRefinementInitialization()) {
+    numTestsPassed++;
+  }
+  numTestsRun++;
+  teardown();
+
+  cout << "finished test testHRefinementInitialization().\n";
+  
+  
+  setup();
   if (testSolutionsAreConsistent()) {
     numTestsPassed++;
   }
   numTestsRun++;
   teardown();
+  
+  cout << "finished test testSolutionsAreConsistent().\n";
   
   setup();
   if (testProjectSolutionOntoOtherMesh()) {
@@ -246,6 +264,8 @@ void SolutionTests::runTests(int &numTestsRun, int &numTestsPassed) {
   }
   numTestsRun++;
   teardown();
+
+  cout << "finished test testProjectSolutionOntoOtherMesh().\n";
   
   setup();
   if (testSolutionEvaluationBasisCache() ) {
@@ -254,12 +274,16 @@ void SolutionTests::runTests(int &numTestsRun, int &numTestsPassed) {
   numTestsRun++;
   teardown();
   
+  cout << "finished test testSolutionEvaluationBasisCache().\n";
+  
   setup();
   if (testAddSolution()) {
     numTestsPassed++;
   }
   numTestsRun++;
   teardown();
+  
+  cout << "finished test testAddSolution().\n";
   
   setup();
   if (testProjectFunction()) {
@@ -268,6 +292,8 @@ void SolutionTests::runTests(int &numTestsRun, int &numTestsPassed) {
   numTestsRun++;
   teardown();
 
+  cout << "finished test testProjectFunction().\n";
+  
   setup();
   if (testAddRefinedSolutions()) {
     numTestsPassed++;
@@ -275,12 +301,16 @@ void SolutionTests::runTests(int &numTestsRun, int &numTestsPassed) {
   numTestsRun++;
   teardown();
 
+  cout << "finished test testAddRefinedSolutions().\n";
+  
   setup();
   if (testEnergyError()) {
     numTestsPassed++;
   }
   numTestsRun++;
   teardown();
+  
+  cout << "finished test testEnergyError().\n";
   
   setup();
   if (testPRefinementInitialization()) {
@@ -289,6 +319,8 @@ void SolutionTests::runTests(int &numTestsRun, int &numTestsPassed) {
   numTestsRun++;
   teardown();
 
+  cout << "finished test testPRefinementInitialization().\n";
+  
  setup();
   if (testScratchPadSolution()) {
     numTestsPassed++;
@@ -296,12 +328,15 @@ void SolutionTests::runTests(int &numTestsRun, int &numTestsPassed) {
   numTestsRun++;
   teardown();
 
+  cout << "finished test testScratchPadSolution().\n";
+  
   setup();
   if (testCondensationSolve()) {
     numTestsPassed++;
   }
   numTestsRun++;
   teardown();
+  cout << "finished test testCondensationSolve().\n";
 }
 
 bool SolutionTests::storageSizesAgree(Teuchos::RCP< Solution > soln1, Teuchos::RCP< Solution > soln2) {
@@ -447,6 +482,9 @@ bool SolutionTests::testProjectVectorValuedSolution() {
   bool success = true;
   double tol = 1e-14;
   
+  int rank = Teuchos::GlobalMPISession::getRank();
+//  cout << "entered testProjectVectorValuedSolution() on rank " << rank << endl;
+  
   ////////////////////   DECLARE VARIABLES   ///////////////////////
   // define test variables
   VarFactory varFactory;
@@ -512,9 +550,13 @@ bool SolutionTests::testProjectVectorValuedSolution() {
   
   int H1Order = 3; // that way, L^2 space contains quadratics
   
+//  cout << "About to call buildQuadMesh on rank " << rank << endl;
+  
   Teuchos::RCP<Mesh> mesh = MeshFactory::buildQuadMesh(quadPoints, horizontalCells, verticalCells, confusionBF, H1Order, H1Order+1);
 
   SolutionPtr confusionSoln = Teuchos::rcp( new Solution(mesh) );
+
+//  cout << "About to call projectOntoMesh on rank " << rank << endl;
   
   confusionSoln->projectOntoMesh(functionMap);
   
@@ -522,14 +564,16 @@ bool SolutionTests::testProjectVectorValuedSolution() {
     cout << "testProjectVectorValuedSolution: for quadraticFunction projection, solution coefficients are inconsistent.\n";
     success = false;
   }
+
+//  cout << "Finished call to solutionCoefficientsAreConsistent on rank " << rank << endl;
   
   for (int testIndex=0; testIndex<2; testIndex++) {
+    set<GlobalIndexType> myActiveCellIDs = confusionSoln->mesh()->globalDofAssignment()->cellsInPartition(-1);
     if (testIndex == 1) {
       // test in which we project the Solution itself
       // here, we just project the Solution onto itself, nothing terribly interesting, but should exercise the vector-valuedness anyway
       // conveniently, this means that the expected values don't change, so we can use the same verification logic below
-      set<GlobalIndexType> activeCellIDs = confusionSoln->mesh()->getActiveCellIDs();
-      for (set<GlobalIndexType>::iterator cellIDIt = activeCellIDs.begin(); cellIDIt != activeCellIDs.end(); cellIDIt++) {
+      for (set<GlobalIndexType>::iterator cellIDIt = myActiveCellIDs.begin(); cellIDIt != myActiveCellIDs.end(); cellIDIt++) {
         GlobalIndexType cellID = *cellIDIt;
         ElementTypePtr elemType = confusionSoln->mesh()->getElement(cellID)->elementType();
         vector<GlobalIndexType> childIDs;
@@ -537,10 +581,11 @@ bool SolutionTests::testProjectVectorValuedSolution() {
         confusionSoln->projectOldCellOntoNewCells(cellID, elemType, childIDs);
       }
     }
-    for (int i=0; i<confusionSoln->mesh()->numElements(); i++) {
+    
+    for (set<GlobalIndexType>::iterator cellIDIt = myActiveCellIDs.begin(); cellIDIt != myActiveCellIDs.end(); cellIDIt++) {
       int numCells = 1;
-      ElementPtr elem = confusionSoln->mesh()->getElement(i);
-      int cellID = elem->cellID();
+      GlobalIndexType cellID = *cellIDIt;
+      ElementPtr elem = confusionSoln->mesh()->getElement(cellID);
       vector<GlobalIndexType> cellIDs(1,cellID);
       BasisCachePtr basisCache = Teuchos::rcp( new BasisCache(elem->elementType(),confusionSoln->mesh()) );
       
@@ -595,9 +640,9 @@ bool SolutionTests::testProjectVectorValuedSolution() {
         }
         double maxDiff;
         if ( !fcsAgree(valuesExpected, valuesActual, tol, maxDiff) ) {
-          cout << "testProjectVectorValuedSolution() failure: maxDiff is " << maxDiff << " for trial variable " << var->name() << endl;
-          cout << "expectedValues:\n" << valuesExpected << endl;
-          cout << "actualValues:\n" << valuesActual << endl;
+          cout << "rank " << rank << " testProjectVectorValuedSolution() failure: maxDiff is " << maxDiff << " for trial variable " << var->name() << endl;
+          cout << "rank " << rank << " expectedValues:\n" << valuesExpected << endl;
+          cout << "rank " << rank << " actualValues:\n" << valuesActual << endl;
           success = false;
         }
       }
@@ -616,9 +661,10 @@ bool SolutionTests::testProjectVectorValuedSolution() {
       soln2->projectOntoMesh(functionMap);
       confusionSoln->addSolution(confusionSoln, 1.0);
     }
+//    cout << "Finished testIndex " << testIndex << " on rank " << rank << endl;
   }
   
-  return success;
+  return allSuccess( success );
 }
 
 bool SolutionTests::testNewProjectFunction() {
@@ -643,9 +689,10 @@ bool SolutionTests::testNewProjectFunction() {
     success = false;
   }
   
-  for (int i=0; i<_confusionUnsolved->mesh()->numElements(); i++) {
+  set<GlobalIndexType> rankLocalCellIDs = _confusionUnsolved->mesh()->cellIDsInPartition();
+  for (set<GlobalIndexType>::iterator cellIDIt = rankLocalCellIDs.begin(); cellIDIt != rankLocalCellIDs.end(); cellIDIt++) {
     int numCells = 1;
-    ElementPtr elem = _confusionUnsolved->mesh()->getElement(i);
+    ElementPtr elem = _confusionUnsolved->mesh()->getElement(*cellIDIt);
     int cellID = elem->cellID();
     vector<GlobalIndexType> cellIDs(1,cellID);
     BasisCachePtr basisCache = Teuchos::rcp( new BasisCache(elem->elementType(),_confusionUnsolved->mesh()) );
@@ -743,9 +790,6 @@ bool SolutionTests::testNewProjectFunction() {
     functionMap.clear();
     functionMap[u->ID()] = f;
     
-    FieldContainer<double> expectedValues( mesh->numActiveElements() );
-    FieldContainer<double> actualValues( mesh->numActiveElements() );
-    
     ElementTypePtr elemType = mesh->elementTypes()[0];
     bool testVsTest=false;
     int cubatureDegreeEnrichment = 5;
@@ -756,10 +800,12 @@ bool SolutionTests::testNewProjectFunction() {
     double l2ErrorOfAverage = (Function::constant(fIntegral) - f)->l2norm(fineMesh,cubatureDegreeEnrichment);
 //    cout << "testNewProjectFunction: l2 error of fIntegral: " << l2ErrorOfAverage << endl;
     
-    vector<GlobalIndexType> cellIDs = mesh->cellIDsOfTypeGlobal(elemType);
+    vector<GlobalIndexType> cellIDs = mesh->cellIDsOfType(elemType);
+    FieldContainer<double> expectedValues( cellIDs.size() );
+    FieldContainer<double> actualValues( cellIDs.size() );
     
     BasisCachePtr basisCache = Teuchos::rcp( new BasisCache(elemType, mesh, testVsTest, cubatureDegreeEnrichment) );
-    basisCache->setPhysicalCellNodes(mesh->physicalCellNodesGlobal(elemType), cellIDs, false); // false: no side cache
+    basisCache->setPhysicalCellNodes(mesh->physicalCellNodes(elemType), cellIDs, false); // false: no side cache
     
     f->integrate(expectedValues, basisCache);
     FieldContainer<double> cellMeasures = basisCache->getCellMeasures();
@@ -807,10 +853,12 @@ bool SolutionTests::testNewProjectFunction() {
     int matchingCubatureEnrichment = 15 - (pTest + H1Order - 1); // chosen so that the effective cubature degree below will match that above
     double l2errorExpected = bestFxnError->l2norm(soln->mesh(),matchingCubatureEnrichment); // here the cubature is actually an enrichment....
     
-    if (abs(l2errorExpected - l2errorActual) > tol) {
+    double diff = abs(l2errorExpected - l2errorActual);
+    if ( diff > tol) {
       success = false;
       cout << "testNewProjectFunction: for function " << j << ", ExactSolution error doesn't match";
-      cout << " that measured by Function: " << l2errorActual << " vs " << l2errorExpected << endl;
+      cout << " that measured by Function: " << l2errorActual << " vs " << l2errorExpected;
+      cout << " (diff " << diff << ")" << endl;
     }
   }
   
@@ -820,10 +868,54 @@ bool SolutionTests::testNewProjectFunction() {
 bool SolutionTests::testProjectSolutionOntoOtherMesh() {
   bool success = true;
   double tol = 1e-14;
+  int rank = Teuchos::GlobalMPISession::getRank();
+//  cout << "About to project _poissonSolution_1x1's field variables on rank " << rank << endl;
+  _poissonSolution_1x1->importGlobalSolution();
+  
+//  ostringstream rankString;
+//  rankString << "cell IDs for rank " << rank;
+//  set<GlobalIndexType> myCells = _poissonSolution_1x1->mesh()->cellIDsInPartition();
+//  Camellia::print(rankString.str(), myCells);
+
+//  set<GlobalIndexType> activeCells = _poissonSolution_1x1->mesh()->getActiveCellIDs();
+//  for (set<GlobalIndexType>::iterator activeCellIt = activeCells.begin(); activeCellIt != activeCells.end(); activeCellIt++) {
+//    GlobalIndexType cellID = *activeCellIt;
+//    vector<double> coefficients;
+//    FieldContainer<double> coefficientsFC = _poissonSolution_1x1->allCoefficientsForCellID(cellID);
+//    for (int i=0; i<coefficientsFC.size(); i++) {
+//      coefficients.push_back(coefficientsFC[i]);
+//    }
+//    rankString.str("");
+//    rankString << "rank " << rank << ", _poissonSolution_1x1 coefficients for cell " << cellID;
+//    Camellia::print(rankString.str(),coefficients);
+//  }
+  
   _poissonSolution_1x1->projectFieldVariablesOntoOtherSolution(_poissonSolution);
 //  _poissonSolution_1x1->writeFieldsToFile(PoissonBilinearForm::PHI, "phi_1x1.m");
 //  _poissonSolution->writeFieldsToFile(PoissonBilinearForm::PHI, "phi_1x1_projected.m");
+//  cout << "About to project _poissonSolution's field variables on rank " << rank << endl;
+  _poissonSolution->importGlobalSolution();
+  
+//  rankString.str("");
+//  rankString << "cell IDs for rank " << rank;
+//  myCells = _poissonSolution->mesh()->cellIDsInPartition();
+//  Camellia::print(rankString.str(), myCells);
+  
+//  activeCells = _poissonSolution->mesh()->getActiveCellIDs();
+//  for (set<GlobalIndexType>::iterator activeCellIt = activeCells.begin(); activeCellIt != activeCells.end(); activeCellIt++) {
+//    GlobalIndexType cellID = *activeCellIt;
+//    vector<double> coefficients;
+//    FieldContainer<double> coefficientsFC = _poissonSolution->allCoefficientsForCellID(cellID);
+//    for (int i=0; i<coefficientsFC.size(); i++) {
+//      coefficients.push_back(coefficientsFC[i]);
+//    }
+//    rankString.str("");
+//    rankString << "rank " << rank << ", _poissonSolution coefficients for cell " << cellID;
+//    Camellia::print(rankString.str(),coefficients);
+//  }
+  
   _poissonSolution->projectFieldVariablesOntoOtherSolution(_poissonSolution_1x1_unsolved);
+//  cout << "About to call addSolution on rank " << rank << endl;
   // difference should be zero:
   _poissonSolution_1x1_unsolved->addSolution(_poissonSolution_1x1,-1.0);
   // test for all field variables:
@@ -990,6 +1082,9 @@ bool SolutionTests::testEnergyError(){
 
 bool SolutionTests::testHRefinementInitialization() {
 
+  int rank = Teuchos::GlobalMPISession::getRank();
+//  cout << "Starting testHRefinementInitialization() on rank " << rank << endl;
+  
   double tol = 2e-14;
 
   bool success = true;
@@ -1005,7 +1100,6 @@ bool SolutionTests::testHRefinementInitialization() {
   FunctionPtr psiFxn = phiFxn->grad();
   map< int, FunctionPtr > fxnMap;
   
-  
   VarFactory vf = PoissonBilinearForm::poissonBilinearForm()->varFactory();
   VarPtr phi = vf.fieldVar(PoissonBilinearForm::S_PHI);
   VarPtr psi_1 = vf.fieldVar(PoissonBilinearForm::S_PSI_1);
@@ -1015,7 +1109,26 @@ bool SolutionTests::testHRefinementInitialization() {
   fxnMap[ psi_1->ID() ] = psiFxn->x();
   fxnMap[ psi_2->ID() ] = psiFxn->y();
   
+//  cout << "About to call projectOntoMesh() on rank " << rank << endl;
+  
   _poissonSolution->projectOntoMesh(fxnMap);
+  
+//  ostringstream rankString;
+//  rankString << "cell IDs for rank " << rank;
+//  set<GlobalIndexType> myCells = _poissonSolution->mesh()->cellIDsInPartition();
+//  Camellia::print(rankString.str(), myCells);
+//  
+//  for (set<GlobalIndexType>::iterator myCellIt = myCells.begin(); myCellIt != myCells.end(); myCellIt++) {
+//    GlobalIndexType cellID = *myCellIt;
+//    vector<double> coefficients;
+//    FieldContainer<double> coefficientsFC = _poissonSolution->allCoefficientsForCellID(cellID);
+//    for (int i=0; i<coefficientsFC.size(); i++) {
+//      coefficients.push_back(coefficientsFC[i]);
+//    }
+//    rankString.str("");
+//    rankString << "coefficients for cell " << cellID;
+//    Camellia::print(rankString.str(),coefficients);
+//  }
   
 //  int trialIDToWrite = PoissonBilinearForm::PHI;
   string filePrefix = "phi";
@@ -1030,6 +1143,8 @@ bool SolutionTests::testHRefinementInitialization() {
   FieldContainer<double> expectedValues(_testPoints.dimension(0)); 
   FieldContainer<double> actualValues(_testPoints.dimension(0)); 
   
+//  cout << "About to populate expected values on rank " << rank << endl;
+  
   for (vector<int>::iterator fieldIDIt=fieldIDs.begin(); fieldIDIt != fieldIDs.end(); fieldIDIt++) {
     int fieldID = *fieldIDIt;
     _poissonSolution->solutionValues(expectedValues,fieldID,_testPoints);
@@ -1039,15 +1154,39 @@ bool SolutionTests::testHRefinementInitialization() {
 //  _poissonSolution->writeFieldsToFile(PoissonBilinearForm::PHI,"phi_preRef.m");
   vector<GlobalIndexType> quadCellsToRefine;
   quadCellsToRefine.push_back(1);
+//  cout << "SolutionTests mesh ptr: " << mesh.get() << endl;
   mesh->registerSolution(_poissonSolution);
+//  cout << "mesh->globalDofAssignment()->getRegisteredSolutions().size(): " << mesh->globalDofAssignment()->getRegisteredSolutions().size() << endl;
 //  vector< Teuchos::RCP<Solution> > solutions;
 //  solutions.push_back(_poissonSolution);
   mesh->hRefine(quadCellsToRefine,RefinementPattern::regularRefinementPatternQuad());
   
-  GnuPlotUtil::writeComputationalMeshSkeleton("/tmp/poissonRefinedMesh",mesh);
+//  myCells = _poissonSolution->mesh()->cellIDsInPartition();
+//  
+//  rankString.str("");
+//  rankString << "cells for rank " << rank << " after h-refinement";
+//  Camellia::print(rankString.str(), myCells);
+//  
+//  for (set<GlobalIndexType>::iterator myCellIt = myCells.begin(); myCellIt != myCells.end(); myCellIt++) {
+//    GlobalIndexType cellID = *myCellIt;
+//    vector<double> coefficients;
+//    FieldContainer<double> coefficientsFC = _poissonSolution->allCoefficientsForCellID(cellID);
+//    for (int i=0; i<coefficientsFC.size(); i++) {
+//      coefficients.push_back(coefficientsFC[i]);
+//    }
+//    rankString.str("");
+//    rankString << "coefficients for cell " << cellID;
+//    Camellia::print(rankString.str(),coefficients);
+//  }
+  
+//  cout << "About to call writeComputationalMeshSkeleton() on rank " << rank << endl;
+//  
+//  GnuPlotUtil::writeComputationalMeshSkeleton("/tmp/poissonRefinedMesh",mesh);
 //  _poissonSolution->writeFieldsToFile(PoissonBilinearForm::PHI,"phi_postRef.m");
   
 //  _poissonSolution->writeFieldsToFile(trialIDToWrite, filePrefix + "AfterRefinement" + fileSuffix);
+  
+//  cout << "About to check FC agreement on rank " << rank << endl;
   
   for (vector<int>::iterator fieldIDIt=fieldIDs.begin(); fieldIDIt != fieldIDs.end(); fieldIDIt++) {
     int fieldID = *fieldIDIt;
@@ -1055,7 +1194,7 @@ bool SolutionTests::testHRefinementInitialization() {
     double maxDiff = 0;
     if ( ! fcsAgree(expectedMap[fieldID],actualValues,tol,maxDiff) ) {
       success = false;
-      cout << "testHRefinementInitialization failed: max difference in " 
+      cout << "testHRefinementInitialization failed: max difference in "
            << _poissonSolution->mesh()->bilinearForm()->trialName(fieldID) << " is " << maxDiff << endl;
       
       FieldContainer<double> points = _testPoints;
@@ -1071,6 +1210,8 @@ bool SolutionTests::testHRefinementInitialization() {
 
 //  _poissonSolution->solve(false);
 //  _poissonSolution->writeFieldsToFile(PoissonBilinearForm::PHI,"phi_postSolve.m");
+  
+//  cout << "About to return on rank " << rank << endl;
   
   return success;
 }
@@ -1158,7 +1299,8 @@ bool SolutionTests::testSolutionEvaluationBasisCache() {
     exactFxn->values(expectedValues, basisCache);
     expectedMap[fieldID] = expectedValues;
   }
-    
+  
+  _poissonSolution_1x1->importGlobalSolution();
   // test for all field variables:
   for (vector<int>::iterator fieldIDIt=fieldIDs.begin(); fieldIDIt != fieldIDs.end(); fieldIDIt++) {
     int fieldID = *fieldIDIt;

@@ -934,6 +934,7 @@ bool MeshTestSuite::testMeshSolvePointwise() {
   
   solution.solve();
   
+  solution.importGlobalSolution(); // so that the solnValues for cell 0 are available on all ranks
   solution.solutionValues(solnValues,PHI,testPoints);
   
   for (int i=0; i<numPoints; i++) {
@@ -994,6 +995,7 @@ bool MeshTestSuite::testMeshSolvePointwise() {
   }
   
   solution2x2.solve();
+  solution2x2.importGlobalSolution();
   solnValues.resize(numElements,numPointsPerElement); // four elements, one test point each
   solution2x2.solutionValues(solnValues,phi->ID(),testPoints);
   
@@ -1442,6 +1444,7 @@ bool MeshTestSuite::testHRefinementForConfusion() {
     cout << "FAILURE: initial mesh fails consistency check.\n";
   }
 
+//  cout << "About to refine mesh.\n";
   // repeatedly refine the first element along the side shared with cellID 1
   int numRefinements = 2;
   for (int i=0; i<numRefinements; i++) {
@@ -1452,6 +1455,8 @@ bool MeshTestSuite::testHRefinementForConfusion() {
       int cellID = descendants[j].first;
       cellsToRefine.push_back(cellID);
     }
+//    cout << "h-refining east side: refIndex " << i << endl;
+//    Camellia::print("h-refining", cellsToRefine);
     mesh->hRefine(cellsToRefine, RefinementPattern::regularRefinementPatternQuad());
     
     // same thing for north side
@@ -1462,16 +1467,20 @@ bool MeshTestSuite::testHRefinementForConfusion() {
       int cellID = descendants[j].first;
       cellsToRefine.push_back(cellID);
     }
+//    cout << "h-refining north side: refIndex " << i << endl;
+//    Camellia::print("h-refining", cellsToRefine);
     mesh->hRefine(cellsToRefine, RefinementPattern::regularRefinementPatternQuad());
   }
+//  cout << "finished mesh refinements.\n";
   
   if (! MeshTestUtility::checkMeshConsistency(mesh) ) {
     success = false;
     cout << "FAILURE: after 'deep' refinement, mesh fails consistency check.\n";
   }
   
-  // the following line should not be necessary, but if Solution's data structures aren't rebuilt properly, it might be...
-  Solution solution = Solution(mesh, exactSolution.ExactSolution::bc(), exactSolution.ExactSolution::rhs(), ip);
+//  cout << "About to create solution object on refined mesh.\n";
+  Solution solution(mesh, exactSolution.ExactSolution::bc(), exactSolution.ExactSolution::rhs(), ip);
+//  cout << "About to solve.\n";
   solution.solve();
   
   double refinedError = exactSolution.L2NormOfError(solution,ConfusionBilinearForm::U_ID);
