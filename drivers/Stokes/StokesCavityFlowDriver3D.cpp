@@ -125,7 +125,7 @@ int main(int argc, char *argv[]) {
   }
   
   int H1Order = k + 1;
-  
+
   if (numCells != -1) {
     horizontalCells = numCells;
     verticalCells = numCells;
@@ -243,7 +243,7 @@ int main(int argc, char *argv[]) {
   bc->addDirichlet(u2hat, otherBoundary, zero);
   bc->addDirichlet(u3hat, otherBoundary, zero);
   
-  bc->addZeroMeanConstraint(p);
+  bc->addSinglePointBC(p->ID(), Function::zero());
 
   IPPtr graphNorm = stokesBF->graphNorm();
   
