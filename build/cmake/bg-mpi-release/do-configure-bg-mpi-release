@@ -10,6 +10,7 @@ rm -rf tests
   -D CAMELLIA_BUILD_TYPE:STRING="mpi-release-trimmed" \
   -D CMAKE_BUILD_TYPE="Release" \
   -D MUMPS_DIR="/soft/libraries/petsc/3.3-p6/xl-opt/lib/" \
+  -D ZLIB_LIB="/soft/libraries/alcf/current/xl/ZLIB/lib/libz.a" \
   -DBOOST_ROOT="/soft/libraries/boost/current/cnk-xl/current" \
   -DADDITIONAL_LIBRARY_DIRS="/soft/compilers/ibmcmp-may2013/vacpp/bg/12.1/lib64;/soft/compilers/ibmcmp-may2013/xlf/bg/14.1/lib64/;/soft/compilers/ibmcmp-may2013/xlsmp/bg/3.1/bglib64" \
   -DADDITIONAL_LIBRARIES="xlf90_r;xlfmath;xlomp_ser;-lxl" \
