@@ -951,6 +951,9 @@ BasisMap GDAMinimumRule::getBasisMap(GlobalIndexType cellID, SubCellDofIndexInfo
             double previousCoefficient = fineOrdinalCoefficientsThusFar[fineOrdinal];
             if (abs(previousCoefficient-coefficient) > tol) {
               cout  << "ERROR: incompatible entries for fine ordinal " << fineOrdinal << " in representation of global ordinal " << globalDofOrdinal << endl;
+              cout << "previousCoefficient = " << previousCoefficient << endl;
+              cout << "coefficient = " << coefficient << endl;
+              cout << "diff = " << abs(previousCoefficient - coefficient) << endl;
               TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Internal Error: incompatible entries for fine ordinal " );
             }
           }
