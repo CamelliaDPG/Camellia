@@ -46,6 +46,9 @@
 
 #include "SerialDenseWrapper.h"
 
+#include "RHS.h"
+#include "IP.h"
+
 #include "cholesky.hpp"
 
 #include "CamelliaCellTools.h"
@@ -119,6 +122,69 @@ void BilinearForm::trialTestOperators(int testID1, int testID2,
     testOps1.push_back(testOp1);
     testOps2.push_back(testOp2);
   }
+}
+
+void BilinearForm::localStiffnessMatrixAndRHS(FieldContainer<double> &localStiffness, FieldContainer<double> &rhsVector,
+                                              Teuchos::RCP< DPGInnerProduct > ip, BasisCachePtr ipBasisCache, RHSPtr rhs, BasisCachePtr basisCache) {
+  double testMatrixAssemblyTime = 0, testMatrixInversionTime = 0, localStiffnessDeterminationFromTestsTime = 0;
+  double rhsIntegrationAgainstOptimalTestsTime = 0;
+  
+  // localStiffness should have dim. (numCells, numTrialFields, numTrialFields)
+  MeshPtr mesh = basisCache->mesh();
+  if (mesh.get() == NULL) {
+    cout << "localStiffnessMatrix requires BasisCache to have mesh set.\n";
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "localStiffnessMatrix requires BasisCache to have mesh set.");
+  }
+  const vector<GlobalIndexType>* cellIDs = &basisCache->cellIDs();
+  int numCells = cellIDs->size();
+  if (numCells != localStiffness.dimension(0)) {
+    cout << "localStiffnessMatrix requires basisCache->cellIDs() to have the same # of cells as the first dimension of localStiffness\n";
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "localStiffnessMatrix requires basisCache->cellIDs() to have the same # of cells as the first dimension of localStiffness");
+  }
+  
+  ElementTypePtr elemType = mesh->getElementType((*cellIDs)[0]); // we assume all cells provided are of the same type
+  DofOrderingPtr trialOrder = elemType->trialOrderPtr;
+  DofOrderingPtr testOrder = elemType->testOrderPtr;
+  int numTestDofs = testOrder->totalDofs();
+  int numTrialDofs = trialOrder->totalDofs();
+  if ((numTrialDofs != localStiffness.dimension(1)) || (numTrialDofs != localStiffness.dimension(2))) {
+    cout << "localStiffness should have dimensions (C,numTrialFields,numTrialFields).\n";
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "localStiffness should have dimensions (C,numTrialFields,numTrialFields).");
+  }
+  
+  //  subTimer.ResetStartTime();
+  
+  FieldContainer<double> ipMatrix(numCells,numTestDofs,numTestDofs);
+  ip->computeInnerProductMatrix(ipMatrix,testOrder, ipBasisCache);
+  
+  //  testMatrixAssemblyTime += subTimer.ElapsedTime();
+  
+  //      cout << "ipMatrix:\n" << ipMatrix;
+  
+//  subTimer.ResetStartTime();
+  FieldContainer<double> optTestCoeffs(numCells,numTrialDofs,numTestDofs);
+  FieldContainer<double> cellSideParities = basisCache->getCellSideParities();
+  
+  int optSuccess = this->optimalTestWeights(optTestCoeffs, ipMatrix, elemType,
+                                            cellSideParities, basisCache);
+  //  testMatrixInversionTime += subTimer.ElapsedTime();
+  //      cout << "optTestCoeffs:\n" << optTestCoeffs;
+  
+  if ( optSuccess != 0 ) {
+    cout << "**** WARNING: in BilinearForm::localStiffnessMatrixAndRHS(), optimal test function computation failed with error code " << optSuccess << ". ****\n";
+  }
+  
+  //cout << "optTestCoeffs\n" << optTestCoeffs;
+  
+  //  subTimer.ResetStartTime();
+  
+  BilinearFormUtility::computeStiffnessMatrix(localStiffness,ipMatrix,optTestCoeffs);
+  //  localStiffnessDeterminationFromTestsTime += subTimer.ElapsedTime();
+  //      cout << "finalStiffness:\n" << finalStiffness;
+  
+  //  subTimer.ResetStartTime();
+  rhs->integrateAgainstOptimalTests(rhsVector, optTestCoeffs, testOrder, basisCache);
+  //  rhsIntegrationAgainstOptimalTestsTime += subTimer.ElapsedTime();
 }
 
 void BilinearForm::multiplyFCByWeight(FieldContainer<double> & fc, double weight) {

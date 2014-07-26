@@ -16,6 +16,8 @@
 
 #include "IP.h"
 
+#include "RHS.h"
+
 class BF : public BilinearForm {
   typedef pair< LinearTermPtr, LinearTermPtr > BilinearTerm;
   vector< BilinearTerm > _terms;
@@ -44,6 +46,10 @@ public:
   bool isFluxOrTrace(int trialID);
   
   void printTrialTestInteractions();
+  
+//  virtual void localStiffnessMatrixAndRHS(FieldContainer<double> &localStiffness, FieldContainer<double> &rhsVector,
+//                                          IPPtr ip, BasisCachePtr ipBasisCache,
+//                                          RHSPtr rhs,  BasisCachePtr basisCache);
   
   void stiffnessMatrix(FieldContainer<double> &stiffness, Teuchos::RCP<ElementType> elemType,
                        FieldContainer<double> &cellSideParities, Teuchos::RCP<BasisCache> basisCache);

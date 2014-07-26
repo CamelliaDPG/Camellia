@@ -334,7 +334,7 @@ void Solution::initializeLHSVector() {
   _lhsVector->PutScalar(0); // unclear whether this is redundant with constructor or not
   
   // set initial _lhsVector (initial guess for iterative solvers)
-  set<GlobalIndexType> cellIDs = _mesh->globalDofAssignment()->cellsInPartition(-1);
+  set<GlobalIndexType> cellIDs = _mesh->cellIDsInPartition();
   for (set<GlobalIndexType>::iterator cellIDIt = cellIDs.begin(); cellIDIt != cellIDs.end(); cellIDIt++) {
     GlobalIndexType cellID = *cellIDIt;
     if (_solutionForCellIDGlobal.find(cellID) != _solutionForCellIDGlobal.end()) {
@@ -424,64 +424,72 @@ void Solution::populateStiffnessAndLoad() {
       
       bool createSideCacheToo = true;
       basisCache->setPhysicalCellNodes(physicalCellNodes,cellIDs,createSideCacheToo);
+      basisCache->setCellSideParities(cellSideParities);
+
       // hard-coding creating side cache for IP for now, since _ip->hasBoundaryTerms() only recognizes terms explicitly passed in as boundary terms:
       ipBasisCache->setPhysicalCellNodes(physicalCellNodes,cellIDs,true);//_ip->hasBoundaryTerms()); // create side cache if ip has boundary values
+      ipBasisCache->setCellSideParities(cellSideParities); // I don't anticipate these being needed, though
       
       //int numCells = physicalCellNodes.dimension(0);
-      CellTopoPtr cellTopoPtr = elemTypePtr->cellTopoPtr;
+//      CellTopoPtr cellTopoPtr = elemTypePtr->cellTopoPtr;
+//      
+//      //      { // this block is not necessary for the solution.  Here just to produce debugging output
+//      //        FieldContainer<double> preStiffness(numCells,numTestDofs,numTrialDofs );
+//      //
+//      //        BilinearFormUtility::computeStiffnessMatrix(preStiffness, _mesh->bilinearForm(),
+//      //                                                    trialOrderingPtr, testOrderingPtr, *(cellTopoPtr.get()),
+//      //                                                    physicalCellNodes, cellSideParities);
+//      //        FieldContainer<double> preStiffnessTransposed(numCells,numTrialDofs,numTestDofs );
+//      //        BilinearFormUtility::transposeFCMatrices(preStiffnessTransposed,preStiffness);
+//      //
+//      ////        cout << "preStiffness:\n" << preStiffness;
+//      //      }
+//      
+//      subTimer.ResetStartTime();
+//      
+//      FieldContainer<double> ipMatrix(numCells,numTestDofs,numTestDofs);
+//      
+//      _ip->computeInnerProductMatrix(ipMatrix,testOrderingPtr, ipBasisCache);
+//      
+//      testMatrixAssemblyTime += subTimer.ElapsedTime();
+//      
+//      //      cout << "ipMatrix:\n" << ipMatrix;
+//      
+//      subTimer.ResetStartTime();
+//      FieldContainer<double> optTestCoeffs(numCells,numTrialDofs,numTestDofs);
+//      
+//      int optSuccess = _mesh->bilinearForm()->optimalTestWeights(optTestCoeffs, ipMatrix, elemTypePtr,
+//                                                                 cellSideParities, basisCache);
+//      testMatrixInversionTime += subTimer.ElapsedTime();
+////      cout << "optTestCoeffs:\n" << optTestCoeffs;
+//      
+//      if ( optSuccess != 0 ) {
+//        cout << "**** WARNING: in Solution.solve(), optimal test function computation failed with error code " << optSuccess << ". ****\n";
+//      }
+//      
+//      //cout << "optTestCoeffs\n" << optTestCoeffs;
+//      
+//      subTimer.ResetStartTime();
+//      FieldContainer<double> finalStiffness(numCells,numTrialDofs,numTrialDofs);
+//      
+//      BilinearFormUtility::computeStiffnessMatrix(finalStiffness,ipMatrix,optTestCoeffs);
+//      localStiffnessDeterminationFromTestsTime += subTimer.ElapsedTime();
+////      cout << "finalStiffness:\n" << finalStiffness;
+//      
+//      subTimer.ResetStartTime();
+//      FieldContainer<double> localRHSVector(numCells, numTrialDofs);
+//      _rhs->integrateAgainstOptimalTests(localRHSVector, optTestCoeffs, testOrderingPtr, basisCache);
+//      rhsIntegrationAgainstOptimalTestsTime += subTimer.ElapsedTime();
       
-      //      { // this block is not necessary for the solution.  Here just to produce debugging output
-      //        FieldContainer<double> preStiffness(numCells,numTestDofs,numTrialDofs );
-      //
-      //        BilinearFormUtility::computeStiffnessMatrix(preStiffness, _mesh->bilinearForm(),
-      //                                                    trialOrderingPtr, testOrderingPtr, *(cellTopoPtr.get()),
-      //                                                    physicalCellNodes, cellSideParities);
-      //        FieldContainer<double> preStiffnessTransposed(numCells,numTrialDofs,numTestDofs );
-      //        BilinearFormUtility::transposeFCMatrices(preStiffnessTransposed,preStiffness);
-      //
-      ////        cout << "preStiffness:\n" << preStiffness;
-      //      }
+      FieldContainer<double> localStiffness(numCells,numTrialDofs,numTrialDofs);
+      FieldContainer<double> localRHSVector(numCells,numTrialDofs);
       
-      subTimer.ResetStartTime();
-      
-      FieldContainer<double> ipMatrix(numCells,numTestDofs,numTestDofs);
-      
-      _ip->computeInnerProductMatrix(ipMatrix,testOrderingPtr, ipBasisCache);
-      
-      testMatrixAssemblyTime += subTimer.ElapsedTime();
-      
-      //      cout << "ipMatrix:\n" << ipMatrix;
-      
-      subTimer.ResetStartTime();
-      FieldContainer<double> optTestCoeffs(numCells,numTrialDofs,numTestDofs);
-      
-      int optSuccess = _mesh->bilinearForm()->optimalTestWeights(optTestCoeffs, ipMatrix, elemTypePtr,
-                                                                 cellSideParities, basisCache);
-      testMatrixInversionTime += subTimer.ElapsedTime();
-//      cout << "optTestCoeffs:\n" << optTestCoeffs;
-      
-      if ( optSuccess != 0 ) {
-        cout << "**** WARNING: in Solution.solve(), optimal test function computation failed with error code " << optSuccess << ". ****\n";
-      }
-      
-      //cout << "optTestCoeffs\n" << optTestCoeffs;
-      
-      subTimer.ResetStartTime();
-      FieldContainer<double> finalStiffness(numCells,numTrialDofs,numTrialDofs);
-      
-      BilinearFormUtility::computeStiffnessMatrix(finalStiffness,ipMatrix,optTestCoeffs);
-      localStiffnessDeterminationFromTestsTime += subTimer.ElapsedTime();
-//      cout << "finalStiffness:\n" << finalStiffness;
-      
-      subTimer.ResetStartTime();
-      FieldContainer<double> localRHSVector(numCells, numTrialDofs);
-      _rhs->integrateAgainstOptimalTests(localRHSVector, optTestCoeffs, testOrderingPtr, basisCache);
-      rhsIntegrationAgainstOptimalTestsTime += subTimer.ElapsedTime();
+      _mesh->bilinearForm()->localStiffnessMatrixAndRHS(localStiffness, localRHSVector, _ip, ipBasisCache, _rhs, basisCache);
       
       // apply filter(s) (e.g. penalty method, preconditioners, etc.)
       if (_filter.get()) {
         subTimer.ResetStartTime();
-        _filter->filter(finalStiffness,localRHSVector,basisCache,_mesh,_bc);
+        _filter->filter(localStiffness,localRHSVector,basisCache,_mesh,_bc);
         filterApplicationTime += subTimer.ElapsedTime();
         //        _filter->filter(localRHSVector,physicalCellNodes,cellIDs,_mesh,_bc);
       }
@@ -505,10 +513,10 @@ void Solution::populateStiffnessAndLoad() {
       
       for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
         GlobalIndexType cellID = _mesh->cellID(elemTypePtr,cellIndex+startCellIndexForBatch,rank);
-        FieldContainer<double> localStiffness(localStiffnessDim,&finalStiffness(cellIndex,0,0)); // shallow copy
-        FieldContainer<double> localRHS(localRHSDim,&localRHSVector(cellIndex,0)); // shallow copy
+        FieldContainer<double> cellStiffness(localStiffnessDim,&localStiffness(cellIndex,0,0)); // shallow copy
+        FieldContainer<double> cellRHS(localRHSDim,&localRHSVector(cellIndex,0)); // shallow copy
         
-        _dofInterpreter->interpretLocalData(cellID, localStiffness, localRHS, interpretedStiffness, interpretedRHS, globalDofIndices);
+        _dofInterpreter->interpretLocalData(cellID, cellStiffness, cellRHS, interpretedStiffness, interpretedRHS, globalDofIndices);
         
         // cast whatever the global index type is to a type that Epetra supports
         globalDofIndices.dimensions(dim);
