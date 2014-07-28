@@ -904,6 +904,7 @@ void Mesh::rebuildLookups() {
 
 int Mesh::rowSizeUpperBound() {
   // includes multiplicity
+  static const int MAX_SIZE_TO_PRESCRIBE = 100; // the below is a significant over-estimate.  Eventually, we want something more precise, that will analyze the BF to determine which variables actually talk to each other, and perhaps even provide a precise per-row count to the Epetra_CrsMatrix.  For now, we just cap the estimate.  (On construction, Epetra_CrsMatrix appears to be allocating the row size provided for every row, which is also wasteful.)
   vector< Teuchos::RCP< ElementType > >::iterator elemTypeIt;
   int maxRowSize = 0;
   PartitionIndexType partitionCount = _gda->getPartitionCount();
@@ -927,7 +928,7 @@ int Mesh::rowSizeUpperBound() {
       maxRowSize = max(maxPossible, maxRowSize);
     }
   }
-  return maxRowSize;
+  return min(maxRowSize, MAX_SIZE_TO_PRESCRIBE);
 }
 
 vector< ParametricCurvePtr > Mesh::parametricEdgesForCell(GlobalIndexType cellID, bool neglectCurves) {
