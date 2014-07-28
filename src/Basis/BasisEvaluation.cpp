@@ -115,7 +115,7 @@ FCPtr BasisEvaluation::getTransformedValues(BasisPtr basis, IntrepidExtendedType
 FCPtr BasisEvaluation::getTransformedVectorValuesWithComponentBasisValues(VectorBasisPtr basis, IntrepidExtendedTypes::EOperatorExtended op,
                                                                           constFCPtr componentReferenceValuesTransformed) {
   IntrepidExtendedTypes::EFunctionSpaceExtended fs = basis->functionSpace();
-  bool vectorizedBasis = (fs == IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HGRAD) || (fs == IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HVOL);
+  bool vectorizedBasis = IntrepidExtendedTypes::functionSpaceIsVectorized(fs);
   if ( !vectorizedBasis || 
       ((op !=  IntrepidExtendedTypes::OP_VALUE) && (op != IntrepidExtendedTypes::OP_CROSS_NORMAL) )) {
     TEUCHOS_TEST_FOR_EXCEPTION( !vectorizedBasis || (op !=  IntrepidExtendedTypes::OP_VALUE),
@@ -150,7 +150,6 @@ FCPtr BasisEvaluation::getTransformedValuesWithBasisValues(BasisPtr basis, Intre
     spaceDim = cellJacobian.dimension(2);
   }
   
-  
   int componentOfInterest;
   IntrepidExtendedTypes::EFunctionSpaceExtended fs = basis->functionSpace();
   Intrepid::EOperator relatedOp = relatedOperator(op,fs, componentOfInterest);
@@ -167,14 +166,17 @@ FCPtr BasisEvaluation::getTransformedValuesWithBasisValues(BasisPtr basis, Intre
     case(Intrepid::OPERATOR_VALUE):
       switch(fs) {
         case IntrepidExtendedTypes::FUNCTION_SPACE_REAL_SCALAR:
-//          cout << "Reference values for FUNCTION_SPACE_REAL_SCALAR: " << *referenceValues;
+          //          cout << "Reference values for FUNCTION_SPACE_REAL_SCALAR: " << *referenceValues;
         case IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD:
+        case IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD_DISC:
           fst::HGRADtransformVALUE<double>(*transformedValues,*referenceValues);
           break;
         case IntrepidExtendedTypes::FUNCTION_SPACE_HCURL:
+        case IntrepidExtendedTypes::FUNCTION_SPACE_HCURL_DISC:
           fst::HCURLtransformVALUE<double>(*transformedValues,cellJacobianInv,*referenceValues);
           break;
         case IntrepidExtendedTypes::FUNCTION_SPACE_HDIV:
+        case IntrepidExtendedTypes::FUNCTION_SPACE_HDIV_DISC:
         case IntrepidExtendedTypes::FUNCTION_SPACE_HDIV_FREE:
           fst::HDIVtransformVALUE<double>(*transformedValues,cellJacobian,cellJacobianDet,*referenceValues);
           break;
@@ -199,11 +201,13 @@ FCPtr BasisEvaluation::getTransformedValuesWithBasisValues(BasisPtr basis, Intre
     case(Intrepid::OPERATOR_GRAD):
       switch(fs) {
         case IntrepidExtendedTypes::FUNCTION_SPACE_HVOL:
-        case IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD: // HGRAD is the only space that supports the GRAD operator...
+        case IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD:
+        case IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD_DISC:
           fst::HGRADtransformGRAD<double>(*transformedValues,cellJacobianInv,*referenceValues);
           break;
         case IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HVOL:
         case IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HGRAD:
+        case IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HGRAD_DISC:
           // referenceValues has dimensions (F,P,D1,D2).  D1 is our component dimension, and D2 is the one that came from the gradient.
           // HGRADtransformGRAD expects (F,P,D) for input, and (C,F,P,D) for output.
           // If we split referenceValues into (F,P,D1=0,D2) and (F,P,D1=1,D2), then we can transform each of those, and then interleave the results…
@@ -262,6 +266,7 @@ FCPtr BasisEvaluation::getTransformedValuesWithBasisValues(BasisPtr basis, Intre
     case(Intrepid::OPERATOR_CURL):
       switch(fs) {
         case IntrepidExtendedTypes::FUNCTION_SPACE_HCURL:
+        case IntrepidExtendedTypes::FUNCTION_SPACE_HCURL_DISC:
           if (spaceDim == 2) {
             // TODO: confirm that this is correct
 //            static bool warningIssued = false;
@@ -275,11 +280,13 @@ FCPtr BasisEvaluation::getTransformedValuesWithBasisValues(BasisPtr basis, Intre
           }
           break;
         case IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD:
+        case IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD_DISC:
           // in 2D, HGRADtransformCURL == HDIVtransformVALUE (because curl(H1) --> H(div))
           fst::HDIVtransformVALUE<double>(*transformedValues,cellJacobian,cellJacobianDet,*referenceValues);
           break;
         case IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HVOL:
-        case IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HGRAD: // shouldn't take the transform so late
+        case IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HGRAD:
+        case IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HGRAD_DISC: // shouldn't take the transform so late
         default:
           TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument, "unhandled transformation");
           break;
@@ -288,11 +295,13 @@ FCPtr BasisEvaluation::getTransformedValuesWithBasisValues(BasisPtr basis, Intre
     case(Intrepid::OPERATOR_DIV):
       switch(fs) {
         case IntrepidExtendedTypes::FUNCTION_SPACE_HDIV:
+        case IntrepidExtendedTypes::FUNCTION_SPACE_HDIV_DISC:
         case IntrepidExtendedTypes::FUNCTION_SPACE_HDIV_FREE:
           fst::HDIVtransformDIV<double>(*transformedValues,cellJacobianDet,*referenceValues);
           break;
         case IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HVOL:
-        case IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HGRAD: // shouldn't take the transform so late
+        case IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HGRAD:
+        case IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HGRAD_DISC: // shouldn't take the transform so late
         default:
           TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument, "unhandled transformation");
           break;
@@ -314,7 +323,7 @@ Intrepid::EOperator BasisEvaluation::relatedOperator(EOperatorExtended op, Intre
   Intrepid::EOperator relatedOp = (Intrepid::EOperator) op;
   componentOfInterest = -1;
 
-  bool vectorizedBasis = (fs == IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HGRAD) || (fs == IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HVOL);
+  bool vectorizedBasis = IntrepidExtendedTypes::functionSpaceIsVectorized(fs);
 
   if (   vectorizedBasis
       && ( (op == IntrepidExtendedTypes::OP_CURL) || (op == IntrepidExtendedTypes::OP_DIV) ) ) {
@@ -335,7 +344,7 @@ Intrepid::EOperator BasisEvaluation::relatedOperator(EOperatorExtended op, Intre
 
 FCPtr BasisEvaluation::getComponentOfInterest(constFCPtr values, IntrepidExtendedTypes::EOperatorExtended op, IntrepidExtendedTypes::EFunctionSpaceExtended fs, int componentOfInterest) {
   FCPtr result;
-  bool vectorizedBasis = (fs == IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HGRAD) || (fs == IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HVOL);
+  bool vectorizedBasis = functionSpaceIsVectorized(fs);
   if (   vectorizedBasis
       && ( (op == IntrepidExtendedTypes::OP_CURL) || (op == IntrepidExtendedTypes::OP_DIV)) ) {
     TEUCHOS_TEST_FOR_EXCEPTION(values->rank() != 5, std::invalid_argument, "rank of values must be 5 for VECTOR_HGRAD_GRAD");

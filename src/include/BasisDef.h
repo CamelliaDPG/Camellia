@@ -312,13 +312,11 @@ namespace Camellia {
     this->_tagToOrdinal = _intrepidBasis->getDofOrdinalData();
     this->_ordinalToTag = _intrepidBasis->getAllDofTags();
     
-    bool isL2 =  (this->_functionSpace == IntrepidExtendedTypes::FUNCTION_SPACE_HVOL)
-              || (this->_functionSpace == IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HVOL)
-              || (this->_functionSpace == IntrepidExtendedTypes::FUNCTION_SPACE_TENSOR_HVOL);
+    bool isDiscontinuous =  IntrepidExtendedTypes::functionSpaceIsDiscontinuous(this->_functionSpace);
 
     // if this is an L^2 basis (potentially wrapping a non-L^2 Intrepid basis--to date, Intrepid doesn't have any L^2 bases, so we usually use H^1 of one lower degree for L^2),
     // then we should rework the data structures a bit...
-    if (isL2) {
+    if (isDiscontinuous) {
       std::vector<int> tag(4);
       int domainDimension = this->domainTopology().getDimension();
       this->_ordinalToTag = std::vector< std::vector<int> >(this->_basisCardinality);

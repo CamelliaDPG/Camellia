@@ -32,7 +32,7 @@ namespace IntrepidExtendedTypes {
     OP_VECTORIZE_VALUE  // 26
   };
   
-  enum EFunctionSpaceExtended { // all but the last three copied from EFunctionSpace
+  enum EFunctionSpaceExtended { // the first four copied from EFunctionSpace
     FUNCTION_SPACE_HGRAD = 0,
     FUNCTION_SPACE_HCURL,
     FUNCTION_SPACE_HDIV,
@@ -41,12 +41,21 @@ namespace IntrepidExtendedTypes {
     FUNCTION_SPACE_TENSOR_HGRAD,
     FUNCTION_SPACE_VECTOR_HVOL,
     FUNCTION_SPACE_TENSOR_HVOL,
+    FUNCTION_SPACE_HGRAD_DISC,
+    FUNCTION_SPACE_HCURL_DISC,
+    FUNCTION_SPACE_HDIV_DISC,
+    FUNCTION_SPACE_HVOL_DISC,
+    FUNCTION_SPACE_VECTOR_HGRAD_DISC,
+    FUNCTION_SPACE_TENSOR_HGRAD_DISC,
+    FUNCTION_SPACE_VECTOR_HVOL_DISC,
+    FUNCTION_SPACE_TENSOR_HVOL_DISC,
     FUNCTION_SPACE_REAL_SCALAR,
     FUNCTION_SPACE_HDIV_FREE,
     FUNCTION_SPACE_UNKNOWN
   };
   
   bool functionSpaceIsVectorized(EFunctionSpaceExtended fs);
+  bool functionSpaceIsDiscontinuous(EFunctionSpaceExtended fs);
 }
 
 #endif
