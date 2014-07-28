@@ -20,18 +20,18 @@
 typedef pair< FunctionPtr, VarPtr > LinearSummand;
 
 bool linearSummandIsBoundaryValueOnly(LinearSummand &ls) {
-  bool opInvolvesNormal = (ls.second->op() == IntrepidExtendedTypes::OP_TIMES_NORMAL)   || 
-  (ls.second->op() == IntrepidExtendedTypes::OP_TIMES_NORMAL_X) || 
-  (ls.second->op() == IntrepidExtendedTypes::OP_TIMES_NORMAL_Y) || 
-  (ls.second->op() == IntrepidExtendedTypes::OP_TIMES_NORMAL_Z) || 
-  (ls.second->op() == IntrepidExtendedTypes::OP_CROSS_NORMAL)   || 
+  bool opInvolvesNormal = (ls.second->op() == IntrepidExtendedTypes::OP_TIMES_NORMAL)   ||
+  (ls.second->op() == IntrepidExtendedTypes::OP_TIMES_NORMAL_X) ||
+  (ls.second->op() == IntrepidExtendedTypes::OP_TIMES_NORMAL_Y) ||
+  (ls.second->op() == IntrepidExtendedTypes::OP_TIMES_NORMAL_Z) ||
+  (ls.second->op() == IntrepidExtendedTypes::OP_CROSS_NORMAL)   ||
   (ls.second->op() == IntrepidExtendedTypes::OP_DOT_NORMAL);
   bool boundaryOnlyFunction = ls.first->boundaryValueOnly();
   return boundaryOnlyFunction || (ls.second->varType()==FLUX) || (ls.second->varType()==TRACE) || opInvolvesNormal;
 }
 
-const vector< LinearSummand > & LinearTerm::summands() const { 
-  return _summands; 
+const vector< LinearSummand > & LinearTerm::summands() const {
+  return _summands;
 }
 
 LinearTerm::LinearTerm() {
@@ -131,15 +131,15 @@ const set<int> & LinearTerm::varIDs() const {
   return _varIDs;
 }
 
-VarType LinearTerm::termType() const { 
-  return _termType; 
+VarType LinearTerm::termType() const {
+  return _termType;
 }
 
 // some notes on the design of integrate:
 // each linear summand can be either an element-boundary-only term, or one that's defined on the
 // whole element.  For boundary-only terms, we integrate along each side.  The summands that are
 // defined on the whole element are integrated over the element interior, unless forceBoundaryTerm
-// is set to true, in which case these too will be integrated over the boundary.  One place where 
+// is set to true, in which case these too will be integrated over the boundary.  One place where
 // this is appropriate is when a test function LinearTerm is being integrated against a trace or
 // flux in a bilinear form: the test function is defined on the whole element, but the traces and
 // fluxes are only defined on the element boundary.
@@ -257,8 +257,7 @@ void LinearTerm::integrate(FieldContainer<double> &values, DofOrderingPtr thisOr
       for (int sideIndex = startSideIndex; sideIndex <= endSideIndex; sideIndex++ ) {
         int numPoints = volumeCache->getPhysicalCubaturePointsForSide(sideIndex).dimension(1);
         
-        basis = thisFluxOrTrace ? thisOrdering->getBasis(varID,sideIndex) 
-                                : thisOrdering->getBasis(varID);
+        basis = thisFluxOrTrace ? thisOrdering->getBasis(varID,sideIndex) : thisOrdering->getBasis(varID);
         int basisCardinality = basis->getCardinality();
         ltValueDim[1] = basisCardinality;
         ltValueDim[2] = numPoints;
@@ -308,22 +307,35 @@ void LinearTerm::integrate(FieldContainer<double> &values, DofOrderingPtr thisOr
 }
 
 void LinearTerm::integrate(FieldContainer<double> &values,
-                           LinearTermPtr u, DofOrderingPtr uOrdering, 
-                           LinearTermPtr v, DofOrderingPtr vOrdering, 
+                           LinearTermPtr u, DofOrderingPtr uOrdering,
+                           LinearTermPtr v, DofOrderingPtr vOrdering,
                            BasisCachePtr basisCache, bool sumInto) {
+  integrate(NULL, values, u, uOrdering, v, vOrdering, basisCache, sumInto);
+}
+
+void LinearTerm::integrate(Epetra_CrsMatrix* valuesCrsMatrix, FieldContainer<double> &valuesFC,
+                           LinearTermPtr u, DofOrderingPtr uOrdering,
+                           LinearTermPtr v, DofOrderingPtr vOrdering,
+                           BasisCachePtr basisCache, bool sumInto) {
+  if (!sumInto) valuesFC.initialize();
+  if (u->isZero() || v->isZero()) return;
+  int numCells = basisCache->getPhysicalCubaturePoints().dimension(0);
   // will integrate either in volume or along a side, depending on the type of BasisCache passed in
-  if (!sumInto) values.initialize();
-  
-  if (u->isZero() || v->isZero()) return; // nothing to do, then.
-  
-  TEUCHOS_TEST_FOR_EXCEPTION(values.dimension(1) != uOrdering->totalDofs(), std::invalid_argument, "values.dim(1) != uOrdering->totalDofs()");
-  TEUCHOS_TEST_FOR_EXCEPTION(values.dimension(2) != vOrdering->totalDofs(), std::invalid_argument, "values.dim(2) != vOrdering->totalDofs()");
+  if (valuesCrsMatrix==NULL) { // then the FC is the one to fill
+    TEUCHOS_TEST_FOR_EXCEPTION(valuesFC.dimension(0) != numCells, std::invalid_argument, "values.dim(0) != numCells");
+    TEUCHOS_TEST_FOR_EXCEPTION(valuesFC.dimension(1) != uOrdering->totalDofs(), std::invalid_argument, "values.dim(1) != uOrdering->totalDofs()");
+    TEUCHOS_TEST_FOR_EXCEPTION(valuesFC.dimension(2) != vOrdering->totalDofs(), std::invalid_argument, "values.dim(2) != vOrdering->totalDofs()");
+  } else {
+    if (numCells != 1) {
+      cout << "CrsMatrix version of integrate() requires that numCells = 1.\n";
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "CrsMatrix version of integrate() requires that numCells = 1.");
+    }
+  }
   
   bool symmetric = false; // turning off a so far buggy attempt at optimization
-//  bool symmetric = (u.get()==v.get()) && (uOrdering.get() == vOrdering.get());
+  //  bool symmetric = (u.get()==v.get()) && (uOrdering.get() == vOrdering.get());
   
   // values has dimensions (numCells, uFields, vFields)
-  int numCells = values.dimension(0);
   int numPoints = basisCache->getPhysicalCubaturePoints().dimension(1);
   int spaceDim = basisCache->getPhysicalCubaturePoints().dimension(2);
   
@@ -343,7 +355,7 @@ void LinearTerm::integrate(FieldContainer<double> &values,
   
   for (int uOrdinal=0; uOrdinal < uIDVector.size(); uOrdinal++) {
     int uID = uIDVector[uOrdinal];
-//    cout << "uID: " << uID << endl;
+    //    cout << "uID: " << uID << endl;
     // the DofOrdering needs a sideIndex argument; this is 0 for volume bases.
     bool uVolVar = (uOrdering->getNumSidesForVarID(uID) == 1);
     int uSideIndex = uVolVar ? 0 : basisCache->getSideIndex();
@@ -369,12 +381,12 @@ void LinearTerm::integrate(FieldContainer<double> &values,
     bool applyCubatureWeights = true, dontApplyCubatureWeights = false;
     u->values(uValues,uID,uBasis,basisCache,applyCubatureWeights);
     
-
+    
     //    double debugSum = 0.0;
-//    for (int i=0; i<uValues.size(); i++) {
-//      debugSum += uValues[i];
-//    }
-//    cout << "uValues debug sum for u = " << u->displayString() << ": " << debugSum << endl;
+    //    for (int i=0; i<uValues.size(); i++) {
+    //      debugSum += uValues[i];
+    //    }
+    //    cout << "uValues debug sum for u = " << u->displayString() << ": " << debugSum << endl;
     
     if ( u->termType() == FLUX ) {
       // we need to multiply uValues' entries by the parity of the normal, since
@@ -382,12 +394,12 @@ void LinearTerm::integrate(FieldContainer<double> &values,
       // that the neighboring cells have opposite normal...
       multiplyFluxValuesByParity(uValues, basisCache); // basisCache had better be a side cache!
     }
-
+    
     int vStartOrdinal = symmetric ? uOrdinal : 0;
     
     for (int vOrdinal = vStartOrdinal; vOrdinal < vIDVector.size(); vOrdinal++) {
       int vID = vIDVector[vOrdinal];
-//      cout << "vID: " << vID << endl;
+      //      cout << "vID: " << vID << endl;
       bool vVolVar = (vOrdering->getNumSidesForVarID(vID) == 1);
       int vSideIndex = vVolVar ? 0 : basisCache->getSideIndex();
       if (! vOrdering->hasBasisEntry(vID, vSideIndex) ) {
@@ -411,8 +423,8 @@ void LinearTerm::integrate(FieldContainer<double> &values,
       FieldContainer<double> vValues(ltValueDim);
       v->values(vValues, vID, vBasis, basisCache, dontApplyCubatureWeights);
       
-//      cout << "vValues (without cubature weights applied) for v = " << v->displayString() << ":" << endl;
-//      cout << vValues;
+      //      cout << "vValues (without cubature weights applied) for v = " << v->displayString() << ":" << endl;
+      //      cout << vValues;
       
       // same flux consideration, for the vValues
       if ( v->termType() == FLUX ) {
@@ -423,39 +435,66 @@ void LinearTerm::integrate(FieldContainer<double> &values,
       
       FunctionSpaceTools::integrate<double>(miniMatrix,uValues,vValues,COMP_CPP);
       
-//      cout << "uValues:" << endl << uValues;
-//      cout << "vValues:" << endl << vValues;
-//      cout << "miniMatrix:" << endl << miniMatrix;
+      //      cout << "uValues:" << endl << uValues;
+      //      cout << "vValues:" << endl << vValues;
+      //      cout << "miniMatrix:" << endl << miniMatrix;
       
       vector<int> uDofIndices = uOrdering->getDofIndices(uID,uSideIndex);
       vector<int> vDofIndices = vOrdering->getDofIndices(vID,vSideIndex);
       
-      // there may be a more efficient way to do this copying:
-      for (int i=0; i < uBasisCardinality; i++) {
-        int uDofIndex = uDofIndices[i];
-        for (int j=0; j < vBasisCardinality; j++) {
-          int vDofIndex = vDofIndices[j];
-          for (unsigned k=0; k < numCells; k++) {
-            double value = miniMatrix(k,i,j); // separate line for debugger inspection
-            values(k,uDofIndex,vDofIndex) += value;
-            if ((symmetric) && (uOrdinal != vOrdinal)) {
-              values(k,vDofIndex,uDofIndex) += value;
+      if (valuesCrsMatrix==NULL) {
+        // there may be a more efficient way to do this copying:
+        for (unsigned k=0; k < numCells; k++) {
+          for (int i=0; i < uBasisCardinality; i++) {
+            int uDofIndex = uDofIndices[i];
+            for (int j=0; j < vBasisCardinality; j++) {
+              int vDofIndex = vDofIndices[j];
+              double value = miniMatrix(k,i,j); // separate line for debugger inspection
+              valuesFC(k,uDofIndex,vDofIndex) += value;
+              if ((symmetric) && (uOrdinal != vOrdinal)) {  // pretty sure this point is where the bug in symmetric accumulation comes in.  Pretty sure we'll get some double-accumulation.  I'm not sure how to fix it just yet, though.
+                valuesFC(k,vDofIndex,uDofIndex) += value;
+              }
+              //            cout << "values(" << k << ", " << uDofIndex << ", " << vDofIndex << ") += " << value << endl;
             }
-//            cout << "values(" << k << ", " << uDofIndex << ", " << vDofIndex << ") += " << value << endl;
           }
+        }
+      } else { // CrsMatrix version
+        FieldContainer<int> uDofIndicesFC(uDofIndices.size()), vDofIndicesFC(vDofIndices.size());
+        for (int i=0; i < uBasisCardinality; i++) {
+          uDofIndicesFC[i] = uDofIndices[i];
+        }
+        for (int j=0; j < vBasisCardinality; j++) {
+          vDofIndicesFC[j] = vDofIndicesFC[j];
+        }
+        for (int i=0; i < uBasisCardinality; i++) {
+          int uDofIndex = uDofIndices[i];
+          valuesCrsMatrix->SumIntoGlobalValues(uDofIndex, vBasisCardinality, &miniMatrix(0,i,0), &vDofIndicesFC[0]);
         }
       }
     }
   }
-//  cout << "Integrate complete.\n";
+  //  cout << "Integrate complete.\n";
 }
 
-void LinearTerm::integrate(FieldContainer<double> &values, DofOrderingPtr thisOrdering, 
-                           LinearTermPtr otherTerm, DofOrderingPtr otherOrdering, 
+void LinearTerm::integrate(Epetra_CrsMatrix *values, DofOrderingPtr thisOrdering,
+                           LinearTermPtr otherTerm, DofOrderingPtr otherOrdering,
+                           BasisCachePtr basisCache, bool forceBoundaryTerm, bool sumInto) {
+  static FieldContainer<double> emptyValues;
+  integrate(values, emptyValues, thisOrdering, otherTerm, otherOrdering, basisCache, forceBoundaryTerm, sumInto);
+}
+
+void LinearTerm::integrate(FieldContainer<double> &values, DofOrderingPtr thisOrdering,
+                           LinearTermPtr otherTerm, DofOrderingPtr otherOrdering,
+                           BasisCachePtr basisCache, bool forceBoundaryTerm, bool sumInto) {
+  integrate(NULL, values, thisOrdering, otherTerm, otherOrdering, basisCache, forceBoundaryTerm, sumInto);
+}
+
+void LinearTerm::integrate(Epetra_CrsMatrix *valuesCrsMatrix, FieldContainer<double> &valuesFC, DofOrderingPtr thisOrdering,
+                           LinearTermPtr otherTerm, DofOrderingPtr otherOrdering,
                            BasisCachePtr basisCache, bool forceBoundaryTerm, bool sumInto) {
   // values has dimensions (numCells, otherFields, thisFields)
   // note that this means when we call the private integrate, we need to use otherTerm as the first LinearTerm argument
-  if (!sumInto) values.initialize();
+  if (!sumInto) valuesFC.initialize();
   
   // define variables:
   //  u - the non-boundary-only part of this
@@ -465,7 +504,7 @@ void LinearTerm::integrate(FieldContainer<double> &values, DofOrderingPtr thisOr
   
   // we are then computing (u + du, v + dv) where e.g. (du,v) will be integrated along boundary
   // so the only non-boundary term is (u,v), and that only comes into it if forceBoundaryTerm is false.
-
+  
   bool symmetric = (thisOrdering.get() == otherOrdering.get()) && (this == otherTerm.get());
   
   if (basisCache->isSideCache() && !forceBoundaryTerm) {
@@ -477,21 +516,21 @@ void LinearTerm::integrate(FieldContainer<double> &values, DofOrderingPtr thisOr
   
   if (basisCache->isSideCache()) {
     // then we just integrate along the one side:
-    integrate(values, otherTerm, otherOrdering, thisPtr, thisOrdering, basisCache);
+    integrate(valuesCrsMatrix, valuesFC, otherTerm, otherOrdering, thisPtr, thisOrdering, basisCache);
     return;
   } else if (forceBoundaryTerm) {
     // then we don't need to worry about splitting into boundary and non-boundary parts,
     // but we do need to loop over the sides:
     int numSides = CamelliaCellTools::getSideCount(basisCache->cellTopology());
     for (int sideIndex=0; sideIndex<numSides; sideIndex++) {
-      integrate(values, otherTerm, otherOrdering, thisPtr, thisOrdering, basisCache->getSideBasisCache(sideIndex));
+      integrate(valuesCrsMatrix, valuesFC, otherTerm, otherOrdering, thisPtr, thisOrdering, basisCache->getSideBasisCache(sideIndex));
     }
   } else {
     LinearTermPtr thisBoundaryOnly = this->getBoundaryOnlyPart();
     LinearTermPtr thisNonBoundaryOnly = this->getNonBoundaryOnlyPart();
     LinearTermPtr otherBoundaryOnly;
     LinearTermPtr otherNonBoundaryOnly;
-
+    
     if (symmetric) {
       otherBoundaryOnly = thisBoundaryOnly;
       otherNonBoundaryOnly = thisNonBoundaryOnly;
@@ -501,23 +540,23 @@ void LinearTerm::integrate(FieldContainer<double> &values, DofOrderingPtr thisOr
     }
     
     // volume integration first:  ( (u,v) from above )
-    integrate(values, otherNonBoundaryOnly, otherOrdering, thisNonBoundaryOnly, thisOrdering, basisCache);
+    integrate(valuesCrsMatrix, valuesFC, otherNonBoundaryOnly, otherOrdering, thisNonBoundaryOnly, thisOrdering, basisCache);
     
     // sides:
     // (u + du, v + dv) - (u,v) = (u + du, dv) + (du, v)
     int numSides = CamelliaCellTools::getSideCount(basisCache->cellTopology());
     for (int sideIndex=0; sideIndex<numSides; sideIndex++) {
       // (u + du, dv)
-      integrate(values, otherBoundaryOnly, otherOrdering, thisPtr, thisOrdering, basisCache->getSideBasisCache(sideIndex));
+      integrate(valuesCrsMatrix, valuesFC, otherBoundaryOnly, otherOrdering, thisPtr, thisOrdering, basisCache->getSideBasisCache(sideIndex));
       // (du, v)
-      integrate(values, otherNonBoundaryOnly, otherOrdering, thisBoundaryOnly, thisOrdering, basisCache->getSideBasisCache(sideIndex));
+      integrate(valuesCrsMatrix, valuesFC, otherNonBoundaryOnly, otherOrdering, thisBoundaryOnly, thisOrdering, basisCache->getSideBasisCache(sideIndex));
     }
   }
 }
 
 // integrate this against otherTerm, where otherVar == fxn
-void LinearTerm::integrate(FieldContainer<double> &values, DofOrderingPtr thisOrdering, 
-                           LinearTermPtr otherTerm, VarPtr otherVar, FunctionPtr fxn, 
+void LinearTerm::integrate(FieldContainer<double> &values, DofOrderingPtr thisOrdering,
+                           LinearTermPtr otherTerm, VarPtr otherVar, FunctionPtr fxn,
                            BasisCachePtr basisCache, bool forceBoundaryTerm) {
   // values has dimensions (numCells, thisFields)
   
@@ -556,14 +595,14 @@ bool LinearTerm::isZero() const { // true if the LinearTerm is identically zero
 // (The SimpleSolutionFunction class is now written, though untested.  What remains is to add something such that
 //  LinearTerm can determine its OP_VALUE VarPtrs so that it can construct the right map.  It would probably suffice
 //  if Var learned about its "base", and then in addition to tracking the varIDs set here, we also tracked vars.)
-void LinearTerm::evaluate(FieldContainer<double> &values, SolutionPtr solution, BasisCachePtr basisCache, 
+void LinearTerm::evaluate(FieldContainer<double> &values, SolutionPtr solution, BasisCachePtr basisCache,
                           bool applyCubatureWeights) {
   int sideIndex = basisCache->getSideIndex();
-//  bool boundaryTerm = (sideIndex != -1);
+  //  bool boundaryTerm = (sideIndex != -1);
   
   int valuesRankExpected = _rank + 2; // 2 for scalar, 3 for vector, etc.
   TEUCHOS_TEST_FOR_EXCEPTION( valuesRankExpected != values.rank(), std::invalid_argument,
-                     "values FC does not have the expected rank" );
+                             "values FC does not have the expected rank" );
   int numCells = values.dimension(0);
   int numPoints = values.dimension(1);
   int spaceDim = basisCache->getPhysicalCubaturePoints().dimension(2);
@@ -583,9 +622,9 @@ void LinearTerm::evaluate(FieldContainer<double> &values, SolutionPtr solution, 
   tensorFunctionValueDim.append(spaceDim);
   
   TEUCHOS_TEST_FOR_EXCEPTION( numCells != basisCache->getPhysicalCubaturePoints().dimension(0),
-                     std::invalid_argument, "values FC numCells disagrees with cubature points container");
+                             std::invalid_argument, "values FC numCells disagrees with cubature points container");
   TEUCHOS_TEST_FOR_EXCEPTION( numPoints != basisCache->getPhysicalCubaturePoints().dimension(1),
-                     std::invalid_argument, "values FC numPoints disagrees with cubature points container");
+                             std::invalid_argument, "values FC numPoints disagrees with cubature points container");
   for (vector< LinearSummand >::iterator lsIt = _summands.begin(); lsIt != _summands.end(); lsIt++) {
     LinearSummand ls = *lsIt;
     FunctionPtr f = ls.first;
@@ -617,14 +656,14 @@ void LinearTerm::evaluate(FieldContainer<double> &values, SolutionPtr solution, 
       }
       solnValues.resize(solnDim);
     }
-      
+    
     f->values(fValues,basisCache);
     solution->solutionValues(solnValues,var->ID(),basisCache,
                              applyCubatureWeights,var->op());
     
     Teuchos::Array<int> fDim(fValues.rank());
     Teuchos::Array<int> solnDim(solnValues.rank());
-
+    
     int entriesPerPoint = 1;
     bool scalarF = f->rank() == 0;
     int resultRank = scalarF ? var->rank() : f->rank();
@@ -736,15 +775,14 @@ FunctionPtr LinearTerm::evaluate(map< int, FunctionPtr> &varFunctions, bool boun
     
     FunctionPtr varEvaluation = Function::op(varFunction,var->op());
     {
-    // DEBUGGING CODE:
-      if (! varEvaluation.get()) {
+      // DEBUGGING CODE:
+      if (varEvaluation.get() == NULL) {
         // try that again, so we can step into the code
-        FunctionPtr varEvaluation = Function::op(varFunction,var->op());        
+        FunctionPtr varEvaluation = Function::op(varFunction,var->op());
       }
     }
     
     if (fxn.get()) {
-      
       fxn = fxn + f * varEvaluation;
     } else {
       fxn = f * varEvaluation;
@@ -776,7 +814,7 @@ void LinearTerm::multiplyFluxValuesByParity(FieldContainer<double> &fluxValues, 
 
 // compute the value of linearTerm for non-zero varID at the cubature points, for each basis function in basis
 // values shape: (C,F,P), (C,F,P,D), or (C,F,P,D,D)
-void LinearTerm::values(FieldContainer<double> &values, int varID, BasisPtr basis, BasisCachePtr basisCache, 
+void LinearTerm::values(FieldContainer<double> &values, int varID, BasisPtr basis, BasisCachePtr basisCache,
                         bool applyCubatureWeights, bool naturalBoundaryTermsOnly) {
   int sideIndex = basisCache->getSideIndex();
   
@@ -802,11 +840,11 @@ void LinearTerm::values(FieldContainer<double> &values, int varID, BasisPtr basi
   tensorFunctionValueDim.append(spaceDim);
   
   TEUCHOS_TEST_FOR_EXCEPTION( numCells != basisCache->getPhysicalCubaturePoints().dimension(0),
-                     std::invalid_argument, "values FC numCells disagrees with cubature points container");
+                             std::invalid_argument, "values FC numCells disagrees with cubature points container");
   TEUCHOS_TEST_FOR_EXCEPTION( numFields != basis->getCardinality(),
-                     std::invalid_argument, "values FC numFields disagrees with basis cardinality");
+                             std::invalid_argument, "values FC numFields disagrees with basis cardinality");
   TEUCHOS_TEST_FOR_EXCEPTION( numPoints != basisCache->getPhysicalCubaturePoints().dimension(1),
-                     std::invalid_argument, "values FC numPoints disagrees with cubature points container");
+                             std::invalid_argument, "values FC numPoints disagrees with cubature points container");
   for (vector< LinearSummand >::iterator lsIt = _summands.begin(); lsIt != _summands.end(); lsIt++) {
     LinearSummand ls = *lsIt;
     // skip if this is a volume term, and we're only interested in the pure-boundary terms
@@ -855,10 +893,10 @@ void LinearTerm::values(FieldContainer<double> &values, int varID, BasisPtr basi
       
       ls.first->values(fValues,basisCache);
       
-//      if (ls.first->rank() == 2) {
-//        cout << "fValues:\n" << fValues;
-//        cout << "basisValues:\n" << *basisValues;
-//      }
+      //      if (ls.first->rank() == 2) {
+      //        cout << "fValues:\n" << fValues;
+      //        cout << "basisValues:\n" << *basisValues;
+      //      }
       
       int numFields = basis->getCardinality();
       
@@ -872,10 +910,10 @@ void LinearTerm::values(FieldContainer<double> &values, int varID, BasisPtr basi
         for (int d=0; d<fRank; d++) {
           entriesPerPoint *= spaceDim;
         }
-//        if (fRank > 0) {
-//          cout << "basisValues:\n" << *basisValues;
-//          cout << "fValues:\n" << fValues;
-//        }
+        //        if (fRank > 0) {
+        //          cout << "basisValues:\n" << *basisValues;
+        //          cout << "fValues:\n" << fValues;
+        //        }
         for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
           fDim[0] = cellIndex; bDim[0] = cellIndex;
           for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
@@ -898,8 +936,8 @@ void LinearTerm::values(FieldContainer<double> &values, int varID, BasisPtr basi
         // (just change the logic in the pointer increments)
         int entriesPerPoint = 1;
         
-//        cout << "basisValues:\n" << basisValues;
-//        cout << "fValues:\n" << fValues;
+        //        cout << "basisValues:\n" << basisValues;
+        //        cout << "fValues:\n" << fValues;
         
         // now that we've changed so that we handle scalar function multiplication separately,
         // we don't hit this code for scalar functions.  I.e. scalarF == false always.
@@ -922,7 +960,7 @@ void LinearTerm::values(FieldContainer<double> &values, int varID, BasisPtr basi
               
               for (int entryIndex=0; entryIndex<entriesPerPoint; entryIndex++) {
                 *value += *fValue * *bValue;
-                value++; 
+                value++;
                 if (scalarF) {
                   bValue++;
                 } else {
@@ -940,7 +978,7 @@ void LinearTerm::values(FieldContainer<double> &values, int varID, BasisPtr basi
 // compute the value of linearTerm for non-zero varID at the cubature points, for var == fxn
 // values shape: (C,P), (C,P,D), or (C,P,D,D)
 // TODO: refactor this and the other values() to reduce code redundancy
-void LinearTerm::values(FieldContainer<double> &values, int varID, FunctionPtr fxn, BasisCachePtr basisCache, 
+void LinearTerm::values(FieldContainer<double> &values, int varID, FunctionPtr fxn, BasisCachePtr basisCache,
                         bool applyCubatureWeights, bool naturalBoundaryTermsOnly) {
   int sideIndex = basisCache->getSideIndex();
   
@@ -977,9 +1015,9 @@ void LinearTerm::values(FieldContainer<double> &values, int varID, FunctionPtr f
   fxnValueAsBasisDim.insert(fxnValueDim.begin()+1, numFields); // (C, F, ...)
   
   TEUCHOS_TEST_FOR_EXCEPTION( numCells != basisCache->getPhysicalCubaturePoints().dimension(0),
-                     std::invalid_argument, "values FC numCells disagrees with cubature points container");
+                             std::invalid_argument, "values FC numCells disagrees with cubature points container");
   TEUCHOS_TEST_FOR_EXCEPTION( numPoints != basisCache->getPhysicalCubaturePoints().dimension(1),
-                     std::invalid_argument, "values FC numPoints disagrees with cubature points container");
+                             std::invalid_argument, "values FC numPoints disagrees with cubature points container");
   for (vector< LinearSummand >::iterator lsIt = _summands.begin(); lsIt != _summands.end(); lsIt++) {
     LinearSummand ls = *lsIt;
     // skip if this is a volume term, and we're only interested in the pure-boundary terms
@@ -1023,7 +1061,7 @@ void LinearTerm::values(FieldContainer<double> &values, int varID, FunctionPtr f
       }
       
       ls.first->values(fValues,basisCache);
-            
+      
       Teuchos::Array<int> fDim(fValues.rank()); // f is the functional weight -- fxn is the function substituted for the variable
       Teuchos::Array<int> fxnDim(fxnValues.rank());
       
@@ -1051,8 +1089,8 @@ void LinearTerm::values(FieldContainer<double> &values, int varID, FunctionPtr f
       } else { // vector/tensor result
         // could pretty easily fold the scalar case above into the code below
         // (just change the logic in the pointer increments)
-//        cout << "fxnValues:\n" << fxnValues;
-//        cout << "fValues:\n" << fValues;
+        //        cout << "fxnValues:\n" << fxnValues;
+        //        cout << "fValues:\n" << fValues;
         
         int entriesPerPoint = 1;
         // now that we've changed so that we handle scalar function multiplication separately,
@@ -1074,7 +1112,7 @@ void LinearTerm::values(FieldContainer<double> &values, int varID, FunctionPtr f
             
             for (int entryIndex=0; entryIndex<entriesPerPoint; entryIndex++) {
               *value += *fValue * *fxnValue;
-              value++; 
+              value++;
               if (scalarF) {
                 fxnValue++;
               } else {
@@ -1089,223 +1127,223 @@ void LinearTerm::values(FieldContainer<double> &values, int varID, FunctionPtr f
 }
 
 int LinearTerm::rank() const {   // 0 for scalar, 1 for vector, etc.
-  return _rank; 
+  return _rank;
 }
 /*
-// added by Jesse --------------------
-
-LinearTermPtr LinearTerm::rieszRep(VarPtr v){
-  LinearTermPtr errorComponent = Teuchos::rcp( new LinearTerm);
-  return errorComponent; // WARNING - FINISH THIS
-}
-
-void LinearTerm::computeRieszRep(Teuchos::RCP<Mesh> mesh, Teuchos::RCP<DPGInnerProduct> ip){
-  int numProcs=1;
-  int rank=0;
-  
-#ifdef HAVE_MPI
-  rank     = Teuchos::GlobalMPISession::getRank();
-  numProcs = Teuchos::GlobalMPISession::getNProc();
-  Epetra_MpiComm Comm(MPI_COMM_WORLD);
-  //cout << "rank: " << rank << " of " << numProcs << endl;
-#else
-  Epetra_SerialComm Comm;
-#endif
-
-  computeRieszRHS(mesh);
-
-  vector<ElementTypePtr> elemTypes = mesh->elementTypes(rank);
-  vector<ElementTypePtr>::iterator elemTypeIt;
-  for (elemTypeIt = elemTypes.begin(); elemTypeIt != elemTypes.end(); elemTypeIt++) {
-    ElementTypePtr elemTypePtr = *(elemTypeIt);
-    BasisCachePtr ipBasisCache = Teuchos::rcp(new BasisCache(elemTypePtr,mesh,true));
-    
-    Teuchos::RCP<DofOrdering> testOrdering = elemTypePtr->testOrderPtr;
-    FieldContainer<double> physicalCellNodes = mesh->physicalCellNodes(elemTypePtr);
-    
-    vector<Teuchos::RCP<Element> > elemsInPartitionOfType = mesh->elementsOfType(rank, elemTypePtr);
-    int numCells = physicalCellNodes.dimension(0);
-    int numTestDofs = testOrdering->totalDofs();
-    
-    FieldContainer<double> ipMatrix(numCells,numTestDofs,numTestDofs);
-    
-    // determine cellIDs
-    vector<GlobalIndexType> cellIDs;
-    for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
-      int cellID = mesh->cellID(elemTypePtr, cellIndex, rank);
-      cellIDs.push_back(cellID);
-    }    
-    ipBasisCache->setPhysicalCellNodes(physicalCellNodes,cellIDs,ip->hasBoundaryTerms());
-    
-    ip->computeInnerProductMatrix(ipMatrix,testOrdering, ipBasisCache);
-    FieldContainer<double> rieszRepresentation(numCells,numTestDofs);
-    
-    Epetra_SerialDenseSolver solver;
-    
-    for (int localCellIndex=0; localCellIndex<numCells; localCellIndex++ ) {
-      
-      Epetra_SerialDenseMatrix ipMatrixT(Copy, &ipMatrix(localCellIndex,0,0),
-                                         ipMatrix.dimension(2), // stride -- fc stores in row-major order (a.o.t. SDM)
-                                         ipMatrix.dimension(2),ipMatrix.dimension(1));
-      
-      Epetra_SerialDenseMatrix rhs(Copy, & (_rieszRHSForElementType[elemTypePtr.get()](localCellIndex,0)),
-                                   _rieszRHSForElementType[elemTypePtr.get()].dimension(1), // stride
-                                   _rieszRHSForElementType[elemTypePtr.get()].dimension(1), 1);
-     
-      Epetra_SerialDenseMatrix representationMatrix(numTestDofs,1);
-      
-      solver.SetMatrix(ipMatrixT);
-      int success = solver.SetVectors(representationMatrix, rhs);
-            
-      bool equilibrated = false;
-      if ( solver.ShouldEquilibrate() ) {
-        solver.EquilibrateMatrix();
-        solver.EquilibrateRHS();
-        equilibrated = true;
-      }
-      
-      success = solver.Solve();      
-      
-      if (equilibrated) {
-        success = solver.UnequilibrateLHS();
-      }    
-      
-      for (int i=0; i<numTestDofs; i++) {
-        rieszRepresentation(localCellIndex,i) = representationMatrix(i,0);
-      }
-    }
-    _rieszRepresentationForElementType[elemTypePtr.get()] = rieszRepresentation;
-  }
-}
-
-void LinearTerm::computeRieszRHS(Teuchos::RCP<Mesh> mesh){
-  int numProcs=1;
-  int rank=0;
-  
-#ifdef HAVE_MPI
-  rank     = Teuchos::GlobalMPISession::getRank();
-  numProcs = Teuchos::GlobalMPISession::getNProc();
-  Epetra_MpiComm Comm(MPI_COMM_WORLD);
-#else
-  Epetra_SerialComm Comm;
-#endif
-  vector<ElementTypePtr> elemTypes = mesh->elementTypes(rank);  
-  vector<ElementTypePtr>::iterator elemTypeIt;
-  for (elemTypeIt = elemTypes.begin(); elemTypeIt != elemTypes.end(); elemTypeIt++) {
-    ElementTypePtr elemTypePtr = *(elemTypeIt);
-    
-    Teuchos::RCP<DofOrdering> trialOrdering = elemTypePtr->trialOrderPtr;
-    Teuchos::RCP<DofOrdering> testOrdering = elemTypePtr->testOrderPtr;
-
-    vector< Teuchos::RCP< Element > > elemsInPartitionOfType = mesh->elementsOfType(rank, elemTypePtr);
-    
-    FieldContainer<double> physicalCellNodes = mesh->physicalCellNodes(elemTypePtr);
-    FieldContainer<double> cellSideParities  = mesh->cellSideParities(elemTypePtr);
-    
-    int numTrialDofs = trialOrdering->totalDofs();
-    int numTestDofs  = testOrdering->totalDofs();
-    int numCells = physicalCellNodes.dimension(0); // partition-local cells
-      
-    // determine cellIDs
-    vector<GlobalIndexType> cellIDs;
-    for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
-      int cellID = mesh->cellID(elemTypePtr, cellIndex, rank);
-      cellIDs.push_back(cellID);
-    }
-    
-    TEUCHOS_TEST_FOR_EXCEPTION( numCells!=elemsInPartitionOfType.size(), std::invalid_argument, "in computeResiduals::numCells does not match number of elems in partition.");    
-     
-    // prepare basisCache and cellIDs
-    BasisCachePtr basisCache = Teuchos::rcp(new BasisCache(elemTypePtr,mesh));
-    bool createSideCacheToo = true;
-    FieldContainer<double> rhs(numCells,numTestDofs);
-    basisCache->setPhysicalCellNodes(physicalCellNodes,cellIDs,createSideCacheToo);
-    this->integrate(rhs, testOrdering, basisCache);
-
-    _rieszRHSForElementType[elemTypePtr.get()] = rhs;
-  }
-  //  _residualsComputed = true;  
-}
-
-const map<int,double> & LinearTerm::energyNorm(Teuchos::RCP<Mesh> mesh, Teuchos::RCP<DPGInnerProduct> ip) { 
-  int numProcs = Teuchos::GlobalMPISession::getNProc();;
-  int rank = Teuchos::GlobalMPISession::getRank();
-  
-#ifdef HAVE_MPI
-  Epetra_MpiComm Comm(MPI_COMM_WORLD);
-#else
-  Epetra_SerialComm Comm;
-#endif  
-  
-  int numActiveElements = mesh->activeElements().size();
-  int numMyCells = mesh->elementsInPartition(rank).size();
-
-  computeRieszRep(mesh,ip);  
-  
-  FieldContainer<int> activeCellIDs(numActiveElements); // initialized to 0
-  FieldContainer<double> norms(numActiveElements);
-  FieldContainer<int> numCellsForMPINode(numProcs);
-  
-  MPIWrapper::allGather(numCellsForMPINode, numMyCells);
-  
-  int myCellIndexOffset = 0;
-  for (int i=0; i<rank; i++) {
-    myCellIndexOffset += numCellsForMPINode[i];
-  }
-  
-  vector<ElementTypePtr> elemTypes = mesh->elementTypes(rank);   
-  vector<ElementTypePtr>::iterator elemTypeIt;  
-  int myCellIndex = 0;
-  for (elemTypeIt = elemTypes.begin(); elemTypeIt != elemTypes.end(); elemTypeIt++) {
-    ElementTypePtr elemTypePtr = *(elemTypeIt);    
-    
-    vector< Teuchos::RCP< Element > > elemsInPartitionOfType = mesh->elementsOfType(rank, elemTypePtr);
-    
-    // for error rep v_e, residual res, energyError = sqrt ( ve_^T * res)
-    FieldContainer<double> rhs = _rieszRHSForElementType[elemTypePtr.get()];
-    FieldContainer<double> rieszReps = _rieszRepresentationForElementType[elemTypePtr.get()];
-    int numTestDofs = rhs.dimension(1);    
-    int numCells = rhs.dimension(0);    
-    TEUCHOS_TEST_FOR_EXCEPTION( numCells!=elemsInPartitionOfType.size(), std::invalid_argument, "In energyError::numCells does not match number of elems in partition.");    
-    
-    for (int cellIndex=0;cellIndex<numCells;cellIndex++){
-      double normSquared = 0.0;
-      for (int i=0; i<numTestDofs; i++) {      
-        normSquared += rhs(cellIndex,i) * rieszReps(cellIndex,i);
-      }
-      norms[myCellIndexOffset + myCellIndex] = sqrt(normSquared);
-      int cellID = mesh->cellID(elemTypePtr,cellIndex,rank);
-      activeCellIDs[myCellIndexOffset + myCellIndex] = cellID;
-      myCellIndex++;
-    }   
-  } // end of loop thru element types
-  
-  MPIWrapper::entryWiseSum(activeCellIDs);
-  MPIWrapper::entryWiseSum(norms);
-  
-  // copy to energyError container
-  for (int i=0; i<numActiveElements; i++){
-    int cellID = activeCellIDs[i];
-    _energyNormForCellIDGlobal[cellID] = norms[i];
-  }
-  
-  // TODO: figure out whether we actually need to keep this around...
-  return _energyNormForCellIDGlobal;
-}
-
-double LinearTerm::energyNormTotal(Teuchos::RCP<Mesh> mesh, Teuchos::RCP<DPGInnerProduct> ip){
-  double energyNormSquared = 0.0;
-  const map<int,double>* energyNormPerCell = &(energyNorm(mesh, ip));  
-  for (map<int,double>::const_iterator cellEnergyIt = energyNormPerCell->begin(); 
-       cellEnergyIt != energyNormPerCell->end(); cellEnergyIt++) {
-    energyNormSquared += (cellEnergyIt->second) * (cellEnergyIt->second);
-  }
-  return sqrt(energyNormSquared);
-
-}
-
-// end of added by Jesse --------------------
-*/
+ // added by Jesse --------------------
+ 
+ LinearTermPtr LinearTerm::rieszRep(VarPtr v){
+ LinearTermPtr errorComponent = Teuchos::rcp( new LinearTerm);
+ return errorComponent; // WARNING - FINISH THIS
+ }
+ 
+ void LinearTerm::computeRieszRep(Teuchos::RCP<Mesh> mesh, Teuchos::RCP<DPGInnerProduct> ip){
+ int numProcs=1;
+ int rank=0;
+ 
+ #ifdef HAVE_MPI
+ rank     = Teuchos::GlobalMPISession::getRank();
+ numProcs = Teuchos::GlobalMPISession::getNProc();
+ Epetra_MpiComm Comm(MPI_COMM_WORLD);
+ //cout << "rank: " << rank << " of " << numProcs << endl;
+ #else
+ Epetra_SerialComm Comm;
+ #endif
+ 
+ computeRieszRHS(mesh);
+ 
+ vector<ElementTypePtr> elemTypes = mesh->elementTypes(rank);
+ vector<ElementTypePtr>::iterator elemTypeIt;
+ for (elemTypeIt = elemTypes.begin(); elemTypeIt != elemTypes.end(); elemTypeIt++) {
+ ElementTypePtr elemTypePtr = *(elemTypeIt);
+ BasisCachePtr ipBasisCache = Teuchos::rcp(new BasisCache(elemTypePtr,mesh,true));
+ 
+ Teuchos::RCP<DofOrdering> testOrdering = elemTypePtr->testOrderPtr;
+ FieldContainer<double> physicalCellNodes = mesh->physicalCellNodes(elemTypePtr);
+ 
+ vector<Teuchos::RCP<Element> > elemsInPartitionOfType = mesh->elementsOfType(rank, elemTypePtr);
+ int numCells = physicalCellNodes.dimension(0);
+ int numTestDofs = testOrdering->totalDofs();
+ 
+ FieldContainer<double> ipMatrix(numCells,numTestDofs,numTestDofs);
+ 
+ // determine cellIDs
+ vector<GlobalIndexType> cellIDs;
+ for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
+ int cellID = mesh->cellID(elemTypePtr, cellIndex, rank);
+ cellIDs.push_back(cellID);
+ }
+ ipBasisCache->setPhysicalCellNodes(physicalCellNodes,cellIDs,ip->hasBoundaryTerms());
+ 
+ ip->computeInnerProductMatrix(ipMatrix,testOrdering, ipBasisCache);
+ FieldContainer<double> rieszRepresentation(numCells,numTestDofs);
+ 
+ Epetra_SerialDenseSolver solver;
+ 
+ for (int localCellIndex=0; localCellIndex<numCells; localCellIndex++ ) {
+ 
+ Epetra_SerialDenseMatrix ipMatrixT(Copy, &ipMatrix(localCellIndex,0,0),
+ ipMatrix.dimension(2), // stride -- fc stores in row-major order (a.o.t. SDM)
+ ipMatrix.dimension(2),ipMatrix.dimension(1));
+ 
+ Epetra_SerialDenseMatrix rhs(Copy, & (_rieszRHSForElementType[elemTypePtr.get()](localCellIndex,0)),
+ _rieszRHSForElementType[elemTypePtr.get()].dimension(1), // stride
+ _rieszRHSForElementType[elemTypePtr.get()].dimension(1), 1);
+ 
+ Epetra_SerialDenseMatrix representationMatrix(numTestDofs,1);
+ 
+ solver.SetMatrix(ipMatrixT);
+ int success = solver.SetVectors(representationMatrix, rhs);
+ 
+ bool equilibrated = false;
+ if ( solver.ShouldEquilibrate() ) {
+ solver.EquilibrateMatrix();
+ solver.EquilibrateRHS();
+ equilibrated = true;
+ }
+ 
+ success = solver.Solve();
+ 
+ if (equilibrated) {
+ success = solver.UnequilibrateLHS();
+ }
+ 
+ for (int i=0; i<numTestDofs; i++) {
+ rieszRepresentation(localCellIndex,i) = representationMatrix(i,0);
+ }
+ }
+ _rieszRepresentationForElementType[elemTypePtr.get()] = rieszRepresentation;
+ }
+ }
+ 
+ void LinearTerm::computeRieszRHS(Teuchos::RCP<Mesh> mesh){
+ int numProcs=1;
+ int rank=0;
+ 
+ #ifdef HAVE_MPI
+ rank     = Teuchos::GlobalMPISession::getRank();
+ numProcs = Teuchos::GlobalMPISession::getNProc();
+ Epetra_MpiComm Comm(MPI_COMM_WORLD);
+ #else
+ Epetra_SerialComm Comm;
+ #endif
+ vector<ElementTypePtr> elemTypes = mesh->elementTypes(rank);
+ vector<ElementTypePtr>::iterator elemTypeIt;
+ for (elemTypeIt = elemTypes.begin(); elemTypeIt != elemTypes.end(); elemTypeIt++) {
+ ElementTypePtr elemTypePtr = *(elemTypeIt);
+ 
+ Teuchos::RCP<DofOrdering> trialOrdering = elemTypePtr->trialOrderPtr;
+ Teuchos::RCP<DofOrdering> testOrdering = elemTypePtr->testOrderPtr;
+ 
+ vector< Teuchos::RCP< Element > > elemsInPartitionOfType = mesh->elementsOfType(rank, elemTypePtr);
+ 
+ FieldContainer<double> physicalCellNodes = mesh->physicalCellNodes(elemTypePtr);
+ FieldContainer<double> cellSideParities  = mesh->cellSideParities(elemTypePtr);
+ 
+ int numTrialDofs = trialOrdering->totalDofs();
+ int numTestDofs  = testOrdering->totalDofs();
+ int numCells = physicalCellNodes.dimension(0); // partition-local cells
+ 
+ // determine cellIDs
+ vector<GlobalIndexType> cellIDs;
+ for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
+ int cellID = mesh->cellID(elemTypePtr, cellIndex, rank);
+ cellIDs.push_back(cellID);
+ }
+ 
+ TEUCHOS_TEST_FOR_EXCEPTION( numCells!=elemsInPartitionOfType.size(), std::invalid_argument, "in computeResiduals::numCells does not match number of elems in partition.");
+ 
+ // prepare basisCache and cellIDs
+ BasisCachePtr basisCache = Teuchos::rcp(new BasisCache(elemTypePtr,mesh));
+ bool createSideCacheToo = true;
+ FieldContainer<double> rhs(numCells,numTestDofs);
+ basisCache->setPhysicalCellNodes(physicalCellNodes,cellIDs,createSideCacheToo);
+ this->integrate(rhs, testOrdering, basisCache);
+ 
+ _rieszRHSForElementType[elemTypePtr.get()] = rhs;
+ }
+ //  _residualsComputed = true;
+ }
+ 
+ const map<int,double> & LinearTerm::energyNorm(Teuchos::RCP<Mesh> mesh, Teuchos::RCP<DPGInnerProduct> ip) {
+ int numProcs = Teuchos::GlobalMPISession::getNProc();;
+ int rank = Teuchos::GlobalMPISession::getRank();
+ 
+ #ifdef HAVE_MPI
+ Epetra_MpiComm Comm(MPI_COMM_WORLD);
+ #else
+ Epetra_SerialComm Comm;
+ #endif
+ 
+ int numActiveElements = mesh->activeElements().size();
+ int numMyCells = mesh->elementsInPartition(rank).size();
+ 
+ computeRieszRep(mesh,ip);
+ 
+ FieldContainer<int> activeCellIDs(numActiveElements); // initialized to 0
+ FieldContainer<double> norms(numActiveElements);
+ FieldContainer<int> numCellsForMPINode(numProcs);
+ 
+ MPIWrapper::allGather(numCellsForMPINode, numMyCells);
+ 
+ int myCellIndexOffset = 0;
+ for (int i=0; i<rank; i++) {
+ myCellIndexOffset += numCellsForMPINode[i];
+ }
+ 
+ vector<ElementTypePtr> elemTypes = mesh->elementTypes(rank);
+ vector<ElementTypePtr>::iterator elemTypeIt;
+ int myCellIndex = 0;
+ for (elemTypeIt = elemTypes.begin(); elemTypeIt != elemTypes.end(); elemTypeIt++) {
+ ElementTypePtr elemTypePtr = *(elemTypeIt);
+ 
+ vector< Teuchos::RCP< Element > > elemsInPartitionOfType = mesh->elementsOfType(rank, elemTypePtr);
+ 
+ // for error rep v_e, residual res, energyError = sqrt ( ve_^T * res)
+ FieldContainer<double> rhs = _rieszRHSForElementType[elemTypePtr.get()];
+ FieldContainer<double> rieszReps = _rieszRepresentationForElementType[elemTypePtr.get()];
+ int numTestDofs = rhs.dimension(1);
+ int numCells = rhs.dimension(0);
+ TEUCHOS_TEST_FOR_EXCEPTION( numCells!=elemsInPartitionOfType.size(), std::invalid_argument, "In energyError::numCells does not match number of elems in partition.");
+ 
+ for (int cellIndex=0;cellIndex<numCells;cellIndex++){
+ double normSquared = 0.0;
+ for (int i=0; i<numTestDofs; i++) {
+ normSquared += rhs(cellIndex,i) * rieszReps(cellIndex,i);
+ }
+ norms[myCellIndexOffset + myCellIndex] = sqrt(normSquared);
+ int cellID = mesh->cellID(elemTypePtr,cellIndex,rank);
+ activeCellIDs[myCellIndexOffset + myCellIndex] = cellID;
+ myCellIndex++;
+ }
+ } // end of loop thru element types
+ 
+ MPIWrapper::entryWiseSum(activeCellIDs);
+ MPIWrapper::entryWiseSum(norms);
+ 
+ // copy to energyError container
+ for (int i=0; i<numActiveElements; i++){
+ int cellID = activeCellIDs[i];
+ _energyNormForCellIDGlobal[cellID] = norms[i];
+ }
+ 
+ // TODO: figure out whether we actually need to keep this around...
+ return _energyNormForCellIDGlobal;
+ }
+ 
+ double LinearTerm::energyNormTotal(Teuchos::RCP<Mesh> mesh, Teuchos::RCP<DPGInnerProduct> ip){
+ double energyNormSquared = 0.0;
+ const map<int,double>* energyNormPerCell = &(energyNorm(mesh, ip));
+ for (map<int,double>::const_iterator cellEnergyIt = energyNormPerCell->begin();
+ cellEnergyIt != energyNormPerCell->end(); cellEnergyIt++) {
+ energyNormSquared += (cellEnergyIt->second) * (cellEnergyIt->second);
+ }
+ return sqrt(energyNormSquared);
+ 
+ }
+ 
+ // end of added by Jesse --------------------
+ */
 // operator overloading niceties:
 
 LinearTerm& LinearTerm::operator=(const LinearTerm &rhs) {
@@ -1467,4 +1505,3 @@ LinearTermPtr operator-(VarPtr v, LinearTermPtr a) {
 LinearTermPtr operator-(LinearTermPtr a1, LinearTermPtr a2) {
   return a1 + -a2;
 }
-

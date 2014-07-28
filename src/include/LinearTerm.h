@@ -18,6 +18,8 @@
 #include "Epetra_SerialComm.h"
 #endif
 
+#include "Epetra_CrsMatrix.h"
+
 #include "Epetra_SerialDenseMatrix.h"
 #include "Epetra_SerialDenseSolver.h"
 
@@ -44,19 +46,31 @@ class LinearTerm {
   vector< LinearSummand > _summands;
   set<int> _varIDs;
   VarType _termType; // shouldn't mix
-
+  
   // for the Riesz inversion evaluation
   map< ElementType*, FieldContainer<double> > _rieszRepresentationForElementType;
   map< ElementType*, FieldContainer<double> > _rieszRHSForElementType;
   map< int, double > _energyNormForCellIDGlobal;
   
   // some private utility methods:
-  static void integrate(FieldContainer<double> &values, 
-                        LinearTermPtr u, DofOrderingPtr uOrdering, 
-                        LinearTermPtr v, DofOrderingPtr vOrdering, 
+  static void integrate(Epetra_CrsMatrix *valuesCrsMatrix, FieldContainer<double> &valuesFC,
+                        LinearTermPtr u, DofOrderingPtr uOrdering,
+                        LinearTermPtr v, DofOrderingPtr vOrdering,
+                        BasisCachePtr basisCache, bool sumInto=true);
+  static void integrate(FieldContainer<double> &values,
+                        LinearTermPtr u, DofOrderingPtr uOrdering,
+                        LinearTermPtr v, DofOrderingPtr vOrdering,
                         BasisCachePtr basisCache, bool sumInto=true);
   static void multiplyFluxValuesByParity(FieldContainer<double> &fluxValues, BasisCachePtr sideBasisCache);
-
+  
+  // poor man's templating: just provide both versions of the values argument, making the other version null or size 0
+  void integrate(Epetra_CrsMatrix *valuesCrsMatrix, FieldContainer<double> &valuesFC, DofOrderingPtr thisDofOrdering,
+                 LinearTermPtr otherTerm, DofOrderingPtr otherDofOrdering,
+                 BasisCachePtr basisCache, bool forceBoundaryTerm = false, bool sumInto = true);
+  void integrate(Epetra_CrsMatrix *valuesCrsMatrix, FieldContainer<double> &valuesFC, DofOrderingPtr thisDofOrdering,
+                 LinearTermPtr otherTerm, VarPtr otherVarID, FunctionPtr fxn,
+                 BasisCachePtr basisCache, bool forceBoundaryTerm = false);
+  
 public: // was protected; changed for debugging (no big deal either way, I think)
   const vector< LinearSummand > & summands() const;
 public:
@@ -66,7 +80,7 @@ public:
   LinearTerm(vector<double> weight, VarPtr var);
   LinearTerm( VarPtr v );
   // copy constructor:
-  LinearTerm( const LinearTerm &a );  
+  LinearTerm( const LinearTerm &a );
   void addVar(FunctionPtr weight, VarPtr var);
   void addVar(double weight, VarPtr var);
   void addVar(vector<double> vector_weight, VarPtr var);
@@ -76,9 +90,9 @@ public:
   VarType termType() const;
   //  vector< IntrepidExtendedTypes::EOperatorExtended > varOps(int varID);
   
-  void evaluate(FieldContainer<double> &values, SolutionPtr solution, BasisCachePtr basisCache, 
+  void evaluate(FieldContainer<double> &values, SolutionPtr solution, BasisCachePtr basisCache,
                 bool applyCubatureWeights = false);
-
+  
   FunctionPtr evaluate(map< int, FunctionPtr> &varFunctions);
   FunctionPtr evaluate(map< int, FunctionPtr> &varFunctions, bool boundaryPart);
   
@@ -87,45 +101,53 @@ public:
   LinearTermPtr getPart(bool boundaryOnlyPart);
   LinearTermPtr getPartMatchingVariable( VarPtr var );
   
-  // integrate into values:
+  // integrate into values FieldContainers:
   void integrate(FieldContainer<double> &values, DofOrderingPtr thisOrdering,
                  BasisCachePtr basisCache, bool forceBoundaryTerm = false, bool sumInto = true);
-  void integrate(FieldContainer<double> &values, DofOrderingPtr thisDofOrdering, 
-                 LinearTermPtr otherTerm, DofOrderingPtr otherDofOrdering, 
+  void integrate(FieldContainer<double> &values, DofOrderingPtr thisDofOrdering,
+                 LinearTermPtr otherTerm, DofOrderingPtr otherDofOrdering,
                  BasisCachePtr basisCache, bool forceBoundaryTerm = false, bool sumInto = true);
-  void integrate(FieldContainer<double> &values, DofOrderingPtr thisDofOrdering, 
+  void integrate(FieldContainer<double> &values, DofOrderingPtr thisDofOrdering,
+                 LinearTermPtr otherTerm, VarPtr otherVarID, FunctionPtr fxn,
+                 BasisCachePtr basisCache, bool forceBoundaryTerm = false);
+  
+  // CrsMatrix versions (for the two-LT (matrix) variants of integrate)
+  void integrate(Epetra_CrsMatrix *values, DofOrderingPtr thisDofOrdering,
+                 LinearTermPtr otherTerm, DofOrderingPtr otherDofOrdering,
+                 BasisCachePtr basisCache, bool forceBoundaryTerm = false, bool sumInto = true);
+  void integrate(Epetra_CrsMatrix *values, DofOrderingPtr thisDofOrdering,
                  LinearTermPtr otherTerm, VarPtr otherVarID, FunctionPtr fxn,
                  BasisCachePtr basisCache, bool forceBoundaryTerm = false);
   
   // compute the value of linearTerm for non-zero varID at the cubature points, for each basis function in basis
   // values shape: (C,F,P), (C,F,P,D), or (C,F,P,D,D)
-  void values(FieldContainer<double> &values, int varID, BasisPtr basis, BasisCachePtr basisCache, 
+  void values(FieldContainer<double> &values, int varID, BasisPtr basis, BasisCachePtr basisCache,
               bool applyCubatureWeights = false, bool naturalBoundaryTermsOnly = false);
-
+  
   // compute the value of linearTerm for varID = fxn
   // values shape: (C,P), (C,P,D), or (C,P,D,D)
-  void values(FieldContainer<double> &values, int varID, FunctionPtr fxn, BasisCachePtr basisCache, 
+  void values(FieldContainer<double> &values, int varID, FunctionPtr fxn, BasisCachePtr basisCache,
               bool applyCubatureWeights, bool naturalBoundaryTermsOnly = false);
   
   int rank() const;  // 0 for scalar, 1 for vector, etc.
-
+  
   bool isZero() const; // true if the LinearTerm is identically zero
   
   string displayString(); // TeX by convention
   
   /*
-  // -------------- added by Jesse --------------------
-
-  void computeRieszRep(Teuchos::RCP<Mesh> mesh, Teuchos::RCP<DPGInnerProduct> ip);
-  void computeRieszRHS(Teuchos::RCP<Mesh> mesh);
-  LinearTermPtr rieszRep(VarPtr v);
-  double functionalNorm();
-  const map<int,double> & energyNorm(Teuchos::RCP<Mesh> mesh, Teuchos::RCP<DPGInnerProduct> ip);
-  double energyNormTotal(Teuchos::RCP<Mesh> mesh, Teuchos::RCP<DPGInnerProduct> ip); // global energy norm
-
-  // -------------- end of added by Jesse --------------------
-  */
-
+   // -------------- added by Jesse --------------------
+   
+   void computeRieszRep(Teuchos::RCP<Mesh> mesh, Teuchos::RCP<DPGInnerProduct> ip);
+   void computeRieszRHS(Teuchos::RCP<Mesh> mesh);
+   LinearTermPtr rieszRep(VarPtr v);
+   double functionalNorm();
+   const map<int,double> & energyNorm(Teuchos::RCP<Mesh> mesh, Teuchos::RCP<DPGInnerProduct> ip);
+   double energyNormTotal(Teuchos::RCP<Mesh> mesh, Teuchos::RCP<DPGInnerProduct> ip); // global energy norm
+   
+   // -------------- end of added by Jesse --------------------
+   */
+  
   void addTerm(const LinearTerm &a, bool overrideTypeCheck=false);
   void addTerm(LinearTermPtr aPtr, bool overrideTypeCheck=false);
   // operator overloading niceties:
