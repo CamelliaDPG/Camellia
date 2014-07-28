@@ -42,6 +42,8 @@
 
 #include "Epetra_DataAccess.h"
 
+#include "Epetra_Time.h"
+
 #include "Intrepid_FunctionSpaceTools.hpp"
 
 #include "SerialDenseWrapper.h"
@@ -129,6 +131,15 @@ void BilinearForm::localStiffnessMatrixAndRHS(FieldContainer<double> &localStiff
   double testMatrixAssemblyTime = 0, testMatrixInversionTime = 0, localStiffnessDeterminationFromTestsTime = 0;
   double rhsIntegrationAgainstOptimalTestsTime = 0;
   
+#ifdef HAVE_MPI
+  Epetra_MpiComm Comm(MPI_COMM_WORLD);
+  //cout << "rank: " << rank << " of " << numProcs << endl;
+#else
+  Epetra_SerialComm Comm;
+#endif
+  
+  Epetra_Time timer(Comm);
+  
   // localStiffness should have dim. (numCells, numTrialFields, numTrialFields)
   MeshPtr mesh = basisCache->mesh();
   if (mesh.get() == NULL) {
@@ -152,23 +163,30 @@ void BilinearForm::localStiffnessMatrixAndRHS(FieldContainer<double> &localStiff
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "localStiffness should have dimensions (C,numTrialFields,numTrialFields).");
   }
   
-  //  subTimer.ResetStartTime();
+  timer.ResetStartTime();
+  
+  bool printTimings = false;
+
+  if (printTimings) {
+    cout << "numCells: " << numCells << endl;
+    cout << "numTestDofs: " << numTestDofs << endl;
+  }
   
   FieldContainer<double> ipMatrix(numCells,numTestDofs,numTestDofs);
-  ip->computeInnerProductMatrix(ipMatrix,testOrder, ipBasisCache);
+  ip->computeInnerProductMatrix(ipMatrix, testOrder, ipBasisCache);
   
-  //  testMatrixAssemblyTime += subTimer.ElapsedTime();
+  testMatrixAssemblyTime += timer.ElapsedTime();
   
   //      cout << "ipMatrix:\n" << ipMatrix;
   
-//  subTimer.ResetStartTime();
+  timer.ResetStartTime();
   FieldContainer<double> optTestCoeffs(numCells,numTrialDofs,numTestDofs);
   FieldContainer<double> cellSideParities = basisCache->getCellSideParities();
   
   int optSuccess = this->optimalTestWeights(optTestCoeffs, ipMatrix, elemType,
                                             cellSideParities, basisCache);
-  //  testMatrixInversionTime += subTimer.ElapsedTime();
-  //      cout << "optTestCoeffs:\n" << optTestCoeffs;
+  testMatrixInversionTime += timer.ElapsedTime();
+//      cout << "optTestCoeffs:\n" << optTestCoeffs;
   
   if ( optSuccess != 0 ) {
     cout << "**** WARNING: in BilinearForm::localStiffnessMatrixAndRHS(), optimal test function computation failed with error code " << optSuccess << ". ****\n";
@@ -176,15 +194,22 @@ void BilinearForm::localStiffnessMatrixAndRHS(FieldContainer<double> &localStiff
   
   //cout << "optTestCoeffs\n" << optTestCoeffs;
   
-  //  subTimer.ResetStartTime();
+  timer.ResetStartTime();
   
   BilinearFormUtility::computeStiffnessMatrix(localStiffness,ipMatrix,optTestCoeffs);
-  //  localStiffnessDeterminationFromTestsTime += subTimer.ElapsedTime();
+  localStiffnessDeterminationFromTestsTime += timer.ElapsedTime();
   //      cout << "finalStiffness:\n" << finalStiffness;
   
-  //  subTimer.ResetStartTime();
+  timer.ResetStartTime();
   rhs->integrateAgainstOptimalTests(rhsVector, optTestCoeffs, testOrder, basisCache);
-  //  rhsIntegrationAgainstOptimalTestsTime += subTimer.ElapsedTime();
+  rhsIntegrationAgainstOptimalTestsTime += timer.ElapsedTime();
+  
+  if (printTimings) {
+    cout << "testMatrixAssemblyTime: " << testMatrixAssemblyTime << " seconds.\n";
+    cout << "testMatrixInversionTime: " << testMatrixInversionTime << " seconds.\n";
+    cout << "localStiffnessDeterminationFromTestsTime: " << localStiffnessDeterminationFromTestsTime << " seconds.\n";
+    cout << "rhsIntegrationAgainstOptimalTestsTime: " << rhsIntegrationAgainstOptimalTestsTime << " seconds.\n";
+  }
 }
 
 void BilinearForm::multiplyFCByWeight(FieldContainer<double> & fc, double weight) {
