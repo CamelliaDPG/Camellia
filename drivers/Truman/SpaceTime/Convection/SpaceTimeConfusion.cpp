@@ -17,7 +17,18 @@
 int H1Order = 3, pToAdd = 2;
 double pi = 2.0*acos(0.0);
 
-double epsilon = 1e-2;
+class EpsilonScaling : public hFunction {
+  double _epsilon;
+  public:
+  EpsilonScaling(double epsilon) {
+    _epsilon = epsilon;
+  }
+  double value(double x, double y, double h) {
+    double scaling = min(_epsilon/(h*h), 1.0);
+    // since this is used in inner product term a like (a,a), take square root
+    return sqrt(scaling);
+  }
+};
 
 class ConstantXBoundary : public SpatialFilter {
    private:
@@ -41,23 +52,23 @@ class ConstantYBoundary : public SpatialFilter {
       }
 };
 
-class UExact : public Function {
-  public:
-    UExact() : Function(0) {}
-    void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
-      int numCells = values.dimension(0);
-      int numPoints = values.dimension(1);
+// class UExact : public Function {
+//   public:
+//     UExact() : Function(0) {}
+//     void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
+//       int numCells = values.dimension(0);
+//       int numPoints = values.dimension(1);
 
-      const FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
-      for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
-        for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
-          double x = (*points)(cellIndex,ptIndex,0);
-          double y = (*points)(cellIndex,ptIndex,1);
-          values(cellIndex, ptIndex) = cos(2*pi*x)*exp(-4*pi*pi*epsilon*y);
-        }
-      }
-    }
-};
+//       const FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
+//       for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
+//         for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
+//           double x = (*points)(cellIndex,ptIndex,0);
+//           double y = (*points)(cellIndex,ptIndex,1);
+//           values(cellIndex, ptIndex) = cos(2*pi*x)*exp(-4*pi*pi*epsilon*y);
+//         }
+//       }
+//     }
+// };
 
 class Forcing : public Function {
   public:
@@ -95,12 +106,13 @@ int main(int argc, char *argv[]) {
   // Required arguments
 
   // Optional arguments (have defaults)
-  // int numX = args.Input("--numX", "number of cells in x direction", 1);
-  // int numY = numX/2;
+  int norm = args.Input("--norm", "test norm", 1);
+  int numRefs = args.Input("--numRefs", "number of refinement steps", 0);
+  double epsilon = args.Input<double>("--epsilon", "diffusion parameter");
+  args.Process();
+
   int numX = 6;
   int numY = 4;
-  int numRefs = args.Input("--numRefs", "number of refinement steps", 0);
-  args.Process();
 
   ////////////////////   DECLARE VARIABLES   ///////////////////////
   // define test variables
@@ -159,7 +171,39 @@ int main(int argc, char *argv[]) {
   rhs->addTerm( f * v ); // obviously, with f = 0 adding this term is not necessary!
 
   ////////////////////   DEFINE INNER PRODUCT(S)   ///////////////////////
-  IPPtr ip = bf->graphNorm();
+  IPPtr ip = Teuchos::rcp(new IP);
+  FunctionPtr ip_scaling = Teuchos::rcp( new EpsilonScaling(epsilon) );
+  vector<double> beta;
+  beta.push_back(1.0);
+  beta.push_back(1.0);
+  switch (norm)
+  {
+    // Automatic graph norm
+    case 0:
+    ip = bf->graphNorm();
+    break;
+
+    // Modified Robust Norm
+    case 1:
+    ip->addTerm( v );
+    ip->addTerm( sqrt(epsilon) * v->grad() );
+    ip->addTerm( beta * v->grad() );
+    ip->addTerm( tau->dx() - beta*v->grad() );
+    ip->addTerm( ip_scaling/sqrt(epsilon) * tau );
+    break;
+
+    // Modified Robust Norm 2
+    case 2:
+    ip->addTerm( v );
+    ip->addTerm( sqrt(epsilon) * v->dx() );
+    ip->addTerm( beta * v->grad() );
+    ip->addTerm( tau->dx() - beta*v->grad() );
+    ip->addTerm( ip_scaling/sqrt(epsilon) * tau );
+    break;
+
+    default:
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "invalid problem number");
+  }
 
   ////////////////////   CREATE BCs   ///////////////////////
   Teuchos::RCP<BCEasy> bc = Teuchos::rcp( new BCEasy );
@@ -167,7 +211,7 @@ int main(int argc, char *argv[]) {
   SpatialFilterPtr right = Teuchos::rcp( new ConstantXBoundary(xmax) );
   SpatialFilterPtr bottom = Teuchos::rcp( new ConstantYBoundary(0) );
   SpatialFilterPtr top = Teuchos::rcp( new ConstantYBoundary(tmax) );
-  FunctionPtr u_exact = Teuchos::rcp( new UExact );
+  // FunctionPtr u_exact = Teuchos::rcp( new UExact );
   FunctionPtr uLeft = zero;
   FunctionPtr uRight = zero;
   bc->addDirichlet(fhat, right, zero);
