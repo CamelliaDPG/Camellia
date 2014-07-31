@@ -88,6 +88,8 @@ DofOrderingPtr DofOrderingFactory::trialOrdering(int polyOrder,
   vector<int>::iterator trialIterator;
   
   DofOrderingPtr trialOrder = Teuchos::rcp(new DofOrdering());
+  DofOrderingPtr traceOrder = Teuchos::rcp(new DofOrdering());
+  DofOrderingPtr fieldOrder = Teuchos::rcp(new DofOrdering());
   
   for (trialIterator = trialIDs.begin(); trialIterator != trialIDs.end(); trialIterator++) {
     int trialID = *trialIterator;
@@ -107,24 +109,81 @@ DofOrderingPtr DofOrderingFactory::trialOrdering(int polyOrder,
         basis = BasisFactory::getConformingBasis( trialIDPolyOrder, sideTopo.getKey(), fs);
         basisRank = basis->rangeRank();
         trialOrder->addEntry(trialID,basis,basisRank,sideOrdinal);
+        traceOrder->addEntry(trialID,basis,basisRank,sideOrdinal);
       }
       if ( conformingVertices
           && fs == IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD) {
         // then we want to identify basis dofs at the vertices...
         
         addConformingVertexPairings(trialID, trialOrder, cellTopo);
+        addConformingVertexPairings(trialID, traceOrder, cellTopo);
       }
     } else {
       basis = BasisFactory::getBasis(trialIDPolyOrder, cellTopo.getKey(), fs);
       basisRank = basis->rangeRank();
       trialOrder->addEntry(trialID,basis,basisRank,0);
+      fieldOrder->addEntry(trialID,basis,basisRank,0);
     }
   }
   trialOrder->rebuildIndex();
+  traceOrder->rebuildIndex();
+  fieldOrder->rebuildIndex();
   // return Teuchos::RCP to the old element if there was one, or the newly inserted element
   trialOrder = *(_trialOrderings.insert(trialOrder).first);
+  traceOrder = *(_trialOrderings.insert(traceOrder).first);
+  fieldOrder = *(_trialOrderings.insert(fieldOrder).first);
   _isConforming[trialOrder.get()] = conformingVertices;
+  _isConforming[traceOrder.get()] = conformingVertices;
+  _isConforming[fieldOrder.get()] = conformingVertices;
+  _traceOrderingForTrial[trialOrder.get()] = traceOrder;
+  _fieldOrderingForTrial[trialOrder.get()] = fieldOrder;
   return trialOrder;
+}
+
+DofOrderingPtr DofOrderingFactory::getRelabeledDofOrdering(DofOrderingPtr dofOrdering, map<int, int> &oldKeysNewValues) {
+  bool conforming = _isConforming[dofOrdering.get()];
+  DofOrderingPtr newOrdering = Teuchos::rcp(new DofOrdering());
+  
+  DofOrderingPtr newTraceOrder = Teuchos::rcp(new DofOrdering());
+  DofOrderingPtr newFieldOrder = Teuchos::rcp(new DofOrdering());
+  
+  set<int> varIDs = dofOrdering->getVarIDs();
+  Teuchos::RCP< shards::CellTopology > cellTopoPtr = dofOrdering->cellTopology();
+  for (set<int>::iterator idIt = varIDs.begin(); idIt != varIDs.end(); idIt++) {
+    int varID = *idIt;
+    int newVarID = oldKeysNewValues[varID];
+    int numSides = dofOrdering->getNumSidesForVarID(varID);
+    IntrepidExtendedTypes::EFunctionSpaceExtended fs;
+    for (int sideIndex=0; sideIndex<numSides; sideIndex++) {
+      BasisPtr basis = dofOrdering->getBasis(varID,sideIndex);
+      
+      fs = BasisFactory::getBasisFunctionSpace(basis);
+      int basisRank = BasisFactory::getBasisRank(basis);
+      newOrdering->addEntry(newVarID,basis,basisRank,sideIndex);
+      if (numSides == 1) {
+        newFieldOrder->addEntry(newVarID, basis, basisRank, sideIndex);
+      } else {
+        newTraceOrder->addEntry(newVarID, basis, basisRank, sideIndex);
+      }
+    }
+    if ((numSides > 1) && (fs == IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD) && (conforming)) {
+      addConformingVertexPairings(newVarID, newOrdering, *cellTopoPtr);
+      addConformingVertexPairings(newVarID, newTraceOrder, *cellTopoPtr);
+    }
+  }
+  newOrdering->rebuildIndex();
+  newTraceOrder->rebuildIndex();
+  newFieldOrder->rebuildIndex();
+  // return Teuchos::RCP to the old element if there was one, or the newly inserted element
+  newOrdering = *(_trialOrderings.insert(newOrdering).first);
+  newTraceOrder = *(_trialOrderings.insert(newTraceOrder).first);
+  newFieldOrder = *(_trialOrderings.insert(newFieldOrder).first);
+  _isConforming[newOrdering.get()] = conforming;
+  _isConforming[newTraceOrder.get()] = conforming;
+  _isConforming[newFieldOrder.get()] = conforming;
+  _traceOrderingForTrial[newOrdering.get()] = newTraceOrder;
+  _fieldOrderingForTrial[newOrdering.get()] = newFieldOrder;
+  return newOrdering;
 }
 
 DofOrderingPtr DofOrderingFactory::getTrialOrdering(DofOrdering &ordering) {
@@ -145,6 +204,24 @@ DofOrderingPtr DofOrderingFactory::getTestOrdering(DofOrdering &ordering) {
   }
   TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "ordering not found");
   return Teuchos::rcp((DofOrdering*) NULL);
+}
+
+DofOrderingPtr DofOrderingFactory::getFieldOrdering(DofOrderingPtr trialOrdering) {
+  // returns the sub-ordering that contains only the traces
+  if (_fieldOrderingForTrial.find(trialOrdering.get()) == _fieldOrderingForTrial.end()) {
+    cout << "trialOrdering not found in DofOrderingFactory!  Did you use DofOrderingFactory to create it??\n";
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "trialOrdering not found in DofOrderingFactory!  Did you use DofOrderingFactory to create it??");
+  }
+  return _fieldOrderingForTrial[trialOrdering.get()];
+}
+
+DofOrderingPtr DofOrderingFactory::getTraceOrdering(DofOrderingPtr trialOrdering) {
+  // returns the sub-ordering that contains only the traces
+  if (_traceOrderingForTrial.find(trialOrdering.get()) == _traceOrderingForTrial.end()) {
+    cout << "trialOrdering not found in DofOrderingFactory!  Did you use DofOrderingFactory to create it??\n";
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "trialOrdering not found in DofOrderingFactory!  Did you use DofOrderingFactory to create it??");
+  }
+  return _traceOrderingForTrial[trialOrdering.get()];
 }
 
 map<int, int> DofOrderingFactory::getTestOrderEnhancements() {
@@ -495,6 +572,62 @@ int DofOrderingFactory::testPolyOrder(DofOrderingPtr testOrdering) {
 
 int DofOrderingFactory::trialPolyOrder(DofOrderingPtr trialOrdering) {
   return polyOrder(trialOrdering,false);
+}
+
+DofOrderingPtr DofOrderingFactory::setBasisDegree(DofOrderingPtr dofOrdering, int basisDegreeToSet, bool replaceDiscontinuousFSWithContinuous) {
+  bool conforming = _isConforming[dofOrdering.get()];
+  DofOrderingPtr newOrdering = Teuchos::rcp(new DofOrdering());
+  
+  DofOrderingPtr newTraceOrder = Teuchos::rcp(new DofOrdering());
+  DofOrderingPtr newFieldOrder = Teuchos::rcp(new DofOrdering());
+  
+  set<int> varIDs = dofOrdering->getVarIDs();
+  Teuchos::RCP< shards::CellTopology > cellTopoPtr = dofOrdering->cellTopology();
+  for (set<int>::iterator idIt = varIDs.begin(); idIt != varIDs.end(); idIt++) {
+    int varID = *idIt;
+    int numSides = dofOrdering->getNumSidesForVarID(varID);
+    IntrepidExtendedTypes::EFunctionSpaceExtended fs;
+    for (int sideIndex=0; sideIndex<numSides; sideIndex++) {
+      BasisPtr basis = dofOrdering->getBasis(varID,sideIndex);
+      
+      fs = BasisFactory::getBasisFunctionSpace(basis);
+      if (replaceDiscontinuousFSWithContinuous) {
+        if (IntrepidExtendedTypes::functionSpaceIsDiscontinuous(fs)) {
+          fs = IntrepidExtendedTypes::continuousSpaceForDiscontinuous(fs);
+        }
+      }
+      int basisRank = BasisFactory::getBasisRank(basis);
+      int currentBasisDegree = basis->getDegree();
+      int delta_k = basisDegreeToSet - currentBasisDegree;
+      // upgrade basis
+      int currentPolyOrder = BasisFactory::basisPolyOrder(basis);
+//      basis = BasisFactory::setPolyOrder(basis, currentPolyOrder + delta_k );
+      basis = BasisFactory::getBasis( currentPolyOrder + delta_k, basis->domainTopology().getBaseKey(), fs );
+      newOrdering->addEntry(varID,basis,basisRank,sideIndex);
+      if (numSides == 1) {
+        newFieldOrder->addEntry(varID, basis, basisRank, sideIndex);
+      } else {
+        newTraceOrder->addEntry(varID, basis, basisRank, sideIndex);
+      }
+    }
+    if ((numSides > 1) && (fs == IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD) && (conforming)) {
+      addConformingVertexPairings(varID, newOrdering, *cellTopoPtr);
+      addConformingVertexPairings(varID, newTraceOrder, *cellTopoPtr);
+    }
+  }
+  newOrdering->rebuildIndex();
+  newTraceOrder->rebuildIndex();
+  newFieldOrder->rebuildIndex();
+  // return Teuchos::RCP to the old element if there was one, or the newly inserted element
+  newOrdering = *(_trialOrderings.insert(newOrdering).first);
+  newTraceOrder = *(_trialOrderings.insert(newTraceOrder).first);
+  newFieldOrder = *(_trialOrderings.insert(newFieldOrder).first);
+  _isConforming[newOrdering.get()] = conforming;
+  _isConforming[newTraceOrder.get()] = conforming;
+  _isConforming[newFieldOrder.get()] = conforming;
+  _traceOrderingForTrial[newOrdering.get()] = newTraceOrder;
+  _fieldOrderingForTrial[newOrdering.get()] = newFieldOrder;
+  return newOrdering;
 }
 
 DofOrderingPtr DofOrderingFactory::setSidePolyOrder(DofOrderingPtr dofOrdering, int sideIndexToSet,
