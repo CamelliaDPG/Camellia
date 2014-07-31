@@ -316,6 +316,7 @@ vector<ElementPtr> Mesh::elementsForPoints(const FieldContainer<double> &physica
 }
 
 void Mesh::enforceOneIrregularity() {
+  int rank = Teuchos::GlobalMPISession::getRank();
   bool meshIsNotRegular = true; // assume it's not regular and check elements
   while (meshIsNotRegular) {
     int spaceDim = _meshTopology->getSpaceDim();
@@ -347,7 +348,7 @@ void Mesh::enforceOneIrregularity() {
       }
       
       if (isIrregular) {
-        cout << "cellID " << cellID << " is irregular.\n";
+        if (rank==0) cout << "cellID " << cellID << " is irregular.\n";
         irregularCellIDs[cell->topology()->getKey()].insert(cellID);
       }
     }
