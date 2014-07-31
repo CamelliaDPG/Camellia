@@ -133,6 +133,27 @@ public:
     }
     transposeMatrix(X); // SDMs are transposed relative to FCs
     
+    int A_cols = (TransposeA=='T') ? A.dimension(0) : A.dimension(1);
+    int A_rows = (TransposeA=='T') ? A.dimension(1) : A.dimension(0);
+    
+    int B_cols = (TransposeB=='T') ? B.dimension(0) : B.dimension(1);
+    int B_rows = (TransposeB=='T') ? B.dimension(1) : B.dimension(0);
+    
+    if (A_cols != B_rows) {
+      cout << "error: A_cols != B_rows\n";
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "error: A_cols != B_rows");
+    }
+    
+    if (A_rows != N) {
+      cout << "error: A_rows != X_rows\n";
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "error: A_rows != X_rows");
+    }
+    
+    if (B_cols != M) {
+      cout << "error: B_cols != X_cols\n";
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "error: B_cols != X_cols");
+    }
+    
     Epetra_SerialDenseMatrix AMatrix = convertFCToSDM(A,::View);
     Epetra_SerialDenseMatrix BMatrix = convertFCToSDM(B,::View);
     Epetra_SerialDenseMatrix XMatrix = convertFCToSDM(X,::View);
@@ -283,12 +304,11 @@ public:
     }
     if ((A.dimension(0) != b.dimension(0)) || (A.dimension(0) != x.dimension(0))) {
       cout << "x and b's first dimension must match the dimension of A!\n";
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "x and b's first dimension must match the dimension of A!");
     }
     
     int N = A.dimension(0);
     int nRHS = b.dimension(1); // M
-    
-    Teuchos::LAPACK<int, double> lapack;
     
     int numCols = N;
     int numRows = N;
@@ -319,6 +339,11 @@ public:
     info = qrSolver.solve();
     if (info != 0) {
       std::cout << "Teuchos::SerialQRDenseSolver::solve() returned : " << info << std::endl;
+      writeMatrixToMatlabFile("/tmp/A.dat", A);
+      writeMatrixToMatlabFile("/tmp/b.dat", b);
+      std::cout << "wrote matrices to /tmp/A.dat, /tmp/b.dat.\n";
+//      std::cout << "A:\n" << A;
+//      std::cout << "b:\n" << b;
       return info;
     }
 
