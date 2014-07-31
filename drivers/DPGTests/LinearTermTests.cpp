@@ -534,7 +534,14 @@ bool LinearTermTests::testBoundaryPlusVolumeTerms() {
     FunctionPtr ibp2_at_v1_equals_one = ibp2->evaluate(v1_equals_one,false); // ibp2 has no boundary terms, so we don't ask for these
     FunctionPtr lt_v_at_v1_equals_one = lt_v->evaluate(v1_equals_one,false); // lt_v also has no boundary terms
     
-    FieldContainer<double> integrals_lt_v_first( mesh->numElements(), num_dofs, num_dofs);
+    if (ibp1_at_v1_equals_one->isZero()) {
+      cout << "ibp1_at_v1_equals_one->isZero() = true.\n";
+    }
+    if (lt_v_at_v1_equals_one->isZero()) {
+      cout << "lt_v_at_v1_equals_one->isZero() = true.\n";
+    }
+    
+    FieldContainer<double> integrals_lt_v_first( mesh->numElements(), num_dofs, num_dofs );
     FieldContainer<double> integrals_ibp1_first( mesh->numElements(), num_dofs, num_dofs );
     FieldContainer<double> integrals_ibp2_first( mesh->numElements(), num_dofs, num_dofs );
     
