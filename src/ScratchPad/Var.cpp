@@ -39,87 +39,209 @@ static const string & S_OP_VECTORIZE_VALUE = ""; // handle this one separately..
 static const string & S_OP_UNKNOWN = "[UNKNOWN OPERATOR] ";
 
 IntrepidExtendedTypes::EFunctionSpaceExtended VarFunctionSpaces::efsForSpace(Space space) {
-  if (space == HGRAD)
-    return IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD;
-  if (space == HCURL)
-    return IntrepidExtendedTypes::FUNCTION_SPACE_HCURL;
-  if (space == HDIV)
-    return IntrepidExtendedTypes::FUNCTION_SPACE_HDIV;
-  if (space == HDIV_FREE)
-    return IntrepidExtendedTypes::FUNCTION_SPACE_HDIV_FREE;
-  if (space == L2)
-    return IntrepidExtendedTypes::FUNCTION_SPACE_HVOL;
-  if (space == CONSTANT_SCALAR)
-    return IntrepidExtendedTypes::FUNCTION_SPACE_REAL_SCALAR;
-  if (space == VECTOR_HGRAD)
-    return IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HGRAD;
-  if (space == VECTOR_L2)
-    return IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HVOL;
-  TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unknown function space.");
-  return IntrepidExtendedTypes::FUNCTION_SPACE_UNKNOWN;
+  switch (space) {
+    case HDIV:
+      return IntrepidExtendedTypes::FUNCTION_SPACE_HDIV;
+    case HGRAD:
+      return IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD;
+    case HCURL:
+      return IntrepidExtendedTypes::FUNCTION_SPACE_HCURL;
+    case L2:
+      return IntrepidExtendedTypes::FUNCTION_SPACE_HVOL;
+    case CONSTANT_SCALAR:
+      return IntrepidExtendedTypes::FUNCTION_SPACE_REAL_SCALAR;
+      
+    case HDIV_DISC:
+      return IntrepidExtendedTypes::FUNCTION_SPACE_HDIV_DISC;
+    case HGRAD_DISC:
+      return IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD_DISC;
+    case HCURL_DISC:
+      return IntrepidExtendedTypes::FUNCTION_SPACE_HCURL_DISC;
+
+    case VECTOR_HGRAD:
+      return IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HGRAD;
+    case VECTOR_L2:
+      return IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HVOL;
+    
+    case VECTOR_HGRAD_DISC:
+      return IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HGRAD_DISC;
+      
+//    case TENSOR_HGRAD:
+      
+    case HDIV_FREE:
+      return IntrepidExtendedTypes::FUNCTION_SPACE_HDIV_FREE;
+      
+    default:
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unknown function space.");
+      return IntrepidExtendedTypes::FUNCTION_SPACE_UNKNOWN;
+  }
+  
+//  if (space == HGRAD)
+//    return IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD;
+//  if (space == HCURL)
+//    return IntrepidExtendedTypes::FUNCTION_SPACE_HCURL;
+//  if (space == HDIV)
+//    return IntrepidExtendedTypes::FUNCTION_SPACE_HDIV;
+//  if (space == HGRAD_DISC)
+//    return IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD_DISC;
+//  if (space == HCURL_DISC)
+//    return IntrepidExtendedTypes::FUNCTION_SPACE_HCURL_DISC;
+//  if (space == HDIV_DISC)
+//    return IntrepidExtendedTypes::FUNCTION_SPACE_HDIV_DISC;
+//  if (space == HDIV_FREE)
+//    return IntrepidExtendedTypes::FUNCTION_SPACE_HDIV_FREE;
+//  if (space == L2)
+//    return IntrepidExtendedTypes::FUNCTION_SPACE_HVOL;
+//  if (space == CONSTANT_SCALAR)
+//    return IntrepidExtendedTypes::FUNCTION_SPACE_REAL_SCALAR;
+//  if (space == VECTOR_HGRAD)
+//    return IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HGRAD;
+//  if (space == VECTOR_HGRAD_DISC)
+//    return IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HGRAD_DISC;
+//  if (space == VECTOR_L2)
+//    return IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HVOL;
+//  TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unknown function space.");
+//  return IntrepidExtendedTypes::FUNCTION_SPACE_UNKNOWN;
+}
+
+int VarFunctionSpaces::rankForSpace(Space space) {
+  switch (space) {
+    case HDIV:
+      return 1;
+    case HGRAD:
+      return 0;
+    case HCURL:
+      return 1;
+    case L2:
+      return 0;
+    case CONSTANT_SCALAR:
+      return 0;
+      
+    case HDIV_DISC:
+      return 1;
+    case HGRAD_DISC:
+      return 0;
+    case HCURL_DISC:
+      return 1;
+      
+    case VECTOR_HGRAD:
+      return 1;
+    case VECTOR_L2:
+      return 1;
+      
+    case VECTOR_HGRAD_DISC:
+      return 1;
+      
+      //    case TENSOR_HGRAD:
+      
+    case HDIV_FREE:
+      return 1;
+      
+    default:
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unknown function space.");
+      return IntrepidExtendedTypes::FUNCTION_SPACE_UNKNOWN;
+  }
 }
 
 Space VarFunctionSpaces::spaceForEFS(IntrepidExtendedTypes::EFunctionSpaceExtended efs) {
-  if (efs == IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD) {
-    return HGRAD;
+  switch (efs) {
+    case IntrepidExtendedTypes::FUNCTION_SPACE_HDIV:
+      return HDIV;
+    case IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD:
+      return HGRAD;
+    case IntrepidExtendedTypes::FUNCTION_SPACE_HCURL:
+      return HCURL;
+    case IntrepidExtendedTypes::FUNCTION_SPACE_HVOL:
+      return L2;
+    case IntrepidExtendedTypes::FUNCTION_SPACE_REAL_SCALAR:
+      return CONSTANT_SCALAR;
+      
+    case IntrepidExtendedTypes::FUNCTION_SPACE_HDIV_DISC:
+      return HDIV_DISC;
+    case IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD_DISC:
+      return HGRAD_DISC;
+    case IntrepidExtendedTypes::FUNCTION_SPACE_HCURL_DISC:
+      return HCURL_DISC;
+      
+    case IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HGRAD:
+      return VECTOR_HGRAD;
+    case IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HVOL:
+      return VECTOR_L2;
+      
+    case IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HGRAD_DISC:
+      return VECTOR_HGRAD_DISC;
+      
+      //    case TENSOR_HGRAD:
+      
+    case IntrepidExtendedTypes::FUNCTION_SPACE_HDIV_FREE:
+      return HDIV_FREE;
+      
+    default:
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unknown function space.");
+      return UNKNOWN_FS;
   }
-  if (efs == IntrepidExtendedTypes::FUNCTION_SPACE_HCURL) {
-    return HCURL;
-  }
-  if (efs == IntrepidExtendedTypes::FUNCTION_SPACE_HDIV) {
-    return HDIV;
-  }
-  if (efs == IntrepidExtendedTypes::FUNCTION_SPACE_HVOL) {
-    return L2;
-  }
-  if (efs == IntrepidExtendedTypes::FUNCTION_SPACE_REAL_SCALAR) {
-    return CONSTANT_SCALAR;
-  }
-  if (efs == IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HGRAD) {
-    return VECTOR_HGRAD;
-  }
-  if (efs == IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HVOL) {
-    return VECTOR_L2;
-  }
-  TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unknown function space.");
+  
+//  
+//  if (efs == IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD) {
+//    return HGRAD;
+//  }
+//  if (efs == IntrepidExtendedTypes::FUNCTION_SPACE_HCURL) {
+//    return HCURL;
+//  }
+//  if (efs == IntrepidExtendedTypes::FUNCTION_SPACE_HDIV) {
+//    return HDIV;
+//  }
+//  if (efs == IntrepidExtendedTypes::FUNCTION_SPACE_HVOL) {
+//    return L2;
+//  }
+//  if (efs == IntrepidExtendedTypes::FUNCTION_SPACE_REAL_SCALAR) {
+//    return CONSTANT_SCALAR;
+//  }
+//  if (efs == IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HGRAD) {
+//    return VECTOR_HGRAD;
+//  }
+//  if (efs == IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HVOL) {
+//    return VECTOR_L2;
+//  }
+//  TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unknown function space.");
 }
 
 VarPtr Var::varForTrialID(int trialID, Teuchos::RCP<BilinearForm> bf) {
   IntrepidExtendedTypes::EFunctionSpaceExtended efs = bf->functionSpaceForTrial(trialID);
-  Space space;
-  int rank;
-  if (efs == IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD) {
-    space = HGRAD;
-    rank = 0;
-  }
-  if (efs == IntrepidExtendedTypes::FUNCTION_SPACE_HCURL) {
-    space = HCURL;
-    rank = 1;
-  }
-  if (efs == IntrepidExtendedTypes::FUNCTION_SPACE_HDIV) {
-    space = HDIV;
-    rank = 1;
-  }
-  if (efs == IntrepidExtendedTypes::FUNCTION_SPACE_HDIV_FREE) {
-    space = HDIV_FREE;
-    rank = 1;
-  }
-  if (efs == IntrepidExtendedTypes::FUNCTION_SPACE_HVOL) {
-    space = L2;
-    rank = 0;
-  }
-  if (efs == IntrepidExtendedTypes::FUNCTION_SPACE_REAL_SCALAR) {
-    space = CONSTANT_SCALAR;
-    rank = 0;
-  }
-  if (efs == IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HGRAD) {
-    space = VECTOR_HGRAD;
-    rank = 1;
-  }
-  if (efs == IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HVOL) {
-    space = VECTOR_L2;
-    rank = 1;
-  }
+  Space space = spaceForEFS(efs);
+  int rank = rankForSpace(space);
+//  if (efs == IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD) {
+//    space = HGRAD;
+//    rank = 0;
+//  }
+//  if (efs == IntrepidExtendedTypes::FUNCTION_SPACE_HCURL) {
+//    space = HCURL;
+//    rank = 1;
+//  }
+//  if (efs == IntrepidExtendedTypes::FUNCTION_SPACE_HDIV) {
+//    space = HDIV;
+//    rank = 1;
+//  }
+//  if (efs == IntrepidExtendedTypes::FUNCTION_SPACE_HDIV_FREE) {
+//    space = HDIV_FREE;
+//    rank = 1;
+//  }
+//  if (efs == IntrepidExtendedTypes::FUNCTION_SPACE_HVOL) {
+//    space = L2;
+//    rank = 0;
+//  }
+//  if (efs == IntrepidExtendedTypes::FUNCTION_SPACE_REAL_SCALAR) {
+//    space = CONSTANT_SCALAR;
+//    rank = 0;
+//  }
+//  if (efs == IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HGRAD) {
+//    space = VECTOR_HGRAD;
+//    rank = 1;
+//  }
+//  if (efs == IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HVOL) {
+//    space = VECTOR_L2;
+//    rank = 1;
+//  }
   
   VarType varType;
   if (bf->isFluxOrTrace(trialID)) {

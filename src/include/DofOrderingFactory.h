@@ -47,9 +47,10 @@
 // Teuchos includes
 #include "Teuchos_RCP.hpp"
 
-// DPG includes
+// Camellia includes
 #include "CamelliaIntrepidExtendedTypes.h"
 #include "DofOrdering.h"
+#include "Var.h"
 
 using namespace std;
 
@@ -101,6 +102,10 @@ private:
   };
   set<DofOrderingPtr, Comparator > _testOrderings;
   set<DofOrderingPtr, Comparator > _trialOrderings;
+
+  map<DofOrdering*, DofOrderingPtr > _fieldOrderingForTrial;
+  map<DofOrdering*, DofOrderingPtr > _traceOrderingForTrial;
+  
   Teuchos::RCP<BilinearForm> _bilinearForm;
   map<DofOrdering*,bool> _isConforming;
   map<int, int> _testOrderEnhancements;
@@ -118,14 +123,23 @@ public:
   DofOrderingPtr testOrdering(int polyOrder, const shards::CellTopology &cellTopo); // NOTE: for now only handles 2D/quads (lines in 1D for sides, too)
   DofOrderingPtr trialOrdering(int polyOrder, const shards::CellTopology &cellTopo,
                                bool conformingVertices = true);
+  
   int testPolyOrder(DofOrderingPtr testOrdering);
   int trialPolyOrder(DofOrderingPtr trialOrdering);
   DofOrderingPtr pRefineTest(DofOrderingPtr testOrdering, const shards::CellTopology &cellTopo, int pToAdd = 1);
   DofOrderingPtr pRefineTrial(DofOrderingPtr trialOrdering, const shards::CellTopology &cellTopo, int pToAdd = 1);
   DofOrderingPtr setSidePolyOrder(DofOrderingPtr dofOrdering, int sideIndexToSet, int newPolyOrder, bool replacePatchBasis);
+  
+  DofOrderingPtr getRelabeledDofOrdering(DofOrderingPtr dofOrdering, map<int,int> &oldKeysNewValues);
+  
+  DofOrderingPtr setBasisDegree(DofOrderingPtr dofOrdering, int basisDegree, bool replaceDiscontinuousFSWithContinuous); // sets all basis functions to have the same poly. degree, without regard for the function space they belong to.  ("polyOrder" in DofOrderingFactory usually is relative to the H^1 order, so that L^2 bases have degree 1 less.)
+  
   DofOrderingPtr getTrialOrdering(DofOrdering &ordering);
   DofOrderingPtr getTestOrdering(DofOrdering &ordering);
-  
+
+  DofOrderingPtr getFieldOrdering(DofOrderingPtr trialOrdering); // the sub-ordering that contains only the fields
+  DofOrderingPtr getTraceOrdering(DofOrderingPtr trialOrdering); // the sub-ordering that contains only the traces
+    
   map<int, int> getTestOrderEnhancements();
   map<int, int> getTrialOrderEnhancements();
   
@@ -152,7 +166,6 @@ public:
                                              const DofOrderingPtr parentTrialOrdering, int parentSideIndex,
                                              int childIndexInParentSide);
   bool sideHasMultiBasis(DofOrderingPtr &trialOrdering, int sideIndex);
-
 
   
 //  DofOrderingPtr trialOrdering(int polyOrder, int* sidePolyOrder, const shards::CellTopology &cellTopo,

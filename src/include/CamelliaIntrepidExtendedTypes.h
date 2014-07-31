@@ -56,6 +56,8 @@ namespace IntrepidExtendedTypes {
   
   bool functionSpaceIsVectorized(EFunctionSpaceExtended fs);
   bool functionSpaceIsDiscontinuous(EFunctionSpaceExtended fs);
+  EFunctionSpaceExtended continuousSpaceForDiscontinuous(EFunctionSpaceExtended fs_disc);
+  EFunctionSpaceExtended discontinuousSpaceForContinuous(EFunctionSpaceExtended fs_continuous);
 }
 
 #endif

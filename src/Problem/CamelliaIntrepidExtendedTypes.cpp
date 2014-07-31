@@ -1,5 +1,7 @@
 #include "CamelliaIntrepidExtendedTypes.h"
 
+#include "Teuchos_TestForException.hpp"
+
 using namespace IntrepidExtendedTypes;
 
 bool IntrepidExtendedTypes::functionSpaceIsVectorized(EFunctionSpaceExtended fs) {
@@ -27,4 +29,52 @@ bool IntrepidExtendedTypes::functionSpaceIsDiscontinuous(IntrepidExtendedTypes::
       break;
   }
   return false;
+}
+
+EFunctionSpaceExtended IntrepidExtendedTypes::discontinuousSpaceForContinuous(IntrepidExtendedTypes::EFunctionSpaceExtended fs_continuous) {
+  switch (fs_continuous) {
+    case FUNCTION_SPACE_HVOL:
+    case FUNCTION_SPACE_VECTOR_HVOL:
+    case FUNCTION_SPACE_TENSOR_HVOL:
+      return fs_continuous;
+    case FUNCTION_SPACE_HGRAD:
+      return FUNCTION_SPACE_HGRAD_DISC;
+    case FUNCTION_SPACE_HCURL:
+      return FUNCTION_SPACE_HCURL_DISC;
+    case FUNCTION_SPACE_HDIV:
+      return FUNCTION_SPACE_HDIV_DISC;
+    case FUNCTION_SPACE_VECTOR_HGRAD:
+      return FUNCTION_SPACE_VECTOR_HGRAD_DISC;
+    case FUNCTION_SPACE_TENSOR_HGRAD:
+      return FUNCTION_SPACE_TENSOR_HGRAD_DISC;
+      break;
+    default:
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "No known discontinuous version for fs_continuous.");
+      return fs_continuous;
+      break;
+  }
+}
+
+EFunctionSpaceExtended IntrepidExtendedTypes::continuousSpaceForDiscontinuous(IntrepidExtendedTypes::EFunctionSpaceExtended fs_disc) {
+  switch (fs_disc) {
+    case FUNCTION_SPACE_HVOL:
+    case FUNCTION_SPACE_VECTOR_HVOL:
+    case FUNCTION_SPACE_TENSOR_HVOL:
+      return fs_disc; // in a sense, these are both continuous and discontinuous: they conform to the fs, but the fs has no continuity.
+    case FUNCTION_SPACE_HGRAD_DISC:
+      return FUNCTION_SPACE_HGRAD;
+    case FUNCTION_SPACE_HCURL_DISC:
+      return FUNCTION_SPACE_HCURL;
+    case FUNCTION_SPACE_HDIV_DISC:
+      return FUNCTION_SPACE_HDIV;
+    case FUNCTION_SPACE_VECTOR_HGRAD_DISC:
+      return FUNCTION_SPACE_VECTOR_HGRAD;
+    case FUNCTION_SPACE_TENSOR_HGRAD_DISC:
+      return FUNCTION_SPACE_TENSOR_HGRAD;
+      break;
+    default:
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "No known continuous version for fs_disc.");
+      return fs_disc;
+      break;
+  }
 }

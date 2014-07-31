@@ -1046,6 +1046,10 @@ unsigned BasisReconciliation::minimumSubcellDimension(BasisPtr basis) {
       break;
     case IntrepidExtendedTypes::FUNCTION_SPACE_HVOL:
     case IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HVOL:
+    case IntrepidExtendedTypes::FUNCTION_SPACE_HDIV_DISC:
+    case IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD_DISC:
+    case IntrepidExtendedTypes::FUNCTION_SPACE_HCURL_DISC:
+    case IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HGRAD_DISC:
       minSubcellDimension = d; // i.e. no continuities enforced
       break;
     case IntrepidExtendedTypes::FUNCTION_SPACE_REAL_SCALAR:

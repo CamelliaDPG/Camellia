@@ -120,7 +120,7 @@ public:
     }
     
     ID = getTestID(ID);
-    int rank = ((fs == HGRAD) || (fs == L2) || (fs == CONSTANT_SCALAR)) ? 0 : 1;
+    int rank = VarFunctionSpaces::rankForSpace(fs);
     
     _testVars[name] = Teuchos::rcp( new Var( ID, rank, name, 
                                              IntrepidExtendedTypes::OP_VALUE, fs, TEST) );
@@ -132,7 +132,7 @@ public:
       return _trialVars[name];
     }
     ID = getTrialID(ID);
-    int rank = ((fs == HGRAD) || (fs == L2) || (fs == CONSTANT_SCALAR)) ? 0 : 1;
+    int rank = VarFunctionSpaces::rankForSpace(fs);
     _trialVars[name] = Teuchos::rcp( new Var( ID, rank, name,
                                               IntrepidExtendedTypes::OP_VALUE, fs, FIELD) );
     _trialVarsByID[ID] = _trialVars[name];
@@ -143,7 +143,7 @@ public:
     if (_trialVars.find(name) != _trialVars.end()) {
       return _trialVars[name];
     }
-    int rank = ((fs == HGRAD) || (fs == L2) || (fs == CONSTANT_SCALAR)) ? 0 : 1;
+    int rank = VarFunctionSpaces::rankForSpace(fs);
     ID = getTrialID(ID);
     _trialVars[name] = Teuchos::rcp( new Var( ID, rank, name,
                                              IntrepidExtendedTypes::OP_VALUE, fs, FLUX, termTraced) );

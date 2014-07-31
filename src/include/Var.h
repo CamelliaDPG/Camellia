@@ -18,11 +18,12 @@ class LinearTerm;
 typedef Teuchos::RCP<LinearTerm> LinearTermPtr;
 
 namespace VarFunctionSpaces {
-  enum Space { HGRAD, HCURL, HDIV, HDIV_FREE, L2, CONSTANT_SCALAR, VECTOR_HGRAD, VECTOR_L2, UNKNOWN_FS };
+  enum Space { HGRAD, HCURL, HDIV, HGRAD_DISC, HCURL_DISC, HDIV_DISC, HDIV_FREE, L2, CONSTANT_SCALAR, VECTOR_HGRAD, VECTOR_HGRAD_DISC, VECTOR_L2, UNKNOWN_FS };
   enum VarType { TEST, FIELD, TRACE, FLUX, UNKNOWN_TYPE, MIXED_TYPE };
   
   IntrepidExtendedTypes::EFunctionSpaceExtended efsForSpace(Space space);
   Space spaceForEFS(IntrepidExtendedTypes::EFunctionSpaceExtended efs);
+  int rankForSpace(Space space);
 }
 
 using namespace VarFunctionSpaces;

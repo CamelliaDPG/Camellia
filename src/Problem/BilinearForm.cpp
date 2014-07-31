@@ -170,6 +170,7 @@ void BilinearForm::localStiffnessMatrixAndRHS(FieldContainer<double> &localStiff
   if (printTimings) {
     cout << "numCells: " << numCells << endl;
     cout << "numTestDofs: " << numTestDofs << endl;
+    cout << "numTrialDofs: " << numTrialDofs << endl;
   }
   
   FieldContainer<double> ipMatrix(numCells,numTestDofs,numTestDofs);
@@ -269,7 +270,7 @@ int BilinearForm::optimalTestWeights(FieldContainer<double> &optimalTestWeights,
                      "testOrdering->totalDofs() and optimalTestWeights.dimension(2) do not match.");
   
   FieldContainer<double> stiffnessMatrix(numCells,numTestDofs,numTrialDofs);
-  FieldContainer<double> stiffnessMatrixT(numCells,numTrialDofs,numTestDofs);
+//  FieldContainer<double> stiffnessMatrixT(numCells,numTrialDofs,numTestDofs);
   
   // RHS:
   this->stiffnessMatrix(stiffnessMatrix, elemType, cellSideParities, stiffnessBasisCache);
@@ -944,6 +945,15 @@ VarFactory BilinearForm::varFactory() {
         break;
       case IntrepidExtendedTypes::FUNCTION_SPACE_HDIV:
         space = HDIV;
+        break;
+      case IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD_DISC:
+        space = HGRAD_DISC;
+        break;
+      case IntrepidExtendedTypes::FUNCTION_SPACE_HCURL_DISC:
+        space = HCURL_DISC;
+        break;
+      case IntrepidExtendedTypes::FUNCTION_SPACE_HDIV_DISC:
+        space = HDIV_DISC;
         break;
       case IntrepidExtendedTypes::FUNCTION_SPACE_HVOL:
         space = L2;
