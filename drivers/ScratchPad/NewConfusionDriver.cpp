@@ -14,10 +14,14 @@
 #include "MeshFactory.h"
 
 #include "GnuPlotUtil.h"
-
-#ifdef HAVE_MPI
 #include <Teuchos_GlobalMPISession.hpp>
-#else
+
+#include "Teuchos_CommandLineProcessor.hpp"
+#include "Teuchos_ParameterList.hpp"
+
+#include "EpetraExt_ConfigDefs.h"
+#ifdef HAVE_EPETRAEXT_HDF5
+#include "HDF5Exporter.h"
 #endif
 
 class EntireBoundary : public SpatialFilter {
@@ -129,21 +133,36 @@ int main(int argc, char *argv[]) {
   bool writeWorstCaseGramMatrices = false;
   int numRefs = 10;
   
-  int H1Order = 3, pToAdd = 2;
-  int horizontalCells = 1, verticalCells = 1;
-  
   // problem parameters:
-  double eps = 1e-4;
+  double eps = 1e-8;
   vector<double> beta_const;
   beta_const.push_back(2.0);
   beta_const.push_back(1.0);
+  
+  int k = 2, delta_k = 2;
+  
+  Teuchos::CommandLineProcessor cmdp(false,true); // false: don't throw exceptions; true: do return errors for unrecognized options
+  
+  cmdp.setOption("polyOrder",&k,"polynomial order for field variable u");
+  cmdp.setOption("delta_k", &delta_k, "test space polynomial order enrichment");
+  cmdp.setOption("numRefs",&numRefs,"number of refinements");
+  cmdp.setOption("eps", &eps, "epsilon");
+  
+  if (cmdp.parse(argc,argv) != Teuchos::CommandLineProcessor::PARSE_SUCCESSFUL) {
+#ifdef HAVE_MPI
+    MPI_Finalize();
+#endif
+    return -1;
+  }
+  
+  int H1Order = k + 1;
   
   if (rank==0) {
     string normChoice = useCompliantGraphNorm ? "unit-compliant graph norm" : "standard graph norm";
     cout << "Using " << normChoice << "." << endl;
     cout << "eps = " << eps << endl;
     cout << "numRefs = " << numRefs << endl;
-    cout << "p = " << H1Order-1 << endl;
+    cout << "p = " << k << endl;
   }
   
   ////////////////////   DECLARE VARIABLES   ///////////////////////
@@ -219,32 +238,18 @@ int main(int argc, char *argv[]) {
   FunctionPtr u0 = Teuchos::rcp( new U0 );
   bc->addDirichlet(uhat, outflowBoundary, u0);
 
-  // bc->addDirichlet(uhat, inflowBoundary, u0);
+  bc->addDirichlet(uhat, inflowBoundary, u0);
   
-  Teuchos::RCP<PenaltyConstraints> pc = Teuchos::rcp(new PenaltyConstraints);
-  pc->addConstraint(uhat==u0,inflowBoundary);
+//  Teuchos::RCP<PenaltyConstraints> pc = Teuchos::rcp(new PenaltyConstraints);
+//  pc->addConstraint(uhat==u0,inflowBoundary);
 
   ////////////////////   BUILD MESH   ///////////////////////
-  // define nodes for mesh
-  FieldContainer<double> quadPoints(4,2);
-  
-  quadPoints(0,0) = 0.0; // x1
-  quadPoints(0,1) = 0.0; // y1
-  quadPoints(1,0) = 1.0;
-  quadPoints(1,1) = 0.0;
-  quadPoints(2,0) = 1.0;
-  quadPoints(2,1) = 1.0;
-  quadPoints(3,0) = 0.0;
-  quadPoints(3,1) = 1.0;
-
-  
-  // create a pointer to a new mesh:
-  Teuchos::RCP<Mesh> mesh = MeshFactory::buildQuadMesh(quadPoints, horizontalCells, verticalCells,
-                                                confusionBF, H1Order, H1Order+pToAdd);
+  // create a new mesh on a single-cell, unit square domain
+  Teuchos::RCP<Mesh> mesh = MeshFactory::quadMeshMinRule(confusionBF, H1Order, delta_k);
   
   ////////////////////   SOLVE & REFINE   ///////////////////////
   Teuchos::RCP<Solution> solution = Teuchos::rcp( new Solution(mesh, bc, rhs, qoptIP) );
-  solution->setFilter(pc);
+//  solution->setFilter(pc);
   
   double energyThreshold = 0.2; // for mesh refinements
   
@@ -305,12 +310,14 @@ int main(int argc, char *argv[]) {
   // one more solve on the final refined mesh:
   solution->solve();
   
-  if (rank==0){
-    solution->writeFieldsToFile(u->ID(), "u.m");
-    solution->writeFluxesToFile(uhat->ID(), "u_hat.dat");
-    
-    cout << "wrote files: u.m, u_hat.dat\n";
-  }
+#ifdef HAVE_EPETRAEXT_HDF5
+  ostringstream dir_name;
+  dir_name << "confusion_eps" << eps;
+  HDF5Exporter exporter(mesh,dir_name.str());
+  exporter.exportSolution(solution, varFactory, 0);
+  if (rank==0) cout << "wrote solution to " << dir_name.str() << endl;
+#endif
+
   
   return 0;
 }
