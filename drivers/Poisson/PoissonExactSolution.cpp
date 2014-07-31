@@ -77,7 +77,6 @@ PoissonExactSolution::PoissonExactSolution(PoissonExactSolutionType type, int po
 }
 
 int PoissonExactSolution::H1Order() {
-  // polynomialOrder here means the H1 order (i.e. polyOrder+1)
   return _polyOrder + 1;
 }
 
