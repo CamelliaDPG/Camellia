@@ -90,7 +90,6 @@ BilinearForm::BilinearForm() {
   _useQRSolveForOptimalTestFunctions = true;
   _useSPDSolveForOptimalTestFunctions = false;
   _useIterativeRefinementsWithSPDSolve = false;
-  _useExtendedPrecisionSolveForOptimalTestFunctions = false;
   _warnAboutZeroRowsAndColumns = true;
 }
 
@@ -297,45 +296,15 @@ int BilinearForm::optimalTestWeights(FieldContainer<double> &optimalTestWeights,
     FieldContainer<double> cellStiffness(localStiffnessDim, &stiffnessMatrix(cellIndex,0,0));
     if (_useQRSolveForOptimalTestFunctions) {
       result = SerialDenseWrapper::solveSystemUsingQR(optimalWeightsT, cellIPMatrix, cellStiffness);
-    } else if (_useSPDSolveForOptimalTestFunctions && !_useExtendedPrecisionSolveForOptimalTestFunctions) {
+    } else if (_useSPDSolveForOptimalTestFunctions) {
       result = SerialDenseWrapper::solveSPDSystemMultipleRHS(optimalWeightsT, cellIPMatrix, cellStiffness);
       if (result != 0) {
         // may be that we're not SPD numerically
         cout << "During optimal test weight solution, encountered IP matrix that's not numerically SPD.  Solving with LU factorization instead of Cholesky.\n";
         result = SerialDenseWrapper::solveSystemMultipleRHS(optimalWeightsT, cellIPMatrix, cellStiffness);
       }
-    } else if ((! _useSPDSolveForOptimalTestFunctions) && (!_useExtendedPrecisionSolveForOptimalTestFunctions)) {
+    } else {
       SerialDenseWrapper::solveSystemMultipleRHS(optimalWeightsT, cellIPMatrix, cellStiffness);
-    } else { // _useExtendedPrecisionSolveForOptimalTestFunctions == true
-      typedef long double DBL;
-      typedef ublas::row_major  ORI;
-      int gramSize = numTestDofs;
-      ublas::matrix<DBL, ORI> A (gramSize, gramSize);
-      ublas::matrix<DBL, ORI> L (gramSize, gramSize);
-      ublas::vector<DBL> x (gramSize);
-      
-      // copy the inner product for this cell into matrix A
-      // (could optimize this using pointer arithmetic)
-      for (int i=0; i<gramSize; i++) {
-        for (int j=0; j<gramSize; j++) {
-          A(i,j) = cellIPMatrix(i,j);
-        }
-      }
-      size_t res = cholesky_decompose(A, L);
-      if (res != 0) { // failure: communicate by setting result
-        result = res;
-      }
-      // now solve for each rhs corresponding to the stiffness matrix columns for this cell
-      for (int j=0; j<numTrialDofs; j++) {
-        // copy from stiffness matrix:
-        for (int i=0; i<gramSize; i++) {
-          x(i) = cellStiffness(i,j);
-        }
-        cholesky_solve(L, x, ublas::lower());
-        for (int i=0; i<gramSize; i++) {
-          optimalWeightsT(i,j) = x(i);
-        }
-      }
     }
     // copy/transpose the optimal test weights
     for (int i=0; i<optimalTestWeights.dimension(1); i++) {
@@ -901,7 +870,7 @@ void BilinearForm::setUseIterativeRefinementsWithSPDSolve(bool value) {
 }
 
 void BilinearForm::setUseExtendedPrecisionSolveForOptimalTestFunctions(bool value) {
-  _useExtendedPrecisionSolveForOptimalTestFunctions = value;
+  cout << "WARNING: BilinearForm no longer supports extended precision solve for optimal test functions.  Ignoring argument to setUseExtendedPrecisionSolveForOptimalTestFunctions().\n";
 }
 
 void BilinearForm::setWarnAboutZeroRowsAndColumns(bool value) {

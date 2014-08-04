@@ -15,13 +15,6 @@ FIND_PACKAGE(Trilinos PATHS ${TRILINOS_PATH}/lib/cmake/Trilinos ${TRILINOS_PATH}
 
 SET(CMAKE_INCLUDE_PATH ${CMAKE_INCLUDE_PATH} "/usr/local/")
 
-FIND_PACKAGE(Boost)
-if (Boost_FOUND)
-  INCLUDE_DIRECTORIES(${Boost_INCLUDE_DIR})
-  MESSAGE("   Boost_INCLUDE_DIRS = ${Boost_INCLUDE_DIRS}")
-  MESSAGE("   Boost_LIBRARY_DIRS = ${Boost_LIBRARY_DIRS}")
-endif()
-
 find_package(VTK)
 if (VTK_FOUND)
   include(${VTK_USE_FILE})
@@ -288,9 +281,9 @@ set( TRUMAN_FLAT_PLATE_INS
   "${DRIVERS_DIR}/Truman/LocalConservation/FlatPlateINS.cpp"
 )
 
-set( uBLAS_CHOLESKY_TEST
-  "${DRIVERS_DIR}/uBLAS/cholesky_test.cpp"
-)
+#set( uBLAS_CHOLESKY_TEST
+#  "${DRIVERS_DIR}/uBLAS/cholesky_test.cpp"
+#)
 
 set( STOKES_SOURCES
   "${STOKES_DIR}/StokesBilinearForm.cpp"
@@ -379,7 +372,7 @@ add_executable(ScratchDriver ${SCRATCH_DRIVER})
 add_executable(VestaCrashDriver ${VESTA_CRASH_DRIVER})
 add_executable(DPGTests ${TEST_SOURCES} ${POISSON_SOURCES} ${CONFUSION_SOURCES})
 add_executable(FlatPlateINS ${TRUMAN_FLAT_PLATE_INS})
-add_executable(ublas_cholesky ${uBLAS_CHOLESKY_TEST})
+#add_executable(ublas_cholesky ${uBLAS_CHOLESKY_TEST})
 
 #
 # EDIT HERE: Change trilinosExample to the name of the executable

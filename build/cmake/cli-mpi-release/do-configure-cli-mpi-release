@@ -7,5 +7,4 @@ cmake \
   -D ZLIB_LIB="/usr/lib/libz.dylib" \
   -DVTK_DIR=/Users/nroberts/lib/vtk-5.10 \
   -DSCALAPACK_LIB="/Users/nroberts/lib/libscalapack.a" \
-  -DMPI_DIR="$HOME/lib/openmpi-1.6.5" \
   .
