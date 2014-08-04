@@ -708,6 +708,33 @@ set<GlobalIndexType> GDAMaximumRule2D::partitionOwnedGlobalFieldIndices() {
   return fieldIndices;
 }
 
+set<GlobalIndexType> GDAMaximumRule2D::partitionOwnedIndicesForVariables(set<int> varIDs) {
+  int rank = Teuchos::GlobalMPISession::getRank();
+  
+  set<GlobalIndexType> varIndices;
+  set<GlobalIndexType> cellIDs = cellsInPartition(-1);
+  for (set<GlobalIndexType>::iterator cellIt = cellIDs.begin(); cellIt != cellIDs.end(); cellIt++) {
+    GlobalIndexType cellID = *cellIt;
+    ElementTypePtr elemTypePtr = elementType(cellID);
+    set< int >::iterator varIt;
+    for (varIt = varIDs.begin(); varIt != varIDs.end(); varIt++){
+      int varID = *varIt;
+      int numSides = elemTypePtr->trialOrderPtr->getNumSidesForVarID(varID);
+      for (int sideOrdinal = 0; sideOrdinal<numSides; sideOrdinal++) {
+        int basisCardinality = elemTypePtr->trialOrderPtr->getBasisCardinality(varID,sideOrdinal);
+        for (int basisOrdinal = 0; basisOrdinal<basisCardinality; basisOrdinal++) {
+          int localDofIndex = elemTypePtr->trialOrderPtr->getDofIndex(varID, basisOrdinal, sideOrdinal);
+          GlobalIndexType globalIndex = globalDofIndex(cellID, localDofIndex);
+          
+          if (partitionForGlobalDofIndex(globalIndex) == rank)
+            varIndices.insert(globalIndex);
+        }
+      }
+    }
+  }
+  return varIndices;
+}
+
 set<GlobalIndexType> GDAMaximumRule2D::partitionOwnedGlobalFluxIndices() {
   int rank = Teuchos::GlobalMPISession::getRank();
 

@@ -103,6 +103,7 @@ public:
   set<GlobalIndexType> partitionOwnedGlobalFieldIndices();
   set<GlobalIndexType> partitionOwnedGlobalFluxIndices();
   set<GlobalIndexType> partitionOwnedGlobalTraceIndices();
+  set<GlobalIndexType> partitionOwnedIndicesForVariables(set<int> varIDs);
   
   FieldContainer<double> & physicalCellNodes( ElementTypePtr elemTypePtr );
   FieldContainer<double> & physicalCellNodesGlobal( ElementTypePtr elemTypePtr );

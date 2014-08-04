@@ -247,6 +247,17 @@ set<GlobalIndexType> GDAMinimumRule::partitionOwnedGlobalFieldIndices() {
   return fieldDofIndices;
 }
 
+set<GlobalIndexType> GDAMinimumRule::partitionOwnedIndicesForVariables(set<int> varIDs) {
+  set<GlobalIndexType> varIndices;
+  for (set<int>::iterator varIt = varIDs.begin(); varIt != varIDs.end(); varIt++) {
+    for (set<IndexType>::iterator varOffsetIt=_partitionIndexOffsetsForVarID[*varIt].begin();
+         varOffsetIt != _partitionIndexOffsetsForVarID[*varIt].end(); varOffsetIt++) {
+      varIndices.insert(*varOffsetIt + _partitionDofOffset);
+    }
+  }
+  return varIndices;
+}
+
 set<GlobalIndexType> GDAMinimumRule::partitionOwnedGlobalFluxIndices() {
   set<GlobalIndexType> fluxIndices;
   for (set<IndexType>::iterator fluxOffsetIt=_partitionFluxIndexOffsets.begin(); fluxOffsetIt != _partitionFluxIndexOffsets.end(); fluxOffsetIt++) {
@@ -1526,6 +1537,7 @@ void GDAMinimumRule::rebuildLookups() {
   
   _partitionFluxIndexOffsets.clear();
   _partitionTraceIndexOffsets.clear();
+  _partitionIndexOffsetsForVarID.clear();
   
   int rank = Teuchos::GlobalMPISession::getRank();
 //  cout << "GDAMinimumRule: Rebuilding lookups on rank " << rank << endl;
@@ -1583,6 +1595,11 @@ void GDAMinimumRule::rebuildLookups() {
                                                                      constrainingSubcellDimension, constraints.subcellConstraints[d][scord].subcellOrdinalInSide);
               }
               basis = trialOrdering->getBasis(var->ID());
+              // field
+              int ordinalCount = basis->dofOrdinalsForSubcell(constrainingSubcellDimension, scordForBasis).size();
+              for (int ordinal=0; ordinal<ordinalCount; ordinal++) {
+                _partitionIndexOffsetsForVarID[var->ID()].insert(ordinal+_partitionDofCount);
+              }
             } else {
               if (constrainingSubcellDimension==spaceDim) continue; // side bases don't have any support on the interior of the cell...
               scordForBasis = constraints.subcellConstraints[d][scord].subcellOrdinalInSide; // the basis sees the side, so that's the view to use for subcell ordinal
@@ -1592,10 +1609,12 @@ void GDAMinimumRule::rebuildLookups() {
               if (var->varType()==FLUX) {
                 for (int ordinal=0; ordinal<ordinalCount; ordinal++) {
                   _partitionFluxIndexOffsets.insert(ordinal+_partitionDofCount);
+                  _partitionIndexOffsetsForVarID[var->ID()].insert(ordinal+_partitionDofCount);
                 }
               } else if (var->varType() == TRACE) {
                 for (int ordinal=0; ordinal<ordinalCount; ordinal++) {
                   _partitionTraceIndexOffsets.insert(ordinal+_partitionDofCount);
+                  _partitionIndexOffsetsForVarID[var->ID()].insert(ordinal+_partitionDofCount);
                 }
               }
             }

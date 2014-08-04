@@ -219,81 +219,25 @@ void Solution::addSolution(Teuchos::RCP<Solution> otherSoln, double weight, bool
 }
 
 void Solution::addSolution(Teuchos::RCP<Solution> otherSoln, double weight, set<int> varsToAdd, bool allowEmptyCells) {
-  cout << "addSolution with set<int> varsToAdd argument is currently broken (ignores _lhsVector).\n";
-  TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "addSolution with set<int> varsToAdd argument is currently broken (ignores _lhsVector).");
-  
-  vector<int> volumeTrialIDs = _mesh->bilinearForm()->trialVolumeIDs();
-  vector<int> boundaryTrialIDs = _mesh->bilinearForm()->trialBoundaryIDs();
-  // thisSoln += weight * otherSoln
-  // throws exception if the two Solutions' solutionForElementTypeMaps fail to match in any way other than in values
-  const map< GlobalIndexType, FieldContainer<double> >* otherMapPtr = &(otherSoln->solutionForCellIDGlobal());
-  if ( ! allowEmptyCells ) {
-    TEUCHOS_TEST_FOR_EXCEPTION(otherMapPtr->size() != _solutionForCellIDGlobal.size(),
-                               std::invalid_argument, "otherSoln doesn't match Solution's solutionMap.");
+  set<GlobalIndexType> globalIndicesForVars = _mesh->globalDofAssignment()->partitionOwnedIndicesForVariables(varsToAdd);
+  Epetra_Map partMap = getPartitionMap();
+
+  // add the global solution vectors together.
+  if (otherSoln->getLHSVector().get() != NULL) {
+    if (_lhsVector.get() == NULL) {
+      // then we treat this solution as 0
+      _lhsVector = Teuchos::rcp(new Epetra_FEVector(partMap,1,true));
+      _lhsVector->PutScalar(0); // unclear whether this is redundant with constructor or not
+    }
+    for (set<GlobalIndexType>::iterator gidIt = globalIndicesForVars.begin(); gidIt != globalIndicesForVars.end(); gidIt++) {
+      int lid = partMap.LID((GlobalIndexTypeToCast)*gidIt);
+      (*_lhsVector)[0][lid] += (*otherSoln->getLHSVector())[0][lid] * weight;
+    }
+    // now, interpret the global data
+    importSolution();
+    
+    clearComputedResiduals();
   }
-  map< GlobalIndexType, FieldContainer<double> >::const_iterator mapIt;
-  for (mapIt=otherMapPtr->begin(); mapIt != otherMapPtr->end(); mapIt++)
-  {
-    int cellID = mapIt->first;
-    const FieldContainer<double>* otherValues = &(mapIt->second);
-    map< GlobalIndexType, FieldContainer<double> >::iterator myMapIt = _solutionForCellIDGlobal.find(cellID);
-    if (myMapIt == _solutionForCellIDGlobal.end())
-    {
-      if ( !allowEmptyCells ) {
-        TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument,
-                                   "otherSoln doesn't match Solution's solutionMap (cellID not found).");
-      } else {
-        // just copy, and apply the weight
-        _solutionForCellIDGlobal[cellID] = *otherValues;
-        BilinearForm::multiplyFCByWeight(_solutionForCellIDGlobal[cellID],weight);
-        continue;
-      }
-    }
-    FieldContainer<double>* myValues = &(myMapIt->second);
-    // for volume variables, use +=
-    for (int idIdx = 0; idIdx < volumeTrialIDs.size(); idIdx++)
-    {
-      int trialID = volumeTrialIDs[idIdx];
-      
-      ElementTypePtr elemTypePtr = _mesh->getElementType(cellID);
-      DofOrderingPtr trialOrdering= elemTypePtr->trialOrderPtr;
-      
-      BasisPtr basis = trialOrdering->getBasis(trialID, 0);
-      int basisCardinality = basis->getCardinality();
-      for (int basisOrdinal = 0; basisOrdinal < basisCardinality; basisOrdinal++)
-      {
-        int dofIndex = trialOrdering->getDofIndex(trialID, basisOrdinal, 0);
-        if (varsToAdd.count(trialID))
-          (*myValues)[dofIndex] += weight * (*otherValues)[dofIndex];
-        else
-          (*myValues)[dofIndex] = weight * (*otherValues)[dofIndex];
-      }
-    }
-    // for volume variables, use =
-    for (int idIdx = 0; idIdx < boundaryTrialIDs.size(); idIdx++)
-    {
-      int trialID = boundaryTrialIDs[idIdx];
-      
-      ElementTypePtr elemTypePtr = _mesh->getElementType(cellID);
-      DofOrderingPtr trialOrdering= elemTypePtr->trialOrderPtr;
-      shards::CellTopology cellTopo = *(elemTypePtr->cellTopoPtr);
-      int numSides = CamelliaCellTools::getSideCount(cellTopo);
-      for (int sideIndex=0; sideIndex < numSides; sideIndex++)
-      {
-        BasisPtr basis = trialOrdering->getBasis(trialID, sideIndex);
-        int basisCardinality = basis->getCardinality();
-        for (int basisOrdinal = 0; basisOrdinal < basisCardinality; basisOrdinal++)
-        {
-          int dofIndex = trialOrdering->getDofIndex(trialID, basisOrdinal, sideIndex);
-          if (varsToAdd.count(trialID))
-            (*myValues)[dofIndex] += weight * (*otherValues)[dofIndex];
-          else
-            (*myValues)[dofIndex] = weight * (*otherValues)[dofIndex];
-        }
-      }
-    }
-  }
-  clearComputedResiduals();
 }
 
 bool Solution::cellHasCoefficientsAssigned(GlobalIndexType cellID) {

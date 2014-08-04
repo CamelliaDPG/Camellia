@@ -95,6 +95,7 @@ public:
   virtual GlobalIndexType globalCellIndex(GlobalIndexType cellID);
   virtual GlobalIndexType globalDofCount() = 0;
   virtual set<GlobalIndexType> globalDofIndicesForPartition(PartitionIndexType partitionNumber) = 0;
+  virtual set<GlobalIndexType> partitionOwnedIndicesForVariables(set<int> varIDs) = 0;
   virtual set<GlobalIndexType> partitionOwnedGlobalFieldIndices() = 0;
   virtual set<GlobalIndexType> partitionOwnedGlobalFluxIndices() = 0;
   virtual set<GlobalIndexType> partitionOwnedGlobalTraceIndices() = 0;

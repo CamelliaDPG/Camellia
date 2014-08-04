@@ -47,6 +47,8 @@ class GDAMinimumRule : public GlobalDofAssignment {
   set<IndexType> _partitionFluxIndexOffsets;
   set<IndexType> _partitionTraceIndexOffsets; // field indices are the complement of the other two
   
+  map<int,set<IndexType> > _partitionIndexOffsetsForVarID; // TODO: factor out _partitionFluxIndexOffsets and _partitionTraceIndexOffsets using this container.
+  
   map< GlobalIndexType, CellConstraints > _constraintsCache;
   
   map< GlobalIndexType, LocalDofMapperPtr > _dofMapperCache;
@@ -98,6 +100,7 @@ public:
   set<GlobalIndexType> partitionOwnedGlobalFieldIndices();
   set<GlobalIndexType> partitionOwnedGlobalFluxIndices();
   set<GlobalIndexType> partitionOwnedGlobalTraceIndices();
+  set<GlobalIndexType> partitionOwnedIndicesForVariables(set<int> varIDs);
   
   void interpretLocalData(GlobalIndexType cellID, const FieldContainer<double> &localData, FieldContainer<double> &globalData,
                           FieldContainer<GlobalIndexType> &globalDofIndices);
