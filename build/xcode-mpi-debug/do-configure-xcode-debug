@@ -1,0 +1,17 @@
+cmake \
+  -G "Xcode" \
+  -DTRILINOS_PATH:FILEPATH="/Users/nroberts/lib/trilinos/mpi-debug" \
+  -DCAMELLIA_SOURCE_DIR:FILEPATH="/Users/nroberts/Camellia/src" \
+  -DCAMELLIA_BUILD_TYPE:STRING="serial-debug" \
+  -DCMAKE_BUILD_TYPE="DEBUG" \
+  -D ZLIB_LIB="/usr/lib/libz.dylib" \
+  -DVTK_DIR=/Users/nroberts/lib/vtk-5.10 \
+  -DMUMPS_DIR="/Users/nroberts/lib/mumps-4.10.0" \
+  -DMPI_DIR="$HOME/lib/openmpi-1.6.5" \
+  -DMPI_INCLUDE="/Users/nroberts/lib/openmpi-1.6.5/include" \
+  -DMPI_LINK_CC="-L/Users/nroberts/lib/openmpi-1.6.5/lib -lmpi -lm" \
+  -DMPI_LINK_FORTRAN="-Wl,-commons,use_dylibs -I/Users/nroberts/lib/openmpi-1.6.5/lib -L/Users/nroberts/lib/openmpi-1.6.5/lib -lmpi_f90 -lmpi_f77 -lmpi -lm -lmpi_cxx" \
+  -DSCALAPACK_LIB="/Users/nroberts/lib/libscalapack.a" \
+  -DBOOST_ROOT:FILEPATH=/usr/local \
+  ../..
+
