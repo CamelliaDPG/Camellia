@@ -273,6 +273,7 @@ void Solution::setSolution(Teuchos::RCP<Solution> otherSoln) {
 }
 
 void Solution::initializeLHSVector() {
+//  _lhsVector = Teuchos::rcp( (Epetra_FEVector*) NULL); // force a delete
   Epetra_Map partMap = getPartitionMap();
   _lhsVector = Teuchos::rcp(new Epetra_FEVector(partMap,1,true));
   _lhsVector->PutScalar(0); // unclear whether this is redundant with constructor or not
@@ -1987,6 +1988,10 @@ void Solution::discardInactiveCellCoefficients() {
 
 Teuchos::RCP<Epetra_FEVector> Solution::getRHSVector() {
   return _rhsVector;
+}
+
+Teuchos::RCP<Epetra_FECrsMatrix> Solution::getStiffnessMatrix() {
+  return _globalStiffMatrix;
 }
 
 void Solution::solutionValues(FieldContainer<double> &values, int trialID, BasisCachePtr basisCache,

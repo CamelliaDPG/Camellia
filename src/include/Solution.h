@@ -275,8 +275,11 @@ public:
 
   void setBC( Teuchos::RCP<BC> );
   void setRHS( Teuchos::RCP<RHS> );
+  
+  Teuchos::RCP<Epetra_FECrsMatrix> getStiffnessMatrix();
   Teuchos::RCP<Epetra_FEVector> getRHSVector();
   Teuchos::RCP<Epetra_FEVector> getLHSVector();
+  
   void setIP( Teuchos::RCP<DPGInnerProduct>);
 
   // Jesse's additions:
