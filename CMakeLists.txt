@@ -1,5 +1,7 @@
 cmake_minimum_required(VERSION 2.6)
-include(ConfigureOptions.cmake)
+IF(NOT CAMELLIA_OPTIONS_CONFIGURED)
+  include(ConfigureOptions.cmake)
+ENDIF()
 
 project(Camellia)
 
@@ -21,11 +23,31 @@ set(DRIVER_DIR drivers)
 #   link_libraries(vtkHybrid)
 # endif()
 
-# adding boost    
-FIND_PACKAGE(Boost)
-if (Boost_FOUND)
-  INCLUDE_DIRECTORIES(${Boost_INCLUDE_DIR})
+if (ZLIB_LIB)
+  link_libraries(${ZLIB_LIB})
 endif()
+
+if(MPI_DIR)
+  MESSAGE("MPI_DIR = ${MPI_DIR}")
+  include_directories(${MPI_DIR}/include)
+  link_directories(${MPI_DIR})
+  link_libraries(mpi)
+  link_libraries(-L/usr/local/lib/gfortran/lib -lgfortran)
+  link_libraries(mpi_f77)
+endif()
+
+if(SCALAPACK_LIB)
+  link_libraries(${SCALAPACK_LIB})
+endif()
+
+# adding boost    
+# FIND_PACKAGE(Boost)
+# if (Boost_FOUND)
+#  INCLUDE_DIRECTORIES(${Boost_INCLUDE_DIR})
+# endif()
+
+MESSAGE(" Looking for Trilinos in ${TRILINOS_PATH}/lib/cmake/Trilinos
+  ${TRILINOS_PATH} $ENV{TRILINOS_DIR}")
 
 # Find Trilinos
 find_package(Trilinos PATHS ${TRILINOS_PATH}/lib/cmake/Trilinos
@@ -103,14 +125,19 @@ link_directories(
   #${MUMPS_PATH}/lib
 )
 
+if (MUMPS_DIR)
+  include_directories(${MUMPS_DIR}/include)
+  link_directories(${MUMPS_DIR})
+endif()
+
 add_library(Camellia ${LIB_SOURCES} ${HEADERS})
 
 link_libraries(
   Camellia
   ${Trilinos_LIBRARIES}
   ${Trilinos_TPL_LIBRARIES}
-  # Xdmf
-  hdf5_cpp
+  # Xdmd
+  # hdf5_cpp
   #  dmumps
   #  mumps_common
   #  pord
