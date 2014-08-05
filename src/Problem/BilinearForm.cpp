@@ -51,8 +51,6 @@
 #include "RHS.h"
 #include "IP.h"
 
-#include "cholesky.hpp"
-
 #include "CamelliaCellTools.h"
 
 static const string & S_OP_VALUE = "";
