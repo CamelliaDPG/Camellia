@@ -538,7 +538,7 @@ void GDAMaximumRule2D::didHRefine(const set<GlobalIndexType> &parentCellIDs) {
       }
     }
     _cellSideUpgrades = remainingCellSideUpgrades;
-  }  
+  }
   this->GlobalDofAssignment::didHRefine(parentCellIDs);
 }
 

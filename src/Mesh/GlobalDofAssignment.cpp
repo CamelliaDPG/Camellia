@@ -16,6 +16,8 @@
 #include "GDAMinimumRule.h"
 #include "GDAMaximumRule2D.h"
 
+#include "Solution.h"
+
 #include "CamelliaCellTools.h"
 
 GlobalDofAssignment::GlobalDofAssignment(MeshPtr mesh, VarFactory varFactory,
@@ -192,6 +194,10 @@ FieldContainer<double> GlobalDofAssignment::cellSideParitiesForCell( GlobalIndex
 
 void GlobalDofAssignment::repartitionAndMigrate() {
   _partitionPolicy->partitionMesh(_mesh.get(),_numPartitions);
+  for (vector< Solution* >::iterator solutionIt = _registeredSolutions.begin();
+       solutionIt != _registeredSolutions.end(); solutionIt++) {
+    (*solutionIt)->initializeLHSVector(); // rebuild LHS vector; global dofs will have changed. (important for addSolution)
+  }
 }
 
 void GlobalDofAssignment::didHRefine(const set<GlobalIndexType> &parentCellIDs) { // subclasses should call super
