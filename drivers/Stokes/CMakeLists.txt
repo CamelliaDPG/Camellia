@@ -7,3 +7,9 @@ add_executable(StokesCavityFlowDriver ${STOKES_CAVITY_FLOW_DRIVER} ${LID_REF_STR
 target_link_libraries(StokesCavityFlowDriver 
   Camellia
 )
+
+set( STOKES_CAVITY_FLOW_DRIVER_3D "StokesCavityFlowDriver3D.cpp" )
+add_executable(StokesCavityFlowDriver3D ${STOKES_CAVITY_FLOW_DRIVER_3D})
+target_link_libraries(StokesCavityFlowDriver3D 
+  Camellia
+)
