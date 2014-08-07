@@ -21,6 +21,8 @@
 #include "HDF5Exporter.h"
 #endif
 
+#include "IndexType.h"
+
 
 class TopBoundary : public SpatialFilter {
 public:
@@ -101,6 +103,8 @@ int main(int argc, char *argv[]) {
   bool enforceOneIrregularity = true;
   
   bool conformingTraces = true;
+  
+  bool bugTestRefs = false;
   
   double width = 1.0, height = 1.0, depth = 1.0;
   int horizontalCells = 2, verticalCells = 2, depthCells = 2;
@@ -253,6 +257,40 @@ int main(int argc, char *argv[]) {
   SolutionPtr solution = Solution::solution(mesh, bc, rhs, graphNorm);
   
   mesh->registerSolution(solution); // sign up for projection of old solution onto refined cells.
+  
+  if (bugTestRefs) {
+    // manually refine according to a series of refinements that caused a crash on Vesta earlier
+    
+    set<GlobalIndexType> cellIDs;
+    // first refinement:
+    cellIDs.insert(2); cellIDs.insert(3); cellIDs.insert(6); cellIDs.insert(7);
+    mesh->hRefine(cellIDs, RefinementPattern::regularRefinementPatternHexahedron());
+    
+    // second refinement:
+    cellIDs.clear();
+    cellIDs.insert(10); cellIDs.insert(11); cellIDs.insert(14); cellIDs.insert(18); cellIDs.insert(22); cellIDs.insert(23); cellIDs.insert(26); cellIDs.insert(27); cellIDs.insert(31); cellIDs.insert(35); cellIDs.insert(38); cellIDs.insert(39);
+    mesh->hRefine(cellIDs, RefinementPattern::regularRefinementPatternHexahedron());
+    
+    // third refinement:
+    cellIDs.clear();
+    cellIDs.insert(1); cellIDs.insert(4); cellIDs.insert(5); cellIDs.insert(42); cellIDs.insert(43); cellIDs.insert(46); cellIDs.insert(50); cellIDs.insert(51); cellIDs.insert(58); cellIDs.insert(62); cellIDs.insert(63); cellIDs.insert(66); cellIDs.insert(67); cellIDs.insert(70); cellIDs.insert(71); cellIDs.insert(74); cellIDs.insert(75); cellIDs.insert(78); cellIDs.insert(79); cellIDs.insert(86); cellIDs.insert(87); cellIDs.insert(90); cellIDs.insert(91); cellIDs.insert(98); cellIDs.insert(99); cellIDs.insert(103); cellIDs.insert(107); cellIDs.insert(111); cellIDs.insert(115); cellIDs.insert(119); cellIDs.insert(126); cellIDs.insert(127); cellIDs.insert(131); cellIDs.insert(134); cellIDs.insert(135);
+    mesh->hRefine(cellIDs, RefinementPattern::regularRefinementPatternHexahedron());
+    
+#ifdef HAVE_EPETRAEXT_HDF5
+    if (rank==0) cout << "Beginning export of solution on problematic mesh.\n";
+    ostringstream dir_name;
+    dir_name << "stokesCavityFlow3D_problemMesh_k" << k << "_ref" << 0;
+    HDF5Exporter exporter2(mesh,dir_name.str());
+    exporter2.exportSolution(solution,varFactory,0);
+    if (rank==0) cout << "...completed.  Beginning export of initial mesh.\n";
+    // straight-line mesh
+    dir_name.str("");
+    dir_name << "stokesCavityFlow3D_problemMesh_k" << k << "_ref" << 0 << "_mesh";
+    HDF5Exporter meshExporter(mesh,dir_name.str());
+    meshExporter.exportFunction(Function::normal(),"mesh",0,2);
+    if (rank==0) cout << "...completed.\n";
+#endif
+  }
   
   double energyThreshold = 0.2;
   RefinementStrategy refinementStrategy( solution, energyThreshold );
