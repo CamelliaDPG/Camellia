@@ -39,6 +39,20 @@ public:
 
 using namespace std;
 
+#include "Amesos_config.h"
+#include "Amesos.h"
+#ifdef HAVE_AMESOS_SUPERLUDIST
+#include "Amesos_Superludist.h"
+
+class SuperLUDistSolver : public Solver {
+public:
+  int solve() {
+    Amesos_Superludist slu(problem());
+    return slu.Solve();
+  }
+};
+#endif
+
 // only use MUMPS when we have MPI
 #ifdef USE_MUMPS
 #ifdef HAVE_MPI

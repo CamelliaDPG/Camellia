@@ -94,7 +94,8 @@ int main(int argc, char *argv[]) {
   int k = 1; // poly order for field variables
   int delta_k = 3;   // test space enrichment
   
-  bool useMumps = true;
+  bool useSuperLUDist = true;
+  bool useMumps = false;
   bool useCGSolver = false;
   bool useMLSolver = false;
   bool useGMGSolver = false;
@@ -301,7 +302,9 @@ int main(int argc, char *argv[]) {
   refinementStrategy.setEnforceOneIrregularity(enforceOneIrregularity);
   
   Teuchos::RCP<Solver> coarseSolver, fineSolver;
-  if (useMumps) {
+  if (useSuperLUDist){
+    coarseSolver = Teuchos::rcp( new SuperLUDistSolver() );
+  } else if (useMumps) {
 #ifdef USE_MUMPS
     coarseSolver = Teuchos::rcp( new MumpsSolver(mumpsMaxMemoryMB) );
 #else
