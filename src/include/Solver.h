@@ -60,7 +60,7 @@ public:
 #ifdef HAVE_MPI
     rank     = Teuchos::GlobalMPISession::getRank();
     numProcs = Teuchos::GlobalMPISession::getNProc();
-//    mumps.SetICNTL(28, 2); // 2: parallel analysis
+    mumps.SetICNTL(28, 2); // 2: parallel analysis
     
 //    int minSize = max(infog[26-1], infog[16-1]);
 //    // want to set ICNTL 23 to a size "significantly larger" than minSize
@@ -102,7 +102,8 @@ public:
           // some error related to an integer array allocation.
           // since I'm not sure how to determine how much we previously had, we'll just try again with the max
           int sizeToSet = _maxMemoryPerCoreMB;
-          cout << "\nMUMPS encountered an error related to the integer workspace -- likely it's running into our allocation limit.  Setting the allocation limit to ";
+          cout << "\nMUMPS encountered an error allocating an integer workspace of size " << infog[2-1] << " MB.\n";
+          cout << "-- perhaps it's running into our allocation limit?? Setting the allocation limit to ";
           cout << sizeToSet << " MB/core." << endl;
           mumps.SetICNTL(23, sizeToSet);
         } else if (infog[0]==-13) { // error during a Fortran ALLOCATE statement
