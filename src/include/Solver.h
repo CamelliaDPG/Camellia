@@ -104,7 +104,7 @@ public:
           // some error related to an integer array allocation.
           // since I'm not sure how to determine how much we previously had, we'll just try again with the max
           int sizeToSet = _maxMemoryPerCoreMB;
-          cout << "\nMUMPS encountered an error allocating an integer workspace of size " << infog[2-1] << " MB.\n";
+          cout << "\nMUMPS encountered an error allocating an integer workspace of size " << infog[2-1] << " (bytes, I think).\n";
           cout << "-- perhaps it's running into our allocation limit?? Setting the allocation limit to ";
           cout << sizeToSet << " MB/core." << endl;
           mumps.SetICNTL(23, sizeToSet);

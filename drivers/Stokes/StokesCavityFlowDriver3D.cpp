@@ -112,6 +112,7 @@ int main(int argc, char *argv[]) {
   int numCells = -1;
   
   double eps = 1.0/64.0;
+  int mumpsMaxMemoryMB = 768;
   
   cmdp.setOption("polyOrder",&k,"polynomial order for field variable u");
   cmdp.setOption("delta_k", &delta_k, "test space polynomial order enrichment");
@@ -120,6 +121,7 @@ int main(int argc, char *argv[]) {
   cmdp.setOption("numRefs",&refCount,"number of refinements");
   cmdp.setOption("eps", &eps, "ramp width (set to 0 for no ramp in BCs)");
   cmdp.setOption("useConformingTraces", "useNonConformingTraces", &conformingTraces);
+  cmdp.setOption("mumpsMaxMemoryMB", &mumpsMaxMemoryMB, "max allocation size MUMPS is allowed to make, in MB");
   
   if (cmdp.parse(argc,argv) != Teuchos::CommandLineProcessor::PARSE_SUCCESSFUL) {
 #ifdef HAVE_MPI
@@ -301,7 +303,7 @@ int main(int argc, char *argv[]) {
   Teuchos::RCP<Solver> coarseSolver, fineSolver;
   if (useMumps) {
 #ifdef USE_MUMPS
-    coarseSolver = Teuchos::rcp( new MumpsSolver );
+    coarseSolver = Teuchos::rcp( new MumpsSolver(mumpsMaxMemoryMB) );
 #else
     cout << "useMumps=true, but MUMPS is not available!\n";
     exit(0);
