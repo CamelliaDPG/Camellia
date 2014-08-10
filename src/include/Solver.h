@@ -60,8 +60,9 @@ public:
 #ifdef HAVE_MPI
     rank     = Teuchos::GlobalMPISession::getRank();
     numProcs = Teuchos::GlobalMPISession::getNProc();
-    mumps.SetICNTL(28, 2); // 2: parallel analysis
-    mumps.SetICNTL(29, 1); // 1: use PT-SCOTCH
+    mumps.SetICNTL(28, 0); // 0: automatic choice between parallel and sequential analysis
+//    mumps.SetICNTL(28, 2); // 2: parallel analysis
+//    mumps.SetICNTL(29, 2); // 2: use PARMETIS; 1: use PT-SCOTCH
     
 //    int minSize = max(infog[26-1], infog[16-1]);
 //    // want to set ICNTL 23 to a size "significantly larger" than minSize
