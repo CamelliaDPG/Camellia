@@ -5,6 +5,7 @@
 #include "InnerProductScratchPad.h"
 #include "RefinementStrategy.h"
 #include "SolutionExporter.h"
+#include "TikhonovRegularizationFilter.h"
 
 #ifdef HAVE_MPI
 #include <Teuchos_GlobalMPISession.hpp>
@@ -92,6 +93,29 @@ class RampedInitialCondition : public Function {
       }
 };
 
+class Viscosity : public hFunction {
+   private:
+    double _mu;
+   public:
+      Viscosity(double mu) : hFunction(), _mu(mu) {}
+      double value(double x, double y, double h) {
+        return max(_mu, h);
+        // return _mu;
+      }
+      // void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
+      //    int numCells = values.dimension(0);
+      //    int numPoints = values.dimension(1);
+
+      //    const FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
+      //    for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
+      //       for (int ptIndex=0; ptIndex<numPoints; ptIndex++) 
+      //       {
+      //         values(cellIndex, ptIndex) = ;
+      //       }
+      //    }
+      // }
+};
+
 int main(int argc, char *argv[]) {
 #ifdef HAVE_MPI
   Teuchos::GlobalMPISession mpiSession(&argc, &argv,0);
@@ -108,10 +132,10 @@ int main(int argc, char *argv[]) {
   int numRefs = args.Input("--numRefs", "number of refinement steps", 0);
   int norm = args.Input("--norm", "norm", 0);
   double mu = args.Input("--mu", "viscosity", 1e-2);
-  int polyOrder = args.Input("--polyOrder", "polynomial order for field variables", 2);
+  int polyOrder = args.Input("--polyOrder", "polynomial order for field variables", 1);
   int deltaP = args.Input("--deltaP", "how much to enrich test space", 2);
   int xCells = args.Input("--xCells", "number of cells in the x direction", 8);
-  int tCells = args.Input("--tCells", "number of cells in the t direction", 4);
+  int tCells = args.Input("--tCells", "number of cells in the t direction", 1);
   int maxNewtonIterations = args.Input("--maxIterations", "maximum number of Newton iterations", 20);
   double nlTol = args.Input("--nlTol", "nonlinear tolerance", 1e-6);
   int numPreRefs = args.Input<int>("--numPreRefs","pre-refinements on singularity",0);
@@ -128,12 +152,14 @@ int main(int argc, char *argv[]) {
   // Strong shock tube
   problemName = "ConfusionShock";
   xmin = 0;
-  xmax = 5;
-  xint = 2.5;
-  tmax = 4e-1;
+  xmax = 4;
+  xint = 2;
+  tmax = .5;
 
   uL = 10;
   uR = 1;
+
+  FunctionPtr viscosity  = Teuchos::rcp( new Viscosity(mu) );
 
   ////////////////////   DECLARE VARIABLES   ///////////////////////
   // define test variables
@@ -189,7 +215,7 @@ int main(int argc, char *argv[]) {
   FunctionPtr sigma_prev   = Function::solution(sigma, backgroundFlow);
 
   // tau terms:
-  bf->addTerm( sigma/mu, tau );
+  bf->addTerm( sigma/viscosity, tau );
   bf->addTerm( u, tau->dx() );
   bf->addTerm( -uhat, tau->times_normal_x() );
 
@@ -203,7 +229,7 @@ int main(int argc, char *argv[]) {
   Teuchos::RCP<RHSEasy> rhs = Teuchos::rcp( new RHSEasy );
 
   // tau terms:
-  rhs->addTerm( -sigma_prev/mu * tau );
+  rhs->addTerm( -sigma_prev/viscosity * tau );
   rhs->addTerm( -u_prev * tau->dx() );
 
   // v terms:
@@ -249,6 +275,10 @@ int main(int argc, char *argv[]) {
 
   ////////////////////   SOLVE & REFINE   ///////////////////////
   Teuchos::RCP<Solution> solution = Teuchos::rcp( new Solution(mesh, bc, rhs, ip) );
+
+  // Teuchos::RCP<TikhonovRegularizationFilter> regularization = Teuchos::rcp( new TikhonovRegularizationFilter(1.0*u->dx()) );
+  // solution->setFilter(regularization);
+
   mesh->registerSolution(backgroundFlow);
   mesh->registerSolution(solution);
   double energyThreshold = 0.2; // for mesh refinements
