@@ -35,7 +35,6 @@ endif()
 if(MPI_LINK_CC)
   link_libraries(${MPI_LINK_CC})
 endif()
-
 if (MPI_LINK_FORTRAN)
   link_libraries(${MPI_LINK_FORTRAN})
 endif()
