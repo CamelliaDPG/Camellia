@@ -99,21 +99,37 @@ class Viscosity : public hFunction {
    public:
       Viscosity(double mu) : hFunction(), _mu(mu) {}
       double value(double x, double y, double h) {
-        return max(_mu, h);
-        // return _mu;
+        // return max(_mu, 0.2*h);
+        return _mu;
       }
-      // void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
-      //    int numCells = values.dimension(0);
-      //    int numPoints = values.dimension(1);
+};
 
-      //    const FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
-      //    for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
-      //       for (int ptIndex=0; ptIndex<numPoints; ptIndex++) 
-      //       {
-      //         values(cellIndex, ptIndex) = ;
-      //       }
-      //    }
-      // }
+class NegativityFunction : public Function {
+private:
+  FunctionPtr _function;
+public:
+  NegativityFunction(FunctionPtr function) : Function(0), _function(function) {}
+  void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
+   int numCells = values.dimension(0);
+   int numPoints = values.dimension(1);
+
+   FieldContainer<double> fcnVals(numCells, numPoints);
+   _function->values(fcnVals, basisCache);
+
+   for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
+    bool isNeg = false;
+    for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
+      if (fcnVals(cellIndex, ptIndex) < 0) {
+        isNeg = true;
+      }
+              // values(cellIndex, ptIndex) = fcnVals(cellIndex, ptIndex) < 0;
+    }
+    if (isNeg)
+      for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
+        values(cellIndex, ptIndex) = 1;
+      }
+    }
+  }
 };
 
 int main(int argc, char *argv[]) {
@@ -202,20 +218,25 @@ int main(int argc, char *argv[]) {
   RHSPtr nullRHS = Teuchos::rcp((RHS*)NULL);
   IPPtr nullIP = Teuchos::rcp((IP*)NULL);
   SolutionPtr backgroundFlow = Teuchos::rcp(new Solution(mesh, nullBC, nullRHS, nullIP) );
+  SolutionPtr backgroundFlow2 = Teuchos::rcp(new Solution(mesh, nullBC, nullRHS, nullIP) );
 
   map<int, Teuchos::RCP<Function> > initialGuess;
   // initialGuess[u->ID() ]   = Teuchos::rcp( new DiscontinuousInitialCondition(xint, uL, uR) );
   initialGuess[u->ID()]   = Teuchos::rcp( new RampedInitialCondition(xint, uL, uR,     (xmax-xmin)/xCells/pow(2.,numPreRefs)) );
 
   backgroundFlow->projectOntoMesh(initialGuess);
+  backgroundFlow2->projectOntoMesh(initialGuess);
 
   ////////////////////   DEFINE BILINEAR FORM   ///////////////////////
   // Set up problem
   FunctionPtr u_prev   = Function::solution(u, backgroundFlow);
   FunctionPtr sigma_prev   = Function::solution(sigma, backgroundFlow);
+  FunctionPtr u_full   = Function::solution(u, backgroundFlow2);
+  FunctionPtr negativity = Teuchos::rcp( new NegativityFunction(u_full) );
+  FunctionPtr viscMod = viscosity+Function::h()*negativity;
 
   // tau terms:
-  bf->addTerm( sigma/viscosity, tau );
+  bf->addTerm( sigma/(viscMod), tau );
   bf->addTerm( u, tau->dx() );
   bf->addTerm( -uhat, tau->times_normal_x() );
 
@@ -229,7 +250,7 @@ int main(int argc, char *argv[]) {
   Teuchos::RCP<RHSEasy> rhs = Teuchos::rcp( new RHSEasy );
 
   // tau terms:
-  rhs->addTerm( -sigma_prev/viscosity * tau );
+  rhs->addTerm( -sigma_prev/(viscMod) * tau );
   rhs->addTerm( -u_prev * tau->dx() );
 
   // v terms:
@@ -280,6 +301,7 @@ int main(int argc, char *argv[]) {
   // solution->setFilter(regularization);
 
   mesh->registerSolution(backgroundFlow);
+  mesh->registerSolution(backgroundFlow2);
   mesh->registerSolution(solution);
   double energyThreshold = 0.2; // for mesh refinements
   RefinementStrategy refinementStrategy( solution, energyThreshold );
@@ -350,7 +372,17 @@ int main(int argc, char *argv[]) {
         }
       }
 
+      backgroundFlow2->setSolution(backgroundFlow);
       backgroundFlow->addSolution(solution, alpha, nonlinearVars);
+      backgroundFlow2->addSolution(solution, 1.0, nonlinearVars);
+      if (commRank ==0)
+      {
+        stringstream outfile;
+        outfile << "negativity";
+        exporter.exportFunction(negativity, outfile.str(), refIndex);
+        FunctionPtr h  = Teuchos::rcp( new hFunction() );
+        exporter.exportFunction(h, "viscosity", refIndex);
+      }
       iterCount++;
       if (commRank == 0)
         cout << "L2 Norm of Update = " << L2Update << endl;

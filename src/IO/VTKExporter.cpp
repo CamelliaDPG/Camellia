@@ -435,7 +435,7 @@ void VTKExporter::exportTraces(const string& filePath, unsigned int num1DPts)
   cout << "    wrote trace variables to " << "trace_"+filePath << ".vtu" << endl;
 }
 
-void VTKExporter::exportFunction(FunctionPtr function, const string& functionName, unsigned int num1DPts)
+void VTKExporter::exportFunction(FunctionPtr function, const string& functionName, double timeVal, unsigned int num1DPts)
 {
   bool defaultPts = (num1DPts == 0);
   vtkUnstructuredGrid* ug = vtkUnstructuredGrid::New();
@@ -636,7 +636,9 @@ void VTKExporter::exportFunction(FunctionPtr function, const string& functionNam
   wr->SetInputData(ug);
 #endif
   ug->Delete();
-  wr->SetFileName((functionName+".vtu").c_str());
+  stringstream outfile;
+  outfile << functionName << timeVal << ".vtu";
+  wr->SetFileName(outfile.str().c_str());
   // wr->SetDataModeToBinary();
   wr->SetDataModeToBinary();
   wr->Update();
