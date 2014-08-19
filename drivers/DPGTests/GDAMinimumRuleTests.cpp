@@ -33,6 +33,11 @@
 
 #include "GlobalDofAssignment.h"
 
+#include "EpetraExt_ConfigDefs.h"
+#ifdef HAVE_EPETRAEXT_HDF5
+#include "HDF5Exporter.h"
+#endif
+
 const static string S_GDAMinimumRuleTests_U1 = "u_1";
 const static string S_GDAMinimumRuleTests_U2 = "u_2";
 const static string S_GDAMinimumRuleTests_PHI = "\\phi";
@@ -976,10 +981,65 @@ bool GDAMinimumRuleTests::testLocalInterpretationConsistency() {
   return success;
 }
 
+SolutionPtr GDAMinimumRuleTests::poissonExactSolution3DHangingNodes(int irregularity, FunctionPtr phi_exact, int H1Order) {
+  // right now, we support 1-irregular and 2-irregular
+  if ((irregularity > 2) || (irregularity < 0)) {
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "only 1- and 2-irregularity supported");
+  }
+  int horizontalCellsInitialMesh = 1, verticalCellsInitialMesh = 2, depthCellsInitialMesh = 1;
+
+  bool useH1Traces = true; // "true" is the more thorough test
+  
+  SolutionPtr soln = poissonExactSolution3D(horizontalCellsInitialMesh, verticalCellsInitialMesh, depthCellsInitialMesh, H1Order, phi_exact, useH1Traces);
+  
+  if (irregularity==0) return soln;
+  
+  MeshPtr mesh = soln->mesh();
+  
+  cout << "about to refine to make Poisson 3D hanging node mesh.\n";
+  
+  set<GlobalIndexType> cellIDs;
+  cellIDs.insert(1);
+  mesh->hRefine(cellIDs, RefinementPattern::regularRefinementPatternHexahedron());
+  
+  if (irregularity==1) return soln;
+  
+  // now, repeat the above, but with a 2-irregular mesh.
+  vector<CellPtr> children = mesh->getTopology()->getCell(1)->children();
+  
+  // childrenForSides outer vector: indexed by parent's sides; inner vector: (child index in children, index of child's side shared with parent)
+  vector< vector< pair< unsigned, unsigned > > > childrenForSides = mesh->getTopology()->getCell(1)->refinementPattern()->childrenForSides();
+  for (int sideOrdinal=0; sideOrdinal<childrenForSides.size(); sideOrdinal++) {
+    vector< pair< unsigned, unsigned > > childrenForSide = childrenForSides[sideOrdinal];
+    bool didRefine = false;
+    for (int i=0; i<childrenForSide.size(); i++) {
+      unsigned childOrdinal = childrenForSide[i].first;
+      CellPtr child = children[childOrdinal];
+      unsigned childSideOrdinal = childrenForSide[i].second;
+      pair<GlobalIndexType,unsigned> neighborInfo = child->getNeighbor(childSideOrdinal);
+      GlobalIndexType neighborCellID = neighborInfo.first;
+      if (neighborCellID != -1) { // not boundary
+        CellPtr neighbor = mesh->getTopology()->getCell(neighborCellID);
+        pair<GlobalIndexType,unsigned> neighborNeighborInfo = neighbor->getNeighbor(neighborInfo.second);
+        bool neighborIsPeer = neighborNeighborInfo.first == child->cellIndex();
+        if (!neighborIsPeer) { // then by refining this cell, we induce a 2-irregular mesh
+          set<GlobalIndexType> cellIDs;
+          cellIDs.insert(child->cellIndex());
+          mesh->hRefine(cellIDs, RefinementPattern::regularRefinementPatternHexahedron());
+          didRefine = true;
+          break;
+        }
+      }
+    }
+    if (didRefine) break;
+  }
+  
+  //if (irregularity==2)
+    return soln;
+}
+
 bool GDAMinimumRuleTests::testHangingNodePoisson3D() {
   bool success = true;
-  int horizontalCellsInitialMesh = 1, verticalCellsInitialMesh = 2, depthCellsInitialMesh = 1;
-  int H1Order = 2;
   
   // exact solution: for now, we just use a linear phi
   FunctionPtr x = Function::xn(1);
@@ -989,168 +1049,102 @@ bool GDAMinimumRuleTests::testHangingNodePoisson3D() {
   FunctionPtr phi_exact = -x + y + z;
 //  FunctionPtr phi_exact = Function::constant(3.14159);
   
-  bool useH1Traces = true; // "true" is the more thorough test
+  int H1Order = 2; // 1 higher than the order of phi_exact, to get an exactly recoverable solution with L^2 fields.
   
-  SolutionPtr soln = poissonExactSolution3D(horizontalCellsInitialMesh, verticalCellsInitialMesh, depthCellsInitialMesh, H1Order, phi_exact, useH1Traces);
-  
-  MeshPtr mesh = soln->mesh();
+  // just doing 2-irregular for now to diagnose an exceptional failure for that case
+  for (int irregularity = 1; irregularity<=1; irregularity++) {
+    SolutionPtr soln = poissonExactSolution3DHangingNodes(irregularity,phi_exact,H1Order);
+    MeshPtr mesh = soln->mesh();
+    VarFactory vf = soln->mesh()->bilinearForm()->varFactory();
 
-  cout << "about to refine to make Poisson 3D hanging node mesh.\n";
-  
-  set<GlobalIndexType> cellIDs;
-  cellIDs.insert(1);
-  mesh->hRefine(cellIDs, RefinementPattern::regularRefinementPatternHexahedron());
-  
-//  cout << "Poisson 3D hanging node mesh after one refinement:\n";
-//  mesh->getTopology()->printAllEntities();
-  
-  if (!checkLocalGlobalConsistency(mesh) ) {
-    cout << "FAILURE: after h-refinement, Poisson 3D mesh fails local-to-global consistency check.\n";
-    success = false;
-//    return success;
-  }
-  
-//  Intrepid::Basis_HGRAD_QUAD_Cn_FEM<double, Intrepid::FieldContainer<double> > linearBasis(1,Intrepid::POINTTYPE_SPECTRAL);
-//  FieldContainer<double> dofCoords(4,2);
-//  linearBasis.getDofCoords(dofCoords);
-//  cout << "dofCoords for linear basis on quad:\n" << dofCoords;
-  
-//  cout << "Poisson 3D hanging node mesh after one refinement:\n";
-//  mesh->getTopology()->printAllEntities();
-
-//  if ( ! MeshTestUtility::neighborBasesAgreeOnSides(mesh)) {
-//    cout << "GDAMinimumRuleTests failure: for 3D Poisson mesh with hanging nodes, neighboring bases do not agree on sides." << endl;
-//    success = false;
-//  }
-
-  
-//  if ( ! MeshTestSuite::neighborBasesAgreeOnSides(mesh, _testPoints2D)) {
-//    cout << "GDAMinimumRuleTests failure: for 3D Poisson mesh with hanging nodes, neighboring bases do not agree on sides." << endl;
-//    success = false;
-//  }
-  
-//  cout << "Poisson 3D hanging node mesh:\n";
-//  mesh->getTopology()->printAllEntities();
-//  
-//  cout << "Poisson 3D hanging node mesh, vertex constraints:\n";
-//  mesh->getTopology()->printConstraintReport(0);
-//  
-//  cout << "Poisson 3D hanging node mesh, edge constraints:\n";
-//  mesh->getTopology()->printConstraintReport(1);
-//  
-//  cout << "Poisson 3D hanging node mesh, face constraints:\n";
-//  mesh->getTopology()->printConstraintReport(2);
-  
-  VarFactory vf = soln->mesh()->bilinearForm()->varFactory();
-  VarPtr phi = vf.fieldVar(S_GDAMinimumRuleTests_PHI);
-  VarPtr phi_hat = vf.traceVar(S_GDAMinimumRuleTests_PHI_HAT);
-  
-  map<int, FunctionPtr> phi_exact_map;
-  phi_exact_map[phi->ID()] = phi_exact;
-  soln->projectOntoMesh(phi_exact_map);
-  
-  FunctionPtr phi_soln = Function::solution(phi, soln);
-  FunctionPtr phi_err = phi_soln - phi_exact;
-  
-  FunctionPtr phi_hat_soln = Function::solution(phi_hat, soln);
-
-//  NewVTKExporter exporter(mesh->getTopology());
-//  exporter.exportFunction(phi_soln, "projected_phi_soln3D");
-//  exporter.exportFunction(phi_err, "projected_phi_err3D");
-//  
-//  FunctionPtr phi_restrictedToSkeleton = Function::meshSkeletonCharacteristic() * phi_soln;
-//  exporter.exportFunction(phi_restrictedToSkeleton, "projected_phi_soln3D_restrictedToSkeleton");
-  
-  double tol = 1e-12;
-  double phi_err_l2 = phi_err->l2norm(mesh);
-//  if (phi_err_l2 > tol) {
-//    success = false;
-//    cout << "GDAMinimumRuleTests failure: for 3D mesh with hanging node and exactly recoverable solution, error in projected exact solution is " << phi_err_l2 << endl;
-//    
-//    NewVTKExporter exporter(mesh->getTopology());
-//    exporter.exportFunction(phi_soln, "projected_phi_soln3D");
-//    exporter.exportFunction(phi_err, "projected_phi_err3D");
-//  }
-
-  soln->clear();
-  soln->solve();
-  
-  cout << "3D poisson w/hanging node solved.  About to check solution continuities.\n";
-  
-  Epetra_MultiVector *lhsVector = soln->getGlobalCoefficients();
-  Epetra_SerialComm Comm;
-  Epetra_Map partMap = soln->getPartitionMap();
-  
-  // Import solution onto current processor
-  GlobalIndexTypeToCast numNodesGlobal = mesh->numGlobalDofs();
-  GlobalIndexTypeToCast numMyNodes = numNodesGlobal;
-  Epetra_Map     solnMap(numNodesGlobal, numMyNodes, 0, Comm);
-  Epetra_Import  solnImporter(solnMap, partMap);
-  Epetra_Vector  solnCoeff(solnMap);
-  solnCoeff.Import(*lhsVector, solnImporter, Insert);
-  
-  if ( ! MeshTestUtility::neighborBasesAgreeOnSides(mesh, solnCoeff)) {
-    cout << "GDAMinimumRuleTests failure: for 3D Poisson mesh with hanging nodes (after solving), neighboring bases do not agree on sides." << endl;
-    success = false;
-  }
-  
-  cout << "...solution continuities checked.\n";
-  
-  phi_err_l2 = phi_err->l2norm(mesh);
-  if (phi_err_l2 > tol) {
-    success = false;
-    cout << "GDAMinimumRuleTests failure: for 3D mesh with hanging node and exactly recoverable solution, phi error is " << phi_err_l2 << endl;
-    
-#ifdef USE_VTK
-    if (Teuchos::GlobalMPISession::getRank()==0) {
-      NewVTKExporter exporter(mesh->getTopology());
-      
-      set<GlobalIndexType> cellIndices = mesh->getTopology()->getActiveCellIndices();
-      for (set<GlobalIndexType>::iterator cellIt = cellIndices.begin(); cellIt != cellIndices.end(); cellIt++) {
-        GlobalIndexType cellIndex = *cellIt;
-        ostringstream fileName;
-        fileName << "phi_hat_soln3D_cell_" << cellIndex;
-        set<GlobalIndexType> cellIndexSet;
-        cellIndexSet.insert(cellIndex);
-        exporter.exportFunction(phi_hat_soln, "phi_hat", fileName.str(), cellIndexSet);
-      }
-    
-      exporter.exportFunction(phi_hat_soln, "phi_hat_soln3D");
-      exporter.exportFunction(phi_soln, "phi_soln3D");
-      exporter.exportFunction(phi_err, "phi_err3D");
+    int rank = Teuchos::GlobalMPISession::getRank();
+//    if (rank==0) cout << "mesh entities:\n";
+//    if (rank==0) mesh->getTopology()->printAllEntities();
+#ifdef HAVE_EPETRAEXT_HDF5
+    if (rank==0) cout << "Beginning export of (zero) solution on irregular mesh.\n";
+    set<GlobalIndexType> cellIndices = mesh->getTopology()->getActiveCellIndices();
+    for (set<GlobalIndexType>::iterator cellIt = cellIndices.begin(); cellIt != cellIndices.end(); cellIt++) {
+      GlobalIndexType cellIndex = *cellIt;
+      ostringstream fileName;
+      fileName << "poisson_" << irregularity << "irregular_soln3D_cell_" << cellIndex;
+      HDF5Exporter exporter(mesh,fileName.str());
+      set<GlobalIndexType> cellIndexSet;
+      cellIndexSet.insert(cellIndex);
+      exporter.exportSolution(soln, vf, 0, 4, map<int,int>(), cellIndexSet);
     }
 #endif
+    
+    if (!checkLocalGlobalConsistency(mesh) ) {
+      cout << "FAILURE: " << irregularity << "-irregular Poisson 3D mesh fails local-to-global consistency check.\n";
+      success = false;
+      //    return success;
+    }
+    
+    VarPtr phi = vf.fieldVar(S_GDAMinimumRuleTests_PHI);
+    VarPtr phi_hat = vf.traceVar(S_GDAMinimumRuleTests_PHI_HAT);
+    
+    map<int, FunctionPtr> phi_exact_map;
+    phi_exact_map[phi->ID()] = phi_exact;
+    soln->projectOntoMesh(phi_exact_map);
+    
+    FunctionPtr phi_soln = Function::solution(phi, soln);
+    FunctionPtr phi_err = phi_soln - phi_exact;
+    
+    FunctionPtr phi_hat_soln = Function::solution(phi_hat, soln);
+
+    double tol = 1e-12;
+    double phi_err_l2 = phi_err->l2norm(mesh);
+
+    soln->clear();
+    soln->solve();
+    
+    cout << irregularity << "-irregular 3D poisson w/hanging node solved.  About to check solution continuities.\n";
+    
+    Epetra_MultiVector *lhsVector = soln->getGlobalCoefficients();
+    Epetra_SerialComm Comm;
+    Epetra_Map partMap = soln->getPartitionMap();
+    
+    // Import solution onto current processor
+    GlobalIndexTypeToCast numNodesGlobal = mesh->numGlobalDofs();
+    GlobalIndexTypeToCast numMyNodes = numNodesGlobal;
+    Epetra_Map     solnMap(numNodesGlobal, numMyNodes, 0, Comm);
+    Epetra_Import  solnImporter(solnMap, partMap);
+    Epetra_Vector  solnCoeff(solnMap);
+    solnCoeff.Import(*lhsVector, solnImporter, Insert);
+    
+    if ( ! MeshTestUtility::neighborBasesAgreeOnSides(mesh, solnCoeff)) {
+      cout << "GDAMinimumRuleTests failure: for" << irregularity << "-irregular 3D Poisson mesh with hanging nodes (after solving), neighboring bases do not agree on sides." << endl;
+      success = false;
+    }
+    
+    cout << "...solution continuities checked.\n";
+    
+    phi_err_l2 = phi_err->l2norm(mesh);
+    if (phi_err_l2 > tol) {
+      success = false;
+      cout << "GDAMinimumRuleTests failure: for " << irregularity << "-irregular 3D mesh and exactly recoverable solution, phi error is " << phi_err_l2 << endl;
+      
+#ifdef USE_VTK
+      if (Teuchos::GlobalMPISession::getRank()==0) {
+        NewVTKExporter exporter(mesh->getTopology());
+        
+        set<GlobalIndexType> cellIndices = mesh->getTopology()->getActiveCellIndices();
+        for (set<GlobalIndexType>::iterator cellIt = cellIndices.begin(); cellIt != cellIndices.end(); cellIt++) {
+          GlobalIndexType cellIndex = *cellIt;
+          ostringstream fileName;
+          fileName << "phi_hat_soln3D_cell_" << cellIndex;
+          set<GlobalIndexType> cellIndexSet;
+          cellIndexSet.insert(cellIndex);
+          exporter.exportFunction(phi_hat_soln, "phi_hat", fileName.str(), cellIndexSet);
+        }
+        
+        exporter.exportFunction(phi_hat_soln, "phi_hat_soln3D");
+        exporter.exportFunction(phi_soln, "phi_soln3D");
+        exporter.exportFunction(phi_err, "phi_err3D");
+      }
+#endif
+    }
   }
-  
-//  /// now try all that with a finer mesh (largely to see if refining reduces error)
-//  set<IndexType> activeCellIDs = mesh->getTopology()->getActiveCellIndices();
-////  Camellia::print("activeCellIDs", activeCellIDs);
-//  mesh->hRefine(activeCellIDs, RefinementPattern::regularRefinementPatternHexahedron());
-//  
-//  if ( ! MeshTestSuite::neighborBasesAgreeOnSides(mesh, _testPoints2D)) {
-//    cout << "GDAMinimumRuleTests failure: for 3D Poisson mesh with hanging nodes (uniformly refined), neighboring bases do not agree on sides." << endl;
-//    success = false;
-//  }
-//  
-//  soln->solve();
-//  
-//  vf = soln->mesh()->bilinearForm()->varFactory();
-//  phi = vf.fieldVar(S_GDAMinimumRuleTests_PHI);
-//  
-//  phi_soln = Function::solution(phi, soln);
-//  
-//  phi_err = phi_soln - phi_exact;
-//  
-//  tol = 1e-12;
-//  phi_err_l2 = phi_err->l2norm(mesh);
-//  if (phi_err_l2 > tol) {
-//    success = false;
-//    cout << "GDAMinimumRuleTests failure: for 3D mesh with hanging node (uniformly refined) and exactly recoverable solution, phi error is " << phi_err_l2 << endl;
-//    
-//    NewVTKExporter exporter(mesh->getTopology());
-//    exporter.exportFunction(phi_soln, "phi_soln3D");
-//    exporter.exportFunction(phi_err, "phi_err3D");
-//  }
   
   return success;
 }

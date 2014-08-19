@@ -252,7 +252,6 @@ int main(int argc, char *argv[]) {
   }
   else if (norm == 1)
   {
-    ip = Teuchos::rcp( new IP );
     ip->addTerm( 0.5/nu*tau11-0.5/nu*tau22 + v1->dx() );
     ip->addTerm( 1./nu*tau12 + v1->dy() );
     ip->addTerm( 1./nu*tau12 + v2->dx() );
@@ -267,6 +266,29 @@ int main(int argc, char *argv[]) {
     ip->addTerm( tau12 );
     ip->addTerm( tau12 );
     ip->addTerm( tau22 );
+  }
+  else if (norm == 2)
+  {
+    // ip->addTerm( 0.5/sqrt(nu)*tau11-0.5/nu*tau22 );
+    // ip->addTerm( 1./sqrt(nu)*tau12 );
+    // ip->addTerm( 1./sqrt(nu)*tau12 );
+    // ip->addTerm( 0.5/sqrt(nu)*tau22-0.5/nu*tau11 );
+    ip->addTerm( tau11 );
+    ip->addTerm( tau12 );
+    ip->addTerm( tau12 );
+    ip->addTerm( tau22 );
+
+    ip->addTerm( 2*tau11->dx() + 2*tau12->dy() - 2*u1_prev*v1->dx() - u2_prev*v1->dy() - u2_prev*v2->dx() );
+    ip->addTerm( 2*tau12->dx() + 2*tau22->dy() - 2*u2_prev*v2->dy() - u1_prev*v1->dy() - u1_prev*v2->dx() );
+
+    ip->addTerm( 2*u1_prev*v1->dx() + u2_prev*v1->dy() + u2_prev*v2->dx() );
+    ip->addTerm( 2*u2_prev*v2->dy() + u1_prev*v1->dy() + u1_prev*v2->dx() );
+
+    ip->addTerm( sqrt(nu)*v1->grad() );
+    ip->addTerm( sqrt(nu)*v2->grad() );
+
+    ip->addTerm( v1 );
+    ip->addTerm( v2 );
   }
 
   ////////////////////   CREATE BCs   ///////////////////////
@@ -314,8 +336,13 @@ int main(int argc, char *argv[]) {
   double energyThreshold = 0.2; // for mesh refinements
   RefinementStrategy refinementStrategy( solution, energyThreshold );
   HDF5Exporter exporter(mesh, "Kovasznay_np");
-  // if (commRank == 0)
-  //   exporter.exportSolution(backgroundFlow, mesh, varFactory, -1);
+
+  ofstream convOut;
+  stringstream convOutFile;
+  convOutFile << "Kovasznay_conv_" << Re <<".txt";
+  if (commRank == 0)
+    convOut.open(convOutFile.str().c_str());
+
   set<int> nonlinearVars;
   nonlinearVars.insert(u1->ID());
   nonlinearVars.insert(u2->ID());
@@ -352,6 +379,16 @@ int main(int argc, char *argv[]) {
     }
 
     exporter.exportSolution(backgroundFlow, varFactory, refIndex, 2, cellIDToSubdivision(mesh, 4));
+
+    FunctionPtr u1Soln = Function::solution(u1, backgroundFlow);
+    FunctionPtr u2Soln = Function::solution(u2, backgroundFlow);
+    FunctionPtr u1Sqr = (u1Soln-u1Exact)*(u1Soln-u1Exact);
+    FunctionPtr u2Sqr = (u2Soln-u2Exact)*(u2Soln-u2Exact);
+    double u1L2Error = u1Sqr->integrate(mesh, 1e-5);
+    double u2L2Error = u2Sqr->integrate(mesh, 1e-5);
+    double l2Error = sqrt(u1L2Error+u2L2Error);
+    double energyError = solution->energyErrorTotal();
+    cout << "L2 Error: " << l2Error << " Energy Error: " << energyError << endl;
 
     if (refIndex < numRefs)
       refinementStrategy.refine(commRank==0); // print to console on commRank 0

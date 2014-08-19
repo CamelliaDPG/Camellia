@@ -38,6 +38,8 @@ private:
   
   SolutionPtr poissonExactSolution3D(int horizontalCells, int verticalCells, int depthCells, int H1Order, FunctionPtr phi_exact, bool useH1Traces);
   
+  SolutionPtr poissonExactSolution3DHangingNodes(int irregularity, FunctionPtr phi_exact, int H1Order);
+  
   bool checkLocalGlobalConsistency(MeshPtr mesh);
   
   FieldContainer<double> _testPoints1D, _testPoints2D; // points on ref cell

@@ -17,12 +17,7 @@
 
 #include "BasisReconciliation.h"
 
-struct ConstrainingSubcellInfo {
-  GlobalIndexType cellID;
-  unsigned sideOrdinal;
-  unsigned subcellOrdinalInSide; // when subcell is a side, this is 0
-  unsigned dimension; // subcells can be constrained by subcells of higher dimension (i.e. this is not redundant!)
-};
+#include "GDAMinimumRuleConstraints.h"
 
 struct OwnershipInfo {
   GlobalIndexType cellID;
@@ -31,7 +26,7 @@ struct OwnershipInfo {
 };
 
 struct CellConstraints {
-  vector< vector< ConstrainingSubcellInfo > > subcellConstraints; // outer: subcell dim, inner: subcell ordinal in cell
+  vector< vector< AnnotatedEntity > > subcellConstraints; // outer: subcell dim, inner: subcell ordinal in cell
   vector< vector< OwnershipInfo > > owningCellIDForSubcell; // outer vector indexed by subcell dimension; inner vector indexed by subcell ordinal in cell.  Pairs are (CellID, subcellIndex in MeshTopology)
 };
 
@@ -63,12 +58,11 @@ class GDAMinimumRule : public GlobalDofAssignment {
                                     FieldContainer<double> &constraintMatrixSideInterior, FieldContainer<bool> &processedDofs,
                                     DofOrderingPtr trialOrdering, VarPtr var, int sideOrdinal = 0);
   
-  CellConstraints getCellConstraints(GlobalIndexType cellID);
-//  CellConstraints getCellConstraintsNew(GlobalIndexType cellID);
-
   typedef vector< SubBasisDofMapperPtr > BasisMap;
   BasisMap getBasisMap(GlobalIndexType cellID, SubCellDofIndexInfo& dofOwnershipInfo, VarPtr var);
   BasisMap getBasisMap(GlobalIndexType cellID, SubCellDofIndexInfo& dofOwnershipInfo, VarPtr var, int sideOrdinal);
+
+  BasisMap getBasisMapNew(GlobalIndexType cellID, SubCellDofIndexInfo& dofOwnershipInfo, VarPtr var, int sideOrdinal);
   
   LocalDofMapperPtr getDofMapper(GlobalIndexType cellID, CellConstraints &constraints, int varIDToMap = -1, int sideOrdinalToMap = -1);
   
@@ -80,6 +74,9 @@ class GDAMinimumRule : public GlobalDofAssignment {
   int H1Order(GlobalIndexType cellID, unsigned sideOrdinal); // this is meant to track the cell's interior idea of what the H^1 order is along that side.  We're isotropic for now, but eventually we might want to allow anisotropy in p...
   
   RefinementBranch volumeRefinementsForSideEntity(IndexType sideEntityIndex);
+  
+public:
+  CellConstraints getCellConstraints(GlobalIndexType cellID);
 public:
   GDAMinimumRule(MeshPtr mesh, VarFactory varFactory, DofOrderingFactoryPtr dofOrderingFactory, MeshPartitionPolicyPtr partitionPolicy,
                  unsigned initialH1OrderTrial, unsigned testOrderEnhancement);

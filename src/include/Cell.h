@@ -72,6 +72,8 @@ public:
   unsigned findSubcellOrdinal(unsigned subcdim, IndexType subcEntityIndex); // this is pretty brute force right now
   unsigned findSubcellOrdinalInSide(unsigned subcdim, IndexType subcEntityIndex, unsigned sideOrdinal); // this is pretty brute force right now
   
+  MeshTopology* meshTopology();
+  
   RefinementPatternPtr refinementPattern();
   void setRefinementPattern(RefinementPatternPtr refPattern);
   

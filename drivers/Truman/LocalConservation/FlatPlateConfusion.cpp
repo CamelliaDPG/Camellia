@@ -11,7 +11,7 @@
 #include "RefinementStrategy.h"
 #include "CheckConservation.h"
 #include "LagrangeConstraints.h"
-#include "SolutionExporter.h"
+#include "HDF5Exporter.h"
 
 #ifdef HAVE_MPI
 #include <Teuchos_GlobalMPISession.hpp>

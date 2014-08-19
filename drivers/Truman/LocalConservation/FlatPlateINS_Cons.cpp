@@ -6,7 +6,7 @@
 #include "PreviousSolutionFunction.h"
 #include "RefinementStrategy.h"
 #include "PenaltyConstraints.h"
-#include "SolutionExporter.h"
+#include "HDF5Exporter.h"
 
 #ifdef HAVE_MPI
 #include <Teuchos_GlobalMPISession.hpp>
@@ -202,7 +202,7 @@ int main(int argc, char *argv[]) {
   bf->addTerm( u2hat, q->times_normal_y() );
 
   ////////////////////   SPECIFY RHS   ///////////////////////
-  Teuchos::RCP<RHSEasy> rhs = Teuchos::rcp( new RHSEasy );
+  RHSPtr rhs = RHS::rhs();
 
   // stress equation
   rhs->addTerm( -u1_prev * tau1->div() );
@@ -252,7 +252,7 @@ int main(int argc, char *argv[]) {
   }
 
   ////////////////////   CREATE BCs   ///////////////////////
-  Teuchos::RCP<BCEasy> bc = Teuchos::rcp( new BCEasy );
+  BCPtr bc = BC::bc();
   SpatialFilterPtr left = Teuchos::rcp( new ConstantXBoundary(xmin) );
   SpatialFilterPtr right = Teuchos::rcp( new ConstantXBoundary(xmax) );
   SpatialFilterPtr bottomFree = Teuchos::rcp( new BottomFree );
@@ -303,7 +303,7 @@ int main(int argc, char *argv[]) {
   ////////////////////   SOLVE & REFINE   ///////////////////////
   double energyThreshold = 0.2; // for mesh refinements
   RefinementStrategy refinementStrategy( solution, energyThreshold );
-  VTKExporter exporter(backgroundFlow, mesh, varFactory);
+  HDF5Exporter exporter(mesh, "FlatPlateConfusion");
 
   double nonlinearRelativeEnergyTolerance = 1e-5; // used to determine convergence of the nonlinear solution
   for (int refIndex=0; refIndex<=numRefs; refIndex++)
@@ -349,12 +349,7 @@ int main(int argc, char *argv[]) {
     if (commRank == 0)
       cout << endl;
 
-    if (commRank == 0)
-    {
-      stringstream outfile;
-      outfile << "flatplate" << "_" << refIndex;
-      exporter.exportSolution(outfile.str());
-    }
+    exporter.exportSolution(backgroundFlow, varFactory, refIndex, 2, cellIDToSubdivision(mesh, 4));
 
     if (refIndex < numRefs)
       refinementStrategy.refine(commRank==0); // print to console on commRank 0

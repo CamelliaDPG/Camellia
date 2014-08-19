@@ -347,6 +347,10 @@ CellPtr Cell::ancestralCellForSubcell(unsigned subcdim, unsigned subcord) {
   return currentAncestor;
 }
 
+MeshTopology* Cell::meshTopology() {
+  return _meshTopo;
+}
+
 RefinementPatternPtr Cell::refinementPattern() {
   return _refPattern;
 }
