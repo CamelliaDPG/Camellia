@@ -1,3 +1,3 @@
-// #define USE_MUMPS
+#define USE_MUMPS
 //#define USE_VTK
 //#define ENABLE_INTEL_FLOATING_POINT_EXCEPTIONS

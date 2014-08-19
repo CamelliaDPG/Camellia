@@ -91,6 +91,8 @@ public:
   
   static SubBasisReconciliationWeights composedSubBasisReconciliationWeights(SubBasisReconciliationWeights aWeights, SubBasisReconciliationWeights bWeights);
   
+  static SubBasisReconciliationWeights sumWeights(SubBasisReconciliationWeights aWeights, SubBasisReconciliationWeights bWeights);
+  
   static set<int> interiorDofOrdinalsForBasis(BasisPtr basis);
   
   static set<unsigned> internalDofOrdinalsForFinerBasis(BasisPtr finerBasis, RefinementBranch refinements); // which degrees of freedom in the finer basis have empty support on the boundary of the coarser basis's reference element? -- these are the ones for which the constrained weights are determined in computeConstrainedWeights.
