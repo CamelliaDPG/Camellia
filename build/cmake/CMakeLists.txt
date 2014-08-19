@@ -26,7 +26,8 @@ if (VTK_FOUND)
 endif()
 
 if (ZLIB_LIB)
-  link_libraries(${ZLIB_LIB})
+  set(Trilinos_TPL_LIBRARIES ${Trilinos_TPL_LIBRARIES} ${ZLIB_LIB})
+#  link_libraries(${ZLIB_LIB})
 endif()
 
 if(MPI_INCLUDE)
