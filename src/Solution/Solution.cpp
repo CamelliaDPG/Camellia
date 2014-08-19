@@ -2466,7 +2466,8 @@ FieldContainer<double> Solution::solutionForElementTypeGlobal(ElementTypePtr ele
     int globalCellIndex = (*elemIt)->globalCellIndex();
     int cellID = (*elemIt)->cellID();
     for (int dofIndex=0; dofIndex<numDofsForType; dofIndex++) {
-      if ( _solutionForCellIDGlobal.find(cellID) != _solutionForCellIDGlobal.end() ) {
+      if (( _solutionForCellIDGlobal.find(cellID) != _solutionForCellIDGlobal.end())
+          && (_solutionForCellIDGlobal[cellID].size() == numDofsForType)) {
         solutionCoeffs(globalCellIndex,dofIndex) = _solutionForCellIDGlobal[cellID](dofIndex);
       } else { // no solution set for that cellID, return 0
         solutionCoeffs(globalCellIndex,dofIndex) = 0.0;
