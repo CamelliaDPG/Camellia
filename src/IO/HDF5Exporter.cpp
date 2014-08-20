@@ -15,6 +15,9 @@
 #include <Epetra_SerialComm.h>
 #include <EpetraExt_HDF5.h>
 
+#include <sys/types.h>
+#include <sys/stat.h>
+
 HDF5Exporter::HDF5Exporter(MeshPtr mesh, string saveDirectory) : _mesh(mesh), _filename(saveDirectory), 
   _fieldXdmf("Xdmf"), _traceXdmf("Xdmf"), _fieldDomain("Domain"), _traceDomain("Domain"), _fieldGrids("Grid"), _traceGrids("Grid")
 {
@@ -28,12 +31,18 @@ HDF5Exporter::HDF5Exporter(MeshPtr mesh, string saveDirectory) : _mesh(mesh), _f
 #endif
   
   if (commRank==0) {
-    ostringstream mkdirCommand;
-    mkdirCommand << "mkdir -p " << _filename <<"/HDF5";
-    system(mkdirCommand.str().c_str());
-    mkdirCommand.str("");
-    mkdirCommand << "mkdir -p " << _filename <<"/XMF";
-    system(mkdirCommand.str().c_str());
+    ostringstream dirName;
+    
+    dirName << _filename;
+    int success = mkdir(dirName.str().c_str(), S_IRWXU | S_IRWXG);
+
+    dirName.str("");
+    dirName << _filename <<"/HDF5";
+    success = mkdir(dirName.str().c_str(), S_IRWXU | S_IRWXG);
+
+    dirName.str("");
+    dirName << _filename <<"/XMF";
+    success = mkdir(dirName.str().c_str(), S_IRWXU | S_IRWXG);
   }
 
   Comm.Barrier(); // everyone should wait until rank 0 has created the directories
