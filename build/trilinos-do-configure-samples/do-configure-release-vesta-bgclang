@@ -29,6 +29,10 @@ rm -r CMakeFiles
     -D CTrilinos_ENABLE_TESTS:BOOL=OFF \
     -D CTrilinos_ENABLE_EXAMPLES:BOOL=OFF \
     -D TPL_ENABLE_MPI:BOOL=ON \
+    -D TPL_ENABLE_HDF5:STRING=ON \
+    -D HDF5_LIBRARY_DIRS:FILEPATH=/soft/libraries/hdf5/1.8.10/cnk-xl/current/lib \
+    -D HDF5_LIBRARY_NAMES:STRING="hdf5" \
+    -D TPL_HDF5_INCLUDE_DIRS:FILEPATH=/soft/libraries/hdf5/1.8.10/cnk-xl/current/include \
     -D MPI_USE_COMPILER_WRAPPERS:BOOL=ON \
     -D MPI_CXX_COMPILER:FILEPATH=mpiclang++ \
     -D MPI_C_COMPILER:FILEPATH=mpiclang \
@@ -39,6 +43,10 @@ rm -r CMakeFiles
     -D TPL_ENABLE_BLAS:STRING=ON \
     -D BLAS_LIBRARY_DIRS:FILEPATH="/soft/libraries/alcf/current/xl/BLAS/lib/" \
     -D BLAS_LIBRARY_NAMES:STRING="libblas.a /soft/compilers/ibmcmp-aug2013/xlf/bg/14.1/bglib64/libxl.a /soft/compilers/ibmcmp-aug2013/xlf/bg/14.1/bglib64/libxlf90_r.a /soft/compilers/ibmcmp-aug2013/xlf/bg/14.1/bglib64/libxlf90_r.a /soft/compilers/ibmcmp-aug2013/xlf/bg/14.1/bglib64/libxlfmath.a /soft/compilers/ibmcmp-aug2013/xlf/bg/14.1/bglib64/libxlopt.a"\
+    -D TPL_ENABLE_SuperLUDist:STRING=ON \
+    -D SuperLUDist_LIBRARY_DIRS:FILEPATH=/soft/libraries/petsc/3.3-p6/xl-opt/lib/ \
+    -D SuperLUDist_LIBRARY_NAMES:STRING="superlu_dist_3.1" \
+    -D TPL_SuperLUDist_INCLUDE_DIRS:FILEPATH=/soft/libraries/petsc/3.3-p6/xl-opt/include/ \
     -D TPL_ENABLE_MUMPS:STRING=ON \
     -D MUMPS_LIBRARY_DIRS:FILEPATH=/soft/libraries/petsc/3.3-p6/xl-opt/lib/ \
     -D MUMPS_LIBRARY_NAMES:STRING="dmumps; pord; mumps_common; pord" \
