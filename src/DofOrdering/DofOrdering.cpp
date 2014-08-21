@@ -185,6 +185,19 @@ int DofOrdering::getNumSidesForVarID(int varID) {
   return numSidesForVarID[varID];
 }
 
+int DofOrdering::getTotalBasisCardinality() { // total number of *distinct* basis functions
+  int totalBasisCardinality = 0;
+  set< Camellia::Basis<>* > basesCounted;
+  for (map< pair<int, int>, BasisPtr >::iterator basisIt = bases.begin(); basisIt != bases.end(); basisIt++) {
+    BasisPtr basis = basisIt->second;
+    if (basesCounted.find(basis.get())==basesCounted.end()) {
+      basesCounted.insert(basis.get());
+      totalBasisCardinality += basis->getCardinality();
+    }
+  }
+  return totalBasisCardinality;
+}
+
 const set<int> & DofOrdering::getVarIDs() {
   return varIDs;
 }

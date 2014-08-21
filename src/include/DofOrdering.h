@@ -89,6 +89,8 @@ public:
     return basisRanks[varID];
   }
   
+  int getTotalBasisCardinality(); // sum of all the *distinct* bases' cardinalities
+  
   void addIdentification(int varID, int side1, int basisDofOrdinal1,
                          int side2, int basisDofOrdinal2);
   

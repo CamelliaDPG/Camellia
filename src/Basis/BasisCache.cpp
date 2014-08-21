@@ -98,6 +98,11 @@ void BasisCache::init(shards::CellTopology &cellTopo, int maxTrialDegree, int ma
     _cubWeights.initialize(1.0);
   }
   
+  _maxPointsPerCubaturePhase = -1;
+  _cubaturePhase = 0;
+  _cubaturePhaseCount = 1;
+  _phasePointOrdinalOffsets.push_back(0);
+  
   // now, create side caches
   if ( createSideCacheToo ) {
     createSideCaches();
@@ -239,6 +244,11 @@ BasisCache::BasisCache(int sideIndex, BasisCachePtr volumeCache, int trialDegree
     _cubPointsSideRefCell.resize(numCubPointsSide, _spaceDim); // cubPointsSide from the pov of the ref cell
     CamelliaCellTools::mapToReferenceSubcell(_cubPointsSideRefCell, _cubPoints, sideDim, _sideIndex, _cellTopo);
   }
+  
+  _maxPointsPerCubaturePhase = -1; // default: -1 (infinite)
+  _cubaturePhase = 0; // index of the cubature phase; defaults to 0
+  _cubaturePhaseCount = 1; // how many phases to get through all the points
+  _phasePointOrdinalOffsets.push_back(0);
 }
 
 const vector<GlobalIndexType> & BasisCache::cellIDs() {
@@ -270,6 +280,55 @@ FieldContainer<double> BasisCache::computeParametricPoints() {
 
 int BasisCache::cubatureDegree() {
   return _cubDegree;
+}
+
+int BasisCache::getCubaturePhaseCount() {
+  return _cubaturePhaseCount;
+}
+
+void BasisCache::setMaxPointsPerCubaturePhase(int maxPoints) {
+  if (_maxPointsPerCubaturePhase == -1) {
+    _allCubPoints = _cubPoints;
+    _allCubWeights = _cubWeights;
+  }
+  
+  _maxPointsPerCubaturePhase = maxPoints;
+
+  int totalPointCount = _allCubPoints.dimension(0);
+
+  if (_maxPointsPerCubaturePhase != -1) {
+    _cubaturePhaseCount = (int) ceil((double)totalPointCount / _maxPointsPerCubaturePhase);
+    
+    _phasePointOrdinalOffsets = vector<int>(_cubaturePhaseCount+1);
+    for (int phaseOrdinal=0; phaseOrdinal<_cubaturePhaseCount; phaseOrdinal++) {
+      _phasePointOrdinalOffsets[phaseOrdinal] = phaseOrdinal * (totalPointCount / _cubaturePhaseCount);
+    }
+    _phasePointOrdinalOffsets[_cubaturePhaseCount] = totalPointCount;
+    _cubPoints.resize(0); // should trigger error if setCubaturePhase isn't called
+    _cubWeights.resize(0);
+  } else {
+    _cubaturePhaseCount = 1;
+    _phasePointOrdinalOffsets = vector<int>(2);
+    _phasePointOrdinalOffsets[0] = 0;
+    _phasePointOrdinalOffsets[1] = totalPointCount;
+    
+    setRefCellPoints(_allCubPoints, _allCubWeights);
+  }
+}
+
+void BasisCache::setCubaturePhase(int phaseOrdinal) {
+  int offset = _phasePointOrdinalOffsets[phaseOrdinal];
+  int phasePointCount = _phasePointOrdinalOffsets[phaseOrdinal+1] - offset;
+  int cubSpaceDim = _allCubPoints.dimension(1);
+  FieldContainer<double> cubPoints(phasePointCount, cubSpaceDim);
+  FieldContainer<double> cubWeights(phasePointCount);
+  for (int ptOrdinal=0; ptOrdinal<phasePointCount; ptOrdinal++) {
+    cubWeights(ptOrdinal) = _allCubWeights(offset+ptOrdinal);
+    for (int d=0; d<cubSpaceDim; d++) {
+      cubPoints(ptOrdinal,d) = _allCubPoints(offset+ptOrdinal,d);
+    }
+  }
+  setRefCellPoints(cubPoints, cubWeights);
 }
 
 void BasisCache::findMaximumDegreeBasisForSides(DofOrdering &trialOrdering) {

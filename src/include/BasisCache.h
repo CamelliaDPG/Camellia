@@ -83,10 +83,18 @@ private:
   int _numSides;
   bool _isSideCache;
   int _sideIndex;
+  
+  int _maxPointsPerCubaturePhase; // default: -1 (infinite)
+  int _cubaturePhase; // index of the cubature phase; defaults to 0
+  int _cubaturePhaseCount; // how many phases to get through all the points
+  vector<int> _phasePointOrdinalOffsets;
+  
   Teuchos::RCP<Mesh> _mesh;
   vector< Teuchos::RCP<BasisCache> > _basisCacheSides;
   Teuchos::RCP<BasisCache> _basisCacheVolume;
   Intrepid::FieldContainer<double> _cubPoints, _cubWeights;
+  Intrepid::FieldContainer<double> _allCubPoints, _allCubWeights; // when using phased cubature points, these store the whole set
+  
   Intrepid::FieldContainer<double> _cellJacobian;
   Intrepid::FieldContainer<double> _cellJacobInv;
   Intrepid::FieldContainer<double> _cellJacobDet;
@@ -174,6 +182,10 @@ public:
   
   int cubatureDegree();
   
+  int getCubaturePhaseCount();
+  void setMaxPointsPerCubaturePhase(int maxPoints);
+  void setCubaturePhase(int phaseOrdinal);
+  
   Teuchos::RCP<Mesh> mesh();
   void setMesh(Teuchos::RCP<Mesh> mesh);
   
@@ -220,7 +232,7 @@ public:
   void setMaxCubatureDegree(int value);
   
   void setTransformationFunction(FunctionPtr fxn, bool composeWithMeshTransformation = true);
-    
+  
   // static convenience constructors:
   static BasisCachePtr parametric1DCache(int cubatureDegree);
   static BasisCachePtr parametricQuadCache(int cubatureDegree);
