@@ -672,7 +672,7 @@ bool basisSumEqualsFunction(FieldContainer<double> &basisCoefficients, BasisPtr 
   int cubatureDegree = basis->getDegree() * 2;
   BasisCachePtr basisCache = BasisCache::basisCache1D(0, 1, cubatureDegree);
 
-  double tol = 2e-14;
+  double tol = 1e-13;
   return sumFunction->equals(f, basisCache, tol);
 }
 
