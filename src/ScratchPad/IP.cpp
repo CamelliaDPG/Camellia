@@ -86,8 +86,8 @@ void IP::computeInnerProductMatrix(FieldContainer<double> &innerProduct,
   int maxValuesAllowed = 30000;
   int maxPointsPerPhase = max(2, maxValuesAllowed / totalBasisCardinality); // minimally, compute 2 points at once
   
-  basisCache->setMaxPointsPerCubaturePhase(maxPointsPerPhase);
-//  basisCache->setMaxPointsPerCubaturePhase(-1); // old behavior
+//  basisCache->setMaxPointsPerCubaturePhase(maxPointsPerPhase);
+  basisCache->setMaxPointsPerCubaturePhase(-1); // old behavior
 
   for (int phase=0; phase < basisCache->getCubaturePhaseCount(); phase++) {
     basisCache->setCubaturePhase(phase);
