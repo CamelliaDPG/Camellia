@@ -94,8 +94,8 @@ int main(int argc, char *argv[]) {
   int k = 1; // poly order for field variables
   int delta_k = 3;   // test space enrichment
   
-  bool useSuperLUDist = true;
-  bool useMumps = false;
+  bool useSuperLUDist = false;
+  bool useMumps = true;
   bool useCGSolver = false;
   bool useMLSolver = false;
   bool useGMGSolver = false;
@@ -344,18 +344,17 @@ int main(int argc, char *argv[]) {
   solution->reportTimings();
   
 #ifdef HAVE_EPETRAEXT_HDF5
-  if (rank==0) cout << "Beginning export of initial solution.\n";
   ostringstream dir_name;
-  dir_name << "stokesCavityFlow3D_k" << k << "_ref" << 0;
-  HDF5Exporter exporter2(mesh,dir_name.str());
-  exporter2.exportSolution(solution,varFactory,0);
+  dir_name << "stokesCavityFlow3D_k" << k;
+  HDF5Exporter exporter(mesh,dir_name.str());
+  exporter.exportSolution(solution,varFactory,0);
   if (rank==0) cout << "...completed.  Beginning export of initial mesh.\n";
   // straight-line mesh
-  dir_name.str("");
-  dir_name << "stokesCavityFlow3D_k" << k << "_ref" << 0 << "_mesh";
-  HDF5Exporter meshExporter(mesh,dir_name.str());
-  meshExporter.exportFunction(Function::normal(),"mesh",0,2);
-  if (rank==0) cout << "...completed.\n";
+//  dir_name.str("");
+//  dir_name << "stokesCavityFlow3D_k" << k << "_ref" << 0 << "_mesh";
+//  HDF5Exporter meshExporter(mesh,dir_name.str());
+//  meshExporter.exportFunction(Function::normal(),"mesh",0,2);
+//  if (rank==0) cout << "...completed.\n";
 #endif
   
   for (int refIndex=0; refIndex < refCount; refIndex++) {
@@ -373,17 +372,17 @@ int main(int argc, char *argv[]) {
     solution->reportTimings();
 #ifdef HAVE_EPETRAEXT_HDF5
     if (rank==0) cout << "Beginning export of refinement " << refIndex << " solution.\n";
-    dir_name.str("");
-    dir_name << "stokesCavityFlow3D_k" << k << "_ref" << refIndex;
-    HDF5Exporter exporter2(mesh,dir_name.str());
-    exporter2.exportSolution(solution,varFactory,0);
-    if (rank==0) cout << "...completed.  Beginning export of refinement " << refIndex << " mesh.\n";
-    // straight-line mesh
-    dir_name.str("");
-    dir_name << "stokesCavityFlow3D_k" << k << "_ref" << refIndex << "_mesh";
-    HDF5Exporter meshExporter(mesh,dir_name.str());
-    meshExporter.exportFunction(Function::normal(),"mesh",0,2);
-    if (rank==0) cout << "Finished export of refinement " << refIndex << " solution.\n";
+//    dir_name.str("");
+//    dir_name << "stokesCavityFlow3D_k" << k << "_ref" << refIndex;
+//    HDF5Exporter exporter2(mesh,dir_name.str());
+    exporter.exportSolution(solution,varFactory,refIndex+1);
+    if (rank==0) cout << "...completed.\n"; //  Beginning export of refinement " << refIndex << " mesh.\n";
+//    // straight-line mesh
+//    dir_name.str("");
+//    dir_name << "stokesCavityFlow3D_k" << k << "_ref" << refIndex << "_mesh";
+//    HDF5Exporter meshExporter(mesh,dir_name.str());
+//    meshExporter.exportFunction(Function::normal(),"mesh",0,2);
+//    if (rank==0) cout << "Finished export of refinement " << refIndex << " solution.\n";
 #endif
   }
   if (rank==0) cout << "Beginning computation of energy error.\n";
@@ -406,20 +405,20 @@ int main(int argc, char *argv[]) {
     cout << "Net mass flux: " << netMassFlux << endl;
   }
   
-#ifdef HAVE_EPETRAEXT_HDF5
-  if (rank==0) cout << "Beginning export of final solution.\n";
-  dir_name.str("");
-  dir_name << "stokesCavityFlow3D_k" << k << "_final";
-  HDF5Exporter exporter(mesh,dir_name.str());
-  exporter.exportSolution(solution,varFactory,0);
-  // straight-line mesh
-  if (rank==0) cout << "...completed.  Beginning export of final mesh.\n";
-  dir_name.str("");
-  dir_name << "stokesCavityFlow3D_k" << k << "_finalMesh";
-  HDF5Exporter meshExporter2(mesh,dir_name.str());
-  meshExporter2.exportFunction(Function::normal(),"mesh",0,2);
-  if (rank==0) cout << "...completed.\n";
-#endif
+//#ifdef HAVE_EPETRAEXT_HDF5
+//  if (rank==0) cout << "Beginning export of final solution.\n";
+//  dir_name.str("");
+//  dir_name << "stokesCavityFlow3D_k" << k << "_final";
+//  HDF5Exporter exporter(mesh,dir_name.str());
+//  exporter.exportSolution(solution,varFactory,0);
+//  // straight-line mesh
+//  if (rank==0) cout << "...completed.  Beginning export of final mesh.\n";
+//  dir_name.str("");
+//  dir_name << "stokesCavityFlow3D_k" << k << "_finalMesh";
+//  HDF5Exporter meshExporter2(mesh,dir_name.str());
+//  meshExporter2.exportFunction(Function::normal(),"mesh",0,2);
+//  if (rank==0) cout << "...completed.\n";
+//#endif
   
 //#ifdef USE_VTK
 //    NewVTKExporter vtkExporter(mesh->getTopology());
