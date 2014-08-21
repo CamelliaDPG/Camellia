@@ -373,7 +373,7 @@ void BilinearFormUtility::computeOptimalStiffnessMatrix(FieldContainer<double> &
             //  especially since test functions live only inside the cell)
             weightCellBasisValues(materialDataAppliedToTestValues, weights, testDofOffset);
               
-            FunctionSpaceTools::integrate<double>(miniStiffness,materialDataAppliedToTestValues,materialDataAppliedToTrialValues,COMP_CPP);
+            FunctionSpaceTools::integrate<double>(miniStiffness,materialDataAppliedToTestValues,materialDataAppliedToTrialValues,COMP_BLAS);
             // place in the appropriate spot in the element-stiffness matrix
             // copy goes from (cell,trial_basis_dof,test_basis_dof) to (cell,element_trial_dof,element_test_dof)
             
@@ -446,7 +446,7 @@ void BilinearFormUtility::computeOptimalStiffnessMatrix(FieldContainer<double> &
               weightCellBasisValues(materialDataAppliedToTestValues, weights, testDofOffset);
               
               //   d. Sum up (integrate) and place in stiffness matrix according to DofOrdering indices
-              FunctionSpaceTools::integrate<double>(miniStiffness,materialDataAppliedToTestValues,materialDataAppliedToTrialValues,COMP_CPP);
+              FunctionSpaceTools::integrate<double>(miniStiffness,materialDataAppliedToTestValues,materialDataAppliedToTrialValues,COMP_BLAS);
               // place in the appropriate spot in the element-stiffness matrix
               // copy goes from (cell,trial_basis_dof,test_basis_dof) to (cell,element_trial_dof,element_test_dof)
                             

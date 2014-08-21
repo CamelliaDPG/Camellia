@@ -433,7 +433,7 @@ void LinearTerm::integrate(Epetra_CrsMatrix* valuesCrsMatrix, FieldContainer<dou
       
       FieldContainer<double> miniMatrix( numCells, uBasisCardinality, vBasisCardinality );
       
-      FunctionSpaceTools::integrate<double>(miniMatrix,uValues,vValues,COMP_CPP);
+      FunctionSpaceTools::integrate<double>(miniMatrix,uValues,vValues,COMP_BLAS);
       
       //      cout << "uValues:" << endl << uValues;
       //      cout << "vValues:" << endl << vValues;

@@ -121,7 +121,7 @@ void DPGInnerProduct::computeInnerProductMatrix(FieldContainer<double> &innerPro
                               testID1, testID2, operatorIndex, basisCache);
 
         FunctionSpaceTools::integrate<double>(miniMatrix,innerProductDataAppliedToTest1,
-                                              innerProductDataAppliedToTest2,COMP_CPP);
+                                              innerProductDataAppliedToTest2,COMP_BLAS);
       
         int test1DofOffset = dofOrdering->getDofIndex(testID1,0);
         int test2DofOffset = dofOrdering->getDofIndex(testID2,0);

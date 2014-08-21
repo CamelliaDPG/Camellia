@@ -1154,7 +1154,7 @@ void Solution::integrateBasisFunctions(FieldContainer<double> &values, ElementTy
       }
     }
   }
-  //FunctionSpaceTools::integrate<double>(values,*trialValuesTransformedWeighted,ones,COMP_CPP);
+  //FunctionSpaceTools::integrate<double>(values,*trialValuesTransformedWeighted,ones,COMP_BLAS);
 }
 
 double Solution::meanValue(int trialID) {

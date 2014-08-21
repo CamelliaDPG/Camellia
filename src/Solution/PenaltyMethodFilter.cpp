@@ -104,7 +104,7 @@ void PenaltyMethodFilter::filter(FieldContainer<double> &localStiffnessMatrix, F
           
           // integrate the transformed values, add them to the relevant trial/testTrialID dof combos
           FieldContainer<double> unweightedPenaltyMatrix(numCells,numDofs1,numDofs2);
-          FunctionSpaceTools::integrate<double>(unweightedPenaltyMatrix,trialValuesCopy,testTrialValuesWeightedCopy,COMP_CPP);
+          FunctionSpaceTools::integrate<double>(unweightedPenaltyMatrix,trialValuesCopy,testTrialValuesWeightedCopy,COMP_BLAS);
           
           for (int cellIndex=0; cellIndex<numCells; cellIndex++){
             for (int testDofIndex=0; testDofIndex<numDofs2; testDofIndex++){		
@@ -122,7 +122,7 @@ void PenaltyMethodFilter::filter(FieldContainer<double> &localStiffnessMatrix, F
         
         // set penalty load
         FieldContainer<double> unweightedRHSVector(numCells,numDofs2);
-        FunctionSpaceTools::integrate<double>(unweightedRHSVector,constrValues,testTrialValuesWeightedCopy,COMP_CPP);
+        FunctionSpaceTools::integrate<double>(unweightedRHSVector,constrValues,testTrialValuesWeightedCopy,COMP_BLAS);
         for (int cellIndex=0; cellIndex<numCells; cellIndex++){
           for (int testDofIndex=0; testDofIndex<numDofs2; testDofIndex++){		
             int localTestDof = trialOrderPtr->getDofIndex(testTrialID, testDofIndex, sideIndex);

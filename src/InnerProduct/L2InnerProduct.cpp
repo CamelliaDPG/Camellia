@@ -133,7 +133,7 @@ void L2InnerProduct::computeInnerProductMatrix(FieldContainer<double> &innerProd
                               trialID1, trialID2, operatorIndex, physicalCubaturePoints);
 
         FunctionSpaceTools::integrate<double>(miniMatrix,innerProductDataAppliedToTrial1,
-                                              innerProductDataAppliedToTrial2,COMP_CPP);
+                                              innerProductDataAppliedToTrial2,COMP_BLAS);
       
         int trial1DofOffset = dofOrdering->getDofIndex(trialID1,0);
         int trial2DofOffset = dofOrdering->getDofIndex(trialID2,0);
@@ -247,7 +247,7 @@ void L2InnerProduct::computeInnerProductVector(FieldContainer<double> &innerProd
                               trialID1, trialID2, operatorIndex, physicalCubaturePoints); 
 
         FunctionSpaceTools::integrate<double>(miniVector,innerProductDataAppliedToTrial1,
-                                              innerProductDataAppliedToTrial2,COMP_CPP);
+                                              innerProductDataAppliedToTrial2,COMP_BLAS);
       
         int trial1DofOffset = dofOrdering->getDofIndex(trialID1,0);
 	//        int trial2DofOffset = dofOrdering->getDofIndex(trialID2,0);

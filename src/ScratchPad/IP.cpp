@@ -273,7 +273,7 @@ bool IP::hasBoundaryTerms() {
 //        
 //        FieldContainer<double> miniMatrix( numCells, numDofs1, numDofs2 );
 //        
-//        FunctionSpaceTools::integrate<double>(miniMatrix,test1Values,test2ValuesWeighted,COMP_CPP);
+//        FunctionSpaceTools::integrate<double>(miniMatrix,test1Values,test2ValuesWeighted,COMP_BLAS);
 //        
 //        int test1DofOffset = dofOrdering->getDofIndex(testID1,0);
 //        int test2DofOffset = dofOrdering->getDofIndex(testID2,0);
