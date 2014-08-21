@@ -559,15 +559,6 @@ SolutionPtr GDAMinimumRuleTests::stokesExactSolution(bool useMinRule, int horizo
 }
 
 void GDAMinimumRuleTests::runTests(int &numTestsRun, int &numTestsPassed) {
-  setup();
-  if (testHangingNodePoisson3D()) {
-    numTestsPassed++;
-  }
-  numTestsRun++;
-  teardown();
-
-  cout << "testHangingNodePoisson3D complete.\n";
-  
   bool useQuads = true;
   setup();
   if (testHangingNodePoisson(useQuads)) {
@@ -658,6 +649,15 @@ void GDAMinimumRuleTests::runTests(int &numTestsRun, int &numTestsPassed) {
   teardown();
   
 //  cout << "testLocalInterpretationConsistency complete.\n";
+  
+  setup();
+  if (testHangingNodePoisson3D()) {
+    numTestsPassed++;
+  }
+  numTestsRun++;
+  teardown();
+  
+  cout << "testHangingNodePoisson3D complete.\n";
 }
 void GDAMinimumRuleTests::setup() {
   // setup test points:
@@ -1191,11 +1191,12 @@ bool GDAMinimumRuleTests::testHangingNodePoisson(bool useQuads) {
   
   GnuPlotUtil::writeComputationalMeshSkeleton("/tmp/hangingNodeTestMesh", mesh, true); // true: label cells
   
-  double tol = 3e-12; // relaxed for vesta
+  double tol = 6e-12; // relaxed for vesta, then relaxed again for BLAS integration
   double phi_err_l2 = phi_err->l2norm(mesh);
   if (phi_err_l2 > tol) {
     success = false;
-    cout << "GDAMinimumRuleTests failure: for mesh with hanging node and exactly recoverable solution, phi error is " << phi_err_l2 << endl;
+    cout << "GDAMinimumRuleTests failure: for mesh with hanging node and exactly recoverable solution, phi error is " << phi_err_l2;
+    cout << " (tol is " << tol << ")\n";
 #ifdef USE_VTK
     VTKExporter solnExporter(soln,soln->mesh(),vf);
     solnExporter.exportSolution("poissonSolution");
@@ -1227,7 +1228,8 @@ bool GDAMinimumRuleTests::testHangingNodePoisson(bool useQuads) {
     phi_err_l2 = phi_err->l2norm(mesh);
     if (phi_err_l2 > tol) {
       success = false;
-      cout << "GDAMinimumRuleTests failure: for 2-irregular mesh with hanging node and exactly recoverable solution, phi error is " << phi_err_l2 << endl;
+      cout << "GDAMinimumRuleTests failure: for 2-irregular quad mesh with hanging node and exactly recoverable solution, phi error is " << phi_err_l2;;
+      cout << " (tol is " << tol << ")\n";
       mesh->getTopology()->printAllEntities();
 #ifdef USE_VTK
       VTKExporter solnExporter(soln,soln->mesh(),vf);
