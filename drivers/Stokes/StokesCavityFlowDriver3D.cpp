@@ -115,6 +115,8 @@ int main(int argc, char *argv[]) {
   double eps = 1.0/64.0;
   int mumpsMaxMemoryMB = 768;
   
+  double energyThreshold = 0.2;
+  
   cmdp.setOption("polyOrder",&k,"polynomial order for field variable u");
   cmdp.setOption("delta_k", &delta_k, "test space polynomial order enrichment");
   cmdp.setOption("numCells",&numCells,"number of cells in x/y/z directions");
@@ -123,6 +125,7 @@ int main(int argc, char *argv[]) {
   cmdp.setOption("eps", &eps, "ramp width (set to 0 for no ramp in BCs)");
   cmdp.setOption("useConformingTraces", "useNonConformingTraces", &conformingTraces);
   cmdp.setOption("mumpsMaxMemoryMB", &mumpsMaxMemoryMB, "max allocation size MUMPS is allowed to make, in MB");
+  cmdp.setOption("refinementThreshold", &energyThreshold, "relative energy threshold for refinements");
   
   if (cmdp.parse(argc,argv) != Teuchos::CommandLineProcessor::PARSE_SUCCESSFUL) {
 #ifdef HAVE_MPI
@@ -295,7 +298,6 @@ int main(int argc, char *argv[]) {
 #endif
   }
   
-  double energyThreshold = 0.2;
   RefinementStrategy refinementStrategy( solution, energyThreshold );
   
   refinementStrategy.setReportPerCellErrors(true);
