@@ -212,6 +212,7 @@ void Boundary::bcsToImpose( map<  int, double > &globalDofIndicesAndValues, BC &
   for (vector< int >::iterator trialIt = trialIDs.begin(); trialIt != trialIDs.end(); trialIt++) {
     int trialID = *(trialIt);
     bool isTrace = _mesh->bilinearForm()->functionSpaceForTrial(trialID) == IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD;
+    bool isSpatialTrace = _mesh->bilinearForm()->isSpatialTrace(trialID);
     // we assume if it's not a trace, then it's a flux (i.e. L2 projection is appropriate)
     if ( bc.bcsImposed(trialID) ) {
       // 1. Collect the physicalCellNodes according to sideIndex
@@ -261,19 +262,20 @@ void Boundary::bcsToImpose( map<  int, double > &globalDofIndicesAndValues, BC &
       bool impositionReported = false;
       // 2. Determine global dof indices and values, in one pass per side
       for (int sideIndex=0; sideIndex<numSides; sideIndex++) {
-        BasisPtr basis = trialOrderingPtr->getBasis(trialID,sideIndex);
-        int numDofs = basis->getCardinality();
-        
-        int numCells = physicalCellNodesPerSide[sideIndex].dimension(0);
-        vector<int> cellIDs = cellIDsPerSide[sideIndex];
-        
-        if (numCells > 0) {
-          FieldContainer<double> dirichletValues(numCells,numDofs);
+        if ((isSpatialTrace && (sideIndex == 1 || sideIndex == 3)) || !isSpatialTrace) {
+          BasisPtr basis = trialOrderingPtr->getBasis(trialID,sideIndex);
+          int numDofs = basis->getCardinality();
+
+          int numCells = physicalCellNodesPerSide[sideIndex].dimension(0);
+          vector<int> cellIDs = cellIDsPerSide[sideIndex];
+
+          if (numCells > 0) {
+            FieldContainer<double> dirichletValues(numCells,numDofs);
 
           // project bc function onto side basis:
-          basisCache->setPhysicalCellNodes(physicalCellNodesPerSide[sideIndex],cellIDs,true);
-          BCPtr bcPtr = Teuchos::rcp(&bc, false);
-          Teuchos::RCP<BCFunction> bcFunction = Teuchos::rcp(new BCFunction(bcPtr, trialID, isTrace));
+            basisCache->setPhysicalCellNodes(physicalCellNodesPerSide[sideIndex],cellIDs,true);
+            BCPtr bcPtr = Teuchos::rcp(&bc, false);
+            Teuchos::RCP<BCFunction> bcFunction = Teuchos::rcp(new BCFunction(bcPtr, trialID, isTrace));
           // TODO: test the below.  (New as of 9/15/12, basically.)
           // (NOT YET WORKING.  NEED TO ADD SUPPORT FOR grad() to BCFunction, but it's unclear how best to do so...)
 //          if (isTrace && (bcFunction->grad().get() != NULL)) { // TODO: in case grad() is NULL, better to interpolate than do the L^2 projection, probably
@@ -285,30 +287,31 @@ void Boundary::bcsToImpose( map<  int, double > &globalDofIndicesAndValues, BC &
 //          }
           // was:
           // Projector::projectFunctionOntoBasis(dirichletValues, bcFunction, basis, basisCache->getSideBasisCache(sideIndex));
-          
+
           // new idea: (trouble with this is that the basisCache already assumes a particular cubature setup, specifically violated when doing straight interpolation.  But this can probably be fixed by the interpolating BC subclass...)
-          bcPtr->coefficientsForBC(dirichletValues, bcFunction, basis, basisCache->getSideBasisCache(sideIndex));
+            bcPtr->coefficientsForBC(dirichletValues, bcFunction, basis, basisCache->getSideBasisCache(sideIndex));
 //          cout << "imposing values for " << meshPtr->bilinearForm()->trialName(trialID);
 //          cout << " at points: \n" << basisCache->getSideBasisCache(sideIndex)->getPhysicalCubaturePoints();
 //          cout << "dirichletValues:" << endl << dirichletValues;
-          
-          for (int localCellIndex=0; localCellIndex<numCells; localCellIndex++) {
-            if (bcFunction->imposeOnCell(localCellIndex)) {
-              for (int dofOrdinal=0; dofOrdinal<numDofs; dofOrdinal++) {
-                int cellID = cellIDsPerSide[sideIndex][localCellIndex];
-                double value = dirichletValues(localCellIndex,dofOrdinal);
-                int localDofIndex = trialOrderingPtr->getDofIndex(trialID,dofOrdinal,sideIndex);
-                int globalDofIndex = _mesh->globalDofIndex(cellID,localDofIndex);
+
+            for (int localCellIndex=0; localCellIndex<numCells; localCellIndex++) {
+              if (bcFunction->imposeOnCell(localCellIndex)) {
+                for (int dofOrdinal=0; dofOrdinal<numDofs; dofOrdinal++) {
+                  int cellID = cellIDsPerSide[sideIndex][localCellIndex];
+                  double value = dirichletValues(localCellIndex,dofOrdinal);
+                  int localDofIndex = trialOrderingPtr->getDofIndex(trialID,dofOrdinal,sideIndex);
+                  int globalDofIndex = _mesh->globalDofIndex(cellID,localDofIndex);
 //                cout << "BC: " << globalDofIndex << " = " << value << " @ (" << dofPointsSidePhysical(localCellIndex,localDofIndex,0) << ", " << dofPointsSidePhysical(localCellIndex,localDofIndex,1) << ")\n";
-                if (globalDofIndex < 0) {
-                  TEUCHOS_TEST_FOR_EXCEPTION( true,
-                                     std::invalid_argument,
-                                     "bcsToImpose: error: globalDofIndex < 0.");
-                }
-                globalDofIndicesAndValues[globalDofIndex] = value;
-                if ( ! impositionReported ) {
+                  if (globalDofIndex < 0) {
+                    TEUCHOS_TEST_FOR_EXCEPTION( true,
+                     std::invalid_argument,
+                     "bcsToImpose: error: globalDofIndex < 0.");
+                  }
+                  globalDofIndicesAndValues[globalDofIndex] = value;
+                  if ( ! impositionReported ) {
                   //cout << "imposed BC values for variable " << _mesh->bilinearForm()->trialName(trialID) << endl;
-                  impositionReported = true;
+                    impositionReported = true;
+                  }
                 }
               }
             }
