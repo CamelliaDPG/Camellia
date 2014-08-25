@@ -6,6 +6,7 @@
 #include "InnerProductScratchPad.h"
 #include "RefinementStrategy.h"
 #include "SolutionExporter.h"
+#include "CheckConservation.h"
 
 #ifdef HAVE_MPI
 #include <Teuchos_GlobalMPISession.hpp>
@@ -52,45 +53,43 @@ class ConstantYBoundary : public SpatialFilter {
       }
 };
 
-// class UExact : public Function {
-//   public:
-//     UExact() : Function(0) {}
-//     void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
-//       int numCells = values.dimension(0);
-//       int numPoints = values.dimension(1);
-
-//       const FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
-//       for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
-//         for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
-//           double x = (*points)(cellIndex,ptIndex,0);
-//           double y = (*points)(cellIndex,ptIndex,1);
-//           values(cellIndex, ptIndex) = cos(2*pi*x)*exp(-4*pi*pi*epsilon*y);
-//         }
-//       }
-//     }
-// };
-
-class Forcing : public Function {
+class UExact : public Function {
+  double _eps;
+  int _returnID;
   public:
-    Forcing() : Function(0) {}
-    void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
-      int numCells = values.dimension(0);
-      int numPoints = values.dimension(1);
+  UExact(double eps) : Function(0) {
+    _eps = eps;
+    _returnID = 0;
+  }
+  UExact(double eps,int trialID) : Function(0) {
+    _eps = eps;
+    _returnID = trialID;
+  }
+  void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
 
-      const FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
-      for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
-        for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
-          double x = (*points)(cellIndex,ptIndex,0);
-          double y = (*points)(cellIndex,ptIndex,1);
-          if (y >= .25 && y <= 0.5 && x >= 0.25 && x <= 0.5)
-            values(cellIndex, ptIndex) = 1;
-          // else if (y >= .5 && y <= 0.75 && x >= 0.5-1./8. && x <= 0.5+1./8.)
-          //   values(cellIndex, ptIndex) = -1;
-          else
-            values(cellIndex, ptIndex) = 0;
+    int numCells = values.dimension(0);
+    int numPoints = values.dimension(1);    
+    const FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
+    for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
+      for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
+        double x = (*points)(cellIndex,ptIndex,0);
+        double t = (*points)(cellIndex,ptIndex,1);
+
+        double l = 3;
+        double lambda1 = (-1.+sqrt(1.-4.*_eps*l))/(-2*_eps);
+        double lambda2 = (-1.-sqrt(1.-4.*_eps*l))/(-2*_eps);
+
+        double u = exp(-l*t)*(exp(lambda1*(x-1))-exp(lambda2*(x-1)));
+        double sigma = _eps*exp(-l*t)*(lambda1*exp(lambda1*(x-1))-lambda2*exp(lambda2*(x-1)));
+        if (_returnID==0){
+          values(cellIndex,ptIndex) = u;
+        }
+        else if (_returnID==1){
+          values(cellIndex,ptIndex) = sigma;
         }
       }
     }
+  }
 };
 
 int main(int argc, char *argv[]) {
@@ -112,7 +111,7 @@ int main(int argc, char *argv[]) {
   args.Process();
 
   int numX = 4;
-  int numY = 6;
+  int numY = 4;
 
   ////////////////////   DECLARE VARIABLES   ///////////////////////
   // define test variables
@@ -124,9 +123,7 @@ int main(int argc, char *argv[]) {
   // define trial variables
   VarPtr u = varFactory.fieldVar("u");
   VarPtr sigma = varFactory.fieldVar("sigma", L2);
-  // VarPtr sigma = varFactory.fieldVar("sigma", VECTOR_L2);
   VarPtr uhat = varFactory.spatialTraceVar("uhat");
-  // VarPtr uhat = varFactory.traceVar("uhat");
   VarPtr fhat = varFactory.fluxVar("fhat");
 
   ////////////////////   BUILD MESH   ///////////////////////
@@ -135,7 +132,7 @@ int main(int argc, char *argv[]) {
   FieldContainer<double> meshBoundary(4,2);
   double xmin = 0.0;
   double xmax = 1.0;
-  double tmax = 1.5;
+  double tmax = 1.0;
 
   meshBoundary(0,0) =  xmin; // x1
   meshBoundary(0,1) =  0.0; // y1
@@ -167,8 +164,8 @@ int main(int argc, char *argv[]) {
 
   ////////////////////   SPECIFY RHS   ///////////////////////
   Teuchos::RCP<RHSEasy> rhs = Teuchos::rcp( new RHSEasy );
-  FunctionPtr f = Teuchos::rcp( new Forcing );
-  rhs->addTerm( f * v ); // obviously, with f = 0 adding this term is not necessary!
+  // FunctionPtr f = Teuchos::rcp( new Forcing );
+  // rhs->addTerm( f * v ); // obviously, with f = 0 adding this term is not necessary!
 
   ////////////////////   DEFINE INNER PRODUCT(S)   ///////////////////////
   IPPtr ip = Teuchos::rcp(new IP);
@@ -187,7 +184,7 @@ int main(int argc, char *argv[]) {
     case 1:
     ip->addTerm( v );
     ip->addTerm( sqrt(epsilon) * v->grad() );
-    ip->addTerm( beta * v->grad() );
+    ip->addTerm( v->dx() );
     ip->addTerm( tau->dx() - beta*v->grad() );
     ip->addTerm( ip_scaling/sqrt(epsilon) * tau );
     break;
@@ -211,13 +208,11 @@ int main(int argc, char *argv[]) {
   SpatialFilterPtr right = Teuchos::rcp( new ConstantXBoundary(xmax) );
   SpatialFilterPtr bottom = Teuchos::rcp( new ConstantYBoundary(0) );
   SpatialFilterPtr top = Teuchos::rcp( new ConstantYBoundary(tmax) );
-  // FunctionPtr u_exact = Teuchos::rcp( new UExact );
-  FunctionPtr uLeft = zero;
-  FunctionPtr uRight = zero;
+  FunctionPtr u_exact = Teuchos::rcp( new UExact(epsilon, 0) );
+  FunctionPtr sigma_exact = Teuchos::rcp( new UExact(epsilon, 1) );
   bc->addDirichlet(uhat, right, zero);
-  bc->addDirichlet(fhat, left, zero);
-  // bc->addDirichlet(fhat, bottom, -u_exact);
-  bc->addDirichlet(fhat, bottom, zero);
+  bc->addDirichlet(fhat, left, -u_exact+sigma_exact);
+  bc->addDirichlet(fhat, bottom, -u_exact+sigma_exact);
 
   Teuchos::RCP<Solution> solution = Teuchos::rcp( new Solution(mesh, bc, rhs, ip) );
 
@@ -229,21 +224,52 @@ int main(int argc, char *argv[]) {
   RefinementStrategy refinementStrategy( solution, energyThreshold );
   VTKExporter exporter(solution, mesh, varFactory);
 
+  ofstream convOut;
+  stringstream convOutFile;
+  convOutFile << "analytical_conv_" << epsilon <<".txt";
+  if (commRank == 0)
+    convOut.open(convOutFile.str().c_str());
+
   for (int refIndex=0; refIndex<=numRefs; refIndex++)
   {
      solution->solve(false);
 
      FunctionPtr u_soln = Function::solution(u, solution);
-     if (commRank == 0)
-     {
-        stringstream outfile;
-        outfile << "confusion_" << refIndex;
-        exporter.exportSolution(outfile.str());
+     FunctionPtr sigma_soln = Function::solution(sigma, solution);
+     FunctionPtr u_diff = (u_soln - u_exact);
+     FunctionPtr u_sqr = u_diff*u_diff;
+     FunctionPtr sigma_diff = (sigma_soln - sigma_exact);
+     FunctionPtr sigma_sqr = sigma_diff*sigma_diff;
+     double L2_error_u = u_sqr->integrate(mesh, 1e-6);
+     double L2_error_sigma = sigma_sqr->integrate(mesh, 1e-6);
+     double L2_error = sqrt(L2_error_u + L2_error_sigma);
+     double energy_error = solution->energyErrorTotal();
+
+     if (commRank==0){
+      stringstream outfile;
+      stringstream errfile;
+      outfile << "analytical_" << refIndex;
+      errfile << "analytical_error_" << refIndex;
+      exporter.exportSolution(outfile.str());
+      // exporter.exportFunction(u_diff, errfile.str());
+      // exporter.exportFunction(u_exact, "analytical_exact");
+
+      // Check local conservation
+      // FunctionPtr flux = Function::solution(fhat, solution);
+      // Teuchos::Tuple<double, 3> fluxImbalances = checkConservation(flux, zero, mesh, 0);
+      // cout << "Mass flux: Largest Local = " << fluxImbalances[0] 
+      // << ", Global = " << fluxImbalances[1] << ", Sum Abs = " << fluxImbalances[2] << endl;
+
+      // convOut << mesh->numGlobalDofs() << " " << L2_error << " " << energy_error << " "
+      // << fluxImbalances[0] << " " << fluxImbalances[1] << " " << fluxImbalances[2] << endl;
+      convOut << mesh->numGlobalDofs() << " " << L2_error << " " << energy_error << endl;
     }
 
     if (refIndex < numRefs)
       refinementStrategy.refine(commRank==0); // print to console on commRank 0
   }
+  // if (commRank == 0)
+  //   convOut.close();
 
   return 0;
 }
