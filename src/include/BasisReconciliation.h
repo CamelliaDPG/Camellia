@@ -50,7 +50,6 @@ private:
   
   static FieldContainer<double> permutedCubaturePoints(BasisCachePtr basisCache, Permutation cellTopoNodePermutation);
   
-  static SubBasisReconciliationWeights filterOutZeroRowsAndColumns(SubBasisReconciliationWeights &weights);
   static SubBasisReconciliationWeights filterToInclude(set<int> &rowOrdinals, set<int> &colOrdinals, SubBasisReconciliationWeights &weights);
 public:
   BasisReconciliation(bool cacheResults = true) { _cacheResults = cacheResults; }
@@ -90,6 +89,8 @@ public:
   static SubBasisReconciliationWeights weightsForCoarseSubcell(SubBasisReconciliationWeights &weights, BasisPtr constrainingBasis, unsigned subcdim, unsigned subcord, bool includeSubsubcells);
   
   static SubBasisReconciliationWeights composedSubBasisReconciliationWeights(SubBasisReconciliationWeights aWeights, SubBasisReconciliationWeights bWeights);
+  
+  static SubBasisReconciliationWeights filterOutZeroRowsAndColumns(SubBasisReconciliationWeights &weights);
   
   static SubBasisReconciliationWeights sumWeights(SubBasisReconciliationWeights aWeights, SubBasisReconciliationWeights bWeights);
   

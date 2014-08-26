@@ -214,8 +214,8 @@ void Projector::projectFunctionOntoBasis(FieldContainer<double> &basisCoefficien
   
   FieldContainer<double> gramMatrix(numCells,numDofs,numDofs);
   FieldContainer<double> ipVector(numCells,numDofs);
-  FunctionSpaceTools::integrate<double>(gramMatrix,*basisValues,*testBasisValues,COMP_CPP);
-  FunctionSpaceTools::integrate<double>(ipVector,functionValues,*testBasisValues,COMP_CPP); 
+  FunctionSpaceTools::integrate<double>(gramMatrix,*basisValues,*testBasisValues,COMP_BLAS);
+  FunctionSpaceTools::integrate<double>(ipVector,functionValues,*testBasisValues,COMP_BLAS); 
   
   basisCoefficients.resize(numCells,numDofs);
   for (int cellIndex=0; cellIndex<numCells; cellIndex++){
@@ -311,8 +311,8 @@ void Projector::projectFunctionOntoBasis(FieldContainer<double> &basisCoefficien
 
   FieldContainer<double> gramMatrix(numCells,numDofs,numDofs);
   FieldContainer<double> ipVector(numCells,numDofs);
-  FunctionSpaceTools::integrate<double>(gramMatrix,basisValues,testBasisValues,COMP_CPP);
-  FunctionSpaceTools::integrate<double>(ipVector,functionValues,testBasisValues,COMP_CPP); 
+  FunctionSpaceTools::integrate<double>(gramMatrix,basisValues,testBasisValues,COMP_BLAS);
+  FunctionSpaceTools::integrate<double>(ipVector,functionValues,testBasisValues,COMP_BLAS); 
   
   basisCoefficients.resize(numCells,numDofs);
   for (int cellIndex=0; cellIndex<numCells; cellIndex++){

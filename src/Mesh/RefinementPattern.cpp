@@ -666,6 +666,13 @@ pair<unsigned, unsigned> RefinementPattern::mapSubcellFromParentToChild(unsigned
   CellPtr parentCell = _refinementTopology->getCell(0);
   CellPtr childCell = parentCell->children()[childOrdinal];
   IndexType parentEntityIndex = parentCell->entityIndex(subcdim, parentSubcord);
+  
+  // first check: does the child have the entity as a subcell?  (this means that subcell was not refined)
+  int childSubcord = childCell->findSubcellOrdinal(subcdim, parentEntityIndex);
+  if (childSubcord != -1) {
+    return make_pair(subcdim, childSubcord);
+  }
+  
 //  vector<IndexType> refinedEntities = _refinementTopology->getChildEntities(subcdim, parentEntityIndex);
 //  refinedEntities.insert(refinedEntities.end(), parentEntityIndex); // in case the subcell wasn't refined, include the parent's subcell in the list to be searched.
 //  vector<IndexType> childEntitiesVector = childCell->getEntityIndices(subcdim);
@@ -695,6 +702,7 @@ pair<unsigned, unsigned> RefinementPattern::mapSubcellFromParentToChild(unsigned
   cout << "ERROR: corresponding subcell not found in child.\n";
   TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "corresponding subcell not found in child");
 }
+
 pair<unsigned, unsigned> RefinementPattern::mapSubcellFromChildToParent(unsigned childOrdinal, unsigned subcdim, unsigned childSubcord) {
   // pair is (subcdim, subcord)
   CellPtr parentCell = _refinementTopology->getCell(0);
@@ -710,8 +718,6 @@ pair<unsigned, unsigned> RefinementPattern::mapSubcellFromChildToParent(unsigned
     return make_pair(subcdim, parentSubcord);
   }
 }
-
-
 
 unsigned RefinementPattern::mapVolumeChildOrdinalToSubcellChildOrdinal(unsigned subcdim, unsigned subcord, unsigned volumeChildOrdinal) {
   CellPtr parentCell = _refinementTopology->getCell(0);

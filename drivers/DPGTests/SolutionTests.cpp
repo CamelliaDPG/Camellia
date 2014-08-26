@@ -33,6 +33,11 @@
 #include "MeshUtilities.h"
 #include "CamelliaDebugUtility.h"
 
+#include "EpetraExt_ConfigDefs.h"
+#ifdef HAVE_EPETRAEXT_HDF5
+#include "HDF5Exporter.h"
+#endif
+
 class NewQuadraticFunction : public SimpleFunction {
 public:
   double value(double x, double y) {
@@ -223,6 +228,14 @@ void SolutionTests::runTests(int &numTestsRun, int &numTestsPassed) {
   cout << "Starting SolutionTests::runTests on rank " << rank << endl;
 
   setup();
+  if (testCondensationSolve()) {
+    numTestsPassed++;
+  }
+  numTestsRun++;
+  teardown();
+  cout << "finished test testCondensationSolve().\n";
+  
+  setup();
   if (testNewProjectFunction()) {
     numTestsPassed++;
   }
@@ -329,14 +342,6 @@ void SolutionTests::runTests(int &numTestsRun, int &numTestsPassed) {
   teardown();
 
   cout << "finished test testScratchPadSolution().\n";
-  
-  setup();
-  if (testCondensationSolve()) {
-    numTestsPassed++;
-  }
-  numTestsRun++;
-  teardown();
-  cout << "finished test testCondensationSolve().\n";
 }
 
 bool SolutionTests::storageSizesAgree(Teuchos::RCP< Solution > soln1, Teuchos::RCP< Solution > soln2) {
@@ -1482,23 +1487,124 @@ bool SolutionTests::testCondensationSolve() {
 
   ////////////////////   BUILD MESH   ///////////////////////
 
-  int H1Order = 3; int pToAdd = 3; int nCells = 4;  
-  Teuchos::RCP<Mesh> mesh = MeshUtilities::buildUnitQuadMesh(nCells, bf, H1Order, H1Order+pToAdd);
+  int H1Order = 2; int pToAdd = 2; int nCells = 2;
+  
+  // first, single-element mesh
+  Teuchos::RCP<Mesh> mesh = MeshUtilities::buildUnitQuadMesh(1, bf, H1Order, H1Order+pToAdd);
     
-  ////////////////////   SOLVE & REFINE   ///////////////////////
+  ////////////////////   REFINE & SOLVE   ///////////////////////
+  SolutionPtr solution = Teuchos::rcp( new Solution(mesh, bc, rhs, ip) );
+  SolutionPtr condensedSolution = Teuchos::rcp( new Solution(mesh, bc, rhs, ip) );
 
-  Teuchos::RCP<Solution> solution = Teuchos::rcp( new Solution(mesh, bc, rhs, ip) );
-  Teuchos::RCP<Solution> condensationSolution = Teuchos::rcp( new Solution(mesh, bc, rhs, ip) );
   solution->solve(false);
-  condensationSolution->solve(false);
+  condensedSolution->newCondensedSolve();
   FunctionPtr uF = Function::solution(u,solution);
-  FunctionPtr uCond = Function::solution(u,condensationSolution);
+  FunctionPtr uCond = Function::solution(u,condensedSolution);
   double diff = (uF-uCond)->l2norm(mesh,H1Order);
   if (diff>tol){
-    cout << "Failing test: Condensation solve does not match regular solve" << endl;
+    cout << "Failing test: Condensed solve on single-element max rule mesh does not match regular solve" << endl;
+    cout << "L2 norm of difference is " << diff << "; tol is " << tol << endl;
     success=false;
   }
 
+  // now, same thing, but with a single-element minimum-rule mesh:
+  mesh = MeshFactory::quadMeshMinRule(bf, H1Order, pToAdd, 1.0, 1.0, 1, 1);
+  
+  solution = Teuchos::rcp( new Solution(mesh, bc, rhs, ip) );
+  condensedSolution = Teuchos::rcp( new Solution(mesh, bc, rhs, ip) );
+  solution->solve(false);
+  condensedSolution->newCondensedSolve();
+  uF = Function::solution(u,solution);
+  uCond = Function::solution(u,condensedSolution);
+  diff = (uF-uCond)->l2norm(mesh,H1Order);
+  if (diff>tol){
+    cout << "Failing test: Condensed solve on single-element min rule mesh does not match regular solve" << endl;
+    cout << "L2 norm of difference is " << diff << "; tol is " << tol << endl;
+    success=false;
+  }
+  
+  // MAX RULE, multi-element refined mesh
+  mesh = MeshUtilities::buildUnitQuadMesh(nCells, bf, H1Order, H1Order+pToAdd);
+  set<GlobalIndexType> cell0;
+  cell0.insert(0);
+  mesh->hRefine(cell0, RefinementPattern::regularRefinementPatternQuad());
+
+  solution = Teuchos::rcp( new Solution(mesh, bc, rhs, ip) );
+  condensedSolution = Teuchos::rcp( new Solution(mesh, bc, rhs, ip) );
+  solution->solve(false);
+  condensedSolution->newCondensedSolve();
+  uF = Function::solution(u,solution);
+  uCond = Function::solution(u,condensedSolution);
+  diff = (uF-uCond)->l2norm(mesh,H1Order);
+  if (diff>tol){
+    cout << "Failing test: Condensed solve on refined max rule mesh does not match regular solve" << endl;
+    cout << "L2 norm of difference is " << diff << "; tol is " << tol << endl;
+    
+#ifdef HAVE_EPETRAEXT_HDF5
+    ostringstream dir_name;
+    dir_name << "refinedMaxRuleMeshStandardVsCondensedSolve";
+    HDF5Exporter exporter(mesh,dir_name.str());
+    exporter.exportSolution(solution,varFactory,0);
+    exporter.exportSolution(condensedSolution,varFactory,1);
+#endif
+    
+    success=false;
+  }
+  
+  // MIN RULE, multi-element compatible mesh
+  mesh = MeshFactory::quadMeshMinRule(bf, H1Order, pToAdd, 1.0, 1.0, nCells, nCells);
+
+  solution = Teuchos::rcp( new Solution(mesh, bc, rhs, ip) );
+  condensedSolution = Teuchos::rcp( new Solution(mesh, bc, rhs, ip) );
+  solution->solve(false);
+  condensedSolution->newCondensedSolve();
+  uF = Function::solution(u,solution);
+  uCond = Function::solution(u,condensedSolution);
+  diff = (uF-uCond)->l2norm(mesh,H1Order);
+  if (diff>tol){
+    cout << "Failing test: Condensed solve on multi-element (compatible) min rule mesh does not match regular solve" << endl;
+    cout << "L2 norm of difference is " << diff << "; tol is " << tol << endl;
+    success=false;
+#ifdef HAVE_EPETRAEXT_HDF5
+    ostringstream dir_name;
+    dir_name << "multiElementMinRuleMeshStandardVsCondensedSolve";
+    HDF5Exporter exporter(mesh,dir_name.str());
+    exporter.exportSolution(solution,varFactory,0);
+    exporter.exportSolution(condensedSolution,varFactory,1);
+#endif
+  }
+
+  // MIN RULE, multi-element refined mesh
+  mesh->hRefine(cell0, RefinementPattern::regularRefinementPatternQuad());
+  
+  solution = Teuchos::rcp( new Solution(mesh, bc, rhs, ip) );
+  condensedSolution = Teuchos::rcp( new Solution(mesh, bc, rhs, ip) );
+  solution->solve(false);
+  condensedSolution->newCondensedSolve();
+  uF = Function::solution(u,solution);
+  uCond = Function::solution(u,condensedSolution);
+  diff = (uF-uCond)->l2norm(mesh,H1Order);
+  if (diff>tol){
+    cout << "Failing test: Condensed solve on refined min rule mesh does not match regular solve" << endl;
+    cout << "L2 norm of difference is " << diff << "; tol is " << tol << endl;
+    success=false;
+    int cellID = 6;
+    FieldContainer<double> cell6coeffs_standard = solution->allCoefficientsForCellID(cellID, false); // false: don't warn if off-rank
+    FieldContainer<double> cell6coeffs_condensed = condensedSolution->allCoefficientsForCellID(cellID, false); // false: don't warn if off-rank
+    if (rank==0) {
+      cout << "cell " << cellID << ", standard solution coefficients:\n" << cell6coeffs_standard;
+      cout << "cell " << cellID << ", condensed solution coefficients:\n" << cell6coeffs_condensed;
+    }
+    
+#ifdef HAVE_EPETRAEXT_HDF5
+    ostringstream dir_name;
+    dir_name << "refinedMinRuleMeshStandardVsCondensedSolve";
+    HDF5Exporter exporter(mesh,dir_name.str());
+    exporter.exportSolution(solution,varFactory,0);
+    exporter.exportSolution(condensedSolution,varFactory,1);
+#endif
+  }
+  
   return success;
 }
 

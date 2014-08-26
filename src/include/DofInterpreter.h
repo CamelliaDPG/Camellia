@@ -40,6 +40,9 @@ public:
     }
   }
   
+  virtual void interpretLocalBasisCoefficients(GlobalIndexType cellID, int varID, int sideOrdinal, const FieldContainer<double> &basisCoefficients,
+                                               FieldContainer<double> &globalCoefficients, FieldContainer<GlobalIndexType> &globalDofIndices) = 0;
+  
   virtual void interpretGlobalCoefficients(GlobalIndexType cellID, FieldContainer<double> &localDofs, const Epetra_MultiVector &globalDofs) = 0;
   
   virtual set<GlobalIndexType> globalDofIndicesForCell(GlobalIndexType cellID) = 0;

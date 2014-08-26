@@ -103,8 +103,8 @@ void BF::stiffnessMatrix(FieldContainer<double> &stiffness, Teuchos::RCP<Element
     BilinearTerm bt = *btIt;
     LinearTermPtr trialTerm = btIt->first;
     LinearTermPtr testTerm = btIt->second;
-    trialTerm->integrate(stiffness, elemType->trialOrderPtr,
-                         testTerm,  elemType->testOrderPtr, basisCache);
+      trialTerm->integrate(stiffness, elemType->trialOrderPtr,
+                           testTerm,  elemType->testOrderPtr, basisCache);
   }
   if (checkForZeroCols){
     bool checkRows = false; // zero rows just mean a test basis function won't get used, which is fine

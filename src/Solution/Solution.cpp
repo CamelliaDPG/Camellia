@@ -311,7 +311,7 @@ void Solution::populateStiffnessAndLoad() {
   Epetra_SerialComm Comm;
 #endif
   
-  set<GlobalIndexType> myGlobalIndicesSet = _mesh->globalDofIndicesForPartition(rank);
+  set<GlobalIndexType> myGlobalIndicesSet = _dofInterpreter->globalDofIndicesForPartition(rank);
   Epetra_Map partMap = getPartitionMap();
   
   vector< ElementTypePtr > elementTypes = _mesh->elementTypes(rank);
@@ -730,7 +730,7 @@ void Solution::solveWithPrepopulatedStiffnessAndLoad(Teuchos::RCP<Solver> solver
   Epetra_SerialComm Comm;
 #endif
   
-  set<GlobalIndexType> myGlobalIndicesSet = _mesh->globalDofIndicesForPartition(rank);
+  set<GlobalIndexType> myGlobalIndicesSet = _dofInterpreter->globalDofIndicesForPartition(rank);
 //  cout << "rank " << rank << " has " << myGlobalIndicesSet.size() << " locally-owned dof indices.\n";
   Epetra_Map partMap = getPartitionMap();
   
@@ -860,7 +860,7 @@ void Solution::importSolution() {
   set<GlobalIndexType> myCellIDs = _mesh->globalDofAssignment()->cellsInPartition(-1);
   for (set<GlobalIndexType>::iterator cellIDIt = myCellIDs.begin(); cellIDIt != myCellIDs.end(); cellIDIt++) {
     GlobalIndexType cellID = *cellIDIt;
-    set<GlobalIndexType> globalDofsForCell = _mesh->globalDofIndicesForCell(cellID);
+    set<GlobalIndexType> globalDofsForCell = _dofInterpreter->globalDofIndicesForCell(cellID);
     globalDofIndicesForMyCells.insert(globalDofsForCell.begin(),globalDofsForCell.end());
   }
 
@@ -964,7 +964,7 @@ void Solution::imposeBCs() {
   FieldContainer<GlobalIndexType> bcGlobalIndices;
   FieldContainer<double> bcGlobalValues;
   
-  set<GlobalIndexType> myGlobalIndicesSet = _mesh->globalDofIndicesForPartition(rank);
+  set<GlobalIndexType> myGlobalIndicesSet = _dofInterpreter->globalDofIndicesForPartition(rank);
   //  cout << "rank " << rank << " has " << myGlobalIndicesSet.size() << " locally-owned dof indices.\n";
   Epetra_Map partMap = getPartitionMap();
 
@@ -2617,23 +2617,28 @@ void Solution::newCondensedSolve(Teuchos::RCP<Solver> globalSolver, bool reduceM
   // when reduceMemoryFootprint is true, local stiffness matrices will be computed twice, rather than stored for reuse
   vector<int> trialIDs = _mesh->bilinearForm()->trialIDs();
   
-  set< int > zeroMeanConstraints;
+  set< int > fieldsToExclude;
   for (vector< int >::iterator trialIt = trialIDs.begin(); trialIt != trialIDs.end(); trialIt++) {
     int trialID = *trialIt;
-    if (_bc->imposeZeroMeanConstraint(trialID)) {
-      zeroMeanConstraints.insert(trialID);
+    if (_bc->imposeZeroMeanConstraint(trialID) || _bc->singlePointBC(trialID) ) {
+      fieldsToExclude.insert(trialID);
     }
   }
   
-  CondensedDofInterpreter dofInterpreter(_mesh.get(), _lagrangeConstraints.get(), zeroMeanConstraints, reduceMemoryFootprint);
+  // override reduceMemoryFootprint for now (since CondensedDofInterpreter doesn't yet support a true value)
+  reduceMemoryFootprint = false;
+  
+  CondensedDofInterpreter dofInterpreter(_mesh.get(), _lagrangeConstraints.get(), fieldsToExclude, !reduceMemoryFootprint);
   
   DofInterpreter* oldDofInterpreter = _dofInterpreter;
   
   _dofInterpreter = &dofInterpreter;
+  _mesh->boundary().setDofInterpreter(_dofInterpreter);
   
   solve(globalSolver);
   
   _dofInterpreter = oldDofInterpreter;
+  _mesh->boundary().setDofInterpreter(_dofInterpreter);
 }
 
 // Jesse's additions below:
@@ -2756,7 +2761,7 @@ void Solution::condensedSolve(Teuchos::RCP<Solver> globalSolver, bool reduceMemo
   }
   
   // create partitioning - CAN BE MORE EFFICIENT if necessary
-  set<GlobalIndexType> myGlobalDofIndices = _mesh->globalDofIndicesForPartition(rank);
+  set<GlobalIndexType> myGlobalDofIndices = _dofInterpreter->globalDofIndicesForPartition(rank);
   set<GlobalIndexType> myGlobalFluxIndices;
   for (setIt=myGlobalDofIndices.begin();setIt!=myGlobalDofIndices.end();setIt++){
     int ind = (*setIt);
@@ -3019,7 +3024,7 @@ void Solution::condensedSolve(Teuchos::RCP<Solver> globalSolver, bool reduceMemo
   
   // define global dof vector to distribute
   GlobalIndexType numGlobalDofs = _mesh->numGlobalDofs();
-  set<GlobalIndexType> myGlobalIndicesSet = _mesh->globalDofIndicesForPartition(rank);
+  set<GlobalIndexType> myGlobalIndicesSet = _dofInterpreter->globalDofIndicesForPartition(rank);
   Epetra_Map partMap = getPartitionMap(rank, myGlobalIndicesSet,numGlobalDofs, 0,&Comm); // no zmc
   Epetra_FEVector lhs_all(partMap, true);
   

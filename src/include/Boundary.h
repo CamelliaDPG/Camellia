@@ -45,6 +45,8 @@
 
 #include "IndexType.h"
 
+#include "DofInterpreter.h"
+
 class Mesh;
 class BC;
 
@@ -58,8 +60,10 @@ class Boundary {
                                                                      // with the sideIndex of the boundary in the element
   map< ElementType*, vector< GlobalIndexType > > _boundaryCellIDs; // ordering matches the pairs in _boundaryElementsByType
   Mesh *_mesh;
+  DofInterpreter *_dofInterpreter;
 public:
   Boundary();
+  void setDofInterpreter(DofInterpreter* dofInterpreter);
   void setMesh(Mesh* mesh);
   bool boundaryElement( GlobalIndexType cellID );
   bool boundaryElement( GlobalIndexType cellID, int sideIndex );

@@ -18,6 +18,15 @@
 
 using namespace Intrepid;
 
+/**
+ Note on naming of variables:
+ Essentially, the notion is that the condensed dof interpreter sits on a layer above the GDA object (owned by the Mesh),
+ which sits atop individual elements.  When we use "interpreted" below we mean interpreted by the GDA.  When we say
+ "global" we mean the level above the condensed dof interpreter, the dofs that actually enter the global solve.
+ 
+ See Nate's dissertation, pp. 44-45 for a brief explanation of static condensation.
+ **/
+
 class CondensedDofInterpreter : public DofInterpreter {
   bool _storeLocalStiffnessMatrices;
   Mesh* _mesh; // for element type lookup, and for determination of which dofs are trace dofs
@@ -27,7 +36,6 @@ class CondensedDofInterpreter : public DofInterpreter {
   map<GlobalIndexType, FieldContainer<double> > _localLoadVectors;       // will be used by interpretGlobalData if _storeLocalStiffnessMatrices is true
   map<GlobalIndexType, FieldContainer<GlobalIndexType> > _localInterpretedDofIndices;       // will be used by interpretGlobalData if _storeLocalStiffnessMatrices is true
 
-  
   GlobalIndexType _myGlobalDofIndexOffset;
   IndexType _myGlobalDofIndexCount;
   
@@ -60,6 +68,9 @@ public:
   
   void interpretLocalData(GlobalIndexType cellID, const FieldContainer<double> &localStiffnessData, const FieldContainer<double> &localLoadData,
                           FieldContainer<double> &globalStiffnessData, FieldContainer<double> &globalLoadData, FieldContainer<GlobalIndexType> &globalDofIndices);
+  
+  void interpretLocalBasisCoefficients(GlobalIndexType cellID, int varID, int sideOrdinal, const FieldContainer<double> &basisCoefficients,
+                                       FieldContainer<double> &globalCoefficients, FieldContainer<GlobalIndexType> &globalDofIndices);
   
   void interpretGlobalCoefficients(GlobalIndexType cellID, FieldContainer<double> &localDofs, const Epetra_MultiVector &globalDofs);
 

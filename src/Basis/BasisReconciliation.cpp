@@ -372,8 +372,8 @@ SubBasisReconciliationWeights BasisReconciliation::computeConstrainedWeights(uns
   FieldContainer<double> lhsValues(1,weights.fineOrdinals.size(),weights.fineOrdinals.size());
   FieldContainer<double> rhsValues(1,weights.fineOrdinals.size(),weights.coarseOrdinals.size());
   
-  FunctionSpaceTools::integrate<double>(lhsValues,fineBasisValuesFiltered,fineBasisValuesFilteredWeighted,COMP_CPP);
-  FunctionSpaceTools::integrate<double>(rhsValues,fineBasisValuesFilteredWeighted,coarserBasisValuesFiltered,COMP_CPP);
+  FunctionSpaceTools::integrate<double>(lhsValues,fineBasisValuesFiltered,fineBasisValuesFilteredWeighted,COMP_BLAS);
+  FunctionSpaceTools::integrate<double>(rhsValues,fineBasisValuesFilteredWeighted,coarserBasisValuesFiltered,COMP_BLAS);
   
   lhsValues.resize(lhsValues.dimension(1),lhsValues.dimension(2));
   rhsValues.resize(rhsValues.dimension(1),rhsValues.dimension(2));
@@ -520,9 +520,17 @@ SubBasisReconciliationWeights BasisReconciliation::computeConstrainedWeights(uns
       CellPtr childCell = parentCell->children()[childOrdinal];
       IndexType fineSubcellEntityIndex = childCell->entityIndex(fineSubcellDimension, fineSubcellOrdinalInLeafCell);
       IndexType subcellParentEntityIndex = parentCell->entityIndex(subcellParent.first, subcellParent.second);
-      IndexType subcellParentChildEntityIndex = refTopology->getChildEntities(subcellParent.first, subcellParentEntityIndex)[subcellChildOrdinal];
-      unsigned subsubcellCount = refTopology->getSubEntityCount(subcellParent.first, subcellParentChildEntityIndex, fineSubcellDimension);
+
       unsigned fineSubcellOrdinalInParentChild = -1;
+      IndexType subcellParentChildEntityIndex;
+      if ((fineSubcellEntityIndex == subcellParentEntityIndex) && (fineSubcellDimension == subcellParent.first)) {
+        // i.e. the refinement on the subcell is the "no refinement" pattern.  There is probably a cleaner way of handling this case.
+        subcellParentChildEntityIndex = subcellParentEntityIndex;
+      } else {
+        subcellParentChildEntityIndex = refTopology->getChildEntities(subcellParent.first, subcellParentEntityIndex)[subcellChildOrdinal];
+      }
+
+      unsigned subsubcellCount = refTopology->getSubEntityCount(subcellParent.first, subcellParentChildEntityIndex, fineSubcellDimension);
       for (unsigned ssOrdinal = 0; ssOrdinal < subsubcellCount; ssOrdinal++) {
         if (refTopology->getSubEntityIndex(subcellParent.first, subcellParentChildEntityIndex, fineSubcellDimension, ssOrdinal) == fineSubcellEntityIndex) {
           fineSubcellOrdinalInParentChild = ssOrdinal;
@@ -754,8 +762,8 @@ SubBasisReconciliationWeights BasisReconciliation::computeConstrainedWeights(uns
   FieldContainer<double> lhsValues(1,weights.fineOrdinals.size(),weights.fineOrdinals.size());
   FieldContainer<double> rhsValues(1,weights.fineOrdinals.size(),weights.coarseOrdinals.size());
   
-  FunctionSpaceTools::integrate<double>(lhsValues,fineBasisValuesFiltered,fineBasisValuesFilteredWeighted,COMP_CPP);
-  FunctionSpaceTools::integrate<double>(rhsValues,fineBasisValuesFilteredWeighted,coarserBasisValuesFiltered,COMP_CPP);
+  FunctionSpaceTools::integrate<double>(lhsValues,fineBasisValuesFiltered,fineBasisValuesFilteredWeighted,COMP_BLAS);
+  FunctionSpaceTools::integrate<double>(rhsValues,fineBasisValuesFilteredWeighted,coarserBasisValuesFiltered,COMP_BLAS);
   
   lhsValues.resize(lhsValues.dimension(1),lhsValues.dimension(2));
   rhsValues.resize(rhsValues.dimension(1),rhsValues.dimension(2));
