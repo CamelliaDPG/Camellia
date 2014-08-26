@@ -11,7 +11,7 @@
 #include "LagrangeConstraints.h"
 #include "PreviousSolutionFunction.h"
 #include "CheckConservation.h"
-#include "SolutionExporter.h"
+#include "HDF5Exporter.h"
 
 #ifdef HAVE_MPI
 #include <Teuchos_GlobalMPISession.hpp>
@@ -264,12 +264,12 @@ int main(int argc, char *argv[]) {
   }
   
   ////////////////////   SPECIFY RHS   ///////////////////////
-  Teuchos::RCP<RHSEasy> rhs = Teuchos::rcp( new RHSEasy );
+  RHSPtr rhs = RHS::rhs();
   FunctionPtr f = Teuchos::rcp( new ConstantScalarFunction(0.0) );
   rhs->addTerm( f * v ); // obviously, with f = 0 adding this term is not necessary!
 
   ////////////////////   CREATE BCs   ///////////////////////
-  Teuchos::RCP<BCEasy> bc = Teuchos::rcp( new BCEasy );
+  BCPtr bc = BC::bc();
   SpatialFilterPtr lBoundary = Teuchos::rcp( new LeftBoundary );
   SpatialFilterPtr rBoundary = Teuchos::rcp( new RightBoundary );
   SpatialFilterPtr tbBoundary = Teuchos::rcp( new TopBottomBoundary );
@@ -319,7 +319,8 @@ int main(int argc, char *argv[]) {
   
   double energyThreshold = 0.3; // for mesh refinements
   RefinementStrategy refinementStrategy( solution, energyThreshold );
-  VTKExporter exporter(solution, mesh, varFactory);
+  // VTKExporter exporter(solution, mesh, varFactory);
+  HDF5Exporter exporter(mesh, "Erikkson");
 
   ofstream convOut;
   stringstream convOutFile;
@@ -337,8 +338,8 @@ int main(int argc, char *argv[]) {
     FunctionPtr u_sqr = u_diff*u_diff;
     FunctionPtr sigma_diff = (sigma_soln - sigma_exact);
     FunctionPtr sigma_sqr = sigma_diff*sigma_diff;
-    double L2_error_u = u_sqr->integrate(mesh, 1e-5);
-    double L2_error_sigma = sigma_sqr->integrate(mesh, 1e-5);
+    double L2_error_u = u_sqr->integrate(mesh, 4);
+    double L2_error_sigma = sigma_sqr->integrate(mesh, 4);
     double L2_error = sqrt(L2_error_u + L2_error_sigma);
     double energy_error = solution->energyErrorTotal();
 
@@ -347,15 +348,16 @@ int main(int argc, char *argv[]) {
       stringstream errfile;
       outfile << "erickson_" << refIndex;
       errfile << "erickson_error_" << refIndex;
-      exporter.exportSolution(outfile.str());
-      exporter.exportFunction(u_diff, errfile.str());
-      exporter.exportFunction(u_exact, "erickson_exact");
+      exporter.exportSolution(solution, varFactory, refIndex, 2, cellIDToSubdivision(mesh, 4));
+      // exporter.exportSolution(outfile.str());
+      // exporter.exportFunction(u_diff, errfile.str());
+      // exporter.exportFunction(u_exact, "erickson_exact");
       // solution->writeToVTK(outfile.str());
 
       // Check local conservation
       FunctionPtr flux = Teuchos::rcp( new PreviousSolutionFunction(solution, beta_n_u_minus_sigma_n) );
       FunctionPtr zero = Teuchos::rcp( new ConstantScalarFunction(0.0) );
-      Teuchos::Tuple<double, 3> fluxImbalances = checkConservation(flux, zero, varFactory, mesh, 0);
+      Teuchos::Tuple<double, 3> fluxImbalances = checkConservation(flux, zero, mesh, 0);
       cout << "Mass flux: Largest Local = " << fluxImbalances[0] 
         << ", Global = " << fluxImbalances[1] << ", Sum Abs = " << fluxImbalances[2] << endl;
 
