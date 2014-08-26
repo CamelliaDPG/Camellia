@@ -20,53 +20,72 @@ bool GDAMinimumRuleConstraints::constraintEntryExists(AnnotatedEntity &subcellIn
   }
 }
 
-void GDAMinimumRuleConstraints::computeConstraintWeights(map<AnnotatedEntity, SubBasisReconciliationWeights> & constraintWeights,
-                                                         GDAMinimumRule *minRule, ConstraintEntryPtr prevEntry, ConstraintEntryPtr thisEntry, VarPtr var) {
-  AnnotatedEntity prevSubcellInfo = prevEntry->subcellInfo();
+void GDAMinimumRuleConstraints::computeConstraintWeightsRecursive(map<AnnotatedEntity, SubBasisReconciliationWeights> & constraintWeights,
+                                                                  GDAMinimumRule *minRule, ConstraintEntryPtr entry, VarPtr var) {
+  vector< ConstraintEntryPtr > priorEntries = entry->getPriorEntries();
   
-  vector< ConstraintEntryPtr > priorEntries = prevEntry->getPriorEntries();
+  AnnotatedEntity thisSubcellInfo = entry->subcellInfo();
   
-  // rule: we only fill in constraintWeights for thisEntry after we have determined all prevEntry's prior entry weights (i.e. we have entirely determined prevEntry's representation in terms of the local basis)
-  for (int i=0; i<priorEntries.size(); i++) {
-    ConstraintEntryPtr priorEntry = priorEntries[i];
-    if (constraintWeights.find(priorEntry->subcellInfo()) == constraintWeights.end()) {
-      computeConstraintWeights(constraintWeights, minRule, priorEntry, prevEntry, var);
+  if (constraintWeights.find(thisSubcellInfo) == constraintWeights.end()) {
+    SubBasisReconciliationWeights summedWeights;
+
+    for (int i=0; i<priorEntries.size(); i++) {
+      if (constraintWeights.find(priorEntries[i]->subcellInfo()) == constraintWeights.end()) {
+        // then there is another path to this node in the graph, which we haven't yet traversed.
+        // therefore, we should bail now..
+        return;
+      }
     }
+    
+    for (int i=0; i<priorEntries.size(); i++) {
+      ConstraintEntryPtr priorEntry = priorEntries[i];
+      AnnotatedEntity priorSubcellInfo = priorEntry->subcellInfo();
+      SubBasisReconciliationWeights priorWeights = constraintWeights[priorSubcellInfo];
+
+      // determine whether the edge on the directed acyclic graph is red or black
+      // red:   target constrains source
+      // black: target is a subcell of source
+      ConstraintEntryPtr priorEntryConstrainingEntity = priorEntry->getConstrainingEntry();
+      bool redEdge = (priorEntryConstrainingEntity.get() != NULL) && (priorEntryConstrainingEntity->subcellInfo() == thisSubcellInfo);
+      
+      DofOrderingPtr priorTrialOrdering = minRule->elementType(priorSubcellInfo.cellID)->trialOrderPtr;
+      BasisPtr prevBasis = priorTrialOrdering->getBasis(var->ID(), priorSubcellInfo.sideOrdinal);
+
+      SubBasisReconciliationWeights composedWeights;
+      if (!redEdge) {
+        // then the edge just filters the prior weights corresponding to the subcell
+        // thisSubcellInfo.subcellOrdinal refers to the ordinal in the *domain*, whether that be the side or the cell:
+        composedWeights = BasisReconciliation::weightsForCoarseSubcell(priorWeights, prevBasis, thisSubcellInfo.dimension, thisSubcellInfo.subcellOrdinal, true);
+        cout << "computeConstraintWeightsRecursive: black (subcell) edge encountered from " <<  priorSubcellInfo << " to " << thisSubcellInfo << endl;
+      } else {
+        cout << "computeConstraintWeightsRecursive: red (constraining) edge encountered from " <<  priorSubcellInfo << " to " << thisSubcellInfo << endl;
+        
+        DofOrderingPtr constrainingTrialOrdering = minRule->elementType(thisSubcellInfo.cellID)->trialOrderPtr;
+        BasisPtr constrainingBasis = constrainingTrialOrdering->getBasis(var->ID(), thisSubcellInfo.sideOrdinal);
+        RefinementBranch volumeRefinements = priorEntry->volumeRefinements();
+        unsigned composedPermutation = priorEntry->composedPermutation();
+        
+        // TODO: work out what to do here for volume basis--in particular, what happens to the sideOrdinal arguments??  It seems like these should not apply... (they should be redundant with subcell ordinal)  It may well be that what we should do is ensure that the sideOrdinal arguments are -1, and then BR should understand that as a flag indicating that volumeRefinements really does apply to the ancestral domain, etc.
+        SubBasisReconciliationWeights newWeights = BasisReconciliation::computeConstrainedWeights(priorSubcellInfo.dimension, prevBasis, priorSubcellInfo.subcellOrdinal,
+                                                                                                  volumeRefinements, priorSubcellInfo.sideOrdinal,
+                                                                                                  thisSubcellInfo.dimension,
+                                                                                                  constrainingBasis, thisSubcellInfo.subcellOrdinal,
+                                                                                                  priorEntry->ancestralSideOrdinal(), composedPermutation);
+        composedWeights = BasisReconciliation::composedSubBasisReconciliationWeights(priorWeights, newWeights);
+      }
+      summedWeights = BasisReconciliation::sumWeights(summedWeights,composedWeights);
+    }
+    
+    summedWeights = BasisReconciliation::filterOutZeroRowsAndColumns(summedWeights);
+    
+    constraintWeights[thisSubcellInfo] = summedWeights;
+    cout << "Set constraint weights for " << thisSubcellInfo << endl;
   }
   
-  SubBasisReconciliationWeights prevWeights = constraintWeights[prevSubcellInfo];
-  
-  DofOrderingPtr prevTrialOrdering = minRule->elementType(prevSubcellInfo.cellID)->trialOrderPtr;
-  BasisPtr prevBasis = prevTrialOrdering->getBasis(var->ID(), prevSubcellInfo.sideOrdinal);
-  
-  AnnotatedEntity constrainingSubcellInfo = thisEntry->subcellInfo();
-  
-  SubBasisReconciliationWeights composedWeights;
-  
-  if (prevEntry->isUnconstrained()) { // then the "constraint" is actually a subcell of the prev. entity
-    // apply the prevWeights to the subcell in thisEntry
-    composedWeights = BasisReconciliation::weightsForCoarseSubcell(prevWeights, prevBasis, thisEntry->entityDim(), thisEntry->subcellOrdinalInSide(), true);
-  } else {
-    DofOrderingPtr constrainingTrialOrdering = minRule->elementType(constrainingSubcellInfo.cellID)->trialOrderPtr;
-    BasisPtr constrainingBasis = constrainingTrialOrdering->getBasis(var->ID(), constrainingSubcellInfo.sideOrdinal);
-    
-    RefinementBranch volumeRefinements = prevEntry->volumeRefinements();
-    unsigned composedPermutation = prevEntry->composedPermutation();
-    // TODO: work out what to do here for volume basis--in particular, what happens to the sideOrdinal arguments??  It seems like these should not apply... (they should be redundant with subcell ordinal)  It may well be that what we should do is ensure that the sideOrdinal arguments are -1, and then BR should understand that as a flag indicating that volumeRefinements really does apply to the ancestral domain, etc.
-    SubBasisReconciliationWeights newWeights = BasisReconciliation::computeConstrainedWeights(prevSubcellInfo.dimension, prevBasis, prevSubcellInfo.subcellOrdinal,
-                                                                                              volumeRefinements, prevSubcellInfo.sideOrdinal,
-                                                                                              constrainingSubcellInfo.dimension,
-                                                                                              constrainingBasis, constrainingSubcellInfo.subcellOrdinal,
-                                                                                              prevEntry->ancestralSideOrdinal(), composedPermutation);
-    
-    composedWeights = BasisReconciliation::composedSubBasisReconciliationWeights(prevWeights, newWeights);
-  }
-  if (constraintWeights.find(constrainingSubcellInfo) == constraintWeights.end()) {
-    constraintWeights[constrainingSubcellInfo] = composedWeights;
-  } else {
-    SubBasisReconciliationWeights existingWeights = constraintWeights[constrainingSubcellInfo];
-    SubBasisReconciliationWeights summedWeights = BasisReconciliation::sumWeights(existingWeights,composedWeights);
-    constraintWeights[constrainingSubcellInfo] = summedWeights;
+  // follow all the out edges:
+  vector< ConstraintEntryPtr > nextEntries = entry->nextEntries();
+  for (vector< ConstraintEntryPtr >::iterator entryIt = nextEntries.begin(); entryIt != nextEntries.end(); entryIt++) {
+    computeConstraintWeightsRecursive(constraintWeights, minRule, *entryIt, var);
   }
 }
 
@@ -92,14 +111,18 @@ void GDAMinimumRuleConstraints::computeConstraintWeights(map<AnnotatedEntity, Su
   
   constraintWeights[rootInfo] = unitWeights;
   
-  computeConstraintWeights(constraintWeights, minRule, rootEntry, rootEntry, var);
+  computeConstraintWeightsRecursive(constraintWeights, minRule, rootEntry, var);
 }
 
 ConstraintEntryPtr GDAMinimumRuleConstraints::getConstraintEntry(AnnotatedEntity &subcellInfo) {
+  if (_constraintEntries.find(subcellInfo) == _constraintEntries.end()) {
+    cout << "WARNING: constraint entry for " << subcellInfo << " not found.\n";
+  }
   return _constraintEntries[subcellInfo];
 }
 
 void GDAMinimumRuleConstraints::setConstraintEntry(AnnotatedEntity &subcellInfo, ConstraintEntryPtr entry) {
+  cout << "Set constraint entry for " << subcellInfo << endl;
   _constraintEntries[subcellInfo] = entry;
 }
 
@@ -142,70 +165,87 @@ GDAMinimumRuleConstraintEntry::GDAMinimumRuleConstraintEntry(GDAMinimumRuleConst
     thisInfo.subcellOrdinal = _subcellOrdinalInSide;
   }
   
-  ConstraintEntryPtr thisPtr = definedConstraints.getConstraintEntry(thisInfo);
+  ConstraintEntryPtr thisPtr;
+  if (definedConstraints.constraintEntryExists(thisInfo)) {
+    thisPtr = definedConstraints.getConstraintEntry(thisInfo);
+  } else {
+    thisPtr = Teuchos::rcp( this, false );
+  }
   
-  // define "edges" going to subcells of dimension one less
-  int subsubcellDim = subcellDim - 1;
-  if (subsubcellDim >= 0) {
-    shards::CellTopology domainTopo;
-    if (sideOrdinal==-1) {
-      domainTopo = *_cell->topology();
-    } else {
-      domainTopo = _cell->topology()->getCellTopologyData(sideDim, sideOrdinal);
-    }
-    
-    shards::CellTopology subcellTopo = domainTopo.getCellTopologyData(subcellDim, _subcellOrdinalInSide);
-    int subsubcellCount = subcellTopo.getSubcellCount(subsubcellDim);
-    for (int ssord = 0; ssord<subsubcellCount; ssord++) { // ssord in *subcell*
-      int ssordInDomain = CamelliaCellTools::subcellOrdinalMap(domainTopo, _entityDim, thisInfo.subcellOrdinal,
-                                                               subsubcellDim, ssord);
-      AnnotatedEntity subsubcellInfo;
-      subsubcellInfo.dimension = subsubcellDim;
-      subsubcellInfo.sideOrdinal = sideOrdinal;
-      subsubcellInfo.cellID = cell->cellIndex();
-      subsubcellInfo.subcellOrdinal = ssordInDomain;
-      
-      ConstraintEntryPtr subsubcellEntry;
-      if (definedConstraints.constraintEntryExists(subsubcellInfo)) {
-        subsubcellEntry = definedConstraints.getConstraintEntry(subsubcellInfo);
+  if (thisInfo == constrainingSubcellInfo) { // unconstrained / self-constrained
+    // define black edges: these go to subcells of dimension one less
+    int subsubcellDim = subcellDim - 1;
+    if (subsubcellDim >= 0) {
+      shards::CellTopology domainTopo;
+      if (sideOrdinal==-1) {
+        domainTopo = *_cell->topology();
       } else {
-        subsubcellEntry = Teuchos::rcp( new GDAMinimumRuleConstraintEntry(definedConstraints, minRule, cell, sideOrdinal, subsubcellDim, ssordInDomain) ) ;
-        definedConstraints.setConstraintEntry(subsubcellInfo, subsubcellEntry);
+        domainTopo = _cell->topology()->getCellTopologyData(sideDim, sideOrdinal);
       }
       
-      subsubcellEntry->addPriorEntry(thisPtr);
-      
-      _subcellEntries.push_back( subsubcellEntry );
+      shards::CellTopology subcellTopo = domainTopo.getCellTopologyData(subcellDim, _subcellOrdinalInSide);
+      int subsubcellCount = subcellTopo.getSubcellCount(subsubcellDim);
+      for (int ssord = 0; ssord<subsubcellCount; ssord++) { // ssord in *subcell*
+        int ssordInDomain = CamelliaCellTools::subcellOrdinalMap(domainTopo, _entityDim, thisInfo.subcellOrdinal,
+                                                                 subsubcellDim, ssord);
+        AnnotatedEntity subsubcellInfo;
+        subsubcellInfo.dimension = subsubcellDim;
+        subsubcellInfo.sideOrdinal = sideOrdinal;
+        subsubcellInfo.cellID = cell->cellIndex();
+        subsubcellInfo.subcellOrdinal = ssordInDomain;
+        
+        ConstraintEntryPtr subsubcellEntry;
+        if (definedConstraints.constraintEntryExists(subsubcellInfo)) {
+          subsubcellEntry = definedConstraints.getConstraintEntry(subsubcellInfo);
+        } else {
+          subsubcellEntry = Teuchos::rcp( new GDAMinimumRuleConstraintEntry(definedConstraints, minRule, cell, sideOrdinal, subsubcellDim, ssordInDomain) ) ;
+          definedConstraints.setConstraintEntry(subsubcellInfo, subsubcellEntry);
+        }
+        
+        subsubcellEntry->addPriorEntry(thisPtr);
+        
+        cout << "Adding black (subcell) edge from " << thisInfo << " to " << subsubcellInfo << endl;
+        
+        _subcellEntries.push_back( subsubcellEntry );
+      }
     }
-  }
-  if (thisInfo != constrainingSubcellInfo) { // not self-constrained
+  } else { // constrained by a distinct node in the graph (draw red edges)
+    CellPtr constrainingCell = cell->meshTopology()->getCell(constrainingSubcellInfo.cellID);
     if (definedConstraints.constraintEntryExists(constrainingSubcellInfo)) {
       _constrainingEntity = definedConstraints.getConstraintEntry(constrainingSubcellInfo);
     } else {
       // the constraining subcell is distinct: edge goes to the constraining subcell
-      CellPtr constrainingCell = cell->meshTopology()->getCell(constrainingSubcellInfo.cellID);
       _constrainingEntity = Teuchos::rcp( new GDAMinimumRuleConstraintEntry(definedConstraints, minRule, constrainingCell, constrainingSubcellInfo.sideOrdinal,
                                                                             constrainingSubcellInfo.dimension, constrainingSubcellInfo.subcellOrdinal) );
       definedConstraints.setConstraintEntry(constrainingSubcellInfo, _constrainingEntity);
-      
-      _ancestralCell = cell->ancestralCellForSubcell(_entityDim, _subcellOrdinalInCell);
-      _volumeRefinements = cell->refinementBranchForSubcell(_entityDim, _subcellOrdinalInCell);
-      pair<unsigned, unsigned> ancestralSubcell = cell->ancestralSubcellOrdinalAndDimension(_entityDim, _subcellOrdinalInCell);
-      _ancestralSubcellOrdinal = ancestralSubcell.first;
-      _ancestralSubcellDimension = ancestralSubcell.second;
-      
-      determineAncestralSideOrdinal(constrainingSubcellInfo);
-      
-      unsigned ancestralSubcellOrdinalInSide = CamelliaCellTools::subcellReverseOrdinalMap(*_ancestralCell->topology(), sideDim, _ancestralSideOrdinal, constrainingSubcellInfo.dimension, _ancestralSubcellOrdinal);
-      
-      unsigned ancestralPermutation = _ancestralCell->sideSubcellPermutation(_ancestralSideOrdinal, _ancestralSubcellDimension, ancestralSubcellOrdinalInSide); // subcell permutation as seen from the perspective of the fine cell's side's ancestor
-      unsigned constrainingPermutation = constrainingCell->sideSubcellPermutation(constrainingSubcellInfo.sideOrdinal, constrainingSubcellInfo.dimension,
-                                                                                  constrainingSubcellInfo.subcellOrdinal); // subcell permutation as seen from the perspective of the domain on the constraining cell
-      
-      shards::CellTopology constrainingTopo = constrainingCell->topology()->getCellTopologyData(constrainingSubcellInfo.dimension, _constrainingEntity->subcellOrdinalInCell());
-      unsigned constrainingPermutationInverse = CamelliaCellTools::permutationInverse(constrainingTopo, constrainingPermutation);
-      _composedPermutation = CamelliaCellTools::permutationComposition(constrainingTopo, constrainingPermutationInverse, ancestralPermutation);
     }
+    
+    _ancestralCell = cell->ancestralCellForSubcell(_entityDim, _subcellOrdinalInCell);
+    _volumeRefinements = cell->refinementBranchForSubcell(_entityDim, _subcellOrdinalInCell);
+    if (_volumeRefinements.size()==0) {
+      // a trick to sneak in the cell topology information that BasisReconciliation will require:
+      RefinementPatternPtr noRefinement = RefinementPattern::noRefinementPattern(cell->topology());
+      _volumeRefinements.push_back(make_pair(noRefinement.get(), 0));
+    }
+    
+    pair<unsigned, unsigned> ancestralSubcell = cell->ancestralSubcellOrdinalAndDimension(_entityDim, _subcellOrdinalInCell);
+    _ancestralSubcellOrdinal = ancestralSubcell.first;
+    _ancestralSubcellDimension = ancestralSubcell.second;
+    
+    determineAncestralSideOrdinal(constrainingSubcellInfo);
+    
+    unsigned ancestralSubcellOrdinalInSide = CamelliaCellTools::subcellReverseOrdinalMap(*_ancestralCell->topology(), sideDim, _ancestralSideOrdinal, constrainingSubcellInfo.dimension, _ancestralSubcellOrdinal);
+    
+    unsigned ancestralPermutation = _ancestralCell->sideSubcellPermutation(_ancestralSideOrdinal, _ancestralSubcellDimension, ancestralSubcellOrdinalInSide); // subcell permutation as seen from the perspective of the fine cell's side's ancestor
+    unsigned constrainingPermutation = constrainingCell->sideSubcellPermutation(constrainingSubcellInfo.sideOrdinal, constrainingSubcellInfo.dimension,
+                                                                                constrainingSubcellInfo.subcellOrdinal); // subcell permutation as seen from the perspective of the domain on the constraining cell
+    
+    shards::CellTopology constrainingTopo = constrainingCell->topology()->getCellTopologyData(constrainingSubcellInfo.dimension, _constrainingEntity->subcellOrdinalInCell());
+    unsigned constrainingPermutationInverse = CamelliaCellTools::permutationInverse(constrainingTopo, constrainingPermutation);
+    _composedPermutation = CamelliaCellTools::permutationComposition(constrainingTopo, constrainingPermutationInverse, ancestralPermutation);
+    
+    cout << "Adding red (constraining) edge from " << thisInfo << " to " << constrainingSubcellInfo << endl;
+    
     _constrainingEntity->addPriorEntry(thisPtr);
   }
 }
@@ -298,6 +338,10 @@ GlobalIndexType GDAMinimumRuleConstraintEntry::entityIndex() {
   return _entityIndex;
 }
 
+ConstraintEntryPtr GDAMinimumRuleConstraintEntry::getConstrainingEntry() {
+  return _constrainingEntity;
+}
+
 vector< ConstraintEntryPtr > GDAMinimumRuleConstraintEntry::getPriorEntries() {
   vector< ConstraintEntryPtr > entries;
   for (map<AnnotatedEntity, ConstraintEntryPtr>::iterator mapIt = _priorEntries.begin(); mapIt != _priorEntries.end(); mapIt++) {
@@ -345,4 +389,16 @@ int GDAMinimumRuleConstraintEntry::subcellOrdinalInSide() {
 
 RefinementBranch GDAMinimumRuleConstraintEntry::volumeRefinements() {
   return _volumeRefinements;
+}
+
+std::ostream& operator << (std::ostream& os, AnnotatedEntity& annotatedEntity) {
+  os << "cell " << annotatedEntity.cellID;
+  if (annotatedEntity.sideOrdinal != -1) {
+    os << "'s side " << annotatedEntity.sideOrdinal;
+  }
+  
+  os << "'s " << CamelliaCellTools::entityTypeString(annotatedEntity.dimension);
+  os << " " << annotatedEntity.subcellOrdinal;
+  
+  return os;
 }

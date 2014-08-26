@@ -36,7 +36,7 @@ class GDAMinimumRule : public GlobalDofAssignment {
   map<GlobalIndexType, GlobalIndexType> _globalCellDofOffsets; // (cellID -> first global dof index for that cell)
   GlobalIndexType _partitionDofOffset; // add to partition-local dof indices to get a global dof index
   GlobalIndexType _partitionDofCount; // how many dofs belong to the local partition
-  FieldContainer<IndexType> _partitionDofCounts; // how many dofs belong to all MPI ranks.
+  FieldContainer<IndexType> _partitionDofCounts; // how many dofs belong to each MPI rank.
   GlobalIndexType _globalDofCount;
   
   set<IndexType> _partitionFluxIndexOffsets;
@@ -60,9 +60,9 @@ class GDAMinimumRule : public GlobalDofAssignment {
   
   typedef vector< SubBasisDofMapperPtr > BasisMap;
   BasisMap getBasisMap(GlobalIndexType cellID, SubCellDofIndexInfo& dofOwnershipInfo, VarPtr var);
-  BasisMap getBasisMap(GlobalIndexType cellID, SubCellDofIndexInfo& dofOwnershipInfo, VarPtr var, int sideOrdinal);
+  BasisMap getBasisMapOld(GlobalIndexType cellID, SubCellDofIndexInfo& dofOwnershipInfo, VarPtr var, int sideOrdinal);
 
-  BasisMap getBasisMapNew(GlobalIndexType cellID, SubCellDofIndexInfo& dofOwnershipInfo, VarPtr var, int sideOrdinal);
+  BasisMap getBasisMap(GlobalIndexType cellID, SubCellDofIndexInfo& dofOwnershipInfo, VarPtr var, int sideOrdinal);
   
   LocalDofMapperPtr getDofMapper(GlobalIndexType cellID, CellConstraints &constraints, int varIDToMap = -1, int sideOrdinalToMap = -1);
   

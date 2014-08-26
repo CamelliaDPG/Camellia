@@ -220,17 +220,28 @@ set<GlobalIndexType> GDAMinimumRule::globalDofIndicesForCell(GlobalIndexType cel
 }
 
 set<GlobalIndexType> GDAMinimumRule::globalDofIndicesForPartition(PartitionIndexType partitionNumber) {
-  // Added this exception because I suspect that in our usage, partitionNumber is always -1 and therefore we can/should
-  // dispense with the argument...
   int rank = Teuchos::GlobalMPISession::getRank();
   
   if (partitionNumber==-1) partitionNumber = rank;
-  
-  TEUCHOS_TEST_FOR_EXCEPTION(partitionNumber != rank, std::invalid_argument, "partitionNumber must be -1 or the current MPI rank");
+
+  // Added this exception because I suspected that in our usage, partitionNumber is always -1 and therefore we can/should
+  // dispense with the argument...  (The recently added case which violates this is in CondensedDofInterpreter)
+//  TEUCHOS_TEST_FOR_EXCEPTION(partitionNumber != rank, std::invalid_argument, "partitionNumber must be -1 or the current MPI rank");
   set<GlobalIndexType> globalDofIndices;
-  // by construction, our globalDofIndices are contiguously numbered, starting with _partitionDofOffset
-  for (GlobalIndexType i=0; i<_partitionDofCount; i++) {
-    globalDofIndices.insert(_partitionDofOffset + i);
+  if (partitionNumber == rank) {
+    // by construction, our globalDofIndices are contiguously numbered, starting with _partitionDofOffset
+    for (GlobalIndexType i=0; i<_partitionDofCount; i++) {
+      globalDofIndices.insert(_partitionDofOffset + i);
+    }
+  } else {
+    GlobalIndexType partitionDofOffset = 0;
+    for (int i=0; i<partitionNumber; i++) {
+      partitionDofOffset += _partitionDofCounts[i];
+    }
+    IndexType partitionDofCount = _partitionDofCounts[partitionNumber];
+    for (IndexType i=0; i<partitionDofCount; i++) {
+      globalDofIndices.insert(partitionDofOffset + i);
+    }
   }
   
   return globalDofIndices;
@@ -565,7 +576,7 @@ BasisMap GDAMinimumRule::getBasisMap(GlobalIndexType cellID, SubCellDofIndexInfo
 }
 
 // trace variable version
-BasisMap GDAMinimumRule::getBasisMapNew(GlobalIndexType cellID, SubCellDofIndexInfo& dofIndexInfo, VarPtr var, int sideOrdinal) {
+BasisMap GDAMinimumRule::getBasisMap(GlobalIndexType cellID, SubCellDofIndexInfo& dofIndexInfo, VarPtr var, int sideOrdinal) {
   
   vector<SubBasisMapInfo> subBasisMaps;
   
@@ -596,7 +607,7 @@ BasisMap GDAMinimumRule::getBasisMapNew(GlobalIndexType cellID, SubCellDofIndexI
   GDAMinimumRuleConstraints definedConstraints;
   
   // construct the DAG, root (source) entry:
-  ConstraintEntryPtr rootEntry = Teuchos::rcp( new GDAMinimumRuleConstraintEntry(definedConstraints, this, cell, sideOrdinal, sideDim, 0) );
+  ConstraintEntryPtr rootEntry = Teuchos::rcp( new GDAMinimumRuleConstraintEntry(definedConstraints, this, cell, sideOrdinal, sideDim, 0) ); // 0: subcellOrdinalInSide
   
   map<AnnotatedEntity, SubBasisReconciliationWeights> constraintWeights; // weights for the specified subcell discretization for varID on cellID, sideOrdinal
 
@@ -804,7 +815,7 @@ BasisMap GDAMinimumRule::getBasisMapNew(GlobalIndexType cellID, SubCellDofIndexI
 }
 
 // trace variable version
-BasisMap GDAMinimumRule::getBasisMap(GlobalIndexType cellID, SubCellDofIndexInfo& dofIndexInfo, VarPtr var, int sideOrdinal) {
+BasisMap GDAMinimumRule::getBasisMapOld(GlobalIndexType cellID, SubCellDofIndexInfo& dofIndexInfo, VarPtr var, int sideOrdinal) {
   vector<SubBasisMapInfo> subBasisMaps;
   
   SubBasisMapInfo subBasisMap;
@@ -1807,7 +1818,7 @@ LocalDofMapperPtr GDAMinimumRule::getDofMapper(GlobalIndexType cellID, CellConst
     } else {
       for (int sideOrdinal=0; sideOrdinal < sideCount; sideOrdinal++) {
         if ((sideOrdinalToMap != -1) && (sideOrdinal != sideOrdinalToMap)) continue; // skip this side...
-        sideMaps[sideOrdinal][var->ID()] = getBasisMap(cellID, dofIndexInfo, var, sideOrdinal);
+        sideMaps[sideOrdinal][var->ID()] = getBasisMapOld(cellID, dofIndexInfo, var, sideOrdinal);
       }
     }
   }

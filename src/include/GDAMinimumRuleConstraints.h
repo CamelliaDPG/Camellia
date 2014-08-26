@@ -28,7 +28,19 @@ struct AnnotatedEntity {
   unsigned dimension; // subcells can be constrained by subcells of higher dimension (i.e. this is not redundant!)
   
   bool operator < (const AnnotatedEntity & other) const {
-    return (cellID < other.cellID) || (sideOrdinal < other.sideOrdinal) || (subcellOrdinal < other.subcellOrdinal) || (dimension < other.dimension);
+    if (cellID < other.cellID) return true;
+    if (cellID > other.cellID) return false;
+    
+    if (sideOrdinal < other.sideOrdinal) return true;
+    if (sideOrdinal > other.sideOrdinal) return false;
+    
+    if (subcellOrdinal < other.subcellOrdinal) return true;
+    if (subcellOrdinal > other.subcellOrdinal) return false;
+    
+    if (dimension < other.dimension) return true;
+    if (dimension > other.dimension) return false;
+    
+    return false; // this is the case of equality.
   }
   
   bool operator == (const AnnotatedEntity & other) const {
@@ -40,12 +52,14 @@ struct AnnotatedEntity {
   }
 };
 
+std::ostream& operator << (std::ostream& os, AnnotatedEntity& annotatedEntity);
+
 class GDAMinimumRuleConstraints {
   map< AnnotatedEntity, ConstraintEntryPtr> _constraintEntries; // flat lookup to ensure uniqueness
   
   // recursive, ensures all prior entries processed before applying constraint to thisEntry:
-  static void computeConstraintWeights(map<AnnotatedEntity, SubBasisReconciliationWeights> & constraintWeights,
-                                       GDAMinimumRule* minRule, ConstraintEntryPtr previousEntry, ConstraintEntryPtr thisEntry, VarPtr var );
+  static void computeConstraintWeightsRecursive(map<AnnotatedEntity, SubBasisReconciliationWeights> & constraintWeights,
+                                                GDAMinimumRule* minRule, ConstraintEntryPtr entry, VarPtr var );
   
 public:
   bool constraintEntryExists( AnnotatedEntity &subcellInfo );
@@ -100,6 +114,7 @@ public:
   int entityDim();
   GlobalIndexType entityIndex();
   
+  ConstraintEntryPtr getConstrainingEntry();
   vector< ConstraintEntryPtr > getPriorEntries();
   
   bool isUnconstrained();
