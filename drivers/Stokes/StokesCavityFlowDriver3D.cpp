@@ -164,7 +164,7 @@ int main(int argc, char *argv[]) {
     u2hat = varFactory.traceVar("\\widehat{u}_2", u2);
     u3hat = varFactory.traceVar("\\widehat{u}_3", u3);
   } else {
-    cout << "Note: using non-conforming traces.\n";
+    if (rank==0) cout << "Note: using non-conforming traces.\n";
     u1hat = varFactory.traceVar("\\widehat{u}_1", u1, L2);
     u2hat = varFactory.traceVar("\\widehat{u}_2", u2, L2);
     u3hat = varFactory.traceVar("\\widehat{u}_3", u3, L2);
@@ -239,7 +239,7 @@ int main(int argc, char *argv[]) {
   mesh = MeshFactory::rectilinearMesh(stokesBF, domainDimensions, elementCounts, H1Order, delta_k);
   coarseMesh = MeshFactory::rectilinearMesh(stokesBF, domainDimensions, elementCounts, H1Order, delta_k);
   double meshConstructionTime = timer.ElapsedTime();
-  cout << "On rank " << rank << ", mesh construction time: " << meshConstructionTime << endl;
+  if (rank==0) cout << "On rank " << rank << ", mesh construction time: " << meshConstructionTime << endl;
   
   RHSPtr rhs = RHS::rhs(); // zero
   
@@ -259,7 +259,8 @@ int main(int argc, char *argv[]) {
   bc->addDirichlet(u2hat, otherBoundary, zero);
   bc->addDirichlet(u3hat, otherBoundary, zero);
   
-  bc->addSinglePointBC(p->ID(), Function::zero());
+//  bc->addSinglePointBC(p->ID(), Function::zero());
+  bc->addZeroMeanConstraint(p);
 
   IPPtr graphNorm = stokesBF->graphNorm();
   
@@ -308,8 +309,10 @@ int main(int argc, char *argv[]) {
   
   Teuchos::RCP<Solver> coarseSolver, fineSolver;
   if (useSuperLUDist){
+    if (rank==0) cout << "Using SuperLU_DIST as coarse solver.\n";
     coarseSolver = Teuchos::rcp( new SuperLUDistSolver() );
   } else if (useMumps) {
+    if (rank==0) cout << "Using MUMPS as coarse solver.\n";
 #ifdef USE_MUMPS
     coarseSolver = Teuchos::rcp( new MumpsSolver(mumpsMaxMemoryMB) );
 #else
