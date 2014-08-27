@@ -139,6 +139,10 @@ int main(int argc, char *argv[]) {
   
   int H1Order = k + 1;
 
+  if (useMumps) {
+    useSuperLUDist = false;
+  }
+  
   if (numCells != -1) {
     horizontalCells = numCells;
     verticalCells = numCells;
@@ -259,8 +263,8 @@ int main(int argc, char *argv[]) {
   bc->addDirichlet(u2hat, otherBoundary, zero);
   bc->addDirichlet(u3hat, otherBoundary, zero);
   
-//  bc->addSinglePointBC(p->ID(), Function::zero());
-  bc->addZeroMeanConstraint(p);
+  bc->addSinglePointBC(p->ID(), Function::zero());
+//  bc->addZeroMeanConstraint(p);
 
   IPPtr graphNorm = stokesBF->graphNorm();
   
