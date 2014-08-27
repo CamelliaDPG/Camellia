@@ -1497,7 +1497,7 @@ bool SolutionTests::testCondensationSolve() {
   SolutionPtr condensedSolution = Teuchos::rcp( new Solution(mesh, bc, rhs, ip) );
 
   solution->solve(false);
-  condensedSolution->newCondensedSolve();
+  condensedSolution->condensedSolve();
   FunctionPtr uF = Function::solution(u,solution);
   FunctionPtr uCond = Function::solution(u,condensedSolution);
   double diff = (uF-uCond)->l2norm(mesh,H1Order);
@@ -1513,7 +1513,7 @@ bool SolutionTests::testCondensationSolve() {
   solution = Teuchos::rcp( new Solution(mesh, bc, rhs, ip) );
   condensedSolution = Teuchos::rcp( new Solution(mesh, bc, rhs, ip) );
   solution->solve(false);
-  condensedSolution->newCondensedSolve();
+  condensedSolution->condensedSolve();
   uF = Function::solution(u,solution);
   uCond = Function::solution(u,condensedSolution);
   diff = (uF-uCond)->l2norm(mesh,H1Order);
@@ -1532,7 +1532,7 @@ bool SolutionTests::testCondensationSolve() {
   solution = Teuchos::rcp( new Solution(mesh, bc, rhs, ip) );
   condensedSolution = Teuchos::rcp( new Solution(mesh, bc, rhs, ip) );
   solution->solve(false);
-  condensedSolution->newCondensedSolve();
+  condensedSolution->condensedSolve();
   uF = Function::solution(u,solution);
   uCond = Function::solution(u,condensedSolution);
   diff = (uF-uCond)->l2norm(mesh,H1Order);
@@ -1557,7 +1557,7 @@ bool SolutionTests::testCondensationSolve() {
   solution = Teuchos::rcp( new Solution(mesh, bc, rhs, ip) );
   condensedSolution = Teuchos::rcp( new Solution(mesh, bc, rhs, ip) );
   solution->solve(false);
-  condensedSolution->newCondensedSolve();
+  condensedSolution->condensedSolve();
   uF = Function::solution(u,solution);
   uCond = Function::solution(u,condensedSolution);
   diff = (uF-uCond)->l2norm(mesh,H1Order);
@@ -1580,7 +1580,7 @@ bool SolutionTests::testCondensationSolve() {
   solution = Teuchos::rcp( new Solution(mesh, bc, rhs, ip) );
   condensedSolution = Teuchos::rcp( new Solution(mesh, bc, rhs, ip) );
   solution->solve(false);
-  condensedSolution->newCondensedSolve();
+  condensedSolution->condensedSolve();
   uF = Function::solution(u,solution);
   uCond = Function::solution(u,condensedSolution);
   diff = (uF-uCond)->l2norm(mesh,H1Order);

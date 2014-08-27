@@ -524,16 +524,21 @@ void Solution::populateStiffnessAndLoad() {
       
       FieldContainer<GlobalIndexTypeToCast> globalDofIndices(numTrialDofs+1); // max # of nonzeros
       FieldContainer<double> nonzeroValues(numTrialDofs+1);
-      Teuchos::Array<int> localLHSDim(numTrialDofs);
+      Teuchos::Array<int> localLHSDim(1, numTrialDofs); // changed from (numTrialDofs) by NVR, 8/27/14
       FieldContainer<double> interpretedLHS;
 
       FieldContainer<GlobalIndexType> interpretedGlobalDofIndices;
+      
+      // need to ask for local stiffness, too, for condensed dof interpreter, even though this is not used.
+      FieldContainer<double> dummyLocalStiffness(numTrialDofs, numTrialDofs);
+      FieldContainer<double> dummyInterpretedStiffness;
       
       for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
         GlobalIndexTypeToCast globalRowIndex = partMap.GID(localRowIndex);
         int nnz = 0;
         FieldContainer<double> localLHS(localLHSDim,&lhs(cellIndex,0)); // shallow copy
-        _dofInterpreter->interpretLocalData(cellIDs[cellIndex], localLHS, interpretedLHS, interpretedGlobalDofIndices);
+        _dofInterpreter->interpretLocalData(cellIDs[cellIndex], dummyLocalStiffness, localLHS, dummyInterpretedStiffness,
+                                            interpretedLHS, interpretedGlobalDofIndices);
         
         for (int i=0; i<interpretedLHS.size(); i++) {
           if (interpretedLHS(i) != 0.0) {
@@ -591,65 +596,73 @@ void Solution::populateStiffnessAndLoad() {
   // TODO: change ZMC imposition to be a distributed computation, instead of doing it all on rank 0
   //       (It's both the code below and the integrateBasisFunctions() methods that will need revision.)
   vector<int> zeroMeanConstraints = getZeroMeanConstraints();
-  if (rank == 0) {
-    int numGlobalConstraints = _lagrangeConstraints->numGlobalConstraints();
-    TEUCHOS_TEST_FOR_EXCEPTION(numGlobalConstraints != 0, std::invalid_argument, "global constraints not yet supported in Solution.");
-    for (int lagrangeIndex = 0; lagrangeIndex < numGlobalConstraints; lagrangeIndex++) {
-      int globalRowIndex = partMap.GID(localRowIndex);
-      
-      localRowIndex++;
+  int numGlobalConstraints = _lagrangeConstraints->numGlobalConstraints();
+  TEUCHOS_TEST_FOR_EXCEPTION(numGlobalConstraints != 0, std::invalid_argument, "global constraints not yet supported in Solution.");
+  for (int lagrangeIndex = 0; lagrangeIndex < numGlobalConstraints; lagrangeIndex++) {
+    int globalRowIndex = partMap.GID(localRowIndex);
+    
+    localRowIndex++;
+  }
+  
+  // impose zero mean constraints:
+  for (vector< int >::iterator trialIt = zeroMeanConstraints.begin(); trialIt != zeroMeanConstraints.end(); trialIt++) {
+    int trialID = *trialIt;
+    
+    // sample an element to make sure that the basis used for trialID is nodal
+    // (this is assumed in our imposition mechanism)
+    GlobalIndexType firstActiveCellID = *_mesh->getActiveCellIDs().begin();
+    ElementTypePtr elemTypePtr = _mesh->getElement(firstActiveCellID)->elementType();
+    BasisPtr trialBasis = elemTypePtr->trialOrderPtr->getBasis(trialID);
+    if (!trialBasis->isNodal()) {
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Zero-mean constraint imposition assumes a nodal basis, and this basis isn't nodal.");
     }
     
-    // impose zero mean constraints:
-    for (vector< int >::iterator trialIt = zeroMeanConstraints.begin(); trialIt != zeroMeanConstraints.end(); trialIt++) {
-      int trialID = *trialIt;
-      
-      // sample an element to make sure that the basis used for trialID is nodal
-      // (this is assumed in our imposition mechanism)
-      GlobalIndexType firstActiveCellID = *_mesh->getActiveCellIDs().begin();
-      ElementTypePtr elemTypePtr = _mesh->getElement(firstActiveCellID)->elementType();
-      BasisPtr trialBasis = elemTypePtr->trialOrderPtr->getBasis(trialID);
-      if (!trialBasis->isNodal()) {
-        TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Zero-mean constraint imposition assumes a nodal basis, and this basis isn't nodal.");
+    GlobalIndexTypeToCast zmcIndex;
+    if (rank==0)
+      zmcIndex = partMap.GID(localRowIndex);
+    else
+      zmcIndex = 0;
+    
+    zmcIndex = MPIWrapper::sum(zmcIndex);
+    
+    //      cout << "Imposing zero-mean constraint for variable " << _mesh->bilinearForm()->trialName(trialID) << endl;
+    FieldContainer<double> basisIntegrals;
+    FieldContainer<GlobalIndexTypeToCast> globalIndices;
+    integrateBasisFunctions(globalIndices,basisIntegrals, trialID);
+    int numValues = globalIndices.size();
+    
+    if (_zmcsAsRankOneUpdate) {
+      // TODO: debug this (not working)
+      // first pass; can make more efficient by implementing as a symmetric SerialDenseMatrix
+      FieldContainer<double> product(numValues,numValues);
+      double denominator = 0.0;
+      for (int i=0; i<numValues; i++) {
+        denominator += basisIntegrals(i);
       }
+      denominator *= denominator;
       
-      GlobalIndexTypeToCast zmcIndex = partMap.GID(localRowIndex);
-      //      cout << "Imposing zero-mean constraint for variable " << _mesh->bilinearForm()->trialName(trialID) << endl;
-      FieldContainer<double> basisIntegrals;
-      FieldContainer<GlobalIndexTypeToCast> globalIndices;
-      integrateBasisFunctions(globalIndices,basisIntegrals, trialID);
-      int numValues = globalIndices.size();
+      for (int i=0; i<numValues; i++) {
+        for (int j=0; j<numValues; j++) {
+          product(i,j) = _zmcRho * basisIntegrals(i) * basisIntegrals(j) / denominator;
+        }
+      }
+      _globalStiffMatrix->SumIntoGlobalValues(numValues, &globalIndices(0), numValues, &globalIndices(0), &product(0,0));
+    } else { // otherwise, we increase the size of the system to accomodate the zmc...
+      // insert row:
+      _globalStiffMatrix->InsertGlobalValues(1,&zmcIndex,numValues,&globalIndices(0),&basisIntegrals(0));
+      // insert column:
+      _globalStiffMatrix->InsertGlobalValues(numValues,&globalIndices(0),1,&zmcIndex,&basisIntegrals(0));
       
-      if (_zmcsAsRankOneUpdate) {
-        // TODO: debug this (not working)
-        // first pass; can make more efficient by implementing as a symmetric SerialDenseMatrix
-        FieldContainer<double> product(numValues,numValues);
-        double denominator = 0.0;
-        for (int i=0; i<numValues; i++) {
-          denominator += basisIntegrals(i);
-        }
-        denominator *= denominator;
-        
-        for (int i=0; i<numValues; i++) {
-          for (int j=0; j<numValues; j++) {
-            product(i,j) = _zmcRho * basisIntegrals(i) * basisIntegrals(j) / denominator;
-          }
-        }
-        _globalStiffMatrix->SumIntoGlobalValues(numValues, &globalIndices(0), numValues, &globalIndices(0), &product(0,0));
-      } else { // otherwise, we increase the size of the system to accomodate the zmc...
-        // insert row:
-        _globalStiffMatrix->InsertGlobalValues(1,&zmcIndex,numValues,&globalIndices(0),&basisIntegrals(0));
-        // insert column:
-        _globalStiffMatrix->InsertGlobalValues(numValues,&globalIndices(0),1,&zmcIndex,&basisIntegrals(0));
-        
-        //      cout << "in zmc, diagonal entry: " << rho << endl;
-        //rho /= numValues;
+      //      cout << "in zmc, diagonal entry: " << rho << endl;
+      //rho /= numValues;
+      if (rank==0) { // insert the diagonal entry on rank 0; other ranks insert basis integrals according to which cells they own
         double rho_entry = - 1.0 / _zmcRho;
         _globalStiffMatrix->InsertGlobalValues(1,&zmcIndex,1,&zmcIndex,&rho_entry);
-        localRowIndex++;
       }
+      if (rank==0) localRowIndex++;
     }
   }
+  // end of ZMC imposition
   
   timer.ResetStartTime();
   
@@ -1078,31 +1091,39 @@ double Solution::globalCondEstLastSolve() {
 }
 
 void Solution::integrateBasisFunctions(FieldContainer<GlobalIndexTypeToCast> &globalIndices, FieldContainer<double> &values, int trialID) {
+  int rank = Teuchos::GlobalMPISession::getRank();
+  
   // only supports scalar-valued field bases right now...
   int sideIndex = 0; // field variables only
-  vector<ElementTypePtr> elemTypes = _mesh->elementTypes();
+  vector<ElementTypePtr> elemTypes = _mesh->elementTypes(rank);
   vector<ElementTypePtr>::iterator elemTypeIt;
   vector<GlobalIndexType> globalIndicesVector;
   vector<double> valuesVector;
   for (elemTypeIt = elemTypes.begin(); elemTypeIt != elemTypes.end(); elemTypeIt++) {
     ElementTypePtr elemTypePtr = *(elemTypeIt);
-    int numCellsOfType = _mesh->numElementsOfType(elemTypePtr);
+    vector<GlobalIndexType> cellIDs = _mesh->globalDofAssignment()->cellIDsOfElementType(rank,elemTypePtr);
+    int numCellsOfType = cellIDs.size();
     int basisCardinality = elemTypePtr->trialOrderPtr->getBasisCardinality(trialID,sideIndex);
     FieldContainer<double> valuesForType(numCellsOfType, basisCardinality);
     integrateBasisFunctions(valuesForType,elemTypePtr,trialID);
     
-    FieldContainer<double> localDiscreteValues(elemTypePtr->trialOrderPtr->totalDofs());
+    int numTrialDofs = elemTypePtr->trialOrderPtr->totalDofs();
+    FieldContainer<double> localDiscreteValues(numTrialDofs);
     FieldContainer<double> interpretedDiscreteValues;
     FieldContainer<GlobalIndexType> globalDofIndices;
     
+    // need to ask for local stiffness, too, for condensed dof interpreter, even though this is not used.
+    FieldContainer<double> dummyLocalStiffness(numTrialDofs, numTrialDofs);
+    FieldContainer<double> dummyInterpretedStiffness;
+    
     // copy into values:
     for (int cellIndex=0; cellIndex<numCellsOfType; cellIndex++) {
-      GlobalIndexType cellID = _mesh->cellID(elemTypePtr,cellIndex);
+      GlobalIndexType cellID = cellIDs[cellIndex];
       for (int dofOrdinal=0; dofOrdinal<basisCardinality; dofOrdinal++) {
         IndexType dofIndex = elemTypePtr->trialOrderPtr->getDofIndex(trialID, dofOrdinal);
         localDiscreteValues(dofIndex) = valuesForType(cellIndex,dofOrdinal);
       }
-      _dofInterpreter->interpretLocalData(cellID, localDiscreteValues, interpretedDiscreteValues, globalDofIndices);
+      _dofInterpreter->interpretLocalData(cellID, dummyLocalStiffness, localDiscreteValues, dummyInterpretedStiffness, interpretedDiscreteValues, globalDofIndices);
       
       for (int dofIndex=0; dofIndex<globalDofIndices.size(); dofIndex++) {
         if (interpretedDiscreteValues(dofIndex) != 0) {
@@ -1122,7 +1143,14 @@ void Solution::integrateBasisFunctions(FieldContainer<GlobalIndexTypeToCast> &gl
 }
 
 void Solution::integrateBasisFunctions(FieldContainer<double> &values, ElementTypePtr elemTypePtr, int trialID) {
-  int numCellsOfType = _mesh->numElementsOfType(elemTypePtr);
+  int rank = Teuchos::GlobalMPISession::getRank();
+  vector<GlobalIndexType> cellIDs = _mesh->globalDofAssignment()->cellIDsOfElementType(rank,elemTypePtr);
+  
+  int numCellsOfType = cellIDs.size();
+  if (numCellsOfType==0) {
+    return;
+  }
+  
   int sideIndex = 0;
   int basisCardinality = elemTypePtr->trialOrderPtr->getBasisCardinality(trialID,sideIndex);
   TEUCHOS_TEST_FOR_EXCEPTION(values.dimension(0) != numCellsOfType,
@@ -1131,12 +1159,10 @@ void Solution::integrateBasisFunctions(FieldContainer<double> &values, ElementTy
                              std::invalid_argument, "values must have dimensions (_mesh.numCellsOfType(elemTypePtr), trialBasisCardinality)");
   BasisPtr trialBasis;
   trialBasis = elemTypePtr->trialOrderPtr->getBasis(trialID);
-  //  int numSides = elemTypePtr->trialOrderPtr->getNumSidesForVarID(trialID);
-  
   
   int cubDegree = trialBasis->getDegree();
   
-  BasisCache basisCache(_mesh->physicalCellNodesGlobal(elemTypePtr), *(elemTypePtr->cellTopoPtr), cubDegree);
+  BasisCache basisCache(_mesh->physicalCellNodes(elemTypePtr), *(elemTypePtr->cellTopoPtr), cubDegree);
   
   Teuchos::RCP < const FieldContainer<double> > trialValuesTransformedWeighted;
   
@@ -2613,7 +2639,7 @@ void Solution::setWriteRHSToMatrixMarketFile(bool value, const string &filePath)
   _rhsFilePath = filePath;
 }
 
-void Solution::newCondensedSolve(Teuchos::RCP<Solver> globalSolver, bool reduceMemoryFootprint) {
+void Solution::condensedSolve(Teuchos::RCP<Solver> globalSolver, bool reduceMemoryFootprint) {
   // when reduceMemoryFootprint is true, local stiffness matrices will be computed twice, rather than stored for reuse
   vector<int> trialIDs = _mesh->bilinearForm()->trialIDs();
   
@@ -2640,646 +2666,6 @@ void Solution::newCondensedSolve(Teuchos::RCP<Solver> globalSolver, bool reduceM
   _dofInterpreter = oldDofInterpreter;
   _mesh->boundary().setDofInterpreter(_dofInterpreter);
 }
-
-// Jesse's additions below:
-
-// =================================== CONDENSED SOLVE ======================================
-void Solution::condensedSolve(Teuchos::RCP<Solver> globalSolver, bool reduceMemoryFootprint) { // when reduceMemoryFootprint is true, local stiffness matrices will be computed twice, rather than stored for reuse
-  int rank=0;
-  
-  if ((_lagrangeConstraints->numElementConstraints() != 0) || (_lagrangeConstraints->numGlobalConstraints() != 0)) {
-    cout << "condensed solve doesn't yet support lagrange constraints.\n";
-    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "condensed solve doesn't yet support lagrange constraints");
-  }
-  
-#ifdef HAVE_MPI
-  rank     = Teuchos::GlobalMPISession::getRank();
-  Epetra_MpiComm Comm(MPI_COMM_WORLD);
-  //cout << "rank: " << rank << " of " << numProcs << endl;
-#else
-  Epetra_SerialComm Comm;
-#endif
-  
-  Epetra_Time totalTime(Comm);
-  Epetra_Time timer(Comm);
-  Epetra_Time elemTimer(Comm);
-  
-  totalTime.ResetStartTime();
-  
-  timer.ResetStartTime();
-  map<int, FieldContainer<double> > elemMatrices; // map from cellID to local stiffness matrix
-  map<int, FieldContainer<double> > elemLoads; // map from cellID to local rhs
-  vector<int> trialIDs = mesh()->bilinearForm()->trialIDs();
-  
-  set< int > zeroMeanConstraints;
-  for (vector< int >::iterator trialIt = trialIDs.begin(); trialIt != trialIDs.end(); trialIt++) {
-    int trialID = *trialIt;
-    if (_bc->imposeZeroMeanConstraint(trialID)) {
-      zeroMeanConstraints.insert(trialID);
-    }
-  }
-  
-  // get local dof indices for reduced matrices
-  map<GlobalIndexType,set<int> > localFluxIndices, localFieldIndices;
-  map<GlobalIndexType,set<GlobalIndexType> > globalFluxIndices, globalFieldIndices;
-  vector< ElementPtr > allElems = _mesh->activeElements();
-  vector< ElementPtr >::iterator elemIt;
-  for (elemIt=allElems.begin();elemIt!=allElems.end();elemIt++){
-    ElementPtr elem = *elemIt;
-    int cellID = elem->cellID();
-    set<int> localFluxDofs,localFieldDofs;
-    set<GlobalIndexType> globalFluxDofs,globalFieldDofs;
-    
-    for (vector<int>::iterator idIt = trialIDs.begin();idIt!=trialIDs.end();idIt++){
-      int trialID = *idIt;
-      int numSides = elem->elementType()->trialOrderPtr->getNumSidesForVarID(trialID);
-      vector<int> dofIndices;
-      if (numSides==1) { // volume element
-        dofIndices = elem->elementType()->trialOrderPtr->getDofIndices(trialID, 0);
-      } else {
-        for (int sideIndex=0;sideIndex<numSides;sideIndex++){
-          vector<int> inds =  elem->elementType()->trialOrderPtr->getDofIndices(trialID, sideIndex);
-          dofIndices.insert(dofIndices.end(),inds.begin(),inds.end());
-        }
-      }
-      for (vector<int>::iterator dofIt = dofIndices.begin();dofIt!=dofIndices.end();dofIt++){
-        int localDofIndex = *dofIt;
-        int globalDofIndex = mesh()->globalDofIndex(cellID, localDofIndex);
-        if (mesh()->bilinearForm()->isFluxOrTrace(trialID)){
-          // is flux ID
-          localFluxDofs.insert(localDofIndex);
-          globalFluxDofs.insert(globalDofIndex);
-        } else if (zeroMeanConstraints.find(trialID) != zeroMeanConstraints.end()) {
-          localFluxDofs.insert(localDofIndex);
-          globalFluxDofs.insert(globalDofIndex);
-        } else {
-          // is field ID
-          localFieldDofs.insert(localDofIndex);
-          globalFieldDofs.insert(globalDofIndex);
-        }
-      }
-    }
-    localFluxIndices[cellID]=localFluxDofs;
-    localFieldIndices[cellID]=localFieldDofs;
-    globalFluxIndices[cellID]=globalFluxDofs;
-    globalFieldIndices[cellID]=globalFieldDofs;
-  }
-  
-  //  _mesh->getFieldFluxDofIndices(localFluxIndices, localFieldIndices);
-  //  _mesh->getGlobalFieldFluxDofIndices(globalFluxIndices, globalFieldIndices);
-  
-  // build maps/list of all flux inds
-  map<GlobalIndexType,map<int,int> > localToCondensedMap;
-  map<GlobalIndexType,map<GlobalIndexType,int> > globalToLocalMap;
-  set<GlobalIndexType> allFluxIndices;
-  for (elemIt=allElems.begin();elemIt!=allElems.end();elemIt++){
-    ElementPtr elem = *elemIt;
-    int cellID = elem->cellID();
-    set<int> fluxIndices = localFluxIndices[cellID];
-    set<int>::iterator setIt;
-    int i = 0;
-    for (setIt=fluxIndices.begin();setIt!=fluxIndices.end();setIt++){
-      int localInd = *setIt;
-      int globalInd = _mesh->globalDofIndex(cellID,localInd);
-      allFluxIndices.insert(globalInd);
-      localToCondensedMap[cellID][localInd] = i;
-      globalToLocalMap[cellID][globalInd] = localInd;
-      i++;
-    }
-  }
-  
-  // build global-condensed map
-  map<GlobalIndexType,GlobalIndexType> globalToCondensedMap;
-  map<GlobalIndexType,GlobalIndexType> condensedToGlobalMap;
-  set<GlobalIndexType>::iterator setIt;
-  int i = 0;
-  for (setIt=allFluxIndices.begin();setIt!=allFluxIndices.end();setIt++){
-    int globalFluxInd = *setIt;
-    globalToCondensedMap[globalFluxInd] = i;
-    condensedToGlobalMap[i] = globalFluxInd;
-    i++;
-  }
-  
-  // create partitioning - CAN BE MORE EFFICIENT if necessary
-  set<GlobalIndexType> myGlobalDofIndices = _dofInterpreter->globalDofIndicesForPartition(rank);
-  set<GlobalIndexType> myGlobalFluxIndices;
-  for (setIt=myGlobalDofIndices.begin();setIt!=myGlobalDofIndices.end();setIt++){
-    int ind = (*setIt);
-    //    cout << "global dof ind = " << ind << endl;
-    if (allFluxIndices.find(ind) != allFluxIndices.end()){
-      myGlobalFluxIndices.insert(globalToCondensedMap[ind]); // need in condensed indices
-      //      cout << "global flux ind = " << globalToCondensedMap[ind] << endl;
-    }
-  }
-  
-  int numZMCs = zeroMeanConstraints.size();
-  int numGlobalFluxDofs = allFluxIndices.size();
-  Epetra_Map fluxPartMap = getPartitionMap(rank, myGlobalFluxIndices, numGlobalFluxDofs, numZMCs, &Comm);
-  
-  // size/create stiffness matrix
-  int maxNnzPerRow = min(_mesh->condensedRowSizeUpperBound(),numGlobalFluxDofs) + zeroMeanConstraints.size();
-  Epetra_FECrsMatrix K_cond(::Copy, fluxPartMap, maxNnzPerRow); // condensed system
-  Epetra_FEVector rhs_cond(fluxPartMap);
-  Epetra_FEVector lhs_cond(fluxPartMap, true);
-  
-  if (_reportTimingResults){
-    cout << "on rank " << rank << ", time to form dof partition maps/init condensed stiffness matrices = " << timer.ElapsedTime() << endl;
-  }
-  timer.ResetStartTime();
-  
-  vector< ElementPtr > elems = _mesh->elementsInPartition(rank);
-  // loop thru elems
-  double localStiffnessTime = 0.0;
-  double condensationTime = 0.0;
-  double assemblyTime = 0.0;
-  for (elemIt=elems.begin();elemIt!=elems.end();elemIt++){
-    elemTimer.ResetStartTime();
-    
-    ElementPtr elem = *elemIt;
-    int cellID = elem->cellID();
-    set<int> fieldIndices = localFieldIndices[cellID];
-    set<int> fluxIndices = localFluxIndices[cellID];
-    int numElemFluxDofs = fluxIndices.size();
-    int numElemFieldDofs = fieldIndices.size();
-    
-    // get elem data and submatrix data
-    FieldContainer<double> K,rhs;
-    getElemData(elem,K,rhs);
-    if (!reduceMemoryFootprint){
-      elemMatrices[cellID] = K;
-      elemLoads[cellID] = rhs;
-    }
-    Epetra_SerialDenseMatrix D, B, K_flux;
-    getSubmatrices(fieldIndices, fluxIndices, K, D, B, K_flux);
-    
-    localStiffnessTime += elemTimer.ElapsedTime();
-    elemTimer.ResetStartTime();
-    
-    // reduce matrix
-    Epetra_SerialDenseMatrix Bcopy = B;
-    Epetra_SerialDenseSolver solver;
-    //    cout << "num elem field dofs, flux dofs = " << numElemFieldDofs << ", " << numElemFluxDofs << endl;
-    Epetra_SerialDenseMatrix DinvB(numElemFieldDofs,numElemFluxDofs);
-    solver.SetMatrix(D);
-    solver.SetVectors(DinvB, Bcopy);
-    bool equilibrated = false;
-    if ( solver.ShouldEquilibrate() ) {
-      solver.EquilibrateMatrix();
-      solver.EquilibrateRHS();
-      equilibrated = true;
-    }
-    solver.Solve();
-    if (equilibrated)
-      solver.UnequilibrateLHS();
-    
-    K_flux.Multiply('T','N',-1.0,B,DinvB,1.0); // assemble condensed matrix - A - B^T*inv(D)*B
-    
-    // reduce vector
-    Epetra_SerialDenseVector Dinvf(numElemFieldDofs);
-    Epetra_SerialDenseVector BtDinvf(numElemFluxDofs);
-    Epetra_SerialDenseVector b_field, b_flux;
-    getSubvectors(fieldIndices, fluxIndices, rhs, b_field, b_flux);
-    //    solver.SetMatrix(D);
-    solver.SetVectors(Dinvf, b_field);
-    equilibrated = false;
-    if ( solver.ShouldEquilibrate() ) {
-      solver.EquilibrateMatrix();
-      solver.EquilibrateRHS();
-      equilibrated = true;
-    }
-    solver.Solve();
-    if (equilibrated)
-      solver.UnequilibrateLHS();
-    
-    b_flux.Multiply('T','N',-1.0,B,Dinvf,1.0); // condensed RHS - f - B^T*inv(D)*g
-    
-    // create vector of dof indices (and global-local maps)
-    Epetra_IntSerialDenseVector condensedFluxIndices(numElemFluxDofs);
-    set<int>::iterator indexIt;
-    int i = 0;
-    for (indexIt = fluxIndices.begin();indexIt!=fluxIndices.end();indexIt++){
-      int localFluxInd = *indexIt;
-      int globalFluxInd = _mesh->globalDofIndex(cellID, localFluxInd);
-      int condensedInd = globalToCondensedMap[globalFluxInd];
-      condensedFluxIndices(i) = condensedInd;
-      i++;
-    }
-    
-    condensationTime += elemTimer.ElapsedTime();
-    
-    // sum into FE matrices - all that's left is applying BCs
-    elemTimer.ResetStartTime();
-    
-    rhs_cond.SumIntoGlobalValues(numElemFluxDofs, condensedFluxIndices.Values(), b_flux.A());
-    K_cond.InsertGlobalValues(numElemFluxDofs, condensedFluxIndices.Values(), K_flux.A());
-    
-    assemblyTime += elemTimer.ElapsedTime();
-    
-  }
-  if (_reportTimingResults){
-    cout << "on rank " << rank << ", in loop, time to get local stiff = " << localStiffnessTime << endl;
-    cout << "on rank " << rank << ", in loop, time to reduce matrix = " << condensationTime << endl;
-    cout << "on rank " << rank << ", in loop, time to assemble into global = " << assemblyTime << endl;
-  }
-  
-  // globally assemble flux matrices
-  rhs_cond.GlobalAssemble();
-  
-  ///////////////////////////////////////////////////////////////////
-  // impose zero mean constraints:
-  ///////////////////////////////////////////////////////////////////
-  if (rank==0) {
-    int localRowIndex = myGlobalFluxIndices.size(); // starts where the dofs left off
-    for (set< int >::iterator trialIt = zeroMeanConstraints.begin(); trialIt != zeroMeanConstraints.end(); trialIt++) {
-      int trialID = *trialIt;
-      
-      // sample an element to make sure that the basis used for trialID is nodal
-      // (this is assumed in our imposition mechanism)
-      GlobalIndexType firstActiveCellID = *_mesh->getActiveCellIDs().begin();
-      ElementTypePtr elemTypePtr = _mesh->getElement(firstActiveCellID)->elementType();
-      BasisPtr trialBasis = elemTypePtr->trialOrderPtr->getBasis(trialID);
-      if (!trialBasis->isNodal()) {
-        TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Zero-mean constraint imposition assumes a nodal basis, and this basis isn't nodal.");
-      }
-      GlobalIndexTypeToCast zmcIndex = fluxPartMap.GID(localRowIndex);
-      //      cout << "Imposing zero-mean constraint for variable " << _mesh->bilinearForm()->trialName(trialID) << endl;
-      FieldContainer<double> basisIntegrals; FieldContainer<GlobalIndexTypeToCast> globalIndices;
-      integrateBasisFunctions(globalIndices,basisIntegrals, trialID);
-      GlobalIndexType numValues = globalIndices.size();
-      FieldContainer<GlobalIndexTypeToCast> condensedGlobalIndices(numValues);
-      for (GlobalIndexType i = 0;i<numValues;i++){
-        condensedGlobalIndices(i) = globalToCondensedMap[globalIndices(i)];
-        //      cout << "zmc constraint on condensed entry " << globalToCondensedMap[globalIndices(i)] << endl;
-      }
-      
-      //      cout << "zmcIndex: " << zmcIndex << endl;
-      // insert row:
-      K_cond.InsertGlobalValues(1,&zmcIndex,numValues,&condensedGlobalIndices(0),&basisIntegrals(0));
-      // insert column:
-      K_cond.InsertGlobalValues(numValues,&condensedGlobalIndices(0),1,&zmcIndex,&basisIntegrals(0));
-      
-      //      cout << "in zmc, diagonal entry: " << rho << endl;
-      //rho /= numValues;
-      // define stabilizing parameter for zero-mean constraints
-      double rho_entry = - 1.0 / _zmcRho;
-      K_cond.InsertGlobalValues(1,&zmcIndex,1,&zmcIndex,&rho_entry);
-      localRowIndex++;
-    }
-  }
-  
-  K_cond.GlobalAssemble();
-  K_cond.FillComplete();
-  
-  if (_reportTimingResults)
-    cout << "on rank " << rank << ", time for assembly = " << timer.ElapsedTime() << endl;
-  
-  timer.ResetStartTime();
-  
-  // getting local flux rows
-  set<GlobalIndexType> myFluxIndices;
-  int numGlobalElements = fluxPartMap.NumMyElements();
-  int * myGlobalIndices = fluxPartMap.MyGlobalElements();
-  for (int i = 0;i<numGlobalElements;i++){
-    myFluxIndices.insert(condensedToGlobalMap[myGlobalIndices[i]]); // form flux inds of global system
-  }
-  
-  // applying BCs
-  FieldContainer<GlobalIndexType> bcGlobalIndices;
-  FieldContainer<double> bcGlobalValues;
-  _mesh->boundary().bcsToImpose(bcGlobalIndices,bcGlobalValues,*(_bc.get()), myFluxIndices);
-  int numBCs = bcGlobalIndices.size();
-  
-  // get lift of the operator corresponding to BCs, modify RHS accordingly
-  Epetra_MultiVector u0(fluxPartMap,1);
-  u0.PutScalar(0.0);
-  for (int i = 0; i < numBCs; i++) {
-    u0.ReplaceGlobalValue((GlobalIndexTypeToCast)globalToCondensedMap[bcGlobalIndices(i)], 0, bcGlobalValues(i));
-  }
-  Epetra_MultiVector rhs_lift(fluxPartMap,1);
-  K_cond.Apply(u0,rhs_lift);
-  rhs_cond.Update(-1.0,rhs_lift,1.0);
-  
-  for (int i = 0; i < numBCs; i++) {
-    int ind = globalToCondensedMap[bcGlobalIndices(i)];
-    double value = bcGlobalValues(i);
-    rhs_cond.ReplaceGlobalValues(1,&ind,&value);
-  }
-  //  cout << "on proc " << rank << ", applying oaz with " << numBCs << " bcs" << endl;
-  // Zero out rows and columns of K corresponding to BC dofs, and add one to diagonal.
-  FieldContainer<GlobalIndexTypeToCast> bcLocalIndices(bcGlobalIndices.dimension(0));
-  for (int i=0; i<bcGlobalIndices.dimension(0); i++) {
-    bcLocalIndices(i) = K_cond.LRID((GlobalIndexTypeToCast)globalToCondensedMap[bcGlobalIndices(i)]);
-  }
-  if (numBCs == 0) {
-    ML_Epetra::Apply_OAZToMatrix(NULL, 0, K_cond);
-  }else{
-    ML_Epetra::Apply_OAZToMatrix(&bcLocalIndices(0), numBCs, K_cond);
-  }
-  if (_reportTimingResults){
-    cout << "on rank " << rank << ", time for applying BCs = " << timer.ElapsedTime() << endl;
-  }
-  
-  // ============= /END BCS ===================
-  
-  if (_writeMatrixToMatlabFile){
-    EpetraExt::RowMatrixToMatlabFile(_matrixFilePath.c_str(),K_cond);
-  }
-  if (_writeMatrixToMatrixMarketFile){
-    EpetraExt::RowMatrixToMatrixMarketFile(_matrixFilePath.c_str(),K_cond);
-  }
-  if (_writeRHSToMatrixMarketFile) {
-    if (rank==0) {
-      cout << "Solution: writing rhs to file: " << _rhsFilePath << endl;
-    }
-    EpetraExt::MultiVectorToMatrixMarketFile(_rhsFilePath.c_str(),rhs_cond,0,0,false);
-  }
-  
-  timer.ResetStartTime();
-  
-  // solve reduced problem
-  Teuchos::RCP<Epetra_LinearProblem> problem_cond = Teuchos::rcp( new Epetra_LinearProblem(&K_cond, &lhs_cond, &rhs_cond));
-  rhs_cond.GlobalAssemble();
-  
-  globalSolver->setProblem(problem_cond);
-  int solveSuccess = globalSolver->solve();
-  if (solveSuccess != 0 ) {
-    cout << "**** WARNING: in Solution.condensedSolve(), globalSolver->solve() failed with error code " << solveSuccess << ". ****\n";
-  }
-  
-  lhs_cond.GlobalAssemble();
-  
-  if (_reportTimingResults){
-    cout << "on rank " << rank << ", time for solve = " << timer.ElapsedTime() << endl;
-  }
-  
-  if (_reportConditionNumber) {
-    double condest = conditionNumberEstimate(*problem_cond);
-    if (rank == 0) {
-      cout << "condition # estimate for global stiffness matrix: " << condest << endl;
-    }
-    _globalSystemConditionEstimate = condest;
-  }
-  
-  timer.ResetStartTime();
-  
-  // define global dof vector to distribute
-  GlobalIndexType numGlobalDofs = _mesh->numGlobalDofs();
-  set<GlobalIndexType> myGlobalIndicesSet = _dofInterpreter->globalDofIndicesForPartition(rank);
-  Epetra_Map partMap = getPartitionMap(rank, myGlobalIndicesSet,numGlobalDofs, 0,&Comm); // no zmc
-  Epetra_FEVector lhs_all(partMap, true);
-  
-  // import condensed solution onto all processors
-  Epetra_Map     solnMap(numGlobalFluxDofs, numGlobalFluxDofs, 0, Comm);
-  Epetra_Import  solnImporter(solnMap, fluxPartMap);
-  Epetra_Vector  all_flux_coeffs(solnMap);
-  all_flux_coeffs.Import(lhs_cond, solnImporter, Insert);
-  
-  if (_reportTimingResults){
-    cout << "on rank " << rank << ", time for distribution of flux dofs = " << timer.ElapsedTime() << endl;
-  }
-  
-  timer.ResetStartTime();
-  
-  // recover field dofs
-  for (elemIt=elems.begin();elemIt!=elems.end();elemIt++){
-    ElementPtr elem = *elemIt;
-    GlobalIndexType cellID = elem->cellID();
-    set<int> fieldIndices = localFieldIndices[cellID];
-    set<int> fluxIndices = localFluxIndices[cellID];
-    int numElemFluxDofs = fluxIndices.size();
-    int numElemFieldDofs = fieldIndices.size();
-    
-    // create vector of dof indices (and global/local maps)
-    Epetra_SerialDenseVector flux_dofs(numElemFluxDofs);
-    Epetra_IntSerialDenseVector inds(numElemFluxDofs);
-    set<int>::iterator indexIt;
-    int i = 0;
-    for (indexIt = fluxIndices.begin();indexIt!=fluxIndices.end();indexIt++){
-      int localFluxInd = *indexIt;
-      int globalFluxInd = _mesh->globalDofIndex(cellID, localFluxInd);
-      //      inds(i) = globalFluxInd;
-      double value = all_flux_coeffs[globalToCondensedMap[globalFluxInd]];
-      flux_dofs(i) = value;
-      i++;
-    }
-    //    lhs_all.ReplaceGlobalValues(inds, flux_dofs); // store flux dofs in multivector while we're at it
-    
-    // get elem data and submatrix data
-    FieldContainer<double> K,rhs;
-    if (reduceMemoryFootprint){
-      getElemData(elem,K,rhs);
-    }else{
-      K = elemMatrices[cellID];
-      rhs = elemLoads[cellID];
-    }
-    Epetra_SerialDenseMatrix D, B, fluxMat;
-    Epetra_SerialDenseVector b_field, b_flux, field_dofs(numElemFieldDofs);
-    getSubmatrices(fieldIndices, fluxIndices, K, D, B, fluxMat);
-    getSubvectors(fieldIndices, fluxIndices, rhs, b_field, b_flux);
-    b_field.Multiply('N','N',-1.0,B,flux_dofs,1.0);
-    
-    // solve for field dofs
-    Epetra_SerialDenseSolver solver;
-    solver.SetMatrix(D);
-    solver.SetVectors(field_dofs,b_field);
-    bool equilibrated = false;
-    if ( solver.ShouldEquilibrate() ) {
-      solver.EquilibrateMatrix();
-      solver.EquilibrateRHS();
-      equilibrated = true;
-    }
-    solver.Solve();
-    if (equilibrated)
-      solver.UnequilibrateLHS();
-    
-    Epetra_IntSerialDenseVector globalFieldIndices(numElemFieldDofs);
-    i = 0;
-    for (indexIt = fieldIndices.begin();indexIt!=fieldIndices.end();indexIt++){
-      double value = field_dofs(i);
-      int localFieldInd = *indexIt;
-      int globalFieldInd = _mesh->globalDofIndex(cellID,localFieldInd);
-      globalFieldIndices(i) = globalFieldInd;
-      lhs_all.ReplaceGlobalValues(1, &globalFieldInd, &value); // store field dofs
-      i++;
-    }
-    //    lhs_all.ReplaceGlobalValues(globalFieldIndices, field_dofs); // store field dofs
-  }
-  
-  // globally assemble LHS and import to all procs (WARNING: INEFFICIENT)
-  lhs_all.GlobalAssemble();
-  
-  if (_reportTimingResults){
-    cout << "on rank " << rank << ", time for recovery of field dofs = " << timer.ElapsedTime() << endl;
-  }
-  timer.ResetStartTime();
-  
-  // finally store flux dofs - don't want to sum them up
-  for (setIt=allFluxIndices.begin();setIt!=allFluxIndices.end();setIt++){
-    int globalFluxInd = *setIt;
-    double value = all_flux_coeffs[globalToCondensedMap[globalFluxInd]];
-    lhs_all.ReplaceGlobalValues(1, &globalFluxInd, &value);
-  }
-  
-  Epetra_Map     fullSolnMap((GlobalIndexTypeToCast)numGlobalDofs, (GlobalIndexTypeToCast)numGlobalDofs, 0, Comm);
-  Epetra_Import  fullSolnImporter(fullSolnMap, partMap);
-  Epetra_Vector  all_coeffs(fullSolnMap);
-  all_coeffs.Import(lhs_all, fullSolnImporter, Insert);
-  
-  initializeLHSVector();
-  
-  for (elemIt=allElems.begin();elemIt!=allElems.end();elemIt++){
-    ElementPtr elem = *elemIt;
-    int cellID = elem->cellID();
-    ElementTypePtr elemTypePtr = elem->elementType();
-    int numDofs = elemTypePtr->trialOrderPtr->totalDofs();
-    FieldContainer<double> elemDofs(numDofs);
-    for (int i = 0;i<numDofs;i++){
-      int globalDofIndex = _mesh->globalDofIndex(cellID,i);
-      elemDofs(i) = all_coeffs[globalDofIndex];
-    }
-    setSolnCoeffsForCellID(elemDofs, cellID);
-//    _solutionForCellIDGlobal[cellID] = elemDofs;
-  }
-  if (_reportTimingResults){
-    cout << "on rank " << rank << ", time for storage of all dofs = " << timer.ElapsedTime();
-    cout << ", and total time spent in solve = " << totalTime.ElapsedTime() << endl;
-  }
-  
-  clearComputedResiduals();
-}
-
-void Solution::getSubmatrices(set<int> fieldIndices, set<int> fluxIndices, const FieldContainer<double> &K, Epetra_SerialDenseMatrix &K_field, Epetra_SerialDenseMatrix &K_coupl, Epetra_SerialDenseMatrix &K_flux){
-  int numFieldDofs = fieldIndices.size();
-  int numFluxDofs = fluxIndices.size();
-  K_field.Reshape(numFieldDofs,numFieldDofs);
-  K_flux.Reshape(numFluxDofs,numFluxDofs);
-  K_coupl.Reshape(numFieldDofs,numFluxDofs); // upper right hand corner matrix - symmetry gets the other
-  
-  set<int>::iterator dofIt1;
-  set<int>::iterator dofIt2;
-  
-  int i,j,j_flux,j_field;
-  i = 0;
-  for (dofIt1 = fieldIndices.begin();dofIt1!=fieldIndices.end();dofIt1++){
-    int rowInd = *dofIt1;
-    j_flux = 0;
-    j_field = 0;
-    
-    // get block field matrices
-    for (dofIt2 = fieldIndices.begin();dofIt2!=fieldIndices.end();dofIt2++){
-      int colInd = *dofIt2;
-      //      cout << "rowInd, colInd = " << rowInd << ", " << colInd << endl;
-      K_field(i,j_field) = K(0,rowInd,colInd);
-      j_field++;
-    }
-    
-    // get field/flux couplings
-    for (dofIt2 = fluxIndices.begin();dofIt2!=fluxIndices.end();dofIt2++){
-      int colInd = *dofIt2;
-      K_coupl(i,j_flux) = K(0,rowInd,colInd);
-      j_flux++;
-    }
-    i++;
-  }
-  
-  // get flux coupling terms
-  i = 0;
-  for (dofIt1 = fluxIndices.begin();dofIt1!=fluxIndices.end();dofIt1++){
-    int rowInd = *dofIt1;
-    j = 0;
-    for (dofIt2 = fluxIndices.begin();dofIt2!=fluxIndices.end();dofIt2++){
-      int colInd = *dofIt2;
-      K_flux(i,j) = K(0,rowInd,colInd);
-      j++;
-    }
-    i++;
-  }
-}
-
-void Solution::getSubvectors(set<int> fieldIndices, set<int> fluxIndices, const FieldContainer<double> &b, Epetra_SerialDenseVector &b_field, Epetra_SerialDenseVector &b_flux){
-  
-  int numFieldDofs = fieldIndices.size();
-  int numFluxDofs = fluxIndices.size();
-  
-  b_field.Resize(numFieldDofs);
-  b_flux.Resize(numFluxDofs);
-  set<int>::iterator dofIt;
-  int i;
-  i = 0;
-  for (dofIt=fieldIndices.begin();dofIt!=fieldIndices.end();dofIt++){
-    int ind = *dofIt;
-    b_field(i) = b(0,ind);
-    i++;
-  }
-  i = 0;
-  for (dofIt=fluxIndices.begin();dofIt!=fluxIndices.end();dofIt++){
-    int ind = *dofIt;
-    b_flux(i) = b(0,ind);
-    i++;
-  }
-}
-
-void Solution::getElemData(ElementPtr elem, FieldContainer<double> &finalStiffness, FieldContainer<double> &localRHSVector){
-  
-  int cellID = elem->cellID();
-  
-  BasisCachePtr basisCache = BasisCache::basisCacheForCell(_mesh, cellID, false, _cubatureEnrichmentDegree);
-  BasisCachePtr ipBasisCache = BasisCache::basisCacheForCell(_mesh, cellID, true, _cubatureEnrichmentDegree);
-  
-  ElementTypePtr elemTypePtr = elem->elementType();
-  DofOrderingPtr trialOrderingPtr = elemTypePtr->trialOrderPtr;
-  DofOrderingPtr testOrderingPtr = elemTypePtr->testOrderPtr;
-  int numTrialDofs = trialOrderingPtr->totalDofs();
-  int numTestDofs = testOrderingPtr->totalDofs();
-  
-  FieldContainer<double> cellSideParities  = _mesh->cellSideParitiesForCell(cellID);
-  
-  vector<GlobalIndexType> cellIDs;
-  cellIDs.push_back(cellID); // just do one cell at a time
-  
-  FieldContainer<double> ipMatrix(1,numTestDofs,numTestDofs);
-  
-  _ip->computeInnerProductMatrix(ipMatrix,testOrderingPtr, ipBasisCache);
-  
-  bool estimateElemCondition = false;
-  if (estimateElemCondition){
-    Epetra_SerialDenseMatrix IPK(numTestDofs,numTestDofs);
-    Epetra_SerialDenseMatrix x(numTestDofs);
-    Epetra_SerialDenseMatrix b(numTestDofs);
-    for (int i = 0;i<numTestDofs;i++){
-      for (int j = 0;j<numTestDofs;j++){
-        IPK(i,j) = ipMatrix(0,i,j);
-      }
-    }
-    // use cholesky factorization/sym matrix
-    Epetra_SerialDenseSolver solver;
-    solver.SetMatrix(IPK);
-    solver.SetVectors(x,b);
-    double invCondNumber;
-    int err = solver.ReciprocalConditionEstimate(invCondNumber);
-    cout << "condition number of element " << cellID << " with h1,h2 = " << _mesh->getCellXSize(cellID) << ", " << _mesh->getCellYSize(cellID) << " = " << 1.0/invCondNumber << endl;
-  }
-  
-  FieldContainer<double> optTestCoeffs(1,numTrialDofs,numTestDofs);
-  _mesh->bilinearForm()->optimalTestWeights(optTestCoeffs, ipMatrix, elemTypePtr, cellSideParities, basisCache);
-  
-  finalStiffness.resize(1,numTrialDofs,numTrialDofs);
-  
-  // use cholesky
-  _mesh->bilinearForm()->setUseSPDSolveForOptimalTestFunctions(true);
-  BilinearFormUtility::computeStiffnessMatrix(finalStiffness,ipMatrix,optTestCoeffs);
-  
-  //  FieldContainer<double> localRHSVector(1, numTrialDofs);
-  localRHSVector.resize(1, numTrialDofs);
-  _rhs->integrateAgainstOptimalTests(localRHSVector, optTestCoeffs, testOrderingPtr, basisCache);
-  
-  // apply filter(s) (e.g. penalty method, preconditioners, etc.)
-  if (_filter.get()) {
-    _filter->filter(finalStiffness,localRHSVector,basisCache,_mesh,_bc);
-  }
-}
-
-// =================================== CONDENSED SOLVE ======================================
 
 // must write to .m file
 void Solution::writeFieldsToFile(int trialID, const string &filePath){
