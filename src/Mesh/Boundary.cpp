@@ -201,6 +201,15 @@ void Boundary::bcsToImpose(FieldContainer<GlobalIndexType> &globalIndices,
 void Boundary::bcsToImpose( map<  GlobalIndexType, double > &globalDofIndicesAndValues, BC &bc,
                            Teuchos::RCP< ElementType > elemTypePtr, map<int,bool> &isSingleton) {
   int rank = Teuchos::GlobalMPISession::getRank();
+  
+  bool imposeSingletonBCsOnThisRank = true;  // want this to be true for the first rank that has some active cells
+  for (int i=0; i<rank; i++) {
+    int activeCellCount = _mesh->globalDofAssignment()->cellsInPartition(i).size();
+    if (activeCellCount > 0) {
+      imposeSingletonBCsOnThisRank = false;
+      break;
+    }
+  }
 
   // define a couple of important inner products:
   IPPtr ipL2 = Teuchos::rcp( new IP );
@@ -403,7 +412,7 @@ void Boundary::bcsToImpose( map<  GlobalIndexType, double > &globalDofIndicesAnd
               bc.imposeBC(trialID, physicalCellNodes, sideNormals, dirichletValues, imposeHere);
 
               for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
-                if ( imposeHere(cellIndex,ptIndex) && isSingleton[trialID] && (rank==0) ) { // only impose singleton BCs on rank 0
+                if ( imposeHere(cellIndex,ptIndex) && isSingleton[trialID] && imposeSingletonBCsOnThisRank ) { // only impose singleton BCs on lowest rank with active cells
                   int cellID = _mesh->cellID(elemTypePtr, cellIndex);
                   int localDofIndex = trialOrderingPtr->getDofIndex(trialID,basisOrdinalForPointFC(ptIndex));
                   int globalDofIndex = _mesh->globalDofIndex(cellID, localDofIndex);
