@@ -23,6 +23,9 @@
 
 #include "IndexType.h"
 
+#ifdef WATCH_BGQ_FLOP_COUNTERS
+
+#endif
 
 class TopBoundary : public SpatialFilter {
 public:
@@ -94,8 +97,8 @@ int main(int argc, char *argv[]) {
   int k = 1; // poly order for field variables
   int delta_k = 3;   // test space enrichment
   
-  bool useSuperLUDist = false;
-  bool useMumps = true;
+  bool useSuperLUDist = true;
+  bool useMumps = false;
   bool useCGSolver = false;
   bool useMLSolver = false;
   bool useGMGSolver = false;
@@ -120,10 +123,10 @@ int main(int argc, char *argv[]) {
   cmdp.setOption("polyOrder",&k,"polynomial order for field variable u");
   cmdp.setOption("delta_k", &delta_k, "test space polynomial order enrichment");
   cmdp.setOption("numCells",&numCells,"number of cells in x/y/z directions");
-  cmdp.setOption("useMumps", "useKLU", &useMumps, "use MUMPS (if available)");
   cmdp.setOption("numRefs",&refCount,"number of refinements");
   cmdp.setOption("eps", &eps, "ramp width (set to 0 for no ramp in BCs)");
   cmdp.setOption("useConformingTraces", "useNonConformingTraces", &conformingTraces);
+  cmdp.setOption("useMumps", "useKLU", &useMumps, "use MUMPS (if available)");
   cmdp.setOption("mumpsMaxMemoryMB", &mumpsMaxMemoryMB, "max allocation size MUMPS is allowed to make, in MB");
   cmdp.setOption("refinementThreshold", &energyThreshold, "relative energy threshold for refinements");
   
@@ -373,7 +376,7 @@ int main(int argc, char *argv[]) {
     solution->condensedSolve(fineSolver);
     solution->reportTimings();
 #ifdef HAVE_EPETRAEXT_HDF5
-    if (rank==0) cout << "Beginning export of refinement " << refIndex << " solution.\n";
+    if (rank==0) cout << "Beginning export of refinement " << refIndex+1 << " solution.\n";
 //    dir_name.str("");
 //    dir_name << "stokesCavityFlow3D_k" << k << "_ref" << refIndex;
 //    HDF5Exporter exporter2(mesh,dir_name.str());
