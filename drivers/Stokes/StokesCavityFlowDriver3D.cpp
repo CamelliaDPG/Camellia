@@ -340,7 +340,7 @@ int main(int argc, char *argv[]) {
   }
   if (rank==0) cout << "About to start solve.\n";
   timer.ResetStartTime();
-  solution->solve(coarseSolver);
+  solution->condensedSolve(coarseSolver);
   double totalSolveTime = timer.ElapsedTime();
   if (rank==0) cout << "total solve time (as seen by rank 0) " << totalSolveTime << " seconds.\n";
   solution->reportTimings();
@@ -370,7 +370,7 @@ int main(int argc, char *argv[]) {
     
     if (clearSolution) solution->clear();
     
-    solution->solve(fineSolver);
+    solution->condensedSolve(fineSolver);
     solution->reportTimings();
 #ifdef HAVE_EPETRAEXT_HDF5
     if (rank==0) cout << "Beginning export of refinement " << refIndex << " solution.\n";
