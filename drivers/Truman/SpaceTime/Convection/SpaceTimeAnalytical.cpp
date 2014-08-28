@@ -212,7 +212,7 @@ int main(int argc, char *argv[]) {
   FunctionPtr sigma_exact = Teuchos::rcp( new UExact(epsilon, 1) );
   bc->addDirichlet(uhat, right, zero);
   bc->addDirichlet(fhat, left, -u_exact+sigma_exact);
-  bc->addDirichlet(fhat, bottom, -u_exact+sigma_exact);
+  bc->addDirichlet(fhat, bottom, -u_exact);
 
   Teuchos::RCP<Solution> solution = Teuchos::rcp( new Solution(mesh, bc, rhs, ip) );
 
@@ -240,8 +240,8 @@ int main(int argc, char *argv[]) {
      FunctionPtr u_sqr = u_diff*u_diff;
      FunctionPtr sigma_diff = (sigma_soln - sigma_exact);
      FunctionPtr sigma_sqr = sigma_diff*sigma_diff;
-     double L2_error_u = u_sqr->integrate(mesh, 1e-6);
-     double L2_error_sigma = sigma_sqr->integrate(mesh, 1e-6);
+     double L2_error_u = u_sqr->integrate(mesh, 5);
+     double L2_error_sigma = sigma_sqr->integrate(mesh, 5);
      double L2_error = sqrt(L2_error_u + L2_error_sigma);
      double energy_error = solution->energyErrorTotal();
 
