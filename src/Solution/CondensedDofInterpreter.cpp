@@ -136,16 +136,17 @@ set<GlobalIndexType> CondensedDofInterpreter::globalDofIndicesForCell(GlobalInde
 }
 
 bool CondensedDofInterpreter::varDofsAreCondensible(int varID, int sideOrdinal, DofOrderingPtr dofOrdering) {
+  // eventually it would be nice to determine which sub-basis ordinals can be condensed, but right now we only
+  // condense out the truly discontinuous bases defined for variables on the element interior.
+  
   int sideCount = dofOrdering->getNumSidesForVarID(varID);
   BasisPtr basis = dofOrdering->getBasis(varID, sideOrdinal);
   
   IntrepidExtendedTypes::EFunctionSpaceExtended fs = basis->functionSpace();
   
-  bool isL2 =  (fs==IntrepidExtendedTypes::FUNCTION_SPACE_HVOL)
-  || (fs==IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HVOL)
-  || (fs==IntrepidExtendedTypes::FUNCTION_SPACE_TENSOR_HVOL);
+  bool isDiscontinuous = functionSpaceIsDiscontinuous(fs);
   
-  return (isL2) && (sideCount==1) && (_uncondensibleVarIDs.find(varID) == _uncondensibleVarIDs.end());
+  return (isDiscontinuous) && (sideCount==1) && (_uncondensibleVarIDs.find(varID) == _uncondensibleVarIDs.end());
 }
 
 map<GlobalIndexType, IndexType> CondensedDofInterpreter::interpretedFluxMapForPartition(PartitionIndexType partition, bool storeFluxDofIndices) { // add the partitionDofOffset to get the globalDofIndices
