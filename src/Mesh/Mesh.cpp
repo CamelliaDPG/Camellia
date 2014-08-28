@@ -1179,10 +1179,13 @@ void Mesh::saveToHDF5(string filename)
       rootKeys.push_back(cell->topology()->getKey());
       rootVertexIndices.insert(rootVertexIndices.end(), vertexIndices.begin(), vertexIndices.end());
     }
-    for (int i=0; i <= *max_element(rootVertexIndices.begin(), rootVertexIndices.end()); i++)
+    IndexType maxVertexIndex = *max_element(rootVertexIndices.begin(), rootVertexIndices.end());
+    for (int i=0; i <= maxVertexIndex; i++)
     {
       vector< double > vertex = getTopology()->getVertex(i);
       rootVertices.insert(rootVertices.end(), vertex.begin(), vertex.end());
+//      cout << "vertex " << i << ":\n";
+//      Camellia::print("vertex coords", vertex);
     }
     map<int, int> trialOrderEnhancements = getDofOrderingFactory().getTrialOrderEnhancements();
     map<int, int> testOrderEnhancements = getDofOrderingFactory().getTestOrderEnhancements();

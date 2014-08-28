@@ -14,6 +14,8 @@
 
 #include "RefinementHistory.h"
 
+#include "CamelliaDebugUtility.h"
+
 #ifdef HAVE_EPETRAEXT_HDF5
 #include <EpetraExt_HDF5.h>
 #include <Epetra_SerialComm.h>
@@ -124,18 +126,31 @@ static ParametricCurvePtr parametricRect(double width, double height, double x0,
       elementVertices.push_back(elemVertices);
     }
 
+//    cout << "Elements:\n";
+//    for (int i=0; i<elementVertices.size(); i++) {
+//      cout << "Element " << i << ":\n";
+//      Camellia::print("vertex indices", elementVertices[i]);
+//    }
+    
     vector< vector<double> > verticesList;
     for (int i=0; i < vertices.size()/dimension; i++)
     {
       vector<double> vertex;
-      vertex.push_back(vertices[2*i]);
-      vertex.push_back(vertices[2*i+1]);
+      for (int d=0; d<dimension; d++) {
+        vertex.push_back(vertices[dimension*i+d]);
+      }
       verticesList.push_back(vertex);
     }
 
+//    cout << "Vertices:\n";
+//    for (int i=0; i<verticesList.size(); i++) {
+//      cout << "Vertex " << i << ":\n";
+//      Camellia::print("vertex coordinates", verticesList[i]);
+//    }
+    
     map<int, int> trialOrderEnhancements;
     map<int, int> testOrderEnhancements;
-    for (int i=0; i < trialOrderEnhancementsVec.size()/2; i++)
+    for (int i=0; i < trialOrderEnhancementsVec.size()/2; i++) // divide by two because we have 2 entries per var; map goes varID --> enhancement
     {
       trialOrderEnhancements[trialOrderEnhancementsVec[2*i]] = trialOrderEnhancementsVec[2*i+1];
     }
