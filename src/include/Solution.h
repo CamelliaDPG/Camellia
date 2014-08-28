@@ -180,7 +180,6 @@ public:
   static void basisCoeffsForTrialOrder(FieldContainer<double> &basisCoeffs, DofOrderingPtr trialOrder,
                                        const FieldContainer<double> &allCoeffs, int trialID, int sideIndex);
 
-
   void clear();
 
   int cubatureEnrichmentDegree() const;
@@ -282,8 +281,11 @@ public:
   
   void setIP( Teuchos::RCP<DPGInnerProduct>);
 
+#if defined(HAVE_MPI) && defined(USE_MUMPS)
+  void condensedSolve(Teuchos::RCP<Solver> globalSolver = Teuchos::rcp(new MumpsSolver()), bool reduceMemoryFootprint = false); // when reduceMemoryFootprint is true, local stiffness matrices will be computed twice, rather than stored for reuse
+#else
   void condensedSolve(Teuchos::RCP<Solver> globalSolver = Teuchos::rcp(new KluSolver()), bool reduceMemoryFootprint = false); // when reduceMemoryFootprint is true, local stiffness matrices will be computed twice, rather than stored for reuse
-
+#endif
   void readFromFile(const string &filePath);
   void writeToFile(const string &filePath);
 
