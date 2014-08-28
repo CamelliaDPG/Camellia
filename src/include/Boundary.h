@@ -61,6 +61,7 @@ class Boundary {
   map< ElementType*, vector< GlobalIndexType > > _boundaryCellIDs; // ordering matches the pairs in _boundaryElementsByType
   Mesh *_mesh;
   DofInterpreter *_dofInterpreter;
+  bool _imposeSingletonBCsOnThisRank;
 public:
   Boundary();
   void setDofInterpreter(DofInterpreter* dofInterpreter);
