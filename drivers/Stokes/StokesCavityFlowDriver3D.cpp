@@ -387,6 +387,14 @@ int main(int argc, char *argv[]) {
     refinementStrategy.refine(rank==0);
     double refinementTime = timer.ElapsedTime();
     if (rank==0) cout << "refinement time (as seen by rank 0) " << refinementTime << " seconds.\n";
+
+#ifdef HAVE_EPETRAEXT_HDF5
+    if (rank==0) cout << "Beginning export of refinement " << refIndex+1 << " mesh.\n";
+    ostringstream meshFileName;
+    meshFileName << "stokesCavityFlow3D_k" << k << "_ref" << refIndex+1 << ".mesh";
+    mesh->saveToHDF5(meshFileName.str());
+    if (rank==0) cout << "...completed.\n";
+#endif
     
     if (clearSolution) solution->clear();
     
@@ -406,9 +414,6 @@ int main(int argc, char *argv[]) {
 //    HDF5Exporter exporter2(mesh,dir_name.str());
     exporter.exportSolution(solution,varFactory,refIndex+1);
     if (rank==0) cout << "...completed.\n"; //  Beginning export of refinement " << refIndex << " mesh.\n";
-    ostringstream meshFileName;
-    meshFileName << "stokesCavityFlow3D_k" << k << "_ref" << refIndex+1 << ".mesh";
-    mesh->saveToHDF5(meshFileName.str());
 #endif
   }
   if (rank==0) cout << "Beginning computation of energy error, and final refinement.\n";
