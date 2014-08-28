@@ -112,9 +112,12 @@ void ZoltanMeshPartitionPolicy::partitionMesh(Mesh *mesh, PartitionIndexType num
                               numExport, exportGlobalIds, exportLocalIds, exportProcs, exportToPart);
     
     if (rc == ZOLTAN_WARN) {
-      if (numActiveElements / numPartitions > 0) // if the warning is just because not every process received an element, don't even note that the warning was issued
-        printf("Partitioning with Zoltan on process %d returned a warning.  # active elements = %d\n",myNode,numActiveElements);
-      else
+      if (numActiveElements / numPartitions > 0) { // if the warning is just because not every process received an element, don't even note that the warning was issued
+        if (myNode == 0) {
+//          printf("Partitioning with Zoltan on process %d returned a warning.  # active elements = %d\n",myNode,numActiveElements);
+          printf("Partitioning with Zoltan returned a warning.  # active elements = %d\n",numActiveElements);
+        }
+      } else
         rc = ZOLTAN_OK;
     }
     
@@ -135,7 +138,8 @@ void ZoltanMeshPartitionPolicy::partitionMesh(Mesh *mesh, PartitionIndexType num
         rankLocalCells.insert(importGlobalIds[i]);
       }
       // compute total number of IDs for this proc
-      bool reportAssignment = (rc==ZOLTAN_WARN);
+      bool reportAssignment = false;
+//      bool reportAssignment = (rc==ZOLTAN_WARN);
       if (reportAssignment) {
         ostringstream rankListLabel;
         rankListLabel << "For rank " << myNode << ", Zoltan assigned IDs: ";
