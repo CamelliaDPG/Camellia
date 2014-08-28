@@ -80,6 +80,7 @@ int main(int argc, char *argv[]) {
   
   Teuchos::GlobalMPISession mpiSession(&argc, &argv);
   int rank = Teuchos::GlobalMPISession::getRank();
+  int numRanks = Teuchos::GlobalMPISession::getNProc();
   
 #ifdef HAVE_MPI
   Epetra_MpiComm Comm(MPI_COMM_WORLD);
@@ -123,6 +124,7 @@ int main(int argc, char *argv[]) {
   
   string meshLoadName = ""; // file to load mesh from
   int startingRefinementNumber = 0;
+  int maxCellsPerRank = INT_MAX;
   
   cmdp.setOption("polyOrder",&k,"polynomial order for field variable u");
   cmdp.setOption("delta_k", &delta_k, "test space polynomial order enrichment");
@@ -136,6 +138,8 @@ int main(int argc, char *argv[]) {
   cmdp.setOption("refinementThreshold", &energyThreshold, "relative energy threshold for refinements");
   cmdp.setOption("meshLoadName", &meshLoadName, "file to load initial mesh from");
   cmdp.setOption("startingRefNumber", &startingRefinementNumber, "where to start counting refinements (useful for restart)");
+  cmdp.setOption("maxCellsPerRank", &maxCellsPerRank, "max cells per rank (will quit refining once this is reached)");
+  
   
   if (cmdp.parse(argc,argv) != Teuchos::CommandLineProcessor::PARSE_SUCCESSFUL) {
 #ifdef HAVE_MPI
@@ -266,6 +270,10 @@ int main(int argc, char *argv[]) {
   int dofCount = mesh->numGlobalDofs();
   if (rank==0) cout << "Initial mesh has " << elementCount << " elements and " << dofCount << " global dofs.\n";
   
+  int maxCells = maxCellsPerRank * numRanks;
+  
+  if (rank==0) cout << "maxCellsPerRank is " << maxCellsPerRank << "; will stop if mesh exceeds " << maxCells << " elements.\n";
+  
   RHSPtr rhs = RHS::rhs(); // zero
   
   BCPtr bc = BC::bc();
@@ -354,6 +362,10 @@ int main(int argc, char *argv[]) {
   } else {
     fineSolver = coarseSolver;
   }
+  if (elementCount > maxCells) {
+    if (rank==0) cout << "Initial mesh size exceeds maxCells; exiting.\n";
+    return 0;
+  }
   if (rank==0) cout << "About to start solve.\n";
   timer.ResetStartTime();
   if (useCondensedSolve)
@@ -395,6 +407,12 @@ int main(int argc, char *argv[]) {
     mesh->saveToHDF5(meshFileName.str());
     if (rank==0) cout << "...completed.\n";
 #endif
+    
+    int elementCount = mesh->getActiveCellIDs().size();
+    if (elementCount > maxCells) {
+      if (rank==0) cout << "Cell count (" << elementCount << ") exceeds maxCells; exiting.\n";
+      return 0;
+    }
     
     if (clearSolution) solution->clear();
     
