@@ -200,7 +200,7 @@ void Boundary::bcsToImpose(FieldContainer<GlobalIndexType> &globalIndices,
   // check to make sure all our singleton BCs got imposed:
   for (vector< int >::iterator trialIt = trialIDs.begin(); trialIt != trialIDs.end(); trialIt++) {
     int trialID = *trialIt;
-    if ((isSingleton[trialID]) && (rank==0)) {
+    if ((isSingleton[trialID]) && _imposeSingletonBCsOnThisRank) {
       // that means that it was NOT imposed: warn the user
       cout << "WARNING: singleton BC requested for trial variable " << _mesh->bilinearForm()->trialName(trialID);
       cout << ", but no BC was imposed for this variable (imposeHere never returned true for any point)." << endl;
