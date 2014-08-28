@@ -100,6 +100,7 @@ int main(int argc, char *argv[]) {
   bool useSuperLUDist = true;
   bool useMumps = false;
   bool useCGSolver = false;
+  bool useCondensedSolve = true;
   bool useMLSolver = false;
   bool useGMGSolver = false;
   bool clearSolution = false;
@@ -125,6 +126,7 @@ int main(int argc, char *argv[]) {
   cmdp.setOption("numCells",&numCells,"number of cells in x/y/z directions");
   cmdp.setOption("numRefs",&refCount,"number of refinements");
   cmdp.setOption("eps", &eps, "ramp width (set to 0 for no ramp in BCs)");
+  cmdp.setOption("useCondensedSolve", "useStandardSolve", &useCondensedSolve);
   cmdp.setOption("useConformingTraces", "useNonConformingTraces", &conformingTraces);
   cmdp.setOption("useMumps", "useKLU", &useMumps, "use MUMPS (if available)");
   cmdp.setOption("mumpsMaxMemoryMB", &mumpsMaxMemoryMB, "max allocation size MUMPS is allowed to make, in MB");
@@ -141,6 +143,12 @@ int main(int argc, char *argv[]) {
 
   if (useMumps) {
     useSuperLUDist = false;
+  }
+  
+  if (useCondensedSolve) {
+    if (rank==0) cout << "Using condensed solve for global problem.\n";
+  } else {
+    if (rank==0) cout << "Using standard solve for global problem.\n";
   }
   
   if (numCells != -1) {
@@ -244,6 +252,9 @@ int main(int argc, char *argv[]) {
   coarseMesh = MeshFactory::rectilinearMesh(stokesBF, domainDimensions, elementCounts, H1Order, delta_k);
   double meshConstructionTime = timer.ElapsedTime();
   if (rank==0) cout << "On rank " << rank << ", mesh construction time: " << meshConstructionTime << endl;
+  int elementCount = mesh->getActiveCellIDs().size();
+  int dofCount = mesh->numGlobalDofs();
+  if (rank==0) cout << "Initial mesh has " << elementCount << " elements and " << dofCount << " global dofs.\n";
   
   RHSPtr rhs = RHS::rhs(); // zero
   
@@ -350,7 +361,10 @@ int main(int argc, char *argv[]) {
   }
   if (rank==0) cout << "About to start solve.\n";
   timer.ResetStartTime();
-  solution->condensedSolve(coarseSolver);
+  if (useCondensedSolve)
+    solution->condensedSolve(coarseSolver);
+  else
+    solution->solve(coarseSolver);
   double totalSolveTime = timer.ElapsedTime();
   if (rank==0) cout << "total solve time (as seen by rank 0) " << totalSolveTime << " seconds.\n";
   solution->reportTimings();
@@ -380,7 +394,10 @@ int main(int argc, char *argv[]) {
     
     if (clearSolution) solution->clear();
     
-    solution->condensedSolve(fineSolver);
+    if (useCondensedSolve)
+      solution->condensedSolve(fineSolver);
+    else
+      solution->solve(fineSolver);
     solution->reportTimings();
 #ifdef HAVE_EPETRAEXT_HDF5
     if (rank==0) cout << "Beginning export of refinement " << refIndex+1 << " solution.\n";
