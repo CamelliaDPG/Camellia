@@ -209,7 +209,6 @@ void RefinementHistory::saveToHDF5(EpetraExt::HDF5 &hdf5) {
   if (histArraySize > 0) {
     hdf5.Write("Mesh", "refinementHistory", H5T_NATIVE_INT, histArraySize, &histArray[0]);
   } else {
-    hdf5.Write("Mesh", "refinementHistory", H5T_NATIVE_INT, histArraySize, NULL);
   }
 }
 #endif

@@ -72,7 +72,7 @@ static ParametricCurvePtr parametricRect(double width, double height, double x0,
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Invalid GDA");
     hdf5.Read("Mesh", "trialOrderEnhancements", H5T_NATIVE_INT, trialOrderEnhancementsSize, &trialOrderEnhancementsVec[0]);
     hdf5.Read("Mesh", "testOrderEnhancements", H5T_NATIVE_INT, testOrderEnhancementsSize, &testOrderEnhancementsVec[0]);
-    hdf5.Read("Mesh", "refinementHistory", H5T_NATIVE_INT, histArraySize, &histArray[0]);
+    if (histArraySize > 0) hdf5.Read("Mesh", "refinementHistory", H5T_NATIVE_INT, histArraySize, &histArray[0]);
     hdf5.Close();
 
     CellTopoPtr line_2 = Teuchos::rcp( new shards::CellTopology(shards::getCellTopologyData<shards::Line<2> >() ) );
