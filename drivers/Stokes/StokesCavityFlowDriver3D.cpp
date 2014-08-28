@@ -121,6 +121,9 @@ int main(int argc, char *argv[]) {
   
   double energyThreshold = 0.2;
   
+  string meshLoadName = ""; // file to load mesh from
+  int startingRefinementNumber = 0;
+  
   cmdp.setOption("polyOrder",&k,"polynomial order for field variable u");
   cmdp.setOption("delta_k", &delta_k, "test space polynomial order enrichment");
   cmdp.setOption("numCells",&numCells,"number of cells in x/y/z directions");
@@ -131,6 +134,8 @@ int main(int argc, char *argv[]) {
   cmdp.setOption("useMumps", "useKLU", &useMumps, "use MUMPS (if available)");
   cmdp.setOption("mumpsMaxMemoryMB", &mumpsMaxMemoryMB, "max allocation size MUMPS is allowed to make, in MB");
   cmdp.setOption("refinementThreshold", &energyThreshold, "relative energy threshold for refinements");
+  cmdp.setOption("meshLoadName", &meshLoadName, "file to load initial mesh from");
+  cmdp.setOption("startingRefNumber", &startingRefinementNumber, "where to start counting refinements (useful for restart)");
   
   if (cmdp.parse(argc,argv) != Teuchos::CommandLineProcessor::PARSE_SUCCESSFUL) {
 #ifdef HAVE_MPI
@@ -248,7 +253,12 @@ int main(int argc, char *argv[]) {
   MeshPtr mesh, coarseMesh;
   
   Epetra_Time timer(Comm);
-  mesh = MeshFactory::rectilinearMesh(stokesBF, domainDimensions, elementCounts, H1Order, delta_k);
+  
+  if (meshLoadName.length() == 0)
+    mesh = MeshFactory::rectilinearMesh(stokesBF, domainDimensions, elementCounts, H1Order, delta_k);
+  else
+    mesh = MeshFactory::loadFromHDF5(stokesBF, meshLoadName);
+  
   coarseMesh = MeshFactory::rectilinearMesh(stokesBF, domainDimensions, elementCounts, H1Order, delta_k);
   double meshConstructionTime = timer.ElapsedTime();
   if (rank==0) cout << "On rank " << rank << ", mesh construction time: " << meshConstructionTime << endl;
@@ -300,21 +310,6 @@ int main(int argc, char *argv[]) {
     cellIDs.clear();
     cellIDs.insert(1); cellIDs.insert(4); cellIDs.insert(5); cellIDs.insert(42); cellIDs.insert(43); cellIDs.insert(46); cellIDs.insert(50); cellIDs.insert(51); cellIDs.insert(58); cellIDs.insert(62); cellIDs.insert(63); cellIDs.insert(66); cellIDs.insert(67); cellIDs.insert(70); cellIDs.insert(71); cellIDs.insert(74); cellIDs.insert(75); cellIDs.insert(78); cellIDs.insert(79); cellIDs.insert(86); cellIDs.insert(87); cellIDs.insert(90); cellIDs.insert(91); cellIDs.insert(98); cellIDs.insert(99); cellIDs.insert(103); cellIDs.insert(107); cellIDs.insert(111); cellIDs.insert(115); cellIDs.insert(119); cellIDs.insert(126); cellIDs.insert(127); cellIDs.insert(131); cellIDs.insert(134); cellIDs.insert(135);
     mesh->hRefine(cellIDs, RefinementPattern::regularRefinementPatternHexahedron());
-    
-#ifdef HAVE_EPETRAEXT_HDF5
-    if (rank==0) cout << "Beginning export of solution on problematic mesh.\n";
-    ostringstream dir_name;
-    dir_name << "stokesCavityFlow3D_problemMesh_k" << k << "_ref" << 0;
-    HDF5Exporter exporter2(mesh,dir_name.str());
-    exporter2.exportSolution(solution,varFactory,0);
-    if (rank==0) cout << "...completed.  Beginning export of initial mesh.\n";
-    // straight-line mesh
-    dir_name.str("");
-    dir_name << "stokesCavityFlow3D_problemMesh_k" << k << "_ref" << 0 << "_mesh";
-    HDF5Exporter meshExporter(mesh,dir_name.str());
-    meshExporter.exportFunction(Function::normal(),"mesh",0,2);
-    if (rank==0) cout << "...completed.\n";
-#endif
   }
   
   RefinementStrategy refinementStrategy( solution, energyThreshold );
@@ -373,32 +368,37 @@ int main(int argc, char *argv[]) {
   ostringstream dir_name;
   dir_name << "stokesCavityFlow3D_k" << k;
   HDF5Exporter exporter(mesh,dir_name.str());
-  exporter.exportSolution(solution,varFactory,0);
-  if (rank==0) cout << "...completed.  Beginning export of initial mesh.\n";
-  // straight-line mesh
-//  dir_name.str("");
-//  dir_name << "stokesCavityFlow3D_k" << k << "_ref" << 0 << "_mesh";
-//  HDF5Exporter meshExporter(mesh,dir_name.str());
-//  meshExporter.exportFunction(Function::normal(),"mesh",0,2);
-//  if (rank==0) cout << "...completed.\n";
+  exporter.exportSolution(solution,varFactory,startingRefinementNumber);
+  if (rank==0) cout << "...completed.\n";
+  ostringstream meshFileName;
+  meshFileName << "stokesCavityFlow3D_k" << k << "_ref" << startingRefinementNumber << ".mesh";
+  mesh->saveToHDF5(meshFileName.str());
 #endif
   
-  for (int refIndex=0; refIndex < refCount; refIndex++) {
+  for (int refIndex=startingRefinementNumber; refIndex < refCount+startingRefinementNumber; refIndex++) {
+    if (rank==0) cout << "About to start refinement " << refIndex + 1 << ".\n";
+    timer.ResetStartTime();
     double energyError = solution->energyErrorTotal();
     int numFluxDofs = mesh->numFluxDofs();
     if (rank==0) {
-      cout << "Before refinement " << refIndex << ", energy error = " << energyError;
+      cout << "Before refinement " << refIndex + 1 << ", energy error = " << energyError;
       cout << " (using " << numFluxDofs << " trace degrees of freedom)." << endl;
     }
     refinementStrategy.refine(rank==0);
+    double refinementTime = timer.ElapsedTime();
+    if (rank==0) cout << "refinement time (as seen by rank 0) " << refinementTime << " seconds.\n";
     
     if (clearSolution) solution->clear();
     
+    timer.ResetStartTime();
     if (useCondensedSolve)
       solution->condensedSolve(fineSolver);
     else
       solution->solve(fineSolver);
+    double totalSolveTime = timer.ElapsedTime();
+    if (rank==0) cout << "total solve time (as seen by rank 0) " << totalSolveTime << " seconds.\n";
     solution->reportTimings();
+    
 #ifdef HAVE_EPETRAEXT_HDF5
     if (rank==0) cout << "Beginning export of refinement " << refIndex+1 << " solution.\n";
 //    dir_name.str("");
@@ -406,17 +406,24 @@ int main(int argc, char *argv[]) {
 //    HDF5Exporter exporter2(mesh,dir_name.str());
     exporter.exportSolution(solution,varFactory,refIndex+1);
     if (rank==0) cout << "...completed.\n"; //  Beginning export of refinement " << refIndex << " mesh.\n";
-//    // straight-line mesh
-//    dir_name.str("");
-//    dir_name << "stokesCavityFlow3D_k" << k << "_ref" << refIndex << "_mesh";
-//    HDF5Exporter meshExporter(mesh,dir_name.str());
-//    meshExporter.exportFunction(Function::normal(),"mesh",0,2);
-//    if (rank==0) cout << "Finished export of refinement " << refIndex << " solution.\n";
+    ostringstream meshFileName;
+    meshFileName << "stokesCavityFlow3D_k" << k << "_ref" << refIndex+1 << ".mesh";
+    mesh->saveToHDF5(meshFileName.str());
 #endif
   }
-  if (rank==0) cout << "Beginning computation of energy error.\n";
+  if (rank==0) cout << "Beginning computation of energy error, and final refinement.\n";
   double energyErrorTotal = solution->energyErrorTotal();
+  refinementStrategy.refine(rank==0);
   if (rank==0) cout << "...completed.\n";
+  
+#ifdef HAVE_EPETRAEXT_HDF5
+  if (rank==0) cout << "Beginning export of refinement " << refCount + startingRefinementNumber + 1 << " mesh.\n";
+  meshFileName.str("");
+  meshFileName << "stokesCavityFlow3D_k" << k << "_ref" << refCount + startingRefinementNumber + 1 << ".mesh";
+  mesh->saveToHDF5(meshFileName.str());
+  if (rank==0) cout << "Mesh for next run saved to " << meshFileName.str() << endl;
+  if (rank==0) cout << "(Use --meshLoadName=\"" << meshFileName.str() << "\" --startingRefNumber=" << refCount + startingRefinementNumber + 1 << ")\n";
+#endif
   
 //  cout << "Final Mesh, entities report:\n";
 //  solution->mesh()->getTopology()->printAllEntities();
