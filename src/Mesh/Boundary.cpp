@@ -87,7 +87,7 @@ void Boundary::buildLookupTables() {
   
   int rank = Teuchos::GlobalMPISession::getRank();
   
-  _imposeSingletonBCsOnThisRank = true;  // want this to be true for the first rank that has some active cells
+  _imposeSingletonBCsOnThisRank = (_mesh->globalDofAssignment()->cellsInPartition(rank).size() > 0);  // want this to be true for the first rank that has some active cells
   for (int i=0; i<rank; i++) {
     int activeCellCount = _mesh->globalDofAssignment()->cellsInPartition(i).size();
     if (activeCellCount > 0) {
