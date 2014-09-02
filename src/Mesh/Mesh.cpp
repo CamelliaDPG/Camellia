@@ -553,6 +553,10 @@ void Mesh::hRefine(const vector<GlobalIndexType> &cellIDs, Teuchos::RCP<Refineme
 }
 
 void Mesh::hRefine(const set<GlobalIndexType> &cellIDs, Teuchos::RCP<RefinementPattern> refPattern) {
+  hRefine(cellIDs, refPattern, true);
+}
+
+void Mesh::hRefine(const set<GlobalIndexType> &cellIDs, Teuchos::RCP<RefinementPattern> refPattern, bool repartitionAndRebuild) {
   // refine any registered meshes
   for (vector< Teuchos::RCP<RefinementObserver> >::iterator meshIt = _registeredObservers.begin();
        meshIt != _registeredObservers.end(); meshIt++) {
@@ -565,10 +569,10 @@ void Mesh::hRefine(const set<GlobalIndexType> &cellIDs, Teuchos::RCP<RefinementP
     int cellID = *cellIt;
     
     _meshTopology->refineCell(cellID, refPattern);
-
+    
     set<GlobalIndexType> cellIDset;
     cellIDset.insert(cellID);
-  
+    
     _gda->didHRefine(cellIDset);
     
     // let transformation function know about the refinement that just took place
@@ -576,8 +580,10 @@ void Mesh::hRefine(const set<GlobalIndexType> &cellIDs, Teuchos::RCP<RefinementP
       _meshTopology->transformationFunction()->didHRefine(cellIDset);
     }
   }
-  _gda->repartitionAndMigrate();
-  _boundary.buildLookupTables();
+  if (repartitionAndRebuild) {
+    _gda->repartitionAndMigrate();
+    _boundary.buildLookupTables();
+  }
 }
 
 void Mesh::hUnrefine(const set<GlobalIndexType> &cellIDs) {

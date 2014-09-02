@@ -259,6 +259,8 @@ public:
   FunctionPtr getTransformationFunction(); // will be NULL for meshes without edge curves defined
 
   void hRefine(const set<GlobalIndexType> &cellIDs, Teuchos::RCP<RefinementPattern> refPattern);
+  
+  void hRefine(const set<GlobalIndexType> &cellIDs, Teuchos::RCP<RefinementPattern> refPattern, bool repartitionAndRebuild);
 
   void hRefine(const vector<GlobalIndexType> &cellIDs, Teuchos::RCP<RefinementPattern> refPattern);
   void hUnrefine(const set<GlobalIndexType> &cellIDs);

@@ -169,11 +169,16 @@ static ParametricCurvePtr parametricRect(double width, double height, double x0,
       i++;
       int numCells = histArray[i];
       i++;
+      CellTopoPtr cellTopo; // we assume all cells for the refinement have the same type
+      if (numCells > 0) {
+        GlobalIndexType firstCellID = histArray[i];
+        cellTopo = mesh->getElementType(firstCellID)->cellTopoPtr;
+      }
+      set<GlobalIndexType> cellIDs;
       for (int c=0; c < numCells; c++)
       {
         GlobalIndexType cellID = histArray[i];
         i++;
-        set<GlobalIndexType> cellIDs;
         cellIDs.insert(cellID);
         // check that the cellIDs are all active nodes
         if (refType != H_UNREFINEMENT) {
@@ -182,19 +187,19 @@ static ParametricCurvePtr parametricRect(double width, double height, double x0,
             TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "cellID for refinement is not an active cell of the mesh");
           }
         }
-        CellTopoPtr cellTopo = mesh->getElementType(cellID)->cellTopoPtr;
+      }
+      bool repartitionAndRebuild = (i==histArraySize); // for h-refinements (the common case), only do this for the last set
 
-        switch (refType) {
-          case P_REFINEMENT:
-            mesh->pRefine(cellIDs);
-            break;
-          case H_UNREFINEMENT:
-            mesh->hUnrefine(cellIDs);
-            break;
-          default: 
-            // if we get here, it should be an h-refinement with a ref pattern
-            mesh->hRefine(cellIDs, refPatternForRefType(refType, cellTopo));
-        }
+      switch (refType) {
+        case P_REFINEMENT:
+          mesh->pRefine(cellIDs);
+          break;
+        case H_UNREFINEMENT:
+          mesh->hUnrefine(cellIDs);
+          break;
+        default: 
+          // if we get here, it should be an h-refinement with a ref pattern
+          mesh->hRefine(cellIDs, refPatternForRefType(refType, cellTopo), repartitionAndRebuild);
       }
     }
     return mesh;
