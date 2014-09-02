@@ -1025,6 +1025,10 @@ void Solution::imposeBCs() {
     if (err != 0) {
       cout << "ERROR: rhsVector.ReplaceGlobalValues(): some indices non-local...\n";
     }
+    err = _lhsVector->ReplaceGlobalValues(numBCs,&bcGlobalIndicesCast(0),&bcGlobalValues(0));
+    if (err != 0) {
+      cout << "ERROR: rhsVector.ReplaceGlobalValues(): some indices non-local...\n";
+    }
   }
   // Zero out rows and columns of stiffness matrix corresponding to Dirichlet edges
   //  and add one to diagonal.

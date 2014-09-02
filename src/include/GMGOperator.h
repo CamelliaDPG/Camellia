@@ -37,8 +37,12 @@ class GMGOperator : public Epetra_Operator {
   
   Teuchos::RCP<Epetra_MultiVector> _diag; // diagonal of the fine (global) stiffness matrix
   
+  Teuchos::RCP<Epetra_MultiVector> filterMultiVectorByFineCellOwnership(const Epetra_MultiVector &X, GlobalIndexType fineCellID) const;
+  
+public: // promoted these two to public for testing purposes:
   LocalDofMapperPtr getLocalCoefficientMap(GlobalIndexType fineCellID) const;
   GlobalIndexType getCoarseCellID(GlobalIndexType fineCellID) const;
+
 public:
   //! @name Destructor
   //@{

@@ -247,6 +247,29 @@ set<GlobalIndexType> GDAMinimumRule::globalDofIndicesForPartition(PartitionIndex
   return globalDofIndices;
 }
 
+set<GlobalIndexType> GDAMinimumRule::ownedGlobalDofIndicesForCell(GlobalIndexType cellID) {
+  set<GlobalIndexType> globalDofIndices;
+  
+  CellConstraints constraints = getCellConstraints(cellID);
+  SubCellDofIndexInfo owningCellDofIndexInfo = getOwnedGlobalDofIndices(cellID, constraints);
+
+  CellTopoPtr cellTopo = _meshTopology->getCell(cellID)->topology();
+  
+  int dim = cellTopo->getDimension();
+  for (int d=0; d<=dim; d++) {
+    int scCount = cellTopo->getSubcellCount(d);
+    for (int scord = 0; scord < scCount; scord++) {
+      map<int, vector<GlobalIndexType> > globalDofOrdinalsMapForSubcell = owningCellDofIndexInfo[d][scord]; // keys are varIDs
+      for (map<int, vector<GlobalIndexType> >::iterator entryIt = globalDofOrdinalsMapForSubcell.begin();
+           entryIt != globalDofOrdinalsMapForSubcell.end(); entryIt++) {
+        globalDofIndices.insert(entryIt->second.begin(), entryIt->second.end());
+      }
+    }
+  }
+  
+  return globalDofIndices;
+}
+
 set<GlobalIndexType> GDAMinimumRule::partitionOwnedGlobalFieldIndices() {
   // compute complement of fluxes and traces
   set<GlobalIndexType> fieldDofIndices;

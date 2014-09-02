@@ -8,12 +8,21 @@
 
 #include "GMGSolver.h"
 
+// EpetraExt includes
+#include "EpetraExt_RowMatrixOut.h"
+#include "EpetraExt_MultiVectorOut.h"
+
 GMGSolver::GMGSolver( BCPtr zeroBCs, MeshPtr coarseMesh, IPPtr coarseIP, MeshPtr fineMesh,
                      Epetra_Map finePartitionMap, int maxIters, double tol, Teuchos::RCP<Solver> coarseSolver) : _gmgOperator(zeroBCs,coarseMesh,coarseIP,fineMesh,finePartitionMap,coarseSolver),
                     _finePartitionMap(finePartitionMap) {
   _maxIters = maxIters;
   _printToConsole = false;
-  _tol = tol;         
+  _tol = tol;
+  _diagonalSmoothing = true;
+}
+
+void GMGSolver::setApplySmoothingOperator(bool applySmoothingOp) {
+  _diagonalSmoothing = applySmoothingOp;
 }
 
 void GMGSolver::setPrintToConsole(bool printToConsole) {
@@ -28,19 +37,23 @@ int GMGSolver::solve() {
   AztecOO solver(problem());
   
   Epetra_RowMatrix *A = problem().GetMatrix();
-  
+  Epetra_MultiVector *b = problem().GetRHS();
+  EpetraExt::MultiVectorToMatlabFile("/tmp/b_gmg.dat",*b);
+
   Epetra_Vector diagA(A->RowMatrixRowMap());
   A->ExtractDiagonalCopy(diagA);
   
   Teuchos::RCP<Epetra_MultiVector> diagA_ptr = Teuchos::rcp( &diagA, false );
   
-  _gmgOperator.setStiffnessDiagonal(diagA_ptr);
+  if (_diagonalSmoothing)
+    _gmgOperator.setStiffnessDiagonal(diagA_ptr);
 
-//  solver.SetAztecOption(AZ_solver, AZ_cg);
-  solver.SetAztecOption(AZ_solver, AZ_gmres);
+  solver.SetAztecOption(AZ_solver, AZ_cg);
+//  solver.SetAztecOption(AZ_solver, AZ_gmres);
   solver.SetPrecOperator(&_gmgOperator);
   solver.SetAztecOption(AZ_precond, AZ_user_precond);
   solver.SetAztecOption(AZ_scaling, AZ_none);
+//  solver.SetAztecOption(AZ_conv, AZ_noscaled);
   
   int solveResult = solver.Iterate(_maxIters,_tol);
   
@@ -68,6 +81,9 @@ int GMGSolver::solve() {
     default:
       break;
   }
+  
+  Epetra_MultiVector *x = problem().GetLHS();
+  EpetraExt::MultiVectorToMatlabFile("/tmp/x.dat",*x);
   
   double norminf = A->NormInf();
   double normone = A->NormOne();

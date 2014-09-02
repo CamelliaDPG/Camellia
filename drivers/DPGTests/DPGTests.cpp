@@ -69,6 +69,7 @@
 #include "ElementTests.h"
 #include "FunctionTests.h"
 #include "GDAMinimumRuleTests.h"
+#include "GMGTests.h"
 #include "HConvergenceStudyTests.h"
 #include "IncompressibleFormulationsTests.h"
 #include "LinearTermTests.h"
@@ -202,17 +203,7 @@ void DPGTests::runTests() {
   // setup our TestSuite tests:
   vector< Teuchos::RCP< TestSuite > > testSuites;
   
-  testSuites.push_back( Teuchos::rcp( new LinearTermTests ) );
-  
-  testSuites.push_back( Teuchos::rcp( new ScratchPadTests ) );
-  
-  testSuites.push_back( Teuchos::rcp( new ElementTests ) );
-  
-  testSuites.push_back( Teuchos::rcp( new MultiBasisTests ) );
-  
-  testSuites.push_back( Teuchos::rcp( new FunctionTests ) );
-  
-  testSuites.push_back( Teuchos::rcp( new MeshTestSuite ) );
+  testSuites.push_back( Teuchos::rcp( new GMGTests ) );
   
   if (skipSlowTests) {
     if (rank==0) {
@@ -222,7 +213,21 @@ void DPGTests::runTests() {
     testSuites.push_back( Teuchos::rcp( new IncompressibleFormulationsTests(false) ) ); // false: turn "thorough" off
   }
   
+  testSuites.push_back( Teuchos::rcp( new SolutionTests ) );
+  
   testSuites.push_back( Teuchos::rcp( new GDAMinimumRuleTests ) );
+  
+  testSuites.push_back( Teuchos::rcp( new LinearTermTests ) );
+  
+  testSuites.push_back( Teuchos::rcp( new MeshTestSuite ) );
+  
+  testSuites.push_back( Teuchos::rcp( new ScratchPadTests ) );
+  
+  testSuites.push_back( Teuchos::rcp( new ElementTests ) );
+  
+  testSuites.push_back( Teuchos::rcp( new MultiBasisTests ) );
+  
+  testSuites.push_back( Teuchos::rcp( new FunctionTests ) );
   
   testSuites.push_back( Teuchos::rcp( new MeshRefinementTests ) ); // skips two PatchBasis tests
   
@@ -244,8 +249,6 @@ void DPGTests::runTests() {
   testSuites.push_back( Teuchos::rcp( new HConvergenceStudyTests ) );
   
   testSuites.push_back( Teuchos::rcp( new LobattoBasisTests ) );
-  
-  testSuites.push_back( Teuchos::rcp( new SolutionTests ) );
   
   //  testSuites.push_back( Teuchos::rcp( new IncompressibleFormulationsTests(true) ) ); // true: turn "thorough" on
   //  testSuites.push_back( Teuchos::rcp( new PatchBasisTests ) ); // skip until we have a proper GDAMinimumRule constructed

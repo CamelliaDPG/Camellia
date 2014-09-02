@@ -12,6 +12,16 @@
 #include "GlobalDofAssignment.h"
 #include "BasisSumFunction.h"
 
+#include "GDAMinimumRule.h"
+
+#include "CamelliaCellTools.h"
+
+// EpetraExt includes
+#include "EpetraExt_RowMatrixOut.h"
+#include "EpetraExt_MultiVectorOut.h"
+
+#include "Epetra_SerialComm.h"
+
 GMGOperator::GMGOperator(BCPtr zeroBCs, MeshPtr coarseMesh, IPPtr coarseIP, MeshPtr fineMesh, Epetra_Map finePartitionMap, Teuchos::RCP<Solver> coarseSolver) :  _finePartitionMap(finePartitionMap), _br(true) {
   RHSPtr zeroRHS = RHS::rhs();
   _fineMesh = fineMesh;
@@ -71,7 +81,7 @@ LocalDofMapperPtr GMGOperator::getLocalCoefficientMap(GlobalIndexType fineCellID
   
   pair< pair<int,int>, RefinementBranch > key = make_pair(make_pair(fineOrder, coarseOrder), refBranch);
   
-  int fineSideCount = fineCell->topology()->getSideCount();
+  int fineSideCount = CamelliaCellTools::getSideCount( *fineCell->topology() );
   int sideDim = _fineMesh->getTopology()->getSpaceDim() - 1;
   vector<unsigned> ancestralSideOrdinals(fineSideCount);
   vector< RefinementBranch > sideRefBranches(fineSideCount);
@@ -183,6 +193,8 @@ int GMGOperator::Apply(const Epetra_MultiVector& X, Epetra_MultiVector& Y) const
 }
 
 int GMGOperator::ApplyInverse(const Epetra_MultiVector& X, Epetra_MultiVector& Y) const {
+  cout << "GMGOperator::ApplyInverse.\n";
+  
   // the data coming in (X) is in global dofs defined on the fine mesh.  First thing we'd like to do is map it to the fine mesh's local cells
   set<GlobalIndexType> cellsInPartition = _fineMesh->globalDofAssignment()->cellsInPartition(-1); // rank-local
   
@@ -191,9 +203,11 @@ int GMGOperator::ApplyInverse(const Epetra_MultiVector& X, Epetra_MultiVector& Y
   set<GlobalIndexTypeToCast> coarseDofIndicesToImport; // keep track of the coarse dof indices that this partition's fine cells talk to
   for (set<GlobalIndexType>::iterator cellIDIt=cellsInPartition.begin(); cellIDIt != cellsInPartition.end(); cellIDIt++) {
     GlobalIndexType fineCellID = *cellIDIt;
+    // filter by cell ownership to ensure that we only treat each fine global dof once:
+    Teuchos::RCP<Epetra_MultiVector> X_filtered = filterMultiVectorByFineCellOwnership(X, fineCellID);
     int fineDofCount = _fineMesh->getElementType(fineCellID)->trialOrderPtr->totalDofs();
     FieldContainer<double> fineCellData(fineDofCount);
-    _fineMesh->globalDofAssignment()->interpretGlobalCoefficients(fineCellID, fineCellData, X);
+    _fineMesh->globalDofAssignment()->interpretGlobalCoefficients(fineCellID, fineCellData, *X_filtered);
 //    cout << "fineCellData:\n" << fineCellData;
     LocalDofMapperPtr fineMapper = getLocalCoefficientMap(fineCellID);
     GlobalIndexType coarseCellID = getCoarseCellID(fineCellID);
@@ -218,22 +232,31 @@ int GMGOperator::ApplyInverse(const Epetra_MultiVector& X, Epetra_MultiVector& Y
     coarseRHSVector->SumIntoGlobalValues(interpretedCoarseData.size(), &interpretedGlobalDofIndicesCast[0], &interpretedCoarseData[0]);
   }
   coarseRHSVector->GlobalAssemble();
-  { // DEBUGGING:
-    // put the RHS into FC for debugging purposes:
-    int numMyDofs = coarseRHSVector->MyLength();
-    FieldContainer<double> rhsFC(numMyDofs);
-    for (int i=0; i<numMyDofs; i++) {
-      rhsFC[i] = (*coarseRHSVector)[0][i];
-    }
-//    cout << "before coarse solve, rhsFC:\n" << rhsFC;
-  }
   
   // solve the coarse system:
+  
   _coarseSolution->imposeBCs();
   _coarseSolution->setProblem(_coarseSolver);
+  
+  Teuchos::RCP<Epetra_FECrsMatrix> coarseStiffness = _coarseSolution->getStiffnessMatrix();
+  EpetraExt::RowMatrixToMatlabFile("/tmp/A_gmg.dat",*coarseStiffness);
+  EpetraExt::MultiVectorToMatlabFile("/tmp/b_gmg.dat",*coarseRHSVector);
+  
   _coarseSolution->solveWithPrepopulatedStiffnessAndLoad(_coarseSolver);
   
+//  { // DEBUGGING:
+//    // put the RHS into FC for debugging purposes:
+//    int numMyDofs = coarseRHSVector->MyLength();
+//    FieldContainer<double> rhsFC(numMyDofs);
+//    for (int i=0; i<numMyDofs; i++) {
+//      rhsFC[i] = (*coarseRHSVector)[0][i];
+//    }
+//    cout << "before coarse solve, rhsFC:\n" << rhsFC;
+//  }
+  
   Teuchos::RCP<Epetra_FEVector> coarseLHSVector = _coarseSolution->getLHSVector();
+  EpetraExt::MultiVectorToMatlabFile("/tmp/x_gmg.dat",*coarseLHSVector);
+
   
   // now, map the coarse data back to the fine mesh, and add that into Y
   Y.PutScalar(0); // clear Y
@@ -292,6 +315,15 @@ int GMGOperator::ApplyInverse(const Epetra_MultiVector& X, Epetra_MultiVector& Y
     
     _fineMesh->globalDofAssignment()->interpretLocalCoefficients(fineCellID, fineLocalCoefficients, Y);
   }
+
+  static int globalIterationCount = 0; // for debugging
+  ostringstream X_file;
+  X_file << "/tmp/X_" << globalIterationCount << ".dat";
+  ostringstream Y_file;
+  Y_file << "/tmp/Y_before_diag_" << globalIterationCount << ".dat";
+  
+  EpetraExt::MultiVectorToMatlabFile(X_file.str().c_str(),X);
+  EpetraExt::MultiVectorToMatlabFile(Y_file.str().c_str(),Y);
   
   // if diag is set, add diag(A)^(-1)X to Y.
   if (_diag.get() != NULL) {
@@ -301,10 +333,51 @@ int GMGOperator::ApplyInverse(const Epetra_MultiVector& X, Epetra_MultiVector& Y
       double diagEntry = (*_diag)[0][globalID];
       double xEntry = X[0][localID];
       Y.SumIntoGlobalValue(globalID, 0, xEntry/diagEntry);
+      cout << "Adding " << xEntry / diagEntry << " to global ID " << globalID << endl;
     }
+  } else {
+    cout << "_diag is NULL.\n";
+  }
+
+  Y_file.str("");
+  Y_file << "/tmp/Y_" << globalIterationCount << ".dat";
+  
+  EpetraExt::MultiVectorToMatlabFile(Y_file.str().c_str(),Y);
+  globalIterationCount++;
+
+  return 0;
+}
+
+Teuchos::RCP<Epetra_MultiVector> GMGOperator::filterMultiVectorByFineCellOwnership(const Epetra_MultiVector &X, GlobalIndexType fineCellID) const {
+  GDAMinimumRule* gda = dynamic_cast< GDAMinimumRule*>(_fineMesh->globalDofAssignment().get());
+
+  set<GlobalIndexType> allFineGlobalIndicesForCell = gda->globalDofIndicesForCell(fineCellID);
+  set<GlobalIndexType> ownedFineGlobalIndices = gda->ownedGlobalDofIndicesForCell(fineCellID); // filter by cell ownership to ensure that we only treat each fine global dof once.
+
+  FieldContainer<GlobalIndexTypeToCast> globalIndicesFC(allFineGlobalIndicesForCell.size());
+  int i=0;
+  for (set<GlobalIndexType>::iterator gdofIt = allFineGlobalIndicesForCell.begin(); gdofIt != allFineGlobalIndicesForCell.end(); gdofIt++) {
+    GlobalIndexTypeToCast globalDofIndex = *gdofIt;
+    globalIndicesFC(i++) = globalDofIndex;
   }
   
-  return 0;
+  
+  // construct map for interpretedCoefficients:
+  Epetra_SerialComm SerialComm; // rank-local map
+  Epetra_Map    cellFilteredMap((GlobalIndexTypeToCast)-1, (GlobalIndexTypeToCast)allFineGlobalIndicesForCell.size(), &globalIndicesFC[0], 0, SerialComm);
+  Teuchos::RCP<Epetra_MultiVector> X_filtered = Teuchos::rcp( new Epetra_MultiVector(cellFilteredMap, 1) );
+  
+  for (int i=0; i<globalIndicesFC.size(); i++) {
+    GlobalIndexTypeToCast globalIndex = globalIndicesFC[i];
+    int lID_filtered = cellFilteredMap.LID(globalIndex);
+    if (ownedFineGlobalIndices.find(globalIndex) != ownedFineGlobalIndices.end()) {
+      int lID_X = X.Map().LID(globalIndex);
+      (*X_filtered)[0][lID_filtered] = X[0][lID_X];
+    } else {
+      (*X_filtered)[0][lID_filtered] = 0; // zero out the unowned dof coefficients that are seen by the cell
+    }
+  }
+  return X_filtered;
 }
 
 double GMGOperator::NormInf() const {
@@ -344,5 +417,8 @@ const Epetra_Map & GMGOperator::OperatorRangeMap() const {
 }
 
 void GMGOperator::setStiffnessDiagonal(Teuchos::RCP< Epetra_MultiVector> diagonal) {
+  if (diagonal.get() != NULL) {
+    EpetraExt::MultiVectorToMatlabFile("/tmp/diag.dat",*diagonal);
+  }
   _diag = diagonal;
 }

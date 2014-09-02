@@ -94,6 +94,8 @@ public:
   set<GlobalIndexType> globalDofIndicesForCell(GlobalIndexType cellID);
   set<GlobalIndexType> globalDofIndicesForPartition(PartitionIndexType partitionNumber);
   
+  set<GlobalIndexType> ownedGlobalDofIndicesForCell(GlobalIndexType cellID);
+  
   set<GlobalIndexType> partitionOwnedGlobalFieldIndices();
   set<GlobalIndexType> partitionOwnedGlobalFluxIndices();
   set<GlobalIndexType> partitionOwnedGlobalTraceIndices();

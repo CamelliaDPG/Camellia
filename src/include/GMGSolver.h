@@ -21,11 +21,18 @@ class GMGSolver : public Solver {
   Epetra_Map _finePartitionMap;
   
   GMGOperator _gmgOperator;
+  
+  bool _diagonalSmoothing;
 public:
   GMGSolver(BCPtr zeroBCs, MeshPtr coarseMesh, IPPtr coarseIP, MeshPtr fineMesh, Epetra_Map finePartitionMap, int maxIters, double tol, Teuchos::RCP<Solver> coarseSolver);
   void setPrintToConsole(bool printToConsole);
   int solve();
+  void setApplySmoothingOperator(bool applySmoothingOp);
   void setTolerance(double tol);
+  
+  GMGOperator & gmgOperator() {
+    return _gmgOperator;
+  }
 };
 
 #endif /* defined(__Camellia_debug__GMGSolver__) */
