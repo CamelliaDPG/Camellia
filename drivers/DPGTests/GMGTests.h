@@ -16,8 +16,10 @@ class GMGTests : public TestSuite {
   void setup();
   void teardown() {}
   
-  SolutionPtr poissonExactSolution1D(int horizontalCells, int H1Order, FunctionPtr phi_exact, bool useH1Traces);
+  FunctionPtr getPhiExact(int spaceDim);
   
+  SolutionPtr poissonExactSolution(int horizontalCells, int H1Order, FunctionPtr phi_exact, bool useH1Traces);
+  SolutionPtr poissonExactSolution(vector<int> numCells, int H1Order, FunctionPtr phi_exact, bool useH1Traces);
 public:
   void runTests(int &numTestsRun, int &numTestsPassed);
   
@@ -25,7 +27,7 @@ public:
   bool testGMGOperatorIdentity();
   bool testGMGSolverIdentity();
   
-  
+  bool testGMGSolverTwoGrid();
   
   std::string testSuiteName();
 };

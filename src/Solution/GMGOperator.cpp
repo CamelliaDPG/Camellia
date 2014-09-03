@@ -192,8 +192,10 @@ int GMGOperator::Apply(const Epetra_MultiVector& X, Epetra_MultiVector& Y) const
   TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unsupported method.");
 }
 
-int GMGOperator::ApplyInverse(const Epetra_MultiVector& X, Epetra_MultiVector& Y) const {
-  cout << "GMGOperator::ApplyInverse.\n";
+int GMGOperator::ApplyInverse(const Epetra_MultiVector& X_in, Epetra_MultiVector& Y) const {
+//  cout << "GMGOperator::ApplyInverse.\n";
+  
+  Epetra_MultiVector X(X_in); // looks like Y may be stored in the same location as X_in, so that changing Y will change X, too...
   
   // the data coming in (X) is in global dofs defined on the fine mesh.  First thing we'd like to do is map it to the fine mesh's local cells
   set<GlobalIndexType> cellsInPartition = _fineMesh->globalDofAssignment()->cellsInPartition(-1); // rank-local
@@ -239,8 +241,8 @@ int GMGOperator::ApplyInverse(const Epetra_MultiVector& X, Epetra_MultiVector& Y
   _coarseSolution->setProblem(_coarseSolver);
   
   Teuchos::RCP<Epetra_FECrsMatrix> coarseStiffness = _coarseSolution->getStiffnessMatrix();
-  EpetraExt::RowMatrixToMatlabFile("/tmp/A_gmg.dat",*coarseStiffness);
-  EpetraExt::MultiVectorToMatlabFile("/tmp/b_gmg.dat",*coarseRHSVector);
+//  EpetraExt::RowMatrixToMatlabFile("/tmp/A_gmg.dat",*coarseStiffness);
+//  EpetraExt::MultiVectorToMatlabFile("/tmp/b_gmg.dat",*coarseRHSVector);
   
   _coarseSolution->solveWithPrepopulatedStiffnessAndLoad(_coarseSolver);
   
@@ -255,7 +257,7 @@ int GMGOperator::ApplyInverse(const Epetra_MultiVector& X, Epetra_MultiVector& Y
 //  }
   
   Teuchos::RCP<Epetra_FEVector> coarseLHSVector = _coarseSolution->getLHSVector();
-  EpetraExt::MultiVectorToMatlabFile("/tmp/x_gmg.dat",*coarseLHSVector);
+//  EpetraExt::MultiVectorToMatlabFile("/tmp/x_gmg.dat",*coarseLHSVector);
 
   
   // now, map the coarse data back to the fine mesh, and add that into Y
@@ -315,35 +317,52 @@ int GMGOperator::ApplyInverse(const Epetra_MultiVector& X, Epetra_MultiVector& Y
     
     _fineMesh->globalDofAssignment()->interpretLocalCoefficients(fineCellID, fineLocalCoefficients, Y);
   }
-
-  static int globalIterationCount = 0; // for debugging
-  ostringstream X_file;
-  X_file << "/tmp/X_" << globalIterationCount << ".dat";
-  ostringstream Y_file;
-  Y_file << "/tmp/Y_before_diag_" << globalIterationCount << ".dat";
   
-  EpetraExt::MultiVectorToMatlabFile(X_file.str().c_str(),X);
-  EpetraExt::MultiVectorToMatlabFile(Y_file.str().c_str(),Y);
+//  static int globalIterationCount = 0; // for debugging
+//  ostringstream X_file;
+//  X_file << "/tmp/X_" << globalIterationCount << ".dat";
+//  EpetraExt::MultiVectorToMatlabFile(X_file.str().c_str(),X);
+//
+//  ostringstream Y_file;
+//  Y_file << "/tmp/Y_before_diag_" << globalIterationCount << ".dat";
+//  
+//
+//  EpetraExt::MultiVectorToMatlabFile(Y_file.str().c_str(),Y);
   
   // if diag is set, add diag(A)^(-1)X to Y.
   if (_diag.get() != NULL) {
     Epetra_BlockMap partitionMap = Y.Map();
     for (int localID = 0; localID < partitionMap.NumMyElements(); localID++) {
       GlobalIndexTypeToCast globalID = partitionMap.GID(localID);
-      double diagEntry = (*_diag)[0][globalID];
+      double diagEntry = (*_diag)[0][localID];
       double xEntry = X[0][localID];
-      Y.SumIntoGlobalValue(globalID, 0, xEntry/diagEntry);
-      cout << "Adding " << xEntry / diagEntry << " to global ID " << globalID << endl;
+      double yEntry = Y[0][localID];
+      
+      
+//      cout << "xEntry = " << xEntry << "; yEntry = " << yEntry << endl;
+      bool applyDiagonalTermsOnlyForZeroY = true;
+      if (applyDiagonalTermsOnlyForZeroY) {
+        if (yEntry == 0) {
+          yEntry = xEntry/diagEntry;
+        }
+      } else {
+        // otherwise, average them together:
+        yEntry = 0.5 * (yEntry + xEntry/diagEntry);
+      }
+      
+      Y.ReplaceGlobalValue(globalID, 0, yEntry);
+      
+//      cout << "Adding " << xEntry / diagEntry << " to global ID " << globalID << endl;
     }
   } else {
     cout << "_diag is NULL.\n";
   }
 
-  Y_file.str("");
-  Y_file << "/tmp/Y_" << globalIterationCount << ".dat";
-  
-  EpetraExt::MultiVectorToMatlabFile(Y_file.str().c_str(),Y);
-  globalIterationCount++;
+//  Y_file.str("");
+//  Y_file << "/tmp/Y_" << globalIterationCount << ".dat";
+//  
+//  EpetraExt::MultiVectorToMatlabFile(Y_file.str().c_str(),Y);
+//  globalIterationCount++;
 
   return 0;
 }
@@ -360,7 +379,6 @@ Teuchos::RCP<Epetra_MultiVector> GMGOperator::filterMultiVectorByFineCellOwnersh
     GlobalIndexTypeToCast globalDofIndex = *gdofIt;
     globalIndicesFC(i++) = globalDofIndex;
   }
-  
   
   // construct map for interpretedCoefficients:
   Epetra_SerialComm SerialComm; // rank-local map

@@ -771,15 +771,15 @@ void Solution::solveWithPrepopulatedStiffnessAndLoad(Teuchos::RCP<Solver> solver
   
   GlobalIndexType dofInterpreterGlobalDofCount = _dofInterpreter->globalDofCount();
   GlobalIndexType meshGlobalDofCount = _mesh->globalDofCount();
-  if (rank==0) cout << "About to call global solver with " << dofInterpreterGlobalDofCount << " global dof count.\n";
-  if (rank==0) cout << "(Mesh sees " << meshGlobalDofCount << " dofs.)\n";
+//  if (rank==0) cout << "About to call global solver with " << dofInterpreterGlobalDofCount << " global dof count.\n";
+//  if (rank==0) cout << "(Mesh sees " << meshGlobalDofCount << " dofs.)\n";
   
 //  cout << "On rank " << rank << ", about to call global solver with " << _dofInterpreter->globalDofCount() << " global dof count.\n";
 //  cout << "(On rank " << rank << ", mesh sees " << _mesh->globalDofCount() << " dofs.)\n";
   
   int solveSuccess = solver->solve();
 
-  if (rank==0) cout << "Returned from global solver.\n";
+//  if (rank==0) cout << "Returned from global solver.\n";
   
   if (solveSuccess != 0 ) {
     cout << "**** WARNING: in Solution.solve(), solver->solve() failed with error code " << solveSuccess << ". ****\n";
