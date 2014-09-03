@@ -95,7 +95,7 @@ void Boundary::buildLookupTables() {
       break;
     }
   }
-  if (_imposeSingletonBCsOnThisRank) cout << "imposing singleton BCs on rank " << rank << endl;
+//  if (_imposeSingletonBCsOnThisRank) cout << "imposing singleton BCs on rank " << rank << endl;
   
   set< pair< GlobalIndexType, unsigned > >::iterator entryIt;
   set< GlobalIndexType > rankLocalCells = _mesh->globalDofAssignment()->cellsInPartition(-1); // -1: this rank's partition
