@@ -34,6 +34,8 @@ void GMGSolver::setTolerance(double tol) {
 }
 
 int GMGSolver::solve() {
+  int rank = Teuchos::GlobalMPISession::getRank();
+  
   AztecOO solver(problem());
   
   Epetra_RowMatrix *A = problem().GetMatrix();
@@ -61,27 +63,29 @@ int GMGSolver::solve() {
   
   const double* status = solver.GetAztecStatus();
   int whyTerminated = status[AZ_why];
-  switch (whyTerminated) {
-    case AZ_normal:
-      cout << "whyTerminated: AZ_normal " << endl;
-      break;
-    case AZ_param:
-      cout << "whyTerminated: AZ_param " << endl;
-      break;
-    case AZ_breakdown:
-      cout << "whyTerminated: AZ_breakdown " << endl;
-      break;
-    case AZ_loss:
-      cout << "whyTerminated: AZ_loss " << endl;
-      break;
-    case AZ_ill_cond:
-      cout << "whyTerminated: AZ_ill_cond " << endl;
-      break;
-    case AZ_maxits:
-      cout << "whyTerminated: AZ_maxits " << endl;
-      break;
-    default:
-      break;
+  if (rank==0) {
+    switch (whyTerminated) {
+      case AZ_normal:
+        cout << "whyTerminated: AZ_normal " << endl;
+        break;
+      case AZ_param:
+        cout << "whyTerminated: AZ_param " << endl;
+        break;
+      case AZ_breakdown:
+        cout << "whyTerminated: AZ_breakdown " << endl;
+        break;
+      case AZ_loss:
+        cout << "whyTerminated: AZ_loss " << endl;
+        break;
+      case AZ_ill_cond:
+        cout << "whyTerminated: AZ_ill_cond " << endl;
+        break;
+      case AZ_maxits:
+        cout << "whyTerminated: AZ_maxits " << endl;
+        break;
+      default:
+        break;
+    }
   }
   
   Epetra_MultiVector *x = problem().GetLHS();
