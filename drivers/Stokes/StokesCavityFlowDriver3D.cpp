@@ -72,6 +72,17 @@ public:
   }
 };
 
+enum SolverChoice {
+  MUMPS, KLU, SLU, UNKNOWN
+};
+
+SolverChoice getSolverChoice(string solverString) {
+  if (solverString=="MUMPS") return MUMPS;
+  if (solverString=="KLU") return KLU;
+  if (solverString=="SLU") return SLU;
+  return UNKNOWN;
+}
+
 int main(int argc, char *argv[]) {
 #ifdef ENABLE_INTEL_FLOATING_POINT_EXCEPTIONS
   cout << "NOTE: enabling floating point exceptions for divide by zero.\n";
@@ -98,13 +109,15 @@ int main(int argc, char *argv[]) {
   int k = 1; // poly order for field variables
   int delta_k = 3;   // test space enrichment
   
-  bool useSuperLUDist = true;
-  bool useMumps = false;
-  bool useCGSolver = false;
   bool useCondensedSolve = true;
-  bool useMLSolver = false;
+//  bool useSuperLUDist = true;
+//  bool useMumps = false;
+//  bool useCGSolver = false;
+//  bool useMLSolver = false;
   bool useGMGSolver = false;
   bool clearSolution = false;
+  
+  string solverString = "MUMPS";
   
   bool enforceOneIrregularity = true;
   
@@ -133,13 +146,14 @@ int main(int argc, char *argv[]) {
   cmdp.setOption("eps", &eps, "ramp width (set to 0 for no ramp in BCs)");
   cmdp.setOption("useCondensedSolve", "useStandardSolve", &useCondensedSolve);
   cmdp.setOption("useConformingTraces", "useNonConformingTraces", &conformingTraces);
-  cmdp.setOption("useMumps", "useKLU", &useMumps, "use MUMPS (if available)");
+  cmdp.setOption("globalSolver", &solverString, "global solver choice -- MUMPS, KLU, GMG, or SLU");
+  cmdp.setOption("useGMG", "useDirect", &useGMGSolver, "use geometric multi-grid");
+//  cmdp.setOption("useMumps", "useKLU", &useMumps, "use MUMPS (if available)");
   cmdp.setOption("mumpsMaxMemoryMB", &mumpsMaxMemoryMB, "max allocation size MUMPS is allowed to make, in MB");
   cmdp.setOption("refinementThreshold", &energyThreshold, "relative energy threshold for refinements");
   cmdp.setOption("meshLoadName", &meshLoadName, "file to load initial mesh from");
   cmdp.setOption("startingRefNumber", &startingRefinementNumber, "where to start counting refinements (useful for restart)");
   cmdp.setOption("maxCellsPerRank", &maxCellsPerRank, "max cells per rank (will quit refining once this is reached)");
-  
   
   if (cmdp.parse(argc,argv) != Teuchos::CommandLineProcessor::PARSE_SUCCESSFUL) {
 #ifdef HAVE_MPI
@@ -150,8 +164,11 @@ int main(int argc, char *argv[]) {
   
   int H1Order = k + 1;
 
-  if (useMumps) {
-    useSuperLUDist = false;
+  SolverChoice solverChoice = getSolverChoice(solverString);
+
+  if (solverChoice==UNKNOWN) {
+    if (rank==0) cout << "Unrecognized global solver choice.  Exiting\n";
+    return 1;
   }
   
   if (useCondensedSolve) {
@@ -263,7 +280,7 @@ int main(int argc, char *argv[]) {
   else
     mesh = MeshFactory::loadFromHDF5(stokesBF, meshLoadName);
   
-  coarseMesh = MeshFactory::rectilinearMesh(stokesBF, domainDimensions, elementCounts, H1Order, delta_k);
+  coarseMesh = MeshFactory::rectilinearMesh(stokesBF, domainDimensions, elementCounts, 1, delta_k);
   double meshConstructionTime = timer.ElapsedTime();
   if (rank==0) cout << "On rank " << rank << ", mesh construction time: " << meshConstructionTime << endl;
   int elementCount = mesh->getActiveCellIDs().size();
@@ -273,6 +290,7 @@ int main(int argc, char *argv[]) {
   int maxCells = maxCellsPerRank * numRanks;
   
   if (rank==0) cout << "maxCellsPerRank is " << maxCellsPerRank << "; will stop if mesh exceeds " << maxCells << " elements.\n";
+  if (rank==0) cout << "energyThreshold is " << energyThreshold << endl;
   
   RHSPtr rhs = RHS::rhs(); // zero
   
@@ -326,34 +344,34 @@ int main(int argc, char *argv[]) {
   refinementStrategy.setEnforceOneIrregularity(enforceOneIrregularity);
   
   Teuchos::RCP<Solver> coarseSolver, fineSolver;
-  if (useSuperLUDist){
-    if (rank==0) cout << "Using SuperLU_DIST as coarse solver.\n";
-    coarseSolver = Teuchos::rcp( new SuperLUDistSolver() );
-  } else if (useMumps) {
-    if (rank==0) cout << "Using MUMPS as coarse solver.\n";
+  switch(solverChoice) {
+      case MUMPS:
 #ifdef USE_MUMPS
-    coarseSolver = Teuchos::rcp( new MumpsSolver(mumpsMaxMemoryMB) );
+      coarseSolver = Teuchos::rcp( new MumpsSolver(mumpsMaxMemoryMB) );
 #else
-    cout << "useMumps=true, but MUMPS is not available!\n";
-    exit(0);
+      cout << "useMumps=true, but MUMPS is not available!\n";
+      exit(1);
 #endif
-  } else {
-    coarseSolver = Teuchos::rcp( new KluSolver );
+      break;
+    case KLU:
+      coarseSolver = Teuchos::rcp( new KluSolver );
+      break;
+    case SLU:
+      coarseSolver = Teuchos::rcp( new SuperLUDistSolver() );
+      break;
+    case UNKNOWN:
+      // should be unreachable
+      break;
   }
-  if (useCGSolver) {
-    int maxIters = 80000;
-    double tol = 1e-6;
-    fineSolver = Teuchos::rcp( new CGSolver(maxIters, tol) );
-  } else if (useMLSolver) {
-    int maxIters = 80000;
-    double tol = 1e-6;
-    fineSolver = Teuchos::rcp( new MLSolver(tol, maxIters) );
-  } else if (useGMGSolver) {
+  
+  double initialTol = 1e-2;
+  
+  if (useGMGSolver) {
     double tol = 1e-6;
     int maxIters = 80000;
     BCPtr zeroBCs = bc->copyImposingZero();
-    // as a test, do "multi" grid between fine and fine meshes.
-    fineSolver = Teuchos::rcp( new GMGSolver(zeroBCs, mesh, graphNorm, mesh,
+
+    fineSolver = Teuchos::rcp( new GMGSolver(zeroBCs, coarseMesh, graphNorm, mesh,
                                              solution->getPartitionMap(), maxIters, tol, coarseSolver) );
 
 //    fineSolver = Teuchos::rcp( new GMGSolver(zeroBCs, coarseMesh, graphNorm, mesh,
@@ -368,10 +386,17 @@ int main(int argc, char *argv[]) {
   }
   if (rank==0) cout << "About to start solve.\n";
   timer.ResetStartTime();
-  if (useCondensedSolve)
-    solution->condensedSolve(coarseSolver);
+  Teuchos::RCP<Solver> firstSolver;
+  if (meshLoadName.length() == 0)
+    firstSolver = coarseSolver;
   else
-    solution->solve(coarseSolver);
+    firstSolver = fineSolver;
+  
+  if (useCondensedSolve)
+    solution->condensedSolve(firstSolver);
+  else
+    solution->solve(firstSolver);
+  
   double totalSolveTime = timer.ElapsedTime();
   if (rank==0) cout << "total solve time (as seen by rank 0) " << totalSolveTime << " seconds.\n";
   solution->reportTimings();
@@ -415,6 +440,15 @@ int main(int argc, char *argv[]) {
     }
     
     if (clearSolution) solution->clear();
+    
+    if (useGMGSolver) { // recreate fineSolver...
+      double tol = initialTol * energyError;
+      int maxIters = 80000;
+      BCPtr zeroBCs = bc->copyImposingZero();
+      
+      fineSolver = Teuchos::rcp( new GMGSolver(zeroBCs, coarseMesh, graphNorm, mesh,
+                                               solution->getPartitionMap(), maxIters, tol, coarseSolver) );
+    }
     
     timer.ResetStartTime();
     if (useCondensedSolve)
