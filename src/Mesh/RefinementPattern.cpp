@@ -335,6 +335,7 @@ unsigned RefinementPattern::ancestralSubcellOrdinal(RefinementBranch &refBranch,
     RefinementPattern* refPattern = refBranch[i].first;
     unsigned childOrdinal = refBranch[i].second;
     ancestralSubcord = refPattern->mapSubcellOrdinalFromChildToParent(childOrdinal, subcdim, ancestralSubcord);
+    if (ancestralSubcord == -1) return ancestralSubcord; // no more mapping to do, then!
   }
   return ancestralSubcord;
 }
