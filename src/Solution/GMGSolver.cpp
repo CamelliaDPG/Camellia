@@ -55,6 +55,8 @@ int GMGSolver::solve() {
   solver.SetAztecOption(AZ_scaling, AZ_none);
 //  solver.SetAztecOption(AZ_conv, AZ_noscaled);
   
+//  solver.SetAztecOption(AZ_output, AZ_last);
+  
   int solveResult = solver.Iterate(_maxIters,_tol);
   
   const double* status = solver.GetAztecStatus();

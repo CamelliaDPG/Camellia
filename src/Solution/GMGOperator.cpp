@@ -340,7 +340,7 @@ int GMGOperator::ApplyInverse(const Epetra_MultiVector& X_in, Epetra_MultiVector
       
       
 //      cout << "xEntry = " << xEntry << "; yEntry = " << yEntry << endl;
-      bool applyDiagonalTermsOnlyForZeroY = true;
+      bool applyDiagonalTermsOnlyForZeroY = false;
       if (applyDiagonalTermsOnlyForZeroY) {
         if (yEntry == 0) {
           yEntry = xEntry/diagEntry;
@@ -390,6 +390,19 @@ Teuchos::RCP<Epetra_MultiVector> GMGOperator::filterMultiVectorByFineCellOwnersh
     int lID_filtered = cellFilteredMap.LID(globalIndex);
     if (ownedFineGlobalIndices.find(globalIndex) != ownedFineGlobalIndices.end()) {
       int lID_X = X.Map().LID(globalIndex);
+      if (lID_X < 0) {
+        cout << "error: lID_X < 0 for globalIndex " << globalIndex << ".\n";
+        Camellia::print("allFineGlobalIndicesForCell", allFineGlobalIndicesForCell);
+        Camellia::print("ownedFineGlobalIndices", ownedFineGlobalIndices);
+        
+        set<GlobalIndexTypeToCast> myXEntries;
+        for (int lID = X.Map().MinLID(); lID <= X.Map().MaxLID(); lID++) {
+          myXEntries.insert(X.Map().GID(lID));
+        }
+        Camellia::print("myXEntries", myXEntries);
+        
+        TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "");
+      }
       (*X_filtered)[0][lID_filtered] = X[0][lID_X];
     } else {
       (*X_filtered)[0][lID_filtered] = 0; // zero out the unowned dof coefficients that are seen by the cell
