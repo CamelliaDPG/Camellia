@@ -135,6 +135,8 @@ int main(int argc, char *argv[]) {
   
   double energyThreshold = 0.2;
   
+  double relativeTol = 1e-2;
+  
   string meshLoadName = ""; // file to load mesh from
   int startingRefinementNumber = 0;
   int maxCellsPerRank = INT_MAX;
@@ -148,6 +150,7 @@ int main(int argc, char *argv[]) {
   cmdp.setOption("useConformingTraces", "useNonConformingTraces", &conformingTraces);
   cmdp.setOption("globalSolver", &solverString, "global solver choice -- MUMPS, KLU, GMG, or SLU");
   cmdp.setOption("useGMG", "useDirect", &useGMGSolver, "use geometric multi-grid");
+  cmdp.setOption("relativeTol", &relativeTol, "Energy error-relative tolerance for iterative solver.");
 //  cmdp.setOption("useMumps", "useKLU", &useMumps, "use MUMPS (if available)");
   cmdp.setOption("mumpsMaxMemoryMB", &mumpsMaxMemoryMB, "max allocation size MUMPS is allowed to make, in MB");
   cmdp.setOption("refinementThreshold", &energyThreshold, "relative energy threshold for refinements");
@@ -364,19 +367,14 @@ int main(int argc, char *argv[]) {
       break;
   }
   
-  double initialTol = 1e-2;
   
   if (useGMGSolver) {
-    double tol = 1e-6;
+    double tol = relativeTol;
     int maxIters = 80000;
     BCPtr zeroBCs = bc->copyImposingZero();
 
     fineSolver = Teuchos::rcp( new GMGSolver(zeroBCs, coarseMesh, graphNorm, mesh,
                                              solution->getPartitionMap(), maxIters, tol, coarseSolver) );
-
-//    fineSolver = Teuchos::rcp( new GMGSolver(zeroBCs, coarseMesh, graphNorm, mesh,
-//                                             solution->getPartitionMap(), maxIters, tol, coarseSolver) );
-
   } else {
     fineSolver = coarseSolver;
   }
@@ -442,7 +440,7 @@ int main(int argc, char *argv[]) {
     if (clearSolution) solution->clear();
     
     if (useGMGSolver) { // recreate fineSolver...
-      double tol = initialTol * energyError;
+      double tol = relativeTol * energyError;
       int maxIters = 80000;
       BCPtr zeroBCs = bc->copyImposingZero();
       
