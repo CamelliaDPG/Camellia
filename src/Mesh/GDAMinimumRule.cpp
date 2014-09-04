@@ -1640,6 +1640,10 @@ set<GlobalIndexType> GDAMinimumRule::getFittableGlobalDofIndices(GlobalIndexType
 SubCellDofIndexInfo GDAMinimumRule::getOwnedGlobalDofIndices(GlobalIndexType cellID, CellConstraints &constraints) {
   // there's a lot of redundancy between this method and the dof-counting bit of rebuild lookups.  May be worth factoring that out.
   
+  if (_ownedGlobalDofIndicesCache.find(cellID) != _ownedGlobalDofIndicesCache.end()) {
+    return _ownedGlobalDofIndicesCache[cellID];
+  }
+  
   int spaceDim = _meshTopology->getSpaceDim();
   int sideDim = spaceDim - 1;
   
@@ -1724,6 +1728,7 @@ SubCellDofIndexInfo GDAMinimumRule::getOwnedGlobalDofIndices(GlobalIndexType cel
       }
     }
   }
+  _ownedGlobalDofIndicesCache[cellID] = scInfo;
   return scInfo;
 }
 
@@ -1786,9 +1791,20 @@ SubCellDofIndexInfo GDAMinimumRule::getGlobalDofIndices(GlobalIndexType cellID, 
 
 LocalDofMapperPtr GDAMinimumRule::getDofMapper(GlobalIndexType cellID, CellConstraints &constraints, int varIDToMap, int sideOrdinalToMap) {
   if ((varIDToMap == -1) && (sideOrdinalToMap == -1)) {
-    // a mapper for the whole dof ordering: we cache these...
+    // a mapper for the whole dof ordering: we cache these separately...
     if (_dofMapperCache.find(cellID) != _dofMapperCache.end()) {
       return _dofMapperCache[cellID];
+    }
+  } else {
+    map< GlobalIndexType, map<int, map<int, LocalDofMapperPtr> > >::iterator cellMapEntry = _dofMapperForVariableOnSideCache.find(cellID);
+    if (cellMapEntry != _dofMapperForVariableOnSideCache.end()) {
+      map<int, map<int, LocalDofMapperPtr> >::iterator sideMapEntry = cellMapEntry->second.find(sideOrdinalToMap);
+      if (sideMapEntry != cellMapEntry->second.end()) {
+        map<int, LocalDofMapperPtr>::iterator varMapEntry = sideMapEntry->second.find(varIDToMap);
+        if (varMapEntry != sideMapEntry->second.end()) {
+          return varMapEntry->second;
+        }
+      }
     }
   }
   
@@ -1853,6 +1869,7 @@ LocalDofMapperPtr GDAMinimumRule::getDofMapper(GlobalIndexType cellID, CellConst
     _dofMapperCache[cellID] = dofMapper;
     return _dofMapperCache[cellID];
   } else {
+    _dofMapperForVariableOnSideCache[cellID][sideOrdinalToMap][varIDToMap] = dofMapper;
     return dofMapper;
   }
 }
@@ -1897,6 +1914,8 @@ void GDAMinimumRule::printConstraintInfo(GlobalIndexType cellID) {
 void GDAMinimumRule::rebuildLookups() {
   _constraintsCache.clear(); // to free up memory, could clear this again after the lookups are rebuilt.  Having the cache is most important during the construction below.
   _dofMapperCache.clear();
+  _dofMapperForVariableOnSideCache.clear();
+  _ownedGlobalDofIndicesCache.clear();
   
   _partitionFluxIndexOffsets.clear();
   _partitionTraceIndexOffsets.clear();

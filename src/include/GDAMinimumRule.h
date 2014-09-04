@@ -44,14 +44,15 @@ class GDAMinimumRule : public GlobalDofAssignment {
   
   map<int,set<IndexType> > _partitionIndexOffsetsForVarID; // TODO: factor out _partitionFluxIndexOffsets and _partitionTraceIndexOffsets using this container.
   
-  map< GlobalIndexType, CellConstraints > _constraintsCache;
-  
-  map< GlobalIndexType, LocalDofMapperPtr > _dofMapperCache;
-
   typedef map<int, vector<GlobalIndexType> > VarIDToDofIndices; // key: varID
   typedef map<unsigned, VarIDToDofIndices> SubCellOrdinalToMap; // key: subcell ordinal
   typedef vector< SubCellOrdinalToMap > SubCellDofIndexInfo; // index to vector: subcell dimension
-    
+
+  map< GlobalIndexType, CellConstraints > _constraintsCache;
+  map< GlobalIndexType, LocalDofMapperPtr > _dofMapperCache;
+  map< GlobalIndexType, map<int, map<int, LocalDofMapperPtr> > > _dofMapperForVariableOnSideCache; // cellID --> side --> variable --> LocalDofMapper
+  map< GlobalIndexType, SubCellDofIndexInfo> _ownedGlobalDofIndicesCache; // (cellID --> SubCellDofIndexInfo)
+  
   vector<unsigned> allBasisDofOrdinalsVector(int basisCardinality);
   
   void filterSubBasisConstraintData(set<unsigned> &basisDofOrdinals,vector<GlobalIndexType> &globalDofOrdinals,
