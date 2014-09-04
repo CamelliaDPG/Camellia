@@ -90,6 +90,57 @@ FieldContainer<double> SubBasisDofMatrixMapper::mapData(bool transposeConstraint
   
   return result;
 }
+
+void SubBasisDofMatrixMapper::mapDataIntoGlobalContainer(const FieldContainer<double> &wholeBasisData, const map<GlobalIndexType, unsigned> &globalIndexToOrdinal,
+                                                         bool fittableDofsOnly, const set<GlobalIndexType> &fittableDofIndices, FieldContainer<double> &globalData) {
+    // like calling mapData, above, with transposeConstraint = true
+    
+  const set<unsigned>* basisOrdinalFilter = &this->basisDofOrdinalFilter();
+  vector<unsigned> dofIndices(basisOrdinalFilter->begin(),basisOrdinalFilter->end());
+  FieldContainer<double> subBasisData(basisOrdinalFilter->size());
+  int dofCount = basisOrdinalFilter->size();
+  if (wholeBasisData.rank()==1) {
+    for (int i=0; i<dofCount; i++) {
+      subBasisData[i] = wholeBasisData[dofIndices[i]];
+    }
+  } else {
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "mapDataIntoGlobalContainer only supports rank 1 basis data");
+  }
+  
+  // subBasisData must be rank 2, and must have the same size as FilteredLocalDofOrdinals in its first dimension
+  // reshape as a rank 2 container (column vector as a matrix):
+  subBasisData.resize(subBasisData.dimension(0),1);
+  int constraintRows = _constraintMatrix.dimension(1);
+  int constraintCols = _constraintMatrix.dimension(0);
+  int dataCols = subBasisData.dimension(1);
+  int dataRows = subBasisData.dimension(0);
+  
+  if ((dataCols==0) || (dataRows==0) || (constraintRows==0) || (constraintCols==0)) {
+    cout << "degenerate matrix encountered.\n";
+  }
+  
+  // given the multiplication we'll do, we need constraint columns = data rows
+  if (constraintCols != dataRows) {
+    cout << "Missized container in SubBasisDofMatrixMapper::mapData() for left-multiplication by constraint matrix.\n";
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Missized container in SubBasisDofMatrixMapper::mapData().");
+  }
+  // (could also test that the dimensions match what we expect in terms of the size of the mapped global dof ordinals or basisDofOrdinal filter)
+  
+  FieldContainer<double> result1(constraintRows,dataCols);
+  
+  char constraintTransposeFlag = 'T';
+  char dataTransposeFlag = 'N';
+  
+  SerialDenseWrapper::multiply(result1,_constraintMatrix,subBasisData,constraintTransposeFlag,dataTransposeFlag);
+  
+  for (int i=0; i<result1.size(); i++) {
+    GlobalIndexType globalIndex_i = _mappedGlobalDofOrdinals[i];
+    if (fittableDofsOnly && (fittableDofIndices.find(globalIndex_i) == fittableDofIndices.end())) continue; // skip this one
+    unsigned globalOrdinal_i = globalIndexToOrdinal.find(globalIndex_i)->second;
+    globalData[globalOrdinal_i] += result1[i];
+  }
+}
+
 vector<GlobalIndexType> SubBasisDofMatrixMapper::mappedGlobalDofOrdinals() {
   return _mappedGlobalDofOrdinals;
 }

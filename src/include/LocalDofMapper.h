@@ -26,6 +26,7 @@ class LocalDofMapper { // maps a whole trial ordering
   
   vector< set<GlobalIndexType> > _fittableGlobalDofOrdinalsOnSides;
   set<GlobalIndexType> _fittableGlobalDofOrdinalsInVolume;
+  vector< GlobalIndexType > _fittableGlobalIndices;
   
   int _sideOrdinalToMap;
   int _varIDToMap;

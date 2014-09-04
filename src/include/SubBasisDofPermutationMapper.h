@@ -20,6 +20,9 @@ public:
   SubBasisDofPermutationMapper(const set<unsigned> &basisDofOrdinalFilter, const vector<GlobalIndexType> &globalDofOrdinals, bool negate=false);
   const set<unsigned> &basisDofOrdinalFilter();
   FieldContainer<double> mapData(bool transposeConstraint, FieldContainer<double> &localData);
+  void mapDataIntoGlobalContainer(const FieldContainer<double> &wholeBasisData, const map<GlobalIndexType, unsigned> &globalIndexToOrdinal,
+                                  bool fittableDofsOnly, const set<GlobalIndexType> &fittableDofIndices, FieldContainer<double> &globalData);
+  
   vector<GlobalIndexType> mappedGlobalDofOrdinals();
   FieldContainer<double> getConstraintMatrix();
   

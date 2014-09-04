@@ -56,17 +56,19 @@ void LocalDofMapper::addSubBasisMapVectorContribution(int varID, int sideOrdinal
   }
   for (vector<SubBasisDofMapperPtr>::iterator subBasisMapIt = basisMap.begin(); subBasisMapIt != basisMap.end(); subBasisMapIt++) {
     SubBasisDofMapperPtr subBasisDofMapper = *subBasisMapIt;
-    vector<int> basisOrdinalFilter(subBasisDofMapper->basisDofOrdinalFilter().begin(), subBasisDofMapper->basisDofOrdinalFilter().end());
-    FieldContainer<double> subBasisData(basisOrdinalFilter.size());
-    filterData(basisOrdinalFilter, basisData, subBasisData);
-    FieldContainer<double> mappedSubBasisData = (*subBasisMapIt)->mapData(transposeConstraint, subBasisData);
-    vector<GlobalIndexType> globalIndices = (*subBasisMapIt)->mappedGlobalDofOrdinals();
-    for (int sbGlobalOrdinal_i=0; sbGlobalOrdinal_i<globalIndices.size(); sbGlobalOrdinal_i++) {
-      GlobalIndexType globalIndex_i = globalIndices[sbGlobalOrdinal_i];
-      if (fittableGlobalDofsOnly && (fittableDofs->find(globalIndex_i) == fittableDofs->end())) continue; // skip this one
-      unsigned globalOrdinal_i = _globalIndexToOrdinal[globalIndex_i];
-      globalData(globalOrdinal_i) += mappedSubBasisData(sbGlobalOrdinal_i);
-    }
+    subBasisDofMapper->mapDataIntoGlobalContainer(basisData, _globalIndexToOrdinal, fittableGlobalDofsOnly, *fittableDofs, globalData);
+    // old version of the method below:
+//    vector<int> basisOrdinalFilter(subBasisDofMapper->basisDofOrdinalFilter().begin(), subBasisDofMapper->basisDofOrdinalFilter().end());
+//    FieldContainer<double> subBasisData(basisOrdinalFilter.size());
+//    filterData(basisOrdinalFilter, basisData, subBasisData);
+//    FieldContainer<double> mappedSubBasisData = (*subBasisMapIt)->mapData(transposeConstraint, subBasisData);
+//    vector<GlobalIndexType> globalIndices = (*subBasisMapIt)->mappedGlobalDofOrdinals();
+//    for (int sbGlobalOrdinal_i=0; sbGlobalOrdinal_i<globalIndices.size(); sbGlobalOrdinal_i++) {
+//      GlobalIndexType globalIndex_i = globalIndices[sbGlobalOrdinal_i];
+//      if (fittableGlobalDofsOnly && (fittableDofs->find(globalIndex_i) == fittableDofs->end())) continue; // skip this one
+//      unsigned globalOrdinal_i = _globalIndexToOrdinal[globalIndex_i];
+//      globalData(globalOrdinal_i) += mappedSubBasisData(sbGlobalOrdinal_i);
+//    }
   }
 }
 
@@ -156,24 +158,27 @@ vector<GlobalIndexType> LocalDofMapper::globalIndices() {
 }
 
 vector<GlobalIndexType> LocalDofMapper::fittableGlobalIndices() {
-  // the implementation does not assume that the global indices will be in numerical order (which they currently are)
-  vector<GlobalIndexType> allGlobalIndices = globalIndices();
+  if (_fittableGlobalIndices.size() == 0) { // then we have not previously set these...
+    // the implementation does not assume that the global indices will be in numerical order (which they currently are)
+    vector<GlobalIndexType> allGlobalIndices = globalIndices();
 
-  set<GlobalIndexType> fittableIndicesSet;
-  for (int sideOrdinal=0; sideOrdinal<_fittableGlobalDofOrdinalsOnSides.size(); sideOrdinal++) {
-    fittableIndicesSet.insert(_fittableGlobalDofOrdinalsOnSides[sideOrdinal].begin(), _fittableGlobalDofOrdinalsOnSides[sideOrdinal].end());
-  }
-  
-  fittableIndicesSet.insert(_fittableGlobalDofOrdinalsInVolume.begin(),_fittableGlobalDofOrdinalsInVolume.end());
-  
-  vector<GlobalIndexType> fittableIndices;
-  for (vector<GlobalIndexType>::iterator globalIndexIt=allGlobalIndices.begin(); globalIndexIt != allGlobalIndices.end(); globalIndexIt++) {
-    GlobalIndexType globalIndex = *globalIndexIt;
-    if (fittableIndicesSet.find(globalIndex) != fittableIndicesSet.end()) {
-      fittableIndices.push_back(globalIndex);
+    set<GlobalIndexType> fittableIndicesSet;
+    for (int sideOrdinal=0; sideOrdinal<_fittableGlobalDofOrdinalsOnSides.size(); sideOrdinal++) {
+      fittableIndicesSet.insert(_fittableGlobalDofOrdinalsOnSides[sideOrdinal].begin(), _fittableGlobalDofOrdinalsOnSides[sideOrdinal].end());
     }
+    
+    fittableIndicesSet.insert(_fittableGlobalDofOrdinalsInVolume.begin(),_fittableGlobalDofOrdinalsInVolume.end());
+    
+    vector<GlobalIndexType> fittableIndices;
+    for (vector<GlobalIndexType>::iterator globalIndexIt=allGlobalIndices.begin(); globalIndexIt != allGlobalIndices.end(); globalIndexIt++) {
+      GlobalIndexType globalIndex = *globalIndexIt;
+      if (fittableIndicesSet.find(globalIndex) != fittableIndicesSet.end()) {
+        fittableIndices.push_back(globalIndex);
+      }
+    }
+    _fittableGlobalIndices = fittableIndices;
   }
-  return fittableIndices;
+  return _fittableGlobalIndices;
 }
 
 FieldContainer<double> LocalDofMapper::mapLocalDataMatrix(const FieldContainer<double> &localData, bool fittableGlobalDofsOnly) {

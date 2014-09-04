@@ -28,6 +28,9 @@ public:
                           const FieldContainer<double> &constraintMatrix);
   const set<unsigned> &basisDofOrdinalFilter();
   FieldContainer<double> mapData(bool transposeConstraint, FieldContainer<double> &localData);
+  void mapDataIntoGlobalContainer(const FieldContainer<double> &wholeBasisData, const map<GlobalIndexType, unsigned> &globalIndexToOrdinal,
+                                  bool fittableDofsOnly, const set<GlobalIndexType> &fittableDofIndices, FieldContainer<double> &globalData);
+  
   vector<GlobalIndexType> mappedGlobalDofOrdinals();
   
   SubBasisDofMapperPtr negatedDofMapper();

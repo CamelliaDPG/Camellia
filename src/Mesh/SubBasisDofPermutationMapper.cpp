@@ -61,6 +61,21 @@ FieldContainer<double> SubBasisDofPermutationMapper::mapData(bool transposeConst
     return dataPermuted;
   }
 }
+void SubBasisDofPermutationMapper::mapDataIntoGlobalContainer(const FieldContainer<double> &wholeBasisData, const map<GlobalIndexType, unsigned int> &globalIndexToOrdinal,
+                                                              bool fittableDofsOnly, const set<GlobalIndexType> &fittableDofIndices, FieldContainer<double> &globalData) {
+  // like calling mapData, above, with transposeConstraintMatrix = true
+  
+  const set<unsigned>* basisOrdinalFilter = &this->basisDofOrdinalFilter();
+  vector<unsigned> dofIndices(basisOrdinalFilter->begin(),basisOrdinalFilter->end());
+  
+  for (int sbGlobalOrdinal_i=0; sbGlobalOrdinal_i<_globalDofOrdinals.size(); sbGlobalOrdinal_i++) {
+    GlobalIndexType globalIndex_i = _globalDofOrdinals[sbGlobalOrdinal_i];
+    if (fittableDofsOnly && (fittableDofIndices.find(globalIndex_i) == fittableDofIndices.end())) continue; // skip this one
+    unsigned globalOrdinal_i = globalIndexToOrdinal.find(globalIndex_i)->second;
+    globalData[globalOrdinal_i] += wholeBasisData[dofIndices[sbGlobalOrdinal_i]];
+  }
+}
+
 FieldContainer<double> SubBasisDofPermutationMapper::getConstraintMatrix() {
   // identity (permutation comes by virtue of ordering in globalDofOrdinals)
   FieldContainer<double> matrix(_basisDofOrdinalFilter.size(),_globalDofOrdinals.size());
