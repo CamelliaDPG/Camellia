@@ -19,10 +19,15 @@ GMGSolver::GMGSolver( BCPtr zeroBCs, MeshPtr coarseMesh, IPPtr coarseIP, MeshPtr
   _printToConsole = false;
   _tol = tol;
   _diagonalSmoothing = true;
+  _azOutput = AZ_warnings;
 }
 
 void GMGSolver::setApplySmoothingOperator(bool applySmoothingOp) {
   _diagonalSmoothing = applySmoothingOp;
+}
+
+void GMGSolver::setFineMesh(MeshPtr fineMesh, Epetra_Map finePartitionMap) {
+  _gmgOperator.setFineMesh(fineMesh, finePartitionMap);
 }
 
 void GMGSolver::setPrintToConsole(bool printToConsole) {
@@ -56,8 +61,8 @@ int GMGSolver::solve() {
   solver.SetAztecOption(AZ_precond, AZ_user_precond);
   solver.SetAztecOption(AZ_scaling, AZ_none);
 //  solver.SetAztecOption(AZ_conv, AZ_noscaled);
-  
 //  solver.SetAztecOption(AZ_output, AZ_last);
+  solver.SetAztecOption(AZ_output, _azOutput);
   
   int solveResult = solver.Iterate(_maxIters,_tol);
   
@@ -105,4 +110,8 @@ int GMGSolver::solve() {
   _gmgOperator.setStiffnessDiagonal(Teuchos::rcp((Epetra_MultiVector*) NULL ));
   
   return solveResult;
+}
+
+void GMGSolver::setAztecOutput(int value) {
+  _azOutput = value;
 }

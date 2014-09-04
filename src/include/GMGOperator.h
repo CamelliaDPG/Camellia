@@ -80,7 +80,19 @@ public:
    
    */
   void setStiffnessDiagonal(Teuchos::RCP<Epetra_MultiVector> diagonal);
-  //@}
+  
+  //! Set new fine mesh
+  /*!
+   
+   \param In
+   fineMesh - new fine mesh
+   
+   
+   \param In
+   finePartitionMap - partition map for the new fine mesh
+   
+   */
+  void setFineMesh(MeshPtr fineMesh, Epetra_Map finePartitionMap);
 
   
   //! @name Mathematical functions

@@ -367,14 +367,17 @@ int main(int argc, char *argv[]) {
       break;
   }
   
+  GMGSolver* gmgSolver = NULL;
   
   if (useGMGSolver) {
     double tol = relativeTol;
     int maxIters = 80000;
     BCPtr zeroBCs = bc->copyImposingZero();
 
-    fineSolver = Teuchos::rcp( new GMGSolver(zeroBCs, coarseMesh, graphNorm, mesh,
-                                             solution->getPartitionMap(), maxIters, tol, coarseSolver) );
+    gmgSolver = new GMGSolver(zeroBCs, coarseMesh, graphNorm, mesh,
+                              solution->getPartitionMap(), maxIters, tol, coarseSolver);
+    gmgSolver->setAztecOutput(100); // print residual every 100 iterations;
+    fineSolver = Teuchos::rcp( gmgSolver );
   } else {
     fineSolver = coarseSolver;
   }
@@ -441,11 +444,9 @@ int main(int argc, char *argv[]) {
     
     if (useGMGSolver) { // recreate fineSolver...
       double tol = relativeTol * energyError;
-      int maxIters = 80000;
-      BCPtr zeroBCs = bc->copyImposingZero();
-      
-      fineSolver = Teuchos::rcp( new GMGSolver(zeroBCs, coarseMesh, graphNorm, mesh,
-                                               solution->getPartitionMap(), maxIters, tol, coarseSolver) );
+      gmgSolver->setTolerance(tol);
+      gmgSolver->setFineMesh(mesh, solution->getPartitionMap());
+      gmgSolver->setAztecOutput(100); // print residual every 100 iterations;
     }
     
     timer.ResetStartTime();

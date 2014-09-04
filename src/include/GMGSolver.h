@@ -23,6 +23,8 @@ class GMGSolver : public Solver {
   GMGOperator _gmgOperator;
   
   bool _diagonalSmoothing;
+  
+  int _azOutput;
 public:
   GMGSolver(BCPtr zeroBCs, MeshPtr coarseMesh, IPPtr coarseIP, MeshPtr fineMesh, Epetra_Map finePartitionMap, int maxIters, double tol, Teuchos::RCP<Solver> coarseSolver);
   void setPrintToConsole(bool printToConsole);
@@ -33,6 +35,9 @@ public:
   GMGOperator & gmgOperator() {
     return _gmgOperator;
   }
+  void setAztecOutput(int value);
+  
+  void setFineMesh(MeshPtr fineMesh, Epetra_Map finePartitionMap);
 };
 
 #endif /* defined(__Camellia_debug__GMGSolver__) */

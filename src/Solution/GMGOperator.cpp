@@ -447,6 +447,11 @@ const Epetra_Map & GMGOperator::OperatorRangeMap() const {
   return _finePartitionMap;
 }
 
+void GMGOperator::setFineMesh(MeshPtr fineMesh, Epetra_Map finePartitionMap) {
+  _fineMesh = fineMesh;
+  _finePartitionMap = finePartitionMap;
+}
+
 void GMGOperator::setStiffnessDiagonal(Teuchos::RCP< Epetra_MultiVector> diagonal) {
   if (diagonal.get() != NULL) {
     EpetraExt::MultiVectorToMatlabFile("/tmp/diag.dat",*diagonal);
