@@ -346,8 +346,7 @@ int GMGOperator::ApplyInverse(const Epetra_MultiVector& X_in, Epetra_MultiVector
           yEntry = xEntry/diagEntry;
         }
       } else {
-        // otherwise, average them together:
-        yEntry = 0.5 * (yEntry + xEntry/diagEntry);
+        yEntry += xEntry/diagEntry;
       }
       
       Y.ReplaceGlobalValue(globalID, 0, yEntry);
