@@ -557,6 +557,8 @@ void Mesh::hRefine(const set<GlobalIndexType> &cellIDs, Teuchos::RCP<RefinementP
 }
 
 void Mesh::hRefine(const set<GlobalIndexType> &cellIDs, Teuchos::RCP<RefinementPattern> refPattern, bool repartitionAndRebuild) {
+  if (cellIDs.size() == 0) return;
+  
   // refine any registered meshes
   for (vector< Teuchos::RCP<RefinementObserver> >::iterator meshIt = _registeredObservers.begin();
        meshIt != _registeredObservers.end(); meshIt++) {
@@ -587,6 +589,8 @@ void Mesh::hRefine(const set<GlobalIndexType> &cellIDs, Teuchos::RCP<RefinementP
 }
 
 void Mesh::hUnrefine(const set<GlobalIndexType> &cellIDs) {
+  if (cellIDs.size() == 0) return;
+  
   // refine any registered meshes
   for (vector< Teuchos::RCP<RefinementObserver> >::iterator meshIt = _registeredObservers.begin();
        meshIt != _registeredObservers.end(); meshIt++) {
@@ -860,6 +864,8 @@ void Mesh::pRefine(const set<GlobalIndexType> &cellIDsForPRefinements){
 }
 
 void Mesh::pRefine(const set<GlobalIndexType> &cellIDsForPRefinements, int pToAdd) {
+  if (cellIDsForPRefinements.size() == 0) return;
+  
   // refine any registered meshes
   for (vector< Teuchos::RCP<RefinementObserver> >::iterator meshIt = _registeredObservers.begin();
        meshIt != _registeredObservers.end(); meshIt++) {
