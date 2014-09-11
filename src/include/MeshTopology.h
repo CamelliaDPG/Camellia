@@ -148,13 +148,15 @@ public:
   IndexType cellCount();
   IndexType activeCellCount();
   
-  pair<IndexType,IndexType> leastActiveCellIndexContainingEntityConstrainedByConstrainingEntity(unsigned d, unsigned constrainingEntityIndex);
+//  pair<IndexType,IndexType> leastActiveCellIndexContainingEntityConstrainedByConstrainingEntity(unsigned d, unsigned constrainingEntityIndex);
   
   const set<IndexType> &getActiveCellIndices();
   set< pair<IndexType, unsigned> > getActiveBoundaryCells(); // (cellIndex, sideOrdinal)
   vector<double> getCellCentroid(IndexType cellIndex);
   
   const set<IndexType> &getRootCellIndices();
+  
+  pair<IndexType,IndexType> owningCellIndexForConstrainingEntity(unsigned d, unsigned constrainingEntityIndex);
   
   // 2D only:
   vector< ParametricCurvePtr > parametricEdgesForCell(IndexType cellID, bool neglectCurves);

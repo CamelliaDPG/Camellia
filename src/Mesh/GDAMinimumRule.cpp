@@ -1543,7 +1543,7 @@ CellConstraints GDAMinimumRule::getCellConstraints(GlobalIndexType cellID) {
                                                                                            constrainingDimension, constrainingSubcellInfo[d][scOrdinal].subcellOrdinal);
           constrainingEntityIndex = constrainingCell->entityIndex(constrainingDimension, constrainingSubcellOrdinalInCell);
         }
-        pair<GlobalIndexType,GlobalIndexType> owningCellInfo = _meshTopology->leastActiveCellIndexContainingEntityConstrainedByConstrainingEntity(constrainingDimension, constrainingEntityIndex);
+        pair<GlobalIndexType,GlobalIndexType> owningCellInfo = _meshTopology->owningCellIndexForConstrainingEntity(constrainingDimension, constrainingEntityIndex);
         cellConstraints.owningCellIDForSubcell[d][scOrdinal].cellID = owningCellInfo.first;
         cellConstraints.owningCellIDForSubcell[d][scOrdinal].owningSubcellEntityIndex = owningCellInfo.second; // the constrained entity in owning cell (which is a same-dimensional descendant of the constraining entity)
         cellConstraints.owningCellIDForSubcell[d][scOrdinal].dimension = constrainingDimension;
