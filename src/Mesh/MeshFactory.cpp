@@ -454,7 +454,7 @@ MeshPtr MeshFactory::rectilinearMesh(BilinearFormPtr bf, vector<double> dimensio
   }
   
   if (spaceDim == 2) {
-    return MeshFactory::quadMeshMinRule(bf, H1Order, dimensions[0], dimensions[1], elementCounts[0], elementCounts[1], pToAddTest, false, x0[0], x0[1]);
+    return MeshFactory::quadMeshMinRule(bf, H1Order, pToAddTest, dimensions[0], dimensions[1], elementCounts[0], elementCounts[1], false, x0[0], x0[1]);
   }
   
   if (spaceDim != 3) {
