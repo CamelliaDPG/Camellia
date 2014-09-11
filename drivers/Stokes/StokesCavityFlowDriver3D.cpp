@@ -137,6 +137,8 @@ int main(int argc, char *argv[]) {
   
   double relativeTol = 1e-2;
   
+  int coarseMesh_k = 0;
+  
   string meshLoadName = ""; // file to load mesh from
   int startingRefinementNumber = 0;
   int maxCellsPerRank = INT_MAX;
@@ -151,6 +153,7 @@ int main(int argc, char *argv[]) {
   cmdp.setOption("globalSolver", &solverString, "global solver choice -- MUMPS, KLU, GMG, or SLU");
   cmdp.setOption("useGMG", "useDirect", &useGMGSolver, "use geometric multi-grid");
   cmdp.setOption("relativeTol", &relativeTol, "Energy error-relative tolerance for iterative solver.");
+  cmdp.setOption("coarseMesh_k", &coarseMesh_k, "field order for coarse mesh in GMG solve.");
 //  cmdp.setOption("useMumps", "useKLU", &useMumps, "use MUMPS (if available)");
   cmdp.setOption("mumpsMaxMemoryMB", &mumpsMaxMemoryMB, "max allocation size MUMPS is allowed to make, in MB");
   cmdp.setOption("refinementThreshold", &energyThreshold, "relative energy threshold for refinements");
@@ -283,7 +286,7 @@ int main(int argc, char *argv[]) {
   else
     mesh = MeshFactory::loadFromHDF5(stokesBF, meshLoadName);
   
-  coarseMesh = MeshFactory::rectilinearMesh(stokesBF, domainDimensions, elementCounts, 1, delta_k);
+  coarseMesh = MeshFactory::rectilinearMesh(stokesBF, domainDimensions, elementCounts, coarseMesh_k + 1, delta_k);
   double meshConstructionTime = timer.ElapsedTime();
   if (rank==0) cout << "On rank " << rank << ", mesh construction time: " << meshConstructionTime << endl;
   int elementCount = mesh->getActiveCellIDs().size();
