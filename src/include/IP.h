@@ -53,6 +53,8 @@ public:
                  vector<IntrepidExtendedTypes::EOperatorExtended> &testOp2);
   
   void printInteractions();
+
+  static Teuchos::RCP<IP> ip();
   
   static pair<Teuchos::RCP<IP>, VarPtr > standardInnerProductForFunctionSpace(EFunctionSpaceExtended fs, bool useTraceVar);
 };

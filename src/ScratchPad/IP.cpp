@@ -347,3 +347,7 @@ pair<IPPtr, VarPtr> IP::standardInnerProductForFunctionSpace(EFunctionSpaceExten
   }
   return make_pair(ip,var);
 }
+
+IPPtr IP::ip() {
+  return Teuchos::rcp( new IP );
+}
