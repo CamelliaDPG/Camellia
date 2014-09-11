@@ -322,7 +322,8 @@ void GlobalDofAssignment::interpretLocalCoefficients(GlobalIndexType cellID, con
       interpretLocalBasisCoefficients(cellID, trialID, sideOrdinal, basisCoefficients, fittedGlobalCoefficients, fittedGlobalDofIndices);
       for (int i=0; i<fittedGlobalCoefficients.size(); i++) {
         GlobalIndexType globalDofIndex = fittedGlobalDofIndices[i];
-        globalCoefficients.ReplaceGlobalValue((GlobalIndexTypeToCast)globalDofIndex, 0, fittedGlobalCoefficients[i]);
+        globalCoefficients.ReplaceGlobalValue((GlobalIndexTypeToCast)globalDofIndex, 0, fittedGlobalCoefficients[i]); // for globalDofIndex not owned by this rank, doesn't do anything...
+//        cout << "global coefficient " << globalDofIndex << " = " << fittedGlobalCoefficients[i] << endl;
       }
     }
   }
