@@ -74,6 +74,8 @@ public:
   
   MeshTopology* meshTopology();
   
+  bool ownsSide(unsigned sideOrdinal);
+  
   RefinementPatternPtr refinementPattern();
   void setRefinementPattern(RefinementPatternPtr refPattern);
   

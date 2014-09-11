@@ -351,6 +351,36 @@ MeshTopology* Cell::meshTopology() {
   return _meshTopo;
 }
 
+bool Cell::ownsSide(unsigned int sideOrdinal) {
+  bool ownsSide;
+  
+  pair<GlobalIndexType,unsigned> neighborInfo = getNeighbor(sideOrdinal);
+  GlobalIndexType neighborCellID = neighborInfo.first;
+  unsigned neighborSideOrdinal = neighborInfo.second;
+  if (neighborCellID == -1) { // boundary side
+    ownsSide = true;
+  } else {
+    CellPtr neighborCell = _meshTopo->getCell(neighborCellID);
+    bool isPeer = neighborCell->getNeighbor(neighborSideOrdinal).first == _cellIndex;
+    
+    if (isPeer && !neighborCell->isParent()) { // then the lower cellID owns
+      ownsSide = (_cellIndex < neighborCellID);
+    } else if (isPeer) {
+      // neighbor is parent (inactive), but we are peers: we own the side
+      ownsSide = true;
+    } else if (!neighborCell->isParent()) {
+      // neighbor is unbroken, and we are not peers: neighbor owns
+      ownsSide = false;
+    } else {
+      // neighbor is parent, and we are a descendant of neighbor's neighbor (i.e. there is an anisotropic refinement)
+      // in this case, we decide based on which of the ancestral cell IDs is lower
+      GlobalIndexType ancestralCellID = neighborCell->getNeighbor(neighborSideOrdinal).first;
+      ownsSide = (ancestralCellID < neighborCellID);
+    }
+  }
+  return ownsSide;
+}
+
 RefinementPatternPtr Cell::refinementPattern() {
   return _refPattern;
 }
