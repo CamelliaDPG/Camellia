@@ -115,8 +115,7 @@ LocalDofMapperPtr GMGOperator::getLocalCoefficientMap(GlobalIndexType fineCellID
       Space varSpace = trialVar->space();
       IntrepidExtendedTypes::EFunctionSpaceExtended varFS = efsForSpace(varSpace);
       if (! IntrepidExtendedTypes::functionSpaceIsDiscontinuous(varFS)) {
-        cout << "WARNING: function space for var " << trialVar->name() << " is not discontinuous, and GMGOperator does not yet support continuous variables.\n";
-        cout << " (in particular, GMGOperator's determination of the coarse RHS is known to break down for variables that have more than side continuity).\n";
+        cout << "WARNING: function space for var " << trialVar->name() << " is not discontinuous, and GMGOperator does not yet support continuous variables, even continuous trace variables (i.e. all trace variables must be in L^2 or some other discontinuous space, like HGRAD_DISC).\n";
       }
       
       if (coarseTrialOrdering->getNumSidesForVarID(trialID) == 1) { // field variable
@@ -355,11 +354,20 @@ int GMGOperator::ApplyInverse(const Epetra_MultiVector& X_in, Epetra_MultiVector
 }
 
 Teuchos::RCP<Epetra_MultiVector> GMGOperator::filterMultiVectorByFineCellOwnership(const Epetra_MultiVector &X, GlobalIndexType fineCellID) const {
+  // returns a rank-local copy of X, with entries that should not contribute to global integrals zeroed out.
   GDAMinimumRule* gda = dynamic_cast< GDAMinimumRule*>(_fineMesh->globalDofAssignment().get());
 
   set<GlobalIndexType> allFineGlobalIndicesForCell = gda->globalDofIndicesForCell(fineCellID);
-  set<GlobalIndexType> ownedFineGlobalIndices = gda->ownedGlobalDofIndicesForCell(fineCellID); // filter by cell ownership to ensure that we only treat each fine global dof once.
-
+//  set<GlobalIndexType> ownedFineGlobalIndices = gda->ownedGlobalDofIndicesForCell(fineCellID); // filter by cell ownership to ensure that we only treat each fine global dof once.
+  
+  set<GlobalIndexType> contributingFineGlobalIndices;
+  int sideCount = CamelliaCellTools::getSideCount(*_fineMesh->getTopology()->getCell(fineCellID)->topology());
+  
+  for (unsigned sideOrdinal=0; sideOrdinal < sideCount; sideOrdinal++) {
+    set<GlobalIndexType> sideIndices = gda->getGlobalDofIndicesForIntegralContribution(fineCellID,sideOrdinal);
+    contributingFineGlobalIndices.insert(sideIndices.begin(),sideIndices.end());
+  }
+  
   FieldContainer<GlobalIndexTypeToCast> globalIndicesFC(allFineGlobalIndicesForCell.size());
   int i=0;
   for (set<GlobalIndexType>::iterator gdofIt = allFineGlobalIndicesForCell.begin(); gdofIt != allFineGlobalIndicesForCell.end(); gdofIt++) {
@@ -375,12 +383,12 @@ Teuchos::RCP<Epetra_MultiVector> GMGOperator::filterMultiVectorByFineCellOwnersh
   for (int i=0; i<globalIndicesFC.size(); i++) {
     GlobalIndexTypeToCast globalIndex = globalIndicesFC[i];
     int lID_filtered = cellFilteredMap.LID(globalIndex);
-    if (ownedFineGlobalIndices.find(globalIndex) != ownedFineGlobalIndices.end()) {
+    if (contributingFineGlobalIndices.find(globalIndex) != contributingFineGlobalIndices.end()) {
       int lID_X = X.Map().LID(globalIndex);
       if (lID_X < 0) {
         cout << "error: lID_X < 0 for globalIndex " << globalIndex << ".\n";
         Camellia::print("allFineGlobalIndicesForCell", allFineGlobalIndicesForCell);
-        Camellia::print("ownedFineGlobalIndices", ownedFineGlobalIndices);
+        Camellia::print("contributingFineGlobalIndices", contributingFineGlobalIndices);
         
         set<GlobalIndexTypeToCast> myXEntries;
         for (int lID = X.Map().MinLID(); lID <= X.Map().MaxLID(); lID++) {
@@ -457,16 +465,28 @@ set<GlobalIndexTypeToCast> GMGOperator::setCoarseRHSVector(const Epetra_MultiVec
   for (set<GlobalIndexType>::iterator cellIDIt=cellsInPartition.begin(); cellIDIt != cellsInPartition.end(); cellIDIt++) {
     GlobalIndexType fineCellID = *cellIDIt;
     // filter by cell ownership to ensure that we only treat each fine global dof once:
-    Teuchos::RCP<Epetra_MultiVector> X_filtered = filterMultiVectorByFineCellOwnership(X, fineCellID);
+//    Teuchos::RCP<Epetra_MultiVector> X_filtered = filterMultiVectorByFineCellOwnership(X, fineCellID);
     int fineDofCount = _fineMesh->getElementType(fineCellID)->trialOrderPtr->totalDofs();
     FieldContainer<double> fineCellData(fineDofCount);
-    _fineMesh->globalDofAssignment()->interpretGlobalCoefficients(fineCellID, fineCellData, *X_filtered);
+//    _fineMesh->globalDofAssignment()->interpretGlobalCoefficients(fineCellID, fineCellData, *X_filtered);
+    _fineMesh->globalDofAssignment()->interpretGlobalCoefficients(fineCellID, fineCellData, X);
     //    cout << "fineCellData:\n" << fineCellData;
     LocalDofMapperPtr fineMapper = getLocalCoefficientMap(fineCellID);
     GlobalIndexType coarseCellID = getCoarseCellID(fineCellID);
     int coarseDofCount = _coarseMesh->getElementType(coarseCellID)->trialOrderPtr->totalDofs();
     FieldContainer<double> coarseCellData(coarseDofCount);
-    FieldContainer<double> mappedCoarseCellData = fineMapper->mapLocalData(fineCellData, false);
+    FieldContainer<double> mappedCoarseCellData(fineMapper->globalIndices().size());
+    fineMapper->mapLocalDataVolume(fineCellData, mappedCoarseCellData, false);
+    
+    CellPtr fineCell = _fineMesh->getTopology()->getCell(fineCellID);
+    int sideCount = CamelliaCellTools::getSideCount(*fineCell->topology());
+    for (int sideOrdinal=0; sideOrdinal<sideCount; sideOrdinal++) {
+      if (fineCell->ownsSide(sideOrdinal)) {
+//        cout << "fine cell " << fineCellID << " owns side " << sideOrdinal << endl;
+        fineMapper->mapLocalDataSide(fineCellData, mappedCoarseCellData, false, sideOrdinal);
+      }
+    }
+    
     //    cout << "mappedCoarseCellData:\n" << mappedCoarseCellData;
     vector<GlobalIndexType> mappedCoarseDofIndices = fineMapper->globalIndices(); // "global" here means the coarse local
     for (int mappedCoarseDofOrdinal = 0; mappedCoarseDofOrdinal < mappedCoarseDofIndices.size(); mappedCoarseDofOrdinal++) {
