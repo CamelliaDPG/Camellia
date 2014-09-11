@@ -744,7 +744,7 @@ set<GlobalIndexType> GDAMaximumRule2D::partitionOwnedGlobalFluxIndices() {
   for (set<GlobalIndexType>::iterator cellIt = cellIDs.begin(); cellIt != cellIDs.end(); cellIt++) {
     GlobalIndexType cellID = *cellIt;
     ElementTypePtr elemTypePtr = elementType(cellID);
-    int sideCount = elemTypePtr->cellTopoPtr->getSideCount();
+    int sideCount = CamelliaCellTools::getSideCount(*elemTypePtr->cellTopoPtr);
     vector< VarPtr >::iterator fluxIt;
     for (fluxIt = fluxVars.begin(); fluxIt != fluxVars.end(); fluxIt++){
       int fluxID = (*fluxIt)->ID();
@@ -773,7 +773,7 @@ set<GlobalIndexType> GDAMaximumRule2D::partitionOwnedGlobalTraceIndices() {
   for (set<GlobalIndexType>::iterator cellIt = cellIDs.begin(); cellIt != cellIDs.end(); cellIt++) {
     GlobalIndexType cellID = *cellIt;
     ElementTypePtr elemTypePtr = elementType(cellID);
-    int sideCount = elemTypePtr->cellTopoPtr->getSideCount();
+    int sideCount = CamelliaCellTools::getSideCount(*elemTypePtr->cellTopoPtr);
     vector< VarPtr >::iterator traceIt;
     for (traceIt = traceVars.begin(); traceIt != traceVars.end(); traceIt++){
       int traceID = (*traceIt)->ID();

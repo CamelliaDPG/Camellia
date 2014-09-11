@@ -3258,7 +3258,7 @@ void Solution::projectOldCellOntoNewCells(GlobalIndexType cellID,
 
    int sideDim = _mesh->getTopology()->getSpaceDim() - 1;
   
-   int sideCount = parentCell->topology()->getSideCount();
+   int sideCount = CamelliaCellTools::getSideCount(*parentCell->topology());
    vector< map<int, FunctionPtr> > traceMap(sideCount);
    for (int sideOrdinal=0; sideOrdinal<sideCount; sideOrdinal++) {
      shards::CellTopology sideTopo = parentCell->topology()->getCellTopologyData(sideDim, sideOrdinal);
@@ -3286,7 +3286,7 @@ void Solution::projectOldCellOntoNewCells(GlobalIndexType cellID,
     GlobalIndexType childID = childIDs[childOrdinal];
     CellPtr childCell = _mesh->getTopology()->getCell(childID);
     ElementTypePtr childType = _mesh->getElementType(childID);
-    int childSideCount = childCell->topology()->getSideCount();
+    int childSideCount = CamelliaCellTools::getSideCount(*childCell->topology());
 
     int child_p_order = _mesh->getElementType(childID)->trialOrderPtr->maxBasisDegree();
     int cubatureDegree = parent_p_order + child_p_order;

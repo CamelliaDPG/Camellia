@@ -331,7 +331,8 @@ void Mesh::enforceOneIrregularity() {
       
       CellPtr cell = _meshTopology->getCell(cellID);
       bool isIrregular = false;
-      for (int sideOrdinal=0; sideOrdinal < cell->topology()->getSideCount(); sideOrdinal++) {
+      int sideCount = CamelliaCellTools::getSideCount(*cell->topology());
+      for (int sideOrdinal=0; sideOrdinal < sideCount; sideOrdinal++) {
         pair<GlobalIndexType, unsigned> neighborInfo = cell->getNeighbor(sideOrdinal);
         unsigned mySideIndexInNeighbor = neighborInfo.second;
         
