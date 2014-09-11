@@ -44,8 +44,8 @@ int GMGSolver::solve() {
   AztecOO solver(problem());
   
   Epetra_RowMatrix *A = problem().GetMatrix();
-  Epetra_MultiVector *b = problem().GetRHS();
-  EpetraExt::MultiVectorToMatlabFile("/tmp/b_gmg.dat",*b);
+//  Epetra_MultiVector *b = problem().GetRHS();
+//  EpetraExt::MultiVectorToMatlabFile("/tmp/b_gmg.dat",*b);
 
   Epetra_Vector diagA(A->RowMatrixRowMap());
   A->ExtractDiagonalCopy(diagA);
@@ -55,12 +55,13 @@ int GMGSolver::solve() {
   if (_diagonalSmoothing)
     _gmgOperator.setStiffnessDiagonal(diagA_ptr);
 
-  solver.SetAztecOption(AZ_solver, AZ_cg);
+  solver.SetAztecOption(AZ_solver, AZ_cg_condnum);
 //  solver.SetAztecOption(AZ_solver, AZ_gmres);
   solver.SetPrecOperator(&_gmgOperator);
+//  solver.SetAztecOption(AZ_precond, AZ_none);
   solver.SetAztecOption(AZ_precond, AZ_user_precond);
   solver.SetAztecOption(AZ_scaling, AZ_none);
-//  solver.SetAztecOption(AZ_conv, AZ_noscaled);
+  solver.SetAztecOption(AZ_conv, AZ_rhs);
 //  solver.SetAztecOption(AZ_output, AZ_last);
   solver.SetAztecOption(AZ_output, _azOutput);
   
@@ -93,8 +94,8 @@ int GMGSolver::solve() {
     }
   }
   
-  Epetra_MultiVector *x = problem().GetLHS();
-  EpetraExt::MultiVectorToMatlabFile("/tmp/x.dat",*x);
+//  Epetra_MultiVector *x = problem().GetLHS();
+//  EpetraExt::MultiVectorToMatlabFile("/tmp/x.dat",*x);
   
   double norminf = A->NormInf();
   double normone = A->NormOne();

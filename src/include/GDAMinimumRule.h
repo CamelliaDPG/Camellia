@@ -65,8 +65,6 @@ class GDAMinimumRule : public GlobalDofAssignment {
 
   BasisMap getBasisMap(GlobalIndexType cellID, SubCellDofIndexInfo& dofOwnershipInfo, VarPtr var, int sideOrdinal);
   
-  LocalDofMapperPtr getDofMapper(GlobalIndexType cellID, CellConstraints &constraints, int varIDToMap = -1, int sideOrdinalToMap = -1);
-  
   SubCellDofIndexInfo getOwnedGlobalDofIndices(GlobalIndexType cellID, CellConstraints &cellConstraints);
   SubCellDofIndexInfo getGlobalDofIndices(GlobalIndexType cellID, CellConstraints &cellConstraints);
   
@@ -77,7 +75,9 @@ class GDAMinimumRule : public GlobalDofAssignment {
   RefinementBranch volumeRefinementsForSideEntity(IndexType sideEntityIndex);
   
 public:
+  // these are public just for easier testing:
   CellConstraints getCellConstraints(GlobalIndexType cellID);
+  LocalDofMapperPtr getDofMapper(GlobalIndexType cellID, CellConstraints &constraints, int varIDToMap = -1, int sideOrdinalToMap = -1);
 public:
   GDAMinimumRule(MeshPtr mesh, VarFactory varFactory, DofOrderingFactoryPtr dofOrderingFactory, MeshPartitionPolicyPtr partitionPolicy,
                  unsigned initialH1OrderTrial, unsigned testOrderEnhancement);

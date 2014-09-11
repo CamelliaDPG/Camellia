@@ -39,10 +39,14 @@ class GMGOperator : public Epetra_Operator {
   
   Teuchos::RCP<Epetra_MultiVector> filterMultiVectorByFineCellOwnership(const Epetra_MultiVector &X, GlobalIndexType fineCellID) const;
   
+//  void copyCoefficientsOwnedByFineCell(const Epetra_MultiVector &Y_source, GlobalIndexType fineCellID, Epetra_MultiVector &Y_target) const;
+  
 public: // promoted these two to public for testing purposes:
   LocalDofMapperPtr getLocalCoefficientMap(GlobalIndexType fineCellID) const;
   GlobalIndexType getCoarseCellID(GlobalIndexType fineCellID) const;
 
+  set<GlobalIndexTypeToCast> setCoarseRHSVector(const Epetra_MultiVector &X, Epetra_FEVector &coarseRHSVector) const;
+  
 public:
   //! @name Destructor
   //@{
