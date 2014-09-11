@@ -568,7 +568,12 @@ void Mesh::hRefine(const set<GlobalIndexType> &cellIDs, Teuchos::RCP<RefinementP
   set<GlobalIndexType>::const_iterator cellIt;
   
   for (cellIt = cellIDs.begin(); cellIt != cellIDs.end(); cellIt++) {
-    int cellID = *cellIt;
+    GlobalIndexType cellID = *cellIt;
+    
+    if (_meshTopology->getActiveCellIndices().find(cellID) == _meshTopology->getActiveCellIndices().end()) {
+      cout << "cellID " << cellID << " is not active, but Mesh received request for h-refinement.\n";
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "inactive cell");
+    }
     
     _meshTopology->refineCell(cellID, refPattern);
     
