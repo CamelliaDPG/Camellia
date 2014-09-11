@@ -45,6 +45,9 @@ public:
                  vector< set<GlobalIndexType> > fittableGlobalDofOrdinalsOnSides, int varIDToMap = -1, int sideOrdinalToMap = -1);
   
   FieldContainer<double> mapLocalData(const FieldContainer<double> &localData, bool fittableGlobalDofsOnly);
+  void mapLocalDataSide(const FieldContainer<double> &localData, FieldContainer<double> &mappedData, bool fittableGlobalDofsOnly, int sideOrdinal);
+  void mapLocalDataVolume(const FieldContainer<double> &localData, FieldContainer<double> &mappedData, bool fittableGlobalDofsOnly);
+  
   FieldContainer<double> fitLocalCoefficients(const FieldContainer<double> &localCoefficients); // solves normal equations (if the localCoefficients are in the range of the global-to-local operator, then the returned coefficients will be the preimage of localCoefficients under that operator)
   FieldContainer<double> mapGlobalCoefficients(const FieldContainer<double> &globalCoefficients);
   
