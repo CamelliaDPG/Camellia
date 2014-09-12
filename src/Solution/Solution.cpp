@@ -110,6 +110,11 @@
 
 #include "MPIWrapper.h"
 
+#ifdef HAVE_EPETRAEXT_HDF5
+#include <EpetraExt_HDF5.h>
+#include <Epetra_SerialComm.h>
+#endif
+
 double Solution::conditionNumberEstimate( Epetra_LinearProblem & problem ) {
   // estimates the 2-norm condition number
   AztecOOConditionNumber conditionEstimator;
@@ -3435,6 +3440,36 @@ void Solution::writeToFile(const string &filePath) {
   
   fout.close();
 }
+
+#ifdef HAVE_EPETRAEXT_HDF5
+void Solution::saveToHDF5(string filename)
+{
+  int commRank = Teuchos::GlobalMPISession::getRank();
+  int nProcs = Teuchos::GlobalMPISession::getNProc();
+
+  Epetra_SerialComm Comm;
+  EpetraExt::HDF5 hdf5(Comm);
+  hdf5.Create(filename+Teuchos::toString(commRank)+".h5");
+  hdf5.Write("Solution", "nProcs", nProcs);
+  hdf5.Write("Solution", "commRank", commRank);
+
+  set<GlobalIndexType> myCells = mesh()->cellIDsInPartition();
+  vector<GlobalIndexType> myCellsVec( myCells.begin(), myCells.end() );
+  hdf5.Write("Solution", "partitionCellIDs", H5T_NATIVE_INT, myCellsVec.size(), &myCellsVec[0]);
+  for (map<GlobalIndexType, FieldContainer<double> >::iterator solnEntryIt = _solutionForCellIDGlobal.begin();
+       solnEntryIt != _solutionForCellIDGlobal.end(); solnEntryIt++) 
+  {
+    GlobalIndexType cellID = solnEntryIt->first;
+    if (myCells.find(cellID) != myCells.end()) {
+      FieldContainer<double>* solnCoeffs = &(solnEntryIt->second);
+      cout << cellID << " " << commRank << endl;
+      hdf5.Write("Solution", "cell"+Teuchos::toString(cellID), H5T_NATIVE_DOUBLE, solnCoeffs->size(), solnCoeffs);
+    }
+  }
+
+  hdf5.Close();
+}
+#endif
 
 vector<int> Solution::getZeroMeanConstraints() {
   // determine any zero-mean constraints:
