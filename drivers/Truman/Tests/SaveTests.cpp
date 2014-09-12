@@ -204,6 +204,7 @@ int main(int argc, char *argv[])
         refinementStrategy.refine(commRank==0);
         solution->solve(false);
         mesh->saveToHDF5("Test0.h5");
+        solution->saveToHDF5("Test0_soln");
         exporter.exportSolution(solution, varFactory, ref, 2, cellIDToSubdivision(mesh, 4));
       }
     }

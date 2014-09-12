@@ -289,6 +289,10 @@ public:
   void readFromFile(const string &filePath);
   void writeToFile(const string &filePath);
 
+#ifdef HAVE_EPETRAEXT_HDF5
+  void saveToHDF5(string filename);
+#endif
+
   // MATLAB output (belongs elsewhere)
   void writeFieldsToFile(int trialID, const string &filePath);
   void writeFluxesToFile(int trialID, const string &filePath);
