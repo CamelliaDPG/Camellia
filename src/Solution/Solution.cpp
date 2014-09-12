@@ -466,10 +466,11 @@ void Solution::populateStiffnessAndLoad() {
         // cast whatever the global index type is to a type that Epetra supports
         globalDofIndices.dimensions(dim);
         globalDofIndicesCast.resize(dim);
+        
         for (int dofOrdinal = 0; dofOrdinal < globalDofIndices.size(); dofOrdinal++) {
           globalDofIndicesCast[dofOrdinal] = globalDofIndices[dofOrdinal];
         }
-        
+                
         _globalStiffMatrix->InsertGlobalValues(globalDofIndices.size(),&globalDofIndicesCast(0),
                                                globalDofIndices.size(),&globalDofIndicesCast(0),&interpretedStiffness[0]);
         _rhsVector->SumIntoGlobalValues(globalDofIndices.size(),&globalDofIndicesCast(0),&interpretedRHS[0]);
@@ -1003,7 +1004,7 @@ void Solution::imposeBCs() {
   for (int dofOrdinal = 0; dofOrdinal < bcGlobalIndices.size(); dofOrdinal++) {
     bcGlobalIndicesCast[dofOrdinal] = bcGlobalIndices[dofOrdinal];
   }
-  //  cout << "bcGlobalIndices:" << endl << bcGlobalIndices;
+//  cout << "bcGlobalIndices:" << endl << bcGlobalIndices;
   //  cout << "bcGlobalValues:" << endl << bcGlobalValues;
   
   Epetra_MultiVector v(partMap,1);

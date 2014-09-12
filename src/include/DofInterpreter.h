@@ -38,6 +38,8 @@ public:
         TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "ERROR: the vector and matrix dof indices differ...\n");
       }
     }
+//    if (cellID==1)
+//      cout << "globalIndices:\n" << globalDofIndices;
   }
   
   virtual void interpretLocalBasisCoefficients(GlobalIndexType cellID, int varID, int sideOrdinal, const FieldContainer<double> &basisCoefficients,

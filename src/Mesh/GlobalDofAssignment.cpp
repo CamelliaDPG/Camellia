@@ -74,6 +74,20 @@ GlobalDofAssignment::GlobalDofAssignment(MeshPtr mesh, VarFactory varFactory,
   
   _numPartitions = Teuchos::GlobalMPISession::getNProc();
   _partitions = vector<set<GlobalIndexType> >(_numPartitions);
+  
+//  cout << "Experimentally (for debugging purposes) setting a more interesting initial partition in GlobalDofAssignment.\n";
+//  int cellsPerPartition = activeCellIDs.size() / _numPartitions;
+//  int extraCells = activeCellIDs.size() - cellsPerPartition * _numPartitions;
+//  int partitionNumber = 0;
+//  for (set<GlobalIndexType>::iterator cellIDIt = activeCellIDs.begin(); cellIDIt != activeCellIDs.end(); cellIDIt++) {
+//    GlobalIndexType cellID = *cellIDIt;
+//    _partitions[partitionNumber].insert(cellID);
+//    int numCellsForPartition = (partitionNumber >= extraCells) ? cellsPerPartition : cellsPerPartition + 1;
+//    if (_partitions[partitionNumber].size() == numCellsForPartition) {
+//      partitionNumber++;
+//    }
+//  }
+  
   // before repartitioning (which should happen immediately), put all active cells on rank 0
   _partitions[0] = _mesh->getActiveCellIDs();
 }

@@ -53,6 +53,8 @@ public:
   
   pair<unsigned, unsigned> ancestralSubcellOrdinalAndDimension(unsigned subcdim, unsigned subcord); // (subcord, subcdim) into the cell returned by ancestralCellForSubcell
   
+  vector<unsigned> boundarySides();
+  
   IndexType cellIndex();
   const vector< Teuchos::RCP< Cell > > &children();
   void setChildren(vector< Teuchos::RCP< Cell > > children);
@@ -66,6 +68,8 @@ public:
   
   Teuchos::RCP<Cell> getParent();
   void setParent(Teuchos::RCP<Cell> parent);
+  
+  bool isBoundary(unsigned sideOrdinal);
   bool isParent();
   
   unsigned childOrdinal(IndexType childIndex);

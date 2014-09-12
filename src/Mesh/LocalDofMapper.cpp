@@ -456,9 +456,10 @@ void LocalDofMapper::printMappingReport() {
         SubBasisDofMapperPtr subBasisDofMapper = *subBasisMapIt;
         Camellia::print("local dof ordinals", subBasisDofMapper->basisDofOrdinalFilter());
         Camellia::print("global ordinals   ", subBasisDofMapper->mappedGlobalDofOrdinals());
-        
-        SubBasisDofMatrixMapper * matrixMapper = (SubBasisDofMatrixMapper *) subBasisDofMapper.get();
-        cout << "constraint matrix:\n" << matrixMapper->constraintMatrix();
+
+        SubBasisDofMatrixMapper * matrixMapper = dynamic_cast< SubBasisDofMatrixMapper* >(subBasisDofMapper.get());
+        if (matrixMapper != NULL)
+          cout << "constraint matrix:\n" << matrixMapper->constraintMatrix();
       }
     }
   }

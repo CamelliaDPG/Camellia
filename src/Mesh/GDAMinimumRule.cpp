@@ -345,7 +345,7 @@ void GDAMinimumRule::interpretLocalData(GlobalIndexType cellID, const FieldConta
   
   // DEBUGGING
 //  if (Teuchos::GlobalMPISession::getRank()==0) {
-//    if (cellID==2) {
+//    if (cellID==1) {
 //      cout << "interpretLocalData, mapping report for cell " << cellID << ":\n";
 //      dofMapper->printMappingReport();
 //    }
@@ -396,7 +396,8 @@ void GDAMinimumRule::interpretLocalData(GlobalIndexType cellID, const FieldConta
   
 //  cout << "localData:\n" << localData;
 //  cout << "globalData:\n" << globalData;
-//  cout << "globalIndices:\n" << globalDofIndices;
+//  if (cellID==1)
+//    cout << "globalIndices:\n" << globalDofIndices;
 }
 
 void GDAMinimumRule::interpretLocalBasisCoefficients(GlobalIndexType cellID, int varID, int sideOrdinal, const FieldContainer<double> &basisCoefficients,
@@ -1789,6 +1790,36 @@ SubCellDofIndexInfo GDAMinimumRule::getGlobalDofIndices(GlobalIndexType cellID, 
   return dofIndexInfo;
 }
 
+set<GlobalIndexType> GDAMinimumRule::getGlobalDofIndicesForIntegralContribution(GlobalIndexType cellID, int sideOrdinal) { // assuming an integral is being done over the whole mesh skeleton, returns either an empty set or the global dof indices associated with the given side, depending on whether the cell "owns" the side for the purpose of such contributions.
+  set<GlobalIndexType> indices;
+  
+  CellPtr cell = _meshTopology->getCell(cellID);
+  bool ownsSide = cell->ownsSide(sideOrdinal);
+  
+  if (ownsSide) {
+    CellConstraints cellConstraints = getCellConstraints(cellID);
+    SubCellDofIndexInfo dofIndexInfo = getGlobalDofIndices(cellID, cellConstraints);
+    int spaceDim =  _meshTopology->getSpaceDim();
+    
+    CellTopoPtr cellTopo = cell->topology();
+    shards::CellTopology sideTopo = cellTopo->getCellTopologyData(spaceDim-1, sideOrdinal);
+    
+    for (int d=0; d<spaceDim; d++) {
+      int scCount = sideTopo.getSubcellCount(d);
+      for (int scordSide=0; scordSide<scCount; scordSide++) {
+        int scordCell = CamelliaCellTools::subcellOrdinalMap(*cellTopo, spaceDim-1, sideOrdinal, d, scordSide);
+        map<int, vector<GlobalIndexType> > dofIndices = dofIndexInfo[d][scordCell];
+        
+        for (map<int, vector<GlobalIndexType> >::iterator dofIndicesIt = dofIndices.begin(); dofIndicesIt != dofIndices.end(); dofIndicesIt++) {
+          indices.insert(dofIndicesIt->second.begin(), dofIndicesIt->second.end());
+        }
+      }
+    }
+  }
+  
+  return indices;
+}
+
 LocalDofMapperPtr GDAMinimumRule::getDofMapper(GlobalIndexType cellID, CellConstraints &constraints, int varIDToMap, int sideOrdinalToMap) {
   if ((varIDToMap == -1) && (sideOrdinalToMap == -1)) {
     // a mapper for the whole dof ordering: we cache these separately...
@@ -1908,6 +1939,17 @@ void GDAMinimumRule::printConstraintInfo(GlobalIndexType cellID) {
     for (int scord=0; scord<subcellCount; scord++) {
       cout << "    ordinal " << scord  << " owned by cell " << cellConstraints.owningCellIDForSubcell[d][scord].cellID << endl;
     }
+  }
+}
+
+void GDAMinimumRule::printGlobalDofInfo() {
+  set<GlobalIndexType> cellIDs = _meshTopology->getActiveCellIndices();
+  for (set<GlobalIndexType>::iterator cellIDIt = cellIDs.begin(); cellIDIt != cellIDs.end(); cellIDIt++) {
+    GlobalIndexType cellID = *cellIDIt;
+    
+    CellConstraints cellConstraints = getCellConstraints(cellID);
+    SubCellDofIndexInfo dofIndexInfo = getOwnedGlobalDofIndices(cellID, cellConstraints);
+    printDofIndexInfo(cellID, dofIndexInfo);
   }
 }
 

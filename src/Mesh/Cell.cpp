@@ -347,6 +347,19 @@ CellPtr Cell::ancestralCellForSubcell(unsigned subcdim, unsigned subcord) {
   return currentAncestor;
 }
 
+vector<unsigned> Cell::boundarySides() {
+  int sideCount = CamelliaCellTools::getSideCount(*_cellTopo);
+  vector<unsigned> sides;
+  for (unsigned sideOrdinal=0; sideOrdinal < sideCount; sideOrdinal++) {
+    if (_neighbors[sideOrdinal].first == -1) sides.push_back(sideOrdinal);
+  }
+  return sides;
+}
+
+bool Cell::isBoundary(unsigned int sideOrdinal) {
+  return _neighbors[sideOrdinal].first == -1;
+}
+
 MeshTopology* Cell::meshTopology() {
   return _meshTopo;
 }

@@ -38,6 +38,12 @@ GMGOperator::GMGOperator(BCPtr zeroBCs, MeshPtr coarseMesh, IPPtr coarseIP, Mesh
 //  cout << "Note: for debugging, GMGOperator writes coarse solution matrix to /tmp/A_coarse.dat.\n";
 //  _coarseSolution->setWriteMatrixToFile(true, "/tmp/A_coarse.dat");
   
+//  GDAMinimumRule* minRule = dynamic_cast<GDAMinimumRule *>(coarseMesh->globalDofAssignment().get());
+
+//  int rank = Teuchos::GlobalMPISession::getRank();
+//  if (rank==1)
+//    minRule->printGlobalDofInfo();
+  
   _coarseSolution->initializeLHSVector();
   _coarseSolution->initializeStiffnessAndLoad();
   _coarseSolution->populateStiffnessAndLoad(); // can get away with doing this just once; after that we just manipulate the RHS vector
@@ -223,9 +229,9 @@ int GMGOperator::ApplyInverse(const Epetra_MultiVector& X_in, Epetra_MultiVector
 //  _coarseSolution->imposeBCs(); // I think this should already be taken care of...
   _coarseSolution->setProblem(_coarseSolver);
   
-  Teuchos::RCP<Epetra_FECrsMatrix> coarseStiffness = _coarseSolution->getStiffnessMatrix();
-  EpetraExt::RowMatrixToMatlabFile("/tmp/A_gmg.dat",*coarseStiffness);
-  EpetraExt::MultiVectorToMatlabFile("/tmp/b_gmg.dat",*coarseRHSVector);
+//  Teuchos::RCP<Epetra_FECrsMatrix> coarseStiffness = _coarseSolution->getStiffnessMatrix();
+//  EpetraExt::RowMatrixToMatlabFile("/tmp/A_gmg.dat",*coarseStiffness);
+//  EpetraExt::MultiVectorToMatlabFile("/tmp/b_gmg.dat",*coarseRHSVector);
   
   _coarseSolution->solveWithPrepopulatedStiffnessAndLoad(_coarseSolver);
   
@@ -240,7 +246,7 @@ int GMGOperator::ApplyInverse(const Epetra_MultiVector& X_in, Epetra_MultiVector
 //  }
   
   Teuchos::RCP<Epetra_FEVector> coarseLHSVector = _coarseSolution->getLHSVector();
-  EpetraExt::MultiVectorToMatlabFile("/tmp/x_gmg.dat",*coarseLHSVector);
+//  EpetraExt::MultiVectorToMatlabFile("/tmp/x_gmg.dat",*coarseLHSVector);
 
   
   // now, map the coarse data back to the fine mesh, and add that into Y
@@ -313,7 +319,6 @@ int GMGOperator::ApplyInverse(const Epetra_MultiVector& X_in, Epetra_MultiVector
 //
 //  ostringstream Y_file;
 //  Y_file << "/tmp/Y_before_diag_" << globalIterationCount << ".dat";
-//  
 //
 //  EpetraExt::MultiVectorToMatlabFile(Y_file.str().c_str(),Y);
   
