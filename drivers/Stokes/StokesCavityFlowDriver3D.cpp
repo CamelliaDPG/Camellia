@@ -422,16 +422,11 @@ int main(int argc, char *argv[]) {
   }
   if (rank==0) cout << "About to start solve.\n";
   timer.ResetStartTime();
-  Teuchos::RCP<Solver> firstSolver;
-  if (meshLoadName.length() == 0)
-    firstSolver = coarseSolver;
-  else
-    firstSolver = fineSolver;
   
   if (useCondensedSolve)
-    solution->condensedSolve(firstSolver);
+    solution->condensedSolve(fineSolver);
   else
-    solution->solve(firstSolver);
+    solution->solve(fineSolver);
   
   double totalSolveTime = timer.ElapsedTime();
   if (rank==0) cout << "total solve time (as seen by rank 0) " << totalSolveTime << " seconds.\n";
