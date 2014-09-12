@@ -135,9 +135,12 @@ int main(int argc, char *argv[]) {
   
   double energyThreshold = 0.2;
   
-  double relativeTol = 1e-2;
+  double relativeTol = 1e-6;
   
   int coarseMesh_k = 0;
+  
+  bool pMultiGridOnly = true;
+  bool useWeightedGraphNorm = true;
   
   string meshLoadName = ""; // file to load mesh from
   int startingRefinementNumber = 0;
@@ -160,6 +163,8 @@ int main(int argc, char *argv[]) {
   cmdp.setOption("meshLoadName", &meshLoadName, "file to load initial mesh from");
   cmdp.setOption("startingRefNumber", &startingRefinementNumber, "where to start counting refinements (useful for restart)");
   cmdp.setOption("maxCellsPerRank", &maxCellsPerRank, "max cells per rank (will quit refining once this is reached)");
+  cmdp.setOption("usePMultigrid", "useHPMultigrid", &pMultiGridOnly);
+  cmdp.setOption("useScaledGraphNorm", "dontUseScaledGraphNorm", &useWeightedGraphNorm);
   
   if (cmdp.parse(argc,argv) != Teuchos::CommandLineProcessor::PARSE_SUCCESSFUL) {
 #ifdef HAVE_MPI
@@ -287,6 +292,13 @@ int main(int argc, char *argv[]) {
     mesh = MeshFactory::loadFromHDF5(stokesBF, meshLoadName);
   
   coarseMesh = MeshFactory::rectilinearMesh(stokesBF, domainDimensions, elementCounts, coarseMesh_k + 1, delta_k);
+  if (pMultiGridOnly) {
+    if (meshLoadName.length() != 0) {
+      if (rank==0) cout << "pMultiGridOnly = true is not yet supported for meshes loaded from disk.\n";
+      return 0;
+    }
+    mesh->registerObserver(coarseMesh);
+  }
   double meshConstructionTime = timer.ElapsedTime();
   if (rank==0) cout << "On rank " << rank << ", mesh construction time: " << meshConstructionTime << endl;
   int elementCount = mesh->getActiveCellIDs().size();
@@ -319,7 +331,27 @@ int main(int argc, char *argv[]) {
   bc->addSinglePointBC(p->ID(), Function::zero());
 //  bc->addZeroMeanConstraint(p);
 
-  IPPtr graphNorm = stokesBF->graphNorm();
+  IPPtr graphNorm;
+  if (! useWeightedGraphNorm) {
+    graphNorm = stokesBF->graphNorm();
+  } else {
+    FunctionPtr h = Teuchos::rcp( new hFunction() );
+    graphNorm = IP::ip();
+    graphNorm->addTerm( mu * v1->grad() + tau1 ); // sigma1
+    graphNorm->addTerm( mu * v2->grad() + tau2 ); // sigma2
+    graphNorm->addTerm( mu * v3->grad() + tau3 ); // sigma3
+    graphNorm->addTerm( v1->dx() + v2->dy() + v3->dz() );       // pressure
+    graphNorm->addTerm( h * tau1->div() - h * q->dx() ); // u1
+    graphNorm->addTerm( h * tau2->div() - h * q->dy() ); // u2
+    graphNorm->addTerm( h * tau3->div() - h * q->dz() ); // u3
+    graphNorm->addTerm( (mu / h) * v1 );
+    graphNorm->addTerm( (mu / h) * v2 );
+    graphNorm->addTerm( (mu / h) * v3 );
+    graphNorm->addTerm(  q );
+    graphNorm->addTerm( tau1 );
+    graphNorm->addTerm( tau2 );
+    graphNorm->addTerm( tau3 );
+  }
   
   SolutionPtr solution = Solution::solution(mesh, bc, rhs, graphNorm);
   
