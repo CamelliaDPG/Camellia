@@ -286,17 +286,22 @@ int main(int argc, char *argv[]) {
   
   Epetra_Time timer(Comm);
   
-  if (meshLoadName.length() == 0)
+  if (meshLoadName.length() == 0) {
     mesh = MeshFactory::rectilinearMesh(stokesBF, domainDimensions, elementCounts, H1Order, delta_k);
-  else
+    coarseMesh = MeshFactory::rectilinearMesh(stokesBF, domainDimensions, elementCounts, coarseMesh_k + 1, delta_k);
+  } else {
     mesh = MeshFactory::loadFromHDF5(stokesBF, meshLoadName);
+    coarseMesh = MeshFactory::loadFromHDF5(stokesBF, meshLoadName);
+    // unrefine coarse mesh in p:
+    int pDiff = H1Order - coarseMesh_k - 1;
+    coarseMesh->pRefine(coarseMesh->getActiveCellIDs(), -pDiff);
+  }
   
-  coarseMesh = MeshFactory::rectilinearMesh(stokesBF, domainDimensions, elementCounts, coarseMesh_k + 1, delta_k);
   if (pMultiGridOnly) {
-    if (meshLoadName.length() != 0) {
-      if (rank==0) cout << "pMultiGridOnly = true is not yet supported for meshes loaded from disk.\n";
-      return 0;
-    }
+//    if (meshLoadName.length() != 0) {
+//      if (rank==0) cout << "pMultiGridOnly = true is not yet supported for meshes loaded from disk.\n";
+//      return 0;
+//    }
     mesh->registerObserver(coarseMesh);
   }
   double meshConstructionTime = timer.ElapsedTime();
