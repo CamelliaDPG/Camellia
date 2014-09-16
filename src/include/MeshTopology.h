@@ -69,7 +69,7 @@ class MeshTopology {
   
 //  set<IndexType> activeDescendants(IndexType d, IndexType entityIndex);
 //  set<IndexType> activeDescendantsNotInSet(IndexType d, IndexType entityIndex, const set<IndexType> &excludedSet);
-  IndexType addCell(CellTopoPtr cellTopo, const vector<IndexType> &cellVertices, IndexType parentCellIndex = -1);
+  IndexType addCell(CellTopoPtrLegacy cellTopo, const vector<IndexType> &cellVertices, IndexType parentCellIndex = -1);
   void addCellForSide(IndexType cellIndex, unsigned sideOrdinal, IndexType sideEntityIndex);
   void addEdgeCurve(pair<IndexType,IndexType> edge, ParametricCurvePtr curve);
   IndexType addEntity(const shards::CellTopology &entityTopo, const vector<IndexType> &entityVertices, unsigned &entityPermutation); // returns the entityIndex
@@ -77,7 +77,7 @@ class MeshTopology {
   set<IndexType> descendants(unsigned d, IndexType entityIndex);
 
 //  pair< IndexType, set<IndexType> > determineEntityConstraints(unsigned d, IndexType entityIndex);
-  void addChildren(CellPtr cell, const vector< CellTopoPtr > &childTopos, const vector< vector<IndexType> > &childVertices);
+  void addChildren(CellPtr cell, const vector< CellTopoPtrLegacy > &childTopos, const vector< vector<IndexType> > &childVertices);
   
   void determineGeneralizedParentsForRefinement(CellPtr cell, RefinementPatternPtr refPattern);
   
@@ -97,7 +97,7 @@ class MeshTopology {
 public:
   MeshTopology(unsigned spaceDim, vector<PeriodicBCPtr> periodicBCs=vector<PeriodicBCPtr>());
   MeshTopology(MeshGeometryPtr meshGeometry, vector<PeriodicBCPtr> periodicBCs=vector<PeriodicBCPtr>());
-  CellPtr addCell(CellTopoPtr cellTopo, const vector< vector<double> > &cellVertices);
+  CellPtr addCell(CellTopoPtrLegacy cellTopo, const vector< vector<double> > &cellVertices);
   bool entityHasParent(unsigned d, IndexType entityIndex);
   bool entityHasChildren(unsigned d, IndexType entityIndex);
   IndexType getActiveCellCount(unsigned d, IndexType entityIndex);

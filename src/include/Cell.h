@@ -14,7 +14,7 @@
 #include "Teuchos_RCP.hpp"
 #include "RefinementPattern.h"
 
-typedef Teuchos::RCP<shards::CellTopology> CellTopoPtr;
+typedef Teuchos::RCP<shards::CellTopology> CellTopoPtrLegacy;
 class MeshTopology;
 
 using namespace std;
@@ -23,7 +23,7 @@ using namespace std;
 // "elements" are cells endowed with a (local) functional discretization
 class Cell {
   unsigned _cellIndex;
-  CellTopoPtr _cellTopo;
+  CellTopoPtrLegacy _cellTopo;
   vector< unsigned > _vertices;
   vector< map< unsigned, unsigned > > _subcellPermutations; // permutation to get from local ordering to the canonical one
   
@@ -43,7 +43,7 @@ class Cell {
      - cells with broken neighbors point to their peer, the ancestor of the active neighbors
    */
 public:
-  Cell(CellTopoPtr cellTopo, const vector<unsigned> &vertices, const vector< map< unsigned, unsigned > > &subcellPermutations,
+  Cell(CellTopoPtrLegacy cellTopo, const vector<unsigned> &vertices, const vector< map< unsigned, unsigned > > &subcellPermutations,
        IndexType cellIndex, MeshTopology* meshTopo);
 
   Teuchos::RCP<Cell> ancestralCellForSubcell(unsigned subcdim, unsigned subcord);
@@ -91,7 +91,7 @@ public:
   
   unsigned sideSubcellPermutation(unsigned sideOrdinal, unsigned sideSubcdim, unsigned sideSubcord);
   
-  CellTopoPtr topology();
+  CellTopoPtrLegacy topology();
   
   pair<GlobalIndexType, unsigned> getNeighbor(unsigned sideOrdinal); // (neighborCellIndex, neighborSideOrdinal)
   void setNeighbor(unsigned sideOrdinal, GlobalIndexType neighborCellIndex, unsigned neighborSideOrdinal);

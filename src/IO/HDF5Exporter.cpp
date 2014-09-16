@@ -448,7 +448,7 @@ void HDF5Exporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
 
     FieldContainer<double> physicalCellNodes = _mesh->getTopology()->physicalCellNodesForCell(cellIndex);
 
-    CellTopoPtr cellTopoPtr = cell->topology();
+    CellTopoPtrLegacy cellTopoPtr = cell->topology();
     int num1DPts = cellIDToNum1DPts[cell->cellIndex()];
     int numPoints = 0;
     

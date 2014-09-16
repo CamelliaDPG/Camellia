@@ -32,7 +32,7 @@
 
 #include <sstream>
 
-typedef Teuchos::RCP<shards::CellTopology> CellTopoPtr;
+typedef Teuchos::RCP<shards::CellTopology> CellTopoPtrLegacy;
 
 void getGradient(FieldContainer<double> &rhsVec, Teuchos::RCP<StandardAssembler> assembler, Epetra_FEVector &xNonlin);
 

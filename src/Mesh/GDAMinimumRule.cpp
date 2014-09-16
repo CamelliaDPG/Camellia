@@ -253,7 +253,7 @@ set<GlobalIndexType> GDAMinimumRule::ownedGlobalDofIndicesForCell(GlobalIndexTyp
   CellConstraints constraints = getCellConstraints(cellID);
   SubCellDofIndexInfo owningCellDofIndexInfo = getOwnedGlobalDofIndices(cellID, constraints);
 
-  CellTopoPtr cellTopo = _meshTopology->getCell(cellID)->topology();
+  CellTopoPtrLegacy cellTopo = _meshTopology->getCell(cellID)->topology();
   
   int dim = cellTopo->getDimension();
   for (int d=0; d<=dim; d++) {
@@ -439,7 +439,7 @@ BasisMap GDAMinimumRule::getBasisMap(GlobalIndexType cellID, SubCellDofIndexInfo
   
   CellPtr cell = _meshTopology->getCell(cellID);
   DofOrderingPtr trialOrdering = _elementTypeForCell[cellID]->trialOrderPtr;
-  CellTopoPtr topo = cell->topology();
+  CellTopoPtrLegacy topo = cell->topology();
   unsigned spaceDim = topo->getDimension();
   unsigned sideDim = spaceDim - 1;
   
@@ -618,7 +618,7 @@ BasisMap GDAMinimumRule::getBasisMap(GlobalIndexType cellID, SubCellDofIndexInfo
   // TODO: move the permutation computation outside of this method -- might include in CellConstraints, e.g. -- this obviously will not change from one var to the next, but we compute it redundantly each time...
 
   CellPtr cell = _meshTopology->getCell(cellID);
-  CellTopoPtr topo = cell->topology();
+  CellTopoPtrLegacy topo = cell->topology();
   unsigned spaceDim = topo->getDimension();
   unsigned sideDim = spaceDim - 1;
   
@@ -862,7 +862,7 @@ BasisMap GDAMinimumRule::getBasisMapOld(GlobalIndexType cellID, SubCellDofIndexI
   
   CellPtr cell = _meshTopology->getCell(cellID);
   DofOrderingPtr trialOrdering = _elementTypeForCell[cellID]->trialOrderPtr;
-  CellTopoPtr topo = cell->topology();
+  CellTopoPtrLegacy topo = cell->topology();
   unsigned spaceDim = topo->getDimension();
   unsigned sideDim = spaceDim - 1;
   shards::CellTopology sideTopo = topo->getCellTopologyData(sideDim, sideOrdinal);
@@ -1174,7 +1174,7 @@ BasisMap GDAMinimumRule::getBasisMapOld(GlobalIndexType cellID, SubCellDofIndexI
         if (subcellConstraint.dimension >= minimumConstraintDimension + 1) {
           int d1 = subcellConstraint.dimension-1;
           unsigned sscCount = constrainingTopo.getSubcellCount(d1);
-          CellTopoPtr constrainingCellTopo = constrainingCell->topology();
+          CellTopoPtrLegacy constrainingCellTopo = constrainingCell->topology();
           for (unsigned ssubcord=0; ssubcord<sscCount; ssubcord++) {
             unsigned ssubcordInCell = CamelliaCellTools::subcellOrdinalMap(*constrainingCellTopo, subcellConstraint.dimension, subcellOrdinalInConstrainingCell, d1, ssubcord);
             IndexType ssEntityIndex = constrainingCell->entityIndex(d1, ssubcordInCell);
@@ -1431,7 +1431,7 @@ CellConstraints GDAMinimumRule::getCellConstraints(GlobalIndexType cellID) {
     
     CellPtr cell = _meshTopology->getCell(cellID);
     DofOrderingPtr trialOrdering = _elementTypeForCell[cellID]->trialOrderPtr;
-    CellTopoPtr topo = cell->topology();
+    CellTopoPtrLegacy topo = cell->topology();
     unsigned spaceDim = topo->getDimension();
     unsigned sideDim = spaceDim - 1;
     
@@ -1595,7 +1595,7 @@ set<GlobalIndexType> GDAMinimumRule::getFittableGlobalDofIndices(GlobalIndexType
    */
   
   // iterate through all the subcells of the constraining side, collecting dof indices
-  CellTopoPtr constrainingCellTopo = constrainingCell->topology();
+  CellTopoPtrLegacy constrainingCellTopo = constrainingCell->topology();
   shards::CellTopology constrainingSideTopo = constrainingCellTopo->getBaseCellTopologyData(sideDim, constrainingCellSideOrdinal);
   set<unsigned> constrainingCellConstrainedNodes; // vertices in the constraining cell that belong to subcell entities that are constrained by other cells
   for (int d=sideDim; d>=0; d--) {
@@ -1650,7 +1650,7 @@ SubCellDofIndexInfo GDAMinimumRule::getOwnedGlobalDofIndices(GlobalIndexType cel
   
   SubCellDofIndexInfo scInfo(spaceDim+1);
   
-  CellTopoPtr topo = _elementTypeForCell[cellID]->cellTopoPtr;
+  CellTopoPtrLegacy topo = _elementTypeForCell[cellID]->cellTopoPtr;
   
   typedef vector< SubBasisDofMapperPtr > BasisMap;
   
@@ -1759,7 +1759,7 @@ SubCellDofIndexInfo GDAMinimumRule::getGlobalDofIndices(GlobalIndexType cellID, 
   SubCellDofIndexInfo dofIndexInfo = getOwnedGlobalDofIndices(cellID, constraints);
   
   CellPtr cell = _meshTopology->getCell(cellID);
-  CellTopoPtr topo = _elementTypeForCell[cellID]->cellTopoPtr;
+  CellTopoPtrLegacy topo = _elementTypeForCell[cellID]->cellTopoPtr;
   
   int spaceDim = topo->getDimension();
   
@@ -1801,7 +1801,7 @@ set<GlobalIndexType> GDAMinimumRule::getGlobalDofIndicesForIntegralContribution(
     SubCellDofIndexInfo dofIndexInfo = getGlobalDofIndices(cellID, cellConstraints);
     int spaceDim =  _meshTopology->getSpaceDim();
     
-    CellTopoPtr cellTopo = cell->topology();
+    CellTopoPtrLegacy cellTopo = cell->topology();
     shards::CellTopology sideTopo = cellTopo->getCellTopologyData(spaceDim-1, sideOrdinal);
     
     for (int d=0; d<spaceDim; d++) {
@@ -1840,7 +1840,7 @@ LocalDofMapperPtr GDAMinimumRule::getDofMapper(GlobalIndexType cellID, CellConst
   }
   
   CellPtr cell = _meshTopology->getCell(cellID);
-  CellTopoPtr topo = _elementTypeForCell[cellID]->cellTopoPtr;
+  CellTopoPtrLegacy topo = _elementTypeForCell[cellID]->cellTopoPtr;
   int sideCount = CamelliaCellTools::getSideCount(*topo);
   int spaceDim = topo->getDimension();
   
@@ -1984,7 +1984,7 @@ void GDAMinimumRule::rebuildLookups() {
     GlobalIndexType cellID = *cellIDIt;
     _cellDofOffsets[cellID] = _partitionDofCount;
     CellPtr cell = _meshTopology->getCell(cellID);
-    CellTopoPtr topo = cell->topology();
+    CellTopoPtrLegacy topo = cell->topology();
     CellConstraints constraints = getCellConstraints(cellID);
     
     set< pair<unsigned,IndexType> > entitiesClaimedForCell;

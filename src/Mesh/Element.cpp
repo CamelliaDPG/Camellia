@@ -143,7 +143,7 @@ int Element::parentSideForSideIndex(int mySideOrdinal) {
   CellPtr parentCell = _cell->getParent();
   if (parentCell.get()==NULL) return -1;
   
-  CellTopoPtr cellTopo = parentCell->topology();
+  CellTopoPtrLegacy cellTopo = parentCell->topology();
 
   int numSides = CamelliaCellTools::getSideCount(*cellTopo);
   

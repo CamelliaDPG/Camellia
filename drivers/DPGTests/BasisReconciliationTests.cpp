@@ -485,7 +485,7 @@ FieldContainer<double> transformedBasisValuesAtPoints(BasisPtr basis, const Fiel
   if (refinements.size() == 0) {
     CamelliaCellTools::refCellNodesForTopology(refCellNodes, cellTopo);
   } else {
-    CellTopoPtr coarseCellTopo = refinements[0].first->parentTopology();
+    CellTopoPtrLegacy coarseCellTopo = refinements[0].first->parentTopology();
     FieldContainer<double> coarseCellNodes(coarseCellTopo->getNodeCount(),coarseCellTopo->getDimension());
     CamelliaCellTools::refCellNodesForTopology(coarseCellNodes, *coarseCellTopo);
     refCellNodes = RefinementPattern::descendantNodes(refinements,coarseCellNodes);
@@ -507,7 +507,7 @@ FieldContainer<double> transformedBasisValuesAtSidePoints(BasisPtr basis, unsign
   if (refinements.size() == 0) {
     CamelliaCellTools::refCellNodesForTopology(refCellNodes, cellTopo);
   } else {
-    CellTopoPtr coarseCellTopo = refinements[0].first->parentTopology();
+    CellTopoPtrLegacy coarseCellTopo = refinements[0].first->parentTopology();
     FieldContainer<double> coarseCellNodes(coarseCellTopo->getNodeCount(),coarseCellTopo->getDimension());
     CamelliaCellTools::refCellNodesForTopology(coarseCellNodes, *coarseCellTopo);
     refCellNodes = RefinementPattern::descendantNodes(refinements,coarseCellNodes);
@@ -526,7 +526,7 @@ FieldContainer<double> transformedBasisValuesAtSidePoints(BasisPtr basis, unsign
 
 RefinementBranch determineSideRefinements(RefinementBranch volumeRefinements, unsigned sideIndex) {
   RefinementBranch sideRefinements;
-  CellTopoPtr volumeTopo = volumeRefinements[0].first->parentTopology();
+  CellTopoPtrLegacy volumeTopo = volumeRefinements[0].first->parentTopology();
   unsigned sideDim = volumeTopo->getDimension() - 1;
   for (int refIndex=0; refIndex<volumeRefinements.size(); refIndex++) {
     RefinementPattern* refPattern = volumeRefinements[refIndex].first;

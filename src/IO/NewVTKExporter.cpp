@@ -43,7 +43,7 @@ void NewVTKExporter::exportFunction(FunctionPtr function, string functionName, s
 
     FieldContainer<double> physicalCellNodes = _mesh->physicalCellNodesForCell(cellIndex);
 
-    CellTopoPtr cellTopoPtr = cell->topology();
+    CellTopoPtrLegacy cellTopoPtr = cell->topology();
     int numPoints = 0;
     int pOrder = 4;
     if (defaultPts)

@@ -381,7 +381,7 @@ void Solution::populateStiffnessAndLoad() {
       ipBasisCache->setCellSideParities(cellSideParities); // I don't anticipate these being needed, though
       
       //int numCells = physicalCellNodes.dimension(0);
-//      CellTopoPtr cellTopoPtr = elemTypePtr->cellTopoPtr;
+//      CellTopoPtrLegacy cellTopoPtr = elemTypePtr->cellTopoPtr;
 //      
 //      //      { // this block is not necessary for the solution.  Here just to produce debugging output
 //      //        FieldContainer<double> preStiffness(numCells,numTestDofs,numTrialDofs );
@@ -1058,15 +1058,15 @@ ElementTypePtr Solution::getEquivalentElementType(Teuchos::RCP<Mesh> otherMesh, 
   DofOrderingPtr otherTest = elemType->testOrderPtr;
   DofOrderingPtr myTrial = _mesh->getDofOrderingFactory().getTrialOrdering(*otherTrial);
   DofOrderingPtr myTest = _mesh->getDofOrderingFactory().getTestOrdering(*otherTest);
-  Teuchos::RCP<shards::CellTopology> otherCellTopoPtr = elemType->cellTopoPtr;
-  Teuchos::RCP<shards::CellTopology> myCellTopoPtr;
+  Teuchos::RCP<shards::CellTopology> otherCellTopoPtrLegacy = elemType->cellTopoPtr;
+  Teuchos::RCP<shards::CellTopology> myCellTopoPtrLegacy;
   for (int i=0; i<_mesh->activeElements().size(); i++) {
-    myCellTopoPtr = _mesh->activeElements()[i]->elementType()->cellTopoPtr;
-    if (myCellTopoPtr->getKey() == otherCellTopoPtr->getKey() ) {
+    myCellTopoPtrLegacy = _mesh->activeElements()[i]->elementType()->cellTopoPtr;
+    if (myCellTopoPtrLegacy->getKey() == otherCellTopoPtrLegacy->getKey() ) {
       break; // out of for loop
     }
   }
-  return _mesh->getElementTypeFactory().getElementType(myTrial,myTest,myCellTopoPtr);
+  return _mesh->getElementTypeFactory().getElementType(myTrial,myTest,myCellTopoPtrLegacy);
 }
 
 // The following method isn't really a good idea.
@@ -2338,7 +2338,7 @@ void Solution::writeToFile(int trialID, const string &filePath) {
   for (elemTypeIt = elementTypes.begin(); elemTypeIt != elementTypes.end(); elemTypeIt++) {
     ElementTypePtr elemTypePtr = *(elemTypeIt);
     
-    CellTopoPtr cellTopo = elemTypePtr->cellTopoPtr;
+    CellTopoPtrLegacy cellTopo = elemTypePtr->cellTopoPtr;
     FieldContainer<double> vertexPoints(cellTopo->getVertexCount(),cellTopo->getDimension());
     CamelliaCellTools::refCellNodesForTopology(vertexPoints, *cellTopo);
     

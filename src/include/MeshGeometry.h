@@ -14,13 +14,13 @@
 #include "IndexType.h"
 
 typedef pair<IndexType, IndexType> Edge;
-typedef Teuchos::RCP< shards::CellTopology > CellTopoPtr;
+typedef Teuchos::RCP< shards::CellTopology > CellTopoPtrLegacy;
 
 class MeshGeometry {
   vector< vector<double> > _vertices;
   vector< vector<IndexType> > _elementVertices;
   map< Edge, ParametricCurvePtr > _edgeToCurveMap;
-  vector< CellTopoPtr > _cellTopos;
+  vector< CellTopoPtrLegacy > _cellTopos;
   
   void initializeVerticesFromFieldContainer(const vector<FieldContainer<double> > &vertices) {
     IndexType numVertices = vertices.size();
@@ -38,15 +38,15 @@ class MeshGeometry {
   
   void populateCellToposFromElementVertices() {
     // guesses the cell topology based on the number of vertices.
-    CellTopoPtr line = Teuchos::rcp(new shards::CellTopology(shards::getCellTopologyData<shards::Line<2> >() ) );
-    CellTopoPtr quad = Teuchos::rcp(new shards::CellTopology(shards::getCellTopologyData<shards::Quadrilateral<4> >() ) );
-    CellTopoPtr triangle = Teuchos::rcp(new shards::CellTopology(shards::getCellTopologyData<shards::Triangle<3> >() ) );
-    CellTopoPtr hex = Teuchos::rcp(new shards::CellTopology(shards::getCellTopologyData<shards::Hexahedron<8> >() ) );
+    CellTopoPtrLegacy line = Teuchos::rcp(new shards::CellTopology(shards::getCellTopologyData<shards::Line<2> >() ) );
+    CellTopoPtrLegacy quad = Teuchos::rcp(new shards::CellTopology(shards::getCellTopologyData<shards::Quadrilateral<4> >() ) );
+    CellTopoPtrLegacy triangle = Teuchos::rcp(new shards::CellTopology(shards::getCellTopologyData<shards::Triangle<3> >() ) );
+    CellTopoPtrLegacy hex = Teuchos::rcp(new shards::CellTopology(shards::getCellTopologyData<shards::Hexahedron<8> >() ) );
     IndexType numCells = _elementVertices.size();
     _cellTopos.clear();
     for (IndexType cellIndex=0; cellIndex<numCells; cellIndex++) {
       IndexType numVertices = _elementVertices[cellIndex].size();
-      CellTopoPtr cellTopo;
+      CellTopoPtrLegacy cellTopo;
       switch (numVertices) {
         case 2:
           cellTopo = line;
@@ -69,7 +69,7 @@ class MeshGeometry {
 public:
   MeshGeometry(const vector< vector<double> > &vertices,
                   const vector< vector<IndexType> > &elementVertices,
-                  const vector< CellTopoPtr > &cellTopos,
+                  const vector< CellTopoPtrLegacy > &cellTopos,
                   const map< Edge, ParametricCurvePtr > &edgeToCurveMap) {
     _vertices = vertices;
     _elementVertices = elementVertices;
@@ -79,7 +79,7 @@ public:
   
   MeshGeometry(const vector< vector<double> > &vertices,
                   const vector< vector<IndexType> > &elementVertices,
-                  const vector< CellTopoPtr > &cellTopos) {
+                  const vector< CellTopoPtrLegacy > &cellTopos) {
     _vertices = vertices;
     _elementVertices = elementVertices;
     _cellTopos = cellTopos;
@@ -117,7 +117,7 @@ public:
     return _vertices;
   }
   
-  const vector< CellTopoPtr > &cellTopos() {
+  const vector< CellTopoPtrLegacy > &cellTopos() {
     return _cellTopos;
   }
 };

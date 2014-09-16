@@ -64,7 +64,7 @@ vector< pair< GlobalIndexType, unsigned> > Cell::getDescendantsForSide(int sideI
   return descendantsForSide;
 }
 
-Cell::Cell(CellTopoPtr cellTopo, const vector<unsigned> &vertices, const vector< map< unsigned, unsigned > > &subcellPermutations,
+Cell::Cell(CellTopoPtrLegacy cellTopo, const vector<unsigned> &vertices, const vector< map< unsigned, unsigned > > &subcellPermutations,
      unsigned cellIndex, MeshTopology* meshTopo) {
   _cellTopo = cellTopo;
   _vertices = vertices;
@@ -430,7 +430,7 @@ unsigned Cell::subcellPermutation(unsigned d, unsigned scord) {
   return _subcellPermutations[d][scord];
 }
 
-CellTopoPtr Cell::topology() {
+CellTopoPtrLegacy Cell::topology() {
   return _cellTopo;
 }
 

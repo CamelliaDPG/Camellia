@@ -20,6 +20,8 @@
 
 #include "CamelliaCellTools.h"
 
+// #include "omp.h"
+
 void testSerialDenseMatrix() {
   int n = 5, m = 3;
   FieldContainer<double> A(n,m);
@@ -289,6 +291,25 @@ void trumanCrashingCode() {
   }
 }
 
+void testFieldContainerSum() {
+  // mimic the creation of an integrated matrix (like a Gram matrix or a stiffness matrix)
+  // idea is to get some timings so that I can examine speedup from threading, as well maybe as
+  // intelligent iteration through the containers to improve cache locality.
+  int fields = 1000;
+  int points = 1000;
+  FieldContainer<double> basisVals(fields,points);
+  FieldContainer<double> cubWeights(points);
+  FieldContainer<double> otherBasisVals(fields,points);
+  FieldContainer<double> integrals(fields,fields);
+  for (int i=0; i<fields; i++) {
+    for (int j=0; j<fields; j++) {
+      for (int ptOrdinal=0; ptOrdinal<points; ptOrdinal++) {
+        integrals(i,j) += basisVals(i,ptOrdinal) * cubWeights(ptOrdinal) * otherBasisVals(j,ptOrdinal);
+      }
+    }
+  }
+}
+
 int main(int argc, char *argv[]) {
   bool testMeshTopoMemory = false;
   
@@ -298,6 +319,7 @@ int main(int argc, char *argv[]) {
   
   bool tryCellToolsMapToRefSubcell = false;
   
+  bool printLinearBasisNodes = true;
   bool printQuadBasisNodes = false;
   
   testSerialDenseMatrix();
@@ -329,6 +351,36 @@ int main(int argc, char *argv[]) {
     // (it's fine, honoring the permutation as expected)
   }
   
+  if (printLinearBasisNodes) {
+    BasisPtr linearBasis = Camellia::intrepidQuadHGRAD(1);
+    
+    FieldContainer<double> refPoints(4,2);
+    refPoints(0,0) = -1.0;
+    refPoints(0,1) = -1.0;
+    
+    refPoints(1,0) =  1.0;
+    refPoints(1,1) = -1.0;
+    
+    refPoints(2,0) =  1.0;
+    refPoints(2,1) =  1.0;
+    
+    refPoints(3,0) = -1.0;
+    refPoints(3,1) =  1.0;
+    
+    FieldContainer<double> values(linearBasis->getCardinality(), 4);
+    linearBasis->getValues(values, refPoints, OPERATOR_VALUE);
+    double tol = 1e-14;
+    for (int dofOrdinal=0; dofOrdinal<linearBasis->getCardinality(); dofOrdinal++) {
+      for (int ptIndex=0; ptIndex < values.dimension(1); ptIndex++) {
+        if (abs(values(dofOrdinal,ptIndex)-1.0) < tol) {
+          double x = refPoints(ptIndex,0);
+          double y = refPoints(ptIndex,1);
+          cout << "dofOrdinal " << dofOrdinal << " has node at point (" << x << "," << y << ")\n";
+        }
+      }
+    }
+  }
+  
   if (printQuadBasisNodes) {
     BasisPtr quadBasis = Camellia::intrepidQuadHGRAD(2);
     
@@ -341,7 +393,7 @@ int main(int argc, char *argv[]) {
         ptIndex++;
       }
     }
-
+    
     FieldContainer<double> values(quadBasis->getCardinality(), 9);
     quadBasis->getValues(values, refPoints, OPERATOR_VALUE);
     double tol = 1e-14;
