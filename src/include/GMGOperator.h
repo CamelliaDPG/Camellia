@@ -48,6 +48,7 @@ class GMGOperator : public Epetra_Operator {
   
   mutable double _timeMapFineToCoarse, _timeMapCoarseToFine, _timeCoarseImport, _timeConstruction, _timeCoarseSolve, _timeLocalCoefficientMapConstruction;  // totals over the life of the object
   
+  mutable bool _haveSolvedOnCoarseMesh; // if this is true, then we can call resolve() instead of solve().
 public: // promoted these two to public for testing purposes:
   LocalDofMapperPtr getLocalCoefficientMap(GlobalIndexType fineCellID) const;
   GlobalIndexType getCoarseCellID(GlobalIndexType fineCellID) const;

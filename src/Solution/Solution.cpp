@@ -739,7 +739,7 @@ void Solution::setProblem(Teuchos::RCP<Solver> solver) {
   solver->setProblem(problem);
 }
 
-void Solution::solveWithPrepopulatedStiffnessAndLoad(Teuchos::RCP<Solver> solver) {
+void Solution::solveWithPrepopulatedStiffnessAndLoad(Teuchos::RCP<Solver> solver, bool callResolveInsteadOfSolve) {
   int rank = Teuchos::GlobalMPISession::getRank();
   int numProcs = Teuchos::GlobalMPISession::getNProc();
   
@@ -775,15 +775,19 @@ void Solution::solveWithPrepopulatedStiffnessAndLoad(Teuchos::RCP<Solver> solver
   
   timer.ResetStartTime();
   
-  GlobalIndexType dofInterpreterGlobalDofCount = _dofInterpreter->globalDofCount();
-  GlobalIndexType meshGlobalDofCount = _mesh->globalDofCount();
+//  GlobalIndexType dofInterpreterGlobalDofCount = _dofInterpreter->globalDofCount();
+//  GlobalIndexType meshGlobalDofCount = _mesh->globalDofCount();
 //  if (rank==0) cout << "About to call global solver with " << dofInterpreterGlobalDofCount << " global dof count.\n";
 //  if (rank==0) cout << "(Mesh sees " << meshGlobalDofCount << " dofs.)\n";
   
 //  cout << "On rank " << rank << ", about to call global solver with " << _dofInterpreter->globalDofCount() << " global dof count.\n";
 //  cout << "(On rank " << rank << ", mesh sees " << _mesh->globalDofCount() << " dofs.)\n";
   
-  int solveSuccess = solver->solve();
+  int solveSuccess;
+  if (!callResolveInsteadOfSolve)
+    solveSuccess = solver->solve();
+  else
+    solveSuccess = solver->resolve();
 
 //  if (rank==0) cout << "Returned from global solver.\n";
   

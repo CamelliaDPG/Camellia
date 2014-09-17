@@ -39,6 +39,7 @@ GMGOperator::GMGOperator(BCPtr zeroBCs, MeshPtr coarseMesh, IPPtr coarseIP, Mesh
   _bc = zeroBCs;
   _coarseSolution = Teuchos::rcp( new Solution(coarseMesh, zeroBCs, zeroRHS, coarseIP) );
   _coarseSolver = coarseSolver;
+  _haveSolvedOnCoarseMesh = false;
     
   if (( coarseMesh->meshUsesMaximumRule()) || (! fineMesh->meshUsesMinimumRule()) ) {
     cout << "GMGOperator only supports minimum rule.\n";
@@ -254,7 +255,12 @@ int GMGOperator::ApplyInverse(const Epetra_MultiVector& X_in, Epetra_MultiVector
   
     timer.ResetStartTime();
   _coarseSolution->setProblem(_coarseSolver);
-  _coarseSolution->solveWithPrepopulatedStiffnessAndLoad(_coarseSolver);
+  if (!_haveSolvedOnCoarseMesh) {
+    _coarseSolution->solveWithPrepopulatedStiffnessAndLoad(_coarseSolver, false);
+    _haveSolvedOnCoarseMesh = true;
+  } else {
+    _coarseSolution->solveWithPrepopulatedStiffnessAndLoad(_coarseSolver, true); // call resolve() instead of solve() -- reuse factorization
+  }
   _timeCoarseSolve += timer.ElapsedTime();
   
 //  { // DEBUGGING:

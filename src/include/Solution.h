@@ -162,7 +162,7 @@ public:
   void populateStiffnessAndLoad();
   void imposeBCs();
   void setProblem(Teuchos::RCP<Solver> solver);
-  void solveWithPrepopulatedStiffnessAndLoad(Teuchos::RCP<Solver> solver);
+  void solveWithPrepopulatedStiffnessAndLoad(Teuchos::RCP<Solver> solver, bool callResolveInstead = false);
   void importSolution(); // imports for all rank-local cellIDs
   void importGlobalSolution(); // imports (and interprets!) global solution.  NOT scalable.
   

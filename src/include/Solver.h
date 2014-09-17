@@ -26,6 +26,11 @@ public:
     _problem = problem;
   }
   virtual int solve() = 0; // solve with an error code response
+  virtual int resolve() {
+    // must be preceded by a call to solve(); caller attests that the system matrix has not been altered since last call to solve()
+    // subclasses may override to reuse factorization information
+    return solve();
+  }
 };
 
 // some concrete implementations follow…
@@ -59,14 +64,17 @@ public:
 #include "Amesos_Mumps.h"
 class MumpsSolver : public Solver {
   int _maxMemoryPerCoreMB;
+  bool _saveFactorization;
+  Teuchos::RCP<Amesos_Mumps> _savedSolver;
 public:
-  MumpsSolver(int maxMemoryPerCoreMB = 512) {
+  MumpsSolver(int maxMemoryPerCoreMB = 512, bool saveFactorization = true) {
     // maximum amount of memory MUMPS may allocate per core.
     _maxMemoryPerCoreMB = maxMemoryPerCoreMB;
+    _saveFactorization = saveFactorization;
   }
   
   int solve() {
-    Amesos_Mumps mumps(problem());
+    Teuchos::RCP<Amesos_Mumps> mumps = Teuchos::rcp(new Amesos_Mumps(problem()));;
     int numProcs=1;
     int rank=0;
     
@@ -74,35 +82,35 @@ public:
 #ifdef HAVE_MPI
     rank     = Teuchos::GlobalMPISession::getRank();
     numProcs = Teuchos::GlobalMPISession::getNProc();
-    mumps.SetICNTL(28, 0); // 0: automatic choice between parallel and sequential analysis
-//    mumps.SetICNTL(28, 2); // 2: parallel analysis
-//    mumps.SetICNTL(29, 2); // 2: use PARMETIS; 1: use PT-SCOTCH
+    mumps->SetICNTL(28, 0); // 0: automatic choice between parallel and sequential analysis
+//    mumps->SetICNTL(28, 2); // 2: parallel analysis
+//    mumps->SetICNTL(29, 2); // 2: use PARMETIS; 1: use PT-SCOTCH
     
 //    int minSize = max(infog[26-1], infog[16-1]);
 //    // want to set ICNTL 23 to a size "significantly larger" than minSize
 //    int sizeToSet = max(2 * minSize, previousSize*2);
 //    sizeToSet = min(sizeToSet, _maxMemoryPerCoreMB);
 //    previousSize = sizeToSet;
-    //    mumps.SetICNTL(23, sizeToSet);
+    //    mumps->SetICNTL(23, sizeToSet);
     
     // not sure why we shouldn't just do this: (I don't think MUMPS will allocate as much as we allow it, unless it thinks it needs it)
-    mumps.SetICNTL(1,6); // set output stream for errors (this is supposed to be the default, but maybe Amesos clobbers it?)
+    mumps->SetICNTL(1,6); // set output stream for errors (this is supposed to be the default, but maybe Amesos clobbers it?)
 //    int sizeToSet = _maxMemoryPerCoreMB;
 //    cout << "setting ICNTL 23 to " << sizeToSet << endl;
-//    mumps.SetICNTL(23, sizeToSet);
+//    mumps->SetICNTL(23, sizeToSet);
 #else
 #endif
 
-    mumps.SymbolicFactorization();
-    mumps.NumericFactorization();
+    mumps->SymbolicFactorization();
+    mumps->NumericFactorization();
     int relaxationParam = 0; // the default
-    int* info = mumps.GetINFO();
-    int* infog = mumps.GetINFOG();
+    int* info = mumps->GetINFO();
+    int* infog = mumps->GetINFOG();
     
     int numErrors = 0;
     while (info[0] < 0) { // error occurred
-      info = mumps.GetINFO(); // not sure if these can change locations between invocations -- just in case...
-      infog = mumps.GetINFOG();
+      info = mumps->GetINFO(); // not sure if these can change locations between invocations -- just in case...
+      infog = mumps->GetINFOG();
       
       numErrors++;
       if (rank == 0) {
@@ -111,7 +119,7 @@ public:
           // want to set ICNTL 23 to a size "significantly larger" than minSize
           int sizeToSet = max(2 * minSize, previousSize*2);
           sizeToSet = min(sizeToSet, _maxMemoryPerCoreMB);
-          mumps.SetICNTL(23, sizeToSet);
+          mumps->SetICNTL(23, sizeToSet);
           cout << "\nMUMPS memory allocation too small.  Setting to: " << sizeToSet << " MB/core." << endl;
           previousSize = sizeToSet;
         } else if (infog[0] == -7) {
@@ -121,11 +129,11 @@ public:
           cout << "\nMUMPS encountered an error allocating an integer workspace of size " << infog[2-1] << " (bytes, I think).\n";
           cout << "-- perhaps it's running into our allocation limit?? Setting the allocation limit to ";
           cout << sizeToSet << " MB/core." << endl;
-          mumps.SetICNTL(23, sizeToSet);
+          mumps->SetICNTL(23, sizeToSet);
         } else if (infog[0]==-13) { // error during a Fortran ALLOCATE statement
           if (previousSize > 0) {
             int sizeToSet = 3 * previousSize / 4; // reduce size by 25%
-            mumps.SetICNTL(23, sizeToSet);
+            mumps->SetICNTL(23, sizeToSet);
             cout << "MUMPS memory allocation error -13; likely indicates we're out of memory.  Reducing by 25%; setting to: " << sizeToSet << " MB/core." << endl;
           } else {
             cout << "MUMPS memory allocation error -13, but previousSize was 0.  (Unhandled case)." << endl;
@@ -138,14 +146,22 @@ public:
           TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unhandled MUMPS error code");
         }
       }
-      mumps.SymbolicFactorization();
-      mumps.NumericFactorization();
+      mumps->SymbolicFactorization();
+      mumps->NumericFactorization();
       if (numErrors > 20) {
         if (rank==0) cout << "Too many errors during MUMPS factorization.  Quitting.\n";
         break;
       }
     }
-    return mumps.Solve();
+    if (_saveFactorization) _savedSolver = mumps;
+    return mumps->Solve();
+  }
+  int resolve() {
+    if (_savedSolver.get() == NULL) {
+      cout << "You must call solve() before calling resolve().  Also, _saveFactorization must be true.\n";
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "You must call solve() before calling resolve().  Also, _saveFactorization must be true.");
+    }
+    return _savedSolver->Solve();
   }
 };
 #else
