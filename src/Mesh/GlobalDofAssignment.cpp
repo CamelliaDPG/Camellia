@@ -343,6 +343,38 @@ void GlobalDofAssignment::interpretLocalCoefficients(GlobalIndexType cellID, con
   }
 }
 
+void GlobalDofAssignment::projectParentCoefficientsOntoUnsetChildren() {
+  set<GlobalIndexType> rankLocalCellIDs = cellsInPartition(-1);
+  
+  for (vector< Solution* >::iterator solutionIt = _registeredSolutions.begin();
+       solutionIt != _registeredSolutions.end(); solutionIt++) {
+    Solution* soln = *solutionIt;
+    for (set<GlobalIndexType>::iterator cellIDIt = rankLocalCellIDs.begin(); cellIDIt != rankLocalCellIDs.end(); cellIDIt++) {
+      GlobalIndexType cellID = *cellIDIt;
+      if (soln->cellHasCoefficientsAssigned(cellID)) continue;
+      
+      CellPtr cell = _meshTopology->getCell(cellID);
+      CellPtr parent = cell->getParent();
+      if (parent.get()==NULL) continue;
+      GlobalIndexType parentCellID = parent->cellIndex();
+      if (! soln->cellHasCoefficientsAssigned(parentCellID)) continue;
+      
+      int childOrdinal = -1;
+      vector<IndexType> childIndices = parent->getChildIndices();
+      for (int i=0; i<childIndices.size(); i++) {
+        if (childIndices[i]==cellID) childOrdinal = i;
+        else childIndices[i] = -1; // indication that Solution should not compute the projection for this child
+      }
+      if (childOrdinal == -1) {
+        cout << "ERROR: child not found.\n";
+        TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "child not found!");
+      }
+//      cout << "determining cellID " << parent->cellIndex() << "'s child " << childOrdinal << "'s coefficients.\n";
+      soln->projectOldCellOntoNewCells(parent->cellIndex(), _elementTypeForCell[parentCellID], childIndices);
+    }
+  }
+}
+
 void GlobalDofAssignment::setPartitions(FieldContainer<GlobalIndexType> &partitionedMesh) {
   set<unsigned> activeCellIDs = _meshTopology->getActiveCellIndices();
   
@@ -369,6 +401,7 @@ void GlobalDofAssignment::setPartitions(FieldContainer<GlobalIndexType> &partiti
       _activeCellOffset += partition.size();
     }
   }
+  projectParentCoefficientsOntoUnsetChildren();
   rebuildLookups();
 }
 

@@ -70,17 +70,17 @@ void GDAMinimumRule::didHRefine(const set<GlobalIndexType> &parentCellIDs) {
   for (set<GlobalIndexType>::iterator cellIDIt = neighborsOfNewElements.begin(); cellIDIt != neighborsOfNewElements.end(); cellIDIt++) {
     assignParities(*cellIDIt);
   }
-  for (set<GlobalIndexType>::const_iterator cellIDIt = parentCellIDs.begin(); cellIDIt != parentCellIDs.end(); cellIDIt++) {
-    GlobalIndexType parentCellID = *cellIDIt;
-    ElementTypePtr elemType = elementType(parentCellID);
-    for (vector< Solution* >::iterator solutionIt = _registeredSolutions.begin();
-         solutionIt != _registeredSolutions.end(); solutionIt++) {
-      // do projection
-      vector<IndexType> childIDsLocalIndexType = _meshTopology->getCell(parentCellID)->getChildIndices();
-      vector<GlobalIndexType> childIDs(childIDsLocalIndexType.begin(),childIDsLocalIndexType.end());
-      (*solutionIt)->projectOldCellOntoNewCells(parentCellID,elemType,childIDs);
-    }
-  }
+//  for (set<GlobalIndexType>::const_iterator cellIDIt = parentCellIDs.begin(); cellIDIt != parentCellIDs.end(); cellIDIt++) {
+//    GlobalIndexType parentCellID = *cellIDIt;
+//    ElementTypePtr elemType = elementType(parentCellID);
+//    for (vector< Solution* >::iterator solutionIt = _registeredSolutions.begin();
+//         solutionIt != _registeredSolutions.end(); solutionIt++) {
+//      // do projection
+//      vector<IndexType> childIDsLocalIndexType = _meshTopology->getCell(parentCellID)->getChildIndices();
+//      vector<GlobalIndexType> childIDs(childIDsLocalIndexType.begin(),childIDsLocalIndexType.end());
+//      (*solutionIt)->projectOldCellOntoNewCells(parentCellID,elemType,childIDs);
+//    }
+//  }
   
   this->GlobalDofAssignment::didHRefine(parentCellIDs);
 }

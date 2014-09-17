@@ -14,7 +14,7 @@
 class CellDataMigration {
 public:
   static int dataSize(Mesh* mesh, GlobalIndexType cellID);
-  static void packData(Mesh* mesh, GlobalIndexType cellID, char *dataBuffer, int size);
+  static void packData(Mesh* mesh, GlobalIndexType cellID, bool packParentDofs, char *dataBuffer, int size);
   static void unpackData(Mesh* mesh, GlobalIndexType cellID, const char *dataBuffer, int size);
 };
 

@@ -67,10 +67,15 @@ class MumpsSolver : public Solver {
   bool _saveFactorization;
   Teuchos::RCP<Amesos_Mumps> _savedSolver;
 public:
-  MumpsSolver(int maxMemoryPerCoreMB = 512, bool saveFactorization = true) {
+  MumpsSolver(int maxMemoryPerCoreMB = 512, bool saveFactorization = false) {
     // maximum amount of memory MUMPS may allocate per core.
     _maxMemoryPerCoreMB = maxMemoryPerCoreMB;
     _saveFactorization = saveFactorization;
+  }
+  
+  void setProblem(Teuchos::RCP< Epetra_LinearProblem > problem) {
+    _savedSolver = Teuchos::rcp((Amesos_Mumps*)NULL);
+    this->_problem = problem;
   }
   
   int solve() {

@@ -58,6 +58,7 @@ protected:
   void assignInitialElementType( GlobalIndexType cellID ); // this is the "natural" element type, before side modifications for constraints (when using maximum rule)
   void assignParities( GlobalIndexType cellID );
   
+  void projectParentCoefficientsOntoUnsetChildren();
   virtual void rebuildLookups() = 0;
 public:
   GlobalDofAssignment(MeshPtr mesh, VarFactory varFactory, DofOrderingFactoryPtr dofOrderingFactory,

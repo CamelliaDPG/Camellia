@@ -654,10 +654,12 @@ void Solution::populateStiffnessAndLoad() {
       }
       _globalStiffMatrix->SumIntoGlobalValues(numValues, &globalIndices(0), numValues, &globalIndices(0), &product(0,0));
     } else { // otherwise, we increase the size of the system to accomodate the zmc...
-      // insert row:
-      _globalStiffMatrix->InsertGlobalValues(1,&zmcIndex,numValues,&globalIndices(0),&basisIntegrals(0));
-      // insert column:
-      _globalStiffMatrix->InsertGlobalValues(numValues,&globalIndices(0),1,&zmcIndex,&basisIntegrals(0));
+      if (numValues > 0) {
+        // insert row:
+        _globalStiffMatrix->InsertGlobalValues(1,&zmcIndex,numValues,&globalIndices(0),&basisIntegrals(0));
+        // insert column:
+        _globalStiffMatrix->InsertGlobalValues(numValues,&globalIndices(0),1,&zmcIndex,&basisIntegrals(0));
+      }
       
       //      cout << "in zmc, diagonal entry: " << rho << endl;
       //rho /= numValues;
@@ -3295,6 +3297,7 @@ void Solution::projectOldCellOntoNewCells(GlobalIndexType cellID,
    
   for (int childOrdinal=0; childOrdinal < childIDs.size(); childOrdinal++) {
     GlobalIndexType childID = childIDs[childOrdinal];
+    if (childID == -1) continue; // indication we should skip this child...
     CellPtr childCell = _mesh->getTopology()->getCell(childID);
     ElementTypePtr childType = _mesh->getElementType(childID);
     int childSideCount = CamelliaCellTools::getSideCount(*childCell->topology());
