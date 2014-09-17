@@ -440,6 +440,7 @@ int main(int argc, char *argv[]) {
   
   if (useGMGSolver) {
     gmgSolver->gmgOperator().reportTimings();
+    gmgSolver->gmgOperator().clearTimings();
   }
   
 #ifdef HAVE_EPETRAEXT_HDF5
@@ -500,6 +501,7 @@ int main(int argc, char *argv[]) {
     solution->reportTimings();
     if (useGMGSolver) {
       gmgSolver->gmgOperator().reportTimings();
+      gmgSolver->gmgOperator().clearTimings();
     }
     
 #ifdef HAVE_EPETRAEXT_HDF5
