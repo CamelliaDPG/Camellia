@@ -530,17 +530,14 @@ bool GMGTests::testGMGSolverIdentity() {
     bool applySmoothing = false;
     int maxIters = applySmoothing ? 100 : 1; // if smoothing not applied, then GMG should recover exactly the direct solution, in 1 iteration
     Teuchos::RCP<Solver> coarseSolver = Teuchos::rcp( new KluSolver );
-    Teuchos::RCP<GMGSolver> gmgSolver = Teuchos::rcp( new GMGSolver(zeroBCs, fineMesh, graphNorm, fineMesh,
-                                                                    solnFine->getPartitionMap(),
-                                                                    maxIters, iter_tol, coarseSolver) );
-    
-    gmgSolver->setApplySmoothingOperator(applySmoothing);
-    
-    Teuchos::RCP<Solver> fineSolver = gmgSolver;
     
 //    solnFine->setWriteMatrixToFile(true, "/tmp/A_fine.dat");
     
     {
+      Teuchos::RCP<GMGSolver> gmgSolver = Teuchos::rcp( new GMGSolver(zeroBCs, fineMesh, graphNorm, fineMesh,
+                                                                      solnFine->getPartitionMap(),
+                                                                      maxIters, iter_tol, coarseSolver) );
+
 //      GnuPlotUtil::writeComputationalMeshSkeleton("/tmp/fineMesh", fineMesh, true); // true: label cells
       
       // before we test the solve proper, let's check that with smoothing off, ApplyInverse acts just like the standard solve
@@ -575,7 +572,15 @@ bool GMGTests::testGMGSolverIdentity() {
         }
       }
     }
+
+    Teuchos::RCP<GMGSolver> gmgSolver = Teuchos::rcp( new GMGSolver(zeroBCs, fineMesh, graphNorm, fineMesh,
+                                                                    solnFine->getPartitionMap(),
+                                                                    maxIters, iter_tol, coarseSolver) );
     
+    gmgSolver->setApplySmoothingOperator(applySmoothing);
+    
+    Teuchos::RCP<Solver> fineSolver = gmgSolver;
+
     solnFine->solve(coarseSolver);
     
     solnCoarse->solve(fineSolver);
