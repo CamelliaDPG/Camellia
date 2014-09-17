@@ -390,7 +390,7 @@ int main(int argc, char *argv[]) {
   switch(solverChoice) {
       case MUMPS:
 #ifdef USE_MUMPS
-      coarseSolver = Teuchos::rcp( new MumpsSolver(mumpsMaxMemoryMB) );
+      coarseSolver = Teuchos::rcp( new MumpsSolver(mumpsMaxMemoryMB, true) );
 #else
       cout << "useMumps=true, but MUMPS is not available!\n";
       exit(1);
@@ -463,6 +463,11 @@ int main(int argc, char *argv[]) {
       cout << "Before refinement " << refIndex + 1 << ", energy error = " << energyError;
       cout << " (using " << numFluxDofs << " trace degrees of freedom)." << endl;
     }
+#ifdef USE_MUMPS
+    // recreate mumpsSolver prior to refinement (true means it keeps a factorization, which is unsafe when the coarse mesh is being refined...)
+    if (solverChoice==MUMPS) coarseSolver = Teuchos::rcp( new MumpsSolver(mumpsMaxMemoryMB, true) );
+#endif
+
     refinementStrategy.refine(rank==0);
     double refinementTime = timer.ElapsedTime();
     if (rank==0) cout << "refinement time (as seen by rank 0) " << refinementTime << " seconds.\n";
