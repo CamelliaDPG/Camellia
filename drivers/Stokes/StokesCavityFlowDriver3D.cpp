@@ -417,6 +417,7 @@ int main(int argc, char *argv[]) {
     gmgSolver = new GMGSolver(zeroBCs, coarseMesh, graphNorm, mesh,
                               solution->getPartitionMap(), maxIters, tol, coarseSolver);
     gmgSolver->setAztecOutput(100); // print residual every 100 iterations;
+    gmgSolver->gmgOperator().constructLocalCoefficientMaps(); // for separating out the timings
     fineSolver = Teuchos::rcp( gmgSolver );
   } else {
     fineSolver = coarseSolver;
@@ -436,6 +437,10 @@ int main(int argc, char *argv[]) {
   double totalSolveTime = timer.ElapsedTime();
   if (rank==0) cout << "total solve time (as seen by rank 0) " << totalSolveTime << " seconds.\n";
   solution->reportTimings();
+  
+  if (useGMGSolver) {
+    gmgSolver->gmgOperator().reportTimings();
+  }
   
 #ifdef HAVE_EPETRAEXT_HDF5
   ostringstream dir_name;
@@ -482,6 +487,7 @@ int main(int argc, char *argv[]) {
       gmgSolver->setTolerance(tol);
       gmgSolver->setFineMesh(mesh, solution->getPartitionMap());
       gmgSolver->setAztecOutput(100); // print residual every 100 iterations;
+      gmgSolver->gmgOperator().constructLocalCoefficientMaps(); // for separating out the timings
     }
     
     timer.ResetStartTime();
@@ -492,6 +498,9 @@ int main(int argc, char *argv[]) {
     double totalSolveTime = timer.ElapsedTime();
     if (rank==0) cout << "total solve time (as seen by rank 0) " << totalSolveTime << " seconds.\n";
     solution->reportTimings();
+    if (useGMGSolver) {
+      gmgSolver->gmgOperator().reportTimings();
+    }
     
 #ifdef HAVE_EPETRAEXT_HDF5
     if (rank==0) cout << "Beginning export of refinement " << refIndex+1 << " solution.\n";
