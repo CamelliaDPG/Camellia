@@ -784,10 +784,11 @@ void Solution::solveWithPrepopulatedStiffnessAndLoad(Teuchos::RCP<Solver> solver
 //  cout << "(On rank " << rank << ", mesh sees " << _mesh->globalDofCount() << " dofs.)\n";
   
   int solveSuccess;
-  if (!callResolveInsteadOfSolve)
+  if (!callResolveInsteadOfSolve) {
     solveSuccess = solver->solve();
-  else
+  } else {
     solveSuccess = solver->resolve();
+  }
 
 //  if (rank==0) cout << "Returned from global solver.\n";
   

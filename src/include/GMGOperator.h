@@ -106,6 +106,7 @@ public:
    */
   void setFineMesh(MeshPtr fineMesh, Epetra_Map finePartitionMap);
 
+  void clearTimings();
   void reportTimings() const;
   
   void constructLocalCoefficientMaps(); // we'll do this lazily if this is not called; this is mostly a way to separate out the time costs

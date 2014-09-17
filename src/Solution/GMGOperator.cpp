@@ -23,7 +23,7 @@
 #include "Epetra_SerialComm.h"
 
 GMGOperator::GMGOperator(BCPtr zeroBCs, MeshPtr coarseMesh, IPPtr coarseIP, MeshPtr fineMesh, Epetra_Map finePartitionMap, Teuchos::RCP<Solver> coarseSolver) :  _finePartitionMap(finePartitionMap), _br(true) {
-  _timeMapFineToCoarse = 0, _timeMapCoarseToFine = 0, _timeConstruction = 0, _timeCoarseSolve = 0, _timeCoarseImport = 0;
+  clearTimings();
   
 #ifdef HAVE_MPI
   Epetra_MpiComm Comm(MPI_COMM_WORLD);
@@ -60,6 +60,10 @@ GMGOperator::GMGOperator(BCPtr zeroBCs, MeshPtr coarseMesh, IPPtr coarseIP, Mesh
   _coarseSolution->populateStiffnessAndLoad(); // can get away with doing this just once; after that we just manipulate the RHS vector
   
   _timeConstruction += constructionTimer.ElapsedTime();
+}
+
+void GMGOperator::clearTimings() {
+  _timeMapFineToCoarse = 0, _timeMapCoarseToFine = 0, _timeConstruction = 0, _timeCoarseSolve = 0, _timeCoarseImport = 0, _timeLocalCoefficientMapConstruction = 0;
 }
 
 void GMGOperator::constructLocalCoefficientMaps() {
@@ -254,11 +258,12 @@ int GMGOperator::ApplyInverse(const Epetra_MultiVector& X_in, Epetra_MultiVector
   // solve the coarse system:
   
     timer.ResetStartTime();
-  _coarseSolution->setProblem(_coarseSolver);
   if (!_haveSolvedOnCoarseMesh) {
+    _coarseSolution->setProblem(_coarseSolver);
     _coarseSolution->solveWithPrepopulatedStiffnessAndLoad(_coarseSolver, false);
     _haveSolvedOnCoarseMesh = true;
   } else {
+    _coarseSolver->problem().SetRHS(coarseRHSVector.get());
     _coarseSolution->solveWithPrepopulatedStiffnessAndLoad(_coarseSolver, true); // call resolve() instead of solve() -- reuse factorization
   }
   _timeCoarseSolve += timer.ElapsedTime();
