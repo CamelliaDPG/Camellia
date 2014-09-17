@@ -24,11 +24,20 @@
 
 using namespace std;
 
+struct TimeStatistics {
+  double min;
+  double max;
+  double mean;
+  double sum;
+};
+
 class GMGOperator : public Epetra_Operator {
   SolutionPtr _coarseSolution;
   MeshPtr _fineMesh, _coarseMesh;
   Epetra_Map _finePartitionMap;
   BCPtr _bc;
+
+  TimeStatistics getStatistics(double timeValue) const;
   
   Teuchos::RCP<Solver> _coarseSolver;
   
@@ -36,6 +45,8 @@ class GMGOperator : public Epetra_Operator {
   mutable map< pair< pair<int,int>, RefinementBranch >, LocalDofMapperPtr > _localCoefficientMap; // pair(fineH1Order,coarseH1Order)
   
   Teuchos::RCP<Epetra_MultiVector> _diag; // diagonal of the fine (global) stiffness matrix
+  
+  mutable double _timeMapFineToCoarse, _timeMapCoarseToFine, _timeCoarseImport, _timeConstruction, _timeCoarseSolve, _timeLocalCoefficientMapConstruction;  // totals over the life of the object
   
 public: // promoted these two to public for testing purposes:
   LocalDofMapperPtr getLocalCoefficientMap(GlobalIndexType fineCellID) const;
@@ -94,6 +105,9 @@ public:
    */
   void setFineMesh(MeshPtr fineMesh, Epetra_Map finePartitionMap);
 
+  void reportTimings() const;
+  
+  void constructLocalCoefficientMaps(); // we'll do this lazily if this is not called; this is mostly a way to separate out the time costs
   
   //! @name Mathematical functions
   //@{
