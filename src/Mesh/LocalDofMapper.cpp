@@ -225,27 +225,40 @@ FieldContainer<double> LocalDofMapper::fitLocalCoefficients(const FieldContainer
   
   unsigned localDofCount = localCoefficients.size();
 
-  FieldContainer<double> localIdentity(localDofCount,localDofCount);
-  for (int i=0; i<localDofCount; i++) {
-    localIdentity(i,i) = 1.0;
-  }
-  
-  FieldContainer<double> normalMatrix = mapLocalData(localIdentity, true);
-  
   FieldContainer<double> mappedLocalCoefficients = mapLocalData(localCoefficients, true);
   
   vector<int> ordinalFilter;
   
   vector<GlobalIndexType> fittableOrdinals = fittableGlobalIndices();
+  if (fittableOrdinals.size()==0) {
+    return FieldContainer<double>(0);
+  }
+  
   for (int i=0; i<fittableOrdinals.size(); i++) {
     ordinalFilter.push_back(_globalIndexToOrdinal[fittableOrdinals[i]]);
   }
-
+  
   FieldContainer<double> filteredMappedLocalCoefficients(fittableOrdinals.size());
   filterData(ordinalFilter, mappedLocalCoefficients, filteredMappedLocalCoefficients);
   
-  FieldContainer<double> filteredNormalMatrix(fittableOrdinals.size(),fittableOrdinals.size());
-  filterData(ordinalFilter, normalMatrix, filteredNormalMatrix);
+  if (_localCoefficientsFitMatrix.size()==0) {
+    FieldContainer<double> localIdentity(localDofCount,localDofCount);
+    for (int i=0; i<localDofCount; i++) {
+      localIdentity(i,i) = 1.0;
+    }
+    FieldContainer<double> normalMatrix = mapLocalData(localIdentity, true);
+    FieldContainer<double> filteredNormalMatrix(fittableOrdinals.size(),fittableOrdinals.size());
+    filterData(ordinalFilter, normalMatrix, filteredNormalMatrix);
+    
+    FieldContainer<double> filteredIdentityCoefficients(fittableOrdinals.size(),fittableOrdinals.size());
+    for (int i=0; i<fittableOrdinals.size(); i++) {
+      filteredIdentityCoefficients(i,i) = 1.0;
+    }
+    
+    _localCoefficientsFitMatrix.resize(fittableOrdinals.size(),fittableOrdinals.size());
+    
+    SerialDenseWrapper::solveSystemUsingQR(_localCoefficientsFitMatrix, filteredNormalMatrix, filteredIdentityCoefficients);
+  }
   
   filteredMappedLocalCoefficients.resize(filteredMappedLocalCoefficients.dimension(0),1);
   
@@ -260,7 +273,7 @@ FieldContainer<double> LocalDofMapper::fitLocalCoefficients(const FieldContainer
 //  cout << "filteredNormalMatrix:\n" << filteredNormalMatrix;
   
   if (fittableGlobalCoefficients.size() > 0)
-    SerialDenseWrapper::solveSystemUsingQR(fittableGlobalCoefficients, filteredNormalMatrix, filteredMappedLocalCoefficients);
+    SerialDenseWrapper::multiply(fittableGlobalCoefficients, _localCoefficientsFitMatrix, filteredMappedLocalCoefficients);
   
   fittableGlobalCoefficients.resize(fittableGlobalCoefficients.dimension(0));
   
@@ -478,4 +491,5 @@ void LocalDofMapper::reverseParity(set<int> fluxVarIDs, set<unsigned int> sideOr
       _sideMaps[sideOrdinal][fluxID] = negatedBasisMap;
     }
   }
+  _localCoefficientsFitMatrix.resize(0); // this will need to be recomputed
 }
