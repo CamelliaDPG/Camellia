@@ -184,6 +184,7 @@ void Solution::initialize() {
   _writeRHSToMatrixMarketFile = false;
   _residualsComputed = false;
   _energyErrorComputed = false;
+  _rankLocalEnergyErrorComputed = false;
   _reportConditionNumber = false;
   _reportTimingResults = false;
   _globalSystemConditionEstimate = -1;
@@ -866,8 +867,10 @@ void Solution::reportTimings() {
 void Solution::clearComputedResiduals() {
   _residualsComputed = false;
   _energyErrorComputed = false;
-  _energyErrorForCellIDGlobal.clear();
-  _residualForElementType.clear();
+  _rankLocalEnergyErrorComputed = false;
+  _energyErrorForCell.clear(); // rank local values
+  _energyErrorForCellGlobal.clear();
+  _residualForCell.clear();
 }
 
 Teuchos::RCP<Mesh> Solution::mesh() const {
@@ -1782,245 +1785,163 @@ void Solution::solutionValues(FieldContainer<double> &values,
 
 double Solution::energyErrorTotal() {
   double energyErrorSquared = 0.0;
-  const map<GlobalIndexType,double>* energyErrorPerCell = &(energyError());
+  const map<GlobalIndexType,double>* energyErrorPerCell = &(rankLocalEnergyError());
   
   for (map<GlobalIndexType,double>::const_iterator cellEnergyIt = energyErrorPerCell->begin();
        cellEnergyIt != energyErrorPerCell->end(); cellEnergyIt++) {
     energyErrorSquared += (cellEnergyIt->second) * (cellEnergyIt->second);
   }
+  energyErrorSquared = MPIWrapper::sum(energyErrorSquared);
   return sqrt(energyErrorSquared);
 }
 
-const map<GlobalIndexType,double> & Solution::energyError() {
-  int numProcs=1;
-  int rank=0;
-  
-#ifdef HAVE_MPI
-  rank     = Teuchos::GlobalMPISession::getRank();
-  numProcs = Teuchos::GlobalMPISession::getNProc();
-  Epetra_MpiComm Comm(MPI_COMM_WORLD);
-  //cout << "rank: " << rank << " of " << numProcs << endl;
-#else
-  Epetra_SerialComm Comm;
-#endif
-  
+const map<GlobalIndexType,double> & Solution::globalEnergyError() {
   if ( _energyErrorComputed ) {
-    /*
-     if (rank==0){
-     cout << "reusing energy error\n";
-     }
-     */
-    return _energyErrorForCellIDGlobal;
+    return _energyErrorForCellGlobal;
   }
   
-  /*
-   // ready multivector for storage of energy errors
-   cout << "Initializing multivectors/maps" << endl;
-   Epetra_Map cellIDPartitionMap = _mesh->getCellIDPartitionMap(rank, &Comm); // TODO FIX - should be cellIndex not cellID
-   cout << "Done initing maps" << endl;
-   Epetra_MultiVector energyErrMV(cellIDPartitionMap,1);
-   cout << "Done initing mvs" << endl;
-   */
-  int numActiveElements = _mesh->activeElements().size();
-  //  energyError.resize( numActiveElements );
+  const map<GlobalIndexType,double>* rankLocalEnergy = &rankLocalEnergyError();
+
+  Teuchos::RCP<Epetra_Map> cellMap = _mesh->globalDofAssignment()->getActiveCellMap();
   
-  //  vector< ElementPtr > elemsInPartition = _mesh->elementsInPartition(rank);
-  //  int numElemsInPartition = elemsInPartition.size();
+  int cellCount = cellMap->NumGlobalElements();
+  FieldContainer<double> globalCellEnergyErrors(cellCount);
+  FieldContainer<GlobalIndexTypeToCast> globalCellIDs(cellCount);
+  
+  set<GlobalIndexType> rankLocalCells = _mesh->cellIDsInPartition();
+  for (set<GlobalIndexType>::iterator cellIDIt = rankLocalCells.begin(); cellIDIt != rankLocalCells.end(); cellIDIt++) {
+    GlobalIndexTypeToCast cellID = *cellIDIt;
+    int lid = cellMap->LID(cellID);
+    globalCellEnergyErrors[lid] = rankLocalEnergy->find(cellID)->second;
+    globalCellIDs[lid] = cellID;
+  }
+  MPIWrapper::entryWiseSum(globalCellIDs);
+  MPIWrapper::entryWiseSum(globalCellEnergyErrors);
+  
+  for (int cellOrdinal=0; cellOrdinal<cellCount; cellOrdinal++) {
+    GlobalIndexTypeToCast cellID = globalCellIDs[cellOrdinal];
+    _energyErrorForCellGlobal[cellID] = globalCellEnergyErrors[cellOrdinal];
+  }
+  
+  _energyErrorComputed = true;
+  
+  return _energyErrorForCell;
+}
+
+const map<GlobalIndexType,double> & Solution::rankLocalEnergyError() {
+  if ( _rankLocalEnergyErrorComputed ) {
+    return _energyErrorForCell;
+  }
   
   computeErrorRepresentation();
   
-  // initialize error array to -1 (cannot have negative index...)
-  int localCellIDArray[numActiveElements];
-  double localErrArray[numActiveElements];
-  for (int globalCellIndex=0;globalCellIndex<numActiveElements;globalCellIndex++){
-    localCellIDArray[globalCellIndex] = -1;
-    localErrArray[globalCellIndex] = -1.0;
-  }
-  
-  vector<ElementTypePtr> elemTypes = _mesh->elementTypes(rank);
-  vector<ElementTypePtr>::iterator elemTypeIt;
-  int globalCellIndex = 0;
-  for (elemTypeIt = elemTypes.begin(); elemTypeIt != elemTypes.end(); elemTypeIt++) {
-    ElementTypePtr elemTypePtr = *(elemTypeIt);
-    
-    vector< Teuchos::RCP< Element > > elemsInPartitionOfType = _mesh->elementsOfType(rank, elemTypePtr);
+  set<GlobalIndexType> rankLocalCells = _mesh->cellIDsInPartition();
+  for (set<GlobalIndexType>::iterator cellIDIt = rankLocalCells.begin(); cellIDIt != rankLocalCells.end(); cellIDIt++) {
+    GlobalIndexType cellID = *cellIDIt;
     
     // for error rep v_e, residual res, energyError = sqrt ( ve_^T * res)
-    FieldContainer<double> residuals = _residualForElementType[elemTypePtr.get()];
-    FieldContainer<double> errorReps = _errorRepresentationForElementType[elemTypePtr.get()];
-    int numTestDofs = residuals.dimension(1);
-    int numCells = residuals.dimension(0);
-    TEUCHOS_TEST_FOR_EXCEPTION( numCells!=elemsInPartitionOfType.size(), std::invalid_argument, "In energyError::numCells does not match number of elems in partition.");
+    FieldContainer<double> residual = _residualForCell[cellID];
+    FieldContainer<double> errorRep = _errorRepresentationForCell[cellID];
+    int numTestDofs = residual.dimension(1);
+    int numCells = residual.dimension(0);
+    TEUCHOS_TEST_FOR_EXCEPTION( numCells!=1, std::invalid_argument, "In energyError::numCells != 1.");
     
-    for (int cellIndex=0;cellIndex<numCells;cellIndex++){
-      double errorSquared = 0.0;
-      for (int i=0; i<numTestDofs; i++) {
-        errorSquared += residuals(cellIndex,i) * errorReps(cellIndex,i);
-      }
-      localErrArray[globalCellIndex] = sqrt(errorSquared);
-      int cellID = _mesh->cellID(elemTypePtr,cellIndex,rank);
-      localCellIDArray[globalCellIndex] = cellID;
-      //      cout << "setting energy error = " << sqrt(errorSquared) << " for cellID " << cellID << endl;
-      globalCellIndex++;
+    double errorSquared = 0.0;
+    for (int i=0; i<numTestDofs; i++) {
+      errorSquared += residual(0,i) * errorRep(0,i);
     }
+    _energyErrorForCell[cellID] = sqrt(errorSquared);
   } // end of loop thru element types
   
-  // mpi communicate all energy errors
-  double errArray[numProcs][numActiveElements];
-  int cellIDArray[numProcs][numActiveElements];
-#ifdef HAVE_MPI
-  if (numProcs>1){
-    //    cout << "sending MPI call for inds on proc " << rank << endl;
-    MPI::COMM_WORLD.Allgather(localErrArray,numActiveElements, MPI::DOUBLE, errArray, numActiveElements , MPI::DOUBLE);
-    MPI::COMM_WORLD.Allgather(localCellIDArray,numActiveElements, MPI::INT, cellIDArray, numActiveElements , MPI::INT);
-    //    cout << "done sending MPI call" << endl;
-  }else{
-#else
-#endif
-    for (int globalCellIndex=0;globalCellIndex<numActiveElements;globalCellIndex++){
-      cellIDArray[0][globalCellIndex] = localCellIDArray[globalCellIndex];
-      errArray[0][globalCellIndex] = localErrArray[globalCellIndex];
-    }
-#ifdef HAVE_MPI
-  }
-#endif
-  // copy back to energyError container
-  for (int procIndex=0;procIndex<numProcs;procIndex++){
-    for (int globalCellIndex=0;globalCellIndex<numActiveElements;globalCellIndex++){
-      if (cellIDArray[procIndex][globalCellIndex]!=-1){
-        _energyErrorForCellIDGlobal[cellIDArray[procIndex][globalCellIndex]] = errArray[procIndex][globalCellIndex];
-      }
-    }
-  }
-  _energyErrorComputed = true;
-  /*
-   if (rank==0){
-   for (map<int,double>::iterator mapIt=_energyErrorForCellIDGlobal.begin();mapIt!=_energyErrorForCellIDGlobal.end();mapIt++){
-   cout << "Energy error for cellID " << mapIt->first << " is " << mapIt->second << endl;
-   }
-   }
-   */
+  _rankLocalEnergyErrorComputed = true;
   
-  return _energyErrorForCellIDGlobal;
+  return _energyErrorForCell;
 }
 
 void Solution::computeErrorRepresentation() {
-  int rank= Teuchos::GlobalMPISession::getRank();
-
   if (!_residualsComputed) {
     computeResiduals();
   }
-  //  vector< ElementPtr > elemsInPartition = _mesh->elementsInPartition(rank);
-  
-  vector<ElementTypePtr> elemTypes = _mesh->elementTypes(rank);
-  vector<ElementTypePtr>::iterator elemTypeIt;
-  for (elemTypeIt = elemTypes.begin(); elemTypeIt != elemTypes.end(); elemTypeIt++) {
-    ElementTypePtr elemTypePtr = *(elemTypeIt);
-    BasisCachePtr ipBasisCache = Teuchos::rcp(new BasisCache(elemTypePtr,_mesh,true,_cubatureEnrichmentDegree));
+  set<GlobalIndexType> rankLocalCells = _mesh->cellIDsInPartition();
+  for (set<GlobalIndexType>::iterator cellIDIt = rankLocalCells.begin(); cellIDIt != rankLocalCells.end(); cellIDIt++) {
+    GlobalIndexType cellID = *cellIDIt;
+    
+    BasisCachePtr ipBasisCache = BasisCache::basisCacheForCell(_mesh, cellID, true);
+    
+    ElementTypePtr elemTypePtr = _mesh->getElementType(cellID);
     
     Teuchos::RCP<DofOrdering> testOrdering = elemTypePtr->testOrderPtr;
     shards::CellTopology cellTopo = *(elemTypePtr->cellTopoPtr);
     
-    vector< ElementPtr > elements = _mesh->elementsOfType(rank, elemTypePtr);
-    
-    int numCells = elements.size();
+    int numCells = 1;
     int numTestDofs = testOrdering->totalDofs();
-
-    Teuchos::Array<int> localRHSDim(2);
-    localRHSDim[0] = _residualForElementType[elemTypePtr.get()].dimension(1);
-    localRHSDim[1] = 1;
     
     FieldContainer<double> representationMatrix(numTestDofs, 1);
     FieldContainer<double> errorRepresentation(numCells,numTestDofs);
     
-    vector<GlobalIndexType> cellIDVector(1);
-    for (int cellOrdinal=0; cellOrdinal<numCells; cellOrdinal++) {
-      GlobalIndexType cellID = _mesh->cellID(elemTypePtr, cellOrdinal, rank);
-      cellIDVector[0] = cellID;
-      FieldContainer<double> physicalCellNodes = _mesh->physicalCellNodesForCell(cellID);
-      ipBasisCache->setPhysicalCellNodes(physicalCellNodes,cellIDVector,_ip->hasBoundaryTerms());
-      FieldContainer<double> ipMatrix(1,numTestDofs,numTestDofs);
-      _ip->computeInnerProductMatrix(ipMatrix,testOrdering, ipBasisCache);
-      FieldContainer<double> rhsMatrix(localRHSDim, &_residualForElementType[elemTypePtr.get()](cellOrdinal,0));
-      // strip cell dimension:
-      ipMatrix.resize(ipMatrix.dimension(1),ipMatrix.dimension(2));
-      int result = SerialDenseWrapper::solveSystemUsingQR(representationMatrix, ipMatrix, rhsMatrix);
-      if (result != 0) {
-        cout << "WARNING: computeErrorRepresentation: call to solveSystemUsingQR failed with error code " << result << endl;
-      }
-      for (int i=0; i<numTestDofs; i++) {
-        errorRepresentation(cellOrdinal,i) = representationMatrix(i,0);
-      }
+    FieldContainer<double> ipMatrix(1,numTestDofs,numTestDofs);
+    _ip->computeInnerProductMatrix(ipMatrix,testOrdering, ipBasisCache);
+    FieldContainer<double> rhsMatrix = _residualForCell[cellID];
+    // transpose residual :
+    rhsMatrix.resize(numTestDofs, 1);
+
+    // strip cell dimension:
+    ipMatrix.resize(ipMatrix.dimension(1),ipMatrix.dimension(2));
+    int result = SerialDenseWrapper::solveSystemUsingQR(representationMatrix, ipMatrix, rhsMatrix);
+    if (result != 0) {
+      cout << "WARNING: computeErrorRepresentation: call to solveSystemUsingQR failed with error code " << result << endl;
     }
-    _errorRepresentationForElementType[elemTypePtr.get()] = errorRepresentation;
+    for (int i=0; i<numTestDofs; i++) {
+      errorRepresentation(0,i) = representationMatrix(i,0);
+    }
+    _errorRepresentationForCell[cellID] = errorRepresentation;
   }
 }
 
 void Solution::computeResiduals() {
-  int rank=0;
-  
-#ifdef HAVE_MPI
-  rank     = Teuchos::GlobalMPISession::getRank();
-  Epetra_MpiComm Comm(MPI_COMM_WORLD);
-  //cout << "rank: " << rank << " of " << numProcs << endl;
-#else
-  Epetra_SerialComm Comm;
-#endif
-  //  vector< ElementPtr > elemsInPartition = _mesh->elementsInPartition(rank);
-  vector<ElementTypePtr> elemTypes = _mesh->elementTypes(rank);
-  vector<ElementTypePtr>::iterator elemTypeIt;
-  for (elemTypeIt = elemTypes.begin(); elemTypeIt != elemTypes.end(); elemTypeIt++) {
-    ElementTypePtr elemTypePtr = *(elemTypeIt);
+  set<GlobalIndexType> rankLocalCells = _mesh->cellIDsInPartition();
+  for (set<GlobalIndexType>::iterator cellIDIt = rankLocalCells.begin(); cellIDIt != rankLocalCells.end(); cellIDIt++) {
+    GlobalIndexType cellID = *cellIDIt;
+    
+    ElementTypePtr elemTypePtr = _mesh->getElementType(cellID);
     
     Teuchos::RCP<DofOrdering> trialOrdering = elemTypePtr->trialOrderPtr;
     Teuchos::RCP<DofOrdering> testOrdering = elemTypePtr->testOrderPtr;
-    vector< Teuchos::RCP< Element > > elemsInPartitionOfType = _mesh->elementsOfType(rank, elemTypePtr);
     
-    int numCells = elemsInPartitionOfType.size();
+    int numCells = 1;
     int numTrialDofs = trialOrdering->totalDofs();
     int numTestDofs  = testOrdering->totalDofs();
     
     // compute l(v) and store in residuals:
-    FieldContainer<double> residuals(numCells,numTestDofs);
-    
-    FieldContainer<double> rhs(numCells,numTestDofs);
-    rhs = residuals; // copy rhs into its own separate container
-    
+    FieldContainer<double> residual(1,numTestDofs);
+
     Teuchos::Array<int> oneCellDim(2);
     oneCellDim[0] = 1;
     oneCellDim[1] = numTestDofs;
     
-    FieldContainer<double> solution = solutionForElementTypeGlobal(elemTypePtr);
+    FieldContainer<double> localCoefficients;
+    if (_solutionForCellIDGlobal.find(cellID) != _solutionForCellIDGlobal.end()) {
+      localCoefficients = _solutionForCellIDGlobal[cellID];
+    } else {
+      localCoefficients.resize(numTrialDofs);
+    }
     
-    vector<GlobalIndexType> cellIDVector(1);
-    for (int cellOrdinal=0; cellOrdinal<numCells; cellOrdinal++) {
-      GlobalIndexType cellID = _mesh->cellID(elemTypePtr, cellOrdinal, rank);
-      cellIDVector[0] = cellID;
-      FieldContainer<double> physicalCellNodes = _mesh->physicalCellNodesForCell(cellID);
-      FieldContainer<double> cellSideParities = _mesh->cellSideParitiesForCell(cellID);
+    BasisCachePtr basisCache = BasisCache::basisCacheForCell(_mesh, cellID, false, _cubatureEnrichmentDegree);
+    _rhs->integrateAgainstStandardBasis(residual, testOrdering, basisCache);
       
-      BasisCachePtr basisCache = Teuchos::rcp(new BasisCache(elemTypePtr,_mesh,false,_cubatureEnrichmentDegree));
-      bool createSideCacheToo = true;
-      basisCache->setPhysicalCellNodes(physicalCellNodes,cellIDVector,createSideCacheToo);
-      FieldContainer<double> thisCellResidual(oneCellDim, &residuals(cellOrdinal,0));
-      _rhs->integrateAgainstStandardBasis(thisCellResidual, testOrdering, basisCache);
-      for (int i=0; i<numTestDofs; i++) {
-        rhs(cellOrdinal,i) = thisCellResidual(0,i);
-      }
-      
-      // compute b(u, v):
-      FieldContainer<double> preStiffness(1,numTestDofs,numTrialDofs );
-      _mesh->bilinearForm()->stiffnessMatrix(preStiffness, elemTypePtr, cellSideParities, basisCache);
+    // compute b(u, v):
+    FieldContainer<double> preStiffness(1,numTestDofs,numTrialDofs );
+    FieldContainer<double> cellSideParitiesForCell = _mesh->cellSideParitiesForCell(cellID);
+    _mesh->bilinearForm()->stiffnessMatrix(preStiffness, elemTypePtr, cellSideParitiesForCell, basisCache);
 
-      int globalCellIndex = elemsInPartitionOfType[cellOrdinal]->globalCellIndex();
-      for (int i=0; i<numTestDofs; i++) {
-        for (int j=0; j<numTrialDofs; j++) {
-          residuals(cellOrdinal,i) -= solution(globalCellIndex,j) * preStiffness(0,i,j);
-        }
+    
+    for (int i=0; i<numTestDofs; i++) {
+      for (int j=0; j<numTrialDofs; j++) {
+        residual(0,i) -= localCoefficients(j) * preStiffness(0,i,j);
       }
     }
-    _residualForElementType[elemTypePtr.get()] = residuals;
-    _rhsForElementType[elemTypePtr.get()] = rhs;
+    
+    _residualForCell[cellID] = residual;
   }
   _residualsComputed = true;
 }

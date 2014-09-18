@@ -19,6 +19,7 @@
 #include "Solution.h"
 
 #include "CamelliaCellTools.h"
+#include "MPIWrapper.h"
 
 GlobalDofAssignment::GlobalDofAssignment(MeshPtr mesh, VarFactory varFactory,
                                          DofOrderingFactoryPtr dofOrderingFactory, MeshPartitionPolicyPtr partitionPolicy,
@@ -90,8 +91,8 @@ GlobalDofAssignment::GlobalDofAssignment(MeshPtr mesh, VarFactory varFactory,
   
   // before repartitioning (which should happen immediately), put all active cells on rank 0
   _partitions[0] = _mesh->getActiveCellIDs();
+  constructActiveCellMap();
 }
-
 
 GlobalIndexType GlobalDofAssignment::activeCellOffset() {
   return _activeCellOffset;
@@ -206,6 +207,25 @@ FieldContainer<double> GlobalDofAssignment::cellSideParitiesForCell( GlobalIndex
   return cellSideParities;
 }
 
+void GlobalDofAssignment::constructActiveCellMap() {
+  const set<GlobalIndexType>* cellIDs = &cellsInPartition(-1);
+  FieldContainer<GlobalIndexTypeToCast> myCellIDsFC(cellIDs->size());
+  
+  int localIndex = 0;
+  for (set<GlobalIndexType>::const_iterator cellIDIt = cellIDs->begin(); cellIDIt != cellIDs->end(); cellIDIt++, localIndex++) {
+    myCellIDsFC(localIndex) = *cellIDIt;
+  }
+  
+  int indexBase = 0;
+#ifdef HAVE_MPI
+  Epetra_MpiComm Comm(MPI_COMM_WORLD);
+  //cout << "rank: " << rank << " of " << numProcs << endl;
+#else
+  Epetra_SerialComm Comm;
+#endif
+  _activeCellMap = Teuchos::rcp( new Epetra_Map(-1, myCellIDsFC.size(), &myCellIDsFC[0], indexBase, Comm) );
+}
+
 void GlobalDofAssignment::repartitionAndMigrate() {
   _partitionPolicy->partitionMesh(_mesh.get(),_numPartitions);
   for (vector< Solution* >::iterator solutionIt = _registeredSolutions.begin();
@@ -226,6 +246,7 @@ void GlobalDofAssignment::didHRefine(const set<GlobalIndexType> &parentCellIDs) 
       _partitions[rank].insert(childIDs.begin(),childIDs.end());
     }
   }
+  constructActiveCellMap();
 }
 
 void GlobalDofAssignment::didPRefine(const set<GlobalIndexType> &cellIDs, int deltaP) { // subclasses should call super
@@ -264,6 +285,10 @@ vector< ElementTypePtr > GlobalDofAssignment::elementTypes(PartitionIndexType pa
     }
     return types;
   }
+}
+
+Teuchos::RCP<Epetra_Map> GlobalDofAssignment::getActiveCellMap() {
+  return _activeCellMap;
 }
 
 DofOrderingFactoryPtr GlobalDofAssignment::getDofOrderingFactory() {
@@ -401,6 +426,7 @@ void GlobalDofAssignment::setPartitions(FieldContainer<GlobalIndexType> &partiti
       _activeCellOffset += partition.size();
     }
   }
+  constructActiveCellMap();
   projectParentCoefficientsOntoUnsetChildren();
   rebuildLookups();
 }
