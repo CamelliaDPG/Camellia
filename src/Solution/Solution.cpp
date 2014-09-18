@@ -1812,6 +1812,7 @@ const map<GlobalIndexType,double> & Solution::globalEnergyError() {
   for (set<GlobalIndexType>::iterator cellIDIt = rankLocalCells.begin(); cellIDIt != rankLocalCells.end(); cellIDIt++) {
     GlobalIndexTypeToCast cellID = *cellIDIt;
     int lid = cellMap->LID(cellID);
+    lid += _mesh->globalDofAssignment()->activeCellOffset();
     globalCellEnergyErrors[lid] = rankLocalEnergy->find(cellID)->second;
     globalCellIDs[lid] = cellID;
   }
@@ -1821,11 +1822,19 @@ const map<GlobalIndexType,double> & Solution::globalEnergyError() {
   for (int cellOrdinal=0; cellOrdinal<cellCount; cellOrdinal++) {
     GlobalIndexTypeToCast cellID = globalCellIDs[cellOrdinal];
     _energyErrorForCellGlobal[cellID] = globalCellEnergyErrors[cellOrdinal];
+//    if (Teuchos::GlobalMPISession::getRank()==0) {
+//      cout << "energy error for cell " << cellID << ": " << _energyErrorForCellGlobal[cellID] << endl;
+//    }
   }
+  
+//  if (Teuchos::GlobalMPISession::getRank()==0) {
+//    cout << "globalCellIDs:\n" << globalCellIDs;
+//    cout << "globalCellEnergyErrors:\n" << globalCellEnergyErrors;
+//  }
   
   _energyErrorComputed = true;
   
-  return _energyErrorForCell;
+  return _energyErrorForCellGlobal;
 }
 
 const map<GlobalIndexType,double> & Solution::rankLocalEnergyError() {
