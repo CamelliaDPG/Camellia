@@ -346,6 +346,7 @@ void HDF5Exporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
       connDimsf = 5*totalSubQuads;
   }
   int connArray[connDimsf];
+  cout << "connArray size: " << connDimsf << endl;
   XMLObject topoDataItem("DataItem");
   topology.addChild(topoDataItem);
   topoDataItem.addAttribute("ItemType", "Uniform");
@@ -370,6 +371,7 @@ void HDF5Exporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
   else
     ptDimsf = spaceDim * totalPts;
   double ptArray[ptDimsf];
+  cout << "ptArray size: " << ptDimsf << endl;
 
   XMLObject geoDataItem("DataItem");
   geometry.addChild(geoDataItem);
@@ -393,6 +395,7 @@ void HDF5Exporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
   }
 
   vector< vector<double> > valArrays;
+  cout << "valArrays size will be " << nFcns * totalPts << endl;
   valArrays.resize(nFcns);
   hsize_t valDimsf[nFcns];
   int numFcnComponents[nFcns];
