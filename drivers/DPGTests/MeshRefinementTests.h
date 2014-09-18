@@ -112,6 +112,8 @@ public:
   
   bool testMultiBasisSideParities();
   bool testPatchBasisSideParities();
+  
+  bool testPRefinements();
 };
 
 #endif

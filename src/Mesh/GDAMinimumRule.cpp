@@ -87,6 +87,26 @@ void GDAMinimumRule::didHRefine(const set<GlobalIndexType> &parentCellIDs) {
 
 void GDAMinimumRule::didPRefine(const set<GlobalIndexType> &cellIDs, int deltaP) {
   this->GlobalDofAssignment::didPRefine(cellIDs, deltaP);
+  
+  // the above assigns _cellH1Orders for active elements; now we take minimums for parents (inactive elements)
+  for (set<GlobalIndexType>::const_iterator cellIDIt = cellIDs.begin(); cellIDIt != cellIDs.end(); cellIDIt++) {
+    CellPtr cell = _meshTopology->getCell(*cellIDIt);
+    CellPtr parent = cell->getParent();
+    while (parent.get() != NULL) {
+      vector<IndexType> childIndices = parent->getChildIndices();
+      unsigned minH1Order = _cellH1Orders[*cellIDIt];
+      for (int childOrdinal=0; childOrdinal<childIndices.size(); childOrdinal++) {
+        if (_cellH1Orders.find(childIndices[childOrdinal])==_cellH1Orders.end()) {
+          TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "sibling H1 order not found");
+        } else {
+          minH1Order = min(minH1Order, _cellH1Orders[childIndices[childOrdinal]]);
+        }
+      }
+      _cellH1Orders[parent->cellIndex()] = minH1Order;
+      parent = parent->getParent();
+    }
+  }
+  
   for (set<GlobalIndexType>::const_iterator cellIDIt = cellIDs.begin(); cellIDIt != cellIDs.end(); cellIDIt++) {
     ElementTypePtr oldType = elementType(*cellIDIt);
     assignInitialElementType(*cellIDIt);
