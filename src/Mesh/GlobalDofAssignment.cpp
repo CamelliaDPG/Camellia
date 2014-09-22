@@ -223,7 +223,10 @@ void GlobalDofAssignment::constructActiveCellMap() {
 #else
   Epetra_SerialComm Comm;
 #endif
-  _activeCellMap = Teuchos::rcp( new Epetra_Map(-1, myCellIDsFC.size(), &myCellIDsFC[0], indexBase, Comm) );
+  if (myCellIDsFC.size()==0)
+    _activeCellMap = Teuchos::rcp( new Epetra_Map(-1, myCellIDsFC.size(), NULL, indexBase, Comm) );
+  else
+    _activeCellMap = Teuchos::rcp( new Epetra_Map(-1, myCellIDsFC.size(), &myCellIDsFC[0], indexBase, Comm) );
 }
 
 void GlobalDofAssignment::repartitionAndMigrate() {
