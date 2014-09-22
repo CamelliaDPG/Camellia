@@ -204,15 +204,24 @@ int main(int argc, char *argv[])
         refinementStrategy.refine(commRank==0);
         solution->solve(false);
         mesh->saveToHDF5("Test0.h5");
-        solution->saveToHDF5("Test0_soln");
+        solution->saveToHDF5("Test0_soln.h5");
         exporter.exportSolution(solution, varFactory, ref, 2, cellIDToSubdivision(mesh, 4));
       }
     }
+    // {
+    //   MeshPtr loadedMesh = MeshFactory::loadFromHDF5(bf, "Test0.h5");
+    //   Teuchos::RCP<Solution> loadedSolution = Teuchos::rcp( new Solution(loadedMesh, bc, rhs, ip) );
+    //   loadedSolution->solve(false);
+    //   HDF5Exporter exporter(loadedMesh, "MeshLoaded");
+    //   exporter.exportSolution(loadedSolution, varFactory, 0, 2, cellIDToSubdivision(loadedMesh, 4));
+    // }
     {
       MeshPtr loadedMesh = MeshFactory::loadFromHDF5(bf, "Test0.h5");
       Teuchos::RCP<Solution> loadedSolution = Teuchos::rcp( new Solution(loadedMesh, bc, rhs, ip) );
-      loadedSolution->solve(false);
-      HDF5Exporter exporter(loadedMesh, "PoissonLoaded");
+      // loadedSolution->solve(false);
+      // loadedSolution->addSolution(loadedSolution, -1.0);
+      loadedSolution->loadFromHDF5("Test0_soln.h5");
+      HDF5Exporter exporter(loadedMesh, "SolutionLoaded");
       exporter.exportSolution(loadedSolution, varFactory, 0, 2, cellIDToSubdivision(loadedMesh, 4));
     }
   }

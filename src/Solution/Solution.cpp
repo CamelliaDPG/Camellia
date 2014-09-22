@@ -3446,26 +3446,106 @@ void Solution::saveToHDF5(string filename)
   int commRank = Teuchos::GlobalMPISession::getRank();
   int nProcs = Teuchos::GlobalMPISession::getNProc();
 
-  Epetra_SerialComm Comm;
+
+  Epetra_MpiComm Comm(MPI_COMM_WORLD);
   EpetraExt::HDF5 hdf5(Comm);
-  hdf5.Create(filename+Teuchos::toString(commRank)+".h5");
-  hdf5.Write("Solution", "nProcs", nProcs);
-  hdf5.Write("Solution", "commRank", commRank);
+  hdf5.Create(filename);
+  // hdf5.Write("Solution", "nProcs", nProcs);
+  // hdf5.Write("Solution", "commRank", commRank);
+  hdf5.Write("PartitionMap", getPartitionMap());
+  hdf5.Write("Solution", *_lhsVector);
+  double norm1;
+  _lhsVector->Norm1(&norm1);
+  if (commRank == 0)
+    cout << "before length = " << _lhsVector->GlobalLength() << " norm1 = " << norm1 << endl;
 
-  set<GlobalIndexType> myCells = mesh()->cellIDsInPartition();
-  vector<GlobalIndexType> myCellsVec( myCells.begin(), myCells.end() );
-  hdf5.Write("Solution", "partitionCellIDs", H5T_NATIVE_INT, myCellsVec.size(), &myCellsVec[0]);
-  for (map<GlobalIndexType, FieldContainer<double> >::iterator solnEntryIt = _solutionForCellIDGlobal.begin();
-       solnEntryIt != _solutionForCellIDGlobal.end(); solnEntryIt++) 
-  {
-    GlobalIndexType cellID = solnEntryIt->first;
-    if (myCells.find(cellID) != myCells.end()) {
-      FieldContainer<double>* solnCoeffs = &(solnEntryIt->second);
-      cout << cellID << " " << commRank << endl;
-      hdf5.Write("Solution", "cell"+Teuchos::toString(cellID), H5T_NATIVE_DOUBLE, solnCoeffs->size(), solnCoeffs);
-    }
+// Old Code I don't want to delete yet
+  // Epetra_SerialComm Comm;
+  // EpetraExt::HDF5 hdf5(Comm);
+  // hdf5.Create("file"+Teuchos::toString(commRank)+".h5");
+  // vector<double> testVec;
+  // for (int i=0; i<1000+1000*commRank; i++)
+  // {
+  //   testVec.push_back(1.0);
+  // }
+  // hdf5.Write("Test", "Group", H5T_NATIVE_DOUBLE, testVec.size(), &testVec[0]); 
+  // set<GlobalIndexType> myCells = mesh()->cellIDsInPartition();
+  // vector<GlobalIndexType> myCellsVec( myCells.begin(), myCells.end() );
+  // hdf5.Write("Solution", "partitionCellIDs", H5T_NATIVE_INT, myCellsVec.size(), &myCellsVec[0]);
+  // for (map<GlobalIndexType, FieldContainer<double> >::iterator solnEntryIt = _solutionForCellIDGlobal.begin();
+  //      solnEntryIt != _solutionForCellIDGlobal.end(); solnEntryIt++) 
+  // {
+  //   GlobalIndexType cellID = solnEntryIt->first;
+  //   if (myCells.find(cellID) != myCells.end()) {
+  //     FieldContainer<double> solnCoeffs = (solnEntryIt->second);
+  //     // vector<double> coeffs;
+  //     // for (int i=0; i<solnCoeffs.size(); i++)
+  //     // {
+  //     //   coeffs.push_back(solnCoeffs(i));
+  //     // }
+  //     // hdf5.Write("Solution", "cell"+Teuchos::toString(cellID), H5T_NATIVE_DOUBLE, coeffs.size(), &coeffs[0]);
+  //     vector<double> testVec;
+  //     for (int i=0; i<100+100*commRank; i++)
+  //     {
+  //       testVec.push_back(1);
+  //     }
+  //     hdf5.Write("Solution", "cell"+Teuchos::toString(cellID), H5T_NATIVE_DOUBLE, testVec.size(), &testVec[0]);
+  //   }
+  // }
+
+  hdf5.Close();
+}
+
+void Solution::loadFromHDF5(string filename)
+{
+  initializeLHSVector();
+  int commRank = Teuchos::GlobalMPISession::getRank();
+  int nProcs = Teuchos::GlobalMPISession::getNProc();
+
+  Epetra_MpiComm Comm(MPI_COMM_WORLD);
+  EpetraExt::HDF5 hdf5(Comm);
+  hdf5.Open(filename);
+  // Epetra_Map partMap = _lhsVector->Map();
+  // Epetra_Map partMap = getPartitionMap();
+  Epetra_Map *partMap;
+  hdf5.Read("PartitionMap", partMap);
+  Epetra_Map pm = *partMap;
+  Epetra_MultiVector *lhsVec;
+  hdf5.Read("Solution", lhsVec);
+  string filename1 = "part1_"+Teuchos::toString(commRank)+".txt";
+  string filename2 = "part2_"+Teuchos::toString(commRank)+".txt";
+  ofstream partfile1, partfile2;
+  partfile1.open(filename1.c_str());
+  partfile2.open(filename2.c_str());
+  getPartitionMap().Print(partfile1);
+  partMap->Print(partfile2);
+  Epetra_Map *pmap = partMap;
+  for (int lid=pmap->MinLID(); lid <= pmap->MaxLID(); lid++) {
+    (*_lhsVector)[0][lid] = (*lhsVec)[0][lid];
   }
-
+  filename1 = "data1_"+Teuchos::toString(commRank)+".txt";
+  filename2 = "data2_"+Teuchos::toString(commRank)+".txt";
+  ofstream datafile1, datafile2;
+  datafile1.open(filename1.c_str());
+  datafile2.open(filename2.c_str());
+  _lhsVector->Print(datafile1);
+  lhsVec->Print(datafile2);
+  // _lhsVector = Teuchos::rcp( new Epetra_FEVector(lv) );
+  // _lhsVector->Print(cout);
+  // lhsVec->Print(cout);
+  // double norm1;
+  // int gl = _lhsVector->GlobalLength();
+  // _lhsVector->Norm1(&norm1);
+  // if (commRank == 0)
+  // {
+  //   cout << "id = " << _lhsVector.get() << " length = " << gl << " norm1 = " << norm1 << endl;
+  // }
+  // lhsVec->Norm1(&norm1);
+  // gl = lhsVec->GlobalLength();
+  // if (commRank == 0)
+  // {
+  //   cout << "id = " << lhsVec << " length = " << gl << " norm1 = " << norm1 << endl;
+  // }
   hdf5.Close();
 }
 #endif

@@ -291,6 +291,7 @@ public:
 
 #ifdef HAVE_EPETRAEXT_HDF5
   void saveToHDF5(string filename);
+  void loadFromHDF5(string filename);
 #endif
 
   // MATLAB output (belongs elsewhere)
