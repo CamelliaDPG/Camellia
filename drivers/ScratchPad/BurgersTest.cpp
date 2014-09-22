@@ -23,7 +23,7 @@
 #include "TestingUtilities.h"
 #include "FiniteDifferenceUtilities.h" 
 
-typedef Teuchos::RCP<shards::CellTopology> CellTopoPtr;
+typedef Teuchos::RCP<shards::CellTopology> CellTopoPtrLegacy;
 
 class PositivePart : public Function {
   FunctionPtr _f;

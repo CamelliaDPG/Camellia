@@ -48,7 +48,7 @@ bool MeshTestUtility::checkMeshConsistency(Teuchos::RCP<Mesh> mesh) {
       int mySideIndexInNeighbor;
       Teuchos::RCP<Element> neighbor = mesh->ancestralNeighborForSide(elem, sideIndex, mySideIndexInNeighbor);
       int myParity = mesh->parityForSide(cellID,sideIndex);
-      if ( mesh->boundary().boundaryElement(cellID,sideIndex) ) { // on boundary
+      if ( mesh->getTopology()->getCell(cellID)->isBoundary(sideIndex) ) { // on boundary
         if ( myParity != 1 ) {
           success = false;
           cout << "Mesh consistency FAILURE: cellID " << cellID << " has parity != 1 on boundary; sideIndex = " << sideIndex << endl;
@@ -137,7 +137,8 @@ bool MeshTestUtility::checkMeshDofConnectivities(Teuchos::RCP<Mesh> mesh) {
         // now a more subtle check: given the mesh layout (that all vertices are specified CCW),
         // the dofs for boundary variables (fluxes & traces) should be reversed between element and its neighbor
         if (mesh->bilinearForm()->isFluxOrTrace(trialID)) {
-          if (! mesh->boundary().boundaryElement(cellID, sideIndex)) { // not boundary...
+          CellPtr cell = mesh->getTopology()->getCell(cellID);
+          if (! mesh->getTopology()->getCell(cellID)->isBoundary(sideIndex)) { // not boundary...
             //            if (neighbor->cellID() != -1) { // not boundary...
             int ancestralSideIndexInNeighbor;
             Teuchos::RCP<Element> neighbor = mesh->ancestralNeighborForSide(elem, sideIndex, ancestralSideIndexInNeighbor);

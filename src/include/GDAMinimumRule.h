@@ -78,6 +78,8 @@ public:
   // these are public just for easier testing:
   CellConstraints getCellConstraints(GlobalIndexType cellID);
   LocalDofMapperPtr getDofMapper(GlobalIndexType cellID, CellConstraints &constraints, int varIDToMap = -1, int sideOrdinalToMap = -1);
+  
+  set<GlobalIndexType> getGlobalDofIndicesForIntegralContribution(GlobalIndexType cellID, int sideOrdinal); // assuming an integral is being done over the whole mesh skeleton, returns either an empty set or the global dof indices associated with the given side, depending on whether the cell "owns" the side for the purpose of such contributions.
 public:
   GDAMinimumRule(MeshPtr mesh, VarFactory varFactory, DofOrderingFactoryPtr dofOrderingFactory, MeshPartitionPolicyPtr partitionPolicy,
                  unsigned initialH1OrderTrial, unsigned testOrderEnhancement);
@@ -111,6 +113,7 @@ public:
 
   PartitionIndexType partitionForGlobalDofIndex( GlobalIndexType globalDofIndex );
   void printConstraintInfo(GlobalIndexType cellID);
+  void printGlobalDofInfo();
   void rebuildLookups();
 };
 

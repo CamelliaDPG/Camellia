@@ -31,12 +31,16 @@ class LocalDofMapper { // maps a whole trial ordering
   int _sideOrdinalToMap;
   int _varIDToMap;
   
+
+  
   void filterData(const vector<int> dofIndices, const FieldContainer<double> &data, FieldContainer<double> &filteredData);
   void addSubBasisMapVectorContribution(int varID, int sideIndex, BasisMap basisMap, const FieldContainer<double> &localData, FieldContainer<double> &globalData, bool fittableGlobalDofsOnly);
 //  void addSubBasisMapMatrixContribution(int varID, int sideOrdinal, BasisMap basisMap, const FieldContainer<double> &localData, FieldContainer<double> &globalData);
   void addReverseSubBasisMapVectorContribution(int varID, int sideOrdinal, BasisMap basisMap, const FieldContainer<double> &globalData, FieldContainer<double> &localData);
 //  void addReverseSubBasisMapMatrixContribution(int varID, int sideOrdinal, BasisMap basisMap, const FieldContainer<double> &globalData, FieldContainer<double> &localData);
   FieldContainer<double> mapLocalDataMatrix(const FieldContainer<double> &localData, bool fittableGlobalDofsOnly);
+  
+  FieldContainer<double> _localCoefficientsFitMatrix; // used for fitLocalCoefficients
   
 public:
   LocalDofMapper(DofOrderingPtr dofOrdering, map< int, BasisMap > volumeMaps,

@@ -22,8 +22,7 @@ void NonlinearSolveStrategy::setUsePicardIteration(bool value) {
 
 void NonlinearSolveStrategy::solve(bool printToConsole) {
   Teuchos::RCP< Mesh > mesh = _solution->mesh();
-  // initialize energyError stuff
-  const map<GlobalIndexType, double>* energyError;
+
   vector< Teuchos::RCP< Element > > activeElements = mesh->activeElements();
   vector< Teuchos::RCP< Element > >::iterator activeElemIt;
   
@@ -33,16 +32,10 @@ void NonlinearSolveStrategy::solve(bool printToConsole) {
   while (!converged) { // while energy error has not stabilized
     
     _solution->solve(false);
+  
+    double totalErrorSquareRoot = _solution->energyErrorTotal();
+    double totalError = totalErrorSquareRoot * totalErrorSquareRoot; // NVR 9-17-14: this is the energy error squared.  Is that what we want??
     
-    // see if energy error has stabilized
-    energyError = &(_solution->energyError());
-    double totalError = 0.0;
-    
-    for (activeElemIt = activeElements.begin();activeElemIt != activeElements.end(); activeElemIt++){
-      Teuchos::RCP< Element > current_element = *(activeElemIt);
-      double cellEnergyError = energyError->find(current_element->cellID())->second;
-      totalError += cellEnergyError*cellEnergyError;
-    }
     double relErrorDiff = abs(totalError-prevError)/max(totalError,prevError);
     if (printToConsole){
       cout << "on iter = " << i  << ", relative change in energy error is " << relErrorDiff;

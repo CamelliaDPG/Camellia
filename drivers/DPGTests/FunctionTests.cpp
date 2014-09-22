@@ -811,7 +811,7 @@ bool FunctionTests::testJumpIntegral() {
   for (int sideIndex=0; sideIndex<numSides; sideIndex++) {
     double actualValue = valOnSWCell->integralOfJump(mesh, swCellID, sideIndex, cubEnrichment);
     double expectedValue;
-    if (mesh->boundary().boundaryElement(swCellID, sideIndex)) {
+    if (mesh->getTopology()->getCell(swCellID)->isBoundary(sideIndex)) {
       expectedValue = 0;
     } else {
       double sideParity = mesh->parityForSide(swCellID, sideIndex);

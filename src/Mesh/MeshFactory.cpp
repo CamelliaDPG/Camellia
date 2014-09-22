@@ -75,12 +75,12 @@ static ParametricCurvePtr parametricRect(double width, double height, double x0,
     if (histArraySize > 0) hdf5.Read("Mesh", "refinementHistory", H5T_NATIVE_INT, histArraySize, &histArray[0]);
     hdf5.Close();
 
-    CellTopoPtr line_2 = Teuchos::rcp( new shards::CellTopology(shards::getCellTopologyData<shards::Line<2> >() ) );
-    CellTopoPtr quad_4 = Teuchos::rcp( new shards::CellTopology(shards::getCellTopologyData<shards::Quadrilateral<4> >() ) );
-    CellTopoPtr tri_3 = Teuchos::rcp( new shards::CellTopology(shards::getCellTopologyData<shards::Triangle<3> >() ) );
-    CellTopoPtr hex_8 = Teuchos::rcp( new shards::CellTopology(shards::getCellTopologyData<shards::Hexahedron<8> >() ) );
+    CellTopoPtrLegacy line_2 = Teuchos::rcp( new shards::CellTopology(shards::getCellTopologyData<shards::Line<2> >() ) );
+    CellTopoPtrLegacy quad_4 = Teuchos::rcp( new shards::CellTopology(shards::getCellTopologyData<shards::Quadrilateral<4> >() ) );
+    CellTopoPtrLegacy tri_3 = Teuchos::rcp( new shards::CellTopology(shards::getCellTopologyData<shards::Triangle<3> >() ) );
+    CellTopoPtrLegacy hex_8 = Teuchos::rcp( new shards::CellTopology(shards::getCellTopologyData<shards::Hexahedron<8> >() ) );
 
-    vector< CellTopoPtr > cellTopos;
+    vector< CellTopoPtrLegacy > cellTopos;
     vector< vector<unsigned> > elementVertices;
     int vindx = 0;
     for (unsigned cellNumber = 0; cellNumber < topoKeysSize; cellNumber++)
@@ -169,7 +169,7 @@ static ParametricCurvePtr parametricRect(double width, double height, double x0,
       i++;
       int numCells = histArray[i];
       i++;
-      CellTopoPtr cellTopo; // we assume all cells for the refinement have the same type
+      CellTopoPtrLegacy cellTopo; // we assume all cells for the refinement have the same type
       if (numCells > 0) {
         GlobalIndexType firstCellID = histArray[i];
         cellTopo = mesh->getElementType(firstCellID)->cellTopoPtr;
@@ -230,13 +230,13 @@ MeshPtr MeshFactory::quadMesh(Teuchos::ParameterList &parameters) {
   
   int numElements = divideIntoTriangles ? horizontalElements * verticalElements * 2 : horizontalElements * verticalElements;
   
-  CellTopoPtr topo;
+  CellTopoPtrLegacy topo;
   if (divideIntoTriangles) {
     topo = Teuchos::rcp( new shards::CellTopology(shards::getCellTopologyData<shards::Triangle<3> >() ));
   } else {
     topo = Teuchos::rcp( new shards::CellTopology(shards::getCellTopologyData<shards::Quadrilateral<4> >() ));
   }
-  vector< CellTopoPtr > cellTopos(numElements, topo);
+  vector< CellTopoPtrLegacy > cellTopos(numElements, topo);
   
   FieldContainer<double> quadBoundaryPoints(4,2);
   quadBoundaryPoints(0,0) = x0;
@@ -422,8 +422,8 @@ MeshPtr MeshFactory::intervalMesh(BilinearFormPtr bf, double xLeft, double xRigh
       elementVertices[i] = oneElement;
     }
   }
-  CellTopoPtr topo = Teuchos::rcp( new shards::CellTopology(shards::getCellTopologyData<shards::Line<2> >() ));
-  vector< CellTopoPtr > cellTopos(numElements, topo);
+  CellTopoPtrLegacy topo = Teuchos::rcp( new shards::CellTopology(shards::getCellTopologyData<shards::Line<2> >() ));
+  vector< CellTopoPtrLegacy > cellTopos(numElements, topo);
   MeshGeometryPtr geometry = Teuchos::rcp( new MeshGeometry(vertices, elementVertices, cellTopos));
   
   MeshTopologyPtr meshTopology = Teuchos::rcp( new MeshTopology(geometry) );
@@ -462,7 +462,7 @@ MeshPtr MeshFactory::rectilinearMesh(BilinearFormPtr bf, vector<double> dimensio
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "For now, only spaceDim 1,2,3 are is supported by this MeshFactory method.");
   }
   
-  CellTopoPtr topo;
+  CellTopoPtrLegacy topo;
   if (spaceDim==1) {
     topo = Teuchos::rcp( new shards::CellTopology(shards::getCellTopologyData<shards::Line<2> >() ));
   } else if (spaceDim==2) {
@@ -481,7 +481,7 @@ MeshPtr MeshFactory::rectilinearMesh(BilinearFormPtr bf, vector<double> dimensio
     numElements *= elementCounts[d];
     elemLinearMeasures[d] = dimensions[d] / elementCounts[d];
   }
-  vector< CellTopoPtr > cellTopos(numElements, topo);
+  vector< CellTopoPtrLegacy > cellTopos(numElements, topo);
     
   map< vector<int>, unsigned> vertexLookup;
   vector< vector<double> > vertices;

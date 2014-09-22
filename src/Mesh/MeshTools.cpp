@@ -61,7 +61,7 @@ bool cellMatches(FieldContainer<double> physicalNodes, double t) {
   return hasVerticesAbove && hasVerticesBelow;
 }
 
-CellTopoPtr getBottomTopology(MeshTopologyPtr meshTopo, IndexType cellID) {
+CellTopoPtrLegacy getBottomTopology(MeshTopologyPtr meshTopo, IndexType cellID) {
   int spaceDim = meshTopo->getSpaceDim() - 1;
   // determine cell topology:
   vector<IndexType> cellVertexIndices = meshTopo->getCell(cellID)->vertices();
@@ -72,7 +72,7 @@ CellTopoPtr getBottomTopology(MeshTopologyPtr meshTopo, IndexType cellID) {
   }
   IndexType bottomEntityIndex = meshTopo->getEntityIndex(spaceDim, bottomVertexIndices);
   unsigned bottomCellTopoKey = meshTopo->getEntityTopology(spaceDim, bottomEntityIndex).getKey();
-  CellTopoPtr cellTopo = CamelliaCellTools::cellTopoForKey(bottomCellTopoKey);
+  CellTopoPtrLegacy cellTopo = CamelliaCellTools::cellTopoForKey(bottomCellTopoKey);
   return cellTopo;
 }
 
@@ -93,7 +93,7 @@ MeshPtr MeshTools::timeSliceMesh(MeshPtr spaceTimeMesh, double t,
     FieldContainer<double> physicalNodes = spaceTimeMesh->physicalCellNodesForCell(rootCellID);
     if (cellMatches(physicalNodes, t)) { // cell and some subset of its descendents should be included in slice mesh
       vector< vector< double > > sliceNodes = timeSliceForCell(physicalNodes, t);
-      CellTopoPtr cellTopo = getBottomTopology(meshTopo, rootCellID);
+      CellTopoPtrLegacy cellTopo = getBottomTopology(meshTopo, rootCellID);
       CellPtr sliceCell = sliceTopo->addCell(cellTopo, sliceNodes);
       sliceCellIDToSpaceTimeCellID[sliceCell->cellIndex()] = rootCellID;
     }

@@ -54,11 +54,7 @@ using namespace Intrepid;
 
 class Boundary {
   set< pair< GlobalIndexType, unsigned > > _boundaryElements; // first arg is cellID, second arg is sideOrdinal
-  // rebuild the next two structures whenever element types have changed (after mesh build or refinement)
-  map< ElementType*, vector< pair< GlobalIndexType, int > > > _boundaryElementsByType; // entries in vector are indices into mesh's
-                                                                     // enumeration of elements of ElementType, paired
-                                                                     // with the sideIndex of the boundary in the element
-  map< ElementType*, vector< GlobalIndexType > > _boundaryCellIDs; // ordering matches the pairs in _boundaryElementsByType
+  
   Mesh *_mesh;
   DofInterpreter *_dofInterpreter;
   bool _imposeSingletonBCsOnThisRank;
@@ -66,17 +62,10 @@ public:
   Boundary();
   void setDofInterpreter(DofInterpreter* dofInterpreter);
   void setMesh(Mesh* mesh);
-  bool boundaryElement( GlobalIndexType cellID );
-  bool boundaryElement( GlobalIndexType cellID, int sideIndex );
-  vector< pair<GlobalIndexType, int > > boundaryElements(Teuchos::RCP< ElementType > elemTypePtr);
   void bcsToImpose(FieldContainer<GlobalIndexType> &globalIndices, FieldContainer<double> &globalValues, BC &bc, set<GlobalIndexType>& globalIndexFilter);
   void bcsToImpose(FieldContainer<GlobalIndexType> &globalIndices, FieldContainer<double> &globalValues, BC &bc);
-  void bcsToImpose( map< GlobalIndexType, double > &globalDofIndicesAndValues, BC &bc, Teuchos::RCP< ElementType > elemTypePtr,
-                   map <int, bool> &isSingleton);
+  void bcsToImpose( map< GlobalIndexType, double > &globalDofIndicesAndValues, BC &bc, GlobalIndexType cellID, map <int, bool> &isSingleton);
   void buildLookupTables();
-  //bool cellIsBoundaryElement(int cellID);
-  //void elementChangedType( Teuchos::RCP< Element > elemPtr, Teuchos::RCP< ElementType > oldType,
-  //                        Teuchos::RCP< ElementType > newType);
 };
 
 #endif

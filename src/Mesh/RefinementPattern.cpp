@@ -51,7 +51,7 @@ RefinementPattern::RefinementPattern(Teuchos::RCP< shards::CellTopology > cellTo
   _childrenForSides = vector< vector< pair< unsigned, unsigned> > >(sideCount); // will populate below..
   
   if (_cellTopoPtr->getNodeCount() == numNodesPerCell) {
-    _childTopos = vector< CellTopoPtr >(numSubCells, _cellTopoPtr);
+    _childTopos = vector< CellTopoPtrLegacy >(numSubCells, _cellTopoPtr);
   } else {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "RefinementPattern: Still need to implement support for child topos that have different topology than parent...");
   }
@@ -528,8 +528,8 @@ map<unsigned, set<unsigned> > RefinementPattern::getInternalSubcellOrdinals(Refi
     cout << "ERROR: RefinementPattern::getInternalSubcellOrdinals() requires non-empty refinement branch.\n";
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "RefinementPattern::getInternalSubcellOrdinals() requires non-empty refinement branch.");
   }
-  CellTopoPtr ancestralTopo = refinements[0].first->parentTopology();
-  CellTopoPtr childTopo;
+  CellTopoPtrLegacy ancestralTopo = refinements[0].first->parentTopology();
+  CellTopoPtrLegacy childTopo;
   set<unsigned> parentSidesToIntersect;
   int numSides = CamelliaCellTools::getSideCount(*ancestralTopo);
   for (unsigned sideOrdinal=0; sideOrdinal < numSides; sideOrdinal++) {
@@ -1035,7 +1035,7 @@ Teuchos::RCP<RefinementPattern> RefinementPattern::yAnisotropicRefinementPattern
   return refPattern;
 }
 
-CellTopoPtr RefinementPattern::parentTopology() {
+CellTopoPtrLegacy RefinementPattern::parentTopology() {
   return _cellTopoPtr;
 }
 
@@ -1071,7 +1071,7 @@ RefinementBranch RefinementPattern::subcellRefinementBranch(RefinementBranch &vo
   // this isn't necessarily the most efficient method...  May want to adopt some caching for parent-to-child subcell maps, for example...
   RefinementBranch subcellRefinements;
   if (volumeRefinementBranch.size()==0) return subcellRefinements; // subcell refinement branch empty, too
-  CellTopoPtr volumeTopo = volumeRefinementBranch[0].first->parentTopology();
+  CellTopoPtrLegacy volumeTopo = volumeRefinementBranch[0].first->parentTopology();
   if (subcdim == 0) {
     // then the empty refinement branch will suffice (since the subcell is a vertex)
     return subcellRefinements;
@@ -1139,7 +1139,7 @@ RefinementBranch RefinementPattern::subcellRefinementBranch(RefinementBranch &vo
 
 FieldContainer<double> RefinementPattern::descendantNodesRelativeToAncestorReferenceCell(RefinementBranch refinementBranch,
                                                                                          unsigned ancestorReferenceCellPermutation) {
-  CellTopoPtr parentTopo = refinementBranch[0].first->parentTopology();
+  CellTopoPtrLegacy parentTopo = refinementBranch[0].first->parentTopology();
   FieldContainer<double> ancestorNodes(parentTopo->getNodeCount(), parentTopo->getDimension());
   CamelliaCellTools::refCellNodesForTopology(ancestorNodes, *parentTopo, ancestorReferenceCellPermutation);
   
@@ -1163,8 +1163,8 @@ FieldContainer<double> RefinementPattern::descendantNodes(RefinementBranch refin
   }
   elementVertices.push_back(ancestorVertexIndices);
   
-  CellTopoPtr ancestorTopo = refinementBranch[0].first->parentTopology();
-  vector< CellTopoPtr > cellTopos(1, ancestorTopo);
+  CellTopoPtrLegacy ancestorTopo = refinementBranch[0].first->parentTopology();
+  vector< CellTopoPtrLegacy > cellTopos(1, ancestorTopo);
   
   MeshGeometryPtr meshGeometry = Teuchos::rcp( new MeshGeometry(vertices, elementVertices, cellTopos) );
   
@@ -1180,7 +1180,7 @@ FieldContainer<double> RefinementPattern::descendantNodes(RefinementBranch refin
   return mesh->physicalCellNodesForCell(cellIndex);
 }
 
-CellTopoPtr RefinementPattern::descendantTopology(RefinementBranch &refinements) {
+CellTopoPtrLegacy RefinementPattern::descendantTopology(RefinementBranch &refinements) {
   if (refinements.size() == 0) {
     cout << "refinement branch must be non-empty!\n";
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "refinement branch must be non-empty!");
@@ -1195,7 +1195,7 @@ CellTopoPtr RefinementPattern::descendantTopology(RefinementBranch &refinements)
 RefinementBranch RefinementPattern::sideRefinementBranch(RefinementBranch &volumeRefinementBranch, unsigned sideIndex) {
   RefinementBranch sideRefinements;
   if (volumeRefinementBranch.size()==0) return sideRefinements; // side refinement branch empty, too
-  CellTopoPtr volumeTopo = volumeRefinementBranch[0].first->parentTopology();
+  CellTopoPtrLegacy volumeTopo = volumeRefinementBranch[0].first->parentTopology();
   unsigned sideDim = volumeTopo->getDimension() - 1;
   if (sideDim == 0) {
     // then the empty refinement branch will suffice (since the "side" is actually a vertex)

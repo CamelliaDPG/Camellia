@@ -500,7 +500,7 @@ int main(int argc, char *argv[]) {
   BFPtr fakeBF = Teuchos::rcp( new BF(varFactory) );
   LinearTermPtr massFluxTerm = massFlux * testOne;
   
-  CellTopoPtr quadTopoPtr = Teuchos::rcp(new shards::CellTopology(shards::getCellTopologyData<shards::Quadrilateral<4> >() ));
+  CellTopoPtrLegacy quadTopoPtr = Teuchos::rcp(new shards::CellTopology(shards::getCellTopologyData<shards::Quadrilateral<4> >() ));
   DofOrderingFactory dofOrderingFactory(fakeBF);
   int fakeTestOrder = H1Order;
   DofOrderingPtr testOrdering = dofOrderingFactory.testOrdering(fakeTestOrder, *quadTopoPtr);

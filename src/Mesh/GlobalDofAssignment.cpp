@@ -19,6 +19,7 @@
 #include "Solution.h"
 
 #include "CamelliaCellTools.h"
+#include "MPIWrapper.h"
 
 GlobalDofAssignment::GlobalDofAssignment(MeshPtr mesh, VarFactory varFactory,
                                          DofOrderingFactoryPtr dofOrderingFactory, MeshPartitionPolicyPtr partitionPolicy,
@@ -74,10 +75,24 @@ GlobalDofAssignment::GlobalDofAssignment(MeshPtr mesh, VarFactory varFactory,
   
   _numPartitions = Teuchos::GlobalMPISession::getNProc();
   _partitions = vector<set<GlobalIndexType> >(_numPartitions);
+  
+//  cout << "Experimentally (for debugging purposes) setting a more interesting initial partition in GlobalDofAssignment.\n";
+//  int cellsPerPartition = activeCellIDs.size() / _numPartitions;
+//  int extraCells = activeCellIDs.size() - cellsPerPartition * _numPartitions;
+//  int partitionNumber = 0;
+//  for (set<GlobalIndexType>::iterator cellIDIt = activeCellIDs.begin(); cellIDIt != activeCellIDs.end(); cellIDIt++) {
+//    GlobalIndexType cellID = *cellIDIt;
+//    _partitions[partitionNumber].insert(cellID);
+//    int numCellsForPartition = (partitionNumber >= extraCells) ? cellsPerPartition : cellsPerPartition + 1;
+//    if (_partitions[partitionNumber].size() == numCellsForPartition) {
+//      partitionNumber++;
+//    }
+//  }
+  
   // before repartitioning (which should happen immediately), put all active cells on rank 0
   _partitions[0] = _mesh->getActiveCellIDs();
+  constructActiveCellMap();
 }
-
 
 GlobalIndexType GlobalDofAssignment::activeCellOffset() {
   return _activeCellOffset;
@@ -192,6 +207,28 @@ FieldContainer<double> GlobalDofAssignment::cellSideParitiesForCell( GlobalIndex
   return cellSideParities;
 }
 
+void GlobalDofAssignment::constructActiveCellMap() {
+  const set<GlobalIndexType>* cellIDs = &cellsInPartition(-1);
+  FieldContainer<GlobalIndexTypeToCast> myCellIDsFC(cellIDs->size());
+  
+  int localIndex = 0;
+  for (set<GlobalIndexType>::const_iterator cellIDIt = cellIDs->begin(); cellIDIt != cellIDs->end(); cellIDIt++, localIndex++) {
+    myCellIDsFC(localIndex) = *cellIDIt;
+  }
+  
+  int indexBase = 0;
+#ifdef HAVE_MPI
+  Epetra_MpiComm Comm(MPI_COMM_WORLD);
+  //cout << "rank: " << rank << " of " << numProcs << endl;
+#else
+  Epetra_SerialComm Comm;
+#endif
+  if (myCellIDsFC.size()==0)
+    _activeCellMap = Teuchos::rcp( new Epetra_Map(-1, myCellIDsFC.size(), NULL, indexBase, Comm) );
+  else
+    _activeCellMap = Teuchos::rcp( new Epetra_Map(-1, myCellIDsFC.size(), &myCellIDsFC[0], indexBase, Comm) );
+}
+
 void GlobalDofAssignment::repartitionAndMigrate() {
   _partitionPolicy->partitionMesh(_mesh.get(),_numPartitions);
   for (vector< Solution* >::iterator solutionIt = _registeredSolutions.begin();
@@ -212,6 +249,7 @@ void GlobalDofAssignment::didHRefine(const set<GlobalIndexType> &parentCellIDs) 
       _partitions[rank].insert(childIDs.begin(),childIDs.end());
     }
   }
+  constructActiveCellMap();
 }
 
 void GlobalDofAssignment::didPRefine(const set<GlobalIndexType> &cellIDs, int deltaP) { // subclasses should call super
@@ -250,6 +288,10 @@ vector< ElementTypePtr > GlobalDofAssignment::elementTypes(PartitionIndexType pa
     }
     return types;
   }
+}
+
+Teuchos::RCP<Epetra_Map> GlobalDofAssignment::getActiveCellMap() {
+  return _activeCellMap;
 }
 
 DofOrderingFactoryPtr GlobalDofAssignment::getDofOrderingFactory() {
@@ -329,6 +371,38 @@ void GlobalDofAssignment::interpretLocalCoefficients(GlobalIndexType cellID, con
   }
 }
 
+void GlobalDofAssignment::projectParentCoefficientsOntoUnsetChildren() {
+  set<GlobalIndexType> rankLocalCellIDs = cellsInPartition(-1);
+  
+  for (vector< Solution* >::iterator solutionIt = _registeredSolutions.begin();
+       solutionIt != _registeredSolutions.end(); solutionIt++) {
+    Solution* soln = *solutionIt;
+    for (set<GlobalIndexType>::iterator cellIDIt = rankLocalCellIDs.begin(); cellIDIt != rankLocalCellIDs.end(); cellIDIt++) {
+      GlobalIndexType cellID = *cellIDIt;
+      if (soln->cellHasCoefficientsAssigned(cellID)) continue;
+      
+      CellPtr cell = _meshTopology->getCell(cellID);
+      CellPtr parent = cell->getParent();
+      if (parent.get()==NULL) continue;
+      GlobalIndexType parentCellID = parent->cellIndex();
+      if (! soln->cellHasCoefficientsAssigned(parentCellID)) continue;
+      
+      int childOrdinal = -1;
+      vector<IndexType> childIndices = parent->getChildIndices();
+      for (int i=0; i<childIndices.size(); i++) {
+        if (childIndices[i]==cellID) childOrdinal = i;
+        else childIndices[i] = -1; // indication that Solution should not compute the projection for this child
+      }
+      if (childOrdinal == -1) {
+        cout << "ERROR: child not found.\n";
+        TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "child not found!");
+      }
+//      cout << "determining cellID " << parent->cellIndex() << "'s child " << childOrdinal << "'s coefficients.\n";
+      soln->projectOldCellOntoNewCells(parent->cellIndex(), _elementTypeForCell[parentCellID], childIndices);
+    }
+  }
+}
+
 void GlobalDofAssignment::setPartitions(FieldContainer<GlobalIndexType> &partitionedMesh) {
   set<unsigned> activeCellIDs = _meshTopology->getActiveCellIndices();
   
@@ -355,6 +429,8 @@ void GlobalDofAssignment::setPartitions(FieldContainer<GlobalIndexType> &partiti
       _activeCellOffset += partition.size();
     }
   }
+  constructActiveCellMap();
+  projectParentCoefficientsOntoUnsetChildren();
   rebuildLookups();
 }
 

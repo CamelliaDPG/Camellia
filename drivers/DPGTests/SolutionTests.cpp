@@ -985,7 +985,7 @@ bool SolutionTests::testEnergyError(){
 
   bool success = true;
   // First test: exact solution has zero energy error:
-  map<GlobalIndexType, double> energyError = _poissonSolution->energyError();
+  map<GlobalIndexType, double> energyError = _poissonSolution->globalEnergyError();
   vector< Teuchos::RCP< Element > > activeElements = _poissonSolution->mesh()->activeElements();
   vector< Teuchos::RCP< Element > >::iterator activeElemIt;
   

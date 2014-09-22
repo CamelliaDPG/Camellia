@@ -92,7 +92,7 @@ public:
     TEUCHOS_TEST_FOR_EXCEPTION(sideIndex == -1, std::invalid_argument, "MeshBoundaryCharacteristicFunction is only defined on cell boundaries");
     for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
       int cellID = basisCache->cellIDs()[cellIndex];
-      bool onBoundary = mesh->boundary().boundaryElement(cellID, sideIndex);
+      bool onBoundary = mesh->getTopology()->getCell(cellID)->isBoundary(sideIndex);
       double value = onBoundary ? 1 : 0;
       for (int pointIndex=0; pointIndex<numPoints; pointIndex++) {
         values(cellIndex,pointIndex) = value;
@@ -736,7 +736,7 @@ double Function::integralOfJump(Teuchos::RCP<Mesh> mesh, int cubatureDegreeEnric
 
 double Function::integralOfJump(Teuchos::RCP<Mesh> mesh, GlobalIndexType cellID, int sideIndex, int cubatureDegreeEnrichment) {
   // for boundaries, the jump is 0
-  if (mesh->boundary().boundaryElement(cellID,sideIndex)) {
+  if (mesh->getTopology()->getCell(cellID)->isBoundary(sideIndex)) {
     return 0;
   }
   int neighborCellID = mesh->getElement(cellID)->getNeighborCellID(sideIndex);

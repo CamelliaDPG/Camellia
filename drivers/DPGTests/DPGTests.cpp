@@ -65,6 +65,7 @@
 // test suite includes
 #include "BasisCacheTests.h"
 #include "BasisReconciliationTests.h"
+#include "CellTopologyTests.h"
 #include "CurvilinearMeshTests.h"
 #include "ElementTests.h"
 #include "FunctionTests.h"
@@ -202,6 +203,10 @@ void DPGTests::runTests() {
   
   // setup our TestSuite tests:
   vector< Teuchos::RCP< TestSuite > > testSuites;
+
+  testSuites.push_back( Teuchos::rcp( new CellTopologyTests ) );
+  
+  testSuites.push_back( Teuchos::rcp( new MeshTestSuite ) );
   
   testSuites.push_back( Teuchos::rcp( new GMGTests ) );
   
@@ -218,8 +223,6 @@ void DPGTests::runTests() {
   testSuites.push_back( Teuchos::rcp( new GDAMinimumRuleTests ) );
   
   testSuites.push_back( Teuchos::rcp( new LinearTermTests ) );
-  
-  testSuites.push_back( Teuchos::rcp( new MeshTestSuite ) );
   
   testSuites.push_back( Teuchos::rcp( new ScratchPadTests ) );
   

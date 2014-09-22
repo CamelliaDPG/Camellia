@@ -24,6 +24,8 @@
 #include "IndexType.h"
 #include "DofInterpreter.h"
 
+#include "Epetra_Map.h"
+
 class GlobalDofAssignment;
 typedef Teuchos::RCP<GlobalDofAssignment> GlobalDofAssignmentPtr;
 
@@ -51,6 +53,8 @@ protected:
   vector< set< GlobalIndexType > > _partitions; // GlobalIndexType: cellIDs
   map<GlobalIndexType, IndexType> _partitionForCellID;
   
+  Teuchos::RCP<Epetra_Map> _activeCellMap;
+  
   unsigned _numPartitions;
   
   vector< Solution* > _registeredSolutions; // solutions that should be modified upon refinement (by subclasses--maximum rule has to worry about cell side upgrades, whereas minimum rule does not, so there's not a great way to do this in the abstract superclass.)
@@ -58,6 +62,9 @@ protected:
   void assignInitialElementType( GlobalIndexType cellID ); // this is the "natural" element type, before side modifications for constraints (when using maximum rule)
   void assignParities( GlobalIndexType cellID );
   
+  void constructActiveCellMap();
+  
+  void projectParentCoefficientsOntoUnsetChildren();
   virtual void rebuildLookups() = 0;
 public:
   GlobalDofAssignment(MeshPtr mesh, VarFactory varFactory, DofOrderingFactoryPtr dofOrderingFactory,
@@ -65,6 +72,7 @@ public:
                       bool enforceConformityLocally);
 
   GlobalIndexType activeCellOffset();
+  Teuchos::RCP<Epetra_Map> getActiveCellMap();
   
   virtual GlobalIndexType cellID(ElementTypePtr elemTypePtr, IndexType cellIndex, PartitionIndexType partitionNumber);
   virtual vector<GlobalIndexType> cellIDsOfElementType(unsigned partitionNumber, ElementTypePtr elemTypePtr);

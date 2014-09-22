@@ -23,12 +23,23 @@
 #include "Epetra_SerialComm.h"
 
 GMGOperator::GMGOperator(BCPtr zeroBCs, MeshPtr coarseMesh, IPPtr coarseIP, MeshPtr fineMesh, Epetra_Map finePartitionMap, Teuchos::RCP<Solver> coarseSolver) :  _finePartitionMap(finePartitionMap), _br(true) {
+  clearTimings();
+  
+#ifdef HAVE_MPI
+  Epetra_MpiComm Comm(MPI_COMM_WORLD);
+  //cout << "rank: " << rank << " of " << numProcs << endl;
+#else
+  Epetra_SerialComm Comm;
+#endif
+  Epetra_Time constructionTimer(Comm);
+  
   RHSPtr zeroRHS = RHS::rhs();
   _fineMesh = fineMesh;
   _coarseMesh = coarseMesh;
   _bc = zeroBCs;
   _coarseSolution = Teuchos::rcp( new Solution(coarseMesh, zeroBCs, zeroRHS, coarseIP) );
   _coarseSolver = coarseSolver;
+  _haveSolvedOnCoarseMesh = false;
     
   if (( coarseMesh->meshUsesMaximumRule()) || (! fineMesh->meshUsesMinimumRule()) ) {
     cout << "GMGOperator only supports minimum rule.\n";
@@ -38,9 +49,33 @@ GMGOperator::GMGOperator(BCPtr zeroBCs, MeshPtr coarseMesh, IPPtr coarseIP, Mesh
 //  cout << "Note: for debugging, GMGOperator writes coarse solution matrix to /tmp/A_coarse.dat.\n";
 //  _coarseSolution->setWriteMatrixToFile(true, "/tmp/A_coarse.dat");
   
+//  GDAMinimumRule* minRule = dynamic_cast<GDAMinimumRule *>(coarseMesh->globalDofAssignment().get());
+
+//  int rank = Teuchos::GlobalMPISession::getRank();
+//  if (rank==1)
+//    minRule->printGlobalDofInfo();
+  
   _coarseSolution->initializeLHSVector();
   _coarseSolution->initializeStiffnessAndLoad();
   _coarseSolution->populateStiffnessAndLoad(); // can get away with doing this just once; after that we just manipulate the RHS vector
+  
+  _timeConstruction += constructionTimer.ElapsedTime();
+}
+
+void GMGOperator::clearTimings() {
+  _timeMapFineToCoarse = 0, _timeMapCoarseToFine = 0, _timeConstruction = 0, _timeCoarseSolve = 0, _timeCoarseImport = 0, _timeLocalCoefficientMapConstruction = 0;
+}
+
+void GMGOperator::constructLocalCoefficientMaps() {
+  Epetra_Time timer(Comm());
+  
+  set<GlobalIndexType> cellsInPartition = _fineMesh->globalDofAssignment()->cellsInPartition(-1); // rank-local
+  
+  for (set<GlobalIndexType>::iterator cellIDIt=cellsInPartition.begin(); cellIDIt != cellsInPartition.end(); cellIDIt++) {
+    GlobalIndexType fineCellID = *cellIDIt;
+    LocalDofMapperPtr fineMapper = getLocalCoefficientMap(fineCellID);
+  }
+  _timeLocalCoefficientMapConstruction += timer.ElapsedTime();
 }
 
 GlobalIndexType GMGOperator::getCoarseCellID(GlobalIndexType fineCellID) const {
@@ -208,26 +243,30 @@ int GMGOperator::Apply(const Epetra_MultiVector& X, Epetra_MultiVector& Y) const
 
 int GMGOperator::ApplyInverse(const Epetra_MultiVector& X_in, Epetra_MultiVector& Y) const {
 //  cout << "GMGOperator::ApplyInverse.\n";
+  Epetra_Time timer(Comm());
   
   Epetra_MultiVector X(X_in); // looks like Y may be stored in the same location as X_in, so that changing Y will change X, too...
   
   // the data coming in (X) is in global dofs defined on the fine mesh.  First thing we'd like to do is map it to the fine mesh's local cells
   set<GlobalIndexType> cellsInPartition = _fineMesh->globalDofAssignment()->cellsInPartition(-1); // rank-local
   
+  timer.ResetStartTime();
   Teuchos::RCP<Epetra_FEVector> coarseRHSVector = _coarseSolution->getRHSVector();
-  
   set<GlobalIndexTypeToCast> coarseDofIndicesToImport = setCoarseRHSVector(X_in, *coarseRHSVector);
+  _timeMapFineToCoarse += timer.ElapsedTime();
   
   // solve the coarse system:
   
-//  _coarseSolution->imposeBCs(); // I think this should already be taken care of...
-  _coarseSolution->setProblem(_coarseSolver);
-  
-  Teuchos::RCP<Epetra_FECrsMatrix> coarseStiffness = _coarseSolution->getStiffnessMatrix();
-  EpetraExt::RowMatrixToMatlabFile("/tmp/A_gmg.dat",*coarseStiffness);
-  EpetraExt::MultiVectorToMatlabFile("/tmp/b_gmg.dat",*coarseRHSVector);
-  
-  _coarseSolution->solveWithPrepopulatedStiffnessAndLoad(_coarseSolver);
+    timer.ResetStartTime();
+  if (!_haveSolvedOnCoarseMesh) {
+    _coarseSolution->setProblem(_coarseSolver);
+    _coarseSolution->solveWithPrepopulatedStiffnessAndLoad(_coarseSolver, false);
+    _haveSolvedOnCoarseMesh = true;
+  } else {
+    _coarseSolver->problem().SetRHS(coarseRHSVector.get());
+    _coarseSolution->solveWithPrepopulatedStiffnessAndLoad(_coarseSolver, true); // call resolve() instead of solve() -- reuse factorization
+  }
+  _timeCoarseSolve += timer.ElapsedTime();
   
 //  { // DEBUGGING:
 //    // put the RHS into FC for debugging purposes:
@@ -239,10 +278,10 @@ int GMGOperator::ApplyInverse(const Epetra_MultiVector& X_in, Epetra_MultiVector
 //    cout << "before coarse solve, rhsFC:\n" << rhsFC;
 //  }
   
+  timer.ResetStartTime();
   Teuchos::RCP<Epetra_FEVector> coarseLHSVector = _coarseSolution->getLHSVector();
-  EpetraExt::MultiVectorToMatlabFile("/tmp/x_gmg.dat",*coarseLHSVector);
+//  EpetraExt::MultiVectorToMatlabFile("/tmp/x_gmg.dat",*coarseLHSVector);
 
-  
   // now, map the coarse data back to the fine mesh, and add that into Y
   Y.PutScalar(0); // clear Y
   
@@ -263,17 +302,20 @@ int GMGOperator::ApplyInverse(const Epetra_MultiVector& X_in, Epetra_MultiVector
   Epetra_Vector  coarseDofs(solnMap);
   coarseDofs.Import(*coarseLHSVector, solnImporter, Insert);
   
-  { // DEBUGGING:
-    // put the global coefficients into FC for debugging purposes:
-    FieldContainer<double> globalCoefficientsFC(numMyDofs);
-    for (int i=0; i<numMyDofs; i++) {
-      GlobalIndexTypeToCast globalIndex = myDofs[i];
-      int lid = solnMap.LID(globalIndex);
-      globalCoefficientsFC[i] = coarseDofs[lid];
-    }
-//    cout << "after coarse solve, globalCoefficientsFC:\n" << globalCoefficientsFC;
-  }
+  _timeCoarseImport += timer.ElapsedTime();
   
+//  { // DEBUGGING:
+//    // put the global coefficients into FC for debugging purposes:
+//    FieldContainer<double> globalCoefficientsFC(numMyDofs);
+//    for (int i=0; i<numMyDofs; i++) {
+//      GlobalIndexTypeToCast globalIndex = myDofs[i];
+//      int lid = solnMap.LID(globalIndex);
+//      globalCoefficientsFC[i] = coarseDofs[lid];
+//    }
+////    cout << "after coarse solve, globalCoefficientsFC:\n" << globalCoefficientsFC;
+//  }
+  
+  timer.ResetStartTime();
   Epetra_MultiVector Y_temp(Y.Map(),1);
   
   for (set<GlobalIndexType>::iterator cellIDIt=cellsInPartition.begin(); cellIDIt != cellsInPartition.end(); cellIDIt++) {
@@ -305,6 +347,7 @@ int GMGOperator::ApplyInverse(const Epetra_MultiVector& X_in, Epetra_MultiVector
     
 //    copyCoefficientsOwnedByFineCell(Y_temp, fineCellID, Y);
   }
+  _timeMapCoarseToFine += timer.ElapsedTime();
   
 //  static int globalIterationCount = 0; // for debugging
 //  ostringstream X_file;
@@ -313,7 +356,6 @@ int GMGOperator::ApplyInverse(const Epetra_MultiVector& X_in, Epetra_MultiVector
 //
 //  ostringstream Y_file;
 //  Y_file << "/tmp/Y_before_diag_" << globalIterationCount << ".dat";
-//  
 //
 //  EpetraExt::MultiVectorToMatlabFile(Y_file.str().c_str(),Y);
   
@@ -445,6 +487,46 @@ set<GlobalIndexTypeToCast> GMGOperator::setCoarseRHSVector(const Epetra_MultiVec
   }
   coarseRHSVector.GlobalAssemble();
   return coarseDofIndicesToImport;
+}
+
+TimeStatistics GMGOperator::getStatistics(double timeValue) const {
+  TimeStatistics stats;
+  int indexBase = 0;
+  int numProcs = Teuchos::GlobalMPISession::getNProc();
+  Epetra_Map timeMap(numProcs,indexBase,Comm());
+  Epetra_Vector timeVector(timeMap);
+  timeVector[0] = timeValue;
+
+  int err = timeVector.Norm1( &stats.sum );
+  err = timeVector.MeanValue( &stats.mean );
+  err = timeVector.MinValue( &stats.min );
+  err = timeVector.MaxValue( &stats.max );
+
+  return stats;
+}
+
+void GMGOperator::reportTimings() const {
+  //   mutable double _timeMapFineToCoarse, _timeMapCoarseToFine, _timeCoarseImport, _timeConstruction, _timeCoarseSolve;  // totals over the life of the object
+  int rank = Teuchos::GlobalMPISession::getRank();
+  
+  map<string, double> reportValues;
+  reportValues["construction time"] = _timeConstruction;
+  reportValues["construct local coefficient maps"] = _timeLocalCoefficientMapConstruction;
+  reportValues["coarse import"] = _timeCoarseImport;
+  reportValues["coarse solve"] = _timeCoarseSolve;
+  reportValues["map coarse to fine"] = _timeMapCoarseToFine;
+  reportValues["map fine to coarse"] = _timeMapFineToCoarse;
+  
+  for (map<string,double>::iterator reportIt = reportValues.begin(); reportIt != reportValues.end(); reportIt++) {
+    TimeStatistics stats = getStatistics(reportIt->second);
+    if (rank==0) {
+      cout << reportIt->first << ":\n";
+      cout <<  "mean = " << stats.mean << " seconds\n";
+      cout << "max =  " << stats.max << " seconds\n";
+      cout << "min =  " << stats.min << " seconds\n";
+      cout << "sum =  " << stats.sum << " seconds\n";
+    }
+  }
 }
 
 void GMGOperator::setFineMesh(MeshPtr fineMesh, Epetra_Map finePartitionMap) {

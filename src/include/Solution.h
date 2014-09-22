@@ -83,15 +83,23 @@ class Solution {
 private:
   int _cubatureEnrichmentDegree;
   map< GlobalIndexType, FieldContainer<double> > _solutionForCellIDGlobal; // eventually, replace this with a distributed _solutionForCellID
-  map< GlobalIndexType, double > _energyErrorForCellIDGlobal;
+  map< GlobalIndexType, double > _energyErrorForCell; // now rank local
+  map< GlobalIndexType, double > _energyErrorForCellGlobal;
 
-//  map< ElementType*, FieldContainer<double> > _solutionForElementType; // for uniform mesh, just a single entry.
-  map< ElementType*, FieldContainer<double> > _residualForElementType; // for uniform mesh, just a single entry.
-  map< ElementType*, FieldContainer<double> > _errorRepresentationForElementType; // for uniform mesh, just a single entry.
+  map< GlobalIndexType, FieldContainer<double> > _residualForCell;
+  map< GlobalIndexType, FieldContainer<double> > _errorRepresentationForCell;
+
+  // OLD:
+//  map< ElementType*, FieldContainer<double> > _residualForElementType; // for uniform mesh, just a single entry.
+//  map< ElementType*, FieldContainer<double> > _errorRepresentationForElementType; // for uniform mesh, just a single entry.
 
   // evaluates the inversion of the RHS
-  map< ElementType*,FieldContainer<double> > _rhsForElementType;
-  map< ElementType*,FieldContainer<double> > _rhsRepresentationForElementType;
+//  map< GlobalIndexType,FieldContainer<double> > _rhsForCell;
+  map< GlobalIndexType,FieldContainer<double> > _rhsRepresentationForCell;
+
+  // OLD
+//  map< ElementType*,FieldContainer<double> > _rhsForElementType;
+//  map< ElementType*,FieldContainer<double> > _rhsRepresentationForElementType;
 
   Teuchos::RCP<Mesh> _mesh;
   Teuchos::RCP<BC> _bc;
@@ -107,6 +115,7 @@ private:
   
   bool _residualsComputed;
   bool _energyErrorComputed;
+  bool _rankLocalEnergyErrorComputed;
   // the  values of this map have dimensions (numCells, numTrialDofs)
 
   void initialize();
@@ -162,7 +171,7 @@ public:
   void populateStiffnessAndLoad();
   void imposeBCs();
   void setProblem(Teuchos::RCP<Solver> solver);
-  void solveWithPrepopulatedStiffnessAndLoad(Teuchos::RCP<Solver> solver);
+  void solveWithPrepopulatedStiffnessAndLoad(Teuchos::RCP<Solver> solver, bool callResolveInstead = false);
   void importSolution(); // imports for all rank-local cellIDs
   void importGlobalSolution(); // imports (and interprets!) global solution.  NOT scalable.
   
@@ -257,7 +266,8 @@ public:
 
   void discardInactiveCellCoefficients();
   double energyErrorTotal();
-  const map<GlobalIndexType,double> & energyError();
+  const map<GlobalIndexType,double> & globalEnergyError();
+  const map<GlobalIndexType,double> & rankLocalEnergyError();
 
   void writeToFile(int trialID, const string &filePath);
   void writeQuadSolutionToFile(int trialID, const string &filePath);

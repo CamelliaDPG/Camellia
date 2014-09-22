@@ -235,7 +235,7 @@ bool Mesh::cellContainsPoint(GlobalIndexType cellID, vector<double> &point) {
   MeshPtr thisPtr = Teuchos::rcp(this,false);
   CamelliaCellTools::mapToReferenceFrame(refPoints, physicalPoints, thisPtr, cellID);
   
-  CellTopoPtr cellTopo = _meshTopology->getCell(cellID)->topology();
+  CellTopoPtrLegacy cellTopo = _meshTopology->getCell(cellID)->topology();
   
   int result = CellTools<double>::checkPointInclusion(&refPoints[0], spaceDim, *cellTopo);
   return result == 1;

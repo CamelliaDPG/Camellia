@@ -58,7 +58,7 @@ MeshTopology::MeshTopology(MeshGeometryPtr meshGeometry, vector<PeriodicBCPtr> p
   int numElements = meshGeometry->cellTopos().size();
   
   for (int i=0; i<numElements; i++) {
-    CellTopoPtr cellTopo = meshGeometry->cellTopos()[i];
+    CellTopoPtrLegacy cellTopo = meshGeometry->cellTopos()[i];
     vector< unsigned > cellVerticesInMeshGeometry = meshGeometry->elementVertices()[i];
     vector<unsigned> cellVertices;
     for (int j=0; j<cellVerticesInMeshGeometry.size(); j++) {
@@ -77,13 +77,13 @@ const set<unsigned> & MeshTopology::getActiveCellIndices() {
   return _activeCells;
 }
 
-CellPtr MeshTopology::addCell(CellTopoPtr cellTopo, const vector<vector<double> > &cellVertices) {
+CellPtr MeshTopology::addCell(CellTopoPtrLegacy cellTopo, const vector<vector<double> > &cellVertices) {
   vector<unsigned> vertexIndices = getVertexIndices(cellVertices);
   unsigned cellIndex = addCell(cellTopo, vertexIndices);
   return _cells[cellIndex];
 }
 
-unsigned MeshTopology::addCell(CellTopoPtr cellTopo, const vector<unsigned> &cellVertices, unsigned parentCellIndex) {
+unsigned MeshTopology::addCell(CellTopoPtrLegacy cellTopo, const vector<unsigned> &cellVertices, unsigned parentCellIndex) {
   vector< map< unsigned, unsigned > > cellEntityPermutations;
   unsigned cellIndex = _cells.size();
   
@@ -337,7 +337,7 @@ unsigned MeshTopology::addEntity(const shards::CellTopology &entityTopo, const v
   return entityIndex;
 }
 
-void MeshTopology::addChildren(CellPtr parentCell, const vector< CellTopoPtr > &childTopos, const vector< vector<unsigned> > &childVertices) {
+void MeshTopology::addChildren(CellPtr parentCell, const vector< CellTopoPtrLegacy > &childTopos, const vector< vector<unsigned> > &childVertices) {
   int numChildren = childTopos.size();
   TEUCHOS_TEST_FOR_EXCEPTION(numChildren != childVertices.size(), std::invalid_argument, "childTopos and childVertices must be the same size");
   vector< CellPtr > children;
@@ -545,7 +545,7 @@ pair<IndexType, unsigned> MeshTopology::getSecondCellForSide(IndexType sideEntit
 
 void MeshTopology::deactivateCell(CellPtr cell) {
 //  cout << "deactivating cell " << cell->cellIndex() << endl;
-  CellTopoPtr cellTopo = cell->topology();
+  CellTopoPtrLegacy cellTopo = cell->topology();
   for (int d=0; d<_spaceDim; d++) { // start with vertices, and go up to sides
     int entityCount = cellTopo->getSubcellCount(d);
     for (int j=0; j<entityCount; j++) {
@@ -1469,7 +1469,7 @@ void MeshTopology::refineCell(unsigned cellIndex, RefinementPatternPtr refPatter
   
   int numChildren = childVertices.size();
   // this is where we assume all the children have same topology as parent:
-  vector< CellTopoPtr > childTopos(numChildren,cell->topology());
+  vector< CellTopoPtrLegacy > childTopos(numChildren,cell->topology());
   
   refineCellEntities(cell, refPattern);
   cell->setRefinementPattern(refPattern);
@@ -1538,7 +1538,7 @@ void MeshTopology::refineCellEntities(CellPtr cell, RefinementPatternPtr refPatt
   
   // TODO generalize the below code to apply recipes instead of just the refPattern...
   
-  CellTopoPtr cellTopo = cell->topology();
+  CellTopoPtrLegacy cellTopo = cell->topology();
   for (unsigned d=1; d<_spaceDim; d++) {
     unsigned subcellCount = cellTopo->getSubcellCount(d);
     for (unsigned subcord = 0; subcord < subcellCount; subcord++) {
@@ -1631,7 +1631,7 @@ void MeshTopology::determineGeneralizedParentsForRefinement(CellPtr cell, Refine
   
   // TODO generalize the below code to apply recipes instead of just the refPattern...
   
-  CellTopoPtr cellTopo = cell->topology();
+  CellTopoPtrLegacy cellTopo = cell->topology();
   for (unsigned d=1; d<_spaceDim; d++) {
     unsigned subcellCount = cellTopo->getSubcellCount(d);
     for (unsigned subcord = 0; subcord < subcellCount; subcord++) {

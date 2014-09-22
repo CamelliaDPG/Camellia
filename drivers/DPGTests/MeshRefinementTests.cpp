@@ -578,6 +578,13 @@ void MeshRefinementTests::teardown() {
 
 void MeshRefinementTests::runTests(int &numTestsRun, int &numTestsPassed) {
   setup();
+  if (testPRefinements()) {
+    numTestsPassed++;
+  }
+  numTestsRun++;
+  teardown();
+  
+  setup();
   if (testMultiBasisSideParities()) {
     numTestsPassed++;
   }
@@ -790,5 +797,105 @@ bool MeshRefinementTests::testPatchBasisSideParities() {
     cout << "Failure: PatchBasisSideParities: children aren't opposite large neighbor cell parity.\n";
   }
 
+  return success;
+}
+
+bool cellsHaveH1Order(MeshPtr mesh, int H1Order, set<GlobalIndexType> cellIDs) {
+  for (set<GlobalIndexType>::iterator cellIDIt = cellIDs.begin(); cellIDIt != cellIDs.end(); cellIDIt++) {
+    GlobalIndexType cellID = *cellIDIt;
+    int cellOrder = mesh->globalDofAssignment()->getH1Order(cellID);
+    if (cellOrder != H1Order) {
+      cout << "cell " << cellID << "'s H1Order " << cellOrder << " does not match expected " << H1Order << endl;
+      return false;
+    }
+  }
+  return true;
+}
+
+bool MeshRefinementTests::testPRefinements() {
+  // make a few simple meshes:
+  bool success = true;
+  
+  VarFactory vf;
+  vf.fieldVar("u1");
+  vf.fluxVar("un_hat");
+  vf.traceVar("u_hat");
+  vf.testVar("v", HGRAD);
+  BFPtr emptyBF = Teuchos::rcp( new BF(vf) );
+  
+  vector<double> dimensions1D(1,1.0), dimensions2D(2,1.0), dimensions3D(3,1.0);
+  vector<int> elements1D(1,3), elements2D(2,2), elements3D(3,1);
+  
+  int H1Order = 1;
+  MeshPtr mesh1D = MeshFactory::rectilinearMesh(emptyBF, dimensions1D, elements1D, H1Order);
+  MeshPtr mesh2D = MeshFactory::rectilinearMesh(emptyBF, dimensions2D, elements2D, H1Order);
+  MeshPtr mesh3D = MeshFactory::rectilinearMesh(emptyBF, dimensions3D, elements3D, H1Order);
+  
+  vector< MeshPtr > meshes;
+  meshes.push_back(mesh1D);
+  meshes.push_back(mesh2D);
+  meshes.push_back(mesh3D);
+  
+  for (int meshOrdinal=0; meshOrdinal < meshes.size(); meshOrdinal++) {
+    MeshPtr mesh = meshes[meshOrdinal];
+    
+    // check that the H1Orders are right to begin with:
+    set<GlobalIndexType> cellIDs = mesh->getActiveCellIDs();
+    if (! cellsHaveH1Order(mesh, H1Order, cellIDs)) {
+      cout << "Internal test error: initial mesh order does not match expected.\n";
+      success = false;
+    }
+    
+    // first, try a uniform p-refinement:
+    mesh->pRefine(cellIDs,2);
+    H1Order += 2;
+    if (! cellsHaveH1Order(mesh, H1Order, cellIDs)) {
+      cout << "Test failure: after p-refinement (by 2), cells do not match expected order.\n";
+      success = false;
+    }
+
+    // now, a uniform p-unrefinement to take us back:
+    mesh->pRefine(cellIDs,-2);
+    H1Order -= 2;
+    if (! cellsHaveH1Order(mesh, H1Order, cellIDs)) {
+      cout << "Test failure: after p-refinement (by 2), cells do not match expected order.\n";
+      success = false;
+    }
+    
+    // now, h-refine
+    CellPtr cell0 = mesh->getTopology()->getCell(0);
+    RefinementPatternPtr refPattern = RefinementPattern::regularRefinementPattern(cell0->topology()->getKey());
+    set<GlobalIndexType> set0;
+    set0.insert(0);
+    mesh->hRefine(set0, refPattern);
+    
+    cellIDs = mesh->getActiveCellIDs();
+    if (! cellsHaveH1Order(mesh, H1Order, cellIDs)) {
+      cout << "After h-refinement, mesh order does not match expected.\n";
+      success = false;
+    }
+    // uniform p-refinement:
+    mesh->pRefine(cellIDs,1);
+    H1Order += 1;
+    if (! cellsHaveH1Order(mesh, H1Order, cellIDs)) {
+      cout << "After h-refinement followed by p-refinement, mesh order does not match expected.\n";
+      success = false;
+    }
+    if (! cellsHaveH1Order(mesh, H1Order, set0)) {
+      cout << "After h-refinement followed by p-refinement, cell 0 (the parent) does not have the new polynomial order.\n";
+      success = false;
+    }
+    
+    mesh->pRefine(cellIDs,-1);
+    H1Order -= 1;
+    if (! cellsHaveH1Order(mesh, H1Order, cellIDs)) {
+      cout << "After h-refinement followed by p-refinement and p-unrefinement, mesh order does not match expected.\n";
+      success = false;
+    }
+    if (! cellsHaveH1Order(mesh, H1Order, set0)) {
+      cout << "After h-refinement followed by p-refinement and p-unrefinement, cell 0 (the parent) does not have the new polynomial order.\n";
+      success = false;
+    }
+  }
   return success;
 }

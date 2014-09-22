@@ -9,8 +9,8 @@
 #include "CamelliaCellTools.h"
 #include "BasisCache.h"
 
-CellTopoPtr CamelliaCellTools::cellTopoForKey(unsigned key) {
-  static CellTopoPtr node, line, triangle, quad, tet, hex;
+CellTopoPtrLegacy CamelliaCellTools::cellTopoForKey(unsigned key) {
+  static CellTopoPtrLegacy node, line, triangle, quad, tet, hex;
   
   switch (key) {
     case shards::Node::key:

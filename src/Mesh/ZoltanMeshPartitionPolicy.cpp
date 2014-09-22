@@ -18,6 +18,8 @@
 
 #include "MPIWrapper.h"
 
+#include "Solution.h"
+
 #include <Teuchos_GlobalMPISession.hpp>
 
 ZoltanMeshPartitionPolicy::ZoltanMeshPartitionPolicy(){
@@ -449,8 +451,8 @@ int ZoltanMeshPartitionPolicy::get_elem_data_size(void *data,
   // returns size in bytes
   Mesh *mesh = (Mesh*) data;
   GlobalIndexType cellID = *global_id;
-  return CellDataMigration::dataSize(mesh, cellID);
   *ierr = ZOLTAN_OK; // CellDataMigration throws exceptions if it's not OK
+  return CellDataMigration::dataSize(mesh, cellID);
 }
 void ZoltanMeshPartitionPolicy::pack_elem_data(void *data,
                                                int num_gid_entries,
@@ -463,7 +465,15 @@ void ZoltanMeshPartitionPolicy::pack_elem_data(void *data,
                                                int *ierr) {
   Mesh *mesh = (Mesh*) data;
   GlobalIndexType cellID = *global_id;
-  CellDataMigration::packData(mesh, cellID, buf, size);
+  CellPtr cell = mesh->getTopology()->getCell(cellID);
+  bool isChild = cell->getParent().get() != NULL;
+  bool hasData = false;
+  if (mesh->globalDofAssignment()->getRegisteredSolutions().size() > 0) {
+    Solution* soln = mesh->globalDofAssignment()->getRegisteredSolutions()[0];
+    hasData = soln->cellHasCoefficientsAssigned(cellID);
+  }
+  CellDataMigration::packData(mesh, cellID, isChild && !hasData, buf, size);
+//  CellDataMigration::packData(mesh, cellID, false, buf, size);
   *ierr = ZOLTAN_OK; // CellDataMigration throws exceptions if it's not OK
 }
 

@@ -64,7 +64,7 @@ vector< pair< GlobalIndexType, unsigned> > Cell::getDescendantsForSide(int sideI
   return descendantsForSide;
 }
 
-Cell::Cell(CellTopoPtr cellTopo, const vector<unsigned> &vertices, const vector< map< unsigned, unsigned > > &subcellPermutations,
+Cell::Cell(CellTopoPtrLegacy cellTopo, const vector<unsigned> &vertices, const vector< map< unsigned, unsigned > > &subcellPermutations,
      unsigned cellIndex, MeshTopology* meshTopo) {
   _cellTopo = cellTopo;
   _vertices = vertices;
@@ -347,6 +347,19 @@ CellPtr Cell::ancestralCellForSubcell(unsigned subcdim, unsigned subcord) {
   return currentAncestor;
 }
 
+vector<unsigned> Cell::boundarySides() {
+  int sideCount = CamelliaCellTools::getSideCount(*_cellTopo);
+  vector<unsigned> sides;
+  for (unsigned sideOrdinal=0; sideOrdinal < sideCount; sideOrdinal++) {
+    if (_neighbors[sideOrdinal].first == -1) sides.push_back(sideOrdinal);
+  }
+  return sides;
+}
+
+bool Cell::isBoundary(unsigned int sideOrdinal) {
+  return _neighbors[sideOrdinal].first == -1;
+}
+
 MeshTopology* Cell::meshTopology() {
   return _meshTopo;
 }
@@ -417,7 +430,7 @@ unsigned Cell::subcellPermutation(unsigned d, unsigned scord) {
   return _subcellPermutations[d][scord];
 }
 
-CellTopoPtr Cell::topology() {
+CellTopoPtrLegacy Cell::topology() {
   return _cellTopo;
 }
 

@@ -53,7 +53,7 @@ string stringForRefinementType(RefinementType refType) {
   }
 }
 
-RefinementPatternPtr refPatternForRefType(RefinementType refType, CellTopoPtr cellTopo) {
+RefinementPatternPtr refPatternForRefType(RefinementType refType, CellTopoPtrLegacy cellTopo) {
   if (refType==H_REFINEMENT) return RefinementPattern::regularRefinementPattern(cellTopo->getKey());
   else if (refType==NULL_REFINEMENT) return RefinementPattern::noRefinementPattern(cellTopo);
   else if ((refType==H_X_REFINEMENT) && (cellTopo->getKey() == shards::Quadrilateral<4>::key)) {
@@ -136,7 +136,7 @@ void RefinementHistory::playback(MeshPtr mesh) {
       }
     }
     GlobalIndexType sampleCellID = *(cellIDs.begin());
-    CellTopoPtr cellTopo = mesh->getElementType(sampleCellID)->cellTopoPtr;
+    CellTopoPtrLegacy cellTopo = mesh->getElementType(sampleCellID)->cellTopoPtr;
     
     switch (refType) {
       case P_REFINEMENT:

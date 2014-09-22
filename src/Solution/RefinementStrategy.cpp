@@ -83,7 +83,7 @@ void RefinementStrategy::refine(bool printToConsole) {
       energyEntryIt->second = sqrt( energyEntryIt->second );
     }
   } else {
-    energyError = _solution->energyError();
+    energyError = _solution->globalEnergyError();
   }
   vector< Teuchos::RCP< Element > > activeElements = mesh->activeElements();
   
@@ -95,28 +95,18 @@ void RefinementStrategy::refine(bool printToConsole) {
   for (set<GlobalIndexType>::iterator cellIt=cellIDs.begin(); cellIt != cellIDs.end(); cellIt++) {
     int cellID = *cellIt;
     cellMeasures[cellID] = mesh->getCellMeasure(cellID);
+    maxError = max(maxError,energyError.find(cellID)->second);
   }
   
-  for (vector< Teuchos::RCP< Element > >::iterator activeElemIt = activeElements.begin();
-       activeElemIt != activeElements.end(); activeElemIt++) {
-    Teuchos::RCP< Element > current_element = *(activeElemIt);
-    int cellID = current_element->cellID();
-    double cellEnergyError = energyError.find(cellID)->second;
-    
-    double h = sqrt(cellMeasures[cellID]);
-    if (h > _min_h) {
-      maxError = max(cellEnergyError,maxError);
-    }
-    totalEnergyError += cellEnergyError * cellEnergyError;
-  }
-  totalEnergyError = sqrt(totalEnergyError);
+  totalEnergyError = _solution->energyErrorTotal();
   if ( printToConsole && _reportPerCellErrors ) {
     cout << "per-cell Energy Error Squared for cells with > 0.1% of squared energy error\n";
     for (vector< Teuchos::RCP< Element > >::iterator activeElemIt = activeElements.begin();
          activeElemIt != activeElements.end(); activeElemIt++) {
       Teuchos::RCP< Element > current_element = *(activeElemIt);
-      int cellID = current_element->cellID();
+      GlobalIndexType cellID = current_element->cellID();
       double cellEnergyError = energyError.find(cellID)->second;
+//      cout << "cellID " << cellID << " has energy error (not squared) " << cellEnergyError << endl;
       double percent = (cellEnergyError*cellEnergyError) / (totalEnergyError*totalEnergyError) * 100;
       if (percent > 0.1) {
         cout << cellID << ": " << cellEnergyError*cellEnergyError << " ( " << percent << " %)\n";
@@ -178,7 +168,7 @@ void RefinementStrategy::refine(bool printToConsole) {
 void RefinementStrategy::getCellsAboveErrorThreshhold(vector<GlobalIndexType> &cellsToRefine){
   // greedy refinement algorithm - mark cells for refinement
   MeshPtr mesh = this->mesh();
-  const map<GlobalIndexType, double>* energyError = &(_solution->energyError());
+  const map<GlobalIndexType, double>* energyError = &(_solution->globalEnergyError());
   vector< Teuchos::RCP< Element > > activeElements = mesh->activeElements();
   
   double maxError = 0.0;
@@ -372,7 +362,7 @@ void RefinementStrategy::getAnisotropicCellsToRefine(map<GlobalIndexType,double>
 
 // anisotropy with variable threshholding
 void RefinementStrategy::getAnisotropicCellsToRefine(map<GlobalIndexType,double> &xErr, map<GlobalIndexType,double> &yErr, vector<GlobalIndexType> &xCells, vector<GlobalIndexType> &yCells, vector<GlobalIndexType> &regCells, map<GlobalIndexType,double> &threshMap){
-  map<GlobalIndexType,double> energyError = _solution->energyError();
+  map<GlobalIndexType,double> energyError = _solution->globalEnergyError();
   MeshPtr mesh = this->mesh();
   vector<GlobalIndexType> cellsToRefine;
   getCellsAboveErrorThreshhold(cellsToRefine);

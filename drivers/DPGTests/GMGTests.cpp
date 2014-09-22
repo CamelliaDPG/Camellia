@@ -154,81 +154,13 @@ SolutionPtr GMGTests::poissonExactSolutionRefined(int H1Order, FunctionPtr phi_e
   
   set<GlobalIndexType> cellIDs;
   switch (refinementSetOrdinal) {
-    case 0:
-      cellIDs.insert(1);
+    case 0: // no refinements
+      break;
+    case 1: // one refinement
       cellIDs.insert(3);
-      mesh->hRefine(cellIDs,RefinementPattern::regularRefinementPatternQuad(),false);
-      
-      cellIDs.clear();
-      cellIDs.insert(6);
-      cellIDs.insert(7);
-      cellIDs.insert(8);
-      cellIDs.insert(10);
-      cellIDs.insert(11);
-      mesh->hRefine(cellIDs,RefinementPattern::regularRefinementPatternQuad(),false);
-      
-      cellIDs.clear();
-      cellIDs.insert(2);
-      mesh->hRefine(cellIDs,RefinementPattern::regularRefinementPatternQuad(),false);
-      
-      cellIDs.clear();
-      cellIDs.insert(4);
-      cellIDs.insert(9);
-      cellIDs.insert(12);
-      cellIDs.insert(14);
-      cellIDs.insert(19);
-      cellIDs.insert(26);
-      cellIDs.insert(31);
-      mesh->hRefine(cellIDs,RefinementPattern::regularRefinementPatternQuad(),false);
-      
-      cellIDs.clear();
-      cellIDs.insert(0);
-      cellIDs.insert(5);
       mesh->hRefine(cellIDs,RefinementPattern::regularRefinementPatternQuad(),true);
       break;
-    case 1:
-//      cellIDs.insert(1);
-//      cellIDs.insert(3);
-//      mesh->hRefine(cellIDs,RefinementPattern::regularRefinementPatternQuad(),false);
-//      cellIDs.clear();
-//      
-//      cellIDs.insert(7);
-//      cellIDs.insert(10);
-//      mesh->hRefine(cellIDs,RefinementPattern::regularRefinementPatternQuad(),false);
-//      cellIDs.clear();
-//      
-//      cellIDs.insert(15);
-//      cellIDs.insert(18);
-//      mesh->hRefine(cellIDs,RefinementPattern::regularRefinementPatternQuad(),false);
-//      cellIDs.clear();
-//      
-//      cellIDs.insert(23);
-//      cellIDs.insert(26);
-//      mesh->hRefine(cellIDs,RefinementPattern::regularRefinementPatternQuad(),false);
-//      cellIDs.clear();
-//      
-//      cellIDs.insert(31);
-//      cellIDs.insert(34);
-//      mesh->hRefine(cellIDs,RefinementPattern::regularRefinementPatternQuad(),false);
-//      cellIDs.clear();
-//      
-//      cellIDs.insert(38);
-//      cellIDs.insert(39);
-//      cellIDs.insert(42);
-//      cellIDs.insert(43);
-//      mesh->hRefine(cellIDs,RefinementPattern::regularRefinementPatternQuad(),true);
-//      cellIDs.clear();
-//      
-//      cellIDs.insert(35);
-//      cellIDs.insert(22);
-//      cellIDs.insert(27);
-//      cellIDs.insert(14);
-//      cellIDs.insert(19);
-//      cellIDs.insert(6);
-//      cellIDs.insert(11);
-//      mesh->hRefine(cellIDs,RefinementPattern::regularRefinementPatternQuad(),true);
-//      break;
-//    case 2: // trying to capture the bad behavior of case 1 without so many elements:
+    case 2:
       cellIDs.insert(3);
       mesh->hRefine(cellIDs,RefinementPattern::regularRefinementPatternQuad(),false);
       cellIDs.clear();
@@ -241,8 +173,40 @@ SolutionPtr GMGTests::poissonExactSolutionRefined(int H1Order, FunctionPtr phi_e
       cellIDs.insert(1);
       mesh->hRefine(cellIDs,RefinementPattern::regularRefinementPatternQuad(),true);
       cellIDs.clear();
-      
       break;
+      
+  case 3:
+    cellIDs.insert(1);
+    cellIDs.insert(3);
+    mesh->hRefine(cellIDs,RefinementPattern::regularRefinementPatternQuad(),false);
+    
+    cellIDs.clear();
+    cellIDs.insert(6);
+    cellIDs.insert(7);
+    cellIDs.insert(8);
+    cellIDs.insert(10);
+    cellIDs.insert(11);
+    mesh->hRefine(cellIDs,RefinementPattern::regularRefinementPatternQuad(),false);
+    
+    cellIDs.clear();
+    cellIDs.insert(2);
+    mesh->hRefine(cellIDs,RefinementPattern::regularRefinementPatternQuad(),false);
+    
+    cellIDs.clear();
+    cellIDs.insert(4);
+    cellIDs.insert(9);
+    cellIDs.insert(12);
+    cellIDs.insert(14);
+    cellIDs.insert(19);
+    cellIDs.insert(26);
+    cellIDs.insert(31);
+    mesh->hRefine(cellIDs,RefinementPattern::regularRefinementPatternQuad(),false);
+    
+    cellIDs.clear();
+    cellIDs.insert(0);
+    cellIDs.insert(5);
+    mesh->hRefine(cellIDs,RefinementPattern::regularRefinementPatternQuad(),true);
+    break;
   }
   
   return soln;
@@ -293,7 +257,7 @@ bool GMGTests::testGMGOperatorIdentity() {
   bool success = true;
   
   // some 2D-specific tests on refined meshes
-  for (int refinementOrdinal=1; refinementOrdinal<2; refinementOrdinal++) {
+  for (int refinementOrdinal=0; refinementOrdinal<4; refinementOrdinal++) {
     int spaceDim = 2;
     
     int H1Order_coarse = 2, H1Order = 2;
@@ -314,6 +278,8 @@ bool GMGTests::testGMGOperatorIdentity() {
     Teuchos::RCP<Solver> coarseSolver = Teuchos::rcp( new KluSolver );
     
     GMGOperator gmgOperator(zeroBCs, fineMesh, graphNorm, fineMesh, solnFine->getPartitionMap(), coarseSolver);
+    
+    GnuPlotUtil::writeComputationalMeshSkeleton("/tmp/fineMesh", fineMesh, true); // true: label cells
     
 //    GDAMinimumRule* fineGDA = dynamic_cast< GDAMinimumRule*>(fineMesh->globalDofAssignment().get());
     
@@ -347,7 +313,8 @@ bool GMGTests::testGMGOperatorIdentity() {
       if (diff > tol) {
         GlobalIndexTypeToCast gid = rhsVector->Map().GID(lid);
 
-        cout << "Failure: in rhs mapping for gid " << gid << ", expected = " << expected << "; actual = " << actual << endl;
+        cout << "Failure: in rhs mapping for refinement sequence " << refinementOrdinal;
+        cout << " and gid " << gid << ", expected = " << expected << "; actual = " << actual << endl;
         success = false;
       }
     }
@@ -563,17 +530,14 @@ bool GMGTests::testGMGSolverIdentity() {
     bool applySmoothing = false;
     int maxIters = applySmoothing ? 100 : 1; // if smoothing not applied, then GMG should recover exactly the direct solution, in 1 iteration
     Teuchos::RCP<Solver> coarseSolver = Teuchos::rcp( new KluSolver );
-    Teuchos::RCP<GMGSolver> gmgSolver = Teuchos::rcp( new GMGSolver(zeroBCs, fineMesh, graphNorm, fineMesh,
-                                                                    solnFine->getPartitionMap(),
-                                                                    maxIters, iter_tol, coarseSolver) );
-    
-    gmgSolver->setApplySmoothingOperator(applySmoothing);
-    
-    Teuchos::RCP<Solver> fineSolver = gmgSolver;
     
 //    solnFine->setWriteMatrixToFile(true, "/tmp/A_fine.dat");
     
     {
+      Teuchos::RCP<GMGSolver> gmgSolver = Teuchos::rcp( new GMGSolver(zeroBCs, fineMesh, graphNorm, fineMesh,
+                                                                      solnFine->getPartitionMap(),
+                                                                      maxIters, iter_tol, coarseSolver) );
+
 //      GnuPlotUtil::writeComputationalMeshSkeleton("/tmp/fineMesh", fineMesh, true); // true: label cells
       
       // before we test the solve proper, let's check that with smoothing off, ApplyInverse acts just like the standard solve
@@ -593,7 +557,7 @@ bool GMGTests::testGMGSolverIdentity() {
       gmgSolver->setApplySmoothingOperator(false); // turn off for the next test:
       gmgSolver->gmgOperator().ApplyInverse(rhsVectorCopy, gmg_lhsVector);
       
-      double tol = 1e-11;
+      double tol = 1e-10;
       int minLID = gmg_lhsVector.Map().MinLID();
       int numLIDs = gmg_lhsVector.Map().NumMyElements();
       for (int lid=minLID; lid < minLID + numLIDs; lid++ ) {
@@ -608,7 +572,15 @@ bool GMGTests::testGMGSolverIdentity() {
         }
       }
     }
+
+    Teuchos::RCP<GMGSolver> gmgSolver = Teuchos::rcp( new GMGSolver(zeroBCs, fineMesh, graphNorm, fineMesh,
+                                                                    solnFine->getPartitionMap(),
+                                                                    maxIters, iter_tol, coarseSolver) );
     
+    gmgSolver->setApplySmoothingOperator(applySmoothing);
+    
+    Teuchos::RCP<Solver> fineSolver = gmgSolver;
+
     solnFine->solve(coarseSolver);
     
     solnCoarse->solve(fineSolver);
@@ -682,7 +654,7 @@ bool GMGTests::testGMGSolverIdentity() {
         gmgSolver->setApplySmoothingOperator(false); // turn off for the next test:
         gmgSolver->gmgOperator().ApplyInverse(rhsVectorCopy, gmg_lhsVector);
         
-        double tol = 1e-12;
+        double tol = 1e-10;
         int minLID = gmg_lhsVector.Map().MinLID();
         int numLIDs = gmg_lhsVector.Map().NumMyElements();
         for (int lid=minLID; lid < minLID + numLIDs; lid++ ) {
@@ -759,7 +731,7 @@ bool GMGTests::testGMGSolverTwoGrid() {
       MeshPtr fineMesh = actualPoissonSolution->mesh();
       
       // refine uniformly once in both exact and actual:
-      CellTopoPtr cellTopo = coarseMesh->getTopology()->getCell(0)->topology();
+      CellTopoPtrLegacy cellTopo = coarseMesh->getTopology()->getCell(0)->topology();
       RefinementPatternPtr refPattern = RefinementPattern::regularRefinementPattern(cellTopo->getKey());
       exactMesh->hRefine(exactMesh->getActiveCellIDs(), refPattern);
       fineMesh->hRefine(fineMesh->getActiveCellIDs(), refPattern);
@@ -838,7 +810,7 @@ bool GMGTests::testGMGSolverThreeGrid() {
       MeshPtr fineMesh = actualPoissonSolution->mesh();
       
       // refine uniformly once in both exact and actual:
-      CellTopoPtr cellTopo = coarseMesh->getTopology()->getCell(0)->topology();
+      CellTopoPtrLegacy cellTopo = coarseMesh->getTopology()->getCell(0)->topology();
       RefinementPatternPtr refPattern = RefinementPattern::regularRefinementPattern(cellTopo->getKey());
       exactMesh->hRefine(exactMesh->getActiveCellIDs(), refPattern);
       fineMesh->hRefine(fineMesh->getActiveCellIDs(), refPattern);

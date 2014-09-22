@@ -1096,19 +1096,19 @@ bool GDAMinimumRuleTests::testHangingNodePoisson3D() {
     int rank = Teuchos::GlobalMPISession::getRank();
 //    if (rank==0) cout << "mesh entities:\n";
 //    if (rank==0) mesh->getTopology()->printAllEntities();
-#ifdef HAVE_EPETRAEXT_HDF5
-    if (rank==0) cout << "Beginning export of (zero) solution on irregular mesh.\n";
-    set<GlobalIndexType> cellIndices = mesh->getTopology()->getActiveCellIndices();
-    for (set<GlobalIndexType>::iterator cellIt = cellIndices.begin(); cellIt != cellIndices.end(); cellIt++) {
-      GlobalIndexType cellIndex = *cellIt;
-      ostringstream fileName;
-      fileName << "poisson_" << irregularity << "irregular_soln3D_cell_" << cellIndex;
-      HDF5Exporter exporter(mesh,fileName.str());
-      set<GlobalIndexType> cellIndexSet;
-      cellIndexSet.insert(cellIndex);
-      exporter.exportSolution(soln, vf, 0, 4, map<int,int>(), cellIndexSet);
-    }
-#endif
+//#ifdef HAVE_EPETRAEXT_HDF5
+//    if (rank==0) cout << "Beginning export of (zero) solution on irregular mesh.\n";
+//    set<GlobalIndexType> cellIndices = mesh->getTopology()->getActiveCellIndices();
+//    for (set<GlobalIndexType>::iterator cellIt = cellIndices.begin(); cellIt != cellIndices.end(); cellIt++) {
+//      GlobalIndexType cellIndex = *cellIt;
+//      ostringstream fileName;
+//      fileName << "poisson_" << irregularity << "irregular_soln3D_cell_" << cellIndex;
+//      HDF5Exporter exporter(mesh,fileName.str());
+//      set<GlobalIndexType> cellIndexSet;
+//      cellIndexSet.insert(cellIndex);
+//      exporter.exportSolution(soln, vf, 0, 4, map<int,int>(), cellIndexSet);
+//    }
+//#endif
     
     if (!checkLocalGlobalConsistency(mesh) ) {
       cout << "FAILURE: " << irregularity << "-irregular Poisson 3D mesh fails local-to-global consistency check.\n";
@@ -1775,7 +1775,7 @@ bool GDAMinimumRuleTests::testPoissonCompatibleMeshWithHeterogeneousOrientations
 
   MeshTopologyPtr meshTopology = Teuchos::rcp( new MeshTopology(spaceDim) );
   
-  CellTopoPtr quadTopo = Teuchos::rcp( new shards::CellTopology(shards::getCellTopologyData<shards::Quadrilateral<4> >() ));
+  CellTopoPtrLegacy quadTopo = Teuchos::rcp( new shards::CellTopology(shards::getCellTopologyData<shards::Quadrilateral<4> >() ));
   
   cout << "Note: experimentally trying with both cells oriented CW.\n";
   meshTopology->addCell(quadTopo, BAFE);

@@ -50,7 +50,7 @@ int main(int argc, char *argv[])
 
   // {
   // // 1D tests
-  //   CellTopoPtr line_2 = Teuchos::rcp( new shards::CellTopology(shards::getCellTopologyData<shards::Line<2> >() ) );
+  //   CellTopoPtrLegacy line_2 = Teuchos::rcp( new shards::CellTopology(shards::getCellTopologyData<shards::Line<2> >() ) );
 
   // // let's draw a line
   //   vector<double> v0 = makeVertex(0);
@@ -73,7 +73,7 @@ int main(int argc, char *argv[])
   //   elementVertices.push_back(line1VertexList);
   //   elementVertices.push_back(line2VertexList);
 
-  //   vector< CellTopoPtr > cellTopos;
+  //   vector< CellTopoPtrLegacy > cellTopos;
   //   cellTopos.push_back(line_2);
   //   cellTopos.push_back(line_2);
   //   MeshGeometryPtr meshGeometry = Teuchos::rcp( new MeshGeometry(vertices, elementVertices, cellTopos) );
@@ -105,8 +105,8 @@ int main(int argc, char *argv[])
   // }
   {
   // 2D tests
-    CellTopoPtr quad_4 = Teuchos::rcp( new shards::CellTopology(shards::getCellTopologyData<shards::Quadrilateral<4> >() ) );
-    CellTopoPtr tri_3 = Teuchos::rcp( new shards::CellTopology(shards::getCellTopologyData<shards::Triangle<3> >() ) );
+    CellTopoPtrLegacy quad_4 = Teuchos::rcp( new shards::CellTopology(shards::getCellTopologyData<shards::Quadrilateral<4> >() ) );
+    CellTopoPtrLegacy tri_3 = Teuchos::rcp( new shards::CellTopology(shards::getCellTopologyData<shards::Triangle<3> >() ) );
 
   // let's draw a little house
     vector<double> v0 = makeVertex(-1,0);
@@ -137,7 +137,7 @@ int main(int argc, char *argv[])
     elementVertices.push_back(quadVertexList);
     elementVertices.push_back(triVertexList);
 
-    vector< CellTopoPtr > cellTopos;
+    vector< CellTopoPtrLegacy > cellTopos;
     cellTopos.push_back(quad_4);
     cellTopos.push_back(tri_3);
     MeshGeometryPtr meshGeometry = Teuchos::rcp( new MeshGeometry(vertices, elementVertices, cellTopos) );
@@ -228,7 +228,7 @@ int main(int argc, char *argv[])
 
   // {
   // // 3D tests
-  //   CellTopoPtr hex = Teuchos::rcp(new shards::CellTopology(shards::getCellTopologyData<shards::Hexahedron<8> >() ));
+  //   CellTopoPtrLegacy hex = Teuchos::rcp(new shards::CellTopology(shards::getCellTopologyData<shards::Hexahedron<8> >() ));
 
   // // let's draw a little box
   //   vector<double> v0 = makeVertex(0,0,0);
@@ -269,7 +269,7 @@ int main(int argc, char *argv[])
   //   elementVertices.push_back(hexVertexList);
   //   // elementVertices.push_back(triVertexList);
 
-  //   vector< CellTopoPtr > cellTopos;
+  //   vector< CellTopoPtrLegacy > cellTopos;
   //   cellTopos.push_back(hex);
   //   // cellTopos.push_back(tri_3);
   //   MeshGeometryPtr meshGeometry = Teuchos::rcp( new MeshGeometry(vertices, elementVertices, cellTopos) );

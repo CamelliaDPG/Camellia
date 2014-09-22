@@ -642,7 +642,7 @@ SubBasisReconciliationWeights BasisReconciliation::computeConstrainedWeights(uns
       }
       
       if (fineSubcellAncestralDimension == 0) { // then the "cubature point" is a node in the ancestral subcell's child
-        CellTopoPtr subcellAncestorChildTopo = subcellRefPattern->childTopology(subcellRefinementBranch[0].second);
+        CellTopoPtrLegacy subcellAncestorChildTopo = subcellRefPattern->childTopology(subcellRefinementBranch[0].second);
         FieldContainer<double> subcellAncestorChildRefNodes(subcellAncestorChildTopo->getVertexCount(),subcellAncestor.first);
         CamelliaCellTools::refCellNodesForTopology(subcellAncestorChildRefNodes, *subcellAncestorChildTopo);
         subcellCubaturePoints.resize(1, subcellAncestor.first);
@@ -712,7 +712,7 @@ SubBasisReconciliationWeights BasisReconciliation::computeConstrainedWeights(uns
     coarseDomainPoints = coarseSubcellCubaturePoints;
   } else {
     // If fineSubcellAncestralDimension is *NOT* the same as the domain dimension, then the ancestral subcell is a subcell of the coarse domain
-    CellTopoPtr refinementRootCellTopo = cellRefinementBranch[0].first->parentTopology();
+    CellTopoPtrLegacy refinementRootCellTopo = cellRefinementBranch[0].first->parentTopology();
     
     unsigned subcellOrdinalInCoarseDomain = CamelliaCellTools::subcellReverseOrdinalMap(*refinementRootCellTopo,
                                                                                         domainDim,
