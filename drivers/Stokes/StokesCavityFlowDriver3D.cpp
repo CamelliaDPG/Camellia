@@ -142,7 +142,7 @@ int main(int argc, char *argv[]) {
   bool pMultiGridOnly = true;
   bool useWeightedGraphNorm = true;
   
-  string meshLoadName = ""; // file to load mesh from
+  string meshLoadName = "", coarseMeshLoadName = ""; // file(s) to load mesh from
   int startingRefinementNumber = 0;
   int maxCellsPerRank = INT_MAX;
   
@@ -161,6 +161,7 @@ int main(int argc, char *argv[]) {
   cmdp.setOption("mumpsMaxMemoryMB", &mumpsMaxMemoryMB, "max allocation size MUMPS is allowed to make, in MB");
   cmdp.setOption("refinementThreshold", &energyThreshold, "relative energy threshold for refinements");
   cmdp.setOption("meshLoadName", &meshLoadName, "file to load initial mesh from");
+  cmdp.setOption("coarseMeshLoadName", &coarseMeshLoadName, "file to load initial mesh from");
   cmdp.setOption("startingRefNumber", &startingRefinementNumber, "where to start counting refinements (useful for restart)");
   cmdp.setOption("maxCellsPerRank", &maxCellsPerRank, "max cells per rank (will quit refining once this is reached)");
   cmdp.setOption("usePMultigrid", "useHPMultigrid", &pMultiGridOnly);
@@ -291,10 +292,7 @@ int main(int argc, char *argv[]) {
     coarseMesh = MeshFactory::rectilinearMesh(stokesBF, domainDimensions, elementCounts, coarseMesh_k + 1, delta_k);
   } else {
     mesh = MeshFactory::loadFromHDF5(stokesBF, meshLoadName);
-    coarseMesh = MeshFactory::loadFromHDF5(stokesBF, meshLoadName);
-    // unrefine coarse mesh in p:
-    int pDiff = H1Order - coarseMesh_k - 1;
-    coarseMesh->pRefine(coarseMesh->getActiveCellIDs(), -pDiff);
+    coarseMesh = MeshFactory::loadFromHDF5(stokesBF, coarseMeshLoadName);
   }
   
   if (pMultiGridOnly) {
@@ -449,7 +447,7 @@ int main(int argc, char *argv[]) {
   HDF5Exporter exporter(mesh,dir_name.str());
   exporter.exportSolution(solution,varFactory,startingRefinementNumber);
   if (rank==0) cout << "...completed.\n";
-  ostringstream meshFileName;
+  ostringstream meshFileName, coarseMeshFileName;
   meshFileName << "stokesCavityFlow3D_k" << k << "_ref" << startingRefinementNumber << ".mesh";
   mesh->saveToHDF5(meshFileName.str());
 #endif
@@ -477,7 +475,11 @@ int main(int argc, char *argv[]) {
     ostringstream meshFileName;
     meshFileName << "stokesCavityFlow3D_k" << k << "_ref" << refIndex+1 << ".mesh";
     mesh->saveToHDF5(meshFileName.str());
-    if (rank==0) cout << "...completed.\n";
+    coarseMeshFileName.str("");
+    coarseMeshFileName << "stokesCavityFlow3D_k" << k << "_ref" << refIndex+1 << "_coarse.mesh";
+    coarseMesh->saveToHDF5(coarseMeshFileName.str());
+    if (rank==0) cout << "Refined mesh saved to " << meshFileName.str() << endl;
+    if (rank==0) cout << "(Use --meshLoadName=\"" << meshFileName.str() << "\" --coarseMeshLoadName=\"" << coarseMeshFileName.str() << "\" --startingRefNumber=" << refIndex + 1 << ")\n";
 #endif
     
     int elementCount = mesh->getActiveCellIDs().size();
@@ -528,8 +530,11 @@ int main(int argc, char *argv[]) {
   meshFileName.str("");
   meshFileName << "stokesCavityFlow3D_k" << k << "_ref" << refCount + startingRefinementNumber + 1 << ".mesh";
   mesh->saveToHDF5(meshFileName.str());
+  coarseMeshFileName.str("");
+  coarseMeshFileName << "stokesCavityFlow3D_k" << k << "_ref" << refCount + startingRefinementNumber + 1 << "_coarse.mesh";
+  coarseMesh->saveToHDF5(coarseMeshFileName.str());
   if (rank==0) cout << "Mesh for next run saved to " << meshFileName.str() << endl;
-  if (rank==0) cout << "(Use --meshLoadName=\"" << meshFileName.str() << "\" --startingRefNumber=" << refCount + startingRefinementNumber + 1 << ")\n";
+  if (rank==0) cout << "(Use --meshLoadName=\"" << meshFileName.str() << "\" --coarseMeshLoadName=\"" << coarseMeshFileName.str() << "\" --startingRefNumber=" << refCount + startingRefinementNumber + 1 << ")\n";
 #endif
   
 //  cout << "Final Mesh, entities report:\n";
