@@ -8,6 +8,10 @@
 #include "Solution.h"
 #include "HDF5Exporter.h"
 
+#include "GlobalDofAssignment.h"
+
+#include "Epetra_FEVector.h"
+
 #ifdef HAVE_MPI
 #include <Teuchos_GlobalMPISession.hpp>
 #endif
@@ -184,6 +188,9 @@ int main(int argc, char *argv[])
     ////////////////////   SOLVE & REFINE   ///////////////////////
 
     // Output solution
+    FieldContainer<GlobalIndexType> savedCellPartition;
+    Teuchos::RCP<Epetra_FEVector> savedLHSVector;
+
     {
       ////////////////////   BUILD MESH   ///////////////////////
       int H1Order = 4, pToAdd = 2;
@@ -207,6 +214,8 @@ int main(int argc, char *argv[])
         solution->saveToHDF5("Test0_soln.h5");
         exporter.exportSolution(solution, varFactory, ref, 2, cellIDToSubdivision(mesh, 4));
       }
+      mesh->globalDofAssignment()->getPartitions(savedCellPartition);
+      savedLHSVector = solution->getLHSVector();
     }
     // {
     //   MeshPtr loadedMesh = MeshFactory::loadFromHDF5(bf, "Test0.h5");
@@ -217,10 +226,70 @@ int main(int argc, char *argv[])
     // }
     {
       MeshPtr loadedMesh = MeshFactory::loadFromHDF5(bf, "Test0.h5");
+      FieldContainer<GlobalIndexType> loadedCellPartition;
+      loadedMesh->globalDofAssignment()->getPartitions(loadedCellPartition);
+      if (loadedCellPartition.size() != savedCellPartition.size()) {
+        cout << "Error: the loaded partition has different size/shape than the saved one.\n";
+        cout << "loaded size: " << loadedCellPartition.size() << "; saved size: " << savedCellPartition.size() << endl;
+      } else {
+        bool partitionsMatch = true;
+        for (int i=0; i<loadedCellPartition.size(); i++) {
+          if (loadedCellPartition[i] != savedCellPartition[i]) {
+            partitionsMatch = false;
+            break;
+          }
+        }
+        if (partitionsMatch) cout << "Saved and loaded cell partitions match!\n";
+        else {
+          cout << "Saved and loaded cell partitions differ.\n";
+          cout << "saved:\n" << savedCellPartition;
+          cout << "loaded:\n" << loadedCellPartition;
+        }
+      }
       Teuchos::RCP<Solution> loadedSolution = Teuchos::rcp( new Solution(loadedMesh, bc, rhs, ip) );
       // loadedSolution->solve(false);
       // loadedSolution->addSolution(loadedSolution, -1.0);
       loadedSolution->loadFromHDF5("Test0_soln.h5");
+      
+      Teuchos::RCP<Epetra_FEVector> loadedLHSVector = loadedSolution->getLHSVector();
+      if (loadedLHSVector->Map().MinLID() != savedLHSVector->Map().MinLID()) {
+        cout << "On rank " << commRank << ", loaded min LID = " << loadedLHSVector->Map().MinLID();
+        cout << ", but saved min LID = " << savedLHSVector->Map().MinLID() << endl;
+      } else if (loadedLHSVector->Map().MaxLID() != savedLHSVector->Map().MaxLID()) {
+        cout << "On rank " << commRank << ", loaded max LID = " << loadedLHSVector->Map().MaxLID();
+        cout << ", but saved max LID = " << savedLHSVector->Map().MaxLID() << endl;
+      } else {
+        bool globalIDsMatch = true;
+        for (int lid = loadedLHSVector->Map().MinLID(); lid <= loadedLHSVector->Map().MaxLID(); lid++) {
+          if (loadedLHSVector->Map().GID(lid) != savedLHSVector->Map().GID(lid)) {
+            globalIDsMatch = false;
+          }
+        }
+        if (! globalIDsMatch) {
+          cout << "On rank " << commRank << ", loaded and saved solution vector maps differ in their global IDs.\n";
+        } else {
+          cout << "On rank " << commRank << ", loaded and saved solution vector maps match in their global IDs.\n";
+        }
+        
+        bool entriesMatch = true;
+        double tol = 1e-16;
+        for (int lid = loadedLHSVector->Map().MinLID(); lid <= loadedLHSVector->Map().MaxLID(); lid++) {
+          double loadedValue = (*loadedLHSVector)[0][lid];
+          double savedValue = (*savedLHSVector)[0][lid];
+          double diff = abs( loadedValue - savedValue );
+          if (diff > tol) {
+            entriesMatch = false;
+            cout << "On rank " << commRank << ", loaded and saved solution vectors differ in entry with lid " << lid;
+            cout << "; loaded value = " << loadedValue << "; saved value = " << savedValue << ".\n";
+          }
+        }
+        if (entriesMatch) {
+          cout << "On rank " << commRank << ", loaded and saved solution vectors match!\n";
+        } else {
+          cout << "On rank " << commRank << ", loaded and saved solution vectors do not match.\n";
+        }
+      }
+      
       HDF5Exporter exporter(loadedMesh, "SolutionLoaded");
       exporter.exportSolution(loadedSolution, varFactory, 0, 2, cellIDToSubdivision(loadedMesh, 4));
     }

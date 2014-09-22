@@ -3453,11 +3453,14 @@ void Solution::loadFromHDF5(string filename)
   hdf5.Read("Solution", lhsVec);
   string filename1 = "part1_"+Teuchos::toString(commRank)+".txt";
   string filename2 = "part2_"+Teuchos::toString(commRank)+".txt";
-  ofstream partfile1, partfile2;
+  string filename3 = "part3_"+Teuchos::toString(commRank)+".txt";
+  ofstream partfile1, partfile2, partfile3;
   partfile1.open(filename1.c_str());
   partfile2.open(filename2.c_str());
+  partfile3.open(filename3.c_str());
   getPartitionMap().Print(partfile1);
   partMap->Print(partfile2);
+  lhsVec->Map().Print(partfile3);
   Epetra_Map *pmap = partMap;
   for (int lid=pmap->MinLID(); lid <= pmap->MaxLID(); lid++) {
     (*_lhsVector)[0][lid] = (*lhsVec)[0][lid];
@@ -3486,6 +3489,7 @@ void Solution::loadFromHDF5(string filename)
   //   cout << "id = " << lhsVec << " length = " << gl << " norm1 = " << norm1 << endl;
   // }
   hdf5.Close();
+  importSolution();
 }
 #endif
 

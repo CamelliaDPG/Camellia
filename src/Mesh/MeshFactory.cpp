@@ -16,6 +16,8 @@
 
 #include "CamelliaDebugUtility.h"
 
+#include "GlobalDofAssignment.h"
+
 #ifdef HAVE_EPETRAEXT_HDF5
 #include <EpetraExt_HDF5.h>
 #include <Epetra_SerialComm.h>
@@ -47,6 +49,23 @@ static ParametricCurvePtr parametricRect(double width, double height, double x0,
     hdf5.Read("Mesh", "testOrderEnhancementsSize", testOrderEnhancementsSize);
     hdf5.Read("Mesh", "histArraySize", histArraySize);
 
+    int numPartitions, maxPartitionSize;
+    
+    hdf5.Read("Mesh", "numPartitions", numPartitions);
+    hdf5.Read("Mesh", "maxPartitionSize", maxPartitionSize);
+    FieldContainer<int> partitionsCastToInt(numPartitions,maxPartitionSize);
+    FieldContainer<GlobalIndexType> partitions;
+    if (numPartitions > 0) {
+      hdf5.Read("Mesh", "partitions", H5T_NATIVE_INT, partitionsCastToInt.size(), &partitionsCastToInt[0]);
+      partitions.resize(numPartitions,maxPartitionSize);
+      for (int i=0; i<numPartitions; i++) {
+        for (int j=0; j<maxPartitionSize; j++) {
+          partitions(i,j) = (GlobalIndexType) partitionsCastToInt(i,j);
+        }
+      }
+    } else {
+    }
+    
     int dimension, H1Order, deltaP;
     vector<int> vertexIndices(vertexIndicesSize);
     vector<int> topoKeys(topoKeysSize);
@@ -188,7 +207,7 @@ static ParametricCurvePtr parametricRect(double width, double height, double x0,
           }
         }
       }
-      bool repartitionAndRebuild = (i==histArraySize); // for h-refinements (the common case), only do this for the last set
+      bool repartitionAndRebuild = false; // we'll do this at the end: if partitions were set, we'll use those.  Otherwise, we'll just do a standard repartition
 
       switch (refType) {
         case P_REFINEMENT:
@@ -201,6 +220,11 @@ static ParametricCurvePtr parametricRect(double width, double height, double x0,
           // if we get here, it should be an h-refinement with a ref pattern
           mesh->hRefine(cellIDs, refPatternForRefType(refType, cellTopo), repartitionAndRebuild);
       }
+    }
+    if (numPartitions > 0) {
+      mesh->globalDofAssignment()->setPartitions(partitions);
+    } else {
+      mesh->globalDofAssignment()->repartitionAndMigrate(); // since no Solution registered, won't actually migrate anything
     }
     return mesh;
   }

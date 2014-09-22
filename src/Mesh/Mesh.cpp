@@ -1183,6 +1183,7 @@ vector<double> Mesh::getCellOrientation(GlobalIndexType cellID){
 void Mesh::saveToHDF5(string filename)
 {
   int commRank = Teuchos::GlobalMPISession::getRank();
+
   if (commRank == 0)
   {
     set<IndexType> rootCellIndicesSet = getTopology()->getRootCellIndices();
@@ -1224,6 +1225,27 @@ void Mesh::saveToHDF5(string filename)
     int verticesSize = rootVertices.size();
     int trialOrderEnhancementsSize = trialOrderEnhancementsVec.size();
     int testOrderEnhancementsSize = testOrderEnhancementsVec.size();
+    
+    
+    FieldContainer<GlobalIndexType> partitions;
+    bool partitionsSet = globalDofAssignment()->getPartitions(partitions);
+    int numPartitions, maxPartitionSize;
+    if (partitionsSet) {
+      numPartitions = partitions.dimension(0);
+      maxPartitionSize = partitions.dimension(1);
+    } else {
+      numPartitions = 0;
+      maxPartitionSize = 0;
+    }
+    FieldContainer<int> partitionsCastToInt;
+    if (partitions.size() > 0) {
+      partitionsCastToInt.resize(numPartitions, maxPartitionSize);
+      for (int i=0; i<numPartitions; i++) {
+        for (int j=0; j<maxPartitionSize; j++) {
+          partitionsCastToInt(i,j) = (int) partitions(i,j);
+        }
+      }
+    }
 
     Epetra_SerialComm Comm;
     EpetraExt::HDF5 hdf5(Comm);
@@ -1239,6 +1261,13 @@ void Mesh::saveToHDF5(string filename)
     hdf5.Write("Mesh", "vertices", H5T_NATIVE_DOUBLE, rootVertices.size(), &rootVertices[0]);
     hdf5.Write("Mesh", "H1Order", globalDofAssignment()->getInitialH1Order());
     hdf5.Write("Mesh", "deltaP", globalDofAssignment()->getTestOrderEnrichment());
+    hdf5.Write("Mesh", "numPartitions", numPartitions);
+    hdf5.Write("Mesh", "maxPartitionSize", maxPartitionSize);
+    if (numPartitions > 0) {
+      hdf5.Write("Mesh", "partitions", H5T_NATIVE_INT, partitionsCastToInt.size(), &partitionsCastToInt[0]);
+    } else {
+      hdf5.Write("Mesh", "partitions", H5T_NATIVE_INT, partitionsCastToInt.size(), NULL);
+    }
     if (meshUsesMaximumRule())
       hdf5.Write("Mesh", "GDARule", "max");
     else if(meshUsesMinimumRule())
