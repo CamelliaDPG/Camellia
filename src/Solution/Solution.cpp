@@ -144,7 +144,7 @@ static const int MIN_BATCH_SIZE_IN_CELLS = 1; // overrides the above, if it resu
 // copy constructor:
 Solution::Solution(const Solution &soln) {
   _mesh = soln.mesh();
-  _dofInterpreter = _mesh.get();
+  _dofInterpreter = Teuchos::rcp( _mesh.get(), false ); // false: doesn't own memory
   _bc = soln.bc();
   _rhs = soln.rhs();
   _ip = soln.ip();
@@ -161,7 +161,7 @@ Solution::Solution(const Solution &soln) {
 
 Solution::Solution(Teuchos::RCP<Mesh> mesh, Teuchos::RCP<BC> bc, Teuchos::RCP<RHS> rhs, Teuchos::RCP<DPGInnerProduct> ip) {
   _mesh = mesh;
-  _dofInterpreter = mesh.get();
+  _dofInterpreter = Teuchos::rcp( _mesh.get(), false ); // false: doesn't own memory
   _bc = bc;
   _rhs = rhs;
   _ip = ip;
@@ -1061,6 +1061,15 @@ void Solution::imposeBCs() {
 
 Teuchos::RCP<LocalStiffnessMatrixFilter> Solution::filter() const{
   return _filter;
+}
+
+DofInterpreter* Solution::getDofInterpreter() const {
+  return _dofInterpreter.get();
+}
+
+void Solution::setDofInterpreter(Teuchos::RCP<DofInterpreter> dofInterpreter) {
+  _dofInterpreter = dofInterpreter;
+  _mesh->boundary().setDofInterpreter(_dofInterpreter.get());
 }
 
 ElementTypePtr Solution::getEquivalentElementType(Teuchos::RCP<Mesh> otherMesh, ElementTypePtr elemType) {
@@ -2612,17 +2621,15 @@ void Solution::condensedSolve(Teuchos::RCP<Solver> globalSolver, bool reduceMemo
   // override reduceMemoryFootprint for now (since CondensedDofInterpreter doesn't yet support a true value)
   reduceMemoryFootprint = false;
   
-  CondensedDofInterpreter dofInterpreter(_mesh.get(), _lagrangeConstraints.get(), fieldsToExclude, !reduceMemoryFootprint);
+  Teuchos::RCP<DofInterpreter> dofInterpreter = Teuchos::rcp(new CondensedDofInterpreter(_mesh.get(), _lagrangeConstraints.get(), fieldsToExclude, !reduceMemoryFootprint) );
   
-  DofInterpreter* oldDofInterpreter = _dofInterpreter;
+  Teuchos::RCP<DofInterpreter> oldDofInterpreter = _dofInterpreter;
   
-  _dofInterpreter = &dofInterpreter;
-  _mesh->boundary().setDofInterpreter(_dofInterpreter);
+  setDofInterpreter(dofInterpreter);
   
   solve(globalSolver);
   
-  _dofInterpreter = oldDofInterpreter;
-  _mesh->boundary().setDofInterpreter(_dofInterpreter);
+  setDofInterpreter(oldDofInterpreter);
 }
 
 // must write to .m file
@@ -3519,6 +3526,37 @@ vector<int> Solution::getZeroMeanConstraints() {
     }
   }
   return zeroMeanConstraints;
+}
+
+void Solution::setUseCondensedSolve(bool value) {
+  if (value) {
+    if (_oldDofInterpreter.get()==NULL) {
+      // when reduceMemoryFootprint is true, local stiffness matrices will be computed twice, rather than stored for reuse
+      vector<int> trialIDs = _mesh->bilinearForm()->trialIDs();
+      
+      set< int > fieldsToExclude;
+      for (vector< int >::iterator trialIt = trialIDs.begin(); trialIt != trialIDs.end(); trialIt++) {
+        int trialID = *trialIt;
+        if (_bc->imposeZeroMeanConstraint(trialID) || _bc->singlePointBC(trialID) ) {
+          fieldsToExclude.insert(trialID);
+        }
+      }
+      
+      // override reduceMemoryFootprint for now (since CondensedDofInterpreter doesn't yet support a true value)
+      bool reduceMemoryFootprint = false;
+      
+      _oldDofInterpreter = _dofInterpreter;
+      
+      Teuchos::RCP<DofInterpreter> dofInterpreter = Teuchos::rcp(new CondensedDofInterpreter(_mesh.get(), _lagrangeConstraints.get(), fieldsToExclude, !reduceMemoryFootprint) );
+      
+      setDofInterpreter(dofInterpreter);
+    }
+  } else {
+    if (_oldDofInterpreter.get() != NULL) {
+      setDofInterpreter(_oldDofInterpreter);
+      _oldDofInterpreter = Teuchos::rcp((DofInterpreter*) NULL);
+    }
+  }
 }
 
 void Solution::setZeroMeanConstraintRho(double value) {
