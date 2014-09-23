@@ -69,6 +69,13 @@ int GMGSolver::solve() {
   
   const double* status = solver.GetAztecStatus();
   int whyTerminated = status[AZ_why];
+  while (whyTerminated==AZ_loss) {
+    int remainingIters = _maxIters - status[AZ_its];
+    if (rank==0) cout << "Aztec warned that the recursive residual indicates convergence even though the true residual is too large.  Restarting with the new solution as initial guess, with maxIters = " << remainingIters << endl;
+    solver.Iterate(remainingIters,_tol);
+    whyTerminated = status[AZ_why];
+  }
+  
   if (rank==0) {
     switch (whyTerminated) {
       case AZ_normal:
