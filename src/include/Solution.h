@@ -103,7 +103,8 @@ private:
 
   Teuchos::RCP<Mesh> _mesh;
   Teuchos::RCP<BC> _bc;
-  DofInterpreter* _dofInterpreter; // defaults to Mesh
+  Teuchos::RCP<DofInterpreter> _dofInterpreter; // defaults to Mesh
+  Teuchos::RCP<DofInterpreter> _oldDofInterpreter; // the one saved when we turn on condensed solve
   Teuchos::RCP<RHS> _rhs;
   Teuchos::RCP<DPGInnerProduct> _ip;
   Teuchos::RCP<LocalStiffnessMatrixFilter> _filter;
@@ -158,6 +159,9 @@ public:
 
   const FieldContainer<double>& allCoefficientsForCellID(GlobalIndexType cellID, bool warnAboutOffRankImports=true); // coefficients for all solution variables
 
+  DofInterpreter* getDofInterpreter() const;
+  void setDofInterpreter(Teuchos::RCP<DofInterpreter> dofInterpreter);
+  
   Epetra_Map getPartitionMap();
   Epetra_Map getPartitionMap(PartitionIndexType rank, set<GlobalIndexType> & myGlobalIndicesSet, GlobalIndexType numGlobalDofs, int zeroMeanConstraintsSize, Epetra_Comm* Comm );
   
@@ -339,6 +343,8 @@ public:
   double minTimeDistributeSolution();
 
   void reportTimings();
+
+  void setUseCondensedSolve(bool value);
   
   void writeStatsToFile(const string &filePath, int precision=4);
 
