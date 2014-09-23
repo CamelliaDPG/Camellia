@@ -208,8 +208,8 @@ int main(int argc, char *argv[])
       int numRefs = 1;
       for (int ref = 1; ref <= numRefs; ref++)
       {
-        // refinementStrategy.refine(commRank==0);
-        // solution->solve(false);
+        refinementStrategy.refine(commRank==0);
+        solution->solve(false);
         mesh->saveToHDF5("Test0.h5");
         solution->saveToHDF5("Test0_soln.h5");
         exporter.exportSolution(solution, varFactory, ref, 2, cellIDToSubdivision(mesh, 4));
@@ -273,20 +273,23 @@ int main(int argc, char *argv[])
         
         bool entriesMatch = true;
         double tol = 1e-16;
-        for (int lid = loadedLHSVector->Map().MinLID(); lid <= loadedLHSVector->Map().MaxLID(); lid++) {
-          double loadedValue = (*loadedLHSVector)[0][lid];
-          double savedValue = (*savedLHSVector)[0][lid];
-          double diff = abs( loadedValue - savedValue );
-          if (diff > tol) {
-            entriesMatch = false;
-            cout << "On rank " << commRank << ", loaded and saved solution vectors differ in entry with lid " << lid;
-            cout << "; loaded value = " << loadedValue << "; saved value = " << savedValue << ".\n";
+        if (loadedLHSVector->Map().MinLID() != loadedLHSVector->Map().MaxLID())
+        {
+          for (int lid = loadedLHSVector->Map().MinLID(); lid <= loadedLHSVector->Map().MaxLID(); lid++) {
+            double loadedValue = (*loadedLHSVector)[0][lid];
+            double savedValue = (*savedLHSVector)[0][lid];
+            double diff = abs( loadedValue - savedValue );
+            if (diff > tol) {
+              entriesMatch = false;
+              cout << "On rank " << commRank << ", loaded and saved solution vectors differ in entry with lid " << lid;
+              cout << "; loaded value = " << loadedValue << "; saved value = " << savedValue << ".\n";
+            }
           }
-        }
-        if (entriesMatch) {
-          cout << "On rank " << commRank << ", loaded and saved solution vectors match!\n";
-        } else {
-          cout << "On rank " << commRank << ", loaded and saved solution vectors do not match.\n";
+          if (entriesMatch) {
+            cout << "On rank " << commRank << ", loaded and saved solution vectors match!\n";
+          } else {
+            cout << "On rank " << commRank << ", loaded and saved solution vectors do not match.\n";
+          }
         }
       }
       
