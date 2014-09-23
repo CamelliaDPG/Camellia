@@ -12,9 +12,10 @@
 #include "Teuchos_RCP.hpp"
 #include "Shards_CellTopology.hpp"
 
-#include <map.h>
-#include <pair.h>
-#include <vector.h>
+#include <map>
+#include <vector>
+
+using namespace std;
 
 namespace Camellia {
   class CellTopology {

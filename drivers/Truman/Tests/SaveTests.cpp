@@ -208,8 +208,8 @@ int main(int argc, char *argv[])
       int numRefs = 1;
       for (int ref = 1; ref <= numRefs; ref++)
       {
-        refinementStrategy.refine(commRank==0);
-        solution->solve(false);
+        // refinementStrategy.refine(commRank==0);
+        // solution->solve(false);
         mesh->saveToHDF5("Test0.h5");
         solution->saveToHDF5("Test0_soln.h5");
         exporter.exportSolution(solution, varFactory, ref, 2, cellIDToSubdivision(mesh, 4));

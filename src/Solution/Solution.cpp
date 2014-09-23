@@ -3393,6 +3393,18 @@ void Solution::saveToHDF5(string filename)
   // hdf5.Write("Solution", "commRank", commRank);
   hdf5.Write("PartitionMap", getPartitionMap());
   hdf5.Write("Solution", *_lhsVector);
+  string filename1 = "saving_data_"+Teuchos::toString(commRank)+".txt";
+  ofstream datafile1;
+  datafile1.open(filename1.c_str());
+  _lhsVector->Print(datafile1);
+  filename1 = "saving_part_"+Teuchos::toString(commRank)+".txt";
+  ofstream partfile1;
+  partfile1.open(filename1.c_str());
+  getPartitionMap().Print(partfile1);
+  filename1 = "saving_map_"+Teuchos::toString(commRank)+".txt";
+  ofstream mapfile1;
+  mapfile1.open(filename1.c_str());
+  _lhsVector->Map().Print(mapfile1);
   double norm1;
   _lhsVector->Norm1(&norm1);
   if (commRank == 0)
@@ -3449,8 +3461,10 @@ void Solution::loadFromHDF5(string filename)
   Epetra_Map *partMap;
   hdf5.Read("PartitionMap", partMap);
   Epetra_Map pm = *partMap;
-  Epetra_MultiVector *lhsVec;
-  hdf5.Read("Solution", lhsVec);
+  Epetra_FEVector feVec(pm);
+  Epetra_MultiVector *lhsVec = &feVec;
+  hdf5.Read("Solution", pm, lhsVec);
+  lhsVec->ReplaceMap(pm);
   string filename1 = "part1_"+Teuchos::toString(commRank)+".txt";
   string filename2 = "part2_"+Teuchos::toString(commRank)+".txt";
   string filename3 = "part3_"+Teuchos::toString(commRank)+".txt";
