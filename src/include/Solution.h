@@ -237,7 +237,7 @@ public:
   double L2NormOfSolutionInCell(int trialID, GlobalIndexType cellID);
 
   Teuchos::RCP<LagrangeConstraints> lagrangeConstraints() const;
-
+  
   void processSideUpgrades( const map<GlobalIndexType, pair< ElementTypePtr, ElementTypePtr > > &cellSideUpgrades);
   void processSideUpgrades( const map<GlobalIndexType, pair< ElementTypePtr, ElementTypePtr > > &cellSideUpgrades, const set<GlobalIndexType> &cellIDsToSkip );
 

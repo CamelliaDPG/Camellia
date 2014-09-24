@@ -263,15 +263,15 @@ void GMGTests::runTests(int &numTestsRun, int &numTestsPassed) {
 bool GMGTests::testGMGOperatorIdentityLocalCoefficientMap() {
   bool success = true;
   
-  vector<bool> useStaticCondensationValues;
-  useStaticCondensationValues.push_back(true);
-  useStaticCondensationValues.push_back(false);
-  
   /***   1D-3D TESTS    ***/
   vector<int> cellCounts;
   cellCounts.push_back(1);
   cellCounts.push_back(2);
   cellCounts.push_back(4);
+  
+  vector<bool> useStaticCondensationValues;
+  useStaticCondensationValues.push_back(true);
+  useStaticCondensationValues.push_back(false);
   
   for (  vector<bool>::iterator useStaticCondensationIt = useStaticCondensationValues.begin();
        useStaticCondensationIt != useStaticCondensationValues.end(); useStaticCondensationIt++) {
@@ -454,97 +454,111 @@ bool GMGTests::testGMGOperatorP() {
   int H1Order = 5;
   
   int whichRefinement = 1;
-  bool useStaticCondensation = false;
+  vector<bool> useStaticCondensationValues;
+  useStaticCondensationValues.push_back(true);
+  useStaticCondensationValues.push_back(false);
   
-  bool useH1Traces = true; // false is the more forgiving; a place to start testing
-  SolutionPtr solnCoarse = poissonExactSolutionRefined(H1Order_coarse, phiExact, useH1Traces, whichRefinement);
-  SolutionPtr solnFine = poissonExactSolutionRefined(H1Order, phiExact, useH1Traces, whichRefinement);
-  solnFine->setUseCondensedSolve(useStaticCondensation);
+  for (  vector<bool>::iterator useStaticCondensationIt = useStaticCondensationValues.begin();
+       useStaticCondensationIt != useStaticCondensationValues.end(); useStaticCondensationIt++) {
+    bool useStaticCondensation = *useStaticCondensationIt;
   
-  MeshPtr coarseMesh = solnCoarse->mesh();
-  MeshPtr fineMesh = solnFine->mesh();
-  
-  BCPtr poissonBC = solnFine->bc();
-  BCPtr zeroBCs = poissonBC->copyImposingZero();
-  BF* bf = dynamic_cast< BF* >( fineMesh->bilinearForm().get() );
-  IPPtr graphNorm = bf->graphNorm();
+    bool useH1Traces = true; // false is the more forgiving; a place to start testing
+    SolutionPtr solnCoarse = poissonExactSolutionRefined(H1Order_coarse, phiExact, useH1Traces, whichRefinement);
+    SolutionPtr solnFine = poissonExactSolutionRefined(H1Order, phiExact, useH1Traces, whichRefinement);
+    solnFine->setUseCondensedSolve(useStaticCondensation);
+    
+    MeshPtr coarseMesh = solnCoarse->mesh();
+    MeshPtr fineMesh = solnFine->mesh();
+    
+    BCPtr poissonBC = solnFine->bc();
+    BCPtr zeroBCs = poissonBC->copyImposingZero();
+    BF* bf = dynamic_cast< BF* >( fineMesh->bilinearForm().get() );
+    IPPtr graphNorm = bf->graphNorm();
 
-  int maxIters = 100;
-  double iter_tol = 1e-6;
-  
-  Teuchos::RCP<Solver> coarseSolver = Teuchos::rcp( new KluSolver );
-  
-  Teuchos::RCP<GMGSolver> gmgSolver = Teuchos::rcp( new GMGSolver(zeroBCs, coarseMesh, graphNorm, fineMesh,
-                                                                  solnFine->getDofInterpreter(),
-                                                                  solnFine->getPartitionMap(),
-                                                                  maxIters, iter_tol, coarseSolver, useStaticCondensation) );
-  
-  GMGOperator* gmgOperator = &gmgSolver->gmgOperator();
-  
-  GDAMinimumRule* coarseGDA = dynamic_cast< GDAMinimumRule*>(coarseMesh->globalDofAssignment().get());
+    int maxIters = 100;
+    double iter_tol = 1e-6;
+    
+    Teuchos::RCP<Solver> coarseSolver = Teuchos::rcp( new KluSolver );
+    
+    Teuchos::RCP<GMGSolver> gmgSolver = Teuchos::rcp( new GMGSolver(zeroBCs, coarseMesh, graphNorm, fineMesh,
+                                                                    solnFine->getDofInterpreter(),
+                                                                    solnFine->getPartitionMap(),
+                                                                    maxIters, iter_tol, coarseSolver, useStaticCondensation) );
+    
+    GMGOperator* gmgOperator = &gmgSolver->gmgOperator();
+    
+    GDAMinimumRule* coarseGDA = dynamic_cast< GDAMinimumRule*>(coarseMesh->globalDofAssignment().get());
 
-  // idea is this: for each cell in the coarse mesh, there exist global dofs mapped by that cell's local dofs
-  //               for each of these, construct a set of basis coefficients (0's and one 1)
-  //               map to the local coefficients on coarse mesh.
-  //               map to the local coefficients on fine mesh.
-  //               using these coefficients, the corresponding functions on the two meshes should be the same.
-  
-  set<GlobalIndexType> cellIDs = coarseMesh->cellIDsInPartition();
-  
-  set<GlobalIndexType> coarseFieldIndices = coarseGDA->partitionOwnedGlobalFieldIndices();
-  for (set<GlobalIndexType>::iterator cellIDIt=cellIDs.begin(); cellIDIt != cellIDs.end(); cellIDIt++) {
-    GlobalIndexType cellID = *cellIDIt;
-    BasisCachePtr basisCache = BasisCache::basisCacheForCell(fineMesh, cellID); // since the mesh geometry is the same, fineMesh's cache will work for both fine and coarse cell.
+    // idea is this: for each cell in the coarse mesh, there exist global dofs mapped by that cell's local dofs
+    //               for each of these, construct a set of basis coefficients (0's and one 1)
+    //               map to the local coefficients on coarse mesh.
+    //               map to the local coefficients on fine mesh.
+    //               using these coefficients, the corresponding functions on the two meshes should be the same.
     
-    LocalDofMapperPtr fineToCoarseMapper = gmgOperator->getLocalCoefficientMap(cellID); // this is a local-to-local mapping between the meshes
+    set<GlobalIndexType> cellIDs = coarseMesh->cellIDsInPartition();
     
-    DofOrderingPtr fineOrdering = fineMesh->getElementType(cellID)->trialOrderPtr;
-    DofOrderingPtr coarseOrdering = coarseMesh->getElementType(cellID)->trialOrderPtr;
-    
-    FieldContainer<double> coarseCoefficients(coarseOrdering->totalDofs());
-    
-    set<int> varIDs = coarseOrdering->getVarIDs();
-    for (set<int>::iterator varIDIt = varIDs.begin(); varIDIt != varIDs.end(); varIDIt++) {
-      int varID = *varIDIt;
-      int sideCount = coarseOrdering->getNumSidesForVarID(varID);
-      for (int sideOrdinal=0; sideOrdinal<sideCount; sideOrdinal++) {
-        BasisPtr coarseBasis = coarseOrdering->getBasis(varID,sideOrdinal);
-        BasisPtr fineBasis = fineOrdering->getBasis(varID,sideOrdinal);
-        FieldContainer<double> coarseBasisCoefficients(coarseBasis->getCardinality());
-        FieldContainer<double> fineBasisCoefficients(fineBasis->getCardinality());
-        
-        for (int coarseBasisOrdinal=0; coarseBasisOrdinal < coarseBasis->getCardinality(); coarseBasisOrdinal++) {
-          int coarseDofIndex = coarseOrdering->getDofIndex(varID, coarseBasisOrdinal, sideOrdinal);
-          coarseBasisCoefficients.initialize(0);
-          coarseCoefficients.initialize(0);
-          fineBasisCoefficients.initialize(0);
-          coarseBasisCoefficients[coarseBasisOrdinal] = 1.0;
-          coarseCoefficients[coarseDofIndex] = 1.0;
+    set<GlobalIndexType> coarseFieldIndices = coarseGDA->partitionOwnedGlobalFieldIndices();
+    for (set<GlobalIndexType>::iterator cellIDIt=cellIDs.begin(); cellIDIt != cellIDs.end(); cellIDIt++) {
+      GlobalIndexType cellID = *cellIDIt;
+      BasisCachePtr basisCache = BasisCache::basisCacheForCell(fineMesh, cellID); // since the mesh geometry is the same, fineMesh's cache will work for both fine and coarse cell.
+      
+      LocalDofMapperPtr fineToCoarseMapper = gmgOperator->getLocalCoefficientMap(cellID); // this is a local-to-local mapping between the meshes
+      
+      DofOrderingPtr fineOrdering = fineMesh->getElementType(cellID)->trialOrderPtr;
+      DofOrderingPtr coarseOrdering = coarseMesh->getElementType(cellID)->trialOrderPtr;
+      
+      FieldContainer<double> coarseCoefficients(coarseOrdering->totalDofs());
+      
+      vector< VarPtr > fieldVars = bf->varFactory().fieldVars();
+      set<int> fieldIDs;
+      for (vector< VarPtr >::iterator fieldIt = fieldVars.begin(); fieldIt != fieldVars.end(); fieldIt++) {
+        fieldIDs.insert((*fieldIt)->ID());
+      }
+      
+      set<int> varIDs = coarseOrdering->getVarIDs();
+      for (set<int>::iterator varIDIt = varIDs.begin(); varIDIt != varIDs.end(); varIDIt++) {
+        int varID = *varIDIt;
+        int sideCount = coarseOrdering->getNumSidesForVarID(varID);
+        if ((fieldIDs.find(varID) != fieldIDs.end()) && useStaticCondensation) continue; // skip field test for static condensation: these guys are mapped in that case...
+        for (int sideOrdinal=0; sideOrdinal<sideCount; sideOrdinal++) {
+          BasisPtr coarseBasis = coarseOrdering->getBasis(varID,sideOrdinal);
+          BasisPtr fineBasis = fineOrdering->getBasis(varID,sideOrdinal);
+          FieldContainer<double> coarseBasisCoefficients(coarseBasis->getCardinality());
+          FieldContainer<double> fineBasisCoefficients(fineBasis->getCardinality());
+          
+          for (int coarseBasisOrdinal=0; coarseBasisOrdinal < coarseBasis->getCardinality(); coarseBasisOrdinal++) {
+            int coarseDofIndex = coarseOrdering->getDofIndex(varID, coarseBasisOrdinal, sideOrdinal);
+            coarseBasisCoefficients.initialize(0);
+            coarseCoefficients.initialize(0);
+            fineBasisCoefficients.initialize(0);
+            coarseBasisCoefficients[coarseBasisOrdinal] = 1.0;
+            coarseCoefficients[coarseDofIndex] = 1.0;
 
-          FieldContainer<double> fineLocalCoefficients = fineToCoarseMapper->mapGlobalCoefficients(coarseCoefficients);
-          
-          for (int basisOrdinal=0; basisOrdinal < fineBasis->getCardinality(); basisOrdinal++) {
-            int fineDofIndex = fineOrdering->getDofIndex(varID, basisOrdinal, sideOrdinal);
-            fineBasisCoefficients[basisOrdinal] = fineLocalCoefficients[fineDofIndex];
-          }
-          
-          FunctionPtr fineBasisSumFunction = NewBasisSumFunction::basisSumFunction(fineBasis, fineBasisCoefficients);
-          FunctionPtr coarseBasisSumFunction = NewBasisSumFunction::basisSumFunction(coarseBasis, coarseBasisCoefficients);
-          FunctionPtr diffFxn = fineBasisSumFunction - coarseBasisSumFunction;
-          
-          BasisCachePtr basisCacheForIntegration = (coarseOrdering->getNumSidesForVarID(varID) == 1) ? basisCache : basisCache->getSideBasisCache(sideOrdinal);
-          
-          double l2diff = sqrt( (diffFxn * diffFxn)->integrate(basisCacheForIntegration) );
-          
-          double tol = 1e-14;
-          if (l2diff > tol) {
-            success = false;
-            cout << "Test Failure: on cell " << cellID << ", for variable " << varID;
-            if (coarseOrdering->getNumSidesForVarID(varID) > 1) cout << " on side " << sideOrdinal << " ";
-            cout << " for coarse basis ordinal " << coarseBasisOrdinal << ", ";
-            cout << "the L^2 norm of difference between fine mesh representation and coarse representation exceeds tol: ";
-            cout << l2diff << " > " << tol << "\n";
-            break;
+            FieldContainer<double> fineLocalCoefficients = fineToCoarseMapper->mapGlobalCoefficients(coarseCoefficients);
+            
+            for (int basisOrdinal=0; basisOrdinal < fineBasis->getCardinality(); basisOrdinal++) {
+              int fineDofIndex = fineOrdering->getDofIndex(varID, basisOrdinal, sideOrdinal);
+              fineBasisCoefficients[basisOrdinal] = fineLocalCoefficients[fineDofIndex];
+            }
+            
+            FunctionPtr fineBasisSumFunction = NewBasisSumFunction::basisSumFunction(fineBasis, fineBasisCoefficients);
+            FunctionPtr coarseBasisSumFunction = NewBasisSumFunction::basisSumFunction(coarseBasis, coarseBasisCoefficients);
+            FunctionPtr diffFxn = fineBasisSumFunction - coarseBasisSumFunction;
+            
+            BasisCachePtr basisCacheForIntegration = (coarseOrdering->getNumSidesForVarID(varID) == 1) ? basisCache : basisCache->getSideBasisCache(sideOrdinal);
+            
+            double l2diff = sqrt( (diffFxn * diffFxn)->integrate(basisCacheForIntegration) );
+            
+            double tol = 1e-14;
+            if (l2diff > tol) {
+              success = false;
+              cout << "Test Failure: on cell " << cellID << ", for variable " << varID;
+              if (coarseOrdering->getNumSidesForVarID(varID) > 1) cout << " on side " << sideOrdinal << " ";
+              cout << " for coarse basis ordinal " << coarseBasisOrdinal << ", ";
+              cout << "the L^2 norm of difference between fine mesh representation and coarse representation exceeds tol: ";
+              cout << l2diff << " > " << tol << "\n";
+              break;
+            }
           }
         }
       }

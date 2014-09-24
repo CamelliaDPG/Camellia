@@ -212,13 +212,19 @@ LocalDofMapperPtr GMGOperator::getLocalCoefficientMap(GlobalIndexType fineCellID
       }
     }
     
+    int coarseDofCount = coarseTrialOrdering->totalDofs();
+    set<GlobalIndexType> allCoarseDofs; // include these even when not mapped (which can happen with static condensation) to guarantee that the dof mapper interprets coarse cell data correctly...
+    for (int coarseOrdinal=0; coarseOrdinal<coarseDofCount; coarseOrdinal++) {
+      allCoarseDofs.insert(coarseOrdinal);
+    }
+    
     // I don't think we need to do any fitting, so we leave the "fittable" containers for LocalDofMapper empty
     
     set<GlobalIndexType> fittableGlobalDofOrdinalsInVolume;
     vector< set<GlobalIndexType> > fittableGlobalDofOrdinalsOnSides(fineSideCount);
 
     LocalDofMapperPtr dofMapper = Teuchos::rcp( new LocalDofMapper(fineTrialOrdering, volumeMaps, fittableGlobalDofOrdinalsInVolume,
-                                                                   sideMaps, fittableGlobalDofOrdinalsOnSides) );
+                                                                   sideMaps, fittableGlobalDofOrdinalsOnSides, allCoarseDofs) );
     _localCoefficientMap[key] = dofMapper;
   }
 
@@ -404,7 +410,7 @@ int GMGOperator::ApplyInverse(const Epetra_MultiVector& X_in, Epetra_MultiVector
 //      cout << "Adding " << xEntry / diagEntry << " to global ID " << globalID << endl;
     }
   } else {
-    cout << "_diag is NULL.\n";
+//    cout << "_diag is NULL.\n";
   }
 
 //  Y_file.str("");

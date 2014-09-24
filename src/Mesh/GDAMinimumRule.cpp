@@ -1913,8 +1913,9 @@ LocalDofMapperPtr GDAMinimumRule::getDofMapper(GlobalIndexType cellID, CellConst
     }
   }
   
+  set<GlobalIndexType> emptyGlobalIDSet; // the "extra" guys to map
   LocalDofMapperPtr dofMapper = Teuchos::rcp( new LocalDofMapper(trialOrdering,volumeMap,fittableGlobalDofOrdinalsInVolume,
-                                                                 sideMaps,fittableGlobalDofOrdinalsOnSides,varIDToMap,sideOrdinalToMap) );
+                                                                 sideMaps,fittableGlobalDofOrdinalsOnSides,emptyGlobalIDSet,varIDToMap,sideOrdinalToMap) );
   if ((varIDToMap == -1) && (sideOrdinalToMap == -1)) {
     // a mapper for the whole dof ordering: we cache these...
     _dofMapperCache[cellID] = dofMapper;

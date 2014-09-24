@@ -31,8 +31,6 @@ class LocalDofMapper { // maps a whole trial ordering
   int _sideOrdinalToMap;
   int _varIDToMap;
   
-
-  
   void filterData(const vector<int> dofIndices, const FieldContainer<double> &data, FieldContainer<double> &filteredData);
   void addSubBasisMapVectorContribution(int varID, int sideIndex, BasisMap basisMap, const FieldContainer<double> &localData, FieldContainer<double> &globalData, bool fittableGlobalDofsOnly);
 //  void addSubBasisMapMatrixContribution(int varID, int sideOrdinal, BasisMap basisMap, const FieldContainer<double> &localData, FieldContainer<double> &globalData);
@@ -46,7 +44,9 @@ public:
   LocalDofMapper(DofOrderingPtr dofOrdering, map< int, BasisMap > volumeMaps,
                  set<GlobalIndexType> fittableGlobalDofOrdinalsInVolume,
                  vector< map< int, BasisMap > > sideMaps,
-                 vector< set<GlobalIndexType> > fittableGlobalDofOrdinalsOnSides, int varIDToMap = -1, int sideOrdinalToMap = -1);
+                 vector< set<GlobalIndexType> > fittableGlobalDofOrdinalsOnSides,
+                 set<GlobalIndexType> unmappedGlobalDofOrdinals = set<GlobalIndexType>(), // extra dof ordinals which aren't mapped as such but should be included in the mapper (used in GMGOperator)
+                 int varIDToMap = -1, int sideOrdinalToMap = -1);
   
   FieldContainer<double> mapLocalData(const FieldContainer<double> &localData, bool fittableGlobalDofsOnly);
   void mapLocalDataSide(const FieldContainer<double> &localData, FieldContainer<double> &mappedData, bool fittableGlobalDofsOnly, int sideOrdinal);

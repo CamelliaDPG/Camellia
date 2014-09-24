@@ -109,6 +109,7 @@ LocalDofMapper::LocalDofMapper(DofOrderingPtr dofOrdering, map< int, BasisMap > 
                                set<GlobalIndexType> fittableGlobalDofOrdinalsInVolume,
                                vector< map< int, BasisMap > > sideMaps,
                                vector< set<GlobalIndexType> > fittableGlobalDofOrdinalsOnSides,
+                               set<GlobalIndexType> unmappedGlobalDofOrdinals,
                                int varIDToMap, int sideOrdinalToMap) {
   _varIDToMap = varIDToMap;
   _sideOrdinalToMap = sideOrdinalToMap;
@@ -137,6 +138,7 @@ LocalDofMapper::LocalDofMapper(DofOrderingPtr dofOrdering, map< int, BasisMap > 
       }
     }
   }
+  globalIndices.insert(unmappedGlobalDofOrdinals.begin(),unmappedGlobalDofOrdinals.end());
   unsigned ordinal = 0;
 //  cout << "_globalIndexToOrdinal:\n";
   for (set<GlobalIndexType>::iterator globalIndexIt = globalIndices.begin(); globalIndexIt != globalIndices.end(); globalIndexIt++) {
