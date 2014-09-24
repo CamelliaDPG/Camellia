@@ -812,6 +812,13 @@ void Solution::solveWithPrepopulatedStiffnessAndLoad(Teuchos::RCP<Solver> solver
 void Solution::solve(Teuchos::RCP<Solver> solver) {
 //  int rank = Teuchos::GlobalMPISession::getRank();
 
+  if (_oldDofInterpreter.get() != NULL) { // proxy for having a condensation interpreter
+    CondensedDofInterpreter* condensedDofInterpreter = dynamic_cast<CondensedDofInterpreter*>(_dofInterpreter.get());
+    if (condensedDofInterpreter != NULL) {
+      condensedDofInterpreter->reinitialize();
+    }
+  }
+  
   initializeLHSVector();
   initializeStiffnessAndLoad();
   setProblem(solver);

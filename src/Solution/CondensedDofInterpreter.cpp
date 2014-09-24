@@ -44,6 +44,14 @@ CondensedDofInterpreter::CondensedDofInterpreter(Mesh* mesh, LagrangeConstraints
   initializeGlobalDofIndices();
 }
 
+void CondensedDofInterpreter::reinitialize() {
+  _localLoadVectors.clear();
+  _localStiffnessMatrices.clear();
+  _localInterpretedDofIndices.clear();
+  
+  initializeGlobalDofIndices();
+}
+
 void CondensedDofInterpreter::getSubmatrices(set<int> fieldIndices, set<int> fluxIndices,
                                              const FieldContainer<double> &K, Epetra_SerialDenseMatrix &K_field,
                                              Epetra_SerialDenseMatrix &K_coupl, Epetra_SerialDenseMatrix &K_flux) {

@@ -57,6 +57,8 @@ class CondensedDofInterpreter : public DofInterpreter {
 public:
   CondensedDofInterpreter(Mesh* mesh, LagrangeConstraints* lagrangeConstraints, const set<int> &fieldIDsToExclude, bool storeLocalStiffnessMatrices);
   
+  void reinitialize(); // clear stiffness matrices, etc., and rebuild global dof index map
+  
   GlobalIndexType globalDofCount();
   set<GlobalIndexType> globalDofIndicesForPartition(PartitionIndexType rank);
   
