@@ -568,7 +568,7 @@ void GDAMinimumRuleTests::runTests(int &numTestsRun, int &numTestsPassed) {
   numTestsRun++;
   teardown();
 
-  cout << "test1IrregularityEnforcement() complete.\n";
+//  cout << "test1IrregularityEnforcement() complete.\n";
   
   setup();
   if (testHangingNodePoisson(useQuads)) {
@@ -577,7 +577,7 @@ void GDAMinimumRuleTests::runTests(int &numTestsRun, int &numTestsPassed) {
   numTestsRun++;
   teardown();
   
-  cout << "testHangingNodePoisson (quads) complete.\n";
+//  cout << "testHangingNodePoisson (quads) complete.\n";
 
   setup();
   if (testHangingNodeStokes(useQuads)) {
@@ -586,7 +586,7 @@ void GDAMinimumRuleTests::runTests(int &numTestsRun, int &numTestsPassed) {
   numTestsRun++;
   teardown();
   
-  cout << "testHangingNodeStokes (quads) complete.\n";
+//  cout << "testHangingNodeStokes (quads) complete.\n";
   
   useQuads = false;
   setup();
@@ -596,7 +596,7 @@ void GDAMinimumRuleTests::runTests(int &numTestsRun, int &numTestsPassed) {
   numTestsRun++;
   teardown();
   
-  cout << "testHangingNodePoisson (triangles) complete.\n";
+//  cout << "testHangingNodePoisson (triangles) complete.\n";
   setup();
   if (testHangingNodeStokes(useQuads)) {
     numTestsPassed++;
@@ -604,7 +604,7 @@ void GDAMinimumRuleTests::runTests(int &numTestsRun, int &numTestsPassed) {
   numTestsRun++;
   teardown();
   
-  cout << "testHangingNodeStokes (triangles) complete.\n";
+//  cout << "testHangingNodeStokes (triangles) complete.\n";
   
   setup();
   if (testMultiCellMesh()) {
@@ -613,7 +613,7 @@ void GDAMinimumRuleTests::runTests(int &numTestsRun, int &numTestsPassed) {
   numTestsRun++;
   teardown();
   
-  cout << "testMultiCellMesh complete.\n";
+//  cout << "testMultiCellMesh complete.\n";
   
   setup();
   if (testGlobalToLocalToGlobalConsistency()) {
@@ -667,7 +667,7 @@ void GDAMinimumRuleTests::runTests(int &numTestsRun, int &numTestsPassed) {
   numTestsRun++;
   teardown();
   
-  cout << "testHangingNodePoisson3D complete.\n";
+//  cout << "testHangingNodePoisson3D complete.\n";
 }
 void GDAMinimumRuleTests::setup() {
   // setup test points:
@@ -1032,7 +1032,7 @@ SolutionPtr GDAMinimumRuleTests::poissonExactSolution3DHangingNodes(int irregula
   
   MeshPtr mesh = soln->mesh();
   
-  cout << "about to refine to make Poisson 3D hanging node mesh.\n";
+//  cout << "about to refine to make Poisson 3D hanging node mesh.\n";
   
   set<GlobalIndexType> cellIDs;
   cellIDs.insert(1);
@@ -1134,7 +1134,7 @@ bool GDAMinimumRuleTests::testHangingNodePoisson3D() {
     soln->clear();
     soln->solve();
     
-    cout << irregularity << "-irregular 3D poisson w/hanging node solved.  About to check solution continuities.\n";
+//    cout << irregularity << "-irregular 3D poisson w/hanging node solved.  About to check solution continuities.\n";
     
     Epetra_MultiVector *lhsVector = soln->getGlobalCoefficients();
     Epetra_SerialComm Comm;
@@ -1153,7 +1153,7 @@ bool GDAMinimumRuleTests::testHangingNodePoisson3D() {
       success = false;
     }
     
-    cout << "...solution continuities checked.\n";
+//    cout << "...solution continuities checked.\n";
     
     phi_err_l2 = phi_err->l2norm(mesh);
     if (phi_err_l2 > tol) {
