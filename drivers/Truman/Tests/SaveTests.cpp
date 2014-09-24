@@ -201,19 +201,17 @@ int main(int argc, char *argv[])
       RefinementStrategy refinementStrategy( solution, 0.2);
       HDF5Exporter exporter(mesh, "Poisson");
       exporter.exportSolution(solution, varFactory, 0, 2, cellIDToSubdivision(mesh, 4));
-        // Teuchos::RCP< RefinementHistory > refHistory = Teuchos::rcp( new RefinementHistory );
-        // mesh->_refinementHistory = Teuchos::rcp( new RefinementHistory );
-        // mesh->registerObserver(refHistory);
-        // refHistory->saveToFile("Test3.txt");
-      int numRefs = 1;
-      for (int ref = 1; ref <= numRefs; ref++)
-      {
-        refinementStrategy.refine(commRank==0);
-        solution->solve(false);
-        mesh->saveToHDF5("Test0.h5");
-        solution->saveToHDF5("Test0_soln.h5");
-        exporter.exportSolution(solution, varFactory, ref, 2, cellIDToSubdivision(mesh, 4));
-      }
+      mesh->saveToHDF5("MeshSave.h5");
+      solution->saveToHDF5("SolnSave.h5");
+      // int numRefs = 1;
+      // for (int ref = 1; ref <= numRefs; ref++)
+      // {
+      //   refinementStrategy.refine(commRank==0);
+      //   solution->solve(false);
+      //   mesh->saveToHDF5("MeshSave.h5");
+      //   solution->saveToHDF5("SolnSave.h5");
+      //   exporter.exportSolution(solution, varFactory, ref, 2, cellIDToSubdivision(mesh, 4));
+      // }
       mesh->globalDofAssignment()->getPartitions(savedCellPartition);
       savedLHSVector = solution->getLHSVector();
     }
@@ -225,7 +223,7 @@ int main(int argc, char *argv[])
     //   exporter.exportSolution(loadedSolution, varFactory, 0, 2, cellIDToSubdivision(loadedMesh, 4));
     // }
     {
-      MeshPtr loadedMesh = MeshFactory::loadFromHDF5(bf, "Test0.h5");
+      MeshPtr loadedMesh = MeshFactory::loadFromHDF5(bf, "MeshSave.h5");
       FieldContainer<GlobalIndexType> loadedCellPartition;
       loadedMesh->globalDofAssignment()->getPartitions(loadedCellPartition);
       if (loadedCellPartition.size() != savedCellPartition.size()) {
@@ -247,9 +245,7 @@ int main(int argc, char *argv[])
         }
       }
       Teuchos::RCP<Solution> loadedSolution = Teuchos::rcp( new Solution(loadedMesh, bc, rhs, ip) );
-      // loadedSolution->solve(false);
-      // loadedSolution->addSolution(loadedSolution, -1.0);
-      loadedSolution->loadFromHDF5("Test0_soln.h5");
+      loadedSolution->loadFromHDF5("SolnSave.h5");
       
       Teuchos::RCP<Epetra_FEVector> loadedLHSVector = loadedSolution->getLHSVector();
       if (loadedLHSVector->Map().MinLID() != savedLHSVector->Map().MinLID()) {
