@@ -3411,12 +3411,9 @@ void Solution::loadFromHDF5(string filename)
   Epetra_MultiVector *lhsVec;
   Epetra_Map partMap = getPartitionMap();
   hdf5.Read("Solution", partMap, lhsVec);
-  if (partMap.MinLID() != partMap.MaxLID())
-  {
-    for (int lid=partMap.MinLID(); lid <= partMap.MaxLID(); lid++) {
-      (*_lhsVector)[0][lid] = (*lhsVec)[0][lid];
-    }
-  }
+
+  Epetra_Import  solnImporter(_lhsVector->Map(), lhsVec->Map());
+  _lhsVector->Import(*lhsVec, solnImporter, Insert);
 
   hdf5.Close();
   importSolution();
