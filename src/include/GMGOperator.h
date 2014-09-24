@@ -33,6 +33,10 @@ struct TimeStatistics {
 
 class GMGOperator : public Epetra_Operator {
   SolutionPtr _coarseSolution;
+  
+  bool _useStaticCondensation; // for both coarse and fine solves
+  Teuchos::RCP<DofInterpreter> _fineDofInterpreter;
+  
   MeshPtr _fineMesh, _coarseMesh;
   Epetra_Map _finePartitionMap;
   BCPtr _bc;
@@ -65,7 +69,7 @@ public:
   //! @name Constructor
   //@{
   //! Constructor
-  GMGOperator(BCPtr zeroBCs, MeshPtr coarseMesh, IPPtr coarseIP, MeshPtr fineMesh, Epetra_Map finePartitionMap, Teuchos::RCP<Solver> coarseSolver);
+  GMGOperator(BCPtr zeroBCs, MeshPtr coarseMesh, IPPtr coarseIP, MeshPtr fineMesh, Teuchos::RCP<DofInterpreter> fineDofInterpreter, Epetra_Map finePartitionMap, Teuchos::RCP<Solver> coarseSolver, bool useStaticCondensation);
   //@}
   
   //! @name Attribute set methods

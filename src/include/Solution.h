@@ -159,7 +159,7 @@ public:
 
   const FieldContainer<double>& allCoefficientsForCellID(GlobalIndexType cellID, bool warnAboutOffRankImports=true); // coefficients for all solution variables
 
-  DofInterpreter* getDofInterpreter() const;
+  Teuchos::RCP<DofInterpreter> getDofInterpreter() const;
   void setDofInterpreter(Teuchos::RCP<DofInterpreter> dofInterpreter);
   
   Epetra_Map getPartitionMap();

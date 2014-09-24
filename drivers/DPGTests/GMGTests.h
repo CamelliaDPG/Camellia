@@ -29,7 +29,8 @@ public:
   void runTests(int &numTestsRun, int &numTestsPassed);
   
   // "identity" tests: fine and coarse mesh the same.
-  bool testGMGOperatorIdentity();
+  bool testGMGOperatorIdentityRHSMap();
+  bool testGMGOperatorIdentityLocalCoefficientMap();
   bool testGMGSolverIdentity();
   
   // p-multigrid tests: fine and coarse mesh the same, except for polynomial order:

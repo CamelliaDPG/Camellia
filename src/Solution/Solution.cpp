@@ -1065,8 +1065,8 @@ Teuchos::RCP<LocalStiffnessMatrixFilter> Solution::filter() const{
   return _filter;
 }
 
-DofInterpreter* Solution::getDofInterpreter() const {
-  return _dofInterpreter.get();
+Teuchos::RCP<DofInterpreter> Solution::getDofInterpreter() const {
+  return _dofInterpreter;
 }
 
 void Solution::setDofInterpreter(Teuchos::RCP<DofInterpreter> dofInterpreter) {

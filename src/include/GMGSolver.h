@@ -21,12 +21,13 @@ class GMGSolver : public Solver {
   Epetra_Map _finePartitionMap;
   
   GMGOperator _gmgOperator;
-  
+    
   bool _diagonalSmoothing;
   
   int _azOutput;
 public:
-  GMGSolver(BCPtr zeroBCs, MeshPtr coarseMesh, IPPtr coarseIP, MeshPtr fineMesh, Epetra_Map finePartitionMap, int maxIters, double tol, Teuchos::RCP<Solver> coarseSolver);
+  GMGSolver(BCPtr zeroBCs, MeshPtr coarseMesh, IPPtr coarseIP, MeshPtr fineMesh, Teuchos::RCP<DofInterpreter> fineDofInterpreter,
+            Epetra_Map finePartitionMap, int maxIters, double tol, Teuchos::RCP<Solver> coarseSolver, bool useStaticCondensation);
   void setPrintToConsole(bool printToConsole);
   int solve();
   void setApplySmoothingOperator(bool applySmoothingOp);
