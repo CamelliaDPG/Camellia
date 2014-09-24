@@ -110,6 +110,8 @@
 
 #include "MPIWrapper.h"
 
+#include "MeshFactory.h"
+
 #ifdef HAVE_EPETRAEXT_HDF5
 #include <EpetraExt_HDF5.h>
 #include <Epetra_SerialComm.h>
@@ -3387,6 +3389,20 @@ void Solution::writeToFile(const string &filePath) {
 }
 
 #ifdef HAVE_EPETRAEXT_HDF5
+void Solution::save(string meshAndSolutionPrefix)
+{
+  saveToHDF5(meshAndSolutionPrefix+".soln");
+  mesh()->saveToHDF5(meshAndSolutionPrefix+".mesh");
+}
+
+SolutionPtr Solution::load(BilinearFormPtr bf, string meshAndSolutionPrefix)
+{
+  MeshPtr mesh = MeshFactory::loadFromHDF5(bf, meshAndSolutionPrefix+".mesh");
+  SolutionPtr solution = Solution::solution(mesh);
+  solution->loadFromHDF5(meshAndSolutionPrefix+".soln");
+  return solution;
+}
+
 void Solution::saveToHDF5(string filename)
 {
   int commRank = Teuchos::GlobalMPISession::getRank();

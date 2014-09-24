@@ -304,6 +304,8 @@ public:
   void writeToFile(const string &filePath);
 
 #ifdef HAVE_EPETRAEXT_HDF5
+  void save(string meshAndSolutionPrefix);
+  static SolutionPtr load(BilinearFormPtr bf, string meshAndSolutionPrefix);
   void saveToHDF5(string filename);
   void loadFromHDF5(string filename);
 #endif
