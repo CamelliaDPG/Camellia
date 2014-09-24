@@ -203,6 +203,7 @@ int main(int argc, char *argv[])
       exporter.exportSolution(solution, varFactory, 0, 2, cellIDToSubdivision(mesh, 4));
       mesh->saveToHDF5("MeshSave.h5");
       solution->saveToHDF5("SolnSave.h5");
+      solution->save("PoissonProblem");
       // int numRefs = 1;
       // for (int ref = 1; ref <= numRefs; ref++)
       // {
@@ -214,6 +215,11 @@ int main(int argc, char *argv[])
       // }
       mesh->globalDofAssignment()->getPartitions(savedCellPartition);
       savedLHSVector = solution->getLHSVector();
+    }
+    {
+      SolutionPtr loadedSolution = Solution::load(bf, "PoissonProblem");
+      HDF5Exporter exporter(loadedSolution->mesh(), "ProblemLoaded");
+      exporter.exportSolution(loadedSolution, varFactory, 0, 2, cellIDToSubdivision(loadedSolution->mesh(), 4));
     }
     // {
     //   MeshPtr loadedMesh = MeshFactory::loadFromHDF5(bf, "Test0.h5");
