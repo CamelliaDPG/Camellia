@@ -12,8 +12,11 @@
 #include "EpetraExt_RowMatrixOut.h"
 #include "EpetraExt_MultiVectorOut.h"
 
-GMGSolver::GMGSolver( BCPtr zeroBCs, MeshPtr coarseMesh, IPPtr coarseIP, MeshPtr fineMesh,
-                     Epetra_Map finePartitionMap, int maxIters, double tol, Teuchos::RCP<Solver> coarseSolver) : _gmgOperator(zeroBCs,coarseMesh,coarseIP,fineMesh,finePartitionMap,coarseSolver),
+GMGSolver::GMGSolver( BCPtr zeroBCs, MeshPtr coarseMesh, IPPtr coarseIP,
+                     MeshPtr fineMesh, Teuchos::RCP<DofInterpreter> fineDofInterpreter, Epetra_Map finePartitionMap,
+                     int maxIters, double tol, Teuchos::RCP<Solver> coarseSolver, bool useStaticCondensation) :
+                     _gmgOperator(zeroBCs,coarseMesh,coarseIP,fineMesh,fineDofInterpreter,
+                                  finePartitionMap,coarseSolver, useStaticCondensation),
                     _finePartitionMap(finePartitionMap) {
   _maxIters = maxIters;
   _printToConsole = false;
@@ -68,12 +71,17 @@ int GMGSolver::solve() {
   int solveResult = solver.Iterate(_maxIters,_tol);
   
   const double* status = solver.GetAztecStatus();
+  int remainingIters = _maxIters;
+
   int whyTerminated = status[AZ_why];
-  while (whyTerminated==AZ_loss) {
-    int remainingIters = _maxIters - status[AZ_its];
+  int maxRestarts = 1;
+  int numRestarts = 0;
+  while ((whyTerminated==AZ_loss) && (numRestarts < maxRestarts)) {
+    remainingIters -= status[AZ_its];
     if (rank==0) cout << "Aztec warned that the recursive residual indicates convergence even though the true residual is too large.  Restarting with the new solution as initial guess, with maxIters = " << remainingIters << endl;
     solver.Iterate(remainingIters,_tol);
     whyTerminated = status[AZ_why];
+    numRestarts++;
   }
   
   if (rank==0) {

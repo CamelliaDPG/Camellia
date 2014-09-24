@@ -23,7 +23,7 @@
 
 #include "CamelliaDebugUtility.h"
 
-CondensedDofInterpreter::CondensedDofInterpreter(Mesh* mesh, LagrangeConstraints* lagrangeConstraints, const set<int> &fieldIDsToExclude, bool storeLocalStiffnessMatrices) {
+CondensedDofInterpreter::CondensedDofInterpreter(Mesh* mesh, LagrangeConstraints* lagrangeConstraints, const set<int> &fieldIDsToExclude, bool storeLocalStiffnessMatrices) : DofInterpreter(Teuchos::rcp(mesh,false)) {
   _mesh = mesh;
   _lagrangeConstraints = lagrangeConstraints;
   _storeLocalStiffnessMatrices = storeLocalStiffnessMatrices;
@@ -314,6 +314,33 @@ void CondensedDofInterpreter::interpretLocalBasisCoefficients(GlobalIndexType ce
   }
 }
 
+void CondensedDofInterpreter::interpretLocalCoefficients(GlobalIndexType cellID, const FieldContainer<double> &localCoefficients, Epetra_MultiVector &globalCoefficients) {
+  DofOrderingPtr trialOrder = _mesh->getElementType(cellID)->trialOrderPtr;
+  FieldContainer<double> basisCoefficients; // declared here so that we can sometimes avoid mallocs, if we get lucky in terms of the resize()
+  for (set<int>::iterator trialIDIt = trialOrder->getVarIDs().begin(); trialIDIt != trialOrder->getVarIDs().end(); trialIDIt++) {
+    int trialID = *trialIDIt;
+    int sideCount = trialOrder->getNumSidesForVarID(trialID);
+    for (int sideOrdinal=0; sideOrdinal < sideCount; sideOrdinal++) {
+      if (varDofsAreCondensible(trialID, sideOrdinal, trialOrder)) continue;
+      int basisCardinality = trialOrder->getBasisCardinality(trialID, sideOrdinal);
+      basisCoefficients.resize(basisCardinality);
+      vector<int> localDofIndices = trialOrder->getDofIndices(trialID, sideOrdinal);
+      for (int basisOrdinal=0; basisOrdinal<basisCardinality; basisOrdinal++) {
+        int localDofIndex = localDofIndices[basisOrdinal];
+        basisCoefficients[basisOrdinal] = localCoefficients[localDofIndex];
+      }
+      FieldContainer<double> fittedGlobalCoefficients;
+      FieldContainer<GlobalIndexType> fittedGlobalDofIndices;
+      interpretLocalBasisCoefficients(cellID, trialID, sideOrdinal, basisCoefficients, fittedGlobalCoefficients, fittedGlobalDofIndices);
+      for (int i=0; i<fittedGlobalCoefficients.size(); i++) {
+        GlobalIndexType globalDofIndex = fittedGlobalDofIndices[i];
+        globalCoefficients.ReplaceGlobalValue((GlobalIndexTypeToCast)globalDofIndex, 0, fittedGlobalCoefficients[i]); // for globalDofIndex not owned by this rank, doesn't do anything...
+        //        cout << "global coefficient " << globalDofIndex << " = " << fittedGlobalCoefficients[i] << endl;
+      }
+    }
+  }
+}
+
 void CondensedDofInterpreter::interpretLocalData(GlobalIndexType cellID, const FieldContainer<double> &localStiffnessData, const FieldContainer<double> &localLoadData,
                                                  FieldContainer<double> &globalStiffnessData, FieldContainer<double> &globalLoadData,
                                                  FieldContainer<GlobalIndexType> &globalDofIndices) {
@@ -332,7 +359,13 @@ void CondensedDofInterpreter::interpretLocalData(GlobalIndexType cellID, const F
                                             interpretedStiffnessData, interpretedLoadData, interpretedDofIndices);
   
   if (_storeLocalStiffnessMatrices) {
-    _localStiffnessMatrices[cellID] = localStiffnessData;
+    if (_localStiffnessMatrices.find(cellID) != _localStiffnessMatrices.end()) {
+      if (&_localStiffnessMatrices[cellID] != &localStiffnessData) {
+        _localStiffnessMatrices[cellID] = localStiffnessData;
+      }
+    } else {
+      _localStiffnessMatrices[cellID] = localStiffnessData;
+    }
     _localLoadVectors[cellID] = localLoadData;
     _localInterpretedDofIndices[cellID] = interpretedDofIndices;
   }
@@ -426,6 +459,18 @@ void CondensedDofInterpreter::interpretGlobalCoefficients(GlobalIndexType cellID
     // getElemData(elem,K,rhs);
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "CondensedDofInterpreter::interpretGlobalData() doesn't yet support _storeLocalStiffnessMatrices = false");
   } else {
+    if (_localStiffnessMatrices.find(cellID) == _localStiffnessMatrices.end()) {
+      cout << "Local stiffness entry for cellID " << cellID << " not found!\n";
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Local stiffness entry for cellID not found!");
+    }
+    if (_localLoadVectors.find(cellID) == _localLoadVectors.end()) {
+      cout << "Local load entry for cellID " << cellID << " not found!\n";
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Local load entry for cellID not found!");
+    }
+    if (_localInterpretedDofIndices.find(cellID) == _localInterpretedDofIndices.end()) {
+      cout << "Local interpreted dof indices entry for cellID " << cellID << " not found!\n";
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Local interpreted dof indices entry for cellID not found!");
+    }
     K = _localStiffnessMatrices[cellID];
     rhs = _localLoadVectors[cellID];
     interpretedDofIndices = _localInterpretedDofIndices[cellID];
@@ -459,6 +504,8 @@ void CondensedDofInterpreter::interpretGlobalCoefficients(GlobalIndexType cellID
   DofOrderingPtr trialOrder = _mesh->getElementType(cellID)->trialOrderPtr;
   
   _mesh->interpretGlobalCoefficients(cellID, localCoefficients, interpretedCoefficients); // *only* fills in fluxes in localCoefficients (fields are zeros).  We still need to back out the fields
+  
+//  cout << "localCoefficients for cellID " << cellID << ":\n" << localCoefficients;
   
   set<int> fieldIndices, fluxIndices; // which are fields and which are fluxes in the local cell coefficients
   set<int> trialIDs = trialOrder->getVarIDs();

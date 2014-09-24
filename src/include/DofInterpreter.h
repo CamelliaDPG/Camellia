@@ -16,11 +16,16 @@
 
 #include <set>
 
+class Mesh;
+typedef Teuchos::RCP<Mesh> MeshPtr;
+
 using namespace Intrepid;
 using namespace std;
 
 class DofInterpreter {
+  MeshPtr _mesh;
 public:
+  DofInterpreter(MeshPtr mesh) : _mesh(mesh) {}
   virtual GlobalIndexType globalDofCount() = 0;
   virtual set<GlobalIndexType> globalDofIndicesForPartition(PartitionIndexType rank) = 0;
   
@@ -28,19 +33,8 @@ public:
                                   FieldContainer<double> &globalData, FieldContainer<GlobalIndexType> &globalDofIndices) = 0;
   
   virtual void interpretLocalData(GlobalIndexType cellID, const FieldContainer<double> &localStiffnessData, const FieldContainer<double> &localLoadData,
-                                  FieldContainer<double> &globalStiffnessData, FieldContainer<double> &globalLoadData, FieldContainer<GlobalIndexType> &globalDofIndices) {
-    this->interpretLocalData(cellID,localStiffnessData,globalStiffnessData,globalDofIndices);
-    FieldContainer<GlobalIndexType> globalDofIndicesForStiffness = globalDofIndices; // copy (for debugging/inspection purposes)
-    this->interpretLocalData(cellID,localLoadData,globalLoadData,globalDofIndices);
-    for (int i=0; i<globalDofIndicesForStiffness.size(); i++) {
-      if (globalDofIndicesForStiffness[i] != globalDofIndices[i]) {
-        cout << "ERROR: the vector and matrix dof indices differ...\n";
-        TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "ERROR: the vector and matrix dof indices differ...\n");
-      }
-    }
-//    if (cellID==1)
-//      cout << "globalIndices:\n" << globalDofIndices;
-  }
+                                  FieldContainer<double> &globalStiffnessData, FieldContainer<double> &globalLoadData, FieldContainer<GlobalIndexType> &globalDofIndices);
+  virtual void interpretLocalCoefficients(GlobalIndexType cellID, const FieldContainer<double> &localCoefficients, Epetra_MultiVector &globalCoefficients);
   
   virtual void interpretLocalBasisCoefficients(GlobalIndexType cellID, int varID, int sideOrdinal, const FieldContainer<double> &basisCoefficients,
                                                FieldContainer<double> &globalCoefficients, FieldContainer<GlobalIndexType> &globalDofIndices) = 0;

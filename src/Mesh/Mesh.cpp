@@ -72,7 +72,7 @@ using namespace Intrepid;
 map<int,int> Mesh::_emptyIntIntMap;
 
 Mesh::Mesh(MeshTopologyPtr meshTopology, BilinearFormPtr bilinearForm, int H1Order, int pToAddTest,
-           map<int,int> trialOrderEnhancements, map<int,int> testOrderEnhancements) {
+           map<int,int> trialOrderEnhancements, map<int,int> testOrderEnhancements) : DofInterpreter(Teuchos::rcp(this,false)) {
   
   _meshTopology = meshTopology;
   
@@ -97,7 +97,7 @@ Mesh::Mesh(MeshTopologyPtr meshTopology, BilinearFormPtr bilinearForm, int H1Ord
 
 Mesh::Mesh(const vector<vector<double> > &vertices, vector< vector<unsigned> > &elementVertices,
            Teuchos::RCP< BilinearForm > bilinearForm, int H1Order, int pToAddTest, bool useConformingTraces,
-           map<int,int> trialOrderEnhancements, map<int,int> testOrderEnhancements, vector<PeriodicBCPtr> periodicBCs) {
+           map<int,int> trialOrderEnhancements, map<int,int> testOrderEnhancements, vector<PeriodicBCPtr> periodicBCs) : DofInterpreter(Teuchos::rcp(this,false)) {
 
 //  cout << "in legacy mesh constructor, periodicBCs size is " << periodicBCs.size() << endl;
   

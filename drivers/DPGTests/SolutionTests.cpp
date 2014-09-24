@@ -1495,9 +1495,10 @@ bool SolutionTests::testCondensationSolve() {
   ////////////////////   REFINE & SOLVE   ///////////////////////
   SolutionPtr solution = Teuchos::rcp( new Solution(mesh, bc, rhs, ip) );
   SolutionPtr condensedSolution = Teuchos::rcp( new Solution(mesh, bc, rhs, ip) );
+  condensedSolution->setUseCondensedSolve(true);
 
   solution->solve(false);
-  condensedSolution->condensedSolve();
+  condensedSolution->solve(false);
   FunctionPtr uF = Function::solution(u,solution);
   FunctionPtr uCond = Function::solution(u,condensedSolution);
   double diff = (uF-uCond)->l2norm(mesh,H1Order);

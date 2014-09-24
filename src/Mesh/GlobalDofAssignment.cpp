@@ -23,7 +23,7 @@
 
 GlobalDofAssignment::GlobalDofAssignment(MeshPtr mesh, VarFactory varFactory,
                                          DofOrderingFactoryPtr dofOrderingFactory, MeshPartitionPolicyPtr partitionPolicy,
-                                         unsigned initialH1OrderTrial, unsigned testOrderEnhancement, bool enforceConformityLocally) {
+                                         unsigned initialH1OrderTrial, unsigned testOrderEnhancement, bool enforceConformityLocally) : DofInterpreter(mesh) {
 
   _mesh = mesh;
   _meshTopology = mesh->getTopology();
