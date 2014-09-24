@@ -87,7 +87,7 @@ int GMGSolver::solve() {
   if (rank==0) {
     switch (whyTerminated) {
       case AZ_normal:
-        cout << "whyTerminated: AZ_normal " << endl;
+//        cout << "whyTerminated: AZ_normal " << endl;
         break;
       case AZ_param:
         cout << "whyTerminated: AZ_param " << endl;
