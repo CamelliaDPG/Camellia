@@ -93,6 +93,7 @@ int main(int argc, char *argv[]) {
   bool printRefinementDetails = false;
   
   bool useWeightedGraphNorm = true; // graph norm scaled according to units, more or less
+  bool useStaticCondensation = false;
   
   int numCells = 2;
   
@@ -100,7 +101,8 @@ int main(int argc, char *argv[]) {
   
   int AztecOutputLevel = 1;
   int gmgMaxIterations = 200;
-  double gmgTolerance = 1e-6;
+  double relativeTol = 1e-6;
+  double minTol = 1e-11; // sorta unreasonable to ask for tighter tolerance than this
   
   cmdp.setOption("polyOrder",&k,"polynomial order for field variable u");
   cmdp.setOption("delta_k", &delta_k, "test space polynomial order enrichment");
@@ -114,7 +116,8 @@ int main(int argc, char *argv[]) {
   cmdp.setOption("numCells", &numCells, "number of cells in the initial mesh");
   cmdp.setOption("eps", &eps, "ramp width");
   cmdp.setOption("useScaledGraphNorm", "dontUseScaledGraphNorm", &useWeightedGraphNorm);
-  cmdp.setOption("gmgTol", &gmgTolerance, "tolerance for GMG convergence");
+//  cmdp.setOption("gmgTol", &gmgTolerance, "tolerance for GMG convergence");
+  cmdp.setOption("relativeTol", &relativeTol, "Energy error-relative tolerance for iterative solver.");
   cmdp.setOption("gmgMaxIterations", &gmgMaxIterations, "tolerance for GMG convergence");
   
   if (cmdp.parse(argc,argv) != Teuchos::CommandLineProcessor::PARSE_SUCCESSFUL) {
@@ -274,29 +277,41 @@ int main(int argc, char *argv[]) {
 //  bc->addZeroMeanConstraint(p);
   bc->addSinglePointBC(p->ID(), zero);
 
-  IPPtr graphNorm;
+  IPPtr fineIP, coarseIP;
   
   FunctionPtr h = Teuchos::rcp( new hFunction() );
   
-  if (useWeightedGraphNorm) {
-    graphNorm = IP::ip();
-    graphNorm->addTerm( mu * v1->dx() + tau1->x() ); // sigma11
-    graphNorm->addTerm( mu * v1->dy() + tau1->y() ); // sigma12
-    graphNorm->addTerm( mu * v2->dx() + tau2->x() ); // sigma21
-    graphNorm->addTerm( mu * v2->dy() + tau2->y() ); // sigma22
-    graphNorm->addTerm( v1->dx() + v2->dy() );       // pressure
-    graphNorm->addTerm( h * tau1->div() - h * q->dx() ); // u1
-    graphNorm->addTerm( h * tau2->div() - h * q->dy() ); // u2
-    graphNorm->addTerm( (mu / h) * v1 );
-    graphNorm->addTerm( (mu / h) * v2 );
-    graphNorm->addTerm(  q );
-    graphNorm->addTerm( tau1 );
-    graphNorm->addTerm( tau2 );
-  } else {
-     graphNorm = stokesBF->graphNorm();
+  IPPtr weightedGraphNorm = IP::ip();
+  {
+    weightedGraphNorm->addTerm( mu * v1->dx() + tau1->x() ); // sigma11
+    weightedGraphNorm->addTerm( mu * v1->dy() + tau1->y() ); // sigma12
+    weightedGraphNorm->addTerm( mu * v2->dx() + tau2->x() ); // sigma21
+    weightedGraphNorm->addTerm( mu * v2->dy() + tau2->y() ); // sigma22
+    weightedGraphNorm->addTerm( v1->dx() + v2->dy() );       // pressure
+    weightedGraphNorm->addTerm( h * tau1->div() - h * q->dx() ); // u1
+    weightedGraphNorm->addTerm( h * tau2->div() - h * q->dy() ); // u2
+    weightedGraphNorm->addTerm( (mu / h) * v1 );
+    weightedGraphNorm->addTerm( (mu / h) * v2 );
+    weightedGraphNorm->addTerm(  q );
+    weightedGraphNorm->addTerm( tau1 );
+    weightedGraphNorm->addTerm( tau2 );
   }
   
-  SolutionPtr solution = Solution::solution(mesh, bc, rhs, graphNorm);
+  IPPtr standardGraphNorm = stokesBF->graphNorm();
+  
+  if (useWeightedGraphNorm) {
+    if (rank==0) cout << "Using weighted graph norm for fine and coarse solves.\n";
+    fineIP = weightedGraphNorm;
+    coarseIP = weightedGraphNorm;
+  } else {
+    if (rank==0) cout << "Using standard graph norm for both fine and coarse solves.\n";
+    fineIP = standardGraphNorm;
+    coarseIP = standardGraphNorm;
+  }
+  
+  SolutionPtr solution = Solution::solution(mesh, bc, rhs, fineIP);
+  
+  solution->setUseCondensedSolve(useStaticCondensation);
   
   mesh->registerSolution(solution); // sign up for projection of old solution onto refined cells.
   
@@ -320,11 +335,14 @@ int main(int argc, char *argv[]) {
   GMGSolver* gmgSolver;
   
   if (useGMGSolver) {
-    double tol = gmgTolerance;
+    double tol = relativeTol;
     int maxIters = gmgMaxIterations;
     BCPtr zeroBCs = bc->copyImposingZero();
-    gmgSolver = new GMGSolver(zeroBCs, k0Mesh, graphNorm, mesh,
-                                         solution->getPartitionMap(), maxIters, tol, coarseSolver);
+//    GMGSolver(BCPtr zeroBCs, MeshPtr coarseMesh, IPPtr coarseIP, MeshPtr fineMesh, Teuchos::RCP<DofInterpreter> fineDofInterpreter,
+//              Epetra_Map finePartitionMap, int maxIters, double tol, Teuchos::RCP<Solver> coarseSolver, bool useStaticCondensation);
+
+    gmgSolver = new GMGSolver(zeroBCs, k0Mesh, coarseIP, mesh, solution->getDofInterpreter(),
+                              solution->getPartitionMap(), maxIters, tol, coarseSolver, useStaticCondensation);
     gmgSolver->setAztecOutput(AztecOutputLevel);
     gmgSolver->setApplySmoothingOperator(applyDiagonalSmoothing);
     fineSolver = Teuchos::rcp( gmgSolver );
@@ -400,11 +418,11 @@ int main(int argc, char *argv[]) {
 #ifdef USE_MUMPS
       if (useMumps) coarseSolver = Teuchos::rcp( new MumpsSolver(512, true) );
 #endif
-      double tol = gmgTolerance;
+      double tol = max(relativeTol * energyError, minTol);
       int maxIters = gmgMaxIterations;
       BCPtr zeroBCs = bc->copyImposingZero();
-      gmgSolver = new GMGSolver(zeroBCs, k0Mesh, graphNorm, mesh,
-                                           solution->getPartitionMap(), maxIters, tol, coarseSolver);
+      gmgSolver = new GMGSolver(zeroBCs, k0Mesh, coarseIP, mesh, solution->getDofInterpreter(),
+                                solution->getPartitionMap(), maxIters, tol, coarseSolver, useStaticCondensation);
       gmgSolver->setAztecOutput(AztecOutputLevel);
       gmgSolver->setApplySmoothingOperator(applyDiagonalSmoothing);
       fineSolver = Teuchos::rcp( gmgSolver );
