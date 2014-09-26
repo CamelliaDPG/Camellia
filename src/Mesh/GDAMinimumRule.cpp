@@ -351,7 +351,12 @@ void GDAMinimumRule::interpretGlobalCoefficients(GlobalIndexType cellID, FieldCo
   for (int i=0; i<globalIndexVector.size(); i++) {
     GlobalIndexTypeToCast globalIndex = globalIndexVector[i];
     int localIndex = partMap.LID(globalIndex);
-    globalCoefficientsFC[i] = globalCoefficients[0][localIndex];
+    if (localIndex != -1) {
+      globalCoefficientsFC[i] = globalCoefficients[0][localIndex];
+    } else {
+      // non-local coefficient: ignore
+      globalCoefficientsFC[i] = 0;
+    }
   }
   localCoefficients = dofMapper->mapGlobalCoefficients(globalCoefficientsFC);
 //  cout << "For cellID " << cellID << ", mapping globalData:\n " << globalDataFC;
