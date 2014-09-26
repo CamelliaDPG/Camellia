@@ -54,13 +54,13 @@ int GMGSolver::solve() {
   
   Epetra_RowMatrix *A = problem().GetMatrix();
   
-  EpetraExt::RowMatrixToMatlabFile("/tmp/A_pre_scaling.dat",*A);
+//  EpetraExt::RowMatrixToMatlabFile("/tmp/A_pre_scaling.dat",*A);
 
   Epetra_MultiVector *b = problem().GetRHS();
-  EpetraExt::MultiVectorToMatlabFile("/tmp/b_pre_scaling.dat",*b);
+//  EpetraExt::MultiVectorToMatlabFile("/tmp/b_pre_scaling.dat",*b);
 
   Epetra_MultiVector *x = problem().GetLHS();
-  EpetraExt::MultiVectorToMatlabFile("/tmp/x_initial_guess.dat",*x);
+//  EpetraExt::MultiVectorToMatlabFile("/tmp/x_initial_guess.dat",*x);
   
   const Epetra_Map* map = &A->RowMatrixRowMap();
   
