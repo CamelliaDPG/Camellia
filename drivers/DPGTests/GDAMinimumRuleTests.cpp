@@ -1225,7 +1225,7 @@ bool GDAMinimumRuleTests::testHangingNodePoisson(bool useQuads) {
   
   FunctionPtr phi_err = phi_soln - phi_exact;
   
-  GnuPlotUtil::writeComputationalMeshSkeleton("/tmp/hangingNodeTestMesh", mesh, true); // true: label cells
+//  GnuPlotUtil::writeComputationalMeshSkeleton("/tmp/hangingNodeTestMesh", mesh, true); // true: label cells
   
   double tol = 6e-12; // relaxed for vesta, then relaxed again for BLAS integration
   double phi_err_l2 = phi_err->l2norm(mesh);
@@ -1258,7 +1258,7 @@ bool GDAMinimumRuleTests::testHangingNodePoisson(bool useQuads) {
     mesh->hRefine(cellIDs, RefinementPattern::regularRefinementPatternQuad());
     soln->solve();
     
-    GnuPlotUtil::writeComputationalMeshSkeleton("/tmp/hangingNodeTestMesh_2irregular", mesh, true); // true: label cells
+//    GnuPlotUtil::writeComputationalMeshSkeleton("/tmp/hangingNodeTestMesh_2irregular", mesh, true); // true: label cells
     
     tol = 1e-12;
     phi_err_l2 = phi_err->l2norm(mesh);
@@ -1319,7 +1319,7 @@ bool GDAMinimumRuleTests::testHangingNodePoisson(bool useQuads) {
     
     FunctionPtr phi_err = phi_soln - phi_exact;
     
-    GnuPlotUtil::writeComputationalMeshSkeleton("/tmp/hangingNodeTestMesh_2_irregular_2", mesh, true); // true: label cells
+//    GnuPlotUtil::writeComputationalMeshSkeleton("/tmp/hangingNodeTestMesh_2_irregular_2", mesh, true); // true: label cells
     
     double tol = 1e-12;
     double phi_err_l2 = phi_err->l2norm(mesh);
@@ -1384,7 +1384,7 @@ bool GDAMinimumRuleTests::testHangingNodeStokes(bool useQuads) {
   FunctionPtr u1_err = u1_soln - u1_exact;
   FunctionPtr u2_err = u2_soln - u2_exact;
   
-  GnuPlotUtil::writeComputationalMeshSkeleton("/tmp/hangingNodeTestMesh", mesh, true); // true: label cells
+//  GnuPlotUtil::writeComputationalMeshSkeleton("/tmp/hangingNodeTestMesh", mesh, true); // true: label cells
   
   double tol = divideIntoTriangles ? 1e-10 : 2e-12; // for now, anyway, we accept a larger tolerance for triangular meshes...
   double u1_err_l2 = u1_err->l2norm(mesh);
@@ -1455,7 +1455,7 @@ bool GDAMinimumRuleTests::testHangingNodeStokes(bool useQuads) {
     
     soln->solve();
     
-    GnuPlotUtil::writeComputationalMeshSkeleton("/tmp/hangingNodeTestMesh_2_irregular_2", mesh, true); // true: label cells
+//    GnuPlotUtil::writeComputationalMeshSkeleton("/tmp/hangingNodeTestMesh_2_irregular_2", mesh, true); // true: label cells
     
     u1_soln = Function::solution(u1, soln);
     u2_soln = Function::solution(u2, soln);
