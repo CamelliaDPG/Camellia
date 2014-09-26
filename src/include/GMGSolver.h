@@ -22,7 +22,10 @@ class GMGSolver : public Solver {
   
   GMGOperator _gmgOperator;
     
-  bool _diagonalSmoothing;
+  bool _diagonalSmoothing; // whether we should add the Jacobi smoothing term (almost always want this--basically we turn off for some tests)
+  bool _diagonalScaling;   // whether we should scale the entire system by the diagonal
+  
+  bool _computeCondest;
   
   int _azOutput;
 public:
@@ -31,6 +34,11 @@ public:
   void setPrintToConsole(bool printToConsole);
   int solve();
   void setApplySmoothingOperator(bool applySmoothingOp);
+  
+  void setComputeConditionNumberEstimate(bool value);
+  
+  void setUseDiagonalScaling(bool value);
+  
   void setTolerance(double tol);
   
   GMGOperator & gmgOperator() {

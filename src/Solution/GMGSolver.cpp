@@ -12,21 +12,27 @@
 #include "EpetraExt_RowMatrixOut.h"
 #include "EpetraExt_MultiVectorOut.h"
 
+const bool DIAGONAL_SCALING_DEFAULT = true;
+
 GMGSolver::GMGSolver( BCPtr zeroBCs, MeshPtr coarseMesh, IPPtr coarseIP,
                      MeshPtr fineMesh, Teuchos::RCP<DofInterpreter> fineDofInterpreter, Epetra_Map finePartitionMap,
                      int maxIters, double tol, Teuchos::RCP<Solver> coarseSolver, bool useStaticCondensation) :
                      _gmgOperator(zeroBCs,coarseMesh,coarseIP,fineMesh,fineDofInterpreter,
-                                  finePartitionMap,coarseSolver, useStaticCondensation),
+                                  finePartitionMap,coarseSolver, useStaticCondensation, DIAGONAL_SCALING_DEFAULT),
                     _finePartitionMap(finePartitionMap) {
   _maxIters = maxIters;
   _printToConsole = false;
   _tol = tol;
   _diagonalSmoothing = true;
+  _diagonalScaling = DIAGONAL_SCALING_DEFAULT;
+                      
+  _computeCondest = true;
   _azOutput = AZ_warnings;
 }
 
 void GMGSolver::setApplySmoothingOperator(bool applySmoothingOp) {
   _diagonalSmoothing = applySmoothingOp;
+  _gmgOperator.setApplyDiagonalSmoothing(_diagonalSmoothing);
 }
 
 void GMGSolver::setFineMesh(MeshPtr fineMesh, Epetra_Map finePartitionMap) {
@@ -47,23 +53,80 @@ int GMGSolver::solve() {
   AztecOO solver(problem());
   
   Epetra_RowMatrix *A = problem().GetMatrix();
-//  Epetra_MultiVector *b = problem().GetRHS();
-//  EpetraExt::MultiVectorToMatlabFile("/tmp/b_gmg.dat",*b);
+  
+  EpetraExt::RowMatrixToMatlabFile("/tmp/A_pre_scaling.dat",*A);
 
-  Epetra_Vector diagA(A->RowMatrixRowMap());
+  Epetra_MultiVector *b = problem().GetRHS();
+  EpetraExt::MultiVectorToMatlabFile("/tmp/b_pre_scaling.dat",*b);
+
+  Epetra_MultiVector *x = problem().GetLHS();
+  EpetraExt::MultiVectorToMatlabFile("/tmp/x_initial_guess.dat",*x);
+  
+  const Epetra_Map* map = &A->RowMatrixRowMap();
+  
+  Epetra_Vector diagA(*map);
   A->ExtractDiagonalCopy(diagA);
+
+  // in place of doing the scaling ourselves, for the moment I've switched
+  // over to using Aztec's built-in scaling.  Not sure this is any different.
+//  EpetraExt::MultiVectorToMatlabFile("/tmp/diagA.dat",diagA);
+//  
+//  Epetra_Vector diagA_inv(*map);
+//  
+//  if (_diagonalScaling) {
+//    if (map->NumMyElements() > 0) {
+//      for (int lid = map->MinLID(); lid <= map->MaxLID(); lid++) {
+//        diagA_inv[lid] = 1.0 / diagA[lid];
+//      }
+//    }
+//    EpetraExt::MultiVectorToMatlabFile("/tmp/diagA_inv.dat",diagA_inv);
+//    A->LeftScale(diagA_inv);
+//    b->Multiply(1.0, diagA_inv, *b, 0);
+//    EpetraExt::MultiVectorToMatlabFile("/tmp/b_post_scaling.dat",*b);
+//    
+//    EpetraExt::RowMatrixToMatlabFile("/tmp/A_post_scaling.dat",*A);
+//  }
   
   Teuchos::RCP<Epetra_MultiVector> diagA_ptr = Teuchos::rcp( &diagA, false );
-  
-  if (_diagonalSmoothing)
-    _gmgOperator.setStiffnessDiagonal(diagA_ptr);
 
-  solver.SetAztecOption(AZ_solver, AZ_cg_condnum);
-//  solver.SetAztecOption(AZ_solver, AZ_gmres);
+  _gmgOperator.setStiffnessDiagonal(diagA_ptr);
+  
+  _gmgOperator.setApplyDiagonalSmoothing(_diagonalSmoothing);
+  _gmgOperator.setFineSolverUsesDiagonalScaling(_diagonalScaling);
+  
+//  if (_diagonalScaling) {
+//    solver.SetAztecOption(AZ_scaling, AZ_Jacobi);
+//    
+//    // when using Jacobi scaling, symmetry may be lost: CG not allowed
+//    if (_computeCondest) {
+//      solver.SetAztecOption(AZ_solver, AZ_gmres_condnum);
+//    } else {
+//      solver.SetAztecOption(AZ_solver, AZ_gmres);
+//    }
+//  } else {
+//    solver.SetAztecOption(AZ_scaling, AZ_none);
+//    
+//    if (_computeCondest) {
+//      solver.SetAztecOption(AZ_solver, AZ_cg_condnum);
+//    } else {
+//      solver.SetAztecOption(AZ_solver, AZ_cg);
+//    }
+//  }
+
+  if (_diagonalScaling) {
+    solver.SetAztecOption(AZ_scaling, AZ_sym_diag);
+  } else {
+    solver.SetAztecOption(AZ_scaling, AZ_none);
+  }
+  if (_computeCondest) {
+    solver.SetAztecOption(AZ_solver, AZ_cg_condnum);
+  } else {
+    solver.SetAztecOption(AZ_solver, AZ_cg);
+  }
+  
   solver.SetPrecOperator(&_gmgOperator);
 //  solver.SetAztecOption(AZ_precond, AZ_none);
   solver.SetAztecOption(AZ_precond, AZ_user_precond);
-  solver.SetAztecOption(AZ_scaling, AZ_none);
   solver.SetAztecOption(AZ_conv, AZ_rhs);
 //  solver.SetAztecOption(AZ_output, AZ_last);
   solver.SetAztecOption(AZ_output, _azOutput);
@@ -112,6 +175,16 @@ int GMGSolver::solve() {
 //  Epetra_MultiVector *x = problem().GetLHS();
 //  EpetraExt::MultiVectorToMatlabFile("/tmp/x.dat",*x);
   
+//  if (_diagonalScaling) {
+//    // reverse the scaling here
+//    A->LeftScale(diagA);
+//    b->Multiply(1.0, diagA, *b, 0);
+//    EpetraExt::MultiVectorToMatlabFile("/tmp/b_post_unscaling.dat",*b);
+//
+//    Epetra_MultiVector *x = problem().GetLHS();
+//    EpetraExt::MultiVectorToMatlabFile("/tmp/x.dat",*x);
+//  }
+
   double norminf = A->NormInf();
   double normone = A->NormOne();
   
@@ -130,4 +203,12 @@ int GMGSolver::solve() {
 
 void GMGSolver::setAztecOutput(int value) {
   _azOutput = value;
+}
+
+void GMGSolver::setComputeConditionNumberEstimate(bool value) {
+  _computeCondest = value;
+}
+
+void GMGSolver::setUseDiagonalScaling(bool value) {
+  _diagonalScaling = value;
 }

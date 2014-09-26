@@ -26,9 +26,12 @@
 
 GMGOperator::GMGOperator(BCPtr zeroBCs, MeshPtr coarseMesh, IPPtr coarseIP,
                          MeshPtr fineMesh, Teuchos::RCP<DofInterpreter> fineDofInterpreter, Epetra_Map finePartitionMap,
-                         Teuchos::RCP<Solver> coarseSolver, bool useStaticCondensation) :  _finePartitionMap(finePartitionMap), _br(true) {
+                         Teuchos::RCP<Solver> coarseSolver, bool useStaticCondensation, bool fineSolverUsesDiagonalScaling) :  _finePartitionMap(finePartitionMap), _br(true) {
   _useStaticCondensation = useStaticCondensation;
   _fineDofInterpreter = fineDofInterpreter;
+  _fineSolverUsesDiagonalScaling = true;
+  
+  _applySmoothingOperator = true;
   
   clearTimings();
   
@@ -67,6 +70,9 @@ GMGOperator::GMGOperator(BCPtr zeroBCs, MeshPtr coarseMesh, IPPtr coarseIP,
   _coarseSolution->initializeLHSVector();
   _coarseSolution->initializeStiffnessAndLoad();
   _coarseSolution->populateStiffnessAndLoad(); // can get away with doing this just once; after that we just manipulate the RHS vector
+  
+  _fineSolverUsesDiagonalScaling = false;
+  setFineSolverUsesDiagonalScaling(fineSolverUsesDiagonalScaling);
   
   _timeConstruction += constructionTimer.ElapsedTime();
 }
@@ -273,14 +279,23 @@ int GMGOperator::ApplyInverse(const Epetra_MultiVector& X_in, Epetra_MultiVector
   Epetra_Time timer(Comm());
   
   Epetra_MultiVector X(X_in); // looks like Y may be stored in the same location as X_in, so that changing Y will change X, too...
+  Epetra_MultiVector X_copy(X_in); // make a copy of X before multiplying by the diagonal, too
+  
+  if (_fineSolverUsesDiagonalScaling) {
+    // Here, we assume symmetric diagonal scaling: D^-1/2 A D^-1/2, where A is the fine matrix.
+    // (because the inverse that we otherwise approximate is A^-1, we now approximate D^1/2 A^-1 D^1/2)
+    X.Multiply(1.0, *_diag_sqrt, X, 0);
+  }
   
   // the data coming in (X) is in global dofs defined on the fine mesh.  First thing we'd like to do is map it to the fine mesh's local cells
   set<GlobalIndexType> cellsInPartition = _fineMesh->globalDofAssignment()->cellsInPartition(-1); // rank-local
   
   timer.ResetStartTime();
   Teuchos::RCP<Epetra_FEVector> coarseRHSVector = _coarseSolution->getRHSVector();
-  set<GlobalIndexTypeToCast> coarseDofIndicesToImport = setCoarseRHSVector(X_in, *coarseRHSVector);
+  set<GlobalIndexTypeToCast> coarseDofIndicesToImport = setCoarseRHSVector(X, *coarseRHSVector);
   _timeMapFineToCoarse += timer.ElapsedTime();
+  
+//  EpetraExt::MultiVectorToMatlabFile("/tmp/b_coarse.dat",*coarseRHSVector);
   
   // solve the coarse system:
   
@@ -386,29 +401,52 @@ int GMGOperator::ApplyInverse(const Epetra_MultiVector& X_in, Epetra_MultiVector
 //
 //  EpetraExt::MultiVectorToMatlabFile(Y_file.str().c_str(),Y);
   
-  // if diag is set, add diag(A)^(-1)X to Y.
-  if (_diag.get() != NULL) {
-    Epetra_BlockMap partitionMap = Y.Map();
-    for (int localID = 0; localID < partitionMap.NumMyElements(); localID++) {
-      GlobalIndexTypeToCast globalID = partitionMap.GID(localID);
-      double diagEntry = (*_diag)[0][localID];
-      double xEntry = X[0][localID];
-      double yEntry = Y[0][localID];
-      
-//      cout << "xEntry = " << xEntry << "; yEntry = " << yEntry << endl;
-      bool applyDiagonalTermsOnlyForZeroY = false;
-      if (applyDiagonalTermsOnlyForZeroY) {
-        if (yEntry == 0) {
-          yEntry = xEntry/diagEntry;
-        }
-      } else {
-        yEntry += xEntry/diagEntry;
-      }
-      
-      Y.ReplaceGlobalValue(globalID, 0, yEntry);
-      
-//      cout << "Adding " << xEntry / diagEntry << " to global ID " << globalID << endl;
+  // if _applySmoothingOperator is set, add diag(A)^(-1)X to Y.
+  if (_applySmoothingOperator) {
+    if (_diag.get() == NULL) {
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "_diag is null!");
     }
+    if (_fineSolverUsesDiagonalScaling) {
+      Y.Multiply(1.0, *_diag_sqrt, Y, 0);
+      Y.Update(1.0, X_copy, 1.0);
+    } else {
+      Y.Multiply(1.0, *_diag_inv, X, 1.0);
+    }
+    
+    // old, crufty version below.
+    
+    // debugging/testing something:
+//    Epetra_MultiVector Y_copy(Y);
+//    Y_copy.Multiply(1.0, *_diag_inv, X, 1.0);
+    
+//    if (_fineSolverUsesDiagonalScaling) {
+//      // Y += D^(-1)X (where X is the unscaled guy)
+//      Y.Multiply(1.0, *_diag_inv, X, 1.0);
+//      // now, scale Y
+//      Y.Multiply(1.0, *_diag_inv, Y, 0.0);
+//    } else {
+//      Epetra_BlockMap partitionMap = Y.Map();
+//      for (int localID = 0; localID < partitionMap.NumMyElements(); localID++) {
+//        GlobalIndexTypeToCast globalID = partitionMap.GID(localID);
+//        double diagEntry = (*_diag)[0][localID];
+//        double xEntry = X[0][localID];
+//        double yEntry = Y[0][localID];
+//        
+//        yEntry += xEntry/diagEntry;
+//
+//        Y.ReplaceGlobalValue(globalID, 0, yEntry);
+    
+//        {
+//          // test code:
+//          double diff = abs(Y_copy[0][localID] - Y[0][localID]);
+//          if (diff > 1e-14) {
+//            cout << "Y_copy differs from Y for localID " << localID << " and globalID " << globalID << "; diff = " << diff << endl;
+//          }
+//        }
+        //      cout << "Adding " << xEntry / diagEntry << " to global ID " << globalID << endl;
+//      }
+    
+//      }
   } else {
 //    cout << "_diag is NULL.\n";
   }
@@ -499,15 +537,6 @@ set<GlobalIndexTypeToCast> GMGOperator::setCoarseRHSVector(const Epetra_MultiVec
     FieldContainer<GlobalIndexTypeToCast> interpretedGlobalDofIndicesCast(interpretedGlobalDofIndices.size());
     for (int interpretedDofOrdinal=0; interpretedDofOrdinal < interpretedGlobalDofIndices.size(); interpretedDofOrdinal++) {
       interpretedGlobalDofIndicesCast[interpretedDofOrdinal] = (GlobalIndexTypeToCast) interpretedGlobalDofIndices[interpretedDofOrdinal];
-//      if (interpretedGlobalDofIndicesCast[interpretedDofOrdinal]==3476) {
-//        cout << "cell ID " << coarseCellID << " maps RHS data to dof 3476; ";
-//        cout << "contribution is " << interpretedCoarseData[interpretedDofOrdinal] << endl;
-//        
-//        if (coarseCellID==56) {
-//          cout << "fineCellData:\n" << fineCellData;
-//          cout << "coarseCellData:\n" << coarseCellData;
-//        }
-//      }
       coarseDofIndicesToImport.insert(interpretedGlobalDofIndicesCast[interpretedDofOrdinal]);
     }
     coarseRHSVector.SumIntoGlobalValues(interpretedCoarseData.size(), &interpretedGlobalDofIndicesCast[0], &interpretedCoarseData[0]);
@@ -556,14 +585,37 @@ void GMGOperator::reportTimings() const {
   }
 }
 
+void GMGOperator::setApplyDiagonalSmoothing(bool value) {
+  _applySmoothingOperator = value;
+}
+
 void GMGOperator::setFineMesh(MeshPtr fineMesh, Epetra_Map finePartitionMap) {
   _fineMesh = fineMesh;
   _finePartitionMap = finePartitionMap;
 }
 
-void GMGOperator::setStiffnessDiagonal(Teuchos::RCP< Epetra_MultiVector> diagonal) {
-  if (diagonal.get() != NULL) {
-//    EpetraExt::MultiVectorToMatlabFile("/tmp/diag.dat",*diagonal);
+void GMGOperator::setFineSolverUsesDiagonalScaling(bool value) {
+  if (value != _fineSolverUsesDiagonalScaling) {
+    _fineSolverUsesDiagonalScaling = value;
   }
-  _diag = diagonal;
+}
+
+void GMGOperator::setStiffnessDiagonal(Teuchos::RCP< Epetra_MultiVector> diagonal) {
+  // this should be the true diagonal (before scaling) of the fine stiffness matrix.
+    _diag = diagonal;
+  if (diagonal.get() != NULL) {
+    // construct inverse, too.
+    const Epetra_BlockMap* map = &_diag->Map();
+    _diag_inv = Teuchos::rcp( new Epetra_MultiVector(*map, 1) );
+    _diag_sqrt = Teuchos::rcp( new Epetra_MultiVector(*map, 1) );
+    if (map->NumMyElements() > 0) {
+      for (int lid = map->MinLID(); lid <= map->MaxLID(); lid++) {
+        (*_diag_inv)[0][lid] = 1.0 / (*_diag)[0][lid];
+        (*_diag_sqrt)[0][lid] = sqrt((*_diag)[0][lid]);
+      }
+    }
+  } else {
+    _diag_inv = Teuchos::rcp( (Epetra_MultiVector*) NULL);
+  }
+
 }

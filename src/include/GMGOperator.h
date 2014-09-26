@@ -39,6 +39,9 @@ class GMGOperator : public Epetra_Operator {
   
   MeshPtr _fineMesh, _coarseMesh;
   Epetra_Map _finePartitionMap;
+  
+  bool _fineSolverUsesDiagonalScaling;
+  bool _applySmoothingOperator; // almost always true; false for some tests
   BCPtr _bc;
 
   TimeStatistics getStatistics(double timeValue) const;
@@ -49,6 +52,8 @@ class GMGOperator : public Epetra_Operator {
   mutable map< pair< pair<int,int>, RefinementBranch >, LocalDofMapperPtr > _localCoefficientMap; // pair(fineH1Order,coarseH1Order)
   
   Teuchos::RCP<Epetra_MultiVector> _diag; // diagonal of the fine (global) stiffness matrix
+  Teuchos::RCP<Epetra_MultiVector> _diag_sqrt; // square root of the diagonal of the fine (global) stiffness matrix
+  Teuchos::RCP<Epetra_MultiVector> _diag_inv; // inverse of the diagonal
   
   mutable double _timeMapFineToCoarse, _timeMapCoarseToFine, _timeCoarseImport, _timeConstruction, _timeCoarseSolve, _timeLocalCoefficientMapConstruction;  // totals over the life of the object
   
@@ -69,7 +74,7 @@ public:
   //! @name Constructor
   //@{
   //! Constructor
-  GMGOperator(BCPtr zeroBCs, MeshPtr coarseMesh, IPPtr coarseIP, MeshPtr fineMesh, Teuchos::RCP<DofInterpreter> fineDofInterpreter, Epetra_Map finePartitionMap, Teuchos::RCP<Solver> coarseSolver, bool useStaticCondensation);
+  GMGOperator(BCPtr zeroBCs, MeshPtr coarseMesh, IPPtr coarseIP, MeshPtr fineMesh, Teuchos::RCP<DofInterpreter> fineDofInterpreter, Epetra_Map finePartitionMap, Teuchos::RCP<Solver> coarseSolver, bool useStaticCondensation, bool fineSolverUsesDiagonalScaling = true);
   //@}
   
   //! @name Attribute set methods
@@ -173,6 +178,10 @@ public:
   //! Returns the Epetra_Map object associated with the range of this operator.
   const Epetra_Map & OperatorRangeMap() const;
   //@}
+  
+  void setApplyDiagonalSmoothing(bool value);
+  
+  void setFineSolverUsesDiagonalScaling(bool value);
 };
 
 
