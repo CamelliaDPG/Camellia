@@ -650,35 +650,55 @@ bool GMGTests::testGMGSolverIdentity2DRefinedMeshes() {
           // since we may change the RHS vector below, let's make a copy and use that
           Epetra_MultiVector rhsVectorCopy2(rhsVectorCopy);
           
+          Epetra_RowMatrix *A = solnFine->getStiffnessMatrix().get();
+          const Epetra_BlockMap* map = &A->Map();
+          Teuchos::RCP<Epetra_Vector> diagA = Teuchos::rcp( new Epetra_Vector(*map) );
+          A->ExtractDiagonalCopy(*diagA);
+          
+          Teuchos::RCP<Epetra_Vector> diagA_inv = Teuchos::rcp( new Epetra_Vector(*map, 1) );
+          Teuchos::RCP<Epetra_Vector> diagA_sqrt_inv = Teuchos::rcp( new Epetra_Vector(*map, 1) );
+          diagA_inv->Reciprocal(*diagA);
+          if (map->NumMyElements() > 0) {
+            for (int lid = map->MinLID(); lid <= map->MaxLID(); lid++) {
+              (*diagA_sqrt_inv)[lid] = 1.0 / sqrt((*diagA)[lid]);
+            }
+          }
+          Teuchos::RCP<Epetra_Vector> diagA_sqrt = Teuchos::rcp( new Epetra_Vector(*map, 1) );
+          diagA_sqrt->Reciprocal(*diagA_sqrt_inv);
+          
+//          EpetraExt::RowMatrixToMatlabFile("/tmp/A.dat",*A);
+//          EpetraExt::MultiVectorToMatlabFile("/tmp/rhs.dat",rhsVectorCopy2);
+          
           if (fineSolverUsesDiagonalScaling) {
-            // then we need to imitate GMGSolver: first, get the diagonal and communicate that
-            Epetra_RowMatrix *A = solnFine->getStiffnessMatrix().get();
-            
-            const Epetra_Map* map = &A->RowMatrixRowMap();
-            
-            Teuchos::RCP<Epetra_Vector> diagA = Teuchos::rcp( new Epetra_Vector(*map) );
-            A->ExtractDiagonalCopy(*diagA);
-            
+            // then we need to imitate GMGSolver: first, communicate the diagonal
             gmgSolver->gmgOperator().setStiffnessDiagonal(diagA);
             
-            // second, apply the inverse diagonal operator to the RHS we pass to GMG Operator.
-            Teuchos::RCP<Epetra_Vector> diagA_inv = Teuchos::rcp( new Epetra_Vector(*map, 1) );
-            if (map->NumMyElements() > 0) {
-              for (int lid = map->MinLID(); lid <= map->MaxLID(); lid++) {
-                (*diagA_inv)[lid] = 1.0 / (*diagA)[lid];
-              }
-            }
-            
-            rhsVectorCopy2.Multiply(1.0, rhsVectorCopy2, *diagA_inv, 0);
+            // then, apply the inverse sqrt diagonal operator to the RHS we pass to GMG Operator.
+            rhsVectorCopy2.Multiply(1.0, rhsVectorCopy2, *diagA_sqrt_inv, 0);
+//            EpetraExt::MultiVectorToMatlabFile("/tmp/scaled_rhs.dat",rhsVectorCopy2);
           }
           
           gmgSolver->gmgOperator().ApplyInverse(rhsVectorCopy2, gmg_lhsVector);
+          
+          // determine the expected value
+          Epetra_MultiVector directValue(*lhsVector); // x
+          if (applySmoothing && !fineSolverUsesDiagonalScaling) {
+            // x + D^-1 b
+            directValue.Multiply(1.0, rhsVectorCopy2, *diagA_inv, 1.0);
+          } else if (applySmoothing && fineSolverUsesDiagonalScaling) {
+            // D^1/2 x + D^-1/2 b
+            directValue.Multiply(1.0, directValue, *diagA_sqrt, 0.0);
+            directValue.Multiply(1.0, rhsVectorCopy2, *diagA_sqrt_inv, 1.0);
+          } else if (!applySmoothing && fineSolverUsesDiagonalScaling) {
+            // D^1/2 x
+            directValue.Multiply(1.0, directValue, *diagA_sqrt, 0.0);
+          }
           
           double tol = 1e-10;
           int minLID = gmg_lhsVector.Map().MinLID();
           int numLIDs = gmg_lhsVector.Map().NumMyElements();
           for (int lid=minLID; lid < minLID + numLIDs; lid++ ) {
-            double direct_val = (*lhsVector)[0][lid];
+            double direct_val = directValue[0][lid];
             double gmg_val = gmg_lhsVector[0][lid];
             double diff = abs(direct_val - gmg_val);
             if (diff > tol) {
@@ -816,32 +836,41 @@ bool GMGTests::testGMGSolverIdentityUniformMeshes() {
               gmgSolver->gmgOperator().setStiffnessDiagonal(diagA);
               
               Teuchos::RCP<Epetra_Vector> diagA_inv = Teuchos::rcp( new Epetra_Vector(*map, 1) );
+              Teuchos::RCP<Epetra_Vector> diagA_sqrt_inv = Teuchos::rcp( new Epetra_Vector(*map, 1) );
+              diagA_inv->Reciprocal(*diagA);
               if (map->NumMyElements() > 0) {
                 for (int lid = map->MinLID(); lid <= map->MaxLID(); lid++) {
-                  (*diagA_inv)[lid] = 1.0 / (*diagA)[lid];
+                  (*diagA_sqrt_inv)[lid] = 1.0 / sqrt((*diagA)[lid]);
                 }
               }
+              Teuchos::RCP<Epetra_Vector> diagA_sqrt = Teuchos::rcp( new Epetra_Vector(*map, 1) );
+              diagA_sqrt->Reciprocal(*diagA_sqrt_inv);
 
-              EpetraExt::RowMatrixToMatlabFile("/tmp/A.dat",*A);
-              EpetraExt::MultiVectorToMatlabFile("/tmp/rhs.dat",rhsVectorCopy2);
+//              EpetraExt::RowMatrixToMatlabFile("/tmp/A.dat",*A);
+//              EpetraExt::MultiVectorToMatlabFile("/tmp/rhs.dat",rhsVectorCopy2);
+              
+              // determine the expected value
+              Epetra_MultiVector directValue(*lhsVector); // x
+              if (applySmoothing && !fineSolverUsesDiagonalScaling) {
+                // x + D^-1 b
+                directValue.Multiply(1.0, rhsVectorCopy2, *diagA_inv, 1.0);
+              } else if (applySmoothing && fineSolverUsesDiagonalScaling) {
+                // D^1/2 x + D^-1/2 b
+                directValue.Multiply(1.0, directValue, *diagA_sqrt, 0.0);
+                directValue.Multiply(1.0, rhsVectorCopy2, *diagA_sqrt_inv, 1.0);
+              } else if (!applySmoothing && fineSolverUsesDiagonalScaling) {
+                // D^1/2 x
+                directValue.Multiply(1.0, directValue, *diagA_sqrt, 0.0);
+              }
               
               if (fineSolverUsesDiagonalScaling) {
-                // then, apply the inverse diagonal operator to the RHS we pass to GMG Operator.
-                rhsVectorCopy2.Multiply(1.0, rhsVectorCopy2, *diagA_inv, 0);
-                EpetraExt::MultiVectorToMatlabFile("/tmp/scaled_rhs.dat",rhsVectorCopy2);
+                // then, apply the inverse sqrt diagonal operator to the RHS we pass to GMG Operator.
+                rhsVectorCopy2.Multiply(1.0, rhsVectorCopy2, *diagA_sqrt_inv, 0);
+//                EpetraExt::MultiVectorToMatlabFile("/tmp/scaled_rhs.dat",rhsVectorCopy2);
               }
 
               // if applySmoothing = false, then we expect exact agreement between direct solution and iterative.
               // If applySmoothing = true,  then we expect iterative = exact + D^-1 b
-              
-              Epetra_MultiVector directValue(*lhsVector);
-              if (applySmoothing) {
-                if (fineSolverUsesDiagonalScaling) {
-                  directValue.Update(1.0, rhsVectorCopy2, 1.0);
-                } else {
-                  directValue.Multiply(1.0, rhsVectorCopy2, *diagA_inv, 1.0);
-                }
-              }
               
               gmgSolver->gmgOperator().ApplyInverse(rhsVectorCopy2, gmg_lhsVector);
 

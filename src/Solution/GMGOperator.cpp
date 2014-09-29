@@ -278,6 +278,8 @@ int GMGOperator::ApplyInverse(const Epetra_MultiVector& X_in, Epetra_MultiVector
 //  cout << "GMGOperator::ApplyInverse.\n";
   Epetra_Time timer(Comm());
   
+//  EpetraExt::MultiVectorToMatlabFile("/tmp/X_in.dat",X_in);
+  
   Epetra_MultiVector X(X_in); // looks like Y may be stored in the same location as X_in, so that changing Y will change X, too...
   Epetra_MultiVector X_copy(X_in); // make a copy of X before multiplying by the diagonal, too
   
@@ -286,6 +288,8 @@ int GMGOperator::ApplyInverse(const Epetra_MultiVector& X_in, Epetra_MultiVector
     // (because the inverse that we otherwise approximate is A^-1, we now approximate D^1/2 A^-1 D^1/2)
     X.Multiply(1.0, *_diag_sqrt, X, 0);
   }
+  
+//  EpetraExt::MultiVectorToMatlabFile("/tmp/X.dat",X);
   
   // the data coming in (X) is in global dofs defined on the fine mesh.  First thing we'd like to do is map it to the fine mesh's local cells
   set<GlobalIndexType> cellsInPartition = _fineMesh->globalDofAssignment()->cellsInPartition(-1); // rank-local
@@ -406,51 +410,16 @@ int GMGOperator::ApplyInverse(const Epetra_MultiVector& X_in, Epetra_MultiVector
     if (_diag.get() == NULL) {
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "_diag is null!");
     }
-    if (_fineSolverUsesDiagonalScaling) {
-      Y.Multiply(1.0, *_diag_sqrt, Y, 0);
-      Y.Update(1.0, X_copy, 1.0);
-    } else {
-      Y.Multiply(1.0, *_diag_inv, X, 1.0);
-    }
     
-    // old, crufty version below.
-    
-    // debugging/testing something:
-//    Epetra_MultiVector Y_copy(Y);
-//    Y_copy.Multiply(1.0, *_diag_inv, X, 1.0);
-    
-//    if (_fineSolverUsesDiagonalScaling) {
-//      // Y += D^(-1)X (where X is the unscaled guy)
-//      Y.Multiply(1.0, *_diag_inv, X, 1.0);
-//      // now, scale Y
-//      Y.Multiply(1.0, *_diag_inv, Y, 0.0);
-//    } else {
-//      Epetra_BlockMap partitionMap = Y.Map();
-//      for (int localID = 0; localID < partitionMap.NumMyElements(); localID++) {
-//        GlobalIndexTypeToCast globalID = partitionMap.GID(localID);
-//        double diagEntry = (*_diag)[0][localID];
-//        double xEntry = X[0][localID];
-//        double yEntry = Y[0][localID];
-//        
-//        yEntry += xEntry/diagEntry;
-//
-//        Y.ReplaceGlobalValue(globalID, 0, yEntry);
-    
-//        {
-//          // test code:
-//          double diff = abs(Y_copy[0][localID] - Y[0][localID]);
-//          if (diff > 1e-14) {
-//            cout << "Y_copy differs from Y for localID " << localID << " and globalID " << globalID << "; diff = " << diff << endl;
-//          }
-//        }
-        //      cout << "Adding " << xEntry / diagEntry << " to global ID " << globalID << endl;
-//      }
-    
-//      }
+    Y.Multiply(1.0, *_diag_inv, X, 1.0);
   } else {
 //    cout << "_diag is NULL.\n";
   }
 
+  if (_fineSolverUsesDiagonalScaling) {
+    Y.Multiply(1.0, *_diag_sqrt, Y, 0);
+  }
+  
 //  Y_file.str("");
 //  Y_file << "/tmp/Y_" << globalIterationCount << ".dat";
 //  
@@ -616,6 +585,7 @@ void GMGOperator::setStiffnessDiagonal(Teuchos::RCP< Epetra_MultiVector> diagona
     }
   } else {
     _diag_inv = Teuchos::rcp( (Epetra_MultiVector*) NULL);
+    _diag_sqrt = Teuchos::rcp( (Epetra_MultiVector*) NULL);
   }
 
 }

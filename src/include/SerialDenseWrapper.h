@@ -216,6 +216,33 @@ public:
     return subMatrix;
   }
 
+  static void scaleBySymmetricDiagonal(FieldContainer<double> &A) {
+    // requires that A's diagonal be non-negative in every entry
+    // the below is a first pass implementation--would be more efficient not to construct the diagonal matrix explicitly
+    
+    if ((A.rank() != 2) || (A.dimension(0) != A.dimension(1))) {
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "A must be N x N matrix");
+    }
+    
+    cout << "A before scaling:\n" << A;
+    
+    int N = A.dimension(0);
+    FieldContainer<double> diag_inv_sqrt(N,N);
+    for (int i=0; i<N; i++) {
+      double diag_ii = A(i,i);
+      if (diag_ii < 0) {
+        cout << "A(" << i << "," << i << ") = " << diag_ii << " < 0!\n";
+        TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "diag(A) must be non-negative!\n");
+      }
+      diag_inv_sqrt(i,i) = 1.0 / sqrt(diag_ii);
+    }
+    FieldContainer<double> A_temp(N,N); // not sure if we can safely use A while multiplying by A
+    multiply(A_temp, diag_inv_sqrt, A);
+    multiply(A, A_temp, diag_inv_sqrt);
+    
+    cout << "A after scaling:\n" << A;
+  }
+  
   static void solveSystem(FieldContainer<double> &x, FieldContainer<double> &A, FieldContainer<double> &b, bool useATranspose = false) {
     // solves Ax = b, where
     // A = (N,N)
