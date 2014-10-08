@@ -105,6 +105,7 @@ int main(int argc, char *argv[]) {
 
    // Required arguments
   int problem = args.Input<int>("--problem", "which problem to run");
+  int formulation = args.Input<int>("--formulation", "which formulation to use: 0 = primitive, 1 = conservation, 2 = entropy");
 
    // Optional arguments (have defaults)
   int numRefs = args.Input("--numRefs", "number of refinement steps", 0);
@@ -125,7 +126,7 @@ int main(int argc, char *argv[]) {
   int H1Order = polyOrder+1;
 
   double xmin, xmax, xint, tmin, tmax;
-  double rhoL, rhoR, uL, uR, pL, pR, eL, eR, TL, TR;
+  double rhoL, rhoR, uL, uR, pL, pR, eL, eR, TL, TR, UcL, UcR, UmL, UmR, UeL, UeR, mL, mR, EL, ER;
   double M_inf = 1;
   double gamma = 1.4;
   double Cv = 1/(gamma*(gamma-1)*M_inf*M_inf);
@@ -241,6 +242,40 @@ int main(int argc, char *argv[]) {
   if (commRank == 0)
     cout << "Running the " << problemName << " problem" << endl;
 
+  switch (formulation)
+  {
+    case 0:
+    UcL = rhoL;
+    UcR = rhoR;
+    UmL = uL;
+    UmR = uR;
+    UeL = TL;
+    UeR = TR;
+    break;
+    case 1:
+    UcL = rhoL;
+    UcR = rhoR;
+    UmL = rhoL*uL;
+    UmR = rhoL*uR;
+    UeL = rhoL*(Cv*TL+0.5*uL*uL);
+    UeR = rhoR*(Cv*TR+0.5*uR*uR);
+    break;
+    case 2:
+    mL = rhoL*uL;
+    mR = rhoL*uR;
+    EL = rhoL*(Cv*TL+0.5*uL*uL);
+    ER = rhoR*(Cv*TR+0.5*uR*uR);
+    UcL = (-EL+(EL-0.5*mL*mL/rhoL)*(gamma+1-log(((gamma-1)*(EL-0.5*mL*mL/rhoL)/pow(rhoL,gamma)))))/(EL-0.5*mL*mL/rhoL);
+    UcR = (-ER+(ER-0.5*mR*mR/rhoR)*(gamma+1-log(((gamma-1)*(ER-0.5*mR*mR/rhoR)/pow(rhoR,gamma)))))/(ER-0.5*mR*mR/rhoR);
+    UmL = mL/(EL-0.5*mL*mL/rhoL);
+    UmL = mR/(ER-0.5*mR*mR/rhoR);
+    UeL = -rhoL/(EL-0.5*mL*mL/rhoL);
+    UeR = -rhoR/(ER-0.5*mR*mR/rhoR);
+    break;
+    default:
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "invalid problem number");
+  }
+
   ////////////////////   DECLARE VARIABLES   ///////////////////////
   // define test variables
   VarFactory varFactory;
@@ -251,16 +286,27 @@ int main(int argc, char *argv[]) {
   VarPtr ve = varFactory.testVar("ve", HGRAD);
 
   // define trial variables
+  // common variables amongst formulations
   VarPtr D = varFactory.fieldVar("D");
   VarPtr q = varFactory.fieldVar("q");
-  VarPtr rho = varFactory.fieldVar("rho");
-  VarPtr u = varFactory.fieldVar("u");
-  VarPtr T = varFactory.fieldVar("T");
   VarPtr uhat = varFactory.spatialTraceVar("uhat");
   VarPtr That = varFactory.spatialTraceVar("That");
   VarPtr Fc = varFactory.fluxVar("Fc");
   VarPtr Fm = varFactory.fluxVar("Fm");
   VarPtr Fe = varFactory.fluxVar("Fe");
+  // variables that vary among formulations
+  VarPtr Uc = varFactory.fieldVar("Uc");
+  VarPtr Um = varFactory.fieldVar("Um");
+  VarPtr Ue = varFactory.fieldVar("Ue");
+  // create aliases for these for each formulation
+  VarPtr rho = Uc;
+  VarPtr u = Um;
+  VarPtr T = Ue;
+  VarPtr m = Um;
+  VarPtr E = Ue;
+  VarPtr Vc = Uc;
+  VarPtr Vm = Um;
+  VarPtr Ve = Ue;
 
   ////////////////////   INITIALIZE USEFUL VARIABLES   ///////////////////////
   // Define useful functions
@@ -289,8 +335,8 @@ int main(int argc, char *argv[]) {
   {
     // define nodes for mesh
     FieldContainer<double> meshBoundary(4,2);
-    xmin = 0.0;
-    xmax = 1.0;
+    // xmin = 0.0;
+    // xmax = 1.0;
     double tminslab = tmax*double(slab)/numSlabs;
     double tmaxslab = tmax*double(slab+1)/numSlabs;
 
@@ -319,9 +365,9 @@ int main(int argc, char *argv[]) {
   // initialGuess[rho->ID()] = Teuchos::rcp( new DiscontinuousInitialCondition(xint, rhoL, rhoR) ) ;
   // initialGuess[u->ID()]   = Teuchos::rcp( new DiscontinuousInitialCondition(xint, uL, uR) );
   // initialGuess[T->ID()]   = Teuchos::rcp( new DiscontinuousInitialCondition(xint, TL, TR) );
-  initialGuess[rho->ID()] = Teuchos::rcp( new RampedInitialCondition(xint, rhoL, rhoR, (xmax-xmin)/numX) ) ;
-  initialGuess[u->ID()]   = Teuchos::rcp( new RampedInitialCondition(xint, uL, uR,     (xmax-xmin)/numX) );
-  initialGuess[T->ID()]   = Teuchos::rcp( new RampedInitialCondition(xint, TL, TR,     (xmax-xmin)/numX) );
+  initialGuess[rho->ID()] = Teuchos::rcp( new RampedInitialCondition(xint, UcL, UcR, (xmax-xmin)/numX) ) ;
+  initialGuess[u->ID()]   = Teuchos::rcp( new RampedInitialCondition(xint, UmL, UmR,     (xmax-xmin)/numX) );
+  initialGuess[T->ID()]   = Teuchos::rcp( new RampedInitialCondition(xint, UeL, UeR,     (xmax-xmin)/numX) );
 
   vector< SolutionPtr > backgroundFlows;
   for (int slab=0; slab < numSlabs; slab++)
@@ -337,262 +383,395 @@ int main(int argc, char *argv[]) {
     BFPtr bf = bfs[slab];
     Teuchos::RCP<RHSEasy> rhs = rhss[slab];
     IPPtr ip = ips[slab];
-    FunctionPtr rho_prev = Function::solution(rho, backgroundFlows[slab]);
-    FunctionPtr u_prev   = Function::solution(u, backgroundFlows[slab]);
-    FunctionPtr T_prev   = Function::solution(T, backgroundFlows[slab]);
+
+    FunctionPtr Uc_prev = Function::solution(Uc, backgroundFlows[slab]);
+    FunctionPtr Um_prev   = Function::solution(Um, backgroundFlows[slab]);
+    FunctionPtr Ue_prev   = Function::solution(Ue, backgroundFlows[slab]);
     FunctionPtr D_prev   = Function::solution(D, backgroundFlows[slab]);
-
-    // S terms:
-    bf->addTerm( D/mu, S);
-    bf->addTerm( 4./3*u, S->dx());
-    bf->addTerm( -4./3*uhat, S->times_normal_x());
-
-    // tau terms:
-    bf->addTerm( Pr/(mu*Cp)*q, tau);
-    bf->addTerm( -T, tau->dx());
-    bf->addTerm( That, tau->times_normal_x());
-
-    // vc terms:
-    bf->addTerm( -rho_prev*u, vc->dx());
-    bf->addTerm( -u_prev*rho, vc->dx());
-    bf->addTerm( -rho, vc->dy());
-    bf->addTerm( Fc, vc);
-
-    // vm terms:
-    bf->addTerm( -rho_prev*u_prev*u, vm->dx());
-    bf->addTerm( -rho_prev*u_prev*u, vm->dx());
-    bf->addTerm( -u_prev*u_prev*rho, vm->dx());
-    bf->addTerm( -R*rho_prev*T, vm->dx());
-    bf->addTerm( -R*T_prev*rho, vm->dx());
-    bf->addTerm( D, vm->dx());
-    bf->addTerm( -rho_prev*u, vm->dy());
-    bf->addTerm( -u_prev*rho, vm->dy());
-    bf->addTerm( Fm, vm);
-
-    // ve terms:
-    bf->addTerm( -Cv*rho_prev*T_prev*u, ve->dx());
-    bf->addTerm( -Cv*u_prev*rho_prev*T, ve->dx());
-    bf->addTerm( -Cv*T_prev*u_prev*rho, ve->dx());
-    bf->addTerm( -0.5*rho_prev*u_prev*u_prev*u, ve->dx());
-    bf->addTerm( -0.5*rho_prev*u_prev*u_prev*u, ve->dx());
-    bf->addTerm( -0.5*rho_prev*u_prev*u_prev*u, ve->dx());
-    bf->addTerm( -0.5*u_prev*u_prev*u_prev*rho, ve->dx());
-    bf->addTerm( -R*rho_prev*T_prev*u, ve->dx());
-    bf->addTerm( -R*rho_prev*u_prev*T, ve->dx());
-    bf->addTerm( -R*u_prev*T_prev*rho, ve->dx());
-    bf->addTerm( -q, ve->dx());
-    bf->addTerm( u_prev*D, ve->dx());
-    bf->addTerm( D_prev*u, ve->dx());
-    bf->addTerm( -Cv*rho_prev*T, ve->dy());
-    bf->addTerm( -Cv*T_prev*rho, ve->dy());
-    bf->addTerm( -0.5*rho_prev*u_prev*u, ve->dy());
-    bf->addTerm( -0.5*rho_prev*u_prev*u, ve->dy());
-    bf->addTerm( -0.5*u_prev*u_prev*rho, ve->dy());
-    bf->addTerm( Fe, ve);
-
-    ////////////////////   SPECIFY RHS   ///////////////////////
-
-    // S terms:
-    rhs->addTerm( -1./mu*D_prev * S );
-    rhs->addTerm( -4./3*u_prev * S->dx() );
-
-    // tau terms:
-    rhs->addTerm( T_prev * tau->dx() );
-
-    // vc terms:
-    rhs->addTerm( rho_prev*u_prev * vc->dx() );
-    rhs->addTerm( rho_prev * vc->dy() );
-
-    // vc terms:
-    rhs->addTerm( rho_prev*u_prev*u_prev * vm->dx() );
-    rhs->addTerm( R*rho_prev*T_prev * vm->dx() );
-    rhs->addTerm( -D_prev * vm->dx() );
-    rhs->addTerm( rho_prev*u_prev * vm->dy() );
-
-    // ve terms:
-    rhs->addTerm( Cv*rho_prev*u_prev*T_prev * ve->dx() );
-    rhs->addTerm( 0.5*rho_prev*u_prev*u_prev*u_prev * ve->dx() );
-    rhs->addTerm( R*rho_prev*u_prev*T_prev * ve->dx() );
-    rhs->addTerm( -u_prev*D_prev * ve->dx() );
-    rhs->addTerm( Cv*rho_prev*T_prev * ve->dy() );
-    rhs->addTerm( 0.5*rho_prev*u_prev*u_prev * ve->dy() );
-
-    ////////////////////   DEFINE INNER PRODUCT(S)   ///////////////////////
-    switch (norm)
+    FunctionPtr rho_prev = Uc_prev;
+    FunctionPtr u_prev = Um_prev;
+    FunctionPtr T_prev = Ue_prev;
+    FunctionPtr m_prev = Um_prev;
+    FunctionPtr E_prev = Ue_prev;
+    FunctionPtr Vc = Uc_prev;
+    FunctionPtr Vm_prev = Um_prev;
+    FunctionPtr Ve_prev = Ue_prev;
+    switch (formulation)
     {
-      // Automatic graph norm
-      case 0:
-      ip = bf->graphNorm();
+      case 0:    
+      //   /$$$$$$$            /$$               /$$   /$$     /$$                     
+      //  | $$__  $$          |__/              |__/  | $$    |__/                     
+      //  | $$  \ $$  /$$$$$$  /$$ /$$$$$$/$$$$  /$$ /$$$$$$   /$$ /$$    /$$  /$$$$$$ 
+      //  | $$$$$$$/ /$$__  $$| $$| $$_  $$_  $$| $$|_  $$_/  | $$|  $$  /$$/ /$$__  $$
+      //  | $$____/ | $$  \__/| $$| $$ \ $$ \ $$| $$  | $$    | $$ \  $$/$$/ | $$$$$$$$
+      //  | $$      | $$      | $$| $$ | $$ | $$| $$  | $$ /$$| $$  \  $$$/  | $$_____/
+      //  | $$      | $$      | $$| $$ | $$ | $$| $$  |  $$$$/| $$   \  $/   |  $$$$$$$
+      //  |__/      |__/      |__/|__/ |__/ |__/|__/   \___/  |__/    \_/     \_______/
+      //                                                                               
+      //                                                                               
+      //  
+      // S terms:
+      bf->addTerm( D/mu, S);
+      bf->addTerm( 4./3*u, S->dx());
+      bf->addTerm( -4./3*uhat, S->times_normal_x());
+
+      // tau terms:
+      bf->addTerm( Pr/(mu*Cp)*q, tau);
+      bf->addTerm( -T, tau->dx());
+      bf->addTerm( That, tau->times_normal_x());
+
+      // vc terms:
+      bf->addTerm( -rho_prev*u, vc->dx());
+      bf->addTerm( -u_prev*rho, vc->dx());
+      bf->addTerm( -rho, vc->dy());
+      bf->addTerm( Fc, vc);
+
+      // vm terms:
+      bf->addTerm( -rho_prev*u_prev*u, vm->dx());
+      bf->addTerm( -rho_prev*u_prev*u, vm->dx());
+      bf->addTerm( -u_prev*u_prev*rho, vm->dx());
+      bf->addTerm( -R*rho_prev*T, vm->dx());
+      bf->addTerm( -R*T_prev*rho, vm->dx());
+      bf->addTerm( D, vm->dx());
+      bf->addTerm( -rho_prev*u, vm->dy());
+      bf->addTerm( -u_prev*rho, vm->dy());
+      bf->addTerm( Fm, vm);
+
+      // ve terms:
+      bf->addTerm( -Cv*rho_prev*T_prev*u, ve->dx());
+      bf->addTerm( -Cv*u_prev*rho_prev*T, ve->dx());
+      bf->addTerm( -Cv*T_prev*u_prev*rho, ve->dx());
+      bf->addTerm( -0.5*rho_prev*u_prev*u_prev*u, ve->dx());
+      bf->addTerm( -0.5*rho_prev*u_prev*u_prev*u, ve->dx());
+      bf->addTerm( -0.5*rho_prev*u_prev*u_prev*u, ve->dx());
+      bf->addTerm( -0.5*u_prev*u_prev*u_prev*rho, ve->dx());
+      bf->addTerm( -R*rho_prev*T_prev*u, ve->dx());
+      bf->addTerm( -R*rho_prev*u_prev*T, ve->dx());
+      bf->addTerm( -R*u_prev*T_prev*rho, ve->dx());
+      bf->addTerm( -q, ve->dx());
+      bf->addTerm( u_prev*D, ve->dx());
+      bf->addTerm( D_prev*u, ve->dx());
+      bf->addTerm( -Cv*rho_prev*T, ve->dy());
+      bf->addTerm( -Cv*T_prev*rho, ve->dy());
+      bf->addTerm( -0.5*rho_prev*u_prev*u, ve->dy());
+      bf->addTerm( -0.5*rho_prev*u_prev*u, ve->dy());
+      bf->addTerm( -0.5*u_prev*u_prev*rho, ve->dy());
+      bf->addTerm( Fe, ve);
+
+      ////////////////////   SPECIFY RHS   ///////////////////////
+
+      // S terms:
+      rhs->addTerm( -1./mu*D_prev * S );
+      rhs->addTerm( -4./3*u_prev * S->dx() );
+
+      // tau terms:
+      rhs->addTerm( T_prev * tau->dx() );
+
+      // vc terms:
+      rhs->addTerm( rho_prev*u_prev * vc->dx() );
+      rhs->addTerm( rho_prev * vc->dy() );
+
+      // vm terms:
+      rhs->addTerm( rho_prev*u_prev*u_prev * vm->dx() );
+      rhs->addTerm( R*rho_prev*T_prev * vm->dx() );
+      rhs->addTerm( -D_prev * vm->dx() );
+      rhs->addTerm( rho_prev*u_prev * vm->dy() );
+
+      // ve terms:
+      rhs->addTerm( Cv*rho_prev*u_prev*T_prev * ve->dx() );
+      rhs->addTerm( 0.5*rho_prev*u_prev*u_prev*u_prev * ve->dx() );
+      rhs->addTerm( R*rho_prev*u_prev*T_prev * ve->dx() );
+      rhs->addTerm( -u_prev*D_prev * ve->dx() );
+      rhs->addTerm( Cv*rho_prev*T_prev * ve->dy() );
+      rhs->addTerm( 0.5*rho_prev*u_prev*u_prev * ve->dy() );
+
+      ////////////////////   DEFINE INNER PRODUCT(S)   ///////////////////////
+      switch (norm)
+      {
+        // Automatic graph norm
+        case 0:
+        ip = bf->graphNorm();
+        break;
+
+        // Manual Graph norm
+        case 1:
+        ip->addTerm(1./mu*S + vm->dx() + u_prev*ve->dx());
+        ip->addTerm(Pr/(Cp*mu)*tau - ve->dx());
+        ip->addTerm(u_prev*vc->dx()+vc->dy()+u_prev*u_prev*vm->dx()+R*T_prev*vm->dx()+u_prev*vm->dy()
+          +Cv*T_prev*u_prev*ve->dx()+0.5*u_prev*u_prev*u_prev*ve->dx()+R*T_prev*u_prev*ve->dx()+Cv*T_prev*ve->dy()+0.5*u_prev*u_prev*ve->dy());
+        ip->addTerm(-4./3*S->dx()+rho_prev*vc->dx()+rho_prev*u_prev*vm->dx()+rho_prev*u_prev*vm->dx()+rho_prev*vm->dy()+Cv*rho_prev*T_prev*ve->dx()
+          +0.5*rho_prev*u_prev*u_prev*ve->dx()+0.5*rho_prev*u_prev*u_prev*ve->dx()+0.5*rho_prev*u_prev*u_prev*ve->dx()
+          +R*rho_prev*T_prev*ve->dx()-D_prev*ve->dx()+0.5*rho_prev*u_prev*ve->dy()+0.5*rho_prev*u_prev*ve->dy());
+        ip->addTerm(tau->dx()+R*rho_prev*vm->dx()+Cv*rho_prev*u_prev*ve->dx()+R*rho_prev*u_prev*ve->dx()+Cv*rho_prev*ve->dy());
+        ip->addTerm(vc);
+        ip->addTerm(vm);
+        ip->addTerm(ve);
+        break;
+
+        // Decoupled Eulerian and viscous norm
+        // Might need to also elimnate D_prev term...
+        case 2:
+        ip->addTerm(vm->dx() + u_prev*ve->dx());
+        ip->addTerm(ve->dx());
+        ip->addTerm(u_prev*vc->dx()+vc->dy()+u_prev*u_prev*vm->dx()+R*T_prev*vm->dx()+u_prev*vm->dy()
+          +Cv*T_prev*u_prev*ve->dx()+0.5*u_prev*u_prev*u_prev*ve->dx()+R*T_prev*u_prev*ve->dx()+Cv*T_prev*ve->dy()+0.5*u_prev*u_prev*ve->dy());
+        ip->addTerm(rho_prev*vc->dx()+rho_prev*u_prev*vm->dx()+rho_prev*u_prev*vm->dx()+rho_prev*vm->dy()+Cv*rho_prev*T_prev*ve->dx()
+          +0.5*rho_prev*u_prev*u_prev*ve->dx()+0.5*rho_prev*u_prev*u_prev*ve->dx()+0.5*rho_prev*u_prev*u_prev*ve->dx()
+          +R*rho_prev*T_prev*ve->dx()-D_prev*ve->dx()+0.5*rho_prev*u_prev*ve->dy()+0.5*rho_prev*u_prev*ve->dy());
+        ip->addTerm(R*rho_prev*vm->dx()+Cv*rho_prev*u_prev*ve->dx()+R*rho_prev*u_prev*ve->dx()+Cv*rho_prev*ve->dy());
+        ip->addTerm(1./mu*S);
+        ip->addTerm(Pr/(Cp*mu)*tau);
+        ip->addTerm(vc);
+        ip->addTerm(vm);
+        ip->addTerm(ve);
+        break;
+
+        // Alternative Decoupled Eulerian and viscous norm
+        case 3:
+        ip->addTerm(vm->dx() + u_prev*ve->dx());
+        ip->addTerm(ve->dx());
+        ip->addTerm(u_prev*vc->dx()+vc->dy()+u_prev*u_prev*vm->dx()+R*T_prev*vm->dx()+u_prev*vm->dy()
+          +Cv*T_prev*u_prev*ve->dx()+0.5*u_prev*u_prev*u_prev*ve->dx()+R*T_prev*u_prev*ve->dx()+Cv*T_prev*ve->dy()+0.5*u_prev*u_prev*ve->dy());
+        ip->addTerm(rho_prev*vc->dx()+rho_prev*u_prev*vm->dx()+rho_prev*u_prev*vm->dx()+rho_prev*vm->dy()+Cv*rho_prev*T_prev*ve->dx()
+          +0.5*rho_prev*u_prev*u_prev*ve->dx()+0.5*rho_prev*u_prev*u_prev*ve->dx()+0.5*rho_prev*u_prev*u_prev*ve->dx()
+          +R*rho_prev*T_prev*ve->dx()+0.5*rho_prev*u_prev*ve->dy()+0.5*rho_prev*u_prev*ve->dy());
+        ip->addTerm(R*rho_prev*vm->dx()+Cv*rho_prev*u_prev*ve->dx()+R*rho_prev*u_prev*ve->dx()+Cv*rho_prev*ve->dy());
+        ip->addTerm(1./mu*S);
+        ip->addTerm(Pr/(Cp*mu)*tau);
+        ip->addTerm(vc);
+        ip->addTerm(vm);
+        ip->addTerm(ve);
+        break;
+
+        // Decoupled Eulerian and viscous norm
+        // Might need to also elimnate D_prev term...
+        case 4:
+        ip->addTerm(vm->dx() + u_prev*ve->dx());
+        ip->addTerm(ve->dx());
+        ip->addTerm(u_prev*vc->dx()+vc->dy()+u_prev*u_prev*vm->dx()+R*T_prev*vm->dx()+u_prev*vm->dy()
+          +Cv*T_prev*u_prev*ve->dx()+0.5*u_prev*u_prev*u_prev*ve->dx()+R*T_prev*u_prev*ve->dx()+Cv*T_prev*ve->dy()+0.5*u_prev*u_prev*ve->dy());
+        ip->addTerm(rho_prev*vc->dx()+rho_prev*u_prev*vm->dx()+rho_prev*u_prev*vm->dx()+rho_prev*vm->dy()+Cv*rho_prev*T_prev*ve->dx()
+          +0.5*rho_prev*u_prev*u_prev*ve->dx()+0.5*rho_prev*u_prev*u_prev*ve->dx()+0.5*rho_prev*u_prev*u_prev*ve->dx()
+          +R*rho_prev*T_prev*ve->dx()-D_prev*ve->dx()+0.5*rho_prev*u_prev*ve->dy()+0.5*rho_prev*u_prev*ve->dy());
+        ip->addTerm(R*rho_prev*vm->dx()+Cv*rho_prev*u_prev*ve->dx()+R*rho_prev*u_prev*ve->dx()+Cv*rho_prev*ve->dy());
+        ip->addTerm(1./mu*S);
+        ip->addTerm(4./3*S->dx());
+        ip->addTerm(Pr/(Cp*mu)*tau);
+        ip->addTerm(tau->dx());
+        ip->addTerm(vc);
+        ip->addTerm(vm);
+        ip->addTerm(ve);
+        break;
+
+        // Alternative Decoupled Eulerian and viscous norm
+        case 5:
+        ip->addTerm(vm->dx() + u_prev*ve->dx());
+        ip->addTerm(ve->dx());
+        ip->addTerm(u_prev*vc->dx()+vc->dy()+u_prev*u_prev*vm->dx()+R*T_prev*vm->dx()+u_prev*vm->dy()
+          +Cv*T_prev*u_prev*ve->dx()+0.5*u_prev*u_prev*u_prev*ve->dx()+R*T_prev*u_prev*ve->dx()+Cv*T_prev*ve->dy()+0.5*u_prev*u_prev*ve->dy());
+        ip->addTerm(rho_prev*vc->dx()+rho_prev*u_prev*vm->dx()+rho_prev*u_prev*vm->dx()+rho_prev*vm->dy()+Cv*rho_prev*T_prev*ve->dx()
+          +0.5*rho_prev*u_prev*u_prev*ve->dx()+0.5*rho_prev*u_prev*u_prev*ve->dx()+0.5*rho_prev*u_prev*u_prev*ve->dx()
+          +R*rho_prev*T_prev*ve->dx()+0.5*rho_prev*u_prev*ve->dy()+0.5*rho_prev*u_prev*ve->dy());
+        ip->addTerm(R*rho_prev*vm->dx()+Cv*rho_prev*u_prev*ve->dx()+R*rho_prev*u_prev*ve->dx()+Cv*rho_prev*ve->dy());
+        ip->addTerm(1./mu*S);
+        ip->addTerm(4./3*S->dx());
+        ip->addTerm(Pr/(Cp*mu)*tau);
+        ip->addTerm(tau->dx());
+        ip->addTerm(vc);
+        ip->addTerm(vm);
+        ip->addTerm(ve);
+        break;
+
+        // Analogous robust norm from convection-diffusion
+        case 6:
+        ip->addTerm(1./mu*S);
+        ip->addTerm(Pr/(Cp*mu)*tau);
+        // ip->addTerm(mu*vm->dx() + mu*u_prev*ve->dx());
+        // ip->addTerm(Cp*mu/Pr*ve->dx());
+        ip->addTerm(vm->dx() + u_prev*ve->dx());
+        ip->addTerm(ve->dx());
+        // NS graph part
+        ip->addTerm(u_prev*vc->dx()+vc->dy()+u_prev*u_prev*vm->dx()+R*T_prev*vm->dx()+u_prev*vm->dy()
+          +Cv*T_prev*u_prev*ve->dx()+0.5*u_prev*u_prev*u_prev*ve->dx()+R*T_prev*u_prev*ve->dx()+Cv*T_prev*ve->dy()+0.5*u_prev*u_prev*ve->dy());
+        ip->addTerm(-4./3*S->dx()+rho_prev*vc->dx()+rho_prev*u_prev*vm->dx()+rho_prev*u_prev*vm->dx()+rho_prev*vm->dy()+Cv*rho_prev*T_prev*ve->dx()
+          +0.5*rho_prev*u_prev*u_prev*ve->dx()+0.5*rho_prev*u_prev*u_prev*ve->dx()+0.5*rho_prev*u_prev*u_prev*ve->dx()
+          +R*rho_prev*T_prev*ve->dx()-D_prev*ve->dx()+0.5*rho_prev*u_prev*ve->dy()+0.5*rho_prev*u_prev*ve->dy());
+        ip->addTerm(tau->dx()+R*rho_prev*vm->dx()+Cv*rho_prev*u_prev*ve->dx()+R*rho_prev*u_prev*ve->dx()+Cv*rho_prev*ve->dy());
+        // Euler graph part
+        ip->addTerm(u_prev*vc->dx()+vc->dy()+u_prev*u_prev*vm->dx()+R*T_prev*vm->dx()+u_prev*vm->dy()
+          +Cv*T_prev*u_prev*ve->dx()+0.5*u_prev*u_prev*u_prev*ve->dx()+R*T_prev*u_prev*ve->dx()+Cv*T_prev*ve->dy()+0.5*u_prev*u_prev*ve->dy());
+        ip->addTerm(rho_prev*vc->dx()+rho_prev*u_prev*vm->dx()+rho_prev*u_prev*vm->dx()+rho_prev*vm->dy()+Cv*rho_prev*T_prev*ve->dx()
+          +0.5*rho_prev*u_prev*u_prev*ve->dx()+0.5*rho_prev*u_prev*u_prev*ve->dx()+0.5*rho_prev*u_prev*u_prev*ve->dx()
+          +R*rho_prev*T_prev*ve->dx()+0.5*rho_prev*u_prev*ve->dy()+0.5*rho_prev*u_prev*ve->dy());
+        ip->addTerm(R*rho_prev*vm->dx()+Cv*rho_prev*u_prev*ve->dx()+R*rho_prev*u_prev*ve->dx()+Cv*rho_prev*ve->dy());
+        ip->addTerm(vc);
+        ip->addTerm(vm);
+        ip->addTerm(ve);
+        break;
+
+        // Analogous robust norm from convection-diffusion
+        case 7:
+        ip->addTerm(1./mu*S);
+        ip->addTerm(Pr/(Cp*mu)*tau);
+        ip->addTerm(vm->dx() + u_prev*ve->dx());
+        ip->addTerm(ve->dx());
+        // NS graph part
+        ip->addTerm(u_prev*vc->dx()+vc->dy()+u_prev*u_prev*vm->dx()+R*T_prev*vm->dx()+u_prev*vm->dy()
+          +Cv*T_prev*u_prev*ve->dx()+0.5*u_prev*u_prev*u_prev*ve->dx()+R*T_prev*u_prev*ve->dx()+Cv*T_prev*ve->dy()+0.5*u_prev*u_prev*ve->dy());
+        ip->addTerm(-4./3*S->dx()+rho_prev*vc->dx()+rho_prev*u_prev*vm->dx()+rho_prev*u_prev*vm->dx()+rho_prev*vm->dy()+Cv*rho_prev*T_prev*ve->dx()
+          +0.5*rho_prev*u_prev*u_prev*ve->dx()+0.5*rho_prev*u_prev*u_prev*ve->dx()+0.5*rho_prev*u_prev*u_prev*ve->dx()
+          +R*rho_prev*T_prev*ve->dx()-D_prev*ve->dx()+0.5*rho_prev*u_prev*ve->dy()+0.5*rho_prev*u_prev*ve->dy());
+        ip->addTerm(tau->dx()+R*rho_prev*vm->dx()+Cv*rho_prev*u_prev*ve->dx()+R*rho_prev*u_prev*ve->dx()+Cv*rho_prev*ve->dy());
+        // Euler graph part
+        // ip->addTerm(u_prev*vc->dx()+vc->dy()+u_prev*u_prev*vm->dx()+R*T_prev*vm->dx()+u_prev*vm->dy()
+        //   +Cv*T_prev*u_prev*ve->dx()+0.5*u_prev*u_prev*u_prev*ve->dx()+R*T_prev*u_prev*ve->dx()+Cv*T_prev*ve->dy()+0.5*u_prev*u_prev*ve->dy());
+        // ip->addTerm(rho_prev*vc->dx()+rho_prev*u_prev*vm->dx()+rho_prev*u_prev*vm->dx()+rho_prev*vm->dy()+Cv*rho_prev*T_prev*ve->dx()
+        //   +0.5*rho_prev*u_prev*u_prev*ve->dx()+0.5*rho_prev*u_prev*u_prev*ve->dx()+0.5*rho_prev*u_prev*u_prev*ve->dx()
+        //   +R*rho_prev*T_prev*ve->dx()+0.5*rho_prev*u_prev*ve->dy()+0.5*rho_prev*u_prev*ve->dy());
+        ip->addTerm(R*rho_prev*vm->dx()+Cv*rho_prev*u_prev*ve->dx()+R*rho_prev*u_prev*ve->dx()+Cv*rho_prev*ve->dy());
+        ip->addTerm(vc);
+        ip->addTerm(vm);
+        ip->addTerm(ve);
+        break;
+
+        // Analogous robust norm from convection-diffusion
+        case 8:
+        ip->addTerm(1./mu*S);
+        ip->addTerm(Pr/(Cp*mu)*tau);
+        ip->addTerm(vm->dx() + u_prev*ve->dx());
+        ip->addTerm(ve->dx());
+        // NS graph part
+        // ip->addTerm(u_prev*vc->dx()+vc->dy()+u_prev*u_prev*vm->dx()+R*T_prev*vm->dx()+u_prev*vm->dy()
+        //   +Cv*T_prev*u_prev*ve->dx()+0.5*u_prev*u_prev*u_prev*ve->dx()+R*T_prev*u_prev*ve->dx()+Cv*T_prev*ve->dy()+0.5*u_prev*u_prev*ve->dy());
+        // ip->addTerm(-4./3*S->dx()+rho_prev*vc->dx()+rho_prev*u_prev*vm->dx()+rho_prev*u_prev*vm->dx()+rho_prev*vm->dy()+Cv*rho_prev*T_prev*ve->dx()
+        //   +0.5*rho_prev*u_prev*u_prev*ve->dx()+0.5*rho_prev*u_prev*u_prev*ve->dx()+0.5*rho_prev*u_prev*u_prev*ve->dx()
+        //   +R*rho_prev*T_prev*ve->dx()-D_prev*ve->dx()+0.5*rho_prev*u_prev*ve->dy()+0.5*rho_prev*u_prev*ve->dy());
+        // ip->addTerm(tau->dx()+R*rho_prev*vm->dx()+Cv*rho_prev*u_prev*ve->dx()+R*rho_prev*u_prev*ve->dx()+Cv*rho_prev*ve->dy());
+        // Euler graph part
+        ip->addTerm(u_prev*vc->dx()+vc->dy()+u_prev*u_prev*vm->dx()+R*T_prev*vm->dx()+u_prev*vm->dy()
+          +Cv*T_prev*u_prev*ve->dx()+0.5*u_prev*u_prev*u_prev*ve->dx()+R*T_prev*u_prev*ve->dx()+Cv*T_prev*ve->dy()+0.5*u_prev*u_prev*ve->dy());
+        ip->addTerm(rho_prev*vc->dx()+rho_prev*u_prev*vm->dx()+rho_prev*u_prev*vm->dx()+rho_prev*vm->dy()+Cv*rho_prev*T_prev*ve->dx()
+          +0.5*rho_prev*u_prev*u_prev*ve->dx()+0.5*rho_prev*u_prev*u_prev*ve->dx()+0.5*rho_prev*u_prev*u_prev*ve->dx()
+          +R*rho_prev*T_prev*ve->dx()+0.5*rho_prev*u_prev*ve->dy()+0.5*rho_prev*u_prev*ve->dy());
+        ip->addTerm(R*rho_prev*vm->dx()+Cv*rho_prev*u_prev*ve->dx()+R*rho_prev*u_prev*ve->dx()+Cv*rho_prev*ve->dy());
+        ip->addTerm(vc);
+        ip->addTerm(vm);
+        ip->addTerm(ve);
+        break;
+
+        default:
+        TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "invalid inner product");
+      }
       break;
 
-      // Manual Graph norm
-      case 1:
-      ip->addTerm(1./mu*S + vm->dx() + u_prev*ve->dx());
-      ip->addTerm(Pr/(Cp*mu)*tau - ve->dx());
-      ip->addTerm(u_prev*vc->dx()+vc->dy()+u_prev*u_prev*vm->dx()+R*T_prev*vm->dx()+u_prev*vm->dy()
-        +Cv*T_prev*u_prev*ve->dx()+0.5*u_prev*u_prev*u_prev*ve->dx()+R*T_prev*u_prev*ve->dx()+Cv*T_prev*ve->dy()+0.5*u_prev*u_prev*ve->dy());
-      ip->addTerm(-4./3*S->dx()+rho_prev*vc->dx()+rho_prev*u_prev*vm->dx()+rho_prev*u_prev*vm->dx()+rho_prev*vm->dy()+Cv*rho_prev*T_prev*ve->dx()
-        +0.5*rho_prev*u_prev*u_prev*ve->dx()+0.5*rho_prev*u_prev*u_prev*ve->dx()+0.5*rho_prev*u_prev*u_prev*ve->dx()
-        +R*rho_prev*T_prev*ve->dx()-D_prev*ve->dx()+0.5*rho_prev*u_prev*ve->dy()+0.5*rho_prev*u_prev*ve->dy());
-      ip->addTerm(tau->dx()+R*rho_prev*vm->dx()+Cv*rho_prev*u_prev*ve->dx()+R*rho_prev*u_prev*ve->dx()+Cv*rho_prev*ve->dy());
-      ip->addTerm(vc);
-      ip->addTerm(vm);
-      ip->addTerm(ve);
+      case 1:      
+      //    /$$$$$$                                                                           /$$     /$$                    
+      //   /$$__  $$                                                                         | $$    |__/                    
+      //  | $$  \__/  /$$$$$$  /$$$$$$$   /$$$$$$$  /$$$$$$   /$$$$$$  /$$    /$$  /$$$$$$  /$$$$$$   /$$  /$$$$$$  /$$$$$$$ 
+      //  | $$       /$$__  $$| $$__  $$ /$$_____/ /$$__  $$ /$$__  $$|  $$  /$$/ |____  $$|_  $$_/  | $$ /$$__  $$| $$__  $$
+      //  | $$      | $$  \ $$| $$  \ $$|  $$$$$$ | $$$$$$$$| $$  \__/ \  $$/$$/   /$$$$$$$  | $$    | $$| $$  \ $$| $$  \ $$
+      //  | $$    $$| $$  | $$| $$  | $$ \____  $$| $$_____/| $$        \  $$$/   /$$__  $$  | $$ /$$| $$| $$  | $$| $$  | $$
+      //  |  $$$$$$/|  $$$$$$/| $$  | $$ /$$$$$$$/|  $$$$$$$| $$         \  $/   |  $$$$$$$  |  $$$$/| $$|  $$$$$$/| $$  | $$
+      //   \______/  \______/ |__/  |__/|_______/  \_______/|__/          \_/     \_______/   \___/  |__/ \______/ |__/  |__/
+      //                                                                                                                     
+      //                                                                                                                     
+      //    
+      // S terms:
+      bf->addTerm( D/mu, S);
+      bf->addTerm( 4./3/rho_prev*m, S->dx());
+      bf->addTerm( -4./3*m_prev/(rho_prev*rho_prev)*rho, S->dx());
+      bf->addTerm( -4./3*uhat, S->times_normal_x());
+
+      // tau terms:
+      bf->addTerm( Pr/(mu*Cp)*q, tau);
+      bf->addTerm( -1/(Cv*rho_prev)*E, tau->dx());
+      bf->addTerm( m_prev/(Cv*rho_prev*rho_prev)*m, tau->dx());
+      bf->addTerm( -m_prev*m_prev/(2.0*Cv*rho_prev*rho_prev*rho_prev)*rho, tau->dx());
+      bf->addTerm( (E_prev-0.5*m_prev*m_prev/rho_prev)/(Cv*rho_prev*rho_prev)*rho, tau->dx());
+      bf->addTerm( That, tau->times_normal_x());
+
+      // vc terms:
+      bf->addTerm( -m, vc->dx());
+      bf->addTerm( -rho, vc->dy());
+      bf->addTerm( Fc, vc);
+
+      // vm terms:
+      bf->addTerm( -2.0*m_prev/rho_prev*m, vm->dx());
+      bf->addTerm( m_prev*m_prev/(rho_prev*rho_prev)*rho, vm->dx());
+      bf->addTerm( -(gamma-1)*E, vm->dx());
+      bf->addTerm( (gamma-1)*m_prev/rho_prev*m, vm->dx());
+      bf->addTerm( -(gamma-1)*m_prev*m_prev/(rho_prev*rho_prev)*rho, vm->dx());
+      bf->addTerm( D, vm->dx());
+      bf->addTerm( -m, vm->dy());
+      bf->addTerm( Fm, vm);
+
+      // ve terms:
+      bf->addTerm( -E_prev/rho_prev*m, ve->dx());
+      bf->addTerm( -m_prev/rho_prev*E, ve->dx());
+      bf->addTerm( m_prev*E_prev/(rho_prev*rho_prev)*rho, ve->dx());
+      bf->addTerm( -(gamma-1)*m_prev/rho_prev*E, ve->dx());
+      bf->addTerm( -(gamma-1)*E_prev/rho_prev*m, ve->dx());
+      bf->addTerm( (gamma-1)*m_prev*E_prev/(rho_prev*rho_prev)*rho, ve->dx());
+      bf->addTerm( 3*(gamma-1)*m_prev*m_prev/(2*rho_prev*rho_prev)*m, ve->dx());
+      bf->addTerm( -(gamma-1)*m_prev*m_prev*m_prev/(rho_prev*rho_prev*rho_prev)*rho, ve->dx());
+      bf->addTerm( D_prev/rho_prev*m, ve->dx());
+      bf->addTerm( m_prev/rho_prev*D, ve->dx());
+      bf->addTerm( -m_prev*D_prev/(rho_prev*rho_prev)*rho, ve->dx());
+      bf->addTerm( -q, ve->dx());
+      bf->addTerm( -E, ve->dy());
+      bf->addTerm( Fe, ve);
+
+      ////////////////////   SPECIFY RHS   ///////////////////////
+
+      // S terms:
+      rhs->addTerm( -1./mu*D_prev * S );
+      rhs->addTerm( -4./3*m_prev/rho_prev * S->dx() );
+
+      // tau terms:
+      rhs->addTerm( (E_prev-0.5*m_prev*m_prev/rho_prev)/(Cv*rho_prev) * tau->dx() );
+
+      // vc terms:
+      rhs->addTerm( m_prev * vc->dx() );
+      rhs->addTerm( rho_prev * vc->dy() );
+
+      // vm terms:
+      rhs->addTerm( m_prev*m_prev/rho_prev * vm->dx() );
+      rhs->addTerm( (gamma-1)*(E_prev-0.5*m_prev*m_prev/rho_prev) * vm->dx() );
+      rhs->addTerm( -D_prev * vm->dx() );
+      rhs->addTerm( m_prev * vm->dy() );
+
+      // ve terms:
+      rhs->addTerm( m_prev*E_prev/rho_prev * ve->dx() );
+      rhs->addTerm( (gamma-1)*(E_prev*0.5*m_prev*m_prev/rho_prev)*m_prev/rho_prev * ve->dx() );
+      rhs->addTerm( -m_prev/rho_prev*D_prev * ve->dx() );
+      rhs->addTerm( E_prev * ve->dy() );
+
+      ////////////////////   DEFINE INNER PRODUCT(S)   ///////////////////////
+      switch (norm)
+      {
+        // Automatic graph norm
+        case 0:
+        ip = bf->graphNorm();
+        break;
+
+        default:
+        TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "invalid inner product");
+      }
       break;
 
-      // Decoupled Eulerian and viscous norm
-      // Might need to also elimnate D_prev term...
       case 2:
-      ip->addTerm(vm->dx() + u_prev*ve->dx());
-      ip->addTerm(ve->dx());
-      ip->addTerm(u_prev*vc->dx()+vc->dy()+u_prev*u_prev*vm->dx()+R*T_prev*vm->dx()+u_prev*vm->dy()
-        +Cv*T_prev*u_prev*ve->dx()+0.5*u_prev*u_prev*u_prev*ve->dx()+R*T_prev*u_prev*ve->dx()+Cv*T_prev*ve->dy()+0.5*u_prev*u_prev*ve->dy());
-      ip->addTerm(rho_prev*vc->dx()+rho_prev*u_prev*vm->dx()+rho_prev*u_prev*vm->dx()+rho_prev*vm->dy()+Cv*rho_prev*T_prev*ve->dx()
-        +0.5*rho_prev*u_prev*u_prev*ve->dx()+0.5*rho_prev*u_prev*u_prev*ve->dx()+0.5*rho_prev*u_prev*u_prev*ve->dx()
-        +R*rho_prev*T_prev*ve->dx()-D_prev*ve->dx()+0.5*rho_prev*u_prev*ve->dy()+0.5*rho_prev*u_prev*ve->dy());
-      ip->addTerm(R*rho_prev*vm->dx()+Cv*rho_prev*u_prev*ve->dx()+R*rho_prev*u_prev*ve->dx()+Cv*rho_prev*ve->dy());
-      ip->addTerm(1./mu*S);
-      ip->addTerm(Pr/(Cp*mu)*tau);
-      ip->addTerm(vc);
-      ip->addTerm(vm);
-      ip->addTerm(ve);
+      //   /$$$$$$$$             /$$                                            
+      //  | $$_____/            | $$                                            
+      //  | $$       /$$$$$$$  /$$$$$$    /$$$$$$   /$$$$$$   /$$$$$$  /$$   /$$
+      //  | $$$$$   | $$__  $$|_  $$_/   /$$__  $$ /$$__  $$ /$$__  $$| $$  | $$
+      //  | $$__/   | $$  \ $$  | $$    | $$  \__/| $$  \ $$| $$  \ $$| $$  | $$
+      //  | $$      | $$  | $$  | $$ /$$| $$      | $$  | $$| $$  | $$| $$  | $$
+      //  | $$$$$$$$| $$  | $$  |  $$$$/| $$      |  $$$$$$/| $$$$$$$/|  $$$$$$$
+      //  |________/|__/  |__/   \___/  |__/       \______/ | $$____/  \____  $$
+      //                                                    | $$       /$$  | $$
+      //                                                    | $$      |  $$$$$$/
+      //                                                    |__/       \______/ 
       break;
-
-      // Alternative Decoupled Eulerian and viscous norm
-      case 3:
-      ip->addTerm(vm->dx() + u_prev*ve->dx());
-      ip->addTerm(ve->dx());
-      ip->addTerm(u_prev*vc->dx()+vc->dy()+u_prev*u_prev*vm->dx()+R*T_prev*vm->dx()+u_prev*vm->dy()
-        +Cv*T_prev*u_prev*ve->dx()+0.5*u_prev*u_prev*u_prev*ve->dx()+R*T_prev*u_prev*ve->dx()+Cv*T_prev*ve->dy()+0.5*u_prev*u_prev*ve->dy());
-      ip->addTerm(rho_prev*vc->dx()+rho_prev*u_prev*vm->dx()+rho_prev*u_prev*vm->dx()+rho_prev*vm->dy()+Cv*rho_prev*T_prev*ve->dx()
-        +0.5*rho_prev*u_prev*u_prev*ve->dx()+0.5*rho_prev*u_prev*u_prev*ve->dx()+0.5*rho_prev*u_prev*u_prev*ve->dx()
-        +R*rho_prev*T_prev*ve->dx()+0.5*rho_prev*u_prev*ve->dy()+0.5*rho_prev*u_prev*ve->dy());
-      ip->addTerm(R*rho_prev*vm->dx()+Cv*rho_prev*u_prev*ve->dx()+R*rho_prev*u_prev*ve->dx()+Cv*rho_prev*ve->dy());
-      ip->addTerm(1./mu*S);
-      ip->addTerm(Pr/(Cp*mu)*tau);
-      ip->addTerm(vc);
-      ip->addTerm(vm);
-      ip->addTerm(ve);
-      break;
-
-      // Decoupled Eulerian and viscous norm
-      // Might need to also elimnate D_prev term...
-      case 4:
-      ip->addTerm(vm->dx() + u_prev*ve->dx());
-      ip->addTerm(ve->dx());
-      ip->addTerm(u_prev*vc->dx()+vc->dy()+u_prev*u_prev*vm->dx()+R*T_prev*vm->dx()+u_prev*vm->dy()
-        +Cv*T_prev*u_prev*ve->dx()+0.5*u_prev*u_prev*u_prev*ve->dx()+R*T_prev*u_prev*ve->dx()+Cv*T_prev*ve->dy()+0.5*u_prev*u_prev*ve->dy());
-      ip->addTerm(rho_prev*vc->dx()+rho_prev*u_prev*vm->dx()+rho_prev*u_prev*vm->dx()+rho_prev*vm->dy()+Cv*rho_prev*T_prev*ve->dx()
-        +0.5*rho_prev*u_prev*u_prev*ve->dx()+0.5*rho_prev*u_prev*u_prev*ve->dx()+0.5*rho_prev*u_prev*u_prev*ve->dx()
-        +R*rho_prev*T_prev*ve->dx()-D_prev*ve->dx()+0.5*rho_prev*u_prev*ve->dy()+0.5*rho_prev*u_prev*ve->dy());
-      ip->addTerm(R*rho_prev*vm->dx()+Cv*rho_prev*u_prev*ve->dx()+R*rho_prev*u_prev*ve->dx()+Cv*rho_prev*ve->dy());
-      ip->addTerm(1./mu*S);
-      ip->addTerm(4./3*S->dx());
-      ip->addTerm(Pr/(Cp*mu)*tau);
-      ip->addTerm(tau->dx());
-      ip->addTerm(vc);
-      ip->addTerm(vm);
-      ip->addTerm(ve);
-      break;
-
-      // Alternative Decoupled Eulerian and viscous norm
-      case 5:
-      ip->addTerm(vm->dx() + u_prev*ve->dx());
-      ip->addTerm(ve->dx());
-      ip->addTerm(u_prev*vc->dx()+vc->dy()+u_prev*u_prev*vm->dx()+R*T_prev*vm->dx()+u_prev*vm->dy()
-        +Cv*T_prev*u_prev*ve->dx()+0.5*u_prev*u_prev*u_prev*ve->dx()+R*T_prev*u_prev*ve->dx()+Cv*T_prev*ve->dy()+0.5*u_prev*u_prev*ve->dy());
-      ip->addTerm(rho_prev*vc->dx()+rho_prev*u_prev*vm->dx()+rho_prev*u_prev*vm->dx()+rho_prev*vm->dy()+Cv*rho_prev*T_prev*ve->dx()
-        +0.5*rho_prev*u_prev*u_prev*ve->dx()+0.5*rho_prev*u_prev*u_prev*ve->dx()+0.5*rho_prev*u_prev*u_prev*ve->dx()
-        +R*rho_prev*T_prev*ve->dx()+0.5*rho_prev*u_prev*ve->dy()+0.5*rho_prev*u_prev*ve->dy());
-      ip->addTerm(R*rho_prev*vm->dx()+Cv*rho_prev*u_prev*ve->dx()+R*rho_prev*u_prev*ve->dx()+Cv*rho_prev*ve->dy());
-      ip->addTerm(1./mu*S);
-      ip->addTerm(4./3*S->dx());
-      ip->addTerm(Pr/(Cp*mu)*tau);
-      ip->addTerm(tau->dx());
-      ip->addTerm(vc);
-      ip->addTerm(vm);
-      ip->addTerm(ve);
-      break;
-
-      // Analogous robust norm from convection-diffusion
-      case 6:
-      ip->addTerm(1./mu*S);
-      ip->addTerm(Pr/(Cp*mu)*tau);
-      // ip->addTerm(mu*vm->dx() + mu*u_prev*ve->dx());
-      // ip->addTerm(Cp*mu/Pr*ve->dx());
-      ip->addTerm(vm->dx() + u_prev*ve->dx());
-      ip->addTerm(ve->dx());
-      // NS graph part
-      ip->addTerm(u_prev*vc->dx()+vc->dy()+u_prev*u_prev*vm->dx()+R*T_prev*vm->dx()+u_prev*vm->dy()
-        +Cv*T_prev*u_prev*ve->dx()+0.5*u_prev*u_prev*u_prev*ve->dx()+R*T_prev*u_prev*ve->dx()+Cv*T_prev*ve->dy()+0.5*u_prev*u_prev*ve->dy());
-      ip->addTerm(-4./3*S->dx()+rho_prev*vc->dx()+rho_prev*u_prev*vm->dx()+rho_prev*u_prev*vm->dx()+rho_prev*vm->dy()+Cv*rho_prev*T_prev*ve->dx()
-        +0.5*rho_prev*u_prev*u_prev*ve->dx()+0.5*rho_prev*u_prev*u_prev*ve->dx()+0.5*rho_prev*u_prev*u_prev*ve->dx()
-        +R*rho_prev*T_prev*ve->dx()-D_prev*ve->dx()+0.5*rho_prev*u_prev*ve->dy()+0.5*rho_prev*u_prev*ve->dy());
-      ip->addTerm(tau->dx()+R*rho_prev*vm->dx()+Cv*rho_prev*u_prev*ve->dx()+R*rho_prev*u_prev*ve->dx()+Cv*rho_prev*ve->dy());
-      // Euler graph part
-      ip->addTerm(u_prev*vc->dx()+vc->dy()+u_prev*u_prev*vm->dx()+R*T_prev*vm->dx()+u_prev*vm->dy()
-        +Cv*T_prev*u_prev*ve->dx()+0.5*u_prev*u_prev*u_prev*ve->dx()+R*T_prev*u_prev*ve->dx()+Cv*T_prev*ve->dy()+0.5*u_prev*u_prev*ve->dy());
-      ip->addTerm(rho_prev*vc->dx()+rho_prev*u_prev*vm->dx()+rho_prev*u_prev*vm->dx()+rho_prev*vm->dy()+Cv*rho_prev*T_prev*ve->dx()
-        +0.5*rho_prev*u_prev*u_prev*ve->dx()+0.5*rho_prev*u_prev*u_prev*ve->dx()+0.5*rho_prev*u_prev*u_prev*ve->dx()
-        +R*rho_prev*T_prev*ve->dx()+0.5*rho_prev*u_prev*ve->dy()+0.5*rho_prev*u_prev*ve->dy());
-      ip->addTerm(R*rho_prev*vm->dx()+Cv*rho_prev*u_prev*ve->dx()+R*rho_prev*u_prev*ve->dx()+Cv*rho_prev*ve->dy());
-      ip->addTerm(vc);
-      ip->addTerm(vm);
-      ip->addTerm(ve);
-      break;
-
-      // Analogous robust norm from convection-diffusion
-      case 7:
-      ip->addTerm(1./mu*S);
-      ip->addTerm(Pr/(Cp*mu)*tau);
-      ip->addTerm(vm->dx() + u_prev*ve->dx());
-      ip->addTerm(ve->dx());
-      // NS graph part
-      ip->addTerm(u_prev*vc->dx()+vc->dy()+u_prev*u_prev*vm->dx()+R*T_prev*vm->dx()+u_prev*vm->dy()
-        +Cv*T_prev*u_prev*ve->dx()+0.5*u_prev*u_prev*u_prev*ve->dx()+R*T_prev*u_prev*ve->dx()+Cv*T_prev*ve->dy()+0.5*u_prev*u_prev*ve->dy());
-      ip->addTerm(-4./3*S->dx()+rho_prev*vc->dx()+rho_prev*u_prev*vm->dx()+rho_prev*u_prev*vm->dx()+rho_prev*vm->dy()+Cv*rho_prev*T_prev*ve->dx()
-        +0.5*rho_prev*u_prev*u_prev*ve->dx()+0.5*rho_prev*u_prev*u_prev*ve->dx()+0.5*rho_prev*u_prev*u_prev*ve->dx()
-        +R*rho_prev*T_prev*ve->dx()-D_prev*ve->dx()+0.5*rho_prev*u_prev*ve->dy()+0.5*rho_prev*u_prev*ve->dy());
-      ip->addTerm(tau->dx()+R*rho_prev*vm->dx()+Cv*rho_prev*u_prev*ve->dx()+R*rho_prev*u_prev*ve->dx()+Cv*rho_prev*ve->dy());
-      // Euler graph part
-      // ip->addTerm(u_prev*vc->dx()+vc->dy()+u_prev*u_prev*vm->dx()+R*T_prev*vm->dx()+u_prev*vm->dy()
-      //   +Cv*T_prev*u_prev*ve->dx()+0.5*u_prev*u_prev*u_prev*ve->dx()+R*T_prev*u_prev*ve->dx()+Cv*T_prev*ve->dy()+0.5*u_prev*u_prev*ve->dy());
-      // ip->addTerm(rho_prev*vc->dx()+rho_prev*u_prev*vm->dx()+rho_prev*u_prev*vm->dx()+rho_prev*vm->dy()+Cv*rho_prev*T_prev*ve->dx()
-      //   +0.5*rho_prev*u_prev*u_prev*ve->dx()+0.5*rho_prev*u_prev*u_prev*ve->dx()+0.5*rho_prev*u_prev*u_prev*ve->dx()
-      //   +R*rho_prev*T_prev*ve->dx()+0.5*rho_prev*u_prev*ve->dy()+0.5*rho_prev*u_prev*ve->dy());
-      ip->addTerm(R*rho_prev*vm->dx()+Cv*rho_prev*u_prev*ve->dx()+R*rho_prev*u_prev*ve->dx()+Cv*rho_prev*ve->dy());
-      ip->addTerm(vc);
-      ip->addTerm(vm);
-      ip->addTerm(ve);
-      break;
-
-      // Analogous robust norm from convection-diffusion
-      case 8:
-      ip->addTerm(1./mu*S);
-      ip->addTerm(Pr/(Cp*mu)*tau);
-      ip->addTerm(vm->dx() + u_prev*ve->dx());
-      ip->addTerm(ve->dx());
-      // NS graph part
-      // ip->addTerm(u_prev*vc->dx()+vc->dy()+u_prev*u_prev*vm->dx()+R*T_prev*vm->dx()+u_prev*vm->dy()
-      //   +Cv*T_prev*u_prev*ve->dx()+0.5*u_prev*u_prev*u_prev*ve->dx()+R*T_prev*u_prev*ve->dx()+Cv*T_prev*ve->dy()+0.5*u_prev*u_prev*ve->dy());
-      // ip->addTerm(-4./3*S->dx()+rho_prev*vc->dx()+rho_prev*u_prev*vm->dx()+rho_prev*u_prev*vm->dx()+rho_prev*vm->dy()+Cv*rho_prev*T_prev*ve->dx()
-      //   +0.5*rho_prev*u_prev*u_prev*ve->dx()+0.5*rho_prev*u_prev*u_prev*ve->dx()+0.5*rho_prev*u_prev*u_prev*ve->dx()
-      //   +R*rho_prev*T_prev*ve->dx()-D_prev*ve->dx()+0.5*rho_prev*u_prev*ve->dy()+0.5*rho_prev*u_prev*ve->dy());
-      // ip->addTerm(tau->dx()+R*rho_prev*vm->dx()+Cv*rho_prev*u_prev*ve->dx()+R*rho_prev*u_prev*ve->dx()+Cv*rho_prev*ve->dy());
-      // Euler graph part
-      ip->addTerm(u_prev*vc->dx()+vc->dy()+u_prev*u_prev*vm->dx()+R*T_prev*vm->dx()+u_prev*vm->dy()
-        +Cv*T_prev*u_prev*ve->dx()+0.5*u_prev*u_prev*u_prev*ve->dx()+R*T_prev*u_prev*ve->dx()+Cv*T_prev*ve->dy()+0.5*u_prev*u_prev*ve->dy());
-      ip->addTerm(rho_prev*vc->dx()+rho_prev*u_prev*vm->dx()+rho_prev*u_prev*vm->dx()+rho_prev*vm->dy()+Cv*rho_prev*T_prev*ve->dx()
-        +0.5*rho_prev*u_prev*u_prev*ve->dx()+0.5*rho_prev*u_prev*u_prev*ve->dx()+0.5*rho_prev*u_prev*u_prev*ve->dx()
-        +R*rho_prev*T_prev*ve->dx()+0.5*rho_prev*u_prev*ve->dy()+0.5*rho_prev*u_prev*ve->dy());
-      ip->addTerm(R*rho_prev*vm->dx()+Cv*rho_prev*u_prev*ve->dx()+R*rho_prev*u_prev*ve->dx()+Cv*rho_prev*ve->dy());
-      ip->addTerm(vc);
-      ip->addTerm(vm);
-      ip->addTerm(ve);
-      break;
-
-      default:
-      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "invalid problem number");
     }
   }
 
