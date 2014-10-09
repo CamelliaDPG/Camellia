@@ -156,9 +156,9 @@ int main(int argc, char *argv[]) {
   bool useLineSearch = args.Input("--lineSearch", "use line search", true);
   int polyOrder = args.Input("--polyOrder", "polynomial order for field variables", 2);
   int deltaP = args.Input("--deltaP", "how much to enrich test space", 2);
-  int numX = args.Input("--numX", "number of cells in the x direction", 8);
-  int numT = args.Input("--numT", "number of cells in the t direction", 4);
-  int maxNewtonIterations = args.Input("--maxIterations", "maximum number of Newton iterations", 20);
+  int numX = args.Input("--numX", "number of cells in the x direction", 4);
+  int numT = args.Input("--numT", "number of cells in the t direction", 1);
+  int maxNewtonIterations = args.Input("--maxIterations", "maximum number of Newton iterations", 1);
   double nlTol = args.Input("--nlTol", "nonlinear tolerance", 1e-6);
 
   args.Process();
@@ -182,7 +182,22 @@ int main(int argc, char *argv[]) {
   switch (problem)
   {
     case 0:
-    // Simple problem for testing
+    // Trivial problem for testing
+    problemName = "Trivial";
+    xmin = 0;
+    xmax = 1;
+    xint = 0.5;
+    tmax = 0.1;
+
+    rhoL = 1;
+    rhoR = 1;
+    uL = 1;
+    uR = 1;
+    TL = 1;
+    TR = 1;
+    break;
+    case 1:
+    // Simple shock for testing
     problemName = "SimpleShock";
     xmin = 0;
     xmax = 1;
@@ -196,8 +211,8 @@ int main(int argc, char *argv[]) {
     TL = 1;
     TR = 1;
     break;
-    case 1:
-    // Simple problem for testing
+    case 2:
+    // Simple rarefaction for testing
     problemName = "SimpleRarefaction";
     xmin = 0;
     xmax = 1;
@@ -211,7 +226,7 @@ int main(int argc, char *argv[]) {
     TL = 1;
     TR = 1;
     break;
-    case 2:
+    case 3:
     // Sod shock tube
     problemName = "Sod";
     xmin = 0;
@@ -226,7 +241,7 @@ int main(int argc, char *argv[]) {
     TL = 1/(rhoL*R);
     TR = .1/(rhoR*R);
     break;
-    case 3:
+    case 4:
     // Strong shock tube
     problemName = "StrongShock";
     xmin = 0;
@@ -241,7 +256,7 @@ int main(int argc, char *argv[]) {
     TL = 100/(rhoL*R);
     TR = 1/(rhoR*R);
     break;
-    case 4:
+    case 5:
     // Strong shock tube
     problemName = "Noh";
     gamma = 5./3;
@@ -257,12 +272,10 @@ int main(int argc, char *argv[]) {
     rhoR = 1;
     uL = 1;
     uR = -1;
-    // TL = 1e-6/(rhoL*R);
-    // TR = 1e-6/(rhoR*R);
     TL = 0;
     TR = 0;
     break;
-    case 5:
+    case 6:
     // Strong shock tube
     problemName = "Sedov";
     xmin = -.5;
@@ -406,9 +419,9 @@ int main(int argc, char *argv[]) {
   // initialGuess[rho->ID()] = Teuchos::rcp( new DiscontinuousInitialCondition(xint, rhoL, rhoR) ) ;
   // initialGuess[u->ID()]   = Teuchos::rcp( new DiscontinuousInitialCondition(xint, uL, uR) );
   // initialGuess[T->ID()]   = Teuchos::rcp( new DiscontinuousInitialCondition(xint, TL, TR) );
-  initialGuess[rho->ID()] = Teuchos::rcp( new RampedInitialCondition(xint, UcL, UcR, (xmax-xmin)/numX) ) ;
-  initialGuess[u->ID()]   = Teuchos::rcp( new RampedInitialCondition(xint, UmL, UmR,     (xmax-xmin)/numX) );
-  initialGuess[T->ID()]   = Teuchos::rcp( new RampedInitialCondition(xint, UeL, UeR,     (xmax-xmin)/numX) );
+  initialGuess[Uc->ID()] = Teuchos::rcp( new RampedInitialCondition(xint, UcL, UcR, (xmax-xmin)/numX) ) ;
+  initialGuess[Um->ID()]   = Teuchos::rcp( new RampedInitialCondition(xint, UmL, UmR,     (xmax-xmin)/numX) );
+  initialGuess[Ue->ID()]   = Teuchos::rcp( new RampedInitialCondition(xint, UeL, UeR,     (xmax-xmin)/numX) );
 
   vector< SolutionPtr > backgroundFlows;
   for (int slab=0; slab < numSlabs; slab++)
@@ -531,7 +544,7 @@ int main(int argc, char *argv[]) {
       {
         // Automatic graph norm
         case 0:
-        ip = bf->graphNorm();
+        ips[slab] = bf->graphNorm();
         break;
 
         // Manual Graph norm
@@ -741,7 +754,7 @@ int main(int argc, char *argv[]) {
       bf->addTerm( m_prev*m_prev/(rho_prev*rho_prev)*rho, vm->dx());
       bf->addTerm( -(gamma-1)*E, vm->dx());
       bf->addTerm( (gamma-1)*m_prev/rho_prev*m, vm->dx());
-      bf->addTerm( -(gamma-1)*m_prev*m_prev/(rho_prev*rho_prev)*rho, vm->dx());
+      bf->addTerm( -(gamma-1)*m_prev*m_prev/(2*rho_prev*rho_prev)*rho, vm->dx());
       bf->addTerm( D, vm->dx());
       bf->addTerm( -m, vm->dy());
       bf->addTerm( Fm, vm);
@@ -783,7 +796,7 @@ int main(int argc, char *argv[]) {
 
       // ve terms:
       rhs->addTerm( m_prev*E_prev/rho_prev * ve->dx() );
-      rhs->addTerm( (gamma-1)*(E_prev*0.5*m_prev*m_prev/rho_prev)*m_prev/rho_prev * ve->dx() );
+      rhs->addTerm( (gamma-1)*(E_prev-0.5*m_prev*m_prev/rho_prev)*m_prev/rho_prev * ve->dx() );
       rhs->addTerm( -m_prev/rho_prev*D_prev * ve->dx() );
       rhs->addTerm( E_prev * ve->dy() );
 
@@ -792,7 +805,7 @@ int main(int argc, char *argv[]) {
       {
         // Automatic graph norm
         case 0:
-        ip = bf->graphNorm();
+        ips[slab] = bf->graphNorm();
         break;
 
         default:
@@ -893,7 +906,7 @@ int main(int argc, char *argv[]) {
       {
         // Automatic graph norm
         case 0:
-        ip = bf->graphNorm();
+        ips[slab] = bf->graphNorm();
         break;
 
         default:
@@ -924,8 +937,10 @@ int main(int argc, char *argv[]) {
     bc->addDirichlet(Fc, right, rhoR*uR*one);
     bc->addDirichlet(Fm, left, -(rhoL*uL*uL+R*rhoL*TL)*one);
     bc->addDirichlet(Fm, right, (rhoR*uR*uR+R*rhoR*TR)*one);
-    bc->addDirichlet(Fe, left, -(rhoL*Cv*TL+0.5*rhoL*uL*uL+R*Cv*TL)*uL*one);
-    bc->addDirichlet(Fe, right, (rhoR*Cv*TR+0.5*rhoR*uR*uR+R*Cv*TL)*uR*one);
+    bc->addDirichlet(Fe, left, -(rhoL*Cv*TL+0.5*rhoL*uL*uL+R*rhoL*TL)*uL*one);
+    bc->addDirichlet(Fe, right, (rhoR*Cv*TR+0.5*rhoR*uR*uR+R*rhoR*TR)*uR*one);
+    // cout << "R = " << R << " Cv = " << Cv << " Cp = " << Cp << " gamma = " << gamma << endl;
+    // cout << "left " << rhoL*uL << " " << (rhoL*uL*uL+R*rhoL*TL) << " " << (rhoL*Cv*TL+0.5*rhoL*uL*uL+R*Cv*TL)*uL << endl;
     if (slab == 0)
     {
       bc->addDirichlet(Fc, init, -rho0);
@@ -934,6 +949,10 @@ int main(int argc, char *argv[]) {
     }
     bcs.push_back(bc);
   }
+
+  // rhs->addTerm( -1./mu*D_prev * S );
+  // rhs->addTerm( -4./3*m_prev/rho_prev * S->dx() );
+  // cout << 
 
   ////////////////////   SOLVE & REFINE   ///////////////////////
   vector< Teuchos::RCP<Solution> > solutions;
@@ -959,9 +978,9 @@ int main(int argc, char *argv[]) {
     VTKExporter exporter(backgroundFlows[slab], meshes[slab], varFactory);
     set<int> nonlinearVars;
     nonlinearVars.insert(D->ID());
-    nonlinearVars.insert(rho->ID());
-    nonlinearVars.insert(u->ID());
-    nonlinearVars.insert(T->ID());
+    nonlinearVars.insert(Uc->ID());
+    nonlinearVars.insert(Um->ID());
+    nonlinearVars.insert(Ue->ID());
 
     for (int refIndex=0; refIndex<=numRefs; refIndex++)
     {
