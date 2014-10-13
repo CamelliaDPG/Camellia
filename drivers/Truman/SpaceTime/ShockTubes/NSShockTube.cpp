@@ -158,7 +158,7 @@ int main(int argc, char *argv[]) {
   int deltaP = args.Input("--deltaP", "how much to enrich test space", 2);
   int numX = args.Input("--numX", "number of cells in the x direction", 4);
   int numT = args.Input("--numT", "number of cells in the t direction", 1);
-  int maxNewtonIterations = args.Input("--maxIterations", "maximum number of Newton iterations", 1);
+  int maxNewtonIterations = args.Input("--maxIterations", "maximum number of Newton iterations", 10);
   double nlTol = args.Input("--nlTol", "nonlinear tolerance", 1e-6);
 
   args.Process();
@@ -322,7 +322,7 @@ int main(int argc, char *argv[]) {
     UcL = (-EL+(EL-0.5*mL*mL/rhoL)*(gamma+1-log(((gamma-1)*(EL-0.5*mL*mL/rhoL)/pow(rhoL,gamma)))))/(EL-0.5*mL*mL/rhoL);
     UcR = (-ER+(ER-0.5*mR*mR/rhoR)*(gamma+1-log(((gamma-1)*(ER-0.5*mR*mR/rhoR)/pow(rhoR,gamma)))))/(ER-0.5*mR*mR/rhoR);
     UmL = mL/(EL-0.5*mL*mL/rhoL);
-    UmL = mR/(ER-0.5*mR*mR/rhoR);
+    UmR = mR/(ER-0.5*mR*mR/rhoR);
     UeL = -rhoL/(EL-0.5*mL*mL/rhoL);
     UeR = -rhoR/(ER-0.5*mR*mR/rhoR);
     break;
@@ -863,17 +863,6 @@ int main(int argc, char *argv[]) {
       //                                                    | $$       /$$  | $$
       //                                                    | $$      |  $$$$$$/
       //                                                    |__/       \______/ 
-      // S terms:
-      bf->addTerm( D/mu, S);
-      bf->addTerm( -4./3/Ve_prev*m, S->dx());
-      bf->addTerm( 4./3*Vm_prev/(Ve_prev*Ve_prev)*Ve, S->dx());
-      bf->addTerm( -4./3*uhat, S->times_normal_x());
-
-      // tau terms:
-      bf->addTerm( Pr/(mu*Cp)*q, tau);
-      bf->addTerm( -1/(Cv*Ve_prev*Ve_prev)*Ve, tau->dx());
-      bf->addTerm( That, tau->times_normal_x());
-
       // define alpha from notes
       FunctionPtr VePow1 = Teuchos::rcp( new PowerFunction(-Ve_prev, gamma));
       FunctionPtr VePow2 = Teuchos::rcp( new PowerFunction(-Ve_prev, -1.-gamma));
@@ -887,26 +876,56 @@ int main(int argc, char *argv[]) {
       alpha_dU->addTerm( -alphaPow1*alphaExp/(gamma-1)*Vm_prev/Ve_prev*Vm );
       alpha_dU->addTerm( alphaPow1*alphaExp/(gamma-1)*Vm_prev*Vm_prev/(2*Ve_prev*Ve_prev)*Ve );
 
+      // Define Euler fluxes and flux jacobians
+      FEc = alpha*Vm_prev;
+      FEm = alpha*(-Vm_prev*Vm_prev/Ve_prev+(gamma-1));
+      FEe = alpha*Vm_prev/Ve_prev*(0.5*Vm_prev*Vm_prev/Ve_prev-gamma);
+
+      FEc_dU->addTerm( Vm_prev*alpha_dU + alpha*Vm );
+
+      FEm_dU->addTerm( (-Vm_prev*Vm_prev/Ve_prev+(gamma-1))*alpha_dU
+            - 2*alpha*Vm_prev/Ve_prev*Vm + alpha*Vm_prev*Vm_prev/(Ve_prev*Ve_prev)*Ve );
+      
+      FEe_dU->addTerm( Vm_prev/Ve_prev*(0.5*Vm_prev*Vm_prev/Ve_prev-gamma)*alpha_dU
+            + alpha*(0.5*Vm_prev*Vm_prev/Ve_prev-gamma)/Ve_prev*Vm
+            - alpha*Vm_prev/(Ve_prev*Ve_prev)*(0.5*Vm_prev*Vm_prev/Ve_prev-gamma)*Ve
+            + alpha*Vm_prev*Vm_prev/(Ve_prev*Ve_prev)*Vm
+            - alpha*Vm_prev*Vm_prev*Vm_prev/(2*Ve_prev*Ve_prev*Ve_prev)*Ve );
+
+      // S terms:
+      bf->addTerm( D/mu, S);
+      bf->addTerm( -4./3/Ve_prev*Vm, S->dx());
+      bf->addTerm( 4./3*Vm_prev/(Ve_prev*Ve_prev)*Ve, S->dx());
+      bf->addTerm( -4./3*uhat, S->times_normal_x());
+
+      // tau terms:
+      bf->addTerm( Pr/(mu*Cp)*q, tau);
+      bf->addTerm( -1/(Cv*Ve_prev*Ve_prev)*Ve, tau->dx());
+      bf->addTerm( That, tau->times_normal_x());
+
       // vc terms:
-      bf->addTerm( -Vm_prev*alpha_dU, vc->dx());
-      bf->addTerm( -alpha*Vm, vc->dx());
+      // bf->addTerm( -Vm_prev*alpha_dU, vc->dx());
+      // bf->addTerm( -alpha*Vm, vc->dx());
+      bf->addTerm( -FEc_dU, vc->dx());
       bf->addTerm( Ve_prev*alpha_dU + alpha*Ve, vc->dy());
       bf->addTerm( Fc, vc);
 
       // vm terms:
-      bf->addTerm( (Vm_prev*Vm_prev/Ve_prev-(gamma-1))*alpha_dU, vm->dx());
-      bf->addTerm( 2*alpha*Vm_prev/Ve_prev*Vm, vm->dx());
-      bf->addTerm( -alpha*Vm_prev*Vm_prev/(Ve_prev*Ve_prev)*Ve, vm->dx());
+      // bf->addTerm( (Vm_prev*Vm_prev/Ve_prev-(gamma-1))*alpha_dU, vm->dx());
+      // bf->addTerm( 2*alpha*Vm_prev/Ve_prev*Vm, vm->dx());
+      // bf->addTerm( -alpha*Vm_prev*Vm_prev/(Ve_prev*Ve_prev)*Ve, vm->dx());
+      bf->addTerm( -FEm_dU, vm->dx());
       bf->addTerm( D, vm->dx());
       bf->addTerm( -Vm_prev*alpha_dU-alpha*Vm, vm->dy());
       bf->addTerm( Fm, vm);
 
       // ve terms:
-      bf->addTerm( -Vm_prev/Ve_prev*(0.5*Vm_prev*Vm_prev/Ve_prev-gamma)*alpha_dU, ve->dx());
-      bf->addTerm( -alpha*(0.5*Vm_prev*Vm_prev/Ve_prev-gamma)/Ve_prev*Vm, ve->dx());
-      bf->addTerm( alpha*Vm_prev/(Ve_prev*Ve_prev)*(0.5*Vm_prev*Vm_prev/Ve_prev-gamma)*Ve, ve->dx());
-      bf->addTerm( -alpha*Vm_prev*Vm_prev/(Ve_prev*Ve_prev)*Vm, ve->dx());
-      bf->addTerm( alpha*Vm_prev*Vm_prev*Vm_prev/(2*Ve_prev*Ve_prev*Ve_prev)*Ve, ve->dx());
+      // bf->addTerm( -Vm_prev/Ve_prev*(0.5*Vm_prev*Vm_prev/Ve_prev-gamma)*alpha_dU, ve->dx());
+      // bf->addTerm( -alpha*(0.5*Vm_prev*Vm_prev/Ve_prev-gamma)/Ve_prev*Vm, ve->dx());
+      // bf->addTerm( alpha*Vm_prev/(Ve_prev*Ve_prev)*(0.5*Vm_prev*Vm_prev/Ve_prev-gamma)*Ve, ve->dx());
+      // bf->addTerm( -alpha*Vm_prev*Vm_prev/(Ve_prev*Ve_prev)*Vm, ve->dx());
+      // bf->addTerm( alpha*Vm_prev*Vm_prev*Vm_prev/(2*Ve_prev*Ve_prev*Ve_prev)*Ve, ve->dx());
+      bf->addTerm( -FEe_dU, ve->dx());
       bf->addTerm( -D_prev/Ve_prev*Vm, ve->dx());
       bf->addTerm( -Vm_prev/Ve_prev*D, ve->dx());
       bf->addTerm( Vm_prev*D_prev/(Ve_prev*Ve_prev)*Ve, ve->dx());
@@ -926,16 +945,19 @@ int main(int argc, char *argv[]) {
       rhs->addTerm( -1./(Cv*Ve_prev) * tau->dx() );
 
       // vc terms:
-      rhs->addTerm( alpha*Vm_prev * vc->dx() );
+      // rhs->addTerm( alpha*Vm_prev * vc->dx() );
+      rhs->addTerm( FEc * vc->dx() );
       rhs->addTerm( -alpha*Ve_prev * vc->dy() );
 
       // vm terms:
-      rhs->addTerm( alpha*(-Vm_prev*Vm_prev/Ve_prev + (gamma-1)) * vm->dx() );
+      // rhs->addTerm( alpha*(-Vm_prev*Vm_prev/Ve_prev + (gamma-1)) * vm->dx() );
+      rhs->addTerm( FEm * vm->dx() );
       rhs->addTerm( -D_prev * vm->dx() );
       rhs->addTerm( alpha*Vm_prev * vm->dy() );
 
       // ve terms:
-      rhs->addTerm( alpha*Vm_prev/Ve_prev*(0.5*Vm_prev*Vm_prev/Ve_prev-gamma) * ve->dx() );
+      // rhs->addTerm( alpha*Vm_prev/Ve_prev*(0.5*Vm_prev*Vm_prev/Ve_prev-gamma) * ve->dx() );
+      rhs->addTerm( FEe * ve->dx() );
       rhs->addTerm( Vm_prev*D_prev/Ve_prev * ve->dx() );
       rhs->addTerm( alpha*(1-0.5*Vm_prev*Vm_prev/Ve_prev) * ve->dy() );
 
