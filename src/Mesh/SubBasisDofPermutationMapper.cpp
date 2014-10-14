@@ -30,7 +30,7 @@ SubBasisDofPermutationMapper::SubBasisDofPermutationMapper(const set<unsigned> &
 const set<unsigned> & SubBasisDofPermutationMapper::basisDofOrdinalFilter() {
   return _basisDofOrdinalFilter;
 }
-FieldContainer<double> SubBasisDofPermutationMapper::mapData(bool transposeConstraintMatrix, FieldContainer<double> &data) {
+FieldContainer<double> SubBasisDofPermutationMapper::mapData(bool transposeConstraintMatrix, FieldContainer<double> &data, bool applyOnLeftOnly) {
   if (transposeConstraintMatrix) {
     // data comes in ordered by basisDofOrdinal
     // caller will interpret the data by virtue of the globalDofOrdinals vector--the permutation is implicit in that
@@ -51,10 +51,18 @@ FieldContainer<double> SubBasisDofPermutationMapper::mapData(bool transposeConst
     } else if (dim.size() == 2) {
       for (int i=0; i<dim[0]; i++) {
         for (int j=0; j<dim[1]; j++) {
-          if (!_negate)
-            dataPermuted(_inversePermutation[i],_inversePermutation[j]) = data(i,j);
-          else
-            dataPermuted(_inversePermutation[i],_inversePermutation[j]) = -data(i,j);
+          if (!applyOnLeftOnly) {
+            if (!_negate)
+              dataPermuted(_inversePermutation[i],_inversePermutation[j]) = data(i,j);
+            else
+              dataPermuted(_inversePermutation[i],_inversePermutation[j]) = -data(i,j);
+          } else {
+            // applying on left only amounts to permuting the rows
+            if (!_negate)
+              dataPermuted(_inversePermutation[i],j) = data(i,j);
+            else
+              dataPermuted(_inversePermutation[i],j) = -data(i,j);
+          }
         }
       }
     }

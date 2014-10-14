@@ -346,19 +346,37 @@ void GDAMinimumRule::interpretGlobalCoefficients(GlobalIndexType cellID, FieldCo
 //    dofMapper->printMappingReport();
 //  }
 
-  FieldContainer<double> globalCoefficientsFC(globalIndexVector.size());
-  Epetra_BlockMap partMap = globalCoefficients.Map();
-  for (int i=0; i<globalIndexVector.size(); i++) {
-    GlobalIndexTypeToCast globalIndex = globalIndexVector[i];
-    int localIndex = partMap.LID(globalIndex);
-    if (localIndex != -1) {
-      globalCoefficientsFC[i] = globalCoefficients[0][localIndex];
-    } else {
-      // non-local coefficient: ignore
-      globalCoefficientsFC[i] = 0;
+  if (globalCoefficients.NumVectors() == 1) {
+    FieldContainer<double> globalCoefficientsFC(globalIndexVector.size());
+    Epetra_BlockMap partMap = globalCoefficients.Map();
+    for (int i=0; i<globalIndexVector.size(); i++) {
+      GlobalIndexTypeToCast globalIndex = globalIndexVector[i];
+      int localIndex = partMap.LID(globalIndex);
+      if (localIndex != -1) {
+        globalCoefficientsFC[i] = globalCoefficients[0][localIndex];
+      } else {
+        // non-local coefficient: ignore
+        globalCoefficientsFC[i] = 0;
+      }
     }
+    localCoefficients = dofMapper->mapGlobalCoefficients(globalCoefficientsFC);
+  } else {
+    FieldContainer<double> globalCoefficientsFC(globalCoefficients.NumVectors(), globalIndexVector.size());
+    Epetra_BlockMap partMap = globalCoefficients.Map();
+    for (int vectorOrdinal=0; vectorOrdinal < globalCoefficients.NumVectors(); vectorOrdinal++) {
+      for (int i=0; i<globalIndexVector.size(); i++) {
+        GlobalIndexTypeToCast globalIndex = globalIndexVector[i];
+        int localIndex = partMap.LID(globalIndex);
+        if (localIndex != -1) {
+          globalCoefficientsFC(vectorOrdinal,i) = globalCoefficients[vectorOrdinal][localIndex];
+        } else {
+          // non-local coefficient: ignore
+          globalCoefficientsFC(vectorOrdinal,i) = 0;
+        }
+      }
+    }
+    localCoefficients = dofMapper->mapGlobalCoefficients(globalCoefficientsFC);
   }
-  localCoefficients = dofMapper->mapGlobalCoefficients(globalCoefficientsFC);
 //  cout << "For cellID " << cellID << ", mapping globalData:\n " << globalDataFC;
 //  cout << " to localData:\n " << localDofs;
 }

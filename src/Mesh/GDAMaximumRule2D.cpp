@@ -796,10 +796,28 @@ set<GlobalIndexType> GDAMaximumRule2D::partitionOwnedGlobalTraceIndices() {
 void GDAMaximumRule2D::interpretGlobalCoefficients(GlobalIndexType cellID, FieldContainer<double> &localCoefficients,
                                                    const Epetra_MultiVector &globalCoefficients) {
   int numDofs = elementType(cellID)->trialOrderPtr->totalDofs();
-  for (int dofIndex=0; dofIndex<numDofs; dofIndex++) {
-    GlobalIndexTypeToCast globalIndex = globalDofIndex(cellID, dofIndex);
-    int localIndex = globalCoefficients.Map().LID(globalIndex);
-    localCoefficients(dofIndex) = globalCoefficients[0][localIndex];
+  if (localCoefficients.rank()==1) {
+    if (globalCoefficients.NumVectors() != 1) {
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "if localCoefficients rank==1, globalCoefficients.NumVectors() should be 1");
+    }
+    for (int dofIndex=0; dofIndex<numDofs; dofIndex++) {
+      GlobalIndexTypeToCast globalIndex = globalDofIndex(cellID, dofIndex);
+      int localIndex = globalCoefficients.Map().LID(globalIndex);
+      localCoefficients(dofIndex) = globalCoefficients[0][localIndex];
+    }
+  } else if (localCoefficients.rank()==2) {
+    if (globalCoefficients.NumVectors() != localCoefficients.dimension(0)) {
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "if localCoefficients rank==2, globalCoefficients.NumVectors() should match localCoefficients.dimension 0");
+    }
+    for (int vectorOrdinal=0; vectorOrdinal < globalCoefficients.NumVectors(); vectorOrdinal++) {
+      for (int dofIndex=0; dofIndex<numDofs; dofIndex++) {
+        GlobalIndexTypeToCast globalIndex = globalDofIndex(cellID, dofIndex);
+        int localIndex = globalCoefficients.Map().LID(globalIndex);
+        localCoefficients(vectorOrdinal, dofIndex) = globalCoefficients[vectorOrdinal][localIndex];
+      }
+    }
+  } else {
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "unsupported localCoefficients rank");
   }
 }
 

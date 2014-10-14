@@ -36,7 +36,7 @@ FieldContainer<double> SubBasisDofMatrixMapper::getConstraintMatrix() {
   return _constraintMatrix;
 }
 
-FieldContainer<double> SubBasisDofMatrixMapper::mapData(bool transposeConstraint, FieldContainer<double> &localData) {
+FieldContainer<double> SubBasisDofMatrixMapper::mapData(bool transposeConstraint, FieldContainer<double> &localData, bool applyOnLeftOnly) {
   // localData must be rank 2, and must have the same size as FilteredLocalDofOrdinals in its first dimension
   bool didReshape = false;
   if (localData.rank() == 1) {
@@ -76,6 +76,8 @@ FieldContainer<double> SubBasisDofMatrixMapper::mapData(bool transposeConstraint
     result1.resize(result1.size());
     return result1;
   }
+  
+  if (applyOnLeftOnly) return result1;
   
   if (constraintCols != dataCols) {
     cout << "Missized container in SubBasisDofMatrixMapper::mapData() for right-multiplication by constraint matrix.\n";

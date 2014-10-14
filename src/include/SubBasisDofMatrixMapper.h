@@ -27,7 +27,7 @@ public:
                           const vector<GlobalIndexType> &mappedGlobalDofOrdinals,
                           const FieldContainer<double> &constraintMatrix);
   const set<unsigned> &basisDofOrdinalFilter();
-  FieldContainer<double> mapData(bool transposeConstraint, FieldContainer<double> &localData);
+  FieldContainer<double> mapData(bool transposeConstraint, FieldContainer<double> &localData, bool applyOnLeftOnly = false);
   void mapDataIntoGlobalContainer(const FieldContainer<double> &wholeBasisData, const map<GlobalIndexType, unsigned> &globalIndexToOrdinal,
                                   bool fittableDofsOnly, const set<GlobalIndexType> &fittableDofIndices, FieldContainer<double> &globalData);
   
