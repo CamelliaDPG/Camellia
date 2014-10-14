@@ -10,6 +10,7 @@
 #include "Mesh.h"
 #include "Solution.h"
 
+#include "MPIWrapper.h"
 #include "CamelliaDebugUtility.h"
 
 RefinementStrategy::RefinementStrategy( SolutionPtr solution, double relativeEnergyThreshold, double min_h,
@@ -73,6 +74,8 @@ void RefinementStrategy::refine(bool printToConsole) {
   // greedy refinement algorithm - mark cells for refinement
   MeshPtr mesh = this->mesh();
   
+  double totalEnergyError = 0.0;
+  
   map<GlobalIndexType, double> energyError;
   if (_rieszRep.get() != NULL) {
     _rieszRep->computeRieszRep();
@@ -80,15 +83,18 @@ void RefinementStrategy::refine(bool printToConsole) {
     // take square roots:
     for (map<GlobalIndexType, double>::iterator energyEntryIt = energyError.begin();
          energyEntryIt != energyError.end(); energyEntryIt++) {
+      totalEnergyError += energyEntryIt->second;
       energyEntryIt->second = sqrt( energyEntryIt->second );
     }
+    MPIWrapper::sum(totalEnergyError);
+    totalEnergyError = sqrt(totalEnergyError);
   } else {
     energyError = _solution->globalEnergyError();
+    totalEnergyError = _solution->energyErrorTotal();
   }
   vector< Teuchos::RCP< Element > > activeElements = mesh->activeElements();
   
   double maxError = 0.0;
-  double totalEnergyError = 0.0;
   
   map<GlobalIndexType, double> cellMeasures;
   set<GlobalIndexType> cellIDs = mesh->getActiveCellIDs();
@@ -98,7 +104,6 @@ void RefinementStrategy::refine(bool printToConsole) {
     maxError = max(maxError,energyError.find(cellID)->second);
   }
   
-  totalEnergyError = _solution->energyErrorTotal();
   if ( printToConsole && _reportPerCellErrors ) {
     cout << "per-cell Energy Error Squared for cells with > 0.1% of squared energy error\n";
     for (vector< Teuchos::RCP< Element > >::iterator activeElemIt = activeElements.begin();
@@ -467,4 +472,29 @@ bool RefinementStrategy::enforceAnisotropicOneIrregularity(vector<GlobalIndexTyp
     success = false;
   }
   return success;
+}
+
+
+double RefinementStrategy::getEnergyError(int refinementNumber) {
+  if (refinementNumber < _results.size()) {
+    return _results[refinementNumber].totalEnergyError;
+  } else {
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "refinementNumber out of bounds!");
+  }
+}
+
+GlobalIndexType RefinementStrategy::getNumElements(int refinementNumber) {
+  if (refinementNumber < _results.size()) {
+    return _results[refinementNumber].numElements;
+  } else {
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "refinementNumber out of bounds!");
+  }
+}
+
+GlobalIndexType RefinementStrategy::getNumDofs(int refinementNumber) {
+  if (refinementNumber < _results.size()) {
+    return _results[refinementNumber].numDofs;
+  } else {
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "refinementNumber out of bounds!");
+  }
 }

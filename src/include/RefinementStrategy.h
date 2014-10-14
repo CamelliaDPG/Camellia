@@ -72,6 +72,10 @@ public:
   void getCellsAboveErrorThreshhold(vector<GlobalIndexType> &cellsToRefine);
   void setMinH(double value);
   void setReportPerCellErrors(bool value);
+  
+  double getEnergyError(int refinementNumber);
+  GlobalIndexType getNumElements(int refinementNumber);
+  GlobalIndexType getNumDofs(int refinementNumber);
 };
 
 #endif
