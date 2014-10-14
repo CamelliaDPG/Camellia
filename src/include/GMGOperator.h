@@ -201,11 +201,13 @@ public:
   };
   
   void setSmootherType(SmootherChoice smootherType);
+  void setSmootherOverlap(int overlap);
   
   void setFineSolverUsesDiagonalScaling(bool value);
   
 private:
   SmootherChoice _smootherType;
+  int _smootherOverlap;
 };
 
 

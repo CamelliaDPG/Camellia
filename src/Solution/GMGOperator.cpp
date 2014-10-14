@@ -64,6 +64,7 @@ GMGOperator::GMGOperator(BCPtr zeroBCs, MeshPtr coarseMesh, IPPtr coarseIP,
   _haveSolvedOnCoarseMesh = false;
   
   _smootherType = ADDITIVE_SCHWARZ; // default
+  _smootherOverlap = 0;
     
   if (( coarseMesh->meshUsesMaximumRule()) || (! fineMesh->meshUsesMinimumRule()) ) {
     cout << "GMGOperator only supports minimum rule.\n";
@@ -127,7 +128,7 @@ void GMGOperator::computeCoarseStiffnessMatrix(Epetra_CrsMatrix *fineStiffnessMa
   Teuchos::RCP<Epetra_CrsMatrix> PT_A_P = Teuchos::rcp( new Epetra_CrsMatrix(::Copy, _P->DomainMap(), maxRowSize) );
   
   // compute P^T * A * P
-//  err = EpetraExt::MatrixMatrix::Multiply(*_P, true, AP, false, *PT_A_P);
+  err = EpetraExt::MatrixMatrix::Multiply(*_P, true, AP, false, *PT_A_P);
   if (err != 0) {
     cout << "WARNING: EpetraExt::MatrixMatrix::Multiply returned an error during computeCoarseStiffnessMatrix's computation of P^T * (A * P).\n";
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "EpetraExt::MatrixMatrix::Multiply returned an error during computeCoarseStiffnessMatrix's computation of P^T * (A * P).");
@@ -181,19 +182,45 @@ Teuchos::RCP<Epetra_CrsMatrix> GMGOperator::constructProlongationOperator() {
   {
     Epetra_SerialComm SerialComm; // rank-local map
     
-    GlobalIndexTypeToCast* myGlobalIndices;
-    _finePartitionMap.MyGlobalElementsPtr(*&myGlobalIndices);
-    
-    Epetra_Map    localXMap(_finePartitionMap.NumMyElements(), _finePartitionMap.NumMyElements(), myGlobalIndices, 0, SerialComm); // just has rank-local IDs (no global IDs)
+    GlobalIndexTypeToCast* myGlobalIndicesPtr;
+    _finePartitionMap.MyGlobalElementsPtr(*&myGlobalIndicesPtr);
 
+    map<GlobalIndexTypeToCast, set<GlobalIndexType> > cellsForGlobalDofOrdinal;
+    vector<GlobalIndexTypeToCast> myGlobalIndices(_finePartitionMap.NumMyElements());
+    {
+      set<GlobalIndexTypeToCast> globalIndicesForRank;
+      for  (int i=0;i <_finePartitionMap.NumMyElements(); i++) {
+        globalIndicesForRank.insert(myGlobalIndicesPtr[i]);
+        myGlobalIndices[i] = myGlobalIndicesPtr[i];
+      }
+      
+      // for dof interpreter's sake, want to put 0's in slots for any seen-but-not-owned global coefficients
+      set<GlobalIndexType> myCellIDs = _fineMesh->globalDofAssignment()->cellsInPartition(-1);
+      for (set<GlobalIndexType>::iterator cellIDIt = myCellIDs.begin(); cellIDIt != myCellIDs.end(); cellIDIt++) {
+        GlobalIndexType cellID = *cellIDIt;
+        set<GlobalIndexType> globalDofsForCell = _fineDofInterpreter->globalDofIndicesForCell(cellID);
+        for (set<GlobalIndexType>::iterator globalDofIt = globalDofsForCell.begin(); globalDofIt != globalDofsForCell.end(); globalDofIt++) {
+          cellsForGlobalDofOrdinal[*globalDofIt].insert(cellID);
+          if (globalIndicesForRank.find(*globalDofIt) == globalIndicesForRank.end()) {
+            myGlobalIndices.push_back(*globalDofIt);
+//            offRankGlobalIndicesForMyCells.insert(*globalDofIt);
+          }
+        }
+      }
+    }
+    
+    Epetra_Map    localXMap(myGlobalIndices.size(), myGlobalIndices.size(), &myGlobalIndices[0], 0, SerialComm);
+    
     for (int localID=0; localID < _finePartitionMap.NumMyElements(); localID++) {
       GlobalIndexTypeToCast globalRow = _finePartitionMap.GID(localID);
 
       map<GlobalIndexTypeToCast, double> coarseXVectorLocal; // rank-local representation, so we just use an STL map.  Has the advantage of growing as we need it to.
       Teuchos::RCP<Epetra_Vector> XLocal = Teuchos::rcp( new Epetra_Vector(localXMap) );
       (*XLocal)[localID] = 1.0;
+      
+      set<GlobalIndexType> cells = cellsForGlobalDofOrdinal[globalRow];
       // could make this more efficient by skipping over cells that don't map anything to this global ID
-      for (set<GlobalIndexType>::iterator cellIDIt=cellsInPartition.begin(); cellIDIt != cellsInPartition.end(); cellIDIt++) {
+      for (set<GlobalIndexType>::iterator cellIDIt=cells.begin(); cellIDIt != cells.end(); cellIDIt++) {
         GlobalIndexType fineCellID = *cellIDIt;
         int fineDofCount = _fineMesh->getElementType(fineCellID)->trialOrderPtr->totalDofs();
         FieldContainer<double> fineCellData(fineDofCount);
@@ -830,6 +857,10 @@ void GMGOperator::setStiffnessDiagonal(Teuchos::RCP< Epetra_MultiVector> diagona
 
 }
 
+void GMGOperator::setSmootherOverlap(int overlap) {
+  _smootherOverlap = overlap;
+}
+
 void GMGOperator::setSmootherType(GMGOperator::SmootherChoice smootherType) {
   _smootherType = smootherType;
 }
@@ -862,7 +893,7 @@ void GMGOperator::setUpSmoother(Epetra_CrsMatrix *fineStiffnessMatrix) {
       smoother = Teuchos::rcp(new Ifpack_BlockRelaxation<Ifpack_SparseContainer<Ifpack_Amesos> >(fineStiffnessMatrix) );
       Teuchos::ParameterList List;
       // TODO: work out what the various parameters do, and how they should depend on the problem...
-      int overlapBlocks = 0;
+      int overlapBlocks = _smootherOverlap;
       int sweeps = 2;
       int localParts = 4;
       
@@ -893,7 +924,7 @@ void GMGOperator::setUpSmoother(Epetra_CrsMatrix *fineStiffnessMatrix) {
       smoother = Teuchos::rcp(new Ifpack_BlockRelaxation<Ifpack_SparseContainer<Ifpack_Amesos> >(fineStiffnessMatrix) );
       Teuchos::ParameterList List;
       // TODO: work out what the various parameters do, and how they should depend on the problem...
-      int overlapBlocks = 0;
+      int overlapBlocks = _smootherOverlap;
       int sweeps = 2;
       int localParts = 4;
       
@@ -919,14 +950,13 @@ void GMGOperator::setUpSmoother(Epetra_CrsMatrix *fineStiffnessMatrix) {
     case ADDITIVE_SCHWARZ:
     {
 //      cout << "Using additive Schwarz smoother.\n";
-      int OverlapLevel = 0;
+      int OverlapLevel = _smootherOverlap;
       smoother = Teuchos::rcp(new Ifpack_AdditiveSchwarz<Ifpack_Amesos>(fineStiffnessMatrix, OverlapLevel) );    }
       break;
       
     default:
       break;
   }
-  
   
   int err = smoother->SetParameters(List);
   err = smoother->Initialize();
