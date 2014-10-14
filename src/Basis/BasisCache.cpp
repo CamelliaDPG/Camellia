@@ -929,6 +929,7 @@ BasisCachePtr BasisCache::basisCacheForCell(MeshPtr mesh, GlobalIndexType cellID
   bool createSideCache = true;
   vector<GlobalIndexType> cellIDs(1,cellID);
   basisCache->setPhysicalCellNodes(mesh->physicalCellNodesForCell(cellID), cellIDs, createSideCache);
+  basisCache->setCellSideParities(mesh->cellSideParitiesForCell(cellID));
   
   return basisCache;
 }

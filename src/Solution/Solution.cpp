@@ -319,6 +319,13 @@ void Solution::populateStiffnessAndLoad() {
   Epetra_SerialComm Comm;
 #endif
   
+  Epetra_FECrsMatrix* globalStiffness = dynamic_cast<Epetra_FECrsMatrix*>(_globalStiffMatrix.get());
+  
+  if (globalStiffness == NULL) {
+    cout << "Error: Solutio::populateStiffnessAndLoad() requires that _globalStiffMatrix be an Epetra_FECrsMatrix\n";
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "populateStiffnessAndLoad() requires that _globalStiffMatrix be an Epetra_FECrsMatrix");
+  }
+  
   set<GlobalIndexType> myGlobalIndicesSet = _dofInterpreter->globalDofIndicesForPartition(rank);
   Epetra_Map partMap = getPartitionMap();
   
@@ -479,7 +486,7 @@ void Solution::populateStiffnessAndLoad() {
           globalDofIndicesCast[dofOrdinal] = globalDofIndices[dofOrdinal];
         }
                 
-        _globalStiffMatrix->InsertGlobalValues(globalDofIndices.size(),&globalDofIndicesCast(0),
+        globalStiffness->InsertGlobalValues(globalDofIndices.size(),&globalDofIndicesCast(0),
                                                globalDofIndices.size(),&globalDofIndicesCast(0),&interpretedStiffness[0]);
         _rhsVector->SumIntoGlobalValues(globalDofIndices.size(),&globalDofIndicesCast(0),&interpretedRHS[0]);
       }
@@ -564,10 +571,10 @@ void Solution::populateStiffnessAndLoad() {
           nonzeroValues(nnz) = 1.0; // just put a 1 in the diagonal to avoid singular matrix
         }
         // insert row:
-        _globalStiffMatrix->InsertGlobalValues(1,&globalRowIndex,nnz+1,&globalDofIndices(0),
+        globalStiffness->InsertGlobalValues(1,&globalRowIndex,nnz+1,&globalDofIndices(0),
                                                &nonzeroValues(0));
         // insert column:
-        _globalStiffMatrix->InsertGlobalValues(nnz+1,&globalDofIndices(0),1,&globalRowIndex,
+        globalStiffness->InsertGlobalValues(nnz+1,&globalDofIndices(0),1,&globalRowIndex,
                                                &nonzeroValues(0));
         _rhsVector->ReplaceGlobalValues(1,&globalRowIndex,&rhs(cellIndex));
         
@@ -655,20 +662,20 @@ void Solution::populateStiffnessAndLoad() {
           product(i,j) = _zmcRho * basisIntegrals(i) * basisIntegrals(j) / denominator;
         }
       }
-      _globalStiffMatrix->SumIntoGlobalValues(numValues, &globalIndices(0), numValues, &globalIndices(0), &product(0,0));
+      globalStiffness->SumIntoGlobalValues(numValues, &globalIndices(0), numValues, &globalIndices(0), &product(0,0));
     } else { // otherwise, we increase the size of the system to accomodate the zmc...
       if (numValues > 0) {
         // insert row:
-        _globalStiffMatrix->InsertGlobalValues(1,&zmcIndex,numValues,&globalIndices(0),&basisIntegrals(0));
+        globalStiffness->InsertGlobalValues(1,&zmcIndex,numValues,&globalIndices(0),&basisIntegrals(0));
         // insert column:
-        _globalStiffMatrix->InsertGlobalValues(numValues,&globalIndices(0),1,&zmcIndex,&basisIntegrals(0));
+        globalStiffness->InsertGlobalValues(numValues,&globalIndices(0),1,&zmcIndex,&basisIntegrals(0));
       }
       
       //      cout << "in zmc, diagonal entry: " << rho << endl;
       //rho /= numValues;
       if (rank==0) { // insert the diagonal entry on rank 0; other ranks insert basis integrals according to which cells they own
         double rho_entry = - 1.0 / _zmcRho;
-        _globalStiffMatrix->InsertGlobalValues(1,&zmcIndex,1,&zmcIndex,&rho_entry);
+        globalStiffness->InsertGlobalValues(1,&zmcIndex,1,&zmcIndex,&rho_entry);
       }
       if (rank==0) localRowIndex++;
     }
@@ -682,7 +689,7 @@ void Solution::populateStiffnessAndLoad() {
   
   //  EpetraExt::MultiVectorToMatrixMarketFile("rhs_vector_before_bcs.dat",rhsVector,0,0,false);
   
-  _globalStiffMatrix->GlobalAssemble(); // will call globalStiffMatrix.FillComplete();
+  globalStiffness->GlobalAssemble(); // will call globalStiffMatrix.FillComplete();
   
   double timeGlobalAssembly = timer.ElapsedTime();
   Epetra_Vector timeGlobalAssemblyVector(timeMap);
@@ -798,6 +805,8 @@ void Solution::solveWithPrepopulatedStiffnessAndLoad(Teuchos::RCP<Solver> solver
 //  if (rank==0) cout << "Returned from global solver.\n";
   
   if (solveSuccess != 0 ) {
+//    EpetraExt::RowMatrixToMatrixMarketFile("/tmp/failing_globalStiffness.dat",*_globalStiffMatrix);
+    
     cout << "**** WARNING: in Solution.solve(), solver->solve() failed with error code " << solveSuccess << ". ****\n";
   }
   
@@ -1398,7 +1407,6 @@ double Solution::L2NormOfSolution(int trialID){
   Epetra_SerialComm Comm;
 #endif
   
-  
   double value = 0.0;
   vector<ElementTypePtr> elemTypes = _mesh->elementTypes(rank);
   vector<ElementTypePtr>::iterator elemTypeIt;
@@ -1992,8 +2000,12 @@ Teuchos::RCP<Epetra_FEVector> Solution::getRHSVector() {
   return _rhsVector;
 }
 
-Teuchos::RCP<Epetra_FECrsMatrix> Solution::getStiffnessMatrix() {
+Teuchos::RCP<Epetra_CrsMatrix> Solution::getStiffnessMatrix() {
   return _globalStiffMatrix;
+}
+
+void Solution::setStiffnessMatrix(Teuchos::RCP<Epetra_CrsMatrix> stiffness) {
+  _globalStiffMatrix = stiffness;
 }
 
 void Solution::solutionValues(FieldContainer<double> &values, int trialID, BasisCachePtr basisCache,
@@ -2630,7 +2642,7 @@ void Solution::condensedSolve(Teuchos::RCP<Solver> globalSolver, bool reduceMemo
   // override reduceMemoryFootprint for now (since CondensedDofInterpreter doesn't yet support a true value)
   reduceMemoryFootprint = false;
   
-  Teuchos::RCP<DofInterpreter> dofInterpreter = Teuchos::rcp(new CondensedDofInterpreter(_mesh.get(), _lagrangeConstraints.get(), fieldsToExclude, !reduceMemoryFootprint) );
+  Teuchos::RCP<DofInterpreter> dofInterpreter = Teuchos::rcp(new CondensedDofInterpreter(_mesh.get(), _ip, _rhs, _lagrangeConstraints.get(), fieldsToExclude, !reduceMemoryFootprint) );
   
   Teuchos::RCP<DofInterpreter> oldDofInterpreter = _dofInterpreter;
   
@@ -3476,7 +3488,7 @@ void Solution::setUseCondensedSolve(bool value) {
       
       _oldDofInterpreter = _dofInterpreter;
       
-      Teuchos::RCP<DofInterpreter> dofInterpreter = Teuchos::rcp(new CondensedDofInterpreter(_mesh.get(), _lagrangeConstraints.get(), fieldsToExclude, !reduceMemoryFootprint) );
+      Teuchos::RCP<DofInterpreter> dofInterpreter = Teuchos::rcp(new CondensedDofInterpreter(_mesh.get(), _ip, _rhs, _lagrangeConstraints.get(), fieldsToExclude, !reduceMemoryFootprint) );
       
       setDofInterpreter(dofInterpreter);
     }

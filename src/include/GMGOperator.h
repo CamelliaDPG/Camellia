@@ -18,6 +18,8 @@
 #include "BasisReconciliation.h"
 #include "LocalDofMapper.h"
 
+#include "Ifpack_Preconditioner.h"
+
 #include "Solver.h"
 
 #include <map>
@@ -58,12 +60,17 @@ class GMGOperator : public Epetra_Operator {
   mutable double _timeMapFineToCoarse, _timeMapCoarseToFine, _timeCoarseImport, _timeConstruction, _timeCoarseSolve, _timeLocalCoefficientMapConstruction;  // totals over the life of the object
   
   mutable bool _haveSolvedOnCoarseMesh; // if this is true, then we can call resolve() instead of solve().
+  
+  Teuchos::RCP<Epetra_CrsMatrix> _P; // prolongation operator
+  
+  Teuchos::RCP<Epetra_Operator> _smoother;
 public: // promoted these two to public for testing purposes:
   LocalDofMapperPtr getLocalCoefficientMap(GlobalIndexType fineCellID) const;
   GlobalIndexType getCoarseCellID(GlobalIndexType fineCellID) const;
 
   set<GlobalIndexTypeToCast> setCoarseRHSVector(const Epetra_MultiVector &X, Epetra_FEVector &coarseRHSVector) const;
   
+  void setUpSmoother(Epetra_CrsMatrix *fineStiffnessMatrix);
 public:
   //! @name Destructor
   //@{
@@ -119,6 +126,10 @@ public:
   void reportTimings() const;
   
   void constructLocalCoefficientMaps(); // we'll do this lazily if this is not called; this is mostly a way to separate out the time costs
+  
+  void computeCoarseStiffnessMatrix(Epetra_CrsMatrix *fineStiffnessMatrix);
+  
+  Teuchos::RCP<Epetra_CrsMatrix> constructProlongationOperator(); // rows belong to the fine grid, columns to the coarse
   
   //! @name Mathematical functions
   //@{
@@ -181,7 +192,20 @@ public:
   
   void setApplyDiagonalSmoothing(bool value);
   
+  enum SmootherChoice {
+    POINT_JACOBI,
+    POINT_SYMMETRIC_GAUSS_SEIDEL,
+    BLOCK_JACOBI,
+    BLOCK_SYMMETRIC_GAUSS_SEIDEL,
+    ADDITIVE_SCHWARZ
+  };
+  
+  void setSmootherType(SmootherChoice smootherType);
+  
   void setFineSolverUsesDiagonalScaling(bool value);
+  
+private:
+  SmootherChoice _smootherType;
 };
 
 

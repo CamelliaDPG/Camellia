@@ -50,11 +50,18 @@ void GMGSolver::setTolerance(double tol) {
 int GMGSolver::solve() {
   int rank = Teuchos::GlobalMPISession::getRank();
   
+  // in place of doing the scaling ourselves, for the moment I've switched
+  // over to using Aztec's built-in scaling.  This appears to be functionally identical.
   bool useAztecToScaleDiagonally = true;
   
   AztecOO solver(problem());
   
-  Epetra_RowMatrix *A = problem().GetMatrix();
+  Epetra_CrsMatrix *A = dynamic_cast<Epetra_CrsMatrix *>( problem().GetMatrix() );
+  
+  if (A == NULL) {
+    cout << "Error: GMGSolver requires an Epetra_CrsMatrix.\n";
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Error: GMGSolver requires an Epetra_CrsMatrix.\n");
+  }
   
 //  EpetraExt::RowMatrixToMatlabFile("/tmp/A_pre_scaling.dat",*A);
 
@@ -69,8 +76,6 @@ int GMGSolver::solve() {
   Epetra_Vector diagA(*map);
   A->ExtractDiagonalCopy(diagA);
 
-  // in place of doing the scaling ourselves, for the moment I've switched
-  // over to using Aztec's built-in scaling.  Not sure this is any different.
 //  EpetraExt::MultiVectorToMatlabFile("/tmp/diagA.dat",diagA);
 //  
   Epetra_Vector scale_vector(*map);
@@ -81,16 +86,8 @@ int GMGSolver::solve() {
     int length = scale_vector.MyLength();
     for (int i=0; i<length; i++) scale_vector[i] = 1.0 / sqrt(fabs(diagA[i]));
 
-    
-//    EpetraExt::MultiVectorToMatlabFile("/tmp/diagA_inv.dat",diagA_inv);
     problem().LeftScale(scale_vector);
     problem().RightScale(scale_vector);
-//    A->LeftScale(diagA_sqrt_inv);
-//    A->RightScale(diagA_sqrt_inv);
-//    b->Multiply(1.0, diagA_inv, *b, 0);
-//    EpetraExt::MultiVectorToMatlabFile("/tmp/b_post_scaling.dat",*b);
-    
-//    EpetraExt::RowMatrixToMatlabFile("/tmp/A_post_scaling.dat",*A);
   }
   
   Teuchos::RCP<Epetra_MultiVector> diagA_ptr = Teuchos::rcp( &diagA, false );
@@ -99,6 +96,8 @@ int GMGSolver::solve() {
   
   _gmgOperator.setApplyDiagonalSmoothing(_diagonalSmoothing);
   _gmgOperator.setFineSolverUsesDiagonalScaling(_diagonalScaling);
+  
+  _gmgOperator.computeCoarseStiffnessMatrix(A);
 
   if (_diagonalScaling && useAztecToScaleDiagonally) {
     solver.SetAztecOption(AZ_scaling, AZ_sym_diag);
@@ -167,13 +166,6 @@ int GMGSolver::solve() {
     scale_vector.Reciprocal(scale_vector);
     problem().LeftScale(scale_vector);
     problem().RightScale(scale_vector);
-//    A->LeftScale(diagA_sqrt);
-//    A->RightScale(diagA_sqrt);
-//    b->Multiply(1.0, diagA, *b, 0);
-//    EpetraExt::MultiVectorToMatlabFile("/tmp/b_post_unscaling.dat",*b);
-
-//    Epetra_MultiVector *x = problem().GetLHS();
-//    EpetraExt::MultiVectorToMatlabFile("/tmp/x.dat",*x);
   }
 
   double norminf = A->NormInf();

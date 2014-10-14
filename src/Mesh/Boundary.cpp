@@ -160,7 +160,7 @@ void Boundary::bcsToImpose(FieldContainer<GlobalIndexType> &globalIndices,
     if ((isSingleton[trialID]) && _imposeSingletonBCsOnThisRank) {
       // that means that it was NOT imposed: warn the user
       cout << "WARNING: singleton BC requested for trial variable " << _mesh->bilinearForm()->trialName(trialID);
-      cout << ", but no BC was imposed for this variable (imposeHere never returned true for any point)." << endl;
+      cout << ", but no BC was imposed for this variable (possibly because imposeHere never returned true for any point)." << endl;
     }
   }
   
@@ -225,13 +225,52 @@ void Boundary::bcsToImpose( map<  GlobalIndexType, double > &globalDofIndicesAnd
   for (vector< int >::iterator trialIt = trialIDs.begin(); trialIt != trialIDs.end(); trialIt++) {
     // now, deal with the singletons:
     int trialID = *trialIt;
-    TEUCHOS_TEST_FOR_EXCEPTION((isSingleton[trialID]) && ( _mesh->bilinearForm()->isFluxOrTrace(trialID) ),
-                       std::invalid_argument,
-                       "Singleton BCs on traces and fluxes unsupported...");
     
+    shards::CellTopology cellTopo = *(elemType->cellTopoPtr.get());
+    
+    if (! _mesh->meshUsesMaximumRule()) {
+      // a bit less nice than the maximum rule singleton BC imposition; we don't impose a non-zero value (because
+      // we don't figure out physical points, etc.), and we also neglect any spatial filtering.
+      // We just find some GlobalDofIndex that belongs to the variable in question, and impose zero on it.
+      
+      // OTOH, here we do support traces and fluxes for single-point BCs
+      if (_imposeSingletonBCsOnThisRank) {
+        if (isSingleton[trialID]) {
+        
+          set<GlobalIndexType> globalIndicesForVariable;
+          DofOrderingPtr trialOrderingPtr = elemType->trialOrderPtr;
+          
+          int numSides = _mesh->bilinearForm()->isFluxOrTrace(trialID) ? cellTopo.getSideCount() : 1;
+          
+          for (int sideOrdinal=0; sideOrdinal < numSides; sideOrdinal++) {
+            BasisPtr basis = trialOrderingPtr->getBasis(trialID,sideOrdinal);
+            int basisCardinality = basis->getCardinality();
+            FieldContainer<double> basisCoefficients(basisCardinality);
+            FieldContainer<double> globalCoefficients; // we'll ignore this
+            FieldContainer<GlobalIndexType> globalDofIndices;
+            _dofInterpreter->interpretLocalBasisCoefficients(cellID, trialID, sideOrdinal, basisCoefficients, globalCoefficients, globalDofIndices);
+            set<GlobalIndexType> rankLocalDofIndices = _mesh->globalDofAssignment()->globalDofIndicesForPartition(-1); // current rank
+            for (int i=0; i<globalDofIndices.size(); i++) {
+              if (rankLocalDofIndices.find(globalDofIndices[i]) != rankLocalDofIndices.end()) {
+                globalDofIndicesAndValues[globalDofIndices[i]] = 0.0;
+                cout << "Imposed single-point BC on variable " << _mesh->bilinearForm()->trialName(trialID) << endl;
+                isSingleton[trialID] = false; // we've imposed it...
+                break;
+              }
+            }
+            if (!isSingleton[trialID]) { // imposed it, so skip other sides
+              break;
+            }
+          }
+        }
+      }
+    } else { // maximum rule
+      TEUCHOS_TEST_FOR_EXCEPTION((isSingleton[trialID]) && ( _mesh->bilinearForm()->isFluxOrTrace(trialID) ),
+                               std::invalid_argument,
+                               "Singleton BCs on traces and fluxes unsupported...");
+
     if ((isSingleton[trialID]) && ( ! _mesh->bilinearForm()->isFluxOrTrace(trialID) ) ) {
       // (we only support singletons on the interior)
-      shards::CellTopology cellTopo = *(elemType->cellTopoPtr.get());
       // find the physical points for the vertices.
       // nodal H1 basis: we know that one basis function will be 1 at a given vertex,
       // and the others will be 0.
@@ -314,29 +353,9 @@ void Boundary::bcsToImpose( map<  GlobalIndexType, double > &globalDofIndicesAnd
 //                cout << ")" << endl;
             }
           }
-        } else {
-          // a bit less nice than the maximum rule singleton BC imposition; we don't impose a non-zero value (because
-          // we don't figure out physical points, etc.), and we also neglect any spatial filtering.
-          // We just find some GlobalDofIndex that belongs to the variable in question, and impose zero on it.
-          if (_imposeSingletonBCsOnThisRank) {
-            set<GlobalIndexType> globalIndicesForVariable;
-            int sideOrdinal = 0;
-            int basisCardinality = basis->getCardinality();
-            FieldContainer<double> basisCoefficients(basisCardinality);
-            FieldContainer<double> globalCoefficients; // we'll ignore this
-            FieldContainer<GlobalIndexType> globalDofIndices;
-            _mesh->interpretLocalBasisCoefficients(cellID, trialID, sideOrdinal, basisCoefficients, globalCoefficients, globalDofIndices);
-            set<GlobalIndexType> rankLocalDofIndices = _mesh->globalDofAssignment()->globalDofIndicesForPartition(-1); // current rank
-            for (int i=0; i<globalDofIndices.size(); i++) {
-              if (rankLocalDofIndices.find(globalDofIndices[i]) != rankLocalDofIndices.end()) {
-                globalDofIndicesAndValues[globalDofIndices[i]] = 0.0;
-                isSingleton[trialID] = false; // we've imposed it...
-                break;
-              }
-            }
-          }
         }
       }
     }
+  }
   }
 }

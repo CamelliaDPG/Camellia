@@ -111,10 +111,10 @@ void LinearTerm::addVar(vector<double> vector_weight, VarPtr var) { // dots weig
   addVar( weightFn, var );
 }
 
-string LinearTerm::displayString() {
+string LinearTerm::displayString() const {
   ostringstream dsStream;
   bool first = true;
-  for (vector< LinearSummand >::iterator lsIt = _summands.begin(); lsIt != _summands.end(); lsIt++) {
+  for (vector< LinearSummand >::const_iterator lsIt = _summands.begin(); lsIt != _summands.end(); lsIt++) {
     if ( ! first ) {
       dsStream << " + ";
     }
@@ -1369,6 +1369,9 @@ void LinearTerm::addTerm(const LinearTerm &a, bool overrideTypeCheck) {
   }
   if (_termType != a.termType()) {
     if (!overrideTypeCheck) {
+      cout << "ERROR: attempting to add terms of unlike type.\n";
+      cout << "Attempting to add term of type " << _termType << " to one of type " << a.termType();
+      cout << "; terms are " << this->displayString() << " and " << a.displayString() << endl;
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "attempting to add terms of unlike type.");
     } else {
       _termType = MIXED_TYPE;

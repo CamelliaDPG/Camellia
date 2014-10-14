@@ -33,6 +33,8 @@
 #include "DPGInnerProduct.h"
 #include "BasisCache.h"
 
+#include "SerialDenseWrapper.h"
+
 using namespace IntrepidExtendedTypes;
 
 DPGInnerProduct::DPGInnerProduct(Teuchos::RCP< BilinearForm > bfs) {

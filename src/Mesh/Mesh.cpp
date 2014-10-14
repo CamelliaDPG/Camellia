@@ -947,6 +947,8 @@ int Mesh::rowSizeUpperBound() {
       maxRowSize = max(maxPossible, maxRowSize);
     }
   }
+  GlobalIndexType numGlobalDofs = this->numGlobalDofs();
+  maxRowSize = min(maxRowSize, (int) numGlobalDofs);
   return min(maxRowSize, MAX_SIZE_TO_PRESCRIBE);
 }
 

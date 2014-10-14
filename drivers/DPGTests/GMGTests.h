@@ -41,6 +41,8 @@ public:
   bool testGMGSolverTwoGrid();
   bool testGMGSolverThreeGrid();
   
+  bool testProlongationOperator(); // to start with, a simple 1D test
+  
   std::string testSuiteName();
 };
 

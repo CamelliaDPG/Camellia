@@ -10,6 +10,8 @@
 
 #include "SerialDenseMatrixUtility.h"
 
+#include "SerialDenseWrapper.h"
+
 #include "VarFactory.h"
 
 #include "BasisCache.h"

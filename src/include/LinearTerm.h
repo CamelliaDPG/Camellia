@@ -133,7 +133,7 @@ public:
   
   bool isZero() const; // true if the LinearTerm is identically zero
   
-  string displayString(); // TeX by convention
+  string displayString() const; // TeX by convention
   
   /*
    // -------------- added by Jesse --------------------

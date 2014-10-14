@@ -15,6 +15,8 @@
 #include "Mesh.h"
 #include "LagrangeConstraints.h"
 #include "Epetra_SerialDenseVector.h"
+#include "DPGInnerProduct.h"
+#include "RHS.h"
 
 using namespace Intrepid;
 
@@ -30,6 +32,8 @@ using namespace Intrepid;
 class CondensedDofInterpreter : public DofInterpreter {
   bool _storeLocalStiffnessMatrices;
   Mesh* _mesh; // for element type lookup, and for determination of which dofs are trace dofs
+  Teuchos::RCP<DPGInnerProduct> _ip;
+  RHSPtr _rhs;
   LagrangeConstraints* _lagrangeConstraints;
   set<int> _uncondensibleVarIDs;
   map<GlobalIndexType, FieldContainer<double> > _localStiffnessMatrices; // will be used by interpretGlobalData if _storeLocalStiffnessMatrices is true
@@ -54,8 +58,11 @@ class CondensedDofInterpreter : public DofInterpreter {
   void initializeGlobalDofIndices();
   map<GlobalIndexType, GlobalIndexType> interpretedFluxMapForPartition(PartitionIndexType partition, bool storeFluxDofIndices);
   
+  void computeAndStoreLocalStiffnessAndLoad(GlobalIndexType cellID);
+  
+  void getLocalData(GlobalIndexType cellID, FieldContainer<double> &stiffness, FieldContainer<double> &load, FieldContainer<GlobalIndexType> &interpretedDofIndices);
 public:
-  CondensedDofInterpreter(Mesh* mesh, LagrangeConstraints* lagrangeConstraints, const set<int> &fieldIDsToExclude, bool storeLocalStiffnessMatrices);
+  CondensedDofInterpreter(Mesh* mesh, Teuchos::RCP<DPGInnerProduct> ip, RHSPtr rhs, LagrangeConstraints* lagrangeConstraints, const set<int> &fieldIDsToExclude, bool storeLocalStiffnessMatrices);
   
   void reinitialize(); // clear stiffness matrices, etc., and rebuild global dof index map
   
@@ -63,14 +70,7 @@ public:
   set<GlobalIndexType> globalDofIndicesForPartition(PartitionIndexType rank);
   
   void interpretLocalData(GlobalIndexType cellID, const FieldContainer<double> &localData,
-                          FieldContainer<double> &globalData, FieldContainer<GlobalIndexType> &globalDofIndices) {
-    if (_localStiffnessMatrices.find(cellID) == _localStiffnessMatrices.end()) {
-      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "CondensedDofInterpreter requires both stiffness and load data to be provided.");
-    } else {
-      FieldContainer<double> globalStiffnessData; // dummy container
-      interpretLocalData(cellID, _localStiffnessMatrices[cellID], localData, globalStiffnessData, globalData, globalDofIndices);
-    }
-  }
+                          FieldContainer<double> &globalData, FieldContainer<GlobalIndexType> &globalDofIndices);
   
   void interpretLocalData(GlobalIndexType cellID, const FieldContainer<double> &localStiffnessData, const FieldContainer<double> &localLoadData,
                           FieldContainer<double> &globalStiffnessData, FieldContainer<double> &globalLoadData, FieldContainer<GlobalIndexType> &globalDofIndices);

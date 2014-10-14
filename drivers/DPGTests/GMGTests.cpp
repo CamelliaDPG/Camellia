@@ -232,6 +232,13 @@ void GMGTests::runTests(int &numTestsRun, int &numTestsPassed) {
   teardown();
   
   setup();
+  if (testGMGOperatorP()) {
+    numTestsPassed++;
+  }
+  numTestsRun++;
+  teardown();
+  
+  setup();
   if (testGMGOperatorIdentityRHSMap()) {
     numTestsPassed++;
   }
@@ -246,21 +253,21 @@ void GMGTests::runTests(int &numTestsRun, int &numTestsPassed) {
   teardown();
   
   setup();
-  if (testGMGOperatorP()) {
+  if (testProlongationOperator()) {
     numTestsPassed++;
   }
   numTestsRun++;
   teardown();
   
-//  setup();
-//  if (testGMGSolverThreeGrid()) {
-//    numTestsPassed++;
-//  }
-//  numTestsRun++;
-//  teardown();
-  
   setup();
   if (testGMGSolverTwoGrid()) {
+    numTestsPassed++;
+  }
+  numTestsRun++;
+  teardown();
+  
+  setup();
+  if (testGMGSolverThreeGrid()) {
     numTestsPassed++;
   }
   numTestsRun++;
@@ -277,7 +284,7 @@ bool GMGTests::testGMGOperatorIdentityLocalCoefficientMap() {
   cellCounts.push_back(4);
   
   vector<bool> useStaticCondensationValues;
-//  useStaticCondensationValues.push_back(true);
+  useStaticCondensationValues.push_back(true);
   useStaticCondensationValues.push_back(false);
   
   for (  vector<bool>::iterator useStaticCondensationIt = useStaticCondensationValues.begin();
@@ -360,14 +367,14 @@ bool GMGTests::testGMGOperatorIdentityRHSMap() {
   bool success = true;
   
   vector<bool> useStaticCondensationValues;
-//  useStaticCondensationValues.push_back(true);
+  useStaticCondensationValues.push_back(true);
   useStaticCondensationValues.push_back(false);
   
   // some 2D-specific tests on refined meshes
   for (  vector<bool>::iterator useStaticCondensationIt = useStaticCondensationValues.begin();
        useStaticCondensationIt != useStaticCondensationValues.end(); useStaticCondensationIt++) {
     bool useStaticCondensation = *useStaticCondensationIt;
-    for (int refinementOrdinal=-1; refinementOrdinal<4; refinementOrdinal++) {
+    for (int refinementOrdinal=-1; refinementOrdinal<3; refinementOrdinal++) { // refinementOrdinal=3 is a slow one, so we skip it...
       int spaceDim = 2;
       
       int H1Order_coarse = 2, H1Order = 2;
@@ -396,15 +403,15 @@ bool GMGTests::testGMGOperatorIdentityRHSMap() {
       
       // as a first test, do "multi" grid between mesh and itself.  Solution should match phiExact.
       Teuchos::RCP<Solver> coarseSolver = Teuchos::rcp( new KluSolver );
-      
-      GMGOperator gmgOperator(zeroBCs, fineMesh, graphNorm, fineMesh, solnFine->getDofInterpreter(), solnFine->getPartitionMap(), coarseSolver, useStaticCondensation);
-      
+
       if (useStaticCondensation) {
         // need to populate local stiffness matrices before dealing with the RHS.
         solnFine->initializeLHSVector();
         solnFine->initializeStiffnessAndLoad();
         solnFine->populateStiffnessAndLoad();
       }
+      
+      GMGOperator gmgOperator(zeroBCs, fineMesh, graphNorm, fineMesh, solnFine->getDofInterpreter(), solnFine->getPartitionMap(), coarseSolver, useStaticCondensation);
       
       //      GnuPlotUtil::writeComputationalMeshSkeleton("/tmp/fineMesh", fineMesh, true); // true: label cells
       
@@ -462,7 +469,7 @@ bool GMGTests::testGMGOperatorP() {
   
   int whichRefinement = 1;
   vector<bool> useStaticCondensationValues;
-//  useStaticCondensationValues.push_back(true);
+  useStaticCondensationValues.push_back(true);
   useStaticCondensationValues.push_back(false);
   
   for (  vector<bool>::iterator useStaticCondensationIt = useStaticCondensationValues.begin();
@@ -486,6 +493,13 @@ bool GMGTests::testGMGOperatorP() {
     double iter_tol = 1e-6;
     
     Teuchos::RCP<Solver> coarseSolver = Teuchos::rcp( new KluSolver );
+    
+    if (useStaticCondensation) {
+      // need to populate local stiffness matrices for sake of condensed solver
+      solnFine->initializeLHSVector();
+      solnFine->initializeStiffnessAndLoad();
+      solnFine->populateStiffnessAndLoad();
+    }
     
     Teuchos::RCP<GMGSolver> gmgSolver = Teuchos::rcp( new GMGSolver(zeroBCs, coarseMesh, graphNorm, fineMesh,
                                                                     solnFine->getDofInterpreter(),
@@ -579,7 +593,7 @@ bool GMGTests::testGMGSolverIdentity2DRefinedMeshes() {
   bool success = true;
   
   vector<bool> useStaticCondensationValues;
-//  useStaticCondensationValues.push_back(true);
+  useStaticCondensationValues.push_back(true);
   useStaticCondensationValues.push_back(false);
   
   for (  vector<bool>::iterator useStaticCondensationIt = useStaticCondensationValues.begin();
@@ -590,7 +604,7 @@ bool GMGTests::testGMGSolverIdentity2DRefinedMeshes() {
     for (int refinementOrdinal=0; refinementOrdinal<4; refinementOrdinal++) {
       int spaceDim = 2;
       
-      int H1Order_coarse = 5, H1Order = 5;
+      int H1Order_coarse = 2, H1Order = 2;
       
       FunctionPtr phiExact = getPhiExact(spaceDim);
       
@@ -598,6 +612,7 @@ bool GMGTests::testGMGSolverIdentity2DRefinedMeshes() {
       SolutionPtr solnCoarse = poissonExactSolutionRefined(H1Order_coarse, phiExact, useH1Traces, refinementOrdinal);
       SolutionPtr solnFine = poissonExactSolutionRefined(H1Order, phiExact, useH1Traces, refinementOrdinal);
       solnFine->setUseCondensedSolve(useStaticCondensation);
+      solnCoarse->setUseCondensedSolve(useStaticCondensation);
       
       BCPtr poissonBC = solnFine->bc();
       BCPtr zeroBCs = poissonBC->copyImposingZero();
@@ -606,27 +621,27 @@ bool GMGTests::testGMGSolverIdentity2DRefinedMeshes() {
       IPPtr graphNorm = bf->graphNorm();
       
       // as a first test, do "multi" grid between mesh and itself.  Solution should match phiExact.
-      double iter_tol = 1e-14;
+      double iter_tol = 1e-11;
       bool applySmoothing = false;
       int maxIters = applySmoothing ? 100 : 1; // if smoothing not applied, then GMG should recover exactly the direct solution, in 1 iteration
       Teuchos::RCP<Solver> coarseSolver = Teuchos::rcp( new KluSolver );
       
       //    solnFine->setWriteMatrixToFile(true, "/tmp/A_fine.dat");
       
+      if (useStaticCondensation) {
+        // need to populate local stiffness matrices before dealing with the RHS.
+        solnFine->initializeLHSVector();
+        solnFine->initializeStiffnessAndLoad();
+        solnFine->populateStiffnessAndLoad();
+      }
+      
+      Teuchos::RCP<GMGSolver> gmgSolver = Teuchos::rcp( new GMGSolver(zeroBCs, fineMesh, graphNorm, fineMesh,
+                                                                      solnFine->getDofInterpreter(),
+                                                                      solnFine->getPartitionMap(),
+                                                                      maxIters, iter_tol, coarseSolver, useStaticCondensation) );
+      gmgSolver->setComputeConditionNumberEstimate(false);
+      
       {
-        Teuchos::RCP<GMGSolver> gmgSolver = Teuchos::rcp( new GMGSolver(zeroBCs, fineMesh, graphNorm, fineMesh,
-                                                                        solnFine->getDofInterpreter(),
-                                                                        solnFine->getPartitionMap(),
-                                                                        maxIters, iter_tol, coarseSolver, useStaticCondensation) );
-        if (maxIters==1) {
-          gmgSolver->setComputeConditionNumberEstimate(false);
-        }
-        
-        //      GnuPlotUtil::writeComputationalMeshSkeleton("/tmp/fineMesh", fineMesh, true); // true: label cells
-        
-        // before we test the solve proper, let's check that with smoothing off, ApplyInverse acts just like the standard solve
-        //      solnFine->setWriteMatrixToFile(true, "/tmp/A_direct.dat");
-        //      solnFine->setWriteRHSToMatrixMarketFile(true, "/tmp/b_direct.dat");
         solnFine->initializeLHSVector();
         solnFine->initializeStiffnessAndLoad();
         solnFine->populateStiffnessAndLoad();
@@ -640,34 +655,34 @@ bool GMGTests::testGMGSolverIdentity2DRefinedMeshes() {
         vector<bool> fineDiagonalScalingValues;
         fineDiagonalScalingValues.push_back(false);
         fineDiagonalScalingValues.push_back(true);
-
+        
+        // since we may change the RHS vector below, let's make a copy and use that
+        Epetra_MultiVector rhsVectorCopy2(rhsVectorCopy);
+        
+        Epetra_CrsMatrix *A = solnFine->getStiffnessMatrix().get();
+        const Epetra_BlockMap* map = &A->Map();
+        Teuchos::RCP<Epetra_Vector> diagA = Teuchos::rcp( new Epetra_Vector(*map) );
+        A->ExtractDiagonalCopy(*diagA);
+        
+        Teuchos::RCP<Epetra_Vector> diagA_inv = Teuchos::rcp( new Epetra_Vector(*map, 1) );
+        Teuchos::RCP<Epetra_Vector> diagA_sqrt_inv = Teuchos::rcp( new Epetra_Vector(*map, 1) );
+        diagA_inv->Reciprocal(*diagA);
+        if (map->NumMyElements() > 0) {
+          for (int lid = map->MinLID(); lid <= map->MaxLID(); lid++) {
+            (*diagA_sqrt_inv)[lid] = 1.0 / sqrt((*diagA)[lid]);
+          }
+        }
+        Teuchos::RCP<Epetra_Vector> diagA_sqrt = Teuchos::rcp( new Epetra_Vector(*map, 1) );
+        diagA_sqrt->Reciprocal(*diagA_sqrt_inv);
+        
+        gmgSolver->gmgOperator().setSmootherType(GMGOperator::POINT_JACOBI);
+        gmgSolver->gmgOperator().computeCoarseStiffnessMatrix(A);
+        
         for (int i=0; i<fineDiagonalScalingValues.size(); i++) {
           bool fineSolverUsesDiagonalScaling = fineDiagonalScalingValues[i];
           Epetra_MultiVector gmg_lhsVector(rhsVectorCopy.Map(), 1); // lhs has same distribution structure as rhs
           gmgSolver->setApplySmoothingOperator(false); // turn off for this next test, comparing direct solve to ApplyInverse
           gmgSolver->gmgOperator().setFineSolverUsesDiagonalScaling(fineSolverUsesDiagonalScaling);
-          
-          // since we may change the RHS vector below, let's make a copy and use that
-          Epetra_MultiVector rhsVectorCopy2(rhsVectorCopy);
-          
-          Epetra_RowMatrix *A = solnFine->getStiffnessMatrix().get();
-          const Epetra_BlockMap* map = &A->Map();
-          Teuchos::RCP<Epetra_Vector> diagA = Teuchos::rcp( new Epetra_Vector(*map) );
-          A->ExtractDiagonalCopy(*diagA);
-          
-          Teuchos::RCP<Epetra_Vector> diagA_inv = Teuchos::rcp( new Epetra_Vector(*map, 1) );
-          Teuchos::RCP<Epetra_Vector> diagA_sqrt_inv = Teuchos::rcp( new Epetra_Vector(*map, 1) );
-          diagA_inv->Reciprocal(*diagA);
-          if (map->NumMyElements() > 0) {
-            for (int lid = map->MinLID(); lid <= map->MaxLID(); lid++) {
-              (*diagA_sqrt_inv)[lid] = 1.0 / sqrt((*diagA)[lid]);
-            }
-          }
-          Teuchos::RCP<Epetra_Vector> diagA_sqrt = Teuchos::rcp( new Epetra_Vector(*map, 1) );
-          diagA_sqrt->Reciprocal(*diagA_sqrt_inv);
-          
-//          EpetraExt::RowMatrixToMatlabFile("/tmp/A.dat",*A);
-//          EpetraExt::MultiVectorToMatlabFile("/tmp/rhs.dat",rhsVectorCopy2);
           
           if (fineSolverUsesDiagonalScaling) {
             // then we need to imitate GMGSolver: first, communicate the diagonal
@@ -711,11 +726,11 @@ bool GMGTests::testGMGSolverIdentity2DRefinedMeshes() {
         }
       }
       
-      Teuchos::RCP<GMGSolver> gmgSolver = Teuchos::rcp( new GMGSolver(zeroBCs, fineMesh, graphNorm, fineMesh,
-                                                                      solnFine->getDofInterpreter(),
-                                                                      solnFine->getPartitionMap(),
-                                                                      maxIters, iter_tol, coarseSolver, useStaticCondensation) );
-      
+//      Teuchos::RCP<GMGSolver> gmgSolver = Teuchos::rcp( new GMGSolver(zeroBCs, fineMesh, graphNorm, fineMesh,
+//                                                                      solnFine->getDofInterpreter(),
+//                                                                      solnFine->getPartitionMap(),
+//                                                                      maxIters, iter_tol, coarseSolver, useStaticCondensation) );
+//      
       gmgSolver->setApplySmoothingOperator(applySmoothing);
       
       Teuchos::RCP<Solver> fineSolver = gmgSolver;
@@ -750,7 +765,7 @@ bool GMGTests::testGMGSolverIdentityUniformMeshes() {
   bool success = true;
   
   vector<bool> useStaticCondensationValues;
-//  useStaticCondensationValues.push_back(true);
+  useStaticCondensationValues.push_back(true);
   useStaticCondensationValues.push_back(false);
   
   for (  vector<bool>::iterator useStaticCondensationIt = useStaticCondensationValues.begin();
@@ -776,12 +791,22 @@ bool GMGTests::testGMGSolverIdentityUniformMeshes() {
         SolutionPtr exactPoissonSolution = poissonExactSolution(cellCount, H1Order, phiExact, useH1Traces);
         SolutionPtr actualPoissonSolution = poissonExactSolution(cellCount, H1Order, phiExact, useH1Traces);
         
+        exactPoissonSolution->setUseCondensedSolve(useStaticCondensation);
+        actualPoissonSolution->setUseCondensedSolve(useStaticCondensation);
+        
         BCPtr poissonBC = exactPoissonSolution->bc();
         BCPtr zeroBCs = poissonBC->copyImposingZero();
         MeshPtr mesh = exactPoissonSolution->mesh();
         BF* bf = dynamic_cast< BF* >( mesh->bilinearForm().get() );
         IPPtr graphNorm = bf->graphNorm();
 
+        if (useStaticCondensation) {
+          // need to populate local stiffness matrices for condensed dof interpreter
+          exactPoissonSolution->initializeLHSVector();
+          exactPoissonSolution->initializeStiffnessAndLoad();
+          exactPoissonSolution->populateStiffnessAndLoad();
+        }
+        
         Teuchos::RCP<Solver> coarseSolver = Teuchos::rcp( new KluSolver );
         int maxIters = 100;
         double iter_tol = 1e-14;
@@ -789,6 +814,7 @@ bool GMGTests::testGMGSolverIdentityUniformMeshes() {
                                                                         exactPoissonSolution->getDofInterpreter(),
                                                                         exactPoissonSolution->getPartitionMap(),
                                                                         maxIters, iter_tol, coarseSolver, useStaticCondensation) );
+        gmgSolver->setComputeConditionNumberEstimate(false);
 
         {
           // before we test the solve proper, let's check that with smoothing off, ApplyInverse acts just like the standard solve
@@ -826,7 +852,7 @@ bool GMGTests::testGMGSolverIdentityUniformMeshes() {
               // since we may change the RHS vector below, let's make a copy and use that
               Epetra_MultiVector rhsVectorCopy2(rhsVectorCopy);
               
-              Epetra_RowMatrix *A = exactPoissonSolution->getStiffnessMatrix().get();
+              Epetra_CrsMatrix *A = exactPoissonSolution->getStiffnessMatrix().get();
               
               const Epetra_Map* map = &A->RowMatrixRowMap();
               
@@ -872,6 +898,8 @@ bool GMGTests::testGMGSolverIdentityUniformMeshes() {
               // if applySmoothing = false, then we expect exact agreement between direct solution and iterative.
               // If applySmoothing = true,  then we expect iterative = exact + D^-1 b
               
+              gmgSolver->gmgOperator().setSmootherType(GMGOperator::POINT_JACOBI);
+              gmgSolver->gmgOperator().computeCoarseStiffnessMatrix(A);
               gmgSolver->gmgOperator().ApplyInverse(rhsVectorCopy2, gmg_lhsVector);
 
               double tol = 1e-10;
@@ -903,15 +931,19 @@ bool GMGTests::testGMGSolverIdentityUniformMeshes() {
           // do "multi" grid between mesh and itself.  Solution should match phiExact.
           int maxIters = applySmoothing ? 100 : 1; // if smoothing not applied, then GMG should recover exactly the direct solution, in 1 iteration
 
-          Teuchos::RCP<GMGSolver> gmgSolver = Teuchos::rcp( new GMGSolver(zeroBCs, mesh, graphNorm, mesh,
-                                                                          exactPoissonSolution->getDofInterpreter(),
-                                                                          exactPoissonSolution->getPartitionMap(),
-                                                                          maxIters, iter_tol, coarseSolver, useStaticCondensation) );
-
-          if (maxIters==1) { // then turn off condest
-            gmgSolver->setComputeConditionNumberEstimate(false);
+          if (useStaticCondensation) {
+            // need to populate local stiffness matrices in the 
+            actualPoissonSolution->initializeLHSVector();
+            actualPoissonSolution->initializeStiffnessAndLoad();
+            actualPoissonSolution->populateStiffnessAndLoad();
           }
           
+          Teuchos::RCP<GMGSolver> gmgSolver = Teuchos::rcp( new GMGSolver(zeroBCs, mesh, graphNorm, mesh,
+                                                                          actualPoissonSolution->getDofInterpreter(),
+                                                                          actualPoissonSolution->getPartitionMap(),
+                                                                          maxIters, iter_tol, coarseSolver, useStaticCondensation) );
+
+          gmgSolver->setComputeConditionNumberEstimate(false);
           gmgSolver->setApplySmoothingOperator(applySmoothing);
           
           Teuchos::RCP<Solver> fineSolver = gmgSolver;
@@ -951,7 +983,7 @@ bool GMGTests::testGMGSolverTwoGrid() {
   vector<int> cellCounts;
   cellCounts.push_back(1);
   
-  bool useStaticCondensation = false;
+  bool useStaticCondensation = false; // static condensation is not yet supported for h-multigrid.
   
   for (int spaceDim=1; spaceDim<=3; spaceDim++) {
     for (int i=0; i<cellCounts.size(); i++) {
@@ -1030,9 +1062,14 @@ bool GMGTests::testGMGSolverThreeGrid() {
   vector<int> cellCounts;
   cellCounts.push_back(1);
   
-  bool useStaticCondensation = false;
+  vector<bool> useStaticCondensationValues; // static condensation is not yet supported for h-multigrid.
+//  useStaticCondensationValues.push_back(true);
+  useStaticCondensationValues.push_back(false);
   
-  for (int spaceDim=1; spaceDim<=3; spaceDim++) {
+  for (  vector<bool>::iterator useStaticCondensationIt = useStaticCondensationValues.begin();
+       useStaticCondensationIt != useStaticCondensationValues.end(); useStaticCondensationIt++) {
+    bool useStaticCondensation = *useStaticCondensationIt;
+    for (int spaceDim=1; spaceDim<=3; spaceDim++) {
     for (int i=0; i<cellCounts.size(); i++) {
       //      if ((spaceDim==3) && (i==cellCounts.size()-1)) continue; // skip the 4x4x4 case, in interest of time.
       vector<int> cellCount;
@@ -1072,6 +1109,22 @@ bool GMGTests::testGMGSolverThreeGrid() {
       int maxIters = 200;
       Teuchos::RCP<Solver> coarsestSolver = Teuchos::rcp( new KluSolver );
       
+      coarseSolution->setUseCondensedSolve(useStaticCondensation);
+      exactPoissonSolution->setUseCondensedSolve(useStaticCondensation);
+      actualPoissonSolution->setUseCondensedSolve(useStaticCondensation);
+      
+      if (useStaticCondensation) {
+        // then for coarseSolution->getDofInterpreter() and exactPoissonSolution->getDofInterpreter() to work,
+        // need to populate their local stiffness matrices
+        coarseSolution->initializeLHSVector();
+        coarseSolution->initializeStiffnessAndLoad();
+        coarseSolution->populateStiffnessAndLoad();
+        
+        exactPoissonSolution->initializeLHSVector();
+        exactPoissonSolution->initializeStiffnessAndLoad();
+        exactPoissonSolution->populateStiffnessAndLoad();
+      }
+      
       Teuchos::RCP<GMGSolver> coarseSolver = Teuchos::rcp( new GMGSolver(zeroBCs, coarsestMesh, graphNorm, coarseMesh,
                                                                          coarseSolution->getDofInterpreter(),
                                                                          coarseSolution->getPartitionMap(),
@@ -1082,6 +1135,9 @@ bool GMGTests::testGMGSolverThreeGrid() {
                                                                       exactPoissonSolution->getPartitionMap(),
                                                                       maxIters, iter_tol, coarseSolver, useStaticCondensation) );
       
+      coarseSolver->setComputeConditionNumberEstimate(false);
+      gmgSolver->setComputeConditionNumberEstimate(false);
+      
       gmgSolver->setApplySmoothingOperator(applySmoothing);
       
       Teuchos::RCP<Solver> fineSolver = gmgSolver;
@@ -1089,7 +1145,7 @@ bool GMGTests::testGMGSolverThreeGrid() {
       //      exactPoissonSolution->setWriteMatrixToFile(true, "/tmp/A.dat");
       //      exactPoissonSolution->setWriteRHSToMatrixMarketFile(true, "/tmp/b.dat");
       
-      exactPoissonSolution->solve(coarseSolver);
+      exactPoissonSolution->solve(coarsestSolver);
       
       actualPoissonSolution->solve(fineSolver);
       
@@ -1110,6 +1166,98 @@ bool GMGTests::testGMGSolverThreeGrid() {
       }
     }
   }
+  }
+  return success;
+}
+
+bool GMGTests::testProlongationOperator() {
+  /*
+   This is not a great test, just a quick check against some hand-determined values.
+   */
+  
+  bool success = true;
+  
+  int H1Order = 2;
+  bool useH1Traces = false;
+  int spaceDim = 1;
+  int coarseCellCount = 1;
+  
+  FunctionPtr phiExact = getPhiExact(spaceDim);
+  
+  MeshPtr coarseMesh = poissonExactSolution(coarseCellCount, H1Order, phiExact, useH1Traces)->mesh();
+  
+  SolutionPtr exactPoissonSolution = poissonExactSolution(coarseCellCount, H1Order, phiExact, useH1Traces);
+  SolutionPtr actualPoissonSolution = poissonExactSolution(coarseCellCount, H1Order, phiExact, useH1Traces);
+  
+  MeshPtr exactMesh = exactPoissonSolution->mesh();
+  MeshPtr fineMesh = actualPoissonSolution->mesh();
+  
+  // refine uniformly once in both exact and actual:
+  CellTopoPtrLegacy cellTopo = coarseMesh->getTopology()->getCell(0)->topology();
+  RefinementPatternPtr refPattern = RefinementPattern::regularRefinementPattern(cellTopo->getKey());
+  exactMesh->hRefine(exactMesh->getActiveCellIDs(), refPattern);
+  fineMesh->hRefine(fineMesh->getActiveCellIDs(), refPattern);
+
+  BCPtr poissonBC = exactPoissonSolution->bc();
+  BCPtr zeroBCs = poissonBC->copyImposingZero();
+  MeshPtr mesh = exactPoissonSolution->mesh();
+  BF* bf = dynamic_cast< BF* >( mesh->bilinearForm().get() );
+  IPPtr graphNorm = bf->graphNorm();
+  
+  bool useStaticCondensation = false;
+  
+  double iter_tol = 1e-8;
+  int maxIters = 200;
+  Teuchos::RCP<Solver> coarseSolver = Teuchos::rcp( new KluSolver );
+  Teuchos::RCP<GMGSolver> gmgSolver = Teuchos::rcp( new GMGSolver(zeroBCs, coarseMesh, graphNorm, fineMesh,
+                                                                  exactPoissonSolution->getDofInterpreter(),
+                                                                  exactPoissonSolution->getPartitionMap(),
+                                                                  maxIters, iter_tol, coarseSolver, useStaticCondensation) );
+
+  gmgSolver->gmgOperator().constructLocalCoefficientMaps();
+  GlobalIndexType cellID = 1; // the left cell in the fine mesh
+  LocalDofMapperPtr localCoefficientMap = gmgSolver->gmgOperator().getLocalCoefficientMap(cellID);
+  
+  bool traceToFieldsEnabled = false; // have not yet implemented the thing that will map fine traces to coarse fields
+  
+  // just hard-coding the values we expect right now.  Rows are fine cell 0 local dofs.  Columns are coarse cell 0 dofs.
+  FieldContainer<double> expectedValues(8,8);
+  expectedValues(0,0) = 1.0;
+  if (traceToFieldsEnabled) {
+    expectedValues(1,4) = 0.5;
+    expectedValues(1,5) = 0.5;
+    expectedValues(3,6) = 0.5;
+    expectedValues(3,7) = 0.5;
+  }
+  expectedValues(2,2) = 1.0;
+  expectedValues(4,4) = 1.0;
+  expectedValues(4,5) = 0.0;
+  expectedValues(5,4) = 0.5;
+  expectedValues(5,5) = 0.5;
+  expectedValues(6,6) = 1.0;
+  expectedValues(6,7) = 0.0;
+  expectedValues(7,6) = 0.5;
+  expectedValues(7,7) = 0.5;
+  
+  FieldContainer<double> actualValues(8,8);
+  for (int i=0; i<8; i++) {
+    FieldContainer<double> localData(8);
+    localData(i) = 1.0;
+    FieldContainer<double> globalData = localCoefficientMap->mapLocalData(localData, false);
+    for (int j=0; j<8; j++) {
+      actualValues(i,j) = globalData(j);
+    }
+  }
+  
+  double tol = 1e-12;
+  double maxDiff;
+  if (! fcsAgree(expectedValues, actualValues, tol, maxDiff)) {
+    cout << "expected differs from actual; maxDiff " << maxDiff << endl;
+    success = false;
+    
+    cout << "actualValues:\n" << actualValues;
+  }
+  
   return success;
 }
 

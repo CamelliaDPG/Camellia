@@ -110,7 +110,7 @@ private:
   Teuchos::RCP<LocalStiffnessMatrixFilter> _filter;
   Teuchos::RCP<LagrangeConstraints> _lagrangeConstraints;
 
-  Teuchos::RCP<Epetra_FECrsMatrix> _globalStiffMatrix;
+  Teuchos::RCP<Epetra_CrsMatrix> _globalStiffMatrix;
   Teuchos::RCP<Epetra_FEVector> _rhsVector;
   Teuchos::RCP<Epetra_FEVector> _lhsVector;
   
@@ -289,7 +289,9 @@ public:
   void setBC( Teuchos::RCP<BC> );
   void setRHS( Teuchos::RCP<RHS> );
   
-  Teuchos::RCP<Epetra_FECrsMatrix> getStiffnessMatrix();
+  Teuchos::RCP<Epetra_CrsMatrix> getStiffnessMatrix();
+  void setStiffnessMatrix(Teuchos::RCP<Epetra_CrsMatrix> stiffness);
+
   Teuchos::RCP<Epetra_FEVector> getRHSVector();
   Teuchos::RCP<Epetra_FEVector> getLHSVector();
   

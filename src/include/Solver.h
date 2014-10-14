@@ -79,7 +79,7 @@ public:
   }
   
   int solve() {
-    Teuchos::RCP<Amesos_Mumps> mumps = Teuchos::rcp(new Amesos_Mumps(problem()));;
+    Teuchos::RCP<Amesos_Mumps> mumps = Teuchos::rcp(new Amesos_Mumps(problem()));
     int numProcs=1;
     int rank=0;
     

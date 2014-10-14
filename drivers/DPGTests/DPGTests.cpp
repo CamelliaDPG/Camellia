@@ -203,12 +203,16 @@ void DPGTests::runTests() {
   
   // setup our TestSuite tests:
   vector< Teuchos::RCP< TestSuite > > testSuites;
+  
+  testSuites.push_back( Teuchos::rcp( new GMGTests ) );
+  
+  testSuites.push_back( Teuchos::rcp( new MeshRefinementTests ) ); // skips two PatchBasis tests
 
+  testSuites.push_back( Teuchos::rcp( new SolutionTests ) );
+  
   testSuites.push_back( Teuchos::rcp( new CellTopologyTests ) );
   
   testSuites.push_back( Teuchos::rcp( new MeshTestSuite ) );
-  
-  testSuites.push_back( Teuchos::rcp( new GMGTests ) );
   
   if (skipSlowTests) {
     if (rank==0) {
@@ -217,8 +221,6 @@ void DPGTests::runTests() {
   } else {
     testSuites.push_back( Teuchos::rcp( new IncompressibleFormulationsTests(false) ) ); // false: turn "thorough" off
   }
-  
-  testSuites.push_back( Teuchos::rcp( new SolutionTests ) );
   
   testSuites.push_back( Teuchos::rcp( new GDAMinimumRuleTests ) );
   
@@ -232,7 +234,6 @@ void DPGTests::runTests() {
   
   testSuites.push_back( Teuchos::rcp( new FunctionTests ) );
   
-  testSuites.push_back( Teuchos::rcp( new MeshRefinementTests ) ); // skips two PatchBasis tests
   
   testSuites.push_back( Teuchos::rcp( new CurvilinearMeshTests) );  
   
