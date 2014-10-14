@@ -20,6 +20,10 @@
 
 #include "GlobalDofAssignment.h"
 
+#include "CondensedDofInterpreter.h"
+
+#include "PressurelessStokesFormulation.h"
+
 #include "Teuchos_CommandLineProcessor.hpp"
 #include "Teuchos_ParameterList.hpp"
 
@@ -90,9 +94,11 @@ int main(int argc, char *argv[]) {
   bool conformingTraces = false;
   bool applyDiagonalSmoothing = true;
   
+  bool useDiagonalScaling = false; // of the global stiffness matrix in GMGSolver
+  
   bool printRefinementDetails = false;
   
-  bool useWeightedGraphNorm = true; // graph norm scaled according to units, more or less
+  bool useWeightedGraphNorm = false; // graph norm scaled according to units, more or less
   bool useStaticCondensation = false;
   
   int numCells = 2;
@@ -116,6 +122,8 @@ int main(int argc, char *argv[]) {
   cmdp.setOption("numCells", &numCells, "number of cells in the initial mesh");
   cmdp.setOption("eps", &eps, "ramp width");
   cmdp.setOption("useScaledGraphNorm", "dontUseScaledGraphNorm", &useWeightedGraphNorm);
+  cmdp.setOption("useDiagonalScaling", "dontUseDiagonalScaling", &useDiagonalScaling);
+  cmdp.setOption("useStaticCondensation", "dontUseStaticCondensation", &useStaticCondensation);
 //  cmdp.setOption("gmgTol", &gmgTolerance, "tolerance for GMG convergence");
   cmdp.setOption("relativeTol", &relativeTol, "Energy error-relative tolerance for iterative solver.");
   cmdp.setOption("gmgMaxIterations", &gmgMaxIterations, "tolerance for GMG convergence");
@@ -127,98 +135,136 @@ int main(int argc, char *argv[]) {
     return -1;
   }
   
-  VarFactory varFactory;
-  // fields:
-  VarPtr u1 = varFactory.fieldVar("u_1", L2);
-  VarPtr u2 = varFactory.fieldVar("u_2", L2);
-  VarPtr u3;
-  if (use3D) u3 = varFactory.fieldVar("u_3", L2);
-  VarPtr sigma1 = varFactory.fieldVar("\\sigma_1", VECTOR_L2);
-  VarPtr sigma2 = varFactory.fieldVar("\\sigma_2", VECTOR_L2);
-  VarPtr sigma3;
-  if (use3D) sigma3 = varFactory.fieldVar("\\sigma_3", VECTOR_L2);
-  VarPtr p = varFactory.fieldVar("p");
+  bool usePressurelessFormulation = false; // VGP otherwise
+  
+  BFPtr stokesBF;
+  
+  VarPtr u1hat, u2hat, u3hat, p;
+  VarPtr t1n;
   
   FunctionPtr n = Function::normal();
-  // traces:
-  VarPtr u1hat, u2hat, u3hat;
   
-  if (conformingTraces) {
-    u1hat = varFactory.traceVar("\\widehat{u}_1", u1);
-    u2hat = varFactory.traceVar("\\widehat{u}_2", u2);
-    
-    if (use3D) {
-      u3hat = varFactory.traceVar("\\widehat{u}_3", u3);
-    }
-  } else {
-    cout << "Note: using non-conforming traces.\n";
-    u1hat = varFactory.traceVar("\\widehat{u}_1", u1, L2);
-    u2hat = varFactory.traceVar("\\widehat{u}_2", u2, L2);
-    
-    if (use3D) {
-      u3hat = varFactory.traceVar("\\widehat{u}_3", u3, L2);
-    }
-  }
-  VarPtr t1_n = varFactory.fluxVar("\\widehat{t}_{1n}", sigma1 * n + p * n->x());
-  VarPtr t2_n = varFactory.fluxVar("\\widehat{t}_{2n}", sigma2 * n + p * n->y());
-  VarPtr t3_n;
-  if (use3D) {
-    t3_n = varFactory.fluxVar("\\widehat{t}_{3n}", sigma3 * n + p * n->z());
-  }
-  
-  // test functions:
-  VarPtr tau1 = varFactory.testVar("\\tau_1", HDIV);  // tau_1
-  VarPtr tau2 = varFactory.testVar("\\tau_2", HDIV);  // tau_2
-  VarPtr tau3;
-  if (use3D) tau3 = varFactory.testVar("\\tau_3", HDIV);  // tau_3
-  VarPtr v1 = varFactory.testVar("v1", HGRAD);        // v_1
-  VarPtr v2 = varFactory.testVar("v2", HGRAD);        // v_2
-  VarPtr v3;
-  if (use3D) v3 = varFactory.testVar("v3", HGRAD);
-  VarPtr q = varFactory.testVar("q", HGRAD);          // q
-  
-  BFPtr stokesBF = Teuchos::rcp( new BF(varFactory) );
   double mu = 1.0; // viscosity
-  // tau1 terms:
-  stokesBF->addTerm(u1, tau1->div());
-  stokesBF->addTerm(sigma1, tau1); // (sigma1, tau1)
-  stokesBF->addTerm(-u1hat, tau1->dot_normal());
   
-  // tau2 terms:
-  stokesBF->addTerm(u2, tau2->div());
-  stokesBF->addTerm(sigma2, tau2);
-  stokesBF->addTerm(-u2hat, tau2->dot_normal());
+  IPPtr weightedGraphNorm; // only valid for VGP
   
-  // tau3:
-  if (use3D) {
-    stokesBF->addTerm(u3, tau3->div());
-    stokesBF->addTerm(sigma3, tau3);
-    stokesBF->addTerm(-u3hat, tau3->dot_normal());
+  if (usePressurelessFormulation) {
+    int spaceDim = use3D ? 3 : 2;
+    PressurelessStokesFormulation stokesForm(spaceDim);
+    stokesBF = stokesForm.bf();
+    u1hat = stokesForm.u_hat(1);
+    u2hat = stokesForm.u_hat(2);
+    if (use3D) u3hat = stokesForm.u_hat(3);
+    t1n = stokesForm.tn_hat(1);
+    
+    if (rank==0) cout << "Using pressure-free Stokes formulation.\n";
+  } else { // VGP formulation
+    VarFactory varFactory;
+    // fields:
+    VarPtr u1 = varFactory.fieldVar("u_1", L2);
+    VarPtr u2 = varFactory.fieldVar("u_2", L2);
+    VarPtr u3;
+    if (use3D) u3 = varFactory.fieldVar("u_3", L2);
+    VarPtr sigma1 = varFactory.fieldVar("\\sigma_1", VECTOR_L2);
+    VarPtr sigma2 = varFactory.fieldVar("\\sigma_2", VECTOR_L2);
+    VarPtr sigma3;
+    if (use3D) sigma3 = varFactory.fieldVar("\\sigma_3", VECTOR_L2);
+    p = varFactory.fieldVar("p");
+    
+    if (conformingTraces) {
+      u1hat = varFactory.traceVar("\\widehat{u}_1", u1);
+      u2hat = varFactory.traceVar("\\widehat{u}_2", u2);
+      
+      if (use3D) {
+        u3hat = varFactory.traceVar("\\widehat{u}_3", u3);
+      }
+    } else {
+      cout << "Note: using non-conforming traces.\n";
+      u1hat = varFactory.traceVar("\\widehat{u}_1", u1, L2);
+      u2hat = varFactory.traceVar("\\widehat{u}_2", u2, L2);
+      
+      if (use3D) {
+        u3hat = varFactory.traceVar("\\widehat{u}_3", u3, L2);
+      }
+    }
+    VarPtr t1_n = varFactory.fluxVar("\\widehat{t}_{1n}", sigma1 * n + p * n->x());
+    VarPtr t2_n = varFactory.fluxVar("\\widehat{t}_{2n}", sigma2 * n + p * n->y());
+    VarPtr t3_n;
+    if (use3D) {
+      t3_n = varFactory.fluxVar("\\widehat{t}_{3n}", sigma3 * n + p * n->z());
+    }
+    
+    // test functions:
+    VarPtr tau1 = varFactory.testVar("\\tau_1", HDIV);  // tau_1
+    VarPtr tau2 = varFactory.testVar("\\tau_2", HDIV);  // tau_2
+    VarPtr tau3;
+    if (use3D) tau3 = varFactory.testVar("\\tau_3", HDIV);  // tau_3
+    VarPtr v1 = varFactory.testVar("v1", HGRAD);        // v_1
+    VarPtr v2 = varFactory.testVar("v2", HGRAD);        // v_2
+    VarPtr v3;
+    if (use3D) v3 = varFactory.testVar("v3", HGRAD);
+    VarPtr q = varFactory.testVar("q", HGRAD);          // q
+    
+    stokesBF = Teuchos::rcp( new BF(varFactory) );
+    // tau1 terms:
+    stokesBF->addTerm(u1, tau1->div());
+    stokesBF->addTerm(sigma1, tau1); // (sigma1, tau1)
+    stokesBF->addTerm(-u1hat, tau1->dot_normal());
+    
+    // tau2 terms:
+    stokesBF->addTerm(u2, tau2->div());
+    stokesBF->addTerm(sigma2, tau2);
+    stokesBF->addTerm(-u2hat, tau2->dot_normal());
+    
+    // tau3:
+    if (use3D) {
+      stokesBF->addTerm(u3, tau3->div());
+      stokesBF->addTerm(sigma3, tau3);
+      stokesBF->addTerm(-u3hat, tau3->dot_normal());
+    }
+    
+    // v1:
+    stokesBF->addTerm(mu * sigma1, v1->grad()); // (mu sigma1, grad v1)
+    stokesBF->addTerm( - p, v1->dx() );
+    stokesBF->addTerm( t1_n, v1);
+    
+    // v2:
+    stokesBF->addTerm(mu * sigma2, v2->grad()); // (mu sigma2, grad v2)
+    stokesBF->addTerm( - p, v2->dy());
+    stokesBF->addTerm( t2_n, v2);
+    
+    // v3:
+    if (use3D) {
+      stokesBF->addTerm(mu * sigma3, v3->grad()); // (mu sigma3, grad v3)
+      stokesBF->addTerm( - p, v3->dz());
+      stokesBF->addTerm( t3_n, v3);
+    }
+    
+    // q:
+    stokesBF->addTerm(-u1,q->dx()); // (-u, grad q)
+    stokesBF->addTerm(-u2,q->dy());
+    if (use3D) stokesBF->addTerm(-u3, q->dz());
+    if (!use3D) stokesBF->addTerm(u1hat * n->x() + u2hat * n->y(), q);
+    else stokesBF->addTerm(u1hat * n->x() + u2hat * n->y() + u3hat * n->z(), q);
+    
+    FunctionPtr h = Teuchos::rcp( new hFunction() );
+    
+    weightedGraphNorm = IP::ip();
+    {
+      weightedGraphNorm->addTerm( mu * v1->dx() + tau1->x() ); // sigma11
+      weightedGraphNorm->addTerm( mu * v1->dy() + tau1->y() ); // sigma12
+      weightedGraphNorm->addTerm( mu * v2->dx() + tau2->x() ); // sigma21
+      weightedGraphNorm->addTerm( mu * v2->dy() + tau2->y() ); // sigma22
+      weightedGraphNorm->addTerm( v1->dx() + v2->dy() );       // pressure
+      weightedGraphNorm->addTerm( h * tau1->div() - h * q->dx() ); // u1
+      weightedGraphNorm->addTerm( h * tau2->div() - h * q->dy() ); // u2
+      weightedGraphNorm->addTerm( (mu / h) * v1 );
+      weightedGraphNorm->addTerm( (mu / h) * v2 );
+      weightedGraphNorm->addTerm(  q );
+      weightedGraphNorm->addTerm( tau1 );
+      weightedGraphNorm->addTerm( tau2 );
+    }
   }
-  
-  // v1:
-  stokesBF->addTerm(mu * sigma1, v1->grad()); // (mu sigma1, grad v1)
-  stokesBF->addTerm( - p, v1->dx() );
-  stokesBF->addTerm( t1_n, v1);
-  
-  // v2:
-  stokesBF->addTerm(mu * sigma2, v2->grad()); // (mu sigma2, grad v2)
-  stokesBF->addTerm( - p, v2->dy());
-  stokesBF->addTerm( t2_n, v2);
-  
-  // v3:
-  if (use3D) {
-    stokesBF->addTerm(mu * sigma3, v3->grad()); // (mu sigma3, grad v3)
-    stokesBF->addTerm( - p, v3->dz());
-    stokesBF->addTerm( t3_n, v3);
-  }
-  
-  // q:
-  stokesBF->addTerm(-u1,q->dx()); // (-u, grad q)
-  stokesBF->addTerm(-u2,q->dy());
-  if (use3D) stokesBF->addTerm(-u3, q->dz());
-  if (!use3D) stokesBF->addTerm(u1hat * n->x() + u2hat * n->y(), q);
-  else stokesBF->addTerm(u1hat * n->x() + u2hat * n->y() + u3hat * n->z(), q);
   
   double width = 1.0, height = 1.0, depth = 1.0;
   int horizontalCells = numCells, verticalCells = numCells, depthCells = numCells;
@@ -275,27 +321,14 @@ int main(int argc, char *argv[]) {
   if (use3D) bc->addDirichlet(u3hat, otherBoundary, zero);
   
 //  bc->addZeroMeanConstraint(p);
-  bc->addSinglePointBC(p->ID(), zero);
+  if (!usePressurelessFormulation) {
+    bc->addSinglePointBC(p->ID(), zero);
+  } else {
+    // need to do something to take care of the extra mode
+    
+  }
 
   IPPtr fineIP, coarseIP;
-  
-  FunctionPtr h = Teuchos::rcp( new hFunction() );
-  
-  IPPtr weightedGraphNorm = IP::ip();
-  {
-    weightedGraphNorm->addTerm( mu * v1->dx() + tau1->x() ); // sigma11
-    weightedGraphNorm->addTerm( mu * v1->dy() + tau1->y() ); // sigma12
-    weightedGraphNorm->addTerm( mu * v2->dx() + tau2->x() ); // sigma21
-    weightedGraphNorm->addTerm( mu * v2->dy() + tau2->y() ); // sigma22
-    weightedGraphNorm->addTerm( v1->dx() + v2->dy() );       // pressure
-    weightedGraphNorm->addTerm( h * tau1->div() - h * q->dx() ); // u1
-    weightedGraphNorm->addTerm( h * tau2->div() - h * q->dy() ); // u2
-    weightedGraphNorm->addTerm( (mu / h) * v1 );
-    weightedGraphNorm->addTerm( (mu / h) * v2 );
-    weightedGraphNorm->addTerm(  q );
-    weightedGraphNorm->addTerm( tau1 );
-    weightedGraphNorm->addTerm( tau2 );
-  }
   
   IPPtr standardGraphNorm = stokesBF->graphNorm();
   
@@ -309,13 +342,18 @@ int main(int argc, char *argv[]) {
     coarseIP = standardGraphNorm;
   }
   
+  VarFactory varFactory = stokesBF->varFactory();
+  
   SolutionPtr solution = Solution::solution(mesh, bc, rhs, fineIP);
   
   solution->setUseCondensedSolve(useStaticCondensation);
   
   mesh->registerSolution(solution); // sign up for projection of old solution onto refined cells.
   
+  LinearTermPtr residual = stokesBF->testFunctional(solution);
+  
   double energyThreshold = 0.2;
+//  RefinementStrategy refinementStrategy( mesh, residual, standardGraphNorm, energyThreshold); // even when we use the weighted graph norm for solving, we should use the standard one for refinements
   RefinementStrategy refinementStrategy( solution, energyThreshold );
   
   refinementStrategy.setReportPerCellErrors(true);
@@ -341,13 +379,20 @@ int main(int argc, char *argv[]) {
 //    GMGSolver(BCPtr zeroBCs, MeshPtr coarseMesh, IPPtr coarseIP, MeshPtr fineMesh, Teuchos::RCP<DofInterpreter> fineDofInterpreter,
 //              Epetra_Map finePartitionMap, int maxIters, double tol, Teuchos::RCP<Solver> coarseSolver, bool useStaticCondensation);
 
+//    if (useStaticCondensation) {
+//      solution->initializeLHSVector();
+//      solution->initializeStiffnessAndLoad();
+//      solution->populateStiffnessAndLoad();
+//    }
+    
     gmgSolver = new GMGSolver(zeroBCs, k0Mesh, coarseIP, mesh, solution->getDofInterpreter(),
                               solution->getPartitionMap(), maxIters, tol, coarseSolver, useStaticCondensation);
     gmgSolver->setAztecOutput(AztecOutputLevel);
     gmgSolver->setApplySmoothingOperator(applyDiagonalSmoothing);
+    gmgSolver->setUseDiagonalScaling(useDiagonalScaling);
     fineSolver = Teuchos::rcp( gmgSolver );
   } else {
-    fineSolver = coarseSolver;
+    fineSolver = Teuchos::rcp( new MumpsSolver(512, false) ); // false: don't save factorization, basically
   }
   
 //  if (rank==0) cout << "experimentally starting by solving with MUMPS on the fine mesh.\n";
@@ -370,14 +415,14 @@ int main(int argc, char *argv[]) {
   solution->reportTimings();
   if (useGMGSolver) gmgSolver->gmgOperator().reportTimings();
   for (int refIndex=0; refIndex < refCount; refIndex++) {
-    double energyError = solution->energyErrorTotal();
     GlobalIndexType numFluxDofs = mesh->numFluxDofs();
-    if (rank==0) {
-      cout << "Before refinement " << refIndex << ", energy error = " << energyError;
-      cout << " (using " << numFluxDofs << " trace degrees of freedom)." << endl;
-    }
     bool printToConsole = printRefinementDetails && (rank==0);
     refinementStrategy.refine(printToConsole);
+    double energyError = refinementStrategy.getEnergyError(refIndex);
+    if (rank==0) {
+      cout << "Before refinement " << refIndex << ", energy error was " << energyError;
+      cout << " (using " << numFluxDofs << " trace degrees of freedom)." << endl;
+    }
     
     GlobalIndexType fineDofs = mesh->globalDofCount();
     GlobalIndexType coarseDofs = k0Mesh->globalDofCount();
@@ -393,31 +438,19 @@ int main(int argc, char *argv[]) {
       coarseMeshLocation << "stokesCoarseMesh_k" << k << "_ref" << refIndex;
       GnuPlotUtil::writeComputationalMeshSkeleton(coarseMeshLocation.str(), k0Mesh, true); // true: label cells
     }
-//
-//    cout << "Fine Mesh entities:\n";
-//    mesh->getTopology()->printAllEntities();
-//
-//    cout << "Coarse Mesh entities:\n";
-//    k0Mesh->getTopology()->printAllEntities();
-    
-//    if (refIndex >= 3) {
-//      set<GlobalIndexType> cellIDs = mesh->getActiveCellIDs();
-//      cout << "Coarse mesh parities:\n";
-//      for (set<GlobalIndexType>::iterator cellIDIt = cellIDs.begin(); cellIDIt != cellIDs.end(); cellIDIt++) {
-//        GlobalIndexType cellID = *cellIDIt;
-//        cout << cellID << ":\n" << k0Mesh->globalDofAssignment()->cellSideParitiesForCell(cellID);
-//      }
-//      cout << "Fine mesh parities:\n";
-//      for (set<GlobalIndexType>::iterator cellIDIt = cellIDs.begin(); cellIDIt != cellIDs.end(); cellIDIt++) {
-//        GlobalIndexType cellID = *cellIDIt;
-//        cout << cellID << ":\n" << mesh->globalDofAssignment()->cellSideParitiesForCell(cellID);
-//      }
-//    }
     
     if (useGMGSolver) { // create fresh fineSolver now that the meshes have changed:
 #ifdef USE_MUMPS
       if (useMumps) coarseSolver = Teuchos::rcp( new MumpsSolver(512, true) );
 #endif
+      
+      if (useStaticCondensation) {
+        CondensedDofInterpreter* condensedDofInterpreter = dynamic_cast<CondensedDofInterpreter*>(solution->getDofInterpreter().get());
+        if (condensedDofInterpreter != NULL) {
+          condensedDofInterpreter->reinitialize();
+        }
+      }
+      
       double tol = max(relativeTol * energyError, minTol);
       int maxIters = gmgMaxIterations;
       BCPtr zeroBCs = bc->copyImposingZero();
@@ -425,6 +458,7 @@ int main(int argc, char *argv[]) {
                                 solution->getPartitionMap(), maxIters, tol, coarseSolver, useStaticCondensation);
       gmgSolver->setAztecOutput(AztecOutputLevel);
       gmgSolver->setApplySmoothingOperator(applyDiagonalSmoothing);
+      gmgSolver->setUseDiagonalScaling(useDiagonalScaling);
       fineSolver = Teuchos::rcp( gmgSolver );
     }
     
@@ -436,6 +470,7 @@ int main(int argc, char *argv[]) {
     exporter.exportSolution(solution,varFactory,refIndex+1);
 #endif
   }
+  solution->setIP(standardGraphNorm); // since we won't be solving again, and want to measure the energy error
   double energyErrorTotal = solution->energyErrorTotal();
   
 //  cout << "Final Mesh, entities report:\n";
@@ -462,6 +497,8 @@ int main(int argc, char *argv[]) {
   if (!use3D) {
     GnuPlotUtil::writeComputationalMeshSkeleton("cavityFlowRefinedMesh", mesh, true);
   }
-  
+
+  coarseSolver = Teuchos::rcp((Solver*) NULL); // without this when useMumps = true and running on one rank, we see a crash on exit, which may have to do with MPI being finalized before coarseSolver is deleted.
+    
   return 0;
 }

@@ -20,6 +20,8 @@
 
 #include "GlobalDofAssignment.h"
 
+#include "CondensedDofInterpreter.h"
+
 #include "Teuchos_CommandLineProcessor.hpp"
 #include "Teuchos_ParameterList.hpp"
 
@@ -61,6 +63,7 @@ int main(int argc, char *argv[]) {
   bool useStaticCondensation = false;
   bool conformingTraces = false;
   bool applyDiagonalSmoothing = true;
+  bool useDiagonalScaling = false; // of the global stiffness matrix in GMGSolver
   
   bool printRefinementDetails = false;
   
@@ -81,6 +84,8 @@ int main(int argc, char *argv[]) {
   cmdp.setOption("useConformingTraces", "useNonConformingTraces", &conformingTraces);
   cmdp.setOption("enforceOneIrregularity", "dontEnforceOneIrregularity", &enforceOneIrregularity);
   cmdp.setOption("useSmoothing", "useNoSmoothing", &applyDiagonalSmoothing);
+  cmdp.setOption("useDiagonalScaling", "dontUseDiagonalScaling", &useDiagonalScaling);
+
   cmdp.setOption("printRefinementDetails", "dontPrintRefinementDetails", &printRefinementDetails);
   cmdp.setOption("azOutput", &AztecOutputLevel, "Aztec output level");
   cmdp.setOption("numCells", &numCells, "number of cells in the initial mesh");
@@ -261,6 +266,7 @@ int main(int argc, char *argv[]) {
                               useStaticCondensation);
     gmgSolver->setAztecOutput(AztecOutputLevel);
     gmgSolver->setApplySmoothingOperator(applyDiagonalSmoothing);
+    gmgSolver->setUseDiagonalScaling(useDiagonalScaling);
     fineSolver = Teuchos::rcp( gmgSolver );
   } else {
     fineSolver = coarseSolver;
@@ -294,6 +300,13 @@ int main(int argc, char *argv[]) {
     bool printToConsole = printRefinementDetails && (rank==0);
     refinementStrategy.refine(printToConsole);
     
+    if (useStaticCondensation) {
+      CondensedDofInterpreter* condensedDofInterpreter = dynamic_cast<CondensedDofInterpreter*>(solution->getDofInterpreter().get());
+      if (condensedDofInterpreter != NULL) {
+        condensedDofInterpreter->reinitialize();
+      }
+    }
+    
     GlobalIndexType fineDofs = mesh->globalDofCount();
     GlobalIndexType coarseDofs = k0Mesh->globalDofCount();
     if (rank==0) {
@@ -320,6 +333,7 @@ int main(int argc, char *argv[]) {
                                 solution->getPartitionMap(), maxIters, tol, coarseSolver, useStaticCondensation);
       gmgSolver->setAztecOutput(AztecOutputLevel);
       gmgSolver->setApplySmoothingOperator(applyDiagonalSmoothing);
+      gmgSolver->setUseDiagonalScaling(useDiagonalScaling);
       fineSolver = Teuchos::rcp( gmgSolver );
     }
     
@@ -348,6 +362,8 @@ int main(int argc, char *argv[]) {
   if (!use3D) {
     GnuPlotUtil::writeComputationalMeshSkeleton("poissonRefinedMesh", mesh, true);
   }
+  
+  coarseSolver = Teuchos::rcp((Solver*) NULL); // without this when useMumps = true and running on one rank, we see a crash on exit, which may have to do with MPI being finalized before coarseSolver is deleted.
   
   return 0;
 }
