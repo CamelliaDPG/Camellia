@@ -224,7 +224,7 @@ public:
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "A must be N x N matrix");
     }
     
-    cout << "A before scaling:\n" << A;
+//    cout << "A before scaling:\n" << A;
     
     int N = A.dimension(0);
     FieldContainer<double> diag_inv_sqrt(N,N);
@@ -240,7 +240,7 @@ public:
     multiply(A_temp, diag_inv_sqrt, A);
     multiply(A, A_temp, diag_inv_sqrt);
     
-    cout << "A after scaling:\n" << A;
+//    cout << "A after scaling:\n" << A;
   }
   
   static void solveSystem(FieldContainer<double> &x, FieldContainer<double> &A, FieldContainer<double> &b, bool useATranspose = false) {
