@@ -28,6 +28,8 @@ GMGSolver::GMGSolver( BCPtr zeroBCs, MeshPtr coarseMesh, IPPtr coarseIP,
                       
   _computeCondest = true;
   _azOutput = AZ_warnings;
+                      
+  _useCG = true;
 }
 
 void GMGSolver::setApplySmoothingOperator(bool applySmoothingOp) {
@@ -104,10 +106,19 @@ int GMGSolver::solve() {
   } else {
     solver.SetAztecOption(AZ_scaling, AZ_none);
   }
-  if (_computeCondest) {
-    solver.SetAztecOption(AZ_solver, AZ_cg_condnum);
+  if (_useCG) {
+    if (_computeCondest) {
+      solver.SetAztecOption(AZ_solver, AZ_cg_condnum);
+    } else {
+      solver.SetAztecOption(AZ_solver, AZ_cg);
+    }
   } else {
-    solver.SetAztecOption(AZ_solver, AZ_cg);
+    solver.SetAztecOption(AZ_kspace, 200); // default is 30
+    if (_computeCondest) {
+      solver.SetAztecOption(AZ_solver, AZ_gmres_condnum);
+    } else {
+      solver.SetAztecOption(AZ_solver, AZ_gmres);
+    }
   }
   
   solver.SetPrecOperator(&_gmgOperator);
@@ -190,6 +201,10 @@ void GMGSolver::setAztecOutput(int value) {
 
 void GMGSolver::setComputeConditionNumberEstimate(bool value) {
   _computeCondest = value;
+}
+
+void GMGSolver::setUseConjugateGradient(bool value) {
+  _useCG = value;
 }
 
 void GMGSolver::setUseDiagonalScaling(bool value) {

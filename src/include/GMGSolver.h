@@ -28,6 +28,8 @@ class GMGSolver : public Solver {
   bool _computeCondest;
   
   int _azOutput;
+  
+  bool _useCG; // otherwise, will use GMRES
 public:
   GMGSolver(BCPtr zeroBCs, MeshPtr coarseMesh, IPPtr coarseIP, MeshPtr fineMesh, Teuchos::RCP<DofInterpreter> fineDofInterpreter,
             Epetra_Map finePartitionMap, int maxIters, double tol, Teuchos::RCP<Solver> coarseSolver, bool useStaticCondensation);
@@ -47,6 +49,8 @@ public:
   void setAztecOutput(int value);
   
   void setFineMesh(MeshPtr fineMesh, Epetra_Map finePartitionMap);
+  
+  void setUseConjugateGradient(bool value); // otherwise will use GMRES
 };
 
 #endif /* defined(__Camellia_debug__GMGSolver__) */
