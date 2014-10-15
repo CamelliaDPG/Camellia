@@ -89,6 +89,7 @@ int main(int argc, char *argv[]) {
   
   bool useMumps = true;
   bool useGMGSolver = true;
+  bool useCG = true;
   
   bool enforceOneIrregularity = true;
   bool conformingTraces = false;
@@ -109,7 +110,9 @@ int main(int argc, char *argv[]) {
   int gmgMaxIterations = 200;
   double relativeTol = 1e-6;
   double minTol = 1e-11; // sorta unreasonable to ask for tighter tolerance than this
+  int smootherOverlap = 0;
   
+  cmdp.setOption("useGMG", "useDirect", &useGMGSolver, "use GMG solver (otherwise, use direct solver--option for testing)");
   cmdp.setOption("polyOrder",&k,"polynomial order for field variable u");
   cmdp.setOption("delta_k", &delta_k, "test space polynomial order enrichment");
   cmdp.setOption("k_coarse", &k_coarse, "polynomial order for field variables on coarse mesh");
@@ -117,6 +120,7 @@ int main(int argc, char *argv[]) {
   cmdp.setOption("useConformingTraces", "useNonConformingTraces", &conformingTraces);
   cmdp.setOption("enforceOneIrregularity", "dontEnforceOneIrregularity", &enforceOneIrregularity);
   cmdp.setOption("useSmoothing", "useNoSmoothing", &applyDiagonalSmoothing);
+  cmdp.setOption("smootherOverlap", &smootherOverlap, "overlap for smoother");
   cmdp.setOption("printRefinementDetails", "dontPrintRefinementDetails", &printRefinementDetails);
   cmdp.setOption("azOutput", &AztecOutputLevel, "Aztec output level");
   cmdp.setOption("numCells", &numCells, "number of cells in the initial mesh");
@@ -124,6 +128,8 @@ int main(int argc, char *argv[]) {
   cmdp.setOption("useScaledGraphNorm", "dontUseScaledGraphNorm", &useWeightedGraphNorm);
   cmdp.setOption("useDiagonalScaling", "dontUseDiagonalScaling", &useDiagonalScaling);
   cmdp.setOption("useStaticCondensation", "dontUseStaticCondensation", &useStaticCondensation);
+  cmdp.setOption("useCG", "useGMRES", &useCG, "use conjugate gradient or GMRES with multi-grid preconditioner");
+  
 //  cmdp.setOption("gmgTol", &gmgTolerance, "tolerance for GMG convergence");
   cmdp.setOption("relativeTol", &relativeTol, "Energy error-relative tolerance for iterative solver.");
   cmdp.setOption("gmgMaxIterations", &gmgMaxIterations, "tolerance for GMG convergence");
@@ -301,7 +307,6 @@ int main(int argc, char *argv[]) {
   
   mesh->registerObserver(k0Mesh); // ensure that the k0 mesh refinements track those of the solution mesh
 
-  
   RHSPtr rhs = RHS::rhs(); // zero
   
   BCPtr bc = BC::bc();
@@ -389,7 +394,10 @@ int main(int argc, char *argv[]) {
                               solution->getPartitionMap(), maxIters, tol, coarseSolver, useStaticCondensation);
     gmgSolver->setAztecOutput(AztecOutputLevel);
     gmgSolver->setApplySmoothingOperator(applyDiagonalSmoothing);
+    gmgSolver->setUseConjugateGradient(useCG);
     gmgSolver->setUseDiagonalScaling(useDiagonalScaling);
+    gmgSolver->gmgOperator().setSmootherType(GMGOperator::ADDITIVE_SCHWARZ);
+    gmgSolver->gmgOperator().setSmootherOverlap(smootherOverlap);
     fineSolver = Teuchos::rcp( gmgSolver );
   } else {
     fineSolver = Teuchos::rcp( new MumpsSolver(512, false) ); // false: don't save factorization, basically
@@ -399,7 +407,6 @@ int main(int argc, char *argv[]) {
 //  solution->solve( Teuchos::rcp( new MumpsSolver) );
   
   solution->solve(fineSolver);
-  
   
 #ifdef HAVE_EPETRAEXT_HDF5
   ostringstream dir_name;
@@ -458,7 +465,10 @@ int main(int argc, char *argv[]) {
                                 solution->getPartitionMap(), maxIters, tol, coarseSolver, useStaticCondensation);
       gmgSolver->setAztecOutput(AztecOutputLevel);
       gmgSolver->setApplySmoothingOperator(applyDiagonalSmoothing);
+      gmgSolver->setUseConjugateGradient(useCG);
       gmgSolver->setUseDiagonalScaling(useDiagonalScaling);
+      gmgSolver->gmgOperator().setSmootherType(GMGOperator::ADDITIVE_SCHWARZ);
+      gmgSolver->gmgOperator().setSmootherOverlap(smootherOverlap);
       fineSolver = Teuchos::rcp( gmgSolver );
     }
     
@@ -472,6 +482,22 @@ int main(int argc, char *argv[]) {
   }
   solution->setIP(standardGraphNorm); // since we won't be solving again, and want to measure the energy error
   double energyErrorTotal = solution->energyErrorTotal();
+  
+//  { // DEBUGGING
+//    double tol = 1e-14;
+//    set<GlobalIndexType> cells = mesh->cellIDsInPartition();
+//    for (set<GlobalIndexType>::iterator cellIt = cells.begin(); cellIt != cells.end(); cellIt++) {
+//      GlobalIndexType cellID = *cellIt;
+//      FieldContainer<double> solnCoeffs = solution->allCoefficientsForCellID(cellID);
+//      FieldContainer<double> solnDirectCoeffs = solutionDirect->allCoefficientsForCellID(cellID);
+//      for (int i=0; i<solnCoeffs.size(); i++) {
+//        double diff = abs(solnCoeffs[i] - solnDirectCoeffs[i]);
+//        if (diff > tol) {
+//          cout << "cell ID " << cellID << ", soln coefficient " << i << " differs by " << diff << endl;
+//        }
+//      }
+//    }
+//  }
   
 //  cout << "Final Mesh, entities report:\n";
 //  solution->mesh()->getTopology()->printAllEntities();
@@ -490,15 +516,30 @@ int main(int argc, char *argv[]) {
     cout << "Net mass flux: " << netMassFlux << endl;
   }
   
-#ifdef HAVE_EPETRAEXT_HDF5
-  exporter.exportSolution(solution,varFactory,0);
-#endif
-  
   if (!use3D) {
     GnuPlotUtil::writeComputationalMeshSkeleton("cavityFlowRefinedMesh", mesh, true);
   }
 
   coarseSolver = Teuchos::rcp((Solver*) NULL); // without this when useMumps = true and running on one rank, we see a crash on exit, which may have to do with MPI being finalized before coarseSolver is deleted.
-    
+
+  int col1 = 8, col2 = 15, col3 = 22;
+  if (rank==0) {
+    cout << "Refinement history:\n";
+    cout << setw(col1) << "# elems" << setw(col2) << "# dofs" << setw(col3) << "energy error" << endl;
+  }
+  for (int refIndex=0; refIndex < refCount; refIndex++) {
+    GlobalIndexType numElements = refinementStrategy.getNumElements(refIndex);
+    GlobalIndexType numDofs = refinementStrategy.getNumDofs(refIndex);
+    double energyError = refinementStrategy.getEnergyError(refIndex);
+    if (rank==0) {
+      cout << setw(col1) << numElements << setw(col2) << numDofs << setw(col3) << setprecision(2) << scientific << energyError << endl;
+    }
+  }
+  int numElements = mesh->numActiveElements();
+  
+  if (rank==0) {
+    cout << setw(col1) << numElements << setw(col2) << numGlobalDofs << setw(col3) << setprecision(2) << scientific << energyErrorTotal << endl;
+  }
+  
   return 0;
 }
