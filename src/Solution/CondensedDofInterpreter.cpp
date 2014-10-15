@@ -229,7 +229,7 @@ map<GlobalIndexType, IndexType> CondensedDofInterpreter::interpretedFluxMapForPa
         
         if (storeFluxDofIndices) {
           pair< int, int > basisIdentifier = make_pair(trialID,sideOrdinal);
-          _interpretedDofIndicesForBasis[cellID][basisIdentifier] = interpretedDofIndicesForBasis;
+          _interpretedDofIndicesForBasis[cellID][basisIdentifier] = interpretedDofIndicesForBasis; // not currently used anywhere
         }
         
         bool isCondensible = varDofsAreCondensible(trialID, sideOrdinal, trialOrder);
@@ -262,6 +262,10 @@ map<GlobalIndexType, IndexType> CondensedDofInterpreter::interpretedFluxMapForPa
 }
 
 void CondensedDofInterpreter::initializeGlobalDofIndices() {
+  _interpretedFluxDofIndices.clear();
+  _interpretedToGlobalDofIndexMap.clear();
+  _interpretedDofIndicesForBasis.clear();
+  
   PartitionIndexType rank = Teuchos::GlobalMPISession::getRank();
   map<GlobalIndexType, IndexType> partitionLocalFluxMap = interpretedFluxMapForPartition(rank, true);
   
@@ -308,6 +312,8 @@ void CondensedDofInterpreter::initializeGlobalDofIndices() {
 //      cout << "Rank " << rank << ": " << interpretedFlux << " --> " << partitionInterpretedFluxMap[owningPartition][interpretedFlux] << endl;
     }
   }
+  
+//  cout << "_interpretedToGlobalDofIndexMap.size() = " << _interpretedToGlobalDofIndexMap.size() << endl;
 }
 
 GlobalIndexType CondensedDofInterpreter::globalDofCount() {
@@ -405,6 +411,10 @@ void CondensedDofInterpreter::interpretLocalData(GlobalIndexType cellID, const F
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "cellID does not belong to partition");
   }
   
+//  if (cellID==14) {
+//    cout << "cellID " << cellID << endl;
+//  }
+  
   FieldContainer<double> interpretedStiffnessData, interpretedLoadData;
   
   FieldContainer<GlobalIndexType> interpretedDofIndices;
@@ -425,14 +435,31 @@ void CondensedDofInterpreter::interpretLocalData(GlobalIndexType cellID, const F
   }
   
   set<int> fieldIndices, fluxIndices; // which are fields and which are fluxes in the interpreted data containers
+//  set<GlobalIndexType> interpretedFluxIndices, interpretedFieldIndices; // debugging
   for (int dofOrdinal=0; dofOrdinal < interpretedDofIndices.size(); dofOrdinal++) {
     GlobalIndexType interpretedDofIndex = interpretedDofIndices(dofOrdinal);
     if (_interpretedToGlobalDofIndexMap.find(interpretedDofIndex) == _interpretedToGlobalDofIndexMap.end()) {
       fieldIndices.insert(dofOrdinal);
+//      interpretedFieldIndices.insert(interpretedDofIndex); // debugging
     } else {
       fluxIndices.insert(dofOrdinal);
+//      interpretedFluxIndices.insert(interpretedDofIndex); // debugging
     }
   }
+  
+//  { // DEBUGGING
+//    cout << "CondensedDofInterpreter, field/flux division:\n";
+//    ostringstream cellIDStr;
+//    cellIDStr << "cell " << cellID << ", fields: ";
+//    Camellia::print(cellIDStr.str(), fieldIndices);
+//    Camellia::print("interpreted field indices", interpretedFieldIndices);
+//    
+//    cellIDStr.str("");
+//    cellIDStr << "cell " << cellID << ", fluxes: ";
+//    Camellia::print(cellIDStr.str(), fluxIndices);
+//    
+//    Camellia::print("interpreted flux indices", interpretedFluxIndices);
+//  }
   
   int fieldCount = fieldIndices.size();
   int fluxCount = fluxIndices.size();
@@ -454,7 +481,11 @@ void CondensedDofInterpreter::interpretLocalData(GlobalIndexType cellID, const F
     solver.EquilibrateRHS();
     equilibrated = true;
   }
-  solver.Solve();
+  int err = solver.Solve();
+  if (err != 0) {
+    cout << "CondensedDofInterpreter: Epetra_SerialDenseMatrix::Solve() returned error code " << err << endl;
+    cout << "matrix:\n" << D;
+  }
   if (equilibrated)
     solver.UnequilibrateLHS();
   
@@ -465,15 +496,21 @@ void CondensedDofInterpreter::interpretLocalData(GlobalIndexType cellID, const F
   Epetra_SerialDenseVector BtDinvf(fluxCount);
   Epetra_SerialDenseVector b_field, b_flux;
   getSubvectors(fieldIndices, fluxIndices, interpretedLoadData, b_field, b_flux);
-  //    solver.SetMatrix(D);
+
   solver.SetVectors(Dinvf, b_field);
   equilibrated = false;
+  //    solver.SetMatrix(D);
   if ( solver.ShouldEquilibrate() ) {
     solver.EquilibrateMatrix();
     solver.EquilibrateRHS();
     equilibrated = true;
   }
-  solver.Solve();
+  err = solver.Solve();
+  if (err != 0) {
+    cout << "CondensedDofInterpreter: Epetra_SerialDenseMatrix::Solve() returned error code " << err << endl;
+    cout << "matrix:\n" << D;
+  }
+  
   if (equilibrated)
     solver.UnequilibrateLHS();
   
