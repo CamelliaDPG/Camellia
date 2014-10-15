@@ -938,7 +938,7 @@ void GMGOperator::setUpSmoother(Epetra_CrsMatrix *fineStiffnessMatrix) {
       // If METIS is not installed, the user may select "linear".
       List.set("partitioner: type", "metis");
 #else
-      // or a simple greedy algorithm is METIS is not enabled
+      // or a simple greedy algorithm if METIS is not enabled
       List.set("partitioner: type", "greedy");
 #endif
       // defines here the number of local blocks. If 1,
@@ -951,7 +951,9 @@ void GMGOperator::setUpSmoother(Epetra_CrsMatrix *fineStiffnessMatrix) {
     {
 //      cout << "Using additive Schwarz smoother.\n";
       int OverlapLevel = _smootherOverlap;
-      smoother = Teuchos::rcp(new Ifpack_AdditiveSchwarz<Ifpack_Amesos>(fineStiffnessMatrix, OverlapLevel) );    }
+      smoother = Teuchos::rcp(new Ifpack_AdditiveSchwarz<Ifpack_Amesos>(fineStiffnessMatrix, OverlapLevel) );
+      List.set("schwarz: combine mode", "Insert"); // docs say to use "Insert" to maintain symmetry
+    }
       break;
       
     default:
@@ -959,7 +961,17 @@ void GMGOperator::setUpSmoother(Epetra_CrsMatrix *fineStiffnessMatrix) {
   }
   
   int err = smoother->SetParameters(List);
-  err = smoother->Initialize();
+  if (err != 0) {
+    cout << "WARNING: In GMGOperator, smoother->SetParameters() returned with err " << err << endl;
+  }
+  
+  if (_smootherType != ADDITIVE_SCHWARZ) {
+    // not real sure why, but in the doc examples, this isn't called for additive schwarz
+    err = smoother->Initialize();
+    if (err != 0) {
+      cout << "WARNING: In GMGOperator, smoother->Initialize() returned with err " << err << endl;
+    }
+  }
   err = smoother->Compute();
   
   if (err != 0) {
