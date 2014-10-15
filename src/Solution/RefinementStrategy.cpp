@@ -121,7 +121,7 @@ void RefinementStrategy::refine(bool printToConsole) {
   
   // record results prior to refinement
   RefinementResults results;
-  setResults(results, mesh->numElements(), mesh->numGlobalDofs(), totalEnergyError);
+  setResults(results, mesh->numActiveElements(), mesh->numGlobalDofs(), totalEnergyError);
   _results.push_back(results);
   
   vector<GlobalIndexType> cellsToRefine;
