@@ -114,6 +114,7 @@ public:
   bool testPatchBasisSideParities();
   
   bool testPRefinements();
+  bool testTraceTermProjection();
 };
 
 #endif
