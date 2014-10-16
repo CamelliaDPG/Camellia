@@ -23,6 +23,8 @@
 
 #include "IndexType.h"
 
+#include "CondensedDofInterpreter.h"
+
 #ifdef WATCH_BGQ_FLOP_COUNTERS
 
 #endif
@@ -384,6 +386,11 @@ int main(int argc, char *argv[]) {
   refinementStrategy.setReportPerCellErrors(true);
   refinementStrategy.setEnforceOneIrregularity(enforceOneIrregularity);
   
+  if ((solverChoice == MUMPS) && (Teuchos::GlobalMPISession::getNProc()==1)) {
+    cout << "solverChoice == MUMPS, but only running on one proc.  There are issues with Amesos_Mumps::Destroy() in this case.  Therefore, overriding solverChoice = KLU.\n";
+    solverChoice = KLU;
+  }
+  
   Teuchos::RCP<Solver> coarseSolver, fineSolver;
   switch(solverChoice) {
       case MUMPS:
@@ -405,15 +412,17 @@ int main(int argc, char *argv[]) {
       break;
   }
   
+  solution->setUseCondensedSolve(useCondensedSolve);
+  
   GMGSolver* gmgSolver = NULL;
+  BCPtr zeroBCs = bc->copyImposingZero();
+  int maxIters = 80000;
   
   if (useGMGSolver) {
     double tol = relativeTol;
-    int maxIters = 80000;
-    BCPtr zeroBCs = bc->copyImposingZero();
 
-    gmgSolver = new GMGSolver(zeroBCs, coarseMesh, graphNorm, mesh,
-                              solution->getPartitionMap(), maxIters, tol, coarseSolver);
+    gmgSolver = new GMGSolver(zeroBCs, coarseMesh, graphNorm, mesh, solution->getDofInterpreter(),
+                              solution->getPartitionMap(), maxIters, tol, coarseSolver, useCondensedSolve);
     gmgSolver->setAztecOutput(100); // print residual every 100 iterations;
     gmgSolver->gmgOperator().constructLocalCoefficientMaps(); // for separating out the timings
     fineSolver = Teuchos::rcp( gmgSolver );
@@ -427,10 +436,11 @@ int main(int argc, char *argv[]) {
   if (rank==0) cout << "About to start solve.\n";
   timer.ResetStartTime();
   
-  if (useCondensedSolve)
-    solution->condensedSolve(fineSolver);
-  else
+  if (useCondensedSolve) {
     solution->solve(fineSolver);
+  } else {
+    solution->solve(fineSolver);
+  }
   
   double totalSolveTime = timer.ElapsedTime();
   if (rank==0) cout << "total solve time (as seen by rank 0) " << totalSolveTime << " seconds.\n";
@@ -492,17 +502,25 @@ int main(int argc, char *argv[]) {
     
     if (useGMGSolver) { // recreate fineSolver...
       double tol = relativeTol * energyError;
-      gmgSolver->setTolerance(tol);
-      gmgSolver->setFineMesh(mesh, solution->getPartitionMap());
+      
+      if (useCondensedSolve) {
+        CondensedDofInterpreter* condensedDofInterpreter = dynamic_cast<CondensedDofInterpreter*>(solution->getDofInterpreter().get());
+        if (condensedDofInterpreter != NULL) {
+          condensedDofInterpreter->reinitialize();
+        }
+      }
+      
+      gmgSolver = new GMGSolver(zeroBCs, coarseMesh, graphNorm, mesh, solution->getDofInterpreter(),
+                                solution->getPartitionMap(), maxIters, tol, coarseSolver, useCondensedSolve);
+
       gmgSolver->setAztecOutput(100); // print residual every 100 iterations;
       gmgSolver->gmgOperator().constructLocalCoefficientMaps(); // for separating out the timings
+      fineSolver = Teuchos::rcp(gmgSolver);
     }
     
     timer.ResetStartTime();
-    if (useCondensedSolve)
-      solution->condensedSolve(fineSolver);
-    else
-      solution->solve(fineSolver);
+
+    solution->solve(fineSolver);
     double totalSolveTime = timer.ElapsedTime();
     if (rank==0) cout << "total solve time (as seen by rank 0) " << totalSolveTime << " seconds.\n";
     solution->reportTimings();
@@ -552,6 +570,8 @@ int main(int argc, char *argv[]) {
     cout << "Final energy error: " << energyErrorTotal << endl;
     cout << "Net mass flux: " << netMassFlux << endl;
   }
+  
+  coarseSolver = Teuchos::rcp((Solver*) NULL); // without this when useMumps = true and running on one rank, we see a crash on exit, which may have to do with MPI being finalized before coarseSolver is deleted.
   
 //#ifdef HAVE_EPETRAEXT_HDF5
 //  if (rank==0) cout << "Beginning export of final solution.\n";
