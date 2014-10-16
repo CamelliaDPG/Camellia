@@ -50,10 +50,27 @@ using namespace std;
 #include "Amesos_Superludist.h"
 
 class SuperLUDistSolver : public Solver {
+  Teuchos::RCP<Amesos_Superludist> _savedSolver;
+  bool _saveFactorization;
 public:
+  SuperLUDistSolver(bool saveFactorization) {
+    _saveFactorization = saveFactorization;
+  }
   int solve() {
-    Amesos_Superludist slu(problem());
-    return slu.Solve();
+    if (!_saveFactorization) {
+      Amesos_Superludist slu(problem());
+      return slu.Solve();
+    } else {
+      _savedSolver = Teuchos::rcp( new Amesos_Superludist(problem()) );
+      return _savedSolver->Solve();
+    }
+  }
+  int resolve() {
+    if (_savedSolver.get() != NULL) {
+      return _savedSolver->Solve();
+    } else {
+      return solve();
+    }
   }
 };
 #endif
@@ -136,12 +153,23 @@ public:
           cout << sizeToSet << " MB/core." << endl;
           mumps->SetICNTL(23, sizeToSet);
         } else if (infog[0]==-13) { // error during a Fortran ALLOCATE statement
+          int infog_sizeRequested = infog[2-1];
+          long long sizeRequested;
+          if (infog_sizeRequested > 0) {
+            sizeRequested = infog_sizeRequested;
+          } else {
+            sizeRequested = -infog_sizeRequested * 1e6;
+          }
           if (previousSize > 0) {
             int sizeToSet = 3 * previousSize / 4; // reduce size by 25%
             mumps->SetICNTL(23, sizeToSet);
-            cout << "MUMPS memory allocation error -13; likely indicates we're out of memory.  Reducing by 25%; setting to: " << sizeToSet << " MB/core." << endl;
+            cout << "MUMPS memory allocation error -13 while requesting allocation of size " << sizeRequested;
+            cout << " (bytes?); likely indicates we're out of memory.  Reducing by 25%; setting to: " << sizeToSet << " MB/core." << endl;
           } else {
-            cout << "MUMPS memory allocation error -13, but previousSize was 0.  (Unhandled case)." << endl;
+            int sizeToSet = ((3 * sizeRequested) / 4) / 1e6; // reduce by 25% and convert to MB
+            mumps->SetICNTL(23, sizeToSet);
+            cout << "MUMPS memory allocation error -13 while requesting allocation of size " << sizeRequested;
+            cout << " (bytes?); likely indicates we're out of memory.  Setting ICNTL 23 to" << sizeToSet << " MB/core." << endl;
           }
         } else {
           cout << "MUMPS encountered unhandled error code " << infog[0] << endl;
