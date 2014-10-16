@@ -32,6 +32,14 @@ GMGSolver::GMGSolver( BCPtr zeroBCs, MeshPtr coarseMesh, IPPtr coarseIP,
   _useCG = true;
 }
 
+double GMGSolver::condest() {
+  return _condest;
+}
+
+int GMGSolver::iterationCount() {
+  return _iterationCount;
+}
+
 void GMGSolver::setApplySmoothingOperator(bool applySmoothingOp) {
   _diagonalSmoothing = applySmoothingOp;
   _gmgOperator.setApplyDiagonalSmoothing(_diagonalSmoothing);
@@ -143,6 +151,9 @@ int GMGSolver::solve() {
     whyTerminated = status[AZ_why];
     numRestarts++;
   }
+  remainingIters -= status[AZ_its];
+  _iterationCount = _maxIters - remainingIters;
+  _condest = solver.Condest(); // will be -1 if running without condest
   
   if (rank==0) {
     switch (whyTerminated) {

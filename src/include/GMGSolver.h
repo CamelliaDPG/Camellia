@@ -30,9 +30,18 @@ class GMGSolver : public Solver {
   int _azOutput;
   
   bool _useCG; // otherwise, will use GMRES
+  
+  // info about the last call to solve()
+  double _condest; // -1 if none exists
+  int _iterationCount;
 public:
   GMGSolver(BCPtr zeroBCs, MeshPtr coarseMesh, IPPtr coarseIP, MeshPtr fineMesh, Teuchos::RCP<DofInterpreter> fineDofInterpreter,
             Epetra_Map finePartitionMap, int maxIters, double tol, Teuchos::RCP<Solver> coarseSolver, bool useStaticCondensation);
+  
+  double condest();
+  
+  int iterationCount();
+  
   void setPrintToConsole(bool printToConsole);
   int solve();
   void setApplySmoothingOperator(bool applySmoothingOp);
