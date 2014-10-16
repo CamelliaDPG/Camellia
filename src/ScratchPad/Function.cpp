@@ -126,6 +126,10 @@ class SimpleSolutionFunction : public Function {
 public:
   SimpleSolutionFunction(VarPtr var, SolutionPtr soln);
   void values(FieldContainer<double> &values, BasisCachePtr basisCache);
+  FunctionPtr x();
+  FunctionPtr y();
+  FunctionPtr z();
+  
   FunctionPtr dx();
   FunctionPtr dy();
   FunctionPtr dz();
@@ -134,16 +138,6 @@ public:
   string displayString();
   bool boundaryValueOnly();
 };
-
-// private class JumpFunction:
-//class JumpFunction : public Function {
-//  FunctionPtr _fxn; // function defined cell-wise
-//public:
-//  JumpFunction(FunctionPtr fxn);
-//  void values(FieldContainer<double> &values, BasisCachePtr basisCache);
-//  string displayString();
-//  bool boundaryValueOnly();
-//};
 
 Function::Function() {
   _rank = 0;
@@ -2411,21 +2405,29 @@ FunctionPtr SimpleSolutionFunction::dz() {
   }
 }
 
-//JumpFunction::JumpFunction(FunctionPtr fxn) : Function(fxn->rank()) {
-//  _fxn = fxn;
-//}
-//void JumpFunction::values(FieldContainer<double> &values, BasisCachePtr basisCache) {
-//  // TODO: implement this method
-//  cout << "WARNING: JumpFunction::values() unimplemented." << endl;
-//}
-//string JumpFunction::displayString() {
-//  ostringstream ss;
-//  ss << "[" << _fxn->displayString() << "]";
-//  return ss.str();
-//}
-//bool JumpFunction::boundaryValueOnly() {
-//  return true;
-//}
+FunctionPtr SimpleSolutionFunction::x() {
+  if (_var->op() != IntrepidExtendedTypes::OP_VALUE) {
+    return Function::null();
+  } else {
+    return Function::solution(_var->x(), _soln);
+  }
+}
+
+FunctionPtr SimpleSolutionFunction::y() {
+  if (_var->op() != IntrepidExtendedTypes::OP_VALUE) {
+    return Function::null();
+  } else {
+    return Function::solution(_var->y(), _soln);
+  }
+}
+
+FunctionPtr SimpleSolutionFunction::z() {
+  if (_var->op() != IntrepidExtendedTypes::OP_VALUE) {
+    return Function::null();
+  } else {
+    return Function::solution(_var->z(), _soln);
+  }
+}
 
 Cos_ax::Cos_ax(double a, double b) {
   _a = a;
