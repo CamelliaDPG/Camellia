@@ -11,6 +11,7 @@
 
 #include "TestSuite.h"
 #include "Solution.h"
+#include "BF.h"
 
 class GMGTests : public TestSuite {
   void setup();
@@ -25,6 +26,11 @@ public:
   // a particular set of refinements (original computed for the Stokes cavity flow problem):
   // (starts with a 2x2 mesh on a unit domain, and refines from there)
   static SolutionPtr poissonExactSolutionRefined(int H1Order, FunctionPtr phi_exact, bool useH1Traces, int refinementSequenceOrdinal);
+  
+  static VarPtr getPoissonPhi(int spaceDim);
+  static VarPtr getPoissonPsi(int spaceDim);
+  static VarPtr getPoissonPsi_n(int spaceDim);
+  static VarPtr getPoissonPhiHat(int spaceDim);
 public:
   void runTests(int &numTestsRun, int &numTestsPassed);
   

@@ -28,14 +28,14 @@
 
 #include "GnuPlotUtil.h"
 
+#include "PoissonFormulation.h"
+
 // EpetraExt includes
 #include "EpetraExt_RowMatrixOut.h"
 #include "EpetraExt_MultiVectorOut.h"
 
 const static string S_GMGTests_U1 = "u_1";
 const static string S_GMGTests_U2 = "u_2";
-const static string S_GMGTests_PHI = "\\phi";
-const static string S_GMGTests_PHI_HAT = "\\widehat{\\phi}";
 
 FunctionPtr GMGTests::getPhiExact(int spaceDim) {
   FunctionPtr x = Function::xn(1);
@@ -51,6 +51,30 @@ FunctionPtr GMGTests::getPhiExact(int spaceDim) {
   TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unhandled spaceDim");
 }
 
+VarPtr GMGTests::getPoissonPhi(int spaceDim) {
+  bool conformingTraces = true; // doesn't affect variable labeling
+  PoissonFormulation pf(spaceDim,conformingTraces);
+  return pf.phi();
+}
+
+VarPtr GMGTests::getPoissonPsi(int spaceDim) {
+  bool conformingTraces = true; // doesn't affect variable labeling
+  PoissonFormulation pf(spaceDim,conformingTraces);
+  return pf.psi();
+}
+
+VarPtr GMGTests::getPoissonPhiHat(int spaceDim) {
+  bool conformingTraces = true; // doesn't affect variable labeling
+  PoissonFormulation pf(spaceDim,conformingTraces);
+  return pf.phi_hat();
+}
+
+VarPtr GMGTests::getPoissonPsi_n(int spaceDim) {
+  bool conformingTraces = true; // doesn't affect variable labeling
+  PoissonFormulation pf(spaceDim,conformingTraces);
+  return pf.psi_n_hat();
+}
+
 SolutionPtr GMGTests::poissonExactSolution(int numCells_x, int H1Order, FunctionPtr phi_exact, bool useH1Traces) {
   vector<int> numCells;
   numCells.push_back(numCells_x);
@@ -60,45 +84,21 @@ SolutionPtr GMGTests::poissonExactSolution(int numCells_x, int H1Order, Function
 SolutionPtr GMGTests::poissonExactSolution(vector<int> numCells, int H1Order, FunctionPtr phi_exact, bool useH1Traces) {
   int spaceDim = numCells.size();
   
-  VarFactory varFactory;
-  Space tauSpace = (spaceDim > 1) ? HDIV : HGRAD;
-  VarPtr tau = varFactory.testVar("\\tau_1", tauSpace);
-  VarPtr q = varFactory.testVar("q", HGRAD);
+  PoissonFormulation pf(spaceDim,useH1Traces);
   
-  Space phi_hat_space = useH1Traces ? HGRAD : L2;
-  VarPtr phi_hat;
-  if (spaceDim > 1) {
-    phi_hat = varFactory.traceVar(S_GMGTests_PHI_HAT, phi_hat_space);
-  } else {
-    // for spaceDim==1, the "normal" component is in the flux-ness of phi_hat (it's a plus or minus 1)
-    phi_hat = varFactory.fluxVar(S_GMGTests_PHI_HAT, phi_hat_space);
-  }
-  VarPtr psi_n = varFactory.fluxVar("\\widehat{\\psi}_{n}");
-  //  VarPtr phi_hat = varFactory.traceVar(S_GDAMinimumRuleTests_PHI_HAT, L2);
-  //  cout << "WARNING: temporarily using L^2 discretization for \\widehat{\\phi}.\n";
+  BFPtr bf = pf.bf();
+
+  // fields
+  VarPtr phi = pf.phi();
+  VarPtr psi = pf.psi();
   
-  VarPtr phi = varFactory.fieldVar(S_GMGTests_PHI, L2);
-  Space psiSpace = (spaceDim > 1) ? VECTOR_L2 : L2;
-  VarPtr psi = varFactory.fieldVar("\\psi_1", psiSpace);
-  
-  BFPtr bf = Teuchos::rcp( new BF(varFactory) );
-  
-  if (spaceDim==1) {
-    // for spaceDim==1, the "normal" component is in the flux-ness of phi_hat (it's a plus or minus 1)
-    bf->addTerm(phi, tau->dx());
-    bf->addTerm(psi, tau);
-    bf->addTerm(-phi_hat, tau);
-    
-    bf->addTerm(-psi, q->dx());
-    bf->addTerm(psi_n, q);
-  } else {
-    bf->addTerm(phi, tau->div());
-    bf->addTerm(psi, tau);
-    bf->addTerm(-phi_hat, tau->dot_normal());
-    
-    bf->addTerm(-psi, q->grad());
-    bf->addTerm(psi_n, q);
-  }
+  // traces
+  VarPtr phi_hat = pf.phi_hat();
+  VarPtr psi_n = pf.psi_n_hat();
+
+  // tests
+  VarPtr tau = pf.tau();
+  VarPtr q = pf.q();
   
   int testSpaceEnrichment = spaceDim; //
 //  double width = 1.0, height = 1.0, depth = 1.0;
@@ -113,7 +113,7 @@ SolutionPtr GMGTests::poissonExactSolution(vector<int> numCells, int H1Order, Fu
   
   MeshPtr mesh = MeshFactory::rectilinearMesh(bf, dimensions, numCells, H1Order, testSpaceEnrichment);
   
-  // rhs = f * v, where f = \Delta phi
+  // rhs = f * q, where f = \Delta phi
   RHSPtr rhs = RHS::rhs();
   FunctionPtr f;
   switch (spaceDim) {
@@ -739,8 +739,7 @@ bool GMGTests::testGMGSolverIdentity2DRefinedMeshes() {
       
       solnCoarse->solve(fineSolver);
       
-      VarFactory vf = bf->varFactory();
-      VarPtr phi = vf.fieldVar(S_GMGTests_PHI);
+      VarPtr phi = getPoissonPhi(spaceDim);
       
       FunctionPtr directPhiSoln = Function::solution(phi, solnFine);
       FunctionPtr iterativePhiSoln = Function::solution(phi, solnCoarse);
@@ -956,8 +955,7 @@ bool GMGTests::testGMGSolverIdentityUniformMeshes() {
           actualPoissonSolution->solve(fineSolver);
           exactPoissonSolution->solve(coarseSolver);
           
-          VarFactory vf = bf->varFactory();
-          VarPtr phi = vf.fieldVar(S_GMGTests_PHI);
+          VarPtr phi = getPoissonPhi(spaceDim);
           
           FunctionPtr exactPhiSoln = Function::solution(phi, exactPoissonSolution);
           FunctionPtr actualPhiSoln = Function::solution(phi, actualPoissonSolution);
@@ -987,7 +985,6 @@ bool GMGTests::testGMGSolverTwoGrid() {
   
   for (int spaceDim=1; spaceDim<=3; spaceDim++) {
     for (int i=0; i<cellCounts.size(); i++) {
-//      if ((spaceDim==3) && (i==cellCounts.size()-1)) continue; // skip the 4x4x4 case, in interest of time.
       vector<int> cellCount;
       for (int d=0; d<spaceDim; d++) {
         cellCount.push_back(cellCounts[i]);
@@ -1017,7 +1014,7 @@ bool GMGTests::testGMGSolverTwoGrid() {
       BF* bf = dynamic_cast< BF* >( mesh->bilinearForm().get() );
       IPPtr graphNorm = bf->graphNorm();
       
-      double iter_tol = 1e-8;
+      double iter_tol = 1e-12;
       bool applySmoothing = true;
       int maxIters = 200;
       Teuchos::RCP<Solver> coarseSolver = Teuchos::rcp( new KluSolver );
@@ -1037,8 +1034,7 @@ bool GMGTests::testGMGSolverTwoGrid() {
       
       actualPoissonSolution->solve(fineSolver);
       
-      VarFactory vf = bf->varFactory();
-      VarPtr phi = vf.fieldVar(S_GMGTests_PHI);
+      VarPtr phi = getPoissonPhi(spaceDim);
       
       FunctionPtr exactPhiSoln = Function::solution(phi, exactPoissonSolution);
       FunctionPtr actualPhiSoln = Function::solution(phi, actualPoissonSolution);
@@ -1104,7 +1100,7 @@ bool GMGTests::testGMGSolverThreeGrid() {
       BF* bf = dynamic_cast< BF* >( mesh->bilinearForm().get() );
       IPPtr graphNorm = bf->graphNorm();
       
-      double iter_tol = 1e-6;
+      double iter_tol = 1e-10;
       bool applySmoothing = true;
       int maxIters = 200;
       Teuchos::RCP<Solver> coarsestSolver = Teuchos::rcp( new KluSolver );
@@ -1128,7 +1124,7 @@ bool GMGTests::testGMGSolverThreeGrid() {
       Teuchos::RCP<GMGSolver> coarseSolver = Teuchos::rcp( new GMGSolver(zeroBCs, coarsestMesh, graphNorm, coarseMesh,
                                                                          coarseSolution->getDofInterpreter(),
                                                                          coarseSolution->getPartitionMap(),
-                                                                         maxIters, iter_tol / 10, coarsestSolver, useStaticCondensation) );
+                                                                         maxIters, iter_tol * 10, coarsestSolver, useStaticCondensation) );
       
       Teuchos::RCP<GMGSolver> gmgSolver = Teuchos::rcp( new GMGSolver(zeroBCs, coarseMesh, graphNorm, fineMesh,
                                                                       exactPoissonSolution->getDofInterpreter(),
@@ -1149,8 +1145,7 @@ bool GMGTests::testGMGSolverThreeGrid() {
       
       actualPoissonSolution->solve(fineSolver);
       
-      VarFactory vf = bf->varFactory();
-      VarPtr phi = vf.fieldVar(S_GMGTests_PHI);
+      VarPtr phi = getPoissonPhi(spaceDim);
       
       FunctionPtr exactPhiSoln = Function::solution(phi, exactPoissonSolution);
       FunctionPtr actualPhiSoln = Function::solution(phi, actualPoissonSolution);
@@ -1220,24 +1215,57 @@ bool GMGTests::testProlongationOperator() {
   
   bool traceToFieldsEnabled = false; // have not yet implemented the thing that will map fine traces to coarse fields
   
-  // just hard-coding the values we expect right now.  Rows are fine cell 0 local dofs.  Columns are coarse cell 0 dofs.
+  // just hard-coding the values we expect right now.  Rows are fine cell 1 local dofs.  Columns are coarse cell 0 dofs.
+  
+  /*
+   Since our field variables are linear, for v_coarse that has corresponding v_fine in fine mesh, we expect
+   coeff(v_coarse) = coeff(v_fine)
+   
+   When v_fine doesn't have a corresponding coarse dof, there will be v_coarse_left and v_coarse_right with:
+   coeff(v_fine) = 0.5 * ( coeff(v_coarse_left) + coeff(v_coarse_right) )
+   */
+  
+  DofOrderingPtr trialPtr = fineMesh->getElementType(cellID)->trialOrderPtr;
+  VarPtr phi = getPoissonPhi(spaceDim);
+  VarPtr psi = getPoissonPsi(spaceDim);
+  VarPtr psi_n = getPoissonPsi_n(spaceDim);
+  VarPtr phi_hat = getPoissonPhiHat(spaceDim);
+  
+  int phiLeft = trialPtr->getDofIndex(phi->ID(), 0);
+  int phiRight = trialPtr->getDofIndex(phi->ID(), 1);
+  
+  int psiLeft = trialPtr->getDofIndex(psi->ID(), 0);
+  int psiRight = trialPtr->getDofIndex(psi->ID(), 1);
+  
+  int phiHatLeft = trialPtr->getDofIndex(phi_hat->ID(), 0, 0);
+  int phiHatRight = trialPtr->getDofIndex(phi_hat->ID(), 0, 1);
+  
+  int psi_n_left = trialPtr->getDofIndex(psi_n->ID(), 0, 0);
+  int psi_n_right = trialPtr->getDofIndex(psi_n->ID(), 0, 1);
+  
   FieldContainer<double> expectedValues(8,8);
-  expectedValues(0,0) = 1.0;
+  
   if (traceToFieldsEnabled) {
-    expectedValues(1,4) = 0.5;
-    expectedValues(1,5) = 0.5;
-    expectedValues(3,6) = 0.5;
-    expectedValues(3,7) = 0.5;
+    expectedValues(phiHatLeft,phiLeft) = 0.5;
+    expectedValues(phiHatLeft,phiRight) = 0.5;
+  
+    expectedValues(psi_n_left,psiLeft) = 0.5;
+    expectedValues(psi_n_left,psiRight) = 0.5;
   }
-  expectedValues(2,2) = 1.0;
-  expectedValues(4,4) = 1.0;
-  expectedValues(4,5) = 0.0;
-  expectedValues(5,4) = 0.5;
-  expectedValues(5,5) = 0.5;
-  expectedValues(6,6) = 1.0;
-  expectedValues(6,7) = 0.0;
-  expectedValues(7,6) = 0.5;
-  expectedValues(7,7) = 0.5;
+  
+  expectedValues(phiHatLeft,phiHatLeft) = 1.0;
+  
+  expectedValues(psi_n_left,psi_n_left) = 1.0;
+  
+  expectedValues(phiLeft,phiLeft) = 1.0;
+  
+  expectedValues(phiRight,phiLeft) = 0.5;
+  expectedValues(phiRight,phiRight) = 0.5;
+  
+  expectedValues(psiLeft,psiLeft) = 1.0;
+
+  expectedValues(psiRight,psiLeft) = 0.5;
+  expectedValues(psiRight,psiRight) = 0.5;
   
   FieldContainer<double> actualValues(8,8);
   for (int i=0; i<8; i++) {
