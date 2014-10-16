@@ -405,7 +405,7 @@ int main(int argc, char *argv[]) {
       coarseSolver = Teuchos::rcp( new KluSolver );
       break;
     case SLU:
-      coarseSolver = Teuchos::rcp( new SuperLUDistSolver() );
+      coarseSolver = Teuchos::rcp( new SuperLUDistSolver(true) ); // true: save factorization
       break;
     case UNKNOWN:
       // should be unreachable
