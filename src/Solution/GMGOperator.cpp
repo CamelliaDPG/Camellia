@@ -82,13 +82,18 @@ GMGOperator::GMGOperator(BCPtr zeroBCs, MeshPtr coarseMesh, IPPtr coarseIP,
   
   _coarseSolution->initializeLHSVector();
   _coarseSolution->initializeStiffnessAndLoad(); // actually don't need to initial stiffness anymore; we'll do this in computeCoarseStiffnessMatrix
+
+  // now that:
+  //   a) CondensedDofInterpreter can supply local stiffness matrices as needed, and
+  //   b) we don't actually use a Solution-computed global stiffness matrix for coarse solves
+  // I'm pretty sure there's no reason to call populateStiffnessAndLoad(), and it is extra work (we avoid at least global assembly)
   
-  if (_useStaticCondensation) {
-    // then, since the coarse solution does a condensed solve, we need to supply CondensedDofInterpreter with the
-    // local stiffness matrices on each coarse cell -- the easiest way to do this is just to invoke populateStiffnessAndLoad
-    // (this does a little extra work, but probably this is negligible)
-    _coarseSolution->populateStiffnessAndLoad();
-  }
+//  if (_useStaticCondensation) {
+//    // then, since the coarse solution does a condensed solve, we need to supply CondensedDofInterpreter with the
+//    // local stiffness matrices on each coarse cell -- the easiest way to do this is just to invoke populateStiffnessAndLoad
+//    // (this does a little extra work, but probably this is negligible)
+//    _coarseSolution->populateStiffnessAndLoad();
+//  }
 
   constructProlongationOperator();
   
@@ -103,9 +108,17 @@ void GMGOperator::clearTimings() {
 }
 
 void GMGOperator::computeCoarseStiffnessMatrix(Epetra_CrsMatrix *fineStiffnessMatrix) {
+  int globalColCount = fineStiffnessMatrix->NumGlobalCols();
   if (_P.get() == NULL) {
     constructProlongationOperator();
+  } else if (_P->NumGlobalRows() != globalColCount) {
+    constructProlongationOperator();
+    if (_P->NumGlobalRows() != globalColCount) {
+      cout << "GMGOperator::computeCoarseStiffnessMatrix: Even after a fresh call to constructProlongationOperator, _P->NumGlobalRows() != globalColCount.\n";
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "_P->NumGlobalRows() != globalColCount");
+    }
   }
+  
 
   setUpSmoother(fineStiffnessMatrix);
   
