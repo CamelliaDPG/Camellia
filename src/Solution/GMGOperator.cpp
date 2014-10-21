@@ -223,12 +223,12 @@ Teuchos::RCP<Epetra_CrsMatrix> GMGOperator::constructProlongationOperator() {
     }
     
     Epetra_Map    localXMap(myGlobalIndices.size(), myGlobalIndices.size(), &myGlobalIndices[0], 0, SerialComm);
+    Teuchos::RCP<Epetra_Vector> XLocal = Teuchos::rcp( new Epetra_Vector(localXMap) );
     
     for (int localID=0; localID < _finePartitionMap.NumMyElements(); localID++) {
       GlobalIndexTypeToCast globalRow = _finePartitionMap.GID(localID);
 
       map<GlobalIndexTypeToCast, double> coarseXVectorLocal; // rank-local representation, so we just use an STL map.  Has the advantage of growing as we need it to.
-      Teuchos::RCP<Epetra_Vector> XLocal = Teuchos::rcp( new Epetra_Vector(localXMap) );
       (*XLocal)[localID] = 1.0;
       
       set<GlobalIndexType> cells = cellsForGlobalDofOrdinal[globalRow];
@@ -294,6 +294,7 @@ Teuchos::RCP<Epetra_CrsMatrix> GMGOperator::constructProlongationOperator() {
         P->InsertGlobalValues(globalRow, nnz, &coarseGlobalValues[0], &coarseGlobalIndices[0]);
 //        cout << "Inserting values for row " << globalRow << endl;
       }
+      (*XLocal)[localID] = 0.0;
     }
   }
 
