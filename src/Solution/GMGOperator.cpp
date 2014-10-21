@@ -315,11 +315,11 @@ Teuchos::RCP<Epetra_CrsMatrix> GMGOperator::constructProlongationOperator() {
 }
 
 GlobalIndexType GMGOperator::getCoarseCellID(GlobalIndexType fineCellID) const {
-  set<GlobalIndexType> coarseCellIDs = _coarseMesh->getActiveCellIDs();
+  const set<IndexType>* coarseCellIDs = &_coarseMesh->getTopology()->getActiveCellIndices();
   CellPtr fineCell = _fineMesh->getTopology()->getCell(fineCellID);
   CellPtr ancestor = fineCell;
   RefinementBranch refBranch;
-  while (coarseCellIDs.find(ancestor->cellIndex()) == coarseCellIDs.end()) {
+  while (coarseCellIDs->find(ancestor->cellIndex()) == coarseCellIDs->end()) {
     CellPtr parent = ancestor->getParent();
     if (parent.get() == NULL) {
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "ancestor for fine cell not found in coarse mesh");
@@ -332,11 +332,11 @@ GlobalIndexType GMGOperator::getCoarseCellID(GlobalIndexType fineCellID) const {
 }
 
 LocalDofMapperPtr GMGOperator::getLocalCoefficientMap(GlobalIndexType fineCellID) const {
-  set<GlobalIndexType> coarseCellIDs = _coarseMesh->getActiveCellIDs();
+  const set<IndexType>* coarseCellIDs = &_coarseMesh->getTopology()->getActiveCellIndices();
   CellPtr fineCell = _fineMesh->getTopology()->getCell(fineCellID);
   CellPtr ancestor = fineCell;
   RefinementBranch refBranch;
-  while (coarseCellIDs.find(ancestor->cellIndex()) == coarseCellIDs.end()) {
+  while (coarseCellIDs->find(ancestor->cellIndex()) == coarseCellIDs->end()) {
     CellPtr parent = ancestor->getParent();
     if (parent.get() == NULL) {
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "ancestor for fine cell not found in coarse mesh");
