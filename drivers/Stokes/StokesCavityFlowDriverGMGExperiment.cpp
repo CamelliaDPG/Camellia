@@ -102,6 +102,8 @@ int main(int argc, char *argv[]) {
   bool useWeightedGraphNorm = false; // graph norm scaled according to units, more or less
   bool useStaticCondensation = false;
   
+  double energyThreshold = 0.2;
+  
   int numCells = 2;
   
   double eps = 1.0 / 64.0;
@@ -118,6 +120,7 @@ int main(int argc, char *argv[]) {
   cmdp.setOption("delta_k", &delta_k, "test space polynomial order enrichment");
   cmdp.setOption("k_coarse", &k_coarse, "polynomial order for field variables on coarse mesh");
   cmdp.setOption("numRefs",&refCount,"number of refinements");
+  cmdp.setOption("refinementThreshold", &energyThreshold, "relative energy threshold for refinements");
   cmdp.setOption("useConformingTraces", "useNonConformingTraces", &conformingTraces);
   cmdp.setOption("enforceOneIrregularity", "dontEnforceOneIrregularity", &enforceOneIrregularity);
   cmdp.setOption("useSmoothing", "useNoSmoothing", &applyDiagonalSmoothing);
@@ -359,7 +362,6 @@ int main(int argc, char *argv[]) {
   
   LinearTermPtr residual = stokesBF->testFunctional(solution);
   
-  double energyThreshold = 0.2;
 //  RefinementStrategy refinementStrategy( mesh, residual, standardGraphNorm, energyThreshold); // even when we use the weighted graph norm for solving, we should use the standard one for refinements
   RefinementStrategy refinementStrategy( solution, energyThreshold );
 
