@@ -27,7 +27,10 @@ endif()
 
 if (ZLIB_LIB)
   set(Trilinos_TPL_LIBRARIES ${Trilinos_TPL_LIBRARIES} ${ZLIB_LIB})
-#  link_libraries(${ZLIB_LIB})
+endif()
+
+if (OMP_INCLUDE)
+  include_directories(${OMP_INCLUDE})
 endif()
 
 if(MPI_INCLUDE)
@@ -63,8 +66,7 @@ if(ADDITIONAL_LIBRARY_DIRS)
   MESSAGE("ADDITIONAL_LIBRARY_DIRS: ${ADDITIONAL_LIBRARY_DIRS}") 
   MESSAGE("ADDITIONAL_LIBRARIES: ${ADDITIONAL_LIBRARIES}")
   link_directories(${ADDITIONAL_LIBRARY_DIRS})
-  set(Trilinos_TPL_LIBRARIES ${Trilinos_TPL_LIBRARIES}
-${ADDITIONAL_LIBRARIES})
+  set(Trilinos_TPL_LIBRARIES ${Trilinos_TPL_LIBRARIES} ${ADDITIONAL_LIBRARIES})
 #  link_libraries(${ADDITIONAL_LIBRARIES})
 endif()
 
