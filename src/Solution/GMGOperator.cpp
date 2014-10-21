@@ -528,7 +528,7 @@ int GMGOperator::ApplyInverse(const Epetra_MultiVector& X_in, Epetra_MultiVector
   _P->Multiply(false, *coarseLHSVector, Y);
   _timeMapCoarseToFine += timer.ElapsedTime();
 
-  // if _applySmoothingOperator is set, add diag(A)^(-1)X to Y.
+  // if _applySmoothingOperator is set, add S^(-1)X to Y.
   if (_applySmoothingOperator) {
     if (_diag.get() == NULL) {
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "_diag is null!");
@@ -965,7 +965,7 @@ void GMGOperator::setUpSmoother(Epetra_CrsMatrix *fineStiffnessMatrix) {
 //      cout << "Using additive Schwarz smoother.\n";
       int OverlapLevel = _smootherOverlap;
       smoother = Teuchos::rcp(new Ifpack_AdditiveSchwarz<Ifpack_Amesos>(fineStiffnessMatrix, OverlapLevel) );
-      List.set("schwarz: combine mode", "Insert"); // docs say to use "Insert" to maintain symmetry
+      List.set("schwarz: combine mode", "Add"); // The PDF doc says to use "Insert" to maintain symmetry, but the HTML docs (which are more recent) say to use "Add".  http://trilinos.org/docs/r11.10/packages/ifpack/doc/html/index.html
     }
       break;
       
