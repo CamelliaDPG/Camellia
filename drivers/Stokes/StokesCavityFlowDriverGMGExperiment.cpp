@@ -60,6 +60,17 @@ public:
   }
 };
 
+enum SolverChoice {
+  MUMPS, KLU, SLU, UNKNOWN
+};
+
+SolverChoice getSolverChoice(string solverString) {
+  if (solverString=="MUMPS") return MUMPS;
+  if (solverString=="KLU") return KLU;
+  if (solverString=="SLU") return SLU;
+  return UNKNOWN;
+}
+
 int main(int argc, char *argv[]) {
 #ifdef ENABLE_INTEL_FLOATING_POINT_EXCEPTIONS
   cout << "NOTE: enabling floating point exceptions for divide by zero.\n";
@@ -102,7 +113,10 @@ int main(int argc, char *argv[]) {
   bool useWeightedGraphNorm = false; // graph norm scaled according to units, more or less
   bool useStaticCondensation = false;
   
+  int mumpsMaxMemoryMB = 768;
   double energyThreshold = 0.2;
+  
+  string solverString = "MUMPS";
   
   int numCells = 2;
   
@@ -124,6 +138,8 @@ int main(int argc, char *argv[]) {
   cmdp.setOption("useConformingTraces", "useNonConformingTraces", &conformingTraces);
   cmdp.setOption("enforceOneIrregularity", "dontEnforceOneIrregularity", &enforceOneIrregularity);
   cmdp.setOption("useSmoothing", "useNoSmoothing", &applyDiagonalSmoothing);
+  cmdp.setOption("globalSolver", &solverString, "global solver choice -- MUMPS, KLU, GMG, or SLU");
+  cmdp.setOption("mumpsMaxMemoryMB", &mumpsMaxMemoryMB, "max allocation size MUMPS is allowed to make, in MB");
   cmdp.setOption("smootherOverlap", &smootherOverlap, "overlap for smoother");
   cmdp.setOption("printRefinementDetails", "dontPrintRefinementDetails", &printRefinementDetails);
   cmdp.setOption("azOutput", &AztecOutputLevel, "Aztec output level");
@@ -145,6 +161,14 @@ int main(int argc, char *argv[]) {
 #endif
     return -1;
   }
+  
+  SolverChoice solverChoice = getSolverChoice(solverString);
+  
+  if (solverChoice==UNKNOWN) {
+    if (rank==0) cout << "Unrecognized global solver choice.  Exiting\n";
+    return 1;
+  }
+
   
   bool usePressurelessFormulation = false; // VGP otherwise
   
@@ -381,15 +405,29 @@ int main(int argc, char *argv[]) {
   refinementStrategy.setEnforceOneIrregularity(enforceOneIrregularity);
   
   Teuchos::RCP<Solver> coarseSolver, fineSolver;
-  if (useMumps) {
+  if ((solverChoice == MUMPS) && (Teuchos::GlobalMPISession::getNProc()==1)) {
+    cout << "solverChoice == MUMPS, but only running on one proc.  There are issues with Amesos_Mumps::Destroy() in this case.  Therefore, overriding solverChoice = KLU.\n";
+    solverChoice = KLU;
+  }
+  
+  switch(solverChoice) {
+    case MUMPS:
 #ifdef USE_MUMPS
-    coarseSolver = Teuchos::rcp( new MumpsSolver(512, true) );
+      coarseSolver = Teuchos::rcp( new MumpsSolver(mumpsMaxMemoryMB, true) );
 #else
-    cout << "useMumps=true, but MUMPS is not available!\n";
-    exit(0);
+      cout << "useMumps=true, but MUMPS is not available!\n";
+      exit(1);
 #endif
-  } else {
-    coarseSolver = Teuchos::rcp( new KluSolver );
+      break;
+    case KLU:
+      coarseSolver = Teuchos::rcp( new KluSolver );
+      break;
+    case SLU:
+      coarseSolver = Teuchos::rcp( new SuperLUDistSolver(true) ); // true: save factorization
+      break;
+    case UNKNOWN:
+      // should be unreachable
+      break;
   }
   
   vector<double> condestForRefinement;
