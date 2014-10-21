@@ -186,7 +186,7 @@ int main(int argc, char *argv[]) {
         u3hat = varFactory.traceVar("\\widehat{u}_3", u3);
       }
     } else {
-      cout << "Note: using non-conforming traces.\n";
+      if (rank==0) cout << "Note: using non-conforming traces.\n";
       u1hat = varFactory.traceVar("\\widehat{u}_1", u1, L2);
       u2hat = varFactory.traceVar("\\widehat{u}_2", u2, L2);
       
@@ -362,15 +362,17 @@ int main(int argc, char *argv[]) {
 //  RefinementStrategy refinementStrategy( mesh, residual, standardGraphNorm, energyThreshold); // even when we use the weighted graph norm for solving, we should use the standard one for refinements
   RefinementStrategy refinementStrategy( solution, energyThreshold );
 
-  // I'm unclear on why, but the following gives us 0 energy error.
-  if (rank==0) cout << "Computing energy error for 0 solution on coarse mesh.\n";
-  solution->initializeStiffnessAndLoad();
-  solution->initializeLHSVector();
-  solution->populateStiffnessAndLoad();
-  solution->imposeBCs();
-  solution->importSolution();
-  double energyErrorForZeroSolution = solution->energyErrorTotal();
-  if (rank==0) cout << "Energy error for 0 solution on coarse mesh: " << energyErrorForZeroSolution << "\n";
+  double energyErrorForZeroSolution = 0;
+  if (refCount > 0) {
+    if (rank==0) cout << "Computing energy error for 0 solution on coarse mesh.\n";
+    solution->initializeStiffnessAndLoad();
+    solution->initializeLHSVector();
+    solution->populateStiffnessAndLoad();
+    solution->imposeBCs();
+    solution->importSolution();
+    energyErrorForZeroSolution = solution->energyErrorTotal();
+    if (rank==0) cout << "Energy error for 0 solution on coarse mesh: " << energyErrorForZeroSolution << "\n";
+  }
   
   refinementStrategy.setReportPerCellErrors(true);
   refinementStrategy.setEnforceOneIrregularity(enforceOneIrregularity);
