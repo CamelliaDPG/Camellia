@@ -130,8 +130,9 @@ int main(int argc, char *argv[]) {
   cmdp.setOption("useStaticCondensation", "dontUseStaticCondensation", &useStaticCondensation);
   cmdp.setOption("useCG", "useGMRES", &useCG, "use conjugate gradient or GMRES with multi-grid preconditioner");
   
-//  cmdp.setOption("gmgTol", &gmgTolerance, "tolerance for GMG convergence");
+  //  cmdp.setOption("gmgTol", &gmgTolerance, "tolerance for GMG convergence");
   cmdp.setOption("relativeTol", &relativeTol, "Energy error-relative tolerance for iterative solver.");
+  cmdp.setOption("minTol", &minTol, "Minimum tolerance for iterative solver.");
   cmdp.setOption("gmgMaxIterations", &gmgMaxIterations, "tolerance for GMG convergence");
   
   if (cmdp.parse(argc,argv) != Teuchos::CommandLineProcessor::PARSE_SUCCESSFUL) {
@@ -360,6 +361,16 @@ int main(int argc, char *argv[]) {
   double energyThreshold = 0.2;
 //  RefinementStrategy refinementStrategy( mesh, residual, standardGraphNorm, energyThreshold); // even when we use the weighted graph norm for solving, we should use the standard one for refinements
   RefinementStrategy refinementStrategy( solution, energyThreshold );
+
+  // I'm unclear on why, but the following gives us 0 energy error.
+  if (rank==0) cout << "Computing energy error for 0 solution on coarse mesh.\n";
+  solution->initializeStiffnessAndLoad();
+  solution->initializeLHSVector();
+  solution->populateStiffnessAndLoad();
+  solution->imposeBCs();
+  solution->importSolution();
+  double energyErrorForZeroSolution = solution->energyErrorTotal();
+  if (rank==0) cout << "Energy error for 0 solution on coarse mesh: " << energyErrorForZeroSolution << "\n";
   
   refinementStrategy.setReportPerCellErrors(true);
   refinementStrategy.setEnforceOneIrregularity(enforceOneIrregularity);
@@ -375,10 +386,17 @@ int main(int argc, char *argv[]) {
   } else {
     coarseSolver = Teuchos::rcp( new KluSolver );
   }
+  
+  vector<double> condestForRefinement;
+  vector<int> iterationsForRefinement;
+  vector<double> tolForRefinement;
+  
   GMGSolver* gmgSolver;
   
   if (useGMGSolver) {
     double tol = relativeTol;
+    tolForRefinement.push_back(tol);
+    if (rank==0) cout << "Initial iterative solve tolerance: " << tol << endl;
     int maxIters = gmgMaxIterations;
     BCPtr zeroBCs = bc->copyImposingZero();
 //    GMGSolver(BCPtr zeroBCs, MeshPtr coarseMesh, IPPtr coarseIP, MeshPtr fineMesh, Teuchos::RCP<DofInterpreter> fineDofInterpreter,
@@ -420,7 +438,11 @@ int main(int argc, char *argv[]) {
 #endif
   
   solution->reportTimings();
-  if (useGMGSolver) gmgSolver->gmgOperator().reportTimings();
+  if (useGMGSolver) {
+    condestForRefinement.push_back(gmgSolver->condest());
+    iterationsForRefinement.push_back(gmgSolver->iterationCount());
+    gmgSolver->gmgOperator().reportTimings();
+  }
   for (int refIndex=0; refIndex < refCount; refIndex++) {
     GlobalIndexType numFluxDofs = mesh->numFluxDofs();
     bool printToConsole = printRefinementDetails && (rank==0);
@@ -458,7 +480,9 @@ int main(int argc, char *argv[]) {
         }
       }
       
-      double tol = max(relativeTol * energyError, minTol);
+      double tol = max(relativeTol * energyError / energyErrorForZeroSolution, minTol);
+      tolForRefinement.push_back(tol);
+      if (rank==0) cout << "Setting iterative solve tolerance to " << tol << endl;
       int maxIters = gmgMaxIterations;
       BCPtr zeroBCs = bc->copyImposingZero();
       gmgSolver = new GMGSolver(zeroBCs, k0Mesh, coarseIP, mesh, solution->getDofInterpreter(),
@@ -474,7 +498,13 @@ int main(int argc, char *argv[]) {
     
     solution->solve(fineSolver);
     solution->reportTimings();
-    if (useGMGSolver) gmgSolver->gmgOperator().reportTimings();
+
+    if (useGMGSolver) {
+      condestForRefinement.push_back(gmgSolver->condest());
+      iterationsForRefinement.push_back(gmgSolver->iterationCount());
+      
+      gmgSolver->gmgOperator().reportTimings();
+    }
     
 #ifdef HAVE_EPETRAEXT_HDF5
     exporter.exportSolution(solution,varFactory,refIndex+1);
@@ -522,23 +552,40 @@ int main(int argc, char *argv[]) {
 
   coarseSolver = Teuchos::rcp((Solver*) NULL); // without this when useMumps = true and running on one rank, we see a crash on exit, which may have to do with MPI being finalized before coarseSolver is deleted.
 
-  int col1 = 8, col2 = 15, col3 = 22;
+  int col1 = 7, col2 = 8, col3 = 15, col4 = 12, col5 = 15, col6 = 12;
   if (rank==0) {
     cout << "Refinement history:\n";
-    cout << setw(col1) << "# elems" << setw(col2) << "# dofs" << setw(col3) << "energy error" << endl;
+    if (useGMGSolver)
+      cout << setw(col1) << "# elems" << setw(col2) << "# dofs" << setw(col3) << "energy error" << setw(col4) << "condest" << setw(col5) << "iter. count" << setw(col6) << "epsilon" << endl;
+    else
+      cout << setw(col1) << "# elems" << setw(col2) << "# dofs" << setw(col3) << "energy error" << endl;
   }
   for (int refIndex=0; refIndex < refCount; refIndex++) {
     GlobalIndexType numElements = refinementStrategy.getNumElements(refIndex);
     GlobalIndexType numDofs = refinementStrategy.getNumDofs(refIndex);
     double energyError = refinementStrategy.getEnergyError(refIndex);
+    double condest = useGMGSolver ? condestForRefinement[refIndex] : -1;
+    int iterCount = useGMGSolver ? iterationsForRefinement[refIndex] : -1;
+    double epsilon = useGMGSolver ? tolForRefinement[refIndex] : 0;
     if (rank==0) {
-      cout << setw(col1) << numElements << setw(col2) << numDofs << setw(col3) << setprecision(2) << scientific << energyError << endl;
+      if (useGMGSolver) {
+        cout << setw(col1) << numElements << setw(col2) << numDofs << setw(col3) << setprecision(2) << scientific << energyError;
+        cout << setw(col4) << condest << setw(col5) << iterCount << setw(col6) << epsilon << endl;
+      } else {
+        cout << setw(col1) << numElements << setw(col2) << numDofs << setw(col3) << setprecision(2) << scientific << energyError << endl;
+      }
     }
   }
   int numElements = mesh->numActiveElements();
   
   if (rank==0) {
-    cout << setw(col1) << numElements << setw(col2) << numGlobalDofs << setw(col3) << setprecision(2) << scientific << energyErrorTotal << endl;
+    if (useGMGSolver) {
+      double epsilon = useGMGSolver ? tolForRefinement[refCount] : 0;
+      cout << setw(col1) << numElements << setw(col2) << numGlobalDofs << setw(col3) << setprecision(2) << scientific << energyErrorTotal;
+      cout << setw(col4) << condestForRefinement[refCount] << setw(col5) << iterationsForRefinement[refCount] << setw(col6) << epsilon << endl;
+    } else {
+      cout << setw(col1) << numElements << setw(col2) << numGlobalDofs << setw(col3) << setprecision(2) << scientific << energyErrorTotal << endl;
+    }
   }
   
   return 0;
