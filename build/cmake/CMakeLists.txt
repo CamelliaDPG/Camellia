@@ -217,6 +217,10 @@ set( STOKES_CONSERVATION_EXPERIMENT
   "${STOKES_DIR}/StokesConservationExperiment.cpp"
   )
 
+set (STOKES_CAVITY_FLOW_DRIVER_GMG
+  "${STOKES_DIR}/StokesCavityFlowDriverGMGExperiment.cpp"
+  )
+
 set( STOKES_BACKWARD_FACING_STEP_DRIVER
   "${STOKES_DIR}/StokesBackwardFacingStepDriver.cpp"
   )
@@ -537,5 +541,10 @@ target_link_libraries(OseenStudy
   ${Trilinos_TPL_LIBRARIES}
   ${CAMELLIA_LIBRARY_NAME}
   )
+
+add_executable(StokesCavityFlowGMGDriver ${STOKES_CAVITY_FLOW_DRIVER_GMG})
+target_link_libraries(StokesCavityFlowGMGDriver 
+  Camellia
+)
 
 add_subdirectory(${CAMELLIA_SOURCE_DIR}/../tests ${PROJECT_BINARY_DIR}/tests)
