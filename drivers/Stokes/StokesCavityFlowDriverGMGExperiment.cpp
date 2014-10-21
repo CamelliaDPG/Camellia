@@ -113,6 +113,7 @@ int main(int argc, char *argv[]) {
   int smootherOverlap = 0;
   
   cmdp.setOption("useGMG", "useDirect", &useGMGSolver, "use GMG solver (otherwise, use direct solver--option for testing)");
+  cmdp.setOption("use3D", "use2D", &use3D);
   cmdp.setOption("polyOrder",&k,"polynomial order for field variable u");
   cmdp.setOption("delta_k", &delta_k, "test space polynomial order enrichment");
   cmdp.setOption("k_coarse", &k_coarse, "polynomial order for field variables on coarse mesh");
