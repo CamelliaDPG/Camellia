@@ -98,7 +98,6 @@ int main(int argc, char *argv[]) {
   int delta_k = use3D ? 3 : 2;   // test space enrichment
   int k_coarse = 0;
   
-  bool useMumps = true;
   bool useGMGSolver = true;
   bool useCG = true;
   
@@ -476,9 +475,9 @@ int main(int argc, char *argv[]) {
   exporter.exportSolution(solution,varFactory,0);
 #endif
   
-#ifdef USE_MUMPS
-  if (useMumps) coarseSolver = Teuchos::rcp( new MumpsSolver(512, true) );
-#endif
+//#ifdef USE_MUMPS
+//  if (useMumps) coarseSolver = Teuchos::rcp( new MumpsSolver(512, true) );
+//#endif
   
   solution->reportTimings();
   if (useGMGSolver) {
@@ -512,9 +511,9 @@ int main(int argc, char *argv[]) {
     }
     
     if (useGMGSolver) { // create fresh fineSolver now that the meshes have changed:
-#ifdef USE_MUMPS
-      if (useMumps) coarseSolver = Teuchos::rcp( new MumpsSolver(512, true) );
-#endif
+//#ifdef USE_MUMPS
+//      if (useMumps) coarseSolver = Teuchos::rcp( new MumpsSolver(512, true) );
+//#endif
       
       if (useStaticCondensation) {
         CondensedDofInterpreter* condensedDofInterpreter = dynamic_cast<CondensedDofInterpreter*>(solution->getDofInterpreter().get());
