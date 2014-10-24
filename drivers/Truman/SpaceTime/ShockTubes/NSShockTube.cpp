@@ -621,7 +621,7 @@ int main(int argc, char *argv[]) {
         ip->addTerm(ve);
         break;
 
-        // Original Robust Norm
+        // Original Decoupled Norm
         case 3:
         ip->addTerm(vm->dx() + u_prev*ve->dx());
         ip->addTerm(ve->dx());
@@ -640,7 +640,7 @@ int main(int argc, char *argv[]) {
         ip->addTerm(ve);
         break;
 
-        // Entropy Scaled Robust Norm
+        // Entropy Scaled Decoupled Norm
         case 4:
         ip->addTerm(vm->dx() + u_prev*ve->dx());
         ip->addTerm(ve->dx());
@@ -654,6 +654,200 @@ int main(int argc, char *argv[]) {
         ip->addTerm(4./3*S->dx());
         ip->addTerm(Pr/(Cp*mu)*tau);
         ip->addTerm(tau->dx());
+        ip->addTerm(vc);
+        ip->addTerm(vm);
+        ip->addTerm(ve);
+        break;
+
+        // Original Robust Norm
+        case 5:
+        // 1/epsilon*||tau||^2
+        ip->addTerm(1./sqrt(mu)*S);
+        ip->addTerm(sqrt(Pr/(Cp*mu))*tau);
+        // ||Div(tau)-beta.Gradxt(V)||^2
+        ip->addTerm(u_prev*vc->dx()+vc->dy()+u_prev*u_prev*vm->dx()+R*T_prev*vm->dx()+u_prev*vm->dy()
+          +Cv*T_prev*u_prev*ve->dx()+0.5*u_prev*u_prev*u_prev*ve->dx()+R*T_prev*u_prev*ve->dx()+Cv*T_prev*ve->dy()+0.5*u_prev*u_prev*ve->dy());
+        ip->addTerm(-4./3*S->dx()+rho_prev*vc->dx()+rho_prev*u_prev*vm->dx()+rho_prev*u_prev*vm->dx()+rho_prev*vm->dy()+Cv*rho_prev*T_prev*ve->dx()
+          +0.5*rho_prev*u_prev*u_prev*ve->dx()+0.5*rho_prev*u_prev*u_prev*ve->dx()+0.5*rho_prev*u_prev*u_prev*ve->dx()
+          +R*rho_prev*T_prev*ve->dx()-D_prev*ve->dx()+0.5*rho_prev*u_prev*ve->dy()+0.5*rho_prev*u_prev*ve->dy());
+        ip->addTerm(tau->dx()+R*rho_prev*vm->dx()+Cv*rho_prev*u_prev*ve->dx()+R*rho_prev*u_prev*ve->dx()+Cv*rho_prev*ve->dy());
+        // ||beta.Grad(V)||^2
+        ip->addTerm(u_prev*vc->dx()+u_prev*u_prev*vm->dx()+R*T_prev*vm->dx()
+          +Cv*T_prev*u_prev*ve->dx()+0.5*u_prev*u_prev*u_prev*ve->dx()+R*T_prev*u_prev*ve->dx());
+        ip->addTerm(rho_prev*vc->dx()+rho_prev*u_prev*vm->dx()+rho_prev*u_prev*vm->dx()+Cv*rho_prev*T_prev*ve->dx()
+          +0.5*rho_prev*u_prev*u_prev*ve->dx()+0.5*rho_prev*u_prev*u_prev*ve->dx()+0.5*rho_prev*u_prev*u_prev*ve->dx()
+          +R*rho_prev*T_prev*ve->dx()-D_prev*ve->dx());
+        ip->addTerm(R*rho_prev*vm->dx()+Cv*rho_prev*u_prev*ve->dx()+R*rho_prev*u_prev*ve->dx());
+        // epsilon*||Grad v||^2
+        ip->addTerm(vm->dx() + u_prev*ve->dx());
+        ip->addTerm(ve->dx());
+        ip->addTerm(vc);
+        ip->addTerm(vm);
+        ip->addTerm(ve);
+        break;
+
+        // Entropy Scaled Robust Norm
+        case 6:
+        // 1/epsilon*||tau||^2
+        ip->addTerm(1./sqrt(mu)*S);
+        ip->addTerm(sqrt(Pr/(Cp*mu))*tau);
+        // ||Div(tau)-beta.Gradxt(V)||
+        ip->addTerm(rho_sqrt/(sqrt(gamma-1))*(u_prev*vc->dx()+vc->dy()+u_prev*u_prev*vm->dx()+R*T_prev*vm->dx()+u_prev*vm->dy()
+          +Cv*T_prev*u_prev*ve->dx()+0.5*u_prev*u_prev*u_prev*ve->dx()+R*T_prev*u_prev*ve->dx()+Cv*T_prev*ve->dy()+0.5*u_prev*u_prev*ve->dy()));
+        ip->addTerm((sqrt(Cv)*T_sqrt)/rho_sqrt*(-4./3*S->dx()+rho_prev*vc->dx()+rho_prev*u_prev*vm->dx()+rho_prev*u_prev*vm->dx()+rho_prev*vm->dy()+Cv*rho_prev*T_prev*ve->dx()
+          +0.5*rho_prev*u_prev*u_prev*ve->dx()+0.5*rho_prev*u_prev*u_prev*ve->dx()+0.5*rho_prev*u_prev*u_prev*ve->dx()
+          +R*rho_prev*T_prev*ve->dx()-D_prev*ve->dx()+0.5*rho_prev*u_prev*ve->dy()+0.5*rho_prev*u_prev*ve->dy()));
+        ip->addTerm(T_prev/rho_sqrt*(tau->dx()+R*rho_prev*vm->dx()+Cv*rho_prev*u_prev*ve->dx()+R*rho_prev*u_prev*ve->dx()+Cv*rho_prev*ve->dy()));
+        // ||beta.Grad(V)||
+        ip->addTerm(rho_sqrt/(sqrt(gamma-1))*(u_prev*vc->dx()+u_prev*u_prev*vm->dx()+R*T_prev*vm->dx()
+          +Cv*T_prev*u_prev*ve->dx()+0.5*u_prev*u_prev*u_prev*ve->dx()+R*T_prev*u_prev*ve->dx()));
+        ip->addTerm((sqrt(Cv)*T_sqrt)/rho_sqrt*(rho_prev*vc->dx()+rho_prev*u_prev*vm->dx()+rho_prev*u_prev*vm->dx()+Cv*rho_prev*T_prev*ve->dx()
+          +0.5*rho_prev*u_prev*u_prev*ve->dx()+0.5*rho_prev*u_prev*u_prev*ve->dx()+0.5*rho_prev*u_prev*u_prev*ve->dx()
+          +R*rho_prev*T_prev*ve->dx()-D_prev*ve->dx()));
+        ip->addTerm(T_prev/rho_sqrt*(R*rho_prev*vm->dx()+Cv*rho_prev*u_prev*ve->dx()+R*rho_prev*u_prev*ve->dx()));
+        // epsilon*||Grad v||
+        ip->addTerm(vm->dx() + u_prev*ve->dx());
+        ip->addTerm(ve->dx());
+        ip->addTerm(vc);
+        ip->addTerm(vm);
+        ip->addTerm(ve);
+        break;
+
+        // Original Robust Norm 2
+        case 7:
+        // 1/epsilon*||tau||^2
+        ip->addTerm(1./sqrt(mu)*S);
+        ip->addTerm(sqrt(Pr/(Cp*mu))*tau);
+        // ||Div(tau)-beta.Gradxt(V)||
+        ip->addTerm(u_prev*vc->dx()+vc->dy()+u_prev*u_prev*vm->dx()+R*T_prev*vm->dx()+u_prev*vm->dy()
+          +Cv*T_prev*u_prev*ve->dx()+0.5*u_prev*u_prev*u_prev*ve->dx()+R*T_prev*u_prev*ve->dx()+Cv*T_prev*ve->dy()+0.5*u_prev*u_prev*ve->dy());
+        ip->addTerm(-4./3*S->dx()+rho_prev*vc->dx()+rho_prev*u_prev*vm->dx()+rho_prev*u_prev*vm->dx()+rho_prev*vm->dy()+Cv*rho_prev*T_prev*ve->dx()
+          +0.5*rho_prev*u_prev*u_prev*ve->dx()+0.5*rho_prev*u_prev*u_prev*ve->dx()+0.5*rho_prev*u_prev*u_prev*ve->dx()
+          +R*rho_prev*T_prev*ve->dx()-D_prev*ve->dx()+0.5*rho_prev*u_prev*ve->dy()+0.5*rho_prev*u_prev*ve->dy());
+        ip->addTerm(tau->dx()+R*rho_prev*vm->dx()+Cv*rho_prev*u_prev*ve->dx()+R*rho_prev*u_prev*ve->dx()+Cv*rho_prev*ve->dy());
+        // epsilon*||Grad v||
+        ip->addTerm(vm->dx() + u_prev*ve->dx());
+        ip->addTerm(ve->dx());
+        ip->addTerm(vc);
+        ip->addTerm(vm);
+        ip->addTerm(ve);
+        break;
+
+        // Entropy Scaled Robust Norm 2
+        case 8:
+        // 1/epsilon*||tau||^2
+        ip->addTerm(1./sqrt(mu)*S);
+        ip->addTerm(sqrt(Pr/(Cp*mu))*tau);
+        // ||Div(tau)-beta.Gradxt(V)||
+        ip->addTerm(rho_sqrt/(sqrt(gamma-1))*(u_prev*vc->dx()+vc->dy()+u_prev*u_prev*vm->dx()+R*T_prev*vm->dx()+u_prev*vm->dy()
+          +Cv*T_prev*u_prev*ve->dx()+0.5*u_prev*u_prev*u_prev*ve->dx()+R*T_prev*u_prev*ve->dx()+Cv*T_prev*ve->dy()+0.5*u_prev*u_prev*ve->dy()));
+        ip->addTerm((sqrt(Cv)*T_sqrt)/rho_sqrt*(-4./3*S->dx()+rho_prev*vc->dx()+rho_prev*u_prev*vm->dx()+rho_prev*u_prev*vm->dx()+rho_prev*vm->dy()+Cv*rho_prev*T_prev*ve->dx()
+          +0.5*rho_prev*u_prev*u_prev*ve->dx()+0.5*rho_prev*u_prev*u_prev*ve->dx()+0.5*rho_prev*u_prev*u_prev*ve->dx()
+          +R*rho_prev*T_prev*ve->dx()-D_prev*ve->dx()+0.5*rho_prev*u_prev*ve->dy()+0.5*rho_prev*u_prev*ve->dy()));
+        ip->addTerm(T_prev/rho_sqrt*(tau->dx()+R*rho_prev*vm->dx()+Cv*rho_prev*u_prev*ve->dx()+R*rho_prev*u_prev*ve->dx()+Cv*rho_prev*ve->dy()));
+        // epsilon*||Grad v||
+        ip->addTerm(vm->dx() + u_prev*ve->dx());
+        ip->addTerm(ve->dx());
+        ip->addTerm(vc);
+        ip->addTerm(vm);
+        ip->addTerm(ve);
+        break;
+
+        // Original Robust Norm 3
+        case 9:
+        // 1/epsilon*||tau||^2
+        ip->addTerm(1./sqrt(mu)*S);
+        ip->addTerm(sqrt(Pr/(Cp*mu))*tau);
+        // ||Div(tau)-beta.Gradxt(V)||
+        ip->addTerm(u_prev*vc->dx()+vc->dy()+u_prev*u_prev*vm->dx()+R*T_prev*vm->dx()+u_prev*vm->dy()
+          +Cv*T_prev*u_prev*ve->dx()+0.5*u_prev*u_prev*u_prev*ve->dx()+R*T_prev*u_prev*ve->dx()+Cv*T_prev*ve->dy()+0.5*u_prev*u_prev*ve->dy());
+        ip->addTerm(-4./3*S->dx()+rho_prev*vc->dx()+rho_prev*u_prev*vm->dx()+rho_prev*u_prev*vm->dx()+rho_prev*vm->dy()+Cv*rho_prev*T_prev*ve->dx()
+          +0.5*rho_prev*u_prev*u_prev*ve->dx()+0.5*rho_prev*u_prev*u_prev*ve->dx()+0.5*rho_prev*u_prev*u_prev*ve->dx()
+          +R*rho_prev*T_prev*ve->dx()-D_prev*ve->dx()+0.5*rho_prev*u_prev*ve->dy()+0.5*rho_prev*u_prev*ve->dy());
+        ip->addTerm(tau->dx()+R*rho_prev*vm->dx()+Cv*rho_prev*u_prev*ve->dx()+R*rho_prev*u_prev*ve->dx()+Cv*rho_prev*ve->dy());
+        // ||beta.Gradxt(V)||
+        ip->addTerm(u_prev*vc->dx()+vc->dy()+u_prev*u_prev*vm->dx()+R*T_prev*vm->dx()+u_prev*vm->dy()
+          +Cv*T_prev*u_prev*ve->dx()+0.5*u_prev*u_prev*u_prev*ve->dx()+R*T_prev*u_prev*ve->dx()+Cv*T_prev*ve->dy()+0.5*u_prev*u_prev*ve->dy());
+        ip->addTerm(rho_prev*vc->dx()+rho_prev*u_prev*vm->dx()+rho_prev*u_prev*vm->dx()+rho_prev*vm->dy()+Cv*rho_prev*T_prev*ve->dx()
+          +0.5*rho_prev*u_prev*u_prev*ve->dx()+0.5*rho_prev*u_prev*u_prev*ve->dx()+0.5*rho_prev*u_prev*u_prev*ve->dx()
+          +R*rho_prev*T_prev*ve->dx()-D_prev*ve->dx()+0.5*rho_prev*u_prev*ve->dy()+0.5*rho_prev*u_prev*ve->dy());
+        ip->addTerm(R*rho_prev*vm->dx()+Cv*rho_prev*u_prev*ve->dx()+R*rho_prev*u_prev*ve->dx()+Cv*rho_prev*ve->dy());
+        // epsilon*||Grad v||
+        ip->addTerm(vm->dx() + u_prev*ve->dx());
+        ip->addTerm(ve->dx());
+        ip->addTerm(vc);
+        ip->addTerm(vm);
+        ip->addTerm(ve);
+        break;
+
+        // Entropy Scaled Robust Norm 3
+        case 10:
+        // 1/epsilon*||tau||^2
+        ip->addTerm(1./sqrt(mu)*S);
+        ip->addTerm(sqrt(Pr/(Cp*mu))*tau);
+        // ||Div(tau)-beta.Gradxt(V)||
+        ip->addTerm(rho_sqrt/(sqrt(gamma-1))*(u_prev*vc->dx()+vc->dy()+u_prev*u_prev*vm->dx()+R*T_prev*vm->dx()+u_prev*vm->dy()
+          +Cv*T_prev*u_prev*ve->dx()+0.5*u_prev*u_prev*u_prev*ve->dx()+R*T_prev*u_prev*ve->dx()+Cv*T_prev*ve->dy()+0.5*u_prev*u_prev*ve->dy()));
+        ip->addTerm((sqrt(Cv)*T_sqrt)/rho_sqrt*(-4./3*S->dx()+rho_prev*vc->dx()+rho_prev*u_prev*vm->dx()+rho_prev*u_prev*vm->dx()+rho_prev*vm->dy()+Cv*rho_prev*T_prev*ve->dx()
+          +0.5*rho_prev*u_prev*u_prev*ve->dx()+0.5*rho_prev*u_prev*u_prev*ve->dx()+0.5*rho_prev*u_prev*u_prev*ve->dx()
+          +R*rho_prev*T_prev*ve->dx()-D_prev*ve->dx()+0.5*rho_prev*u_prev*ve->dy()+0.5*rho_prev*u_prev*ve->dy()));
+        ip->addTerm(T_prev/rho_sqrt*(tau->dx()+R*rho_prev*vm->dx()+Cv*rho_prev*u_prev*ve->dx()+R*rho_prev*u_prev*ve->dx()+Cv*rho_prev*ve->dy()));
+        // ||beta.Gradxt(V)||
+        ip->addTerm(rho_sqrt/(sqrt(gamma-1))*(u_prev*vc->dx()+vc->dy()+u_prev*u_prev*vm->dx()+R*T_prev*vm->dx()+u_prev*vm->dy()
+          +Cv*T_prev*u_prev*ve->dx()+0.5*u_prev*u_prev*u_prev*ve->dx()+R*T_prev*u_prev*ve->dx()+Cv*T_prev*ve->dy()+0.5*u_prev*u_prev*ve->dy()));
+        ip->addTerm((sqrt(Cv)*T_sqrt)/rho_sqrt*(rho_prev*vc->dx()+rho_prev*u_prev*vm->dx()+rho_prev*u_prev*vm->dx()+rho_prev*vm->dy()+Cv*rho_prev*T_prev*ve->dx()
+          +0.5*rho_prev*u_prev*u_prev*ve->dx()+0.5*rho_prev*u_prev*u_prev*ve->dx()+0.5*rho_prev*u_prev*u_prev*ve->dx()
+          +R*rho_prev*T_prev*ve->dx()-D_prev*ve->dx()+0.5*rho_prev*u_prev*ve->dy()+0.5*rho_prev*u_prev*ve->dy()));
+        ip->addTerm(T_prev/rho_sqrt*(R*rho_prev*vm->dx()+Cv*rho_prev*u_prev*ve->dx()+R*rho_prev*u_prev*ve->dx()+Cv*rho_prev*ve->dy()));
+        // epsilon*||Grad v||
+        ip->addTerm(vm->dx() + u_prev*ve->dx());
+        ip->addTerm(ve->dx());
+        ip->addTerm(vc);
+        ip->addTerm(vm);
+        ip->addTerm(ve);
+        break;
+
+        // Original Robust Norm 3
+        case 11:
+        // 1/epsilon*||tau||^2
+        ip->addTerm(1./sqrt(mu)*S);
+        ip->addTerm(sqrt(Pr/(Cp*mu))*tau);
+        // ||Div(tau)-beta.Gradxt(V)||
+        ip->addTerm(-4./3*S->dx());
+        ip->addTerm(tau->dx());
+        // ||beta.Gradxt(V)||
+        ip->addTerm(u_prev*vc->dx()+vc->dy()+u_prev*u_prev*vm->dx()+R*T_prev*vm->dx()+u_prev*vm->dy()
+          +Cv*T_prev*u_prev*ve->dx()+0.5*u_prev*u_prev*u_prev*ve->dx()+R*T_prev*u_prev*ve->dx()+Cv*T_prev*ve->dy()+0.5*u_prev*u_prev*ve->dy());
+        ip->addTerm(rho_prev*vc->dx()+rho_prev*u_prev*vm->dx()+rho_prev*u_prev*vm->dx()+rho_prev*vm->dy()+Cv*rho_prev*T_prev*ve->dx()
+          +0.5*rho_prev*u_prev*u_prev*ve->dx()+0.5*rho_prev*u_prev*u_prev*ve->dx()+0.5*rho_prev*u_prev*u_prev*ve->dx()
+          +R*rho_prev*T_prev*ve->dx()-D_prev*ve->dx()+0.5*rho_prev*u_prev*ve->dy()+0.5*rho_prev*u_prev*ve->dy());
+        ip->addTerm(R*rho_prev*vm->dx()+Cv*rho_prev*u_prev*ve->dx()+R*rho_prev*u_prev*ve->dx()+Cv*rho_prev*ve->dy());
+        // epsilon*||Grad v||
+        ip->addTerm(vm->dx() + u_prev*ve->dx());
+        ip->addTerm(ve->dx());
+        ip->addTerm(vc);
+        ip->addTerm(vm);
+        ip->addTerm(ve);
+        break;
+
+        // Entropy Scaled Robust Norm 3
+        case 12:
+        // 1/epsilon*||tau||^2
+        ip->addTerm(1./sqrt(mu)*S);
+        ip->addTerm(sqrt(Pr/(Cp*mu))*tau);
+        // ||Div(tau)||
+        ip->addTerm((sqrt(Cv)*T_sqrt)/rho_sqrt*(-4./3*S->dx()));
+        ip->addTerm(T_prev/rho_sqrt*(tau->dx()));
+        // ||beta.Gradxt(V)||
+        ip->addTerm(rho_sqrt/(sqrt(gamma-1))*(u_prev*vc->dx()+vc->dy()+u_prev*u_prev*vm->dx()+R*T_prev*vm->dx()+u_prev*vm->dy()
+          +Cv*T_prev*u_prev*ve->dx()+0.5*u_prev*u_prev*u_prev*ve->dx()+R*T_prev*u_prev*ve->dx()+Cv*T_prev*ve->dy()+0.5*u_prev*u_prev*ve->dy()));
+        ip->addTerm((sqrt(Cv)*T_sqrt)/rho_sqrt*(rho_prev*vc->dx()+rho_prev*u_prev*vm->dx()+rho_prev*u_prev*vm->dx()+rho_prev*vm->dy()+Cv*rho_prev*T_prev*ve->dx()
+          +0.5*rho_prev*u_prev*u_prev*ve->dx()+0.5*rho_prev*u_prev*u_prev*ve->dx()+0.5*rho_prev*u_prev*u_prev*ve->dx()
+          +R*rho_prev*T_prev*ve->dx()-D_prev*ve->dx()+0.5*rho_prev*u_prev*ve->dy()+0.5*rho_prev*u_prev*ve->dy()));
+        ip->addTerm(T_prev/rho_sqrt*(R*rho_prev*vm->dx()+Cv*rho_prev*u_prev*ve->dx()+R*rho_prev*u_prev*ve->dx()+Cv*rho_prev*ve->dy()));
+        // epsilon*||Grad v||
+        ip->addTerm(vm->dx() + u_prev*ve->dx());
+        ip->addTerm(ve->dx());
         ip->addTerm(vc);
         ip->addTerm(vm);
         ip->addTerm(ve);
