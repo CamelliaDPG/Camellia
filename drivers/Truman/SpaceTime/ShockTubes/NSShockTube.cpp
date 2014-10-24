@@ -493,13 +493,13 @@ int main(int argc, char *argv[]) {
       //                                                                               
       //
       // Define Euler fluxes and flux jacobians
-      FEc = u_prev;
-      FEm = rho_prev*u_prev*u_prev+R*rho_prev*T_prev;
-      FEe = Cv*rho_prev*u_prev*T_prev+0.5*rho_prev*u_prev*u_prev*u_prev+R*rho_prev*u_prev*T_prev;
-      FEc_dU->addTerm( u_prev*rho+rho_prev*u );
-      FEm_dU->addTerm( u_prev*u_prev*rho+2*rho_prev*u_prev*u+R*T_prev*rho+R*rho_prev*T );
+      FEc = rho_prev*u_prev;
+      FEm = rho_prev*u_prev*u_prev + R*rho_prev*T_prev;
+      FEe = Cv*rho_prev*u_prev*T_prev + 0.5*rho_prev*u_prev*u_prev*u_prev + R*rho_prev*u_prev*T_prev;
+      FEc_dU->addTerm( u_prev*rho + rho_prev*u );
+      FEm_dU->addTerm( u_prev*u_prev*rho + 2*rho_prev*u_prev*u + R*T_prev*rho + R*rho_prev*T );
       FEe_dU->addTerm( Cv*u_prev*T_prev*rho + Cv*rho_prev*T_prev*u + Cv*rho_prev*u_prev*T
-            + 0.5*u_prev*u_prev*u_prev*rho + 3./2.*rho_prev*u_prev*u_prev*u
+            + 0.5*u_prev*u_prev*u_prev*rho + 1.5*rho_prev*u_prev*u_prev*u
             + R*rho_prev*T_prev*u + R*u_prev*T_prev*rho + R*rho_prev*u_prev*T );
 
       // S terms:
@@ -513,36 +513,36 @@ int main(int argc, char *argv[]) {
       bf->addTerm( That, tau->times_normal_x());
 
       // vc terms:
-      bf->addTerm( -rho_prev*u, vc->dx());
-      bf->addTerm( -u_prev*rho, vc->dx());
-      // bf->addTerm( -FEc_dU, vc->dx());
+      // bf->addTerm( -rho_prev*u, vc->dx());
+      // bf->addTerm( -u_prev*rho, vc->dx());
+      bf->addTerm( -FEc_dU, vc->dx());
       bf->addTerm( -rho, vc->dy());
       bf->addTerm( Fc, vc);
 
       // vm terms:
-      bf->addTerm( -rho_prev*u_prev*u, vm->dx());
-      bf->addTerm( -rho_prev*u_prev*u, vm->dx());
-      bf->addTerm( -u_prev*u_prev*rho, vm->dx());
-      bf->addTerm( -R*rho_prev*T, vm->dx());
-      bf->addTerm( -R*T_prev*rho, vm->dx());
-      // bf->addTerm( -FEm_dU, vm->dx());
+      // bf->addTerm( -rho_prev*u_prev*u, vm->dx());
+      // bf->addTerm( -rho_prev*u_prev*u, vm->dx());
+      // bf->addTerm( -u_prev*u_prev*rho, vm->dx());
+      // bf->addTerm( -R*rho_prev*T, vm->dx());
+      // bf->addTerm( -R*T_prev*rho, vm->dx());
+      bf->addTerm( -FEm_dU, vm->dx());
       bf->addTerm( D, vm->dx());
       bf->addTerm( -rho_prev*u, vm->dy());
       bf->addTerm( -u_prev*rho, vm->dy());
       bf->addTerm( Fm, vm);
 
       // ve terms:
-      bf->addTerm( -Cv*rho_prev*T_prev*u, ve->dx());
-      bf->addTerm( -Cv*u_prev*rho_prev*T, ve->dx());
-      bf->addTerm( -Cv*T_prev*u_prev*rho, ve->dx());
-      bf->addTerm( -0.5*rho_prev*u_prev*u_prev*u, ve->dx());
-      bf->addTerm( -0.5*rho_prev*u_prev*u_prev*u, ve->dx());
-      bf->addTerm( -0.5*rho_prev*u_prev*u_prev*u, ve->dx());
-      bf->addTerm( -0.5*u_prev*u_prev*u_prev*rho, ve->dx());
-      bf->addTerm( -R*rho_prev*T_prev*u, ve->dx());
-      bf->addTerm( -R*rho_prev*u_prev*T, ve->dx());
-      bf->addTerm( -R*u_prev*T_prev*rho, ve->dx());
-      // bf->addTerm( -FEe_dU, ve->dx());
+      // bf->addTerm( -Cv*rho_prev*T_prev*u, ve->dx());
+      // bf->addTerm( -Cv*u_prev*rho_prev*T, ve->dx());
+      // bf->addTerm( -Cv*T_prev*u_prev*rho, ve->dx());
+      // bf->addTerm( -0.5*rho_prev*u_prev*u_prev*u, ve->dx());
+      // bf->addTerm( -0.5*rho_prev*u_prev*u_prev*u, ve->dx());
+      // bf->addTerm( -0.5*rho_prev*u_prev*u_prev*u, ve->dx());
+      // bf->addTerm( -0.5*u_prev*u_prev*u_prev*rho, ve->dx());
+      // bf->addTerm( -R*rho_prev*T_prev*u, ve->dx());
+      // bf->addTerm( -R*rho_prev*u_prev*T, ve->dx());
+      // bf->addTerm( -R*u_prev*T_prev*rho, ve->dx());
+      bf->addTerm( -FEe_dU, ve->dx());
       bf->addTerm( -q, ve->dx());
       bf->addTerm( u_prev*D, ve->dx());
       bf->addTerm( D_prev*u, ve->dx());
@@ -563,22 +563,22 @@ int main(int argc, char *argv[]) {
       rhs->addTerm( T_prev * tau->dx() );
 
       // vc terms:
-      rhs->addTerm( rho_prev*u_prev * vc->dx() );
-      // rhs->addTerm( FEc * vc->dx() );
+      // rhs->addTerm( rho_prev*u_prev * vc->dx() );
+      rhs->addTerm( FEc * vc->dx() );
       rhs->addTerm( rho_prev * vc->dy() );
 
       // vm terms:
-      rhs->addTerm( rho_prev*u_prev*u_prev * vm->dx() );
-      rhs->addTerm( R*rho_prev*T_prev * vm->dx() );
-      // rhs->addTerm( FEm * vm->dx() );
+      // rhs->addTerm( rho_prev*u_prev*u_prev * vm->dx() );
+      // rhs->addTerm( R*rho_prev*T_prev * vm->dx() );
+      rhs->addTerm( FEm * vm->dx() );
       rhs->addTerm( -D_prev * vm->dx() );
       rhs->addTerm( rho_prev*u_prev * vm->dy() );
 
       // ve terms:
-      rhs->addTerm( Cv*rho_prev*u_prev*T_prev * ve->dx() );
-      rhs->addTerm( 0.5*rho_prev*u_prev*u_prev*u_prev * ve->dx() );
-      rhs->addTerm( R*rho_prev*u_prev*T_prev * ve->dx() );
-      // rhs->addTerm( FEe * ve->dx() );
+      // rhs->addTerm( Cv*rho_prev*u_prev*T_prev * ve->dx() );
+      // rhs->addTerm( 0.5*rho_prev*u_prev*u_prev*u_prev * ve->dx() );
+      // rhs->addTerm( R*rho_prev*u_prev*T_prev * ve->dx() );
+      rhs->addTerm( FEe * ve->dx() );
       rhs->addTerm( -u_prev*D_prev * ve->dx() );
       rhs->addTerm( Cv*rho_prev*T_prev * ve->dy() );
       rhs->addTerm( 0.5*rho_prev*u_prev*u_prev * ve->dy() );
