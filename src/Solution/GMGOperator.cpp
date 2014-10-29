@@ -28,9 +28,15 @@
 #include "Ifpack_AdditiveSchwarz.h"
 #include "Ifpack_PointRelaxation.h"
 #include "Ifpack_Amesos.h"
+#include "Ifpack_ILU.h"
 #include "Ifpack_Graph.h"
 #include "Ifpack_Graph_Epetra_CrsGraph.h"
 #include "Ifpack_Graph_Epetra_RowMatrix.h"
+
+#include "Ifpack_AdditiveSchwarz.h"
+#include "Ifpack_BlockRelaxation.h"
+#include "Ifpack_Graph_Epetra_RowMatrix.h"
+#include "Ifpack_DenseContainer.h"
 
 #include "CondensedDofInterpreter.h"
 
@@ -965,7 +971,17 @@ void GMGOperator::setUpSmoother(Epetra_CrsMatrix *fineStiffnessMatrix) {
     {
 //      cout << "Using additive Schwarz smoother.\n";
       int OverlapLevel = _smootherOverlap;
-      smoother = Teuchos::rcp(new Ifpack_AdditiveSchwarz<Ifpack_Amesos>(fineStiffnessMatrix, OverlapLevel) );
+      
+      bool useILU = false;
+      
+      if (useILU) {
+        // something to try out to reduce the memory footprint (and other costs) of the Schwarz inversions
+        smoother = Teuchos::rcp(new Ifpack_AdditiveSchwarz<Ifpack_ILU>(fineStiffnessMatrix, OverlapLevel) );
+        List.set("fact: level of fill", 2);
+      } else {
+        smoother = Teuchos::rcp(new Ifpack_AdditiveSchwarz<Ifpack_Amesos>(fineStiffnessMatrix, OverlapLevel) );
+      }
+      
       List.set("schwarz: combine mode", "Add"); // The PDF doc says to use "Insert" to maintain symmetry, but the HTML docs (which are more recent) say to use "Add".  http://trilinos.org/docs/r11.10/packages/ifpack/doc/html/index.html
     }
       break;
@@ -986,7 +1002,9 @@ void GMGOperator::setUpSmoother(Epetra_CrsMatrix *fineStiffnessMatrix) {
       cout << "WARNING: In GMGOperator, smoother->Initialize() returned with err " << err << endl;
     }
   }
+//  cout << "Calling smoother->Compute()\n";
   err = smoother->Compute();
+//  cout << "smoother->Compute() completed\n";
   
   if (err != 0) {
     cout << "WARNING: In GMGOperator, smoother->Compute() returned with err = " << err << endl;
