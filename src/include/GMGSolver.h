@@ -34,6 +34,8 @@ class GMGSolver : public Solver {
   // info about the last call to solve()
   double _condest; // -1 if none exists
   int _iterationCount;
+  
+  int _azConvergenceOption; // defaults to AZ_rhs
 public:
   GMGSolver(BCPtr zeroBCs, MeshPtr coarseMesh, IPPtr coarseIP, MeshPtr fineMesh, Teuchos::RCP<DofInterpreter> fineDofInterpreter,
             Epetra_Map finePartitionMap, int maxIters, double tol, Teuchos::RCP<Solver> coarseSolver, bool useStaticCondensation);
@@ -55,6 +57,8 @@ public:
   GMGOperator & gmgOperator() {
     return _gmgOperator;
   }
+  
+  void setAztecConvergenceOption(int value);
   void setAztecOutput(int value);
   
   void setFineMesh(MeshPtr fineMesh, Epetra_Map finePartitionMap);

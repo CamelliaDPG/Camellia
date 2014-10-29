@@ -30,6 +30,7 @@ GMGSolver::GMGSolver( BCPtr zeroBCs, MeshPtr coarseMesh, IPPtr coarseIP,
   _azOutput = AZ_warnings;
                       
   _useCG = true;
+  _azConvergenceOption = AZ_rhs;
 }
 
 double GMGSolver::condest() {
@@ -132,7 +133,7 @@ int GMGSolver::solve() {
   solver.SetPrecOperator(&_gmgOperator);
 //  solver.SetAztecOption(AZ_precond, AZ_none);
   solver.SetAztecOption(AZ_precond, AZ_user_precond);
-  solver.SetAztecOption(AZ_conv, AZ_rhs);
+  solver.SetAztecOption(AZ_conv, _azConvergenceOption);
 //  solver.SetAztecOption(AZ_output, AZ_last);
   solver.SetAztecOption(AZ_output, _azOutput);
   
@@ -204,6 +205,10 @@ int GMGSolver::solve() {
   _gmgOperator.setStiffnessDiagonal(Teuchos::rcp((Epetra_MultiVector*) NULL ));
   
   return solveResult;
+}
+
+void GMGSolver::setAztecConvergenceOption(int value) {
+  _azConvergenceOption = value;
 }
 
 void GMGSolver::setAztecOutput(int value) {
