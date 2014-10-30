@@ -49,6 +49,7 @@
 #include "CamelliaCellTools.h"
 
 #include "GlobalDofAssignment.h"
+#include "CondensedDofInterpreter.h"
 
 #include "CamelliaDebugUtility.h"
 
@@ -57,8 +58,9 @@ Boundary::Boundary() {
   _mesh = NULL;
 }
 
-void Boundary::setDofInterpreter(DofInterpreter* dofInterpreter) { // must be called after setMesh(); setMesh will also set dofInterpreter to be the mesh
+void Boundary::setDofInterpreter(DofInterpreter* dofInterpreter, Teuchos::RCP<Epetra_Map> globalDofMap) { // must be called after setMesh(); setMesh will also set dofInterpreter to be the mesh
   _dofInterpreter = dofInterpreter;
+  _globalDofMap = globalDofMap;
 }
 
 void Boundary::setMesh(Mesh* mesh) {
@@ -248,14 +250,28 @@ void Boundary::bcsToImpose( map<  GlobalIndexType, double > &globalDofIndicesAnd
             FieldContainer<double> basisCoefficients(basisCardinality);
             FieldContainer<double> globalCoefficients; // we'll ignore this
             FieldContainer<GlobalIndexType> globalDofIndices;
-            _dofInterpreter->interpretLocalBasisCoefficients(cellID, trialID, sideOrdinal, basisCoefficients, globalCoefficients, globalDofIndices);
-            set<GlobalIndexType> rankLocalDofIndices = _mesh->globalDofAssignment()->globalDofIndicesForPartition(-1); // current rank
-            for (int i=0; i<globalDofIndices.size(); i++) {
-              if (rankLocalDofIndices.find(globalDofIndices[i]) != rankLocalDofIndices.end()) {
-                globalDofIndicesAndValues[globalDofIndices[i]] = 0.0;
-                cout << "Imposed single-point BC on variable " << _mesh->bilinearForm()->trialName(trialID) << endl;
-                isSingleton[trialID] = false; // we've imposed it...
-                break;
+            _dofInterpreter->interpretLocalBasisCoefficients(cellID, trialID, sideOrdinal, basisCoefficients,
+                                                             globalCoefficients, globalDofIndices);
+            if (_globalDofMap.get() != NULL) {
+              for (int i=0; i<globalDofIndices.size(); i++) {
+                if (_globalDofMap->LID((GlobalIndexTypeToCast)globalDofIndices[i]) != -1) {
+                  globalDofIndicesAndValues[globalDofIndices[i]] = 0.0;
+                  cout << "Imposed single-point BC on variable " << _mesh->bilinearForm()->trialName(trialID) << endl;
+                  isSingleton[trialID] = false; // we've imposed it...
+                  break;
+                }
+              }
+              
+            } else {
+              // _globalDofMap not set, so presumably mesh->GDA sees an accurate picture of the global dofs.
+              set<GlobalIndexType> rankLocalDofIndices = _mesh->globalDofAssignment()->globalDofIndicesForPartition(-1); // current rank
+              for (int i=0; i<globalDofIndices.size(); i++) {
+                if (rankLocalDofIndices.find(globalDofIndices[i]) != rankLocalDofIndices.end()) {
+                  globalDofIndicesAndValues[globalDofIndices[i]] = 0.0;
+                  cout << "Imposed single-point BC on variable " << _mesh->bilinearForm()->trialName(trialID) << endl;
+                  isSingleton[trialID] = false; // we've imposed it...
+                  break;
+                }
               }
             }
             if (!isSingleton[trialID]) { // imposed it, so skip other sides
@@ -344,9 +360,27 @@ void Boundary::bcsToImpose( map<  GlobalIndexType, double > &globalDofIndicesAnd
           for (int ptIndex=0; ptIndex<numNodes; ptIndex++) {
             if ( imposeHere(0,ptIndex) && isSingleton[trialID] && _imposeSingletonBCsOnThisRank ) { // only impose singleton BCs on lowest rank with active cells
               int localDofIndex = trialOrderingPtr->getDofIndex(trialID,basisOrdinalForPointFC(ptIndex));
-              int globalDofIndex = _mesh->globalDofIndex(cellID, localDofIndex);
+              GlobalIndexType globalDofIndex = _mesh->globalDofIndex(cellID, localDofIndex);;
+              if (_dofInterpreter != NULL) {
+                // then map from mesh's view to the condensed view of the global dof index
+                // (only supported for CondensedDofInterpreter right now)
+                CondensedDofInterpreter* condensedDofInterpreter = dynamic_cast<CondensedDofInterpreter*>(_dofInterpreter);
+                
+                if (condensedDofInterpreter != NULL) {
+                  globalDofIndex = condensedDofInterpreter->condensedGlobalIndex(globalDofIndex);
+                } else {
+                  Mesh* meshAsInterpreter = dynamic_cast<Mesh*>(_dofInterpreter);
+                  if (meshAsInterpreter == NULL) {
+                    cout << "Unsupported dof interpreter for singleton BCs.\n";
+                    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unsupported dof interpreter for singleton BCs");
+                  }
+                }
+
+              }
               globalDofIndicesAndValues[globalDofIndex] = dirichletValues(0,ptIndex);
               isSingleton[trialID] = false; // we've imposed it...
+              break;
+
 //                cout << "imposed singleton BC value " << dirichletValues(cellIndex,ptIndex);
 //                cout << " for variable " << _mesh->bilinearForm()->trialName(trialID) << " at point: (";
 //                cout << physicalCellNodes(cellIndex,ptIndex,0) << "," << physicalCellNodes(cellIndex,ptIndex,1);

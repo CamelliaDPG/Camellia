@@ -1087,7 +1087,9 @@ Teuchos::RCP<DofInterpreter> Solution::getDofInterpreter() const {
 
 void Solution::setDofInterpreter(Teuchos::RCP<DofInterpreter> dofInterpreter) {
   _dofInterpreter = dofInterpreter;
-  _mesh->boundary().setDofInterpreter(_dofInterpreter.get());
+  Epetra_Map map = getPartitionMap();
+  Teuchos::RCP<Epetra_Map> mapPtr = Teuchos::rcp( new Epetra_Map(map) ); // copy map to RCP
+  _mesh->boundary().setDofInterpreter(_dofInterpreter.get(), mapPtr);
 }
 
 ElementTypePtr Solution::getEquivalentElementType(Teuchos::RCP<Mesh> otherMesh, ElementTypePtr elemType) {

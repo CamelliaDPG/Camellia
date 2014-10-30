@@ -161,6 +161,14 @@ void CondensedDofInterpreter::getSubvectors(set<int> fieldIndices, set<int> flux
   }
 }
 
+GlobalIndexType CondensedDofInterpreter::condensedGlobalIndex(GlobalIndexType meshGlobalIndex) {
+  if (_interpretedToGlobalDofIndexMap.find(meshGlobalIndex) != _interpretedToGlobalDofIndexMap.end()) {
+    return _interpretedToGlobalDofIndexMap[meshGlobalIndex];
+  } else {
+    return -1;
+  }
+}
+
 set<GlobalIndexType> CondensedDofInterpreter::globalDofIndicesForCell(GlobalIndexType cellID)  {
   set<GlobalIndexType> interpretedDofIndicesForCell = _mesh->globalDofIndicesForCell(cellID);
   set<GlobalIndexType> globalDofIndicesForCell;

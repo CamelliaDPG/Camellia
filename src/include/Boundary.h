@@ -47,6 +47,8 @@
 
 #include "DofInterpreter.h"
 
+#include "Epetra_Map.h"
+
 class Mesh;
 class BC;
 
@@ -57,10 +59,11 @@ class Boundary {
   
   Mesh *_mesh;
   DofInterpreter *_dofInterpreter;
+  Teuchos::RCP<Epetra_Map> _globalDofMap;
   bool _imposeSingletonBCsOnThisRank;
 public:
   Boundary();
-  void setDofInterpreter(DofInterpreter* dofInterpreter);
+  void setDofInterpreter(DofInterpreter* dofInterpreter, Teuchos::RCP<Epetra_Map> globalDofMap);
   void setMesh(Mesh* mesh);
   void bcsToImpose(FieldContainer<GlobalIndexType> &globalIndices, FieldContainer<double> &globalValues, BC &bc, set<GlobalIndexType>& globalIndexFilter);
   void bcsToImpose(FieldContainer<GlobalIndexType> &globalIndices, FieldContainer<double> &globalValues, BC &bc);
