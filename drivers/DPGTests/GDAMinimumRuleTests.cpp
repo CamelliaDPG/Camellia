@@ -33,6 +33,8 @@
 
 #include "GlobalDofAssignment.h"
 
+#include "PoissonFormulation.h"
+
 #include "EpetraExt_ConfigDefs.h"
 #ifdef HAVE_EPETRAEXT_HDF5
 #include "HDF5Exporter.h"
@@ -40,8 +42,6 @@
 
 const static string S_GDAMinimumRuleTests_U1 = "u_1";
 const static string S_GDAMinimumRuleTests_U2 = "u_2";
-const static string S_GDAMinimumRuleTests_PHI = "\\phi";
-const static string S_GDAMinimumRuleTests_PHI_HAT = "\\widehat{\\phi}";
 
 class GDAMinimumRuleTests_UnitHexahedronBoundary : public SpatialFilter {
 public:
@@ -283,25 +283,19 @@ SolutionPtr GDAMinimumRuleTests::stokesCavityFlowSolution(bool useMinRule, int h
 SolutionPtr GDAMinimumRuleTests::poissonExactSolution1D(int horizontalCells, int H1Order, FunctionPtr phi_exact, bool useH1Traces) {
   bool usePenaltyBCs = false;
   
-  VarFactory varFactory;
-  VarPtr tau = varFactory.testVar("\\tau_1", HGRAD);
-  VarPtr q = varFactory.testVar("q", HGRAD);
+  int spaceDim = 1;
+  PoissonFormulation poissonForm(spaceDim, useH1Traces);
   
-  Space phi_hat_space = useH1Traces ? HGRAD : L2; // should not matter
-  VarPtr phi_hat = varFactory.fluxVar(S_GDAMinimumRuleTests_PHI_HAT, phi_hat_space);
-  VarPtr psi_hat = varFactory.fluxVar("\\widehat{\\psi}");
+  VarPtr tau = poissonForm.tau();
+  VarPtr q = poissonForm.q();
   
-  VarPtr phi = varFactory.fieldVar(S_GDAMinimumRuleTests_PHI, L2);
-  VarPtr psi1 = varFactory.fieldVar("\\psi_1", L2);
+  VarPtr phi_hat = poissonForm.phi_hat();
+  VarPtr psi_hat = poissonForm.psi_n_hat();
   
-  BFPtr bf = Teuchos::rcp( new BF(varFactory) );
+  VarPtr phi = poissonForm.phi();
+  VarPtr psi = poissonForm.psi();
   
-  bf->addTerm(phi, tau->dx());
-  bf->addTerm(psi1, tau);
-  bf->addTerm(-phi_hat, tau);
-  
-  bf->addTerm(-psi1, q->dx());
-  bf->addTerm(psi_hat, q);
+  BFPtr bf = poissonForm.bf();
   
   int testSpaceEnrichment = 1; //
   double width = 3.14159;
@@ -347,33 +341,19 @@ SolutionPtr GDAMinimumRuleTests::poissonExactSolution1D(int horizontalCells, int
 SolutionPtr GDAMinimumRuleTests::poissonExactSolution3D(int horizontalCells, int verticalCells, int depthCells, int H1Order, FunctionPtr phi_exact, bool useH1Traces) {
   bool usePenaltyBCs = false;
   
-  VarFactory varFactory;
-  VarPtr tau = varFactory.testVar("\\tau_1", HDIV);
-  VarPtr q = varFactory.testVar("q", HGRAD);
+  int spaceDim = 3;
+  PoissonFormulation poissonForm(spaceDim, useH1Traces);
   
-  Space phi_hat_space = useH1Traces ? HGRAD : L2;
-  VarPtr phi_hat = varFactory.traceVar(S_GDAMinimumRuleTests_PHI_HAT, phi_hat_space);
-  //  VarPtr phi_hat = varFactory.traceVar(S_GDAMinimumRuleTests_PHI_HAT, L2);
-  //  cout << "WARNING: temporarily using L^2 discretization for \\widehat{\\phi}.\n";
-  VarPtr psi_n = varFactory.fluxVar("\\widehat{\\psi}_{n}");
+  VarPtr tau = poissonForm.tau();
+  VarPtr q = poissonForm.q();
   
-  VarPtr phi = varFactory.fieldVar(S_GDAMinimumRuleTests_PHI, L2);
-  VarPtr psi1 = varFactory.fieldVar("\\psi_1", L2);
-  VarPtr psi2 = varFactory.fieldVar("\\psi_2", L2);
-  VarPtr psi3 = varFactory.fieldVar("\\psi_3", L2);
+  VarPtr phi_hat = poissonForm.phi_hat();
+  VarPtr psi_hat = poissonForm.psi_n_hat();
   
-  BFPtr bf = Teuchos::rcp( new BF(varFactory) );
+  VarPtr phi = poissonForm.phi();
+  VarPtr psi = poissonForm.psi();
   
-  bf->addTerm(phi, tau->div());
-  bf->addTerm(psi1, tau->x());
-  bf->addTerm(psi2, tau->y());
-  bf->addTerm(psi3, tau->z());
-  bf->addTerm(-phi_hat, tau->dot_normal());
-  
-  bf->addTerm(-psi1, q->dx());
-  bf->addTerm(-psi2, q->dy());
-  bf->addTerm(-psi3, q->dz());
-  bf->addTerm(psi_n, q);
+  BFPtr bf = poissonForm.bf();
   
   int testSpaceEnrichment = 3; //
   double width = 1.0, height = 1.0, depth = 1.0;
@@ -418,29 +398,21 @@ SolutionPtr GDAMinimumRuleTests::poissonExactSolution3D(int horizontalCells, int
 
 SolutionPtr GDAMinimumRuleTests::poissonExactSolution(bool useMinRule, int horizontalCells, int verticalCells, int H1Order, FunctionPtr phi_exact,
                                                       bool divideIntoTriangles) {
-  VarFactory varFactory;
-  VarPtr tau = varFactory.testVar("\\tau_1", HDIV);
-  VarPtr q = varFactory.testVar("q", HGRAD);
+
+  int spaceDim = 2;
+  bool useConformingTraces = true;
+  PoissonFormulation poissonForm(spaceDim, useConformingTraces);
   
-  VarPtr phi_hat = varFactory.traceVar(S_GDAMinimumRuleTests_PHI_HAT);
-//  VarPtr phi_hat = varFactory.traceVar(S_GDAMinimumRuleTests_PHI_HAT, L2);
-//  cout << "WARNING: temporarily using L^2 discretization for \\widehat{\\phi}.\n";
-  VarPtr psi_n = varFactory.fluxVar("\\widehat{\\psi}_{n}");
+  VarPtr tau = poissonForm.tau();
+  VarPtr q = poissonForm.q();
   
-  VarPtr phi = varFactory.fieldVar(S_GDAMinimumRuleTests_PHI, L2);
-  VarPtr psi1 = varFactory.fieldVar("\\psi_1", L2);
-  VarPtr psi2 = varFactory.fieldVar("\\psi_2", L2);
+  VarPtr phi_hat = poissonForm.phi_hat();
+  VarPtr psi_hat = poissonForm.psi_n_hat();
   
-  BFPtr bf = Teuchos::rcp( new BF(varFactory) );
+  VarPtr phi = poissonForm.phi();
+  VarPtr psi = poissonForm.psi();
   
-  bf->addTerm(phi, tau->div());
-  bf->addTerm(psi1, tau->x());
-  bf->addTerm(psi2, tau->y());
-  bf->addTerm(-phi_hat, tau->dot_normal());
-  
-  bf->addTerm(-psi1, q->dx());
-  bf->addTerm(-psi2, q->dy());
-  bf->addTerm(psi_n, q);
+  BFPtr bf = poissonForm.bf();
   
   int testSpaceEnrichment = 2; //
   double width = 1.0, height = 1.0;
@@ -1086,14 +1058,17 @@ bool GDAMinimumRuleTests::testHangingNodePoisson3D() {
 //  FunctionPtr phi_exact = Function::constant(3.14159);
   
   int H1Order = 2; // 1 higher than the order of phi_exact, to get an exactly recoverable solution with L^2 fields.
-  
+  int spaceDim = 3;
+  bool useConformingTraces = false;
+  PoissonFormulation poissonForm(spaceDim, useConformingTraces);
   // just doing 2-irregular for now to diagnose an exceptional failure for that case
   for (int irregularity = 1; irregularity<=1; irregularity++) {
     SolutionPtr soln = poissonExactSolution3DHangingNodes(irregularity,phi_exact,H1Order);
+    
     MeshPtr mesh = soln->mesh();
     VarFactory vf = soln->mesh()->bilinearForm()->varFactory();
 
-    int rank = Teuchos::GlobalMPISession::getRank();
+//    int rank = Teuchos::GlobalMPISession::getRank();
 //    if (rank==0) cout << "mesh entities:\n";
 //    if (rank==0) mesh->getTopology()->printAllEntities();
 //#ifdef HAVE_EPETRAEXT_HDF5
@@ -1116,8 +1091,8 @@ bool GDAMinimumRuleTests::testHangingNodePoisson3D() {
       //    return success;
     }
     
-    VarPtr phi = vf.fieldVar(S_GDAMinimumRuleTests_PHI);
-    VarPtr phi_hat = vf.traceVar(S_GDAMinimumRuleTests_PHI_HAT);
+    VarPtr phi = poissonForm.phi();
+    VarPtr phi_hat = poissonForm.phi_hat();
     
     map<int, FunctionPtr> phi_exact_map;
     phi_exact_map[phi->ID()] = phi_exact;
@@ -1200,7 +1175,12 @@ bool GDAMinimumRuleTests::testHangingNodePoisson(bool useQuads) {
   FunctionPtr y = Function::yn(1);
   FunctionPtr phi_exact = x + 0.5 * y;
   
-  SolutionPtr soln = poissonExactSolution(true, horizontalCellsInitialMesh, verticalCellsInitialMesh, H1Order, phi_exact, divideIntoTriangles);
+  int spaceDim = 2;
+  bool useConformingTraces = true;
+  PoissonFormulation poissonForm(spaceDim,useConformingTraces);
+  
+  SolutionPtr soln = poissonExactSolution(true, horizontalCellsInitialMesh, verticalCellsInitialMesh,
+                                          H1Order, phi_exact, divideIntoTriangles);
   
   MeshPtr mesh = soln->mesh();
   
@@ -1218,8 +1198,7 @@ bool GDAMinimumRuleTests::testHangingNodePoisson(bool useQuads) {
 
   soln->solve();
   
-  VarFactory vf = soln->mesh()->bilinearForm()->varFactory();
-  VarPtr phi = vf.fieldVar(S_GDAMinimumRuleTests_PHI);
+  VarPtr phi = poissonForm.phi();
   
   FunctionPtr phi_soln = Function::solution(phi, soln);
   
@@ -1526,6 +1505,10 @@ bool GDAMinimumRuleTests::testMultiCellMesh() {
     
     vector< MeshToTest > testList;
     
+    int spaceDim = 1;
+    bool useConformingTraces = true; // true and false amount to the same thing in 1D
+    PoissonFormulation poissonForm(spaceDim, useConformingTraces);
+    
     // exact solution: for now, we just use a linear phi
 //    FunctionPtr x = Function::xn(1);
 //    FunctionPtr phi_exact = 2 * x + 1;
@@ -1543,9 +1526,7 @@ bool GDAMinimumRuleTests::testMultiCellMesh() {
       int horizontalCells = dim;
       int H1Order = meshParams.second;
       
-      bool useH1Traces = true; // "true" and "false" should amount to the same thing in 1D
-      
-      SolutionPtr soln = poissonExactSolution1D(horizontalCells, H1Order, phi_exact, useH1Traces);
+      SolutionPtr soln = poissonExactSolution1D(horizontalCells, H1Order, phi_exact, useConformingTraces);
       
       MeshPtr mesh = soln->mesh();
       
@@ -1556,11 +1537,10 @@ bool GDAMinimumRuleTests::testMultiCellMesh() {
       
       soln->solve();
       
-      VarFactory vf = soln->mesh()->bilinearForm()->varFactory();
-      VarPtr phi = vf.fieldVar(S_GDAMinimumRuleTests_PHI);
+      VarPtr phi = poissonForm.phi();
+      VarPtr phi_hat = poissonForm.phi_hat();
+      
       FunctionPtr phi_soln = Function::solution(phi, soln);
-
-      VarPtr phi_hat = vf.traceVar(S_GDAMinimumRuleTests_PHI_HAT);
       FunctionPtr phi_hat_soln = Function::solution(phi_hat, soln);
       
       double tol = 1e-12;
@@ -1626,6 +1606,10 @@ bool GDAMinimumRuleTests::testMultiCellMesh() {
   
   // now, try just a single 2x2x2 mesh in 3D:
   
+  int spaceDim = 3;
+  bool useConformingTraces = true; // "true" is the more thorough test
+  PoissonFormulation poissonForm(spaceDim, useConformingTraces);
+  
   int horizontalCellsInitialMesh = 2, verticalCellsInitialMesh = 2, depthCellsInitialMesh = 2;
   int H1Order = 2;
   
@@ -1635,9 +1619,7 @@ bool GDAMinimumRuleTests::testMultiCellMesh() {
   FunctionPtr z = Function::zn(1);
   FunctionPtr phi_exact = x + y - z;
   
-  bool useH1Traces = true; // "true" is the more thorough test: set to false for now to diagnose test failure
-  
-  SolutionPtr soln = poissonExactSolution3D(horizontalCellsInitialMesh, verticalCellsInitialMesh, depthCellsInitialMesh, H1Order, phi_exact, useH1Traces);
+  SolutionPtr soln = poissonExactSolution3D(horizontalCellsInitialMesh, verticalCellsInitialMesh, depthCellsInitialMesh, H1Order, phi_exact, useConformingTraces);
 
   MeshPtr mesh = soln->mesh();
 
@@ -1654,8 +1636,7 @@ bool GDAMinimumRuleTests::testMultiCellMesh() {
   
   soln->solve();
   
-  VarFactory vf = soln->mesh()->bilinearForm()->varFactory();
-  VarPtr phi = vf.fieldVar(S_GDAMinimumRuleTests_PHI);
+  VarPtr phi = poissonForm.phi();
   
   FunctionPtr phi_soln = Function::solution(phi, soln);
   
@@ -1675,7 +1656,7 @@ bool GDAMinimumRuleTests::testMultiCellMesh() {
   }
   
   // now, construct a single-cell mesh, but then refine it
-  soln = poissonExactSolution3D(1, 1, 1, H1Order, phi_exact, useH1Traces);
+  soln = poissonExactSolution3D(1, 1, 1, H1Order, phi_exact, useConformingTraces);
   
   mesh = soln->mesh();
   
@@ -1695,11 +1676,7 @@ bool GDAMinimumRuleTests::testMultiCellMesh() {
   
   soln->solve();
   
-  vf = soln->mesh()->bilinearForm()->varFactory();
-  phi = vf.fieldVar(S_GDAMinimumRuleTests_PHI);
-  
   phi_soln = Function::solution(phi, soln);
-  
   phi_err = phi_soln - phi_exact;
   
   tol = 1e-12;
@@ -1732,29 +1709,22 @@ bool GDAMinimumRuleTests::testPoissonCompatibleMeshWithHeterogeneousOrientations
   VarPtr tau = varFactory.testVar("\\tau_1", HDIV);
   VarPtr q = varFactory.testVar("q", HGRAD);
   
-  VarPtr phi_hat = varFactory.traceVar(S_GDAMinimumRuleTests_PHI_HAT);
+  int spaceDim = 2;
+  bool useConformingTraces = true;
+  PoissonFormulation poissonForm(spaceDim, useConformingTraces);
+  //  cout << "WARNING: temporarily using L^2 discretization for \\widehat{\\phi}.\n";
+  
+  VarPtr phi_hat = poissonForm.phi_hat();
 //  VarPtr phi_hat = varFactory.traceVar("\\widehat{\\phi}", L2);
-//  cout << "WARNING: temporarily using L^2 discretization for \\widehat{\\phi}.\n";
-  VarPtr psi_n = varFactory.fluxVar("\\widehat{\\psi}_{n}");
+
+  VarPtr psi_n = poissonForm.psi_n_hat();
   
-  VarPtr phi = varFactory.fieldVar(S_GDAMinimumRuleTests_PHI, L2);
-  VarPtr psi1 = varFactory.fieldVar("\\psi_1", L2);
-  VarPtr psi2 = varFactory.fieldVar("\\psi_2", L2);
-  
-  BFPtr bf = Teuchos::rcp( new BF(varFactory) );
-  
-  bf->addTerm(phi, tau->div());
-  bf->addTerm(psi1, tau->x());
-  bf->addTerm(psi2, tau->y());
-  bf->addTerm(-phi_hat, tau->dot_normal());
-  
-  bf->addTerm(-psi1, q->dx());
-  bf->addTerm(-psi2, q->dy());
-  bf->addTerm(psi_n, q);
+  VarPtr phi = poissonForm.phi();
+  VarPtr psi = poissonForm.psi();
+
+  BFPtr bf = poissonForm.bf();
   
   int testSpaceEnrichment = 2; //
-  
-  int spaceDim = 2;
   
   double x0 = 0, x1 = 1.0, x2 = 2.0;
   double y0 = 0, y1 = 1.0;
@@ -1817,8 +1787,7 @@ bool GDAMinimumRuleTests::testPoissonCompatibleMeshWithHeterogeneousOrientations
     
     map<int, FunctionPtr> exactSolutionMap;
     exactSolutionMap[phi->ID()] = phi_exact;
-    exactSolutionMap[psi1->ID()] = phi_exact->dx();
-    exactSolutionMap[psi2->ID()] = phi_exact->dy();
+    exactSolutionMap[psi->ID()] = Function::vectorize(phi_exact->dx(), phi_exact->dy());
     solution->projectOntoMesh(exactSolutionMap);
 
 #ifdef USE_VTK
@@ -1887,15 +1856,16 @@ bool GDAMinimumRuleTests::testSingleCellMesh() {
   FunctionPtr phi_exact = x + y - z;
   
   bool useH1Traces = true; // "true" is the more thorough test: set to false for now to diagnose test failure
+  int spaceDim = 3;
   
+  PoissonFormulation poissonForm(spaceDim,useH1Traces);
   SolutionPtr soln = poissonExactSolution3D(horizontalCellsInitialMesh, verticalCellsInitialMesh, depthCellsInitialMesh, H1Order, phi_exact, useH1Traces);
   
   soln->solve();
   
   MeshPtr mesh = soln->mesh();
   
-  VarFactory vf = soln->mesh()->bilinearForm()->varFactory();
-  VarPtr phi = vf.fieldVar(S_GDAMinimumRuleTests_PHI);
+  VarPtr phi = poissonForm.phi();
   
   FunctionPtr phi_soln = Function::solution(phi, soln);
   

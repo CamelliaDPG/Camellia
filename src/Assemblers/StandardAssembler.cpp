@@ -123,7 +123,7 @@ void StandardAssembler::applyBCs(Epetra_FECrsMatrix &globalStiffMatrix, Epetra_F
 
   FieldContainer<GlobalIndexType> bcGlobalIndices;
   FieldContainer<double> bcGlobalValues;
-  mesh->boundary().bcsToImpose(bcGlobalIndices,bcGlobalValues,*(_solution->bc()), myGlobalIndicesSet);
+  mesh->boundary().bcsToImpose(bcGlobalIndices,bcGlobalValues,*(_solution->bc()), myGlobalIndicesSet, NULL, NULL);
   int numBCs = bcGlobalIndices.size();
 
   Epetra_MultiVector v(partMap,1);

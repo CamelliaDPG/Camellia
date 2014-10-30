@@ -54,18 +54,11 @@
 #include "CamelliaDebugUtility.h"
 
 Boundary::Boundary() {
-  _dofInterpreter = NULL;
   _mesh = NULL;
-}
-
-void Boundary::setDofInterpreter(DofInterpreter* dofInterpreter, Teuchos::RCP<Epetra_Map> globalDofMap) { // must be called after setMesh(); setMesh will also set dofInterpreter to be the mesh
-  _dofInterpreter = dofInterpreter;
-  _globalDofMap = globalDofMap;
 }
 
 void Boundary::setMesh(Mesh* mesh) {
   _mesh = mesh;
-  _dofInterpreter = _mesh;
   buildLookupTables();
 }
 
@@ -95,7 +88,7 @@ void Boundary::buildLookupTables() {
 }
 
 void Boundary::bcsToImpose(FieldContainer<GlobalIndexType> &globalIndices, FieldContainer<double> &globalValues, BC &bc,
-                           set<GlobalIndexType> &globalIndexFilter) {
+                           set<GlobalIndexType> &globalIndexFilter, DofInterpreter* dofInterpreter, const Epetra_Map *globalDofMap) {
 //  int rank = Teuchos::GlobalMPISession::getRank();
 //  ostringstream rankLabel;
 //  rankLabel << "on rank " << rank << ", globalIndexFilter";
@@ -103,7 +96,7 @@ void Boundary::bcsToImpose(FieldContainer<GlobalIndexType> &globalIndices, Field
   
   FieldContainer<GlobalIndexType> allGlobalIndices; // "all" belonging to cells that belong to us...
   FieldContainer<double> allGlobalValues;
-  this->bcsToImpose(allGlobalIndices,allGlobalValues,bc);
+  this->bcsToImpose(allGlobalIndices,allGlobalValues,bc, dofInterpreter, globalDofMap);
 //  cout << "rank " << rank << " allGlobalIndices:\n" << allGlobalIndices;
   set<int> matchingFCIndices;
   int i;
@@ -129,7 +122,8 @@ void Boundary::bcsToImpose(FieldContainer<GlobalIndexType> &globalIndices, Field
 }
 
 void Boundary::bcsToImpose(FieldContainer<GlobalIndexType> &globalIndices,
-                           FieldContainer<double> &globalValues, BC &bc) {
+                           FieldContainer<double> &globalValues, BC &bc,
+                           DofInterpreter* dofInterpreter, const Epetra_Map *globalDofMap) {
   int rank = Teuchos::GlobalMPISession::getRank();
   
   // first, let's check for any singletons (one-point BCs)
@@ -143,7 +137,7 @@ void Boundary::bcsToImpose(FieldContainer<GlobalIndexType> &globalIndices,
   set< GlobalIndexType > rankLocalCells = _mesh->cellIDsInPartition();
   map< GlobalIndexType, double> bcGlobalIndicesAndValues;
   for (set< GlobalIndexType >::iterator cellIDIt = rankLocalCells.begin(); cellIDIt != rankLocalCells.end(); cellIDIt++) {
-    bcsToImpose(bcGlobalIndicesAndValues, bc, *cellIDIt, isSingleton);
+    bcsToImpose(bcGlobalIndicesAndValues, bc, *cellIDIt, isSingleton, dofInterpreter, globalDofMap);
   }
   
   globalIndices.resize(bcGlobalIndicesAndValues.size());
@@ -169,9 +163,9 @@ void Boundary::bcsToImpose(FieldContainer<GlobalIndexType> &globalIndices,
   //cout << "bcsToImpose: globalIndices:" << endl << globalIndices;
 }
 
-void Boundary::bcsToImpose( map<  GlobalIndexType, double > &globalDofIndicesAndValues, BC &bc, GlobalIndexType cellID, map<int,bool> &isSingleton) {
-  int rank = Teuchos::GlobalMPISession::getRank();
-
+void Boundary::bcsToImpose( map<  GlobalIndexType, double > &globalDofIndicesAndValues, BC &bc,
+                           GlobalIndexType cellID, map<int,bool> &isSingleton,
+                           DofInterpreter* dofInterpreter, const Epetra_Map *globalDofMap) {
   CellPtr cell = _mesh->getTopology()->getCell(cellID);
   
   // define a couple of important inner products:
@@ -213,7 +207,7 @@ void Boundary::bcsToImpose( map<  GlobalIndexType, double > &globalDofIndicesAnd
           if (bcFunction->imposeOnCell(0)) {
             FieldContainer<double> globalData;
             FieldContainer<GlobalIndexType> globalDofIndices;
-            _dofInterpreter->interpretLocalBasisCoefficients(cellID, trialID, sideOrdinal, dirichletValues, globalData, globalDofIndices);
+            dofInterpreter->interpretLocalBasisCoefficients(cellID, trialID, sideOrdinal, dirichletValues, globalData, globalDofIndices);
               for (int globalDofOrdinal=0; globalDofOrdinal<globalDofIndices.size(); globalDofOrdinal++) {
                 GlobalIndexType globalDofIndex = globalDofIndices(globalDofOrdinal);
                 globalDofIndicesAndValues[globalDofIndex] = globalData(globalDofOrdinal);
@@ -250,13 +244,13 @@ void Boundary::bcsToImpose( map<  GlobalIndexType, double > &globalDofIndicesAnd
             FieldContainer<double> basisCoefficients(basisCardinality);
             FieldContainer<double> globalCoefficients; // we'll ignore this
             FieldContainer<GlobalIndexType> globalDofIndices;
-            _dofInterpreter->interpretLocalBasisCoefficients(cellID, trialID, sideOrdinal, basisCoefficients,
+            dofInterpreter->interpretLocalBasisCoefficients(cellID, trialID, sideOrdinal, basisCoefficients,
                                                              globalCoefficients, globalDofIndices);
-            if (_globalDofMap.get() != NULL) {
+            if (globalDofMap != NULL) {
               for (int i=0; i<globalDofIndices.size(); i++) {
-                if (_globalDofMap->LID((GlobalIndexTypeToCast)globalDofIndices[i]) != -1) {
+                if (globalDofMap->LID((GlobalIndexTypeToCast)globalDofIndices[i]) != -1) {
                   globalDofIndicesAndValues[globalDofIndices[i]] = 0.0;
-                  cout << "Imposed single-point BC on variable " << _mesh->bilinearForm()->trialName(trialID) << endl;
+//                  cout << "Imposed single-point BC on variable " << _mesh->bilinearForm()->trialName(trialID) << endl;
                   isSingleton[trialID] = false; // we've imposed it...
                   break;
                 }
@@ -268,7 +262,7 @@ void Boundary::bcsToImpose( map<  GlobalIndexType, double > &globalDofIndicesAnd
               for (int i=0; i<globalDofIndices.size(); i++) {
                 if (rankLocalDofIndices.find(globalDofIndices[i]) != rankLocalDofIndices.end()) {
                   globalDofIndicesAndValues[globalDofIndices[i]] = 0.0;
-                  cout << "Imposed single-point BC on variable " << _mesh->bilinearForm()->trialName(trialID) << endl;
+//                  cout << "Imposed single-point BC on variable " << _mesh->bilinearForm()->trialName(trialID) << endl;
                   isSingleton[trialID] = false; // we've imposed it...
                   break;
                 }
@@ -361,15 +355,15 @@ void Boundary::bcsToImpose( map<  GlobalIndexType, double > &globalDofIndicesAnd
             if ( imposeHere(0,ptIndex) && isSingleton[trialID] && _imposeSingletonBCsOnThisRank ) { // only impose singleton BCs on lowest rank with active cells
               int localDofIndex = trialOrderingPtr->getDofIndex(trialID,basisOrdinalForPointFC(ptIndex));
               GlobalIndexType globalDofIndex = _mesh->globalDofIndex(cellID, localDofIndex);;
-              if (_dofInterpreter != NULL) {
+              if (dofInterpreter != NULL) {
                 // then map from mesh's view to the condensed view of the global dof index
                 // (only supported for CondensedDofInterpreter right now)
-                CondensedDofInterpreter* condensedDofInterpreter = dynamic_cast<CondensedDofInterpreter*>(_dofInterpreter);
+                CondensedDofInterpreter* condensedDofInterpreter = dynamic_cast<CondensedDofInterpreter*>(dofInterpreter);
                 
                 if (condensedDofInterpreter != NULL) {
                   globalDofIndex = condensedDofInterpreter->condensedGlobalIndex(globalDofIndex);
                 } else {
-                  Mesh* meshAsInterpreter = dynamic_cast<Mesh*>(_dofInterpreter);
+                  Mesh* meshAsInterpreter = dynamic_cast<Mesh*>(dofInterpreter);
                   if (meshAsInterpreter == NULL) {
                     cout << "Unsupported dof interpreter for singleton BCs.\n";
                     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unsupported dof interpreter for singleton BCs");
@@ -379,6 +373,7 @@ void Boundary::bcsToImpose( map<  GlobalIndexType, double > &globalDofIndicesAnd
               }
               globalDofIndicesAndValues[globalDofIndex] = dirichletValues(0,ptIndex);
               isSingleton[trialID] = false; // we've imposed it...
+//              cout << "Imposed single-point BC on variable " << _mesh->bilinearForm()->trialName(trialID) << endl;
               break;
 
 //                cout << "imposed singleton BC value " << dirichletValues(cellIndex,ptIndex);

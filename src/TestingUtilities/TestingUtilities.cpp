@@ -19,7 +19,7 @@ void TestingUtilities::initializeSolnCoeffs(SolutionPtr solution){
 bool TestingUtilities::isBCDof(GlobalIndexType globalDofIndex, SolutionPtr solution){
   FieldContainer<GlobalIndexType> globalIndices;
   FieldContainer<double> globalValues;
-  solution->mesh()->boundary().bcsToImpose(globalIndices, globalValues, *(solution->bc()));
+  solution->mesh()->boundary().bcsToImpose(globalIndices, globalValues, *(solution->bc()), NULL, NULL);
   for (int i = 0;i < globalIndices.size(); i++){
     if (globalIndices[i]==globalDofIndex){
       return true;

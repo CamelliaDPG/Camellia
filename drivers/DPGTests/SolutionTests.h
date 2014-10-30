@@ -43,6 +43,8 @@ public:
   bool testScratchPadSolution();
   bool testSolutionsAreConsistent();
   bool testCondensationSolve();
+  bool testCondensationSolveWithSinglePointConstraint();
+  bool testCondensationSolveWithZeroMeanConstraint();
   
   static bool solutionCoefficientsAreConsistent(Teuchos::RCP<Solution> soln, bool printDetailsToConsole = false);
 };

@@ -748,7 +748,7 @@ bool ScratchPadTests::testGalerkinOrthogonality(){
 
   FieldContainer<GlobalIndexType> bcGlobalIndices;
   FieldContainer<double> bcGlobalValues;
-  mesh->boundary().bcsToImpose(bcGlobalIndices,bcGlobalValues,*(solution->bc()));
+  mesh->boundary().bcsToImpose(bcGlobalIndices,bcGlobalValues,*(solution->bc()), NULL, NULL);
   set<int> bcInds;
   for (int i=0;i<bcGlobalIndices.dimension(0);i++){
     bcInds.insert(bcGlobalIndices(i));

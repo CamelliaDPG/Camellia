@@ -84,6 +84,8 @@ public:
 
   set<GlobalIndexType> globalDofIndicesForCell(GlobalIndexType cellID);
   
+  GlobalIndexType condensedGlobalIndex(GlobalIndexType meshGlobalIndex); // meshGlobalIndex aka interpretedGlobalIndex
+  
   bool varDofsAreCondensible(int varID, int sideOrdinal, DofOrderingPtr dofOrdering);
 };
 

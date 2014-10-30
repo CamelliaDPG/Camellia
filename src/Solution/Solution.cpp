@@ -1026,7 +1026,7 @@ void Solution::imposeBCs() {
   //  cout << "rank " << rank << " has " << myGlobalIndicesSet.size() << " locally-owned dof indices.\n";
   Epetra_Map partMap = getPartitionMap();
 
-  _mesh->boundary().bcsToImpose(bcGlobalIndices,bcGlobalValues,*(_bc.get()), myGlobalIndicesSet);
+  _mesh->boundary().bcsToImpose(bcGlobalIndices,bcGlobalValues,*(_bc.get()), myGlobalIndicesSet, _dofInterpreter.get(), &partMap);
   int numBCs = bcGlobalIndices.size();
   
   FieldContainer<GlobalIndexTypeToCast> bcGlobalIndicesCast;
@@ -1089,7 +1089,14 @@ void Solution::setDofInterpreter(Teuchos::RCP<DofInterpreter> dofInterpreter) {
   _dofInterpreter = dofInterpreter;
   Epetra_Map map = getPartitionMap();
   Teuchos::RCP<Epetra_Map> mapPtr = Teuchos::rcp( new Epetra_Map(map) ); // copy map to RCP
-  _mesh->boundary().setDofInterpreter(_dofInterpreter.get(), mapPtr);
+//  _mesh->boundary().setDofInterpreter(_dofInterpreter.get(), mapPtr);
+  // TODO: notice that the above call to Boundary::setDofInterpreter() will cause incompatibilities if two solutions share
+  //       a mesh but not a dof interpreter.  This basically only would come up in standard cases if one solution has
+  //       had setUseCondensedSolve(true) called, and the other has not.  Not too likely to arise in production code, but
+  //       this did come up in the tests in SolutionTests.  In any case, it indicates a poor design; the BC enforcement code
+  //       (i.e. what Boundary now controls) really belongs to Solution, not to Mesh.  I.e. each Solution should have a BC
+  //       enforcer, not each mesh.  One simple, immediate fix would be to add arguments for dofInterpreter to each BC enforcement
+  //       method in Boundary (i.e. don't let Boundary own either the partition map or the dof interpreter reference).
 }
 
 ElementTypePtr Solution::getEquivalentElementType(Teuchos::RCP<Mesh> otherMesh, ElementTypePtr elemType) {

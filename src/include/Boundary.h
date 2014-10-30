@@ -58,16 +58,17 @@ class Boundary {
   set< pair< GlobalIndexType, unsigned > > _boundaryElements; // first arg is cellID, second arg is sideOrdinal
   
   Mesh *_mesh;
-  DofInterpreter *_dofInterpreter;
-  Teuchos::RCP<Epetra_Map> _globalDofMap;
   bool _imposeSingletonBCsOnThisRank;
 public:
   Boundary();
-  void setDofInterpreter(DofInterpreter* dofInterpreter, Teuchos::RCP<Epetra_Map> globalDofMap);
   void setMesh(Mesh* mesh);
-  void bcsToImpose(FieldContainer<GlobalIndexType> &globalIndices, FieldContainer<double> &globalValues, BC &bc, set<GlobalIndexType>& globalIndexFilter);
-  void bcsToImpose(FieldContainer<GlobalIndexType> &globalIndices, FieldContainer<double> &globalValues, BC &bc);
-  void bcsToImpose( map< GlobalIndexType, double > &globalDofIndicesAndValues, BC &bc, GlobalIndexType cellID, map <int, bool> &isSingleton);
+  void bcsToImpose(FieldContainer<GlobalIndexType> &globalIndices, FieldContainer<double> &globalValues,
+                   BC &bc, set<GlobalIndexType>& globalIndexFilter,
+                   DofInterpreter* dofInterpreter, const Epetra_Map *globalDofMap);
+  void bcsToImpose(FieldContainer<GlobalIndexType> &globalIndices, FieldContainer<double> &globalValues, BC &bc,
+                   DofInterpreter* dofInterpreter, const Epetra_Map *globalDofMap);
+  void bcsToImpose( map< GlobalIndexType, double > &globalDofIndicesAndValues, BC &bc, GlobalIndexType cellID,
+                   map <int, bool> &isSingleton, DofInterpreter* dofInterpreter, const Epetra_Map *globalDofMap);
   void buildLookupTables();
 };
 
