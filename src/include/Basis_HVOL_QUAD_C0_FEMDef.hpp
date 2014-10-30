@@ -46,7 +46,7 @@
 namespace Intrepid {
   
   template<class Scalar, class ArrayScalar>
-  Basis_HGRAD_QUAD_C0_FEM<Scalar, ArrayScalar>::Basis_HGRAD_QUAD_C0_FEM()
+  Basis_HVOL_QUAD_C0_FEM<Scalar, ArrayScalar>::Basis_HVOL_QUAD_C0_FEM()
   {
     this -> basisCardinality_  = 1;
     this -> basisDegree_       = 0;    
@@ -57,7 +57,7 @@ namespace Intrepid {
   }
   
   template<class Scalar, class ArrayScalar>
-  void Basis_HGRAD_QUAD_C0_FEM<Scalar, ArrayScalar>::initializeTags() {
+  void Basis_HVOL_QUAD_C0_FEM<Scalar, ArrayScalar>::initializeTags() {
     
     // Basis-dependent intializations
     int tagSize  = 1;        // size of DoF tag, i.e., number of fields in the tag
@@ -83,7 +83,7 @@ namespace Intrepid {
   
   
   template<class Scalar, class ArrayScalar>
-  void Basis_HGRAD_QUAD_C0_FEM<Scalar, ArrayScalar>::getValues(ArrayScalar &        outputValues,
+  void Basis_HVOL_QUAD_C0_FEM<Scalar, ArrayScalar>::getValues(ArrayScalar &        outputValues,
                                                                const ArrayScalar &  inputPoints,
                                                                const EOperator      operatorType) const {
     
@@ -168,35 +168,35 @@ namespace Intrepid {
         
       default:
         TEUCHOS_TEST_FOR_EXCEPTION( !( Intrepid::isValidOperator(operatorType) ), std::invalid_argument,
-                           ">>> ERROR (Basis_HGRAD_QUAD_C0_FEM): Invalid operator type");
+                           ">>> ERROR (Basis_HVOL_QUAD_C0_FEM): Invalid operator type");
     }
   }
   
   
   
   template<class Scalar, class ArrayScalar>
-  void Basis_HGRAD_QUAD_C0_FEM<Scalar, ArrayScalar>::getValues(ArrayScalar&           outputValues,
+  void Basis_HVOL_QUAD_C0_FEM<Scalar, ArrayScalar>::getValues(ArrayScalar&           outputValues,
                                                                const ArrayScalar &    inputPoints,
                                                                const ArrayScalar &    cellVertices,
                                                                const EOperator        operatorType) const {
     TEUCHOS_TEST_FOR_EXCEPTION( (true), std::logic_error,
-                       ">>> ERROR (Basis_HGRAD_QUAD_C0_FEM): FEM Basis calling an FVD member function");
+                       ">>> ERROR (Basis_HVOL_QUAD_C0_FEM): FEM Basis calling an FVD member function");
   }
   
   
   
   template<class Scalar, class ArrayScalar>
-  void Basis_HGRAD_QUAD_C0_FEM<Scalar, ArrayScalar>::getDofCoords(ArrayScalar & DofCoords) const {
+  void Basis_HVOL_QUAD_C0_FEM<Scalar, ArrayScalar>::getDofCoords(ArrayScalar & DofCoords) const {
 #ifdef HAVE_INTREPID_DEBUG
     // Verify rank of output array.
     TEUCHOS_TEST_FOR_EXCEPTION( !(DofCoords.rank() == 2), std::invalid_argument,
-                       ">>> ERROR: (Intrepid::Basis_HGRAD_QUAD_C0_FEM::getDofCoords) rank = 2 required for DofCoords array");
+                       ">>> ERROR: (Intrepid::Basis_HVOL_QUAD_C0_FEM::getDofCoords) rank = 2 required for DofCoords array");
     // Verify 0th dimension of output array.
     TEUCHOS_TEST_FOR_EXCEPTION( !( DofCoords.dimension(0) == this -> basisCardinality_ ), std::invalid_argument,
-                       ">>> ERROR: (Intrepid::Basis_HGRAD_QUAD_C0_FEM::getDofCoords) mismatch in number of DoF and 0th dimension of DofCoords array");
+                       ">>> ERROR: (Intrepid::Basis_HVOL_QUAD_C0_FEM::getDofCoords) mismatch in number of DoF and 0th dimension of DofCoords array");
     // Verify 1st dimension of output array.
     TEUCHOS_TEST_FOR_EXCEPTION( !( DofCoords.dimension(1) == (int)(this -> basisCellTopology_.getDimension()) ), std::invalid_argument,
-                       ">>> ERROR: (Intrepid::Basis_HGRAD_QUAD_C0_FEM::getDofCoords) incorrect reference cell (1st) dimension in DofCoords array");
+                       ">>> ERROR: (Intrepid::Basis_HVOL_QUAD_C0_FEM::getDofCoords) incorrect reference cell (1st) dimension in DofCoords array");
     
     DofCoords(0,0) = -1.0;   DofCoords(0,1) = -1.0;
 #endif

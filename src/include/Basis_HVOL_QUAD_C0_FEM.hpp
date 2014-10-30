@@ -48,11 +48,11 @@
 using namespace Intrepid;
 namespace Intrepid {
   
-  /** \class  Intrepid::Basis_HGRAD_QUAD_C0_FEM
-   \brief  Implementation of the default H(grad)-compatible FEM basis of degree 0 on Quadrilateral cell
+  /** \class  Intrepid::Basis_HVOL_QUAD_C0_FEM
+   \brief  Implementation of the default H(VOL)-compatible FEM basis of degree 0 on Quadrilateral cell
    
-   Implements Lagrangian basis of degree 1 on the reference Quadrilateral cell. The basis has
-   cardinality 1 and spans a COMPLETE bi-linear polynomial space. Basis functions are dual 
+   Implements constant (degree 0) basis on the reference Quadrilateral cell. The basis has
+   cardinality 1 and spans a COMPLETE bilinear polynomial space. Basis functions are dual
    to a unisolvent set of degrees-of-freedom (DoF) defined and enumerated as follows:
    
    \verbatim
@@ -68,7 +68,7 @@ namespace Intrepid {
    \endverbatim
    */
   template<class Scalar, class ArrayScalar> 
-  class Basis_HGRAD_QUAD_C0_FEM : public Basis<Scalar, ArrayScalar>, public DofCoordsInterface<ArrayScalar> {
+  class Basis_HVOL_QUAD_C0_FEM : public Basis<Scalar, ArrayScalar>, public DofCoordsInterface<ArrayScalar> {
   private:
     
     /** \brief Initializes <var>tagToOrdinal_</var> and <var>ordinalToTag_</var> lookup arrays.
@@ -79,7 +79,7 @@ namespace Intrepid {
     
     /** \brief Constructor.
      */
-    Basis_HGRAD_QUAD_C0_FEM();
+    Basis_HVOL_QUAD_C0_FEM();
     
     
     /** \brief  FEM basis evaluation on a <strong>reference Quadrilateral</strong> cell. 
@@ -115,6 +115,6 @@ namespace Intrepid {
   };
 }// namespace Intrepid
 
-#include "Basis_HGRAD_QUAD_C0_FEMDef.hpp"
+#include "Basis_HVOL_QUAD_C0_FEMDef.hpp"
 
 #endif

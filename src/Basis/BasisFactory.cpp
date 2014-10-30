@@ -43,7 +43,7 @@
 #include "Intrepid_HDIV_HEX_In_FEM.hpp"
 #include "Intrepid_HCURL_HEX_In_FEM.hpp"
 
-#include "Basis_HGRAD_QUAD_C0_FEM.hpp"
+#include "Basis_HVOL_QUAD_C0_FEM.hpp"
 
 #include "VectorizedBasis.h"
 
@@ -157,7 +157,7 @@ BasisPtr BasisFactory::getBasis( int polyOrder, unsigned cellTopoKey, IntrepidEx
           case IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD:
           case IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD_DISC:
             //if (polyOrder==0) {
-            //  basis = Teuchos::rcp( new Basis_HGRAD_QUAD_C0_FEM<double, Intrepid::FieldContainer<double> >() ) ;
+            //  basis = Teuchos::rcp( new Basis_HVOL_QUAD_C0_FEM<double, Intrepid::FieldContainer<double> >() ) ;
             //} else {
             if (! _useLobattoForQuadHGRAD) {
               basis = Teuchos::rcp( new IntrepidBasisWrapper<>( Teuchos::rcp( new Basis_HGRAD_QUAD_Cn_FEM<double, Intrepid::FieldContainer<double> >(polyOrder,POINTTYPE_SPECTRAL)),
@@ -198,7 +198,7 @@ BasisPtr BasisFactory::getBasis( int polyOrder, unsigned cellTopoKey, IntrepidEx
                                  );
           break;
           case(IntrepidExtendedTypes::FUNCTION_SPACE_REAL_SCALAR):
-            basis = Teuchos::rcp( new IntrepidBasisWrapper<>(Teuchos::rcp( new Basis_HGRAD_QUAD_C0_FEM<double, Intrepid::FieldContainer<double> >()),
+            basis = Teuchos::rcp( new IntrepidBasisWrapper<>(Teuchos::rcp( new Basis_HVOL_QUAD_C0_FEM<double, Intrepid::FieldContainer<double> >()),
                                                              spaceDim, scalarRank, fs)
                                  ) ;
           break;
@@ -352,7 +352,7 @@ BasisPtr BasisFactory::getConformingBasis( int polyOrder, unsigned cellTopoKey, 
           case IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD:
           case IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD_DISC:
             //if (polyOrder==0) {
-            //  basis = Teuchos::rcp( new Basis_HGRAD_QUAD_C0_FEM<double, Intrepid::FieldContainer<double> >() ) ;
+            //  basis = Teuchos::rcp( new Basis_HVOL_QUAD_C0_FEM<double, Intrepid::FieldContainer<double> >() ) ;
             //} else {
             if (! _useLobattoForQuadHGRAD) {
               basis = Teuchos::rcp( new IntrepidBasisWrapper<>( Teuchos::rcp( new Basis_HGRAD_QUAD_Cn_FEM<double, Intrepid::FieldContainer<double> >(polyOrder,POINTTYPE_SPECTRAL)),
@@ -393,7 +393,7 @@ BasisPtr BasisFactory::getConformingBasis( int polyOrder, unsigned cellTopoKey, 
                                  );
             break;
           case IntrepidExtendedTypes::FUNCTION_SPACE_REAL_SCALAR:
-            basis = Teuchos::rcp( new IntrepidBasisWrapper<>(Teuchos::rcp( new Basis_HGRAD_QUAD_C0_FEM<double, Intrepid::FieldContainer<double> >()),
+            basis = Teuchos::rcp( new IntrepidBasisWrapper<>(Teuchos::rcp( new Basis_HVOL_QUAD_C0_FEM<double, Intrepid::FieldContainer<double> >()),
                                                              spaceDim, scalarRank, fs)
                                  ) ;
             break;
