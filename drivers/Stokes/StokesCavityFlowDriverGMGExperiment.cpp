@@ -126,6 +126,8 @@ int main(int argc, char *argv[]) {
   double relativeTol = 1e-6;
   double minTol = 1e-11; // sorta unreasonable to ask for tighter tolerance than this
   int smootherOverlap = 0;
+  double graphNormL2TermWeight = 1.0;
+  string aztecConvergenceString = "AZ_rhs";
   
   cmdp.setOption("useGMG", "useDirect", &useGMGSolver, "use GMG solver (otherwise, use direct solver--option for testing)");
   cmdp.setOption("use3D", "use2D", &use3D);
@@ -138,10 +140,12 @@ int main(int argc, char *argv[]) {
   cmdp.setOption("enforceOneIrregularity", "dontEnforceOneIrregularity", &enforceOneIrregularity);
   cmdp.setOption("useSmoothing", "useNoSmoothing", &applyDiagonalSmoothing);
   cmdp.setOption("globalSolver", &solverString, "global solver choice -- MUMPS, KLU, GMG, or SLU");
+  cmdp.setOption("l2WeightForGraphNorm", &graphNormL2TermWeight, "a.k.a. 'beta' weight");
   cmdp.setOption("mumpsMaxMemoryMB", &mumpsMaxMemoryMB, "max allocation size MUMPS is allowed to make, in MB");
   cmdp.setOption("smootherOverlap", &smootherOverlap, "overlap for smoother");
   cmdp.setOption("printRefinementDetails", "dontPrintRefinementDetails", &printRefinementDetails);
   cmdp.setOption("azOutput", &AztecOutputLevel, "Aztec output level");
+  cmdp.setOption("azConv", &aztecConvergenceString, "Aztec convergence criterion");
   cmdp.setOption("numCells", &numCells, "number of cells in the initial mesh");
   cmdp.setOption("eps", &eps, "ramp width");
   cmdp.setOption("useScaledGraphNorm", "dontUseScaledGraphNorm", &useWeightedGraphNorm);
@@ -168,6 +172,17 @@ int main(int argc, char *argv[]) {
     return 1;
   }
 
+  int azConv;
+  if (aztecConvergenceString=="AZ_rhs") {
+    azConv = AZ_rhs;
+  } else if (aztecConvergenceString=="AZ_noscaled") {
+    azConv = AZ_noscaled;
+  } else if (aztecConvergenceString=="AZ_r0") {
+    azConv = AZ_r0;
+  } else {
+    if (rank==0) cout << "Unrecognized Aztec convergence criterion " << aztecConvergenceString << endl;
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unrecognized Aztec convergence criterion");
+  }
   
   bool usePressurelessFormulation = false; // VGP otherwise
   
@@ -363,7 +378,7 @@ int main(int argc, char *argv[]) {
 
   IPPtr fineIP, coarseIP;
   
-  IPPtr standardGraphNorm = stokesBF->graphNorm();
+  IPPtr standardGraphNorm = stokesBF->graphNorm(graphNormL2TermWeight);
   
   if (useWeightedGraphNorm) {
     if (rank==0) cout << "Using weighted graph norm for fine and coarse solves.\n";
@@ -390,14 +405,19 @@ int main(int argc, char *argv[]) {
 
   double energyErrorForZeroSolution = 0;
   if (refCount > 0) {
-    if (rank==0) cout << "Computing energy error for 0 solution on coarse mesh.\n";
-    solution->initializeStiffnessAndLoad();
-    solution->initializeLHSVector();
-    solution->populateStiffnessAndLoad();
-    solution->imposeBCs();
-    solution->importSolution();
-    energyErrorForZeroSolution = solution->energyErrorTotal();
-    if (rank==0) cout << "Energy error for 0 solution on coarse mesh: " << energyErrorForZeroSolution << "\n";
+    if (minTol < relativeTol) {
+      if (rank==0) cout << "Computing energy error for 0 solution on coarse mesh.\n";
+      solution->initializeStiffnessAndLoad();
+      solution->initializeLHSVector();
+      solution->populateStiffnessAndLoad();
+      solution->imposeBCs();
+      solution->importSolution();
+      energyErrorForZeroSolution = solution->energyErrorTotal();
+      if (rank==0) cout << "Energy error for 0 solution on coarse mesh: " << energyErrorForZeroSolution << "\n";
+    } else {
+      // take minTol >= relativeTol as an indication that Aztec tolerance should not be energy error relative
+      energyErrorForZeroSolution = 1.0;
+    }
   }
   
   refinementStrategy.setReportPerCellErrors(true);
@@ -452,6 +472,7 @@ int main(int argc, char *argv[]) {
     
     gmgSolver = new GMGSolver(zeroBCs, k0Mesh, coarseIP, mesh, solution->getDofInterpreter(),
                               solution->getPartitionMap(), maxIters, tol, coarseSolver, useStaticCondensation);
+    gmgSolver->setAztecConvergenceOption(azConv);
     gmgSolver->setAztecOutput(AztecOutputLevel);
     gmgSolver->setApplySmoothingOperator(applyDiagonalSmoothing);
     gmgSolver->setUseConjugateGradient(useCG);
@@ -460,6 +481,26 @@ int main(int argc, char *argv[]) {
     gmgSolver->gmgOperator().setSmootherOverlap(smootherOverlap);
     fineSolver = Teuchos::rcp( gmgSolver );
   } else {
+    // otherwise, make a new Solver of the same type as coarseSolver
+    switch(solverChoice) {
+      case MUMPS:
+#ifdef USE_MUMPS
+        coarseSolver = Teuchos::rcp( new MumpsSolver(mumpsMaxMemoryMB, false) ); // false: don't save factorization, basically
+#else
+        cout << "useMumps=true, but MUMPS is not available!\n";
+        exit(1);
+#endif
+        break;
+      case KLU:
+        coarseSolver = Teuchos::rcp( new KluSolver );
+        break;
+      case SLU:
+        coarseSolver = Teuchos::rcp( new SuperLUDistSolver(true) ); // true: save factorization
+        break;
+      case UNKNOWN:
+        // should be unreachable
+        break;
+    }
     fineSolver = Teuchos::rcp( new MumpsSolver(512, false) ); // false: don't save factorization, basically
   }
   
@@ -529,6 +570,7 @@ int main(int argc, char *argv[]) {
       BCPtr zeroBCs = bc->copyImposingZero();
       gmgSolver = new GMGSolver(zeroBCs, k0Mesh, coarseIP, mesh, solution->getDofInterpreter(),
                                 solution->getPartitionMap(), maxIters, tol, coarseSolver, useStaticCondensation);
+      gmgSolver->setAztecConvergenceOption(azConv);
       gmgSolver->setAztecOutput(AztecOutputLevel);
       gmgSolver->setApplySmoothingOperator(applyDiagonalSmoothing);
       gmgSolver->setUseConjugateGradient(useCG);
