@@ -141,6 +141,8 @@ int main(int argc, char *argv[]) {
   
   int coarseMesh_k = 0;
   
+  int mumpsMaxMemoryMB = 768;
+  
   bool pMultiGridOnly = true;
   bool useWeightedGraphNorm = true;
   
