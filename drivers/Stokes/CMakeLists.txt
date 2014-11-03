@@ -9,6 +9,11 @@ target_link_libraries(StokesCavityFlowDriver
   Camellia
 )
 
+add_executable(StokesCavityFlowDriverForPaper "StokesCavityFlowDriverForPaper.cpp")
+target_link_libraries(StokesCavityFlowDriver 
+  Camellia
+)
+
 add_executable(StokesCavityFlowGMGDriver ${STOKES_CAVITY_FLOW_DRIVER_GMG})
 target_link_libraries(StokesCavityFlowGMGDriver 
   Camellia
