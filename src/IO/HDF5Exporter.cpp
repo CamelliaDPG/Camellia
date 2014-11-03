@@ -18,8 +18,9 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 
-HDF5Exporter::HDF5Exporter(MeshPtr mesh, string saveDirectory) : _mesh(mesh), _filename(saveDirectory), 
-  _fieldXdmf("Xdmf"), _traceXdmf("Xdmf"), _fieldDomain("Domain"), _traceDomain("Domain"), _fieldGrids("Grid"), _traceGrids("Grid")
+HDF5Exporter::HDF5Exporter(MeshPtr mesh, string outputDirName, string outputDirSuperPath) : _mesh(mesh), _dirName(outputDirName),
+  _dirSuperPath(outputDirSuperPath), _fieldXdmf("Xdmf"), _traceXdmf("Xdmf"),
+  _fieldDomain("Domain"), _traceDomain("Domain"), _fieldGrids("Grid"), _traceGrids("Grid")
 {
   int commRank = Teuchos::GlobalMPISession::getRank();
   int numProcs = Teuchos::GlobalMPISession::getNProc();
@@ -31,18 +32,18 @@ HDF5Exporter::HDF5Exporter(MeshPtr mesh, string saveDirectory) : _mesh(mesh), _f
 #endif
   
   if (commRank==0) {
-    ostringstream dirName;
+    ostringstream dirPath;
     
-    dirName << _filename;
-    int success = mkdir(dirName.str().c_str(), S_IRWXU | S_IRWXG);
+    dirPath << _dirSuperPath << "/" << _dirName;
+    int success = mkdir(dirPath.str().c_str(), S_IRWXU | S_IRWXG);
 
-    dirName.str("");
-    dirName << _filename <<"/HDF5";
-    success = mkdir(dirName.str().c_str(), S_IRWXU | S_IRWXG);
+    dirPath.str("");
+    dirPath << _dirSuperPath << "/" << _dirName << "/HDF5";
+    success = mkdir(dirPath.str().c_str(), S_IRWXU | S_IRWXG);
 
-    dirName.str("");
-    dirName << _filename <<"/XMF";
-    success = mkdir(dirName.str().c_str(), S_IRWXU | S_IRWXG);
+    dirPath.str("");
+    dirPath << _dirSuperPath << "/" << _dirName << "/XMF";
+    success = mkdir(dirPath.str().c_str(), S_IRWXU | S_IRWXG);
   }
 
   Comm.Barrier(); // everyone should wait until rank 0 has created the directories
@@ -176,9 +177,9 @@ void HDF5Exporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
   ofstream gridFile;
   stringstream partitionFileName;
   if (!exportingBoundaryValues)
-    partitionFileName << _filename << "/XMF/field" << "-part" << commRank << "-time" << timeVal << ".xmf";
+    partitionFileName << _dirSuperPath << "/" << _dirName << "/XMF/field" << "-part" << commRank << "-time" << timeVal << ".xmf";
   else
-    partitionFileName << _filename << "/XMF/trace" << "-part" << commRank << "-time" << timeVal << ".xmf";
+    partitionFileName << _dirSuperPath << "/" << _dirName << "/XMF/trace" << "-part" << commRank << "-time" << timeVal << ".xmf";
   gridFile.open(partitionFileName.str().c_str());
   XMLObject grid("Grid");
   stringstream gridName;
@@ -201,12 +202,12 @@ void HDF5Exporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
   if (!exportingBoundaryValues)
   {
     h5OutRel << "HDF5/" << "field-part" << commRank << "-time" << timeVal << ".h5";
-    h5OutFull << _filename << "/" << h5OutRel.str();
+    h5OutFull << _dirSuperPath << "/" << _dirName << "/" << h5OutRel.str();
   }
   else
   {
     h5OutRel << "HDF5/" << "trace-part" << commRank << "-time" << timeVal << ".h5";
-    h5OutFull << _filename << "/" << h5OutRel.str();
+    h5OutFull << _dirSuperPath << "/" << _dirName << "/" << h5OutRel.str();
   }
   Epetra_SerialComm Comm;
   EpetraExt::HDF5 hdf5(Comm);
@@ -788,8 +789,8 @@ void HDF5Exporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
   {
     ofstream xmfFieldFile;
     ofstream xmfTraceFile;
-    xmfFieldFile.open((_filename+"/"+_filename+"-field.xmf").c_str());
-    xmfTraceFile.open((_filename+"/"+_filename+"-trace.xmf").c_str());
+    xmfFieldFile.open((_dirSuperPath + "/" + _dirName+"/"+_dirName+"-field.xmf").c_str());
+    xmfTraceFile.open((_dirSuperPath + "/" + _dirName+"/"+_dirName+"-trace.xmf").c_str());
     xmfFieldFile << "<?xml version=\"1.0\" ?>" << endl
     << "<!DOCTYPE Xdmf SYSTEM \"Xdmf.dtd\" []>" << endl;
     xmfTraceFile << "<?xml version=\"1.0\" ?>" << endl
@@ -799,6 +800,12 @@ void HDF5Exporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
     xmfFieldFile.close();
     xmfTraceFile.close();
   }
+}
+
+void HDF5Exporter::exportSolution(std::string superDirectory, std::string solnName, SolutionPtr solution) {
+  MeshPtr mesh = solution->mesh();
+  HDF5Exporter exporter(mesh, solnName, superDirectory);
+  exporter.exportSolution(solution, mesh->bilinearForm()->varFactory());
 }
 
 map<int,int> cellIDToSubdivision(MeshPtr mesh, unsigned int subdivisionFactor, set<GlobalIndexType> cellIndices)

@@ -22,7 +22,8 @@
 
 class HDF5Exporter {
 private:
-  string _filename;
+  string _dirName;
+  string _dirSuperPath;
   MeshPtr _mesh;
   XMLObject _fieldXdmf;
   XMLObject _traceXdmf;
@@ -33,7 +34,7 @@ private:
   set<double> _fieldTimeVals;
   set<double> _traceTimeVals;
 public:
-  HDF5Exporter(MeshPtr mesh, string saveDirectory="output");
+  HDF5Exporter(MeshPtr mesh, string outputDirName="output", string outputDirSuperPath = ".");
   ~HDF5Exporter();
   void exportFunction(FunctionPtr function, string functionName="function", double timeVal=0, 
     unsigned int defaultNum1DPts=4, map<int, int> cellIDToNum1DPts=map<int,int>(), set<GlobalIndexType> cellIndices=set<GlobalIndexType>());
@@ -41,11 +42,31 @@ public:
     unsigned int defaultNum1DPts=4, map<int, int> cellIDToNum1DPts=map<int,int>(), set<GlobalIndexType> cellIndices=set<GlobalIndexType>());
   void exportSolution(SolutionPtr solution, VarFactory varFactory, double timeVal=0, 
     unsigned int defaultNum1DPts=4, map<int, int> cellIDToNum1DPts=map<int,int>(), set<GlobalIndexType> cellIndices=set<GlobalIndexType>());
+  
+  static void exportSolution(string directoryPath, string solutionName, SolutionPtr solution); // allows one-line export without storing an exporter object
 };
 
 // creates a map from cell index to number of 1D points (number of subdivisions + 1)
 // num1DPts = max(subdivisionFactor*(polyOrder-1) + 1, 2)
 map<int,int> cellIDToSubdivision(MeshPtr mesh, unsigned int subdivisionFactor=2, set<GlobalIndexType> cellIndices=set<GlobalIndexType>());
+
+#else
+
+/* DUMMY (NO-OP) IMPLEMENTATION FOR WHEN HDF5 IS UNAVAILABLE */
+class HDF5Exporter {
+private:
+public:
+  HDF5Exporter(MeshPtr mesh, string saveDirectory="output") {}
+  ~HDF5Exporter() {}
+  void exportFunction(FunctionPtr function, string functionName="function", double timeVal=0,
+                      unsigned int defaultNum1DPts=4, map<int, int> cellIDToNum1DPts=map<int,int>(), set<GlobalIndexType> cellIndices=set<GlobalIndexType>()) {}
+  void exportFunction(vector<FunctionPtr> functions, vector<string> functionNames, double timeVal=0,
+                      unsigned int defaultNum1DPts=4, map<int, int> cellIDToNum1DPts=map<int,int>(), set<GlobalIndexType> cellIndices=set<GlobalIndexType>()) {}
+  void exportSolution(SolutionPtr solution, VarFactory varFactory, double timeVal=0,
+                      unsigned int defaultNum1DPts=4, map<int, int> cellIDToNum1DPts=map<int,int>(), set<GlobalIndexType> cellIndices=set<GlobalIndexType>()) {}
+  static void exportSolution(string saveDirectory, SolutionPtr solution) {}
+};
+/* END OF DUMMY IMPLEMENTATION */
 
 #endif
 
