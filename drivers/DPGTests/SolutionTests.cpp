@@ -1626,7 +1626,7 @@ bool SolutionTests::testCondensationSolve() {
 
 bool SolutionTests::testCondensationSolveWithSinglePointConstraint() {
   bool success = true;
-  double tol = 1e-12;
+  double tol = 5e-12;
   
   int rank = Teuchos::GlobalMPISession::getRank();;
   
@@ -1691,6 +1691,14 @@ bool SolutionTests::testCondensationSolveWithSinglePointConstraint() {
     cout << "L2 norm of difference is " << diff << "; tol is " << tol << endl;
     success=false;
   }
+  FunctionPtr p_soln = Function::solution(p,solution);
+  FunctionPtr p_condensed_soln = Function::solution(p,condensedSolution);
+  diff = (p_soln-p_condensed_soln)->l2norm(mesh,H1Order);
+  if (diff > tol) {
+    cout << "Failing test: Condensed solve pressure solution with single-point constraint on single-element max rule mesh does not match regular solve" << endl;
+    cout << "L2 norm of difference is " << diff << "; tol is " << tol << endl;
+    success=false;
+  }
   
   // repeat, but now with the newer interface for condensed solve:
   solution = Teuchos::rcp( new Solution(mesh, bc, rhs, ip) );
@@ -1715,6 +1723,15 @@ bool SolutionTests::testCondensationSolveWithSinglePointConstraint() {
     cout << "L2 norm of difference is " << diff << "; tol is " << tol << endl;
     success=false;
   }
+  p_soln = Function::solution(p,solution);
+  p_condensed_soln = Function::solution(p,condensedSolution);
+  diff = (p_soln-p_condensed_soln)->l2norm(mesh,H1Order);
+  if (diff > tol) {
+    cout << "Failing test: Condensed solve pressure solution with single-point constraint on single-element max rule mesh does not match regular solve";
+    cout << " when using newer setUseCondensedSolve() method." << endl;
+    cout << "L2 norm of difference is " << diff << "; tol is " << tol << endl;
+    success=false;
+  }
   
   // now, same thing, but with a single-element minimum-rule mesh:
   mesh = MeshFactory::quadMeshMinRule(bf, H1Order, pToAdd, 1.0, 1.0, 1, 1);
@@ -1730,6 +1747,14 @@ bool SolutionTests::testCondensationSolveWithSinglePointConstraint() {
   diff = (u1_soln-u1_condensed_soln)->l2norm(mesh,H1Order);
   if (diff>tol){
     cout << "Failing test: Condensed solve with single-point constraint on single-element min rule mesh does not match regular solve" << endl;
+    cout << "L2 norm of difference is " << diff << "; tol is " << tol << endl;
+    success=false;
+  }
+  p_soln = Function::solution(p,solution);
+  p_condensed_soln = Function::solution(p,condensedSolution);
+  diff = (p_soln-p_condensed_soln)->l2norm(mesh,H1Order);
+  if (diff > tol) {
+    cout << "Failing test: Condensed solve pressure solution with single-point constraint on single-element min rule mesh does not match regular solve" << endl;
     cout << "L2 norm of difference is " << diff << "; tol is " << tol << endl;
     success=false;
   }
@@ -1752,19 +1777,17 @@ bool SolutionTests::testCondensationSolveWithSinglePointConstraint() {
   if (diff>tol){
     cout << "Failing test: Condensed solve with single-point constraint on refined max rule mesh does not match regular solve" << endl;
     cout << "L2 norm of difference is " << diff << "; tol is " << tol << endl;
-    
-#ifdef HAVE_EPETRAEXT_HDF5
-    ostringstream dir_name;
-    dir_name << "refinedMaxRuleMeshStandardVsCondensedSolve";
-    HDF5Exporter exporter(mesh,dir_name.str());
-    VarFactory vf = bf->varFactory();
-    exporter.exportSolution(solution,vf,0);
-    exporter.exportSolution(condensedSolution,vf,1);
-#endif
-    
     success=false;
   }
-  
+  p_soln = Function::solution(p,solution);
+  p_condensed_soln = Function::solution(p,condensedSolution);
+  diff = (p_soln-p_condensed_soln)->l2norm(mesh,H1Order);
+  if (diff > tol) {
+    cout << "Failing test: Condensed solve pressure solution with single-point constraint on refined max rule mesh does not match regular solve" << endl;
+    cout << "L2 norm of difference is " << diff << "; tol is " << tol << endl;
+    success=false;
+  }
+
   // MIN RULE, multi-element compatible mesh
   mesh = MeshFactory::quadMeshMinRule(bf, H1Order, pToAdd, 1.0, 1.0, numCells, numCells);
   
@@ -1788,6 +1811,15 @@ bool SolutionTests::testCondensationSolveWithSinglePointConstraint() {
     exporter.exportSolution(condensedSolution,vf,1);
 #endif
   }
+  p_soln = Function::solution(p,solution);
+  p_condensed_soln = Function::solution(p,condensedSolution);
+  diff = (p_soln-p_condensed_soln)->l2norm(mesh,H1Order);
+  if (diff > tol) {
+    cout << "Failing test: Condensed solve pressure solution with single-point constraint on multi-element (compatible) min rule mesh does not match regular solve" << endl;
+    cout << "L2 norm of difference is " << diff << "; tol is " << tol << endl;
+    success=false;
+  }
+
   
   // MIN RULE, multi-element refined mesh
   mesh->hRefine(cell0, RefinementPattern::regularRefinementPatternQuad());
@@ -1810,6 +1842,14 @@ bool SolutionTests::testCondensationSolveWithSinglePointConstraint() {
       cout << "cell " << cellID << ", standard solution coefficients:\n" << cell6coeffs_standard;
       cout << "cell " << cellID << ", condensed solution coefficients:\n" << cell6coeffs_condensed;
     }
+  }
+  p_soln = Function::solution(p,solution);
+  p_condensed_soln = Function::solution(p,condensedSolution);
+  diff = (p_soln-p_condensed_soln)->l2norm(mesh,H1Order);
+  if (diff > tol) {
+    cout << "Failing test: Condensed solve pressure solution with single-point constraint on refined min rule mesh does not match regular solve" << endl;
+    cout << "L2 norm of difference is " << diff << "; tol is " << tol << endl;
+    success=false;
   }
   
   return success;
@@ -1879,6 +1919,14 @@ bool SolutionTests::testCondensationSolveWithZeroMeanConstraint() {
     cout << "L2 norm of difference is " << diff << "; tol is " << tol << endl;
     success=false;
   }
+  FunctionPtr p_soln = Function::solution(p,solution);
+  FunctionPtr p_condensed_soln = Function::solution(p,condensedSolution);
+  diff = (p_soln-p_condensed_soln)->l2norm(mesh,H1Order);
+  if (diff > tol) {
+    cout << "Failing test: Condensed solve pressure solution with zero-mean constraint on single-element max rule mesh does not match regular solve" << endl;
+    cout << "L2 norm of difference is " << diff << "; tol is " << tol << endl;
+    success=false;
+  }
   
   // now, same thing, but with a single-element minimum-rule mesh:
   mesh = MeshFactory::quadMeshMinRule(bf, H1Order, pToAdd, 1.0, 1.0, 1, 1);
@@ -1897,6 +1945,15 @@ bool SolutionTests::testCondensationSolveWithZeroMeanConstraint() {
     cout << "L2 norm of difference is " << diff << "; tol is " << tol << endl;
     success=false;
   }
+  p_soln = Function::solution(p,solution);
+  p_condensed_soln = Function::solution(p,condensedSolution);
+  diff = (p_soln-p_condensed_soln)->l2norm(mesh,H1Order);
+  if (diff > tol) {
+    cout << "Failing test: Condensed solve pressure solution with zero-mean constraint on single-element min rule mesh does not match regular solve" << endl;
+    cout << "L2 norm of difference is " << diff << "; tol is " << tol << endl;
+    success=false;
+  }
+
   
   int numCells = 2;
   // MAX RULE, multi-element refined mesh
@@ -1925,7 +1982,14 @@ bool SolutionTests::testCondensationSolveWithZeroMeanConstraint() {
     exporter.exportSolution(solution,vf,0);
     exporter.exportSolution(condensedSolution,vf,1);
 #endif
-    
+    success=false;
+  }
+  p_soln = Function::solution(p,solution);
+  p_condensed_soln = Function::solution(p,condensedSolution);
+  diff = (p_soln-p_condensed_soln)->l2norm(mesh,H1Order);
+  if (diff > tol) {
+    cout << "Failing test: Condensed solve pressure solution with zero-mean constraint on refined max rule mesh does not match regular solve" << endl;
+    cout << "L2 norm of difference is " << diff << "; tol is " << tol << endl;
     success=false;
   }
   
@@ -1952,6 +2016,14 @@ bool SolutionTests::testCondensationSolveWithZeroMeanConstraint() {
     exporter.exportSolution(condensedSolution,vf,1);
 #endif
   }
+  p_soln = Function::solution(p,solution);
+  p_condensed_soln = Function::solution(p,condensedSolution);
+  diff = (p_soln-p_condensed_soln)->l2norm(mesh,H1Order);
+  if (diff > tol) {
+    cout << "Failing test: Condensed solve pressure solution with zero-mean constraint on multi-element (compatible) min rule mesh does not match regular solve" << endl;
+    cout << "L2 norm of difference is " << diff << "; tol is " << tol << endl;
+    success=false;
+  }
   
   // MIN RULE, multi-element refined mesh
   mesh->hRefine(cell0, RefinementPattern::regularRefinementPatternQuad());
@@ -1967,13 +2039,14 @@ bool SolutionTests::testCondensationSolveWithZeroMeanConstraint() {
     cout << "Failing test: Condensed solve with zero-mean constraint on refined min rule mesh does not match regular solve" << endl;
     cout << "L2 norm of difference is " << diff << "; tol is " << tol << endl;
     success=false;
-    int cellID = 6;
-    FieldContainer<double> cell6coeffs_standard = solution->allCoefficientsForCellID(cellID, false); // false: don't warn if off-rank
-    FieldContainer<double> cell6coeffs_condensed = condensedSolution->allCoefficientsForCellID(cellID, false); // false: don't warn if off-rank
-    if (rank==0) {
-      cout << "cell " << cellID << ", standard solution coefficients:\n" << cell6coeffs_standard;
-      cout << "cell " << cellID << ", condensed solution coefficients:\n" << cell6coeffs_condensed;
-    }
+  }
+  p_soln = Function::solution(p,solution);
+  p_condensed_soln = Function::solution(p,condensedSolution);
+  diff = (p_soln-p_condensed_soln)->l2norm(mesh,H1Order);
+  if (diff > tol) {
+    cout << "Failing test: Condensed solve pressure solution with zero-mean constraint on refined min rule mesh does not match regular solve" << endl;
+    cout << "L2 norm of difference is " << diff << "; tol is " << tol << endl;
+    success=false;
   }
   
   return success;
