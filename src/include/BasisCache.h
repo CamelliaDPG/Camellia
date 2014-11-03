@@ -64,9 +64,6 @@
 
 #include "Function.h"
 
-using namespace std;
-using namespace IntrepidExtendedTypes;
-
 using namespace Camellia;
 
 class Mesh;
@@ -87,10 +84,10 @@ private:
   int _maxPointsPerCubaturePhase; // default: -1 (infinite)
   int _cubaturePhase; // index of the cubature phase; defaults to 0
   int _cubaturePhaseCount; // how many phases to get through all the points
-  vector<int> _phasePointOrdinalOffsets;
+  std::vector<int> _phasePointOrdinalOffsets;
   
   Teuchos::RCP<Mesh> _mesh;
-  vector< Teuchos::RCP<BasisCache> > _basisCacheSides;
+  std::vector< Teuchos::RCP<BasisCache> > _basisCacheSides;
   Teuchos::RCP<BasisCache> _basisCacheVolume;
   Intrepid::FieldContainer<double> _cubPoints, _cubWeights;
   Intrepid::FieldContainer<double> _allCubPoints, _allCubWeights; // when using phased cubature points, these store the whole set
@@ -108,7 +105,7 @@ private:
   // bool: compose with existing ref-to-mesh-cell transformation. (false means that the function goes from ref to the physical geometry;
   //                                                                true means it goes from the straight-edge mesh to the curvilinear one)
     
-  vector<GlobalIndexType> _cellIDs; // the list of cell IDs corresponding to the physicalCellNodes
+  std::vector<GlobalIndexType> _cellIDs; // the list of cell IDs corresponding to the physicalCellNodes
   
   int _cubDegree;
   
@@ -150,7 +147,7 @@ private:
 protected:
   BasisCache() { _isSideCache = false; } // for the sake of some hackish subclassing
   
-  vector< BasisPtr > _maxDegreeBasisForSide; // stored in volume cache so we can get cubature right on sides, including broken sides (if this is a multiBasis)
+  std::vector< BasisPtr > _maxDegreeBasisForSide; // stored in volume cache so we can get cubature right on sides, including broken sides (if this is a multiBasis)
   int _maxTestDegree, _maxTrialDegree;
 public:
   BasisCache(ElementTypePtr elemType, Teuchos::RCP<Mesh> mesh = Teuchos::rcp( (Mesh*) NULL ), bool testVsTest=false,
@@ -176,7 +173,7 @@ public:
   Teuchos::RCP<BasisCache> getSideBasisCache(int sideOrdinal);
   Teuchos::RCP<BasisCache> getVolumeBasisCache(); // from sideCache
   
-  const vector<GlobalIndexType> & cellIDs();
+  const std::vector<GlobalIndexType> & cellIDs();
   
   shards::CellTopology cellTopology();
   
@@ -206,7 +203,7 @@ public:
   const Intrepid::FieldContainer<double> & getSideUnitNormals(int sideOrdinal);
   
   const Intrepid::FieldContainer<double> &getPhysicalCellNodes();
-  void setPhysicalCellNodes(const Intrepid::FieldContainer<double> &physicalCellNodes, const vector<GlobalIndexType> &cellIDs, bool createSideCacheToo);
+  void setPhysicalCellNodes(const Intrepid::FieldContainer<double> &physicalCellNodes, const std::vector<GlobalIndexType> &cellIDs, bool createSideCacheToo);
   
   /*** Methods added for BC support below ***/
   // setRefCellPoints overwrites _cubPoints -- for when cubature is not your interest

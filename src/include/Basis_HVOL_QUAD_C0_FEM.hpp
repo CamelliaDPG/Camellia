@@ -45,7 +45,6 @@
 
 #include "Intrepid_Basis.hpp"
 
-using namespace Intrepid;
 namespace Intrepid {
   
   /** \class  Intrepid::Basis_HVOL_QUAD_C0_FEM

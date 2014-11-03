@@ -44,6 +44,8 @@
 
 #include "Teuchos_GlobalMPISession.hpp"
 
+using namespace std;
+
 typedef FunctionSpaceTools fst;
 typedef Teuchos::RCP< FieldContainer<double> > FCPtr;
 typedef Teuchos::RCP< const FieldContainer<double> > constFCPtr;
