@@ -35,6 +35,8 @@
 #include "MeshUtilities.h"
 #include "CamelliaDebugUtility.h"
 
+#include "ConvectionFormulation.h"
+
 #include "EpetraExt_ConfigDefs.h"
 #ifdef HAVE_EPETRAEXT_HDF5
 #include "HDF5Exporter.h"
@@ -229,6 +231,22 @@ void SolutionTests::runTests(int &numTestsRun, int &numTestsPassed) {
   int rank = Teuchos::GlobalMPISession::getRank();
   cout << "Starting SolutionTests::runTests on rank " << rank << endl;
 
+//  setup(); // commented out to make certain debugging output easier to read (in fact testCondensationSolveNonlinear() doesn't depend on setup at all...)
+  if (testCondensationSolveNonlinear()) {
+    numTestsPassed++;
+  }
+  numTestsRun++;
+  teardown();
+  
+  
+  setup();
+  if (testAddCondensedSolution()) {
+    numTestsPassed++;
+  }
+  numTestsRun++;
+  teardown();
+  
+  
   setup();
   if (testCondensationSolve()) {
     numTestsPassed++;
@@ -400,6 +418,243 @@ bool SolutionTests::storageSizesAgree(Teuchos::RCP< Solution > soln1, Teuchos::R
     }
   }
   return true;
+}
+
+bool SolutionTests::testAddCondensedSolution() {
+  bool success = true;
+  
+  double weight = 3.141592;
+  double tol = 1e-12;
+  
+  double soln2_coefficientWeight = 2.0;
+  
+  FunctionPtr c = Function::vectorize(Function::constant(0.5), Function::constant(0.5));
+  ConvectionFormulation convectionForm(2, c);
+  
+  BFPtr bf = convectionForm.bf();
+  
+  Teuchos::ParameterList pl;
+  
+  int H1Order = 1;
+  int pToAddTest = 2;
+  int horizontalElements = 1;
+  int verticalElements = 1;
+  double width = 1.0;
+  double height = 1.0;
+  double x0 = 0;
+  double y0 = 0;
+  bool divideIntoTriangles = false;
+  
+  BilinearFormPtr bilinearFormPtr = Teuchos::rcp((BilinearForm*)bf.get(), false);
+  
+  pl.set("useMinRule", true);
+  pl.set("bf",bilinearFormPtr);
+  pl.set("H1Order", H1Order);
+  pl.set("delta_k", pToAddTest);
+  pl.set("horizontalElements", horizontalElements);
+  pl.set("verticalElements", verticalElements);
+  pl.set("width", width);
+  pl.set("height", height);
+  pl.set("divideIntoTriangles", divideIntoTriangles);
+  pl.set("x0",x0);
+  pl.set("y0",y0);
+  
+  MeshPtr mesh = MeshFactory::quadMesh(pl);
+  
+//  MeshPtr mesh = MeshFactory::quadMesh(bf, 2); // min-rule mesh, single element
+  
+  // inflow BCs; set to x+1 and 2*y+1 for soln1.
+  SpatialFilterPtr x_equals_0 = SpatialFilter::matchingX(0.0);
+  SpatialFilterPtr y_equals_0 = SpatialFilter::matchingY(0.0);
+  
+  // so that the fields scale linearly with the trace data (which are weighted by soln2_coefficientWeight),
+  // we scale the BC and RHS data for soln2 with soln2_coefficientWeight.
+  
+  BCPtr bc = BC::bc();
+  BCPtr bc2 = BC::bc();
+  
+  FunctionPtr x = Function::xn(1);
+  FunctionPtr y = Function::yn(1);
+  
+  FunctionPtr in_x = 2*y + 1;
+  FunctionPtr in_y = x + 1;
+  
+  bc->addDirichlet(convectionForm.q_n_hat(), x_equals_0, in_x);
+  bc->addDirichlet(convectionForm.q_n_hat(), y_equals_0, in_y);
+  
+  bc2->addDirichlet(convectionForm.q_n_hat(), x_equals_0, in_x * soln2_coefficientWeight);
+  bc2->addDirichlet(convectionForm.q_n_hat(), y_equals_0, in_y * soln2_coefficientWeight);
+  
+  RHSPtr rhs = RHS::rhs();
+  RHSPtr rhs2 = RHS::rhs();
+  
+  rhs->addTerm(convectionForm.v());
+  rhs2->addTerm(soln2_coefficientWeight * convectionForm.v());
+  
+  IPPtr ip = bf->graphNorm();
+  
+  SolutionPtr soln1 = Solution::solution(mesh, bc, rhs, ip);
+  soln1->setUseCondensedSolve(true);
+  soln1->solve(); // to force computation of local stiffness matrices, etc.
+  SolutionPtr soln2 = Solution::solution(mesh, bc2, rhs2, ip);
+  soln2->setUseCondensedSolve(true);
+  soln2->solve();
+  
+  Teuchos::RCP< Epetra_FEVector > lhsVector1 = soln1->getLHSVector();
+  Teuchos::RCP< Epetra_FEVector > lhsVector2 = soln2->getLHSVector();
+  
+  // load lhsVector1 and 2 with some arbitrary data
+  
+  if (lhsVector1->Map().NumMyElements() > 0) {
+    for (int i=lhsVector1->Map().MinLID(); i<=lhsVector1->Map().MaxLID(); i++) {
+      GlobalIndexType gid = lhsVector1->Map().GID(i);
+      (*lhsVector1)[0][i] = (double) gid;
+    }
+  }
+  
+  if (lhsVector2->Map().NumMyElements() > 0) {
+    for (int i=lhsVector2->Map().MinLID(); i<=lhsVector2->Map().MaxLID(); i++) {
+      GlobalIndexType gid = lhsVector2->Map().GID(i);
+      (*lhsVector2)[0][i] = (double) soln2_coefficientWeight * gid;
+    }
+  }
+  
+  // determine cell-local coefficients:
+  soln1->importSolution();
+  soln2->importSolution();
+  
+  GlobalIndexType cellID = 0;
+  
+  FieldContainer<double> soln1_cell0 = soln1->allCoefficientsForCellID(cellID);
+  FieldContainer<double> soln2_cell0 = soln2->allCoefficientsForCellID(cellID);
+  
+//  cout << "soln1_cell0:\n" << soln1_cell0;
+  
+  { // DEBUGGING: check for linear dependence of cell0 coefficients on the lhsVector coefficients
+    FieldContainer<double> soln1_doubled = soln1_cell0;
+    BilinearForm::multiplyFCByWeight(soln1_doubled, soln2_coefficientWeight);
+    double tol = 1e-14;
+    double maxDiff = 0;
+    if ( !TestSuite::fcsAgree(soln1_doubled, soln2_cell0, tol, maxDiff) ) {
+      cout << "Error: before calling addSolution, coefficients for soln2 aren't as expected...\n";
+      success = false;
+    }
+  }
+  
+  soln1->addSolution(soln2, weight);
+  
+  FieldContainer<double> actualValues = soln1->allCoefficientsForCellID(cellID);
+  FieldContainer<double> expectedValues = soln1_cell0;
+  BilinearForm::multiplyFCByWeight(expectedValues, soln2_coefficientWeight * weight + 1);
+  double maxDiff = 0;
+  if ( !TestSuite::fcsAgree(expectedValues, actualValues, tol, maxDiff) ) {
+    cout << "Error: after calling addSolution, actual coefficients for sum differ from expected by as much as " << maxDiff << "...\n";
+    success = false;
+  }
+  
+  weight = 1.0; // since we don't weight the rhs or the BCs below, this is require to ensure the correctness of the test...
+  
+  _confusionSolution2_2x2->setUseCondensedSolve(true);
+  _confusionSolution1_2x2->setUseCondensedSolve(true);
+  
+  _confusionSolution1_2x2->solve();
+  _confusionSolution2_2x2->solve();
+  
+  FieldContainer<double> expectedValuesU(_testPoints.dimension(0));
+  FieldContainer<double> expectedValuesSIGMA1(_testPoints.dimension(0));
+  FieldContainer<double> expectedValuesSIGMA2(_testPoints.dimension(0));
+  _confusionSolution2_2x2->solutionValues(expectedValuesU, ConfusionBilinearForm::U_ID, _testPoints);
+  _confusionSolution2_2x2->solutionValues(expectedValuesSIGMA1, ConfusionBilinearForm::SIGMA_1_ID, _testPoints);
+  _confusionSolution2_2x2->solutionValues(expectedValuesSIGMA2, ConfusionBilinearForm::SIGMA_2_ID, _testPoints);
+  
+  BilinearForm::multiplyFCByWeight(expectedValuesU, weight+1.0);
+  BilinearForm::multiplyFCByWeight(expectedValuesSIGMA1, weight+1.0);
+  BilinearForm::multiplyFCByWeight(expectedValuesSIGMA2, weight+1.0);
+  
+  Teuchos::RCP< Epetra_FEVector > vector1_copy = Teuchos::rcp( new Epetra_FEVector(*_confusionSolution1_2x2->getLHSVector().get()) );
+  Teuchos::RCP< Epetra_FEVector > vector2 = _confusionSolution2_2x2->getLHSVector();
+
+  map<GlobalIndexType, FieldContainer<double> > cellCoefficientsForRank;
+  set<GlobalIndexType> rankLocalCells = _confusionSolution1_2x2->mesh()->cellIDsInPartition();
+  
+  for (set<GlobalIndexType>::iterator cellIDIt = rankLocalCells.begin(); cellIDIt != rankLocalCells.end(); cellIDIt++) {
+    GlobalIndexType cellID = *cellIDIt;
+    FieldContainer<double> coefficients = _confusionSolution1_2x2->allCoefficientsForCellID(cellID);
+    cellCoefficientsForRank[cellID] = coefficients;
+  }
+  
+//  cout << "local coefficients, cell 0:\n";
+//  GlobalIndexType cellID = 0;
+//  cout << _confusionSolution1_2x2->allCoefficientsForCellID(cellID);
+  
+//  cout << "vector 1:\n";
+//  for (int i = vector1_copy->Map().MinLID(); i <= vector1_copy->Map().MaxLID(); i++) {
+//    cout << vector1_copy->Map().GID(i) << ": " << vector1_copy->Values()[i] << endl;
+//  }
+
+//  cout << "vector 2:\n";
+//  for (int i = vector2->Map().MinLID(); i <= vector2->Map().MaxLID(); i++) {
+//    cout << vector2->Map().GID(i) << ": " << vector2->Values()[i] << endl;
+//  }
+  
+  _confusionSolution1_2x2->addSolution(_confusionSolution2_2x2, weight);
+  
+  // check that the cell-local coefficients are as expected (multiplied by weight + 1)
+  
+  for (set<GlobalIndexType>::iterator cellIDIt = rankLocalCells.begin(); cellIDIt != rankLocalCells.end(); cellIDIt++) {
+    GlobalIndexType cellID = *cellIDIt;
+    FieldContainer<double> actualCoefficients = _confusionSolution1_2x2->allCoefficientsForCellID(cellID);
+    FieldContainer<double> expectedCoefficients = cellCoefficientsForRank[cellID];
+    BilinearForm::multiplyFCByWeight(expectedCoefficients, weight + 1.0);
+    double maxDiff = 0;
+    if (! TestSuite::fcsAgree(expectedCoefficients, actualCoefficients, tol, maxDiff) ) {
+      cout << "Error: expected coefficients for cell ID " << cellID << " differ from actual by " << maxDiff << endl;
+      
+      cout << "expectedCoefficients:\n" << expectedCoefficients;
+      cout << "actualCoefficients:\n" << actualCoefficients;
+      success = false;
+    }
+  }
+  
+//  cout << "local coefficients, cell 0, after summing:\n";
+//  cout << _confusionSolution1_2x2->allCoefficientsForCellID(cellID);
+  
+  Teuchos::RCP< Epetra_FEVector > lhsVector = _confusionSolution1_2x2->getLHSVector();
+
+//  cout << "weighted sum:\n";
+//  for (int i = lhsVector->Map().MinLID(); i <= lhsVector->Map().MaxLID(); i++) {
+//    cout << lhsVector->Map().GID(i) << ": " << lhsVector->Values()[i] << endl;
+//  }
+  
+  FieldContainer<double> valuesU(_testPoints.dimension(0));
+  FieldContainer<double> valuesSIGMA1(_testPoints.dimension(0));
+  FieldContainer<double> valuesSIGMA2(_testPoints.dimension(0));
+  
+  _confusionSolution1_2x2->solutionValues(valuesU, ConfusionBilinearForm::U_ID, _testPoints);
+  _confusionSolution1_2x2->solutionValues(valuesSIGMA1, ConfusionBilinearForm::SIGMA_1_ID, _testPoints);
+  _confusionSolution1_2x2->solutionValues(valuesSIGMA2, ConfusionBilinearForm::SIGMA_2_ID, _testPoints);
+  
+  for (int pointIndex=0; pointIndex < valuesU.size(); pointIndex++) {
+    double diff = abs(valuesU[pointIndex] - expectedValuesU[pointIndex]);
+    if (diff > tol) {
+      success = false;
+      cout << "expected value of U: " << expectedValuesU[pointIndex] << "; actual: " << valuesU[pointIndex] << endl;
+    }
+    
+    diff = abs(valuesSIGMA1[pointIndex] - expectedValuesSIGMA1[pointIndex]);
+    if (diff > tol) {
+      success = false;
+      cout << "expected value of SIGMA1: " << expectedValuesSIGMA1[pointIndex] << "; actual: " << valuesSIGMA1[pointIndex] << endl;
+    }
+    
+    diff = abs(valuesSIGMA2[pointIndex] - expectedValuesSIGMA2[pointIndex]);
+    if (diff > tol) {
+      success = false;
+      cout << "expected value of SIGMA2: " << expectedValuesSIGMA2[pointIndex] << "; actual: " << valuesSIGMA2[pointIndex] << endl;
+    }
+  }
+  
+  return success;
 }
 
 bool SolutionTests::testAddSolution() {
@@ -1620,6 +1875,153 @@ bool SolutionTests::testCondensationSolve() {
     exporter.exportSolution(condensedSolution,varFactory,1);
 #endif
   }
+  
+  return success;
+}
+
+bool SolutionTests::testCondensationSolveNonlinear() {
+  bool success = true;
+  
+  int rank = Teuchos::GlobalMPISession::getRank();
+
+  // adapted from a consistency test in IncompressibleFormulationTests; checks that condensed and
+  // standard solve agree in context of a nonlinear problem.
+  
+  double tol = 2e-11;
+  
+  bool useLineSearch = false;
+  bool enrichVelocity = true; // true adds an extra polynomial degree to the velocity.
+  
+  // exact solution functions: store these as vector< pair< Function, int > >
+  // in the order u1, u2, p, where the paired int is the polynomial degree of the function
+  
+  int polyOrder = 3;
+  
+  FunctionPtr x = Function::xn(1);
+  FunctionPtr x2 = Function::xn(2);
+  FunctionPtr y = Function::yn(1);
+  FunctionPtr y2 = Function::yn(2);
+  FunctionPtr y3 = Function::yn(3);
+
+  FunctionPtr u1_exact = x2 * y;
+  FunctionPtr u2_exact = -x * y2; // chosen to have zero divergence
+  FunctionPtr p_exact = y3; // odd function: zero mean on our domain
+  
+  FieldContainer<double> quadPoints(4,2);
+  
+  quadPoints(0,0) = -1.0; // x1
+  quadPoints(0,1) = -1.0; // y1
+  quadPoints(1,0) = 1.0;
+  quadPoints(1,1) = -1.0;
+  quadPoints(2,0) = 1.0;
+  quadPoints(2,1) = 1.0;
+  quadPoints(3,0) = -1.0;
+  quadPoints(3,1) = 1.0;
+  
+  int H1Order = polyOrder + 1;
+  int pToAdd = 2;
+  
+  int horizontalCells = 2, verticalCells = 2;
+  
+  double mu = 0.1;
+  double Re = 1 / mu;
+  
+  bool dontEnhanceFluxes = false;
+  VGPNavierStokesProblem problem = VGPNavierStokesProblem(Re, quadPoints,
+                                                          horizontalCells, verticalCells,
+                                                          H1Order, pToAdd,
+                                                          u1_exact, u2_exact, p_exact, enrichVelocity, dontEnhanceFluxes);
+  
+  VarPtr u1_vgp = problem.vgpNavierStokesFormulation()->u1var();
+  VarPtr u2_vgp = problem.vgpNavierStokesFormulation()->u2var();
+  VarPtr p_vgp = problem.vgpNavierStokesFormulation()->pvar();
+
+  // set up identical problem for condensed solve
+  VGPNavierStokesProblem problem_condensed = VGPNavierStokesProblem(Re, quadPoints,
+                                                                    horizontalCells, verticalCells,
+                                                                    H1Order, pToAdd,
+                                                                    u1_exact, u2_exact, p_exact, enrichVelocity, dontEnhanceFluxes);
+  
+  SolutionPtr solnIncrement = problem.solutionIncrement();
+  SolutionPtr backgroundFlow = problem.backgroundFlow();
+  
+  SolutionPtr solnIncrement_condensed = problem_condensed.solutionIncrement();
+  
+  Teuchos::RCP<ExactSolution> exactSolution = problem.exactSolution();
+  MeshPtr mesh = problem.mesh();
+  
+  int maxIters = 3;
+  
+  FunctionPtr u1_incr = Function::solution(u1_vgp, solnIncrement);
+  FunctionPtr u2_incr = Function::solution(u2_vgp, solnIncrement);
+  FunctionPtr p_incr = Function::solution(p_vgp, solnIncrement);
+  
+  FunctionPtr l2_incr = u1_incr * u1_incr + u2_incr * u2_incr + p_incr * p_incr;
+  
+  FunctionPtr u1_incr_condensed = Function::solution(u1_vgp, solnIncrement_condensed);
+  FunctionPtr u2_incr_condensed = Function::solution(u2_vgp, solnIncrement_condensed);
+  FunctionPtr p_incr_condensed = Function::solution(p_vgp, solnIncrement_condensed);
+  
+  FunctionPtr l2_incr_condensed = u1_incr_condensed * u1_incr_condensed
+                                + u2_incr_condensed * u2_incr_condensed
+                                + p_incr_condensed * p_incr_condensed;
+  
+  double l2_incr_norm, l2_incr_norm_condensed;
+  do {
+    problem.iterate(useLineSearch,false);          // false: don't use condensation
+    problem_condensed.iterate(useLineSearch,true); //  true: use condensation
+
+    l2_incr_norm = sqrt(l2_incr->integrate(mesh));
+    l2_incr_norm_condensed = sqrt(l2_incr_condensed->integrate(mesh));
+    if (rank==0) {
+//      cout << "l2_incr_norm: " << l2_incr_norm << endl;
+//      cout << "l2_incr_norm_condensed: " << l2_incr_norm_condensed << endl;
+    }
+    
+    if (abs(l2_incr_norm_condensed - l2_incr_norm) > tol) {
+      success = false;
+      if (rank==0) {
+        cout << "Failure in SolutionTests::testCondensationSolveNonlinear: on iteration " << problem.iterationCount() << ", condensed solve and standard differ in L^2 norm of increment by ";
+        cout << abs(l2_incr_norm_condensed - l2_incr_norm) << endl;
+      }
+      
+      double p_diff = (p_incr - p_incr_condensed)->l2norm(mesh);
+      double u1_diff = (u1_incr - u1_incr_condensed)->l2norm(mesh);
+      double u2_diff = (u2_incr - u2_incr_condensed)->l2norm(mesh);
+      
+      VarPtr u1hat = problem.vgpNavierStokesFormulation()->u1hat();
+      VarPtr u2hat = problem.vgpNavierStokesFormulation()->u2hat();
+      VarPtr t1n =  problem.vgpNavierStokesFormulation()->t1n();
+      VarPtr t2n =  problem.vgpNavierStokesFormulation()->t2n();
+      
+      FunctionPtr u1hat_soln = Function::solution(u1hat, solnIncrement);
+      FunctionPtr u1hat_soln_condensed = Function::solution(u1hat, solnIncrement_condensed);
+      FunctionPtr u2hat_soln = Function::solution(u2hat, solnIncrement);
+      FunctionPtr u2hat_soln_condensed = Function::solution(u2hat, solnIncrement_condensed);
+      FunctionPtr t1n_soln = Function::solution(t1n, solnIncrement);
+      FunctionPtr t1n_soln_condensed = Function::solution(t1n, solnIncrement_condensed);
+      FunctionPtr t2n_soln = Function::solution(t2n, solnIncrement);
+      FunctionPtr t2n_soln_condensed = Function::solution(t2n, solnIncrement_condensed);
+      
+      double u1hat_diff = (u1hat_soln - u1hat_soln_condensed)->l2norm(mesh);
+      double u2hat_diff = (u2hat_soln - u2hat_soln_condensed)->l2norm(mesh);
+      double t1n_diff = (t1n_soln - t1n_soln_condensed)->l2norm(mesh);
+      double t2n_diff = (t2n_soln - t2n_soln_condensed)->l2norm(mesh);
+      
+      if (rank==0) {
+        cout << "p difference: " << p_diff << endl;
+        cout << "u1 difference: " << u1_diff << endl;
+        cout << "u2 difference: " << u2_diff << endl;
+        
+        cout << "u1hat difference: " << u1hat_diff << endl;
+        cout << "u2hat difference: " << u2hat_diff << endl;
+        cout << "t1n difference: " << t1n_diff << endl;
+        cout << "t2n difference: " << t2n_diff << endl;
+      }
+      
+      break;
+    }
+  }  while ( (problem.iterationCount() < maxIters) );
   
   return success;
 }

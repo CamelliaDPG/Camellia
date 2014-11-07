@@ -30,6 +30,7 @@ public:
   void runTests(int &numTestsRun, int &numTestsPassed);
   static bool storageSizesAgree(Teuchos::RCP< Solution > sol1, Teuchos::RCP< Solution > sol2);
   string testSuiteName() { return "SolutionTests"; }
+  bool testAddCondensedSolution();
   bool testAddSolution();
   bool testProjectFunction();
   bool testNewProjectFunction();
@@ -43,6 +44,7 @@ public:
   bool testScratchPadSolution();
   bool testSolutionsAreConsistent();
   bool testCondensationSolve();
+  bool testCondensationSolveNonlinear();
   bool testCondensationSolveWithSinglePointConstraint();
   bool testCondensationSolveWithZeroMeanConstraint();
   
