@@ -78,11 +78,11 @@ public:
 class VGPNavierStokesFormulation : public NavierStokesFormulation {
   VarFactory varFactory;
   // fields:
-  VarPtr u1, u2, p, sigma11, sigma12, sigma21, sigma22;
+  VarPtr _u1, _u2, _p, _sigma11, _sigma12, _sigma21, _sigma22;
   // fluxes & traces:
-  VarPtr u1hat, u2hat, t1n, t2n;
+  VarPtr _u1hat, _u2hat, _t1n, _t2n;
   // tests:
-  VarPtr tau1, tau2, q, v1, v2;
+  VarPtr _tau1, _tau2, _q, _v1, _v2;
   BFPtr _bf, _stokesBF;
   IPPtr _graphNorm;
   FunctionPtr _mu;
@@ -97,31 +97,31 @@ class VGPNavierStokesFormulation : public NavierStokesFormulation {
   
   void initVars() {
     varFactory = VGPStokesFormulation::vgpVarFactory();
-    v1 = varFactory.testVar(VGP_V1_S, HGRAD);
-    v2 = varFactory.testVar(VGP_V2_S, HGRAD);
-    tau1 = varFactory.testVar(VGP_TAU1_S, HDIV);
-    tau2 = varFactory.testVar(VGP_TAU2_S, HDIV);
-    q = varFactory.testVar(VGP_Q_S, HGRAD);
+    _v1 = varFactory.testVar(VGP_V1_S, HGRAD);
+    _v2 = varFactory.testVar(VGP_V2_S, HGRAD);
+    _tau1 = varFactory.testVar(VGP_TAU1_S, HDIV);
+    _tau2 = varFactory.testVar(VGP_TAU2_S, HDIV);
+    _q = varFactory.testVar(VGP_Q_S, HGRAD);
     
-    u1hat = varFactory.traceVar(VGP_U1HAT_S);
-    u2hat = varFactory.traceVar(VGP_U2HAT_S);
+    _u1hat = varFactory.traceVar(VGP_U1HAT_S);
+    _u2hat = varFactory.traceVar(VGP_U2HAT_S);
     
-    t1n = varFactory.fluxVar(VGP_T1HAT_S);
-    t2n = varFactory.fluxVar(VGP_T2HAT_S);
-    u1 = varFactory.fieldVar(VGP_U1_S);
-    u2 = varFactory.fieldVar(VGP_U2_S);
-    sigma11 = varFactory.fieldVar(VGP_SIGMA11_S);
-    sigma12 = varFactory.fieldVar(VGP_SIGMA12_S);
-    sigma21 = varFactory.fieldVar(VGP_SIGMA21_S);
-    sigma22 = varFactory.fieldVar(VGP_SIGMA22_S);
-    p = varFactory.fieldVar(VGP_P_S);
+    _t1n = varFactory.fluxVar(VGP_T1HAT_S);
+    _t2n = varFactory.fluxVar(VGP_T2HAT_S);
+    _u1 = varFactory.fieldVar(VGP_U1_S);
+    _u2 = varFactory.fieldVar(VGP_U2_S);
+    _sigma11 = varFactory.fieldVar(VGP_SIGMA11_S);
+    _sigma12 = varFactory.fieldVar(VGP_SIGMA12_S);
+    _sigma21 = varFactory.fieldVar(VGP_SIGMA21_S);
+    _sigma22 = varFactory.fieldVar(VGP_SIGMA22_S);
+    _p = varFactory.fieldVar(VGP_P_S);
     
-    sigma11_prev = Function::solution(sigma11, _soln);
-    sigma12_prev = Function::solution(sigma12, _soln);
-    sigma21_prev = Function::solution(sigma21, _soln);
-    sigma22_prev = Function::solution(sigma22, _soln);
-    u1_prev = Function::solution(u1,_soln);
-    u2_prev = Function::solution(u2,_soln);
+    sigma11_prev = Function::solution(_sigma11, _soln);
+    sigma12_prev = Function::solution(_sigma12, _soln);
+    sigma21_prev = Function::solution(_sigma21, _soln);
+    sigma22_prev = Function::solution(_sigma22, _soln);
+    u1_prev = Function::solution(_u1,_soln);
+    u2_prev = Function::solution(_u2,_soln);
   }
   
   void init(FunctionPtr Re, SolutionPtr soln) {
@@ -133,29 +133,29 @@ class VGPNavierStokesFormulation : public NavierStokesFormulation {
     
     bool dontEnrichVelocity = false;
     _bf = stokesBF(_mu);
-
-//    FunctionPtr u_prev = Function::vectorize(u1_prev, u2_prev);
-//    
-//    _bf->addTerm( u1, u_prev * v1->grad() );
-//    _bf->addTerm( u1_prev * u1, v1->dx());
-//    _bf->addTerm( u1_prev * u2, v1->dy());
-//    
-//    _bf->addTerm( u2, u_prev * v2->grad() );
-//    _bf->addTerm( u2_prev * u1, v2->dx());
-//    _bf->addTerm( u2_prev * u2, v2->dy());
     
-    _bf->addTerm(- Re * sigma11_prev * u1 - Re * sigma12_prev * u2 - Re * u1_prev * sigma11 - Re * u2_prev * sigma12, v1);
-    _bf->addTerm(- Re * sigma21_prev * u1 - Re * sigma22_prev * u2 - Re * u1_prev * sigma21 - Re * u2_prev * sigma22, v2);
-//    _bf->addTerm( - ( u1_prev->dx() + u2_prev->dy() ) * u1, v1); // (div u) delta u v
-//    _bf->addTerm( - ( u1_prev->dx() + u2_prev->dy() ) * u2, v2); // (div u) delta u v
+    //    FunctionPtr u_prev = Function::vectorize(u1_prev, u2_prev);
+    //
+    //    _bf->addTerm( _u1, u_prev * _v1->grad() );
+    //    _bf->addTerm( u1_prev * _u1, _v1->dx());
+    //    _bf->addTerm( u1_prev * _u2, _v1->dy());
+    //
+    //    _bf->addTerm( _u2, u_prev * _v2->grad() );
+    //    _bf->addTerm( u2_prev * _u1, _v2->dx());
+    //    _bf->addTerm( u2_prev * _u2, _v2->dy());
+    
+    _bf->addTerm(- Re * sigma11_prev * _u1 - Re * sigma12_prev * _u2 - Re * u1_prev * _sigma11 - Re * u2_prev * _sigma12, _v1);
+    _bf->addTerm(- Re * sigma21_prev * _u1 - Re * sigma22_prev * _u2 - Re * u1_prev * _sigma21 - Re * u2_prev * _sigma22, _v2);
+    //    _bf->addTerm( - ( u1_prev->dx() + u2_prev->dy() ) * _u1, _v1); // (div u) delta u v
+    //    _bf->addTerm( - ( u1_prev->dx() + u2_prev->dy() ) * _u2, _v2); // (div u) delta u v
     
     _graphNorm = _bf->graphNorm(); // just use the automatic for now
     
     // EXPERIMENT! :
     // when _mu is small, we lose control of the gradient of v, which we need control of for the
     // equivalence to the optimal test norm.  So here we add it back in:
-//    _graphNorm->addTerm(v1->grad());
-//    _graphNorm->addTerm(v2->grad());
+    //    _graphNorm->addTerm(_v1->grad());
+    //    _graphNorm->addTerm(_v2->grad());
   }
 public:
   static BFPtr stokesBF(FunctionPtr mu) {
@@ -178,52 +178,52 @@ public:
   }
   RHSPtr rhs(FunctionPtr f1, FunctionPtr f2, bool excludeFluxesAndTraces) {
     RHSPtr rhs = RHS::rhs();
-    rhs->addTerm( f1 * v1 + f2 * v2 );
+    rhs->addTerm( f1 * _v1 + f2 * _v2 );
     // add the subtraction of the stokes BF here:
     rhs->addTerm( -_stokesBF->testFunctional(_soln, excludeFluxesAndTraces) );
     
-//    // finally, add convective term:
-//    FunctionPtr u_prev = Function::vectorize(u1_prev,u2_prev);
-//    rhs->addTerm( - u1_prev * u_prev * v1->grad() );
-//    rhs->addTerm( - u2_prev * u_prev * v2->grad() );
+    //    // finally, add convective term:
+    //    FunctionPtr u_prev = Function::vectorize(u1_prev,u2_prev);
+    //    rhs->addTerm( - u1_prev * u_prev * _v1->grad() );
+    //    rhs->addTerm( - u2_prev * u_prev * _v2->grad() );
     
     // finally, add the u sigma term:
-    rhs->addTerm( ((u1_prev / _mu) * sigma11_prev + (u2_prev / _mu) * sigma12_prev) * v1 );
-    rhs->addTerm( ((u1_prev / _mu) * sigma21_prev + (u2_prev / _mu) * sigma22_prev) * v2 );
-//    rhs->addTerm( (u1_prev->dx() + u2_prev->dy()) * (u1_prev * v1 + u2_prev * v2) ); // (div u) u * v
+    rhs->addTerm( ((u1_prev / _mu) * sigma11_prev + (u2_prev / _mu) * sigma12_prev) * _v1 );
+    rhs->addTerm( ((u1_prev / _mu) * sigma21_prev + (u2_prev / _mu) * sigma22_prev) * _v2 );
+    //    rhs->addTerm( (u1_prev->dx() + u2_prev->dy()) * (u1_prev * _v1 + u2_prev * _v2) ); // (div u) u * v
     
     return rhs;
   }
   IPPtr scaleCompliantGraphNorm(FunctionPtr dt_inv = Function::zero()) {
-    // corresponds to ||u||^2 + ||grad u||^2 + ||p||^2
+    // corresponds to ||u||^2 + ||grad u||^2 + ||_p||^2
     FunctionPtr h = Teuchos::rcp( new hFunction() );
     IPPtr compliantGraphNorm = Teuchos::rcp( new IP );
     
-    compliantGraphNorm->addTerm( _mu * v1->dx() + tau1->x() - (u1_prev / _mu) * v1 ); // sigma11
-    compliantGraphNorm->addTerm( _mu * v1->dy() + tau1->y() - (u2_prev / _mu) * v1 ); // sigma12
-    compliantGraphNorm->addTerm( _mu * v2->dx() + tau2->x() - (u1_prev / _mu) * v2 ); // sigma21
-    compliantGraphNorm->addTerm( _mu * v2->dy() + tau2->y() - (u2_prev / _mu) * v2); // sigma22
+    compliantGraphNorm->addTerm( _mu * _v1->dx() + _tau1->x() - (u1_prev / _mu) * _v1 ); // _sigma11
+    compliantGraphNorm->addTerm( _mu * _v1->dy() + _tau1->y() - (u2_prev / _mu) * _v1 ); // _sigma12
+    compliantGraphNorm->addTerm( _mu * _v2->dx() + _tau2->x() - (u1_prev / _mu) * _v2 ); // _sigma21
+    compliantGraphNorm->addTerm( _mu * _v2->dy() + _tau2->y() - (u2_prev / _mu) * _v2); // _sigma22
     
-    compliantGraphNorm->addTerm(   h * tau1->div() - h * q->dx() - h * dt_inv * v1
-                                 - (sigma11_prev / _mu) * v1 - (sigma21_prev / _mu) * v2 );  // u1
-    compliantGraphNorm->addTerm(   h * tau2->div() - h * q->dy() - h * dt_inv * v2
-                                 - (sigma12_prev / _mu) * v1 - (sigma22_prev / _mu) * v2 );  // u2
+    compliantGraphNorm->addTerm(   h * _tau1->div() - h * _q->dx() - h * dt_inv * _v1
+                                - (sigma11_prev / _mu) * _v1 - (sigma21_prev / _mu) * _v2 );  // _u1
+    compliantGraphNorm->addTerm(   h * _tau2->div() - h * _q->dy() - h * dt_inv * _v2
+                                - (sigma12_prev / _mu) * _v1 - (sigma22_prev / _mu) * _v2 );  // _u2
     
-    compliantGraphNorm->addTerm( v1->dx() + v2->dy() );          // pressure
+    compliantGraphNorm->addTerm( _v1->dx() + _v2->dy() );          // pressure
     
-    compliantGraphNorm->addTerm( (1 / h) * v1 );
-    compliantGraphNorm->addTerm( (1 / h) * v2 );
-    compliantGraphNorm->addTerm( q );
-    compliantGraphNorm->addTerm( tau1 );
-    compliantGraphNorm->addTerm( tau2 );
+    compliantGraphNorm->addTerm( (1 / h) * _v1 );
+    compliantGraphNorm->addTerm( (1 / h) * _v2 );
+    compliantGraphNorm->addTerm( _q );
+    compliantGraphNorm->addTerm( _tau1 );
+    compliantGraphNorm->addTerm( _tau2 );
     return compliantGraphNorm;
   }
   
   BCPtr bc(FunctionPtr u1_fxn, FunctionPtr u2_fxn, SpatialFilterPtr entireBoundary) {
     BCPtr bc = BC::bc();
-    bc->addDirichlet(u1hat, entireBoundary, u1_fxn);
-    bc->addDirichlet(u2hat, entireBoundary, u2_fxn);
-    bc->addZeroMeanConstraint(p);
+    bc->addDirichlet(_u1hat, entireBoundary, u1_fxn);
+    bc->addDirichlet(_u2hat, entireBoundary, u2_fxn);
+    bc->addZeroMeanConstraint(_p);
     return bc;
   }
   Teuchos::RCP<ExactSolution> exactSolution(FunctionPtr u1_exact, FunctionPtr u2_exact, FunctionPtr p_exact,
@@ -231,18 +231,18 @@ public:
     // f1 and f2 are those for Stokes, but minus u \cdot \grad u
     FunctionPtr mu = 1.0 / _Re;
     FunctionPtr f1 = -p_exact->dx() + mu * (u1_exact->dx()->dx() + u1_exact->dy()->dy())
-                     - u1_exact * u1_exact->dx() - u2_exact * u1_exact->dy();
+    - u1_exact * u1_exact->dx() - u2_exact * u1_exact->dy();
     FunctionPtr f2 = -p_exact->dy() + mu * (u2_exact->dx()->dx() + u2_exact->dy()->dy())
-                     - u1_exact * u2_exact->dx() - u2_exact * u2_exact->dy();
+    - u1_exact * u2_exact->dx() - u2_exact * u2_exact->dy();
     
     BCPtr bc = this->bc(u1_exact, u2_exact, entireBoundary);
     
     RHSPtr rhs = this->rhs(f1,f2,false);
     Teuchos::RCP<ExactSolution> mySolution = Teuchos::rcp( new ExactSolution(_bf, bc, rhs) );
-    mySolution->setSolutionFunction(u1, u1_exact);
-    mySolution->setSolutionFunction(u2, u2_exact);
+    mySolution->setSolutionFunction(_u1, u1_exact);
+    mySolution->setSolutionFunction(_u2, u2_exact);
     
-    mySolution->setSolutionFunction(p, p_exact);
+    mySolution->setSolutionFunction(_p, p_exact);
     
     FunctionPtr sigma_weight = _mu;
     
@@ -251,10 +251,10 @@ public:
     FunctionPtr sigma21_exact = sigma_weight * u2_exact->dx();
     FunctionPtr sigma22_exact = sigma_weight * u2_exact->dy();
     
-    mySolution->setSolutionFunction(sigma11, sigma11_exact);
-    mySolution->setSolutionFunction(sigma12, sigma12_exact);
-    mySolution->setSolutionFunction(sigma21, sigma21_exact);
-    mySolution->setSolutionFunction(sigma22, sigma22_exact);
+    mySolution->setSolutionFunction(_sigma11, sigma11_exact);
+    mySolution->setSolutionFunction(_sigma12, sigma12_exact);
+    mySolution->setSolutionFunction(_sigma21, sigma21_exact);
+    mySolution->setSolutionFunction(_sigma22, sigma22_exact);
     
     // tn = (mu sigma - pI)n
     FunctionPtr sideParity = Function::sideParity();
@@ -262,16 +262,16 @@ public:
     FunctionPtr t1n_exact = (sigma11_exact - p_exact) * n->x() + sigma12_exact * n->y();
     FunctionPtr t2n_exact = sigma21_exact * n->x() + (sigma22_exact - p_exact) * n->y();
     
-    mySolution->setSolutionFunction(u1hat, u1_exact);
-    mySolution->setSolutionFunction(u2hat, u2_exact);
-    mySolution->setSolutionFunction(t1n, t1n_exact * sideParity);
-    mySolution->setSolutionFunction(t2n, t2n_exact * sideParity);
+    mySolution->setSolutionFunction(_u1hat, u1_exact);
+    mySolution->setSolutionFunction(_u2hat, u2_exact);
+    mySolution->setSolutionFunction(_t1n, t1n_exact * sideParity);
+    mySolution->setSolutionFunction(_t2n, t2n_exact * sideParity);
     
     return mySolution;
   }
   
   void primaryTrialIDs(vector<int> &fieldIDs) {
-    // (u1,u2,p) 
+    // (_u1,_u2,_p)
     FunctionPtr mu = 1.0 / _Re;
     VGPStokesFormulation stokesFormulation(mu);
     stokesFormulation.primaryTrialIDs(fieldIDs);
@@ -282,13 +282,26 @@ public:
     stokesFormulation.trialIDs(fieldIDs,correspondingTraceIDs,fileFriendlyNames);
   }
   VarPtr u1var() {
-    return u1;
+    return _u1;
   }
   VarPtr u2var() {
-    return u2;
+    return _u2;
   }
   VarPtr pvar() {
-    return p;
+    return _p;
+  }
+  
+  VarPtr u1hat() {
+    return _u1hat;
+  }
+  VarPtr u2hat() {
+    return _u2hat;
+  }
+  VarPtr t1n() {
+    return _t1n;
+  }
+  VarPtr t2n() {
+    return _t2n;
   }
 };
 
@@ -551,7 +564,8 @@ public:
     }
   }
   double iterate(bool useLineSearch, bool useCondensedSolve) { // returns the weight used...
-    double weight;
+    double weight = 1.0;
+    
     if (_iterations==0) {
       _solnIncrement->clear(); // zero out so we start afresh if the _iterations have been manually set...
       if (useCondensedSolve) {
@@ -560,8 +574,9 @@ public:
         _backgroundFlow->solve(_solver);
       }
       // want _solnIncrement to store the initial solution as the first increment:
-      weight = 1.0;
+//      weight = 1.0;
       _solnIncrement->addSolution(_backgroundFlow, weight, true); // true: allow adds of empty cells
+//      _solnIncrement->setSolution(_backgroundFlow);
     } else {
       if (useCondensedSolve) {
         _solnIncrement->condensedSolve(_solver);
