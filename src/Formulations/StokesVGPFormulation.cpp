@@ -26,9 +26,10 @@ const string StokesVGPFormulation::S_TN3_HAT = "\\widehat{t}_{3n}";
 const string StokesVGPFormulation::S_V1 = "v_1";
 const string StokesVGPFormulation::S_V2 = "v_2";
 const string StokesVGPFormulation::S_V3 = "v_3";
-const string StokesVGPFormulation::S_TAU1 = "\\widehat{\\tau}_{1}";
-const string StokesVGPFormulation::S_TAU2 = "\\widehat{\\tau}_{2}";
-const string StokesVGPFormulation::S_TAU3 = "\\widehat{\\tau}_{3}";
+const string StokesVGPFormulation::S_TAU1 = "\\tau_{1}";
+const string StokesVGPFormulation::S_TAU2 = "\\tau_{2}";
+const string StokesVGPFormulation::S_TAU3 = "\\tau_{3}";
+const string StokesVGPFormulation::S_Q = "q";
 
 StokesVGPFormulation::StokesVGPFormulation(int spaceDim, bool useConformingTraces, double mu) {
   _spaceDim = spaceDim;
@@ -52,6 +53,7 @@ StokesVGPFormulation::StokesVGPFormulation(int spaceDim, bool useConformingTrace
   // tests
   VarPtr v1, v2, v3;
   VarPtr tau1, tau2, tau3;
+  VarPtr q;
   
   VarFactory vf;
   u1 = vf.fieldVar(S_U1);
@@ -93,6 +95,8 @@ StokesVGPFormulation::StokesVGPFormulation(int spaceDim, bool useConformingTrace
     tau3 = vf.testVar(S_TAU3, HDIV);
   }
   
+  q = vf.testVar(S_Q, HGRAD);
+  
   _stokesBF = Teuchos::rcp( new BF(vf) );
   // v1
   // tau1 terms:
@@ -127,6 +131,16 @@ StokesVGPFormulation::StokesVGPFormulation(int spaceDim, bool useConformingTrace
     _stokesBF->addTerm(sigma3, v3->grad()); // (mu sigma3, grad v3)
     _stokesBF->addTerm( - p, v3->dz());
     _stokesBF->addTerm( t3n, v3);
+  }
+  
+  // q:
+  _stokesBF->addTerm(-u1,q->dx()); // (-u, grad q)
+  _stokesBF->addTerm(-u2,q->dy());
+
+  if (spaceDim==2) {
+    _stokesBF->addTerm(u1_hat * n->x() + u2_hat * n->y(), q);
+  } else if (spaceDim==3) {
+    _stokesBF->addTerm(u1_hat * n->x() + u2_hat * n->y() + u3_hat * n->z(), q);
   }
 }
 
