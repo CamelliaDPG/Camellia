@@ -197,6 +197,103 @@ void Solution::initialize() {
 }
 
 void Solution::addSolution(Teuchos::RCP<Solution> otherSoln, double weight, bool allowEmptyCells, bool replaceBoundaryTerms) {
+  // In many situations, we can't legitimately add two condensed solution _lhsVectors together and back out the other (field) dofs.
+  // E.g., consider a nonlinear problem in which the bilinear form (and therefore stiffness matrix) depends on background data.
+  // Even a linear problem with two solutions with different RHS data would require us to accumulate the local load vectors.
+  // For this reason, we don't attempt to add the two _lhsVectors together.  Instead, we add their respective cell-local
+  // (expanded, basically) coefficients together, and then glean the condensed representation from that using the private
+  // setGlobalSolutionFromCellLocalCoefficients() method.
+  
+  set<GlobalIndexType> myCellIDs = _mesh->cellIDsInPartition();
+  
+  for (set<GlobalIndexType>::iterator cellIDIt = myCellIDs.begin(); cellIDIt != myCellIDs.end(); cellIDIt++) {
+    GlobalIndexType cellID = *cellIDIt;
+    
+    FieldContainer<double> myCoefficients;
+    if (_solutionForCellIDGlobal.find(cellID) != _solutionForCellIDGlobal.end()) {
+      myCoefficients = _solutionForCellIDGlobal[cellID];
+    } else {
+      myCoefficients.resize(_mesh->getElementType(cellID)->trialOrderPtr->totalDofs());
+    }
+    
+    FieldContainer<double> otherCoefficients = otherSoln->allCoefficientsForCellID(cellID);
+    
+    SerialDenseWrapper::addFCs(myCoefficients, otherCoefficients, weight);
+    
+    if (replaceBoundaryTerms) {
+      // then copy the flux/field terms from otherCoefficients, weighting with weight
+      //   (though it seems to me now that this option probably only really makes sense when weight = 1.0, this implementation is consistent
+      //    with the previous non-condensed version of addSolution)
+      DofOrderingPtr trialOrder = _mesh->getElementType(cellID)->trialOrderPtr;
+      set<int> traceDofIndices = trialOrder->getTraceDofIndices();
+      for (set<int>::iterator traceDofIndexIt = traceDofIndices.begin(); traceDofIndexIt != traceDofIndices.end(); traceDofIndexIt++) {
+        int traceDofIndex = *traceDofIndexIt;
+        myCoefficients[traceDofIndex] = weight * otherCoefficients[traceDofIndex];
+      }
+    }
+    _solutionForCellIDGlobal[cellID] = myCoefficients;
+  }
+  
+  setGlobalSolutionFromCellLocalCoefficients();
+  
+  clearComputedResiduals();
+  
+  return;
+  // old implementation -- distinguishing between condensed case and other -- below
+  /*
+  { // treat the condensedDofInterpreter case:
+    CondensedDofInterpreter* condensedDofInterpreter = dynamic_cast<CondensedDofInterpreter*>( _dofInterpreter.get() );
+    CondensedDofInterpreter* otherCondensedDofInterpreter = dynamic_cast<CondensedDofInterpreter*>( otherSoln->getDofInterpreter().get() );
+    
+    bool isCondensed = (condensedDofInterpreter != NULL);
+    bool otherIsCondensed = (otherCondensedDofInterpreter != NULL);
+    
+    if (isCondensed || otherIsCondensed) {
+      // In many situations, we can't legitimately add two condensed solution _lhsVectors together and back out the other (field) dofs.
+      // E.g., consider a nonlinear problem in which the bilinear form (and therefore stiffness matrix) depends on background data.
+      // Even a linear problem with two solutions with different RHS data would require us to accumulate the local load vectors.
+      // For this reason, we don't attempt to add two condensed solutions together.  Instead, we add their respective cell-local
+      // (expanded, basically) coefficients together, and then glean the condensed representation from that using the private
+      // setGlobalSolutionFromCellLocalCoefficients() method.
+      
+      set<GlobalIndexType> myCellIDs = _mesh->cellIDsInPartition();
+
+      for (set<GlobalIndexType>::iterator cellIDIt = myCellIDs.begin(); cellIDIt != myCellIDs.end(); cellIDIt++) {
+        GlobalIndexType cellID = *cellIDIt;
+
+        FieldContainer<double> myCoefficients;
+        if (_solutionForCellIDGlobal.find(cellID) != _solutionForCellIDGlobal.end()) {
+          myCoefficients = _solutionForCellIDGlobal[cellID];
+        } else {
+          myCoefficients.resize(_mesh->getElementType(cellID)->trialOrderPtr->totalDofs());
+        }
+        
+        FieldContainer<double> otherCoefficients = otherSoln->allCoefficientsForCellID(cellID);
+        
+        SerialDenseWrapper::addFCs(myCoefficients, otherCoefficients, weight);
+        
+        if (replaceBoundaryTerms) {
+          // then copy the flux/field terms from otherCoefficients, weighting with weight
+          //   (though it seems to me now that this option probably only really makes sense when weight = 1.0, this implementation is consistent
+          //    with the previous non-condensed version of addSolution)
+          DofOrderingPtr trialOrder = _mesh->getElementType(cellID)->trialOrderPtr;
+          set<int> traceDofIndices = trialOrder->getTraceDofIndices();
+          for (set<int>::iterator traceDofIndexIt = traceDofIndices.begin(); traceDofIndexIt != traceDofIndices.end(); traceDofIndexIt++) {
+            int traceDofIndex = *traceDofIndexIt;
+            myCoefficients[traceDofIndex] = weight * otherCoefficients[traceDofIndex];
+          }
+        }
+        _solutionForCellIDGlobal[cellID] = myCoefficients;
+      }
+      
+      setGlobalSolutionFromCellLocalCoefficients();
+      
+      clearComputedResiduals();
+      
+      return;
+    }
+  }
+  
   // first, add the global solution vectors together.
   if (otherSoln->getLHSVector().get() != NULL) {
     if (_lhsVector.get() != NULL) {
@@ -205,6 +302,7 @@ void Solution::addSolution(Teuchos::RCP<Solution> otherSoln, double weight, bool
       _lhsVector = Teuchos::rcp( new Epetra_FEVector( *otherSoln->getLHSVector() ) );
       _lhsVector->Scale(weight);
     }
+    
     if (replaceBoundaryTerms) {
       Epetra_Map partMap = getPartitionMap();
       set<GlobalIndexType> boundaryIndices;
@@ -223,10 +321,24 @@ void Solution::addSolution(Teuchos::RCP<Solution> otherSoln, double weight, bool
     importSolution();
     
     clearComputedResiduals();
-  }
+  }*/
 }
 
 void Solution::addSolution(Teuchos::RCP<Solution> otherSoln, double weight, set<int> varsToAdd, bool allowEmptyCells) {
+  {
+    CondensedDofInterpreter* condensedDofInterpreter = dynamic_cast<CondensedDofInterpreter*>( _dofInterpreter.get() );
+    CondensedDofInterpreter* otherCondensedDofInterpreter = dynamic_cast<CondensedDofInterpreter*>( otherSoln->getDofInterpreter().get() );
+    
+    bool isCondensed = (condensedDofInterpreter != NULL);
+    bool otherIsCondensed = (otherCondensedDofInterpreter != NULL);
+    
+    if (isCondensed || otherIsCondensed) {
+      cout << "This version of addSolution() doesn't yet support condensed solution data.\n";
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "This version of addSolution() doesn't yet support condensed solution data.");
+    }
+    
+  }
+  
   set<GlobalIndexType> globalIndicesForVars = _mesh->globalDofAssignment()->partitionOwnedIndicesForVariables(varsToAdd);
   Epetra_Map partMap = getPartitionMap();
 
@@ -284,19 +396,8 @@ void Solution::initializeLHSVector() {
 //  _lhsVector = Teuchos::rcp( (Epetra_FEVector*) NULL); // force a delete
   Epetra_Map partMap = getPartitionMap();
   _lhsVector = Teuchos::rcp(new Epetra_FEVector(partMap,1,true));
-  _lhsVector->PutScalar(0); // unclear whether this is redundant with constructor or not
-  
-  // set initial _lhsVector (initial guess for iterative solvers)
-  set<GlobalIndexType> cellIDs = _mesh->cellIDsInPartition();
-  for (set<GlobalIndexType>::iterator cellIDIt = cellIDs.begin(); cellIDIt != cellIDs.end(); cellIDIt++) {
-    GlobalIndexType cellID = *cellIDIt;
-    if (_solutionForCellIDGlobal.find(cellID) != _solutionForCellIDGlobal.end()) {
-      int localTrialDofCount = _mesh->getElementType(cellID)->trialOrderPtr->totalDofs();
-      if (localTrialDofCount==_solutionForCellIDGlobal[cellID].size()) { // guard against cases when solutions not registered with their meshes have their meshes p-refined beneath them.  In such a case, we'll just ignore the previous solution coefficients on the cell.
-        _mesh->globalDofAssignment()->interpretLocalCoefficients(cellID, _solutionForCellIDGlobal[cellID], *_lhsVector);
-      }
-    }
-  }
+
+  setGlobalSolutionFromCellLocalCoefficients();
 }
 
 void Solution::initializeStiffnessAndLoad() {
@@ -454,8 +555,8 @@ void Solution::populateStiffnessAndLoad() {
         //        _filter->filter(localRHSVector,physicalCellNodes,cellIDs,_mesh,_bc);
       }
       
-      //      cout << "local stiffness matrices:\n" << finalStiffness;
-      //      cout << "local loads:\n" << localRHSVector;
+//      cout << "local stiffness matrices:\n" << localStiffness;
+//      cout << "local loads:\n" << localRHSVector;
       
       subTimer.ResetStartTime();
       
@@ -641,7 +742,7 @@ void Solution::populateStiffnessAndLoad() {
     
     zmcIndex = MPIWrapper::sum(zmcIndex);
     
-    //      cout << "Imposing zero-mean constraint for variable " << _mesh->bilinearForm()->trialName(trialID) << endl;
+//    cout << "Imposing zero-mean constraint for variable " << _mesh->bilinearForm()->trialName(trialID) << endl;
     FieldContainer<double> basisIntegrals;
     FieldContainer<GlobalIndexTypeToCast> globalIndices;
     integrateBasisFunctions(globalIndices,basisIntegrals, trialID);
@@ -919,6 +1020,9 @@ void Solution::importSolution() {
   for (set<GlobalIndexType>::iterator cellIDIt = myCellIDs.begin(); cellIDIt != myCellIDs.end(); cellIDIt++) {
     GlobalIndexType cellID = *cellIDIt;
     set<GlobalIndexType> globalDofsForCell = _dofInterpreter->globalDofIndicesForCell(cellID);
+//    cout << "globalDofs for cell " << cellID << ":\n";
+//    Camellia::print("globalDofIndices", globalDofsForCell);
+    
     globalDofIndicesForMyCells.insert(globalDofsForCell.begin(),globalDofsForCell.end());
   }
 
@@ -1173,7 +1277,7 @@ void Solution::integrateBasisFunctions(FieldContainer<GlobalIndexTypeToCast> &gl
     int basisCardinality = elemTypePtr->trialOrderPtr->getBasisCardinality(trialID,sideIndex);
     FieldContainer<double> valuesForType(numCellsOfType, basisCardinality);
     integrateBasisFunctions(valuesForType,elemTypePtr,trialID);
-    
+
     int numTrialDofs = elemTypePtr->trialOrderPtr->totalDofs();
     FieldContainer<double> localDiscreteValues(numTrialDofs);
     FieldContainer<double> interpretedDiscreteValues;
@@ -1183,14 +1287,31 @@ void Solution::integrateBasisFunctions(FieldContainer<GlobalIndexTypeToCast> &gl
     FieldContainer<double> dummyLocalStiffness(numTrialDofs, numTrialDofs);
     FieldContainer<double> dummyInterpretedStiffness;
     
+    CondensedDofInterpreter* condensedDofInterpreter = dynamic_cast<CondensedDofInterpreter*>(_dofInterpreter.get());
+    
     // copy into values:
     for (int cellIndex=0; cellIndex<numCellsOfType; cellIndex++) {
       GlobalIndexType cellID = cellIDs[cellIndex];
+      
       for (int dofOrdinal=0; dofOrdinal<basisCardinality; dofOrdinal++) {
         IndexType dofIndex = elemTypePtr->trialOrderPtr->getDofIndex(trialID, dofOrdinal);
         localDiscreteValues(dofIndex) = valuesForType(cellIndex,dofOrdinal);
       }
-      _dofInterpreter->interpretLocalData(cellID, dummyLocalStiffness, localDiscreteValues, dummyInterpretedStiffness, interpretedDiscreteValues, globalDofIndices);
+      FieldContainer<double> storedLoad;
+      if (condensedDofInterpreter != NULL) {
+        // condensedDofInterpreter requires the *true* local stiffness, because it will invert part of it...
+        // we assume that the condensedDofInterpreter already has the local stiffness stored:
+        // (CondensedDofInterpreter will throw an exception if not)
+        dummyLocalStiffness = condensedDofInterpreter->storedLocalStiffnessForCell(cellID);
+        // condensedDofInterpreter also requires that we restore the previous load vector for the cell once we're done
+        // (otherwise it would store interpretedDiscreteValues as the load, causing errors)
+        storedLoad = condensedDofInterpreter->storedLocalLoadForCell(cellID);
+      }
+      _dofInterpreter->interpretLocalData(cellID, dummyLocalStiffness, localDiscreteValues, dummyInterpretedStiffness,
+                                          interpretedDiscreteValues, globalDofIndices);
+      if (condensedDofInterpreter != NULL) {
+        condensedDofInterpreter->storeLoadForCell(cellID, storedLoad);
+      }
       
       for (int dofIndex=0; dofIndex<globalDofIndices.size(); dofIndex++) {
         if (interpretedDiscreteValues(dofIndex) != 0) {
@@ -3476,6 +3597,27 @@ vector<int> Solution::getZeroMeanConstraints() {
     }
   }
   return zeroMeanConstraints;
+}
+
+void Solution::setGlobalSolutionFromCellLocalCoefficients() {
+  if (_lhsVector.get() == NULL) {
+    initializeLHSVector();
+    return; // initializeLHSVector() calls setGlobalSolutionFromCellLocalCoefficients(), so return now to avoid redundant execution of the below.
+  }
+  
+  _lhsVector->PutScalar(0); // unclear whether this is redundant with constructor or not
+  
+  // set initial _lhsVector (initial guess for iterative solvers)
+  set<GlobalIndexType> cellIDs = _mesh->cellIDsInPartition();
+  for (set<GlobalIndexType>::iterator cellIDIt = cellIDs.begin(); cellIDIt != cellIDs.end(); cellIDIt++) {
+    GlobalIndexType cellID = *cellIDIt;
+    if (_solutionForCellIDGlobal.find(cellID) != _solutionForCellIDGlobal.end()) {
+      int localTrialDofCount = _mesh->getElementType(cellID)->trialOrderPtr->totalDofs();
+      if (localTrialDofCount==_solutionForCellIDGlobal[cellID].size()) { // guard against cases when solutions not registered with their meshes have their meshes p-refined beneath them.  In such a case, we'll just ignore the previous solution coefficients on the cell.
+        _dofInterpreter->interpretLocalCoefficients(cellID, _solutionForCellIDGlobal[cellID], *_lhsVector);
+      }
+    }
+  }
 }
 
 void Solution::setUseCondensedSolve(bool value) {
