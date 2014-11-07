@@ -121,7 +121,7 @@ public:
       valuePtr++;
     }
   }
-
+  
   // wrapper for SDM multiply + add routine.  Must pass in 2D arrays, even for vectors! 
   // X = ScalarThis*X + ScalarAB*A*B
   static void multiplyAndAdd(FieldContainer<double> &X, const FieldContainer<double> &A, const FieldContainer<double> &B, char TransposeA, char TransposeB, double ScalarAB, double ScalarThis){
@@ -456,6 +456,21 @@ public:
       matrixFile << endl;
     }
     matrixFile.close();
+  }
+  
+  
+  static void addFCs(FieldContainer<double> &A, const FieldContainer<double> &B, double B_weight = 1.0, double A_weight = 1.0) {
+    if (A.size() != B.size() ) {
+      std::cout << "addFCs: A and B must have the same size!\n";
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "addFCs: Array sizes do not match.\n");
+    }
+    double* ptrA = &A[0];
+    const double* ptrB = &B[0];
+    for (int i=0; i<A.size(); i++) {
+      *ptrA = *ptrA * A_weight + *ptrB * B_weight;
+      ptrA++;
+      ptrB++;
+    }
   }
 };
 
