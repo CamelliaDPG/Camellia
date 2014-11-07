@@ -5,7 +5,7 @@ by Nathan V. Roberts
 ******** PREREQUISITES ********
 Trilinos is required for all builds of Camellia.  A couple of sample do-configure scripts for Trilinos can be found in distribution directory, under build/trilinos-do-configure-samples.  These include the packages within Trilinos that Camellia requires.
 
-For a serial debug build, Camellia requires Boost.  VTK is not absolutely required, but very helpful to allow fuller visualization output capabilities.
+For a serial debug build, Camellia requires Boost.  Building Trilinos (specifically Epetra)  with HDF5 is not absolutely required, but allows some useful visualization and other output (which can be read in ParaView, e.g.).
 
 For an MPI build, Camellia also requires some version of the MPI libraries.  Open MPI is what we use most of the time.  Additionally, Camellia supports MUMPS if both Camellia and Trilinos are built with the MUMPS libraries.  MUMPS also requires SCALAPACK to be installed.
 
@@ -50,21 +50,6 @@ HDF5 install (serial build, not suitable for parallel builds of Trilinos):
    -D HDF5_LIBRARY_NAMES:STRING="hdf5" \
    -D TPL_HDF5_INCLUDE_DIRS:FILEPATH=/Users/nroberts/lib/hdf5-serial/include \
    -D EpetraExt_USING_HDF5:BOOL=ON \
-
-VTK install:
-1. Download source from http://www.vtk.org/files/release/5.10/vtk-5.10.1.tar.gz.
-2. Untar:
-	tar -xvf vtk-5.10.1.tar.gz
-	cd VTK5.10.1
-3. Run ccmake:
-	ccmake .
-4. Within ccmake, type 'c' to configure.
-5. Edit any configuration options.  "CMAKE_INSTALL_PREFIX" is probably the most interesting/relevant.
-6. Type 'c' again.
-7. Once it's done configuring, type 'g' to generate and exit.
-8. Make and install:
-	make
-	make install
 
 OpenMPI install:
 1. Download source from http://www.open-mpi.org/software/ompi/.
