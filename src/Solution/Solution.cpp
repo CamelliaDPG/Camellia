@@ -347,10 +347,15 @@ void Solution::addSolution(Teuchos::RCP<Solution> otherSoln, double weight, set<
     FieldContainer<double> otherCoefficients = otherSoln->allCoefficientsForCellID(cellID);
 
     DofOrderingPtr trialOrder = _mesh->getElementType(cellID)->trialOrderPtr;
-    set<int> traceDofIndices = trialOrder->getTraceDofIndices();
-    for (set<int>::iterator traceDofIndexIt = traceDofIndices.begin(); traceDofIndexIt != traceDofIndices.end(); traceDofIndexIt++) {
-      int traceDofIndex = *traceDofIndexIt;
-      myCoefficients[traceDofIndex] += weight * otherCoefficients[traceDofIndex];
+    for (set<int>::iterator varIDIt = varsToAdd.begin(); varIDIt != varsToAdd.end(); varIDIt++) {
+      int varID = *varIDIt;
+      for (int sideOrdinal=0; sideOrdinal<trialOrder->getNumSidesForVarID(varID); sideOrdinal++) {
+        vector<int> dofIndices = trialOrder->getDofIndices(varID, sideOrdinal);
+        for (vector<int>::iterator dofIndexIt = dofIndices.begin(); dofIndexIt != dofIndices.end(); dofIndexIt++) {
+          int dofIndex = *dofIndexIt;
+          myCoefficients[dofIndex] += weight * otherCoefficients[dofIndex];
+        }
+      }
     }
     
     _solutionForCellIDGlobal[cellID] = myCoefficients;
