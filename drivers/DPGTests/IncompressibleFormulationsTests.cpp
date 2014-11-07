@@ -10,6 +10,8 @@
 
 #include "GlobalDofAssignment.h"
 
+#include "HDF5Exporter.h"
+
 #include "CamelliaCellTools.h"
 
 IncompressibleFormulationsTests::IncompressibleFormulationsTests(bool thorough) {
@@ -771,11 +773,12 @@ bool IncompressibleFormulationsTests::testVGPNavierStokesFormulationConsistency(
   // starting out with a single hard-coded solve, but will switch soon to
   // doing several: varying meshes, pToAdd, mu, and which exact solutions we use...
   
+  double nonlinearTol = 1e-15;
   double tol = 2e-11;
   
   bool useLineSearch = false;
   bool useCondensedSolve = true;
-  bool enrichVelocity = false; // true would be for the "compliant" norm, which isn't working well yet
+  bool enrichVelocity = false; // true would add an extra polynomial degree to the velocity.
   
   vector<bool> useHessianList;
   useHessianList.push_back(false);
@@ -874,7 +877,7 @@ bool IncompressibleFormulationsTests::testVGPNavierStokesFormulationConsistency(
               }
               l2_incr_norm = sqrt(l2_incr->integrate(mesh));
 //              cout << "l2_incr_norm: " << l2_incr_norm << endl;
-            }  while ( (l2_incr_norm > tol) && (problem.iterationCount() < maxIters) );
+            }  while ( (l2_incr_norm > nonlinearTol) && (problem.iterationCount() < maxIters) );
             if (printToConsole) {
               string withHessian = useHessian ? "using hessian term" : "without hessian term";
               cout << "with Re = " << 1.0 / mu << " and " << withHessian;
@@ -893,6 +896,10 @@ bool IncompressibleFormulationsTests::testVGPNavierStokesFormulationConsistency(
                 string withHessian = useHessian ? "using hessian term" : "without hessian term";
                 cout << "Failure for Re = " << 1.0 / mu << " and " << withHessian;
                 cout << "; # iters to converge: " << problem.iterationCount() << endl;
+                
+                HDF5Exporter::exportSolution("/tmp", "incomp_tests_background_flow",backgroundFlow);
+                HDF5Exporter::exportSolution("/tmp", "incomp_tests_soln_increment",solnIncrement);
+                
               } else {
   //              cout << "PASS: testVGPStokesFormulationConsistency(): ";
   //              cout << "L^2 error of " << l2Error << " for variable " << field->displayString();
