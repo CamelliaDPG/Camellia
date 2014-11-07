@@ -32,6 +32,8 @@
 #include "MultiBasis.h"
 #include "BasisFactory.h"
 
+using namespace std;
+
 DofOrdering::DofOrdering() { // constructor
   _nextIndex = 0;
   _indexNeedsToBeRebuilt = false;
@@ -196,6 +198,21 @@ int DofOrdering::getTotalBasisCardinality() { // total number of *distinct* basi
     }
   }
   return totalBasisCardinality;
+}
+
+set<int> DofOrdering::getTraceDofIndices() {
+  // returns dof indices corresponding to variables with numSides > 1.
+  set<int> traceDofIndices;
+  for (set<int>::iterator varIDIt = varIDs.begin(); varIDIt != varIDs.end(); varIDIt++) {
+    int varID = *varIDIt;
+    if (numSidesForVarID[varID] > 1) {
+      for (int sideOrdinal=0; sideOrdinal<numSidesForVarID[varID]; sideOrdinal++) {
+        const vector<int> * indices = &getDofIndices(varID, sideOrdinal);
+        traceDofIndices.insert(indices->begin(),indices->end());
+      }
+    }
+  }
+  return traceDofIndices;
 }
 
 const set<int> & DofOrdering::getVarIDs() {

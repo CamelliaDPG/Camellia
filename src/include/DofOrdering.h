@@ -44,23 +44,22 @@
 #include "Basis.h"
 
 using namespace Intrepid;
-using namespace std;
 
 class DofOrdering {
   int _indexNeedsToBeRebuilt;
   int _nextIndex;
 //  vector<int> varIDs;
-  set<int> varIDs;
-  vector<int> varIDsVector;
-  map< pair<int, pair<int, int> >, pair<int, int> > dofIdentifications; // keys: <varID, <sideIndex, dofOrdinal> >
+  std::set<int> varIDs;
+  std::vector<int> varIDsVector;
+  std::map< std::pair<int, std::pair<int, int> >, std::pair<int, int> > dofIdentifications; // keys: <varID, <sideIndex, dofOrdinal> >
                                                                         // values: <sideIndex, dofOrdinal>
-  map<int,int> numSidesForVarID;
-  map< pair<int,int>, vector<int> > indices; // keys for indices are <varID, sideIndex >, where sideIndex = 0 for field (volume) variables
+  std::map<int,int> numSidesForVarID;
+  std::map< std::pair<int,int>, std::vector<int> > indices; // keys for indices are <varID, sideIndex >, where sideIndex = 0 for field (volume) variables
   // values for indices: list of the indices used in the DofOrdering by this <varID, sideIndex> pair's basis, ordered according to that basis's ordering
-  map< pair<int,int>, BasisPtr > bases; // keys are <varID, sideIndex>
-  map< int, int > basisRanks; // keys are varIDs; values are 0,1,2,... (scalar, vector, tensor)
+  std::map< std::pair<int,int>, BasisPtr > bases; // keys are <varID, sideIndex>
+  std::map< int, int > basisRanks; // keys are varIDs; values are 0,1,2,... (scalar, vector, tensor)
   
-  map< int, Teuchos::RCP< shards::CellTopology > > _cellTopologyForSide; // -1 is field variable
+  std::map< int, Teuchos::RCP< shards::CellTopology > > _cellTopologyForSide; // -1 is field variable
 public:
   DofOrdering(); // constructor
   
@@ -75,9 +74,11 @@ public:
   // get the varIndex variable's dof with basis ordinal dofId in the Dof ordering:
   int getDofIndex(int varID, int basisDofOrdinal, int sideIndex=0, int subSideIndex = -1);
   
-  const vector<int> & getDofIndices(int varID, int sideIndex=0);
+  const std::vector<int> & getDofIndices(int varID, int sideIndex=0);
   
-  const set<int> & getVarIDs();
+  const std::set<int> & getVarIDs();
+  
+  std::set<int> getTraceDofIndices(); // returns dof indices corresponding to variables with numSides > 1.
   
   int getNumSidesForVarID(int varID);
   
