@@ -104,8 +104,7 @@ int main(int argc, char *argv[]) {
   bc->addDirichlet(u1hat, otherBoundary, zero);
   bc->addDirichlet(u2hat, otherBoundary, zero);
   
-  //bc->addZeroMeanConstraint(p);
-  bc->addSinglePointBC(p->ID(), zero);
+  bc->addZeroMeanConstraint(p);
   
   IPPtr graphNorm = stokesBF->graphNorm();
   
