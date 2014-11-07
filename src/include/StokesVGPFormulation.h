@@ -26,6 +26,7 @@ class StokesVGPFormulation {
   static const string S_TN1_HAT, S_TN2_HAT, S_TN3_HAT;
 
   static const string S_V1, S_V2, S_V3;
+  static const string S_Q;
   static const string S_TAU1, S_TAU2, S_TAU3;
 public:
   StokesVGPFormulation(int spaceDim, bool useConformingTraces, double mu = 1.0);
