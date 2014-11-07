@@ -325,21 +325,43 @@ void Solution::addSolution(Teuchos::RCP<Solution> otherSoln, double weight, bool
 }
 
 void Solution::addSolution(Teuchos::RCP<Solution> otherSoln, double weight, set<int> varsToAdd, bool allowEmptyCells) {
-  {
-    CondensedDofInterpreter* condensedDofInterpreter = dynamic_cast<CondensedDofInterpreter*>( _dofInterpreter.get() );
-    CondensedDofInterpreter* otherCondensedDofInterpreter = dynamic_cast<CondensedDofInterpreter*>( otherSoln->getDofInterpreter().get() );
+  // In many situations, we can't legitimately add two condensed solution _lhsVectors together and back out the other (field) dofs.
+  // E.g., consider a nonlinear problem in which the bilinear form (and therefore stiffness matrix) depends on background data.
+  // Even a linear problem with two solutions with different RHS data would require us to accumulate the local load vectors.
+  // For this reason, we don't attempt to add the two _lhsVectors together.  Instead, we add their respective cell-local
+  // (expanded, basically) coefficients together, and then glean the condensed representation from that using the private
+  // setGlobalSolutionFromCellLocalCoefficients() method.
+  
+  set<GlobalIndexType> myCellIDs = _mesh->cellIDsInPartition();
+  
+  for (set<GlobalIndexType>::iterator cellIDIt = myCellIDs.begin(); cellIDIt != myCellIDs.end(); cellIDIt++) {
+    GlobalIndexType cellID = *cellIDIt;
     
-    bool isCondensed = (condensedDofInterpreter != NULL);
-    bool otherIsCondensed = (otherCondensedDofInterpreter != NULL);
-    
-    if (isCondensed || otherIsCondensed) {
-      cout << "This version of addSolution() doesn't yet support condensed solution data.\n";
-      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "This version of addSolution() doesn't yet support condensed solution data.");
+    FieldContainer<double> myCoefficients;
+    if (_solutionForCellIDGlobal.find(cellID) != _solutionForCellIDGlobal.end()) {
+      myCoefficients = _solutionForCellIDGlobal[cellID];
+    } else {
+      myCoefficients.resize(_mesh->getElementType(cellID)->trialOrderPtr->totalDofs());
     }
     
+    FieldContainer<double> otherCoefficients = otherSoln->allCoefficientsForCellID(cellID);
+
+    DofOrderingPtr trialOrder = _mesh->getElementType(cellID)->trialOrderPtr;
+    set<int> traceDofIndices = trialOrder->getTraceDofIndices();
+    for (set<int>::iterator traceDofIndexIt = traceDofIndices.begin(); traceDofIndexIt != traceDofIndices.end(); traceDofIndexIt++) {
+      int traceDofIndex = *traceDofIndexIt;
+      myCoefficients[traceDofIndex] += weight * otherCoefficients[traceDofIndex];
+    }
+    
+    _solutionForCellIDGlobal[cellID] = myCoefficients;
   }
   
-  set<GlobalIndexType> globalIndicesForVars = _mesh->globalDofAssignment()->partitionOwnedIndicesForVariables(varsToAdd);
+  setGlobalSolutionFromCellLocalCoefficients();
+  
+  clearComputedResiduals();
+  
+  // old implementation below:
+/*  set<GlobalIndexType> globalIndicesForVars = _mesh->globalDofAssignment()->partitionOwnedIndicesForVariables(varsToAdd);
   Epetra_Map partMap = getPartitionMap();
 
   // add the global solution vectors together.
@@ -357,7 +379,7 @@ void Solution::addSolution(Teuchos::RCP<Solution> otherSoln, double weight, set<
     importSolution();
     
     clearComputedResiduals();
-  }
+  }*/
 }
 
 bool Solution::cellHasCoefficientsAssigned(GlobalIndexType cellID) {

@@ -552,6 +552,27 @@ bool SolutionTests::testAddCondensedSolution() {
     success = false;
   }
   
+  // now repeat, but with a different version of addSolution
+  // first, reset soln1:
+  {
+    if (lhsVector1->Map().NumMyElements() > 0) {
+      for (int i=lhsVector1->Map().MinLID(); i<=lhsVector1->Map().MaxLID(); i++) {
+        GlobalIndexType gid = lhsVector1->Map().GID(i);
+        (*lhsVector1)[0][i] = (double) gid;
+      }
+    }
+    soln1->importSolution();
+  }
+  set<int> varsToAdd = mesh->getElementType(cellID)->trialOrderPtr->getVarIDs(); //simple test: apply to all varIDs
+  soln1->addSolution(soln2, weight, varsToAdd);
+  
+  actualValues = soln1->allCoefficientsForCellID(cellID);
+  maxDiff = 0;
+  if ( !TestSuite::fcsAgree(expectedValues, actualValues, tol, maxDiff) ) {
+    cout << "Error: after calling addSolution (varID filtered version), actual coefficients for sum differ from expected by as much as " << maxDiff << "...\n";
+    success = false;
+  }
+  
   weight = 1.0; // since we don't weight the rhs or the BCs below, this is require to ensure the correctness of the test...
   
   _confusionSolution2_2x2->setUseCondensedSolve(true);
