@@ -21,6 +21,8 @@
 
 #include "GlobalDofAssignment.h"
 
+#include "SerialDenseWrapper.h"
+
 #include "CamelliaDebugUtility.h"
 
 #include "RHS.h"
@@ -57,6 +59,7 @@ void CondensedDofInterpreter::reinitialize() {
 }
 
 void CondensedDofInterpreter::computeAndStoreLocalStiffnessAndLoad(GlobalIndexType cellID) {
+//  cout << "CondensedDofInterpreter: computing stiffness and load for cell " << cellID << endl;
   int numTrialDofs = _mesh->getElementType(cellID)->trialOrderPtr->totalDofs();
   MeshPtr meshPtr = Teuchos::rcp(_mesh, false);
   BasisCachePtr cellBasisCache = BasisCache::basisCacheForCell(meshPtr, cellID);
@@ -551,11 +554,17 @@ void CondensedDofInterpreter::interpretGlobalCoefficients(GlobalIndexType cellID
                                                           const Epetra_MultiVector &globalCoefficients) {
   // here, globalCoefficients correspond to *flux* dofs
   
+//  cout << "CondensedDofInterpreter::interpretGlobalCoefficients for cell " << cellID << endl;
+  
   // get elem data and submatrix data
   FieldContainer<double> K,rhs;
   FieldContainer<GlobalIndexType> interpretedDofIndices;
   
   getLocalData(cellID, K, rhs, interpretedDofIndices);
+  
+//  cout << "CondensedDofInterpreter::interpretGlobalCoefficients, K:\n" << K;
+//  cout << "CondensedDofInterpreter::interpretGlobalCoefficients, rhs:\n" << rhs;
+  
 //  if (! _storeLocalStiffnessMatrices ){
 //    // getElemData(elem,K,rhs);
 //    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "CondensedDofInterpreter::interpretGlobalData() doesn't yet support _storeLocalStiffnessMatrices = false");
@@ -638,6 +647,14 @@ void CondensedDofInterpreter::interpretGlobalCoefficients(GlobalIndexType cellID
   getSubmatrices(fieldIndices, fluxIndices, K, D, B, fluxMat);
   getSubvectors(fieldIndices, fluxIndices, rhs, b_field, b_flux);
   
+//  cout << "K:\n" << K;
+//  cout << "D:\n" << D;
+//  cout << "B:\n" << B;
+//  cout << "fluxMat:\n" << fluxMat;
+//  
+//  cout << "b_field:\n" << b_field;
+//  cout << "b_flux:\n" << b_flux;
+  
   b_field.Multiply('N','N',-1.0,B,flux_dofs,1.0);
   
   // solve for field dofs
@@ -657,5 +674,31 @@ void CondensedDofInterpreter::interpretGlobalCoefficients(GlobalIndexType cellID
   int fieldOrdinal = 0; // index into field_dofs
   for (set<int>::iterator fieldIt = fieldIndices.begin(); fieldIt != fieldIndices.end(); fieldIt++, fieldOrdinal++) {
     localCoefficients[*fieldIt] = field_dofs[fieldOrdinal];
+  }
+  
+//  cout << "field_dofs:\n" << field_dofs;
+}
+
+void CondensedDofInterpreter::storeLoadForCell(GlobalIndexType cellID, const FieldContainer<double> &load) {
+  _localLoadVectors[cellID] = load;
+}
+
+void CondensedDofInterpreter::storeStiffnessForCell(GlobalIndexType cellID, const FieldContainer<double> &stiffness) {
+  _localStiffnessMatrices[cellID] = stiffness;
+}
+
+const FieldContainer<double> & CondensedDofInterpreter::storedLocalLoadForCell(GlobalIndexType cellID) {
+  if (_localLoadVectors.find(cellID) != _localLoadVectors.end()) {
+    return _localLoadVectors[cellID];
+  } else {
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "no local load is stored for cell");
+  }
+}
+
+const FieldContainer<double> & CondensedDofInterpreter::storedLocalStiffnessForCell(GlobalIndexType cellID) {
+  if (_localStiffnessMatrices.find(cellID) != _localStiffnessMatrices.end()) {
+    return _localStiffnessMatrices[cellID];
+  } else {
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "no local stiffness matrix is stored for cell");
   }
 }

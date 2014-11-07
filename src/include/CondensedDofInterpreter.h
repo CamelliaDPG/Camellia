@@ -30,6 +30,9 @@ using namespace Intrepid;
  **/
 
 class CondensedDofInterpreter : public DofInterpreter {
+protected:
+  map<GlobalIndexType, FieldContainer<double> > _localLoadVectors;       // will be used by interpretGlobalData if _storeLocalStiffnessMatrices is true
+private:
   bool _storeLocalStiffnessMatrices;
   Mesh* _mesh; // for element type lookup, and for determination of which dofs are trace dofs
   Teuchos::RCP<DPGInnerProduct> _ip;
@@ -37,7 +40,6 @@ class CondensedDofInterpreter : public DofInterpreter {
   LagrangeConstraints* _lagrangeConstraints;
   set<int> _uncondensibleVarIDs;
   map<GlobalIndexType, FieldContainer<double> > _localStiffnessMatrices; // will be used by interpretGlobalData if _storeLocalStiffnessMatrices is true
-  map<GlobalIndexType, FieldContainer<double> > _localLoadVectors;       // will be used by interpretGlobalData if _storeLocalStiffnessMatrices is true
   map<GlobalIndexType, FieldContainer<GlobalIndexType> > _localInterpretedDofIndices;       // will be used by interpretGlobalData if _storeLocalStiffnessMatrices is true
 
   GlobalIndexType _myGlobalDofIndexOffset;
@@ -64,6 +66,8 @@ class CondensedDofInterpreter : public DofInterpreter {
 public:
   CondensedDofInterpreter(Mesh* mesh, Teuchos::RCP<DPGInnerProduct> ip, RHSPtr rhs, LagrangeConstraints* lagrangeConstraints, const set<int> &fieldIDsToExclude, bool storeLocalStiffnessMatrices);
   
+  void addSolution(CondensedDofInterpreter* otherSolnDofInterpreter, double weight);
+  
   void reinitialize(); // clear stiffness matrices, etc., and rebuild global dof index map
   
   GlobalIndexType globalDofCount();
@@ -72,6 +76,9 @@ public:
   void interpretLocalData(GlobalIndexType cellID, const FieldContainer<double> &localData,
                           FieldContainer<double> &globalData, FieldContainer<GlobalIndexType> &globalDofIndices);
   
+  // note that interpretLocalData stores the stiffness and load.  If you call this with data different from the actual stiffness and load
+  // (as Solution does when imposing zero-mean constraints), it can be important to restore the actual stiffness and load afterward.
+  // (see storeLoadForCell, storeStiffnessForCell)
   void interpretLocalData(GlobalIndexType cellID, const FieldContainer<double> &localStiffnessData, const FieldContainer<double> &localLoadData,
                           FieldContainer<double> &globalStiffnessData, FieldContainer<double> &globalLoadData, FieldContainer<GlobalIndexType> &globalDofIndices);
   
@@ -87,6 +94,12 @@ public:
   GlobalIndexType condensedGlobalIndex(GlobalIndexType meshGlobalIndex); // meshGlobalIndex aka interpretedGlobalIndex
   
   bool varDofsAreCondensible(int varID, int sideOrdinal, DofOrderingPtr dofOrdering);
+  
+  void storeLoadForCell(GlobalIndexType cellID, const FieldContainer<double> &load);
+  void storeStiffnessForCell(GlobalIndexType cellID, const FieldContainer<double> &stiffness);
+  
+  const FieldContainer<double> & storedLocalLoadForCell(GlobalIndexType cellID);
+  const FieldContainer<double> & storedLocalStiffnessForCell(GlobalIndexType cellID);
 };
 
 
