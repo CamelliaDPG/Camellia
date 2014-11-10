@@ -247,7 +247,7 @@ Teuchos::RCP<Epetra_CrsMatrix> GMGOperator::constructProlongationOperator() {
       
       if (globalRow >= firstFineConstraintRowIndex) {
         // belongs to a lagrange degree of freedom (zero-mean constraints are a special case), so we do a one-to-one map
-        int offset = globalRow - firstCoarseConstraintRowIndex;
+        int offset = globalRow - firstFineConstraintRowIndex;
         GlobalIndexType coarseGlobalRow = firstCoarseConstraintRowIndex + offset;
         coarseXVectorLocal[coarseGlobalRow] = 1.0;
       } else {
@@ -304,13 +304,16 @@ Teuchos::RCP<Epetra_CrsMatrix> GMGOperator::constructProlongationOperator() {
       FieldContainer<GlobalIndexTypeToCast> coarseGlobalIndices(coarseXVectorLocal.size());
       FieldContainer<double> coarseGlobalValues(coarseXVectorLocal.size());
       int nnz = 0; // nonzero entries
+//      cout << "P global row " << globalRow << ": ";
       for (map<GlobalIndexTypeToCast, double>::iterator coarseXIt=coarseXVectorLocal.begin(); coarseXIt != coarseXVectorLocal.end(); coarseXIt++) {
         if (coarseXIt->second != 0.0) {
           coarseGlobalIndices[nnz] = coarseXIt->first;
           coarseGlobalValues[nnz] = coarseXIt->second;
+//          cout << coarseGlobalIndices[nnz] << " --> " << coarseGlobalValues[nnz] << "; ";
           nnz++;
         }
       }
+//      cout << endl;
       if (nnz > 0) {
         P->InsertGlobalValues(globalRow, nnz, &coarseGlobalValues[0], &coarseGlobalIndices[0]);
 //        cout << "Inserting values for row " << globalRow << endl;
