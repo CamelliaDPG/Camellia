@@ -1,7 +1,0 @@
-Import('*')
-
-src_obj = env.Object(Glob('*/*.cpp'))
-
-lib_name = camellia_dir + '/lib/Camellia'
-
-src_lib = env.Library(lib_name, src_obj)

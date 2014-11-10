@@ -1,6 +1,0 @@
-Import('*')
-
-src_obj = env.Object(['StokesManufacturedSolution.cpp','StokesBilinearForm.cpp','StokesMathBilinearForm.cpp', 'StokesVVPBilinearForm.cpp', 'LidDrivenFlowRefinementStrategy.cpp'])
-
-env.Program('exec/StokesCavityFlowDriver',['StokesCavityFlowDriver.cpp',src_obj])
-env.Program('exec/TestStokesCavityFlowDriver',['TestStokesCavityFlowDriver.cpp',src_obj])
