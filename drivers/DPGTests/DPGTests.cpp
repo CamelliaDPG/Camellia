@@ -160,15 +160,15 @@ void DPGTests::createBases() {
   IntrepidExtendedTypes::EFunctionSpaceExtended hdiv = IntrepidExtendedTypes::FUNCTION_SPACE_HDIV;
   
   basis = Teuchos::rcp( new IntrepidBasisWrapper<>(Teuchos::rcp( new Basis_HGRAD_QUAD_C1_FEM<double,FieldContainer<double> >()), rangeDimension, scalarRank, hgrad) );
-  BasisFactory::registerBasis(basis,0, C1_FAKE_POLY_ORDER, quad_4.getKey(), hgrad);
+  BasisFactory::basisFactory()->registerBasis(basis,0, C1_FAKE_POLY_ORDER, quad_4.getKey(), hgrad);
   basis = Teuchos::rcp( new IntrepidBasisWrapper<>(Teuchos::rcp( new Basis_HGRAD_QUAD_C1_FEM<double,FieldContainer<double> >()), rangeDimension, scalarRank, hgrad ) );
-  BasisFactory::registerBasis(basis,0, C1_FAKE_POLY_ORDER, tri_3.getKey(), hgrad);
+  BasisFactory::basisFactory()->registerBasis(basis,0, C1_FAKE_POLY_ORDER, tri_3.getKey(), hgrad);
   basis = Teuchos::rcp( new IntrepidBasisWrapper<>(Teuchos::rcp( new Basis_HGRAD_LINE_Cn_FEM<double,FieldContainer<double> >(3,POINTTYPE_SPECTRAL)), rangeDimension, scalarRank, hgrad ) );
-  BasisFactory::registerBasis(basis,0, C3_FAKE_POLY_ORDER, line_2.getKey(), hgrad);
+  BasisFactory::basisFactory()->registerBasis(basis,0, C3_FAKE_POLY_ORDER, line_2.getKey(), hgrad);
   basis = Teuchos::rcp( new IntrepidBasisWrapper<>(Teuchos::rcp( new Basis_HGRAD_LINE_Cn_FEM<double,FieldContainer<double> >(1,POINTTYPE_SPECTRAL)), rangeDimension, scalarRank, hgrad ) );
-  BasisFactory::registerBasis(basis,0, C1_FAKE_POLY_ORDER, line_2.getKey(), hgrad);
+  BasisFactory::basisFactory()->registerBasis(basis,0, C1_FAKE_POLY_ORDER, line_2.getKey(), hgrad);
   basis = Teuchos::rcp( new IntrepidBasisWrapper<>(Teuchos::rcp( new Basis_HDIV_QUAD_I1_FEM<double,FieldContainer<double> >()), rangeDimension, vectorRank, hdiv ) );
-  BasisFactory::registerBasis(basis,1, C1_FAKE_POLY_ORDER, quad_4.getKey(), hdiv);
+  BasisFactory::basisFactory()->registerBasis(basis,1, C1_FAKE_POLY_ORDER, quad_4.getKey(), hdiv);
 }
 
 void DPGTests::runTests() {
@@ -203,17 +203,9 @@ void DPGTests::runTests() {
   
   // setup our TestSuite tests:
   vector< Teuchos::RCP< TestSuite > > testSuites;
-  
-  testSuites.push_back( Teuchos::rcp( new GMGTests ) );
-  
-  testSuites.push_back( Teuchos::rcp( new MeshRefinementTests ) ); // skips two PatchBasis tests
 
   testSuites.push_back( Teuchos::rcp( new SolutionTests ) );
-  
-  testSuites.push_back( Teuchos::rcp( new CellTopologyTests ) );
-  
-  testSuites.push_back( Teuchos::rcp( new MeshTestSuite ) );
-  
+
   if (skipSlowTests) {
     if (rank==0) {
       cout << "skipping slow tests (IncompressibleFormulationsTests).\n";
@@ -221,6 +213,14 @@ void DPGTests::runTests() {
   } else {
     testSuites.push_back( Teuchos::rcp( new IncompressibleFormulationsTests(false) ) ); // false: turn "thorough" off
   }
+  
+  testSuites.push_back( Teuchos::rcp( new MeshRefinementTests ) ); // skips two PatchBasis tests
+  
+  testSuites.push_back( Teuchos::rcp( new GMGTests ) );
+  
+  testSuites.push_back( Teuchos::rcp( new CellTopologyTests ) );
+  
+  testSuites.push_back( Teuchos::rcp( new MeshTestSuite ) );
   
   testSuites.push_back( Teuchos::rcp( new GDAMinimumRuleTests ) );
   
@@ -506,7 +506,7 @@ bool DPGTests::testDofOrdering() {
   
   BasisPtr traceBasis
   = 
-  BasisFactory::getBasis(C1_FAKE_POLY_ORDER,
+  BasisFactory::basisFactory()->getBasis(C1_FAKE_POLY_ORDER,
                          line_2.getKey(), IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD);
   
   int numSides = 4;
@@ -608,7 +608,7 @@ bool DPGTests::testComputeStiffnessDx() {
   shards::CellTopology quad_4(shards::getCellTopologyData<shards::Quadrilateral<4> >() );
   
   BasisPtr basis
-  = BasisFactory::getBasis(C1_FAKE_POLY_ORDER,
+  = BasisFactory::basisFactory()->getBasis(C1_FAKE_POLY_ORDER,
                            quad_4.getKey(), IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD);
   
   lowestOrderHGRADOrdering.addEntry(0,basis,0);
@@ -741,7 +741,7 @@ bool DPGTests::testComputeStiffnessFlux() {
   
   BasisPtr traceBasis
   = 
-  BasisFactory::getBasis(C1_FAKE_POLY_ORDER,
+  BasisFactory::basisFactory()->getBasis(C1_FAKE_POLY_ORDER,
                          line_2.getKey(), IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD);
   
   int numSides = 4;
@@ -754,7 +754,7 @@ bool DPGTests::testComputeStiffnessFlux() {
   
   BasisPtr testBasis
   = 
-  BasisFactory::getBasis(C1_FAKE_POLY_ORDER, quad_4.getKey(), IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD);  
+  BasisFactory::basisFactory()->getBasis(C1_FAKE_POLY_ORDER, quad_4.getKey(), IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD);  
   testOrdering->addEntry(0,testBasis,0);
   
   int numTests = 1;  // 1. ref quad
@@ -865,7 +865,7 @@ bool DPGTests::testComputeStiffnessTrace() {
   
   shards::CellTopology line_2(shards::getCellTopologyData<shards::Line<2> >() );
   BasisPtr traceBasis 
-  = BasisFactory::getBasis(C1_FAKE_POLY_ORDER,
+  = BasisFactory::basisFactory()->getBasis(C1_FAKE_POLY_ORDER,
                            line_2.getKey(), IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD);
   
   int numSides = 4;
@@ -876,7 +876,7 @@ bool DPGTests::testComputeStiffnessTrace() {
   
   shards::CellTopology quad_4(shards::getCellTopologyData<shards::Quadrilateral<4> >() );
   BasisPtr testBasis 
-  = BasisFactory::getBasis(C1_FAKE_POLY_ORDER,
+  = BasisFactory::basisFactory()->getBasis(C1_FAKE_POLY_ORDER,
                            quad_4.getKey(), IntrepidExtendedTypes::FUNCTION_SPACE_HDIV);
   
   testOrdering->addEntry(0,testBasis,1,0);
@@ -1035,7 +1035,7 @@ bool DPGTests::testMathInnerProductDx() {
   
   DofOrdering lowestOrderHGRADOrdering;
   
-  BasisPtr basis = BasisFactory::getBasis(C1_FAKE_POLY_ORDER, quad_4.getKey(), IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD);
+  BasisPtr basis = BasisFactory::basisFactory()->getBasis(C1_FAKE_POLY_ORDER, quad_4.getKey(), IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD);
   
   lowestOrderHGRADOrdering.addEntry(0,basis,0);
   
@@ -1363,7 +1363,7 @@ bool DPGTests::testLowOrderTrialCubicTest() {
   
   BasisPtr basis
   = 
-  BasisFactory::getBasis(C1_FAKE_POLY_ORDER, quad_4.getKey(), IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD);
+  BasisFactory::basisFactory()->getBasis(C1_FAKE_POLY_ORDER, quad_4.getKey(), IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD);
   
   lowestOrderHGRADOrdering->addEntry(0,basis,0);
   
@@ -2194,7 +2194,7 @@ bool DPGTests::testComputeOptimalTest() {
     
     BasisPtr basis
     = 
-    BasisFactory::getBasis(C1_FAKE_POLY_ORDER, cellTopo.getKey(), IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD);
+    BasisFactory::basisFactory()->getBasis(C1_FAKE_POLY_ORDER, cellTopo.getKey(), IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD);
     
     DofOrdering lowestOrderHGRADOrdering;
     Teuchos::RCP<DofOrdering> lowestOrderHGRADOrderingPtr = Teuchos::rcp(&lowestOrderHGRADOrdering,false);
@@ -2599,7 +2599,7 @@ bool DPGTests::testProjection(){
 
   // creating basisCache to compute values at certain points
   shards::CellTopology cellTopo = basis->domainTopology();
-  int basisRank = BasisFactory::getBasisRank(basis);
+  int basisRank = BasisFactory::basisFactory()->getBasisRank(basis);
   DofOrderingPtr dofOrderPtr = Teuchos::rcp(new DofOrdering());
   int ID = 0; // fake ID 
   dofOrderPtr->addEntry(ID,basis,basisRank);  

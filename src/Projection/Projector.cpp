@@ -287,7 +287,7 @@ void Projector::projectFunctionOntoBasis(FieldContainer<double> &basisCoefficien
   shards::CellTopology cellTopo = basis->domainTopology();
   DofOrderingPtr dofOrderPtr = Teuchos::rcp(new DofOrdering());
 
-  int basisRank = BasisFactory::getBasisRank(basis);
+  int basisRank = BasisFactory::basisFactory()->getBasisRank(basis);
   int ID = 0; // only one entry for this fake dofOrderPtr
   dofOrderPtr->addEntry(ID,basis,basisRank);
   int maxTrialDegree = dofOrderPtr->maxBasisDegree();

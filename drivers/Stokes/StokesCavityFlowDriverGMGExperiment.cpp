@@ -368,9 +368,10 @@ int main(int argc, char *argv[]) {
   bc->addDirichlet(u2hat, otherBoundary, zero);
   if (use3D) bc->addDirichlet(u3hat, otherBoundary, zero);
   
-//  bc->addZeroMeanConstraint(p);
   if (!usePressurelessFormulation) {
     bc->addSinglePointBC(p->ID(), zero);
+    if (rank==0) cout << "using single-point BC for pressure.\n";
+//    bc->addZeroMeanConstraint(p);
   } else {
     // need to do something to take care of the extra mode
     
@@ -506,6 +507,8 @@ int main(int argc, char *argv[]) {
   
 //  if (rank==0) cout << "experimentally starting by solving with MUMPS on the fine mesh.\n";
 //  solution->solve( Teuchos::rcp( new MumpsSolver) );
+  
+  solution->setWriteMatrixToFile(true, "/tmp/A_stokes.dat");
   
   solution->solve(fineSolver);
   

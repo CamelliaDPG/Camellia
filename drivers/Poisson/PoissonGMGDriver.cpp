@@ -73,6 +73,7 @@ int main(int argc, char *argv[]) {
   
   int AztecOutputLevel = 1;
   int gmgMaxIterations = 10000;
+  int smootherOverlap = 0;
   double relativeTol = 1e-6;
   double D = 1.0; // characteristic length scale
   
@@ -86,6 +87,8 @@ int main(int argc, char *argv[]) {
   cmdp.setOption("useSmoothing", "useNoSmoothing", &applyDiagonalSmoothing);
   cmdp.setOption("useDiagonalScaling", "dontUseDiagonalScaling", &useDiagonalScaling);
 
+  cmdp.setOption("smootherOverlap", &smootherOverlap, "overlap for smoother");
+  
   cmdp.setOption("printRefinementDetails", "dontPrintRefinementDetails", &printRefinementDetails);
   cmdp.setOption("azOutput", &AztecOutputLevel, "Aztec output level");
   cmdp.setOption("numCells", &numCells, "number of cells in the initial mesh");
@@ -267,6 +270,13 @@ int main(int argc, char *argv[]) {
     gmgSolver->setAztecOutput(AztecOutputLevel);
     gmgSolver->setApplySmoothingOperator(applyDiagonalSmoothing);
     gmgSolver->setUseDiagonalScaling(useDiagonalScaling);
+    
+    gmgSolver->setAztecOutput(AztecOutputLevel);
+    gmgSolver->setApplySmoothingOperator(applyDiagonalSmoothing);
+    gmgSolver->setUseConjugateGradient(true);
+    gmgSolver->gmgOperator().setSmootherType(GMGOperator::ADDITIVE_SCHWARZ);
+    gmgSolver->gmgOperator().setSmootherOverlap(smootherOverlap);
+    
     fineSolver = Teuchos::rcp( gmgSolver );
   } else {
     fineSolver = coarseSolver;

@@ -739,15 +739,15 @@ bool CurvilinearMeshTests::testH1Projection() {
   bool useL2 = false; // H1 semi-norm otherwise
   
   // this test sprawls a bit.  It could very reasonably be broken apart into several
-  // others; tests of projection, BasisFactory::sideFieldIndices, etc.
+  // others; tests of projection, BasisFactory::basisFactory()->sideFieldIndices, etc.
   
   shards::CellTopology quad_4(shards::getCellTopologyData<shards::Quadrilateral<4> >() );
   
-  BasisPtr quadraticScalarBasis = BasisFactory::getBasis(2, quad_4.getKey(), IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD);
-  BasisPtr quadraticVectorBasis = BasisFactory::getBasis(2, quad_4.getKey(), IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HGRAD);
+  BasisPtr quadraticScalarBasis = BasisFactory::basisFactory()->getBasis(2, quad_4.getKey(), IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD);
+  BasisPtr quadraticVectorBasis = BasisFactory::basisFactory()->getBasis(2, quad_4.getKey(), IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HGRAD);
   
-  set<int> scalarEdgeNodes = BasisFactory::sideFieldIndices(quadraticScalarBasis);
-  set<int> vectorEdgeNodes = BasisFactory::sideFieldIndices(quadraticVectorBasis);
+  set<int> scalarEdgeNodes = BasisFactory::basisFactory()->sideFieldIndices(quadraticScalarBasis);
+  set<int> vectorEdgeNodes = BasisFactory::basisFactory()->sideFieldIndices(quadraticVectorBasis);
   
   // how many non-edge nodes are there?
   int numMiddleNodesScalar = quadraticScalarBasis->getCardinality() - scalarEdgeNodes.size();
@@ -924,7 +924,7 @@ bool CurvilinearMeshTests::testH1Projection() {
     int cellID = 0; // the only cell
     bool testVsTest = true;
     
-    BasisPtr basis = BasisFactory::getBasis(H1Order, quad_4.getKey(), IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HGRAD);
+    BasisPtr basis = BasisFactory::basisFactory()->getBasis(H1Order, quad_4.getKey(), IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HGRAD);
     
     int cubatureEnrichment = mesh->getElement(cellID)->elementType()->testOrderPtr->maxBasisDegree();
     BasisCachePtr basisCache = BasisCache::basisCacheForCell(mesh, cellID, testVsTest, cubatureEnrichment);
@@ -966,7 +966,7 @@ bool CurvilinearMeshTests::testH1Projection() {
     edgeInterpolantCoefficients.resize(edgeInterpolantCoefficients.size());
     
     // check that the only nonzeros in edgeInterpolantCoefficients belong to edges
-    set<int> edgeFieldIndices = BasisFactory::sideFieldIndices(vectorBasis, true); // true: include the vertices
+    set<int> edgeFieldIndices = BasisFactory::basisFactory()->sideFieldIndices(vectorBasis, true); // true: include the vertices
     for (int i=0; i<edgeInterpolantCoefficients.size(); i++) {
       if (edgeInterpolantCoefficients(i) != 0) {
         if (edgeFieldIndices.find(i) == edgeFieldIndices.end()) {
@@ -986,7 +986,7 @@ bool CurvilinearMeshTests::testH1Projection() {
       bool nonZeroSomewhere = false;
       
       FunctionPtr edgeBasisFunction = NewBasisSumFunction::basisSumFunction(basis, edgeBasisFunctionWeights);
-      int basisRank = BasisFactory::getBasisRank(basis);
+      int basisRank = BasisFactory::basisFactory()->getBasisRank(basis);
       
       for (int sideIndex=0; sideIndex<numEdges; sideIndex++) {
         BasisCachePtr sideCache = basisCache->getSideBasisCache(sideIndex);
@@ -1012,7 +1012,7 @@ bool CurvilinearMeshTests::testH1Projection() {
       nonEdgeBasisFunctionWeights[fieldIndex] = 1.0;
       
       FunctionPtr nonEdgeBasisFunction = NewBasisSumFunction::basisSumFunction(basis, nonEdgeBasisFunctionWeights);
-      int basisRank = BasisFactory::getBasisRank(basis);
+      int basisRank = BasisFactory::basisFactory()->getBasisRank(basis);
       
       for (int sideIndex=0; sideIndex<numEdges; sideIndex++) {
         BasisCachePtr sideCache = basisCache->getSideBasisCache(sideIndex);

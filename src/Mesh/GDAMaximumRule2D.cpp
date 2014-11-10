@@ -981,8 +981,8 @@ void GDAMaximumRule2D::matchNeighbor(GlobalIndexType cellID, int sideIndex) {
                                "BilinearForm has no traces or fluxes, but somehow element was upgraded...");
     
     int boundaryVarID = tracesAndFluxes[0]->ID();
-    int neighborSidePolyOrder = BasisFactory::basisPolyOrder(neighborTrialOrdering->getBasis(boundaryVarID,sideIndexInNeighbor));
-    int mySidePolyOrder = BasisFactory::basisPolyOrder(elemTrialOrdering->getBasis(boundaryVarID,sideIndex));
+    int neighborSidePolyOrder = BasisFactory::basisFactory()->basisPolyOrder(neighborTrialOrdering->getBasis(boundaryVarID,sideIndexInNeighbor));
+    int mySidePolyOrder = BasisFactory::basisFactory()->basisPolyOrder(elemTrialOrdering->getBasis(boundaryVarID,sideIndex));
     TEUCHOS_TEST_FOR_EXCEPTION(mySidePolyOrder != neighborSidePolyOrder,
                                std::invalid_argument,
                                "After matchSides(), the appropriate sides don't have the same order.");
@@ -1010,8 +1010,8 @@ void GDAMaximumRule2D::matchNeighbor(GlobalIndexType cellID, int sideIndex) {
                                std::invalid_argument,
                                "neighborTrialOrdering was supposed to be upgraded, but remains unchanged...");
     int boundaryVarID = tracesAndFluxes[0]->ID();
-    int sidePolyOrder = BasisFactory::basisPolyOrder(neighborTrialOrdering->getBasis(boundaryVarID,sideIndexInNeighbor));
-    int mySidePolyOrder = BasisFactory::basisPolyOrder(elemTrialOrdering->getBasis(boundaryVarID,sideIndex));
+    int sidePolyOrder = BasisFactory::basisFactory()->basisPolyOrder(neighborTrialOrdering->getBasis(boundaryVarID,sideIndexInNeighbor));
+    int mySidePolyOrder = BasisFactory::basisFactory()->basisPolyOrder(elemTrialOrdering->getBasis(boundaryVarID,sideIndex));
     TEUCHOS_TEST_FOR_EXCEPTION(mySidePolyOrder != sidePolyOrder,
                                std::invalid_argument,
                                "After matchSides(), the appropriate sides don't have the same order.");
@@ -1082,7 +1082,7 @@ map< int, BasisPtr > GDAMaximumRule2D::multiBasisUpgradeMap(CellPtr parent, unsi
       }
       bases.push_back(childVarIDsToUpgrade[permutedChildIndex][varID]);
     }
-    BasisPtr multiBasis = BasisFactory::getMultiBasis(bases);
+    BasisPtr multiBasis = BasisFactory::basisFactory()->getMultiBasis(bases);
     // debugging:
     //    ((MultiBasis*)multiBasis.get())->printInfo();
     varIDsToUpgrade[varID] = multiBasis;

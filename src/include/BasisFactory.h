@@ -56,55 +56,59 @@ typedef Teuchos::RCP< Camellia::Basis<> > BasisPtr;
 
 class BasisFactory {
 private:
-  static map< pair< pair<int,int>, IntrepidExtendedTypes::EFunctionSpaceExtended >, BasisPtr >
+  map< pair< pair<int,int>, IntrepidExtendedTypes::EFunctionSpaceExtended >, BasisPtr >
               _existingBases; // keys are ((polyOrder,cellTopoKey),fs))
-  static map< pair< pair<int,int>, IntrepidExtendedTypes::EFunctionSpaceExtended >, BasisPtr >
+  map< pair< pair<int,int>, IntrepidExtendedTypes::EFunctionSpaceExtended >, BasisPtr >
               _conformingBases; // keys are ((polyOrder,cellTopoKey),fs))
   
   // the following maps let us remember what arguments were used to create a basis:
   // (this is useful to, say, create a basis again, but now with polyOrder+1)
-  static map< Camellia::Basis<>*, int > _polyOrders; // allows lookup of poly order used to create basis
+  map< Camellia::Basis<>*, int > _polyOrders; // allows lookup of poly order used to create basis
 //  static map< Camellia::Basis<>*, int > _ranks; // allows lookup of basis rank
-  static map< Camellia::Basis<>*, IntrepidExtendedTypes::EFunctionSpaceExtended > _functionSpaces; // allows lookup of function spaces
-  static map< Camellia::Basis<>*, int > _cellTopoKeys; // allows lookup of cellTopoKeys
-  static set< Camellia::Basis<>*> _multiBases;
-  static map< vector< Camellia::Basis<>* >, MultiBasisPtr > _multiBasesMap;
-  static map< pair<Camellia::Basis<>*, vector<double> >, PatchBasisPtr > _patchBases;
-  static set< Camellia::Basis<>* > _patchBasisSet;
+  map< Camellia::Basis<>*, IntrepidExtendedTypes::EFunctionSpaceExtended > _functionSpaces; // allows lookup of function spaces
+  map< Camellia::Basis<>*, int > _cellTopoKeys; // allows lookup of cellTopoKeys
+  set< Camellia::Basis<>*> _multiBases;
+  map< vector< Camellia::Basis<>* >, MultiBasisPtr > _multiBasesMap;
+  map< pair<Camellia::Basis<>*, vector<double> >, PatchBasisPtr > _patchBases;
+  set< Camellia::Basis<>* > _patchBasisSet;
   
-  static bool _useEnrichedTraces; // i.e. p+1, not p (default is true: this is what we need to prove optimal convergence)
-  static bool _useLobattoForQuadHGRAD;
-  static bool _useLobattoForQuadHDIV;
-  static bool _useLobattoForLineHGRAD;
-  static bool _useLegendreForLineHVOL;
+  bool _useEnrichedTraces; // i.e. p+1, not p (default is true: this is what we need to prove optimal convergence)
+  bool _useLobattoForQuadHGRAD;
+  bool _useLobattoForQuadHDIV;
+  bool _useLobattoForLineHGRAD;
+  bool _useLegendreForLineHVOL;
 public:
-  static BasisPtr getBasis( int polyOrder, unsigned cellTopoKey, IntrepidExtendedTypes::EFunctionSpaceExtended fs);
+  BasisFactory();
+  
+  BasisPtr getBasis( int polyOrder, unsigned cellTopoKey, IntrepidExtendedTypes::EFunctionSpaceExtended fs);
 //  static BasisPtr getBasis(int &basisRank, int polyOrder, unsigned cellTopoKey, IntrepidExtendedTypes::EFunctionSpaceExtended fs);
-  static BasisPtr getConformingBasis( int polyOrder, unsigned cellTopoKey, IntrepidExtendedTypes::EFunctionSpaceExtended fs );
+  BasisPtr getConformingBasis( int polyOrder, unsigned cellTopoKey, IntrepidExtendedTypes::EFunctionSpaceExtended fs );
   
-  static MultiBasisPtr getMultiBasis(vector< BasisPtr > &bases);
-  static PatchBasisPtr getPatchBasis(BasisPtr parent, FieldContainer<double> &patchNodesInParentRefCell, unsigned cellTopoKey = shards::Line<2>::key);
+  MultiBasisPtr getMultiBasis(vector< BasisPtr > &bases);
+  PatchBasisPtr getPatchBasis(BasisPtr parent, FieldContainer<double> &patchNodesInParentRefCell, unsigned cellTopoKey = shards::Line<2>::key);
 
-  static BasisPtr addToPolyOrder(BasisPtr basis, int pToAdd);
-  static BasisPtr setPolyOrder(BasisPtr basis, int polyOrderToSet);
+  BasisPtr addToPolyOrder(BasisPtr basis, int pToAdd);
+  BasisPtr setPolyOrder(BasisPtr basis, int polyOrderToSet);
   
-  static int basisPolyOrder(BasisPtr basis);
-  static int getBasisRank(BasisPtr basis);
-  static IntrepidExtendedTypes::EFunctionSpaceExtended getBasisFunctionSpace(BasisPtr basis);
+  int basisPolyOrder(BasisPtr basis);
+  int getBasisRank(BasisPtr basis);
+  IntrepidExtendedTypes::EFunctionSpaceExtended getBasisFunctionSpace(BasisPtr basis);
   
-  static bool basisKnown(BasisPtr basis);
-  static bool isMultiBasis(BasisPtr basis);
-  static bool isPatchBasis(BasisPtr basis);
+  bool basisKnown(BasisPtr basis);
+  bool isMultiBasis(BasisPtr basis);
+  bool isPatchBasis(BasisPtr basis);
   
-  static void registerBasis( BasisPtr basis, int basisRank, int polyOrder, int cellTopoKey, IntrepidExtendedTypes::EFunctionSpaceExtended fs );
+  void registerBasis( BasisPtr basis, int basisRank, int polyOrder, int cellTopoKey, IntrepidExtendedTypes::EFunctionSpaceExtended fs );
   
-  static void setUseEnrichedTraces( bool value );
+  void setUseEnrichedTraces( bool value );
   
   // the following convenience methods belong in Basis or perhaps a wrapper thereof
-  static set<int> sideFieldIndices( BasisPtr basis, bool includeSideSubcells = true); // includeSideSubcells: e.g. include vertices as part of quad sides
+  set<int> sideFieldIndices( BasisPtr basis, bool includeSideSubcells = true); // includeSideSubcells: e.g. include vertices as part of quad sides
   
-  static void setUseLobattoForQuadHGrad(bool value);
-  static void setUseLobattoForQuadHDiv(bool value);
+  void setUseLobattoForQuadHGrad(bool value);
+  void setUseLobattoForQuadHDiv(bool value);
+  
+  static Teuchos::RCP<BasisFactory> basisFactory(); // shared, global BasisFactory
 };
 
 #endif

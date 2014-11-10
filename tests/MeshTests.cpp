@@ -38,14 +38,14 @@ TEST_F(MeshTests, TestBasisRefinement)
   
   shards::CellTopology quad_4(shards::getCellTopologyData<shards::Quadrilateral<4> >() );
   
-  Teuchos::RCP<Basis<double,FieldContainer<double> > > basis = BasisFactory::getBasis(basisRank, initialPolyOrder, quad_4.getKey(), hgrad);
+  Teuchos::RCP<Basis<double,FieldContainer<double> > > basis = BasisFactory::basisFactory()->getBasis(basisRank, initialPolyOrder, quad_4.getKey(), hgrad);
   // since it's hgrad, that's a problem (hvol would be initialPolyOrder-1)
   EXPECT_EQ(initialPolyOrder, basis->getDegree())
     << "testBasisRefinement: initial BasisFactory call returned a different-degree basis than expected..." << endl
     << "testBasisRefinement: expected: " << initialPolyOrder << "; actual: " << basis->getDegree() << endl;
 
   int additionalP = 4;
-  basis = BasisFactory::addToPolyOrder(basis, additionalP);
+  basis = BasisFactory::basisFactory()->addToPolyOrder(basis, additionalP);
   // since it's hgrad, that's a problem (hvol would be initialPolyOrder-1)
   EXPECT_EQ(initialPolyOrder+additionalP, basis->getDegree())
     << "testBasisRefinement: addToPolyOrder call returned a different-degree basis than expected..." << endl

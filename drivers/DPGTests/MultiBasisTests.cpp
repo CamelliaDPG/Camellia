@@ -196,7 +196,7 @@ void MultiBasisTests::getPolyOrders(vector< map<int, int> > &polyOrderMapVector,
   map<int, int> polyOrders;
   for (varIt = _fieldIDs.begin(); varIt != _fieldIDs.end(); varIt++) {
     int fieldID = *varIt;
-    int polyOrder = BasisFactory::basisPolyOrder(elem->elementType()->trialOrderPtr->getBasis(fieldID));
+    int polyOrder = BasisFactory::basisFactory()->basisPolyOrder(elem->elementType()->trialOrderPtr->getBasis(fieldID));
     polyOrders[fieldID] = polyOrder;
   }
   polyOrderMapVector.push_back(polyOrders);
@@ -206,7 +206,7 @@ void MultiBasisTests::getPolyOrders(vector< map<int, int> > &polyOrderMapVector,
     vector<int>::iterator varIt;
     for (varIt = _fluxIDs.begin(); varIt != _fluxIDs.end(); varIt++) {
       int fluxID = *varIt;
-      int polyOrder =  BasisFactory::basisPolyOrder(elem->elementType()->trialOrderPtr->getBasis(fluxID,sideIndex));
+      int polyOrder =  BasisFactory::basisFactory()->basisPolyOrder(elem->elementType()->trialOrderPtr->getBasis(fluxID,sideIndex));
       polyOrders[fluxID] = polyOrder;
     }
     polyOrderMapVector.push_back(polyOrders);
@@ -309,7 +309,7 @@ bool MultiBasisTests::multiBasisCorrectlyAppliedInMesh(Teuchos::RCP<Mesh> mesh, 
       int numSides = elem->numSides();
       for (int sideIndex=0; sideIndex<numSides; sideIndex++) {
         BasisPtr basis = elem->elementType()->trialOrderPtr->getBasis(fluxID,sideIndex);
-        bool hasMultiBasis = BasisFactory::isMultiBasis(basis);
+        bool hasMultiBasis = BasisFactory::basisFactory()->isMultiBasis(basis);
         bool shouldHaveMultiBasis;
         // check who the (ancestor's) neighbor is on this side:
         int sideIndexInNeighbor;
@@ -318,7 +318,7 @@ bool MultiBasisTests::multiBasisCorrectlyAppliedInMesh(Teuchos::RCP<Mesh> mesh, 
         if (neighbor.get() != NULL) {
           // then we'll check *neighbor's* basis instead:
           BasisPtr neighborBasis = neighbor->elementType()->trialOrderPtr->getBasis(fluxID,sideIndexInNeighbor);
-          hasMultiBasis = BasisFactory::isMultiBasis(neighborBasis);
+          hasMultiBasis = BasisFactory::basisFactory()->isMultiBasis(neighborBasis);
         }
         
         // check whether the neighbor relationship is symmetric:
@@ -339,7 +339,7 @@ bool MultiBasisTests::multiBasisCorrectlyAppliedInMesh(Teuchos::RCP<Mesh> mesh, 
       int fieldID = *varIt;
       bool shouldHaveMultiBasis = false; // false for all fields
       BasisPtr basis = elem->elementType()->trialOrderPtr->getBasis(fieldID);
-      bool hasMultiBasis = BasisFactory::isMultiBasis(basis);
+      bool hasMultiBasis = BasisFactory::basisFactory()->isMultiBasis(basis);
       if (shouldHaveMultiBasis != hasMultiBasis) {
         correct = false;
       }

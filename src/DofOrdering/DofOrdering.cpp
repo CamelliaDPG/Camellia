@@ -139,7 +139,7 @@ int DofOrdering::getDofIndex(int varID, int basisDofOrdinal, int sideIndex, int 
   if (subSideIndex >= 0) {
     // then we've got a MultiBasis, and the basisDofOrdinal we have is *relative* to the subbasis
     BasisPtr basis = getBasis(varID,sideIndex);
-    if ( ! BasisFactory::isMultiBasis(basis) ) {
+    if ( ! BasisFactory::basisFactory()->isMultiBasis(basis) ) {
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "subSideIndex >= 0 for non-MultiBasis...");
     }
     MultiBasis<>* multiBasis = (MultiBasis<>*) basis.get();

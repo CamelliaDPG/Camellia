@@ -141,7 +141,7 @@ void ParametricSurface::basisWeightsForEdgeInterpolant(FieldContainer<double> &e
   
   int basisDegree = basis->getDegree();
   shards::CellTopology line_2(shards::getCellTopologyData<shards::Line<2> >() );
-  BasisPtr basis1D = BasisFactory::getBasis(basisDegree, line_2.getKey(),
+  BasisPtr basis1D = BasisFactory::basisFactory()->getBasis(basisDegree, line_2.getKey(),
                                             IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD);
   
   BasisPtr compBasis = basis->getComponentBasis();
@@ -152,7 +152,7 @@ void ParametricSurface::basisWeightsForEdgeInterpolant(FieldContainer<double> &e
   
   edgeInterpolationCoefficients.resize(basis->getCardinality());
   
-  set<int> edgeNodeFieldIndices = BasisFactory::sideFieldIndices(basis,true); // true: include vertex dofs
+  set<int> edgeNodeFieldIndices = BasisFactory::basisFactory()->sideFieldIndices(basis,true); // true: include vertex dofs
   
   FieldContainer<double> dofCoords(compBasis->getCardinality(),2);
   IntrepidBasisWrapper< double, Intrepid::FieldContainer<double> >* intrepidBasisWrapper = dynamic_cast< IntrepidBasisWrapper< double, Intrepid::FieldContainer<double> >* >(compBasis.get());
@@ -252,7 +252,7 @@ void ParametricSurface::basisWeightsForProjectedInterpolant(FieldContainer<doubl
   FieldContainer<double> edgeInterpolationCoefficients(basis->getCardinality());
   basisWeightsForEdgeInterpolant(edgeInterpolationCoefficients, basis, mesh, cellID);
   
-  set<int> edgeFieldIndices = BasisFactory::sideFieldIndices(basis,true); // true: include vertex dofs
+  set<int> edgeFieldIndices = BasisFactory::basisFactory()->sideFieldIndices(basis,true); // true: include vertex dofs
   
   FunctionPtr edgeInterpolant = Teuchos::rcp( new NewBasisSumFunction(basis, edgeInterpolationCoefficients) );
   

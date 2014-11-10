@@ -67,7 +67,7 @@ DofOrderingPtr DofOrderingFactory::testOrdering(int polyOrder,
     IntrepidExtendedTypes::EFunctionSpaceExtended fs = _bilinearForm->functionSpaceForTest(testID);
     BasisPtr basis;
     int testIDPolyOrder = polyOrder + _testOrderEnhancements[testID]; // uses the fact that map defaults to 0 for entries that aren't found
-    basis = BasisFactory::getBasis( testIDPolyOrder, cellTopo.getKey(), fs);
+    basis = BasisFactory::basisFactory()->getBasis( testIDPolyOrder, cellTopo.getKey(), fs);
     int basisRank = basis->rangeRank();
     testOrder->addEntry(testID,basis,basisRank);
   }
@@ -106,7 +106,7 @@ DofOrderingPtr DofOrderingFactory::trialOrdering(int polyOrder,
       int numSides = CamelliaCellTools::getSideCount(cellTopo);
       for (int sideOrdinal=0; sideOrdinal<numSides; sideOrdinal++) {
         shards::CellTopology sideTopo = cellTopo.getBaseCellTopologyData(sideDim, sideOrdinal);
-        basis = BasisFactory::getConformingBasis( trialIDPolyOrder, sideTopo.getKey(), fs);
+        basis = BasisFactory::basisFactory()->getConformingBasis( trialIDPolyOrder, sideTopo.getKey(), fs);
         basisRank = basis->rangeRank();
         trialOrder->addEntry(trialID,basis,basisRank,sideOrdinal);
         traceOrder->addEntry(trialID,basis,basisRank,sideOrdinal);
@@ -119,7 +119,7 @@ DofOrderingPtr DofOrderingFactory::trialOrdering(int polyOrder,
         addConformingVertexPairings(trialID, traceOrder, cellTopo);
       }
     } else {
-      basis = BasisFactory::getBasis(trialIDPolyOrder, cellTopo.getKey(), fs);
+      basis = BasisFactory::basisFactory()->getBasis(trialIDPolyOrder, cellTopo.getKey(), fs);
       basisRank = basis->rangeRank();
       trialOrder->addEntry(trialID,basis,basisRank,0);
       fieldOrder->addEntry(trialID,basis,basisRank,0);
@@ -157,8 +157,8 @@ DofOrderingPtr DofOrderingFactory::getRelabeledDofOrdering(DofOrderingPtr dofOrd
     for (int sideIndex=0; sideIndex<numSides; sideIndex++) {
       BasisPtr basis = dofOrdering->getBasis(varID,sideIndex);
       
-      fs = BasisFactory::getBasisFunctionSpace(basis);
-      int basisRank = BasisFactory::getBasisRank(basis);
+      fs = BasisFactory::basisFactory()->getBasisFunctionSpace(basis);
+      int basisRank = BasisFactory::basisFactory()->getBasisRank(basis);
       newOrdering->addEntry(newVarID,basis,basisRank,sideIndex);
       if (numSides == 1) {
         newFieldOrder->addEntry(newVarID, basis, basisRank, sideIndex);
@@ -278,7 +278,7 @@ int DofOrderingFactory::polyOrder(DofOrderingPtr dofOrdering, bool isTestOrderin
       break;
     } else {
       for (int sideIndex=0; sideIndex<numSides; sideIndex++) {
-        int polyOrder = BasisFactory::basisPolyOrder( dofOrdering->getBasis(varID,sideIndex) ) - varIDEnhancement;
+        int polyOrder = BasisFactory::basisFactory()->basisPolyOrder( dofOrdering->getBasis(varID,sideIndex) ) - varIDEnhancement;
         minSidePolyOrder = min(minSidePolyOrder,polyOrder);
       }
     }
@@ -294,7 +294,7 @@ int DofOrderingFactory::polyOrder(DofOrderingPtr dofOrdering, bool isTestOrderin
   }
   int varIDEnhancement = isTestOrdering ? _testOrderEnhancements[interiorVariable] : _trialOrderEnhancements[interiorVariable];
   BasisPtr interiorBasis = dofOrdering->getBasis(interiorVariable);
-  return BasisFactory::basisPolyOrder(interiorBasis) - varIDEnhancement;
+  return BasisFactory::basisFactory()->basisPolyOrder(interiorBasis) - varIDEnhancement;
 }
 
 map<int, BasisPtr> DofOrderingFactory::getMultiBasisUpgradeMap(vector< pair< DofOrderingPtr,int > > &childTrialOrdersForSide) {
@@ -314,7 +314,7 @@ map<int, BasisPtr> DofOrderingFactory::getMultiBasisUpgradeMap(vector< pair< Dof
         bases.push_back(basis);
       }
       if (bases.size() != 1) {
-        BasisPtr multiBasis = BasisFactory::getMultiBasis(bases);
+        BasisPtr multiBasis = BasisFactory::basisFactory()->getMultiBasis(bases);
         varIDsToUpgrade[varID] = multiBasis;
       } else {
         varIDsToUpgrade[varID] = bases[0];
@@ -344,7 +344,7 @@ map<int, BasisPtr> DofOrderingFactory::getPatchBasisUpgradeMap(const DofOrdering
         nodes(0,0) = 0.0;
         nodes(1,0) = 1.0;
       }
-      BasisPtr patchBasis = BasisFactory::getPatchBasis(basis, nodes);
+      BasisPtr patchBasis = BasisFactory::basisFactory()->getPatchBasis(basis, nodes);
       varIDsToUpgrade[varID] = patchBasis;
     }
   }
@@ -376,7 +376,7 @@ bool DofOrderingFactory::sideHasMultiBasis(DofOrderingPtr &trialOrdering, int si
     if (numSides > 1) { // a variable that lives on the sides
       BasisPtr basis = trialOrdering->getBasis(varID,sideIndex);
       // as one side basis goes, so go they all:
-      return BasisFactory::isMultiBasis(basis);
+      return BasisFactory::basisFactory()->isMultiBasis(basis);
     }
   }
   // if we get here, we didn't really have a side...
@@ -399,7 +399,7 @@ void DofOrderingFactory::childMatchParent(DofOrderingPtr &childTrialOrdering, in
       int numSides = parentTrialOrdering->getNumSidesForVarID(varID);
       if (numSides > 1) { // a variable that lives on the sides: we need to match basis
         BasisPtr basis  = parentTrialOrdering->getBasis(varID,sideIndex);
-        if (! BasisFactory::isMultiBasis(basis) ) {
+        if (! BasisFactory::basisFactory()->isMultiBasis(basis) ) {
           TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "if one basis is multibasis, they all should be");
         }
         MultiBasis<>* multiBasis = (MultiBasis<>*) basis.get();
@@ -431,7 +431,7 @@ int DofOrderingFactory::matchSides(DofOrderingPtr &firstOrdering, int firstSideI
     if (numSides > 1) { // a variable that lives on the sides: we need to match basis
       BasisPtr firstBasis = firstOrdering->getBasis(varID,firstSideIndex);
       BasisPtr secondBasis = secondOrdering->getBasis(varID,secondSideIndex);
-      if (BasisFactory::isPatchBasis(firstBasis) || BasisFactory::isPatchBasis(secondBasis)) {
+      if (BasisFactory::basisFactory()->isPatchBasis(firstBasis) || BasisFactory::basisFactory()->isPatchBasis(secondBasis)) {
         return -1; // then we need to deal with ancestors, etc.--and we can't do that here
       }
       
@@ -490,8 +490,8 @@ DofOrderingPtr DofOrderingFactory::upgradeSide(DofOrderingPtr dofOrdering,
     IntrepidExtendedTypes::EFunctionSpaceExtended fs;
     for (int sideIndex=0; sideIndex<numSides; sideIndex++) {
       BasisPtr basis = dofOrdering->getBasis(varID,sideIndex);
-      fs = BasisFactory::getBasisFunctionSpace(basis);
-      int basisRank = BasisFactory::getBasisRank(basis);
+      fs = BasisFactory::basisFactory()->getBasisFunctionSpace(basis);
+      int basisRank = BasisFactory::basisFactory()->getBasisRank(basis);
       if ((varIDsToUpgrade.find(varID) == varIDsToUpgrade.end()) || (sideIndex != sideToUpgrade)) {
         // use existing basis
         newOrdering->addEntry(varID,basis,basisRank,sideIndex);
@@ -534,13 +534,13 @@ DofOrderingPtr DofOrderingFactory::pRefine(DofOrderingPtr dofOrdering,
     }
     for (int sideIndex=0; sideIndex<numSides; sideIndex++) {
       BasisPtr basis = dofOrdering->getBasis(varID,sideIndex);
-      fs = BasisFactory::getBasisFunctionSpace(basis);
-      int basisRank = BasisFactory::getBasisRank(basis);
-      if (BasisFactory::basisPolyOrder(basis) >= newPolyOrderForVarID) {
+      fs = BasisFactory::basisFactory()->getBasisFunctionSpace(basis);
+      int basisRank = BasisFactory::basisFactory()->getBasisRank(basis);
+      if (BasisFactory::basisFactory()->basisPolyOrder(basis) >= newPolyOrderForVarID) {
         newOrdering->addEntry(varID,basis,basisRank,sideIndex);
       } else {
         // upgrade basis
-        basis = BasisFactory::setPolyOrder(basis, newPolyOrderForVarID);
+        basis = BasisFactory::basisFactory()->setPolyOrder(basis, newPolyOrderForVarID);
         newOrdering->addEntry(varID,basis,basisRank,sideIndex);
       }
     }
@@ -590,19 +590,19 @@ DofOrderingPtr DofOrderingFactory::setBasisDegree(DofOrderingPtr dofOrdering, in
     for (int sideIndex=0; sideIndex<numSides; sideIndex++) {
       BasisPtr basis = dofOrdering->getBasis(varID,sideIndex);
       
-      fs = BasisFactory::getBasisFunctionSpace(basis);
+      fs = BasisFactory::basisFactory()->getBasisFunctionSpace(basis);
       if (replaceDiscontinuousFSWithContinuous) {
         if (IntrepidExtendedTypes::functionSpaceIsDiscontinuous(fs)) {
           fs = IntrepidExtendedTypes::continuousSpaceForDiscontinuous(fs);
         }
       }
-      int basisRank = BasisFactory::getBasisRank(basis);
+      int basisRank = BasisFactory::basisFactory()->getBasisRank(basis);
       int currentBasisDegree = basis->getDegree();
       int delta_k = basisDegreeToSet - currentBasisDegree;
       // upgrade basis
-      int currentPolyOrder = BasisFactory::basisPolyOrder(basis);
-//      basis = BasisFactory::setPolyOrder(basis, currentPolyOrder + delta_k );
-      basis = BasisFactory::getBasis( currentPolyOrder + delta_k, basis->domainTopology().getBaseKey(), fs );
+      int currentPolyOrder = BasisFactory::basisFactory()->basisPolyOrder(basis);
+//      basis = BasisFactory::basisFactory()->setPolyOrder(basis, currentPolyOrder + delta_k );
+      basis = BasisFactory::basisFactory()->getBasis( currentPolyOrder + delta_k, basis->domainTopology().getBaseKey(), fs );
       newOrdering->addEntry(varID,basis,basisRank,sideIndex);
       if (numSides == 1) {
         newFieldOrder->addEntry(varID, basis, basisRank, sideIndex);
@@ -643,17 +643,17 @@ DofOrderingPtr DofOrderingFactory::setSidePolyOrder(DofOrderingPtr dofOrdering, 
     for (int sideIndex=0; sideIndex<numSides; sideIndex++) {
       BasisPtr basis = dofOrdering->getBasis(varID,sideIndex);
       if (replacePatchBasis) {
-        if (BasisFactory::isPatchBasis(basis)) {
+        if (BasisFactory::basisFactory()->isPatchBasis(basis)) {
           // if we have a PatchBasis, then we want to get the underlying basis...
           basis = ((PatchBasis<>*)basis.get())->nonPatchAncestorBasis();
         }
       }
-      fs = BasisFactory::getBasisFunctionSpace(basis);
-      int basisRank = BasisFactory::getBasisRank(basis);
-      int basisPolyOrder = BasisFactory::basisPolyOrder(basis);
+      fs = BasisFactory::basisFactory()->getBasisFunctionSpace(basis);
+      int basisRank = BasisFactory::basisFactory()->getBasisRank(basis);
+      int basisPolyOrder = BasisFactory::basisFactory()->basisPolyOrder(basis);
       if ( (numSides > 1) && (sideIndex==sideIndexToSet) && (basisPolyOrder < newPolyOrder) ) {
         // upgrade basis
-        basis = BasisFactory::setPolyOrder(basis, newPolyOrder);
+        basis = BasisFactory::basisFactory()->setPolyOrder(basis, newPolyOrder);
       }
       newOrdering->addEntry(varID,basis,basisRank,sideIndex);
     }

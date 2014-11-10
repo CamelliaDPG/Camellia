@@ -121,7 +121,7 @@ void BasisCache::createSideCaches() {
     
     int maxTrialDegreeOnSide = _maxTrialDegree;
     if (maxDegreeBasisOnSide.get() != NULL) {
-      if (BasisFactory::isMultiBasis(maxDegreeBasisOnSide)) {
+      if (BasisFactory::basisFactory()->isMultiBasis(maxDegreeBasisOnSide)) {
         multiBasisIfAny = maxDegreeBasisOnSide;
       }
       maxTrialDegreeOnSide = maxDegreeBasisOnSide->getDegree();
@@ -1056,7 +1056,7 @@ BasisCachePtr BasisCache::sideBasisCache(Teuchos::RCP<BasisCache> volumeCache, i
   if (spaceDim > 1) {
     BasisPtr maxDegreeBasisOnSide = volumeCache->_maxDegreeBasisForSide[sideIndex];
     if (maxDegreeBasisOnSide.get() != NULL) {
-      if (BasisFactory::isMultiBasis(maxDegreeBasisOnSide)) {
+      if (BasisFactory::basisFactory()->isMultiBasis(maxDegreeBasisOnSide)) {
         multiBasisIfAny = maxDegreeBasisOnSide;
       }
       maxTrialDegreeOnSide = maxDegreeBasisOnSide->getDegree();

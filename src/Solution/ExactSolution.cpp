@@ -132,7 +132,7 @@ void ExactSolution::L2NormOfError(FieldContainer<double> &errorSquaredPerCell, S
   dimensions.push_back(numCells);
   dimensions.push_back(numCubPoints);
   
-  int basisRank = BasisFactory::getBasisRank(basis);
+  int basisRank = BasisFactory::basisFactory()->getBasisRank(basis);
   if (basisRank==1) {
     dimensions.push_back(spaceDim);
   }

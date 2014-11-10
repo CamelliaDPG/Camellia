@@ -67,7 +67,7 @@ int main(int argc, char *argv[]) {
   int pToAdd = 2; // for optimal test function approximation
   bool computeRelativeErrors = true; // we'll say false when one of the exact solution components is 0
   bool useEnrichedTraces = true; // enriched traces are the right choice, mathematically speaking
-  BasisFactory::setUseEnrichedTraces(useEnrichedTraces);
+  BasisFactory::basisFactory()->setUseEnrichedTraces(useEnrichedTraces);
   bool scaleSigmaByMu = true;
   
   bool useTriangles = false;

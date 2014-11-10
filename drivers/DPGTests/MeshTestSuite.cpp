@@ -472,14 +472,14 @@ bool MeshTestSuite::testBasisRefinement() {
   
   shards::CellTopology quad_4(shards::getCellTopologyData<shards::Quadrilateral<4> >() );
   
-  BasisPtr basis = BasisFactory::getBasis(initialPolyOrder, quad_4.getKey(), hgrad);
+  BasisPtr basis = BasisFactory::basisFactory()->getBasis(initialPolyOrder, quad_4.getKey(), hgrad);
   if (basis->getDegree() != initialPolyOrder) {  // since it's hgrad, that's a problem (hvol would be initialPolyOrder-1)
     success = false;
     cout << "testBasisRefinement: initial BasisFactory call returned a different-degree basis than expected..." << endl;
     cout << "testBasisRefinement: expected: " << initialPolyOrder << "; actual: " << basis->getDegree() << endl;
   }
   int additionalP = 4;
-  basis = BasisFactory::addToPolyOrder(basis, additionalP);
+  basis = BasisFactory::basisFactory()->addToPolyOrder(basis, additionalP);
   if (basis->getDegree() != initialPolyOrder+additionalP) {  // since it's hgrad, that's a problem (hvol would be initialPolyOrder-1)
     success = false;
     cout << "testBasisRefinement: addToPolyOrder call returned a different-degree basis than expected..." << endl;

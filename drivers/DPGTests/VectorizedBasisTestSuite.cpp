@@ -102,10 +102,10 @@ bool VectorizedBasisTestSuite::testVectorizedBasisTags() {
   int vertexDim = 0;
   
   for (int polyOrder = 1; polyOrder<10; polyOrder++) {    
-    BasisPtr hgradBasis =  BasisFactory::getConformingBasis(polyOrder,
+    BasisPtr hgradBasis =  BasisFactory::basisFactory()->getConformingBasis(polyOrder,
                                                             quad_4.getKey(),
                                                             IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD);
-    BasisPtr vectorHGradBasis = BasisFactory::getConformingBasis( polyOrder,
+    BasisPtr vectorHGradBasis = BasisFactory::basisFactory()->getConformingBasis( polyOrder,
                                                                  quad_4.getKey(),
                                                                  IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HGRAD);
     vector<int> vertexNodeFieldIndices;
@@ -136,7 +136,7 @@ bool VectorizedBasisTestSuite::testVectorizedBasis() {
   
   int polyOrder = 3, numPoints = 5, spaceDim = 2;
   
-  BasisPtr hgradBasis = BasisFactory::getBasis(polyOrder, quad_4.getKey(), IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD);
+  BasisPtr hgradBasis = BasisFactory::basisFactory()->getBasis(polyOrder, quad_4.getKey(), IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD);
   
   // first test: make a single-component vector basis.  This should agree in every entry with the basis itself, but its field container will have one higher rank...
   VectorizedBasis<> oneComp(hgradBasis, 1);
@@ -168,7 +168,7 @@ bool VectorizedBasisTestSuite::testVectorizedBasis() {
   
   vector< BasisPtr > twoComps;
   twoComps.push_back( Teuchos::rcp( new VectorizedBasis<>(hgradBasis, 2) ) );
-  twoComps.push_back( BasisFactory::getBasis( polyOrder,
+  twoComps.push_back( BasisFactory::basisFactory()->getBasis( polyOrder,
                                              quad_4.getKey(), IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HGRAD) );
   
   

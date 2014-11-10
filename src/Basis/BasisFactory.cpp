@@ -55,23 +55,13 @@
 
 #include "PointBasis.h"
 
-//define the static maps:
-map< pair< pair<int,int>, IntrepidExtendedTypes::EFunctionSpaceExtended >, BasisPtr > BasisFactory::_conformingBases;
-map< pair< pair<int,int>, IntrepidExtendedTypes::EFunctionSpaceExtended >, BasisPtr > BasisFactory::_existingBases;
-map< Camellia::Basis<>*, int > BasisFactory::_polyOrders; // allows lookup of poly order used to create basis
-map< Camellia::Basis<>*, IntrepidExtendedTypes::EFunctionSpaceExtended > BasisFactory::_functionSpaces; // allows lookup of function spaces
-map< Camellia::Basis<>*, int > BasisFactory::_cellTopoKeys; // allows lookup of cellTopoKeys
-set< Camellia::Basis<>* > BasisFactory::_multiBases;
-map< vector< Camellia::Basis<>* >, MultiBasisPtr > BasisFactory::_multiBasesMap;
-map< pair<Camellia::Basis<>*, vector<double> >, PatchBasisPtr > BasisFactory::_patchBases;
-set< Camellia::Basis<>* > BasisFactory::_patchBasisSet;
-
-bool BasisFactory::_useEnrichedTraces = true;
-
-bool BasisFactory::_useLobattoForQuadHGRAD = false;
-bool BasisFactory::_useLobattoForQuadHDIV = false;
-bool BasisFactory::_useLobattoForLineHGRAD = false;
-bool BasisFactory::_useLegendreForLineHVOL = false;
+BasisFactory::BasisFactory() {
+  _useEnrichedTraces = true;
+  _useLobattoForQuadHGRAD = false;
+  _useLobattoForQuadHDIV = false;
+  _useLobattoForLineHGRAD = false;
+  _useLegendreForLineHVOL = false;
+}
 
 using namespace Camellia;
 
@@ -680,4 +670,9 @@ void BasisFactory::setUseLobattoForQuadHGrad(bool value) {
 }
 void BasisFactory::setUseLobattoForQuadHDiv(bool value) {
   _useLobattoForQuadHDIV = value;
+}
+
+Teuchos::RCP<BasisFactory> BasisFactory::basisFactory() {
+  static Teuchos::RCP<BasisFactory> basisFactory = Teuchos::rcp( new BasisFactory() );
+  return basisFactory;
 }

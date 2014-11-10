@@ -203,7 +203,7 @@ void PatchBasisTests::getPolyOrders(vector< map<int, int> > &polyOrderMapVector,
   map<int, int> polyOrders;
   for (varIt = _fieldIDs.begin(); varIt != _fieldIDs.end(); varIt++) {
     int fieldID = *varIt;
-    int polyOrder = BasisFactory::basisPolyOrder(elem->elementType()->trialOrderPtr->getBasis(fieldID));
+    int polyOrder = BasisFactory::basisFactory()->basisPolyOrder(elem->elementType()->trialOrderPtr->getBasis(fieldID));
     polyOrders[fieldID] = polyOrder;
   }
   polyOrderMapVector.push_back(polyOrders);
@@ -213,7 +213,7 @@ void PatchBasisTests::getPolyOrders(vector< map<int, int> > &polyOrderMapVector,
     vector<int>::iterator varIt;
     for (varIt = _fluxIDs.begin(); varIt != _fluxIDs.end(); varIt++) {
       int fluxID = *varIt;
-      int polyOrder =  BasisFactory::basisPolyOrder(elem->elementType()->trialOrderPtr->getBasis(fluxID,sideIndex));
+      int polyOrder =  BasisFactory::basisFactory()->basisPolyOrder(elem->elementType()->trialOrderPtr->getBasis(fluxID,sideIndex));
       polyOrders[fluxID] = polyOrder;
     }
     polyOrderMapVector.push_back(polyOrders);
@@ -348,7 +348,7 @@ bool PatchBasisTests::patchBasisCorrectlyAppliedInMesh(Teuchos::RCP<Mesh> mesh, 
       int numSides = elem->numSides();
       for (int sideIndex=0; sideIndex<numSides; sideIndex++) {
         BasisPtr basis = elem->elementType()->trialOrderPtr->getBasis(fluxID,sideIndex);
-        bool hasPatchBasis = BasisFactory::isPatchBasis(basis);
+        bool hasPatchBasis = BasisFactory::basisFactory()->isPatchBasis(basis);
         bool shouldHavePatchBasis;
         // check who the (ancestor's) neighbor is on this side:
         int sideIndexInNeighbor;
@@ -372,7 +372,7 @@ bool PatchBasisTests::patchBasisCorrectlyAppliedInMesh(Teuchos::RCP<Mesh> mesh, 
       int fieldID = *varIt;
       bool shouldHavePatchBasis = false; // false for all fields
       BasisPtr basis = elem->elementType()->trialOrderPtr->getBasis(fieldID);
-      bool hasPatchBasis = BasisFactory::isPatchBasis(basis);
+      bool hasPatchBasis = BasisFactory::basisFactory()->isPatchBasis(basis);
       if (shouldHavePatchBasis != hasPatchBasis) {
         correct = false;
       }
@@ -401,7 +401,7 @@ bool PatchBasisTests::patchBasesAgreeWithParentInMesh() {
       int numSides = trialOrdering->getNumSidesForVarID(varID);
       for (int sideIndex = 0; sideIndex < numSides; sideIndex++) {
         BasisPtr basis = trialOrdering->getBasis(varID,sideIndex);
-        if (BasisFactory::isPatchBasis(basis)) {
+        if (BasisFactory::basisFactory()->isPatchBasis(basis)) {
           // get parent basis:
           ElementPtr parent = elem->getParent();
           int parentSideIndex = elem->parentSideForSideIndex(sideIndex);
@@ -500,7 +500,7 @@ void PatchBasisTests::setup() {
   // (for now, PatchBasis only supports 1D bases--sufficient for 2D DPG meshes)
   // setup bases:
   int polyOrder = 3;
-  _parentBasis = BasisFactory::getBasis( polyOrder, shards::Line<2>::key, IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD );
+  _parentBasis = BasisFactory::basisFactory()->getBasis( polyOrder, shards::Line<2>::key, IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD );
   FieldContainer<double> nodesLeft(2,1), nodesMiddle(2,1), nodesRight(2,1);
   nodesLeft(0,0)   = -1.0;
   nodesLeft(1,0)   = -1.0 / 3.0;
@@ -508,9 +508,9 @@ void PatchBasisTests::setup() {
   nodesMiddle(1,0) = 1.0 / 3.0;
   nodesRight(0,0)  = 1.0 / 3.0;
   nodesRight(1,0)  = 1.0;
-  _patchBasisLeft   = BasisFactory::getPatchBasis(_parentBasis,nodesLeft);
-  _patchBasisMiddle = BasisFactory::getPatchBasis(_parentBasis,nodesMiddle);
-  _patchBasisRight  = BasisFactory::getPatchBasis(_parentBasis,nodesRight);
+  _patchBasisLeft   = BasisFactory::basisFactory()->getPatchBasis(_parentBasis,nodesLeft);
+  _patchBasisMiddle = BasisFactory::basisFactory()->getPatchBasis(_parentBasis,nodesMiddle);
+  _patchBasisRight  = BasisFactory::basisFactory()->getPatchBasis(_parentBasis,nodesRight);
   
   double refCellLeft = -1.0;
   double refCellRight = 1.0;

@@ -69,7 +69,7 @@ int main(int argc, char *argv[]) {
   bool useLineSearch = false;
   bool computeRelativeErrors = true; // we'll say false when one of the exact solution components is 0
   bool useEnrichedTraces = true; // enriched traces are the right choice, mathematically speaking
-  BasisFactory::setUseEnrichedTraces(useEnrichedTraces);
+  BasisFactory::basisFactory()->setUseEnrichedTraces(useEnrichedTraces);
   
   // parse args:
   bool useTriangles = false, useGraphNorm = false, useCompliantNorm = false, useStokesCompliantNorm = false, useStokesGraphNorm = false;
