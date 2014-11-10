@@ -153,9 +153,11 @@ void GMGOperator::computeCoarseStiffnessMatrix(Epetra_CrsMatrix *fineStiffnessMa
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "EpetraExt::MatrixMatrix::Multiply returned an error during computeCoarseStiffnessMatrix's computation of P^T * (A * P).");
   }
   
-//  PT_A_P->FillComplete();
+  PT_A_P->FillComplete();
   
-//  EpetraExt::RowMatrixToMatrixMarketFile("/tmp/PT_AP.dat", *PT_A_P, NULL, NULL, false); // false: don't write header
+  string PT_A_P_path = "/tmp/PT_AP.dat";
+  cout << "Writing P^T * (A * P) to disk at " << PT_A_P_path << endl;
+  EpetraExt::RowMatrixToMatrixMarketFile(PT_A_P_path.c_str(), *PT_A_P, NULL, NULL, false); // false: don't write header
   
   Epetra_Map targetMap = _coarseSolution->getPartitionMap();
   Epetra_Import  coarseImporter(targetMap, PT_A_P->RowMap());
@@ -191,6 +193,12 @@ Teuchos::RCP<Epetra_CrsMatrix> GMGOperator::constructProlongationOperator() {
   int maxRowSizeToPrescribe = _coarseMesh->rowSizeUpperBound();
 
   Teuchos::RCP<Epetra_FECrsMatrix> P = Teuchos::rcp( new Epetra_FECrsMatrix(::Copy, _finePartitionMap, maxRowSizeToPrescribe) );
+  
+  // by convention, all constraints come at the end.  (Element and global lagrange constraints, zero-mean constraints.)
+  // There should be the same number in the coarse and the fine Solution objects, and the mapping is taken to be the identity.
+  
+  GlobalIndexType firstFineConstraintRowIndex = _fineDofInterpreter->globalDofCount();
+  GlobalIndexType firstCoarseConstraintRowIndex = _coarseSolution->getDofInterpreter()->globalDofCount();
   
   // strategy: we iterate on the rank-local global dof indices on the fine mesh.
   //           we construct X, a canonical basis vector for the global dof index.
@@ -237,52 +245,59 @@ Teuchos::RCP<Epetra_CrsMatrix> GMGOperator::constructProlongationOperator() {
       map<GlobalIndexTypeToCast, double> coarseXVectorLocal; // rank-local representation, so we just use an STL map.  Has the advantage of growing as we need it to.
       (*XLocal)[localID] = 1.0;
       
-      set<GlobalIndexType> cells = cellsForGlobalDofOrdinal[globalRow];
-      // could make this more efficient by skipping over cells that don't map anything to this global ID
-      for (set<GlobalIndexType>::iterator cellIDIt=cells.begin(); cellIDIt != cells.end(); cellIDIt++) {
-        GlobalIndexType fineCellID = *cellIDIt;
-        int fineDofCount = _fineMesh->getElementType(fineCellID)->trialOrderPtr->totalDofs();
-        FieldContainer<double> fineCellData(fineDofCount);
-        _fineDofInterpreter->interpretGlobalCoefficients(fineCellID, fineCellData, *XLocal);
-//        if (globalRow==1) {
-//          cout << "fineCellData:\n" << fineCellData;
-//        }
-        LocalDofMapperPtr fineMapper = getLocalCoefficientMap(fineCellID);
-        GlobalIndexType coarseCellID = getCoarseCellID(fineCellID);
-        int coarseDofCount = _coarseMesh->getElementType(coarseCellID)->trialOrderPtr->totalDofs();
-        FieldContainer<double> coarseCellData(coarseDofCount);
-        FieldContainer<double> mappedCoarseCellData(fineMapper->globalIndices().size());
-        fineMapper->mapLocalDataVolume(fineCellData, mappedCoarseCellData, false);
+      if (globalRow >= firstFineConstraintRowIndex) {
+        // belongs to a lagrange degree of freedom (zero-mean constraints are a special case), so we do a one-to-one map
+        int offset = globalRow - firstCoarseConstraintRowIndex;
+        GlobalIndexType coarseGlobalRow = firstCoarseConstraintRowIndex + offset;
+        coarseXVectorLocal[coarseGlobalRow] = 1.0;
+      } else {
         
-        CellPtr fineCell = _fineMesh->getTopology()->getCell(fineCellID);
-        int sideCount = CamelliaCellTools::getSideCount(*fineCell->topology());
-        for (int sideOrdinal=0; sideOrdinal<sideCount; sideOrdinal++) {
-          if (fineCell->ownsSide(sideOrdinal)) {
-//        cout << "fine cell " << fineCellID << " owns side " << sideOrdinal << endl;
-            fineMapper->mapLocalDataSide(fineCellData, mappedCoarseCellData, false, sideOrdinal);
+        set<GlobalIndexType> cells = cellsForGlobalDofOrdinal[globalRow];
+        for (set<GlobalIndexType>::iterator cellIDIt=cells.begin(); cellIDIt != cells.end(); cellIDIt++) {
+          GlobalIndexType fineCellID = *cellIDIt;
+          int fineDofCount = _fineMesh->getElementType(fineCellID)->trialOrderPtr->totalDofs();
+          FieldContainer<double> fineCellData(fineDofCount);
+          _fineDofInterpreter->interpretGlobalCoefficients(fineCellID, fineCellData, *XLocal);
+  //        if (globalRow==1) {
+  //          cout << "fineCellData:\n" << fineCellData;
+  //        }
+          LocalDofMapperPtr fineMapper = getLocalCoefficientMap(fineCellID);
+          GlobalIndexType coarseCellID = getCoarseCellID(fineCellID);
+          int coarseDofCount = _coarseMesh->getElementType(coarseCellID)->trialOrderPtr->totalDofs();
+          FieldContainer<double> coarseCellData(coarseDofCount);
+          FieldContainer<double> mappedCoarseCellData(fineMapper->globalIndices().size());
+          fineMapper->mapLocalDataVolume(fineCellData, mappedCoarseCellData, false);
+          
+          CellPtr fineCell = _fineMesh->getTopology()->getCell(fineCellID);
+          int sideCount = CamelliaCellTools::getSideCount(*fineCell->topology());
+          for (int sideOrdinal=0; sideOrdinal<sideCount; sideOrdinal++) {
+            if (fineCell->ownsSide(sideOrdinal)) {
+  //        cout << "fine cell " << fineCellID << " owns side " << sideOrdinal << endl;
+              fineMapper->mapLocalDataSide(fineCellData, mappedCoarseCellData, false, sideOrdinal);
+            }
           }
-        }
-        
-//        if (globalRow==1) {
-//          cout << "mappedCoarseCellData:\n" << mappedCoarseCellData;
-//        }
-        vector<GlobalIndexType> mappedCoarseDofIndices = fineMapper->globalIndices(); // "global" here means the coarse local
-        for (int mappedCoarseDofOrdinal = 0; mappedCoarseDofOrdinal < mappedCoarseDofIndices.size(); mappedCoarseDofOrdinal++) {
-          GlobalIndexType coarseDofIndex = mappedCoarseDofIndices[mappedCoarseDofOrdinal];
-          coarseCellData[coarseDofIndex] = mappedCoarseCellData[mappedCoarseDofOrdinal];
-        }
-        FieldContainer<double> interpretedCoarseData;
-        FieldContainer<GlobalIndexType> interpretedGlobalDofIndices;
-        _coarseSolution->getDofInterpreter()->interpretLocalData(coarseCellID, coarseCellData, interpretedCoarseData, interpretedGlobalDofIndices);
-        
-//        if (globalRow==1) {
-//          cout << "interpretedCoarseData:\n" << interpretedCoarseData;
-//          cout << "interpretedGlobalDofIndices:\n" << interpretedGlobalDofIndices;
-//        }
-        
-        for (int interpretedCoarseGlobalDofOrdinal=0; interpretedCoarseGlobalDofOrdinal < interpretedGlobalDofIndices.size(); interpretedCoarseGlobalDofOrdinal++) {
-          GlobalIndexType globalDofIndex = interpretedGlobalDofIndices[interpretedCoarseGlobalDofOrdinal];
-          coarseXVectorLocal[globalDofIndex] += interpretedCoarseData[interpretedCoarseGlobalDofOrdinal];
+          
+  //        if (globalRow==1) {
+  //          cout << "mappedCoarseCellData:\n" << mappedCoarseCellData;
+  //        }
+          vector<GlobalIndexType> mappedCoarseDofIndices = fineMapper->globalIndices(); // "global" here means the coarse local
+          for (int mappedCoarseDofOrdinal = 0; mappedCoarseDofOrdinal < mappedCoarseDofIndices.size(); mappedCoarseDofOrdinal++) {
+            GlobalIndexType coarseDofIndex = mappedCoarseDofIndices[mappedCoarseDofOrdinal];
+            coarseCellData[coarseDofIndex] = mappedCoarseCellData[mappedCoarseDofOrdinal];
+          }
+          FieldContainer<double> interpretedCoarseData;
+          FieldContainer<GlobalIndexType> interpretedGlobalDofIndices;
+          _coarseSolution->getDofInterpreter()->interpretLocalData(coarseCellID, coarseCellData, interpretedCoarseData, interpretedGlobalDofIndices);
+          
+  //        if (globalRow==1) {
+  //          cout << "interpretedCoarseData:\n" << interpretedCoarseData;
+  //          cout << "interpretedGlobalDofIndices:\n" << interpretedGlobalDofIndices;
+  //        }
+          
+          for (int interpretedCoarseGlobalDofOrdinal=0; interpretedCoarseGlobalDofOrdinal < interpretedGlobalDofIndices.size(); interpretedCoarseGlobalDofOrdinal++) {
+            GlobalIndexType globalDofIndex = interpretedGlobalDofIndices[interpretedCoarseGlobalDofOrdinal];
+            coarseXVectorLocal[globalDofIndex] += interpretedCoarseData[interpretedCoarseGlobalDofOrdinal];
+          }
         }
       }
       
