@@ -155,9 +155,9 @@ void GMGOperator::computeCoarseStiffnessMatrix(Epetra_CrsMatrix *fineStiffnessMa
   
   PT_A_P->FillComplete();
   
-  string PT_A_P_path = "/tmp/PT_AP.dat";
-  cout << "Writing P^T * (A * P) to disk at " << PT_A_P_path << endl;
-  EpetraExt::RowMatrixToMatrixMarketFile(PT_A_P_path.c_str(), *PT_A_P, NULL, NULL, false); // false: don't write header
+//  string PT_A_P_path = "/tmp/PT_AP.dat";
+//  cout << "Writing P^T * (A * P) to disk at " << PT_A_P_path << endl;
+//  EpetraExt::RowMatrixToMatrixMarketFile(PT_A_P_path.c_str(), *PT_A_P, NULL, NULL, false); // false: don't write header
   
   Epetra_Map targetMap = _coarseSolution->getPartitionMap();
   Epetra_Import  coarseImporter(targetMap, PT_A_P->RowMap());
