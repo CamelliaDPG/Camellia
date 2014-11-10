@@ -116,9 +116,37 @@ class DivergenceIndicator : public Function {
       for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
         for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
           if (values(cellIndex,ptIndex) < -1e-3)
-            values(cellIndex, ptIndex) = 1;
+            values(cellIndex, ptIndex) = 1./(-values(cellIndex, ptIndex));
+            // values(cellIndex, ptIndex) = 1;
           else
             values(cellIndex, ptIndex) = 0;
+        }
+      }
+    }
+};
+
+class ErrorFunction : public Function {
+  private:
+    SolutionPtr _solution;
+  public:
+    ErrorFunction(SolutionPtr solution) : Function(0), _solution(solution) {}
+    void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
+      int numCells = values.dimension(0);
+      int numPoints = values.dimension(1);
+
+      // _function->values(values, basisCache);
+      map<int, double> errorMap = _solution->energyError();
+
+      const FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
+      for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
+        map<int, double>::iterator it = errorMap.find(cellIndex);
+        if (it != errorMap.end())
+          cout << "cell " << cellIndex << " error " << errorMap[cellIndex] << endl;
+        else
+          cout << " Problem " << endl;
+        for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
+          // values(cellIndex, ptIndex) = errorMap[cellIndex];
+          values(cellIndex, ptIndex) = 0;
         }
       }
     }
@@ -213,15 +241,18 @@ int main(int argc, char *argv[]) {
 
   double xmin, xmax, xint, tmin, tmax;
   double rhoL, rhoR, uL, uR, pL, pR, eL, eR, TL, TR, UcL, UcR, UmL, UmR, UeL, UeR, mL, mR, EL, ER;
-  double M_inf = 1;
-  double gamma = 1.4;
-  double Cv = 1/(gamma*(gamma-1)*M_inf*M_inf);
+  double gamma = 5./3.;
+  double p0 = 1e-6;
+  double rho0 = 1;
+  double u0 = 1;
+  double a0 = sqrt(gamma*p0/rho0);
+  // double M_inf = u0/a0;
+  // double Cv = 1/(gamma*(gamma-1)*M_inf*M_inf);
+  double Cv = 1;
   double Cp = gamma*Cv;
-  // double Cv = 718;
-  // double Cp = 1010;
   double R = Cp-Cv;
   double Pr = 0.713;
-  // double gamma = Cp/Cv;
+  double T0 = p0/(rho0*R);
   string problemName;
 
   switch (problem)
@@ -305,9 +336,6 @@ int main(int argc, char *argv[]) {
     // Strong shock tube
     problemName = "Noh";
     gamma = 5./3;
-    Cv = 1/(gamma*(gamma-1)*M_inf*M_inf);
-    Cp = gamma*Cv;
-    R = Cp-Cv;
     xmin = 0;
     xmax = 1;
     xint = .5;
@@ -317,8 +345,8 @@ int main(int argc, char *argv[]) {
     rhoR = 1;
     uL = 1;
     uR = -1;
-    TL = 1;
-    TR = 1;
+    TL = p0/(rho0*R*T0);
+    TR = p0/(rho0*R*T0);
     break;
     case 6:
     // Strong shock tube
@@ -530,7 +558,9 @@ int main(int argc, char *argv[]) {
     FunctionPtr invA0p_m = 1./A0p_m;
     FunctionPtr invA0p_e = 1./A0p_e;
     FunctionPtr div_indicator = Teuchos::rcp( new DivergenceIndicator(D_prev) );
-    FunctionPtr artificialViscosity = Function::h()*div_indicator;
+    FunctionPtr artificialViscosity = 0.1*Function::h()*div_indicator+1e-4;
+    // FunctionPtr artificialViscosity = 0.1*Function::h()+1e-4;
+    // FunctionPtr artificialViscosity = 0.1*Function::h()*div_indicator + 1e-4;
     // FunctionPtr mu = artificialViscosity;
     // FunctionPtr mu_sqrt = Teuchos::rcp( new SqrtFunction(mu) );
     switch (formulation)
@@ -639,7 +669,7 @@ int main(int argc, char *argv[]) {
       rhs->addTerm( -2*u_prev * S->dx() );
 
       // tau terms:
-      rhs->addTerm( Cp/Pr*mu*T_prev * tau->dx() );
+      rhs->addTerm( T_prev * tau->dx() );
 
       // vc terms:
       // rhs->addTerm( rho_prev*u_prev * vc->dx() );
@@ -760,12 +790,12 @@ int main(int argc, char *argv[]) {
         ip->addTerm( invA0p_c*(F_cxGradV + C_cxdVdt) );
         ip->addTerm( invA0p_m*(F_mxGradV + C_mxdVdt) );
         ip->addTerm( invA0p_e*(F_exGradV + C_exdVdt) );
-        ip->addTerm(vc);
-        ip->addTerm(vm);
-        ip->addTerm(ve);
-        // ip->addTerm( A0p_c*vc);
-        // ip->addTerm( A0p_m*vm);
-        // ip->addTerm( A0p_e*ve);
+        // ip->addTerm(vc);
+        // ip->addTerm(vm);
+        // ip->addTerm(ve);
+        ip->addTerm( A0p_c*vc);
+        ip->addTerm( A0p_m*vm);
+        ip->addTerm( A0p_e*ve);
         break;
 
         // Original Robust Norm 3
@@ -898,12 +928,42 @@ int main(int argc, char *argv[]) {
         ip->addTerm( F_cxGradV + C_cxdVdt );
         ip->addTerm( F_mxGradV + C_mxdVdt );
         ip->addTerm( F_exGradV + C_exdVdt );
-        ip->addTerm( vc->dx() );
-        ip->addTerm( vm->dx() );
-        ip->addTerm( ve->dx() );
+        // ip->addTerm( 100*mu*vc->dx() );
+        // ip->addTerm( 100*mu*vm->dx() );
+        // ip->addTerm( 100*mu*ve->dx() );
+        // ip->addTerm( 100*mu*S->dx() );
+        // ip->addTerm( 100*mu*tau->dx() );
+        // ip->addTerm( 100*mu*vc->dy() );
+        // ip->addTerm( 100*mu*vm->dy() );
+        // ip->addTerm( 100*mu*ve->dy() );
+        // ip->addTerm( 100*mu*S->dy() );
+        // ip->addTerm( 100*mu*tau->dy() );
         ip->addTerm( vc );
         ip->addTerm( vm );
         ip->addTerm( ve );
+        break;
+
+        // Entropy Scaled Robust Norm 7
+        case 16:        
+        ip->addTerm( Msqrt_DxS );
+        ip->addTerm( MinvsqrtxK_DxGradV );
+        ip->addTerm( Msqrt_qxtau );
+        ip->addTerm( MinvsqrtxK_qxGradV );
+        ip->addTerm( invA0p_c*(G_cxGradPsi - F_cxGradV - C_cxdVdt) );
+        ip->addTerm( invA0p_m*(G_mxGradPsi - F_mxGradV - C_mxdVdt) );
+        ip->addTerm( invA0p_e*(G_exGradPsi - F_exGradV - C_exdVdt) );
+        ip->addTerm( invA0p_c*(F_cxGradV + C_cxdVdt) );
+        ip->addTerm( invA0p_m*(F_mxGradV + C_mxdVdt) );
+        ip->addTerm( invA0p_e*(F_exGradV + C_exdVdt) );
+        // ip->addTerm(vc);
+        // ip->addTerm(vm);
+        // ip->addTerm(ve);
+        ip->addTerm( mu*A0p_c*vc->dx() );
+        ip->addTerm( mu*A0p_m*vm->dx() );
+        ip->addTerm( mu*A0p_e*ve->dx() );
+        ip->addTerm( A0p_c*vc);
+        ip->addTerm( A0p_m*vm);
+        ip->addTerm( A0p_e*ve);
         break;
 
         default:
@@ -1272,7 +1332,9 @@ int main(int argc, char *argv[]) {
         exporter.exportSolution(outfile.str());
         FunctionPtr D_prev = Function::solution(D,backgroundFlows[slab]);
         FunctionPtr div_indicator = Teuchos::rcp( new DivergenceIndicator(D_prev) );
+        FunctionPtr errorFunction = Teuchos::rcp( new ErrorFunction(solution) );
         exporter.exportFunction(div_indicator,"Indicator"+Teuchos::toString(refIndex));
+        exporter.exportFunction(errorFunction,"Error"+Teuchos::toString(refIndex));
       }
 
       if (refIndex < numRefs)
