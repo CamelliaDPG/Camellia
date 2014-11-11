@@ -424,14 +424,14 @@ int main(int argc, char *argv[]) {
     problemName = "Sedov";
     xmin = -.5;
     xmax = 0.5;
-    xint = 0;
+    xint = -.5+1./128;
     tmax = 0.1;
 
     rhoL = 1;
     rhoR = 1;
     uL = 0;
     uR = 0;
-    TL = 1;
+    TL = 2;
     TR = 1;
     break;
     default:
@@ -1293,14 +1293,16 @@ int main(int argc, char *argv[]) {
     FunctionPtr rho0  = Teuchos::rcp( new DiscontinuousInitialCondition(xint, rhoL, rhoR) );
     FunctionPtr mom0 = Teuchos::rcp( new DiscontinuousInitialCondition(xint, uL*rhoL, uR*rhoR) );
     FunctionPtr E0    = Teuchos::rcp( new DiscontinuousInitialCondition(xint, (rhoL*Cv*TL+0.5*rhoL*uL*uL), (rhoR*Cv*TR+0.5*rhoR*uR*uR)) );
-    if (problem == 6)
-      E0 = Teuchos::rcp( new PulseInitialCondition(0.25, 2, 1) );
+    // if (problem == 6)
+    //   E0 = Teuchos::rcp( new PulseInitialCondition(0.25, 2, 1) );
     // FunctionPtr rho0  = Teuchos::rcp( new RampedInitialCondition(xint, rhoL, rhoR, (xmax-xmin)/numX) );
     // FunctionPtr mom0 = Teuchos::rcp( new RampedInitialCondition(xint, uL*rhoL, uR*rhoR, (xmax-xmin)/numX) );
     // FunctionPtr E0    = Teuchos::rcp( new RampedInitialCondition(xint, (rhoL*Cv*TL+0.5*rhoL*uL*uL), (rhoR*Cv*TR+0.5*rhoR*uR*uR), (xmax-xmin)/numX) );
     bc->addDirichlet(Fc, left, -rhoL*uL*one);
-    bc->addDirichlet(Fc, right, rhoR*uR*one);
-    bc->addDirichlet(Fm, left, -(rhoL*uL*uL+R*rhoL*TL)*one);
+    // bc->addDirichlet(Fc, right, rhoR*uR*one);
+    // bc->addDirichlet(Fm, left, -(rhoL*uL*uL+R*rhoL*TL)*one);
+    bc->addDirichlet(uhat, right, zero);
+    bc->addDirichlet(uhat, left, zero);
     bc->addDirichlet(Fm, right, (rhoR*uR*uR+R*rhoR*TR)*one);
     bc->addDirichlet(Fe, left, -(rhoL*Cv*TL+0.5*rhoL*uL*uL+R*rhoL*TL)*uL*one);
     bc->addDirichlet(Fe, right, (rhoR*Cv*TR+0.5*rhoR*uR*uR+R*rhoR*TR)*uR*one);
@@ -1405,8 +1407,8 @@ int main(int argc, char *argv[]) {
         outfile << problemName << norm << "_" << slab << "_" << refIndex;
         exporter.exportSolution(outfile.str());
         FunctionPtr D_prev = Function::solution(D,backgroundFlows[slab]);
-        FunctionPtr div_indicator = Teuchos::rcp( new DivergenceIndicator(D_prev) );
-        FunctionPtr errorFunction = Teuchos::rcp( new ErrorFunction(solution) );
+        // FunctionPtr div_indicator = Teuchos::rcp( new DivergenceIndicator(D_prev) );
+        // FunctionPtr errorFunction = Teuchos::rcp( new ErrorFunction(solution) );
         // exporter.exportFunction(div_indicator,"Indicator"+Teuchos::toString(refIndex));
         // exporter.exportFunction(errorFunction,"Error"+Teuchos::toString(refIndex));
       }
