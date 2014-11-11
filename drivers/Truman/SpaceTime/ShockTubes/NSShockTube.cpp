@@ -101,6 +101,48 @@ class SqrtFunction : public Function {
     }
 };
 
+class BoundedBelowFunction : public Function {
+  private:
+    FunctionPtr _function;
+    double _bound;
+  public:
+    BoundedBelowFunction(FunctionPtr function, double bound) : Function(0), _function(function), _bound(bound) {}
+    void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
+      int numCells = values.dimension(0);
+      int numPoints = values.dimension(1);
+
+      _function->values(values, basisCache);
+
+      const FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
+      for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
+        for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
+          values(cellIndex, ptIndex) = max(values(cellIndex, ptIndex),_bound);
+        }
+      }
+    }
+};
+
+class BoundedSqrtFunction : public Function {
+  private:
+    FunctionPtr _function;
+    double _bound;
+  public:
+    BoundedSqrtFunction(FunctionPtr function, double bound) : Function(0), _function(function), _bound(bound) {}
+    void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
+      int numCells = values.dimension(0);
+      int numPoints = values.dimension(1);
+
+      _function->values(values, basisCache);
+
+      const FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
+      for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
+        for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
+          values(cellIndex, ptIndex) = sqrt(max(values(cellIndex, ptIndex),_bound));
+        }
+      }
+    }
+};
+
 class DivergenceIndicator : public Function {
   private:
     FunctionPtr _function;
@@ -241,18 +283,16 @@ int main(int argc, char *argv[]) {
 
   double xmin, xmax, xint, tmin, tmax;
   double rhoL, rhoR, uL, uR, pL, pR, eL, eR, TL, TR, UcL, UcR, UmL, UmR, UeL, UeR, mL, mR, EL, ER;
-  double gamma = 5./3.;
-  double p0 = 1e-6;
+  double Pr = 0.713;
+  double gamma = 1.4;
+  double p0 = 1;
   double rho0 = 1;
   double u0 = 1;
   double a0 = sqrt(gamma*p0/rho0);
-  // double M_inf = u0/a0;
-  // double Cv = 1/(gamma*(gamma-1)*M_inf*M_inf);
-  double Cv = 1;
+  double M_inf = u0/a0;
+  double Cv = 1./(gamma*(gamma-1)*M_inf*M_inf);
   double Cp = gamma*Cv;
   double R = Cp-Cv;
-  double Pr = 0.713;
-  double T0 = p0/(rho0*R);
   string problemName;
 
   switch (problem)
@@ -336,6 +376,11 @@ int main(int argc, char *argv[]) {
     // Strong shock tube
     problemName = "Noh";
     gamma = 5./3;
+    a0 = sqrt(gamma*p0/rho0);
+    M_inf = u0/a0;
+    Cv = 1./(gamma*(gamma-1)*M_inf*M_inf);
+    Cp = gamma*Cv;
+    R = Cp-Cv;
     xmin = 0;
     xmax = 1;
     xint = .5;
@@ -345,8 +390,10 @@ int main(int argc, char *argv[]) {
     rhoR = 1;
     uL = 1;
     uR = -1;
-    TL = p0/(rho0*R*T0);
-    TR = p0/(rho0*R*T0);
+    // TL = p0/(rho0*R*T0);
+    // TR = p0/(rho0*R*T0);
+    TL = 0;
+    TR = 0;
     break;
     case 6:
     // Strong shock tube
@@ -517,7 +564,8 @@ int main(int argc, char *argv[]) {
     FunctionPtr D_prev   = Function::solution(D, backgroundFlows[slab]);
     FunctionPtr rho_prev = Uc_prev;
     FunctionPtr u_prev = Um_prev;
-    FunctionPtr T_prev = Ue_prev;
+    // FunctionPtr T_prev = Ue_prev;
+    FunctionPtr T_prev = Teuchos::rcp( new BoundedBelowFunction(Ue_prev, 0) );
     FunctionPtr m_prev = Um_prev;
     FunctionPtr E_prev = Ue_prev;
     FunctionPtr Vc_prev = Uc_prev;
@@ -546,11 +594,11 @@ int main(int argc, char *argv[]) {
     LinearTermPtr G_cxGradPsi = Teuchos::rcp( new LinearTerm );
     LinearTermPtr G_mxGradPsi = Teuchos::rcp( new LinearTerm );
     LinearTermPtr G_exGradPsi = Teuchos::rcp( new LinearTerm );
-    FunctionPtr T_sqrt = Teuchos::rcp( new SqrtFunction(T_prev) );
-    FunctionPtr rho_sqrt = Teuchos::rcp( new SqrtFunction(rho_prev) );
+    FunctionPtr T_sqrt = Teuchos::rcp( new BoundedSqrtFunction(T_prev, 0.1) );
+    FunctionPtr rho_sqrt = Teuchos::rcp( new BoundedSqrtFunction(rho_prev, 0.1) );
     FunctionPtr A0p_c = sqrt(gamma-1)/rho_sqrt;
     FunctionPtr A0p_m = rho_sqrt/(sqrt(Cv)*T_sqrt);
-    FunctionPtr A0p_e = rho_sqrt/T_prev;
+    FunctionPtr A0p_e = rho_sqrt/(T_sqrt*T_sqrt);
     // FunctionPtr invA0p_c = rho_sqrt/sqrt(gamma-1);
     // FunctionPtr invA0p_m = (sqrt(Cv)*T_sqrt)/rho_sqrt;
     // FunctionPtr invA0p_e = T_prev/rho_sqrt;
@@ -1297,8 +1345,8 @@ int main(int argc, char *argv[]) {
           FunctionPtr rhoTemp = Function::solution(rho,backgroundFlows[slab]) + alpha*Function::solution(rho,solution) - Function::constant(eps);
           FunctionPtr TTemp = Function::solution(T,backgroundFlows[slab]) + alpha*Function::solution(T,solution) - Function::constant(eps);
           bool rhoIsPositive = rhoTemp->isPositive(meshes[slab],posEnrich);
-          bool TIsPositive = TTemp->isPositive(meshes[slab],posEnrich);
-          // bool TIsPositive = true;
+          // bool TIsPositive = TTemp->isPositive(meshes[slab],posEnrich);
+          bool TIsPositive = true;
           int iter = 0; int maxIter = 20;
           while (!(rhoIsPositive && TIsPositive) && iter < maxIter)
           {
@@ -1306,8 +1354,8 @@ int main(int argc, char *argv[]) {
             rhoTemp = Function::solution(rho,backgroundFlows[slab]) + alpha*Function::solution(rho,solution);
             TTemp = Function::solution(T,backgroundFlows[slab]) + alpha*Function::solution(T,solution);
             rhoIsPositive = rhoTemp->isPositive(meshes[slab],posEnrich);
-            TIsPositive = TTemp->isPositive(meshes[slab],posEnrich);
-            // TIsPositive = true;
+            // TIsPositive = TTemp->isPositive(meshes[slab],posEnrich);
+            TIsPositive = true;
             iter++;
           }
           if (commRank==0 && alpha < 1.0){
@@ -1334,7 +1382,7 @@ int main(int argc, char *argv[]) {
         FunctionPtr div_indicator = Teuchos::rcp( new DivergenceIndicator(D_prev) );
         FunctionPtr errorFunction = Teuchos::rcp( new ErrorFunction(solution) );
         exporter.exportFunction(div_indicator,"Indicator"+Teuchos::toString(refIndex));
-        exporter.exportFunction(errorFunction,"Error"+Teuchos::toString(refIndex));
+        // exporter.exportFunction(errorFunction,"Error"+Teuchos::toString(refIndex));
       }
 
       if (refIndex < numRefs)
