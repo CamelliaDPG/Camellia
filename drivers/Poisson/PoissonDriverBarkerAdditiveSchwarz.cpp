@@ -190,7 +190,7 @@ int main(int argc, char *argv[]) {
   elementCounts.push_back(horizontalCells);
   elementCounts.push_back(verticalCells);
   
-  MeshPtr mesh, k0Mesh;
+  MeshPtr mesh;
   
   int H1Order = k + 1;
 
@@ -214,8 +214,6 @@ int main(int argc, char *argv[]) {
   pl.set("height",height);
   
   mesh = MeshFactory::quadMesh(pl);
-  
-  mesh->registerObserver(k0Mesh); // ensure that the k0 mesh refinements track those of the solution mesh
   
   RHSPtr rhs = RHS::rhs(); // zero
   FunctionPtr sin_pi_x = Teuchos::rcp( new Sin_ax(PI) );
