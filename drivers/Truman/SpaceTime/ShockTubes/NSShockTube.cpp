@@ -194,6 +194,30 @@ class ErrorFunction : public Function {
     }
 };
 
+class PulseInitialCondition : public Function {
+   private:
+      double width;
+      double valI;
+      double valO;
+   public:
+      PulseInitialCondition(double width, double valI, double valO) : Function(0), width(width), valI(valI), valO(valO) {}
+      void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
+         int numCells = values.dimension(0);
+         int numPoints = values.dimension(1);
+
+         const FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
+         for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
+            for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
+               double x = (*points)(cellIndex,ptIndex,0);
+               if (abs(x) <= width/2.)
+                  values(cellIndex, ptIndex) = valI;
+               else
+                  values(cellIndex, ptIndex) = valO;
+            }
+         }
+      }
+};
+
 class DiscontinuousInitialCondition : public Function {
    private:
       double xloc;
@@ -399,16 +423,16 @@ int main(int argc, char *argv[]) {
     // Strong shock tube
     problemName = "Sedov";
     xmin = -.5;
-    xmax = .5;
+    xmax = 0.5;
     xint = 0;
-    tmax = .1;
+    tmax = 0.1;
 
     rhoL = 1;
     rhoR = 1;
-    uL = 1;
-    uR = -1;
-    TL = 1e-6/(rhoL*R);
-    TR = 1e-6/(rhoR*R);
+    uL = 0;
+    uR = 0;
+    TL = 1;
+    TR = 1;
     break;
     default:
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "invalid problem number");
@@ -564,8 +588,8 @@ int main(int argc, char *argv[]) {
     FunctionPtr D_prev   = Function::solution(D, backgroundFlows[slab]);
     FunctionPtr rho_prev = Uc_prev;
     FunctionPtr u_prev = Um_prev;
-    // FunctionPtr T_prev = Ue_prev;
-    FunctionPtr T_prev = Teuchos::rcp( new BoundedBelowFunction(Ue_prev, 0) );
+    FunctionPtr T_prev = Ue_prev;
+    // FunctionPtr T_prev = Teuchos::rcp( new BoundedBelowFunction(Ue_prev, 1e-6) );
     FunctionPtr m_prev = Um_prev;
     FunctionPtr E_prev = Ue_prev;
     FunctionPtr Vc_prev = Uc_prev;
@@ -1269,6 +1293,8 @@ int main(int argc, char *argv[]) {
     FunctionPtr rho0  = Teuchos::rcp( new DiscontinuousInitialCondition(xint, rhoL, rhoR) );
     FunctionPtr mom0 = Teuchos::rcp( new DiscontinuousInitialCondition(xint, uL*rhoL, uR*rhoR) );
     FunctionPtr E0    = Teuchos::rcp( new DiscontinuousInitialCondition(xint, (rhoL*Cv*TL+0.5*rhoL*uL*uL), (rhoR*Cv*TR+0.5*rhoR*uR*uR)) );
+    if (problem == 6)
+      E0 = Teuchos::rcp( new PulseInitialCondition(0.25, 2, 1) );
     // FunctionPtr rho0  = Teuchos::rcp( new RampedInitialCondition(xint, rhoL, rhoR, (xmax-xmin)/numX) );
     // FunctionPtr mom0 = Teuchos::rcp( new RampedInitialCondition(xint, uL*rhoL, uR*rhoR, (xmax-xmin)/numX) );
     // FunctionPtr E0    = Teuchos::rcp( new RampedInitialCondition(xint, (rhoL*Cv*TL+0.5*rhoL*uL*uL), (rhoR*Cv*TR+0.5*rhoR*uR*uR), (xmax-xmin)/numX) );
@@ -1345,8 +1371,8 @@ int main(int argc, char *argv[]) {
           FunctionPtr rhoTemp = Function::solution(rho,backgroundFlows[slab]) + alpha*Function::solution(rho,solution) - Function::constant(eps);
           FunctionPtr TTemp = Function::solution(T,backgroundFlows[slab]) + alpha*Function::solution(T,solution) - Function::constant(eps);
           bool rhoIsPositive = rhoTemp->isPositive(meshes[slab],posEnrich);
-          // bool TIsPositive = TTemp->isPositive(meshes[slab],posEnrich);
-          bool TIsPositive = true;
+          bool TIsPositive = TTemp->isPositive(meshes[slab],posEnrich);
+          // bool TIsPositive = true;
           int iter = 0; int maxIter = 20;
           while (!(rhoIsPositive && TIsPositive) && iter < maxIter)
           {
@@ -1354,8 +1380,8 @@ int main(int argc, char *argv[]) {
             rhoTemp = Function::solution(rho,backgroundFlows[slab]) + alpha*Function::solution(rho,solution);
             TTemp = Function::solution(T,backgroundFlows[slab]) + alpha*Function::solution(T,solution);
             rhoIsPositive = rhoTemp->isPositive(meshes[slab],posEnrich);
-            // TIsPositive = TTemp->isPositive(meshes[slab],posEnrich);
-            TIsPositive = true;
+            TIsPositive = TTemp->isPositive(meshes[slab],posEnrich);
+            // TIsPositive = true;
             iter++;
           }
           if (commRank==0 && alpha < 1.0){
@@ -1381,7 +1407,7 @@ int main(int argc, char *argv[]) {
         FunctionPtr D_prev = Function::solution(D,backgroundFlows[slab]);
         FunctionPtr div_indicator = Teuchos::rcp( new DivergenceIndicator(D_prev) );
         FunctionPtr errorFunction = Teuchos::rcp( new ErrorFunction(solution) );
-        exporter.exportFunction(div_indicator,"Indicator"+Teuchos::toString(refIndex));
+        // exporter.exportFunction(div_indicator,"Indicator"+Teuchos::toString(refIndex));
         // exporter.exportFunction(errorFunction,"Error"+Teuchos::toString(refIndex));
       }
 
