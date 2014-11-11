@@ -118,6 +118,8 @@ public:
 
 #include "PoissonFormulation.h"
 
+#include "GMGSolver.h"
+
 int main(int argc, char *argv[]) {
 #ifdef ENABLE_INTEL_FLOATING_POINT_EXCEPTIONS
   cout << "NOTE: enabling floating point exceptions for divide by zero.\n";
@@ -150,11 +152,14 @@ int main(int argc, char *argv[]) {
   int cgMaxIterations = 10000;
   int schwarzOverlap = 0;
   
+  bool schwarzOnly = true;
+  
   double cgTol = 1e-10;
   
   cmdp.setOption("polyOrder",&k,"polynomial order for field variable u");
   cmdp.setOption("delta_k", &delta_k, "test space polynomial order enrichment");
   
+  cmdp.setOption("useSchwarzPreconditioner", "useGMGPreconditioner", &schwarzOnly);
   cmdp.setOption("useConformingTraces", "useNonConformingTraces", &conformingTraces);
   cmdp.setOption("precondition", "dontPrecondition", &precondition);
   
@@ -189,7 +194,10 @@ int main(int argc, char *argv[]) {
   
   mesh = MeshFactory::intervalMesh(poissonBF, xLeft, xRight, numCells, H1Order, delta_k);
   
-  RHSPtr rhs = RHS::rhs(); // zero
+  int H1Order_coarse = 0 + 1;
+  MeshPtr k0Mesh = MeshFactory::intervalMesh(poissonBF, xLeft, xRight, numCells, H1Order_coarse, delta_k);
+  
+  RHSPtr rhs = RHS::rhs();
   FunctionPtr f = Function::constant(1.0);
   
   VarPtr q = formulation.q();
@@ -203,7 +211,25 @@ int main(int argc, char *argv[]) {
   
   SolutionPtr solution = Solution::solution(mesh, bc, rhs, graphNorm);
   
-  Teuchos::RCP<Solver> solver = Teuchos::rcp( new AztecSolver(cgMaxIterations,cgTol,schwarzOverlap,precondition) );
+  Teuchos::RCP<Solver> solver;
+  if (schwarzOnly) {
+    solver = Teuchos::rcp( new AztecSolver(cgMaxIterations,cgTol,schwarzOverlap,precondition) );
+  } else {
+    BCPtr zeroBCs = bc->copyImposingZero();
+    Teuchos::RCP<Solver> coarseSolver = Teuchos::rcp( new KluSolver );
+    bool useStaticCondensation = false;
+    GMGSolver* gmgSolver = new GMGSolver(zeroBCs, k0Mesh, graphNorm, mesh, solution->getDofInterpreter(),
+                              solution->getPartitionMap(), cgMaxIterations, cgTol, coarseSolver,
+                              useStaticCondensation);
+    gmgSolver->setAztecOutput(AztecOutputLevel);
+    
+    gmgSolver->setUseConjugateGradient(true);
+    gmgSolver->gmgOperator().setSmootherType(GMGOperator::ADDITIVE_SCHWARZ);
+    gmgSolver->gmgOperator().setSmootherOverlap(schwarzOverlap);
+    solver = Teuchos::rcp( gmgSolver ); // we use "new" above, so we can let this RCP own the memory
+  }
+  
+  solution->setWriteMatrixToFile(true, "/tmp/A_poisson.dat");
   
   solution->solve(solver);
   
