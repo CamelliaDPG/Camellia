@@ -64,8 +64,6 @@
 
 #include "Function.h"
 
-using namespace Camellia;
-
 class Mesh;
 class Function; // Function.h and BasisCache.h refer to each other...
 class BasisCache;

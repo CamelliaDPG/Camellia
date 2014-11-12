@@ -14,6 +14,8 @@
 
 #include "Intrepid_HGRAD_QUAD_Cn_FEM.hpp"
 
+using namespace Camellia;
+
 class LinearInterpolatingSurface : public ParametricSurface {
   vector< pair<double, double> > _vertices;
 public:

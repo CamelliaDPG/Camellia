@@ -22,6 +22,7 @@
 
 typedef Teuchos::RCP< const FieldContainer<double> > constFCPtr;
 
+using namespace Camellia;
 
 // TODO: move all the stuff to do with transfinite interpolation into ParametricSurface.cpp
 

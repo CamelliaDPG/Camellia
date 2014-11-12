@@ -45,6 +45,7 @@
 #include "Teuchos_GlobalMPISession.hpp"
 
 using namespace std;
+using namespace Camellia;
 
 typedef FunctionSpaceTools fst;
 typedef Teuchos::RCP< FieldContainer<double> > FCPtr;

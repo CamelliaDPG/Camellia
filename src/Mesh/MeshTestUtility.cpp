@@ -21,6 +21,7 @@
 
 #include "BasisCache.h"
 
+using namespace Camellia;
 
 bool MeshTestUtility::checkMeshConsistency(Teuchos::RCP<Mesh> mesh) {
   bool success = true;
