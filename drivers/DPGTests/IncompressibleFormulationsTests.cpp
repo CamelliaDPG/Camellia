@@ -689,6 +689,8 @@ bool IncompressibleFormulationsTests::testVVPStokesFormulationGraphNorm() {
   double tol = 1e-15;
 
   bool trueTraces = false; // shouldn't matter
+
+  int spaceDim = 2;
   
   VarFactory vvpVarFactory = VVPStokesFormulation::vvpVarFactory(trueTraces);
   
@@ -719,11 +721,11 @@ bool IncompressibleFormulationsTests::testVVPStokesFormulationGraphNorm() {
     IPPtr ipExpected = Teuchos::rcp( new IP );
     { // setup ipExpected:
       // curl (mu v) + q1
-      ipExpected->addTerm(mu * v->curl() + q1);
+      ipExpected->addTerm(mu * v->curl(spaceDim) + q1);
       // div v
       ipExpected->addTerm(v->div());
       // grad q2 + curl q1
-      ipExpected->addTerm(q2->grad() + q1->curl());
+      ipExpected->addTerm(q2->grad() + q1->curl(spaceDim));
       // v
       ipExpected->addTerm(v);
       // q1
@@ -932,6 +934,8 @@ bool IncompressibleFormulationsTests::testVGPNavierStokesFormulationCorrectness(
   bool success = true;
   bool printToConsole = false;
   
+  int spaceDim = 2;
+  
   Teuchos::RCP< VGPStokesFormulation > vgpStokesFormulation;
   Teuchos::RCP< Solution > vgpStokesSolution;
   Teuchos::RCP<ExactSolution> vgpStokesExactSolution;
@@ -1075,7 +1079,7 @@ bool IncompressibleFormulationsTests::testVGPNavierStokesFormulationCorrectness(
 //        cout << "norm of RHS with zero background flow: " << rieszRepRHS->getNorm() << endl;
       }
       
-      Teuchos::RCP<RieszRep> rieszRepRHS_naiveNorm = Teuchos::rcp( new RieszRep(mesh, problem.bf()->naiveNorm(), rhsLT) );
+      Teuchos::RCP<RieszRep> rieszRepRHS_naiveNorm = Teuchos::rcp( new RieszRep(mesh, problem.bf()->naiveNorm(spaceDim), rhsLT) );
       rieszRepRHS_naiveNorm->computeRieszRep();
 //      cout << "norm of RHS with zero background flow, using naive norm: " << rieszRepRHS_naiveNorm->getNorm() << endl;
       
@@ -1135,7 +1139,7 @@ bool IncompressibleFormulationsTests::testVGPNavierStokesFormulationCorrectness(
       if (u1_exact->isZero() && u2_exact->isZero()) {
         if (functionsAgree(p_exact,y,mesh)) {
           // for this case, check some hand-computed values:
-          IPPtr ip = stokesBF->naiveNorm();
+          IPPtr ip = stokesBF->naiveNorm(spaceDim);
           // test functional: stokes background flow = - v2
 //          LinearTermPtr testFunctionalExpected = - v2_vgp;
           // experimentally, try with the IBP version:
@@ -1226,7 +1230,7 @@ bool IncompressibleFormulationsTests::testVGPNavierStokesFormulationCorrectness(
           cout << "u1hat_exact = " << solnMap[u1hat_vgp->ID()]->displayString() << endl;
           cout << "u2hat_exact = " << solnMap[u2hat_vgp->ID()]->displayString() << endl;
           cout << "Re = " << Re << endl;
-          vector< VarPtr > nonZeros = nonZeroComponents(expectedRHS, vgpTests, mesh, stokesBF->naiveNorm());
+          vector< VarPtr > nonZeros = nonZeroComponents(expectedRHS, vgpTests, mesh, stokesBF->naiveNorm(spaceDim));
           cout << "Expected RHS is non-zero in components: " << endl;
           for (vector< VarPtr >::iterator varIt = nonZeros.begin(); varIt != nonZeros.end(); varIt++) {
             VarPtr var = *varIt;
@@ -1366,7 +1370,8 @@ bool IncompressibleFormulationsTests::testVGPNavierStokesFormulationLocalConserv
   int pToAdd = 2; // for optimal test function approximation
   double eps = 1.0/64.0; // width of ramp up to 1.0 for top BC;  eps == 0 ==> soln not in H1
   bool enforceLocalConservation = false;
-  
+
+  int spaceDim = 2;
   int horizontalCells = 2, verticalCells = 2;
   int polyOrder = 1;
 
@@ -1404,8 +1409,8 @@ bool IncompressibleFormulationsTests::testVGPNavierStokesFormulationLocalConserv
   SolutionPtr solnIncrement = problem.solutionIncrement();
   
   // see if we do better with naive norm, which is better conditioned:
-  solution->setIP(problem.bf()->naiveNorm());
-  solnIncrement->setIP(problem.bf()->naiveNorm());
+  solution->setIP(problem.bf()->naiveNorm(spaceDim));
+  solnIncrement->setIP(problem.bf()->naiveNorm(spaceDim));
   
   Teuchos::RCP<Mesh> mesh = problem.mesh();
   mesh->registerSolution(solution);
@@ -1426,7 +1431,7 @@ bool IncompressibleFormulationsTests::testVGPNavierStokesFormulationLocalConserv
     cout << "Gram matrix condition number of stokes graph norm for cell " << cellID << ": " << stokesConditionNumber << endl;
 //    double conditionNumber = problem.bf()->graphNorm()->computeMaxConditionNumber(testSpace, basisCache);
 //    cout << "Gram matrix condition number of Navier-Stokes graph norm for cell " << cellID << ": " << conditionNumber << endl;
-    double naiveStokesConditionNumber = problem.stokesBF()->naiveNorm()->computeMaxConditionNumber(testSpace, basisCache);
+    double naiveStokesConditionNumber = problem.stokesBF()->naiveNorm(spaceDim)->computeMaxConditionNumber(testSpace, basisCache);
     cout << "Gram matrix condition number of stokes naive norm for cell " << cellID << ": " << naiveStokesConditionNumber << endl;
 //    double naiveConditionNumber = problem.bf()->naiveNorm()->computeMaxConditionNumber(testSpace, basisCache);
 //    cout << "Gram matrix condition number of Navier-Stokes naive norm for cell " << cellID << ": " << naiveConditionNumber << endl;
@@ -1477,6 +1482,8 @@ bool IncompressibleFormulationsTests::testVGPNavierStokesFormulationKovasnayConv
   bool useCondensedSolve = true;
   bool enrichVelocity = false; // true would be for the "compliant" norm, which isn't working well yet
   
+  int spaceDim = 2;
+  
   for (vector<bool>::iterator useHessianIt = useHessianList.begin();
        useHessianIt != useHessianList.end(); useHessianIt++) {
     bool useHessian = *useHessianIt;
@@ -1525,7 +1532,7 @@ bool IncompressibleFormulationsTests::testVGPNavierStokesFormulationKovasnayConv
           
           IPPtr ip;
           if ( useNaiveNorm ) {
-            ip = kProblem.bf()->naiveNorm();
+            ip = kProblem.bf()->naiveNorm(spaceDim);
           } else {
             ip = kProblem.bf()->graphNorm();
           }

@@ -229,6 +229,8 @@ class VVPStokesFormulation : public StokesFormulation {
   double _mu;
   bool _trueTraces;
   
+  int _spaceDim;
+  
 public:
   static VarFactory vvpVarFactory(bool trueTraces = false) {
     // sets the order of the variables in a canonical way
@@ -287,6 +289,7 @@ public:
   VVPStokesFormulation(double mu, bool trueTraces = false) {
     _mu = mu;
     _trueTraces = trueTraces;
+    _spaceDim = 2;
     
     initVars(trueTraces);
     
@@ -295,7 +298,7 @@ public:
     // v terms:
     _bf->addTerm(mu * omega_hat, v->cross_normal());
     _bf->addTerm(- p_hat,v->dot_normal()); // (sigma1, tau1)
-    _bf->addTerm(mu * omega,v->curl());
+    _bf->addTerm(mu * omega,v->curl(_spaceDim));
     _bf->addTerm(p, v->div());
     
     // q1 terms:
