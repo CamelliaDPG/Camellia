@@ -18,8 +18,6 @@
 #include "Epetra_SerialComm.h"
 #endif
 
-#include "Epetra_CrsMatrix.h"
-
 #include "Epetra_SerialDenseMatrix.h"
 #include "Epetra_SerialDenseSolver.h"
 
@@ -27,7 +25,7 @@
 #include "Intrepid_Basis.hpp"
 #include "Var.h"
 
-
+class Epetra_CrsMatrix;
 class BasisCache;
 class LinearTerm;
 class Mesh;

@@ -15,6 +15,8 @@
 
 #include "Function.h"
 
+#include "Epetra_CrsMatrix.h"
+
 #include "CamelliaCellTools.h"
 
 typedef pair< FunctionPtr, VarPtr > LinearSummand;
