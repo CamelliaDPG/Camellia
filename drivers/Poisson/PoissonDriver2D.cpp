@@ -154,6 +154,8 @@ int main(int argc, char *argv[]) {
   
   bool schwarzOnly = true;
   
+  bool useStaticCondensation = false;
+  
   double cgTol = 1e-10;
   
   cmdp.setOption("polyOrder",&k,"polynomial order for field variable u");
@@ -162,6 +164,8 @@ int main(int argc, char *argv[]) {
   cmdp.setOption("useSchwarzPreconditioner", "useGMGPreconditioner", &schwarzOnly);
   cmdp.setOption("useConformingTraces", "useNonConformingTraces", &conformingTraces);
   cmdp.setOption("precondition", "dontPrecondition", &precondition);
+  
+  cmdp.setOption("useStaticCondensation", "dontUseStaticCondensation", &useStaticCondensation);
   
   cmdp.setOption("overlap", &schwarzOverlap, "Schwarz overlap level");
   
@@ -228,6 +232,7 @@ int main(int argc, char *argv[]) {
   IPPtr graphNorm = poissonBF->graphNorm();
   
   SolutionPtr solution = Solution::solution(mesh, bc, rhs, graphNorm);
+  solution->setUseCondensedSolve(useStaticCondensation);
   
   Teuchos::RCP<Solver> solver;
   if (schwarzOnly) {
@@ -235,7 +240,6 @@ int main(int argc, char *argv[]) {
   } else {
     BCPtr zeroBCs = bc->copyImposingZero();
     Teuchos::RCP<Solver> coarseSolver = Teuchos::rcp( new KluSolver );
-    bool useStaticCondensation = false;
     GMGSolver* gmgSolver = new GMGSolver(zeroBCs, k0Mesh, graphNorm, mesh, solution->getDofInterpreter(),
                               solution->getPartitionMap(), cgMaxIterations, cgTol, coarseSolver,
                               useStaticCondensation);
