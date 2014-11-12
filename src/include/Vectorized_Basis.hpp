@@ -49,7 +49,6 @@
 // Teuchos includes
 #include "Teuchos_RCP.hpp"
 
-using namespace Intrepid;
 namespace Intrepid {
   
   /** \class  Intrepid::Vectorized_Basis

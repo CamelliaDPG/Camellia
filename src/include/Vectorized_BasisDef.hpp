@@ -32,8 +32,6 @@
 //
 // @HEADER
 
-using namespace std;
-
 namespace Intrepid {
   
   template<class Scalar, class ArrayScalar>
@@ -69,7 +67,7 @@ namespace Intrepid {
     for (int comp=0; comp<_numComponents; comp++) {
       for (int compFieldIndex=0; compFieldIndex<componentCardinality; compFieldIndex++) {
         int i=comp*componentCardinality + compFieldIndex; // i is the ordinal in the vector basis
-        vector<int> tagData = compOrdinalToTag[compFieldIndex];
+        std::vector<int> tagData = compOrdinalToTag[compFieldIndex];
         tags[tagSize*i]   = tagData[0]; // spaceDim
         tags[tagSize*i+1] = tagData[1]; // subcell ordinal
         tags[tagSize*i+2] = tagData[2] + comp * tagData[3];  // ordinal of the specified DoF relative to the subcell (shifted)
