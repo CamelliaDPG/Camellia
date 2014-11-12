@@ -389,7 +389,7 @@ void Projector::projectFunctionOntoBasisInterpolating(FieldContainer<double> &ba
   
   bool traceVar = domainBasisCache->isSideCache();
   
-  pair<IPPtr, VarPtr> ipVarPair = IP::standardInnerProductForFunctionSpace(basis->functionSpace(), traceVar);
+  pair<IPPtr, VarPtr> ipVarPair = IP::standardInnerProductForFunctionSpace(basis->functionSpace(), traceVar, domainDim);
   ip = ipVarPair.first;
   VarPtr v = ipVarPair.second;
   

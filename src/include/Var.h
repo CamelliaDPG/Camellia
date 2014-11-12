@@ -51,7 +51,7 @@ public:
   
   VarPtr grad();
   VarPtr div();
-  VarPtr curl();
+  VarPtr curl(int spaceDim); // 3D curl differs from 2D
   VarPtr dx();
   VarPtr dy();
   VarPtr dz();

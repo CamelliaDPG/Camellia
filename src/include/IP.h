@@ -56,7 +56,7 @@ public:
 
   static Teuchos::RCP<IP> ip();
   
-  static pair<Teuchos::RCP<IP>, VarPtr > standardInnerProductForFunctionSpace(EFunctionSpaceExtended fs, bool useTraceVar);
+  static pair<Teuchos::RCP<IP>, VarPtr > standardInnerProductForFunctionSpace(EFunctionSpaceExtended fs, bool useTraceVar, int spaceDim);
 };
 
 typedef Teuchos::RCP<IP> IPPtr;

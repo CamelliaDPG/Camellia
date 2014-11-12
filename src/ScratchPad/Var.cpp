@@ -420,11 +420,16 @@ VarPtr Var::div() {
   return Teuchos::rcp( new Var(_id, _rank - 1, _name, IntrepidExtendedTypes::OP_DIV, UNKNOWN_FS, _varType ) );
 }
 
-VarPtr Var::curl() {
+VarPtr Var::curl(int spaceDim) {
   TEUCHOS_TEST_FOR_EXCEPTION( _op !=  IntrepidExtendedTypes::OP_VALUE, std::invalid_argument, "operators can only be applied to raw vars, not vars that have been operated on.");
   TEUCHOS_TEST_FOR_EXCEPTION( (_rank != 0) && (_rank != 1), std::invalid_argument, "curl() can only be applied to vars of ranks 0 or 1.");
-  int newRank = (_rank == 0) ? 1 : 0;
-  return Teuchos::rcp( new Var(_id, newRank, _name, IntrepidExtendedTypes::OP_CURL, UNKNOWN_FS, _varType ) );
+  if (spaceDim == 2) {
+    int newRank = (_rank == 0) ? 1 : 0;
+    return Teuchos::rcp( new Var(_id, newRank, _name, IntrepidExtendedTypes::OP_CURL, UNKNOWN_FS, _varType ) );
+  } else {
+    // in 3D, curl is rank-preserving.  (Vectors map to vectors.)
+    return Teuchos::rcp( new Var(_id, _rank, _name, IntrepidExtendedTypes::OP_CURL, UNKNOWN_FS, _varType ) );
+  }
 }
 
 VarPtr Var::dx() {

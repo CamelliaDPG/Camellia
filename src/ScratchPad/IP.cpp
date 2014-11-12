@@ -317,7 +317,7 @@ void IP::printInteractions() {
   }
 }
 
-pair<IPPtr, VarPtr> IP::standardInnerProductForFunctionSpace(EFunctionSpaceExtended fs, bool useTraceVar) {
+pair<IPPtr, VarPtr> IP::standardInnerProductForFunctionSpace(EFunctionSpaceExtended fs, bool useTraceVar, int spaceDim) {
   IPPtr ip = Teuchos::rcp( new IP );
   VarFactory vf;
   VarFunctionSpaces::Space space = VarFunctionSpaces::spaceForEFS(fs);
@@ -334,7 +334,7 @@ pair<IPPtr, VarPtr> IP::standardInnerProductForFunctionSpace(EFunctionSpaceExten
       ip->addTerm(var->grad());
       break;
     case IntrepidExtendedTypes::FUNCTION_SPACE_HCURL:
-      ip->addTerm(var->curl());
+      ip->addTerm(var->curl(spaceDim));
       break;
     case IntrepidExtendedTypes::FUNCTION_SPACE_HDIV:
       ip->addTerm(var->div());

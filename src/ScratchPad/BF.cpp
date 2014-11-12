@@ -196,7 +196,7 @@ IPPtr BF::l2Norm() {
   return ip;
 }
 
-IPPtr BF::naiveNorm() {
+IPPtr BF::naiveNorm(int spaceDim) {
   IPPtr ip = Teuchos::rcp( new IP );
   map< int, VarPtr > testVars = _varFactory.testVars();
   for ( map< int, VarPtr >::iterator testVarIt = testVars.begin(); testVarIt != testVars.end(); testVarIt++) {
@@ -208,7 +208,7 @@ IPPtr BF::naiveNorm() {
     } else if ( (var->space() == L2) || (var->space() == VECTOR_L2) ) {
       // do nothing (we already added the L2 term
     } else if (var->space() == HCURL) {
-      ip->addTerm( var->curl() );
+      ip->addTerm( var->curl(spaceDim) );
     } else if (var->space() == HDIV) {
       ip->addTerm( var->div() );
     }

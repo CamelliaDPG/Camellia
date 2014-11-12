@@ -41,7 +41,7 @@ public:
   IPPtr graphNorm(double weightForL2TestTerms = 1.0);
   IPPtr graphNorm(const map<int, double> &varWeights, double weightForL2TestTerms = 1.0);
   IPPtr l2Norm();
-  IPPtr naiveNorm();
+  IPPtr naiveNorm(int spaceDim);
   
   bool isFluxOrTrace(int trialID);
   
