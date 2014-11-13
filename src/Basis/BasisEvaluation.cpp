@@ -42,6 +42,8 @@
 #include "Intrepid_DefaultCubatureFactory.hpp"
 #include "Intrepid_FunctionSpaceTools.hpp"
 
+using namespace Camellia;
+
 typedef Teuchos::RCP< FieldContainer<double> > FCPtr;
 typedef Teuchos::RCP< const FieldContainer<double> > constFCPtr;
 
@@ -112,7 +114,7 @@ FCPtr BasisEvaluation::getTransformedValues(BasisPtr basis, IntrepidExtendedType
   return getTransformedValuesWithBasisValues(basis,op,referenceValues,cellJacobian,cellJacobianInv,cellJacobianDet);
 }
 
-FCPtr BasisEvaluation::getTransformedVectorValuesWithComponentBasisValues(Camellia::VectorBasisPtr basis, IntrepidExtendedTypes::EOperatorExtended op,
+FCPtr BasisEvaluation::getTransformedVectorValuesWithComponentBasisValues(VectorBasisPtr basis, IntrepidExtendedTypes::EOperatorExtended op,
                                                                           constFCPtr componentReferenceValuesTransformed) {
   IntrepidExtendedTypes::EFunctionSpaceExtended fs = basis->functionSpace();
   bool vectorizedBasis = IntrepidExtendedTypes::functionSpaceIsVectorized(fs);

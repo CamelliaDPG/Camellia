@@ -43,6 +43,8 @@
 
 #include "CamelliaCellTools.h"
 
+using namespace Camellia;
+
 DofOrderingFactory::DofOrderingFactory(Teuchos::RCP<BilinearForm> bilinearForm) {
   _bilinearForm = bilinearForm;
 }
