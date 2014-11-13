@@ -194,13 +194,13 @@ class ErrorFunction : public Function {
     }
 };
 
-class PulseInitialCondition : public Function {
+class PulseInitialCondition : public hFunction {
    private:
-      double width;
-      double valI;
-      double valO;
+      int _numPreRefs;
+      double _valI;
+      double _valO;
    public:
-      PulseInitialCondition(double width, double valI, double valO) : Function(0), width(width), valI(valI), valO(valO) {}
+      PulseInitialCondition(int numPreRefs, double valI, double valO) : _numPreRefs(numPreRefs), _valI(valI), _valO(valO) {}
       void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
          int numCells = values.dimension(0);
          int numPoints = values.dimension(1);
@@ -209,10 +209,12 @@ class PulseInitialCondition : public Function {
          for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
             for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
                double x = (*points)(cellIndex,ptIndex,0);
-               if (abs(x) <= width/2.)
-                  values(cellIndex, ptIndex) = valI;
+               // if (abs(x) <= 1./pow(2,_numPreRefs))
+               if (abs(x) <= 1./pow(2,2))
+                  // values(cellIndex, ptIndex) = _valI*pow(2,_numPreRefs);
+                  values(cellIndex, ptIndex) = 256*_valI*pow(2,2);
                else
-                  values(cellIndex, ptIndex) = valO;
+                  values(cellIndex, ptIndex) = _valO;
             }
          }
       }
@@ -287,6 +289,7 @@ int main(int argc, char *argv[]) {
 
    // Optional arguments (have defaults)
   int numRefs = args.Input("--numRefs", "number of refinement steps", 0);
+  int numPreRefs = args.Input<int>("--numPreRefs","pre-refinements on singularity",0);
   int norm = args.Input("--norm", "norm", 0);
   double physicalViscosity = args.Input("--mu", "viscosity", 1e-2);
   double mu = physicalViscosity;
@@ -422,17 +425,18 @@ int main(int argc, char *argv[]) {
     case 6:
     // Strong shock tube
     problemName = "Sedov";
-    xmin = -.5;
-    xmax = 0.5;
-    xint = -.5+1./128;
-    tmax = 0.1;
+    xmin = -3.;
+    xmax = 3;
+    // xint = -.5+1./64;
+    xint = 0;
+    tmax = 1;
 
     rhoL = 1;
     rhoR = 1;
     uL = 0;
     uR = 0;
-    TL = 2;
-    TR = 1;
+    TL = 1e-6;
+    TR = 1e-6;
     break;
     default:
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "invalid problem number");
@@ -550,6 +554,44 @@ int main(int argc, char *argv[]) {
     // create a pointer to a new mesh:
     Teuchos::RCP<Mesh> mesh = Mesh::buildQuadMesh(meshBoundary, numX, numT,
       bfs[slab], H1Order, H1Order+pToAdd);
+
+    if (slab == 0)
+    {
+      LinearTermPtr nullLT = Teuchos::rcp((LinearTerm*)NULL);
+      IPPtr nullIP = Teuchos::rcp((IP*)NULL);
+      RefinementStrategy refinementStrategy(mesh, nullLT, nullIP, 0.2);
+      if (commRank==0)
+      {
+        cout << "Number of pre-refinements = " << numPreRefs << endl;
+      }
+      for (int i =0;i<=numPreRefs;i++)
+      {
+        vector<ElementPtr> elems = mesh->activeElements();
+        vector<ElementPtr>::iterator elemIt;
+        vector<int> pointCells;
+        for (elemIt=elems.begin();elemIt != elems.end();elemIt++)
+        {
+          int cellID = (*elemIt)->cellID();
+          int numSides = mesh->getElement(cellID)->numSides();
+          FieldContainer<double> vertices(numSides,2); //for quads
+
+          mesh->verticesForCell(vertices, cellID);
+          bool cellIDset = false;
+          for (int j = 0;j<numSides;j++)
+          {
+            if ((abs(vertices(j,0))<1e-14) && (abs(vertices(j,1))<1e-14) && !cellIDset)
+            {
+              pointCells.push_back(cellID);
+              cellIDset = true;
+            }
+          }
+        }
+        if (i<numPreRefs){
+          refinementStrategy.refineCells(pointCells);
+        }
+      }
+    }
+
     meshes.push_back(mesh);
     tmins.push_back(tminslab);
     tmaxs.push_back(tmaxslab);
@@ -587,9 +629,10 @@ int main(int argc, char *argv[]) {
     FunctionPtr Ue_prev   = Function::solution(Ue, backgroundFlows[slab]);
     FunctionPtr D_prev   = Function::solution(D, backgroundFlows[slab]);
     FunctionPtr rho_prev = Uc_prev;
+    // FunctionPtr rho_prev = Teuchos::rcp( new BoundedBelowFunction(Uc_prev, 0) );
     FunctionPtr u_prev = Um_prev;
     FunctionPtr T_prev = Ue_prev;
-    // FunctionPtr T_prev = Teuchos::rcp( new BoundedBelowFunction(Ue_prev, 1e-6) );
+    // FunctionPtr T_prev = Teuchos::rcp( new BoundedBelowFunction(Ue_prev, 0) );
     FunctionPtr m_prev = Um_prev;
     FunctionPtr E_prev = Ue_prev;
     FunctionPtr Vc_prev = Uc_prev;
@@ -618,8 +661,8 @@ int main(int argc, char *argv[]) {
     LinearTermPtr G_cxGradPsi = Teuchos::rcp( new LinearTerm );
     LinearTermPtr G_mxGradPsi = Teuchos::rcp( new LinearTerm );
     LinearTermPtr G_exGradPsi = Teuchos::rcp( new LinearTerm );
-    FunctionPtr T_sqrt = Teuchos::rcp( new BoundedSqrtFunction(T_prev, 0.1) );
-    FunctionPtr rho_sqrt = Teuchos::rcp( new BoundedSqrtFunction(rho_prev, 0.1) );
+    FunctionPtr T_sqrt = Teuchos::rcp( new BoundedSqrtFunction(T_prev, 0.01) );
+    FunctionPtr rho_sqrt = Teuchos::rcp( new BoundedSqrtFunction(rho_prev, 0.01) );
     FunctionPtr A0p_c = sqrt(gamma-1)/rho_sqrt;
     FunctionPtr A0p_m = rho_sqrt/(sqrt(Cv)*T_sqrt);
     FunctionPtr A0p_e = rho_sqrt/(T_sqrt*T_sqrt);
@@ -1293,8 +1336,8 @@ int main(int argc, char *argv[]) {
     FunctionPtr rho0  = Teuchos::rcp( new DiscontinuousInitialCondition(xint, rhoL, rhoR) );
     FunctionPtr mom0 = Teuchos::rcp( new DiscontinuousInitialCondition(xint, uL*rhoL, uR*rhoR) );
     FunctionPtr E0    = Teuchos::rcp( new DiscontinuousInitialCondition(xint, (rhoL*Cv*TL+0.5*rhoL*uL*uL), (rhoR*Cv*TR+0.5*rhoR*uR*uR)) );
-    // if (problem == 6)
-    //   E0 = Teuchos::rcp( new PulseInitialCondition(0.25, 2, 1) );
+    if (problem == 6)
+      E0 = Teuchos::rcp( new PulseInitialCondition(numPreRefs, 1./Cv, 1e-6) );
     // FunctionPtr rho0  = Teuchos::rcp( new RampedInitialCondition(xint, rhoL, rhoR, (xmax-xmin)/numX) );
     // FunctionPtr mom0 = Teuchos::rcp( new RampedInitialCondition(xint, uL*rhoL, uR*rhoR, (xmax-xmin)/numX) );
     // FunctionPtr E0    = Teuchos::rcp( new RampedInitialCondition(xint, (rhoL*Cv*TL+0.5*rhoL*uL*uL), (rhoR*Cv*TR+0.5*rhoR*uR*uR), (xmax-xmin)/numX) );
@@ -1363,7 +1406,7 @@ int main(int argc, char *argv[]) {
 
         // line search algorithm
         double alpha = 1.0;
-        // bool useLineSearch = true;
+        // bool useLineSearch = false;
         // amount of enriching of grid points on which to ensure positivity
         int posEnrich = 5; 
         if (useLineSearch)
@@ -1373,8 +1416,8 @@ int main(int argc, char *argv[]) {
           FunctionPtr rhoTemp = Function::solution(rho,backgroundFlows[slab]) + alpha*Function::solution(rho,solution) - Function::constant(eps);
           FunctionPtr TTemp = Function::solution(T,backgroundFlows[slab]) + alpha*Function::solution(T,solution) - Function::constant(eps);
           bool rhoIsPositive = rhoTemp->isPositive(meshes[slab],posEnrich);
-          bool TIsPositive = TTemp->isPositive(meshes[slab],posEnrich);
-          // bool TIsPositive = true;
+          // bool TIsPositive = TTemp->isPositive(meshes[slab],posEnrich);
+          bool TIsPositive = true;
           int iter = 0; int maxIter = 20;
           while (!(rhoIsPositive && TIsPositive) && iter < maxIter)
           {
@@ -1382,8 +1425,8 @@ int main(int argc, char *argv[]) {
             rhoTemp = Function::solution(rho,backgroundFlows[slab]) + alpha*Function::solution(rho,solution);
             TTemp = Function::solution(T,backgroundFlows[slab]) + alpha*Function::solution(T,solution);
             rhoIsPositive = rhoTemp->isPositive(meshes[slab],posEnrich);
-            TIsPositive = TTemp->isPositive(meshes[slab],posEnrich);
-            // TIsPositive = true;
+            // TIsPositive = TTemp->isPositive(meshes[slab],posEnrich);
+            TIsPositive = true;
             iter++;
           }
           if (commRank==0 && alpha < 1.0){
@@ -1395,7 +1438,7 @@ int main(int argc, char *argv[]) {
         iterCount++;
         if (commRank == 0)
           cout << "L2 Norm of Update = " << L2Update << endl;
-        if (alpha <= 1./128)
+        if (alpha <= 1e-3)
           break;
       }
       if (commRank == 0)
