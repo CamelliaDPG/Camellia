@@ -7,6 +7,8 @@
 //
 #include "Teuchos_TestForException.hpp"
 
+#include "CellTopology.h"
+
 #include "Legendre.hpp"
 
 namespace Camellia {
@@ -27,7 +29,7 @@ namespace Camellia {
     this->_functionSpace = IntrepidExtendedTypes::FUNCTION_SPACE_HVOL;
     this->_rangeDimension = 1;
     this->_rangeRank = 0; // scalar
-    this->_domainTopology = shards::CellTopology(shards::getCellTopologyData<shards::Line<2> >() );
+    this->_domainTopology = CellTopology::cellTopology( shards::CellTopology(shards::getCellTopologyData<shards::Line<2> >() ) );
     this->_basisCardinality = _degree + 1;
     initializeL2normValues();
   }

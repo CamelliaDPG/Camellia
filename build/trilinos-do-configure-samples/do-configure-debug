@@ -1,4 +1,4 @@
-TRILINOS_PATH=../../trilinos-11.4.1-Source
+TRILINOS_PATH=../../
 EXTRA_ARGS=$@
 
 rm -f CMakeCache.txt
@@ -14,6 +14,7 @@ cmake \
 -D DART_TESTING_TIMEOUT:STRING=600 \
 -D CMAKE_VERBOSE_MAKEFILE:BOOL=TRUE \
 -D Trilinos_ENABLE_Anasazi:BOOL=ON \
+-D Trilinos_ENABLE_Belos:BOOL=ON \
 -D Trilinos_ENABLE_Intrepid:BOOL=ON \
 -D Trilinos_ENABLE_Sacado:BOOL=ON \
 -D Trilinos_ENABLE_Epetra:BOOL=ON \

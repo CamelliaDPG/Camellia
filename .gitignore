@@ -10,6 +10,10 @@ build/cmake/CMakeScripts/*
 
 build/cmake/Debug/*
 
+build/mpi-release/*
+
+build/xcode-mpi-debug/*
+
 build/mpi-release-trimmed/*
 
 build/Camellia-debug.build/*

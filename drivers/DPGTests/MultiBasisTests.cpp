@@ -23,6 +23,8 @@
 
 #include "GnuPlotUtil.h"
 
+using namespace Camellia;
+
 typedef Teuchos::RCP< FieldContainer<double> > FCPtr;
 
 // for some reason, we throw an exception (at least in debug mode) if we don't

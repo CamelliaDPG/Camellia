@@ -188,7 +188,6 @@ public:
   
   //! Returns the Epetra_Map object associated with the range of this operator.
   const Epetra_Map & OperatorRangeMap() const;
-  //@}
   
   void setApplyDiagonalSmoothing(bool value);
   
@@ -204,11 +203,21 @@ public:
   void setSmootherOverlap(int overlap);
   
   void setFineSolverUsesDiagonalScaling(bool value);
+  //@}
+
+  //! Returns the prolongation operator (an Epetra_CrsMatrix).
+  Teuchos::RCP<Epetra_CrsMatrix> getProlongationOperator(); // prolongation operator
   
+  //! Constructs and returns an Epetra_CrsMatrix for the smoother.
+  Teuchos::RCP<Epetra_CrsMatrix> getSmootherAsMatrix();
+
+  //! Returns the coarse stiffness matrix (an Epetra_CrsMatrix).
+  Teuchos::RCP<Epetra_CrsMatrix> getCoarseStiffnessMatrix();
 private:
   SmootherChoice _smootherType;
   int _smootherOverlap;
 };
+
 
 
 #endif /* defined(__Camellia_debug__GMGOperator__) */

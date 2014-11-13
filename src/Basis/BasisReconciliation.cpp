@@ -20,7 +20,11 @@
 
 #include "SerialDenseWrapper.h"
 
+#include "CellTopology.h"
+
 #include "CamelliaDebugUtility.h" // includes print() methods
+
+using namespace Camellia;
 
 void sizeFCForBasisValues(FieldContainer<double> &fc, BasisPtr basis, int numPoints, bool includeCellDimension = false, int numBasisFieldsToInclude = -1) {
   // values should have shape: (F,P[,D,D,...]) where the # of D's = rank of the basis's range
@@ -97,12 +101,12 @@ unsigned vertexPermutation(shards::CellTopology &fineTopo, unsigned fineSideInde
 }
 
 FieldContainer<double> BasisReconciliation::permutedCubaturePoints(BasisCachePtr basisCache, Permutation cellTopoNodePermutation) { // permutation is for side nodes if the basisCache is a side cache
-  shards::CellTopology volumeTopo = basisCache->cellTopology();
-  int spaceDim = volumeTopo.getDimension();
-  shards::CellTopology cellTopo = basisCache->isSideCache() ? volumeTopo.getCellTopologyData(spaceDim-1, basisCache->getSideIndex()) : volumeTopo;
+  CellTopoPtr volumeTopo = basisCache->cellTopology();
+  int spaceDim = volumeTopo->getDimension();
+  CellTopoPtr cellTopo = basisCache->isSideCache() ? volumeTopo->getSubcell(spaceDim-1, basisCache->getSideIndex()) : volumeTopo;
   int cubDegree = basisCache->  cubatureDegree(); // not really an argument that matters; we'll overwrite the cubature points in basisCacheForPermutation anyway
   BasisCachePtr basisCacheForPermutation = Teuchos::rcp( new BasisCache( cellTopo, cubDegree, false ) );
-  FieldContainer<double> permutedCellTopoNodes(cellTopo.getNodeCount(), cellTopo.getDimension());
+  FieldContainer<double> permutedCellTopoNodes(cellTopo->getNodeCount(), cellTopo->getDimension());
   CamelliaCellTools::refCellNodesForTopology(permutedCellTopoNodes, cellTopo, cellTopoNodePermutation);
   basisCacheForPermutation->setRefCellPoints(basisCache->getRefCellPoints());
   const int oneCell = 1;
@@ -226,7 +230,7 @@ SubBasisReconciliationWeights BasisReconciliation::computeConstrainedWeights(uns
     }
   }
   
-  int spaceDim = finerBasis->domainTopology().getDimension();
+  int spaceDim = finerBasis->domainTopology()->getDimension();
   
   // figure out ancestralSubcellOrdinal
   unsigned ancestralSubcellOrdinal = RefinementPattern::ancestralSubcellOrdinal(refinements, subcellDimension, finerBasisSubcellOrdinal);
@@ -254,14 +258,14 @@ SubBasisReconciliationWeights BasisReconciliation::computeConstrainedWeights(uns
   int cubDegree = finerBasis->getDegree() * 2; // on LHS, will integrate finerBasis against itself (this is overkill; we could likely get away with less by reasoning about the cardinality of fineOrdinals)
   
   // determine cubature points as seen by the fine basis
-  shards::CellTopology fineTopo = finerBasis->domainTopology();
-  shards::CellTopology fineSubcellTopo = fineTopo.getCellTopologyData(subcellDimension, finerBasisSubcellOrdinal);
+  CellTopoPtr fineTopo = finerBasis->domainTopology();
+  CellTopoPtr fineSubcellTopo = fineTopo->getSubcell(subcellDimension, finerBasisSubcellOrdinal);
   
-  shards::CellTopology coarseTopo = coarserBasis->domainTopology();
+  CellTopoPtr coarseTopo = coarserBasis->domainTopology();
   
-  FieldContainer<double> fineTopoRefNodes(fineTopo.getVertexCount(), fineTopo.getDimension());
+  FieldContainer<double> fineTopoRefNodes(fineTopo->getVertexCount(), fineTopo->getDimension());
   CamelliaCellTools::refCellNodesForTopology(fineTopoRefNodes, fineTopo);
-  FieldContainer<double> coarseTopoRefNodes(coarseTopo.getVertexCount(), coarseTopo.getDimension());
+  FieldContainer<double> coarseTopoRefNodes(coarseTopo->getVertexCount(), coarseTopo->getDimension());
   CamelliaCellTools::refCellNodesForTopology(coarseTopoRefNodes, coarseTopo);
 
   FieldContainer<double> coarseVolumeCubaturePoints;
@@ -288,7 +292,7 @@ SubBasisReconciliationWeights BasisReconciliation::computeConstrainedWeights(uns
     if (subcellRefinements.size() > 0) {
       fineSubcellRefNodes = RefinementPattern::descendantNodesRelativeToAncestorReferenceCell(subcellRefinements);
     } else {
-      fineSubcellRefNodes.resize(fineSubcellTopo.getVertexCount(),fineSubcellTopo.getDimension());
+      fineSubcellRefNodes.resize(fineSubcellTopo->getVertexCount(),fineSubcellTopo->getDimension());
       CamelliaCellTools::refCellNodesForTopology(fineSubcellRefNodes, fineSubcellTopo);
     }
     fineSubcellRefNodes.resize(1,fineSubcellRefNodes.dimension(0),fineSubcellRefNodes.dimension(1));
@@ -300,11 +304,11 @@ SubBasisReconciliationWeights BasisReconciliation::computeConstrainedWeights(uns
     
     // now, we need first to map the ancestralSubcellCubaturePoints to the subcell as seen by the coarse neigbor, then to map those points into the coarse volume topology
     
-    shards::CellTopology ancestralSubcellTopo = (subcellRefinements.size() > 0) ? *subcellRefinements[0].first->parentTopology() : fineSubcellTopo;
+    CellTopoPtr ancestralSubcellTopo = (subcellRefinements.size() > 0) ? CellTopology::cellTopology(*subcellRefinements[0].first->parentTopology()) : fineSubcellTopo;
     BasisCachePtr ancestralSubcellCache = Teuchos::rcp( new BasisCache(ancestralSubcellTopo, cubDegree, false) );
     ancestralSubcellCache->setRefCellPoints(ancestralSubcellCubaturePoints);
     
-    FieldContainer<double> coarseSubcellNodes(ancestralSubcellTopo.getNodeCount(), subcellDimension);
+    FieldContainer<double> coarseSubcellNodes(ancestralSubcellTopo->getNodeCount(), subcellDimension);
     // when you set physical cell nodes according to the coarse-to-fine permutation, then the reference-to-physical map
     // is fine-to-coarse (which is what we want).  Because the vertexNodePermutation is fine-to-coarse, we want its inverse:
     unsigned permutationInverse = CamelliaCellTools::permutationInverse(ancestralSubcellTopo, vertexNodePermutation);
@@ -399,8 +403,8 @@ SubBasisReconciliationWeights BasisReconciliation::computeConstrainedWeights(uns
   IntrepidExtendedTypes::EFunctionSpaceExtended fs = finerBasis->functionSpace();
   TEUCHOS_TEST_FOR_EXCEPTION(fs != coarserBasis->functionSpace(), std::invalid_argument, "Bases must agree on functionSpace().");
   
-  int domainDim = finerBasis->domainTopology().getDimension();
-  if (domainDim != coarserBasis->domainTopology().getDimension()) {
+  int domainDim = finerBasis->domainTopology()->getDimension();
+  if (domainDim != coarserBasis->domainTopology()->getDimension()) {
     cout << "dimensions of finerBasis and coarserBasis domains do not match!\n";
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "dimensions of finerBasis and coarserBasis domains do not match!");
   }
@@ -423,15 +427,15 @@ SubBasisReconciliationWeights BasisReconciliation::computeConstrainedWeights(uns
   int cubDegree = finerBasis->getDegree() * 2; // on LHS, will integrate finerBasis against itself (this is overkill; we could likely get away with less by reasoning about the cardinality of fineOrdinals)
   
   // determine cubature points as seen by the fine basis
-  shards::CellTopology fineTopo = finerBasis->domainTopology();
-  shards::CellTopology fineSubcellTopo = fineTopo.getCellTopologyData(fineSubcellDimension, finerBasisSubcellOrdinalInFineDomain);
+  CellTopoPtr fineTopo = finerBasis->domainTopology();
+  CellTopoPtr fineSubcellTopo = fineTopo->getSubcell(fineSubcellDimension, finerBasisSubcellOrdinalInFineDomain);
   
-  shards::CellTopology coarseTopo = coarserBasis->domainTopology();
-  shards::CellTopology coarseSubcellTopo = coarseTopo.getCellTopologyData(coarseSubcellDimension, coarserBasisSubcellOrdinalInCoarseDomain);
+  CellTopoPtr coarseTopo = coarserBasis->domainTopology();
+  CellTopoPtr coarseSubcellTopo = coarseTopo->getSubcell(coarseSubcellDimension, coarserBasisSubcellOrdinalInCoarseDomain);
   
-  FieldContainer<double> fineTopoRefNodes(fineTopo.getVertexCount(), fineTopo.getDimension());
+  FieldContainer<double> fineTopoRefNodes(fineTopo->getVertexCount(), fineTopo->getDimension());
   CamelliaCellTools::refCellNodesForTopology(fineTopoRefNodes, fineTopo);
-  FieldContainer<double> coarseTopoRefNodes(coarseTopo.getVertexCount(), coarseTopo.getDimension());
+  FieldContainer<double> coarseTopoRefNodes(coarseTopo->getVertexCount(), coarseTopo->getDimension());
   CamelliaCellTools::refCellNodesForTopology(coarseTopoRefNodes, coarseTopo);
   
   FieldContainer<double> coarseDomainPoints; // these are as seen from the coarse cell's neighbor -- we use the coarseDomainPermutation together with the physicalCellNodes on the coarse domain to convert...
@@ -486,11 +490,11 @@ SubBasisReconciliationWeights BasisReconciliation::computeConstrainedWeights(uns
   //       leaf of the subcell refinement branch used to generate the coarse domain's points.  Use this to permute the
   //       subcellCubaturePoints appropriately before generating the coarse domain's points...
   
-  if (fineSubcellTopo.getNodeCount() > 1) {
+  if (fineSubcellTopo->getNodeCount() > 1) {
     
     vector<unsigned> fineDomainSubcellNodes;
-    for (int i=0; i<fineSubcellTopo.getNodeCount(); i++) {
-      unsigned nodeInFineDomain = fineTopo.getNodeMap(fineSubcellDimension, finerBasisSubcellOrdinalInFineDomain, i);
+    for (int i=0; i<fineSubcellTopo->getNodeCount(); i++) {
+      unsigned nodeInFineDomain = fineTopo->getNodeMap(fineSubcellDimension, finerBasisSubcellOrdinalInFineDomain, i);
       unsigned nodeInFineCell = leafCellTopo.getNodeMap(domainDim, fineDomainOrdinalInRefinementLeaf, nodeInFineDomain);
       fineDomainSubcellNodes.push_back(nodeInFineCell);
     }
@@ -543,7 +547,7 @@ SubBasisReconciliationWeights BasisReconciliation::computeConstrainedWeights(uns
       }
       unsigned parentChildOrdinalInChildCell = childCell->findSubcellOrdinal(subcellParent.first, subcellParentChildEntityIndex);
       shards::CellTopology parentChildTopo = refTopology->getEntityTopology(subcellParent.first, subcellParentChildEntityIndex);
-      for (int i=0; i<fineSubcellTopo.getNodeCount(); i++) {
+      for (int i=0; i<fineSubcellTopo->getNodeCount(); i++) {
         unsigned nodeInParentChild = parentChildTopo.getNodeMap(fineSubcellDimension, fineSubcellOrdinalInParentChild, i);
         unsigned nodeInCell = leafCellTopo.getNodeMap(subcellParent.first, parentChildOrdinalInChildCell, nodeInParentChild);
         subcellParentChildNodes.push_back(nodeInCell);
@@ -551,7 +555,7 @@ SubBasisReconciliationWeights BasisReconciliation::computeConstrainedWeights(uns
     }
     unsigned permutation = CamelliaCellTools::permutationMatchingOrder(fineSubcellTopo, fineDomainSubcellNodes, subcellParentChildNodes);
     if (permutation != 0) {
-      FieldContainer<double> permutedRefNodes(fineSubcellTopo.getNodeCount(),fineSubcellDimension);
+      FieldContainer<double> permutedRefNodes(fineSubcellTopo->getNodeCount(),fineSubcellDimension);
       // we could do this more efficiently by not introducing the overhead of a BasisCache--this is well-tested, reliable code, and
       // easy to invoke, so we use this for now.  But we do this a few times in BasisReconciliation, and it may be worth adding a method
       // that will transform a set of points in reference space according to a permutation of a topology's nodes to CamelliaCellTools
@@ -692,7 +696,7 @@ SubBasisReconciliationWeights BasisReconciliation::computeConstrainedWeights(uns
   if (coarseSubcellDimension == 0) {
     coarseSubcellCubaturePoints = subcellCubaturePoints; // not real sure we need to do this...
   } else {
-    FieldContainer<double> coarseSubcellNodesPermuted(coarseSubcellTopo.getNodeCount(),coarseSubcellDimension);
+    FieldContainer<double> coarseSubcellNodesPermuted(coarseSubcellTopo->getNodeCount(),coarseSubcellDimension);
     // when you set physical cell nodes according to the coarse-to-fine permutation, then the reference-to-physical map
     // is fine-to-coarse (which is what we want).  Because the coarseSubcellPermutation is fine-to-coarse, we want its inverse:
     unsigned ancestralSubcellPermutation = CamelliaCellTools::permutationInverse(coarseTopo, coarseSubcellPermutation);
@@ -776,7 +780,7 @@ SubBasisReconciliationWeights BasisReconciliation::computeConstrainedWeights(uns
 }
 
 const SubBasisReconciliationWeights& BasisReconciliation::constrainedWeights(BasisPtr finerBasis, BasisPtr coarserBasis, Permutation vertexNodePermutation) {
-  unsigned domainDimension = finerBasis->domainTopology().getDimension();
+  unsigned domainDimension = finerBasis->domainTopology()->getDimension();
   RefinementBranch noRefinements;
   
   return constrainedWeights(domainDimension, finerBasis, 0, noRefinements, coarserBasis, 0, vertexNodePermutation);
@@ -784,7 +788,7 @@ const SubBasisReconciliationWeights& BasisReconciliation::constrainedWeights(Bas
 
 const SubBasisReconciliationWeights & BasisReconciliation::constrainedWeights(BasisPtr finerBasis, int finerBasisSideOrdinal, BasisPtr coarserBasis, int coarserBasisSideOrdinal,
                                                                               Permutation vertexNodePermutation) {
-  unsigned domainDimension = finerBasis->domainTopology().getDimension();
+  unsigned domainDimension = finerBasis->domainTopology()->getDimension();
   unsigned sideDimension = domainDimension - 1;
   RefinementBranch noRefinements;
   
@@ -792,7 +796,7 @@ const SubBasisReconciliationWeights & BasisReconciliation::constrainedWeights(Ba
 }
 
 const SubBasisReconciliationWeights & BasisReconciliation::constrainedWeights(BasisPtr finerBasis, RefinementBranch refinements, BasisPtr coarserBasis, Permutation vertexNodePermutation) {
-  unsigned domainDimension = finerBasis->domainTopology().getDimension();
+  unsigned domainDimension = finerBasis->domainTopology()->getDimension();
   
   return constrainedWeights(domainDimension, finerBasis, 0, refinements, coarserBasis, 0, vertexNodePermutation);
 }
@@ -800,7 +804,7 @@ const SubBasisReconciliationWeights & BasisReconciliation::constrainedWeights(Ba
 const SubBasisReconciliationWeights & BasisReconciliation::constrainedWeights(BasisPtr finerBasis, int finerBasisSideOrdinal, RefinementBranch &volumeRefinements,
                                                                               BasisPtr coarserBasis, int coarserBasisSideOrdinal, unsigned vertexNodePermutation) { // vertexPermutation is for the fine basis's ancestral orientation (how to permute side as seen by fine's ancestor to produce side as seen by coarse)...
   
-  unsigned domainDimension = finerBasis->domainTopology().getDimension();
+  unsigned domainDimension = finerBasis->domainTopology()->getDimension();
   unsigned sideDimension = domainDimension - 1;
   
   return constrainedWeights(sideDimension, finerBasis, finerBasisSideOrdinal, volumeRefinements, coarserBasis, finerBasisSideOrdinal, vertexNodePermutation);
@@ -932,7 +936,7 @@ SubBasisReconciliationWeights BasisReconciliation::filterToInclude(set<int> &row
 set<int> BasisReconciliation::interiorDofOrdinalsForBasis(BasisPtr basis) {
   // if L2, we include all dofs, not just the interior ones
   bool isL2 = (basis->functionSpace() == IntrepidExtendedTypes::FUNCTION_SPACE_HVOL) || (basis->functionSpace() == IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HVOL);
-  int spaceDim = basis->domainTopology().getDimension();
+  int spaceDim = basis->domainTopology()->getDimension();
   set<int> interiorDofOrdinals = isL2 ? basis->dofOrdinalsForSubcells(spaceDim, true) : basis->dofOrdinalsForInterior();
   if (interiorDofOrdinals.size() == 0) {
     cout << "Empty interiorDofOrdinals ";
@@ -947,7 +951,7 @@ set<int> BasisReconciliation::interiorDofOrdinalsForBasis(BasisPtr basis) {
 set<unsigned> BasisReconciliation::internalDofOrdinalsForFinerBasis(BasisPtr finerBasis, RefinementBranch refinements) {
   // which degrees of freedom in the finer basis have empty support on the boundary of the coarser basis's reference element? -- these are the ones for which the constrained weights are determined in computeConstrainedWeights.
   set<unsigned> internalDofOrdinals;
-  unsigned spaceDim = finerBasis->domainTopology().getDimension();
+  unsigned spaceDim = finerBasis->domainTopology()->getDimension();
   
   if (refinements.size() == 0) {
     set<int> internalDofOrdinalsInt = BasisReconciliation::interiorDofOrdinalsForBasis(finerBasis);
@@ -983,7 +987,7 @@ set<unsigned> BasisReconciliation::internalDofOrdinalsForFinerBasis(BasisPtr fin
 
 set<unsigned> BasisReconciliation::internalDofOrdinalsForFinerBasis(BasisPtr finerBasis, RefinementBranch refinements, unsigned subcdim, unsigned subcord) {
   // subcord is in the fine cell (as opposed to the ancestor)
-  unsigned spaceDim = finerBasis->domainTopology().getDimension();
+  unsigned spaceDim = finerBasis->domainTopology()->getDimension();
   if (subcdim == spaceDim) {
     if (subcord != 0) {
       cout << "ERROR: subcord out of range.\n";
@@ -1044,7 +1048,7 @@ unsigned BasisReconciliation::minimumSubcellDimension(BasisPtr basis) {
   // use the functionSpace to determine what continuities should be enforced:
   IntrepidExtendedTypes::EFunctionSpaceExtended fs = basis->functionSpace();
   
-  int d = basis->domainTopology().getDimension();
+  int d = basis->domainTopology()->getDimension();
   int minSubcellDimension = d-1;
   switch (fs) {
     case IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD:

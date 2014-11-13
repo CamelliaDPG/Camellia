@@ -132,12 +132,7 @@ public:
     
     int spaceDim = basisCache->getSpaceDim();
     
-    bool basisIsVolumeBasis = true;
-    if (spaceDim==2) {
-      basisIsVolumeBasis = (_basis->domainTopology().getBaseKey() != shards::Line<2>::key);
-    } else if (spaceDim==3) {
-      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "spaceDim==3 not yet supported in basisIsVolumeBasis determination.");
-    }
+    bool basisIsVolumeBasis = (spaceDim == _basis->domainTopology()->getDimension());
     
     bool useCubPointsSideRefCell = basisIsVolumeBasis && basisCache->isSideCache();
     

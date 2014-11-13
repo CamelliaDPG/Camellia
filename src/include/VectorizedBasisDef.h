@@ -35,7 +35,7 @@ namespace Camellia {
   // domain info on which the basis is defined:
 
   template<class Scalar, class ArrayScalar>
-  shards::CellTopology VectorizedBasis<Scalar,ArrayScalar>::domainTopology() const {
+  CellTopoPtr VectorizedBasis<Scalar,ArrayScalar>::domainTopology() const {
     return _componentBasis->domainTopology();
   }
 

@@ -110,11 +110,10 @@ private:
   map<DofOrdering*,bool> _isConforming;
   map<int, int> _testOrderEnhancements;
   map<int, int> _trialOrderEnhancements;
-  void addConformingVertexPairings(int varID, DofOrderingPtr dofOrdering,
-                                   const shards::CellTopology &cellTopo);
+  void addConformingVertexPairings(int varID, DofOrderingPtr dofOrdering, CellTopoPtr cellTopo);
   int polyOrder(DofOrderingPtr dofOrdering, bool isTestOrdering);
   DofOrderingPtr pRefine(DofOrderingPtr dofOrdering,
-                         const shards::CellTopology &cellTopo, int pToAdd, bool isTestOrdering);
+                         CellTopoPtr, int pToAdd, bool isTestOrdering);
 public:
   DofOrderingFactory(Teuchos::RCP<BilinearForm> bilinearForm);
   DofOrderingFactory(Teuchos::RCP<BilinearForm> bilinearForm,

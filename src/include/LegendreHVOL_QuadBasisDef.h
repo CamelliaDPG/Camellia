@@ -9,6 +9,8 @@
 
 #include "Legendre.hpp"
 
+#include "CellTopology.h"
+
 namespace Camellia {
   template<class Scalar, class ArrayScalar>
   int LegendreHVOL_QuadBasis<Scalar,ArrayScalar>::dofOrdinalMap(int i, int j) const { // i the xDofOrdinal, j the yDofOrdinal
@@ -39,7 +41,7 @@ namespace Camellia {
     this->_functionSpace = IntrepidExtendedTypes::FUNCTION_SPACE_HVOL;
     this->_rangeDimension = 2; // 2 space dim
     this->_rangeRank = 0; // scalar
-    this->_domainTopology = shards::CellTopology(shards::getCellTopologyData<shards::Quadrilateral<4> >() );
+    this->_domainTopology = CellTopology::cellTopology( shards::CellTopology(shards::getCellTopologyData<shards::Quadrilateral<4> >() ) );
     this->_basisCardinality = (_degree_x + 1) * (_degree_y + 1);
     initializeL2normValues();
   }
@@ -54,7 +56,7 @@ namespace Camellia {
     this->_functionSpace = IntrepidExtendedTypes::FUNCTION_SPACE_HVOL;
     this->_rangeDimension = 2; // 2 space dim
     this->_rangeRank = 0; // scalar
-    this->_domainTopology = shards::CellTopology(shards::getCellTopologyData<shards::Quadrilateral<4> >() );
+    this->_domainTopology = CellTopology::cellTopology( shards::CellTopology(shards::getCellTopologyData<shards::Quadrilateral<4> >() ) );
     this->_basisCardinality = (_degree_x + 1) * (_degree_y + 1);
     initializeL2normValues();
   }

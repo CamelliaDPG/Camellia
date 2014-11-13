@@ -65,6 +65,29 @@ BasisFactory::BasisFactory() {
 
 using namespace Camellia;
 
+BasisPtr BasisFactory::getBasis(int H1Order, CellTopoPtr cellTopo, IntrepidExtendedTypes::EFunctionSpaceExtended functionSpaceForSpatialTopology,
+                                int temporalPolyOrder, IntrepidExtendedTypes::EFunctionSpaceExtended functionSpaceForTemporalTopology) {
+  if (cellTopo->getTensorialDegree() > 1) {
+    cout << "BasisFactory::getBasis() only handles 0 or 1 tensorial degree elements.\n";
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "BasisFactory::getBasis() only handles 0 or 1 tensorial degree elements.");
+  }
+  
+  BasisPtr basisForShardsTopo = getBasis(H1Order, cellTopo->getShardsTopology().getKey(), functionSpaceForSpatialTopology);
+  
+  if (cellTopo->getTensorialDegree() == 0) return basisForShardsTopo;
+  
+  // if we get here, have tensorial degree exactly 1.
+  
+  unsigned lineKey = shards::Line<2>::key;
+  pair< pair<Camellia::Basis<>*, int>, IntrepidExtendedTypes::EFunctionSpaceExtended> key = make_pair( make_pair(basisForShardsTopo.get(), temporalPolyOrder), functionSpaceForTemporalTopology );
+  
+  if (_spaceTimeBases.find(key) != _spaceTimeBases.end()) return _spaceTimeBases[key];
+  
+  BasisPtr temporalBasis = getBasis(temporalPolyOrder + 1, lineKey, functionSpaceForTemporalTopology);
+  
+  
+}
+
 BasisPtr BasisFactory::getBasis( int polyOrder, unsigned cellTopoKey, IntrepidExtendedTypes::EFunctionSpaceExtended fs) {
   if (fs != IntrepidExtendedTypes::FUNCTION_SPACE_REAL_SCALAR) {
     TEUCHOS_TEST_FOR_EXCEPTION(polyOrder == 0, std::invalid_argument, "polyOrder = 0 unsupported");
@@ -650,8 +673,8 @@ void BasisFactory::setUseEnrichedTraces( bool value ) {
 }
 
 set<int> BasisFactory::sideFieldIndices( BasisPtr basis, bool includeSideSubcells ) { // includeSideSubcells: e.g. include vertices as part of quad sides
-  shards::CellTopology cellTopo = basis->domainTopology();
-  int dim = cellTopo.getDimension();
+  CellTopoPtr cellTopo = basis->domainTopology();
+  int dim = cellTopo->getDimension();
   int sideDim = dim - 1;
   if (sideDim==2) {
     return basis->dofOrdinalsForFaces(includeSideSubcells);

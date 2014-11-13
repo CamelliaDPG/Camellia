@@ -33,19 +33,19 @@ namespace Camellia {
     
     if (rankChange != UNKNOWN_RANK_CHANGE) {
       // values should have shape: (F,P[,D,D,...]) where the # of D's = rank of the basis's range
-      TEUCHOS_TEST_FOR_EXCEPTION(values.rank() != 2 + rangeRank() + rankChange, std::invalid_argument, "values should have shape (F,P).");
+      TEUCHOS_TEST_FOR_EXCEPTION(values.rank() != 2 + rangeRank() + rankChange, std::invalid_argument, "values should have shape (F,P,[D,D,...]).");
     }
     // refPoints should have shape: (P,D)
     if (refPoints.rank() != 2) {
       TEUCHOS_TEST_FOR_EXCEPTION(refPoints.rank() != 2, std::invalid_argument, "refPoints should have shape (P,D).");
     }
-    if ( refPoints.dimension(1) != domainTopology().getDimension() ) {
-      TEUCHOS_TEST_FOR_EXCEPTION(refPoints.dimension(1) != domainTopology().getDimension(), std::invalid_argument, "refPoints should have shape (P,D).");
+    if ( refPoints.dimension(1) != domainTopology()->getDimension() ) {
+      TEUCHOS_TEST_FOR_EXCEPTION(refPoints.dimension(1) != domainTopology()->getDimension(), std::invalid_argument, "refPoints should have shape (P,D).");
     }
   }
 
   template<class Scalar, class ArrayScalar>
-  shards::CellTopology Basis<Scalar,ArrayScalar>::domainTopology() const {
+  CellTopoPtr Basis<Scalar,ArrayScalar>::domainTopology() const {
     return _domainTopology;
   }
   
@@ -142,9 +142,12 @@ namespace Camellia {
     }
     // to start, get the ones defined on the subcell itself:
     std::set<int> dofOrdinals = this->dofOrdinalsForSubcell(subcellDim, subcellIndex);
+
+    CellTopoPtr cellTopo = this->domainTopology();
+    CellTopoPtr sideTopo = cellTopo->getSubcell(subcellDim, subcellIndex);
     
-    const CellTopologyData *cellTopoData = this->domainTopology().getCellTopologyData();
-    const CellTopologyData *sideTopoData = this->domainTopology().getCellTopologyData(subcellDim, subcellIndex);
+//    const CellTopologyData *cellTopoData = this->domainTopology()->getCellTopologyData();
+//    const CellTopologyData *sideTopoData = this->domainTopology()->getCellTopologyData(subcellDim, subcellIndex);
     
     // Now, we want to look up all the subcells of the "side" of dimension > minimumSubSubcellDimension
     // For each of these, we need to:
@@ -153,32 +156,33 @@ namespace Camellia {
     
     // ssc: sub-subcell
     for (int d_ssc = minimumSubSubcellDimension; d_ssc < subcellDim; d_ssc++) {
-      int numSubSubcells_d = sideTopoData->subcell_count[d_ssc]; // numSubSubcells of dim d
+      int numSubSubcells_d = sideTopo->getSubcellCount(d_ssc); // numSubSubcells of dim d
       for (int ssc=0; ssc<numSubSubcells_d; ssc++) { //
-        int numNodes_ssc = sideTopoData->subcell[d_ssc][ssc].topology->node_count;
+        CellTopoPtr subSubCellTopo = sideTopo->getSubcell(d_ssc,ssc);
+        int numNodes_ssc = subSubCellTopo->getNodeCount();
         std::set<int> cellNodeIndices;
         for (int i=0; i < numNodes_ssc; i++) {
-          unsigned subcellNodeIndex = sideTopoData->subcell[d_ssc][ssc].node[i];
-          unsigned cellNodeIndex = cellTopoData->subcell[subcellDim][subcellIndex].node[subcellNodeIndex];
+          unsigned subcellNodeIndex = sideTopo->getNodeMap(d_ssc, ssc, i); //  ->subcell[d_ssc][ssc].node[i];
+          unsigned cellNodeIndex = cellTopo->getNodeMap(subcellDim, subcellIndex, subcellNodeIndex); //cellTopoData->subcell[subcellDim][subcellIndex].node[subcellNodeIndex];
           cellNodeIndices.insert(cellNodeIndex);
         }
         // this is a bit involved, because CellTopology doesn't give a way to go from a set of nodes to a subcell defined on those nodes
         
         // now, examine each of the d_ssc-dimensional subcells of cell to look for one that matches all cellNodeIndices
-        unsigned numSubcells = cellTopoData->subcell_count[d_ssc];
+        unsigned numSubcells = cellTopo->getSubcellCount(d_ssc);
         unsigned matchingSubcellIndex = numSubcells;
         
         if (d_ssc==0) { // vertex
           // map the nodeIndex ssc in the subcell to the cellNodeIndex in the cell
-          matchingSubcellIndex = cellTopoData->subcell[subcellDim][subcellIndex].node[ssc];
+          matchingSubcellIndex = cellTopo->getNodeMap(subcellDim, subcellIndex, ssc); // cellTopoData->subcell[subcellDim][subcellIndex].node[ssc];
         } else {
           for (unsigned sc=0; sc<numSubcells; sc++) {
             bool matches = true;
-            if (numNodes_ssc != cellTopoData->subcell[d_ssc][sc].topology->node_count) {
+            if (numNodes_ssc != subSubCellTopo->getNodeCount()) {
               matches = false;
             } else {
               for (int i=0; i < numNodes_ssc; i++) {
-                unsigned cellNodeIndex = cellTopoData->subcell[d_ssc][sc].node[i];
+                unsigned cellNodeIndex = cellTopo->getNodeMap(d_ssc,sc,i); // ->subcell[d_ssc][sc].node[i];
                 if (cellNodeIndices.find(cellNodeIndex) == cellNodeIndices.end()) {
                   matches = false;
                   break;
@@ -242,7 +246,7 @@ namespace Camellia {
   
   template<class Scalar, class ArrayScalar>
   std::set<int> Basis<Scalar,ArrayScalar>::dofOrdinalsForInterior() const {
-    int interiorDim = this->domainTopology().getDimension();
+    int interiorDim = this->domainTopology()->getDimension();
     return dofOrdinalsForSubcells(interiorDim, false);
   }
 
@@ -261,6 +265,14 @@ namespace Camellia {
   template<class Scalar, class ArrayScalar>
   IntrepidExtendedTypes::EFunctionSpaceExtended Basis<Scalar,ArrayScalar>::functionSpace() const {
     return this->_functionSpace;
+  }
+  
+  template<class Scalar, class ArrayScalar>
+  IntrepidExtendedTypes::EFunctionSpaceExtended Basis<Scalar,ArrayScalar>::functionSpace(int tensorialRank) const {
+    if (tensorialRank==0)
+      return this->_functionSpace;
+    else
+      TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument,"tensorialRank exceeds the tensorial degree of the basis");
   }
   
   template<class Scalar, class ArrayScalar>
@@ -303,7 +315,7 @@ namespace Camellia {
     this->_functionSpace = fs;
     this->_basisCardinality = _intrepidBasis->getCardinality();
     this->_basisDegree = _intrepidBasis->getDegree();
-    this->_domainTopology = _intrepidBasis->getBaseCellTopology();
+    this->_domainTopology = CellTopology::cellTopology( _intrepidBasis->getBaseCellTopology() );
   }
 
   template<class Scalar, class ArrayScalar>
@@ -318,7 +330,7 @@ namespace Camellia {
     // then we should rework the data structures a bit...
     if (isDiscontinuous) {
       std::vector<int> tag(4);
-      int domainDimension = this->domainTopology().getDimension();
+      int domainDimension = this->domainTopology()->getDimension();
       this->_ordinalToTag = std::vector< std::vector<int> >(this->_basisCardinality);
       this->_tagToOrdinal = std::vector<std::vector<std::vector<int> > >(domainDimension + 1);
       this->_tagToOrdinal[domainDimension] = std::vector<std::vector<int> >(1);

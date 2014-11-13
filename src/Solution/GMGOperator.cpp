@@ -40,6 +40,8 @@
 
 #include "CondensedDofInterpreter.h"
 
+#include "Epetra_Operator_to_Epetra_Matrix.h"
+
 GMGOperator::GMGOperator(BCPtr zeroBCs, MeshPtr coarseMesh, IPPtr coarseIP,
                          MeshPtr fineMesh, Teuchos::RCP<DofInterpreter> fineDofInterpreter, Epetra_Map finePartitionMap,
                          Teuchos::RCP<Solver> coarseSolver, bool useStaticCondensation, bool fineSolverUsesDiagonalScaling) :  _finePartitionMap(finePartitionMap), _br(true) {
@@ -124,7 +126,6 @@ void GMGOperator::computeCoarseStiffnessMatrix(Epetra_CrsMatrix *fineStiffnessMa
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "_P->NumGlobalRows() != globalColCount");
     }
   }
-  
 
   setUpSmoother(fineStiffnessMatrix);
   
@@ -158,6 +159,10 @@ void GMGOperator::computeCoarseStiffnessMatrix(Epetra_CrsMatrix *fineStiffnessMa
 //  string PT_A_P_path = "/tmp/PT_AP.dat";
 //  cout << "Writing P^T * (A * P) to disk at " << PT_A_P_path << endl;
 //  EpetraExt::RowMatrixToMatrixMarketFile(PT_A_P_path.c_str(), *PT_A_P, NULL, NULL, false); // false: don't write header
+//
+//  string P_path = "/tmp/P.dat";
+//  cout << "Writing P to disk at " << P_path << endl;
+//  EpetraExt::RowMatrixToMatrixMarketFile(P_path.c_str(),*_P, NULL, NULL, false); // false: don't write header
   
   Epetra_Map targetMap = _coarseSolution->getPartitionMap();
   Epetra_Import  coarseImporter(targetMap, PT_A_P->RowMap());
@@ -555,10 +560,6 @@ int GMGOperator::ApplyInverse(const Epetra_MultiVector& X_in, Epetra_MultiVector
 
   // if _applySmoothingOperator is set, add S^(-1)X to Y.
   if (_applySmoothingOperator) {
-    if (_diag.get() == NULL) {
-      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "_diag is null!");
-    }
-    
     Epetra_MultiVector X2(X); // copy, since I'm not sure ApplyInverse is generally OK with X and Y in same location (though Aztec seems to make that assumption, so it probably is OK).
     _smoother->ApplyInverse(X2, X);
     
@@ -1013,21 +1014,55 @@ void GMGOperator::setUpSmoother(Epetra_CrsMatrix *fineStiffnessMatrix) {
     cout << "WARNING: In GMGOperator, smoother->SetParameters() returned with err " << err << endl;
   }
   
-  if (_smootherType != ADDITIVE_SCHWARZ) {
+//  if (_smootherType != ADDITIVE_SCHWARZ) {
     // not real sure why, but in the doc examples, this isn't called for additive schwarz
     err = smoother->Initialize();
     if (err != 0) {
       cout << "WARNING: In GMGOperator, smoother->Initialize() returned with err " << err << endl;
     }
-  }
+//  }
 //  cout << "Calling smoother->Compute()\n";
   err = smoother->Compute();
 //  cout << "smoother->Compute() completed\n";
   
+  
   if (err != 0) {
     cout << "WARNING: In GMGOperator, smoother->Compute() returned with err = " << err << endl;
   }
+
+//  int rank = Teuchos::GlobalMPISession::getRank();
+//  {
+//    // TEST CODE: compute and output condest
+//    double condest = smoother->Condest(Ifpack_CG);
+//
+//    if (rank==0) {
+//      cout << "smoother condest = " << condest << endl;
+//    }
+//  }
+  
+//  {
+//    if (rank==0) cout << "Converting IfPack smoother to an Epetra_CrsMatrix.\n";
+//    // TEST CODE: construct an Epetra_Matrix and output to disk:
+//    Teuchos::RCP<Epetra_CrsMatrix> matrix = Epetra_Operator_to_Epetra_Matrix::constructInverseMatrix(*smoother, _finePartitionMap);
+//   
+//    string smoother_path = "/tmp/smoother.dat";
+//    cout << "Writing smoother to disk at " << smoother_path << endl;
+//    EpetraExt::RowMatrixToMatrixMarketFile(smoother_path.c_str(), *matrix, NULL, NULL, false); // false: don't write header
+//  }
   
   _smoother = smoother;
   
+}
+
+Teuchos::RCP<Epetra_CrsMatrix> GMGOperator::getProlongationOperator() {
+  return _P;
+}
+
+Teuchos::RCP<Epetra_CrsMatrix> GMGOperator::getSmootherAsMatrix() {
+  return Epetra_Operator_to_Epetra_Matrix::constructInverseMatrix(*_smoother, _finePartitionMap);
+}
+
+//! Returns the coarse stiffness matrix (an Epetra_CrsMatrix).
+Teuchos::RCP<Epetra_CrsMatrix> GMGOperator::getCoarseStiffnessMatrix() {
+  return _coarseSolution->getStiffnessMatrix();
 }

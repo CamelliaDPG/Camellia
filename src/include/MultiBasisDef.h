@@ -52,10 +52,10 @@ namespace Camellia {
   MultiBasis<Scalar, ArrayScalar>::MultiBasis(vector< Teuchos::RCP< Basis<Scalar,ArrayScalar> > > bases, ArrayScalar &subRefNodes, shards::CellTopology &cellTopo) {
     this -> _bases = bases;
     this -> _subRefNodes = subRefNodes;
-    this -> _cellTopo = cellTopo;
+    this -> _cellTopo = CellTopology::cellTopology( cellTopo );
     this -> _functionSpace = bases[0]->functionSpace();
     
-    if (_cellTopo.getKey() != shards::Line<2>::key ) {
+    if (_cellTopo->getShardsTopology().getKey() != shards::Line<2>::key ) {
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "MultiBasis only supports lines right now.");
     }
     
@@ -96,10 +96,10 @@ namespace Camellia {
     this -> _basisCardinality  = basisCardinality;
     this -> _basisDegree       = basisDegree;
     
-    if (bases[0]->domainTopology().getKey() != _cellTopo.getKey() ) {
+    if (bases[0]->domainTopology()->getShardsTopology().getKey() != _cellTopo->getShardsTopology().getKey() ) {
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "MultiBasis bases[0] must have baseCellTopo == cellTopo");
     }
-    if (bases[1]->domainTopology().getKey() != _cellTopo.getKey() ) {
+    if (bases[1]->domainTopology()->getShardsTopology().getKey() != _cellTopo->getShardsTopology().getKey() ) {
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "MultiBasis bases[1] must have baseCellTopo == cellTopo");
     }
   //  this -> basisCellTopology_ = _cellTopo;
@@ -115,7 +115,7 @@ namespace Camellia {
     typedef CellTools<Scalar>  CellTools;
     // maxTestDegree: the maximum degree of functions being integrated against us.
     int numBases = _bases.size();
-    int spaceDim = _cellTopo.getDimension();
+    int spaceDim = _cellTopo->getDimension();
     vector< ArrayScalar > cubPointsVector, cubWeightsVector;
     int totalCubPoints=0;
     Intrepid::DefaultCubatureFactory<Scalar>  cubFactory;
@@ -129,7 +129,7 @@ namespace Camellia {
         numCubPoints = cubPointsForBasis.dimension(0);
       } else {
         int cubDegree = maxTestDegree + _bases[basisIndex]->getDegree();
-        Teuchos::RCP<Intrepid::Cubature<Scalar> > cellCub = cubFactory.create(_cellTopo, cubDegree);
+        Teuchos::RCP<Intrepid::Cubature<Scalar> > cellCub = cubFactory.create(_cellTopo->getShardsTopology(), cubDegree);
         numCubPoints = cellCub->getNumPoints();
         cubPointsForBasis.resize(numCubPoints, spaceDim);
         cubWeightsForBasis.resize(numCubPoints);
@@ -140,7 +140,7 @@ namespace Camellia {
       
       // map to quasi-physical frame (from the sub-ref cell to the ref cell)
       ArrayScalar cubPointsInRefCell(dimensions);
-      CellTools::mapToPhysicalFrame (cubPointsInRefCell, cubPointsForBasis, _subRefNodes, _cellTopo, basisIndex);
+      CellTools::mapToPhysicalFrame (cubPointsInRefCell, cubPointsForBasis, _subRefNodes, _cellTopo->getShardsTopology(), basisIndex);
       
       // weight according to (sub-)cell measure
       ArrayScalar cellJacobian,cellJacobInv,cellJacobDet;
@@ -182,8 +182,8 @@ namespace Camellia {
     int numSubRefCells = _subRefNodes.dimension(0);
     //  int numNodesPerCell = _subRefNodes.dimension(1);
     int spaceDim = inputPoints.dimension(1);
-    if (spaceDim != _cellTopo.getDimension() ) {
-      TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument, "spaceDim != _cellTopo.getDimension()");
+    if (spaceDim != _cellTopo->getDimension() ) {
+      TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument, "spaceDim != _cellTopo->getDimension()");
     }
     if (spaceDim != 1) {
       TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument, "spaceDim != 1");
@@ -241,7 +241,7 @@ namespace Camellia {
       }
       ArrayScalar inputPointsRefCell(numPointsForSubRefCell,spaceDim);
       
-      CellTools::mapToReferenceFrame (inputPointsRefCell, inputPointsQuasiPhysical, _subRefNodes, _cellTopo, refCellIndex);
+      CellTools::mapToReferenceFrame (inputPointsRefCell, inputPointsQuasiPhysical, _subRefNodes, _cellTopo->getShardsTopology(), refCellIndex);
       
       // now get all the values for basis (including the ones we'll skip)
       int basisCardinality = basis->getCardinality();
@@ -384,7 +384,7 @@ namespace Camellia {
     }
     
     typedef CellTools<Scalar>  CellTools;
-    CellTools::setJacobian(cellJacobian, inputPointsSubRefCell, thisSubRefNode, _cellTopo);
+    CellTools::setJacobian(cellJacobian, inputPointsSubRefCell, thisSubRefNode, _cellTopo->getShardsTopology());
     CellTools::setJacobianInv(cellJacobInv, cellJacobian );
     CellTools::setJacobianDet(cellJacobDet, cellJacobian );
   }
@@ -478,7 +478,7 @@ namespace Camellia {
   }
 
   template<class Scalar, class ArrayScalar>
-  shards::CellTopology MultiBasis<Scalar, ArrayScalar>::domainTopology() const {
+  CellTopoPtr MultiBasis<Scalar, ArrayScalar>::domainTopology() const {
     return _bases[0]->domainTopology();
   }
 

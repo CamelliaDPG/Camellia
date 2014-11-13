@@ -156,4 +156,8 @@ link_libraries(
 
 # Build Drivers
 add_subdirectory(drivers)
-add_subdirectory(tests)
+#add_subdirectory(tests)
+add_subdirectory(unit_tests)
+
+# Enable testing (see unit_tests directory)
+include(CTest)

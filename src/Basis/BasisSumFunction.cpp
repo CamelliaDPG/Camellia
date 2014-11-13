@@ -18,7 +18,13 @@ void BasisSumFunction::getValues(FieldContainer<double> &functionValues, const F
 
   FieldContainer<double> refElemPoints(numCells, numPoints, spaceDim);
   typedef CellTools<double>  CellTools;
-  CellTools::mapToReferenceFrame(refElemPoints,physicalPoints,_physicalCellNodes,_basis->domainTopology());
+  CellTopoPtr domainTopo = _basis->domainTopology();
+  if (domainTopo->getTensorialDegree() == 0) {
+    CellTools::mapToReferenceFrame(refElemPoints,physicalPoints,_physicalCellNodes,_basis->domainTopology()->getShardsTopology());
+  } else {
+    cout << "ERROR: BasisSumFunction's mapToReferenceFrame doesn't yet support tensorial degree > 0.\n";
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "BasisSumFunction's mapToReferenceFrame doesn't yet support tensorial degree > 0.");
+  }
   refElemPoints.resize(numPoints,spaceDim); // reshape for the single set of ref cell points
   
   int numDofs = _basis->getCardinality();
@@ -97,8 +103,14 @@ void NewBasisSumFunction::values(FieldContainer<double> &values, BasisCachePtr b
     int spaceDim = physicalCellNodes->dimension(2);
     FieldContainer<double> relativeReferenceCellNodes(numCells, numNodes, spaceDim);
     typedef CellTools<double>  CellTools;
-    CellTools::mapToReferenceFrame(relativeReferenceCellNodes,*physicalCellNodes,_overridingBasisCache->getPhysicalCellNodes(),_basis->domainTopology());
-    
+    CellTopoPtr domainTopo = _basis->domainTopology();
+    if (domainTopo->getTensorialDegree() == 0) {
+      CellTools::mapToReferenceFrame(relativeReferenceCellNodes,*physicalCellNodes,_overridingBasisCache->getPhysicalCellNodes(),_basis->domainTopology()->getShardsTopology());
+    } else {
+      cout << "ERROR: NewBasisSumFunction's mapToReferenceFrame doesn't yet support tensorial degree > 0.\n";
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "BasisSumFunction's mapToReferenceFrame doesn't yet support tensorial degree > 0.");
+    }
+
     FieldContainer<double> oneCellRelativeReferenceNodes(1,numNodes,spaceDim);
     for (int n=0; n<numNodes; n++) {
       for (int d=0; d<spaceDim; d++) {
@@ -108,7 +120,12 @@ void NewBasisSumFunction::values(FieldContainer<double> &values, BasisCachePtr b
     bool cachesAgreeOnSideness = basisCache->isSideCache() == _overridingBasisCache->isSideCache();
     FieldContainer<double> relativeReferencePoints = cachesAgreeOnSideness ? basisCache->getRefCellPoints() : basisCache->getSideRefCellPointsInVolumeCoordinates();
     FieldContainer<double> refPoints(1,relativeReferencePoints.dimension(0),relativeReferencePoints.dimension(1));
-    CellTools::mapToPhysicalFrame(refPoints, relativeReferencePoints, oneCellRelativeReferenceNodes, basisCache->cellTopology());
+    if (domainTopo->getTensorialDegree() == 0) {
+      CellTools::mapToPhysicalFrame(refPoints, relativeReferencePoints, oneCellRelativeReferenceNodes, basisCache->cellTopology()->getShardsTopology());
+    } else {
+      cout << "ERROR: NewBasisSumFunction's mapToReferenceFrame doesn't yet support tensorial degree > 0.\n";
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "BasisSumFunction's mapToReferenceFrame doesn't yet support tensorial degree > 0.");
+    }
     refPoints.resize(refPoints.dimension(1),refPoints.dimension(2)); // strip cell dimension
     _overridingBasisCache->setRefCellPoints(refPoints, basisCache->getCubatureWeights());
     basisCache = _overridingBasisCache;
@@ -118,7 +135,7 @@ void NewBasisSumFunction::values(FieldContainer<double> &values, BasisCachePtr b
   
   int spaceDim = basisCache->getSpaceDim();
   
-  bool basisIsVolumeBasis = _basis->domainTopology().getDimension() == spaceDim;
+  bool basisIsVolumeBasis = _basis->domainTopology()->getDimension() == spaceDim;
   
   bool useCubPointsSideRefCell = basisIsVolumeBasis && basisCache->isSideCache();
   
@@ -191,7 +208,7 @@ FunctionPtr NewBasisSumFunction::dz() {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "derivatives only supported for NewBasisSumFunction with op = OP_VALUE");
   }
   // a bit of a hack: if the topology defined in 3D, then we'll define a derivative there...
-  if (_basis->domainTopology().getDimension() > 2) {
+  if (_basis->domainTopology()->getDimension() > 2) {
     return Teuchos::rcp( new NewBasisSumFunction(_basis, _coefficients, _overridingBasisCache, OP_DZ));
   } else {
     return Function::null();

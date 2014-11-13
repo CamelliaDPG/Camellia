@@ -1,10 +1,15 @@
 EXTRA_ARGS=$@
 
 rm -f CMakeCache.txt
+rm -rf CMakeFiles
 
 cmake \
 -D Trilinos_WARNINGS_AS_ERRORS_FLAGS:STRING="" \
 -D TPL_ENABLE_MPI:BOOL=ON \
+-D TPL_ENABLE_HDF5:STRING=ON \
+-D HDF5_LIBRARY_DIRS:FILEPATH=/Users/nroberts/lib/hdf5/lib \
+-D HDF5_LIBRARY_NAMES:STRING="hdf5" \
+-D TPL_HDF5_INCLUDE_DIRS:FILEPATH=/Users/nroberts/lib/hdf5/include \
 -D TPL_ENABLE_MUMPS:STRING=ON \
 -D MUMPS_LIBRARY_DIRS:FILEPATH=/Users/nroberts/lib/mumps-4.10.0 \
 -D MUMPS_LIBRARY_NAMES:STRING="dmumps; pord; mumps_common" \
@@ -17,10 +22,12 @@ cmake \
 -D DART_TESTING_TIMEOUT:STRING=600 \
 -D CMAKE_VERBOSE_MAKEFILE:BOOL=TRUE \
 -D Trilinos_ENABLE_Anasazi:BOOL=ON \
+-D Trilinos_ENABLE_Belos:BOOL=ON \
 -D Trilinos_ENABLE_Intrepid:BOOL=ON \
 -D Trilinos_ENABLE_Sacado:BOOL=ON \
 -D Trilinos_ENABLE_Epetra:BOOL=ON \
 -D Trilinos_ENABLE_EpetraExt:BOOL=ON \
+-D EpetraExt_USING_HDF5:BOOL=ON \
 -D Trilinos_ENABLE_Teuchos:BOOL=ON \
 -D Trilinos_ENABLE_Shards:BOOL=ON \
 -D Trilinos_ENABLE_Amesos:BOOL=ON \

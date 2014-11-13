@@ -41,13 +41,12 @@
 
 #include "Basis.h"
 
-using namespace std;
-typedef Intrepid::EOperator EOperator;
+typedef ::Intrepid::EOperator EOperator;
 
-template<class Scalar=double, class ArrayScalar=Intrepid::FieldContainer<double> > class PatchBasis;
+template<class Scalar=double, class ArrayScalar=::Intrepid::FieldContainer<double> > class PatchBasis;
 template<class Scalar, class ArrayScalar> class PatchBasis : public Camellia::Basis<Scalar,ArrayScalar> {
-  shards::CellTopology _patchCellTopo;
-  shards::CellTopology _parentTopo;
+  CellTopoPtr _patchCellTopo;
+  CellTopoPtr _parentTopo;
   ArrayScalar _patchNodesInParentRefCell;
   BasisPtr _parentBasis;
   ArrayScalar _parentRefNodes;
@@ -69,7 +68,7 @@ public:
   vector< pair<int,int> > adjacentVertexOrdinals() const; // NOTE: prototype, untested code!
   
   // domain info on which the basis is defined:
-  shards::CellTopology domainTopology() const;
+  CellTopoPtr domainTopology() const;
   
   // dof ordinal subsets:
 //  std::set<int> dofOrdinalsForEdges(bool includeVertices = true);

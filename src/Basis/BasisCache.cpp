@@ -66,30 +66,35 @@ int boundDegreeToMaxCubatureForCellTopo(int degree, unsigned cellTopoKey) {
     return degree; // unhandled cell topo--we'll get an exception if we go beyond the max...
 }
 
-// init is for volume caches.
-void BasisCache::init(shards::CellTopology &cellTopo, int maxTrialDegree, int maxTestDegree, bool createSideCacheToo) {
+void BasisCache::init(CellTopoPtr cellTopo, int maxTrialDegree, int maxTestDegree, bool createSideCacheToo) {
   _sideIndex = -1;
-  _spaceDim = cellTopo.getDimension();
+  _spaceDim = cellTopo->getDimension();
   _isSideCache = false; // VOLUME constructor
   
   _cellTopo = cellTopo;
   
   _cubDegree = maxTrialDegree + maxTestDegree;
-
-  _cubDegree = boundDegreeToMaxCubatureForCellTopo(_cubDegree, cellTopo.getKey());
+  
+  _cubDegree = boundDegreeToMaxCubatureForCellTopo(_cubDegree, cellTopo->getShardsTopology().getKey());
   _maxTestDegree = maxTestDegree;
   _maxTrialDegree = maxTrialDegree;
   
   if (_spaceDim > 0) {
     DefaultCubatureFactory<double> cubFactory;
-    Teuchos::RCP<Cubature<double> > cellTopoCub = cubFactory.create(cellTopo, _cubDegree);
+    Teuchos::RCP<Cubature<double> > cellTopoCub;
+    if (_cellTopo->getTensorialDegree() == 0) {
+      cellTopoCub = cubFactory.create(cellTopo->getShardsTopology(), _cubDegree);
+    } else {
+      cout << "BasisCache cubature determination doesn't yet support tensorial degree > 0.\n";
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "BasisCache cubature determination doesn't yet support tensorial degree > 0.\n");
+    }
     
     int cubDim       = cellTopoCub->getDimension();
     int numCubPoints = cellTopoCub->getNumPoints();
     
     _cubPoints = FieldContainer<double>(numCubPoints, cubDim);
     _cubWeights.resize(numCubPoints);
-  
+    
     cellTopoCub->getCubature(_cubPoints, _cubWeights);
   } else {
     _cubDegree = 1;
@@ -112,9 +117,15 @@ void BasisCache::init(shards::CellTopology &cellTopo, int maxTrialDegree, int ma
   }
 }
 
+// init is for volume caches.
+void BasisCache::init(shards::CellTopology &shardsTopo, int maxTrialDegree, int maxTestDegree, bool createSideCacheToo) {
+  CellTopoPtr cellTopo = CellTopology::cellTopology(shardsTopo);
+  init(cellTopo, maxTrialDegree, maxTestDegree, createSideCacheToo);
+}
+
 void BasisCache::createSideCaches() {
   _basisCacheSides.clear();
-  _numSides = CamelliaCellTools::getSideCount(_cellTopo);
+  _numSides = _cellTopo->getSideCount();
 
   for (int sideOrdinal=0; sideOrdinal<_numSides; sideOrdinal++) {
     BasisPtr maxDegreeBasisOnSide = _maxDegreeBasisForSide[sideOrdinal];
@@ -132,6 +143,14 @@ void BasisCache::createSideCaches() {
     BasisCachePtr sideCache = Teuchos::rcp( new BasisCache(sideOrdinal, thisPtr, maxTrialDegreeOnSide, _maxTestDegree, multiBasisIfAny));
     _basisCacheSides.push_back(sideCache);
   }
+}
+
+BasisCache::BasisCache(CellTopoPtr cellTopo, int cubDegree, bool createSideCacheToo) {
+  _spaceDim = cellTopo->getDimension();
+  _numSides = cellTopo->getSideCount();
+  DofOrdering trialOrdering; // dummy trialOrdering
+  findMaximumDegreeBasisForSides(trialOrdering); // should fill with NULL ptrs
+  init(cellTopo, 0, cubDegree, createSideCacheToo);
 }
 
 BasisCache::BasisCache(ElementTypePtr elemType, Teuchos::RCP<Mesh> mesh, bool testVsTest, int cubatureDegreeEnrichment) {
@@ -209,16 +228,23 @@ BasisCache::BasisCache(int sideIndex, BasisCachePtr volumeCache, int trialDegree
     _composeTransformationFxnWithMeshTransformation = true;
   }
   _cellTopo = volumeCache->cellTopology(); // VOLUME cell topo.
-  _spaceDim = _cellTopo.getDimension();
+  _spaceDim = _cellTopo->getDimension();
   int sideDim = _spaceDim - 1;
-  shards::CellTopology side(_cellTopo.getCellTopologyData(sideDim,sideIndex)); // create relevant subcell (side) topology
+  CellTopoPtr side = _cellTopo->getSubcell(sideDim,sideIndex); // create relevant subcell (side) topology
   
   _cubDegree = testDegree + trialDegree;
-  _cubDegree = boundDegreeToMaxCubatureForCellTopo(_cubDegree, side.getBaseKey());
+  _cubDegree = boundDegreeToMaxCubatureForCellTopo(_cubDegree, side->getShardsTopology().getBaseKey());
 
   if (sideDim > 0) {
     DefaultCubatureFactory<double> cubFactory;
-    Teuchos::RCP<Cubature<double> > sideCub = cubFactory.create(side, _cubDegree);
+    Teuchos::RCP<Cubature<double> > sideCub;
+    if (_cellTopo->getTensorialDegree() == 0) {
+      sideCub = cubFactory.create(side->getShardsTopology(), _cubDegree);
+    } else {
+      cout << "BasisCache cubature determination doesn't yet support tensorial degree > 0.\n";
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "BasisCache cubature determination doesn't yet support tensorial degree > 0.\n");
+    }
+  
     int numCubPointsSide = sideCub->getNumPoints();
     _cubPoints.resize(numCubPointsSide, sideDim); // cubature points from the pov of the side (i.e. a (d-1)-dimensional set)
     _cubWeights.resize(numCubPointsSide);
@@ -234,7 +260,12 @@ BasisCache::BasisCache(int sideIndex, BasisCachePtr volumeCache, int trialDegree
     }
     
     _cubPointsSideRefCell.resize(numCubPointsSide, _spaceDim); // cubPointsSide from the pov of the ref cell
-    CamelliaCellTools::mapToReferenceSubcell(_cubPointsSideRefCell, _cubPoints, sideDim, _sideIndex, _cellTopo);
+    if (_cellTopo->getTensorialDegree() == 0) {
+      CamelliaCellTools::mapToReferenceSubcell(_cubPointsSideRefCell, _cubPoints, sideDim, _sideIndex, _cellTopo->getShardsTopology());
+    } else {
+      cout << "Reference subcell mapping doesn't yet support tensorial degree > 0.\n";
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Reference subcell mapping doesn't yet support tensorial degree > 0.");
+    }
   } else {
     _cubDegree = 1;
     int numCubPointsSide = 1;
@@ -245,7 +276,12 @@ BasisCache::BasisCache(int sideIndex, BasisCachePtr volumeCache, int trialDegree
     _cubWeights.initialize(1.0);
     
     _cubPointsSideRefCell.resize(numCubPointsSide, _spaceDim); // cubPointsSide from the pov of the ref cell
-    CamelliaCellTools::mapToReferenceSubcell(_cubPointsSideRefCell, _cubPoints, sideDim, _sideIndex, _cellTopo);
+    if (_cellTopo->getTensorialDegree() == 0) {
+      CamelliaCellTools::mapToReferenceSubcell(_cubPointsSideRefCell, _cubPoints, sideDim, _sideIndex, _cellTopo->getShardsTopology());
+    } else {
+      cout << "Reference subcell mapping doesn't yet support tensorial degree > 0.\n";
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Reference subcell mapping doesn't yet support tensorial degree > 0.");
+    }
   }
   
   _maxPointsPerCubaturePhase = -1; // default: -1 (infinite)
@@ -258,7 +294,7 @@ const vector<GlobalIndexType> & BasisCache::cellIDs() {
   return _cellIDs;
 }
 
-shards::CellTopology BasisCache::cellTopology() {
+CellTopoPtr BasisCache::cellTopology() {
   return _cellTopo;
 }
 
@@ -266,11 +302,14 @@ FieldContainer<double> BasisCache::computeParametricPoints() {
   if (_cubPoints.size()==0) {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "computeParametricPoints() requires reference cell points to be defined.");
   }
-  if (_cellTopo.getKey()==shards::Quadrilateral<4>::key) {
+  if (_cellTopo->getTensorialDegree() > 0) {
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "computeParametricPoints() requires tensorial degree of cell topo to be 0");
+  }
+  if (_cellTopo->getShardsTopology().getKey()==shards::Quadrilateral<4>::key) {
     int cubatureDegree = 0;
     BasisCachePtr parametricCache = BasisCache::parametricQuadCache(cubatureDegree, getRefCellPoints(), this->getSideIndex());
     return parametricCache->getPhysicalCubaturePoints();
-  } else if (_cellTopo.getKey()==shards::Line<2>::key) {
+  } else if (_cellTopo->getShardsTopology().getKey()==shards::Line<2>::key) {
     int cubatureDegree = 0;  // we throw away the computed cubature points, so let's create as few as possible...
     BasisCachePtr parametricCache = BasisCache::parametric1DCache(cubatureDegree);
     parametricCache->setRefCellPoints(this->getRefCellPoints());
@@ -626,8 +665,13 @@ FieldContainer<double> BasisCache::getRefCellPointsForPhysicalPoints(const Field
   int numPoints = physicalPoints.dimension(0);
   int spaceDim = physicalPoints.dimension(1);
   
+  if (_cellTopo->getTensorialDegree() > 0) {
+    cout << " BasisCache::getRefCellPointsForPhysicalPoints does not support tensorial degree > 1.\n";
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "BasisCache::getRefCellPointsForPhysicalPoints does not support tensorial degree > 1.");
+  }
+  
   FieldContainer<double> refCellPoints(numPoints,spaceDim);
-  CellTools<double>::mapToReferenceFrame(refCellPoints,physicalPoints,_physicalCellNodes,_cellTopo,cellIndex);
+  CellTools<double>::mapToReferenceFrame(refCellPoints,physicalPoints,_physicalCellNodes,_cellTopo->getShardsTopology(),cellIndex);
   return refCellPoints;
 }
 
@@ -676,7 +720,13 @@ void BasisCache::setRefCellPoints(const FieldContainer<double> &pointsRefCell, c
         // recompute sideNormals
         _sideNormals.resize(_numCells, numPoints, _spaceDim);
         FieldContainer<double> normalLengths(_numCells, numPoints);
-        CellTools<double>::getPhysicalSideNormals(_sideNormals, _cellJacobian, _sideIndex, _cellTopo);
+        
+        if (_cellTopo->getTensorialDegree() == 0) {
+          CellTools<double>::getPhysicalSideNormals(_sideNormals, _cellJacobian, _sideIndex, _cellTopo->getShardsTopology());
+        } else {
+          cout << "ERROR: BasisCache::setRefCellPoints does not yet support tensorial degree > 0.\n";
+          TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "BasisCache::setRefCellPoints does not yet support tensorial degree > 0.");
+        }
         
         // make unit length
         RealSpaceTools<double>::vectorNorm(normalLengths, _sideNormals, NORM_TWO);
@@ -729,10 +779,15 @@ void BasisCache::determinePhysicalPoints() {
   if ( Function::isNull(_transformationFxn) || _composeTransformationFxnWithMeshTransformation) {
     // _spaceDim for side cache refers to the volume cache's spatial dimension
     _physCubPoints.resize(_numCells, numPoints, _spaceDim);
-    if ( ! isSideCache() ) {
-      CellTools<double>::mapToPhysicalFrame(_physCubPoints,_cubPoints,_physicalCellNodes,_cellTopo);
+    if (_cellTopo->getTensorialDegree() == 0) {
+      if ( ! isSideCache() ) {
+        CellTools<double>::mapToPhysicalFrame(_physCubPoints,_cubPoints,_physicalCellNodes,_cellTopo->getShardsTopology());
+      } else {
+        CellTools<double>::mapToPhysicalFrame(_physCubPoints,_cubPointsSideRefCell,_physicalCellNodes,_cellTopo->getShardsTopology());
+      }
     } else {
-      CellTools<double>::mapToPhysicalFrame(_physCubPoints,_cubPointsSideRefCell,_physicalCellNodes,_cellTopo);
+      cout << "ERROR: BasisCache::determinePhysicalPoints() does not yet support tensorial degree > 0.\n";
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "BasisCache::determinePhysicalPoints() does not yet support tensorial degree > 0");
     }
   } else {
     // if we get here, then Function is meant to work on reference cell
@@ -785,10 +840,15 @@ void BasisCache::determineJacobian() {
   typedef CellTools<double>  CellTools;
   
   if ( Function::isNull(_transformationFxn) || _composeTransformationFxnWithMeshTransformation) {
-    if (!isSideCache())
-      CellTools::setJacobian(_cellJacobian, _cubPoints, _physicalCellNodes, _cellTopo);
-    else {
-      CellTools::setJacobian(_cellJacobian, _cubPointsSideRefCell, _physicalCellNodes, _cellTopo);
+    if (_cellTopo->getTensorialDegree() == 0) {
+      if (!isSideCache())
+        CellTools::setJacobian(_cellJacobian, _cubPoints, _physicalCellNodes, _cellTopo->getShardsTopology());
+      else {
+        CellTools::setJacobian(_cellJacobian, _cubPointsSideRefCell, _physicalCellNodes, _cellTopo->getShardsTopology());
+      }
+    } else {
+      cout << "ERROR: BasisCache::determineJacobian() does not yet support tensorial degree > 0.\n";
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "BasisCache::determinePhysicalPoints() does not yet support tensorial degree > 0");
     }
   }
   
@@ -1001,14 +1061,24 @@ void BasisCache::recomputeMeasures() {
         // TODO: determine whether this is the right thing:
         _weightedMeasure.initialize(1.0); // not sure this is the right thing.
       } else if (_spaceDim==2) {
-        // compute weighted edge measure
-        FunctionSpaceTools::computeEdgeMeasure<double>(_weightedMeasure,
-                                                       _cellJacobian,
-                                                       _cubWeights,
-                                                       _sideIndex,
-                                                       _cellTopo);
+        if (_cellTopo->getTensorialDegree() == 0) {
+          // compute weighted edge measure
+          FunctionSpaceTools::computeEdgeMeasure<double>(_weightedMeasure,
+                                                         _cellJacobian,
+                                                         _cubWeights,
+                                                         _sideIndex,
+                                                         _cellTopo->getShardsTopology());
+        } else {
+          cout << "ERROR: BasisCache::recomputeMeasures() does not yet support tensorial degree > 0.\n";
+          TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "recomputeMeasures() does not yet support tensorial degree > 0.");
+        }
       } else if (_spaceDim==3) {
-        FunctionSpaceTools::computeFaceMeasure<double>(_weightedMeasure, _cellJacobian, _cubWeights, _sideIndex, _cellTopo);
+        if (_cellTopo->getTensorialDegree() == 0) {
+          FunctionSpaceTools::computeFaceMeasure<double>(_weightedMeasure, _cellJacobian, _cubWeights, _sideIndex, _cellTopo->getShardsTopology());
+        } else {
+          cout << "ERROR: BasisCache::recomputeMeasures() does not yet support tensorial degree > 0.\n";
+          TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "recomputeMeasures() does not yet support tensorial degree > 0.");
+        }
       } else {
         TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unhandled space dimension.");
       }
@@ -1021,7 +1091,13 @@ void BasisCache::recomputeMeasures() {
         // get normals
         _sideNormals.resize(_numCells, numCubPoints, _spaceDim);
         FieldContainer<double> normalLengths(_numCells, numCubPoints);
-        CellTools<double>::getPhysicalSideNormals(_sideNormals, _cellJacobian, _sideIndex, _cellTopo);
+        if (_cellTopo->getTensorialDegree() == 0) {
+          CellTools<double>::getPhysicalSideNormals(_sideNormals, _cellJacobian, _sideIndex, _cellTopo->getShardsTopology());
+        } else {
+          cout << "ERROR: BasisCache::recomputeMeasures() does not yet support tensorial degree > 0.\n";
+          TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "recomputeMeasures() does not yet support tensorial degree > 0.");
+        }
+
         
         // make unit length
         RealSpaceTools<double>::vectorNorm(normalLengths, _sideNormals, NORM_TWO);
@@ -1045,8 +1121,8 @@ void BasisCache::recomputeMeasures() {
 }
 
 BasisCachePtr BasisCache::sideBasisCache(Teuchos::RCP<BasisCache> volumeCache, int sideIndex) {
-  int spaceDim = volumeCache->cellTopology().getDimension();
-  int numSides = CamelliaCellTools::getSideCount(volumeCache->cellTopology());
+  int spaceDim = volumeCache->cellTopology()->getDimension();
+  int numSides = volumeCache->cellTopology()->getSideCount();
   
   TEUCHOS_TEST_FOR_EXCEPTION(sideIndex >= numSides, std::invalid_argument, "sideIndex out of range");
 

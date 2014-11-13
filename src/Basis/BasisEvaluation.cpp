@@ -146,7 +146,7 @@ FCPtr BasisEvaluation::getTransformedValuesWithBasisValues(BasisPtr basis, Intre
   // 6-16-14 NVR: getting the spaceDim from cellJacobian's dimensioning is the way we've historically done it.
   // I think it might be better to do this using basis->domainTopology() generally, but for now we only make the
   // switch in case the domain topology is a Node.
-  if (basis->domainTopology().getDimension() == 0) {
+  if (basis->domainTopology()->getDimension() == 0) {
     spaceDim = 0;
   } else {
     spaceDim = cellJacobian.dimension(2);

@@ -111,7 +111,7 @@ private:
   Intrepid::FieldContainer<double> _cubPointsSideRefCell; // the _cubPoints is the one in the side coordinates; this one in volume coords
   Intrepid::FieldContainer<double> _sideNormals;
   
-  shards::CellTopology _cellTopo;
+  CellTopoPtr _cellTopo;
   
   map< pair< Camellia::Basis<>*, IntrepidExtendedTypes::EOperatorExtended >,
   Teuchos::RCP< const Intrepid::FieldContainer<double> > > _knownValues;
@@ -127,7 +127,8 @@ private:
   
   map< pair< Camellia::Basis<>*, IntrepidExtendedTypes::EOperatorExtended >,
   Teuchos::RCP< const Intrepid::FieldContainer<double> > > _knownValuesTransformedWeightedDottedWithNormal;
-  
+
+  void init(CellTopoPtr cellTopo, int maxTrialDegree, int maxTestDegree, bool createSideCacheToo);
   void init(shards::CellTopology &cellTopo, int maxTrialDegree, int maxTestDegree, bool createSideCacheToo);
 
   void determineJacobian();
@@ -150,6 +151,7 @@ protected:
 public:
   BasisCache(ElementTypePtr elemType, Teuchos::RCP<Mesh> mesh = Teuchos::rcp( (Mesh*) NULL ), bool testVsTest=false,
              int cubatureDegreeEnrichment = 0); // use testVsTest=true for test space inner product
+  BasisCache(CellTopoPtr cellTopo, int cubDegree, bool createSideCacheToo);
   BasisCache(shards::CellTopology &cellTopo, int cubDegree, bool createSideCacheToo);
   BasisCache(const Intrepid::FieldContainer<double> &physicalCellNodes, shards::CellTopology &cellTopo, int cubDegree, bool createSideCacheToo = false);
   BasisCache(const Intrepid::FieldContainer<double> &physicalCellNodes, shards::CellTopology &cellTopo,
@@ -173,7 +175,7 @@ public:
   
   const std::vector<GlobalIndexType> & cellIDs();
   
-  shards::CellTopology cellTopology();
+  CellTopoPtr cellTopology();
   
   int cubatureDegree();
   

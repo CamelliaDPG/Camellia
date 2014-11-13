@@ -62,7 +62,7 @@ int main(int argc, char *argv[]) {
   bool enforceOneIrregularity = true;
   bool useStaticCondensation = false;
   bool conformingTraces = false;
-  bool applyDiagonalSmoothing = true;
+  bool applySmoothing = true;
   bool useDiagonalScaling = false; // of the global stiffness matrix in GMGSolver
   
   bool printRefinementDetails = false;
@@ -84,8 +84,7 @@ int main(int argc, char *argv[]) {
   cmdp.setOption("D", &D, "domain dimension");
   cmdp.setOption("useConformingTraces", "useNonConformingTraces", &conformingTraces);
   cmdp.setOption("enforceOneIrregularity", "dontEnforceOneIrregularity", &enforceOneIrregularity);
-  cmdp.setOption("useSmoothing", "useNoSmoothing", &applyDiagonalSmoothing);
-  cmdp.setOption("useDiagonalScaling", "dontUseDiagonalScaling", &useDiagonalScaling);
+  cmdp.setOption("useSmoothing", "useNoSmoothing", &applySmoothing);
 
   cmdp.setOption("smootherOverlap", &smootherOverlap, "overlap for smoother");
   
@@ -202,15 +201,14 @@ int main(int argc, char *argv[]) {
   RHSPtr rhs = RHS::rhs(); // zero
   FunctionPtr sin_pi_x = Teuchos::rcp( new Sin_ax(PI/D) );
   FunctionPtr sin_pi_y = Teuchos::rcp( new Sin_ay(PI/D) );
-  FunctionPtr f = (2.0 * PI * PI / (D * D)) * sin_pi_x * sin_pi_y;
+  FunctionPtr u_exact = sin_pi_x * sin_pi_y;
+  FunctionPtr f = -(2.0 * PI * PI / (D * D)) * sin_pi_x * sin_pi_y;
   rhs->addTerm( f * v );
   
   BCPtr bc = BC::bc();
   SpatialFilterPtr boundary = SpatialFilter::allSpace();
-  
-  // top boundary:
-  FunctionPtr u_bc_fxn = Function::zero();
-  bc->addDirichlet(u_hat, boundary, u_bc_fxn);
+
+  bc->addDirichlet(u_hat, boundary, u_exact);
 
   IPPtr graphNorm;
   
@@ -268,11 +266,9 @@ int main(int argc, char *argv[]) {
                               solution->getPartitionMap(), maxIters, tol, coarseSolver,
                               useStaticCondensation);
     gmgSolver->setAztecOutput(AztecOutputLevel);
-    gmgSolver->setApplySmoothingOperator(applyDiagonalSmoothing);
-    gmgSolver->setUseDiagonalScaling(useDiagonalScaling);
+    gmgSolver->setApplySmoothingOperator(applySmoothing);
     
     gmgSolver->setAztecOutput(AztecOutputLevel);
-    gmgSolver->setApplySmoothingOperator(applyDiagonalSmoothing);
     gmgSolver->setUseConjugateGradient(true);
     gmgSolver->gmgOperator().setSmootherType(GMGOperator::ADDITIVE_SCHWARZ);
     gmgSolver->gmgOperator().setSmootherOverlap(smootherOverlap);
@@ -342,7 +338,7 @@ int main(int argc, char *argv[]) {
       gmgSolver = new GMGSolver(zeroBCs, k0Mesh, graphNorm, mesh, solution->getDofInterpreter(),
                                 solution->getPartitionMap(), maxIters, tol, coarseSolver, useStaticCondensation);
       gmgSolver->setAztecOutput(AztecOutputLevel);
-      gmgSolver->setApplySmoothingOperator(applyDiagonalSmoothing);
+      gmgSolver->setApplySmoothingOperator(applySmoothing);
       gmgSolver->setUseDiagonalScaling(useDiagonalScaling);
       fineSolver = Teuchos::rcp( gmgSolver );
     }

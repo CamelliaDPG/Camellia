@@ -283,7 +283,7 @@ bool FunctionTests::testBasisSumFunction() {
           }
           
           // test that the restriction to a side works
-          int numSides = CamelliaCellTools::getSideCount(volumeCache->cellTopology());
+          int numSides = volumeCache->cellTopology()->getSideCount();
           for (int i=0; i<numSides; i++) {
             BasisCachePtr mySideCache = volumeCache->getSideBasisCache(i);
             if (! solnFxn->equals(basisSumFxn, mySideCache, tol)) {

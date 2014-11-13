@@ -349,9 +349,9 @@ void BilinearForm::stiffnessMatrix(FieldContainer<double> &stiffness, Teuchos::R
   int numTestDofs = testOrdering->totalDofs();
   int numTrialDofs = trialOrdering->totalDofs();
   
-  shards::CellTopology cellTopo = basisCache->cellTopology();
+  CellTopoPtr cellTopo = basisCache->cellTopology();
   unsigned numCells = basisCache->getPhysicalCubaturePoints().dimension(0);
-  unsigned spaceDim = cellTopo.getDimension();
+  unsigned spaceDim = cellTopo->getDimension();
   
   //cout << "trialOrdering: " << *trialOrdering;
   //cout << "testOrdering: " << *testOrdering;
@@ -372,7 +372,7 @@ void BilinearForm::stiffnessMatrix(FieldContainer<double> &stiffness, Teuchos::R
   int cubDegreeTest = testOrdering->maxBasisDegree();
   int cubDegree = cubDegreeTrial + cubDegreeTest;
   
-  unsigned numSides = CamelliaCellTools::getSideCount(cellTopo);
+  unsigned numSides = cellTopo->getSideCount();
   
   // 3. For each (test, trial) combination:
   vector<int> testIDs = this->testIDs();

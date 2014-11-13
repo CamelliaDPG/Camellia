@@ -10,6 +10,8 @@
 
 #include "CamelliaDebugUtility.h"
 
+using namespace Camellia;
+
 CellTopologyTests::CellTopologyTests() {
   _shardsTopologies.push_back(CellTopology::point());
   _shardsTopologies.push_back(CellTopology::line());

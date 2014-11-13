@@ -13,6 +13,7 @@
 #include "Intrepid_FieldContainer.hpp"
 #include "Shards_CellTopology.hpp"
 
+#include "CellTopology.h"
 #include "CamelliaIntrepidExtendedTypes.h"
 
 namespace Camellia {
@@ -48,7 +49,7 @@ namespace Camellia {
      */
     mutable std::vector<std::vector<int> > _ordinalToTag;
     
-    shards::CellTopology _domainTopology;
+    CellTopoPtr _domainTopology;
     
     /** \brief  DoF tag to ordinal lookup table.
      
@@ -66,8 +67,9 @@ namespace Camellia {
     virtual int getCardinality() const;
     virtual int getDegree() const;
     
-    // domain info on which the basis is defined:
-    virtual shards::CellTopology domainTopology() const;
+    /** \brief  Returns the topology on which the basis is defined.
+     */
+    virtual CellTopoPtr domainTopology() const;
     
     // dof ordinal subsets:
     virtual std::set<int> dofOrdinalsForEdges(bool includeVertices = true) const;
@@ -87,6 +89,7 @@ namespace Camellia {
     virtual const std::vector<std::vector<int> > & getAllDofTags() const;
     
     virtual IntrepidExtendedTypes::EFunctionSpaceExtended functionSpace() const;
+    virtual IntrepidExtendedTypes::EFunctionSpaceExtended functionSpace(int tensorialRank) const; // 0 for space, 1 for time, in space-time bases
     
     // methods identifying the type of basis:
     virtual bool isConforming() const; // defaults to false (true for the Intrepid bases)
@@ -121,7 +124,7 @@ namespace Camellia {
     
     void getValues(ArrayScalar &values, const ArrayScalar &refPoints, Intrepid::EOperator operatorType) const;
   };
-}
+} // namespace Camellia
 
 typedef Teuchos::RCP< Camellia::Basis<> > BasisPtr;
 

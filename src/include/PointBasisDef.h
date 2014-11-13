@@ -11,11 +11,13 @@
 
 #include "CamelliaIntrepidExtendedTypes.h"
 
+#include "CellTopology.h"
+
 template <class Scalar, class ArrayScalar>
 PointBasis<Scalar,ArrayScalar>::PointBasis() {
   this -> _basisCardinality  = 1;
   this -> _basisDegree       = 0;
-  this -> _domainTopology = shards::getCellTopologyData< shards::Node >();
+  this -> _domainTopology = Camellia::CellTopology::cellTopology( shards::getCellTopologyData< shards::Node >() );
   this -> _functionSpace = IntrepidExtendedTypes::FUNCTION_SPACE_REAL_SCALAR;
   this -> _rangeRank = 0;
   this -> _rangeDimension = 0;

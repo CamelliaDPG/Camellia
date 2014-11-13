@@ -460,12 +460,12 @@ FieldContainer<double> cubaturePoints(shards::CellTopology fineCellTopo, int cub
 }
 
 //FieldContainer<double> basisValuesAtPoints(BasisPtr basis, const FieldContainer<double> &pointsOnRefCell) {
-//  shards::CellTopology cellTopo = basis->domainTopology();
+//  CellTopoPtr cellTopo = basis->domainTopology();
 //  BasisCachePtr basisCache = Teuchos::rcp( new BasisCache(cellTopo, basis->getDegree(), false) );
-//  FieldContainer<double> refCellNodes(cellTopo.getNodeCount(),cellTopo.getDimension());
+//  FieldContainer<double> refCellNodes(cellTopo->getNodeCount(),cellTopo->getDimension());
 //  CamelliaCellTools::refCellNodesForTopology(refCellNodes, cellTopo);
 //  basisCache->setRefCellPoints(pointsOnRefCell);
-//  refCellNodes.resize(1,cellTopo.getNodeCount(),cellTopo.getDimension());
+//  refCellNodes.resize(1,cellTopo->getNodeCount(),cellTopo->getDimension());
 //  basisCache->setPhysicalCellNodes(refCellNodes, vector<GlobalIndexType>(), false);
 //  return *(basisCache->getValues(basis, OP_VALUE).get());
 //}
@@ -479,9 +479,9 @@ FieldContainer<double> cubaturePoints(shards::CellTopology fineCellTopo, int cub
 //}
 
 FieldContainer<double> transformedBasisValuesAtPoints(BasisPtr basis, const FieldContainer<double> &pointsOnFineCell, RefinementBranch refinements) {
-  shards::CellTopology cellTopo = basis->domainTopology();
+  CellTopoPtr cellTopo = basis->domainTopology();
   FieldContainer<double> refCellNodes;
-  refCellNodes.resize(cellTopo.getNodeCount(),cellTopo.getDimension());
+  refCellNodes.resize(cellTopo->getNodeCount(),cellTopo->getDimension());
   if (refinements.size() == 0) {
     CamelliaCellTools::refCellNodesForTopology(refCellNodes, cellTopo);
   } else {
@@ -490,7 +490,7 @@ FieldContainer<double> transformedBasisValuesAtPoints(BasisPtr basis, const Fiel
     CamelliaCellTools::refCellNodesForTopology(coarseCellNodes, *coarseCellTopo);
     refCellNodes = RefinementPattern::descendantNodes(refinements,coarseCellNodes);
   }
-  refCellNodes.resize(1,cellTopo.getNodeCount(),cellTopo.getDimension());
+  refCellNodes.resize(1,cellTopo->getNodeCount(),cellTopo->getDimension());
   
   int dummyCubatureDegree = 1;
   BasisCachePtr basisCache = Teuchos::rcp( new BasisCache(cellTopo, dummyCubatureDegree, false) );
@@ -501,9 +501,9 @@ FieldContainer<double> transformedBasisValuesAtPoints(BasisPtr basis, const Fiel
 
 FieldContainer<double> transformedBasisValuesAtSidePoints(BasisPtr basis, unsigned sideIndex, const FieldContainer<double> &pointsOnSideRefCell,
                                                           RefinementBranch &refinements) {
-  shards::CellTopology cellTopo = basis->domainTopology();
+  CellTopoPtr cellTopo = basis->domainTopology();
   FieldContainer<double> refCellNodes;
-  refCellNodes.resize(cellTopo.getNodeCount(),cellTopo.getDimension());
+  refCellNodes.resize(cellTopo->getNodeCount(),cellTopo->getDimension());
   if (refinements.size() == 0) {
     CamelliaCellTools::refCellNodesForTopology(refCellNodes, cellTopo);
   } else {
@@ -512,7 +512,7 @@ FieldContainer<double> transformedBasisValuesAtSidePoints(BasisPtr basis, unsign
     CamelliaCellTools::refCellNodesForTopology(coarseCellNodes, *coarseCellTopo);
     refCellNodes = RefinementPattern::descendantNodes(refinements,coarseCellNodes);
   }
-  refCellNodes.resize(1,cellTopo.getNodeCount(),cellTopo.getDimension());
+  refCellNodes.resize(1,cellTopo->getNodeCount(),cellTopo->getDimension());
   
   int dummyCubatureDegree = 1;
   BasisCachePtr basisCache = Teuchos::rcp( new BasisCache(cellTopo, dummyCubatureDegree, true) );
@@ -559,13 +559,19 @@ bool BasisReconciliationTests::hConstraintSideBasisSubTest(BasisPtr fineBasis, u
   
   FieldContainer<double> fineCellNodes = RefinementPattern::descendantNodes(volumeRefinements, fineCellAncestralNodes);
 
-  int spaceDim = fineBasis->domainTopology().getDimension();
+  int spaceDim = fineBasis->domainTopology()->getDimension();
   int sideDim = spaceDim - 1;
   
     // want to figure out a set of physical cell nodes that corresponds to this combination
-  shards::CellTopology coarseTopo = coarseBasis->domainTopology();
-  shards::CellTopology fineTopo = fineBasis->domainTopology();
-  shards::CellTopology ancestralTopo = *volumeRefinements[0].first->parentTopology();
+  CellTopoPtr coarseTopo = coarseBasis->domainTopology();
+  CellTopoPtr fineTopo = fineBasis->domainTopology();
+  
+  if ( (coarseTopo->getTensorialDegree() > 0) || (fineTopo->getTensorialDegree() > 0) ) {
+    cout << "ERROR: hConstraintSideBasisSubTest() does not support tensorial degree > 0.\n";
+    return false;
+  }
+  
+  CellTopoPtr ancestralTopo = Camellia::CellTopology::cellTopology( *volumeRefinements[0].first->parentTopology() );
 
   // figure out fineSideIndex
   unsigned fineSideIndex = fineAncestralSideIndex;
@@ -580,28 +586,36 @@ bool BasisReconciliationTests::hConstraintSideBasisSubTest(BasisPtr fineBasis, u
     }
   }
   
-  shards::CellTopology fineSideTopo = fineTopo.getBaseCellTopologyData(sideDim, fineSideIndex);
-  shards::CellTopology coarseSideTopo = coarseTopo.getBaseCellTopologyData(sideDim, coarseSideIndex);
+  CellTopoPtr fineSideTopo = fineTopo->getSubcell(sideDim, fineSideIndex);
+  CellTopoPtr coarseSideTopo = coarseTopo->getSubcell(sideDim, coarseSideIndex);
   
   int oneCell = 1;
   fineCellAncestralNodes.resize(oneCell, fineCellAncestralNodes.dimension(0), fineCellAncestralNodes.dimension(1));
   fineCellNodes.resize(oneCell, fineCellNodes.dimension(0), fineCellNodes.dimension(1));
   coarseCellNodes.resize(oneCell, coarseCellNodes.dimension(0), coarseCellNodes.dimension(1));
   
-  unsigned permutation = vertexPermutation(ancestralTopo, fineAncestralSideIndex, fineCellAncestralNodes, coarseTopo, coarseSideIndex, coarseCellNodes);
+  shards::CellTopology shardsAncestralTopo = ancestralTopo->getShardsTopology();
+  shards::CellTopology shardsCoarseTopo = coarseTopo->getShardsTopology();
+  unsigned permutation = vertexPermutation(shardsAncestralTopo, fineAncestralSideIndex, fineCellAncestralNodes, shardsCoarseTopo, coarseSideIndex, coarseCellNodes);
 
   SubBasisReconciliationWeights weights = br.constrainedWeights(sideDim, fineBasis, fineSideIndex, volumeRefinements, coarseBasis, coarseSideIndex, permutation);
 //  SubBasisReconciliationWeights weights = br.constrainedWeights(fineBasis, fineAncestralSideIndex, volumeRefinements, coarseBasis, coarseSideIndex, permutation);
 //  cout << "WARNING: meta-test code enabled (calls the wrong constrainedWeights to confirm that the rest of the code executes safely).\n";
 //  SubBasisReconciliationWeights weights = br.constrainedWeights(fineBasis, fineAncestralSideIndex, coarseBasis, coarseSideIndex, permutation);
   
+  shards::CellTopology shardsFineSideTopo = fineSideTopo->getShardsTopology();
+  shards::CellTopology shardsCoarseSideTopo = coarseSideTopo->getShardsTopology();
+  
   int cubDegree = 1;
-  FieldContainer<double> sidePointsFine = cubaturePoints(fineSideTopo, cubDegree, 0);
-  FieldContainer<double> sidePointsCoarse = cubaturePoints(fineSideTopo, cubDegree, coarseSideTopo, permutation, sideRefinements);
+  FieldContainer<double> sidePointsFine = cubaturePoints(shardsFineSideTopo, cubDegree, 0);
+  FieldContainer<double> sidePointsCoarse = cubaturePoints(shardsFineSideTopo, cubDegree, shardsCoarseSideTopo, permutation, sideRefinements);
   
   cubDegree = fineBasis->getDegree() * 2;
-  BasisCachePtr fineCache = Teuchos::rcp( new BasisCache(fineCellNodes, fineTopo, cubDegree, true) );
-  BasisCachePtr coarseCache = Teuchos::rcp( new BasisCache(coarseCellNodes, coarseTopo, cubDegree, true) );
+  
+  shards::CellTopology shardsFineTopo = fineTopo->getShardsTopology();
+  
+  BasisCachePtr fineCache = Teuchos::rcp( new BasisCache(fineCellNodes, shardsFineTopo, cubDegree, true) );
+  BasisCachePtr coarseCache = Teuchos::rcp( new BasisCache(coarseCellNodes, shardsCoarseTopo, cubDegree, true) );
   
   fineCache->getSideBasisCache(fineSideIndex)->setRefCellPoints(sidePointsFine);
   coarseCache->getSideBasisCache(coarseSideIndex)->setRefCellPoints(sidePointsCoarse);
@@ -659,8 +673,13 @@ bool BasisReconciliationTests::hConstraintInternalBasisSubTest(BasisPtr fineBasi
   
   //  cout << "BasisReconciliation: computed weights when matching whole bases.\n";
   
-  FieldContainer<double> finePoints = cubaturePoints(fineBasis->domainTopology(), 1, 0);
-  FieldContainer<double> coarsePoints = cubaturePoints(fineBasis->domainTopology(), 1, coarseBasis->domainTopology(), 0, refinements);
+  if ( (coarseBasis->domainTopology()->getTensorialDegree() > 0) || (fineBasis->domainTopology()->getTensorialDegree() > 0) ) {
+    cout << "ERROR: hConstraintInternalBasisSubTest() does not support tensorial degree > 0.\n";
+    return false;
+  }
+  
+  FieldContainer<double> finePoints = cubaturePoints(fineBasis->domainTopology()->getShardsTopology(), 1, 0);
+  FieldContainer<double> coarsePoints = cubaturePoints(fineBasis->domainTopology()->getShardsTopology(), 1, coarseBasis->domainTopology()->getShardsTopology(), 0, refinements);
   
   // I think these values should be transformed!
   FieldContainer<double> fineBasisValues = transformedBasisValuesAtPoints(fineBasis, finePoints, refinements);
@@ -695,17 +714,22 @@ bool BasisReconciliationTests::pConstraintInternalBasisSubTest(BasisPtr fineBasi
   bool success = true;
   
   BasisReconciliation br;
-  unsigned permutationCount = fineBasis->domainTopology().getNodePermutationCount();
+  unsigned shardsPermutationCount = fineBasis->domainTopology()->getShardsTopology().getNodePermutationCount(); // shards doesn't provide 3D permutations.
   
-  for (unsigned permutation = 0; permutation < permutationCount; permutation++) {
+  if ( (coarseBasis->domainTopology()->getTensorialDegree() > 0) || (fineBasis->domainTopology()->getTensorialDegree() > 0) ) {
+    cout << "ERROR: pConstraintInternalBasisSubTest() does not support tensorial degree > 0.\n";
+    return false;
+  }
+  
+  for (unsigned permutation = 0; permutation < shardsPermutationCount; permutation++) {
     SubBasisReconciliationWeights weights = br.constrainedWeights(fineBasis, coarseBasis, permutation);
     
     //  cout << "BasisReconciliation: computed weights when matching whole bases.\n";
     
-    FieldContainer<double> points = cubaturePoints(fineBasis->domainTopology(), 5, 0);
+    FieldContainer<double> points = cubaturePoints(fineBasis->domainTopology()->getShardsTopology(), 5, 0);
     RefinementBranch noRefinements;
     FieldContainer<double> fineBasisValues = transformedBasisValuesAtPoints(fineBasis, points, noRefinements);
-    FieldContainer<double> coarseBasisPoints = cubaturePoints(fineBasis->domainTopology(), 5, permutation);
+    FieldContainer<double> coarseBasisPoints = cubaturePoints(fineBasis->domainTopology()->getShardsTopology(), 5, permutation);
     FieldContainer<double> coarseBasisValues = transformedBasisValuesAtPoints(coarseBasis, coarseBasisPoints, noRefinements);
     
     stripDummyCellDimensionFromFC(fineBasisValues);
@@ -727,7 +751,7 @@ bool BasisReconciliationTests::pConstraintInternalBasisSubTest(BasisPtr fineBasi
     double tol = 1e-13;
     if ( !fcsAgree(coarseBasisValues, interpretedFineBasisValues, tol, maxDiff) ) {
       success = false;
-      cout << "FAILURE: BasisReconciliation's interpreted fine basis values do not match coarse values on " << fineBasis->domainTopology().getName() << ".\n";
+      cout << "FAILURE: BasisReconciliation's interpreted fine basis values do not match coarse values on " << fineBasis->domainTopology()->getShardsTopology().getName() << ".\n";
       cout << "points:\n" << points;
       cout << "permutation: " << permutation << endl;
       cout << "permuted points:\n" << coarseBasisPoints;
@@ -813,15 +837,21 @@ bool BasisReconciliationTests::pConstraintSideBasisSubTest(BasisPtr fineBasis, u
   
   BasisReconciliation br;
 
-  int d = fineBasis->domainTopology().getDimension();
+  int d = fineBasis->domainTopology()->getDimension();
   
   int oneCell = 1;
   fineCellNodes.resize(oneCell, fineCellNodes.dimension(0), fineCellNodes.dimension(1));
   coarseCellNodes.resize(oneCell, coarseCellNodes.dimension(0), coarseCellNodes.dimension(1));
   
+  if ( (coarseBasis->domainTopology()->getTensorialDegree() > 0) || (fineBasis->domainTopology()->getTensorialDegree() > 0) ) {
+    cout << "ERROR: pConstraintSideBasisSubTest() does not support tensorial degree > 0.\n";
+    return false;
+  }
+
+  
   // want to figure out a set of physical cell nodes that corresponds to this combination
-  shards::CellTopology coarseTopo = coarseBasis->domainTopology();
-  shards::CellTopology fineTopo = fineBasis->domainTopology();
+  shards::CellTopology coarseTopo = coarseBasis->domainTopology()->getShardsTopology();
+  shards::CellTopology fineTopo = fineBasis->domainTopology()->getShardsTopology();
   
   shards::CellTopology sideTopo = fineTopo.getBaseCellTopologyData(d-1, fineSideIndex);
   

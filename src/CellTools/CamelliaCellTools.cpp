@@ -163,6 +163,37 @@ void CamelliaCellTools::refCellNodesForTopology(FieldContainer<double> &cellNode
   }
 }
 
+void CamelliaCellTools::refCellNodesForTopology(FieldContainer<double> &cellNodes, CellTopoPtr cellTopo, unsigned permutation) {
+  if ((cellNodes.dimension(0) != cellTopo->getNodeCount()) && (cellTopo->getDimension() != 0) ) { // shards and Camellia disagree on the node count for points (0 vs. 1), so we accept either as dimensions for cellNodes, which is a size 0 container in any case...
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "cellNodes must be sized (N,D) where N=node count, D=space dim.");
+  }
+  if (cellNodes.dimension(1) != cellTopo->getDimension()) {
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "cellNodes must be sized (N,D) where N=node count, D=space dim.");
+  }
+  
+  if (cellTopo->getTensorialDegree() == 0) {
+    // then the other variant of refCellNodesForTopology will do the trick
+    refCellNodesForTopology(cellNodes, cellTopo->getShardsTopology(), permutation);
+    return;
+  }
+  
+  shards::CellTopology shardsTopology = cellTopo->getShardsTopology();
+  FieldContainer<double> shardsCellNodes(shardsTopology.getNodeCount(), shardsTopology.getDimension());
+  
+  refCellNodesForTopology(shardsCellNodes, shardsTopology);
+  
+  TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "refCellNodesForTopology does not yet support tensorial degree > 0.");
+}
+
+unsigned CamelliaCellTools::permutationMatchingOrder( CellTopoPtr cellTopo, const vector<unsigned> &fromOrder, const vector<unsigned> &toOrder) {
+  if (cellTopo->getTensorialDegree() == 0) {
+    return permutationMatchingOrder(cellTopo->getShardsTopology(), fromOrder, toOrder);
+  } else {
+    cout << "CamelliaCellTools::permutationMatchingOrder() does not yet support tensorial degree > 0.\n";
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "CamelliaCellTools::permutationMatchingOrder() does not yet support tensorial degree > 0.");
+  }
+}
+
 unsigned CamelliaCellTools::permutationMatchingOrder( const shards::CellTopology &cellTopo, const vector<unsigned> &fromOrder, const vector<unsigned> &toOrder) {
   if (cellTopo.getDimension() == 0) {
     return 0;
@@ -231,6 +262,15 @@ unsigned CamelliaCellTools::permutationComposition( const shards::CellTopology &
   return compositionMap[cellTopo.getKey()][abPair];
 }
 
+unsigned CamelliaCellTools::permutationInverse( CellTopoPtr cellTopo, unsigned permutation ) {
+  if (cellTopo->getTensorialDegree() == 0) {
+    return permutationInverse(cellTopo->getShardsTopology(), permutation);
+  } else {
+    cout << "CamelliaCellTools::permutationInverse() does not yet support tensorial degree > 0.\n";
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "CamelliaCellTools::permutationInverse() does not yet support tensorial degree > 0.");
+  }
+}
+
 unsigned CamelliaCellTools::permutationInverse( const shards::CellTopology &cellTopo, unsigned permutation ) {
   // returns the permutation ordinal for the inverse of this permutation -- the lookup table is determined in a fairly brute force way (treating CellTopo as a black box), but we just do this once per topology.  (CellTopology lets you execute an inverse, but doesn't give any way to determine the ordinal of the inverse.)
   
@@ -273,6 +313,15 @@ unsigned CamelliaCellTools::permutationInverse( const shards::CellTopology &cell
   //    }
   
   return inverseMap[cellTopo.getKey()][permutation];
+}
+
+unsigned CamelliaCellTools::subcellOrdinalMap(CellTopoPtr cellTopo, unsigned subcdim, unsigned subcord, unsigned subsubcdim, unsigned subsubcord) {
+  if (cellTopo->getTensorialDegree() == 0) {
+    return subcellOrdinalMap(cellTopo->getShardsTopology(), subcdim, subcord, subsubcdim, subsubcord);
+  } else {
+    cout << "CamelliaCellTools::subcellOrdinalMap() does not yet support tensorial degree > 0.\n";
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "CamelliaCellTools::subcellOrdinalMap() does not yet support tensorial degree > 0.");
+  }
 }
 
 // this caches the lookup tables it builds.  Well worth it, since we'll have just one per cell topology
@@ -546,6 +595,18 @@ void CamelliaCellTools::mapToReferenceFrame(          FieldContainer<double>    
   
   // Call method with initial guess
   mapToReferenceFrameInitGuess(refPoints, initGuess, physPoints, mesh, cellID);
+}
+
+void CamelliaCellTools::mapToReferenceSubcell(FieldContainer<double>       &refSubcellPoints,
+                                              const FieldContainer<double> &paramPoints,
+                                              const int                     subcellDim,
+                                              const int                     subcellOrd,
+                                              CellTopoPtr                  &parentCell) {
+  if (parentCell->getTensorialDegree() == 0) {
+    mapToReferenceSubcell(refSubcellPoints, paramPoints, subcellDim, subcellOrd, parentCell->getShardsTopology());
+  } else {
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "CamelliaCellTools::mapToReferenceSubcell does not yet support tensorial degree > 0.");
+  }
 }
 
 void CamelliaCellTools::mapToReferenceSubcell(FieldContainer<double>       &refSubcellPoints,

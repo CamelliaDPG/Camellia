@@ -38,7 +38,7 @@ namespace Camellia {
     }
     
     // domain info on which the basis is defined:
-    shards::CellTopology domainTopology() const;
+    CellTopoPtr domainTopology() const;
     
     // dof ordinal subsets:
     std::set<int> dofOrdinalsForSubcells(int subcellDim, bool includeLesserDimensions) const;

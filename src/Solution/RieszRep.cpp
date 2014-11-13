@@ -296,13 +296,7 @@ void RieszRep::computeRepresentationValues(FieldContainer<double> &values, int t
   int numTestDofsForVarID = testOrderingPtr->getBasisCardinality(testID, 0);
   BasisPtr testBasis = testOrderingPtr->getBasis(testID);
   
-  bool testBasisIsVolumeBasis = true;
-  if (spaceDim==2) {
-    testBasisIsVolumeBasis = (testBasis->domainTopology().getBaseKey() != shards::Line<2>::key);
-  } else if (spaceDim==3) {
-    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "spaceDim==3 not yet supported in testBasisIsVolumeBasis determination.");
-  }
-  
+  bool testBasisIsVolumeBasis = (spaceDim == testBasis->domainTopology()->getDimension());  
   bool useCubPointsSideRefCell = testBasisIsVolumeBasis && basisCache->isSideCache();
   
   Teuchos::RCP< const FieldContainer<double> > transformedBasisValues = basisCache->getTransformedValues(testBasis,op,useCubPointsSideRefCell);

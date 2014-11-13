@@ -102,7 +102,7 @@ int main(int argc, char *argv[]) {
   bool useCG = true;
   
   bool enforceOneIrregularity = true;
-  bool conformingTraces = false;
+  bool conformingTraces = true;
   bool applyDiagonalSmoothing = true;
   
   bool useDiagonalScaling = false; // of the global stiffness matrix in GMGSolver
@@ -369,9 +369,9 @@ int main(int argc, char *argv[]) {
   if (use3D) bc->addDirichlet(u3hat, otherBoundary, zero);
   
   if (!usePressurelessFormulation) {
-    bc->addSinglePointBC(p->ID(), zero);
-    if (rank==0) cout << "using single-point BC for pressure.\n";
-//    bc->addZeroMeanConstraint(p);
+//    bc->addSinglePointBC(p->ID(), zero);
+//    if (rank==0) cout << "using single-point BC for pressure.\n";
+    bc->addZeroMeanConstraint(p);
   } else {
     // need to do something to take care of the extra mode
     

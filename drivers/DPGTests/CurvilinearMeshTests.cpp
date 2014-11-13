@@ -22,6 +22,8 @@
 
 const static double PI  = 3.141592653589793238462;
 
+using namespace Camellia;
+
 void CurvilinearMeshTests::setup() {
   
 }

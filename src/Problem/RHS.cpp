@@ -66,10 +66,10 @@ void RHS::integrateAgainstStandardBasis(FieldContainer<double> &rhsVector,
       
       // 0. Set up Cubature
       
-      shards::CellTopology cellTopo = basisCache->cellTopology();
+      CellTopoPtr cellTopo = basisCache->cellTopology();
       
       unsigned numCells = basisCache->getPhysicalCubaturePoints().dimension(0);
-      unsigned spaceDim = cellTopo.getDimension();
+      unsigned spaceDim = cellTopo->getDimension();
       
       TEUCHOS_TEST_FOR_EXCEPTION( ( testOrdering->totalDofs() != rhsVector.dimension(1) ),
                                  std::invalid_argument,

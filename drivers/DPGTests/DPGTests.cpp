@@ -203,7 +203,11 @@ void DPGTests::runTests() {
   
   // setup our TestSuite tests:
   vector< Teuchos::RCP< TestSuite > > testSuites;
+  
+  testSuites.push_back( Teuchos::rcp( new BasisReconciliationTests ) );
 
+  testSuites.push_back( Teuchos::rcp( new GMGTests ) );
+  
   testSuites.push_back( Teuchos::rcp( new SolutionTests ) );
 
   if (skipSlowTests) {
@@ -215,8 +219,6 @@ void DPGTests::runTests() {
   }
   
   testSuites.push_back( Teuchos::rcp( new MeshRefinementTests ) ); // skips two PatchBasis tests
-  
-  testSuites.push_back( Teuchos::rcp( new GMGTests ) );
   
   testSuites.push_back( Teuchos::rcp( new CellTopologyTests ) );
   
@@ -238,8 +240,6 @@ void DPGTests::runTests() {
   testSuites.push_back( Teuchos::rcp( new CurvilinearMeshTests) );  
   
   testSuites.push_back( Teuchos::rcp( new SerialDenseMatrixUtilityTests) );
-
-  testSuites.push_back( Teuchos::rcp( new BasisReconciliationTests ) );
   
   testSuites.push_back( Teuchos::rcp( new MeshTopologyTests ) );
   
@@ -2478,105 +2478,6 @@ bool DPGTests::testTestBilinearFormAnalyticBoundaryIntegralExpectedConformingMat
   return success;
 }
 
-//bool DPGTests::testComputeOptimalTestPoisson() {
-//  string myName = "testComputeOptimalTestPoisson";
-//  
-//  int numTests = 1;
-//  int numSides = 4; // quad
-//  
-//  double tol = 1e-12;
-//  
-//  bool bSuccess = true;
-//  
-//  FieldContainer<double> cellSideParities(numTests,numSides);
-//  cellSideParities.initialize(1.0); // for 1-element meshes, all side parites are 1.0
-//  
-//  for (int order = 2; order <= 3; order++) {    
-//    for (int testOrder=order+3; testOrder < order+5; testOrder++) {
-//      //cout << "testComputeOptimalTestPoisson: testing with order=" << order << ", testOrder=" << testOrder << endl;
-//      Teuchos::RCP<BilinearForm> bilinearForm = PoissonBilinearForm::poissonBilinearForm();
-//      
-//      DofOrderingFactory dofOrderingFactory(bilinearForm);
-//      
-//      shards::CellTopology quad_4(shards::getCellTopologyData<shards::Quadrilateral<4> >() );
-//      
-//      Teuchos::RCP<DofOrdering> trialOrdering = dofOrderingFactory.trialOrdering(order, quad_4);
-//      Teuchos::RCP<DofOrdering> testOrdering = dofOrderingFactory.testOrdering(testOrder, quad_4);
-//      
-//      int numTrialDofs = trialOrdering->totalDofs();
-//      int numTestDofs = testOrdering->totalDofs();
-//      
-//      FieldContainer<double> expectedStiffness(numTests, numTrialDofs, numTrialDofs);
-//      
-//      FieldContainer<double> actualStiffness(numTests, numTrialDofs, numTrialDofs);
-//      
-//      Teuchos::RCP<DPGInnerProduct> ip = Teuchos::rcp( new MathInnerProduct(bilinearForm) );
-//      
-//      FieldContainer<double> preStiffness(numTests, numTestDofs, numTrialDofs); // the RHS for opt test determination
-//      FieldContainer<double> optimalTestWeights(numTests, numTrialDofs, numTestDofs);
-//      
-//      FieldContainer<double> quadPoints(numTests,4,2);
-//      quadPoints(0,0,0) = -1.0; // x1
-//      quadPoints(0,0,1) = -1.0; // y1
-//      quadPoints(0,1,0) = 1.0;
-//      quadPoints(0,1,1) = -1.0;
-//      quadPoints(0,2,0) = 1.0;
-//      quadPoints(0,2,1) = 1.0;
-//      quadPoints(0,3,0) = -1.0;
-//      quadPoints(0,3,1) = 1.0;
-//      vector<GlobalIndexType> cellIDs;
-//      cellIDs.push_back(0);
-//      
-//      FieldContainer<double> ipMatrix(numTests,numTestDofs,numTestDofs);
-//      
-//      ip->computeInnerProductMatrix(ipMatrix,testOrdering, quad_4, quadPoints);
-//      
-//      int i,j,cellIndex;
-//      if (! fcIsSymmetric(ipMatrix,tol,cellIndex,i,j) ) {
-//        cout << myName << ": inner product matrix asymmetric for i=" << i << ", j=" << j << endl;
-//        cout << "ipMatrix(i,j)=" << ipMatrix(cellIndex,i,j) << "; ipMatrix(j,i)=" << ipMatrix(cellIndex,j,i) << endl;
-//      }
-//      
-//      ElementTypePtr elemType = makeElemType(trialOrdering, testOrdering, quad_4);
-//      BasisCachePtr basisCache = makeBasisCache(elemType,quadPoints,cellIDs);
-//      int success = bilinearForm->optimalTestWeights(optimalTestWeights, ipMatrix,
-//                                                     elemType, cellSideParities, basisCache);
-//      if (success != 0) {
-//        cout << myName << ": computeOptimalTest failed." << endl;
-//        return false;
-//      }
-//      
-//      // let's try to confirm that the optWeights actually fulfill the contract....
-//      BilinearFormUtility::computeStiffnessMatrix(preStiffness, bilinearForm,trialOrdering, testOrdering, quad_4, quadPoints, cellSideParities);
-//      if ( ! checkOptTestWeights(optimalTestWeights,ipMatrix,preStiffness,tol) ) {
-//        cout << myName << ": check that optWeights == ipMatrix^(-1) * preStiffness failed." << endl;
-//        return false;
-//      }
-//      
-//      BilinearFormUtility::computeStiffnessMatrix(actualStiffness,ipMatrix,optimalTestWeights);
-//      
-//      if (! fcIsSymmetric(actualStiffness,tol,cellIndex,i,j) ) {
-//        cout << myName << ": actualStiffness matrix asymmetric for i=" << i << ", j=" << j << endl;
-//        cout << "ipMatrix(i,j)=" << actualStiffness(cellIndex,i,j) << "; ipMatrix(j,i)=" << actualStiffness(cellIndex,j,i) << endl;
-//      }
-//      
-//      BilinearFormUtility::computeOptimalStiffnessMatrix(expectedStiffness, optimalTestWeights,
-//                                                         bilinearForm,
-//                                                         trialOrdering, testOrdering,
-//                                                         quad_4, quadPoints, cellSideParities);
-//      
-//      bool localBSuccess = fcsAgree(myName, expectedStiffness,actualStiffness,tol);
-//      
-//      if ( ! localBSuccess ) {
-//        cout << "failed Poisson test for testOrder = " << testOrder << endl;
-//        bSuccess = false;
-//      }
-//    }
-//  }
-//  return bSuccess;
-//}
-
-
 bool DPGTests::testProjection(){
   double tol = 1e-14;
   // reference cell physical cell nodes in counterclockwise order
@@ -2598,7 +2499,7 @@ bool DPGTests::testProjection(){
   BasisPtr basis = Camellia::intrepidQuadHGRAD(polyOrder);
 
   // creating basisCache to compute values at certain points
-  shards::CellTopology cellTopo = basis->domainTopology();
+  shards::CellTopology cellTopo = basis->domainTopology()->getShardsTopology();
   int basisRank = BasisFactory::basisFactory()->getBasisRank(basis);
   DofOrderingPtr dofOrderPtr = Teuchos::rcp(new DofOrdering());
   int ID = 0; // fake ID 

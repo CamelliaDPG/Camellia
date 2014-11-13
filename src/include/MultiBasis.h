@@ -34,8 +34,7 @@
 #include "Basis.h"
 #include "Intrepid_FieldContainer.hpp"
 
-// Shards includes
-#include "Shards_CellTopology.hpp"
+#include "CellTopology.h"
 
 // Teuchos includes
 #include "Teuchos_RCP.hpp"
@@ -43,7 +42,7 @@
 namespace Camellia {
   template<class Scalar=double, class ArrayScalar=Intrepid::FieldContainer<double> > class MultiBasis;
   template<class Scalar, class ArrayScalar> class MultiBasis : public Basis<Scalar,ArrayScalar> {
-    shards::CellTopology _cellTopo;
+    CellTopoPtr _cellTopo;
     Intrepid::FieldContainer<double> _subRefNodes;
     std::vector< Teuchos::RCP< Basis<Scalar,ArrayScalar> > > _bases;
     int _numLeaves;
@@ -67,7 +66,7 @@ namespace Camellia {
     std::vector< std::pair<int,int> > adjacentVertexOrdinals() const; // NOTE: prototype, untested code!
     
     // domain info on which the basis is defined:
-    shards::CellTopology domainTopology() const;
+    CellTopoPtr domainTopology() const;
     
     // dof ordinal subsets:
   //  std::set<int> dofOrdinalsForEdges(bool includeVertices = true);

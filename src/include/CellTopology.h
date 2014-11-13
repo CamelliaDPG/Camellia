@@ -51,6 +51,7 @@ namespace Camellia {
   public:
     /** \brief  The underlying shards topology */
     const shards::CellTopology & getShardsTopology() const;
+    
     /** \brief  The number of times we have taken a tensor product between a line topology and the shards topology to form this cell topology */
     unsigned getTensorialDegree() const;
     

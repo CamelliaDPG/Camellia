@@ -18,6 +18,8 @@
 // Shards includes
 #include "Shards_CellTopology.hpp"
 
+using namespace Camellia;
+
 void LobattoBasisTests::setup() {}
 
 void LobattoBasisTests::teardown() {}
@@ -239,10 +241,10 @@ bool checkVertexOrdinalsQuad(BasisPtr basis, vector<int> &vertexOrdinals) {
 bool testBasisClassifications(BasisPtr basis) {
   bool success = true;
   
-  shards::CellTopology cellTopo = basis->domainTopology();
+  CellTopoPtr cellTopo = basis->domainTopology();
   
-  int numVertices = cellTopo.getVertexCount();
-  int numEdges = cellTopo.getEdgeCount();
+  int numVertices = cellTopo->getVertexCount();
+  int numEdges = cellTopo->getEdgeCount();
   
   int degree = basis->getDegree();
   

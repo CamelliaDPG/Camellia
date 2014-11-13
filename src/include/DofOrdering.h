@@ -43,6 +43,8 @@
 
 #include "Basis.h"
 
+#include "CellTopology.h"
+
 using namespace Intrepid;
 
 class DofOrdering {
@@ -59,7 +61,7 @@ class DofOrdering {
   std::map< std::pair<int,int>, BasisPtr > bases; // keys are <varID, sideIndex>
   std::map< int, int > basisRanks; // keys are varIDs; values are 0,1,2,... (scalar, vector, tensor)
   
-  std::map< int, Teuchos::RCP< shards::CellTopology > > _cellTopologyForSide; // -1 is field variable
+  std::map< int, CellTopoPtr > _cellTopologyForSide; // -1 is field variable
 public:
   DofOrdering(); // constructor
   
@@ -95,7 +97,7 @@ public:
   void addIdentification(int varID, int side1, int basisDofOrdinal1,
                          int side2, int basisDofOrdinal2);
   
-  Teuchos::RCP< shards::CellTopology > cellTopology(int sideIndex = -1);
+  CellTopoPtr cellTopology(int sideIndex = -1);
   
   int maxBasisDegree();
   int maxBasisDegreeForVolume();

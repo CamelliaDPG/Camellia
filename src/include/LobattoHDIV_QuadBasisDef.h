@@ -56,7 +56,7 @@ namespace Camellia {
   
     this->_rangeDimension = 2; // 2 space dim
     this->_rangeRank = 1; // vector
-    this->_domainTopology = shards::CellTopology(shards::getCellTopologyData<shards::Quadrilateral<4> >() );
+    this->_domainTopology = CellTopology::cellTopology( shards::CellTopology(shards::getCellTopologyData<shards::Quadrilateral<4> >() ) );
     this->_basisCardinality = 2 * _degree_x * _degree_y + _degree_x + _degree_y;
     this->_functionSpace = IntrepidExtendedTypes::FUNCTION_SPACE_HDIV;
     initializeL2normValues();
@@ -71,7 +71,7 @@ namespace Camellia {
 
     this->_rangeDimension = 2; // 2 space dim
     this->_rangeRank = 1; // scalar
-    this->_domainTopology = shards::CellTopology(shards::getCellTopologyData<shards::Quadrilateral<4> >() );
+    this->_domainTopology = CellTopology::cellTopology( shards::CellTopology(shards::getCellTopologyData<shards::Quadrilateral<4> >() ) );
     this->_basisCardinality = 2 * _degree_x * _degree_y + _degree_x + _degree_y;
     this->_functionSpace = IntrepidExtendedTypes::FUNCTION_SPACE_HDIV;
     initializeL2normValues();

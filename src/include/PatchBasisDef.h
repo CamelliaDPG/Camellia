@@ -41,11 +41,11 @@ template<class Scalar, class ArrayScalar>
 PatchBasis<Scalar, ArrayScalar>::PatchBasis(BasisPtr parentBasis, ArrayScalar &patchNodesInParentRefCell, shards::CellTopology &patchCellTopo) {
   this -> _parentBasis = parentBasis;
   this -> _patchNodesInParentRefCell = patchNodesInParentRefCell;
-  this -> _patchCellTopo = patchCellTopo;
+  this -> _patchCellTopo = Camellia::CellTopology::cellTopology(patchCellTopo);
   this -> _parentTopo = parentBasis->domainTopology();
   this -> _functionSpace = parentBasis->functionSpace();
   
-  if (_patchCellTopo.getKey() != shards::Line<2>::key ) {
+  if (patchCellTopo.getKey() != shards::Line<2>::key ) {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "PatchBasis only supports lines right now.");
   }
   
@@ -53,7 +53,7 @@ PatchBasis<Scalar, ArrayScalar>::PatchBasis(BasisPtr parentBasis, ArrayScalar &p
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "patchNodes should be rank 2.");
   }
   
-  if (_parentTopo.getKey() != shards::Line<2>::key) {
+  if (_parentTopo->getDimension() != 1) {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "PatchBasis only supports lines right now.");
   }
   
@@ -63,7 +63,7 @@ PatchBasis<Scalar, ArrayScalar>::PatchBasis(BasisPtr parentBasis, ArrayScalar &p
   // I don't think we actually need _parentRefNodes...
   // TODO: delete this
   // otherwise, set parent's ref nodes to be that of Line<2>
-  _parentRefNodes = Intrepid::FieldContainer<double>(1,2,1); // for convenience in mapToPhysicalFrame, make this a rank-3 container
+  _parentRefNodes = ::Intrepid::FieldContainer<double>(1,2,1); // for convenience in mapToPhysicalFrame, make this a rank-3 container
   _parentRefNodes(0,0,0) = 0.0;
   _parentRefNodes(0,1,0) = 1.0;
   
@@ -95,22 +95,22 @@ void PatchBasis<Scalar, ArrayScalar>::getValues(ArrayScalar &outputValues, const
   
   int numPoints = inputPoints.dimension(0);
   int spaceDim = inputPoints.dimension(1);
-  if (spaceDim != _patchCellTopo.getDimension() ) {
+  if (spaceDim != _patchCellTopo->getDimension() ) {
     TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument, "spaceDim != _patchCellTopo.getDimension()");
   }
   if (spaceDim != 1) {
     TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument, "spaceDim != 1");
   }
-  if (operatorType != Intrepid::OPERATOR_VALUE) {
+  if (operatorType != ::Intrepid::OPERATOR_VALUE) {
     TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument, "PatchBasis only supports OPERATOR_VALUE right now.");
   }
   
-  typedef Intrepid::CellTools<double>  CellTools;
+  typedef ::Intrepid::CellTools<double>  CellTools;
   ArrayScalar parentInputPoints(numPoints,spaceDim);
   
   // first, transform the inputPoints into parent's reference frame:
   int parentCellIndex = 0;
-  CellTools::mapToPhysicalFrame (parentInputPoints, inputPoints, _patchNodesInParentRefCell, _parentTopo, parentCellIndex);
+  CellTools::mapToPhysicalFrame (parentInputPoints, inputPoints, _patchNodesInParentRefCell, _parentTopo->getShardsTopology(), parentCellIndex);
   //  cout << "_patchNodesInParentRefCell:\n" << _patchNodesInParentRefCell;
   //  cout << "inputPoints:\n" << inputPoints;
   //  cout << "parentInputPoints:\n" << parentInputPoints;
@@ -213,7 +213,7 @@ void PatchBasis<Scalar, ArrayScalar>::computeCellJacobians(ArrayScalar &cellJaco
 
 
 template<class Scalar, class ArrayScalar>
-shards::CellTopology PatchBasis<Scalar, ArrayScalar>::domainTopology() const {
+CellTopoPtr PatchBasis<Scalar, ArrayScalar>::domainTopology() const {
   return _patchCellTopo;
 }
 
@@ -261,14 +261,14 @@ void PatchBasis<Scalar, ArrayScalar>::initializeTags() const {
   tags[4*n+2] = 0;
   tags[4*n+3] = 1;
   
-  Intrepid::setOrdinalTagData(this -> _tagToOrdinal,
-                              this -> _ordinalToTag,
-                              tags,
-                              this -> _basisCardinality,
-                              tagSize,
-                              posScDim,
-                              posScOrd,
-                              posDfOrd);
+  ::Intrepid::setOrdinalTagData(this -> _tagToOrdinal,
+                                this -> _ordinalToTag,
+                                tags,
+                                this -> _basisCardinality,
+                                tagSize,
+                                posScDim,
+                                posScOrd,
+                                posDfOrd);
   
   delete []tags;
 }

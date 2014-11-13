@@ -5,9 +5,17 @@
 #include <Teuchos_GlobalMPISession.hpp>
 #include "GnuPlotUtil.h"
 
+#include "Epetra_Operator_to_Epetra_Matrix.h"
+#include "EpetraExt_MatrixMatrix.h"
+
 #include "Solver.h"
 #include "Ifpack_AdditiveSchwarz.h"
 #include "Ifpack_Amesos.h"
+
+// EpetraExt includes
+#include "EpetraExt_RowMatrixOut.h"
+#include "EpetraExt_MultiVectorOut.h"
+
 
 Teuchos::RCP<Epetra_Operator> additiveSchwarzPreconditioner(Epetra_RowMatrix* A, int overlapLevel) {
   Teuchos::RCP<Ifpack_Preconditioner> preconditioner = Teuchos::rcp(new Ifpack_AdditiveSchwarz<Ifpack_Amesos>(A, overlapLevel) );
@@ -97,6 +105,12 @@ public:
     }
     
     return solveResult;
+  }
+  Teuchos::RCP< Epetra_CrsMatrix > getPreconditionerMatrix(const Epetra_Map &map) {
+    Epetra_RowMatrix *A = problem().GetMatrix();
+    Teuchos::RCP<Epetra_Operator> preconditioner = additiveSchwarzPreconditioner(A, _schwarzOverlap);
+
+    return Epetra_Operator_to_Epetra_Matrix::constructInverseMatrix(*preconditioner, map);
   }
 };
 
@@ -232,9 +246,35 @@ int main(int argc, char *argv[]) {
   solution->setWriteMatrixToFile(true, "/tmp/A_poisson.dat");
   
   solution->solve(solver);
-  
   solution->reportTimings();
   double energyErrorTotal = solution->energyErrorTotal();
+  
+  Teuchos::RCP< Epetra_CrsMatrix > A = solution->getStiffnessMatrix();
+  Teuchos::RCP< Epetra_CrsMatrix > M;
+  if (schwarzOnly) {
+    M = ((AztecSolver*)solver.get())->getPreconditionerMatrix(A->DomainMap());
+  } else {
+    GMGOperator* op = &((GMGSolver*)solver.get())->gmgOperator();
+    M = Epetra_Operator_to_Epetra_Matrix::constructInverseMatrix(*op, A->DomainMap());
+    Teuchos::RCP< Epetra_CrsMatrix > A_coarse = op->getCoarseStiffnessMatrix();
+//    Teuchos::RCP< Epetra_CrsMatrix > A_coarse_inverse = Epetra_Operator_to_Epetra_Matrix::constructInverseMatrix(*A_coarse, A_coarse->DomainMap());
+    if (rank==0) cout << "writing A_coarse to /tmp/A_coarse_poisson.dat.\n";
+    EpetraExt::RowMatrixToMatrixMarketFile("/tmp/A_coarse_poisson.dat",*A_coarse, NULL, NULL, false);
+//    EpetraExt::RowMatrixToMatrixMarketFile("/tmp/A_coarse_inv_poisson.dat",*A_coarse_inverse, NULL, NULL, false);
+    
+    Teuchos::RCP< Epetra_CrsMatrix > S = op->getSmootherAsMatrix();
+    EpetraExt::RowMatrixToMatrixMarketFile("/tmp/S.dat",*S, NULL, NULL, false);
+  }
+
+  if (rank==0) cout << "writing M (preconditioner) to /tmp/M_poisson.dat.\n";
+  EpetraExt::RowMatrixToMatrixMarketFile("/tmp/M_poisson.dat",*M, NULL, NULL, false);
+  
+  Epetra_CrsMatrix AM(::Copy, A->DomainMap(), 0);
+  int err = EpetraExt::MatrixMatrix::Multiply(*A, false, *M, false, AM);
+  
+  AM.FillComplete();
+  
+  EpetraExt::RowMatrixToMatrixMarketFile("/tmp/AM_poisson.dat",AM, NULL, NULL, false);
   
   GlobalIndexType numFluxDofs = mesh->numFluxDofs();
   GlobalIndexType numGlobalDofs = mesh->numGlobalDofs();

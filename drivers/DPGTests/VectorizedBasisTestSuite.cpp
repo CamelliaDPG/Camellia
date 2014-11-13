@@ -15,6 +15,7 @@
 
 #include <string>
 using namespace std;
+using namespace Camellia;
 
 void VectorizedBasisTestSuite::runTests(int &numTestsRun, int &numTestsPassed) {
   numTestsRun++;

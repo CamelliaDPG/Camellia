@@ -32,7 +32,7 @@ typedef Teuchos::RCP< const FieldContainer<double> > constFCPtr;
 void Projector::projectFunctionOntoBasis(FieldContainer<double> &basisCoefficients, FunctionPtr fxn, 
                                          BasisPtr basis, BasisCachePtr basisCache, IPPtr ip, VarPtr v,
                                          set<int> fieldIndicesToSkip) {
-  shards::CellTopology cellTopo = basis->domainTopology();
+  CellTopoPtr cellTopo = basis->domainTopology();
   DofOrderingPtr dofOrderPtr = Teuchos::rcp(new DofOrdering());
   
   if (! fxn.get()) {
@@ -284,7 +284,7 @@ void Projector::projectFunctionOntoBasis(FieldContainer<double> &basisCoefficien
 void Projector::projectFunctionOntoBasis(FieldContainer<double> &basisCoefficients, Teuchos::RCP<AbstractFunction> fxn, BasisPtr basis,
                                          const FieldContainer<double> &physicalCellNodes) {
 
-  shards::CellTopology cellTopo = basis->domainTopology();
+  CellTopoPtr cellTopo = basis->domainTopology();
   DofOrderingPtr dofOrderPtr = Teuchos::rcp(new DofOrdering());
 
   int basisRank = BasisFactory::basisFactory()->getBasisRank(basis);
@@ -293,7 +293,12 @@ void Projector::projectFunctionOntoBasis(FieldContainer<double> &basisCoefficien
   int maxTrialDegree = dofOrderPtr->maxBasisDegree();
 
   // do not build side caches - no projections for sides supported at the moment
-  BasisCache basisCache(physicalCellNodes, cellTopo, *(dofOrderPtr), maxTrialDegree, false);
+  if (cellTopo->getTensorialDegree() != 0) {
+    cout << "Projector::projectFunctionOntoBasis() does not yet support tensorial degree > 0.\n";
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Projector::projectFunctionOntoBasis() does not yet support tensorial degree > 0.");
+  }
+  shards::CellTopology shardsTopo = cellTopo->getShardsTopology();
+  BasisCache basisCache(physicalCellNodes, shardsTopo, *(dofOrderPtr), maxTrialDegree, false);
   // assume only L2 projections
   IntrepidExtendedTypes::EOperatorExtended op =  IntrepidExtendedTypes::OP_VALUE;
 
@@ -382,8 +387,8 @@ void Projector::projectFunctionOntoBasis(FieldContainer<double> &basisCoefficien
 void Projector::projectFunctionOntoBasisInterpolating(FieldContainer<double> &basisCoefficients, FunctionPtr fxn,
                                                       BasisPtr basis, BasisCachePtr domainBasisCache) {
   basisCoefficients.initialize(0);
-  shards::CellTopology domainTopo = basis->domainTopology();
-  unsigned domainDim = domainTopo.getDimension();
+  CellTopoPtr domainTopo = basis->domainTopology();
+  unsigned domainDim = domainTopo->getDimension();
   
   IPPtr ip;
   
@@ -399,7 +404,7 @@ void Projector::projectFunctionOntoBasisInterpolating(FieldContainer<double> &ba
   // for now, make all projections use L^2... (having some issues with gradients and cell Jacobians--I think we need the restriction of the cell Jacobian to the subcell, e.g., and it's not clear how to do that...)
   ip = ip_l2;
   
-  FieldContainer<double> referenceDomainNodes(domainTopo.getVertexCount(),domainDim);
+  FieldContainer<double> referenceDomainNodes(domainTopo->getVertexCount(),domainDim);
   CamelliaCellTools::refCellNodesForTopology(referenceDomainNodes, domainTopo);
   
   int basisCardinality = basis->getCardinality();
@@ -412,7 +417,7 @@ void Projector::projectFunctionOntoBasisInterpolating(FieldContainer<double> &ba
   for (int d=0; d<=domainDim; d++) {
     FunctionPtr projectionThusFar = NewBasisSumFunction::basisSumFunction(basis, basisCoefficients);
     FunctionPtr fxnToApproximate = fxn - projectionThusFar;
-    int subcellCount = domainTopo.getSubcellCount(d);
+    int subcellCount = domainTopo->getSubcellCount(d);
     for (int subcord=0; subcord<subcellCount; subcord++) {
       set<int> subcellDofOrdinals = basis->dofOrdinalsForSubcell(d, subcord);
       if (subcellDofOrdinals.size() > 0) {
@@ -426,7 +431,7 @@ void Projector::projectFunctionOntoBasisInterpolating(FieldContainer<double> &ba
           cubatureWeightsSubcell.resize(1);
           cubatureWeightsSubcell(0) = 1.0;
         } else {
-          shards::CellTopology subcellTopo = domainTopo.getBaseCellTopologyData(d, subcord);
+          CellTopoPtr subcellTopo = domainTopo->getSubcell(d, subcord);
 //          Teuchos::RCP<Cubature<double> > subcellCubature = cubFactory.create(subcellTopo, domainBasisCache->cubatureDegree());
           BasisCachePtr subcellCache = Teuchos::rcp( new BasisCache(subcellTopo, domainBasisCache->cubatureDegree(), false) );
           int numPoints = subcellCache->getRefCellPoints().dimension(0);

@@ -26,6 +26,8 @@
 
 #include "InnerProductScratchPad.h"
 
+using namespace Camellia;
+
 void RHSTests::runTests(int &numTestsRun, int &numTestsPassed) {
   setup();
   if (testComputeRHSLegacy()) {

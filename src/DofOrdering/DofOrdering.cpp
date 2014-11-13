@@ -88,7 +88,7 @@ void DofOrdering::addIdentification(int varID, int side1, int basisDofOrdinal1,
   dofIdentifications[make_pair(varID,sidePair2)] = sidePair1;
 }
 
-Teuchos::RCP< shards::CellTopology > DofOrdering::cellTopology(int sideIndex) {
+CellTopoPtr DofOrdering::cellTopology(int sideIndex) {
   return _cellTopologyForSide[sideIndex];
 }
 
@@ -284,7 +284,7 @@ void DofOrdering::rebuildIndex() {
       BasisPtr basis = getBasis(varID,sideIndex);
       int cellTopoSideIndex = (numSidesForVarID[varID]==1) ? -1 : sideIndex;
       if ( _cellTopologyForSide.find(cellTopoSideIndex) == _cellTopologyForSide.end() ) {
-        Teuchos::RCP< shards::CellTopology > cellTopoPtr = Teuchos::rcp(new shards::CellTopology( basis->domainTopology() ));
+        CellTopoPtr cellTopoPtr = basis->domainTopology();
         _cellTopologyForSide[cellTopoSideIndex] = cellTopoPtr;
       }
       for (int dofOrdinal=0; dofOrdinal < basis->getCardinality(); dofOrdinal++) {

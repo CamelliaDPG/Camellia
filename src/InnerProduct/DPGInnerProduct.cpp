@@ -67,9 +67,7 @@ void DPGInnerProduct::computeInnerProductMatrix(FieldContainer<double> &innerPro
   
   unsigned numCells = physicalCubaturePoints.dimension(0);
   unsigned spaceDim = physicalCubaturePoints.dimension(2);
-  
-  shards::CellTopology cellTopo = basisCache->cellTopology();
-    
+      
   vector<int> testIDs = _bilinearForm->testIDs();
   vector<int>::iterator testIterator1;
   vector<int>::iterator testIterator2;

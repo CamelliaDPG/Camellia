@@ -163,7 +163,7 @@ void LinearTerm::integrate(FieldContainer<double> &values, DofOrderingPtr thisOr
   // (if thisFluxOrTrace, there won't be any volume summands, so the above will hold trivially)
   // note that ! boundaryTerm does NOT imply that all terms are volume terms.  boundaryTerm means that
   // we ONLY evaluate on the boundary; !boundaryTerm allows the possibility of "mixed-type" terms
-  int numSides = CamelliaCellTools::getSideCount(basisCache->cellTopology());
+  int numSides = basisCache->cellTopology()->getSideCount();
   
   Teuchos::Array<int> ltValueDim;
   ltValueDim.push_back(numCells);
@@ -523,7 +523,7 @@ void LinearTerm::integrate(Epetra_CrsMatrix *valuesCrsMatrix, FieldContainer<dou
   } else if (forceBoundaryTerm) {
     // then we don't need to worry about splitting into boundary and non-boundary parts,
     // but we do need to loop over the sides:
-    int numSides = CamelliaCellTools::getSideCount(basisCache->cellTopology());
+    int numSides = basisCache->cellTopology()->getSideCount();
     for (int sideIndex=0; sideIndex<numSides; sideIndex++) {
       integrate(valuesCrsMatrix, valuesFC, otherTerm, otherOrdering, thisPtr, thisOrdering, basisCache->getSideBasisCache(sideIndex));
     }
@@ -546,7 +546,7 @@ void LinearTerm::integrate(Epetra_CrsMatrix *valuesCrsMatrix, FieldContainer<dou
     
     // sides:
     // (u + du, v + dv) - (u,v) = (u + du, dv) + (du, v)
-    int numSides = CamelliaCellTools::getSideCount(basisCache->cellTopology());
+    int numSides = basisCache->cellTopology()->getSideCount();
     for (int sideIndex=0; sideIndex<numSides; sideIndex++) {
       // (u + du, dv)
       integrate(valuesCrsMatrix, valuesFC, otherBoundaryOnly, otherOrdering, thisPtr, thisOrdering, basisCache->getSideBasisCache(sideIndex));

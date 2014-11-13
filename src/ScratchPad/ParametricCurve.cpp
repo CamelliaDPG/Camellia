@@ -563,7 +563,11 @@ public:
     _convertBasisCacheToParametricSpace = convertBasisCacheToParametricSpace;
   }
   void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
-    unsigned cellTopoKey = basisCache->cellTopology().getBaseKey();
+    if (basisCache->cellTopology()->getTensorialDegree() > 0) {
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "ParametricGradient wrapper does not yet support tensorial degree > 0.");
+    }
+    
+    unsigned cellTopoKey = basisCache->cellTopology()->getShardsTopology().getBaseKey();
     int numPoints = basisCache->getPhysicalCubaturePoints().dimension(1);
     Teuchos::Array<int> dimensions;
     values.dimensions(dimensions);
