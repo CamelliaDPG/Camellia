@@ -854,7 +854,7 @@ void Solution::populateStiffnessAndLoad() {
     //    EpetraExt::MultiVectorToMatrixMarketFile("lhs_vector.dat",lhsVector,0,0,false);
   }
   if (_writeMatrixToMatrixMarketFile){
-    EpetraExt::RowMatrixToMatrixMarketFile(_matrixFilePath.c_str(),*_globalStiffMatrix);
+    EpetraExt::RowMatrixToMatrixMarketFile(_matrixFilePath.c_str(),*_globalStiffMatrix,NULL,NULL,false);
   }
   
   int err = timeLocalStiffnessVector.Norm1( &_totalTimeLocalStiffness );
