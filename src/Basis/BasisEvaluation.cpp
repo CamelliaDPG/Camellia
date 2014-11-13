@@ -112,7 +112,7 @@ FCPtr BasisEvaluation::getTransformedValues(BasisPtr basis, IntrepidExtendedType
   return getTransformedValuesWithBasisValues(basis,op,referenceValues,cellJacobian,cellJacobianInv,cellJacobianDet);
 }
 
-FCPtr BasisEvaluation::getTransformedVectorValuesWithComponentBasisValues(VectorBasisPtr basis, IntrepidExtendedTypes::EOperatorExtended op,
+FCPtr BasisEvaluation::getTransformedVectorValuesWithComponentBasisValues(Camellia::VectorBasisPtr basis, IntrepidExtendedTypes::EOperatorExtended op,
                                                                           constFCPtr componentReferenceValuesTransformed) {
   IntrepidExtendedTypes::EFunctionSpaceExtended fs = basis->functionSpace();
   bool vectorizedBasis = IntrepidExtendedTypes::functionSpaceIsVectorized(fs);
