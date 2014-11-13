@@ -49,17 +49,19 @@
 
 #include "CamelliaIntrepidExtendedTypes.h"
 
-using namespace std;
-using namespace IntrepidExtendedTypes;
+#include "CellTopology.h"
 
 typedef Teuchos::RCP< Camellia::Basis<> > BasisPtr;
 
 class BasisFactory {
+  typedef IntrepidExtendedTypes::EFunctionSpaceExtended FSE;
 private:
   map< pair< pair<int,int>, IntrepidExtendedTypes::EFunctionSpaceExtended >, BasisPtr >
               _existingBases; // keys are ((polyOrder,cellTopoKey),fs))
   map< pair< pair<int,int>, IntrepidExtendedTypes::EFunctionSpaceExtended >, BasisPtr >
               _conformingBases; // keys are ((polyOrder,cellTopoKey),fs))
+  map< pair< pair< Camellia::Basis<>*, int>, IntrepidExtendedTypes::EFunctionSpaceExtended>, BasisPtr >
+              _spaceTimeBases; // keys are (shards Topo basis, temporal degree, temporal function space)
   
   // the following maps let us remember what arguments were used to create a basis:
   // (this is useful to, say, create a basis again, but now with polyOrder+1)
@@ -68,8 +70,8 @@ private:
   map< Camellia::Basis<>*, IntrepidExtendedTypes::EFunctionSpaceExtended > _functionSpaces; // allows lookup of function spaces
   map< Camellia::Basis<>*, int > _cellTopoKeys; // allows lookup of cellTopoKeys
   set< Camellia::Basis<>*> _multiBases;
-  map< vector< Camellia::Basis<>* >, MultiBasisPtr > _multiBasesMap;
-  map< pair<Camellia::Basis<>*, vector<double> >, PatchBasisPtr > _patchBases;
+  map< vector< Camellia::Basis<>* >, Camellia::MultiBasisPtr > _multiBasesMap;
+  map< pair< Camellia::Basis<>*, vector<double> >, PatchBasisPtr > _patchBases;
   set< Camellia::Basis<>* > _patchBasisSet;
   
   bool _useEnrichedTraces; // i.e. p+1, not p (default is true: this is what we need to prove optimal convergence)
@@ -80,11 +82,14 @@ private:
 public:
   BasisFactory();
   
-  BasisPtr getBasis( int polyOrder, unsigned cellTopoKey, IntrepidExtendedTypes::EFunctionSpaceExtended fs);
+  // new getBasis: (handles 0 or 1 temporal dimensions; calls the other version)
+  BasisPtr getBasis(int H1Order, CellTopoPtr cellTopo, FSE functionSpaceForSpatialTopology, int temporalPolyOrder = 1,
+                    FSE functionSpaceForTemporalTopology = IntrepidExtendedTypes::FUNCTION_SPACE_HVOL);
+  BasisPtr getBasis( int polyOrder, unsigned cellTopoKey, FSE fs);
 //  static BasisPtr getBasis(int &basisRank, int polyOrder, unsigned cellTopoKey, IntrepidExtendedTypes::EFunctionSpaceExtended fs);
-  BasisPtr getConformingBasis( int polyOrder, unsigned cellTopoKey, IntrepidExtendedTypes::EFunctionSpaceExtended fs );
+  BasisPtr getConformingBasis( int polyOrder, unsigned cellTopoKey, FSE fs );
   
-  MultiBasisPtr getMultiBasis(vector< BasisPtr > &bases);
+  Camellia::MultiBasisPtr getMultiBasis(vector< BasisPtr > &bases);
   PatchBasisPtr getPatchBasis(BasisPtr parent, FieldContainer<double> &patchNodesInParentRefCell, unsigned cellTopoKey = shards::Line<2>::key);
 
   BasisPtr addToPolyOrder(BasisPtr basis, int pToAdd);
@@ -98,7 +103,7 @@ public:
   bool isMultiBasis(BasisPtr basis);
   bool isPatchBasis(BasisPtr basis);
   
-  void registerBasis( BasisPtr basis, int basisRank, int polyOrder, int cellTopoKey, IntrepidExtendedTypes::EFunctionSpaceExtended fs );
+  void registerBasis( BasisPtr basis, int basisRank, int polyOrder, int cellTopoKey, FSE fs );
   
   void setUseEnrichedTraces( bool value );
   
@@ -110,5 +115,7 @@ public:
   
   static Teuchos::RCP<BasisFactory> basisFactory(); // shared, global BasisFactory
 };
+
+typedef Teuchos::RCP<BasisFactory> BasisFactoryPtr;
 
 #endif
