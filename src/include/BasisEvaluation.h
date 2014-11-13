@@ -62,7 +62,7 @@ public:
                                    const FieldContainer<double> &cellJacobian, 
                                    const FieldContainer<double> &cellJacobianInv,
                                    const FieldContainer<double> &cellJacobianDet);
-  static FCPtr getTransformedVectorValuesWithComponentBasisValues(VectorBasisPtr basis, IntrepidExtendedTypes::EOperatorExtended op,
+  static FCPtr getTransformedVectorValuesWithComponentBasisValues(Camellia::VectorBasisPtr basis, IntrepidExtendedTypes::EOperatorExtended op,
                                                                   constFCPtr componentReferenceValuesTransformed);
   static FCPtr getTransformedValuesWithBasisValues(BasisPtr basis, IntrepidExtendedTypes::EOperatorExtended op,
                                                    constFCPtr referenceValues,                                 
