@@ -202,19 +202,23 @@ namespace Camellia {
     ArrayScalar temporalValues(_temporalBasis->getCardinality(), numPoints);
     _temporalBasis->getValues(temporalValues, refPointsTemporal, temporalOperatorType);
     
-    Teuchos::Array<int> valueCoordinate(spaceTimeValuesDimensions.size(), 0);
+    Teuchos::Array<int> spaceTimeValueCoordinate(spaceTimeValuesDimensions.size(), 0);
+    Teuchos::Array<int> spatialValueCoordinate(spaceTimeValuesDimensions.size(), 0);
     
     // combine values:
     for (int spaceFieldOrdinal=0; spaceFieldOrdinal<_spatialBasis->getCardinality(); spaceFieldOrdinal++) {
+      spatialValueCoordinate[0] = spaceFieldOrdinal;
       for (int timeFieldOrdinal=0; timeFieldOrdinal<_temporalBasis->getCardinality(); timeFieldOrdinal++) {
         int spaceTimeFieldOrdinal = spaceFieldOrdinal * _temporalBasis->getCardinality() + timeFieldOrdinal;
-        valueCoordinate[0] = spaceTimeFieldOrdinal;
+        spaceTimeValueCoordinate[0] = spaceTimeFieldOrdinal;
         for (int pointOrdinal=0; pointOrdinal<numPoints; pointOrdinal++) {
-          valueCoordinate[1] = pointOrdinal;
+          spaceTimeValueCoordinate[1] = pointOrdinal;
+          spatialValueCoordinate[1] = pointOrdinal;
           double temporalValue = temporalValues[pointOrdinal];
-          int valueEnumeration = values.getEnumeration(valueCoordinate); // we take spatialValues and values to have same enumeration (layout)
+          int spaceTimeValueEnumeration = values.getEnumeration(spaceTimeValueCoordinate);
+          int spatialValueEnumeration = spatialValues.getEnumeration(spatialValueCoordinate);
           for (int offset=0; offset<valuesPerPoint; offset++) {
-            values[valueEnumeration+offset] = spatialValues[valueEnumeration+offset] * temporalValue;
+            values[spaceTimeValueEnumeration+offset] = spatialValues[spatialValueEnumeration+offset] * temporalValue;
           }
         }
       }
