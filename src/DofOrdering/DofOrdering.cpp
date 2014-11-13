@@ -33,6 +33,7 @@
 #include "BasisFactory.h"
 
 using namespace std;
+using namespace Camellia;
 
 DofOrdering::DofOrdering() { // constructor
   _nextIndex = 0;
@@ -189,7 +190,7 @@ int DofOrdering::getNumSidesForVarID(int varID) {
 
 int DofOrdering::getTotalBasisCardinality() { // total number of *distinct* basis functions
   int totalBasisCardinality = 0;
-  set< Camellia::Basis<>* > basesCounted;
+  set< Basis<>* > basesCounted;
   for (map< pair<int, int>, BasisPtr >::iterator basisIt = bases.begin(); basisIt != bases.end(); basisIt++) {
     BasisPtr basis = basisIt->second;
     if (basesCounted.find(basis.get())==basesCounted.end()) {
