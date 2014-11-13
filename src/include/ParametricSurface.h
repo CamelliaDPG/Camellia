@@ -36,9 +36,9 @@ public:
   static FieldContainer<double> &parametricQuadNodes(); // for CellTools cellWorkset argument
   
   static void basisWeightsForEdgeInterpolant(FieldContainer<double> &basisCoefficients,
-                                             VectorBasisPtr basis, MeshPtr mesh, int cellID);
+                                             Camellia::VectorBasisPtr basis, MeshPtr mesh, int cellID);
   static void basisWeightsForProjectedInterpolant(FieldContainer<double> &basisCoefficients,
-                                                    VectorBasisPtr basis, MeshPtr mesh, int cellID);
+                                                  Camellia::VectorBasisPtr basis, MeshPtr mesh, int cellID);
   static ParametricSurfacePtr linearInterpolant(const vector< ParametricCurvePtr > &curves);
   static ParametricSurfacePtr transfiniteInterpolant(const vector< ParametricCurvePtr > &curves);
 };
