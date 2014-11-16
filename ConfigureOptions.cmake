@@ -2,7 +2,7 @@
 
 #set(TRILINOS_PATH /opt/apps/ossw/libraries/trilinos/trilinos-10.12.2/sl6/gcc-4.6/openmpi-1.6/mkl-gf-10.2.6.038)
 #set(TRILINOS_PATH /opt/apps/ossw/libraries/trilinos/test)
-#set(TRILINOS_PATH /workspace/truman/trilinos-build)
+set(TRILINOS_PATH /workspace/truman/trilinos)
 #set(MUMPS_PATH /opt/apps/ossw/libraries/mumps)
 #set(TRILINOS_PATH $ENV{TRILINOS_DIR})
 #set(MUMPS_PATH /workspace/jchan/MUMPS_4.9.2/)

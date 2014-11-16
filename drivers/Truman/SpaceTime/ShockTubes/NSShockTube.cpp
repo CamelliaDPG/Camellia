@@ -145,23 +145,38 @@ class BoundedSqrtFunction : public Function {
 
 class DivergenceIndicator : public Function {
   private:
-    FunctionPtr _function;
+    FunctionPtr _h;
+    FunctionPtr _rho;
+    FunctionPtr _D;
   public:
-    DivergenceIndicator(FunctionPtr function) : Function(0), _function(function) {}
+    DivergenceIndicator(FunctionPtr h, FunctionPtr rho, FunctionPtr D) : Function(0), _h(h), _rho(rho), _D(D) {}
     void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
       int numCells = values.dimension(0);
       int numPoints = values.dimension(1);
 
-      _function->values(values, basisCache);
+      FieldContainer<double> h(values);
+      FieldContainer<double> rho(values);
+      FieldContainer<double> D(values);
+      _h->values(h, basisCache);
+      _rho->values(rho, basisCache);
+      _D->values(D, basisCache);
 
       const FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
       for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
         for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
-          if (values(cellIndex,ptIndex) < -1e-3)
-            values(cellIndex, ptIndex) = 1./(-values(cellIndex, ptIndex));
-            // values(cellIndex, ptIndex) = 1;
-          else
-            values(cellIndex, ptIndex) = 0;
+          // rho = 1 => visc = 0
+          // rho = 1e-4 => visc = 1e-2
+          // double viscSwitch = 0;
+          // if (rhovalues(cellIndex, ptIndex) < 1e-1)
+          //   viscSwitch = 
+          // double viscBoost = 1e-2*max(1./rhovalues(cellIndex, ptIndex),)
+          double cr = 0;
+          double cD = 5;
+          values(cellIndex, ptIndex) = 1e-4 + cr/abs(rho(cellIndex, ptIndex)) + cD*min(1e-2,abs(D(cellIndex,ptIndex)))*h(cellIndex,ptIndex);
+          // if (values(cellIndex,ptIndex) < -1e-3)
+          //   // values(cellIndex, ptIndex) = 1;
+          // else
+          //   values(cellIndex, ptIndex) = 0;
         }
       }
     }
@@ -196,11 +211,11 @@ class ErrorFunction : public Function {
 
 class PulseInitialCondition : public hFunction {
    private:
-      int _numPreRefs;
+      double _width;
       double _valI;
       double _valO;
    public:
-      PulseInitialCondition(int numPreRefs, double valI, double valO) : _numPreRefs(numPreRefs), _valI(valI), _valO(valO) {}
+      PulseInitialCondition(double width, double valI, double valO) : _width(width), _valI(valI), _valO(valO) {}
       void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
          int numCells = values.dimension(0);
          int numPoints = values.dimension(1);
@@ -210,9 +225,9 @@ class PulseInitialCondition : public hFunction {
             for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
                double x = (*points)(cellIndex,ptIndex,0);
                // if (abs(x) <= 1./pow(2,_numPreRefs))
-               if (abs(x) <= 1./pow(2,2))
+               if (abs(x) <= 0.5*_width)
                   // values(cellIndex, ptIndex) = _valI*pow(2,_numPreRefs);
-                  values(cellIndex, ptIndex) = 256*_valI*pow(2,2);
+                  values(cellIndex, ptIndex) = _valO+2*(_valI-_valO)/_width*(1-abs(2*x/_width));
                else
                   values(cellIndex, ptIndex) = _valO;
             }
@@ -259,7 +274,7 @@ class RampedInitialCondition : public Function {
 
          const FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
          for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
-            for (int ptIndex=0; ptIndex<numPoints; ptIndex++) 
+            for (int ptIndex=0; ptIndex<numPoints; ptIndex++)
             {
                double x = (*points)(cellIndex,ptIndex,0);
                if (x <= xloc-h/2.)
@@ -435,8 +450,8 @@ int main(int argc, char *argv[]) {
     rhoR = 1;
     uL = 0;
     uR = 0;
-    TL = 1e-6;
-    TR = 1e-6;
+    TL = 0;
+    TR = 0;
     break;
     default:
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "invalid problem number");
@@ -579,7 +594,7 @@ int main(int argc, char *argv[]) {
           bool cellIDset = false;
           for (int j = 0;j<numSides;j++)
           {
-            if ((abs(vertices(j,0))<1e-14) && (abs(vertices(j,1))<1e-14) && !cellIDset)
+            if ((abs(vertices(j,0)-xint)<1e-14) && (abs(vertices(j,1))<1e-14) && !cellIDset)
             {
               pointCells.push_back(cellID);
               cellIDset = true;
@@ -661,36 +676,39 @@ int main(int argc, char *argv[]) {
     LinearTermPtr G_cxGradPsi = Teuchos::rcp( new LinearTerm );
     LinearTermPtr G_mxGradPsi = Teuchos::rcp( new LinearTerm );
     LinearTermPtr G_exGradPsi = Teuchos::rcp( new LinearTerm );
-    FunctionPtr T_sqrt = Teuchos::rcp( new BoundedSqrtFunction(T_prev, 0.01) );
-    FunctionPtr rho_sqrt = Teuchos::rcp( new BoundedSqrtFunction(rho_prev, 0.01) );
+    // FunctionPtr T_sqrt = Teuchos::rcp( new BoundedSqrtFunction(T_prev, 0.01) );
+    // FunctionPtr rho_sqrt = Teuchos::rcp( new BoundedSqrtFunction(rho_prev, 0.01) );
+    FunctionPtr T_sqrt = Teuchos::rcp( new SqrtFunction(T_prev) );
+    FunctionPtr rho_sqrt = Teuchos::rcp( new SqrtFunction(rho_prev) );
     FunctionPtr A0p_c = sqrt(gamma-1)/rho_sqrt;
     FunctionPtr A0p_m = rho_sqrt/(sqrt(Cv)*T_sqrt);
-    FunctionPtr A0p_e = rho_sqrt/(T_sqrt*T_sqrt);
+    FunctionPtr A0p_e = rho_sqrt/(T_prev);
+    // FunctionPtr A0p_e = rho_sqrt/(T_sqrt*T_sqrt);
     // FunctionPtr invA0p_c = rho_sqrt/sqrt(gamma-1);
     // FunctionPtr invA0p_m = (sqrt(Cv)*T_sqrt)/rho_sqrt;
     // FunctionPtr invA0p_e = T_prev/rho_sqrt;
     FunctionPtr invA0p_c = 1./A0p_c;
     FunctionPtr invA0p_m = 1./A0p_m;
     FunctionPtr invA0p_e = 1./A0p_e;
-    FunctionPtr div_indicator = Teuchos::rcp( new DivergenceIndicator(D_prev) );
-    FunctionPtr artificialViscosity = 0.1*Function::h()*div_indicator+1e-4;
+    FunctionPtr div_indicator = Teuchos::rcp( new DivergenceIndicator(Function::h(), rho_prev, D_prev) );
+    FunctionPtr artificialViscosity = div_indicator;
     // FunctionPtr artificialViscosity = 0.1*Function::h()+1e-4;
     // FunctionPtr artificialViscosity = 0.1*Function::h()*div_indicator + 1e-4;
     // FunctionPtr mu = artificialViscosity;
     // FunctionPtr mu_sqrt = Teuchos::rcp( new SqrtFunction(mu) );
     switch (formulation)
     {
-      case 0:    
-      //   /$$$$$$$            /$$               /$$   /$$     /$$                     
-      //  | $$__  $$          |__/              |__/  | $$    |__/                     
-      //  | $$  \ $$  /$$$$$$  /$$ /$$$$$$/$$$$  /$$ /$$$$$$   /$$ /$$    /$$  /$$$$$$ 
+      case 0:
+      //   /$$$$$$$            /$$               /$$   /$$     /$$
+      //  | $$__  $$          |__/              |__/  | $$    |__/
+      //  | $$  \ $$  /$$$$$$  /$$ /$$$$$$/$$$$  /$$ /$$$$$$   /$$ /$$    /$$  /$$$$$$
       //  | $$$$$$$/ /$$__  $$| $$| $$_  $$_  $$| $$|_  $$_/  | $$|  $$  /$$/ /$$__  $$
       //  | $$____/ | $$  \__/| $$| $$ \ $$ \ $$| $$  | $$    | $$ \  $$/$$/ | $$$$$$$$
       //  | $$      | $$      | $$| $$ | $$ | $$| $$  | $$ /$$| $$  \  $$$/  | $$_____/
       //  | $$      | $$      | $$| $$ | $$ | $$| $$  |  $$$$/| $$   \  $/   |  $$$$$$$
       //  |__/      |__/      |__/|__/ |__/ |__/|__/   \___/  |__/    \_/     \_______/
-      //                                                                               
-      //                                                                               
+      //
+      //
       //
       // Define Euler fluxes and flux jacobians
       FEc = rho_prev*u_prev;
@@ -714,10 +732,10 @@ int main(int argc, char *argv[]) {
       K_qxGradV->addTerm( -ve->dx() );
       // MinvsqrtxK_qxGradV->addTerm( -sqrt(Cp*mu/Pr)*ve->dx() );
       MinvsqrtxK_qxGradV->addTerm( -sqrt(Cp/Pr)*mu_sqrt*ve->dx() );
-      F_cxGradV->addTerm( u_prev*vc->dx() + u_prev*u_prev*vm->dx() + R*T_prev*vm->dx() + Cv*T_prev*u_prev*ve->dx() 
+      F_cxGradV->addTerm( u_prev*vc->dx() + u_prev*u_prev*vm->dx() + R*T_prev*vm->dx() + Cv*T_prev*u_prev*ve->dx()
         + 0.5*u_prev*u_prev*u_prev*ve->dx() + R*T_prev*u_prev*ve->dx() );
       C_cxdVdt->addTerm( vc->dy() + u_prev*vm->dy() + Cv*T_prev*ve->dy() + 0.5*u_prev*u_prev*ve->dy() );
-      F_mxGradV->addTerm( rho_prev*vc->dx() + 2*rho_prev*u_prev*vm->dx() + Cv*T_prev*rho_prev*ve->dx() 
+      F_mxGradV->addTerm( rho_prev*vc->dx() + 2*rho_prev*u_prev*vm->dx() + Cv*T_prev*rho_prev*ve->dx()
         + 0.5*rho_prev*u_prev*u_prev*ve->dx() + rho_prev*u_prev*u_prev*ve->dx() + R*T_prev*rho_prev*ve->dx() - D_prev*ve->dx() );
       C_mxdVdt->addTerm( rho_prev*vm->dy() + rho_prev*u_prev*ve->dy() );
       F_exGradV->addTerm( R*rho_prev*vm->dx() + Cv*rho_prev*u_prev*ve->dx() + R*rho_prev*u_prev*ve->dx() );
@@ -894,7 +912,7 @@ int main(int argc, char *argv[]) {
         break;
 
         // Entropy Scaled Robust Norm 2
-        case 6:        
+        case 6:
         ip->addTerm( Msqrt_DxS );
         ip->addTerm( MinvsqrtxK_DxGradV );
         ip->addTerm( Msqrt_qxtau );
@@ -1059,7 +1077,7 @@ int main(int argc, char *argv[]) {
         break;
 
         // Entropy Scaled Robust Norm 7
-        case 16:        
+        case 16:
         ip->addTerm( Msqrt_DxS );
         ip->addTerm( MinvsqrtxK_DxGradV );
         ip->addTerm( Msqrt_qxtau );
@@ -1086,24 +1104,24 @@ int main(int argc, char *argv[]) {
       }
       break;
 
-      case 1:      
-      //    /$$$$$$                                                                           /$$     /$$                    
-      //   /$$__  $$                                                                         | $$    |__/                    
-      //  | $$  \__/  /$$$$$$  /$$$$$$$   /$$$$$$$  /$$$$$$   /$$$$$$  /$$    /$$  /$$$$$$  /$$$$$$   /$$  /$$$$$$  /$$$$$$$ 
+      case 1:
+      //    /$$$$$$                                                                           /$$     /$$
+      //   /$$__  $$                                                                         | $$    |__/
+      //  | $$  \__/  /$$$$$$  /$$$$$$$   /$$$$$$$  /$$$$$$   /$$$$$$  /$$    /$$  /$$$$$$  /$$$$$$   /$$  /$$$$$$  /$$$$$$$
       //  | $$       /$$__  $$| $$__  $$ /$$_____/ /$$__  $$ /$$__  $$|  $$  /$$/ |____  $$|_  $$_/  | $$ /$$__  $$| $$__  $$
       //  | $$      | $$  \ $$| $$  \ $$|  $$$$$$ | $$$$$$$$| $$  \__/ \  $$/$$/   /$$$$$$$  | $$    | $$| $$  \ $$| $$  \ $$
       //  | $$    $$| $$  | $$| $$  | $$ \____  $$| $$_____/| $$        \  $$$/   /$$__  $$  | $$ /$$| $$| $$  | $$| $$  | $$
       //  |  $$$$$$/|  $$$$$$/| $$  | $$ /$$$$$$$/|  $$$$$$$| $$         \  $/   |  $$$$$$$  |  $$$$/| $$|  $$$$$$/| $$  | $$
       //   \______/  \______/ |__/  |__/|_______/  \_______/|__/          \_/     \_______/   \___/  |__/ \______/ |__/  |__/
-      //                                                                                                                     
-      //                                                                                                                     
-      //    
+      //
+      //
+      //
       // Define Euler fluxes and flux jacobians
       FEc = m_prev;
       FEm = m_prev*m_prev/rho_prev+(gamma-1)*(E_prev-0.5*m_prev*m_prev/rho_prev);
       FEe = m_prev*E_prev/rho_prev+(gamma-1)*(E_prev-0.5*m_prev*m_prev/rho_prev)*m_prev/rho_prev;
       FEc_dU->addTerm( 1*m );
-      FEm_dU->addTerm( 2*m_prev/rho_prev*m - m_prev*m_prev/(rho_prev*rho_prev)*rho 
+      FEm_dU->addTerm( 2*m_prev/rho_prev*m - m_prev*m_prev/(rho_prev*rho_prev)*rho
             + (gamma-1)*E - (gamma-1)*m_prev/rho_prev*m + (gamma-1)*m_prev*m_prev/(2*rho_prev*rho_prev)*rho );
       FEe_dU->addTerm( E_prev/rho_prev*E + m_prev/rho_prev*E - m_prev*E_prev/(rho_prev*rho_prev)*rho
             + (gamma-1)*m_prev/rho_prev*E + (gamma-1)*E_prev/rho_prev*m - E_prev*m_prev/(rho_prev*rho_prev)*rho
@@ -1198,8 +1216,8 @@ int main(int argc, char *argv[]) {
       break;
 
       case 2:
-      //   /$$$$$$$$             /$$                                            
-      //  | $$_____/            | $$                                            
+      //   /$$$$$$$$             /$$
+      //  | $$_____/            | $$
       //  | $$       /$$$$$$$  /$$$$$$    /$$$$$$   /$$$$$$   /$$$$$$  /$$   /$$
       //  | $$$$$   | $$__  $$|_  $$_/   /$$__  $$ /$$__  $$ /$$__  $$| $$  | $$
       //  | $$__/   | $$  \ $$  | $$    | $$  \__/| $$  \ $$| $$  \ $$| $$  | $$
@@ -1208,7 +1226,7 @@ int main(int argc, char *argv[]) {
       //  |________/|__/  |__/   \___/  |__/       \______/ | $$____/  \____  $$
       //                                                    | $$       /$$  | $$
       //                                                    | $$      |  $$$$$$/
-      //                                                    |__/       \______/ 
+      //                                                    |__/       \______/
       // define alpha from notes
       FunctionPtr VePow1 = Teuchos::rcp( new PowerFunction(-Ve_prev, gamma));
       FunctionPtr VePow2 = Teuchos::rcp( new PowerFunction(-Ve_prev, -1.-gamma));
@@ -1231,7 +1249,7 @@ int main(int argc, char *argv[]) {
 
       FEm_dU->addTerm( (-Vm_prev*Vm_prev/Ve_prev+(gamma-1))*alpha_dU
             - 2*alpha*Vm_prev/Ve_prev*Vm + alpha*Vm_prev*Vm_prev/(Ve_prev*Ve_prev)*Ve );
-      
+
       FEe_dU->addTerm( Vm_prev/Ve_prev*(0.5*Vm_prev*Vm_prev/Ve_prev-gamma)*alpha_dU
             + alpha*(0.5*Vm_prev*Vm_prev/Ve_prev-gamma)/Ve_prev*Vm
             - alpha*Vm_prev/(Ve_prev*Ve_prev)*(0.5*Vm_prev*Vm_prev/Ve_prev-gamma)*Ve
@@ -1337,16 +1355,16 @@ int main(int argc, char *argv[]) {
     FunctionPtr mom0 = Teuchos::rcp( new DiscontinuousInitialCondition(xint, uL*rhoL, uR*rhoR) );
     FunctionPtr E0    = Teuchos::rcp( new DiscontinuousInitialCondition(xint, (rhoL*Cv*TL+0.5*rhoL*uL*uL), (rhoR*Cv*TR+0.5*rhoR*uR*uR)) );
     if (problem == 6)
-      E0 = Teuchos::rcp( new PulseInitialCondition(numPreRefs, 1./Cv, 1e-6) );
+      E0 = Teuchos::rcp( new PulseInitialCondition(1./8, 1./Cv, 0) );
     // FunctionPtr rho0  = Teuchos::rcp( new RampedInitialCondition(xint, rhoL, rhoR, (xmax-xmin)/numX) );
     // FunctionPtr mom0 = Teuchos::rcp( new RampedInitialCondition(xint, uL*rhoL, uR*rhoR, (xmax-xmin)/numX) );
     // FunctionPtr E0    = Teuchos::rcp( new RampedInitialCondition(xint, (rhoL*Cv*TL+0.5*rhoL*uL*uL), (rhoR*Cv*TR+0.5*rhoR*uR*uR), (xmax-xmin)/numX) );
     bc->addDirichlet(Fc, left, -rhoL*uL*one);
-    // bc->addDirichlet(Fc, right, rhoR*uR*one);
-    // bc->addDirichlet(Fm, left, -(rhoL*uL*uL+R*rhoL*TL)*one);
-    bc->addDirichlet(uhat, right, zero);
-    bc->addDirichlet(uhat, left, zero);
+    bc->addDirichlet(Fc, right, rhoR*uR*one);
+    bc->addDirichlet(Fm, left, -(rhoL*uL*uL+R*rhoL*TL)*one);
     bc->addDirichlet(Fm, right, (rhoR*uR*uR+R*rhoR*TR)*one);
+    // bc->addDirichlet(uhat, right, zero);
+    // bc->addDirichlet(uhat, left, zero);
     bc->addDirichlet(Fe, left, -(rhoL*Cv*TL+0.5*rhoL*uL*uL+R*rhoL*TL)*uL*one);
     bc->addDirichlet(Fe, right, (rhoR*Cv*TR+0.5*rhoR*uR*uR+R*rhoR*TR)*uR*one);
     // cout << "R = " << R << " Cv = " << Cv << " Cp = " << Cp << " gamma = " << gamma << endl;
@@ -1362,7 +1380,7 @@ int main(int argc, char *argv[]) {
 
   // rhs->addTerm( -1./mu*D_prev * S );
   // rhs->addTerm( -4./3*m_prev/rho_prev * S->dx() );
-  // cout << 
+  // cout <<
 
   ////////////////////   SOLVE & REFINE   ///////////////////////
   vector< Teuchos::RCP<Solution> > solutions;
@@ -1383,7 +1401,7 @@ int main(int argc, char *argv[]) {
     }
     meshes[slab]->registerSolution(backgroundFlows[slab]);
     meshes[slab]->registerSolution(solutions[slab]);
-    double energyThreshold = 0.2; // for mesh refinements
+    double energyThreshold = 0.4; // for mesh refinements
     RefinementStrategy refinementStrategy( solution, energyThreshold );
     VTKExporter exporter(backgroundFlows[slab], meshes[slab], varFactory);
     set<int> nonlinearVars;
@@ -1408,10 +1426,10 @@ int main(int argc, char *argv[]) {
         double alpha = 1.0;
         // bool useLineSearch = false;
         // amount of enriching of grid points on which to ensure positivity
-        int posEnrich = 5; 
+        int posEnrich = 5;
         if (useLineSearch)
         {
-          double lineSearchFactor = .5; 
+          double lineSearchFactor = .5;
           double eps = .001;
           FunctionPtr rhoTemp = Function::solution(rho,backgroundFlows[slab]) + alpha*Function::solution(rho,solution) - Function::constant(eps);
           FunctionPtr TTemp = Function::solution(T,backgroundFlows[slab]) + alpha*Function::solution(T,solution) - Function::constant(eps);
@@ -1449,10 +1467,11 @@ int main(int argc, char *argv[]) {
         stringstream outfile;
         outfile << problemName << norm << "_" << slab << "_" << refIndex;
         exporter.exportSolution(outfile.str());
+        FunctionPtr rho_prev = Function::solution(rho,backgroundFlows[slab]);
         FunctionPtr D_prev = Function::solution(D,backgroundFlows[slab]);
-        // FunctionPtr div_indicator = Teuchos::rcp( new DivergenceIndicator(D_prev) );
-        // FunctionPtr errorFunction = Teuchos::rcp( new ErrorFunction(solution) );
+        FunctionPtr div_indicator = Teuchos::rcp( new DivergenceIndicator(rho_prev, rho_prev, D_prev) );
         // exporter.exportFunction(div_indicator,"Indicator"+Teuchos::toString(refIndex));
+        // FunctionPtr errorFunction = Teuchos::rcp( new ErrorFunction(solution) );
         // exporter.exportFunction(errorFunction,"Error"+Teuchos::toString(refIndex));
       }
 
