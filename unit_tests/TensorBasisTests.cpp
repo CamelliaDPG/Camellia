@@ -39,9 +39,9 @@ namespace {
     std::vector< BasisPtr > spatialBases;
     {
       int H1Order = spatialPolyOrder + 1;
-      BasisPtr basis = basisFactory->getBasis(H1Order, shards::Line<2>::key, IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD);
+      BasisPtr basis = basisFactory->getBasis(H1Order, shards::Line<2>::key, IntrepidExtendedTypes::FUNCTION_SPACE_HVOL);
       spatialBases.push_back(basis);
-      basis = basisFactory->getBasis(H1Order, shards::Line<2>::key, IntrepidExtendedTypes::FUNCTION_SPACE_HVOL);
+      basis = basisFactory->getBasis(H1Order, shards::Line<2>::key, IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD);
       spatialBases.push_back(basis);
       basis = basisFactory->getBasis(H1Order, shards::Quadrilateral<4>::key, IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD);
       spatialBases.push_back(basis);
@@ -61,7 +61,7 @@ namespace {
       spatialBases.push_back(basis);
     }
     
-    int timePolyOrder = 2;
+    int timePolyOrder = 1;
     BasisPtr timeBasis = basisFactory->getBasis(timePolyOrder + 1, shards::Line<2>::key, IntrepidExtendedTypes::FUNCTION_SPACE_HVOL);
     
     typedef Intrepid::FieldContainer<double> FC;
@@ -95,9 +95,9 @@ namespace {
     spacePointsForDimension[2] = spatialPoints3D;
     
     FC temporalPoints(numTimePoints, 1);
-    temporalPoints(0,0) = -0.5; // these are in reference space; we don't actually have negative time values
-    temporalPoints(1,0) = 0.33;
-    temporalPoints(2,0) = 1.0;
+    temporalPoints(0,0) = 0.5; // these are in reference space; we don't actually have negative time values
+    temporalPoints(1,0) = 0.5; // 0.33;
+    temporalPoints(2,0) = 0.5; // 1.0;
     
     int numTensorPoints = numSpacePoints * numTimePoints;
     for (int spaceDim=1; spaceDim<=3; spaceDim++) {
@@ -162,7 +162,18 @@ namespace {
       spatialBasis->getValues(spatialValues, spatialPoints, op);
       timeBasis->getValues(temporalValues, temporalPoints, timeOp);
       
+//      cout << "spatialPoints:\n" << spatialPoints;
+//      cout << "temporalPoints:\n" << temporalPoints;
+//      
+//      cout << "tensorPoints:\n" << tensorPoints;
+//      
+//      cout << "spatialValues:\n" << spatialValues;
+//      cout << "temporalValues:\n" << temporalValues;
+      
       tensorBasis->getValues(tensorValues, tensorPoints, op, timeOp);
+      
+//      cout << "tensorValues:\n" << tensorValues;
+      
       
       vector<int> fieldCoord(2);
       for (int fieldOrdinal_i = 0; fieldOrdinal_i < spatialBasis->getCardinality(); fieldOrdinal_i++) {
@@ -186,7 +197,7 @@ namespace {
               }
             }
             for (int pointOrdinal_j = 0; pointOrdinal_j < numTimePoints; pointOrdinal_j++) {
-              double timeValue = temporalValues(pointOrdinal_j, 0);
+              double timeValue = temporalValues(fieldOrdinal_j, pointOrdinal_j);
               int pointOrdinal_tensor = pointOrdinal_i * numTimePoints + pointOrdinal_j;
               vector<double> tensorValue;
               if (rank == 0) {
@@ -216,8 +227,6 @@ namespace {
           }
         }
       }
-      
-      // TODO: test that the values are correct
     }
   }
 

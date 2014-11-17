@@ -202,6 +202,9 @@ namespace Camellia {
     ArrayScalar temporalValues(_temporalBasis->getCardinality(), numPoints);
     _temporalBasis->getValues(temporalValues, refPointsTemporal, temporalOperatorType);
     
+//    cout << "spatialValues:\n" << spatialValues;
+//    cout << "temporalValues:\n" << temporalValues;
+    
     Teuchos::Array<int> spaceTimeValueCoordinate(spaceTimeValuesDimensions.size(), 0);
     Teuchos::Array<int> spatialValueCoordinate(spaceTimeValuesDimensions.size(), 0);
     
@@ -214,7 +217,7 @@ namespace Camellia {
         for (int pointOrdinal=0; pointOrdinal<numPoints; pointOrdinal++) {
           spaceTimeValueCoordinate[1] = pointOrdinal;
           spatialValueCoordinate[1] = pointOrdinal;
-          double temporalValue = temporalValues[pointOrdinal];
+          double temporalValue = temporalValues(timeFieldOrdinal,pointOrdinal);
           int spaceTimeValueEnumeration = values.getEnumeration(spaceTimeValueCoordinate);
           int spatialValueEnumeration = spatialValues.getEnumeration(spatialValueCoordinate);
           for (int offset=0; offset<valuesPerPoint; offset++) {
