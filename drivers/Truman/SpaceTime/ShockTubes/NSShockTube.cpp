@@ -828,6 +828,71 @@ int main(int argc, char *argv[]) {
       ////////////////////   DEFINE INNER PRODUCT(S)   ///////////////////////
       switch (norm)
       {
+        // case -1:
+        // // Decoupled Eulerian and viscous norm
+        // // Might need to also elimnate D_prev term...
+        // ip->addTerm(vm->dx() + u_prev*ve->dx());
+        // ip->addTerm(ve->dx());
+        // ip->addTerm(u_prev*vc->dx()+vc->dy()+u_prev*u_prev*vm->dx()+R*T_prev*vm->dx()+u_prev*vm->dy()
+        //   +Cv*T_prev*u_prev*ve->dx()+0.5*u_prev*u_prev*u_prev*ve->dx()+R*T_prev*u_prev*ve->dx()+Cv*T_prev*ve->dy()+0.5*u_prev*u_prev*ve->dy());
+        // ip->addTerm(rho_prev*vc->dx()+rho_prev*u_prev*vm->dx()+rho_prev*u_prev*vm->dx()+rho_prev*vm->dy()+Cv*rho_prev*T_prev*ve->dx()
+        //   +0.5*rho_prev*u_prev*u_prev*ve->dx()+0.5*rho_prev*u_prev*u_prev*ve->dx()+0.5*rho_prev*u_prev*u_prev*ve->dx()
+        //   +R*rho_prev*T_prev*ve->dx()-D_prev*ve->dx()+0.5*rho_prev*u_prev*ve->dy()+0.5*rho_prev*u_prev*ve->dy());
+        // ip->addTerm(R*rho_prev*vm->dx()+Cv*rho_prev*u_prev*ve->dx()+R*rho_prev*u_prev*ve->dx()+Cv*rho_prev*ve->dy());
+        // ip->addTerm(1./mu*S);
+        // ip->addTerm(Pr/(Cp*mu)*tau);
+        // ip->addTerm(2*S->dx());
+        // ip->addTerm(tau->dx());
+        // ip->addTerm(vc);
+        // ip->addTerm(vm);
+        // ip->addTerm(ve);
+        // break;
+
+        case -1:
+        ip->addTerm( M_DxS );
+        ip->addTerm( M_qxtau );
+        ip->addTerm( K_DxGradV );
+        ip->addTerm( K_qxGradV );
+        ip->addTerm( F_cxGradV + C_cxdVdt );
+        ip->addTerm( F_mxGradV + C_mxdVdt );
+        ip->addTerm( F_exGradV + C_exdVdt );
+        ip->addTerm( G_mxGradPsi );
+        ip->addTerm( G_exGradPsi );
+        ip->addTerm(vc);
+        ip->addTerm(vm);
+        ip->addTerm(ve);
+        break;
+
+        case -2:
+        ip->addTerm( M_DxS );
+        ip->addTerm( M_qxtau );
+        ip->addTerm( K_DxGradV );
+        ip->addTerm( K_qxGradV );
+        ip->addTerm( invA0_c*(F_cxGradV + C_cxdVdt) );
+        ip->addTerm( invA0_m*(F_mxGradV + C_mxdVdt) );
+        ip->addTerm( invA0_e*(F_exGradV + C_exdVdt) );
+        ip->addTerm( invA0_m*G_mxGradPsi );
+        ip->addTerm( invA0_e*G_exGradPsi );
+        ip->addTerm( A0_c*(vc) );
+        ip->addTerm( A0_m*(vm) );
+        ip->addTerm( A0_e*(ve) );
+        break;
+
+        case -3:
+        ip->addTerm( K_DxGradV );
+        ip->addTerm( K_qxGradV );
+        ip->addTerm( G_cxGradPsi - F_cxGradV - C_cxdVdt );
+        ip->addTerm( G_mxGradPsi - F_mxGradV - C_mxdVdt );
+        ip->addTerm( G_exGradPsi - F_exGradV - C_exdVdt );
+        ip->addTerm( M_DxS );
+        ip->addTerm( M_qxtau );
+        ip->addTerm( G_mxGradPsi );
+        ip->addTerm( G_exGradPsi );
+        ip->addTerm(vc);
+        ip->addTerm(vm);
+        ip->addTerm(ve);
+        break;
+
         // Automatic graph norm
         case 0:
         ips[slab] = bf->graphNorm();
