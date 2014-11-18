@@ -424,7 +424,9 @@ LocalDofMapperPtr GMGOperator::getLocalCoefficientMap(GlobalIndexType fineCellID
       Space varSpace = trialVar->space();
       IntrepidExtendedTypes::EFunctionSpaceExtended varFS = efsForSpace(varSpace);
       if (! IntrepidExtendedTypes::functionSpaceIsDiscontinuous(varFS)) {
-        cout << "WARNING: function space for var " << trialVar->name() << " is not discontinuous, and GMGOperator does not yet support continuous variables, even continuous trace variables (i.e. all trace variables must be in L^2 or some other discontinuous space, like HGRAD_DISC).\n";
+        int rank = Teuchos::GlobalMPISession::getRank();
+        if (rank == 0)
+          cout << "WARNING: function space for var " << trialVar->name() << " is not discontinuous, and GMGOperator does not yet support continuous variables, even continuous trace variables (i.e. all trace variables must be in L^2 or some other discontinuous space, like HGRAD_DISC).\n";
       }
       
       if (coarseTrialOrdering->getNumSidesForVarID(trialID) == 1) { // field variable
