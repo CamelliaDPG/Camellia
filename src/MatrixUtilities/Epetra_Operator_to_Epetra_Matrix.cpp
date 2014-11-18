@@ -12,8 +12,8 @@
 
 #include "IndexType.h"
 
-#include <set.h>
-#include <map.h>
+#include <set>
+#include <map>
 
 Teuchos::RCP<Epetra_CrsMatrix> Epetra_Operator_to_Epetra_Matrix::constructInverseMatrix(const Epetra_Operator &op, const Epetra_Map &map) {
   int numEntriesPerRow = 0;
