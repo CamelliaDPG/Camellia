@@ -29,7 +29,7 @@
 
 #include "Teuchos_GlobalMPISession.hpp"
 
-#include "IfPack_LocalFilter.h"
+#include "Ifpack_LocalFilter.h"
 
 #include "Epetra_SerialComm.h"
 
