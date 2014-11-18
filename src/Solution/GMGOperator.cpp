@@ -42,6 +42,8 @@
 
 #include "Epetra_Operator_to_Epetra_Matrix.h"
 
+#include "AdditiveSchwarz.h"
+
 GMGOperator::GMGOperator(BCPtr zeroBCs, MeshPtr coarseMesh, IPPtr coarseIP,
                          MeshPtr fineMesh, Teuchos::RCP<DofInterpreter> fineDofInterpreter, Epetra_Map finePartitionMap,
                          Teuchos::RCP<Solver> coarseSolver, bool useStaticCondensation, bool fineSolverUsesDiagonalScaling) :  _finePartitionMap(finePartitionMap), _br(true) {
@@ -71,7 +73,7 @@ GMGOperator::GMGOperator(BCPtr zeroBCs, MeshPtr coarseMesh, IPPtr coarseIP,
   _coarseSolver = coarseSolver;
   _haveSolvedOnCoarseMesh = false;
   
-  _smootherType = ADDITIVE_SCHWARZ; // default
+  _smootherType = IFPACK_ADDITIVE_SCHWARZ; // default
   _smootherOverlap = 0;
     
   if (( coarseMesh->meshUsesMaximumRule()) || (! fineMesh->meshUsesMinimumRule()) ) {
@@ -986,19 +988,30 @@ void GMGOperator::setUpSmoother(Epetra_CrsMatrix *fineStiffnessMatrix) {
       List.set("partitioner: local parts", localParts);
     }
       break;
-    case ADDITIVE_SCHWARZ:
+    case IFPACK_ADDITIVE_SCHWARZ:
+    case CAMELLIA_ADDITIVE_SCHWARZ:
     {
 //      cout << "Using additive Schwarz smoother.\n";
       int OverlapLevel = _smootherOverlap;
       
       bool useILU = false;
       
-      if (useILU) {
-        // something to try out to reduce the memory footprint (and other costs) of the Schwarz inversions
-        smoother = Teuchos::rcp(new Ifpack_AdditiveSchwarz<Ifpack_ILU>(fineStiffnessMatrix, OverlapLevel) );
-        List.set("fact: level of fill", 2);
+      if (choice==IFPACK_ADDITIVE_SCHWARZ) {
+        if (useILU) {
+          // something to try out to reduce the memory footprint (and other costs) of the Schwarz inversions
+          smoother = Teuchos::rcp(new Ifpack_AdditiveSchwarz<Ifpack_ILU>(fineStiffnessMatrix, OverlapLevel) );
+          List.set("fact: level of fill", 2);
+        } else {
+          smoother = Teuchos::rcp(new Ifpack_AdditiveSchwarz<Ifpack_Amesos>(fineStiffnessMatrix, OverlapLevel) );
+        }
       } else {
-        smoother = Teuchos::rcp(new Ifpack_AdditiveSchwarz<Ifpack_Amesos>(fineStiffnessMatrix, OverlapLevel) );
+        if (useILU) {
+          // something to try out to reduce the memory footprint (and other costs) of the Schwarz inversions
+          smoother = Teuchos::rcp(new Camellia::AdditiveSchwarz<Ifpack_ILU>(fineStiffnessMatrix, OverlapLevel, _fineMesh, _fineDofInterpreter) );
+          List.set("fact: level of fill", 2);
+        } else {
+          smoother = Teuchos::rcp(new Camellia::AdditiveSchwarz<Ifpack_Amesos>(fineStiffnessMatrix, OverlapLevel, _fineMesh, _fineDofInterpreter) );
+        }
       }
       
       List.set("schwarz: combine mode", "Add"); // The PDF doc says to use "Insert" to maintain symmetry, but the HTML docs (which are more recent) say to use "Add".  http://trilinos.org/docs/r11.10/packages/ifpack/doc/html/index.html
@@ -1014,7 +1027,7 @@ void GMGOperator::setUpSmoother(Epetra_CrsMatrix *fineStiffnessMatrix) {
     cout << "WARNING: In GMGOperator, smoother->SetParameters() returned with err " << err << endl;
   }
   
-//  if (_smootherType != ADDITIVE_SCHWARZ) {
+//  if (_smootherType != IFPACK_ADDITIVE_SCHWARZ) {
     // not real sure why, but in the doc examples, this isn't called for additive schwarz
     err = smoother->Initialize();
     if (err != 0) {
