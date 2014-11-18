@@ -5,15 +5,15 @@
 #include <set>
 #include <string>
 
-using namespace std;
-
 namespace Camellia {
-  void print(string name, vector<int> data);
-  void print(string name, vector<unsigned> data);
-  void print(string name, vector<double> data);
-  void print(string name, set<unsigned> data);
-  void print(string name, set<int> data);
-  void print(string name, set<double> data);
+  void print(std::string name, std::vector<int> data);
+  void print(std::string name, std::vector<unsigned> data);
+  void print(std::string name, std::vector<long long> data);
+  void print(std::string name, std::vector<double> data);
+  void print(std::string name, std::set<unsigned> data);
+  void print(std::string name, std::set<int> data);
+  void print(std::string name, std::set<long long> data);
+  void print(std::string name, std::set<double> data);
 }
 
 #endif
