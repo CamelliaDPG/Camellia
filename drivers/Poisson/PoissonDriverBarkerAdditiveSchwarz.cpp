@@ -9,8 +9,19 @@
 #include "Ifpack_AdditiveSchwarz.h"
 #include "Ifpack_Amesos.h"
 
-Teuchos::RCP<Epetra_Operator> additiveSchwarzPreconditioner(Epetra_RowMatrix* A, int overlapLevel) {
-  Teuchos::RCP<Ifpack_Preconditioner> preconditioner = Teuchos::rcp(new Ifpack_AdditiveSchwarz<Ifpack_Amesos>(A, overlapLevel) );
+#include "AdditiveSchwarz.h"
+
+#include "Teuchos_GlobalMPISession.hpp"
+
+#include "Epetra_Operator_to_Epetra_Matrix.h"
+
+// EpetraExt includes
+#include "EpetraExt_RowMatrixOut.h"
+
+using namespace Camellia;
+
+Teuchos::RCP<Epetra_Operator> CamelliaAdditiveSchwarzPreconditioner(Epetra_RowMatrix* A, int overlapLevel, MeshPtr mesh, Teuchos::RCP<DofInterpreter> dofInterpreter) {
+  Teuchos::RCP<Ifpack_Preconditioner> preconditioner = Teuchos::rcp(new AdditiveSchwarz<Ifpack_Amesos>(A, overlapLevel, mesh, dofInterpreter) );
   
   Teuchos::ParameterList List;
 
@@ -19,7 +30,6 @@ Teuchos::RCP<Epetra_Operator> additiveSchwarzPreconditioner(Epetra_RowMatrix* A,
   if (err != 0) {
     cout << "WARNING: In additiveSchwarzPreconditioner, preconditioner->SetParameters() returned with err " << err << endl;
   }
-  
 
   err = preconditioner->Initialize();
   if (err != 0) {
@@ -34,6 +44,31 @@ Teuchos::RCP<Epetra_Operator> additiveSchwarzPreconditioner(Epetra_RowMatrix* A,
   return preconditioner;
 }
 
+Teuchos::RCP<Epetra_Operator> IfPackAdditiveSchwarzPreconditioner(Epetra_RowMatrix* A, int overlapLevel) {
+  Teuchos::RCP<Ifpack_Preconditioner> preconditioner = Teuchos::rcp(new Ifpack_AdditiveSchwarz<Ifpack_Amesos>(A, overlapLevel) );
+  
+  Teuchos::ParameterList List;
+  
+  List.set("schwarz: combine mode", "Add"); // The PDF doc says to use "Insert" to maintain symmetry, but the HTML docs (which are more recent) say to use "Add".  http://trilinos.org/docs/r11.10/packages/ifpack/doc/html/index.html
+  int err = preconditioner->SetParameters(List);
+  if (err != 0) {
+    cout << "WARNING: In additiveSchwarzPreconditioner, preconditioner->SetParameters() returned with err " << err << endl;
+  }
+  
+  
+  err = preconditioner->Initialize();
+  if (err != 0) {
+    cout << "WARNING: In additiveSchwarzPreconditioner, preconditioner->Initialize() returned with err " << err << endl;
+  }
+  err = preconditioner->Compute();
+  
+  if (err != 0) {
+    cout << "WARNING: In additiveSchwarzPreconditioner, preconditioner->Compute() returned with err = " << err << endl;
+  }
+  
+  return preconditioner;
+}
+
 class AztecSolver : public Solver {
   int _maxIters;
   double _tol;
@@ -41,8 +76,22 @@ class AztecSolver : public Solver {
   bool _useSchwarzPreconditioner;
   
   int _azOutputLevel;
+  
+  MeshPtr _mesh;
+  Teuchos::RCP<DofInterpreter> _dofInterpreter;
 public:
   AztecSolver(int maxIters, double tol, int schwarzOverlapLevel, bool useSchwarzPreconditioner) {
+    _maxIters = maxIters;
+    _tol = tol;
+    _schwarzOverlap = schwarzOverlapLevel;
+    _useSchwarzPreconditioner = useSchwarzPreconditioner;
+    _azOutputLevel = 1;
+  }
+  
+  AztecSolver(int maxIters, double tol, int schwarzOverlapLevel, bool useSchwarzPreconditioner,
+              MeshPtr mesh, Teuchos::RCP<DofInterpreter> dofInterpreter) {
+    _mesh = mesh;
+    _dofInterpreter = dofInterpreter;
     _maxIters = maxIters;
     _tol = tol;
     _schwarzOverlap = schwarzOverlapLevel;
@@ -56,7 +105,20 @@ public:
     
     Epetra_RowMatrix *A = problem().GetMatrix();
     
-    Teuchos::RCP<Epetra_Operator> preconditioner = additiveSchwarzPreconditioner(A, _schwarzOverlap);
+    Teuchos::RCP<Epetra_Operator> preconditioner;
+    if (_mesh != Teuchos::null) {
+      preconditioner = CamelliaAdditiveSchwarzPreconditioner(A, _schwarzOverlap, _mesh, _dofInterpreter);
+      
+//      Teuchos::RCP< Epetra_CrsMatrix > M;
+//      M = Epetra_Operator_to_Epetra_Matrix::constructInverseMatrix(*preconditioner, A->RowMatrixRowMap());
+//
+//      int rank = Teuchos::GlobalMPISession::getRank();
+//      if (rank==0) cout << "writing preconditioner to /tmp/preconditioner.dat.\n";
+//      EpetraExt::RowMatrixToMatrixMarketFile("/tmp/preconditioner.dat",*M, NULL, NULL, false);
+      
+    } else {
+      preconditioner = IfPackAdditiveSchwarzPreconditioner(A, _schwarzOverlap);
+    }
     
     if (_useSchwarzPreconditioner) {
       solver.SetPrecOperator(preconditioner.get());
@@ -73,27 +135,31 @@ public:
     
     const double* status = solver.GetAztecStatus();
     int whyTerminated = status[AZ_why];
-    switch (whyTerminated) {
-      case AZ_normal:
-        cout << "whyTerminated: AZ_normal " << endl;
-        break;
-      case AZ_param:
-        cout << "whyTerminated: AZ_param " << endl;
-        break;
-      case AZ_breakdown:
-        cout << "whyTerminated: AZ_breakdown " << endl;
-        break;
-      case AZ_loss:
-        cout << "whyTerminated: AZ_loss " << endl;
-        break;
-      case AZ_ill_cond:
-        cout << "whyTerminated: AZ_ill_cond " << endl;
-        break;
-      case AZ_maxits:
-        cout << "whyTerminated: AZ_maxits " << endl;
-        break;
-      default:
-        break;
+    int rank = Teuchos::GlobalMPISession::getRank();
+    
+    if (rank==0) {
+      switch (whyTerminated) {
+        case AZ_normal:
+  //        cout << "whyTerminated: AZ_normal " << endl;
+          break;
+        case AZ_param:
+          cout << "whyTerminated: AZ_param " << endl;
+          break;
+        case AZ_breakdown:
+          cout << "whyTerminated: AZ_breakdown " << endl;
+          break;
+        case AZ_loss:
+          cout << "whyTerminated: AZ_loss " << endl;
+          break;
+        case AZ_ill_cond:
+          cout << "whyTerminated: AZ_ill_cond " << endl;
+          break;
+        case AZ_maxits:
+          cout << "whyTerminated: AZ_maxits " << endl;
+          break;
+        default:
+          break;
+      }
     }
     
     return solveResult;
@@ -146,6 +212,8 @@ int main(int argc, char *argv[]) {
   bool conformingTraces = true;
   bool precondition = true;
   
+  bool useCamelliaAdditiveSchwarz = true;
+  
   int numCells = 2;
   
   int AztecOutputLevel = 1;
@@ -158,9 +226,12 @@ int main(int argc, char *argv[]) {
   cmdp.setOption("delta_k", &delta_k, "test space polynomial order enrichment");
   
   cmdp.setOption("useConformingTraces", "useNonConformingTraces", &conformingTraces);
+  cmdp.setOption("useCamelliaAdditiveSchwarz", "useIfPackAdditiveSchwarz", &useCamelliaAdditiveSchwarz);
   cmdp.setOption("precondition", "dontPrecondition", &precondition);
 
   cmdp.setOption("overlap", &schwarzOverlap, "Schwarz overlap level");
+  
+  cmdp.setOption("maxIterations", &cgMaxIterations, "Max iterations for CG solve.");
   
   cmdp.setOption("azOutput", &AztecOutputLevel, "Aztec output level");
   cmdp.setOption("numCells", &numCells, "number of cells in the initial mesh");
@@ -232,7 +303,14 @@ int main(int argc, char *argv[]) {
   
   SolutionPtr solution = Solution::solution(mesh, bc, rhs, graphNorm);
   
-  Teuchos::RCP<Solver> solver = Teuchos::rcp( new AztecSolver(cgMaxIterations,cgTol,schwarzOverlap,precondition) );
+  Teuchos::RCP<Solver> solver;
+  if (useCamelliaAdditiveSchwarz) {
+    solver = Teuchos::rcp( new AztecSolver(cgMaxIterations,cgTol,schwarzOverlap,precondition,mesh, solution->getDofInterpreter()) );
+  } else {
+    solver = Teuchos::rcp( new AztecSolver(cgMaxIterations,cgTol,schwarzOverlap,precondition) );
+  }
+  
+  solution->setWriteMatrixToFile(true, "/tmp/A_barker.dat");
   
   solution->solve(solver);
   
