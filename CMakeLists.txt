@@ -161,6 +161,7 @@ link_libraries(
   Camellia
   ${Trilinos_LIBRARIES}
   ${Trilinos_TPL_LIBRARIES}
+  ${ADDITIONAL_LIBRARIES}
   # Xdmd
   # hdf5_cpp
   #  dmumps
