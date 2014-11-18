@@ -270,7 +270,7 @@ int main(int argc, char *argv[]) {
     
     gmgSolver->setAztecOutput(AztecOutputLevel);
     gmgSolver->setUseConjugateGradient(true);
-    gmgSolver->gmgOperator().setSmootherType(GMGOperator::ADDITIVE_SCHWARZ);
+    gmgSolver->gmgOperator().setSmootherType(GMGOperator::IFPACK_ADDITIVE_SCHWARZ);
     gmgSolver->gmgOperator().setSmootherOverlap(smootherOverlap);
     
     fineSolver = Teuchos::rcp( gmgSolver );
