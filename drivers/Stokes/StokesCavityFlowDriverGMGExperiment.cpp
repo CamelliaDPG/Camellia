@@ -478,7 +478,7 @@ int main(int argc, char *argv[]) {
     gmgSolver->setApplySmoothingOperator(applyDiagonalSmoothing);
     gmgSolver->setUseConjugateGradient(useCG);
     gmgSolver->setUseDiagonalScaling(useDiagonalScaling);
-    gmgSolver->gmgOperator().setSmootherType(GMGOperator::ADDITIVE_SCHWARZ);
+    gmgSolver->gmgOperator().setSmootherType(GMGOperator::IFPACK_ADDITIVE_SCHWARZ);
     gmgSolver->gmgOperator().setSmootherOverlap(smootherOverlap);
     fineSolver = Teuchos::rcp( gmgSolver );
   } else {
@@ -578,7 +578,7 @@ int main(int argc, char *argv[]) {
       gmgSolver->setApplySmoothingOperator(applyDiagonalSmoothing);
       gmgSolver->setUseConjugateGradient(useCG);
       gmgSolver->setUseDiagonalScaling(useDiagonalScaling);
-      gmgSolver->gmgOperator().setSmootherType(GMGOperator::ADDITIVE_SCHWARZ);
+      gmgSolver->gmgOperator().setSmootherType(GMGOperator::IFPACK_ADDITIVE_SCHWARZ);
       gmgSolver->gmgOperator().setSmootherOverlap(smootherOverlap);
       fineSolver = Teuchos::rcp( gmgSolver );
     }
