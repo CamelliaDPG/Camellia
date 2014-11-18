@@ -1,15 +1,8 @@
 cmake_minimum_required(VERSION 2.6)
-IF(NOT CAMELLIA_OPTIONS_CONFIGURED)
-  include(ConfigureOptions.cmake)
-ENDIF()
+#IF(NOT CAMELLIA_OPTIONS_CONFIGURED)
+#  include(ConfigureOptions.cmake)
+#ENDIF()
 
-project(Camellia)
-
-configure_file(
-  "${PROJECT_SOURCE_DIR}/src/include/CamelliaConfig.h.in"
-  "${PROJECT_BINARY_DIR}/CamelliaConfig.h"
-)
-include_directories(${PROJECT_BINARY_DIR})
 
 # Set Camellia directories
 set(CAMELLIA_SOURCE_DIR src)
@@ -25,6 +18,10 @@ set(DRIVER_DIR drivers)
 
 if (ZLIB_LIB)
   link_libraries(${ZLIB_LIB})
+endif()
+
+if (OMP_INCLUDE)
+  include_directories(${OMP_INCLUDE})
 endif()
 
 if(MPI_INCLUDE)
@@ -48,6 +45,15 @@ endif()
 
 if(SCALAPACK_LIB)
   link_libraries(${SCALAPACK_LIB})
+endif()
+
+if(ADDITIONAL_LIBRARY_DIRS)
+  MESSAGE("ADDITIONAL_LIBRARY_DIRS: ${ADDITIONAL_LIBRARY_DIRS}")
+  MESSAGE("ADDITIONAL_LIBRARIES: ${ADDITIONAL_LIBRARIES}")
+  link_directories(${ADDITIONAL_LIBRARY_DIRS})
+  set(Trilinos_TPL_LIBRARIES ${Trilinos_TPL_LIBRARIES}
+${ADDITIONAL_LIBRARIES})
+#  link_libraries(${ADDITIONAL_LIBRARIES})
 endif()
 
 # adding boost    
@@ -115,6 +121,15 @@ IF(NOT CMAKE_Fortran_COMPILER)
   MESSAGE("Setting Fortran compiler.")
   SET(CMAKE_Fortran_COMPILER ${Trilinos_Fortran_COMPILER})
 ENDIF()
+
+project(Camellia)
+
+configure_file(
+  "${PROJECT_SOURCE_DIR}/src/include/CamelliaConfig.h.in"
+  "${PROJECT_BINARY_DIR}/CamelliaConfig.h"
+)
+
+include_directories(${PROJECT_BINARY_DIR})
 
 # Find all library source files
 FILE(GLOB_RECURSE LIB_SOURCES "${CAMELLIA_SOURCE_DIR}/*.cpp")
