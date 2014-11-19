@@ -52,7 +52,7 @@ void OverlappingRowMatrix::BuildMap(int OverlapLevel_in)
     std::set<GlobalIndexType> cellNeighbors;
     for (std::set<GlobalIndexType>::iterator cellIDIt = lastNeighbors.begin(); cellIDIt != lastNeighbors.end(); cellIDIt++) {
       CellPtr cell = mesh_->getTopology()->getCell(*cellIDIt);
-      int numSides = cell->topology()->getSideCount();
+      int numSides = cell->getSideCount();
       for (int sideOrdinal=0; sideOrdinal<numSides; sideOrdinal++) {
         pair<GlobalIndexType, unsigned> neighborInfo = cell->getNeighbor(sideOrdinal);
         if (neighborInfo.first != -1) { // -1 indicates boundary/no neighbor
@@ -135,14 +135,6 @@ void OverlappingRowMatrix::BuildMap(int OverlapLevel_in)
     TmpMatrix->FillComplete(A().OperatorDomainMap(),*TmpMap);
   }
   
-//  // in case A's ColMap doesn't have these degrees of freedom (but it should; hence commented out)
-//  for (typename std::set<int_type>::iterator dofIt = externalDofIndices.begin(); dofIt != externalDofIndices.end(); dofIt++) {
-//    int_type GID = *dofIt;
-//    if (find(ExtElements.begin(),ExtElements.end(),GID) == ExtElements.end()) {
-//      ExtElements.push_back(GID);
-//    }
-//  }
-  
   // build the map containing all the nodes (original
   // matrix + extended matrix)
   std::vector<int_type> list(NumMyRowsA_ + ExtElements.size());
@@ -153,6 +145,8 @@ void OverlappingRowMatrix::BuildMap(int OverlapLevel_in)
   
   int rank = Teuchos::GlobalMPISession::getRank();
   
+//  if (rank==0) cout << "Overlap level: " << OverlapLevel_in << endl;
+//  
 //  { // DEBUGGING
 //    ostringstream rankLabel;
 //    rankLabel << "rank " << rank << ", externalDofIndices";
