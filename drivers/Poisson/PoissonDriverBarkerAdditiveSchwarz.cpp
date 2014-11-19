@@ -310,7 +310,7 @@ int main(int argc, char *argv[]) {
     solver = Teuchos::rcp( new AztecSolver(cgMaxIterations,cgTol,schwarzOverlap,precondition) );
   }
   
-  solution->setWriteMatrixToFile(true, "/tmp/A_barker.dat");
+//  solution->setWriteMatrixToFile(true, "/tmp/A_barker.dat");
   
   solution->solve(solver);
   
