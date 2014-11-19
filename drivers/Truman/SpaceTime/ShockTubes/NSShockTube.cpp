@@ -143,40 +143,63 @@ class BoundedSqrtFunction : public Function {
     }
 };
 
-class DivergenceIndicator : public Function {
+class ArtificialViscosity : public Function {
   private:
     FunctionPtr _h;
     FunctionPtr _rho;
+    FunctionPtr _dudx;
+    FunctionPtr _sqrtT;
     FunctionPtr _D;
+    FunctionPtr _dDdx;
+    double _gamma;
+    double _R;
+    double _qlin;
+    double _qquad;
   public:
-    DivergenceIndicator(FunctionPtr h, FunctionPtr rho, FunctionPtr D) : Function(0), _h(h), _rho(rho), _D(D) {}
+    ArtificialViscosity(FunctionPtr h, FunctionPtr rho, FunctionPtr dudx, FunctionPtr sqrtT, FunctionPtr D, FunctionPtr dDdx, double gamma, double R, double qlin=1, double qquad=1) : Function(0), 
+      _h(h), _rho(rho), _dudx(dudx), _sqrtT(sqrtT), _D(D), _dDdx(dDdx), _gamma(gamma), _R(R), _qlin(qlin), _qquad(qquad) {}
     void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
       int numCells = values.dimension(0);
       int numPoints = values.dimension(1);
 
       FieldContainer<double> h(values);
       FieldContainer<double> rho(values);
+      FieldContainer<double> dudx(values);
+      FieldContainer<double> sqrtT(values);
       FieldContainer<double> D(values);
+      FieldContainer<double> dDdx(values);
       _h->values(h, basisCache);
       _rho->values(rho, basisCache);
+      _dudx->values(dudx, basisCache);
+      _sqrtT->values(sqrtT, basisCache);
       _D->values(D, basisCache);
+      _dDdx->values(dDdx, basisCache);
 
       const FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
       for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
         for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
-          // rho = 1 => visc = 0
-          // rho = 1e-4 => visc = 1e-2
-          // double viscSwitch = 0;
-          // if (rhovalues(cellIndex, ptIndex) < 1e-1)
-          //   viscSwitch = 
-          // double viscBoost = 1e-2*max(1./rhovalues(cellIndex, ptIndex),)
-          double cr = 0;
-          double cD = 5;
-          values(cellIndex, ptIndex) = 1e-4 + cr/abs(rho(cellIndex, ptIndex)) + cD*min(1e-2,abs(D(cellIndex,ptIndex)))*h(cellIndex,ptIndex);
-          // if (values(cellIndex,ptIndex) < -1e-3)
-          //   // values(cellIndex, ptIndex) = 1;
+          double a0 = sqrt(_gamma*_R)*sqrtT(cellIndex, ptIndex);
+          double Vz = 0;
+          double Cz = dudx(cellIndex, ptIndex);
+          double psi0 = 1;
+          double psi1 = 1;
+          double psi2 = 1;
+          if (Cz >= 0)
+            psi1 = 0;
+          if (abs(dDdx(cellIndex, ptIndex)) < 1e-2)
+            psi1 = 0;
+          // if (Cz < 1e-6)
+          // {
+          //   psi1 = max(-Cz/abs(Cz),0.);
+          //   psi2 = Cz/(Cz+Vz);
+          // }
           // else
-          //   values(cellIndex, ptIndex) = 0;
+          // {
+          //   psi1 = 0;
+          //   psi2 = 0;
+          // }
+          values(cellIndex, ptIndex) = 1e-4 + psi0*psi1*rho(cellIndex, ptIndex)*h(cellIndex, ptIndex)*(_qquad*h(cellIndex, ptIndex)*Cz + psi2*_qlin*a0);
+          // values(cellIndex, ptIndex) = 1e-4 + rho(cellIndex, ptIndex)*h(cellIndex, ptIndex)*(_qquad*h(cellIndex, ptIndex)*Cz + psi2*_qlin*a0);
         }
       }
     }
@@ -307,8 +330,8 @@ int main(int argc, char *argv[]) {
   int numPreRefs = args.Input<int>("--numPreRefs","pre-refinements on singularity",0);
   int norm = args.Input("--norm", "norm", 0);
   double physicalViscosity = args.Input("--mu", "viscosity", 1e-2);
-  double mu = physicalViscosity;
-  double mu_sqrt = sqrt(mu);
+  // double mu = physicalViscosity;
+  // double mu_sqrt = sqrt(mu);
   int numSlabs = args.Input("--numSlabs", "number of time slabs", 1);
   bool useLineSearch = args.Input("--lineSearch", "use line search", true);
   int polyOrder = args.Input("--polyOrder", "polynomial order for field variables", 2);
@@ -646,6 +669,8 @@ int main(int argc, char *argv[]) {
     FunctionPtr rho_prev = Uc_prev;
     // FunctionPtr rho_prev = Teuchos::rcp( new BoundedBelowFunction(Uc_prev, 0) );
     FunctionPtr u_prev = Um_prev;
+    FunctionPtr dudx_prev   = Function::solution(Um->dx(), backgroundFlows[slab]);
+    FunctionPtr dDdx_prev   = Function::solution(D->dx(), backgroundFlows[slab]);
     FunctionPtr T_prev = Ue_prev;
     // FunctionPtr T_prev = Teuchos::rcp( new BoundedBelowFunction(Ue_prev, 0) );
     FunctionPtr m_prev = Um_prev;
@@ -678,11 +703,12 @@ int main(int argc, char *argv[]) {
     LinearTermPtr G_exGradPsi = Teuchos::rcp( new LinearTerm );
     // FunctionPtr T_sqrt = Teuchos::rcp( new BoundedSqrtFunction(T_prev, 0.01) );
     // FunctionPtr rho_sqrt = Teuchos::rcp( new BoundedSqrtFunction(rho_prev, 0.01) );
-    FunctionPtr T_sqrt = Teuchos::rcp( new SqrtFunction(T_prev) );
-    FunctionPtr rho_sqrt = Teuchos::rcp( new SqrtFunction(rho_prev) );
+    FunctionPtr T_sqrt = Teuchos::rcp( new BoundedSqrtFunction(T_prev, 1e-2) );
+    FunctionPtr rho_sqrt = Teuchos::rcp( new BoundedSqrtFunction(rho_prev, 1e-2) );
+    // FunctionPtr h_sqrt = Teuchos::rcp( new BoundedSqrtFunction(Function::h(), mu*mu) );
     FunctionPtr A0p_c = sqrt(gamma-1)/rho_sqrt;
     FunctionPtr A0p_m = rho_sqrt/(sqrt(Cv)*T_sqrt);
-    FunctionPtr A0p_e = rho_sqrt/(T_prev);
+    FunctionPtr A0p_e = rho_sqrt/(T_sqrt*T_sqrt);
     // FunctionPtr A0p_e = rho_sqrt/(T_sqrt*T_sqrt);
     // FunctionPtr invA0p_c = rho_sqrt/sqrt(gamma-1);
     // FunctionPtr invA0p_m = (sqrt(Cv)*T_sqrt)/rho_sqrt;
@@ -690,12 +716,9 @@ int main(int argc, char *argv[]) {
     FunctionPtr invA0p_c = 1./A0p_c;
     FunctionPtr invA0p_m = 1./A0p_m;
     FunctionPtr invA0p_e = 1./A0p_e;
-    FunctionPtr div_indicator = Teuchos::rcp( new DivergenceIndicator(Function::h(), rho_prev, D_prev) );
-    FunctionPtr artificialViscosity = div_indicator;
-    // FunctionPtr artificialViscosity = 0.1*Function::h()+1e-4;
-    // FunctionPtr artificialViscosity = 0.1*Function::h()*div_indicator + 1e-4;
-    // FunctionPtr mu = artificialViscosity;
-    // FunctionPtr mu_sqrt = Teuchos::rcp( new SqrtFunction(mu) );
+    FunctionPtr artificialViscosity = Teuchos::rcp( new ArtificialViscosity(Function::h(), rho_prev, dudx_prev, T_sqrt, D_prev, dDdx_prev, gamma, R) );
+    FunctionPtr mu = artificialViscosity;
+    FunctionPtr mu_sqrt = Teuchos::rcp( new SqrtFunction(mu) );
     switch (formulation)
     {
       case 0:
@@ -864,34 +887,222 @@ int main(int argc, char *argv[]) {
         break;
 
         case -2:
-        ip->addTerm( M_DxS );
-        ip->addTerm( M_qxtau );
-        ip->addTerm( K_DxGradV );
-        ip->addTerm( K_qxGradV );
-        ip->addTerm( invA0_c*(F_cxGradV + C_cxdVdt) );
-        ip->addTerm( invA0_m*(F_mxGradV + C_mxdVdt) );
-        ip->addTerm( invA0_e*(F_exGradV + C_exdVdt) );
-        ip->addTerm( invA0_m*G_mxGradPsi );
-        ip->addTerm( invA0_e*G_exGradPsi );
-        ip->addTerm( A0_c*(vc) );
-        ip->addTerm( A0_m*(vm) );
-        ip->addTerm( A0_e*(ve) );
-        break;
-
-        case -3:
-        ip->addTerm( K_DxGradV );
-        ip->addTerm( K_qxGradV );
-        ip->addTerm( G_cxGradPsi - F_cxGradV - C_cxdVdt );
-        ip->addTerm( G_mxGradPsi - F_mxGradV - C_mxdVdt );
-        ip->addTerm( G_exGradPsi - F_exGradV - C_exdVdt );
-        ip->addTerm( M_DxS );
-        ip->addTerm( M_qxtau );
+        ip->addTerm( M_DxS + K_DxGradV );
+        ip->addTerm( M_qxtau + K_qxGradV );
+        ip->addTerm( MinvsqrtxK_DxGradV );
+        ip->addTerm( MinvsqrtxK_qxGradV );
+        ip->addTerm( F_cxGradV + C_cxdVdt );
+        ip->addTerm( F_mxGradV + C_mxdVdt );
+        ip->addTerm( F_exGradV + C_exdVdt );
         ip->addTerm( G_mxGradPsi );
         ip->addTerm( G_exGradPsi );
         ip->addTerm(vc);
         ip->addTerm(vm);
         ip->addTerm(ve);
         break;
+
+        case -3:
+        ip->addTerm( M_DxS );
+        ip->addTerm( M_qxtau );
+        ip->addTerm( K_DxGradV );
+        ip->addTerm( K_qxGradV );
+        ip->addTerm( invA0p_c*(G_cxGradPsi - F_cxGradV - C_cxdVdt) );
+        ip->addTerm( invA0p_e*(G_mxGradPsi - F_mxGradV - C_mxdVdt) );
+        ip->addTerm( invA0p_m*(G_exGradPsi - F_exGradV - C_exdVdt) );
+        ip->addTerm( vc );
+        ip->addTerm( vm );
+        ip->addTerm( ve );
+        // ip->addTerm( Msqrt_DxS );
+        // ip->addTerm( Msqrt_qxtau );
+        // ip->addTerm( K_DxGradV );
+        // ip->addTerm( K_qxGradV );
+        // ip->addTerm( F_cxGradV + C_cxdVdt );
+        // ip->addTerm( F_mxGradV + C_mxdVdt );
+        // ip->addTerm( F_exGradV + C_exdVdt );
+        // ip->addTerm( G_mxGradPsi );
+        // ip->addTerm( G_exGradPsi );
+        // ip->addTerm(vc);
+        // ip->addTerm(vm);
+        // ip->addTerm(ve);
+        break;
+
+        case -4:
+        ip->addTerm( M_DxS );
+        ip->addTerm( M_qxtau );
+        ip->addTerm( K_DxGradV );
+        ip->addTerm( K_qxGradV );
+        ip->addTerm( G_cxGradPsi - F_cxGradV - C_cxdVdt );
+        ip->addTerm( G_mxGradPsi - F_mxGradV - C_mxdVdt );
+        ip->addTerm( G_exGradPsi - F_exGradV - C_exdVdt );
+        ip->addTerm( vc );
+        ip->addTerm( vm );
+        ip->addTerm( ve );
+        break;
+
+        case -5:
+        ip->addTerm( M_DxS );
+        ip->addTerm( M_qxtau );
+        ip->addTerm( K_DxGradV );
+        ip->addTerm( K_qxGradV );
+        ip->addTerm( invA0p_c*(G_cxGradPsi - F_cxGradV - C_cxdVdt) );
+        ip->addTerm( invA0p_e*(G_mxGradPsi - F_mxGradV - C_mxdVdt) );
+        ip->addTerm( invA0p_m*(G_exGradPsi - F_exGradV - C_exdVdt) );
+        ip->addTerm( A0p_c*vc );
+        ip->addTerm( A0p_m*vm );
+        ip->addTerm( A0p_e*ve );
+        // ip->addTerm( K_DxGradV );
+        // ip->addTerm( K_qxGradV );
+        // ip->addTerm( Msqrt_DxS );
+        // ip->addTerm( Msqrt_qxtau );
+        // ip->addTerm( MinvsqrtxK_DxGradV );
+        // ip->addTerm( MinvsqrtxK_qxGradV );
+        // ip->addTerm( G_cxGradPsi - F_cxGradV - C_cxdVdt );
+        // ip->addTerm( G_mxGradPsi - F_mxGradV - C_mxdVdt );
+        // ip->addTerm( G_exGradPsi - F_exGradV - C_exdVdt );
+        // ip->addTerm( vc );
+        // ip->addTerm( vm );
+        // ip->addTerm( ve );
+        break;
+
+        case -6:
+        // ip->addTerm( M_DxS );
+        // ip->addTerm( M_qxtau );
+        ip->addTerm( K_DxGradV );
+        ip->addTerm( K_qxGradV );
+        ip->addTerm( Msqrt_DxS );
+        ip->addTerm( Msqrt_qxtau );
+        ip->addTerm( MinvsqrtxK_DxGradV );
+        ip->addTerm( MinvsqrtxK_qxGradV );
+        ip->addTerm( G_cxGradPsi - F_cxGradV - C_cxdVdt );
+        ip->addTerm( G_mxGradPsi - F_mxGradV - C_mxdVdt );
+        ip->addTerm( G_exGradPsi - F_exGradV - C_exdVdt );
+        ip->addTerm( F_cxGradV + C_cxdVdt );
+        ip->addTerm( F_mxGradV + C_mxdVdt );
+        ip->addTerm( F_exGradV + C_exdVdt );
+        ip->addTerm( vc );
+        ip->addTerm( vm );
+        ip->addTerm( ve );
+        break;
+
+        case -7:
+        // ip->addTerm( M_DxS );
+        // ip->addTerm( M_qxtau );
+        ip->addTerm( K_DxGradV );
+        ip->addTerm( K_qxGradV );
+        ip->addTerm( Msqrt_DxS );
+        ip->addTerm( Msqrt_qxtau );
+        ip->addTerm( MinvsqrtxK_DxGradV );
+        ip->addTerm( MinvsqrtxK_qxGradV );
+        ip->addTerm( G_cxGradPsi );
+        ip->addTerm( G_mxGradPsi );
+        ip->addTerm( G_exGradPsi );
+        ip->addTerm( F_cxGradV + C_cxdVdt );
+        ip->addTerm( F_mxGradV + C_mxdVdt );
+        ip->addTerm( F_exGradV + C_exdVdt );
+        ip->addTerm( vc );
+        ip->addTerm( vm );
+        ip->addTerm( ve );
+        break;
+
+        // case -8:
+        // // ip->addTerm( M_DxS );
+        // // ip->addTerm( M_qxtau );
+        // ip->addTerm( 10*h_sqrt*K_DxGradV );
+        // ip->addTerm( 10*h_sqrt*K_qxGradV );
+        // ip->addTerm( Msqrt_DxS );
+        // ip->addTerm( Msqrt_qxtau );
+        // ip->addTerm( MinvsqrtxK_DxGradV );
+        // ip->addTerm( MinvsqrtxK_qxGradV );
+        // ip->addTerm( G_cxGradPsi - F_cxGradV - C_cxdVdt );
+        // ip->addTerm( G_mxGradPsi - F_mxGradV - C_mxdVdt );
+        // ip->addTerm( G_exGradPsi - F_exGradV - C_exdVdt );
+        // ip->addTerm( F_cxGradV + C_cxdVdt );
+        // ip->addTerm( F_mxGradV + C_mxdVdt );
+        // ip->addTerm( F_exGradV + C_exdVdt );
+        // ip->addTerm( vc );
+        // ip->addTerm( vm );
+        // ip->addTerm( ve );
+        // break;
+
+        case -9:
+        ip->addTerm( M_DxS );
+        ip->addTerm( M_qxtau );
+        ip->addTerm( K_DxGradV );
+        ip->addTerm( K_qxGradV );
+        // ip->addTerm( Msqrt_DxS );
+        // ip->addTerm( Msqrt_qxtau );
+        // ip->addTerm( MinvsqrtxK_DxGradV );
+        // ip->addTerm( MinvsqrtxK_qxGradV );
+        ip->addTerm( invA0p_c*(G_cxGradPsi - F_cxGradV - C_cxdVdt) );
+        ip->addTerm( invA0p_m*(G_mxGradPsi - F_mxGradV - C_mxdVdt) );
+        ip->addTerm( invA0p_e*(G_exGradPsi - F_exGradV - C_exdVdt) );
+        ip->addTerm( invA0p_c*(F_cxGradV + C_cxdVdt) );
+        ip->addTerm( invA0p_m*(F_mxGradV + C_mxdVdt) );
+        ip->addTerm( invA0p_e*(F_exGradV + C_exdVdt) );
+        ip->addTerm( A0p_c*vc );
+        ip->addTerm( A0p_m*vm );
+        ip->addTerm( A0p_c*ve );
+        break;
+
+        // case -2:
+        // ip->addTerm( M_DxS );
+        // ip->addTerm( M_qxtau );
+        // ip->addTerm( K_DxGradV );
+        // ip->addTerm( K_qxGradV );
+        // ip->addTerm( invA0p_c*(F_cxGradV + C_cxdVdt) );
+        // ip->addTerm( invA0p_m*(F_mxGradV + C_mxdVdt) );
+        // ip->addTerm( invA0p_e*(F_exGradV + C_exdVdt) );
+        // ip->addTerm( invA0p_m*G_mxGradPsi );
+        // ip->addTerm( invA0p_e*G_exGradPsi );
+        // ip->addTerm( A0p_c*(vc) );
+        // ip->addTerm( A0p_m*(vm) );
+        // ip->addTerm( A0p_e*(ve) );
+        // break;
+
+        // case -3:
+        // ip->addTerm( K_DxGradV );
+        // ip->addTerm( K_qxGradV );
+        // ip->addTerm( G_cxGradPsi - F_cxGradV - C_cxdVdt );
+        // ip->addTerm( G_mxGradPsi - F_mxGradV - C_mxdVdt );
+        // ip->addTerm( G_exGradPsi - F_exGradV - C_exdVdt );
+        // ip->addTerm( M_DxS );
+        // ip->addTerm( M_qxtau );
+        // ip->addTerm( G_mxGradPsi );
+        // ip->addTerm( G_exGradPsi );
+        // ip->addTerm( vc );
+        // ip->addTerm( vm );
+        // ip->addTerm( ve );
+        // break;
+
+        // case -4:
+        // ip->addTerm( M_DxS );
+        // ip->addTerm( M_qxtau );
+        // ip->addTerm( K_DxGradV );
+        // ip->addTerm( K_qxGradV );
+        // ip->addTerm( invA0p_c*(G_cxGradPsi - F_cxGradV - C_cxdVdt) );
+        // ip->addTerm( invA0p_m*(G_cxGradPsi - F_mxGradV - C_mxdVdt) );
+        // ip->addTerm( invA0p_e*(G_cxGradPsi - F_exGradV - C_exdVdt) );
+        // ip->addTerm( invA0p_m*G_mxGradPsi );
+        // ip->addTerm( invA0p_e*G_exGradPsi );
+        // ip->addTerm( A0p_c*(vc) );
+        // ip->addTerm( A0p_m*(vm) );
+        // ip->addTerm( A0p_e*(ve) );
+        // break;
+
+        // case -5:
+        // ip->addTerm( Msqrt_DxS );
+        // ip->addTerm( Msqrt_qxtau );
+        // ip->addTerm( MinvsqrtxK_DxGradV );
+        // ip->addTerm( MinvsqrtxK_qxGradV );
+        // ip->addTerm( F_cxGradV + C_cxdVdt );
+        // ip->addTerm( F_mxGradV + C_mxdVdt );
+        // ip->addTerm( F_exGradV + C_exdVdt );
+        // ip->addTerm( G_mxGradPsi );
+        // ip->addTerm( G_exGradPsi );
+        // ip->addTerm(vc);
+        // ip->addTerm(vm);
+        // ip->addTerm(ve);
+        // break;
 
         // Automatic graph norm
         case 0:
@@ -1420,7 +1631,7 @@ int main(int argc, char *argv[]) {
     FunctionPtr mom0 = Teuchos::rcp( new DiscontinuousInitialCondition(xint, uL*rhoL, uR*rhoR) );
     FunctionPtr E0    = Teuchos::rcp( new DiscontinuousInitialCondition(xint, (rhoL*Cv*TL+0.5*rhoL*uL*uL), (rhoR*Cv*TR+0.5*rhoR*uR*uR)) );
     if (problem == 6)
-      E0 = Teuchos::rcp( new PulseInitialCondition(1./8, 1./Cv, 0) );
+      E0 = Teuchos::rcp( new PulseInitialCondition(1./32, 1./Cv, 0) );
     // FunctionPtr rho0  = Teuchos::rcp( new RampedInitialCondition(xint, rhoL, rhoR, (xmax-xmin)/numX) );
     // FunctionPtr mom0 = Teuchos::rcp( new RampedInitialCondition(xint, uL*rhoL, uR*rhoR, (xmax-xmin)/numX) );
     // FunctionPtr E0    = Teuchos::rcp( new RampedInitialCondition(xint, (rhoL*Cv*TL+0.5*rhoL*uL*uL), (rhoR*Cv*TR+0.5*rhoR*uR*uR), (xmax-xmin)/numX) );
@@ -1466,7 +1677,7 @@ int main(int argc, char *argv[]) {
     }
     meshes[slab]->registerSolution(backgroundFlows[slab]);
     meshes[slab]->registerSolution(solutions[slab]);
-    double energyThreshold = 0.4; // for mesh refinements
+    double energyThreshold = 0.2; // for mesh refinements
     RefinementStrategy refinementStrategy( solution, energyThreshold );
     VTKExporter exporter(backgroundFlows[slab], meshes[slab], varFactory);
     set<int> nonlinearVars;
@@ -1534,8 +1745,11 @@ int main(int argc, char *argv[]) {
         exporter.exportSolution(outfile.str());
         FunctionPtr rho_prev = Function::solution(rho,backgroundFlows[slab]);
         FunctionPtr D_prev = Function::solution(D,backgroundFlows[slab]);
-        FunctionPtr div_indicator = Teuchos::rcp( new DivergenceIndicator(rho_prev, rho_prev, D_prev) );
-        // exporter.exportFunction(div_indicator,"Indicator"+Teuchos::toString(refIndex));
+        FunctionPtr dDdx = Function::solution(D->dx(),backgroundFlows[slab]);
+        FunctionPtr dudx = Function::solution(u->dx(),backgroundFlows[slab]);
+        // FunctionPtr div_indicator = Teuchos::rcp( new DivergenceIndicator(rho_prev, rho_prev, D_prev) );
+        exporter.exportFunction(dDdx,"dDdx"+Teuchos::toString(refIndex));
+        exporter.exportFunction(dudx,"dudx"+Teuchos::toString(refIndex));
         // FunctionPtr errorFunction = Teuchos::rcp( new ErrorFunction(solution) );
         // exporter.exportFunction(errorFunction,"Error"+Teuchos::toString(refIndex));
       }
