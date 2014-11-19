@@ -267,7 +267,8 @@ void run(int &iterationCount, int spaceDim, int numCells, int k, int delta_k, bo
     ((AztecSolver*) solver.get())->setAztecOutputLevel(AztecOutputLevel);
   } else {
     BCPtr zeroBCs = bc->copyImposingZero();
-    Teuchos::RCP<Solver> coarseSolver = Teuchos::rcp( new KluSolver );
+    bool saveFactorization = true;
+    Teuchos::RCP<Solver> coarseSolver = Teuchos::rcp( new SuperLUDistSolver(saveFactorization) );
     bool useStaticCondensation = false;
     GMGSolver* gmgSolver = new GMGSolver(zeroBCs, k0Mesh, graphNorm, mesh, solution->getDofInterpreter(),
                                          solution->getPartitionMap(), cgMaxIterations, cgTol, coarseSolver,
