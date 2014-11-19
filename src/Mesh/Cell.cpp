@@ -456,4 +456,9 @@ void Cell::setNeighbor(unsigned sideOrdinal, GlobalIndexType neighborCellIndex, 
   _neighbors[sideOrdinal] = make_pair(neighborCellIndex, neighborSideOrdinal);
 }
 
+unsigned Cell::getSideCount() {
+  if (_cellTopo->getDimension() == 1) return _vertices.size();
+  else return _cellTopo->getSideCount();
+}
+
 const vector< unsigned > & Cell::vertices() {return _vertices;}

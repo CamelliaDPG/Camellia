@@ -87,6 +87,13 @@ public:
   
   RefinementBranch refinementBranchForSubcell(unsigned subcdim, unsigned subcord);
   
+  //! Returns the number of sides of the cell; that is, subcells of dimension 1 lower than the cell.  In 1D, returns the number of vertices.
+  /*!
+   
+   \return the number of sides of the cell.
+   */
+  unsigned getSideCount();
+  
   unsigned subcellPermutation(unsigned d, unsigned scord);
   
   unsigned sideSubcellPermutation(unsigned sideOrdinal, unsigned sideSubcdim, unsigned sideSubcord);
