@@ -21,7 +21,6 @@ Teuchos::RCP<Epetra_CrsMatrix> Epetra_Operator_to_Epetra_Matrix::constructInvers
   
   int numRows = map.NumGlobalElements();
 
-  // when ApplyInverse is cheap, this is the better way to go -- will only allocate 2 Vectors
   Epetra_Vector X(map);
   Epetra_Vector Y(map);
   
