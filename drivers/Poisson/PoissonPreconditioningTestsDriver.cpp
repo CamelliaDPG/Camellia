@@ -355,20 +355,19 @@ void runMany(int spaceDim, int delta_k, bool conformingTraces, double cgTol, int
   
   vector<int> numCellsValues;
   int numCells = 2;
-  while (pow((double)numCells,spaceDim) <= Teuchos::GlobalMPISession::getNProc()) {
+  while (pow((double)numCells,spaceDim) <= Teuchos::GlobalMPISession::getNProc()) { // ensure max of 1 cell per MPI node
     // want to do as many as we can with just one cell per processor
     numCellsValues.push_back(numCells);
     numCells *= 2;
   }
-  
-  vector<int> overlapValues;
   
   ostringstream results;
   results << "Preconditioner\tSmoother\tOverlap\tnum_cells\th\tk\tIterations\n";
   
   for (vector<bool>::iterator preconditionChoiceIt = preconditionValues.begin(); preconditionChoiceIt != preconditionValues.end(); preconditionChoiceIt++) {
     bool precondition = *preconditionChoiceIt;
-    
+  
+    vector<int> overlapValues;
     vector<bool> schwarzOnlyValues, useCamelliaSchwarzValues;
     if (precondition) {
       schwarzOnlyValues.push_back(false);
@@ -377,7 +376,7 @@ void runMany(int spaceDim, int delta_k, bool conformingTraces, double cgTol, int
       useCamelliaSchwarzValues.push_back(true);
       overlapValues.push_back(0);
       if (spaceDim < 3) overlapValues.push_back(1);
-      if (spaceDim < 3) overlapValues.push_back(2);
+      if (spaceDim < 2) overlapValues.push_back(2);
     } else {
       // schwarzOnly and useCamelliaSchwarz ignored; just use one of them
       schwarzOnlyValues.push_back(false);
