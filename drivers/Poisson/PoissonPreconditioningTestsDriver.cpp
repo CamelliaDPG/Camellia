@@ -349,8 +349,8 @@ void runMany(int spaceDim, int delta_k, bool conformingTraces, double cgTol, int
   vector<int> kValues;
   kValues.push_back(1);
   kValues.push_back(2);
-  kValues.push_back(4);
-  if (spaceDim < 3) kValues.push_back(8);
+  if (spaceDim < 3) kValues.push_back(4);
+  if (spaceDim < 2) kValues.push_back(8);
   if (spaceDim < 2) kValues.push_back(16);
   
   vector<int> numCellsValues;
@@ -376,7 +376,7 @@ void runMany(int spaceDim, int delta_k, bool conformingTraces, double cgTol, int
       useCamelliaSchwarzValues.push_back(false);
       useCamelliaSchwarzValues.push_back(true);
       overlapValues.push_back(0);
-      overlapValues.push_back(1);
+      if (spaceDim < 3) overlapValues.push_back(1);
       if (spaceDim < 3) overlapValues.push_back(2);
     } else {
       // schwarzOnly and useCamelliaSchwarz ignored; just use one of them
