@@ -13,6 +13,7 @@
 #include "Epetra_SerialDenseMatrix.h"
 #include "Epetra_SerialDenseVector.h"
 #include "Epetra_SerialDenseSolver.h"
+#include "Epetra_SerialDenseSVD.h"
 #include "Epetra_DataAccess.h"
 
 #include "Epetra_SerialSymDenseMatrix.h"
@@ -431,6 +432,13 @@ public:
     return result;
   }
 
+  //! Returns the reciprocal of the 1-norm condition number of the matrix in A
+  /*!
+   \param A In
+   A rank-2 FieldContainer with equal first and second dimensions.
+   
+   \return the 1-norm condition number if successful; -1 otherwise.
+   */
   static double getMatrixConditionNumber(FieldContainer<double> &A) {
     Epetra_SerialDenseMatrix AMatrix = convertFCToSDM(A);
     Epetra_SerialDenseSolver solver;
@@ -441,6 +449,48 @@ public:
       return 1.0/invCond;
     else // failure
       return -1;
+  }
+  
+  //! Returns the reciprocal of the 2-norm condition number of the matrix in A
+  /*!
+   \param A In
+   A rank-2 FieldContainer with equal first and second dimensions.
+   
+   \return the 2-norm condition number if successful; -1 otherwise.
+   */
+  static double getMatrixConditionNumber2Norm(FieldContainer<double> &A, bool ignoreZeroEigenvalues = true) {
+    Epetra_SerialDenseSVD svd;
+    
+    int N = A.dimension(0);
+    if ((N != A.dimension(1)) || (A.rank() != 2)) {
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "badly shaped matrix");
+    }
+    
+    Epetra_SerialDenseMatrix AMatrix = convertFCToSDM(A);
+    
+    svd.SetMatrix(AMatrix);
+    int result = svd.Factor();
+    
+    if (result == 0) {
+      // then the singular values are stored in svd.S_
+      double maxSingularValue = svd.S_[0];
+      double minSingularValue = svd.S_[N-1];
+      double tol = 1e-14;
+      if (ignoreZeroEigenvalues) {
+        int index = N-1;
+        while ((abs(minSingularValue) < tol) && (index > 0)) {
+          index--;
+          minSingularValue = svd.S_[index];
+        }
+      }
+      if (maxSingularValue < tol) {
+//        cout << "maxSingularValue is zero for matrix:\n" << A;
+      }
+      return maxSingularValue / minSingularValue;
+    } else {
+//      cout << "SVD failed for matrix:\n" << A;
+      return -1.0;
+    }
   }
 
   static void writeMatrixToMatlabFile(const string& filePath, FieldContainer<double> &A){
