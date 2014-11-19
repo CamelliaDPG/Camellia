@@ -258,7 +258,10 @@ void run(int &iterationCount, int spaceDim, int numCells, int k, int delta_k, bo
   SolutionPtr solution = Solution::solution(mesh, bc, rhs, graphNorm);
   
   Teuchos::RCP<Solver> solver;
-  if (schwarzOnly) {
+  if (!precondition) {
+    solver = Teuchos::rcp( new AztecSolver(cgMaxIterations,cgTol,schwarzOverlap,precondition) );
+    ((AztecSolver*) solver.get())->setAztecOutputLevel(AztecOutputLevel);
+  } else if (schwarzOnly) {
     if (useCamelliaAdditiveSchwarz) {
       solver = Teuchos::rcp( new AztecSolver(cgMaxIterations,cgTol,schwarzOverlap,precondition,mesh, solution->getDofInterpreter()) );
     } else {
@@ -289,7 +292,9 @@ void run(int &iterationCount, int spaceDim, int numCells, int k, int delta_k, bo
   
   solution->solve(solver);
   
-  if (schwarzOnly) {
+  if (!precondition) {
+    iterationCount = ((AztecSolver *) solver.get())->iterationCount();
+  } else if (schwarzOnly) {
     iterationCount = ((AztecSolver *) solver.get())->iterationCount();
   } else {
     iterationCount = ((GMGSolver *) solver.get())->iterationCount();
@@ -334,7 +339,7 @@ void run(int &iterationCount, int spaceDim, int numCells, int k, int delta_k, bo
   }
 }
 
-void runMany(int spaceDim, int delta_k, bool conformingTraces, double cgTol, int cgMaxIterations) {
+void runMany(int spaceDim, int delta_k, bool conformingTraces, double cgTol, int cgMaxIterations, int aztecOutputLevel) {
   int rank = Teuchos::GlobalMPISession::getRank();
   
   vector<bool> preconditionValues;
@@ -372,7 +377,7 @@ void runMany(int spaceDim, int delta_k, bool conformingTraces, double cgTol, int
       useCamelliaSchwarzValues.push_back(true);
       overlapValues.push_back(0);
       overlapValues.push_back(1);
-      overlapValues.push_back(2);
+      if (spaceDim < 3) overlapValues.push_back(2);
     } else {
       // schwarzOnly and useCamelliaSchwarz ignored; just use one of them
       schwarzOnlyValues.push_back(false);
@@ -417,10 +422,9 @@ void runMany(int spaceDim, int delta_k, bool conformingTraces, double cgTol, int
               int iterationCount;
               bool reportTimings = false;
               bool reportEnergyError = false;
-              int AztecOutputLevel = 0;
               run(iterationCount, spaceDim, numCells1D, k, delta_k, conformingTraces,
                   precondition, schwarzOnly, useCamelliaSchwarz, overlapValue,
-                  cgTol, cgMaxIterations, AztecOutputLevel, reportTimings, reportEnergyError);
+                  cgTol, cgMaxIterations, aztecOutputLevel, reportTimings, reportEnergyError);
               
               double h = 1.0 / numCells1D;
               int numCells = pow((double)numCells1D, spaceDim);
@@ -534,7 +538,7 @@ int main(int argc, char *argv[]) {
       cout << "CG tolerance = " << cgTol << ", max iterations = " << cgMaxIterations << endl;
     }
     
-    runMany(spaceDim, delta_k, conformingTraces, cgTol, cgMaxIterations);
+    runMany(spaceDim, delta_k, conformingTraces, cgTol, cgMaxIterations, AztecOutputLevel);
   }
   return 0;
 }
