@@ -802,6 +802,11 @@ void HDF5Exporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
   }
 }
 
+void HDF5Exporter::exportFunction(string superDirectory, string functionName, FunctionPtr function, MeshPtr mesh) {
+  HDF5Exporter exporter(mesh, functionName, superDirectory);
+  exporter.exportFunction(function);
+}
+
 void HDF5Exporter::exportSolution(std::string superDirectory, std::string solnName, SolutionPtr solution) {
   MeshPtr mesh = solution->mesh();
   HDF5Exporter exporter(mesh, solnName, superDirectory);

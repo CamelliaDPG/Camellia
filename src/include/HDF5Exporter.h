@@ -43,6 +43,7 @@ public:
   void exportSolution(SolutionPtr solution, VarFactory varFactory, double timeVal=0, 
     unsigned int defaultNum1DPts=4, map<int, int> cellIDToNum1DPts=map<int,int>(), set<GlobalIndexType> cellIndices=set<GlobalIndexType>());
   
+  static void exportFunction(string directoryPath, string functionName, FunctionPtr function, MeshPtr mesh); // allows one-line export without storing an exporter object
   static void exportSolution(string directoryPath, string solutionName, SolutionPtr solution); // allows one-line export without storing an exporter object
 };
 
