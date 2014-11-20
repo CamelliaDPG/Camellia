@@ -276,37 +276,52 @@ void initializeSolutionAndCoarseMesh(SolutionPtr &solution, MeshPtr &coarseMesh,
     FunctionPtr cos_y = Teuchos::rcp( new Cos_y );
     FunctionPtr sin_y = Teuchos::rcp( new Sin_y );
     FunctionPtr exp_x = Teuchos::rcp( new Exp_x );
+    FunctionPtr exp_z = Teuchos::rcp( new Exp_z );
     
-    FunctionPtr x = Teuchos::rcp ( new Xn(1) );
-    FunctionPtr x2 = Teuchos::rcp( new Xn(2) );
-    FunctionPtr y2 = Teuchos::rcp( new Yn(2) );
     FunctionPtr y = Teuchos::rcp( new Yn(1) );
     
-    FunctionPtr u1_exact = - exp_x * ( y * cos_y + sin_y );
-    FunctionPtr u2_exact = exp_x * y * sin_y;
-    FunctionPtr p_exact = 2.0 * exp_x * sin_y;
+    FunctionPtr u1_exact, u2_exact, u3_exact, p_exact;
+    
+    if (spaceDim == 2) {
+      // this one was in the Cockburn Kanschat LDG Stokes paper
+      u1_exact = - exp_x * ( y * cos_y + sin_y );
+      u2_exact = exp_x * y * sin_y;
+      p_exact = 2.0 * exp_x * sin_y;
+    } else {
+      // this one is inspired the 2D one
+      u1_exact = - exp_x * ( y * cos_y + sin_y );
+      u2_exact = exp_x * y * sin_y + exp_z * y * cos_y;
+      u3_exact = - exp_z * (y * sin_y + cos_y);
+      p_exact = 2.0 * exp_x * sin_y * exp_z;
+    }
     
     // to ensure zero mean for p, need the domain carefully defined:
-    x0[0] = -1.0;
-    x0[1] = -1.0;
+    x0 = vector<double>(spaceDim,-1.0);
     
     width = 2.0;
     
     bc = BC::bc();
+    // our usual way of adding in the zero mean constraint results in a negative eigenvalue
+    // therefore, for now, we use a single-point BC
 //    bc->addZeroMeanConstraint(formulation.p());
     bc->addSinglePointBC(formulation.p()->ID(), Function::zero());
     SpatialFilterPtr boundary = SpatialFilter::allSpace();
     bc->addDirichlet(formulation.u_hat(1), boundary, u1_exact);
     bc->addDirichlet(formulation.u_hat(2), boundary, u2_exact);
+    if (spaceDim==3) bc->addDirichlet(formulation.u_hat(3), boundary, u3_exact);
     
     double mu = 1.0;
     
-    FunctionPtr f1 = -p_exact->dx() + mu * (u1_exact->dx()->dx() + u1_exact->dy()->dy());
-    FunctionPtr f2 = -p_exact->dy() + mu * (u2_exact->dx()->dx() + u2_exact->dy()->dy());
+    FunctionPtr f1, f2, f3;
+    if (spaceDim==2) {
+      f1 = -p_exact->dx() + mu * (u1_exact->dx()->dx() + u1_exact->dy()->dy());
+      f2 = -p_exact->dy() + mu * (u2_exact->dx()->dx() + u2_exact->dy()->dy());
+    } else {
+      f1 = -p_exact->dx() + mu * (u1_exact->dx()->dx() + u1_exact->dy()->dy() + u1_exact->dz()->dz());
+      f2 = -p_exact->dy() + mu * (u2_exact->dx()->dx() + u2_exact->dy()->dy() + u2_exact->dz()->dz());
+      f3 = -p_exact->dz() + mu * (u3_exact->dx()->dx() + u3_exact->dy()->dy() + u3_exact->dz()->dz());
+    }
     
-    VarPtr v1 = formulation.v(1);
-    VarPtr v2 = formulation.v(2);
-
 //    { // DEBUGGING
 //      int H1Order = k + 1;
 //      
@@ -336,8 +351,17 @@ void initializeSolutionAndCoarseMesh(SolutionPtr &solution, MeshPtr &coarseMesh,
 //      cout << "Exported functions to /tmp/testSolution/testFunctions.\n";
 //    }
     
+    VarPtr v1 = formulation.v(1);
+    VarPtr v2 = formulation.v(2);
+    
+    VarPtr v3;
+    if (spaceDim==3) v3 = formulation.v(3);
+
     RHSPtr rhs = RHS::rhs();
-//    rhs->addTerm(f1 * v1 + f2 * v2);
+    if (spaceDim==2)
+      rhs->addTerm(f1 * v1 + f2 * v2);
+    else
+      rhs->addTerm(f1 * v1 + f2 * v2 + f3 * v3);
   }
   
   int H1Order = k + 1;
@@ -582,8 +606,8 @@ void runMany(ProblemChoice problemChoice, int spaceDim, int delta_k, bool confor
           }
         }
       }
+      if (rank==0) cout << results.str(); // output results so far
     }
-    if (rank==0) cout << results.str(); // output results so far
   }
   
   if (rank == 0) {
