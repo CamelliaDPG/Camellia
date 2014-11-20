@@ -391,15 +391,15 @@ bool Solution::cellHasCoefficientsAssigned(GlobalIndexType cellID) {
   return _solutionForCellIDGlobal.find(cellID) != _solutionForCellIDGlobal.end();
 }
 
-void Solution::solve() {
+int Solution::solve() {
 #ifdef HAVE_MPI
-  solve(true);
+  return solve(true);
 #else
-  solve(false);
+  return solve(false);
 #endif
 }
 
-void Solution::solve(bool useMumps) {
+int Solution::solve(bool useMumps) {
   Teuchos::RCP<Solver> solver;
 #ifdef USE_MUMPS
   if (useMumps) {
@@ -410,7 +410,7 @@ void Solution::solve(bool useMumps) {
 #else
   solver = Teuchos::rcp(new KluSolver());
 #endif
-  solve(solver);
+  return solve(solver);
 }
 
 void Solution::setSolution(Teuchos::RCP<Solution> otherSoln) {
@@ -879,7 +879,7 @@ void Solution::setProblem(Teuchos::RCP<Solver> solver) {
   solver->setProblem(problem);
 }
 
-void Solution::solveWithPrepopulatedStiffnessAndLoad(Teuchos::RCP<Solver> solver, bool callResolveInsteadOfSolve) {
+int Solution::solveWithPrepopulatedStiffnessAndLoad(Teuchos::RCP<Solver> solver, bool callResolveInsteadOfSolve) {
   int rank = Teuchos::GlobalMPISession::getRank();
   int numProcs = Teuchos::GlobalMPISession::getNProc();
   
@@ -946,9 +946,11 @@ void Solution::solveWithPrepopulatedStiffnessAndLoad(Teuchos::RCP<Solver> solver
   err = timeSolveVector.MeanValue( &_meanTimeSolve );
   err = timeSolveVector.MinValue( &_minTimeSolve );
   err = timeSolveVector.MaxValue( &_maxTimeSolve );
+  
+  return solveSuccess;
 }
 
-void Solution::solve(Teuchos::RCP<Solver> solver) {
+int Solution::solve(Teuchos::RCP<Solver> solver) {
 //  int rank = Teuchos::GlobalMPISession::getRank();
 
   if (_oldDofInterpreter.get() != NULL) { // proxy for having a condensation interpreter
@@ -962,7 +964,7 @@ void Solution::solve(Teuchos::RCP<Solver> solver) {
   initializeStiffnessAndLoad();
   setProblem(solver);
   populateStiffnessAndLoad();
-  solveWithPrepopulatedStiffnessAndLoad(solver);
+  int solveSuccess = solveWithPrepopulatedStiffnessAndLoad(solver);
 //  cout << "about to call importSolution on rank " << rank << endl;
   importSolution();
 //  cout << "calling importGlobalSolution (this doesn't scale well, especially in its current form).\n";
@@ -974,6 +976,8 @@ void Solution::solve(Teuchos::RCP<Solver> solver) {
   if (_reportTimingResults ) {
     reportTimings();
   }
+  
+  return solveSuccess;
 }
 
 void Solution::reportTimings() {

@@ -177,15 +177,15 @@ public:
   void populateStiffnessAndLoad();
   void imposeBCs();
   void setProblem(Teuchos::RCP<Solver> solver);
-  void solveWithPrepopulatedStiffnessAndLoad(Teuchos::RCP<Solver> solver, bool callResolveInstead = false);
+  int solveWithPrepopulatedStiffnessAndLoad(Teuchos::RCP<Solver> solver, bool callResolveInstead = false);
   void importSolution(); // imports for all rank-local cellIDs
   void importGlobalSolution(); // imports (and interprets!) global solution.  NOT scalable.
   
-  void solve(); // could add arguments to allow different solution algorithms to be selected...
+  int solve(); // could add arguments to allow different solution algorithms to be selected...
 
-  void solve(bool useMumps);
+  int solve(bool useMumps);
 
-  void solve( Teuchos::RCP<Solver> solver );
+  int solve( Teuchos::RCP<Solver> solver );
 
   void addSolution(Teuchos::RCP<Solution> soln, double weight, bool allowEmptyCells = false, bool replaceBoundaryTerms=false); // thisSoln += weight * soln
   // will add terms in varsToAdd, but will replace all other variables
