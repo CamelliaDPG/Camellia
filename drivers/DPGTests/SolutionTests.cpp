@@ -2279,8 +2279,6 @@ bool SolutionTests::testCondensationSolveWithSinglePointConstraint() {
 }
 
 bool SolutionTests::testCondensationSolveWithZeroMeanConstraint() {
-  // (specifically, we don't yet do a zero mean constraint!)
-  
   bool success = true;
   double tol = 1e-12;
   
