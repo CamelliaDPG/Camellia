@@ -19,6 +19,8 @@
 #include "AdditiveSchwarz.h"
 #include "MeshFactory.h"
 
+#include "HDF5Exporter.h"
+
 using namespace Camellia;
 
 Teuchos::RCP<Epetra_Operator> CamelliaAdditiveSchwarzPreconditioner(Epetra_RowMatrix* A, int overlapLevel, MeshPtr mesh, Teuchos::RCP<DofInterpreter> dofInterpreter) {
@@ -140,8 +142,25 @@ public:
     
     int solveResult = solver.Iterate(_maxIters,_tol);
     
+    int remainingIters = _maxIters;
+    
     const double* status = solver.GetAztecStatus();
     int whyTerminated = status[AZ_why];
+    
+    int rank = Teuchos::GlobalMPISession::getRank();
+    
+    int maxRestarts = 1;
+    int numRestarts = 0;
+    while ((whyTerminated==AZ_loss) && (numRestarts < maxRestarts)) {
+      remainingIters -= status[AZ_its];
+      if (rank==0) cout << "Aztec warned that the recursive residual indicates convergence even though the true residual is too large.  Restarting with the new solution as initial guess, with maxIters = " << remainingIters << endl;
+      solveResult = solver.Iterate(remainingIters,_tol);
+      whyTerminated = status[AZ_why];
+      numRestarts++;
+    }
+    remainingIters -= status[AZ_its];
+    _iterationCount = _maxIters - remainingIters;
+    
     switch (whyTerminated) {
       case AZ_normal:
 //        cout << "whyTerminated: AZ_normal " << endl;
@@ -175,12 +194,12 @@ public:
     if (_mesh != Teuchos::null) {
       preconditioner = CamelliaAdditiveSchwarzPreconditioner(A, _schwarzOverlap, _mesh, _dofInterpreter);
       
-      Teuchos::RCP< Epetra_CrsMatrix > M;
-      M = Epetra_Operator_to_Epetra_Matrix::constructInverseMatrix(*preconditioner, A->RowMatrixRowMap());
-      
-      int rank = Teuchos::GlobalMPISession::getRank();
-      if (rank==0) cout << "writing preconditioner to /tmp/preconditioner.dat.\n";
-      EpetraExt::RowMatrixToMatrixMarketFile("/tmp/preconditioner.dat",*M, NULL, NULL, false);
+//      Teuchos::RCP< Epetra_CrsMatrix > M;
+//      M = Epetra_Operator_to_Epetra_Matrix::constructInverseMatrix(*preconditioner, A->RowMatrixRowMap());
+//      
+//      int rank = Teuchos::GlobalMPISession::getRank();
+//      if (rank==0) cout << "writing preconditioner to /tmp/preconditioner.dat.\n";
+//      EpetraExt::RowMatrixToMatrixMarketFile("/tmp/preconditioner.dat",*M, NULL, NULL, false);
       
     } else {
       preconditioner = IfPackAdditiveSchwarzPreconditioner(A, _schwarzOverlap);
@@ -210,27 +229,120 @@ public:
 #include "Teuchos_ParameterList.hpp"
 
 #include "PoissonFormulation.h"
+#include "StokesVGPFormulation.h"
 
 #include "GMGSolver.h"
 
-void run(int &iterationCount, int spaceDim, int numCells, int k, int delta_k, bool conformingTraces, bool precondition,
-         bool schwarzOnly, bool useCamelliaAdditiveSchwarz, int schwarzOverlap, double cgTol,
-         int cgMaxIterations, int AztecOutputLevel, bool reportTimings, bool reportEnergyError) {
-  int rank = Teuchos::GlobalMPISession::getRank();
+enum ProblemChoice {
+  Poisson,
+  Stokes,
+  NavierStokes
+};
+
+void initializeSolutionAndCoarseMesh(SolutionPtr &solution, MeshPtr &coarseMesh, IPPtr &graphNorm, ProblemChoice problemChoice, int spaceDim,
+                                     bool conformingTraces, int numCells, int k, int delta_k) {
+  BFPtr bf;
+  BCPtr bc;
+  RHSPtr rhs;
+  MeshPtr mesh;
   
   double width = 1.0; // in each dimension
+  vector<double> x0(spaceDim,0); // origin is the default
   
-  PoissonFormulation formulation(spaceDim, conformingTraces);
-  
-  BFPtr poissonBF = formulation.bf();
-  
-  VarPtr phi_hat = formulation.phi_hat();
-  
-  MeshPtr mesh;
+  if (problemChoice == Poisson) {
+    PoissonFormulation formulation(spaceDim, conformingTraces);
+    
+    bf = formulation.bf();
+    
+    rhs = RHS::rhs();
+    FunctionPtr f = Function::constant(1.0);
+    
+    VarPtr q = formulation.q();
+    rhs->addTerm( f * q );
+    
+    bc = BC::bc();
+    SpatialFilterPtr boundary = SpatialFilter::allSpace();
+    VarPtr phi_hat = formulation.phi_hat();
+    bc->addDirichlet(phi_hat, boundary, Function::zero());
+  } else if (problemChoice == Stokes) {
+    
+    StokesVGPFormulation formulation(spaceDim, conformingTraces);
+    
+    bf = formulation.bf();
+    graphNorm = bf->graphNorm();
+    
+    rhs = RHS::rhs();
+    
+    FunctionPtr cos_y = Teuchos::rcp( new Cos_y );
+    FunctionPtr sin_y = Teuchos::rcp( new Sin_y );
+    FunctionPtr exp_x = Teuchos::rcp( new Exp_x );
+    
+    FunctionPtr x = Teuchos::rcp ( new Xn(1) );
+    FunctionPtr x2 = Teuchos::rcp( new Xn(2) );
+    FunctionPtr y2 = Teuchos::rcp( new Yn(2) );
+    FunctionPtr y = Teuchos::rcp( new Yn(1) );
+    
+    FunctionPtr u1_exact = - exp_x * ( y * cos_y + sin_y );
+    FunctionPtr u2_exact = exp_x * y * sin_y;
+    FunctionPtr p_exact = 2.0 * exp_x * sin_y;
+    
+    // to ensure zero mean for p, need the domain carefully defined:
+    x0[0] = -1.0;
+    x0[1] = -1.0;
+    
+    width = 2.0;
+    
+    bc = BC::bc();
+//    bc->addZeroMeanConstraint(formulation.p());
+    bc->addSinglePointBC(formulation.p()->ID(), Function::zero());
+    SpatialFilterPtr boundary = SpatialFilter::allSpace();
+    bc->addDirichlet(formulation.u_hat(1), boundary, u1_exact);
+    bc->addDirichlet(formulation.u_hat(2), boundary, u2_exact);
+    
+    double mu = 1.0;
+    
+    FunctionPtr f1 = -p_exact->dx() + mu * (u1_exact->dx()->dx() + u1_exact->dy()->dy());
+    FunctionPtr f2 = -p_exact->dy() + mu * (u2_exact->dx()->dx() + u2_exact->dy()->dy());
+    
+    VarPtr v1 = formulation.v(1);
+    VarPtr v2 = formulation.v(2);
+
+//    { // DEBUGGING
+//      int H1Order = k + 1;
+//      
+//      Teuchos::RCP<BilinearForm> bilinearForm = bf;
+//      
+//      vector<double> dimensions;
+//      vector<int> elementCounts;
+//      for (int d=0; d<spaceDim; d++) {
+//        dimensions.push_back(width);
+//        elementCounts.push_back(numCells);
+//      }
+//      MeshPtr mesh = MeshFactory::rectilinearMesh(bf, dimensions, elementCounts, H1Order, delta_k, x0);
+//
+//      vector<string> functionNames;
+//      vector<FunctionPtr> functions;
+//      
+//      functions.push_back(f1); functionNames.push_back("f1");
+//      functions.push_back(f2); functionNames.push_back("f2");
+//      functions.push_back(u1_exact); functionNames.push_back("u1_exact");
+//      functions.push_back(u2_exact); functionNames.push_back("u2_exact");
+//      functions.push_back(p_exact); functionNames.push_back("p_exact");
+//      
+//      HDF5Exporter exporter(mesh, "testFunctions", "/tmp/testSolution");
+//      
+//      exporter.exportFunction(functions, functionNames, 0, 10);
+//      
+//      cout << "Exported functions to /tmp/testSolution/testFunctions.\n";
+//    }
+    
+    RHSPtr rhs = RHS::rhs();
+//    rhs->addTerm(f1 * v1 + f2 * v2);
+  }
   
   int H1Order = k + 1;
   
-  Teuchos::RCP<BilinearForm> poissonBilinearForm = poissonBF;
+  Teuchos::RCP<BilinearForm> bilinearForm = bf;
   
   vector<double> dimensions;
   vector<int> elementCounts;
@@ -238,24 +350,28 @@ void run(int &iterationCount, int spaceDim, int numCells, int k, int delta_k, bo
     dimensions.push_back(width);
     elementCounts.push_back(numCells);
   }
-  mesh = MeshFactory::rectilinearMesh(poissonBF, dimensions, elementCounts, H1Order, delta_k);
+  mesh = MeshFactory::rectilinearMesh(bf, dimensions, elementCounts, H1Order, delta_k, x0);
   
   int H1Order_coarse = 0 + 1;
-  MeshPtr k0Mesh = MeshFactory::rectilinearMesh(poissonBF, dimensions, elementCounts, H1Order_coarse, delta_k);
+  coarseMesh = MeshFactory::rectilinearMesh(bf, dimensions, elementCounts, H1Order_coarse, delta_k, x0);
   
-  RHSPtr rhs = RHS::rhs();
-  FunctionPtr f = Function::constant(1.0);
+  graphNorm = bf->graphNorm();
   
-  VarPtr q = formulation.q();
-  rhs->addTerm( f * q );
+  solution = Solution::solution(mesh, bc, rhs, graphNorm);
+}
+
+void run(ProblemChoice problemChoice, int &iterationCount, int spaceDim, int numCells, int k, int delta_k, bool conformingTraces, bool precondition,
+         bool schwarzOnly, bool useCamelliaAdditiveSchwarz, int schwarzOverlap, double cgTol,
+         int cgMaxIterations, int AztecOutputLevel, bool reportTimings, bool reportEnergyError) {
+  int rank = Teuchos::GlobalMPISession::getRank();
   
-  BCPtr bc = BC::bc();
-  SpatialFilterPtr boundary = SpatialFilter::allSpace();
-  bc->addDirichlet(phi_hat, boundary, Function::zero());
+  SolutionPtr solution;
+  MeshPtr k0Mesh;
+  IPPtr graphNorm;
+  initializeSolutionAndCoarseMesh(solution, k0Mesh, graphNorm, problemChoice, spaceDim, conformingTraces, numCells, k, delta_k);
   
-  IPPtr graphNorm = poissonBF->graphNorm();
-  
-  SolutionPtr solution = Solution::solution(mesh, bc, rhs, graphNorm);
+  MeshPtr mesh = solution->mesh();
+  BCPtr bc = solution->bc();
   
   Teuchos::RCP<Solver> solver;
   if (!precondition) {
@@ -288,16 +404,23 @@ void run(int &iterationCount, int spaceDim, int numCells, int k, int delta_k, bo
     solver = Teuchos::rcp( gmgSolver ); // we use "new" above, so we can let this RCP own the memory
   }
   
-  //  solution->setWriteMatrixToFile(true, "/tmp/A_poisson.dat");
+//  if (problemChoice==Stokes) {
+//    if (rank==0) cout << "Writing fine Stokes matrix to /tmp/A_stokes.dat.\n";
+//    solution->setWriteMatrixToFile(true, "/tmp/A_stokes.dat");
+//  }
   
-  solution->solve(solver);
+  int result = solution->solve(solver);
   
-  if (!precondition) {
-    iterationCount = ((AztecSolver *) solver.get())->iterationCount();
-  } else if (schwarzOnly) {
-    iterationCount = ((AztecSolver *) solver.get())->iterationCount();
+  if (result == 0) {
+    if (!precondition) {
+      iterationCount = ((AztecSolver *) solver.get())->iterationCount();
+    } else if (schwarzOnly) {
+      iterationCount = ((AztecSolver *) solver.get())->iterationCount();
+    } else {
+      iterationCount = ((GMGSolver *) solver.get())->iterationCount();
+    }
   } else {
-    iterationCount = ((GMGSolver *) solver.get())->iterationCount();
+    iterationCount = -1;
   }
   
   if (reportTimings) solution->reportTimings();
@@ -337,10 +460,32 @@ void run(int &iterationCount, int spaceDim, int numCells, int k, int delta_k, bo
     cout << numGlobalDofs << " total dofs, including fields).\n";
     cout << "Energy error: " << energyErrorTotal << endl;
   }
+  
+//  if (rank==0) cout << "NOTE: Exported solution for debugging.\n";
+//  HDF5Exporter::exportSolution("/tmp/testSolution", "testSolution", solution);
+//  
+//  solution->solve();
+//  if (rank==0) cout << "NOTE: Exported direct solution for debugging.\n";
+//  HDF5Exporter::exportSolution("/tmp/testSolution", "testSolution_direct", solution);
 }
 
-void runMany(int spaceDim, int delta_k, bool conformingTraces, double cgTol, int cgMaxIterations, int aztecOutputLevel) {
+void runMany(ProblemChoice problemChoice, int spaceDim, int delta_k, bool conformingTraces, double cgTol, int cgMaxIterations, int aztecOutputLevel) {
   int rank = Teuchos::GlobalMPISession::getRank();
+  
+  string problemChoiceString;
+  switch (problemChoice) {
+    case Poisson:
+      problemChoiceString = "Poisson";
+      break;
+    case Stokes:
+      problemChoiceString = "Stokes";
+      break;
+    case NavierStokes:
+      problemChoiceString = "NavierStokes";
+    default:
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unhandled problem choice");
+      break;
+  }
   
   vector<bool> preconditionValues;
   preconditionValues.push_back(false);
@@ -362,7 +507,7 @@ void runMany(int spaceDim, int delta_k, bool conformingTraces, double cgTol, int
   }
   
   ostringstream results;
-  results << "Preconditioner\tSmoother\tOverlap\tnum_cells\th\tk\tIterations\n";
+  results << "Preconditioner\tSmoother\tOverlap\tnum_cells\tmesh_width\tk\tIterations\n";
   
   for (vector<bool>::iterator preconditionChoiceIt = preconditionValues.begin(); preconditionChoiceIt != preconditionValues.end(); preconditionChoiceIt++) {
     bool precondition = *preconditionChoiceIt;
@@ -370,8 +515,12 @@ void runMany(int spaceDim, int delta_k, bool conformingTraces, double cgTol, int
     vector<int> overlapValues;
     vector<bool> schwarzOnlyValues, useCamelliaSchwarzValues;
     if (precondition) {
-      schwarzOnlyValues.push_back(false);
-      schwarzOnlyValues.push_back(true);
+//      if (problemChoice==Poisson) { // we might only be interested in pure Schwarz preconditioners for Poisson
+        schwarzOnlyValues.push_back(false);
+        schwarzOnlyValues.push_back(true);
+//      } else {
+//        schwarzOnlyValues.push_back(false);
+//      }
       useCamelliaSchwarzValues.push_back(false);
       useCamelliaSchwarzValues.push_back(true);
       overlapValues.push_back(0);
@@ -393,9 +542,9 @@ void runMany(int spaceDim, int delta_k, bool conformingTraces, double cgTol, int
           S_str = "None";
         } else {
           if (useCamelliaSchwarz) {
-            S_str = "Schwarz (geometric)";
+            S_str = "Schwarz(geometric)";
           } else {
-            S_str = "Schwarz (algebraic)";
+            S_str = "Schwarz(algebraic)";
           }
         }
         
@@ -421,15 +570,14 @@ void runMany(int spaceDim, int delta_k, bool conformingTraces, double cgTol, int
               int iterationCount;
               bool reportTimings = false;
               bool reportEnergyError = false;
-              run(iterationCount, spaceDim, numCells1D, k, delta_k, conformingTraces,
+              run(problemChoice, iterationCount, spaceDim, numCells1D, k, delta_k, conformingTraces,
                   precondition, schwarzOnly, useCamelliaSchwarz, overlapValue,
                   cgTol, cgMaxIterations, aztecOutputLevel, reportTimings, reportEnergyError);
               
-              double h = 1.0 / numCells1D;
               int numCells = pow((double)numCells1D, spaceDim);
               
               results << M_str << "\t" << S_str << "\t" << overlapValue << "\t" << numCells << "\t";
-              results << h << "\t" << k << "\t" << iterationCount << endl;
+              results << numCells1D << "\t" << k << "\t" << iterationCount << endl;
             }
           }
         }
@@ -440,7 +588,7 @@ void runMany(int spaceDim, int delta_k, bool conformingTraces, double cgTol, int
   
   if (rank == 0) {
     ostringstream filename;
-    filename << "PoissonDriver" << spaceDim << "D_results.dat";
+    filename << problemChoiceString << "Driver" << spaceDim << "D_results.dat";
     ofstream fout(filename.str().c_str());
     fout << results.str();
     fout.close();
@@ -477,7 +625,7 @@ int main(int argc, char *argv[]) {
   int numCells = 2;
   
   int AztecOutputLevel = 1;
-  int cgMaxIterations = 10000;
+  int cgMaxIterations = 25000;
   int schwarzOverlap = 0;
   
   int spaceDim = 1;
@@ -489,6 +637,10 @@ int main(int argc, char *argv[]) {
   double cgTol = 1e-10;
   
   bool runAutomatic = false;
+  
+  string problemChoiceString = "Poisson";
+
+  cmdp.setOption("problem",&problemChoiceString,"problem choice: Poisson, Stokes, Navier-Stokes");
   
   cmdp.setOption("polyOrder",&k,"polynomial order for field variable u");
   cmdp.setOption("delta_k", &delta_k, "test space polynomial order enrichment");
@@ -515,20 +667,40 @@ int main(int argc, char *argv[]) {
     return -1;
   }
   
+  ProblemChoice problemChoice;
+  
+  if (problemChoiceString == "Poisson") {
+    problemChoice = Poisson;
+  } else if (problemChoiceString == "Stokes") {
+    problemChoice = Stokes;
+  } else if (problemChoiceString == "Navier-Stokes") {
+    if (rank==0) cout << "Navier-Stokes not yet supported by this driver!\n";
+#ifdef HAVE_MPI
+    MPI_Finalize();
+#endif
+    return -1;
+  } else {
+    if (rank==0) cout << "Problem choice not recognized.\n";
+#ifdef HAVE_MPI
+    MPI_Finalize();
+#endif
+    return -1;
+  }
+  
   if (delta_k==-1) delta_k = spaceDim;
   
   if (! runAutomatic) {
     int iterationCount;
     bool reportTimings = true, reportEnergyError = true;
     
-    run(iterationCount, spaceDim, numCells, k, delta_k, conformingTraces,
+    run(problemChoice, iterationCount, spaceDim, numCells, k, delta_k, conformingTraces,
         precondition, schwarzOnly, useCamelliaAdditiveSchwarz, schwarzOverlap,
         cgTol, cgMaxIterations, AztecOutputLevel, reportTimings, reportEnergyError);
     
     if (rank==0) cout << "Iteration count: " << iterationCount << endl;
   } else {
     if (rank==0) {
-      cout << "Running in automatic mode, with spaceDim " << spaceDim;
+      cout << "Running " << problemChoice << " solver in automatic mode, with spaceDim " << spaceDim;
       cout << ", delta_k = " << delta_k << ", ";
       if (conformingTraces)
         cout << "conforming traces, ";
@@ -537,7 +709,7 @@ int main(int argc, char *argv[]) {
       cout << "CG tolerance = " << cgTol << ", max iterations = " << cgMaxIterations << endl;
     }
     
-    runMany(spaceDim, delta_k, conformingTraces, cgTol, cgMaxIterations, AztecOutputLevel);
+    runMany(problemChoice, spaceDim, delta_k, conformingTraces, cgTol, cgMaxIterations, AztecOutputLevel);
   }
   return 0;
 }
