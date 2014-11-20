@@ -2249,6 +2249,9 @@ FunctionPtr Exp_x::dx() {
 FunctionPtr Exp_x::dy() {
   return Function::zero();
 }
+FunctionPtr Exp_x::dz() {
+  return Function::zero();
+}
 
 string Exp_y::displayString() {
   return "e^y";
@@ -2262,6 +2265,26 @@ FunctionPtr Exp_y::dx() {
 FunctionPtr Exp_y::dy() {
   return Teuchos::rcp( new Exp_y );
 }
+FunctionPtr Exp_y::dz() {
+  return Function::zero();
+}
+
+string Exp_z::displayString() {
+  return "e^z";
+}
+double Exp_z::value(double x, double y, double z) {
+  return exp(z);
+}
+FunctionPtr Exp_z::dx() {
+  return Function::zero();
+}
+FunctionPtr Exp_z::dy() {
+  return Function::zero();
+}
+FunctionPtr Exp_z::dz() {
+  return Teuchos::rcp( new Exp_z );
+}
+
 
 string Xn::displayString() {
   ostringstream ss;

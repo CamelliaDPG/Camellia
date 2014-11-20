@@ -486,6 +486,7 @@ public:
   double value(double x, double y);
   FunctionPtr dx();
   FunctionPtr dy();
+  FunctionPtr dz();
   string displayString();
 };
 
@@ -494,6 +495,16 @@ public:
   double value(double x, double y);
   FunctionPtr dx();
   FunctionPtr dy();
+  FunctionPtr dz();
+  string displayString();
+};
+
+class Exp_z : public SimpleFunction {
+public:
+  double value(double x, double y, double z);
+  FunctionPtr dx();
+  FunctionPtr dy();
+  FunctionPtr dz();
   string displayString();
 };
 
