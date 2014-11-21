@@ -123,9 +123,8 @@ void BC::removeZeroMeanConstraint( int fieldID ) {
   }
 }
 
-void BC::addSinglePointBC( int fieldID, FunctionPtr valueFunction, SpatialFilterPtr spatialPoints ) {
-  DirichletBC bc = make_pair(spatialPoints, valueFunction);
-  _singlePointBCs[ fieldID ] = bc;
+void BC::addSinglePointBC( int fieldID, double value, GlobalIndexType vertexNumber ) {
+  _singlePointBCs[ fieldID ] = make_pair(vertexNumber, value);
 }
 
 map< int, DirichletBC > & BC::dirichletBCs() {
@@ -243,31 +242,35 @@ void BC::imposeBC(int varID, FieldContainer<double> &physicalPoints,
   }
   else
   {
-    if (_singlePointBCs.find(varID) == _singlePointBCs.end()) {
-      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "this version of BC::imposeBC only supports singleton points.");
-    }
-    DirichletBC bc = _singlePointBCs[varID];
-    SpatialFilterPtr filter = bc.first;
-    FunctionPtr f = bc.second;
-    
-    BasisCachePtr basisCache = Teuchos::rcp( new PhysicalPointCache(physicalPoints) );
-    
-    filter->matchesPoints(imposeHere,basisCache);
-    f->values(dirichletValues,basisCache);
-    
-//    cout << "BC::imposeBC (singleton BC implementation) called for varID " << varID << endl;
-    
-    bool pointMatched = false; // make sure we just impose this once
-    for (int i=0; i<imposeHere.size(); i++) {
-      if (imposeHere[i]) {
-        if (pointMatched) {
-          // then don't impose here
-          imposeHere[i] = false;
-        } else {
-          pointMatched = true;
-        }
-      }
-    }
+    cout << "ERROR: this version of imposeBC (the singleton version) is only supported by legacy subclasses.\n";
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "this version of imposeBC (the singleton version) is only supported by legacy subclasses.");
+//    if (_singlePointBCs.find(varID) == _singlePointBCs.end()) {
+//      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "this version of BC::imposeBC only supports singleton points.");
+//    }
+//    DirichletBC bc = _singlePointBCs[varID];
+//    SpatialFilterPtr filter = bc.first;
+//    FunctionPtr f = bc.second;
+//    
+//    
+//    
+//    BasisCachePtr basisCache = Teuchos::rcp( new PhysicalPointCache(physicalPoints) );
+//    
+//    filter->matchesPoints(imposeHere,basisCache);
+//    f->values(dirichletValues,basisCache);
+//    
+////    cout << "BC::imposeBC (singleton BC implementation) called for varID " << varID << endl;
+//    
+//    bool pointMatched = false; // make sure we just impose this once
+//    for (int i=0; i<imposeHere.size(); i++) {
+//      if (imposeHere[i]) {
+//        if (pointMatched) {
+//          // then don't impose here
+//          imposeHere[i] = false;
+//        } else {
+//          pointMatched = true;
+//        }
+//      }
+//    }
   }
 }
 
@@ -310,6 +313,21 @@ void BC::coefficientsForBC(FieldContainer<double> &basisCoefficients, Teuchos::R
 //    //  how to take derivatives of BCFunction)
 //    Projector::projectFunctionOntoBasis(basisCoefficients, bcFxn, basis, sideBasisCache);
 //  }
+}
+
+double BC::valueForSinglePointBC(int varID) {
+  if (_singlePointBCs.find(varID) != _singlePointBCs.end())
+    return _singlePointBCs[varID].second;
+  else
+    return -1;
+}
+
+
+GlobalIndexType BC::vertexForSinglePointBC(int varID) {
+  if (_singlePointBCs.find(varID) != _singlePointBCs.end())
+    return _singlePointBCs[varID].first;
+  else
+    return -1;
 }
 
 BCPtr BC::bc() {

@@ -518,10 +518,15 @@ bool MeshTestSuite::testFluxIntegration() {
   
   for (int i=0; i<expectedValues.size(); i++) {
     PoissonExactSolution exactSolution(PoissonExactSolution::POLYNOMIAL, polyOrders[i]);
-    exactSolution.setUseSinglePointBCForPHI(true);
     int order = exactSolution.H1Order(); // matters for getting enough cubature points, and of course recovering the exact solution
+    vector<double> zeroPoint = exactSolution.getPointForBCImposition();
     Teuchos::RCP<Mesh> myMesh = MeshFactory::buildQuadMesh(quadPoints, horizontalCells, verticalCells,
                                                            exactSolution.bilinearForm(), order, order+pToAdd, triangulate);
+    IndexType vertexIndex;
+    if (! myMesh->getTopology()->getVertexIndex(zeroPoint, vertexIndex) ) {
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "vertex not found!");
+    }
+    exactSolution.setUseSinglePointBCForPHI(true, vertexIndex);
     
     Teuchos::RCP<DPGInnerProduct> ip = Teuchos::rcp(new MathInnerProduct(exactSolution.bilinearForm()));
     
@@ -577,10 +582,16 @@ bool MeshTestSuite::testFluxNorm() {
   
   for (int i=0; i<expectedValues.size(); i++) {
     PoissonExactSolution exactSolution(PoissonExactSolution::POLYNOMIAL, polyOrders[i]);
-    exactSolution.setUseSinglePointBCForPHI(true);
+    vector<double> zeroPoint = exactSolution.getPointForBCImposition();
     int order = exactSolution.H1Order(); // matters for getting enough cubature points, and of course recovering the exact solution
+    
     Teuchos::RCP<Mesh> myMesh = MeshFactory::buildQuadMesh(quadPoints, horizontalCells, verticalCells,
                                                            exactSolution.bilinearForm(), order, order+pToAdd, triangulate);
+    IndexType vertexIndex;
+    if (! myMesh->getTopology()->getVertexIndex(zeroPoint, vertexIndex) ) {
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "vertex not found!");
+    }
+    exactSolution.setUseSinglePointBCForPHI(true, vertexIndex);
     
     Teuchos::RCP<DPGInnerProduct> ip = Teuchos::rcp(new MathInnerProduct(exactSolution.bilinearForm()));
     
@@ -633,9 +644,16 @@ bool MeshTestSuite::testSacadoExactSolution() {
     int pToAdd = 1;
     for (int i=1; i<6; i++) {
       PoissonExactSolution exactSolution(PoissonExactSolution::POLYNOMIAL, i);
-      exactSolution.setUseSinglePointBCForPHI(true); // otherwise, we'd be using the zero-mean condition, and the solution doesn't have zero mean on this domain...
+      int horizontalCells = 2, verticalCells = 2;
       int order = exactSolution.H1Order(); // matters for getting enough cubature points, and of course recovering the exact solution
-      Teuchos::RCP<Mesh> myMesh = MeshFactory::buildQuadMesh(quadPoints, 2, 2, exactSolution.bilinearForm(), order, order+pToAdd, triangulate);
+      vector<double> zeroPoint = exactSolution.getPointForBCImposition();
+      Teuchos::RCP<Mesh> myMesh = MeshFactory::buildQuadMesh(quadPoints, horizontalCells, verticalCells,
+                                                             exactSolution.bilinearForm(), order, order+pToAdd, triangulate);
+      IndexType vertexIndex;
+      if (! myMesh->getTopology()->getVertexIndex(zeroPoint, vertexIndex) ) {
+        TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "vertex not found!");
+      }
+      exactSolution.setUseSinglePointBCForPHI(true, vertexIndex);
       
       Teuchos::RCP<DPGInnerProduct> ip = Teuchos::rcp(new MathInnerProduct(exactSolution.bilinearForm()));
       
@@ -1194,12 +1212,16 @@ bool MeshTestSuite::testHRefinement() {
   
   int polyOrder = 1;
   PoissonExactSolution exactSolution(PoissonExactSolution::POLYNOMIAL, polyOrder); // 0 doesn't mean constant, but a particular solution...
-  exactSolution.setUseSinglePointBCForPHI(true); // because these don't have zero mean on the domain...
-  
   int H1Order = exactSolution.H1Order();
-  int horizontalCells = 1; int verticalCells = 1;
-  
+  int horizontalCells = 2; int verticalCells = 2;
   Teuchos::RCP<Mesh> mesh = MeshFactory::buildQuadMesh(quadPoints, horizontalCells, verticalCells, exactSolution.bilinearForm(), H1Order, H1Order+1);
+  
+  vector<double> zeroPoint = exactSolution.getPointForBCImposition();
+  IndexType vertexIndex;
+  if (! mesh->getTopology()->getVertexIndex(zeroPoint, vertexIndex)) {
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "vertexIndex not found!");
+  }
+  exactSolution.setUseSinglePointBCForPHI(true, vertexIndex);
   
   vector<GlobalIndexType> cellsToRefine;
   for (int i=0; i<horizontalCells*verticalCells; i++) {
@@ -1332,8 +1354,8 @@ bool MeshTestSuite::testHRefinement() {
   
   cellsToRefine.clear();
   
-  // start with a fresh 2x1 mesh:
-  horizontalCells = 2; verticalCells = 1;
+  // start with a fresh 2x2 mesh:
+  horizontalCells = 2; verticalCells = 2;
   mesh = MeshFactory::buildQuadMesh(quadPoints, horizontalCells, verticalCells, exactSolution.bilinearForm(), H1Order, H1Order+1);
   
   // repeatedly refine the first element along the side shared with cellID 1
@@ -1624,8 +1646,6 @@ bool MeshTestSuite::testPRefinement() {
   
   PoissonExactSolution exactExponential(PoissonExactSolution::EXPONENTIAL);
   PoissonExactSolution exactPolynomial(PoissonExactSolution::POLYNOMIAL, 2); // 0 doesn't mean constant, but a particular solution...
-  exactPolynomial.setUseSinglePointBCForPHI(true); // because these don't have zero mean on the domain...
-  exactExponential.setUseSinglePointBCForPHI(true);
   
   exactSolutions.push_back( exactExponential );
   exactSolutions.push_back( exactPolynomial );
@@ -1642,6 +1662,19 @@ bool MeshTestSuite::testPRefinement() {
   
   Teuchos::RCP<Mesh> mesh1 = MeshFactory::buildQuadMesh(quadPoints, horizontalCells, verticalCells, exactPolynomial.bilinearForm(), H1Order, H1Order+1);
   Teuchos::RCP<Mesh> mesh2 = MeshFactory::buildQuadMesh(quadPoints, horizontalCells, verticalCells, exactPolynomial.bilinearForm(), H1Order+1, H1Order+2);
+  
+  vector<double> zeroPointPolynomial = exactPolynomial.getPointForBCImposition();
+  vector<double> zeroPointExponential = exactPolynomial.getPointForBCImposition();
+  IndexType vertexIndexPolynomial, vertexIndexExponential;
+  if (! mesh1->getTopology()->getVertexIndex(zeroPointPolynomial, vertexIndexPolynomial) ) {
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "vertex not found!");
+  }
+  if (! mesh1->getTopology()->getVertexIndex(zeroPointPolynomial, vertexIndexExponential) ) {
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "vertex not found!");
+  }
+  exactPolynomial.setUseSinglePointBCForPHI(true, vertexIndexPolynomial);
+  exactExponential.setUseSinglePointBCForPHI(true, vertexIndexExponential);
+
   Teuchos::RCP<DPGInnerProduct> ip0 = Teuchos::rcp(new MathInnerProduct(exactExponential.bilinearForm()));
   vector<GlobalIndexType> cellsToRefine;
   Solution solution1(mesh1, exactPolynomial.ExactSolution::bc(), exactPolynomial.ExactSolution::rhs(), ip0);
@@ -1661,8 +1694,7 @@ bool MeshTestSuite::testPRefinement() {
     success = false;
     cout << "FAILURE: Failed to resolve exact polynomial on mesh of more than sufficiently high degree... (tol: " << tol << "; error2: " << error2 << ")" << endl;
   }
-  
-  
+
   Teuchos::RCP<Mesh> mesh3 = MeshFactory::buildQuadMesh(quadPoints, horizontalCells, verticalCells, exactPolynomial.bilinearForm(), H1Order, H1Order+1);
   DofOrderingPtr trialOrdering = mesh3->getElementType(refinedCellID)->trialOrderPtr;
   mesh3->getDofOrderingFactory().trialPolyOrder(trialOrdering);
@@ -1885,8 +1917,6 @@ bool MeshTestSuite::testSinglePointBC() {
   
   PoissonExactSolution exactPolynomial(PoissonExactSolution::POLYNOMIAL, 1);
   
-  exactPolynomial.setUseSinglePointBCForPHI(true);
-  
   int order = 2;
   // instead of ref quad, use unit cell (force a transformation)
   FieldContainer<double> quadPoints(4,2);
@@ -1900,6 +1930,14 @@ bool MeshTestSuite::testSinglePointBC() {
   quadPoints(3,1) = 1.0;
   
   Teuchos::RCP<Mesh> mesh = MeshFactory::buildQuadMesh(quadPoints, horizontalCells, verticalCells, exactPolynomial.bilinearForm(), order, order+pToAdd);
+  
+  vector<double> zeroPoint = exactPolynomial.getPointForBCImposition();
+  IndexType vertexIndex;
+  if (! mesh->getTopology()->getVertexIndex(zeroPoint, vertexIndex) ) {
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "vertex not found!");
+  }
+  exactPolynomial.setUseSinglePointBCForPHI(true, vertexIndex);
+  
   if ( ! MeshTestUtility::checkMeshConsistency(mesh) ) {
     cout << "In singlePointBC test, mesh consistency test FAILED for non-conforming mesh." << endl;
     success = false;
@@ -1922,7 +1960,7 @@ bool MeshTestSuite::testSinglePointBC() {
   
   PoissonExactSolution exactPolynomialConforming = PoissonExactSolution(PoissonExactSolution::POLYNOMIAL, 1, true); // use conforming traces
   
-  exactPolynomialConforming.setUseSinglePointBCForPHI(true);
+  exactPolynomialConforming.setUseSinglePointBCForPHI(true, vertexIndex); // can reuse vertexIndex because we have the same mesh layout
   
   mesh = MeshFactory::buildQuadMesh(quadPoints, horizontalCells, verticalCells,
                                     exactPolynomialConforming.bilinearForm(), order, order+pToAdd);
@@ -1975,13 +2013,18 @@ bool MeshTestSuite::testSolutionForMultipleElementTypes() {
   quadPoints(3,0) = 0.0;
   quadPoints(3,1) = 1.0;
   
-  PoissonExactSolution exactPolynomial(PoissonExactSolution::POLYNOMIAL, 0); // 0 doesn't mean constant, but a particular solution...
-  exactPolynomial.setUseSinglePointBCForPHI(true);
-  
+  PoissonExactSolution exactPolynomial(PoissonExactSolution::POLYNOMIAL, 0); // 0 means a zero solution
   int order = 2; // H1 order ==> L2 order of order-1.
   int horizontalCells = 2; int verticalCells = 2;
-  
   Teuchos::RCP<Mesh> mesh = MeshFactory::buildQuadMesh(quadPoints, horizontalCells, verticalCells, exactPolynomial.bilinearForm(), order, order+1);
+
+  vector<double> zeroPoint = exactPolynomial.getPointForBCImposition();
+  IndexType vertexIndex;
+  if (! mesh->getTopology()->getVertexIndex(zeroPoint, vertexIndex) ) {
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "vertex not found!");
+  }
+  exactPolynomial.setUseSinglePointBCForPHI(true, vertexIndex);
+  
   Teuchos::RCP<DPGInnerProduct> ip0 = Teuchos::rcp(new MathInnerProduct(exactPolynomial.bilinearForm()));
   Solution solution1(mesh, exactPolynomial.ExactSolution::bc(), exactPolynomial.ExactSolution::rhs(), ip0);
   solution1.solve();
@@ -2021,9 +2064,6 @@ bool MeshTestSuite::testSolutionForSingleElementUpgradedSide() {
   double tol = 5e-13;
   
   PoissonExactSolution exactPolynomial(PoissonExactSolution::POLYNOMIAL, 0);
-  
-  exactPolynomial.setUseSinglePointBCForPHI(true);
-  
   int order = 2;
   // use ref quad
   FieldContainer<double> quadPoints(4,2);
@@ -2037,6 +2077,14 @@ bool MeshTestSuite::testSolutionForSingleElementUpgradedSide() {
   quadPoints(3,1) = 1.0;
   
   Teuchos::RCP<Mesh> mesh = MeshFactory::buildQuadMesh(quadPoints, 1, 1, exactPolynomial.bilinearForm(), order, order);
+  
+  vector<double> zeroPoint = exactPolynomial.getPointForBCImposition();
+  IndexType vertexIndex;
+  if (! mesh->getTopology()->getVertexIndex(zeroPoint, vertexIndex) ) {
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "vertex not found!");
+  }
+  exactPolynomial.setUseSinglePointBCForPHI(true,vertexIndex);
+
   Teuchos::RCP<DPGInnerProduct> ip = Teuchos::rcp(new MathInnerProduct(exactPolynomial.bilinearForm()));
   Solution solution(mesh, exactPolynomial.ExactSolution::bc(), exactPolynomial.ExactSolution::rhs(), ip);
   solution.solve();
@@ -2231,10 +2279,15 @@ bool MeshTestSuite::testPointContainment() {
   vector<double> expectedValues;
   
   PoissonExactSolution exactSolution(PoissonExactSolution::POLYNOMIAL, polyOrder);
-  exactSolution.setUseSinglePointBCForPHI(true);
+  vector<double> zeroPoint = exactSolution.getPointForBCImposition();
   int order = exactSolution.H1Order(); // matters for getting enough cubature points, and of course recovering the exact solution
   Teuchos::RCP<Mesh> myMesh = MeshFactory::buildQuadMesh(quadPoints, horizontalCells, verticalCells,
                                                          exactSolution.bilinearForm(), order, order+pToAdd, triangulate);
+  IndexType vertexIndex;
+  if (! myMesh->getTopology()->getVertexIndex(zeroPoint, vertexIndex) ) {
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "vertex not found!");
+  }
+  exactSolution.setUseSinglePointBCForPHI(true, vertexIndex);
   
   vector<double> x, y; vector<int> inside;
   x.push_back(0.5); y.push_back(0.5); inside.push_back(0);

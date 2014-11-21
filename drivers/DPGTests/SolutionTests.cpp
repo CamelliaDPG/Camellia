@@ -179,7 +179,7 @@ void SolutionTests::setup() {
   _poissonExactSolution = 
     Teuchos::rcp( new PoissonExactSolution(PoissonExactSolution::POLYNOMIAL, 
 					   polyOrder, useConformingTraces) );  
-  _poissonExactSolution->setUseSinglePointBCForPHI(false); // impose zero-mean constraint
+  _poissonExactSolution->setUseSinglePointBCForPHI(false, -1); // impose zero-mean constraint
 
   int H1Order = polyOrder+1;
   int horizontalCells = 2; int verticalCells = 2;
@@ -2049,7 +2049,7 @@ bool SolutionTests::testCondensationSolveNonlinear() {
 
 bool SolutionTests::testCondensationSolveWithSinglePointConstraint() {
   bool success = true;
-  double tol = 5e-12;
+  double tol = 1e-11;
   
   int rank = Teuchos::GlobalMPISession::getRank();;
   
@@ -2084,7 +2084,7 @@ bool SolutionTests::testCondensationSolveWithSinglePointConstraint() {
   bc->addDirichlet(u1hat, topBoundary, Function::constant(1.0));
   bc->addDirichlet(u1hat, wallBoundary, Function::zero());
   bc->addDirichlet(u2hat, wallBoundary, Function::zero());
-  bc->addSinglePointBC(p->ID(), Function::zero());
+  bc->addSinglePointBC(p->ID(), 0);
   
   ////////////////////   BUILD MESH   ///////////////////////
   

@@ -41,6 +41,8 @@
 #include "Projector.h"
 #include "VarFactory.h"
 
+#include "BasisFactory.h"
+
 #include "BC.h"
 #include "BCFunction.h"
 
@@ -126,18 +128,48 @@ void Boundary::bcsToImpose(FieldContainer<GlobalIndexType> &globalIndices,
                            DofInterpreter* dofInterpreter, const Epetra_Map *globalDofMap) {
   int rank = Teuchos::GlobalMPISession::getRank();
   
+  set< GlobalIndexType > rankLocalCells = _mesh->cellIDsInPartition();
+  
   // first, let's check for any singletons (one-point BCs)
-  map<int,bool> isSingleton;
+  map<IndexType, set < pair<int, unsigned> > > singletonsForCell;
+  
   vector< int > trialIDs = _mesh->bilinearForm()->trialIDs();
   for (vector< int >::iterator trialIt = trialIDs.begin(); trialIt != trialIDs.end(); trialIt++) {
     int trialID = *trialIt;
-    isSingleton[trialID] = bc.singlePointBC(trialID);
+    if (bc.singlePointBC(trialID)) {
+      GlobalIndexType vertexNumberForImposition = bc.vertexForSinglePointBC(trialID);
+      if (vertexNumberForImposition == -1) vertexNumberForImposition = 0; // just pick the first point in the mesh.  This should never be a hanging node.
+      unsigned vertexDim = 0;
+      IndexType leastActiveCellIndex = -1;
+      set< pair<IndexType, unsigned> > cellsForVertex = _mesh->getTopology()->getCellsContainingEntity(vertexDim, vertexNumberForImposition);
+      for (set< pair<IndexType, unsigned> >::iterator cellEntryIt = cellsForVertex.begin(); cellEntryIt != cellsForVertex.end(); cellEntryIt++) {
+        IndexType cellIndex = cellEntryIt->first;
+        if (_mesh->getTopology()->getActiveCellIndices().find(cellIndex) != _mesh->getTopology()->getActiveCellIndices().end()) {
+          leastActiveCellIndex = cellIndex;
+          break;
+        }
+      }
+      if (rankLocalCells.find(leastActiveCellIndex) != rankLocalCells.end()) { // we own this cell, so we're responsible for imposing the singleton BC
+        CellPtr cell = _mesh->getTopology()->getCell(leastActiveCellIndex);
+        int vertexCount = cell->vertices().size();
+        for (int vertexOrdinal=0; vertexOrdinal<vertexCount; vertexOrdinal++) {
+          if (vertexNumberForImposition == cell->vertices()[vertexOrdinal]) {
+            singletonsForCell[leastActiveCellIndex].insert(make_pair(trialID, vertexOrdinal));
+          }
+        }
+      }
+    }
   }
   
-  set< GlobalIndexType > rankLocalCells = _mesh->cellIDsInPartition();
   map< GlobalIndexType, double> bcGlobalIndicesAndValues;
+  set < pair<int, unsigned> > noSingletons;
+  
   for (set< GlobalIndexType >::iterator cellIDIt = rankLocalCells.begin(); cellIDIt != rankLocalCells.end(); cellIDIt++) {
-    bcsToImpose(bcGlobalIndicesAndValues, bc, *cellIDIt, isSingleton, dofInterpreter, globalDofMap);
+    if (singletonsForCell.find(*cellIDIt) != singletonsForCell.end()) {
+      bcsToImpose(bcGlobalIndicesAndValues, bc, *cellIDIt, singletonsForCell[*cellIDIt], dofInterpreter, globalDofMap);
+    } else {
+      bcsToImpose(bcGlobalIndicesAndValues, bc, *cellIDIt, noSingletons, dofInterpreter, globalDofMap);
+    }
   }
   
   globalIndices.resize(bcGlobalIndicesAndValues.size());
@@ -150,21 +182,21 @@ void Boundary::bcsToImpose(FieldContainer<GlobalIndexType> &globalIndices,
     globalValues[entryOrdinal] = bcEntry->second;
   }
   
-  // check to make sure all our singleton BCs got imposed:
-  for (vector< int >::iterator trialIt = trialIDs.begin(); trialIt != trialIDs.end(); trialIt++) {
-    int trialID = *trialIt;
-    if ((isSingleton[trialID]) && _imposeSingletonBCsOnThisRank) {
-      // that means that it was NOT imposed: warn the user
-      cout << "WARNING: singleton BC requested for trial variable " << _mesh->bilinearForm()->trialName(trialID);
-      cout << ", but no BC was imposed for this variable (possibly because imposeHere never returned true for any point)." << endl;
-    }
-  }
+//  // check to make sure all our singleton BCs got imposed:
+//  for (vector< int >::iterator trialIt = trialIDs.begin(); trialIt != trialIDs.end(); trialIt++) {
+//    int trialID = *trialIt;
+//    if ((isSingleton[trialID]) && _imposeSingletonBCsOnThisRank) {
+//      // that means that it was NOT imposed: warn the user
+//      cout << "WARNING: singleton BC requested for trial variable " << _mesh->bilinearForm()->trialName(trialID);
+//      cout << ", but no BC was imposed for this variable (possibly because imposeHere never returned true for any point)." << endl;
+//    }
+//  }
   
   //cout << "bcsToImpose: globalIndices:" << endl << globalIndices;
 }
 
 void Boundary::bcsToImpose( map<  GlobalIndexType, double > &globalDofIndicesAndValues, BC &bc,
-                           GlobalIndexType cellID, map<int,bool> &isSingleton,
+                           GlobalIndexType cellID, set < pair<int, unsigned> > &singletons,
                            DofInterpreter* dofInterpreter, const Epetra_Map *globalDofMap) {
   CellPtr cell = _mesh->getTopology()->getCell(cellID);
   
@@ -180,211 +212,138 @@ void Boundary::bcsToImpose( map<  GlobalIndexType, double > &globalDofIndicesAnd
   ElementTypePtr elemType = _mesh->getElementType(cellID);
   DofOrderingPtr trialOrderingPtr = elemType->trialOrderPtr;
   vector< int > trialIDs = _mesh->bilinearForm()->trialIDs();
-  int spaceDim = elemType->cellTopoPtr->getDimension();
-  int sideDim = spaceDim - 1;
   Teuchos::RCP<Mesh> meshPtr = Teuchos::rcp(_mesh,false); // create an RCP that doesn't own the memory....
-  BasisCachePtr basisCache = BasisCache::basisCacheForCell(meshPtr, cellID);
-  for (vector< int >::iterator trialIt = trialIDs.begin(); trialIt != trialIDs.end(); trialIt++) {
-    int trialID = *(trialIt);
-    bool isTrace = _mesh->bilinearForm()->functionSpaceForTrial(trialID) == IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD;
-    // we assume if it's not a trace, then it's a flux (i.e. L2 projection is appropriate)
-    if ( bc.bcsImposed(trialID) ) {
-      vector<unsigned> boundarySides = cell->boundarySides();
-      
-      // 2. Determine global dof indices and values, in one pass per side
-      for (int i=0; i<boundarySides.size(); i++) {
-        unsigned sideOrdinal = boundarySides[i];
-        BasisPtr basis = trialOrderingPtr->getBasis(trialID,sideOrdinal);
-        int numDofs = basis->getCardinality();
-        GlobalIndexType numCells = 1;
-        if (numCells > 0) {
-          FieldContainer<double> dirichletValues(numCells,numDofs);
-          // project bc function onto side basis:
-          BCPtr bcPtr = Teuchos::rcp(&bc, false);
-          Teuchos::RCP<BCFunction> bcFunction = BCFunction::bcFunction(bcPtr, trialID, isTrace);
-          bcPtr->coefficientsForBC(dirichletValues, bcFunction, basis, basisCache->getSideBasisCache(sideOrdinal));
-          dirichletValues.resize(numDofs);
-          if (bcFunction->imposeOnCell(0)) {
-            FieldContainer<double> globalData;
-            FieldContainer<GlobalIndexType> globalDofIndices;
-            dofInterpreter->interpretLocalBasisCoefficients(cellID, trialID, sideOrdinal, dirichletValues, globalData, globalDofIndices);
-              for (int globalDofOrdinal=0; globalDofOrdinal<globalDofIndices.size(); globalDofOrdinal++) {
-                GlobalIndexType globalDofIndex = globalDofIndices(globalDofOrdinal);
-                globalDofIndicesAndValues[globalDofIndex] = globalData(globalDofOrdinal);
+  
+  vector<unsigned> boundarySides = cell->boundarySides();
+  if (boundarySides.size() > 0) {
+    BasisCachePtr basisCache = BasisCache::basisCacheForCell(meshPtr, cellID);
+    for (vector< int >::iterator trialIt = trialIDs.begin(); trialIt != trialIDs.end(); trialIt++) {
+      int trialID = *(trialIt);
+      bool isTrace = _mesh->bilinearForm()->functionSpaceForTrial(trialID) == IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD;
+      // we assume if it's not a trace, then it's a flux (i.e. L2 projection is appropriate)
+      if ( bc.bcsImposed(trialID) ) {
+        // Determine global dof indices and values, in one pass per side
+        for (int i=0; i<boundarySides.size(); i++) {
+          unsigned sideOrdinal = boundarySides[i];
+          BasisPtr basis = trialOrderingPtr->getBasis(trialID,sideOrdinal);
+          int numDofs = basis->getCardinality();
+          GlobalIndexType numCells = 1;
+          if (numCells > 0) {
+            FieldContainer<double> dirichletValues(numCells,numDofs);
+            // project bc function onto side basis:
+            BCPtr bcPtr = Teuchos::rcp(&bc, false);
+            Teuchos::RCP<BCFunction> bcFunction = BCFunction::bcFunction(bcPtr, trialID, isTrace);
+            bcPtr->coefficientsForBC(dirichletValues, bcFunction, basis, basisCache->getSideBasisCache(sideOrdinal));
+            dirichletValues.resize(numDofs);
+            if (bcFunction->imposeOnCell(0)) {
+              FieldContainer<double> globalData;
+              FieldContainer<GlobalIndexType> globalDofIndices;
+              dofInterpreter->interpretLocalBasisCoefficients(cellID, trialID, sideOrdinal, dirichletValues, globalData, globalDofIndices);
+                for (int globalDofOrdinal=0; globalDofOrdinal<globalDofIndices.size(); globalDofOrdinal++) {
+                  GlobalIndexType globalDofIndex = globalDofIndices(globalDofOrdinal);
+                  globalDofIndicesAndValues[globalDofIndex] = globalData(globalDofOrdinal);
+                }
               }
             }
           }
         }
-      }
+    }
   }
   
-  for (vector< int >::iterator trialIt = trialIDs.begin(); trialIt != trialIDs.end(); trialIt++) {
-    // now, deal with the singletons:
-    int trialID = *trialIt;
+  for (set<pair<int, unsigned> >::iterator singletonIt = singletons.begin(); singletonIt != singletons.end(); singletonIt++) {
+    int trialID = singletonIt->first;
+    unsigned vertexOrdinalInCell = singletonIt->second;
     
     shards::CellTopology cellTopo = *(elemType->cellTopoPtr.get());
+
+    // in some ways less nice than the previous version of singleton BC imposition; we don't impose a non-zero value (because
+    // we don't figure out physical points, etc.), and we also neglect any spatial filtering.
     
-    if (! _mesh->meshUsesMaximumRule()) {
-      // a bit less nice than the maximum rule singleton BC imposition; we don't impose a non-zero value (because
-      // we don't figure out physical points, etc.), and we also neglect any spatial filtering.
-      // We just find some GlobalDofIndex that belongs to the variable in question, and impose zero on it.
-      
-      // OTOH, here we do support traces and fluxes for single-point BCs
-      if (_imposeSingletonBCsOnThisRank) {
-        if (isSingleton[trialID]) {
-        
-          set<GlobalIndexType> globalIndicesForVariable;
-          DofOrderingPtr trialOrderingPtr = elemType->trialOrderPtr;
-          
-          int numSides = _mesh->bilinearForm()->isFluxOrTrace(trialID) ? cellTopo.getSideCount() : 1;
-          
-          for (int sideOrdinal=0; sideOrdinal < numSides; sideOrdinal++) {
-            BasisPtr basis = trialOrderingPtr->getBasis(trialID,sideOrdinal);
-            int basisCardinality = basis->getCardinality();
-            FieldContainer<double> basisCoefficients(basisCardinality);
-            FieldContainer<double> globalCoefficients; // we'll ignore this
-            FieldContainer<GlobalIndexType> globalDofIndices;
-            dofInterpreter->interpretLocalBasisCoefficients(cellID, trialID, sideOrdinal, basisCoefficients,
-                                                             globalCoefficients, globalDofIndices);
-            if (globalDofMap != NULL) {
-              for (int i=0; i<globalDofIndices.size(); i++) {
-                if (globalDofMap->LID((GlobalIndexTypeToCast)globalDofIndices[i]) != -1) {
-                  globalDofIndicesAndValues[globalDofIndices[i]] = 0.0;
-//                  cout << "Imposed single-point BC on variable " << _mesh->bilinearForm()->trialName(trialID) << endl;
-                  isSingleton[trialID] = false; // we've imposed it...
-                  break;
-                }
-              }
-              
-            } else {
-              // _globalDofMap not set, so presumably mesh->GDA sees an accurate picture of the global dofs.
-              set<GlobalIndexType> rankLocalDofIndices = _mesh->globalDofAssignment()->globalDofIndicesForPartition(-1); // current rank
-              for (int i=0; i<globalDofIndices.size(); i++) {
-                if (rankLocalDofIndices.find(globalDofIndices[i]) != rankLocalDofIndices.end()) {
-                  globalDofIndicesAndValues[globalDofIndices[i]] = 0.0;
-//                  cout << "Imposed single-point BC on variable " << _mesh->bilinearForm()->trialName(trialID) << endl;
-                  isSingleton[trialID] = false; // we've imposed it...
-                  break;
-                }
-              }
-            }
-            if (!isSingleton[trialID]) { // imposed it, so skip other sides
-              break;
-            }
+    // OTOH, here we do support traces and fluxes for single-point BCs, and this is significantly simpler
+    
+    set<GlobalIndexType> globalIndicesForVariable;
+    DofOrderingPtr trialOrderingPtr = elemType->trialOrderPtr;
+    
+    IndexType vertexIndex = cell->vertices()[vertexOrdinalInCell];
+    int numSides = cell->getSideCount();
+    
+    int vertexOrdinal;
+    
+    int sideForVertex = -1;
+    int sideDim = cellTopo.getDimension() - 1;
+    if (!_mesh->bilinearForm()->isFluxOrTrace(trialID)) {
+      vertexOrdinal = vertexOrdinalInCell;
+      sideForVertex = 0; // for volume trialIDs, the "side" in DofOrdering is 0
+    } else {
+      int vertexOrdinalInSide = -1;
+      for (int sideOrdinal=0; sideOrdinal < numSides; sideOrdinal++) {
+        vector<IndexType> vertexIndicesForSide = cell->getEntityVertexIndices(sideDim, sideOrdinal);
+        for (int vertexOrdinal=0; vertexOrdinal < vertexIndicesForSide.size(); vertexOrdinal++) {
+          if (vertexIndicesForSide[vertexOrdinal] == vertexIndex) {
+            sideForVertex = sideOrdinal;
+            vertexOrdinalInSide = vertexOrdinal;
+            break;
           }
         }
+        if (sideForVertex != -1) break;
       }
-    } else { // maximum rule
-      TEUCHOS_TEST_FOR_EXCEPTION((isSingleton[trialID]) && ( _mesh->bilinearForm()->isFluxOrTrace(trialID) ),
-                               std::invalid_argument,
-                               "Singleton BCs on traces and fluxes unsupported...");
-
-    if ((isSingleton[trialID]) && ( ! _mesh->bilinearForm()->isFluxOrTrace(trialID) ) ) {
-      // (we only support singletons on the interior)
-      // find the physical points for the vertices.
-      // nodal H1 basis: we know that one basis function will be 1 at a given vertex,
-      // and the others will be 0.
-      // (a bit of a hack, but then so is imposing a BC at a single point)
-        // then we have a cell on which to impose the BC
-      FieldContainer<double> physicalCellNodes = _mesh->physicalCellNodesForCell(cellID);
-      int numCells = physicalCellNodes.dimension(0);
-      int numNodes = physicalCellNodes.dimension(1);
-      int spaceDim = physicalCellNodes.dimension(2);
-        
-      DofOrderingPtr trialOrderingPtr = elemType->trialOrderPtr;
-      BasisPtr basis = trialOrderingPtr->getBasis(trialID,0);
-      if (! basis->isNodal()) {
-        // could we relax this to just requiring a conforming basis?  I think any conforming basis will be "nodal"
-        // with respect to the vertices.  (I.e. each vertex has exactly one basis function on each element that is non-zero there.)
-        TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "single-point BC imposition requires a nodal basis");
+      if (sideForVertex == -1) {
+        cout << "ERROR: sideForVertex not found during singleton BC imposition.\n";
+        TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "sideForVertex not found during singleton BC imposition");
       }
-      int basisCardinality = basis->getCardinality();
-      FieldContainer<double> refNodes(numNodes,spaceDim);
-      CamelliaCellTools::refCellNodesForTopology(refNodes, cellTopo);
-      
-      FieldContainer<double> basisValues(basisCardinality,numNodes);
-      if ( isSingleton[trialID] ) {
-        if (_mesh->meshUsesMaximumRule()) {
-          basis->getValues(basisValues, refNodes, Intrepid::OPERATOR_VALUE);
-          
-          FieldContainer<int> basisOrdinalForPointFC(numNodes);
-          for (int ptIndex=0; ptIndex < numNodes; ptIndex++) {
-            int basisOrdinalForPoint = -1;
-            double tol = 1e-12;
-            for (int i=0; i< basisCardinality; i++) {
-              if (basisOrdinalForPoint == -1) {
-                if (abs(basisValues(i,ptIndex)-1.0) < tol ) {
-                  basisOrdinalForPoint = i;
-                } else if (abs(basisValues(i,ptIndex)) > tol ) {
-                  cout << "basis value at node " << ptIndex << " is neither 1 nor 0.  Values:" << endl;
-                  cout << basisValues;
-                  cout << "Reference points:\n" << refNodes;
-                  cout << "Physical cell nodes:\n" << physicalCellNodes;
-                  
-                  TEUCHOS_TEST_FOR_EXCEPTION(true,
-                                             std::invalid_argument,
-                                             "basis value at node neither 1.0 nor 0.0");
-                }
-              } else {
-                if (abs(basisValues(i,ptIndex)-1.0) < tol ) {
-                  TEUCHOS_TEST_FOR_EXCEPTION(true,
-                                             std::invalid_argument,
-                                             "multiple basis values at node == 1.0");
-                } else if (abs(basisValues(i,ptIndex)) > tol) {
-                  cout << "error: basisValue at node neither 1 nor 0: " << basisValues(i,ptIndex) << endl;
-                  TEUCHOS_TEST_FOR_EXCEPTION(true,
-                                             std::invalid_argument,
-                                             "basis value at node neither 1.0 nor 0.0");
-                }
-              }
-            }
-            if (basisOrdinalForPoint == -1) {
-              TEUCHOS_TEST_FOR_EXCEPTION(true,
-                                         std::invalid_argument,
-                                         "no nonzero basis function found at node");
-            }
-            // otherwise, we have our basis ordinal...
-            basisOrdinalForPointFC(ptIndex) = basisOrdinalForPoint;
+      vertexOrdinal = vertexOrdinalInSide;
+    }
+    BasisPtr basis = trialOrderingPtr->getBasis(trialID,sideForVertex);
+    
+    // upgrade basis to continuous one of the same cardinality, if it is discontinuous.
+    if ((basis->functionSpace() == IntrepidExtendedTypes::FUNCTION_SPACE_HVOL) || (basis->functionSpace() == IntrepidExtendedTypes::FUNCTION_SPACE_HVOL_DISC)) {
+      basis = BasisFactory::basisFactory()->getBasis(basis->getDegree(), basis->domainTopology(), IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD);
+    } else if (IntrepidExtendedTypes::functionSpaceIsDiscontinuous(basis->functionSpace())) {
+      IntrepidExtendedTypes::EFunctionSpaceExtended fsContinuous = IntrepidExtendedTypes::continuousSpaceForDiscontinuous((basis->functionSpace()));
+      basis = BasisFactory::basisFactory()->getBasis(basis->getDegree(), basis->domainTopology(), fsContinuous);
+    }
+    
+    std::set<int> dofOrdinals = basis->dofOrdinalsForVertex(vertexOrdinal);
+    if (dofOrdinals.size() != 1) {
+      cout << "ERROR: dofOrdinals.size() != 1 during singleton BC imposition.\n";
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "dofOrdinals.size() != 1 during singleton BC imposition");
+    }
+    int dofOrdinal = *dofOrdinals.begin();
+    int basisCardinality = basis->getCardinality();
+    FieldContainer<double> basisCoefficients(basisCardinality);
+    basisCoefficients[dofOrdinal] = 1.0;
+    FieldContainer<double> globalCoefficients; // we'll ignore this
+    FieldContainer<GlobalIndexType> globalDofIndices;
+    dofInterpreter->interpretLocalBasisCoefficients(cellID, trialID, sideForVertex, basisCoefficients,
+                                                    globalCoefficients, globalDofIndices);
+    double tol = 1e-14;
+    int nonzeroEntryOrdinal = -1;
+    for (int fieldOrdinal=0; fieldOrdinal < globalCoefficients.size(); fieldOrdinal++) {
+      if (abs(globalCoefficients[fieldOrdinal]) > tol) {
+        if (nonzeroEntryOrdinal != -1) {
+          // previous nonzero entry found; this is a problem--it means we have multiple global coefficients that depend on this vertex
+          // (could happen if user specified a hanging node)
+          cout << "Error: vertex for single-point imposition has multiple global degrees of freedom.\n";
+          TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Error: vertex for single-point imposition has multiple global degrees of freedom.");
+        }
+        // nonzero entry: store the fact, and impose the constraint
+        nonzeroEntryOrdinal = fieldOrdinal;
+        if (globalDofMap != NULL) {
+          if (globalDofMap->LID((GlobalIndexTypeToCast)globalDofIndices[fieldOrdinal]) != -1) {
+            globalDofIndicesAndValues[globalDofIndices[fieldOrdinal]] = bc.valueForSinglePointBC(trialID) * globalCoefficients[fieldOrdinal];
+          } else {
+            TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "ERROR: global dof index for single-point BC is not locally owned");
           }
-          FieldContainer<double> sideNormals;
-          FieldContainer<double> dirichletValues(numCells,numNodes);
-          FieldContainer<bool> imposeHere(numCells,numNodes);
-          bc.imposeBC(trialID, physicalCellNodes, sideNormals, dirichletValues, imposeHere);
-
-          for (int ptIndex=0; ptIndex<numNodes; ptIndex++) {
-            if ( imposeHere(0,ptIndex) && isSingleton[trialID] && _imposeSingletonBCsOnThisRank ) { // only impose singleton BCs on lowest rank with active cells
-              int localDofIndex = trialOrderingPtr->getDofIndex(trialID,basisOrdinalForPointFC(ptIndex));
-              GlobalIndexType globalDofIndex = _mesh->globalDofIndex(cellID, localDofIndex);;
-              if (dofInterpreter != NULL) {
-                // then map from mesh's view to the condensed view of the global dof index
-                // (only supported for CondensedDofInterpreter right now)
-                CondensedDofInterpreter* condensedDofInterpreter = dynamic_cast<CondensedDofInterpreter*>(dofInterpreter);
-                
-                if (condensedDofInterpreter != NULL) {
-                  globalDofIndex = condensedDofInterpreter->condensedGlobalIndex(globalDofIndex);
-                } else {
-                  Mesh* meshAsInterpreter = dynamic_cast<Mesh*>(dofInterpreter);
-                  if (meshAsInterpreter == NULL) {
-                    cout << "Unsupported dof interpreter for singleton BCs.\n";
-                    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unsupported dof interpreter for singleton BCs");
-                  }
-                }
-
-              }
-              globalDofIndicesAndValues[globalDofIndex] = dirichletValues(0,ptIndex);
-              isSingleton[trialID] = false; // we've imposed it...
-//              cout << "Imposed single-point BC on variable " << _mesh->bilinearForm()->trialName(trialID) << endl;
-              break;
-
-//                cout << "imposed singleton BC value " << dirichletValues(cellIndex,ptIndex);
-//                cout << " for variable " << _mesh->bilinearForm()->trialName(trialID) << " at point: (";
-//                cout << physicalCellNodes(cellIndex,ptIndex,0) << "," << physicalCellNodes(cellIndex,ptIndex,1);
-//                cout << ")" << endl;
-            }
+        } else {
+          // _globalDofMap not set, so presumably mesh->GDA sees an accurate picture of the global dofs.
+          set<GlobalIndexType> rankLocalDofIndices = _mesh->globalDofAssignment()->globalDofIndicesForPartition(-1); // current rank
+          if (rankLocalDofIndices.find(globalDofIndices[fieldOrdinal]) != rankLocalDofIndices.end()) {
+            globalDofIndicesAndValues[globalDofIndices[fieldOrdinal]] = 0.0;
+          } else {
+            TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "ERROR: global dof index for single-point BC is not locally owned");
           }
         }
       }
     }
-  }
   }
 }

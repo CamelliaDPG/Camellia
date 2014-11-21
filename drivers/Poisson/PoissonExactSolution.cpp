@@ -73,7 +73,7 @@ PoissonExactSolution::PoissonExactSolution(PoissonExactSolutionType type, int po
   FunctionPtr f = phi_exact->dx()->dx() + phi_exact->dy()->dy();
   _rhs->addTerm(f * q);
 
-  setUseSinglePointBCForPHI(false); // sets _bc
+  setUseSinglePointBCForPHI(false, -1); // sets _bc
 }
 
 int PoissonExactSolution::H1Order() {
@@ -116,11 +116,8 @@ FunctionPtr PoissonExactSolution::phi() {
       break;
     case EXPONENTIAL:
     {
-      integral = exp(1.0); // 4.18597023381589 / 4.0; // solution average as reported by Mathematica
+      integral = exp(1.0);
       FunctionPtr exp_x = Teuchos::rcp( new Exp_x );
-      // composed function expects a 2D vector argument as second argument...
-//      FunctionPtr exponent_arg = Function::vectorize(x * sin_y, Function::zero());
-//      f = Function::composedFunction(exp_x, exponent_arg);
       f = exp_x;
     }
   }
@@ -128,7 +125,14 @@ FunctionPtr PoissonExactSolution::phi() {
   return f;
 }
 
-void PoissonExactSolution::setUseSinglePointBCForPHI(bool useSinglePointBCForPhi) {
+std::vector<double> PoissonExactSolution::getPointForBCImposition() {
+  std::vector<double> point(2);
+  point[0] = 1.0;
+  point[1] = 1.0;
+  return point;
+}
+
+void PoissonExactSolution::setUseSinglePointBCForPHI(bool useSinglePointBCForPhi, IndexType vertexIndexForZeroValue) {
   FunctionPtr phi_exact = phi();
   
   VarFactory vf = _bf->varFactory();
@@ -148,7 +152,9 @@ void PoissonExactSolution::setUseSinglePointBCForPHI(bool useSinglePointBCForPhi
     _bc->addZeroMeanConstraint(phi);
 
   } else {
-    _bc->addSinglePointBC(phi->ID(), phi_exact);
+    std::vector<double> point = getPointForBCImposition();
+    double value = Function::evaluate(phi_exact, point[0], point[1]);
+    _bc->addSinglePointBC(phi->ID(), value, vertexIndexForZeroValue);
   }
 }
 

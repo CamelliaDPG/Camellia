@@ -21,7 +21,7 @@ class BC {
   
   typedef pair< SpatialFilterPtr, FunctionPtr > DirichletBC;
   set< int > _zeroMeanConstraints; // variables on which ZMCs imposed
-  map< int, DirichletBC > _singlePointBCs; // variables on which single-point conditions imposed
+  map< int, pair<GlobalIndexType,double> > _singlePointBCs; // variables on which single-point conditions imposed
   map< int, DirichletBC > _dirichletBCs; // key: trialID
 protected:
   map< int, DirichletBC > &dirichletBCs();
@@ -39,6 +39,8 @@ public:
                         FieldContainer<bool> &imposeHere);
   
   virtual bool singlePointBC(int varID); // override if you want to implement a BC at a single, arbitrary point (and nowhere else).
+  virtual double valueForSinglePointBC(int varID); 
+  virtual GlobalIndexType vertexForSinglePointBC(int varID); // returns -1 when no vertex was specified for the imposition
   
   virtual bool imposeZeroMeanConstraint(int varID);
   
@@ -50,7 +52,7 @@ public:
   virtual ~BC() {}
   
   void addDirichlet( VarPtr traceOrFlux, SpatialFilterPtr spatialPoints, FunctionPtr valueFunction );
-  void addSinglePointBC( int fieldID, FunctionPtr valueFunction, SpatialFilterPtr spatialPoints = SpatialFilter::allSpace() );
+  void addSinglePointBC( int fieldID, double value, GlobalIndexType meshVertexNumber = -1 );
   void addZeroMeanConstraint( VarPtr field );
   void removeZeroMeanConstraint( int fieldID );
   

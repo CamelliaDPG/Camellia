@@ -61,7 +61,9 @@ public:
   PoissonExactSolution(PoissonExactSolutionType type, int polyOrder=-2, bool useConformingTraces=false); // poly order here means that of phi -- -2 for non-polynomial types
 // ExactSolution
   virtual int H1Order(); // here it means the H1 order (i.e. polyOrder+1)
-  virtual void setUseSinglePointBCForPHI(bool value);
+  virtual void setUseSinglePointBCForPHI(bool value, IndexType vertexIndexForZeroValue);
+  
+  std::vector<double> getPointForBCImposition();
   
   static Teuchos::RCP<ExactSolution> poissonExactPolynomialSolution(int polyOrder, bool useConformingTraces = true);
 };
