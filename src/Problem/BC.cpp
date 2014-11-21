@@ -140,6 +140,13 @@ BCPtr BC::copyImposingZero() {
     bcIt->second.second = Function::zero();
   }
   
+  for (map< int, pair<GlobalIndexType,double> >::iterator singlePointIt = _singlePointBCs.begin(); singlePointIt != _singlePointBCs.end(); singlePointIt++) {
+    int trialID = singlePointIt->first;
+    GlobalIndexType vertexNumber = singlePointIt->second.first;
+    double zero = 0.0;
+    zeroBC->addSinglePointBC(trialID, zero, vertexNumber);
+  }
+  
   return zeroBC;
 }
 
