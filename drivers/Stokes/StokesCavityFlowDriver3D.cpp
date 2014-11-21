@@ -141,8 +141,6 @@ int main(int argc, char *argv[]) {
   
   int coarseMesh_k = 0;
   
-  int mumpsMaxMemoryMB = 768;
-  
   bool pMultiGridOnly = true;
   bool useWeightedGraphNorm = true;
   
@@ -335,7 +333,7 @@ int main(int argc, char *argv[]) {
   bc->addDirichlet(u2hat, otherBoundary, zero);
   bc->addDirichlet(u3hat, otherBoundary, zero);
   
-  bc->addSinglePointBC(p->ID(), Function::zero());
+  bc->addSinglePointBC(p->ID(), 0);
 //  bc->addZeroMeanConstraint(p);
 
   IPPtr graphNorm;
