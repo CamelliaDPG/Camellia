@@ -249,6 +249,8 @@ void initializeSolutionAndCoarseMesh(SolutionPtr &solution, MeshPtr &coarseMesh,
   double width = 1.0; // in each dimension
   vector<double> x0(spaceDim,0); // origin is the default
   
+  VarPtr p; // pressure
+  
   if (problemChoice == Poisson) {
     PoissonFormulation formulation(spaceDim, conformingTraces);
     
@@ -267,6 +269,8 @@ void initializeSolutionAndCoarseMesh(SolutionPtr &solution, MeshPtr &coarseMesh,
   } else if (problemChoice == Stokes) {
     
     StokesVGPFormulation formulation(spaceDim, conformingTraces);
+    
+    p = formulation.p();
     
     bf = formulation.bf();
     graphNorm = bf->graphNorm();
@@ -304,7 +308,6 @@ void initializeSolutionAndCoarseMesh(SolutionPtr &solution, MeshPtr &coarseMesh,
     // our usual way of adding in the zero mean constraint results in a negative eigenvalue
     // therefore, for now, we use a single-point BC
 //    bc->addZeroMeanConstraint(formulation.p());
-    bc->addSinglePointBC(formulation.p()->ID(), Function::zero());
     SpatialFilterPtr boundary = SpatialFilter::allSpace();
     bc->addDirichlet(formulation.u_hat(1), boundary, u1_exact);
     bc->addDirichlet(formulation.u_hat(2), boundary, u2_exact);
@@ -376,8 +379,22 @@ void initializeSolutionAndCoarseMesh(SolutionPtr &solution, MeshPtr &coarseMesh,
   }
   mesh = MeshFactory::rectilinearMesh(bf, dimensions, elementCounts, H1Order, delta_k, x0);
   
+  // now that we have mesh, add pressure constraint for Stokes (imposing zero at origin--want to aim for center of mesh)
+  if ((problemChoice == Stokes) || (problemChoice==NavierStokes)) {
+    vector<double> origin(spaceDim,0);
+    IndexType vertexIndex;
+    
+    if (!mesh->getTopology()->getVertexIndex(origin, vertexIndex)) {
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "origin vertex not found");
+    }
+    
+    bc->addSinglePointBC(p()->ID(), 0, vertexIndex);
+  }
+  
   int H1Order_coarse = 0 + 1;
   coarseMesh = MeshFactory::rectilinearMesh(bf, dimensions, elementCounts, H1Order_coarse, delta_k, x0);
+  
+  
   
   graphNorm = bf->graphNorm();
   
@@ -681,6 +698,9 @@ int main(int argc, char *argv[]) {
   
   cmdp.setOption("azOutput", &AztecOutputLevel, "Aztec output level");
   cmdp.setOption("numCells", &numCells, "number of cells in the initial mesh");
+  
+  cmdp.setOption("maxIterations", &cgMaxIterations, "maximum number of CG iterations");
+  cmdp.setOption("cgTol", &cgTol, "CG convergence tolerance");
   
   cmdp.setOption("runMany", "runOne", &runAutomatic, "Run in automatic mode (ignores several input parameters)");
   
