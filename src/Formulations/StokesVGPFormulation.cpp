@@ -12,9 +12,9 @@ const string StokesVGPFormulation::S_U1 = "u_1";
 const string StokesVGPFormulation::S_U2 = "u_2";
 const string StokesVGPFormulation::S_U3 = "u_3";
 const string StokesVGPFormulation::S_P = "p";
-const string StokesVGPFormulation::S_SIGMA1 = "\\widehat{\\sigma}_{1}";
-const string StokesVGPFormulation::S_SIGMA2 = "\\widehat{\\sigma}_{2}";
-const string StokesVGPFormulation::S_SIGMA3 = "\\widehat{\\sigma}_{3}";
+const string StokesVGPFormulation::S_SIGMA1 = "\\sigma_{1}";
+const string StokesVGPFormulation::S_SIGMA2 = "\\sigma_{2}";
+const string StokesVGPFormulation::S_SIGMA3 = "\\sigma_{3}";
 
 const string StokesVGPFormulation::S_U1_HAT = "\\widehat{u}_1";
 const string StokesVGPFormulation::S_U2_HAT = "\\widehat{u}_2";
@@ -136,6 +136,7 @@ StokesVGPFormulation::StokesVGPFormulation(int spaceDim, bool useConformingTrace
   // q:
   _stokesBF->addTerm(-u1,q->dx()); // (-u, grad q)
   _stokesBF->addTerm(-u2,q->dy());
+  if (spaceDim==3) _stokesBF->addTerm(-u3, q->dz());
 
   if (spaceDim==2) {
     _stokesBF->addTerm(u1_hat * n->x() + u2_hat * n->y(), q);
