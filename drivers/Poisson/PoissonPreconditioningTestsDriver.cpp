@@ -239,6 +239,13 @@ enum ProblemChoice {
   NavierStokes
 };
 
+enum RunManyPreconditionerChoices {
+  DontPrecondition,
+  AllGMG,     // Schwarz smoother, multiple overlap values, both algebraic and geometric Schwarz
+  AllSchwarz, // Schwarz as the only preconditioner; multiple overlap values, both algebraic and geometric Schwarz
+  All         // All of the above, including the DontPrecondition option
+};
+
 void initializeSolutionAndCoarseMesh(SolutionPtr &solution, MeshPtr &coarseMesh, IPPtr &graphNorm, ProblemChoice problemChoice, int spaceDim,
                                      bool conformingTraces, int numCells, int k, int delta_k) {
   BFPtr bf;
@@ -282,7 +289,9 @@ void initializeSolutionAndCoarseMesh(SolutionPtr &solution, MeshPtr &coarseMesh,
     FunctionPtr exp_x = Teuchos::rcp( new Exp_x );
     FunctionPtr exp_z = Teuchos::rcp( new Exp_z );
     
-    FunctionPtr y = Teuchos::rcp( new Yn(1) );
+    FunctionPtr x = Function::xn(1);
+    FunctionPtr y = Function::yn(1);
+    FunctionPtr z = Function::zn(1);
     
     FunctionPtr u1_exact, u2_exact, u3_exact, p_exact;
     
@@ -292,11 +301,16 @@ void initializeSolutionAndCoarseMesh(SolutionPtr &solution, MeshPtr &coarseMesh,
       u2_exact = exp_x * y * sin_y;
       p_exact = 2.0 * exp_x * sin_y;
     } else {
-      // this one is inspired the 2D one
+      // this one is inspired by the 2D one
       u1_exact = - exp_x * ( y * cos_y + sin_y );
       u2_exact = exp_x * y * sin_y + exp_z * y * cos_y;
-      u3_exact = - exp_z * (y * sin_y + cos_y);
-      p_exact = 2.0 * exp_x * sin_y * exp_z;
+      u3_exact = - exp_z * (cos_y - y * sin_y);
+      p_exact = 2.0 * exp_x * sin_y + 2.0 * exp_z * cos_y;
+      // DEBUGGING:
+//      u1_exact = Function::zero();
+//      u2_exact = Function::zero();
+//      u3_exact = x;
+//      p_exact = Function::zero();
     }
     
     // to ensure zero mean for p, need the domain carefully defined:
@@ -338,20 +352,32 @@ void initializeSolutionAndCoarseMesh(SolutionPtr &solution, MeshPtr &coarseMesh,
 //      }
 //      MeshPtr mesh = MeshFactory::rectilinearMesh(bf, dimensions, elementCounts, H1Order, delta_k, x0);
 //
-//      vector<string> functionNames;
-//      vector<FunctionPtr> functions;
+//      int rank = Teuchos::GlobalMPISession::getRank();
 //      
-//      functions.push_back(f1); functionNames.push_back("f1");
-//      functions.push_back(f2); functionNames.push_back("f2");
-//      functions.push_back(u1_exact); functionNames.push_back("u1_exact");
-//      functions.push_back(u2_exact); functionNames.push_back("u2_exact");
-//      functions.push_back(p_exact); functionNames.push_back("p_exact");
-//      
-//      HDF5Exporter exporter(mesh, "testFunctions", "/tmp/testSolution");
-//      
-//      exporter.exportFunction(functions, functionNames, 0, 10);
-//      
-//      cout << "Exported functions to /tmp/testSolution/testFunctions.\n";
+//      if (spaceDim==3) {
+//        double f1_L2 = f1->l2norm(mesh);
+//        double f2_L2 = f2->l2norm(mesh);
+//        double f3_L2 = f3->l2norm(mesh);
+//        if (rank==0) {
+//          cout << "f1_L2 = "<< f1_L2 << endl;
+//          cout << "f2_L2 = "<< f2_L2 << endl;
+//          cout << "f3_L2 = "<< f3_L2 << endl;
+//        }
+//        
+//        FunctionPtr div_u = u1_exact->dx() + u2_exact->dy() + u3_exact->dz();
+//        double integral = div_u->integrate(mesh);
+//        if (rank==0) cout << "integral of div_u = " << integral << endl;
+//        
+//        if (rank==0) cout << "bilinear form:\n";
+//        if (rank==0) bf->printTrialTestInteractions();
+//      } else if (spaceDim==2) {
+//        double f1_L2 = f1->l2norm(mesh);
+//        double f2_L2 = f2->l2norm(mesh);
+//        if (rank==0) {
+//          cout << "f1_L2 = "<< f1_L2 << endl;
+//          cout << "f2_L2 = "<< f2_L2 << endl;
+//        }
+//      }
 //    }
     
     VarPtr v1 = formulation.v(1);
@@ -387,14 +413,12 @@ void initializeSolutionAndCoarseMesh(SolutionPtr &solution, MeshPtr &coarseMesh,
     if (!mesh->getTopology()->getVertexIndex(origin, vertexIndex)) {
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "origin vertex not found");
     }
-    
-    bc->addSinglePointBC(p()->ID(), 0, vertexIndex);
+    bc->addSinglePointBC(p->ID(), 0, vertexIndex);
+//    bc->addZeroMeanConstraint(p);
   }
   
   int H1Order_coarse = 0 + 1;
   coarseMesh = MeshFactory::rectilinearMesh(bf, dimensions, elementCounts, H1Order_coarse, delta_k, x0);
-  
-  
   
   graphNorm = bf->graphNorm();
   
@@ -508,9 +532,12 @@ void run(ProblemChoice problemChoice, int &iterationCount, int spaceDim, int num
 //  solution->solve();
 //  if (rank==0) cout << "NOTE: Exported direct solution for debugging.\n";
 //  HDF5Exporter::exportSolution("/tmp/testSolution", "testSolution_direct", solution);
+//  energyErrorTotal = solution->energyErrorTotal();
+//  if (rank==0) cout << "Direct solution has energy error " << energyErrorTotal << endl;
 }
 
-void runMany(ProblemChoice problemChoice, int spaceDim, int delta_k, bool conformingTraces, double cgTol, int cgMaxIterations, int aztecOutputLevel) {
+void runMany(ProblemChoice problemChoice, int spaceDim, int delta_k, bool conformingTraces, double cgTol, int cgMaxIterations, int aztecOutputLevel,
+             RunManyPreconditionerChoices preconditionerChoices) {
   int rank = Teuchos::GlobalMPISession::getRank();
   
   string problemChoiceString;
@@ -528,9 +555,57 @@ void runMany(ProblemChoice problemChoice, int spaceDim, int delta_k, bool confor
       break;
   }
   
+  string preconditionerChoiceString;
+  switch (preconditionerChoices) {
+    case All:
+      preconditionerChoiceString = "All";
+      break;
+    case AllGMG:
+      preconditionerChoiceString = "AllGMG";
+      break;
+    case AllSchwarz:
+      preconditionerChoiceString = "AllSchwarz";
+      break;
+    case DontPrecondition:
+      preconditionerChoiceString = "NoPrecondition";
+      break;
+    default:
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unhandled preconditioner choice subset");
+      break;
+  }
+  
   vector<bool> preconditionValues;
-  preconditionValues.push_back(false);
-  preconditionValues.push_back(true);
+  
+  vector<bool> schwarzOnly_maxChoices;
+  vector<bool> useCamelliaSchwarz_maxChoices;
+  
+  switch (preconditionerChoices) {
+    case DontPrecondition:
+      preconditionValues.push_back(false);
+      schwarzOnly_maxChoices.push_back(false);
+      useCamelliaSchwarz_maxChoices.push_back(false);
+      break;
+    case AllGMG:
+      preconditionValues.push_back(true);
+      schwarzOnly_maxChoices.push_back(false);
+      useCamelliaSchwarz_maxChoices.push_back(false);
+      useCamelliaSchwarz_maxChoices.push_back(true);
+      break;
+    case AllSchwarz:
+      preconditionValues.push_back(true);
+      schwarzOnly_maxChoices.push_back(true);
+      useCamelliaSchwarz_maxChoices.push_back(false);
+      useCamelliaSchwarz_maxChoices.push_back(true);
+      break;
+    case All:
+      preconditionValues.push_back(false);
+      preconditionValues.push_back(true);
+      schwarzOnly_maxChoices.push_back(false);
+      schwarzOnly_maxChoices.push_back(true);
+      useCamelliaSchwarz_maxChoices.push_back(false);
+      useCamelliaSchwarz_maxChoices.push_back(true);
+      break;
+  }
   
   vector<int> kValues;
   kValues.push_back(1);
@@ -556,14 +631,8 @@ void runMany(ProblemChoice problemChoice, int spaceDim, int delta_k, bool confor
     vector<int> overlapValues;
     vector<bool> schwarzOnlyValues, useCamelliaSchwarzValues;
     if (precondition) {
-//      if (problemChoice==Poisson) { // we might only be interested in pure Schwarz preconditioners for Poisson
-        schwarzOnlyValues.push_back(false);
-        schwarzOnlyValues.push_back(true);
-//      } else {
-//        schwarzOnlyValues.push_back(false);
-//      }
-      useCamelliaSchwarzValues.push_back(false);
-      useCamelliaSchwarzValues.push_back(true);
+      schwarzOnlyValues = schwarzOnly_maxChoices;
+      useCamelliaSchwarzValues = useCamelliaSchwarz_maxChoices;
       overlapValues.push_back(0);
       overlapValues.push_back(1);
       if (spaceDim < 3) overlapValues.push_back(2);
@@ -617,8 +686,14 @@ void runMany(ProblemChoice problemChoice, int spaceDim, int delta_k, bool confor
               
               int numCells = pow((double)numCells1D, spaceDim);
               
-              results << M_str << "\t" << S_str << "\t" << overlapValue << "\t" << numCells << "\t";
-              results << numCells1D << "\t" << k << "\t" << iterationCount << endl;
+              ostringstream thisResult;
+
+              thisResult << M_str << "\t" << S_str << "\t" << overlapValue << "\t" << numCells << "\t";
+              thisResult << numCells1D << "\t" << k << "\t" << iterationCount << endl;
+              
+              if (rank==0) cout << thisResult.str();
+              
+              results << thisResult.str();
             }
           }
         }
@@ -629,7 +704,7 @@ void runMany(ProblemChoice problemChoice, int spaceDim, int delta_k, bool confor
   
   if (rank == 0) {
     ostringstream filename;
-    filename << problemChoiceString << "Driver" << spaceDim << "D_results.dat";
+    filename << problemChoiceString << "Driver" << spaceDim << "D_" << preconditionerChoiceString << "_results.dat";
     ofstream fout(filename.str().c_str());
     fout << results.str();
     fout.close();
@@ -680,6 +755,8 @@ int main(int argc, char *argv[]) {
   bool runAutomatic = false;
   
   string problemChoiceString = "Poisson";
+  
+  string runManySubsetString = "All";
 
   cmdp.setOption("problem",&problemChoiceString,"problem choice: Poisson, Stokes, Navier-Stokes");
   
@@ -703,6 +780,7 @@ int main(int argc, char *argv[]) {
   cmdp.setOption("cgTol", &cgTol, "CG convergence tolerance");
   
   cmdp.setOption("runMany", "runOne", &runAutomatic, "Run in automatic mode (ignores several input parameters)");
+  cmdp.setOption("runManySubset", &runManySubsetString, "DontPrecondition, AllGMG, AllSchwarz, or All");
   
   if (cmdp.parse(argc,argv) != Teuchos::CommandLineProcessor::PARSE_SUCCESSFUL) {
 #ifdef HAVE_MPI
@@ -731,6 +809,24 @@ int main(int argc, char *argv[]) {
     return -1;
   }
   
+  RunManyPreconditionerChoices runManySubsetChoice;
+  
+  if (runManySubsetString == "All") {
+    runManySubsetChoice = All;
+  } else if (runManySubsetString == "DontPrecondition") {
+    runManySubsetChoice = DontPrecondition;
+  } else if (runManySubsetString == "AllGMG") {
+    runManySubsetChoice = AllGMG;
+  } else if (runManySubsetString == "AllSchwarz") {
+    runManySubsetChoice = AllSchwarz;
+  } else {
+    if (rank==0) cout << "Run many subset string not recognized.\n";
+#ifdef HAVE_MPI
+    MPI_Finalize();
+#endif
+    return -1;
+  }
+  
   if (delta_k==-1) delta_k = spaceDim;
   
   if (! runAutomatic) {
@@ -753,7 +849,7 @@ int main(int argc, char *argv[]) {
       cout << "CG tolerance = " << cgTol << ", max iterations = " << cgMaxIterations << endl;
     }
     
-    runMany(problemChoice, spaceDim, delta_k, conformingTraces, cgTol, cgMaxIterations, AztecOutputLevel);
+    runMany(problemChoice, spaceDim, delta_k, conformingTraces, cgTol, cgMaxIterations, AztecOutputLevel, runManySubsetChoice);
   }
   return 0;
 }
