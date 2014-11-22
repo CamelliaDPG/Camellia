@@ -241,6 +241,10 @@ enum ProblemChoice {
 
 enum RunManyPreconditionerChoices {
   DontPrecondition,
+  GMGAlgebraicSchwarz, // GMG with algebraic Schwarz smoother
+  GMGGeometricSchwarz, // GMG with geometric Schwarz smoother
+  AlgebraicSchwarz, // algebraic Schwarz preconditioner
+  GeometricSchwarz, // geometric Schwarz preconditioner
   AllGMG,     // Schwarz smoother, multiple overlap values, both algebraic and geometric Schwarz
   AllSchwarz, // Schwarz as the only preconditioner; multiple overlap values, both algebraic and geometric Schwarz
   All         // All of the above, including the DontPrecondition option
@@ -569,6 +573,18 @@ void runMany(ProblemChoice problemChoice, int spaceDim, int delta_k, bool confor
     case DontPrecondition:
       preconditionerChoiceString = "NoPrecondition";
       break;
+    case GMGAlgebraicSchwarz:
+      preconditionerChoiceString = "GMGAlgebraicSchwarz";
+      break;
+    case GMGGeometricSchwarz:
+      preconditionerChoiceString = "GMGGeometricSchwarz";
+      break;
+    case AlgebraicSchwarz:
+      preconditionerChoiceString = "AlgebraicSchwarz";
+      break;
+    case GeometricSchwarz:
+      preconditionerChoiceString = "GeometricSchwarz";
+      break;
     default:
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unhandled preconditioner choice subset");
       break;
@@ -584,6 +600,26 @@ void runMany(ProblemChoice problemChoice, int spaceDim, int delta_k, bool confor
       preconditionValues.push_back(false);
       schwarzOnly_maxChoices.push_back(false);
       useCamelliaSchwarz_maxChoices.push_back(false);
+      break;
+    case GMGAlgebraicSchwarz:
+      preconditionValues.push_back(true);
+      schwarzOnly_maxChoices.push_back(false);
+      useCamelliaSchwarz_maxChoices.push_back(false);
+      break;
+    case GMGGeometricSchwarz:
+      preconditionValues.push_back(true);
+      schwarzOnly_maxChoices.push_back(false);
+      useCamelliaSchwarz_maxChoices.push_back(true);
+      break;
+    case AlgebraicSchwarz:
+      preconditionValues.push_back(true);
+      schwarzOnly_maxChoices.push_back(true);
+      useCamelliaSchwarz_maxChoices.push_back(false);
+      break;
+    case GeometricSchwarz:
+      preconditionValues.push_back(true);
+      schwarzOnly_maxChoices.push_back(true);
+      useCamelliaSchwarz_maxChoices.push_back(true);
       break;
     case AllGMG:
       preconditionValues.push_back(true);
@@ -819,6 +855,14 @@ int main(int argc, char *argv[]) {
     runManySubsetChoice = AllGMG;
   } else if (runManySubsetString == "AllSchwarz") {
     runManySubsetChoice = AllSchwarz;
+  } else if (runManySubsetString == "AlgebraicSchwarz") {
+    runManySubsetChoice = AlgebraicSchwarz;
+  } else if (runManySubsetString == "GeometricSchwarz") {
+    runManySubsetChoice = GeometricSchwarz;
+  } else if (runManySubsetString == "GMGAlgebraicSchwarz") {
+    runManySubsetChoice = GMGAlgebraicSchwarz;
+  } else if (runManySubsetString == "GMGGeometricSchwarz") {
+    runManySubsetChoice = GMGGeometricSchwarz;
   } else {
     if (rank==0) cout << "Run many subset string not recognized.\n";
 #ifdef HAVE_MPI
