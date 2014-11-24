@@ -40,21 +40,19 @@ using namespace Teuchos;
 
 using namespace Camellia;
 
-// ====================================================================== 
-
+// ======================================================================
 template<typename int_type>
-void OverlappingRowMatrix::BuildMap(int OverlapLevel_in)
-{
+void OverlappingRowMatrix::BuildMap(int OverlapLevel_in, MeshPtr mesh, Teuchos::RCP<DofInterpreter> dofInterpreter) {
   // Camellia revision/addition: determine the cell neighbors according to the overlap level
-  std::set<GlobalIndexType> allCells = mesh_->cellIDsInPartition();
+  std::set<GlobalIndexType> allCells = mesh->cellIDsInPartition();
   std::set<GlobalIndexType> lastNeighbors = allCells;
   for (int overlap = 0 ; overlap < OverlapLevel_in ; ++overlap) {
     std::set<GlobalIndexType> cellNeighbors;
     for (std::set<GlobalIndexType>::iterator cellIDIt = lastNeighbors.begin(); cellIDIt != lastNeighbors.end(); cellIDIt++) {
-      CellPtr cell = mesh_->getTopology()->getCell(*cellIDIt);
+      CellPtr cell = mesh->getTopology()->getCell(*cellIDIt);
       int numSides = cell->getSideCount();
       for (int sideOrdinal=0; sideOrdinal<numSides; sideOrdinal++) {
-        pair<GlobalIndexType, unsigned> neighborInfo = cell->getNeighbor(sideOrdinal);
+        pair<GlobalIndexType, unsigned> neighborInfo = cell->getNeighborInfo(sideOrdinal);
         if (neighborInfo.first != -1) { // -1 indicates boundary/no neighbor
           cellNeighbors.insert(neighborInfo.first);
         }
@@ -66,23 +64,28 @@ void OverlappingRowMatrix::BuildMap(int OverlapLevel_in)
   // Next, determine all global degrees of freedom belonging to those cells
   std::set<GlobalIndexType> globalDofIndices;
   for (std::set<GlobalIndexType>::iterator cellIDIt = allCells.begin(); cellIDIt != allCells.end(); cellIDIt++) {
-    std::set<GlobalIndexType> globalDofIndicesForCell = dofInterpreter_->globalDofIndicesForCell(*cellIDIt);
+    std::set<GlobalIndexType> globalDofIndicesForCell = dofInterpreter->globalDofIndicesForCell(*cellIDIt);
     globalDofIndices.insert(globalDofIndicesForCell.begin(),globalDofIndicesForCell.end());
   }
   
-  std::set<int_type> externalDofIndices;
+  //  std::set<int_type> externalDofIndices;
+  //
+  //  // importing rows corresponding to elements that are in the globalDofIndices set,
+  //  // but not in RowMap (seen by our cells and their neighbors, but not owned by us)
+  //  {
+  //    for (std::set<GlobalIndexType>::iterator dofIt = globalDofIndices.begin(); dofIt != globalDofIndices.end(); dofIt++) {
+  //      int_type GID = (int_type) *dofIt;
+  //      if (A().RowMatrixRowMap().LID(GID) == -1) {
+  //        externalDofIndices.insert(GID);
+  //      }
+  //    }
+  //  }
   
-  // importing rows corresponding to elements that are in the globalDofIndices set,
-  // but not in RowMap (seen by our cells and their neighbors, but not owned by us)
-  {
-    for (std::set<GlobalIndexType>::iterator dofIt = globalDofIndices.begin(); dofIt != globalDofIndices.end(); dofIt++) {
-      int_type GID = (int_type) *dofIt;
-      if (A().RowMatrixRowMap().LID(GID) == -1) {
-        externalDofIndices.insert(GID);
-      }
-    }
-  }
-  
+  BuildMap<int_type>(OverlapLevel_in, globalDofIndices);
+}
+
+template<typename int_type>
+void OverlappingRowMatrix::BuildMap(int OverlapLevel_in, const set<GlobalIndexType> &globalDofIndices, bool filterByRowIndices) {
   RCP<Epetra_Map> TmpMap;
   RCP<Epetra_CrsMatrix> TmpMatrix;
   RCP<Epetra_Import> TmpImporter;
@@ -112,7 +115,7 @@ void OverlappingRowMatrix::BuildMap(int OverlapLevel_in)
     // define the set of rows that are in ColMap but not in RowMap
     for (int i = 0 ; i < ColMap->NumMyElements() ; ++i) {
       int_type GID = (int_type) ColMap->GID64(i);
-      if (globalDofIndices.find(GID) == globalDofIndices.end()) continue;
+      if (filterByRowIndices && (globalDofIndices.find(GID) == globalDofIndices.end())) continue;
       if (A().RowMatrixRowMap().LID(GID) == -1) {
         typename std::vector<int_type>::iterator pos = find(ExtElements.begin(),ExtElements.end(),GID);
         if (pos == ExtElements.end()) {
@@ -145,25 +148,25 @@ void OverlappingRowMatrix::BuildMap(int OverlapLevel_in)
   
   int rank = Teuchos::GlobalMPISession::getRank();
   
-//  if (rank==0) cout << "Overlap level: " << OverlapLevel_in << endl;
-//  
-//  { // DEBUGGING
-//    ostringstream rankLabel;
-//    rankLabel << "rank " << rank << ", externalDofIndices";
-//    Camellia::print(rankLabel.str(), externalDofIndices);
-//    
-//    rankLabel.str("");
-//    rankLabel << "rank " << rank << ", globalDofIndices";
-//    Camellia::print(rankLabel.str(), globalDofIndices);
-//    
-//    rankLabel.str("");
-//    rankLabel << "rank " << rank << ", cells";
-//    Camellia::print(rankLabel.str(), allCells);
-//    
-//    rankLabel.str("");
-//    rankLabel << "rank " << rank << ", list";
-//    Camellia::print(rankLabel.str(), list);
-//  }
+  //  if (rank==0) cout << "Overlap level: " << OverlapLevel_in << endl;
+  //
+  //  { // DEBUGGING
+  //    ostringstream rankLabel;
+  //    rankLabel << "rank " << rank << ", externalDofIndices";
+  //    Camellia::print(rankLabel.str(), externalDofIndices);
+  //
+  //    rankLabel.str("");
+  //    rankLabel << "rank " << rank << ", globalDofIndices";
+  //    Camellia::print(rankLabel.str(), globalDofIndices);
+  //
+  //    rankLabel.str("");
+  //    rankLabel << "rank " << rank << ", cells";
+  //    Camellia::print(rankLabel.str(), allCells);
+  //
+  //    rankLabel.str("");
+  //    rankLabel << "rank " << rank << ", list";
+  //    Camellia::print(rankLabel.str(), list);
+  //  }
   
   const int_type *listptr = NULL;
   if ( ! list.empty() ) listptr = &list[0];
@@ -182,6 +185,120 @@ void OverlappingRowMatrix::BuildMap(int OverlapLevel_in)
     ExtMap_ = rcp( new Epetra_Map((int_type) -1,ExtElements.size(),
                                   extelsptr,0,A().Comm()) );
   }
+  
+  if (filterByRowIndices) {
+    rowIndices_ = globalDofIndices;
+  } else {
+    rowIndices_.insert(list.begin(), list.end());
+  }
+}
+
+
+template<typename int_type>
+void OverlappingRowMatrix::BuildMap(int OverlapLevel_in)
+{
+  rowIndices_ = set<GlobalIndexType>(); // empty set
+  bool filter = false; // don't filter by row indices -- take all of them, just like the IfPack_OverlappingRowMatrix
+  BuildMap<int_type>(OverlapLevel_in, rowIndices_, filter);
+}
+
+OverlappingRowMatrix::
+OverlappingRowMatrix(const Teuchos::RefCountPtr<const Epetra_RowMatrix>& Matrix_in, int OverlapLevel_in,
+                     const std::set<GlobalIndexType> &rowIndicesForThisRank) :
+Matrix_(Matrix_in),
+OverlapLevel_(OverlapLevel_in)
+{
+  NumMyRowsA_ = A().NumMyRows();
+  
+  // construct the external matrix
+  
+#ifndef EPETRA_NO_32BIT_GLOBAL_INDICES
+  if(A().RowMatrixRowMap().GlobalIndicesInt()) {
+    BuildMap<int>(OverlapLevel_in, rowIndicesForThisRank);
+  }
+  else
+#endif
+#ifndef EPETRA_NO_64BIT_GLOBAL_INDICES
+    if(A().RowMatrixRowMap().GlobalIndicesLongLong()) {
+      BuildMap<long long>(OverlapLevel_in, rowIndicesForThisRank);
+    }
+    else
+#endif
+      throw "OverlappingRowMatrix::OverlappingRowMatrix: GlobalIndices type unknown";
+  
+  ExtMatrix_ = rcp( new Epetra_CrsMatrix(Copy,*ExtMap_,*Map_,0) );
+  
+  ExtImporter_ = rcp( new Epetra_Import(*ExtMap_,A().RowMatrixRowMap()) );
+  ExtMatrix_->Import(A(),*ExtImporter_,Insert);
+  ExtMatrix_->FillComplete(A().OperatorDomainMap(),*Map_);
+  
+  Importer_ = rcp( new Epetra_Import(*Map_,A().RowMatrixRowMap()) );
+  
+  // fix indices for overlapping matrix
+  NumMyRowsB_ = B().NumMyRows();
+  NumMyRows_ = NumMyRowsA_ + NumMyRowsB_;
+  NumMyCols_ = NumMyRows_;
+  
+  NumMyDiagonals_ = A().NumMyDiagonals() + B().NumMyDiagonals();
+  
+  NumMyNonzeros_ = A().NumMyNonzeros() + B().NumMyNonzeros();
+  long long NumMyNonzeros_tmp = NumMyNonzeros_;
+  Comm().SumAll(&NumMyNonzeros_tmp,&NumGlobalNonzeros_,1);
+  MaxNumEntries_ = A().MaxNumEntries();
+  
+  if (MaxNumEntries_ < B().MaxNumEntries())
+    MaxNumEntries_ = B().MaxNumEntries();
+}
+
+//! Constructor for an exact match to IfPack_OverlappingMatrix's behavior.
+OverlappingRowMatrix::
+OverlappingRowMatrix(const Teuchos::RefCountPtr<const Epetra_RowMatrix>& Matrix_in, int OverlapLevel_in) :
+Matrix_(Matrix_in),
+OverlapLevel_(OverlapLevel_in) {
+  // nothing to do as well with one process
+  if (Comm().NumProc() == 1)
+    IFPACK_CHK_ERRV(-1);
+  
+  NumMyRowsA_ = A().NumMyRows();
+  
+  // construct the external matrix
+  
+#ifndef EPETRA_NO_32BIT_GLOBAL_INDICES
+  if(A().RowMatrixRowMap().GlobalIndicesInt()) {
+    BuildMap<int>(OverlapLevel_in);
+  }
+  else
+#endif
+#ifndef EPETRA_NO_64BIT_GLOBAL_INDICES
+    if(A().RowMatrixRowMap().GlobalIndicesLongLong()) {
+      BuildMap<long long>(OverlapLevel_in);
+    }
+    else
+#endif
+      throw "OverlappingRowMatrix::OverlappingRowMatrix: GlobalIndices type unknown";
+  
+  ExtMatrix_ = rcp( new Epetra_CrsMatrix(Copy,*ExtMap_,*Map_,0) );
+  
+  ExtImporter_ = rcp( new Epetra_Import(*ExtMap_,A().RowMatrixRowMap()) );
+  ExtMatrix_->Import(A(),*ExtImporter_,Insert);
+  ExtMatrix_->FillComplete(A().OperatorDomainMap(),*Map_);
+  
+  Importer_ = rcp( new Epetra_Import(*Map_,A().RowMatrixRowMap()) );
+  
+  // fix indices for overlapping matrix
+  NumMyRowsB_ = B().NumMyRows();
+  NumMyRows_ = NumMyRowsA_ + NumMyRowsB_;
+  NumMyCols_ = NumMyRows_;
+  
+  NumMyDiagonals_ = A().NumMyDiagonals() + B().NumMyDiagonals();
+  
+  NumMyNonzeros_ = A().NumMyNonzeros() + B().NumMyNonzeros();
+  long long NumMyNonzeros_tmp = NumMyNonzeros_;
+  Comm().SumAll(&NumMyNonzeros_tmp,&NumGlobalNonzeros_,1);
+  MaxNumEntries_ = A().MaxNumEntries();
+  
+  if (MaxNumEntries_ < B().MaxNumEntries())
+    MaxNumEntries_ = B().MaxNumEntries();
 }
 
 // ======================================================================
@@ -189,33 +306,22 @@ void OverlappingRowMatrix::BuildMap(int OverlapLevel_in)
 OverlappingRowMatrix::
 OverlappingRowMatrix(const RCP<const Epetra_RowMatrix>& Matrix_in,
                      int OverlapLevel_in, MeshPtr mesh, Teuchos::RCP<DofInterpreter> dofInterpreter)  :
-mesh_(mesh),
-dofInterpreter_(dofInterpreter),
 Matrix_(Matrix_in),
 OverlapLevel_(OverlapLevel_in)
 {
-// Camellia revisions: level zero overlap does not (quite) mean no overlap
-//  // should not be here if no overlap
-//  if (OverlapLevel_in == 0)
-//    IFPACK_CHK_ERRV(-1);
-//
-  // nothing to do as well with one process
-  if (Comm().NumProc() == 1)
-    IFPACK_CHK_ERRV(-1);
-  
   NumMyRowsA_ = A().NumMyRows();
 
   // construct the external matrix
 
 #ifndef EPETRA_NO_32BIT_GLOBAL_INDICES
     if(A().RowMatrixRowMap().GlobalIndicesInt()) {
-      BuildMap<int>(OverlapLevel_in);
+      BuildMap<int>(OverlapLevel_in, mesh, dofInterpreter);
     }
     else
 #endif
 #ifndef EPETRA_NO_64BIT_GLOBAL_INDICES
     if(A().RowMatrixRowMap().GlobalIndicesLongLong()) {
-      BuildMap<long long>(OverlapLevel_in);
+      BuildMap<long long>(OverlapLevel_in, mesh, dofInterpreter);
     }
     else
 #endif
@@ -385,7 +491,7 @@ int OverlappingRowMatrix::
 Multiply(bool TransA, const Epetra_MultiVector& X, Epetra_MultiVector& Y) const
 {
   // In our present usage, I'm pretty sure this doesn't get invoked...
-  // (We use this exclusively int the context of an IfPack_LocalFilter, which invokes ExtractMyRowCopy)
+  // (We use this exclusively in the context of an IfPack_LocalFilter, which invokes ExtractMyRowCopy)
   cout << "Entered OverlappingRowMatrix::Multiply().\n";
   
   int NumVectors = X.NumVectors();

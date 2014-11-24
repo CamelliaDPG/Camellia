@@ -72,6 +72,11 @@ namespace Camellia {
   //@{ Constructors/Destructors
   OverlappingRowMatrix(const Teuchos::RefCountPtr<const Epetra_RowMatrix>& Matrix_in,
                               int OverlapLevel_in, MeshPtr mesh, Teuchos::RCP<DofInterpreter> dofInterpreter);
+  OverlappingRowMatrix(const Teuchos::RefCountPtr<const Epetra_RowMatrix>& Matrix_in, int OverlapLevel_in,
+                       const std::set<GlobalIndexType> &rowIndicesForThisRank);
+
+  //! Constructor for an exact match to IfPack_OverlappingMatrix's behavior.
+  OverlappingRowMatrix(const Teuchos::RefCountPtr<const Epetra_RowMatrix>& Matrix_in, int OverlapLevel_in);
   ~OverlappingRowMatrix() {};
   //@}
 
@@ -359,8 +364,12 @@ const Epetra_BlockMap& Map() const;
 
 const char* Label() const{
   return(Label_.c_str());
-};
+}
 
+const set<GlobalIndexType> & RowIndices() {
+  return rowIndices_;
+}
+    
 int OverlapLevel() const
 {
   return(OverlapLevel_);
@@ -384,8 +393,10 @@ private:
 
 
   // Camellia additions:
-    MeshPtr mesh_;
-    Teuchos::RCP<DofInterpreter> dofInterpreter_;
+//    MeshPtr mesh_;
+//    Teuchos::RCP<DofInterpreter> dofInterpreter_;
+    
+    set<GlobalIndexType> rowIndices_; // for this rank
   // end of Camellia additions
   
   int NumMyRows_;
@@ -414,6 +425,12 @@ private:
 
   template<typename int_type>
   void BuildMap(int OverlapLevel_in);
+    
+  template<typename int_type>
+  void BuildMap(int OverlapLevel_in, const set<GlobalIndexType> &rowIndices, bool filterByRowIndices = true);
+  
+  template<typename int_type>
+  void BuildMap(int OverlapLevel_in, MeshPtr mesh, Teuchos::RCP<DofInterpreter> dofInterpreter);
 
 }; // class OverlappingRowMatrix
 
