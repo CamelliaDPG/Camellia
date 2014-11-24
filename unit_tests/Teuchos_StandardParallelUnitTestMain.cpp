@@ -42,10 +42,10 @@
 
 /*! \file Teuchos_StandardUnitTestMain.cpp
 
-\brief Standard Unit testing main program.
+\brief Standard Parallel Unit testing main program.
 
 This file is ment to be used as a standard main program for a unit test
-executable.
+executable for parallel unit tests.
 
 NOTE: This file should *not* be built and included as part of the Teuchos
 library.  It is instead to be directly included in the build files for
@@ -61,5 +61,6 @@ specific unit test suites.
 int main( int argc, char* argv[] )
 {
   Teuchos::GlobalMPISession mpiSession(&argc, &argv);
+  Teuchos::UnitTestRepository::setGloballyReduceTestResult(true);
   return Teuchos::UnitTestRepository::runUnitTestsFromMain(argc, argv);
 }
