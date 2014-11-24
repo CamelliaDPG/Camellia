@@ -250,8 +250,8 @@ enum RunManyPreconditionerChoices {
   All         // All of the above, including the DontPrecondition option
 };
 
-void initializeSolutionAndCoarseMesh(SolutionPtr &solution, MeshPtr &coarseMesh, IPPtr &graphNorm, ProblemChoice problemChoice, int spaceDim,
-                                     bool conformingTraces, int numCells, int k, int delta_k) {
+void initializeSolutionAndCoarseMesh(SolutionPtr &solution, MeshPtr &coarseMesh, IPPtr &graphNorm, ProblemChoice problemChoice,
+                                     int spaceDim, bool conformingTraces, bool useStaticCondensation, int numCells, int k, int delta_k) {
   BFPtr bf;
   BCPtr bc;
   RHSPtr rhs;
@@ -427,17 +427,19 @@ void initializeSolutionAndCoarseMesh(SolutionPtr &solution, MeshPtr &coarseMesh,
   graphNorm = bf->graphNorm();
   
   solution = Solution::solution(mesh, bc, rhs, graphNorm);
+  solution->setUseCondensedSolve(useStaticCondensation);
 }
 
-void run(ProblemChoice problemChoice, int &iterationCount, int spaceDim, int numCells, int k, int delta_k, bool conformingTraces, bool precondition,
-         bool schwarzOnly, bool useCamelliaAdditiveSchwarz, int schwarzOverlap, double cgTol,
-         int cgMaxIterations, int AztecOutputLevel, bool reportTimings, bool reportEnergyError) {
+void run(ProblemChoice problemChoice, int &iterationCount, int spaceDim, int numCells, int k, int delta_k, bool conformingTraces,
+         bool useStaticCondensation, bool precondition, bool schwarzOnly, bool useCamelliaAdditiveSchwarz, int schwarzOverlap,
+         double cgTol, int cgMaxIterations, int AztecOutputLevel, bool reportTimings, bool reportEnergyError) {
   int rank = Teuchos::GlobalMPISession::getRank();
   
   SolutionPtr solution;
   MeshPtr k0Mesh;
   IPPtr graphNorm;
-  initializeSolutionAndCoarseMesh(solution, k0Mesh, graphNorm, problemChoice, spaceDim, conformingTraces, numCells, k, delta_k);
+  initializeSolutionAndCoarseMesh(solution, k0Mesh, graphNorm, problemChoice, spaceDim, conformingTraces, useStaticCondensation,
+                                  numCells, k, delta_k);
   
   MeshPtr mesh = solution->mesh();
   BCPtr bc = solution->bc();
@@ -462,6 +464,7 @@ void run(ProblemChoice problemChoice, int &iterationCount, int spaceDim, int num
                                          solution->getPartitionMap(), cgMaxIterations, cgTol, coarseSolver,
                                          useStaticCondensation);
     gmgSolver->setAztecOutput(AztecOutputLevel);
+//    gmgSolver->setComputeConditionNumberEstimate(false);
     
     gmgSolver->setUseConjugateGradient(true);
     if (useCamelliaAdditiveSchwarz) {
@@ -540,7 +543,8 @@ void run(ProblemChoice problemChoice, int &iterationCount, int spaceDim, int num
 //  if (rank==0) cout << "Direct solution has energy error " << energyErrorTotal << endl;
 }
 
-void runMany(ProblemChoice problemChoice, int spaceDim, int delta_k, bool conformingTraces, double cgTol, int cgMaxIterations, int aztecOutputLevel,
+void runMany(ProblemChoice problemChoice, int spaceDim, int delta_k, bool conformingTraces, bool useStaticCondensation,
+             double cgTol, int cgMaxIterations, int aztecOutputLevel,
              RunManyPreconditionerChoices preconditionerChoices) {
   int rank = Teuchos::GlobalMPISession::getRank();
   
@@ -717,7 +721,7 @@ void runMany(ProblemChoice problemChoice, int spaceDim, int delta_k, bool confor
               bool reportTimings = false;
               bool reportEnergyError = false;
               run(problemChoice, iterationCount, spaceDim, numCells1D, k, delta_k, conformingTraces,
-                  precondition, schwarzOnly, useCamelliaSchwarz, overlapValue,
+                  useStaticCondensation, precondition, schwarzOnly, useCamelliaSchwarz, overlapValue,
                   cgTol, cgMaxIterations, aztecOutputLevel, reportTimings, reportEnergyError);
               
               int numCells = pow((double)numCells1D, spaceDim);
@@ -782,8 +786,9 @@ int main(int argc, char *argv[]) {
   
   int spaceDim = 1;
   
-  bool useCamelliaAdditiveSchwarz = true;
+  bool useCondensedSolve = false;
   
+  bool useCamelliaAdditiveSchwarz = true;
   bool schwarzOnly = true;
   
   double cgTol = 1e-10;
@@ -799,6 +804,8 @@ int main(int argc, char *argv[]) {
   cmdp.setOption("polyOrder",&k,"polynomial order for field variable u");
   cmdp.setOption("delta_k", &delta_k, "test space polynomial order enrichment");
 
+  cmdp.setOption("useCondensedSolve", "useStandardSolve", &useCondensedSolve);
+  
   cmdp.setOption("useSchwarzPreconditioner", "useGMGPreconditioner", &schwarzOnly);
   cmdp.setOption("useCamelliaAdditiveSchwarz", "useIfPackAdditiveSchwarz", &useCamelliaAdditiveSchwarz);
 
@@ -878,13 +885,14 @@ int main(int argc, char *argv[]) {
     bool reportTimings = true, reportEnergyError = true;
     
     run(problemChoice, iterationCount, spaceDim, numCells, k, delta_k, conformingTraces,
-        precondition, schwarzOnly, useCamelliaAdditiveSchwarz, schwarzOverlap,
+        useCondensedSolve, precondition, schwarzOnly, useCamelliaAdditiveSchwarz, schwarzOverlap,
         cgTol, cgMaxIterations, AztecOutputLevel, reportTimings, reportEnergyError);
     
     if (rank==0) cout << "Iteration count: " << iterationCount << endl;
   } else {
     if (rank==0) {
-      cout << "Running " << problemChoice << " solver in automatic mode, with spaceDim " << spaceDim;
+      cout << "Running " << problemChoiceString << " solver in automatic mode (subset: ";
+      cout << runManySubsetString << "), with spaceDim " << spaceDim;
       cout << ", delta_k = " << delta_k << ", ";
       if (conformingTraces)
         cout << "conforming traces, ";
@@ -893,7 +901,8 @@ int main(int argc, char *argv[]) {
       cout << "CG tolerance = " << cgTol << ", max iterations = " << cgMaxIterations << endl;
     }
     
-    runMany(problemChoice, spaceDim, delta_k, conformingTraces, cgTol, cgMaxIterations, AztecOutputLevel, runManySubsetChoice);
+    runMany(problemChoice, spaceDim, delta_k, conformingTraces, useCondensedSolve,
+            cgTol, cgMaxIterations, AztecOutputLevel, runManySubsetChoice);
   }
   return 0;
 }
