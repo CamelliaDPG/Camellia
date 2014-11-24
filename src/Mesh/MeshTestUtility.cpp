@@ -318,7 +318,7 @@ bool MeshTestUtility::determineRefTestPointsForNeighbors(MeshTopologyPtr meshTop
     CamelliaCellTools::refCellNodesForTopology(lineRefNodes, line_2);
     
     fineCellRefPoints[0] = lineRefNodes[sideOrdinal];
-    unsigned neighborSideOrdinal = fineCell->getNeighbor(sideOrdinal).second;
+    unsigned neighborSideOrdinal = fineCell->getNeighborInfo(sideOrdinal).second;
     if (neighborSideOrdinal != -1) {
       coarseCellRefPoints[0] = lineRefNodes[neighborSideOrdinal];
       return true;
@@ -326,7 +326,7 @@ bool MeshTestUtility::determineRefTestPointsForNeighbors(MeshTopologyPtr meshTop
       return false;
     }
   }
-  pair<GlobalIndexType, unsigned> neighborInfo = fineCell->getNeighbor(sideOrdinal);
+  pair<GlobalIndexType, unsigned> neighborInfo = fineCell->getNeighborInfo(sideOrdinal);
   if (neighborInfo.first == -1) {
     // boundary
     return false;
@@ -461,7 +461,7 @@ bool MeshTestUtility::neighborBasesAgreeOnSides(Teuchos::RCP<Mesh> mesh, Epetra_
       bool hasCoarserNeighbor = determineRefTestPointsForNeighbors(meshTopo, cell, sideOrdinal, fineSideRefPoints, fineCellRefPoints, coarseSideRefPoints, coarseCellRefPoints);
       if (!hasCoarserNeighbor) continue;
       
-      pair<GlobalIndexType, unsigned> neighborInfo = cell->getNeighbor(sideOrdinal);
+      pair<GlobalIndexType, unsigned> neighborInfo = cell->getNeighborInfo(sideOrdinal);
       
       CellPtr neighborCell = meshTopo->getCell(neighborInfo.first);
       

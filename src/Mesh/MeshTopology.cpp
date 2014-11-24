@@ -360,9 +360,9 @@ void MeshTopology::addChildren(CellPtr parentCell, const vector< CellTopoPtrLega
 //      CellPtr child = _cells[childIndex];
 ////      unsigned childSideEntityIndex = child->entityIndex(sideDim, childSideOrdinal);
 ////      if (_activeCellsForEntities[sideDim][childSideEntityIndex].size()==1) {
-//      if (child->getNeighbor(childSideOrdinal).first == -1) { // i.e. child hasn't yet had a neighbor set here...
+//      if (child->getNeighborInfo(childSideOrdinal).first == -1) { // i.e. child hasn't yet had a neighbor set here...
 //        // then child should inherit neighbor relationship from parent
-//        pair< unsigned, unsigned > neighborInfo = parentCell->getNeighbor(sideOrdinal);
+//        pair< unsigned, unsigned > neighborInfo = parentCell->getNeighborInfo(sideOrdinal);
 //        child->setNeighbor(childSideOrdinal, neighborInfo.first, neighborInfo.second);
 //      }
 //    }

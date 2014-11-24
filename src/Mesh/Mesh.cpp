@@ -169,7 +169,7 @@ vector< ElementPtr > Mesh::activeElements() {
 
 ElementPtr Mesh::ancestralNeighborForSide(ElementPtr elem, int sideIndex, int &elemSideIndexInNeighbor) {
   CellPtr cell = _meshTopology->getCell(elem->cellID());
-  pair<GlobalIndexType, unsigned> neighborInfo = cell->getNeighbor(sideIndex);
+  pair<GlobalIndexType, unsigned> neighborInfo = cell->getNeighborInfo(sideIndex);
   elemSideIndexInNeighbor = neighborInfo.second;
   
   if (neighborInfo.first == -1) return Teuchos::rcp( (Element*) NULL );
@@ -333,7 +333,7 @@ void Mesh::enforceOneIrregularity() {
       bool isIrregular = false;
       int sideCount = CamelliaCellTools::getSideCount(*cell->topology());
       for (int sideOrdinal=0; sideOrdinal < sideCount; sideOrdinal++) {
-        pair<GlobalIndexType, unsigned> neighborInfo = cell->getNeighbor(sideOrdinal);
+        pair<GlobalIndexType, unsigned> neighborInfo = cell->getNeighborInfo(sideOrdinal);
         unsigned mySideIndexInNeighbor = neighborInfo.second;
         
         if (neighborInfo.first != -1) {

@@ -1024,11 +1024,11 @@ SolutionPtr GDAMinimumRuleTests::poissonExactSolution3DHangingNodes(int irregula
       unsigned childOrdinal = childrenForSide[i].first;
       CellPtr child = children[childOrdinal];
       unsigned childSideOrdinal = childrenForSide[i].second;
-      pair<GlobalIndexType,unsigned> neighborInfo = child->getNeighbor(childSideOrdinal);
+      pair<GlobalIndexType,unsigned> neighborInfo = child->getNeighborInfo(childSideOrdinal);
       GlobalIndexType neighborCellID = neighborInfo.first;
       if (neighborCellID != -1) { // not boundary
         CellPtr neighbor = mesh->getTopology()->getCell(neighborCellID);
-        pair<GlobalIndexType,unsigned> neighborNeighborInfo = neighbor->getNeighbor(neighborInfo.second);
+        pair<GlobalIndexType,unsigned> neighborNeighborInfo = neighbor->getNeighborInfo(neighborInfo.second);
         bool neighborIsPeer = neighborNeighborInfo.first == child->cellIndex();
         if (!neighborIsPeer) { // then by refining this cell, we induce a 2-irregular mesh
           set<GlobalIndexType> cellIDs;

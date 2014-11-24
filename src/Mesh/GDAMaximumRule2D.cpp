@@ -349,11 +349,11 @@ void GDAMaximumRule2D::determineDofPairings() {
         int numSides = CamelliaCellTools::getSideCount(*cell->topology());
         for (int sideIndex=0; sideIndex<numSides; sideIndex++) {
           int myNumDofs = elemTypePtr->trialOrderPtr->getBasisCardinality(trialID,sideIndex);
-          pair<unsigned, unsigned> neighborInfo = cell->getNeighbor(sideIndex);
+          pair<unsigned, unsigned> neighborInfo = cell->getNeighborInfo(sideIndex);
           unsigned neighborCellID = neighborInfo.first;
           unsigned mySideIndexInNeighbor = neighborInfo.second;
           
-          bool neighborIsPeer = (neighborCellID != -1) && (_meshTopology->getCell(neighborCellID)->getNeighbor(mySideIndexInNeighbor).first==cellID);
+          bool neighborIsPeer = (neighborCellID != -1) && (_meshTopology->getCell(neighborCellID)->getNeighborInfo(mySideIndexInNeighbor).first==cellID);
           
           if (neighborIsPeer) {
             CellPtr neighbor = _meshTopology->getCell(neighborCellID);
@@ -586,7 +586,7 @@ void GDAMaximumRule2D::didPRefine(const set<GlobalIndexType> &cellIDs, int delta
     int numSides = CamelliaCellTools::getSideCount(*cell->topology());
     for (int sideOrdinal=0; sideOrdinal<numSides; sideOrdinal++) {
       // get and match the big neighbor along the side, if we're a small element…
-      pair<GlobalIndexType, int> neighborInfo = cell->getNeighbor(sideOrdinal);
+      pair<GlobalIndexType, int> neighborInfo = cell->getNeighborInfo(sideOrdinal);
       GlobalIndexType neighborToMatch = neighborInfo.first;
       int neighborSideIndex = neighborInfo.second;
       
@@ -865,7 +865,7 @@ void GDAMaximumRule2D::matchNeighbor(GlobalIndexType cellID, int sideIndex) {
   CellPtr cell = _meshTopology->getCell(cellID);
   const shards::CellTopology cellTopo = *cell->topology();
   
-  pair< unsigned, unsigned > neighborRecord = cell->getNeighbor(sideIndex);
+  pair< unsigned, unsigned > neighborRecord = cell->getNeighborInfo(sideIndex);
   GlobalIndexType neighborCellID = neighborRecord.first;
   unsigned sideIndexInNeighbor = neighborRecord.second;
   
@@ -896,7 +896,7 @@ void GDAMaximumRule2D::matchNeighbor(GlobalIndexType cellID, int sideIndex) {
   }
   
   // check whether neighbor and cell are peers: this happens if the neighbor relationship commutes:
-  bool neighborIsPeer = neighbor->getNeighbor(sideIndexInNeighbor).first == cellID;
+  bool neighborIsPeer = neighbor->getNeighborInfo(sideIndexInNeighbor).first == cellID;
   if ( !neighborIsPeer ) {
     // TODO: figure out if this is correct: (I believe this will always result in a peer relationship, but if not, there'd be danger of an infinite recursion.)
     matchNeighbor(neighborCellID, sideIndexInNeighbor);

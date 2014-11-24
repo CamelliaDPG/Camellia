@@ -100,8 +100,10 @@ public:
   
   CellTopoPtrLegacy topology();
   
-  pair<GlobalIndexType, unsigned> getNeighbor(unsigned sideOrdinal); // (neighborCellIndex, neighborSideOrdinal)
+  Teuchos::RCP<Cell> getNeighbor(unsigned sideOrdinal);
+  pair<GlobalIndexType, unsigned> getNeighborInfo(unsigned sideOrdinal); // (neighborCellIndex, neighborSideOrdinal)
   void setNeighbor(unsigned sideOrdinal, GlobalIndexType neighborCellIndex, unsigned neighborSideOrdinal);
+  std::vector< Teuchos::RCP<Cell> > getNeighbors();
   
   const vector< unsigned > &vertices();
 };

@@ -40,13 +40,13 @@ namespace {
       TEST_ASSERT(cell->getSideCount() == 2);
       
       for (int sideOrdinal = 0; sideOrdinal < cell->getSideCount(); sideOrdinal++) {
-        pair<GlobalIndexType, unsigned> neighborInfo = cell->getNeighbor(sideOrdinal);
+        pair<GlobalIndexType, unsigned> neighborInfo = cell->getNeighborInfo(sideOrdinal);
         if (neighborInfo.first == -1) {
           numBoundarySides++;
         } else {
           CellPtr neighbor = meshTopo->getCell(neighborInfo.first);
           unsigned sideOrdinalInNeighbor = neighborInfo.second;
-          pair<GlobalIndexType, unsigned> neighborNeighborInfo = neighbor->getNeighbor(sideOrdinalInNeighbor);
+          pair<GlobalIndexType, unsigned> neighborNeighborInfo = neighbor->getNeighborInfo(sideOrdinalInNeighbor);
           TEST_ASSERT(neighborNeighborInfo.first == cellIndex);
         }
       }

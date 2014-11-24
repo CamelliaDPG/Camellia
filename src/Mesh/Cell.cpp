@@ -199,17 +199,17 @@ RefinementBranch Cell::refinementBranchForSide(unsigned sideOrdinal) {
   // if this cell (on this side) is the finer side of a hanging node, returns the RefinementBranch starting
   // with the coarse neighbor's neighbor (this cell's ancestor).  (Otherwise, the RefinementBranch will be empty.)
   RefinementBranch refBranch;
-  pair<GlobalIndexType, unsigned> neighborInfo = this->getNeighbor(sideOrdinal);
+  pair<GlobalIndexType, unsigned> neighborInfo = this->getNeighborInfo(sideOrdinal);
   GlobalIndexType neighborCellIndex = neighborInfo.first;
   unsigned sideIndexInNeighbor = neighborInfo.second;
   if (neighborCellIndex == -1) {
     return refBranch; // no refinements
   }
   CellPtr neighbor = _meshTopo->getCell(neighborCellIndex);
-  if (neighbor->getNeighbor(sideIndexInNeighbor).first == this->_cellIndex) { // peers!
+  if (neighbor->getNeighborInfo(sideIndexInNeighbor).first == this->_cellIndex) { // peers!
     return refBranch; // no refinements
   } else {
-    GlobalIndexType ancestorCellIndex = neighbor->getNeighbor(sideIndexInNeighbor).first;
+    GlobalIndexType ancestorCellIndex = neighbor->getNeighborInfo(sideIndexInNeighbor).first;
     vector< CellPtr > ancestors;
     vector< unsigned > childOrdinals;
     CellPtr currentAncestor = _meshTopo->getCell(_cellIndex);
@@ -367,14 +367,14 @@ MeshTopology* Cell::meshTopology() {
 bool Cell::ownsSide(unsigned int sideOrdinal) {
   bool ownsSide;
   
-  pair<GlobalIndexType,unsigned> neighborInfo = getNeighbor(sideOrdinal);
+  pair<GlobalIndexType,unsigned> neighborInfo = getNeighborInfo(sideOrdinal);
   GlobalIndexType neighborCellID = neighborInfo.first;
   unsigned neighborSideOrdinal = neighborInfo.second;
   if (neighborCellID == -1) { // boundary side
     ownsSide = true;
   } else {
     CellPtr neighborCell = _meshTopo->getCell(neighborCellID);
-    bool isPeer = neighborCell->getNeighbor(neighborSideOrdinal).first == _cellIndex;
+    bool isPeer = neighborCell->getNeighborInfo(neighborSideOrdinal).first == _cellIndex;
     
     if (isPeer && !neighborCell->isParent()) { // then the lower cellID owns
       ownsSide = (_cellIndex < neighborCellID);
@@ -387,7 +387,7 @@ bool Cell::ownsSide(unsigned int sideOrdinal) {
     } else {
       // neighbor is parent, and we are a descendant of neighbor's neighbor (i.e. there is an anisotropic refinement)
       // in this case, we decide based on which of the ancestral cell IDs is lower
-      GlobalIndexType ancestralCellID = neighborCell->getNeighbor(neighborSideOrdinal).first;
+      GlobalIndexType ancestralCellID = neighborCell->getNeighborInfo(neighborSideOrdinal).first;
       ownsSide = (ancestralCellID < neighborCellID);
     }
   }
@@ -434,13 +434,30 @@ CellTopoPtrLegacy Cell::topology() {
   return _cellTopo;
 }
 
-pair<GlobalIndexType, unsigned> Cell::getNeighbor(unsigned sideOrdinal) {
+CellPtr Cell::getNeighbor(unsigned sideOrdinal) {
+  GlobalIndexType neighborCellIndex = this->getNeighborInfo(sideOrdinal).first;
+  if (neighborCellIndex == -1) return Teuchos::null;
+  else return _meshTopo->getCell(neighborCellIndex);
+}
+
+pair<GlobalIndexType, unsigned> Cell::getNeighborInfo(unsigned sideOrdinal) {
   int sideCount = CamelliaCellTools::getSideCount(*_cellTopo);
   if (sideOrdinal >= sideCount) {
     cout << "sideOrdinal " << sideOrdinal << " >= sideCount " << sideCount << endl;
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "sideOrdinal must be less than sideCount!");
   }
   return _neighbors[sideOrdinal];
+}
+
+vector<CellPtr> Cell::getNeighbors() {
+  vector<CellPtr> neighbors;
+  for (int sideOrdinal=0; sideOrdinal<getSideCount(); sideOrdinal++) {
+    CellPtr neighbor = getNeighbor(sideOrdinal);
+    if (! Teuchos::is_null(neighbor)) {
+      neighbors.push_back(neighbor);
+    }
+  }
+  return neighbors;
 }
 
 void Cell::setNeighbor(unsigned sideOrdinal, GlobalIndexType neighborCellIndex, unsigned neighborSideOrdinal) {

@@ -59,7 +59,7 @@ void GDAMinimumRule::didHRefine(const set<GlobalIndexType> &parentCellIDs) {
       
       unsigned childSideCount = CamelliaCellTools::getSideCount(*childCell->topology());
       for (int childSideOrdinal=0; childSideOrdinal<childSideCount; childSideOrdinal++) {
-        GlobalIndexType neighborCellID = childCell->getNeighbor(childSideOrdinal).first;
+        GlobalIndexType neighborCellID = childCell->getNeighborInfo(childSideOrdinal).first;
         if (neighborCellID != -1) {
           neighborsOfNewElements.insert(neighborCellID);
         }

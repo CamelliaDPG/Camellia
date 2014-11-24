@@ -118,13 +118,13 @@ void GlobalDofAssignment::assignParities( GlobalIndexType cellID ) {
   
   vector<int> cellParities(sideCount);
   for (int sideOrdinal=0; sideOrdinal<sideCount; sideOrdinal++) {
-    pair<GlobalIndexType,unsigned> neighborInfo = cell->getNeighbor(sideOrdinal);
+    pair<GlobalIndexType,unsigned> neighborInfo = cell->getNeighborInfo(sideOrdinal);
     GlobalIndexType neighborCellID = neighborInfo.first;
     if (neighborCellID == -1) { // boundary --> parity is 1
       cellParities[sideOrdinal] = 1;
     } else {
       CellPtr neighbor = _meshTopology->getCell(neighborCellID);
-      pair<GlobalIndexType,unsigned> neighborNeighborInfo = neighbor->getNeighbor(neighborInfo.second);
+      pair<GlobalIndexType,unsigned> neighborNeighborInfo = neighbor->getNeighborInfo(neighborInfo.second);
       bool neighborIsPeer = neighborNeighborInfo.first == cellID;
       if (neighborIsPeer) { // then the lower cellID gets the positive parity
         cellParities[sideOrdinal] = (cellID < neighborCellID) ? 1 : -1;

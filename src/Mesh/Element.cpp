@@ -220,7 +220,7 @@ ElementPtr Element::getNeighbor( int & mySideIndexInNeighbor, int neighborsSideI
                      std::invalid_argument,
                      "neighbor's side index in me is out of bounds.");
   ElementPtr elemPtr;
-  pair<IndexType, unsigned> neighborInfo = _cell->getNeighbor(neighborsSideIndexInMe);
+  pair<IndexType, unsigned> neighborInfo = _cell->getNeighborInfo(neighborsSideIndexInMe);
   
   IndexType neighborCellID = neighborInfo.first;
   if (neighborCellID == -1) {
@@ -233,11 +233,11 @@ ElementPtr Element::getNeighbor( int & mySideIndexInNeighbor, int neighborsSideI
 
 int Element::getNeighborCellID(int sideIndex) {
   // returns -1 if neighbor isn't a peer (or is boundary)
-  pair<IndexType, unsigned> neighborInfo = _cell->getNeighbor(sideIndex);
+  pair<IndexType, unsigned> neighborInfo = _cell->getNeighborInfo(sideIndex);
   if (neighborInfo.first == -1) return -1;
   CellPtr neighborCell = _mesh->getTopology()->getCell(neighborInfo.first);
   int sideOrdinalInNeighbor = neighborInfo.second;
-  pair<IndexType, unsigned> neighborNeighborInfo = neighborCell->getNeighbor(sideOrdinalInNeighbor);
+  pair<IndexType, unsigned> neighborNeighborInfo = neighborCell->getNeighborInfo(sideOrdinalInNeighbor);
   if (neighborNeighborInfo.first != _cell->cellIndex()) { // they are not peers
     return -1;
   }
@@ -245,7 +245,7 @@ int Element::getNeighborCellID(int sideIndex) {
 }
 
 int Element::getSideIndexInNeighbor(int sideIndex) {
-  pair<IndexType, unsigned> neighborInfo = _cell->getNeighbor(sideIndex);
+  pair<IndexType, unsigned> neighborInfo = _cell->getNeighborInfo(sideIndex);
   return neighborInfo.second;
 }
 
