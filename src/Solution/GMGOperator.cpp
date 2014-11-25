@@ -29,6 +29,7 @@
 #include "Ifpack_PointRelaxation.h"
 #include "Ifpack_Amesos.h"
 #include "Ifpack_ILU.h"
+#include "Ifpack_IC.h"
 #include "Ifpack_Graph.h"
 #include "Ifpack_Graph_Epetra_CrsGraph.h"
 #include "Ifpack_Graph_Epetra_RowMatrix.h"
@@ -49,7 +50,9 @@ GMGOperator::GMGOperator(BCPtr zeroBCs, MeshPtr coarseMesh, IPPtr coarseIP,
                          Teuchos::RCP<Solver> coarseSolver, bool useStaticCondensation, bool fineSolverUsesDiagonalScaling) :  _finePartitionMap(finePartitionMap), _br(true) {
   _useStaticCondensation = useStaticCondensation;
   _fineDofInterpreter = fineDofInterpreter;
-  _fineSolverUsesDiagonalScaling = true;
+  _fineSolverUsesDiagonalScaling = false;
+  
+  _schwarzBlockFactorizationType = Direct;
   
   _applySmoothingOperator = true;
   
@@ -879,6 +882,10 @@ void GMGOperator::setFineSolverUsesDiagonalScaling(bool value) {
   }
 }
 
+void GMGOperator::setSchwarzFactorizationType(FactorType choice) {
+  _schwarzBlockFactorizationType = choice;
+}
+
 void GMGOperator::setStiffnessDiagonal(Teuchos::RCP< Epetra_MultiVector> diagonal) {
   // this should be the true diagonal (before scaling) of the fine stiffness matrix.
     _diag = diagonal;
@@ -996,23 +1003,39 @@ void GMGOperator::setUpSmoother(Epetra_CrsMatrix *fineStiffnessMatrix) {
 //      cout << "Using additive Schwarz smoother.\n";
       int OverlapLevel = _smootherOverlap;
       
-      bool useILU = false;
-      
+      int level_of_fill = 2;
+      double fillRatio = 5.0;
       if (choice==IFPACK_ADDITIVE_SCHWARZ) {
-        if (useILU) {
-          // something to try out to reduce the memory footprint (and other costs) of the Schwarz inversions
-          smoother = Teuchos::rcp(new Ifpack_AdditiveSchwarz<Ifpack_ILU>(fineStiffnessMatrix, OverlapLevel) );
-          List.set("fact: level of fill", 2);
-        } else {
-          smoother = Teuchos::rcp(new Ifpack_AdditiveSchwarz<Ifpack_Amesos>(fineStiffnessMatrix, OverlapLevel) );
+        switch (_schwarzBlockFactorizationType) {
+          case Direct:
+            smoother = Teuchos::rcp(new Ifpack_AdditiveSchwarz<Ifpack_Amesos>(fineStiffnessMatrix, OverlapLevel) );
+            break;
+          case ILU:
+            smoother = Teuchos::rcp(new Ifpack_AdditiveSchwarz<Ifpack_ILU>(fineStiffnessMatrix, OverlapLevel) );
+            List.set("fact: level-of-fill", level_of_fill);
+            break;
+          case IC:
+            smoother = Teuchos::rcp(new Ifpack_AdditiveSchwarz<Ifpack_IC>(fineStiffnessMatrix, OverlapLevel) );
+            List.set("fact: ict level-of-fill", fillRatio);
+            break;
+          default:
+            break;
         }
       } else {
-        if (useILU) {
-          // something to try out to reduce the memory footprint (and other costs) of the Schwarz inversions
-          smoother = Teuchos::rcp(new Camellia::AdditiveSchwarz<Ifpack_ILU>(fineStiffnessMatrix, OverlapLevel, _fineMesh, _fineDofInterpreter) );
-          List.set("fact: level of fill", 2);
-        } else {
-          smoother = Teuchos::rcp(new Camellia::AdditiveSchwarz<Ifpack_Amesos>(fineStiffnessMatrix, OverlapLevel, _fineMesh, _fineDofInterpreter) );
+        switch (_schwarzBlockFactorizationType) {
+          case Direct:
+            smoother = Teuchos::rcp(new Ifpack_AdditiveSchwarz<Ifpack_Amesos>(fineStiffnessMatrix, OverlapLevel) );
+            break;
+          case ILU:
+            smoother = Teuchos::rcp(new Ifpack_AdditiveSchwarz<Ifpack_ILU>(fineStiffnessMatrix, OverlapLevel) );
+            List.set("fact: level-of-fill", level_of_fill);
+            break;
+          case IC:
+            smoother = Teuchos::rcp(new Ifpack_AdditiveSchwarz<Ifpack_IC>(fineStiffnessMatrix, OverlapLevel) );
+            List.set("fact: ict level-of-fill", fillRatio);
+            break;
+          default:
+            break;
         }
       }
       
@@ -1028,6 +1051,12 @@ void GMGOperator::setUpSmoother(Epetra_CrsMatrix *fineStiffnessMatrix) {
   if (err != 0) {
     cout << "WARNING: In GMGOperator, smoother->SetParameters() returned with err " << err << endl;
   }
+  
+//  int rank = Teuchos::GlobalMPISession::getRank();
+//  if (rank == 0) {
+//    cout << "Smoother info:\n";
+//    cout << *smoother;
+//  }
   
 //  if (_smootherType != IFPACK_ADDITIVE_SCHWARZ) {
     // not real sure why, but in the doc examples, this isn't called for additive schwarz

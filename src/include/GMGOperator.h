@@ -191,6 +191,15 @@ public:
   
   void setApplyDiagonalSmoothing(bool value);
   
+  //! factorization choices for Schwarz blocks, when a Schwarz smoother is used.
+  enum FactorType {
+    Direct,
+    ILU,
+    IC
+  };
+  
+  void setSchwarzFactorizationType(FactorType choice);
+  
   enum SmootherChoice {
     POINT_JACOBI,
     POINT_SYMMETRIC_GAUSS_SEIDEL,
@@ -217,6 +226,8 @@ public:
 private:
   SmootherChoice _smootherType;
   int _smootherOverlap;
+  
+  FactorType _schwarzBlockFactorizationType;
 };
 
 
