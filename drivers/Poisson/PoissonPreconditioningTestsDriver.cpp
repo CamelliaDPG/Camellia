@@ -11,6 +11,8 @@
 #include "Solver.h"
 #include "Ifpack_AdditiveSchwarz.h"
 #include "Ifpack_Amesos.h"
+#include "Ifpack_IC.h"
+#include "Ifpack_ILU.h"
 
 // EpetraExt includes
 #include "EpetraExt_RowMatrixOut.h"
@@ -19,14 +21,64 @@
 #include "AdditiveSchwarz.h"
 #include "MeshFactory.h"
 
+#include "GMGOperator.h"
+
 #include "HDF5Exporter.h"
 
 using namespace Camellia;
 
-Teuchos::RCP<Epetra_Operator> CamelliaAdditiveSchwarzPreconditioner(Epetra_RowMatrix* A, int overlapLevel, MeshPtr mesh, Teuchos::RCP<DofInterpreter> dofInterpreter) {
-  Teuchos::RCP<Ifpack_Preconditioner> preconditioner = Teuchos::rcp(new AdditiveSchwarz<Ifpack_Amesos>(A, overlapLevel, mesh, dofInterpreter) );
+enum CoarseSolverChoice {
+  KLU,
+  SuperLUDist,
+  MUMPS,
+  SimpleML
+};
+
+string getFactorizationTypeString(GMGOperator::FactorType factorizationType) {
+  switch (factorizationType) {
+    case GMGOperator::Direct:
+      return "Direct";
+    case GMGOperator::IC:
+      return "IC";
+    case GMGOperator::ILU:
+      return "ILU";
+    default:
+      return "Unknown";
+  }
+}
+
+GMGOperator::FactorType getFactorizationType(string factorizationTypeString) {
+  if (factorizationTypeString == "Direct") {
+    return GMGOperator::Direct;
+  }
+  if (factorizationTypeString == "IC") return GMGOperator::IC;
+  if (factorizationTypeString == "ILU") return GMGOperator::ILU;
   
+  TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "factorization type not recognized");
+}
+
+Teuchos::RCP<Epetra_Operator> CamelliaAdditiveSchwarzPreconditioner(Epetra_RowMatrix* A, int overlapLevel, MeshPtr mesh, Teuchos::RCP<DofInterpreter> dofInterpreter,
+                                                                    GMGOperator::FactorType schwarzBlockFactorization) {
+  
+  Teuchos::RCP<Ifpack_Preconditioner> preconditioner;
   Teuchos::ParameterList List;
+  double fillRatio = 5.0;
+  int levelOfFill = 2;
+  switch (schwarzBlockFactorization) {
+    case GMGOperator::Direct:
+      preconditioner = Teuchos::rcp(new AdditiveSchwarz<Ifpack_Amesos>(A, overlapLevel, mesh, dofInterpreter) );
+      break;
+    case GMGOperator::IC:
+      preconditioner = Teuchos::rcp(new AdditiveSchwarz<Ifpack_IC>(A, overlapLevel, mesh, dofInterpreter) );
+      List.set("fact: ict level-of-fill", fillRatio);
+      break;
+    case GMGOperator::ILU:
+      preconditioner = Teuchos::rcp(new AdditiveSchwarz<Ifpack_ILU>(A, overlapLevel, mesh, dofInterpreter) );
+      List.set("fact: level-of-fill", levelOfFill);
+      break;
+    default:
+      break;
+  }
   
   List.set("schwarz: combine mode", "Add"); // The PDF doc says to use "Insert" to maintain symmetry, but the HTML docs (which are more recent) say to use "Add".  http://trilinos.org/docs/r11.10/packages/ifpack/doc/html/index.html
   int err = preconditioner->SetParameters(List);
@@ -47,10 +99,27 @@ Teuchos::RCP<Epetra_Operator> CamelliaAdditiveSchwarzPreconditioner(Epetra_RowMa
   return preconditioner;
 }
 
-Teuchos::RCP<Epetra_Operator> IfPackAdditiveSchwarzPreconditioner(Epetra_RowMatrix* A, int overlapLevel) {
-  Teuchos::RCP<Ifpack_Preconditioner> preconditioner = Teuchos::rcp(new Ifpack_AdditiveSchwarz<Ifpack_Amesos>(A, overlapLevel) );
-  
+Teuchos::RCP<Epetra_Operator> IfPackAdditiveSchwarzPreconditioner(Epetra_RowMatrix* A, int overlapLevel,
+                                                                  GMGOperator::FactorType schwarzBlockFactorization) {
+  Teuchos::RCP<Ifpack_Preconditioner> preconditioner;
   Teuchos::ParameterList List;
+  double fillRatio = 5.0;
+  int levelOfFill = 2;
+  switch (schwarzBlockFactorization) {
+    case GMGOperator::Direct:
+      preconditioner = Teuchos::rcp(new Ifpack_AdditiveSchwarz<Ifpack_Amesos>(A, overlapLevel) );
+      break;
+    case GMGOperator::IC:
+      preconditioner = Teuchos::rcp(new Ifpack_AdditiveSchwarz<Ifpack_IC>(A, overlapLevel) );
+      List.set("fact: ict level-of-fill", fillRatio);
+      break;
+    case GMGOperator::ILU:
+      preconditioner = Teuchos::rcp(new Ifpack_AdditiveSchwarz<Ifpack_ILU>(A, overlapLevel) );
+      List.set("fact: level-of-fill", levelOfFill);
+      break;
+    default:
+      break;
+  }
   
   List.set("schwarz: combine mode", "Add"); // The PDF doc says to use "Insert" to maintain symmetry, but the HTML docs (which are more recent) say to use "Add".  http://trilinos.org/docs/r11.10/packages/ifpack/doc/html/index.html
   int err = preconditioner->SetParameters(List);
@@ -84,16 +153,19 @@ class AztecSolver : public Solver {
   
   MeshPtr _mesh;
   Teuchos::RCP<DofInterpreter> _dofInterpreter;
+  GMGOperator::FactorType _schwarzBlockFactorization;
 public:
-  AztecSolver(int maxIters, double tol, int schwarzOverlapLevel, bool useSchwarzPreconditioner) {
+  AztecSolver(int maxIters, double tol, int schwarzOverlapLevel, bool useSchwarzPreconditioner, GMGOperator::FactorType schwarzBlockFactorization) {
     _maxIters = maxIters;
     _tol = tol;
     _schwarzOverlap = schwarzOverlapLevel;
     _useSchwarzPreconditioner = useSchwarzPreconditioner;
     _azOutputLevel = 1;
+    _schwarzBlockFactorization = schwarzBlockFactorization;
   }
   
   AztecSolver(int maxIters, double tol, int schwarzOverlapLevel, bool useSchwarzPreconditioner,
+              GMGOperator::FactorType schwarzBlockFactorization,
               MeshPtr mesh, Teuchos::RCP<DofInterpreter> dofInterpreter) {
     _mesh = mesh;
     _dofInterpreter = dofInterpreter;
@@ -101,6 +173,7 @@ public:
     _tol = tol;
     _schwarzOverlap = schwarzOverlapLevel;
     _useSchwarzPreconditioner = useSchwarzPreconditioner;
+    _schwarzBlockFactorization = schwarzBlockFactorization;
     _azOutputLevel = 1;
   }
   void setAztecOutputLevel(int AztecOutputLevel) {
@@ -116,7 +189,7 @@ public:
     
     Teuchos::RCP<Epetra_Operator> preconditioner;
     if (_mesh != Teuchos::null) {
-      preconditioner = CamelliaAdditiveSchwarzPreconditioner(A, _schwarzOverlap, _mesh, _dofInterpreter);
+      preconditioner = CamelliaAdditiveSchwarzPreconditioner(A, _schwarzOverlap, _mesh, _dofInterpreter, _schwarzBlockFactorization);
       
 //      Teuchos::RCP< Epetra_CrsMatrix > M;
 //      M = Epetra_Operator_to_Epetra_Matrix::constructInverseMatrix(*preconditioner, A->RowMatrixRowMap());
@@ -126,7 +199,7 @@ public:
 //      EpetraExt::RowMatrixToMatrixMarketFile("/tmp/preconditioner.dat",*M, NULL, NULL, false);
       
     } else {
-      preconditioner = IfPackAdditiveSchwarzPreconditioner(A, _schwarzOverlap);
+      preconditioner = IfPackAdditiveSchwarzPreconditioner(A, _schwarzOverlap, _schwarzBlockFactorization);
     }
     
     if (_useSchwarzPreconditioner) {
@@ -192,7 +265,7 @@ public:
     Epetra_RowMatrix *A = problem().GetMatrix();
     Teuchos::RCP<Epetra_Operator> preconditioner;
     if (_mesh != Teuchos::null) {
-      preconditioner = CamelliaAdditiveSchwarzPreconditioner(A, _schwarzOverlap, _mesh, _dofInterpreter);
+      preconditioner = CamelliaAdditiveSchwarzPreconditioner(A, _schwarzOverlap, _mesh, _dofInterpreter, _schwarzBlockFactorization);
       
 //      Teuchos::RCP< Epetra_CrsMatrix > M;
 //      M = Epetra_Operator_to_Epetra_Matrix::constructInverseMatrix(*preconditioner, A->RowMatrixRowMap());
@@ -202,7 +275,7 @@ public:
 //      EpetraExt::RowMatrixToMatrixMarketFile("/tmp/preconditioner.dat",*M, NULL, NULL, false);
       
     } else {
-      preconditioner = IfPackAdditiveSchwarzPreconditioner(A, _schwarzOverlap);
+      preconditioner = IfPackAdditiveSchwarzPreconditioner(A, _schwarzOverlap, _schwarzBlockFactorization);
     }
     
     return Epetra_Operator_to_Epetra_Matrix::constructInverseMatrix(*preconditioner, map);
@@ -432,6 +505,7 @@ void initializeSolutionAndCoarseMesh(SolutionPtr &solution, MeshPtr &coarseMesh,
 
 void run(ProblemChoice problemChoice, int &iterationCount, int spaceDim, int numCells, int k, int delta_k, bool conformingTraces,
          bool useStaticCondensation, bool precondition, bool schwarzOnly, bool useCamelliaAdditiveSchwarz, int schwarzOverlap,
+         GMGOperator::FactorType schwarzBlockFactorization, Solver::SolverChoice coarseSolverChoice,
          double cgTol, int cgMaxIterations, int AztecOutputLevel, bool reportTimings, bool reportEnergyError) {
   int rank = Teuchos::GlobalMPISession::getRank();
   
@@ -446,19 +520,21 @@ void run(ProblemChoice problemChoice, int &iterationCount, int spaceDim, int num
   
   Teuchos::RCP<Solver> solver;
   if (!precondition) {
-    solver = Teuchos::rcp( new AztecSolver(cgMaxIterations,cgTol,schwarzOverlap,precondition) );
+    solver = Teuchos::rcp( new AztecSolver(cgMaxIterations,cgTol,schwarzOverlap,precondition, schwarzBlockFactorization) );
     ((AztecSolver*) solver.get())->setAztecOutputLevel(AztecOutputLevel);
   } else if (schwarzOnly) {
     if (useCamelliaAdditiveSchwarz) {
-      solver = Teuchos::rcp( new AztecSolver(cgMaxIterations,cgTol,schwarzOverlap,precondition,mesh, solution->getDofInterpreter()) );
+      solver = Teuchos::rcp( new AztecSolver(cgMaxIterations,cgTol,schwarzOverlap, precondition, schwarzBlockFactorization, mesh, solution->getDofInterpreter()) );
     } else {
-      solver = Teuchos::rcp( new AztecSolver(cgMaxIterations,cgTol,schwarzOverlap,precondition) );
+      solver = Teuchos::rcp( new AztecSolver(cgMaxIterations,cgTol,schwarzOverlap,precondition, schwarzBlockFactorization) );
     }
     ((AztecSolver*) solver.get())->setAztecOutputLevel(AztecOutputLevel);
   } else {
     BCPtr zeroBCs = bc->copyImposingZero();
     bool saveFactorization = true;
-    Teuchos::RCP<Solver> coarseSolver = Teuchos::rcp( new SuperLUDistSolver(saveFactorization) );
+    double coarseTol = 1e-6;
+    int coarseMaxIterations = 1000;
+    Teuchos::RCP<Solver> coarseSolver = Solver::getSolver(coarseSolverChoice, saveFactorization, coarseTol, coarseMaxIterations);
     GMGSolver* gmgSolver = new GMGSolver(zeroBCs, k0Mesh, graphNorm, mesh, solution->getDofInterpreter(),
                                          solution->getPartitionMap(), cgMaxIterations, cgTol, coarseSolver,
                                          useStaticCondensation);
@@ -466,6 +542,7 @@ void run(ProblemChoice problemChoice, int &iterationCount, int spaceDim, int num
 //    gmgSolver->setComputeConditionNumberEstimate(false);
     
     gmgSolver->setUseConjugateGradient(true);
+    gmgSolver->gmgOperator().setSchwarzFactorizationType(schwarzBlockFactorization);
     if (useCamelliaAdditiveSchwarz) {
       gmgSolver->gmgOperator().setSmootherType(GMGOperator::CAMELLIA_ADDITIVE_SCHWARZ);
     } else {
@@ -543,8 +620,8 @@ void run(ProblemChoice problemChoice, int &iterationCount, int spaceDim, int num
 }
 
 void runMany(ProblemChoice problemChoice, int spaceDim, int delta_k, bool conformingTraces, bool useStaticCondensation,
-             double cgTol, int cgMaxIterations, int aztecOutputLevel,
-             RunManyPreconditionerChoices preconditionerChoices) {
+             GMGOperator::FactorType schwarzBlockFactorization, Solver::SolverChoice coarseSolverChoice,
+             double cgTol, int cgMaxIterations, int aztecOutputLevel, RunManyPreconditionerChoices preconditionerChoices) {
   int rank = Teuchos::GlobalMPISession::getRank();
   
   string problemChoiceString;
@@ -721,6 +798,7 @@ void runMany(ProblemChoice problemChoice, int spaceDim, int delta_k, bool confor
               bool reportEnergyError = false;
               run(problemChoice, iterationCount, spaceDim, numCells1D, k, delta_k, conformingTraces,
                   useStaticCondensation, precondition, schwarzOnly, useCamelliaSchwarz, overlapValue,
+                  schwarzBlockFactorization, coarseSolverChoice,
                   cgTol, cgMaxIterations, aztecOutputLevel, reportTimings, reportEnergyError);
               
               int numCells = pow((double)numCells1D, spaceDim);
@@ -743,7 +821,14 @@ void runMany(ProblemChoice problemChoice, int spaceDim, int delta_k, bool confor
   
   if (rank == 0) {
     ostringstream filename;
-    filename << problemChoiceString << "Driver" << spaceDim << "D_" << preconditionerChoiceString << "_results.dat";
+    filename << problemChoiceString << "Driver" << spaceDim << "D_";
+    filename << preconditionerChoiceString;
+    if (schwarzBlockFactorization != GMGOperator::Direct)
+      filename << "_schwarzFactorization_" << getFactorizationTypeString(schwarzBlockFactorization);
+    // if coarse solver is not direct, then include in the file name:
+    if ((coarseSolverChoice != Solver::KLU) && (coarseSolverChoice != Solver::MUMPS) && (coarseSolverChoice != Solver::SuperLUDist))
+      filename << "_coarseSolver_" << Solver::solverChoiceString(coarseSolverChoice);
+    filename << "_results.dat";
     ofstream fout(filename.str().c_str());
     fout << results.str();
     fout.close();
@@ -794,7 +879,11 @@ int main(int argc, char *argv[]) {
   
   bool runAutomatic = false;
   
+  string schwarzFactorizationTypeString = "Direct";
+  
   string problemChoiceString = "Poisson";
+  
+  string coarseSolverChoiceString = "KLU";
   
   string runManySubsetString = "All";
 
@@ -803,17 +892,20 @@ int main(int argc, char *argv[]) {
   cmdp.setOption("polyOrder",&k,"polynomial order for field variable u");
   cmdp.setOption("delta_k", &delta_k, "test space polynomial order enrichment");
 
+  cmdp.setOption("coarseSolver", &coarseSolverChoiceString, "coarse solver choice: KLU, MUMPS, SuperLUDist, SimpleMLSolver");
+  
   cmdp.setOption("useCondensedSolve", "useStandardSolve", &useCondensedSolve);
   
   cmdp.setOption("useSchwarzPreconditioner", "useGMGPreconditioner", &schwarzOnly);
   cmdp.setOption("useCamelliaAdditiveSchwarz", "useIfPackAdditiveSchwarz", &useCamelliaAdditiveSchwarz);
 
+  cmdp.setOption("schwarzFactorization", &schwarzFactorizationTypeString, "Schwarz block factorization strategy: Direct, IC, ILU");
   cmdp.setOption("useConformingTraces", "useNonConformingTraces", &conformingTraces);
   cmdp.setOption("precondition", "dontPrecondition", &precondition);
   
   cmdp.setOption("overlap", &schwarzOverlap, "Schwarz overlap level");
 
-  cmdp.setOption("spaceDim", &spaceDim, "space dimensions (1 to 3)");
+  cmdp.setOption("spaceDim", &spaceDim, "space dimensions (1, 2, or 3)");
   
   cmdp.setOption("azOutput", &AztecOutputLevel, "Aztec output level");
   cmdp.setOption("numCells", &numCells, "number of cells in the initial mesh");
@@ -851,6 +943,8 @@ int main(int argc, char *argv[]) {
     return -1;
   }
   
+  Solver::SolverChoice coarseSolverChoice = Solver::solverChoiceFromString(coarseSolverChoiceString);
+  
   RunManyPreconditionerChoices runManySubsetChoice;
   
   if (runManySubsetString == "All") {
@@ -877,6 +971,8 @@ int main(int argc, char *argv[]) {
     return -1;
   }
   
+  GMGOperator::FactorType schwarzFactorType = getFactorizationType(schwarzFactorizationTypeString);
+  
   if (delta_k==-1) delta_k = spaceDim;
   
   if (! runAutomatic) {
@@ -885,6 +981,7 @@ int main(int argc, char *argv[]) {
     
     run(problemChoice, iterationCount, spaceDim, numCells, k, delta_k, conformingTraces,
         useCondensedSolve, precondition, schwarzOnly, useCamelliaAdditiveSchwarz, schwarzOverlap,
+        schwarzFactorType, coarseSolverChoice,
         cgTol, cgMaxIterations, AztecOutputLevel, reportTimings, reportEnergyError);
     
     if (rank==0) cout << "Iteration count: " << iterationCount << endl;
@@ -900,7 +997,7 @@ int main(int argc, char *argv[]) {
       cout << "CG tolerance = " << cgTol << ", max iterations = " << cgMaxIterations << endl;
     }
     
-    runMany(problemChoice, spaceDim, delta_k, conformingTraces, useCondensedSolve,
+    runMany(problemChoice, spaceDim, delta_k, conformingTraces, useCondensedSolve, schwarzFactorType, coarseSolverChoice,
             cgTol, cgMaxIterations, AztecOutputLevel, runManySubsetChoice);
   }
   return 0;
