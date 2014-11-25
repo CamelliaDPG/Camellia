@@ -459,7 +459,6 @@ void run(ProblemChoice problemChoice, int &iterationCount, int spaceDim, int num
     BCPtr zeroBCs = bc->copyImposingZero();
     bool saveFactorization = true;
     Teuchos::RCP<Solver> coarseSolver = Teuchos::rcp( new SuperLUDistSolver(saveFactorization) );
-    bool useStaticCondensation = false;
     GMGSolver* gmgSolver = new GMGSolver(zeroBCs, k0Mesh, graphNorm, mesh, solution->getDofInterpreter(),
                                          solution->getPartitionMap(), cgMaxIterations, cgTol, coarseSolver,
                                          useStaticCondensation);
