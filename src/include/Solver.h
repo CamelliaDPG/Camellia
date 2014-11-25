@@ -31,14 +31,55 @@ public:
     // subclasses may override to reuse factorization information
     return solve();
   }
+  
+  enum SolverChoice {
+    KLU,
+    SuperLUDist,
+    MUMPS,
+    SimpleML
+  };
+  static Teuchos::RCP<Solver> getSolver(SolverChoice choice, bool saveFactorization,
+                                        double residualTolerance = 1e-12, int maxIterations = 50000);
+  
+  static SolverChoice solverChoiceFromString(string choiceString) {
+    if (choiceString=="KLU") return KLU;
+    if (choiceString=="SuperLUDist") return SuperLUDist;
+    if (choiceString=="MUMPS") return MUMPS;
+    if (choiceString=="SimpleML") return SimpleML;
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "choiceString not recognized!");
+  }
+  static string solverChoiceString(SolverChoice choice) {
+    if (choice==KLU) return "KLU";
+    if (choice==SuperLUDist) return "SuperLUDist";
+    if (choice==MUMPS) return "MUMPS";
+    if (choice==SimpleML) return "SimpleML";
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "choice not recognized!");
+  }
 };
 
 // some concrete implementations follow…
 class KluSolver : public Solver {
+  bool _saveFactorization;
+  Teuchos::RCP<Amesos_Klu> _savedSolver;
 public:
+  KluSolver(bool saveFactorization = false) {
+    _saveFactorization = saveFactorization;
+  }
   int solve() {
-    Amesos_Klu klu(problem());
-    return klu.Solve();
+    if (!_saveFactorization) {
+      Amesos_Klu klu(problem());
+      return klu.Solve();
+    } else {
+      _savedSolver = Teuchos::rcp( new Amesos_Klu(problem()) );
+      return _savedSolver->Solve();
+    }
+  }
+  int resolve() {
+    if (_savedSolver.get() != NULL) {
+      return _savedSolver->Solve();
+    } else {
+      return solve();
+    }
   }
 };
 
@@ -190,11 +231,16 @@ public:
     return mumps->Solve();
   }
   int resolve() {
-    if (_savedSolver.get() == NULL) {
-      cout << "You must call solve() before calling resolve().  Also, _saveFactorization must be true.\n";
-      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "You must call solve() before calling resolve().  Also, _saveFactorization must be true.");
+//    if (_savedSolver.get() == NULL) {
+//      cout << "You must call solve() before calling resolve().  Also, _saveFactorization must be true.\n";
+//      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "You must call solve() before calling resolve().  Also, _saveFactorization must be true.");
+//    }
+//    return _savedSolver->Solve();
+    if (_savedSolver.get() != NULL) {
+      return _savedSolver->Solve();
+    } else {
+      return solve();
     }
-    return _savedSolver->Solve();
   }
 };
 #else
