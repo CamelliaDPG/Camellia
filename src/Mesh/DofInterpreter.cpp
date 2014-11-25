@@ -9,6 +9,21 @@
 #include "DofInterpreter.h"
 #include "Mesh.h"
 
+#include "MPIWrapper.h"
+
+#include "GlobalDofAssignment.h"
+
+#include "CamelliaDebugUtility.h"
+
+#ifdef HAVE_MPI
+#include "Epetra_MpiComm.h"
+#include "Epetra_MpiDistributor.h"
+#else
+#include "Epetra_SerialComm.h"
+#include "Epetra_SerialDistributor.h"
+#endif
+#include "Teuchos_GlobalMPISession.hpp"
+
 void DofInterpreter::interpretLocalCoefficients(GlobalIndexType cellID, const FieldContainer<double> &localCoefficients, Epetra_MultiVector &globalCoefficients) {
   DofOrderingPtr trialOrder = _mesh->getElementType(cellID)->trialOrderPtr;
   FieldContainer<double> basisCoefficients; // declared here so that we can sometimes avoid mallocs, if we get lucky in terms of the resize()
@@ -46,4 +61,118 @@ void DofInterpreter::interpretLocalData(GlobalIndexType cellID, const FieldConta
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "ERROR: the vector and matrix dof indices differ...\n");
     }
   }
+}
+
+std::set<GlobalIndexType> DofInterpreter::importGlobalIndicesForCells(const std::vector<GlobalIndexType> &cellIDs) {
+  // INITIAL, DRAFT implementation: aiming first for correctness.
+  // (that's to say, I expect there is a better way to do some of this)
+  int rank = Teuchos::GlobalMPISession::getRank();
+  
+  set<GlobalIndexType> dofIndicesSet;
+  
+#ifdef HAVE_MPI
+  Epetra_MpiComm Comm(MPI_COMM_WORLD);
+#else
+  Epetra_SerialComm Comm;
+#endif
+
+  vector<int> myRequestOwners;
+  vector<GlobalIndexTypeToCast> myRequest;
+  for (int cellOrdinal=0; cellOrdinal<cellIDs.size(); cellOrdinal++) {
+    GlobalIndexType cellID = cellIDs[cellOrdinal];
+    int partitionForCell = _mesh->globalDofAssignment()->partitionForCellID(cellIDs[cellOrdinal]);
+    if (partitionForCell == rank) {
+      set<GlobalIndexType> dofIndicesForCell = this->globalDofIndicesForCell(cellID);
+      dofIndicesSet.insert(dofIndicesForCell.begin(),dofIndicesForCell.end());
+    }
+    else
+    {
+      myRequest.push_back(cellID);
+      myRequestOwners.push_back(partitionForCell);
+    }
+  }
+  
+  int myRequestCount = myRequest.size();
+  
+#ifdef HAVE_MPI
+  Epetra_MpiDistributor distributor(Comm);
+#else
+  Epetra_SerialDistributor distributor(Comm);
+#endif
+
+  GlobalIndexTypeToCast* myRequestPtr = NULL;
+  int *myRequestOwnersPtr = NULL;
+  if (myRequest.size() > 0) {
+    myRequestPtr = &myRequest[0];
+    myRequestOwnersPtr = &myRequestOwners[0];
+  }
+  int numCellsToExport = 0;
+  GlobalIndexTypeToCast* cellIDsToExport = NULL;  // we are responsible for deleting the allocated arrays
+  int* exportRecipients = NULL;
+  
+  distributor.CreateFromRecvs(myRequestCount, myRequestPtr, myRequestOwnersPtr, true, numCellsToExport, cellIDsToExport, exportRecipients);
+  
+  const std::set<GlobalIndexType>* myCells = &_mesh->globalDofAssignment()->cellsInPartition(-1);
+  
+  vector<int> sizes(numCellsToExport);
+  vector<GlobalIndexTypeToCast> indicesToExport;
+  for (int cellOrdinal=0; cellOrdinal<numCellsToExport; cellOrdinal++) {
+    GlobalIndexType cellID = cellIDsToExport[cellOrdinal];
+    if (myCells->find(cellID) == myCells->end()) {
+      cout << "cellID " << cellID << " does not belong to rank " << rank << endl;
+      ostringstream myRankDescriptor;
+      myRankDescriptor << "rank " << rank << ", cellID ownership";
+      Camellia::print(myRankDescriptor.str().c_str(), *myCells);
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "requested cellID does not belong to this rank!");
+    }
+    
+    set<GlobalIndexType> indicesForCell = this->globalDofIndicesForCell(cellID);
+    indicesToExport.insert(indicesToExport.end(), indicesForCell.begin(), indicesForCell.end());
+    sizes[cellOrdinal] = indicesForCell.size();
+  }
+  
+  int objSize = sizeof(GlobalIndexTypeToCast) / sizeof(char);
+  
+  int importLength = 0;
+  char* globalIndexData = NULL;
+  int* sizePtr = NULL;
+  char* indicesToExportPtr = NULL;
+  if (numCellsToExport > 0) {
+    sizePtr = &sizes[0];
+    indicesToExportPtr = (char *) &indicesToExport[0];
+  }
+  distributor.Do(indicesToExportPtr, objSize, sizePtr, importLength, globalIndexData);
+  const char* copyFromLocation = globalIndexData;
+  int numDofsImport = importLength / objSize;
+  vector<GlobalIndexTypeToCast> globalIndicesVector(numDofsImport);
+  GlobalIndexTypeToCast* copyToLocation = &globalIndicesVector[0];
+  for (int dofOrdinal=0; dofOrdinal<numDofsImport; dofOrdinal++) {
+    memcpy(copyToLocation, copyFromLocation, objSize);
+    copyFromLocation += objSize;
+    copyToLocation++; // copyToLocation has type GlobalIndexTypeToCast*, so this moves the pointer by objSize bytes
+  }
+  
+//  { // DEBUGGING
+//    ostringstream myRankDescriptor;
+//    myRankDescriptor << "rank " << rank << ", requested cells";
+//    Camellia::print(myRankDescriptor.str().c_str(), cellIDs);
+//    
+//    myRankDescriptor.str("");
+//    myRankDescriptor << "rank " << rank << ", exported data";
+//    Camellia::print(myRankDescriptor.str().c_str(), indicesToExport);
+//
+//    cout << "On rank " << rank << ", import length = " << importLength << endl;
+//    myRankDescriptor.str("");
+//    myRankDescriptor << "rank " << rank << ", imported data";
+//    Camellia::print(myRankDescriptor.str().c_str(), globalIndicesVector);
+//  }
+
+  // debugging: introducing 
+  if( cellIDsToExport != 0 ) delete [] cellIDsToExport;
+  if( exportRecipients != 0 ) delete [] exportRecipients;
+  if (globalIndexData != 0 ) delete [] globalIndexData;
+
+  dofIndicesSet.insert(globalIndicesVector.begin(),globalIndicesVector.end());
+  
+  return dofIndicesSet;
 }
