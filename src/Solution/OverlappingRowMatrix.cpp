@@ -61,12 +61,13 @@ void OverlappingRowMatrix::BuildMap(int OverlapLevel_in, MeshPtr mesh, Teuchos::
     allCells.insert(cellNeighbors.begin(), cellNeighbors.end());
     lastNeighbors = cellNeighbors;
   }
+  std::vector<GlobalIndexType> allCellsVector(allCells.begin(),allCells.end());
   // Next, determine all global degrees of freedom belonging to those cells
-  std::set<GlobalIndexType> globalDofIndices;
-  for (std::set<GlobalIndexType>::iterator cellIDIt = allCells.begin(); cellIDIt != allCells.end(); cellIDIt++) {
-    std::set<GlobalIndexType> globalDofIndicesForCell = dofInterpreter->globalDofIndicesForCell(*cellIDIt);
-    globalDofIndices.insert(globalDofIndicesForCell.begin(),globalDofIndicesForCell.end());
-  }
+  std::set<GlobalIndexType> globalDofIndices = dofInterpreter->importGlobalIndicesForCells(allCellsVector);
+//  for (std::set<GlobalIndexType>::iterator cellIDIt = allCells.begin(); cellIDIt != allCells.end(); cellIDIt++) {
+//    std::set<GlobalIndexType> globalDofIndicesForCell = dofInterpreter->globalDofIndicesForCell(*cellIDIt);
+//    globalDofIndices.insert(globalDofIndicesForCell.begin(),globalDofIndicesForCell.end());
+//  }
   
   //  std::set<int_type> externalDofIndices;
   //

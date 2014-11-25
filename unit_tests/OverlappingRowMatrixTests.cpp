@@ -23,6 +23,8 @@
 
 #include "PoissonFormulation.h"
 
+#include "CamelliaDebugUtility.h"
+
 using namespace Camellia;
 
 namespace {
@@ -32,6 +34,8 @@ namespace {
     // when OverlappingRowMatrix is constructed by passing in a Mesh.
     
     // to fully exploit this test, should be run in context of 1, 2, 4, 16 MPI ranks.
+    
+    int rank = Teuchos::GlobalMPISession::getRank();
     
     Teuchos::ParameterList pl;
     
@@ -102,12 +106,23 @@ namespace {
             lastGhostCells = ghostCells;
           }
         }
-        set<GlobalIndexType> expectedGlobalDofIndices;
-        for (set<GlobalIndexType>::iterator cellIDIt = cells.begin(); cellIDIt != cells.end(); cellIDIt++) {
-          GlobalIndexType cellID = *cellIDIt;
-          set<GlobalIndexType> cellIndices = dofInterpreter->globalDofIndicesForCell(cellID);
-          expectedGlobalDofIndices.insert(cellIndices.begin(), cellIndices.end());
-        }
+        
+        vector<GlobalIndexType> cellsVector(cells.begin(),cells.end());
+        set<GlobalIndexType> expectedGlobalDofIndices = dofInterpreter->importGlobalIndicesForCells(cellsVector);
+        
+//        set<GlobalIndexType> expectedGlobalDofIndices;
+//        for (set<GlobalIndexType>::iterator cellIDIt = cells.begin(); cellIDIt != cells.end(); cellIDIt++) {
+//          GlobalIndexType cellID = *cellIDIt;
+//          set<GlobalIndexType> cellIndices = dofInterpreter->globalDofIndicesForCell(cellID);
+//          expectedGlobalDofIndices.insert(cellIndices.begin(), cellIndices.end());
+//        }
+        
+        // DEBUGGING output...
+//        if (useStaticCondensation) {
+//          ostringstream description;
+//          description << "expectedGlobalDofIndices for overlap " << overlap << " on rank " << rank;
+//          Camellia::print(description.str().c_str(), expectedGlobalDofIndices);
+//        }
         
         OverlappingRowMatrix rowMatrix(stiffness, overlap, mesh, soln->getDofInterpreter());
         set<GlobalIndexType> actualGlobalDofIndices = rowMatrix.RowIndices();
