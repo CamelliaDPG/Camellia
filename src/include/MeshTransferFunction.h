@@ -41,6 +41,9 @@ public:
   virtual void values(FieldContainer<double> &values, BasisCachePtr basisCache);
   
   bool boundaryValueOnly();
+  
+  const std::map<CellSide,CellSide> mapToOriginalMesh() { return _newToOriginalMap; }
+  const std::map<CellSide,CellSide> mapToNewMesh() { return _originalToNewMap; }
 };
 
 #endif
