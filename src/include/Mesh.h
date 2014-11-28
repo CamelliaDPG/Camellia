@@ -196,7 +196,9 @@ public:
   Teuchos::RCP<BilinearForm> bilinearForm();
   void setBilinearForm( Teuchos::RCP<BilinearForm>);
 
-  vector<ElementPtr> elementsForPoints(const FieldContainer<double> &physicalPoints, bool nullElementsIfOffRank=true);
+  //! This method should probably be moved to MeshTopology; its implementation is independent of Mesh.
+  std::vector<GlobalIndexType> cellIDsForPoints(const FieldContainer<double> &physicalPoints, bool minusOnesForOffRank=true);
+  std::vector<ElementPtr> elementsForPoints(const FieldContainer<double> &physicalPoints, bool nullElementsIfOffRank=true);
 
   vector< Teuchos::RCP< ElementType > > elementTypes(PartitionIndexType partitionNumber=-1); // returns *all* elementTypes by default
 
