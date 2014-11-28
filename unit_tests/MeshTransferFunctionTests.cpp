@@ -146,13 +146,25 @@ namespace {
     // then try with some arbitrarily permuted cell numberings
   }
   
-  TEUCHOS_UNIT_TEST( MeshTransferFunction, FunctionValues)
+  TEUCHOS_UNIT_TEST( MeshTransferFunction, FunctionValuesPiecewiseConstant)
   {
     // TODO: write this test
     // test to check that functions are correctly valued
     
     // try with some functions that simply return the cellID
     // and check that this matches the cell map.
+    
+    // important to try this test on multiple MPI ranks...
+  }
+  
+  TEUCHOS_UNIT_TEST( MeshTransferFunction, FunctionValues)
+  {
+    // TODO: write this test
+    // test to check that functions are correctly valued
+    
+    // try with some functions that vary on the interface
+    // (thereby checking that any permutations of the reference
+    //  values are correctly imposed)
     
     // important to try this test on multiple MPI ranks...
   }

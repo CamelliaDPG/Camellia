@@ -7,6 +7,10 @@ MeshTransferFunction::MeshTransferFunction(FunctionPtr originalFunction, MeshPtr
   _newMesh = newMesh;
   
   // 1. Find (cellID, sideOrdinal) belonging to this rank that have interface_t values in originalMesh.
+  
+  // initial strategy: examine the vertices that belong to cells owned by this rank. Sides that are wholly
+  //                   comprised of vertices on the interface are the sides of interest
+  
   // 2. Find corresponding cells in newMesh.  Typically, these will be less refined than originalMesh,
   //    so that the relationship is many-to-one from originalMesh.  We look for a common ancestor to
   //    make it one-to-one.  I.e. when we find a newMesh CellSide matching one from originalMesh, we
@@ -37,6 +41,16 @@ MeshTransferFunction::MeshTransferFunction(FunctionPtr originalFunction, MeshPtr
 bool MeshTransferFunction::boundaryValueOnly() {
   // This function is only valid on the interface (boundary) between the two meshes.
   return true;
+}
+
+
+void MeshTransferFunction::didHRefine(MeshTopologyPtr meshTopo, const set<GlobalIndexType> &cellIDs,
+                                      Teuchos::RCP<RefinementPattern> refPattern) {
+  
+}
+
+void MeshTransferFunction::didHUnrefine(MeshTopologyPtr meshTopo, const set<GlobalIndexType> &cellIDs) {
+  
 }
 
 void MeshTransferFunction::values(FieldContainer<double> &values, BasisCachePtr basisCache) {

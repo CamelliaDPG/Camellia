@@ -19,6 +19,8 @@
 #include "Mesh.h"
 #include "BasisCache.h"
 
+#include "RefinementObserver.h"
+
 //! MeshTransferFunction: Given two meshes with a shared interface...
 //
 /*!
@@ -29,7 +31,7 @@
  */
 
 
-class MeshTransferFunction : public Function {
+class MeshTransferFunction : public Function, public RefinementObserver {
   MeshPtr _originalMesh, _newMesh;
   FunctionPtr _originalFunction;
   
@@ -44,6 +46,10 @@ public:
   
   const std::map<CellSide,CellSide> & mapToOriginalMesh() { return _newToOriginalMap; }
   const std::map<CellSide,CellSide> & mapToNewMesh() { return _originalToNewMap; }
+  
+  // RefinementObserver methods:
+  void didHRefine(MeshTopologyPtr meshTopology, const set<GlobalIndexType> &cellIDs, Teuchos::RCP<RefinementPattern> refPattern);
+  void didHUnrefine(MeshTopologyPtr meshTopology, const set<GlobalIndexType> &cellIDs);
 };
 
 #endif
