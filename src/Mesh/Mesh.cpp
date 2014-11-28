@@ -310,10 +310,16 @@ vector<GlobalIndexType> Mesh::cellIDsForPoints(const FieldContainer<double> &phy
         }
       }
     }
-    GlobalIndexType cellID = cell->cellIndex();
-    if (minusOnesIfOffRank && (cell.get() != NULL) && (rankLocalCellIDs.find(cellID) == rankLocalCellIDs.end())) {
-      cellID = -1;
-    }
+    GlobalIndexType cellID = -1;
+    if (!minusOnesIfOffRank) { // need not check if it's off-rank, then
+      if (cell.get() != NULL) {
+        cellID = cell->cellIndex();
+      }
+    } else {
+      if ((cell.get() != NULL) && (rankLocalCellIDs.find(cell->cellIndex()) != rankLocalCellIDs.end())) {
+        cellID = cell->cellIndex();
+      }
+    }    
     cellIDs.push_back(cellID);
   }
   //  cout << "Returning from cellIDs\n";
@@ -660,10 +666,10 @@ void Mesh::hRefine(const set<GlobalIndexType> &cellIDs, Teuchos::RCP<RefinementP
 void Mesh::hRefine(const set<GlobalIndexType> &cellIDs, Teuchos::RCP<RefinementPattern> refPattern, bool repartitionAndRebuild) {
   if (cellIDs.size() == 0) return;
   
-  // refine any registered meshes
+  // send h-refinement message any registered observers (may be meshes)
   for (vector< Teuchos::RCP<RefinementObserver> >::iterator meshIt = _registeredObservers.begin();
        meshIt != _registeredObservers.end(); meshIt++) {
-    (*meshIt)->hRefine(cellIDs,refPattern);
+    (*meshIt)->hRefine(_meshTopology,cellIDs,refPattern);
   }
   
   set<GlobalIndexType>::const_iterator cellIt;
@@ -681,8 +687,14 @@ void Mesh::hRefine(const set<GlobalIndexType> &cellIDs, Teuchos::RCP<RefinementP
     set<GlobalIndexType> cellIDset;
     cellIDset.insert(cellID);
     
+    // TODO: consider making GDA a refinementObserver, using that interface to send it the notification
     _gda->didHRefine(cellIDset);
-    
+    for (vector< Teuchos::RCP<RefinementObserver> >::iterator meshIt = _registeredObservers.begin();
+         meshIt != _registeredObservers.end(); meshIt++) {
+      (*meshIt)->didHRefine(_meshTopology,cellIDs,refPattern);
+    }
+
+    // TODO: consider making transformation function a refinementObserver, using that interface to send it the notification
     // let transformation function know about the refinement that just took place
     if (_meshTopology->transformationFunction().get()) {
       _meshTopology->transformationFunction()->didHRefine(cellIDset);
@@ -776,7 +788,15 @@ void Mesh::hUnrefine(const set<GlobalIndexType> &cellIDs) {
 //    }
 //  }
   
+  // TODO: consider making GDA a RefinementObserver, and using that interface to send the notification of unrefinement.
   _gda->didHUnrefine(cellIDs);
+  
+  // notify observers that of the unrefinement that just happened
+  for (vector< Teuchos::RCP<RefinementObserver> >::iterator meshIt = _registeredObservers.begin();
+       meshIt != _registeredObservers.end(); meshIt++) {
+    (*meshIt)->didHUnrefine(_meshTopology,cellIDs);
+  }
+  
   _gda->repartitionAndMigrate();
   _boundary.buildLookupTables();
 }
