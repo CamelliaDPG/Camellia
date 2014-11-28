@@ -42,8 +42,8 @@ public:
   
   bool boundaryValueOnly();
   
-  const std::map<CellSide,CellSide> mapToOriginalMesh() { return _newToOriginalMap; }
-  const std::map<CellSide,CellSide> mapToNewMesh() { return _originalToNewMap; }
+  const std::map<CellSide,CellSide> & mapToOriginalMesh() { return _newToOriginalMap; }
+  const std::map<CellSide,CellSide> & mapToNewMesh() { return _originalToNewMap; }
 };
 
 #endif
