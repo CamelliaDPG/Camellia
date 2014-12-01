@@ -71,6 +71,8 @@ public:
   virtual FunctionPtr curl();
   virtual FunctionPtr grad(int numComponents=-1);
 
+  virtual void importCellData(std::vector<GlobalIndexType> cellIDs) {}
+  
 // inverse() presently unused: and unclear how useful...
 //  virtual FunctionPtr inverse();
 

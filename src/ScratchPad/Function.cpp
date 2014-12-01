@@ -17,6 +17,8 @@
 #include "Var.h"
 #include "Solution.h"
 
+#include "GlobalDofAssignment.h"
+
 #include "PhysicalPointCache.h"
 
 #include "CamelliaCellTools.h"
@@ -134,6 +136,8 @@ public:
   FunctionPtr dy();
   FunctionPtr dz();
   // for reasons of efficiency, may want to implement div() and grad() as well
+  
+  void importCellData(std::vector<GlobalIndexType> cellIDs);
 
   string displayString();
   bool boundaryValueOnly();
@@ -2394,6 +2398,18 @@ string SimpleSolutionFunction::displayString() {
   ostringstream str;
   str << "\\overline{" << _var->displayString() << "} ";
   return str.str();
+}
+
+void SimpleSolutionFunction::importCellData(std::vector<GlobalIndexType> cells) {
+  int rank = Teuchos::GlobalMPISession::getRank();
+  set<GlobalIndexType> offRankCells;
+  const set<GlobalIndexType>* rankLocalCells = &_soln->mesh()->globalDofAssignment()->cellsInPartition(rank);
+  for (int cellOrdinal=0; cellOrdinal < cells.size(); cellOrdinal++) {
+    if (rankLocalCells->find(cells[cellOrdinal]) == rankLocalCells->end()) {
+      offRankCells.insert(cells[cellOrdinal]);
+    }
+  }
+  _soln->importSolutionForOffRankCells(offRankCells);
 }
 
 void SimpleSolutionFunction::values(FieldContainer<double> &values, BasisCachePtr basisCache) {
