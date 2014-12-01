@@ -160,6 +160,7 @@ public:
 //  bool equals(Solution& otherSolution, double tol=0.0);
 
   const FieldContainer<double>& allCoefficientsForCellID(GlobalIndexType cellID, bool warnAboutOffRankImports=true); // coefficients for all solution variables
+  void setLocalCoefficientsForCell(GlobalIndexType cellID, const FieldContainer<double> &coefficients);
 
   Teuchos::RCP<DofInterpreter> getDofInterpreter() const;
   void setDofInterpreter(Teuchos::RCP<DofInterpreter> dofInterpreter);
@@ -179,6 +180,7 @@ public:
   void setProblem(Teuchos::RCP<Solver> solver);
   int solveWithPrepopulatedStiffnessAndLoad(Teuchos::RCP<Solver> solver, bool callResolveInstead = false);
   void importSolution(); // imports for all rank-local cellIDs
+  void importSolutionForOffRankCells(std::set<GlobalIndexType> cellIDs);
   void importGlobalSolution(); // imports (and interprets!) global solution.  NOT scalable.
   
   int solve(); // could add arguments to allow different solution algorithms to be selected...
