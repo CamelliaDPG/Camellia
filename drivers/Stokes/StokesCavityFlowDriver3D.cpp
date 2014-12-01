@@ -109,7 +109,7 @@ int main(int argc, char *argv[]) {
   int refCount = 1;
   
   int k = 1; // poly order for field variables
-  int delta_k = 3;   // test space enrichment
+  int delta_k = 1;   // test space enrichment (1 suffices)
   
   bool useCondensedSolve = true;
 //  bool useSuperLUDist = true;
