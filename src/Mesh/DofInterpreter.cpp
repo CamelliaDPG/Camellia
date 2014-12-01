@@ -65,7 +65,7 @@ void DofInterpreter::interpretLocalData(GlobalIndexType cellID, const FieldConta
 
 std::set<GlobalIndexType> DofInterpreter::importGlobalIndicesForCells(const std::vector<GlobalIndexType> &cellIDs) {
   // INITIAL, DRAFT implementation: aiming first for correctness.
-  // (that's to say, I expect there is a better way to do some of this)
+  // (that's to say, there may be a better way to do some of this)
   int rank = Teuchos::GlobalMPISession::getRank();
   
   set<GlobalIndexType> dofIndicesSet;
