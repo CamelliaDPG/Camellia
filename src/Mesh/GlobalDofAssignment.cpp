@@ -21,6 +21,8 @@
 #include "CamelliaCellTools.h"
 #include "MPIWrapper.h"
 
+#include "CondensedDofInterpreter.h"
+
 GlobalDofAssignment::GlobalDofAssignment(MeshPtr mesh, VarFactory varFactory,
                                          DofOrderingFactoryPtr dofOrderingFactory, MeshPartitionPolicyPtr partitionPolicy,
                                          unsigned initialH1OrderTrial, unsigned testOrderEnhancement, bool enforceConformityLocally) : DofInterpreter(mesh) {
@@ -233,6 +235,13 @@ void GlobalDofAssignment::repartitionAndMigrate() {
   _partitionPolicy->partitionMesh(_mesh.get(),_numPartitions);
   for (vector< Solution* >::iterator solutionIt = _registeredSolutions.begin();
        solutionIt != _registeredSolutions.end(); solutionIt++) {
+    // if solution has a condensed dof interpreter, we should reinitialize the mapping from interpreted to global dofs
+    Teuchos::RCP<DofInterpreter> dofInterpreter = (*solutionIt)->getDofInterpreter();
+    CondensedDofInterpreter* condensedDofInterpreter = dynamic_cast<CondensedDofInterpreter*>(dofInterpreter.get());
+    if (condensedDofInterpreter != NULL) {
+      condensedDofInterpreter->reinitialize();
+    }
+    
     (*solutionIt)->initializeLHSVector(); // rebuild LHS vector; global dofs will have changed. (important for addSolution)
   }
 }
