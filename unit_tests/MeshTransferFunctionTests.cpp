@@ -134,16 +134,23 @@ namespace {
           bool entryFound = false;
           TEST_ASSERT(entryFound);
         } else {
-          CellSide originalCellSideActual = actualMapToNew->find(newCellSide)->second;
+          CellSide originalCellSideActual = actualMapToOriginal->find(newCellSide)->second;
           TEST_EQUALITY(originalCellSide, originalCellSideActual);
         }
       }
     }
     
-    // TODO: finish this test: check that the contents of the maps are as expected...
-
-    
     // then try with some arbitrarily permuted cell numberings
+  }
+  
+  TEUCHOS_UNIT_TEST( MeshTransferFunction, CellMapUnderRefinement)
+  {
+    // TODO: write this test
+    // test to check that the cell mapping is correctly updated when the newMesh is refined
+    
+    // (may be worth checking that things are updated correctly when originalMesh is refined,
+    //  but the newMesh one is the one that corresponds to the typical use case.)
+
   }
   
   TEUCHOS_UNIT_TEST( MeshTransferFunction, FunctionValuesPiecewiseConstant)

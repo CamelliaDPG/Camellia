@@ -50,6 +50,8 @@ public:
   // RefinementObserver methods:
   void didHRefine(MeshTopologyPtr meshTopology, const set<GlobalIndexType> &cellIDs, Teuchos::RCP<RefinementPattern> refPattern);
   void didHUnrefine(MeshTopologyPtr meshTopology, const set<GlobalIndexType> &cellIDs);
+  
+  ~MeshTransferFunction();
 };
 
 #endif
