@@ -1,0 +1,17 @@
+rm -f CMakeCache.txt
+rm Makefile
+rm cmake_install.cmake
+rm -rf CMakeFiles
+rm -rf tests
+
+/soft/buildtools/cmake/2.8.10.2/gnu/fen/bin/cmake \
+  -D TRILINOS_PATH:FILEPATH="/projects/Camellia/lib/Trilinos/Versions/11.8.1-Release" \
+  -D CAMELLIA_SOURCE_DIR:FILEPATH="/projects/Camellia/Camellia/src" \
+  -D CMAKE_BUILD_TYPE="Release" \
+  -D CMAKE_EXE_LINKER_FLAGS:STRING="-O3 -fopenmp" \
+  -D MUMPS_DIR="/soft/libraries/petsc/3.3-p6/xl-opt/lib/" \
+  -D ZLIB_LIB="/soft/libraries/alcf/current/xl/ZLIB/lib/libz.a" \
+  -D OMP_INCLUDE="/home/projects/llvm/omp/include/" \
+  -DADDITIONAL_LIBRARY_DIRS="/soft/compilers/ibmcmp-may2014/vac/bg/12.1/lib64;/soft/compilers/ibmcmp-may2013/xlf/bg/14.1/lib64/;/soft/compilers/ibmcmp-may2013/xlsmp/bg/3.1/bglib64" \
+  -DADDITIONAL_LIBRARIES="xlf90_r;xlfmath;xlomp_ser;-lxl;-lxlopt" \
+  ../..
