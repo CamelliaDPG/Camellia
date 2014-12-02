@@ -364,6 +364,10 @@ MeshTopology* Cell::meshTopology() {
   return _meshTopo;
 }
 
+int Cell::numChildren() {
+  return _children.size();
+}
+
 bool Cell::ownsSide(unsigned int sideOrdinal) {
   bool ownsSide;
   

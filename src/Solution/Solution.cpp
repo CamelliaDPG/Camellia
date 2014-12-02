@@ -1099,6 +1099,113 @@ void Solution::importSolution() {
   err = timeDistributeSolutionVector.MaxValue( &_maxTimeDistributeSolution );
 }
 
+void Solution::importSolutionForOffRankCells(std::set<GlobalIndexType> cellIDs) {
+  // INITIAL, DRAFT implementation: aiming first for correctness.
+  // (that's to say, there may be a better way to do some of this)
+  int rank = Teuchos::GlobalMPISession::getRank();
+  
+  set<GlobalIndexType> dofIndicesSet;
+  
+#ifdef HAVE_MPI
+  Epetra_MpiComm Comm(MPI_COMM_WORLD);
+#else
+  Epetra_SerialComm Comm;
+#endif
+  
+  std::vector<GlobalIndexType> cellIDsVector(cellIDs.begin(),cellIDs.end());
+  
+  vector<int> myRequestOwners;
+  vector<GlobalIndexTypeToCast> myRequest;
+  for (int cellOrdinal=0; cellOrdinal<cellIDs.size(); cellOrdinal++) {
+    GlobalIndexType cellID = cellIDsVector[cellOrdinal];
+    int partitionForCell = _mesh->globalDofAssignment()->partitionForCellID(cellIDsVector[cellOrdinal]);
+    if (partitionForCell == rank) {
+      set<GlobalIndexType> dofIndicesForCell = _dofInterpreter->globalDofIndicesForCell(cellID);
+      dofIndicesSet.insert(dofIndicesForCell.begin(),dofIndicesForCell.end());
+    }
+    else
+    {
+      myRequest.push_back(cellID);
+      myRequestOwners.push_back(partitionForCell);
+    }
+  }
+  
+  int myRequestCount = myRequest.size();
+  
+#ifdef HAVE_MPI
+  Epetra_MpiDistributor distributor(Comm);
+#else
+  Epetra_SerialDistributor distributor(Comm);
+#endif
+  
+  GlobalIndexTypeToCast* myRequestPtr = NULL;
+  int *myRequestOwnersPtr = NULL;
+  if (myRequest.size() > 0) {
+    myRequestPtr = &myRequest[0];
+    myRequestOwnersPtr = &myRequestOwners[0];
+  }
+  int numCellsToExport = 0;
+  GlobalIndexTypeToCast* cellIDsToExport = NULL;  // we are responsible for deleting the allocated arrays
+  int* exportRecipients = NULL;
+  
+  distributor.CreateFromRecvs(myRequestCount, myRequestPtr, myRequestOwnersPtr, true, numCellsToExport, cellIDsToExport, exportRecipients);
+  
+  const std::set<GlobalIndexType>* myCells = &_mesh->globalDofAssignment()->cellsInPartition(-1);
+  
+  vector<int> sizes(numCellsToExport);
+  vector<double> dataToExport;
+  for (int cellOrdinal=0; cellOrdinal<numCellsToExport; cellOrdinal++) {
+    GlobalIndexType cellID = cellIDsToExport[cellOrdinal];
+    if (myCells->find(cellID) == myCells->end()) {
+      cout << "cellID " << cellID << " does not belong to rank " << rank << endl;
+      ostringstream myRankDescriptor;
+      myRankDescriptor << "rank " << rank << ", cellID ownership";
+      Camellia::print(myRankDescriptor.str().c_str(), *myCells);
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "requested cellID does not belong to this rank!");
+    }
+    
+    FieldContainer<double>* solnCoeffs = &_solutionForCellIDGlobal[cellID];
+    sizes[cellOrdinal] = solnCoeffs->size();
+    for (int dofOrdinal=0; dofOrdinal < solnCoeffs->size(); dofOrdinal++) {
+      dataToExport.push_back((*solnCoeffs)[dofOrdinal]);
+    }
+  }
+  
+  int objSize = sizeof(double) / sizeof(char);
+  
+  int importLength = 0;
+  char* importedData = NULL;
+  int* sizePtr = NULL;
+  char* dataToExportPtr = NULL;
+  if (numCellsToExport > 0) {
+    sizePtr = &sizes[0];
+    dataToExportPtr = (char *) &dataToExport[0];
+  }
+  distributor.Do(dataToExportPtr, objSize, sizePtr, importLength, importedData);
+  const char* copyFromLocation = importedData;
+  int numDofsImport = importLength / objSize;
+  int dofsImported = 0;
+  for (vector<GlobalIndexTypeToCast>::iterator cellIDIt = myRequest.begin(); cellIDIt != myRequest.end(); cellIDIt++) {
+    GlobalIndexType cellID = *cellIDIt;
+    FieldContainer<double> cellDofs(_mesh->getElementType(cellID)->trialOrderPtr->totalDofs());
+    if (cellDofs.size() + dofsImported > numDofsImport) {
+      cout << "ERROR: not enough dofs provided to this rank!\n";
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Attempt to go beyond array bounds because not enough dofs were imported.");
+    }
+    
+    double* copyToLocation = &cellDofs[0];
+    memcpy(copyToLocation, copyFromLocation, objSize * cellDofs.size());
+    copyFromLocation += objSize * cellDofs.size();
+    copyToLocation += cellDofs.size(); // copyToLocation has type double*, so this moves the pointer the same # of bytes
+    dofsImported += cellDofs.size();
+    _solutionForCellIDGlobal[cellID] = cellDofs;
+  }
+  
+  if( cellIDsToExport != 0 ) delete [] cellIDsToExport;
+  if( exportRecipients != 0 ) delete [] exportRecipients;
+  if (importedData != 0 ) delete [] importedData;
+}
+
 void Solution::importGlobalSolution() {
 #ifdef HAVE_MPI
   Epetra_MpiComm Comm(MPI_COMM_WORLD);
@@ -2719,6 +2826,16 @@ void Solution::setLagrangeConstraints( Teuchos::RCP<LagrangeConstraints> lagrang
 
 void Solution::setReportConditionNumber(bool value) {
   _reportConditionNumber = value;
+}
+
+void Solution::setLocalCoefficientsForCell(GlobalIndexType cellID, const FieldContainer<double> &coefficients) {
+  if (coefficients.size() != _mesh->getElementType(cellID)->trialOrderPtr->totalDofs()) {
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "coefficients container doesn't have the right # of dofs");
+  }
+  if (coefficients.rank() != 1) {
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "coefficients container doesn't have the right shape; should be rank 1");
+  }
+  _solutionForCellIDGlobal[cellID] = coefficients;
 }
 
 void Solution::setReportTimingResults(bool value) {

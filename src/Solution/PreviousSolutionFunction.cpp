@@ -13,6 +13,8 @@
 #include "Solution.h"
 #include "InnerProductScratchPad.h"
 
+#include "GlobalDofAssignment.h"
+
 PreviousSolutionFunction::PreviousSolutionFunction(SolutionPtr soln, LinearTermPtr solnExpression, bool multiplyFluxesByCellParity) : Function(solnExpression->rank()) {
   _soln = soln;
   _solnExpression = solnExpression;
@@ -43,8 +45,20 @@ void PreviousSolutionFunction::setOverrideMeshCheck(bool value) {
   }
   _overrideMeshCheck = value;
 }
+void PreviousSolutionFunction::importCellData(std::vector<GlobalIndexType> cells) {
+  int rank = Teuchos::GlobalMPISession::getRank();
+  set<GlobalIndexType> offRankCells;
+  const set<GlobalIndexType>* rankLocalCells = &_soln->mesh()->globalDofAssignment()->cellsInPartition(rank);
+  for (int cellOrdinal=0; cellOrdinal < cells.size(); cellOrdinal++) {
+    if (rankLocalCells->find(cells[cellOrdinal]) == rankLocalCells->end()) {
+      offRankCells.insert(cells[cellOrdinal]);
+    }
+  }
+  _soln->importSolutionForOffRankCells(offRankCells);
+}
 void PreviousSolutionFunction::values(FieldContainer<double> &values, BasisCachePtr basisCache) {
   int rank = Teuchos::GlobalMPISession::getRank();
+  
   if (_overrideMeshCheck) {
     _solnExpression->evaluate(values, _soln, basisCache);
     return;

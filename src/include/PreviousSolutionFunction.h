@@ -23,6 +23,7 @@ public:
   PreviousSolutionFunction(SolutionPtr soln, VarPtr var, bool multiplyFluxesByCellParity = true);
   bool boundaryValueOnly();
   void setOverrideMeshCheck(bool value);
+  void importCellData(std::vector<GlobalIndexType> cells);
   void values(FieldContainer<double> &values, BasisCachePtr basisCache);
   static map<int, FunctionPtr > functionMap( vector< VarPtr > varPtrs, SolutionPtr soln);
   string displayString();

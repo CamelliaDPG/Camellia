@@ -60,6 +60,8 @@ public:
   void setChildren(vector< Teuchos::RCP< Cell > > children);
   vector<IndexType> getChildIndices();
   vector< pair<IndexType, unsigned> > childrenForSide(unsigned sideOrdinal);
+  int numChildren();
+  
   vector< pair< IndexType, unsigned> > getDescendantsForSide(int sideOrdinal, bool leafNodesOnly = true);
   unsigned entityIndex(unsigned subcdim, unsigned subcord);
   vector<unsigned> getEntityIndices(unsigned subcdim);
