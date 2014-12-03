@@ -38,6 +38,10 @@ class MeshTransferFunction : public Function, public RefinementObserver {
   typedef std::pair<GlobalIndexType,unsigned> CellSide; // cellID, side ordinal
   std::map<CellSide,CellSide> _newToOriginalMap;
   std::map<CellSide,CellSide> _originalToNewMap;
+  
+  std::map<CellSide,CellSide> _activeSideToAncestralSideInNewMesh;
+  
+  std::map<CellSide, unsigned> _permutationForNewMeshCellSide; // permutation goes from cell side in _newMesh to that in _originalMesh
 public:
   MeshTransferFunction(FunctionPtr originalFunction, MeshPtr originalMesh, MeshPtr newMesh, double interface_t);
   virtual void values(FieldContainer<double> &values, BasisCachePtr basisCache);

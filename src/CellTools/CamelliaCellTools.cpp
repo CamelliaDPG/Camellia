@@ -9,6 +9,8 @@
 #include "CamelliaCellTools.h"
 #include "BasisCache.h"
 
+#include "MeshTransformationFunction.h"
+
 CellTopoPtrLegacy CamelliaCellTools::cellTopoForKey(unsigned key) {
   static CellTopoPtrLegacy node, line, triangle, quad, tet, hex;
   
@@ -315,6 +317,16 @@ unsigned CamelliaCellTools::permutationInverse( const shards::CellTopology &cell
   return inverseMap[cellTopo.getKey()][permutation];
 }
 
+void CamelliaCellTools::permutedReferenceCellPoints(const shards::CellTopology &cellTopo, unsigned int permutation,
+                                                    const FieldContainer<double> &refPoints, FieldContainer<double> &permutedPoints) {
+  FieldContainer<double> permutedNodes(cellTopo.getNodeCount(),cellTopo.getDimension());
+  CamelliaCellTools::refCellNodesForTopology(permutedNodes, cellTopo, permutation);
+  
+  permutedNodes.resize(1,permutedNodes.dimension(0), permutedNodes.dimension(1));
+  int whichCell = 0;
+  CellTools<double>::mapToPhysicalFrame(permutedPoints,refPoints,permutedNodes,cellTopo, whichCell);
+}
+
 unsigned CamelliaCellTools::subcellOrdinalMap(CellTopoPtr cellTopo, unsigned subcdim, unsigned subcord, unsigned subsubcdim, unsigned subsubcord) {
   if (cellTopo->getTensorialDegree() == 0) {
     return subcellOrdinalMap(cellTopo->getShardsTopology(), subcdim, subcord, subsubcdim, subsubcord);
@@ -441,10 +453,10 @@ unsigned CamelliaCellTools::subcellReverseOrdinalMap(const shards::CellTopology 
 void CamelliaCellTools::mapToReferenceFrameInitGuess(       FieldContainer<double>  &        refPoints,
                                                      const FieldContainer<double>  &        initGuess,
                                                      const FieldContainer<double>  &        physPoints,
-                                                     MeshPtr mesh, int cellID)
+                                                     MeshTopologyPtr meshTopo, IndexType cellID, int cubatureDegree)
 {
-  ElementPtr elem = mesh->getElement(cellID);
-  int spaceDim  = elem->elementType()->cellTopoPtr->getDimension();
+  CellPtr cell = meshTopo->getCell(cellID);
+  int spaceDim  = meshTopo->getSpaceDim();
   int numPoints;
   int numCells=1;
   
@@ -468,7 +480,18 @@ void CamelliaCellTools::mapToReferenceFrameInitGuess(       FieldContainer<doubl
     }// p
   }// c
   
-  BasisCachePtr basisCache = BasisCache::basisCacheForCell(mesh, cellID);
+  BasisCachePtr basisCache = BasisCache::basisCacheForReferenceCell(*cell->topology(), cubatureDegree);
+  
+  if (meshTopo->transformationFunction().get() != NULL) {
+    FunctionPtr transformFunction = meshTopo->transformationFunction();
+    basisCache->setTransformationFunction(transformFunction, true);
+  }
+  std::vector<GlobalIndexType> cellIDs;
+  cellIDs.push_back(cellID);
+  bool includeCellDimension = true;
+  basisCache->setPhysicalCellNodes(meshTopo->physicalCellNodesForCell(cellID, includeCellDimension), cellIDs, false);
+  
+//  BasisCachePtr basisCache = BasisCache::basisCacheForCell(mesh, cellID);
   
   // Newton method to solve the equation F(refPoints) - physPoints = 0:
   // refPoints = xOld - DF^{-1}(xOld)*(F(xOld) - physPoints) = xOld + DF^{-1}(xOld)*(physPoints - F(xOld))
@@ -514,17 +537,17 @@ void CamelliaCellTools::mapToReferenceFrameInitGuess(       FieldContainer<doubl
 // copied from Intrepid's CellTools and specialized to allow use when we have curvilinear geometry
 void CamelliaCellTools::mapToReferenceFrame(          FieldContainer<double>      &        refPoints,
                                             const FieldContainer<double>      &        physPoints,
-                                            MeshPtr mesh, int cellID)
+                                            MeshTopologyPtr meshTopo, IndexType cellID, int cubatureDegree)
 {
-  ElementPtr elem = mesh->getElement(cellID);
-  shards::CellTopology cellTopo = *(elem->elementType()->cellTopoPtr);
-  int spaceDim  = cellTopo.getDimension();
+  CellPtr cell = meshTopo->getCell(cellID);
+  CellTopoPtrLegacy cellTopo = cell->topology();
+  int spaceDim  = cellTopo->getDimension();
   int numPoints;
   int numCells;
   
   // Define initial guesses to be  the Cell centers of the reference cell topology
   FieldContainer<double> cellCenter(spaceDim);
-  switch( cellTopo.getKey() ){
+  switch( cellTopo->getKey() ){
       // Standard Base topologies (number of cellWorkset = number of vertices)
     case shards::Line<2>::key:
       cellCenter(0) = 0.0;    break;
@@ -594,7 +617,7 @@ void CamelliaCellTools::mapToReferenceFrame(          FieldContainer<double>    
   }// c
   
   // Call method with initial guess
-  mapToReferenceFrameInitGuess(refPoints, initGuess, physPoints, mesh, cellID);
+  mapToReferenceFrameInitGuess(refPoints, initGuess, physPoints, meshTopo, cellID, cubatureDegree);
 }
 
 void CamelliaCellTools::mapToReferenceSubcell(FieldContainer<double>       &refSubcellPoints,

@@ -38,6 +38,9 @@ public:
 
   static unsigned permutationInverse( const shards::CellTopology &cellTopo, unsigned permutation );
   
+  //! Take refPoints on reference cell, take as physical nodes the specified permutation of the reference cell points.  Permuted points are then the physical points mapped.
+  static void permutedReferenceCellPoints(const shards::CellTopology &cellTopo, unsigned permutation, const FieldContainer<double> &refPoints, FieldContainer<double> &permutedPoints);
+  
   // this caches the lookup tables it builds.  Well worth it, since we'll have just one per cell topology
   static unsigned subcellOrdinalMap(CellTopoPtr cellTopo, unsigned subcdim, unsigned subcord, unsigned subsubcdim, unsigned subsubcord);
   
@@ -50,12 +53,12 @@ public:
   static void mapToReferenceFrameInitGuess(       FieldContainer<double>  &        refPoints,
                                            const FieldContainer<double>  &        initGuess,
                                            const FieldContainer<double>  &        physPoints,
-                                           MeshPtr mesh, int cellID);
+                                           MeshTopologyPtr meshTopo, IndexType cellID, int cubatureDegree);
   
   // copied from Intrepid's CellTools and specialized to allow use when we have curvilinear geometry
   static void mapToReferenceFrame(      FieldContainer<double>      &        refPoints,
                                   const FieldContainer<double>      &        physPoints,
-                                  MeshPtr mesh, int cellID);
+                                  MeshTopologyPtr meshTopo, IndexType cellID, int cubatureDegree);
   
   static void mapToReferenceSubcell(FieldContainer<double>       &refSubcellPoints,
                                     const FieldContainer<double> &paramPoints,

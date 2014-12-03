@@ -88,6 +88,8 @@ Mesh::Mesh(MeshTopologyPtr meshTopology, BilinearFormPtr bilinearForm, int H1Ord
   
   setBilinearForm(bilinearForm);
   _boundary.setMesh(this);
+  
+  _meshTopology->setGlobalDofAssignment(_gda.get());
 
   // Teuchos::RCP< RefinementHistory > refHist = Teuchos::rcp( &_refinementHistory, false );
   // cout << "Has ownership " << refHist.has_ownership() << endl;
@@ -112,6 +114,8 @@ Mesh::Mesh(const vector<vector<double> > &vertices, vector< vector<unsigned> > &
   _gda = Teuchos::rcp( new GDAMaximumRule2D(thisPtr, bilinearForm->varFactory(), dofOrderingFactoryPtr,
                                             partitionPolicy, H1Order, pToAddTest, _enforceMBFluxContinuity) );
   _gda->repartitionAndMigrate();
+  
+  _meshTopology->setGlobalDofAssignment(_gda.get());
   
   setBilinearForm(bilinearForm);
   
@@ -222,107 +226,17 @@ int Mesh::cellPolyOrder(GlobalIndexType cellID) { // aka H1Order
   return _gda->getH1Order(cellID);
 }
 
-bool Mesh::cellContainsPoint(GlobalIndexType cellID, vector<double> &point) {
-  // note that this design, with a single point being passed in, will be quite inefficient
-  // if there are many points.  TODO: revise to allow multiple points (returning vector<bool>, maybe)
-  int numCells = 1, numPoints = 1, spaceDim = _meshTopology->getSpaceDim();
-  FieldContainer<double> physicalPoints(numCells,numPoints,spaceDim);
-  for (int d=0; d<spaceDim; d++) {
-    physicalPoints(0,0,d) = point[d];
-  }
-  //  cout << "cell " << elem->cellID() << ": (" << x << "," << y << ") --> ";
-  FieldContainer<double> refPoints(numCells,numPoints,spaceDim);
-  MeshPtr thisPtr = Teuchos::rcp(this,false);
-  CamelliaCellTools::mapToReferenceFrame(refPoints, physicalPoints, thisPtr, cellID);
-  
-  CellTopoPtrLegacy cellTopo = _meshTopology->getCell(cellID)->topology();
-  
-  int result = CellTools<double>::checkPointInclusion(&refPoints[0], spaceDim, *cellTopo);
-  return result == 1;
-}
-
 vector<GlobalIndexType> Mesh::cellIDsForPoints(const FieldContainer<double> &physicalPoints, bool minusOnesIfOffRank) {
-  // returns a vector of an active element per point, or null if there is no element including that point
-  vector<GlobalIndexType> cellIDs;
-  //  cout << "entered elementsForPoints: \n" << physicalPoints;
-  int numPoints = physicalPoints.dimension(0);
+  vector<GlobalIndexType> cellIDs = _meshTopology->cellIDsForPoints(physicalPoints);
   
-  int spaceDim = _meshTopology->getSpaceDim();
-  
-  set<GlobalIndexType> rootCellIndices = _meshTopology->getRootCellIndices();
-  set<GlobalIndexType> rankLocalCellIDs = cellIDsInPartition();
-  
-  // NOTE: the above does depend on the domain of the mesh remaining fixed after refinements begin.
-  
-  for (int pointIndex=0; pointIndex<numPoints; pointIndex++) {
-    vector<double> point;
-    
-    for (int d=0; d<spaceDim; d++) {
-      point.push_back(physicalPoints(pointIndex,d));
-    }
-    
-    // find the element from the original mesh that contains this point
-    CellPtr cell;
-    for (set<GlobalIndexType>::iterator cellIt = rootCellIndices.begin(); cellIt != rootCellIndices.end(); cellIt++) {
-      GlobalIndexType cellID = *cellIt;
-      if (cellContainsPoint(cellID,point)) {
-        cell = _meshTopology->getCell(cellID);
-        break;
+  if (minusOnesIfOffRank) {
+    set<GlobalIndexType> rankLocalCellIDs = cellIDsInPartition();
+    for (int i=0; i<cellIDs.size(); i++) {
+      if (rankLocalCellIDs.find(cellIDs[i]) == rankLocalCellIDs.end()) {
+        cellIDs[i] = -1;
       }
     }
-    if (cell.get() != NULL) {
-      while ( cell->isParent() ) {
-        int numChildren = cell->numChildren();
-        bool foundMatchingChild = false;
-        for (int childOrdinal = 0; childOrdinal < numChildren; childOrdinal++) {
-          CellPtr child = cell->children()[childOrdinal];
-          if ( cellContainsPoint(child->cellIndex(),point) ) {
-            cell = child;
-            foundMatchingChild = true;
-            break;
-          }
-        }
-        if (!foundMatchingChild) {
-          cout << "parent matches, but none of its children do... will return nearest cell centroid\n";
-          int numVertices = cell->vertices().size();
-          FieldContainer<double> vertices(numVertices,spaceDim);
-          verticesForCell(vertices, cell->cellIndex());
-          cout << "parent vertices:\n" << vertices;
-          double minDistance = numeric_limits<double>::max();
-          int childSelected = -1;
-          for (int childIndex = 0; childIndex < numChildren; childIndex++) {
-            CellPtr child = cell->children()[childIndex];
-            verticesForCell(vertices, child->cellIndex());
-            cout << "child " << childIndex << ", vertices:\n" << vertices;
-            vector<double> cellCentroid = getCellCentroid(child->cellIndex());
-            double squaredDistance = 0;
-            for (int d=0; d<spaceDim; d++) {
-              squaredDistance += (cellCentroid[d] - physicalPoints(pointIndex,d)) * (cellCentroid[d] - physicalPoints(pointIndex,d));
-            }
-            
-            double distance = sqrt(squaredDistance);
-            if (distance < minDistance) {
-              minDistance = distance;
-              childSelected = childIndex;
-            }
-          }
-          cell = cell->children()[childSelected];
-        }
-      }
-    }
-    GlobalIndexType cellID = -1;
-    if (!minusOnesIfOffRank) { // need not check if it's off-rank, then
-      if (cell.get() != NULL) {
-        cellID = cell->cellIndex();
-      }
-    } else {
-      if ((cell.get() != NULL) && (rankLocalCellIDs.find(cell->cellIndex()) != rankLocalCellIDs.end())) {
-        cellID = cell->cellIndex();
-      }
-    }    
-    cellIDs.push_back(cellID);
   }
-  //  cout << "Returning from cellIDs\n";
   return cellIDs;
 }
 
@@ -342,83 +256,6 @@ vector<ElementPtr> Mesh::elementsForPoints(const FieldContainer<double> &physica
     elemsForPoints[i] = elem;
   }
   return elemsForPoints;
-  /*
-  // returns a vector of an active element per point, or null if there is no element including that point
-  vector<ElementPtr> elemsForPoints;
-//  cout << "entered elementsForPoints: \n" << physicalPoints;
-  int numPoints = physicalPoints.dimension(0);
-
-  int spaceDim = _meshTopology->getSpaceDim();
-  
-  set<GlobalIndexType> rootCellIndices = _meshTopology->getRootCellIndices();
-  set<GlobalIndexType> rankLocalCellIDs = cellIDsInPartition();
-  
-  // NOTE: the above does depend on the domain of the mesh remaining fixed after refinements begin.
-  
-  for (int pointIndex=0; pointIndex<numPoints; pointIndex++) {
-    vector<double> point;
-    
-    for (int d=0; d<spaceDim; d++) {
-      point.push_back(physicalPoints(pointIndex,d));
-    }
-    
-    // find the element from the original mesh that contains this point
-    ElementPtr elem;
-    for (set<GlobalIndexType>::iterator cellIt = rootCellIndices.begin(); cellIt != rootCellIndices.end(); cellIt++) {
-      GlobalIndexType cellID = *cellIt;
-      if (cellContainsPoint(cellID,point)) {
-        elem = getElement(cellID);
-        break;
-      }
-    }
-    if (elem.get() != NULL) {
-      while ( elem->isParent() ) {
-        int numChildren = elem->numChildren();
-        bool foundMatchingChild = false;
-        for (int childIndex = 0; childIndex < numChildren; childIndex++) {
-          ElementPtr child = elem->getChild(childIndex);
-          if ( cellContainsPoint(child->cellID(),point) ) {
-            elem = child;
-            foundMatchingChild = true;
-            break;
-          }
-        }
-        if (!foundMatchingChild) {
-          cout << "parent matches, but none of its children do... will return nearest cell centroid\n";
-          int numVertices = elem->numSides();
-          int spaceDim = 2;
-          FieldContainer<double> vertices(numVertices,spaceDim);
-          verticesForCell(vertices, elem->cellID());
-          cout << "parent vertices:\n" << vertices;
-          double minDistance = numeric_limits<double>::max();
-          int childSelected = -1;
-          for (int childIndex = 0; childIndex < numChildren; childIndex++) {
-            ElementPtr child = elem->getChild(childIndex);
-            verticesForCell(vertices, child->cellID());
-            cout << "child " << childIndex << ", vertices:\n" << vertices;
-            vector<double> cellCentroid = getCellCentroid(child->cellID());
-            double squaredDistance = 0;
-            for (int d=0; d<spaceDim; d++) {
-              squaredDistance += (cellCentroid[d] - physicalPoints(pointIndex,d)) * (cellCentroid[d] - physicalPoints(pointIndex,d));
-            }
-            
-            double distance = sqrt(squaredDistance);
-            if (distance < minDistance) {
-              minDistance = distance;
-              childSelected = childIndex;
-            }
-          }
-          elem = elem->getChild(childSelected);
-        }
-      }
-    }
-    if (nullElementsIfOffRank && (elem.get() != NULL) && (rankLocalCellIDs.find(elem->cellID()) == rankLocalCellIDs.end())) {
-      elem = Teuchos::rcp( (Element*) NULL);
-    }
-    elemsForPoints.push_back(elem);
-  }
-//  cout << "Returning from elementsForPoints\n";
-  return elemsForPoints;*/
 }
 
 void Mesh::enforceOneIrregularity() {

@@ -303,6 +303,11 @@ Teuchos::RCP<Epetra_Map> GlobalDofAssignment::getActiveCellMap() {
   return _activeCellMap;
 }
 
+int GlobalDofAssignment::getCubatureDegree(GlobalIndexType cellID) {
+  ElementTypePtr elemType = this->elementType(cellID);
+  return elemType->trialOrderPtr->maxBasisDegree() + elemType->testOrderPtr->maxBasisDegree();
+}
+
 DofOrderingFactoryPtr GlobalDofAssignment::getDofOrderingFactory() {
   return _dofOrderingFactory;
 }

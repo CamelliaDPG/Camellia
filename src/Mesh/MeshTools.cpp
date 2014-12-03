@@ -170,7 +170,7 @@ public:
       BasisCachePtr spaceTimeBasisCache = BasisCache::basisCacheForCell(_spaceTimeMesh, cellID);
       
       FieldContainer<double> spaceTimeRefPoints(1,numPoints,spaceDim+1);
-      CamelliaCellTools::mapToReferenceFrame(spaceTimeRefPoints, spaceTimePhysicalPoints, _spaceTimeMesh, cellID);
+      CamelliaCellTools::mapToReferenceFrame(spaceTimeRefPoints, spaceTimePhysicalPoints, _spaceTimeMesh->getTopology(), cellID, spaceTimeBasisCache->cubatureDegree());
       spaceTimeRefPoints.resize(numPoints,spaceDim+1);
       spaceTimeBasisCache->setRefCellPoints(spaceTimeRefPoints);
       _spaceTimeFunction->values(valuesForCell, spaceTimeBasisCache);

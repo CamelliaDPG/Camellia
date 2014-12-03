@@ -14,6 +14,8 @@
 
 #include "Intrepid_CellTools.hpp"
 
+#include "GlobalDofAssignment.h"
+
 void MeshTopology::init(unsigned spaceDim) {
   RefinementPattern::initializeAnisotropicRelationships(); // not sure this is the optimal place for this call
   
@@ -27,6 +29,8 @@ void MeshTopology::init(unsigned spaceDim) {
   _generalizedParentEntities = vector< map<unsigned, pair<unsigned,unsigned> > >(_spaceDim);
   _childEntities = vector< map< unsigned, vector< pair<RefinementPatternPtr, vector<unsigned> > > > >(_spaceDim);
   _entityCellTopologyKeys = vector< map< unsigned, unsigned > >(_spaceDim);
+  
+  _gda = NULL;
 }
 
 MeshTopology::MeshTopology(unsigned spaceDim, vector<PeriodicBCPtr> periodicBCs) {
@@ -436,6 +440,127 @@ bool MeshTopology::cellHasCurvedEdges(unsigned cellIndex) {
     }
   }
   return false;
+}
+
+bool MeshTopology::cellContainsPoint(GlobalIndexType cellID, const vector<double> &point, int cubatureDegree) {
+  // note that this design, with a single point being passed in, will be quite inefficient
+  // if there are many points.  TODO: revise to allow multiple points (returning vector<bool>, maybe)
+  int numCells = 1, numPoints = 1;
+  FieldContainer<double> physicalPoints(numCells,numPoints,_spaceDim);
+  for (int d=0; d<_spaceDim; d++) {
+    physicalPoints(0,0,d) = point[d];
+  }
+  //  cout << "cell " << elem->cellID() << ": (" << x << "," << y << ") --> ";
+  FieldContainer<double> refPoints(numCells,numPoints,_spaceDim);
+  MeshTopologyPtr thisPtr = Teuchos::rcp(this,false);
+  CamelliaCellTools::mapToReferenceFrame(refPoints, physicalPoints, thisPtr, cellID, cubatureDegree);
+  
+  CellTopoPtrLegacy cellTopo = getCell(cellID)->topology();
+  
+  int result = CellTools<double>::checkPointInclusion(&refPoints[0], _spaceDim, *cellTopo);
+  return result == 1;
+}
+
+vector<IndexType> MeshTopology::cellIDsForPoints(const FieldContainer<double> &physicalPoints) {
+  // returns a vector of an active element per point, or null if there is no element including that point
+  vector<GlobalIndexType> cellIDs;
+  //  cout << "entered elementsForPoints: \n" << physicalPoints;
+  int numPoints = physicalPoints.dimension(0);
+  
+  int spaceDim = this->getSpaceDim();
+  
+  set<GlobalIndexType> rootCellIndices = this->getRootCellIndices();
+  
+  // NOTE: the above does depend on the domain of the mesh remaining fixed after refinements begin.
+  
+  for (int pointIndex=0; pointIndex<numPoints; pointIndex++) {
+    vector<double> point;
+    
+    for (int d=0; d<spaceDim; d++) {
+      point.push_back(physicalPoints(pointIndex,d));
+    }
+    
+    // find the element from the original mesh that contains this point
+    CellPtr cell;
+    for (set<GlobalIndexType>::iterator cellIt = rootCellIndices.begin(); cellIt != rootCellIndices.end(); cellIt++) {
+      GlobalIndexType cellID = *cellIt;
+      int cubatureDegreeForCell = 1;
+      if (_gda != NULL) {
+        cubatureDegreeForCell = _gda->getCubatureDegree(cellID);
+      }
+      if (cellContainsPoint(cellID,point,cubatureDegreeForCell)) {
+        cell = getCell(cellID);
+        break;
+      }
+    }
+    if (cell.get() != NULL) {
+      while ( cell->isParent() ) {
+        int numChildren = cell->numChildren();
+        bool foundMatchingChild = false;
+        for (int childOrdinal = 0; childOrdinal < numChildren; childOrdinal++) {
+          CellPtr child = cell->children()[childOrdinal];
+          int cubatureDegreeForCell = 1;
+          if (_gda != NULL) {
+            cubatureDegreeForCell = _gda->getCubatureDegree(child->cellIndex());
+          }
+          if ( cellContainsPoint(child->cellIndex(),point,cubatureDegreeForCell) ) {
+            cell = child;
+            foundMatchingChild = true;
+            break;
+          }
+        }
+        if (!foundMatchingChild) {
+          cout << "parent matches, but none of its children do... will return nearest cell centroid\n";
+          int numVertices = cell->vertices().size();
+          FieldContainer<double> vertices(numVertices,spaceDim);
+          vector<unsigned> vertexIndices = cell->vertices();
+          
+          //vertices.resize(numVertices,dimension);
+          for (unsigned vertexOrdinal = 0; vertexOrdinal < numVertices; vertexOrdinal++) {
+            for (int d=0; d<spaceDim; d++) {
+              vertices(vertexOrdinal,d) = getVertex(vertexIndices[vertexOrdinal])[d];
+            }
+          }
+        
+          cout << "parent vertices:\n" << vertices;
+          double minDistance = numeric_limits<double>::max();
+          int childSelected = -1;
+          for (int childIndex = 0; childIndex < numChildren; childIndex++) {
+            CellPtr child = cell->children()[childIndex];
+            int numVertices = child->vertices().size();
+            FieldContainer<double> vertices(numVertices,spaceDim);
+            vector<unsigned> vertexIndices = child->vertices();
+            
+            //vertices.resize(numVertices,dimension);
+            for (unsigned vertexOrdinal = 0; vertexOrdinal < numVertices; vertexOrdinal++) {
+              for (int d=0; d<spaceDim; d++) {
+                vertices(vertexOrdinal,d) = getVertex(vertexIndices[vertexOrdinal])[d];
+              }
+            }
+            cout << "child " << childIndex << ", vertices:\n" << vertices;
+            vector<double> cellCentroid = getCellCentroid(child->cellIndex());
+            double squaredDistance = 0;
+            for (int d=0; d<spaceDim; d++) {
+              squaredDistance += (cellCentroid[d] - physicalPoints(pointIndex,d)) * (cellCentroid[d] - physicalPoints(pointIndex,d));
+            }
+            
+            double distance = sqrt(squaredDistance);
+            if (distance < minDistance) {
+              minDistance = distance;
+              childSelected = childIndex;
+            }
+          }
+          cell = cell->children()[childSelected];
+        }
+      }
+    }
+    GlobalIndexType cellID = -1;
+    if (cell.get() != NULL) {
+      cellID = cell->cellIndex();
+    }
+    cellIDs.push_back(cellID);
+  }
+  return cellIDs;
 }
 
 CellPtr MeshTopology::findCellWithVertices(const vector< vector<double> > &cellVertices) {
@@ -1430,7 +1555,7 @@ void MeshTopology::printAllEntities() {
   }
 }
 
-FieldContainer<double> MeshTopology::physicalCellNodesForCell(unsigned int cellIndex) {
+FieldContainer<double> MeshTopology::physicalCellNodesForCell(unsigned int cellIndex, bool includeCellDimension) {
   CellPtr cell = getCell(cellIndex);
   unsigned vertexCount = cell->vertices().size();
   FieldContainer<double> nodes(vertexCount, _spaceDim);
@@ -1439,6 +1564,9 @@ FieldContainer<double> MeshTopology::physicalCellNodesForCell(unsigned int cellI
     for (unsigned d=0; d<_spaceDim; d++) {
       nodes(vertexOrdinal,d) = _vertices[vertexIndex][d];
     }
+  }
+  if (includeCellDimension) {
+    nodes.resize(1,nodes.dimension(0),nodes.dimension(1));
   }
   return nodes;
 }
@@ -1700,6 +1828,10 @@ void MeshTopology::setEdgeToCurveMap(const map< pair<IndexType, IndexType>, Para
   // mesh transformation function expects global ID type
   set<GlobalIndexType> cellIDsGlobal(_cellIDsWithCurves.begin(),_cellIDsWithCurves.end());
   _transformationFunction = Teuchos::rcp(new MeshTransformationFunction(mesh, cellIDsGlobal));
+}
+
+void MeshTopology::setGlobalDofAssignment(GlobalDofAssignment* gda) { // for cubature degree lookups
+  _gda = gda;
 }
 
 void MeshTopology::setEntityGeneralizedParent(unsigned entityDim, IndexType entityIndex, unsigned parentDim, IndexType parentEntityIndex) {

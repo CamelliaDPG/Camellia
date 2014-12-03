@@ -92,6 +92,8 @@ public:
   DofOrderingFactoryPtr getDofOrderingFactory();
   ElementTypeFactory & getElementTypeFactory();
   
+  virtual int getCubatureDegree(GlobalIndexType cellID);
+  
   virtual int getH1Order(GlobalIndexType cellID) = 0;
   int getInitialH1Order();
   

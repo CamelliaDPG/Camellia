@@ -15,7 +15,7 @@ using namespace Intrepid;
 
 class RefinementPattern;
 typedef Teuchos::RCP<RefinementPattern> RefinementPatternPtr;
-typedef vector< pair<RefinementPattern*, unsigned> > RefinementBranch; //unsigned: the child ordinal
+typedef vector< pair<RefinementPattern*, unsigned> > RefinementBranch; //unsigned: the child ordinal; order is from coarse to fine
 typedef vector< pair<RefinementPattern*, vector<unsigned> > > RefinementPatternRecipe;
 
 class MeshTopology;
@@ -62,6 +62,8 @@ public:
   static Teuchos::RCP<RefinementPattern> xAnisotropicRefinementPatternQuad(); // vertical cut
   static Teuchos::RCP<RefinementPattern> yAnisotropicRefinementPatternQuad(); // horizontal cut
   
+  unsigned childOrdinalForPoint(const std::vector<double> &pointParentCoords); // returns -1 if no hit
+  
   static void initializeAnisotropicRelationships();
 
   const FieldContainer<double> & verticesOnReferenceCell();
@@ -96,6 +98,8 @@ public:
   
   static unsigned mapSideOrdinalFromLeafToAncestor(unsigned descendantSideOrdinal, RefinementBranch &refinements); // given a side ordinal in the leaf node of a branch, returns the corresponding side ordinal in the earliest ancestor in the branch.
   
+  void mapPointsToChildRefCoordinates(const FieldContainer<double> &pointsParentCoords, unsigned childOrdinal, FieldContainer<double> &pointsChildCoords);
+  
   vector< RefinementPatternRecipe > &relatedRecipes(); // e.g. the anisotropic + isotropic refinements of the quad.  This should be an exhaustive list, and should be in order of increasing fineness--i.e. the isotropic refinement should come at the end of the list.  Unless the list is empty, the current refinement pattern is required to be part of the list.  (A refinement pattern is related to itself.)  It's the job of initializeAnisotropicRelationships to initialize this list for the default refinement patterns that support it.
   void setRelatedRecipes(vector< RefinementPatternRecipe > &recipes);
   
@@ -113,7 +117,10 @@ public:
   
   static RefinementBranch sideRefinementBranch(RefinementBranch &volumeRefinementBranch, unsigned sideIndex);
   
-  static RefinementBranch subcellRefinementBranch(RefinementBranch &volumeRefinementBranch, unsigned subcdim, unsigned subcord, bool tolerateSubcellsWithoutDescendants=false);
+  static RefinementBranch subcellRefinementBranch(RefinementBranch &volumeRefinementBranch, unsigned subcdim, unsigned subcord,
+                                                  bool tolerateSubcellsWithoutDescendants=false);
+  
+  static void mapRefCellPointsToAncestor(RefinementBranch &refinementBranch, const FieldContainer<double> &leafRefCellPoints, FieldContainer<double> &rootRefCellPoints);
 };
 
 typedef Teuchos::RCP<RefinementPattern> RefinementPatternPtr;

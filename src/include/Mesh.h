@@ -187,8 +187,6 @@ public:
                               bool useTriangles);
 
   GlobalIndexType activeCellOffset();
-
-  bool cellContainsPoint(GlobalIndexType cellID, vector<double> &point);
   
   FieldContainer<double> cellSideParities( ElementTypePtr elemTypePtr);
   FieldContainer<double> cellSideParitiesForCell( GlobalIndexType cellID );
@@ -197,6 +195,7 @@ public:
   void setBilinearForm( Teuchos::RCP<BilinearForm>);
 
   //! This method should probably be moved to MeshTopology; its implementation is independent of Mesh.
+//  bool cellContainsPoint(GlobalIndexType cellID, vector<double> &point);
   std::vector<GlobalIndexType> cellIDsForPoints(const FieldContainer<double> &physicalPoints, bool minusOnesForOffRank=true);
   std::vector<ElementPtr> elementsForPoints(const FieldContainer<double> &physicalPoints, bool nullElementsIfOffRank=true);
 

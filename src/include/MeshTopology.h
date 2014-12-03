@@ -25,6 +25,7 @@
 using namespace std;
 
 class MeshTransformationFunction;
+class GlobalDofAssignment;
 
 class Mesh;
 typedef Teuchos::RCP<Mesh> MeshPtr;
@@ -94,6 +95,7 @@ class MeshTopology {
   void refineCellEntities(CellPtr cell, RefinementPatternPtr refPattern); // ensures that the appropriate child entities exist, and parental relationships are recorded in _parentEntities
   void setEntityGeneralizedParent(unsigned entityDim, IndexType entityIndex, unsigned parentDim, IndexType parentEntityIndex);
   
+  GlobalDofAssignment* _gda; // for cubature degree lookups
 public:
   MeshTopology(unsigned spaceDim, vector<PeriodicBCPtr> periodicBCs=vector<PeriodicBCPtr>());
   MeshTopology(MeshGeometryPtr meshGeometry, vector<PeriodicBCPtr> periodicBCs=vector<PeriodicBCPtr>());
@@ -106,6 +108,9 @@ public:
 //  vector< pair< unsigned, unsigned > > getCellNeighbors(unsigned cellIndex, unsigned sideIndex); // second entry in return is the sideIndex in neighbor (note that in context of h-refinements, one or both of the sides may be broken)
 //  pair< CellPtr, unsigned > getCellAncestralNeighbor(unsigned cellIndex, unsigned sideIndex);
   bool cellHasCurvedEdges(IndexType cellIndex);
+  
+  bool cellContainsPoint(GlobalIndexType cellID, const std::vector<double> &point, int cubatureDegree);
+  std::vector<IndexType> cellIDsForPoints(const FieldContainer<double> &physicalPoints);
   
   bool entityIsAncestor(unsigned d, IndexType ancestor, IndexType descendent);
   
@@ -143,12 +148,14 @@ public:
   unsigned getSubEntityPermutation(unsigned d, IndexType entityIndex, unsigned subEntityDim, unsigned subEntityOrdinal);
   bool getVertexIndex(const vector<double> &vertex, IndexType &vertexIndex, double tol=1e-14);
   const vector<double>& getVertex(IndexType vertexIndex);
-  FieldContainer<double> physicalCellNodesForCell(unsigned cellIndex);
+  FieldContainer<double> physicalCellNodesForCell(unsigned cellIndex, bool includeCellDimension = false);
   void refineCell(IndexType cellIndex, RefinementPatternPtr refPattern);
   IndexType cellCount();
   IndexType activeCellCount();
   
 //  pair<IndexType,IndexType> leastActiveCellIndexContainingEntityConstrainedByConstrainingEntity(unsigned d, unsigned constrainingEntityIndex);
+  
+  void setGlobalDofAssignment(GlobalDofAssignment* gda); // for cubature degree lookups
   
   const set<IndexType> &getActiveCellIndices();
   set< pair<IndexType, unsigned> > getActiveBoundaryCells(); // (cellIndex, sideOrdinal)
@@ -170,7 +177,6 @@ public:
   // not sure this should ultimately be exposed -- using it now to allow correctly timed call to updateCells()
   // (will be transitioning from having MeshTransformationFunction talk to Mesh to having it talk to MeshTopology)
   Teuchos::RCP<MeshTransformationFunction> transformationFunction();
-  
 };
 
 typedef Teuchos::RCP<MeshTopology> MeshTopologyPtr;

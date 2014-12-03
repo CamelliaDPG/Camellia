@@ -35,6 +35,8 @@
 #include "Intrepid_CellTools.hpp"
 #include "CamelliaCellTools.h"
 
+#include "BasisCache.h"
+
 //#include "CamelliaDebugUtility.h" // includes print() methods.
 
 using namespace Intrepid;
@@ -418,6 +420,16 @@ const FieldContainer<double> & RefinementPattern::verticesOnReferenceCell() {
   return _vertices;
 }
 
+unsigned RefinementPattern::childOrdinalForPoint(const std::vector<double> &pointParentCoords) {
+  int cubatureDegree = 1; // straight-line mesh in reference space
+  for (int i=0; i<_refinementTopology->cellCount(); i++) {
+    if (_refinementTopology->cellContainsPoint(i, pointParentCoords, cubatureDegree)) {
+      return i;
+    }
+  }
+  return -1;
+}
+
 vector< vector<GlobalIndexType> > RefinementPattern::children(const map<unsigned, GlobalIndexType> &localToGlobalVertexIndex) {
   // localToGlobalVertexIndex key: index in vertices; value: index in _vertices
   // children returns a vector of global vertex indices for each child
@@ -579,6 +591,12 @@ map<unsigned, set<unsigned> > RefinementPattern::getInternalSubcellOrdinals(Refi
     }
   }
   return internalSubcellOrdinals;
+}
+
+void RefinementPattern::mapPointsToChildRefCoordinates(const FieldContainer<double> &pointsParentCoords, unsigned childOrdinal,
+                                                       FieldContainer<double> &pointsChildCoords) {
+  int cubatureDegree = 1;
+  CamelliaCellTools::mapToReferenceFrame(pointsChildCoords, pointsParentCoords, _refinementTopology, childOrdinal, cubatureDegree);
 }
 
 unsigned RefinementPattern::mapSideChildIndex(unsigned sideIndex, unsigned sideRefinementChildIndex) {
@@ -1221,4 +1239,23 @@ RefinementBranch RefinementPattern::sideRefinementBranch(RefinementBranch &volum
     sideRefinements.push_back(make_pair(sideRefPattern,sideBranchChild));
   }
   return sideRefinements;
+}
+
+void RefinementPattern::mapRefCellPointsToAncestor(RefinementBranch &refBranch, const FieldContainer<double> &leafRefCellPoints,
+                                                   FieldContainer<double> &rootRefCellPoints) {
+  FieldContainer<double> fineCellRefNodes;
+  if (refBranch.size() == 0) {
+    rootRefCellPoints = leafRefCellPoints;
+  }
+  fineCellRefNodes = RefinementPattern::descendantNodesRelativeToAncestorReferenceCell(refBranch);
+
+  int minCubDegree = 1;
+  Teuchos::RCP<shards::CellTopology> cellTopo = refBranch[refBranch.size() - 1].first->childTopology(refBranch[refBranch.size() - 1].second);
+  BasisCachePtr fineCellCache = Teuchos::rcp( new BasisCache(*cellTopo, minCubDegree, false) ); // could be more efficient by doing what BasisCache does in terms of the physical cell mapping, instead of using BasisCache (which sets up a bunch of data structures that we just throw away here)
+
+  fineCellRefNodes.resize(1,fineCellRefNodes.dimension(0),fineCellRefNodes.dimension(1));
+  fineCellCache->setPhysicalCellNodes(fineCellRefNodes, vector<GlobalIndexType>(), false);
+  
+  rootRefCellPoints = fineCellCache->getPhysicalCubaturePoints();
+  rootRefCellPoints.resize(rootRefCellPoints.dimension(1),rootRefCellPoints.dimension(2)); // eliminate cell dimension
 }
