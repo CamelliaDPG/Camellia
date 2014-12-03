@@ -212,6 +212,9 @@ public:
   void setSmootherType(SmootherChoice smootherType);
   void setSmootherOverlap(int overlap);
   
+  void setLevelOfFill(int fillLevel);
+  void setFillRatio(double fillRatio);
+  
   void setFineSolverUsesDiagonalScaling(bool value);
   //@}
 
@@ -228,6 +231,8 @@ private:
   int _smootherOverlap;
   
   FactorType _schwarzBlockFactorizationType;
+  int _levelOfFill;
+  double _fillRatio;
 };
 
 

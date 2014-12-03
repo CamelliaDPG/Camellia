@@ -56,6 +56,9 @@ GMGOperator::GMGOperator(BCPtr zeroBCs, MeshPtr coarseMesh, IPPtr coarseIP,
   
   _applySmoothingOperator = true;
   
+  _levelOfFill = 2;
+  _fillRatio = 5.0;
+  
   clearTimings();
   
 #ifdef HAVE_MPI
@@ -876,10 +879,20 @@ void GMGOperator::setFineMesh(MeshPtr fineMesh, Epetra_Map finePartitionMap) {
   constructProlongationOperator(); // _P
 }
 
+void GMGOperator::setFillRatio(double fillRatio) {
+  _fillRatio = fillRatio;
+//  cout << "fill ratio set to " << fillRatio << endl;
+}
+
 void GMGOperator::setFineSolverUsesDiagonalScaling(bool value) {
   if (value != _fineSolverUsesDiagonalScaling) {
     _fineSolverUsesDiagonalScaling = value;
   }
+}
+
+void GMGOperator::setLevelOfFill(int fillLevel) {
+  _levelOfFill = fillLevel;
+//  cout << "level of fill set to " << fillLevel << endl;
 }
 
 void GMGOperator::setSchwarzFactorizationType(FactorType choice) {
@@ -1003,8 +1016,6 @@ void GMGOperator::setUpSmoother(Epetra_CrsMatrix *fineStiffnessMatrix) {
 //      cout << "Using additive Schwarz smoother.\n";
       int OverlapLevel = _smootherOverlap;
       
-      int level_of_fill = 2;
-      double fillRatio = 5.0;
       if (choice==IFPACK_ADDITIVE_SCHWARZ) {
         switch (_schwarzBlockFactorizationType) {
           case Direct:
@@ -1012,11 +1023,11 @@ void GMGOperator::setUpSmoother(Epetra_CrsMatrix *fineStiffnessMatrix) {
             break;
           case ILU:
             smoother = Teuchos::rcp(new Ifpack_AdditiveSchwarz<Ifpack_ILU>(fineStiffnessMatrix, OverlapLevel) );
-            List.set("fact: level-of-fill", level_of_fill);
+            List.set("fact: level-of-fill", _levelOfFill);
             break;
           case IC:
             smoother = Teuchos::rcp(new Ifpack_AdditiveSchwarz<Ifpack_IC>(fineStiffnessMatrix, OverlapLevel) );
-            List.set("fact: ict level-of-fill", fillRatio);
+            List.set("fact: ict level-of-fill", _fillRatio);
             break;
           default:
             break;
@@ -1028,11 +1039,11 @@ void GMGOperator::setUpSmoother(Epetra_CrsMatrix *fineStiffnessMatrix) {
             break;
           case ILU:
             smoother = Teuchos::rcp(new Ifpack_AdditiveSchwarz<Ifpack_ILU>(fineStiffnessMatrix, OverlapLevel) );
-            List.set("fact: level-of-fill", level_of_fill);
+            List.set("fact: level-of-fill", _levelOfFill);
             break;
           case IC:
             smoother = Teuchos::rcp(new Ifpack_AdditiveSchwarz<Ifpack_IC>(fineStiffnessMatrix, OverlapLevel) );
-            List.set("fact: ict level-of-fill", fillRatio);
+            List.set("fact: ict level-of-fill", _fillRatio);
             break;
           default:
             break;
