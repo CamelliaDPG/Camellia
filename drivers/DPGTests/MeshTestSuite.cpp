@@ -69,6 +69,8 @@
 #include "BC.h"
 #include "BF.h"
 
+#include "HDF5Exporter.h"
+
 #include "CamelliaCellTools.h"
 
 using namespace Intrepid;
@@ -1300,7 +1302,17 @@ bool MeshTestSuite::testHRefinement() {
   //    --> Make sure solution is the same as when we just start with 4x4 mesh.
   quadPoints.resize(4,2);
   Teuchos::RCP<Mesh> fineMesh = MeshFactory::buildQuadMesh(quadPoints, horizontalCells*2, verticalCells*2, exactSolution.bilinearForm(), H1Order, H1Order+1);
-  origSolution = Solution(fineMesh, exactSolution.ExactSolution::bc(), exactSolution.ExactSolution::rhs(), ip);
+  BCPtr fineMeshBC = Teuchos::rcp( new BC(*exactSolution.ExactSolution::bc()) ); // copy
+  
+  IndexType fineMeshVertexIndex;
+  if (! fineMesh->getTopology()->getVertexIndex(zeroPoint, fineMeshVertexIndex)) {
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "vertexIndex not found!");
+  }
+  FunctionPtr phiExact = exactSolution.exactFunctions().find(phi->ID())->second;
+  double value = Function::evaluate(phiExact, zeroPoint[0], zeroPoint[1]);
+  fineMeshBC->addSinglePointBC(phi->ID(), value, fineMeshVertexIndex); // replaces existing
+
+  origSolution = Solution(fineMesh, fineMeshBC, exactSolution.ExactSolution::rhs(), ip);
   origSolution.solve();
   
   cellsToRefine.clear();
@@ -1344,6 +1356,13 @@ bool MeshTestSuite::testHRefinement() {
   if (diff > tol) {
     cout << "FAILURE: after uniform regular refinement, L2 error different from originally fine mesh.\n";
     cout << "Difference of L2 error in refined vs. originally fine mesh: " << diff << endl;
+    success = false;
+    
+    SolutionPtr origSolnPtr = Teuchos::rcp(&origSolution, false);
+    SolutionPtr refinedSolnPtr = Teuchos::rcp(&solution, false);
+    
+    HDF5Exporter::exportSolution("/tmp/", "originalFine", origSolnPtr);
+    HDF5Exporter::exportSolution("/tmp/", "refinedSoln", refinedSolnPtr);
   }
   
   // TODO: work out how to fix solution.equals to work with meshes whose cells may be in different orders...
