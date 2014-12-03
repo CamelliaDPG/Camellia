@@ -154,6 +154,7 @@ void PoissonExactSolution::setUseSinglePointBCForPHI(bool useSinglePointBCForPhi
   } else {
     std::vector<double> point = getPointForBCImposition();
     double value = Function::evaluate(phi_exact, point[0], point[1]);
+//    cout << "PoissonExactSolution: imposing phi = " << value << " at (" << point[0] << ", " << point[1] << ")\n";
     _bc->addSinglePointBC(phi->ID(), value, vertexIndexForZeroValue);
   }
 }
