@@ -137,6 +137,8 @@ int main(int argc, char *argv[]) {
   
   double energyThreshold = 0.2;
   
+  double coarseSolveTolerance = 1e-4;
+  
   double relativeTol = 1e-6;
   
   int coarseMesh_k = 0;
@@ -418,7 +420,7 @@ int main(int argc, char *argv[]) {
   
   if (!pMultiGridOnly) {
     GMGSolver* intermediateSolverGMG = new GMGSolver(zeroBCs, coarseMesh_h, graphNorm, coarseMesh_p, solution_p->getDofInterpreter(),
-                                                     solution_p->getPartitionMap(), maxIters, relativeTol, coarsestSolver, useCondensedSolve);
+                                                     solution_p->getPartitionMap(), maxIters, coarseSolveTolerance, coarsestSolver, useCondensedSolve);
     intermediateSolverGMG->setAztecOutput(0); // suppress output for nested solver
     intermediateSolver = Teuchos::rcp( intermediateSolverGMG );
   }
@@ -529,7 +531,7 @@ int main(int argc, char *argv[]) {
           }
         }
         GMGSolver* intermediateSolverGMG = new GMGSolver(zeroBCs, coarseMesh_h, graphNorm, coarseMesh_p, solution_p->getDofInterpreter(),
-                                                         solution_p->getPartitionMap(), maxIters, relativeTol, coarsestSolver, useCondensedSolve);
+                                                         solution_p->getPartitionMap(), maxIters, coarseSolveTolerance, coarsestSolver, useCondensedSolve);
         intermediateSolverGMG->setAztecOutput(0); // suppress output for nested solver
         intermediateSolver = Teuchos::rcp( intermediateSolverGMG );
       }
