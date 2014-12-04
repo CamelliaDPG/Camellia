@@ -116,14 +116,14 @@ int main(int argc, char *argv[]) {
 //  bool useMumps = false;
 //  bool useCGSolver = false;
 //  bool useMLSolver = false;
-  bool useGMGSolver = false;
+  bool useGMGSolver = true;
   bool clearSolution = false;
   
   string solverString = "MUMPS";
   
   bool enforceOneIrregularity = true;
   
-  bool conformingTraces = true;
+  bool conformingTraces = false;
   
   bool bugTestRefs = false;
   
@@ -142,11 +142,11 @@ int main(int argc, char *argv[]) {
   int coarseMesh_k = 0;
   
   bool pMultiGridOnly = true;
-  bool useWeightedGraphNorm = true;
+  bool useWeightedGraphNorm = false;
   
-  string meshLoadName = "", coarseMeshLoadName = ""; // file(s) to load mesh from
+  string meshLoadName = "", coarseMeshLoadName_p = "", coarseMeshLoadName_h = ""; // file(s) to load mesh from
   int startingRefinementNumber = 0;
-  int maxCellsPerRank = INT_MAX;
+  int maxCellsPerRank = 300;
   
   cmdp.setOption("polyOrder",&k,"polynomial order for field variable u");
   cmdp.setOption("delta_k", &delta_k, "test space polynomial order enrichment");
@@ -163,7 +163,8 @@ int main(int argc, char *argv[]) {
   cmdp.setOption("mumpsMaxMemoryMB", &mumpsMaxMemoryMB, "max allocation size MUMPS is allowed to make, in MB");
   cmdp.setOption("refinementThreshold", &energyThreshold, "relative energy threshold for refinements");
   cmdp.setOption("meshLoadName", &meshLoadName, "file to load initial mesh from");
-  cmdp.setOption("coarseMeshLoadName", &coarseMeshLoadName, "file to load initial mesh from");
+  cmdp.setOption("coarseMeshLoadName_h", &coarseMeshLoadName_h, "file to load coarse (h) mesh from");
+  cmdp.setOption("coarseMeshLoadName_p", &coarseMeshLoadName_p, "file to load coarse (p) mesh from");
   cmdp.setOption("startingRefNumber", &startingRefinementNumber, "where to start counting refinements (useful for restart)");
   cmdp.setOption("maxCellsPerRank", &maxCellsPerRank, "max cells per rank (will quit refining once this is reached)");
   cmdp.setOption("usePMultigrid", "useHPMultigrid", &pMultiGridOnly);
@@ -285,32 +286,28 @@ int main(int argc, char *argv[]) {
   elementCounts.push_back(verticalCells);
   elementCounts.push_back(depthCells);
   
-  MeshPtr mesh, coarseMesh;
+  MeshPtr mesh, coarseMesh_p, coarseMesh_h;
   
   Epetra_Time timer(Comm);
   
   if (meshLoadName.length() == 0) {
     mesh = MeshFactory::rectilinearMesh(stokesBF, domainDimensions, elementCounts, H1Order, delta_k);
-    coarseMesh = MeshFactory::rectilinearMesh(stokesBF, domainDimensions, elementCounts, coarseMesh_k + 1, delta_k);
+    coarseMesh_p = MeshFactory::rectilinearMesh(stokesBF, domainDimensions, elementCounts, coarseMesh_k + 1, delta_k);
+    coarseMesh_h = MeshFactory::rectilinearMesh(stokesBF, domainDimensions, elementCounts, coarseMesh_k + 1, delta_k);
   } else {
     mesh = MeshFactory::loadFromHDF5(stokesBF, meshLoadName);
-    coarseMesh = MeshFactory::loadFromHDF5(stokesBF, coarseMeshLoadName);
+    coarseMesh_p = MeshFactory::loadFromHDF5(stokesBF, coarseMeshLoadName_p);
+    coarseMesh_h = MeshFactory::loadFromHDF5(stokesBF, coarseMeshLoadName_h);
   }
   
-  if (pMultiGridOnly) {
-//    if (meshLoadName.length() != 0) {
-//      if (rank==0) cout << "pMultiGridOnly = true is not yet supported for meshes loaded from disk.\n";
-//      return 0;
-//    }
-    mesh->registerObserver(coarseMesh);
-  }
+  mesh->registerObserver(coarseMesh_p);
   double meshConstructionTime = timer.ElapsedTime();
   if (rank==0) cout << "On rank " << rank << ", mesh construction time: " << meshConstructionTime << endl;
   int elementCount = mesh->getActiveCellIDs().size();
   int dofCount = mesh->numGlobalDofs();
   if (rank==0) cout << "Initial mesh has " << elementCount << " elements and " << dofCount << " global dofs.\n";
   
-  int maxCells = maxCellsPerRank * numRanks;
+  int maxCells = (maxCellsPerRank != INT_MAX) ? maxCellsPerRank * numRanks : INT_MAX;
   
   if (rank==0) cout << "maxCellsPerRank is " << maxCellsPerRank << "; will stop if mesh exceeds " << maxCells << " elements.\n";
   if (rank==0) cout << "energyThreshold is " << energyThreshold << endl;
@@ -359,6 +356,7 @@ int main(int argc, char *argv[]) {
   }
   
   SolutionPtr solution = Solution::solution(mesh, bc, rhs, graphNorm);
+  SolutionPtr solution_p = Solution::solution(coarseMesh_p, bc, rhs, graphNorm); // solution on constant mesh
   
   mesh->registerSolution(solution); // sign up for projection of old solution onto refined cells.
   
@@ -391,21 +389,21 @@ int main(int argc, char *argv[]) {
     solverChoice = KLU;
   }
   
-  Teuchos::RCP<Solver> coarseSolver, fineSolver;
+  Teuchos::RCP<Solver> coarsestSolver, fineSolver, intermediateSolver;
   switch(solverChoice) {
       case MUMPS:
 #ifdef USE_MUMPS
-      coarseSolver = Teuchos::rcp( new MumpsSolver(mumpsMaxMemoryMB, true) );
+      coarsestSolver = Teuchos::rcp( new MumpsSolver(mumpsMaxMemoryMB, true) );
 #else
       cout << "useMumps=true, but MUMPS is not available!\n";
       exit(1);
 #endif
       break;
     case KLU:
-      coarseSolver = Teuchos::rcp( new KluSolver );
+      coarsestSolver = Teuchos::rcp( new KluSolver );
       break;
     case SLU:
-      coarseSolver = Teuchos::rcp( new SuperLUDistSolver(true) ); // true: save factorization
+      coarsestSolver = Teuchos::rcp( new SuperLUDistSolver(true) ); // true: save factorization
       break;
     case UNKNOWN:
       // should be unreachable
@@ -413,21 +411,35 @@ int main(int argc, char *argv[]) {
   }
   
   solution->setUseCondensedSolve(useCondensedSolve);
-  
-  GMGSolver* gmgSolver = NULL;
+  solution_p->setUseCondensedSolve(useCondensedSolve);
+
   BCPtr zeroBCs = bc->copyImposingZero();
   int maxIters = 80000;
+  
+  if (!pMultiGridOnly) {
+    GMGSolver* intermediateSolverGMG = new GMGSolver(zeroBCs, coarseMesh_h, graphNorm, coarseMesh_p, solution_p->getDofInterpreter(),
+                                                     solution_p->getPartitionMap(), maxIters, relativeTol, coarsestSolver, useCondensedSolve);
+    intermediateSolverGMG->setAztecOutput(0); // suppress output for nested solver
+    intermediateSolver = Teuchos::rcp( intermediateSolverGMG );
+  }
+  
+  GMGSolver* gmgSolver = NULL;
   
   if (useGMGSolver) {
     double tol = relativeTol;
 
-    gmgSolver = new GMGSolver(zeroBCs, coarseMesh, graphNorm, mesh, solution->getDofInterpreter(),
-                              solution->getPartitionMap(), maxIters, tol, coarseSolver, useCondensedSolve);
+    if (pMultiGridOnly) {
+      gmgSolver = new GMGSolver(zeroBCs, coarseMesh_p, graphNorm, mesh, solution->getDofInterpreter(),
+                                solution->getPartitionMap(), maxIters, tol, coarsestSolver, useCondensedSolve);
+    } else {
+      gmgSolver = new GMGSolver(zeroBCs, coarseMesh_p, graphNorm, mesh, solution->getDofInterpreter(),
+                                solution->getPartitionMap(), maxIters, tol, intermediateSolver, useCondensedSolve);
+    }
     gmgSolver->setAztecOutput(100); // print residual every 100 iterations;
-    gmgSolver->gmgOperator().constructLocalCoefficientMaps(); // for separating out the timings
+//    gmgSolver->gmgOperator().constructLocalCoefficientMaps(); // for separating out the timings
     fineSolver = Teuchos::rcp( gmgSolver );
   } else {
-    fineSolver = coarseSolver;
+    fineSolver = coarsestSolver;
   }
   if (elementCount > maxCells) {
     if (rank==0) cout << "Initial mesh size exceeds maxCells; exiting.\n";
@@ -457,7 +469,7 @@ int main(int argc, char *argv[]) {
   HDF5Exporter exporter(mesh,dir_name.str());
   exporter.exportSolution(solution,varFactory,startingRefinementNumber);
   if (rank==0) cout << "...completed.\n";
-  ostringstream meshFileName, coarseMeshFileName;
+  ostringstream meshFileName, coarseMeshFileName_h, coarseMeshFileName_p;
   meshFileName << "stokesCavityFlow3D_k" << k << "_ref" << startingRefinementNumber << ".mesh";
   mesh->saveToHDF5(meshFileName.str());
 #endif
@@ -472,9 +484,10 @@ int main(int argc, char *argv[]) {
       cout << " (using " << numFluxDofs << " trace degrees of freedom)." << endl;
     }
 #ifdef USE_MUMPS
-    // recreate mumpsSolver prior to refinement (true means it keeps a factorization, which is unsafe when the coarse mesh is being refined...)
-    if (solverChoice==MUMPS) coarseSolver = Teuchos::rcp( new MumpsSolver(mumpsMaxMemoryMB, true) );
+    // recreate coarsest solver prior to refinement (true means it keeps a factorization, which is unsafe when the coarse mesh is being refined...)
+    if (solverChoice==MUMPS) coarsestSolver = Teuchos::rcp( new MumpsSolver(mumpsMaxMemoryMB, true) );
 #endif
+    if (solverChoice==SLU)   coarsestSolver = Teuchos::rcp( new SuperLUDistSolver(true) ); // true: save factorization
 
     refinementStrategy.refine(rank==0);
     double refinementTime = timer.ElapsedTime();
@@ -485,11 +498,14 @@ int main(int argc, char *argv[]) {
     ostringstream meshFileName;
     meshFileName << "stokesCavityFlow3D_k" << k << "_ref" << refIndex+1 << ".mesh";
     mesh->saveToHDF5(meshFileName.str());
-    coarseMeshFileName.str("");
-    coarseMeshFileName << "stokesCavityFlow3D_k" << k << "_ref" << refIndex+1 << "_coarse.mesh";
-    coarseMesh->saveToHDF5(coarseMeshFileName.str());
+    coarseMeshFileName_h.str("");
+    coarseMeshFileName_h << "stokesCavityFlow3D_k" << k << "_ref" << refIndex+1 << "_coarse_h.mesh";
+    coarseMesh_h->saveToHDF5(coarseMeshFileName_h.str());
+    coarseMeshFileName_p.str("");
+    coarseMeshFileName_p << "stokesCavityFlow3D_k" << k << "_ref" << refIndex+1 << "_coarse_p.mesh";
+    coarseMesh_p->saveToHDF5(coarseMeshFileName_p.str());
     if (rank==0) cout << "Refined mesh saved to " << meshFileName.str() << endl;
-    if (rank==0) cout << "(Use --meshLoadName=\"" << meshFileName.str() << "\" --coarseMeshLoadName=\"" << coarseMeshFileName.str() << "\" --startingRefNumber=" << refIndex + 1 << ")\n";
+    if (rank==0) cout << "(Use --meshLoadName=\"" << meshFileName.str() << "\" --coarseMeshLoadName_h=\"" << coarseMeshFileName_h.str() << "\" --coarseMeshLoadName_p=\"" << coarseMeshFileName_p.str() << "\" --startingRefNumber=" << refIndex + 1 << ")\n";
 #endif
     
     int elementCount = mesh->getActiveCellIDs().size();
@@ -501,21 +517,40 @@ int main(int argc, char *argv[]) {
     if (clearSolution) solution->clear();
     
     if (useGMGSolver) { // recreate fineSolver...
-      double tol = relativeTol * energyError;
-      
-      if (useCondensedSolve) {
-        CondensedDofInterpreter* condensedDofInterpreter = dynamic_cast<CondensedDofInterpreter*>(solution->getDofInterpreter().get());
-        if (condensedDofInterpreter != NULL) {
-          condensedDofInterpreter->reinitialize();
+      if (!pMultiGridOnly) {
+        if (useCondensedSolve) {
+          CondensedDofInterpreter* condensedDofInterpreter = dynamic_cast<CondensedDofInterpreter*>(solution_p->getDofInterpreter().get());
+          if (condensedDofInterpreter != NULL) {
+            condensedDofInterpreter->reinitialize();
+          }
+          condensedDofInterpreter = dynamic_cast<CondensedDofInterpreter*>(solution->getDofInterpreter().get());
+          if (condensedDofInterpreter != NULL) {
+            condensedDofInterpreter->reinitialize();
+          }
         }
+        GMGSolver* intermediateSolverGMG = new GMGSolver(zeroBCs, coarseMesh_h, graphNorm, coarseMesh_p, solution_p->getDofInterpreter(),
+                                                         solution_p->getPartitionMap(), maxIters, relativeTol, coarsestSolver, useCondensedSolve);
+        intermediateSolverGMG->setAztecOutput(0); // suppress output for nested solver
+        intermediateSolver = Teuchos::rcp( intermediateSolverGMG );
       }
       
-      gmgSolver = new GMGSolver(zeroBCs, coarseMesh, graphNorm, mesh, solution->getDofInterpreter(),
-                                solution->getPartitionMap(), maxIters, tol, coarseSolver, useCondensedSolve);
-
-      gmgSolver->setAztecOutput(100); // print residual every 100 iterations;
-      gmgSolver->gmgOperator().constructLocalCoefficientMaps(); // for separating out the timings
-      fineSolver = Teuchos::rcp(gmgSolver);
+      gmgSolver = NULL;
+      
+      if (useGMGSolver) {
+        double tol = relativeTol * energyError;
+        if (pMultiGridOnly) {
+          gmgSolver = new GMGSolver(zeroBCs, coarseMesh_p, graphNorm, mesh, solution->getDofInterpreter(),
+                                    solution->getPartitionMap(), maxIters, tol, coarsestSolver, useCondensedSolve);
+        } else {
+          gmgSolver = new GMGSolver(zeroBCs, coarseMesh_p, graphNorm, mesh, solution->getDofInterpreter(),
+                                    solution->getPartitionMap(), maxIters, tol, intermediateSolver, useCondensedSolve);
+        }
+        gmgSolver->setAztecOutput(100); // print residual every 100 iterations;
+        //    gmgSolver->gmgOperator().constructLocalCoefficientMaps(); // for separating out the timings
+        fineSolver = Teuchos::rcp( gmgSolver );
+      } else {
+        fineSolver = coarsestSolver;
+      }
     }
     
     timer.ResetStartTime();
@@ -548,11 +583,15 @@ int main(int argc, char *argv[]) {
   meshFileName.str("");
   meshFileName << "stokesCavityFlow3D_k" << k << "_ref" << refCount + startingRefinementNumber + 1 << ".mesh";
   mesh->saveToHDF5(meshFileName.str());
-  coarseMeshFileName.str("");
-  coarseMeshFileName << "stokesCavityFlow3D_k" << k << "_ref" << refCount + startingRefinementNumber + 1 << "_coarse.mesh";
-  coarseMesh->saveToHDF5(coarseMeshFileName.str());
-  if (rank==0) cout << "Mesh for next run saved to " << meshFileName.str() << endl;
-  if (rank==0) cout << "(Use --meshLoadName=\"" << meshFileName.str() << "\" --coarseMeshLoadName=\"" << coarseMeshFileName.str() << "\" --startingRefNumber=" << refCount + startingRefinementNumber + 1 << ")\n";
+  coarseMeshFileName_h.str("");
+  coarseMeshFileName_h << "stokesCavityFlow3D_k" << k << "_ref" << refCount + startingRefinementNumber+1 << "_coarse_h.mesh";
+  coarseMesh_h->saveToHDF5(coarseMeshFileName_h.str());
+  coarseMeshFileName_p.str("");
+  coarseMeshFileName_p << "stokesCavityFlow3D_k" << k << "_ref" << refCount + startingRefinementNumber+1 << "_coarse_p.mesh";
+  coarseMesh_p->saveToHDF5(coarseMeshFileName_p.str());
+  if (rank==0) cout << "Refined mesh saved to " << meshFileName.str() << endl;
+  if (rank==0) cout << "(Use --meshLoadName=\"" << meshFileName.str() << "\" --coarseMeshLoadName_h=\"" << coarseMeshFileName_h.str() << "\" --coarseMeshLoadName_p=\"" << coarseMeshFileName_p.str() << "\" --startingRefNumber=" << refCount + startingRefinementNumber + 1 << ")\n";
+
 #endif
   
 //  cout << "Final Mesh, entities report:\n";
@@ -571,7 +610,7 @@ int main(int argc, char *argv[]) {
     cout << "Net mass flux: " << netMassFlux << endl;
   }
   
-  coarseSolver = Teuchos::rcp((Solver*) NULL); // without this when useMumps = true and running on one rank, we see a crash on exit, which may have to do with MPI being finalized before coarseSolver is deleted.
+  coarsestSolver = Teuchos::rcp((Solver*) NULL); // without this when useMumps = true and running on one rank, we see a crash on exit, which may have to do with MPI being finalized before coarseSolver is deleted.
   
 //#ifdef HAVE_EPETRAEXT_HDF5
 //  if (rank==0) cout << "Beginning export of final solution.\n";
