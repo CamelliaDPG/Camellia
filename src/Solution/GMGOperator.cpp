@@ -1035,14 +1035,14 @@ void GMGOperator::setUpSmoother(Epetra_CrsMatrix *fineStiffnessMatrix) {
       } else {
         switch (_schwarzBlockFactorizationType) {
           case Direct:
-            smoother = Teuchos::rcp(new Ifpack_AdditiveSchwarz<Ifpack_Amesos>(fineStiffnessMatrix, OverlapLevel) );
+            smoother = Teuchos::rcp(new Camellia::AdditiveSchwarz<Ifpack_Amesos>(fineStiffnessMatrix, OverlapLevel, _fineMesh, _fineDofInterpreter) );
             break;
           case ILU:
-            smoother = Teuchos::rcp(new Ifpack_AdditiveSchwarz<Ifpack_ILU>(fineStiffnessMatrix, OverlapLevel) );
+            smoother = Teuchos::rcp(new Camellia::AdditiveSchwarz<Ifpack_ILU>(fineStiffnessMatrix, OverlapLevel, _fineMesh, _fineDofInterpreter) );
             List.set("fact: level-of-fill", _levelOfFill);
             break;
           case IC:
-            smoother = Teuchos::rcp(new Ifpack_AdditiveSchwarz<Ifpack_IC>(fineStiffnessMatrix, OverlapLevel) );
+            smoother = Teuchos::rcp(new Camellia::AdditiveSchwarz<Ifpack_IC>(fineStiffnessMatrix, OverlapLevel, _fineMesh, _fineDofInterpreter) );
             List.set("fact: ict level-of-fill", _fillRatio);
             break;
           default:
