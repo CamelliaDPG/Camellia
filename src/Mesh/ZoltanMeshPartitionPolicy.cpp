@@ -22,6 +22,12 @@
 
 #include <Teuchos_GlobalMPISession.hpp>
 
+#ifdef HAVE_MPI
+#include "Epetra_MpiComm.h"
+#else
+#include "Epetra_SerialComm.h"
+#endif
+
 ZoltanMeshPartitionPolicy::ZoltanMeshPartitionPolicy(){
   string partitionerName = "HSFC"; // was "BLOCK"
   string debug_level = "0"; // was "10"
@@ -41,11 +47,6 @@ void ZoltanMeshPartitionPolicy::partitionMesh(Mesh *mesh, PartitionIndexType num
 //  cout << "ZoltanMeshPartitionPolicy::partitionMesh, registered solution count: " << mesh->globalDofAssignment()->getRegisteredSolutions().size() << endl;
   int numNodes = numPartitions;
   GlobalIndexType numActiveElements = mesh->numActiveElements();
-  int maxPartitionSize = (numActiveElements / numPartitions + 1) * 2; // not sure this is a good formula, but just using numActiveElements for maxPartitionSize won't scale at all...
-  
-  FieldContainer<GlobalIndexType> partitionedActiveCells(numNodes,maxPartitionSize);
-
-  partitionedActiveCells.initialize(-1); // cellID == -1 signals end of partition
   
   float version;
   //these arguments are ignored by Zoltan initialize if MPI_init is called
@@ -148,6 +149,21 @@ void ZoltanMeshPartitionPolicy::partitionMesh(Mesh *mesh, PartitionIndexType num
         Camellia::print(rankListLabel.str(), rankLocalCells);
       }
       
+#ifdef HAVE_MPI
+      Epetra_MpiComm Comm(MPI_COMM_WORLD);
+      //cout << "rank: " << rank << " of " << numProcs << endl;
+#else
+      Epetra_SerialComm Comm;
+#endif
+      
+      int myPartitionSize = rankLocalCells.size();
+      int maxPartitionSize;
+      Comm.MaxAll(&myPartitionSize, &maxPartitionSize, 1);
+      
+      FieldContainer<GlobalIndexType> partitionedActiveCells(numNodes,maxPartitionSize);
+      
+      partitionedActiveCells.initialize(-1); // cellID == -1 signals end of partition
+
       // need to pass around information about partitions here thru MPI - each processor must know all other processors' partitions
       FieldContainer<int> myPartition(maxPartitionSize);
       myPartition.initialize(-1);
@@ -164,7 +180,7 @@ void ZoltanMeshPartitionPolicy::partitionMesh(Mesh *mesh, PartitionIndexType num
       for (int node=0;node<numNodes;node++){
         for (int i=0;i<maxPartitionSize;i++){
           partitionedActiveCells(node,i) = allPartitions(node,i);
-        }	
+        }
       }
       
       // now that we have the new partition, communicate it:
@@ -198,10 +214,11 @@ void ZoltanMeshPartitionPolicy::partitionMesh(Mesh *mesh, PartitionIndexType num
 #endif
   } else { // if just one node, partition = active cellID array
     set<GlobalIndexType> activeCellIDSet = mesh->getTopology()->getActiveCellIndices();
-    vector< GlobalIndexType > activeCellIDs(activeCellIDSet.begin(), activeCellIDSet.end());
-    for (int i=0;i<numActiveElements;i++){
+    FieldContainer<GlobalIndexType> partitionedActiveCells(numNodes,numActiveElements);
+    int i=0;
+    for (set<GlobalIndexType>::iterator cellIDIt = activeCellIDSet.begin();cellIDIt != activeCellIDSet.end(); cellIDIt++, i++){
       //    for (vector<Teuchos::RCP< Element > >::iterator elemIt=activeElements.begin();elemIt!=activeElements.end();elemIt++){
-      partitionedActiveCells(0,i) = activeCellIDs[i];
+      partitionedActiveCells(0,i) = *cellIDIt;
     }
     // now that we have the new partition, communicate it:
     mesh->globalDofAssignment()->setPartitions(partitionedActiveCells);
