@@ -631,7 +631,8 @@ void run(ProblemChoice problemChoice, int &iterationCount, int spaceDim, int num
 //  if (rank==0) cout << "Direct solution has energy error " << energyErrorTotal << endl;
 }
 
-void runMany(ProblemChoice problemChoice, int spaceDim, int delta_k, bool conformingTraces, bool useStaticCondensation,
+void runMany(ProblemChoice problemChoice, int spaceDim, int delta_k, int minCells,
+             bool conformingTraces, bool useStaticCondensation,
              GMGOperator::FactorType schwarzBlockFactorization, int schwarzLevelOfFill, double schwarzFillRatio,
              Solver::SolverChoice coarseSolverChoice,
              double cgTol, int cgMaxIterations, int aztecOutputLevel, RunManyPreconditionerChoices preconditionerChoices) {
@@ -744,7 +745,7 @@ void runMany(ProblemChoice problemChoice, int spaceDim, int delta_k, bool confor
   if (spaceDim < 2) kValues.push_back(16);
   
   vector<int> numCellsValues;
-  int numCells = 2;
+  int numCells = minCells;
   while (pow((double)numCells,spaceDim) <= Teuchos::GlobalMPISession::getNProc()) { // ensure max of 1 cell per MPI node
     // want to do as many as we can with just one cell per processor
     numCellsValues.push_back(numCells);
@@ -902,6 +903,8 @@ int main(int argc, char *argv[]) {
   string coarseSolverChoiceString = "KLU";
   
   string runManySubsetString = "All";
+  
+  int runManyMinCells = 2;
 
   cmdp.setOption("problem",&problemChoiceString,"problem choice: Poisson, Stokes, Navier-Stokes");
   
@@ -933,6 +936,7 @@ int main(int argc, char *argv[]) {
   
   cmdp.setOption("runMany", "runOne", &runAutomatic, "Run in automatic mode (ignores several input parameters)");
   cmdp.setOption("runManySubset", &runManySubsetString, "DontPrecondition, AllGMG, AllSchwarz, or All");
+  cmdp.setOption("runManyMinCells", &runManyMinCells, "Minimum number of cells to use for mesh width");
   
   if (cmdp.parse(argc,argv) != Teuchos::CommandLineProcessor::PARSE_SUCCESSFUL) {
 #ifdef HAVE_MPI
@@ -1015,8 +1019,12 @@ int main(int argc, char *argv[]) {
       cout << "CG tolerance = " << cgTol << ", max iterations = " << cgMaxIterations << endl;
     }
     
-    runMany(problemChoice, spaceDim, delta_k, conformingTraces, useCondensedSolve, schwarzFactorType, levelOfFill, fillRatio,
-            coarseSolverChoice, cgTol, cgMaxIterations, AztecOutputLevel, runManySubsetChoice);
+    runMany(problemChoice, spaceDim, delta_k, runManyMinCells,
+            conformingTraces, useCondensedSolve,
+            schwarzFactorType, levelOfFill, fillRatio,
+            coarseSolverChoice,
+            cgTol, cgMaxIterations, AztecOutputLevel,
+            runManySubsetChoice);
   }
   return 0;
 }
