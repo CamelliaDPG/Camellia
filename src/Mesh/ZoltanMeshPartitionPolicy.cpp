@@ -40,8 +40,8 @@ void ZoltanMeshPartitionPolicy::partitionMesh(Mesh *mesh, PartitionIndexType num
 //  cout << "Entered ZoltanMeshPartitionPolicy::partitionMesh() on rank " << myNode << endl;
 //  cout << "ZoltanMeshPartitionPolicy::partitionMesh, registered solution count: " << mesh->globalDofAssignment()->getRegisteredSolutions().size() << endl;
   int numNodes = numPartitions;
-  int maxPartitionSize = mesh->numActiveElements();
   GlobalIndexType numActiveElements = mesh->numActiveElements();
+  int maxPartitionSize = (numActiveElements / numPartitions + 1) * 2; // not sure this is a good formula, but just using numActiveElements for maxPartitionSize won't scale at all...
   
   FieldContainer<GlobalIndexType> partitionedActiveCells(numNodes,maxPartitionSize);
 
