@@ -45,6 +45,11 @@
 
 #include "AdditiveSchwarz.h"
 
+#ifdef USE_HPCTW
+extern "C" void HPM_Start(char *);
+extern "C" void HPM_Stop(char *);
+#endif
+
 GMGOperator::GMGOperator(BCPtr zeroBCs, MeshPtr coarseMesh, IPPtr coarseIP,
                          MeshPtr fineMesh, Teuchos::RCP<DofInterpreter> fineDofInterpreter, Epetra_Map finePartitionMap,
                          Teuchos::RCP<Solver> coarseSolver, bool useStaticCondensation, bool fineSolverUsesDiagonalScaling) :  _finePartitionMap(finePartitionMap), _br(true) {
@@ -111,7 +116,13 @@ GMGOperator::GMGOperator(BCPtr zeroBCs, MeshPtr coarseMesh, IPPtr coarseIP,
 //    _coarseSolution->populateStiffnessAndLoad();
 //  }
 
+#ifdef HPCTW
+  HPM_Start("constructProlongationOperator");
+#endif
   constructProlongationOperator();
+#ifdef HPCTW
+  HPM_Stop("constructProlongationOperator");
+#endif
   
   _fineSolverUsesDiagonalScaling = false;
   setFineSolverUsesDiagonalScaling(fineSolverUsesDiagonalScaling);
