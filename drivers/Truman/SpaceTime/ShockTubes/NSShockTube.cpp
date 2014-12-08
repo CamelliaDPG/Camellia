@@ -156,7 +156,7 @@ class ArtificialViscosity : public Function {
     double _qlin;
     double _qquad;
   public:
-    ArtificialViscosity(FunctionPtr h, FunctionPtr rho, FunctionPtr dudx, FunctionPtr sqrtT, FunctionPtr D, FunctionPtr dDdx, double gamma, double R, double qlin=1, double qquad=1) : Function(0), 
+    ArtificialViscosity(FunctionPtr h, FunctionPtr rho, FunctionPtr dudx, FunctionPtr sqrtT, FunctionPtr D, FunctionPtr dDdx, double gamma, double R, double qlin=0.25, double qquad=2) : Function(0),
       _h(h), _rho(rho), _dudx(dudx), _sqrtT(sqrtT), _D(D), _dDdx(dDdx), _gamma(gamma), _R(R), _qlin(qlin), _qquad(qquad) {}
     void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
       int numCells = values.dimension(0);
@@ -198,7 +198,8 @@ class ArtificialViscosity : public Function {
           //   psi1 = 0;
           //   psi2 = 0;
           // }
-          values(cellIndex, ptIndex) = 1e-4 + psi0*psi1*rho(cellIndex, ptIndex)*h(cellIndex, ptIndex)*(_qquad*h(cellIndex, ptIndex)*Cz + psi2*_qlin*a0);
+          double artViscScaling = 1e-0;
+          values(cellIndex, ptIndex) = 1e-4 + artViscScaling*psi0*psi1*rho(cellIndex, ptIndex)*h(cellIndex, ptIndex)*(_qquad*h(cellIndex, ptIndex)*Cz + psi2*_qlin*a0);
           // values(cellIndex, ptIndex) = 1e-4 + rho(cellIndex, ptIndex)*h(cellIndex, ptIndex)*(_qquad*h(cellIndex, ptIndex)*Cz + psi2*_qlin*a0);
         }
       }
@@ -232,28 +233,51 @@ class ErrorFunction : public Function {
     }
 };
 
-class PulseInitialCondition : public hFunction {
+class PulseInitialCondition : public Function {
    private:
       double _width;
       double _valI;
       double _valO;
+      FunctionPtr _h;
    public:
-      PulseInitialCondition(double width, double valI, double valO) : _width(width), _valI(valI), _valO(valO) {}
+      PulseInitialCondition(double width, double valI, double valO, FunctionPtr h) : Function(0), _width(width), _valI(valI), _valO(valO), _h(h) {}
       void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
          int numCells = values.dimension(0);
          int numPoints = values.dimension(1);
 
+         FieldContainer<double> h(values);
+         _h->values(h, basisCache);
+
          const FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
-         for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
-            for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
-               double x = (*points)(cellIndex,ptIndex,0);
-               // if (abs(x) <= 1./pow(2,_numPreRefs))
-               if (abs(x) <= 0.5*_width)
-                  // values(cellIndex, ptIndex) = _valI*pow(2,_numPreRefs);
-                  values(cellIndex, ptIndex) = _valO+2*(_valI-_valO)/_width*(1-abs(2*x/_width));
-               else
-                  values(cellIndex, ptIndex) = _valO;
-            }
+         for (int cellIndex=0; cellIndex<numCells; cellIndex++)
+         {
+          for (int ptIndex=0; ptIndex<numPoints; ptIndex++)
+          {
+            double x = (*points)(cellIndex,ptIndex,0);
+            double y = (*points)(cellIndex,ptIndex,1);
+            double w = 0.2*h(cellIndex, ptIndex);
+            if (abs(x) <= w)
+              values(cellIndex, ptIndex) = _valI/w;
+            else
+              values(cellIndex, ptIndex) = _valO;
+          }
+               // double w = min(_width, 0.5*h(cellIndex, ptIndex));
+               // double w;
+               // for (int i = 0; i <= 8; i++)
+               //  if (h(cellIndex, ptIndex) < pow(2,-i))
+               //    w = 0.5*pow(2,-i);
+               // // double w = h(cellIndex, ptIndex);
+               // // if (abs(x) <= 1./pow(2,_numPreRefs))
+               // if (abs(x) < 0.5*w)
+               //    // values(cellIndex, ptIndex) = _valI*pow(2,_numPreRefs);
+               //    // values(cellIndex, ptIndex) = _valO+2*(_valI-_valO)/w*(1-abs(2*x/w));
+               // {
+               //    values(cellIndex, ptIndex) = 1;
+               //    cout << "(" << h(cellIndex, ptIndex) << " " << w << ") ";
+               // }
+               // else
+               //    // values(cellIndex, ptIndex) = _valO;
+               //    values(cellIndex, ptIndex) = 0;
          }
       }
 };
@@ -330,8 +354,8 @@ int main(int argc, char *argv[]) {
   int numPreRefs = args.Input<int>("--numPreRefs","pre-refinements on singularity",0);
   int norm = args.Input("--norm", "norm", 0);
   double physicalViscosity = args.Input("--mu", "viscosity", 1e-2);
-  // double mu = physicalViscosity;
-  // double mu_sqrt = sqrt(mu);
+  double mu = physicalViscosity;
+  double mu_sqrt = sqrt(mu);
   int numSlabs = args.Input("--numSlabs", "number of time slabs", 1);
   bool useLineSearch = args.Input("--lineSearch", "use line search", true);
   int polyOrder = args.Input("--polyOrder", "polynomial order for field variables", 2);
@@ -531,9 +555,9 @@ int main(int argc, char *argv[]) {
   VarPtr q = varFactory.fieldVar("q");
   VarPtr uhat = varFactory.spatialTraceVar("uhat");
   VarPtr That = varFactory.spatialTraceVar("That");
-  VarPtr Fc = varFactory.fluxVar("Fc");
-  VarPtr Fm = varFactory.fluxVar("Fm");
-  VarPtr Fe = varFactory.fluxVar("Fe");
+  VarPtr tc = varFactory.fluxVar("tc");
+  VarPtr tm = varFactory.fluxVar("tm");
+  VarPtr te = varFactory.fluxVar("te");
   // variables that vary among formulations
   VarPtr Uc = varFactory.fieldVar("Uc");
   VarPtr Um = varFactory.fieldVar("Um");
@@ -666,59 +690,93 @@ int main(int argc, char *argv[]) {
     FunctionPtr Um_prev   = Function::solution(Um, backgroundFlows[slab]);
     FunctionPtr Ue_prev   = Function::solution(Ue, backgroundFlows[slab]);
     FunctionPtr D_prev   = Function::solution(D, backgroundFlows[slab]);
+    FunctionPtr q_prev   = Function::solution(q, backgroundFlows[slab]);
     FunctionPtr rho_prev = Uc_prev;
-    // FunctionPtr rho_prev = Teuchos::rcp( new BoundedBelowFunction(Uc_prev, 0) );
     FunctionPtr u_prev = Um_prev;
-    FunctionPtr dudx_prev   = Function::solution(Um->dx(), backgroundFlows[slab]);
-    FunctionPtr dDdx_prev   = Function::solution(D->dx(), backgroundFlows[slab]);
     FunctionPtr T_prev = Ue_prev;
-    // FunctionPtr T_prev = Teuchos::rcp( new BoundedBelowFunction(Ue_prev, 0) );
     FunctionPtr m_prev = Um_prev;
     FunctionPtr E_prev = Ue_prev;
     FunctionPtr Vc_prev = Uc_prev;
     FunctionPtr Vm_prev = Um_prev;
     FunctionPtr Ve_prev = Ue_prev;
-    FunctionPtr FEc;
-    FunctionPtr FEm;
-    FunctionPtr FEe;
-    LinearTermPtr FEc_dU = Teuchos::rcp( new LinearTerm );
-    LinearTermPtr FEm_dU = Teuchos::rcp( new LinearTerm );
-    LinearTermPtr FEe_dU = Teuchos::rcp( new LinearTerm );
-    LinearTermPtr M_DxS = Teuchos::rcp( new LinearTerm );
-    LinearTermPtr M_qxtau = Teuchos::rcp( new LinearTerm );
-    LinearTermPtr Msqrt_DxS = Teuchos::rcp( new LinearTerm );
-    LinearTermPtr Msqrt_qxtau = Teuchos::rcp( new LinearTerm );
-    LinearTermPtr K_DxGradV = Teuchos::rcp( new LinearTerm );
-    LinearTermPtr K_qxGradV = Teuchos::rcp( new LinearTerm );
-    LinearTermPtr MinvsqrtxK_DxGradV = Teuchos::rcp( new LinearTerm );
-    LinearTermPtr MinvsqrtxK_qxGradV = Teuchos::rcp( new LinearTerm );
-    LinearTermPtr F_cxGradV = Teuchos::rcp( new LinearTerm );
-    LinearTermPtr C_cxdVdt = Teuchos::rcp( new LinearTerm );
-    LinearTermPtr F_mxGradV = Teuchos::rcp( new LinearTerm );
-    LinearTermPtr C_mxdVdt = Teuchos::rcp( new LinearTerm );
-    LinearTermPtr F_exGradV = Teuchos::rcp( new LinearTerm );
-    LinearTermPtr C_exdVdt = Teuchos::rcp( new LinearTerm );
-    LinearTermPtr G_cxGradPsi = Teuchos::rcp( new LinearTerm );
-    LinearTermPtr G_mxGradPsi = Teuchos::rcp( new LinearTerm );
-    LinearTermPtr G_exGradPsi = Teuchos::rcp( new LinearTerm );
-    // FunctionPtr T_sqrt = Teuchos::rcp( new BoundedSqrtFunction(T_prev, 0.01) );
-    // FunctionPtr rho_sqrt = Teuchos::rcp( new BoundedSqrtFunction(rho_prev, 0.01) );
-    FunctionPtr T_sqrt = Teuchos::rcp( new BoundedSqrtFunction(T_prev, 1e-2) );
-    FunctionPtr rho_sqrt = Teuchos::rcp( new BoundedSqrtFunction(rho_prev, 1e-2) );
-    // FunctionPtr h_sqrt = Teuchos::rcp( new BoundedSqrtFunction(Function::h(), mu*mu) );
-    FunctionPtr A0p_c = sqrt(gamma-1)/rho_sqrt;
-    FunctionPtr A0p_m = rho_sqrt/(sqrt(Cv)*T_sqrt);
-    FunctionPtr A0p_e = rho_sqrt/(T_sqrt*T_sqrt);
+    // FunctionPtr dudx_prev   = Function::solution(Um->dx(), backgroundFlows[slab]);
+    // FunctionPtr dDdx_prev   = Function::solution(D->dx(), backgroundFlows[slab]);
+    // Nonlinear Residual Terms
+    FunctionPtr Fc;
+    FunctionPtr Fm;
+    FunctionPtr Fe;
+    FunctionPtr Cc;
+    FunctionPtr Cm;
+    FunctionPtr Ce;
+    FunctionPtr Km;
+    FunctionPtr Ke;
+    FunctionPtr MD;
+    FunctionPtr Mq;
+    FunctionPtr GD;
+    FunctionPtr Gq;
+    // Linearized Terms
+    LinearTermPtr Fc_dU = Teuchos::rcp( new LinearTerm );
+    LinearTermPtr Fm_dU = Teuchos::rcp( new LinearTerm );
+    LinearTermPtr Fe_dU = Teuchos::rcp( new LinearTerm );
+    LinearTermPtr Cc_dU = Teuchos::rcp( new LinearTerm );
+    LinearTermPtr Cm_dU = Teuchos::rcp( new LinearTerm );
+    LinearTermPtr Ce_dU = Teuchos::rcp( new LinearTerm );
+    LinearTermPtr Km_dU = Teuchos::rcp( new LinearTerm );
+    LinearTermPtr Ke_dU = Teuchos::rcp( new LinearTerm );
+    LinearTermPtr MD_dU = Teuchos::rcp( new LinearTerm );
+    LinearTermPtr Mq_dU = Teuchos::rcp( new LinearTerm );
+    LinearTermPtr GD_dU = Teuchos::rcp( new LinearTerm );
+    LinearTermPtr Gq_dU = Teuchos::rcp( new LinearTerm );
+    // Adjoint Terms
+    LinearTermPtr adj_Fc = Teuchos::rcp( new LinearTerm );
+    LinearTermPtr adj_Fm = Teuchos::rcp( new LinearTerm );
+    LinearTermPtr adj_Fe = Teuchos::rcp( new LinearTerm );
+    LinearTermPtr adj_Cc = Teuchos::rcp( new LinearTerm );
+    LinearTermPtr adj_Cm = Teuchos::rcp( new LinearTerm );
+    LinearTermPtr adj_Ce = Teuchos::rcp( new LinearTerm );
+    LinearTermPtr adj_KD = Teuchos::rcp( new LinearTerm );
+    LinearTermPtr adj_Kq = Teuchos::rcp( new LinearTerm );
+    LinearTermPtr adj_MD = Teuchos::rcp( new LinearTerm );
+    LinearTermPtr adj_Mq = Teuchos::rcp( new LinearTerm );
+    LinearTermPtr adj_Gc = Teuchos::rcp( new LinearTerm );
+    LinearTermPtr adj_Gm = Teuchos::rcp( new LinearTerm );
+    LinearTermPtr adj_Ge = Teuchos::rcp( new LinearTerm );
+    // LinearTermPtr M_DxS = Teuchos::rcp( new LinearTerm );
+    // LinearTermPtr M_qxtau = Teuchos::rcp( new LinearTerm );
+    // LinearTermPtr Msqrt_DxS = Teuchos::rcp( new LinearTerm );
+    // LinearTermPtr Msqrt_qxtau = Teuchos::rcp( new LinearTerm );
+    // LinearTermPtr K_DxGradV = Teuchos::rcp( new LinearTerm );
+    // LinearTermPtr K_qxGradV = Teuchos::rcp( new LinearTerm );
+    // LinearTermPtr MinvsqrtxK_DxGradV = Teuchos::rcp( new LinearTerm );
+    // LinearTermPtr MinvsqrtxK_qxGradV = Teuchos::rcp( new LinearTerm );
+    // LinearTermPtr F_cxGradV = Teuchos::rcp( new LinearTerm );
+    // LinearTermPtr C_cxdVdt = Teuchos::rcp( new LinearTerm );
+    // LinearTermPtr F_mxGradV = Teuchos::rcp( new LinearTerm );
+    // LinearTermPtr C_mxdVdt = Teuchos::rcp( new LinearTerm );
+    // LinearTermPtr F_exGradV = Teuchos::rcp( new LinearTerm );
+    // LinearTermPtr C_exdVdt = Teuchos::rcp( new LinearTerm );
+    // LinearTermPtr G_cxGradPsi = Teuchos::rcp( new LinearTerm );
+    // LinearTermPtr G_mxGradPsi = Teuchos::rcp( new LinearTerm );
+    // LinearTermPtr G_exGradPsi = Teuchos::rcp( new LinearTerm );
+
+    // Entropy Scaling
+    // FunctionPtr T_sqrt = Teuchos::rcp( new BoundedSqrtFunction(T_prev, 1e-2) );
+    // FunctionPtr rho_sqrt = Teuchos::rcp( new BoundedSqrtFunction(rho_prev, 1e-2) );
+    // FunctionPtr A0p_c = sqrt(gamma-1)/rho_sqrt;
+    // FunctionPtr A0p_m = rho_sqrt/(sqrt(Cv)*T_sqrt);
     // FunctionPtr A0p_e = rho_sqrt/(T_sqrt*T_sqrt);
-    // FunctionPtr invA0p_c = rho_sqrt/sqrt(gamma-1);
-    // FunctionPtr invA0p_m = (sqrt(Cv)*T_sqrt)/rho_sqrt;
-    // FunctionPtr invA0p_e = T_prev/rho_sqrt;
-    FunctionPtr invA0p_c = 1./A0p_c;
-    FunctionPtr invA0p_m = 1./A0p_m;
-    FunctionPtr invA0p_e = 1./A0p_e;
-    FunctionPtr artificialViscosity = Teuchos::rcp( new ArtificialViscosity(Function::h(), rho_prev, dudx_prev, T_sqrt, D_prev, dDdx_prev, gamma, R) );
-    FunctionPtr mu = artificialViscosity;
-    FunctionPtr mu_sqrt = Teuchos::rcp( new SqrtFunction(mu) );
+    // // FunctionPtr A0p_e = rho_sqrt/(T_sqrt*T_sqrt);
+    // // FunctionPtr invA0p_c = rho_sqrt/sqrt(gamma-1);
+    // // FunctionPtr invA0p_m = (sqrt(Cv)*T_sqrt)/rho_sqrt;
+    // // FunctionPtr invA0p_e = T_prev/rho_sqrt;
+    // FunctionPtr invA0p_c = 1./A0p_c;
+    // FunctionPtr invA0p_m = 1./A0p_m;
+    // FunctionPtr invA0p_e = 1./A0p_e;
+
+    // Artificial Viscosity
+    // FunctionPtr artificialViscosity = Teuchos::rcp( new ArtificialViscosity(Function::h(), rho_prev, dudx_prev, T_sqrt, D_prev, dDdx_prev, gamma, R) );
+    // FunctionPtr mu = artificialViscosity;
+    // FunctionPtr mu_sqrt = Teuchos::rcp( new SqrtFunction(mu) );
     switch (formulation)
     {
       case 0:
@@ -733,70 +791,114 @@ int main(int argc, char *argv[]) {
       //
       //
       //
-      // Define Euler fluxes and flux jacobians
-      FEc = rho_prev*u_prev;
-      FEm = rho_prev*u_prev*u_prev + R*rho_prev*T_prev;
-      FEe = Cv*rho_prev*u_prev*T_prev + 0.5*rho_prev*u_prev*u_prev*u_prev + R*rho_prev*u_prev*T_prev;
-      FEc_dU->addTerm( u_prev*rho + rho_prev*u );
-      FEm_dU->addTerm( u_prev*u_prev*rho + 2*rho_prev*u_prev*u + R*T_prev*rho + R*rho_prev*T );
-      FEe_dU->addTerm( Cv*u_prev*T_prev*rho + Cv*rho_prev*T_prev*u + Cv*rho_prev*u_prev*T
+      // Nonlinear Residual Terms
+      Fc = rho_prev*u_prev;
+      Fm = rho_prev*u_prev*u_prev + R*rho_prev*T_prev;
+      Fe = Cv*rho_prev*u_prev*T_prev + 0.5*rho_prev*u_prev*u_prev*u_prev + R*rho_prev*u_prev*T_prev;
+      Cc = rho_prev;
+      Cm = rho_prev*u_prev;
+      Ce = Cv*rho_prev*T_prev + 0.5*rho_prev*u_prev*u_prev;
+      Km = D_prev;
+      Ke = -q_prev + u_prev*D_prev;
+      MD = 1./mu*D_prev;
+      Mq = Pr/(Cp*mu)*q_prev;
+      GD = 2*u_prev;
+      Gq = -T_prev;
+
+      // Linearized Terms
+      Fc_dU->addTerm( u_prev*rho + rho_prev*u );
+      Fm_dU->addTerm( u_prev*u_prev*rho + 2*rho_prev*u_prev*u + R*T_prev*rho + R*rho_prev*T );
+      Fe_dU->addTerm( Cv*u_prev*T_prev*rho + Cv*rho_prev*T_prev*u + Cv*rho_prev*u_prev*T
             + 0.5*u_prev*u_prev*u_prev*rho + 1.5*rho_prev*u_prev*u_prev*u
             + R*rho_prev*T_prev*u + R*u_prev*T_prev*rho + R*rho_prev*u_prev*T );
-      // Define norm terms
-      M_DxS->addTerm( 1./mu*S );
-      // Msqrt_DxS->addTerm( 1./sqrt(mu)*S );
-      Msqrt_DxS->addTerm( 1./mu_sqrt*S );
-      M_qxtau->addTerm( Pr/(Cp*mu)*tau );
-      // Msqrt_qxtau->addTerm( sqrt(Pr/(Cp*mu))*tau );
-      Msqrt_qxtau->addTerm( sqrt(Pr/Cp)/mu_sqrt*tau );
-      K_DxGradV->addTerm( vm->dx() + u_prev*ve->dx() );
-      // MinvsqrtxK_DxGradV->addTerm( sqrt(mu)*vm->dx() + sqrt(mu)*u_prev*ve->dx() );
-      MinvsqrtxK_DxGradV->addTerm( mu_sqrt*vm->dx() + mu_sqrt*u_prev*ve->dx() );
-      K_qxGradV->addTerm( -ve->dx() );
-      // MinvsqrtxK_qxGradV->addTerm( -sqrt(Cp*mu/Pr)*ve->dx() );
-      MinvsqrtxK_qxGradV->addTerm( -sqrt(Cp/Pr)*mu_sqrt*ve->dx() );
-      F_cxGradV->addTerm( u_prev*vc->dx() + u_prev*u_prev*vm->dx() + R*T_prev*vm->dx() + Cv*T_prev*u_prev*ve->dx()
-        + 0.5*u_prev*u_prev*u_prev*ve->dx() + R*T_prev*u_prev*ve->dx() );
-      C_cxdVdt->addTerm( vc->dy() + u_prev*vm->dy() + Cv*T_prev*ve->dy() + 0.5*u_prev*u_prev*ve->dy() );
-      F_mxGradV->addTerm( rho_prev*vc->dx() + 2*rho_prev*u_prev*vm->dx() + Cv*T_prev*rho_prev*ve->dx()
-        + 0.5*rho_prev*u_prev*u_prev*ve->dx() + rho_prev*u_prev*u_prev*ve->dx() + R*T_prev*rho_prev*ve->dx() - D_prev*ve->dx() );
-      C_mxdVdt->addTerm( rho_prev*vm->dy() + rho_prev*u_prev*ve->dy() );
-      F_exGradV->addTerm( R*rho_prev*vm->dx() + Cv*rho_prev*u_prev*ve->dx() + R*rho_prev*u_prev*ve->dx() );
-      C_exdVdt->addTerm( Cv*rho_prev*ve->dy() );
-      G_mxGradPsi->addTerm( 2*S->dx() );
-      G_exGradPsi->addTerm( -tau->dx() );
+      Cc_dU->addTerm( 1*rho );
+      Cm_dU->addTerm( rho_prev*u + u_prev*rho );
+      Ce_dU->addTerm( Cv*T_prev*rho + Cv*rho_prev*T + 0.5*u_prev*u_prev*rho + rho_prev*u_prev*u );
+      Km_dU->addTerm( 1*D );
+      Ke_dU->addTerm( -q + D_prev*u + u_prev*D );
+      MD_dU->addTerm( 1./mu*D );
+      Mq_dU->addTerm( Pr/(Cp*mu)*q );
+      GD_dU->addTerm( 2*u );
+      Gq_dU->addTerm( -T );
 
+      // Adjoint Terms
+      adj_Fc->addTerm( u_prev*vc->dx() + u_prev*u_prev*vm->dx() + R*T_prev*vm->dx() + Cv*T_prev*u_prev*ve->dx()
+        + 0.5*u_prev*u_prev*u_prev*ve->dx() + R*T_prev*u_prev*ve->dx() );
+      adj_Fm->addTerm( rho_prev*vc->dx() + 2*rho_prev*u_prev*vm->dx() + Cv*T_prev*rho_prev*ve->dx()
+        + 0.5*rho_prev*u_prev*u_prev*ve->dx() + rho_prev*u_prev*u_prev*ve->dx() + R*T_prev*rho_prev*ve->dx() - D_prev*ve->dx() );
+      adj_Fe->addTerm( R*rho_prev*vm->dx() + Cv*rho_prev*u_prev*ve->dx() + R*rho_prev*u_prev*ve->dx() );
+      adj_Cc->addTerm( vc->dy() + u_prev*vm->dy() + Cv*T_prev*ve->dy() + 0.5*u_prev*u_prev*ve->dy() );
+      adj_Cm->addTerm( rho_prev*vm->dy() + rho_prev*u_prev*ve->dy() );
+      adj_Ce->addTerm( Cv*rho_prev*ve->dy() );
+      adj_KD->addTerm( vm->dx() + u_prev*ve->dx() );
+      adj_Kq->addTerm( -ve->dx() );
+      adj_Gm->addTerm( 2*S->dx() );
+      adj_Ge->addTerm( -tau->dx() );
+      adj_MD->addTerm( 1./mu*S );
+      adj_Mq->addTerm( Pr/(Cp*mu)*tau );
+
+      // M_DxS->addTerm( 1./mu*S );
+      // // Msqrt_DxS->addTerm( 1./sqrt(mu)*S );
+      // Msqrt_DxS->addTerm( 1./mu_sqrt*S );
+      // M_qxtau->addTerm( Pr/(Cp*mu)*tau );
+      // // Msqrt_qxtau->addTerm( sqrt(Pr/(Cp*mu))*tau );
+      // Msqrt_qxtau->addTerm( sqrt(Pr/Cp)/mu_sqrt*tau );
+      // K_DxGradV->addTerm( vm->dx() + u_prev*ve->dx() );
+      // // MinvsqrtxK_DxGradV->addTerm( sqrt(mu)*vm->dx() + sqrt(mu)*u_prev*ve->dx() );
+      // MinvsqrtxK_DxGradV->addTerm( mu_sqrt*vm->dx() + mu_sqrt*u_prev*ve->dx() );
+      // K_qxGradV->addTerm( -ve->dx() );
+      // // MinvsqrtxK_qxGradV->addTerm( -sqrt(Cp*mu/Pr)*ve->dx() );
+      // MinvsqrtxK_qxGradV->addTerm( -sqrt(Cp/Pr)*mu_sqrt*ve->dx() );
+      // F_cxGradV->addTerm( u_prev*vc->dx() + u_prev*u_prev*vm->dx() + R*T_prev*vm->dx() + Cv*T_prev*u_prev*ve->dx()
+      //   + 0.5*u_prev*u_prev*u_prev*ve->dx() + R*T_prev*u_prev*ve->dx() );
+      // C_cxdVdt->addTerm( vc->dy() + u_prev*vm->dy() + Cv*T_prev*ve->dy() + 0.5*u_prev*u_prev*ve->dy() );
+      // F_mxGradV->addTerm( rho_prev*vc->dx() + 2*rho_prev*u_prev*vm->dx() + Cv*T_prev*rho_prev*ve->dx()
+      //   + 0.5*rho_prev*u_prev*u_prev*ve->dx() + rho_prev*u_prev*u_prev*ve->dx() + R*T_prev*rho_prev*ve->dx() - D_prev*ve->dx() );
+      // C_mxdVdt->addTerm( rho_prev*vm->dy() + rho_prev*u_prev*ve->dy() );
+      // F_exGradV->addTerm( R*rho_prev*vm->dx() + Cv*rho_prev*u_prev*ve->dx() + R*rho_prev*u_prev*ve->dx() );
+      // C_exdVdt->addTerm( Cv*rho_prev*ve->dy() );
+      // G_mxGradPsi->addTerm( 2*S->dx() );
+      // G_exGradPsi->addTerm( -tau->dx() );
+
+      // Bilinear Form
       // S terms:
+      bf->addTerm( MD_dU, S );
+      bf->addTerm( GD_dU, S->dx() );
+      bf->addTerm( -2*uhat, S->times_normal_x() );
+      // // bf->addTerm( D/mu, S);
       // bf->addTerm( D/mu, S);
-      bf->addTerm( D/mu, S);
-      bf->addTerm( 2*u, S->dx());
-      bf->addTerm( -2*uhat, S->times_normal_x());
+      // bf->addTerm( 2*u, S->dx());
 
       // tau terms:
-      bf->addTerm( Pr/Cp/mu*q, tau);
-      bf->addTerm( -T, tau->dx());
+      bf->addTerm( Mq_dU, tau );
+      bf->addTerm( Gq_dU, tau->dx() );
       bf->addTerm( That, tau->times_normal_x());
+      // // bf->addTerm( Pr/Cp/mu*q, tau);
+      // bf->addTerm( -T, tau->dx());
 
       // vc terms:
+      bf->addTerm( -Fc_dU, vc->dx());
+      bf->addTerm( -Cc_dU, vc->dy());
+      bf->addTerm( tc, vc);
       // bf->addTerm( -rho_prev*u, vc->dx());
       // bf->addTerm( -u_prev*rho, vc->dx());
-      bf->addTerm( -FEc_dU, vc->dx());
-      bf->addTerm( -rho, vc->dy());
-      bf->addTerm( Fc, vc);
 
       // vm terms:
+      bf->addTerm( -Fm_dU, vm->dx());
+      bf->addTerm( Km_dU, vm->dx());
+      bf->addTerm( -Cm_dU, vm->dy());
+      bf->addTerm( tm, vm);
       // bf->addTerm( -rho_prev*u_prev*u, vm->dx());
       // bf->addTerm( -rho_prev*u_prev*u, vm->dx());
       // bf->addTerm( -u_prev*u_prev*rho, vm->dx());
       // bf->addTerm( -R*rho_prev*T, vm->dx());
       // bf->addTerm( -R*T_prev*rho, vm->dx());
-      bf->addTerm( -FEm_dU, vm->dx());
-      bf->addTerm( D, vm->dx());
-      bf->addTerm( -rho_prev*u, vm->dy());
-      bf->addTerm( -u_prev*rho, vm->dy());
-      bf->addTerm( Fm, vm);
 
       // ve terms:
+      bf->addTerm( -Fe_dU, ve->dx());
+      bf->addTerm( Ke_dU, ve->dx());
+      bf->addTerm( -Ce_dU, ve->dy());
+      bf->addTerm( te, ve);
       // bf->addTerm( -Cv*rho_prev*T_prev*u, ve->dx());
       // bf->addTerm( -Cv*u_prev*rho_prev*T, ve->dx());
       // bf->addTerm( -Cv*T_prev*u_prev*rho, ve->dx());
@@ -807,46 +909,50 @@ int main(int argc, char *argv[]) {
       // bf->addTerm( -R*rho_prev*T_prev*u, ve->dx());
       // bf->addTerm( -R*rho_prev*u_prev*T, ve->dx());
       // bf->addTerm( -R*u_prev*T_prev*rho, ve->dx());
-      bf->addTerm( -FEe_dU, ve->dx());
-      bf->addTerm( -q, ve->dx());
-      bf->addTerm( u_prev*D, ve->dx());
-      bf->addTerm( D_prev*u, ve->dx());
-      bf->addTerm( -Cv*rho_prev*T, ve->dy());
-      bf->addTerm( -Cv*T_prev*rho, ve->dy());
-      bf->addTerm( -0.5*rho_prev*u_prev*u, ve->dy());
-      bf->addTerm( -0.5*rho_prev*u_prev*u, ve->dy());
-      bf->addTerm( -0.5*u_prev*u_prev*rho, ve->dy());
-      bf->addTerm( Fe, ve);
+
+      // bf->addTerm( -FEe_dU, ve->dx());
+      // bf->addTerm( -q, ve->dx());
+      // bf->addTerm( u_prev*D, ve->dx());
+      // bf->addTerm( D_prev*u, ve->dx());
+      // bf->addTerm( -Cv*rho_prev*T, ve->dy());
+      // bf->addTerm( -Cv*T_prev*rho, ve->dy());
+      // bf->addTerm( -0.5*rho_prev*u_prev*u, ve->dy());
+      // bf->addTerm( -0.5*rho_prev*u_prev*u, ve->dy());
+      // bf->addTerm( -0.5*u_prev*u_prev*rho, ve->dy());
+      // bf->addTerm( Fe, ve);
 
       ////////////////////   SPECIFY RHS   ///////////////////////
 
       // S terms:
-      rhs->addTerm( -1./mu*D_prev * S );
-      rhs->addTerm( -2*u_prev * S->dx() );
+      rhs->addTerm( -MD * S );
+      rhs->addTerm( -GD * S->dx() );
+      // rhs->addTerm( -1./mu*D_prev * S );
+      // rhs->addTerm( -2*u_prev * S->dx() );
 
       // tau terms:
-      rhs->addTerm( T_prev * tau->dx() );
+      rhs->addTerm( -Mq * tau );
+      rhs->addTerm( -Gq * tau->dx() );
+      // rhs->addTerm( T_prev * tau->dx() );
 
       // vc terms:
+      rhs->addTerm( Fc * vc->dx() );
+      rhs->addTerm( Cc * vc->dy() );
       // rhs->addTerm( rho_prev*u_prev * vc->dx() );
-      rhs->addTerm( FEc * vc->dx() );
-      rhs->addTerm( rho_prev * vc->dy() );
 
       // vm terms:
+      rhs->addTerm( Fm * vm->dx() );
+      rhs->addTerm( -Km * vm->dx() );
+      rhs->addTerm( Cm * vm->dy() );
       // rhs->addTerm( rho_prev*u_prev*u_prev * vm->dx() );
       // rhs->addTerm( R*rho_prev*T_prev * vm->dx() );
-      rhs->addTerm( FEm * vm->dx() );
-      rhs->addTerm( -D_prev * vm->dx() );
-      rhs->addTerm( rho_prev*u_prev * vm->dy() );
 
       // ve terms:
       // rhs->addTerm( Cv*rho_prev*u_prev*T_prev * ve->dx() );
       // rhs->addTerm( 0.5*rho_prev*u_prev*u_prev*u_prev * ve->dx() );
       // rhs->addTerm( R*rho_prev*u_prev*T_prev * ve->dx() );
-      rhs->addTerm( FEe * ve->dx() );
-      rhs->addTerm( -u_prev*D_prev * ve->dx() );
-      rhs->addTerm( Cv*rho_prev*T_prev * ve->dy() );
-      rhs->addTerm( 0.5*rho_prev*u_prev*u_prev * ve->dy() );
+      rhs->addTerm( Fe * ve->dx() );
+      rhs->addTerm( -Ke * ve->dx() );
+      rhs->addTerm( Ce * ve->dy() );
 
       ////////////////////   DEFINE INNER PRODUCT(S)   ///////////////////////
       switch (norm)
@@ -871,49 +977,9 @@ int main(int argc, char *argv[]) {
         // ip->addTerm(ve);
         // break;
 
-        case -1:
-        ip->addTerm( M_DxS );
-        ip->addTerm( M_qxtau );
-        ip->addTerm( K_DxGradV );
-        ip->addTerm( K_qxGradV );
-        ip->addTerm( F_cxGradV + C_cxdVdt );
-        ip->addTerm( F_mxGradV + C_mxdVdt );
-        ip->addTerm( F_exGradV + C_exdVdt );
-        ip->addTerm( G_mxGradPsi );
-        ip->addTerm( G_exGradPsi );
-        ip->addTerm(vc);
-        ip->addTerm(vm);
-        ip->addTerm(ve);
-        break;
-
-        case -2:
-        ip->addTerm( M_DxS + K_DxGradV );
-        ip->addTerm( M_qxtau + K_qxGradV );
-        ip->addTerm( MinvsqrtxK_DxGradV );
-        ip->addTerm( MinvsqrtxK_qxGradV );
-        ip->addTerm( F_cxGradV + C_cxdVdt );
-        ip->addTerm( F_mxGradV + C_mxdVdt );
-        ip->addTerm( F_exGradV + C_exdVdt );
-        ip->addTerm( G_mxGradPsi );
-        ip->addTerm( G_exGradPsi );
-        ip->addTerm(vc);
-        ip->addTerm(vm);
-        ip->addTerm(ve);
-        break;
-
-        case -3:
-        ip->addTerm( M_DxS );
-        ip->addTerm( M_qxtau );
-        ip->addTerm( K_DxGradV );
-        ip->addTerm( K_qxGradV );
-        ip->addTerm( invA0p_c*(G_cxGradPsi - F_cxGradV - C_cxdVdt) );
-        ip->addTerm( invA0p_e*(G_mxGradPsi - F_mxGradV - C_mxdVdt) );
-        ip->addTerm( invA0p_m*(G_exGradPsi - F_exGradV - C_exdVdt) );
-        ip->addTerm( vc );
-        ip->addTerm( vm );
-        ip->addTerm( ve );
-        // ip->addTerm( Msqrt_DxS );
-        // ip->addTerm( Msqrt_qxtau );
+        // case -1:
+        // ip->addTerm( M_DxS );
+        // ip->addTerm( M_qxtau );
         // ip->addTerm( K_DxGradV );
         // ip->addTerm( K_qxGradV );
         // ip->addTerm( F_cxGradV + C_cxdVdt );
@@ -924,154 +990,46 @@ int main(int argc, char *argv[]) {
         // ip->addTerm(vc);
         // ip->addTerm(vm);
         // ip->addTerm(ve);
-        break;
+        // break;
 
-        case -4:
-        ip->addTerm( M_DxS );
-        ip->addTerm( M_qxtau );
-        ip->addTerm( K_DxGradV );
-        ip->addTerm( K_qxGradV );
-        ip->addTerm( G_cxGradPsi - F_cxGradV - C_cxdVdt );
-        ip->addTerm( G_mxGradPsi - F_mxGradV - C_mxdVdt );
-        ip->addTerm( G_exGradPsi - F_exGradV - C_exdVdt );
-        ip->addTerm( vc );
-        ip->addTerm( vm );
-        ip->addTerm( ve );
-        break;
-
-        case -5:
-        ip->addTerm( M_DxS );
-        ip->addTerm( M_qxtau );
-        ip->addTerm( K_DxGradV );
-        ip->addTerm( K_qxGradV );
-        ip->addTerm( invA0p_c*(G_cxGradPsi - F_cxGradV - C_cxdVdt) );
-        ip->addTerm( invA0p_e*(G_mxGradPsi - F_mxGradV - C_mxdVdt) );
-        ip->addTerm( invA0p_m*(G_exGradPsi - F_exGradV - C_exdVdt) );
-        ip->addTerm( A0p_c*vc );
-        ip->addTerm( A0p_m*vm );
-        ip->addTerm( A0p_e*ve );
-        // ip->addTerm( K_DxGradV );
-        // ip->addTerm( K_qxGradV );
-        // ip->addTerm( Msqrt_DxS );
-        // ip->addTerm( Msqrt_qxtau );
+        // case -2:
+        // ip->addTerm( M_DxS + K_DxGradV );
+        // ip->addTerm( M_qxtau + K_qxGradV );
         // ip->addTerm( MinvsqrtxK_DxGradV );
         // ip->addTerm( MinvsqrtxK_qxGradV );
-        // ip->addTerm( G_cxGradPsi - F_cxGradV - C_cxdVdt );
-        // ip->addTerm( G_mxGradPsi - F_mxGradV - C_mxdVdt );
-        // ip->addTerm( G_exGradPsi - F_exGradV - C_exdVdt );
-        // ip->addTerm( vc );
-        // ip->addTerm( vm );
-        // ip->addTerm( ve );
-        break;
-
-        case -6:
-        // ip->addTerm( M_DxS );
-        // ip->addTerm( M_qxtau );
-        ip->addTerm( K_DxGradV );
-        ip->addTerm( K_qxGradV );
-        ip->addTerm( Msqrt_DxS );
-        ip->addTerm( Msqrt_qxtau );
-        ip->addTerm( MinvsqrtxK_DxGradV );
-        ip->addTerm( MinvsqrtxK_qxGradV );
-        ip->addTerm( G_cxGradPsi - F_cxGradV - C_cxdVdt );
-        ip->addTerm( G_mxGradPsi - F_mxGradV - C_mxdVdt );
-        ip->addTerm( G_exGradPsi - F_exGradV - C_exdVdt );
-        ip->addTerm( F_cxGradV + C_cxdVdt );
-        ip->addTerm( F_mxGradV + C_mxdVdt );
-        ip->addTerm( F_exGradV + C_exdVdt );
-        ip->addTerm( vc );
-        ip->addTerm( vm );
-        ip->addTerm( ve );
-        break;
-
-        case -7:
-        // ip->addTerm( M_DxS );
-        // ip->addTerm( M_qxtau );
-        ip->addTerm( K_DxGradV );
-        ip->addTerm( K_qxGradV );
-        ip->addTerm( Msqrt_DxS );
-        ip->addTerm( Msqrt_qxtau );
-        ip->addTerm( MinvsqrtxK_DxGradV );
-        ip->addTerm( MinvsqrtxK_qxGradV );
-        ip->addTerm( G_cxGradPsi );
-        ip->addTerm( G_mxGradPsi );
-        ip->addTerm( G_exGradPsi );
-        ip->addTerm( F_cxGradV + C_cxdVdt );
-        ip->addTerm( F_mxGradV + C_mxdVdt );
-        ip->addTerm( F_exGradV + C_exdVdt );
-        ip->addTerm( vc );
-        ip->addTerm( vm );
-        ip->addTerm( ve );
-        break;
-
-        // case -8:
-        // // ip->addTerm( M_DxS );
-        // // ip->addTerm( M_qxtau );
-        // ip->addTerm( 10*h_sqrt*K_DxGradV );
-        // ip->addTerm( 10*h_sqrt*K_qxGradV );
-        // ip->addTerm( Msqrt_DxS );
-        // ip->addTerm( Msqrt_qxtau );
-        // ip->addTerm( MinvsqrtxK_DxGradV );
-        // ip->addTerm( MinvsqrtxK_qxGradV );
-        // ip->addTerm( G_cxGradPsi - F_cxGradV - C_cxdVdt );
-        // ip->addTerm( G_mxGradPsi - F_mxGradV - C_mxdVdt );
-        // ip->addTerm( G_exGradPsi - F_exGradV - C_exdVdt );
         // ip->addTerm( F_cxGradV + C_cxdVdt );
         // ip->addTerm( F_mxGradV + C_mxdVdt );
         // ip->addTerm( F_exGradV + C_exdVdt );
-        // ip->addTerm( vc );
-        // ip->addTerm( vm );
-        // ip->addTerm( ve );
-        // break;
-
-        case -9:
-        ip->addTerm( M_DxS );
-        ip->addTerm( M_qxtau );
-        ip->addTerm( K_DxGradV );
-        ip->addTerm( K_qxGradV );
-        // ip->addTerm( Msqrt_DxS );
-        // ip->addTerm( Msqrt_qxtau );
-        // ip->addTerm( MinvsqrtxK_DxGradV );
-        // ip->addTerm( MinvsqrtxK_qxGradV );
-        ip->addTerm( invA0p_c*(G_cxGradPsi - F_cxGradV - C_cxdVdt) );
-        ip->addTerm( invA0p_m*(G_mxGradPsi - F_mxGradV - C_mxdVdt) );
-        ip->addTerm( invA0p_e*(G_exGradPsi - F_exGradV - C_exdVdt) );
-        ip->addTerm( invA0p_c*(F_cxGradV + C_cxdVdt) );
-        ip->addTerm( invA0p_m*(F_mxGradV + C_mxdVdt) );
-        ip->addTerm( invA0p_e*(F_exGradV + C_exdVdt) );
-        ip->addTerm( A0p_c*vc );
-        ip->addTerm( A0p_m*vm );
-        ip->addTerm( A0p_c*ve );
-        break;
-
-        // case -2:
-        // ip->addTerm( M_DxS );
-        // ip->addTerm( M_qxtau );
-        // ip->addTerm( K_DxGradV );
-        // ip->addTerm( K_qxGradV );
-        // ip->addTerm( invA0p_c*(F_cxGradV + C_cxdVdt) );
-        // ip->addTerm( invA0p_m*(F_mxGradV + C_mxdVdt) );
-        // ip->addTerm( invA0p_e*(F_exGradV + C_exdVdt) );
-        // ip->addTerm( invA0p_m*G_mxGradPsi );
-        // ip->addTerm( invA0p_e*G_exGradPsi );
-        // ip->addTerm( A0p_c*(vc) );
-        // ip->addTerm( A0p_m*(vm) );
-        // ip->addTerm( A0p_e*(ve) );
+        // ip->addTerm( G_mxGradPsi );
+        // ip->addTerm( G_exGradPsi );
+        // ip->addTerm(vc);
+        // ip->addTerm(vm);
+        // ip->addTerm(ve);
         // break;
 
         // case -3:
-        // ip->addTerm( K_DxGradV );
-        // ip->addTerm( K_qxGradV );
-        // ip->addTerm( G_cxGradPsi - F_cxGradV - C_cxdVdt );
-        // ip->addTerm( G_mxGradPsi - F_mxGradV - C_mxdVdt );
-        // ip->addTerm( G_exGradPsi - F_exGradV - C_exdVdt );
         // ip->addTerm( M_DxS );
         // ip->addTerm( M_qxtau );
-        // ip->addTerm( G_mxGradPsi );
-        // ip->addTerm( G_exGradPsi );
+        // ip->addTerm( K_DxGradV );
+        // ip->addTerm( K_qxGradV );
+        // ip->addTerm( invA0p_c*(G_cxGradPsi - F_cxGradV - C_cxdVdt) );
+        // ip->addTerm( invA0p_e*(G_mxGradPsi - F_mxGradV - C_mxdVdt) );
+        // ip->addTerm( invA0p_m*(G_exGradPsi - F_exGradV - C_exdVdt) );
         // ip->addTerm( vc );
         // ip->addTerm( vm );
         // ip->addTerm( ve );
+        // // ip->addTerm( Msqrt_DxS );
+        // // ip->addTerm( Msqrt_qxtau );
+        // // ip->addTerm( K_DxGradV );
+        // // ip->addTerm( K_qxGradV );
+        // // ip->addTerm( F_cxGradV + C_cxdVdt );
+        // // ip->addTerm( F_mxGradV + C_mxdVdt );
+        // // ip->addTerm( F_exGradV + C_exdVdt );
+        // // ip->addTerm( G_mxGradPsi );
+        // // ip->addTerm( G_exGradPsi );
+        // // ip->addTerm(vc);
+        // // ip->addTerm(vm);
+        // // ip->addTerm(ve);
         // break;
 
         // case -4:
@@ -1079,540 +1037,702 @@ int main(int argc, char *argv[]) {
         // ip->addTerm( M_qxtau );
         // ip->addTerm( K_DxGradV );
         // ip->addTerm( K_qxGradV );
-        // ip->addTerm( invA0p_c*(G_cxGradPsi - F_cxGradV - C_cxdVdt) );
-        // ip->addTerm( invA0p_m*(G_cxGradPsi - F_mxGradV - C_mxdVdt) );
-        // ip->addTerm( invA0p_e*(G_cxGradPsi - F_exGradV - C_exdVdt) );
-        // ip->addTerm( invA0p_m*G_mxGradPsi );
-        // ip->addTerm( invA0p_e*G_exGradPsi );
-        // ip->addTerm( A0p_c*(vc) );
-        // ip->addTerm( A0p_m*(vm) );
-        // ip->addTerm( A0p_e*(ve) );
+        // ip->addTerm( G_cxGradPsi - F_cxGradV - C_cxdVdt );
+        // ip->addTerm( G_mxGradPsi - F_mxGradV - C_mxdVdt );
+        // ip->addTerm( G_exGradPsi - F_exGradV - C_exdVdt );
+        // ip->addTerm( vc );
+        // ip->addTerm( vm );
+        // ip->addTerm( ve );
         // break;
 
         // case -5:
+        // ip->addTerm( M_DxS );
+        // ip->addTerm( M_qxtau );
+        // ip->addTerm( K_DxGradV );
+        // ip->addTerm( K_qxGradV );
+        // ip->addTerm( invA0p_c*(G_cxGradPsi - F_cxGradV - C_cxdVdt) );
+        // ip->addTerm( invA0p_e*(G_mxGradPsi - F_mxGradV - C_mxdVdt) );
+        // ip->addTerm( invA0p_m*(G_exGradPsi - F_exGradV - C_exdVdt) );
+        // ip->addTerm( A0p_c*vc );
+        // ip->addTerm( A0p_m*vm );
+        // ip->addTerm( A0p_e*ve );
+        // // ip->addTerm( K_DxGradV );
+        // // ip->addTerm( K_qxGradV );
+        // // ip->addTerm( Msqrt_DxS );
+        // // ip->addTerm( Msqrt_qxtau );
+        // // ip->addTerm( MinvsqrtxK_DxGradV );
+        // // ip->addTerm( MinvsqrtxK_qxGradV );
+        // // ip->addTerm( G_cxGradPsi - F_cxGradV - C_cxdVdt );
+        // // ip->addTerm( G_mxGradPsi - F_mxGradV - C_mxdVdt );
+        // // ip->addTerm( G_exGradPsi - F_exGradV - C_exdVdt );
+        // // ip->addTerm( vc );
+        // // ip->addTerm( vm );
+        // // ip->addTerm( ve );
+        // break;
+
+        // case -6:
+        // // ip->addTerm( M_DxS );
+        // // ip->addTerm( M_qxtau );
+        // ip->addTerm( K_DxGradV );
+        // ip->addTerm( K_qxGradV );
         // ip->addTerm( Msqrt_DxS );
         // ip->addTerm( Msqrt_qxtau );
         // ip->addTerm( MinvsqrtxK_DxGradV );
         // ip->addTerm( MinvsqrtxK_qxGradV );
+        // ip->addTerm( G_cxGradPsi - F_cxGradV - C_cxdVdt );
+        // ip->addTerm( G_mxGradPsi - F_mxGradV - C_mxdVdt );
+        // ip->addTerm( G_exGradPsi - F_exGradV - C_exdVdt );
         // ip->addTerm( F_cxGradV + C_cxdVdt );
         // ip->addTerm( F_mxGradV + C_mxdVdt );
         // ip->addTerm( F_exGradV + C_exdVdt );
+        // ip->addTerm( vc );
+        // ip->addTerm( vm );
+        // ip->addTerm( ve );
+        // break;
+
+        // case -7:
+        // // ip->addTerm( M_DxS );
+        // // ip->addTerm( M_qxtau );
+        // ip->addTerm( K_DxGradV );
+        // ip->addTerm( K_qxGradV );
+        // ip->addTerm( Msqrt_DxS );
+        // ip->addTerm( Msqrt_qxtau );
+        // ip->addTerm( MinvsqrtxK_DxGradV );
+        // ip->addTerm( MinvsqrtxK_qxGradV );
+        // ip->addTerm( G_cxGradPsi );
         // ip->addTerm( G_mxGradPsi );
         // ip->addTerm( G_exGradPsi );
+        // ip->addTerm( F_cxGradV + C_cxdVdt );
+        // ip->addTerm( F_mxGradV + C_mxdVdt );
+        // ip->addTerm( F_exGradV + C_exdVdt );
+        // ip->addTerm( vc );
+        // ip->addTerm( vm );
+        // ip->addTerm( ve );
+        // break;
+
+        // // case -8:
+        // // // ip->addTerm( M_DxS );
+        // // // ip->addTerm( M_qxtau );
+        // // ip->addTerm( 10*h_sqrt*K_DxGradV );
+        // // ip->addTerm( 10*h_sqrt*K_qxGradV );
+        // // ip->addTerm( Msqrt_DxS );
+        // // ip->addTerm( Msqrt_qxtau );
+        // // ip->addTerm( MinvsqrtxK_DxGradV );
+        // // ip->addTerm( MinvsqrtxK_qxGradV );
+        // // ip->addTerm( G_cxGradPsi - F_cxGradV - C_cxdVdt );
+        // // ip->addTerm( G_mxGradPsi - F_mxGradV - C_mxdVdt );
+        // // ip->addTerm( G_exGradPsi - F_exGradV - C_exdVdt );
+        // // ip->addTerm( F_cxGradV + C_cxdVdt );
+        // // ip->addTerm( F_mxGradV + C_mxdVdt );
+        // // ip->addTerm( F_exGradV + C_exdVdt );
+        // // ip->addTerm( vc );
+        // // ip->addTerm( vm );
+        // // ip->addTerm( ve );
+        // // break;
+
+        // case -9:
+        // ip->addTerm( M_DxS );
+        // ip->addTerm( M_qxtau );
+        // ip->addTerm( K_DxGradV );
+        // ip->addTerm( K_qxGradV );
+        // // ip->addTerm( Msqrt_DxS );
+        // // ip->addTerm( Msqrt_qxtau );
+        // // ip->addTerm( MinvsqrtxK_DxGradV );
+        // // ip->addTerm( MinvsqrtxK_qxGradV );
+        // ip->addTerm( invA0p_c*(G_cxGradPsi - F_cxGradV - C_cxdVdt) );
+        // ip->addTerm( invA0p_m*(G_mxGradPsi - F_mxGradV - C_mxdVdt) );
+        // ip->addTerm( invA0p_e*(G_exGradPsi - F_exGradV - C_exdVdt) );
+        // ip->addTerm( invA0p_c*(F_cxGradV + C_cxdVdt) );
+        // ip->addTerm( invA0p_m*(F_mxGradV + C_mxdVdt) );
+        // ip->addTerm( invA0p_e*(F_exGradV + C_exdVdt) );
+        // ip->addTerm( A0p_c*vc );
+        // ip->addTerm( A0p_m*vm );
+        // ip->addTerm( A0p_c*ve );
+        // break;
+
+        // // case -2:
+        // // ip->addTerm( M_DxS );
+        // // ip->addTerm( M_qxtau );
+        // // ip->addTerm( K_DxGradV );
+        // // ip->addTerm( K_qxGradV );
+        // // ip->addTerm( invA0p_c*(F_cxGradV + C_cxdVdt) );
+        // // ip->addTerm( invA0p_m*(F_mxGradV + C_mxdVdt) );
+        // // ip->addTerm( invA0p_e*(F_exGradV + C_exdVdt) );
+        // // ip->addTerm( invA0p_m*G_mxGradPsi );
+        // // ip->addTerm( invA0p_e*G_exGradPsi );
+        // // ip->addTerm( A0p_c*(vc) );
+        // // ip->addTerm( A0p_m*(vm) );
+        // // ip->addTerm( A0p_e*(ve) );
+        // // break;
+
+        // // case -3:
+        // // ip->addTerm( K_DxGradV );
+        // // ip->addTerm( K_qxGradV );
+        // // ip->addTerm( G_cxGradPsi - F_cxGradV - C_cxdVdt );
+        // // ip->addTerm( G_mxGradPsi - F_mxGradV - C_mxdVdt );
+        // // ip->addTerm( G_exGradPsi - F_exGradV - C_exdVdt );
+        // // ip->addTerm( M_DxS );
+        // // ip->addTerm( M_qxtau );
+        // // ip->addTerm( G_mxGradPsi );
+        // // ip->addTerm( G_exGradPsi );
+        // // ip->addTerm( vc );
+        // // ip->addTerm( vm );
+        // // ip->addTerm( ve );
+        // // break;
+
+        // // case -4:
+        // // ip->addTerm( M_DxS );
+        // // ip->addTerm( M_qxtau );
+        // // ip->addTerm( K_DxGradV );
+        // // ip->addTerm( K_qxGradV );
+        // // ip->addTerm( invA0p_c*(G_cxGradPsi - F_cxGradV - C_cxdVdt) );
+        // // ip->addTerm( invA0p_m*(G_cxGradPsi - F_mxGradV - C_mxdVdt) );
+        // // ip->addTerm( invA0p_e*(G_cxGradPsi - F_exGradV - C_exdVdt) );
+        // // ip->addTerm( invA0p_m*G_mxGradPsi );
+        // // ip->addTerm( invA0p_e*G_exGradPsi );
+        // // ip->addTerm( A0p_c*(vc) );
+        // // ip->addTerm( A0p_m*(vm) );
+        // // ip->addTerm( A0p_e*(ve) );
+        // // break;
+
+        // // case -5:
+        // // ip->addTerm( Msqrt_DxS );
+        // // ip->addTerm( Msqrt_qxtau );
+        // // ip->addTerm( MinvsqrtxK_DxGradV );
+        // // ip->addTerm( MinvsqrtxK_qxGradV );
+        // // ip->addTerm( F_cxGradV + C_cxdVdt );
+        // // ip->addTerm( F_mxGradV + C_mxdVdt );
+        // // ip->addTerm( F_exGradV + C_exdVdt );
+        // // ip->addTerm( G_mxGradPsi );
+        // // ip->addTerm( G_exGradPsi );
+        // // ip->addTerm(vc);
+        // // ip->addTerm(vm);
+        // // ip->addTerm(ve);
+        // // break;
+
+        // Automatic graph norm
+        case 0:
+        ips[slab] = bf->graphNorm();
+        break;
+
+        // // Manual Graph Norm
+        // case 1:
+        // ip->addTerm( M_DxS + K_DxGradV );
+        // ip->addTerm( M_qxtau + K_qxGradV );
+        // ip->addTerm( G_cxGradPsi - F_cxGradV - C_cxdVdt );
+        // ip->addTerm( G_mxGradPsi - F_mxGradV - C_mxdVdt );
+        // ip->addTerm( G_exGradPsi - F_exGradV - C_exdVdt );
         // ip->addTerm(vc);
         // ip->addTerm(vm);
         // ip->addTerm(ve);
         // break;
 
-        // Automatic graph norm
-        case 0:
-        ips[slab] = bf->graphNorm();
-        break;
-
         // Manual Graph Norm
         case 1:
-        ip->addTerm( M_DxS + K_DxGradV );
-        ip->addTerm( M_qxtau + K_qxGradV );
-        ip->addTerm( G_cxGradPsi - F_cxGradV - C_cxdVdt );
-        ip->addTerm( G_mxGradPsi - F_mxGradV - C_mxdVdt );
-        ip->addTerm( G_exGradPsi - F_exGradV - C_exdVdt );
-        ip->addTerm(vc);
-        ip->addTerm(vm);
-        ip->addTerm(ve);
+        ip->addTerm( adj_MD + adj_KD );
+        ip->addTerm( adj_Mq + adj_Kq );
+        ip->addTerm( adj_Gc - adj_Fc - adj_Cc );
+        ip->addTerm( adj_Gm - adj_Fm - adj_Cm );
+        ip->addTerm( adj_Ge - adj_Fe - adj_Ce );
+        ip->addTerm( vc );
+        ip->addTerm( vm );
+        ip->addTerm( ve );
+        // ip->addTerm( S );
+        // ip->addTerm( tau );
         break;
 
-        // Entropy Scaled Manual Graph Norm
-        case 2:
-        ip->addTerm( M_DxS + K_DxGradV );
-        ip->addTerm( (M_qxtau + K_qxGradV) );
-        ip->addTerm( invA0p_c*(G_cxGradPsi - F_cxGradV - C_cxdVdt) );
-        ip->addTerm( invA0p_m*(G_mxGradPsi - F_mxGradV - C_mxdVdt) );
-        ip->addTerm( invA0p_e*(G_exGradPsi - F_exGradV - C_exdVdt) );
+        // // Entropy Scaled Manual Graph Norm
+        // case 2:
+        // ip->addTerm( M_DxS + K_DxGradV );
+        // ip->addTerm( (M_qxtau + K_qxGradV) );
+        // ip->addTerm( invA0p_c*(G_cxGradPsi - F_cxGradV - C_cxdVdt) );
+        // ip->addTerm( invA0p_m*(G_mxGradPsi - F_mxGradV - C_mxdVdt) );
+        // ip->addTerm( invA0p_e*(G_exGradPsi - F_exGradV - C_exdVdt) );
+        // // ip->addTerm( vc );
+        // // ip->addTerm( vm );
+        // // ip->addTerm( ve );
+        // ip->addTerm( A0p_c*vc );
+        // ip->addTerm( A0p_m*vm );
+        // ip->addTerm( A0p_e*ve );
+        // break;
+
+        // // Original Robust Norm
+        // case 3:
+        // ip->addTerm( Msqrt_DxS );
+        // ip->addTerm( MinvsqrtxK_DxGradV );
+        // ip->addTerm( Msqrt_qxtau );
+        // ip->addTerm( MinvsqrtxK_qxGradV );
+        // ip->addTerm( G_cxGradPsi - F_cxGradV - C_cxdVdt );
+        // ip->addTerm( G_mxGradPsi - F_mxGradV - C_mxdVdt );
+        // ip->addTerm( G_exGradPsi - F_exGradV - C_exdVdt );
+        // ip->addTerm( F_cxGradV );
+        // ip->addTerm( F_mxGradV );
+        // ip->addTerm( F_exGradV );
         // ip->addTerm( vc );
         // ip->addTerm( vm );
         // ip->addTerm( ve );
-        ip->addTerm( A0p_c*vc );
-        ip->addTerm( A0p_m*vm );
-        ip->addTerm( A0p_e*ve );
-        break;
+        // break;
 
-        // Original Robust Norm
-        case 3:
-        ip->addTerm( Msqrt_DxS );
-        ip->addTerm( MinvsqrtxK_DxGradV );
-        ip->addTerm( Msqrt_qxtau );
-        ip->addTerm( MinvsqrtxK_qxGradV );
-        ip->addTerm( G_cxGradPsi - F_cxGradV - C_cxdVdt );
-        ip->addTerm( G_mxGradPsi - F_mxGradV - C_mxdVdt );
-        ip->addTerm( G_exGradPsi - F_exGradV - C_exdVdt );
-        ip->addTerm( F_cxGradV );
-        ip->addTerm( F_mxGradV );
-        ip->addTerm( F_exGradV );
-        ip->addTerm( vc );
-        ip->addTerm( vm );
-        ip->addTerm( ve );
-        break;
+        // // Entropy Scaled Robust Norm
+        // case 4:
+        // ip->addTerm( Msqrt_DxS );
+        // ip->addTerm( MinvsqrtxK_DxGradV );
+        // ip->addTerm( Msqrt_qxtau );
+        // ip->addTerm( MinvsqrtxK_qxGradV );
+        // ip->addTerm( invA0p_c*(G_cxGradPsi - F_cxGradV - C_cxdVdt) );
+        // ip->addTerm( invA0p_m*(G_mxGradPsi - F_mxGradV - C_mxdVdt) );
+        // ip->addTerm( invA0p_e*(G_exGradPsi - F_exGradV - C_exdVdt) );
+        // ip->addTerm( invA0p_c*F_cxGradV );
+        // ip->addTerm( invA0p_m*F_mxGradV );
+        // ip->addTerm( invA0p_e*F_exGradV );
+        // ip->addTerm( A0p_c*vc);
+        // ip->addTerm( A0p_m*vm);
+        // ip->addTerm( A0p_e*ve);
+        // break;
 
-        // Entropy Scaled Robust Norm
-        case 4:
-        ip->addTerm( Msqrt_DxS );
-        ip->addTerm( MinvsqrtxK_DxGradV );
-        ip->addTerm( Msqrt_qxtau );
-        ip->addTerm( MinvsqrtxK_qxGradV );
-        ip->addTerm( invA0p_c*(G_cxGradPsi - F_cxGradV - C_cxdVdt) );
-        ip->addTerm( invA0p_m*(G_mxGradPsi - F_mxGradV - C_mxdVdt) );
-        ip->addTerm( invA0p_e*(G_exGradPsi - F_exGradV - C_exdVdt) );
-        ip->addTerm( invA0p_c*F_cxGradV );
-        ip->addTerm( invA0p_m*F_mxGradV );
-        ip->addTerm( invA0p_e*F_exGradV );
-        ip->addTerm( A0p_c*vc);
-        ip->addTerm( A0p_m*vm);
-        ip->addTerm( A0p_e*ve);
-        break;
-
-        // Robust Norm 2
-        case 5:
-        ip->addTerm( Msqrt_DxS );
-        ip->addTerm( MinvsqrtxK_DxGradV );
-        ip->addTerm( Msqrt_qxtau );
-        ip->addTerm( MinvsqrtxK_qxGradV );
-        ip->addTerm( G_cxGradPsi - F_cxGradV - C_cxdVdt );
-        ip->addTerm( G_mxGradPsi - F_mxGradV - C_mxdVdt );
-        ip->addTerm( G_exGradPsi - F_exGradV - C_exdVdt );
-        ip->addTerm( F_cxGradV + C_cxdVdt );
-        ip->addTerm( F_mxGradV + C_mxdVdt );
-        ip->addTerm( F_exGradV + C_exdVdt );
-        ip->addTerm(vc);
-        ip->addTerm(vm);
-        ip->addTerm(ve);
-        break;
-
-        // Entropy Scaled Robust Norm 2
-        case 6:
-        ip->addTerm( Msqrt_DxS );
-        ip->addTerm( MinvsqrtxK_DxGradV );
-        ip->addTerm( Msqrt_qxtau );
-        ip->addTerm( MinvsqrtxK_qxGradV );
-        ip->addTerm( invA0p_c*(G_cxGradPsi - F_cxGradV - C_cxdVdt) );
-        ip->addTerm( invA0p_m*(G_mxGradPsi - F_mxGradV - C_mxdVdt) );
-        ip->addTerm( invA0p_e*(G_exGradPsi - F_exGradV - C_exdVdt) );
-        ip->addTerm( invA0p_c*(F_cxGradV + C_cxdVdt) );
-        ip->addTerm( invA0p_m*(F_mxGradV + C_mxdVdt) );
-        ip->addTerm( invA0p_e*(F_exGradV + C_exdVdt) );
+        // // Robust Norm 2
+        // case 5:
+        // ip->addTerm( Msqrt_DxS );
+        // ip->addTerm( MinvsqrtxK_DxGradV );
+        // ip->addTerm( Msqrt_qxtau );
+        // ip->addTerm( MinvsqrtxK_qxGradV );
+        // ip->addTerm( G_cxGradPsi - F_cxGradV - C_cxdVdt );
+        // ip->addTerm( G_mxGradPsi - F_mxGradV - C_mxdVdt );
+        // ip->addTerm( G_exGradPsi - F_exGradV - C_exdVdt );
+        // ip->addTerm( F_cxGradV + C_cxdVdt );
+        // ip->addTerm( F_mxGradV + C_mxdVdt );
+        // ip->addTerm( F_exGradV + C_exdVdt );
         // ip->addTerm(vc);
         // ip->addTerm(vm);
         // ip->addTerm(ve);
-        ip->addTerm( A0p_c*vc);
-        ip->addTerm( A0p_m*vm);
-        ip->addTerm( A0p_e*ve);
-        break;
+        // break;
 
-        // Original Robust Norm 3
-        case 7:
-        ip->addTerm( Msqrt_DxS );
-        ip->addTerm( MinvsqrtxK_DxGradV );
-        ip->addTerm( Msqrt_qxtau );
-        ip->addTerm( MinvsqrtxK_qxGradV );
-        ip->addTerm( G_cxGradPsi );
-        ip->addTerm( G_mxGradPsi );
-        ip->addTerm( G_exGradPsi );
-        ip->addTerm( F_cxGradV + C_cxdVdt );
-        ip->addTerm( F_mxGradV + C_mxdVdt );
-        ip->addTerm( F_exGradV + C_exdVdt );
-        ip->addTerm(vc);
-        ip->addTerm(vm);
-        ip->addTerm(ve);
-        break;
+        // // Entropy Scaled Robust Norm 2
+        // case 6:
+        // ip->addTerm( Msqrt_DxS );
+        // ip->addTerm( MinvsqrtxK_DxGradV );
+        // ip->addTerm( Msqrt_qxtau );
+        // ip->addTerm( MinvsqrtxK_qxGradV );
+        // ip->addTerm( invA0p_c*(G_cxGradPsi - F_cxGradV - C_cxdVdt) );
+        // ip->addTerm( invA0p_m*(G_mxGradPsi - F_mxGradV - C_mxdVdt) );
+        // ip->addTerm( invA0p_e*(G_exGradPsi - F_exGradV - C_exdVdt) );
+        // ip->addTerm( invA0p_c*(F_cxGradV + C_cxdVdt) );
+        // ip->addTerm( invA0p_m*(F_mxGradV + C_mxdVdt) );
+        // ip->addTerm( invA0p_e*(F_exGradV + C_exdVdt) );
+        // // ip->addTerm(vc);
+        // // ip->addTerm(vm);
+        // // ip->addTerm(ve);
+        // ip->addTerm( A0p_c*vc);
+        // ip->addTerm( A0p_m*vm);
+        // ip->addTerm( A0p_e*ve);
+        // break;
 
-        // Entropy Scaled Robust Norm 3
-        case 8:
-        ip->addTerm( Msqrt_DxS );
-        ip->addTerm( MinvsqrtxK_DxGradV );
-        ip->addTerm( Msqrt_qxtau );
-        ip->addTerm( MinvsqrtxK_qxGradV );
-        ip->addTerm( invA0p_c*G_cxGradPsi );
-        ip->addTerm( invA0p_m*G_mxGradPsi );
-        ip->addTerm( invA0p_e*G_exGradPsi );
-        ip->addTerm( invA0p_c*(F_cxGradV + C_cxdVdt) );
-        ip->addTerm( invA0p_m*(F_mxGradV + C_mxdVdt) );
-        ip->addTerm( invA0p_e*(F_exGradV + C_exdVdt) );
-        ip->addTerm( A0p_c*vc);
-        ip->addTerm( A0p_m*vm);
-        ip->addTerm( A0p_e*ve);
-        break;
-
-        // Original Robust Norm 4
-        case 9:
-        ip->addTerm( Msqrt_DxS + MinvsqrtxK_DxGradV );
-        ip->addTerm( Msqrt_qxtau + MinvsqrtxK_qxGradV );
-        ip->addTerm( G_cxGradPsi - F_cxGradV - C_cxdVdt );
-        ip->addTerm( G_mxGradPsi - F_mxGradV - C_mxdVdt );
-        ip->addTerm( G_exGradPsi - F_exGradV - C_exdVdt );
-        ip->addTerm( F_cxGradV );
-        ip->addTerm( F_mxGradV );
-        ip->addTerm( F_exGradV );
-        ip->addTerm(vc);
-        ip->addTerm(vm);
-        ip->addTerm(ve);
-        break;
-
-        // Entropy Scaled Robust Norm 4
-        case 10:
-        ip->addTerm( Msqrt_DxS + MinvsqrtxK_DxGradV );
-        ip->addTerm( Msqrt_qxtau + MinvsqrtxK_qxGradV );
-        ip->addTerm( invA0p_c*(G_cxGradPsi - F_cxGradV - C_cxdVdt) );
-        ip->addTerm( invA0p_m*(G_mxGradPsi - F_mxGradV - C_mxdVdt) );
-        ip->addTerm( invA0p_e*(G_exGradPsi - F_exGradV - C_exdVdt) );
-        ip->addTerm( invA0p_c*F_cxGradV );
-        ip->addTerm( invA0p_m*F_mxGradV );
-        ip->addTerm( invA0p_e*F_exGradV );
-        ip->addTerm( A0p_c*vc);
-        ip->addTerm( A0p_m*vm);
-        ip->addTerm( A0p_e*ve);
-        break;
-
-        // Original Robust Norm 5
-        case 11:
-        ip->addTerm( Msqrt_DxS + MinvsqrtxK_DxGradV );
-        ip->addTerm( Msqrt_qxtau + MinvsqrtxK_qxGradV );
-        ip->addTerm( G_cxGradPsi - F_cxGradV - C_cxdVdt );
-        ip->addTerm( G_mxGradPsi - F_mxGradV - C_mxdVdt );
-        ip->addTerm( G_exGradPsi - F_exGradV - C_exdVdt );
-        ip->addTerm(vc);
-        ip->addTerm(vm);
-        ip->addTerm(ve);
-        break;
-
-        // Entropy Scaled Robust Norm 5
-        case 12:
-        ip->addTerm( Msqrt_DxS + MinvsqrtxK_DxGradV );
-        ip->addTerm( Msqrt_qxtau + MinvsqrtxK_qxGradV );
-        ip->addTerm( invA0p_c*(G_cxGradPsi - F_cxGradV - C_cxdVdt) );
-        ip->addTerm( invA0p_m*(G_mxGradPsi - F_mxGradV - C_mxdVdt) );
-        ip->addTerm( invA0p_e*(G_exGradPsi - F_exGradV - C_exdVdt) );
-        ip->addTerm( A0p_c*vc);
-        ip->addTerm( A0p_m*vm);
-        ip->addTerm( A0p_e*ve);
-        break;
-
-        // Original Robust Norm 6
-        case 13:
-        ip->addTerm( Msqrt_DxS + MinvsqrtxK_DxGradV );
-        ip->addTerm( Msqrt_qxtau + MinvsqrtxK_qxGradV );
-        ip->addTerm( G_cxGradPsi - F_cxGradV - C_cxdVdt );
-        ip->addTerm( G_mxGradPsi - F_mxGradV - C_mxdVdt );
-        ip->addTerm( G_exGradPsi - F_exGradV - C_exdVdt );
-        ip->addTerm( F_cxGradV + C_cxdVdt );
-        ip->addTerm( F_mxGradV + C_mxdVdt );
-        ip->addTerm( F_exGradV + C_exdVdt );
-        ip->addTerm(vc);
-        ip->addTerm(vm);
-        ip->addTerm(ve);
-        break;
-
-        // Entropy Scaled Robust Norm 6
-        case 14:
-        ip->addTerm( Msqrt_DxS + MinvsqrtxK_DxGradV );
-        ip->addTerm( Msqrt_qxtau + MinvsqrtxK_qxGradV );
-        ip->addTerm( invA0p_c*(G_cxGradPsi - F_cxGradV - C_cxdVdt) );
-        ip->addTerm( invA0p_m*(G_mxGradPsi - F_mxGradV - C_mxdVdt) );
-        ip->addTerm( invA0p_e*(G_exGradPsi - F_exGradV - C_exdVdt) );
-        ip->addTerm( invA0p_c*(F_cxGradV + C_cxdVdt) );
-        ip->addTerm( invA0p_m*(F_mxGradV + C_mxdVdt) );
-        ip->addTerm( invA0p_e*(F_exGradV + C_exdVdt) );
-        ip->addTerm( A0p_c*vc);
-        ip->addTerm( A0p_m*vm);
-        ip->addTerm( A0p_e*ve);
-        break;
-
-        // Robust Norm 7
-        case 15:
-        ip->addTerm( Msqrt_DxS );
-        ip->addTerm( MinvsqrtxK_DxGradV );
-        ip->addTerm( Msqrt_qxtau );
-        ip->addTerm( MinvsqrtxK_qxGradV );
-        ip->addTerm( G_cxGradPsi - F_cxGradV - C_cxdVdt );
-        ip->addTerm( G_mxGradPsi - F_mxGradV - C_mxdVdt );
-        ip->addTerm( G_exGradPsi - F_exGradV - C_exdVdt );
-        ip->addTerm( F_cxGradV + C_cxdVdt );
-        ip->addTerm( F_mxGradV + C_mxdVdt );
-        ip->addTerm( F_exGradV + C_exdVdt );
-        // ip->addTerm( 100*mu*vc->dx() );
-        // ip->addTerm( 100*mu*vm->dx() );
-        // ip->addTerm( 100*mu*ve->dx() );
-        // ip->addTerm( 100*mu*S->dx() );
-        // ip->addTerm( 100*mu*tau->dx() );
-        // ip->addTerm( 100*mu*vc->dy() );
-        // ip->addTerm( 100*mu*vm->dy() );
-        // ip->addTerm( 100*mu*ve->dy() );
-        // ip->addTerm( 100*mu*S->dy() );
-        // ip->addTerm( 100*mu*tau->dy() );
-        ip->addTerm( vc );
-        ip->addTerm( vm );
-        ip->addTerm( ve );
-        break;
-
-        // Entropy Scaled Robust Norm 7
-        case 16:
-        ip->addTerm( Msqrt_DxS );
-        ip->addTerm( MinvsqrtxK_DxGradV );
-        ip->addTerm( Msqrt_qxtau );
-        ip->addTerm( MinvsqrtxK_qxGradV );
-        ip->addTerm( invA0p_c*(G_cxGradPsi - F_cxGradV - C_cxdVdt) );
-        ip->addTerm( invA0p_m*(G_mxGradPsi - F_mxGradV - C_mxdVdt) );
-        ip->addTerm( invA0p_e*(G_exGradPsi - F_exGradV - C_exdVdt) );
-        ip->addTerm( invA0p_c*(F_cxGradV + C_cxdVdt) );
-        ip->addTerm( invA0p_m*(F_mxGradV + C_mxdVdt) );
-        ip->addTerm( invA0p_e*(F_exGradV + C_exdVdt) );
+        // // Original Robust Norm 3
+        // case 7:
+        // ip->addTerm( Msqrt_DxS );
+        // ip->addTerm( MinvsqrtxK_DxGradV );
+        // ip->addTerm( Msqrt_qxtau );
+        // ip->addTerm( MinvsqrtxK_qxGradV );
+        // ip->addTerm( G_cxGradPsi );
+        // ip->addTerm( G_mxGradPsi );
+        // ip->addTerm( G_exGradPsi );
+        // ip->addTerm( F_cxGradV + C_cxdVdt );
+        // ip->addTerm( F_mxGradV + C_mxdVdt );
+        // ip->addTerm( F_exGradV + C_exdVdt );
         // ip->addTerm(vc);
         // ip->addTerm(vm);
         // ip->addTerm(ve);
-        ip->addTerm( mu*A0p_c*vc->dx() );
-        ip->addTerm( mu*A0p_m*vm->dx() );
-        ip->addTerm( mu*A0p_e*ve->dx() );
-        ip->addTerm( A0p_c*vc);
-        ip->addTerm( A0p_m*vm);
-        ip->addTerm( A0p_e*ve);
-        break;
+        // break;
+
+        // // Entropy Scaled Robust Norm 3
+        // case 8:
+        // ip->addTerm( Msqrt_DxS );
+        // ip->addTerm( MinvsqrtxK_DxGradV );
+        // ip->addTerm( Msqrt_qxtau );
+        // ip->addTerm( MinvsqrtxK_qxGradV );
+        // ip->addTerm( invA0p_c*G_cxGradPsi );
+        // ip->addTerm( invA0p_m*G_mxGradPsi );
+        // ip->addTerm( invA0p_e*G_exGradPsi );
+        // ip->addTerm( invA0p_c*(F_cxGradV + C_cxdVdt) );
+        // ip->addTerm( invA0p_m*(F_mxGradV + C_mxdVdt) );
+        // ip->addTerm( invA0p_e*(F_exGradV + C_exdVdt) );
+        // ip->addTerm( A0p_c*vc);
+        // ip->addTerm( A0p_m*vm);
+        // ip->addTerm( A0p_e*ve);
+        // break;
+
+        // // Original Robust Norm 4
+        // case 9:
+        // ip->addTerm( Msqrt_DxS + MinvsqrtxK_DxGradV );
+        // ip->addTerm( Msqrt_qxtau + MinvsqrtxK_qxGradV );
+        // ip->addTerm( G_cxGradPsi - F_cxGradV - C_cxdVdt );
+        // ip->addTerm( G_mxGradPsi - F_mxGradV - C_mxdVdt );
+        // ip->addTerm( G_exGradPsi - F_exGradV - C_exdVdt );
+        // ip->addTerm( F_cxGradV );
+        // ip->addTerm( F_mxGradV );
+        // ip->addTerm( F_exGradV );
+        // ip->addTerm(vc);
+        // ip->addTerm(vm);
+        // ip->addTerm(ve);
+        // break;
+
+        // // Entropy Scaled Robust Norm 4
+        // case 10:
+        // ip->addTerm( Msqrt_DxS + MinvsqrtxK_DxGradV );
+        // ip->addTerm( Msqrt_qxtau + MinvsqrtxK_qxGradV );
+        // ip->addTerm( invA0p_c*(G_cxGradPsi - F_cxGradV - C_cxdVdt) );
+        // ip->addTerm( invA0p_m*(G_mxGradPsi - F_mxGradV - C_mxdVdt) );
+        // ip->addTerm( invA0p_e*(G_exGradPsi - F_exGradV - C_exdVdt) );
+        // ip->addTerm( invA0p_c*F_cxGradV );
+        // ip->addTerm( invA0p_m*F_mxGradV );
+        // ip->addTerm( invA0p_e*F_exGradV );
+        // ip->addTerm( A0p_c*vc);
+        // ip->addTerm( A0p_m*vm);
+        // ip->addTerm( A0p_e*ve);
+        // break;
+
+        // // Original Robust Norm 5
+        // case 11:
+        // ip->addTerm( Msqrt_DxS + MinvsqrtxK_DxGradV );
+        // ip->addTerm( Msqrt_qxtau + MinvsqrtxK_qxGradV );
+        // ip->addTerm( G_cxGradPsi - F_cxGradV - C_cxdVdt );
+        // ip->addTerm( G_mxGradPsi - F_mxGradV - C_mxdVdt );
+        // ip->addTerm( G_exGradPsi - F_exGradV - C_exdVdt );
+        // ip->addTerm(vc);
+        // ip->addTerm(vm);
+        // ip->addTerm(ve);
+        // break;
+
+        // // Entropy Scaled Robust Norm 5
+        // case 12:
+        // ip->addTerm( Msqrt_DxS + MinvsqrtxK_DxGradV );
+        // ip->addTerm( Msqrt_qxtau + MinvsqrtxK_qxGradV );
+        // ip->addTerm( invA0p_c*(G_cxGradPsi - F_cxGradV - C_cxdVdt) );
+        // ip->addTerm( invA0p_m*(G_mxGradPsi - F_mxGradV - C_mxdVdt) );
+        // ip->addTerm( invA0p_e*(G_exGradPsi - F_exGradV - C_exdVdt) );
+        // ip->addTerm( A0p_c*vc);
+        // ip->addTerm( A0p_m*vm);
+        // ip->addTerm( A0p_e*ve);
+        // break;
+
+        // // Original Robust Norm 6
+        // case 13:
+        // ip->addTerm( Msqrt_DxS + MinvsqrtxK_DxGradV );
+        // ip->addTerm( Msqrt_qxtau + MinvsqrtxK_qxGradV );
+        // ip->addTerm( G_cxGradPsi - F_cxGradV - C_cxdVdt );
+        // ip->addTerm( G_mxGradPsi - F_mxGradV - C_mxdVdt );
+        // ip->addTerm( G_exGradPsi - F_exGradV - C_exdVdt );
+        // ip->addTerm( F_cxGradV + C_cxdVdt );
+        // ip->addTerm( F_mxGradV + C_mxdVdt );
+        // ip->addTerm( F_exGradV + C_exdVdt );
+        // ip->addTerm(vc);
+        // ip->addTerm(vm);
+        // ip->addTerm(ve);
+        // break;
+
+        // // Entropy Scaled Robust Norm 6
+        // case 14:
+        // ip->addTerm( Msqrt_DxS + MinvsqrtxK_DxGradV );
+        // ip->addTerm( Msqrt_qxtau + MinvsqrtxK_qxGradV );
+        // ip->addTerm( invA0p_c*(G_cxGradPsi - F_cxGradV - C_cxdVdt) );
+        // ip->addTerm( invA0p_m*(G_mxGradPsi - F_mxGradV - C_mxdVdt) );
+        // ip->addTerm( invA0p_e*(G_exGradPsi - F_exGradV - C_exdVdt) );
+        // ip->addTerm( invA0p_c*(F_cxGradV + C_cxdVdt) );
+        // ip->addTerm( invA0p_m*(F_mxGradV + C_mxdVdt) );
+        // ip->addTerm( invA0p_e*(F_exGradV + C_exdVdt) );
+        // ip->addTerm( A0p_c*vc);
+        // ip->addTerm( A0p_m*vm);
+        // ip->addTerm( A0p_e*ve);
+        // break;
+
+        // // Robust Norm 7
+        // case 15:
+        // ip->addTerm( Msqrt_DxS );
+        // ip->addTerm( MinvsqrtxK_DxGradV );
+        // ip->addTerm( Msqrt_qxtau );
+        // ip->addTerm( MinvsqrtxK_qxGradV );
+        // ip->addTerm( G_cxGradPsi - F_cxGradV - C_cxdVdt );
+        // ip->addTerm( G_mxGradPsi - F_mxGradV - C_mxdVdt );
+        // ip->addTerm( G_exGradPsi - F_exGradV - C_exdVdt );
+        // ip->addTerm( F_cxGradV + C_cxdVdt );
+        // ip->addTerm( F_mxGradV + C_mxdVdt );
+        // ip->addTerm( F_exGradV + C_exdVdt );
+        // // ip->addTerm( 100*mu*vc->dx() );
+        // // ip->addTerm( 100*mu*vm->dx() );
+        // // ip->addTerm( 100*mu*ve->dx() );
+        // // ip->addTerm( 100*mu*S->dx() );
+        // // ip->addTerm( 100*mu*tau->dx() );
+        // // ip->addTerm( 100*mu*vc->dy() );
+        // // ip->addTerm( 100*mu*vm->dy() );
+        // // ip->addTerm( 100*mu*ve->dy() );
+        // // ip->addTerm( 100*mu*S->dy() );
+        // // ip->addTerm( 100*mu*tau->dy() );
+        // ip->addTerm( vc );
+        // ip->addTerm( vm );
+        // ip->addTerm( ve );
+        // break;
+
+        // // Entropy Scaled Robust Norm 7
+        // case 16:
+        // ip->addTerm( Msqrt_DxS );
+        // ip->addTerm( MinvsqrtxK_DxGradV );
+        // ip->addTerm( Msqrt_qxtau );
+        // ip->addTerm( MinvsqrtxK_qxGradV );
+        // ip->addTerm( invA0p_c*(G_cxGradPsi - F_cxGradV - C_cxdVdt) );
+        // ip->addTerm( invA0p_m*(G_mxGradPsi - F_mxGradV - C_mxdVdt) );
+        // ip->addTerm( invA0p_e*(G_exGradPsi - F_exGradV - C_exdVdt) );
+        // ip->addTerm( invA0p_c*(F_cxGradV + C_cxdVdt) );
+        // ip->addTerm( invA0p_m*(F_mxGradV + C_mxdVdt) );
+        // ip->addTerm( invA0p_e*(F_exGradV + C_exdVdt) );
+        // // ip->addTerm(vc);
+        // // ip->addTerm(vm);
+        // // ip->addTerm(ve);
+        // ip->addTerm( mu*A0p_c*vc->dx() );
+        // ip->addTerm( mu*A0p_m*vm->dx() );
+        // ip->addTerm( mu*A0p_e*ve->dx() );
+        // ip->addTerm( A0p_c*vc);
+        // ip->addTerm( A0p_m*vm);
+        // ip->addTerm( A0p_e*ve);
+        // break;
 
         default:
         TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "invalid inner product");
       }
       break;
 
-      case 1:
-      //    /$$$$$$                                                                           /$$     /$$
-      //   /$$__  $$                                                                         | $$    |__/
-      //  | $$  \__/  /$$$$$$  /$$$$$$$   /$$$$$$$  /$$$$$$   /$$$$$$  /$$    /$$  /$$$$$$  /$$$$$$   /$$  /$$$$$$  /$$$$$$$
-      //  | $$       /$$__  $$| $$__  $$ /$$_____/ /$$__  $$ /$$__  $$|  $$  /$$/ |____  $$|_  $$_/  | $$ /$$__  $$| $$__  $$
-      //  | $$      | $$  \ $$| $$  \ $$|  $$$$$$ | $$$$$$$$| $$  \__/ \  $$/$$/   /$$$$$$$  | $$    | $$| $$  \ $$| $$  \ $$
-      //  | $$    $$| $$  | $$| $$  | $$ \____  $$| $$_____/| $$        \  $$$/   /$$__  $$  | $$ /$$| $$| $$  | $$| $$  | $$
-      //  |  $$$$$$/|  $$$$$$/| $$  | $$ /$$$$$$$/|  $$$$$$$| $$         \  $/   |  $$$$$$$  |  $$$$/| $$|  $$$$$$/| $$  | $$
-      //   \______/  \______/ |__/  |__/|_______/  \_______/|__/          \_/     \_______/   \___/  |__/ \______/ |__/  |__/
-      //
-      //
-      //
-      // Define Euler fluxes and flux jacobians
-      FEc = m_prev;
-      FEm = m_prev*m_prev/rho_prev+(gamma-1)*(E_prev-0.5*m_prev*m_prev/rho_prev);
-      FEe = m_prev*E_prev/rho_prev+(gamma-1)*(E_prev-0.5*m_prev*m_prev/rho_prev)*m_prev/rho_prev;
-      FEc_dU->addTerm( 1*m );
-      FEm_dU->addTerm( 2*m_prev/rho_prev*m - m_prev*m_prev/(rho_prev*rho_prev)*rho
-            + (gamma-1)*E - (gamma-1)*m_prev/rho_prev*m + (gamma-1)*m_prev*m_prev/(2*rho_prev*rho_prev)*rho );
-      FEe_dU->addTerm( E_prev/rho_prev*E + m_prev/rho_prev*E - m_prev*E_prev/(rho_prev*rho_prev)*rho
-            + (gamma-1)*m_prev/rho_prev*E + (gamma-1)*E_prev/rho_prev*m - E_prev*m_prev/(rho_prev*rho_prev)*rho
-            - 1.5*(gamma-1)*m_prev*m_prev/(rho_prev*rho_prev)*m + (gamma-1)*m_prev*m_prev*m_prev/(rho_prev*rho_prev*rho_prev)*rho );
-      // S terms:
-      bf->addTerm( D/mu, S);
-      bf->addTerm( 2/rho_prev*m, S->dx());
-      bf->addTerm( -2*m_prev/(rho_prev*rho_prev)*rho, S->dx());
-      bf->addTerm( -2*uhat, S->times_normal_x());
+      // case 1:
+      // //    /$$$$$$                                                                           /$$     /$$
+      // //   /$$__  $$                                                                         | $$    |__/
+      // //  | $$  \__/  /$$$$$$  /$$$$$$$   /$$$$$$$  /$$$$$$   /$$$$$$  /$$    /$$  /$$$$$$  /$$$$$$   /$$  /$$$$$$  /$$$$$$$
+      // //  | $$       /$$__  $$| $$__  $$ /$$_____/ /$$__  $$ /$$__  $$|  $$  /$$/ |____  $$|_  $$_/  | $$ /$$__  $$| $$__  $$
+      // //  | $$      | $$  \ $$| $$  \ $$|  $$$$$$ | $$$$$$$$| $$  \__/ \  $$/$$/   /$$$$$$$  | $$    | $$| $$  \ $$| $$  \ $$
+      // //  | $$    $$| $$  | $$| $$  | $$ \____  $$| $$_____/| $$        \  $$$/   /$$__  $$  | $$ /$$| $$| $$  | $$| $$  | $$
+      // //  |  $$$$$$/|  $$$$$$/| $$  | $$ /$$$$$$$/|  $$$$$$$| $$         \  $/   |  $$$$$$$  |  $$$$/| $$|  $$$$$$/| $$  | $$
+      // //   \______/  \______/ |__/  |__/|_______/  \_______/|__/          \_/     \_______/   \___/  |__/ \______/ |__/  |__/
+      // //
+      // //
+      // //
+      // // Define Euler fluxes and flux jacobians
+      // FEc = m_prev;
+      // FEm = m_prev*m_prev/rho_prev+(gamma-1)*(E_prev-0.5*m_prev*m_prev/rho_prev);
+      // FEe = m_prev*E_prev/rho_prev+(gamma-1)*(E_prev-0.5*m_prev*m_prev/rho_prev)*m_prev/rho_prev;
+      // FEc_dU->addTerm( 1*m );
+      // FEm_dU->addTerm( 2*m_prev/rho_prev*m - m_prev*m_prev/(rho_prev*rho_prev)*rho
+      //       + (gamma-1)*E - (gamma-1)*m_prev/rho_prev*m + (gamma-1)*m_prev*m_prev/(2*rho_prev*rho_prev)*rho );
+      // FEe_dU->addTerm( E_prev/rho_prev*E + m_prev/rho_prev*E - m_prev*E_prev/(rho_prev*rho_prev)*rho
+      //       + (gamma-1)*m_prev/rho_prev*E + (gamma-1)*E_prev/rho_prev*m - E_prev*m_prev/(rho_prev*rho_prev)*rho
+      //       - 1.5*(gamma-1)*m_prev*m_prev/(rho_prev*rho_prev)*m + (gamma-1)*m_prev*m_prev*m_prev/(rho_prev*rho_prev*rho_prev)*rho );
+      // // S terms:
+      // bf->addTerm( D/mu, S);
+      // bf->addTerm( 2/rho_prev*m, S->dx());
+      // bf->addTerm( -2*m_prev/(rho_prev*rho_prev)*rho, S->dx());
+      // bf->addTerm( -2*uhat, S->times_normal_x());
 
-      // tau terms:
-      bf->addTerm( Pr/(mu*Cp)*q, tau);
-      bf->addTerm( -1/(Cv*rho_prev)*E, tau->dx());
-      bf->addTerm( m_prev/(Cv*rho_prev*rho_prev)*m, tau->dx());
-      bf->addTerm( -m_prev*m_prev/(2.0*Cv*rho_prev*rho_prev*rho_prev)*rho, tau->dx());
-      bf->addTerm( (E_prev-0.5*m_prev*m_prev/rho_prev)/(Cv*rho_prev*rho_prev)*rho, tau->dx());
-      bf->addTerm( That, tau->times_normal_x());
+      // // tau terms:
+      // bf->addTerm( Pr/(mu*Cp)*q, tau);
+      // bf->addTerm( -1/(Cv*rho_prev)*E, tau->dx());
+      // bf->addTerm( m_prev/(Cv*rho_prev*rho_prev)*m, tau->dx());
+      // bf->addTerm( -m_prev*m_prev/(2.0*Cv*rho_prev*rho_prev*rho_prev)*rho, tau->dx());
+      // bf->addTerm( (E_prev-0.5*m_prev*m_prev/rho_prev)/(Cv*rho_prev*rho_prev)*rho, tau->dx());
+      // bf->addTerm( That, tau->times_normal_x());
 
-      // vc terms:
-      // bf->addTerm( -m, vc->dx());
-      bf->addTerm( -FEc_dU, vc->dx());
-      bf->addTerm( -rho, vc->dy());
-      bf->addTerm( Fc, vc);
+      // // vc terms:
+      // // bf->addTerm( -m, vc->dx());
+      // bf->addTerm( -FEc_dU, vc->dx());
+      // bf->addTerm( -rho, vc->dy());
+      // bf->addTerm( Fc, vc);
 
-      // vm terms:
-      // bf->addTerm( -2.0*m_prev/rho_prev*m, vm->dx());
-      // bf->addTerm( m_prev*m_prev/(rho_prev*rho_prev)*rho, vm->dx());
-      // bf->addTerm( -(gamma-1)*E, vm->dx());
-      // bf->addTerm( (gamma-1)*m_prev/rho_prev*m, vm->dx());
-      // bf->addTerm( -(gamma-1)*m_prev*m_prev/(2*rho_prev*rho_prev)*rho, vm->dx());
-      bf->addTerm( -FEm_dU, vm->dx());
-      bf->addTerm( D, vm->dx());
-      bf->addTerm( -m, vm->dy());
-      bf->addTerm( Fm, vm);
+      // // vm terms:
+      // // bf->addTerm( -2.0*m_prev/rho_prev*m, vm->dx());
+      // // bf->addTerm( m_prev*m_prev/(rho_prev*rho_prev)*rho, vm->dx());
+      // // bf->addTerm( -(gamma-1)*E, vm->dx());
+      // // bf->addTerm( (gamma-1)*m_prev/rho_prev*m, vm->dx());
+      // // bf->addTerm( -(gamma-1)*m_prev*m_prev/(2*rho_prev*rho_prev)*rho, vm->dx());
+      // bf->addTerm( -FEm_dU, vm->dx());
+      // bf->addTerm( D, vm->dx());
+      // bf->addTerm( -m, vm->dy());
+      // bf->addTerm( Fm, vm);
 
-      // ve terms:
-      // bf->addTerm( -E_prev/rho_prev*m, ve->dx());
-      // bf->addTerm( -m_prev/rho_prev*E, ve->dx());
-      // bf->addTerm( m_prev*E_prev/(rho_prev*rho_prev)*rho, ve->dx());
-      // bf->addTerm( -(gamma-1)*m_prev/rho_prev*E, ve->dx());
-      // bf->addTerm( -(gamma-1)*E_prev/rho_prev*m, ve->dx());
-      // bf->addTerm( (gamma-1)*m_prev*E_prev/(rho_prev*rho_prev)*rho, ve->dx());
-      // bf->addTerm( 3*(gamma-1)*m_prev*m_prev/(2*rho_prev*rho_prev)*m, ve->dx());
-      // bf->addTerm( -(gamma-1)*m_prev*m_prev*m_prev/(rho_prev*rho_prev*rho_prev)*rho, ve->dx());
-      bf->addTerm( -FEe_dU, ve->dx());
-      bf->addTerm( -q, ve->dx());
-      bf->addTerm( D_prev/rho_prev*m, ve->dx());
-      bf->addTerm( m_prev/rho_prev*D, ve->dx());
-      bf->addTerm( -m_prev*D_prev/(rho_prev*rho_prev)*rho, ve->dx());
-      bf->addTerm( -E, ve->dy());
-      bf->addTerm( Fe, ve);
+      // // ve terms:
+      // // bf->addTerm( -E_prev/rho_prev*m, ve->dx());
+      // // bf->addTerm( -m_prev/rho_prev*E, ve->dx());
+      // // bf->addTerm( m_prev*E_prev/(rho_prev*rho_prev)*rho, ve->dx());
+      // // bf->addTerm( -(gamma-1)*m_prev/rho_prev*E, ve->dx());
+      // // bf->addTerm( -(gamma-1)*E_prev/rho_prev*m, ve->dx());
+      // // bf->addTerm( (gamma-1)*m_prev*E_prev/(rho_prev*rho_prev)*rho, ve->dx());
+      // // bf->addTerm( 3*(gamma-1)*m_prev*m_prev/(2*rho_prev*rho_prev)*m, ve->dx());
+      // // bf->addTerm( -(gamma-1)*m_prev*m_prev*m_prev/(rho_prev*rho_prev*rho_prev)*rho, ve->dx());
+      // bf->addTerm( -FEe_dU, ve->dx());
+      // bf->addTerm( -q, ve->dx());
+      // bf->addTerm( D_prev/rho_prev*m, ve->dx());
+      // bf->addTerm( m_prev/rho_prev*D, ve->dx());
+      // bf->addTerm( -m_prev*D_prev/(rho_prev*rho_prev)*rho, ve->dx());
+      // bf->addTerm( -E, ve->dy());
+      // bf->addTerm( Fe, ve);
 
-      ////////////////////   SPECIFY RHS   ///////////////////////
+      // ////////////////////   SPECIFY RHS   ///////////////////////
 
-      // S terms:
-      rhs->addTerm( -1./mu*D_prev * S );
-      rhs->addTerm( -2*m_prev/rho_prev * S->dx() );
+      // // S terms:
+      // rhs->addTerm( -1./mu*D_prev * S );
+      // rhs->addTerm( -2*m_prev/rho_prev * S->dx() );
 
-      // tau terms:
-      rhs->addTerm( (E_prev-0.5*m_prev*m_prev/rho_prev)/(Cv*rho_prev) * tau->dx() );
+      // // tau terms:
+      // rhs->addTerm( (E_prev-0.5*m_prev*m_prev/rho_prev)/(Cv*rho_prev) * tau->dx() );
 
-      // vc terms:
-      // rhs->addTerm( m_prev * vc->dx() );
-      rhs->addTerm( FEc * vc->dx() );
-      rhs->addTerm( rho_prev * vc->dy() );
+      // // vc terms:
+      // // rhs->addTerm( m_prev * vc->dx() );
+      // rhs->addTerm( FEc * vc->dx() );
+      // rhs->addTerm( rho_prev * vc->dy() );
 
-      // vm terms:
-      // rhs->addTerm( m_prev*m_prev/rho_prev * vm->dx() );
-      // rhs->addTerm( (gamma-1)*(E_prev-0.5*m_prev*m_prev/rho_prev) * vm->dx() );
-      rhs->addTerm( FEm * vm->dx() );
-      rhs->addTerm( -D_prev * vm->dx() );
-      rhs->addTerm( m_prev * vm->dy() );
+      // // vm terms:
+      // // rhs->addTerm( m_prev*m_prev/rho_prev * vm->dx() );
+      // // rhs->addTerm( (gamma-1)*(E_prev-0.5*m_prev*m_prev/rho_prev) * vm->dx() );
+      // rhs->addTerm( FEm * vm->dx() );
+      // rhs->addTerm( -D_prev * vm->dx() );
+      // rhs->addTerm( m_prev * vm->dy() );
 
-      // ve terms:
-      // rhs->addTerm( m_prev*E_prev/rho_prev * ve->dx() );
-      // rhs->addTerm( (gamma-1)*(E_prev-0.5*m_prev*m_prev/rho_prev)*m_prev/rho_prev * ve->dx() );
-      rhs->addTerm( FEe * ve->dx() );
-      rhs->addTerm( -m_prev/rho_prev*D_prev * ve->dx() );
-      rhs->addTerm( E_prev * ve->dy() );
+      // // ve terms:
+      // // rhs->addTerm( m_prev*E_prev/rho_prev * ve->dx() );
+      // // rhs->addTerm( (gamma-1)*(E_prev-0.5*m_prev*m_prev/rho_prev)*m_prev/rho_prev * ve->dx() );
+      // rhs->addTerm( FEe * ve->dx() );
+      // rhs->addTerm( -m_prev/rho_prev*D_prev * ve->dx() );
+      // rhs->addTerm( E_prev * ve->dy() );
 
-      ////////////////////   DEFINE INNER PRODUCT(S)   ///////////////////////
-      switch (norm)
-      {
-        // Automatic graph norm
-        case 0:
-        ips[slab] = bf->graphNorm();
-        break;
+      // ////////////////////   DEFINE INNER PRODUCT(S)   ///////////////////////
+      // switch (norm)
+      // {
+      //   // Automatic graph norm
+      //   case 0:
+      //   ips[slab] = bf->graphNorm();
+      //   break;
 
-        default:
-        TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "invalid inner product");
-      }
-      break;
+      //   default:
+      //   TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "invalid inner product");
+      // }
+      // break;
 
-      case 2:
-      //   /$$$$$$$$             /$$
-      //  | $$_____/            | $$
-      //  | $$       /$$$$$$$  /$$$$$$    /$$$$$$   /$$$$$$   /$$$$$$  /$$   /$$
-      //  | $$$$$   | $$__  $$|_  $$_/   /$$__  $$ /$$__  $$ /$$__  $$| $$  | $$
-      //  | $$__/   | $$  \ $$  | $$    | $$  \__/| $$  \ $$| $$  \ $$| $$  | $$
-      //  | $$      | $$  | $$  | $$ /$$| $$      | $$  | $$| $$  | $$| $$  | $$
-      //  | $$$$$$$$| $$  | $$  |  $$$$/| $$      |  $$$$$$/| $$$$$$$/|  $$$$$$$
-      //  |________/|__/  |__/   \___/  |__/       \______/ | $$____/  \____  $$
-      //                                                    | $$       /$$  | $$
-      //                                                    | $$      |  $$$$$$/
-      //                                                    |__/       \______/
-      // define alpha from notes
-      FunctionPtr VePow1 = Teuchos::rcp( new PowerFunction(-Ve_prev, gamma));
-      FunctionPtr VePow2 = Teuchos::rcp( new PowerFunction(-Ve_prev, -1.-gamma));
-      FunctionPtr alphaPow1 = Teuchos::rcp( new PowerFunction((gamma-1)/VePow1, 1./(gamma-1)));
-      FunctionPtr alphaPow2 = Teuchos::rcp( new PowerFunction((gamma-1)/VePow1, (2-gamma)/(gamma-1)));
-      FunctionPtr alphaExp = Teuchos::rcp( new ExpFunction((-gamma+Vc_prev-0.5*Vm_prev*Vm_prev/Ve_prev)/(gamma-1)) );
-      FunctionPtr alpha = alphaPow1*alphaExp;
-      LinearTermPtr alpha_dU = Teuchos::rcp( new LinearTerm );
-      alpha_dU->addTerm( alphaPow2*gamma*VePow2*alphaExp*Ve );
-      alpha_dU->addTerm( alphaPow1*alphaExp/(gamma-1)*Vc );
-      alpha_dU->addTerm( -alphaPow1*alphaExp/(gamma-1)*Vm_prev/Ve_prev*Vm );
-      alpha_dU->addTerm( alphaPow1*alphaExp/(gamma-1)*Vm_prev*Vm_prev/(2*Ve_prev*Ve_prev)*Ve );
+      // case 2:
+      // //   /$$$$$$$$             /$$
+      // //  | $$_____/            | $$
+      // //  | $$       /$$$$$$$  /$$$$$$    /$$$$$$   /$$$$$$   /$$$$$$  /$$   /$$
+      // //  | $$$$$   | $$__  $$|_  $$_/   /$$__  $$ /$$__  $$ /$$__  $$| $$  | $$
+      // //  | $$__/   | $$  \ $$  | $$    | $$  \__/| $$  \ $$| $$  \ $$| $$  | $$
+      // //  | $$      | $$  | $$  | $$ /$$| $$      | $$  | $$| $$  | $$| $$  | $$
+      // //  | $$$$$$$$| $$  | $$  |  $$$$/| $$      |  $$$$$$/| $$$$$$$/|  $$$$$$$
+      // //  |________/|__/  |__/   \___/  |__/       \______/ | $$____/  \____  $$
+      // //                                                    | $$       /$$  | $$
+      // //                                                    | $$      |  $$$$$$/
+      // //                                                    |__/       \______/
+      // // define alpha from notes
+      // FunctionPtr VePow1 = Teuchos::rcp( new PowerFunction(-Ve_prev, gamma));
+      // FunctionPtr VePow2 = Teuchos::rcp( new PowerFunction(-Ve_prev, -1.-gamma));
+      // FunctionPtr alphaPow1 = Teuchos::rcp( new PowerFunction((gamma-1)/VePow1, 1./(gamma-1)));
+      // FunctionPtr alphaPow2 = Teuchos::rcp( new PowerFunction((gamma-1)/VePow1, (2-gamma)/(gamma-1)));
+      // FunctionPtr alphaExp = Teuchos::rcp( new ExpFunction((-gamma+Vc_prev-0.5*Vm_prev*Vm_prev/Ve_prev)/(gamma-1)) );
+      // FunctionPtr alpha = alphaPow1*alphaExp;
+      // LinearTermPtr alpha_dU = Teuchos::rcp( new LinearTerm );
+      // alpha_dU->addTerm( alphaPow2*gamma*VePow2*alphaExp*Ve );
+      // alpha_dU->addTerm( alphaPow1*alphaExp/(gamma-1)*Vc );
+      // alpha_dU->addTerm( -alphaPow1*alphaExp/(gamma-1)*Vm_prev/Ve_prev*Vm );
+      // alpha_dU->addTerm( alphaPow1*alphaExp/(gamma-1)*Vm_prev*Vm_prev/(2*Ve_prev*Ve_prev)*Ve );
 
-      // Define Euler fluxes and flux jacobians
-      FEc = alpha*Vm_prev;
-      FEm = alpha*(-Vm_prev*Vm_prev/Ve_prev+(gamma-1));
-      FEe = alpha*Vm_prev/Ve_prev*(0.5*Vm_prev*Vm_prev/Ve_prev-gamma);
+      // // Define Euler fluxes and flux jacobians
+      // FEc = alpha*Vm_prev;
+      // FEm = alpha*(-Vm_prev*Vm_prev/Ve_prev+(gamma-1));
+      // FEe = alpha*Vm_prev/Ve_prev*(0.5*Vm_prev*Vm_prev/Ve_prev-gamma);
 
-      FEc_dU->addTerm( Vm_prev*alpha_dU + alpha*Vm );
+      // FEc_dU->addTerm( Vm_prev*alpha_dU + alpha*Vm );
 
-      FEm_dU->addTerm( (-Vm_prev*Vm_prev/Ve_prev+(gamma-1))*alpha_dU
-            - 2*alpha*Vm_prev/Ve_prev*Vm + alpha*Vm_prev*Vm_prev/(Ve_prev*Ve_prev)*Ve );
+      // FEm_dU->addTerm( (-Vm_prev*Vm_prev/Ve_prev+(gamma-1))*alpha_dU
+      //       - 2*alpha*Vm_prev/Ve_prev*Vm + alpha*Vm_prev*Vm_prev/(Ve_prev*Ve_prev)*Ve );
 
-      FEe_dU->addTerm( Vm_prev/Ve_prev*(0.5*Vm_prev*Vm_prev/Ve_prev-gamma)*alpha_dU
-            + alpha*(0.5*Vm_prev*Vm_prev/Ve_prev-gamma)/Ve_prev*Vm
-            - alpha*Vm_prev/(Ve_prev*Ve_prev)*(0.5*Vm_prev*Vm_prev/Ve_prev-gamma)*Ve
-            + alpha*Vm_prev*Vm_prev/(Ve_prev*Ve_prev)*Vm
-            - alpha*Vm_prev*Vm_prev*Vm_prev/(2*Ve_prev*Ve_prev*Ve_prev)*Ve );
+      // FEe_dU->addTerm( Vm_prev/Ve_prev*(0.5*Vm_prev*Vm_prev/Ve_prev-gamma)*alpha_dU
+      //       + alpha*(0.5*Vm_prev*Vm_prev/Ve_prev-gamma)/Ve_prev*Vm
+      //       - alpha*Vm_prev/(Ve_prev*Ve_prev)*(0.5*Vm_prev*Vm_prev/Ve_prev-gamma)*Ve
+      //       + alpha*Vm_prev*Vm_prev/(Ve_prev*Ve_prev)*Vm
+      //       - alpha*Vm_prev*Vm_prev*Vm_prev/(2*Ve_prev*Ve_prev*Ve_prev)*Ve );
 
-      // S terms:
-      bf->addTerm( D/mu, S);
-      bf->addTerm( -2/Ve_prev*Vm, S->dx());
-      bf->addTerm( 2*Vm_prev/(Ve_prev*Ve_prev)*Ve, S->dx());
-      bf->addTerm( -2*uhat, S->times_normal_x());
+      // // S terms:
+      // bf->addTerm( D/mu, S);
+      // bf->addTerm( -2/Ve_prev*Vm, S->dx());
+      // bf->addTerm( 2*Vm_prev/(Ve_prev*Ve_prev)*Ve, S->dx());
+      // bf->addTerm( -2*uhat, S->times_normal_x());
 
-      // tau terms:
-      bf->addTerm( Pr/(mu*Cp)*q, tau);
-      bf->addTerm( -1/(Cv*Ve_prev*Ve_prev)*Ve, tau->dx());
-      bf->addTerm( That, tau->times_normal_x());
+      // // tau terms:
+      // bf->addTerm( Pr/(mu*Cp)*q, tau);
+      // bf->addTerm( -1/(Cv*Ve_prev*Ve_prev)*Ve, tau->dx());
+      // bf->addTerm( That, tau->times_normal_x());
 
-      // vc terms:
-      // bf->addTerm( -Vm_prev*alpha_dU, vc->dx());
-      // bf->addTerm( -alpha*Vm, vc->dx());
-      bf->addTerm( -FEc_dU, vc->dx());
-      bf->addTerm( Ve_prev*alpha_dU + alpha*Ve, vc->dy());
-      bf->addTerm( Fc, vc);
+      // // vc terms:
+      // // bf->addTerm( -Vm_prev*alpha_dU, vc->dx());
+      // // bf->addTerm( -alpha*Vm, vc->dx());
+      // bf->addTerm( -FEc_dU, vc->dx());
+      // bf->addTerm( Ve_prev*alpha_dU + alpha*Ve, vc->dy());
+      // bf->addTerm( Fc, vc);
 
-      // vm terms:
-      // bf->addTerm( (Vm_prev*Vm_prev/Ve_prev-(gamma-1))*alpha_dU, vm->dx());
-      // bf->addTerm( 2*alpha*Vm_prev/Ve_prev*Vm, vm->dx());
-      // bf->addTerm( -alpha*Vm_prev*Vm_prev/(Ve_prev*Ve_prev)*Ve, vm->dx());
-      bf->addTerm( -FEm_dU, vm->dx());
-      bf->addTerm( D, vm->dx());
-      bf->addTerm( -Vm_prev*alpha_dU-alpha*Vm, vm->dy());
-      bf->addTerm( Fm, vm);
+      // // vm terms:
+      // // bf->addTerm( (Vm_prev*Vm_prev/Ve_prev-(gamma-1))*alpha_dU, vm->dx());
+      // // bf->addTerm( 2*alpha*Vm_prev/Ve_prev*Vm, vm->dx());
+      // // bf->addTerm( -alpha*Vm_prev*Vm_prev/(Ve_prev*Ve_prev)*Ve, vm->dx());
+      // bf->addTerm( -FEm_dU, vm->dx());
+      // bf->addTerm( D, vm->dx());
+      // bf->addTerm( -Vm_prev*alpha_dU-alpha*Vm, vm->dy());
+      // bf->addTerm( Fm, vm);
 
-      // ve terms:
-      // bf->addTerm( -Vm_prev/Ve_prev*(0.5*Vm_prev*Vm_prev/Ve_prev-gamma)*alpha_dU, ve->dx());
-      // bf->addTerm( -alpha*(0.5*Vm_prev*Vm_prev/Ve_prev-gamma)/Ve_prev*Vm, ve->dx());
-      // bf->addTerm( alpha*Vm_prev/(Ve_prev*Ve_prev)*(0.5*Vm_prev*Vm_prev/Ve_prev-gamma)*Ve, ve->dx());
-      // bf->addTerm( -alpha*Vm_prev*Vm_prev/(Ve_prev*Ve_prev)*Vm, ve->dx());
-      // bf->addTerm( alpha*Vm_prev*Vm_prev*Vm_prev/(2*Ve_prev*Ve_prev*Ve_prev)*Ve, ve->dx());
-      bf->addTerm( -FEe_dU, ve->dx());
-      bf->addTerm( -D_prev/Ve_prev*Vm, ve->dx());
-      bf->addTerm( -Vm_prev/Ve_prev*D, ve->dx());
-      bf->addTerm( Vm_prev*D_prev/(Ve_prev*Ve_prev)*Ve, ve->dx());
-      bf->addTerm( -q, ve->dx());
-      bf->addTerm( -(1-0.5*Vm_prev*Vm_prev/Ve_prev)*alpha_dU, ve->dy());
-      bf->addTerm( alpha*Vm_prev/Ve_prev*Vm, ve->dy());
-      bf->addTerm( -0.5*alpha*Vm_prev*Vm_prev/(Ve_prev*Ve_prev)*Ve, ve->dy());
-      bf->addTerm( Fe, ve);
+      // // ve terms:
+      // // bf->addTerm( -Vm_prev/Ve_prev*(0.5*Vm_prev*Vm_prev/Ve_prev-gamma)*alpha_dU, ve->dx());
+      // // bf->addTerm( -alpha*(0.5*Vm_prev*Vm_prev/Ve_prev-gamma)/Ve_prev*Vm, ve->dx());
+      // // bf->addTerm( alpha*Vm_prev/(Ve_prev*Ve_prev)*(0.5*Vm_prev*Vm_prev/Ve_prev-gamma)*Ve, ve->dx());
+      // // bf->addTerm( -alpha*Vm_prev*Vm_prev/(Ve_prev*Ve_prev)*Vm, ve->dx());
+      // // bf->addTerm( alpha*Vm_prev*Vm_prev*Vm_prev/(2*Ve_prev*Ve_prev*Ve_prev)*Ve, ve->dx());
+      // bf->addTerm( -FEe_dU, ve->dx());
+      // bf->addTerm( -D_prev/Ve_prev*Vm, ve->dx());
+      // bf->addTerm( -Vm_prev/Ve_prev*D, ve->dx());
+      // bf->addTerm( Vm_prev*D_prev/(Ve_prev*Ve_prev)*Ve, ve->dx());
+      // bf->addTerm( -q, ve->dx());
+      // bf->addTerm( -(1-0.5*Vm_prev*Vm_prev/Ve_prev)*alpha_dU, ve->dy());
+      // bf->addTerm( alpha*Vm_prev/Ve_prev*Vm, ve->dy());
+      // bf->addTerm( -0.5*alpha*Vm_prev*Vm_prev/(Ve_prev*Ve_prev)*Ve, ve->dy());
+      // bf->addTerm( Fe, ve);
 
-      ////////////////////   SPECIFY RHS   ///////////////////////
+      // ////////////////////   SPECIFY RHS   ///////////////////////
 
-      // S terms:
-      rhs->addTerm( -1./mu*D_prev * S );
-      rhs->addTerm( 2*Vm_prev/Ve_prev * S->dx() );
+      // // S terms:
+      // rhs->addTerm( -1./mu*D_prev * S );
+      // rhs->addTerm( 2*Vm_prev/Ve_prev * S->dx() );
 
-      // tau terms:
-      rhs->addTerm( -1./(Cv*Ve_prev) * tau->dx() );
+      // // tau terms:
+      // rhs->addTerm( -1./(Cv*Ve_prev) * tau->dx() );
 
-      // vc terms:
-      // rhs->addTerm( alpha*Vm_prev * vc->dx() );
-      rhs->addTerm( FEc * vc->dx() );
-      rhs->addTerm( -alpha*Ve_prev * vc->dy() );
+      // // vc terms:
+      // // rhs->addTerm( alpha*Vm_prev * vc->dx() );
+      // rhs->addTerm( FEc * vc->dx() );
+      // rhs->addTerm( -alpha*Ve_prev * vc->dy() );
 
-      // vm terms:
-      // rhs->addTerm( alpha*(-Vm_prev*Vm_prev/Ve_prev + (gamma-1)) * vm->dx() );
-      rhs->addTerm( FEm * vm->dx() );
-      rhs->addTerm( -D_prev * vm->dx() );
-      rhs->addTerm( alpha*Vm_prev * vm->dy() );
+      // // vm terms:
+      // // rhs->addTerm( alpha*(-Vm_prev*Vm_prev/Ve_prev + (gamma-1)) * vm->dx() );
+      // rhs->addTerm( FEm * vm->dx() );
+      // rhs->addTerm( -D_prev * vm->dx() );
+      // rhs->addTerm( alpha*Vm_prev * vm->dy() );
 
-      // ve terms:
-      // rhs->addTerm( alpha*Vm_prev/Ve_prev*(0.5*Vm_prev*Vm_prev/Ve_prev-gamma) * ve->dx() );
-      rhs->addTerm( FEe * ve->dx() );
-      rhs->addTerm( Vm_prev*D_prev/Ve_prev * ve->dx() );
-      rhs->addTerm( alpha*(1-0.5*Vm_prev*Vm_prev/Ve_prev) * ve->dy() );
+      // // ve terms:
+      // // rhs->addTerm( alpha*Vm_prev/Ve_prev*(0.5*Vm_prev*Vm_prev/Ve_prev-gamma) * ve->dx() );
+      // rhs->addTerm( FEe * ve->dx() );
+      // rhs->addTerm( Vm_prev*D_prev/Ve_prev * ve->dx() );
+      // rhs->addTerm( alpha*(1-0.5*Vm_prev*Vm_prev/Ve_prev) * ve->dy() );
 
-      ////////////////////   DEFINE INNER PRODUCT(S)   ///////////////////////
-      switch (norm)
-      {
-        // Automatic graph norm
-        case 0:
-        ips[slab] = bf->graphNorm();
-        break;
+      // ////////////////////   DEFINE INNER PRODUCT(S)   ///////////////////////
+      // switch (norm)
+      // {
+      //   // Automatic graph norm
+      //   case 0:
+      //   ips[slab] = bf->graphNorm();
+      //   break;
 
-        default:
-        TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "invalid inner product");
-      }
-      break;
+      //   default:
+      //   TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "invalid inner product");
+      // }
+      // break;
     }
   }
 
@@ -1631,25 +1751,25 @@ int main(int argc, char *argv[]) {
     FunctionPtr mom0 = Teuchos::rcp( new DiscontinuousInitialCondition(xint, uL*rhoL, uR*rhoR) );
     FunctionPtr E0    = Teuchos::rcp( new DiscontinuousInitialCondition(xint, (rhoL*Cv*TL+0.5*rhoL*uL*uL), (rhoR*Cv*TR+0.5*rhoR*uR*uR)) );
     if (problem == 6)
-      E0 = Teuchos::rcp( new PulseInitialCondition(1./32, 1./Cv, 0) );
+      E0 = Teuchos::rcp( new PulseInitialCondition(1./8, 1./Cv, 0, Function::h()) );
     // FunctionPtr rho0  = Teuchos::rcp( new RampedInitialCondition(xint, rhoL, rhoR, (xmax-xmin)/numX) );
     // FunctionPtr mom0 = Teuchos::rcp( new RampedInitialCondition(xint, uL*rhoL, uR*rhoR, (xmax-xmin)/numX) );
     // FunctionPtr E0    = Teuchos::rcp( new RampedInitialCondition(xint, (rhoL*Cv*TL+0.5*rhoL*uL*uL), (rhoR*Cv*TR+0.5*rhoR*uR*uR), (xmax-xmin)/numX) );
-    bc->addDirichlet(Fc, left, -rhoL*uL*one);
-    bc->addDirichlet(Fc, right, rhoR*uR*one);
-    bc->addDirichlet(Fm, left, -(rhoL*uL*uL+R*rhoL*TL)*one);
-    bc->addDirichlet(Fm, right, (rhoR*uR*uR+R*rhoR*TR)*one);
+    bc->addDirichlet(tc, left, -rhoL*uL*one);
+    bc->addDirichlet(tc, right, rhoR*uR*one);
+    bc->addDirichlet(tm, left, -(rhoL*uL*uL+R*rhoL*TL)*one);
+    bc->addDirichlet(tm, right, (rhoR*uR*uR+R*rhoR*TR)*one);
     // bc->addDirichlet(uhat, right, zero);
     // bc->addDirichlet(uhat, left, zero);
-    bc->addDirichlet(Fe, left, -(rhoL*Cv*TL+0.5*rhoL*uL*uL+R*rhoL*TL)*uL*one);
-    bc->addDirichlet(Fe, right, (rhoR*Cv*TR+0.5*rhoR*uR*uR+R*rhoR*TR)*uR*one);
+    bc->addDirichlet(te, left, -(rhoL*Cv*TL+0.5*rhoL*uL*uL+R*rhoL*TL)*uL*one);
+    bc->addDirichlet(te, right, (rhoR*Cv*TR+0.5*rhoR*uR*uR+R*rhoR*TR)*uR*one);
     // cout << "R = " << R << " Cv = " << Cv << " Cp = " << Cp << " gamma = " << gamma << endl;
     // cout << "left " << rhoL*uL << " " << (rhoL*uL*uL+R*rhoL*TL) << " " << (rhoL*Cv*TL+0.5*rhoL*uL*uL+R*Cv*TL)*uL << endl;
     if (slab == 0)
     {
-      bc->addDirichlet(Fc, init, -rho0);
-      bc->addDirichlet(Fm, init, -mom0);
-      bc->addDirichlet(Fe, init, -E0);
+      bc->addDirichlet(tc, init, -rho0);
+      bc->addDirichlet(tm, init, -mom0);
+      bc->addDirichlet(te, init, -E0);
     }
     bcs.push_back(bc);
   }
@@ -1671,9 +1791,9 @@ int main(int argc, char *argv[]) {
       FunctionPtr u_prev = Teuchos::RCP<Function>( new PreviousSolutionFunction(backgroundFlows[slab-1], u) );
       FunctionPtr T_prev = Teuchos::RCP<Function>( new PreviousSolutionFunction(backgroundFlows[slab-1], T) );
       SpatialFilterPtr init = Teuchos::rcp( new ConstantYBoundary(tmins[slab]) );
-      bcs[slab]->addDirichlet(Fc, init, -rho_prev);
-      bcs[slab]->addDirichlet(Fm, init, -rho_prev*u_prev);
-      bcs[slab]->addDirichlet(Fe, init, -Cv*rho_prev*T_prev-0.5*rho_prev*u_prev*u_prev);
+      bcs[slab]->addDirichlet(tc, init, -rho_prev);
+      bcs[slab]->addDirichlet(tm, init, -rho_prev*u_prev);
+      bcs[slab]->addDirichlet(te, init, -Cv*rho_prev*T_prev-0.5*rho_prev*u_prev*u_prev);
     }
     meshes[slab]->registerSolution(backgroundFlows[slab]);
     meshes[slab]->registerSolution(solutions[slab]);
@@ -1682,6 +1802,7 @@ int main(int argc, char *argv[]) {
     VTKExporter exporter(backgroundFlows[slab], meshes[slab], varFactory);
     set<int> nonlinearVars;
     nonlinearVars.insert(D->ID());
+    nonlinearVars.insert(q->ID());
     nonlinearVars.insert(Uc->ID());
     nonlinearVars.insert(Um->ID());
     nonlinearVars.insert(Ue->ID());
@@ -1748,8 +1869,8 @@ int main(int argc, char *argv[]) {
         FunctionPtr dDdx = Function::solution(D->dx(),backgroundFlows[slab]);
         FunctionPtr dudx = Function::solution(u->dx(),backgroundFlows[slab]);
         // FunctionPtr div_indicator = Teuchos::rcp( new DivergenceIndicator(rho_prev, rho_prev, D_prev) );
-        exporter.exportFunction(dDdx,"dDdx"+Teuchos::toString(refIndex));
-        exporter.exportFunction(dudx,"dudx"+Teuchos::toString(refIndex));
+        // exporter.exportFunction(dDdx,"dDdx"+Teuchos::toString(refIndex));
+        // exporter.exportFunction(dudx,"dudx"+Teuchos::toString(refIndex));
         // FunctionPtr errorFunction = Teuchos::rcp( new ErrorFunction(solution) );
         // exporter.exportFunction(errorFunction,"Error"+Teuchos::toString(refIndex));
       }
