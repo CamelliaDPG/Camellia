@@ -91,10 +91,10 @@ int main(int argc, char *argv[]) {
   
   Teuchos::CommandLineProcessor cmdp(false,true); // false: don't throw exceptions; true: do return errors for unrecognized options
   
-  bool use3D = false;
+  bool use3D = true;
   int refCount = 10;
   
-  int k = 4; // poly order for field variables
+  int k = 3; // poly order for field variables
   int delta_k = use3D ? 3 : 2;   // test space enrichment
   int k_coarse = 0;
   
@@ -102,7 +102,7 @@ int main(int argc, char *argv[]) {
   bool useCG = true;
   
   bool enforceOneIrregularity = true;
-  bool conformingTraces = true;
+  bool conformingTraces = false;
   bool applyDiagonalSmoothing = true;
   
   bool useDiagonalScaling = false; // of the global stiffness matrix in GMGSolver
@@ -110,7 +110,7 @@ int main(int argc, char *argv[]) {
   bool printRefinementDetails = false;
   
   bool useWeightedGraphNorm = false; // graph norm scaled according to units, more or less
-  bool useStaticCondensation = false;
+  bool useStaticCondensation = true;
   
   int mumpsMaxMemoryMB = 768;
   double energyThreshold = 0.2;
@@ -486,7 +486,7 @@ int main(int argc, char *argv[]) {
     switch(solverChoice) {
       case MUMPS:
 #ifdef USE_MUMPS
-        coarseSolver = Teuchos::rcp( new MumpsSolver(mumpsMaxMemoryMB, false) ); // false: don't save factorization, basically
+        coarseSolver = Teuchos::rcp( new MumpsSolver(mumpsMaxMemoryMB, true) ); // true: save factorization
 #else
         cout << "useMumps=true, but MUMPS is not available!\n";
         exit(1);
@@ -502,7 +502,7 @@ int main(int argc, char *argv[]) {
         // should be unreachable
         break;
     }
-    fineSolver = Teuchos::rcp( new MumpsSolver(512, false) ); // false: don't save factorization, basically
+    fineSolver = Teuchos::rcp( new MumpsSolver(512, false) ); // false: don't save factorization for fine solve
   }
   
 //  if (rank==0) cout << "experimentally starting by solving with MUMPS on the fine mesh.\n";
