@@ -64,7 +64,7 @@ vector< pair< GlobalIndexType, unsigned> > Cell::getDescendantsForSide(int sideI
   return descendantsForSide;
 }
 
-Cell::Cell(CellTopoPtrLegacy cellTopo, const vector<unsigned> &vertices, const vector< map< unsigned, unsigned > > &subcellPermutations,
+Cell::Cell(CellTopoPtrLegacy cellTopo, const vector<unsigned> &vertices, const vector< vector< unsigned > > &subcellPermutations,
      unsigned cellIndex, MeshTopology* meshTopo) {
   _cellTopo = cellTopo;
   _vertices = vertices;
@@ -74,6 +74,50 @@ Cell::Cell(CellTopoPtrLegacy cellTopo, const vector<unsigned> &vertices, const v
   int sideCount = CamelliaCellTools::getSideCount(*_cellTopo);
   _neighbors = vector< pair<GlobalIndexType, unsigned> >(sideCount,make_pair(-1,-1));
 }
+
+map<string, long long> Cell::approximateMemoryCosts() {
+  map<string, long long> variableCosts;
+  
+  // calibrate by computing some sizes
+  map<int, int> emptyMap;
+  vector<int> emptyVector;
+  
+  int MAP_OVERHEAD = sizeof(emptyMap);
+  int VECTOR_OVERHEAD = sizeof(emptyVector);
+  
+  int MAP_NODE_OVERHEAD = 32; // according to http://info.prelert.com/blog/stl-container-memory-usage, this appears to be basically universal
+  
+  variableCosts["_cellIndex"] = sizeof(_cellIndex);
+  variableCosts["_cellTopo"] = sizeof(_cellTopo);
+  variableCosts["_vertices"] = VECTOR_OVERHEAD + sizeof(unsigned) * _vertices.size();
+  
+  variableCosts["_subcellPermutations"] = VECTOR_OVERHEAD;
+  for (vector< vector< unsigned > >::iterator entryIt = _subcellPermutations.begin(); entryIt != _subcellPermutations.end(); entryIt++) {
+    variableCosts["_subcellPermutations"] += VECTOR_OVERHEAD + entryIt->size() * sizeof(unsigned);
+  }
+  variableCosts["_meshTopo"] += sizeof(MeshTopology*);
+  
+  variableCosts["_children"] = VECTOR_OVERHEAD + _children.size() * sizeof(CellPtr);
+  
+  variableCosts["_refPattern"] = sizeof(RefinementPatternPtr);
+  
+  variableCosts["_parent"] = sizeof(_parent);
+  
+  variableCosts["_neighbors"] = VECTOR_OVERHEAD + _neighbors.size() * sizeof(pair<GlobalIndexType, unsigned>);
+  
+  return variableCosts;
+}
+
+long long Cell::approximateMemoryFootprint() {
+  long long memSize = 0; // in bytes
+  
+  map<string, long long> variableCost = approximateMemoryCosts();
+  for (map<string, long long>::iterator entryIt = variableCost.begin(); entryIt != variableCost.end(); entryIt++) {
+    memSize += entryIt->second;
+  }
+  return memSize;
+}
+
 unsigned Cell::cellIndex() {
   return _cellIndex;
 }
@@ -427,10 +471,15 @@ unsigned Cell::sideSubcellPermutation(unsigned int sideOrdinal, unsigned int sid
 }
 
 unsigned Cell::subcellPermutation(unsigned d, unsigned scord) {
-  if (_subcellPermutations[d].find(scord) == _subcellPermutations[d].end()) {
-    cout << "ERROR: subcell permutations appear to be unset.\n";
-    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "ERROR: subcell permutations appear to be unset.");
+  if (d >= _subcellPermutations.size()) {
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Dimension d is out of bounds.");
   }
+  if (_subcellPermutations[d].size() <= scord) {
+    cout << "ERROR: scord out of bounds (maybe because _subcellPermutations is unset?).\n";
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "ERROR: scord out of bounds (maybe because _subcellPermutations is unset?).");
+  }
+  
+  if (d==0) return 0;
   return _subcellPermutations[d][scord];
 }
 
@@ -480,6 +529,26 @@ void Cell::setNeighbor(unsigned sideOrdinal, GlobalIndexType neighborCellIndex, 
 unsigned Cell::getSideCount() {
   if (_cellTopo->getDimension() == 1) return _vertices.size();
   else return _cellTopo->getSideCount();
+}
+
+void Cell::printApproximateMemoryReport() {
+  cout << "**** Cell Memory Report ****\n";
+  cout << "Memory sizes are in bytes.\n";
+  
+  long long memSize = 0;
+  
+  map<string, long long> variableCost = approximateMemoryCosts();
+
+  map<long long, string> variableOrderedByCost;
+  for (map<string, long long>::iterator entryIt = variableCost.begin(); entryIt != variableCost.end(); entryIt++) {
+    variableOrderedByCost[entryIt->second] = entryIt->first;
+  }
+  
+  for (map<long long, string>::iterator entryIt = variableOrderedByCost.begin(); entryIt != variableOrderedByCost.end(); entryIt++) {
+    cout << setw(30) << entryIt->second << setw(30) << entryIt->first << endl;
+    memSize += entryIt->first;
+  }
+  cout << "Total: " << memSize << " bytes.\n";
 }
 
 const vector< unsigned > & Cell::vertices() {return _vertices;}

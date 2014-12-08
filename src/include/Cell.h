@@ -25,7 +25,7 @@ class Cell {
   unsigned _cellIndex;
   CellTopoPtrLegacy _cellTopo;
   vector< unsigned > _vertices;
-  vector< map< unsigned, unsigned > > _subcellPermutations; // permutation to get from local ordering to the canonical one
+  vector< vector< unsigned > > _subcellPermutations; // permutation to get from local ordering to the canonical one
   
   MeshTopology* _meshTopo;
   
@@ -42,8 +42,10 @@ class Cell {
      - hanging node sides point to the constraining neighbor (which may not be active)
      - cells with broken neighbors point to their peer, the ancestor of the active neighbors
    */
+  
+  map<string, long long> approximateMemoryCosts(); // for each private variable
 public:
-  Cell(CellTopoPtrLegacy cellTopo, const vector<unsigned> &vertices, const vector< map< unsigned, unsigned > > &subcellPermutations,
+  Cell(CellTopoPtrLegacy cellTopo, const vector<unsigned> &vertices, const vector< vector< unsigned > > &subcellPermutations,
        IndexType cellIndex, MeshTopology* meshTopo);
 
   Teuchos::RCP<Cell> ancestralCellForSubcell(unsigned subcdim, unsigned subcord);
@@ -52,6 +54,8 @@ public:
 //  unsigned ancestralPermutationForSideSubcell(unsigned sideOrdinal, unsigned subcdim, unsigned subcord);
   
   pair<unsigned, unsigned> ancestralSubcellOrdinalAndDimension(unsigned subcdim, unsigned subcord); // (subcord, subcdim) into the cell returned by ancestralCellForSubcell
+  
+  long long approximateMemoryFootprint(); // in bytes
   
   vector<unsigned> boundarySides();
   
@@ -106,6 +110,8 @@ public:
   pair<GlobalIndexType, unsigned> getNeighborInfo(unsigned sideOrdinal); // (neighborCellIndex, neighborSideOrdinal)
   void setNeighbor(unsigned sideOrdinal, GlobalIndexType neighborCellIndex, unsigned neighborSideOrdinal);
   std::vector< Teuchos::RCP<Cell> > getNeighbors();
+  
+  void printApproximateMemoryReport(); // in bytes
   
   const vector< unsigned > &vertices();
 };

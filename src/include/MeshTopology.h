@@ -47,7 +47,7 @@ class MeshTopology {
   vector< vector< set<IndexType> > > _entities; // vertices, edges, faces, solids, etc., up to dimension (_spaceDim - 1)
   vector< map< set<IndexType>, IndexType > > _knownEntities; // map keys are sets of vertices, values are entity indices in _entities[d]
   vector< map< IndexType, vector<IndexType> > > _canonicalEntityOrdering; // since we'll have one of these for each entity, could replace map with a vector
-  vector< map< IndexType, set< pair<IndexType, unsigned> > > > _activeCellsForEntities; // set entries are (cellIndex, entityIndexInCell) (entityIndexInCell aka subcord)--I'm vascillating on whether this should contain entries for active ancestral cells.  Today, I think it should not.  I think we should have another set of activeEntities.  Things in that list either themselves have active cells or an ancestor that has an active cell.  So if your parent is inactive and you don't have any active cells of your own, then you know you can deactivate.
+  vector< map< IndexType, vector< pair<IndexType, unsigned> > > > _activeCellsForEntities; // inner vector entries are sorted (cellIndex, entityIndexInCell) (entityIndexInCell aka subcord)--I'm vascillating on whether this should contain entries for active ancestral cells.  Today, I think it should not.  I think we should have another set of activeEntities.  Things in that list either themselves have active cells or an ancestor that has an active cell.  So if your parent is inactive and you don't have any active cells of your own, then you know you can deactivate.
   vector< map<IndexType, set<IndexType> > > _sidesForEntities; // map keys are entity indices of dimension d (the outer vector index); map values are entities of dimension _spaceDim-1 belonging to cells that contain the entity indicated by the map key.
   map< IndexType, pair< pair<IndexType, unsigned>, pair<IndexType, unsigned> > > _cellsForSideEntities; // key: sideEntityIndex.  value.first is (cellIndex1, sideOrdinal1), value.second is (cellIndex2, sideOrdinal2).  On initialization, (cellIndex2, sideOrdinal2) == ((IndexType)-1,(IndexType)-1).
   set<IndexType> _boundarySides; // entities of dimension _spaceDim-1 on the mesh boundary
@@ -82,7 +82,6 @@ class MeshTopology {
   
   void determineGeneralizedParentsForRefinement(CellPtr cell, RefinementPatternPtr refPattern);
   
-  vector< pair<IndexType,unsigned> > getConstrainingSideAncestry(IndexType sideEntityIndex);   // pair: first is the sideEntityIndex of the ancestor; second is the refinementIndex of the refinement to get from parent to child (see _parentEntities and _childEntities)
   IndexType getVertexIndexAdding(const vector<double> &vertex, double tol);
   vector<IndexType> getVertexIndices(const FieldContainer<double> &vertices);
   vector<IndexType> getVertexIndices(const vector< vector<double> > &vertices);
@@ -96,14 +95,24 @@ class MeshTopology {
   void setEntityGeneralizedParent(unsigned entityDim, IndexType entityIndex, unsigned parentDim, IndexType parentEntityIndex);
   
   GlobalDofAssignment* _gda; // for cubature degree lookups
+  
+  map<string, long long> approximateMemoryCosts(); // for each private variable
 public:
   MeshTopology(unsigned spaceDim, vector<PeriodicBCPtr> periodicBCs=vector<PeriodicBCPtr>());
   MeshTopology(MeshGeometryPtr meshGeometry, vector<PeriodicBCPtr> periodicBCs=vector<PeriodicBCPtr>());
   CellPtr addCell(CellTopoPtrLegacy cellTopo, const vector< vector<double> > &cellVertices);
+  
+  // ! This method only gets within a factor of 2 or so, but can give a rough estimate
+  long long approximateMemoryFootprint();
+  
+  // ! This method only gets within a factor of 2 or so, but can give rough estimates
+  void printApproximateMemoryReport();
+  
   bool entityHasParent(unsigned d, IndexType entityIndex);
   bool entityHasChildren(unsigned d, IndexType entityIndex);
   IndexType getActiveCellCount(unsigned d, IndexType entityIndex);
-  const set< pair<IndexType,IndexType> > &getActiveCellIndices(unsigned d, IndexType entityIndex); // first entry in pair is the cellIndex, the second is the index of the entity in that cell (the subcord).
+  
+  const vector< pair<IndexType,IndexType> > &getActiveCellIndices(unsigned d, IndexType entityIndex); // first entry in pair is the cellIndex, the second is the index of the entity in that cell (the subcord).
   CellPtr getCell(IndexType cellIndex);
 //  vector< pair< unsigned, unsigned > > getCellNeighbors(unsigned cellIndex, unsigned sideIndex); // second entry in return is the sideIndex in neighbor (note that in context of h-refinements, one or both of the sides may be broken)
 //  pair< CellPtr, unsigned > getCellAncestralNeighbor(unsigned cellIndex, unsigned sideIndex);
@@ -127,7 +136,7 @@ public:
   
   IndexType getEntityParent(unsigned d, IndexType entityIndex, unsigned parentOrdinal=0);
   IndexType getEntityParentForSide(unsigned d, IndexType entityIndex, IndexType parentSideEntityIndex);   // returns the entity index for the parent (which might be the entity itself) of entity (d,entityIndex) that is a subcell of side parentSideEntityIndex
-  const vector<IndexType> &getEntityVertexIndices(unsigned d, IndexType entityIndex);
+  vector<IndexType> getEntityVertexIndices(unsigned d, IndexType entityIndex);
   const shards::CellTopology &getEntityTopology(unsigned d, IndexType entityIndex);
   IndexType getFaceEdgeIndex(unsigned faceIndex, unsigned edgeOrdinalInFace);
   
@@ -177,6 +186,11 @@ public:
   // not sure this should ultimately be exposed -- using it now to allow correctly timed call to updateCells()
   // (will be transitioning from having MeshTransformationFunction talk to Mesh to having it talk to MeshTopology)
   Teuchos::RCP<MeshTransformationFunction> transformationFunction();
+  
+
+  // ! This method exposed for the sake of tests
+  vector< pair<IndexType,unsigned> > getConstrainingSideAncestry(IndexType sideEntityIndex);   // pair: first is the sideEntityIndex of the ancestor; second is the refinementIndex of the refinement to get from parent to child (see _parentEntities and _childEntities)
+
 };
 
 typedef Teuchos::RCP<MeshTopology> MeshTopologyPtr;

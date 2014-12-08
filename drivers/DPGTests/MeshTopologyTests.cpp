@@ -757,14 +757,14 @@ bool MeshTopologyTests::testEntityConstraints() {
     success = false;
   }
   
-  set< pair<unsigned,unsigned> > cellsForVertex = mesh2D->getActiveCellIndices(vertexDim, vertexIndex);
+  vector< pair<unsigned,unsigned> > cellsForVertex = mesh2D->getActiveCellIndices(vertexDim, vertexIndex);
   if (cellsForVertex.size() != 2) {
     cout << "cellsForVertex should have 2 entries; has " << cellsForVertex.size() << endl;
     success = false;
   }
   unsigned childCellForVertex, childCellConstrainedEdge;
   set<unsigned> childNewlyConstrainingEdges; // the two interior edges that we break
-  for (set< pair<unsigned,unsigned> >::iterator cellIt=cellsForVertex.begin(); cellIt != cellsForVertex.end(); cellIt++) {
+  for (vector< pair<unsigned,unsigned> >::iterator cellIt=cellsForVertex.begin(); cellIt != cellsForVertex.end(); cellIt++) {
 //    cout << "cellsForVertex: " << cellIt->first << endl;
     if ( cellsForEdgeChildren2D.find( cellIt->first ) != cellsForEdgeChildren2D.end() ) {
       // found match
@@ -826,7 +826,7 @@ bool MeshTopologyTests::testEntityConstraints() {
   }
 
   vector<unsigned> justCellsForVertex;
-  for (set< pair<unsigned,unsigned> >::iterator entryIt = cellsForVertex.begin(); entryIt != cellsForVertex.end(); entryIt++) {
+  for (vector< pair<unsigned,unsigned> >::iterator entryIt = cellsForVertex.begin(); entryIt != cellsForVertex.end(); entryIt++) {
     justCellsForVertex.push_back(entryIt->first);
   }
   vector<unsigned> childCellIndices = mesh3D->getCell(cellToRefine3D)->getChildIndices();
