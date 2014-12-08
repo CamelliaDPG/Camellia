@@ -1476,7 +1476,7 @@ bool MeshTestSuite::testHRefinementForConfusion() {
   vector<GlobalIndexType> cellsToRefine;
   cellsToRefine.clear();
   
-  // start with a fresh 2x1 mesh:
+  // start with a fresh 2x2 mesh:
   horizontalCells = 2; verticalCells = 2;
   Teuchos::RCP<Mesh> mesh = MeshFactory::buildQuadMesh(quadPoints, horizontalCells, verticalCells, exactSolution.bilinearForm(), H1Order, H1Order+2);
   
