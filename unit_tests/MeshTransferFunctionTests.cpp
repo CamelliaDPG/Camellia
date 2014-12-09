@@ -85,6 +85,8 @@ namespace {
     vector<GlobalIndexType> cellIDs_bottomMesh = bottomMesh->cellIDsForPoints(midPointsBottomMesh, false);
     vector<GlobalIndexType> cellIDs_topMesh = topMesh->cellIDsForPoints(midPointsTopMesh, false);
     
+    set<GlobalIndexType> myCellIDs_topMesh = topMesh->cellIDsInPartition();
+    
     // hard-coded notion of which sides meet the interface.  Would be a cleaner test if we determined these
     // programmatically...
     unsigned topCellsSideOrdinal = 0;
@@ -97,8 +99,10 @@ namespace {
       GlobalIndexType cellID_top = cellIDs_topMesh[i];
       CellSide topCellSide = make_pair(cellID_top,topCellsSideOrdinal);
       CellSide bottomCellSide = make_pair(cellID_bottom, bottomCellsSideOrdinal);
-      expectedMappingToOriginal[topCellSide] = bottomCellSide;
-      expectedMappingToNew[bottomCellSide] = topCellSide;
+      if (myCellIDs_topMesh.find(cellID_top) != myCellIDs_topMesh.end()) {
+        expectedMappingToOriginal[topCellSide] = bottomCellSide;
+        expectedMappingToNew[bottomCellSide] = topCellSide;
+      }
     }
     
     MeshTransferFunction transferFunction(Function::zero(), bottomMesh, topMesh, y_interface);
