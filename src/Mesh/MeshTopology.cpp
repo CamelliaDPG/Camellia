@@ -249,14 +249,14 @@ map<string, long long> MeshTopology::approximateMemoryCosts() {
     variableCost["_cells"] += (*entryIt)->approximateMemoryFootprint();
   }
   
-  variableCost["_activeCells"] += approximateSetSizeLLVM(_activeCells);
-  variableCost["_rootCells"] += approximateSetSizeLLVM(_rootCells);
+  variableCost["_activeCells"] = approximateSetSizeLLVM(_activeCells);
+  variableCost["_rootCells"] = approximateSetSizeLLVM(_rootCells);
   
-  variableCost["_cellIDsWithCurves"] += approximateSetSizeLLVM(_cellIDsWithCurves);
+  variableCost["_cellIDsWithCurves"] = approximateSetSizeLLVM(_cellIDsWithCurves);
   
-  variableCost["_edgeToCurveMap"] += approximateMapSizeLLVM(_edgeToCurveMap);
+  variableCost["_edgeToCurveMap"] = approximateMapSizeLLVM(_edgeToCurveMap);
   
-  variableCost["_knownTopologies"] += approximateMapSizeLLVM( _knownTopologies );
+  variableCost["_knownTopologies"] = approximateMapSizeLLVM( _knownTopologies );
   
   return variableCost;
 }
@@ -266,6 +266,7 @@ long long MeshTopology::approximateMemoryFootprint() {
 
   map<string, long long> variableCost = approximateMemoryCosts();
   for (map<string, long long>::iterator entryIt = variableCost.begin(); entryIt != variableCost.end(); entryIt++) {
+//    cout << entryIt->first << ": " << entryIt->second << endl;
     memSize += entryIt->second;
   }
   return memSize;
@@ -284,7 +285,8 @@ unsigned MeshTopology::addCell(CellTopoPtrLegacy cellTopo, const vector<unsigned
   vector< vector<unsigned> > cellEntityIndices(_spaceDim); // subcdim, subcord
   for (int d=0; d<_spaceDim; d++) { // start with vertices, and go up to sides
     int entityCount = cellTopo->getSubcellCount(d);
-    cellEntityPermutations.push_back(vector<unsigned>(entityCount));
+    if (d > 0) cellEntityPermutations.push_back(vector<unsigned>(entityCount));
+    else cellEntityPermutations.push_back(vector<unsigned>(0)); // empty vector for d=0 -- we don't track permutations here...
     cellEntityIndices[d] = vector<unsigned>(entityCount);
     for (int j=0; j<entityCount; j++) {
       // for now, we treat vertices just like all the others--could save a bit of memory, etc. by not storing in _knownEntities[0], etc.
@@ -1226,7 +1228,8 @@ unsigned MeshTopology::getVertexIndexAdding(const vector<double> &vertex, double
     }
   }
   
-  _periodicBCIndicesMatchingNode[vertexIndex] = matchingPeriodicBCs;
+  if (matchingPeriodicBCs.size() > 0)
+    _periodicBCIndicesMatchingNode[vertexIndex] = matchingPeriodicBCs;
   
   return vertexIndex;
 }
@@ -1710,17 +1713,18 @@ void MeshTopology::printApproximateMemoryReport() {
   
   map<string, long long> variableCost = approximateMemoryCosts();
 
-  map<long long, string> variableOrderedByCost;
+  map<long long, vector<string> > variableOrderedByCost;
   for (map<string, long long>::iterator entryIt = variableCost.begin(); entryIt != variableCost.end(); entryIt++) {
-    variableOrderedByCost[entryIt->second] = entryIt->first;
+    variableOrderedByCost[entryIt->second].push_back(entryIt->first);
   }
   
-  for (map<long long, string>::iterator entryIt = variableOrderedByCost.begin(); entryIt != variableOrderedByCost.end(); entryIt++) {
-    cout << setw(30) << entryIt->second << setw(30) << entryIt->first << endl;
-    memSize += entryIt->first;
+  for (map<long long, vector<string> >::iterator entryIt = variableOrderedByCost.begin(); entryIt != variableOrderedByCost.end(); entryIt++) {
+    for (int i=0; i< entryIt->second.size(); i++) {
+      cout << setw(30) << (entryIt->second)[i] << setw(30) << entryIt->first << endl;
+      memSize += entryIt->first;
+    }
   }
   cout << "Total: " << memSize << " bytes.\n";
-
 }
 
 void MeshTopology::printConstraintReport(unsigned d) {
