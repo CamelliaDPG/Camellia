@@ -89,21 +89,23 @@ map<string, long long> Cell::approximateMemoryCosts() {
   
   variableCosts["_cellIndex"] = sizeof(_cellIndex);
   variableCosts["_cellTopo"] = sizeof(_cellTopo);
-  variableCosts["_vertices"] = VECTOR_OVERHEAD + sizeof(unsigned) * _vertices.size();
+  variableCosts["_vertices"] = VECTOR_OVERHEAD + sizeof(unsigned) * _vertices.capacity();
   
   variableCosts["_subcellPermutations"] = VECTOR_OVERHEAD;
   for (vector< vector< unsigned > >::iterator entryIt = _subcellPermutations.begin(); entryIt != _subcellPermutations.end(); entryIt++) {
-    variableCosts["_subcellPermutations"] += VECTOR_OVERHEAD + entryIt->size() * sizeof(unsigned);
+    variableCosts["_subcellPermutations"] += VECTOR_OVERHEAD + entryIt->capacity() * sizeof(unsigned);
   }
+  variableCosts["_subcellPermutations"] += VECTOR_OVERHEAD * (_subcellPermutations.capacity() - _subcellPermutations.size());
+  
   variableCosts["_meshTopo"] += sizeof(MeshTopology*);
   
-  variableCosts["_children"] = VECTOR_OVERHEAD + _children.size() * sizeof(CellPtr);
+  variableCosts["_children"] = VECTOR_OVERHEAD + _children.capacity() * sizeof(CellPtr);
   
   variableCosts["_refPattern"] = sizeof(RefinementPatternPtr);
   
   variableCosts["_parent"] = sizeof(_parent);
   
-  variableCosts["_neighbors"] = VECTOR_OVERHEAD + _neighbors.size() * sizeof(pair<GlobalIndexType, unsigned>);
+  variableCosts["_neighbors"] = VECTOR_OVERHEAD + _neighbors.capacity() * sizeof(pair<GlobalIndexType, unsigned>);
   
   return variableCosts;
 }
