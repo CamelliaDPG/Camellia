@@ -55,7 +55,7 @@ class MeshTopology {
   
   vector< map< IndexType, pair<IndexType, unsigned> > > _generalizedParentEntities; // map from entity to its nearest generalized parent.  map entries are (parentEntityIndex, parentEntityDimension).  Generalized parents may be higher-dimensional or equal-dimensional to the child entity.
   vector< map< IndexType, vector< pair< RefinementPatternPtr, vector<IndexType> > > > > _childEntities; // map from parent to child entities, together with the RefinementPattern to get from one to the other.
-  vector< map< IndexType, IndexType > > _entityCellTopologyKeys;
+  vector< vector< IndexType > > _entityCellTopologyKeys;
   
   vector< CellPtr > _cells;
   set< IndexType > _activeCells;

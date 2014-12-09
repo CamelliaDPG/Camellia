@@ -28,7 +28,7 @@ void MeshTopology::init(unsigned spaceDim) {
   _parentEntities = vector< map< unsigned, vector< pair<unsigned, unsigned> > > >(_spaceDim); // map to possible parents
   _generalizedParentEntities = vector< map<unsigned, pair<unsigned,unsigned> > >(_spaceDim);
   _childEntities = vector< map< unsigned, vector< pair<RefinementPatternPtr, vector<unsigned> > > > >(_spaceDim);
-  _entityCellTopologyKeys = vector< map< unsigned, unsigned > >(_spaceDim);
+  _entityCellTopologyKeys = vector< vector< unsigned > >(_spaceDim);
   
   _gda = NULL;
 }
@@ -249,16 +249,16 @@ map<string, long long> MeshTopology::approximateMemoryCosts() {
   variableCost["_childEntities"] += MAP_OVERHEAD * (_childEntities.capacity() - _childEntities.size());
   
   variableCost["_entityCellTopologyKeys"] = VECTOR_OVERHEAD; // _entityCellTopologyKeys vector
-  for (vector< map< IndexType, IndexType > >::iterator entryIt = _entityCellTopologyKeys.begin(); entryIt != _entityCellTopologyKeys.end(); entryIt++) {
-    variableCost["_entityCellTopologyKeys"] += approximateMapSizeLLVM(*entryIt);
+  for (vector< vector< IndexType > >::iterator entryIt = _entityCellTopologyKeys.begin(); entryIt != _entityCellTopologyKeys.end(); entryIt++) {
+    variableCost["_entityCellTopologyKeys"] += approximateVectorSizeLLVM(*entryIt);
   }
-  variableCost["_entityCellTopologyKeys"] += MAP_OVERHEAD * (_entityCellTopologyKeys.capacity() - _entityCellTopologyKeys.size());
+  variableCost["_entityCellTopologyKeys"] += VECTOR_OVERHEAD * (_entityCellTopologyKeys.capacity() - _entityCellTopologyKeys.size());
   
   variableCost["_cells"] = VECTOR_OVERHEAD; // _cells vector
   for (vector< CellPtr >::iterator entryIt = _cells.begin(); entryIt != _cells.end(); entryIt++) {
     variableCost["_cells"] += (*entryIt)->approximateMemoryFootprint();
   }
-  variableCost["_cells"] += sizeof(CellPtr) * (_entityCellTopologyKeys.capacity() - _entityCellTopologyKeys.size());
+  variableCost["_cells"] += sizeof(CellPtr) * (_cells.capacity() - _cells.size());
   
   variableCost["_activeCells"] = approximateSetSizeLLVM(_activeCells);
   variableCost["_rootCells"] = approximateSetSizeLLVM(_rootCells);
@@ -544,7 +544,7 @@ unsigned MeshTopology::addEntity(const shards::CellTopology &entityTopo, const v
     if (_knownTopologies.find(entityTopo.getKey()) == _knownTopologies.end()) {
       _knownTopologies[entityTopo.getKey()] = entityTopo;
     }
-    _entityCellTopologyKeys[d].insert(make_pair(entityIndex, entityTopo.getKey()) );
+    _entityCellTopologyKeys[d].push_back(entityTopo.getKey());
   } else {
     // existing entity
     vector<IndexType> canonicalVertices = getCanonicalEntityNodesViaPeriodicBCs(d, entityVertices);
@@ -1235,8 +1235,6 @@ unsigned MeshTopology::getVertexIndexAdding(const vector<double> &vertex, double
     int vertexDim = 0;
     vector<IndexType> nodeVector(1,vertexIndex);
     _entities[vertexDim].push_back(nodeVector);
-    set<IndexType> nodeSet;
-    nodeSet.insert(vertexIndex);
     _knownEntities[vertexDim][nodeVector] = vertexIndex;
     vector<IndexType> entityVertices;
     entityVertices.push_back(vertexIndex);
@@ -1245,7 +1243,7 @@ unsigned MeshTopology::getVertexIndexAdding(const vector<double> &vertex, double
     if (_knownTopologies.find(nodeTopo.getKey()) == _knownTopologies.end()) {
       _knownTopologies[nodeTopo.getKey()] = nodeTopo;
     }
-    _entityCellTopologyKeys[vertexDim][vertexIndex] = nodeTopo.getKey();
+    _entityCellTopologyKeys[vertexDim].push_back(nodeTopo.getKey());
   }
   
   set< pair<int,int> > matchingPeriodicBCs;
