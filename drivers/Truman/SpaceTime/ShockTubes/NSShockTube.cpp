@@ -900,52 +900,66 @@ int main(int argc, char *argv[]) {
       adj_MD->addTerm( 1./mu*S );
       adj_Mq->addTerm( Pr/(Cp*mu)*tau );
       break;
+
+      case 2:
+      //   /$$$$$$$$             /$$
+      //  | $$_____/            | $$
+      //  | $$       /$$$$$$$  /$$$$$$    /$$$$$$   /$$$$$$   /$$$$$$  /$$   /$$
+      //  | $$$$$   | $$__  $$|_  $$_/   /$$__  $$ /$$__  $$ /$$__  $$| $$  | $$
+      //  | $$__/   | $$  \ $$  | $$    | $$  \__/| $$  \ $$| $$  \ $$| $$  | $$
+      //  | $$      | $$  | $$  | $$ /$$| $$      | $$  | $$| $$  | $$| $$  | $$
+      //  | $$$$$$$$| $$  | $$  |  $$$$/| $$      |  $$$$$$/| $$$$$$$/|  $$$$$$$
+      //  |________/|__/  |__/   \___/  |__/       \______/ | $$____/  \____  $$
+      //                                                    | $$       /$$  | $$
+      //                                                    | $$      |  $$$$$$/
+      //                                                    |__/       \______/
+      // define alpha from notes
+      FunctionPtr VePow1 = Teuchos::rcp( new PowerFunction(-Ve_prev, gamma));
+      FunctionPtr VePow2 = Teuchos::rcp( new PowerFunction(-Ve_prev, -1.-gamma));
+      FunctionPtr alphaPow1 = Teuchos::rcp( new PowerFunction((gamma-1)/VePow1, 1./(gamma-1)));
+      FunctionPtr alphaPow2 = Teuchos::rcp( new PowerFunction((gamma-1)/VePow1, (2-gamma)/(gamma-1)));
+      FunctionPtr alphaExp = Teuchos::rcp( new ExpFunction((-gamma+Vc_prev-0.5*Vm_prev*Vm_prev/Ve_prev)/(gamma-1)) );
+      FunctionPtr alpha = alphaPow1*alphaExp;
+      LinearTermPtr alpha_dU = Teuchos::rcp( new LinearTerm );
+      alpha_dU->addTerm( alphaPow2*gamma*VePow2*alphaExp*Ve );
+      alpha_dU->addTerm( alphaPow1*alphaExp/(gamma-1)*Vc );
+      alpha_dU->addTerm( -alphaPow1*alphaExp/(gamma-1)*Vm_prev/Ve_prev*Vm );
+      alpha_dU->addTerm( alphaPow1*alphaExp/(gamma-1)*Vm_prev*Vm_prev/(2*Ve_prev*Ve_prev)*Ve );
+
+      // Define Euler fluxes and flux jacobians
+      Fc = alpha*Vm_prev;
+      Fm = alpha*(-Vm_prev*Vm_prev/Ve_prev+(gamma-1));
+      Fe = alpha*Vm_prev/Ve_prev*(0.5*Vm_prev*Vm_prev/Ve_prev-gamma);
+      Cc = -alpha*Ve_prev;
+      Cm = alpha*Vm_prev;
+      Ce = alpha*(1-0.5*Vm_prev*Vm_prev/Ve_prev);
+      Km = D_prev;
+      Ke = -q_prev - Vm_prev/Ve_prev*D_prev;
+      MD = 1./mu*D_prev;
+      Mq = Pr/(Cp*mu)*q_prev;
+      GD = -2*Vm_prev/Ve_prev;
+      Gq = 1/(Cv*Ve_prev);
+
+      // Linearized Terms
+      Fc_dU->addTerm( Vm_prev*alpha_dU
+          + alpha*Vm );
+      Fm_dU->addTerm( (-Vm_prev*Vm_prev/Ve_prev+(gamma-1))*alpha_dU
+          + alpha*(-2*Vm_prev/Ve_prev*Vm) );
+      Fe_dU->addTerm( Vm_prev/Ve_prev*(0.5*Vm_prev*Vm_prev/Ve_prev-gamma)*alpha_dU
+          + alpha*(1.5*Vm_prev*Vm_prev/(Ve_prev*Ve_prev)*Vm - Vm_prev*Vm_prev*Vm_prev/(Ve_prev*Ve_prev*Ve_prev)*Ve
+            - gamma/Ve_prev*Vm + gamma*Vm_prev/(Ve_prev*Ve_prev)*Ve) );
+      Cc_dU->addTerm( -Ve_prev*alpha_dU - alpha*Ve );
+      Cm_dU->addTerm( Vm_prev*alpha_dU + alpha*Vm );
+      Ce_dU->addTerm( (1-0.5*Vm_prev*Vm_prev/Ve_prev)*alpha_dU
+          + alpha*(-Vm_prev/Ve_prev*Vm + 0.5*Vm_prev*Vm_prev/(Ve_prev*Ve_prev)*Ve) );
+      Km_dU->addTerm( 1*D );
+      Ke_dU->addTerm( -q - D_prev/Ve_prev*Vm - Vm_prev/Ve_prev*D + Vm_prev*D_prev/(Ve_prev*Ve_prev)*Ve );
+      MD_dU->addTerm( 1./mu*D );
+      Mq_dU->addTerm( Pr/(Cp*mu)*q );
+      GD_dU->addTerm( -2./Ve_prev*Vm + 2*Vm_prev/(Ve_prev*Ve_prev)*Ve );
+      Gq_dU->addTerm( -1/(Cv*Ve_prev*Ve_prev)*Ve );
+      break;
     }
-
-    // // S terms:
-    // bf->addTerm( D/mu, S);
-    // bf->addTerm( 2/rho_prev*m, S->dx());
-    // bf->addTerm( -2*m_prev/(rho_prev*rho_prev)*rho, S->dx());
-    // bf->addTerm( -2*uhat, S->times_normal_x());
-
-    // // tau terms:
-    // bf->addTerm( Pr/(mu*Cp)*q, tau);
-    // bf->addTerm( -1/(Cv*rho_prev)*E, tau->dx());
-    // bf->addTerm( m_prev/(Cv*rho_prev*rho_prev)*m, tau->dx());
-    // bf->addTerm( -m_prev*m_prev/(2.0*Cv*rho_prev*rho_prev*rho_prev)*rho, tau->dx());
-    // bf->addTerm( (E_prev-0.5*m_prev*m_prev/rho_prev)/(Cv*rho_prev*rho_prev)*rho, tau->dx());
-    // bf->addTerm( That, tau->times_normal_x());
-
-    // // vc terms:
-    // bf->addTerm( -m, vc->dx());
-    // bf->addTerm( -rho, vc->dy());
-    // bf->addTerm( tc, vc);
-
-    // // vm terms:
-    // bf->addTerm( -2.0*m_prev/rho_prev*m, vm->dx());
-    // bf->addTerm( m_prev*m_prev/(rho_prev*rho_prev)*rho, vm->dx());
-    // bf->addTerm( -(gamma-1)*E, vm->dx());
-    // bf->addTerm( (gamma-1)*m_prev/rho_prev*m, vm->dx());
-    // bf->addTerm( -(gamma-1)*m_prev*m_prev/(2*rho_prev*rho_prev)*rho, vm->dx());
-    // bf->addTerm( D, vm->dx());
-    // bf->addTerm( -m, vm->dy());
-    // bf->addTerm( tm, vm);
-
-    // // ve terms:
-    // bf->addTerm( -E_prev/rho_prev*m, ve->dx());
-    // bf->addTerm( -m_prev/rho_prev*E, ve->dx());
-    // bf->addTerm( m_prev*E_prev/(rho_prev*rho_prev)*rho, ve->dx());
-    // bf->addTerm( -(gamma-1)*m_prev/rho_prev*E, ve->dx());
-    // bf->addTerm( -(gamma-1)*E_prev/rho_prev*m, ve->dx());
-    // bf->addTerm( (gamma-1)*m_prev*E_prev/(rho_prev*rho_prev)*rho, ve->dx());
-    // bf->addTerm( 3*(gamma-1)*m_prev*m_prev/(2*rho_prev*rho_prev)*m, ve->dx());
-    // bf->addTerm( -(gamma-1)*m_prev*m_prev*m_prev/(rho_prev*rho_prev*rho_prev)*rho, ve->dx());
-    // bf->addTerm( -q, ve->dx());
-    // bf->addTerm( D_prev/rho_prev*m, ve->dx());
-    // bf->addTerm( m_prev/rho_prev*D, ve->dx());
-    // bf->addTerm( -m_prev*D_prev/(rho_prev*rho_prev)*rho, ve->dx());
-    // bf->addTerm( -E, ve->dy());
-    // bf->addTerm( Fe, ve);
 
     // Bilinear Form
     // S terms:
@@ -974,22 +988,6 @@ int main(int argc, char *argv[]) {
     bf->addTerm( Ke_dU, ve->dx());
     bf->addTerm( -Ce_dU, ve->dy());
     bf->addTerm( te, ve);
-
-    // bf->addTerm( 1./mu*D, S );
-    // bf->addTerm( -2*m_prev/(rho_prev*rho_prev)*rho + 2./rho_prev*m, S->dx() );
-    // bf->addTerm( Pr/(Cp*mu)*q, tau );
-    // bf->addTerm( (-m_prev*m_prev/(Cv*rho_prev*rho_prev*rho_prev) + E_prev/(Cv*rho_prev*rho_prev))*rho
-    //     + m_prev/(Cv*rho_prev*rho_prev)*m - 1./(Cv*rho_prev)*E, tau->dx() );
-    // bf->addTerm( -rho, vc->dy() );
-    // bf->addTerm( -m, vm->dy() );
-    // bf->addTerm( -E, vm->dy() );
-    // bf->addTerm( -m, vc->dx() );
-    // bf->addTerm( D - (gamma-1)*E + (1.-(gamma-1)/2.)*m_prev*m_prev/(rho_prev*rho_prev)*rho
-    //     + (-2*m_prev/rho_prev+(gamma-1)*m_prev/rho_prev)*m, vm->dx() );
-    // bf->addTerm( -q + (-(gamma-1)*m_prev*m_prev*m_prev/(rho_prev*rho_prev*rho_prev)
-    //       - m_prev*D_prev/(rho_prev*rho_prev) + gamma*m_prev*E_prev/(rho_prev*rho_prev))*rho
-    //     + (1.5*(gamma-1)*m_prev*m_prev/(rho_prev*rho_prev) + D_prev/rho_prev - gamma*E_prev/rho_prev)*m
-    //     - gamma*m_prev/rho_prev*E + m_prev/rho_prev*D, ve->dx() );
 
     ////////////////////   SPECIFY RHS   ///////////////////////
 
@@ -1061,95 +1059,6 @@ int main(int argc, char *argv[]) {
       default:
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "invalid inner product");
     }
-
-      // // S terms:
-      // bf->addTerm( D/mu, S);
-      // bf->addTerm( 2/rho_prev*m, S->dx());
-      // bf->addTerm( -2*m_prev/(rho_prev*rho_prev)*rho, S->dx());
-      // bf->addTerm( -2*uhat, S->times_normal_x());
-
-      // // tau terms:
-      // bf->addTerm( Pr/(mu*Cp)*q, tau);
-      // bf->addTerm( -1/(Cv*rho_prev)*E, tau->dx());
-      // bf->addTerm( m_prev/(Cv*rho_prev*rho_prev)*m, tau->dx());
-      // bf->addTerm( -m_prev*m_prev/(2.0*Cv*rho_prev*rho_prev*rho_prev)*rho, tau->dx());
-      // bf->addTerm( (E_prev-0.5*m_prev*m_prev/rho_prev)/(Cv*rho_prev*rho_prev)*rho, tau->dx());
-      // bf->addTerm( That, tau->times_normal_x());
-
-      // // vc terms:
-      // // bf->addTerm( -m, vc->dx());
-      // bf->addTerm( -FEc_dU, vc->dx());
-      // bf->addTerm( -rho, vc->dy());
-      // bf->addTerm( Fc, vc);
-
-      // // vm terms:
-      // // bf->addTerm( -2.0*m_prev/rho_prev*m, vm->dx());
-      // // bf->addTerm( m_prev*m_prev/(rho_prev*rho_prev)*rho, vm->dx());
-      // // bf->addTerm( -(gamma-1)*E, vm->dx());
-      // // bf->addTerm( (gamma-1)*m_prev/rho_prev*m, vm->dx());
-      // // bf->addTerm( -(gamma-1)*m_prev*m_prev/(2*rho_prev*rho_prev)*rho, vm->dx());
-      // bf->addTerm( -FEm_dU, vm->dx());
-      // bf->addTerm( D, vm->dx());
-      // bf->addTerm( -m, vm->dy());
-      // bf->addTerm( Fm, vm);
-
-      // // ve terms:
-      // // bf->addTerm( -E_prev/rho_prev*m, ve->dx());
-      // // bf->addTerm( -m_prev/rho_prev*E, ve->dx());
-      // // bf->addTerm( m_prev*E_prev/(rho_prev*rho_prev)*rho, ve->dx());
-      // // bf->addTerm( -(gamma-1)*m_prev/rho_prev*E, ve->dx());
-      // // bf->addTerm( -(gamma-1)*E_prev/rho_prev*m, ve->dx());
-      // // bf->addTerm( (gamma-1)*m_prev*E_prev/(rho_prev*rho_prev)*rho, ve->dx());
-      // // bf->addTerm( 3*(gamma-1)*m_prev*m_prev/(2*rho_prev*rho_prev)*m, ve->dx());
-      // // bf->addTerm( -(gamma-1)*m_prev*m_prev*m_prev/(rho_prev*rho_prev*rho_prev)*rho, ve->dx());
-      // bf->addTerm( -FEe_dU, ve->dx());
-      // bf->addTerm( -q, ve->dx());
-      // bf->addTerm( D_prev/rho_prev*m, ve->dx());
-      // bf->addTerm( m_prev/rho_prev*D, ve->dx());
-      // bf->addTerm( -m_prev*D_prev/(rho_prev*rho_prev)*rho, ve->dx());
-      // bf->addTerm( -E, ve->dy());
-      // bf->addTerm( Fe, ve);
-
-      // ////////////////////   SPECIFY RHS   ///////////////////////
-
-      // // S terms:
-      // rhs->addTerm( -1./mu*D_prev * S );
-      // rhs->addTerm( -2*m_prev/rho_prev * S->dx() );
-
-      // // tau terms:
-      // rhs->addTerm( (E_prev-0.5*m_prev*m_prev/rho_prev)/(Cv*rho_prev) * tau->dx() );
-
-      // // vc terms:
-      // // rhs->addTerm( m_prev * vc->dx() );
-      // rhs->addTerm( FEc * vc->dx() );
-      // rhs->addTerm( rho_prev * vc->dy() );
-
-      // // vm terms:
-      // // rhs->addTerm( m_prev*m_prev/rho_prev * vm->dx() );
-      // // rhs->addTerm( (gamma-1)*(E_prev-0.5*m_prev*m_prev/rho_prev) * vm->dx() );
-      // rhs->addTerm( FEm * vm->dx() );
-      // rhs->addTerm( -D_prev * vm->dx() );
-      // rhs->addTerm( m_prev * vm->dy() );
-
-      // // ve terms:
-      // // rhs->addTerm( m_prev*E_prev/rho_prev * ve->dx() );
-      // // rhs->addTerm( (gamma-1)*(E_prev-0.5*m_prev*m_prev/rho_prev)*m_prev/rho_prev * ve->dx() );
-      // rhs->addTerm( FEe * ve->dx() );
-      // rhs->addTerm( -m_prev/rho_prev*D_prev * ve->dx() );
-      // rhs->addTerm( E_prev * ve->dy() );
-
-      // ////////////////////   DEFINE INNER PRODUCT(S)   ///////////////////////
-      // switch (norm)
-      // {
-      //   // Automatic graph norm
-      //   case 0:
-      //   ips[slab] = bf->graphNorm();
-      //   break;
-
-      //   default:
-      //   TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "invalid inner product");
-      // }
-      // break;
 
       // case 2:
       // //   /$$$$$$$$             /$$
@@ -1370,8 +1279,8 @@ int main(int argc, char *argv[]) {
           FunctionPtr rhoTemp = Function::solution(rho,backgroundFlows[slab]) + alpha*Function::solution(rho,solution) - Function::constant(eps);
           FunctionPtr TTemp = Function::solution(T,backgroundFlows[slab]) + alpha*Function::solution(T,solution) - Function::constant(eps);
           bool rhoIsPositive = rhoTemp->isPositive(meshes[slab],posEnrich);
-          // bool TIsPositive = TTemp->isPositive(meshes[slab],posEnrich);
-          bool TIsPositive = true;
+          bool TIsPositive = TTemp->isPositive(meshes[slab],posEnrich);
+          // bool TIsPositive = true;
           int iter = 0; int maxIter = 20;
           while (!(rhoIsPositive && TIsPositive) && iter < maxIter)
           {
@@ -1379,8 +1288,8 @@ int main(int argc, char *argv[]) {
             rhoTemp = Function::solution(rho,backgroundFlows[slab]) + alpha*Function::solution(rho,solution);
             TTemp = Function::solution(T,backgroundFlows[slab]) + alpha*Function::solution(T,solution);
             rhoIsPositive = rhoTemp->isPositive(meshes[slab],posEnrich);
-            // TIsPositive = TTemp->isPositive(meshes[slab],posEnrich);
-            TIsPositive = true;
+            TIsPositive = TTemp->isPositive(meshes[slab],posEnrich);
+            // TIsPositive = true;
             iter++;
           }
           if (commRank==0 && alpha < 1.0){
