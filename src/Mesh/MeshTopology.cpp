@@ -22,7 +22,7 @@ void MeshTopology::init(unsigned spaceDim) {
   _spaceDim = spaceDim;
   _entities = vector< vector< vector< unsigned > > >(_spaceDim);
   _knownEntities = vector< map< vector<unsigned>, unsigned > >(_spaceDim); // map keys are sets of vertices, values are entity indices in _entities[d]
-  _canonicalEntityOrdering = vector< map< unsigned, vector<unsigned> > >(_spaceDim);
+  _canonicalEntityOrdering = vector< vector< vector<unsigned> > >(_spaceDim);
   _activeCellsForEntities = vector< vector< vector< pair<unsigned, unsigned> > > >(_spaceDim); // pair entries are (cellIndex, entityIndexInCell) (entityIndexInCell aka subcord)
   _sidesForEntities = vector< vector< vector< unsigned > > >(_spaceDim);
   _parentEntities = vector< map< unsigned, vector< pair<unsigned, unsigned> > > >(_spaceDim); // map to possible parents
@@ -180,13 +180,12 @@ map<string, long long> MeshTopology::approximateMemoryCosts() {
   variableCost["_knownEntities"] += MAP_OVERHEAD * (_knownEntities.capacity() - _knownEntities.size());
   
   variableCost["_canonicalEntityOrdering"] = VECTOR_OVERHEAD; // for outer vector _canonicalEntityOrdering
-  for (vector< map< IndexType, vector<IndexType> > >::iterator entryIt = _canonicalEntityOrdering.begin(); entryIt != _canonicalEntityOrdering.end(); entryIt++) {
-    variableCost["_canonicalEntityOrdering"] += MAP_OVERHEAD; // for map
-    for (map< IndexType, vector<IndexType> >::iterator entry2It = entryIt->begin(); entry2It != entryIt->end(); entry2It++) {
-      variableCost["_canonicalEntityOrdering"] += MAP_NODE_OVERHEAD;
-      variableCost["_canonicalEntityOrdering"] += sizeof(IndexType);
-      variableCost["_canonicalEntityOrdering"] += approximateVectorSizeLLVM(entry2It->second);
+  for (vector< vector< vector<IndexType> > >::iterator entryIt = _canonicalEntityOrdering.begin(); entryIt != _canonicalEntityOrdering.end(); entryIt++) {
+    variableCost["_canonicalEntityOrdering"] += VECTOR_OVERHEAD;
+    for (vector< vector<IndexType> >::iterator entry2It = entryIt->begin(); entry2It != entryIt->end(); entry2It++) {
+      variableCost["_canonicalEntityOrdering"] += approximateVectorSizeLLVM(*entry2It);
     }
+    variableCost["_canonicalEntityOrdering"] += VECTOR_OVERHEAD * (entryIt->capacity() - entryIt->size());
   }
   variableCost["_canonicalEntityOrdering"] += MAP_OVERHEAD * (_canonicalEntityOrdering.capacity() - _canonicalEntityOrdering.size());
   
@@ -540,7 +539,7 @@ unsigned MeshTopology::addEntity(const shards::CellTopology &entityTopo, const v
     entityIndex = _entities[d].size();
     _entities[d].push_back(sortedVertices);
     _knownEntities[d].insert(make_pair(sortedVertices, entityIndex));
-    if (d != 0) _canonicalEntityOrdering[d].insert(make_pair(entityIndex, entityVertices));
+    if (d != 0) _canonicalEntityOrdering[d].push_back(entityVertices);
     entityPermutation = 0;
     if (_knownTopologies.find(entityTopo.getKey()) == _knownTopologies.end()) {
       _knownTopologies[entityTopo.getKey()] = entityTopo;
@@ -1109,6 +1108,9 @@ const shards::CellTopology &MeshTopology::getEntityTopology(unsigned d, IndexTyp
 vector<unsigned> MeshTopology::getEntityVertexIndices(unsigned d, unsigned entityIndex) {
   if (d==0) {
     return vector<IndexType>(1,entityIndex);
+  }
+  if (_canonicalEntityOrdering[d].size() <= entityIndex) {
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "entityIndex out of bounds");
   }
   return _canonicalEntityOrdering[d][entityIndex];
 }
