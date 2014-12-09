@@ -44,7 +44,7 @@ class MeshTopology {
   map< pair<IndexType, pair<int,int> >, IndexType > _equivalentNodeViaPeriodicBC;
   
   // the following entity vectors are indexed on dimension of the entities
-  vector< vector< set<IndexType> > > _entities; // vertices, edges, faces, solids, etc., up to dimension (_spaceDim - 1)
+  vector< vector< vector<IndexType> > > _entities; // vertices, edges, faces, solids, etc., up to dimension (_spaceDim - 1).  Innermost container is sorted by value of IndexType (nodes). The outer two indices are entityDim, entityIndex.
   vector< map< set<IndexType>, IndexType > > _knownEntities; // map keys are sets of vertices, values are entity indices in _entities[d]
   vector< map< IndexType, vector<IndexType> > > _canonicalEntityOrdering; // since we'll have one of these for each entity, could replace map with a vector
   vector< vector< vector< pair<IndexType, unsigned> > > > _activeCellsForEntities; // inner vector entries are sorted (cellIndex, entityIndexInCell) (entityIndexInCell aka subcord)--I'm vascillating on whether this should contain entries for active ancestral cells.  Today, I think it should not.  I think we should have another set of activeEntities.  Things in that list either themselves have active cells or an ancestor that has an active cell.  So if your parent is inactive and you don't have any active cells of your own, then you know you can deactivate.

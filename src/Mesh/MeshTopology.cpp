@@ -20,7 +20,7 @@ void MeshTopology::init(unsigned spaceDim) {
   RefinementPattern::initializeAnisotropicRelationships(); // not sure this is the optimal place for this call
   
   _spaceDim = spaceDim;
-  _entities = vector< vector< set< unsigned > > >(_spaceDim);
+  _entities = vector< vector< vector< unsigned > > >(_spaceDim);
   _knownEntities = vector< map< set<unsigned>, unsigned > >(_spaceDim); // map keys are sets of vertices, values are entity indices in _entities[d]
   _canonicalEntityOrdering = vector< map< unsigned, vector<unsigned> > >(_spaceDim);
   _activeCellsForEntities = vector< vector< vector< pair<unsigned, unsigned> > > >(_spaceDim); // pair entries are (cellIndex, entityIndexInCell) (entityIndexInCell aka subcord)
@@ -160,12 +160,12 @@ map<string, long long> MeshTopology::approximateMemoryCosts() {
   variableCost["_equivalentNodeViaPeriodicBC"] = approximateMapSizeLLVM(_equivalentNodeViaPeriodicBC); // for map _equivalentNodeViaPeriodicBC
   
   variableCost["_entities"] = VECTOR_OVERHEAD; // for outer vector _entities
-  for (vector< vector< set<IndexType> > >::iterator entryIt = _entities.begin(); entryIt != _entities.end(); entryIt++) {
+  for (vector< vector< vector<IndexType> > >::iterator entryIt = _entities.begin(); entryIt != _entities.end(); entryIt++) {
     variableCost["_entities"] += VECTOR_OVERHEAD; //
-    for (vector< set<IndexType> >::iterator entry2It = entryIt->begin(); entry2It != entryIt->end(); entry2It++) {
-      variableCost["_entities"] += approximateSetSizeLLVM(*entry2It);
+    for (vector< vector<IndexType> >::iterator entry2It = entryIt->begin(); entry2It != entryIt->end(); entry2It++) {
+      variableCost["_entities"] += approximateVectorSizeLLVM(*entry2It);
     }
-    variableCost["_entities"] += SET_OVERHEAD * (entryIt->capacity() - entryIt->size());
+    variableCost["_entities"] += VECTOR_OVERHEAD * (entryIt->capacity() - entryIt->size());
   }
   variableCost["_entities"] += VECTOR_OVERHEAD * (_entities.capacity() - _entities.size());
   
@@ -531,10 +531,12 @@ unsigned MeshTopology::addEntity(const shards::CellTopology &entityTopo, const v
   unsigned d  = entityTopo.getDimension();
   unsigned entityIndex = getEntityIndex(d, nodeSet);
   
+  vector<unsigned> sortedVertices(nodeSet.begin(),nodeSet.end());
+  
   if ( entityIndex == -1 ) {
     // new entity
     entityIndex = _entities[d].size();
-    _entities[d].push_back(nodeSet);
+    _entities[d].push_back(sortedVertices);
     _knownEntities[d].insert(make_pair(nodeSet, entityIndex));
     if (d != 0) _canonicalEntityOrdering[d].insert(make_pair(entityIndex, entityVertices));
     entityPermutation = 0;
@@ -1217,9 +1219,10 @@ unsigned MeshTopology::getVertexIndexAdding(const vector<double> &vertex, double
   
   { // update the various entity containers
     int vertexDim = 0;
+    vector<IndexType> nodeVector(1,vertexIndex);
+    _entities[vertexDim].push_back(nodeVector);
     set<IndexType> nodeSet;
     nodeSet.insert(vertexIndex);
-    _entities[vertexDim].push_back(nodeSet);
     _knownEntities[vertexDim][nodeSet] = vertexIndex;
     vector<IndexType> entityVertices;
     entityVertices.push_back(vertexIndex);
