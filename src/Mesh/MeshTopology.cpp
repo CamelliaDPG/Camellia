@@ -21,7 +21,7 @@ void MeshTopology::init(unsigned spaceDim) {
   
   _spaceDim = spaceDim;
   _entities = vector< vector< vector< unsigned > > >(_spaceDim);
-  _knownEntities = vector< map< set<unsigned>, unsigned > >(_spaceDim); // map keys are sets of vertices, values are entity indices in _entities[d]
+  _knownEntities = vector< map< vector<unsigned>, unsigned > >(_spaceDim); // map keys are sets of vertices, values are entity indices in _entities[d]
   _canonicalEntityOrdering = vector< map< unsigned, vector<unsigned> > >(_spaceDim);
   _activeCellsForEntities = vector< vector< vector< pair<unsigned, unsigned> > > >(_spaceDim); // pair entries are (cellIndex, entityIndexInCell) (entityIndexInCell aka subcord)
   _sidesForEntities = vector< vector< vector< unsigned > > >(_spaceDim);
@@ -170,11 +170,11 @@ map<string, long long> MeshTopology::approximateMemoryCosts() {
   variableCost["_entities"] += VECTOR_OVERHEAD * (_entities.capacity() - _entities.size());
   
   variableCost["_knownEntities"] = VECTOR_OVERHEAD; // for outer vector _knownEntities
-  for (vector< map< set<IndexType>, IndexType > >::iterator entryIt = _knownEntities.begin(); entryIt != _knownEntities.end(); entryIt++) {
+  for (vector< map< vector<IndexType>, IndexType > >::iterator entryIt = _knownEntities.begin(); entryIt != _knownEntities.end(); entryIt++) {
     variableCost["_knownEntities"] += MAP_OVERHEAD; // for inner map
-    for (map< set<IndexType>, IndexType >::iterator entry2It = entryIt->begin(); entry2It != entryIt->end(); entry2It++) {
-      set<IndexType> entrySet = entry2It->first;
-      variableCost["_knownEntities"] += approximateSetSizeLLVM(entrySet) + sizeof(IndexType);
+    for (map< vector<IndexType>, IndexType >::iterator entry2It = entryIt->begin(); entry2It != entryIt->end(); entry2It++) {
+      vector<IndexType> entryVector = entry2It->first;
+      variableCost["_knownEntities"] += approximateVectorSizeLLVM(entryVector) + sizeof(IndexType);
     }
   }
   variableCost["_knownEntities"] += MAP_OVERHEAD * (_knownEntities.capacity() - _knownEntities.size());
@@ -474,9 +474,11 @@ void MeshTopology::addEdgeCurve(pair<unsigned,unsigned> edge, ParametricCurvePtr
   // because we don't know whether there are more curves coming for the affected elements.
   
   unsigned edgeDim = 1;
-  set<unsigned> edgeNodes;
-  edgeNodes.insert(edge.first);
-  edgeNodes.insert(edge.second);
+  vector<unsigned> edgeNodes;
+  edgeNodes.push_back(edge.first);
+  edgeNodes.push_back(edge.second);
+  
+  std::sort(edgeNodes.begin(), edgeNodes.end());
   
   if (_knownEntities[edgeDim].find(edgeNodes) == _knownEntities[edgeDim].end() ) {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "edge not found.");
@@ -537,7 +539,7 @@ unsigned MeshTopology::addEntity(const shards::CellTopology &entityTopo, const v
     // new entity
     entityIndex = _entities[d].size();
     _entities[d].push_back(sortedVertices);
-    _knownEntities[d].insert(make_pair(nodeSet, entityIndex));
+    _knownEntities[d].insert(make_pair(sortedVertices, entityIndex));
     if (d != 0) _canonicalEntityOrdering[d].insert(make_pair(entityIndex, entityVertices));
     entityPermutation = 0;
     if (_knownTopologies.find(entityTopo.getKey()) == _knownTopologies.end()) {
@@ -599,8 +601,11 @@ void MeshTopology::addSideForEntity(unsigned int entityDim, IndexType entityInde
 }
 
 vector<IndexType> MeshTopology::getCanonicalEntityNodesViaPeriodicBCs(unsigned d, const vector<IndexType> &myEntityNodes) {
-  set<IndexType> myNodeSet(myEntityNodes.begin(),myEntityNodes.end());
-  if (_knownEntities[d].find(myNodeSet) != _knownEntities[d].end()) {
+//  set<IndexType> myNodeSet(myEntityNodes.begin(),myEntityNodes.end());
+  vector<IndexType> sortedNodes(myEntityNodes.begin(),myEntityNodes.end());
+  std::sort(sortedNodes.begin(), sortedNodes.end());
+  
+  if (_knownEntities[d].find(sortedNodes) != _knownEntities[d].end()) {
     return myEntityNodes;
   } else {
     // compute the intersection of the periodic BCs that match each node in nodeSet
@@ -634,8 +639,11 @@ vector<IndexType> MeshTopology::getCanonicalEntityNodesViaPeriodicBCs(unsigned d
       for (vector<IndexType>::const_iterator nodeIt=myEntityNodes.begin(); nodeIt!=myEntityNodes.end(); nodeIt++) {
         equivalentNodeVector.push_back(_equivalentNodeViaPeriodicBC[make_pair(*nodeIt, matchingBC)]);
       }
-      set<IndexType> equivalentNodeSet(equivalentNodeVector.begin(),equivalentNodeVector.end());
-      if (_knownEntities[d].find(equivalentNodeSet) != _knownEntities[d].end()) {
+      
+      vector<IndexType> sortedEquivalentNodeVector = equivalentNodeVector;
+      std::sort(sortedEquivalentNodeVector.begin(), sortedEquivalentNodeVector.end());
+      
+      if (_knownEntities[d].find(sortedEquivalentNodeVector) != _knownEntities[d].end()) {
         return equivalentNodeVector;
       }
     }
@@ -1067,17 +1075,21 @@ unsigned MeshTopology::getEntityIndex(unsigned d, const set<unsigned> &nodeSet) 
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "node set for vertex should not have more than one entry!");
     }
   }
-  if (_knownEntities[d].find(nodeSet) != _knownEntities[d].end()) {
-    return _knownEntities[d][nodeSet];
+  vector<unsigned> sortedNodes(nodeSet.begin(),nodeSet.end());
+  if (_knownEntities[d].find(sortedNodes) != _knownEntities[d].end()) {
+    return _knownEntities[d][sortedNodes];
   } else {
     // look for alternative, equivalent nodeSets, arrived at via periodic BCs
     vector<IndexType> nodeVector(nodeSet.begin(),nodeSet.end());
     vector<IndexType> equivalentNodeVector = getCanonicalEntityNodesViaPeriodicBCs(d, nodeVector);
     
     if (equivalentNodeVector.size() > 0) {
-      set<IndexType> equivalentNodeSet(equivalentNodeVector.begin(),equivalentNodeVector.end());
-      if (_knownEntities[d].find(equivalentNodeSet) != _knownEntities[d].end()) {
-        return _knownEntities[d][equivalentNodeSet];
+      vector<IndexType> sortedEquivalentNodeVector = equivalentNodeVector;
+      std::sort(sortedEquivalentNodeVector.begin(), sortedEquivalentNodeVector.end());
+      
+//      set<IndexType> equivalentNodeSet(equivalentNodeVector.begin(),equivalentNodeVector.end());
+      if (_knownEntities[d].find(sortedEquivalentNodeVector) != _knownEntities[d].end()) {
+        return _knownEntities[d][sortedEquivalentNodeVector];
       }
     }
   }
@@ -1223,7 +1235,7 @@ unsigned MeshTopology::getVertexIndexAdding(const vector<double> &vertex, double
     _entities[vertexDim].push_back(nodeVector);
     set<IndexType> nodeSet;
     nodeSet.insert(vertexIndex);
-    _knownEntities[vertexDim][nodeSet] = vertexIndex;
+    _knownEntities[vertexDim][nodeVector] = vertexIndex;
     vector<IndexType> entityVertices;
     entityVertices.push_back(vertexIndex);
     //_canonicalEntityOrdering[vertexDim][vertexIndex] = entityVertices;
