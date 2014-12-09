@@ -138,7 +138,7 @@ RefinementPattern::RefinementPattern(Teuchos::RCP< shards::CellTopology > cellTo
   CellPtr parentCell = _refinementTopology->getCell(0);
   
   // populate _childrenForSides and _parentSideForChildSide
-  for (int sideIndex = 0; sideIndex < sideCount; sideIndex++) { // sideIndices in parent
+  for (int sideIndex = 0; sideIndex < sideCount; sideIndex++) { // sideIndex: side ordinal in parent
 //    cout << "sideIndex " << sideIndex << endl;
     int sideEntityIndex = parentCell->entityIndex(sideDim, sideIndex);
 //    cout << "sideEntityIndex " << sideEntityIndex << endl;
