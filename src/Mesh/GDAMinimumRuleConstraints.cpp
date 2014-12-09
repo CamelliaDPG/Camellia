@@ -310,13 +310,13 @@ void GDAMinimumRuleConstraintEntry::determineAncestralSideOrdinal(AnnotatedEntit
       }
     } else {
       // find some side in the ancestral cell that contains the ancestral subcell, then (there should be at least two; which one shouldn't matter)
-      set<IndexType> sidesForSubcell = _cell->meshTopology()->getSidesContainingEntity(_ancestralSubcellDimension, ancestralSubcellEntityIndex);
+      vector<IndexType> sidesForSubcell = _cell->meshTopology()->getSidesContainingEntity(_ancestralSubcellDimension, ancestralSubcellEntityIndex);
       
       _ancestralSideOrdinal = -1;
       int sideCount = CamelliaCellTools::getSideCount(*_ancestralCell->topology());
       for (int side=0; side<sideCount; side++) {
         IndexType ancestralSideEntityIndex = _ancestralCell->entityIndex(sideDim, side);
-        if (sidesForSubcell.find(ancestralSideEntityIndex) != sidesForSubcell.end()) {
+        if (std::find(sidesForSubcell.begin(), sidesForSubcell.end(), ancestralSideEntityIndex) != sidesForSubcell.end()) {
           _ancestralSideOrdinal = side;
           break;
         }

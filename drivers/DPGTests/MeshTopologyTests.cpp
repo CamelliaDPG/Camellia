@@ -522,7 +522,7 @@ bool MeshTopologyTests::testCellsForEntity() {
     for (int scord=0; scord<scCount; scord++) {
       IndexType scEntityIndex = cell->entityIndex(d, scord);
       set< pair<IndexType, unsigned> > cellsContainingEntity = mesh2D->getCellsContainingEntity(d, scEntityIndex);
-      set<IndexType> sidesContainingEntity = mesh2D->getSidesContainingEntity(d, scEntityIndex);
+      vector<IndexType> sidesContainingEntity = mesh2D->getSidesContainingEntity(d, scEntityIndex);
       if (cellsContainingEntity.size() != 1) {
         cout << "cellsContainingEntity should have exactly one entry, but has " << cellsContainingEntity.size() << endl;
         success = false;
@@ -535,7 +535,7 @@ bool MeshTopologyTests::testCellsForEntity() {
         } else {
           unsigned sideOrdinal = cellEntry.second;
           IndexType sideEntityIndex = cell->entityIndex(sideDim, sideOrdinal);
-          if (sidesContainingEntity.find(sideEntityIndex) == sidesContainingEntity.end()) {
+          if (std::find(sidesContainingEntity.begin(), sidesContainingEntity.end(), sideEntityIndex) == sidesContainingEntity.end()) {
             cout << "The side returned by getCellsContainingEntity() does not contain the specified entity.\n";
             success = false;
           }

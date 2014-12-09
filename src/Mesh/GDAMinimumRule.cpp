@@ -1101,9 +1101,9 @@ BasisMap GDAMinimumRule::getBasisMapOld(GlobalIndexType cellID, SubCellDofIndexI
             }
             
             { // a sanity check:
-              set<IndexType> sidesForSubcell = _meshTopology->getSidesContainingEntity(ancestralSubcellDimension, ancestralSubcellEntityIndex);
+              vector<IndexType> sidesForSubcell = _meshTopology->getSidesContainingEntity(ancestralSubcellDimension, ancestralSubcellEntityIndex);
               IndexType ancestralSideEntityIndex = ancestralCell->entityIndex(sideDim, ancestralSideOrdinal);
-              if (sidesForSubcell.find(ancestralSideEntityIndex) == sidesForSubcell.end()) {
+              if (std::find(sidesForSubcell.begin(), sidesForSubcell.end(), ancestralSideEntityIndex) == sidesForSubcell.end()) {
                 cout << "Error: the ancestral side does not contain the ancestral subcell.\n";
                 TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "the ancestral side does not contain the ancestral subcell.");
               }
@@ -1111,13 +1111,13 @@ BasisMap GDAMinimumRule::getBasisMapOld(GlobalIndexType cellID, SubCellDofIndexI
             
           } else {
             // find some side in the ancestral cell that contains the ancestral subcell, then (there should be at least two; which one shouldn't matter)
-            set<IndexType> sidesForSubcell = _meshTopology->getSidesContainingEntity(ancestralSubcellDimension, ancestralSubcellEntityIndex);
+            vector<IndexType> sidesForSubcell = _meshTopology->getSidesContainingEntity(ancestralSubcellDimension, ancestralSubcellEntityIndex);
             
             ancestralSideOrdinal = -1;
             int sideCount = CamelliaCellTools::getSideCount(*ancestralCell->topology());
             for (int side=0; side<sideCount; side++) {
               IndexType ancestralSideEntityIndex = ancestralCell->entityIndex(sideDim, side);
-              if (sidesForSubcell.find(ancestralSideEntityIndex) != sidesForSubcell.end()) {
+              if (std::find(sidesForSubcell.begin(), sidesForSubcell.end(), ancestralSideEntityIndex) != sidesForSubcell.end()) {
                 ancestralSideOrdinal = side;
                 break;
               }

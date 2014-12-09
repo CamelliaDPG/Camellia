@@ -62,12 +62,18 @@ namespace {
     mesh = MeshFactory::quadMesh(bf, H1Order, width, height, horizontalElements, verticalElements); // creates a 1-cell mesh
     meshTopo = mesh->getTopology();
     
-    for (int d=0; d<sideDim; d++) {
+    for (int d=0; d<=sideDim; d++) {
       int entityCount = meshTopo->getEntityCount(d);
       for (IndexType entityIndex=0; entityIndex < entityCount; entityIndex++) {
         vector< pair<unsigned,unsigned> > activeCellInfoForEntity = meshTopo->getActiveCellIndices(d, entityIndex);
         TEST_ASSERT((activeCellInfoForEntity.size() == 1) || (activeCellInfoForEntity.size() == 2));
         TEST_EQUALITY(meshTopo->getActiveCellCount(d, entityIndex), activeCellInfoForEntity.size());
+        
+        if (d==sideDim) {
+          vector< IndexType > sides = meshTopo->getSidesContainingEntity(sideDim, entityIndex);
+          TEST_EQUALITY(sides.size(), 1);
+          TEST_EQUALITY(sides[0], entityIndex);
+        }
       }
     }
   }

@@ -24,7 +24,7 @@ void MeshTopology::init(unsigned spaceDim) {
   _knownEntities = vector< map< set<unsigned>, unsigned > >(_spaceDim); // map keys are sets of vertices, values are entity indices in _entities[d]
   _canonicalEntityOrdering = vector< map< unsigned, vector<unsigned> > >(_spaceDim);
   _activeCellsForEntities = vector< vector< vector< pair<unsigned, unsigned> > > >(_spaceDim); // pair entries are (cellIndex, entityIndexInCell) (entityIndexInCell aka subcord)
-  _sidesForEntities = vector< vector< set< unsigned > > >(_spaceDim);
+  _sidesForEntities = vector< vector< vector< unsigned > > >(_spaceDim);
   _parentEntities = vector< map< unsigned, vector< pair<unsigned, unsigned> > > >(_spaceDim); // map to possible parents
   _generalizedParentEntities = vector< map<unsigned, pair<unsigned,unsigned> > >(_spaceDim);
   _childEntities = vector< map< unsigned, vector< pair<RefinementPatternPtr, vector<unsigned> > > > >(_spaceDim);
@@ -201,14 +201,15 @@ map<string, long long> MeshTopology::approximateMemoryCosts() {
   variableCost["_activeCellsForEntities"] += VECTOR_OVERHEAD * (_activeCellsForEntities.capacity() - _activeCellsForEntities.size());
   
   variableCost["_sidesForEntities"] = VECTOR_OVERHEAD; // _sidesForEntities
-  for (vector< vector< set<IndexType> > >::iterator entryIt = _sidesForEntities.begin(); entryIt != _sidesForEntities.end(); entryIt++) {
+  for (vector< vector< vector<IndexType> > >::iterator entryIt = _sidesForEntities.begin(); entryIt != _sidesForEntities.end(); entryIt++) {
     variableCost["_sidesForEntities"] += VECTOR_OVERHEAD;
-    for (vector< set<IndexType> >::iterator entry2It = entryIt->begin(); entry2It != entryIt->end(); entry2It++) {
+    for (vector< vector<IndexType> >::iterator entry2It = entryIt->begin(); entry2It != entryIt->end(); entry2It++) {
       variableCost["_sidesForEntities"] += sizeof(IndexType);
-      variableCost["_sidesForEntities"] += approximateSetSizeLLVM(*entry2It);
+      variableCost["_sidesForEntities"] += approximateVectorSizeLLVM(*entry2It);
     }
+    variableCost["_sidesForEntities"] += VECTOR_OVERHEAD * (entryIt->capacity() - entryIt->size());
   }
-  variableCost["_sidesForEntities"] += MAP_OVERHEAD * (_sidesForEntities.capacity() - _sidesForEntities.size());
+  variableCost["_sidesForEntities"] += VECTOR_OVERHEAD * (_sidesForEntities.capacity() - _sidesForEntities.size());
   
   variableCost["_cellsForSideEntities"] = approximateMapSizeLLVM(_cellsForSideEntities);
   
@@ -418,30 +419,20 @@ unsigned MeshTopology::addCell(CellTopoPtrLegacy cellTopo, const vector<unsigned
       set<unsigned> sideSubcellIndices = getEntitiesForSide(sideEntityIndex, d);
       for (set<unsigned>::iterator subcellIt = sideSubcellIndices.begin(); subcellIt != sideSubcellIndices.end(); subcellIt++) {
         unsigned subcellEntityIndex = *subcellIt;
-        if (_sidesForEntities[d].size() <= subcellEntityIndex) {
-          _sidesForEntities[d].resize(subcellEntityIndex + 1);
-        }
-        _sidesForEntities[d][subcellEntityIndex].insert(sideEntityIndex);
+        addSideForEntity(d, subcellEntityIndex, sideEntityIndex);
         if (d==0) {
           if (_periodicBCIndicesMatchingNode.find(subcellEntityIndex) != _periodicBCIndicesMatchingNode.end()) {
             for (set< pair<int, int> >::iterator bcIt = _periodicBCIndicesMatchingNode[subcellEntityIndex].begin(); bcIt != _periodicBCIndicesMatchingNode[subcellEntityIndex].end(); bcIt++) {
               IndexType equivalentNode = _equivalentNodeViaPeriodicBC[make_pair(subcellEntityIndex, *bcIt)];
-              if (_sidesForEntities[d].size() <= equivalentNode) {
-                _sidesForEntities[d].resize(equivalentNode + 1);
-              }
-              _sidesForEntities[d][equivalentNode].insert(sideEntityIndex);
+              
+              addSideForEntity(d, equivalentNode, sideEntityIndex);
             }
           }
         }
       }
     }
     // for convenience, include the side itself in the _sidesForEntities lookup:
-    set<unsigned> thisSideSet;
-    thisSideSet.insert(sideEntityIndex);
-    if (_sidesForEntities[sideDim].size() <= sideEntityIndex) {
-      _sidesForEntities[sideDim].resize(sideEntityIndex + 1);
-    }
-    _sidesForEntities[sideDim][sideEntityIndex] = thisSideSet;
+    addSideForEntity(sideDim, sideEntityIndex, sideEntityIndex);
   }
   
   return cellIndex;
@@ -592,6 +583,17 @@ void MeshTopology::addChildren(CellPtr parentCell, const vector< CellTopoPtrLega
   //      }
   //    }
   //  }
+}
+
+void MeshTopology::addSideForEntity(unsigned int entityDim, IndexType entityIndex, IndexType sideEntityIndex) {
+  if (_sidesForEntities[entityDim].size() <= entityIndex) {
+    _sidesForEntities[entityDim].resize(entityIndex + 1);
+  }
+  
+  std::vector<IndexType>::iterator searchResult = std::find(_sidesForEntities[entityDim][entityIndex].begin(), _sidesForEntities[entityDim][entityIndex].end(), sideEntityIndex);
+  if (searchResult == _sidesForEntities[entityDim][entityIndex].end()) {
+    _sidesForEntities[entityDim][entityIndex].push_back(sideEntityIndex);
+  }
 }
 
 vector<IndexType> MeshTopology::getCanonicalEntityNodesViaPeriodicBCs(unsigned d, const vector<IndexType> &myEntityNodes) {
@@ -1332,14 +1334,14 @@ pair<IndexType, unsigned> MeshTopology::getConstrainingEntity(unsigned d, IndexT
       // if the generalized parent has no constraint of like dimension, then either the generalized parent is the constraint, or there is no constraint of this dimension
       // basic rule: if there exists a side belonging to an active cell that contains the putative constraining entity, then we constrain
       // I am a bit vague on whether this will work correctly in the context of anisotropic refinements.  (It might, but I'm not sure.)  But first we are targeting isotropic.
-      set<unsigned> sidesForEntity;
+      vector<IndexType> sidesForEntity;
       if (generalizedAncestorDim==sideDim) {
-        sidesForEntity.insert(generalizedAncestorEntityIndex);
+        sidesForEntity.push_back(generalizedAncestorEntityIndex);
       } else {
         sidesForEntity = _sidesForEntities[generalizedAncestorDim][generalizedAncestorEntityIndex];
       }
-      for (set<unsigned>::iterator sideEntityIt = sidesForEntity.begin(); sideEntityIt != sidesForEntity.end(); sideEntityIt++) {
-        unsigned sideEntityIndex = *sideEntityIt;
+      for (vector<IndexType>::iterator sideEntityIt = sidesForEntity.begin(); sideEntityIt != sidesForEntity.end(); sideEntityIt++) {
+        IndexType sideEntityIndex = *sideEntityIt;
         if (getActiveCellCount(sideDim, sideEntityIndex) > 0) {
           constrainingEntity.second = generalizedAncestorDim;
           constrainingEntity.first = possibleConstrainingEntityIndex;
@@ -1369,14 +1371,14 @@ unsigned MeshTopology::getConstrainingEntityIndexOfLikeDimension(unsigned int d,
     return entityIndex;
   }
   
-  set<unsigned> sidesForEntity;
+  vector<unsigned> sidesForEntity;
   unsigned sideDim = _spaceDim - 1;
   if (d==sideDim) {
-    sidesForEntity.insert(entityIndex);
+    sidesForEntity.push_back(entityIndex);
   } else {
     sidesForEntity = _sidesForEntities[d][entityIndex];
   }
-  for (set<unsigned>::iterator sideEntityIt = sidesForEntity.begin(); sideEntityIt != sidesForEntity.end(); sideEntityIt++) {
+  for (vector<unsigned>::iterator sideEntityIt = sidesForEntity.begin(); sideEntityIt != sidesForEntity.end(); sideEntityIt++) {
     unsigned sideEntityIndex = *sideEntityIt;
     vector< pair<unsigned,unsigned> > sideAncestry = getConstrainingSideAncestry(sideEntityIndex);
     unsigned constrainingEntityIndexForSide = entityIndex;
@@ -1513,11 +1515,11 @@ unsigned MeshTopology::getEntityParentForSide(unsigned d, unsigned entityIndex,
 }
 
 set< pair<IndexType, unsigned> > MeshTopology::getCellsContainingEntity(unsigned d, unsigned entityIndex) { // not *all* cells, but within any refinement branch, the most refined cell that contains the entity will be present in this set.  The unsigned value is the ordinal of a *side* in the cell containing this entity.  There may be multiple sides in a cell that contain the entity; this method will return just one entry per cell.
-  set<IndexType> sidesForEntity = _sidesForEntities[d][entityIndex];
+  vector<IndexType> sidesForEntity = _sidesForEntities[d][entityIndex];
   typedef pair<IndexType,unsigned> CellPair;
   set< CellPair > cells;
   set< IndexType > cellIndices;  // container to keep track of which cells we've already counted -- we only return one (cell, side) pair per cell that contains the entity...
-  for (set<IndexType>::iterator sideEntityIt = sidesForEntity.begin(); sideEntityIt != sidesForEntity.end(); sideEntityIt++) {
+  for (vector<IndexType>::iterator sideEntityIt = sidesForEntity.begin(); sideEntityIt != sidesForEntity.end(); sideEntityIt++) {
     IndexType sideEntityIndex = *sideEntityIt;
     int numCellsForSide = getCellCountForSide(sideEntityIndex);
     if (numCellsForSide == 2) {
@@ -1572,8 +1574,8 @@ pair<IndexType,IndexType> MeshTopology::owningCellIndexForConstrainingEntity(uns
         cout << "ERROR: entityIndex " << constrainingEntityIndex << " of dimension " << d << " is beyond bounds of _sidesForEntities" << endl;
         TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "ERROR: constrainingEntityIndex is out of bounds of _sidesForEntities");
       }
-      set<IndexType> sideEntityIndices = _sidesForEntities[d][constrainedEntityIndex];
-      for (set<IndexType>::iterator sideEntityIt = sideEntityIndices.begin(); sideEntityIt != sideEntityIndices.end(); sideEntityIt++) {
+      vector<IndexType> sideEntityIndices = _sidesForEntities[d][constrainedEntityIndex];
+      for (vector<IndexType>::iterator sideEntityIt = sideEntityIndices.begin(); sideEntityIt != sideEntityIndices.end(); sideEntityIt++) {
         IndexType sideEntityIndex = *sideEntityIt;
         typedef pair<IndexType, unsigned> CellPair;
         pair<CellPair,CellPair> cellsForSide = _cellsForSideEntities[sideEntityIndex];
@@ -1607,9 +1609,9 @@ pair<IndexType,IndexType> MeshTopology::owningCellIndexForConstrainingEntity(uns
   return make_pair(leastActiveCellIndex, leastActiveCellConstrainedEntityIndex);
 }
 
-set< IndexType > MeshTopology::getSidesContainingEntity(unsigned d, unsigned entityIndex) {
+vector< IndexType > MeshTopology::getSidesContainingEntity(unsigned d, unsigned entityIndex) {
   if (_sidesForEntities[d].size() <= entityIndex) {
-    return set<IndexType> ();
+    return vector<IndexType> ();
   }
   return _sidesForEntities[d][entityIndex];
 }
