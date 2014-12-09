@@ -202,9 +202,8 @@ map<string, long long> MeshTopology::approximateMemoryCosts() {
   
   variableCost["_sidesForEntities"] = VECTOR_OVERHEAD; // _sidesForEntities
   for (vector< vector< set<IndexType> > >::iterator entryIt = _sidesForEntities.begin(); entryIt != _sidesForEntities.end(); entryIt++) {
-    variableCost["_sidesForEntities"] += MAP_OVERHEAD; // map
+    variableCost["_sidesForEntities"] += VECTOR_OVERHEAD;
     for (vector< set<IndexType> >::iterator entry2It = entryIt->begin(); entry2It != entryIt->end(); entry2It++) {
-      variableCost["_sidesForEntities"] += MAP_NODE_OVERHEAD; // map node
       variableCost["_sidesForEntities"] += sizeof(IndexType);
       variableCost["_sidesForEntities"] += approximateSetSizeLLVM(*entry2It);
     }
