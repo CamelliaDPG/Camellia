@@ -537,7 +537,7 @@ int main(int argc, char *argv[]) {
     UeR = -rhoR/(ER-0.5*mR*mR/rhoR);
     break;
     default:
-    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "invalid problem number");
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "invalid formulation");
   }
 
   ////////////////////   DECLARE VARIABLES   ///////////////////////
@@ -944,7 +944,7 @@ int main(int argc, char *argv[]) {
       Fc_dU->addTerm( Vm_prev*alpha_dU
           + alpha*Vm );
       Fm_dU->addTerm( (-Vm_prev*Vm_prev/Ve_prev+(gamma-1))*alpha_dU
-          + alpha*(-2*Vm_prev/Ve_prev*Vm) );
+          + alpha*(-2*Vm_prev/Ve_prev*Vm + Vm_prev*Vm_prev/(Ve_prev*Ve_prev)*Ve) );
       Fe_dU->addTerm( Vm_prev/Ve_prev*(0.5*Vm_prev*Vm_prev/Ve_prev-gamma)*alpha_dU
           + alpha*(1.5*Vm_prev*Vm_prev/(Ve_prev*Ve_prev)*Vm - Vm_prev*Vm_prev*Vm_prev/(Ve_prev*Ve_prev*Ve_prev)*Ve
             - gamma/Ve_prev*Vm + gamma*Vm_prev/(Ve_prev*Ve_prev)*Ve) );
@@ -959,6 +959,9 @@ int main(int argc, char *argv[]) {
       GD_dU->addTerm( -2./Ve_prev*Vm + 2*Vm_prev/(Ve_prev*Ve_prev)*Ve );
       Gq_dU->addTerm( -1/(Cv*Ve_prev*Ve_prev)*Ve );
       break;
+
+      // default:
+      // TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "invalid formulation");
     }
 
     // Bilinear Form
@@ -1034,27 +1037,6 @@ int main(int argc, char *argv[]) {
       ip->addTerm( S );
       ip->addTerm( tau );
       break;
-
-      // Manual Graph Norm
-      case 2:
-      ip->addTerm( vm->dx() + 1./mu*S + m_prev/rho_prev*ve->dx() );
-      ip->addTerm( -ve->dx() + Pr/(Cp*mu)*tau );
-      ip->addTerm( -vc->dy() + (1.-(gamma-1)/2.)*m_prev*m_prev/(rho_prev*rho_prev)*vm->dx()
-          + (-(gamma-1)*m_prev*m_prev*m_prev/(rho_prev*rho_prev*rho_prev) - m_prev*D_prev/(rho_prev*rho_prev)
-            + gamma*m_prev*E_prev/(rho_prev*rho_prev))*ve->dx()
-          - (m_prev*m_prev/(Cv*rho_prev*rho_prev*rho_prev) - E_prev/(Cv*rho_prev*rho_prev))*tau->dx()
-          - 2*m_prev/(rho_prev*rho_prev)*S->dx() );
-      ip->addTerm( -vc->dx() - vm->dy() + (-2*m_prev/rho_prev + (gamma-1)*m_prev/rho_prev)*vm->dx()
-          + (1.5*(gamma-1)*m_prev*m_prev/(rho_prev*rho_prev) + D_prev/rho_prev - gamma*E_prev/rho_prev)*ve->dx()
-          + m_prev/(Cv*rho_prev*rho_prev)*tau->dx() + 2./rho_prev*S->dx() );
-      ip->addTerm( -ve->dy() - (gamma-1)*vm->dx() - 1./(Cv*rho_prev)*tau->dx() - gamma*m_prev/rho_prev*ve->dx() );
-      ip->addTerm( vc );
-      ip->addTerm( vm );
-      ip->addTerm( ve );
-      ip->addTerm( S );
-      ip->addTerm( tau );
-      break;
-
 
       default:
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "invalid inner product");
@@ -1231,6 +1213,7 @@ int main(int argc, char *argv[]) {
   for (int slab=0; slab < numSlabs; slab++)
   {
     Teuchos::RCP<Solution> solution = Teuchos::rcp( new Solution(meshes[slab], bcs[slab], rhss[slab], ips[slab]) );
+    solution->setCubatureEnrichmentDegree(8);
     solutions.push_back(solution);
     if (slab > 0)
     {
@@ -1255,6 +1238,31 @@ int main(int argc, char *argv[]) {
     nonlinearVars.insert(Um->ID());
     nonlinearVars.insert(Ue->ID());
 
+    vector<FunctionPtr> positiveFunctions;
+    vector<FunctionPtr> positiveUpdates;
+    switch (formulation)
+    {
+      case 0:
+      positiveFunctions.push_back(Function::solution(rho,backgroundFlows[slab]));
+      positiveUpdates.push_back(Function::solution(rho,solution));
+      positiveFunctions.push_back(Function::solution(T,backgroundFlows[slab]));
+      positiveUpdates.push_back(Function::solution(T,solution));
+      break;
+      case 1:
+      positiveFunctions.push_back(Function::solution(rho,backgroundFlows[slab]));
+      positiveUpdates.push_back(Function::solution(rho,solution));
+      positiveFunctions.push_back(Function::solution(E,backgroundFlows[slab]));
+      positiveUpdates.push_back(Function::solution(E,solution));
+      break;
+      case 2:
+      positiveFunctions.push_back(-Function::solution(Ve,backgroundFlows[slab]));
+      positiveUpdates.push_back(-Function::solution(Ve,solution));
+      break;
+
+      default:
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "invalid formulation");
+    }
+
     for (int refIndex=0; refIndex<=numRefs; refIndex++)
     {
       double L2Update = 1e7;
@@ -1269,27 +1277,28 @@ int main(int argc, char *argv[]) {
 
         // line search algorithm
         double alpha = 1.0;
-        // bool useLineSearch = false;
         // amount of enriching of grid points on which to ensure positivity
         int posEnrich = 5;
         if (useLineSearch)
         {
           double lineSearchFactor = .5;
           double eps = .001;
-          FunctionPtr rhoTemp = Function::solution(rho,backgroundFlows[slab]) + alpha*Function::solution(rho,solution) - Function::constant(eps);
-          FunctionPtr TTemp = Function::solution(T,backgroundFlows[slab]) + alpha*Function::solution(T,solution) - Function::constant(eps);
-          bool rhoIsPositive = rhoTemp->isPositive(meshes[slab],posEnrich);
-          bool TIsPositive = TTemp->isPositive(meshes[slab],posEnrich);
-          // bool TIsPositive = true;
+          bool isPositive=true;
+          for (int i=0; i < positiveFunctions.size(); i++)
+          {
+            FunctionPtr temp = positiveFunctions[i] + alpha*positiveUpdates[i] - Function::constant(eps);
+            isPositive = isPositive and temp->isPositive(meshes[slab],posEnrich);
+          }
           int iter = 0; int maxIter = 20;
-          while (!(rhoIsPositive && TIsPositive) && iter < maxIter)
+          while (!isPositive && iter < maxIter)
           {
             alpha = alpha*lineSearchFactor;
-            rhoTemp = Function::solution(rho,backgroundFlows[slab]) + alpha*Function::solution(rho,solution);
-            TTemp = Function::solution(T,backgroundFlows[slab]) + alpha*Function::solution(T,solution);
-            rhoIsPositive = rhoTemp->isPositive(meshes[slab],posEnrich);
-            TIsPositive = TTemp->isPositive(meshes[slab],posEnrich);
-            // TIsPositive = true;
+            isPositive = true;
+            for (int i=0; i < positiveFunctions.size(); i++)
+            {
+              FunctionPtr temp = positiveFunctions[i] + alpha*positiveUpdates[i] - Function::constant(eps);
+              isPositive = isPositive and temp->isPositive(meshes[slab],posEnrich);
+            }
             iter++;
           }
           if (commRank==0 && alpha < 1.0){
@@ -1310,7 +1319,7 @@ int main(int argc, char *argv[]) {
       if (commRank == 0)
       {
         stringstream outfile;
-        outfile << problemName << norm << "_" << slab << "_" << refIndex;
+        outfile << problemName << formulation << "_" << norm << "_" << slab << "_" << refIndex;
         exporter.exportSolution(outfile.str());
         FunctionPtr rho_prev = Function::solution(rho,backgroundFlows[slab]);
         FunctionPtr D_prev = Function::solution(D,backgroundFlows[slab]);
