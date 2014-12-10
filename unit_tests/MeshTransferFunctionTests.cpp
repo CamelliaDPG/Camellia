@@ -12,6 +12,7 @@
 #include "MeshFactory.h"
 
 #include "MeshTransferFunction.h"
+#include "CamelliaDebugUtility.h"
 
 namespace {
   TEUCHOS_UNIT_TEST( MeshTransferFunction, CellMap)
@@ -149,7 +150,10 @@ namespace {
   
   TEUCHOS_UNIT_TEST( MeshTransferFunction, CellMapUnderRefinement)
   {
-    // TODO: write this test
+#ifdef HAVE_MPI
+    Epetra_MpiComm Comm(MPI_COMM_WORLD);
+    Comm.Barrier(); // set breakpoint here to allow debugger attachment to other MPI processes than the one you automatically attached to.
+#endif
     // test to check that the cell mapping is correctly updated when the newMesh is refined
     
     // (may be worth checking that things are updated correctly when originalMesh is refined,
@@ -226,6 +230,13 @@ namespace {
     vector<GlobalIndexType> cellIDs_bottomMesh = bottomMesh->cellIDsForPoints(midPointsBottomMesh, false);
     vector<GlobalIndexType> cellIDs_topMesh = topMesh->cellIDsForPoints(midPointsTopMesh, false);
     
+//    { //DEBUGGING
+//      int rank = Teuchos::GlobalMPISession::getRank();
+//      if (rank==1) {
+//        cout << "Rank 1.\n";
+//      }
+//    }
+    
     // refine topMesh
     set<GlobalIndexType> cellIDs;
     cellIDs.insert(0);
@@ -254,10 +265,12 @@ namespace {
       
       for (vector< pair<GlobalIndexType, unsigned> >::iterator topCellIDIt = topCellSides.begin(); topCellIDIt != topCellSides.end(); topCellIDIt++) {
         CellSide topCellSide = *topCellIDIt;
+        CellSide topCellSideAncestor = make_pair(cellID_top, topCellsSideOrdinal); // may be identical to topCellSide, or may be its parent
         CellSide bottomCellSide = make_pair(cellID_bottom, bottomCellsSideOrdinal);
+        
         if (myCellIDs_topMesh.find(topCellSide.first) != myCellIDs_topMesh.end()) {
-          expectedMappingToOriginal[topCellSide] = bottomCellSide;
-          expectedMappingToNew[bottomCellSide] = make_pair(cellID_top, topCellsSideOrdinal);
+          expectedMappingToOriginal[topCellSideAncestor] = bottomCellSide;
+          expectedMappingToNew[bottomCellSide] = topCellSideAncestor;
         }
       }
     }
@@ -281,6 +294,14 @@ namespace {
           CellSide newCellSideActual = actualMapToNew->find(originalCellSide)->second;
           TEST_EQUALITY(newCellSide, newCellSideActual);
         }
+      }
+    } else {
+      // DEBUGGING output
+      int rank = Teuchos::GlobalMPISession::getRank();
+      for (map<CellSide, CellSide>::iterator expectedMapIt = expectedMappingToNew.begin();
+           expectedMapIt != expectedMappingToNew.end(); expectedMapIt++) {
+        cout << "On rank " << rank << ", expectedMappingToNew[ (" << expectedMapIt->first.first << ", " << expectedMapIt->first.second << ") ] = ";
+        cout << "(" << expectedMapIt->second.first << ", " << expectedMapIt->second.second << ")\n";
       }
     }
     

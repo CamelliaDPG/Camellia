@@ -37,6 +37,8 @@ public:
   virtual void didHUnrefine(MeshTopologyPtr meshToRefine, const set<GlobalIndexType> &cellIDs) {
     didHUnrefine(cellIDs);
   }
+  
+  virtual void didRepartition(MeshTopologyPtr meshTopo) {}
 };
 
 #endif
