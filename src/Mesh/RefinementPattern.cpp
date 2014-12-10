@@ -731,6 +731,7 @@ pair<unsigned, unsigned> RefinementPattern::mapSubcellFromChildToParent(unsigned
   unsigned parentSubcord = parentCell->findSubcellOrdinal(subcdim, childEntityIndex);
   if (parentSubcord == -1) {
     pair<IndexType,unsigned> generalizedParent = _refinementTopology->getEntityGeneralizedParent(subcdim, childEntityIndex);
+    if (generalizedParent.first == -1) return make_pair(-1,-1);
     parentSubcord = parentCell->findSubcellOrdinal(generalizedParent.second, generalizedParent.first);
     return make_pair(generalizedParent.second, parentSubcord);
   } else {
@@ -1250,9 +1251,11 @@ void RefinementPattern::mapRefCellPointsToAncestor(RefinementBranch &refBranch, 
   fineCellRefNodes = RefinementPattern::descendantNodesRelativeToAncestorReferenceCell(refBranch);
 
   int minCubDegree = 1;
-  Teuchos::RCP<shards::CellTopology> cellTopo = refBranch[refBranch.size() - 1].first->childTopology(refBranch[refBranch.size() - 1].second);
-  BasisCachePtr fineCellCache = Teuchos::rcp( new BasisCache(*cellTopo, minCubDegree, false) ); // could be more efficient by doing what BasisCache does in terms of the physical cell mapping, instead of using BasisCache (which sets up a bunch of data structures that we just throw away here)
+  Teuchos::RCP<shards::CellTopology> leafCellTopo = refBranch[refBranch.size() - 1].first->childTopology(refBranch[refBranch.size() - 1].second);
+  BasisCachePtr fineCellCache = Teuchos::rcp( new BasisCache(*leafCellTopo, minCubDegree, false) ); // could be more efficient by doing what BasisCache does in terms of the physical cell mapping, instead of using BasisCache (which sets up a bunch of data structures that we just throw away here)
 
+  fineCellCache->setRefCellPoints(leafRefCellPoints);
+  
   fineCellRefNodes.resize(1,fineCellRefNodes.dimension(0),fineCellRefNodes.dimension(1));
   fineCellCache->setPhysicalCellNodes(fineCellRefNodes, vector<GlobalIndexType>(), false);
   
