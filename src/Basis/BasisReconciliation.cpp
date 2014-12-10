@@ -100,30 +100,6 @@ unsigned vertexPermutation(shards::CellTopology &fineTopo, unsigned fineSideInde
   return -1; // just for compilers that would otherwise warn that we're missing a return value...
 }
 
-FieldContainer<double> BasisReconciliation::permutedCubaturePoints(BasisCachePtr basisCache, Permutation cellTopoNodePermutation) { // permutation is for side nodes if the basisCache is a side cache
-  CellTopoPtr volumeTopo = basisCache->cellTopology();
-  int spaceDim = volumeTopo->getDimension();
-  CellTopoPtr cellTopo = basisCache->isSideCache() ? volumeTopo->getSubcell(spaceDim-1, basisCache->getSideIndex()) : volumeTopo;
-  int cubDegree = basisCache->  cubatureDegree(); // not really an argument that matters; we'll overwrite the cubature points in basisCacheForPermutation anyway
-  BasisCachePtr basisCacheForPermutation = Teuchos::rcp( new BasisCache( cellTopo, cubDegree, false ) );
-  FieldContainer<double> permutedCellTopoNodes(cellTopo->getNodeCount(), cellTopo->getDimension());
-  CamelliaCellTools::refCellNodesForTopology(permutedCellTopoNodes, cellTopo, cellTopoNodePermutation);
-  basisCacheForPermutation->setRefCellPoints(basisCache->getRefCellPoints());
-  const int oneCell = 1;
-  permutedCellTopoNodes.resize(oneCell,permutedCellTopoNodes.dimension(0),permutedCellTopoNodes.dimension(1));
-  basisCacheForPermutation->setPhysicalCellNodes(permutedCellTopoNodes, vector<GlobalIndexType>(), false);
-  FieldContainer<double> permutedCubaturePoints = basisCacheForPermutation->getPhysicalCubaturePoints();
-  // resize for reference space (no cellIndex dimension):
-  permutedCubaturePoints.resize(permutedCubaturePoints.dimension(1), permutedCubaturePoints.dimension(2));
-
-//  if (cellTopoNodePermutation != 0) {
-//    cout << "For non-identity permutation, unpermuted cubature points:\n" << basisCache->getRefCellPoints();
-//    cout << "Permuted points:\n" << permutedCubaturePoints;
-//  }
-
-  return permutedCubaturePoints;
-}
-
 SubBasisReconciliationWeights BasisReconciliation::composedSubBasisReconciliationWeights(SubBasisReconciliationWeights aWeights, SubBasisReconciliationWeights bWeights) {
   // first render aWeights and bWeights compatible by intersecting aWeights.coarseOrdinals with bWeights.fineOrdinals
   set<int> aColOrdinalsToInclude, bRowOrdinalsToInclude;
@@ -556,18 +532,9 @@ SubBasisReconciliationWeights BasisReconciliation::computeConstrainedWeights(uns
     unsigned permutation = CamelliaCellTools::permutationMatchingOrder(fineSubcellTopo, fineDomainSubcellNodes, subcellParentChildNodes);
     if (permutation != 0) {
       FieldContainer<double> permutedRefNodes(fineSubcellTopo->getNodeCount(),fineSubcellDimension);
-      // we could do this more efficiently by not introducing the overhead of a BasisCache--this is well-tested, reliable code, and
-      // easy to invoke, so we use this for now.  But we do this a few times in BasisReconciliation, and it may be worth adding a method
-      // that will transform a set of points in reference space according to a permutation of a topology's nodes to CamelliaCellTools
-      CamelliaCellTools::refCellNodesForTopology(permutedRefNodes, fineSubcellTopo, permutation);
-      // add cell dimension:
-      permutedRefNodes.resize(1,permutedRefNodes.dimension(0),permutedRefNodes.dimension(1));
-      BasisCachePtr fineSubcellCache = Teuchos::rcp( new BasisCache(fineSubcellTopo, 1, false) );
-      fineSubcellCache->setRefCellPoints(subcellCubaturePoints);
-      fineSubcellCache->setPhysicalCellNodes(permutedRefNodes,vector<GlobalIndexType>(), false);
-      subcellCubaturePoints = fineSubcellCache->getPhysicalCubaturePoints();
-      // eliminate cell dimension:
-      subcellCubaturePoints.resize(subcellCubaturePoints.dimension(1),subcellCubaturePoints.dimension(2));
+      
+      FieldContainer<double> subcellCubaturePointsCopy = subcellCubaturePoints;
+      CamelliaCellTools::permutedReferenceCellPoints(fineSubcellTopo, permutation, subcellCubaturePointsCopy, subcellCubaturePoints);
     }
   }
   
@@ -696,19 +663,11 @@ SubBasisReconciliationWeights BasisReconciliation::computeConstrainedWeights(uns
   if (coarseSubcellDimension == 0) {
     coarseSubcellCubaturePoints = subcellCubaturePoints; // not real sure we need to do this...
   } else {
-    FieldContainer<double> coarseSubcellNodesPermuted(coarseSubcellTopo->getNodeCount(),coarseSubcellDimension);
     // when you set physical cell nodes according to the coarse-to-fine permutation, then the reference-to-physical map
     // is fine-to-coarse (which is what we want).  Because the coarseSubcellPermutation is fine-to-coarse, we want its inverse:
-    unsigned ancestralSubcellPermutation = CamelliaCellTools::permutationInverse(coarseTopo, coarseSubcellPermutation);
-    CamelliaCellTools::refCellNodesForTopology(coarseSubcellNodesPermuted, coarseSubcellTopo, ancestralSubcellPermutation);
-    coarseSubcellNodesPermuted.resize(1,coarseSubcellNodesPermuted.dimension(0),coarseSubcellNodesPermuted.dimension(1)); // add cell dimension
+    unsigned ancestralSubcellPermutation = CamelliaCellTools::permutationInverse(coarseSubcellTopo, coarseSubcellPermutation);
     
-    BasisCachePtr coarseSubcellCache = Teuchos::rcp( new BasisCache(coarseSubcellTopo, cubDegree, false) );
-    coarseSubcellCache->setRefCellPoints(subcellCubaturePoints);
-    coarseSubcellCache->setPhysicalCellNodes(coarseSubcellNodesPermuted, vector<GlobalIndexType>(), false);
-
-    coarseSubcellCubaturePoints = coarseSubcellCache->getPhysicalCubaturePoints();
-    coarseSubcellCubaturePoints.resize(coarseSubcellCubaturePoints.dimension(1),coarseSubcellCubaturePoints.dimension(2)); // strip cell dimension
+    CamelliaCellTools::permutedReferenceCellPoints(coarseSubcellTopo, ancestralSubcellPermutation, subcellCubaturePoints, coarseSubcellCubaturePoints);
   }
   
   if (domainDim == fineSubcellAncestralDimension) {

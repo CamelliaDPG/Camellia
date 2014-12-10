@@ -48,8 +48,6 @@ private:
   
   static FieldContainer<double> filterBasisValues(const FieldContainer<double> &basisValues, set<int> &filter);
   
-  static FieldContainer<double> permutedCubaturePoints(BasisCachePtr basisCache, Permutation cellTopoNodePermutation);
-  
   static SubBasisReconciliationWeights filterToInclude(set<int> &rowOrdinals, set<int> &colOrdinals, SubBasisReconciliationWeights &weights);
 public:
   BasisReconciliation(bool cacheResults = true) { _cacheResults = cacheResults; }
