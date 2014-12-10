@@ -44,9 +44,6 @@ class MeshTransferFunction : public Function, public RefinementObserver {
   
   std::map<CellSide, unsigned> _permutationForNewMeshCellSide; // permutation goes from cell side in _newMesh to that in _originalMesh
   
-  void findAncestralPairForNewMeshCellSide(const CellSide &newMeshCellSide, CellSide &newMeshCellSideAncestor,
-                                           CellSide &originalMeshCellSideAncestor, unsigned &newCellSideAncestorPermutation);
-  
   void rebuildMaps();
 public:
   MeshTransferFunction(FunctionPtr originalFunction, MeshPtr originalMesh, MeshPtr newMesh, double interface_t);
@@ -54,9 +51,12 @@ public:
   
   bool boundaryValueOnly();
   
+  bool findAncestralPairForNewMeshCellSide(const CellSide &newMeshCellSide, CellSide &newMeshCellSideAncestor,
+                                           CellSide &originalMeshCellSideAncestor, unsigned &newCellSideAncestorPermutation);
+  
   const std::map<CellSide,CellSide> & mapToOriginalMesh() { return _newToOriginalMap; }
   const std::map<CellSide,CellSide> & mapToNewMesh() { return _originalToNewMap; }
-  
+    
   // RefinementObserver method:
   void didRepartition(MeshTopologyPtr meshTopology);
   
