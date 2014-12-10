@@ -521,23 +521,27 @@ void Mesh::hRefine(const set<GlobalIndexType> &cellIDs, Teuchos::RCP<RefinementP
     
     _meshTopology->refineCell(cellID, refPattern);
     
-    // TODO: consider moving the didHRefine notifications outside the cellID loop (thereby reducing the number of notifications)
+    // TODO: figure out what it is that breaks in GDAMaximumRule when we use didHRefine to notify about all cells together outside this loop
+    //       (and/or try moving outside the loop if and only if we are using the minimum rule)
     set<GlobalIndexType> cellIDset;
     cellIDset.insert(cellID);
     
     // TODO: consider making GDA a refinementObserver, using that interface to send it the notification
     _gda->didHRefine(cellIDset);
-    for (vector< Teuchos::RCP<RefinementObserver> >::iterator observerIt = _registeredObservers.begin();
-         observerIt != _registeredObservers.end(); observerIt++) {
-      (*observerIt)->didHRefine(_meshTopology,cellIDset,refPattern);
-    }
-
-    // TODO: consider making transformation function a refinementObserver, using that interface to send it the notification
-    // let transformation function know about the refinement that just took place
-    if (_meshTopology->transformationFunction().get()) {
-      _meshTopology->transformationFunction()->didHRefine(cellIDset);
-    }
   }
+  
+  // NVR 12/10/14 the code below moved from inside the loop above, where it was doing the below one cell at a time...
+  for (vector< Teuchos::RCP<RefinementObserver> >::iterator observerIt = _registeredObservers.begin();
+       observerIt != _registeredObservers.end(); observerIt++) {
+    (*observerIt)->didHRefine(_meshTopology,cellIDs,refPattern);
+  }
+  
+  // TODO: consider making transformation function a refinementObserver, using that interface to send it the notification
+  // let transformation function know about the refinement that just took place
+  if (_meshTopology->transformationFunction().get()) {
+    _meshTopology->transformationFunction()->didHRefine(cellIDs);
+  }
+  
   if (repartitionAndRebuild) {
     _gda->repartitionAndMigrate();
     _boundary.buildLookupTables();
