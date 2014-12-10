@@ -187,6 +187,16 @@ void CamelliaCellTools::refCellNodesForTopology(FieldContainer<double> &cellNode
   TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "refCellNodesForTopology does not yet support tensorial degree > 0.");
 }
 
+void CamelliaCellTools::mapToPhysicalFrame(FieldContainer<double> &physPoints, const FieldContainer<double> &refPoints, const FieldContainer<double> &cellWorkset,
+                                           CellTopoPtr cellTopo, const int & whichCell) {
+  if (cellTopo->getTensorialDegree() == 0) {
+    CellTools<double>::mapToPhysicalFrame(physPoints,refPoints,cellWorkset,cellTopo->getShardsTopology(), whichCell);
+  } else {
+    cout << "CamelliaCellTools::mapToPhysicalFrame() does not yet support tensorial degree > 0.\n";
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "CamelliaCellTools::mapToPhysicalFrame() does not yet support tensorial degree > 0.");
+  }
+}
+
 unsigned CamelliaCellTools::permutationMatchingOrder( CellTopoPtr cellTopo, const vector<unsigned> &fromOrder, const vector<unsigned> &toOrder) {
   if (cellTopo->getTensorialDegree() == 0) {
     return permutationMatchingOrder(cellTopo->getShardsTopology(), fromOrder, toOrder);
@@ -325,6 +335,16 @@ void CamelliaCellTools::permutedReferenceCellPoints(const shards::CellTopology &
   permutedNodes.resize(1,permutedNodes.dimension(0), permutedNodes.dimension(1));
   int whichCell = 0;
   CellTools<double>::mapToPhysicalFrame(permutedPoints,refPoints,permutedNodes,cellTopo, whichCell);
+}
+
+void CamelliaCellTools::permutedReferenceCellPoints(CellTopoPtr cellTopo, unsigned int permutation,
+                                                    const FieldContainer<double> &refPoints, FieldContainer<double> &permutedPoints) {
+  FieldContainer<double> permutedNodes(cellTopo->getNodeCount(),cellTopo->getDimension());
+  CamelliaCellTools::refCellNodesForTopology(permutedNodes, cellTopo, permutation);
+  
+  permutedNodes.resize(1,permutedNodes.dimension(0), permutedNodes.dimension(1));
+  int whichCell = 0;
+  CamelliaCellTools::mapToPhysicalFrame(permutedPoints,refPoints,permutedNodes,cellTopo, whichCell);
 }
 
 unsigned CamelliaCellTools::subcellOrdinalMap(CellTopoPtr cellTopo, unsigned subcdim, unsigned subcord, unsigned subsubcdim, unsigned subsubcord) {
