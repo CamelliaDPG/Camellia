@@ -987,7 +987,7 @@ BasisCachePtr BasisCache::basisCache1D(double x0, double x1, int cubatureDegree)
 }
 
 BasisCachePtr BasisCache::basisCacheForCell(MeshPtr mesh, GlobalIndexType cellID, bool testVsTest, int cubatureDegreeEnrichment) {
-  ElementTypePtr elemType = mesh->getElement(cellID)->elementType();
+  ElementTypePtr elemType = mesh->getElementType(cellID);
   BasisCachePtr basisCache = Teuchos::rcp( new BasisCache(elemType, mesh, testVsTest, cubatureDegreeEnrichment) );
   bool createSideCache = true;
   vector<GlobalIndexType> cellIDs(1,cellID);
