@@ -28,6 +28,8 @@
 //
 // @HEADER 
 
+#include "Intrepid_FunctionSpaceTools.hpp"
+
 #include "BilinearFormUtility.h"
 
 #include "DPGInnerProduct.h"

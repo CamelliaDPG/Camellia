@@ -19,6 +19,8 @@
 
 #include "CamelliaCellTools.h"
 
+#include "Intrepid_FunctionSpaceTools.hpp"
+
 typedef pair< FunctionPtr, VarPtr > LinearSummand;
 
 bool linearSummandIsBoundaryValueOnly(LinearSummand &ls) {

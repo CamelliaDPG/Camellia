@@ -10,6 +10,8 @@
 #include "BasisCache.h"
 #include "DofOrdering.h"
 
+#include "Intrepid_FunctionSpaceTools.hpp"
+
 #include "CamelliaCellTools.h"
 
 PenaltyMethodFilter::PenaltyMethodFilter(Teuchos::RCP<Constraints> constraints){

@@ -23,6 +23,8 @@
 
 #include "CamelliaCellTools.h"
 
+#include "Intrepid_CellTools.hpp"
+
 // for adaptive quadrature
 struct CacheInfo {
   ElementTypePtr elemType;

@@ -15,6 +15,8 @@
 
 #include "GlobalDofAssignment.h"
 
+#include "Intrepid_CellTools.hpp"
+
 PreviousSolutionFunction::PreviousSolutionFunction(SolutionPtr soln, LinearTermPtr solnExpression, bool multiplyFluxesByCellParity) : Function(solnExpression->rank()) {
   _soln = soln;
   _solnExpression = solnExpression;
