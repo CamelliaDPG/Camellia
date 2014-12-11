@@ -97,13 +97,15 @@ namespace {
     for (int valOrdinal=0; valOrdinal<referenceToReferenceJacobian.size(); valOrdinal++) {
       double diff = abs(kronecker[valOrdinal]-referenceToReferenceJacobian[valOrdinal]);
       TEST_ASSERT( diff < tol );
-      double maxDiff = max(maxDiff,diff);
+      maxDiff = max(maxDiff,diff);
     }
     TEST_ASSERT(maxDiff < tol);
     
     if (maxDiff >= tol) {
       cout << "identity map doesn't have identity Jacobian.\n";
       cout << "maxDiff = " << maxDiff << endl;
+      
+      cout << "referenceToReferenceJacobian:\n" << referenceToReferenceJacobian ;
     }
 
     
@@ -126,7 +128,7 @@ namespace {
     for (int valOrdinal=0; valOrdinal<referenceToUnitCubeJacobian.size(); valOrdinal++) {
       double diff = abs(halfKronecker[valOrdinal]-referenceToUnitCubeJacobian[valOrdinal]);
       TEST_ASSERT( diff < tol );
-      double maxDiff = max(maxDiff,diff);
+      maxDiff = max(maxDiff,diff);
     }
     TEST_ASSERT(maxDiff < tol);
     
