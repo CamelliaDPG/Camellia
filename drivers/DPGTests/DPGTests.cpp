@@ -63,7 +63,6 @@
 #include "DPGTests.h"
 
 // test suite includes
-#include "BasisCacheTests.h"
 #include "BasisReconciliationTests.h"
 #include "CurvilinearMeshTests.h"
 #include "ElementTests.h"
@@ -224,7 +223,7 @@ void DPGTests::runTests() {
   }
   
   testSuites.push_back( Teuchos::rcp( new MeshRefinementTests ) ); // skips two PatchBasis tests
-    
+  
   testSuites.push_back( Teuchos::rcp( new LinearTermTests ) );
   
   testSuites.push_back( Teuchos::rcp( new ScratchPadTests ) );
@@ -246,8 +245,6 @@ void DPGTests::runTests() {
   testSuites.push_back( Teuchos::rcp( new RHSTests ) );
   testSuites.push_back( Teuchos::rcp( new VectorizedBasisTestSuite ) );
   
-  testSuites.push_back( Teuchos::rcp( new BasisCacheTests ) );
-
   testSuites.push_back( Teuchos::rcp( new HConvergenceStudyTests ) );
   
   testSuites.push_back( Teuchos::rcp( new LobattoBasisTests ) );
