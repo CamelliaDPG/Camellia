@@ -360,6 +360,7 @@ int main(int argc, char *argv[]) {
   bool useLineSearch = args.Input("--lineSearch", "use line search", true);
   int polyOrder = args.Input("--polyOrder", "polynomial order for field variables", 2);
   int deltaP = args.Input("--deltaP", "how much to enrich test space", 2);
+  int cubatureEnrichment = args.Input("--cubatureEnrichment", "how much to enrich cubature", 0);
   int numX = args.Input("--numX", "number of cells in the x direction", 4);
   int numT = args.Input("--numT", "number of cells in the t direction", 1);
   int maxNewtonIterations = args.Input("--maxIterations", "maximum number of Newton iterations", 10);
@@ -915,16 +916,17 @@ int main(int argc, char *argv[]) {
       //                                                    |__/       \______/
       // define alpha from notes
       FunctionPtr VePow1 = Teuchos::rcp( new PowerFunction(-Ve_prev, gamma));
-      FunctionPtr VePow2 = Teuchos::rcp( new PowerFunction(-Ve_prev, -1.-gamma));
+      // FunctionPtr VePow2 = Teuchos::rcp( new PowerFunction(-Ve_prev, -1.-gamma));
       FunctionPtr alphaPow1 = Teuchos::rcp( new PowerFunction((gamma-1)/VePow1, 1./(gamma-1)));
-      FunctionPtr alphaPow2 = Teuchos::rcp( new PowerFunction((gamma-1)/VePow1, (2-gamma)/(gamma-1)));
+      // FunctionPtr alphaPow2 = Teuchos::rcp( new PowerFunction((gamma-1)/VePow1, (2-gamma)/(gamma-1)));
       FunctionPtr alphaExp = Teuchos::rcp( new ExpFunction((-gamma+Vc_prev-0.5*Vm_prev*Vm_prev/Ve_prev)/(gamma-1)) );
       FunctionPtr alpha = alphaPow1*alphaExp;
       LinearTermPtr alpha_dU = Teuchos::rcp( new LinearTerm );
-      alpha_dU->addTerm( alphaPow2*gamma*VePow2*alphaExp*Ve );
-      alpha_dU->addTerm( alphaPow1*alphaExp/(gamma-1)*Vc );
-      alpha_dU->addTerm( -alphaPow1*alphaExp/(gamma-1)*Vm_prev/Ve_prev*Vm );
-      alpha_dU->addTerm( alphaPow1*alphaExp/(gamma-1)*Vm_prev*Vm_prev/(2*Ve_prev*Ve_prev)*Ve );
+      alpha_dU->addTerm( alpha/(gamma-1)*(Vc - Vm_prev/Ve_prev*Vm + (0.5*Vm_prev*Vm_prev/(Ve_prev*Ve_prev)-gamma/Ve_prev)*Ve) );
+      // alpha_dU->addTerm( alphaPow2*gamma*VePow2*alphaExp*Ve );
+      // alpha_dU->addTerm( alphaPow1*alphaExp/(gamma-1)*Vc );
+      // alpha_dU->addTerm( -alphaPow1*alphaExp/(gamma-1)*Vm_prev/Ve_prev*Vm );
+      // alpha_dU->addTerm( alphaPow1*alphaExp/(gamma-1)*Vm_prev*Vm_prev/(2*Ve_prev*Ve_prev)*Ve );
 
       // Define Euler fluxes and flux jacobians
       Fc = alpha*Vm_prev;
@@ -958,6 +960,35 @@ int main(int argc, char *argv[]) {
       Mq_dU->addTerm( Pr/(Cp*mu)*q );
       GD_dU->addTerm( -2./Ve_prev*Vm + 2*Vm_prev/(Ve_prev*Ve_prev)*Ve );
       Gq_dU->addTerm( -1/(Cv*Ve_prev*Ve_prev)*Ve );
+
+      // Adjoint Terms
+      adj_Fc->addTerm( alpha/(gamma-1)*(Vm_prev*vc->dx() + (-Vm_prev*Vm_prev/Ve_prev+(gamma-1))*vm->dx()
+            + (0.5*Vm_prev*Vm_prev/Ve_prev-gamma)*Vm_prev/Ve_prev*ve->dx()));
+      adj_Fm->addTerm( -alpha/(gamma-1)*Vm_prev/Ve_prev*(Vm_prev*vc->dx() + (-Vm_prev*Vm_prev/Ve_prev+(gamma-1))*vm->dx()
+          + (0.5*Vm_prev*Vm_prev/Ve_prev-gamma)*Vm_prev/Ve_prev*ve->dx())
+        + alpha*vc->dx() - 2*alpha*Vm_prev/Ve_prev*vm->dx()
+        + alpha*((0.5*Vm_prev*Vm_prev/Ve_prev-gamma)/Ve_prev*ve->dx() + Vm_prev*Vm_prev/(Ve_prev*Ve_prev)*ve->dx())
+        + D_prev/Ve_prev*ve->dx() );
+      adj_Fe->addTerm(
+          alpha/(gamma-1)*(0.5*Vm_prev*Vm_prev/(Ve_prev*Ve_prev)-gamma/Ve_prev)*(Vm_prev*vc->dx()
+            + (-Vm_prev*Vm_prev/Ve_prev + (gamma-1))*vm->dx() + (0.5*Vm_prev*Vm_prev/Ve_prev-gamma)*Vm_prev/Ve_prev*ve->dx())
+          + alpha*Vm_prev*Vm_prev/(Ve_prev*Ve_prev)*vm->dx()
+          - alpha*(Vm_prev*Vm_prev/Ve_prev-gamma)*Vm_prev/(Ve_prev*Ve_prev)*ve->dx()
+          - Vm_prev/(Ve_prev*Ve_prev)*D_prev*ve->dx() );
+      adj_Cc->addTerm( alpha/(gamma-1)*(-Ve_prev*vc->dy() + Vm_prev*vm->dy() + (1-0.5*Vm_prev*Vm_prev/Ve_prev)*ve->dy()) );
+      adj_Cm->addTerm( -alpha/(gamma-1)*Vm_prev/Ve_prev*(-Ve_prev*vc->dy() + Vm_prev*vm->dy()
+            + (1-0.5*Vm_prev*Vm_prev/Ve_prev)*ve->dy())
+          + alpha*vm->dy() - alpha*Vm_prev/Ve_prev*ve->dy() );
+      adj_Ce->addTerm(
+          alpha/(gamma-1)*(0.5*Vm_prev*Vm_prev/(Ve_prev*Ve_prev)-gamma/Ve_prev)*(-Ve_prev*vc->dy()
+            + Vm_prev*vm->dy() + (1-0.5*Vm_prev*Vm_prev/Ve_prev)*ve->dy())
+          -alpha*vc->dy() + 0.5*alpha*Vm_prev*Vm_prev/(Ve_prev*Ve_prev)*ve->dy() );
+      adj_KD->addTerm( vm->dx() - Vm_prev/Ve_prev*ve->dx() );
+      adj_Kq->addTerm( -ve->dx() );
+      adj_Gm->addTerm( -2./Ve_prev*S->dx() );
+      adj_Ge->addTerm( 2*Vm_prev/(Ve_prev*Ve_prev)*S->dx() - 1./(Cv*Ve_prev*Ve_prev)*tau->dx() );
+      adj_MD->addTerm( 1./mu*S );
+      adj_Mq->addTerm( Pr/(Cp*mu)*tau );
       break;
 
       // default:
@@ -1041,129 +1072,6 @@ int main(int argc, char *argv[]) {
       default:
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "invalid inner product");
     }
-
-      // case 2:
-      // //   /$$$$$$$$             /$$
-      // //  | $$_____/            | $$
-      // //  | $$       /$$$$$$$  /$$$$$$    /$$$$$$   /$$$$$$   /$$$$$$  /$$   /$$
-      // //  | $$$$$   | $$__  $$|_  $$_/   /$$__  $$ /$$__  $$ /$$__  $$| $$  | $$
-      // //  | $$__/   | $$  \ $$  | $$    | $$  \__/| $$  \ $$| $$  \ $$| $$  | $$
-      // //  | $$      | $$  | $$  | $$ /$$| $$      | $$  | $$| $$  | $$| $$  | $$
-      // //  | $$$$$$$$| $$  | $$  |  $$$$/| $$      |  $$$$$$/| $$$$$$$/|  $$$$$$$
-      // //  |________/|__/  |__/   \___/  |__/       \______/ | $$____/  \____  $$
-      // //                                                    | $$       /$$  | $$
-      // //                                                    | $$      |  $$$$$$/
-      // //                                                    |__/       \______/
-      // // define alpha from notes
-      // FunctionPtr VePow1 = Teuchos::rcp( new PowerFunction(-Ve_prev, gamma));
-      // FunctionPtr VePow2 = Teuchos::rcp( new PowerFunction(-Ve_prev, -1.-gamma));
-      // FunctionPtr alphaPow1 = Teuchos::rcp( new PowerFunction((gamma-1)/VePow1, 1./(gamma-1)));
-      // FunctionPtr alphaPow2 = Teuchos::rcp( new PowerFunction((gamma-1)/VePow1, (2-gamma)/(gamma-1)));
-      // FunctionPtr alphaExp = Teuchos::rcp( new ExpFunction((-gamma+Vc_prev-0.5*Vm_prev*Vm_prev/Ve_prev)/(gamma-1)) );
-      // FunctionPtr alpha = alphaPow1*alphaExp;
-      // LinearTermPtr alpha_dU = Teuchos::rcp( new LinearTerm );
-      // alpha_dU->addTerm( alphaPow2*gamma*VePow2*alphaExp*Ve );
-      // alpha_dU->addTerm( alphaPow1*alphaExp/(gamma-1)*Vc );
-      // alpha_dU->addTerm( -alphaPow1*alphaExp/(gamma-1)*Vm_prev/Ve_prev*Vm );
-      // alpha_dU->addTerm( alphaPow1*alphaExp/(gamma-1)*Vm_prev*Vm_prev/(2*Ve_prev*Ve_prev)*Ve );
-
-      // // Define Euler fluxes and flux jacobians
-      // FEc = alpha*Vm_prev;
-      // FEm = alpha*(-Vm_prev*Vm_prev/Ve_prev+(gamma-1));
-      // FEe = alpha*Vm_prev/Ve_prev*(0.5*Vm_prev*Vm_prev/Ve_prev-gamma);
-
-      // FEc_dU->addTerm( Vm_prev*alpha_dU + alpha*Vm );
-
-      // FEm_dU->addTerm( (-Vm_prev*Vm_prev/Ve_prev+(gamma-1))*alpha_dU
-      //       - 2*alpha*Vm_prev/Ve_prev*Vm + alpha*Vm_prev*Vm_prev/(Ve_prev*Ve_prev)*Ve );
-
-      // FEe_dU->addTerm( Vm_prev/Ve_prev*(0.5*Vm_prev*Vm_prev/Ve_prev-gamma)*alpha_dU
-      //       + alpha*(0.5*Vm_prev*Vm_prev/Ve_prev-gamma)/Ve_prev*Vm
-      //       - alpha*Vm_prev/(Ve_prev*Ve_prev)*(0.5*Vm_prev*Vm_prev/Ve_prev-gamma)*Ve
-      //       + alpha*Vm_prev*Vm_prev/(Ve_prev*Ve_prev)*Vm
-      //       - alpha*Vm_prev*Vm_prev*Vm_prev/(2*Ve_prev*Ve_prev*Ve_prev)*Ve );
-
-      // // S terms:
-      // bf->addTerm( D/mu, S);
-      // bf->addTerm( -2/Ve_prev*Vm, S->dx());
-      // bf->addTerm( 2*Vm_prev/(Ve_prev*Ve_prev)*Ve, S->dx());
-      // bf->addTerm( -2*uhat, S->times_normal_x());
-
-      // // tau terms:
-      // bf->addTerm( Pr/(mu*Cp)*q, tau);
-      // bf->addTerm( -1/(Cv*Ve_prev*Ve_prev)*Ve, tau->dx());
-      // bf->addTerm( That, tau->times_normal_x());
-
-      // // vc terms:
-      // // bf->addTerm( -Vm_prev*alpha_dU, vc->dx());
-      // // bf->addTerm( -alpha*Vm, vc->dx());
-      // bf->addTerm( -FEc_dU, vc->dx());
-      // bf->addTerm( Ve_prev*alpha_dU + alpha*Ve, vc->dy());
-      // bf->addTerm( Fc, vc);
-
-      // // vm terms:
-      // // bf->addTerm( (Vm_prev*Vm_prev/Ve_prev-(gamma-1))*alpha_dU, vm->dx());
-      // // bf->addTerm( 2*alpha*Vm_prev/Ve_prev*Vm, vm->dx());
-      // // bf->addTerm( -alpha*Vm_prev*Vm_prev/(Ve_prev*Ve_prev)*Ve, vm->dx());
-      // bf->addTerm( -FEm_dU, vm->dx());
-      // bf->addTerm( D, vm->dx());
-      // bf->addTerm( -Vm_prev*alpha_dU-alpha*Vm, vm->dy());
-      // bf->addTerm( Fm, vm);
-
-      // // ve terms:
-      // // bf->addTerm( -Vm_prev/Ve_prev*(0.5*Vm_prev*Vm_prev/Ve_prev-gamma)*alpha_dU, ve->dx());
-      // // bf->addTerm( -alpha*(0.5*Vm_prev*Vm_prev/Ve_prev-gamma)/Ve_prev*Vm, ve->dx());
-      // // bf->addTerm( alpha*Vm_prev/(Ve_prev*Ve_prev)*(0.5*Vm_prev*Vm_prev/Ve_prev-gamma)*Ve, ve->dx());
-      // // bf->addTerm( -alpha*Vm_prev*Vm_prev/(Ve_prev*Ve_prev)*Vm, ve->dx());
-      // // bf->addTerm( alpha*Vm_prev*Vm_prev*Vm_prev/(2*Ve_prev*Ve_prev*Ve_prev)*Ve, ve->dx());
-      // bf->addTerm( -FEe_dU, ve->dx());
-      // bf->addTerm( -D_prev/Ve_prev*Vm, ve->dx());
-      // bf->addTerm( -Vm_prev/Ve_prev*D, ve->dx());
-      // bf->addTerm( Vm_prev*D_prev/(Ve_prev*Ve_prev)*Ve, ve->dx());
-      // bf->addTerm( -q, ve->dx());
-      // bf->addTerm( -(1-0.5*Vm_prev*Vm_prev/Ve_prev)*alpha_dU, ve->dy());
-      // bf->addTerm( alpha*Vm_prev/Ve_prev*Vm, ve->dy());
-      // bf->addTerm( -0.5*alpha*Vm_prev*Vm_prev/(Ve_prev*Ve_prev)*Ve, ve->dy());
-      // bf->addTerm( Fe, ve);
-
-      // ////////////////////   SPECIFY RHS   ///////////////////////
-
-      // // S terms:
-      // rhs->addTerm( -1./mu*D_prev * S );
-      // rhs->addTerm( 2*Vm_prev/Ve_prev * S->dx() );
-
-      // // tau terms:
-      // rhs->addTerm( -1./(Cv*Ve_prev) * tau->dx() );
-
-      // // vc terms:
-      // // rhs->addTerm( alpha*Vm_prev * vc->dx() );
-      // rhs->addTerm( FEc * vc->dx() );
-      // rhs->addTerm( -alpha*Ve_prev * vc->dy() );
-
-      // // vm terms:
-      // // rhs->addTerm( alpha*(-Vm_prev*Vm_prev/Ve_prev + (gamma-1)) * vm->dx() );
-      // rhs->addTerm( FEm * vm->dx() );
-      // rhs->addTerm( -D_prev * vm->dx() );
-      // rhs->addTerm( alpha*Vm_prev * vm->dy() );
-
-      // // ve terms:
-      // // rhs->addTerm( alpha*Vm_prev/Ve_prev*(0.5*Vm_prev*Vm_prev/Ve_prev-gamma) * ve->dx() );
-      // rhs->addTerm( FEe * ve->dx() );
-      // rhs->addTerm( Vm_prev*D_prev/Ve_prev * ve->dx() );
-      // rhs->addTerm( alpha*(1-0.5*Vm_prev*Vm_prev/Ve_prev) * ve->dy() );
-
-      // ////////////////////   DEFINE INNER PRODUCT(S)   ///////////////////////
-      // switch (norm)
-      // {
-      //   // Automatic graph norm
-      //   case 0:
-      //   ips[slab] = bf->graphNorm();
-      //   break;
-
-      //   default:
-      //   TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "invalid inner product");
-      // }
-      // break;
   }
 
   ////////////////////   CREATE BCs   ///////////////////////
@@ -1213,7 +1121,7 @@ int main(int argc, char *argv[]) {
   for (int slab=0; slab < numSlabs; slab++)
   {
     Teuchos::RCP<Solution> solution = Teuchos::rcp( new Solution(meshes[slab], bcs[slab], rhss[slab], ips[slab]) );
-    solution->setCubatureEnrichmentDegree(8);
+    solution->setCubatureEnrichmentDegree(cubatureEnrichment);
     solutions.push_back(solution);
     if (slab > 0)
     {
