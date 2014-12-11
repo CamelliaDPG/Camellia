@@ -198,6 +198,8 @@ void CamelliaCellTools::refCellNodesForTopology(FieldContainer<double> &cellNode
     tensorComponentNodes.push_back(lineNodes);
   }
   
+  cellNodes.resize(cellTopo->getNodeCount(),cellTopo->getDimension());
+  
   cellTopo->initializeNodes(tensorComponentNodes, cellNodes);
   
   if ( permutation != 0 ) {
