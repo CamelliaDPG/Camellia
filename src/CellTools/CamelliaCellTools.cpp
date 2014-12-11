@@ -460,6 +460,116 @@ void CamelliaCellTools::permutedReferenceCellPoints(CellTopoPtr cellTopo, unsign
   CamelliaCellTools::mapToPhysicalFrame(permutedPoints,refPoints,permutedNodes,cellTopo, whichCell);
 }
 
+void CamelliaCellTools::setJacobian(FieldContainer<double> &jacobian, const FieldContainer<double> &points, const FieldContainer<double> &cellWorkset, CellTopoPtr cellTopo, const int &whichCell) {
+  int spaceDim  = (int)cellTopo->getDimension();
+  int numCells  = cellWorkset.dimension(0);
+  //points can be rank-2 (P,D), or rank-3 (C,P,D)
+  int numPoints = (points.rank() == 2) ? points.dimension(0) : points.dimension(1);
+  
+  // Jacobian is computed using gradients of an appropriate H(grad) basis function, nodalBasis
+  
+  BasisPtr shardsNodalBasis = BasisFactory::basisFactory()->getNodalBasisForCellTopology(cellTopo->getShardsTopology().getKey());
+  
+  BasisPtr lineNodalBasis = BasisFactory::basisFactory()->getNodalBasisForCellTopology(shards::Line<2>::key);
+  
+  typedef Camellia::TensorBasis<double, FieldContainer<double> > TensorBasis;
+  
+  BasisPtr nodalBasis = shardsNodalBasis;
+  for (int i=0; i<cellTopo->getTensorialDegree(); i++) {
+    nodalBasis = Teuchos::rcp( new TensorBasis(nodalBasis, lineNodalBasis) );
+  }
+  
+  int basisCardinality = nodalBasis -> getCardinality();
+  FieldContainer<double> basisGrads(basisCardinality, numPoints, spaceDim);
+  
+  // Initialize jacobian
+  jacobian.initialize(0);
+
+  // Handle separately rank-2 (P,D) and rank-3 (C,P,D) cases of points arrays.
+  switch(points.rank()) {
+      // refPoints is (P,D): a single or multiple cell jacobians computed for a single set of ref. points
+    case 2:
+    {
+      nodalBasis -> getValues(basisGrads, points, OPERATOR_GRAD);
+      
+      // The outer loops select the multi-index of the Jacobian entry: cell, point, row, col
+      // If whichCell = -1, all jacobians are computed, otherwise a single cell jacobian is computed
+      int cellLoop = (whichCell == -1) ? numCells : 1 ;
+      
+      if(whichCell == -1) {
+        for(int cellOrd = 0; cellOrd < cellLoop; cellOrd++) {
+          for(int pointOrd = 0; pointOrd < numPoints; pointOrd++) {
+            for(int row = 0; row < spaceDim; row++){
+              for(int col = 0; col < spaceDim; col++){
+                
+                // The entry is computed by contracting the basis index. Number of basis functions and vertices must be the same.
+                for(int bfOrd = 0; bfOrd < basisCardinality; bfOrd++){
+                  jacobian(cellOrd, pointOrd, row, col) += cellWorkset(cellOrd, bfOrd, row)*basisGrads(bfOrd, pointOrd, col);
+                } // bfOrd
+              } // col
+            } // row
+          } // pointOrd
+        } // cellOrd
+      }
+      else {
+        for(int cellOrd = 0; cellOrd < cellLoop; cellOrd++) {
+          for(int pointOrd = 0; pointOrd < numPoints; pointOrd++) {
+            for(int row = 0; row < spaceDim; row++){
+              for(int col = 0; col < spaceDim; col++){
+                
+                // The entry is computed by contracting the basis index. Number of basis functions and vertices must be the same.
+                for(int bfOrd = 0; bfOrd < basisCardinality; bfOrd++){
+                  jacobian(pointOrd, row, col) += cellWorkset(whichCell, bfOrd, row)*basisGrads(bfOrd, pointOrd, col);
+                } // bfOrd
+              } // col
+            } // row
+          } // pointOrd
+        } // cellOrd
+      } // if whichcell
+    }// case 2
+      break;
+      
+      // points is (C,P,D): multiple jacobians computed at multiple point sets, one jacobian per cell
+    case 3:
+    {
+      // getValues requires rank-2 (P,D) input array, refPoints cannot be used as argument: need temp (P,D) array
+      FieldContainer<double> tempPoints( points.dimension(1), points.dimension(2) );
+      
+      for(int cellOrd = 0; cellOrd < numCells; cellOrd++) {
+        
+        // Copy point set corresponding to this cell oridinal to the temp (P,D) array
+        for(int pt = 0; pt < points.dimension(1); pt++){
+          for(int dm = 0; dm < points.dimension(2) ; dm++){
+            tempPoints(pt, dm) = points(cellOrd, pt, dm);
+          }//dm
+        }//pt
+        
+        // Compute gradients of basis functions at this set of ref. points
+        nodalBasis -> getValues(basisGrads, tempPoints, OPERATOR_GRAD);
+        
+        // Compute jacobians for the point set corresponding to the current cellordinal
+        for(int pointOrd = 0; pointOrd < numPoints; pointOrd++) {
+          for(int row = 0; row < spaceDim; row++){
+            for(int col = 0; col < spaceDim; col++){
+              
+              // The entry is computed by contracting the basis index. Number of basis functions and vertices must be the same
+              for(int bfOrd = 0; bfOrd < basisCardinality; bfOrd++){
+                jacobian(cellOrd, pointOrd, row, col) += cellWorkset(cellOrd, bfOrd, row)*basisGrads(bfOrd, pointOrd, col);
+              } // bfOrd
+            } // col
+          } // row
+        } // pointOrd
+      }//cellOrd
+    }// case 3
+      
+      break;
+      
+    default:
+      TEUCHOS_TEST_FOR_EXCEPTION( !( (points.rank() == 2) && (points.rank() == 3) ), std::invalid_argument,
+                                 ">>> ERROR (CamelliaCellTools::setJacobian): rank 2 or 3 required for points array. ");
+  }//switch
+}
+
 unsigned CamelliaCellTools::subcellOrdinalMap(CellTopoPtr cellTopo, unsigned subcdim, unsigned subcord, unsigned subsubcdim, unsigned subsubcord) {
   if (cellTopo->getTensorialDegree() == 0) {
     return subcellOrdinalMap(cellTopo->getShardsTopology(), subcdim, subcord, subsubcdim, subsubcord);

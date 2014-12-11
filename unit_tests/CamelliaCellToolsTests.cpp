@@ -11,6 +11,8 @@
 
 #include "Intrepid_FieldContainer.hpp"
 
+#include "Intrepid_CellTools.hpp"
+
 #include "Shards_CellTopology.hpp"
 
 #include "CellTopology.h"
@@ -32,11 +34,47 @@ namespace {
     return shardsTopologies;
   }
   
-  TEUCHOS_UNIT_TEST( CamelliaCellTools, MapToPhysicalFrame) {
+  TEUCHOS_UNIT_TEST( CamelliaCellTools, MapToPhysicalFrame)
+  {
     // TODO: implement this test
     // particularly important to try it out on some topologies defined in terms of tensor products
     // main use case is with tensorial degree equal to 1 (for space-time), but might be worth trying with tensorial degree 2 and 3, too
     
+  }
+  
+  TEUCHOS_UNIT_TEST( CamelliaCellTools, SetJacobianForSimpleShardsTopologies )
+  {
+    std::vector< CellTopoPtr > shardsTopologies = getShardsTopologies();
+    
+    for (int topoOrdinal = 0; topoOrdinal < shardsTopologies.size(); topoOrdinal++) {
+      CellTopoPtr topo = shardsTopologies[topoOrdinal];
+      
+      int spaceDim = topo->getDimension();
+      
+      if (spaceDim == 0) continue; // don't bother testing point topology
+      
+      FieldContainer<double> refCellNodes(topo->getNodeCount(),spaceDim);
+      
+      CamelliaCellTools::refCellNodesForTopology(refCellNodes, topo);
+      
+      FieldContainer<double> cellNodes = refCellNodes;
+      cellNodes.resize(1,cellNodes.dimension(0),cellNodes.dimension(1));
+      int numPoints = refCellNodes.dimension(0);
+      FieldContainer<double> jacobianCamellia(1,numPoints,spaceDim,spaceDim);
+      FieldContainer<double> jacobianShards(1,numPoints,spaceDim,spaceDim);
+      CamelliaCellTools::setJacobian(jacobianCamellia, refCellNodes, cellNodes, topo);
+      Intrepid::CellTools<double>::setJacobian(jacobianShards, refCellNodes, cellNodes, topo->getShardsTopology());
+      
+      TEST_COMPARE_FLOATING_ARRAYS(jacobianShards, jacobianCamellia, 1e-15);
+          
+      for (int i=0; i<cellNodes.size(); i++) {
+        cellNodes[i] /= 2.0;
+      }
+      CamelliaCellTools::setJacobian(jacobianCamellia, refCellNodes, cellNodes, topo);
+      Intrepid::CellTools<double>::setJacobian(jacobianShards, refCellNodes, cellNodes, topo->getShardsTopology());
+      
+      TEST_COMPARE_FLOATING_ARRAYS(jacobianShards, jacobianCamellia, 1e-15);
+    }
   }
   
   TEUCHOS_UNIT_TEST( CamelliaCellTools, PermutedReferenceCellPoints )

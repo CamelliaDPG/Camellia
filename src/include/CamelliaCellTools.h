@@ -44,6 +44,9 @@ public:
   //! Take refPoints on reference cell, take as physical nodes the specified permutation of the reference cell points.  Permuted points are then the physical points mapped.
   static void permutedReferenceCellPoints(CellTopoPtr cellTopo, unsigned permutation, const FieldContainer<double> &refPoints, FieldContainer<double> &permutedPoints);
   
+  //! Computes the Jacobian matrix DF of the reference-to-physical frame map
+  static void setJacobian (FieldContainer<double> &jacobian, const FieldContainer<double> &points, const FieldContainer<double> &cellWorkset, CellTopoPtr cellTopo, const int &whichCell=-1);
+  
   // this caches the lookup tables it builds.  Well worth it, since we'll have just one per cell topology
   static unsigned subcellOrdinalMap(CellTopoPtr cellTopo, unsigned subcdim, unsigned subcord, unsigned subsubcdim, unsigned subsubcord);
   

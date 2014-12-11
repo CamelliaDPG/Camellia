@@ -6,7 +6,7 @@
 // @HEADER
 //
 // Original version copyright © 2011 Sandia Corporation. All Rights Reserved.
-// Revisions copyright © 2013 Nathan Roberts. All Rights Reserved.
+// Revisions copyright © 2014 Nathan Roberts. All Rights Reserved.
 //
 // Redistribution and use in source and binary forms, with or without modification, are 
 // permitted provided that the following conditions are met:
@@ -878,16 +878,10 @@ void BasisCache::determineJacobian() {
   typedef CellTools<double>  CellTools;
   
   if ( Function::isNull(_transformationFxn) || _composeTransformationFxnWithMeshTransformation) {
-    if (_cellTopo->getTensorialDegree() == 0) {
-      if (!isSideCache())
-        CellTools::setJacobian(_cellJacobian, _cubPoints, _physicalCellNodes, _cellTopo->getShardsTopology());
-      else {
-        CellTools::setJacobian(_cellJacobian, _cubPointsSideRefCell, _physicalCellNodes, _cellTopo->getShardsTopology());
-      }
-    } else {
-      cout << "ERROR: BasisCache::determineJacobian() does not yet support tensorial degree > 0.\n";
-      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "BasisCache::determinePhysicalPoints() does not yet support tensorial degree > 0");
-    }
+    if (!isSideCache())
+      CamelliaCellTools::setJacobian(_cellJacobian, _cubPoints, _physicalCellNodes, _cellTopo);
+    else
+      CamelliaCellTools::setJacobian(_cellJacobian, _cubPointsSideRefCell, _physicalCellNodes, _cellTopo);
   }
   
   CellTools::setJacobianDet(_cellJacobDet, _cellJacobian );
