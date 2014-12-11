@@ -383,16 +383,21 @@ unsigned CellTopology::getNodePermutationCount() const {
  */
 unsigned CellTopology::getNodePermutation( const unsigned permutation_ord ,
                                            const unsigned node_ord ) const {
+  
+  // if this is just a wrapped shards topology, use the shards way of numbering permutations...
+  if ((_tensorialDegree==0) && (_shardsBaseTopology.getDimension() != 3)) {
+    if ((_shardsBaseTopology.getDimension() == 0) && (node_ord==0) && (permutation_ord==0)) return 0; // point permutation
+    
+    return _shardsBaseTopology.getNodePermutation(permutation_ord, node_ord);
+  }
+  
   if (!isHypercube()) {
     // then the way we order the 2n permutation labels is:
     //  - the first n are the unreflected symmetries of the component topologies
     //  - the second n are the corresponding symmetries, but reflected across the tensorial direction
-    if (_tensorialDegree==0) {
-      if (_shardsBaseTopology.getDimension()==3) {
-        cout << "ERROR: getNodePermutation() not yet implemented for 3D shards topologies (except hexahedra).\n";
-        TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "getNodePermutation() not yet implemented for 3D shards topologies (except hexahedra)");
-      }
-      return _shardsBaseTopology.getNodePermutation(permutation_ord, node_ord);
+    if ((_tensorialDegree==0) && (_shardsBaseTopology.getDimension()==3)) {
+      cout << "ERROR: getNodePermutation() not yet implemented for 3D shards topologies (except hexahedra).\n";
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "getNodePermutation() not yet implemented for 3D shards topologies (except hexahedra)");
     } else {
       int nodePermutationCount = _shardsBaseTopology.getNodePermutationCount();
       bool reflected = (permutation_ord >= nodePermutationCount);
@@ -414,7 +419,7 @@ unsigned CellTopology::getNodePermutation( const unsigned permutation_ord ,
     // (that is, you read right to left).  This preserves the usual x,y,z order while also
     // maintaining our convention regarding tensorial component node numbering.
     
-    // TODO: get the node_ord corresponding to the base shards topology
+    //       get the node_ord corresponding to the base shards topology
     //       then, convert to our hypercube numbering, then add back on the discarded bits of the node_ord
     //       corresponding to the tensorial product dimensions...
     
@@ -476,16 +481,21 @@ unsigned CellTopology::getNodePermutation( const unsigned permutation_ord ,
  */
 unsigned CellTopology::getNodePermutationInverse( const unsigned permutation_ord ,
                                                  const unsigned node_ord ) const {
+  
+  // if this is just a wrapped shards topology, use the shards way of numbering permutations...
+  if ((_tensorialDegree==0) && (_shardsBaseTopology.getDimension() != 3)) {
+    if ((_shardsBaseTopology.getDimension() == 0) && (node_ord==0) && (permutation_ord==0)) return 0; // point permutation
+    
+    return _shardsBaseTopology.getNodePermutationInverse(permutation_ord, node_ord);
+  }
+  
   if (!isHypercube()) {
     // then the way we order the 2n permutation labels is:
     //  - the first n are the unreflected symmetries of the component topologies
     //  - the second n are the corresponding symmetries, but reflected across the tensorial direction
-    if (_tensorialDegree==0) {
-      if (_shardsBaseTopology.getDimension()==3) {
-        cout << "ERROR: getNodePermutation() not yet implemented for 3D shards topologies (except hexahedra).\n";
-        TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "getNodePermutation() not yet implemented for 3D shards topologies (except hexahedra)");
-      }
-      return _shardsBaseTopology.getNodePermutationInverse(permutation_ord, node_ord);
+    if ((_tensorialDegree==0) && (_shardsBaseTopology.getDimension()==3)) {
+      cout << "ERROR: getNodePermutation() not yet implemented for 3D shards topologies (except hexahedra).\n";
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "getNodePermutation() not yet implemented for 3D shards topologies (except hexahedra)");
     } else {
       int nodePermutationCount = _shardsBaseTopology.getNodePermutationCount();
       bool reflected = (permutation_ord >= nodePermutationCount);
@@ -605,11 +615,11 @@ void CellTopology::initializeNodes(const std::vector<Intrepid::FieldContainer<do
   // nodes are ordered as they are in the shards topology, but then repeated for each tensor component choice
   // i.e. if there are N nodes in the shards topology, the first N nodes here will be those with the 0-index of each tensorComponent node selected
   //      Will the next N be the (1,0,0,...,0) or the (0,0,0,...,1)?  I think the consistent choice is the former...
-  if (tensorComponentNodes[0].dimension(0) != 2) {
-    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "tensor components beyond the first must have 2 nodes specified!");
+  if (tensorComponentNodes[0].dimension(0) != _shardsBaseTopology.getNodeCount()) {
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "the first tensor component must have the same number of nodes as the underlying shards CellTopology.");
   }
-  if (tensorComponentNodes[0].dimension(1) != 1) {
-    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "tensor components must be one-dimensional!");
+  if (tensorComponentNodes[0].dimension(1) != _shardsBaseTopology.getDimension()) {
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "the first tensor component must have the same dimension as the underlying shards CellTopology.");
   }
   for (int degreeOrdinal=1; degreeOrdinal<tensorComponentNodes.size(); degreeOrdinal++) {
     if (tensorComponentNodes[degreeOrdinal].dimension(0) != 2) {
