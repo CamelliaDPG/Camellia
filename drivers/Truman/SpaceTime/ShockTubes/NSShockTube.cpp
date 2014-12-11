@@ -793,12 +793,12 @@ int main(int argc, char *argv[]) {
       //
       //
       // Nonlinear Residual Terms
-      Fc = rho_prev*u_prev;
-      Fm = rho_prev*u_prev*u_prev + R*rho_prev*T_prev;
-      Fe = Cv*rho_prev*u_prev*T_prev + 0.5*rho_prev*u_prev*u_prev*u_prev + R*rho_prev*u_prev*T_prev;
       Cc = rho_prev;
       Cm = rho_prev*u_prev;
       Ce = Cv*rho_prev*T_prev + 0.5*rho_prev*u_prev*u_prev;
+      Fc = rho_prev*u_prev;
+      Fm = rho_prev*u_prev*u_prev + R*rho_prev*T_prev;
+      Fe = Cv*rho_prev*u_prev*T_prev + 0.5*rho_prev*u_prev*u_prev*u_prev + R*rho_prev*u_prev*T_prev;
       Km = D_prev;
       Ke = -q_prev + u_prev*D_prev;
       MD = 1./mu*D_prev;
@@ -807,14 +807,14 @@ int main(int argc, char *argv[]) {
       Gq = -T_prev;
 
       // Linearized Terms
+      Cc_dU->addTerm( 1*rho );
+      Cm_dU->addTerm( rho_prev*u + u_prev*rho );
+      Ce_dU->addTerm( Cv*T_prev*rho + Cv*rho_prev*T + 0.5*u_prev*u_prev*rho + rho_prev*u_prev*u );
       Fc_dU->addTerm( u_prev*rho + rho_prev*u );
       Fm_dU->addTerm( u_prev*u_prev*rho + 2*rho_prev*u_prev*u + R*T_prev*rho + R*rho_prev*T );
       Fe_dU->addTerm( Cv*u_prev*T_prev*rho + Cv*rho_prev*T_prev*u + Cv*rho_prev*u_prev*T
             + 0.5*u_prev*u_prev*u_prev*rho + 1.5*rho_prev*u_prev*u_prev*u
             + R*rho_prev*T_prev*u + R*u_prev*T_prev*rho + R*rho_prev*u_prev*T );
-      Cc_dU->addTerm( 1*rho );
-      Cm_dU->addTerm( rho_prev*u + u_prev*rho );
-      Ce_dU->addTerm( Cv*T_prev*rho + Cv*rho_prev*T + 0.5*u_prev*u_prev*rho + rho_prev*u_prev*u );
       Km_dU->addTerm( 1*D );
       Ke_dU->addTerm( -q + D_prev*u + u_prev*D );
       MD_dU->addTerm( 1./mu*D );
@@ -823,14 +823,14 @@ int main(int argc, char *argv[]) {
       Gq_dU->addTerm( -T );
 
       // Adjoint Terms
+      adj_Cc->addTerm( vc->dy() + u_prev*vm->dy() + Cv*T_prev*ve->dy() + 0.5*u_prev*u_prev*ve->dy() );
+      adj_Cm->addTerm( rho_prev*vm->dy() + rho_prev*u_prev*ve->dy() );
+      adj_Ce->addTerm( Cv*rho_prev*ve->dy() );
       adj_Fc->addTerm( u_prev*vc->dx() + u_prev*u_prev*vm->dx() + R*T_prev*vm->dx() + Cv*T_prev*u_prev*ve->dx()
         + 0.5*u_prev*u_prev*u_prev*ve->dx() + R*T_prev*u_prev*ve->dx() );
       adj_Fm->addTerm( rho_prev*vc->dx() + 2*rho_prev*u_prev*vm->dx() + Cv*T_prev*rho_prev*ve->dx()
         + 0.5*rho_prev*u_prev*u_prev*ve->dx() + rho_prev*u_prev*u_prev*ve->dx() + R*T_prev*rho_prev*ve->dx() - D_prev*ve->dx() );
       adj_Fe->addTerm( R*rho_prev*vm->dx() + Cv*rho_prev*u_prev*ve->dx() + R*rho_prev*u_prev*ve->dx() );
-      adj_Cc->addTerm( vc->dy() + u_prev*vm->dy() + Cv*T_prev*ve->dy() + 0.5*u_prev*u_prev*ve->dy() );
-      adj_Cm->addTerm( rho_prev*vm->dy() + rho_prev*u_prev*ve->dy() );
-      adj_Ce->addTerm( Cv*rho_prev*ve->dy() );
       adj_KD->addTerm( vm->dx() + u_prev*ve->dx() );
       adj_Kq->addTerm( -ve->dx() );
       adj_Gm->addTerm( 2*S->dx() );
@@ -852,12 +852,12 @@ int main(int argc, char *argv[]) {
       //
       //
       // Nonlinear Residual Terms
-      Fc = m_prev;
-      Fm = m_prev*m_prev/rho_prev + (gamma-1)*(E_prev-0.5*m_prev*m_prev/rho_prev);
-      Fe = gamma*m_prev*E_prev/rho_prev-0.5*(gamma-1)*m_prev*m_prev*m_prev/(rho_prev*rho_prev);
       Cc = rho_prev;
       Cm = m_prev;
       Ce = E_prev;
+      Fc = m_prev;
+      Fm = m_prev*m_prev/rho_prev + (gamma-1)*(E_prev-0.5*m_prev*m_prev/rho_prev);
+      Fe = gamma*m_prev*E_prev/rho_prev-0.5*(gamma-1)*m_prev*m_prev*m_prev/(rho_prev*rho_prev);
       Km = D_prev;
       Ke = -q_prev + m_prev/rho_prev*D_prev;
       MD = 1./mu*D_prev;
@@ -866,14 +866,14 @@ int main(int argc, char *argv[]) {
       Gq = -(E_prev-0.5*m_prev*m_prev/rho_prev)/(Cv*rho_prev);
 
       // Linearized Terms
+      Cc_dU->addTerm( 1*rho );
+      Cm_dU->addTerm( 1*m );
+      Ce_dU->addTerm( 1*E );
       Fc_dU->addTerm( 1*m );
       Fm_dU->addTerm( 2*m_prev/rho_prev*m - m_prev*m_prev/(rho_prev*rho_prev)*rho
           + (gamma-1)*E - (gamma-1)*m_prev/rho_prev*m + 0.5*(gamma-1)*m_prev*m_prev/(rho_prev*rho_prev)*rho );
       Fe_dU->addTerm( gamma*m_prev/rho_prev*E + gamma*E_prev/rho_prev*m - gamma*m_prev*E_prev/(rho_prev*rho_prev)*rho
           - 1.5*(gamma-1)*m_prev*m_prev/(rho_prev*rho_prev)*m + (gamma-1)*m_prev*m_prev*m_prev/(rho_prev*rho_prev*rho_prev)*rho );
-      Cc_dU->addTerm( 1*rho );
-      Cm_dU->addTerm( 1*m );
-      Ce_dU->addTerm( 1*E );
       Km_dU->addTerm( 1*D );
       Ke_dU->addTerm( -q + D_prev/rho_prev*m + m_prev/rho_prev*D - m_prev*D_prev/(rho_prev*rho_prev)*rho );
       MD_dU->addTerm( 1./mu*D );
@@ -883,15 +883,15 @@ int main(int argc, char *argv[]) {
           + m_prev/(Cv*rho_prev*rho_prev)*m - m_prev*m_prev/(Cv*rho_prev*rho_prev*rho_prev)*rho );
 
       // Adjoint Terms
+      adj_Cc->addTerm( 1*vc->dy() );
+      adj_Cm->addTerm( 1*vm->dy() );
+      adj_Ce->addTerm( 1*ve->dy() );
       adj_Fc->addTerm( (-m_prev*m_prev/(rho_prev*rho_prev) + 0.5*(gamma-1)*m_prev*m_prev/(rho_prev*rho_prev))*vm->dx()
             + (-gamma*E_prev*m_prev/(rho_prev*rho_prev) + (gamma-1)*m_prev*m_prev*m_prev/(rho_prev*rho_prev*rho_prev))*ve->dx()
             + m_prev*D_prev/(rho_prev*rho_prev)*ve->dx() );
       adj_Fm->addTerm( vc->dx() + 2*m_prev/rho_prev*vm->dx() - (gamma-1)*m_prev/rho_prev*vm->dx()
             + gamma*E_prev/rho_prev*ve->dx() - 1.5*(gamma-1)*m_prev*m_prev/(rho_prev*rho_prev)*ve->dx() - D_prev/rho_prev*ve->dx() );
       adj_Fe->addTerm( (gamma-1)*vm->dx() + gamma*m_prev/rho_prev*ve->dx() );
-      adj_Cc->addTerm( 1*vc->dy() );
-      adj_Cm->addTerm( 1*vm->dy() );
-      adj_Ce->addTerm( 1*ve->dy() );
       adj_KD->addTerm( vm->dx() + m_prev/rho_prev*ve->dx() );
       adj_Kq->addTerm( -ve->dx() );
       adj_Gc->addTerm( -2*m_prev/(rho_prev*rho_prev)*S->dx() + E_prev/(Cv*rho_prev*rho_prev)*tau->dx()
@@ -916,25 +916,19 @@ int main(int argc, char *argv[]) {
       //                                                    |__/       \______/
       // define alpha from notes
       FunctionPtr VePow1 = Teuchos::rcp( new PowerFunction(-Ve_prev, gamma));
-      // FunctionPtr VePow2 = Teuchos::rcp( new PowerFunction(-Ve_prev, -1.-gamma));
       FunctionPtr alphaPow1 = Teuchos::rcp( new PowerFunction((gamma-1)/VePow1, 1./(gamma-1)));
-      // FunctionPtr alphaPow2 = Teuchos::rcp( new PowerFunction((gamma-1)/VePow1, (2-gamma)/(gamma-1)));
       FunctionPtr alphaExp = Teuchos::rcp( new ExpFunction((-gamma+Vc_prev-0.5*Vm_prev*Vm_prev/Ve_prev)/(gamma-1)) );
       FunctionPtr alpha = alphaPow1*alphaExp;
       LinearTermPtr alpha_dU = Teuchos::rcp( new LinearTerm );
       alpha_dU->addTerm( alpha/(gamma-1)*(Vc - Vm_prev/Ve_prev*Vm + (0.5*Vm_prev*Vm_prev/(Ve_prev*Ve_prev)-gamma/Ve_prev)*Ve) );
-      // alpha_dU->addTerm( alphaPow2*gamma*VePow2*alphaExp*Ve );
-      // alpha_dU->addTerm( alphaPow1*alphaExp/(gamma-1)*Vc );
-      // alpha_dU->addTerm( -alphaPow1*alphaExp/(gamma-1)*Vm_prev/Ve_prev*Vm );
-      // alpha_dU->addTerm( alphaPow1*alphaExp/(gamma-1)*Vm_prev*Vm_prev/(2*Ve_prev*Ve_prev)*Ve );
 
       // Define Euler fluxes and flux jacobians
-      Fc = alpha*Vm_prev;
-      Fm = alpha*(-Vm_prev*Vm_prev/Ve_prev+(gamma-1));
-      Fe = alpha*Vm_prev/Ve_prev*(0.5*Vm_prev*Vm_prev/Ve_prev-gamma);
       Cc = -alpha*Ve_prev;
       Cm = alpha*Vm_prev;
       Ce = alpha*(1-0.5*Vm_prev*Vm_prev/Ve_prev);
+      Fc = alpha*Vm_prev;
+      Fm = alpha*(-Vm_prev*Vm_prev/Ve_prev+(gamma-1));
+      Fe = alpha*Vm_prev/Ve_prev*(0.5*Vm_prev*Vm_prev/Ve_prev-gamma);
       Km = D_prev;
       Ke = -q_prev - Vm_prev/Ve_prev*D_prev;
       MD = 1./mu*D_prev;
@@ -943,6 +937,10 @@ int main(int argc, char *argv[]) {
       Gq = 1/(Cv*Ve_prev);
 
       // Linearized Terms
+      Cc_dU->addTerm( -Ve_prev*alpha_dU - alpha*Ve );
+      Cm_dU->addTerm( Vm_prev*alpha_dU + alpha*Vm );
+      Ce_dU->addTerm( (1-0.5*Vm_prev*Vm_prev/Ve_prev)*alpha_dU
+          + alpha*(-Vm_prev/Ve_prev*Vm + 0.5*Vm_prev*Vm_prev/(Ve_prev*Ve_prev)*Ve) );
       Fc_dU->addTerm( Vm_prev*alpha_dU
           + alpha*Vm );
       Fm_dU->addTerm( (-Vm_prev*Vm_prev/Ve_prev+(gamma-1))*alpha_dU
@@ -950,10 +948,6 @@ int main(int argc, char *argv[]) {
       Fe_dU->addTerm( Vm_prev/Ve_prev*(0.5*Vm_prev*Vm_prev/Ve_prev-gamma)*alpha_dU
           + alpha*(1.5*Vm_prev*Vm_prev/(Ve_prev*Ve_prev)*Vm - Vm_prev*Vm_prev*Vm_prev/(Ve_prev*Ve_prev*Ve_prev)*Ve
             - gamma/Ve_prev*Vm + gamma*Vm_prev/(Ve_prev*Ve_prev)*Ve) );
-      Cc_dU->addTerm( -Ve_prev*alpha_dU - alpha*Ve );
-      Cm_dU->addTerm( Vm_prev*alpha_dU + alpha*Vm );
-      Ce_dU->addTerm( (1-0.5*Vm_prev*Vm_prev/Ve_prev)*alpha_dU
-          + alpha*(-Vm_prev/Ve_prev*Vm + 0.5*Vm_prev*Vm_prev/(Ve_prev*Ve_prev)*Ve) );
       Km_dU->addTerm( 1*D );
       Ke_dU->addTerm( -q - D_prev/Ve_prev*Vm - Vm_prev/Ve_prev*D + Vm_prev*D_prev/(Ve_prev*Ve_prev)*Ve );
       MD_dU->addTerm( 1./mu*D );
@@ -962,6 +956,14 @@ int main(int argc, char *argv[]) {
       Gq_dU->addTerm( -1/(Cv*Ve_prev*Ve_prev)*Ve );
 
       // Adjoint Terms
+      adj_Cc->addTerm( alpha/(gamma-1)*(-Ve_prev*vc->dy() + Vm_prev*vm->dy() + (1-0.5*Vm_prev*Vm_prev/Ve_prev)*ve->dy()) );
+      adj_Cm->addTerm( -alpha/(gamma-1)*Vm_prev/Ve_prev*(-Ve_prev*vc->dy() + Vm_prev*vm->dy()
+            + (1-0.5*Vm_prev*Vm_prev/Ve_prev)*ve->dy())
+          + alpha*vm->dy() - alpha*Vm_prev/Ve_prev*ve->dy() );
+      adj_Ce->addTerm(
+          alpha/(gamma-1)*(0.5*Vm_prev*Vm_prev/(Ve_prev*Ve_prev)-gamma/Ve_prev)*(-Ve_prev*vc->dy()
+            + Vm_prev*vm->dy() + (1-0.5*Vm_prev*Vm_prev/Ve_prev)*ve->dy())
+          -alpha*vc->dy() + 0.5*alpha*Vm_prev*Vm_prev/(Ve_prev*Ve_prev)*ve->dy() );
       adj_Fc->addTerm( alpha/(gamma-1)*(Vm_prev*vc->dx() + (-Vm_prev*Vm_prev/Ve_prev+(gamma-1))*vm->dx()
             + (0.5*Vm_prev*Vm_prev/Ve_prev-gamma)*Vm_prev/Ve_prev*ve->dx()));
       adj_Fm->addTerm( -alpha/(gamma-1)*Vm_prev/Ve_prev*(Vm_prev*vc->dx() + (-Vm_prev*Vm_prev/Ve_prev+(gamma-1))*vm->dx()
@@ -975,14 +977,6 @@ int main(int argc, char *argv[]) {
           + alpha*Vm_prev*Vm_prev/(Ve_prev*Ve_prev)*vm->dx()
           - alpha*(Vm_prev*Vm_prev/Ve_prev-gamma)*Vm_prev/(Ve_prev*Ve_prev)*ve->dx()
           - Vm_prev/(Ve_prev*Ve_prev)*D_prev*ve->dx() );
-      adj_Cc->addTerm( alpha/(gamma-1)*(-Ve_prev*vc->dy() + Vm_prev*vm->dy() + (1-0.5*Vm_prev*Vm_prev/Ve_prev)*ve->dy()) );
-      adj_Cm->addTerm( -alpha/(gamma-1)*Vm_prev/Ve_prev*(-Ve_prev*vc->dy() + Vm_prev*vm->dy()
-            + (1-0.5*Vm_prev*Vm_prev/Ve_prev)*ve->dy())
-          + alpha*vm->dy() - alpha*Vm_prev/Ve_prev*ve->dy() );
-      adj_Ce->addTerm(
-          alpha/(gamma-1)*(0.5*Vm_prev*Vm_prev/(Ve_prev*Ve_prev)-gamma/Ve_prev)*(-Ve_prev*vc->dy()
-            + Vm_prev*vm->dy() + (1-0.5*Vm_prev*Vm_prev/Ve_prev)*ve->dy())
-          -alpha*vc->dy() + 0.5*alpha*Vm_prev*Vm_prev/(Ve_prev*Ve_prev)*ve->dy() );
       adj_KD->addTerm( vm->dx() - Vm_prev/Ve_prev*ve->dx() );
       adj_Kq->addTerm( -ve->dx() );
       adj_Gm->addTerm( -2./Ve_prev*S->dx() );
@@ -1067,6 +1061,25 @@ int main(int argc, char *argv[]) {
       ip->addTerm( ve );
       ip->addTerm( S );
       ip->addTerm( tau );
+      break;
+
+      // Decoupled Norm
+      case 2:
+      ip->addTerm( adj_MD );
+      ip->addTerm( adj_Mq );
+      ip->addTerm( adj_KD );
+      ip->addTerm( adj_Kq );
+      ip->addTerm( adj_Fc + adj_Cc );
+      ip->addTerm( adj_Fm + adj_Cm );
+      ip->addTerm( adj_Fe + adj_Ce );
+      ip->addTerm( adj_Gc );
+      ip->addTerm( adj_Gm );
+      ip->addTerm( adj_Ge );
+      ip->addTerm( vc );
+      ip->addTerm( vm );
+      ip->addTerm( ve );
+      // ip->addTerm( S );
+      // ip->addTerm( tau );
       break;
 
       default:
@@ -1229,10 +1242,47 @@ int main(int argc, char *argv[]) {
         stringstream outfile;
         outfile << problemName << formulation << "_" << norm << "_" << slab << "_" << refIndex;
         exporter.exportSolution(outfile.str());
+        FunctionPtr density;
+        FunctionPtr velocity;
+        FunctionPtr temperature;
+        stringstream denFile, velFile, tempFile;
+        denFile << problemName << "-density" << formulation << "_" << norm << "_" << slab << "_" << refIndex;
+        velFile << problemName << "-velocity" << formulation << "_" << norm << "_" << slab << "_" << refIndex;
+        tempFile << problemName << "-temperature" << formulation << "_" << norm << "_" << slab << "_" << refIndex;
         FunctionPtr rho_prev = Function::solution(rho,backgroundFlows[slab]);
-        FunctionPtr D_prev = Function::solution(D,backgroundFlows[slab]);
-        FunctionPtr dDdx = Function::solution(D->dx(),backgroundFlows[slab]);
-        FunctionPtr dudx = Function::solution(u->dx(),backgroundFlows[slab]);
+        FunctionPtr m_prev = Function::solution(m,backgroundFlows[slab]);
+        FunctionPtr E_prev = Function::solution(E,backgroundFlows[slab]);
+        FunctionPtr Vc_prev = Function::solution(Vc,backgroundFlows[slab]);
+        FunctionPtr Vm_prev = Function::solution(Vm,backgroundFlows[slab]);
+        FunctionPtr Ve_prev = Function::solution(Ve,backgroundFlows[slab]);
+        switch (formulation)
+        {
+          case 0:
+          density = Function::solution(rho,backgroundFlows[slab]);
+          velocity = Function::solution(u,backgroundFlows[slab]);
+          temperature = Function::solution(T,backgroundFlows[slab]);
+          break;
+          case 1:
+          density = rho_prev;
+          velocity = m_prev/rho_prev;
+          temperature = (E_prev-0.5*m_prev*m_prev/rho_prev)/(Cv*rho_prev);
+          break;
+          case 2:
+          FunctionPtr VePow1 = Teuchos::rcp( new PowerFunction(-Ve_prev, gamma));
+          FunctionPtr alphaPow1 = Teuchos::rcp( new PowerFunction((gamma-1)/VePow1, 1./(gamma-1)));
+          FunctionPtr alphaExp = Teuchos::rcp( new ExpFunction((-gamma+Vc_prev-0.5*Vm_prev*Vm_prev/Ve_prev)/(gamma-1)) );
+          FunctionPtr alpha = alphaPow1*alphaExp;
+          density = -alpha*Ve_prev;
+          velocity = -Vm_prev/Ve_prev;
+          temperature = -1/(Cv*Ve_prev);
+          break;
+        }
+        exporter.exportFunction(density,denFile.str());
+        exporter.exportFunction(velocity,velFile.str());
+        exporter.exportFunction(temperature,tempFile.str());
+        // FunctionPtr D_prev = Function::solution(D,backgroundFlows[slab]);
+        // FunctionPtr dDdx = Function::solution(D->dx(),backgroundFlows[slab]);
+        // FunctionPtr dudx = Function::solution(u->dx(),backgroundFlows[slab]);
         // FunctionPtr div_indicator = Teuchos::rcp( new DivergenceIndicator(rho_prev, rho_prev, D_prev) );
         // exporter.exportFunction(dDdx,"dDdx"+Teuchos::toString(refIndex));
         // exporter.exportFunction(dudx,"dudx"+Teuchos::toString(refIndex));
