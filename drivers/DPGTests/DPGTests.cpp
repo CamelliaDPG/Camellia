@@ -65,7 +65,6 @@
 // test suite includes
 #include "BasisCacheTests.h"
 #include "BasisReconciliationTests.h"
-#include "CellTopologyTests.h"
 #include "CurvilinearMeshTests.h"
 #include "ElementTests.h"
 #include "FunctionTests.h"
@@ -204,12 +203,18 @@ void DPGTests::runTests() {
   // setup our TestSuite tests:
   vector< Teuchos::RCP< TestSuite > > testSuites;
   
+  testSuites.push_back( Teuchos::rcp( new GDAMinimumRuleTests ) );
+  
+  testSuites.push_back( Teuchos::rcp( new SolutionTests ) );
+  
+  testSuites.push_back( Teuchos::rcp( new MeshTopologyTests ) );
+  
+  testSuites.push_back( Teuchos::rcp( new MeshTestSuite ) );
+  
   testSuites.push_back( Teuchos::rcp( new BasisReconciliationTests ) );
 
   testSuites.push_back( Teuchos::rcp( new GMGTests ) );
   
-  testSuites.push_back( Teuchos::rcp( new SolutionTests ) );
-
   if (skipSlowTests) {
     if (rank==0) {
       cout << "skipping slow tests (IncompressibleFormulationsTests).\n";
@@ -219,13 +224,7 @@ void DPGTests::runTests() {
   }
   
   testSuites.push_back( Teuchos::rcp( new MeshRefinementTests ) ); // skips two PatchBasis tests
-  
-  testSuites.push_back( Teuchos::rcp( new CellTopologyTests ) );
-  
-  testSuites.push_back( Teuchos::rcp( new MeshTestSuite ) );
-  
-  testSuites.push_back( Teuchos::rcp( new GDAMinimumRuleTests ) );
-  
+    
   testSuites.push_back( Teuchos::rcp( new LinearTermTests ) );
   
   testSuites.push_back( Teuchos::rcp( new ScratchPadTests ) );
@@ -241,7 +240,6 @@ void DPGTests::runTests() {
   
   testSuites.push_back( Teuchos::rcp( new SerialDenseMatrixUtilityTests) );
   
-  testSuites.push_back( Teuchos::rcp( new MeshTopologyTests ) );
   
   testSuites.push_back( Teuchos::rcp( new MPIWrapperTests) );
   testSuites.push_back( Teuchos::rcp( new ParametricCurveTests) );

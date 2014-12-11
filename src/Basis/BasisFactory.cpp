@@ -55,6 +55,8 @@
 
 #include "PointBasis.h"
 
+#include "TensorBasis.h"
+
 BasisFactory::BasisFactory() {
   _useEnrichedTraces = true;
   _useLobattoForQuadHGRAD = false;
@@ -85,7 +87,12 @@ BasisPtr BasisFactory::getBasis(int H1Order, CellTopoPtr cellTopo, IntrepidExten
   
   BasisPtr temporalBasis = getBasis(temporalPolyOrder + 1, lineKey, functionSpaceForTemporalTopology);
   
-  
+  typedef Camellia::TensorBasis<double, FieldContainer<double> > TensorBasis;
+  Teuchos::RCP<TensorBasis> tensorBasis = Teuchos::rcp( new TensorBasis(basisForShardsTopo, temporalBasis) );
+
+  _spaceTimeBases[key] = tensorBasis;
+
+  return tensorBasis;
 }
 
 BasisPtr BasisFactory::getBasis( int polyOrder, unsigned cellTopoKey, IntrepidExtendedTypes::EFunctionSpaceExtended fs) {
@@ -567,6 +574,87 @@ MultiBasisPtr BasisFactory::getMultiBasis(vector< BasisPtr > &bases) {
   _cellTopoKeys[multiBasis.get()] = cellTopoKey;
   
   return multiBasis;
+}
+
+BasisPtr BasisFactory::getNodalBasisForCellTopology(unsigned int cellTopoKey) {
+  switch( cellTopoKey ){
+      // Standard Base topologies (number of cellWorkset = number of vertices)
+    case shards::Line<2>::key:
+    case shards::Triangle<3>::key:
+    case shards::Quadrilateral<4>::key:
+    case shards::Tetrahedron<4>::key:
+    case shards::Hexahedron<8>::key:
+      return getBasis(1, cellTopoKey, IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD);
+/*
+    case shards::Wedge<6>::key:
+      HGRAD_Basis = Teuchos::rcp( new Basis_HGRAD_WEDGE_C1_FEM<Scalar, FieldContainer<Scalar> >() );
+      break;
+      
+    case shards::Pyramid<5>::key:
+      HGRAD_Basis = Teuchos::rcp( new Basis_HGRAD_PYR_C1_FEM<Scalar, FieldContainer<Scalar> >() );
+      break;
+      
+      // Standard Extended topologies
+    case shards::Triangle<6>::key:
+      HGRAD_Basis = Teuchos::rcp( new Basis_HGRAD_TRI_C2_FEM<Scalar, FieldContainer<Scalar> >() );
+      break;
+      
+    case shards::Quadrilateral<9>::key:
+      HGRAD_Basis = Teuchos::rcp( new Basis_HGRAD_QUAD_C2_FEM<Scalar, FieldContainer<Scalar> >() );
+      break;
+      
+    case shards::Tetrahedron<10>::key:
+      HGRAD_Basis = Teuchos::rcp( new Basis_HGRAD_TET_C2_FEM<Scalar, FieldContainer<Scalar> >() );
+      break;
+      
+    case shards::Tetrahedron<11>::key:
+      HGRAD_Basis = Teuchos::rcp( new Basis_HGRAD_TET_COMP12_FEM<Scalar, FieldContainer<Scalar> >() );
+      break;
+      
+    case shards::Hexahedron<20>::key:
+      HGRAD_Basis = Teuchos::rcp( new Basis_HGRAD_HEX_I2_FEM<Scalar, FieldContainer<Scalar> >() );
+      break;
+      
+    case shards::Hexahedron<27>::key:
+      HGRAD_Basis = Teuchos::rcp( new Basis_HGRAD_HEX_C2_FEM<Scalar, FieldContainer<Scalar> >() );
+      break;
+      
+    case shards::Wedge<15>::key:
+      HGRAD_Basis = Teuchos::rcp( new Basis_HGRAD_WEDGE_I2_FEM<Scalar, FieldContainer<Scalar> >() );
+      break;
+      
+    case shards::Wedge<18>::key:
+      HGRAD_Basis = Teuchos::rcp( new Basis_HGRAD_WEDGE_C2_FEM<Scalar, FieldContainer<Scalar> >() );
+      break;
+      
+    case shards::Pyramid<13>::key:
+      HGRAD_Basis = Teuchos::rcp( new Basis_HGRAD_PYR_I2_FEM<Scalar, FieldContainer<Scalar> >() );
+      break;
+      
+      // These extended topologies are not used for mapping purposes
+    case shards::Quadrilateral<8>::key:
+      TEUCHOS_TEST_FOR_EXCEPTION( (true), std::invalid_argument,
+                                 ">>> ERROR (Intrepid::CellTools::mapToPhysicalFrame): Cell topology not supported. ");
+      break;
+      
+      // Base and Extended Line, Beam and Shell topologies
+    case shards::Line<3>::key:
+    case shards::Beam<2>::key:
+    case shards::Beam<3>::key:
+    case shards::ShellLine<2>::key:
+    case shards::ShellLine<3>::key:
+    case shards::ShellTriangle<3>::key:
+    case shards::ShellTriangle<6>::key:
+    case shards::ShellQuadrilateral<4>::key:
+    case shards::ShellQuadrilateral<8>::key:
+    case shards::ShellQuadrilateral<9>::key:
+      TEUCHOS_TEST_FOR_EXCEPTION( (true), std::invalid_argument,
+                                 ">>> ERROR (Intrepid::CellTools::mapToPhysicalFrame): Cell topology not supported. ");
+      break;*/
+    default:
+      TEUCHOS_TEST_FOR_EXCEPTION( true, std::invalid_argument,
+                                 ">>> ERROR (BasisFactory::getNodalBasisForCellTopology): Cell topology not supported.");
+  }// switch
 }
 
 PatchBasisPtr BasisFactory::getPatchBasis(BasisPtr parent, FieldContainer<double> &patchNodesInParentRefCell, unsigned cellTopoKey) {

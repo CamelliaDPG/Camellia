@@ -12,6 +12,8 @@
 #include "Teuchos_RCP.hpp"
 #include "Shards_CellTopology.hpp"
 
+#include "Intrepid_FieldContainer.hpp"
+
 #include <map>
 #include <vector>
 
@@ -138,6 +140,8 @@ namespace Camellia {
     CellTopoPtr getSubcell( unsigned scdim, unsigned scord ) const;
     
     bool isHypercube() const;
+    
+    void initializeNodes(const std::vector< Intrepid::FieldContainer<double> > &tensorComponentNodes, Intrepid::FieldContainer<double> &cellNodes);
     
     /*** STATIC CONSTRUCTORS ***/
     // constructor from Trilinos CellTopology:

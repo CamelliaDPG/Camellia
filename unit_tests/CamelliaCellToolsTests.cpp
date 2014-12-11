@@ -16,6 +16,13 @@
 #include "CamelliaCellTools.h"
 
 namespace {
+  TEUCHOS_UNIT_TEST( CamelliaCellTools, MapToPhysicalFrame) {
+    // TODO: implement this test
+    // particularly important to try it out on some topologies defined in terms of tensor products
+    // main use case is with tensorial degree equal to 1 (for space-time), but might be worth trying with tensorial degree 2 and 3, too
+    
+  }
+  
   TEUCHOS_UNIT_TEST( CamelliaCellTools, PermutedReferenceCellPoints )
   {
     // to begin, just a very simple test that *nodes* are permuted appropriately

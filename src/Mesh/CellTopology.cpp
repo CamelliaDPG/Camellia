@@ -592,6 +592,66 @@ CellTopoPtr CellTopology::getSubcell( unsigned scdim, unsigned scord ) const {
   }
 }
 
+void CellTopology::initializeNodes(const std::vector<Intrepid::FieldContainer<double> > &tensorComponentNodes, Intrepid::FieldContainer<double> &cellNodes) {
+  if (cellNodes.dimension(0) != this->getNodeCount()) {
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "cellNodes.dimension(0) != this->getNodeCount()");
+  }
+  if (cellNodes.dimension(1) != this->getDimension()) {
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "cellNodes.dimension(1) != this->getDimension()");
+  }
+  if (tensorComponentNodes.size() != this->getTensorialDegree() + 1) {
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "tensorComponentNodes.size() != this->getTensorialDegree() + 1");
+  }
+  // nodes are ordered as they are in the shards topology, but then repeated for each tensor component choice
+  // i.e. if there are N nodes in the shards topology, the first N nodes here will be those with the 0-index of each tensorComponent node selected
+  //      Will the next N be the (1,0,0,...,0) or the (0,0,0,...,1)?  I think the consistent choice is the former...
+  if (tensorComponentNodes[0].dimension(0) != 2) {
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "tensor components beyond the first must have 2 nodes specified!");
+  }
+  if (tensorComponentNodes[0].dimension(1) != 1) {
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "tensor components must be one-dimensional!");
+  }
+  for (int degreeOrdinal=1; degreeOrdinal<tensorComponentNodes.size(); degreeOrdinal++) {
+    if (tensorComponentNodes[degreeOrdinal].dimension(0) != 2) {
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "tensor components beyond the first must have 2 nodes specified!");
+    }
+    if (tensorComponentNodes[degreeOrdinal].dimension(1) != 1) {
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "tensor components must be one-dimensional!");
+    }
+  }
+  
+  if (_tensorialDegree==0) {
+    cellNodes = tensorComponentNodes[0];
+  } else {
+    // note that the construction of tensorComponentTopo here does assume that all the tensorial components
+    // after _shardsBaseTopology are lines, but the code that follows does not.  (The argument checks above
+    // do also require that the tensorial components are lines.)
+    CellTopoPtr tensorComponentTopo = CellTopology::cellTopology(_shardsBaseTopology, _tensorialDegree - 1);
+    Intrepid::FieldContainer<double> componentCellNodes(tensorComponentTopo->getNodeCount(),tensorComponentTopo->getDimension());
+    
+    std::vector<Intrepid::FieldContainer<double> > fewerNodes = tensorComponentNodes;
+    Intrepid::FieldContainer<double> lastNodes = fewerNodes[fewerNodes.size()-1];
+    fewerNodes.pop_back();
+    
+    tensorComponentTopo->initializeNodes(fewerNodes, componentCellNodes);
+    
+    // now the component nodes get stacked atop each other
+    int nodeOrdinal=0;
+    for (int lastNodesOrdinal=0; lastNodesOrdinal<lastNodes.dimension(0); lastNodesOrdinal++) {
+      for (int componentNodeOrdinal=0; componentNodeOrdinal<componentCellNodes.dimension(0); componentNodeOrdinal++, nodeOrdinal++) {
+        // TODO: finish this...
+        for (int d=0; d<tensorComponentTopo->getDimension(); d++) {
+          cellNodes(nodeOrdinal,d) = componentCellNodes(componentNodeOrdinal,d);
+        }
+        int dOffset = tensorComponentTopo->getDimension();
+        for (int d=0; d<lastNodes.dimension(1); d++) {
+          cellNodes(nodeOrdinal,d+dOffset) = lastNodes(lastNodesOrdinal,d);
+        }
+      }
+    }
+  }
+}
+
 bool CellTopology::isHypercube() const {
   unsigned baseKey = _shardsBaseTopology.getBaseKey();
   return (baseKey==shards::Node::key) || (baseKey==shards::Line<2>::key) || (baseKey==shards::Quadrilateral<4>::key) || (baseKey==shards::Hexahedron<8>::key);

@@ -89,6 +89,8 @@ public:
 //  static BasisPtr getBasis(int &basisRank, int polyOrder, unsigned cellTopoKey, IntrepidExtendedTypes::EFunctionSpaceExtended fs);
   BasisPtr getConformingBasis( int polyOrder, unsigned cellTopoKey, FSE fs );
   
+  BasisPtr getNodalBasisForCellTopology(unsigned cellTopoKey);
+  
   Camellia::MultiBasisPtr getMultiBasis(vector< BasisPtr > &bases);
   PatchBasisPtr getPatchBasis(BasisPtr parent, FieldContainer<double> &patchNodesInParentRefCell, unsigned cellTopoKey = shards::Line<2>::key);
 
