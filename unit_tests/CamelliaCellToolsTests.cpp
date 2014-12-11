@@ -13,9 +13,25 @@
 
 #include "Shards_CellTopology.hpp"
 
+#include "CellTopology.h"
+
 #include "CamelliaCellTools.h"
 
+using namespace Camellia;
+
 namespace {
+  vector< CellTopoPtr > getShardsTopologies() {
+    vector< CellTopoPtr > shardsTopologies;
+    
+    shardsTopologies.push_back(CellTopology::point());
+    shardsTopologies.push_back(CellTopology::line());
+    shardsTopologies.push_back(CellTopology::quad());
+    shardsTopologies.push_back(CellTopology::triangle());
+    shardsTopologies.push_back(CellTopology::hexahedron());
+    //  shardsTopologies.push_back(CellTopology::tetrahedron()); // tetrahedron not yet supported by permutation
+    return shardsTopologies;
+  }
+  
   TEUCHOS_UNIT_TEST( CamelliaCellTools, MapToPhysicalFrame) {
     // TODO: implement this test
     // particularly important to try it out on some topologies defined in terms of tensor products
@@ -48,6 +64,39 @@ namespace {
       for (int nodeOrdinal=0; nodeOrdinal < quadNodesPermuted.dimension(0); nodeOrdinal++) {
         for (int d=0; d<quadNodesPermuted.dimension(1); d++) {
           TEST_FLOATING_EQUALITY(quadNodesPermuted(nodeOrdinal,d), permutedRefPoints(nodeOrdinal,d), 1e-15);
+        }
+      }
+    }
+  }
+  
+  TEUCHOS_UNIT_TEST( CamelliaCellTools, RefCellPointsForTopology ) {
+    // just check that the version that takes a Camellia CellTopology matches
+    // the one that takes a shards CellTopology
+    
+    std::vector< CellTopoPtr > shardsTopologies = getShardsTopologies();
+    
+    for (int topoOrdinal = 0; topoOrdinal < shardsTopologies.size(); topoOrdinal++) {
+      CellTopoPtr topo = shardsTopologies[topoOrdinal];
+      
+      if (topo->getDimension() == 0) continue; // don't bother testing point topology
+      
+      FieldContainer<double> refCellNodesShards(topo->getNodeCount(),topo->getDimension());
+      FieldContainer<double> refCellNodesCamellia(topo->getNodeCount(),topo->getDimension());
+      int permutationCount;
+      if (topo->getDimension() <= 2) {
+        permutationCount = topo->getNodePermutationCount();
+      } else {
+        permutationCount = 1; // shards doesn't provide permutations for 3D objects
+      }
+      
+      for (int permutation=0; permutation<permutationCount; permutation++) {
+        CamelliaCellTools::refCellNodesForTopology(refCellNodesShards, topo->getShardsTopology(), permutation);
+        CamelliaCellTools::refCellNodesForTopology(refCellNodesCamellia, topo, permutation);
+        
+        TEST_COMPARE_FLOATING_ARRAYS(refCellNodesShards, refCellNodesCamellia, 1e-15);
+        
+        if (!success) {
+          cout << "Test failure (set breakpoint here) \n";
         }
       }
     }
