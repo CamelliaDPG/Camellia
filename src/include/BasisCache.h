@@ -38,10 +38,6 @@
 // @HEADER 
 
 // only works properly with bases obtained from the BasisFactory.
-#include "Intrepid_CellTools.hpp"
-#include "Intrepid_DefaultCubatureFactory.hpp"
-#include "Intrepid_FunctionSpaceTools.hpp"
-
 #include "Intrepid_FieldContainer.hpp"
 
 // Shards includes
@@ -105,7 +101,11 @@ private:
     
   std::vector<GlobalIndexType> _cellIDs; // the list of cell IDs corresponding to the physicalCellNodes
   
+  // we use *EITHER* _cubDegree or _cubDegrees
+  // if _cubDegree is -1, use _cubDegrees
+  // (_cubDegree == -1) <=> (_cubDegrees.size() > 0)
   int _cubDegree;
+  vector<int> _cubDegrees;
   
   // containers specifically for sides:
   Intrepid::FieldContainer<double> _cubPointsSideRefCell; // the _cubPoints is the one in the side coordinates; this one in volume coords
@@ -128,8 +128,10 @@ private:
   map< pair< Camellia::Basis<>*, IntrepidExtendedTypes::EOperatorExtended >,
   Teuchos::RCP< const Intrepid::FieldContainer<double> > > _knownValuesTransformedWeightedDottedWithNormal;
 
-  void init(CellTopoPtr cellTopo, int maxTrialDegree, int maxTestDegree, bool createSideCacheToo);
-  void init(shards::CellTopology &cellTopo, int maxTrialDegree, int maxTestDegree, bool createSideCacheToo);
+  void initCubatureDegree(int maxTrialDegree, int maxTestDegree);
+  void initCubatureDegree(std::vector<int> &maxTrialDegrees, std::vector<int> &maxTestDegrees);
+  
+  void init(bool createSideCacheToo);
 
   void determineJacobian();
   void determinePhysicalPoints();

@@ -34,6 +34,9 @@
 //
 // @HEADER 
 
+#include "Intrepid_CellTools.hpp"
+#include "Intrepid_FunctionSpaceTools.hpp"
+
 #include "BasisCache.h"
 #include "BasisFactory.h"
 #include "BasisEvaluation.h"
@@ -41,6 +44,8 @@
 #include "Function.h"
 #include "MeshTransformationFunction.h"
 #include "CamelliaCellTools.h"
+
+#include "CubatureFactory.h"
 
 #include "Teuchos_GlobalMPISession.hpp"
 
@@ -55,39 +60,65 @@ typedef Teuchos::RCP< const FieldContainer<double> > constFCPtr;
 // (e.g. useCubPointsSideRefCell==true when _isSideCache==false)
 
 int boundDegreeToMaxCubatureForCellTopo(int degree, unsigned cellTopoKey) {
-  // limit cubature degree to max that Intrepid will support (TODO: case triangles and quads separately--this is for quads)
-  if (cellTopoKey == shards::Line<2>::key)
-    return min(INTREPID_CUBATURE_LINE_GAUSS_MAX, degree);
-  if (cellTopoKey == shards::Quadrilateral<4>::key)
-    return min(INTREPID_CUBATURE_LINE_GAUSS_MAX, degree);
-  else if (cellTopoKey == shards::Triangle<3>::key)
-    return min(INTREPID_CUBATURE_TRI_DEFAULT_MAX, degree);
-  else
-    return degree; // unhandled cell topo--we'll get an exception if we go beyond the max...
+  // limit cubature degree to max that Intrepid will support
+  switch (cellTopoKey) {
+    case shards::Line<2>::key:
+    case shards::Quadrilateral<4>::key:
+    case shards::Hexahedron<8>::key:
+      return min(INTREPID_CUBATURE_LINE_GAUSS_MAX, degree);
+      break;
+    case shards::Triangle<3>::key:
+      return min(INTREPID_CUBATURE_TRI_DEFAULT_MAX, degree);
+      break;
+    default:
+      return degree; // unhandled cell topo--we'll get an exception if we go beyond the max...
+  }
 }
 
-void BasisCache::init(CellTopoPtr cellTopo, int maxTrialDegree, int maxTestDegree, bool createSideCacheToo) {
-  _sideIndex = -1;
-  _spaceDim = cellTopo->getDimension();
-  _isSideCache = false; // VOLUME constructor
-  
-  _cellTopo = cellTopo;
-  
+// ! Requires that _cellTopo be initialized
+void BasisCache::initCubatureDegree(int maxTrialDegree, int maxTestDegree) {
   _cubDegree = maxTrialDegree + maxTestDegree;
   
-  _cubDegree = boundDegreeToMaxCubatureForCellTopo(_cubDegree, cellTopo->getShardsTopology().getKey());
+  if (! _isSideCache) {
+    _cubDegree = boundDegreeToMaxCubatureForCellTopo(_cubDegree, _cellTopo->getShardsTopology().getKey());
+  } else {
+    int sideDim = _spaceDim - 1;
+    CellTopoPtr side = _cellTopo->getSubcell(sideDim,_sideIndex); // create relevant subcell (side) topology
+    _cubDegree = boundDegreeToMaxCubatureForCellTopo(_cubDegree, side->getShardsTopology().getKey());
+  }
   _maxTestDegree = maxTestDegree;
   _maxTrialDegree = maxTrialDegree;
+}
+
+// ! Requires that _cellTopo be initialized
+void BasisCache::initCubatureDegree(std::vector<int> &maxTrialDegrees, std::vector<int> &maxTestDegrees) {
+  TEUCHOS_TEST_FOR_EXCEPTION(maxTrialDegrees.size() != maxTestDegrees.size(), std::invalid_argument, "maxTrialDegrees must have same length as maxTestDegrees");
+  _maxTestDegree = 0;
+  _maxTrialDegree = 0;
+  _cubDegree = -1;
+  _cubDegrees.resize(maxTrialDegrees.size());
+  for (int i=0; i<maxTrialDegrees.size(); i++) {
+    _maxTrialDegree = max(_maxTrialDegree, maxTrialDegrees[i]);
+    _maxTestDegree = max(_maxTestDegree, maxTestDegrees[i]);
+    
+    int cubDegree = maxTrialDegrees[i] + maxTestDegrees[i];
+    _cubDegrees[i] = boundDegreeToMaxCubatureForCellTopo(cubDegree, _cellTopo->getShardsTopology().getKey());
+  }
+}
+
+// ! requires that initCubature() has been called
+void BasisCache::init(bool createSideCacheToo) {
+  _sideIndex = -1;
+  _spaceDim = _cellTopo->getDimension();
+  _isSideCache = false; // VOLUME constructor
   
   if (_spaceDim > 0) {
-    DefaultCubatureFactory<double> cubFactory;
+    CubatureFactory cubFactory;
     Teuchos::RCP<Cubature<double> > cellTopoCub;
-    if (_cellTopo->getTensorialDegree() == 0) {
-      cellTopoCub = cubFactory.create(cellTopo->getShardsTopology(), _cubDegree);
-    } else {
-      cout << "BasisCache cubature determination doesn't yet support tensorial degree > 0.\n";
-      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "BasisCache cubature determination doesn't yet support tensorial degree > 0.\n");
-    }
+    if (_cubDegree >= 0)
+      cellTopoCub = cubFactory.create(_cellTopo, _cubDegree);
+    else
+      cellTopoCub = cubFactory.create(_cellTopo, _cubDegrees);
     
     int cubDim       = cellTopoCub->getDimension();
     int numCubPoints = cellTopoCub->getNumPoints();
@@ -117,12 +148,6 @@ void BasisCache::init(CellTopoPtr cellTopo, int maxTrialDegree, int maxTestDegre
   }
 }
 
-// init is for volume caches.
-void BasisCache::init(shards::CellTopology &shardsTopo, int maxTrialDegree, int maxTestDegree, bool createSideCacheToo) {
-  CellTopoPtr cellTopo = CellTopology::cellTopology(shardsTopo);
-  init(cellTopo, maxTrialDegree, maxTestDegree, createSideCacheToo);
-}
-
 void BasisCache::createSideCaches() {
   _basisCacheSides.clear();
   _numSides = _cellTopo->getSideCount();
@@ -150,7 +175,11 @@ BasisCache::BasisCache(CellTopoPtr cellTopo, int cubDegree, bool createSideCache
   _numSides = cellTopo->getSideCount();
   DofOrdering trialOrdering; // dummy trialOrdering
   findMaximumDegreeBasisForSides(trialOrdering); // should fill with NULL ptrs
-  init(cellTopo, 0, cubDegree, createSideCacheToo);
+  
+  _isSideCache = false;
+  _cellTopo = cellTopo;
+  initCubatureDegree(0, cubDegree);
+  init(createSideCacheToo);
 }
 
 BasisCache::BasisCache(ElementTypePtr elemType, Teuchos::RCP<Mesh> mesh, bool testVsTest, int cubatureDegreeEnrichment) {
@@ -179,7 +208,10 @@ BasisCache::BasisCache(ElementTypePtr elemType, Teuchos::RCP<Mesh> mesh, bool te
   
   bool createSideCacheToo = !testVsTest && elemType->trialOrderPtr->hasSideVarIDs();
   
-  init(cellTopo,_maxTrialDegree,_maxTestDegree + cubatureDegreeEnrichment,createSideCacheToo);
+  _isSideCache = false;
+  _cellTopo = CellTopology::cellTopology(cellTopo);
+  initCubatureDegree(_maxTrialDegree, _maxTestDegree + cubatureDegreeEnrichment);
+  init(createSideCacheToo);
 }
 
 BasisCache::BasisCache(const FieldContainer<double> &physicalCellNodes, 
@@ -188,7 +220,11 @@ BasisCache::BasisCache(const FieldContainer<double> &physicalCellNodes,
   _spaceDim = cellTopo.getDimension();
   _numSides = CamelliaCellTools::getSideCount(cellTopo);
   findMaximumDegreeBasisForSides(trialOrdering);
-  init(cellTopo, trialOrdering.maxBasisDegree(), maxTestDegree, createSideCacheToo);
+  
+  _isSideCache = false;
+  _cellTopo = CellTopology::cellTopology(cellTopo);
+  initCubatureDegree(trialOrdering.maxBasisDegree(), maxTestDegree);
+  init(createSideCacheToo);
   setPhysicalCellNodes(physicalCellNodes,vector<GlobalIndexType>(),createSideCacheToo);
 }
 
@@ -199,7 +235,11 @@ BasisCache::BasisCache(shards::CellTopology &cellTopo, int cubDegree, bool creat
   _numSides = CamelliaCellTools::getSideCount(cellTopo);
   DofOrdering trialOrdering; // dummy trialOrdering
   findMaximumDegreeBasisForSides(trialOrdering); // should fill with NULL ptrs
-  init(cellTopo, 0, cubDegree, createSideCacheToo);
+  
+  _isSideCache = false;
+  _cellTopo = CellTopology::cellTopology(cellTopo);
+  initCubatureDegree(0, cubDegree);
+  init(createSideCacheToo);
 }
 
 BasisCache::BasisCache(const FieldContainer<double> &physicalCellNodes, shards::CellTopology &cellTopo, int cubDegree, bool createSideCacheToo) {
@@ -209,7 +249,12 @@ BasisCache::BasisCache(const FieldContainer<double> &physicalCellNodes, shards::
   _numSides = CamelliaCellTools::getSideCount(cellTopo);
   DofOrdering trialOrdering; // dummy trialOrdering
   findMaximumDegreeBasisForSides(trialOrdering); // should fill with NULL ptrs
-  init(cellTopo, 0, cubDegree, createSideCacheToo);
+  
+  _isSideCache = false;
+  _cellTopo = CellTopology::cellTopology(cellTopo);
+  initCubatureDegree(0, cubDegree);
+  init(createSideCacheToo);
+
   setPhysicalCellNodes(physicalCellNodes,vector<GlobalIndexType>(),createSideCacheToo);
 }
 
@@ -232,19 +277,16 @@ BasisCache::BasisCache(int sideIndex, BasisCachePtr volumeCache, int trialDegree
   int sideDim = _spaceDim - 1;
   CellTopoPtr side = _cellTopo->getSubcell(sideDim,sideIndex); // create relevant subcell (side) topology
   
-  _cubDegree = testDegree + trialDegree;
-  _cubDegree = boundDegreeToMaxCubatureForCellTopo(_cubDegree, side->getShardsTopology().getBaseKey());
-
-  if (sideDim > 0) {
-    DefaultCubatureFactory<double> cubFactory;
-    Teuchos::RCP<Cubature<double> > sideCub;
-    if (_cellTopo->getTensorialDegree() == 0) {
-      sideCub = cubFactory.create(side->getShardsTopology(), _cubDegree);
-    } else {
-      cout << "BasisCache cubature determination doesn't yet support tensorial degree > 0.\n";
-      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "BasisCache cubature determination doesn't yet support tensorial degree > 0.\n");
-    }
+  initCubatureDegree(trialDegree, testDegree);
   
+  if (sideDim > 0) {
+    CubatureFactory cubFactory;
+    Teuchos::RCP<Cubature<double> > sideCub;
+    if (_cubDegree >= 0)
+      sideCub = cubFactory.create(side, _cubDegree);
+    else
+      sideCub = cubFactory.create(side, _cubDegrees);
+    
     int numCubPointsSide = sideCub->getNumPoints();
     _cubPoints.resize(numCubPointsSide, sideDim); // cubature points from the pov of the side (i.e. a (d-1)-dimensional set)
     _cubWeights.resize(numCubPointsSide);
