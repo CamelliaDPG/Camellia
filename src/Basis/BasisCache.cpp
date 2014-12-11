@@ -1158,18 +1158,18 @@ void BasisCache::recomputeMeasures() {
   }
 }
 
-BasisCachePtr BasisCache::sideBasisCache(Teuchos::RCP<BasisCache> volumeCache, int sideIndex) {
+BasisCachePtr BasisCache::sideBasisCache(Teuchos::RCP<BasisCache> volumeCache, int sideOrdinal) {
   int spaceDim = volumeCache->cellTopology()->getDimension();
   int numSides = volumeCache->cellTopology()->getSideCount();
   
-  TEUCHOS_TEST_FOR_EXCEPTION(sideIndex >= numSides, std::invalid_argument, "sideIndex out of range");
+  TEUCHOS_TEST_FOR_EXCEPTION(sideOrdinal >= numSides, std::invalid_argument, "sideOrdinal out of range");
 
   int maxTestDegree = volumeCache->_maxTestDegree;
   int maxTrialDegreeOnSide = volumeCache->_maxTrialDegree;
   BasisPtr multiBasisIfAny;
   
   if (spaceDim > 1) {
-    BasisPtr maxDegreeBasisOnSide = volumeCache->_maxDegreeBasisForSide[sideIndex];
+    BasisPtr maxDegreeBasisOnSide = volumeCache->_maxDegreeBasisForSide[sideOrdinal];
     if (maxDegreeBasisOnSide.get() != NULL) {
       if (BasisFactory::basisFactory()->isMultiBasis(maxDegreeBasisOnSide)) {
         multiBasisIfAny = maxDegreeBasisOnSide;
@@ -1177,6 +1177,6 @@ BasisCachePtr BasisCache::sideBasisCache(Teuchos::RCP<BasisCache> volumeCache, i
       maxTrialDegreeOnSide = maxDegreeBasisOnSide->getDegree();
     }
   }
-  BasisCachePtr sideCache = Teuchos::rcp( new BasisCache(sideIndex, volumeCache, maxTrialDegreeOnSide, maxTestDegree, multiBasisIfAny));
+  BasisCachePtr sideCache = Teuchos::rcp( new BasisCache(sideOrdinal, volumeCache, maxTrialDegreeOnSide, maxTestDegree, multiBasisIfAny));
   return sideCache;
 }
