@@ -577,14 +577,25 @@ MultiBasisPtr BasisFactory::getMultiBasis(vector< BasisPtr > &bases) {
 }
 
 BasisPtr BasisFactory::getNodalBasisForCellTopology(unsigned int cellTopoKey) {
+  // used by CamelliaCellTools for computing Jacobians, etc.
   switch( cellTopoKey ){
       // Standard Base topologies (number of cellWorkset = number of vertices)
     case shards::Line<2>::key:
+      return Teuchos::rcp( new IntrepidBasisWrapper<>( Teuchos::rcp( new Basis_HGRAD_LINE_C1_FEM<double, FieldContainer<double> >()),
+                                                      2, 0, IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD) );
     case shards::Triangle<3>::key:
+      return Teuchos::rcp( new IntrepidBasisWrapper<>( Teuchos::rcp( new Basis_HGRAD_TRI_C1_FEM<double, FieldContainer<double> >()),
+                                                      2, 0, IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD) );
     case shards::Quadrilateral<4>::key:
+      return Teuchos::rcp( new IntrepidBasisWrapper<>( Teuchos::rcp( new Basis_HGRAD_QUAD_C1_FEM<double, FieldContainer<double> >()),
+                                                      2, 0, IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD) );
     case shards::Tetrahedron<4>::key:
+      return Teuchos::rcp( new IntrepidBasisWrapper<>( Teuchos::rcp( new Basis_HGRAD_TET_C1_FEM<double, FieldContainer<double> >()),
+                                                      2, 0, IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD) );
     case shards::Hexahedron<8>::key:
-      return getBasis(1, cellTopoKey, IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD);
+      return Teuchos::rcp( new IntrepidBasisWrapper<>( Teuchos::rcp( new Basis_HGRAD_HEX_C1_FEM<double, FieldContainer<double> >()),
+                                                      2, 0, IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD) );
+      
 /*
     case shards::Wedge<6>::key:
       HGRAD_Basis = Teuchos::rcp( new Basis_HGRAD_WEDGE_C1_FEM<Scalar, FieldContainer<Scalar> >() );
