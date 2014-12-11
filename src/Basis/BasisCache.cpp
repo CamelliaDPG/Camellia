@@ -821,15 +821,11 @@ void BasisCache::determinePhysicalPoints() {
   if ( Function::isNull(_transformationFxn) || _composeTransformationFxnWithMeshTransformation) {
     // _spaceDim for side cache refers to the volume cache's spatial dimension
     _physCubPoints.resize(_numCells, numPoints, _spaceDim);
-    if (_cellTopo->getTensorialDegree() == 0) {
-      if ( ! isSideCache() ) {
-        CellTools<double>::mapToPhysicalFrame(_physCubPoints,_cubPoints,_physicalCellNodes,_cellTopo->getShardsTopology());
-      } else {
-        CellTools<double>::mapToPhysicalFrame(_physCubPoints,_cubPointsSideRefCell,_physicalCellNodes,_cellTopo->getShardsTopology());
-      }
+    
+    if ( ! isSideCache() ) {
+      CamelliaCellTools::mapToPhysicalFrame(_physCubPoints,_cubPoints,_physicalCellNodes,_cellTopo);
     } else {
-      cout << "ERROR: BasisCache::determinePhysicalPoints() does not yet support tensorial degree > 0.\n";
-      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "BasisCache::determinePhysicalPoints() does not yet support tensorial degree > 0");
+      CamelliaCellTools::mapToPhysicalFrame(_physCubPoints,_cubPointsSideRefCell,_physicalCellNodes,_cellTopo);
     }
   } else {
     // if we get here, then Function is meant to work on reference cell
