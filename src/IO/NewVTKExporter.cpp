@@ -1,5 +1,4 @@
 #include "SolutionExporter.h"
-#include "CamelliaConfig.h"
 
 #include "CamelliaCellTools.h"
 
@@ -34,9 +33,9 @@ void NewVTKExporter::exportFunction(FunctionPtr function, string functionName, s
   vals->SetName(functionName.c_str());
 
   unsigned int total_vertices = 0;
-  
+
   if (cellIndices.size()==0) cellIndices = _mesh->getActiveCellIndices();
-  
+
   for (set<GlobalIndexType>::iterator cellIt = cellIndices.begin(); cellIt != cellIndices.end(); cellIt++) {
     GlobalIndexType cellIndex = *cellIt;
     CellPtr cell = _mesh->getCell(cellIndex);
@@ -48,26 +47,26 @@ void NewVTKExporter::exportFunction(FunctionPtr function, string functionName, s
     int pOrder = 4;
     if (defaultPts)
       num1DPts = 2 * pOrder + 1;
-    
+
     if (physicalCellNodes.rank() == 2)
       physicalCellNodes.resize(1,physicalCellNodes.dimension(0), physicalCellNodes.dimension(1));
     bool createSideCache = function->boundaryValueOnly();
-    
+
     BasisCachePtr volumeBasisCache = Teuchos::rcp( new BasisCache(*cellTopoPtr, 1, createSideCache) );
     volumeBasisCache->setPhysicalCellNodes(physicalCellNodes, vector<GlobalIndexType>(1,cellIndex), createSideCache);
 
     int numSides = createSideCache ? CamelliaCellTools::getSideCount(*cellTopoPtr) : 1;
-    
+
     int sideDim = spaceDim - 1;
-    
+
     for (int sideOrdinal = 0; sideOrdinal < numSides; sideOrdinal++) {
       shards::CellTopology topo = createSideCache ? cellTopoPtr->getBaseCellTopologyData(sideDim, sideOrdinal) : *cellTopoPtr;
       unsigned cellTopoKey = topo.getKey();
-      
+
       BasisCachePtr basisCache = createSideCache ? volumeBasisCache->getSideBasisCache(sideOrdinal) : volumeBasisCache;
-      
+
       unsigned domainDim = createSideCache ? sideDim : spaceDim;
-      
+
       switch (cellTopoKey)
       {
         case shards::Line<2>::key:

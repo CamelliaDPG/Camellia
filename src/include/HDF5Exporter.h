@@ -8,7 +8,6 @@
  *
  */
 
-#include "CamelliaConfig.h"
 
 #include "EpetraExt_ConfigDefs.h"
 #ifdef HAVE_EPETRAEXT_HDF5
@@ -36,13 +35,13 @@ private:
 public:
   HDF5Exporter(MeshPtr mesh, string outputDirName="output", string outputDirSuperPath = ".");
   ~HDF5Exporter();
-  void exportFunction(FunctionPtr function, string functionName="function", double timeVal=0, 
+  void exportFunction(FunctionPtr function, string functionName="function", double timeVal=0,
     unsigned int defaultNum1DPts=4, map<int, int> cellIDToNum1DPts=map<int,int>(), set<GlobalIndexType> cellIndices=set<GlobalIndexType>());
-  void exportFunction(vector<FunctionPtr> functions, vector<string> functionNames, double timeVal=0, 
+  void exportFunction(vector<FunctionPtr> functions, vector<string> functionNames, double timeVal=0,
     unsigned int defaultNum1DPts=4, map<int, int> cellIDToNum1DPts=map<int,int>(), set<GlobalIndexType> cellIndices=set<GlobalIndexType>());
-  void exportSolution(SolutionPtr solution, VarFactory varFactory, double timeVal=0, 
+  void exportSolution(SolutionPtr solution, VarFactory varFactory, double timeVal=0,
     unsigned int defaultNum1DPts=4, map<int, int> cellIDToNum1DPts=map<int,int>(), set<GlobalIndexType> cellIndices=set<GlobalIndexType>());
-  
+
   static void exportFunction(string directoryPath, string functionName, FunctionPtr function, MeshPtr mesh); // allows one-line export without storing an exporter object
   static void exportSolution(string directoryPath, string solutionName, SolutionPtr solution); // allows one-line export without storing an exporter object
 };

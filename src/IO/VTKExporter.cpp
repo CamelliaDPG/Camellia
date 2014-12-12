@@ -6,7 +6,6 @@
  */
 
 #include "SolutionExporter.h"
-#include "CamelliaConfig.h"
 
 #ifdef USE_VTK
 #include "vtkPointData.h"
@@ -680,7 +679,7 @@ void VTKExporter::exportBoundaryValuedFunctions(vector< FunctionPtr > &functions
     ElementTypePtr elemTypePtr = *(elemTypeIt);
     Teuchos::RCP<shards::CellTopology> cellTopoPtr = elemTypePtr->cellTopoPtr;
     int numSides = CamelliaCellTools::getSideCount(*cellTopoPtr);
-    
+
     FieldContainer<double> vertexPoints;
     _mesh->verticesForElementType(vertexPoints,elemTypePtr); //stores vertex points for this element
     FieldContainer<double> physicalCellNodes = _mesh->physicalCellNodesGlobal(elemTypePtr);

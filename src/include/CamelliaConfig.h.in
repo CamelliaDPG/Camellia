@@ -1,9 +1,0 @@
-#include <string>
-using namespace std;
-#define Camellia_Root "@CMAKE_SOURCE_DIR@"
-#define Camellia_MeshDir string("@CMAKE_SOURCE_DIR@/meshes/")
-
-// #define USE_MUMPS
-// #define USE_VTK
-//#define USE_XDMF
-#define USE_HDF5

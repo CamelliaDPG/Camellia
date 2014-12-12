@@ -1,5 +1,4 @@
 #include "Solution.h"
-#include "CamelliaConfig.h"
 
 #include "CamelliaCellTools.h"
 
@@ -68,20 +67,20 @@ void Solution::writeFieldsToVTK(const string& filePath, unsigned int num1DPts)
   unsigned int total_vertices = 0;
 
   // Loop through Quads, Triangles, etc
-  for (elemTypeIt = elementTypes.begin(); elemTypeIt != elementTypes.end(); elemTypeIt++) 
+  for (elemTypeIt = elementTypes.begin(); elemTypeIt != elementTypes.end(); elemTypeIt++)
   {
     ElementTypePtr elemTypePtr = *(elemTypeIt);
     shards::CellTopology cellTopo = *(elemTypePtr->cellTopoPtr);
     Teuchos::RCP<shards::CellTopology> cellTopoPtr = elemTypePtr->cellTopoPtr;
-    
-    FieldContainer<double> vertexPoints;    
+
+    FieldContainer<double> vertexPoints;
     _mesh->verticesForElementType(vertexPoints,elemTypePtr); //stores vertex points for this element
     FieldContainer<double> physicalCellNodes = _mesh->physicalCellNodesGlobal(elemTypePtr);
-    
+
     int numCells = physicalCellNodes.dimension(0);
     bool createSideCacheToo = false;
     BasisCachePtr basisCache = Teuchos::rcp(new BasisCache(elemTypePtr,_mesh, createSideCacheToo));
-    
+
     vector<GlobalIndexType> cellIDs;
     for (GlobalIndexType cellIndex=0; cellIndex<numCells; cellIndex++)
     {
@@ -128,7 +127,7 @@ void Solution::writeFieldsToVTK(const string& filePath, unsigned int num1DPts)
           pointIndex++;
         }
     }
-    
+
     basisCache->setRefCellPoints(refPoints);
     basisCache->setPhysicalCellNodes(physicalCellNodes, cellIDs, createSideCacheToo);
     const FieldContainer<double> *physicalPoints = &basisCache->getPhysicalCubaturePoints();
@@ -290,7 +289,7 @@ void Solution::writeTracesToVTK(const string& filePath)
   BasisCachePtr basisCache;
   vector< ElementTypePtr > elementTypes = _mesh->elementTypes();
   vector< ElementTypePtr >::iterator elemTypeIt;
-  for (elemTypeIt = elementTypes.begin(); elemTypeIt != elementTypes.end(); elemTypeIt++) 
+  for (elemTypeIt = elementTypes.begin(); elemTypeIt != elementTypes.end(); elemTypeIt++)
   {
     ElementTypePtr elemTypePtr = *(elemTypeIt);
     FieldContainer<double> physicalCellNodes = _mesh()->physicalCellNodesGlobal(elemTypePtr);
@@ -304,7 +303,7 @@ void Solution::writeTracesToVTK(const string& filePath)
     int numCells = physicalCellNodes.dimension(0);
     // determine cellIDs
     vector<GlobalIndexType> cellIDs;
-    for (int cellIndex=0; cellIndex<numCells; cellIndex++) 
+    for (int cellIndex=0; cellIndex<numCells; cellIndex++)
     {
       GlobalIndexType cellID = _mesh->cellID(elemTypePtr, cellIndex, -1); // -1: "global" lookup (independent of MPI node)
       cellIDs.push_back(cellID);
@@ -400,7 +399,7 @@ void Solution::writeToVTK(const string& filePath, unsigned int num1DPts)
   // Get trialIDs
   vector<int> trialIDs = _mesh->bilinearForm()->trialIDs();
   vector<int> fieldTrialIDs;
-  
+
   // NVR: for this version, if default of num1DPts=0 chosen, just use 4 points:
   if (num1DPts==0) num1DPts = 4;
 
@@ -449,28 +448,28 @@ void Solution::writeToVTK(const string& filePath, unsigned int num1DPts)
   int offsetCount = 0;
 
   // Loop through Quads, Triangles, etc
-  for (elemTypeIt = elementTypes.begin(); elemTypeIt != elementTypes.end(); elemTypeIt++) 
+  for (elemTypeIt = elementTypes.begin(); elemTypeIt != elementTypes.end(); elemTypeIt++)
   {
     ElementTypePtr elemTypePtr = *(elemTypeIt);
     shards::CellTopology cellTopo = *(elemTypePtr->cellTopoPtr);
     Teuchos::RCP<shards::CellTopology> cellTopoPtr = elemTypePtr->cellTopoPtr;
-    
-    FieldContainer<double> vertexPoints;    
+
+    FieldContainer<double> vertexPoints;
     _mesh->verticesForElementType(vertexPoints,elemTypePtr); //stores vertex points for this element
     FieldContainer<double> physicalCellNodes = _mesh()->physicalCellNodesGlobal(elemTypePtr);
-    
+
     int numCells = physicalCellNodes.dimension(0);
     bool createSideCacheToo = true;
     BasisCachePtr basisCache = Teuchos::rcp(new BasisCache(elemTypePtr,_mesh, createSideCacheToo));
-    
+
     vector<GlobalIndexType> cellIDs;
-    for (int cellIndex=0; cellIndex<numCells; cellIndex++) 
+    for (int cellIndex=0; cellIndex<numCells; cellIndex++)
     {
       int cellID = _mesh->cellID(elemTypePtr, cellIndex, -1); // -1: global cellID
       cellIDs.push_back(cellID);
     }
 
-    int numPoints = num1DPts * num1DPts;  
+    int numPoints = num1DPts * num1DPts;
     FieldContainer<double> refPoints(numPoints,spaceDim);
     for (int xPointIndex = 0; xPointIndex < num1DPts; xPointIndex++){
       for (int yPointIndex = 0; yPointIndex < num1DPts; yPointIndex++){
@@ -481,7 +480,7 @@ void Solution::writeToVTK(const string& filePath, unsigned int num1DPts)
         refPoints(pointIndex,1) = y;
       }
     }
-    
+
     basisCache->setRefCellPoints(refPoints);
     basisCache->setPhysicalCellNodes(physicalCellNodes, cellIDs, createSideCacheToo);
     const FieldContainer<double> *physicalPoints = &basisCache->getPhysicalCubaturePoints();
@@ -505,7 +504,7 @@ void Solution::writeToVTK(const string& filePath, unsigned int num1DPts)
           int ind2 = ind1 + num1DPts;
           int ind3 = ind2 + 1;
           int ind4 = ind1 + 1;
-          *conn << "          " 
+          *conn << "          "
             << ind1 <<" "<< ind2 <<" "<< ind3 <<" "<< ind4 << endl;
           subcellStartIndex++;
           total_cells++;
@@ -517,7 +516,7 @@ void Solution::writeToVTK(const string& filePath, unsigned int num1DPts)
       }
       for (int pointIndex = 0; pointIndex < num1DPts*num1DPts; pointIndex++)
       {
-        *pout << "          " 
+        *pout << "          "
           << (*physicalPoints)(cellIndex, pointIndex, 0) << " "
           << (*physicalPoints)(cellIndex, pointIndex, 1) << " "
           << 0 << endl;
@@ -527,7 +526,7 @@ void Solution::writeToVTK(const string& filePath, unsigned int num1DPts)
       {
         for (int pointIndex = 0; pointIndex < num1DPts*num1DPts; pointIndex++)
         {
-          *pdata[varIdx] << "          " 
+          *pdata[varIdx] << "          "
             << computedValues[varIdx](cellIndex, pointIndex) << endl;
         }
       }
@@ -556,7 +555,7 @@ void Solution::writeToVTK(const string& filePath, unsigned int num1DPts)
   for (int varIdx = 0; varIdx < numFieldVars; varIdx++)
   {
   fout << "        <DataArray type=\"Float32\" Name=\""
-    << _mesh->bilinearForm()->trialName(fieldTrialIDs[varIdx]) << "\" " 
+    << _mesh->bilinearForm()->trialName(fieldTrialIDs[varIdx]) << "\" "
     << "NumberOfComponents=\"1\" Format=\"ascii\">" << endl;
   fout << pdata[varIdx]->str();
   fout << "        </DataArray>" << endl;

@@ -1,6 +1,5 @@
 //TODO: solution output
 #include "XDMFExporter.h"
-#include "CamelliaConfig.h"
 
 #include "CamelliaCellTools.h"
 
@@ -116,7 +115,7 @@ void XDMFExporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
   topology->SetTopologyType(XDMF_MIXED);
 
   unsigned int total_vertices = 0;
-  
+
   if (cellIndices.size()==0) cellIndices = _meshTopology->getActiveCellIndices();
   // Number of line elements in 1D mesh
   int numLines=0;
@@ -149,7 +148,7 @@ void XDMFExporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
     if (!cellIDToNum1DPts[cell->cellIndex()] || cellIDToNum1DPts[cell->cellIndex()] < 2)
       cellIDToNum1DPts[cell->cellIndex()] = defaultNum1DPts;
     int num1DPts = cellIDToNum1DPts[cell->cellIndex()];
-    if (cell->topology()->getKey() == shards::Line<2>::key) 
+    if (cell->topology()->getKey() == shards::Line<2>::key)
     {
       numLines++;
       if (!exportingBoundaryValues)
@@ -163,7 +162,7 @@ void XDMFExporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
         totalPts += 2;
       }
     }
-    if (cell->topology()->getKey() == shards::Triangle<3>::key) 
+    if (cell->topology()->getKey() == shards::Triangle<3>::key)
     {
       numTriangles++;
       if (!exportingBoundaryValues)
@@ -178,7 +177,7 @@ void XDMFExporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
         totalPts += 3*num1DPts;
       }
     }
-    if (cell->topology()->getKey() == shards::Quadrilateral<4>::key) 
+    if (cell->topology()->getKey() == shards::Quadrilateral<4>::key)
     {
       numQuads++;
       if (!exportingBoundaryValues)
@@ -193,7 +192,7 @@ void XDMFExporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
         totalPts += 4*num1DPts;
       }
     }
-    if (cell->topology()->getKey() == shards::Hexahedron<8>::key) 
+    if (cell->topology()->getKey() == shards::Hexahedron<8>::key)
     {
       numHexas++;
       if (!exportingBoundaryValues)
@@ -327,8 +326,8 @@ void XDMFExporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
   int valIndex[nFcns];
   for (int i = 0; i < nFcns; i++)
     valIndex[i] = 0;
-  
-  for (set<GlobalIndexType>::iterator cellIt = cellIndices.begin(); cellIt != cellIndices.end(); cellIt++) 
+
+  for (set<GlobalIndexType>::iterator cellIt = cellIndices.begin(); cellIt != cellIndices.end(); cellIt++)
   {
     GlobalIndexType cellIndex = *cellIt;
     CellPtr cell = _meshTopology->getCell(cellIndex);
@@ -338,29 +337,29 @@ void XDMFExporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
     CellTopoPtrLegacy cellTopoPtr = cell->topology();
     int num1DPts = cellIDToNum1DPts[cell->cellIndex()];
     int numPoints = 0;
-    
+
     if (physicalCellNodes.rank() == 2)
       physicalCellNodes.resize(1,physicalCellNodes.dimension(0), physicalCellNodes.dimension(1));
     bool createSideCache = functions[0]->boundaryValueOnly();
-    
+
     BasisCachePtr volumeBasisCache = Teuchos::rcp( new BasisCache(*cellTopoPtr, 1, createSideCache) );
     volumeBasisCache->setPhysicalCellNodes(physicalCellNodes, vector<GlobalIndexType>(1,cellIndex), createSideCache);
 
     int numSides = createSideCache ? CamelliaCellTools::getSideCount(*cellTopoPtr) : 1;
-    
+
     int sideDim = spaceDim - 1;
-    
-    for (int sideOrdinal = 0; sideOrdinal < numSides; sideOrdinal++) 
+
+    for (int sideOrdinal = 0; sideOrdinal < numSides; sideOrdinal++)
     {
       shards::CellTopology topo = createSideCache ? cellTopoPtr->getBaseCellTopologyData(sideDim, sideOrdinal) : *cellTopoPtr;
       unsigned cellTopoKey = topo.getKey();
-      
+
       BasisCachePtr basisCache = createSideCache ? volumeBasisCache->getSideBasisCache(sideOrdinal) : volumeBasisCache;
       if (mesh.get())
         basisCache->setMesh(mesh);
-      
+
       unsigned domainDim = createSideCache ? sideDim : spaceDim;
-      
+
       switch (cellTopoKey)
       {
         case shards::Node::key:
@@ -595,7 +594,7 @@ void XDMFExporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
       }
       for (int pointIndex = 0; pointIndex < numPoints; pointIndex++)
       {
-        if (spaceDim == 1) 
+        if (spaceDim == 1)
         {
           ptArray->SetValue(ptIndex, (*physicalPoints)(0, pointIndex, 0));
           ptIndex++;
@@ -700,7 +699,7 @@ map<int,int> cellIDToSubdivision(MeshPtr mesh, unsigned int subdivisionFactor, s
 {
   if (cellIndices.size()==0) cellIndices = mesh->getTopology()->getActiveCellIndices();
   map<int,int> cellIDToPolyOrder;
-  for (set<GlobalIndexType>::iterator cellIt = cellIndices.begin(); cellIt != cellIndices.end(); cellIt++) 
+  for (set<GlobalIndexType>::iterator cellIt = cellIndices.begin(); cellIt != cellIndices.end(); cellIt++)
   {
     cellIDToPolyOrder[*cellIt] =  (subdivisionFactor*(mesh->cellPolyOrder(*cellIt)-2)+1);
   }

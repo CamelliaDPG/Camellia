@@ -8,8 +8,6 @@
  *
  */
 
-#include "CamelliaConfig.h"
-
 #ifdef USE_XDMF
 #include <Xdmf.h>
 
@@ -65,11 +63,11 @@ public:
     ~XDMFExporter()
     {
     }
-  void exportFunction(FunctionPtr function, string functionName="function", double timeVal=0, 
+  void exportFunction(FunctionPtr function, string functionName="function", double timeVal=0,
     unsigned int defaultNum1DPts=4, map<int, int> cellIDToNum1DPts=map<int,int>(), MeshPtr mesh=Teuchos::rcp((Mesh*)NULL),  set<GlobalIndexType> cellIndices=set<GlobalIndexType>());
-  void exportFunction(vector<FunctionPtr> functions, vector<string> functionNames, double timeVal=0, 
+  void exportFunction(vector<FunctionPtr> functions, vector<string> functionNames, double timeVal=0,
     unsigned int defaultNum1DPts=4, map<int, int> cellIDToNum1DPts=map<int,int>(), MeshPtr mesh=Teuchos::rcp((Mesh*)NULL), set<GlobalIndexType> cellIndices=set<GlobalIndexType>());
-  void exportSolution(SolutionPtr solution, MeshPtr mesh, VarFactory varFactory, double timeVal=0, 
+  void exportSolution(SolutionPtr solution, MeshPtr mesh, VarFactory varFactory, double timeVal=0,
     unsigned int defaultNum1DPts=4, map<int, int> cellIDToNum1DPts=map<int,int>(), set<GlobalIndexType> cellIndices=set<GlobalIndexType>());
 };
 

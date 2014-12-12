@@ -3,6 +3,11 @@ cmake_minimum_required(VERSION 2.6)
 #  include(ConfigureOptions.cmake)
 #ENDIF()
 
+option(USE_MUMPS "Use MUMPS" ON)
+if(USE_MUMPS)
+  add_definitions(-DUSE_MUMPS)
+endif(USE_MUMPS)
+
 
 # Set Camellia directories
 set(CAMELLIA_SOURCE_DIR src)
@@ -123,13 +128,6 @@ IF(NOT CMAKE_Fortran_COMPILER)
 ENDIF()
 
 project(Camellia)
-
-configure_file(
-  "${PROJECT_SOURCE_DIR}/src/include/CamelliaConfig.h.in"
-  "${PROJECT_BINARY_DIR}/CamelliaConfig.h"
-)
-
-include_directories(${PROJECT_BINARY_DIR})
 
 # Find all library source files
 FILE(GLOB_RECURSE LIB_SOURCES "${CAMELLIA_SOURCE_DIR}/*.cpp")

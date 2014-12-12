@@ -13,8 +13,6 @@
 #include "Amesos_Klu.h"
 #include "AztecOO.h"
 
-#include "CamelliaConfig.h"
-
 // abstract class for solving Epetra_LinearProblem problems
 class Solver {
 protected:
@@ -31,7 +29,7 @@ public:
     // subclasses may override to reuse factorization information
     return solve();
   }
-  
+
   enum SolverChoice {
     KLU,
     SuperLUDist,
@@ -40,7 +38,7 @@ public:
   };
   static Teuchos::RCP<Solver> getSolver(SolverChoice choice, bool saveFactorization,
                                         double residualTolerance = 1e-12, int maxIterations = 50000);
-  
+
   static SolverChoice solverChoiceFromString(string choiceString) {
     if (choiceString=="KLU") return KLU;
     if (choiceString=="SuperLUDist") return SuperLUDist;
@@ -130,17 +128,17 @@ public:
     _maxMemoryPerCoreMB = maxMemoryPerCoreMB;
     _saveFactorization = saveFactorization;
   }
-  
+
   void setProblem(Teuchos::RCP< Epetra_LinearProblem > problem) {
     _savedSolver = Teuchos::rcp((Amesos_Mumps*)NULL);
     this->_problem = problem;
   }
-  
+
   int solve() {
     Teuchos::RCP<Amesos_Mumps> mumps = Teuchos::rcp(new Amesos_Mumps(problem()));
     int numProcs=1;
     int rank=0;
-    
+
     int previousSize = 0;
 #ifdef HAVE_MPI
     rank     = Teuchos::GlobalMPISession::getRank();
@@ -148,14 +146,14 @@ public:
     mumps->SetICNTL(28, 0); // 0: automatic choice between parallel and sequential analysis
 //    mumps->SetICNTL(28, 2); // 2: parallel analysis
 //    mumps->SetICNTL(29, 2); // 2: use PARMETIS; 1: use PT-SCOTCH
-    
+
 //    int minSize = max(infog[26-1], infog[16-1]);
 //    // want to set ICNTL 23 to a size "significantly larger" than minSize
 //    int sizeToSet = max(2 * minSize, previousSize*2);
 //    sizeToSet = min(sizeToSet, _maxMemoryPerCoreMB);
 //    previousSize = sizeToSet;
     //    mumps->SetICNTL(23, sizeToSet);
-    
+
     // not sure why we shouldn't just do this: (I don't think MUMPS will allocate as much as we allow it, unless it thinks it needs it)
     mumps->SetICNTL(1,6); // set output stream for errors (this is supposed to be the default, but maybe Amesos clobbers it?)
 //    int sizeToSet = _maxMemoryPerCoreMB;
@@ -169,12 +167,12 @@ public:
     int relaxationParam = 0; // the default
     int* info = mumps->GetINFO();
     int* infog = mumps->GetINFOG();
-    
+
     int numErrors = 0;
     while (info[0] < 0) { // error occurred
       info = mumps->GetINFO(); // not sure if these can change locations between invocations -- just in case...
       infog = mumps->GetINFOG();
-      
+
       numErrors++;
       if (rank == 0) {
         if (infog[0] == -9) {
