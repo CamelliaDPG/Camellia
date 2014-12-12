@@ -16,8 +16,10 @@ Teuchos::RCP<Solver> Solver::getSolver(SolverChoice choice, bool saveFactorizati
     case KLU:
       return Teuchos::rcp( new KluSolver(saveFactorization) );
       break;
+#ifdef HAVE_AMESOS_SUPERLUDIST
     case SuperLUDist:
       return Teuchos::rcp( new SuperLUDistSolver(saveFactorization) );
+#endif
     case MUMPS:
       return Teuchos::rcp( new MumpsSolver(saveFactorization) );
     case SimpleML:
