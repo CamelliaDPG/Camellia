@@ -6,6 +6,7 @@
 #include "MPIWrapper.h"
 
 #include "MeshFactory.h"
+#include "LinearTerm.h"
 
 //static const double RAMP_HEIGHT = 0.0;
 
@@ -55,7 +56,7 @@ MeshPtr MeshUtilities::buildRampMesh(double rampHeight, Teuchos::RCP< BilinearFo
   elementVertices.push_back(el1);
   elementVertices.push_back(el2);
   int pToAdd = pTest-H1Order;
-  mesh = Teuchos::rcp( new Mesh(vertices, elementVertices, bilinearForm, H1Order, pToAdd) );  
+  mesh = Teuchos::rcp( new Mesh(vertices, elementVertices, bilinearForm, H1Order, pToAdd) );
   return mesh;
 }
 
@@ -96,7 +97,7 @@ MeshPtr MeshUtilities::buildLongRampMesh(double rampHeight, Teuchos::RCP< Biline
   elementVertices.push_back(el2);
   elementVertices.push_back(el3);
   int pToAdd = pTest-H1Order;
-  mesh = Teuchos::rcp( new Mesh(vertices, elementVertices, bilinearForm, H1Order, pToAdd) );  
+  mesh = Teuchos::rcp( new Mesh(vertices, elementVertices, bilinearForm, H1Order, pToAdd) );
   vector<ElementPtr> elems = mesh->activeElements();
   vector<GlobalIndexType> cellsToRefine;
   for (vector<ElementPtr>::iterator elemIt = elems.begin();elemIt!=elems.end();elemIt++){
@@ -143,7 +144,7 @@ MeshPtr MeshUtilities::buildFrontFacingStep(Teuchos::RCP< BilinearForm > bilinea
   elementVertices.push_back(el2);
   elementVertices.push_back(el3);
   int pToAdd = pTest-H1Order;
-  mesh = Teuchos::rcp( new Mesh(vertices, elementVertices, bilinearForm, H1Order, pToAdd) );  
+  mesh = Teuchos::rcp( new Mesh(vertices, elementVertices, bilinearForm, H1Order, pToAdd) );
   return mesh;
 }
 
@@ -160,7 +161,7 @@ MeshPtr MeshUtilities::buildUnitQuadMesh(int horizontalCells, int verticalCells,
   quadPoints(2,1) = squareSize;
   quadPoints(3,0) = 0.0;
   quadPoints(3,1) = squareSize;
-  
+
   // create a pointer to a new mesh:
   return MeshFactory::buildQuadMesh(quadPoints, horizontalCells, verticalCells, bilinearForm, H1Order, pTest);
 }
@@ -175,7 +176,7 @@ double MeshUtilities::computeMaxLocalConditionNumber(Teuchos::RCP< DPGInnerProdu
   vector< ElementPtr > elements = mesh->elementsInPartition(rank);
 
 //  cout << "Checking condition numbers on rank " << rank << endl;
-  
+
   FieldContainer<double> maxConditionNumberIPMatrix;
   int maxCellID = -1;
   double myMaxConditionNumber = -1;
@@ -207,7 +208,7 @@ double MeshUtilities::computeMaxLocalConditionNumber(Teuchos::RCP< DPGInnerProdu
   FieldContainer<double> maxConditionNumbers(numProcs);
   maxConditionNumbers[rank] = myMaxConditionNumber;
   MPIWrapper::entryWiseSum(maxConditionNumbers);
-  
+
   double maxConditionNumber = maxConditionNumbers[0];
   int maxConditionNumberOwner = 0; // the MPI node with the max condition number
   for (int i=1; i<numProcs; i++) {
@@ -216,7 +217,7 @@ double MeshUtilities::computeMaxLocalConditionNumber(Teuchos::RCP< DPGInnerProdu
       maxConditionNumberOwner = i;
     }
   }
-  
+
   if (rank==maxConditionNumberOwner) { // owner is responsible for writing to file
 //    cout << "max condition number is on rank " << rank << endl;
     if (sparseFileToWriteTo.length() > 0) {

@@ -20,8 +20,10 @@ Teuchos::RCP<Solver> Solver::getSolver(SolverChoice choice, bool saveFactorizati
     case SuperLUDist:
       return Teuchos::rcp( new SuperLUDistSolver(saveFactorization) );
 #endif
+#ifdef USE_MUMPS
     case MUMPS:
       return Teuchos::rcp( new MumpsSolver(saveFactorization) );
+#endif
     case SimpleML:
       return Teuchos::rcp( new SimpleMLSolver(saveFactorization, residualTolerance, maxIterations) );
     default:
