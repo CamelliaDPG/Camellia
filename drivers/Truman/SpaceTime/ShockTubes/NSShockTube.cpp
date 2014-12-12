@@ -569,9 +569,9 @@ int main(int argc, char *argv[]) {
   VarPtr T = Ue;
   VarPtr m = Um;
   VarPtr E = Ue;
-  VarPtr Vc = Uc;
-  VarPtr Vm = Um;
-  VarPtr Ve = Ue;
+  VarPtr zc = Uc;
+  VarPtr zm = Um;
+  VarPtr ze = Ue;
 
   ////////////////////   INITIALIZE USEFUL VARIABLES   ///////////////////////
   // Define useful functions
@@ -697,9 +697,9 @@ int main(int argc, char *argv[]) {
     FunctionPtr T_prev = Ue_prev;
     FunctionPtr m_prev = Um_prev;
     FunctionPtr E_prev = Ue_prev;
-    FunctionPtr Vc_prev = Uc_prev;
-    FunctionPtr Vm_prev = Um_prev;
-    FunctionPtr Ve_prev = Ue_prev;
+    FunctionPtr zc_prev = Uc_prev;
+    FunctionPtr zm_prev = Um_prev;
+    FunctionPtr ze_prev = Ue_prev;
     // FunctionPtr dudx_prev   = Function::solution(Um->dx(), backgroundFlows[slab]);
     // FunctionPtr dDdx_prev   = Function::solution(D->dx(), backgroundFlows[slab]);
     // Nonlinear Residual Terms
@@ -833,10 +833,10 @@ int main(int argc, char *argv[]) {
       adj_Fe->addTerm( R*rho_prev*vm->dx() + Cv*rho_prev*u_prev*ve->dx() + R*rho_prev*u_prev*ve->dx() );
       adj_KD->addTerm( vm->dx() + u_prev*ve->dx() );
       adj_Kq->addTerm( -ve->dx() );
-      adj_Gm->addTerm( 2*S->dx() );
-      adj_Ge->addTerm( -tau->dx() );
       adj_MD->addTerm( 1./mu*S );
       adj_Mq->addTerm( Pr/(Cp*mu)*tau );
+      adj_Gm->addTerm( 2*S->dx() );
+      adj_Ge->addTerm( -tau->dx() );
       break;
 
       case 1:
@@ -894,12 +894,12 @@ int main(int argc, char *argv[]) {
       adj_Fe->addTerm( (gamma-1)*vm->dx() + gamma*m_prev/rho_prev*ve->dx() );
       adj_KD->addTerm( vm->dx() + m_prev/rho_prev*ve->dx() );
       adj_Kq->addTerm( -ve->dx() );
+      adj_MD->addTerm( 1./mu*S );
+      adj_Mq->addTerm( Pr/(Cp*mu)*tau );
       adj_Gc->addTerm( -2*m_prev/(rho_prev*rho_prev)*S->dx() + E_prev/(Cv*rho_prev*rho_prev)*tau->dx()
             - m_prev*m_prev/(Cv*rho_prev*rho_prev*rho_prev)*tau->dx() );
       adj_Gm->addTerm( 2./rho_prev*S->dx() + m_prev/(Cv*rho_prev*rho_prev)*tau->dx() );
       adj_Ge->addTerm( -1./(Cv*rho_prev)*tau->dx() );
-      adj_MD->addTerm( 1./mu*S );
-      adj_Mq->addTerm( Pr/(Cp*mu)*tau );
       break;
 
       case 2:
@@ -915,74 +915,73 @@ int main(int argc, char *argv[]) {
       //                                                    | $$      |  $$$$$$/
       //                                                    |__/       \______/
       // define alpha from notes
-      FunctionPtr VePow1 = Teuchos::rcp( new PowerFunction(-Ve_prev, gamma));
-      FunctionPtr alphaPow1 = Teuchos::rcp( new PowerFunction((gamma-1)/VePow1, 1./(gamma-1)));
-      FunctionPtr alphaExp = Teuchos::rcp( new ExpFunction((-gamma+Vc_prev-0.5*Vm_prev*Vm_prev/Ve_prev)/(gamma-1)) );
+      FunctionPtr zePow1 = Teuchos::rcp( new PowerFunction(-ze_prev, gamma));
+      FunctionPtr alphaPow1 = Teuchos::rcp( new PowerFunction((gamma-1)/zePow1, 1./(gamma-1)));
+      FunctionPtr alphaExp = Teuchos::rcp( new ExpFunction((-gamma+zc_prev-0.5*zm_prev*zm_prev/ze_prev)/(gamma-1)) );
       FunctionPtr alpha = alphaPow1*alphaExp;
       LinearTermPtr alpha_dU = Teuchos::rcp( new LinearTerm );
-      alpha_dU->addTerm( alpha/(gamma-1)*(Vc - Vm_prev/Ve_prev*Vm + (0.5*Vm_prev*Vm_prev/(Ve_prev*Ve_prev)-gamma/Ve_prev)*Ve) );
+      alpha_dU->addTerm( alpha/(gamma-1)*(zc - zm_prev/ze_prev*zm + (0.5*zm_prev*zm_prev/(ze_prev*ze_prev)-gamma/ze_prev)*ze) );
 
       // Define Euler fluxes and flux jacobians
-      Cc = -alpha*Ve_prev;
-      Cm = alpha*Vm_prev;
-      Ce = alpha*(1-0.5*Vm_prev*Vm_prev/Ve_prev);
-      Fc = alpha*Vm_prev;
-      Fm = alpha*(-Vm_prev*Vm_prev/Ve_prev+(gamma-1));
-      Fe = alpha*Vm_prev/Ve_prev*(0.5*Vm_prev*Vm_prev/Ve_prev-gamma);
+      Cc = -alpha*ze_prev;
+      Cm = alpha*zm_prev;
+      Ce = alpha*(1-0.5*zm_prev*zm_prev/ze_prev);
+      Fc = alpha*zm_prev;
+      Fm = alpha*(-zm_prev*zm_prev/ze_prev+(gamma-1));
+      Fe = alpha*zm_prev/ze_prev*(0.5*zm_prev*zm_prev/ze_prev-gamma);
       Km = D_prev;
-      Ke = -q_prev - Vm_prev/Ve_prev*D_prev;
+      Ke = -q_prev - zm_prev/ze_prev*D_prev;
       MD = 1./mu*D_prev;
       Mq = Pr/(Cp*mu)*q_prev;
-      GD = -2*Vm_prev/Ve_prev;
-      Gq = 1/(Cv*Ve_prev);
+      GD = -2*zm_prev/ze_prev;
+      Gq = 1/(Cv*ze_prev);
 
       // Linearized Terms
-      Cc_dU->addTerm( -Ve_prev*alpha_dU - alpha*Ve );
-      Cm_dU->addTerm( Vm_prev*alpha_dU + alpha*Vm );
-      Ce_dU->addTerm( (1-0.5*Vm_prev*Vm_prev/Ve_prev)*alpha_dU
-          + alpha*(-Vm_prev/Ve_prev*Vm + 0.5*Vm_prev*Vm_prev/(Ve_prev*Ve_prev)*Ve) );
-      Fc_dU->addTerm( Vm_prev*alpha_dU
-          + alpha*Vm );
-      Fm_dU->addTerm( (-Vm_prev*Vm_prev/Ve_prev+(gamma-1))*alpha_dU
-          + alpha*(-2*Vm_prev/Ve_prev*Vm + Vm_prev*Vm_prev/(Ve_prev*Ve_prev)*Ve) );
-      Fe_dU->addTerm( Vm_prev/Ve_prev*(0.5*Vm_prev*Vm_prev/Ve_prev-gamma)*alpha_dU
-          + alpha*(1.5*Vm_prev*Vm_prev/(Ve_prev*Ve_prev)*Vm - Vm_prev*Vm_prev*Vm_prev/(Ve_prev*Ve_prev*Ve_prev)*Ve
-            - gamma/Ve_prev*Vm + gamma*Vm_prev/(Ve_prev*Ve_prev)*Ve) );
+      Cc_dU->addTerm( -ze_prev*alpha_dU - alpha*ze );
+      Cm_dU->addTerm( zm_prev*alpha_dU + alpha*zm );
+      Ce_dU->addTerm( (1-0.5*zm_prev*zm_prev/ze_prev)*alpha_dU
+          + alpha*(-zm_prev/ze_prev*zm + 0.5*zm_prev*zm_prev/(ze_prev*ze_prev)*ze) );
+      Fc_dU->addTerm( zm_prev*alpha_dU + alpha*zm );
+      Fm_dU->addTerm( (-zm_prev*zm_prev/ze_prev+(gamma-1))*alpha_dU
+          + alpha*(-2*zm_prev/ze_prev*zm + zm_prev*zm_prev/(ze_prev*ze_prev)*ze) );
+      Fe_dU->addTerm( zm_prev/ze_prev*(0.5*zm_prev*zm_prev/ze_prev-gamma)*alpha_dU
+          + alpha*(1.5*zm_prev*zm_prev/(ze_prev*ze_prev)*zm - zm_prev*zm_prev*zm_prev/(ze_prev*ze_prev*ze_prev)*ze
+            - gamma/ze_prev*zm + gamma*zm_prev/(ze_prev*ze_prev)*ze) );
       Km_dU->addTerm( 1*D );
-      Ke_dU->addTerm( -q - D_prev/Ve_prev*Vm - Vm_prev/Ve_prev*D + Vm_prev*D_prev/(Ve_prev*Ve_prev)*Ve );
+      Ke_dU->addTerm( -q - D_prev/ze_prev*zm - zm_prev/ze_prev*D + zm_prev*D_prev/(ze_prev*ze_prev)*ze );
       MD_dU->addTerm( 1./mu*D );
       Mq_dU->addTerm( Pr/(Cp*mu)*q );
-      GD_dU->addTerm( -2./Ve_prev*Vm + 2*Vm_prev/(Ve_prev*Ve_prev)*Ve );
-      Gq_dU->addTerm( -1/(Cv*Ve_prev*Ve_prev)*Ve );
+      GD_dU->addTerm( -2./ze_prev*zm + 2*zm_prev/(ze_prev*ze_prev)*ze );
+      Gq_dU->addTerm( -1/(Cv*ze_prev*ze_prev)*ze );
 
       // Adjoint Terms
-      adj_Cc->addTerm( alpha/(gamma-1)*(-Ve_prev*vc->dy() + Vm_prev*vm->dy() + (1-0.5*Vm_prev*Vm_prev/Ve_prev)*ve->dy()) );
-      adj_Cm->addTerm( -alpha/(gamma-1)*Vm_prev/Ve_prev*(-Ve_prev*vc->dy() + Vm_prev*vm->dy()
-            + (1-0.5*Vm_prev*Vm_prev/Ve_prev)*ve->dy())
-          + alpha*vm->dy() - alpha*Vm_prev/Ve_prev*ve->dy() );
+      adj_Cc->addTerm( alpha/(gamma-1)*(-ze_prev*vc->dy() + zm_prev*vm->dy() + (1-0.5*zm_prev*zm_prev/ze_prev)*ve->dy()) );
+      adj_Cm->addTerm( -alpha/(gamma-1)*zm_prev/ze_prev*(-ze_prev*vc->dy() + zm_prev*vm->dy()
+            + (1-0.5*zm_prev*zm_prev/ze_prev)*ve->dy())
+          + alpha*vm->dy() - alpha*zm_prev/ze_prev*ve->dy() );
       adj_Ce->addTerm(
-          alpha/(gamma-1)*(0.5*Vm_prev*Vm_prev/(Ve_prev*Ve_prev)-gamma/Ve_prev)*(-Ve_prev*vc->dy()
-            + Vm_prev*vm->dy() + (1-0.5*Vm_prev*Vm_prev/Ve_prev)*ve->dy())
-          -alpha*vc->dy() + 0.5*alpha*Vm_prev*Vm_prev/(Ve_prev*Ve_prev)*ve->dy() );
-      adj_Fc->addTerm( alpha/(gamma-1)*(Vm_prev*vc->dx() + (-Vm_prev*Vm_prev/Ve_prev+(gamma-1))*vm->dx()
-            + (0.5*Vm_prev*Vm_prev/Ve_prev-gamma)*Vm_prev/Ve_prev*ve->dx()));
-      adj_Fm->addTerm( -alpha/(gamma-1)*Vm_prev/Ve_prev*(Vm_prev*vc->dx() + (-Vm_prev*Vm_prev/Ve_prev+(gamma-1))*vm->dx()
-          + (0.5*Vm_prev*Vm_prev/Ve_prev-gamma)*Vm_prev/Ve_prev*ve->dx())
-        + alpha*vc->dx() - 2*alpha*Vm_prev/Ve_prev*vm->dx()
-        + alpha*((0.5*Vm_prev*Vm_prev/Ve_prev-gamma)/Ve_prev*ve->dx() + Vm_prev*Vm_prev/(Ve_prev*Ve_prev)*ve->dx())
-        + D_prev/Ve_prev*ve->dx() );
+          alpha/(gamma-1)*(0.5*zm_prev*zm_prev/(ze_prev*ze_prev)-gamma/ze_prev)*(-ze_prev*vc->dy()
+            + zm_prev*vm->dy() + (1-0.5*zm_prev*zm_prev/ze_prev)*ve->dy())
+          -alpha*vc->dy() + 0.5*alpha*zm_prev*zm_prev/(ze_prev*ze_prev)*ve->dy() );
+      adj_Fc->addTerm( alpha/(gamma-1)*(zm_prev*vc->dx() + (-zm_prev*zm_prev/ze_prev+(gamma-1))*vm->dx()
+            + (0.5*zm_prev*zm_prev/ze_prev-gamma)*zm_prev/ze_prev*ve->dx()));
+      adj_Fm->addTerm( -alpha/(gamma-1)*zm_prev/ze_prev*(zm_prev*vc->dx() + (-zm_prev*zm_prev/ze_prev+(gamma-1))*vm->dx()
+          + (0.5*zm_prev*zm_prev/ze_prev-gamma)*zm_prev/ze_prev*ve->dx())
+        + alpha*vc->dx() - 2*alpha*zm_prev/ze_prev*vm->dx()
+        + alpha*((0.5*zm_prev*zm_prev/ze_prev-gamma)/ze_prev*ve->dx() + zm_prev*zm_prev/(ze_prev*ze_prev)*ve->dx())
+        + D_prev/ze_prev*ve->dx() );
       adj_Fe->addTerm(
-          alpha/(gamma-1)*(0.5*Vm_prev*Vm_prev/(Ve_prev*Ve_prev)-gamma/Ve_prev)*(Vm_prev*vc->dx()
-            + (-Vm_prev*Vm_prev/Ve_prev + (gamma-1))*vm->dx() + (0.5*Vm_prev*Vm_prev/Ve_prev-gamma)*Vm_prev/Ve_prev*ve->dx())
-          + alpha*Vm_prev*Vm_prev/(Ve_prev*Ve_prev)*vm->dx()
-          - alpha*(Vm_prev*Vm_prev/Ve_prev-gamma)*Vm_prev/(Ve_prev*Ve_prev)*ve->dx()
-          - Vm_prev/(Ve_prev*Ve_prev)*D_prev*ve->dx() );
-      adj_KD->addTerm( vm->dx() - Vm_prev/Ve_prev*ve->dx() );
+          alpha/(gamma-1)*(0.5*zm_prev*zm_prev/(ze_prev*ze_prev)-gamma/ze_prev)*(zm_prev*vc->dx()
+            + (-zm_prev*zm_prev/ze_prev + (gamma-1))*vm->dx() + (0.5*zm_prev*zm_prev/ze_prev-gamma)*zm_prev/ze_prev*ve->dx())
+          + alpha*zm_prev*zm_prev/(ze_prev*ze_prev)*vm->dx()
+          - alpha*(zm_prev*zm_prev/ze_prev-gamma)*zm_prev/(ze_prev*ze_prev)*ve->dx()
+          - zm_prev/(ze_prev*ze_prev)*D_prev*ve->dx() );
+      adj_KD->addTerm( vm->dx() - zm_prev/ze_prev*ve->dx() );
       adj_Kq->addTerm( -ve->dx() );
-      adj_Gm->addTerm( -2./Ve_prev*S->dx() );
-      adj_Ge->addTerm( 2*Vm_prev/(Ve_prev*Ve_prev)*S->dx() - 1./(Cv*Ve_prev*Ve_prev)*tau->dx() );
       adj_MD->addTerm( 1./mu*S );
       adj_Mq->addTerm( Pr/(Cp*mu)*tau );
+      adj_Gm->addTerm( -2./ze_prev*S->dx() );
+      adj_Ge->addTerm( 2*zm_prev/(ze_prev*ze_prev)*S->dx() - 1./(Cv*ze_prev*ze_prev)*tau->dx() );
       break;
 
       // default:
@@ -1176,8 +1175,8 @@ int main(int argc, char *argv[]) {
       positiveUpdates.push_back(Function::solution(E,solution));
       break;
       case 2:
-      positiveFunctions.push_back(-Function::solution(Ve,backgroundFlows[slab]));
-      positiveUpdates.push_back(-Function::solution(Ve,solution));
+      positiveFunctions.push_back(-Function::solution(ze,backgroundFlows[slab]));
+      positiveUpdates.push_back(-Function::solution(ze,solution));
       break;
 
       default:
@@ -1252,9 +1251,9 @@ int main(int argc, char *argv[]) {
         FunctionPtr rho_prev = Function::solution(rho,backgroundFlows[slab]);
         FunctionPtr m_prev = Function::solution(m,backgroundFlows[slab]);
         FunctionPtr E_prev = Function::solution(E,backgroundFlows[slab]);
-        FunctionPtr Vc_prev = Function::solution(Vc,backgroundFlows[slab]);
-        FunctionPtr Vm_prev = Function::solution(Vm,backgroundFlows[slab]);
-        FunctionPtr Ve_prev = Function::solution(Ve,backgroundFlows[slab]);
+        FunctionPtr zc_prev = Function::solution(zc,backgroundFlows[slab]);
+        FunctionPtr zm_prev = Function::solution(zm,backgroundFlows[slab]);
+        FunctionPtr ze_prev = Function::solution(ze,backgroundFlows[slab]);
         switch (formulation)
         {
           case 0:
@@ -1268,13 +1267,13 @@ int main(int argc, char *argv[]) {
           temperature = (E_prev-0.5*m_prev*m_prev/rho_prev)/(Cv*rho_prev);
           break;
           case 2:
-          FunctionPtr VePow1 = Teuchos::rcp( new PowerFunction(-Ve_prev, gamma));
-          FunctionPtr alphaPow1 = Teuchos::rcp( new PowerFunction((gamma-1)/VePow1, 1./(gamma-1)));
-          FunctionPtr alphaExp = Teuchos::rcp( new ExpFunction((-gamma+Vc_prev-0.5*Vm_prev*Vm_prev/Ve_prev)/(gamma-1)) );
+          FunctionPtr zePow1 = Teuchos::rcp( new PowerFunction(-ze_prev, gamma));
+          FunctionPtr alphaPow1 = Teuchos::rcp( new PowerFunction((gamma-1)/zePow1, 1./(gamma-1)));
+          FunctionPtr alphaExp = Teuchos::rcp( new ExpFunction((-gamma+zc_prev-0.5*zm_prev*zm_prev/ze_prev)/(gamma-1)) );
           FunctionPtr alpha = alphaPow1*alphaExp;
-          density = -alpha*Ve_prev;
-          velocity = -Vm_prev/Ve_prev;
-          temperature = -1/(Cv*Ve_prev);
+          density = -alpha*ze_prev;
+          velocity = -zm_prev/ze_prev;
+          temperature = -1/(Cv*ze_prev);
           break;
         }
         exporter.exportFunction(density,denFile.str());
