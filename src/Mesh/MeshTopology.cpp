@@ -81,12 +81,6 @@ const set<unsigned> & MeshTopology::getActiveCellIndices() {
   return _activeCells;
 }
 
-template<typename A, typename B>
-long long approximateMapSize(map<A,B> &someMap) {
-  // map.size() * ( sizeof(A) + sizeof(B) + sizeof(_Rb_tree_node_base) ) + sizeof ( _Rb_tree< A, B, _Select1st<B>, std::less< A > > )
-  return someMap.size() * ( sizeof(A) + sizeof(B) + sizeof(_Rb_tree_node_base) ) + sizeof ( _Rb_tree< A, B, _Select1st<B>, std::less< A > > );
-}
-
 // LLVM memory approximations come from http://info.prelert.com/blog/stl-container-memory-usage
 template<typename A, typename B>
 long long approximateMapSizeLLVM(map<A,B> &someMap) { // in bytes
@@ -140,7 +134,7 @@ map<string, long long> MeshTopology::approximateMemoryCosts() {
   
   variableCost["_spaceDim"] = sizeof(_spaceDim);
   
-  variableCost["_vertexMap"] = approximateMapSize(_vertexMap);
+  variableCost["_vertexMap"] = approximateMapSizeLLVM(_vertexMap);
   
   variableCost["_vertices"] = VECTOR_OVERHEAD; // for the outer vector _vertices.
   for (vector< vector<double> >::iterator entryIt = _vertices.begin(); entryIt != _vertices.end(); entryIt++) {
