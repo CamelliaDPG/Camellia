@@ -1,0 +1,48 @@
+EXTRA_ARGS=$@
+
+rm -f CMakeCache.txt
+
+cmake \
+-D Trilinos_WARNINGS_AS_ERRORS_FLAGS:STRING="" \
+-D TPL_ENABLE_MPI:BOOL=ON \
+-D TPL_ENABLE_MUMPS:STRING=ON \
+-D MUMPS_LIBRARY_DIRS:FILEPATH=/Users/nroberts/src/MUMPS_4.9.2/lib/ \
+-D MUMPS_LIBRARY_NAMES:STRING="dmumps; pord; mumps_common" \
+-D TPL_MUMPS_INCLUDE_DIRS:FILEPATH=/Users/nroberts/lib/mumps-4.9.2/include \
+-D CMAKE_CXX_COMPILER:FILEPATH=/Users/nroberts/lib/openmpi-1.8.3/bin/mpicxx \
+-D CMAKE_C_COMPILER:FILEPATH=/Users/nroberts/lib/openmpi-1.8.3/bin/mpicc \
+-D CMAKE_Fortran_COMPILER:FILEPATH=/Users/nroberts/lib/openmpi-1.8.3/bin/mpif90 \
+-D SWIG_EXECUTABLE:PATH=/Users/nroberts/lib/swig-3.0.2/bin/swig \
+-D Trilinos_SKIP_FORTRANCINTERFACE_VERIFY_TEST:BOOL=ON \
+-D MPI_BASE_DIR:PATH=/Users/nroberts/lib/openmpi-1.8.3 \
+-D HAVE_GCC_ABI_DEMANGLE:BOOL=ON \
+-D DART_TESTING_TIMEOUT:STRING=600 \
+-D CMAKE_VERBOSE_MAKEFILE:BOOL=TRUE \
+-D BUILD_SHARED_LIBS:BOOL=ON \
+-D Trilinos_ENABLE_Anasazi:BOOL=ON \
+-D Trilinos_ENABLE_Belos:BOOL=ON \
+-D Trilinos_ENABLE_Intrepid:BOOL=ON \
+-D Trilinos_ENABLE_Sacado:BOOL=ON \
+-D Trilinos_ENABLE_Epetra:BOOL=ON \
+-D Trilinos_ENABLE_EpetraExt:BOOL=ON \
+-D Trilinos_ENABLE_Teuchos:BOOL=ON \
+-D Trilinos_ENABLE_Shards:BOOL=ON \
+-D Trilinos_ENABLE_Amesos:BOOL=ON \
+-D Trilinos_ENABLE_PyTrilinos:BOOL=ON \
+-D Trilinos_ENABLE_Zoltan:BOOL=ON \
+-D Trilinos_ENABLE_ML:BOOL=ON \
+-D Trilinos_ENABLE_TESTS:BOOL=OFF \
+-D TPL_ENABLE_HDF5:STRING=ON \
+-D Trilinos_EXTRA_LINK_FLAGS:STRING="libz.dylib" \
+-D TPL_ENABLE_Zlib:BOOL=ON \
+-D HDF5_LIBRARY_DIRS:FILEPATH=/Users/nroberts/lib/hdf5/lib \
+-D HDF5_LIBRARY_NAMES:STRING="hdf5" \
+-D TPL_HDF5_INCLUDE_DIRS:FILEPATH=/Users/nroberts/lib/hdf5/include \
+-D EpetraExt_USING_HDF5:BOOL=ON \
+-DTPL_ENABLE_Netcdf=OFF \
+-DTPL_ENABLE_GLM=OFF \
+-DTrilinos_ASSERT_MISSING_PACKAGES=OFF \
+-D CMAKE_INSTALL_PREFIX:PATH=/Users/nroberts/lib/trilinos/mpi-release-shared/ \
+$EXTRA_ARGS \
+../../
+
