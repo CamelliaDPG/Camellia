@@ -12,8 +12,6 @@
 
 #include "ErrorPercentageRefinementStrategy.h"
 
-#include "CamelliaConfig.h"
-
 #include "MeshTools.h"
 
 #ifdef ENABLE_INTEL_FLOATING_POINT_EXCEPTIONS
@@ -25,6 +23,7 @@
 #include "HDF5Exporter.h"
 #endif
 
+#include "MeshTransferFunction.h"
 
 class Cone_U0 : public SimpleFunction {
   double _r; // cone radius
@@ -100,7 +99,7 @@ int main(int argc, char *argv[]) {
   
   bool useCondensedSolve = false; // condensed solve not yet compatible with minimum rule meshes
   
-  int k = 2; // poly order for u
+  int k = 2; // poly order for u in every direction, including temporal
   int numCells = 32; // in x, y
   int numTimeCells = 1;
   int numTimeSlabs = -1;
@@ -116,6 +115,7 @@ int main(int argc, char *argv[]) {
 
   cmdp.setOption("numCells",&numCells,"number of cells in x and y directions");
   cmdp.setOption("numTimeCells",&numTimeCells,"number of time axis cells");
+  cmdp.setOption("numTimeSlabs",&numTimeSlabs,"number of time slabs");
   cmdp.setOption("numFrames",&numFrames,"number of frames for export");
   
   cmdp.setOption("useConstantConvection", "useVariableConvection", &useConstantConvection);
@@ -175,8 +175,8 @@ int main(int argc, char *argv[]) {
   }
   
   if (numTimeSlabs==-1) {
-    double h = width / horizontalCells; // want t approx equal to h
-    numTimeSlabs = (int) totalTime / h / numTimeCells;
+    // want the number of grid points in temporal direction to be about 2000.  The temporal length is 2 * PI
+    numTimeSlabs = (int) 2000 / k;
   }
   double timeLengthPerSlab = totalTime / numTimeSlabs;
   
@@ -184,8 +184,6 @@ int main(int argc, char *argv[]) {
     cout << "solving on " << numCells << " x " << numCells << " x " << numTimeCells << " mesh " << "of order " << k << ".\n";
     cout << "numTimeSlabs: " << numTimeSlabs << endl;
   }
-  
-  BCPtr bc = BC::bc();
   
   SpatialFilterPtr inflowFilter  = Teuchos::rcp( new InflowFilterForClockwisePlanarRotation (x0,x0+width,y0,y0+height,0.5,0.5));
   
@@ -204,42 +202,24 @@ int main(int argc, char *argv[]) {
   origin[1] = y0;
   origin[2] = t0;
   
-  MeshPtr mesh = MeshFactory::rectilinearMesh(bf, dimensions, elementCounts, H1Order, delta_k, origin);
-  
-  FunctionPtr u0 = Teuchos::rcp( new Cone_U0(0.0, 0.25, 0.1, 1.0, false) );
-  
-  bc->addDirichlet(qHat, inflowFilter, Function::zero()); // zero BCs enforced at the inflow boundary.
-  bc->addDirichlet(qHat, SpatialFilter::matchingZ(t0), u0);
-
-  IPPtr ip;
-  ip = bf->graphNorm();
-  
-  // create two Solution objects; we'll switch between these for time steps
-  SolutionPtr soln = Solution::solution(mesh, bc, RHS::rhs(), ip);
-  
   Teuchos::RCP<Solver> solver = Teuchos::rcp( new KluSolver );
   
 #ifdef USE_MUMPS
   if (useMumpsIfAvailable) solver = Teuchos::rcp( new MumpsSolver );
 #endif
   
-#ifdef USE_VTK
-  NewVTKExporter vtkExporter(mesh->getTopology());
-#endif
-  
 //  double errorPercentage = 0.5; // for mesh refinements: ask to refine elements that account for 80% of the error in each step
 //  Teuchos::RCP<RefinementStrategy> refinementStrategy;
 //  refinementStrategy = Teuchos::rcp( new ErrorPercentageRefinementStrategy( soln, errorPercentage ));
-
-  double energyThreshold = 0.2; // for mesh refinements: ask to refine elements that account for 80% of the error in each step
-  Teuchos::RCP<RefinementStrategy> refinementStrategy;
-  refinementStrategy = Teuchos::rcp( new RefinementStrategy( soln, energyThreshold ));
   
-  if (rank==0) cout << "Initial mesh has " << mesh->getTopology()->activeCellCount() << " active (leaf) cells " << "and " << mesh->globalDofCount() << " degrees of freedom.\n";
   
   if (maxRefinements != 0) {
     cout << "Warning: maxRefinements is not 0, but the slice exporter implicitly assumes there won't be any refinements.\n";
   }
+  
+  MeshPtr mesh = MeshFactory::rectilinearMesh(bf, dimensions, elementCounts, H1Order, delta_k, origin);
+  
+  if (rank==0) cout << "Initial mesh has " << mesh->getTopology()->activeCellCount() << " active (leaf) cells " << "and " << mesh->globalDofCount() << " degrees of freedom.\n";
   
 #ifdef HAVE_EPETRAEXT_HDF5
   ostringstream dir_name;
@@ -250,11 +230,29 @@ int main(int argc, char *argv[]) {
 #endif
   
   FunctionPtr sideParity = Function::sideParity();
-  FunctionPtr u_spacetime = Function::solution(u, soln);
   
   int lastFrameOutputted = -1;
   
+  SolutionPtr soln;
+  
+  IPPtr ip;
+  ip = bf->graphNorm();
+  
+  FunctionPtr u0 = Teuchos::rcp( new Cone_U0(0.0, 0.25, 0.1, 1.0, false) );
+  
+  BCPtr bc = BC::bc();
+  bc->addDirichlet(qHat, inflowFilter, Function::zero()); // zero BCs enforced at the inflow boundary.
+  bc->addDirichlet(qHat, SpatialFilter::matchingZ(t0), u0);
+  
   for(int timeSlab = 0; timeSlab<numTimeSlabs; timeSlab++) {
+    soln = Solution::solution(mesh, bc, RHS::rhs(), ip);
+    
+    double energyThreshold = 0.2; // for mesh refinements: ask to refine elements that account for 80% of the error in each step
+    Teuchos::RCP<RefinementStrategy> refinementStrategy;
+    refinementStrategy = Teuchos::rcp( new RefinementStrategy( soln, energyThreshold ));
+    
+    FunctionPtr u_spacetime = Function::solution(u, soln);
+    
     double relativeEnergyError;
     int refNumber = 0;
    
@@ -282,6 +280,8 @@ int main(int argc, char *argv[]) {
       dir_name << "spacetime_convectingCone_k" << k << "_t" << timeSlab;
       HDF5Exporter exporter(soln->mesh(),dir_name.str());
       exporter.exportSolution(soln, varFactory);
+      
+      if (rank==0) cout << "Exported HDF solution for time slab to directory " << dir_name.str() << endl;
 //      string u_name = "u_spacetime";
 //      exporter.exportFunction(u_spacetime, u_name);
       
@@ -326,7 +326,7 @@ int main(int argc, char *argv[]) {
       }
       
     } while ((relativeEnergyError > refinementTolerance) && (refNumber < maxRefinements));
-  
+    
     double t_slab_final = (timeSlab+1) * timeLengthPerSlab;
     int frameOrdinal = lastFrameOutputted + 1;
     vector<double> timesForSlab;
@@ -340,15 +340,23 @@ int main(int argc, char *argv[]) {
     
     // set up next mesh/solution:
     FunctionPtr q_prev = Function::solution(qHat, soln);
-    cout << "Error in setup of q_prev: simple solution doesn't know about the map from the previous time slab to the current one. (TODO: fix this.)\n";
+    
+//    cout << "Error in setup of q_prev: simple solution doesn't know about the map from the previous time slab to the current one. (TODO: fix this.)\n";
     
     double tn = (timeSlab+1) * timeLengthPerSlab;
     origin[2] = tn;
     mesh = MeshFactory::rectilinearMesh(bf, dimensions, elementCounts, H1Order, delta_k, origin);
+    
+    FunctionPtr q_transfer = Teuchos::rcp( new MeshTransferFunction(-q_prev, soln->mesh(), mesh, tn) ); // negate because the normals go in opposite directions
+    
     bc = BC::bc();
     bc->addDirichlet(qHat, inflowFilter, Function::zero()); // zero BCs enforced at the inflow boundary.
-    bc->addDirichlet(qHat, SpatialFilter::matchingZ(tn), q_prev * sideParity);
-
+    bc->addDirichlet(qHat, SpatialFilter::matchingZ(tn), q_transfer);
+    
+    // IMPORTANT: now that we are ready to step to next soln, nullify BC.  If we do not do this, then we have an RCP chain
+    //            that extends back to the first time slab, effectively a memory leak.
+    soln->setBC(BC::bc());
+    
     soln = Solution::solution(mesh, bc, RHS::rhs(), ip);
   }
   
