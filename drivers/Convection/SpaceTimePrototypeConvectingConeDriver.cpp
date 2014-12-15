@@ -288,26 +288,17 @@ int main(int argc, char *argv[]) {
       ostringstream file_name;
       file_name << dir_name.str();
       
-      dir_name << ".soln";
-      soln->writeToFile(dir_name.str());
-      if (rank==0) cout << endl << "wrote " << dir_name.str() << endl;
-      
-      file_name << ".mesh";
-      soln->mesh()->saveToHDF5(file_name.str());
+      bool saveSolutionAndMeshForEachSlab = false;
+      if (saveSolutionAndMeshForEachSlab) {
+        dir_name << ".soln";
+        soln->writeToFile(dir_name.str());
+        if (rank==0) cout << endl << "wrote " << dir_name.str() << endl;
+        
+        file_name << ".mesh";
+        soln->mesh()->saveToHDF5(file_name.str());
+      }
   #endif
       FunctionPtr u_soln = Function::solution(u, soln);
-  #ifdef USE_VTK
-      ostringstream fileName;
-      fileName << "u_soln_ref_" << refNumber;
-      if (rank==0) vtkExporter.exportFunction(u_soln, "u_soln", fileName.str());
-  #endif
-      
-
-  //    LinearTermPtr solnFunctional = bf->testFunctional(soln);
-  //    RieszRep solnRieszRep(mesh, ip, solnFunctional);
-  //    
-  //    solnRieszRep.computeRieszRep();
-  //    double solnEnergyNorm = solnRieszRep.getNorm();
       
       double solnNorm = u_soln->l2norm(mesh);
       
