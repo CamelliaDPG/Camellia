@@ -4,6 +4,7 @@ cmake \
   -D CMAKE_BUILD_TYPE="Release" \
   -D MPI_DIR:FILEPATH="/Users/nroberts/lib/openmpi-1.6.5" \
   -D MUMPS_DIR="/Users/nroberts/lib/mumps-4.10.0" \
+  -D CMAKE_EXE_LINKER_FLAGS:STRING="-g -O3" \
   -D ZLIB_LIB="/usr/lib/libz.dylib" \
   -DVTK_DIR=/Users/nroberts/lib/vtk-5.10 \
   -DSCALAPACK_LIB="/Users/nroberts/lib/libscalapack.a" \
