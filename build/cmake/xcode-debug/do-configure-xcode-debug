@@ -4,7 +4,7 @@ rm -r CMakeFiles/
 cmake \
  -G "Xcode" \
  -D TRILINOS_PATH:FILEPATH=$HOME/lib/trilinos/serial-debug \
- -D CAMELLIA_SOURCE_DIR:FILEPATH=$HOME/Camellia/src \
+ -D CAMELLIA_SOURCE_DIR:FILEPATH=$HOME/Documents/Camellia/src \
  -D CAMELLIA_BUILD_TYPE:STRING="debug" \
  -D ZLIB_LIB="/usr/lib/libz.dylib" \
  -D VTK_DIR:FILEPATH=$HOME/lib/vtk-5.10 \

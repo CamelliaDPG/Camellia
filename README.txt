@@ -11,6 +11,18 @@ For an MPI build, Camellia also requires some version of the MPI libraries.  Ope
 
 Instructions for building several of these libraries follow.
 
+CMake install:
+On a Mac, our experience is that due to Apple’s requirements for code signatures it is simpler to install CMake from source than to use the prebuilt binary.
+
+SWIG install (required to build Trilinos with support for PyTrilinos):
+1. Download source from http://www.swig.org/download.html.
+2. Configure:
+	./configure --prefix=/Users/nroberts/lib/swig-3.0.2
+3. Make:
+	make -j6
+4. Install:
+	make install
+
 Boost install:
 1. Download source from http://sourceforge.net/projects/boost/files/boost/.
 2. cd into source dir.
@@ -92,6 +104,7 @@ MUMPS install:
 5. Copy the built libraries from <MUMPS dir>/lib to $HOME/lib/mumps-4.10.0.
 6. Copy the include directory to $HOME/lib/mumps-4.10.0/include.
 
+
 ******** BUILDING CAMELLIA **********
 
 Once that's done, you're ready to start on the Camellia build.
@@ -100,16 +113,18 @@ Instructions for a serial debug build:
 1. Clone from repo.
 	git clone https://github.com/CamelliaDPG/Camellia.git
 2. Go to the serial-debug build directory:
-	cd build/cmake/cli-debug
-3. Edit do-configure-cli-serial-debug in the following manner:
+	cd build/serial-debug
+3. Edit do-configure-serial-debug in the following manner:
        - set the TRILINOS_PATH to your serial-debug Trilinos installation
-       - set the VTK_DIR to match wherever you installed VTK
        - set the ZLIB_LIB to the path to the zlib library (for HDF5 support)
 4. Run the do-configure script:
 	./do-configure-cli-serial-debug
-5. Try building DPGTests:
+5. Try building DPGTests (older tests that have not yet been moved to the new test environment):
 	make DPGTests
 6. Assuming it builds, try running it:
 	./DPGTests
+7. Try building runTests (the new test environment):
+	make runTests
+8. Run
 
-All tests in DPGTests should pass, with one exception: ScratchPadTests::testLTResidualSimple().  This has been failing for quite a while.  I leave it there until I understand it well enough to fix either the test or, if the test is good, the bug it reveals.
+All tests in DPGTests and runTest should pass.
