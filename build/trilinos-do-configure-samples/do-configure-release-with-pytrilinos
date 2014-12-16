@@ -5,16 +5,17 @@ rm -f CMakeCache.txt
 cmake \
 -D Trilinos_WARNINGS_AS_ERRORS_FLAGS:STRING="" \
 -D TPL_ENABLE_MPI:BOOL=ON \
--D TPL_ENABLE_MUMPS:STRING=ON \
--D MUMPS_LIBRARY_DIRS:FILEPATH=/Users/nroberts/src/MUMPS_4.9.2/lib/ \
+-D Trilinos_ENABLE_Fortran:BOOL=OFF \
+-D TPL_ENABLE_MUMPS:STRING=OFF \
+-D MUMPS_LIBRARY_DIRS:FILEPATH=/Users/nroberts/src/MUMPS_4.10.0/lib/ \
 -D MUMPS_LIBRARY_NAMES:STRING="dmumps; pord; mumps_common" \
--D TPL_MUMPS_INCLUDE_DIRS:FILEPATH=/Users/nroberts/lib/mumps-4.9.2/include \
--D CMAKE_CXX_COMPILER:FILEPATH=/Users/nroberts/lib/openmpi-1.8.3/bin/mpicxx \
--D CMAKE_C_COMPILER:FILEPATH=/Users/nroberts/lib/openmpi-1.8.3/bin/mpicc \
--D CMAKE_Fortran_COMPILER:FILEPATH=/Users/nroberts/lib/openmpi-1.8.3/bin/mpif90 \
+-D TPL_MUMPS_INCLUDE_DIRS:FILEPATH=/Users/nroberts/lib/mumps-4.10.0/include \
+-D CMAKE_CXX_COMPILER:FILEPATH=/Users/nroberts/lib/openmpi-1.6.5/bin/mpicxx \
+-D CMAKE_C_COMPILER:FILEPATH=/Users/nroberts/lib/openmpi-1.6.5/bin/mpicc \
+-D CMAKE_Fortran_COMPILER:FILEPATH=/Users/nroberts/lib/openmpi-1.6.5/bin/mpif90 \
 -D SWIG_EXECUTABLE:PATH=/Users/nroberts/lib/swig-3.0.2/bin/swig \
 -D Trilinos_SKIP_FORTRANCINTERFACE_VERIFY_TEST:BOOL=ON \
--D MPI_BASE_DIR:PATH=/Users/nroberts/lib/openmpi-1.8.3 \
+-D MPI_BASE_DIR:PATH=/Users/nroberts/lib/openmpi-1.6.5 \
 -D HAVE_GCC_ABI_DEMANGLE:BOOL=ON \
 -D DART_TESTING_TIMEOUT:STRING=600 \
 -D CMAKE_VERBOSE_MAKEFILE:BOOL=TRUE \
@@ -29,14 +30,18 @@ cmake \
 -D Trilinos_ENABLE_Shards:BOOL=ON \
 -D Trilinos_ENABLE_Amesos:BOOL=ON \
 -D Trilinos_ENABLE_PyTrilinos:BOOL=ON \
+-D Trilinos_ENABLE_STK:BOOL=OFF \
 -D Trilinos_ENABLE_Zoltan:BOOL=ON \
 -D Trilinos_ENABLE_ML:BOOL=ON \
 -D Trilinos_ENABLE_TESTS:BOOL=OFF \
 -D TPL_ENABLE_HDF5:STRING=ON \
--D Trilinos_EXTRA_LINK_FLAGS:STRING="libz.dylib" \
+-D Trilinos_EXTRA_LINK_FLAGS:STRING="/usr/lib/libz.dylib" \
 -D TPL_ENABLE_Zlib:BOOL=ON \
+-D Zlib_LIBRARY_DIRS:FILEPATH="/usr/lib" \
+-D Zlib_LIBRARY_NAMES:FILEPATH="z" \
 -D HDF5_LIBRARY_DIRS:FILEPATH=/Users/nroberts/lib/hdf5/lib \
 -D HDF5_LIBRARY_NAMES:STRING="hdf5" \
+-D TPL_HDF5_LIBRARIES="/Users/nroberts/lib/hdf5/lib/libhdf5.a;/usr/lib/libz.dylib" \
 -D TPL_HDF5_INCLUDE_DIRS:FILEPATH=/Users/nroberts/lib/hdf5/include \
 -D EpetraExt_USING_HDF5:BOOL=ON \
 -DTPL_ENABLE_Netcdf=OFF \
@@ -45,4 +50,3 @@ cmake \
 -D CMAKE_INSTALL_PREFIX:PATH=/Users/nroberts/lib/trilinos/mpi-release-shared/ \
 $EXTRA_ARGS \
 ../../
-
