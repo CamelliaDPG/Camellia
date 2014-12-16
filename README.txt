@@ -67,20 +67,20 @@ OpenMPI install:
 1. Download source from http://www.open-mpi.org/software/ompi/.
 2. cd into source dir.
 3. Configure (editing the prefix line according to where you'd like it installed):
-	./configure --prefix=$HOME/lib/openmpi-1.6.5
+	./configure --prefix=$HOME/lib/openmpi-1.8.3
 4. Build:
 	make -j6
 5. Install:
 	make install
 6. Add the bin folder to your PATH, e.g. by adding to your .bashrc:
-	export PATH=${PATH}:${HOME}/lib/openmpi-1.6.5/bin
+	export PATH=${PATH}:${HOME}/lib/openmpi-1.8.3/bin
 
 Scalapack install:
 1. Download source from http://www.netlib.org/scalapack/
 2. cd into source dir.
 3. Configure:
 	ccmake .
-	(specify ~/lib/openmpi-1.6.5 as the MPI_BASE_DIR, and ~ as the CMAKE_INSTALL_PREFIX; the other values should be autofilled on configure.)
+	(specify ~/lib/openmpi-1.8.3 as the MPI_BASE_DIR, and ~ as the CMAKE_INSTALL_PREFIX; the other values should be autofilled on configure.)
 4. Build
 	cmake .
 	make -j6
@@ -94,8 +94,8 @@ MUMPS install:
 	FC = gfortran
 	FL = gfortran
 	SCALAP  = <home dir>/lib/libscalapack.a
-	INCPAR = -I<home dir>/lib/openmpi-1.6.5/include
-	LIBPAR = $(SCALAP)  -L<home dir>/lib/openmpi-1.6.5/lib -lmpi -lmpi_f77
+	INCPAR = -I<home dir>/lib/openmpi-1.8.3/include
+	LIBPAR = $(SCALAP)  -L<home dir>/lib/openmpi-1.8.3/lib -lmpi -lmpi_f77
 	LIBBLAS = -framework vecLib # BLAS and LAPACK libraries for Mac
 	OPTF    = -O3 -Dintel_ -DALLOW_NON_INIT 
 	OPTL    = -O3
@@ -116,7 +116,7 @@ Instructions for a serial debug build:
 	cd build/serial-debug
 3. Edit do-configure-serial-debug in the following manner:
        - set the TRILINOS_PATH to your serial-debug Trilinos installation
-       - set the ZLIB_LIB to the path to the zlib library (for HDF5 support)
+       - set ZLIB_LIB to the path to the zlib library (for HDF5 support)
 4. Run the do-configure script:
 	./do-configure-cli-serial-debug
 5. Try building DPGTests (older tests that have not yet been moved to the new test environment):
