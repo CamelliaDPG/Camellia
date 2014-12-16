@@ -247,6 +247,8 @@ int main(int argc, char *argv[]) {
   FunctionPtr u0 = Teuchos::rcp( new Cone_U0(0.0, 0.25, 0.1, 1.0, false) );
   
   BCPtr bc = BC::bc();
+  bc->addDirichlet(qHat, inflowFilter, Function::zero()); // zero BCs enforced at the inflow boundary.
+  bc->addDirichlet(qHat, SpatialFilter::matchingZ(t0), u0);
   
   MeshPtr initialMesh = mesh;
   
@@ -254,12 +256,13 @@ int main(int argc, char *argv[]) {
   if (previousSolutionTimeSlabNumber != -1) {
     startingSlabNumber = previousSolutionTimeSlabNumber + 1;
 
-    cout << "Loading mesh from " << previousMeshFile << endl;
+    if (rank==0) cout << "Loading mesh from " << previousMeshFile << endl;
     
     prevMesh = MeshFactory::loadFromHDF5(bf, previousMeshFile);
-    prevSoln = Solution::solution(mesh);
+    prevSoln = Solution::solution(mesh, bc, RHS::rhs(), ip); // include BC and IP objects for sake of condensed dof interpreter setup...
+    prevSoln->setUseCondensedSolve(useCondensedSolve);
     
-    cout << "Loading solution from " << previousSolutionFile;
+    if (rank==0) cout << "Loading solution from " << previousSolutionFile << endl;
     prevSoln->loadFromHDF5(previousSolutionFile);
     
     double tn = (previousSolutionTimeSlabNumber+1) * timeLengthPerSlab;
@@ -281,8 +284,6 @@ int main(int argc, char *argv[]) {
     }
   } else {
     startingSlabNumber = 0;
-    bc->addDirichlet(qHat, inflowFilter, Function::zero()); // zero BCs enforced at the inflow boundary.
-    bc->addDirichlet(qHat, SpatialFilter::matchingZ(t0), u0);
   }
   
   
@@ -295,6 +296,7 @@ int main(int argc, char *argv[]) {
 #endif
   
   soln = Solution::solution(mesh, bc, RHS::rhs(), ip);
+  soln->setUseCondensedSolve(useCondensedSolve);
   
   for(int timeSlab = startingSlabNumber; timeSlab<numTimeSlabs; timeSlab++) {
     double energyThreshold = 0.2; // for mesh refinements: ask to refine elements that account for 80% of the error in each step
@@ -399,6 +401,7 @@ int main(int argc, char *argv[]) {
     soln->setBC(BC::bc());
     
     soln = Solution::solution(mesh, bc, RHS::rhs(), ip);
+    soln->setUseCondensedSolve(useCondensedSolve);
   }
   
   return 0;
