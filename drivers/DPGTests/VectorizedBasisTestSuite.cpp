@@ -4,7 +4,7 @@
 #include "Solution.h"
 #include "InnerProductScratchPad.h"
 #include "RefinementStrategy.h"
-#include "CamelliaConfig.h"
+//#include "CamelliaConfig.h"
 #include "MeshFactory.h"
 
 #include <Teuchos_GlobalMPISession.hpp>
