@@ -67,7 +67,7 @@ OpenMPI install:
 1. Download source from http://www.open-mpi.org/software/ompi/.
 2. cd into source dir.
 3. Configure (editing the prefix line according to where you'd like it installed):
-	./configure --prefix=$HOME/lib/openmpi-1.8.3
+	./configure --prefix=$HOME/lib/openmpi-1.8.3 CC=cc CXX=c++ FC=gfortran
 4. Build:
 	make -j6
 5. Install:
