@@ -97,7 +97,7 @@ int main(int argc, char *argv[]) {
 
   const static double PI  = 3.141592653589793238462;
   
-  bool useCondensedSolve = false; // condensed solve not yet compatible with minimum rule meshes
+  bool useCondensedSolve = true; // condensed solve not yet compatible with minimum rule meshes
   
   int k = 2; // poly order for u in every direction, including temporal
   int numCells = 32; // in x, y
@@ -109,6 +109,12 @@ int main(int argc, char *argv[]) {
   bool useMumpsIfAvailable  = true;
   bool useConstantConvection = false;
   double refinementTolerance = 0.1;
+  
+  int checkPointFrequency = 50; // output solution and mesh every 50 time slabs
+  
+  int previousSolutionTimeSlabNumber = -1;
+  string previousSolutionFile = "";
+  string previousMeshFile = "";
   
   cmdp.setOption("polyOrder",&k,"polynomial order for field variable u");
   cmdp.setOption("delta_k", &delta_k, "test space polynomial order enrichment");
@@ -125,6 +131,10 @@ int main(int argc, char *argv[]) {
   
   cmdp.setOption("refinementTolerance", &refinementTolerance, "relative error beyond which to stop refining");
   cmdp.setOption("maxRefinements", &maxRefinements, "maximum # of refinements on each time slab");
+  
+  cmdp.setOption("previousSlabNumber", &previousSolutionTimeSlabNumber, "time slab number of previous solution");
+  cmdp.setOption("previousSolution", &previousSolutionFile, "file with previous solution");
+  cmdp.setOption("previousMesh", &previousMeshFile, "file with previous mesh");
   
   if (cmdp.parse(argc,argv) != Teuchos::CommandLineProcessor::PARSE_SUCCESSFUL) {
 #ifdef HAVE_MPI
@@ -212,22 +222,18 @@ int main(int argc, char *argv[]) {
 //  Teuchos::RCP<RefinementStrategy> refinementStrategy;
 //  refinementStrategy = Teuchos::rcp( new ErrorPercentageRefinementStrategy( soln, errorPercentage ));
   
-  
   if (maxRefinements != 0) {
     cout << "Warning: maxRefinements is not 0, but the slice exporter implicitly assumes there won't be any refinements.\n";
   }
   
-  MeshPtr mesh = MeshFactory::rectilinearMesh(bf, dimensions, elementCounts, H1Order, delta_k, origin);
+  MeshPtr mesh;
+  
+  MeshPtr prevMesh;
+  SolutionPtr prevSoln;
+  
+  mesh = MeshFactory::rectilinearMesh(bf, dimensions, elementCounts, H1Order, delta_k, origin);
   
   if (rank==0) cout << "Initial mesh has " << mesh->getTopology()->activeCellCount() << " active (leaf) cells " << "and " << mesh->globalDofCount() << " degrees of freedom.\n";
-  
-#ifdef HAVE_EPETRAEXT_HDF5
-  ostringstream dir_name;
-  dir_name << "spacetime_slice_convectingCone_k" << k;
-  map<GlobalIndexType,GlobalIndexType> cellMap;
-  MeshPtr meshSlice = MeshTools::timeSliceMesh(mesh, 0, cellMap, H1Order);
-  HDF5Exporter sliceExporter(meshSlice,dir_name.str());
-#endif
   
   FunctionPtr sideParity = Function::sideParity();
   
@@ -241,12 +247,56 @@ int main(int argc, char *argv[]) {
   FunctionPtr u0 = Teuchos::rcp( new Cone_U0(0.0, 0.25, 0.1, 1.0, false) );
   
   BCPtr bc = BC::bc();
-  bc->addDirichlet(qHat, inflowFilter, Function::zero()); // zero BCs enforced at the inflow boundary.
-  bc->addDirichlet(qHat, SpatialFilter::matchingZ(t0), u0);
   
-  for(int timeSlab = 0; timeSlab<numTimeSlabs; timeSlab++) {
-    soln = Solution::solution(mesh, bc, RHS::rhs(), ip);
+  MeshPtr initialMesh = mesh;
+  
+  int startingSlabNumber;
+  if (previousSolutionTimeSlabNumber != -1) {
+    startingSlabNumber = previousSolutionTimeSlabNumber + 1;
+
+    cout << "Loading mesh from " << previousMeshFile << endl;
     
+    prevMesh = MeshFactory::loadFromHDF5(bf, previousMeshFile);
+    prevSoln = Solution::solution(mesh);
+    
+    cout << "Loading solution from " << previousSolutionFile;
+    prevSoln->loadFromHDF5(previousSolutionFile);
+    
+    double tn = (previousSolutionTimeSlabNumber+1) * timeLengthPerSlab;
+    origin[2] = tn;
+    mesh = MeshFactory::rectilinearMesh(bf, dimensions, elementCounts, H1Order, delta_k, origin);
+    
+    FunctionPtr q_prev = Function::solution(qHat, prevSoln);
+    FunctionPtr q_transfer = Teuchos::rcp( new MeshTransferFunction(-q_prev, prevMesh, mesh, tn) ); // negate because the normals go in opposite directions
+    
+    bc = BC::bc();
+    bc->addDirichlet(qHat, inflowFilter, Function::zero()); // zero BCs enforced at the inflow boundary.
+    bc->addDirichlet(qHat, SpatialFilter::matchingZ(tn), q_transfer);
+    
+    double t_slab_final = (previousSolutionTimeSlabNumber+1) * timeLengthPerSlab;
+    int frameOrdinal = 0;
+    
+    while (frameTimes[frameOrdinal] < t_slab_final) {
+      lastFrameOutputted = frameOrdinal++;
+    }
+  } else {
+    startingSlabNumber = 0;
+    bc->addDirichlet(qHat, inflowFilter, Function::zero()); // zero BCs enforced at the inflow boundary.
+    bc->addDirichlet(qHat, SpatialFilter::matchingZ(t0), u0);
+  }
+  
+  
+#ifdef HAVE_EPETRAEXT_HDF5
+  ostringstream dir_name;
+  dir_name << "spacetime_slice_convectingCone_k" << k << "_startSlab" << startingSlabNumber;
+  map<GlobalIndexType,GlobalIndexType> cellMap;
+  MeshPtr meshSlice = MeshTools::timeSliceMesh(initialMesh, 0, cellMap, H1Order);
+  HDF5Exporter sliceExporter(meshSlice,dir_name.str());
+#endif
+  
+  soln = Solution::solution(mesh, bc, RHS::rhs(), ip);
+  
+  for(int timeSlab = startingSlabNumber; timeSlab<numTimeSlabs; timeSlab++) {
     double energyThreshold = 0.2; // for mesh refinements: ask to refine elements that account for 80% of the error in each step
     Teuchos::RCP<RefinementStrategy> refinementStrategy;
     refinementStrategy = Teuchos::rcp( new RefinementStrategy( soln, energyThreshold ));
@@ -288,10 +338,10 @@ int main(int argc, char *argv[]) {
       ostringstream file_name;
       file_name << dir_name.str();
       
-      bool saveSolutionAndMeshForEachSlab = false;
-      if (saveSolutionAndMeshForEachSlab) {
+      bool saveSolutionAndMeshForThisSlab = ((timeSlab + 1) % checkPointFrequency == 0); // +1 so that first output is nth, not first
+      if (saveSolutionAndMeshForThisSlab) {
         dir_name << ".soln";
-        soln->writeToFile(dir_name.str());
+        soln->saveToHDF5(dir_name.str());
         if (rank==0) cout << endl << "wrote " << dir_name.str() << endl;
         
         file_name << ".mesh";
