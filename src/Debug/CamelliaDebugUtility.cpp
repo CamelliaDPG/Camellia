@@ -31,7 +31,24 @@ namespace Camellia {
     }
     cout << endl;
   }
+  
+  template<typename key_type, typename value_type>
+  void print(string name, map<key_type, value_type> &data) {
+    cout << name << ": ";
+    for (typename map<key_type, value_type>::iterator dataIt=data.begin(); dataIt != data.end(); dataIt++) {
+      cout << "(" << dataIt->first << " => " << dataIt->second << ") ";
+    }
+    cout << endl;
+  }
+  
+  void print(string name, map<int, double> data) {
+    print<int, double>(name, data);
+  }
 
+  void print(string name, map<unsigned, unsigned> data) {
+    print<unsigned, unsigned>(name, data);
+  }
+  
   void print(string name, vector<long long> data) {
     print<long long>(name, data);
   }
