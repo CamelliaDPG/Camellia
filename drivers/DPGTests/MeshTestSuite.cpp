@@ -62,7 +62,6 @@
 #include "MeshFactory.h"
 
 // just for the test to close a mesh anisotropically
-#include "SolutionExporter.h"
 #include "Solution.h"
 #include "VarFactory.h"
 #include "RHS.h"

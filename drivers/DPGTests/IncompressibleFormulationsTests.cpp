@@ -5,7 +5,6 @@
 #include "ParameterFunction.h"
 #include "LagrangeConstraints.h"
 
-#include "SolutionExporter.h"
 #include "MeshFactory.h"
 
 #include "GlobalDofAssignment.h"

@@ -17,8 +17,6 @@
 
 #include "Epetra_SerialComm.h"
 
-#include "SolutionExporter.h"
-
 #include "MeshTestSuite.h"
 
 #include "MeshTestUtility.h"
