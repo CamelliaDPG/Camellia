@@ -24,7 +24,7 @@ using namespace Camellia;
 namespace {
   vector< CellTopoPtr > getShardsTopologies() {
     vector< CellTopoPtr > shardsTopologies;
-    
+
     shardsTopologies.push_back(CellTopology::point());
     shardsTopologies.push_back(CellTopology::line());
     shardsTopologies.push_back(CellTopology::quad());
@@ -60,8 +60,10 @@ namespace {
         for (int node=0; node < topo->getNodeCount(); node++) {
           for (int d=0; d<topo->getDimension(); d++) {
             physicalNodes(0,node,d) = refNodes(node,d) * d + d * d;
+//            physicalNodes(0,node,d) = refNodes(node,d);
           }
         }
+//        cout << "WARNING: in CamelliaCellToolsTests, temporarily replaced the physical nodes with the reference nodes (i.e. just testing the identity mapping right now).\n";
         
         FieldContainer<double> mappedNodes(1,topo->getNodeCount(),topo->getDimension());
         CamelliaCellTools::mapToPhysicalFrame(mappedNodes, refNodes, physicalNodes, topo);
