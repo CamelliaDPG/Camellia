@@ -318,6 +318,35 @@ unsigned CellTopology::getAxisChoiceOrdinal(const vector<unsigned> &axisChoices)
   return _axisPermutationToOrdinal.find(axisChoices)->second;
 }
 
+unsigned CellTopology::getNodeFromTensorialComponentNodes(const std::vector<unsigned int> &tensorComponentNodes) const {
+  if (tensorComponentNodes.size() != _tensorialDegree + 1) {
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "tensorComponentNodes.size() != _tensorialDegree + 1");
+  }
+  /*
+   Example: we have a base topology of 4 nodes x line x line.  Read addresses from right to left.
+   
+   address (1,0,0) --> 0 * (2 * 4) + 0 * 4 + 1 =  1
+   address (0,1,0) --> 0 * (2 * 4) + 1 * 4 + 0 =  4
+   address (0,0,1) --> 1 * (2 * 4) + 0 * 4 + 0 =  8
+   address (0,1,1) --> 1 * (2 * 4) + 1 * 4 + 0 = 12
+   
+   */
+  
+  unsigned node = 0;
+  CellTopoPtr line = CellTopology::line();
+  std::vector<CellTopoPtr> componentTopos(_tensorialDegree + 1, line);
+  componentTopos[0] = cellTopology(_shardsBaseTopology);
+  for (int i=tensorComponentNodes.size()-1; i >= 0; i--) {
+    unsigned componentNode = tensorComponentNodes[i];
+    node *= componentTopos[i]->getNodeCount();
+    node += componentNode;
+  }
+  return node;
+//  unsigned lastComponentNode = tensorComponentNodes[tensorComponentNodes.size()-1];
+//  std::vector<unsigned> remainingComponentNodes(tensorComponentNodes.begin(),tensorComponentNodes.begin() + (tensorComponentNodes.size()-1));
+//  if (remainingComponentNodes.size())
+}
+
 /** \brief  Mapping from a subcell's node ordinal to a
  *          node ordinal of this parent cell topology.
  *  \param  subcell_dim      [in]  - spatial dimension of the subcell

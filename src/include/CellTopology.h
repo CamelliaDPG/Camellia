@@ -109,6 +109,12 @@ namespace Camellia {
      *  \param  subcell_dim    [in]  - spatial dimension of the subcell
      */
     unsigned getSubcellCount( const unsigned subcell_dim ) const;
+
+    /** \brief  Mapping from the tensorial component node ordinals to the
+     *          node ordinal of this tensor cell topology.
+     *  \param  tensorComponentNodes      [in]  - node ordinals in the tensorial components.
+     */
+    unsigned getNodeFromTensorialComponentNodes(const std::vector<unsigned> &tensorComponentNodes) const;
     
     /** \brief  Mapping from a subcell's node ordinal to a
      *          node ordinal of this parent cell topology.
