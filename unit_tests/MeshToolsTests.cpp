@@ -94,7 +94,7 @@ namespace {
     
     // doing this for the convecting cone problem, one of the early test cases for space-time meshes
     
-    int k = 4;
+    int k = 3;
     int delta_k = 0; // since we're just doing projections, and this will make for a trial x trial element...
     int H1Order = k + 1;
     
