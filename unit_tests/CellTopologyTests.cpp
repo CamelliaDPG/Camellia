@@ -132,6 +132,45 @@ namespace {
     
     TEST_COMPARE_FLOATING_ARRAYS(expectedNodes, actualNodes, 1e-15);
   }
+  
+  TEUCHOS_UNIT_TEST( CellTopology, GetNodeFromTensorialComponentNodes)
+  {
+    // just one concrete examples from the comments in the method to ensure it's doing what it claims
+    
+    /*
+     Example: we have a base topology of 4 nodes x line x line.  Read addresses from right to left.
+     
+     address (1,0,0) --> 0 * (2 * 4) + 0 * 4 + 1 =  1
+     address (0,1,0) --> 0 * (2 * 4) + 1 * 4 + 0 =  4
+     address (0,0,1) --> 1 * (2 * 4) + 0 * 4 + 0 =  8
+     address (0,1,1) --> 1 * (2 * 4) + 1 * 4 + 0 = 12
+     
+     */
+    CellTopoPtr quad = CellTopology::quad();
+    CellTopoPtr tensorTopo = CellTopology::cellTopology(quad->getShardsTopology(), 2);
+    
+    map< vector<unsigned>, unsigned > expectedTensorNodes;
+    vector<unsigned> compNodes(3,0);
+    compNodes[0] = 1;
+    expectedTensorNodes[compNodes] = 1;
+    compNodes[0] = 0;
+    compNodes[1] = 1;
+    compNodes[2] = 0;
+    expectedTensorNodes[compNodes] = 4;
+    compNodes[0] = 0;
+    compNodes[1] = 0;
+    compNodes[2] = 1;
+    expectedTensorNodes[compNodes] = 8;
+    compNodes[0] = 0;
+    compNodes[1] = 1;
+    compNodes[2] = 1;
+    expectedTensorNodes[compNodes] = 12;
+    
+    for (map< vector<unsigned>, unsigned >::iterator entryIt = expectedTensorNodes.begin(); entryIt != expectedTensorNodes.end(); entryIt++) {
+      unsigned tensorNode = tensorTopo->getNodeFromTensorialComponentNodes(entryIt->first);
+      TEST_EQUALITY(entryIt->second, tensorNode);
+    }
+  }
 
   TEUCHOS_UNIT_TEST( CellTopology, InitializeNodesQuad)
   {
