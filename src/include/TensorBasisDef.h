@@ -5,6 +5,9 @@
 //  Created by Nathan Roberts on 11/12/14.
 //
 //
+
+#define TENSOR_FIELD_ORDINAL(spaceFieldOrdinal,timeFieldOrdinal) timeFieldOrdinal * _spatialBasis->getCardinality() + spaceFieldOrdinal;
+
 namespace Camellia {
   template<class Scalar, class ArrayScalar>
   TensorBasis<Scalar,ArrayScalar>::TensorBasis(Teuchos::RCP< Camellia::Basis<Scalar,ArrayScalar> > spatialBasis, Teuchos::RCP< Camellia::Basis<Scalar,ArrayScalar> > temporalBasis) {
@@ -230,7 +233,7 @@ namespace Camellia {
     for (int spaceFieldOrdinal=0; spaceFieldOrdinal<_spatialBasis->getCardinality(); spaceFieldOrdinal++) {
       spatialValueCoordinate[0] = spaceFieldOrdinal;
       for (int timeFieldOrdinal=0; timeFieldOrdinal<_temporalBasis->getCardinality(); timeFieldOrdinal++) {
-        int spaceTimeFieldOrdinal = spaceFieldOrdinal * _temporalBasis->getCardinality() + timeFieldOrdinal;
+        int spaceTimeFieldOrdinal = TENSOR_FIELD_ORDINAL(spaceFieldOrdinal, timeFieldOrdinal);
         spaceTimeValueCoordinate[0] = spaceTimeFieldOrdinal;
         for (int pointOrdinal=0; pointOrdinal<numPoints; pointOrdinal++) {
           spaceTimeValueCoordinate[1] = pointOrdinal;
@@ -254,7 +257,7 @@ namespace Camellia {
     }
     int spaceFieldOrdinal = componentDofOrdinals[0];
     int timeFieldOrdinal = componentDofOrdinals[1];
-    return spaceFieldOrdinal * _temporalBasis->getCardinality() + timeFieldOrdinal;
+    return TENSOR_FIELD_ORDINAL(spaceFieldOrdinal, timeFieldOrdinal);
   }
 
   template<class Scalar, class ArrayScalar>
