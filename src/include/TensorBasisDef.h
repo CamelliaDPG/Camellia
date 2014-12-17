@@ -160,12 +160,27 @@ namespace Camellia {
   template<class Scalar, class ArrayScalar>
   void TensorBasis<Scalar,ArrayScalar>::getValues(ArrayScalar &values, const ArrayScalar &refPoints,
                                                   Intrepid::EOperator operatorType) const {
-    getValues(values, refPoints, operatorType, OPERATOR_VALUE);
+    Intrepid::EOperator temporalOperator = OPERATOR_VALUE; // default
+    if (operatorType==OPERATOR_GRAD) {
+      if (values.rank() == 3) { // F, P, D
+        if (_spatialBasis->rangeDimension() + _temporalBasis->rangeDimension() == values.dimension(2)) {
+          // then we can/should use OPERATOR_GRAD for the temporal operator as well
+          temporalOperator = OPERATOR_GRAD;
+        }
+      }
+    }
+    getValues(values, refPoints, operatorType, temporalOperator);
   }
   
   template<class Scalar, class ArrayScalar>
-  void TensorBasis<Scalar,ArrayScalar>::getValues(ArrayScalar &values, const ArrayScalar &refPoints, EOperator spatialOperatorType, EOperator temporalOperatorType) const {
-    this->CHECK_VALUES_ARGUMENTS(values,refPoints,spatialOperatorType);
+  void TensorBasis<Scalar,ArrayScalar>::getValues(ArrayScalar &values, const ArrayScalar &refPoints,
+                                                  EOperator spatialOperatorType, EOperator temporalOperatorType) const {
+    if ((spatialOperatorType==OPERATOR_GRAD) && (temporalOperatorType==OPERATOR_GRAD)) {
+      // i.e., we are taking the gradient of the whole, not just a time derivative or a spatial gradient.
+      cout << "WARNING: support for taking OPERATOR_GRAD on both space and time not yet fully implemented.\n";
+    } else {
+      this->CHECK_VALUES_ARGUMENTS(values,refPoints,spatialOperatorType);
+    }
     
     int numPoints = refPoints.dimension(0);
     
@@ -173,6 +188,7 @@ namespace Camellia {
     refPoints.dimensions(spaceTimePointsDimensions);
     
     spaceTimePointsDimensions[1] -= 1; // spatial dimension is 1 less than space-time
+    if (spaceTimePointsDimensions[1]==0) spaceTimePointsDimensions[1] = 1; // degenerate case: we still want points defined in the 0-dimensional case...
     ArrayScalar refPointsSpatial(spaceTimePointsDimensions);
     
     spaceTimePointsDimensions[1] = 1; // time is 1-dimensional
@@ -202,6 +218,8 @@ namespace Camellia {
     ArrayScalar temporalValues(_temporalBasis->getCardinality(), numPoints);
     _temporalBasis->getValues(temporalValues, refPointsTemporal, temporalOperatorType);
     
+//    cout << "refPointsTemporal:\n" << refPointsTemporal;
+    
 //    cout << "spatialValues:\n" << spatialValues;
 //    cout << "temporalValues:\n" << temporalValues;
     
@@ -221,7 +239,8 @@ namespace Camellia {
           int spaceTimeValueEnumeration = values.getEnumeration(spaceTimeValueCoordinate);
           int spatialValueEnumeration = spatialValues.getEnumeration(spatialValueCoordinate);
           for (int offset=0; offset<valuesPerPoint; offset++) {
-            values[spaceTimeValueEnumeration+offset] = spatialValues[spatialValueEnumeration+offset] * temporalValue;
+            double spatialValue = spatialValues[spatialValueEnumeration+offset];
+            values[spaceTimeValueEnumeration+offset] = spatialValue * temporalValue;
           }
         }
       }
