@@ -58,7 +58,9 @@ template<class Scalar, class ArrayScalar>
 void PointBasis<Scalar, ArrayScalar>::getValues(ArrayScalar &outputValues, const ArrayScalar &  inputPoints,
                                                 const EOperator operatorType) const {
   // TODO: add parameter checking
-  outputValues[0] = 1.0;
+  for (int i=0; i<outputValues.size(); i++) {
+    outputValues[i] = 1.0;
+  }
 }
 
 
