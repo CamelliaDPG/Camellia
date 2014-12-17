@@ -28,8 +28,42 @@
 #include "TensorBasis.h"
 
 #include "BasisFactory.h"
+#include "CellTopology.h"
+
+using namespace Camellia;
 
 namespace {
+  TEUCHOS_UNIT_TEST( TensorBasis, TensorBasisOrderingAgreesWithTensorTopologyOrdering ) {
+    int H1Order = 1;
+    
+    BasisFactoryPtr basisFactory = BasisFactory::basisFactory();
+    CellTopoPtr line = CellTopology::line();
+    
+    BasisPtr basis = basisFactory->getBasis(H1Order, line, IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD);
+    
+    typedef Camellia::TensorBasis<double, FieldContainer<double> > TensorBasis;
+    Teuchos::RCP<TensorBasis> tensorBasis = Teuchos::rcp( new TensorBasis(basis, basis) );
+    
+    int tensorialDegree = 1;
+    CellTopoPtr tensorTopo = CellTopology::cellTopology(line->getShardsTopology(), tensorialDegree);
+    
+    int numSpatialNodes = line->getNodeCount();
+    int numTimeNodes = line->getNodeCount();
+    vector<unsigned> compNodes(2);
+    vector<int> compBasisOrdinals(2);
+    for (int spatialNode=0; spatialNode<numSpatialNodes; spatialNode++) {
+      compNodes[0] = spatialNode;
+      compBasisOrdinals[0] = spatialNode;
+      for (int timeNode=0; timeNode<numTimeNodes; timeNode++) {
+        compNodes[1] = timeNode;
+        compBasisOrdinals[1] = timeNode;
+        unsigned topoOrdinal = tensorTopo->getNodeFromTensorialComponentNodes(compNodes);
+        unsigned basisOrdinal = tensorBasis->getDofOrdinalFromComponentDofOrdinals(compBasisOrdinals);
+        TEST_EQUALITY(topoOrdinal, basisOrdinal);
+      }
+    }
+  }
+  
   TEUCHOS_UNIT_TEST( TensorBasis, TensorBasisBasicValues ) {
     int spatialPolyOrder = 1;
     
@@ -162,17 +196,17 @@ namespace {
       spatialBasis->getValues(spatialValues, spatialPoints, op);
       timeBasis->getValues(temporalValues, temporalPoints, timeOp);
       
-//      cout << "spatialPoints:\n" << spatialPoints;
-//      cout << "temporalPoints:\n" << temporalPoints;
-//      
-//      cout << "tensorPoints:\n" << tensorPoints;
-//      
-//      cout << "spatialValues:\n" << spatialValues;
-//      cout << "temporalValues:\n" << temporalValues;
+      //      cout << "spatialPoints:\n" << spatialPoints;
+      //      cout << "temporalPoints:\n" << temporalPoints;
+      //
+      //      cout << "tensorPoints:\n" << tensorPoints;
+      //
+      //      cout << "spatialValues:\n" << spatialValues;
+      //      cout << "temporalValues:\n" << temporalValues;
       
       tensorBasis->getValues(tensorValues, tensorPoints, op, timeOp);
       
-//      cout << "tensorValues:\n" << tensorValues;
+      //      cout << "tensorValues:\n" << tensorValues;
       
       
       vector<int> fieldCoord(2);
@@ -229,5 +263,5 @@ namespace {
       }
     }
   }
-
+  
 } // namespace
