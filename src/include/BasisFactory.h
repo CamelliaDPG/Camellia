@@ -89,6 +89,7 @@ public:
 //  static BasisPtr getBasis(int &basisRank, int polyOrder, unsigned cellTopoKey, IntrepidExtendedTypes::EFunctionSpaceExtended fs);
   BasisPtr getConformingBasis( int polyOrder, unsigned cellTopoKey, FSE fs );
   
+  BasisPtr getNodalBasisForCellTopology(CellTopoPtr cellTopo);
   BasisPtr getNodalBasisForCellTopology(unsigned cellTopoKey);
   
   Camellia::MultiBasisPtr getMultiBasis(vector< BasisPtr > &bases);

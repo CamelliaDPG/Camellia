@@ -576,10 +576,28 @@ MultiBasisPtr BasisFactory::getMultiBasis(vector< BasisPtr > &bases) {
   return multiBasis;
 }
 
+BasisPtr BasisFactory::getNodalBasisForCellTopology(CellTopoPtr cellTopo) {
+  BasisPtr shardsNodalBasis = BasisFactory::basisFactory()->getNodalBasisForCellTopology(cellTopo->getShardsTopology().getKey());
+  
+  if (cellTopo->getTensorialDegree() == 0) return shardsNodalBasis;
+  
+  BasisPtr lineNodalBasis = BasisFactory::basisFactory()->getNodalBasisForCellTopology(shards::Line<2>::key);
+  
+  typedef Camellia::TensorBasis<double, FieldContainer<double> > TensorBasis;
+  
+  BasisPtr nodalBasis = shardsNodalBasis;
+  for (int i=0; i<cellTopo->getTensorialDegree(); i++) {
+    nodalBasis = Teuchos::rcp( new TensorBasis(nodalBasis, lineNodalBasis) );
+  }
+  return nodalBasis;
+}
+
 BasisPtr BasisFactory::getNodalBasisForCellTopology(unsigned int cellTopoKey) {
   // used by CamelliaCellTools for computing Jacobians, etc.
   switch( cellTopoKey ){
       // Standard Base topologies (number of cellWorkset = number of vertices)
+    case shards::Node::key: // point topology
+      return Teuchos::rcp( new PointBasis<>() );
     case shards::Line<2>::key:
       return Teuchos::rcp( new IntrepidBasisWrapper<>( Teuchos::rcp( new Basis_HGRAD_LINE_C1_FEM<double, FieldContainer<double> >()),
                                                       2, 0, IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD) );
