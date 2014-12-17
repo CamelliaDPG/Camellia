@@ -36,10 +36,40 @@ namespace {
   
   TEUCHOS_UNIT_TEST( CamelliaCellTools, MapToPhysicalFrame)
   {
-    // TODO: implement this test
     // particularly important to try it out on some topologies defined in terms of tensor products
     // main use case is with tensorial degree equal to 1 (for space-time), but might be worth trying with tensorial degree 2 and 3, too
     
+    // to begin, just a very simple test that *nodes* are mapped appropriately
+
+    std::vector< CellTopoPtr > shardsTopologies = getShardsTopologies();
+    
+    for (int tensorialDegree=0; tensorialDegree<2; tensorialDegree++) {
+      for (int topoOrdinal = 0; topoOrdinal < shardsTopologies.size(); topoOrdinal++) {
+        CellTopoPtr shardsTopo = shardsTopologies[topoOrdinal];
+        
+        if (shardsTopo->getDimension() == 0) continue; // don't bother testing point topology
+        
+        CellTopoPtr topo = CellTopology::cellTopology(shardsTopo->getShardsTopology(), tensorialDegree);
+        
+        FieldContainer<double> refNodes(topo->getNodeCount(),topo->getDimension());
+        
+        CamelliaCellTools::refCellNodesForTopology(refNodes, topo);
+        FieldContainer<double> physicalNodes(1,topo->getNodeCount(),topo->getDimension());
+        
+        // to make the physical cell, multiply node by 1/2/3 in x/y/z and add 1/4/9
+        for (int node=0; node < topo->getNodeCount(); node++) {
+          for (int d=0; d<topo->getDimension(); d++) {
+            physicalNodes(0,node,d) = refNodes(node,d) * d + d * d;
+          }
+        }
+        
+        FieldContainer<double> mappedNodes(1,topo->getNodeCount(),topo->getDimension());
+        CamelliaCellTools::mapToPhysicalFrame(mappedNodes, refNodes, physicalNodes, topo);
+        
+        TEST_COMPARE_FLOATING_ARRAYS(physicalNodes, mappedNodes, 1e-15);
+        
+      }
+    }
   }
   
   TEUCHOS_UNIT_TEST( CamelliaCellTools, SetJacobianForSimpleShardsTopologies )
@@ -136,6 +166,54 @@ namespace {
         if (!success) {
           cout << "Test failure (set breakpoint here) \n";
         }
+      }
+    }
+  }
+  
+  TEUCHOS_UNIT_TEST( CamelliaCellTools, RefCellPointsForTensorTopology ) {
+    // just check that the version that takes a Camellia CellTopology of tensorial degree 1 matches:
+    // shardsTopo refNodes + t = -1
+    // shardsTopo refNodes + t =  1
+    // in that order...
+    
+    std::vector< CellTopoPtr > shardsTopologies = getShardsTopologies();
+    
+    for (int topoOrdinal = 0; topoOrdinal < shardsTopologies.size(); topoOrdinal++) {
+      CellTopoPtr shardsTopo = shardsTopologies[topoOrdinal];
+      
+      int tensorialDegree = 1;
+      CellTopoPtr topo = CellTopology::cellTopology(shardsTopo->getShardsTopology(), tensorialDegree);
+      
+      FieldContainer<double> refCellNodesShards(shardsTopo->getNodeCount(),shardsTopo->getDimension());
+      FieldContainer<double> refCellNodesCamellia(topo->getNodeCount(),topo->getDimension());
+      
+      int permutation=0;
+      CamelliaCellTools::refCellNodesForTopology(refCellNodesShards, shardsTopo, permutation);
+      CamelliaCellTools::refCellNodesForTopology(refCellNodesCamellia, topo, permutation);
+      
+      FieldContainer<double> refCellNodesExpected(topo->getNodeCount(),topo->getDimension());
+      
+      if (shardsTopo->getDimension() == 0) {
+       // special case: point x line = line
+        CellTopoPtr line = CellTopology::line();
+        CamelliaCellTools::refCellNodesForTopology(refCellNodesExpected, line);
+      } else {
+        for (int node=0; node<topo->getNodeCount(); node++) {
+          int shardsNode = node % shardsTopo->getNodeCount();
+          for (int d=0; d<topo->getDimension(); d++) {
+            if (d < shardsTopo->getDimension())
+              refCellNodesExpected(node,d) = refCellNodesShards(shardsNode,d);
+            else
+              if (shardsNode == node) refCellNodesExpected(node,d) = -1;
+              else refCellNodesExpected(node,d) = 1;
+          }
+        }
+      }
+      
+      TEST_COMPARE_FLOATING_ARRAYS(refCellNodesExpected, refCellNodesCamellia, 1e-15);
+      
+      if (!success) {
+        cout << "Test failure (set breakpoint here) \n";
       }
     }
   }
