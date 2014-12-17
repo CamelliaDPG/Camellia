@@ -632,6 +632,9 @@ void CellTopology::initializeNodes(const std::vector<Intrepid::FieldContainer<do
   
   if (_tensorialDegree==0) {
     cellNodes = tensorComponentNodes[0];
+    if (_shardsBaseTopology.getDimension() == 0) {
+      cellNodes.resize(1, 1); // the values inside will be ignored, but for the tensor product logic below to work, we do need to have a container that contains one point.
+    }
   } else {
     // note that the construction of tensorComponentTopo here does assume that all the tensorial components
     // after _shardsBaseTopology are lines, but the code that follows does not.  (The argument checks above
@@ -649,7 +652,6 @@ void CellTopology::initializeNodes(const std::vector<Intrepid::FieldContainer<do
     int nodeOrdinal=0;
     for (int lastNodesOrdinal=0; lastNodesOrdinal<lastNodes.dimension(0); lastNodesOrdinal++) {
       for (int componentNodeOrdinal=0; componentNodeOrdinal<componentCellNodes.dimension(0); componentNodeOrdinal++, nodeOrdinal++) {
-        // TODO: finish this...
         for (int d=0; d<tensorComponentTopo->getDimension(); d++) {
           cellNodes(nodeOrdinal,d) = componentCellNodes(componentNodeOrdinal,d);
         }
