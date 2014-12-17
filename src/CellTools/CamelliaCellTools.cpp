@@ -194,7 +194,7 @@ void CamelliaCellTools::refCellNodesForTopology(FieldContainer<double> &cellNode
   shards::CellTopology shardsLine(shards::getCellTopologyData<shards::Line<2> >() );
   refCellNodesForTopology(lineNodes, shardsLine);
   
-  for (int degreeOrdinal=1; degreeOrdinal<cellTopo->getTensorialDegree(); degreeOrdinal++) {
+  for (int degreeOrdinal=0; degreeOrdinal<cellTopo->getTensorialDegree(); degreeOrdinal++) {
     tensorComponentNodes.push_back(lineNodes);
   }
   
@@ -217,96 +217,83 @@ void CamelliaCellTools::refCellNodesForTopology(FieldContainer<double> &cellNode
 
 void CamelliaCellTools::mapToPhysicalFrame(FieldContainer<double> &physPoints, const FieldContainer<double> &refPoints, const FieldContainer<double> &cellWorkset,
                                            CellTopoPtr cellTopo, const int & whichCell) {
-  if (cellTopo->getTensorialDegree() == 0) {
-    CellTools<double>::mapToPhysicalFrame(physPoints,refPoints,cellWorkset,cellTopo->getShardsTopology(), whichCell);
-  } else {
-    BasisPtr shardsNodalBasis = BasisFactory::basisFactory()->getNodalBasisForCellTopology(cellTopo->getShardsTopology().getKey());
-    
-    BasisPtr lineNodalBasis = BasisFactory::basisFactory()->getNodalBasisForCellTopology(shards::Line<2>::key);
-    
-    typedef Camellia::TensorBasis<double, FieldContainer<double> > TensorBasis;
-    
-    BasisPtr nodalBasis = shardsNodalBasis;
-    for (int i=0; i<cellTopo->getTensorialDegree(); i++) {
-      nodalBasis = Teuchos::rcp( new TensorBasis(nodalBasis, lineNodalBasis) );
-    }
-    
-    int basisCardinality = nodalBasis->getCardinality();
-    int numCells = cellWorkset.dimension(0);
-    int numNodes = cellWorkset.dimension(1);
-    int numPoints = (refPoints.rank() == 2) ? refPoints.dimension(0) : refPoints.dimension(1);
-
-    if (numNodes != cellTopo->getNodeCount()) {
-      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Second dimension of cellWorkset does not match cellTopo->getNodeCount()!");
-    }
-    if (cellTopo->getNodeCount() != nodalBasis->getCardinality()) {
-      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Internal error: cellTopo node count does not match nodalBasis->getCardinality()!");
-    }
-    
-    FieldContainer<double> basisValues(basisCardinality, numPoints);
-
-    physPoints.initialize(0.0);
-    int spaceDim = cellTopo->getDimension();
-    
-    // handle separately rank-2 (P,D) and rank-3 (C,P,D) cases of refPoints
-    switch(refPoints.rank()) {
-      case 2:
-      {
-        nodalBasis->getValues(basisValues, refPoints, OPERATOR_VALUE);
-        // If whichCell = -1, ref pt. set is mapped to all cells, otherwise, the set is mapped to one cell only
-        int cellLoop = (whichCell == -1) ? numCells : 1 ;
-        
-        // Compute the map F(refPoints) = sum node_coordinate*basis(refPoints)
-        for(int cellOrdinal = 0; cellOrdinal < cellLoop; cellOrdinal++) {
-          for(int pointOrdinal = 0; pointOrdinal < numPoints; pointOrdinal++) {
-            for(int d = 0; d < spaceDim; d++){
-              for(int basisOrdinal = 0; basisOrdinal < basisCardinality; basisOrdinal++){
-                
-                if(whichCell == -1){
-                  physPoints(cellOrdinal, pointOrdinal, d) += cellWorkset(cellOrdinal, basisOrdinal, d)*basisValues(basisOrdinal, pointOrdinal);
-                }
-                else{
-                  physPoints(pointOrdinal, d) += cellWorkset(whichCell, basisOrdinal, d)*basisValues(basisOrdinal, pointOrdinal);
-                }
-              } // basisOrdinal
-            }// d
-          }// pointOrdinal
-        }//cellOrdinal
-      }// case 2
-        break;
-        
-        // refPoints is (C,P,D): multiple sets of ref. points are mapped to matching number of physical cells.
-      case 3:
-      {
-        FieldContainer<double> refPointsForCell(numPoints, spaceDim);
-        // Compute the map F(refPoints) = sum node_coordinate*basis(refPoints)
-        for(int cellOrdinal = 0; cellOrdinal < numCells; cellOrdinal++) {
-          for (int pointOrdinal=0; pointOrdinal<numPoints; pointOrdinal++) {
-            for (int d=0; d<spaceDim; d++) {
-              refPointsForCell(pointOrdinal,d) = refPoints(cellOrdinal,pointOrdinal,d);
-            }
-          }
-          
-          // Compute basis values for this set of ref. points
-          nodalBasis -> getValues(basisValues, refPointsForCell, OPERATOR_VALUE);
-          
-          for(int pointOrdinal = 0; pointOrdinal < numPoints; pointOrdinal++) {
-            for(int d = 0; d < spaceDim; d++){
-              for(int basisOrdinal = 0; basisOrdinal < basisCardinality; basisOrdinal++){
-                
+  BasisPtr nodalBasis = BasisFactory::basisFactory()->getNodalBasisForCellTopology(cellTopo);
+  
+  int basisCardinality = nodalBasis->getCardinality();
+  int numCells = cellWorkset.dimension(0);
+  int numNodes = cellWorkset.dimension(1);
+  int numPoints = (refPoints.rank() == 2) ? refPoints.dimension(0) : refPoints.dimension(1);
+  
+  if (numNodes != cellTopo->getNodeCount()) {
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Second dimension of cellWorkset does not match cellTopo->getNodeCount()!");
+  }
+  if (cellTopo->getNodeCount() != nodalBasis->getCardinality()) {
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Internal error: cellTopo node count does not match nodalBasis->getCardinality()!");
+  }
+  
+  FieldContainer<double> basisValues(basisCardinality, numPoints);
+  
+  physPoints.initialize(0.0);
+  int spaceDim = cellTopo->getDimension();
+  
+  // handle separately rank-2 (P,D) and rank-3 (C,P,D) cases of refPoints
+  switch(refPoints.rank()) {
+    case 2:
+    {
+      nodalBasis->getValues(basisValues, refPoints, OPERATOR_VALUE);
+      // If whichCell = -1, ref pt. set is mapped to all cells, otherwise, the set is mapped to one cell only
+      int cellLoop = (whichCell == -1) ? numCells : 1 ;
+      
+      // Compute the map F(refPoints) = sum node_coordinate*basis(refPoints)
+      for(int cellOrdinal = 0; cellOrdinal < cellLoop; cellOrdinal++) {
+        for(int pointOrdinal = 0; pointOrdinal < numPoints; pointOrdinal++) {
+          for(int d = 0; d < spaceDim; d++){
+            for(int basisOrdinal = 0; basisOrdinal < basisCardinality; basisOrdinal++){
+              
+              if(whichCell == -1){
                 physPoints(cellOrdinal, pointOrdinal, d) += cellWorkset(cellOrdinal, basisOrdinal, d)*basisValues(basisOrdinal, pointOrdinal);
-                
-              } // basisOrdinal
-            }// d
-          }// pointOrdinal
-        }//cellOrdinal
-      }// case 3
-        break;
+              }
+              else{
+                physPoints(pointOrdinal, d) += cellWorkset(whichCell, basisOrdinal, d)*basisValues(basisOrdinal, pointOrdinal);
+              }
+            } // basisOrdinal
+          }// d
+        }// pointOrdinal
+      }//cellOrdinal
+    }// case 2
+      break;
+      
+      // refPoints is (C,P,D): multiple sets of ref. points are mapped to matching number of physical cells.
+    case 3:
+    {
+      FieldContainer<double> refPointsForCell(numPoints, spaceDim);
+      // Compute the map F(refPoints) = sum node_coordinate*basis(refPoints)
+      for(int cellOrdinal = 0; cellOrdinal < numCells; cellOrdinal++) {
+        for (int pointOrdinal=0; pointOrdinal<numPoints; pointOrdinal++) {
+          for (int d=0; d<spaceDim; d++) {
+            refPointsForCell(pointOrdinal,d) = refPoints(cellOrdinal,pointOrdinal,d);
+          }
+        }
         
-      default:
-        TEUCHOS_TEST_FOR_EXCEPTION( !( (refPoints.rank() == 2) && (refPoints.rank() == 3) ), std::invalid_argument,
-                                   ">>> ERROR (CamelliaCellTools::mapToPhysicalFrame): rank 2 or 3 required for refPoints array. ");
-    }
+        // Compute basis values for this set of ref. points
+        nodalBasis -> getValues(basisValues, refPointsForCell, OPERATOR_VALUE);
+        
+        for(int pointOrdinal = 0; pointOrdinal < numPoints; pointOrdinal++) {
+          for(int d = 0; d < spaceDim; d++){
+            for(int basisOrdinal = 0; basisOrdinal < basisCardinality; basisOrdinal++){
+              
+              physPoints(cellOrdinal, pointOrdinal, d) += cellWorkset(cellOrdinal, basisOrdinal, d)*basisValues(basisOrdinal, pointOrdinal);
+              
+            } // basisOrdinal
+          }// d
+        }// pointOrdinal
+      }//cellOrdinal
+    }// case 3
+      break;
+      
+    default:
+      TEUCHOS_TEST_FOR_EXCEPTION( !( (refPoints.rank() == 2) && (refPoints.rank() == 3) ), std::invalid_argument,
+                                 ">>> ERROR (CamelliaCellTools::mapToPhysicalFrame): rank 2 or 3 required for refPoints array. ");
   }
 }
 
