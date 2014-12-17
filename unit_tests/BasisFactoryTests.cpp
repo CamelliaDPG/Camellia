@@ -47,20 +47,14 @@ namespace {
       
       nodalBasis->getValues(basisValues, refNodes, Intrepid::OPERATOR_VALUE);
       
-      double tol = 1e-15;
+      // require that the nodal basis be numbered the same way as the topology i.e.
+      // basisValues(i,j) = (i==j) ? 1 : 0;
       
-      std::map<int, int> nodeToBasisOrdinal;
       for (int basisOrdinal=0; basisOrdinal<nodalBasis->getCardinality(); basisOrdinal++) {
-        int nonZeroLocation = -1;
         for (int node=0; node < topo->getNodeCount(); node++) {
+          double expectedValue = (node==basisOrdinal) ? 1 : 0;
           double value = basisValues(basisOrdinal,node);
-          if (abs(value) > tol) {
-            TEST_EQUALITY(nonZeroLocation, -1); // shouldn't have more than one for any basisOrdinal
-            nonZeroLocation = node;
-            TEST_FLOATING_EQUALITY(value, 1.0, tol);
-            TEST_ASSERT(nodeToBasisOrdinal.find(node) == nodeToBasisOrdinal.end()); // ensure uniqueness of the node --> basisOrdinal mapping
-            nodeToBasisOrdinal[node] = basisOrdinal;
-          }
+          TEST_EQUALITY(expectedValue, value);
         }
       }
     }
@@ -92,21 +86,18 @@ namespace {
       
 //      cout << "basisValues:\n" << basisValues;
       
-      double tol = 1e-15;
-      
-      std::map<int, int> nodeToBasisOrdinal;
+      // require that the nodal basis be numbered the same way as the topology i.e.
+      // basisValues(i,j) = (i==j) ? 1 : 0;
+    
       for (int basisOrdinal=0; basisOrdinal<nodalBasis->getCardinality(); basisOrdinal++) {
-        int nonZeroLocation = -1;
         for (int node=0; node < topo->getNodeCount(); node++) {
+          double expectedValue = (node==basisOrdinal) ? 1 : 0;
           double value = basisValues(basisOrdinal,node);
-          if (abs(value) > tol) {
-            TEST_EQUALITY(nonZeroLocation, -1); // shouldn't have more than one for any basisOrdinal
-            nonZeroLocation = node;
-            TEST_FLOATING_EQUALITY(value, 1.0, tol);
-            TEST_ASSERT(nodeToBasisOrdinal.find(node) == nodeToBasisOrdinal.end()); // ensure uniqueness of the node --> basisOrdinal mapping
-            nodeToBasisOrdinal[node] = basisOrdinal;
-          }
+          TEST_EQUALITY(expectedValue, value);
         }
+      }
+      if (!success) {
+        cout << "basisValues:\n" << basisValues;
       }
     }
   }
