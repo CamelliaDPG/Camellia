@@ -109,6 +109,125 @@ namespace {
     }
   }
   
+  TEUCHOS_UNIT_TEST( CamelliaCellTools, SetJacobianForSpaceTimeTopologies )
+  {
+    std::vector< CellTopoPtr > shardsTopologies = getShardsTopologies();
+    
+    // Two simple tests for each shards topology:
+    //  1. identity in both space and time.
+    //  2. doubling coordinates in space, tripling in time.
+    
+    for (int topoOrdinal = 0; topoOrdinal < shardsTopologies.size(); topoOrdinal++) {
+      CellTopoPtr spaceTopo = shardsTopologies[topoOrdinal];
+      
+      int spaceDim = spaceTopo->getDimension();
+      if (spaceDim == 0) continue; // don't bother testing point topology
+      
+      int tensorialDegree = 1;
+      CellTopoPtr topo = CellTopology::cellTopology(spaceTopo->getShardsTopology(), tensorialDegree);
+      
+      CellTopoPtr timeTopo = CellTopology::line();
+      int timeDim = timeTopo->getDimension();
+      
+      int spaceTimeDim = topo->getDimension();
+      
+      FieldContainer<double> refCellNodesSpace(spaceTopo->getNodeCount(),spaceDim);
+      FieldContainer<double> refCellNodesTime(timeTopo->getNodeCount(),timeDim);
+      FieldContainer<double> refCellNodes(topo->getNodeCount(),spaceTimeDim);
+      
+      CamelliaCellTools::refCellNodesForTopology(refCellNodesSpace, spaceTopo);
+      CamelliaCellTools::refCellNodesForTopology(refCellNodesTime, timeTopo);
+      CamelliaCellTools::refCellNodesForTopology(refCellNodes, topo);
+
+      FieldContainer<double> cellNodesSpace = refCellNodesSpace;
+      FieldContainer<double> cellNodesTime = refCellNodesTime;
+      FieldContainer<double> cellNodesSpaceTime = refCellNodes;
+      cellNodesSpace.resize(1,cellNodesSpace.dimension(0),cellNodesSpace.dimension(1));
+      cellNodesTime.resize(1,cellNodesTime.dimension(0),cellNodesTime.dimension(1));
+      cellNodesSpaceTime.resize(1,cellNodesSpaceTime.dimension(0),cellNodesSpaceTime.dimension(1));
+      int numPointsSpace = refCellNodesSpace.dimension(0);
+      int numPointsTime = refCellNodesTime.dimension(0);
+      int numPointsSpaceTime = refCellNodes.dimension(0);
+      FieldContainer<double> jacobianTime(1,numPointsTime,timeDim,timeDim);
+      FieldContainer<double> jacobianSpace(1,numPointsSpace,spaceDim,spaceDim);
+      FieldContainer<double> jacobianSpaceTime(1,numPointsSpaceTime,spaceTimeDim,spaceTimeDim);
+      
+      CamelliaCellTools::setJacobian(jacobianTime, refCellNodesTime, cellNodesTime, timeTopo);
+      CamelliaCellTools::setJacobian(jacobianSpace, refCellNodesSpace, cellNodesSpace, spaceTopo);
+      CamelliaCellTools::setJacobian(jacobianSpaceTime, refCellNodes, cellNodesSpaceTime, topo);
+      
+      // combine the Jacobians:
+      FieldContainer<double> expectedJacobian(1,numPointsSpaceTime,spaceTimeDim,spaceTimeDim);
+      for (int spaceNode=0; spaceNode<spaceTopo->getNodeCount(); spaceNode++) {
+        for (int timeNode=0; timeNode<timeTopo->getNodeCount(); timeNode++) {
+          vector<unsigned> nodes(2);
+          nodes[0] = spaceNode;
+          nodes[1] = timeNode;
+          int spaceTimeNode = topo->getNodeFromTensorialComponentNodes(nodes);
+          for (int d1=0; d1<spaceDim; d1++) {
+            for (int d2=0; d2<spaceDim; d2++) {
+              expectedJacobian(0,spaceTimeNode,d1,d2) = jacobianSpace(0,spaceNode,d1,d2);
+            }
+          }
+          for (int d1=0; d1<timeDim; d1++) {
+            for (int d2=0; d2<timeDim; d2++) {
+              expectedJacobian(0,spaceTimeNode,spaceDim + d1, spaceDim + d2) = jacobianTime(0,timeNode,d1,d2);
+            }
+          }
+        }
+      }
+      
+      TEST_COMPARE_FLOATING_ARRAYS(jacobianSpaceTime, expectedJacobian, 1e-15);
+      
+      for (int i=0; i<cellNodesSpace.size(); i++) {
+        cellNodesSpace[i] *= 2.0;
+      }
+      
+      for (int i=0; i<cellNodesTime.size(); i++) {
+        cellNodesTime[i] *= 3.0;
+      }
+      
+      cellNodesSpaceTime.resize(topo->getNodeCount(), topo->getDimension());
+      vector< FieldContainer<double> > tensorComponentNodes;
+      tensorComponentNodes.push_back(cellNodesSpace);
+      tensorComponentNodes.push_back(cellNodesTime);
+      tensorComponentNodes[0].resize(spaceTopo->getNodeCount(), spaceTopo->getDimension());
+      tensorComponentNodes[1].resize(timeTopo->getNodeCount(), timeTopo->getDimension());
+      topo->initializeNodes(tensorComponentNodes, cellNodesSpaceTime);
+      cellNodesSpaceTime.resize(1, topo->getNodeCount(), topo->getDimension());
+      
+      CamelliaCellTools::setJacobian(jacobianTime, refCellNodesTime, cellNodesTime, timeTopo);
+      CamelliaCellTools::setJacobian(jacobianSpace, refCellNodesSpace, cellNodesSpace, spaceTopo);
+      CamelliaCellTools::setJacobian(jacobianSpaceTime, refCellNodes, cellNodesSpaceTime, topo);
+      
+      // combine the Jacobians:
+      for (int spaceNode=0; spaceNode<spaceTopo->getNodeCount(); spaceNode++) {
+        for (int timeNode=0; timeNode<timeTopo->getNodeCount(); timeNode++) {
+          vector<unsigned> nodes(2);
+          nodes[0] = spaceNode;
+          nodes[1] = timeNode;
+          
+          int spaceTimeNode = topo->getNodeFromTensorialComponentNodes(nodes);
+          for (int d1_space=0; d1_space<spaceDim; d1_space++) { // d1: which spatial component we're taking derivative of
+            for (int d2_space=0; d2_space<spaceDim; d2_space++) { // d2: which spatial direction we take the derivative in
+              expectedJacobian(0,spaceTimeNode,d1_space,d2_space) = jacobianSpace(0,spaceNode,d1_space,d2_space);
+            }
+          }
+          for (int d1=0; d1<timeDim; d1++) {
+            for (int d2=0; d2<timeDim; d2++) {
+              expectedJacobian(0,spaceTimeNode,spaceDim + d1, spaceDim + d2) = jacobianTime(0,timeNode,d1,d2);
+            }
+          }
+        }
+      }
+
+//      cout << "expectedJacobian:\n" << expectedJacobian;
+//      cout << "jacobianSpaceTime:\n" << jacobianSpaceTime;
+      
+      TEST_COMPARE_FLOATING_ARRAYS(jacobianSpaceTime, expectedJacobian, 1e-15);
+    }
+  }
+  
   TEUCHOS_UNIT_TEST( CamelliaCellTools, PermutedReferenceCellPoints )
   {
     // to begin, just a very simple test that *nodes* are permuted appropriately
