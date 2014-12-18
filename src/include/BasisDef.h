@@ -23,6 +23,7 @@ namespace Camellia {
     // (for CURL, it's different between 2D and 3D--and in 2D it depends on whether you're taking the curl of a scalar or a vector quantity)
     int UNKNOWN_RANK_CHANGE = -2;
     int rankChange=UNKNOWN_RANK_CHANGE;
+
     if (operatorType == Intrepid::OPERATOR_VALUE) {
       rankChange = 0;
     } else if (operatorType == Intrepid::OPERATOR_DIV) {
@@ -33,7 +34,9 @@ namespace Camellia {
     
     if (rankChange != UNKNOWN_RANK_CHANGE) {
       // values should have shape: (F,P[,D,D,...]) where the # of D's = rank of the basis's range
-      TEUCHOS_TEST_FOR_EXCEPTION(values.rank() != 2 + rangeRank() + rankChange, std::invalid_argument, "values should have shape (F,P,[D,D,...]).");
+      if (values.rank() != 2 + rangeRank() + rankChange) {
+        TEUCHOS_TEST_FOR_EXCEPTION(values.rank() != 2 + rangeRank() + rankChange, std::invalid_argument, "values should have shape (F,P,[D,D,...]).");
+      }
     }
     // refPoints should have shape: (P,D)
     if (refPoints.rank() != 2) {
