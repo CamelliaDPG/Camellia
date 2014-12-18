@@ -41,6 +41,8 @@ namespace {
 
       BasisPtr nodalBasis = BasisFactory::basisFactory()->getNodalBasisForCellTopology(topo);
       
+      TEST_EQUALITY(nodalBasis->rangeDimension(), topo->getDimension());
+      
       TEST_EQUALITY(nodalBasis->getCardinality(), topo->getNodeCount());
       
       FieldContainer<double> basisValues(nodalBasis->getCardinality(),topo->getNodeCount());
@@ -75,6 +77,7 @@ namespace {
       CamelliaCellTools::refCellNodesForTopology(refNodes, topo);
       
       BasisPtr nodalBasis = BasisFactory::basisFactory()->getNodalBasisForCellTopology(topo);
+      TEST_EQUALITY(nodalBasis->rangeDimension(), topo->getDimension());
       
       TEST_EQUALITY(nodalBasis->getCardinality(), topo->getNodeCount());
       
@@ -96,9 +99,9 @@ namespace {
           TEST_EQUALITY(expectedValue, value);
         }
       }
-      if (!success) {
-        cout << "basisValues:\n" << basisValues;
-      }
+//      if (!success) {
+//        cout << "basisValues:\n" << basisValues;
+//      }
     }
   }
 } // namespace
