@@ -152,7 +152,14 @@ namespace Camellia {
   // range info for basis values:
   template<class Scalar, class ArrayScalar>
   int TensorBasis<Scalar,ArrayScalar>::rangeDimension() const {
-    return _spatialBasis->rangeDimension();
+    // two possibilities:
+    // 1. We have a temporal basis which we won't take the derivative of--because it's in HVOL.  Then:
+    if (_temporalBasis->functionSpace() == IntrepidExtendedTypes::FUNCTION_SPACE_HVOL) {
+      return _spatialBasis->rangeDimension();
+    } else {
+      // 2. We can take derivatives of the temporal basis.  Then we sum the two range dimensions:
+      return _spatialBasis->rangeDimension() + _temporalBasis->rangeDimension();
+    }
   }
   
   template<class Scalar, class ArrayScalar>
@@ -178,12 +185,8 @@ namespace Camellia {
   template<class Scalar, class ArrayScalar>
   void TensorBasis<Scalar,ArrayScalar>::getValues(ArrayScalar &values, const ArrayScalar &refPoints,
                                                   EOperator spatialOperatorType, EOperator temporalOperatorType) const {
-    if ((spatialOperatorType==OPERATOR_GRAD) && (temporalOperatorType==OPERATOR_GRAD)) {
-      // i.e., we are taking the gradient of the whole, not just a time derivative or a spatial gradient.
-      cout << "WARNING: support for taking OPERATOR_GRAD on both space and time not yet fully implemented.\n";
-    } else {
-      this->CHECK_VALUES_ARGUMENTS(values,refPoints,spatialOperatorType);
-    }
+    bool gradInBoth = (spatialOperatorType==OPERATOR_GRAD) && (temporalOperatorType==OPERATOR_GRAD);
+    this->CHECK_VALUES_ARGUMENTS(values,refPoints,spatialOperatorType);
     
     int numPoints = refPoints.dimension(0);
     
@@ -206,28 +209,40 @@ namespace Camellia {
       refPointsTemporal(pointOrdinal,0) = refPoints(pointOrdinal,spaceDim);
     }
     
-    Teuchos::Array<int> spaceTimeValuesDimensions;
-    values.dimensions(spaceTimeValuesDimensions);
+    Teuchos::Array<int> valuesDim; // will use to size our space and time values arrays
+    values.dimensions(valuesDim); // F, P[,D,...]
     
-    int valuesPerPoint = 1;
-    for (int d=2; d<spaceTimeValuesDimensions.size(); d++) { // for vector and tensor-valued bases, take the spatial range dimension in each tensorial rank
-      spaceTimeValuesDimensions[d] = _spatialBasis->rangeDimension();
-      valuesPerPoint *= _spatialBasis->rangeDimension();
+    int valuesPerPointSpace = 1;
+    for (int d=2; d<valuesDim.size(); d++) { // for vector and tensor-valued bases, take the spatial range dimension in each tensorial rank
+      valuesDim[d] = _spatialBasis->rangeDimension();
+      valuesPerPointSpace *= _spatialBasis->rangeDimension();
     }
-    spaceTimeValuesDimensions[0] = _spatialBasis->getCardinality(); // field dimension
-    ArrayScalar spatialValues(spaceTimeValuesDimensions);
+    valuesDim[0] = _spatialBasis->getCardinality(); // field dimension
+    ArrayScalar spatialValues(valuesDim);
     _spatialBasis->getValues(spatialValues, refPointsSpatial, spatialOperatorType);
     
     ArrayScalar temporalValues(_temporalBasis->getCardinality(), numPoints);
+    if (temporalOperatorType==OPERATOR_GRAD) {
+      temporalValues.resize(_temporalBasis->getCardinality(), numPoints, _temporalBasis->rangeDimension());
+    }
     _temporalBasis->getValues(temporalValues, refPointsTemporal, temporalOperatorType);
+    
+    ArrayScalar spatialValues_opValue;
+    ArrayScalar temporalValues_opValue;
+    if (gradInBoth) {
+      spatialValues_opValue.resize(_spatialBasis->getCardinality(), numPoints);
+      temporalValues_opValue.resize(_temporalBasis->getCardinality(), numPoints);
+      _spatialBasis->getValues(spatialValues_opValue, refPointsSpatial, OPERATOR_VALUE);
+      _temporalBasis->getValues(temporalValues_opValue, refPointsTemporal, OPERATOR_VALUE);
+    }
     
 //    cout << "refPointsTemporal:\n" << refPointsTemporal;
     
 //    cout << "spatialValues:\n" << spatialValues;
 //    cout << "temporalValues:\n" << temporalValues;
     
-    Teuchos::Array<int> spaceTimeValueCoordinate(spaceTimeValuesDimensions.size(), 0);
-    Teuchos::Array<int> spatialValueCoordinate(spaceTimeValuesDimensions.size(), 0);
+    Teuchos::Array<int> spaceTimeValueCoordinate(valuesDim.size(), 0);
+    Teuchos::Array<int> spatialValueCoordinate(valuesDim.size(), 0);
     
     // combine values:
     for (int spaceFieldOrdinal=0; spaceFieldOrdinal<_spatialBasis->getCardinality(); spaceFieldOrdinal++) {
@@ -238,12 +253,42 @@ namespace Camellia {
         for (int pointOrdinal=0; pointOrdinal<numPoints; pointOrdinal++) {
           spaceTimeValueCoordinate[1] = pointOrdinal;
           spatialValueCoordinate[1] = pointOrdinal;
-          double temporalValue = temporalValues(timeFieldOrdinal,pointOrdinal);
-          int spaceTimeValueEnumeration = values.getEnumeration(spaceTimeValueCoordinate);
+          double temporalValue;
+          if (temporalOperatorType!=OPERATOR_GRAD)
+            temporalValue = temporalValues(timeFieldOrdinal,pointOrdinal);
+          else
+            temporalValue = temporalValues(timeFieldOrdinal,pointOrdinal, 0);
           int spatialValueEnumeration = spatialValues.getEnumeration(spatialValueCoordinate);
-          for (int offset=0; offset<valuesPerPoint; offset++) {
-            double spatialValue = spatialValues[spatialValueEnumeration+offset];
-            values[spaceTimeValueEnumeration+offset] = spatialValue * temporalValue;
+          
+          if (! gradInBoth) {
+            int spaceTimeValueEnumeration = values.getEnumeration(spaceTimeValueCoordinate);
+            for (int offset=0; offset<valuesPerPointSpace; offset++) {
+              double spatialValue = spatialValues[spatialValueEnumeration+offset];
+              values[spaceTimeValueEnumeration+offset] = spatialValue * temporalValue;
+            }
+          } else {
+            double spatialValue_opValue = spatialValues_opValue(spaceFieldOrdinal,pointOrdinal);
+            double temporalValue_opValue = temporalValues_opValue(timeFieldOrdinal,pointOrdinal);
+            
+            // product rule: first components are spatial gradient times temporal value; next components are spatial value times temporal gradient
+            // first, handle spatial gradients
+            spaceTimeValueCoordinate[2] = 0;
+            int spaceTimeValueEnumeration = values.getEnumeration(spaceTimeValueCoordinate);
+            for (int offset=0; offset<valuesPerPointSpace; offset++) {
+              double spatialGradValue = spatialValues[spatialValueEnumeration+offset];
+              double spaceTimeValue = spatialGradValue * temporalValue_opValue;
+
+              values[spaceTimeValueEnumeration+offset] = spaceTimeValue;
+            }
+
+            // next, temporal gradients
+            spaceTimeValueCoordinate[2] = _spatialBasis->rangeDimension();
+            spaceTimeValueEnumeration = values.getEnumeration(spaceTimeValueCoordinate);
+            
+            double temporalGradValue = temporalValues(timeFieldOrdinal,pointOrdinal,0);
+            double spaceTimeValue = spatialValue_opValue * temporalGradValue;
+
+            values[spaceTimeValueEnumeration] = spaceTimeValue;
           }
         }
       }
