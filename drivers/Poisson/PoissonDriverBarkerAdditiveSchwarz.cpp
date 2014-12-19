@@ -79,22 +79,25 @@ class AztecSolver : public Solver {
   
   MeshPtr _mesh;
   Teuchos::RCP<DofInterpreter> _dofInterpreter;
+  GMGOperator::FactorType _schwarzBlockFactorization;
 public:
-  AztecSolver(int maxIters, double tol, int schwarzOverlapLevel, bool useSchwarzPreconditioner) {
+  AztecSolver(int maxIters, double tol, int schwarzOverlapLevel, bool useSchwarzPreconditioner, GMGOperator::FactorType schwarzBlockFactorization) {
     _maxIters = maxIters;
     _tol = tol;
     _schwarzOverlap = schwarzOverlapLevel;
     _useSchwarzPreconditioner = useSchwarzPreconditioner;
+    _schwarzBlockFactorization = schwarzBlockFactorization;
     _azOutputLevel = 1;
   }
   
   AztecSolver(int maxIters, double tol, int schwarzOverlapLevel, bool useSchwarzPreconditioner,
-              MeshPtr mesh, Teuchos::RCP<DofInterpreter> dofInterpreter) {
+              MeshPtr mesh, Teuchos::RCP<DofInterpreter> dofInterpreter, GMGOperator::FactorType schwarzBlockFactorization) {
     _mesh = mesh;
     _dofInterpreter = dofInterpreter;
     _maxIters = maxIters;
     _tol = tol;
     _schwarzOverlap = schwarzOverlapLevel;
+    _schwarzBlockFactorization = schwarzBlockFactorization;
     _useSchwarzPreconditioner = useSchwarzPreconditioner;
     _azOutputLevel = 1;
   }
@@ -107,7 +110,7 @@ public:
     
     Teuchos::RCP<Epetra_Operator> preconditioner;
     if (_mesh != Teuchos::null) {
-      preconditioner = CamelliaAdditiveSchwarzPreconditioner(A, _schwarzOverlap, _mesh, _dofInterpreter);
+      preconditioner = CamelliaAdditiveSchwarzPreconditioner(A, _schwarzOverlap, _mesh, _dofInterpreter, _schwarzBlockFactorization);
       
 //      Teuchos::RCP< Epetra_CrsMatrix > M;
 //      M = Epetra_Operator_to_Epetra_Matrix::constructInverseMatrix(*preconditioner, A->RowMatrixRowMap());
@@ -117,7 +120,7 @@ public:
 //      EpetraExt::RowMatrixToMatrixMarketFile("/tmp/preconditioner.dat",*M, NULL, NULL, false);
       
     } else {
-      preconditioner = IfPackAdditiveSchwarzPreconditioner(A, _schwarzOverlap);
+      preconditioner = IfPackAdditiveSchwarzPreconditioner(A, _schwarzOverlap, _schwarzBlockFactorization);
     }
     
     if (_useSchwarzPreconditioner) {
@@ -305,9 +308,9 @@ int main(int argc, char *argv[]) {
   
   Teuchos::RCP<Solver> solver;
   if (useCamelliaAdditiveSchwarz) {
-    solver = Teuchos::rcp( new AztecSolver(cgMaxIterations,cgTol,schwarzOverlap,precondition,mesh, solution->getDofInterpreter()) );
+    solver = Teuchos::rcp( new AztecSolver(cgMaxIterations,cgTol,schwarzOverlap,precondition,mesh, solution->getDofInterpreter(), schwarzBlockFactorization) );
   } else {
-    solver = Teuchos::rcp( new AztecSolver(cgMaxIterations,cgTol,schwarzOverlap,precondition) );
+    solver = Teuchos::rcp( new AztecSolver(cgMaxIterations,cgTol,schwarzOverlap,precondition, schwarzBlockFactorization) );
   }
   
 //  solution->setWriteMatrixToFile(true, "/tmp/A_barker.dat");
