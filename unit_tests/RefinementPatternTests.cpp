@@ -10,14 +10,25 @@
 #include "Teuchos_UnitTestHelpers.hpp"
 
 #include "Intrepid_FieldContainer.hpp"
-
-#include "Shards_CellTopology.hpp"
-
 #include "CamelliaCellTools.h"
 
 #include "RefinementPattern.h"
 
+using namespace Camellia;
+
 namespace {
+  vector< CellTopoPtr > getShardsTopologies() {
+    vector< CellTopoPtr > shardsTopologies;
+    
+    shardsTopologies.push_back(CellTopology::point());
+    shardsTopologies.push_back(CellTopology::line());
+    shardsTopologies.push_back(CellTopology::quad());
+    shardsTopologies.push_back(CellTopology::triangle());
+    shardsTopologies.push_back(CellTopology::hexahedron());
+    //  shardsTopologies.push_back(CellTopology::tetrahedron()); // tetrahedron not yet supported by permutation
+    return shardsTopologies;
+  }
+  
   TEUCHOS_UNIT_TEST( RefinementPattern, MapRefCellPointsToAncestor_ChildNodeIdentity )
   {
     // test takes regular refinement patterns and checks that RefinementPattern::mapRefCellPointsToAncestor
@@ -60,6 +71,21 @@ namespace {
         
         TEST_COMPARE_FLOATING_ARRAYS(expectedPoints, actualPoints, 1e-15);
       }
+    }
+  }
+  
+  TEUCHOS_UNIT_TEST( RefinementPattern, SpaceTimeTopology )
+  {
+    // tests refinement patterns for space-time topologies.
+    int tensorialDegree = 1;
+    vector<CellTopoPtr> shardsTopologies = getShardsTopologies();
+    for (int topoOrdinal=0; topoOrdinal < shardsTopologies.size(); topoOrdinal++) {
+      shards::CellTopology shardsTopo = shardsTopologies[topoOrdinal]->getShardsTopology();
+      CellTopoPtr cellTopo = CellTopology::cellTopology(shardsTopo, tensorialDegree);
+      
+      RefinementPatternPtr refPatternShards = RefinementPattern::regularRefinementPattern(shardsTopo.getKey());
+      
+      // TODO: finish this test...
     }
   }
 } // namespace
