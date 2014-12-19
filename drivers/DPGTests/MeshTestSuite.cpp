@@ -242,7 +242,7 @@ bool MeshTestSuite::neighborBasesAgreeOnSides(Teuchos::RCP<Mesh> mesh, const Fie
       
       RefinementBranch sideRefBranch = RefinementPattern::subcellRefinementBranch(cellRefBranch, sideDim, ancestralSideOrdinal);
 
-      shards::CellTopology sideTopo = cell->topology()->getBaseCellTopologyData(sideDim, sideOrdinal);
+      CellTopoPtr sideTopo = cell->topology()->getSubcell(sideDim, sideOrdinal);
       BasisCachePtr sideTopoCache = Teuchos::rcp( new BasisCache(sideTopo,1,false) );
       sideTopoCache->setRefCellPoints(testPointsRefCoords);
       
@@ -250,7 +250,7 @@ bool MeshTestSuite::neighborBasesAgreeOnSides(Teuchos::RCP<Mesh> mesh, const Fie
       if (sideRefBranch.size() > 0) {
         fineSideRefNodes = RefinementPattern::descendantNodesRelativeToAncestorReferenceCell(sideRefBranch);
       } else {
-        fineSideRefNodes.resize(sideTopo.getVertexCount(),sideTopo.getDimension());
+        fineSideRefNodes.resize(sideTopo->getVertexCount(),sideTopo->getDimension());
         CamelliaCellTools::refCellNodesForTopology(fineSideRefNodes, sideTopo);
       }
       fineSideRefNodes.resize(1,fineSideRefNodes.dimension(0),fineSideRefNodes.dimension(1));
@@ -260,7 +260,7 @@ bool MeshTestSuite::neighborBasesAgreeOnSides(Teuchos::RCP<Mesh> mesh, const Fie
       // strip off cell dimension:
       testPointsInAncestralSide.resize(testPointsInAncestralSide.dimension(1),testPointsInAncestralSide.dimension(2));
       
-      shards::CellTopology ancestralSideTopo = ancestralCell->topology()->getBaseCellTopologyData(sideDim, ancestralSideOrdinal);
+      CellTopoPtr ancestralSideTopo = ancestralCell->topology()->getSubcell(sideDim, ancestralSideOrdinal);
       BasisCachePtr ancestralSideTopoCache = Teuchos::rcp(new BasisCache(ancestralSideTopo,1,false));
       ancestralSideTopoCache->setRefCellPoints(testPointsInAncestralSide);
       
@@ -274,7 +274,7 @@ bool MeshTestSuite::neighborBasesAgreeOnSides(Teuchos::RCP<Mesh> mesh, const Fie
       // is fine-to-coarse (which is what we want).  Because the composedPermutation is fine-to-coarse, we want its inverse:
       unsigned composedPermutationInverse = CamelliaCellTools::permutationInverse(ancestralSideTopo, composedPermutation);
       
-      FieldContainer<double> permutedAncestralSideReferenceNodes(ancestralSideTopo.getVertexCount(),sideDim);
+      FieldContainer<double> permutedAncestralSideReferenceNodes(ancestralSideTopo->getVertexCount(),sideDim);
       CamelliaCellTools::refCellNodesForTopology(permutedAncestralSideReferenceNodes, ancestralSideTopo, composedPermutationInverse);
       // add cell dimension:
       permutedAncestralSideReferenceNodes.resize(1,permutedAncestralSideReferenceNodes.dimension(0),permutedAncestralSideReferenceNodes.dimension(1));
@@ -1068,7 +1068,7 @@ bool MeshTestSuite::testDofOrderingFactory() {
   VarPtr phi_hat = bilinearForm->varFactory().traceVar(PoissonBilinearForm::S_PHI_HAT);
   
   Teuchos::RCP<DofOrdering> conformingOrdering,nonConformingOrdering;
-  shards::CellTopology quad_4(shards::getCellTopologyData<shards::Quadrilateral<4> >() );
+  CellTopoPtr quad_4 = Camellia::CellTopology::quad();
   
   DofOrderingFactory dofOrderingFactory(bilinearForm);
   
@@ -2118,7 +2118,7 @@ bool MeshTestSuite::testSolutionForSingleElementUpgradedSide() {
   
   Teuchos::RCP<ElementType> elemTypePtr = mesh->getElement(0)->elementType();
   Teuchos::RCP<DofOrdering> trialOrdering = elemTypePtr->trialOrderPtr;
-  shards::CellTopology cellTopo = *(elemTypePtr->cellTopoPtr.get());
+  CellTopoPtr cellTopo = elemTypePtr->cellTopoPtr;
   // create a second mesh so we can have another DofOrdering of higher order to match...
   Teuchos::RCP<Mesh> mesh2 = MeshFactory::buildQuadMesh(quadPoints, 1, 1, exactPolynomial.bilinearForm(), order+1, order);
   Teuchos::RCP<DofOrdering> trialOrderingToMatch = mesh2->getElement(0)->elementType()->trialOrderPtr;

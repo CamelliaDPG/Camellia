@@ -94,12 +94,12 @@ static ParametricCurvePtr parametricRect(double width, double height, double x0,
     if (histArraySize > 0) hdf5.Read("Mesh", "refinementHistory", H5T_NATIVE_INT, histArraySize, &histArray[0]);
     hdf5.Close();
 
-    CellTopoPtrLegacy line_2 = Teuchos::rcp( new shards::CellTopology(shards::getCellTopologyData<shards::Line<2> >() ) );
-    CellTopoPtrLegacy quad_4 = Teuchos::rcp( new shards::CellTopology(shards::getCellTopologyData<shards::Quadrilateral<4> >() ) );
-    CellTopoPtrLegacy tri_3 = Teuchos::rcp( new shards::CellTopology(shards::getCellTopologyData<shards::Triangle<3> >() ) );
-    CellTopoPtrLegacy hex_8 = Teuchos::rcp( new shards::CellTopology(shards::getCellTopologyData<shards::Hexahedron<8> >() ) );
+    CellTopoPtr line_2 = Camellia::CellTopology::line();
+    CellTopoPtr quad_4 = Camellia::CellTopology::quad();
+    CellTopoPtr tri_3 = Camellia::CellTopology::triangle();
+    CellTopoPtr hex_8 = Camellia::CellTopology::hexahedron();
 
-    vector< CellTopoPtrLegacy > cellTopos;
+    vector< CellTopoPtr > cellTopos;
     vector< vector<unsigned> > elementVertices;
     int vindx = 0;
     for (unsigned cellNumber = 0; cellNumber < topoKeysSize; cellNumber++)
@@ -188,7 +188,7 @@ static ParametricCurvePtr parametricRect(double width, double height, double x0,
       i++;
       int numCells = histArray[i];
       i++;
-      CellTopoPtrLegacy cellTopo; // we assume all cells for the refinement have the same type
+      CellTopoPtr cellTopo; // we assume all cells for the refinement have the same type
       if (numCells > 0) {
         GlobalIndexType firstCellID = histArray[i];
         cellTopo = mesh->getElementType(firstCellID)->cellTopoPtr;
@@ -218,7 +218,7 @@ static ParametricCurvePtr parametricRect(double width, double height, double x0,
           break;
         default: 
           // if we get here, it should be an h-refinement with a ref pattern
-          mesh->hRefine(cellIDs, refPatternForRefType(refType, cellTopo), repartitionAndRebuild);
+          mesh->hRefine(cellIDs, RefinementHistory::refPatternForRefType(refType, cellTopo), repartitionAndRebuild);
       }
     }
     if (numPartitions > 0) {
@@ -254,13 +254,13 @@ MeshPtr MeshFactory::quadMesh(Teuchos::ParameterList &parameters) {
   
   int numElements = divideIntoTriangles ? horizontalElements * verticalElements * 2 : horizontalElements * verticalElements;
   
-  CellTopoPtrLegacy topo;
+  CellTopoPtr topo;
   if (divideIntoTriangles) {
-    topo = Teuchos::rcp( new shards::CellTopology(shards::getCellTopologyData<shards::Triangle<3> >() ));
+    topo = Camellia::CellTopology::triangle();
   } else {
-    topo = Teuchos::rcp( new shards::CellTopology(shards::getCellTopologyData<shards::Quadrilateral<4> >() ));
+    topo = Camellia::CellTopology::quad();
   }
-  vector< CellTopoPtrLegacy > cellTopos(numElements, topo);
+  vector< CellTopoPtr > cellTopos(numElements, topo);
   
   FieldContainer<double> quadBoundaryPoints(4,2);
   quadBoundaryPoints(0,0) = x0;
@@ -446,8 +446,8 @@ MeshPtr MeshFactory::intervalMesh(BilinearFormPtr bf, double xLeft, double xRigh
       elementVertices[i] = oneElement;
     }
   }
-  CellTopoPtrLegacy topo = Teuchos::rcp( new shards::CellTopology(shards::getCellTopologyData<shards::Line<2> >() ));
-  vector< CellTopoPtrLegacy > cellTopos(numElements, topo);
+  CellTopoPtr topo = Camellia::CellTopology::line();
+  vector< CellTopoPtr > cellTopos(numElements, topo);
   MeshGeometryPtr geometry = Teuchos::rcp( new MeshGeometry(vertices, elementVertices, cellTopos));
   
   MeshTopologyPtr meshTopology = Teuchos::rcp( new MeshTopology(geometry) );
@@ -486,13 +486,13 @@ MeshPtr MeshFactory::rectilinearMesh(BilinearFormPtr bf, vector<double> dimensio
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "For now, only spaceDim 1,2,3 are is supported by this MeshFactory method.");
   }
   
-  CellTopoPtrLegacy topo;
+  CellTopoPtr topo;
   if (spaceDim==1) {
-    topo = Teuchos::rcp( new shards::CellTopology(shards::getCellTopologyData<shards::Line<2> >() ));
+    topo = Camellia::CellTopology::line();
   } else if (spaceDim==2) {
-    topo = Teuchos::rcp( new shards::CellTopology(shards::getCellTopologyData<shards::Quadrilateral<4> >() ));
+    topo = Camellia::CellTopology::quad();
   } else if (spaceDim==3) {
-    topo = Teuchos::rcp( new shards::CellTopology(shards::getCellTopologyData<shards::Hexahedron<8> >() ));
+    topo = Camellia::CellTopology::hexahedron();
   } else {
     cout << "Unsupported spatial dimension.\n";
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unsupported spatial dimension");
@@ -505,7 +505,7 @@ MeshPtr MeshFactory::rectilinearMesh(BilinearFormPtr bf, vector<double> dimensio
     numElements *= elementCounts[d];
     elemLinearMeasures[d] = dimensions[d] / elementCounts[d];
   }
-  vector< CellTopoPtrLegacy > cellTopos(numElements, topo);
+  vector< CellTopoPtr > cellTopos(numElements, topo);
     
   map< vector<int>, unsigned> vertexLookup;
   vector< vector<double> > vertices;

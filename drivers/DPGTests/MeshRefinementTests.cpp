@@ -1053,8 +1053,8 @@ bool MeshRefinementTests::testTraceTermProjection() {
   
   // do a uniform refinement, then check that psi_n_soln and phi_hat_soln match the exact
   CellPtr sampleCell = mesh->getTopology()->getCell(0);
-  CellTopoPtrLegacy cellTopo = sampleCell->topology();
-  RefinementPatternPtr refPattern = RefinementPattern::regularRefinementPattern(cellTopo->getBaseKey());
+  CellTopoPtr cellTopo = sampleCell->topology();
+  RefinementPatternPtr refPattern = RefinementPattern::regularRefinementPattern(cellTopo->getKey());
   
   mesh->registerSolution(solution); // this way, solution will get the memo to project
   mesh->hRefine(mesh->getActiveCellIDs(), refPattern);

@@ -18,6 +18,8 @@
 #include "GnuPlotUtil.h"
 #include "ParametricSurface.h"
 
+#include "CamelliaCellTools.h"
+
 #include "BasisCache.h"
 
 typedef Teuchos::RCP< const FieldContainer<double> > constFCPtr;
@@ -27,11 +29,9 @@ using namespace Camellia;
 // TODO: move all the stuff to do with transfinite interpolation into ParametricSurface.cpp
 
 VectorBasisPtr basisForTransformation(ElementTypePtr cellType) {
-  unsigned int cellTopoKey = cellType->cellTopoPtr->getKey();
-  
   int polyOrder = max(cellType->trialOrderPtr->maxBasisDegree(), cellType->testOrderPtr->maxBasisDegree());
   
-  BasisPtr basis = BasisFactory::basisFactory()->getBasis(polyOrder, cellTopoKey, IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HGRAD);
+  BasisPtr basis = BasisFactory::basisFactory()->getBasis(polyOrder, cellType->cellTopoPtr, IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HGRAD);
   VectorBasisPtr vectorBasis = Teuchos::rcp( (VectorizedBasis<> *)basis.get(),false); // dynamic cast would be better
   return vectorBasis;
 }
@@ -274,16 +274,19 @@ bool MeshTransformationFunction::mapRefCellPointsUsingExactGeometry(FieldContain
 //  
 //  cout << "cellPoints prior to mapRefCellPointsUsingExactGeometry():\n" << cellPoints;
   
-  Teuchos::RCP< shards::CellTopology > cellTopo = _mesh->getElement(cellID)->elementType()->cellTopoPtr;
-  if (cellTopo->getKey() == shards::Quadrilateral<4>::key) {
+  CellTopoPtr cellTopo = _mesh->getElement(cellID)->elementType()->cellTopoPtr;
+  if (cellTopo->getTensorialDegree() > 0) {
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "mapRefCellPointsUsingExactGeometry does not support tensorial degree > 0.");
+  }
+  if (cellTopo->getKey().first == shards::Quadrilateral<4>::key) {
     int numPoints = refCellPoints.dimension(0);
     int spaceDim = refCellPoints.dimension(1);
     TEUCHOS_TEST_FOR_EXCEPTION(spaceDim != 2, std::invalid_argument, "points must be in 2D for the quad!");
     FieldContainer<double> parametricPoints(numPoints,spaceDim); // map to (t1,t2) space
     int whichCell = 0;
-    CellTools<double>::mapToPhysicalFrame(parametricPoints,refCellPoints,
+    CamelliaCellTools::mapToPhysicalFrame(parametricPoints,refCellPoints,
                                           ParametricSurface::parametricQuadNodes(),
-                                          *cellTopo,whichCell);
+                                          cellTopo,whichCell);
     
 //    cout << "parametricPoints in mapRefCellPointsUsingExactGeometry():\n" << parametricPoints;
 

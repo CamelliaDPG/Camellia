@@ -16,6 +16,10 @@
 
 #include "GlobalDofAssignment.h"
 
+#include "CellTopology.h"
+
+using namespace Camellia;
+
 void MeshTopology::init(unsigned spaceDim) {
   RefinementPattern::initializeAnisotropicRelationships(); // not sure this is the optimal place for this call
   
@@ -28,7 +32,7 @@ void MeshTopology::init(unsigned spaceDim) {
   _parentEntities = vector< map< unsigned, vector< pair<unsigned, unsigned> > > >(_spaceDim); // map to possible parents
   _generalizedParentEntities = vector< map<unsigned, pair<unsigned,unsigned> > >(_spaceDim);
   _childEntities = vector< map< unsigned, vector< pair<RefinementPatternPtr, vector<unsigned> > > > >(_spaceDim);
-  _entityCellTopologyKeys = vector< vector< unsigned > >(_spaceDim);
+  _entityCellTopologyKeys = vector< vector< CellTopologyKey > >(_spaceDim);
   
   _gda = NULL;
 }
@@ -62,7 +66,7 @@ MeshTopology::MeshTopology(MeshGeometryPtr meshGeometry, vector<PeriodicBCPtr> p
   int numElements = meshGeometry->cellTopos().size();
   
   for (int i=0; i<numElements; i++) {
-    CellTopoPtrLegacy cellTopo = meshGeometry->cellTopos()[i];
+    CellTopoPtr cellTopo = meshGeometry->cellTopos()[i];
     vector< unsigned > cellVerticesInMeshGeometry = meshGeometry->elementVertices()[i];
     vector<unsigned> cellVertices;
     for (int j=0; j<cellVerticesInMeshGeometry.size(); j++) {
@@ -243,7 +247,7 @@ map<string, long long> MeshTopology::approximateMemoryCosts() {
   variableCost["_childEntities"] += MAP_OVERHEAD * (_childEntities.capacity() - _childEntities.size());
   
   variableCost["_entityCellTopologyKeys"] = VECTOR_OVERHEAD; // _entityCellTopologyKeys vector
-  for (vector< vector< IndexType > >::iterator entryIt = _entityCellTopologyKeys.begin(); entryIt != _entityCellTopologyKeys.end(); entryIt++) {
+  for (vector< vector< CellTopologyKey > >::iterator entryIt = _entityCellTopologyKeys.begin(); entryIt != _entityCellTopologyKeys.end(); entryIt++) {
     variableCost["_entityCellTopologyKeys"] += approximateVectorSizeLLVM(*entryIt);
   }
   variableCost["_entityCellTopologyKeys"] += VECTOR_OVERHEAD * (_entityCellTopologyKeys.capacity() - _entityCellTopologyKeys.size());
@@ -277,13 +281,23 @@ long long MeshTopology::approximateMemoryFootprint() {
   return memSize;
 }
 
-CellPtr MeshTopology::addCell(CellTopoPtrLegacy cellTopo, const vector<vector<double> > &cellVertices) {
+CellPtr MeshTopology::addCell(CellTopoPtr cellTopo, const vector<vector<double> > &cellVertices) {
   vector<unsigned> vertexIndices = getVertexIndices(cellVertices);
   unsigned cellIndex = addCell(cellTopo, vertexIndices);
   return _cells[cellIndex];
 }
 
-unsigned MeshTopology::addCell(CellTopoPtrLegacy cellTopo, const vector<unsigned> &cellVertices, unsigned parentCellIndex) {
+CellPtr MeshTopology::addCell(CellTopoPtrLegacy shardsTopo, const vector<vector<double> > &cellVertices) {
+  CellTopoPtr cellTopo = CellTopology::cellTopology(*shardsTopo);
+  return addCell(cellTopo, cellVertices);
+}
+
+unsigned MeshTopology::addCell(CellTopoPtrLegacy shardsTopo, const vector<unsigned> &cellVertices, unsigned parentCellIndex) {
+  CellTopoPtr cellTopo = CellTopology::cellTopology(*shardsTopo);
+  return addCell(cellTopo, cellVertices, parentCellIndex);
+}
+
+unsigned MeshTopology::addCell(CellTopoPtr cellTopo, const vector<unsigned> &cellVertices, unsigned parentCellIndex) {
   vector< vector< unsigned > > cellEntityPermutations;
   unsigned cellIndex = _cells.size();
   
@@ -307,7 +321,7 @@ unsigned MeshTopology::addCell(CellTopoPtrLegacy cellTopo, const vector<unsigned
         nodes.push_back(cellVertices[j]);
       }
       
-      entityIndex = addEntity(cellTopo->getCellTopologyData(d, j), nodes, entityPermutation);
+      entityIndex = addEntity(cellTopo->getSubcell(d, j), nodes, entityPermutation);
       cellEntityIndices[d][j] = entityIndex;
       
       // if d==0, then we don't need permutation info
@@ -342,7 +356,7 @@ unsigned MeshTopology::addCell(CellTopoPtrLegacy cellTopo, const vector<unsigned
   
   // set neighbors:
   unsigned sideDim = _spaceDim - 1;
-  unsigned sideCount = CamelliaCellTools::getSideCount(*cellTopo);
+  unsigned sideCount = cellTopo->getSideCount();
   for (int sideOrdinal=0; sideOrdinal<sideCount; sideOrdinal++) {
     unsigned sideEntityIndex = cell->entityIndex(sideDim, sideOrdinal);
     addCellForSide(cellIndex,sideOrdinal,sideEntityIndex);
@@ -516,14 +530,14 @@ void MeshTopology::addEdgeCurve(pair<unsigned,unsigned> edge, ParametricCurvePtr
   _cellIDsWithCurves.insert(cellID);
 }
 
-unsigned MeshTopology::addEntity(const shards::CellTopology &entityTopo, const vector<unsigned> &entityVertices, unsigned &entityPermutation) {
+unsigned MeshTopology::addEntity(CellTopoPtr entityTopo, const vector<unsigned> &entityVertices, unsigned &entityPermutation) {
   set< unsigned > nodeSet;
   nodeSet.insert(entityVertices.begin(),entityVertices.end());
   
   if (nodeSet.size() != entityVertices.size()) {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Entities may not have repeated vertices");
   }
-  unsigned d  = entityTopo.getDimension();
+  unsigned d  = entityTopo->getDimension();
   unsigned entityIndex = getEntityIndex(d, nodeSet);
   
   vector<unsigned> sortedVertices(nodeSet.begin(),nodeSet.end());
@@ -535,10 +549,10 @@ unsigned MeshTopology::addEntity(const shards::CellTopology &entityTopo, const v
     _knownEntities[d].insert(make_pair(sortedVertices, entityIndex));
     if (d != 0) _canonicalEntityOrdering[d].push_back(entityVertices);
     entityPermutation = 0;
-    if (_knownTopologies.find(entityTopo.getKey()) == _knownTopologies.end()) {
-      _knownTopologies[entityTopo.getKey()] = entityTopo;
+    if (_knownTopologies.find(entityTopo->getKey()) == _knownTopologies.end()) {
+      _knownTopologies[entityTopo->getKey()] = entityTopo;
     }
-    _entityCellTopologyKeys[d].push_back(entityTopo.getKey());
+    _entityCellTopologyKeys[d].push_back(entityTopo->getKey());
   } else {
     // existing entity
     vector<IndexType> canonicalVertices = getCanonicalEntityNodesViaPeriodicBCs(d, entityVertices);
@@ -550,7 +564,7 @@ unsigned MeshTopology::addEntity(const shards::CellTopology &entityTopo, const v
   return entityIndex;
 }
 
-void MeshTopology::addChildren(CellPtr parentCell, const vector< CellTopoPtrLegacy > &childTopos, const vector< vector<unsigned> > &childVertices) {
+void MeshTopology::addChildren(CellPtr parentCell, const vector< CellTopoPtr > &childTopos, const vector< vector<unsigned> > &childVertices) {
   int numChildren = childTopos.size();
   TEUCHOS_TEST_FOR_EXCEPTION(numChildren != childVertices.size(), std::invalid_argument, "childTopos and childVertices must be the same size");
   vector< CellPtr > children;
@@ -681,9 +695,14 @@ bool MeshTopology::cellContainsPoint(GlobalIndexType cellID, const vector<double
   MeshTopologyPtr thisPtr = Teuchos::rcp(this,false);
   CamelliaCellTools::mapToReferenceFrame(refPoints, physicalPoints, thisPtr, cellID, cubatureDegree);
   
-  CellTopoPtrLegacy cellTopo = getCell(cellID)->topology();
+  CellTopoPtr cellTopo = getCell(cellID)->topology();
   
-  int result = CellTools<double>::checkPointInclusion(&refPoints[0], _spaceDim, *cellTopo);
+  if (cellTopo->getTensorialDegree() > 0) {
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "cellContainsPoint doesn't yet support tensorial degree > 0");
+    // TODO: implement CamelliaCellTools::checkPointInclusion
+  }
+  
+  int result = CellTools<double>::checkPointInclusion(&refPoints[0], _spaceDim, cellTopo->getShardsTopology());
   return result == 1;
 }
 
@@ -896,7 +915,7 @@ pair<IndexType, unsigned> MeshTopology::getSecondCellForSide(IndexType sideEntit
 
 void MeshTopology::deactivateCell(CellPtr cell) {
   //  cout << "deactivating cell " << cell->cellIndex() << endl;
-  CellTopoPtrLegacy cellTopo = cell->topology();
+  CellTopoPtr cellTopo = cell->topology();
   for (int d=0; d<_spaceDim; d++) { // start with vertices, and go up to sides
     int entityCount = cellTopo->getSubcellCount(d);
     for (int j=0; j<entityCount; j++) {
@@ -1094,8 +1113,8 @@ unsigned MeshTopology::getEntityParent(unsigned d, unsigned entityIndex, unsigne
   return _parentEntities[d][entityIndex][parentOrdinal].first;
 }
 
-const shards::CellTopology &MeshTopology::getEntityTopology(unsigned d, IndexType entityIndex) {
-  unsigned cellKey = _entityCellTopologyKeys[d][entityIndex];
+CellTopoPtr MeshTopology::getEntityTopology(unsigned d, IndexType entityIndex) {
+  CellTopologyKey cellKey = _entityCellTopologyKeys[d][entityIndex];
   return _knownTopologies[cellKey];
 }
 
@@ -1135,7 +1154,7 @@ unsigned MeshTopology::getSubEntityCount(unsigned int d, unsigned int entityInde
       return 0;
     }
   }
-  shards::CellTopology *entityTopo = &_knownTopologies[_entityCellTopologyKeys[d][entityIndex]];
+  CellTopoPtr entityTopo = _knownTopologies[_entityCellTopologyKeys[d][entityIndex]];
   return entityTopo->getSubcellCount(subEntityDim);
 }
 
@@ -1148,7 +1167,7 @@ unsigned MeshTopology::getSubEntityIndex(unsigned int d, unsigned int entityInde
     }
   }
   
-  shards::CellTopology *entityTopo = &_knownTopologies[_entityCellTopologyKeys[d][entityIndex]];
+  CellTopoPtr entityTopo = _knownTopologies[_entityCellTopologyKeys[d][entityIndex]];
   set<unsigned> subEntityNodes;
   unsigned subEntityNodeCount = (subEntityDim > 0) ? entityTopo->getNodeCount(subEntityDim, subEntityOrdinal) : 1; // vertices are by definition just one node
   vector<unsigned> entityNodes = getEntityVertexIndices(d, entityIndex);
@@ -1233,11 +1252,11 @@ unsigned MeshTopology::getVertexIndexAdding(const vector<double> &vertex, double
     vector<IndexType> entityVertices;
     entityVertices.push_back(vertexIndex);
     //_canonicalEntityOrdering[vertexDim][vertexIndex] = entityVertices;
-    shards::CellTopology nodeTopo = shards::getCellTopologyData< shards::Node >();
-    if (_knownTopologies.find(nodeTopo.getKey()) == _knownTopologies.end()) {
-      _knownTopologies[nodeTopo.getKey()] = nodeTopo;
+    CellTopoPtr nodeTopo = CellTopology::point();
+    if (_knownTopologies.find(nodeTopo->getKey()) == _knownTopologies.end()) {
+      _knownTopologies[nodeTopo->getKey()] = nodeTopo;
     }
-    _entityCellTopologyKeys[vertexDim].push_back(nodeTopo.getKey());
+    _entityCellTopologyKeys[vertexDim].push_back(nodeTopo->getKey());
   }
   
   set< pair<int,int> > matchingPeriodicBCs;
@@ -1634,16 +1653,16 @@ unsigned MeshTopology::getSubEntityPermutation(unsigned d, IndexType entityIndex
   }
   
   vector<unsigned> entityNodes = getEntityVertexIndices(d,entityIndex);
-  shards::CellTopology topo = getEntityTopology(d, entityIndex);
+  CellTopoPtr topo = getEntityTopology(d, entityIndex);
   vector<unsigned> subEntityNodes;
-  int subEntityNodeCount = topo.getNodeCount(subEntityDim, subEntityOrdinal);
+  int subEntityNodeCount = topo->getNodeCount(subEntityDim, subEntityOrdinal);
   for (int seNodeOrdinal = 0; seNodeOrdinal<subEntityNodeCount; seNodeOrdinal++) {
-    unsigned entityNodeOrdinal = topo.getNodeMap(subEntityDim, subEntityOrdinal, seNodeOrdinal);
+    unsigned entityNodeOrdinal = topo->getNodeMap(subEntityDim, subEntityOrdinal, seNodeOrdinal);
     subEntityNodes.push_back(entityNodes[entityNodeOrdinal]);
   }
   subEntityNodes = getCanonicalEntityNodesViaPeriodicBCs(subEntityDim, subEntityNodes);
   unsigned subEntityIndex = getSubEntityIndex(d, entityIndex, subEntityDim, subEntityOrdinal);
-  shards::CellTopology subEntityTopo = getEntityTopology(subEntityDim, subEntityIndex);
+  CellTopoPtr subEntityTopo = getEntityTopology(subEntityDim, subEntityIndex);
   return CamelliaCellTools::permutationMatchingOrder(subEntityTopo, _canonicalEntityOrdering[subEntityDim][subEntityOrdinal], subEntityNodes);
 }
 
@@ -1894,7 +1913,7 @@ void MeshTopology::refineCell(unsigned cellIndex, RefinementPatternPtr refPatter
   
   int numChildren = childVertices.size();
   // this is where we assume all the children have same topology as parent:
-  vector< CellTopoPtrLegacy > childTopos(numChildren,cell->topology());
+  vector< CellTopoPtr > childTopos(numChildren,cell->topology());
   
   refineCellEntities(cell, refPattern);
   cell->setRefinementPattern(refPattern);
@@ -1963,7 +1982,7 @@ void MeshTopology::refineCellEntities(CellPtr cell, RefinementPatternPtr refPatt
   
   // TODO generalize the below code to apply recipes instead of just the refPattern...
   
-  CellTopoPtrLegacy cellTopo = cell->topology();
+  CellTopoPtr cellTopo = cell->topology();
   for (unsigned d=1; d<_spaceDim; d++) {
     unsigned subcellCount = cellTopo->getSubcellCount(d);
     for (unsigned subcord = 0; subcord < subcellCount; subcord++) {
@@ -1989,11 +2008,11 @@ void MeshTopology::refineCellEntities(CellPtr cell, RefinementPatternPtr refPatt
           }
           //          cout << "nodesOnSubcell:\n" << nodesOnSubcell;
           FieldContainer<double> nodesOnRefCell(nodeCount,_spaceDim);
-          CellTools<double>::mapToReferenceSubcell(nodesOnRefCell, nodesOnSubcell, d, subcord, *cellTopo);
+          CamelliaCellTools::mapToReferenceSubcell(nodesOnRefCell, nodesOnSubcell, d, subcord, cellTopo);
           //          cout << "nodesOnRefCell:\n" << nodesOnRefCell;
           FieldContainer<double> physicalNodes(1,nodeCount,_spaceDim);
           // map to physical space:
-          CellTools<double>::mapToPhysicalFrame(physicalNodes, nodesOnRefCell, cellNodes, *cellTopo);
+          CamelliaCellTools::mapToPhysicalFrame(physicalNodes, nodesOnRefCell, cellNodes, cellTopo);
           //          cout << "physicalNodes:\n" << physicalNodes;
           
           
@@ -2018,7 +2037,7 @@ void MeshTopology::refineCellEntities(CellPtr cell, RefinementPatternPtr refPatt
           vector<unsigned> childEntityVertices = getVertexIndices(physicalNodes); // key: index in physicalNodes; value: index in _vertices
           
           unsigned entityPermutation;
-          shards::CellTopology childTopo = cellTopo->getCellTopologyData(d, subcord);
+          CellTopoPtr childTopo = cellTopo->getSubcell(d, subcord);
           unsigned childEntityIndex = addEntity(childTopo, childEntityVertices, entityPermutation);
           //          cout << "for d=" << d << ", entity index " << childEntityIndex << " is child of " << parentIndex << endl;
           _parentEntities[d][childEntityIndex] = vector< pair<unsigned,unsigned> >(1, make_pair(parentIndex,0)); // TODO: this is where we want to fill in a proper list of possible parents once we work through recipes
@@ -2056,7 +2075,7 @@ void MeshTopology::determineGeneralizedParentsForRefinement(CellPtr cell, Refine
   
   // TODO generalize the below code to apply recipes instead of just the refPattern...
   
-  CellTopoPtrLegacy cellTopo = cell->topology();
+  CellTopoPtr cellTopo = cell->topology();
   for (unsigned d=1; d<_spaceDim; d++) {
     unsigned subcellCount = cellTopo->getSubcellCount(d);
     for (unsigned subcord = 0; subcord < subcellCount; subcord++) {

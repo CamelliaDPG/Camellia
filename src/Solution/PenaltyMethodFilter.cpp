@@ -28,7 +28,7 @@ void PenaltyMethodFilter::filter(FieldContainer<double> &localStiffnessMatrix, F
   
   DofOrderingPtr trialOrderPtr = elemTypePtr->trialOrderPtr;
   
-  unsigned numSides = CamelliaCellTools::getSideCount( *elemTypePtr->cellTopoPtr );
+  unsigned numSides = elemTypePtr->cellTopoPtr->getSideCount();
   // only allows for L2 inner products at the moment. 
   IntrepidExtendedTypes::EOperatorExtended trialOperator =  IntrepidExtendedTypes::OP_VALUE;
 	

@@ -292,7 +292,6 @@ void RieszRep::computeRepresentationValues(FieldContainer<double> &values, int t
   ElementPtr elem = _mesh->getElement(cellIDs[0]);
   ElementTypePtr elemTypePtr = elem->elementType();   
   DofOrderingPtr testOrderingPtr = elemTypePtr->testOrderPtr;
-  CellTopoPtrLegacy cellTopoPtr = elemTypePtr->cellTopoPtr;
   int numTestDofsForVarID = testOrderingPtr->getBasisCardinality(testID, 0);
   BasisPtr testBasis = testOrderingPtr->getBasis(testID);
   

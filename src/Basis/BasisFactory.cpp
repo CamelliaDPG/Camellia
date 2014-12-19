@@ -319,6 +319,32 @@ BasisPtr BasisFactory::getBasis( int polyOrder, unsigned cellTopoKey, IntrepidEx
   return basis;
 }
 
+BasisPtr BasisFactory::getConformingBasis( int polyOrder, CellTopoPtr cellTopo, IntrepidExtendedTypes::EFunctionSpaceExtended fs,
+                                          int temporalPolyOrder, FSE functionSpaceForTemporalTopology) {
+  // this method is fairly redundant with getBasis(), but it provides the chance to offer different bases when a conforming basis is
+  // required.
+  
+  BasisPtr basisForShardsTopo = getConformingBasis(polyOrder, cellTopo->getShardsTopology().getKey(), fs);
+  
+  if (cellTopo->getTensorialDegree() == 0) return basisForShardsTopo;
+  
+  // if we get here, have tensorial degree exactly 1.
+  
+  unsigned lineKey = shards::Line<2>::key;
+  pair< pair<Camellia::Basis<>*, int>, IntrepidExtendedTypes::EFunctionSpaceExtended> key = make_pair( make_pair(basisForShardsTopo.get(), temporalPolyOrder), functionSpaceForTemporalTopology );
+  
+  if (_conformingSpaceTimeBases.find(key) != _conformingSpaceTimeBases.end()) return _conformingSpaceTimeBases[key];
+  
+  BasisPtr temporalBasis = getBasis(temporalPolyOrder + 1, lineKey, functionSpaceForTemporalTopology);
+  
+  typedef Camellia::TensorBasis<double, FieldContainer<double> > TensorBasis;
+  Teuchos::RCP<TensorBasis> tensorBasis = Teuchos::rcp( new TensorBasis(basisForShardsTopo, temporalBasis) );
+  
+  _conformingSpaceTimeBases[key] = tensorBasis;
+  
+  return tensorBasis;
+}
+
 BasisPtr BasisFactory::getConformingBasis( int polyOrder, unsigned cellTopoKey, IntrepidExtendedTypes::EFunctionSpaceExtended fs ) {
   // this method is fairly redundant with getBasis(), but it provides the chance to offer different bases when a conforming basis is
   // required.

@@ -53,7 +53,7 @@ string stringForRefinementType(RefinementType refType) {
   }
 }
 
-RefinementPatternPtr refPatternForRefType(RefinementType refType, CellTopoPtrLegacy cellTopo) {
+RefinementPatternPtr refPatternForRefTypeLegacy(RefinementType refType, CellTopoPtrLegacy cellTopo) {
   if (refType==H_REFINEMENT) return RefinementPattern::regularRefinementPattern(cellTopo->getKey());
   else if (refType==NULL_REFINEMENT) return RefinementPattern::noRefinementPattern(cellTopo);
   else if ((refType==H_X_REFINEMENT) && (cellTopo->getKey() == shards::Quadrilateral<4>::key)) {
@@ -62,6 +62,23 @@ RefinementPatternPtr refPatternForRefType(RefinementType refType, CellTopoPtrLeg
     return RefinementPattern::yAnisotropicRefinementPatternQuad();
   } else {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unhandled refinement type");
+  }
+}
+
+RefinementPatternPtr RefinementHistory::refPatternForRefType(RefinementType refType, CellTopoPtr cellTopo) {
+  if (refType==H_REFINEMENT) return RefinementPattern::regularRefinementPattern(cellTopo);
+  else if (refType==NULL_REFINEMENT) return RefinementPattern::noRefinementPattern(cellTopo);
+  else {
+    if (cellTopo->getTensorialDegree() > 0) {
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "tensorial degree > 0 not handled for anisotropic refinements");
+    }
+    if ((refType==H_X_REFINEMENT) && (cellTopo->getKey().first == shards::Quadrilateral<4>::key)) {
+      return RefinementPattern::xAnisotropicRefinementPatternQuad();
+    } else if ((refType==H_Y_REFINEMENT) && (cellTopo->getKey().second == shards::Quadrilateral<4>::key)) {
+      return RefinementPattern::yAnisotropicRefinementPatternQuad();
+    } else {
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unhandled refinement type");
+    }
   }
 }
 
@@ -136,7 +153,7 @@ void RefinementHistory::playback(MeshPtr mesh) {
       }
     }
     GlobalIndexType sampleCellID = *(cellIDs.begin());
-    CellTopoPtrLegacy cellTopo = mesh->getElementType(sampleCellID)->cellTopoPtr;
+    CellTopoPtr cellTopo = mesh->getElementType(sampleCellID)->cellTopoPtr;
     
     switch (refType) {
       case P_REFINEMENT:

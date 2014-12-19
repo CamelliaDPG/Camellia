@@ -265,7 +265,7 @@ void Mesh::enforceOneIrregularity() {
     int spaceDim = _meshTopology->getSpaceDim();
     if (spaceDim == 1) return;
     
-    map< unsigned, set<GlobalIndexType> > irregularCellIDs; // key is CellTopology key
+    map< Camellia::CellTopologyKey, set<GlobalIndexType> > irregularCellIDs; // key is CellTopology key
     set< GlobalIndexType > activeCellIDs = _meshTopology->getActiveCellIndices();
     set< GlobalIndexType >::iterator cellIDIt;
     
@@ -274,7 +274,7 @@ void Mesh::enforceOneIrregularity() {
       
       CellPtr cell = _meshTopology->getCell(cellID);
       bool isIrregular = false;
-      int sideCount = CamelliaCellTools::getSideCount(*cell->topology());
+      int sideCount = cell->getSideCount();
       for (int sideOrdinal=0; sideOrdinal < sideCount; sideOrdinal++) {
         pair<GlobalIndexType, unsigned> neighborInfo = cell->getNeighborInfo(sideOrdinal);
         unsigned mySideIndexInNeighbor = neighborInfo.second;
@@ -297,9 +297,9 @@ void Mesh::enforceOneIrregularity() {
       }
     }
     if (irregularCellIDs.size() > 0) {
-      for (map< unsigned, set<GlobalIndexType> >::iterator mapIt = irregularCellIDs.begin();
+      for (map< Camellia::CellTopologyKey, set<GlobalIndexType> >::iterator mapIt = irregularCellIDs.begin();
            mapIt != irregularCellIDs.end(); mapIt++) {
-        unsigned int cellKey = mapIt->first;
+        Camellia::CellTopologyKey cellKey = mapIt->first;
         hRefine(mapIt->second, RefinementPattern::regularRefinementPattern(cellKey));
       }
       irregularCellIDs.clear();
@@ -318,7 +318,7 @@ FieldContainer<double> Mesh::cellSideParities( ElementTypePtr elemTypePtr ) {
   vector<GlobalIndexType> cellIDs = _gda->cellIDsOfElementType(rank, elemTypePtr);
   
   int numCells = cellIDs.size();
-  int numSides = CamelliaCellTools::getSideCount(*elemTypePtr->cellTopoPtr);
+  int numSides = elemTypePtr->cellTopoPtr->getSideCount();
   
   FieldContainer<double> sideParities(numCells, numSides);
   for (int i=0; i<numCells; i++) {
@@ -865,7 +865,7 @@ int Mesh::condensedRowSizeUpperBound() {
     vector<ElementTypePtr> elementTypes = _gda->elementTypes(partitionNumber);
     for (elemTypeIt = elementTypes.begin(); elemTypeIt != elementTypes.end(); elemTypeIt++) {
       ElementTypePtr elemTypePtr = *elemTypeIt;
-      int numSides = CamelliaCellTools::getSideCount(*elemTypePtr->cellTopoPtr);
+      int numSides = elemTypePtr->cellTopoPtr->getSideCount();
       vector< int > fluxIDs = _bilinearForm->trialBoundaryIDs();
       vector< int >::iterator fluxIDIt;
       int numFluxDofs = 0;
@@ -898,7 +898,7 @@ int Mesh::rowSizeUpperBound() {
     vector<ElementTypePtr> elementTypes = _gda->elementTypes(partitionNumber);
     for (elemTypeIt = elementTypes.begin(); elemTypeIt != elementTypes.end(); elemTypeIt++) {
       ElementTypePtr elemTypePtr = *elemTypeIt;
-      int numSides = CamelliaCellTools::getSideCount(*elemTypePtr->cellTopoPtr);
+      int numSides = elemTypePtr->cellTopoPtr->getSideCount();
       vector< int > fluxIDs = _bilinearForm->trialBoundaryIDs();
       vector< int >::iterator fluxIDIt;
       int numFluxDofs = 0;
@@ -1103,8 +1103,8 @@ double Mesh::getCellMeasure(GlobalIndexType cellID)
   FieldContainer<double> physicalCellNodes = physicalCellNodesForCell(cellID);
   ElementPtr elem = getElement(cellID);
   Teuchos::RCP< ElementType > elemType = elem->elementType();
-  Teuchos::RCP< shards::CellTopology > cellTopo = elemType->cellTopoPtr;  
-  BasisCache basisCache(physicalCellNodes, *cellTopo, 1);
+  CellTopoPtr cellTopo = elemType->cellTopoPtr;
+  BasisCache basisCache(physicalCellNodes, cellTopo, 1);
   return basisCache.getCellMeasures()(0);
 }
 
@@ -1158,7 +1158,7 @@ void Mesh::saveToHDF5(string filename)
     set<IndexType> rootCellIndicesSet = getTopology()->getRootCellIndices();
     vector<IndexType> rootCellIndices(rootCellIndicesSet.begin(), rootCellIndicesSet.end());
     vector<IndexType> rootVertexIndices;
-    vector<unsigned> rootKeys;
+    vector<Camellia::CellTopologyKey> rootKeys;
     vector<double> rootVertices;
     for (int i=0; i < rootCellIndices.size(); i++)
     {

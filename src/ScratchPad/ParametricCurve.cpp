@@ -657,10 +657,13 @@ FunctionPtr ParametricCurve::parametricGradientWrapper(FunctionPtr parametricGra
   return Teuchos::rcp( new ParametricGradientWrapper(parametricGradient, convertBasisCacheToParametricSpace) );
 }
 
-std::vector< ParametricCurvePtr > ParametricCurve::referenceCellEdges(unsigned cellTopoKey) {
-  if (cellTopoKey == shards::Quadrilateral<4>::key) {
+std::vector< ParametricCurvePtr > ParametricCurve::referenceCellEdges(Camellia::CellTopologyKey cellTopoKey) {
+  if (cellTopoKey.second != 0) {
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "tensorial degree > 0 not supported by ParametricCurve::referenceCellEdges");
+  }
+  if (cellTopoKey.first == shards::Quadrilateral<4>::key) {
     return referenceQuadEdges();
-  } else if (cellTopoKey == shards::Triangle<3>::key) {
+  } else if (cellTopoKey.first == shards::Triangle<3>::key) {
     return referenceTriangleEdges();
   } else {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "unhandled cellTopoKey");

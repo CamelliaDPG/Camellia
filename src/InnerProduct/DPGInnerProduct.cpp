@@ -37,7 +37,10 @@
 
 #include "SerialDenseWrapper.h"
 
+#include "CellTopology.h"
+
 using namespace IntrepidExtendedTypes;
+using namespace Camellia;
 
 DPGInnerProduct::DPGInnerProduct(Teuchos::RCP< BilinearForm > bfs) {
   _bilinearForm = bfs;
@@ -53,7 +56,7 @@ void DPGInnerProduct::applyInnerProductData(FieldContainer<double> &testValues1,
 void DPGInnerProduct::computeInnerProductMatrix(FieldContainer<double> &innerProduct,
                                                 Teuchos::RCP<DofOrdering> dofOrdering, shards::CellTopology &cellTopo,
                                                 FieldContainer<double>& physicalCellNodes) {
-  Teuchos::RCP<shards::CellTopology> cellTopoPtr = Teuchos::rcp( new shards::CellTopology(cellTopo.getCellTopologyData() ) );
+  CellTopoPtr cellTopoPtr = CellTopology::cellTopology(cellTopo);
   Teuchos::RCP<ElementType> elemTypePtr = Teuchos::rcp( new ElementType(dofOrdering,dofOrdering, cellTopoPtr) );
   Teuchos::RCP<Mesh> nullMeshPtr = Teuchos::rcp( (Mesh*) NULL );
   BasisCachePtr ipBasisCache = Teuchos::rcp(new BasisCache(elemTypePtr, nullMeshPtr,true));

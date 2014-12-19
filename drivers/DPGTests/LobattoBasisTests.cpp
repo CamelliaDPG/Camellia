@@ -415,7 +415,7 @@ bool LobattoBasisTests::testSimpleStiffnessMatrix() {
   FieldContainer<double> cellSideParities(numCells,numSides);
   cellSideParities.initialize(1.0);
   
-  Teuchos::RCP<shards::CellTopology> quad_4 = Teuchos::rcp( new shards::CellTopology(shards::getCellTopologyData<shards::Quadrilateral<4> >() ) );
+  CellTopoPtr quad_4 = Camellia::CellTopology::quad();
   Teuchos::RCP<ElementType> elemType = Teuchos::rcp( new ElementType(trialSpace, testSpace, quad_4));
   
   BasisCachePtr basisCache = Teuchos::rcp( new BasisCache(elemType) );

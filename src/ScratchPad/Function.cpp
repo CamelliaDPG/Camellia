@@ -595,7 +595,10 @@ double Function::integrate(Teuchos::RCP<Mesh> mesh, double tol, bool testVsTest)
     vector<CacheInfo> newSubCells;
     for (set<GlobalIndexType>::iterator setIt = subCellsToRefine.begin();setIt!=subCellsToRefine.end();setIt++){
       CacheInfo newCacheInfo = subCellsToCheck[*setIt];
-      unsigned cellTopoKey = newCacheInfo.elemType->cellTopoPtr->getKey();
+      if (newCacheInfo.elemType->cellTopoPtr->getTensorialDegree() > 0) {
+        TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "tensorial degree > 0 not supported here.");
+      }
+      unsigned cellTopoKey = newCacheInfo.elemType->cellTopoPtr->getKey().first;
       switch (cellTopoKey)
       {
         case shards::Quadrilateral<4>::key:
@@ -791,7 +794,7 @@ double Function::integrate(Teuchos::RCP<Mesh> mesh, int cubatureDegreeEnrichment
     FieldContainer<double> cellIntegrals(numCells);
     if ( this->boundaryValueOnly() ) {
       // sum the integral over the sides...
-      int numSides = CamelliaCellTools::getSideCount(*elemType->cellTopoPtr);
+      int numSides = elemType->cellTopoPtr->getSideCount();
 
       for (int i=0; i<numSides; i++) {
         this->integrate(cellIntegrals, basisCache->getSideBasisCache(i), true);
@@ -981,8 +984,8 @@ void Function::writeBoundaryValuesToMATLABFile(Teuchos::RCP<Mesh> mesh, const st
   for (elemTypeIt = elementTypes.begin(); elemTypeIt != elementTypes.end(); elemTypeIt++) {
     ElementTypePtr elemTypePtr = *(elemTypeIt);
     basisCache = Teuchos::rcp( new BasisCache(elemTypePtr, mesh, true) );
-    shards::CellTopology cellTopo = *(elemTypePtr->cellTopoPtr);
-    int numSides = CamelliaCellTools::getSideCount(cellTopo);
+    CellTopoPtr cellTopo = elemTypePtr->cellTopoPtr;
+    int numSides = cellTopo->getSideCount();
 
     FieldContainer<double> physicalCellNodes = mesh->physicalCellNodesGlobal(elemTypePtr);
     int numCells = physicalCellNodes.dimension(0);
@@ -1069,8 +1072,6 @@ void Function::writeValuesToMATLABFile(Teuchos::RCP<Mesh> mesh, const string &fi
     ElementTypePtr elemTypePtr = *(elemTypeIt);
     basisCache = Teuchos::rcp( new BasisCache(elemTypePtr, mesh) );
     basisCache->setRefCellPoints(refPoints);
-    shards::CellTopology cellTopo = *(elemTypePtr->cellTopoPtr);
-    Teuchos::RCP<shards::CellTopology> cellTopoPtr = elemTypePtr->cellTopoPtr;
 
     FieldContainer<double> physicalCellNodes = mesh->physicalCellNodesGlobal(elemTypePtr);
     int numCells = physicalCellNodes.dimension(0);

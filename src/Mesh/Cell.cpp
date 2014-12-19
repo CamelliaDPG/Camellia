@@ -64,14 +64,14 @@ vector< pair< GlobalIndexType, unsigned> > Cell::getDescendantsForSide(int sideI
   return descendantsForSide;
 }
 
-Cell::Cell(CellTopoPtrLegacy cellTopo, const vector<unsigned> &vertices, const vector< vector< unsigned > > &subcellPermutations,
+Cell::Cell(CellTopoPtr cellTopo, const vector<unsigned> &vertices, const vector< vector< unsigned > > &subcellPermutations,
      unsigned cellIndex, MeshTopology* meshTopo) {
   _cellTopo = cellTopo;
   _vertices = vertices;
   _subcellPermutations = subcellPermutations;
   _cellIndex = cellIndex;
   _meshTopo = meshTopo;
-  int sideCount = CamelliaCellTools::getSideCount(*_cellTopo);
+  int sideCount = cellTopo->getSideCount();
   _neighbors = vector< pair<GlobalIndexType, unsigned> >(sideCount,make_pair(-1,-1));
 }
 
@@ -394,7 +394,7 @@ CellPtr Cell::ancestralCellForSubcell(unsigned subcdim, unsigned subcord) {
 }
 
 vector<unsigned> Cell::boundarySides() {
-  int sideCount = CamelliaCellTools::getSideCount(*_cellTopo);
+  int sideCount = _cellTopo->getSideCount();
   vector<unsigned> sides;
   for (unsigned sideOrdinal=0; sideOrdinal < sideCount; sideOrdinal++) {
     if (_neighbors[sideOrdinal].first == -1) sides.push_back(sideOrdinal);
@@ -456,17 +456,17 @@ unsigned Cell::sideSubcellPermutation(unsigned int sideOrdinal, unsigned int sid
   if (sideSubcdim==0) return 0; // no permutations / identity permutation for vertices
   vector< IndexType > subcellVertexIndices; //
   unsigned sideDim = _cellTopo->getDimension() - 1;
-  shards::CellTopology sideTopo = _cellTopo->getCellTopologyData(sideDim, sideOrdinal);
-  unsigned subcellNodeCount = sideTopo.getNodeCount(sideSubcdim, sideSubcord);
+  CellTopoPtr sideTopo = _cellTopo->getSubcell(sideDim, sideOrdinal);
+  unsigned subcellNodeCount = sideTopo->getNodeCount(sideSubcdim, sideSubcord);
   for (int nodeOrdinal=0; nodeOrdinal<subcellNodeCount; nodeOrdinal++) {
-    unsigned nodeInSide = sideTopo.getNodeMap(sideSubcdim, sideSubcord, nodeOrdinal);
+    unsigned nodeInSide = sideTopo->getNodeMap(sideSubcdim, sideSubcord, nodeOrdinal);
     unsigned nodeInCell = _cellTopo->getNodeMap(sideDim, sideOrdinal, nodeInSide);
     subcellVertexIndices.push_back(_vertices[nodeInCell]);
   }
-  unsigned subcellOrdinalInCell = CamelliaCellTools::subcellOrdinalMap(*_cellTopo, sideDim, sideOrdinal, sideSubcdim, sideSubcord);
+  unsigned subcellOrdinalInCell = CamelliaCellTools::subcellOrdinalMap(_cellTopo, sideDim, sideOrdinal, sideSubcdim, sideSubcord);
   IndexType subcellEntityIndex = entityIndex(sideSubcdim, subcellOrdinalInCell);
   vector< IndexType > canonicalOrdering = _meshTopo->getEntityVertexIndices(sideSubcdim, subcellEntityIndex);
-  shards::CellTopology subEntityTopo = _meshTopo->getEntityTopology(sideSubcdim, subcellEntityIndex);
+  CellTopoPtr subEntityTopo = _meshTopo->getEntityTopology(sideSubcdim, subcellEntityIndex);
   subcellVertexIndices = _meshTopo->getCanonicalEntityNodesViaPeriodicBCs(sideSubcdim, subcellVertexIndices);
   
   return CamelliaCellTools::permutationMatchingOrder(subEntityTopo, canonicalOrdering, subcellVertexIndices);
@@ -485,7 +485,7 @@ unsigned Cell::subcellPermutation(unsigned d, unsigned scord) {
   return _subcellPermutations[d][scord];
 }
 
-CellTopoPtrLegacy Cell::topology() {
+CellTopoPtr Cell::topology() {
   return _cellTopo;
 }
 
@@ -496,7 +496,7 @@ CellPtr Cell::getNeighbor(unsigned sideOrdinal) {
 }
 
 pair<GlobalIndexType, unsigned> Cell::getNeighborInfo(unsigned sideOrdinal) {
-  int sideCount = CamelliaCellTools::getSideCount(*_cellTopo);
+  int sideCount = _cellTopo->getSideCount();
   if (sideOrdinal >= sideCount) {
     cout << "sideOrdinal " << sideOrdinal << " >= sideCount " << sideCount << endl;
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "sideOrdinal must be less than sideCount!");
@@ -520,7 +520,7 @@ void Cell::setNeighbor(unsigned sideOrdinal, GlobalIndexType neighborCellIndex, 
     cout << "ERROR: neighborCellIndex == _cellIndex.\n";
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "ERROR: neighborCellIndex == _cellIndex.\n");
   }
-  int sideCount = CamelliaCellTools::getSideCount(*_cellTopo);
+  int sideCount = _cellTopo->getSideCount();
   if (sideOrdinal >= sideCount) {
     cout << "sideOrdinal " << sideOrdinal << " >= sideCount " << sideCount << endl;
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "sideOrdinal must be less than sideCount!");

@@ -18,6 +18,17 @@ CellTopology::CellTopology(const shards::CellTopology &baseTopo, unsigned tensor
   _shardsBaseTopology = baseTopo;
   _tensorialDegree = tensorialDegree;
   
+  if (_tensorialDegree == 0) {
+    _name = baseTopo.getName();
+  } else {
+    ostringstream nameStream;
+    nameStream << baseTopo.getName();
+    for (int tensorialOrdinal = 0; tensorialOrdinal < tensorialDegree; tensorialOrdinal++) {
+      nameStream << " x Line<2>";
+    }
+    _name = nameStream.str();
+  }
+  
   int baseDim = baseTopo.getDimension();
   vector<unsigned> subcellCounts = vector<unsigned>(baseDim + _tensorialDegree + 1);
   _subcells = vector< vector< CellTopoPtr > >(baseDim + _tensorialDegree + 1);
@@ -194,6 +205,10 @@ unsigned CellTopology::getDimension() const {
   return _shardsBaseTopology.getDimension() + _tensorialDegree;
 }
 
+std::pair<unsigned, unsigned> CellTopology::getKey() const {
+  return make_pair(_shardsBaseTopology.getKey(), _tensorialDegree);
+}
+
 /** \brief  Node count of this cell topology */
 unsigned CellTopology::getNodeCount() const {
   unsigned two_pow = 1 << _tensorialDegree;
@@ -219,6 +234,10 @@ unsigned CellTopology::getEdgeCount() const {
 /** \brief  Face boundary subcell count of this cell topology */
 unsigned CellTopology::getFaceCount() const {
   return getSubcellCount(2);
+}
+
+std::string CellTopology::getName() const {
+  return _name;
 }
 
 /** \brief  Side boundary subcell count of this cell topology */

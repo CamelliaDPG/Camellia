@@ -170,7 +170,7 @@ RefinementBranch demoRefinementsOnSide(shards::CellTopology cellTopo, unsigned s
     // pick one randomly
     unsigned indexOfChildInSide = rand() % childrenForSide.size();
     unsigned childIndex = childrenForSide[indexOfChildInSide].first;
-    cellTopo = *(refPattern->childTopology(childIndex));
+
     sideIndex = childrenForSide[indexOfChildInSide].second; // the side child shares with parent...
     demoRefinements.push_back(make_pair(refPattern.get(),childIndex));
   }
@@ -485,9 +485,9 @@ FieldContainer<double> transformedBasisValuesAtPoints(BasisPtr basis, const Fiel
   if (refinements.size() == 0) {
     CamelliaCellTools::refCellNodesForTopology(refCellNodes, cellTopo);
   } else {
-    CellTopoPtrLegacy coarseCellTopo = refinements[0].first->parentTopology();
+    CellTopoPtr coarseCellTopo = refinements[0].first->parentTopology();
     FieldContainer<double> coarseCellNodes(coarseCellTopo->getNodeCount(),coarseCellTopo->getDimension());
-    CamelliaCellTools::refCellNodesForTopology(coarseCellNodes, *coarseCellTopo);
+    CamelliaCellTools::refCellNodesForTopology(coarseCellNodes, coarseCellTopo);
     refCellNodes = RefinementPattern::descendantNodes(refinements,coarseCellNodes);
   }
   refCellNodes.resize(1,cellTopo->getNodeCount(),cellTopo->getDimension());
@@ -507,9 +507,9 @@ FieldContainer<double> transformedBasisValuesAtSidePoints(BasisPtr basis, unsign
   if (refinements.size() == 0) {
     CamelliaCellTools::refCellNodesForTopology(refCellNodes, cellTopo);
   } else {
-    CellTopoPtrLegacy coarseCellTopo = refinements[0].first->parentTopology();
+    CellTopoPtr coarseCellTopo = refinements[0].first->parentTopology();
     FieldContainer<double> coarseCellNodes(coarseCellTopo->getNodeCount(),coarseCellTopo->getDimension());
-    CamelliaCellTools::refCellNodesForTopology(coarseCellNodes, *coarseCellTopo);
+    CamelliaCellTools::refCellNodesForTopology(coarseCellNodes, coarseCellTopo);
     refCellNodes = RefinementPattern::descendantNodes(refinements,coarseCellNodes);
   }
   refCellNodes.resize(1,cellTopo->getNodeCount(),cellTopo->getDimension());
@@ -526,7 +526,7 @@ FieldContainer<double> transformedBasisValuesAtSidePoints(BasisPtr basis, unsign
 
 RefinementBranch determineSideRefinements(RefinementBranch volumeRefinements, unsigned sideIndex) {
   RefinementBranch sideRefinements;
-  CellTopoPtrLegacy volumeTopo = volumeRefinements[0].first->parentTopology();
+  CellTopoPtr volumeTopo = volumeRefinements[0].first->parentTopology();
   unsigned sideDim = volumeTopo->getDimension() - 1;
   for (int refIndex=0; refIndex<volumeRefinements.size(); refIndex++) {
     RefinementPattern* refPattern = volumeRefinements[refIndex].first;
@@ -571,7 +571,7 @@ bool BasisReconciliationTests::hConstraintSideBasisSubTest(BasisPtr fineBasis, u
     return false;
   }
   
-  CellTopoPtr ancestralTopo = Camellia::CellTopology::cellTopology( *volumeRefinements[0].first->parentTopology() );
+  CellTopoPtr ancestralTopo = volumeRefinements[0].first->parentTopology();
 
   // figure out fineSideIndex
   unsigned fineSideIndex = fineAncestralSideIndex;

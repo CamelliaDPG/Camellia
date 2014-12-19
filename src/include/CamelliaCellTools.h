@@ -20,6 +20,8 @@
 
 class CamelliaCellTools {
 public:
+  static CellTopoPtr cellTopoForKey(Camellia::CellTopologyKey key);
+  
   static CellTopoPtrLegacy cellTopoForKey(unsigned key);
   
   static int getSideCount(const shards::CellTopology &cellTopo); // unlike shards itself, defines vertices as sides for Line topo
@@ -31,6 +33,8 @@ public:
   static unsigned permutationMatchingOrder( CellTopoPtr cellTopo, const vector<unsigned> &fromOrder, const vector<unsigned> &toOrder);
 
   static unsigned permutationMatchingOrder( const shards::CellTopology &cellTopo, const vector<unsigned> &fromOrder, const vector<unsigned> &toOrder);
+
+  static unsigned permutationComposition( CellTopoPtr cellTopo, unsigned a_permutation, unsigned b_permutation );
   
   static unsigned permutationComposition( const shards::CellTopology &cellTopo, unsigned a_permutation, unsigned b_permutation );
 
@@ -52,6 +56,8 @@ public:
   
   // this caches the lookup tables it builds.  Well worth it, since we'll have just one per cell topology
   static unsigned subcellOrdinalMap(const shards::CellTopology &cellTopo, unsigned subcdim, unsigned subcord, unsigned subsubcdim, unsigned subsubcord);
+  
+  static unsigned subcellReverseOrdinalMap(CellTopoPtr cellTopo, unsigned subcdim, unsigned subcord, unsigned subsubcdim, unsigned subsubcordInCell);
   
   static unsigned subcellReverseOrdinalMap(const shards::CellTopology &cellTopo, unsigned subcdim, unsigned subcord, unsigned subsubcdim, unsigned subsubcordInCell);
   
@@ -83,7 +89,7 @@ public:
                                     const FieldContainer<double> &paramPoints,
                                     const int                     subcellDim,
                                     const int                     subcellOrd,
-                                    CellTopoPtr                  &parentCell);
+                                    CellTopoPtr                   parentCell);
   
   static string entityTypeString(unsigned entityDimension); // vertex, edge, face, solid, hypersolid
 };

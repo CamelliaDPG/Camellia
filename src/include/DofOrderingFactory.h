@@ -119,14 +119,21 @@ public:
   DofOrderingFactory(Teuchos::RCP<BilinearForm> bilinearForm,
                      map<int,int> trialOrderEnhancements,
                      map<int,int> testOrderEnhancements);
-  DofOrderingPtr testOrdering(int polyOrder, const shards::CellTopology &cellTopo); // NOTE: for now only handles 2D/quads (lines in 1D for sides, too)
+  DofOrderingPtr testOrdering(int polyOrder, const shards::CellTopology &cellTopo);
   DofOrderingPtr trialOrdering(int polyOrder, const shards::CellTopology &cellTopo,
                                bool conformingVertices = true);
+  
+  DofOrderingPtr testOrdering(int polyOrder, CellTopoPtr cellTopo);
+  DofOrderingPtr trialOrdering(int polyOrder, CellTopoPtr cellTopo, bool conformingVertices = true);
   
   int testPolyOrder(DofOrderingPtr testOrdering);
   int trialPolyOrder(DofOrderingPtr trialOrdering);
   DofOrderingPtr pRefineTest(DofOrderingPtr testOrdering, const shards::CellTopology &cellTopo, int pToAdd = 1);
   DofOrderingPtr pRefineTrial(DofOrderingPtr trialOrdering, const shards::CellTopology &cellTopo, int pToAdd = 1);
+  
+  DofOrderingPtr pRefineTest(DofOrderingPtr testOrdering, CellTopoPtr cellTopo, int pToAdd = 1);
+  DofOrderingPtr pRefineTrial(DofOrderingPtr trialOrdering, CellTopoPtr cellTopo, int pToAdd = 1);
+  
   DofOrderingPtr setSidePolyOrder(DofOrderingPtr dofOrdering, int sideIndexToSet, int newPolyOrder, bool replacePatchBasis);
   
   DofOrderingPtr getRelabeledDofOrdering(DofOrderingPtr dofOrdering, map<int,int> &oldKeysNewValues);
@@ -143,21 +150,21 @@ public:
   map<int, int> getTrialOrderEnhancements();
   
   int matchSides(DofOrderingPtr &firstOrdering, int firstSideIndex, 
-                 const shards::CellTopology &firstCellTopo,
+                 CellTopoPtr firstCellTopo,
                  DofOrderingPtr &secondOrdering, int secondSideIndex,
-                 const shards::CellTopology &secondCellTopo);
+                 CellTopoPtr secondCellTopo);
   void childMatchParent(DofOrderingPtr &childTrialOrdering, int childSideIndex,
-                        const shards::CellTopology &childTopo, int childIndexInParentSide, // == where in the multi-basis are we, if there is a multi-basis?
+                        CellTopoPtr childTopo, int childIndexInParentSide, // == where in the multi-basis are we, if there is a multi-basis?
                         DofOrderingPtr &parentTrialOrdering, int sideIndex,
-                        const shards::CellTopology &parentTopo);
+                        CellTopoPtr parentTopo);
   void assignMultiBasis(DofOrderingPtr &trialOrdering, int sideIndex, 
-                        const shards::CellTopology &cellTopo,
+                        CellTopoPtr cellTopo,
                         vector< pair< DofOrderingPtr,int > > &childTrialOrdersForSide );
   void assignPatchBasis(DofOrderingPtr &childTrialOrdering, int childSideIndex,
                         const DofOrderingPtr parentTrialOrdering, int parentSideIndex,
-                        int childIndexInParentSide,const shards::CellTopology &childCellTopo);
+                        int childIndexInParentSide, CellTopoPtr childCellTopo);
   DofOrderingPtr upgradeSide(DofOrderingPtr dofOrdering,
-                             const shards::CellTopology &cellTopo, 
+                             CellTopoPtr cellTopo,
                              map<int,BasisPtr> varIDsToUpgrade,
                              int sideToUpgrade);
   map<int, BasisPtr> getMultiBasisUpgradeMap(vector< pair< DofOrderingPtr,int > > &childTrialOrdersForSide);

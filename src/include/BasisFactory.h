@@ -62,6 +62,9 @@ private:
               _conformingBases; // keys are ((polyOrder,cellTopoKey),fs))
   map< pair< pair< Camellia::Basis<>*, int>, IntrepidExtendedTypes::EFunctionSpaceExtended>, BasisPtr >
               _spaceTimeBases; // keys are (shards Topo basis, temporal degree, temporal function space)
+  map< pair< pair< Camellia::Basis<>*, int>, IntrepidExtendedTypes::EFunctionSpaceExtended>, BasisPtr >
+              _conformingSpaceTimeBases; // keys are (shards Topo basis, temporal degree, temporal function space)
+
   
   // the following maps let us remember what arguments were used to create a basis:
   // (this is useful to, say, create a basis again, but now with polyOrder+1)
@@ -88,6 +91,8 @@ public:
   BasisPtr getBasis( int polyOrder, unsigned cellTopoKey, FSE fs);
 //  static BasisPtr getBasis(int &basisRank, int polyOrder, unsigned cellTopoKey, IntrepidExtendedTypes::EFunctionSpaceExtended fs);
   BasisPtr getConformingBasis( int polyOrder, unsigned cellTopoKey, FSE fs );
+  BasisPtr getConformingBasis( int polyOrder, CellTopoPtr cellTopo, FSE fs, int temporalPolyOrder = 1,
+                              FSE functionSpaceForTemporalTopology = IntrepidExtendedTypes::FUNCTION_SPACE_HVOL);
   
   BasisPtr getNodalBasisForCellTopology(CellTopoPtr cellTopo);
   BasisPtr getNodalBasisForCellTopology(unsigned cellTopoKey);

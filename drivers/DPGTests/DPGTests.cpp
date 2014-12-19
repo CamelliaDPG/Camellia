@@ -107,9 +107,8 @@ using namespace std;
 using namespace Intrepid;
 using namespace Camellia;
 
-ElementTypePtr makeElemType(DofOrderingPtr trialOrdering, DofOrderingPtr testOrdering, shards::CellTopology &cellTopo) {
-  Teuchos::RCP< shards::CellTopology > cellTopoPtr = Teuchos::rcp(new shards::CellTopology(cellTopo));
-  return Teuchos::rcp( new ElementType( trialOrdering, testOrdering, cellTopoPtr) );
+ElementTypePtr makeElemType(DofOrderingPtr trialOrdering, DofOrderingPtr testOrdering, CellTopoPtr cellTopo) {
+  return Teuchos::rcp( new ElementType( trialOrdering, testOrdering, cellTopo) );
 }
 
 BasisCachePtr makeBasisCache(ElementTypePtr elemType, const FieldContainer<double> &physicalCellNodes, const vector<GlobalIndexType> &cellIDs,
@@ -202,9 +201,9 @@ void DPGTests::runTests() {
   // setup our TestSuite tests:
   vector< Teuchos::RCP< TestSuite > > testSuites;
   
-  testSuites.push_back( Teuchos::rcp( new GDAMinimumRuleTests ) );
-  
   testSuites.push_back( Teuchos::rcp( new SolutionTests ) );
+
+  testSuites.push_back( Teuchos::rcp( new GDAMinimumRuleTests ) );
   
   testSuites.push_back( Teuchos::rcp( new MeshTopologyTests ) );
   
@@ -427,7 +426,7 @@ bool DPGTests::testComputeStiffnessConformingVertices() {
   
   int polyOrder = 3; 
   Teuchos::RCP<DofOrdering> conformingOrdering,nonConformingOrdering;
-  shards::CellTopology quad_4(shards::getCellTopologyData<shards::Quadrilateral<4> >() );
+  CellTopoPtr quad_4 = Camellia::CellTopology::quad();
   
   DofOrderingFactory dofOrderingFactory(bilinearForm);
   
@@ -600,11 +599,10 @@ bool DPGTests::testComputeStiffnessDx() {
   bool success = true;
   DofOrdering lowestOrderHGRADOrdering;
   
-  shards::CellTopology quad_4(shards::getCellTopologyData<shards::Quadrilateral<4> >() );
+  CellTopoPtr quad_4 = Camellia::CellTopology::quad();
   
-  BasisPtr basis
-  = BasisFactory::basisFactory()->getBasis(C1_FAKE_POLY_ORDER,
-                           quad_4.getKey(), IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD);
+  BasisPtr basis = BasisFactory::basisFactory()->getBasis(C1_FAKE_POLY_ORDER,
+                                                          quad_4, IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD);
   
   lowestOrderHGRADOrdering.addEntry(0,basis,0);
   
@@ -745,11 +743,11 @@ bool DPGTests::testComputeStiffnessFlux() {
     traceOrdering->addEntry(0,traceBasis,0,i);
   }
   
-  shards::CellTopology quad_4(shards::getCellTopologyData<shards::Quadrilateral<4> >() );
+  CellTopoPtr quad_4 = Camellia::CellTopology::quad();
   
   BasisPtr testBasis
   = 
-  BasisFactory::basisFactory()->getBasis(C1_FAKE_POLY_ORDER, quad_4.getKey(), IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD);  
+  BasisFactory::basisFactory()->getBasis(C1_FAKE_POLY_ORDER, quad_4, IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD);  
   testOrdering->addEntry(0,testBasis,0);
   
   int numTests = 1;  // 1. ref quad
@@ -869,10 +867,9 @@ bool DPGTests::testComputeStiffnessTrace() {
     traceOrdering->addEntry(0,traceBasis,0,i);
   }
   
-  shards::CellTopology quad_4(shards::getCellTopologyData<shards::Quadrilateral<4> >() );
-  BasisPtr testBasis 
-  = BasisFactory::basisFactory()->getBasis(C1_FAKE_POLY_ORDER,
-                           quad_4.getKey(), IntrepidExtendedTypes::FUNCTION_SPACE_HDIV);
+  CellTopoPtr quad_4 = Camellia::CellTopology::quad();
+  BasisPtr testBasis = BasisFactory::basisFactory()->getBasis(C1_FAKE_POLY_ORDER,
+                                                              quad_4, IntrepidExtendedTypes::FUNCTION_SPACE_HDIV);
   
   testOrdering->addEntry(0,testBasis,1,0);
   
@@ -1185,7 +1182,7 @@ bool DPGTests::testAnalyticBoundaryIntegral(bool conforming) {
   
   BFPtr bilinearForm = TestBilinearFormAnalyticBoundaryIntegral::bf();
   
-  shards::CellTopology quad_4(shards::getCellTopologyData<shards::Quadrilateral<4> >() );
+  CellTopoPtr quad_4 = Camellia::CellTopology::quad();
   
   Teuchos::RCP<DofOrdering> cubicHGradOrdering = TestBilinearFormAnalyticBoundaryIntegral::testOrdering(order);
   
@@ -1224,7 +1221,8 @@ bool DPGTests::testAnalyticBoundaryIntegral(bool conforming) {
   TestBilinearFormAnalyticBoundaryIntegral::expectedIPMatrixForCubicsOnQuad(ipMatrixExpected);
   
   Teuchos::RCP<DPGInnerProduct> ip = Teuchos::rcp( new MathInnerProduct(bilinearForm) );
-  ip->computeInnerProductMatrix(ipMatrixActual,cubicHGradOrdering, quad_4, quadPoints);
+  shards::CellTopology shardsTopo = quad_4->getShardsTopology();
+  ip->computeInnerProductMatrix(ipMatrixActual,cubicHGradOrdering, shardsTopo, quadPoints);
   
   string myNameIPMatrix = "testAnalyticBoundaryIntegral.ipMatrix";
   successLocal = fcsAgree(myNameIPMatrix, ipMatrixExpected, ipMatrixActual, tol);
@@ -1354,11 +1352,11 @@ bool DPGTests::testLowOrderTrialCubicTest() {
   bool success = true;
   Teuchos::RCP<DofOrdering> lowestOrderHGRADOrdering = Teuchos::rcp(new DofOrdering());
   
-  shards::CellTopology quad_4(shards::getCellTopologyData<shards::Quadrilateral<4> >() );
+  CellTopoPtr quad_4 = Camellia::CellTopology::quad();
   
   BasisPtr basis
   = 
-  BasisFactory::basisFactory()->getBasis(C1_FAKE_POLY_ORDER, quad_4.getKey(), IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD);
+  BasisFactory::basisFactory()->getBasis(C1_FAKE_POLY_ORDER, quad_4, IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD);
   
   lowestOrderHGRADOrdering->addEntry(0,basis,0);
   
@@ -1725,7 +1723,8 @@ bool DPGTests::testLowOrderTrialCubicTest() {
   }
   
   Teuchos::RCP<DPGInnerProduct> ip = Teuchos::rcp( new MathInnerProduct(bilinearForm) );
-  ip->computeInnerProductMatrix(ipMatrixActual,cubicHGradOrdering, quad_4, quadPoints);
+  shards::CellTopology shardsTopo = quad_4->getShardsTopology();
+  ip->computeInnerProductMatrix(ipMatrixActual,cubicHGradOrdering, shardsTopo, quadPoints);
   
   string myNameIPMatrix = "testLowOrderTrialCubicTest.ipMatrix";
   successLocal = fcsAgree(myNameIPMatrix, ipMatrixExpected, ipMatrixActual, tol);
@@ -2152,9 +2151,9 @@ bool DPGTests::testComputeOptimalTest() {
   
   bool bSuccess = true;
   
-  shards::CellTopology quad_4(shards::getCellTopologyData<shards::Quadrilateral<4> >() );
-  shards::CellTopology tri_3(shards::getCellTopologyData<shards::Triangle<3> >() );
-  shards::CellTopology cellTopo;
+  CellTopoPtr quad_4 = Camellia::CellTopology::quad();
+  CellTopoPtr tri_3 = Camellia::CellTopology::triangle();
+  CellTopoPtr cellTopo;
   FieldContainer<double> quadPoints(numTests,4,2);
   quadPoints(0,0,0) = -1.0; // x1
   quadPoints(0,0,1) = -1.0; // y1
@@ -2189,7 +2188,7 @@ bool DPGTests::testComputeOptimalTest() {
     
     BasisPtr basis
     = 
-    BasisFactory::basisFactory()->getBasis(C1_FAKE_POLY_ORDER, cellTopo.getKey(), IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD);
+    BasisFactory::basisFactory()->getBasis(C1_FAKE_POLY_ORDER, cellTopo, IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD);
     
     DofOrdering lowestOrderHGRADOrdering;
     Teuchos::RCP<DofOrdering> lowestOrderHGRADOrderingPtr = Teuchos::rcp(&lowestOrderHGRADOrdering,false);
@@ -2214,7 +2213,8 @@ bool DPGTests::testComputeOptimalTest() {
     cellSideParities.initialize(1.0); // for 1-element meshes, all side parites are 1.0
     
     FieldContainer<double> ipMatrix(numTests,numTestDofs,numTestDofs);
-    ip->computeInnerProductMatrix(ipMatrix,Teuchos::rcp(&lowestOrderHGRADOrdering,false), cellTopo, nodePoints);
+    shards::CellTopology shardsTopo = cellTopo->getShardsTopology();
+    ip->computeInnerProductMatrix(ipMatrix,Teuchos::rcp(&lowestOrderHGRADOrdering,false), shardsTopo, nodePoints);
     
     ElementTypePtr elemType = makeElemType(lowestOrderHGRADOrderingPtr, lowestOrderHGRADOrderingPtr, cellTopo);
     BasisCachePtr basisCache = makeBasisCache(elemType,nodePoints,cellIDs);
@@ -2257,7 +2257,8 @@ bool DPGTests::testComputeOptimalTest() {
       
       
       ipMatrix.resize(numTests,numTestDofs,numTestDofs);
-      ip->computeInnerProductMatrix(ipMatrix,highOrderHGradOrdering, cellTopo, nodePoints);
+      shards::CellTopology shardsTopo = cellTopo->getShardsTopology();
+      ip->computeInnerProductMatrix(ipMatrix,highOrderHGradOrdering, shardsTopo, nodePoints);
       
       elemType = makeElemType(highOrderHGradOrdering, highOrderHGradOrdering, cellTopo);
       basisCache = makeBasisCache(elemType,nodePoints,cellIDs);
@@ -2299,7 +2300,8 @@ bool DPGTests::testComputeOptimalTest() {
       optimalTestWeights.resize(numTests, numTrialDofs, numTestDofs);
       
       ipMatrix.resize(numTests,numTestDofs,numTestDofs);
-      ip->computeInnerProductMatrix(ipMatrix,testOrdering, cellTopo, nodePoints);
+      shards::CellTopology shardsTopo = cellTopo->getShardsTopology();
+      ip->computeInnerProductMatrix(ipMatrix,testOrdering, shardsTopo, nodePoints);
       
       elemType = makeElemType(lowestOrderHGRADOrderingPtr, testOrdering, cellTopo);
       basisCache = makeBasisCache(elemType,nodePoints,cellIDs);
@@ -2433,7 +2435,8 @@ bool DPGTests::testTestBilinearFormAnalyticBoundaryIntegralExpectedConformingMat
   DofOrderingFactory dofOrderingFactory(bilinearForm);
   
   int polyOrder = 3;
-  shards::CellTopology quad_4(shards::getCellTopologyData<shards::Quadrilateral<4> >() );
+
+  CellTopoPtr quad_4 = Camellia::CellTopology::quad();
   
   conformingOrdering = dofOrderingFactory.trialOrdering(polyOrder, quad_4, true);
   nonConformingOrdering = dofOrderingFactory.trialOrdering(polyOrder, quad_4, false);

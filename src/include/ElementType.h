@@ -44,20 +44,22 @@
 
 #include "DofOrdering.h"
 
+#include "CellTopology.h"
+
 class ElementType {
 public: // TODO: create accessors for these Ptrs, and make them private...
   Teuchos::RCP< DofOrdering > trialOrderPtr;
   Teuchos::RCP< DofOrdering > testOrderPtr;
-  Teuchos::RCP< shards::CellTopology > cellTopoPtr;  
-ElementType(Teuchos::RCP< DofOrdering > trialOrderPtr,
-            Teuchos::RCP< DofOrdering > testOrderPtr,
-            Teuchos::RCP< shards::CellTopology > cellTopoPtr) { 
-  // TODO: for adaptivity: add bool [] sidesBroken??
-  this->trialOrderPtr = trialOrderPtr;
-  this->testOrderPtr = testOrderPtr;
-  this->cellTopoPtr = cellTopoPtr;
-}
+  CellTopoPtr cellTopoPtr;
   
+  ElementType(Teuchos::RCP< DofOrdering > trialOrderPtr,
+              Teuchos::RCP< DofOrdering > testOrderPtr,
+              CellTopoPtr cellTopoPtr) {
+    // TODO: for adaptivity: add bool [] sidesBroken??
+    this->trialOrderPtr = trialOrderPtr;
+    this->testOrderPtr = testOrderPtr;
+    this->cellTopoPtr = cellTopoPtr;
+  }
 };
 
 typedef Teuchos::RCP< ElementType > ElementTypePtr;

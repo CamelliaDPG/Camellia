@@ -41,16 +41,15 @@
 
 #include "ElementType.h"
 
-using namespace std;
+#include "CellTopology.h"
 
 class ElementTypeFactory {
-  map< pair< int, pair<  DofOrdering*, DofOrdering* > >,
+  std::map< std::pair< Camellia::CellTopologyKey, std::pair<  DofOrdering*, DofOrdering* > >,
   Teuchos::RCP< ElementType > > _elementTypes;
   
 public:
-  Teuchos::RCP< ElementType > getElementType(Teuchos::RCP< DofOrdering > trialOrderPtr,
-                                             Teuchos::RCP< DofOrdering > testOrderPtr,
-                                             Teuchos::RCP< shards::CellTopology > cellTopoPtr);
+  Teuchos::RCP< ElementType > getElementType(DofOrderingPtr trialOrderPtr, DofOrderingPtr testOrderPtr, CellTopoPtr cellTopoPtr);
+  Teuchos::RCP< ElementType > getElementType(DofOrderingPtr trialOrderPtr, DofOrderingPtr testOrderPtr, CellTopoPtrLegacy cellTopoPtr);
 };
 
 #endif

@@ -69,7 +69,7 @@ void MeshTopologyTests::teardown() {
 bool MeshTopologyTests::test1DMesh() {
   bool success = true;
   
-  CellTopoPtrLegacy line_2 = Teuchos::rcp( new shards::CellTopology(shards::getCellTopologyData<shards::Line<2> >() ) );
+  CellTopoPtr line_2 = Camellia::CellTopology::line();
   RefinementPatternPtr lineRefPattern = RefinementPattern::regularRefinementPatternLine();
   
   vector<double> v0(1,0.0), v1(1,1.0), v2(1,3.0);
@@ -88,7 +88,7 @@ bool MeshTopologyTests::test1DMesh() {
   elemVertexList[1] = 2;
   elementVertices.push_back(elemVertexList);
   
-  vector< CellTopoPtrLegacy > cellTopos(2,line_2);
+  vector< CellTopoPtr > cellTopos(2,line_2);
   
   MeshGeometryPtr meshGeometry = Teuchos::rcp( new MeshGeometry(vertices, elementVertices, cellTopos) );
   
@@ -155,8 +155,8 @@ vector<double> makeVertex(double v0, double v1, double v2) {
 bool MeshTopologyTests::test2DMesh() {
   bool success = true;
 
-  CellTopoPtrLegacy quad_4 = Teuchos::rcp( new shards::CellTopology(shards::getCellTopologyData<shards::Quadrilateral<4> >() ) );
-  CellTopoPtrLegacy tri_3 = Teuchos::rcp( new shards::CellTopology(shards::getCellTopologyData<shards::Triangle<3> >() ) );
+  CellTopoPtr quad_4 = Camellia::CellTopology::quad();
+  CellTopoPtr tri_3 = Camellia::CellTopology::triangle();
   RefinementPatternPtr quadRefPattern = RefinementPattern::regularRefinementPatternQuad();
   RefinementPatternPtr triangleRefPattern = RefinementPattern::regularRefinementPatternTriangle();
   
@@ -189,7 +189,7 @@ bool MeshTopologyTests::test2DMesh() {
   elementVertices.push_back(quadVertexList);
   elementVertices.push_back(triVertexList);
 
-  vector< CellTopoPtrLegacy > cellTopos;
+  vector< CellTopoPtr > cellTopos;
   cellTopos.push_back(quad_4);
   cellTopos.push_back(tri_3);
   MeshGeometryPtr meshGeometry = Teuchos::rcp( new MeshGeometry(vertices, elementVertices, cellTopos) );
@@ -241,8 +241,8 @@ bool MeshTopologyTests::test3DMesh() {
   unsigned spaceDim = 3;
   unsigned hexNodeCount = 1 << spaceDim;
   FieldContainer<double> refHexPoints(hexNodeCount,spaceDim);
-  Teuchos::RCP< shards::CellTopology > hexTopo = Teuchos::rcp(new shards::CellTopology(shards::getCellTopologyData<shards::Hexahedron<8> >() ));
-  CamelliaCellTools::refCellNodesForTopology(refHexPoints, *hexTopo);
+  CellTopoPtr hexTopo = Camellia::CellTopology::hexahedron();
+  CamelliaCellTools::refCellNodesForTopology(refHexPoints, hexTopo);
  
   vector< vector<double> > vertices;
   vector< unsigned > hexVertexIndices(hexNodeCount);
@@ -270,7 +270,7 @@ bool MeshTopologyTests::test3DMesh() {
 //  }
 //  elementVertices.push_back(hexVertexIndices);
  
-  vector< CellTopoPtrLegacy > cellTopos(1,hexTopo);
+  vector< CellTopoPtr > cellTopos(1,hexTopo);
   MeshGeometryPtr meshGeometry = Teuchos::rcp( new MeshGeometry(vertices, elementVertices, cellTopos) );
 
   MeshTopology mesh(meshGeometry);
@@ -567,7 +567,7 @@ bool MeshTopologyTests::testEntityConstraints() {
 
   for (unsigned cellIndex=0; cellIndex<mesh2D->cellCount(); cellIndex++) {
     CellPtr cell = mesh2D->getCell(cellIndex);
-    unsigned sideCount = CamelliaCellTools::getSideCount(*cell->topology());
+    unsigned sideCount = cell->getSideCount();
 
     for (unsigned sideOrdinal=0; sideOrdinal<sideCount; sideOrdinal++) {
       unsigned edgeIndex = cell->entityIndex(edgeDim, sideOrdinal);
@@ -600,7 +600,7 @@ bool MeshTopologyTests::testEntityConstraints() {
   map<unsigned, vector<unsigned> > faceToEdges;
   for (unsigned cellIndex=0; cellIndex<mesh3D->cellCount(); cellIndex++) {
     CellPtr cell = mesh3D->getCell(cellIndex);
-    unsigned sideCount = CamelliaCellTools::getSideCount(*cell->topology());
+    unsigned sideCount = cell->getSideCount();
     
     for (unsigned sideOrdinal=0; sideOrdinal<sideCount; sideOrdinal++) {
       unsigned faceIndex = cell->entityIndex(faceDim, sideOrdinal);
@@ -615,8 +615,8 @@ bool MeshTopologyTests::testEntityConstraints() {
       }
       
       if (faceToEdges.find(faceIndex) == faceToEdges.end()) {
-        shards::CellTopology faceTopo = cell->topology()->getCellTopologyData(faceDim, sideOrdinal);
-        unsigned numEdges = faceTopo.getSubcellCount(edgeDim);
+        CellTopoPtr faceTopo = cell->topology()->getSubcell(faceDim, sideOrdinal);
+        unsigned numEdges = faceTopo->getSubcellCount(edgeDim);
         vector<unsigned> edgeIndices(numEdges);
         for (unsigned edgeOrdinal=0; edgeOrdinal<numEdges; edgeOrdinal++) {
           edgeIndices[edgeOrdinal] = mesh3D->getFaceEdgeIndex(faceIndex, edgeOrdinal);
@@ -771,7 +771,7 @@ bool MeshTopologyTests::testEntityConstraints() {
       childCellForVertex = cellIt->first;
       // now, figure out which of the "edgeChildren2D" is shared by this cell:
       CellPtr cell = mesh2D->getCell(childCellForVertex);
-      unsigned numEdges = CamelliaCellTools::getSideCount(*cell->topology());
+      unsigned numEdges = cell->getSideCount();
       for (unsigned edgeOrdinal=0; edgeOrdinal<numEdges; edgeOrdinal++) {
         unsigned edgeIndex = cell->entityIndex(edgeDim, edgeOrdinal);
         if (edgeChildren2D.find(edgeIndex) != edgeChildren2D.end()) {
@@ -843,7 +843,7 @@ bool MeshTopologyTests::testEntityConstraints() {
   CellPtr childCell = mesh3D->getCell(childCellIndex);
   set<unsigned> childInteriorUnconstrainedFaces;
   set<unsigned> childInteriorConstrainedFaces;
-  unsigned faceCount = CamelliaCellTools::getSideCount(*childCell->topology());
+  unsigned faceCount = childCell->getSideCount();
   for (unsigned faceOrdinal=0; faceOrdinal<faceCount; faceOrdinal++) {
     unsigned faceIndex = childCell->entityIndex(faceDim, faceOrdinal);
     if (mesh3D->getActiveCellCount(faceDim, faceIndex) == 1) {

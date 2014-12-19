@@ -231,6 +231,15 @@ void SolutionTests::runTests(int &numTestsRun, int &numTestsPassed) {
   int rank = Teuchos::GlobalMPISession::getRank();
   cout << "Starting SolutionTests::runTests on rank " << rank << endl;
 
+  setup();
+  if (testProjectSolutionOntoOtherMesh()) {
+    numTestsPassed++;
+  }
+  numTestsRun++;
+  teardown();
+  
+  cout << "finished test testProjectSolutionOntoOtherMesh().\n";
+  
 //  setup(); // commented out to make certain debugging output easier to read (in fact testCondensationSolveNonlinear() doesn't depend on setup at all...)
   if (testCondensationSolveNonlinear()) {
     numTestsPassed++;
@@ -303,15 +312,6 @@ void SolutionTests::runTests(int &numTestsRun, int &numTestsPassed) {
   teardown();
   
   cout << "finished test testSolutionsAreConsistent().\n";
-  
-  setup();
-  if (testProjectSolutionOntoOtherMesh()) {
-    numTestsPassed++;
-  }
-  numTestsRun++;
-  teardown();
-
-  cout << "finished test testProjectSolutionOntoOtherMesh().\n";
   
   setup();
   if (testSolutionEvaluationBasisCache() ) {

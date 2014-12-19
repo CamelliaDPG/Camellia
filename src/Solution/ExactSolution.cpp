@@ -72,7 +72,7 @@ double ExactSolution::L2NormOfError(Solution &solution, int trialID, int cubDegr
     if (! solution.mesh()->bilinearForm()->isFluxOrTrace(trialID)) {
       numSides = 1;
     } else {
-      numSides = CamelliaCellTools::getSideCount(*elemTypePtr->cellTopoPtr);
+      numSides = elemTypePtr->cellTopoPtr->getSideCount();
     }
 
     for (int sideIndex=0; sideIndex<numSides; sideIndex++) {

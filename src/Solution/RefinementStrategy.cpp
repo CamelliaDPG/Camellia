@@ -212,9 +212,7 @@ void RefinementStrategy::pRefineCells(Teuchos::RCP<Mesh> mesh, const vector<Glob
 }
 
 void RefinementStrategy::hRefineCells(Teuchos::RCP<Mesh> mesh, const vector<GlobalIndexType> &cellIDs) {
-  vector<GlobalIndexType> triangleCellsToRefine;
-  vector<GlobalIndexType> quadCellsToRefine;
-  vector<GlobalIndexType> hexCellsToRefine;
+  map< Camellia::CellTopologyKey, vector<GlobalIndexType> > topologyCellsToRefine;
   
   MeshTopologyPtr meshTopology = mesh->getTopology();
   
@@ -223,27 +221,21 @@ void RefinementStrategy::hRefineCells(Teuchos::RCP<Mesh> mesh, const vector<Glob
     int cellID = *cellIDIt;
     
     CellPtr cell = meshTopology->getCell(cellID);
-    unsigned topoKey = cell->topology()->getKey();
+    Camellia::CellTopologyKey topoKey = cell->topology()->getKey();
     
-    switch (topoKey) {
-      case shards::Triangle<3>::key:
-        triangleCellsToRefine.push_back(cellID);
-        break;
-      case shards::Quadrilateral<4>::key:
-        quadCellsToRefine.push_back(cellID);
-        break;
-      case shards::Hexahedron<8>::key:
-        hexCellsToRefine.push_back(cellID);
-        break;
-      default:
-        cout << "Unhandled cell topology in h-refinement.";
-        break;
-    }
+    topologyCellsToRefine[topoKey].push_back(cellID);
   }
   
-  mesh->hRefine(triangleCellsToRefine,RefinementPattern::regularRefinementPatternTriangle());
-  mesh->hRefine(quadCellsToRefine,RefinementPattern::regularRefinementPatternQuad());
-  mesh->hRefine(hexCellsToRefine,RefinementPattern::regularRefinementPatternHexahedron());
+  for (map< Camellia::CellTopologyKey, vector<GlobalIndexType> >::iterator topoEntry = topologyCellsToRefine.begin();
+       topoEntry != topologyCellsToRefine.end(); topoEntry++) {
+    Camellia::CellTopologyKey topoKey = topoEntry->first;
+    RefinementPatternPtr refPattern = RefinementPattern::regularRefinementPattern(topoKey);
+    mesh->hRefine(topoEntry->second, refPattern);
+  }
+  
+//  mesh->hRefine(triangleCellsToRefine,RefinementPattern::regularRefinementPatternTriangle());
+//  mesh->hRefine(quadCellsToRefine,RefinementPattern::regularRefinementPatternQuad());
+//  mesh->hRefine(hexCellsToRefine,RefinementPattern::regularRefinementPatternHexahedron());
 }
 
 void RefinementStrategy::hRefineUniformly(Teuchos::RCP<Mesh> mesh) {

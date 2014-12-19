@@ -55,7 +55,7 @@ class MeshTopology {
   
   vector< map< IndexType, pair<IndexType, unsigned> > > _generalizedParentEntities; // map from entity to its nearest generalized parent.  map entries are (parentEntityIndex, parentEntityDimension).  Generalized parents may be higher-dimensional or equal-dimensional to the child entity.
   vector< map< IndexType, vector< pair< RefinementPatternPtr, vector<IndexType> > > > > _childEntities; // map from parent to child entities, together with the RefinementPattern to get from one to the other.
-  vector< vector< IndexType > > _entityCellTopologyKeys;
+  vector< vector< Camellia::CellTopologyKey > > _entityCellTopologyKeys;
   
   vector< CellPtr > _cells;
   set< IndexType > _activeCells;
@@ -66,19 +66,22 @@ class MeshTopology {
   map< pair<IndexType, IndexType>, ParametricCurvePtr > _edgeToCurveMap;
   Teuchos::RCP<MeshTransformationFunction> _transformationFunction; // for dealing with those curves
   
-  map< IndexType, shards::CellTopology > _knownTopologies; // key -> topo.  Might want to move this to a CellTopoFactory, but it is fairly simple
+  map< pair<unsigned,unsigned>, CellTopoPtr > _knownTopologies; // (shards key, tensorial degree) -> topo.  Might want to move this to a CellTopoFactory, but it is fairly simple
   
   //  set<IndexType> activeDescendants(IndexType d, IndexType entityIndex);
   //  set<IndexType> activeDescendantsNotInSet(IndexType d, IndexType entityIndex, const set<IndexType> &excludedSet);
   IndexType addCell(CellTopoPtrLegacy cellTopo, const vector<IndexType> &cellVertices, IndexType parentCellIndex = -1);
+  IndexType addCell(CellTopoPtr cellTopo, const vector<IndexType> &cellVertices, IndexType parentCellIndex = -1);
   void addCellForSide(IndexType cellIndex, unsigned sideOrdinal, IndexType sideEntityIndex);
   void addEdgeCurve(pair<IndexType,IndexType> edge, ParametricCurvePtr curve);
-  IndexType addEntity(const shards::CellTopology &entityTopo, const vector<IndexType> &entityVertices, unsigned &entityPermutation); // returns the entityIndex
+//  IndexType addEntity(const shards::CellTopology &entityTopo, const vector<IndexType> &entityVertices, unsigned &entityPermutation); // returns the entityIndex
+  IndexType addEntity(CellTopoPtr entityTopo, const vector<IndexType> &entityVertices, unsigned &entityPermutation); // returns the entityIndex
+
   void deactivateCell(CellPtr cell);
   set<IndexType> descendants(unsigned d, IndexType entityIndex);
   
   //  pair< IndexType, set<IndexType> > determineEntityConstraints(unsigned d, IndexType entityIndex);
-  void addChildren(CellPtr cell, const vector< CellTopoPtrLegacy > &childTopos, const vector< vector<IndexType> > &childVertices);
+  void addChildren(CellPtr cell, const vector< CellTopoPtr > &childTopos, const vector< vector<IndexType> > &childVertices);
   
   void determineGeneralizedParentsForRefinement(CellPtr cell, RefinementPatternPtr refPattern);
   
@@ -102,6 +105,7 @@ class MeshTopology {
 public:
   MeshTopology(unsigned spaceDim, vector<PeriodicBCPtr> periodicBCs=vector<PeriodicBCPtr>());
   MeshTopology(MeshGeometryPtr meshGeometry, vector<PeriodicBCPtr> periodicBCs=vector<PeriodicBCPtr>());
+  CellPtr addCell(CellTopoPtr cellTopo, const vector< vector<double> > &cellVertices);
   CellPtr addCell(CellTopoPtrLegacy cellTopo, const vector< vector<double> > &cellVertices);
   
   // ! This method only gets within a factor of 2 or so, but can give a rough estimate
@@ -139,7 +143,7 @@ public:
   IndexType getEntityParent(unsigned d, IndexType entityIndex, unsigned parentOrdinal=0);
   IndexType getEntityParentForSide(unsigned d, IndexType entityIndex, IndexType parentSideEntityIndex);   // returns the entity index for the parent (which might be the entity itself) of entity (d,entityIndex) that is a subcell of side parentSideEntityIndex
   vector<IndexType> getEntityVertexIndices(unsigned d, IndexType entityIndex);
-  const shards::CellTopology &getEntityTopology(unsigned d, IndexType entityIndex);
+  CellTopoPtr getEntityTopology(unsigned d, IndexType entityIndex);
   IndexType getFaceEdgeIndex(unsigned faceIndex, unsigned edgeOrdinalInFace);
   
   unsigned getCellCountForSide(IndexType sideEntityIndex); // 1 or 2

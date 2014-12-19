@@ -119,8 +119,8 @@ bool MeshTransferFunction::findAncestralPairForNewMeshCellSide(const CellSide &n
         IndexType originalVertexIndex = originalVertexIndices[vertexOrdinal];
         originalOrder[vertexOrdinal] = originalVertexIndexToNewVertexIndex[originalVertexIndex];
       }
-      const shards::CellTopology* sideTopo = &_originalMesh->getTopology()->getEntityTopology(sideDim, originalSideEntityIndex);
-      newMeshCellSideAncestorPermutation = CamelliaCellTools::permutationMatchingOrder(*sideTopo, originalOrder, permutedOrder);
+      CellTopoPtr sideTopo = _originalMesh->getTopology()->getEntityTopology(sideDim, originalSideEntityIndex);
+      newMeshCellSideAncestorPermutation = CamelliaCellTools::permutationMatchingOrder(sideTopo, originalOrder, permutedOrder);
     }
   }
   return true;
@@ -334,10 +334,10 @@ void MeshTransferFunction::values(FieldContainer<double> &values, BasisCachePtr 
     
     unsigned sideDim = _originalMesh->getDimension() - 1;
     IndexType originalSideEntityIndex = _originalMesh->getTopology()->getCell(originalMeshAncestralCellSide.first)->entityIndex(sideDim,originalMeshAncestralCellSide.second);
-    const shards::CellTopology* sideTopo = &_originalMesh->getTopology()->getEntityTopology(sideDim, originalSideEntityIndex);
+    CellTopoPtr sideTopo = _originalMesh->getTopology()->getEntityTopology(sideDim, originalSideEntityIndex);
     
     FieldContainer<double> originalMeshCellReferencePoints(newMeshCellReferencePoints.dimension(0), newMeshCellReferencePoints.dimension(1));
-    CamelliaCellTools::permutedReferenceCellPoints(*sideTopo, newMeshAncestralCellSidePermutation, newMeshCellReferencePoints, originalMeshCellReferencePoints);
+    CamelliaCellTools::permutedReferenceCellPoints(sideTopo, newMeshAncestralCellSidePermutation, newMeshCellReferencePoints, originalMeshCellReferencePoints);
     
     // in originalMesh, may have to map downward to descendants
     CellPtr cell = _originalMesh->getTopology()->getCell(originalMeshAncestralCellSide.first);

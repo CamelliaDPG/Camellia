@@ -153,9 +153,15 @@ protected:
 public:
   BasisCache(ElementTypePtr elemType, Teuchos::RCP<Mesh> mesh = Teuchos::rcp( (Mesh*) NULL ), bool testVsTest=false,
              int cubatureDegreeEnrichment = 0); // use testVsTest=true for test space inner product
+  
   BasisCache(CellTopoPtr cellTopo, int cubDegree, bool createSideCacheToo);
   BasisCache(shards::CellTopology &cellTopo, int cubDegree, bool createSideCacheToo);
+  
   BasisCache(const Intrepid::FieldContainer<double> &physicalCellNodes, shards::CellTopology &cellTopo, int cubDegree, bool createSideCacheToo = false);
+  BasisCache(const Intrepid::FieldContainer<double> &physicalCellNodes, CellTopoPtr cellTopo, int cubDegree, bool createSideCacheToo = false);
+
+  BasisCache(const Intrepid::FieldContainer<double> &physicalCellNodes, CellTopoPtr cellTopo,
+             DofOrdering &trialOrdering, int maxTestDegree, bool createSideCacheToo = false);
   BasisCache(const Intrepid::FieldContainer<double> &physicalCellNodes, shards::CellTopology &cellTopo,
              DofOrdering &trialOrdering, int maxTestDegree, bool createSideCacheToo = false);
   virtual ~BasisCache() {}
@@ -243,6 +249,9 @@ public:
                                              int cubatureDegreeEnrichment = 0); // for cells on the local MPI node
   static BasisCachePtr basisCacheForReferenceCell(shards::CellTopology &cellTopo, int cubatureDegree, bool createSideCacheToo=false);
   static BasisCachePtr basisCacheForRefinedReferenceCell(shards::CellTopology &cellTopo, int cubatureDegree, RefinementBranch refinementBranch, bool createSideCacheToo=false);
+  
+  static BasisCachePtr basisCacheForReferenceCell(CellTopoPtr cellTopo, int cubatureDegree, bool createSideCacheToo=false);
+  static BasisCachePtr basisCacheForRefinedReferenceCell(CellTopoPtr cellTopo, int cubatureDegree, RefinementBranch refinementBranch, bool createSideCacheToo=false);
   
   static BasisCachePtr quadBasisCache(double width, double height, int cubDegree, bool createSideCacheToo=false);
   

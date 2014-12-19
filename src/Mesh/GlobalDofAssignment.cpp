@@ -107,8 +107,8 @@ void GlobalDofAssignment::assignInitialElementType( GlobalIndexType cellID ) {
   
   int testDegree = _cellH1Orders[cellID] + _testOrderEnhancement;
   CellPtr cell = _meshTopology->getCell(cellID);
-  DofOrderingPtr trialOrdering = _dofOrderingFactory->trialOrdering(_cellH1Orders[cellID], *cell->topology(), _enforceConformityLocally);
-  DofOrderingPtr testOrdering = _dofOrderingFactory->testOrdering(testDegree, *cell->topology());
+  DofOrderingPtr trialOrdering = _dofOrderingFactory->trialOrdering(_cellH1Orders[cellID], cell->topology(), _enforceConformityLocally);
+  DofOrderingPtr testOrdering = _dofOrderingFactory->testOrdering(testDegree, cell->topology());
   ElementTypePtr elemType = _elementTypeFactory.getElementType(trialOrdering,testOrdering,cell->topology());
   _elementTypeForCell[cellID] = elemType;
 }
@@ -116,7 +116,7 @@ void GlobalDofAssignment::assignInitialElementType( GlobalIndexType cellID ) {
 void GlobalDofAssignment::assignParities( GlobalIndexType cellID ) {
   CellPtr cell = _meshTopology->getCell(cellID);
 
-  unsigned sideCount = CamelliaCellTools::getSideCount(*cell->topology());
+  unsigned sideCount = cell->getSideCount();
   
   vector<int> cellParities(sideCount);
   for (int sideOrdinal=0; sideOrdinal<sideCount; sideOrdinal++) {

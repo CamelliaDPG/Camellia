@@ -38,7 +38,6 @@
 
 
 // Intrepid includes
-#include "Intrepid_DefaultCubatureFactory.hpp"
 #include "Intrepid_FieldContainer.hpp"
 #include "Intrepid_CellTools.hpp"
 #include "Intrepid_FunctionSpaceTools.hpp"
@@ -110,10 +109,14 @@
 
 #include "MeshFactory.h"
 
+#include "CubatureFactory.h"
+
 #ifdef HAVE_EPETRAEXT_HDF5
 #include <EpetraExt_HDF5.h>
 #include <Epetra_SerialComm.h>
 #endif
+
+using namespace Camellia;
 
 double Solution::conditionNumberEstimate( Epetra_LinearProblem & problem ) {
   // estimates the 2-norm condition number
@@ -1344,49 +1347,16 @@ ElementTypePtr Solution::getEquivalentElementType(Teuchos::RCP<Mesh> otherMesh, 
   DofOrderingPtr otherTest = elemType->testOrderPtr;
   DofOrderingPtr myTrial = _mesh->getDofOrderingFactory().getTrialOrdering(*otherTrial);
   DofOrderingPtr myTest = _mesh->getDofOrderingFactory().getTestOrdering(*otherTest);
-  Teuchos::RCP<shards::CellTopology> otherCellTopoPtrLegacy = elemType->cellTopoPtr;
-  Teuchos::RCP<shards::CellTopology> myCellTopoPtrLegacy;
+  CellTopoPtr otherCellTopo = elemType->cellTopoPtr;
+  CellTopoPtr myCellTopo;
   for (int i=0; i<_mesh->activeElements().size(); i++) {
-    myCellTopoPtrLegacy = _mesh->activeElements()[i]->elementType()->cellTopoPtr;
-    if (myCellTopoPtrLegacy->getKey() == otherCellTopoPtrLegacy->getKey() ) {
+    myCellTopo = _mesh->activeElements()[i]->elementType()->cellTopoPtr;
+    if (myCellTopo->getKey() == otherCellTopo->getKey() ) {
       break; // out of for loop
     }
   }
-  return _mesh->getElementTypeFactory().getElementType(myTrial,myTest,myCellTopoPtrLegacy);
+  return _mesh->getElementTypeFactory().getElementType(myTrial,myTest,myCellTopo);
 }
-
-// The following method isn't really a good idea.
-//bool Solution::equals(Solution& otherSolution, double tol) {
-//  double maxDiff = 0.0;
-//  map< int, FieldContainer<double> > otherSolutionForCell = otherSolution.solutionForCellIDGlobal();
-//  int numElements = otherSolutionForCell.size();
-//  if (numElements != _solutionForCellIDGlobal.size()) return false;
-//
-//  for (map< int, FieldContainer<double> >::iterator entryIt=_solutionForCellIDGlobal.begin();
-//       entryIt != _solutionForCellIDGlobal.end(); entryIt++) {
-//    int cellID = entryIt->first;
-//    FieldContainer<double> mySoln = entryIt->second;
-//    vector<double> centroid = _mesh->getCellCentroid(cellID);
-//
-//    vector<ElementPtr>
-//    int otherCellID =
-//    FieldContainer<double> otherSoln = otherSolutionForCell[cellID];
-//    int numSolnEntries = mySoln.size();
-//    if ( numSolnEntries != otherSoln.size() ) {
-//      return false;
-//    }
-//    for (int i=0; i<numSolnEntries; i++) {
-//      double mine = mySoln[i], theirs = otherSoln[i];
-//      double diff = abs(mine-theirs);
-//      if (diff > tol) {
-//        return false;
-//      }
-//      maxDiff = max(maxDiff,diff);
-//    }
-//  }
-//  //cout << "Solution maxDiff is " << maxDiff << endl;
-//  return true;
-//}
 
 Epetra_MultiVector* Solution::getGlobalCoefficients() {
   return (*_lhsVector)(0);
@@ -1486,7 +1456,7 @@ void Solution::integrateBasisFunctions(FieldContainer<double> &values, ElementTy
 
   int cubDegree = trialBasis->getDegree();
 
-  BasisCache basisCache(_mesh->physicalCellNodes(elemTypePtr), *(elemTypePtr->cellTopoPtr), cubDegree);
+  BasisCache basisCache(_mesh->physicalCellNodes(elemTypePtr), elemTypePtr->cellTopoPtr, cubDegree);
 
   Teuchos::RCP < const FieldContainer<double> > trialValuesTransformedWeighted;
 
@@ -1519,7 +1489,7 @@ double Solution::meshMeasure() {
     ElementTypePtr elemTypePtr = *(elemTypeIt);
     int numCellsOfType = _mesh->numElementsOfType(elemTypePtr);
     int cubDegree = 1;
-    BasisCache basisCache(_mesh->physicalCellNodesGlobal(elemTypePtr), *(elemTypePtr->cellTopoPtr), cubDegree);
+    BasisCache basisCache(_mesh->physicalCellNodesGlobal(elemTypePtr), elemTypePtr->cellTopoPtr, cubDegree);
     FieldContainer<double> cellMeasures = basisCache.getCellMeasures();
     for (int cellIndex=0; cellIndex<numCellsOfType; cellIndex++) {
       value += cellMeasures(cellIndex);
@@ -1752,7 +1722,7 @@ void Solution::integrateSolution(FieldContainer<double> &values, ElementTypePtr 
 
   int cubDegree = trialBasis->getDegree();
 
-  BasisCache basisCache(_mesh->physicalCellNodesGlobal(elemTypePtr), *(elemTypePtr->cellTopoPtr), cubDegree);
+  BasisCache basisCache(_mesh->physicalCellNodesGlobal(elemTypePtr), elemTypePtr->cellTopoPtr, cubDegree);
 
   Teuchos::RCP < const FieldContainer<double> > trialValuesTransformedWeighted;
 
@@ -1808,12 +1778,12 @@ void Solution::integrateFlux(FieldContainer<double> &values, ElementTypePtr elem
 
   DofOrdering dofOrdering = *(elemTypePtr->trialOrderPtr.get());
 
-  shards::CellTopology cellTopo = *(elemTypePtr->cellTopoPtr);
-  int numSides = CamelliaCellTools::getSideCount(cellTopo);
+  CellTopoPtr cellTopo = elemTypePtr->cellTopoPtr;
+  int numSides = cellTopo->getSideCount();
 
   for (int sideIndex=0; sideIndex<numSides; sideIndex++) {
     // Get numerical integration points and weights
-    DefaultCubatureFactory<double>  cubFactory;
+    CubatureFactory  cubFactory;
     BasisPtr basis = dofOrdering.getBasis(trialID,sideIndex);
     int basisRank = dofOrdering.getBasisRank(trialID);
     int cubDegree = 2*basis->getDegree();
@@ -1823,9 +1793,9 @@ void Solution::integrateFlux(FieldContainer<double> &values, ElementTypePtr elem
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "integrateFlux() called for field variable.");
     }
 
-    shards::CellTopology side(cellTopo.getCellTopologyData(spaceDim-1,sideIndex)); // create relevant subcell (side) topology
-    int sideDim = side.getDimension();
-    Teuchos::RCP<Cubature<double> > sideCub = cubFactory.create(side, cubDegree);
+    CellTopoPtr side = (cellTopo->getSubcell(spaceDim-1,sideIndex)); // create relevant subcell (side) topology
+    int sideDim = side->getDimension();
+    Teuchos::RCP< Intrepid::Cubature<double> > sideCub = cubFactory.create(side, cubDegree);
     int numCubPoints = sideCub->getNumPoints();
     FieldContainer<double> cubPointsSide(numCubPoints, sideDim); // cubature points from the pov of the side (i.e. a 1D set)
     FieldContainer<double> cubWeightsSide(numCubPoints);
@@ -1836,16 +1806,20 @@ void Solution::integrateFlux(FieldContainer<double> &values, ElementTypePtr elem
 
     // compute geometric cell information
     //cout << "computing geometric cell info for boundary integral." << endl;
-    CellTools::mapToReferenceSubcell(cubPointsSideRefCell, cubPointsSide, sideDim, (int)sideIndex, cellTopo);
-    CellTools::setJacobian(jacobianSideRefCell, cubPointsSideRefCell, physicalCellNodes, cellTopo);
+    CamelliaCellTools::mapToReferenceSubcell(cubPointsSideRefCell, cubPointsSide, sideDim, (int)sideIndex, cellTopo);
+    CamelliaCellTools::setJacobian(jacobianSideRefCell, cubPointsSideRefCell, physicalCellNodes, cellTopo);
 
     // map side cubature points in reference parent cell domain to physical space
     FieldContainer<double> physCubPoints(numCells, numCubPoints, spaceDim);
-    CellTools::mapToPhysicalFrame(physCubPoints, cubPointsSideRefCell, physicalCellNodes, cellTopo);
+    CamelliaCellTools::mapToPhysicalFrame(physCubPoints, cubPointsSideRefCell, physicalCellNodes, cellTopo);
 
+    if (cellTopo->getTensorialDegree() > 0) {
+      TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument,"integrateFlux() doesn't support tensorial degree > 0.");
+    }
+    
     FieldContainer<double> weightedMeasure(numCells, numCubPoints);
     FunctionSpaceTools::computeEdgeMeasure<double>(weightedMeasure, jacobianSideRefCell,
-                                                   cubWeightsSide, sideIndex, cellTopo);
+                                                   cubWeightsSide, sideIndex, cellTopo->getShardsTopology());
 
     FieldContainer<double> computedValues(numCells,numCubPoints);
 
@@ -1882,8 +1856,8 @@ void Solution::solutionValues(FieldContainer<double> &values,
 
   int numCells = physicalCellNodes.dimension(0);
   int numPoints = physicalPoints.dimension(1);
-  shards::CellTopology cellTopo = *(elemTypePtr->cellTopoPtr.get());
-  int spaceDim = cellTopo.getDimension();
+  CellTopoPtr cellTopo = elemTypePtr->cellTopoPtr;
+  int spaceDim = cellTopo->getDimension();
 
   typedef CellTools<double>  CellTools;
   typedef FunctionSpaceTools fst;
@@ -1931,14 +1905,14 @@ void Solution::solutionValues(FieldContainer<double> &values,
   FieldContainer<double> thisCellJacobDet(1,numPoints);
   FieldContainer<double> thisRefElemPoints(numPoints,spaceDim);
 
-  shards::CellTopology side(cellTopo.getCellTopologyData(spaceDim-1,sideIndex)); // create relevant subcell (side) topology
+  CellTopoPtr side = cellTopo->getSubcell(spaceDim-1,sideIndex); // create relevant subcell (side) topology
   int sideDim = spaceDim-1;
   FieldContainer<double> cubPointsSideRefCell(numPoints, spaceDim); // cubPointsSide from the pov of the ref cell
 
   // compute geometric cell information
   //cout << "computing geometric cell info for boundary integral." << endl;
-  CellTools::mapToReferenceSubcell(cubPointsSideRefCell, sideRefCellPoints, sideDim, (int)sideIndex, cellTopo);
-  CellTools::setJacobian(cellJacobian, cubPointsSideRefCell, physicalCellNodes, cellTopo);
+  CamelliaCellTools::mapToReferenceSubcell(cubPointsSideRefCell, sideRefCellPoints, sideDim, (int)sideIndex, cellTopo);
+  CamelliaCellTools::setJacobian(cellJacobian, cubPointsSideRefCell, physicalCellNodes, cellTopo);
   CellTools::setJacobianDet(cellJacobDet, cellJacobian );
   CellTools::setJacobianInv(cellJacobInv, cellJacobian );
 
@@ -2172,7 +2146,7 @@ void Solution::computeErrorRepresentation() {
     ElementTypePtr elemTypePtr = _mesh->getElementType(cellID);
 
     Teuchos::RCP<DofOrdering> testOrdering = elemTypePtr->testOrderPtr;
-    shards::CellTopology cellTopo = *(elemTypePtr->cellTopoPtr);
+    CellTopoPtr cellTopo = elemTypePtr->cellTopoPtr;
 
     int numCells = 1;
     int numTestDofs = testOrdering->totalDofs();
@@ -2407,7 +2381,7 @@ void Solution::solutionValues(FieldContainer<double> &values, int trialID, const
 
       // 1. compute refElemPoints, the evaluation points mapped to reference cell:
       FieldContainer<double> refElemPoints(numCells,numPoints, spaceDim);
-      CellTools<double>::mapToReferenceFrame(refElemPoints,physicalPointsForCell,physicalCellNodes,*(elemTypePtr->cellTopoPtr.get()));
+      CamelliaCellTools::mapToReferenceFrame(refElemPoints,physicalPointsForCell,_mesh->getTopology(),cellID,_mesh->globalDofAssignment()->getCubatureDegree(cellID));
       refElemPoints.resize(numPoints,spaceDim);
 
       BasisCachePtr basisCache = BasisCache::basisCacheForCell(_mesh, cellID);
@@ -2490,8 +2464,8 @@ void Solution::solutionValues(FieldContainer<double> &values, int trialID, const
 
       // 1. compute refElemPoints, the evaluation points mapped to reference cell:
       FieldContainer<double> refElemPoint(numCells, numPoints, spaceDim);
-      shards::CellTopology cellTopo = *(elemTypePtr->cellTopoPtr.get());
-      CellTools::mapToReferenceFrame(refElemPoint,physicalPoint,physicalCellNodes,cellTopo);
+      CellTopoPtr cellTopo = elemTypePtr->cellTopoPtr;
+      CamelliaCellTools::mapToReferenceFrame(refElemPoint,physicalPoint,_mesh->getTopology(),cellID,_mesh->globalDofAssignment()->getCubatureDegree(cellID));
       refElemPoint.resize(numPoints,spaceDim);
 
       Teuchos::RCP<DofOrdering> trialOrder = elemTypePtr->trialOrderPtr;
@@ -2571,9 +2545,9 @@ void Solution::writeToFile(int trialID, const string &filePath) {
   for (elemTypeIt = elementTypes.begin(); elemTypeIt != elementTypes.end(); elemTypeIt++) {
     ElementTypePtr elemTypePtr = *(elemTypeIt);
 
-    CellTopoPtrLegacy cellTopo = elemTypePtr->cellTopoPtr;
+    CellTopoPtr cellTopo = elemTypePtr->cellTopoPtr;
     FieldContainer<double> vertexPoints(cellTopo->getVertexCount(),cellTopo->getDimension());
-    CamelliaCellTools::refCellNodesForTopology(vertexPoints, *cellTopo);
+    CamelliaCellTools::refCellNodesForTopology(vertexPoints, cellTopo);
 
     int numVertices = vertexPoints.dimension(1);
 
@@ -2660,12 +2634,12 @@ void Solution::writeQuadSolutionToFile(int trialID, const string &filePath) {
     ElementTypePtr elemTypePtr = *(elemTypeIt);
     int numCellsOfType = _mesh->numElementsOfType(elemTypePtr);
     int basisDegree = elemTypePtr->trialOrderPtr->getBasis(trialID)->getDegree();
-    Teuchos::RCP<shards::CellTopology> cellTopoPtr = elemTypePtr->cellTopoPtr;
+    CellTopoPtr cellTopoPtr = elemTypePtr->cellTopoPtr;
     // 0. Set up Cubature
     // Get numerical integration points--these will be the points we compute the solution values for...
-    DefaultCubatureFactory<double>  cubFactory;
+    CubatureFactory  cubFactory;
     int cubDegree = 2*basisDegree;
-    Teuchos::RCP<Cubature<double> > cellTopoCub = cubFactory.create(*(cellTopoPtr.get()), cubDegree);
+    Teuchos::RCP<Cubature<double> > cellTopoCub = cubFactory.create(cellTopoPtr, cubDegree);
 
     int cubDim       = cellTopoCub->getDimension();
     int numCubPoints = cellTopoCub->getNumPoints();
@@ -2954,8 +2928,7 @@ void Solution::writeFieldsToFile(int trialID, const string &filePath){
   int globalCellInd = 1; //matlab indexes from 1
   for (elemTypeIt = elementTypes.begin(); elemTypeIt != elementTypes.end(); elemTypeIt++) { //thru quads/triangles/etc
     ElementTypePtr elemTypePtr = *(elemTypeIt);
-    shards::CellTopology cellTopo = *(elemTypePtr->cellTopoPtr);
-    Teuchos::RCP<shards::CellTopology> cellTopoPtr = elemTypePtr->cellTopoPtr;
+    CellTopoPtr cellTopo = elemTypePtr->cellTopoPtr;
 
     FieldContainer<double> vertexPoints, physPoints;
     _mesh->verticesForElementType(vertexPoints,elemTypePtr); //stores vertex points for this element
@@ -3058,8 +3031,8 @@ void Solution::writeFluxesToFile(int trialID, const string &filePath){
   for (elemTypeIt = elementTypes.begin(); elemTypeIt != elementTypes.end(); elemTypeIt++) { //thru quads/triangles/etc
 
     ElementTypePtr elemTypePtr = *(elemTypeIt);
-    shards::CellTopology cellTopo = *(elemTypePtr->cellTopoPtr);
-    int numSides = CamelliaCellTools::getSideCount(cellTopo);
+    CellTopoPtr cellTopo = elemTypePtr->cellTopoPtr;
+    int numSides = cellTopo->getSideCount();
 
     FieldContainer<double> vertexPoints, physPoints;
     _mesh->verticesForElementType(vertexPoints,elemTypePtr); //stores vertex points for this element
@@ -3087,10 +3060,10 @@ void Solution::writeFluxesToFile(int trialID, const string &filePath){
 
     for (int sideIndex=0; sideIndex < numSides; sideIndex++){
 
-      DefaultCubatureFactory<double>  cubFactory;
+      CubatureFactory  cubFactory;
       int cubDegree = 15;//arbitrary number of points per cell, make dep on basis degree?
-      shards::CellTopology side(cellTopo.getCellTopologyData(spaceDim-1,sideIndex));
-      int sideDim = side.getDimension();
+      CellTopoPtr side = cellTopo->getSubcell(spaceDim-1,sideIndex);
+      int sideDim = side->getDimension();
       Teuchos::RCP<Cubature<double> > sideCub = cubFactory.create(side, cubDegree);
       int numCubPoints = sideCub->getNumPoints();
       FieldContainer<double> cubPointsSideRefCell(numCubPoints, spaceDim); // just need the reference cell cubature points - map to physical space in n-D space
@@ -3100,11 +3073,11 @@ void Solution::writeFluxesToFile(int trialID, const string &filePath){
       sideCub->getCubature(cubPointsSide, cubWeightsSide);
 
       // compute geometric cell information
-      CellTools::mapToReferenceSubcell(cubPointsSideRefCell, cubPointsSide, sideDim, sideIndex, cellTopo);
+      CamelliaCellTools::mapToReferenceSubcell(cubPointsSideRefCell, cubPointsSide, sideDim, sideIndex, cellTopo);
 
       // map side cubature points in reference parent cell domain to physical space
       FieldContainer<double> physCubPoints(numCells, numCubPoints, spaceDim);
-      CellTools::mapToPhysicalFrame(physCubPoints, cubPointsSideRefCell, physicalCellNodes, cellTopo);
+      CamelliaCellTools::mapToPhysicalFrame(physCubPoints, cubPointsSideRefCell, physicalCellNodes, cellTopo);
 
       // we now have cubPointsSideRefCell
       FieldContainer<double> computedValues(numCells,numCubPoints); // first arg = 1 cell only
@@ -3356,7 +3329,7 @@ void Solution::projectOntoCell(const map<int, FunctionPtr > &functionMap, Global
       int firstSide, lastSide;
       if (side == -1) { // handle all sides
         firstSide = 0;
-        lastSide = CamelliaCellTools::getSideCount(*elemTypePtr->cellTopoPtr) - 1;
+        lastSide = elemTypePtr->cellTopoPtr->getSideCount() - 1;
       } else {
         firstSide = side;
         lastSide = side;
@@ -3462,7 +3435,7 @@ void Solution::projectOldCellOntoNewCells(GlobalIndexType cellID,
 
    CellPtr parentCell = _mesh->getTopology()->getCell(cellID);
    int dummyCubatureDegree = 1;
-   BasisCachePtr parentRefCellCache = BasisCache::basisCacheForReferenceCell(*parentCell->topology(), dummyCubatureDegree);
+   BasisCachePtr parentRefCellCache = BasisCache::basisCacheForReferenceCell(parentCell->topology(), dummyCubatureDegree);
 
 //   cout << "projecting from cell " << cellID << " onto its children.\n";
 
@@ -3505,10 +3478,10 @@ void Solution::projectOldCellOntoNewCells(GlobalIndexType cellID,
 
    int sideDim = _mesh->getTopology()->getSpaceDim() - 1;
 
-   int sideCount = CamelliaCellTools::getSideCount(*parentCell->topology());
+   int sideCount = parentCell->topology()->getSideCount();
    vector< map<int, FunctionPtr> > traceMap(sideCount);
    for (int sideOrdinal=0; sideOrdinal<sideCount; sideOrdinal++) {
-     shards::CellTopology sideTopo = parentCell->topology()->getCellTopologyData(sideDim, sideOrdinal);
+     CellTopoPtr sideTopo = parentCell->topology()->getSubcell(sideDim, sideOrdinal);
      BasisCachePtr parentSideTopoBasisCache = BasisCache::basisCacheForReferenceCell(sideTopo, dummyCubatureDegree);
      for (set<int>::iterator trialIDIt = trialIDs.begin(); trialIDIt != trialIDs.end(); trialIDIt++) {
        int trialID = *trialIDIt;
@@ -3534,7 +3507,7 @@ void Solution::projectOldCellOntoNewCells(GlobalIndexType cellID,
     if (childID == -1) continue; // indication we should skip this child...
     CellPtr childCell = _mesh->getTopology()->getCell(childID);
     ElementTypePtr childType = _mesh->getElementType(childID);
-    int childSideCount = CamelliaCellTools::getSideCount(*childCell->topology());
+    int childSideCount = childCell->getSideCount();
 
     int child_p_order = _mesh->getElementType(childID)->trialOrderPtr->maxBasisDegree();
     int cubatureDegree = parent_p_order + child_p_order;
@@ -3544,9 +3517,9 @@ void Solution::projectOldCellOntoNewCells(GlobalIndexType cellID,
 
     if (parentCell->children().size() > 0) {
       RefinementBranch refBranch(1,make_pair(parentCell->refinementPattern().get(), childOrdinal));
-      volumeBasisCache = BasisCache::basisCacheForRefinedReferenceCell(*childCell->topology(), cubatureDegree, refBranch, true);
+      volumeBasisCache = BasisCache::basisCacheForRefinedReferenceCell(childCell->topology(), cubatureDegree, refBranch, true);
       for (int sideOrdinal = 0; sideOrdinal < childSideCount; sideOrdinal++) {
-        shards::CellTopology sideTopo = childCell->topology()->getCellTopologyData(sideDim, sideOrdinal);
+        CellTopoPtr sideTopo = childCell->topology()->getSubcell(sideDim, sideOrdinal);
         unsigned parentSideOrdinal = (childID==cellID) ? sideOrdinal
                                    : parentCell->refinementPattern()->mapSubcellOrdinalFromChildToParent(childOrdinal, sideDim, sideOrdinal);
 
@@ -3560,9 +3533,9 @@ void Solution::projectOldCellOntoNewCells(GlobalIndexType cellID,
         }
       }
     } else {
-      volumeBasisCache = BasisCache::basisCacheForReferenceCell(*childCell->topology(), cubatureDegree, true);
+      volumeBasisCache = BasisCache::basisCacheForReferenceCell(childCell->topology(), cubatureDegree, true);
       for (int sideOrdinal = 0; sideOrdinal < childSideCount; sideOrdinal++) {
-        shards::CellTopology sideTopo = childCell->topology()->getCellTopologyData(sideDim, sideOrdinal);
+        CellTopoPtr sideTopo = childCell->topology()->getSubcell(sideDim, sideOrdinal);
         sideBasisCache[sideOrdinal] = BasisCache::basisCacheForReferenceCell(sideTopo, cubatureDegree);
       }
     }

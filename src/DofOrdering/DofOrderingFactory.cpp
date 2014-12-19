@@ -57,8 +57,7 @@ DofOrderingFactory::DofOrderingFactory(Teuchos::RCP<BilinearForm> bilinearForm,
   _testOrderEnhancements = testOrderEnhancements;
 }
 
-DofOrderingPtr DofOrderingFactory::testOrdering(int polyOrder, 
-                                               const shards::CellTopology &cellTopo) {
+DofOrderingPtr DofOrderingFactory::testOrdering(int polyOrder, CellTopoPtr cellTopo) {
   vector<int> testIDs = _bilinearForm->testIDs();
   vector<int>::iterator testIterator;
   
@@ -69,20 +68,26 @@ DofOrderingPtr DofOrderingFactory::testOrdering(int polyOrder,
     IntrepidExtendedTypes::EFunctionSpaceExtended fs = _bilinearForm->functionSpaceForTest(testID);
     BasisPtr basis;
     int testIDPolyOrder = polyOrder + _testOrderEnhancements[testID]; // uses the fact that map defaults to 0 for entries that aren't found
-    basis = BasisFactory::basisFactory()->getBasis( testIDPolyOrder, cellTopo.getKey(), fs);
+    basis = BasisFactory::basisFactory()->getBasis( testIDPolyOrder, cellTopo, fs);
     int basisRank = basis->rangeRank();
     testOrder->addEntry(testID,basis,basisRank);
   }
   
   // return Teuchos::RCP to the old element if there was one, or the newly inserted element
-  return *(_testOrderings.insert(testOrder).first); 
+  return *(_testOrderings.insert(testOrder).first);
 }
 
-DofOrderingPtr DofOrderingFactory::trialOrdering(int polyOrder, 
-                                                 const shards::CellTopology &cellTopo,
+DofOrderingPtr DofOrderingFactory::testOrdering(int polyOrder, 
+                                                const shards::CellTopology &shardsTopo) {
+  CellTopoPtr cellTopo = CellTopology::cellTopology(shardsTopo);
+  return testOrdering(polyOrder, cellTopo);
+}
+
+DofOrderingPtr DofOrderingFactory::trialOrdering(int polyOrder,
+                                                 CellTopoPtr cellTopo,
                                                  bool conformingVertices) {
   // conformingVertices = true only works for 2D topologies
-  if ((cellTopo.getDimension() != 2) && conformingVertices) {
+  if ((cellTopo->getDimension() != 2) && conformingVertices) {
     cout << "ERROR: DofOrderingFactory only supports conformingVertices = true for 2D topologies.\n";
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "DofOrderingFactory only supports conformingVertices = true for 2D topologies");
   }
@@ -92,8 +97,6 @@ DofOrderingPtr DofOrderingFactory::trialOrdering(int polyOrder,
   DofOrderingPtr trialOrder = Teuchos::rcp(new DofOrdering());
   DofOrderingPtr traceOrder = Teuchos::rcp(new DofOrdering());
   DofOrderingPtr fieldOrder = Teuchos::rcp(new DofOrdering());
-  
-  CellTopoPtr cellTopoPtr = CellTopology::cellTopology(cellTopo);
   
   for (trialIterator = trialIDs.begin(); trialIterator != trialIDs.end(); trialIterator++) {
     int trialID = *trialIterator;
@@ -106,11 +109,11 @@ DofOrderingPtr DofOrderingFactory::trialOrdering(int polyOrder,
     int basisRank;
     
     if (_bilinearForm->isFluxOrTrace(trialID)) { //lines, in 2D case (TODO: extend to arbitrary dimension)
-      int sideDim = cellTopo.getDimension() - 1;
-      int numSides = CamelliaCellTools::getSideCount(cellTopo);
+      int sideDim = cellTopo->getDimension() - 1;
+      int numSides = cellTopo->getSideCount();
       for (int sideOrdinal=0; sideOrdinal<numSides; sideOrdinal++) {
-        shards::CellTopology sideTopo = cellTopo.getBaseCellTopologyData(sideDim, sideOrdinal);
-        basis = BasisFactory::basisFactory()->getConformingBasis( trialIDPolyOrder, sideTopo.getKey(), fs);
+        CellTopoPtr sideTopo = cellTopo->getSubcell(sideDim, sideOrdinal);
+        basis = BasisFactory::basisFactory()->getConformingBasis( trialIDPolyOrder, sideTopo, fs);
         basisRank = basis->rangeRank();
         trialOrder->addEntry(trialID,basis,basisRank,sideOrdinal);
         traceOrder->addEntry(trialID,basis,basisRank,sideOrdinal);
@@ -119,11 +122,11 @@ DofOrderingPtr DofOrderingFactory::trialOrdering(int polyOrder,
           && fs == IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD) {
         // then we want to identify basis dofs at the vertices...
         
-        addConformingVertexPairings(trialID, trialOrder, cellTopoPtr);
-        addConformingVertexPairings(trialID, traceOrder, cellTopoPtr);
+        addConformingVertexPairings(trialID, trialOrder, cellTopo);
+        addConformingVertexPairings(trialID, traceOrder, cellTopo);
       }
     } else {
-      basis = BasisFactory::basisFactory()->getBasis(trialIDPolyOrder, cellTopo.getKey(), fs);
+      basis = BasisFactory::basisFactory()->getBasis(trialIDPolyOrder, cellTopo, fs);
       basisRank = basis->rangeRank();
       trialOrder->addEntry(trialID,basis,basisRank,0);
       fieldOrder->addEntry(trialID,basis,basisRank,0);
@@ -142,6 +145,13 @@ DofOrderingPtr DofOrderingFactory::trialOrdering(int polyOrder,
   _traceOrderingForTrial[trialOrder.get()] = traceOrder;
   _fieldOrderingForTrial[trialOrder.get()] = fieldOrder;
   return trialOrder;
+}
+
+DofOrderingPtr DofOrderingFactory::trialOrdering(int polyOrder, 
+                                                 const shards::CellTopology &shardsTopo,
+                                                 bool conformingVertices) {
+  CellTopoPtr cellTopoPtr = CellTopology::cellTopology(shardsTopo);
+  return trialOrdering(polyOrder, cellTopoPtr, conformingVertices);
 }
 
 DofOrderingPtr DofOrderingFactory::getRelabeledDofOrdering(DofOrderingPtr dofOrdering, map<int, int> &oldKeysNewValues) {
@@ -355,7 +365,7 @@ map<int, BasisPtr> DofOrderingFactory::getPatchBasisUpgradeMap(const DofOrdering
 }
 
 void DofOrderingFactory::assignMultiBasis(DofOrderingPtr &trialOrdering, int sideIndex, 
-                                          const shards::CellTopology &cellTopo,
+                                          CellTopoPtr cellTopo,
                                           vector< pair< DofOrderingPtr,int > > &childTrialOrdersForSide ) {
   map<int, BasisPtr> varIDsToUpgrade = getMultiBasisUpgradeMap(childTrialOrdersForSide);
   trialOrdering = upgradeSide(trialOrdering,cellTopo,varIDsToUpgrade,sideIndex);
@@ -363,7 +373,7 @@ void DofOrderingFactory::assignMultiBasis(DofOrderingPtr &trialOrdering, int sid
 
 void DofOrderingFactory::assignPatchBasis(DofOrderingPtr &childTrialOrdering, int childSideIndex,
                                           const DofOrderingPtr parentTrialOrdering, int parentSideIndex,
-                                          int childIndexInParentSide, const shards::CellTopology &childCellTopo) {
+                                          int childIndexInParentSide, CellTopoPtr childCellTopo) {
   TEUCHOS_TEST_FOR_EXCEPTION(childIndexInParentSide >= 2, std::invalid_argument, "assignPatchBasis only supports 2 children on a side right now.");
   map<int, BasisPtr> varIDsToUpgrade = getPatchBasisUpgradeMap(childTrialOrdering, childSideIndex, parentTrialOrdering,
                                                                parentSideIndex, childIndexInParentSide);
@@ -387,10 +397,10 @@ bool DofOrderingFactory::sideHasMultiBasis(DofOrderingPtr &trialOrdering, int si
 }
 
 void DofOrderingFactory::childMatchParent(DofOrderingPtr &childTrialOrdering, int childSideIndex,
-                                          const shards::CellTopology &childTopo,
+                                          CellTopoPtr childTopo,
                                           int childIndexInParentSide, // == where in the multi-basis are we, if there is a multi-basis?
                                           DofOrderingPtr &parentTrialOrdering, int sideIndex,
-                                          const shards::CellTopology &parentTopo) {
+                                          CellTopoPtr parentTopo) {
   // basic strategy: if parent has MultiBasis on that side, then child should get a piece of that
   //                 otherwise, we can simply use matchSides as it is...
   if ( sideHasMultiBasis(parentTrialOrdering,sideIndex) ) {
@@ -420,9 +430,9 @@ void DofOrderingFactory::childMatchParent(DofOrderingPtr &childTrialOrdering, in
 }
 
 int DofOrderingFactory::matchSides(DofOrderingPtr &firstOrdering, int firstSideIndex, 
-                                    const shards::CellTopology &firstCellTopo,
+                                    CellTopoPtr firstCellTopo,
                                     DofOrderingPtr &secondOrdering, int secondSideIndex,
-                                    const shards::CellTopology &secondCellTopo) {
+                                    CellTopoPtr secondCellTopo) {
   // upgrades the lesser-order basis 
   map<int, BasisPtr > varIDsToUpgrade;
   int orderingToUpgrade = 0; // 0 means neither, 1 first, 2 second, -1 means PatchBasis (i.e. can't matchSides w/o more Mesh info)
@@ -473,7 +483,7 @@ int DofOrderingFactory::matchSides(DofOrderingPtr &firstOrdering, int firstSideI
 }
 
 DofOrderingPtr DofOrderingFactory::upgradeSide(DofOrderingPtr dofOrdering,
-                                               const shards::CellTopology &cellTopo, 
+                                               CellTopoPtr cellTopo,
                                                map<int,BasisPtr> varIDsToUpgrade,
                                                int sideToUpgrade) {
   bool conforming = _isConforming[dofOrdering.get()];
@@ -481,8 +491,6 @@ DofOrderingPtr DofOrderingFactory::upgradeSide(DofOrderingPtr dofOrdering,
   
   set<int> varIDs = dofOrdering->getVarIDs();
   set<int>::iterator idIt;
-
-  CellTopoPtr cellTopoPtr = CellTopology::cellTopology(cellTopo);
   
   for (idIt = varIDs.begin(); idIt != varIDs.end(); idIt++) {
     int varID = *idIt;
@@ -508,7 +516,7 @@ DofOrderingPtr DofOrderingFactory::upgradeSide(DofOrderingPtr dofOrdering,
     }
 
     if ((numSides > 1) && (fs == IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD) && (conforming)) {
-      addConformingVertexPairings(varID, newOrdering, cellTopoPtr);
+      addConformingVertexPairings(varID, newOrdering, cellTopo);
     }
   }
   newOrdering->rebuildIndex();
@@ -570,6 +578,16 @@ DofOrderingPtr DofOrderingFactory::pRefineTrial(DofOrderingPtr trialOrdering,
                                                const shards::CellTopology &cellTopo, int pToAdd) {
   CellTopoPtr cellTopoPtr = CellTopology::cellTopology(cellTopo);
   return pRefine(trialOrdering, cellTopoPtr, pToAdd, false);
+}
+
+DofOrderingPtr DofOrderingFactory::pRefineTest(DofOrderingPtr testOrdering,
+                                               CellTopoPtr cellTopo, int pToAdd) {
+  return pRefine(testOrdering, cellTopo, pToAdd, true);
+}
+
+DofOrderingPtr DofOrderingFactory::pRefineTrial(DofOrderingPtr trialOrdering,
+                                                CellTopoPtr cellTopo, int pToAdd) {
+  return pRefine(trialOrdering, cellTopo, pToAdd, false);
 }
 
 int DofOrderingFactory::testPolyOrder(DofOrderingPtr testOrdering) {

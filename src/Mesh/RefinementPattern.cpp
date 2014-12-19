@@ -40,8 +40,12 @@
 //#include "CamelliaDebugUtility.h" // includes print() methods.
 
 using namespace Intrepid;
+using namespace Camellia;
 
-RefinementPattern::RefinementPattern(Teuchos::RCP< shards::CellTopology > cellTopoPtr, FieldContainer<double> refinedNodes, vector< RefinementPatternPtr > sideRefinementPatterns) { 
+// define our static map:
+map< CellTopologyKey, RefinementPatternPtr > RefinementPattern::_refPatternForKeyTensorialDegree;
+
+RefinementPattern::RefinementPattern(CellTopoPtr cellTopoPtr, FieldContainer<double> refinedNodes, vector< RefinementPatternPtr > sideRefinementPatterns) {
   _cellTopoPtr = cellTopoPtr;
   _nodes = refinedNodes;
   _sideRefinementPatterns = sideRefinementPatterns;
@@ -49,11 +53,11 @@ RefinementPattern::RefinementPattern(Teuchos::RCP< shards::CellTopology > cellTo
   int numSubCells = refinedNodes.dimension(0);
   int numNodesPerCell = refinedNodes.dimension(1);
   unsigned spaceDim = refinedNodes.dimension(2);
-  unsigned sideCount = CamelliaCellTools::getSideCount(*_cellTopoPtr);
+  unsigned sideCount = cellTopoPtr->getSideCount();
   _childrenForSides = vector< vector< pair< unsigned, unsigned> > >(sideCount); // will populate below..
   
   if (_cellTopoPtr->getNodeCount() == numNodesPerCell) {
-    _childTopos = vector< CellTopoPtrLegacy >(numSubCells, _cellTopoPtr);
+    _childTopos = vector< CellTopoPtr >(numSubCells, _cellTopoPtr);
   } else {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "RefinementPattern: Still need to implement support for child topos that have different topology than parent...");
   }
@@ -74,10 +78,10 @@ RefinementPattern::RefinementPattern(Teuchos::RCP< shards::CellTopology > cellTo
     for (unsigned sideOrdinal=0; sideOrdinal<sideCount; sideOrdinal++) {
       _patternForSubcell[sideDim][sideOrdinal] = _sideRefinementPatterns[sideOrdinal];
       for (unsigned d=1; d<sideDim; d++) {
-        shards::CellTopology sideTopo = _cellTopoPtr->getCellTopologyData(sideDim, sideOrdinal);
-        unsigned sideSubcellCount = sideTopo.getSubcellCount(d);
+        CellTopoPtr sideTopo = _cellTopoPtr->getSubcell(sideDim, sideOrdinal);
+        unsigned sideSubcellCount = sideTopo->getSubcellCount(d);
         for (unsigned sideSubcellOrdinal=0; sideSubcellOrdinal<sideSubcellCount; sideSubcellOrdinal++) {
-          unsigned subcord = CamelliaCellTools::subcellOrdinalMap(*cellTopoPtr, sideDim, sideOrdinal, d, sideSubcellOrdinal);
+          unsigned subcord = CamelliaCellTools::subcellOrdinalMap(cellTopoPtr, sideDim, sideOrdinal, d, sideSubcellOrdinal);
           _patternForSubcell[d][subcord] = _sideRefinementPatterns[sideOrdinal]->patternForSubcell(d, sideSubcellOrdinal);
         }
       }
@@ -85,8 +89,6 @@ RefinementPattern::RefinementPattern(Teuchos::RCP< shards::CellTopology > cellTo
   }
   
   vector<double> vertex(spaceDim);
-  
-  unsigned cellKey = cellTopoPtr->getKey();
   
   map< vector<double>, unsigned> vertexLookup;
   vector< vector<double> > vertices;
@@ -122,7 +124,7 @@ RefinementPattern::RefinementPattern(Teuchos::RCP< shards::CellTopology > cellTo
   RefinementPatternPtr thisPtr = Teuchos::rcp( this, false );
   
   FieldContainer<double> refCellNodes(cellTopoPtr->getNodeCount(),spaceDim);
-  CamelliaCellTools::refCellNodesForTopology(refCellNodes, *cellTopoPtr);
+  CamelliaCellTools::refCellNodesForTopology(refCellNodes, cellTopoPtr);
   vector< vector<double> > refCellNodesVector;
   for (int nodeIndex=0; nodeIndex<refCellNodes.dimension(0); nodeIndex++) {
     vector<double> node;
@@ -154,7 +156,7 @@ RefinementPattern::RefinementPattern(Teuchos::RCP< shards::CellTopology > cellTo
     for (int childIndexInParent = 0; childIndexInParent<childCellIndices.size(); childIndexInParent++) {
       unsigned childCellIndex = childCellIndices[childIndexInParent];
       CellPtr childCell = _refinementTopology->getCell(childCellIndex);
-      int childSideCount = CamelliaCellTools::getSideCount(*childCell->topology());
+      int childSideCount = childCell->topology()->getSideCount();
       for (int childSideIndex=0; childSideIndex<childSideCount; childSideIndex++) {
         unsigned childSideEntityIndex = childCell->entityIndex(sideDim, childSideIndex);
         if (sideChildEntities.find(childSideEntityIndex) != sideChildEntities.end()) {
@@ -181,7 +183,7 @@ RefinementPattern::RefinementPattern(Teuchos::RCP< shards::CellTopology > cellTo
       for (int childIndexInParent = 0; childIndexInParent<childCellIndices.size(); childIndexInParent++) {
         unsigned childCellIndex = childCellIndices[childIndexInParent];
         CellPtr childCell = _refinementTopology->getCell(childCellIndex);
-        int childSideCount = CamelliaCellTools::getSideCount(*childCell->topology());
+        int childSideCount = childCell->getSideCount();
         for (int childSideIndex=0; childSideIndex<childSideCount; childSideIndex++) {
           if ( sideChildEntityIndex == childCell->entityIndex(sideDim, childSideIndex) ) {
             _sideRefinementChildIndices[sideIndex].push_back(childIndexInParent);
@@ -202,6 +204,7 @@ RefinementPattern::RefinementPattern(Teuchos::RCP< shards::CellTopology > cellTo
 //    }
 //  }
   
+  unsigned cellKey = cellTopoPtr->getShardsTopology().getKey();
   for (int sideIndex = 0; sideIndex < sideCount; sideIndex++) { // sideIndices in parent
     // the following code is replicated from the old code populating _childrenForSides
     // the upshot is that it sorts _childrenForSides in a particular way.  It seems likely this is
@@ -361,7 +364,7 @@ map< unsigned, unsigned > RefinementPattern::parentSideLookupForChild(unsigned c
   // returns a map for the child: childSideIndex --> parentSideIndex
   // (only populated for childSideIndices that are shared with the parent)
   map<unsigned, unsigned> lookupTable;
-  int numSides = CamelliaCellTools::getSideCount(*_cellTopoPtr);
+  int numSides = _cellTopoPtr->getSideCount();
   for (unsigned childSideIndex = 0; childSideIndex<numSides; childSideIndex++) {
     pair< unsigned, unsigned > entry = make_pair(childIndex,childSideIndex);
     if ( _parentSideForChildSide.find(entry) != _parentSideForChildSide.end() ) {
@@ -407,7 +410,7 @@ FieldContainer<double> RefinementPattern::verticesForRefinement(FieldContainer<d
     TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument,"cellNodes should be rank 2 or 3");
   }
   
-  CellTools<double>::mapToPhysicalFrame(verticesFC,_vertices,cellNodes,*_cellTopoPtr);
+  CamelliaCellTools::mapToPhysicalFrame(verticesFC,_vertices,cellNodes,_cellTopoPtr);
 
   if (singleCellNode) {
     // caller will expect rank-2 return
@@ -464,7 +467,7 @@ vector< vector< pair< unsigned, unsigned> > > & RefinementPattern::childrenForSi
   return _childrenForSides;
 }
 
-Teuchos::RCP< shards::CellTopology > RefinementPattern::childTopology(unsigned childIndex) {
+CellTopoPtr RefinementPattern::childTopology(unsigned childIndex) {
   return _childTopos[childIndex];
 }
 
@@ -540,10 +543,10 @@ map<unsigned, set<unsigned> > RefinementPattern::getInternalSubcellOrdinals(Refi
     cout << "ERROR: RefinementPattern::getInternalSubcellOrdinals() requires non-empty refinement branch.\n";
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "RefinementPattern::getInternalSubcellOrdinals() requires non-empty refinement branch.");
   }
-  CellTopoPtrLegacy ancestralTopo = refinements[0].first->parentTopology();
-  CellTopoPtrLegacy childTopo;
+  CellTopoPtr ancestralTopo = refinements[0].first->parentTopology();
+  CellTopoPtr childTopo;
   set<unsigned> parentSidesToIntersect;
-  int numSides = CamelliaCellTools::getSideCount(*ancestralTopo);
+  int numSides = ancestralTopo->getSideCount();
   for (unsigned sideOrdinal=0; sideOrdinal < numSides; sideOrdinal++) {
     parentSidesToIntersect.insert(sideOrdinal);
   }
@@ -570,12 +573,12 @@ map<unsigned, set<unsigned> > RefinementPattern::getInternalSubcellOrdinals(Refi
   
   for (set<unsigned>::iterator externalSideIt = parentSidesToIntersect.begin(); externalSideIt != parentSidesToIntersect.end(); externalSideIt++) {
     unsigned externalSideOrdinal = *externalSideIt;
-    shards::CellTopology sideTopo = childTopo->getCellTopologyData(spaceDim-1, externalSideOrdinal);
+    CellTopoPtr sideTopo = childTopo->getSubcell(spaceDim-1, externalSideOrdinal);
     for (unsigned d=0; d<spaceDim; d++) {
       set<unsigned> subcellsForSide; // of dimension d...
-      unsigned scCount = sideTopo.getSubcellCount(d);
+      unsigned scCount = sideTopo->getSubcellCount(d);
       for (unsigned scOrdinal=0; scOrdinal<scCount; scOrdinal++) {
-        unsigned scOrdinalInCell = CamelliaCellTools::subcellOrdinalMap(*childTopo, spaceDim-1, externalSideOrdinal, d, scOrdinal); // this is not a particularly efficient method...
+        unsigned scOrdinalInCell = CamelliaCellTools::subcellOrdinalMap(childTopo, spaceDim-1, externalSideOrdinal, d, scOrdinal); // this is not a particularly efficient method...
         externalSubcellOrdinals[d].insert(scOrdinalInCell);
       }
     }
@@ -762,26 +765,31 @@ unsigned RefinementPattern::mapVolumeChildOrdinalToSubcellChildOrdinal(unsigned 
 }
 
 
-RefinementPatternPtr RefinementPattern::noRefinementPattern(Teuchos::RCP< shards::CellTopology > cellTopoPtr) {
-  static map< unsigned, RefinementPatternPtr > knownRefinementPatterns;
-  unsigned key = cellTopoPtr->getKey();
+RefinementPatternPtr RefinementPattern::noRefinementPattern(CellTopoPtr cellTopoPtr) {
+  static map< CellTopologyKey, RefinementPatternPtr > knownRefinementPatterns;
+  CellTopologyKey key = cellTopoPtr->getKey();
   if (knownRefinementPatterns.find(key) == knownRefinementPatterns.end()) {
-    unsigned numSides = CamelliaCellTools::getSideCount(*cellTopoPtr);
+    unsigned numSides = cellTopoPtr->getSideCount();
     vector< RefinementPatternPtr > sideRefPatterns;
     unsigned d = cellTopoPtr->getDimension();
     if (d > 1) {
       for (unsigned sideOrdinal=0; sideOrdinal<numSides; sideOrdinal++) {
-        Teuchos::RCP< shards::CellTopology > sideTopo = Teuchos::rcp( new shards::CellTopology(cellTopoPtr->getCellTopologyData(d-1, sideOrdinal)) );
+        CellTopoPtr sideTopo = cellTopoPtr->getSubcell(d-1, sideOrdinal);
         sideRefPatterns.push_back( noRefinementPattern(sideTopo) );
       }
     }
     FieldContainer<double> cellPoints(cellTopoPtr->getVertexCount(),d);
-    CamelliaCellTools::refCellNodesForTopology(cellPoints, *cellTopoPtr);
+    CamelliaCellTools::refCellNodesForTopology(cellPoints, cellTopoPtr);
     cellPoints.resize(1,cellPoints.dimension(0),cellPoints.dimension(1));
     
     knownRefinementPatterns[key] = Teuchos::rcp( new RefinementPattern(cellTopoPtr, cellPoints, sideRefPatterns) );
   }
   return knownRefinementPatterns[key];
+}
+
+RefinementPatternPtr RefinementPattern::noRefinementPattern(Teuchos::RCP< shards::CellTopology > shardsTopoPtr) {
+  CellTopoPtr cellTopo = CellTopology::cellTopology(*shardsTopoPtr);
+  return noRefinementPattern(cellTopo);
 }
 
 Teuchos::RCP<RefinementPattern> RefinementPattern::noRefinementPatternLine() {
@@ -824,14 +832,14 @@ RefinementPatternPtr RefinementPattern::regularRefinementPatternLine() {
   static RefinementPatternPtr refPattern;
   
   if (refPattern.get() == NULL) {
-    Teuchos::RCP< shards::CellTopology > line_2_ptr = Teuchos::rcp(new shards::CellTopology(shards::getCellTopologyData<shards::Line<2> >() ));
+    CellTopoPtr line = CellTopology::line();
 
     FieldContainer<double> linePoints(2,2,1);
     linePoints(0,0,0) = -1.0;
     linePoints(0,1,0) =  0.0;
     linePoints(1,0,0) =  0.0;
     linePoints(1,1,0) =  1.0;
-    refPattern = Teuchos::rcp( new RefinementPattern(line_2_ptr,linePoints,vector< RefinementPatternPtr >()) );
+    refPattern = Teuchos::rcp( new RefinementPattern(line,linePoints,vector< RefinementPatternPtr >()) );
   }
   return refPattern;
 }
@@ -866,9 +874,9 @@ Teuchos::RCP<RefinementPattern> RefinementPattern::regularRefinementPatternTrian
     triPoints(3,1,1) = 0.5;
     triPoints(3,2,0) = 0.0;
     triPoints(3,2,1) = 1.0; 
-    Teuchos::RCP< shards::CellTopology > tri_3_ptr = Teuchos::rcp(new shards::CellTopology(shards::getCellTopologyData<shards::Triangle<3> >() ));
+    CellTopoPtr triangle = CellTopology::triangle();
     
-    refPattern = Teuchos::rcp( new RefinementPattern(tri_3_ptr,triPoints,vector<RefinementPatternPtr>(3,regularRefinementPatternLine())) );
+    refPattern = Teuchos::rcp( new RefinementPattern(triangle,triPoints,vector<RefinementPatternPtr>(3,regularRefinementPatternLine())) );
   }
   return refPattern;
 }
@@ -911,10 +919,10 @@ Teuchos::RCP<RefinementPattern> RefinementPattern::regularRefinementPatternQuad(
     quadPoints(3,2,0) = 0.0;
     quadPoints(3,2,1) = 1.0;
     quadPoints(3,3,0) = -1.0;
-    quadPoints(3,3,1) = 1.0; 
-    Teuchos::RCP< shards::CellTopology > quad_4_ptr = Teuchos::rcp(new shards::CellTopology(shards::getCellTopologyData<shards::Quadrilateral<4> >() ));
+    quadPoints(3,3,1) = 1.0;
+    CellTopoPtr quad = CellTopology::quad();
     
-    refPattern = Teuchos::rcp( new RefinementPattern(quad_4_ptr,quadPoints,vector<RefinementPatternPtr>(4,regularRefinementPatternLine())) );
+    refPattern = Teuchos::rcp( new RefinementPattern(quad,quadPoints,vector<RefinementPatternPtr>(4,regularRefinementPatternLine())) );
   }
   return refPattern;
 }
@@ -933,8 +941,8 @@ Teuchos::RCP<RefinementPattern> RefinementPattern::regularRefinementPatternHexah
     unsigned numNodesPerChild = 1 << spaceDim; // 2^3
     FieldContainer<double> hexPoints(numChildren,numNodesPerChild,spaceDim);
     FieldContainer<double> refHexPoints(numNodesPerChild,spaceDim);
-    Teuchos::RCP< shards::CellTopology > hexTopo = Teuchos::rcp(new shards::CellTopology(shards::getCellTopologyData<shards::Hexahedron<8> >() ));
-    CamelliaCellTools::refCellNodesForTopology(refHexPoints, *hexTopo);
+    CellTopoPtr hexTopo = CellTopology::hexahedron();
+    CamelliaCellTools::refCellNodesForTopology(refHexPoints, hexTopo);
     
     // scale and shift ref points to be in the bottommost (in each spatial direction) corner.  xi --> (xi - 1) / 2
     for (int nodeIndex=0; nodeIndex<numNodesPerChild; nodeIndex++) {
@@ -964,7 +972,7 @@ Teuchos::RCP<RefinementPattern> RefinementPattern::regularRefinementPatternHexah
   return refPattern;
 }
 
-Teuchos::RCP<RefinementPattern> RefinementPattern::regularRefinementPattern(unsigned cellTopoKey) {
+RefinementPatternPtr RefinementPattern::regularRefinementPattern(unsigned cellTopoKey) {
   switch (cellTopoKey) {
     case shards::Line<2>::key :
       return regularRefinementPatternLine();
@@ -978,6 +986,94 @@ Teuchos::RCP<RefinementPattern> RefinementPattern::regularRefinementPattern(unsi
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "unsupported cellTopology");
   }
   return Teuchos::rcp( (RefinementPattern*) NULL );
+}
+
+RefinementPatternPtr RefinementPattern::regularRefinementPattern(Camellia::CellTopologyKey cellTopoKey) {
+  unsigned shardsKey = cellTopoKey.first;
+  unsigned tensorialDegree = cellTopoKey.second;
+  
+  if (_refPatternForKeyTensorialDegree.find(cellTopoKey) != _refPatternForKeyTensorialDegree.end()) {
+    return _refPatternForKeyTensorialDegree[cellTopoKey];
+  }
+  
+  RefinementPatternPtr shardsRefPattern = regularRefinementPattern(shardsKey);
+  
+  if (tensorialDegree == 0) {
+    _refPatternForKeyTensorialDegree[cellTopoKey] = shardsRefPattern;
+  } else {
+    RefinementPatternPtr lineRefPattern = regularRefinementPatternLine();
+    
+    RefinementPatternPtr tensorRefPattern = shardsRefPattern;
+    pair<unsigned,unsigned> priorLookupKey = make_pair(shardsKey, 0);
+    // make sure that the degree 0 guy is in place
+    if (_refPatternForKeyTensorialDegree.find(priorLookupKey) == _refPatternForKeyTensorialDegree.end()) {
+      _refPatternForKeyTensorialDegree[priorLookupKey] = shardsRefPattern;
+    }
+    while (_refPatternForKeyTensorialDegree.find(priorLookupKey) != _refPatternForKeyTensorialDegree.end()) {
+      tensorRefPattern = _refPatternForKeyTensorialDegree[priorLookupKey];
+      priorLookupKey.second++;
+    }
+    
+    FieldContainer<double> tensorRefNodes = tensorRefPattern->refinedNodes();
+    FieldContainer<double> lineRefNodes = lineRefPattern->refinedNodes();
+    
+    int maxTensorialDegreeKnown = priorLookupKey.second-1;
+    
+    for (int lineComponentOrdinal=maxTensorialDegreeKnown; lineComponentOrdinal < tensorialDegree; lineComponentOrdinal++) {
+      int numChildrenForTensor = tensorRefNodes.dimension(0);
+      int nodesPerTensorChild = tensorRefNodes.dimension(1);
+      int spaceDimForTensor = tensorRefNodes.dimension(2);
+      int numChildrenForLine = lineRefNodes.dimension(0);
+      int nodesPerLineChild = lineRefNodes.dimension(1);
+      int spaceDimForLine = lineRefNodes.dimension(2);
+      FieldContainer<double> newTensorRefNodes(numChildrenForTensor*numChildrenForLine,
+                                               nodesPerTensorChild*nodesPerLineChild,
+                                               spaceDimForTensor + spaceDimForLine);
+      for (int tensorChildOrdinal=0; tensorChildOrdinal<numChildrenForTensor; tensorChildOrdinal++) {
+        for (int lineChildOrdinal=0; lineChildOrdinal<numChildrenForLine; lineChildOrdinal++) {
+          int newTensorChildOrdinal = lineChildOrdinal * numChildrenForTensor + tensorChildOrdinal;
+          for (int tensorNodeOrdinal=0; tensorNodeOrdinal<nodesPerTensorChild; tensorNodeOrdinal++) {
+            for (int lineNodeOrdinal=0; lineNodeOrdinal<nodesPerLineChild; lineNodeOrdinal++) {
+              int newTensorNodeOrdinal = lineNodeOrdinal * nodesPerTensorChild + tensorNodeOrdinal;
+              for (int d_tensor = 0; d_tensor<spaceDimForTensor; d_tensor++) {
+                newTensorRefNodes(newTensorChildOrdinal, newTensorNodeOrdinal, d_tensor) = tensorRefNodes(tensorChildOrdinal, tensorNodeOrdinal, d_tensor);
+              }
+              for (int d_line = 0; d_line<spaceDimForLine; d_line++) {
+                newTensorRefNodes(newTensorChildOrdinal, newTensorNodeOrdinal, d_line + spaceDimForTensor) = lineRefNodes(lineChildOrdinal, lineNodeOrdinal, d_line);
+              }
+            }
+          }
+        }
+      }
+      
+      int tensorialDegree = lineComponentOrdinal + 1;
+      CellTopoPtr tensorTopo = CellTopology::cellTopology(*CamelliaCellTools::cellTopoForKey(shardsKey), tensorialDegree);
+      
+      tensorRefNodes = newTensorRefNodes;
+      
+      vector< RefinementPatternPtr > sideRefPatterns;
+      
+      int sideDim = tensorTopo->getDimension() - 1;
+      if ( sideDim > 0) {
+        int sideCount = tensorTopo->getSideCount();
+        
+        sideRefPatterns.resize(sideCount);
+        for (int sideOrdinal=0; sideOrdinal<sideCount; sideOrdinal++) {
+          CellTopoPtr sideTopo = tensorTopo->getSubcell(sideDim, sideOrdinal);
+          sideRefPatterns[sideOrdinal] = regularRefinementPattern(sideTopo);
+        }
+      }
+      
+      RefinementPatternPtr refPattern = Teuchos::rcp( new RefinementPattern(tensorTopo,tensorRefNodes,sideRefPatterns) );
+      priorLookupKey.second = lineComponentOrdinal + 1;
+      _refPatternForKeyTensorialDegree[priorLookupKey] = refPattern;
+    }
+  }
+  return _refPatternForKeyTensorialDegree[cellTopoKey];
+}
+
+RefinementPatternPtr RefinementPattern::regularRefinementPattern(CellTopoPtr cellTopo) {
+  return regularRefinementPattern(cellTopo->getKey());
 }
 
 // cuts a quad vertically (x-refines the element)
@@ -1004,7 +1100,7 @@ Teuchos::RCP<RefinementPattern> RefinementPattern::xAnisotropicRefinementPattern
     quadPoints(1,2,1) = 1.0;
     quadPoints(1,3,0) = 0.0;
     quadPoints(1,3,1) = 1.0;   
-    Teuchos::RCP< shards::CellTopology > quad_4_ptr = Teuchos::rcp(new shards::CellTopology(shards::getCellTopologyData<shards::Quadrilateral<4> >() ));
+    CellTopoPtr quad = CellTopology::quad();
     
     vector< RefinementPatternPtr > sideRefinements;
     sideRefinements.push_back(regularRefinementPatternLine());
@@ -1012,7 +1108,7 @@ Teuchos::RCP<RefinementPattern> RefinementPattern::xAnisotropicRefinementPattern
     sideRefinements.push_back(regularRefinementPatternLine());
     sideRefinements.push_back(     noRefinementPatternLine());
     
-    refPattern = Teuchos::rcp( new RefinementPattern(quad_4_ptr,quadPoints,sideRefinements) );
+    refPattern = Teuchos::rcp( new RefinementPattern(quad,quadPoints,sideRefinements) );
   }
   return refPattern;
 }
@@ -1041,7 +1137,7 @@ Teuchos::RCP<RefinementPattern> RefinementPattern::yAnisotropicRefinementPattern
     quadPoints(1,2,1) = 1.0;
     quadPoints(1,3,0) = -1.0;
     quadPoints(1,3,1) = 1.0;   
-    Teuchos::RCP< shards::CellTopology > quad_4_ptr = Teuchos::rcp(new shards::CellTopology(shards::getCellTopologyData<shards::Quadrilateral<4> >() ));
+    CellTopoPtr quad = CellTopology::quad();
 
     vector< RefinementPatternPtr > sideRefinements;
     sideRefinements.push_back(     noRefinementPatternLine());
@@ -1049,12 +1145,12 @@ Teuchos::RCP<RefinementPattern> RefinementPattern::yAnisotropicRefinementPattern
     sideRefinements.push_back(     noRefinementPatternLine());
     sideRefinements.push_back(regularRefinementPatternLine());
     
-    refPattern = Teuchos::rcp( new RefinementPattern(quad_4_ptr,quadPoints, sideRefinements) );
+    refPattern = Teuchos::rcp( new RefinementPattern(quad,quadPoints, sideRefinements) );
   }
   return refPattern;
 }
 
-CellTopoPtrLegacy RefinementPattern::parentTopology() {
+CellTopoPtr RefinementPattern::parentTopology() {
   return _cellTopoPtr;
 }
 
@@ -1090,7 +1186,7 @@ RefinementBranch RefinementPattern::subcellRefinementBranch(RefinementBranch &vo
   // this isn't necessarily the most efficient method...  May want to adopt some caching for parent-to-child subcell maps, for example...
   RefinementBranch subcellRefinements;
   if (volumeRefinementBranch.size()==0) return subcellRefinements; // subcell refinement branch empty, too
-  CellTopoPtrLegacy volumeTopo = volumeRefinementBranch[0].first->parentTopology();
+  CellTopoPtr volumeTopo = volumeRefinementBranch[0].first->parentTopology();
   if (subcdim == 0) {
     // then the empty refinement branch will suffice (since the subcell is a vertex)
     return subcellRefinements;
@@ -1158,9 +1254,9 @@ RefinementBranch RefinementPattern::subcellRefinementBranch(RefinementBranch &vo
 
 FieldContainer<double> RefinementPattern::descendantNodesRelativeToAncestorReferenceCell(RefinementBranch refinementBranch,
                                                                                          unsigned ancestorReferenceCellPermutation) {
-  CellTopoPtrLegacy parentTopo = refinementBranch[0].first->parentTopology();
+  CellTopoPtr parentTopo = refinementBranch[0].first->parentTopology();
   FieldContainer<double> ancestorNodes(parentTopo->getNodeCount(), parentTopo->getDimension());
-  CamelliaCellTools::refCellNodesForTopology(ancestorNodes, *parentTopo, ancestorReferenceCellPermutation);
+  CamelliaCellTools::refCellNodesForTopology(ancestorNodes, parentTopo, ancestorReferenceCellPermutation);
   
   return descendantNodes(refinementBranch, ancestorNodes);
 }
@@ -1182,8 +1278,8 @@ FieldContainer<double> RefinementPattern::descendantNodes(RefinementBranch refin
   }
   elementVertices.push_back(ancestorVertexIndices);
   
-  CellTopoPtrLegacy ancestorTopo = refinementBranch[0].first->parentTopology();
-  vector< CellTopoPtrLegacy > cellTopos(1, ancestorTopo);
+  CellTopoPtr ancestorTopo = refinementBranch[0].first->parentTopology();
+  vector< CellTopoPtr > cellTopos(1, ancestorTopo);
   
   MeshGeometryPtr meshGeometry = Teuchos::rcp( new MeshGeometry(vertices, elementVertices, cellTopos) );
   
@@ -1199,7 +1295,7 @@ FieldContainer<double> RefinementPattern::descendantNodes(RefinementBranch refin
   return mesh->physicalCellNodesForCell(cellIndex);
 }
 
-CellTopoPtrLegacy RefinementPattern::descendantTopology(RefinementBranch &refinements) {
+CellTopoPtr RefinementPattern::descendantTopology(RefinementBranch &refinements) {
   if (refinements.size() == 0) {
     cout << "refinement branch must be non-empty!\n";
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "refinement branch must be non-empty!");
@@ -1214,7 +1310,7 @@ CellTopoPtrLegacy RefinementPattern::descendantTopology(RefinementBranch &refine
 RefinementBranch RefinementPattern::sideRefinementBranch(RefinementBranch &volumeRefinementBranch, unsigned sideIndex) {
   RefinementBranch sideRefinements;
   if (volumeRefinementBranch.size()==0) return sideRefinements; // side refinement branch empty, too
-  CellTopoPtrLegacy volumeTopo = volumeRefinementBranch[0].first->parentTopology();
+  CellTopoPtr volumeTopo = volumeRefinementBranch[0].first->parentTopology();
   unsigned sideDim = volumeTopo->getDimension() - 1;
   if (sideDim == 0) {
     // then the empty refinement branch will suffice (since the "side" is actually a vertex)
@@ -1251,8 +1347,8 @@ void RefinementPattern::mapRefCellPointsToAncestor(RefinementBranch &refBranch, 
   fineCellRefNodes = RefinementPattern::descendantNodesRelativeToAncestorReferenceCell(refBranch);
 
   int minCubDegree = 1;
-  Teuchos::RCP<shards::CellTopology> leafCellTopo = refBranch[refBranch.size() - 1].first->childTopology(refBranch[refBranch.size() - 1].second);
-  BasisCachePtr fineCellCache = Teuchos::rcp( new BasisCache(*leafCellTopo, minCubDegree, false) ); // could be more efficient by doing what BasisCache does in terms of the physical cell mapping, instead of using BasisCache (which sets up a bunch of data structures that we just throw away here)
+  CellTopoPtr leafCellTopo = refBranch[refBranch.size() - 1].first->childTopology(refBranch[refBranch.size() - 1].second);
+  BasisCachePtr fineCellCache = Teuchos::rcp( new BasisCache(leafCellTopo, minCubDegree, false) ); // could be more efficient by doing what BasisCache does in terms of the physical cell mapping, instead of using BasisCache (which sets up a bunch of data structures that we just throw away here)
 
   fineCellCache->setRefCellPoints(leafRefCellPoints);
   

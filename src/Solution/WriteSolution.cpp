@@ -70,8 +70,7 @@ void Solution::writeFieldsToVTK(const string& filePath, unsigned int num1DPts)
   for (elemTypeIt = elementTypes.begin(); elemTypeIt != elementTypes.end(); elemTypeIt++)
   {
     ElementTypePtr elemTypePtr = *(elemTypeIt);
-    shards::CellTopology cellTopo = *(elemTypePtr->cellTopoPtr);
-    Teuchos::RCP<shards::CellTopology> cellTopoPtr = elemTypePtr->cellTopoPtr;
+    cellTopo = elemTypePtr->cellTopoPtr;
 
     FieldContainer<double> vertexPoints;
     _mesh->verticesForElementType(vertexPoints,elemTypePtr); //stores vertex points for this element
@@ -293,12 +292,12 @@ void Solution::writeTracesToVTK(const string& filePath)
   {
     ElementTypePtr elemTypePtr = *(elemTypeIt);
     FieldContainer<double> physicalCellNodes = _mesh()->physicalCellNodesGlobal(elemTypePtr);
-    shards::CellTopology cellTopo = *(elemTypePtr->cellTopoPtr);
+    CellTopoPtr cellTopo = elemTypePtr->cellTopoPtr;
     // basisCache = Teuchos::rcp( new BasisCache(physicalCellNodes, cellTopo, 1) );
     basisCache = Teuchos::rcp( new BasisCache( elemTypePtr, _mesh ) );
     if (basisCache.get() == NULL)
       cout << "NULL Basis" << endl;
-    int numSides = CamelliaCellTools::getSideCount(cellTopo);
+    int numSides = cellTopo->getSideCount();
 
     int numCells = physicalCellNodes.dimension(0);
     // determine cellIDs
@@ -451,8 +450,7 @@ void Solution::writeToVTK(const string& filePath, unsigned int num1DPts)
   for (elemTypeIt = elementTypes.begin(); elemTypeIt != elementTypes.end(); elemTypeIt++)
   {
     ElementTypePtr elemTypePtr = *(elemTypeIt);
-    shards::CellTopology cellTopo = *(elemTypePtr->cellTopoPtr);
-    Teuchos::RCP<shards::CellTopology> cellTopoPtr = elemTypePtr->cellTopoPtr;
+    CellTopoPtr cellTopo = elemTypePtr->cellTopoPtr;
 
     FieldContainer<double> vertexPoints;
     _mesh->verticesForElementType(vertexPoints,elemTypePtr); //stores vertex points for this element

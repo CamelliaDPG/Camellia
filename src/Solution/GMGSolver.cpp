@@ -219,6 +219,10 @@ void GMGSolver::setComputeConditionNumberEstimate(bool value) {
   _computeCondest = value;
 }
 
+void GMGSolver::setPrintIterationCount(bool value) {
+  _printIterationCountIfNoAzOutput = value;
+}
+
 void GMGSolver::setUseConjugateGradient(bool value) {
   _useCG = value;
 }

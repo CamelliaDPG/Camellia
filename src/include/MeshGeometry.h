@@ -13,6 +13,8 @@
 
 #include "IndexType.h"
 
+#include "CellTopology.h"
+
 typedef pair<IndexType, IndexType> Edge;
 typedef Teuchos::RCP< shards::CellTopology > CellTopoPtrLegacy;
 
@@ -20,7 +22,7 @@ class MeshGeometry {
   vector< vector<double> > _vertices;
   vector< vector<IndexType> > _elementVertices;
   map< Edge, ParametricCurvePtr > _edgeToCurveMap;
-  vector< CellTopoPtrLegacy > _cellTopos;
+  vector< CellTopoPtr > _cellTopos;
   
   void initializeVerticesFromFieldContainer(const vector<FieldContainer<double> > &vertices) {
     IndexType numVertices = vertices.size();
@@ -38,27 +40,23 @@ class MeshGeometry {
   
   void populateCellToposFromElementVertices() {
     // guesses the cell topology based on the number of vertices.
-    CellTopoPtrLegacy line = Teuchos::rcp(new shards::CellTopology(shards::getCellTopologyData<shards::Line<2> >() ) );
-    CellTopoPtrLegacy quad = Teuchos::rcp(new shards::CellTopology(shards::getCellTopologyData<shards::Quadrilateral<4> >() ) );
-    CellTopoPtrLegacy triangle = Teuchos::rcp(new shards::CellTopology(shards::getCellTopologyData<shards::Triangle<3> >() ) );
-    CellTopoPtrLegacy hex = Teuchos::rcp(new shards::CellTopology(shards::getCellTopologyData<shards::Hexahedron<8> >() ) );
     IndexType numCells = _elementVertices.size();
     _cellTopos.clear();
     for (IndexType cellIndex=0; cellIndex<numCells; cellIndex++) {
       IndexType numVertices = _elementVertices[cellIndex].size();
-      CellTopoPtrLegacy cellTopo;
+      CellTopoPtr cellTopo;
       switch (numVertices) {
         case 2:
-          cellTopo = line;
+          cellTopo = Camellia::CellTopology::line();
           break;
         case 3:
-          cellTopo = triangle;
+          cellTopo = Camellia::CellTopology::triangle();
           break;
         case 4:
-          cellTopo = quad;
+          cellTopo = Camellia::CellTopology::quad();
           break;
         case 8:
-          cellTopo = hex;
+          cellTopo = Camellia::CellTopology::hexahedron();
           break;
         default:
           TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unhandled number of vertices.  Must use the constructor that includes CellTopology assignment for each cell.");
@@ -69,7 +67,7 @@ class MeshGeometry {
 public:
   MeshGeometry(const vector< vector<double> > &vertices,
                   const vector< vector<IndexType> > &elementVertices,
-                  const vector< CellTopoPtrLegacy > &cellTopos,
+                  const vector< CellTopoPtr > &cellTopos,
                   const map< Edge, ParametricCurvePtr > &edgeToCurveMap) {
     _vertices = vertices;
     _elementVertices = elementVertices;
@@ -79,7 +77,7 @@ public:
   
   MeshGeometry(const vector< vector<double> > &vertices,
                   const vector< vector<IndexType> > &elementVertices,
-                  const vector< CellTopoPtrLegacy > &cellTopos) {
+                  const vector< CellTopoPtr > &cellTopos) {
     _vertices = vertices;
     _elementVertices = elementVertices;
     _cellTopos = cellTopos;
@@ -117,7 +115,7 @@ public:
     return _vertices;
   }
   
-  const vector< CellTopoPtrLegacy > &cellTopos() {
+  const vector< CellTopoPtr > &cellTopos() {
     return _cellTopos;
   }
 };

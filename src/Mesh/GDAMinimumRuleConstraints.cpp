@@ -146,7 +146,7 @@ GDAMinimumRuleConstraintEntry::GDAMinimumRuleConstraintEntry(GDAMinimumRuleConst
   
   int sideDim = _cell->topology()->getDimension() - 1;
   
-  _subcellOrdinalInCell = CamelliaCellTools::subcellOrdinalMap(*_cell->topology(), sideDim, sideOrdinal,
+  _subcellOrdinalInCell = CamelliaCellTools::subcellOrdinalMap(_cell->topology(), sideDim, sideOrdinal,
                                                                subcellDim, subcellOrdinalInSide);
   
   _entityIndex = _cell->entityIndex(subcellDim, _subcellOrdinalInCell);
@@ -176,15 +176,15 @@ GDAMinimumRuleConstraintEntry::GDAMinimumRuleConstraintEntry(GDAMinimumRuleConst
     // define black edges: these go to subcells of dimension one less
     int subsubcellDim = subcellDim - 1;
     if (subsubcellDim >= 0) {
-      shards::CellTopology domainTopo;
+      CellTopoPtr domainTopo;
       if (sideOrdinal==-1) {
-        domainTopo = *_cell->topology();
+        domainTopo = _cell->topology();
       } else {
-        domainTopo = _cell->topology()->getCellTopologyData(sideDim, sideOrdinal);
+        domainTopo = _cell->topology()->getSubcell(sideDim, sideOrdinal);
       }
       
-      shards::CellTopology subcellTopo = domainTopo.getCellTopologyData(subcellDim, _subcellOrdinalInSide);
-      int subsubcellCount = subcellTopo.getSubcellCount(subsubcellDim);
+      CellTopoPtr subcellTopo = domainTopo->getSubcell(subcellDim, _subcellOrdinalInSide);
+      int subsubcellCount = subcellTopo->getSubcellCount(subsubcellDim);
       for (int ssord = 0; ssord<subsubcellCount; ssord++) { // ssord in *subcell*
         int ssordInDomain = CamelliaCellTools::subcellOrdinalMap(domainTopo, _entityDim, thisInfo.subcellOrdinal,
                                                                  subsubcellDim, ssord);
@@ -234,13 +234,13 @@ GDAMinimumRuleConstraintEntry::GDAMinimumRuleConstraintEntry(GDAMinimumRuleConst
     
     determineAncestralSideOrdinal(constrainingSubcellInfo);
     
-    unsigned ancestralSubcellOrdinalInSide = CamelliaCellTools::subcellReverseOrdinalMap(*_ancestralCell->topology(), sideDim, _ancestralSideOrdinal, constrainingSubcellInfo.dimension, _ancestralSubcellOrdinal);
+    unsigned ancestralSubcellOrdinalInSide = CamelliaCellTools::subcellReverseOrdinalMap(_ancestralCell->topology(), sideDim, _ancestralSideOrdinal, constrainingSubcellInfo.dimension, _ancestralSubcellOrdinal);
     
     unsigned ancestralPermutation = _ancestralCell->sideSubcellPermutation(_ancestralSideOrdinal, _ancestralSubcellDimension, ancestralSubcellOrdinalInSide); // subcell permutation as seen from the perspective of the fine cell's side's ancestor
     unsigned constrainingPermutation = constrainingCell->sideSubcellPermutation(constrainingSubcellInfo.sideOrdinal, constrainingSubcellInfo.dimension,
                                                                                 constrainingSubcellInfo.subcellOrdinal); // subcell permutation as seen from the perspective of the domain on the constraining cell
     
-    shards::CellTopology constrainingTopo = constrainingCell->topology()->getCellTopologyData(constrainingSubcellInfo.dimension, _constrainingEntity->subcellOrdinalInCell());
+    CellTopoPtr constrainingTopo = constrainingCell->topology()->getSubcell(constrainingSubcellInfo.dimension, _constrainingEntity->subcellOrdinalInCell());
     unsigned constrainingPermutationInverse = CamelliaCellTools::permutationInverse(constrainingTopo, constrainingPermutation);
     _composedPermutation = CamelliaCellTools::permutationComposition(constrainingTopo, constrainingPermutationInverse, ancestralPermutation);
     
@@ -290,7 +290,7 @@ void GDAMinimumRuleConstraintEntry::determineAncestralSideOrdinal(AnnotatedEntit
       IndexType descendantSideEntityIndex = _cell->entityIndex(sideDim, _sideOrdinal);
       
       _ancestralSideOrdinal = -1;
-      int sideCount = CamelliaCellTools::getSideCount(*_ancestralCell->topology());
+      int sideCount = _ancestralCell->topology()->getSideCount();
       for (int side=0; side<sideCount; side++) {
         IndexType ancestralSideEntityIndex = _ancestralCell->entityIndex(sideDim, side);
         if (ancestralSideEntityIndex == descendantSideEntityIndex) {
@@ -313,7 +313,7 @@ void GDAMinimumRuleConstraintEntry::determineAncestralSideOrdinal(AnnotatedEntit
       vector<IndexType> sidesForSubcell = _cell->meshTopology()->getSidesContainingEntity(_ancestralSubcellDimension, ancestralSubcellEntityIndex);
       
       _ancestralSideOrdinal = -1;
-      int sideCount = CamelliaCellTools::getSideCount(*_ancestralCell->topology());
+      int sideCount = _ancestralCell->topology()->getSideCount();
       for (int side=0; side<sideCount; side++) {
         IndexType ancestralSideEntityIndex = _ancestralCell->entityIndex(sideDim, side);
         if (std::find(sidesForSubcell.begin(), sidesForSubcell.end(), ancestralSideEntityIndex) != sidesForSubcell.end()) {

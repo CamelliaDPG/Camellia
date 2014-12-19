@@ -1003,7 +1003,7 @@ bool GMGTests::testGMGSolverTwoGrid() {
       MeshPtr fineMesh = actualPoissonSolution->mesh();
       
       // refine uniformly once in both exact and actual:
-      CellTopoPtrLegacy cellTopo = coarseMesh->getTopology()->getCell(0)->topology();
+      CellTopoPtr cellTopo = coarseMesh->getTopology()->getCell(0)->topology();
       RefinementPatternPtr refPattern = RefinementPattern::regularRefinementPattern(cellTopo->getKey());
       exactMesh->hRefine(exactMesh->getActiveCellIDs(), refPattern);
       fineMesh->hRefine(fineMesh->getActiveCellIDs(), refPattern);
@@ -1089,7 +1089,7 @@ bool GMGTests::testGMGSolverThreeGrid() {
       MeshPtr fineMesh = actualPoissonSolution->mesh();
       
       // refine uniformly once in both exact and actual:
-      CellTopoPtrLegacy cellTopo = coarseMesh->getTopology()->getCell(0)->topology();
+      CellTopoPtr cellTopo = coarseMesh->getTopology()->getCell(0)->topology();
       RefinementPatternPtr refPattern = RefinementPattern::regularRefinementPattern(cellTopo->getKey());
       exactMesh->hRefine(exactMesh->getActiveCellIDs(), refPattern);
       fineMesh->hRefine(fineMesh->getActiveCellIDs(), refPattern);
@@ -1188,7 +1188,7 @@ bool GMGTests::testProlongationOperator() {
   MeshPtr fineMesh = actualPoissonSolution->mesh();
   
   // refine uniformly once in both exact and actual:
-  CellTopoPtrLegacy cellTopo = coarseMesh->getTopology()->getCell(0)->topology();
+  CellTopoPtr cellTopo = coarseMesh->getTopology()->getCell(0)->topology();
   RefinementPatternPtr refPattern = RefinementPattern::regularRefinementPattern(cellTopo->getKey());
   exactMesh->hRefine(exactMesh->getActiveCellIDs(), refPattern);
   fineMesh->hRefine(fineMesh->getActiveCellIDs(), refPattern);

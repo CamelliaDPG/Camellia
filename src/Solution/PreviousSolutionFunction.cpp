@@ -15,7 +15,7 @@
 
 #include "GlobalDofAssignment.h"
 
-#include "Intrepid_CellTools.hpp"
+#include "CamelliaCellTools.h"
 
 PreviousSolutionFunction::PreviousSolutionFunction(SolutionPtr soln, LinearTermPtr solnExpression, bool multiplyFluxesByCellParity) : Function(solnExpression->rank()) {
   _soln = soln;
@@ -85,7 +85,7 @@ void PreviousSolutionFunction::values(FieldContainer<double> &values, BasisCache
     int spaceDim = physicalPoints.dimension(2);
     physicalPoints.resize(numCells*numPoints,spaceDim);
     vector< ElementPtr > elements = _soln->mesh()->elementsForPoints(physicalPoints, false); // false: don't make elements null just because they're off-rank.
-    FieldContainer<double> point(1,spaceDim);
+    FieldContainer<double> point(1,1,spaceDim);
     FieldContainer<double> refPoint(1,spaceDim);
     int combinedIndex = 0;
     vector<GlobalIndexType> cellID;
@@ -96,18 +96,18 @@ void PreviousSolutionFunction::values(FieldContainer<double> &values, BasisCache
         if (elements[combinedIndex].get()==NULL) continue; // no element found for point; skip it…
         ElementTypePtr elemType = elements[combinedIndex]->elementType();
         for (int d=0; d<spaceDim; d++) {
-          point(0,d) = physicalPoints(combinedIndex,d);
+          point(0,0,d) = physicalPoints(combinedIndex,d);
         }
         if (elements[combinedIndex]->cellID() != cellID[0]) {
           cellID[0] = elements[combinedIndex]->cellID();
           basisCacheOnePoint = Teuchos::rcp( new BasisCache(elemType, _soln->mesh()) );
           basisCacheOnePoint->setPhysicalCellNodes(_soln->mesh()->physicalCellNodesForCell(cellID[0]),cellID,false); // false: don't createSideCacheToo
         }
+        refPoint.resize(1,1,spaceDim); // CamelliaCellTools::mapToReferenceFrame wants a numCells dimension...  (perhaps it shouldn't, though!)
         // compute the refPoint:
-        typedef CellTools<double>  CellTools;
-        int whichCell = 0;
-        CellTools::mapToReferenceFrame(refPoint,point,_soln->mesh()->physicalCellNodesForCell(cellID[0]),
-                                       *(elemType->cellTopoPtr),whichCell);
+        CamelliaCellTools::mapToReferenceFrame(refPoint,point,_soln->mesh()->getTopology(), cellID[0],
+                                               _soln->mesh()->globalDofAssignment()->getCubatureDegree(cellID[0]));
+        refPoint.resize(1,spaceDim);
         basisCacheOnePoint->setRefCellPoints(refPoint);
         //          cout << "refCellPoints:\n " << refPoint;
         //          cout << "physicalCubaturePoints:\n " << basisCacheOnePoint->getPhysicalCubaturePoints();

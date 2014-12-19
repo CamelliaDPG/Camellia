@@ -30,6 +30,8 @@ namespace Camellia {
     shards::CellTopology _shardsBaseTopology;
     unsigned _tensorialDegree; // number of times we've tensor-producted the base topology with the line topology
     
+    std::string _name;
+    
     vector< vector<CellTopoPtr> > _subcells; // ordered by dimension, then ordinal
     
     CellTopology(const shards::CellTopology &baseTopo, unsigned tensorialDegree);
@@ -74,6 +76,10 @@ namespace Camellia {
     
     /** \brief  Side boundary subcell count of this cell topology */
     unsigned getSideCount() const;
+ 
+    /** \brief  Key that's unique for standard shards topologies and any tensorial degree.
+     */
+    std::pair<unsigned,unsigned> getKey() const;
     
     /** \brief  Node count of a subcell of the given dimension and ordinal.
      *  \param  subcell_dim    [in]  - spatial dimension of the subcell
@@ -81,6 +87,12 @@ namespace Camellia {
      */
     unsigned getNodeCount( const unsigned subcell_dim ,
                           const unsigned subcell_ord ) const;
+    
+    /** \brief  Node count of a subcell of the given dimension and ordinal.
+     *  \param  subcell_dim    [in]  - spatial dimension of the subcell
+     *  \param  subcell_ord    [in]  - subcell ordinal
+     */
+    std::string getName() const;
     
     /** \brief  Vertex count of a subcell of the given dimension and ordinal.
      *  \param  subcell_dim    [in]  - spatial dimension of the subcell
@@ -166,8 +178,10 @@ namespace Camellia {
     static CellTopoPtr tetrahedron();
 //    static CellTopoPtr pyramid();
   };
+  typedef std::pair<unsigned,unsigned> CellTopologyKey;
 }
 
 typedef Teuchos::RCP<Camellia::CellTopology> CellTopoPtr;
+typedef Teuchos::RCP< shards::CellTopology > CellTopoPtrLegacy;
 
 #endif /* defined(__Camellia__CellTopology__) */

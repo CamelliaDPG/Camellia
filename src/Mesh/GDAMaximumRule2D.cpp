@@ -133,7 +133,7 @@ void GDAMaximumRule2D::buildLocalToGlobalMap() {
           globalIndex++;
         }
       } else {
-        int numSides = CamelliaCellTools::getSideCount(*cell->topology());
+        int numSides = cell->getSideCount();
         for (int sideIndex=0; sideIndex<numSides; sideIndex++) {
           int numDofs = elemTypePtr->trialOrderPtr->getBasisCardinality(trialID,sideIndex);
           for (int dofOrdinal=0; dofOrdinal<numDofs; dofOrdinal++) {
@@ -227,7 +227,7 @@ void GDAMaximumRule2D::buildTypeLookups() {
       //   would also need to call elem.setElementType for
       //   affected elements...)
       int spaceDim = elemType->cellTopoPtr->getDimension();
-      int numSides = CamelliaCellTools::getSideCount(*elemType->cellTopoPtr);
+      int numSides = elemType->cellTopoPtr->getSideCount();
       int numNodes = elemType->cellTopoPtr->getNodeCount();
       vector<GlobalIndexType> cellIDs = _cellIDsForElementType[partitionNumber][elemType.get()];
       GlobalIndexType numCells = cellIDs.size();
@@ -260,7 +260,7 @@ void GDAMaximumRule2D::buildTypeLookups() {
     ElementType* elemType = elemTypeIt->get();
     GlobalIndexType numCells = globalCellIndices[elemType];
     int spaceDim = elemType->cellTopoPtr->getDimension();
-    int numSides = CamelliaCellTools::getSideCount(*elemType->cellTopoPtr);
+    int numSides = elemType->cellTopoPtr->getSideCount();
     _physicalCellNodesForElementType[elemType] = FieldContainer<double>(numCells,numSides,spaceDim);
   }
   // copy from the local (per-partition) FieldContainers to the global ones
@@ -346,7 +346,7 @@ void GDAMaximumRule2D::determineDofPairings() {
       VarPtr trialVar = _varFactory.trial(trialID);
       bool isFluxOrTrace = (trialVar->varType() == FLUX) || (trialVar->varType() == TRACE);
       if ( isFluxOrTrace ) {
-        int numSides = CamelliaCellTools::getSideCount(*cell->topology());
+        int numSides = cell->getSideCount();
         for (int sideIndex=0; sideIndex<numSides; sideIndex++) {
           int myNumDofs = elemTypePtr->trialOrderPtr->getBasisCardinality(trialID,sideIndex);
           pair<unsigned, unsigned> neighborInfo = cell->getNeighborInfo(sideIndex);
@@ -434,7 +434,7 @@ void GDAMaximumRule2D::determineDofPairings() {
       bool isFluxOrTrace = (trialVar->varType() == FLUX) || (trialVar->varType() == TRACE);
       
       if ( isFluxOrTrace ) {
-        int numSides = CamelliaCellTools::getSideCount(*cell->topology());
+        int numSides = cell->getSideCount();
         for (int sideIndex=0; sideIndex<numSides; sideIndex++) {
           int numDofs = elemTypePtr->trialOrderPtr->getBasisCardinality(trialID,sideIndex);
           for (int dofOrdinal=0; dofOrdinal<numDofs; dofOrdinal++) {
@@ -515,7 +515,7 @@ void GDAMaximumRule2D::didHRefine(const set<GlobalIndexType> &parentCellIDs) {
     }
     for (vector< CellPtr >::iterator childIt = children.begin(); childIt != children.end(); childIt++) {
       CellPtr child = *childIt;
-      int sideCount = CamelliaCellTools::getSideCount(*child->topology());
+      int sideCount = child->getSideCount();
       _cellSideParitiesForCellID[child->cellIndex()] = vector<int>(sideCount); // 
       for (int sideIndex=0; sideIndex<sideCount; sideIndex++) {
         matchNeighbor(child->cellIndex(), sideIndex); // we'll do this more often than necessary.  Could be smarter about it.
@@ -557,7 +557,7 @@ void GDAMaximumRule2D::didPRefine(const set<GlobalIndexType> &cellIDs, int delta
     GlobalIndexType cellID = *cellIt;
     CellPtr cell = _meshTopology->getCell(cellID);
     ElementTypePtr oldElemType = oldTypes[cellID];
-    const shards::CellTopology cellTopo = *(cell->topology());
+    CellTopoPtr cellTopo = cell->topology();
     //   a. create new DofOrderings for trial and test
     Teuchos::RCP<DofOrdering> currentTrialOrdering, currentTestOrdering;
     currentTrialOrdering = _elementTypeForCell[cellID]->trialOrderPtr;
@@ -583,7 +583,7 @@ void GDAMaximumRule2D::didPRefine(const set<GlobalIndexType> &cellIDs, int delta
     
     //    elem->setElementType( _elementTypeFactory.getElementType(newTrialOrdering, newTestOrdering,
     //                                                             elem->elementType()->cellTopoPtr ) );
-    int numSides = CamelliaCellTools::getSideCount(*cell->topology());
+    int numSides = cell->getSideCount();
     for (int sideOrdinal=0; sideOrdinal<numSides; sideOrdinal++) {
       // get and match the big neighbor along the side, if we're a small element…
       pair<GlobalIndexType, int> neighborInfo = cell->getNeighborInfo(sideOrdinal);
@@ -613,7 +613,7 @@ void GDAMaximumRule2D::didHUnrefine(const set<GlobalIndexType> &parentCellIDs) {
     GlobalIndexType parentCellID = *parentCellIt;
     CellPtr parent = _meshTopology->getCell(parentCellID);
     
-    int sideCount = CamelliaCellTools::getSideCount(*parent->topology());
+    int sideCount = parent->getSideCount();
     for (int sideIndex=0; sideIndex<sideCount; sideIndex++) {
       matchNeighbor(parentCellID, sideIndex);
     }
@@ -648,7 +648,7 @@ void GDAMaximumRule2D::getMultiBasisOrdering(DofOrderingPtr &originalNonParentOr
 
   map< int, BasisPtr > varIDsToUpgrade = multiBasisUpgradeMap(parent,sideIndex,nonParentPolyOrder);
   originalNonParentOrdering = _dofOrderingFactory->upgradeSide(originalNonParentOrdering,
-                                                              *nonParent->topology(),
+                                                              nonParent->topology(),
                                                               varIDsToUpgrade,parentSideIndexInNeighbor);
 }
 
@@ -746,7 +746,7 @@ set<GlobalIndexType> GDAMaximumRule2D::partitionOwnedGlobalFluxIndices() {
   for (set<GlobalIndexType>::iterator cellIt = cellIDs.begin(); cellIt != cellIDs.end(); cellIt++) {
     GlobalIndexType cellID = *cellIt;
     ElementTypePtr elemTypePtr = elementType(cellID);
-    int sideCount = CamelliaCellTools::getSideCount(*elemTypePtr->cellTopoPtr);
+    int sideCount = elemTypePtr->cellTopoPtr->getSideCount();
     vector< VarPtr >::iterator fluxIt;
     for (fluxIt = fluxVars.begin(); fluxIt != fluxVars.end(); fluxIt++){
       int fluxID = (*fluxIt)->ID();
@@ -775,7 +775,7 @@ set<GlobalIndexType> GDAMaximumRule2D::partitionOwnedGlobalTraceIndices() {
   for (set<GlobalIndexType>::iterator cellIt = cellIDs.begin(); cellIt != cellIDs.end(); cellIt++) {
     GlobalIndexType cellID = *cellIt;
     ElementTypePtr elemTypePtr = elementType(cellID);
-    int sideCount = CamelliaCellTools::getSideCount(*elemTypePtr->cellTopoPtr);
+    int sideCount = elemTypePtr->cellTopoPtr->getSideCount();
     vector< VarPtr >::iterator traceIt;
     for (traceIt = traceVars.begin(); traceIt != traceVars.end(); traceIt++){
       int traceID = (*traceIt)->ID();
@@ -863,7 +863,7 @@ void GDAMaximumRule2D::matchNeighbor(GlobalIndexType cellID, int sideIndex) {
 //  cout << "matching neighbor for cell " << cellID << " with side ordinal " << sideIndex << endl;
   
   CellPtr cell = _meshTopology->getCell(cellID);
-  const shards::CellTopology cellTopo = *cell->topology();
+  CellTopoPtr cellTopo = cell->topology();
   
   pair< unsigned, unsigned > neighborRecord = cell->getNeighborInfo(sideIndex);
   GlobalIndexType neighborCellID = neighborRecord.first;
@@ -878,11 +878,11 @@ void GDAMaximumRule2D::matchNeighbor(GlobalIndexType cellID, int sideIndex) {
   CellPtr neighbor = _meshTopology->getCell(neighborCellID);
   
   if (_cellSideParitiesForCellID.find(cellID) == _cellSideParitiesForCellID.end()) {
-    int sideCount = CamelliaCellTools::getSideCount(*cell->topology());
+    int sideCount = cell->getSideCount();
     _cellSideParitiesForCellID[cellID] = vector<int>(sideCount);
   }
   if (_cellSideParitiesForCellID.find(neighborCellID) == _cellSideParitiesForCellID.end()) {
-    int neighborSideCount = CamelliaCellTools::getSideCount(*neighbor->topology());
+    int neighborSideCount = neighbor->getSideCount();
     _cellSideParitiesForCellID[neighborCellID] = vector<int>(neighborSideCount);
   }
   if ((_cellSideParitiesForCellID[cellID][sideIndex] == 0) && (_cellSideParitiesForCellID[neighborCellID][sideIndexInNeighbor] == 0)) {
@@ -962,7 +962,7 @@ void GDAMaximumRule2D::matchNeighbor(GlobalIndexType cellID, int sideIndex) {
     }
   }
   // p-refinement handling:
-  const shards::CellTopology neighborTopo = *neighbor->topology();
+  CellTopoPtr neighborTopo = neighbor->topology();
   Teuchos::RCP<DofOrdering> elemTrialOrdering = _elementTypeForCell[cellID]->trialOrderPtr;
   Teuchos::RCP<DofOrdering> elemTestOrdering = _elementTypeForCell[cellID]->testOrderPtr;
   

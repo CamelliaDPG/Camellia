@@ -134,7 +134,7 @@ int Element::numChildren() {
 }
 
 int Element::numSides() {
-  return CamelliaCellTools::getSideCount(*_cell->topology());
+  return _cell->getSideCount();
 }
 
 int Element::parentSideForSideIndex(int mySideOrdinal) {
@@ -143,9 +143,9 @@ int Element::parentSideForSideIndex(int mySideOrdinal) {
   CellPtr parentCell = _cell->getParent();
   if (parentCell.get()==NULL) return -1;
   
-  CellTopoPtrLegacy cellTopo = parentCell->topology();
+  CellTopoPtr cellTopo = parentCell->topology();
 
-  int numSides = CamelliaCellTools::getSideCount(*cellTopo);
+  int numSides = cellTopo->getSideCount();
   
   for (int parentSideOrdinal=0; parentSideOrdinal<numSides; parentSideOrdinal++) {
     vector< pair<GlobalIndexType, unsigned> > childrenForSide = parentCell->childrenForSide(parentSideOrdinal);

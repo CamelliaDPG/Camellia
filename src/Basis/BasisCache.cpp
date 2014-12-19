@@ -184,9 +184,9 @@ BasisCache::BasisCache(CellTopoPtr cellTopo, int cubDegree, bool createSideCache
 
 BasisCache::BasisCache(ElementTypePtr elemType, Teuchos::RCP<Mesh> mesh, bool testVsTest, int cubatureDegreeEnrichment) {
   // use testVsTest=true for test space inner product (won't create side caches, and will use higher cubDegree)
-  shards::CellTopology cellTopo = *(elemType->cellTopoPtr);
-  _spaceDim = cellTopo.getDimension();
-  _numSides = CamelliaCellTools::getSideCount(cellTopo);
+  CellTopoPtr cellTopo = elemType->cellTopoPtr;
+  _spaceDim = cellTopo->getDimension();
+  _numSides = cellTopo->getSideCount();
   
   _maxTestDegree = elemType->testOrderPtr->maxBasisDegree();
   
@@ -209,9 +209,23 @@ BasisCache::BasisCache(ElementTypePtr elemType, Teuchos::RCP<Mesh> mesh, bool te
   bool createSideCacheToo = !testVsTest && elemType->trialOrderPtr->hasSideVarIDs();
   
   _isSideCache = false;
-  _cellTopo = CellTopology::cellTopology(cellTopo);
+  _cellTopo = cellTopo;
   initCubatureDegree(_maxTrialDegree, _maxTestDegree + cubatureDegreeEnrichment);
   init(createSideCacheToo);
+}
+
+BasisCache::BasisCache(const FieldContainer<double> &physicalCellNodes,
+                       CellTopoPtr cellTopo,
+                       DofOrdering &trialOrdering, int maxTestDegree, bool createSideCacheToo) {
+  _spaceDim = cellTopo->getDimension();
+  _numSides = cellTopo->getSideCount();
+  findMaximumDegreeBasisForSides(trialOrdering);
+  
+  _isSideCache = false;
+  _cellTopo = cellTopo;
+  initCubatureDegree(trialOrdering.maxBasisDegree(), maxTestDegree);
+  init(createSideCacheToo);
+  setPhysicalCellNodes(physicalCellNodes,vector<GlobalIndexType>(),createSideCacheToo);
 }
 
 BasisCache::BasisCache(const FieldContainer<double> &physicalCellNodes, 
@@ -255,6 +269,22 @@ BasisCache::BasisCache(const FieldContainer<double> &physicalCellNodes, shards::
   initCubatureDegree(0, cubDegree);
   init(createSideCacheToo);
 
+  setPhysicalCellNodes(physicalCellNodes,vector<GlobalIndexType>(),createSideCacheToo);
+}
+
+BasisCache::BasisCache(const FieldContainer<double> &physicalCellNodes, CellTopoPtr cellTopo, int cubDegree, bool createSideCacheToo) {
+  // NOTE that this constructor's a bit dangerous, in that we lack information about the brokenness
+  // of the sides; we may under-integrate for cells with broken sides...
+  _spaceDim = cellTopo->getDimension();
+  _numSides = cellTopo->getSideCount();
+  DofOrdering trialOrdering; // dummy trialOrdering
+  findMaximumDegreeBasisForSides(trialOrdering); // should fill with NULL ptrs
+  
+  _isSideCache = false;
+  _cellTopo = cellTopo;
+  initCubatureDegree(0, cubDegree);
+  init(createSideCacheToo);
+  
   setPhysicalCellNodes(physicalCellNodes,vector<GlobalIndexType>(),createSideCacheToo);
 }
 
@@ -1040,11 +1070,26 @@ BasisCachePtr BasisCache::basisCacheForCellType(MeshPtr mesh, ElementTypePtr ele
   return basisCache;
 }
 
-BasisCachePtr BasisCache::basisCacheForReferenceCell(shards::CellTopology &cellTopo, int cubatureDegree, bool createSideCacheToo) {
-  FieldContainer<double> cellNodes(cellTopo.getNodeCount(),cellTopo.getDimension());
+BasisCachePtr BasisCache::basisCacheForReferenceCell(shards::CellTopology &shardsTopo, int cubatureDegree, bool createSideCacheToo) {
+  CellTopoPtr cellTopo = CellTopology::cellTopology(shardsTopo);
+  
+  return basisCacheForReferenceCell(cellTopo, cubatureDegree, createSideCacheToo);
+}
+
+BasisCachePtr BasisCache::basisCacheForReferenceCell(CellTopoPtr cellTopo, int cubatureDegree, bool createSideCacheToo) {
+  FieldContainer<double> cellNodes(cellTopo->getNodeCount(),cellTopo->getDimension());
   CamelliaCellTools::refCellNodesForTopology(cellNodes, cellTopo);
   cellNodes.resize(1,cellNodes.dimension(0),cellNodes.dimension(1));
   
+  BasisCachePtr basisCache = Teuchos::rcp(new BasisCache(cellNodes,cellTopo,cubatureDegree,createSideCacheToo));
+  return basisCache;
+}
+
+BasisCachePtr BasisCache::basisCacheForRefinedReferenceCell(CellTopoPtr cellTopo, int cubatureDegree,
+                                                            RefinementBranch refinementBranch, bool createSideCacheToo) {
+  FieldContainer<double> cellNodes = RefinementPattern::descendantNodesRelativeToAncestorReferenceCell(refinementBranch);
+  
+  cellNodes.resize(1,cellNodes.dimension(0),cellNodes.dimension(1));
   BasisCachePtr basisCache = Teuchos::rcp(new BasisCache(cellNodes,cellTopo,cubatureDegree,createSideCacheToo));
   return basisCache;
 }

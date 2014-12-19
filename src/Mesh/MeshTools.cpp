@@ -61,7 +61,7 @@ bool cellMatches(FieldContainer<double> physicalNodes, double t) {
   return hasVerticesAbove && hasVerticesBelow;
 }
 
-CellTopoPtrLegacy getBottomTopology(MeshTopologyPtr meshTopo, IndexType cellID) {
+CellTopoPtr getBottomTopology(MeshTopologyPtr meshTopo, IndexType cellID) {
   int spaceDim = meshTopo->getSpaceDim() - 1;
   // determine cell topology:
   vector<IndexType> cellVertexIndices = meshTopo->getCell(cellID)->vertices();
@@ -71,8 +71,8 @@ CellTopoPtrLegacy getBottomTopology(MeshTopologyPtr meshTopo, IndexType cellID) 
     bottomVertexIndices.insert(cellVertexIndices[i]);
   }
   IndexType bottomEntityIndex = meshTopo->getEntityIndex(spaceDim, bottomVertexIndices);
-  unsigned bottomCellTopoKey = meshTopo->getEntityTopology(spaceDim, bottomEntityIndex).getKey();
-  CellTopoPtrLegacy cellTopo = CamelliaCellTools::cellTopoForKey(bottomCellTopoKey);
+  Camellia::CellTopologyKey bottomCellTopoKey = meshTopo->getEntityTopology(spaceDim, bottomEntityIndex)->getKey();
+  CellTopoPtr cellTopo = CamelliaCellTools::cellTopoForKey(bottomCellTopoKey);
   return cellTopo;
 }
 
@@ -93,7 +93,7 @@ MeshPtr MeshTools::timeSliceMesh(MeshPtr spaceTimeMesh, double t,
     FieldContainer<double> physicalNodes = spaceTimeMesh->physicalCellNodesForCell(rootCellID);
     if (cellMatches(physicalNodes, t)) { // cell and some subset of its descendents should be included in slice mesh
       vector< vector< double > > sliceNodes = timeSliceForCell(physicalNodes, t);
-      CellTopoPtrLegacy cellTopo = getBottomTopology(meshTopo, rootCellID);
+      CellTopoPtr cellTopo = getBottomTopology(meshTopo, rootCellID);
       CellPtr sliceCell = sliceTopo->addCell(cellTopo, sliceNodes);
       sliceCellIDToSpaceTimeCellID[sliceCell->cellIndex()] = rootCellID;
     }
@@ -113,7 +113,7 @@ MeshPtr MeshTools::timeSliceMesh(MeshPtr spaceTimeMesh, double t,
     if (spaceTimeCell->isParent()) {
       set<GlobalIndexType> cellsToRefine;
       cellsToRefine.insert(sliceCellID);
-      sliceMesh->hRefine(cellsToRefine, RefinementPattern::regularRefinementPattern(sliceCell->topology()->getKey()));
+      sliceMesh->hRefine(cellsToRefine, RefinementPattern::regularRefinementPattern(sliceCell->topology()));
       vector<IndexType> spaceTimeChildren = spaceTimeCell->getChildIndices();
       for (int childOrdinal=0; childOrdinal<spaceTimeChildren.size(); childOrdinal++) {
         IndexType childID = spaceTimeChildren[childOrdinal];

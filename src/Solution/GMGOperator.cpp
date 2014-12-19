@@ -291,7 +291,7 @@ Teuchos::RCP<Epetra_CrsMatrix> GMGOperator::constructProlongationOperator() {
           fineMapper->mapLocalDataVolume(fineCellData, mappedCoarseCellData, false);
 
           CellPtr fineCell = _fineMesh->getTopology()->getCell(fineCellID);
-          int sideCount = CamelliaCellTools::getSideCount(*fineCell->topology());
+          int sideCount = fineCell->getSideCount();
           for (int sideOrdinal=0; sideOrdinal<sideCount; sideOrdinal++) {
             if (fineCell->ownsSide(sideOrdinal)) {
   //        cout << "fine cell " << fineCellID << " owns side " << sideOrdinal << endl;
@@ -408,7 +408,7 @@ LocalDofMapperPtr GMGOperator::getLocalCoefficientMap(GlobalIndexType fineCellID
     condensedDofInterpreter = dynamic_cast<CondensedDofInterpreter*>(_fineDofInterpreter.get());
   }
 
-  int fineSideCount = CamelliaCellTools::getSideCount( *fineCell->topology() );
+  int fineSideCount = fineCell->getSideCount();
   int sideDim = _fineMesh->getTopology()->getSpaceDim() - 1;
   vector<unsigned> ancestralSideOrdinals(fineSideCount);
   vector< RefinementBranch > sideRefBranches(fineSideCount);
@@ -808,7 +808,7 @@ set<GlobalIndexTypeToCast> GMGOperator::setCoarseRHSVector(const Epetra_MultiVec
     fineMapper->mapLocalDataVolume(fineCellData, mappedCoarseCellData, false);
 
     CellPtr fineCell = _fineMesh->getTopology()->getCell(fineCellID);
-    int sideCount = CamelliaCellTools::getSideCount(*fineCell->topology());
+    int sideCount = fineCell->getSideCount();
     for (int sideOrdinal=0; sideOrdinal<sideCount; sideOrdinal++) {
       if (fineCell->ownsSide(sideOrdinal)) {
 //        cout << "fine cell " << fineCellID << " owns side " << sideOrdinal << endl;

@@ -254,7 +254,7 @@ void Boundary::bcsToImpose( map<  GlobalIndexType, double > &globalDofIndicesAnd
     int trialID = singletonIt->first;
     unsigned vertexOrdinalInCell = singletonIt->second;
     
-    shards::CellTopology cellTopo = *(elemType->cellTopoPtr.get());
+    CellTopoPtr cellTopo = elemType->cellTopoPtr;
 
     // in some ways less nice than the previous version of singleton BC imposition; we don't impose a non-zero value (because
     // we don't figure out physical points, etc.), and we also neglect any spatial filtering.
@@ -270,7 +270,7 @@ void Boundary::bcsToImpose( map<  GlobalIndexType, double > &globalDofIndicesAnd
     int vertexOrdinal;
     
     int sideForVertex = -1;
-    int sideDim = cellTopo.getDimension() - 1;
+    int sideDim = cellTopo->getDimension() - 1;
     if (!_mesh->bilinearForm()->isFluxOrTrace(trialID)) {
       vertexOrdinal = vertexOrdinalInCell;
       sideForVertex = 0; // for volume trialIDs, the "side" in DofOrdering is 0

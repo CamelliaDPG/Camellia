@@ -227,9 +227,9 @@ void BilinearFormUtility::computeStiffnessMatrix(FieldContainer<double> &stiffne
 }
 
 void BilinearFormUtility::computeStiffnessMatrixForCell(FieldContainer<double> &stiffness, Teuchos::RCP<Mesh> mesh, int cellID) {
-  Teuchos::RCP<DofOrdering> trialOrder = mesh->getElement(cellID)->elementType()->trialOrderPtr;
-  Teuchos::RCP<DofOrdering> testOrder  = mesh->getElement(cellID)->elementType()->testOrderPtr;
-  shards::CellTopology     cellTopo  = *(mesh->getElement(cellID)->elementType()->cellTopoPtr);
+  DofOrderingPtr trialOrder = mesh->getElement(cellID)->elementType()->trialOrderPtr;
+  DofOrderingPtr testOrder  = mesh->getElement(cellID)->elementType()->testOrderPtr;
+  CellTopoPtr     cellTopo  = mesh->getElement(cellID)->elementType()->cellTopoPtr;
   FieldContainer<double> physicalCellNodes = mesh->physicalCellNodesForCell(cellID);
   FieldContainer<double> cellSideParities  = mesh->cellSideParitiesForCell(cellID);
   int numCells = 1;
@@ -239,7 +239,7 @@ void BilinearFormUtility::computeStiffnessMatrixForCell(FieldContainer<double> &
 
 void BilinearFormUtility::computeStiffnessMatrix(FieldContainer<double> &stiffness, BilinearFormPtr bilinearForm,
                                                  Teuchos::RCP<DofOrdering> trialOrdering, Teuchos::RCP<DofOrdering> testOrdering, 
-                                                 shards::CellTopology &cellTopo, FieldContainer<double> &physicalCellNodes,
+                                                 CellTopoPtr cellTopo, FieldContainer<double> &physicalCellNodes,
                                                  FieldContainer<double> &cellSideParities) {
   // this method is deprecated--here basically until we can revise tests, etc. to use the BasisCache version
   
@@ -259,7 +259,7 @@ void BilinearFormUtility::computeOptimalStiffnessMatrix(FieldContainer<double> &
                                                         FieldContainer<double> &optimalTestWeights,
                                                         BilinearFormPtr bilinearForm,
                                                         Teuchos::RCP<DofOrdering> trialOrdering, Teuchos::RCP<DofOrdering> testOrdering,
-                                                        shards::CellTopology &cellTopo, FieldContainer<double> &physicalCellNodes,
+                                                        CellTopoPtr cellTopo, FieldContainer<double> &physicalCellNodes,
                                                         FieldContainer<double> &cellSideParities) {
   // lots of code copied and pasted from the very similar computeStiffnessMatrix.  The difference here is that for each optimal test function,
   // we need to ask the bilinear form about each of its components (it's a vector whereas the other guy had just a single basis function
@@ -286,10 +286,10 @@ void BilinearFormUtility::computeOptimalStiffnessMatrix(FieldContainer<double> &
   unsigned spaceDim = physicalCellNodes.dimension(2);
   
   // Check that cellTopo and physicalCellNodes agree
-  TEUCHOS_TEST_FOR_EXCEPTION( ( numNodesPerElem != cellTopo.getNodeCount() ),
+  TEUCHOS_TEST_FOR_EXCEPTION( ( numNodesPerElem != cellTopo->getNodeCount() ),
                      std::invalid_argument,
                      "Second dimension of physicalCellNodes and cellTopo.getNodeCount() do not match.");
-  TEUCHOS_TEST_FOR_EXCEPTION( ( spaceDim != cellTopo.getDimension() ),
+  TEUCHOS_TEST_FOR_EXCEPTION( ( spaceDim != cellTopo->getDimension() ),
                      std::invalid_argument,
                      "Third dimension of physicalCellNodes and cellTopo.getDimension() do not match.");
   
@@ -309,7 +309,7 @@ void BilinearFormUtility::computeOptimalStiffnessMatrix(FieldContainer<double> &
   
   BasisCache basisCache(physicalCellNodes, cellTopo, *trialOrdering, cubDegreeTest, true); // DO create side caches, too
   
-  unsigned numSides = CamelliaCellTools::getSideCount(cellTopo);
+  unsigned numSides = cellTopo->getSideCount();
 
   vector<int> testIDs = bilinearForm->testIDs();
   vector<int>::iterator testIterator;

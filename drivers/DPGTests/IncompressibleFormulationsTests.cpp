@@ -279,7 +279,7 @@ bool IncompressibleFormulationsTests::functionsAgree(FunctionPtr f1, FunctionPtr
 
     int numSides = 1; // interior only
     if (f1->boundaryValueOnly()) {
-      numSides = CamelliaCellTools::getSideCount(*mesh->getTopology()->getCell(cellID)->topology());
+      numSides = mesh->getTopology()->getCell(cellID)->getSideCount();
     }
     for (int sideIndex = 0; sideIndex<numSides; sideIndex++) {
       BasisCachePtr basisCacheForTest;

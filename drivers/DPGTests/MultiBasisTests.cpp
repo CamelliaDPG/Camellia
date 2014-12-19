@@ -555,7 +555,7 @@ bool MultiBasisTests::testMultiBasisLegacyTest() {
   
   int polyOrder = 2; 
   Teuchos::RCP<DofOrdering> trialOrdering;
-  shards::CellTopology quad_4(shards::getCellTopologyData<shards::Quadrilateral<4> >() );
+  CellTopoPtr quad_4 = Camellia::CellTopology::quad();
   
   DofOrderingFactory dofOrderingFactory(bilinearForm);
   

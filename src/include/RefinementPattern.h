@@ -4,8 +4,7 @@
 // Intrepid includes
 #include "Intrepid_FieldContainer.hpp"
 
-// Shards includes
-#include "Shards_CellTopology.hpp"
+#include "CellTopology.h"
 
 // Teuchos includes
 #include "Teuchos_RCP.hpp"
@@ -24,14 +23,14 @@ typedef Teuchos::RCP<MeshTopology> MeshTopologyPtr;
 #include "MeshTopology.h"
 
 class RefinementPattern {
-  MeshTopologyPtr _refinementTopology; // ultimately, this may be able to supplant a number of structures here...
+  MeshTopologyPtr _refinementTopology;
   
-  Teuchos::RCP< shards::CellTopology > _cellTopoPtr;
+  CellTopoPtr _cellTopoPtr;
   FieldContainer<double> _nodes;
   vector< vector< unsigned > > _subCells;
   FieldContainer<double> _vertices;
   
-  vector< Teuchos::RCP< shards::CellTopology > > _childTopos;
+  vector< CellTopoPtr > _childTopos;
   
   vector< vector< Teuchos::RCP<RefinementPattern> > > _patternForSubcell;
   vector< RefinementPatternRecipe > _relatedRecipes;
@@ -46,11 +45,15 @@ class RefinementPattern {
   
   double distance(const vector<double> &v1, const vector<double> &v2);
   
+  static map< pair<unsigned,unsigned>, Teuchos::RCP<RefinementPattern> > _refPatternForKeyTensorialDegree;
 public:
-  RefinementPattern(Teuchos::RCP< shards::CellTopology > cellTopoPtr, FieldContainer<double> refinedNodes,
+  RefinementPattern(CellTopoPtr cellTopoPtr, FieldContainer<double> refinedNodes,
                     vector< Teuchos::RCP<RefinementPattern> > sideRefinementPatterns);
+//  RefinementPattern(Teuchos::RCP< shards::CellTopology > shardsTopoPtr, FieldContainer<double> refinedNodes,
+//                    vector< Teuchos::RCP<RefinementPattern> > sideRefinementPatterns);
 
-  static Teuchos::RCP<RefinementPattern> noRefinementPattern(Teuchos::RCP< shards::CellTopology > cellTopoPtr);
+  static Teuchos::RCP<RefinementPattern> noRefinementPattern(CellTopoPtr cellTopoPtr);
+  static Teuchos::RCP<RefinementPattern> noRefinementPattern(CellTopoPtrLegacy shardsTopoPtr);
   static Teuchos::RCP<RefinementPattern> noRefinementPatternLine();
   static Teuchos::RCP<RefinementPattern> noRefinementPatternTriangle();
   static Teuchos::RCP<RefinementPattern> noRefinementPatternQuad();
@@ -59,6 +62,8 @@ public:
   static Teuchos::RCP<RefinementPattern> regularRefinementPatternQuad();
   static Teuchos::RCP<RefinementPattern> regularRefinementPatternHexahedron();
   static Teuchos::RCP<RefinementPattern> regularRefinementPattern(unsigned cellTopoKey);
+  static Teuchos::RCP<RefinementPattern> regularRefinementPattern(CellTopoPtr cellTopo);
+  static Teuchos::RCP<RefinementPattern> regularRefinementPattern(Camellia::CellTopologyKey cellTopoKey);
   static Teuchos::RCP<RefinementPattern> xAnisotropicRefinementPatternQuad(); // vertical cut
   static Teuchos::RCP<RefinementPattern> yAnisotropicRefinementPatternQuad(); // horizontal cut
   
@@ -75,8 +80,8 @@ public:
   vector< vector< pair< unsigned, unsigned > > > & childrenForSides(); // outer vector: indexed by parent's sides; inner vector: (child index in children, index of child's side shared with parent)
   map< unsigned, unsigned > parentSideLookupForChild(unsigned childIndex); // inverse of childrenForSides
 
-  Teuchos::RCP< shards::CellTopology > childTopology(unsigned childIndex);
-  Teuchos::RCP< shards::CellTopology > parentTopology();
+  CellTopoPtr childTopology(unsigned childIndex);
+  CellTopoPtr parentTopology();
   MeshTopologyPtr refinementMeshTopology();
   
   unsigned numChildren();
@@ -111,7 +116,7 @@ public:
   
   static FieldContainer<double> descendantNodes(RefinementBranch refinementBranch, const FieldContainer<double> &ancestorNodes);
   
-  static Teuchos::RCP< shards::CellTopology > descendantTopology(RefinementBranch &refinements);
+  static CellTopoPtr descendantTopology(RefinementBranch &refinements);
   
   static map<unsigned, set<unsigned> > getInternalSubcellOrdinals(RefinementBranch &refinements);
   

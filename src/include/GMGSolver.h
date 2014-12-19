@@ -36,6 +36,8 @@ class GMGSolver : public Solver {
   int _iterationCount;
   
   int _azConvergenceOption; // defaults to AZ_rhs
+  
+  bool _printIterationCountIfNoAzOutput;
 public:
   GMGSolver(BCPtr zeroBCs, MeshPtr coarseMesh, IPPtr coarseIP, MeshPtr fineMesh, Teuchos::RCP<DofInterpreter> fineDofInterpreter,
             Epetra_Map finePartitionMap, int maxIters, double tol, Teuchos::RCP<Solver> coarseSolver, bool useStaticCondensation);
@@ -64,6 +66,8 @@ public:
   void setFineMesh(MeshPtr fineMesh, Epetra_Map finePartitionMap);
   
   void setUseConjugateGradient(bool value); // otherwise will use GMRES
+  
+  void setPrintIterationCount(bool value);
 };
 
 #endif /* defined(__Camellia_debug__GMGSolver__) */

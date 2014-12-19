@@ -61,7 +61,7 @@ public:
   // the "pre-stiffness" (rectangular) matrix methods:
   static void computeStiffnessMatrix(FieldContainer<double> &stiffness, BilinearFormPtr bilinearForm,
                                      Teuchos::RCP<DofOrdering> trialOrdering, Teuchos::RCP<DofOrdering> testOrdering,
-                                     shards::CellTopology &cellTopo, FieldContainer<double> &physicalCellNodes,
+                                     CellTopoPtr cellTopo, FieldContainer<double> &physicalCellNodes,
                                      FieldContainer<double> &cellSideParities);
 
   // the real one:
@@ -77,7 +77,7 @@ public:
                                             FieldContainer<double> &optimalTestWeights,
                                             BilinearFormPtr bilinearForm,
                                             Teuchos::RCP<DofOrdering> trialOrdering, Teuchos::RCP<DofOrdering> testOrdering,
-                                            shards::CellTopology &cellTopo, FieldContainer<double> &physicalCellNodes,
+                                            CellTopoPtr cellTopo, FieldContainer<double> &physicalCellNodes,
                                             FieldContainer<double> &cellSideParities);
   
   static void computeStiffnessMatrix(FieldContainer<double> &stiffness, FieldContainer<double> &innerProductMatrix,

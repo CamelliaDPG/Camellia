@@ -17,12 +17,15 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 
+#include "CellTopology.h"
+
+using namespace Camellia;
+
 HDF5Exporter::HDF5Exporter(MeshPtr mesh, string outputDirName, string outputDirSuperPath) : _mesh(mesh), _dirName(outputDirName),
   _dirSuperPath(outputDirSuperPath), _fieldXdmf("Xdmf"), _traceXdmf("Xdmf"),
   _fieldDomain("Domain"), _traceDomain("Domain"), _fieldGrids("Grid"), _traceGrids("Grid")
 {
   int commRank = Teuchos::GlobalMPISession::getRank();
-  int numProcs = Teuchos::GlobalMPISession::getNProc();
 
 #ifdef HAVE_MPI
   Epetra_MpiComm Comm(MPI_COMM_WORLD);
@@ -246,63 +249,69 @@ void HDF5Exporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
     if (!cellIDToNum1DPts[cell->cellIndex()] || cellIDToNum1DPts[cell->cellIndex()] < 2)
       cellIDToNum1DPts[cell->cellIndex()] = defaultNum1DPts;
     int num1DPts = cellIDToNum1DPts[cell->cellIndex()];
-    if (cell->topology()->getKey() == shards::Line<2>::key)
+    
+    int lineTensorPoints = 1;
+    for (int i=0; i<cell->topology()->getTensorialDegree(); i++) {
+      lineTensorPoints *= num1DPts;
+    }
+    
+    if (cell->topology()->getKey().first == shards::Line<2>::key)
     {
       numLines++;
       if (!exportingBoundaryValues)
       {
-        totalSubLines += num1DPts-1;
-        totalPts += num1DPts;
+        totalSubLines += num1DPts-1 * lineTensorPoints;
+        totalPts += num1DPts * lineTensorPoints;
       }
       else
       {
-        totalBoundaryPts += 2;
-        totalPts += 2;
+        totalBoundaryPts += 2 * lineTensorPoints;
+        totalPts += 2 * lineTensorPoints;
       }
     }
-    if (cell->topology()->getKey() == shards::Triangle<3>::key)
+    if (cell->topology()->getKey().first == shards::Triangle<3>::key)
     {
       numTriangles++;
       if (!exportingBoundaryValues)
       {
-        totalSubTriangles += (num1DPts-1)*(num1DPts-1);
-        totalPts += num1DPts*(num1DPts+1)/2;
+        totalSubTriangles += (num1DPts-1)*(num1DPts-1) * lineTensorPoints;
+        totalPts += num1DPts*(num1DPts+1)/2 * lineTensorPoints;
       }
       else
       {
-        totalBoundaryLines += 3;
-        totalSubLines += 3*(num1DPts-1);
-        totalPts += 3*num1DPts;
+        totalBoundaryLines += 3 * lineTensorPoints;
+        totalSubLines += 3*(num1DPts-1) * lineTensorPoints;
+        totalPts += 3*num1DPts * lineTensorPoints;
       }
     }
-    if (cell->topology()->getKey() == shards::Quadrilateral<4>::key)
+    if (cell->topology()->getKey().first == shards::Quadrilateral<4>::key)
     {
       numQuads++;
       if (!exportingBoundaryValues)
       {
-        totalSubQuads += (num1DPts-1)*(num1DPts-1);
-        totalPts += num1DPts*num1DPts;
+        totalSubQuads += (num1DPts-1)*(num1DPts-1) * lineTensorPoints;
+        totalPts += num1DPts*num1DPts * lineTensorPoints;
       }
       else
       {
-        totalBoundaryLines += 4;
-        totalSubLines += 4*(num1DPts-1);
-        totalPts += 4*num1DPts;
+        totalBoundaryLines += 4 * lineTensorPoints;
+        totalSubLines += 4*(num1DPts-1) * lineTensorPoints;
+        totalPts += 4*num1DPts * lineTensorPoints;
       }
     }
-    if (cell->topology()->getKey() == shards::Hexahedron<8>::key)
+    if (cell->topology()->getKey().first == shards::Hexahedron<8>::key)
     {
       numHexas++;
       if (!exportingBoundaryValues)
       {
-        totalSubHexas += (num1DPts-1)*(num1DPts-1)*(num1DPts-1);
-        totalPts += num1DPts*num1DPts*num1DPts;
+        totalSubHexas += (num1DPts-1)*(num1DPts-1)*(num1DPts-1) * lineTensorPoints;
+        totalPts += num1DPts*num1DPts*num1DPts * lineTensorPoints;
       }
       else
       {
-        totalBoundaryFaces += 6;
-        totalSubQuads += 6*(num1DPts-1)*(num1DPts-1);
-        totalPts += 6*num1DPts*num1DPts;
+        totalBoundaryFaces += 6 * lineTensorPoints;
+        totalSubQuads += 6*(num1DPts-1)*(num1DPts-1) * lineTensorPoints;
+        totalPts += 6*num1DPts*num1DPts * lineTensorPoints;
       }
     }
   }
@@ -451,7 +460,7 @@ void HDF5Exporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
 
     FieldContainer<double> physicalCellNodes = _mesh->getTopology()->physicalCellNodesForCell(cellIndex);
 
-    CellTopoPtrLegacy cellTopoPtr = cell->topology();
+    CellTopoPtr cellTopoPtr = cell->topology();
     int num1DPts = cellIDToNum1DPts[cell->cellIndex()];
     int numPoints = 0;
 
@@ -459,17 +468,23 @@ void HDF5Exporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
       physicalCellNodes.resize(1,physicalCellNodes.dimension(0), physicalCellNodes.dimension(1));
     bool createSideCache = functions[0]->boundaryValueOnly();
 
-    BasisCachePtr volumeBasisCache = Teuchos::rcp( new BasisCache(*cellTopoPtr, 1, createSideCache) );
+    BasisCachePtr volumeBasisCache = Teuchos::rcp( new BasisCache(cellTopoPtr, 1, createSideCache) );
     volumeBasisCache->setPhysicalCellNodes(physicalCellNodes, vector<GlobalIndexType>(1,cellIndex), createSideCache);
 
-    int numSides = createSideCache ? CamelliaCellTools::getSideCount(*cellTopoPtr) : 1;
+    int numSides = createSideCache ? cellTopoPtr->getSideCount() : 1;
 
     int sideDim = spaceDim - 1;
 
     for (int sideOrdinal = 0; sideOrdinal < numSides; sideOrdinal++)
     {
-      shards::CellTopology topo = createSideCache ? cellTopoPtr->getBaseCellTopologyData(sideDim, sideOrdinal) : *cellTopoPtr;
-      unsigned cellTopoKey = topo.getKey();
+      CellTopoPtr topo = createSideCache ? cellTopoPtr->getSubcell(sideDim, sideOrdinal) : cellTopoPtr;
+      
+      int lineTensorPoints = 1;
+      for (int i=0; i<cell->topology()->getTensorialDegree(); i++) {
+        lineTensorPoints *= num1DPts;
+      }
+      
+      unsigned cellTopoKey = topo->getKey().first;
 
       BasisCachePtr basisCache = createSideCache ? volumeBasisCache->getSideBasisCache(sideOrdinal) : volumeBasisCache;
       basisCache->setMesh(_mesh);
@@ -482,23 +497,26 @@ void HDF5Exporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
       switch (cellTopoKey)
       {
         case shards::Node::key:
-          numPoints = 1;
+          numPoints = 1 * lineTensorPoints;
           break;
         case shards::Line<2>::key:
-          numPoints = num1DPts;
+          numPoints = num1DPts * lineTensorPoints;
           break;
         case shards::Quadrilateral<4>::key:
-          numPoints = num1DPts*num1DPts;
+          numPoints = num1DPts*num1DPts * lineTensorPoints;
           break;
         case shards::Triangle<3>::key:
-          numPoints = num1DPts*(num1DPts+1)/2;
+          numPoints = num1DPts*(num1DPts+1)/2 * lineTensorPoints;
           break;
         case shards::Hexahedron<8>::key:
-          numPoints = num1DPts*num1DPts*num1DPts;
+          numPoints = num1DPts*num1DPts*num1DPts * lineTensorPoints;
           break;
         default:
           TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "cellTopoKey unrecognized");
       }
+      
+      // TODO: rework the code below to handle tensorial degree > 0.
+      TEUCHOS_TEST_FOR_EXCEPTION(topo->getTensorialDegree() > 0, std::invalid_argument, "exportFunction does not yet support tensorial degree > 0.");
 
       FieldContainer<double> refPoints(numPoints,domainDim);
       if (domainDim == 0)

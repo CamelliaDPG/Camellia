@@ -21,6 +21,8 @@
 
 #include "BasisCache.h"
 
+#include "CubatureFactory.h"
+
 using namespace Camellia;
 
 bool MeshTestUtility::checkMeshConsistency(Teuchos::RCP<Mesh> mesh) {
@@ -313,9 +315,9 @@ bool MeshTestUtility::determineRefTestPointsForNeighbors(MeshTopologyPtr meshTop
     coarseCellRefPoints.resize(1,1);
     
     FieldContainer<double> lineRefNodes(2,1);
-    shards::CellTopology line_2(shards::getCellTopologyData<shards::Line<2> >() );
+    CellTopoPtr line = CellTopology::line();
 
-    CamelliaCellTools::refCellNodesForTopology(lineRefNodes, line_2);
+    CamelliaCellTools::refCellNodesForTopology(lineRefNodes, line);
     
     fineCellRefPoints[0] = lineRefNodes[sideOrdinal];
     unsigned neighborSideOrdinal = fineCell->getNeighborInfo(sideOrdinal).second;
@@ -336,9 +338,9 @@ bool MeshTestUtility::determineRefTestPointsForNeighbors(MeshTopologyPtr meshTop
     return false; // fineCell isn't the finer of the two...
   }
 
-  shards::CellTopology fineSideTopo = fineCell->topology()->getCellTopologyData(sideDim, sideOrdinal);
+  CellTopoPtr fineSideTopo = fineCell->topology()->getSubcell(sideDim, sideOrdinal);
   
-  DefaultCubatureFactory<double> cubFactory;
+  CubatureFactory cubFactory;
   int cubDegree = 4; // fairly arbitrary choice: enough to get a decent number of test points...
   Teuchos::RCP<Cubature<double> > fineSideTopoCub = cubFactory.create(fineSideTopo, cubDegree);
   
@@ -349,20 +351,20 @@ bool MeshTestUtility::determineRefTestPointsForNeighbors(MeshTopologyPtr meshTop
   
   fineSideTopoCub->getCubature(cubPoints, cubWeights);
   
-  FieldContainer<double> sideRefCellNodes(fineSideTopo.getNodeCount(),sideDim);
+  FieldContainer<double> sideRefCellNodes(fineSideTopo->getNodeCount(),sideDim);
   CamelliaCellTools::refCellNodesForTopology(sideRefCellNodes, fineSideTopo);
 
-  int numTestPoints = numCubPoints + fineSideTopo.getNodeCount();
+  int numTestPoints = numCubPoints + fineSideTopo->getNodeCount();
   
   FieldContainer<double> testPoints(numTestPoints, sideDim);
   for (int ptOrdinal=0; ptOrdinal<testPoints.dimension(0); ptOrdinal++) {
-    if (ptOrdinal<fineSideTopo.getNodeCount()) {
+    if (ptOrdinal<fineSideTopo->getNodeCount()) {
       for (int d=0; d<sideDim; d++) {
         testPoints(ptOrdinal,d) = sideRefCellNodes(ptOrdinal,d);
       }
     } else {
       for (int d=0; d<sideDim; d++) {
-        testPoints(ptOrdinal,d) = cubPoints(ptOrdinal-fineSideTopo.getNodeCount(),d);
+        testPoints(ptOrdinal,d) = cubPoints(ptOrdinal-fineSideTopo->getNodeCount(),d);
       }
     }
   }
@@ -370,9 +372,9 @@ bool MeshTestUtility::determineRefTestPointsForNeighbors(MeshTopologyPtr meshTop
   fineSideRefPoints = testPoints;
   fineCellRefPoints.resize(numTestPoints, spaceDim);
   
-  CamelliaCellTools::mapToReferenceSubcell(fineCellRefPoints, testPoints, sideDim, sideOrdinal, *fineCell->topology());
+  CamelliaCellTools::mapToReferenceSubcell(fineCellRefPoints, testPoints, sideDim, sideOrdinal, fineCell->topology());
   
-  shards::CellTopology coarseSideTopo = neighborCell->topology()->getCellTopologyData(sideDim, neighborInfo.second);
+  CellTopoPtr coarseSideTopo = neighborCell->topology()->getSubcell(sideDim, neighborInfo.second);
   
   unsigned fineSideAncestorPermutation = fineCell->ancestralPermutationForSubcell(sideDim, sideOrdinal);
   unsigned coarseSidePermutation = neighborCell->subcellPermutation(sideDim, neighborInfo.second);
@@ -383,11 +385,11 @@ bool MeshTestUtility::determineRefTestPointsForNeighbors(MeshTopologyPtr meshTop
   
   RefinementBranch fineRefBranch = fineCell->refinementBranchForSide(sideOrdinal);
   
-  FieldContainer<double> fineSideNodes(fineSideTopo.getNodeCount(), sideDim);  // relative to the ancestral cell whose neighbor is compatible
+  FieldContainer<double> fineSideNodes(fineSideTopo->getNodeCount(), sideDim);  // relative to the ancestral cell whose neighbor is compatible
   if (fineRefBranch.size() == 0) {
     CamelliaCellTools::refCellNodesForTopology(fineSideNodes, coarseSideTopo, composedPermutation);
   } else {
-    FieldContainer<double> ancestralSideNodes(coarseSideTopo.getNodeCount(), sideDim);
+    FieldContainer<double> ancestralSideNodes(coarseSideTopo->getNodeCount(), sideDim);
     CamelliaCellTools::refCellNodesForTopology(ancestralSideNodes, coarseSideTopo, composedPermutation);
     
     RefinementBranch fineSideRefBranch = RefinementPattern::sideRefinementBranch(fineRefBranch, sideOrdinal);
@@ -406,7 +408,7 @@ bool MeshTestUtility::determineRefTestPointsForNeighbors(MeshTopologyPtr meshTop
   coarseSideRefPoints.resize(coarseSideRefPoints.dimension(1),coarseSideRefPoints.dimension(2));
   
   coarseCellRefPoints.resize(numTestPoints,spaceDim);
-  CamelliaCellTools::mapToReferenceSubcell(coarseCellRefPoints, coarseSideRefPoints, sideDim, neighborInfo.second, *neighborCell->topology());
+  CamelliaCellTools::mapToReferenceSubcell(coarseCellRefPoints, coarseSideRefPoints, sideDim, neighborInfo.second, neighborCell->topology());
 
   return true; // containers filled....
 }
@@ -455,7 +457,7 @@ bool MeshTestUtility::neighborBasesAgreeOnSides(Teuchos::RCP<Mesh> mesh, Epetra_
 //      cout << "MeshTestUtility: local coefficients for cell " << cellIndex << ":\n" << fineSolutionCoefficients;
 //    }
 
-    unsigned sideCount = CamelliaCellTools::getSideCount(*cell->topology());
+    unsigned sideCount = cell->getSideCount();
     for (unsigned sideOrdinal=0; sideOrdinal<sideCount; sideOrdinal++) {
       FieldContainer<double> fineSideRefPoints, fineCellRefPoints, coarseSideRefPoints, coarseCellRefPoints;
       bool hasCoarserNeighbor = determineRefTestPointsForNeighbors(meshTopo, cell, sideOrdinal, fineSideRefPoints, fineCellRefPoints, coarseSideRefPoints, coarseCellRefPoints);

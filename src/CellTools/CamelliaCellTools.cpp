@@ -14,6 +14,15 @@
 
 #include "MeshTransformationFunction.h"
 
+#include "CellTopology.h"
+
+using namespace Camellia;
+
+CellTopoPtr CamelliaCellTools::cellTopoForKey(Camellia::CellTopologyKey key) {
+  CellTopoPtrLegacy shardsTopo = cellTopoForKey(key.first);
+  return CellTopology::cellTopology(*shardsTopo, key.second);
+}
+
 CellTopoPtrLegacy CamelliaCellTools::cellTopoForKey(unsigned key) {
   static CellTopoPtrLegacy node, line, triangle, quad, tet, hex;
   
@@ -331,23 +340,28 @@ unsigned CamelliaCellTools::permutationMatchingOrder( const shards::CellTopology
   return permutationCount; // an impossible (out of bounds) answer: this line just to satisfy compilers that warn about missing return values.
 }
 
-unsigned CamelliaCellTools::permutationComposition( const shards::CellTopology &cellTopo, unsigned a_permutation, unsigned b_permutation ) {
+unsigned CamelliaCellTools::permutationComposition( const shards::CellTopology &shardsTopo, unsigned a_permutation, unsigned b_permutation ) {
+  CellTopoPtr cellTopo = Camellia::CellTopology::cellTopology(shardsTopo);
+  
+}
+
+unsigned CamelliaCellTools::permutationComposition( CellTopoPtr cellTopo, unsigned a_permutation, unsigned b_permutation ) {
   // returns the permutation ordinal for a composed with b -- the lookup table is determined in a fairly brute force way (treating CellTopo as a black box), but we just do this once per topology.
   
-  typedef unsigned CellTopoKey;
+  typedef CellTopologyKey CellTopoKey;
   typedef unsigned Permutation;
   typedef pair<Permutation, Permutation> PermutationPair;
   static map< CellTopoKey, map< PermutationPair, Permutation > > compositionMap;
   
-  if (cellTopo.getKey() == shards::Node::key) {
+  if (cellTopo->getKey() == CellTopology::point()->getKey()) {
     if ((a_permutation==0) && (b_permutation==0)) {
       return 0;
     }
   }
   
-  if (compositionMap.find(cellTopo.getKey()) == compositionMap.end()) { // build lookup table
-    int permCount = cellTopo.getNodePermutationCount();
-    int nodeCount = cellTopo.getNodeCount();
+  if (compositionMap.find(cellTopo->getKey()) == compositionMap.end()) { // build lookup table
+    int permCount = cellTopo->getNodePermutationCount();
+    int nodeCount = cellTopo->getNodeCount();
     vector<unsigned> identityOrder;
     for (unsigned node=0; node<nodeCount; node++) {
       identityOrder.push_back(node);
@@ -357,21 +371,21 @@ unsigned CamelliaCellTools::permutationComposition( const shards::CellTopology &
         vector<unsigned> composedOrder(nodeCount);
         PermutationPair ijPair = make_pair(i,j);
         for (unsigned node=0; node<nodeCount; node++) {
-          unsigned j_of_node = cellTopo.getNodePermutation(j, node);
-          unsigned i_of_j_of_node = cellTopo.getNodePermutation(i, j_of_node);
+          unsigned j_of_node = cellTopo->getNodePermutation(j, node);
+          unsigned i_of_j_of_node = cellTopo->getNodePermutation(i, j_of_node);
           composedOrder[node] = i_of_j_of_node;
         }
-        compositionMap[cellTopo.getKey()][ijPair] = permutationMatchingOrder(cellTopo, identityOrder, composedOrder);
+        compositionMap[cellTopo->getKey()][ijPair] = permutationMatchingOrder(cellTopo, identityOrder, composedOrder);
       }
     }
   }
   PermutationPair abPair = make_pair(a_permutation, b_permutation);
   
-  if (compositionMap[cellTopo.getKey()].find(abPair) == compositionMap[cellTopo.getKey()].end()) {
+  if (compositionMap[cellTopo->getKey()].find(abPair) == compositionMap[cellTopo->getKey()].end()) {
     cout << "Permutation pair not found.\n";
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Permutation pair not found");
   }
-  return compositionMap[cellTopo.getKey()][abPair];
+  return compositionMap[cellTopo->getKey()][abPair];
 }
 
 unsigned CamelliaCellTools::permutationInverse( CellTopoPtr cellTopo, unsigned permutation ) {
@@ -658,6 +672,27 @@ unsigned CamelliaCellTools::subcellOrdinalMap(const shards::CellTopology &cellTo
   }
 }
 
+unsigned CamelliaCellTools::subcellReverseOrdinalMap(CellTopoPtr cellTopo, unsigned subcdim, unsigned subcord, unsigned subsubcdim, unsigned subsubcordInCell) {
+  // looks for the ordinal of a sub-sub-cell in the subcell
+  CellTopoPtr subcellTopo = cellTopo->getSubcell(subcdim, subcord);
+  int subsubcCount = subcellTopo->getSubcellCount(subsubcdim);
+  //    cout << "For cellTopo " << cellTopo.getName() << ", subcell dim " << subcdim << ", ordinal " << subcord;
+  //    cout << ", and subsubcdim " << subsubcdim << ":\n";
+  for (int subsubcOrdinal = 0; subsubcOrdinal < subsubcCount; subsubcOrdinal++) {
+    unsigned mapped_subsubcOrdinal = subcellOrdinalMap(cellTopo, subcdim, subcord, subsubcdim, subsubcOrdinal);
+    //      cout << "subsubcOrdinal " << subsubcOrdinal << " --> subcord " << mapped_subsubcOrdinal << endl;
+    if (mapped_subsubcOrdinal == subsubcordInCell) {
+      return subsubcOrdinal;
+    }
+  }
+  cout << "ERROR: subcell " << subsubcordInCell << " not found in subcellReverseOrdinalMap.\n";
+  cout << "For topology " << cellTopo->getName() << ", looking for subcell of dimension " << subsubcdim << " with ordinal " << subsubcordInCell << " in cell.\n";
+  cout << "Looking in subcell of dimension " << subcdim << " with ordinal " << subcord << ".\n";
+  
+  TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "subcell not found in subcellReverseOrdinalMap.");
+  return -1; // NOT FOUND
+}
+
 unsigned CamelliaCellTools::subcellReverseOrdinalMap(const shards::CellTopology &cellTopo, unsigned subcdim, unsigned subcord, unsigned subsubcdim, unsigned subsubcordInCell) {
   // looks for the ordinal of a sub-sub-cell in the subcell
   const shards::CellTopology subcellTopo = cellTopo.getCellTopologyData(subcdim, subcord);
@@ -710,7 +745,7 @@ void CamelliaCellTools::mapToReferenceFrameInitGuess(       FieldContainer<doubl
     }// p
   }// c
   
-  BasisCachePtr basisCache = BasisCache::basisCacheForReferenceCell(*cell->topology(), cubatureDegree);
+  BasisCachePtr basisCache = BasisCache::basisCacheForReferenceCell(cell->topology(), cubatureDegree);
   
   if (meshTopo->transformationFunction().get() != NULL) {
     FunctionPtr transformFunction = meshTopo->transformationFunction();
@@ -765,70 +800,27 @@ void CamelliaCellTools::mapToReferenceFrameInitGuess(       FieldContainer<doubl
 }
 
 // copied from Intrepid's CellTools and specialized to allow use when we have curvilinear geometry
-void CamelliaCellTools::mapToReferenceFrame(          FieldContainer<double>      &        refPoints,
+void CamelliaCellTools::mapToReferenceFrame(      FieldContainer<double>      &        refPoints,
                                             const FieldContainer<double>      &        physPoints,
                                             MeshTopologyPtr meshTopo, IndexType cellID, int cubatureDegree)
 {
   CellPtr cell = meshTopo->getCell(cellID);
-  CellTopoPtrLegacy cellTopo = cell->topology();
+  CellTopoPtr cellTopo = cell->topology();
   int spaceDim  = cellTopo->getDimension();
   int numPoints;
   int numCells;
   
-  // Define initial guesses to be  the Cell centers of the reference cell topology
-  FieldContainer<double> cellCenter(spaceDim);
-  switch( cellTopo->getKey() ){
-      // Standard Base topologies (number of cellWorkset = number of vertices)
-    case shards::Line<2>::key:
-      cellCenter(0) = 0.0;    break;
-      
-    case shards::Triangle<3>::key:
-    case shards::Triangle<6>::key:
-      cellCenter(0) = 1./3.;    cellCenter(1) = 1./3.;  break;
-      
-    case shards::Quadrilateral<4>::key:
-    case shards::Quadrilateral<9>::key:
-      cellCenter(0) = 0.0;      cellCenter(1) = 0.0;    break;
-      
-    case shards::Tetrahedron<4>::key:
-    case shards::Tetrahedron<10>::key:
-    case shards::Tetrahedron<11>::key:
-      cellCenter(0) = 1./6.;    cellCenter(1) =  1./6.;    cellCenter(2) =  1./6.;  break;
-      
-    case shards::Hexahedron<8>::key:
-    case shards::Hexahedron<27>::key:
-      cellCenter(0) = 0.0;      cellCenter(1) =  0.0;       cellCenter(2) =  0.0;   break;
-      
-    case shards::Wedge<6>::key:
-    case shards::Wedge<18>::key:
-      cellCenter(0) = 1./3.;    cellCenter(1) =  1./3.;     cellCenter(2) = 0.0;    break;
-      
-      // These extended topologies are not used for mapping purposes
-    case shards::Quadrilateral<8>::key:
-    case shards::Hexahedron<20>::key:
-    case shards::Wedge<15>::key:
-      TEUCHOS_TEST_FOR_EXCEPTION( (true), std::invalid_argument,
-                                 ">>> ERROR (CamelliaCellTools::mapToReferenceFrame): Cell topology not supported. ");
-      break;
-      
-      // Base and Extended Line, Beam and Shell topologies
-    case shards::Line<3>::key:
-    case shards::Beam<2>::key:
-    case shards::Beam<3>::key:
-    case shards::ShellLine<2>::key:
-    case shards::ShellLine<3>::key:
-    case shards::ShellTriangle<3>::key:
-    case shards::ShellTriangle<6>::key:
-    case shards::ShellQuadrilateral<4>::key:
-    case shards::ShellQuadrilateral<8>::key:
-    case shards::ShellQuadrilateral<9>::key:
-      TEUCHOS_TEST_FOR_EXCEPTION( (true), std::invalid_argument,
-                                 ">>> ERROR (CamelliaCellTools::mapToReferenceFrame): Cell topology not supported. ");
-      break;
-    default:
-      TEUCHOS_TEST_FOR_EXCEPTION( (true), std::invalid_argument,
-                                 ">>> ERROR (CamelliaCellTools::mapToReferenceFrame): Cell topology not supported.");
-  }// switch key
+  FieldContainer<double> cellCenter(cellTopo->getDimension());
+  
+  FieldContainer<double> refCellNodes(cellTopo->getNodeCount(),cellTopo->getDimension());
+  CamelliaCellTools::refCellNodesForTopology(refCellNodes, cellTopo);
+  
+  int nodeCount = cellTopo->getNodeCount();
+  for (int node=0; node < nodeCount; node++) {
+    for (int d=0; d<cellTopo->getDimension(); d++) {
+      cellCenter(d) += refCellNodes(node,d) / nodeCount;
+    }
+  }
   
   // Resize initial guess depending on the rank of the physical points array
   FieldContainer<double> initGuess;
@@ -854,7 +846,7 @@ void CamelliaCellTools::mapToReferenceSubcell(FieldContainer<double>       &refS
                                               const FieldContainer<double> &paramPoints,
                                               const int                     subcellDim,
                                               const int                     subcellOrd,
-                                              CellTopoPtr                  &parentCell) {
+                                              CellTopoPtr                   parentCell) {
   if (parentCell->getTensorialDegree() == 0) {
     mapToReferenceSubcell(refSubcellPoints, paramPoints, subcellDim, subcellOrd, parentCell->getShardsTopology());
   } else {

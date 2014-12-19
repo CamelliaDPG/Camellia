@@ -23,7 +23,7 @@ using namespace std;
 // "elements" are cells endowed with a (local) functional discretization
 class Cell {
   unsigned _cellIndex;
-  CellTopoPtrLegacy _cellTopo;
+  CellTopoPtr _cellTopo;
   vector< unsigned > _vertices;
   vector< vector< unsigned > > _subcellPermutations; // permutation to get from local ordering to the canonical one
   
@@ -45,7 +45,7 @@ class Cell {
   
   map<string, long long> approximateMemoryCosts(); // for each private variable
 public:
-  Cell(CellTopoPtrLegacy cellTopo, const vector<unsigned> &vertices, const vector< vector< unsigned > > &subcellPermutations,
+  Cell(CellTopoPtr cellTopo, const vector<unsigned> &vertices, const vector< vector< unsigned > > &subcellPermutations,
        IndexType cellIndex, MeshTopology* meshTopo);
 
   Teuchos::RCP<Cell> ancestralCellForSubcell(unsigned subcdim, unsigned subcord);
@@ -104,7 +104,7 @@ public:
   
   unsigned sideSubcellPermutation(unsigned sideOrdinal, unsigned sideSubcdim, unsigned sideSubcord);
   
-  CellTopoPtrLegacy topology();
+  CellTopoPtr topology();
   
   Teuchos::RCP<Cell> getNeighbor(unsigned sideOrdinal);
   pair<GlobalIndexType, unsigned> getNeighborInfo(unsigned sideOrdinal); // (neighborCellIndex, neighborSideOrdinal)
