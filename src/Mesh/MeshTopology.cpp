@@ -24,15 +24,18 @@ void MeshTopology::init(unsigned spaceDim) {
   RefinementPattern::initializeAnisotropicRelationships(); // not sure this is the optimal place for this call
   
   _spaceDim = spaceDim;
-  _entities = vector< vector< vector< unsigned > > >(_spaceDim);
-  _knownEntities = vector< map< vector<unsigned>, unsigned > >(_spaceDim); // map keys are sets of vertices, values are entity indices in _entities[d]
-  _canonicalEntityOrdering = vector< vector< vector<unsigned> > >(_spaceDim);
-  _activeCellsForEntities = vector< vector< vector< pair<unsigned, unsigned> > > >(_spaceDim); // pair entries are (cellIndex, entityIndexInCell) (entityIndexInCell aka subcord)
-  _sidesForEntities = vector< vector< vector< unsigned > > >(_spaceDim);
-  _parentEntities = vector< map< unsigned, vector< pair<unsigned, unsigned> > > >(_spaceDim); // map to possible parents
-  _generalizedParentEntities = vector< map<unsigned, pair<unsigned,unsigned> > >(_spaceDim);
-  _childEntities = vector< map< unsigned, vector< pair<RefinementPatternPtr, vector<unsigned> > > > >(_spaceDim);
-  _entityCellTopologyKeys = vector< vector< CellTopologyKey > >(_spaceDim);
+  // for nontrivial mesh topology, we store entities with dimension sideDim down to vertices, so _spaceDim total possibilities
+  // for trivial mesh topology (just a node), we allow storage of 0-dimensional (vertex) entity
+  int numEntityDimensions = (_spaceDim > 0) ? _spaceDim : 1;
+  _entities = vector< vector< vector< unsigned > > >(numEntityDimensions);
+  _knownEntities = vector< map< vector<unsigned>, unsigned > >(numEntityDimensions); // map keys are sets of vertices, values are entity indices in _entities[d]
+  _canonicalEntityOrdering = vector< vector< vector<unsigned> > >(numEntityDimensions);
+  _activeCellsForEntities = vector< vector< vector< pair<unsigned, unsigned> > > >(numEntityDimensions); // pair entries are (cellIndex, entityIndexInCell) (entityIndexInCell aka subcord)
+  _sidesForEntities = vector< vector< vector< unsigned > > >(numEntityDimensions);
+  _parentEntities = vector< map< unsigned, vector< pair<unsigned, unsigned> > > >(numEntityDimensions); // map to possible parents
+  _generalizedParentEntities = vector< map<unsigned, pair<unsigned,unsigned> > >(numEntityDimensions);
+  _childEntities = vector< map< unsigned, vector< pair<RefinementPatternPtr, vector<unsigned> > > > >(numEntityDimensions);
+  _entityCellTopologyKeys = vector< vector< CellTopologyKey > >(numEntityDimensions);
   
   _gda = NULL;
 }
