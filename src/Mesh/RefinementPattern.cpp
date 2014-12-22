@@ -66,7 +66,7 @@ RefinementPattern::RefinementPattern(CellTopoPtr cellTopoPtr, FieldContainer<dou
     TEUCHOS_TEST_FOR_EXCEPTION(sideRefinementPatterns.size() != sideCount, std::invalid_argument, "sideRefinementPatterns length != sideCount");
   }
   
-  unsigned sideDim = spaceDim - 1;
+  int sideDim = spaceDim - 1;
 
   if (sideDim > 0) {
     // we will fill some entries in _patternForSubcell repeatedly/redundantly
@@ -135,7 +135,8 @@ RefinementPattern::RefinementPattern(CellTopoPtr cellTopoPtr, FieldContainer<dou
   }
   
   _refinementTopology->addCell(cellTopoPtr, refCellNodesVector);
-  _refinementTopology->refineCell(0, thisPtr);
+  if (spaceDim != 0)
+    _refinementTopology->refineCell(0, thisPtr);
   
   CellPtr parentCell = _refinementTopology->getCell(0);
   
@@ -204,124 +205,124 @@ RefinementPattern::RefinementPattern(CellTopoPtr cellTopoPtr, FieldContainer<dou
 //    }
 //  }
   
-  unsigned cellKey = cellTopoPtr->getShardsTopology().getKey();
-  for (int sideIndex = 0; sideIndex < sideCount; sideIndex++) { // sideIndices in parent
-    // the following code is replicated from the old code populating _childrenForSides
-    // the upshot is that it sorts _childrenForSides in a particular way.  It seems likely this is
-    // important to some legacy code, so I'm leaving it in place.  But probably we should remove it
-    // at some point...
-    if (spaceDim==2) {
-      vector< vector< int > > refSides;
-      if (cellKey == shards::Quadrilateral<4>::key ) {
-        vector<double> v0, v1, v2, v3;
-        v0.push_back(-1.0);
-        v0.push_back(-1.0);
-        v1.push_back(1.0);
-        v1.push_back(-1.0);
-        v2.push_back(1.0);
-        v2.push_back(1.0);
-        v3.push_back(-1.0);
-        v3.push_back(1.0);
-        
-        if ( vertexLookup.find(v0) == vertexLookup.end() ) {
-          TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument,"v0 not found!");
-        }
-        if ( vertexLookup.find(v1) == vertexLookup.end() ) {
-          TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument,"v1 not found!");
-        }
-        if ( vertexLookup.find(v2) == vertexLookup.end() ) {
-          TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument,"v2 not found!");
-        }
-        if ( vertexLookup.find(v3) == vertexLookup.end() ) {
-          TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument,"v3 not found!");
-        }
-        
-        int v0_index = vertexLookup[v0];
-        int v1_index = vertexLookup[v1];
-        int v2_index = vertexLookup[v2];
-        int v3_index = vertexLookup[v3];
-        
-        // first side: v0 to v1
-        vector<int> side0, side1, side2, side3;
-        side0.push_back(v0_index);
-        side0.push_back(v1_index);
-        side1.push_back(v1_index);
-        side1.push_back(v2_index);
-        side2.push_back(v2_index);
-        side2.push_back(v3_index);
-        side3.push_back(v3_index);
-        side3.push_back(v0_index);
-        refSides.push_back(side0);
-        refSides.push_back(side1);
-        refSides.push_back(side2);
-        refSides.push_back(side3);
-      } else if (cellKey == shards::Triangle<3>::key) {
-        vector<double> v0, v1, v2, v3;
-        v0.push_back(0.0);
-        v0.push_back(0.0);
-        v1.push_back(1.0);
-        v1.push_back(0.0);
-        v2.push_back(0.0);
-        v2.push_back(1.0);
-        
-        if ( vertexLookup.find(v0) == vertexLookup.end() ) {
-          TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument,"v0 not found!");
-        }
-        if ( vertexLookup.find(v1) == vertexLookup.end() ) {
-          TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument,"v1 not found!");
-        }
-        if ( vertexLookup.find(v2) == vertexLookup.end() ) {
-          TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument,"v2 not found!");
-        }
-        
-        int v0_index = vertexLookup[v0];
-        int v1_index = vertexLookup[v1];
-        int v2_index = vertexLookup[v2];
-        
-        // first side: v0 to v1
-        vector<int> side0, side1, side2, side3;
-        side0.push_back(v0_index);
-        side0.push_back(v1_index);
-        side1.push_back(v1_index);
-        side1.push_back(v2_index);
-        side2.push_back(v2_index);
-        side2.push_back(v0_index);
-        refSides.push_back(side0);
-        refSides.push_back(side1);
-        refSides.push_back(side2);
-      } else {
-        TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "In 2D, RefinementPattern only supports quads and triangles.  This is for legacy reasons to do with childrenForSides, and probably this restriction can soon be eliminated.");
-      }
-
-      vector<double> v0 = vertices[refSides[sideIndex][0]];
-      vector<double> v1 = vertices[refSides[sideIndex][1]];
-    
-      // sort _childrenForSides[sideIndex] according to child_v0's proximity to v0
-      // bubble sort (we're likely to have at most a handful)
-      int numEntriesForSideIndex = _childrenForSides[sideIndex].size();
-      for (int entryIndex = 0; entryIndex < numEntriesForSideIndex; entryIndex++) {
-        pair< int, int > entry = _childrenForSides[sideIndex][entryIndex];
-        int childIndex = entry.first;
-        int childSideIndex = entry.second;
-        vector<double> child_v0 = vertices[_subCells[childIndex][childSideIndex]];
-        double dist = distance(child_v0,v0);
-        for (int secondEntryIndex = entryIndex+1; secondEntryIndex < numEntriesForSideIndex; secondEntryIndex++) {
-          pair< int, int > secondEntry = _childrenForSides[sideIndex][secondEntryIndex];
-          int secondChildIndex = secondEntry.first;
-          int secondChildSideIndex = secondEntry.second;
-          vector<double> secondChild_v0 = vertices[_subCells[secondChildIndex][secondChildSideIndex]];
-          double secondDist = distance(secondChild_v0,v0);
-          if ( secondDist < dist) {
-            // swap secondEntry with entry
-            _childrenForSides[sideIndex][entryIndex] = secondEntry;
-            _childrenForSides[sideIndex][secondEntryIndex] = entry;
-            // new distance to beat...
-            dist = secondDist;
-          }
-        }
-      }
-    }
-  }
+//  unsigned cellKey = cellTopoPtr->getShardsTopology().getKey();
+//  for (int sideIndex = 0; sideIndex < sideCount; sideIndex++) { // sideIndices in parent
+//    // the following code is replicated from the old code populating _childrenForSides
+//    // the upshot is that it sorts _childrenForSides in a particular way.  It seems likely this is
+//    // important to some legacy code, so I'm leaving it in place.  But probably we should remove it
+//    // at some point...
+//    if (spaceDim==2) {
+//      vector< vector< int > > refSides;
+//      if (cellKey == shards::Quadrilateral<4>::key ) {
+//        vector<double> v0, v1, v2, v3;
+//        v0.push_back(-1.0);
+//        v0.push_back(-1.0);
+//        v1.push_back(1.0);
+//        v1.push_back(-1.0);
+//        v2.push_back(1.0);
+//        v2.push_back(1.0);
+//        v3.push_back(-1.0);
+//        v3.push_back(1.0);
+//        
+//        if ( vertexLookup.find(v0) == vertexLookup.end() ) {
+//          TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument,"v0 not found!");
+//        }
+//        if ( vertexLookup.find(v1) == vertexLookup.end() ) {
+//          TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument,"v1 not found!");
+//        }
+//        if ( vertexLookup.find(v2) == vertexLookup.end() ) {
+//          TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument,"v2 not found!");
+//        }
+//        if ( vertexLookup.find(v3) == vertexLookup.end() ) {
+//          TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument,"v3 not found!");
+//        }
+//        
+//        int v0_index = vertexLookup[v0];
+//        int v1_index = vertexLookup[v1];
+//        int v2_index = vertexLookup[v2];
+//        int v3_index = vertexLookup[v3];
+//        
+//        // first side: v0 to v1
+//        vector<int> side0, side1, side2, side3;
+//        side0.push_back(v0_index);
+//        side0.push_back(v1_index);
+//        side1.push_back(v1_index);
+//        side1.push_back(v2_index);
+//        side2.push_back(v2_index);
+//        side2.push_back(v3_index);
+//        side3.push_back(v3_index);
+//        side3.push_back(v0_index);
+//        refSides.push_back(side0);
+//        refSides.push_back(side1);
+//        refSides.push_back(side2);
+//        refSides.push_back(side3);
+//      } else if (cellKey == shards::Triangle<3>::key) {
+//        vector<double> v0, v1, v2, v3;
+//        v0.push_back(0.0);
+//        v0.push_back(0.0);
+//        v1.push_back(1.0);
+//        v1.push_back(0.0);
+//        v2.push_back(0.0);
+//        v2.push_back(1.0);
+//        
+//        if ( vertexLookup.find(v0) == vertexLookup.end() ) {
+//          TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument,"v0 not found!");
+//        }
+//        if ( vertexLookup.find(v1) == vertexLookup.end() ) {
+//          TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument,"v1 not found!");
+//        }
+//        if ( vertexLookup.find(v2) == vertexLookup.end() ) {
+//          TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument,"v2 not found!");
+//        }
+//        
+//        int v0_index = vertexLookup[v0];
+//        int v1_index = vertexLookup[v1];
+//        int v2_index = vertexLookup[v2];
+//        
+//        // first side: v0 to v1
+//        vector<int> side0, side1, side2, side3;
+//        side0.push_back(v0_index);
+//        side0.push_back(v1_index);
+//        side1.push_back(v1_index);
+//        side1.push_back(v2_index);
+//        side2.push_back(v2_index);
+//        side2.push_back(v0_index);
+//        refSides.push_back(side0);
+//        refSides.push_back(side1);
+//        refSides.push_back(side2);
+//      } else {
+//        TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "In 2D, RefinementPattern only supports quads and triangles.  This is for legacy reasons to do with childrenForSides, and probably this restriction can soon be eliminated.");
+//      }
+//
+//      vector<double> v0 = vertices[refSides[sideIndex][0]];
+//      vector<double> v1 = vertices[refSides[sideIndex][1]];
+//    
+//      // sort _childrenForSides[sideIndex] according to child_v0's proximity to v0
+//      // bubble sort (we're likely to have at most a handful)
+//      int numEntriesForSideIndex = _childrenForSides[sideIndex].size();
+//      for (int entryIndex = 0; entryIndex < numEntriesForSideIndex; entryIndex++) {
+//        pair< int, int > entry = _childrenForSides[sideIndex][entryIndex];
+//        int childIndex = entry.first;
+//        int childSideIndex = entry.second;
+//        vector<double> child_v0 = vertices[_subCells[childIndex][childSideIndex]];
+//        double dist = distance(child_v0,v0);
+//        for (int secondEntryIndex = entryIndex+1; secondEntryIndex < numEntriesForSideIndex; secondEntryIndex++) {
+//          pair< int, int > secondEntry = _childrenForSides[sideIndex][secondEntryIndex];
+//          int secondChildIndex = secondEntry.first;
+//          int secondChildSideIndex = secondEntry.second;
+//          vector<double> secondChild_v0 = vertices[_subCells[secondChildIndex][secondChildSideIndex]];
+//          double secondDist = distance(secondChild_v0,v0);
+//          if ( secondDist < dist) {
+//            // swap secondEntry with entry
+//            _childrenForSides[sideIndex][entryIndex] = secondEntry;
+//            _childrenForSides[sideIndex][secondEntryIndex] = entry;
+//            // new distance to beat...
+//            dist = secondDist;
+//          }
+//        }
+//      }
+//    }
+//  }
   
 //  cout << "At end of RefinementPattern construction, _childrenForSides:\n";
 //  for (int sideIndex=0; sideIndex<sideCount; sideIndex++) {
@@ -828,6 +829,22 @@ unsigned RefinementPattern::numChildren() {
   return _nodes.dimension(0);
 }
 
+RefinementPatternPtr RefinementPattern::regularRefinementPatternPoint() {
+  static RefinementPatternPtr refPattern;
+  
+  if (refPattern.get() == NULL) {
+    CellTopoPtr point = CellTopology::point();
+    
+    const int numChildren = 1;
+    const int numNodesPerChild = 1;
+    const int spaceDim = 0;
+    
+    FieldContainer<double> points(numChildren,numNodesPerChild,spaceDim);
+    refPattern = Teuchos::rcp( new RefinementPattern(point,points,vector< RefinementPatternPtr >()) );
+  }
+  return refPattern;
+}
+
 RefinementPatternPtr RefinementPattern::regularRefinementPatternLine() {
   static RefinementPatternPtr refPattern;
   
@@ -974,6 +991,8 @@ Teuchos::RCP<RefinementPattern> RefinementPattern::regularRefinementPatternHexah
 
 RefinementPatternPtr RefinementPattern::regularRefinementPattern(unsigned cellTopoKey) {
   switch (cellTopoKey) {
+    case shards::Node::key :
+      return regularRefinementPatternPoint();
     case shards::Line<2>::key :
       return regularRefinementPatternLine();
     case shards::Triangle<3>::key :
@@ -1063,6 +1082,8 @@ RefinementPatternPtr RefinementPattern::regularRefinementPattern(Camellia::CellT
           sideRefPatterns[sideOrdinal] = regularRefinementPattern(sideTopo);
         }
       }
+      
+//      cout << "tensorRefNodes:\n" << tensorRefNodes;
       
       RefinementPatternPtr refPattern = Teuchos::rcp( new RefinementPattern(tensorTopo,tensorRefNodes,sideRefPatterns) );
       priorLookupKey.second = lineComponentOrdinal + 1;

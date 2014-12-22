@@ -57,9 +57,16 @@ public:
   static Teuchos::RCP<RefinementPattern> noRefinementPatternLine();
   static Teuchos::RCP<RefinementPattern> noRefinementPatternTriangle();
   static Teuchos::RCP<RefinementPattern> noRefinementPatternQuad();
+  
+  //! A refinement pattern for the point (node) topology.  Provided mainly to allow the logic of tensor-product topologies to work for Node x Line topologies.
+  static Teuchos::RCP<RefinementPattern> regularRefinementPatternPoint();
+  //! Standard refinement pattern for the line topology; splits the line into two of equal size.
   static Teuchos::RCP<RefinementPattern> regularRefinementPatternLine();
+  //! Standard refinement pattern for the triangle topology; splits the triangle into four of equal size (by bisecting edges).
   static Teuchos::RCP<RefinementPattern> regularRefinementPatternTriangle();
+  //! Standard refinement pattern for the quadrilateral topology; splits the quad into four of equal size (by bisecting edges).
   static Teuchos::RCP<RefinementPattern> regularRefinementPatternQuad();
+  //! Standard refinement pattern for the hexahedral topology; splits the quad into eight of equal size (by bisecting edges).
   static Teuchos::RCP<RefinementPattern> regularRefinementPatternHexahedron();
   static Teuchos::RCP<RefinementPattern> regularRefinementPattern(unsigned cellTopoKey);
   static Teuchos::RCP<RefinementPattern> regularRefinementPattern(CellTopoPtr cellTopo);
