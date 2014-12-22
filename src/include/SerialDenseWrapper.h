@@ -244,16 +244,59 @@ public:
 //    cout << "A after scaling:\n" << A;
   }
   
-  static void solveSystem(FieldContainer<double> &x, FieldContainer<double> &A, FieldContainer<double> &b, bool useATranspose = false) {
+  static int solveSystem(FieldContainer<double> &x, FieldContainer<double> &A, FieldContainer<double> &b, bool useATranspose = false) {
     // solves Ax = b, where
     // A = (N,N)
     // x, b = (N)
     if (b.rank()==1){
       b.resize(b.dimension(0),1);
       x.resize(x.dimension(0),1);
-      solveSystemMultipleRHS(x, A, b, useATranspose);
+      int result = solveSystemMultipleRHS(x, A, b, useATranspose);
       x.resize(x.dimension(0));
+      return result;
     }
+    return solveSystemMultipleRHS(x, A, b, useATranspose);
+  }
+  
+  static int solveSystemLeastSquares(FieldContainer<double> &x, const FieldContainer<double> &A, const FieldContainer<double> &b) {
+    // solves Ax = b, where
+    // A = (N,M), N >= M
+    // b = (N)
+    // x = (M)
+    //   OR
+    // b = (N,L)
+    // x = (M,L)
+    FieldContainer<double> bCopy = b;
+    
+    if (bCopy.rank()==1){
+      bCopy.resize(b.dimension(0),1);
+      x.resize(x.dimension(0),1);
+    }
+    
+    int N = A.dimension(0);
+    int M = A.dimension(1);
+    int L = bCopy.dimension(1);
+    
+    if (N < M) {
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "N < M");
+    }
+    if (N != b.dimension(0)) {
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "N != b.dimension(0)");
+    }
+    if (M != x.dimension(0)) {
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "x.dimension(0) != M");
+    }
+    
+    FieldContainer<double> A_T = A;
+    transposeMatrix(A_T);
+    
+    FieldContainer<double> ATA(M,M);
+    multiply(ATA, A_T, A);
+    
+    FieldContainer<double> ATb(M,L);
+    multiply(ATb, A_T, b);
+    
+    return solveSystemMultipleRHS(x, ATA, ATb, false);
   }
 
   static int solveSystemMultipleRHS(FieldContainer<double> &x, FieldContainer<double> &A, FieldContainer<double> &b, bool useATranspose = false){
