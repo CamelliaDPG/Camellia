@@ -24,7 +24,7 @@ CellTopology::CellTopology(const shards::CellTopology &baseTopo, unsigned tensor
     ostringstream nameStream;
     nameStream << baseTopo.getName();
     for (int tensorialOrdinal = 0; tensorialOrdinal < tensorialDegree; tensorialOrdinal++) {
-      nameStream << " x Line<2>";
+      nameStream << " x Line_2";
     }
     _name = nameStream.str();
   }
@@ -223,7 +223,10 @@ unsigned CellTopology::getNodeCount(const shards::CellTopology &shardsTopo) {
 /** \brief  Vertex count of this cell topology */
 unsigned CellTopology::getVertexCount() const {
   unsigned two_pow = 1 << _tensorialDegree;
-  return _shardsBaseTopology.getVertexCount() * two_pow;
+  unsigned baseVertexCount;
+  if (_shardsBaseTopology.getDimension()==0) baseVertexCount = 1; // Node topology; by my lights shards returns the wrong thing (0) here
+  else baseVertexCount = _shardsBaseTopology.getVertexCount();
+  return baseVertexCount * two_pow;
 }
 
 /** \brief  Edge boundary subcell count of this cell topology */
@@ -375,7 +378,19 @@ unsigned CellTopology::getNodeFromTensorialComponentNodes(const std::vector<unsi
 unsigned CellTopology::getNodeMap( const unsigned scdim ,
                                   const unsigned  scord ,
                                   const unsigned  sc_node_ord ) const {
-  if (scdim==getDimension()) return sc_node_ord; // map from topology to itself
+  if (scdim==getDimension()) {
+    // map from topology to itself
+    if (scord != 0) {
+      TEUCHOS_TEST_FOR_EXCEPTION(scord != 0, std::invalid_argument, "subcell ordinal out of bounds");
+    }
+    return sc_node_ord;
+  } else if (scdim==0) {
+    // mapping a node--the sc_node_ord must be 0, then, and we should just return the scord (which is the node ordinal)
+    if (sc_node_ord != 0) {
+      TEUCHOS_TEST_FOR_EXCEPTION(sc_node_ord != 0, std::invalid_argument, "subcell node ordinal out of bounds");
+    }
+    return scord;
+  }
   if (_tensorialDegree==0) {
     return _shardsBaseTopology.getNodeMap(scdim, scord, sc_node_ord);
   } else {
@@ -384,7 +399,7 @@ unsigned CellTopology::getNodeMap( const unsigned scdim ,
     if (scord < componentSubcellCount * 2) { // subcell belongs to one of the two component topologies
       unsigned scord_comp = scord % componentSubcellCount;  // subcell ordinal in the component topology
       unsigned compOrdinal = scord / componentSubcellCount; // which component topology? 0 or 1.
-      unsigned mappedNodeInsideComponentTopology = tensorComponentTopo->getSubcell(scdim, scord_comp)->getNodeMap(scdim, scord_comp, sc_node_ord);
+      unsigned mappedNodeInsideComponentTopology = tensorComponentTopo->getNodeMap(scdim, scord_comp, sc_node_ord);
       return mappedNodeInsideComponentTopology + compOrdinal * tensorComponentTopo->getNodeCount();
     } else {
       // otherwise, the subcell is a tensor product of a component's (scdim-1)-dimensional subcell with the line topology.
