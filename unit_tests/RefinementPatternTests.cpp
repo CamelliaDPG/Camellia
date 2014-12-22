@@ -112,7 +112,24 @@ namespace {
       TEST_EQUALITY(dSpace + dTime, dSpaceTime);
       
       FieldContainer<double> expectedRefinedNodes(numChildrenSpaceTime,numNodesSpaceTime,dSpaceTime);
-      // TODO: finish this test...
+      
+      int spaceTimeChildOrdinal = 0;
+      for (int timeChildOrdinal=0; timeChildOrdinal<numChildrenTime; timeChildOrdinal++) {
+        for (int spaceChildOrdinal=0; spaceChildOrdinal<numChildrenSpace; spaceChildOrdinal++, spaceTimeChildOrdinal++) {
+          int spaceTimeNodeOrdinal=0;
+          for (int timeNodeOrdinal=0; timeNodeOrdinal<numNodesTime; timeNodeOrdinal++) {
+            for (int spaceNodeOrdinal=0; spaceNodeOrdinal<numNodesSpace; spaceNodeOrdinal++, spaceTimeNodeOrdinal++) {
+              for (int d_space=0; d_space<dSpace; d_space++) {
+                expectedRefinedNodes(spaceTimeChildOrdinal,spaceTimeNodeOrdinal,d_space) = spaceRefinedNodes(spaceChildOrdinal,spaceNodeOrdinal,d_space);
+              }
+              for (int d_time=0; d_time<dTime; d_time++) {
+                expectedRefinedNodes(spaceTimeChildOrdinal,spaceTimeNodeOrdinal,d_time + dSpace) = timeRefinedNodes(timeChildOrdinal,timeNodeOrdinal,d_time);
+              }
+            }
+          }
+        }
+      }
+      TEST_COMPARE_FLOATING_ARRAYS(spaceTimeRefinedNodes, expectedRefinedNodes, 1e-15);
     }
   }
 } // namespace
