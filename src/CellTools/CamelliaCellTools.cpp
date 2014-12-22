@@ -14,6 +14,8 @@
 
 #include "MeshTransformationFunction.h"
 
+#include "SerialDenseWrapper.h"
+
 #include "CellTopology.h"
 
 using namespace Camellia;
@@ -307,12 +309,28 @@ void CamelliaCellTools::mapToPhysicalFrame(FieldContainer<double> &physPoints, c
 }
 
 unsigned CamelliaCellTools::permutationMatchingOrder( CellTopoPtr cellTopo, const vector<unsigned> &fromOrder, const vector<unsigned> &toOrder) {
-  if (cellTopo->getTensorialDegree() == 0) {
-    return permutationMatchingOrder(cellTopo->getShardsTopology(), fromOrder, toOrder);
-  } else {
-    cout << "CamelliaCellTools::permutationMatchingOrder() does not yet support tensorial degree > 0.\n";
-    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "CamelliaCellTools::permutationMatchingOrder() does not yet support tensorial degree > 0.");
+  if (cellTopo->getDimension() == 0) {
+    return 0;
   }
+  unsigned permutationCount = cellTopo->getNodePermutationCount();
+  unsigned nodeCount = fromOrder.size();
+  for (unsigned permutation=0; permutation<permutationCount; permutation++) {
+    bool matches = true;
+    for (unsigned fromIndex=0; fromIndex<nodeCount; fromIndex++) {
+      unsigned toIndex = cellTopo->getNodePermutation(permutation, fromIndex);
+      if (fromOrder[fromIndex] != toOrder[toIndex]) {
+        matches = false;
+        break;
+      }
+    }
+    if (matches) return permutation;
+  }
+  cout << "No matching permutation found.\n";
+  Camellia::print("fromOrder", fromOrder);
+  Camellia::print("toOrder", toOrder);
+  
+  TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "No matching permutation found");
+  return permutationCount; // an impossible (out of bounds) answer: this line just to satisfy compilers that warn about missing return values.
 }
 
 unsigned CamelliaCellTools::permutationMatchingOrder( const shards::CellTopology &cellTopo, const vector<unsigned> &fromOrder, const vector<unsigned> &toOrder) {
@@ -571,12 +589,166 @@ void CamelliaCellTools::setJacobian(FieldContainer<double> &jacobian, const Fiel
   }//switch
 }
 
+const FieldContainer<double>& CamelliaCellTools::getSubcellParametrization(const int subcellDim, CellTopoPtr parentCell) {
+  // Coefficients of the coordinate functions defining the parametrization maps are stored in
+  // rank-3 arrays with dimensions (SC, PCD, COEF) where:
+  //  - SC    is the subcell count of subcells with the specified dimension in the parent cell
+  //  - PCD   is Parent Cell Dimension, which gives the number of coordinate functions in the map:
+  //          PCD = 2 for standard 2D cells and non-standard 2D cells: shell line and beam
+  //          PCD = 3 for standard 3D cells and non-standard 3D cells: shell Tri and Quad
+  //  - COEF  is number of coefficients needed to specify a coordinate function:
+  //          COEFF = 2 for edge parametrizations
+  //          COEFF = 3 for both Quad and Tri face parametrizations. Because all Quad reference faces
+  //          are affine, the coefficient of the bilinear term u*v is zero and is not stored, i.e.,
+  //          3 coefficients are sufficient to store Quad face parameterization maps.
+  //
+  // Arrays are sized and filled only when parametrization of a particular subcell is requested
+  // by setSubcellParametrization.
+  
+  static std::vector< std::map< Camellia::CellTopologyKey, FieldContainer<double> > > subcellMapsForDimension;
+  if (subcellMapsForDimension.size() < subcellDim + 1) subcellMapsForDimension.resize(subcellDim + 1);
+  
+  if (subcellMapsForDimension[subcellDim].find(parentCell->getKey()) == subcellMapsForDimension[subcellDim].end()) {
+    int subcellCount = parentCell->getSubcellCount(subcellDim);
+    int parentDim = parentCell->getDimension();
+    int numCoefficients = subcellDim + 1; // I believe this suffices for all affine cases (all our reference cells have subcells that are affine maps of the subcell topology's reference cell.)
+    FieldContainer<double> subcellMap(subcellCount,parentDim,numCoefficients);
+    FieldContainer<double> parentRefNodes(parentCell->getVertexCount(), parentCell->getDimension());
+    refCellNodesForTopology(parentRefNodes, parentCell);
+    
+    for (int scOrd=0; scOrd<subcellCount; scOrd++) {
+      CellTopoPtr scTopo = parentCell->getSubcell(subcellDim, scOrd);
+      int scNodeCount = scTopo->getVertexCount();
+      FieldContainer<double> scTopoRefNodes(scNodeCount, scTopo->getDimension());
+      refCellNodesForTopology(scTopoRefNodes, scTopo);
+      
+      // A gets built up out of identity blocks multiplied by the weights in scTopoRefNodes
+      FieldContainer<double> A(scNodeCount, subcellDim+1);
+      FieldContainer<double> b(scNodeCount, parentDim);
+      
+      for (int scNode = 0; scNode < scNodeCount; scNode++) {
+        int parentNode = parentCell->getNodeMap(subcellDim, scOrd, scNode);
+
+        // we'll solve for each parent dimension separately:
+        for (int d_parent = 0; d_parent < parentDim; d_parent++) {
+          b(scNode, d_parent) = parentRefNodes(parentNode,d_parent);
+          
+          A(scNode, 0) = 1;
+          for (int d_sc = 0; d_sc < subcellDim; d_sc++) {
+            A(scNode, d_sc + 1) = scTopoRefNodes(scNode, d_sc);
+          }
+        }
+      }
+      
+      // In general, A will correspond to an overdetermined system.
+      FieldContainer<double> x(subcellDim+1,parentDim);
+      int result = SerialDenseWrapper::solveSystemLeastSquares(x, A, b);
+      
+      if (result != 0) {
+        cout << "ERROR: getSubcellParametrization failed to solve for subcell parameters.\n";
+        cout << "A:\n" << A;
+        cout << "b:\n" << b;
+        TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "solve failed");
+      }
+    
+      for (int d_parent=0; d_parent<parentDim; d_parent++) {
+        for (int coeffOrdinal=0; coeffOrdinal < numCoefficients; coeffOrdinal++) {
+          subcellMap(scOrd,d_parent,coeffOrdinal) = x(coeffOrdinal,d_parent);
+        }
+      }
+    }
+    subcellMapsForDimension[subcellDim][parentCell->getKey()] = subcellMap;
+  }
+  return subcellMapsForDimension[subcellDim][parentCell->getKey()];
+}
+
 unsigned CamelliaCellTools::subcellOrdinalMap(CellTopoPtr cellTopo, unsigned subcdim, unsigned subcord, unsigned subsubcdim, unsigned subsubcord) {
-  if (cellTopo->getTensorialDegree() == 0) {
-    return subcellOrdinalMap(cellTopo->getShardsTopology(), subcdim, subcord, subsubcdim, subsubcord);
+  // maps from a subcell's ordering of its subcells (the sub-subcells) to the cell topology's ordering of those subcells.
+  typedef unsigned SubcellOrdinal;
+  typedef unsigned SubcellDimension;
+  typedef unsigned SubSubcellOrdinal;
+  typedef unsigned SubSubcellDimension;
+  typedef unsigned SubSubcellOrdinalInCellTopo;
+  typedef pair< SubcellDimension, SubcellOrdinal > SubcellIdentifier;    // dim, ord in cellTopo
+  typedef pair< SubSubcellDimension, SubSubcellOrdinal > SubSubcellIdentifier; // dim, ord in subcell
+  typedef map< SubcellIdentifier, map< SubSubcellIdentifier, SubSubcellOrdinalInCellTopo > > OrdinalMap;
+  static map< CellTopologyKey, OrdinalMap > ordinalMaps;
+  
+  if (subsubcdim==subcdim) {
+    if (subsubcord==0) { // i.e. the "subsubcell" is really just the subcell
+      return subcord;
+    } else {
+      cout << "request for subsubcell of the same dimension as subcell, but with subsubcord > 0.\n";
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "request for subsubcell of the same dimension as subcell, but with subsubcord > 0.");
+    }
+  }
+  
+  if (subcdim==cellTopo->getDimension()) {
+    if (subcord==0) { // i.e. the subcell is the cell itself
+      return subsubcord;
+    } else {
+      cout << "request for subcell of the same dimension as cell, but with subsubcord > 0.\n";
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "request for subcell of the same dimension as cell, but with subsubcord > 0.");
+    }
+  }
+  
+  CellTopologyKey key = cellTopo->getKey();
+  if (ordinalMaps.find(key) == ordinalMaps.end()) {
+    // then we construct the map for this cellTopo
+    OrdinalMap ordinalMap;
+    unsigned sideDim = cellTopo->getDimension() - 1;
+    typedef unsigned NodeOrdinal;
+    map< set<NodeOrdinal>, SubcellIdentifier > subcellMap; // given set of nodes in cellTopo, what subcell is it?)
+    
+    for (unsigned d=1; d<=sideDim; d++) { // only things of dimension >= 1 will have subcells
+      unsigned subcellCount = cellTopo->getSubcellCount(d);
+      for (unsigned subcellOrdinal=0; subcellOrdinal<subcellCount; subcellOrdinal++) {
+        
+        set<NodeOrdinal> nodes;
+        unsigned nodeCount = cellTopo->getNodeCount(d, subcellOrdinal);
+        for (NodeOrdinal subcNode=0; subcNode<nodeCount; subcNode++) {
+          nodes.insert(cellTopo->getNodeMap(d, subcellOrdinal, subcNode));
+        }
+        SubcellIdentifier subcell = make_pair(d, subcellOrdinal);
+        subcellMap[nodes] = subcell;
+        
+        CellTopoPtr subcellTopo = cellTopo->getSubcell(d, subcellOrdinal);
+        // now, go over all the subsubcells, and look them up...
+        for (unsigned subsubcellDim=0; subsubcellDim<d; subsubcellDim++) {
+          unsigned subsubcellCount = subcellTopo->getSubcellCount(subsubcellDim);
+          for (unsigned subsubcellOrdinal=0; subsubcellOrdinal<subsubcellCount; subsubcellOrdinal++) {
+            SubSubcellIdentifier subsubcell = make_pair(subsubcellDim,subsubcellOrdinal);
+            if (subsubcellDim==0) { // treat vertices separately
+              ordinalMap[subcell][subsubcell] = cellTopo->getNodeMap(subcell.first, subcell.second, subsubcellOrdinal);
+              continue;
+            }
+            unsigned nodeCount = subcellTopo->getNodeCount(subsubcellDim, subsubcellOrdinal);
+            set<NodeOrdinal> subcellNodes; // NodeOrdinals index into cellTopo, though!
+            for (NodeOrdinal subsubcNode=0; subsubcNode<nodeCount; subsubcNode++) {
+              NodeOrdinal subcNode = subcellTopo->getNodeMap(subsubcellDim, subsubcellOrdinal, subsubcNode);
+              NodeOrdinal node = cellTopo->getNodeMap(d, subcellOrdinal, subcNode);
+              subcellNodes.insert(node);
+            }
+            
+            SubcellIdentifier subsubcellInCellTopo = subcellMap[subcellNodes];
+            ordinalMap[ subcell ][ subsubcell ] = subsubcellInCellTopo.second;
+            //              cout << "ordinalMap( (" << subcell.first << "," << subcell.second << "), (" << subsubcell.first << "," << subsubcell.second << ") ) ";
+            //              cout << " ---> " << subsubcellInCellTopo.second << endl;
+          }
+        }
+      }
+    }
+    ordinalMaps[key] = ordinalMap;
+  }
+  SubcellIdentifier subcell = make_pair(subcdim, subcord);
+  SubSubcellIdentifier subsubcell = make_pair(subsubcdim, subsubcord);
+  if (ordinalMaps[key][subcell].find(subsubcell) != ordinalMaps[key][subcell].end()) {
+    return ordinalMaps[key][subcell][subsubcell];
   } else {
-    cout << "CamelliaCellTools::subcellOrdinalMap() does not yet support tensorial degree > 0.\n";
-    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "CamelliaCellTools::subcellOrdinalMap() does not yet support tensorial degree > 0.");
+    cout << "For topology " << cellTopo->getName() << " and subcell " << subcord << " of dim " << subcdim;
+    cout << ", subsubcell " << subsubcord << " of dim " << subsubcdim << " not found.\n";
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "subsubcell not found");
+    return -1; // NOT FOUND
   }
 }
 
@@ -847,11 +1019,23 @@ void CamelliaCellTools::mapToReferenceSubcell(FieldContainer<double>       &refS
                                               const int                     subcellDim,
                                               const int                     subcellOrd,
                                               CellTopoPtr                   parentCell) {
-  if (parentCell->getTensorialDegree() == 0) {
-    mapToReferenceSubcell(refSubcellPoints, paramPoints, subcellDim, subcellOrd, parentCell->getShardsTopology());
-  } else {
-    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "CamelliaCellTools::mapToReferenceSubcell does not yet support tensorial degree > 0.");
-  }
+//  if (parentCell->getTensorialDegree() == 0) {
+//    mapToReferenceSubcell(refSubcellPoints, paramPoints, subcellDim, subcellOrd, parentCell->getShardsTopology());
+//  } else {
+    const FieldContainer<double>& subcellMap = getSubcellParametrization(subcellDim, parentCell);
+    
+    int numPoints = paramPoints.dimension(0);
+    int parentDim = parentCell->getDimension();
+    // Apply the parametrization map to every point in parameter domain
+    for(int pt = 0; pt < numPoints; pt++){
+      for(int  d_parent = 0; d_parent < parentDim; d_parent++){
+        refSubcellPoints(pt, d_parent) = subcellMap(subcellOrd, d_parent, 0);
+        for (int d_sc = 0; d_sc < subcellDim; d_sc++) {
+          refSubcellPoints(pt, d_parent) += subcellMap(subcellOrd, d_parent, d_sc + 1) * paramPoints(pt, d_sc);
+        }
+      }
+    }
+//  }
 }
 
 void CamelliaCellTools::mapToReferenceSubcell(FieldContainer<double>       &refSubcellPoints,
@@ -864,9 +1048,11 @@ void CamelliaCellTools::mapToReferenceSubcell(FieldContainer<double>       &refS
   if ((subcellDim > 0) && ((cellDim == 2) || (cellDim == 3)) ) {
     CellTools<double>::mapToReferenceSubcell(refSubcellPoints, paramPoints, subcellDim, subcellOrd, parentCell);
   } else if (subcellDim == 0) {
+    // just looking for a vertex; neglect paramPoints argument here
     FieldContainer<double> refCellNodes(parentCell.getNodeCount(),cellDim);
     refCellNodesForTopology(refCellNodes,parentCell);
-    // neglect paramPoints argument here; assume that refSubcellPoints is appropriately sized
+
+    // we do assume that refSubcellPoints is appropriately sized
     int numPoints = refSubcellPoints.dimension(0);
     for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
       for (int d=0; d<cellDim; d++) {
