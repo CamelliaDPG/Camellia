@@ -34,6 +34,37 @@ namespace {
     return shardsTopologies;
   }
   
+  TEUCHOS_UNIT_TEST( CamelliaCellTools, MapToReferenceSubcell_Shards)
+  {
+    // for shards topologies supported by Intrepid::CellTools<double>::mapToReferenceSubcell(), test that
+    // CamelliaCellTools::mapToReferenceSubcell() agrees with the Intrepid implementation.
+    std::vector< CellTopoPtr > shardsTopologies = getShardsTopologies();
+    
+    for (int topoOrdinal = 0; topoOrdinal < shardsTopologies.size(); topoOrdinal++) {
+      CellTopoPtr simpleTopo = shardsTopologies[topoOrdinal];
+      shards::CellTopology shardsTopo = simpleTopo->getShardsTopology();
+      
+      if (shardsTopo.getDimension() == 0) continue; // don't bother testing point topology
+
+      int maxSubcellDim = min((int)shardsTopo.getDimension()-1,2);
+      for (int subcellDim = 1; subcellDim <= maxSubcellDim; subcellDim++) {
+        for (unsigned scord=0; scord < shardsTopo.getSubcellCount(subcellDim); scord++) {
+          shards::CellTopology shardsSubcellTopo = shardsTopo.getCellTopologyData(subcellDim, scord);
+          FieldContainer<double> refSubcellNodes(shardsSubcellTopo.getVertexCount(), subcellDim);
+          CamelliaCellTools::refCellNodesForTopology(refSubcellNodes, shardsSubcellTopo);
+          
+          FieldContainer<double> intrepidParentNodes(shardsSubcellTopo.getVertexCount(),shardsTopo.getDimension());
+          CellTools<double>::mapToReferenceSubcell(intrepidParentNodes, refSubcellNodes, subcellDim, scord, shardsTopo);
+          
+          FieldContainer<double> camelliaParentNodes(shardsSubcellTopo.getVertexCount(),shardsTopo.getDimension());
+          CamelliaCellTools::mapToReferenceSubcell(camelliaParentNodes, refSubcellNodes, subcellDim, scord, simpleTopo);
+          
+          TEST_COMPARE_FLOATING_ARRAYS(intrepidParentNodes, camelliaParentNodes, 1e-15);
+        }
+      }
+    }
+  }
+  
   TEUCHOS_UNIT_TEST( CamelliaCellTools, MapToPhysicalFrame)
   {
     // particularly important to try it out on some topologies defined in terms of tensor products
@@ -227,32 +258,146 @@ namespace {
       TEST_COMPARE_FLOATING_ARRAYS(jacobianSpaceTime, expectedJacobian, 1e-15);
     }
   }
+
+  TEUCHOS_UNIT_TEST( CamelliaCellTools, PermutationMatchingOrder_Space ) // tensorial degree 0 Camellia CellTopology
+  {
+    std::vector< CellTopoPtr > shardsTopologies = getShardsTopologies();
+    
+    for (int topoOrdinal = 0; topoOrdinal < shardsTopologies.size(); topoOrdinal++) {
+      CellTopoPtr camelliaTopo = shardsTopologies[topoOrdinal];
+      
+      int spaceDim = camelliaTopo->getDimension();
+      if (spaceDim == 0) continue; // don't bother testing point topology
+      
+      int permutationCount = camelliaTopo->getNodePermutationCount(); // Camellia CellTopology defines permutations for 3D entities, while shards does not, so using Camellia's permutation count will provide a more rigorous test
+      
+      int nodeCount = camelliaTopo->getNodeCount();
+      
+      for (int permutation=0; permutation<permutationCount; permutation++) {
+        vector<unsigned> fromOrder(nodeCount);
+        vector<unsigned> toOrder(nodeCount);
+        
+        for (unsigned node=0; node<nodeCount; node++) {
+          unsigned permutedNode = camelliaTopo->getNodePermutation(permutation, node);
+          fromOrder[node] = node;
+          toOrder[permutedNode] = node;
+        }
+        
+        unsigned permutationMatchingOrder = CamelliaCellTools::permutationMatchingOrder(camelliaTopo, fromOrder, toOrder);
+        
+        TEST_EQUALITY(permutation, permutationMatchingOrder);
+      }
+    }
+  }
   
-  TEUCHOS_UNIT_TEST( CamelliaCellTools, PermutedReferenceCellPoints )
+  TEUCHOS_UNIT_TEST( CamelliaCellTools, PermutationMatchingOrder_SpaceTime ) // tensorial degree 1 Camellia CellTopology
+  {
+    int tensorialDegree = 1;
+    
+    std::vector< CellTopoPtr > shardsTopologies = getShardsTopologies();
+    
+    for (int topoOrdinal = 0; topoOrdinal < shardsTopologies.size(); topoOrdinal++) {
+      CellTopoPtr camelliaTopo = CellTopology::cellTopology(shardsTopologies[topoOrdinal]->getShardsTopology(), tensorialDegree);
+      
+      int spaceDim = camelliaTopo->getDimension();
+      if (spaceDim == 0) continue; // don't bother testing point topology
+      
+      int permutationCount = camelliaTopo->getNodePermutationCount(); // Camellia CellTopology defines permutations for 3D entities, while shards does not, so using Camellia's permutation count will provide a more rigorous test
+      
+      int nodeCount = camelliaTopo->getNodeCount();
+      
+      for (int permutation=0; permutation<permutationCount; permutation++) {
+        vector<unsigned> fromOrder(nodeCount);
+        vector<unsigned> toOrder(nodeCount);
+        
+        for (unsigned node=0; node<nodeCount; node++) {
+          unsigned permutedNode = camelliaTopo->getNodePermutation(permutation, node);
+          fromOrder[node] = node;
+          toOrder[permutedNode] = node;
+        }
+        
+        unsigned permutationMatchingOrder = CamelliaCellTools::permutationMatchingOrder(camelliaTopo, fromOrder, toOrder);
+        
+        TEST_EQUALITY(permutation, permutationMatchingOrder);
+      }
+    }
+  }
+  
+  TEUCHOS_UNIT_TEST( CamelliaCellTools, PermutedReferenceCellPoints_Space ) // tensorial degree 0 Camellia CellTopology
+  {
+    // to begin, just a very simple test that *nodes* are permuted appropriately
+   
+    std::vector< CellTopoPtr > shardsTopologies = getShardsTopologies();
+    
+    for (int topoOrdinal = 0; topoOrdinal < shardsTopologies.size(); topoOrdinal++) {
+      CellTopoPtr camelliaTopo = shardsTopologies[topoOrdinal];
+      
+      int spaceDim = camelliaTopo->getDimension();
+      if (spaceDim == 0) continue; // don't bother testing point topology
+      
+      shards::CellTopology shardsTopo = camelliaTopo->getShardsTopology();
+
+      FieldContainer<double> refPoints(camelliaTopo->getNodeCount(),camelliaTopo->getDimension());
+      FieldContainer<double> topoNodesPermuted(camelliaTopo->getNodeCount(),camelliaTopo->getDimension());
+    
+      int permutationCount = camelliaTopo->getNodePermutationCount(); // Camellia CellTopology defines permutations for 3D entities, while shards does not, so using Camellia's permutation count will provide a more rigorous test
+    
+      CamelliaCellTools::refCellNodesForTopology(refPoints, camelliaTopo);
+    
+      FieldContainer<double> permutedRefPoints(camelliaTopo->getNodeCount(),camelliaTopo->getDimension());
+    
+      for (int permutation=0; permutation<permutationCount; permutation++) {
+        CamelliaCellTools::refCellNodesForTopology(topoNodesPermuted, camelliaTopo, permutation);
+        
+        CamelliaCellTools::permutedReferenceCellPoints(camelliaTopo, permutation, refPoints, permutedRefPoints);
+        
+        // expect permutedRefPoints = topoNodesPermuted
+        
+        for (int nodeOrdinal=0; nodeOrdinal < topoNodesPermuted.dimension(0); nodeOrdinal++) {
+          for (int d=0; d<topoNodesPermuted.dimension(1); d++) {
+            TEST_FLOATING_EQUALITY(topoNodesPermuted(nodeOrdinal,d), permutedRefPoints(nodeOrdinal,d), 1e-15);
+          }
+        }
+      }
+    }
+  }
+  
+  TEUCHOS_UNIT_TEST( CamelliaCellTools, PermutedReferenceCellPoints_SpaceTime ) // tensorial degree 1 Camellia CellTopology
   {
     // to begin, just a very simple test that *nodes* are permuted appropriately
     
-    shards::CellTopology quad_4(shards::getCellTopologyData<shards::Quadrilateral<4> >() );
-
-    FieldContainer<double> refPoints(quad_4.getNodeCount(),quad_4.getDimension());
-    FieldContainer<double> quadNodesPermuted(quad_4.getNodeCount(),quad_4.getDimension());
+    std::vector< CellTopoPtr > shardsTopologies = getShardsTopologies();
     
-    int permutationCount = quad_4.getNodePermutationCount();
+    int tensorialDegree = 1;
     
-    CamelliaCellTools::refCellNodesForTopology(refPoints, quad_4);
-    
-    FieldContainer<double> permutedRefPoints(quad_4.getNodeCount(),quad_4.getDimension());
-    
-    for (int permutation=0; permutation<permutationCount; permutation++) {
-      CamelliaCellTools::refCellNodesForTopology(quadNodesPermuted, quad_4, permutation);
+    for (int topoOrdinal = 0; topoOrdinal < shardsTopologies.size(); topoOrdinal++) {
+      CellTopoPtr camelliaTopo = CellTopology::cellTopology(shardsTopologies[topoOrdinal]->getShardsTopology(), tensorialDegree);
       
-      CamelliaCellTools::permutedReferenceCellPoints(quad_4, permutation, refPoints, permutedRefPoints);
+      int spaceDim = camelliaTopo->getDimension();
+      if (spaceDim == 0) continue; // don't bother testing point topology
       
-      // expect permutedRefPoints = quadNodesPermuted
+      shards::CellTopology shardsTopo = camelliaTopo->getShardsTopology();
       
-      for (int nodeOrdinal=0; nodeOrdinal < quadNodesPermuted.dimension(0); nodeOrdinal++) {
-        for (int d=0; d<quadNodesPermuted.dimension(1); d++) {
-          TEST_FLOATING_EQUALITY(quadNodesPermuted(nodeOrdinal,d), permutedRefPoints(nodeOrdinal,d), 1e-15);
+      FieldContainer<double> refPoints(camelliaTopo->getNodeCount(),camelliaTopo->getDimension());
+      FieldContainer<double> topoNodesPermuted(camelliaTopo->getNodeCount(),camelliaTopo->getDimension());
+      
+      int permutationCount = camelliaTopo->getNodePermutationCount(); // Camellia CellTopology defines permutations for 3D entities, while shards does not, so using Camellia's permutation count will provide a more rigorous test
+      
+      CamelliaCellTools::refCellNodesForTopology(refPoints, camelliaTopo);
+      
+      FieldContainer<double> permutedRefPoints(camelliaTopo->getNodeCount(),camelliaTopo->getDimension());
+      
+      for (int permutation=0; permutation<permutationCount; permutation++) {
+        CamelliaCellTools::refCellNodesForTopology(topoNodesPermuted, camelliaTopo, permutation);
+        
+        CamelliaCellTools::permutedReferenceCellPoints(camelliaTopo, permutation, refPoints, permutedRefPoints);
+        
+        // expect permutedRefPoints = topoNodesPermuted
+        
+        for (int nodeOrdinal=0; nodeOrdinal < topoNodesPermuted.dimension(0); nodeOrdinal++) {
+          for (int d=0; d<topoNodesPermuted.dimension(1); d++) {
+            TEST_FLOATING_EQUALITY(topoNodesPermuted(nodeOrdinal,d), permutedRefPoints(nodeOrdinal,d), 1e-15);
+          }
         }
       }
     }
@@ -335,6 +480,99 @@ namespace {
       
       if (!success) {
         cout << "Test failure (set breakpoint here) \n";
+      }
+    }
+  }
+  
+  TEUCHOS_UNIT_TEST( CamelliaCellTools, SubcellOrdinalMap_Space ) {
+    std::vector< CellTopoPtr > shardsTopologies = getShardsTopologies();
+    
+    for (int topoOrdinal = 0; topoOrdinal < shardsTopologies.size(); topoOrdinal++) {
+      CellTopoPtr spaceTopo = shardsTopologies[topoOrdinal];
+      
+      int spaceDim = spaceTopo->getDimension();
+      if (spaceDim == 0) continue; // don't bother testing point topology
+
+      for (int scDim = 0; scDim <= spaceDim; scDim++) {
+        int scCount = spaceTopo->getSubcellCount(scDim);
+        for (int scord=0; scord < scCount; scord++) {
+          CellTopoPtr scTopo = spaceTopo->getSubcell(scDim, scord);
+          for (int sscDim = 0; sscDim <= scTopo->getDimension(); sscDim++) {
+            int sscCount = scTopo->getSubcellCount(sscDim);
+            for (int sscord=0; sscord < sscCount; sscord++) {
+              unsigned sscord_parent = CamelliaCellTools::subcellOrdinalMap(spaceTopo, scDim, scord, sscDim, sscord);
+              int sscNodeCount = scTopo->getNodeCount(sscDim, sscord);
+              vector<unsigned> subsubcellNodesInParent(sscNodeCount);
+              vector<unsigned> subsubcellNodesInSubcellInParent(sscNodeCount);
+              for (unsigned sscNodeOrdinal=0; sscNodeOrdinal<sscNodeCount; sscNodeOrdinal++) {
+                // first, map node from subsubcell to spaceTopo
+                unsigned subsubcellNode_parent = spaceTopo->getNodeMap(sscDim, sscord_parent, sscNodeOrdinal);
+                subsubcellNodesInParent[sscNodeOrdinal] = subsubcellNode_parent;
+                // next, map same node from subsubcell to subcell
+                // then, map from subcell to spaceTopo and check that they match
+                unsigned subcellNode = scTopo->getNodeMap(sscDim, sscord, sscNodeOrdinal);
+                unsigned subcellNode_parent = spaceTopo->getNodeMap(scDim, scord, subcellNode);
+                subsubcellNodesInSubcellInParent[sscNodeOrdinal] = subcellNode_parent;
+              }
+              // we require that the two node sets are the same, not that they come in the same order
+              // (parent and subcell may have differing ideas about the sub-subcell orientation)
+              std::sort(subsubcellNodesInParent.begin(), subsubcellNodesInParent.end());
+              std::sort(subsubcellNodesInSubcellInParent.begin(), subsubcellNodesInSubcellInParent.end());
+              TEST_COMPARE_ARRAYS(subsubcellNodesInParent, subsubcellNodesInSubcellInParent);
+            }
+          }
+        }
+      }
+    }
+  }
+  
+  TEUCHOS_UNIT_TEST( CamelliaCellTools, SubcellOrdinalMap_SpaceTime ) {
+    std::vector< CellTopoPtr > shardsTopologies = getShardsTopologies();
+    
+    bool havePrintedFirstFailureInfo = false;
+    
+    int tensorialDegree = 1;
+    for (int topoOrdinal = 0; topoOrdinal < shardsTopologies.size(); topoOrdinal++) {
+      CellTopoPtr spaceTimeTopo = CellTopology::cellTopology(shardsTopologies[topoOrdinal]->getShardsTopology(), tensorialDegree);
+      
+      int spaceDim = spaceTimeTopo->getDimension();
+      
+      for (int scDim = 0; scDim <= spaceDim; scDim++) {
+        int scCount = spaceTimeTopo->getSubcellCount(scDim);
+        for (int scord=0; scord < scCount; scord++) {
+          CellTopoPtr scTopo = spaceTimeTopo->getSubcell(scDim, scord);
+          for (int sscDim = 0; sscDim <= scTopo->getDimension(); sscDim++) {
+            int sscCount = scTopo->getSubcellCount(sscDim);
+            for (int sscord=0; sscord < sscCount; sscord++) {
+              unsigned sscord_parent = CamelliaCellTools::subcellOrdinalMap(spaceTimeTopo, scDim, scord, sscDim, sscord);
+              int sscNodeCount = scTopo->getNodeCount(sscDim, sscord);
+              vector<unsigned> subsubcellNodesInParent(sscNodeCount);
+              vector<unsigned> subsubcellNodesInSubcellInParent(sscNodeCount);
+              for (unsigned sscNodeOrdinal=0; sscNodeOrdinal<sscNodeCount; sscNodeOrdinal++) {
+                // first, map node from subsubcell to spaceTopo
+                unsigned subsubcellNode_parent = spaceTimeTopo->getNodeMap(sscDim, sscord_parent, sscNodeOrdinal);
+                subsubcellNodesInParent[sscNodeOrdinal] = subsubcellNode_parent;
+                // next, map same node from subsubcell to subcell
+                // then, map from subcell to spaceTopo and check that they match
+                unsigned subcellNode = scTopo->getNodeMap(sscDim, sscord, sscNodeOrdinal);
+                unsigned subcellNode_parent = spaceTimeTopo->getNodeMap(scDim, scord, subcellNode);
+                subsubcellNodesInSubcellInParent[sscNodeOrdinal] = subcellNode_parent;
+              }
+              // we require that the two node sets are the same, not that they come in the same order
+              // (parent and subcell may have differing ideas about the sub-subcell orientation)
+              std::sort(subsubcellNodesInParent.begin(), subsubcellNodesInParent.end());
+              std::sort(subsubcellNodesInSubcellInParent.begin(), subsubcellNodesInSubcellInParent.end());
+              TEST_COMPARE_ARRAYS(subsubcellNodesInParent, subsubcellNodesInSubcellInParent);
+              
+              if ((success == false) && !havePrintedFirstFailureInfo) {
+                cout << "First failed test here.\n";
+                cout << "spaceTimeTopo = " << spaceTimeTopo->getName() << "; subcell " << scTopo->getName() << " ordinal " << scord;
+                cout << "; sscDim " << sscDim << ", sscord " << sscord << endl;
+                havePrintedFirstFailureInfo = true;
+              }
+            }
+          }
+        }
       }
     }
   }

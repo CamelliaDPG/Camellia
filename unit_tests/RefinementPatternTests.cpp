@@ -83,8 +83,35 @@ namespace {
       shards::CellTopology shardsTopo = shardsTopologies[topoOrdinal]->getShardsTopology();
       CellTopoPtr cellTopo = CellTopology::cellTopology(shardsTopo, tensorialDegree);
       
-      RefinementPatternPtr refPatternShards = RefinementPattern::regularRefinementPattern(shardsTopo.getKey());
+      FieldContainer<double> spaceRefinedNodes;
+      RefinementPatternPtr refPatternSpace = RefinementPattern::regularRefinementPattern(shardsTopo.getKey());
+      spaceRefinedNodes = refPatternSpace->refinedNodes();
       
+      RefinementPatternPtr refPatternTime = RefinementPattern::regularRefinementPattern(CellTopology::line());
+      FieldContainer<double> timeRefinedNodes = refPatternTime->refinedNodes();
+      
+      RefinementPatternPtr refPatternSpaceTime = RefinementPattern::regularRefinementPattern(cellTopo);
+      FieldContainer<double> spaceTimeRefinedNodes = refPatternSpaceTime->refinedNodes();
+      
+      int numChildrenSpace = spaceRefinedNodes.dimension(0);
+      int numChildrenTime = timeRefinedNodes.dimension(0);
+      int numChildrenSpaceTime = spaceTimeRefinedNodes.dimension(0);
+      
+      TEST_EQUALITY(numChildrenSpace * numChildrenTime, numChildrenSpaceTime);
+      
+      int numNodesSpace = spaceRefinedNodes.dimension(1);
+      int numNodesTime = timeRefinedNodes.dimension(1);
+      int numNodesSpaceTime = spaceTimeRefinedNodes.dimension(1);
+      
+      TEST_EQUALITY(numNodesSpace * numNodesTime, numNodesSpaceTime);
+      
+      int dSpace = spaceRefinedNodes.dimension(2);
+      int dTime = timeRefinedNodes.dimension(2);
+      int dSpaceTime = spaceTimeRefinedNodes.dimension(2);
+      
+      TEST_EQUALITY(dSpace + dTime, dSpaceTime);
+      
+      FieldContainer<double> expectedRefinedNodes(numChildrenSpaceTime,numNodesSpaceTime,dSpaceTime);
       // TODO: finish this test...
     }
   }
