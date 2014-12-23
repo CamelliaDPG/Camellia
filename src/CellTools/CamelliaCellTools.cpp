@@ -94,76 +94,22 @@ int CamelliaCellTools::getSideCount(const shards::CellTopology &cellTopo) {
 }
 
 void CamelliaCellTools::refCellNodesForTopology(FieldContainer<double> &cellNodes, const shards::CellTopology &cellTopo, unsigned permutation) { // 0 permutation is the identity
-  if (cellNodes.dimension(0) != cellTopo.getNodeCount()) {
-    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "cellNodes must be sized (N,D) where N=node count, D=space dim.");
+  // really, ref cell *vertices* for topology.  (shards/Intrepid distinguish between vertices and nodes; we don't.)
+  
+  int vertexCount = cellTopo.getVertexCount();
+  if (cellNodes.dimension(0) != vertexCount) {
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "cellNodes must be sized (N,D) where N=vertex count, D=space dim.");
   }
   if (cellNodes.dimension(1) != cellTopo.getDimension()) {
-    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "cellNodes must be sized (N,D) where N=node count, D=space dim.");
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "cellNodes must be sized (N,D) where N=vertex count, D=space dim.");
   }
-  unsigned cellKey = cellTopo.getKey();
-  switch (cellKey) {
-    case shards::Node::key:
-      break;
-    case shards::Line<2>::key:
-      cellNodes(0,0) = -1;
-      cellNodes(1,0) =  1;
-      break;
-    case shards::Triangle<3>::key:
-      cellNodes(0,0) =  0;
-      cellNodes(0,1) =  0;
-      
-      cellNodes(1,0) =  1;
-      cellNodes(1,1) =  0;
-      
-      cellNodes(2,0) =  0;
-      cellNodes(2,1) =  1;
-      break;
-    case shards::Quadrilateral<4>::key:
-      cellNodes(0,0) = -1.0; // x1
-      cellNodes(0,1) = -1.0; // y1
-      cellNodes(1,0) = 1.0;
-      cellNodes(1,1) = -1.0;
-      cellNodes(2,0) = 1.0;
-      cellNodes(2,1) = 1.0;
-      cellNodes(3,0) = -1.0;
-      cellNodes(3,1) = 1.0;
-      break;
-    case shards::Hexahedron<8>::key:
-      cellNodes(0,0) = -1;
-      cellNodes(0,1) = -1;
-      cellNodes(0,2) = -1;
-      
-      cellNodes(1,0) = 1;
-      cellNodes(1,1) = -1;
-      cellNodes(1,2) = -1;
-      
-      cellNodes(2,0) = 1;
-      cellNodes(2,1) = 1;
-      cellNodes(2,2) = -1;
-      
-      cellNodes(3,0) = -1;
-      cellNodes(3,1) = 1;
-      cellNodes(3,2) = -1;
-      
-      cellNodes(4,0) = -1;
-      cellNodes(4,1) = -1;
-      cellNodes(4,2) = 1;
-      
-      cellNodes(5,0) = 1;
-      cellNodes(5,1) = -1;
-      cellNodes(5,2) = 1;
-      
-      cellNodes(6,0) = 1;
-      cellNodes(6,1) = 1;
-      cellNodes(6,2) = 1;
-      
-      cellNodes(7,0) = -1;
-      cellNodes(7,1) = 1;
-      cellNodes(7,2) = 1;
-      break;
-    default:
-      cout << "Unhandled CellTopology.\n";
-      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unhandled CellTopology.");
+  int dim = cellTopo.getDimension();
+  
+  for (int vertexOrdinal=0; vertexOrdinal<vertexCount; vertexOrdinal++) {
+    const double* v = CellTools<double>::getReferenceVertex(cellTopo, vertexOrdinal);
+    for (int d=0; d<dim; d++) {
+      cellNodes(vertexOrdinal,d) = v[d];
+    }
   }
   
   if ( permutation != 0 ) {
@@ -360,7 +306,7 @@ unsigned CamelliaCellTools::permutationMatchingOrder( const shards::CellTopology
 
 unsigned CamelliaCellTools::permutationComposition( const shards::CellTopology &shardsTopo, unsigned a_permutation, unsigned b_permutation ) {
   CellTopoPtr cellTopo = Camellia::CellTopology::cellTopology(shardsTopo);
-  
+  return permutationComposition(cellTopo, a_permutation, b_permutation);
 }
 
 unsigned CamelliaCellTools::permutationComposition( CellTopoPtr cellTopo, unsigned a_permutation, unsigned b_permutation ) {
@@ -1019,9 +965,6 @@ void CamelliaCellTools::mapToReferenceSubcell(FieldContainer<double>       &refS
                                               const int                     subcellDim,
                                               const int                     subcellOrd,
                                               CellTopoPtr                   parentCell) {
-//  if (parentCell->getTensorialDegree() == 0) {
-//    mapToReferenceSubcell(refSubcellPoints, paramPoints, subcellDim, subcellOrd, parentCell->getShardsTopology());
-//  } else {
     const FieldContainer<double>& subcellMap = getSubcellParametrization(subcellDim, parentCell);
     
     int numPoints = paramPoints.dimension(0);
@@ -1035,7 +978,6 @@ void CamelliaCellTools::mapToReferenceSubcell(FieldContainer<double>       &refS
         }
       }
     }
-//  }
 }
 
 void CamelliaCellTools::mapToReferenceSubcell(FieldContainer<double>       &refSubcellPoints,
