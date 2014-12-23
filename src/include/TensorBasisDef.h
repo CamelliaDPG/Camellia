@@ -214,8 +214,8 @@ namespace Camellia {
     
     int valuesPerPointSpace = 1;
     for (int d=2; d<valuesDim.size(); d++) { // for vector and tensor-valued bases, take the spatial range dimension in each tensorial rank
-      valuesDim[d] = _spatialBasis->rangeDimension();
-      valuesPerPointSpace *= _spatialBasis->rangeDimension();
+      valuesDim[d] = max(_spatialBasis->rangeDimension(), 1); // ensure that for 0-dimensional topologies, we still define a value
+      valuesPerPointSpace *= valuesDim[d];
     }
     valuesDim[0] = _spatialBasis->getCardinality(); // field dimension
     ArrayScalar spatialValues(valuesDim);
