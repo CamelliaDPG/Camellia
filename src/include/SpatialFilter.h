@@ -28,16 +28,26 @@ public:
   virtual bool matchesPoint(double x, double y, double z);
   virtual bool matchesPoint(vector<double>&point);
   virtual bool matchesPoints(FieldContainer<bool> &pointsMatch, BasisCachePtr basisCache);
-  
+
   static SpatialFilterPtr allSpace();
   static SpatialFilterPtr unionFilter(SpatialFilterPtr a, SpatialFilterPtr b);
-  
+  static SpatialFilterPtr intersectionFilter(SpatialFilterPtr a, SpatialFilterPtr b);
+
   static SpatialFilterPtr negatedFilter(SpatialFilterPtr filterToNegate);
-  
+
   static SpatialFilterPtr matchingX(double x);
   static SpatialFilterPtr matchingY(double y);
   static SpatialFilterPtr matchingZ(double z);
-  
+
+  static SpatialFilterPtr lessThanX(double x);
+  static SpatialFilterPtr lessThanY(double y);
+  static SpatialFilterPtr lessThanZ(double z);
+
+  static SpatialFilterPtr greaterThanX(double x);
+  static SpatialFilterPtr greaterThanY(double y);
+  static SpatialFilterPtr greaterThanZ(double z);
+
+
   virtual ~SpatialFilter() {}
 };
 
@@ -50,7 +60,18 @@ class SpatialFilterLogicalOr : public SpatialFilter {
 public:
   SpatialFilterLogicalOr(SpatialFilterPtr sf1, SpatialFilterPtr sf2);
   bool matchesPoints(FieldContainer<bool> &pointsMatch, BasisCachePtr basisCache);
-  
+
+//  bool matchesPoint( double x, double y ) {
+//    return _sf1->matchesPoint(x,y) || _sf2->matchesPoint(x,y);
+//  }
+};
+
+class SpatialFilterLogicalAnd : public SpatialFilter {
+  SpatialFilterPtr _sf1, _sf2;
+public:
+  SpatialFilterLogicalAnd(SpatialFilterPtr sf1, SpatialFilterPtr sf2);
+  bool matchesPoints(FieldContainer<bool> &pointsMatch, BasisCachePtr basisCache);
+
 //  bool matchesPoint( double x, double y ) {
 //    return _sf1->matchesPoint(x,y) || _sf2->matchesPoint(x,y);
 //  }
@@ -59,7 +80,7 @@ public:
 class NegatedSpatialFilter : public SpatialFilter {
   SpatialFilterPtr _filterToNegate;
 public:
-  NegatedSpatialFilter(SpatialFilterPtr filterToNegate);
+  NegatedSpatialFilter(SpatialFilterPtr FilterToNegate);
   bool matchesPoints(FieldContainer<bool> &pointsMatch, BasisCachePtr basisCache);
 };
 //

@@ -68,6 +68,126 @@ public:
   }
 };
 
+class SpatialFilterLessThanX : public SpatialFilter {
+  double _tol;
+  double _xToMatch;
+public:
+  SpatialFilterLessThanX(double xToMatch, double tol=1e-14) {
+    _xToMatch = xToMatch;
+    _tol = tol;
+  }
+  bool matchesPoint(double x) {
+    if (x<=_xToMatch) {
+      return true;
+    } else {
+      return false;
+    }
+  }
+  bool matchesPoint(double x, double y) {
+    return matchesPoint(x);
+  }
+  bool matchesPoint(double x, double y, double z) {
+    return matchesPoint(x);
+  }
+};
+
+class SpatialFilterLessThanY : public SpatialFilter {
+  double _tol;
+  double _yToMatch;
+public:
+  SpatialFilterLessThanY(double yToMatch, double tol=1e-14) {
+    _yToMatch = yToMatch;
+    _tol = tol;
+  }
+  bool matchesPoint(double x, double y) {
+    if (y<=_yToMatch) {
+      return true;
+    } else {
+      return false;
+    }
+  }
+  bool matchesPoint(double x, double y, double z) {
+    return matchesPoint(x,y);
+  }
+};
+
+class SpatialFilterLessThanZ : public SpatialFilter {
+  double _tol;
+  double _zToMatch;
+public:
+  SpatialFilterLessThanZ(double zToMatch, double tol=1e-14) {
+    _zToMatch = zToMatch;
+    _tol = tol;
+  }
+  bool matchesPoint(double x, double y, double z) {
+    if (z<=_zToMatch) {
+      return true;
+    } else {
+      return false;
+    }
+  }
+};
+
+class SpatialFilterGreaterThanX : public SpatialFilter {
+  double _tol;
+  double _xToMatch;
+public:
+  SpatialFilterGreaterThanX(double xToMatch, double tol=1e-14) {
+    _xToMatch = xToMatch;
+    _tol = tol;
+  }
+  bool matchesPoint(double x) {
+    if (x>=_xToMatch) {
+      return true;
+    } else {
+      return false;
+    }
+  }
+  bool matchesPoint(double x, double y) {
+    return matchesPoint(x);
+  }
+  bool matchesPoint(double x, double y, double z) {
+    return matchesPoint(x);
+  }
+};
+
+class SpatialFilterGreaterThanY : public SpatialFilter {
+  double _tol;
+  double _yToMatch;
+public:
+  SpatialFilterGreaterThanY(double yToMatch, double tol=1e-14) {
+    _yToMatch = yToMatch;
+    _tol = tol;
+  }
+  bool matchesPoint(double x, double y) {
+    if (y>=_yToMatch) {
+      return true;
+    } else {
+      return false;
+    }
+  }
+  bool matchesPoint(double x, double y, double z) {
+    return matchesPoint(x,y);
+  }
+};
+
+class SpatialFilterGreaterThanZ : public SpatialFilter {
+  double _tol;
+  double _zToMatch;
+public:
+  SpatialFilterGreaterThanZ(double zToMatch, double tol=1e-14) {
+    _zToMatch = zToMatch;
+    _tol = tol;
+  }
+  bool matchesPoint(double x, double y, double z) {
+    if (z>=_zToMatch) {
+      return true;
+    } else {
+      return false;
+    }
+  }
+};
+
 bool SpatialFilter::matchesPoint(double x) {
   TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "matchesPoint(x) unimplemented.");
   return false;
@@ -129,6 +249,10 @@ SpatialFilterPtr SpatialFilter::unionFilter(SpatialFilterPtr a, SpatialFilterPtr
   return Teuchos::rcp( new SpatialFilterLogicalOr(a,b) );
 }
 
+SpatialFilterPtr SpatialFilter::intersectionFilter(SpatialFilterPtr a, SpatialFilterPtr b) {
+  return Teuchos::rcp( new SpatialFilterLogicalAnd(a,b) );
+}
+
 SpatialFilterPtr SpatialFilter::negatedFilter(SpatialFilterPtr filterToNegate) {
   return Teuchos::rcp( new NegatedSpatialFilter(filterToNegate) );
 }
@@ -147,6 +271,30 @@ SpatialFilterPtr SpatialFilter::matchingY(double y) {
 
 SpatialFilterPtr SpatialFilter::matchingZ(double z) {
   return Teuchos::rcp( new SpatialFilterMatchingZ(z) );
+}
+
+SpatialFilterPtr SpatialFilter::lessThanX(double x) {
+  return Teuchos::rcp( new SpatialFilterLessThanX(x) );
+}
+
+SpatialFilterPtr SpatialFilter::lessThanY(double y) {
+  return Teuchos::rcp( new SpatialFilterLessThanY(y) );
+}
+
+SpatialFilterPtr SpatialFilter::lessThanZ(double z) {
+  return Teuchos::rcp( new SpatialFilterLessThanZ(z) );
+}
+
+SpatialFilterPtr SpatialFilter::greaterThanX(double x) {
+  return Teuchos::rcp( new SpatialFilterGreaterThanX(x) );
+}
+
+SpatialFilterPtr SpatialFilter::greaterThanY(double y) {
+  return Teuchos::rcp( new SpatialFilterGreaterThanY(y) );
+}
+
+SpatialFilterPtr SpatialFilter::greaterThanZ(double z) {
+  return Teuchos::rcp( new SpatialFilterGreaterThanZ(z) );
 }
 
 SpatialFilterLogicalOr::SpatialFilterLogicalOr(SpatialFilterPtr sf1, SpatialFilterPtr sf2) {
@@ -177,6 +325,35 @@ bool SpatialFilterLogicalOr::matchesPoints(FieldContainer<bool> &pointsMatch, Ba
     // if we're here, then some point matched: return true:
     return true;
   }
+}
+
+SpatialFilterLogicalAnd::SpatialFilterLogicalAnd(SpatialFilterPtr sf1, SpatialFilterPtr sf2) {
+  _sf1 = sf1;
+  _sf2 = sf2;
+}
+bool SpatialFilterLogicalAnd::matchesPoints(FieldContainer<bool> &pointsMatch, BasisCachePtr basisCache) {
+  const FieldContainer<double>* points = &(basisCache->getPhysicalCubaturePoints());
+  int numCells = points->dimension(0);
+  int numPoints = points->dimension(1);
+  FieldContainer<bool> pointsMatch1(pointsMatch);
+  FieldContainer<bool> pointsMatch2(pointsMatch);
+  bool somePointMatches1 = _sf1->matchesPoints(pointsMatch1,basisCache);
+  bool somePointMatches2 = _sf2->matchesPoints(pointsMatch2,basisCache);
+  bool samePointsMatch = false;
+  if (somePointMatches1 && somePointMatches2) {
+    for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
+      for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
+        if (pointsMatch1(cellIndex,ptIndex) && pointsMatch2(cellIndex,ptIndex))
+        {
+          pointsMatch(cellIndex,ptIndex) = true;
+          samePointsMatch = true;
+        }
+        else
+          pointsMatch(cellIndex,ptIndex) = false;
+      }
+    }
+  }
+  return samePointsMatch;
 }
 
 NegatedSpatialFilter::NegatedSpatialFilter(SpatialFilterPtr filterToNegate) {
