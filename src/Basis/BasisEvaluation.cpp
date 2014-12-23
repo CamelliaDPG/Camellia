@@ -337,7 +337,7 @@ Intrepid::EOperator BasisEvaluation::relatedOperator(EOperatorExtended op, Intre
     componentOfInterest = op - OP_DX;
     relatedOp = Intrepid::OPERATOR_GRAD;
   } else if (   (op==OP_CROSS_NORMAL)   || (op==OP_DOT_NORMAL)     || (op==OP_TIMES_NORMAL)
-             || (op==OP_TIMES_NORMAL_X) || (op==OP_TIMES_NORMAL_Y) || (op==OP_TIMES_NORMAL_Z) 
+             || (op==OP_TIMES_NORMAL_X) || (op==OP_TIMES_NORMAL_Y) || (op==OP_TIMES_NORMAL_Z) || (op==OP_TIMES_NORMAL_T)
              || (op==OP_VECTORIZE_VALUE)) {
     relatedOp = Intrepid::OPERATOR_VALUE;
   }

@@ -82,7 +82,7 @@ void BasisCache::initCubatureDegree(int maxTrialDegree, int maxTestDegree) {
   if (! _isSideCache) {
     _cubDegree = boundDegreeToMaxCubatureForCellTopo(_cubDegree, _cellTopo->getShardsTopology().getKey());
   } else {
-    int sideDim = _spaceDim - 1;
+    int sideDim = _cellTopo->getDimension() - 1;
     CellTopoPtr side = _cellTopo->getSubcell(sideDim,_sideIndex); // create relevant subcell (side) topology
     _cubDegree = boundDegreeToMaxCubatureForCellTopo(_cubDegree, side->getShardsTopology().getKey());
   }
@@ -107,12 +107,16 @@ void BasisCache::initCubatureDegree(std::vector<int> &maxTrialDegrees, std::vect
 }
 
 // ! requires that initCubature() has been called
-void BasisCache::init(bool createSideCacheToo) {
+void BasisCache::init(bool createSideCacheToo, bool tensorProductTopologyMeansSpaceTime) {
   _sideIndex = -1;
   _spaceDim = _cellTopo->getDimension();
+  if ((tensorProductTopologyMeansSpaceTime) && (_cellTopo->getTensorialDegree() > 0)) {
+    // last dimension is time, then
+    _spaceDim = _spaceDim - 1;
+  }
   _isSideCache = false; // VOLUME constructor
   
-  if (_spaceDim > 0) {
+  if (_cellTopo->getDimension() > 0) {
     CubatureFactory cubFactory;
     Teuchos::RCP<Cubature<double> > cellTopoCub;
     if (_cubDegree >= 0)
@@ -150,9 +154,9 @@ void BasisCache::init(bool createSideCacheToo) {
 
 void BasisCache::createSideCaches() {
   _basisCacheSides.clear();
-  _numSides = _cellTopo->getSideCount();
+  int numSides = _cellTopo->getSideCount();
 
-  for (int sideOrdinal=0; sideOrdinal<_numSides; sideOrdinal++) {
+  for (int sideOrdinal=0; sideOrdinal<numSides; sideOrdinal++) {
     BasisPtr maxDegreeBasisOnSide = _maxDegreeBasisForSide[sideOrdinal];
     BasisPtr multiBasisIfAny;
     
@@ -170,23 +174,20 @@ void BasisCache::createSideCaches() {
   }
 }
 
-BasisCache::BasisCache(CellTopoPtr cellTopo, int cubDegree, bool createSideCacheToo) {
-  _spaceDim = cellTopo->getDimension();
-  _numSides = cellTopo->getSideCount();
+BasisCache::BasisCache(CellTopoPtr cellTopo, int cubDegree, bool createSideCacheToo, bool tensorProductTopologyMeansSpaceTime) {
+  _cellTopo = cellTopo;
+
   DofOrdering trialOrdering; // dummy trialOrdering
   findMaximumDegreeBasisForSides(trialOrdering); // should fill with NULL ptrs
   
   _isSideCache = false;
-  _cellTopo = cellTopo;
   initCubatureDegree(0, cubDegree);
-  init(createSideCacheToo);
+  init(createSideCacheToo, tensorProductTopologyMeansSpaceTime);
 }
 
-BasisCache::BasisCache(ElementTypePtr elemType, Teuchos::RCP<Mesh> mesh, bool testVsTest, int cubatureDegreeEnrichment) {
+BasisCache::BasisCache(ElementTypePtr elemType, Teuchos::RCP<Mesh> mesh, bool testVsTest, int cubatureDegreeEnrichment, bool tensorProductTopologyMeansSpaceTime) {
   // use testVsTest=true for test space inner product (won't create side caches, and will use higher cubDegree)
-  CellTopoPtr cellTopo = elemType->cellTopoPtr;
-  _spaceDim = cellTopo->getDimension();
-  _numSides = cellTopo->getSideCount();
+  _cellTopo = elemType->cellTopoPtr;
   
   _maxTestDegree = elemType->testOrderPtr->maxBasisDegree();
   
@@ -209,90 +210,82 @@ BasisCache::BasisCache(ElementTypePtr elemType, Teuchos::RCP<Mesh> mesh, bool te
   bool createSideCacheToo = !testVsTest && elemType->trialOrderPtr->hasSideVarIDs();
   
   _isSideCache = false;
-  _cellTopo = cellTopo;
   initCubatureDegree(_maxTrialDegree, _maxTestDegree + cubatureDegreeEnrichment);
-  init(createSideCacheToo);
+  init(createSideCacheToo, tensorProductTopologyMeansSpaceTime);
 }
 
 BasisCache::BasisCache(const FieldContainer<double> &physicalCellNodes,
                        CellTopoPtr cellTopo,
-                       DofOrdering &trialOrdering, int maxTestDegree, bool createSideCacheToo) {
-  _spaceDim = cellTopo->getDimension();
-  _numSides = cellTopo->getSideCount();
+                       DofOrdering &trialOrdering, int maxTestDegree, bool createSideCacheToo, bool tensorProductTopologyMeansSpaceTime) {
+  _cellTopo = cellTopo;
   findMaximumDegreeBasisForSides(trialOrdering);
   
   _isSideCache = false;
-  _cellTopo = cellTopo;
   initCubatureDegree(trialOrdering.maxBasisDegree(), maxTestDegree);
-  init(createSideCacheToo);
+  init(createSideCacheToo, tensorProductTopologyMeansSpaceTime);
   setPhysicalCellNodes(physicalCellNodes,vector<GlobalIndexType>(),createSideCacheToo);
 }
 
 BasisCache::BasisCache(const FieldContainer<double> &physicalCellNodes, 
                        shards::CellTopology &cellTopo,
                        DofOrdering &trialOrdering, int maxTestDegree, bool createSideCacheToo) {
-  _spaceDim = cellTopo.getDimension();
-  _numSides = CamelliaCellTools::getSideCount(cellTopo);
+  _cellTopo = CellTopology::cellTopology(cellTopo);
   findMaximumDegreeBasisForSides(trialOrdering);
   
   _isSideCache = false;
-  _cellTopo = CellTopology::cellTopology(cellTopo);
   initCubatureDegree(trialOrdering.maxBasisDegree(), maxTestDegree);
-  init(createSideCacheToo);
+  bool tensorProductTopologyMeansSpaceTime = true; // doesn't matter for shards topologies (they're not tensor products)
+  init(createSideCacheToo, tensorProductTopologyMeansSpaceTime);
   setPhysicalCellNodes(physicalCellNodes,vector<GlobalIndexType>(),createSideCacheToo);
 }
 
 BasisCache::BasisCache(shards::CellTopology &cellTopo, int cubDegree, bool createSideCacheToo) {
   // NOTE that this constructor's a bit dangerous, in that we lack information about the brokenness
   // of the sides; we may under-integrate for cells with broken sides...
-  _spaceDim = cellTopo.getDimension();
-  _numSides = CamelliaCellTools::getSideCount(cellTopo);
+  _cellTopo = CellTopology::cellTopology(cellTopo);
   DofOrdering trialOrdering; // dummy trialOrdering
   findMaximumDegreeBasisForSides(trialOrdering); // should fill with NULL ptrs
   
   _isSideCache = false;
-  _cellTopo = CellTopology::cellTopology(cellTopo);
   initCubatureDegree(0, cubDegree);
-  init(createSideCacheToo);
+  bool tensorProductTopologyMeansSpaceTime = true; // doesn't matter for shards topologies (they're not tensor products)
+  init(createSideCacheToo, tensorProductTopologyMeansSpaceTime);
 }
 
 BasisCache::BasisCache(const FieldContainer<double> &physicalCellNodes, shards::CellTopology &cellTopo, int cubDegree, bool createSideCacheToo) {
   // NOTE that this constructor's a bit dangerous, in that we lack information about the brokenness
   // of the sides; we may under-integrate for cells with broken sides...
-  _spaceDim = cellTopo.getDimension();
-  _numSides = CamelliaCellTools::getSideCount(cellTopo);
+  _cellTopo = CellTopology::cellTopology(cellTopo);
   DofOrdering trialOrdering; // dummy trialOrdering
   findMaximumDegreeBasisForSides(trialOrdering); // should fill with NULL ptrs
   
   _isSideCache = false;
-  _cellTopo = CellTopology::cellTopology(cellTopo);
   initCubatureDegree(0, cubDegree);
-  init(createSideCacheToo);
+  bool tensorProductTopologyMeansSpaceTime = true; // doesn't matter for shards topologies (they're not tensor products)
+  init(createSideCacheToo, tensorProductTopologyMeansSpaceTime);
 
   setPhysicalCellNodes(physicalCellNodes,vector<GlobalIndexType>(),createSideCacheToo);
 }
 
-BasisCache::BasisCache(const FieldContainer<double> &physicalCellNodes, CellTopoPtr cellTopo, int cubDegree, bool createSideCacheToo) {
+BasisCache::BasisCache(const FieldContainer<double> &physicalCellNodes, CellTopoPtr cellTopo, int cubDegree, bool createSideCacheToo, bool tensorProductTopologyMeansSpaceTime) {
   // NOTE that this constructor's a bit dangerous, in that we lack information about the brokenness
   // of the sides; we may under-integrate for cells with broken sides...
-  _spaceDim = cellTopo->getDimension();
-  _numSides = cellTopo->getSideCount();
+  _cellTopo = cellTopo;
   DofOrdering trialOrdering; // dummy trialOrdering
   findMaximumDegreeBasisForSides(trialOrdering); // should fill with NULL ptrs
   
   _isSideCache = false;
-  _cellTopo = cellTopo;
   initCubatureDegree(0, cubDegree);
-  init(createSideCacheToo);
+  init(createSideCacheToo, tensorProductTopologyMeansSpaceTime);
   
   setPhysicalCellNodes(physicalCellNodes,vector<GlobalIndexType>(),createSideCacheToo);
 }
 
 // side constructor
 BasisCache::BasisCache(int sideIndex, BasisCachePtr volumeCache, int trialDegree, int testDegree, BasisPtr multiBasisIfAny) {
+  _cellTopo = volumeCache->cellTopology(); // VOLUME cell topo.
   _isSideCache = true;
   _sideIndex = sideIndex;
-  _numSides = -1;
   _basisCacheVolume = volumeCache;
   _maxTestDegree = testDegree;
   _maxTrialDegree = trialDegree;
@@ -302,9 +295,8 @@ BasisCache::BasisCache(int sideIndex, BasisCachePtr volumeCache, int trialDegree
     // one with potentially curved edges...
     _composeTransformationFxnWithMeshTransformation = true;
   }
-  _cellTopo = volumeCache->cellTopology(); // VOLUME cell topo.
-  _spaceDim = _cellTopo->getDimension();
-  int sideDim = _spaceDim - 1;
+  _spaceDim = volumeCache->getSpaceDim();
+  int sideDim = _cellTopo->getDimension() - 1;
   CellTopoPtr side = _cellTopo->getSubcell(sideDim,sideIndex); // create relevant subcell (side) topology
   
   initCubatureDegree(trialDegree, testDegree);
@@ -331,13 +323,8 @@ BasisCache::BasisCache(int sideIndex, BasisCachePtr volumeCache, int trialDegree
       numCubPointsSide = _cubPoints.dimension(0);
     }
     
-    _cubPointsSideRefCell.resize(numCubPointsSide, _spaceDim); // cubPointsSide from the pov of the ref cell
-    if (_cellTopo->getTensorialDegree() == 0) {
-      CamelliaCellTools::mapToReferenceSubcell(_cubPointsSideRefCell, _cubPoints, sideDim, _sideIndex, _cellTopo->getShardsTopology());
-    } else {
-      cout << "Reference subcell mapping doesn't yet support tensorial degree > 0.\n";
-      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Reference subcell mapping doesn't yet support tensorial degree > 0.");
-    }
+    _cubPointsSideRefCell.resize(numCubPointsSide, sideDim + 1); // cubPointsSide from the pov of the ref cell
+    CamelliaCellTools::mapToReferenceSubcell(_cubPointsSideRefCell, _cubPoints, sideDim, _sideIndex, _cellTopo);
   } else {
     _cubDegree = 1;
     int numCubPointsSide = 1;
@@ -347,13 +334,8 @@ BasisCache::BasisCache(int sideIndex, BasisCachePtr volumeCache, int trialDegree
     _cubPoints.initialize(0.0);
     _cubWeights.initialize(1.0);
     
-    _cubPointsSideRefCell.resize(numCubPointsSide, _spaceDim); // cubPointsSide from the pov of the ref cell
-    if (_cellTopo->getTensorialDegree() == 0) {
-      CamelliaCellTools::mapToReferenceSubcell(_cubPointsSideRefCell, _cubPoints, sideDim, _sideIndex, _cellTopo->getShardsTopology());
-    } else {
-      cout << "Reference subcell mapping doesn't yet support tensorial degree > 0.\n";
-      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Reference subcell mapping doesn't yet support tensorial degree > 0.");
-    }
+    _cubPointsSideRefCell.resize(numCubPointsSide, sideDim + 1); // cubPointsSide from the pov of the ref cell
+    CamelliaCellTools::mapToReferenceSubcell(_cubPointsSideRefCell, _cubPoints, sideDim, _sideIndex, _cellTopo);
   }
   
   _maxPointsPerCubaturePhase = -1; // default: -1 (infinite)
@@ -455,8 +437,10 @@ void BasisCache::findMaximumDegreeBasisForSides(DofOrdering &trialOrdering) {
       sideTrialIDs.push_back(trialID);
     }
   }
+  int numSides = _cellTopo->getSideCount();
+
   int numSideTrialIDs = sideTrialIDs.size();
-  for (int sideOrdinal=0; sideOrdinal<_numSides; sideOrdinal++) {
+  for (int sideOrdinal=0; sideOrdinal<numSides; sideOrdinal++) {
     BasisPtr maxDegreeBasisOnSide;
     // loop through looking for highest-degree basis
     int maxTrialDegree = -1;
@@ -629,7 +613,7 @@ constFCPtr BasisCache::getTransformedValues(BasisPtr basis, IntrepidExtendedType
   if (   (op != IntrepidExtendedTypes::OP_CROSS_NORMAL)   && (op != IntrepidExtendedTypes::OP_DOT_NORMAL)
       && (op != IntrepidExtendedTypes::OP_TIMES_NORMAL)   && (op != IntrepidExtendedTypes::OP_VECTORIZE_VALUE) 
       && (op != IntrepidExtendedTypes::OP_TIMES_NORMAL_X) && (op != IntrepidExtendedTypes::OP_TIMES_NORMAL_Y)
-      && (op != IntrepidExtendedTypes::OP_TIMES_NORMAL_Z)
+      && (op != IntrepidExtendedTypes::OP_TIMES_NORMAL_Z) && (op != IntrepidExtendedTypes::OP_TIMES_NORMAL_T)
      ) {
     result = BasisEvaluation::BasisEvaluation::getComponentOfInterest(relatedValuesTransformed,op,fs,componentOfInterest);
     if ( result.get() == 0 ) {
@@ -657,6 +641,14 @@ constFCPtr BasisCache::getTransformedValues(BasisPtr basis, IntrepidExtendedType
         result = BasisEvaluation::getValuesTimesNormals(relatedValuesTransformed,_sideNormals,normalComponent);
       }
         break;
+      case OP_TIMES_NORMAL_T:
+      {
+        if (_cellTopo->getTensorialDegree() == 0) {
+          TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "temporal normals are not defined for pure spatial topologies");
+        }
+        int normalComponent = _cellTopo->getDimension() - 1; // time dimension is the last one
+        result = BasisEvaluation::getValuesTimesNormals(relatedValuesTransformed,_sideNormalsSpaceTime,normalComponent);
+      }
       default:
         TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unhandled op.");
     }
@@ -765,10 +757,11 @@ void BasisCache::setRefCellPoints(const FieldContainer<double> &pointsRefCell, c
   int numPoints = pointsRefCell.dimension(0);
   
   if ( isSideCache() ) { // then we need to map pointsRefCell (on side) into volume coordinates, and store in _cubPointsSideRefCell
+    int cellDim = _cellTopo->getDimension();
     // for side cache, _spaceDim is the spatial dimension of the volume cache
-    _cubPointsSideRefCell.resize(numPoints, _spaceDim); 
+    _cubPointsSideRefCell.resize(numPoints, cellDim);
     // _cellTopo is the volume cell topology for side basis caches.
-    int sideDim = _spaceDim - 1;
+    int sideDim = cellDim - 1;
     CamelliaCellTools::mapToReferenceSubcell(_cubPointsSideRefCell, _cubPoints, sideDim, _sideIndex, _cellTopo);
   }
   
@@ -786,43 +779,18 @@ void BasisCache::setRefCellPoints(const FieldContainer<double> &pointsRefCell, c
     determineJacobian();
     
     recomputeMeasures();
-    
-    if (isSideCache()) {
-      if (_spaceDim > 1) {
-        // recompute sideNormals
-        _sideNormals.resize(_numCells, numPoints, _spaceDim);
-        FieldContainer<double> normalLengths(_numCells, numPoints);
-        
-        if (_cellTopo->getTensorialDegree() == 0) {
-          CellTools<double>::getPhysicalSideNormals(_sideNormals, _cellJacobian, _sideIndex, _cellTopo->getShardsTopology());
-        } else {
-          cout << "ERROR: BasisCache::setRefCellPoints does not yet support tensorial degree > 0.\n";
-          TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "BasisCache::setRefCellPoints does not yet support tensorial degree > 0.");
-        }
-        
-        // make unit length
-        RealSpaceTools<double>::vectorNorm(normalLengths, _sideNormals, NORM_TWO);
-        FunctionSpaceTools::scalarMultiplyDataData<double>(_sideNormals, normalLengths, _sideNormals, true);
-      } else if (_spaceDim==1) {
-        _sideNormals.resize(_numCells, numPoints, _spaceDim); // here, numPoints should be 1
-        unsigned thisSideOrdinal = _sideIndex;
-        unsigned otherSideOrdinal = 1 - thisSideOrdinal;
-        for (int cellOrdinal=0; cellOrdinal<_numCells; cellOrdinal++) {
-          double x_this = _physicalCellNodes(cellOrdinal,thisSideOrdinal,0);
-          double x_other = _physicalCellNodes(cellOrdinal,otherSideOrdinal,0);
-          if (x_this > x_other) {
-            _sideNormals(cellOrdinal,0,0) = 1;
-          } else {
-            _sideNormals(cellOrdinal,0,0) = -1;
-          }
-        }
-      }
-    }
   }
 }
 
 const FieldContainer<double> & BasisCache::getSideNormals() {
   return _sideNormals;
+}
+
+const FieldContainer<double> & BasisCache::getSideNormalsSpaceTime() {
+  if (_cellTopo->getTensorialDegree() == 0) {
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "space-time side normals are only defined for cell topologies with tensorial degree > 0.");
+  }
+  return _sideNormalsSpaceTime;
 }
 
 void BasisCache::setSideNormals(FieldContainer<double> &sideNormals) {
@@ -846,11 +814,12 @@ void BasisCache::setTransformationFunction(FunctionPtr fxn, bool composeWithMesh
 }
 
 void BasisCache::determinePhysicalPoints() {
-  if (_spaceDim==0) return; // physical points not meaningful then...
+  int cellDim = _cellTopo->getDimension();
+  if (cellDim==0) return; // physical points not meaningful then...
   int numPoints = isSideCache() ? _cubPointsSideRefCell.dimension(0) : _cubPoints.dimension(0);
   if ( Function::isNull(_transformationFxn) || _composeTransformationFxnWithMeshTransformation) {
     // _spaceDim for side cache refers to the volume cache's spatial dimension
-    _physCubPoints.resize(_numCells, numPoints, _spaceDim);
+    _physCubPoints.resize(_numCells, numPoints, cellDim);
     
     if ( ! isSideCache() ) {
       CamelliaCellTools::mapToPhysicalFrame(_physCubPoints,_cubPoints,_physicalCellNodes,_cellTopo);
@@ -868,7 +837,7 @@ void BasisCache::determinePhysicalPoints() {
     //  BasisCache: the if clause above only serves to save us a little computational effort.)
   }
   if ( ! Function::isNull(_transformationFxn) ) {
-    FieldContainer<double> newPhysCubPoints(_numCells,numPoints,_spaceDim);
+    FieldContainer<double> newPhysCubPoints(_numCells,numPoints,cellDim);
     BasisCachePtr thisPtr = Teuchos::rcp(this,false);
     
     // the usual story: we don't want to use the transformation Function inside the BasisCache
@@ -879,8 +848,8 @@ void BasisCache::determinePhysicalPoints() {
     {
       // size cell Jacobian containers—the dimensions are used even for HGRAD basis OP_VALUE, which
       // may legitimately be invoked by transformationFxn, below...
-      _cellJacobian.resize(_numCells, numPoints, _spaceDim, _spaceDim);
-      _cellJacobInv.resize(_numCells, numPoints, _spaceDim, _spaceDim);
+      _cellJacobian.resize(_numCells, numPoints, cellDim, cellDim);
+      _cellJacobInv.resize(_numCells, numPoints, cellDim, cellDim);
       _cellJacobDet.resize(_numCells, numPoints);
       // (the sizes here agree with what's done in determineJacobian, so the resizing there should be
       //  basically free if we've done it here.)
@@ -894,15 +863,16 @@ void BasisCache::determinePhysicalPoints() {
 }
 
 void BasisCache::determineJacobian() {
-  if (_spaceDim == 0) return;  // Jacobians not meaningful then...
+  int cellDim = _cellTopo->getDimension();
+
+  if (cellDim == 0) return;  // Jacobians not meaningful then...
   
   // Compute cell Jacobians, their inverses and their determinants
-  
   int numCubPoints = isSideCache() ? _cubPointsSideRefCell.dimension(0) : _cubPoints.dimension(0);
   
   // Containers for Jacobian
-  _cellJacobian.resize(_numCells, numCubPoints, _spaceDim, _spaceDim);
-  _cellJacobInv.resize(_numCells, numCubPoints, _spaceDim, _spaceDim);
+  _cellJacobian.resize(_numCells, numCubPoints, cellDim, cellDim);
+  _cellJacobInv.resize(_numCells, numCubPoints, cellDim, cellDim);
   _cellJacobDet.resize(_numCells, numCubPoints);
   
   typedef CellTools<double>  CellTools;
@@ -922,7 +892,7 @@ void BasisCache::determineJacobian() {
     BasisCachePtr thisPtr = Teuchos::rcp(this,false);
     if (_composeTransformationFxnWithMeshTransformation) {
       // then we need to multiply one Jacobian by the other
-      FieldContainer<double> fxnJacobian(_numCells,numCubPoints,_spaceDim,_spaceDim);
+      FieldContainer<double> fxnJacobian(_numCells,numCubPoints,cellDim,cellDim);
       // a little quirky, but since _transformationFxn calls BasisCache in its values determination,
       // we disable the _transformationFxn during the call to grad()->values()
       FunctionPtr fxnCopy = _transformationFxn;
@@ -951,7 +921,10 @@ void BasisCache::setPhysicalCellNodes(const FieldContainer<double> &physicalCell
   
   _physicalCellNodes = physicalCellNodes;
   _numCells = physicalCellNodes.dimension(0);
-  _spaceDim = physicalCellNodes.dimension(2);
+  
+  if (physicalCellNodes.dimension(2) != max((int)_cellTopo->getDimension(), 1)) {
+    TEUCHOS_TEST_FOR_EXCEPTION(physicalCellNodes.dimension(2) != max((int)_cellTopo->getDimension(), 1), std::invalid_argument, "physicalCellNodes.dimension(2) must equal cellTopo's dimension!");
+  }
   
   _cellIDs = cellIDs;
   // Compute cell Jacobians, their inverses and their determinants
@@ -969,7 +942,8 @@ void BasisCache::setPhysicalCellNodes(const FieldContainer<double> &physicalCell
     if (_basisCacheSides.size() == 0) {
       createSideCaches();
     }
-    for (int sideOrdinal=0; sideOrdinal<_numSides; sideOrdinal++) {
+    int numSides = _cellTopo->getSideCount();
+    for (int sideOrdinal=0; sideOrdinal<numSides; sideOrdinal++) {
       _basisCacheSides[sideOrdinal]->setPhysicalCellNodes(physicalCellNodes, cellIDs, false);
     }
   } else if (! isSideCache() && ! createSideCacheToo ) {
@@ -1048,9 +1022,9 @@ BasisCachePtr BasisCache::basisCache1D(double x0, double x1, int cubatureDegree)
   return Teuchos::rcp( new BasisCache(physicalCellNodes, line_2, cubatureDegree));
 }
 
-BasisCachePtr BasisCache::basisCacheForCell(MeshPtr mesh, GlobalIndexType cellID, bool testVsTest, int cubatureDegreeEnrichment) {
+BasisCachePtr BasisCache::basisCacheForCell(MeshPtr mesh, GlobalIndexType cellID, bool testVsTest, int cubatureDegreeEnrichment, bool tensorProductTopologyMeansSpaceTime) {
   ElementTypePtr elemType = mesh->getElementType(cellID);
-  BasisCachePtr basisCache = Teuchos::rcp( new BasisCache(elemType, mesh, testVsTest, cubatureDegreeEnrichment) );
+  BasisCachePtr basisCache = Teuchos::rcp( new BasisCache(elemType, mesh, testVsTest, cubatureDegreeEnrichment, tensorProductTopologyMeansSpaceTime) );
   bool createSideCache = true;
   vector<GlobalIndexType> cellIDs(1,cellID);
   basisCache->setPhysicalCellNodes(mesh->physicalCellNodesForCell(cellID), cellIDs, createSideCache);
@@ -1059,8 +1033,8 @@ BasisCachePtr BasisCache::basisCacheForCell(MeshPtr mesh, GlobalIndexType cellID
   return basisCache;
 }
 BasisCachePtr BasisCache::basisCacheForCellType(MeshPtr mesh, ElementTypePtr elemType, bool testVsTest,
-                                                int cubatureDegreeEnrichment) { // for cells on the local MPI node
-  BasisCachePtr basisCache = Teuchos::rcp( new BasisCache(elemType, mesh, testVsTest, cubatureDegreeEnrichment) );
+                                                int cubatureDegreeEnrichment, bool tensorProductTopologyMeansSpaceTime) { // for cells on the local MPI node
+  BasisCachePtr basisCache = Teuchos::rcp( new BasisCache(elemType, mesh, testVsTest, cubatureDegreeEnrichment, tensorProductTopologyMeansSpaceTime) );
   bool createSideCache = true;
   vector<GlobalIndexType> cellIDs = mesh->cellIDsOfType(elemType);
   if (cellIDs.size() > 0) {
@@ -1076,21 +1050,21 @@ BasisCachePtr BasisCache::basisCacheForReferenceCell(shards::CellTopology &shard
   return basisCacheForReferenceCell(cellTopo, cubatureDegree, createSideCacheToo);
 }
 
-BasisCachePtr BasisCache::basisCacheForReferenceCell(CellTopoPtr cellTopo, int cubatureDegree, bool createSideCacheToo) {
+BasisCachePtr BasisCache::basisCacheForReferenceCell(CellTopoPtr cellTopo, int cubatureDegree, bool createSideCacheToo, bool tensorProductTopologyMeansSpaceTime) {
   FieldContainer<double> cellNodes(cellTopo->getNodeCount(),cellTopo->getDimension());
   CamelliaCellTools::refCellNodesForTopology(cellNodes, cellTopo);
   cellNodes.resize(1,cellNodes.dimension(0),cellNodes.dimension(1));
   
-  BasisCachePtr basisCache = Teuchos::rcp(new BasisCache(cellNodes,cellTopo,cubatureDegree,createSideCacheToo));
+  BasisCachePtr basisCache = Teuchos::rcp(new BasisCache(cellNodes,cellTopo,cubatureDegree,createSideCacheToo, tensorProductTopologyMeansSpaceTime));
   return basisCache;
 }
 
 BasisCachePtr BasisCache::basisCacheForRefinedReferenceCell(CellTopoPtr cellTopo, int cubatureDegree,
-                                                            RefinementBranch refinementBranch, bool createSideCacheToo) {
+                                                            RefinementBranch refinementBranch, bool createSideCacheToo, bool tensorProductTopologyMeansSpaceTime) {
   FieldContainer<double> cellNodes = RefinementPattern::descendantNodesRelativeToAncestorReferenceCell(refinementBranch);
   
   cellNodes.resize(1,cellNodes.dimension(0),cellNodes.dimension(1));
-  BasisCachePtr basisCache = Teuchos::rcp(new BasisCache(cellNodes,cellTopo,cubatureDegree,createSideCacheToo));
+  BasisCachePtr basisCache = Teuchos::rcp(new BasisCache(cellNodes,cellTopo,cubatureDegree,createSideCacheToo,tensorProductTopologyMeansSpaceTime));
   return basisCache;
 }
 
@@ -1119,7 +1093,7 @@ BasisCachePtr BasisCache::quadBasisCache(double width, double height, int cubDeg
 }
 
 void BasisCache::recomputeMeasures() {
-  if (_spaceDim == 0) {
+  if (_cellTopo->getDimension() == 0) {
     // then we define the measure of the domain as 1...
     int numCubPoints = isSideCache() ? _cubPointsSideRefCell.dimension(0) : _cubPoints.dimension(0);
     _weightedMeasure.resize(_numCells, numCubPoints);
@@ -1127,17 +1101,17 @@ void BasisCache::recomputeMeasures() {
     return;
   }
   if (_cubWeights.size() > 0) {
-    int numCubPoints = isSideCache() ? _cubPointsSideRefCell.dimension(0) : _cubPoints.dimension(0);
     // a bit ugly: "_cubPoints" may not be cubature points at all, but just points of interest...  If they're not cubature points, then _cubWeights will be cleared out.  See setRefCellPoints, above.
+    int numCubPoints = isSideCache() ? _cubPointsSideRefCell.dimension(0) : _cubPoints.dimension(0);
     // TODO: rename _cubPoints and related methods...
     _weightedMeasure.resize(_numCells, numCubPoints);
     if (! isSideCache()) {
       fst::computeCellMeasure<double>(_weightedMeasure, _cellJacobDet, _cubWeights);
     } else {
-      if (_spaceDim==1) {
+      if (_cellTopo->getDimension()==1) {
         // TODO: determine whether this is the right thing:
         _weightedMeasure.initialize(1.0); // not sure this is the right thing.
-      } else if (_spaceDim==2) {
+      } else if (_cellTopo->getDimension()==2) {
         if (_cellTopo->getTensorialDegree() == 0) {
           // compute weighted edge measure
           FunctionSpaceTools::computeEdgeMeasure<double>(_weightedMeasure,
@@ -1149,7 +1123,7 @@ void BasisCache::recomputeMeasures() {
           cout << "ERROR: BasisCache::recomputeMeasures() does not yet support tensorial degree > 0.\n";
           TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "recomputeMeasures() does not yet support tensorial degree > 0.");
         }
-      } else if (_spaceDim==3) {
+      } else if (_cellTopo->getDimension()==3) {
         if (_cellTopo->getTensorialDegree() == 0) {
           FunctionSpaceTools::computeFaceMeasure<double>(_weightedMeasure, _cellJacobian, _cubWeights, _sideIndex, _cellTopo->getShardsTopology());
         } else {
@@ -1159,39 +1133,60 @@ void BasisCache::recomputeMeasures() {
       } else {
         TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unhandled space dimension.");
       }
-      //      if (_sideIndex==0) {
-      //        cout << "_cellJacobian:\n" << _cellJacobian;
-      //        cout << "_cubWeights:\n" << _cubWeights;
-      //        cout << "_weightedMeasure:\n" << _weightedMeasure;
-      //      }
-      if (_spaceDim > 1) {
-        // get normals
-        _sideNormals.resize(_numCells, numCubPoints, _spaceDim);
-        FieldContainer<double> normalLengths(_numCells, numCubPoints);
-        if (_cellTopo->getTensorialDegree() == 0) {
-          CellTools<double>::getPhysicalSideNormals(_sideNormals, _cellJacobian, _sideIndex, _cellTopo->getShardsTopology());
-        } else {
-          cout << "ERROR: BasisCache::recomputeMeasures() does not yet support tensorial degree > 0.\n";
-          TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "recomputeMeasures() does not yet support tensorial degree > 0.");
-        }
-
-        
+    }
+    
+  }
+  
+  if ( isSideCache() ) {
+    int numPoints = _cubPointsSideRefCell.dimension(0);
+    if (_cellTopo->getDimension() > 1) {
+      FieldContainer<double> normalLengths(_numCells, numPoints);
+      
+      if (_cellTopo->getTensorialDegree() == 0) {
+        // recompute sideNormals
+        _sideNormals.resize(_numCells, numPoints, _spaceDim);
+        CellTools<double>::getPhysicalSideNormals(_sideNormals, _cellJacobian, _sideIndex, _cellTopo->getShardsTopology());
         // make unit length
         RealSpaceTools<double>::vectorNorm(normalLengths, _sideNormals, NORM_TWO);
         FunctionSpaceTools::scalarMultiplyDataData<double>(_sideNormals, normalLengths, _sideNormals, true);
-      } else if (_spaceDim == 1) {
-        _sideNormals.resize(_numCells, numCubPoints, _spaceDim); // here, numPoints should be 1
-        unsigned thisSideOrdinal = _sideIndex;
-        unsigned otherSideOrdinal = 1 - thisSideOrdinal;
+      } else {
+        cout << "ERROR: BasisCache::recomputeMeasures does not yet support tensorial degree > 0.\n";
+        TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "BasisCache::recomputeMeasures does not yet support tensorial degree > 0.");
+        
+        _sideNormalsSpaceTime.resize(_numCells, numPoints, _cellTopo->getDimension());
+        cout << "WARNING: CamelliaCellTools::getPhysicalSideNormals is not yet implemented; skipping the call in BasisCache.\n";
+        //          CamelliaCellTools::getPhysicalSideNormals(_sideNormalsSpaceTime, _cellJacobian, _sideIndex, _cellTopo);
+        // make unit length
+        RealSpaceTools<double>::vectorNorm(normalLengths, _sideNormalsSpaceTime, NORM_TWO);
+        FunctionSpaceTools::scalarMultiplyDataData<double>(_sideNormalsSpaceTime, normalLengths, _sideNormalsSpaceTime, true);
+        
+        // next, extract the pure-spatial part of the normal (this might not be unit length)
+        _sideNormals.resize(_numCells, numPoints, _spaceDim);
         for (int cellOrdinal=0; cellOrdinal<_numCells; cellOrdinal++) {
-          double x_this = _physicalCellNodes(cellOrdinal,thisSideOrdinal,0);
-          double x_other = _physicalCellNodes(cellOrdinal,otherSideOrdinal,0);
-          if (x_this > x_other) {
-            _sideNormals(cellOrdinal,0,0) = 1;
-          } else {
-            _sideNormals(cellOrdinal,0,0) = -1;
+          for (int ptOrdinal=0; ptOrdinal<numPoints; ptOrdinal++) {
+            for (int d=0; d<_spaceDim; d++) {
+              _sideNormals(cellOrdinal,ptOrdinal,d) = _sideNormalsSpaceTime(cellOrdinal,ptOrdinal,d);
+            }
           }
         }
+      }
+    } else if (_cellTopo->getDimension()==1) {
+      _sideNormals.resize(_numCells, numPoints, 1); // here, numPoints should be 1
+      unsigned thisSideOrdinal = _sideIndex;
+      unsigned otherSideOrdinal = 1 - thisSideOrdinal;
+      for (int cellOrdinal=0; cellOrdinal<_numCells; cellOrdinal++) {
+        double x_this = _physicalCellNodes(cellOrdinal,thisSideOrdinal,0);
+        double x_other = _physicalCellNodes(cellOrdinal,otherSideOrdinal,0);
+        if (x_this > x_other) {
+          _sideNormals(cellOrdinal,0,0) = 1;
+        } else {
+          _sideNormals(cellOrdinal,0,0) = -1;
+        }
+      }
+      if (_spaceDim == 0) {
+        // space-time mesh with point topology as the spatial part.  (Not sure this is important to handle.)
+        _sideNormalsSpaceTime = _sideNormals;
+        _sideNormals.resize(1,numPoints,0); // empty container: no spatial normals...
       }
     }
   }

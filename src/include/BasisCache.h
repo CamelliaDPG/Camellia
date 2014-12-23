@@ -71,7 +71,6 @@ class BasisCache {
 private:
   IndexType _numCells;
   int _spaceDim;
-  int _numSides;
   bool _isSideCache;
   int _sideIndex;
   
@@ -110,6 +109,7 @@ private:
   // containers specifically for sides:
   Intrepid::FieldContainer<double> _cubPointsSideRefCell; // the _cubPoints is the one in the side coordinates; this one in volume coords
   Intrepid::FieldContainer<double> _sideNormals;
+  Intrepid::FieldContainer<double> _sideNormalsSpaceTime; // for space-time CellTopologies, a copy of _sideNormals that includes the temporal component
   
   CellTopoPtr _cellTopo;
   
@@ -131,7 +131,7 @@ private:
   void initCubatureDegree(int maxTrialDegree, int maxTestDegree);
   void initCubatureDegree(std::vector<int> &maxTrialDegrees, std::vector<int> &maxTestDegrees);
   
-  void init(bool createSideCacheToo);
+  void init(bool createSideCacheToo, bool interpretTensorTopologyAsSpaceTime);
 
   void determineJacobian();
   void determinePhysicalPoints();
@@ -152,16 +152,16 @@ protected:
   int _maxTestDegree, _maxTrialDegree;
 public:
   BasisCache(ElementTypePtr elemType, Teuchos::RCP<Mesh> mesh = Teuchos::rcp( (Mesh*) NULL ), bool testVsTest=false,
-             int cubatureDegreeEnrichment = 0); // use testVsTest=true for test space inner product
+             int cubatureDegreeEnrichment = 0, bool tensorProductTopologyMeansSpaceTime = true); // use testVsTest=true for test space inner product
   
-  BasisCache(CellTopoPtr cellTopo, int cubDegree, bool createSideCacheToo);
+  BasisCache(CellTopoPtr cellTopo, int cubDegree, bool createSideCacheToo, bool tensorProductTopologyMeansSpaceTime=true);
   BasisCache(shards::CellTopology &cellTopo, int cubDegree, bool createSideCacheToo);
   
   BasisCache(const Intrepid::FieldContainer<double> &physicalCellNodes, shards::CellTopology &cellTopo, int cubDegree, bool createSideCacheToo = false);
-  BasisCache(const Intrepid::FieldContainer<double> &physicalCellNodes, CellTopoPtr cellTopo, int cubDegree, bool createSideCacheToo = false);
+  BasisCache(const Intrepid::FieldContainer<double> &physicalCellNodes, CellTopoPtr cellTopo, int cubDegree, bool createSideCacheToo = false, bool tensorProductTopologyMeansSpaceTime=true);
 
   BasisCache(const Intrepid::FieldContainer<double> &physicalCellNodes, CellTopoPtr cellTopo,
-             DofOrdering &trialOrdering, int maxTestDegree, bool createSideCacheToo = false);
+             DofOrdering &trialOrdering, int maxTestDegree, bool createSideCacheToo = false, bool tensorProductTopologyMeansSpaceTime=true);
   BasisCache(const Intrepid::FieldContainer<double> &physicalCellNodes, shards::CellTopology &cellTopo,
              DofOrdering &trialOrdering, int maxTestDegree, bool createSideCacheToo = false);
   virtual ~BasisCache() {}
@@ -224,9 +224,15 @@ public:
   // physicalPoints: (P,D).  cellIndex indexes into BasisCache's physicalCellNodes
   Intrepid::FieldContainer<double> getRefCellPointsForPhysicalPoints(const Intrepid::FieldContainer<double> &physicalPoints, int cellIndex=0);
 
+  /** \brief  Returns an Intrepid::FieldContainer<double> populated with the side normals; dimensions are (C,P,D) or (C,P,D-1).  Tensor-product topologies are interpreted as space-time elements; in this context, the side normals provided will be the spatial part of the space-time normal.
+   */
   const Intrepid::FieldContainer<double> & getSideNormals();
   void setSideNormals(Intrepid::FieldContainer<double> &sideNormals);
   void setCellSideParities(const Intrepid::FieldContainer<double> &cellSideParities);
+
+  /** \brief  Returns an Intrepid::FieldContainer<double> populated with the full space-time side normals; dimensions are (C,P,D).  For non-tensor-product topologies, throws an exception.
+   */
+  const Intrepid::FieldContainer<double> & getSideNormalsSpaceTime();
   
   int getMaxCubatureDegree();
   
@@ -244,14 +250,16 @@ public:
   static BasisCachePtr parametricQuadCache(int cubatureDegree, const Intrepid::FieldContainer<double> &refCellPoints, int sideCacheIndex=-1);
   static BasisCachePtr basisCache1D(double x0, double x1, int cubatureDegree); // x0 and x1: physical space endpoints
   static BasisCachePtr basisCacheForCell(Teuchos::RCP<Mesh> mesh, GlobalIndexType cellID, bool testVsTest = false,
-                                         int cubatureDegreeEnrichment = 0);
+                                         int cubatureDegreeEnrichment = 0, bool tensorProductTopologyMeansSpaceTime=true);
   static BasisCachePtr basisCacheForCellType(Teuchos::RCP<Mesh> mesh, ElementTypePtr elemType, bool testVsTest = false,
-                                             int cubatureDegreeEnrichment = 0); // for cells on the local MPI node
+                                             int cubatureDegreeEnrichment = 0, bool tensorProductTopologyMeansSpaceTime=true); // for cells on the local MPI node
   static BasisCachePtr basisCacheForReferenceCell(shards::CellTopology &cellTopo, int cubatureDegree, bool createSideCacheToo=false);
   static BasisCachePtr basisCacheForRefinedReferenceCell(shards::CellTopology &cellTopo, int cubatureDegree, RefinementBranch refinementBranch, bool createSideCacheToo=false);
   
-  static BasisCachePtr basisCacheForReferenceCell(CellTopoPtr cellTopo, int cubatureDegree, bool createSideCacheToo=false);
-  static BasisCachePtr basisCacheForRefinedReferenceCell(CellTopoPtr cellTopo, int cubatureDegree, RefinementBranch refinementBranch, bool createSideCacheToo=false);
+  static BasisCachePtr basisCacheForReferenceCell(CellTopoPtr cellTopo, int cubatureDegree, bool createSideCacheToo=false,
+                                                  bool tensorProductTopologyMeansSpaceTime=true);
+  static BasisCachePtr basisCacheForRefinedReferenceCell(CellTopoPtr cellTopo, int cubatureDegree, RefinementBranch refinementBranch,
+                                                         bool createSideCacheToo=false, bool tensorProductTopologyMeansSpaceTime=true);
   
   static BasisCachePtr quadBasisCache(double width, double height, int cubDegree, bool createSideCacheToo=false);
   
