@@ -79,6 +79,7 @@ static const string & S_OP_TIMES_NORMAL = " \\widehat{n} \\cdot ";
 static const string & S_OP_TIMES_NORMAL_X = " \\widehat{n}_x ";
 static const string & S_OP_TIMES_NORMAL_Y = " \\widehat{n}_y ";
 static const string & S_OP_TIMES_NORMAL_Z = " \\widehat{n}_z ";
+static const string & S_OP_TIMES_NORMAL_T = " \\widehat{n}_t ";
 static const string & S_OP_VECTORIZE_VALUE = ""; // handle this one separately...
 static const string & S_OP_UNKNOWN = "[UNKNOWN OPERATOR] ";
 
