@@ -29,7 +29,8 @@ namespace IntrepidExtendedTypes {
     OP_TIMES_NORMAL_X,  // 23
     OP_TIMES_NORMAL_Y,  // 24
     OP_TIMES_NORMAL_Z,  // 25
-    OP_VECTORIZE_VALUE  // 26
+    OP_TIMES_NORMAL_T,  // 26
+    OP_VECTORIZE_VALUE  // 27
   };
   
   enum EFunctionSpaceExtended { // the first four copied from EFunctionSpace
