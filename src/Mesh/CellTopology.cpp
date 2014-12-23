@@ -732,6 +732,13 @@ bool CellTopology::isHypercube() const {
   return (baseKey==shards::Node::key) || (baseKey==shards::Line<2>::key) || (baseKey==shards::Quadrilateral<4>::key) || (baseKey==shards::Hexahedron<8>::key);
 }
 
+bool CellTopology::sideIsSpatial(unsigned sideOrdinal) const {
+  int sideCount = getSideCount();
+  if (_tensorialDegree == 0) return sideOrdinal < sideCount;
+  // otherwise, there are two temporal sides, and these are at the end
+  return sideOrdinal < sideCount - 2;
+}
+
 CellTopoPtr CellTopology::cellTopology(const shards::CellTopology &shardsCellTopo) {
   return cellTopology(shardsCellTopo, 0);
 }

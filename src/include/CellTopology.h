@@ -20,11 +20,13 @@
 using namespace std;
 
 namespace Camellia {
+  typedef std::pair<unsigned,unsigned> CellTopologyKey;
+
   class CellTopology {
     typedef Teuchos::RCP<CellTopology> CellTopoPtr;
     
 //    static map< unsigned, CellTopoPtr > _trilinosTopologies; // trilinos key --> our CellTopoPtr
-    static map< pair<unsigned, unsigned>, CellTopoPtr > _tensorizedTrilinosTopologies; // (trilinos key, n) --> our CellTopoPtr for that cellTopo's nth-order tensor product with a line topology.  I.e. (shard::CellTopology::Line<2>::key, 2) --> a tensor-product hexahedron.  (This differs from the Trilinos hexahedron, because the enumeration of the sides of the quad in Shards goes counter-clockwise.)
+    static map< CellTopologyKey, CellTopoPtr > _tensorizedTrilinosTopologies; // (trilinos key, n) --> our CellTopoPtr for that cellTopo's nth-order tensor product with a line topology.  I.e. (shard::CellTopology::Line<2>::key, 2) --> a tensor-product hexahedron.  (This differs from the Trilinos hexahedron, because the enumeration of the sides of the quad in Shards goes counter-clockwise.)
     
     // members:
     shards::CellTopology _shardsBaseTopology;
@@ -157,6 +159,12 @@ namespace Camellia {
     
     CellTopoPtr getSubcell( unsigned scdim, unsigned scord ) const;
     
+    
+    /** \brief  For topologies with positive _tensorialDegree, spatial sides are those belonging to the tensorial components, extruded in the final tensorial direction; in the context of space-time elements, these are the spatial sides.  Temporal sides are those identified with the tensorial components; there will be two such sides for each space-time topology.  For topologies with zero _tensorialDegree, each side is a spatial side.
+     *  \param  sideOrdinal [in] Ordinal of the side.
+     */
+    bool sideIsSpatial( unsigned sideOrdinal ) const;
+    
     bool isHypercube() const;
     
     void initializeNodes(const std::vector< Intrepid::FieldContainer<double> > &tensorComponentNodes, Intrepid::FieldContainer<double> &cellNodes);
@@ -178,7 +186,6 @@ namespace Camellia {
     static CellTopoPtr tetrahedron();
 //    static CellTopoPtr pyramid();
   };
-  typedef std::pair<unsigned,unsigned> CellTopologyKey;
 }
 
 typedef Teuchos::RCP<Camellia::CellTopology> CellTopoPtr;
