@@ -13,9 +13,24 @@
 #include "CamelliaCellTools.h"
 #include "CellTopology.h"
 
+#include "Intrepid_CellTools.hpp"
+#include "Intrepid_FunctionSpaceTools.hpp"
+
 using namespace Camellia;
 
 namespace {
+  vector< CellTopoPtr > getShardsTopologies() {
+    vector< CellTopoPtr > shardsTopologies;
+    
+    shardsTopologies.push_back(CellTopology::point());
+    shardsTopologies.push_back(CellTopology::line());
+    shardsTopologies.push_back(CellTopology::quad());
+    shardsTopologies.push_back(CellTopology::triangle());
+    shardsTopologies.push_back(CellTopology::hexahedron());
+    shardsTopologies.push_back(CellTopology::tetrahedron()); // tetrahedron not yet supported by permutation
+    return shardsTopologies;
+  }
+  
   FieldContainer<double> unitCubeNodes() {
     CellTopoPtr hex = CellTopology::hexahedron();
     // for now, let's use the reference cell.  (Jacobian should be the identity.)
@@ -144,6 +159,119 @@ namespace {
 //      cout << "maxDiff = " << maxDiff << endl;
 //      success = false;
 //    }
+  }
+  
+  TEUCHOS_UNIT_TEST( BasisCache, SideNormals_Space )
+  {
+    // pretty simple: just check that BasisCache gets values that agree with Intrepid's computation of side normals, on the reference cell
+    // as of this writing, this is how BasisCache does it, so it should pass more or less by definition.  But we're likely to swap out
+    // this implementation for a more general one that deals with tensor topologies; this will check that we still get the same values as
+    // before.
+    vector<CellTopoPtr> shardsTopologies = getShardsTopologies();
+    for (int topoOrdinal=0; topoOrdinal < shardsTopologies.size(); topoOrdinal++) {
+      CellTopoPtr cellTopo = shardsTopologies[topoOrdinal];
+      
+      if (cellTopo->getDimension() < 1) continue; // side normals only defined when dimension >= 1
+      
+      int cubatureDegree = 3;
+      
+      bool createSideCache = true;
+      BasisCachePtr volumeCache = BasisCache::basisCacheForReferenceCell(cellTopo, cubatureDegree, createSideCache);
+      
+      for (int sideOrdinal=0; sideOrdinal<cellTopo->getSideCount(); sideOrdinal++) {
+        int numCells = 1;
+        BasisCachePtr sideCache = volumeCache->getSideBasisCache(sideOrdinal);
+        int numCubPoints = sideCache->getRefCellPoints().dimension(0);
+        int spaceDim = sideCache->getSpaceDim();
+        
+        FieldContainer<double> sideNormalsExpected(numCells, numCubPoints, spaceDim);
+        if (spaceDim == 1) {
+          if (sideOrdinal==0) { // on the -1 side of the line element
+            sideNormalsExpected(0,0,0) = -1;
+          } else {
+            sideNormalsExpected(0,0,0) =  1;
+          }
+        } else {
+          FieldContainer<double> normalLengths(numCells, numCubPoints);
+
+          FieldContainer<double> cellJacobian = sideCache->getJacobian();
+          CellTools<double>::getPhysicalSideNormals(sideNormalsExpected, cellJacobian, sideOrdinal, cellTopo->getShardsTopology());
+          // make unit length
+          RealSpaceTools<double>::vectorNorm(normalLengths, sideNormalsExpected, NORM_TWO);
+          FunctionSpaceTools::scalarMultiplyDataData<double>(sideNormalsExpected, normalLengths, sideNormalsExpected, true);
+        }
+        
+        FieldContainer<double> sideNormals = sideCache->getSideNormals();
+        
+        TEST_COMPARE_FLOATING_ARRAYS(sideNormalsExpected, sideNormals, 1e-15);
+      }
+    }
+  }
+  
+  TEUCHOS_UNIT_TEST( BasisCache, SideNormals_SpaceTime )
+  {    
+    vector<CellTopoPtr> shardsTopologies = getShardsTopologies();
+    for (int topoOrdinal=0; topoOrdinal < shardsTopologies.size(); topoOrdinal++) {
+      CellTopoPtr shardsTopo = shardsTopologies[topoOrdinal];
+      
+      int tensorialDegree = 1;
+      CellTopoPtr cellTopo = CellTopology::cellTopology(shardsTopo->getShardsTopology(), tensorialDegree);
+      
+      if (cellTopo->getDimension() < 1) continue; // side normals only defined when dimension >= 1
+      
+      int cubatureDegree = 3;
+      
+      bool createSideCache = true;
+      BasisCachePtr volumeCacheSpaceTime = BasisCache::basisCacheForReferenceCell(cellTopo, cubatureDegree, createSideCache);
+      BasisCachePtr volumeCacheSpace = BasisCache::basisCacheForReferenceCell(shardsTopo, cubatureDegree, createSideCache);
+
+      // for reference cells, we expect the space-time normals to go as follows:
+      //   - the first shardsTopo->getSideCount() sides will have normals identical to shardsTopo in its reference space, padded with 0 in time dimension
+      //   - the next side will have normal equal to 0 in every spatial dimension, -1 in temporal
+      //   - final side with have normal +1 in temporal dimension
+      
+      for (int sideOrdinal=0; sideOrdinal<cellTopo->getSideCount(); sideOrdinal++) {
+        int numCells = 1;
+        BasisCachePtr sideCacheSpaceTime = volumeCacheSpaceTime->getSideBasisCache(sideOrdinal);
+        int numCubPoints = sideCacheSpaceTime->getRefCellPoints().dimension(0);
+        int dim = sideCacheSpaceTime->getSpaceDim() + 1;
+        
+        FieldContainer<double> sideNormalsExpected(numCells, numCubPoints, dim);
+
+        if (cellTopo->sideIsSpatial(sideOrdinal)) {
+          BasisCachePtr sideCacheSpace = volumeCacheSpace->getSideBasisCache(sideOrdinal);
+          // set up cubature points for shards topo
+          FieldContainer<double> refPointsSpaceTime = sideCacheSpaceTime->getRefCellPoints();
+          FieldContainer<double> refPointsSpace(numCubPoints, shardsTopo->getDimension());
+          for (int ptOrdinal=0; ptOrdinal<numCubPoints; ptOrdinal++) {
+            for (int d=0; d<shardsTopo->getDimension(); d++) {
+              refPointsSpace(ptOrdinal,d) = refPointsSpaceTime(ptOrdinal,d);
+            }
+          }
+          sideCacheSpace->setRefCellPoints(refPointsSpace);
+          FieldContainer<double> sideNormalsSpace = sideCacheSpace->getSideNormals();
+          for (int cellOrdinal=0; cellOrdinal < numCells; cellOrdinal++) {
+            for (int ptOrdinal=0; ptOrdinal < numCubPoints; ptOrdinal++) {
+              for (int d=0; d<shardsTopo->getDimension(); d++) {
+                sideNormalsExpected(cellOrdinal,ptOrdinal,d) = sideNormalsSpace(cellOrdinal,ptOrdinal,d);
+              }
+            }
+          }
+        } else {
+          double timeNormal = (sideOrdinal==shardsTopo->getSideCount()) ? -1 : 1;
+          int d_time = shardsTopo->getDimension();
+          for (int cellOrdinal=0; cellOrdinal < numCells; cellOrdinal++) {
+            for (int ptOrdinal=0; ptOrdinal < numCubPoints; ptOrdinal++) {
+              sideNormalsExpected(cellOrdinal,ptOrdinal,d_time) = timeNormal;
+            }
+          }
+        }
+        
+        FieldContainer<double> sideNormals = sideCacheSpaceTime->getSideNormalsSpaceTime();
+        
+        TEST_COMPARE_FLOATING_ARRAYS(sideNormalsExpected, sideNormals, 1e-15);
+      }
+    }
   }
   
   TEUCHOS_UNIT_TEST( BasisCache, SetRefCellPoints )
