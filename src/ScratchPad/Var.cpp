@@ -35,6 +35,7 @@ static const string & S_OP_TIMES_NORMAL = " \\widehat{n} \\cdot ";
 static const string & S_OP_TIMES_NORMAL_X = " \\widehat{n}_x ";
 static const string & S_OP_TIMES_NORMAL_Y = " \\widehat{n}_y ";
 static const string & S_OP_TIMES_NORMAL_Z = " \\widehat{n}_z ";
+static const string & S_OP_TIMES_NORMAL_T = " \\widehat{n}_t ";
 static const string & S_OP_VECTORIZE_VALUE = ""; // handle this one separately...
 static const string & S_OP_UNKNOWN = "[UNKNOWN OPERATOR] ";
 
@@ -259,7 +260,8 @@ VarPtr Var::varForTrialID(int trialID, Teuchos::RCP<BilinearForm> bf) {
   return Teuchos::rcp(new Var(trialID, rank, "trial", OP_VALUE, space, varType));
 }
 
-Var::Var(int ID, int rank, string name, IntrepidExtendedTypes::EOperatorExtended op, Space fs, VarType varType, LinearTermPtr termTraced) {
+Var::Var(int ID, int rank, string name, IntrepidExtendedTypes::EOperatorExtended op, Space fs, VarType varType, LinearTermPtr termTraced,
+         bool definedOnTemporalInterfaces) {
   _id = ID;
   _rank = rank;
   _name = name;
@@ -267,13 +269,18 @@ Var::Var(int ID, int rank, string name, IntrepidExtendedTypes::EOperatorExtended
   _fs = fs;
   _varType = varType;
   _termTraced = termTraced;
+  _definedOnTemporalInterfaces = definedOnTemporalInterfaces;
 }
 
-int Var::ID() { 
+int Var::ID() const {
   return _id;
 }
 
-const string & Var::name() { 
+bool Var::isDefinedOnTemporalInterface() const {
+  return _definedOnTemporalInterfaces;
+}
+
+const string & Var::name() const {
   return _name; 
 }
 
@@ -377,7 +384,7 @@ bool isRightOperator(IntrepidExtendedTypes::EOperatorExtended op) { // as oppose
   return _normalOperators.find(op) != _normalOperators.end();
 }
 
-string Var::displayString() {
+string Var::displayString() const {
   ostringstream varStream;
   if ( isRightOperator(_op) ) {
     varStream << _name << operatorName(_op);
@@ -387,40 +394,40 @@ string Var::displayString() {
   return varStream.str();
 }
 
-EOperatorExtended Var::op() { 
+EOperatorExtended Var::op() const {
   return _op; 
 }
 
-int Var::rank() {  // 0 for scalar, 1 for vector, etc. 
+int Var::rank() const {  // 0 for scalar, 1 for vector, etc.
   return _rank; 
 }
 
-Space Var::space() { 
+Space Var::space() const {
   return _fs; 
 }
 
-VarType Var::varType() { 
+VarType Var::varType() const {
   return _varType; 
 }
 
-LinearTermPtr Var::termTraced() {
+LinearTermPtr Var::termTraced() const {
   return _termTraced;
 }
 
-VarPtr Var::grad() {
+VarPtr Var::grad() const {
   TEUCHOS_TEST_FOR_EXCEPTION( _op !=  IntrepidExtendedTypes::OP_VALUE, std::invalid_argument, "operators can only be applied to raw vars, not vars that have been operated on.");
   if (space() != VECTOR_HGRAD)
     TEUCHOS_TEST_FOR_EXCEPTION( _rank != 0, std::invalid_argument, "grad() only supported for vars of rank 0.");
   return Teuchos::rcp( new Var(_id, _rank + 1, _name, IntrepidExtendedTypes::OP_GRAD, UNKNOWN_FS, _varType ) );
 }
 
-VarPtr Var::div() {
+VarPtr Var::div() const {
   TEUCHOS_TEST_FOR_EXCEPTION( _op !=  IntrepidExtendedTypes::OP_VALUE, std::invalid_argument, "operators can only be applied to raw vars, not vars that have been operated on.");
   TEUCHOS_TEST_FOR_EXCEPTION( _rank != 1, std::invalid_argument, "div() only supported for vars of rank 1.");
   return Teuchos::rcp( new Var(_id, _rank - 1, _name, IntrepidExtendedTypes::OP_DIV, UNKNOWN_FS, _varType ) );
 }
 
-VarPtr Var::curl(int spaceDim) {
+VarPtr Var::curl(int spaceDim) const {
   TEUCHOS_TEST_FOR_EXCEPTION( _op !=  IntrepidExtendedTypes::OP_VALUE, std::invalid_argument, "operators can only be applied to raw vars, not vars that have been operated on.");
   TEUCHOS_TEST_FOR_EXCEPTION( (_rank != 0) && (_rank != 1), std::invalid_argument, "curl() can only be applied to vars of ranks 0 or 1.");
   if (spaceDim == 2) {
@@ -432,55 +439,55 @@ VarPtr Var::curl(int spaceDim) {
   }
 }
 
-VarPtr Var::dx() {
+VarPtr Var::dx() const {
   TEUCHOS_TEST_FOR_EXCEPTION( _op !=  IntrepidExtendedTypes::OP_VALUE, std::invalid_argument, "operators can only be applied to raw vars, not vars that have been operated on.");
   TEUCHOS_TEST_FOR_EXCEPTION( _rank != 0, std::invalid_argument, "dx() only supported for vars of rank 0.");
   return Teuchos::rcp( new Var(_id, _rank, _name, IntrepidExtendedTypes::OP_DX, UNKNOWN_FS, _varType ) );
 }
 
-VarPtr Var::dy() {
+VarPtr Var::dy() const {
   TEUCHOS_TEST_FOR_EXCEPTION( _op !=  IntrepidExtendedTypes::OP_VALUE, std::invalid_argument, "operators can only be applied to raw vars, not vars that have been operated on.");
   TEUCHOS_TEST_FOR_EXCEPTION( _rank != 0, std::invalid_argument, "dy() only supported for vars of rank 0.");
   return Teuchos::rcp( new Var(_id, _rank, _name, IntrepidExtendedTypes::OP_DY, UNKNOWN_FS, _varType ) );
 }
 
-VarPtr Var::dz() {
+VarPtr Var::dz() const {
   TEUCHOS_TEST_FOR_EXCEPTION( _op !=  IntrepidExtendedTypes::OP_VALUE, std::invalid_argument, "operators can only be applied to raw vars, not vars that have been operated on.");
   TEUCHOS_TEST_FOR_EXCEPTION( _rank != 0, std::invalid_argument, "dz() only supported for vars of rank 0.");
   return Teuchos::rcp( new Var(_id, _rank, _name, IntrepidExtendedTypes::OP_DZ, UNKNOWN_FS, _varType ) );
 }
 
-VarPtr Var::x() { 
+VarPtr Var::x() const {
   TEUCHOS_TEST_FOR_EXCEPTION( _op !=  IntrepidExtendedTypes::OP_VALUE, std::invalid_argument, "operators can only be applied to raw vars, not vars that have been operated on.");
   TEUCHOS_TEST_FOR_EXCEPTION( _rank != 1, std::invalid_argument, "x() only supported for vars of rank 1.");
   return Teuchos::rcp( new Var(_id, _rank-1, _name, OP_X, UNKNOWN_FS, _varType ) );
 }
 
-VarPtr Var::y() { 
+VarPtr Var::y() const {
   TEUCHOS_TEST_FOR_EXCEPTION( _op !=  IntrepidExtendedTypes::OP_VALUE, std::invalid_argument, "operators can only be applied to raw vars, not vars that have been operated on.");
   TEUCHOS_TEST_FOR_EXCEPTION( _rank != 1, std::invalid_argument, "y() only supported for vars of rank 1.");
   return Teuchos::rcp( new Var(_id, _rank-1, _name, OP_Y, UNKNOWN_FS, _varType ) );
 }
 
-VarPtr Var::z() { 
+VarPtr Var::z() const {
   TEUCHOS_TEST_FOR_EXCEPTION( _op !=  IntrepidExtendedTypes::OP_VALUE, std::invalid_argument, "operators can only be applied to raw vars, not vars that have been operated on.");
   TEUCHOS_TEST_FOR_EXCEPTION( _rank != 1, std::invalid_argument, "z() only supported for vars of rank 1.");
   return Teuchos::rcp( new Var(_id, _rank-1, _name, OP_Z, UNKNOWN_FS, _varType ) );
 }
 
-VarPtr Var::cross_normal() {
+VarPtr Var::cross_normal() const {
   TEUCHOS_TEST_FOR_EXCEPTION( _op !=  IntrepidExtendedTypes::OP_VALUE, std::invalid_argument, "operators can only be applied to raw vars, not vars that have been operated on.");
   TEUCHOS_TEST_FOR_EXCEPTION( _rank != 1, std::invalid_argument, "cross_normal() only supported for vars of rank 1.");
   return Teuchos::rcp( new Var(_id, _rank-1, _name, OP_CROSS_NORMAL, UNKNOWN_FS, _varType ) );
 }
 
-VarPtr Var::dot_normal() {
+VarPtr Var::dot_normal() const {
   TEUCHOS_TEST_FOR_EXCEPTION( _rank != 1, std::invalid_argument, "dot_normal() only supported for vars of rank 1.");
   TEUCHOS_TEST_FOR_EXCEPTION( _op !=  IntrepidExtendedTypes::OP_VALUE, std::invalid_argument, "operators can only be applied to raw vars, not vars that have been operated on.");
   return Teuchos::rcp( new Var(_id, _rank-1, _name, OP_DOT_NORMAL, UNKNOWN_FS, _varType ) );
 }
 
-VarPtr Var::times_normal() {
+VarPtr Var::times_normal() const {
   TEUCHOS_TEST_FOR_EXCEPTION( _op !=  IntrepidExtendedTypes::OP_VALUE, std::invalid_argument, "operators can only be applied to raw vars, not vars that have been operated on.");
   VarType newType;
   if (_varType == TRACE)
@@ -493,17 +500,17 @@ VarPtr Var::times_normal() {
   return Teuchos::rcp( new Var(_id, _rank + 1, _name, OP_TIMES_NORMAL, UNKNOWN_FS, newType ) );
 }
 
-VarPtr Var::times_normal_x() {
+VarPtr Var::times_normal_x() const {
   TEUCHOS_TEST_FOR_EXCEPTION( _op !=  IntrepidExtendedTypes::OP_VALUE, std::invalid_argument, "operators can only be applied to raw vars, not vars that have been operated on.");
   return Teuchos::rcp( new Var(_id, _rank, _name, OP_TIMES_NORMAL_X, UNKNOWN_FS, _varType ) );
 }
 
-VarPtr Var::times_normal_y() {
+VarPtr Var::times_normal_y() const {
   TEUCHOS_TEST_FOR_EXCEPTION( _op !=  IntrepidExtendedTypes::OP_VALUE, std::invalid_argument, "operators can only be applied to raw vars, not vars that have been operated on.");
   return Teuchos::rcp( new Var(_id, _rank, _name, OP_TIMES_NORMAL_Y, UNKNOWN_FS, _varType ) );
 }
 
-VarPtr Var::times_normal_z() {
+VarPtr Var::times_normal_z() const {
   TEUCHOS_TEST_FOR_EXCEPTION( _op !=  IntrepidExtendedTypes::OP_VALUE, std::invalid_argument, "operators can only be applied to raw vars, not vars that have been operated on.");
   return Teuchos::rcp( new Var(_id, _rank, _name, OP_TIMES_NORMAL_Z, UNKNOWN_FS, _varType ) );
 }
