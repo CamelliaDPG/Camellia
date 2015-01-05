@@ -88,6 +88,52 @@ string CamelliaCellTools::entityTypeString(unsigned entityDimension) { // vertex
   }
 }
 
+void CamelliaCellTools::getReferenceSideNormal(FieldContainer<double> &refSideNormal, int sideOrdinal, CellTopoPtr parentCell) {
+  if ((sideOrdinal < 0) || (sideOrdinal >= parentCell->getSideCount())) {
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "sideOrdinal out of bounds");
+  }
+  if (refSideNormal.rank() != 1) {
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "refSideNormal must have dimensions (D)");
+  }
+  
+  int spaceDim = parentCell->getDimension();
+  if (refSideNormal.dimension(0) != spaceDim) {
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "refSideNormal must have dimensions (D), where D is the parent cell's spatial dimension");
+  }
+
+  if (spaceDim == 1) {
+    if (sideOrdinal == 0) {
+      refSideNormal[0] = -1;
+    } else {
+      refSideNormal[0] =  1;
+    }
+  } else if (parentCell->getTensorialDegree() == 0) {
+    if ((spaceDim != 2) && (spaceDim != 3)) {
+      // shouldn't get here, except for point topology.  Can't get side normals for point topology...
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "When tensorial degree == 0, spaceDim must be 2 or 3");
+    }
+    CellTools<double>::getReferenceSideNormal(refSideNormal, sideOrdinal, parentCell->getShardsTopology());
+  } else {
+    refSideNormal.initialize(0.0);
+    if (! parentCell->sideIsSpatial(sideOrdinal)) {
+      // then it's a temporal side.  First temporal side has normal (0,…,-1); second has normal (0,…,1)
+      int sideCount = parentCell->getSideCount();
+      if (sideOrdinal == sideCount - 2) { // first temporal side
+        refSideNormal[spaceDim-1] = -1;
+      } else { // second temporal side
+        refSideNormal[spaceDim-1] =  1;
+      }
+    } else {
+      // spatial side: normal will be same as that of the spatial topology, with a 0 tacked on for the temporal dimension (since we initialize to 0 above, the latter is taken care of)
+      Teuchos::Array<int> dim(1,spaceDim-1);
+      FieldContainer<double> spatialRefSideNormal(dim,&refSideNormal[0]); // FC pointing to the spatial part of the refSideNormal
+      CellTopoPtr spatialParentCell = CellTopology::cellTopology(parentCell->getShardsTopology(), parentCell->getTensorialDegree() - 1);
+      getReferenceSideNormal(spatialRefSideNormal, sideOrdinal, spatialParentCell);
+    }
+  }
+  
+}
+
 int CamelliaCellTools::getSideCount(const shards::CellTopology &cellTopo) {
   // unlike shards itself, defines vertices as sides for Line topo
   return (cellTopo.getDimension() > 1) ? cellTopo.getSideCount() : cellTopo.getVertexCount();

@@ -24,6 +24,70 @@ public:
   
   static CellTopoPtrLegacy cellTopoForKey(unsigned key);
   
+  /** \brief  Computes constant normal vectors to sides of reference cells.  Generalizes Intrepid's CellTools<double>'s version of the same method to apply to Camellia CellTopology parent cells (the present implementation calls Intrepid's method for some of the base shards topologies).  This allows treatment of some cells that are not 2D or 3D (1D and 4D in particular are supported).  Much of the documentation below copied from Intrepid's documentation.
+   
+   A side is defined as a subcell of dimension one less than that of its parent cell.
+   Therefore, sides of 2D cells are 1-subcells (edges) and sides of 3D cells
+   are 2-subcells (faces).
+   
+   Returns rank-1 array with dimension (D), D >= 1 such that
+   \f[
+   {refSideNormal}(*) = \hat{\bf n}_i =
+   \left\{\begin{array}{rl}
+   \displaystyle
+   \left({\partial\hat{\Phi}_i(t)\over\partial t}\right)^{\perp}
+   & \mbox{for 2D parent cells} \\[2ex]
+   \displaystyle
+   {\partial\hat{\Phi}_{i}\over\partial u} \times
+   {\partial\hat{\Phi}_{i}\over\partial v}   & \mbox{for 3D parent cells}
+   \end{array}\right.
+   \f]
+   where \f$ (u_1,u_2)^\perp = (u_2, -u_1)\f$, and \f$\hat{\Phi}_i: R \mapsto \hat{\mathcal S}_i\f$
+   is the parametrization map of the specified reference side \f$\hat{\mathcal S}_i\f$ given by
+   \f[
+   \hat{\Phi}_i(u,v) =
+   \left\{\begin{array}{rl}
+   (\hat{x}(t),\hat{y}(t))                   & \mbox{for 2D parent cells} \\[1ex]
+   (\hat{x}(u,v),\hat{y}(u,v),\hat{z}(u,v))  & \mbox{for 3D parent cells}
+   \end{array}\right.
+   
+   \f]
+   For sides of 2D cells \e R=[-1,1] and for sides of 3D cells
+   \f[
+   R = \left\{\begin{array}{rl}
+   \{(0,0),(1,0),(0,1)\}   & \mbox{if $\hat{\mathcal S}_i$ is Triangle} \\[1ex]
+   [-1,1]\times [-1,1] & \mbox{if $\hat{\mathcal S}_i$ is Quadrilateral} \,.
+   \end{array}\right.
+   \f]
+   For 3D cells the length of computed side normals is proportional to side area:
+   \f[
+   |\hat{\bf n}_i | = \left\{\begin{array}{rl}
+   2 \mbox{Area}(\hat{\mathcal F}_i) & \mbox{if $\hat{\mathcal F}_i$  is Triangle} \\[1ex]
+   \mbox{Area}(\hat{\mathcal F}_i) & \mbox{if $\hat{\mathcal F}_i$ is Quadrilateral} \,.
+   \end{array}\right.
+   \f]
+   For 2D cells the length of computed side normals is proportional to side length:
+   \f[
+   |\hat{\bf n}_i | = {1\over 2} |\hat{\mathcal F}_i |\,.
+   \f]
+   Because the sides of all reference cells are always affine images of \e R ,
+   the coordinate functions \f$\hat{x},\hat{y},\hat{z}\f$ of the parametrization maps
+   are linear and the side normal is a constant vector.
+   
+   \remark
+   - For 3D cells the reference side normal coincides with the face normal computed by
+   CellTools<Scalar>::getReferenceFaceNormal and these two methods are completely equivalent.
+   - For 2D cells the reference side normal is defined by \f$\hat{{\bf n}}= \hat{\bf t}^\perp = (t_2,-t_1)\f$
+   where \f$\hat{{\bf t}}=(t_1,t_2)\f$ is the tangent vector computed by
+   CellTools<Scalar>::getReferenceEdgeTangent. Therefore, the pair
+   \f$(\hat{{\bf n}},\hat{{\bf t}})\f$ is positively oriented.
+   
+   \param  refSideNormal     [out] - rank-1 array (D) with (constant) side normal
+   \param  sideOrd           [in]  - ordinal of the side whose normal is computed
+   \param  parentCell        [in]  - cell topology of the parent reference cell
+   */
+  static void getReferenceSideNormal(FieldContainer<double> &refSideNormal, int sideOrdinal, CellTopoPtr parentCell);
+  
   static int getSideCount(const shards::CellTopology &cellTopo); // unlike shards itself, defines vertices as sides for Line topo
   
   /** \brief Generalization of Intrepid::CellTools method; computes subcell parameterizations for subcells up to dimension d-1 for a parent cell of dimension d. (documentation below copied from that in Intrepid::CellTools).  The intent is to support any Camellia::CellTopology that has a reference cell (as of this writing, all supported topologies have reference cells).  The implementation does make the assumption that the mapping from (d-1)-dimensional reference space to d-dimensional reference space is affine.  (Intrepid's implementation is limited to 1D and 2D subcells of 2D and 3D cells.)

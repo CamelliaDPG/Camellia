@@ -34,6 +34,100 @@ namespace {
     return shardsTopologies;
   }
   
+  TEUCHOS_UNIT_TEST( CamelliaCellTools, GetReferenceSideNormal_Space)
+  {
+    std::vector< CellTopoPtr > shardsTopologies = getShardsTopologies();
+    
+    for (int topoOrdinal = 0; topoOrdinal < shardsTopologies.size(); topoOrdinal++) {
+      CellTopoPtr simpleTopo = shardsTopologies[topoOrdinal];
+      shards::CellTopology shardsTopo = simpleTopo->getShardsTopology();
+      
+      int spaceDim = simpleTopo->getDimension();
+      if (spaceDim == 0) continue; // skip point topology
+      
+      int sideCount = simpleTopo->getSideCount();
+      
+      FieldContainer<double> sideNormal(spaceDim);
+      FieldContainer<double> expectedSideNormal(spaceDim);
+      
+      for (int sideOrdinal=0; sideOrdinal<sideCount; sideOrdinal++) {
+        if (spaceDim == 1) {
+          expectedSideNormal[0] = (sideOrdinal==0) ? -1 : 1;
+        } else {
+          CellTools<double>::getReferenceSideNormal(expectedSideNormal, sideOrdinal, shardsTopo);
+        }
+        
+        CamelliaCellTools::getReferenceSideNormal(sideNormal, sideOrdinal, simpleTopo);
+        TEST_COMPARE_FLOATING_ARRAYS(expectedSideNormal, sideNormal, 1e-15);
+      }
+    }
+  }
+  
+  TEUCHOS_UNIT_TEST( CamelliaCellTools, GetReferenceSideNormal_SpaceTime)
+  {
+    std::vector< CellTopoPtr > shardsTopologies = getShardsTopologies();
+    
+    for (int topoOrdinal = 0; topoOrdinal < shardsTopologies.size(); topoOrdinal++) {
+      CellTopoPtr simpleTopo = shardsTopologies[topoOrdinal];
+      shards::CellTopology spaceTopo = simpleTopo->getShardsTopology();
+      
+      int tensorialDegree = 1;
+      CellTopoPtr spaceTimeTopo = CellTopology::cellTopology(spaceTopo, tensorialDegree);
+      
+      int spaceDim = spaceTimeTopo->getDimension();
+      
+      FieldContainer<double> sideNormal(spaceDim);
+      FieldContainer<double> expectedSideNormal(spaceDim);
+
+      int sideCount = spaceTimeTopo->getSideCount();
+      for (int sideOrdinal = 0; sideOrdinal < sideCount; sideOrdinal++) {
+        if (spaceDim == 1) {
+          expectedSideNormal[0] = (sideOrdinal==0) ? -1 : 1;
+        } else if (spaceDim == 2) {
+          // Line<2> x Line<2>.
+          // Sides 0 and 1 are spatial sides with normals (-1,0) and (1,0), respectively
+          // Sides 2 and 3 are temporal sides with normals (0,-1) and (0,-1), respectively
+          switch (sideOrdinal) {
+            case 0:
+              expectedSideNormal(0) = -1.0;
+              expectedSideNormal(1) =  0.0;
+              break;
+            case 1:
+              expectedSideNormal(0) =  1.0;
+              expectedSideNormal(1) =  0.0;
+              break;
+            case 2:
+              expectedSideNormal(0) =  0.0;
+              expectedSideNormal(1) = -1.0;
+              break;
+            case 3:
+              expectedSideNormal(0) =  0.0;
+              expectedSideNormal(1) =  1.0;
+              break;
+          }
+        } else {
+          if (spaceTimeTopo->sideIsSpatial(sideOrdinal)) {
+            FieldContainer<double> spaceSideNormal(spaceDim-1);
+            CellTools<double>::getReferenceSideNormal(spaceSideNormal, sideOrdinal, spaceTopo);
+            for (int d=0; d<spaceDim-1; d++) {
+              expectedSideNormal[d] = spaceSideNormal[d];
+            }
+            expectedSideNormal[spaceDim-1] = 0;
+          } else {
+            expectedSideNormal.initialize(0);
+            if (sideOrdinal == sideCount - 2) {
+              expectedSideNormal[spaceDim - 1] = -1;
+            } else {
+              expectedSideNormal[spaceDim - 1] =  1;
+            }
+          }
+        }
+        CamelliaCellTools::getReferenceSideNormal(sideNormal, sideOrdinal, spaceTimeTopo);
+        TEST_COMPARE_FLOATING_ARRAYS(expectedSideNormal, sideNormal, 1e-15);
+      }
+    }
+  }
+
   TEUCHOS_UNIT_TEST( CamelliaCellTools, MapToReferenceSubcell_Shards)
   {
     // for shards topologies supported by Intrepid::CellTools<double>::mapToReferenceSubcell(), test that
