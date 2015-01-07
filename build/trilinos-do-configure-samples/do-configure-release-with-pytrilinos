@@ -34,6 +34,7 @@ cmake \
 -D Trilinos_ENABLE_Zoltan:BOOL=ON \
 -D Trilinos_ENABLE_ML:BOOL=ON \
 -D Trilinos_ENABLE_TESTS:BOOL=OFF \
+-D PyTrilinos_ENABLE_Tpetra:BOOL=OFF \
 -D TPL_ENABLE_HDF5:STRING=ON \
 -D Trilinos_EXTRA_LINK_FLAGS:STRING="/usr/lib/libz.dylib" \
 -D TPL_ENABLE_Zlib:BOOL=ON \
