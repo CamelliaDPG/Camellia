@@ -186,10 +186,12 @@ namespace {
         
         FieldContainer<double> sideNormalsExpected(numCells, numCubPoints, spaceDim);
         if (spaceDim == 1) {
-          if (sideOrdinal==0) { // on the -1 side of the line element
-            sideNormalsExpected(0,0,0) = -1;
-          } else {
-            sideNormalsExpected(0,0,0) =  1;
+          for (int ptOrdinal=0; ptOrdinal<numCubPoints; ptOrdinal++) {
+            if (sideOrdinal==0) { // on the -1 side of the line element
+              sideNormalsExpected(0,ptOrdinal,0) = -1;
+            } else {
+              sideNormalsExpected(0,ptOrdinal,0) =  1;
+            }
           }
         } else {
           FieldContainer<double> normalLengths(numCells, numCubPoints);
@@ -219,6 +221,8 @@ namespace {
       
       if (cellTopo->getDimension() < 1) continue; // side normals only defined when dimension >= 1
       
+      out << "Testing side normals for space-time topo " << cellTopo->getName() << endl;
+      
       int cubatureDegree = 3;
       
       bool createSideCache = true;
@@ -239,9 +243,10 @@ namespace {
         FieldContainer<double> sideNormalsExpected(numCells, numCubPoints, dim);
 
         if (cellTopo->sideIsSpatial(sideOrdinal)) {
-          BasisCachePtr sideCacheSpace = volumeCacheSpace->getSideBasisCache(sideOrdinal);
+          unsigned spatialSideOrdinal = cellTopo->getSpatialComponentSideOrdinal(sideOrdinal);
+          BasisCachePtr sideCacheSpace = volumeCacheSpace->getSideBasisCache(spatialSideOrdinal);
           // set up cubature points for shards topo
-          FieldContainer<double> refPointsSpaceTime = sideCacheSpaceTime->getRefCellPoints();
+          FieldContainer<double> refPointsSpaceTime = sideCacheSpaceTime->getSideRefCellPointsInVolumeCoordinates();
           FieldContainer<double> refPointsSpace(numCubPoints, shardsTopo->getDimension());
           for (int ptOrdinal=0; ptOrdinal<numCubPoints; ptOrdinal++) {
             for (int d=0; d<shardsTopo->getDimension(); d++) {
@@ -257,17 +262,38 @@ namespace {
               }
             }
           }
+//          {
+//            out << "sideNormalsSpace:\n" << sideNormalsSpace;
+//            // DEBUGGING:
+//            out << "refPointsSpaceTime:\n" << refPointsSpaceTime;
+//            out << "refPointsSpace:\n" << refPointsSpace;
+//          }
+          
         } else {
-          double timeNormal = (sideOrdinal==shardsTopo->getSideCount()) ? -1 : 1;
+          unsigned temporalNodeOrdinal = cellTopo->getTemporalComponentSideOrdinal(sideOrdinal);
+          double timeNormal = (temporalNodeOrdinal == 0) ? -1 : 1;
+          FieldContainer<double> spaceTimeCellJacobian = sideCacheSpaceTime->getJacobian();
           int d_time = shardsTopo->getDimension();
           for (int cellOrdinal=0; cellOrdinal < numCells; cellOrdinal++) {
             for (int ptOrdinal=0; ptOrdinal < numCubPoints; ptOrdinal++) {
-              sideNormalsExpected(cellOrdinal,ptOrdinal,d_time) = timeNormal;
+              double timeJacobian = spaceTimeCellJacobian(cellOrdinal,ptOrdinal,d_time,d_time);
+              if (timeJacobian > 0) {
+                sideNormalsExpected(cellOrdinal,ptOrdinal,d_time) = timeNormal;
+              } else {
+                sideNormalsExpected(cellOrdinal,ptOrdinal,d_time) = -timeNormal;
+              }
             }
           }
         }
         
         FieldContainer<double> sideNormals = sideCacheSpaceTime->getSideNormalsSpaceTime();
+        
+        {
+          // DEBUGGING:
+          out << "testing with sideOrdinal " << sideOrdinal << endl;
+          out << "sideNormals:\n" << sideNormals;
+          out << "sideNormalsExpected:\n" << sideNormalsExpected;
+        }
         
         TEST_COMPARE_FLOATING_ARRAYS(sideNormalsExpected, sideNormals, 1e-15);
       }
@@ -352,13 +378,68 @@ namespace {
     for (int valOrdinal=0; valOrdinal<physicalPointsActual.size(); valOrdinal++) {
       double diff = abs(physicalPointsExpected[valOrdinal]-physicalPointsActual[valOrdinal]);
       TEST_ASSERT( diff < tol );
-      double maxDiff = max(maxDiff,diff);
+      maxDiff = max(maxDiff,diff);
     }
     TEST_ASSERT(maxDiff < tol);
     
     if (maxDiff >= tol) {
       cout << "physical points don't match expected for hexahedron.";
       cout << "maxDiff = " << maxDiff << endl;
+    }
+  }
+  
+  TEUCHOS_UNIT_TEST( BasisCache, SetRefCellPointsSpaceTimeSide )
+  {
+    double tol = 1e-15;
+    
+    // test setting ref points on the side cache
+    CellTopoPtr lineTopo = CellTopology::line();
+    CellTopoPtr lineLineTopo = CellTopology::cellTopology(lineTopo->getShardsTopology(), 1);
+
+    int cubDegree = 2;
+    BasisCachePtr basisCache = Teuchos::rcp( new BasisCache(lineLineTopo, cubDegree, true) ); // true: create side caches, too
+
+    FieldContainer<double> refLineNodes(lineTopo->getNodeCount(), lineTopo->getDimension());
+    CamelliaCellTools::refCellNodesForTopology(refLineNodes, lineTopo);
+
+    int numPoints = 2;
+    FieldContainer<double> sideRefCubaturePoints(numPoints,lineTopo->getDimension());
+    sideRefCubaturePoints(0,0) = -0.5;
+    sideRefCubaturePoints(1,0) =  0.5;
+    
+    int sideCount = lineLineTopo->getSideCount();
+    for (int sideOrdinal=0; sideOrdinal < sideCount; sideOrdinal++)
+    {
+      BasisCachePtr sideBasisCache = basisCache->getSideBasisCache(sideOrdinal);
+      FieldContainer<double> volumeRefPointsExpected(numPoints,lineLineTopo->getDimension());
+      
+      if (lineLineTopo->sideIsSpatial(sideOrdinal)) {
+        // then the space coordinate is fixed at ±1, and the time coordinate where the cubature happens
+        unsigned spatialNodeOrdinal = lineLineTopo->getSpatialComponentSideOrdinal(sideOrdinal);
+        for (int ptOrdinal=0; ptOrdinal<numPoints; ptOrdinal++) {
+          volumeRefPointsExpected(ptOrdinal,0) = refLineNodes(spatialNodeOrdinal,0);
+          volumeRefPointsExpected(ptOrdinal,1) = sideRefCubaturePoints(ptOrdinal,0);
+        }
+      } else {
+        unsigned temporalNodeOrdinal = lineLineTopo->getTemporalComponentSideOrdinal(sideOrdinal);
+        for (int ptOrdinal=0; ptOrdinal<numPoints; ptOrdinal++) {
+          volumeRefPointsExpected(ptOrdinal,0) = sideRefCubaturePoints(ptOrdinal,0);
+          volumeRefPointsExpected(ptOrdinal,1) = refLineNodes(temporalNodeOrdinal,0);
+        }
+      }
+      
+      sideBasisCache->setRefCellPoints(sideRefCubaturePoints);
+      FieldContainer<double> volumeRefPoints = sideBasisCache->getSideRefCellPointsInVolumeCoordinates();
+      
+      TEST_COMPARE_FLOATING_ARRAYS(volumeRefPoints, volumeRefPointsExpected, tol);
+      
+      double maxDiff = 0;
+      for (int valOrdinal=0; valOrdinal<volumeRefPoints.size(); valOrdinal++) {
+        double diff = abs(volumeRefPointsExpected[valOrdinal]-volumeRefPoints[valOrdinal]);
+        TEST_ASSERT( diff < tol );
+        maxDiff = max(maxDiff,diff);
+      }
+      TEST_ASSERT(maxDiff < tol);
     }
   }
 } // namespace

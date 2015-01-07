@@ -665,6 +665,22 @@ CellTopoPtr CellTopology::getSubcell( unsigned scdim, unsigned scord ) const {
   }
 }
 
+unsigned CellTopology::getSpatialComponentSideOrdinal(unsigned int thisSideOrdinal) {
+  if (!sideIsSpatial(thisSideOrdinal)) {
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "thisSideOrdinal must be a spatial side!");
+  }
+  // TODO: if/when we change the subcell node ordering, change this to return thisSideOrdinal
+  return thisSideOrdinal - 2;
+}
+
+unsigned CellTopology::getTemporalComponentSideOrdinal(unsigned int thisSideOrdinal) {
+  if (sideIsSpatial(thisSideOrdinal)) {
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "thisSideOrdinal must be a temporal side!");
+  }
+  // TODO: if/when we change the subcell node ordering, change this to return thisSideOrdinal - spatialTopo->getSideCount();
+  return thisSideOrdinal;
+}
+
 void CellTopology::initializeNodes(const std::vector<Intrepid::FieldContainer<double> > &tensorComponentNodes, Intrepid::FieldContainer<double> &cellNodes) {
   if (cellNodes.dimension(0) != this->getNodeCount()) {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "cellNodes.dimension(0) != this->getNodeCount()");
@@ -735,8 +751,12 @@ bool CellTopology::isHypercube() const {
 bool CellTopology::sideIsSpatial(unsigned sideOrdinal) const {
   int sideCount = getSideCount();
   if (_tensorialDegree == 0) return sideOrdinal < sideCount;
-  // otherwise, there are two temporal sides, and these are at the end
-  return sideOrdinal < sideCount - 2;
+  // preferred ordering is what's commented out; need to revise getNodeMap() and getSubcell() to allow this ordering
+//  // otherwise, there are two temporal sides, and these are at the end
+//  return sideOrdinal < sideCount - 2;
+  
+  // right now, we put the temporal sides at the beginning:
+  return (sideOrdinal > 1) && (sideOrdinal < sideCount);
 }
 
 CellTopoPtr CellTopology::cellTopology(const shards::CellTopology &shardsCellTopo) {

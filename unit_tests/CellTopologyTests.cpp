@@ -284,15 +284,7 @@ namespace {
     for (int topoOrdinal=0; topoOrdinal < shardsTopologies.size(); topoOrdinal++) {
       CellTopoPtr cellTopo = shardsTopologies[topoOrdinal];
       TEST_ASSERT(checkPermutationCount(cellTopo));
-//      if (! checkPermutationCount(cellTopo)) {
-//        cout << "testShardsTopologiesPermutations failed checkPermutationCount() for " << cellTopo->getShardsTopology().getName() << endl;
-//        success = false;
-//      }
       TEST_ASSERT(checkPermutations(cellTopo));
-//      if (! checkPermutations(cellTopo)) {
-//        cout << "testShardsTopologiesPermutations failed for " << cellTopo->getShardsTopology().getName() << endl;
-//        success = false;
-//      }
     }
   }
   
@@ -305,22 +297,116 @@ namespace {
       shards::CellTopology shardsTopo = shardsTopologies[topoOrdinal]->getShardsTopology();
       CellTopoPtr cellTopo = CellTopology::cellTopology(shardsTopo, tensorialDegree);
       TEST_ASSERT(checkDimension(cellTopo));
-//      if (! checkDimension(cellTopo)) {
-//        cout << "testOneTensorTopologiesPermutations failed checkDimension() for " << cellTopo->getShardsTopology().getName() << endl;
-//        success = false;
-//      }
       TEST_ASSERT(checkPermutationCount(cellTopo));
-//      if (! checkPermutationCount(cellTopo)) {
-//        cout << "testOneTensorTopologiesPermutations failed checkPermutationCount() for " << cellTopo->getShardsTopology().getName() << endl;
-//        success = false;
-//      }
       TEST_ASSERT(checkPermutations(cellTopo));
-//      if (! checkPermutations(cellTopo)) {
-//        cout << "testOneTensorTopologiesPermutations failed for " << cellTopo->getShardsTopology().getName() << endl;
-//        success = false;
-//      }
     }
   }
+
+  TEUCHOS_UNIT_TEST( CellTopology, SpaceTimeSideNumbering )
+  {
+    vector<CellTopoPtr> shardsTopologies = getShardsTopologies();
+    for (int topoOrdinal=0; topoOrdinal < shardsTopologies.size(); topoOrdinal++) {
+      CellTopoPtr shardsTopo = shardsTopologies[topoOrdinal];
+      unsigned tensorialDegree = 1;
+      CellTopoPtr spaceTimeTopo = CellTopology::cellTopology(shardsTopo->getShardsTopology(), tensorialDegree);
+
+      out << "checking side numbering for " << spaceTimeTopo->getName() << endl;
+      
+      int sideCount = spaceTimeTopo->getSideCount();
+      TEST_EQUALITY(sideCount, shardsTopo->getSideCount() + 2);
+      
+      int sideDim = spaceTimeTopo->getDimension() - 1;
+      for (int sideOrdinal=0; sideOrdinal<sideCount; sideOrdinal++) {
+        if (spaceTimeTopo->sideIsSpatial(sideOrdinal)) {
+          // then this is a temporally extruded version of the spatial topology's side
+          // check node count: should be double that of the spatial side
+          int shardsSideOrdinal = spaceTimeTopo->getSpatialComponentSideOrdinal(sideOrdinal);
+          int shardsSideNodeCount = shardsTopo->getNodeCount(sideDim-1, shardsSideOrdinal);
+          int expectedSideNodeCount = 2 * shardsSideNodeCount;
+          
+          int sideNodeCount = spaceTimeTopo->getNodeCount(sideDim, sideOrdinal);
+          TEST_EQUALITY(sideNodeCount, expectedSideNodeCount);
+          
+          for (int sideNode=0; sideNode<sideNodeCount; sideNode++) {
+            int shardsSideNode = sideNode % shardsSideNodeCount;
+            int shardsParentNode;
+            if (sideDim >= 1)
+              shardsParentNode = shardsTopo->getNodeMap(sideDim-1, shardsSideOrdinal, shardsSideNode);
+            else
+              shardsParentNode = 0;
+            int expectedParentNode;
+            if (sideNode < shardsSideNodeCount) {
+              expectedParentNode = shardsParentNode;
+            } else {
+              expectedParentNode = shardsParentNode + shardsTopo->getNodeCount();
+            }
+            int parentNode = spaceTimeTopo->getNodeMap(sideDim, sideOrdinal, sideNode);
+            TEST_EQUALITY(parentNode, expectedParentNode);
+          }
+        } else {
+          unsigned temporalSideOrdinal = spaceTimeTopo->getTemporalComponentSideOrdinal(sideOrdinal);
+          bool bottomSide = (temporalSideOrdinal == 0);
+          
+          int shardsNodeCount = shardsTopo->getNodeCount();
+          int nodeOffset = bottomSide ? 0 : shardsNodeCount;
+          
+          int sideNodeCount = spaceTimeTopo->getNodeCount(sideDim, sideOrdinal);
+          TEST_EQUALITY(sideNodeCount, shardsNodeCount);
+          
+          for (int shardsNode=0; shardsNode < shardsNodeCount; shardsNode++) {
+            int expectedParentNode = shardsNode + nodeOffset;
+            int parentNode = spaceTimeTopo->getNodeMap(sideDim, sideOrdinal, shardsNode);
+            TEST_EQUALITY(expectedParentNode, parentNode);
+          }
+          
+        }
+      }
+    }
+  }
+  
+//  TEUCHOS_UNIT_TEST( CellTopology, SpaceTimeSideNumbering_Line_2_x_Line_2 )
+//  {
+//    // in this test, we look at a particular space-time topology and check that sides are numbered as we expect
+//    CellTopoPtr line = CellTopology::line();
+//    int tensorialDegree = 1;
+//    CellTopoPtr line_line = CellTopology::cellTopology(line->getShardsTopology(), tensorialDegree);
+//    
+//    // nodes for temporally "bottom" side are 0 and 1
+//    // nodes for top side are 2 and 3
+//    
+//    // spatial sides (temporally extruded) are numbered 0 and 1
+//    // side 0 has vertices 0 --> 2
+//    // side 1 has vertices 1 --> 3
+//    
+//    // temporal sides (copies of the spatial topology with constant time coordinate) are numbered 2 and 3
+//    // side 2 has vertices 0 --> 1
+//    // side 3 has vertices 2 --> 3
+//    
+//    vector< pair<int,int> > sides(4);
+//    sides[0] = make_pair(0, 2);
+//    sides[1] = make_pair(1, 3);
+//    sides[2] = make_pair(0, 1);
+//    sides[3] = make_pair(2, 3);
+//    
+//    // check that spatial sides are spatial
+//    TEST_ASSERT( line_line->sideIsSpatial(0) );
+//    TEST_ASSERT( line_line->sideIsSpatial(1) );
+//    
+//    // check that temporal sides are not spatial:
+//    TEST_ASSERT( ! line_line->sideIsSpatial(2) );
+//    TEST_ASSERT( ! line_line->sideIsSpatial(3) );
+//    
+//    int sideDim = line_line->getDimension() - 1;
+//    for (int sideOrdinal=0; sideOrdinal<sides.size(); sideOrdinal++) {
+//      int nodeCount = line_line->getNodeCount(sideDim, sideOrdinal);
+//      TEST_EQUALITY(nodeCount, 2);
+//      for (int scNode=0; scNode<nodeCount; scNode++) {
+//        int parentNode = line_line->getNodeMap(sideDim, sideOrdinal, scNode);
+//        if (scNode==0) TEST_EQUALITY(parentNode, sides[sideOrdinal].first);
+//        if (scNode==1) TEST_EQUALITY(parentNode, sides[sideOrdinal].second);
+//      }
+//    }
+//  }
   
   TEUCHOS_UNIT_TEST( CellTopology, MultiTensorTopologiesPermutations )
   {
@@ -343,21 +429,8 @@ namespace {
         CellTopoPtr cellTopo = CellTopology::cellTopology(shardsTopo, tensorialDegree);
         
         TEST_ASSERT(checkDimension(cellTopo));
-//        if (! checkDimension(cellTopo)) {
-//          cout << "testMultiTensorTopologiesPermutations failed checkDimension() for " << cellTopo->getShardsTopology().getName() << endl;
-//          success = false;
-//        }
         TEST_ASSERT(checkPermutationCount(cellTopo));
-//        if (! checkPermutationCount(cellTopo)) {
-//          cout << "testMultiTensorTopologiesPermutations failed checkPermutationCount() for " << cellTopo->getShardsTopology().getName() << endl;
-//          success = false;
-//        }
         TEST_ASSERT(checkPermutations(cellTopo));
-//        if (! checkPermutations(cellTopo)) {
-//          cout << "testMultiTensorTopologiesPermutations failed for " << cellTopo->getShardsTopology().getName();
-//          cout << " with tensorial degree " << tensorialDegree << endl;
-//          success = false;
-//        }
       }
     }
   }

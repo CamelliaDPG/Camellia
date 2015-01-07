@@ -24,7 +24,63 @@ public:
   
   static CellTopoPtrLegacy cellTopoForKey(unsigned key);
   
-  /** \brief  Computes constant normal vectors to sides of reference cells.  Generalizes Intrepid's CellTools<double>'s version of the same method to apply to Camellia CellTopology parent cells (the present implementation calls Intrepid's method for some of the base shards topologies).  This allows treatment of some cells that are not 2D or 3D (1D and 4D in particular are supported).  Much of the documentation below copied from Intrepid's documentation.
+  /** \brief  Variation on Intrepid FunctionSpaceTools computeEdgeMeasure and computeFaceMeasure;
+   intended to support Camellia CellTopology generally, though unlike computeEdgeMeasure we here
+   assume that the subcell over which we integrate is of dimension (d-1) for a d-dimensional parent cell.
+   Note that this initial implementation does require orthogonality of the transformations in space and
+   time; it is assumed that \f$dF_i/dxi_j = 0\f$ if \f$i\f$ is a spatial dimension and \f$j\f$ is a temporal one, or vice
+   versa.
+   
+   Returns the weighted integration measures \a <b>outVals</b> with dimensions
+   (C,P) used for the computation of side integrals, based on the provided
+   cell Jacobian array \a <b>inJac</b> with dimensions (C,P,D,D) and the
+   provided integration weights \a <b>inWeights</b> with dimensions (P).
+   
+   Returns a rank-2 array (C, P) array such that
+   \f[
+   \mbox{outVals}(c,p)   =
+   \left\|\frac{\partial\Phi_c(\widehat{x}_p)}{\partial u}\times
+   \frac{\partial\Phi_c(\widehat{x}_p)}{\partial v}\right\|\omega_{p} \,,
+   \f]
+   where:
+   \li      \f$\{(\widehat{x}_p,\omega_p)\}\f$ is a cubature rule defined on \b reference
+   \b side \f$\widehat{\mathcal{F}}\f$, with ordinal \e whichSide relative to the specified parent reference cell;
+   \li      \f$ \Phi_c : R \mapsto \mathcal{F} \f$ is parameterization of the physical face
+   corresponding to \f$\widehat{\mathcal{F}}\f$; see Section \ref sec_cell_topology_subcell_map.
+   
+   \warning
+   The user is responsible for providing input arrays with consistent data: the Jacobians
+   in \a <b>inJac</b> should be evaluated at integration points on the <b>reference face</b>
+   corresponding to the weights in \a <b>inWeights</b>.
+   
+   \remark
+   Cubature rules on reference faces are defined by a two-step process:
+   \li     A cubature rule is defined on the parametrization domain \e R of the face
+   (\e R is the standard 2-simplex {(0,0),(1,0),(0,1)} or the standard 2-cube [-1,1] X [-1,1]).
+   \li     The points are mapped to a reference face using Intrepid::CellTools::mapToReferenceSubcell
+   
+   \remark
+   See Intrepid::CellTools::setJacobian for computation of \e DF and
+   Intrepid::CellTools::setJacobianDet for computation of its determinant.
+   
+   \code
+   C - num. integration domains                     dim0 in all input containers
+   P - num. integration points                      dim1 in all input containers
+   D - spatial dimension                            dim2 and dim3 in Jacobian container
+   \endcode
+   
+   \param  outVals     [out] - Output array with weighted face measures.
+   \param  inJac        [in] - Input array containing cell Jacobians.
+   \param  inWeights    [in] - Input integration weights.
+   \param  whichSide    [in] - Index of the side subcell relative to the parent cell; defines the domain of integration.
+   \param  parentCell   [in] - Parent cell topology.
+   */
+  static void computeSideMeasure(FieldContainer<double> & weightedMeasure, const FieldContainer<double> &cellJacobian, const FieldContainer<double> &cubWeights,
+                          int sideOrdinal, CellTopoPtr parentCell);
+  
+  static void getUnitSideNormals(FieldContainer<double> &unitSideNormals, int sideOrdinal, const FieldContainer<double> &inCellJacobian, CellTopoPtr parentCell);
+  
+  /** \brief  Computes constant normal vectors to sides of reference cells.  Generalizes Intrepid's CellTools<double>'s version of the same method to apply to Camellia CellTopology parent cells (the present implementation calls Intrepid's method for some of the base shards topologies).  This allows treatment of some cells that are not 2D or 3D (1D and 4D in particular are supported).  The documentation below is largely copied from Intrepid's documentation.
    
    A side is defined as a subcell of dimension one less than that of its parent cell.
    Therefore, sides of 2D cells are 1-subcells (edges) and sides of 3D cells
@@ -73,14 +129,6 @@ public:
    Because the sides of all reference cells are always affine images of \e R ,
    the coordinate functions \f$\hat{x},\hat{y},\hat{z}\f$ of the parametrization maps
    are linear and the side normal is a constant vector.
-   
-   \remark
-   - For 3D cells the reference side normal coincides with the face normal computed by
-   CellTools<Scalar>::getReferenceFaceNormal and these two methods are completely equivalent.
-   - For 2D cells the reference side normal is defined by \f$\hat{{\bf n}}= \hat{\bf t}^\perp = (t_2,-t_1)\f$
-   where \f$\hat{{\bf t}}=(t_1,t_2)\f$ is the tangent vector computed by
-   CellTools<Scalar>::getReferenceEdgeTangent. Therefore, the pair
-   \f$(\hat{{\bf n}},\hat{{\bf t}})\f$ is positively oriented.
    
    \param  refSideNormal     [out] - rank-1 array (D) with (constant) side normal
    \param  sideOrd           [in]  - ordinal of the side whose normal is computed

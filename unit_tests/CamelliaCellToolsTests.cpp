@@ -15,6 +15,8 @@
 
 #include "Shards_CellTopology.hpp"
 
+#include "SerialDenseWrapper.h"
+
 #include "CellTopology.h"
 
 #include "CamelliaCellTools.h"
@@ -84,38 +86,31 @@ namespace {
         if (spaceDim == 1) {
           expectedSideNormal[0] = (sideOrdinal==0) ? -1 : 1;
         } else if (spaceDim == 2) {
-          // Line<2> x Line<2>.
-          // Sides 0 and 1 are spatial sides with normals (-1,0) and (1,0), respectively
-          // Sides 2 and 3 are temporal sides with normals (0,-1) and (0,-1), respectively
-          switch (sideOrdinal) {
-            case 0:
-              expectedSideNormal(0) = -1.0;
-              expectedSideNormal(1) =  0.0;
-              break;
-            case 1:
-              expectedSideNormal(0) =  1.0;
-              expectedSideNormal(1) =  0.0;
-              break;
-            case 2:
-              expectedSideNormal(0) =  0.0;
-              expectedSideNormal(1) = -1.0;
-              break;
-            case 3:
-              expectedSideNormal(0) =  0.0;
-              expectedSideNormal(1) =  1.0;
-              break;
+          // Line_2 x Line_2.
+          if (spaceTimeTopo->sideIsSpatial(sideOrdinal)) {
+            // temporal direction is tangent to this side.
+            int spatialNode = spaceTimeTopo->getSpatialComponentSideOrdinal(sideOrdinal);
+            expectedSideNormal(0) = (spatialNode == 0) ? -1 : 1;
+            expectedSideNormal(1) = 0.0;
+          } else {
+            // spatial direction is tangent to this side.
+            int temporalNode = spaceTimeTopo->getTemporalComponentSideOrdinal(sideOrdinal);
+            expectedSideNormal(0) = 0;
+            expectedSideNormal(1) = (temporalNode == 0) ? -1 : 1;
           }
         } else {
           if (spaceTimeTopo->sideIsSpatial(sideOrdinal)) {
+            unsigned spatialSideOrdinal = spaceTimeTopo->getSpatialComponentSideOrdinal(sideOrdinal);
             FieldContainer<double> spaceSideNormal(spaceDim-1);
-            CellTools<double>::getReferenceSideNormal(spaceSideNormal, sideOrdinal, spaceTopo);
+            CellTools<double>::getReferenceSideNormal(spaceSideNormal, spatialSideOrdinal, spaceTopo);
             for (int d=0; d<spaceDim-1; d++) {
               expectedSideNormal[d] = spaceSideNormal[d];
             }
             expectedSideNormal[spaceDim-1] = 0;
           } else {
             expectedSideNormal.initialize(0);
-            if (sideOrdinal == sideCount - 2) {
+            unsigned temporalSideOrdinal = spaceTimeTopo->getTemporalComponentSideOrdinal(sideOrdinal);
+            if (temporalSideOrdinal == 0) {
               expectedSideNormal[spaceDim - 1] = -1;
             } else {
               expectedSideNormal[spaceDim - 1] =  1;
@@ -154,6 +149,98 @@ namespace {
           CamelliaCellTools::mapToReferenceSubcell(camelliaParentNodes, refSubcellNodes, subcellDim, scord, simpleTopo);
           
           TEST_COMPARE_FLOATING_ARRAYS(intrepidParentNodes, camelliaParentNodes, 1e-15);
+        }
+      }
+    }
+  }
+  
+  TEUCHOS_UNIT_TEST( CamelliaCellTools, MapToReferenceSubcell_Line_2_x_Line_2 )
+  {
+    // in this test, we look at a particular space-time topology and check that points get mapped as we expect
+    // (contrast with MapToReferenceSubcell_SpaceTime, in which we look at a bunch of topologies, but only check
+    //  consistency with the node mapping)
+    CellTopoPtr line = CellTopology::line();
+    int tensorialDegree = 1;
+    CellTopoPtr line_line = CellTopology::cellTopology(line->getShardsTopology(), tensorialDegree);
+    
+    FieldContainer<double> sidePoints(2,1); // the points we'll map
+    sidePoints(0,0) = -0.5;
+    sidePoints(1,0) =  0.5;
+    
+    FieldContainer<double> volumePoints(2,2);
+    FieldContainer<double> expectedVolumePoints(2,2);
+    
+    FieldContainer<double> lineRefNodes(2,1);
+    CamelliaCellTools::refCellNodesForTopology(lineRefNodes, line);
+    
+    TEST_EQUALITY(4, line_line->getSideCount());
+    
+    for (int sideOrdinal = 0; sideOrdinal < line_line->getSideCount(); sideOrdinal++) {
+      out << "Testing side " << sideOrdinal << endl;
+      if (line_line->sideIsSpatial(sideOrdinal)) {
+        // sideIsSpatial: the spatial coordinate is fixed
+        int spatialNodeOrdinal = line_line->getSpatialComponentSideOrdinal(sideOrdinal);
+        expectedVolumePoints(0,0) = lineRefNodes(spatialNodeOrdinal,0);
+        expectedVolumePoints(0,1) = sidePoints(0,0);
+        expectedVolumePoints(1,0) = lineRefNodes(spatialNodeOrdinal,0);
+        expectedVolumePoints(1,1) = sidePoints(1,0);
+      } else {
+        int temporalNode = line_line->getTemporalComponentSideOrdinal(sideOrdinal);
+        expectedVolumePoints(0,0) = sidePoints(0,0);
+        expectedVolumePoints(0,1) = lineRefNodes(temporalNode,0);
+        expectedVolumePoints(1,0) = sidePoints(1,0);
+        expectedVolumePoints(1,1) = lineRefNodes(temporalNode,0);
+      }
+      
+      CamelliaCellTools::mapToReferenceSubcell(volumePoints, sidePoints, line->getDimension(), sideOrdinal, line_line);
+
+      SerialDenseWrapper::roundZeros(volumePoints, 1e-15);
+      SerialDenseWrapper::roundZeros(expectedVolumePoints, 1e-15);
+      
+      out << "expectedVolumePoints:\n" << expectedVolumePoints;
+      out << "volumePoints:\n" << volumePoints;
+      
+      TEST_COMPARE_FLOATING_ARRAYS(expectedVolumePoints, volumePoints, 1e-15);
+
+    }
+  }
+  
+  TEUCHOS_UNIT_TEST( CamelliaCellTools, MapToReferenceSubcell_SpaceTime )
+  {
+    std::vector< CellTopoPtr > shardsTopologies = getShardsTopologies();
+    
+    for (int topoOrdinal = 0; topoOrdinal < shardsTopologies.size(); topoOrdinal++) {
+      CellTopoPtr spaceTopo = shardsTopologies[topoOrdinal];
+      int tensorialDegree = 1;
+      CellTopoPtr spaceTimeTopo = CellTopology::cellTopology(spaceTopo->getShardsTopology(), tensorialDegree);
+
+      FieldContainer<double> parentRefNodes(spaceTimeTopo->getVertexCount(),spaceTimeTopo->getDimension());
+      CamelliaCellTools::refCellNodesForTopology(parentRefNodes, spaceTimeTopo);
+      
+      int maxSubcellDim = spaceTimeTopo->getDimension();
+      for (int subcellDim = 0; subcellDim <= maxSubcellDim; subcellDim++) {
+        for (unsigned scord=0; scord < spaceTimeTopo->getSubcellCount(subcellDim); scord++) {
+          CellTopoPtr subcellTopo = spaceTimeTopo->getSubcell(subcellDim, scord);
+          FieldContainer<double> refSubcellNodes(subcellTopo->getVertexCount(), subcellDim);
+          CamelliaCellTools::refCellNodesForTopology(refSubcellNodes, subcellTopo);
+          
+          FieldContainer<double> actualParentNodes(subcellTopo->getVertexCount(),spaceTimeTopo->getDimension());
+          CamelliaCellTools::mapToReferenceSubcell(actualParentNodes, refSubcellNodes, subcellDim, scord, spaceTimeTopo);
+          
+          FieldContainer<double> expectedParentNodes(subcellTopo->getVertexCount(),spaceTimeTopo->getDimension());
+          
+          int nodeCount = subcellTopo->getNodeCount();
+          for (int scNode=0; scNode<nodeCount; scNode++) {
+            int parentNode = spaceTimeTopo->getNodeMap(subcellDim, scord, scNode);
+            for (int d=0; d<spaceTimeTopo->getDimension(); d++) {
+              expectedParentNodes(scNode,d) = parentRefNodes(parentNode,d);
+            }
+          }
+          
+          SerialDenseWrapper::roundZeros(expectedParentNodes, 1e-15);
+          SerialDenseWrapper::roundZeros(actualParentNodes, 1e-15);
+          
+          TEST_COMPARE_FLOATING_ARRAYS(expectedParentNodes, actualParentNodes, 1e-15);
         }
       }
     }

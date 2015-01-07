@@ -71,6 +71,68 @@ CellTopoPtrLegacy CamelliaCellTools::cellTopoForKey(unsigned key) {
   }
 }
 
+void CamelliaCellTools::computeSideMeasure(FieldContainer<double> &weightedMeasure, const FieldContainer<double> &cellJacobian, const FieldContainer<double> &cubWeights,
+                                           int sideOrdinal, CellTopoPtr parentCell) {
+  int spaceDim = parentCell->getDimension();
+  int numCells = cellJacobian.dimension(0);
+  int numPoints = cellJacobian.dimension(1);
+
+  if (parentCell->getTensorialDegree() == 0) {
+    if (spaceDim < 2) { // side topology is then a point; just copy the cubature weights
+      for (int cellOrdinal=0; cellOrdinal<numCells; cellOrdinal++) {
+        for (int ptOrdinal=0; ptOrdinal<numPoints; ptOrdinal++) {
+          weightedMeasure(cellOrdinal,ptOrdinal) = cubWeights(ptOrdinal);
+        }
+      }
+    } else { // spaceDim >= 2
+      if (spaceDim == 2) {
+      // compute weighted edge measure
+        FunctionSpaceTools::computeEdgeMeasure<double>(weightedMeasure, cellJacobian, cubWeights, sideOrdinal, parentCell->getShardsTopology());
+      } else if (spaceDim == 3) {
+        FunctionSpaceTools::computeFaceMeasure<double>(weightedMeasure, cellJacobian, cubWeights, sideOrdinal, parentCell->getShardsTopology());
+      } else {
+        cout << "ERROR: CamelliaCellTools::computeSideMeasure() does not yet support dimension > 3 for shards topologies.\n";
+        TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "recomputeMeasures() does not yet support tensorial degree > 0.");
+      }
+    }
+  } else { // tensorialDegree > 0
+    // for the below to work, we require the transformation preserves orthogonality of space and time.  Check that the Jacobian provided satisfies this:
+    FieldContainer<double> spatialCellJacobian(numCells,numPoints,spaceDim-1,spaceDim-1);
+    FieldContainer<double> temporalCellJacobianAbs(numCells,numPoints);
+    for (int cellOrdinal=0; cellOrdinal<numCells; cellOrdinal++) {
+      for (int ptOrdinal=0; ptOrdinal<numPoints; ptOrdinal++) {
+        for (int d1=0; d1<spaceDim-1; d1++) {
+          int d2 = spaceDim - 1;
+          const double tol = 1e-15;
+          if (abs(cellJacobian(cellOrdinal,ptOrdinal,d1,d2) > tol) || abs(cellJacobian(cellOrdinal,ptOrdinal,d2,d1) > tol)) {
+            cout << "CamelliaCellTools::computeSideMeasure requires the transformation to be orthogonal in space and time.\n";
+            cout << "cellJacobian:\n" << cellJacobian;
+            TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "CamelliaCellTools::computeSideMeasure requires the transformation to be orthogonal in space and time.");
+          }
+          for (int d2=0; d2<spaceDim-1; d2++) {
+            spatialCellJacobian(cellOrdinal,ptOrdinal,d1,d2) = cellJacobian(cellOrdinal,ptOrdinal,d1,d2);
+          }
+        }
+        temporalCellJacobianAbs(cellOrdinal,ptOrdinal) = abs(cellJacobian(cellOrdinal,ptOrdinal,spaceDim-1,spaceDim-1));
+      }
+    }
+    // if we get here, cellJacobian satisfies the orthogonality requirement and spatialCellJacobian contains the appropriate submatrix of cellJacobian.
+    int spaceSideCount = parentCell->getSideCount() - 2;
+    if (sideOrdinal < spaceSideCount) {
+      // then the space-time side is comprised of space side x temporal line, and we can recurse:
+      CellTopoPtr spatialCell = CellTopology::cellTopology(parentCell->getShardsTopology(), parentCell->getTensorialDegree()-1);
+      computeSideMeasure(weightedMeasure, spatialCellJacobian, cubWeights, sideOrdinal, spatialCell);
+      // next, we multiply the weights uniformly by the absolute value of the temporal Jacobian (which is just a scalar value for each point)
+      ArrayTools::scalarMultiplyDataData<double>(weightedMeasure, weightedMeasure, temporalCellJacobianAbs);
+    } else { // sideOrdinal >= spaceSideCount
+      // here, the space-time side is an instance of the spatial cell, so we want to use FunctionSpaceTools::computeCellMeasure
+      FieldContainer<double> spatialCellJacobianDet(numCells,numPoints);
+      CellTools<double>::setJacobianDet(spatialCellJacobianDet, spatialCellJacobian );
+      FunctionSpaceTools::computeCellMeasure<double>(weightedMeasure, spatialCellJacobianDet, cubWeights);
+    }
+  }
+}
+
 string CamelliaCellTools::entityTypeString(unsigned entityDimension) { // vertex, edge, face, solid, hypersolid
   switch (entityDimension) {
     case 0:
@@ -117,8 +179,8 @@ void CamelliaCellTools::getReferenceSideNormal(FieldContainer<double> &refSideNo
     refSideNormal.initialize(0.0);
     if (! parentCell->sideIsSpatial(sideOrdinal)) {
       // then it's a temporal side.  First temporal side has normal (0,…,-1); second has normal (0,…,1)
-      int sideCount = parentCell->getSideCount();
-      if (sideOrdinal == sideCount - 2) { // first temporal side
+      int temporalOrdinal = parentCell->getTemporalComponentSideOrdinal(sideOrdinal);
+      if (temporalOrdinal == 0) { // first temporal side
         refSideNormal[spaceDim-1] = -1;
       } else { // second temporal side
         refSideNormal[spaceDim-1] =  1;
@@ -128,7 +190,8 @@ void CamelliaCellTools::getReferenceSideNormal(FieldContainer<double> &refSideNo
       Teuchos::Array<int> dim(1,spaceDim-1);
       FieldContainer<double> spatialRefSideNormal(dim,&refSideNormal[0]); // FC pointing to the spatial part of the refSideNormal
       CellTopoPtr spatialParentCell = CellTopology::cellTopology(parentCell->getShardsTopology(), parentCell->getTensorialDegree() - 1);
-      getReferenceSideNormal(spatialRefSideNormal, sideOrdinal, spatialParentCell);
+      unsigned spatialSideOrdinal = parentCell->getSpatialComponentSideOrdinal(sideOrdinal);
+      getReferenceSideNormal(spatialRefSideNormal, spatialSideOrdinal, spatialParentCell);
     }
   }
   
@@ -137,6 +200,78 @@ void CamelliaCellTools::getReferenceSideNormal(FieldContainer<double> &refSideNo
 int CamelliaCellTools::getSideCount(const shards::CellTopology &cellTopo) {
   // unlike shards itself, defines vertices as sides for Line topo
   return (cellTopo.getDimension() > 1) ? cellTopo.getSideCount() : cellTopo.getVertexCount();
+}
+
+void CamelliaCellTools::getUnitSideNormals(FieldContainer<double> &unitSideNormals, int sideOrdinal, const FieldContainer<double> &inCellJacobian, CellTopoPtr parentCell) {
+  int numCells = unitSideNormals.dimension(0);
+  int numPoints = unitSideNormals.dimension(1);
+  int spaceDim = unitSideNormals.dimension(2);
+  
+  if (spaceDim==0) {
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "spaceDim==0 not supported in CamelliaCellTools::getUnitSideNormals.");
+  } else if (spaceDim==1) { // Line
+    // If it's the first side, the normal points left; if it's the second, it points right.
+    // the direction is flipped if the cell jacobian is negative...
+    double refSpaceNormal = (sideOrdinal == 0) ? -1 : 1;
+    unitSideNormals.initialize(0);
+    for (int cellOrdinal=0; cellOrdinal<numCells; cellOrdinal++) {
+      for (int ptOrdinal=0; ptOrdinal<numPoints; ptOrdinal++) {
+        double jacobianDirection = (inCellJacobian(cellOrdinal,ptOrdinal,spaceDim-1,spaceDim-1) > 0) ? 1.0 : -1.0;
+        double normal = refSpaceNormal * jacobianDirection;
+        unitSideNormals(cellOrdinal,ptOrdinal,0) = normal;
+      }
+    }
+  } else if (parentCell->getTensorialDegree() == 0) {
+    CellTools<double>::getPhysicalSideNormals(unitSideNormals, inCellJacobian, sideOrdinal, parentCell->getShardsTopology());      // make unit length
+    FieldContainer<double> normalLengths(numCells, numPoints);
+    RealSpaceTools<double>::vectorNorm(normalLengths, unitSideNormals, NORM_TWO);
+    FunctionSpaceTools::scalarMultiplyDataData<double>(unitSideNormals, normalLengths, unitSideNormals, true); // true: divide
+  } else {
+    if (parentCell->sideIsSpatial(sideOrdinal)) {
+      FieldContainer<double> spaceUnitSideNormals(numCells,numPoints,spaceDim-1);
+      CellTopoPtr spaceTopo = CellTopology::cellTopology(parentCell->getShardsTopology(), parentCell->getTensorialDegree());
+      // for the below to work, we require the transformation preserves orthogonality of space and time.  Check that the Jacobian provided satisfies this:
+      unsigned spatialSideOrdinal = parentCell->getSpatialComponentSideOrdinal(sideOrdinal);
+      FieldContainer<double> spatialCellJacobian(numCells,numPoints,spaceDim-1,spaceDim-1);
+      FieldContainer<double> temporalCellJacobianAbs(numCells,numPoints);
+      for (int cellOrdinal=0; cellOrdinal<numCells; cellOrdinal++) {
+        for (int ptOrdinal=0; ptOrdinal<numPoints; ptOrdinal++) {
+          for (int d1=0; d1<spaceDim-1; d1++) {
+            int d2 = spaceDim - 1;
+            const double tol = 1e-15;
+            if (abs(inCellJacobian(cellOrdinal,ptOrdinal,d1,d2) > tol) || abs(inCellJacobian(cellOrdinal,ptOrdinal,d2,d1) > tol)) {
+              cout << "CamelliaCellTools::getUnitSideNormals requires the transformation to be orthogonal in space and time.\n";
+              TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "CamelliaCellTools::getUnitSideNormals requires the transformation to be orthogonal in space and time.");
+            }
+            for (int d2=0; d2<spaceDim-1; d2++) {
+              spatialCellJacobian(cellOrdinal,ptOrdinal,d1,d2) = inCellJacobian(cellOrdinal,ptOrdinal,d1,d2);
+            }
+          }
+          temporalCellJacobianAbs(cellOrdinal,ptOrdinal) = abs(inCellJacobian(cellOrdinal,ptOrdinal,spaceDim-1,spaceDim-1));
+        }
+      }
+      CamelliaCellTools::getUnitSideNormals(spaceUnitSideNormals, spatialSideOrdinal, spatialCellJacobian, spaceTopo);
+      unitSideNormals.initialize(0);
+      for (int cellOrdinal=0; cellOrdinal<numCells; cellOrdinal++) {
+        for (int ptOrdinal=0; ptOrdinal<numPoints; ptOrdinal++) {
+          for (int d=0; d<spaceDim-1; d++) {
+            unitSideNormals(cellOrdinal,ptOrdinal,d) = spaceUnitSideNormals(cellOrdinal,ptOrdinal,d);
+          }
+        }
+      }
+    } else { // side is not spatial; it's temporal.  If it's the first side, the normal points downward; if it's the second, it points upward.
+      // the direction is flipped if the cell jacobian is negative...
+      double refSpaceNormal = (sideOrdinal == spaceDim - 2) ? -1 : 1;
+      unitSideNormals.initialize(0);
+      for (int cellOrdinal=0; cellOrdinal<numCells; cellOrdinal++) {
+        for (int ptOrdinal=0; ptOrdinal<numPoints; ptOrdinal++) {
+          double jacobianDirection = (inCellJacobian(cellOrdinal,ptOrdinal,spaceDim-1,spaceDim-1) > 0) ? 1.0 : -1.0;
+          double temporalNormal = refSpaceNormal * jacobianDirection;
+          unitSideNormals(cellOrdinal,ptOrdinal,spaceDim-1) = temporalNormal;
+        }
+      }
+    }
+  }
 }
 
 void CamelliaCellTools::refCellNodesForTopology(FieldContainer<double> &cellNodes, const shards::CellTopology &cellTopo, unsigned permutation) { // 0 permutation is the identity
@@ -1011,19 +1146,19 @@ void CamelliaCellTools::mapToReferenceSubcell(FieldContainer<double>       &refS
                                               const int                     subcellDim,
                                               const int                     subcellOrd,
                                               CellTopoPtr                   parentCell) {
-    const FieldContainer<double>& subcellMap = getSubcellParametrization(subcellDim, parentCell);
-    
-    int numPoints = paramPoints.dimension(0);
-    int parentDim = parentCell->getDimension();
-    // Apply the parametrization map to every point in parameter domain
-    for(int pt = 0; pt < numPoints; pt++){
-      for(int  d_parent = 0; d_parent < parentDim; d_parent++){
-        refSubcellPoints(pt, d_parent) = subcellMap(subcellOrd, d_parent, 0);
-        for (int d_sc = 0; d_sc < subcellDim; d_sc++) {
-          refSubcellPoints(pt, d_parent) += subcellMap(subcellOrd, d_parent, d_sc + 1) * paramPoints(pt, d_sc);
-        }
+  const FieldContainer<double>& subcellMap = getSubcellParametrization(subcellDim, parentCell);
+  
+  int numPoints = paramPoints.dimension(0);
+  int parentDim = parentCell->getDimension();
+  // Apply the parametrization map to every point in parameter domain
+  for(int pt = 0; pt < numPoints; pt++){
+    for(int  d_parent = 0; d_parent < parentDim; d_parent++){
+      refSubcellPoints(pt, d_parent) = subcellMap(subcellOrd, d_parent, 0);
+      for (int d_sc = 0; d_sc < subcellDim; d_sc++) {
+        refSubcellPoints(pt, d_parent) += subcellMap(subcellOrd, d_parent, d_sc + 1) * paramPoints(pt, d_sc);
       }
     }
+  }
 }
 
 void CamelliaCellTools::mapToReferenceSubcell(FieldContainer<double>       &refSubcellPoints,

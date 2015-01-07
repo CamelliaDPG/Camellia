@@ -45,6 +45,8 @@
 #include "MeshTransformationFunction.h"
 #include "CamelliaCellTools.h"
 
+#include "SerialDenseWrapper.h"
+
 #include "CubatureFactory.h"
 
 #include "Teuchos_GlobalMPISession.hpp"
@@ -884,9 +886,11 @@ void BasisCache::determineJacobian() {
       CamelliaCellTools::setJacobian(_cellJacobian, _cubPointsSideRefCell, _physicalCellNodes, _cellTopo);
   }
   
-  CellTools::setJacobianDet(_cellJacobDet, _cellJacobian );
-//  cout << "On rank " << Teuchos::GlobalMPISession::getRank() << ", about to compute jacobian inverse for cellJacobian of size: " << _cellJacobian.size() << endl;
-  CellTools::setJacobianInv(_cellJacobInv, _cellJacobian );
+  SerialDenseWrapper::determinantAndInverse(_cellJacobDet, _cellJacobInv, _cellJacobian);
+  
+//  CellTools::setJacobianDet(_cellJacobDet, _cellJacobian );
+////  cout << "On rank " << Teuchos::GlobalMPISession::getRank() << ", about to compute jacobian inverse for cellJacobian of size: " << _cellJacobian.size() << endl;
+//  CellTools::setJacobianInv(_cellJacobInv, _cellJacobian );
   
   if (! Function::isNull(_transformationFxn) ) {
     BasisCachePtr thisPtr = Teuchos::rcp(this,false);
@@ -909,9 +913,11 @@ void BasisCache::determineJacobian() {
     } else {
       _transformationFxn->grad()->values( _cellJacobian, thisPtr );
     }
-    
-    CellTools::setJacobianInv(_cellJacobInv, _cellJacobian );
-    CellTools::setJacobianDet(_cellJacobDet, _cellJacobian );
+
+    SerialDenseWrapper::determinantAndInverse(_cellJacobDet, _cellJacobInv, _cellJacobian);
+
+//    CellTools::setJacobianInv(_cellJacobInv, _cellJacobian );
+//    CellTools::setJacobianDet(_cellJacobDet, _cellJacobian );
   }
 }
 
@@ -1111,7 +1117,9 @@ void BasisCache::recomputeMeasures() {
       if (_cellTopo->getDimension()==1) {
         // TODO: determine whether this is the right thing:
         _weightedMeasure.initialize(1.0); // not sure this is the right thing.
-      } else if (_cellTopo->getDimension()==2) {
+      } else {
+        CamelliaCellTools::computeSideMeasure(_weightedMeasure, _cellJacobian, _cubWeights, _sideIndex, _cellTopo);
+      } /*else if (_cellTopo->getDimension()==2) {
         if (_cellTopo->getTensorialDegree() == 0) {
           // compute weighted edge measure
           FunctionSpaceTools::computeEdgeMeasure<double>(_weightedMeasure,
@@ -1132,7 +1140,7 @@ void BasisCache::recomputeMeasures() {
         }
       } else {
         TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unhandled space dimension.");
-      }
+      }*/
     }
     
   }
@@ -1150,15 +1158,8 @@ void BasisCache::recomputeMeasures() {
         RealSpaceTools<double>::vectorNorm(normalLengths, _sideNormals, NORM_TWO);
         FunctionSpaceTools::scalarMultiplyDataData<double>(_sideNormals, normalLengths, _sideNormals, true);
       } else {
-        cout << "ERROR: BasisCache::recomputeMeasures does not yet support tensorial degree > 0.\n";
-        TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "BasisCache::recomputeMeasures does not yet support tensorial degree > 0.");
-        
         _sideNormalsSpaceTime.resize(_numCells, numPoints, _cellTopo->getDimension());
-        cout << "WARNING: CamelliaCellTools::getPhysicalSideNormals is not yet implemented; skipping the call in BasisCache.\n";
-        //          CamelliaCellTools::getPhysicalSideNormals(_sideNormalsSpaceTime, _cellJacobian, _sideIndex, _cellTopo);
-        // make unit length
-        RealSpaceTools<double>::vectorNorm(normalLengths, _sideNormalsSpaceTime, NORM_TWO);
-        FunctionSpaceTools::scalarMultiplyDataData<double>(_sideNormalsSpaceTime, normalLengths, _sideNormalsSpaceTime, true);
+        CamelliaCellTools::getUnitSideNormals(_sideNormalsSpaceTime, _sideIndex, _cellJacobian, _cellTopo);
         
         // next, extract the pure-spatial part of the normal (this might not be unit length)
         _sideNormals.resize(_numCells, numPoints, _spaceDim);
@@ -1171,16 +1172,14 @@ void BasisCache::recomputeMeasures() {
         }
       }
     } else if (_cellTopo->getDimension()==1) {
-      _sideNormals.resize(_numCells, numPoints, 1); // here, numPoints should be 1
+      _sideNormals.resize(_numCells, numPoints, 1);
       unsigned thisSideOrdinal = _sideIndex;
       unsigned otherSideOrdinal = 1 - thisSideOrdinal;
       for (int cellOrdinal=0; cellOrdinal<_numCells; cellOrdinal++) {
         double x_this = _physicalCellNodes(cellOrdinal,thisSideOrdinal,0);
         double x_other = _physicalCellNodes(cellOrdinal,otherSideOrdinal,0);
-        if (x_this > x_other) {
-          _sideNormals(cellOrdinal,0,0) = 1;
-        } else {
-          _sideNormals(cellOrdinal,0,0) = -1;
+        for (int ptOrdinal=0; ptOrdinal<numPoints; ptOrdinal++) {
+          _sideNormals(cellOrdinal,ptOrdinal,0) = (x_this > x_other) ? 1 : -1;
         }
       }
       if (_spaceDim == 0) {

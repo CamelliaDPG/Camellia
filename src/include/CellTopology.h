@@ -130,6 +130,26 @@ namespace Camellia {
      */
     unsigned getNodeFromTensorialComponentNodes(const std::vector<unsigned> &tensorComponentNodes) const;
     
+    /** \brief  Mapping from this CellTopology's side ordinal of dimension d-1 to the corresponding
+     *          side ordinal in one of the tensorial component nodes; that is, if
+     *              this = (shardsTopo x Line_2 x Line_2 ...) x Line_2,
+     *          the mapping returns the corresponding side ordinal of dimension d-2 in
+     *              (shardsTopo x Line_2 x Line_2 ...)
+     *          Note that the sideOrdinal must be one for which sideIsSpatial() returns true.
+     *  \param  thisSideOrdinal      [in]  - sideOrdinal in this cell topology.
+     */
+    unsigned getSpatialComponentSideOrdinal(unsigned thisSideOrdinal);
+    
+    /** \brief  Mapping from this CellTopology's side ordinal of dimension d-1 to the corresponding
+     *          node ordinal in the Line_2 topology; that is, if
+     *              this = (shardsTopo x Line_2 x Line_2 ...) x Line_2,
+     *          the mapping returns the corresponding node ordinal in
+     *              Line_2
+     *          Note that the sideOrdinal must be one for which sideIsSpatial() returns false.
+     *  \param  thisSideOrdinal      [in]  - sideOrdinal in this cell topology.
+     */
+    unsigned getTemporalComponentSideOrdinal(unsigned thisSideOrdinal);
+    
     /** \brief  Mapping from a subcell's node ordinal to a
      *          node ordinal of this parent cell topology.
      *  \param  subcell_dim      [in]  - spatial dimension of the subcell
