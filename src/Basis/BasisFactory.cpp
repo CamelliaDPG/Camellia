@@ -637,7 +637,7 @@ BasisPtr BasisFactory::getNodalBasisForCellTopology(unsigned int cellTopoKey) {
                                                       TWO_D, SCALAR_RANK, IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD) );
     case shards::Tetrahedron<4>::key:
       return Teuchos::rcp( new IntrepidBasisWrapper<>( Teuchos::rcp( new Basis_HGRAD_TET_C1_FEM<double, FieldContainer<double> >()),
-                                                      TWO_D, SCALAR_RANK, IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD) );
+                                                      THREE_D, SCALAR_RANK, IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD) );
     case shards::Hexahedron<8>::key:
       return Teuchos::rcp( new IntrepidBasisWrapper<>( Teuchos::rcp( new Basis_HGRAD_HEX_C1_FEM<double, FieldContainer<double> >()),
                                                       THREE_D, SCALAR_RANK, IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD) );
