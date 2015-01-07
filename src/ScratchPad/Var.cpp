@@ -76,33 +76,6 @@ IntrepidExtendedTypes::EFunctionSpaceExtended VarFunctionSpaces::efsForSpace(Spa
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unknown function space.");
       return IntrepidExtendedTypes::FUNCTION_SPACE_UNKNOWN;
   }
-  
-//  if (space == HGRAD)
-//    return IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD;
-//  if (space == HCURL)
-//    return IntrepidExtendedTypes::FUNCTION_SPACE_HCURL;
-//  if (space == HDIV)
-//    return IntrepidExtendedTypes::FUNCTION_SPACE_HDIV;
-//  if (space == HGRAD_DISC)
-//    return IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD_DISC;
-//  if (space == HCURL_DISC)
-//    return IntrepidExtendedTypes::FUNCTION_SPACE_HCURL_DISC;
-//  if (space == HDIV_DISC)
-//    return IntrepidExtendedTypes::FUNCTION_SPACE_HDIV_DISC;
-//  if (space == HDIV_FREE)
-//    return IntrepidExtendedTypes::FUNCTION_SPACE_HDIV_FREE;
-//  if (space == L2)
-//    return IntrepidExtendedTypes::FUNCTION_SPACE_HVOL;
-//  if (space == CONSTANT_SCALAR)
-//    return IntrepidExtendedTypes::FUNCTION_SPACE_REAL_SCALAR;
-//  if (space == VECTOR_HGRAD)
-//    return IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HGRAD;
-//  if (space == VECTOR_HGRAD_DISC)
-//    return IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HGRAD_DISC;
-//  if (space == VECTOR_L2)
-//    return IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HVOL;
-//  TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unknown function space.");
-//  return IntrepidExtendedTypes::FUNCTION_SPACE_UNKNOWN;
 }
 
 int VarFunctionSpaces::rankForSpace(Space space) {
