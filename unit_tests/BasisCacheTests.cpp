@@ -10,6 +10,8 @@
 
 #include "BasisCache.h"
 
+#include "SerialDenseWrapper.h"
+
 #include "CamelliaCellTools.h"
 #include "CellTopology.h"
 
@@ -294,6 +296,9 @@ namespace {
           out << "sideNormals:\n" << sideNormals;
           out << "sideNormalsExpected:\n" << sideNormalsExpected;
         }
+        
+        SerialDenseWrapper::roundZeros(sideNormals, 1e-15);
+        SerialDenseWrapper::roundZeros(sideNormalsExpected, 1e-15);
         
         TEST_COMPARE_FLOATING_ARRAYS(sideNormalsExpected, sideNormals, 1e-15);
       }
