@@ -15,28 +15,25 @@
 #include "SubBasisDofMapper.h"
 #include "IndexType.h"
 
-using namespace std;
-using namespace Intrepid;
-
 class SubBasisDofMatrixMapper : public SubBasisDofMapper { // subclass that multiplies by a matrix (as opposed to applying a permutation)
-  set<unsigned> _basisDofOrdinalFilter;
-  vector<GlobalIndexType> _mappedGlobalDofOrdinals;
-  FieldContainer<double> _constraintMatrix;
+  std::set<unsigned> _basisDofOrdinalFilter;
+  std::vector<GlobalIndexType> _mappedGlobalDofOrdinals;
+  Intrepid::FieldContainer<double> _constraintMatrix;
 public:
-  SubBasisDofMatrixMapper(const set<unsigned> &basisDofOrdinalFilter,
-                          const vector<GlobalIndexType> &mappedGlobalDofOrdinals,
-                          const FieldContainer<double> &constraintMatrix);
+  SubBasisDofMatrixMapper(const std::set<unsigned> &basisDofOrdinalFilter,
+                          const std::vector<GlobalIndexType> &mappedGlobalDofOrdinals,
+                          const Intrepid::FieldContainer<double> &constraintMatrix);
   const set<unsigned> &basisDofOrdinalFilter();
-  FieldContainer<double> mapData(bool transposeConstraint, FieldContainer<double> &localData, bool applyOnLeftOnly = false);
-  void mapDataIntoGlobalContainer(const FieldContainer<double> &wholeBasisData, const map<GlobalIndexType, unsigned> &globalIndexToOrdinal,
-                                  bool fittableDofsOnly, const set<GlobalIndexType> &fittableDofIndices, FieldContainer<double> &globalData);
+  Intrepid::FieldContainer<double> mapData(bool transposeConstraint, Intrepid::FieldContainer<double> &localData, bool applyOnLeftOnly = false);
+  void mapDataIntoGlobalContainer(const Intrepid::FieldContainer<double> &wholeBasisData, const std::map<GlobalIndexType, unsigned> &globalIndexToOrdinal,
+                                  bool fittableDofsOnly, const std::set<GlobalIndexType> &fittableDofIndices, Intrepid::FieldContainer<double> &globalData);
   
-  vector<GlobalIndexType> mappedGlobalDofOrdinals();
+  std::vector<GlobalIndexType> mappedGlobalDofOrdinals();
   
   SubBasisDofMapperPtr negatedDofMapper();
   
-  const FieldContainer<double> &constraintMatrix();
-  FieldContainer<double> getConstraintMatrix();
+  const Intrepid::FieldContainer<double> &constraintMatrix();
+  Intrepid::FieldContainer<double> getConstraintMatrix();
 };
 
 #endif /* defined(__Camellia_debug__SubBasisDofMatrixMapper__) */
