@@ -229,7 +229,7 @@ void CamelliaCellTools::getUnitSideNormals(FieldContainer<double> &unitSideNorma
   } else {
     if (parentCell->sideIsSpatial(sideOrdinal)) {
       FieldContainer<double> spaceUnitSideNormals(numCells,numPoints,spaceDim-1);
-      CellTopoPtr spaceTopo = CellTopology::cellTopology(parentCell->getShardsTopology(), parentCell->getTensorialDegree());
+      CellTopoPtr spaceTopo = CellTopology::cellTopology(parentCell->getShardsTopology(), parentCell->getTensorialDegree()-1);
       // for the below to work, we require the transformation preserves orthogonality of space and time.  Check that the Jacobian provided satisfies this:
       unsigned spatialSideOrdinal = parentCell->getSpatialComponentSideOrdinal(sideOrdinal);
       FieldContainer<double> spatialCellJacobian(numCells,numPoints,spaceDim-1,spaceDim-1);
@@ -261,7 +261,8 @@ void CamelliaCellTools::getUnitSideNormals(FieldContainer<double> &unitSideNorma
       }
     } else { // side is not spatial; it's temporal.  If it's the first side, the normal points downward; if it's the second, it points upward.
       // the direction is flipped if the cell jacobian is negative...
-      double refSpaceNormal = (sideOrdinal == spaceDim - 2) ? -1 : 1;
+      unsigned temporalNodeOrdinal = parentCell->getTemporalComponentSideOrdinal(sideOrdinal);
+      double refSpaceNormal = (temporalNodeOrdinal == 0) ? -1 : 1;
       unitSideNormals.initialize(0);
       for (int cellOrdinal=0; cellOrdinal<numCells; cellOrdinal++) {
         for (int ptOrdinal=0; ptOrdinal<numPoints; ptOrdinal++) {
