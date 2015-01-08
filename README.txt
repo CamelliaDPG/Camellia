@@ -17,7 +17,7 @@ On a Mac, our experience is that due to Apple’s requirements for code signatur
 SWIG install (required to build Trilinos with support for PyTrilinos):
 1. Download source from http://www.swig.org/download.html.
 2. Configure:
-	./configure --prefix=/Users/nroberts/lib/swig-3.0.2
+	./configure --prefix=/Users/nroberts/local/swig-3.0.2
 3. Make:
 	make -j6
 4. Install:
@@ -33,36 +33,6 @@ Boost install:
 5. Install
 	./b2 install
 
-HDF5 install (parallel build, not suitable for serial builds of Trilinos):
-1. Download source for hdf5-1.8.X from http://www.hdfgroup.org/HDF5/release/obtainsrc.html#conf.
-2. Untar.
-3. Configure:
-   CC=mpicc ./configure --prefix=/Users/nroberts/lib/hdf5
-4. Make and install:
-   make -j6
-   make install
-5. In the Trilinos do-configure, you'll want to include lines like the following:
-   -D TPL_ENABLE_HDF5:STRING=ON \
-   -D HDF5_LIBRARY_DIRS:FILEPATH=/Users/nroberts/lib/hdf5/lib \
-   -D HDF5_LIBRARY_NAMES:STRING="hdf5" \
-   -D TPL_HDF5_INCLUDE_DIRS:FILEPATH=/Users/nroberts/lib/hdf5/include \
-   -D EpetraExt_USING_HDF5:BOOL=ON \
-
-HDF5 install (serial build, not suitable for parallel builds of Trilinos):
-1. Download source for hdf5-1.8.X from http://www.hdfgroup.org/HDF5/release/obtainsrc.html#conf.
-2. Untar.
-3. Configure:
-   CC=clang ./configure --prefix=/Users/nroberts/lib/hdf5-serial
-4. Make and install:
-   make -j6
-   make install
-5. In the Trilinos do-configure, you'll want to include lines like the following:
-   -D TPL_ENABLE_HDF5:STRING=ON \
-   -D HDF5_LIBRARY_DIRS:FILEPATH=/Users/nroberts/lib/hdf5-serial/lib \
-   -D HDF5_LIBRARY_NAMES:STRING="hdf5" \
-   -D TPL_HDF5_INCLUDE_DIRS:FILEPATH=/Users/nroberts/lib/hdf5-serial/include \
-   -D EpetraExt_USING_HDF5:BOOL=ON \
-
 OpenMPI install:
 1. Download source from http://www.open-mpi.org/software/ompi/.
 2. cd into source dir.
@@ -74,6 +44,36 @@ OpenMPI install:
 	make install
 6. Add the bin folder to your PATH, e.g. by adding to your .bashrc:
 	export PATH=${PATH}:${HOME}/lib/openmpi-1.8.3/bin
+
+HDF5 install (parallel build, not suitable for serial builds of Trilinos):
+1. Download source for hdf5-1.8.X from http://www.hdfgroup.org/HDF5/release/obtainsrc.html#conf.
+2. Untar.
+3. Configure:
+   CC=mpicc ./configure --prefix=/Users/nroberts/local/hdf5
+4. Make and install:
+   make -j6
+   make install
+5. In the Trilinos do-configure, you'll want to include lines like the following:
+   -D TPL_ENABLE_HDF5:STRING=ON \
+   -D HDF5_LIBRARY_DIRS:FILEPATH=/Users/nroberts/local/hdf5/lib \
+   -D HDF5_LIBRARY_NAMES:STRING="hdf5" \
+   -D TPL_HDF5_INCLUDE_DIRS:FILEPATH=/Users/nroberts/local/hdf5/include \
+   -D EpetraExt_USING_HDF5:BOOL=ON \
+
+HDF5 install (serial build, not suitable for parallel builds of Trilinos):
+1. Download source for hdf5-1.8.X from http://www.hdfgroup.org/HDF5/release/obtainsrc.html#conf.
+2. Untar.
+3. Configure:
+   CC=clang ./configure --prefix=/Users/nroberts/local/hdf5-serial
+4. Make and install:
+   make -j6
+   make install
+5. In the Trilinos do-configure, you'll want to include lines like the following:
+   -D TPL_ENABLE_HDF5:STRING=ON \
+   -D HDF5_LIBRARY_DIRS:FILEPATH=/Users/nroberts/local/hdf5-serial/lib \
+   -D HDF5_LIBRARY_NAMES:STRING="hdf5" \
+   -D TPL_HDF5_INCLUDE_DIRS:FILEPATH=/Users/nroberts/local/hdf5-serial/include \
+   -D EpetraExt_USING_HDF5:BOOL=ON \
 
 Scalapack install:
 1. Download source from http://www.netlib.org/scalapack/
@@ -104,7 +104,6 @@ MUMPS install:
 5. Copy the built libraries from <MUMPS dir>/lib to $HOME/lib/mumps-4.10.0.
 6. Copy the include directory to $HOME/lib/mumps-4.10.0/include.
 
-
 ******** BUILDING CAMELLIA **********
 
 Once that's done, you're ready to start on the Camellia build.
@@ -127,4 +126,4 @@ Instructions for a serial debug build:
 	make runTests
 8. Run
 
-All tests in DPGTests and runTest should pass.
+All tests in DPGTests and runTests should pass, with the exception of the runTests test MeshTools_MeshSliceTimeZero_UnitTest, which is a test against some new space-time facilities still under development.
