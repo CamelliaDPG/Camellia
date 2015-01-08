@@ -67,6 +67,8 @@ public:
   virtual FunctionPtr dx();
   virtual FunctionPtr dy();
   virtual FunctionPtr dz();
+//  virtual FunctionPtr dt(); // TODO: rework ParametricCurve (Function subclass) so that we can define dt() thus.
+  
   virtual FunctionPtr div();
   virtual FunctionPtr curl();
   virtual FunctionPtr grad(int numComponents=-1);
@@ -155,6 +157,7 @@ public:
   static FunctionPtr xn(int n=1);
   static FunctionPtr yn(int n=1);
   static FunctionPtr zn(int n=1);
+  static FunctionPtr tn(int n=1);
 //  static FunctionPtr jump(FunctionPtr f);
 
   static FunctionPtr cellCharacteristic(GlobalIndexType cellID);
@@ -219,6 +222,7 @@ public:
   virtual double value(double x);
   virtual double value(double x, double y);
   virtual double value(double x, double y, double z);
+  virtual double value(double x, double y, double z, double t);
   virtual void values(FieldContainer<double> &values, BasisCachePtr basisCache);
 };
 typedef Teuchos::RCP<SimpleFunction> SimpleFunctionPtr;
@@ -540,6 +544,20 @@ public:
   FunctionPtr dx();
   FunctionPtr dy();
   FunctionPtr dz();
+  string displayString();
+};
+
+class Tn : public SimpleFunction {
+  int _n;
+public:
+  Tn(int n);
+  double value(double x, double t);
+  double value(double x, double y, double t);
+  double value(double x, double y, double z, double t);
+  FunctionPtr dx();
+  FunctionPtr dy();
+  FunctionPtr dz();
+  FunctionPtr dt();
   string displayString();
 };
 

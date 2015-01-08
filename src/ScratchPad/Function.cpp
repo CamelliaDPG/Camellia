@@ -314,6 +314,10 @@ FunctionPtr Function::dy() {
 FunctionPtr Function::dz() {
   return Function::null();
 }
+ // TODO: rework ParametricCurve (Function subclass) so that we can define dt() thus.
+//FunctionPtr Function::dt() {
+//  return Function::null();
+//}
 FunctionPtr Function::curl() {
   FunctionPtr dxFxn = dx();
   FunctionPtr dyFxn = dy();
@@ -1180,6 +1184,10 @@ FunctionPtr Function::zn(int n) {
   return Teuchos::rcp( new Zn(n) );
 }
 
+FunctionPtr Function::tn(int n) {
+  return Teuchos::rcp( new Tn(n) );
+}
+
 FunctionPtr Function::xPart(FunctionPtr vectorFxn) {
   return Teuchos::rcp( new ComponentFunction(vectorFxn, 0) );
 }
@@ -1645,6 +1653,10 @@ double SimpleFunction::value(double x, double y, double z) {
   return value(x,y);
 }
 
+double SimpleFunction::value(double x, double y, double z, double t) {
+  return value(x,y,z);
+}
+
 void SimpleFunction::values(FieldContainer<double> &values, BasisCachePtr basisCache) {
   CHECK_VALUES_RANK(values);
   int numCells = values.dimension(0);
@@ -1666,6 +1678,12 @@ void SimpleFunction::values(FieldContainer<double> &values, BasisCachePtr basisC
         double y = (*points)(cellIndex,ptIndex,1);
         double z = (*points)(cellIndex,ptIndex,2);
         values(cellIndex,ptIndex) = value(x,y,z);
+      } else if (spaceDim == 4) {
+        double x = (*points)(cellIndex,ptIndex,0);
+        double y = (*points)(cellIndex,ptIndex,1);
+        double z = (*points)(cellIndex,ptIndex,2);
+        double t = (*points)(cellIndex,ptIndex,3);
+        values(cellIndex,ptIndex) = value(x,y,z,t);
       }
     }
   }
@@ -2385,6 +2403,47 @@ FunctionPtr Zn::dz() {
     return Function::zero();
   }
   FunctionPtr z_n_minus = Teuchos::rcp( new Zn(_n-1) );
+  return _n * z_n_minus;
+}
+
+string Tn::displayString() {
+  ostringstream ss;
+  if ((_n != 1) && (_n != 0)) {
+    ss << "t^" << _n ;
+  } else if (_n == 1) {
+    ss << "t";
+  } else {
+    ss << "(1)";
+  }
+  return ss.str();
+}
+Tn::Tn(int n) {
+  _n = n;
+}
+double Tn::value(double x, double t) {
+  return pow(t,_n);
+}
+double Tn::value(double x, double y, double t) {
+  return pow(t,_n);
+}
+double Tn::value(double x, double y, double z, double t) {
+  return pow(t,_n);
+}
+
+FunctionPtr Tn::dx() {
+  return Function::zero();
+}
+FunctionPtr Tn::dy() {
+  return Function::zero();
+}
+FunctionPtr Tn::dz() {
+  return Function::zero();
+}
+FunctionPtr Tn::dt() {
+  if (_n == 0) {
+    return Function::zero();
+  }
+  FunctionPtr z_n_minus = Teuchos::rcp( new Tn(_n-1) );
   return _n * z_n_minus;
 }
 
