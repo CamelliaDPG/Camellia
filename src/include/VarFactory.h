@@ -13,6 +13,10 @@
 #include "BilinearForm.h"
 #include "LinearTerm.h"
 
+// The basic function of VarFactory is to assign unique test/trial IDs and keep track of the variables in play.
+// Usually, you have exactly one VarFactory for each problem, and you pass this into the bilinear form (BF) object
+// on construction.
+
 class VarFactory {
   std::map< std::string, VarPtr > _testVars;
   std::map< std::string, VarPtr > _trialVars;
@@ -43,8 +47,6 @@ public:
   
   std::vector<int> trialIDs();
   
-  // The basic function of the VarFactory is to assign unique test/trial IDs and keep track of the variables in play.
-  
   VarPtr testVar(std::string name, Space fs, int ID = -1);
   VarPtr fieldVar(std::string name, Space fs = L2, int ID = -1);
   
@@ -68,6 +70,7 @@ public:
   
   std::vector< VarPtr > traceVars();
   
+  // returns a new VarFactory with the same test space, and a subspace of the trial space
   VarFactory trialSubFactory(std::vector< VarPtr > &trialVars);
 };
 
