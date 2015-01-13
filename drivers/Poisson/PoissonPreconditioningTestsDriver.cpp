@@ -634,7 +634,8 @@ void runMany(ProblemChoice problemChoice, int spaceDim, int delta_k, int minCell
              bool conformingTraces, bool useStaticCondensation,
              GMGOperator::FactorType schwarzBlockFactorization, int schwarzLevelOfFill, double schwarzFillRatio,
              Solver::SolverChoice coarseSolverChoice,
-             double cgTol, int cgMaxIterations, int aztecOutputLevel, RunManyPreconditionerChoices preconditionerChoices) {
+             double cgTol, int cgMaxIterations, int aztecOutputLevel, RunManyPreconditionerChoices preconditionerChoices,
+             int k=-1, int overlapLevel=-1) {
   int rank = Teuchos::GlobalMPISession::getRank();
   
   string problemChoiceString;
@@ -737,11 +738,15 @@ void runMany(ProblemChoice problemChoice, int spaceDim, int delta_k, int minCell
   }
   
   vector<int> kValues;
-  kValues.push_back(1);
-  kValues.push_back(2);
-  if (spaceDim < 3) kValues.push_back(4);
-  if (spaceDim < 2) kValues.push_back(8);
-  if (spaceDim < 2) kValues.push_back(16);
+  if (k == -1) {
+    kValues.push_back(1);
+    kValues.push_back(2);
+    if (spaceDim < 3) kValues.push_back(4);
+    if (spaceDim < 2) kValues.push_back(8);
+    if (spaceDim < 2) kValues.push_back(16);
+  } else {
+    kValues.push_back(k);
+  }
   
   vector<int> numCellsValues;
   int numCells = minCells;
@@ -762,14 +767,22 @@ void runMany(ProblemChoice problemChoice, int spaceDim, int delta_k, int minCell
     if (precondition) {
       schwarzOnlyValues = schwarzOnly_maxChoices;
       useCamelliaSchwarzValues = useCamelliaSchwarz_maxChoices;
-      overlapValues.push_back(0);
-      overlapValues.push_back(1);
-      if (spaceDim < 3) overlapValues.push_back(2);
+      if (overlapLevel == -1) {
+        overlapValues.push_back(0);
+        overlapValues.push_back(1);
+        if (spaceDim < 3) overlapValues.push_back(2);
+      } else {
+        overlapValues.push_back(overlapLevel);
+      }
     } else {
       // schwarzOnly and useCamelliaSchwarz ignored; just use one of them
       schwarzOnlyValues.push_back(false);
       useCamelliaSchwarzValues.push_back(false);
-      overlapValues.push_back(0);
+      if (overlapLevel == -1) {
+        overlapValues.push_back(0);
+      } else {
+        overlapValues.push_back(overlapLevel);
+      }
     }
     for (vector<bool>::iterator schwarzOnlyChoiceIt = schwarzOnlyValues.begin(); schwarzOnlyChoiceIt != schwarzOnlyValues.end(); schwarzOnlyChoiceIt++) {
       bool schwarzOnly = *schwarzOnlyChoiceIt;
@@ -838,6 +851,13 @@ void runMany(ProblemChoice problemChoice, int spaceDim, int delta_k, int minCell
     filename << preconditionerChoiceString;
     if (schwarzBlockFactorization != GMGOperator::Direct)
       filename << "_schwarzFactorization_" << getFactorizationTypeString(schwarzBlockFactorization);
+    if (overlapLevel != -1) {
+      filename << "_overlap" << overlapLevel;
+    }
+    if (k != -1) {
+      filename << "_k" << k;
+    }
+    
     // if coarse solver is not direct, then include in the file name:
     if ((coarseSolverChoice != Solver::KLU) && (coarseSolverChoice != Solver::MUMPS) && (coarseSolverChoice != Solver::SuperLUDist))
       filename << "_coarseSolver_" << Solver::solverChoiceString(coarseSolverChoice);
@@ -869,7 +889,7 @@ int main(int argc, char *argv[]) {
   
   Teuchos::CommandLineProcessor cmdp(false,true); // false: don't throw exceptions; true: do return errors for unrecognized options
   
-  int k = 1; // poly order for field variables
+  int k = -1; // poly order for field variables
   int delta_k = -1;   // test space enrichment; -1 for default detection (defaults to spaceDim)
   
   bool conformingTraces = true;
@@ -879,7 +899,7 @@ int main(int argc, char *argv[]) {
   
   int AztecOutputLevel = 1;
   int cgMaxIterations = 25000;
-  int schwarzOverlap = 0;
+  int schwarzOverlap = -1;
   
   int spaceDim = 1;
   
@@ -1000,6 +1020,9 @@ int main(int argc, char *argv[]) {
     int iterationCount;
     bool reportTimings = true, reportEnergyError = true;
     
+    if (schwarzOverlap == -1) schwarzOverlap = 0;
+    if (k == -1) k = 2;
+    
     run(problemChoice, iterationCount, spaceDim, numCells, k, delta_k, conformingTraces,
         useCondensedSolve, precondition, schwarzOnly, useCamelliaAdditiveSchwarz, schwarzOverlap,
         schwarzFactorType, levelOfFill, fillRatio, coarseSolverChoice,
@@ -1023,7 +1046,7 @@ int main(int argc, char *argv[]) {
             schwarzFactorType, levelOfFill, fillRatio,
             coarseSolverChoice,
             cgTol, cgMaxIterations, AztecOutputLevel,
-            runManySubsetChoice);
+            runManySubsetChoice, k, schwarzOverlap);
   }
   return 0;
 }
