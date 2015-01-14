@@ -26,6 +26,8 @@
 
 using namespace Camellia;
 
+bool runGMGOperatorInDebugMode;
+
 enum CoarseSolverChoice {
   KLU,
   SuperLUDist,
@@ -560,6 +562,7 @@ void run(ProblemChoice problemChoice, int &iterationCount, int spaceDim, int num
       gmgSolver->gmgOperator().setSmootherType(GMGOperator::IFPACK_ADDITIVE_SCHWARZ);
     }
     gmgSolver->gmgOperator().setSmootherOverlap(schwarzOverlap);
+    gmgSolver->gmgOperator().setDebugMode(runGMGOperatorInDebugMode);
     solver = Teuchos::rcp( gmgSolver ); // we use "new" above, so we can let this RCP own the memory
   }
   
@@ -878,6 +881,8 @@ int main(int argc, char *argv[]) {
   Teuchos::GlobalMPISession mpiSession(&argc, &argv);
   int rank = Teuchos::GlobalMPISession::getRank();
   
+  runGMGOperatorInDebugMode = false;
+  
 #ifdef HAVE_MPI
   Epetra_MpiComm Comm(MPI_COMM_WORLD);
   //cout << "rank: " << rank << " of " << numProcs << endl;
@@ -956,6 +961,8 @@ int main(int argc, char *argv[]) {
   cmdp.setOption("runMany", "runOne", &runAutomatic, "Run in automatic mode (ignores several input parameters)");
   cmdp.setOption("runManySubset", &runManySubsetString, "DontPrecondition, AllGMG, AllSchwarz, or All");
   cmdp.setOption("runManyMinCells", &runManyMinCells, "Minimum number of cells to use for mesh width");
+  
+  cmdp.setOption("  ", "gmgOperatorNormal", &runGMGOperatorInDebugMode, "Run GMGOperator in a debug mode");
   
   if (cmdp.parse(argc,argv) != Teuchos::CommandLineProcessor::PARSE_SUCCESSFUL) {
 #ifdef HAVE_MPI
