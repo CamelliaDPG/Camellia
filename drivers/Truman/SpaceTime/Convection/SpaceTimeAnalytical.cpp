@@ -182,24 +182,55 @@ int main(int argc, char *argv[]) {
 
     // Modified Robust Norm
     case 1:
-    ip->addTerm( v );
-    ip->addTerm( sqrt(epsilon) * v->grad() );
-    ip->addTerm( v->dx() );
-    ip->addTerm( tau->dx() - beta*v->grad() );
     ip->addTerm( ip_scaling/sqrt(epsilon) * tau );
+    ip->addTerm( sqrt(epsilon) * v->dx() );
+    ip->addTerm( tau->dx() - beta*v->grad() );
+    ip->addTerm( beta * v->grad() );
+    ip->addTerm( v );
     break;
 
     // Modified Robust Norm 2
     case 2:
-    ip->addTerm( v );
+    ip->addTerm( ip_scaling/sqrt(epsilon) * tau );
     ip->addTerm( sqrt(epsilon) * v->dx() );
     ip->addTerm( beta * v->grad() );
-    ip->addTerm( tau->dx() - beta*v->grad() );
+    ip->addTerm( tau->dx() );
+    ip->addTerm( v );
+    break;
+
+    // NS Robust Norm
+    case 3:
+    ip->addTerm( 1./epsilon * tau );
+    ip->addTerm( v->dx() );
+    ip->addTerm( beta * v->grad() );
+    ip->addTerm( tau->dx() );
+    ip->addTerm( v );
+    break;
+
+    // NS Robust Norm
+    case 4:
     ip->addTerm( ip_scaling/sqrt(epsilon) * tau );
+    ip->addTerm( sqrt(epsilon) * v->dx() );
+    ip->addTerm( tau->dx() - beta*v->grad() );
+    ip->addTerm( v->dx() );
+    ip->addTerm( v );
+    // ip->addTerm( ip_scaling/sqrt(epsilon) * tau );
+    // ip->addTerm( Function::h()*v->dx() );
+    // ip->addTerm( beta*v->grad() );
+    // ip->addTerm( tau->dx() );
+    // ip->addTerm( v );
+    break;
+
+    // NS Robust Norm
+    case 5:
+    // ip->addTerm( ip_scaling/sqrt(epsilon) * tau );
+    // ip->addTerm( Function::h()*v->dx() );
+    // ip->addTerm( tau->dx() - beta*v->grad() );
+    // ip->addTerm( v );
     break;
 
     default:
-    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "invalid problem number");
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "invalid inner product");
   }
 
   ////////////////////   CREATE BCs   ///////////////////////
@@ -250,7 +281,7 @@ int main(int argc, char *argv[]) {
       stringstream errfile;
       outfile << "analytical_" << refIndex;
       errfile << "analytical_error_" << refIndex;
-      exporter.exportSolution(outfile.str());
+      // exporter.exportSolution(outfile.str());
       // exporter.exportFunction(u_diff, errfile.str());
       // exporter.exportFunction(u_exact, "analytical_exact");
 
