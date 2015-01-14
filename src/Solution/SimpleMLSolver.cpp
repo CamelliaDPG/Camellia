@@ -11,14 +11,14 @@
 #include "SimpleMLSolver.h"
 
 SimpleMLSolver::SimpleMLSolver(bool saveFactorization, double residualTolerance, int maxIterations) {
-  if (saveFactorization) {
-    int rank = Teuchos::GlobalMPISession::getRank();
-    
-    if (rank==0) {
-      cout << "WARNING: SimpleMLSolver may have issues with saveFactorization=true; overriding with false.\n";
-    }
-    saveFactorization = false;
-  }
+//  if (saveFactorization) {
+//    int rank = Teuchos::GlobalMPISession::getRank();
+//    
+//    if (rank==0) {
+//      cout << "WARNING: SimpleMLSolver may have issues with saveFactorization=true; overriding with false.\n";
+//    }
+//    saveFactorization = false;
+//  }
   _saveFactorization = saveFactorization;
   _resTol = residualTolerance;
   _maxIters = maxIterations;
