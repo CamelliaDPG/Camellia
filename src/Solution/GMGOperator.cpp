@@ -54,6 +54,8 @@ GMGOperator::GMGOperator(BCPtr zeroBCs, MeshPtr coarseMesh, IPPtr coarseIP,
   _useStaticCondensation = useStaticCondensation;
   _fineDofInterpreter = fineDofInterpreter;
   _fineSolverUsesDiagonalScaling = false;
+  
+  _debugMode = false;
 
   _schwarzBlockFactorizationType = Direct;
 
@@ -114,6 +116,7 @@ GMGOperator::GMGOperator(BCPtr zeroBCs, MeshPtr coarseMesh, IPPtr coarseIP,
 //    _coarseSolution->populateStiffnessAndLoad();
 //  }
 
+  Epetra_Time prolongationTimer(Comm);
 #ifdef HPCTW
   HPM_Start("constructProlongationOperator");
 #endif
@@ -121,7 +124,13 @@ GMGOperator::GMGOperator(BCPtr zeroBCs, MeshPtr coarseMesh, IPPtr coarseIP,
 #ifdef HPCTW
   HPM_Stop("constructProlongationOperator");
 #endif
+  _timeProlongationOperatorConstruction = prolongationTimer.ElapsedTime();
 
+  int rank = Teuchos::GlobalMPISession::getRank();
+  if (rank==0) {
+    cout << "Prolongation operator constructed in " << _timeProlongationOperatorConstruction << " seconds.\n";
+  }
+  
   _fineSolverUsesDiagonalScaling = false;
   setFineSolverUsesDiagonalScaling(fineSolverUsesDiagonalScaling);
 
@@ -546,210 +555,77 @@ int GMGOperator::Apply(const Epetra_MultiVector& X, Epetra_MultiVector& Y) const
 
 int GMGOperator::ApplyInverse(const Epetra_MultiVector& X_in, Epetra_MultiVector& Y) const {
 //  cout << "GMGOperator::ApplyInverse.\n";
+  int rank = Teuchos::GlobalMPISession::getRank();
+  bool printVerboseOutput = (rank==0) && _debugMode;
+  
   Epetra_Time timer(Comm());
 
   Epetra_MultiVector X(X_in); // looks like Y may be stored in the same location as X_in, so that changing Y will change X, too...
   if (_fineSolverUsesDiagonalScaling) {
+    if (printVerboseOutput) cout << "multiplying X by _diag_sqrt\n";
     // Here, we assume symmetric diagonal scaling: D^-1/2 A D^-1/2, where A is the fine matrix.
     // (because the inverse that we otherwise approximate is A^-1, we now approximate D^1/2 A^-1 D^1/2)
     X.Multiply(1.0, *_diag_sqrt, X, 0);
+    if (printVerboseOutput) cout << "finished multiplying X by _diag_sqrt\n";
   }
-
+  
+  if (printVerboseOutput) cout << "calling _coarseSolution->getRHSVector()\n";
   Teuchos::RCP<Epetra_FEVector> coarseRHSVector = _coarseSolution->getRHSVector();
+  if (printVerboseOutput) cout << "returned from _coarseSolution->getRHSVector()\n";
 
   timer.ResetStartTime();
+  if (printVerboseOutput) cout << "calling _P->Multiply(true, X, *coarseRHSVector);\n";
   _P->Multiply(true, X, *coarseRHSVector);
+  if (printVerboseOutput) cout << "finished _P->Multiply(true, X, *coarseRHSVector);\n";
   _timeMapFineToCoarse += timer.ElapsedTime();
 
   timer.ResetStartTime();
   if (!_haveSolvedOnCoarseMesh) {
+    if (printVerboseOutput) cout << "solving on coarse mesh\n";
     _coarseSolution->setProblem(_coarseSolver);
     _coarseSolution->solveWithPrepopulatedStiffnessAndLoad(_coarseSolver, false);
+    if (printVerboseOutput) cout << "finished solving on coarse mesh\n";
     _haveSolvedOnCoarseMesh = true;
   } else {
+    if (printVerboseOutput) cout << "resolving on coarse mesh\n";
     _coarseSolver->problem().SetRHS(coarseRHSVector.get());
     _coarseSolution->solveWithPrepopulatedStiffnessAndLoad(_coarseSolver, true); // call resolve() instead of solve() -- reuse factorization
+    if (printVerboseOutput) cout << "finished resolving on coarse mesh\n";
   }
   _timeCoarseSolve += timer.ElapsedTime();
 
   timer.ResetStartTime();
+  if (printVerboseOutput) cout << "calling _coarseSolution->getLHSVector()\n";
   Teuchos::RCP<Epetra_FEVector> coarseLHSVector = _coarseSolution->getLHSVector();
+  if (printVerboseOutput) cout << "finished _coarseSolution->getLHSVector()\n";
+  if (printVerboseOutput) cout << "calling _P->Multiply(false, *coarseLHSVector, Y)\n";
   _P->Multiply(false, *coarseLHSVector, Y);
+  if (printVerboseOutput) cout << "finished _P->Multiply(false, *coarseLHSVector, Y)\n";
   _timeMapCoarseToFine += timer.ElapsedTime();
 
   // if _applySmoothingOperator is set, add S^(-1)X to Y.
   if (_applySmoothingOperator) {
+    if (printVerboseOutput) cout << "copying X into X2\n";
     Epetra_MultiVector X2(X); // copy, since I'm not sure ApplyInverse is generally OK with X and Y in same location (though Aztec seems to make that assumption, so it probably is OK).
+    if (printVerboseOutput) cout << "finished copying X into X2\n";
+    if (printVerboseOutput) cout << "calling _smoother->ApplyInverse(X2, X)\n";
     _smoother->ApplyInverse(X2, X);
-
+    if (printVerboseOutput) cout << "finished _smoother->ApplyInverse(X2, X)\n";
+    if (printVerboseOutput) cout << "calling Y.Update(1.0, X, 1.0)\n";
     Y.Update(1.0, X, 1.0);
-    // old Jacobi smoothing application:
-//    Y.Multiply(1.0, *_diag_inv, X, 1.0);
+    if (printVerboseOutput) cout << "finished Y.Update(1.0, X, 1.0)\n";
   } else {
     //    cout << "_diag is NULL.\n";
   }
 
 
   if (_fineSolverUsesDiagonalScaling) {
+    if (printVerboseOutput) cout << "calling Y.Multiply(1.0, *_diag_sqrt, Y, 0)\n";
     Y.Multiply(1.0, *_diag_sqrt, Y, 0);
+    if (printVerboseOutput) cout << "finished Y.Multiply(1.0, *_diag_sqrt, Y, 0)\n";
   }
 
   return 0;
-
-  // old (pre-_P) implementation below...
-  /*
-//  EpetraExt::MultiVectorToMatlabFile("/tmp/X_in.dat",X_in);
-
-  Epetra_MultiVector X(X_in); // looks like Y may be stored in the same location as X_in, so that changing Y will change X, too...
-  Epetra_MultiVector X_copy(X_in); // make a copy of X before multiplying by the diagonal, too
-
-  if (_fineSolverUsesDiagonalScaling) {
-    // Here, we assume symmetric diagonal scaling: D^-1/2 A D^-1/2, where A is the fine matrix.
-    // (because the inverse that we otherwise approximate is A^-1, we now approximate D^1/2 A^-1 D^1/2)
-    X.Multiply(1.0, *_diag_sqrt, X, 0);
-  }
-
-
-
-//  EpetraExt::MultiVectorToMatlabFile("/tmp/X.dat",X);
-
-  // the data coming in (X) is in global dofs defined on the fine mesh.  First thing we'd like to do is map it to the fine mesh's local cells
-  set<GlobalIndexType> cellsInPartition = _fineMesh->globalDofAssignment()->cellsInPartition(-1); // rank-local
-
-  timer.ResetStartTime();
-  Teuchos::RCP<Epetra_FEVector> coarseRHSVector = _coarseSolution->getRHSVector();
-  set<GlobalIndexTypeToCast> coarseDofIndicesToImport = setCoarseRHSVector(X, *coarseRHSVector);
-  _timeMapFineToCoarse += timer.ElapsedTime();
-
-//  EpetraExt::MultiVectorToMatlabFile("/tmp/b_coarse.dat",*coarseRHSVector);
-
-  // solve the coarse system:
-
-  timer.ResetStartTime();
-  if (!_haveSolvedOnCoarseMesh) {
-    _coarseSolution->setProblem(_coarseSolver);
-    _coarseSolution->solveWithPrepopulatedStiffnessAndLoad(_coarseSolver, false);
-    _haveSolvedOnCoarseMesh = true;
-  } else {
-    _coarseSolver->problem().SetRHS(coarseRHSVector.get());
-    _coarseSolution->solveWithPrepopulatedStiffnessAndLoad(_coarseSolver, true); // call resolve() instead of solve() -- reuse factorization
-  }
-  _timeCoarseSolve += timer.ElapsedTime();
-
-//  { // DEBUGGING:
-//    // put the RHS into FC for debugging purposes:
-//    int numMyDofs = coarseRHSVector->MyLength();
-//    FieldContainer<double> rhsFC(numMyDofs);
-//    for (int i=0; i<numMyDofs; i++) {
-//      rhsFC[i] = (*coarseRHSVector)[0][i];
-//    }
-//    cout << "before coarse solve, rhsFC:\n" << rhsFC;
-//  }
-
-  timer.ResetStartTime();
-  Teuchos::RCP<Epetra_FEVector> coarseLHSVector = _coarseSolution->getLHSVector();
-//  EpetraExt::MultiVectorToMatlabFile("/tmp/x_gmg.dat",*coarseLHSVector);
-
-  // now, map the coarse data back to the fine mesh, and add that into Y
-  Y.PutScalar(0); // clear Y
-
-  // import all the dofs of interest to us onto this MPI rank
-  Epetra_Map coarseMap = _coarseSolution->getPartitionMap();
-//  GlobalIndexTypeToCast numDofsGlobal = coarseMap.NumGlobalElements();
-  GlobalIndexTypeToCast numMyDofs = coarseDofIndicesToImport.size();
-  GlobalIndexTypeToCast myDofs[coarseDofIndicesToImport.size()];
-  GlobalIndexTypeToCast* myDof = &myDofs[0];
-  for (set<GlobalIndexTypeToCast>::iterator coarseDofIndexIt = coarseDofIndicesToImport.begin();
-       coarseDofIndexIt != coarseDofIndicesToImport.end(); coarseDofIndexIt++) {
-    *myDof = *coarseDofIndexIt;
-    myDof++;
-  }
-
-  Epetra_Map     solnMap(-1, numMyDofs, myDofs, 0, Comm());
-  Epetra_Import  solnImporter(solnMap, coarseMap);
-  Epetra_Vector  coarseDofs(solnMap);
-  coarseDofs.Import(*coarseLHSVector, solnImporter, Insert);
-
-  _timeCoarseImport += timer.ElapsedTime();
-
-//  { // DEBUGGING:
-//    // put the global coefficients into FC for debugging purposes:
-//    FieldContainer<double> globalCoefficientsFC(numMyDofs);
-//    for (int i=0; i<numMyDofs; i++) {
-//      GlobalIndexTypeToCast globalIndex = myDofs[i];
-//      int lid = solnMap.LID(globalIndex);
-//      globalCoefficientsFC[i] = coarseDofs[lid];
-//    }
-////    cout << "after coarse solve, globalCoefficientsFC:\n" << globalCoefficientsFC;
-//  }
-
-  timer.ResetStartTime();
-  Epetra_MultiVector Y_temp(Y.Map(),1);
-
-  for (set<GlobalIndexType>::iterator cellIDIt=cellsInPartition.begin(); cellIDIt != cellsInPartition.end(); cellIDIt++) {
-    GlobalIndexType fineCellID = *cellIDIt;
-    int fineDofCount = _fineMesh->getElementType(fineCellID)->trialOrderPtr->totalDofs();
-    FieldContainer<double> fineCellData(fineDofCount);
-
-    LocalDofMapperPtr fineMapper = getLocalCoefficientMap(fineCellID);
-    GlobalIndexType coarseCellID = getCoarseCellID(fineCellID);
-
-    int coarseDofCount = _coarseMesh->getElementType(coarseCellID)->trialOrderPtr->totalDofs();
-    FieldContainer<double> coarseCellCoefficients(coarseDofCount);
-
-    _coarseSolution->getDofInterpreter()->interpretGlobalCoefficients(coarseCellID, coarseCellCoefficients, coarseDofs);
-//    cout << "coarseCellData after coarse solve:\n" << coarseCellData;
-
-    vector<GlobalIndexType> coarseCellMappedLocalIndices = fineMapper->globalIndices();
-
-    FieldContainer<double> coarseCellMappedCoefficients(coarseCellMappedLocalIndices.size());
-    for (int i=0; i<coarseCellMappedLocalIndices.size(); i++) {
-      int coarseCellLocalIndex = coarseCellMappedLocalIndices[i];
-      coarseCellMappedCoefficients[i] = coarseCellCoefficients[coarseCellLocalIndex];
-    }
-
-    FieldContainer<double> fineLocalCoefficients = fineMapper->mapGlobalCoefficients(coarseCellMappedCoefficients);
-//    cout << "fineLocalCoefficients after coarse solve:\n" << fineLocalCoefficients;
-
-    _fineDofInterpreter->interpretLocalCoefficients(fineCellID, fineLocalCoefficients, Y);
-
-//    copyCoefficientsOwnedByFineCell(Y_temp, fineCellID, Y);
-  }
-  _timeMapCoarseToFine += timer.ElapsedTime();
-
-//  static int globalIterationCount = 0; // for debugging
-//  ostringstream X_file;
-//  X_file << "/tmp/X_" << globalIterationCount << ".dat";
-//  EpetraExt::MultiVectorToMatlabFile(X_file.str().c_str(),X);
-//
-//  ostringstream Y_file;
-//  Y_file << "/tmp/Y_before_diag_" << globalIterationCount << ".dat";
-//
-//  EpetraExt::MultiVectorToMatlabFile(Y_file.str().c_str(),Y);
-
-  // if _applySmoothingOperator is set, add diag(A)^(-1)X to Y.
-  if (_applySmoothingOperator) {
-    if (_diag.get() == NULL) {
-      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "_diag is null!");
-    }
-
-    Y.Multiply(1.0, *_diag_inv, X, 1.0);
-  } else {
-//    cout << "_diag is NULL.\n";
-  }
-
-  if (_fineSolverUsesDiagonalScaling) {
-    Y.Multiply(1.0, *_diag_sqrt, Y, 0);
-  }
-
-//  Y_file.str("");
-//  Y_file << "/tmp/Y_" << globalIterationCount << ".dat";
-//
-//  EpetraExt::MultiVectorToMatlabFile(Y_file.str().c_str(),Y);
-//  globalIterationCount++;
-
-  return 0;
-   */
 }
 
 double GMGOperator::NormInf() const {
@@ -879,6 +755,10 @@ void GMGOperator::reportTimings() const {
 
 void GMGOperator::setApplyDiagonalSmoothing(bool value) {
   _applySmoothingOperator = value;
+}
+
+void GMGOperator::setDebugMode(bool value) {
+  _debugMode = value;
 }
 
 void GMGOperator::setFineMesh(MeshPtr fineMesh, Epetra_Map finePartitionMap) {
