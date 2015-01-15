@@ -48,7 +48,7 @@ extern "C" void HPM_Start(char *);
 extern "C" void HPM_Stop(char *);
 #endif
 
-GMGOperator::GMGOperator(BCPtr zeroBCs, MeshPtr coarseMesh, IPPtr coarseIP,
+GMGOperator::GMGOperator(BCPtr zeroBCs, MeshPtr coarseMesh, Teuchos::RCP<DPGInnerProduct> coarseIP,
                          MeshPtr fineMesh, Teuchos::RCP<DofInterpreter> fineDofInterpreter, Epetra_Map finePartitionMap,
                          Teuchos::RCP<Solver> coarseSolver, bool useStaticCondensation, bool fineSolverUsesDiagonalScaling) :  _finePartitionMap(finePartitionMap), _br(true) {
   _useStaticCondensation = useStaticCondensation;
@@ -385,6 +385,10 @@ GlobalIndexType GMGOperator::getCoarseCellID(GlobalIndexType fineCellID) const {
     ancestor = parent;
   }
   return ancestor->cellIndex();
+}
+
+SolutionPtr GMGOperator::getCoarseSolution() {
+  return _coarseSolution;
 }
 
 LocalDofMapperPtr GMGOperator::getLocalCoefficientMap(GlobalIndexType fineCellID) const {
@@ -755,6 +759,10 @@ void GMGOperator::reportTimings() const {
 
 void GMGOperator::setApplyDiagonalSmoothing(bool value) {
   _applySmoothingOperator = value;
+}
+
+void GMGOperator::setCoarseSolver(SolverPtr coarseSolver) {
+  _coarseSolver = coarseSolver;
 }
 
 void GMGOperator::setDebugMode(bool value) {
