@@ -146,4 +146,75 @@ namespace {
       }
     }
   }
+  
+  TEUCHOS_UNIT_TEST(MeshTopology, GetRootMeshTopology) {
+    int k = 1;
+    int H1Order = k + 1;
+    int delta_k = 1;
+    
+    int spaceDim = 2;
+    bool conformingTraces = false;
+    PoissonFormulation formulation(spaceDim, conformingTraces);
+    BFPtr bf = formulation.bf();
+    
+    Teuchos::RCP<BilinearForm> bilinearForm = bf;
+    
+    int rootMeshNumCells = 2;
+    double width = 1.0;
+    
+    vector<double> dimensions;
+    vector<int> elementCounts;
+    vector<double> x0(spaceDim,0.0);
+    for (int d=0; d<spaceDim; d++) {
+      dimensions.push_back(width);
+      elementCounts.push_back(rootMeshNumCells);
+    }
+    MeshPtr originalMesh = MeshFactory::rectilinearMesh(bf, dimensions, elementCounts, H1Order, delta_k, x0);
+    MeshPtr mesh = MeshFactory::rectilinearMesh(bf, dimensions, elementCounts, H1Order, delta_k, x0);
+    
+    // get a sample cellTopo:
+    CellTopoPtr cellTopo = mesh->getTopology()->getCell(0)->topology();
+    RefinementPatternPtr refPattern = RefinementPattern::regularRefinementPattern(cellTopo);
+    
+    int numUniformRefinements = 3;
+    for (int i=0; i<numUniformRefinements; i++) {
+      set<GlobalIndexType> activeCellIDs = mesh->getActiveCellIDs();
+      mesh->RefinementObserver::hRefine(activeCellIDs, refPattern);
+    }
+    
+    MeshTopologyPtr rootMeshTopology = mesh->getTopology()->getRootMeshTopology();
+    MeshTopologyPtr originalMeshTopology = originalMesh->getTopology();
+    
+    TEST_EQUALITY(rootMeshTopology->cellCount(), originalMeshTopology->cellCount());
+    
+    std::set<IndexType> rootCellIndices = rootMeshTopology->getActiveCellIndices();
+    std::set<IndexType> originalCellIndices = originalMeshTopology->getActiveCellIndices();
+    
+    // compare sets:
+    std::set<IndexType>::iterator rootCellIt = rootCellIndices.begin(), originalCellIt = originalCellIndices.begin();
+    for (int i=0; i<rootMeshTopology->cellCount(); i++) {
+      TEST_EQUALITY(*rootCellIt, *originalCellIt);
+      rootCellIt++;
+      originalCellIt++;
+    }
+    
+    for (std::set<IndexType>::iterator cellIDIt = rootCellIndices.begin(); cellIDIt != rootCellIndices.end(); cellIDIt++) {
+      CellPtr originalCell = originalMeshTopology->getCell(*cellIDIt);
+      CellPtr rootCell = rootMeshTopology->getCell(*cellIDIt);
+      
+      vector<unsigned> originalVertexIndices = originalCell->vertices();
+      vector<unsigned> rootVertexIndices = rootCell->vertices();
+      
+      TEST_EQUALITY(originalVertexIndices.size(), rootVertexIndices.size());
+
+      TEST_COMPARE_ARRAYS(originalVertexIndices, rootVertexIndices);
+      
+      for (int i=0; i<originalVertexIndices.size(); i++) {
+        vector<double> originalVertex = originalMeshTopology->getVertex(originalVertexIndices[i]);
+        vector<double> rootVertex = rootMeshTopology->getVertex(rootVertexIndices[i]);
+        
+        TEST_COMPARE_FLOATING_ARRAYS(originalVertex, rootVertex, 1e-15);
+      }
+    }
+  }
 } // namespace
