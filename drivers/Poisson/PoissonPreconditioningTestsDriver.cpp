@@ -24,6 +24,8 @@
 
 #include "HDF5Exporter.h"
 
+#include "CamelliaDebugUtility.h"
+
 using namespace Camellia;
 
 bool runGMGOperatorInDebugMode;
@@ -520,7 +522,7 @@ void run(ProblemChoice problemChoice, int &iterationCount, int spaceDim, int num
     BCPtr zeroBCs = bc->copyImposingZero();
     bool saveFactorization = true;
     double coarseTol = 1e-8; // this is pretty fine--want to avoid adding to the fine solver's iteration count...
-    int coarseMaxIterations = 500;
+    int coarseMaxIterations = 2000;
 
     Teuchos::RCP<Solver> coarseSolver = Teuchos::null;
     GMGSolver* gmgSolver = new GMGSolver(solution, k0Mesh, cgMaxIterations, cgTol, coarseSolver, useStaticCondensation);
@@ -539,7 +541,7 @@ void run(ProblemChoice problemChoice, int &iterationCount, int spaceDim, int num
                                        coarsestMesh, kluSolver);
       GMGSolver* coarseSolverGMG = static_cast<GMGSolver*>( coarseSolver.get() );
       
-      coarseSolverGMG->gmgOperator().setSmootherType(GMGOperator::POINT_JACOBI); // make it cheap...
+      coarseSolverGMG->gmgOperator().setSmootherType(GMGOperator::IFPACK_ADDITIVE_SCHWARZ); // make it cheap...
     }
     
     gmgSolver->gmgOperator().setCoarseSolver(coarseSolver);
@@ -598,6 +600,7 @@ void run(ProblemChoice problemChoice, int &iterationCount, int spaceDim, int num
     if (coarseSolver != NULL) {
       if (rank==0) cout << "************   Coarse GMG Solver, timings   *************\n";
       coarseSolver->gmgOperator().reportTimings();
+      if (rank==0) Camellia::print("coarseSolver iteration counts:",coarseSolver->getIterationCountLog());
     }
   }
   
