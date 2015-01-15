@@ -53,17 +53,6 @@ class DPGInnerProduct {
 protected:
   Teuchos::RCP< BilinearForm > _bilinearForm;
 public:
-  /*virtual void computeInnerProduct(FieldContainer<double> &innerProduct,
-                                   FieldContainer<double>& dofWeights1,
-                                   FieldContainer<double>& dofWeights2,
-                                   DofOrdering &dofOrdering, CellTopology &cellTopo,
-                                   FieldContainer<double>& physicalNodePoints) {
-    cout << "WARNING: computeInnerProduct unimplemented." << endl;
-    // idea is to eventually implement it using computeInnerProductMatrix
-  }*/
-    // dofWeights dimensions are (numCells, numFunctions, numDofs)
-    // innerProduct dimensions are (numCells, numFunctions, numFunctions)
-  
   DPGInnerProduct(Teuchos::RCP< BilinearForm > bfs);
   virtual ~DPGInnerProduct() {}
   
@@ -95,11 +84,6 @@ public:
                                      BasisCachePtr basisCache);
   
   virtual bool hasBoundaryTerms(); // used for deciding whether to create side caches or not.
-                         
-  // equivalent to calling computeInnerProduct but with just one dof lit up per function
-  // (and can be more efficiently implemented than actually calling computeInnerProduct with such arguments)
-  // innerProduct dimensions are (numCells, numDofs, numDofs)
-  // physicalCellNodes dimensions are (numCells, numNodesPerElement, spaceDim)
 };
 
 typedef Teuchos::RCP<DPGInnerProduct> InnerProductPtr;
