@@ -13,8 +13,14 @@
 #include "Amesos_Klu.h"
 #include "AztecOO.h"
 
+class Solution;
+class Mesh;
+typedef Teuchos::RCP<Solution> SolutionPtr;
+typedef Teuchos::RCP<Mesh> MeshPtr;
+
 // abstract class for solving Epetra_LinearProblem problems
 class Solver {
+  typedef Teuchos::RCP<Solver> SolverPtr;
 protected:
   Teuchos::RCP< Epetra_LinearProblem > _problem;
 public:
@@ -34,16 +40,21 @@ public:
     KLU,
     SuperLUDist,
     MUMPS,
-    SimpleML
+    SimpleML,
+    GMGSolver_1_Level_h
   };
-  static Teuchos::RCP<Solver> getSolver(SolverChoice choice, bool saveFactorization,
-                                        double residualTolerance = 1e-12, int maxIterations = 50000);
+  
+  static SolverPtr getSolver(SolverChoice choice, bool saveFactorization,
+                             double residualTolerance = 1e-12, int maxIterations = 50000,
+                             SolutionPtr fineSolution = Teuchos::null, MeshPtr coarseMesh = Teuchos::null,
+                             SolverPtr coarseSolver = Teuchos::null);
 
   static SolverChoice solverChoiceFromString(string choiceString) {
     if (choiceString=="KLU") return KLU;
     if (choiceString=="SuperLUDist") return SuperLUDist;
     if (choiceString=="MUMPS") return MUMPS;
     if (choiceString=="SimpleML") return SimpleML;
+    if (choiceString=="GMGSolver_1_Level_h") return GMGSolver_1_Level_h;
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "choiceString not recognized!");
   }
   static string solverChoiceString(SolverChoice choice) {
@@ -51,9 +62,12 @@ public:
     if (choice==SuperLUDist) return "SuperLUDist";
     if (choice==MUMPS) return "MUMPS";
     if (choice==SimpleML) return "SimpleML";
+    if (choice==GMGSolver_1_Level_h) return "GMGSolver_1_Level_h";
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "choice not recognized!");
   }
 };
+
+typedef Teuchos::RCP<Solver> SolverPtr;
 
 // some concrete implementations follow…
 class KluSolver : public Solver {
