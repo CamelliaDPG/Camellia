@@ -520,7 +520,7 @@ void run(ProblemChoice problemChoice, int &iterationCount, int spaceDim, int num
     BCPtr zeroBCs = bc->copyImposingZero();
     bool saveFactorization = true;
     double coarseTol = 1e-8; // this is pretty fine--want to avoid adding to the fine solver's iteration count...
-    int coarseMaxIterations = 2000;
+    int coarseMaxIterations = 500;
 
     Teuchos::RCP<Solver> coarseSolver = Teuchos::null;
     GMGSolver* gmgSolver = new GMGSolver(solution, k0Mesh, cgMaxIterations, cgTol, coarseSolver, useStaticCondensation);
@@ -535,8 +535,11 @@ void run(ProblemChoice problemChoice, int &iterationCount, int spaceDim, int num
       SolverPtr kluSolver = Solver::getSolver(Solver::KLU, saveFactorization);
       coarseSolver = Solver::getSolver(coarseSolverChoice, saveFactorization,
                                        coarseTol, coarseMaxIterations,
-                                       gmgSolver->gmgOperator().getCoarseSolution(), coarsestMesh,
-                                       kluSolver);
+                                       gmgSolver->gmgOperator().getCoarseSolution(),
+                                       coarsestMesh, kluSolver);
+      GMGSolver* coarseSolverGMG = static_cast<GMGSolver*>( coarseSolver.get() );
+      
+      coarseSolverGMG->gmgOperator().setSmootherType(GMGOperator::POINT_JACOBI); // make it cheap...
     }
     
     gmgSolver->gmgOperator().setCoarseSolver(coarseSolver);
@@ -548,6 +551,7 @@ void run(ProblemChoice problemChoice, int &iterationCount, int spaceDim, int num
 //    gmgSolver->setComputeConditionNumberEstimate(false);
     
     gmgSolver->setUseConjugateGradient(true);
+    gmgSolver->setComputeConditionNumberEstimate(false);
     gmgSolver->gmgOperator().setSchwarzFactorizationType(schwarzBlockFactorization);
     gmgSolver->gmgOperator().setLevelOfFill(schwarzLevelOfFill);
     gmgSolver->gmgOperator().setFillRatio(schwarzFillRatio);
@@ -584,6 +588,18 @@ void run(ProblemChoice problemChoice, int &iterationCount, int spaceDim, int num
   
   if (reportTimings) solution->reportTimings();
   double energyErrorTotal = solution->energyErrorTotal();
+  
+  GMGSolver* fineSolver = dynamic_cast<GMGSolver*>(solver.get());
+  if (fineSolver != NULL) {
+    if (rank==0) cout << "************   Fine GMG Solver, timings   *************\n";
+    fineSolver->gmgOperator().reportTimings();
+    
+    GMGSolver* coarseSolver = dynamic_cast<GMGSolver*>(fineSolver->gmgOperator().getCoarseSolver().get());
+    if (coarseSolver != NULL) {
+      if (rank==0) cout << "************   Coarse GMG Solver, timings   *************\n";
+      coarseSolver->gmgOperator().reportTimings();
+    }
+  }
   
   //  Teuchos::RCP< Epetra_CrsMatrix > A = solution->getStiffnessMatrix();
   //  Teuchos::RCP< Epetra_CrsMatrix > M;
@@ -908,8 +924,8 @@ int main(int argc, char *argv[]) {
   
   bool useCondensedSolve = false;
   
-  bool useCamelliaAdditiveSchwarz = true;
-  bool schwarzOnly = true;
+  bool useCamelliaAdditiveSchwarz = false;
+  bool schwarzOnly = false;
   
   double cgTol = 1e-10;
   
