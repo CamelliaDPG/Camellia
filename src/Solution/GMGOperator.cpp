@@ -391,6 +391,10 @@ SolutionPtr GMGOperator::getCoarseSolution() {
   return _coarseSolution;
 }
 
+SolverPtr GMGOperator::getCoarseSolver() {
+  return _coarseSolver;
+}
+
 LocalDofMapperPtr GMGOperator::getLocalCoefficientMap(GlobalIndexType fineCellID) const {
   const set<IndexType>* coarseCellIDs = &_coarseMesh->getTopology()->getActiveCellIndices();
   CellPtr fineCell = _fineMesh->getTopology()->getCell(fineCellID);
@@ -739,6 +743,7 @@ void GMGOperator::reportTimings() const {
 
   map<string, double> reportValues;
   reportValues["construction time"] = _timeConstruction;
+  reportValues["  construct prolongation operator"] = _timeProlongationOperatorConstruction;
   reportValues["construct local coefficient maps"] = _timeLocalCoefficientMapConstruction;
   reportValues["coarse import"] = _timeCoarseImport;
   reportValues["coarse solve"] = _timeCoarseSolve;
@@ -757,7 +762,7 @@ void GMGOperator::reportTimings() const {
   }
 }
 
-void GMGOperator::setApplyDiagonalSmoothing(bool value) {
+void GMGOperator::setApplySmoothingOperator(bool value) {
   _applySmoothingOperator = value;
 }
 

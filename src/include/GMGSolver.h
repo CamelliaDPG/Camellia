@@ -22,7 +22,7 @@ class GMGSolver : public Solver {
   
   GMGOperator _gmgOperator;
     
-  bool _diagonalSmoothing; // whether we should add the Jacobi smoothing term (almost always want this--basically we turn off for some tests)
+  bool _applySmoothing;    // whether we should add the smoothing term (almost always want this--basically we turn off for some tests)
   bool _diagonalScaling;   // whether we should scale the entire system by the diagonal
   
   bool _computeCondest;

@@ -191,7 +191,7 @@ public:
   //! Returns the Epetra_Map object associated with the range of this operator.
   const Epetra_Map & OperatorRangeMap() const;
   
-  void setApplyDiagonalSmoothing(bool value);
+  void setApplySmoothingOperator(bool value);
   
   //! sets debug mode for verbose console output on rank 0.
   void setDebugMode(bool value);
@@ -234,6 +234,10 @@ public:
 
   //! Returns the coarse stiffness matrix (an Epetra_CrsMatrix).
   Teuchos::RCP<Epetra_CrsMatrix> getCoarseStiffnessMatrix();
+  
+  
+  //! Returns the Solver used in the coarse solve.
+  SolverPtr getCoarseSolver();
   
   //! Returns the Solution object used in the coarse solve.
   SolutionPtr getCoarseSolution();
