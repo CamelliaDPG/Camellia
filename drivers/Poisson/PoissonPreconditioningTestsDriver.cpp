@@ -466,6 +466,7 @@ void initializeSolutionAndCoarseMesh(SolutionPtr &solution, MeshPtr &coarseMesh,
   while (meshWidthCells < numCells) {
     set<IndexType> activeCellIDs = mesh->getActiveCellIDs(); // should match between coarseMesh and mesh
     mesh->hRefine(activeCellIDs, refPattern);
+    coarseMesh->hRefine(activeCellIDs, refPattern);
     
     meshWidthCells *= 2;
   }
@@ -487,8 +488,12 @@ void run(ProblemChoice problemChoice, int &iterationCount, int spaceDim, int num
          bool useStaticCondensation, bool precondition, bool schwarzOnly, bool useCamelliaAdditiveSchwarz, int schwarzOverlap,
          GMGOperator::FactorType schwarzBlockFactorization, int schwarzLevelOfFill, double schwarzFillRatio,
          Solver::SolverChoice coarseSolverChoice, double cgTol, int cgMaxIterations, int AztecOutputLevel, bool reportTimings, bool reportEnergyError,
-         int numCellsRootMesh = 2) {
+         int numCellsRootMesh) {
   int rank = Teuchos::GlobalMPISession::getRank();
+  
+  if (numCellsRootMesh == -1) {
+    numCellsRootMesh = numCells;
+  }
   
   SolutionPtr solution;
   MeshPtr k0Mesh;
@@ -514,7 +519,7 @@ void run(ProblemChoice problemChoice, int &iterationCount, int spaceDim, int num
   } else {
     BCPtr zeroBCs = bc->copyImposingZero();
     bool saveFactorization = true;
-    double coarseTol = 1e-6;
+    double coarseTol = 1e-8; // this is pretty fine--want to avoid adding to the fine solver's iteration count...
     int coarseMaxIterations = 1000;
 
     Teuchos::RCP<Solver> coarseSolver = Teuchos::null;
@@ -630,7 +635,7 @@ void runMany(ProblemChoice problemChoice, int spaceDim, int delta_k, int minCell
              GMGOperator::FactorType schwarzBlockFactorization, int schwarzLevelOfFill, double schwarzFillRatio,
              Solver::SolverChoice coarseSolverChoice,
              double cgTol, int cgMaxIterations, int aztecOutputLevel, RunManyPreconditionerChoices preconditionerChoices,
-             int k=-1, int overlapLevel=-1) {
+             int k, int overlapLevel, int numCellsRootMesh) {
   int rank = Teuchos::GlobalMPISession::getRank();
   
   string problemChoiceString;
@@ -820,7 +825,7 @@ void runMany(ProblemChoice problemChoice, int spaceDim, int delta_k, int minCell
               run(problemChoice, iterationCount, spaceDim, numCells1D, k, delta_k, conformingTraces,
                   useStaticCondensation, precondition, schwarzOnly, useCamelliaSchwarz, overlapValue,
                   schwarzBlockFactorization, schwarzLevelOfFill, schwarzFillRatio, coarseSolverChoice,
-                  cgTol, cgMaxIterations, aztecOutputLevel, reportTimings, reportEnergyError);
+                  cgTol, cgMaxIterations, aztecOutputLevel, reportTimings, reportEnergyError, numCellsRootMesh);
               
               int numCells = pow((double)numCells1D, spaceDim);
               
@@ -1027,7 +1032,7 @@ int main(int argc, char *argv[]) {
     run(problemChoice, iterationCount, spaceDim, numCells, k, delta_k, conformingTraces,
         useCondensedSolve, precondition, schwarzOnly, useCamelliaAdditiveSchwarz, schwarzOverlap,
         schwarzFactorType, levelOfFill, fillRatio, coarseSolverChoice,
-        cgTol, cgMaxIterations, AztecOutputLevel, reportTimings, reportEnergyError);
+        cgTol, cgMaxIterations, AztecOutputLevel, reportTimings, reportEnergyError, numCellsRootMesh);
     
     if (rank==0) cout << "Iteration count: " << iterationCount << endl;
   } else {
@@ -1047,7 +1052,7 @@ int main(int argc, char *argv[]) {
             schwarzFactorType, levelOfFill, fillRatio,
             coarseSolverChoice,
             cgTol, cgMaxIterations, AztecOutputLevel,
-            runManySubsetChoice, k, schwarzOverlap);
+            runManySubsetChoice, k, schwarzOverlap, numCellsRootMesh);
   }
   return 0;
 }
