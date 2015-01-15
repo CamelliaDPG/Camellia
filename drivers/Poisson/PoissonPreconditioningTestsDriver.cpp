@@ -28,13 +28,6 @@ using namespace Camellia;
 
 bool runGMGOperatorInDebugMode;
 
-enum CoarseSolverChoice {
-  KLU,
-  SuperLUDist,
-  MUMPS,
-  SimpleML
-};
-
 string getFactorizationTypeString(GMGOperator::FactorType factorizationType) {
   switch (factorizationType) {
     case GMGOperator::Direct:
@@ -332,7 +325,8 @@ enum RunManyPreconditionerChoices {
 };
 
 void initializeSolutionAndCoarseMesh(SolutionPtr &solution, MeshPtr &coarseMesh, IPPtr &graphNorm, ProblemChoice problemChoice,
-                                     int spaceDim, bool conformingTraces, bool useStaticCondensation, int numCells, int k, int delta_k) {
+                                     int spaceDim, bool conformingTraces, bool useStaticCondensation, int numCells, int k, int delta_k,
+                                     int rootMeshNumCells) {
   BFPtr bf;
   BCPtr bc;
   RHSPtr rhs;
@@ -424,47 +418,6 @@ void initializeSolutionAndCoarseMesh(SolutionPtr &solution, MeshPtr &coarseMesh,
       f3 = -p_exact->dz() + mu * (u3_exact->dx()->dx() + u3_exact->dy()->dy() + u3_exact->dz()->dz());
     }
     
-//    { // DEBUGGING
-//      int H1Order = k + 1;
-//      
-//      Teuchos::RCP<BilinearForm> bilinearForm = bf;
-//      
-//      vector<double> dimensions;
-//      vector<int> elementCounts;
-//      for (int d=0; d<spaceDim; d++) {
-//        dimensions.push_back(width);
-//        elementCounts.push_back(numCells);
-//      }
-//      MeshPtr mesh = MeshFactory::rectilinearMesh(bf, dimensions, elementCounts, H1Order, delta_k, x0);
-//
-//      int rank = Teuchos::GlobalMPISession::getRank();
-//      
-//      if (spaceDim==3) {
-//        double f1_L2 = f1->l2norm(mesh);
-//        double f2_L2 = f2->l2norm(mesh);
-//        double f3_L2 = f3->l2norm(mesh);
-//        if (rank==0) {
-//          cout << "f1_L2 = "<< f1_L2 << endl;
-//          cout << "f2_L2 = "<< f2_L2 << endl;
-//          cout << "f3_L2 = "<< f3_L2 << endl;
-//        }
-//        
-//        FunctionPtr div_u = u1_exact->dx() + u2_exact->dy() + u3_exact->dz();
-//        double integral = div_u->integrate(mesh);
-//        if (rank==0) cout << "integral of div_u = " << integral << endl;
-//        
-//        if (rank==0) cout << "bilinear form:\n";
-//        if (rank==0) bf->printTrialTestInteractions();
-//      } else if (spaceDim==2) {
-//        double f1_L2 = f1->l2norm(mesh);
-//        double f2_L2 = f2->l2norm(mesh);
-//        if (rank==0) {
-//          cout << "f1_L2 = "<< f1_L2 << endl;
-//          cout << "f2_L2 = "<< f2_L2 << endl;
-//        }
-//      }
-//    }
-    
     VarPtr v1 = formulation.v(1);
     VarPtr v2 = formulation.v(2);
     
@@ -486,7 +439,7 @@ void initializeSolutionAndCoarseMesh(SolutionPtr &solution, MeshPtr &coarseMesh,
   vector<int> elementCounts;
   for (int d=0; d<spaceDim; d++) {
     dimensions.push_back(width);
-    elementCounts.push_back(numCells);
+    elementCounts.push_back(rootMeshNumCells);
   }
   mesh = MeshFactory::rectilinearMesh(bf, dimensions, elementCounts, H1Order, delta_k, x0);
   
@@ -505,6 +458,25 @@ void initializeSolutionAndCoarseMesh(SolutionPtr &solution, MeshPtr &coarseMesh,
   int H1Order_coarse = 0 + 1;
   coarseMesh = MeshFactory::rectilinearMesh(bf, dimensions, elementCounts, H1Order_coarse, delta_k, x0);
   
+  // get a sample cell topology:
+  CellTopoPtr cellTopo = coarseMesh->getTopology()->getCell(0)->topology();
+  RefinementPatternPtr refPattern = RefinementPattern::regularRefinementPattern(cellTopo);
+  
+  int meshWidthCells = rootMeshNumCells;
+  while (meshWidthCells < numCells) {
+    set<IndexType> activeCellIDs = mesh->getActiveCellIDs(); // should match between coarseMesh and mesh
+    mesh->hRefine(activeCellIDs, refPattern);
+    
+    meshWidthCells *= 2;
+  }
+  
+  if (meshWidthCells != numCells) {
+    int rank = Teuchos::GlobalMPISession::getRank();
+    if (rank == 0) {
+      cout << "Warning: may have overrefined mesh; mesh has width " << meshWidthCells << ", not " << numCells << endl;
+    }
+  }
+  
   graphNorm = bf->graphNorm();
   
   solution = Solution::solution(mesh, bc, rhs, graphNorm);
@@ -514,14 +486,15 @@ void initializeSolutionAndCoarseMesh(SolutionPtr &solution, MeshPtr &coarseMesh,
 void run(ProblemChoice problemChoice, int &iterationCount, int spaceDim, int numCells, int k, int delta_k, bool conformingTraces,
          bool useStaticCondensation, bool precondition, bool schwarzOnly, bool useCamelliaAdditiveSchwarz, int schwarzOverlap,
          GMGOperator::FactorType schwarzBlockFactorization, int schwarzLevelOfFill, double schwarzFillRatio,
-         Solver::SolverChoice coarseSolverChoice, double cgTol, int cgMaxIterations, int AztecOutputLevel, bool reportTimings, bool reportEnergyError) {
+         Solver::SolverChoice coarseSolverChoice, double cgTol, int cgMaxIterations, int AztecOutputLevel, bool reportTimings, bool reportEnergyError,
+         int numCellsRootMesh = 2) {
   int rank = Teuchos::GlobalMPISession::getRank();
   
   SolutionPtr solution;
   MeshPtr k0Mesh;
   IPPtr graphNorm;
   initializeSolutionAndCoarseMesh(solution, k0Mesh, graphNorm, problemChoice, spaceDim, conformingTraces, useStaticCondensation,
-                                  numCells, k, delta_k);
+                                  numCells, k, delta_k, numCellsRootMesh);
   
   MeshPtr mesh = solution->mesh();
   BCPtr bc = solution->bc();
@@ -543,10 +516,29 @@ void run(ProblemChoice problemChoice, int &iterationCount, int spaceDim, int num
     bool saveFactorization = true;
     double coarseTol = 1e-6;
     int coarseMaxIterations = 1000;
-    Teuchos::RCP<Solver> coarseSolver = Solver::getSolver(coarseSolverChoice, saveFactorization, coarseTol, coarseMaxIterations);
-    GMGSolver* gmgSolver = new GMGSolver(zeroBCs, k0Mesh, graphNorm, mesh, solution->getDofInterpreter(),
-                                         solution->getPartitionMap(), cgMaxIterations, cgTol, coarseSolver,
-                                         useStaticCondensation);
+
+    Teuchos::RCP<Solver> coarseSolver = Teuchos::null;
+    GMGSolver* gmgSolver = new GMGSolver(solution, k0Mesh, cgMaxIterations, cgTol, coarseSolver, useStaticCondensation);
+
+    if (coarseSolverChoice != Solver::GMGSolver_1_Level_h) {
+      coarseSolver = Solver::getSolver(coarseSolverChoice, saveFactorization,
+                                       coarseTol, coarseMaxIterations);
+    } else {
+      MeshTopologyPtr coarsestMeshTopo = k0Mesh->getTopology()->getRootMeshTopology();
+      int H1OrderP0 = 0 + 1;
+      MeshPtr coarsestMesh = Teuchos::rcp( new Mesh(coarsestMeshTopo, k0Mesh->bilinearForm(), H1OrderP0, delta_k) );
+      SolverPtr kluSolver = Solver::getSolver(Solver::KLU, saveFactorization);
+      coarseSolver = Solver::getSolver(coarseSolverChoice, saveFactorization,
+                                       coarseTol, coarseMaxIterations,
+                                       gmgSolver->gmgOperator().getCoarseSolution(), coarsestMesh,
+                                       kluSolver);
+    }
+    
+    gmgSolver->gmgOperator().setCoarseSolver(coarseSolver);
+    
+//    GMGSolver* gmgSolver = new GMGSolver(zeroBCs, k0Mesh, graphNorm, mesh, solution->getDofInterpreter(),
+//                                         solution->getPartitionMap(), cgMaxIterations, cgTol, coarseSolver,
+//                                         useStaticCondensation);
     gmgSolver->setAztecOutput(AztecOutputLevel);
 //    gmgSolver->setComputeConditionNumberEstimate(false);
     
@@ -901,6 +893,7 @@ int main(int argc, char *argv[]) {
   bool precondition = true;
   
   int numCells = 2;
+  int numCellsRootMesh = -1;
   
   int AztecOutputLevel = 1;
   int cgMaxIterations = 25000;
@@ -935,7 +928,7 @@ int main(int argc, char *argv[]) {
   cmdp.setOption("polyOrder",&k,"polynomial order for field variable u");
   cmdp.setOption("delta_k", &delta_k, "test space polynomial order enrichment");
 
-  cmdp.setOption("coarseSolver", &coarseSolverChoiceString, "coarse solver choice: KLU, MUMPS, SuperLUDist, SimpleMLSolver");
+  cmdp.setOption("coarseSolver", &coarseSolverChoiceString, "coarse solver choice: KLU, MUMPS, SuperLUDist, SimpleML");
   
   cmdp.setOption("useCondensedSolve", "useStandardSolve", &useCondensedSolve);
   
@@ -953,7 +946,8 @@ int main(int argc, char *argv[]) {
   cmdp.setOption("spaceDim", &spaceDim, "space dimensions (1, 2, or 3)");
   
   cmdp.setOption("azOutput", &AztecOutputLevel, "Aztec output level");
-  cmdp.setOption("numCells", &numCells, "number of cells in the initial mesh");
+  cmdp.setOption("numCells", &numCells, "number of cells in the mesh");
+  cmdp.setOption("numCellsRootMesh", &numCellsRootMesh, "number of cells in the root mesh");
   
   cmdp.setOption("maxIterations", &cgMaxIterations, "maximum number of CG iterations");
   cmdp.setOption("cgTol", &cgTol, "CG convergence tolerance");
