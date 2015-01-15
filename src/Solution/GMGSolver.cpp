@@ -23,7 +23,7 @@ GMGSolver::GMGSolver(BCPtr zeroBCs, MeshPtr coarseMesh, IPPtr coarseIP,
   _maxIters = maxIters;
   _printToConsole = false;
   _tol = tol;
-  _diagonalSmoothing = true;
+  _applySmoothing = true;
   _diagonalScaling = DIAGONAL_SCALING_DEFAULT;
                       
   _computeCondest = true;
@@ -43,7 +43,7 @@ GMGSolver::GMGSolver(SolutionPtr fineSolution, MeshPtr coarseMesh, int maxIters,
   _maxIters = maxIters;
   _printToConsole = false;
   _tol = tol;
-  _diagonalSmoothing = true;
+  _applySmoothing = true;
   _diagonalScaling = DIAGONAL_SCALING_DEFAULT;
   
   _computeCondest = true;
@@ -62,8 +62,8 @@ int GMGSolver::iterationCount() {
 }
 
 void GMGSolver::setApplySmoothingOperator(bool applySmoothingOp) {
-  _diagonalSmoothing = applySmoothingOp;
-  _gmgOperator.setApplyDiagonalSmoothing(_diagonalSmoothing);
+  _applySmoothing = applySmoothingOp;
+  _gmgOperator.setApplySmoothingOperator(_applySmoothing);
 }
 
 void GMGSolver::setFineMesh(MeshPtr fineMesh, Epetra_Map finePartitionMap) {
@@ -125,7 +125,7 @@ int GMGSolver::solve() {
 
   _gmgOperator.setStiffnessDiagonal(diagA_ptr);
   
-  _gmgOperator.setApplyDiagonalSmoothing(_diagonalSmoothing);
+  _gmgOperator.setApplySmoothingOperator(_applySmoothing);
   _gmgOperator.setFineSolverUsesDiagonalScaling(_diagonalScaling);
   
   _gmgOperator.computeCoarseStiffnessMatrix(A);
