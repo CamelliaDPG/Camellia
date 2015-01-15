@@ -197,6 +197,9 @@ public:
   // ! This method exposed for the sake of tests
   vector< pair<IndexType,unsigned> > getConstrainingSideAncestry(IndexType sideEntityIndex);   // pair: first is the sideEntityIndex of the ancestor; second is the refinementIndex of the refinement to get from parent to child (see _parentEntities and _childEntities)
   
+  // ! Creates a new MeshTopology object containing only the root cells from this MeshTopology.
+  Teuchos::RCP<MeshTopology> getRootMeshTopology();
+  
 };
 
 typedef Teuchos::RCP<MeshTopology> MeshTopologyPtr;

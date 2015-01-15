@@ -1145,6 +1145,22 @@ unsigned MeshTopology::getFaceEdgeIndex(unsigned int faceIndex, unsigned int edg
   return getSubEntityIndex(2, faceIndex, 1, edgeOrdinalInFace);
 }
 
+MeshTopologyPtr MeshTopology::getRootMeshTopology() {
+  MeshTopologyPtr rootTopology = Teuchos::rcp(new MeshTopology(_spaceDim) );
+  for (set<IndexType>::iterator rootCellIt = _rootCells.begin(); rootCellIt != _rootCells.end(); rootCellIt++) {
+    IndexType rootCellIndex = *rootCellIt;
+    CellPtr cell = getCell(rootCellIndex);
+    
+    vector<unsigned> cellVertexIndices = cell->vertices();
+    vector< vector< double > > cellVertices(cellVertexIndices.size());
+    for (int i=0; i<cellVertexIndices.size(); i++) {
+      cellVertices[i] = getVertex(cellVertexIndices[i]);
+    }
+    rootTopology->addCell(cell->topology(), cellVertices);
+  }
+  return rootTopology;
+}
+
 unsigned MeshTopology::getSpaceDim() {
   return _spaceDim;
 }
