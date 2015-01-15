@@ -1146,18 +1146,35 @@ unsigned MeshTopology::getFaceEdgeIndex(unsigned int faceIndex, unsigned int edg
 }
 
 MeshTopologyPtr MeshTopology::getRootMeshTopology() {
-  MeshTopologyPtr rootTopology = Teuchos::rcp(new MeshTopology(_spaceDim) );
+  // TODO: add support for curvilinear elements, periodic BCs to this method.
+  set<IndexType> vertexIndicesSet;
+  
+  vector< vector<IndexType> > allCellsVertexIndices;
+  vector< CellTopoPtr > cellTopos;
+  
   for (set<IndexType>::iterator rootCellIt = _rootCells.begin(); rootCellIt != _rootCells.end(); rootCellIt++) {
     IndexType rootCellIndex = *rootCellIt;
     CellPtr cell = getCell(rootCellIndex);
     
+    cellTopos.push_back(cell->topology());
+    
     vector<unsigned> cellVertexIndices = cell->vertices();
-    vector< vector< double > > cellVertices(cellVertexIndices.size());
-    for (int i=0; i<cellVertexIndices.size(); i++) {
-      cellVertices[i] = getVertex(cellVertexIndices[i]);
-    }
-    rootTopology->addCell(cell->topology(), cellVertices);
+    allCellsVertexIndices.push_back(cellVertexIndices);
+    
+    vertexIndicesSet.insert(cellVertexIndices.begin(),cellVertexIndices.end());
   }
+  
+  // we require that the vertices be contiguously numbered (we want to enforce that root MeshTopology shares vertex numbers with this).
+  
+  vector< vector<double> > vertices( vertexIndicesSet.size() );
+  for (set<IndexType>::iterator vertexIndexIt = vertexIndicesSet.begin(); vertexIndexIt != vertexIndicesSet.end(); vertexIndexIt++) {
+    IndexType vertexIndex = *vertexIndexIt;
+    vertices[vertexIndex] = getVertex(vertexIndex);
+  }
+  
+  MeshGeometryPtr meshGeometry = Teuchos::rcp(new MeshGeometry(vertices, allCellsVertexIndices, cellTopos) );
+  
+  MeshTopologyPtr rootTopology = Teuchos::rcp( new MeshTopology(meshGeometry) );
   return rootTopology;
 }
 
