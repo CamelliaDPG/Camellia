@@ -520,7 +520,7 @@ void run(ProblemChoice problemChoice, int &iterationCount, int spaceDim, int num
     BCPtr zeroBCs = bc->copyImposingZero();
     bool saveFactorization = true;
     double coarseTol = 1e-8; // this is pretty fine--want to avoid adding to the fine solver's iteration count...
-    int coarseMaxIterations = 1000;
+    int coarseMaxIterations = 2000;
 
     Teuchos::RCP<Solver> coarseSolver = Teuchos::null;
     GMGSolver* gmgSolver = new GMGSolver(solution, k0Mesh, cgMaxIterations, cgTol, coarseSolver, useStaticCondensation);

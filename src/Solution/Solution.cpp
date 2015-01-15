@@ -936,7 +936,7 @@ int Solution::solveWithPrepopulatedStiffnessAndLoad(Teuchos::RCP<Solver> solver,
   if (solveSuccess != 0 ) {
 //    EpetraExt::RowMatrixToMatrixMarketFile("/tmp/failing_globalStiffness.dat",*_globalStiffMatrix);
 
-    cout << "**** WARNING: in Solution.solve(), solver->solve() failed with error code " << solveSuccess << ". ****\n";
+    if (rank==0) cout << "**** WARNING: in Solution.solve(), solver->solve() failed with error code " << solveSuccess << ". ****\n";
   }
 
   double timeSolve = timer.ElapsedTime();
