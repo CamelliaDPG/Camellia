@@ -33,9 +33,23 @@ Teuchos::RCP<Solver> Solver::getSolver(SolverChoice choice, bool saveFactorizati
 #endif
     case SimpleML:
       return Teuchos::rcp( new SimpleMLSolver(saveFactorization, residualTolerance, maxIterations) );
+      
     case GMGSolver_1_Level_h:
+    {
       // false below: don't use condensed solve...
-      return Teuchos::rcp( new GMGSolver(fineSolution, coarseMesh, maxIterations, residualTolerance, coarseSolver, false) );
+      bool useCondensedSolve = false;
+      GMGSolver* gmgSolver = new GMGSolver(fineSolution, coarseMesh, maxIterations, residualTolerance, coarseSolver, useCondensedSolve);
+      
+      gmgSolver->setComputeConditionNumberEstimate(false); // faster if we don't compute it
+      
+      // testing:
+//      gmgSolver->setAztecOutput(100);
+      
+      // testing:
+//      gmgSolver->setApplySmoothingOperator(false);
+      
+      return Teuchos::rcp(gmgSolver);
+    }
     default:
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Solver choice not recognized!");
   }
