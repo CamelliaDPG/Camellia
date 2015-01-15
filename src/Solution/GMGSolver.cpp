@@ -14,12 +14,12 @@
 
 const bool DIAGONAL_SCALING_DEFAULT = false;
 
-GMGSolver::GMGSolver( BCPtr zeroBCs, MeshPtr coarseMesh, IPPtr coarseIP,
+GMGSolver::GMGSolver(BCPtr zeroBCs, MeshPtr coarseMesh, IPPtr coarseIP,
                      MeshPtr fineMesh, Teuchos::RCP<DofInterpreter> fineDofInterpreter, Epetra_Map finePartitionMap,
                      int maxIters, double tol, Teuchos::RCP<Solver> coarseSolver, bool useStaticCondensation) :
-                     _gmgOperator(zeroBCs,coarseMesh,coarseIP,fineMesh,fineDofInterpreter,
-                                  finePartitionMap,coarseSolver, useStaticCondensation, DIAGONAL_SCALING_DEFAULT),
-                    _finePartitionMap(finePartitionMap) {
+                    _finePartitionMap(finePartitionMap),
+                    _gmgOperator(zeroBCs,coarseMesh,coarseIP,fineMesh,fineDofInterpreter,
+                                 finePartitionMap,coarseSolver, useStaticCondensation, DIAGONAL_SCALING_DEFAULT) {
   _maxIters = maxIters;
   _printToConsole = false;
   _tol = tol;
@@ -29,6 +29,26 @@ GMGSolver::GMGSolver( BCPtr zeroBCs, MeshPtr coarseMesh, IPPtr coarseIP,
   _computeCondest = true;
   _azOutput = AZ_warnings;
                       
+  _useCG = true;
+  _azConvergenceOption = AZ_rhs;
+}
+
+GMGSolver::GMGSolver(SolutionPtr fineSolution, MeshPtr coarseMesh, int maxIters, double tol,
+                     Teuchos::RCP<Solver> coarseSolver, bool useStaticCondensation) :
+                    _finePartitionMap(fineSolution->getPartitionMap()),
+                    _gmgOperator(fineSolution->bc()->copyImposingZero(),coarseMesh,
+                                 fineSolution->ip(), fineSolution->mesh(), fineSolution->getDofInterpreter(),
+                                 _finePartitionMap, coarseSolver, useStaticCondensation, DIAGONAL_SCALING_DEFAULT)
+{
+  _maxIters = maxIters;
+  _printToConsole = false;
+  _tol = tol;
+  _diagonalSmoothing = true;
+  _diagonalScaling = DIAGONAL_SCALING_DEFAULT;
+  
+  _computeCondest = true;
+  _azOutput = AZ_warnings;
+  
   _useCG = true;
   _azConvergenceOption = AZ_rhs;
 }
