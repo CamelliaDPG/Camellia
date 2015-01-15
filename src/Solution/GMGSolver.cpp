@@ -57,6 +57,10 @@ double GMGSolver::condest() {
   return _condest;
 }
 
+vector<int> GMGSolver::getIterationCountLog() {
+  return _iterationCountLog;
+}
+
 int GMGSolver::iterationCount() {
   return _iterationCount;
 }
@@ -223,6 +227,8 @@ int GMGSolver::solve() {
   }
   
   _gmgOperator.setStiffnessDiagonal(Teuchos::rcp((Epetra_MultiVector*) NULL ));
+  
+  _iterationCountLog.push_back(_iterationCount);
   
   return solveResult;
 }

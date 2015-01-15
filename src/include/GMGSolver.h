@@ -38,6 +38,8 @@ class GMGSolver : public Solver {
   int _azConvergenceOption; // defaults to AZ_rhs
   
   bool _printIterationCountIfNoAzOutput;
+  
+  std::vector< int > _iterationCountLog; // each time solve() is called, we push_back the number of iterations we run
 public:
   GMGSolver(BCPtr zeroBCs, MeshPtr coarseMesh, IPPtr coarseIP, MeshPtr fineMesh, Teuchos::RCP<DofInterpreter> fineDofInterpreter,
             Epetra_Map finePartitionMap, int maxIters, double tol, Teuchos::RCP<Solver> coarseSolver, bool useStaticCondensation);
@@ -69,6 +71,8 @@ public:
   void setUseConjugateGradient(bool value); // otherwise will use GMRES
   
   void setPrintIterationCount(bool value);
+  
+  vector<int> getIterationCountLog();
 };
 
 #endif /* defined(__Camellia_debug__GMGSolver__) */
