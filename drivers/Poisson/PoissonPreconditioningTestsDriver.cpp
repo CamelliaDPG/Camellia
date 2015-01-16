@@ -534,6 +534,9 @@ void run(ProblemChoice problemChoice, int &iterationCount, int spaceDim, int num
       MeshTopologyPtr coarsestMeshTopo = k0Mesh->getTopology()->getRootMeshTopology();
       int H1OrderP0 = 0 + 1;
       MeshPtr coarsestMesh = Teuchos::rcp( new Mesh(coarsestMeshTopo, k0Mesh->bilinearForm(), H1OrderP0, delta_k) );
+      // put all coarsest mesh cells on rank 0, where KLU will solve anyway:
+      coarsestMesh->setPartitionPolicy(MeshPartitionPolicy::oneRankPartitionPolicy(0));
+      
       SolverPtr kluSolver = Solver::getSolver(Solver::KLU, saveFactorization);
       coarseSolver = Solver::getSolver(coarseSolverChoice, saveFactorization,
                                        coarseTol, coarseMaxIterations,
