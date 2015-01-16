@@ -29,6 +29,7 @@
 using namespace Camellia;
 
 bool runGMGOperatorInDebugMode;
+int maxDofsForKLU;
 
 string getFactorizationTypeString(GMGOperator::FactorType factorizationType) {
   switch (factorizationType) {
@@ -534,18 +535,30 @@ void run(ProblemChoice problemChoice, int &iterationCount, int spaceDim, int num
       MeshTopologyPtr coarsestMeshTopo = k0Mesh->getTopology()->getRootMeshTopology();
       int H1OrderP0 = 0 + 1;
       MeshPtr coarsestMesh = Teuchos::rcp( new Mesh(coarsestMeshTopo, k0Mesh->bilinearForm(), H1OrderP0, delta_k) );
+      
+      int numGlobalDofs = coarsestMesh->numGlobalDofs();
+      
+      // debugging:
+      // if (rank==0) cout << "coarsest mesh, dof count: " << numGlobalDofs << endl;
       // put all coarsest mesh cells on rank 0, where KLU will solve anyway:
       // (turning off for now because this seems to slow things down significantly on BG/Q)
 //      coarsestMesh->setPartitionPolicy(MeshPartitionPolicy::oneRankPartitionPolicy(0));
       
-      SolverPtr kluSolver = Solver::getSolver(Solver::KLU, saveFactorization);
+      SolverPtr coarsestSolver;
+      
+      if (numGlobalDofs <= maxDofsForKLU) {
+        coarsestSolver = Solver::getSolver(Solver::KLU, saveFactorization);
+      } else {
+        coarsestSolver = Solver::getSolver(Solver::SuperLUDist, saveFactorization);
+      }
+      
       coarseSolver = Solver::getSolver(coarseSolverChoice, saveFactorization,
                                        coarseTol, coarseMaxIterations,
                                        gmgSolver->gmgOperator().getCoarseSolution(),
-                                       coarsestMesh, kluSolver);
+                                       coarsestMesh, coarsestSolver);
       GMGSolver* coarseSolverGMG = static_cast<GMGSolver*>( coarseSolver.get() );
       
-      coarseSolverGMG->gmgOperator().setSmootherType(GMGOperator::IFPACK_ADDITIVE_SCHWARZ); // make it cheap...
+      coarseSolverGMG->gmgOperator().setSmootherType(GMGOperator::IFPACK_ADDITIVE_SCHWARZ);
     }
     
     gmgSolver->gmgOperator().setCoarseSolver(coarseSolver);
@@ -922,6 +935,8 @@ int main(int argc, char *argv[]) {
   
   int numCells = 2;
   int numCellsRootMesh = -1;
+  
+  maxDofsForKLU = 2000; // used when defining coarsest solve on 3-level solver -- will use SuperLUDist if not KLU
   
   int AztecOutputLevel = 1;
   int cgMaxIterations = 25000;
