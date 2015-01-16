@@ -138,7 +138,7 @@ GMGOperator::GMGOperator(BCPtr zeroBCs, MeshPtr coarseMesh, Teuchos::RCP<DPGInne
 }
 
 void GMGOperator::clearTimings() {
-  _timeMapFineToCoarse = 0, _timeMapCoarseToFine = 0, _timeConstruction = 0, _timeCoarseSolve = 0, _timeCoarseImport = 0, _timeLocalCoefficientMapConstruction = 0;
+  _timeMapFineToCoarse = 0, _timeMapCoarseToFine = 0, _timeConstruction = 0, _timeCoarseSolve = 0, _timeCoarseImport = 0, _timeLocalCoefficientMapConstruction = 0, _timeComputeCoarseStiffnessMatrix = 0, _timeProlongationOperatorConstruction = 0;
 }
 
 void GMGOperator::computeCoarseStiffnessMatrix(Epetra_CrsMatrix *fineStiffnessMatrix) {
@@ -153,6 +153,14 @@ void GMGOperator::computeCoarseStiffnessMatrix(Epetra_CrsMatrix *fineStiffnessMa
     }
   }
 
+#ifdef HAVE_MPI
+  Epetra_MpiComm Comm(MPI_COMM_WORLD);
+  //cout << "rank: " << rank << " of " << numProcs << endl;
+#else
+  Epetra_SerialComm Comm;
+#endif
+  Epetra_Time coarseStiffnessTimer(Comm);
+  
   setUpSmoother(fineStiffnessMatrix);
 
 //  EpetraExt::RowMatrixToMatrixMarketFile("/tmp/A.dat",*fineStiffnessMatrix, NULL, NULL, false); // false: don't write header
@@ -201,6 +209,8 @@ void GMGOperator::computeCoarseStiffnessMatrix(Epetra_CrsMatrix *fineStiffnessMa
 //  int blah;
 //  cin >> blah;
 
+  _timeComputeCoarseStiffnessMatrix = coarseStiffnessTimer.ElapsedTime();
+  
   _haveSolvedOnCoarseMesh = false; // having recomputed coarseStiffness, any existing factorization is invalid
 }
 
@@ -749,6 +759,7 @@ void GMGOperator::reportTimings() const {
   reportValues["coarse solve"] = _timeCoarseSolve;
   reportValues["map coarse to fine"] = _timeMapCoarseToFine;
   reportValues["map fine to coarse"] = _timeMapFineToCoarse;
+  reportValues["compute coarse stiffness matrix"] = _timeComputeCoarseStiffnessMatrix;
 
   for (map<string,double>::iterator reportIt = reportValues.begin(); reportIt != reportValues.end(); reportIt++) {
     TimeStatistics stats = getStatistics(reportIt->second);

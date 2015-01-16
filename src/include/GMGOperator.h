@@ -59,7 +59,7 @@ class GMGOperator : public Epetra_Operator {
   Teuchos::RCP<Epetra_MultiVector> _diag_sqrt; // square root of the diagonal of the fine (global) stiffness matrix
   Teuchos::RCP<Epetra_MultiVector> _diag_inv; // inverse of the diagonal
   
-  mutable double _timeMapFineToCoarse, _timeMapCoarseToFine, _timeCoarseImport, _timeConstruction, _timeCoarseSolve, _timeLocalCoefficientMapConstruction, _timeProlongationOperatorConstruction;  // totals over the life of the object
+  mutable double _timeMapFineToCoarse, _timeMapCoarseToFine, _timeCoarseImport, _timeConstruction, _timeCoarseSolve, _timeLocalCoefficientMapConstruction, _timeComputeCoarseStiffnessMatrix, _timeProlongationOperatorConstruction;  // totals over the life of the object
   
   mutable bool _haveSolvedOnCoarseMesh; // if this is true, then we can call resolve() instead of solve().
   
