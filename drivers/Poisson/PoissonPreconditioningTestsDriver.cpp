@@ -521,7 +521,7 @@ void run(ProblemChoice problemChoice, int &iterationCount, int spaceDim, int num
   } else {
     BCPtr zeroBCs = bc->copyImposingZero();
     bool saveFactorization = true;
-    double coarseTol = 1e-8; // this is pretty fine--want to avoid adding to the fine solver's iteration count...
+    double coarseTol = 1e-6; // this is pretty fine--want to avoid adding to the fine solver's iteration count...
     int coarseMaxIterations = 2000;
 
     Teuchos::RCP<Solver> coarseSolver = Teuchos::null;
@@ -535,7 +535,8 @@ void run(ProblemChoice problemChoice, int &iterationCount, int spaceDim, int num
       int H1OrderP0 = 0 + 1;
       MeshPtr coarsestMesh = Teuchos::rcp( new Mesh(coarsestMeshTopo, k0Mesh->bilinearForm(), H1OrderP0, delta_k) );
       // put all coarsest mesh cells on rank 0, where KLU will solve anyway:
-      coarsestMesh->setPartitionPolicy(MeshPartitionPolicy::oneRankPartitionPolicy(0));
+      // (turning off for now because this seems to slow things down significantly on BG/Q)
+//      coarsestMesh->setPartitionPolicy(MeshPartitionPolicy::oneRankPartitionPolicy(0));
       
       SolverPtr kluSolver = Solver::getSolver(Solver::KLU, saveFactorization);
       coarseSolver = Solver::getSolver(coarseSolverChoice, saveFactorization,
@@ -916,7 +917,7 @@ int main(int argc, char *argv[]) {
   int k = -1; // poly order for field variables
   int delta_k = -1;   // test space enrichment; -1 for default detection (defaults to spaceDim)
   
-  bool conformingTraces = true;
+  bool conformingTraces = false;
   bool precondition = true;
   
   int numCells = 2;
