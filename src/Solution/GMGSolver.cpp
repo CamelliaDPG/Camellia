@@ -82,7 +82,17 @@ void GMGSolver::setTolerance(double tol) {
   _tol = tol;
 }
 
+int GMGSolver::resolve() {
+  bool buildCoarseStiffness = false; // won't have changed since solve() was called
+  return solve(buildCoarseStiffness);
+}
+
 int GMGSolver::solve() {
+  bool buildCoarseStiffness = true;
+  return solve(buildCoarseStiffness);
+}
+
+int GMGSolver::solve(bool buildCoarseStiffness) {
   int rank = Teuchos::GlobalMPISession::getRank();
   
   // in place of doing the scaling ourselves, for the moment I've switched
@@ -98,21 +108,21 @@ int GMGSolver::solve() {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Error: GMGSolver requires an Epetra_CrsMatrix.\n");
   }
   
-//  EpetraExt::RowMatrixToMatlabFile("/tmp/A_pre_scaling.dat",*A);
-
-//  Epetra_MultiVector *b = problem().GetRHS();
-//  EpetraExt::MultiVectorToMatlabFile("/tmp/b_pre_scaling.dat",*b);
-
-//  Epetra_MultiVector *x = problem().GetLHS();
-//  EpetraExt::MultiVectorToMatlabFile("/tmp/x_initial_guess.dat",*x);
+  //  EpetraExt::RowMatrixToMatlabFile("/tmp/A_pre_scaling.dat",*A);
+  
+  //  Epetra_MultiVector *b = problem().GetRHS();
+  //  EpetraExt::MultiVectorToMatlabFile("/tmp/b_pre_scaling.dat",*b);
+  
+  //  Epetra_MultiVector *x = problem().GetLHS();
+  //  EpetraExt::MultiVectorToMatlabFile("/tmp/x_initial_guess.dat",*x);
   
   const Epetra_Map* map = &A->RowMatrixRowMap();
   
   Epetra_Vector diagA(*map);
   A->ExtractDiagonalCopy(diagA);
-
-//  EpetraExt::MultiVectorToMatlabFile("/tmp/diagA.dat",diagA);
-//  
+  
+  //  EpetraExt::MultiVectorToMatlabFile("/tmp/diagA.dat",diagA);
+  //
   Epetra_Vector scale_vector(*map);
   Epetra_Vector diagA_sqrt_inv(*map);
   Epetra_Vector diagA_inv(*map);
@@ -120,20 +130,20 @@ int GMGSolver::solve() {
   if (_diagonalScaling && !useAztecToScaleDiagonally) {
     int length = scale_vector.MyLength();
     for (int i=0; i<length; i++) scale_vector[i] = 1.0 / sqrt(fabs(diagA[i]));
-
+    
     problem().LeftScale(scale_vector);
     problem().RightScale(scale_vector);
   }
   
   Teuchos::RCP<Epetra_MultiVector> diagA_ptr = Teuchos::rcp( &diagA, false );
-
+  
   _gmgOperator.setStiffnessDiagonal(diagA_ptr);
   
   _gmgOperator.setApplySmoothingOperator(_applySmoothing);
   _gmgOperator.setFineSolverUsesDiagonalScaling(_diagonalScaling);
   
-  _gmgOperator.computeCoarseStiffnessMatrix(A);
-
+  if (buildCoarseStiffness) _gmgOperator.computeCoarseStiffnessMatrix(A);
+  
   if (_diagonalScaling && useAztecToScaleDiagonally) {
     solver.SetAztecOption(AZ_scaling, AZ_sym_diag);
   } else {
@@ -155,17 +165,17 @@ int GMGSolver::solve() {
   }
   
   solver.SetPrecOperator(&_gmgOperator);
-//  solver.SetAztecOption(AZ_precond, AZ_none);
+  //  solver.SetAztecOption(AZ_precond, AZ_none);
   solver.SetAztecOption(AZ_precond, AZ_user_precond);
   solver.SetAztecOption(AZ_conv, _azConvergenceOption);
-//  solver.SetAztecOption(AZ_output, AZ_last);
+  //  solver.SetAztecOption(AZ_output, AZ_last);
   solver.SetAztecOption(AZ_output, _azOutput);
   
   int solveResult = solver.Iterate(_maxIters,_tol);
   
   const double* status = solver.GetAztecStatus();
   int remainingIters = _maxIters;
-
+  
   int whyTerminated = status[AZ_why];
   int maxRestarts = 1;
   int numRestarts = 0;
@@ -183,7 +193,7 @@ int GMGSolver::solve() {
   if (rank==0) {
     switch (whyTerminated) {
       case AZ_normal:
-//        cout << "whyTerminated: AZ_normal " << endl;
+        //        cout << "whyTerminated: AZ_normal " << endl;
         break;
       case AZ_param:
         cout << "whyTerminated: AZ_param " << endl;
@@ -205,25 +215,14 @@ int GMGSolver::solve() {
     }
   }
   
-//  Epetra_MultiVector *x = problem().GetLHS();
-//  EpetraExt::MultiVectorToMatlabFile("/tmp/x.dat",*x);
+  //  Epetra_MultiVector *x = problem().GetLHS();
+  //  EpetraExt::MultiVectorToMatlabFile("/tmp/x.dat",*x);
   
   if (_diagonalScaling && !useAztecToScaleDiagonally) {
     // reverse the scaling here
     scale_vector.Reciprocal(scale_vector);
     problem().LeftScale(scale_vector);
     problem().RightScale(scale_vector);
-  }
-
-  double norminf = A->NormInf();
-  double normone = A->NormOne();
-  
-  int numIters = solver.NumIters();
-  
-  if (_printToConsole) {
-    cout << "\n Inf-norm of stiffness matrix after scaling = " << norminf;
-    cout << "\n One-norm of stiffness matrix after scaling = " << normone << endl << endl;
-    cout << "Num iterations: " << numIters << endl;
   }
   
   _gmgOperator.setStiffnessDiagonal(Teuchos::rcp((Epetra_MultiVector*) NULL ));

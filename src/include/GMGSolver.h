@@ -40,6 +40,8 @@ class GMGSolver : public Solver {
   bool _printIterationCountIfNoAzOutput;
   
   std::vector< int > _iterationCountLog; // each time solve() is called, we push_back the number of iterations we run
+  
+  int solve(bool rebuildCoarseStiffness);
 public:
   GMGSolver(BCPtr zeroBCs, MeshPtr coarseMesh, IPPtr coarseIP, MeshPtr fineMesh, Teuchos::RCP<DofInterpreter> fineDofInterpreter,
             Epetra_Map finePartitionMap, int maxIters, double tol, Teuchos::RCP<Solver> coarseSolver, bool useStaticCondensation);
@@ -50,7 +52,10 @@ public:
   int iterationCount();
   
   void setPrintToConsole(bool printToConsole);
+  
+  int resolve();
   int solve();
+  
   void setApplySmoothingOperator(bool applySmoothingOp);
   
   void setComputeConditionNumberEstimate(bool value);
