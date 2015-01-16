@@ -23,6 +23,9 @@ class MeshPartitionPolicy {
 public:
   virtual ~MeshPartitionPolicy() {}
   virtual void partitionMesh(Mesh *mesh, PartitionIndexType numPartitions);
+  
+  static MeshPartitionPolicyPtr standardPartitionPolicy(); // aims to balance across all MPI ranks; present implementation uses Zoltan
+  static MeshPartitionPolicyPtr oneRankPartitionPolicy(int rank=0); // all cells belong to the rank specified
 };
 
 #endif

@@ -448,6 +448,33 @@ void GlobalDofAssignment::setPartitions(FieldContainer<GlobalIndexType> &partiti
   rebuildLookups();
 }
 
+void GlobalDofAssignment::setPartitions(std::vector<std::set<GlobalIndexType> > &partitions) {
+  int thisPartitionNumber     = Teuchos::GlobalMPISession::getRank();
+
+  // not sure numProcs == partitions.size() is a great requirement to impose, but it is an assumption we make in some places,
+  // so we require it here.
+  int numProcs = Teuchos::GlobalMPISession::getNProc();
+  TEUCHOS_TEST_FOR_EXCEPTION(numProcs != partitions.size(), std::invalid_argument, "partitions.size() must be equal to numProcs!");
+  
+  _partitions = partitions;
+  _partitionForCellID.clear();
+  
+  _activeCellOffset = 0;
+  for (PartitionIndexType i=0; i< _partitions.size(); i++) {
+    set< GlobalIndexType > partition;
+    for (set< GlobalIndexType >::iterator cellIDIt = partitions[i].begin(); cellIDIt != partitions[i].end(); cellIDIt++) {
+      GlobalIndexType cellID = *cellIDIt;
+      _partitionForCellID[cellID] = i;
+    }
+    if (thisPartitionNumber > i) {
+      _activeCellOffset += partition.size();
+    }
+  }
+  constructActiveCellMap();
+  projectParentCoefficientsOntoUnsetChildren();
+  rebuildLookups();
+}
+
 void GlobalDofAssignment::setPartitionPolicy( MeshPartitionPolicyPtr partitionPolicy ) {
   _partitionPolicy = partitionPolicy;
   repartitionAndMigrate();

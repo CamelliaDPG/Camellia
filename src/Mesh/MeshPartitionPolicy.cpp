@@ -9,6 +9,7 @@
 #include <iostream>
 
 #include "MeshPartitionPolicy.h"
+#include "ZoltanMeshPartitionPolicy.h"
 
 #include "GlobalDofAssignment.h"
 
@@ -33,4 +34,27 @@ void MeshPartitionPolicy::partitionMesh(Mesh *mesh, PartitionIndexType numPartit
     }
   }
   mesh->globalDofAssignment()->setPartitions(partitionedActiveCells);
+}
+
+MeshPartitionPolicyPtr MeshPartitionPolicy::standardPartitionPolicy() {
+  MeshPartitionPolicyPtr partitionPolicy = Teuchos::rcp( new ZoltanMeshPartitionPolicy() );
+  return partitionPolicy;
+}
+
+class OneRankPartitionPolicy : public MeshPartitionPolicy {
+  int _rankNumber;
+public:
+  OneRankPartitionPolicy(int rankNumber) {
+    _rankNumber = rankNumber;
+  }
+  void partitionMesh(Mesh *mesh, PartitionIndexType numPartitions) {
+    set<GlobalIndexType> activeCellIDs = mesh->getActiveCellIDs();
+    vector< set<GlobalIndexType> > partitions(numPartitions);
+    partitions[_rankNumber] = activeCellIDs;
+    mesh->globalDofAssignment()->setPartitions(partitions);
+  }
+};
+
+MeshPartitionPolicyPtr MeshPartitionPolicy::oneRankPartitionPolicy(int rankNumber) {
+  return Teuchos::rcp( new OneRankPartitionPolicy(rankNumber) );
 }

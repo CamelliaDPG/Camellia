@@ -132,7 +132,8 @@ public:
   vector<Solution *> getRegisteredSolutions();
   void unregisterSolution(Solution* solution);
   
-  void setPartitions(FieldContainer<GlobalIndexType> &partitions);
+  void setPartitions(std::vector< std::set<IndexType> > &partitions);
+  void setPartitions(Intrepid::FieldContainer<GlobalIndexType> &partitions);
   void setPartitionPolicy( MeshPartitionPolicyPtr partitionPolicy );
   
   // static constructors:
