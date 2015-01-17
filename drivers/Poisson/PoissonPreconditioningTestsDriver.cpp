@@ -30,6 +30,8 @@ using namespace Camellia;
 
 bool runGMGOperatorInDebugMode;
 int maxDofsForKLU;
+double coarseCGTol;
+int coarseMaxIterations;
 
 string getFactorizationTypeString(GMGOperator::FactorType factorizationType) {
   switch (factorizationType) {
@@ -522,15 +524,13 @@ void run(ProblemChoice problemChoice, int &iterationCount, int spaceDim, int num
   } else {
     BCPtr zeroBCs = bc->copyImposingZero();
     bool saveFactorization = true;
-    double coarseTol = 1e-6; // this is pretty fine--want to avoid adding to the fine solver's iteration count...
-    int coarseMaxIterations = 2000;
 
     Teuchos::RCP<Solver> coarseSolver = Teuchos::null;
     GMGSolver* gmgSolver = new GMGSolver(solution, k0Mesh, cgMaxIterations, cgTol, coarseSolver, useStaticCondensation);
 
     if (coarseSolverChoice != Solver::GMGSolver_1_Level_h) {
       coarseSolver = Solver::getSolver(coarseSolverChoice, saveFactorization,
-                                       coarseTol, coarseMaxIterations);
+                                       coarseCGTol, coarseMaxIterations);
     } else {
       MeshTopologyPtr coarsestMeshTopo = k0Mesh->getTopology()->getRootMeshTopology();
       int H1OrderP0 = 0 + 1;
@@ -553,7 +553,7 @@ void run(ProblemChoice problemChoice, int &iterationCount, int spaceDim, int num
       }
       
       coarseSolver = Solver::getSolver(coarseSolverChoice, saveFactorization,
-                                       coarseTol, coarseMaxIterations,
+                                       coarseCGTol, coarseMaxIterations,
                                        gmgSolver->gmgOperator().getCoarseSolution(),
                                        coarsestMesh, coarsestSolver);
       GMGSolver* coarseSolverGMG = static_cast<GMGSolver*>( coarseSolver.get() );
@@ -937,6 +937,8 @@ int main(int argc, char *argv[]) {
   int numCellsRootMesh = -1;
   
   maxDofsForKLU = 2000; // used when defining coarsest solve on 3-level solver -- will use SuperLUDist if not KLU
+  coarseCGTol = 1e-6;
+  coarseMaxIterations = 2000;
   
   int AztecOutputLevel = 1;
   int cgMaxIterations = 25000;
@@ -994,6 +996,9 @@ int main(int argc, char *argv[]) {
   
   cmdp.setOption("maxIterations", &cgMaxIterations, "maximum number of CG iterations");
   cmdp.setOption("cgTol", &cgTol, "CG convergence tolerance");
+  
+  cmdp.setOption("coarseCGTol", &coarseCGTol, "coarse solve CG tolerance");
+  cmdp.setOption("coarseMaxIterations", &coarseMaxIterations, "coarse solve max iterations");
   
   cmdp.setOption("runMany", "runOne", &runAutomatic, "Run in automatic mode (ignores several input parameters)");
   cmdp.setOption("runManySubset", &runManySubsetString, "DontPrecondition, AllGMG, AllSchwarz, or All");
