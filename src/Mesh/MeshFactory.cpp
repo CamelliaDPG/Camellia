@@ -668,7 +668,7 @@ MeshPtr MeshFactory::readMesh(string filePath, Teuchos::RCP< BilinearForm > bili
 {
   ifstream mshFile;
   mshFile.open(filePath.c_str());
-  TEUCHOS_TEST_FOR_EXCEPTION(mshFile == NULL, std::invalid_argument, "Could not open msh file");
+  TEUCHOS_TEST_FOR_EXCEPTION(mshFile.fail(), std::invalid_argument, "Could not open msh file");
   string line;
   getline(mshFile, line);
   while (line != "$Nodes")
@@ -737,8 +737,8 @@ MeshPtr MeshFactory::readTriangle(string filePath, Teuchos::RCP< BilinearForm > 
   string eleFileName = filePath+".ele";
   nodeFile.open(nodeFileName.c_str());
   eleFile.open(eleFileName.c_str());
-  TEUCHOS_TEST_FOR_EXCEPTION(nodeFile == NULL, std::invalid_argument, "Could not open node file: "+nodeFileName);
-  TEUCHOS_TEST_FOR_EXCEPTION(eleFile == NULL, std::invalid_argument, "Could not open ele file: "+eleFileName);
+  TEUCHOS_TEST_FOR_EXCEPTION(nodeFile.fail(), std::invalid_argument, "Could not open node file: "+nodeFileName);
+  TEUCHOS_TEST_FOR_EXCEPTION(eleFile.fail(), std::invalid_argument, "Could not open ele file: "+eleFileName);
   // Read node file
   string line;
   int numNodes;
