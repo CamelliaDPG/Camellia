@@ -338,6 +338,7 @@ public:
 
   MeshTopologyPtr getTopology();
   
+  vector< vector<double> > verticesForCell(GlobalIndexType cellID);
   vector<unsigned> vertexIndicesForCell(GlobalIndexType cellID);
   FieldContainer<double> vertexCoordinates(GlobalIndexType vertexIndex);
 

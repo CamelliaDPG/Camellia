@@ -973,6 +973,19 @@ FieldContainer<double> Mesh::vertexCoordinates(GlobalIndexType vertexIndex) {
   return vertex;
 }
 
+vector< vector<double> > Mesh::verticesForCell(GlobalIndexType cellID) {
+  CellPtr cell = _meshTopology->getCell(cellID);
+  vector<unsigned> vertexIndices = cell->vertices();
+  int numVertices = vertexIndices.size();
+  
+  vector< vector<double> > vertices(numVertices);
+  //vertices.resize(numVertices,dimension);
+  for (unsigned vertexIndex = 0; vertexIndex < numVertices; vertexIndex++) {
+    vertices[vertexIndex] = _meshTopology->getVertex(vertexIndices[vertexIndex]);
+  }
+  return vertices;
+}
+
 void Mesh::verticesForCell(FieldContainer<double>& vertices, GlobalIndexType cellID) {
   CellPtr cell = _meshTopology->getCell(cellID);
   vector<unsigned> vertexIndices = cell->vertices();
