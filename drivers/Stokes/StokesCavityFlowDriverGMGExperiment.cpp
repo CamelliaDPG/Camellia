@@ -432,7 +432,7 @@ int main(int argc, char *argv[]) {
   
   switch(solverChoice) {
     case MUMPS:
-#ifdef USE_MUMPS
+#ifdef HAVE_AMESOS_MUMPS
       coarseSolver = Teuchos::rcp( new MumpsSolver(mumpsMaxMemoryMB, true) );
 #else
       cout << "useMumps=true, but MUMPS is not available!\n";
@@ -485,7 +485,7 @@ int main(int argc, char *argv[]) {
     // otherwise, make a new Solver of the same type as coarseSolver
     switch(solverChoice) {
       case MUMPS:
-#ifdef USE_MUMPS
+#ifdef HAVE_AMESOS_MUMPS
         coarseSolver = Teuchos::rcp( new MumpsSolver(mumpsMaxMemoryMB, true) ); // true: save factorization
 #else
         cout << "useMumps=true, but MUMPS is not available!\n";
@@ -519,7 +519,7 @@ int main(int argc, char *argv[]) {
   exporter.exportSolution(solution,varFactory,0);
 #endif
   
-//#ifdef USE_MUMPS
+//#ifdef HAVE_AMESOS_MUMPS
 //  if (useMumps) coarseSolver = Teuchos::rcp( new MumpsSolver(512, true) );
 //#endif
   
@@ -555,7 +555,7 @@ int main(int argc, char *argv[]) {
     }
     
     if (useGMGSolver) { // create fresh fineSolver now that the meshes have changed:
-//#ifdef USE_MUMPS
+//#ifdef HAVE_AMESOS_MUMPS
 //      if (useMumps) coarseSolver = Teuchos::rcp( new MumpsSolver(512, true) );
 //#endif
       

@@ -49,7 +49,7 @@
 
 // only use MUMPS when we have MPI
 #ifdef HAVE_MPI
-#ifdef USE_MUMPS
+#ifdef HAVE_AMESOS_MUMPS
 #include "Amesos_Mumps.h"
 #endif
 #endif
@@ -402,7 +402,7 @@ int Solution::solve() {
 
 int Solution::solve(bool useMumps) {
   Teuchos::RCP<Solver> solver;
-#ifdef USE_MUMPS
+#ifdef HAVE_AMESOS_MUMPS
   if (useMumps) {
     solver = Teuchos::rcp(new MumpsSolver());
   } else {

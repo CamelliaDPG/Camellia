@@ -247,7 +247,7 @@ int main(int argc, char *argv[]) {
   
   Teuchos::RCP<Solver> coarseSolver, fineSolver;
   if (useMumps) {
-#ifdef USE_MUMPS
+#ifdef HAVE_AMESOS_MUMPS
     coarseSolver = Teuchos::rcp( new MumpsSolver(512, true) );
 #else
     cout << "useMumps=true, but MUMPS is not available!\n";
@@ -290,7 +290,7 @@ int main(int argc, char *argv[]) {
   exporter.exportSolution(solution,varFactory,0);
 #endif
   
-#ifdef USE_MUMPS
+#ifdef HAVE_AMESOS_MUMPS
   if (useMumps) coarseSolver = Teuchos::rcp( new MumpsSolver(512, true) );
 #endif
   
@@ -329,7 +329,7 @@ int main(int argc, char *argv[]) {
     }
     
     if (useGMGSolver) { // create fresh fineSolver now that the meshes have changed:
-#ifdef USE_MUMPS
+#ifdef HAVE_AMESOS_MUMPS
       if (useMumps) coarseSolver = Teuchos::rcp( new MumpsSolver(512, true) );
 #endif
       double tol = max(relativeTol * energyError, minTol);

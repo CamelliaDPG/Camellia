@@ -345,11 +345,11 @@ int main(int argc, char *argv[]) {
 
   Teuchos::RCP<Solver> solver;
   if (useMumps) {
-#ifdef USE_MUMPS
+#ifdef HAVE_AMESOS_MUMPS
     solver = Teuchos::rcp(new MumpsSolver());
 #else
     if (rank==0)
-      cout << "useMumps = true, but USE_MUMPS is unset.  Exiting...\n";
+      cout << "useMumps = true, but HAVE_AMESOS_MUMPS is unset.  Exiting...\n";
     exit(1);
 #endif
   } else if (useML) {

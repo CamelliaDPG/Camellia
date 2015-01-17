@@ -129,7 +129,7 @@ public:
 #endif
 
 // only use MUMPS when we have MPI
-#ifdef USE_MUMPS
+#ifdef HAVE_AMESOS_MUMPS
 #ifdef HAVE_MPI
 #include "Amesos_Mumps.h"
 class MumpsSolver : public Solver {

@@ -213,7 +213,7 @@ int main(int argc, char *argv[]) {
   
   Teuchos::RCP<Solver> solver = Teuchos::rcp( new KluSolver );
   
-#ifdef USE_MUMPS
+#ifdef HAVE_AMESOS_MUMPS
   if (useMumpsIfAvailable) solver = Teuchos::rcp( new MumpsSolver );
 #endif
   
