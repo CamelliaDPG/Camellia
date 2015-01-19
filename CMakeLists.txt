@@ -1,13 +1,4 @@
 cmake_minimum_required(VERSION 2.6)
-#IF(NOT CAMELLIA_OPTIONS_CONFIGURED)
-#  include(ConfigureOptions.cmake)
-#ENDIF()
-
-option(USE_MUMPS "Use MUMPS" ON)
-if(USE_MUMPS)
-  add_definitions(-DUSE_MUMPS)
-endif(USE_MUMPS)
-
 
 # Set Camellia directories
 set(CAMELLIA_SOURCE_DIR src)
@@ -62,12 +53,6 @@ ${ADDITIONAL_LIBRARIES})
 #  link_libraries(${ADDITIONAL_LIBRARIES})
 endif()
 
-# adding boost    
-# FIND_PACKAGE(Boost)
-# if (Boost_FOUND)
-#  INCLUDE_DIRECTORIES(${Boost_INCLUDE_DIR})
-# endif()
-
 MESSAGE(" Looking for Trilinos in ${TRILINOS_PATH}/lib/cmake/Trilinos
   ${TRILINOS_PATH} $ENV{TRILINOS_DIR}")
 
@@ -114,6 +99,22 @@ IF(NOT CMAKE_CXX_COMPILER)
   SET(CMAKE_CXX_COMPILER ${Trilinos_CXX_COMPILER})
 ENDIF()
 
+# Testing something:
+#SET(CMAKE_CXX_COMPILER "echo")
+
+#get_cmake_property(_variableNames VARIABLES)
+#foreach (_variableName ${_variableNames})
+#    message(STATUS "${_variableName}=${${_variableName}}")
+#endforeach()
+
+IF(NOT CMAKE_CXX_FLAGS)
+  # -fPIC allows shared libraries to be built against the Camellia library
+  SET(CMAKE_CXX_FLAGS ${Trilinos_CXX_COMPILER_FLAGS})
+ENDIF() 
+
+SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fPIC")
+#MESSAGE("CMAKE_CXX_FLAGS = ${CMAKE_CXX_FLAGS}")
+
 # If you haven't already set the C compiler, use the same compiler
 # that was used to build Trilinos on your machine.  
 IF(NOT CMAKE_C_COMPILER)
@@ -121,12 +122,24 @@ IF(NOT CMAKE_C_COMPILER)
   SET(CMAKE_C_COMPILER ${Trilinos_C_COMPILER})
 ENDIF()
 
+IF (NOT CMAKE_C_FLAGS)
+  SET(CMAKE_C_FLAGS ${Trilinos_C_COMPILER_FLAGS})
+ENDIF()
+
+SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fPIC")
+#MESSAGE("CMAKE_C_FLAGS = ${CMAKE_C_FLAGS}")
+
 # If you haven't already set the Fortran compiler, use the same compiler
 # that was used to build Trilinos on your machine.  
 IF(NOT CMAKE_Fortran_COMPILER)
   MESSAGE("Setting Fortran compiler.")
   SET(CMAKE_Fortran_COMPILER ${Trilinos_Fortran_COMPILER})
 ENDIF()
+
+#IF(NOT BUILD_SHARED_LIBS)
+#  MESSAGE("Setting BUILD_SHARED_LIBS to ${Trilinos_BUILD_SHARED_LIBS}")
+#  SET(BUILD_SHARED_LIBS ${Trilinos_BUILD_SHARED_LIBS})
+#ENDIF()
 
 project(Camellia)
 
@@ -157,10 +170,10 @@ endif()
 add_library(Camellia ${LIB_SOURCES} ${HEADERS})
 
 link_libraries(
-  Camellia
   ${Trilinos_LIBRARIES}
   ${Trilinos_TPL_LIBRARIES}
   ${ADDITIONAL_LIBRARIES}
+  Camellia
   # Xdmd
   # hdf5_cpp
   #  dmumps
