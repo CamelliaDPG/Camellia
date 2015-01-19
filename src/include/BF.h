@@ -45,6 +45,8 @@ public:
   
   bool isFluxOrTrace(int trialID);
   
+  string displayString();
+  
   void printTrialTestInteractions();
   
   void stiffnessMatrix(FieldContainer<double> &stiffness, Teuchos::RCP<ElementType> elemType,

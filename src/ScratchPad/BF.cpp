@@ -67,7 +67,7 @@ bool BF::isFluxOrTrace(int trialID) {
   return (varType == FLUX) || (varType == TRACE);
 }
 
-void BF::printTrialTestInteractions() {
+string BF::displayString() {
   ostringstream bfStream;
   bool first = true;
   for ( vector< BilinearTerm >:: iterator btIt = _terms.begin();
@@ -81,8 +81,11 @@ void BF::printTrialTestInteractions() {
     bfStream << "( " << trialTerm->displayString() << ", " << testTerm->displayString() << ")";
     first = false;
   }
-  string bfString = bfStream.str();
-  cout << bfString << endl;
+  return bfStream.str();
+}
+
+void BF::printTrialTestInteractions() {
+  cout << displayString() << endl;
 }
 
 void BF::stiffnessMatrix(FieldContainer<double> &stiffness, Teuchos::RCP<ElementType> elemType,
