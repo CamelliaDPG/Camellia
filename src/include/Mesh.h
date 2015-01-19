@@ -257,8 +257,12 @@ public:
 //                             ElementPtr nonParent);
 //
 //  void getPatchBasisOrdering(DofOrderingPtr &originalChildOrdering, ElementPtr child, int sideIndex);
+  
   FunctionPtr getTransformationFunction(); // will be NULL for meshes without edge curves defined
 
+  void hRefine(const vector<GlobalIndexType> &cellIDs);
+  void hRefine(const set<GlobalIndexType> &cellIDs);
+  
   void hRefine(const set<GlobalIndexType> &cellIDs, Teuchos::RCP<RefinementPattern> refPattern);
   
   void hRefine(const set<GlobalIndexType> &cellIDs, Teuchos::RCP<RefinementPattern> refPattern, bool repartitionAndRebuild);

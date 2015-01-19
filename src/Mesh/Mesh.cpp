@@ -68,6 +68,7 @@
 #include "ZoltanMeshPartitionPolicy.h"
 
 using namespace Intrepid;
+using namespace Camellia;
 
 map<int,int> Mesh::_emptyIntIntMap;
 
@@ -490,6 +491,28 @@ set<GlobalIndexType> Mesh::globalDofIndicesForPartition(PartitionIndexType parti
 //void Mesh::hRefine(vector<GlobalIndexType> cellIDs, Teuchos::RCP<RefinementPattern> refPattern) {
 //  hRefine(cellIDs,refPattern,vector< Teuchos::RCP<Solution> >()); 
 //}
+
+void Mesh::hRefine(const vector<GlobalIndexType> &cellIDs) {
+  set<GlobalIndexType> cellSet(cellIDs.begin(),cellIDs.end());
+  hRefine(cellSet);
+}
+
+void Mesh::hRefine(const set<GlobalIndexType> &cellIDs) {
+  map< CellTopologyKey, set<GlobalIndexType> > cellIDsForTopo;
+  for (set<GlobalIndexType>::iterator cellIDIt = cellIDs.begin(); cellIDIt != cellIDs.end();
+       cellIDIt++) {
+    GlobalIndexType cellID = *cellIDIt;
+    CellTopoPtr cellTopo = getElementType(cellID)->cellTopoPtr;
+    cellIDsForTopo[cellTopo->getKey()].insert(cellID);
+  }
+  
+  for (map< CellTopologyKey, set<GlobalIndexType> >::iterator entryIt = cellIDsForTopo.begin();
+       entryIt != cellIDsForTopo.end(); entryIt++) {
+    CellTopologyKey cellTopoKey = entryIt->first;
+    RefinementPatternPtr refPattern = RefinementPattern::regularRefinementPattern(cellTopoKey);
+    hRefine(entryIt->second, refPattern);
+  }
+}
 
 void Mesh::hRefine(const vector<GlobalIndexType> &cellIDs, Teuchos::RCP<RefinementPattern> refPattern) {
   set<GlobalIndexType> cellSet(cellIDs.begin(),cellIDs.end());
