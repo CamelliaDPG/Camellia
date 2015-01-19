@@ -917,7 +917,7 @@ bool PatchBasisTests::testSolveUniformMesh() {
 
   hRefineAllActiveCells(multiBasisMesh);
   
-  Teuchos::RCP<DPGInnerProduct> ip = Teuchos::rcp( new MathInnerProduct(confusionBF) );
+  IPPtr ip = Teuchos::rcp( new MathInnerProduct(confusionBF) );
   
   Teuchos::RCP<ConfusionProblemLegacy> confusionProblem = Teuchos::rcp( new ConfusionProblemLegacy(confusionBF, beta_x, beta_y) );
   

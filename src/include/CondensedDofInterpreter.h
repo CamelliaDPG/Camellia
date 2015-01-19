@@ -15,7 +15,6 @@
 #include "Mesh.h"
 #include "LagrangeConstraints.h"
 #include "Epetra_SerialDenseVector.h"
-#include "DPGInnerProduct.h"
 #include "RHS.h"
 
 using namespace Intrepid;
@@ -35,7 +34,7 @@ protected:
 private:
   bool _storeLocalStiffnessMatrices;
   Mesh* _mesh; // for element type lookup, and for determination of which dofs are trace dofs
-  Teuchos::RCP<DPGInnerProduct> _ip;
+  IPPtr _ip;
   RHSPtr _rhs;
   LagrangeConstraints* _lagrangeConstraints;
   set<int> _uncondensibleVarIDs;
@@ -64,7 +63,7 @@ private:
   
   void getLocalData(GlobalIndexType cellID, FieldContainer<double> &stiffness, FieldContainer<double> &load, FieldContainer<GlobalIndexType> &interpretedDofIndices);
 public:
-  CondensedDofInterpreter(Mesh* mesh, Teuchos::RCP<DPGInnerProduct> ip, RHSPtr rhs, LagrangeConstraints* lagrangeConstraints, const set<int> &fieldIDsToExclude, bool storeLocalStiffnessMatrices);
+  CondensedDofInterpreter(Mesh* mesh, IPPtr ip, RHSPtr rhs, LagrangeConstraints* lagrangeConstraints, const set<int> &fieldIDsToExclude, bool storeLocalStiffnessMatrices);
   
   void addSolution(CondensedDofInterpreter* otherSolnDofInterpreter, double weight);
   

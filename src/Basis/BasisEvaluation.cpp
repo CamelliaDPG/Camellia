@@ -378,8 +378,8 @@ FCPtr BasisEvaluation::getComponentOfInterest(constFCPtr values, IntrepidExtende
   int spaceDim = dimensions[dimensions.size()-1];
   dimensions.pop_back(); // get rid of last, spatial dimension
   result = Teuchos::rcp(new FieldContainer<double>(dimensions));
-  int numPoints = dimensions[0];
-  int basisCardinality = dimensions[1];
+//  int numPoints = dimensions[0];
+//  int basisCardinality = dimensions[1];
   int size = result->size();
   int enumeratedLocation;
   if (values->rank() == 3) {

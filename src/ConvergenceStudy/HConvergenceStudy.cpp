@@ -48,7 +48,7 @@ HConvergenceStudy::HConvergenceStudy(Teuchos::RCP<ExactSolution> exactSolution,
                                      Teuchos::RCP<BilinearForm> bilinearForm,
                                      Teuchos::RCP<RHS> rhs,
                                      Teuchos::RCP<BC> bc,
-                                     Teuchos::RCP<DPGInnerProduct> ip, 
+                                     IPPtr ip, 
                                      int minLogElements, int maxLogElements, 
                                      int H1Order, int pToAdd, bool randomRefinements,
                                      bool useTriangles, bool useHybrid) {

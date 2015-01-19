@@ -162,7 +162,7 @@ Solution::Solution(const Solution &soln) {
   _cubatureEnrichmentDegree = soln.cubatureEnrichmentDegree();
 }
 
-Solution::Solution(Teuchos::RCP<Mesh> mesh, Teuchos::RCP<BC> bc, Teuchos::RCP<RHS> rhs, Teuchos::RCP<DPGInnerProduct> ip) {
+Solution::Solution(Teuchos::RCP<Mesh> mesh, Teuchos::RCP<BC> bc, Teuchos::RCP<RHS> rhs, IPPtr ip) {
   _mesh = mesh;
   _dofInterpreter = Teuchos::rcp( _mesh.get(), false ); // false: doesn't own memory
   _bc = bc;
@@ -1255,7 +1255,7 @@ void Solution::importGlobalSolution() {
   err = timeDistributeSolutionVector.MaxValue( &_maxTimeDistributeSolution );
 }
 
-Teuchos::RCP<DPGInnerProduct> Solution::ip() const {
+IPPtr Solution::ip() const {
   return _ip;
 }
 
@@ -2786,7 +2786,7 @@ void Solution::setFilter(Teuchos::RCP<LocalStiffnessMatrixFilter> newFilter) {
   _filter = newFilter;
 }
 
-void Solution::setIP( Teuchos::RCP<DPGInnerProduct> ip) {
+void Solution::setIP( IPPtr ip) {
   _ip = ip;
   // any computed residuals will need to be recomputed with the new IP
   clearComputedResiduals();
@@ -3635,7 +3635,7 @@ void Solution::readFromFile(const string &filePath) {
   fin.close();
 }
 
-SolutionPtr Solution::solution(MeshPtr mesh, BCPtr bc, RHSPtr rhs, Teuchos::RCP<DPGInnerProduct> ip ) {
+SolutionPtr Solution::solution(MeshPtr mesh, BCPtr bc, RHSPtr rhs, IPPtr ip ) {
   return Teuchos::rcp( new Solution(mesh,bc,rhs,ip) );
 }
 

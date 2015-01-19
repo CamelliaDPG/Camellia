@@ -170,7 +170,7 @@ MeshPtr MeshUtilities::buildUnitQuadMesh(int nCells, Teuchos::RCP< BilinearForm 
   return MeshUtilities::buildUnitQuadMesh(nCells,nCells, bilinearForm, H1Order, pTest);
 }
 
-double MeshUtilities::computeMaxLocalConditionNumber(Teuchos::RCP< DPGInnerProduct > ip, MeshPtr mesh, bool jacobiScaling, string sparseFileToWriteTo) {
+double MeshUtilities::computeMaxLocalConditionNumber(IPPtr ip, MeshPtr mesh, bool jacobiScaling, string sparseFileToWriteTo) {
   int rank = Teuchos::GlobalMPISession::getRank();
   int numProcs = Teuchos::GlobalMPISession::getNProc();
   vector< ElementPtr > elements = mesh->elementsInPartition(rank);

@@ -44,13 +44,13 @@
 // Teuchos includes
 #include "Teuchos_RCP.hpp"
 
-#include "DPGInnerProduct.h"
+#include "IP.h"
 
 /*
  Implements quasi-optimal inner product for H1, H(div) test functions
  */
 
-class OptimalInnerProduct : public DPGInnerProduct {
+class OptimalInnerProduct : public IP {
   typedef pair<IntrepidExtendedTypes::EOperatorExtended, int > OpOpIndexPair;
   map< pair<int, int>, 
        vector< pair < pair< OpOpIndexPair, OpOpIndexPair >, int> > > _testCombos;

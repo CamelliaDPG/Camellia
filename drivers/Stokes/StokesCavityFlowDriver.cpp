@@ -732,7 +732,7 @@ int main(int argc, char *argv[]) {
   topCornerPoints(3,0) = 1 - 1e-12;
   topCornerPoints(3,1) = 1 - 1e-10;
   
-  Teuchos::RCP<DPGInnerProduct> ip;
+  IPPtr ip;
   
   IPPtr qoptIP = Teuchos::rcp(new IP());
   

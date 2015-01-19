@@ -13,7 +13,7 @@
 #include "BilinearForm.h"
 #include "BC.h"
 #include "RHS.h"
-#include "DPGInnerProduct.h"
+#include "IP.h"
 
 class Formulation {
 protected:

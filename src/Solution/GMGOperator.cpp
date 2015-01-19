@@ -48,7 +48,7 @@ extern "C" void HPM_Start(char *);
 extern "C" void HPM_Stop(char *);
 #endif
 
-GMGOperator::GMGOperator(BCPtr zeroBCs, MeshPtr coarseMesh, Teuchos::RCP<DPGInnerProduct> coarseIP,
+GMGOperator::GMGOperator(BCPtr zeroBCs, MeshPtr coarseMesh, IPPtr coarseIP,
                          MeshPtr fineMesh, Teuchos::RCP<DofInterpreter> fineDofInterpreter, Epetra_Map finePartitionMap,
                          Teuchos::RCP<Solver> coarseSolver, bool useStaticCondensation, bool fineSolverUsesDiagonalScaling) :  _finePartitionMap(finePartitionMap), _br(true) {
   _useStaticCondensation = useStaticCondensation;

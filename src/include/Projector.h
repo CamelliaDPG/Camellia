@@ -1,7 +1,6 @@
 #ifndef PROJECTOR
 #define PROJECTOR
 
-//#include "DPGInnerProduct.h"
 #include "AbstractFunction.h"
 #include "IP.h"
 

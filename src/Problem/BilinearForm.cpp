@@ -125,7 +125,7 @@ void BilinearForm::trialTestOperators(int testID1, int testID2,
 }
 
 void BilinearForm::localStiffnessMatrixAndRHS(FieldContainer<double> &localStiffness, FieldContainer<double> &rhsVector,
-                                              Teuchos::RCP< DPGInnerProduct > ip, BasisCachePtr ipBasisCache, RHSPtr rhs, BasisCachePtr basisCache) {
+                                              IPPtr ip, BasisCachePtr ipBasisCache, RHSPtr rhs, BasisCachePtr basisCache) {
   double testMatrixAssemblyTime = 0, testMatrixInversionTime = 0, localStiffnessDeterminationFromTestsTime = 0;
   double rhsIntegrationAgainstOptimalTestsTime = 0;
   

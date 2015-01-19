@@ -8,6 +8,7 @@
 
 #include "Var.h"
 #include "LinearTerm.h"
+#include "BilinearForm.h"
 
 static const string & S_OP_VALUE = "";
 static const string & S_OP_GRAD = "\\nabla ";

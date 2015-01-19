@@ -83,7 +83,7 @@ public:
   //! @name Constructor
   //@{
   //! Constructor
-  GMGOperator(BCPtr zeroBCs, MeshPtr coarseMesh, Teuchos::RCP<DPGInnerProduct> coarseIP, MeshPtr fineMesh, Teuchos::RCP<DofInterpreter> fineDofInterpreter, Epetra_Map finePartitionMap, Teuchos::RCP<Solver> coarseSolver, bool useStaticCondensation, bool fineSolverUsesDiagonalScaling = true);
+  GMGOperator(BCPtr zeroBCs, MeshPtr coarseMesh, IPPtr coarseIP, MeshPtr fineMesh, Teuchos::RCP<DofInterpreter> fineDofInterpreter, Epetra_Map finePartitionMap, Teuchos::RCP<Solver> coarseSolver, bool useStaticCondensation, bool fineSolverUsesDiagonalScaling = true);
   //@}
   
   //! @name Attribute set methods

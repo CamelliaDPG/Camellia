@@ -50,7 +50,7 @@
 #include "BilinearForm.h"
 #include "SpatialFilter.h"
 
-#include "DPGInnerProduct.h"
+#include "IP.h"
 
 class MeshUtilities {
  public:
@@ -67,7 +67,7 @@ class MeshUtilities {
   
   static MeshPtr buildUnitQuadMesh(int nCells, Teuchos::RCP< BilinearForm > bilinearForm, int H1Order, int pTest);
 
-  static double computeMaxLocalConditionNumber(Teuchos::RCP< DPGInnerProduct > ip, MeshPtr mesh, bool jacobiScaling=true, string sparseFileToWriteTo="");
+  static double computeMaxLocalConditionNumber(IPPtr ip, MeshPtr mesh, bool jacobiScaling=true, string sparseFileToWriteTo="");
   
 };
 

@@ -27,7 +27,7 @@
 
 #include "RHS.h"
 
-CondensedDofInterpreter::CondensedDofInterpreter(Mesh* mesh, Teuchos::RCP<DPGInnerProduct> ip, RHSPtr rhs, LagrangeConstraints* lagrangeConstraints, const set<int> &fieldIDsToExclude, bool storeLocalStiffnessMatrices) : DofInterpreter(Teuchos::rcp(mesh,false)) {
+CondensedDofInterpreter::CondensedDofInterpreter(Mesh* mesh, IPPtr ip, RHSPtr rhs, LagrangeConstraints* lagrangeConstraints, const set<int> &fieldIDsToExclude, bool storeLocalStiffnessMatrices) : DofInterpreter(Teuchos::rcp(mesh,false)) {
   _mesh = mesh;
   _ip = ip;
   _rhs = rhs;

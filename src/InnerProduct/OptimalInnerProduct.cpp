@@ -40,7 +40,7 @@
 
 typedef pair<IntrepidExtendedTypes::EOperatorExtended, int > OpOpIndexPair;
 
-OptimalInnerProduct::OptimalInnerProduct(Teuchos::RCP< BilinearForm > bf) : DPGInnerProduct(bf) {
+OptimalInnerProduct::OptimalInnerProduct(Teuchos::RCP< BilinearForm > bf) : IP(bf) {
   _beta = 1; // TODO: allow this to be controlled from outside
   // TODO: replace the cout with an ostringstream, and save the string so that we can return description on request...
   vector<int> trialIDs = bf->trialIDs();

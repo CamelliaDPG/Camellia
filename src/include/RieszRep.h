@@ -56,7 +56,6 @@
 #include "Element.h"
 #include "Function.h"
 
-//#include "DPGInnerProduct.h"
 #include "LinearTerm.h"
 #include "BasisCache.h"
 #include "IP.h"
@@ -73,13 +72,13 @@ class RieszRep {
   map<GlobalIndexType, double > _rieszRepNormSquaredGlobal; // from cellID to norm squared of riesz inversion
   
   MeshPtr _mesh;
-  Teuchos::RCP< DPGInnerProduct > _ip;
+  IPPtr _ip;
   LinearTermPtr _rhs;  // the RHS stuff here and below is misnamed -- should just be called functional
   bool _printAll;
   bool _repsNotComputed;
  
  public:
-  RieszRep(MeshPtr mesh, Teuchos::RCP< DPGInnerProduct > ip, LinearTermPtr rhs){
+  RieszRep(MeshPtr mesh, IPPtr ip, LinearTermPtr rhs){
     _mesh = mesh;
     _ip = ip;
     _rhs = rhs;
@@ -115,7 +114,7 @@ class RieszRep {
   map<GlobalIndexType,double> computeAlternativeNormSqOnCells(IPPtr ip, vector<GlobalIndexType> cellIDs);
   
   static FunctionPtr repFunction( VarPtr var, RieszRepPtr rep );
-  static RieszRepPtr rieszRep(MeshPtr mesh, Teuchos::RCP< DPGInnerProduct > ip, LinearTermPtr rhs);
+  static RieszRepPtr rieszRep(MeshPtr mesh, IPPtr ip, LinearTermPtr rhs);
 };
 
 class RepFunction;

@@ -1,5 +1,5 @@
 #include "TimeIntegrator.h"
-#include "DPGInnerProduct.h"
+#include "IP.h"
 
 #ifdef HAVE_MPI
 #include <Teuchos_GlobalMPISession.hpp>

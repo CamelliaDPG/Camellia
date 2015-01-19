@@ -36,15 +36,15 @@
 // Teuchos includes
 #include "Teuchos_RCP.hpp"
 
-#include "DPGInnerProduct.h"
+#include "IP.h"
 
 /*
   Implements "standard" inner product for H1, H(div) test functions
  */
 
-class MathInnerProduct : public DPGInnerProduct {
+class MathInnerProduct : public IP {
 public:
-  MathInnerProduct(Teuchos::RCP< BilinearForm > bfs) : DPGInnerProduct(bfs) {}
+  MathInnerProduct(Teuchos::RCP< BilinearForm > bfs) : IP(bfs) {}
   
   void operators(int testID1, int testID2, 
                  vector<IntrepidExtendedTypes::EOperatorExtended> &testOp1,

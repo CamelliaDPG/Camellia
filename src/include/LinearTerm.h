@@ -9,7 +9,7 @@
 #ifndef Camellia_LinearTerm_h
 #define Camellia_LinearTerm_h
 
-#include "DPGInnerProduct.h"
+#include "IP.h"
 
 #include <Epetra_Map.h>
 #ifdef HAVE_MPI
@@ -25,74 +25,78 @@
 #include "Intrepid_Basis.hpp"
 #include "Var.h"
 
+#include "DofOrdering.h"
+
 class Epetra_CrsMatrix;
 class BasisCache;
 class LinearTerm;
 class Mesh;
+class ElementType;
+
 class Solution;
 class Function;
 
 typedef Teuchos::RCP<LinearTerm> LinearTermPtr;
 typedef Teuchos::RCP<Solution> SolutionPtr;
 typedef Teuchos::RCP<Function> FunctionPtr;
-typedef Teuchos::RCP< const FieldContainer<double> > constFCPtr;
+typedef Teuchos::RCP< const Intrepid::FieldContainer<double> > constFCPtr;
 typedef Teuchos::RCP<BasisCache> BasisCachePtr;
 
 class LinearTerm {
-  typedef pair< FunctionPtr, VarPtr > LinearSummand;
+  typedef std::pair< FunctionPtr, VarPtr > LinearSummand;
   int _rank; // gets set after first var is added
-  vector< LinearSummand > _summands;
-  set<int> _varIDs;
+  std::vector< LinearSummand > _summands;
+  std::set<int> _varIDs;
   VarType _termType; // shouldn't mix
   
   // for the Riesz inversion evaluation
-  map< ElementType*, FieldContainer<double> > _rieszRepresentationForElementType;
-  map< ElementType*, FieldContainer<double> > _rieszRHSForElementType;
-  map< int, double > _energyNormForCellIDGlobal;
+  std::map< ElementType*, Intrepid::FieldContainer<double> > _rieszRepresentationForElementType;
+  std::map< ElementType*, Intrepid::FieldContainer<double> > _rieszRHSForElementType;
+  std::map< int, double > _energyNormForCellIDGlobal;
   
   // some private utility methods:
-  static void integrate(Epetra_CrsMatrix *valuesCrsMatrix, FieldContainer<double> &valuesFC,
+  static void integrate(Epetra_CrsMatrix *valuesCrsMatrix, Intrepid::FieldContainer<double> &valuesFC,
                         LinearTermPtr u, DofOrderingPtr uOrdering,
                         LinearTermPtr v, DofOrderingPtr vOrdering,
                         BasisCachePtr basisCache, bool sumInto=true);
-  static void integrate(FieldContainer<double> &values,
+  static void integrate(Intrepid::FieldContainer<double> &values,
                         LinearTermPtr u, DofOrderingPtr uOrdering,
                         LinearTermPtr v, DofOrderingPtr vOrdering,
                         BasisCachePtr basisCache, bool sumInto=true);
-  static void multiplyFluxValuesByParity(FieldContainer<double> &fluxValues, BasisCachePtr sideBasisCache);
+  static void multiplyFluxValuesByParity(Intrepid::FieldContainer<double> &fluxValues, BasisCachePtr sideBasisCache);
   
   // poor man's templating: just provide both versions of the values argument, making the other version null or size 0
-  void integrate(Epetra_CrsMatrix *valuesCrsMatrix, FieldContainer<double> &valuesFC, DofOrderingPtr thisDofOrdering,
+  void integrate(Epetra_CrsMatrix *valuesCrsMatrix, Intrepid::FieldContainer<double> &valuesFC, DofOrderingPtr thisDofOrdering,
                  LinearTermPtr otherTerm, DofOrderingPtr otherDofOrdering,
                  BasisCachePtr basisCache, bool forceBoundaryTerm = false, bool sumInto = true);
-  void integrate(Epetra_CrsMatrix *valuesCrsMatrix, FieldContainer<double> &valuesFC, DofOrderingPtr thisDofOrdering,
+  void integrate(Epetra_CrsMatrix *valuesCrsMatrix, Intrepid::FieldContainer<double> &valuesFC, DofOrderingPtr thisDofOrdering,
                  LinearTermPtr otherTerm, VarPtr otherVarID, FunctionPtr fxn,
                  BasisCachePtr basisCache, bool forceBoundaryTerm = false);
   
 public: // was protected; changed for debugging (no big deal either way, I think)
-  const vector< LinearSummand > & summands() const;
+  const std::vector< LinearSummand > & summands() const;
 public:
   LinearTerm();
   LinearTerm(FunctionPtr weight, VarPtr var);
   LinearTerm(double weight, VarPtr var);
-  LinearTerm(vector<double> weight, VarPtr var);
+  LinearTerm(std::vector<double> weight, VarPtr var);
   LinearTerm( VarPtr v );
   // copy constructor:
   LinearTerm( const LinearTerm &a );
   void addVar(FunctionPtr weight, VarPtr var);
   void addVar(double weight, VarPtr var);
-  void addVar(vector<double> vector_weight, VarPtr var);
+  void addVar(std::vector<double> vector_weight, VarPtr var);
   
-  const set<int> & varIDs() const;
+  const std::set<int> & varIDs() const;
   
   VarType termType() const;
   //  vector< IntrepidExtendedTypes::EOperatorExtended > varOps(int varID);
   
-  void evaluate(FieldContainer<double> &values, SolutionPtr solution, BasisCachePtr basisCache,
+  void evaluate(Intrepid::FieldContainer<double> &values, SolutionPtr solution, BasisCachePtr basisCache,
                 bool applyCubatureWeights = false);
   
-  FunctionPtr evaluate(map< int, FunctionPtr> &varFunctions);
-  FunctionPtr evaluate(map< int, FunctionPtr> &varFunctions, bool boundaryPart);
+  FunctionPtr evaluate(Teuchos::map< int, FunctionPtr> &varFunctions);
+  FunctionPtr evaluate(Teuchos::map< int, FunctionPtr> &varFunctions, bool boundaryPart);
   
   LinearTermPtr getBoundaryOnlyPart();
   LinearTermPtr getNonBoundaryOnlyPart();
@@ -136,12 +140,12 @@ public:
   /*
    // -------------- added by Jesse --------------------
    
-   void computeRieszRep(Teuchos::RCP<Mesh> mesh, Teuchos::RCP<DPGInnerProduct> ip);
+   void computeRieszRep(Teuchos::RCP<Mesh> mesh, Teuchos::RCP<IP> ip);
    void computeRieszRHS(Teuchos::RCP<Mesh> mesh);
    LinearTermPtr rieszRep(VarPtr v);
    double functionalNorm();
-   const map<int,double> & energyNorm(Teuchos::RCP<Mesh> mesh, Teuchos::RCP<DPGInnerProduct> ip);
-   double energyNormTotal(Teuchos::RCP<Mesh> mesh, Teuchos::RCP<DPGInnerProduct> ip); // global energy norm
+   const map<int,double> & energyNorm(Teuchos::RCP<Mesh> mesh, Teuchos::RCP<IP> ip);
+   double energyNormTotal(Teuchos::RCP<Mesh> mesh, Teuchos::RCP<IP> ip); // global energy norm
    
    // -------------- end of added by Jesse --------------------
    */

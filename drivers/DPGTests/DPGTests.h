@@ -38,6 +38,8 @@ class Epetra_SerialDenseMatrix;
 
 class DPGTests {
 public:
+  static void runExceptionThrowingTest();
+  
   static void runTests();
   static void createBases();
   static bool testDofOrdering();

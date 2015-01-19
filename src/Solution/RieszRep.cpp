@@ -405,6 +405,6 @@ FunctionPtr RieszRep::repFunction( VarPtr var, RieszRepPtr rep ) {
   return Teuchos::rcp( new RepFunction(var, rep) );
 }
 
-RieszRepPtr RieszRep::rieszRep(MeshPtr mesh, Teuchos::RCP< DPGInnerProduct > ip, LinearTermPtr rhs) {
+RieszRepPtr RieszRep::rieszRep(MeshPtr mesh, IPPtr ip, LinearTermPtr rhs) {
   return Teuchos::rcp( new RieszRep(mesh,ip,rhs) );
 }

@@ -1141,7 +1141,7 @@ int LinearTerm::rank() const {   // 0 for scalar, 1 for vector, etc.
  return errorComponent; // WARNING - FINISH THIS
  }
  
- void LinearTerm::computeRieszRep(Teuchos::RCP<Mesh> mesh, Teuchos::RCP<DPGInnerProduct> ip){
+ void LinearTerm::computeRieszRep(Teuchos::RCP<Mesh> mesh, IPPtr ip){
  int numProcs=1;
  int rank=0;
  
@@ -1269,7 +1269,7 @@ int LinearTerm::rank() const {   // 0 for scalar, 1 for vector, etc.
  //  _residualsComputed = true;
  }
  
- const map<int,double> & LinearTerm::energyNorm(Teuchos::RCP<Mesh> mesh, Teuchos::RCP<DPGInnerProduct> ip) {
+ const map<int,double> & LinearTerm::energyNorm(Teuchos::RCP<Mesh> mesh, IPPtr ip) {
  int numProcs = Teuchos::GlobalMPISession::getNProc();;
  int rank = Teuchos::GlobalMPISession::getRank();
  
@@ -1335,7 +1335,7 @@ int LinearTerm::rank() const {   // 0 for scalar, 1 for vector, etc.
  return _energyNormForCellIDGlobal;
  }
  
- double LinearTerm::energyNormTotal(Teuchos::RCP<Mesh> mesh, Teuchos::RCP<DPGInnerProduct> ip){
+ double LinearTerm::energyNormTotal(Teuchos::RCP<Mesh> mesh, IPPtr ip){
  double energyNormSquared = 0.0;
  const map<int,double>* energyNormPerCell = &(energyNorm(mesh, ip));
  for (map<int,double>::const_iterator cellEnergyIt = energyNormPerCell->begin();

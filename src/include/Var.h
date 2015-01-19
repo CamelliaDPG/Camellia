@@ -9,7 +9,11 @@
 #ifndef Camellia_Var_h
 #define Camellia_Var_h
 
-#include "BilinearForm.h"
+#include "Teuchos_RCP.hpp"
+
+#include "CamelliaIntrepidExtendedTypes.h"
+
+class BilinearForm;
 
 class Var;
 typedef Teuchos::RCP<Var> VarPtr;
@@ -31,7 +35,7 @@ using namespace VarFunctionSpaces;
 class Var { // really Var x Operator
   int _rank;
   int _id;
-  string _name;
+  std::string _name;
   Space _fs;
   IntrepidExtendedTypes::EOperatorExtended _op; // default is OP_VALUE
   VarType _varType;
@@ -39,13 +43,13 @@ class Var { // really Var x Operator
   //  map< IntrepidExtendedTypes::EOperatorExtended, VarPtr > _relatedVars; // grad, div, etc. could be cached here
   bool _definedOnTemporalInterfaces;
 public:
-  Var(int ID, int rank, string name, IntrepidExtendedTypes::EOperatorExtended op =  IntrepidExtendedTypes::OP_VALUE,
+  Var(int ID, int rank, std::string name, IntrepidExtendedTypes::EOperatorExtended op =  IntrepidExtendedTypes::OP_VALUE,
       Space fs = UNKNOWN_FS, VarType varType = UNKNOWN_TYPE, LinearTermPtr termTraced = Teuchos::rcp((LinearTerm*) NULL),
       bool definedOnTemporalInterfaces = true);
   
   int ID() const;
-  const string & name() const;
-  string displayString() const;
+  const std::string & name() const;
+  std::string displayString() const;
   IntrepidExtendedTypes::EOperatorExtended op() const;
   int rank() const;  // 0 for scalar, 1 for vector, etc.
   Space space() const;

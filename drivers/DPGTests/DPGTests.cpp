@@ -60,6 +60,8 @@
 
 #include "doubleBasisConstruction.h"
 
+#include "SerialDenseWrapper.h"
+
 #include "DPGTests.h"
 
 // test suite includes
@@ -83,6 +85,8 @@
 #include "ScratchPadTests.h"
 #include "SerialDenseMatrixUtilityTests.h"
 #include "SolutionTests.h"
+
+#include "CamelliaCellTools.h"
 
 #include "Projector.h"
 #include "BasisCache.h"
@@ -198,8 +202,12 @@ void DPGTests::runTests() {
   // set up a few special entries for BasisFactory first:
   createBases();
   
+  runExceptionThrowingTest(); // placeholder for Teuchos unit tests that we copy and paste here to catch them when they fail by throwing an exception (the Teuchos framework catches them and doesn't provide a stack trace).
+  
   // setup our TestSuite tests:
   vector< Teuchos::RCP< TestSuite > > testSuites;
+  
+  testSuites.push_back( Teuchos::rcp( new MeshRefinementTests ) );
   
   testSuites.push_back( Teuchos::rcp( new SolutionTests ) );
 
@@ -220,8 +228,6 @@ void DPGTests::runTests() {
   } else {
     testSuites.push_back( Teuchos::rcp( new IncompressibleFormulationsTests(false) ) ); // false: turn "thorough" off
   }
-  
-  testSuites.push_back( Teuchos::rcp( new MeshRefinementTests ) ); // skips two PatchBasis tests
   
   testSuites.push_back( Teuchos::rcp( new LinearTermTests ) );
   
@@ -956,7 +962,7 @@ bool DPGTests::testMathInnerProductDx() {
   
   Teuchos::RCP<BilinearForm> bilinearForm = Teuchos::rcp( new TestBilinearFormDx() );
   
-  Teuchos::RCP<DPGInnerProduct> ip = Teuchos::rcp( new MathInnerProduct(bilinearForm) );
+  IPPtr ip = Teuchos::rcp( new MathInnerProduct(bilinearForm) );
   
   shards::CellTopology quad_4(shards::getCellTopologyData<shards::Quadrilateral<4> >() );
   
@@ -993,35 +999,6 @@ bool DPGTests::testMathInnerProductDx() {
   innerProductExpected(0,1,3) = -2.0/9.0;
   innerProductExpected(0,2,0) = -2.0/9.0;
   innerProductExpected(0,3,1) = -2.0/9.0;
-  
-  // the following test does not pass.  The likely reason is that the
-  // Mathematica code doesn't do any kind of transform, whereas the inner product
-  // code here does.  We'll need to figure out a way to fix the Mathematica code
-  // before we can test this properly...
-  /*quadPoints(1,0,0) = -2;
-   quadPoints(1,0,1) = -2;
-   quadPoints(1,1,0) = 1;
-   quadPoints(1,1,1) = -2;
-   quadPoints(1,2,0) = 1;
-   quadPoints(1,2,1) = 1;
-   quadPoints(1,3,0) = -2;
-   quadPoints(1,3,1) = 1;
-   innerProductExpected(1,0,0) = 8.4375000000000;
-   innerProductExpected(1,0,1) = -1.6875000000000;
-   innerProductExpected(1,0,2) = 0;
-   innerProductExpected(1,0,3) = -1.6875000000000;
-   innerProductExpected(1,1,0) = -1.6875000000000;
-   innerProductExpected(1,1,1) = 3.9375000000000;
-   innerProductExpected(1,1,2) = -0.56250000000000;
-   innerProductExpected(1,1,3) = 0;
-   innerProductExpected(1,2,0) = 0;
-   innerProductExpected(1,2,1) = -0.56250000000000;
-   innerProductExpected(1,2,2) = 1.6875000000000;
-   innerProductExpected(1,2,3) = -0.56250000000000;
-   innerProductExpected(1,3,0) = -1.6875000000000;
-   innerProductExpected(1,3,1) = 0;
-   innerProductExpected(1,3,2) = -0.56250000000000;
-   innerProductExpected(1,3,3) = 3.9375000000000;*/
   
   FieldContainer<double> innerProductActual(numTests,4,4);
   
@@ -1220,7 +1197,7 @@ bool DPGTests::testAnalyticBoundaryIntegral(bool conforming) {
   
   TestBilinearFormAnalyticBoundaryIntegral::expectedIPMatrixForCubicsOnQuad(ipMatrixExpected);
   
-  Teuchos::RCP<DPGInnerProduct> ip = Teuchos::rcp( new MathInnerProduct(bilinearForm) );
+  IPPtr ip = Teuchos::rcp( new MathInnerProduct(bilinearForm) );
   shards::CellTopology shardsTopo = quad_4->getShardsTopology();
   ip->computeInnerProductMatrix(ipMatrixActual,cubicHGradOrdering, shardsTopo, quadPoints);
   
@@ -1722,7 +1699,7 @@ bool DPGTests::testLowOrderTrialCubicTest() {
     ipMatrixExpected(0,15,15) = 0.639455782312925;
   }
   
-  Teuchos::RCP<DPGInnerProduct> ip = Teuchos::rcp( new MathInnerProduct(bilinearForm) );
+  IPPtr ip = Teuchos::rcp( new MathInnerProduct(bilinearForm) );
   shards::CellTopology shardsTopo = quad_4->getShardsTopology();
   ip->computeInnerProductMatrix(ipMatrixActual,cubicHGradOrdering, shardsTopo, quadPoints);
   
@@ -2060,7 +2037,7 @@ bool DPGTests::testOptimalStiffnessByMultiplying() {
 //    FieldContainer<double> expectedStiffness(numTests, numTrialDofs, numTrialDofs);
 //    FieldContainer<double> actualStiffness(numTests, numTrialDofs, numTrialDofs);
 //    
-//    Teuchos::RCP<DPGInnerProduct> ip = Teuchos::rcp( new MathInnerProduct(bilinearForm) );
+//    IPPtr ip = Teuchos::rcp( new MathInnerProduct(bilinearForm) );
 //    
 //    FieldContainer<double> optimalTestWeights(numTests, numTrialDofs, numTestDofs);
 //    FieldContainer<double> summingOptimalTestWeights(numTests, numTrialDofs, numTestDofs);
@@ -2205,7 +2182,7 @@ bool DPGTests::testComputeOptimalTest() {
     
     bilinearForm->setWarnAboutZeroRowsAndColumns(false); // we *expect* zero columns for constant basis functions (which we can have with non-conforming bases)
     
-    Teuchos::RCP<DPGInnerProduct> ip = Teuchos::rcp( new MathInnerProduct(bilinearForm) );
+    IPPtr ip = Teuchos::rcp( new MathInnerProduct(bilinearForm) );
     
     FieldContainer<double> optimalTestWeights(numTests, numTrialDofs, numTestDofs);
     
@@ -2531,4 +2508,108 @@ bool DPGTests::testProjection(){
   }
 
   return passedTest;
+}
+
+vector< CellTopoPtr > getShardsTopologies() {
+  vector< CellTopoPtr > shardsTopologies;
+  
+  shardsTopologies.push_back(CellTopology::point());
+  shardsTopologies.push_back(CellTopology::line());
+  shardsTopologies.push_back(CellTopology::quad());
+  shardsTopologies.push_back(CellTopology::triangle());
+  shardsTopologies.push_back(CellTopology::hexahedron());
+  shardsTopologies.push_back(CellTopology::tetrahedron()); // tetrahedron not yet supported by permutation
+  return shardsTopologies;
+}
+
+void DPGTests::runExceptionThrowingTest() {
+  vector<CellTopoPtr> shardsTopologies = getShardsTopologies();
+  for (int topoOrdinal=0; topoOrdinal < shardsTopologies.size(); topoOrdinal++) {
+    CellTopoPtr shardsTopo = shardsTopologies[topoOrdinal];
+    
+    int tensorialDegree = 1;
+    CellTopoPtr cellTopo = CellTopology::cellTopology(shardsTopo->getShardsTopology(), tensorialDegree);
+    
+    if (cellTopo->getDimension() < 1) continue; // side normals only defined when dimension >= 1
+    
+    cout << "Testing side normals for space-time topo " << cellTopo->getName() << endl;
+    
+    int cubatureDegree = 3;
+    
+    bool createSideCache = true;
+    BasisCachePtr volumeCacheSpaceTime = BasisCache::basisCacheForReferenceCell(cellTopo, cubatureDegree, createSideCache);
+    BasisCachePtr volumeCacheSpace = BasisCache::basisCacheForReferenceCell(shardsTopo, cubatureDegree, createSideCache);
+    
+    // for reference cells, we expect the space-time normals to go as follows:
+    //   - the first shardsTopo->getSideCount() sides will have normals identical to shardsTopo in its reference space, padded with 0 in time dimension
+    //   - the next side will have normal equal to 0 in every spatial dimension, -1 in temporal
+    //   - final side with have normal +1 in temporal dimension
+    
+    for (int sideOrdinal=0; sideOrdinal<cellTopo->getSideCount(); sideOrdinal++) {
+      int numCells = 1;
+      BasisCachePtr sideCacheSpaceTime = volumeCacheSpaceTime->getSideBasisCache(sideOrdinal);
+      int numCubPoints = sideCacheSpaceTime->getRefCellPoints().dimension(0);
+      int dim = sideCacheSpaceTime->getSpaceDim() + 1;
+      
+      FieldContainer<double> sideNormalsExpected(numCells, numCubPoints, dim);
+      
+      if (cellTopo->sideIsSpatial(sideOrdinal)) {
+        unsigned spatialSideOrdinal = cellTopo->getSpatialComponentSideOrdinal(sideOrdinal);
+        BasisCachePtr sideCacheSpace = volumeCacheSpace->getSideBasisCache(spatialSideOrdinal);
+        // set up cubature points for shards topo
+        FieldContainer<double> refPointsSpaceTime = sideCacheSpaceTime->getSideRefCellPointsInVolumeCoordinates();
+        FieldContainer<double> refPointsSpace(numCubPoints, shardsTopo->getDimension());
+        for (int ptOrdinal=0; ptOrdinal<numCubPoints; ptOrdinal++) {
+          for (int d=0; d<shardsTopo->getDimension(); d++) {
+            refPointsSpace(ptOrdinal,d) = refPointsSpaceTime(ptOrdinal,d);
+          }
+        }
+        sideCacheSpace->setRefCellPoints(refPointsSpace);
+        FieldContainer<double> sideNormalsSpace = sideCacheSpace->getSideNormals();
+        for (int cellOrdinal=0; cellOrdinal < numCells; cellOrdinal++) {
+          for (int ptOrdinal=0; ptOrdinal < numCubPoints; ptOrdinal++) {
+            for (int d=0; d<shardsTopo->getDimension(); d++) {
+              sideNormalsExpected(cellOrdinal,ptOrdinal,d) = sideNormalsSpace(cellOrdinal,ptOrdinal,d);
+            }
+          }
+        }
+        //          {
+        //            out << "sideNormalsSpace:\n" << sideNormalsSpace;
+        //            // DEBUGGING:
+        //            out << "refPointsSpaceTime:\n" << refPointsSpaceTime;
+        //            out << "refPointsSpace:\n" << refPointsSpace;
+        //          }
+        
+      } else {
+        unsigned temporalNodeOrdinal = cellTopo->getTemporalComponentSideOrdinal(sideOrdinal);
+        double timeNormal = (temporalNodeOrdinal == 0) ? -1 : 1;
+        FieldContainer<double> spaceTimeCellJacobian = sideCacheSpaceTime->getJacobian();
+        int d_time = shardsTopo->getDimension();
+        for (int cellOrdinal=0; cellOrdinal < numCells; cellOrdinal++) {
+          for (int ptOrdinal=0; ptOrdinal < numCubPoints; ptOrdinal++) {
+            double timeJacobian = spaceTimeCellJacobian(cellOrdinal,ptOrdinal,d_time,d_time);
+            if (timeJacobian > 0) {
+              sideNormalsExpected(cellOrdinal,ptOrdinal,d_time) = timeNormal;
+            } else {
+              sideNormalsExpected(cellOrdinal,ptOrdinal,d_time) = -timeNormal;
+            }
+          }
+        }
+      }
+      
+      FieldContainer<double> sideNormals = sideCacheSpaceTime->getSideNormalsSpaceTime();
+      
+//      {
+//        // DEBUGGING:
+//        out << "testing with sideOrdinal " << sideOrdinal << endl;
+//        out << "sideNormals:\n" << sideNormals;
+//        out << "sideNormalsExpected:\n" << sideNormalsExpected;
+//      }
+      
+      SerialDenseWrapper::roundZeros(sideNormals, 1e-15);
+      SerialDenseWrapper::roundZeros(sideNormalsExpected, 1e-15);
+      
+//      TEST_COMPARE_FLOATING_ARRAYS(sideNormalsExpected, sideNormals, 1e-15);
+    }
+  }
 }

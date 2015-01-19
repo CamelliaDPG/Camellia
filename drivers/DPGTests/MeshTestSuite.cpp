@@ -529,7 +529,7 @@ bool MeshTestSuite::testFluxIntegration() {
     }
     exactSolution.setUseSinglePointBCForPHI(true, vertexIndex);
     
-    Teuchos::RCP<DPGInnerProduct> ip = Teuchos::rcp(new MathInnerProduct(exactSolution.bilinearForm()));
+    IPPtr ip = Teuchos::rcp(new MathInnerProduct(exactSolution.bilinearForm()));
     
     Solution solution(myMesh, exactSolution.ExactSolution::bc(), exactSolution.ExactSolution::rhs(), ip);
     // Poisson is set up such that the solution should be (x + 2y)^p
@@ -594,7 +594,7 @@ bool MeshTestSuite::testFluxNorm() {
     }
     exactSolution.setUseSinglePointBCForPHI(true, vertexIndex);
     
-    Teuchos::RCP<DPGInnerProduct> ip = Teuchos::rcp(new MathInnerProduct(exactSolution.bilinearForm()));
+    IPPtr ip = Teuchos::rcp(new MathInnerProduct(exactSolution.bilinearForm()));
     
     Solution solution(myMesh, exactSolution.ExactSolution::bc(), exactSolution.ExactSolution::rhs(), ip);
     // Poisson is set up such that the solution should be x + 2y
@@ -656,7 +656,7 @@ bool MeshTestSuite::testSacadoExactSolution() {
       }
       exactSolution.setUseSinglePointBCForPHI(true, vertexIndex);
       
-      Teuchos::RCP<DPGInnerProduct> ip = Teuchos::rcp(new MathInnerProduct(exactSolution.bilinearForm()));
+      IPPtr ip = Teuchos::rcp(new MathInnerProduct(exactSolution.bilinearForm()));
       
       Solution solution(myMesh, exactSolution.ExactSolution::bc(), exactSolution.ExactSolution::rhs(), ip);
       // Poisson is set up such that the solution should be x + 2y
@@ -718,7 +718,7 @@ bool MeshTestSuite::testPoissonConvergence() {
    PoissonExactSolution exactSolution(PoissonExactSolution::EXPONENTIAL);
    Teuchos::RCP<Mesh> myMesh = MeshFactory::buildQuadMesh(quadPoints, sqrtElements, sqrtElements, exactSolution.bilinearForm(), order, order+1);
    
-   Teuchos::RCP<DPGInnerProduct> ip = Teuchos::rcp(new MathInnerProduct(exactSolution.bilinearForm()));
+   IPPtr ip = Teuchos::rcp(new MathInnerProduct(exactSolution.bilinearForm()));
    
    Solution solution(myMesh, exactSolution.ExactSolution::bc(), exactSolution.ExactSolution::rhs(), ip);
    
@@ -750,7 +750,7 @@ bool MeshTestSuite::testPoissonConvergence() {
    PoissonExactSolution exactSolution(PoissonExactSolution::EXPONENTIAL);
    Teuchos::RCP<Mesh> myMesh = MeshFactory::buildQuadMesh(quadPoints, sqrtElements, sqrtElements, exactSolution.bilinearForm(), order, order+1);
    
-   Teuchos::RCP<DPGInnerProduct> ip = Teuchos::rcp(new MathInnerProduct(exactSolution.bilinearForm()));
+   IPPtr ip = Teuchos::rcp(new MathInnerProduct(exactSolution.bilinearForm()));
    
    Solution solution(myMesh, exactSolution.ExactSolution::bc(), exactSolution.ExactSolution::rhs(), ip);
    
@@ -817,7 +817,7 @@ bool MeshTestSuite::testExactSolution(bool checkL2Norm) {
     int order = exactSolution->H1Order(); // matters for getting enough cubature points, and of course recovering the exact solution
     Teuchos::RCP<Mesh> myMesh = MeshFactory::buildQuadMesh(quadPoints, 3, 3, exactSolution->bilinearForm(), order, order+1);
     
-    Teuchos::RCP<DPGInnerProduct> ip = Teuchos::rcp(new MathInnerProduct(exactSolution->bilinearForm()));
+    IPPtr ip = Teuchos::rcp(new MathInnerProduct(exactSolution->bilinearForm()));
     
     Solution solution(myMesh, exactSolution->ExactSolution::bc(), exactSolution->rhs(), ip);
     // Poisson is set up such that the solution should be x + y
@@ -927,7 +927,7 @@ bool MeshTestSuite::testMeshSolvePointwise() {
   
   BCPtr bc = exactLinear->bc();
   RHSPtr rhs = exactLinear->rhs();
-  Teuchos::RCP<DPGInnerProduct> ip = Teuchos::rcp( new MathInnerProduct(bilinearForm) );
+  IPPtr ip = Teuchos::rcp( new MathInnerProduct(bilinearForm) );
   
   VarPtr phi = PoissonBilinearForm::poissonBilinearForm()->varFactory().fieldVar(PoissonBilinearForm::S_PHI);
   
@@ -1239,7 +1239,7 @@ bool MeshTestSuite::testHRefinement() {
   int numGlobalDofs = mesh->numGlobalDofs();
   
   // before we hRefine, compute a solution for comparison after refinement
-  Teuchos::RCP<DPGInnerProduct> ip = Teuchos::rcp(new MathInnerProduct(exactSolution.bilinearForm()));
+  IPPtr ip = Teuchos::rcp(new MathInnerProduct(exactSolution.bilinearForm()));
   Solution origSolution(mesh, exactSolution.ExactSolution::bc(), exactSolution.ExactSolution::rhs(), ip);
   origSolution.solve();
   
@@ -1470,7 +1470,7 @@ bool MeshTestSuite::testHRefinementForConfusion() {
   int horizontalCells = 4; int verticalCells = 4;
   
   // before we hRefine, compute a solution for comparison after refinement
-  Teuchos::RCP<DPGInnerProduct> ip = Teuchos::rcp(new MathInnerProduct(exactSolution.bilinearForm()));
+  IPPtr ip = Teuchos::rcp(new MathInnerProduct(exactSolution.bilinearForm()));
   
   vector<GlobalIndexType> cellsToRefine;
   cellsToRefine.clear();
@@ -1566,7 +1566,7 @@ bool MeshTestSuite::testHUnrefinementForConfusion() {
   int H1Order = 3;
   
   // before we hRefine, compute a solution for comparison after refinement
-  Teuchos::RCP<DPGInnerProduct> ip = Teuchos::rcp(new MathInnerProduct(exactSolution.bilinearForm()));
+  IPPtr ip = Teuchos::rcp(new MathInnerProduct(exactSolution.bilinearForm()));
   
   set<GlobalIndexType> cellsToRefine;
   cellsToRefine.clear();
@@ -1693,7 +1693,7 @@ bool MeshTestSuite::testPRefinement() {
   exactPolynomial.setUseSinglePointBCForPHI(true, vertexIndexPolynomial);
   exactExponential.setUseSinglePointBCForPHI(true, vertexIndexExponential);
 
-  Teuchos::RCP<DPGInnerProduct> ip0 = Teuchos::rcp(new MathInnerProduct(exactExponential.bilinearForm()));
+  IPPtr ip0 = Teuchos::rcp(new MathInnerProduct(exactExponential.bilinearForm()));
   vector<GlobalIndexType> cellsToRefine;
   Solution solution1(mesh1, exactPolynomial.ExactSolution::bc(), exactPolynomial.ExactSolution::rhs(), ip0);
   solution1.solve();
@@ -1846,7 +1846,7 @@ bool MeshTestSuite::testPRefinement() {
     cellsToRefine.clear();
     cellsToRefine.push_back(2);
     
-    Teuchos::RCP<DPGInnerProduct> ip = Teuchos::rcp(new MathInnerProduct(exactSolution.bilinearForm()));
+    IPPtr ip = Teuchos::rcp(new MathInnerProduct(exactSolution.bilinearForm()));
     Solution solution(myMesh, exactSolution.ExactSolution::bc(), exactSolution.ExactSolution::rhs(), ip);
     
     double L2norm = exactSolution.L2NormOfError(solution, phi->ID(),15); // high fidelity L2norm
@@ -1960,7 +1960,7 @@ bool MeshTestSuite::testSinglePointBC() {
     cout << "In singlePointBC test, mesh consistency test FAILED for non-conforming mesh." << endl;
     success = false;
   }
-  Teuchos::RCP<DPGInnerProduct> ip = Teuchos::rcp(new MathInnerProduct(exactPolynomial.bilinearForm()));
+  IPPtr ip = Teuchos::rcp(new MathInnerProduct(exactPolynomial.bilinearForm()));
   Solution solution(mesh, exactPolynomial.ExactSolution::bc(), exactPolynomial.ExactSolution::rhs(), ip);
   VarPtr phi = PoissonBilinearForm::poissonBilinearForm()->varFactory().fieldVar(PoissonBilinearForm::S_PHI);
 
@@ -2043,7 +2043,7 @@ bool MeshTestSuite::testSolutionForMultipleElementTypes() {
   }
   exactPolynomial.setUseSinglePointBCForPHI(true, vertexIndex);
   
-  Teuchos::RCP<DPGInnerProduct> ip0 = Teuchos::rcp(new MathInnerProduct(exactPolynomial.bilinearForm()));
+  IPPtr ip0 = Teuchos::rcp(new MathInnerProduct(exactPolynomial.bilinearForm()));
   Solution solution1(mesh, exactPolynomial.ExactSolution::bc(), exactPolynomial.ExactSolution::rhs(), ip0);
   solution1.solve();
   VarPtr phi = PoissonBilinearForm::poissonBilinearForm()->varFactory().fieldVar(PoissonBilinearForm::S_PHI);
@@ -2103,7 +2103,7 @@ bool MeshTestSuite::testSolutionForSingleElementUpgradedSide() {
   }
   exactPolynomial.setUseSinglePointBCForPHI(true,vertexIndex);
 
-  Teuchos::RCP<DPGInnerProduct> ip = Teuchos::rcp(new MathInnerProduct(exactPolynomial.bilinearForm()));
+  IPPtr ip = Teuchos::rcp(new MathInnerProduct(exactPolynomial.bilinearForm()));
   Solution solution(mesh, exactPolynomial.ExactSolution::bc(), exactPolynomial.ExactSolution::rhs(), ip);
   solution.solve();
   

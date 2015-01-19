@@ -29,7 +29,7 @@
 // @HEADER 
 
 #include "BasisFactory.h"
-#include "DPGInnerProduct.h"
+#include "IP.h"
 
 // Intrepid includes
 #include "Intrepid_CellTools.hpp"

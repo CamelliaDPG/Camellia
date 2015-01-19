@@ -59,7 +59,7 @@ class HConvergenceStudy {
   Teuchos::RCP<BilinearForm> _bilinearForm;
   Teuchos::RCP<RHS> _rhs;  
   Teuchos::RCP<BC> _bc;
-  Teuchos::RCP<DPGInnerProduct> _ip;
+  IPPtr _ip;
   Teuchos::RCP<LagrangeConstraints> _lagrangeConstraints;
   
   bool _reportConditionNumber;
@@ -110,7 +110,7 @@ public:
                     Teuchos::RCP<BilinearForm> bilinearForm,
                     Teuchos::RCP<RHS> rhs,
                     Teuchos::RCP<BC> bc,
-                    Teuchos::RCP<DPGInnerProduct> ip,
+                    IPPtr ip,
                     int minLogElements, int maxLogElements, int H1Order, int pToAdd,
                     bool randomRefinements=false, bool useTriangles=false, bool useHybrid=false);
   void setLagrangeConstraints(Teuchos::RCP<LagrangeConstraints> lagrangeConstraints);

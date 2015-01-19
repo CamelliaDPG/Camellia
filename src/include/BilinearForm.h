@@ -38,10 +38,11 @@
 
 #include "DofOrdering.h"
 
+#include "IP.h"
+
 class BasisCache;
 class ElementType;
 class VarFactory;
-class DPGInnerProduct;
 class RHS;
 typedef Teuchos::RCP< BasisCache > BasisCachePtr;
 typedef Teuchos::RCP< ElementType > ElementTypePtr;
@@ -83,7 +84,7 @@ public:
   // default implementation calls BasisCache-less version
   
   virtual void localStiffnessMatrixAndRHS(FieldContainer<double> &localStiffness, FieldContainer<double> &rhsVector,
-                                          Teuchos::RCP< DPGInnerProduct > ip, BasisCachePtr ipBasisCache,
+                                          IPPtr ip, BasisCachePtr ipBasisCache,
                                           RHSPtr rhs,  BasisCachePtr basisCache);
   
   virtual int optimalTestWeights(FieldContainer<double> &optimalTestWeights, FieldContainer<double> &innerProductMatrix,

@@ -33,7 +33,7 @@
 
 #include "DofOrdering.h"
 #include "BilinearForm.h"
-#include "DPGInnerProduct.h"
+#include "IP.h"
 #include "RHS.h"
 #include "BasisCache.h"
 

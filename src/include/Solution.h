@@ -53,7 +53,7 @@
 
 #include "Mesh.h"
 #include "ElementType.h"
-#include "DPGInnerProduct.h"
+#include "IP.h"
 #include "RHS.h"
 #include "BC.h"
 #include "BasisCache.h"
@@ -106,7 +106,7 @@ private:
   Teuchos::RCP<DofInterpreter> _dofInterpreter; // defaults to Mesh
   Teuchos::RCP<DofInterpreter> _oldDofInterpreter; // the one saved when we turn on condensed solve
   Teuchos::RCP<RHS> _rhs;
-  Teuchos::RCP<DPGInnerProduct> _ip;
+  IPPtr _ip;
   Teuchos::RCP<LocalStiffnessMatrixFilter> _filter;
   Teuchos::RCP<LagrangeConstraints> _lagrangeConstraints;
 
@@ -152,9 +152,8 @@ protected:
   FieldContainer<double> solutionForElementTypeGlobal(ElementTypePtr elemType); // probably should be deprecated…
   ElementTypePtr getEquivalentElementType(Teuchos::RCP<Mesh> otherMesh, ElementTypePtr elemType);
 public:
-  Solution(Teuchos::RCP<Mesh> mesh, Teuchos::RCP<BC> bc = Teuchos::rcp( (BC*) NULL),
-           Teuchos::RCP<RHS> rhs = Teuchos::rcp( (RHS*) NULL),
-           Teuchos::RCP<DPGInnerProduct> ip = Teuchos::rcp( (DPGInnerProduct*)NULL) );
+  Solution(Teuchos::RCP<Mesh> mesh, Teuchos::RCP<BC> bc = Teuchos::null,
+           Teuchos::RCP<RHS> rhs = Teuchos::null, IPPtr ip = Teuchos::null);
   Solution(const Solution &soln);
   virtual ~Solution() {}
 //  bool equals(Solution& otherSolution, double tol=0.0);
@@ -287,7 +286,7 @@ public:
   Teuchos::RCP<Mesh> mesh() const;
   Teuchos::RCP<BC> bc() const;
   Teuchos::RCP<RHS> rhs() const;
-  Teuchos::RCP<DPGInnerProduct> ip() const;
+  IPPtr ip() const;
   Teuchos::RCP<LocalStiffnessMatrixFilter> filter() const;
 
   void setBC( Teuchos::RCP<BC> );
@@ -299,7 +298,7 @@ public:
   Teuchos::RCP<Epetra_FEVector> getRHSVector();
   Teuchos::RCP<Epetra_FEVector> getLHSVector();
   
-  void setIP( Teuchos::RCP<DPGInnerProduct>);
+  void setIP( IPPtr);
 
 #if defined(HAVE_MPI) && defined(HAVE_AMESOS_MUMPS)
   void condensedSolve(Teuchos::RCP<Solver> globalSolver = Teuchos::rcp(new MumpsSolver()), bool reduceMemoryFootprint = false); // when reduceMemoryFootprint is true, local stiffness matrices will be computed twice, rather than stored for reuse
@@ -360,9 +359,9 @@ public:
   void setZeroMeanConstraintRho(double value);
   double zeroMeanConstraintRho();
   
-  static SolutionPtr solution(Teuchos::RCP<Mesh> mesh, Teuchos::RCP<BC> bc = Teuchos::rcp( (BC*) NULL),
-                              Teuchos::RCP<RHS> rhs = Teuchos::rcp( (RHS*) NULL),
-                              Teuchos::RCP<DPGInnerProduct> ip = Teuchos::rcp( (DPGInnerProduct*)NULL) );
+  static SolutionPtr solution(Teuchos::RCP<Mesh> mesh, Teuchos::RCP<BC> bc = Teuchos::null,
+                              Teuchos::RCP<RHS> rhs = Teuchos::null,
+                              IPPtr ip = Teuchos::null);
 };
 
 #endif
