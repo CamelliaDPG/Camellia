@@ -183,7 +183,7 @@ public:
   void importSolutionForOffRankCells(std::set<GlobalIndexType> cellIDs);
   void importGlobalSolution(); // imports (and interprets!) global solution.  NOT scalable.
   
-  int solve(); // could add arguments to allow different solution algorithms to be selected...
+  int solve();
 
   int solve(bool useMumps);
 
