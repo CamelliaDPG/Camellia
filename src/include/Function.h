@@ -276,11 +276,14 @@ public:
   void scalarDivideFunctionValues(FieldContainer<double> &values, BasisCachePtr basisCache);
   void scalarMultiplyBasisValues(FieldContainer<double> &basisValues, BasisCachePtr basisCache);
   void scalarDivideBasisValues(FieldContainer<double> &basisValues, BasisCachePtr basisCache);
-  double value();
+  
   virtual double value(double x);
   virtual double value(double x, double y);
   virtual double value(double x, double y, double z);
 
+  using SimpleFunction::value; // avoid compiler warnings about the value() method below.
+  double value();
+  
   FunctionPtr dx();
   FunctionPtr dy();
   FunctionPtr dz();  // Hmm... a design issue: if we implement dz() then grad() will return a 3D function, not what we want...  It may be that grad() should require a spaceDim argument.  I'm not sure.

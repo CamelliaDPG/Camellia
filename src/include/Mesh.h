@@ -260,14 +260,16 @@ public:
   
   FunctionPtr getTransformationFunction(); // will be NULL for meshes without edge curves defined
 
+  // method signature inherited from RefinementObserver:
+  void hRefine(const set<GlobalIndexType> &cellIDs, Teuchos::RCP<RefinementPattern> refPattern);
+  
+  using RefinementObserver::hRefine; // avoid compiler warnings about the hRefine() methods below.
   void hRefine(const vector<GlobalIndexType> &cellIDs);
   void hRefine(const set<GlobalIndexType> &cellIDs);
   
-  void hRefine(const set<GlobalIndexType> &cellIDs, Teuchos::RCP<RefinementPattern> refPattern);
-  
   void hRefine(const set<GlobalIndexType> &cellIDs, Teuchos::RCP<RefinementPattern> refPattern, bool repartitionAndRebuild);
-
   void hRefine(const vector<GlobalIndexType> &cellIDs, Teuchos::RCP<RefinementPattern> refPattern);
+
   void hUnrefine(const set<GlobalIndexType> &cellIDs);
   
   void interpretGlobalCoefficients(GlobalIndexType cellID, FieldContainer<double> &localCoefficients, const Epetra_MultiVector &globalCoefficients);
