@@ -4,7 +4,7 @@
 #include <set>
 
 namespace IntrepidExtendedTypes {
-  enum EOperatorExtended { // first 13 simply copied from Intrepid::EOperator
+  enum EOperator { // first 13 simply copied from Intrepid::EOperator
     OP_VALUE = 0,
     OP_GRAD,      // 1
     OP_CURL,      // 2
@@ -35,7 +35,7 @@ namespace IntrepidExtendedTypes {
     OP_VECTORIZE_VALUE  // 27
   };
   
-  enum EFunctionSpaceExtended { // the first four copied from Intrepid::EFunctionSpace
+  enum EFunctionSpace { // the first four copied from Intrepid::EFunctionSpace
     FUNCTION_SPACE_HGRAD = 0,
     FUNCTION_SPACE_HCURL,
     FUNCTION_SPACE_HDIV,
@@ -57,12 +57,12 @@ namespace IntrepidExtendedTypes {
     FUNCTION_SPACE_UNKNOWN
   };
   
-  bool functionSpaceIsVectorized(EFunctionSpaceExtended fs);
-  bool functionSpaceIsDiscontinuous(EFunctionSpaceExtended fs);
-  EFunctionSpaceExtended continuousSpaceForDiscontinuous(EFunctionSpaceExtended fs_disc);
-  EFunctionSpaceExtended discontinuousSpaceForContinuous(EFunctionSpaceExtended fs_continuous);
+  bool functionSpaceIsVectorized(EFunctionSpace fs);
+  bool functionSpaceIsDiscontinuous(EFunctionSpace fs);
+  EFunctionSpace continuousSpaceForDiscontinuous(EFunctionSpace fs_disc);
+  EFunctionSpace discontinuousSpaceForContinuous(EFunctionSpace fs_continuous);
   
-  const std::set<EOperatorExtended> & normalOperators();
+  const std::set<EOperator> & normalOperators();
 }
 
 #endif

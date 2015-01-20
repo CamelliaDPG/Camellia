@@ -25,8 +25,8 @@ namespace VarFunctionSpaces {
   enum Space { HGRAD, HCURL, HDIV, HGRAD_DISC, HCURL_DISC, HDIV_DISC, HDIV_FREE, L2, CONSTANT_SCALAR, VECTOR_HGRAD, VECTOR_HGRAD_DISC, VECTOR_L2, UNKNOWN_FS };
   enum VarType { TEST, FIELD, TRACE, FLUX, UNKNOWN_TYPE, MIXED_TYPE };
   
-  IntrepidExtendedTypes::EFunctionSpaceExtended efsForSpace(Space space);
-  Space spaceForEFS(IntrepidExtendedTypes::EFunctionSpaceExtended efs);
+  IntrepidExtendedTypes::EFunctionSpace efsForSpace(Space space);
+  Space spaceForEFS(IntrepidExtendedTypes::EFunctionSpace efs);
   int rankForSpace(Space space);
 }
 
@@ -37,20 +37,20 @@ class Var { // really Var x Operator
   int _id;
   std::string _name;
   Space _fs;
-  IntrepidExtendedTypes::EOperatorExtended _op; // default is OP_VALUE
+  IntrepidExtendedTypes::EOperator _op; // default is OP_VALUE
   VarType _varType;
   LinearTermPtr _termTraced; // for trace variables, optionally allows identification with fields
-  //  map< IntrepidExtendedTypes::EOperatorExtended, VarPtr > _relatedVars; // grad, div, etc. could be cached here
+  //  map< IntrepidExtendedTypes::EOperator, VarPtr > _relatedVars; // grad, div, etc. could be cached here
   bool _definedOnTemporalInterfaces;
 public:
-  Var(int ID, int rank, std::string name, IntrepidExtendedTypes::EOperatorExtended op =  IntrepidExtendedTypes::OP_VALUE,
+  Var(int ID, int rank, std::string name, IntrepidExtendedTypes::EOperator op =  IntrepidExtendedTypes::OP_VALUE,
       Space fs = UNKNOWN_FS, VarType varType = UNKNOWN_TYPE, LinearTermPtr termTraced = Teuchos::rcp((LinearTerm*) NULL),
       bool definedOnTemporalInterfaces = true);
   
   int ID() const;
   const std::string & name() const;
   std::string displayString() const;
-  IntrepidExtendedTypes::EOperatorExtended op() const;
+  IntrepidExtendedTypes::EOperator op() const;
   int rank() const;  // 0 for scalar, 1 for vector, etc.
   Space space() const;
   VarType varType() const;

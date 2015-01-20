@@ -88,7 +88,7 @@ PatchBasis<Scalar, ArrayScalar>::PatchBasis(BasisPtr parentBasis, ArrayScalar &p
 
 template<class Scalar, class ArrayScalar>
 void PatchBasis<Scalar, ArrayScalar>::getValues(ArrayScalar &outputValues, const ArrayScalar &  inputPoints,
-                                                const EOperator operatorType) const {
+                                                const Intrepid::EOperator operatorType) const {
   // compute cellJacobian, etc. for inputPoints:
   // inputPoints dimensions (P, D)
   // outputValues dimensions (F,P), (F,P,D), or (F,P,D,D)
@@ -127,7 +127,7 @@ void PatchBasis<Scalar, ArrayScalar>::getValues(ArrayScalar &outputValues, const
   //  computeCellJacobians(cellJacobian,cellJacobInv,cellJacobDet, parentInputPoints);
   ////
   //  Teuchos::RCP< ArrayScalar > transformedValues = BasisEvaluation::getTransformedValues(_parentBasis,
-  //                                                                  (IntrepidExtendedTypes::EOperatorExtended)operatorType,
+  //                                                                  (IntrepidExtendedTypes::EOperator)operatorType,
   //                                                                  parentInputPoints,
   //                                                                  cellJacobian, cellJacobInv, cellJacobDet);
   // copy back to outputValues

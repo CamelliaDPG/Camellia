@@ -70,7 +70,7 @@ void BasisSumFunction::getValues(FieldContainer<double> &functionValues, const F
 }
 
 NewBasisSumFunction::NewBasisSumFunction(BasisPtr basis, const FieldContainer<double> &basisCoefficients,
-                                         BasisCachePtr overridingBasisCache, EOperatorExtended op, bool boundaryValueOnly) : Function( BasisFactory::basisFactory()->getBasisRank(basis) ) {
+                                         BasisCachePtr overridingBasisCache, IntrepidExtendedTypes::EOperator op, bool boundaryValueOnly) : Function( BasisFactory::basisFactory()->getBasisRank(basis) ) {
   // TODO: fix the rank setter here to take into account rank-changing ops (e.g. DIV, GRAD)
   _coefficients = basisCoefficients;
   _overridingBasisCache = overridingBasisCache;

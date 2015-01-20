@@ -24,8 +24,8 @@ TimeMarchingProblem::TimeMarchingProblem(Teuchos::RCP<BilinearForm> bilinearForm
 }
 
 void TimeMarchingProblem::trialTestOperators(int trialID, int testID, 
-                                                  vector<EOperatorExtended> &trialOps,
-                                                  vector<EOperatorExtended> &testOps) {
+                                                  vector<IntrepidExtendedTypes::EOperator> &trialOps,
+                                                  vector<IntrepidExtendedTypes::EOperator> &testOps) {
   // each (trial,test) pair gets one extra operator, a VALUE on each, belonging to the time marching
   _bilinearForm->trialTestOperators(trialID,testID,trialOps,testOps);
   
@@ -51,11 +51,11 @@ void TimeMarchingProblem::applyBilinearFormData(FieldContainer<double> &trialVal
   }
 }
 
-EFunctionSpaceExtended TimeMarchingProblem::functionSpaceForTest(int testID) {
+IntrepidExtendedTypes::EFunctionSpace TimeMarchingProblem::functionSpaceForTest(int testID) {
   return _bilinearForm->functionSpaceForTest(testID);
 }
 
-EFunctionSpaceExtended TimeMarchingProblem::functionSpaceForTrial(int trialID) {
+IntrepidExtendedTypes::EFunctionSpace TimeMarchingProblem::functionSpaceForTrial(int trialID) {
   return _bilinearForm->functionSpaceForTrial(trialID);
 }
 
@@ -67,9 +67,9 @@ bool TimeMarchingProblem::nonZeroRHS(int testVarID) {
   return _rhs->nonZeroRHS(testVarID);
 }
 
-vector<EOperatorExtended> TimeMarchingProblem::operatorsForTestID(int testID) {
+vector<IntrepidExtendedTypes::EOperator> TimeMarchingProblem::operatorsForTestID(int testID) {
   // check whether there's time derivative-interaction with any trial function
-  vector< IntrepidExtendedTypes::EOperatorExtended > ops = _rhs->operatorsForTestID(testID);
+  vector< IntrepidExtendedTypes::EOperator > ops = _rhs->operatorsForTestID(testID);
   if ( testHasTimeDerivative(testID) ) {
     ops.insert(ops.begin(), IntrepidExtendedTypes::OP_VALUE);
   }

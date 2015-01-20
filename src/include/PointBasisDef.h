@@ -56,7 +56,7 @@ void PointBasis<Scalar,ArrayScalar>::initializeTags() const {
 
 template<class Scalar, class ArrayScalar>
 void PointBasis<Scalar, ArrayScalar>::getValues(ArrayScalar &outputValues, const ArrayScalar &  inputPoints,
-                                                const EOperator operatorType) const {
+                                                const Intrepid::EOperator operatorType) const {
   // TODO: add parameter checking
   for (int i=0; i<outputValues.size(); i++) {
     outputValues[i] = 1.0;

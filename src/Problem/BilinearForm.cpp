@@ -113,9 +113,9 @@ void BilinearForm::applyBilinearFormData(FieldContainer<double> &trialValues, Fi
 }
 
 void BilinearForm::trialTestOperators(int testID1, int testID2, 
-                                      vector<EOperatorExtended> &testOps1,
-                                      vector<EOperatorExtended> &testOps2) {
-  IntrepidExtendedTypes::EOperatorExtended testOp1, testOp2;
+                                      vector<IntrepidExtendedTypes::EOperator> &testOps1,
+                                      vector<IntrepidExtendedTypes::EOperator> &testOps2) {
+  IntrepidExtendedTypes::EOperator testOp1, testOp2;
   testOps1.clear();
   testOps2.clear();
   if (trialTestOperator(testID1,testID2,testOp1,testOp2)) {
@@ -383,17 +383,17 @@ void BilinearForm::stiffnessMatrix(FieldContainer<double> &stiffness, Teuchos::R
     for (trialIterator = trialIDs.begin(); trialIterator != trialIDs.end(); trialIterator++) {
       int trialID = *trialIterator;
       
-      vector<EOperatorExtended> trialOperators, testOperators;
+      vector<IntrepidExtendedTypes::EOperator> trialOperators, testOperators;
       this->trialTestOperators(trialID, testID, trialOperators, testOperators);
-      vector<EOperatorExtended>::iterator trialOpIt, testOpIt;
+      vector<IntrepidExtendedTypes::EOperator>::iterator trialOpIt, testOpIt;
       testOpIt = testOperators.begin();
       TEUCHOS_TEST_FOR_EXCEPTION(trialOperators.size() != testOperators.size(), std::invalid_argument,
                          "trialOperators and testOperators must be the same length");
       int operatorIndex = -1;
       for (trialOpIt = trialOperators.begin(); trialOpIt != trialOperators.end(); trialOpIt++) {
         operatorIndex++;
-        IntrepidExtendedTypes::EOperatorExtended trialOperator = *trialOpIt;
-        IntrepidExtendedTypes::EOperatorExtended testOperator = *testOpIt;
+        IntrepidExtendedTypes::EOperator trialOperator = *trialOpIt;
+        IntrepidExtendedTypes::EOperator testOperator = *testOpIt;
         
         if (testOperator==OP_TIMES_NORMAL) {
           TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument,"OP_TIMES_NORMAL not supported for tests.  Use for trial only");
@@ -457,7 +457,7 @@ void BilinearForm::stiffnessMatrix(FieldContainer<double> &stiffness, Teuchos::R
             testBasis = testOrdering->getBasis(testID);
             
             bool isFlux = false; // i.e. the normal is "folded into" the variable definition, so that we must take parity into account
-            const set<IntrepidExtendedTypes::EOperatorExtended> normalOperators = IntrepidExtendedTypes::normalOperators();
+            const set<IntrepidExtendedTypes::EOperator> normalOperators = IntrepidExtendedTypes::normalOperators();
             if (   (normalOperators.find(testOperator)  == normalOperators.end() ) 
                 && (normalOperators.find(trialOperator) == normalOperators.end() ) ) {
               // normal not yet taken into account -- so it must be "hidden" in the trial variable
@@ -559,7 +559,7 @@ vector<int> BilinearForm::trialBoundaryIDs() {
   return ids;  
 }
 
-int BilinearForm::operatorRank(EOperatorExtended op, IntrepidExtendedTypes::EFunctionSpaceExtended fs) {
+int BilinearForm::operatorRank(IntrepidExtendedTypes::EOperator op, IntrepidExtendedTypes::EFunctionSpace fs) {
   // returns the rank of basis functions in the function space fs when op is applied
   // 0 scalar, 1 vector
   int SCALAR = 0, VECTOR = 1;
@@ -601,7 +601,7 @@ int BilinearForm::operatorRank(EOperatorExtended op, IntrepidExtendedTypes::EFun
   }
 }
 
-const string & BilinearForm::operatorName(EOperatorExtended op) {
+const string & BilinearForm::operatorName(IntrepidExtendedTypes::EOperator op) {
   switch (op) {
     case  IntrepidExtendedTypes::OP_VALUE:
       return S_OP_VALUE; 
@@ -704,14 +704,14 @@ void BilinearForm::printTrialTestInteractions() {
     FieldContainer<double> testValue, trialValue;
     for (vector<int>::iterator trialIt = _trialIDs.begin(); trialIt != _trialIDs.end(); trialIt++) {
       int trialID = *trialIt;
-      vector<EOperatorExtended> trialOperators, testOperators;
+      vector<IntrepidExtendedTypes::EOperator> trialOperators, testOperators;
       trialTestOperators(trialID, testID, trialOperators, testOperators);
-      vector<EOperatorExtended>::iterator trialOpIt, testOpIt;
+      vector<IntrepidExtendedTypes::EOperator>::iterator trialOpIt, testOpIt;
       testOpIt = testOperators.begin();
       int operatorIndex = 0;
       for (trialOpIt = trialOperators.begin(); trialOpIt != trialOperators.end(); trialOpIt++) {
-        IntrepidExtendedTypes::EOperatorExtended opTrial = *trialOpIt;
-        IntrepidExtendedTypes::EOperatorExtended opTest = *testOpIt;
+        IntrepidExtendedTypes::EOperator opTrial = *trialOpIt;
+        IntrepidExtendedTypes::EOperator opTest = *testOpIt;
         int trialRank = operatorRank(opTrial, functionSpaceForTrial(trialID));
         int testRank = operatorRank(opTest, functionSpaceForTest(testID));
         trialValue = ( trialRank == 0 ) ? trialValueScalar : trialValueVector;
@@ -881,7 +881,7 @@ VarFactory BilinearForm::varFactory() {
     int testID = testIDs[testIndex];
     string name = this->testName(testID);
     VarPtr testVar;
-    IntrepidExtendedTypes::EFunctionSpaceExtended fs = this->functionSpaceForTest(testID);
+    IntrepidExtendedTypes::EFunctionSpace fs = this->functionSpaceForTest(testID);
     Space space;
     switch (fs) {
       case IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD:

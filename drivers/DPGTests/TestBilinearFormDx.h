@@ -44,15 +44,16 @@ public:
   const string & trialName(int trialID);
   
   bool trialTestOperator(int trialID, int testID, 
-                         EOperatorExtended &trialOperator, EOperatorExtended &testOperator);
+                         IntrepidExtendedTypes::EOperator &trialOperator,
+                         IntrepidExtendedTypes::EOperator &testOperator);
        
   void applyBilinearFormData(int trialID, int testID,
                            FieldContainer<double> &trialValues, FieldContainer<double> &testValues,
                              const FieldContainer<double> &points);
                            
-  EFunctionSpaceExtended functionSpaceForTest(int testID);
+  IntrepidExtendedTypes::EFunctionSpace functionSpaceForTest(int testID);
   
-  EFunctionSpaceExtended functionSpaceForTrial(int trialID);
+  IntrepidExtendedTypes::EFunctionSpace functionSpaceForTrial(int trialID);
 
   bool isFluxOrTrace(int trialID);
   

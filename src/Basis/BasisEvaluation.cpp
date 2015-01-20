@@ -47,7 +47,7 @@ using namespace Camellia;
 typedef Teuchos::RCP< FieldContainer<double> > FCPtr;
 typedef Teuchos::RCP< const FieldContainer<double> > constFCPtr;
 
-FCPtr BasisEvaluation::getValues(BasisPtr basis, IntrepidExtendedTypes::EOperatorExtended op,
+FCPtr BasisEvaluation::getValues(BasisPtr basis, IntrepidExtendedTypes::EOperator op,
                                  const FieldContainer<double> &refPoints) {
   int numPoints = refPoints.dimension(0);
   int spaceDim = refPoints.dimension(1);  // points dimensions are (numPoints, spaceDim)
@@ -56,13 +56,13 @@ FCPtr BasisEvaluation::getValues(BasisPtr basis, IntrepidExtendedTypes::EOperato
   // test to make sure that the basis is known by BasisFactory--otherwise, throw exception
   int componentOfInterest = -1;
   // otherwise, lookup to see whether a related value is already known
-  IntrepidExtendedTypes::EFunctionSpaceExtended fs = basis->functionSpace();
-  EOperator relatedOp = relatedOperator(op, fs, componentOfInterest);
+  IntrepidExtendedTypes::EFunctionSpace fs = basis->functionSpace();
+  Intrepid::EOperator relatedOp = relatedOperator(op, fs, componentOfInterest);
   
-  if ((EOperatorExtended)relatedOp != op) {
+  if ((IntrepidExtendedTypes::EOperator)relatedOp != op) {
       // we can assume relatedResults has dimensions (numPoints,basisCardinality,spaceDimOut)
     FCPtr relatedResults = Teuchos::rcp(new FieldContainer<double>(basisCardinality,numPoints,spaceDimOut));
-    basis->getValues(*(relatedResults.get()), refPoints, (EOperator)relatedOp);
+    basis->getValues(*(relatedResults.get()), refPoints, relatedOp);
     FCPtr result = getComponentOfInterest(relatedResults,op,fs,componentOfInterest);
     if ( result.get() == 0 ) {
       result = relatedResults;
@@ -96,27 +96,27 @@ FCPtr BasisEvaluation::getValues(BasisPtr basis, IntrepidExtendedTypes::EOperato
     dimensions.push_back(spaceDimOut);
   }
   FCPtr result = Teuchos::rcp(new FieldContainer<double>(dimensions));
-  basis->getValues(*(result.get()), refPoints, (EOperator)op);
+  basis->getValues(*(result.get()), refPoints, (Intrepid::EOperator)op);
   return result;
 }
 
-FCPtr BasisEvaluation::getTransformedValues(BasisPtr basis, IntrepidExtendedTypes::EOperatorExtended op,
+FCPtr BasisEvaluation::getTransformedValues(BasisPtr basis, IntrepidExtendedTypes::EOperator op,
                                             const FieldContainer<double> &referencePoints,
                                             const FieldContainer<double> &cellJacobian, 
                                             const FieldContainer<double> &cellJacobianInv,
                                             const FieldContainer<double> &cellJacobianDet) {
-  IntrepidExtendedTypes::EFunctionSpaceExtended fs = basis->functionSpace();
+  IntrepidExtendedTypes::EFunctionSpace fs = basis->functionSpace();
   int componentOfInterest;
   Intrepid::EOperator relatedOp;
   relatedOp = relatedOperator(op, fs, componentOfInterest);
   
-  FCPtr referenceValues = getValues(basis,(EOperatorExtended) relatedOp, referencePoints);
+  FCPtr referenceValues = getValues(basis,(IntrepidExtendedTypes::EOperator) relatedOp, referencePoints);
   return getTransformedValuesWithBasisValues(basis,op,referenceValues,cellJacobian,cellJacobianInv,cellJacobianDet);
 }
 
-FCPtr BasisEvaluation::getTransformedVectorValuesWithComponentBasisValues(VectorBasisPtr basis, IntrepidExtendedTypes::EOperatorExtended op,
+FCPtr BasisEvaluation::getTransformedVectorValuesWithComponentBasisValues(VectorBasisPtr basis, IntrepidExtendedTypes::EOperator op,
                                                                           constFCPtr componentReferenceValuesTransformed) {
-  IntrepidExtendedTypes::EFunctionSpaceExtended fs = basis->functionSpace();
+  IntrepidExtendedTypes::EFunctionSpace fs = basis->functionSpace();
   bool vectorizedBasis = IntrepidExtendedTypes::functionSpaceIsVectorized(fs);
   if ( !vectorizedBasis || 
       ((op !=  IntrepidExtendedTypes::OP_VALUE) && (op != IntrepidExtendedTypes::OP_CROSS_NORMAL) )) {
@@ -134,7 +134,7 @@ FCPtr BasisEvaluation::getTransformedVectorValuesWithComponentBasisValues(Vector
   return transformedValues;
 }
 
-FCPtr BasisEvaluation::getTransformedValuesWithBasisValues(BasisPtr basis, IntrepidExtendedTypes::EOperatorExtended op,
+FCPtr BasisEvaluation::getTransformedValuesWithBasisValues(BasisPtr basis, IntrepidExtendedTypes::EOperator op,
                                                            constFCPtr referenceValues,
                                                            const FieldContainer<double> &cellJacobian, 
                                                            const FieldContainer<double> &cellJacobianInv,
@@ -153,7 +153,7 @@ FCPtr BasisEvaluation::getTransformedValuesWithBasisValues(BasisPtr basis, Intre
   }
   
   int componentOfInterest;
-  IntrepidExtendedTypes::EFunctionSpaceExtended fs = basis->functionSpace();
+  IntrepidExtendedTypes::EFunctionSpace fs = basis->functionSpace();
   Intrepid::EOperator relatedOp = relatedOperator(op,fs, componentOfInterest);
   Teuchos::Array<int> dimensions;
   referenceValues->dimensions(dimensions);
@@ -321,7 +321,7 @@ FCPtr BasisEvaluation::getTransformedValuesWithBasisValues(BasisPtr basis, Intre
   return result;
 }
 
-Intrepid::EOperator BasisEvaluation::relatedOperator(EOperatorExtended op, IntrepidExtendedTypes::EFunctionSpaceExtended fs, int &componentOfInterest) {
+Intrepid::EOperator BasisEvaluation::relatedOperator(IntrepidExtendedTypes::EOperator op, IntrepidExtendedTypes::EFunctionSpace fs, int &componentOfInterest) {
   Intrepid::EOperator relatedOp = (Intrepid::EOperator) op;
   componentOfInterest = -1;
 
@@ -344,7 +344,7 @@ Intrepid::EOperator BasisEvaluation::relatedOperator(EOperatorExtended op, Intre
   return relatedOp;
 }
 
-FCPtr BasisEvaluation::getComponentOfInterest(constFCPtr values, IntrepidExtendedTypes::EOperatorExtended op, IntrepidExtendedTypes::EFunctionSpaceExtended fs, int componentOfInterest) {
+FCPtr BasisEvaluation::getComponentOfInterest(constFCPtr values, IntrepidExtendedTypes::EOperator op, IntrepidExtendedTypes::EFunctionSpace fs, int componentOfInterest) {
   FCPtr result;
   bool vectorizedBasis = functionSpaceIsVectorized(fs);
   if (   vectorizedBasis
@@ -468,7 +468,7 @@ FCPtr BasisEvaluation::getValuesTimesNormals(constFCPtr values,const FieldContai
   // values should have dimensions (C,basisCardinality,P)
   int numCells = sideNormals.dimension(0);
   int numPoints = sideNormals.dimension(1);
-  int spaceDim = sideNormals.dimension(2);
+//  int spaceDim = sideNormals.dimension(2);
   int basisCardinality = values->dimension(1);
   
   if ( (numCells != values->dimension(0)) || (basisCardinality != values->dimension(1))

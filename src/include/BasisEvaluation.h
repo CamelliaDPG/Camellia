@@ -55,16 +55,16 @@ class BasisEvaluation {
   typedef Teuchos::RCP< const FieldContainer<double> > constFCPtr;
   
 public:
-  static FCPtr getValues(BasisPtr basis, EOperatorExtended op,
+  static FCPtr getValues(BasisPtr basis, IntrepidExtendedTypes::EOperator op,
                          const FieldContainer<double> &refPoints);
-  static FCPtr getTransformedValues(BasisPtr basis, EOperatorExtended op,
+  static FCPtr getTransformedValues(BasisPtr basis, IntrepidExtendedTypes::EOperator op,
                                    const FieldContainer<double> &refPoints,
                                    const FieldContainer<double> &cellJacobian, 
                                    const FieldContainer<double> &cellJacobianInv,
                                    const FieldContainer<double> &cellJacobianDet);
-  static FCPtr getTransformedVectorValuesWithComponentBasisValues(Camellia::VectorBasisPtr basis, IntrepidExtendedTypes::EOperatorExtended op,
+  static FCPtr getTransformedVectorValuesWithComponentBasisValues(Camellia::VectorBasisPtr basis, IntrepidExtendedTypes::EOperator op,
                                                                   constFCPtr componentReferenceValuesTransformed);
-  static FCPtr getTransformedValuesWithBasisValues(BasisPtr basis, IntrepidExtendedTypes::EOperatorExtended op,
+  static FCPtr getTransformedValuesWithBasisValues(BasisPtr basis, IntrepidExtendedTypes::EOperator op,
                                                    constFCPtr referenceValues,                                 
                                                    const FieldContainer<double> &cellJacobian, 
                                                    const FieldContainer<double> &cellJacobianInv,
@@ -74,8 +74,8 @@ public:
   static FCPtr getValuesTimesNormals(constFCPtr values,const FieldContainer<double> &sideNormals);
   static FCPtr getValuesTimesNormals(constFCPtr values,const FieldContainer<double> &sideNormals, int normalComponent);
   static FCPtr getVectorizedValues(constFCPtr values, int spaceDim);
-  static Intrepid::EOperator relatedOperator(EOperatorExtended op, IntrepidExtendedTypes::EFunctionSpaceExtended fs, int &componentOfInterest);
-  static FCPtr getComponentOfInterest(constFCPtr values, IntrepidExtendedTypes::EOperatorExtended op, IntrepidExtendedTypes::EFunctionSpaceExtended fs, int componentOfInterest);
+  static Intrepid::EOperator relatedOperator(IntrepidExtendedTypes::EOperator op, IntrepidExtendedTypes::EFunctionSpace fs, int &componentOfInterest);
+  static FCPtr getComponentOfInterest(constFCPtr values, IntrepidExtendedTypes::EOperator op, IntrepidExtendedTypes::EFunctionSpace fs, int componentOfInterest);
 };
 
 #endif

@@ -464,7 +464,7 @@ LocalDofMapperPtr GMGOperator::getLocalCoefficientMap(GlobalIndexType fineCellID
 
       VarPtr trialVar = vf.trialVars().find(trialID)->second;
       Space varSpace = trialVar->space();
-      IntrepidExtendedTypes::EFunctionSpaceExtended varFS = efsForSpace(varSpace);
+      IntrepidExtendedTypes::EFunctionSpace varFS = efsForSpace(varSpace);
       if (! IntrepidExtendedTypes::functionSpaceIsDiscontinuous(varFS)) {
         int rank = Teuchos::GlobalMPISession::getRank();
         if (rank == 0)

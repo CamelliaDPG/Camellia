@@ -266,12 +266,12 @@ namespace Camellia {
   }
   
   template<class Scalar, class ArrayScalar>
-  IntrepidExtendedTypes::EFunctionSpaceExtended Basis<Scalar,ArrayScalar>::functionSpace() const {
+  IntrepidExtendedTypes::EFunctionSpace Basis<Scalar,ArrayScalar>::functionSpace() const {
     return this->_functionSpace;
   }
   
   template<class Scalar, class ArrayScalar>
-  IntrepidExtendedTypes::EFunctionSpaceExtended Basis<Scalar,ArrayScalar>::functionSpace(int tensorialRank) const {
+  IntrepidExtendedTypes::EFunctionSpace Basis<Scalar,ArrayScalar>::functionSpace(int tensorialRank) const {
     if (tensorialRank==0)
       return this->_functionSpace;
     else
@@ -311,7 +311,7 @@ namespace Camellia {
   template<class Scalar, class ArrayScalar>
   IntrepidBasisWrapper<Scalar,ArrayScalar>::IntrepidBasisWrapper(Teuchos::RCP< Intrepid::Basis<Scalar,ArrayScalar> > intrepidBasis,
                                                                  int rangeDimension, int rangeRank,
-                                                                 IntrepidExtendedTypes::EFunctionSpaceExtended fs) {
+                                                                 IntrepidExtendedTypes::EFunctionSpace fs) {
     _intrepidBasis = intrepidBasis;
     this->_rangeDimension = rangeDimension;
     this->_rangeRank = rangeRank;

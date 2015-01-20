@@ -29,7 +29,7 @@ namespace Camellia {
     int _rangeDimension;
     int _rangeRank;
     
-    IntrepidExtendedTypes::EFunctionSpaceExtended _functionSpace;
+    IntrepidExtendedTypes::EFunctionSpace _functionSpace;
     
     virtual void initializeTags() const = 0;
     /** \brief  "true" if <var>_tagToOrdinal</var> and <var>_ordinalToTag</var> have been initialized
@@ -88,8 +88,8 @@ namespace Camellia {
     virtual const std::vector<int>& getDofTag(int dofOrd) const;
     virtual const std::vector<std::vector<int> > & getAllDofTags() const;
     
-    virtual IntrepidExtendedTypes::EFunctionSpaceExtended functionSpace() const;
-    virtual IntrepidExtendedTypes::EFunctionSpaceExtended functionSpace(int tensorialRank) const; // 0 for space, 1 for time, in space-time bases
+    virtual IntrepidExtendedTypes::EFunctionSpace functionSpace() const;
+    virtual IntrepidExtendedTypes::EFunctionSpace functionSpace(int tensorialRank) const; // 0 for space, 1 for time, in space-time bases
     
     // methods identifying the type of basis:
     virtual bool isConforming() const; // defaults to false (true for the Intrepid bases)
@@ -115,7 +115,7 @@ namespace Camellia {
     void initializeTags() const;
   public:
     IntrepidBasisWrapper(Teuchos::RCP< Intrepid::Basis<Scalar,ArrayScalar> > intrepidBasis, int rangeDimension, int rangeRank,
-                         IntrepidExtendedTypes::EFunctionSpaceExtended functionSpace);
+                         IntrepidExtendedTypes::EFunctionSpace functionSpace);
     
     Teuchos::RCP< Intrepid::Basis<Scalar,ArrayScalar> > intrepidBasis();
     

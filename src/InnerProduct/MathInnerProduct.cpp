@@ -39,12 +39,12 @@
 using namespace IntrepidExtendedTypes;
 
 void MathInnerProduct::operators(int testID1, int testID2, 
-               vector<EOperatorExtended> &testOp1,
-               vector<EOperatorExtended> &testOp2) {
+               vector<IntrepidExtendedTypes::EOperator> &testOp1,
+               vector<IntrepidExtendedTypes::EOperator> &testOp2) {
   testOp1.clear();
   testOp2.clear();
   if (testID1 == testID2) {
-    IntrepidExtendedTypes::EOperatorExtended dOperator;
+    IntrepidExtendedTypes::EOperator dOperator;
     if (_bilinearForm->functionSpaceForTest(testID1) == IntrepidExtendedTypes::FUNCTION_SPACE_REAL_SCALAR) {
       testOp1.push_back( IntrepidExtendedTypes::OP_VALUE);
       testOp2.push_back( IntrepidExtendedTypes::OP_VALUE);

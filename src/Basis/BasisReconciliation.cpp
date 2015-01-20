@@ -186,7 +186,7 @@ SubBasisReconciliationWeights BasisReconciliation::computeConstrainedWeights(uns
   SubBasisReconciliationWeights weights;
   
   // use the functionSpace to determine what continuities should be enforced:
-  IntrepidExtendedTypes::EFunctionSpaceExtended fs = finerBasis->functionSpace();
+  IntrepidExtendedTypes::EFunctionSpace fs = finerBasis->functionSpace();
   TEUCHOS_TEST_FOR_EXCEPTION(fs != coarserBasis->functionSpace(), std::invalid_argument, "Bases must agree on functionSpace().");
   
   if (fs==IntrepidExtendedTypes::FUNCTION_SPACE_REAL_SCALAR) {
@@ -376,7 +376,7 @@ SubBasisReconciliationWeights BasisReconciliation::computeConstrainedWeights(uns
   SubBasisReconciliationWeights weights;
   
   // use the functionSpace to determine what continuities should be enforced:
-  IntrepidExtendedTypes::EFunctionSpaceExtended fs = finerBasis->functionSpace();
+  IntrepidExtendedTypes::EFunctionSpace fs = finerBasis->functionSpace();
   TEUCHOS_TEST_FOR_EXCEPTION(fs != coarserBasis->functionSpace(), std::invalid_argument, "Bases must agree on functionSpace().");
   
   int domainDim = finerBasis->domainTopology()->getDimension();
@@ -1006,7 +1006,7 @@ set<unsigned> BasisReconciliation::internalDofOrdinalsForFinerBasis(BasisPtr fin
 
 unsigned BasisReconciliation::minimumSubcellDimension(BasisPtr basis) {
   // use the functionSpace to determine what continuities should be enforced:
-  IntrepidExtendedTypes::EFunctionSpaceExtended fs = basis->functionSpace();
+  IntrepidExtendedTypes::EFunctionSpace fs = basis->functionSpace();
   
   int d = basis->domainTopology()->getDimension();
   int minSubcellDimension = d-1;

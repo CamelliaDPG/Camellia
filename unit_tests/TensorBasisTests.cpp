@@ -153,7 +153,7 @@ namespace {
       tensorPointsForDimension[spaceDim-1] = tensorPoints;
     }
     
-    std::map<EOperator, int> rankAdjustmentForOperator;
+    std::map<Intrepid::EOperator, int> rankAdjustmentForOperator;
     
     rankAdjustmentForOperator[OPERATOR_VALUE] = 0;
     rankAdjustmentForOperator[OPERATOR_GRAD] = 1;
@@ -165,8 +165,8 @@ namespace {
       typedef Camellia::TensorBasis<double, FieldContainer<double> > TensorBasis;
       Teuchos::RCP<TensorBasis> tensorBasis = Teuchos::rcp( new TensorBasis(spatialBasis, timeBasis) );
       FC spatialValues, temporalValues(timeBasis->getCardinality(), numTimePoints), tensorValues;
-      EOperator op = OPERATOR_VALUE;
-      EOperator timeOp = OPERATOR_VALUE;
+      Intrepid::EOperator op = OPERATOR_VALUE;
+      Intrepid::EOperator timeOp = OPERATOR_VALUE;
       
       int spaceDim = spatialBasis->domainTopology()->getDimension();
       

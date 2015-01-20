@@ -113,19 +113,19 @@ private:
   
   CellTopoPtr _cellTopo;
   
-  map< pair< Camellia::Basis<>*, IntrepidExtendedTypes::EOperatorExtended >,
+  map< pair< Camellia::Basis<>*, IntrepidExtendedTypes::EOperator >,
   Teuchos::RCP< const Intrepid::FieldContainer<double> > > _knownValues;
   
-  map< pair< Camellia::Basis<>*, IntrepidExtendedTypes::EOperatorExtended >,
+  map< pair< Camellia::Basis<>*, IntrepidExtendedTypes::EOperator >,
   Teuchos::RCP< const Intrepid::FieldContainer<double> > > _knownValuesTransformed;
   
-  map< pair< Camellia::Basis<>*, IntrepidExtendedTypes::EOperatorExtended >,
+  map< pair< Camellia::Basis<>*, IntrepidExtendedTypes::EOperator >,
   Teuchos::RCP< const Intrepid::FieldContainer<double> > > _knownValuesTransformedDottedWithNormal;
   
-  map< pair< Camellia::Basis<>*, IntrepidExtendedTypes::EOperatorExtended >,
+  map< pair< Camellia::Basis<>*, IntrepidExtendedTypes::EOperator >,
   Teuchos::RCP< const Intrepid::FieldContainer<double> > > _knownValuesTransformedWeighted;
   
-  map< pair< Camellia::Basis<>*, IntrepidExtendedTypes::EOperatorExtended >,
+  map< pair< Camellia::Basis<>*, IntrepidExtendedTypes::EOperator >,
   Teuchos::RCP< const Intrepid::FieldContainer<double> > > _knownValuesTransformedWeightedDottedWithNormal;
 
   void initCubatureDegree(int maxTrialDegree, int maxTestDegree);
@@ -166,16 +166,16 @@ public:
              DofOrdering &trialOrdering, int maxTestDegree, bool createSideCacheToo = false);
   virtual ~BasisCache() {}
   
-  Teuchos::RCP< const Intrepid::FieldContainer<double> > getValues(BasisPtr basis, IntrepidExtendedTypes::EOperatorExtended op, bool useCubPointsSideRefCell = false);
+  Teuchos::RCP< const Intrepid::FieldContainer<double> > getValues(BasisPtr basis, IntrepidExtendedTypes::EOperator op, bool useCubPointsSideRefCell = false);
   Intrepid::FieldContainer<double> & getWeightedMeasures();
   Intrepid::FieldContainer<double> getCellMeasures();
-  Teuchos::RCP< const Intrepid::FieldContainer<double> > getTransformedValues(BasisPtr basis, IntrepidExtendedTypes::EOperatorExtended op, bool useCubPointsSideRefCell = false);
-  Teuchos::RCP< const Intrepid::FieldContainer<double> > getTransformedWeightedValues(BasisPtr basis, IntrepidExtendedTypes::EOperatorExtended op, bool useCubPointsSideRefCell = false);
+  Teuchos::RCP< const Intrepid::FieldContainer<double> > getTransformedValues(BasisPtr basis, IntrepidExtendedTypes::EOperator op, bool useCubPointsSideRefCell = false);
+  Teuchos::RCP< const Intrepid::FieldContainer<double> > getTransformedWeightedValues(BasisPtr basis, IntrepidExtendedTypes::EOperator op, bool useCubPointsSideRefCell = false);
   
   // side variants:
-  Teuchos::RCP< const Intrepid::FieldContainer<double> > getValues(BasisPtr basis, IntrepidExtendedTypes::EOperatorExtended op, int sideOrdinal, bool useCubPointsSideRefCell = false);
-  Teuchos::RCP< const Intrepid::FieldContainer<double> > getTransformedValues(BasisPtr basis, IntrepidExtendedTypes::EOperatorExtended op, int sideOrdinal, bool useCubPointsSideRefCell = false);
-  Teuchos::RCP< const Intrepid::FieldContainer<double> > getTransformedWeightedValues(BasisPtr basis, IntrepidExtendedTypes::EOperatorExtended op, int sideOrdinal, bool useCubPointsSideRefCell = false);
+  Teuchos::RCP< const Intrepid::FieldContainer<double> > getValues(BasisPtr basis, IntrepidExtendedTypes::EOperator op, int sideOrdinal, bool useCubPointsSideRefCell = false);
+  Teuchos::RCP< const Intrepid::FieldContainer<double> > getTransformedValues(BasisPtr basis, IntrepidExtendedTypes::EOperator op, int sideOrdinal, bool useCubPointsSideRefCell = false);
+  Teuchos::RCP< const Intrepid::FieldContainer<double> > getTransformedWeightedValues(BasisPtr basis, IntrepidExtendedTypes::EOperator op, int sideOrdinal, bool useCubPointsSideRefCell = false);
   
   bool isSideCache();
   Teuchos::RCP<BasisCache> getSideBasisCache(int sideOrdinal);

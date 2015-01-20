@@ -50,11 +50,11 @@ const string & BF::trialName(int trialID) {
   return _varFactory.trial(trialID)->name();
 }
 
-EFunctionSpaceExtended BF::functionSpaceForTest(int testID) {
+IntrepidExtendedTypes::EFunctionSpace BF::functionSpaceForTest(int testID) {
   return efsForSpace(_varFactory.test(testID)->space());
 }
 
-EFunctionSpaceExtended BF::functionSpaceForTrial(int trialID) {
+IntrepidExtendedTypes::EFunctionSpace BF::functionSpaceForTrial(int trialID) {
   return efsForSpace(_varFactory.trial(trialID)->space());
 }
 

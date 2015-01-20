@@ -50,14 +50,14 @@ namespace Camellia {
   }
 
   template<class Scalar, class ArrayScalar>
-  void TensorBasis<Scalar,ArrayScalar>::getTensorValues(ArrayScalar& outputValues, std::vector< const ArrayScalar> & componentOutputValuesVector, std::vector<EOperator> operatorTypes) const {
+  void TensorBasis<Scalar,ArrayScalar>::getTensorValues(ArrayScalar& outputValues, std::vector< const ArrayScalar> & componentOutputValuesVector, std::vector<Intrepid::EOperator> operatorTypes) const {
     // outputValues can have dimensions (C,F,P,...) or (F,P,...)
     
     if (operatorTypes.size() != 2) {
       TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument, "only two-component tensor bases supported right now");
     }
     
-    EOperator spatialOperator = operatorTypes[0];
+    Intrepid::EOperator spatialOperator = operatorTypes[0];
     int rankAdjustment;
     switch (spatialOperator) {
       case(OPERATOR_VALUE):
@@ -184,7 +184,7 @@ namespace Camellia {
   
   template<class Scalar, class ArrayScalar>
   void TensorBasis<Scalar,ArrayScalar>::getValues(ArrayScalar &values, const ArrayScalar &refPoints,
-                                                  EOperator spatialOperatorType, EOperator temporalOperatorType) const {
+                                                  Intrepid::EOperator spatialOperatorType, Intrepid::EOperator temporalOperatorType) const {
     bool gradInBoth = (spatialOperatorType==OPERATOR_GRAD) && (temporalOperatorType==OPERATOR_GRAD);
     this->CHECK_VALUES_ARGUMENTS(values,refPoints,spatialOperatorType);
     

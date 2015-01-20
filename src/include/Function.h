@@ -55,10 +55,10 @@ public:
 
   virtual bool boundaryValueOnly() { return false; } // if true, indicates a function defined only on element boundaries (mesh skeleton)
 
-  virtual void values(FieldContainer<double> &values, EOperatorExtended op, BasisCachePtr basisCache);
+  virtual void values(FieldContainer<double> &values, IntrepidExtendedTypes::EOperator op, BasisCachePtr basisCache);
   virtual void values(FieldContainer<double> &values, BasisCachePtr basisCache) = 0;
 
-  static FunctionPtr op(FunctionPtr f, EOperatorExtended op);
+  static FunctionPtr op(FunctionPtr f, IntrepidExtendedTypes::EOperator op);
 
   virtual FunctionPtr x();
   virtual FunctionPtr y();

@@ -33,7 +33,7 @@ public:
   PointBasis();
   
   void getValues(ArrayScalar &outputValues, const ArrayScalar &  inputPoints,
-                 const EOperator operatorType) const;
+                 const Intrepid::EOperator operatorType) const;
 };
 
 typedef Teuchos::RCP< PointBasis<> > PointBasisPtr;

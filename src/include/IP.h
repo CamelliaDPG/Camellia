@@ -78,8 +78,8 @@ public:
   virtual bool hasBoundaryTerms();
   
   virtual void operators(int testID1, int testID2,
-                         std::vector<IntrepidExtendedTypes::EOperatorExtended> &testOp1,
-                         std::vector<IntrepidExtendedTypes::EOperatorExtended> &testOp2);
+                         std::vector<IntrepidExtendedTypes::EOperator> &testOp1,
+                         std::vector<IntrepidExtendedTypes::EOperator> &testOp2);
   
   virtual void printInteractions();
   
@@ -87,7 +87,7 @@ public:
 
   static Teuchos::RCP<IP> ip();
   
-  static pair<Teuchos::RCP<IP>, VarPtr > standardInnerProductForFunctionSpace(IntrepidExtendedTypes::EFunctionSpaceExtended fs, bool useTraceVar, int spaceDim);
+  static pair<Teuchos::RCP<IP>, VarPtr > standardInnerProductForFunctionSpace(IntrepidExtendedTypes::EFunctionSpace fs, bool useTraceVar, int spaceDim);
 };
 
 typedef Teuchos::RCP<IP> IPPtr;

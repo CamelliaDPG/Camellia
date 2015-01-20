@@ -74,7 +74,7 @@ public:
    
    */
   void getTensorValues(ArrayScalar& outputValues, std::vector< const ArrayScalar> & componentOutputValues,
-                       std::vector<EOperator> operatorTypes) const;
+                       std::vector<Intrepid::EOperator> operatorTypes) const;
 
   /** \brief  Returns the basis corresponding to the provided tensorial rank.
    
@@ -107,7 +107,7 @@ public:
    \param  operatorType   [in] - the operator to use when evaluating the spatial basis.  (OPERATOR_VALUE assumed for the temporal basis)
 
    */
-  void getValues(ArrayScalar &values, const ArrayScalar &refPoints, EOperator operatorType) const;
+  void getValues(ArrayScalar &values, const ArrayScalar &refPoints, Intrepid::EOperator operatorType) const;
   
   /** \brief  Computes the values of the basis at the provided points.
    
@@ -117,7 +117,7 @@ public:
    \param  temporalOperatorType  [in] - the operator to use when evaluating the temporal basis.
    
    */
-  void getValues(ArrayScalar &values, const ArrayScalar &refPoints, EOperator spatialOperatorType, EOperator temporalOperatorType) const;
+  void getValues(ArrayScalar &values, const ArrayScalar &refPoints, Intrepid::EOperator spatialOperatorType, Intrepid::EOperator temporalOperatorType) const;
 };
 
 typedef Teuchos::RCP<TensorBasis<> > TensorBasisPtr;

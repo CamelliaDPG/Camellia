@@ -46,9 +46,9 @@ class TransfiniteInterpolatingSurface : public ParametricSurface {
   vector< ParametricCurvePtr > _curves;
   vector< pair<double, double> > _vertices;
   bool _neglectVertices; // if true, then the value returned by value() is a "bubble" value...
-  EOperatorExtended _op;
+  IntrepidExtendedTypes::EOperator _op;
   
-  void init(const vector< ParametricCurvePtr > &curves, EOperatorExtended op,
+  void init(const vector< ParametricCurvePtr > &curves, IntrepidExtendedTypes::EOperator op,
             const vector< pair<double, double> > &vertices) {
     if ((op != OP_VALUE) && (op != OP_DX) && (op != OP_DY)) {
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unsupported operator");
@@ -92,7 +92,7 @@ class TransfiniteInterpolatingSurface : public ParametricSurface {
     }
   }
 protected:
-  TransfiniteInterpolatingSurface(const vector< ParametricCurvePtr > &curves, EOperatorExtended op,
+  TransfiniteInterpolatingSurface(const vector< ParametricCurvePtr > &curves, IntrepidExtendedTypes::EOperator op,
                                   const vector< pair<double, double> > &vertices) {
     init(curves, op, vertices);
   }

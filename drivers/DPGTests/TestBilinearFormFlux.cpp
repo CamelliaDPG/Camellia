@@ -22,7 +22,8 @@ const string & TestBilinearFormFlux::trialName(int trialID) {
 }
   
 bool TestBilinearFormFlux::trialTestOperator(int trialID, int testID, 
-                                             EOperatorExtended &trialOperator, EOperatorExtended &testOperator) {
+                                             IntrepidExtendedTypes::EOperator &trialOperator,
+                                             IntrepidExtendedTypes::EOperator &testOperator) {
   trialOperator = OP_VALUE;
   testOperator  = OP_VALUE;
   return true;
@@ -34,11 +35,11 @@ void TestBilinearFormFlux::applyBilinearFormData(int trialID, int testID,
     // leave values as they are...             
 }
   
-EFunctionSpaceExtended TestBilinearFormFlux::functionSpaceForTest(int testID) {
+IntrepidExtendedTypes::EFunctionSpace TestBilinearFormFlux::functionSpaceForTest(int testID) {
   return IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD;
 }
   
-EFunctionSpaceExtended TestBilinearFormFlux::functionSpaceForTrial(int trialID) {
+IntrepidExtendedTypes::EFunctionSpace TestBilinearFormFlux::functionSpaceForTrial(int trialID) {
   return IntrepidExtendedTypes::FUNCTION_SPACE_HVOL;
 }
   

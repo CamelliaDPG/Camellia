@@ -25,15 +25,15 @@ public:
   
   // BILINEAR FORM:
   virtual void trialTestOperators(int trialID, int testID, 
-                                  vector<EOperatorExtended> &trialOps,
-                                  vector<EOperatorExtended> &testOps);
+                                  vector<IntrepidExtendedTypes::EOperator> &trialOps,
+                                  vector<IntrepidExtendedTypes::EOperator> &testOps);
   
   virtual void applyBilinearFormData(FieldContainer<double> &trialValues, FieldContainer<double> &testValues, 
                                      int trialID, int testID, int operatorIndex,
                                      Teuchos::RCP<BasisCache> basisCache);
   
-  virtual IntrepidExtendedTypes::EFunctionSpaceExtended functionSpaceForTest(int testID);
-  virtual IntrepidExtendedTypes::EFunctionSpaceExtended functionSpaceForTrial(int trialID); 
+  virtual IntrepidExtendedTypes::EFunctionSpace functionSpaceForTest(int testID);
+  virtual IntrepidExtendedTypes::EFunctionSpace functionSpaceForTrial(int trialID); 
   
   virtual bool isFluxOrTrace(int trialID);
   
@@ -42,7 +42,7 @@ public:
   
   // RHS:
   bool nonZeroRHS(int testVarID);
-  vector<EOperatorExtended> operatorsForTestID(int testID);
+  vector<IntrepidExtendedTypes::EOperator> operatorsForTestID(int testID);
   virtual void rhs(int testVarID, int operatorIndex, Teuchos::RCP<BasisCache> basisCache, 
                    FieldContainer<double> &values);
   

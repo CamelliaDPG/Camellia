@@ -215,7 +215,7 @@ public:
                       int sideIndex);
   void solutionValues(FieldContainer<double> &values, int trialID, const FieldContainer<double> &physicalPoints); // searches for the elements that match the points provided
   void solutionValues(FieldContainer<double> &values, int trialID, BasisCachePtr basisCache,
-                      bool weightForCubature = false, EOperatorExtended op = OP_VALUE);
+                      bool weightForCubature = false, IntrepidExtendedTypes::EOperator op = OP_VALUE);
 
   void solnCoeffsForCellID(FieldContainer<double> &solnCoeffs, GlobalIndexType cellID, int trialID, int sideIndex=0);
   void setSolnCoeffsForCellID(FieldContainer<double> &solnCoeffsToSet, GlobalIndexType cellID, int trialID, int sideIndex=0);

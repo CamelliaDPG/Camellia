@@ -174,7 +174,7 @@ double Function::getTime()
   return _time;
 }
 
-void Function::values(FieldContainer<double> &values, EOperatorExtended op, BasisCachePtr basisCache) {
+void Function::values(FieldContainer<double> &values, IntrepidExtendedTypes::EOperator op, BasisCachePtr basisCache) {
   switch (op) {
     case IntrepidExtendedTypes::OP_VALUE:
       this->values(values, basisCache);
@@ -205,7 +205,7 @@ void Function::values(FieldContainer<double> &values, EOperatorExtended op, Basi
   }
 }
 
-FunctionPtr Function::op(FunctionPtr f, IntrepidExtendedTypes::EOperatorExtended op) {
+FunctionPtr Function::op(FunctionPtr f, IntrepidExtendedTypes::EOperator op) {
   if ( isNull(f) ) {
     return Function::null();
   }
@@ -2040,7 +2040,7 @@ FunctionPtr VectorizedFunction::z() {
 
 FunctionPtr VectorizedFunction::di(int i) {
   // derivative in the ith coordinate direction
-  EOperatorExtended op;
+  IntrepidExtendedTypes::EOperator op;
   switch (i) {
     case 0:
       op = IntrepidExtendedTypes::OP_DX;

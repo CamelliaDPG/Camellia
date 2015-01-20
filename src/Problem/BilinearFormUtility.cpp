@@ -334,15 +334,15 @@ void BilinearFormUtility::computeOptimalStiffnessMatrix(FieldContainer<double> &
       for (testIterator = testIDs.begin(); testIterator != testIDs.end(); testIterator++) {
         int testID = *testIterator;
         
-        vector<EOperatorExtended> trialOperators, testOperators;
+        vector<IntrepidExtendedTypes::EOperator> trialOperators, testOperators;
         bilinearForm->trialTestOperators(trialID, testID, trialOperators, testOperators);
-        vector<EOperatorExtended>::iterator trialOpIt, testOpIt;
+        vector<IntrepidExtendedTypes::EOperator>::iterator trialOpIt, testOpIt;
         testOpIt = testOperators.begin();
         
         int operatorIndex = -1;
         for (trialOpIt = trialOperators.begin(); trialOpIt != trialOperators.end(); trialOpIt++) {
-          IntrepidExtendedTypes::EOperatorExtended trialOperator = *trialOpIt;
-          IntrepidExtendedTypes::EOperatorExtended testOperator = *testOpIt;
+          IntrepidExtendedTypes::EOperator trialOperator = *trialOpIt;
+          IntrepidExtendedTypes::EOperator testOperator = *testOpIt;
           operatorIndex++;
           
           if (testOperator==OP_TIMES_NORMAL) {
@@ -396,7 +396,7 @@ void BilinearFormUtility::computeOptimalStiffnessMatrix(FieldContainer<double> &
                                "Boundary trial variable (flux or trace) given with non-scalar basis.  Unsupported.");
             
             bool isFlux = false; // i.e. the normal is "folded into" the variable definition, so that we must take parity into account
-            const set<IntrepidExtendedTypes::EOperatorExtended> normalOperators = IntrepidExtendedTypes::normalOperators();
+            const set<IntrepidExtendedTypes::EOperator> normalOperators = IntrepidExtendedTypes::normalOperators();
             if (   (normalOperators.find(testOperator)  == normalOperators.end() ) 
                 && (normalOperators.find(trialOperator) == normalOperators.end() ) ) {
               // normal not yet taken into account -- so it must be "hidden" in the trial variable

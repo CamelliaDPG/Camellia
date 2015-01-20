@@ -51,7 +51,7 @@ namespace Camellia {
     int rangeDimension() const;
     int rangeRank() const;
     
-    void getValues(ArrayScalar &values, const ArrayScalar &refPoints, EOperator operatorType) const;
+    void getValues(ArrayScalar &values, const ArrayScalar &refPoints, Intrepid::EOperator operatorType) const;
   };
   typedef Teuchos::RCP<VectorizedBasis<> > VectorBasisPtr;
 

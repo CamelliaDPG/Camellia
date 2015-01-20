@@ -40,7 +40,7 @@ static const string & S_OP_TIMES_NORMAL_T = " \\widehat{n}_t ";
 static const string & S_OP_VECTORIZE_VALUE = ""; // handle this one separately...
 static const string & S_OP_UNKNOWN = "[UNKNOWN OPERATOR] ";
 
-IntrepidExtendedTypes::EFunctionSpaceExtended VarFunctionSpaces::efsForSpace(Space space) {
+IntrepidExtendedTypes::EFunctionSpace VarFunctionSpaces::efsForSpace(Space space) {
   switch (space) {
     case HDIV:
       return IntrepidExtendedTypes::FUNCTION_SPACE_HDIV;
@@ -118,7 +118,7 @@ int VarFunctionSpaces::rankForSpace(Space space) {
   }
 }
 
-Space VarFunctionSpaces::spaceForEFS(IntrepidExtendedTypes::EFunctionSpaceExtended efs) {
+Space VarFunctionSpaces::spaceForEFS(IntrepidExtendedTypes::EFunctionSpace efs) {
   switch (efs) {
     case IntrepidExtendedTypes::FUNCTION_SPACE_HDIV:
       return HDIV;
@@ -182,7 +182,7 @@ Space VarFunctionSpaces::spaceForEFS(IntrepidExtendedTypes::EFunctionSpaceExtend
 }
 
 VarPtr Var::varForTrialID(int trialID, Teuchos::RCP<BilinearForm> bf) {
-  IntrepidExtendedTypes::EFunctionSpaceExtended efs = bf->functionSpaceForTrial(trialID);
+  IntrepidExtendedTypes::EFunctionSpace efs = bf->functionSpaceForTrial(trialID);
   Space space = spaceForEFS(efs);
   int rank = rankForSpace(space);
 //  if (efs == IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD) {
@@ -234,7 +234,7 @@ VarPtr Var::varForTrialID(int trialID, Teuchos::RCP<BilinearForm> bf) {
   return Teuchos::rcp(new Var(trialID, rank, "trial", OP_VALUE, space, varType));
 }
 
-Var::Var(int ID, int rank, string name, IntrepidExtendedTypes::EOperatorExtended op, Space fs, VarType varType, LinearTermPtr termTraced,
+Var::Var(int ID, int rank, string name, IntrepidExtendedTypes::EOperator op, Space fs, VarType varType, LinearTermPtr termTraced,
          bool definedOnTemporalInterfaces) {
   _id = ID;
   _rank = rank;
@@ -258,7 +258,7 @@ const string & Var::name() const {
   return _name; 
 }
 
-const string & operatorName(IntrepidExtendedTypes::EOperatorExtended op) {
+const string & operatorName(IntrepidExtendedTypes::EOperator op) {
   switch (op) {
     case  IntrepidExtendedTypes::OP_VALUE:
       return S_OP_VALUE; 
@@ -347,7 +347,7 @@ const string & operatorName(IntrepidExtendedTypes::EOperatorExtended op) {
   }
 }
 
-bool isRightOperator(IntrepidExtendedTypes::EOperatorExtended op) { // as opposed to left
+bool isRightOperator(IntrepidExtendedTypes::EOperator op) { // as opposed to left
   set<int> _normalOperators;
   _normalOperators.insert(OP_CROSS_NORMAL);
   _normalOperators.insert(OP_DOT_NORMAL);
@@ -368,7 +368,7 @@ string Var::displayString() const {
   return varStream.str();
 }
 
-EOperatorExtended Var::op() const {
+IntrepidExtendedTypes::EOperator Var::op() const {
   return _op; 
 }
 

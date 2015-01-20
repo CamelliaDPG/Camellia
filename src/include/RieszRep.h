@@ -108,7 +108,7 @@ class RieszRep {
 
   void distributeDofs();
 
-  void computeRepresentationValues(FieldContainer<double> &values, int testID, IntrepidExtendedTypes::EOperatorExtended op, BasisCachePtr basisCache);
+  void computeRepresentationValues(FieldContainer<double> &values, int testID, IntrepidExtendedTypes::EOperator op, BasisCachePtr basisCache);
 
   double computeAlternativeNormSqOnCell(IPPtr ip, ElementPtr elem);
   map<GlobalIndexType,double> computeAlternativeNormSqOnCells(IPPtr ip, vector<GlobalIndexType> cellIDs);
@@ -125,7 +125,7 @@ private:
   
   int _testID;
   Teuchos::RCP<RieszRep> _rep;
-  IntrepidExtendedTypes::EOperatorExtended _op;
+  IntrepidExtendedTypes::EOperator _op;
 public:
   RepFunction( VarPtr var, RieszRepPtr rep ) : Function( var->rank() ) {
     _testID = var->ID();
@@ -143,14 +143,14 @@ public:
   */
 
   // optional specification of operator to apply - default to rank 0
- RepFunction(int testID,Teuchos::RCP<RieszRep> rep, IntrepidExtendedTypes::EOperatorExtended op): Function(0){
+ RepFunction(int testID,Teuchos::RCP<RieszRep> rep, IntrepidExtendedTypes::EOperator op): Function(0){
     _testID = testID;
     _rep = rep;   
     _op = op;
   }   
  
   // specification of function rank
- RepFunction(int testID,Teuchos::RCP<RieszRep> rep, IntrepidExtendedTypes::EOperatorExtended op, int fxnRank): Function(fxnRank){
+ RepFunction(int testID,Teuchos::RCP<RieszRep> rep, IntrepidExtendedTypes::EOperator op, int fxnRank): Function(fxnRank){
     _testID = testID;
     _rep = rep;   
     _op = op;
@@ -181,7 +181,7 @@ public:
   }
 
   // for specifying an operator
-  void values(FieldContainer<double> &values, IntrepidExtendedTypes::EOperatorExtended op, BasisCachePtr basisCache){
+  void values(FieldContainer<double> &values, IntrepidExtendedTypes::EOperator op, BasisCachePtr basisCache){
     _rep->computeRepresentationValues(values, _testID, op, basisCache);
   }
 };

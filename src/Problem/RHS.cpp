@@ -87,12 +87,12 @@ void RHS::integrateAgainstStandardBasis(FieldContainer<double> &rhsVector,
       for (testIterator = testIDs.begin(); testIterator != testIDs.end(); testIterator++) {
         int testID = *testIterator;
         
-        vector<EOperatorExtended> testOperators = this->operatorsForTestID(testID);
+        vector<IntrepidExtendedTypes::EOperator> testOperators = this->operatorsForTestID(testID);
         int operatorIndex = -1;
-        for (vector<EOperatorExtended>::iterator testOpIt=testOperators.begin();
+        for (vector<IntrepidExtendedTypes::EOperator>::iterator testOpIt=testOperators.begin();
              testOpIt != testOperators.end(); testOpIt++) {
           operatorIndex++;
-          IntrepidExtendedTypes::EOperatorExtended testOperator = *testOpIt;
+          IntrepidExtendedTypes::EOperator testOperator = *testOpIt;
           bool notZero = this->nonZeroRHS(testID);
           if (notZero) { // compute the integral(s)
             

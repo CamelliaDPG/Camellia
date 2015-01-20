@@ -59,7 +59,7 @@ public:
   }
   
   bool trialTestOperator(int trialID, int testID, 
-                         EOperatorExtended &trialOperator, EOperatorExtended &testOperator) {
+                         IntrepidExtendedTypes::EOperator &trialOperator, IntrepidExtendedTypes::EOperator &testOperator) {
     trialOperator = IntrepidExtendedTypes::OP_VALUE;
     testOperator  = IntrepidExtendedTypes::OP_DOT_NORMAL;
     return true;
@@ -71,11 +71,11 @@ public:
     // leave values as they are...             
   }
   
-  EFunctionSpaceExtended functionSpaceForTest(int testID) {
+  IntrepidExtendedTypes::EFunctionSpace functionSpaceForTest(int testID) {
     return IntrepidExtendedTypes::FUNCTION_SPACE_HDIV;
   }
   
-  EFunctionSpaceExtended functionSpaceForTrial(int trialID) {
+  IntrepidExtendedTypes::EFunctionSpace functionSpaceForTrial(int trialID) {
     return IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD;
   }
   

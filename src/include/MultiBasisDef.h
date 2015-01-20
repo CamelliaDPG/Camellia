@@ -172,7 +172,7 @@ namespace Camellia {
 
   template<class Scalar, class ArrayScalar>
   void MultiBasis<Scalar, ArrayScalar>::getValues(ArrayScalar &outputValues, const ArrayScalar &  inputPoints,
-                                                  const EOperator operatorType) const {
+                                                  const Intrepid::EOperator operatorType) const {
     // compute cellJacobian, etc. for inputPoints:
     // inputPoints dimensions (P, D)
     // outputValues dimensions (F,P), (F,P,D), or (F,P,D,D)
@@ -255,7 +255,7 @@ namespace Camellia {
       computeCellJacobians(cellJacobian,cellJacobInv,cellJacobDet, inputPointsRefCell,refCellIndex);
       
       Teuchos::RCP< ArrayScalar > transformedValues = BasisEvaluation::getTransformedValues(basis,
-                                                                                            (IntrepidExtendedTypes::EOperatorExtended)operatorType,
+                                                                                            (IntrepidExtendedTypes::EOperator)operatorType,
                                                                                             inputPointsRefCell,
                                                                                             cellJacobian, cellJacobInv, cellJacobDet);
       

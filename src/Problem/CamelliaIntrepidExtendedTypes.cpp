@@ -4,7 +4,7 @@
 
 using namespace IntrepidExtendedTypes;
 
-bool IntrepidExtendedTypes::functionSpaceIsVectorized(EFunctionSpaceExtended fs) {
+bool IntrepidExtendedTypes::functionSpaceIsVectorized(EFunctionSpace fs) {
   return (FUNCTION_SPACE_VECTOR_HGRAD == fs)
   ||     (FUNCTION_SPACE_TENSOR_HGRAD == fs)
   ||     (FUNCTION_SPACE_VECTOR_HVOL  == fs)
@@ -13,7 +13,7 @@ bool IntrepidExtendedTypes::functionSpaceIsVectorized(EFunctionSpaceExtended fs)
   ||     (FUNCTION_SPACE_TENSOR_HGRAD_DISC == fs);
 }
 
-bool IntrepidExtendedTypes::functionSpaceIsDiscontinuous(IntrepidExtendedTypes::EFunctionSpaceExtended fs) {
+bool IntrepidExtendedTypes::functionSpaceIsDiscontinuous(IntrepidExtendedTypes::EFunctionSpace fs) {
   switch (fs) {
     case FUNCTION_SPACE_HVOL:
     case FUNCTION_SPACE_VECTOR_HVOL:
@@ -31,7 +31,7 @@ bool IntrepidExtendedTypes::functionSpaceIsDiscontinuous(IntrepidExtendedTypes::
   return false;
 }
 
-EFunctionSpaceExtended IntrepidExtendedTypes::discontinuousSpaceForContinuous(IntrepidExtendedTypes::EFunctionSpaceExtended fs_continuous) {
+EFunctionSpace IntrepidExtendedTypes::discontinuousSpaceForContinuous(IntrepidExtendedTypes::EFunctionSpace fs_continuous) {
   switch (fs_continuous) {
     case FUNCTION_SPACE_HVOL:
     case FUNCTION_SPACE_VECTOR_HVOL:
@@ -55,7 +55,7 @@ EFunctionSpaceExtended IntrepidExtendedTypes::discontinuousSpaceForContinuous(In
   }
 }
 
-EFunctionSpaceExtended IntrepidExtendedTypes::continuousSpaceForDiscontinuous(IntrepidExtendedTypes::EFunctionSpaceExtended fs_disc) {
+EFunctionSpace IntrepidExtendedTypes::continuousSpaceForDiscontinuous(IntrepidExtendedTypes::EFunctionSpace fs_disc) {
   switch (fs_disc) {
     case FUNCTION_SPACE_HVOL:
     case FUNCTION_SPACE_VECTOR_HVOL:
@@ -79,8 +79,8 @@ EFunctionSpaceExtended IntrepidExtendedTypes::continuousSpaceForDiscontinuous(In
   }
 }
 
-const std::set<EOperatorExtended> & IntrepidExtendedTypes::normalOperators() {
-  static std::set<EOperatorExtended> _normalOperators;
+const std::set<EOperator> & IntrepidExtendedTypes::normalOperators() {
+  static std::set<EOperator> _normalOperators;
   if (_normalOperators.size() == 0) {
     _normalOperators.insert(OP_CROSS_NORMAL);
     _normalOperators.insert(OP_DOT_NORMAL);

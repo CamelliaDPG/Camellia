@@ -39,7 +39,7 @@
 #include "OptimalInnerProduct.h"
 #include "SerialDenseWrapper.h"
 
-typedef pair<IntrepidExtendedTypes::EOperatorExtended, int > OpOpIndexPair;
+typedef pair<IntrepidExtendedTypes::EOperator, int > OpOpIndexPair;
 
 OptimalInnerProduct::OptimalInnerProduct(Teuchos::RCP< BilinearForm > bf) : IP(bf) {
   _beta = 1; // TODO: allow this to be controlled from outside
@@ -51,20 +51,20 @@ OptimalInnerProduct::OptimalInnerProduct(Teuchos::RCP< BilinearForm > bf) : IP(b
     int trialID = *trialIt;
     cout << "*********** optimal test Interactions for trial variable " << _bilinearForm->trialName(trialID) << "************" << endl;
     vector<int> myTestIDs;
-    vector<vector<IntrepidExtendedTypes::EOperatorExtended> > ops;
+    vector<vector<IntrepidExtendedTypes::EOperator> > ops;
     for (vector<int>::iterator testIt=testIDs.begin();
          testIt != testIDs.end(); testIt++) {
       int testID = *testIt;
-      vector<EOperatorExtended> trialOperators, testOperators;
+      vector<IntrepidExtendedTypes::EOperator> trialOperators, testOperators;
       bf->trialTestOperators(trialID, testID, trialOperators, testOperators);
-      vector<EOperatorExtended>::iterator trialOpIt, testOpIt;
+      vector<IntrepidExtendedTypes::EOperator>::iterator trialOpIt, testOpIt;
       testOpIt = testOperators.begin();
       // NVR moved next two lines outside the for loop below 11/14/11
-      vector<IntrepidExtendedTypes::EOperatorExtended> testOps;
+      vector<IntrepidExtendedTypes::EOperator> testOps;
       myTestIDs.push_back(testID);
       for (trialOpIt = trialOperators.begin(); trialOpIt != trialOperators.end(); trialOpIt++) {
-        IntrepidExtendedTypes::EOperatorExtended op1 = *trialOpIt;
-        IntrepidExtendedTypes::EOperatorExtended op2 = *testOpIt;
+        IntrepidExtendedTypes::EOperator op1 = *trialOpIt;
+        IntrepidExtendedTypes::EOperator op2 = *testOpIt;
 
         // there is a live combination
         // op1 will always be value
@@ -107,22 +107,22 @@ OptimalInnerProduct::OptimalInnerProduct(Teuchos::RCP< BilinearForm > bf) : IP(b
         cout << _bilinearForm->testName(testID1) << " " << _bilinearForm->testName(testID1);
         first = false;
       } else {
-        vector<IntrepidExtendedTypes::EOperatorExtended> ops1 = ops[test1Index];
+        vector<IntrepidExtendedTypes::EOperator> ops1 = ops[test1Index];
         int test2Index = -1;
         for (vector<int>::iterator testIt2=myTestIDs.begin();
              testIt2 != myTestIDs.end(); testIt2++) {
           test2Index++;
           int testID2 = *testIt2;
           pair<int,int> key = make_pair(testID1, testID2);
-          vector<IntrepidExtendedTypes::EOperatorExtended> ops2 = ops[test2Index];
-          vector<IntrepidExtendedTypes::EOperatorExtended>::iterator op1It, op2It;
+          vector<IntrepidExtendedTypes::EOperator> ops2 = ops[test2Index];
+          vector<IntrepidExtendedTypes::EOperator>::iterator op1It, op2It;
           int op1Index = -1;
           for (op1It = ops1.begin(); op1It != ops1.end(); op1It++) {
-            IntrepidExtendedTypes::EOperatorExtended op1 = *op1It;
+            IntrepidExtendedTypes::EOperator op1 = *op1It;
             op1Index++;
             int op2Index = -1;
             for (op2It = ops2.begin(); op2It != ops2.end(); op2It++) {
-              IntrepidExtendedTypes::EOperatorExtended op2 = *op2It;
+              IntrepidExtendedTypes::EOperator op2 = *op2It;
               op2Index++;
               OpOpIndexPair op1Pair = make_pair(op1,op1Index);
               OpOpIndexPair op2Pair = make_pair(op2,op2Index);
@@ -143,8 +143,8 @@ OptimalInnerProduct::OptimalInnerProduct(Teuchos::RCP< BilinearForm > bf) : IP(b
 
 
 void OptimalInnerProduct::operators(int testID1, int testID2, 
-               vector<IntrepidExtendedTypes::EOperatorExtended> &testOp1,
-               vector<IntrepidExtendedTypes::EOperatorExtended> &testOp2) {
+               vector<IntrepidExtendedTypes::EOperator> &testOp1,
+               vector<IntrepidExtendedTypes::EOperator> &testOp2) {
   testOp1.clear();
   testOp2.clear();
   pair<int, int> key = make_pair(testID1,testID2);

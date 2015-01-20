@@ -157,8 +157,8 @@ void DPGTests::createBases() {
   shards::CellTopology line_2(shards::getCellTopologyData<shards::Line<2> >() );
   BasisPtr basis;
   int rangeDimension = 2, scalarRank = 0, vectorRank = 1;
-  IntrepidExtendedTypes::EFunctionSpaceExtended hgrad = IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD;
-  IntrepidExtendedTypes::EFunctionSpaceExtended hdiv = IntrepidExtendedTypes::FUNCTION_SPACE_HDIV;
+  IntrepidExtendedTypes::EFunctionSpace hgrad = IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD;
+  IntrepidExtendedTypes::EFunctionSpace hdiv = IntrepidExtendedTypes::FUNCTION_SPACE_HDIV;
   
   basis = Teuchos::rcp( new IntrepidBasisWrapper<>(Teuchos::rcp( new Basis_HGRAD_QUAD_C1_FEM<double,FieldContainer<double> >()), rangeDimension, scalarRank, hgrad) );
   BasisFactory::basisFactory()->registerBasis(basis,0, C1_FAKE_POLY_ORDER, quad_4.getKey(), hgrad);
@@ -2489,7 +2489,7 @@ bool DPGTests::testProjection(){
   Projector::projectFunctionOntoBasis(basisCoefficients, simpleFunction, basis, physicalCellNodes);      
 
   int numDofs = basis->getCardinality();
-  EOperatorExtended op = IntrepidExtendedTypes::OP_VALUE;
+  IntrepidExtendedTypes::EOperator op = IntrepidExtendedTypes::OP_VALUE;
   FieldContainer<double> cubPoints = basisCache.getPhysicalCubaturePoints();    
   FieldContainer<double> basisValues = *(basisCache.getTransformedValues(basis, op));
   int numPts = cubPoints.dimension(1);

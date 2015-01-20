@@ -62,7 +62,7 @@ void roundToOneOrZero(double &value, double tol) {
 class CellTransformationFunction : public Function {
   FieldContainer<double> _basisCoefficients;
   VectorBasisPtr _basis;
-  EOperatorExtended _op;
+  IntrepidExtendedTypes::EOperator _op;
   int _cellIndex; // index into BasisCache's list of cellIDs; must be set prior to each call to values() (there's a reason why this is a private class!)
   
   FieldContainer<double> pointLatticeQuad(int numPointsTotal, const vector< ParametricCurvePtr > &edgeFunctions) {
@@ -107,7 +107,7 @@ class CellTransformationFunction : public Function {
   }
   
 protected:
-  CellTransformationFunction(VectorBasisPtr basis, FieldContainer<double> &basisCoefficients, EOperatorExtended op) : Function(1) {
+  CellTransformationFunction(VectorBasisPtr basis, FieldContainer<double> &basisCoefficients, IntrepidExtendedTypes::EOperator op) : Function(1) {
     _basis = basis;
     _basisCoefficients = basisCoefficients;
     _op = op;
@@ -245,7 +245,7 @@ public:
 typedef Teuchos::RCP<CellTransformationFunction> CellTransformationFunctionPtr;
 
 // protected method; used for dx(), dy(), dz():
-MeshTransformationFunction::MeshTransformationFunction(MeshPtr mesh, map< GlobalIndexType, FunctionPtr> cellTransforms, EOperatorExtended op) : Function(1) {
+MeshTransformationFunction::MeshTransformationFunction(MeshPtr mesh, map< GlobalIndexType, FunctionPtr> cellTransforms, IntrepidExtendedTypes::EOperator op) : Function(1) {
   _mesh = mesh;
   _cellTransforms = cellTransforms;
   _op = op;
@@ -367,7 +367,7 @@ void MeshTransformationFunction::values(FieldContainer<double> &values, BasisCac
 //  }
 }
 
-map< GlobalIndexType, FunctionPtr > applyOperatorToCellTransforms(const map< GlobalIndexType, FunctionPtr > &cellTransforms, EOperatorExtended op) {
+map< GlobalIndexType, FunctionPtr > applyOperatorToCellTransforms(const map< GlobalIndexType, FunctionPtr > &cellTransforms, IntrepidExtendedTypes::EOperator op) {
   map<GlobalIndexType, FunctionPtr > newTransforms;
   for (map< GlobalIndexType, FunctionPtr >::const_iterator cellTransformIt = cellTransforms.begin();
        cellTransformIt != cellTransforms.end(); cellTransformIt++) {
@@ -378,7 +378,7 @@ map< GlobalIndexType, FunctionPtr > applyOperatorToCellTransforms(const map< Glo
 }
 
 FunctionPtr MeshTransformationFunction::dx() {
-  EOperatorExtended op = OP_DX;
+  IntrepidExtendedTypes::EOperator op = OP_DX;
   return Teuchos::rcp( new MeshTransformationFunction(_mesh, applyOperatorToCellTransforms(_cellTransforms, op),op));
 }
 
@@ -386,7 +386,7 @@ FunctionPtr MeshTransformationFunction::dy() {
   if (_mesh->getDimension() < 2) {
     return Function::null();
   }
-  EOperatorExtended op = OP_DY;
+  IntrepidExtendedTypes::EOperator op = OP_DY;
   return Teuchos::rcp( new MeshTransformationFunction(_mesh, applyOperatorToCellTransforms(_cellTransforms, op),op));
 }
 
@@ -394,7 +394,7 @@ FunctionPtr MeshTransformationFunction::dz() {
   if (_mesh->getDimension() < 3) {
     return Function::null();
   }
-  EOperatorExtended op = OP_DZ;
+  IntrepidExtendedTypes::EOperator op = OP_DZ;
   return Teuchos::rcp( new MeshTransformationFunction(_mesh, applyOperatorToCellTransforms(_cellTransforms, op),op));
 }
 

@@ -299,7 +299,7 @@ void Boundary::bcsToImpose( map<  GlobalIndexType, double > &globalDofIndicesAnd
     if ((basis->functionSpace() == IntrepidExtendedTypes::FUNCTION_SPACE_HVOL) || (basis->functionSpace() == IntrepidExtendedTypes::FUNCTION_SPACE_HVOL_DISC)) {
       basis = BasisFactory::basisFactory()->getBasis(basis->getDegree(), basis->domainTopology(), IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD);
     } else if (IntrepidExtendedTypes::functionSpaceIsDiscontinuous(basis->functionSpace())) {
-      IntrepidExtendedTypes::EFunctionSpaceExtended fsContinuous = IntrepidExtendedTypes::continuousSpaceForDiscontinuous((basis->functionSpace()));
+      IntrepidExtendedTypes::EFunctionSpace fsContinuous = IntrepidExtendedTypes::continuousSpaceForDiscontinuous((basis->functionSpace()));
       basis = BasisFactory::basisFactory()->getBasis(basis->getDegree(), basis->domainTopology(), fsContinuous);
     }
     

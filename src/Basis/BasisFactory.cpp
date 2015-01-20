@@ -67,8 +67,8 @@ BasisFactory::BasisFactory() {
 
 using namespace Camellia;
 
-BasisPtr BasisFactory::getBasis(int H1Order, CellTopoPtr cellTopo, IntrepidExtendedTypes::EFunctionSpaceExtended functionSpaceForSpatialTopology,
-                                int temporalPolyOrder, IntrepidExtendedTypes::EFunctionSpaceExtended functionSpaceForTemporalTopology) {
+BasisPtr BasisFactory::getBasis(int H1Order, CellTopoPtr cellTopo, IntrepidExtendedTypes::EFunctionSpace functionSpaceForSpatialTopology,
+                                int temporalPolyOrder, IntrepidExtendedTypes::EFunctionSpace functionSpaceForTemporalTopology) {
   if (cellTopo->getTensorialDegree() > 1) {
     cout << "BasisFactory::getBasis() only handles 0 or 1 tensorial degree elements.\n";
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "BasisFactory::getBasis() only handles 0 or 1 tensorial degree elements.");
@@ -81,7 +81,7 @@ BasisPtr BasisFactory::getBasis(int H1Order, CellTopoPtr cellTopo, IntrepidExten
   // if we get here, have tensorial degree exactly 1.
   
   unsigned lineKey = shards::Line<2>::key;
-  pair< pair<Camellia::Basis<>*, int>, IntrepidExtendedTypes::EFunctionSpaceExtended> key = make_pair( make_pair(basisForShardsTopo.get(), temporalPolyOrder), functionSpaceForTemporalTopology );
+  pair< pair<Camellia::Basis<>*, int>, IntrepidExtendedTypes::EFunctionSpace> key = make_pair( make_pair(basisForShardsTopo.get(), temporalPolyOrder), functionSpaceForTemporalTopology );
   
   if (_spaceTimeBases.find(key) != _spaceTimeBases.end()) return _spaceTimeBases[key];
   
@@ -95,13 +95,13 @@ BasisPtr BasisFactory::getBasis(int H1Order, CellTopoPtr cellTopo, IntrepidExten
   return tensorBasis;
 }
 
-BasisPtr BasisFactory::getBasis( int polyOrder, unsigned cellTopoKey, IntrepidExtendedTypes::EFunctionSpaceExtended fs) {
+BasisPtr BasisFactory::getBasis( int polyOrder, unsigned cellTopoKey, IntrepidExtendedTypes::EFunctionSpace fs) {
   if (fs != IntrepidExtendedTypes::FUNCTION_SPACE_REAL_SCALAR) {
     TEUCHOS_TEST_FOR_EXCEPTION(polyOrder == 0, std::invalid_argument, "polyOrder = 0 unsupported");
   }
   
   BasisPtr basis;
-  pair< pair<int,int>, IntrepidExtendedTypes::EFunctionSpaceExtended > key = make_pair( make_pair(polyOrder, cellTopoKey), fs );
+  pair< pair<int,int>, IntrepidExtendedTypes::EFunctionSpace > key = make_pair( make_pair(polyOrder, cellTopoKey), fs );
   
   if ( _existingBases.find(key) != _existingBases.end() ) {
     basis = _existingBases[key];
@@ -319,7 +319,7 @@ BasisPtr BasisFactory::getBasis( int polyOrder, unsigned cellTopoKey, IntrepidEx
   return basis;
 }
 
-BasisPtr BasisFactory::getConformingBasis( int polyOrder, CellTopoPtr cellTopo, IntrepidExtendedTypes::EFunctionSpaceExtended fs,
+BasisPtr BasisFactory::getConformingBasis( int polyOrder, CellTopoPtr cellTopo, IntrepidExtendedTypes::EFunctionSpace fs,
                                           int temporalPolyOrder, FSE functionSpaceForTemporalTopology) {
   // this method is fairly redundant with getBasis(), but it provides the chance to offer different bases when a conforming basis is
   // required.
@@ -331,7 +331,7 @@ BasisPtr BasisFactory::getConformingBasis( int polyOrder, CellTopoPtr cellTopo, 
   // if we get here, have tensorial degree exactly 1.
   
   unsigned lineKey = shards::Line<2>::key;
-  pair< pair<Camellia::Basis<>*, int>, IntrepidExtendedTypes::EFunctionSpaceExtended> key = make_pair( make_pair(basisForShardsTopo.get(), temporalPolyOrder), functionSpaceForTemporalTopology );
+  pair< pair<Camellia::Basis<>*, int>, IntrepidExtendedTypes::EFunctionSpace> key = make_pair( make_pair(basisForShardsTopo.get(), temporalPolyOrder), functionSpaceForTemporalTopology );
   
   if (_conformingSpaceTimeBases.find(key) != _conformingSpaceTimeBases.end()) return _conformingSpaceTimeBases[key];
   
@@ -345,7 +345,7 @@ BasisPtr BasisFactory::getConformingBasis( int polyOrder, CellTopoPtr cellTopo, 
   return tensorBasis;
 }
 
-BasisPtr BasisFactory::getConformingBasis( int polyOrder, unsigned cellTopoKey, IntrepidExtendedTypes::EFunctionSpaceExtended fs ) {
+BasisPtr BasisFactory::getConformingBasis( int polyOrder, unsigned cellTopoKey, IntrepidExtendedTypes::EFunctionSpace fs ) {
   // this method is fairly redundant with getBasis(), but it provides the chance to offer different bases when a conforming basis is
   // required.
   
@@ -354,7 +354,7 @@ BasisPtr BasisFactory::getConformingBasis( int polyOrder, unsigned cellTopoKey, 
   }
   
   BasisPtr basis;
-  pair< pair<int,int>, IntrepidExtendedTypes::EFunctionSpaceExtended > key = make_pair( make_pair(polyOrder, cellTopoKey), fs );
+  pair< pair<int,int>, IntrepidExtendedTypes::EFunctionSpace > key = make_pair( make_pair(polyOrder, cellTopoKey), fs );
   
   // First, we call getBasis(), and if the one that it returns is conforming, we just use that.
   BasisPtr standardBasis = getBasis(polyOrder, cellTopoKey, fs);
@@ -563,7 +563,7 @@ MultiBasisPtr BasisFactory::getMultiBasis(vector< BasisPtr > &bases) {
   }
   
   int polyOrder = 0;
-  IntrepidExtendedTypes::EFunctionSpaceExtended fs;
+  IntrepidExtendedTypes::EFunctionSpace fs;
   unsigned cellTopoKey;
   
   if (numBases != 2) {
@@ -741,8 +741,8 @@ PatchBasisPtr BasisFactory::getPatchBasis(BasisPtr parent, FieldContainer<double
 }
 
 
-void BasisFactory::registerBasis( BasisPtr basis, int basisRank, int polyOrder, int cellTopoKey, IntrepidExtendedTypes::EFunctionSpaceExtended fs ) {
-  pair< pair<int,int>, IntrepidExtendedTypes::EFunctionSpaceExtended > key = make_pair( make_pair(polyOrder, cellTopoKey), fs );
+void BasisFactory::registerBasis( BasisPtr basis, int basisRank, int polyOrder, int cellTopoKey, IntrepidExtendedTypes::EFunctionSpace fs ) {
+  pair< pair<int,int>, IntrepidExtendedTypes::EFunctionSpace > key = make_pair( make_pair(polyOrder, cellTopoKey), fs );
   if ( _existingBases.find(key) != _existingBases.end() ) {
     TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument, "Can't register a basis for which there's already an entry...");
   }
@@ -754,7 +754,7 @@ void BasisFactory::registerBasis( BasisPtr basis, int basisRank, int polyOrder, 
 
 BasisPtr BasisFactory::addToPolyOrder(BasisPtr basis, int pToAdd) {
   int polyOrder = _polyOrders[basis.get()] + pToAdd;
-  IntrepidExtendedTypes::EFunctionSpaceExtended fs = _functionSpaces[basis.get()];
+  IntrepidExtendedTypes::EFunctionSpace fs = _functionSpaces[basis.get()];
   int cellTopoKey = _cellTopoKeys[basis.get()];
   if (basis->isConforming()) {
     return getConformingBasis(polyOrder, cellTopoKey, fs);
@@ -778,7 +778,7 @@ BasisPtr BasisFactory::setPolyOrder(BasisPtr basis, int pToSet) {
 //    }
 //    return getMultiBasis(upgradedSubBases);
   }
-  IntrepidExtendedTypes::EFunctionSpaceExtended fs = _functionSpaces[basis.get()];
+  IntrepidExtendedTypes::EFunctionSpace fs = _functionSpaces[basis.get()];
   int cellTopoKey = _cellTopoKeys[basis.get()];
   if (basis->isConforming()) {
     return getConformingBasis(pToSet, cellTopoKey, fs);
@@ -791,7 +791,7 @@ int BasisFactory::getBasisRank(BasisPtr basis) {
   return basis->rangeRank();
 }
 
-EFunctionSpaceExtended BasisFactory::getBasisFunctionSpace(BasisPtr basis) {
+IntrepidExtendedTypes::EFunctionSpace BasisFactory::getBasisFunctionSpace(BasisPtr basis) {
   return _functionSpaces[basis.get()];
 }
 

@@ -40,7 +40,7 @@
 
 #include "Intrepid_FieldContainer.hpp"
 
-#include "BilinearForm.h" // defines IntrepidExtendedTypes::EOperatorExtended
+#include "BilinearForm.h" // defines IntrepidExtendedTypes::EOperator
 
 #include "BasisCache.h"
 
@@ -60,8 +60,8 @@ class RHS {
 public:
   RHS(bool legacySubclass) : _legacySubclass(legacySubclass) {}
   virtual bool nonZeroRHS(int testVarID);
-  virtual vector<EOperatorExtended> operatorsForTestID(int testID) {
-    vector<EOperatorExtended> ops;
+  virtual vector<IntrepidExtendedTypes::EOperator> operatorsForTestID(int testID) {
+    vector<IntrepidExtendedTypes::EOperator> ops;
     ops.push_back( IntrepidExtendedTypes::OP_VALUE);
     return ops;
   }
