@@ -138,7 +138,7 @@ namespace {
     physicalCellNodes.resize(numCells, hexTopo.getVertexCount(), hexTopo.getDimension());
     hexBasisCache = BasisCache( physicalCellNodes, hexTopo, cubDegree );
     FieldContainer<double> halfKronecker = kronecker;
-    BilinearForm::multiplyFCByWeight(halfKronecker, 0.5);
+    SerialDenseWrapper::multiplyFCByWeight(halfKronecker, 0.5);
     
     maxDiff = 0;
     FieldContainer<double> referenceToUnitCubeJacobian = hexBasisCache.getJacobian();

@@ -1,8 +1,10 @@
 #ifndef CAMELLIA_INTREPID_EXTENDED_TYPES
 #define CAMELLIA_INTREPID_EXTENDED_TYPES
 
+#include <set>
+
 namespace IntrepidExtendedTypes {
-  enum EOperatorExtended { // first 13 simply copied from EOperator
+  enum EOperatorExtended { // first 13 simply copied from Intrepid::EOperator
     OP_VALUE = 0,
     OP_GRAD,      // 1
     OP_CURL,      // 2
@@ -33,7 +35,7 @@ namespace IntrepidExtendedTypes {
     OP_VECTORIZE_VALUE  // 27
   };
   
-  enum EFunctionSpaceExtended { // the first four copied from EFunctionSpace
+  enum EFunctionSpaceExtended { // the first four copied from Intrepid::EFunctionSpace
     FUNCTION_SPACE_HGRAD = 0,
     FUNCTION_SPACE_HCURL,
     FUNCTION_SPACE_HDIV,
@@ -59,6 +61,8 @@ namespace IntrepidExtendedTypes {
   bool functionSpaceIsDiscontinuous(EFunctionSpaceExtended fs);
   EFunctionSpaceExtended continuousSpaceForDiscontinuous(EFunctionSpaceExtended fs_disc);
   EFunctionSpaceExtended discontinuousSpaceForContinuous(EFunctionSpaceExtended fs_continuous);
+  
+  const std::set<EOperatorExtended> & normalOperators();
 }
 
 #endif

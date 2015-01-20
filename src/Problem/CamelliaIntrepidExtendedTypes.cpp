@@ -78,3 +78,16 @@ EFunctionSpaceExtended IntrepidExtendedTypes::continuousSpaceForDiscontinuous(In
       break;
   }
 }
+
+const std::set<EOperatorExtended> & IntrepidExtendedTypes::normalOperators() {
+  static std::set<EOperatorExtended> _normalOperators;
+  if (_normalOperators.size() == 0) {
+    _normalOperators.insert(OP_CROSS_NORMAL);
+    _normalOperators.insert(OP_DOT_NORMAL);
+    _normalOperators.insert(OP_TIMES_NORMAL);
+    _normalOperators.insert(OP_TIMES_NORMAL_X);
+    _normalOperators.insert(OP_TIMES_NORMAL_Y);
+    _normalOperators.insert(OP_TIMES_NORMAL_Z);
+  }
+  return _normalOperators;
+}

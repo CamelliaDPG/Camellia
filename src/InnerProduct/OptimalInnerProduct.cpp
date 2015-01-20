@@ -37,6 +37,7 @@
  */
 
 #include "OptimalInnerProduct.h"
+#include "SerialDenseWrapper.h"
 
 typedef pair<IntrepidExtendedTypes::EOperatorExtended, int > OpOpIndexPair;
 
@@ -245,7 +246,7 @@ void OptimalInnerProduct::applyInnerProductData(FieldContainer<double> &testValu
       }
     } else if (_bilinearForm->isFluxOrTrace(trialID)) {
       // then weight by _beta
-      BilinearForm::multiplyFCByWeight(testValues2, _beta); // TODO: determine whether it should be beta or beta^2 to be consistent with hpDPG code...
+      SerialDenseWrapper::multiplyFCByWeight(testValues2, _beta); // TODO: determine whether it should be beta or beta^2 to be consistent with hpDPG code...
     }
     // when bilinear form gets vectors of operators, we'll consult 
     // opOpPair.first.second (where opOpPair = entry.first is as above) for the operatorIndex for testID1, i.e.:

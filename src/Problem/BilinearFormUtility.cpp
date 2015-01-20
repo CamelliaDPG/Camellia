@@ -396,7 +396,7 @@ void BilinearFormUtility::computeOptimalStiffnessMatrix(FieldContainer<double> &
                                "Boundary trial variable (flux or trace) given with non-scalar basis.  Unsupported.");
             
             bool isFlux = false; // i.e. the normal is "folded into" the variable definition, so that we must take parity into account
-            const set<int> normalOperators = BilinearForm::normalOperators();
+            const set<IntrepidExtendedTypes::EOperatorExtended> normalOperators = IntrepidExtendedTypes::normalOperators();
             if (   (normalOperators.find(testOperator)  == normalOperators.end() ) 
                 && (normalOperators.find(trialOperator) == normalOperators.end() ) ) {
               // normal not yet taken into account -- so it must be "hidden" in the trial variable

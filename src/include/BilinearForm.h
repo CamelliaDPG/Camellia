@@ -109,7 +109,6 @@ public:
   
   virtual bool isFluxOrTrace(int trialID) = 0;
   
-  static void multiplyFCByWeight(FieldContainer<double> &fc, double weight); // belongs elsewhere...
   static const string & operatorName(IntrepidExtendedTypes::EOperatorExtended op);
   static int operatorRank(IntrepidExtendedTypes::EOperatorExtended op,
                           IntrepidExtendedTypes::EFunctionSpaceExtended fs);
@@ -117,8 +116,6 @@ public:
   vector<int> trialBoundaryIDs();
   
   virtual void printTrialTestInteractions();
-  
-  static const set<int> & normalOperators(); // the set of all operators that use the normal
   
   void setUseSPDSolveForOptimalTestFunctions(bool value);
   void setUseIterativeRefinementsWithSPDSolve(bool value);

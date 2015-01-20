@@ -211,15 +211,6 @@ void BilinearForm::localStiffnessMatrixAndRHS(FieldContainer<double> &localStiff
   }
 }
 
-void BilinearForm::multiplyFCByWeight(FieldContainer<double> & fc, double weight) {
-  int size = fc.size();
-  double *valuePtr = &fc[0]; // to make this as fast as possible, do some pointer arithmetic...
-  for (int i=0; i<size; i++) {
-    *valuePtr *= weight;
-    valuePtr++;
-  }
-}
-
 bool checkSymmetry(FieldContainer<double> &innerProductMatrix) {
   double tol = 1e-10;
   int numCells = innerProductMatrix.dimension(0);
@@ -466,7 +457,7 @@ void BilinearForm::stiffnessMatrix(FieldContainer<double> &stiffness, Teuchos::R
             testBasis = testOrdering->getBasis(testID);
             
             bool isFlux = false; // i.e. the normal is "folded into" the variable definition, so that we must take parity into account
-            const set<int> normalOperators = BilinearForm::normalOperators();
+            const set<IntrepidExtendedTypes::EOperatorExtended> normalOperators = IntrepidExtendedTypes::normalOperators();
             if (   (normalOperators.find(testOperator)  == normalOperators.end() ) 
                 && (normalOperators.find(trialOperator) == normalOperators.end() ) ) {
               // normal not yet taken into account -- so it must be "hidden" in the trial variable
@@ -846,18 +837,6 @@ void BilinearForm::printTrialTestInteractions() {
     }
     cout << endl << "\\\\";
   }
-}
-
-const set<int> & BilinearForm::normalOperators() {
-  if (_normalOperators.size() == 0) {
-    _normalOperators.insert(OP_CROSS_NORMAL);
-    _normalOperators.insert(OP_DOT_NORMAL);
-    _normalOperators.insert(OP_TIMES_NORMAL);
-    _normalOperators.insert(OP_TIMES_NORMAL_X);
-    _normalOperators.insert(OP_TIMES_NORMAL_Y);
-    _normalOperators.insert(OP_TIMES_NORMAL_Z);
-  }
-  return _normalOperators;
 }
 
 void BilinearForm::setUseSPDSolveForOptimalTestFunctions(bool value) {

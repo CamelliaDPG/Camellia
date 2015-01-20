@@ -12,6 +12,8 @@
 #include "RHS.h"
 #include "Solution.h"
 
+#include "SerialDenseWrapper.h"
+
 TimeMarchingProblem::TimeMarchingProblem(Teuchos::RCP<BilinearForm> bilinearForm,
                                          Teuchos::RCP<RHS> rhs) : RHS(true) { // true: legacy subclass
   _bilinearForm = bilinearForm;
@@ -45,7 +47,7 @@ void TimeMarchingProblem::applyBilinearFormData(FieldContainer<double> &trialVal
     _bilinearForm->applyBilinearFormData(trialValues,testValues,trialID,testID,operatorIndex-1,basisCache);
   } else {
     this->timeLHS(trialValues,trialID,basisCache);
-    BilinearForm::multiplyFCByWeight(trialValues, 1.0 / _dt);
+    SerialDenseWrapper::multiplyFCByWeight(trialValues, 1.0 / _dt);
   }
 }
 
@@ -96,7 +98,7 @@ void TimeMarchingProblem::rhs(int testID, int operatorIndex, Teuchos::RCP<BasisC
     _rhs->rhs(testID,operatorIndex,basisCache,values);
   } else {
     this->timeRHS(values,testID,basisCache);
-    BilinearForm::multiplyFCByWeight(values, 1.0 / _dt);
+    SerialDenseWrapper::multiplyFCByWeight(values, 1.0 / _dt);
   }
 }
 

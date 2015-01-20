@@ -37,6 +37,8 @@
 
 #include "ConvectionFormulation.h"
 
+#include "SerialDenseWrapper.h"
+
 #include "EpetraExt_ConfigDefs.h"
 #ifdef HAVE_EPETRAEXT_HDF5
 #include "HDF5Exporter.h"
@@ -533,7 +535,7 @@ bool SolutionTests::testAddCondensedSolution() {
   
   { // DEBUGGING: check for linear dependence of cell0 coefficients on the lhsVector coefficients
     FieldContainer<double> soln1_doubled = soln1_cell0;
-    BilinearForm::multiplyFCByWeight(soln1_doubled, soln2_coefficientWeight);
+    SerialDenseWrapper::multiplyFCByWeight(soln1_doubled, soln2_coefficientWeight);
     double tol = 1e-14;
     double maxDiff = 0;
     if ( !TestSuite::fcsAgree(soln1_doubled, soln2_cell0, tol, maxDiff) ) {
@@ -546,7 +548,7 @@ bool SolutionTests::testAddCondensedSolution() {
   
   FieldContainer<double> actualValues = soln1->allCoefficientsForCellID(cellID);
   FieldContainer<double> expectedValues = soln1_cell0;
-  BilinearForm::multiplyFCByWeight(expectedValues, soln2_coefficientWeight * weight + 1);
+  SerialDenseWrapper::multiplyFCByWeight(expectedValues, soln2_coefficientWeight * weight + 1);
   double maxDiff = 0;
   if ( !TestSuite::fcsAgree(expectedValues, actualValues, tol, maxDiff) ) {
     cout << "Error: after calling addSolution, actual coefficients for sum differ from expected by as much as " << maxDiff << "...\n";
@@ -589,9 +591,9 @@ bool SolutionTests::testAddCondensedSolution() {
   _confusionSolution2_2x2->solutionValues(expectedValuesSIGMA1, ConfusionBilinearForm::SIGMA_1_ID, _testPoints);
   _confusionSolution2_2x2->solutionValues(expectedValuesSIGMA2, ConfusionBilinearForm::SIGMA_2_ID, _testPoints);
   
-  BilinearForm::multiplyFCByWeight(expectedValuesU, weight+1.0);
-  BilinearForm::multiplyFCByWeight(expectedValuesSIGMA1, weight+1.0);
-  BilinearForm::multiplyFCByWeight(expectedValuesSIGMA2, weight+1.0);
+  SerialDenseWrapper::multiplyFCByWeight(expectedValuesU, weight+1.0);
+  SerialDenseWrapper::multiplyFCByWeight(expectedValuesSIGMA1, weight+1.0);
+  SerialDenseWrapper::multiplyFCByWeight(expectedValuesSIGMA2, weight+1.0);
   
   Teuchos::RCP< Epetra_FEVector > vector1_copy = Teuchos::rcp( new Epetra_FEVector(*_confusionSolution1_2x2->getLHSVector().get()) );
   Teuchos::RCP< Epetra_FEVector > vector2 = _confusionSolution2_2x2->getLHSVector();
@@ -627,7 +629,7 @@ bool SolutionTests::testAddCondensedSolution() {
     GlobalIndexType cellID = *cellIDIt;
     FieldContainer<double> actualCoefficients = _confusionSolution1_2x2->allCoefficientsForCellID(cellID);
     FieldContainer<double> expectedCoefficients = cellCoefficientsForRank[cellID];
-    BilinearForm::multiplyFCByWeight(expectedCoefficients, weight + 1.0);
+    SerialDenseWrapper::multiplyFCByWeight(expectedCoefficients, weight + 1.0);
     double maxDiff = 0;
     if (! TestSuite::fcsAgree(expectedCoefficients, actualCoefficients, tol, maxDiff) ) {
       cout << "Error: expected coefficients for cell ID " << cellID << " differ from actual by " << maxDiff << endl;
@@ -692,9 +694,9 @@ bool SolutionTests::testAddSolution() {
   _confusionSolution2_2x2->solutionValues(expectedValuesSIGMA1, ConfusionBilinearForm::SIGMA_1_ID, _testPoints);
   _confusionSolution2_2x2->solutionValues(expectedValuesSIGMA2, ConfusionBilinearForm::SIGMA_2_ID, _testPoints);
   
-  BilinearForm::multiplyFCByWeight(expectedValuesU, weight+1.0);
-  BilinearForm::multiplyFCByWeight(expectedValuesSIGMA1, weight+1.0);
-  BilinearForm::multiplyFCByWeight(expectedValuesSIGMA2, weight+1.0);
+  SerialDenseWrapper::multiplyFCByWeight(expectedValuesU, weight+1.0);
+  SerialDenseWrapper::multiplyFCByWeight(expectedValuesSIGMA1, weight+1.0);
+  SerialDenseWrapper::multiplyFCByWeight(expectedValuesSIGMA2, weight+1.0);
   
   _confusionSolution1_2x2->addSolution(_confusionSolution2_2x2, weight);
   FieldContainer<double> valuesU(_testPoints.dimension(0));
