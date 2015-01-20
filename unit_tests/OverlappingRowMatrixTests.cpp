@@ -57,7 +57,7 @@ namespace {
       double width = 1.0;
       double height = 1.0;
       
-      Teuchos::RCP<BilinearForm> poissonBilinearForm = form.bf();
+      BFPtr poissonBilinearForm = form.bf();
       
       pl.set("useMinRule", true);
       pl.set("bf",poissonBilinearForm);

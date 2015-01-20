@@ -866,7 +866,7 @@ bool MeshTestSuite::testBuildMesh() {
   quadPoints(3,0) = -1.0;
   quadPoints(3,1) = 1.0;
   
-  Teuchos::RCP<BilinearForm> bilinearForm = PoissonBilinearForm::poissonBilinearForm();
+  BFPtr bilinearForm = PoissonBilinearForm::poissonBilinearForm();
   
   Teuchos::RCP<Mesh> myMesh = MeshFactory::buildQuadMesh(quadPoints, 1, 1, bilinearForm, order, order);
   // some basic sanity checks:
@@ -919,7 +919,7 @@ bool MeshTestSuite::testMeshSolvePointwise() {
   quadPoints(3,0) = 0.0;
   quadPoints(3,1) = 1.0;
   
-  Teuchos::RCP<BilinearForm> bilinearForm = PoissonBilinearForm::poissonBilinearForm();
+  BFPtr bilinearForm = PoissonBilinearForm::poissonBilinearForm();
   
   Teuchos::RCP<Mesh> myMesh = MeshFactory::buildQuadMesh(quadPoints, 1, 1, bilinearForm, order, order+1);
   
@@ -2206,7 +2206,7 @@ bool MeshTestSuite::testRefinementPattern() {
   
   int polyOrder = 1;
   
-  Teuchos::RCP<BilinearForm> bilinearForm = PoissonBilinearForm::poissonBilinearForm();
+  BFPtr bilinearForm = PoissonBilinearForm::poissonBilinearForm();
   
   int H1Order = 2;
   int horizontalCells = 2; int verticalCells = 1;

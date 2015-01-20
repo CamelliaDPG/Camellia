@@ -157,7 +157,7 @@ namespace {
     PoissonFormulation formulation(spaceDim, conformingTraces);
     BFPtr bf = formulation.bf();
     
-    Teuchos::RCP<BilinearForm> bilinearForm = bf;
+    BFPtr bilinearForm = bf;
     
     int rootMeshNumCells = 2;
     double width = 1.0;

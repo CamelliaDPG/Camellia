@@ -20,32 +20,32 @@ class MeshFactory {
   static map<int,int> _emptyIntIntMap; // just defined here to implement a default argument to constructor (there's likely a better way)
 public:
 #ifdef HAVE_EPETRAEXT_HDF5
-  static MeshPtr loadFromHDF5(BilinearFormPtr bf, string filename);
+  static MeshPtr loadFromHDF5(BFPtr bf, string filename);
 #endif
-  static MeshPtr intervalMesh(BilinearFormPtr bf, double xLeft, double xRight, int numElements, int H1Order, int delta_k); // 1D equispaced
+  static MeshPtr intervalMesh(BFPtr bf, double xLeft, double xRight, int numElements, int H1Order, int delta_k); // 1D equispaced
   
   static MeshPtr quadMesh(Teuchos::ParameterList &parameters);
   
-  static MeshPtr quadMesh(BilinearFormPtr bf, int H1Order, int pToAddTest=2,
+  static MeshPtr quadMesh(BFPtr bf, int H1Order, int pToAddTest=2,
                           double width=1.0, double height=1.0, int horizontalElements=1, int verticalElements=1, bool divideIntoTriangles=false,
                           double x0=0.0, double y0=0.0, vector<PeriodicBCPtr> periodicBCs=vector<PeriodicBCPtr>());
   
-  static MeshPtr quadMeshMinRule(BilinearFormPtr bf, int H1Order, int pToAddTest=2,
+  static MeshPtr quadMeshMinRule(BFPtr bf, int H1Order, int pToAddTest=2,
                                  double width=1.0, double height=1.0, int horizontalElements=1, int verticalElements=1, bool divideIntoTriangles=false,
                                  double x0=0.0, double y0=0.0, vector<PeriodicBCPtr> periodicBCs=vector<PeriodicBCPtr>());
   
-  static MeshPtr quadMesh(BilinearFormPtr bf, int H1Order, FieldContainer<double> &quadNodes, int pToAddTest=2);
+  static MeshPtr quadMesh(BFPtr bf, int H1Order, FieldContainer<double> &quadNodes, int pToAddTest=2);
   
-  static MeshPtr rectilinearMesh(BilinearFormPtr bf, vector<double> dimensions, vector<int> elementCounts, int H1Order, int pToAddTest=-1, vector<double> x0 = vector<double>());
+  static MeshPtr rectilinearMesh(BFPtr bf, vector<double> dimensions, vector<int> elementCounts, int H1Order, int pToAddTest=-1, vector<double> x0 = vector<double>());
   
   static MeshPtr hemkerMesh(double meshWidth, double meshHeight, double cylinderRadius, // cylinder is centered in quad mesh.
-                            BilinearFormPtr bilinearForm, int H1Order, int pToAddTest)
+                            BFPtr bilinearForm, int H1Order, int pToAddTest)
   {
     return shiftedHemkerMesh(-meshWidth/2, meshWidth/2, meshHeight, cylinderRadius, bilinearForm, H1Order, pToAddTest);
   }
 
   static MeshPtr shiftedHemkerMesh(double xLeft, double xRight, double meshHeight, double cylinderRadius, // cylinder is centered in quad mesh.
-                            BilinearFormPtr bilinearForm, int H1Order, int pToAddTest);
+                            BFPtr bilinearForm, int H1Order, int pToAddTest);
 
   static MeshGeometryPtr shiftedHemkerGeometry(double xLeft, double xRight, double meshHeight, double cylinderRadius);
   
@@ -57,21 +57,21 @@ public:
   // legacy methods that originally belonged to Mesh:
   static MeshPtr buildQuadMesh(const FieldContainer<double> &quadBoundaryPoints,
                                int horizontalElements, int verticalElements,
-                               Teuchos::RCP< BilinearForm > bilinearForm,
+                               BFPtr bilinearForm,
                                int H1Order, int pTest, bool triangulate=false, bool useConformingTraces=true,
                                map<int,int> trialOrderEnhancements=_emptyIntIntMap,
                                map<int,int> testOrderEnhancements=_emptyIntIntMap);
   
   static MeshPtr buildQuadMeshHybrid(const FieldContainer<double> &quadBoundaryPoints,
                                      int horizontalElements, int verticalElements,
-                                     Teuchos::RCP< BilinearForm > bilinearForm,
+                                     BFPtr bilinearForm,
                                      int H1Order, int pTest, bool useConformingTraces);
   
   static void quadMeshCellIDs(FieldContainer<int> &cellIDs, int horizontalElements, int verticalElements, bool useTriangles);
 
-  static MeshPtr readMesh(string filePath, Teuchos::RCP< BilinearForm > bilinearForm, int H1Order, int pToAdd);
+  static MeshPtr readMesh(string filePath, BFPtr bilinearForm, int H1Order, int pToAdd);
   
-  static MeshPtr readTriangle(string filePath, Teuchos::RCP< BilinearForm > bilinearForm, int H1Order, int pToAdd);
+  static MeshPtr readTriangle(string filePath, BFPtr bilinearForm, int H1Order, int pToAdd);
 };
 
 #endif

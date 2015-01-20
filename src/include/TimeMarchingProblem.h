@@ -9,19 +9,18 @@
 #ifndef Camellia_TimeMarchingProblem_h
 #define Camellia_TimeMarchingProblem_h
 
-#include "BilinearForm.h"
 #include "RHS.h"
 
 class Solution;
 
-class TimeMarchingProblem : public BilinearForm, public RHS {
+class TimeMarchingProblem : public BF, public RHS {
   Teuchos::RCP<RHS> _rhs;
   double _dt;
   Teuchos::RCP<Solution> _previousTimeSolution;
 protected:
-  Teuchos::RCP<BilinearForm> _bilinearForm;
+  BFPtr _bilinearForm;
 public:
-  TimeMarchingProblem(Teuchos::RCP<BilinearForm> bilinearForm, Teuchos::RCP<RHS> rhs);
+  TimeMarchingProblem(BFPtr bilinearForm, Teuchos::RCP<RHS> rhs);
   
   // BILINEAR FORM:
   virtual void trialTestOperators(int trialID, int testID, 

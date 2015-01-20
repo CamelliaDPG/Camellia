@@ -31,9 +31,9 @@
 //
 // @HEADER 
 
-#include "BilinearForm.h"
+#include "BF.h"
 
-class TestBilinearFormDx : public BilinearForm {
+class TestBilinearFormDx : public BF {
 private:
   
 public:

@@ -110,7 +110,7 @@ bool CurvilinearMeshTests::testCylinderMesh() {
   double height = 30.0;
   double r = 1.0;
   
-  BilinearFormPtr bf = VGPStokesFormulation(1.0).bf();
+  BFPtr bf = VGPStokesFormulation(1.0).bf();
   
   double trueArea = width * height - PI * r * r;
   
@@ -273,7 +273,7 @@ bool CurvilinearMeshTests::testAutomaticStraightEdgesMatchVertices() {
 //  physicalCellNodes(0,3,1) = 1;
   
   int quadraticOrder = 2;
-  BilinearFormPtr bf = VGPStokesFormulation(1.0).bf(); // just to specify something
+  BFPtr bf = VGPStokesFormulation(1.0).bf(); // just to specify something
   MeshPtr quadMesh = MeshFactory::quadMesh(bf, quadraticOrder, physicalCellNodes, 0);
   
   int cellID = 0;
@@ -360,7 +360,7 @@ bool CurvilinearMeshTests::testEdgeLength() {
   
   double meshWidth = radius * sqrt(2.0);
   
-  BilinearFormPtr bf = VGPStokesFormulation(1.0).bf();
+  BFPtr bf = VGPStokesFormulation(1.0).bf();
   
   int pToAdd = 0; // 0 so that H1Order itself will govern the order of the approximation
   
@@ -670,7 +670,7 @@ bool CurvilinearMeshTests::testStraightEdgeMesh() {
   double width = 1.0;
   double height = 1.0;
   
-  BilinearFormPtr bf = VGPStokesFormulation(1.0).bf();
+  BFPtr bf = VGPStokesFormulation(1.0).bf();
   
   double trueArea = width * height;
   
@@ -835,7 +835,7 @@ bool CurvilinearMeshTests::testH1Projection() {
   FunctionPtr fxnScalar = x*x;
   FunctionPtr fxnVector = Function::vectorize(fxnScalar,fxnScalar);
   
-  BilinearFormPtr bf = VGPStokesFormulation(1.0).bf();
+  BFPtr bf = VGPStokesFormulation(1.0).bf();
   int pToAdd = 0; // 0 so that H1Order itself will govern the order of the approximation
   
   MeshPtr mesh = MeshFactory::quadMesh(bf, 2, pToAdd, 1.0, 1.0);
@@ -1163,7 +1163,7 @@ bool CurvilinearMeshTests::testPointsRemainInsideElement() {
   double width = 5.0;
   double height = 5.0;
   
-  BilinearFormPtr bf = VGPStokesFormulation(1.0).bf();
+  BFPtr bf = VGPStokesFormulation(1.0).bf();
   
   int pToAdd = 0; // 0 so that H1Order itself will govern the order of the approximation
   
@@ -1387,7 +1387,7 @@ bool CurvilinearMeshTests::testTransformationJacobian() {
   double width = 4.0;
   double height = 3.0;
   
-  BilinearFormPtr bf = VGPStokesFormulation(1.0).bf();
+  BFPtr bf = VGPStokesFormulation(1.0).bf();
   
   int pToAdd = 0; // 0 so that H1Order itself will govern the order of the approximation
   

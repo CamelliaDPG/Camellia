@@ -40,8 +40,6 @@
 
 #include "Intrepid_FieldContainer.hpp"
 
-#include "BilinearForm.h" // defines Camellia::EOperator
-
 #include "BasisCache.h"
 
 #include "LinearTerm.h"
@@ -60,22 +58,11 @@ class RHS {
 public:
   RHS(bool legacySubclass) : _legacySubclass(legacySubclass) {}
   virtual bool nonZeroRHS(int testVarID);
-  virtual vector<Camellia::EOperator> operatorsForTestID(int testID) {
-    vector<Camellia::EOperator> ops;
-    ops.push_back( Camellia::OP_VALUE);
-    return ops;
-  }
+  virtual vector<Camellia::EOperator> operatorsForTestID(int testID);
   // TODO: change the API here so that values is the first argument (fitting a convention in the rest of the code)
-  virtual void rhs(int testVarID, int operatorIndex, Teuchos::RCP<BasisCache> basisCache, FieldContainer<double> &values) {
-    rhs(testVarID, operatorIndex, basisCache->getPhysicalCubaturePoints(), values);
-  }
-  virtual void rhs(int testVarID, int operatorIndex, const FieldContainer<double> &physicalPoints, FieldContainer<double> &values) {
-    TEUCHOS_TEST_FOR_EXCEPTION(operatorIndex != 0, std::invalid_argument, "base rhs() method called for operatorIndex != 0");
-    rhs(testVarID,physicalPoints,values);
-  }
-  virtual void rhs(int testVarID, const FieldContainer<double> &physicalPoints, FieldContainer<double> &values) {
-    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "no rhs() implemented within RHS");
-  }
+  virtual void rhs(int testVarID, int operatorIndex, Teuchos::RCP<BasisCache> basisCache, FieldContainer<double> &values);
+  virtual void rhs(int testVarID, int operatorIndex, const FieldContainer<double> &physicalPoints, FieldContainer<double> &values);
+  virtual void rhs(int testVarID, const FieldContainer<double> &physicalPoints, FieldContainer<double> &values);
   // physPoints (numCells,numPoints,spaceDim)
   // values: either (numCells,numPoints) or (numCells,numPoints,spaceDim)
   

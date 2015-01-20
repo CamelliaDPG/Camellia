@@ -14,8 +14,8 @@
 
 #include "SerialDenseWrapper.h"
 
-TimeMarchingProblem::TimeMarchingProblem(Teuchos::RCP<BilinearForm> bilinearForm,
-                                         Teuchos::RCP<RHS> rhs) : RHS(true) { // true: legacy subclass
+TimeMarchingProblem::TimeMarchingProblem(BFPtr bilinearForm,
+                                         Teuchos::RCP<RHS> rhs) : RHS(true), BF(true) { // true: legacy subclass
   _bilinearForm = bilinearForm;
   _rhs = rhs;
   _dt = 1.0;

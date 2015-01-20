@@ -1,6 +1,6 @@
 #include "TestBilinearFormDx.h"
 
-TestBilinearFormDx::TestBilinearFormDx() {
+TestBilinearFormDx::TestBilinearFormDx() : BF(true) { // true: legacy subclass
   _testIDs.push_back(0);
   _trialIDs.push_back(0);
 }

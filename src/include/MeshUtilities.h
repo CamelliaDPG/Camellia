@@ -56,16 +56,16 @@ class MeshUtilities {
  public:
 
   static SpatialFilterPtr rampBoundary(double rampHeight);
-  static MeshPtr buildRampMesh(double rampHeight, Teuchos::RCP< BilinearForm > bilinearForm, int H1Order, int pTest);
+  static MeshPtr buildRampMesh(double rampHeight, BFPtr bilinearForm, int H1Order, int pTest);
 
   static SpatialFilterPtr longRampBoundary(double rampHeight);
-  static MeshPtr buildLongRampMesh(double rampHeight, Teuchos::RCP< BilinearForm > bilinearForm, int H1Order, int pTest);
+  static MeshPtr buildLongRampMesh(double rampHeight, BFPtr bilinearForm, int H1Order, int pTest);
 
-  static MeshPtr buildFrontFacingStep(Teuchos::RCP< BilinearForm > bilinearForm, int H1Order, int pTest);
+  static MeshPtr buildFrontFacingStep(BFPtr bilinearForm, int H1Order, int pTest);
 
-  static MeshPtr buildUnitQuadMesh(int horizontalCells, int verticalCells, Teuchos::RCP< BilinearForm > bilinearForm, int H1Order, int pTest);
+  static MeshPtr buildUnitQuadMesh(int horizontalCells, int verticalCells, BFPtr bilinearForm, int H1Order, int pTest);
   
-  static MeshPtr buildUnitQuadMesh(int nCells, Teuchos::RCP< BilinearForm > bilinearForm, int H1Order, int pTest);
+  static MeshPtr buildUnitQuadMesh(int nCells, BFPtr bilinearForm, int H1Order, int pTest);
 
   static double computeMaxLocalConditionNumber(IPPtr ip, MeshPtr mesh, bool jacobiScaling=true, string sparseFileToWriteTo="");
   

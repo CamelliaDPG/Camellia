@@ -63,6 +63,9 @@ namespace Camellia {
   EFunctionSpace discontinuousSpaceForContinuous(EFunctionSpace fs_continuous);
   
   const std::set<EOperator> & normalOperators();
+  
+  const std::string & operatorName(EOperator op);
+  int operatorRank(EOperator op, EFunctionSpace fs);
 }
 
 #endif

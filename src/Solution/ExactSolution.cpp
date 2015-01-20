@@ -264,7 +264,7 @@ void ExactSolution::solutionValues(FieldContainer<double> &values,
   }
 }
 
-Teuchos::RCP<BilinearForm> ExactSolution::bilinearForm() {
+BFPtr ExactSolution::bilinearForm() {
   return _bilinearForm;
 }
 
@@ -279,7 +279,7 @@ ExactSolution::ExactSolution() {
   
 }
 
-ExactSolution::ExactSolution(Teuchos::RCP<BilinearForm> bf, Teuchos::RCP<BC> bc, Teuchos::RCP<RHS> rhs, int H1Order) {
+ExactSolution::ExactSolution(BFPtr bf, Teuchos::RCP<BC> bc, Teuchos::RCP<RHS> rhs, int H1Order) {
   _bilinearForm = bf;
   _bc = bc;
   _rhs = rhs;

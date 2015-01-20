@@ -72,7 +72,7 @@ using namespace Camellia;
 
 map<int,int> Mesh::_emptyIntIntMap;
 
-Mesh::Mesh(MeshTopologyPtr meshTopology, BilinearFormPtr bilinearForm, int H1Order, int pToAddTest,
+Mesh::Mesh(MeshTopologyPtr meshTopology, BFPtr bilinearForm, int H1Order, int pToAddTest,
            map<int,int> trialOrderEnhancements, map<int,int> testOrderEnhancements) : DofInterpreter(Teuchos::rcp(this,false)) {
   
   _meshTopology = meshTopology;
@@ -99,7 +99,7 @@ Mesh::Mesh(MeshTopologyPtr meshTopology, BilinearFormPtr bilinearForm, int H1Ord
 }
 
 Mesh::Mesh(const vector<vector<double> > &vertices, vector< vector<unsigned> > &elementVertices,
-           Teuchos::RCP< BilinearForm > bilinearForm, int H1Order, int pToAddTest, bool useConformingTraces,
+           Teuchos::RCP< BF > bilinearForm, int H1Order, int pToAddTest, bool useConformingTraces,
            map<int,int> trialOrderEnhancements, map<int,int> testOrderEnhancements, vector<PeriodicBCPtr> periodicBCs) : DofInterpreter(Teuchos::rcp(this,false)) {
 
 //  cout << "in legacy mesh constructor, periodicBCs size is " << periodicBCs.size() << endl;
@@ -182,11 +182,11 @@ ElementPtr Mesh::ancestralNeighborForSide(ElementPtr elem, int sideIndex, int &e
   return getElement(neighborInfo.first);
 }
 
-BilinearFormPtr Mesh::bilinearForm() {
+BFPtr Mesh::bilinearForm() {
   return _bilinearForm;
 }
 
-void Mesh::setBilinearForm( BilinearFormPtr bf) {
+void Mesh::setBilinearForm( BFPtr bf) {
   // must match the original in terms of variable IDs, etc...
   _bilinearForm = bf;
 }
@@ -1289,7 +1289,7 @@ void Mesh::saveToHDF5(string filename)
 #endif
 
 
-Teuchos::RCP<Mesh> Mesh::readMsh(string filePath, Teuchos::RCP< BilinearForm > bilinearForm, int H1Order, int pToAdd)
+Teuchos::RCP<Mesh> Mesh::readMsh(string filePath, Teuchos::RCP< BF > bilinearForm, int H1Order, int pToAdd)
 {
   int rank = Teuchos::GlobalMPISession::getRank();
   if (rank==0) cout << "Warning: Mesh::readMsh() deprecated.  Use MeshFactory::readMesh() instead.\n";
@@ -1297,7 +1297,7 @@ Teuchos::RCP<Mesh> Mesh::readMsh(string filePath, Teuchos::RCP< BilinearForm > b
   return MeshFactory::readMesh(filePath, bilinearForm, H1Order, pToAdd);
 }
 
-Teuchos::RCP<Mesh> Mesh::readTriangle(string filePath, Teuchos::RCP< BilinearForm > bilinearForm, int H1Order, int pToAdd)
+Teuchos::RCP<Mesh> Mesh::readTriangle(string filePath, Teuchos::RCP< BF > bilinearForm, int H1Order, int pToAdd)
 {
   int rank = Teuchos::GlobalMPISession::getRank();
   if (rank==0) cout << "Warning: Mesh::readTriangle() deprecated.  Use MeshFactory::readTriangle() instead.\n";
@@ -1307,7 +1307,7 @@ Teuchos::RCP<Mesh> Mesh::readTriangle(string filePath, Teuchos::RCP< BilinearFor
 
 Teuchos::RCP<Mesh> Mesh::buildQuadMesh(const FieldContainer<double> &quadBoundaryPoints,
                                        int horizontalElements, int verticalElements,
-                                       Teuchos::RCP< BilinearForm > bilinearForm,
+                                       Teuchos::RCP< BF > bilinearForm,
                                        int H1Order, int pTest, bool triangulate, bool useConformingTraces,
                                        map<int,int> trialOrderEnhancements,
                                        map<int,int> testOrderEnhancements) {
@@ -1319,7 +1319,7 @@ Teuchos::RCP<Mesh> Mesh::buildQuadMesh(const FieldContainer<double> &quadBoundar
 
 Teuchos::RCP<Mesh> Mesh::buildQuadMeshHybrid(const FieldContainer<double> &quadBoundaryPoints,
                                              int horizontalElements, int verticalElements,
-                                             Teuchos::RCP< BilinearForm > bilinearForm,
+                                             Teuchos::RCP< BF > bilinearForm,
                                              int H1Order, int pTest, bool useConformingTraces) {
   int rank = Teuchos::GlobalMPISession::getRank();
   if (rank==0) cout << "Warning: Mesh::buildQuadMeshHybrid() deprecated.  Use MeshFactory::buildQuadMeshHybrid() instead.\n";

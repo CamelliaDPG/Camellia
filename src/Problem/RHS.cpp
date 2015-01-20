@@ -167,3 +167,23 @@ void RHS::integrateAgainstOptimalTests(FieldContainer<double> &rhsVector,
   
 //  cout << "RHS vector:\n" << rhsVector;
 }
+
+vector<Camellia::EOperator> RHS::operatorsForTestID(int testID) {
+  vector<Camellia::EOperator> ops;
+  ops.push_back( Camellia::OP_VALUE);
+  return ops;
+}
+
+void RHS::rhs(int testVarID, int operatorIndex, Teuchos::RCP<BasisCache> basisCache, FieldContainer<double> &values) {
+  rhs(testVarID, operatorIndex, basisCache->getPhysicalCubaturePoints(), values);
+}
+
+void RHS::rhs(int testVarID, int operatorIndex, const FieldContainer<double> &physicalPoints, FieldContainer<double> &values) {
+  TEUCHOS_TEST_FOR_EXCEPTION(operatorIndex != 0, std::invalid_argument, "base rhs() method called for operatorIndex != 0");
+  rhs(testVarID,physicalPoints,values);
+}
+
+void RHS::rhs(int testVarID, const FieldContainer<double> &physicalPoints, FieldContainer<double> &values) {
+  TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "no rhs() implemented within RHS");
+}
+

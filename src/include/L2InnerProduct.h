@@ -31,7 +31,7 @@
 //
 // @HEADER 
 
-#include "BilinearForm.h"
+#include "BF.h"
 
 // Teuchos includes
 #include "Teuchos_RCP.hpp"
@@ -47,7 +47,7 @@
 class L2InnerProduct : public IP {
  public:
 
- L2InnerProduct(Teuchos::RCP< BilinearForm > bfs) : IP(bfs) {}
+ L2InnerProduct(Teuchos::RCP< BF > bfs) : IP(bfs) {}
   
   void operators(int testID1, int testID2, 
                  vector<Camellia::EOperator> &testOp1,

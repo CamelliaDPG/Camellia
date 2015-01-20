@@ -39,9 +39,11 @@
 #include "OptimalInnerProduct.h"
 #include "SerialDenseWrapper.h"
 
+#include "BF.h"
+
 typedef pair<Camellia::EOperator, int > OpOpIndexPair;
 
-OptimalInnerProduct::OptimalInnerProduct(Teuchos::RCP< BilinearForm > bf) : IP(bf) {
+OptimalInnerProduct::OptimalInnerProduct(BFPtr bf) : IP(bf) {
   _beta = 1; // TODO: allow this to be controlled from outside
   // TODO: replace the cout with an ostringstream, and save the string so that we can return description on request...
   vector<int> trialIDs = bf->trialIDs();
@@ -129,8 +131,8 @@ OptimalInnerProduct::OptimalInnerProduct(Teuchos::RCP< BilinearForm > bf) : IP(b
               pair<pair<OpOpIndexPair,OpOpIndexPair>, int> entry = make_pair( make_pair(op1Pair,op2Pair), trialID);
               _testCombos[key].push_back(entry);
               if ( ! first) cout << " + ";
-              cout << _bilinearForm->operatorName(op1) << _bilinearForm->testName(testID1) << " ";
-              cout << _bilinearForm->operatorName(op2) << _bilinearForm->testName(testID2);
+              cout << Camellia::operatorName(op1) << _bilinearForm->testName(testID1) << " ";
+              cout << Camellia::operatorName(op2) << _bilinearForm->testName(testID2);
               first = false;
             }
           }

@@ -54,8 +54,6 @@
 
 using namespace std;
 
-class BilinearForm;
-
 class DofOrderingFactory {
 private:
   struct Comparator {
@@ -106,7 +104,7 @@ private:
   map<DofOrdering*, DofOrderingPtr > _fieldOrderingForTrial;
   map<DofOrdering*, DofOrderingPtr > _traceOrderingForTrial;
   
-  Teuchos::RCP<BilinearForm> _bilinearForm;
+  BFPtr _bilinearForm;
   map<DofOrdering*,bool> _isConforming;
   map<int, int> _testOrderEnhancements;
   map<int, int> _trialOrderEnhancements;
@@ -115,8 +113,8 @@ private:
   DofOrderingPtr pRefine(DofOrderingPtr dofOrdering,
                          CellTopoPtr, int pToAdd, bool isTestOrdering);
 public:
-  DofOrderingFactory(Teuchos::RCP<BilinearForm> bilinearForm);
-  DofOrderingFactory(Teuchos::RCP<BilinearForm> bilinearForm,
+  DofOrderingFactory(BFPtr bilinearForm);
+  DofOrderingFactory(BFPtr bilinearForm,
                      map<int,int> trialOrderEnhancements,
                      map<int,int> testOrderEnhancements);
   DofOrderingPtr testOrdering(int polyOrder, const shards::CellTopology &cellTopo);

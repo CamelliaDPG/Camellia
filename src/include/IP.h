@@ -15,7 +15,7 @@
 #include "Function.h"
 #include "DofOrdering.h"
 
-class BilinearForm;
+class BF;
 
 class IP {
   std::vector< LinearTermPtr > _linearTerms;
@@ -24,12 +24,12 @@ class IP {
   
   bool _isLegacySubclass;
 protected:
-  Teuchos::RCP< BilinearForm > _bilinearForm; // for legacy subclasses (originally subclasses of DPGInnerProduct)
+  Teuchos::RCP<BF> _bilinearForm; // for legacy subclasses (originally subclasses of DPGInnerProduct)
 public:
   IP();
   
   // legacy subclass constructor:
-  IP(Teuchos::RCP< BilinearForm > bfs);
+  IP(Teuchos::RCP< BF > bfs);
   
   // legacy DPGInnerProduct::applyInnerProductData() methods:
   virtual void applyInnerProductData(Intrepid::FieldContainer<double> &testValues1,

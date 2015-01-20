@@ -3663,7 +3663,7 @@ void Solution::save(string meshAndSolutionPrefix)
   mesh()->saveToHDF5(meshAndSolutionPrefix+".mesh");
 }
 
-SolutionPtr Solution::load(BilinearFormPtr bf, string meshAndSolutionPrefix)
+SolutionPtr Solution::load(BFPtr bf, string meshAndSolutionPrefix)
 {
   MeshPtr mesh = MeshFactory::loadFromHDF5(bf, meshAndSolutionPrefix+".mesh");
   SolutionPtr solution = Solution::solution(mesh);

@@ -237,7 +237,7 @@ void BilinearFormUtility::computeStiffnessMatrixForCell(FieldContainer<double> &
   computeStiffnessMatrix(stiffness,mesh->bilinearForm(),trialOrder,testOrder,cellTopo,physicalCellNodes,cellSideParities);
 }
 
-void BilinearFormUtility::computeStiffnessMatrix(FieldContainer<double> &stiffness, BilinearFormPtr bilinearForm,
+void BilinearFormUtility::computeStiffnessMatrix(FieldContainer<double> &stiffness, BFPtr bilinearForm,
                                                  Teuchos::RCP<DofOrdering> trialOrdering, Teuchos::RCP<DofOrdering> testOrdering, 
                                                  CellTopoPtr cellTopo, FieldContainer<double> &physicalCellNodes,
                                                  FieldContainer<double> &cellSideParities) {
@@ -257,7 +257,7 @@ void BilinearFormUtility::computeStiffnessMatrix(FieldContainer<double> &stiffne
 
 void BilinearFormUtility::computeOptimalStiffnessMatrix(FieldContainer<double> &stiffness, 
                                                         FieldContainer<double> &optimalTestWeights,
-                                                        BilinearFormPtr bilinearForm,
+                                                        BFPtr bilinearForm,
                                                         Teuchos::RCP<DofOrdering> trialOrdering, Teuchos::RCP<DofOrdering> testOrdering,
                                                         CellTopoPtr cellTopo, FieldContainer<double> &physicalCellNodes,
                                                         FieldContainer<double> &cellSideParities) {
@@ -468,7 +468,7 @@ void BilinearFormUtility::computeOptimalStiffnessMatrix(FieldContainer<double> &
 }
 
 void BilinearFormUtility::computeRHS(FieldContainer<double> &rhsVector, 
-                                     BilinearFormPtr bilinearForm, RHS &rhs, 
+                                     BFPtr bilinearForm, RHS &rhs, 
                                      FieldContainer<double> &optimalTestWeights,
                                      Teuchos::RCP<DofOrdering> testOrdering,
                                      shards::CellTopology &cellTopo, 

@@ -10,20 +10,20 @@
 #define Camellia_Formulation_h
 
 #include "Teuchos_RCP.hpp"
-#include "BilinearForm.h"
+#include "BF.h"
 #include "BC.h"
 #include "RHS.h"
 #include "IP.h"
 
 class Formulation {
 protected:
-  BilinearFormPtr _bilinearForm;
+  BFPtr _bilinearForm;
   BCPtr _bc;
   RHSPtr _rhs;
   InnerProductPtr _ip;
   FieldContainer<double> _quadDomain; // leave empty/unspecified for non-quad domains (not ideal)
 public:
-  BilinearFormPtr bilinearForm();
+  BFPtr bilinearForm();
   BCPtr bc();
   RHSPtr rhs();
   InnerProductPtr innerProduct();

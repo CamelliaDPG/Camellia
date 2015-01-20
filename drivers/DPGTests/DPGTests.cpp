@@ -528,7 +528,7 @@ bool DPGTests::testDofOrdering() {
   // now, test the DofPairing mechanism, and the Utility's use of it...
   int dofsPerSide = 2;
   numSides = 4;
-  Teuchos::RCP<BilinearForm> bilinearForm = Teuchos::rcp(new TestBilinearFormTrace());
+  BFPtr bilinearForm = Teuchos::rcp(new TestBilinearFormTrace());
   int polyOrder = 1; // keep things simple
   Teuchos::RCP<DofOrdering> trialOrder;
   shards::CellTopology quad_4(shards::getCellTopologyData<shards::Quadrilateral<4> >() );
@@ -701,7 +701,7 @@ bool DPGTests::testComputeStiffnessDx() {
   
   FieldContainer<double> stiffnessActual(numTests,4,4);
   
-  Teuchos::RCP<BilinearForm> bilinearForm = Teuchos::rcp(new TestBilinearFormDx());
+  BFPtr bilinearForm = Teuchos::rcp(new TestBilinearFormDx());
   
   FieldContainer<double> cellSideParities(numTests,numSides);
   cellSideParities.initialize(1.0); // for 1-element meshes, all side parites are 1.0
@@ -825,7 +825,7 @@ bool DPGTests::testComputeStiffnessFlux() {
    }
    }*/
   
-  Teuchos::RCP<BilinearForm> bilinearForm = Teuchos::rcp(new TestBilinearFormFlux());
+  BFPtr bilinearForm = Teuchos::rcp(new TestBilinearFormFlux());
   
   FieldContainer<double> cellSideParities(numTests,numSides);
   cellSideParities.initialize(1.0); // for 1-element meshes, all side parites are 1.0
@@ -922,7 +922,7 @@ bool DPGTests::testComputeStiffnessTrace() {
   // horizontal half-slice doesn't change the x derivatives at all
   // cell measure is again half the ref cell, so 1/2 the ref cell's stiffness.
   
-  Teuchos::RCP<BilinearForm> bilinearForm = Teuchos::rcp(new TestBilinearFormTrace());
+  BFPtr bilinearForm = Teuchos::rcp(new TestBilinearFormTrace());
   
   FieldContainer<double> cellSideParities(numTests,numSides);
   cellSideParities.initialize(1.0); // for 1-element meshes, all side parites are 1.0
@@ -960,7 +960,7 @@ bool DPGTests::testComputeStiffnessTrace() {
 bool DPGTests::testMathInnerProductDx() {
   int numTests = 1;
   
-  Teuchos::RCP<BilinearForm> bilinearForm = Teuchos::rcp( new TestBilinearFormDx() );
+  BFPtr bilinearForm = Teuchos::rcp( new TestBilinearFormDx() );
   
   IPPtr ip = Teuchos::rcp( new MathInnerProduct(bilinearForm) );
   
@@ -1337,7 +1337,7 @@ bool DPGTests::testLowOrderTrialCubicTest() {
   
   lowestOrderHGRADOrdering->addEntry(0,basis,0);
   
-  Teuchos::RCP<BilinearForm> bilinearForm = Teuchos::rcp( new TestBilinearFormDx() );
+  BFPtr bilinearForm = Teuchos::rcp( new TestBilinearFormDx() );
   
   DofOrderingPtr cubicHGradOrdering = Teuchos::rcp( new DofOrdering );
   BasisPtr testBasis = Camellia::intrepidQuadHGRAD(order);
@@ -2178,7 +2178,7 @@ bool DPGTests::testComputeOptimalTest() {
     
     FieldContainer<double> actualStiffness(numTests, numTrialDofs, numTestDofs);
     
-    Teuchos::RCP<BilinearForm> bilinearForm = Teuchos::rcp( new TestBilinearFormDx() );
+    BFPtr bilinearForm = Teuchos::rcp( new TestBilinearFormDx() );
     
     bilinearForm->setWarnAboutZeroRowsAndColumns(false); // we *expect* zero columns for constant basis functions (which we can have with non-conforming bases)
     
@@ -2405,7 +2405,7 @@ bool DPGTests::testTestBilinearFormAnalyticBoundaryIntegralExpectedConformingMat
   TestBilinearFormAnalyticBoundaryIntegral::expectedPreStiffnessForCubicsOnQuad(preStiffnessConforming,true);
   TestBilinearFormAnalyticBoundaryIntegral::expectedPreStiffnessForCubicsOnQuad(preStiffnessNonConforming,false);
   
-  Teuchos::RCP<BilinearForm> bilinearForm = TestBilinearFormAnalyticBoundaryIntegral::bf();
+  BFPtr bilinearForm = TestBilinearFormAnalyticBoundaryIntegral::bf();
   
   Teuchos::RCP<DofOrdering> conformingOrdering, nonConformingOrdering;
   

@@ -146,8 +146,8 @@ void MeshRefinementTests::preStiffnessExpectedUniform(FieldContainer<double> &pr
   
   numPoints = 2;
   FieldContainer<double> refPoints1D(numPoints,1); // line nodes (for linear basis)
-  refPoints2D(0,0) = -1.0;
-  refPoints2D(1,0) = 1.0;
+  refPoints1D(0,0) = -1.0;
+  refPoints1D(1,0) = 1.0;
   int v_ordinals[numPoints];
   
   FieldContainer<double> trialValues(trialBasis->getCardinality(),refPoints1D.dimension(0));

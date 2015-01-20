@@ -41,7 +41,6 @@
 // Shards includes
 #include "Shards_CellTopology.hpp"
 
-#include "BilinearForm.h"
 #include "VectorizedBasis.h"
 #include "Basis.h"
 
@@ -51,28 +50,28 @@
 #include "CamelliaIntrepidExtendedTypes.h"
 
 class BasisEvaluation { 
-  typedef Teuchos::RCP< FieldContainer<double> > FCPtr;
-  typedef Teuchos::RCP< const FieldContainer<double> > constFCPtr;
+  typedef Teuchos::RCP< Intrepid::FieldContainer<double> > FCPtr;
+  typedef Teuchos::RCP< const Intrepid::FieldContainer<double> > constFCPtr;
   
 public:
   static FCPtr getValues(BasisPtr basis, Camellia::EOperator op,
-                         const FieldContainer<double> &refPoints);
+                         const Intrepid::FieldContainer<double> &refPoints);
   static FCPtr getTransformedValues(BasisPtr basis, Camellia::EOperator op,
-                                   const FieldContainer<double> &refPoints,
-                                   const FieldContainer<double> &cellJacobian, 
-                                   const FieldContainer<double> &cellJacobianInv,
-                                   const FieldContainer<double> &cellJacobianDet);
+                                   const Intrepid::FieldContainer<double> &refPoints,
+                                   const Intrepid::FieldContainer<double> &cellJacobian, 
+                                   const Intrepid::FieldContainer<double> &cellJacobianInv,
+                                   const Intrepid::FieldContainer<double> &cellJacobianDet);
   static FCPtr getTransformedVectorValuesWithComponentBasisValues(Camellia::VectorBasisPtr basis, Camellia::EOperator op,
                                                                   constFCPtr componentReferenceValuesTransformed);
   static FCPtr getTransformedValuesWithBasisValues(BasisPtr basis, Camellia::EOperator op,
                                                    constFCPtr referenceValues,                                 
-                                                   const FieldContainer<double> &cellJacobian, 
-                                                   const FieldContainer<double> &cellJacobianInv,
-                                                   const FieldContainer<double> &cellJacobianDet);
-  static FCPtr getValuesCrossedWithNormals(constFCPtr values,const FieldContainer<double> &sideNormals);
-  static FCPtr getValuesDottedWithNormals(constFCPtr values,const FieldContainer<double> &sideNormals);
-  static FCPtr getValuesTimesNormals(constFCPtr values,const FieldContainer<double> &sideNormals);
-  static FCPtr getValuesTimesNormals(constFCPtr values,const FieldContainer<double> &sideNormals, int normalComponent);
+                                                   const Intrepid::FieldContainer<double> &cellJacobian, 
+                                                   const Intrepid::FieldContainer<double> &cellJacobianInv,
+                                                   const Intrepid::FieldContainer<double> &cellJacobianDet);
+  static FCPtr getValuesCrossedWithNormals(constFCPtr values,const Intrepid::FieldContainer<double> &sideNormals);
+  static FCPtr getValuesDottedWithNormals(constFCPtr values,const Intrepid::FieldContainer<double> &sideNormals);
+  static FCPtr getValuesTimesNormals(constFCPtr values,const Intrepid::FieldContainer<double> &sideNormals);
+  static FCPtr getValuesTimesNormals(constFCPtr values,const Intrepid::FieldContainer<double> &sideNormals, int normalComponent);
   static FCPtr getVectorizedValues(constFCPtr values, int spaceDim);
   static Intrepid::EOperator relatedOperator(Camellia::EOperator op, Camellia::EFunctionSpace fs, int &componentOfInterest);
   static FCPtr getComponentOfInterest(constFCPtr values, Camellia::EOperator op, Camellia::EFunctionSpace fs, int componentOfInterest);

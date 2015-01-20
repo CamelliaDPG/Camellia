@@ -8,7 +8,6 @@
 
 #include "BasisFactory.h"
 
-#include "BilinearForm.h" // defines Camellia
 #include "StokesBilinearForm.h"
 #include "BasisEvaluation.h"
 

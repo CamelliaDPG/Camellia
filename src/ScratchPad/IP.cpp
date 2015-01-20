@@ -22,7 +22,7 @@ IP::IP() {
 }
 // if the terms are a1, a2, ..., then the inner product is (a1,a1) + (a2,a2) + ... 
 
-IP::IP(Teuchos::RCP< BilinearForm > bfs) {
+IP::IP(BFPtr bfs) {
   _bilinearForm = bfs;
   _isLegacySubclass = true;
 }
@@ -349,8 +349,8 @@ void IP::printInteractions() {
         int numOps = ops1.size();
         for (int i=0; i<numOps; i++) {
           if ( ! first) cout << " + ";
-          cout << _bilinearForm->operatorName(ops1[i]) << " " << _bilinearForm->testName(testID) << " ";
-          cout << _bilinearForm->operatorName(ops2[i]) << " " << _bilinearForm->testName(testID2);
+          cout << Camellia::operatorName(ops1[i]) << " " << _bilinearForm->testName(testID) << " ";
+          cout << Camellia::operatorName(ops2[i]) << " " << _bilinearForm->testName(testID2);
           first = false;
         }
       }

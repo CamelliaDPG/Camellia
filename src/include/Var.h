@@ -13,7 +13,8 @@
 
 #include "CamelliaIntrepidExtendedTypes.h"
 
-class BilinearForm;
+class BF;
+typedef Teuchos::RCP<BF> BFPtr;
 
 class Var;
 typedef Teuchos::RCP<Var> VarPtr;
@@ -79,7 +80,7 @@ public:
    */
   bool isDefinedOnTemporalInterface() const;
   
-  static VarPtr varForTrialID(int trialID, Teuchos::RCP<BilinearForm> bf);
+  static VarPtr varForTrialID(int trialID, BFPtr bf);
 };
 
 #endif

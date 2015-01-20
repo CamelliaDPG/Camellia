@@ -31,7 +31,7 @@
 //
 // @HEADER 
 
-#include "BilinearForm.h"
+#include "BF.h"
 
 /*
  This test bilinear form just has b(u,v) = Int_dK (u_hat, v ),
@@ -39,7 +39,7 @@
  function, belonging to H(div,K).
  */
 
-class TestBilinearFormFlux : public BilinearForm {
+class TestBilinearFormFlux : public BF {
 private:
 //  static const string & S_TEST;
 //  static const string & S_TRIAL;

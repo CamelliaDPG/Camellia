@@ -438,7 +438,7 @@ void initializeSolutionAndCoarseMesh(SolutionPtr &solution, MeshPtr &coarseMesh,
   
   int H1Order = k + 1;
   
-  Teuchos::RCP<BilinearForm> bilinearForm = bf;
+  BFPtr bilinearForm = bf;
   
   vector<double> dimensions;
   vector<int> elementCounts;

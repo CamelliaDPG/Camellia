@@ -271,7 +271,7 @@ int main(int argc, char *argv[]) {
   Teuchos::ParameterList pl;
   
   map<int,int> trialOrderEnhancements;
-  Teuchos::RCP<BilinearForm> poissonBilinearForm = poissonBF;
+  BFPtr poissonBilinearForm = poissonBF;
   
   pl.set("useMinRule", true);
   pl.set("bf",poissonBilinearForm);

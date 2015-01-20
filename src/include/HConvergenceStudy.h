@@ -56,7 +56,7 @@ struct DerivedVariable {
 
 class HConvergenceStudy {
   Teuchos::RCP<ExactSolution> _exactSolution;
-  Teuchos::RCP<BilinearForm> _bilinearForm;
+  BFPtr _bilinearForm;
   Teuchos::RCP<RHS> _rhs;  
   Teuchos::RCP<BC> _bc;
   IPPtr _ip;
@@ -107,7 +107,7 @@ class HConvergenceStudy {
                                bool useConformingTraces );
 public:
   HConvergenceStudy(Teuchos::RCP<ExactSolution> exactSolution,
-                    Teuchos::RCP<BilinearForm> bilinearForm,
+                    BFPtr bilinearForm,
                     Teuchos::RCP<RHS> rhs,
                     Teuchos::RCP<BC> bc,
                     IPPtr ip,
@@ -126,7 +126,7 @@ public:
   
   void addDerivedVariable( LinearTermPtr derivedVar, const string & name );
   
-  Teuchos::RCP<BilinearForm> bilinearForm();
+  BFPtr bilinearForm();
   
   vector<int> meshSizes();
   vector< Teuchos::RCP<Solution> >& bestApproximations();

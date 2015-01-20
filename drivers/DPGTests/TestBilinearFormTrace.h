@@ -31,7 +31,7 @@
 //
 // @HEADER 
 
-#include "BilinearForm.h"
+#include "BF.h"
 
 /*
  This test bilinear form just has b(u,v) = Int_dK (u_hat, \tau \cdot n),
@@ -39,13 +39,13 @@
  function, belonging to H(div,K).
  */
 
-class TestBilinearFormTrace : public BilinearForm {
+class TestBilinearFormTrace : public BF {
 private:
   static const string & S_TEST;
   static const string & S_TRIAL;
   
 public:
-  TestBilinearFormTrace() {
+  TestBilinearFormTrace() : BF(true) { // true: is legacy subclass
     _testIDs.push_back(0);
     _trialIDs.push_back(0);
   }

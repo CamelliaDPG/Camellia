@@ -39,7 +39,7 @@
  *
  */
 
-#include "BilinearForm.h"
+#include "BF.h"
 
 // Teuchos includes
 #include "Teuchos_RCP.hpp"
@@ -63,7 +63,7 @@ class OptimalInnerProduct : public IP {
    */
   double _beta; // TODO: make this a vector, one value per flux/trace, or even somehow problem/mesh-dependent...
 public:
-  OptimalInnerProduct(Teuchos::RCP< BilinearForm > bilinearForm);
+  OptimalInnerProduct(BFPtr bilinearForm);
   
   void operators(int testID1, int testID2, 
                  vector<Camellia::EOperator> &testOp1,

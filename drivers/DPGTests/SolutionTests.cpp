@@ -96,7 +96,7 @@ public:
 };
 
 bool SolutionTests::solutionCoefficientsAreConsistent(Teuchos::RCP<Solution> soln, bool printDetailsToConsole) {
-  Teuchos::RCP<BilinearForm> bf = soln->mesh()->bilinearForm();
+  BFPtr bf = soln->mesh()->bilinearForm();
   
   vector<int> trialIDs = bf->trialIDs();
 
@@ -448,10 +448,8 @@ bool SolutionTests::testAddCondensedSolution() {
   double y0 = 0;
   bool divideIntoTriangles = false;
   
-  BilinearFormPtr bilinearFormPtr = Teuchos::rcp((BilinearForm*)bf.get(), false);
-  
   pl.set("useMinRule", true);
-  pl.set("bf",bilinearFormPtr);
+  pl.set("bf",bf);
   pl.set("H1Order", H1Order);
   pl.set("delta_k", pToAddTest);
   pl.set("horizontalElements", horizontalElements);
@@ -970,7 +968,7 @@ bool SolutionTests::testNewProjectFunction() {
   bool success = true;
   double tol = 1e-14;
   
-  Teuchos::RCP<BilinearForm> bf = _confusionUnsolved->mesh()->bilinearForm();
+  BFPtr bf = _confusionUnsolved->mesh()->bilinearForm();
   
   vector<int> trialIDs = bf->trialIDs();
   

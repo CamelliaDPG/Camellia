@@ -37,7 +37,7 @@
 
 #include "DofOrderingFactory.h"
 
-#include "BilinearForm.h"
+#include "BF.h"
 
 #include "Basis.h"
 
@@ -45,11 +45,11 @@
 
 using namespace Camellia;
 
-DofOrderingFactory::DofOrderingFactory(Teuchos::RCP<BilinearForm> bilinearForm) {
+DofOrderingFactory::DofOrderingFactory(BFPtr bilinearForm) {
   _bilinearForm = bilinearForm;
 }
 
-DofOrderingFactory::DofOrderingFactory(Teuchos::RCP<BilinearForm> bilinearForm,
+DofOrderingFactory::DofOrderingFactory(BFPtr bilinearForm,
                                        map<int,int> trialOrderEnhancements,
                                        map<int,int> testOrderEnhancements) {
   _bilinearForm = bilinearForm;

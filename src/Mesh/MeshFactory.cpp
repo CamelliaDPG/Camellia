@@ -37,7 +37,7 @@ static ParametricCurvePtr parametricRect(double width, double height, double x0,
 }
 
 #ifdef HAVE_EPETRAEXT_HDF5
-  MeshPtr MeshFactory::loadFromHDF5(BilinearFormPtr bf, string filename) {
+  MeshPtr MeshFactory::loadFromHDF5(BFPtr bf, string filename) {
     Epetra_SerialComm Comm;
     EpetraExt::HDF5 hdf5(Comm);
     hdf5.Open(filename);
@@ -232,7 +232,7 @@ static ParametricCurvePtr parametricRect(double width, double height, double x0,
 
 MeshPtr MeshFactory::quadMesh(Teuchos::ParameterList &parameters) {
   bool useMinRule = parameters.get<bool>("useMinRule",true);
-  BilinearFormPtr bf = parameters.get< BilinearFormPtr >("bf");
+  BFPtr bf = parameters.get< BFPtr >("bf");
   int H1Order = parameters.get<int>("H1Order");
   int spaceDim = 2;
   int delta_k = parameters.get<int>("delta_k",spaceDim);
@@ -362,7 +362,7 @@ public:
   }
 };*/
 
-MeshPtr MeshFactory::quadMesh(BilinearFormPtr bf, int H1Order, FieldContainer<double> &quadNodes, int pToAddTest) {
+MeshPtr MeshFactory::quadMesh(BFPtr bf, int H1Order, FieldContainer<double> &quadNodes, int pToAddTest) {
   if (quadNodes.size() != 8) {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "quadNodes must be 4 x 2");
   }
@@ -386,7 +386,7 @@ MeshPtr MeshFactory::quadMesh(BilinearFormPtr bf, int H1Order, FieldContainer<do
   return mesh;
 }
 
-MeshPtr MeshFactory::quadMesh(BilinearFormPtr bf, int H1Order, int pToAddTest,
+MeshPtr MeshFactory::quadMesh(BFPtr bf, int H1Order, int pToAddTest,
                               double width, double height, int horizontalElements, int verticalElements, bool divideIntoTriangles,
                               double x0, double y0, vector<PeriodicBCPtr> periodicBCs) {
   
@@ -408,7 +408,7 @@ MeshPtr MeshFactory::quadMesh(BilinearFormPtr bf, int H1Order, int pToAddTest,
   return quadMesh(pl);
 }
 
-MeshPtr MeshFactory::quadMeshMinRule(BilinearFormPtr bf, int H1Order, int pToAddTest,
+MeshPtr MeshFactory::quadMeshMinRule(BFPtr bf, int H1Order, int pToAddTest,
                                       double width, double height, int horizontalElements, int verticalElements,
                                      bool divideIntoTriangles, double x0, double y0, vector<PeriodicBCPtr> periodicBCs) {
   Teuchos::ParameterList pl;
@@ -429,7 +429,7 @@ MeshPtr MeshFactory::quadMeshMinRule(BilinearFormPtr bf, int H1Order, int pToAdd
   return quadMesh(pl);
 }
 
-MeshPtr MeshFactory::intervalMesh(BilinearFormPtr bf, double xLeft, double xRight, int numElements, int H1Order, int delta_k) {
+MeshPtr MeshFactory::intervalMesh(BFPtr bf, double xLeft, double xRight, int numElements, int H1Order, int delta_k) {
   int n = numElements;
   vector< vector<double> > vertices(n+1);
   vector<double> vertex(1);
@@ -454,7 +454,7 @@ MeshPtr MeshFactory::intervalMesh(BilinearFormPtr bf, double xLeft, double xRigh
   return Teuchos::rcp( new Mesh(meshTopology, bf, H1Order, delta_k) );
 }
 
-MeshPtr MeshFactory::rectilinearMesh(BilinearFormPtr bf, vector<double> dimensions, vector<int> elementCounts, int H1Order, int pToAddTest, vector<double> x0) {
+MeshPtr MeshFactory::rectilinearMesh(BFPtr bf, vector<double> dimensions, vector<int> elementCounts, int H1Order, int pToAddTest, vector<double> x0) {
   int spaceDim = dimensions.size();
   if (pToAddTest==-1) {
     pToAddTest = spaceDim;
@@ -664,7 +664,7 @@ MeshGeometryPtr MeshFactory::shiftedHemkerGeometry(double xLeft, double xRight, 
   return shiftedHemkerGeometry(xLeft, xRight, -meshHeight/2.0, meshHeight/2.0, cylinderRadius);
 }
 
-MeshPtr MeshFactory::readMesh(string filePath, Teuchos::RCP< BilinearForm > bilinearForm, int H1Order, int pToAdd)
+MeshPtr MeshFactory::readMesh(string filePath, BFPtr bilinearForm, int H1Order, int pToAdd)
 {
   ifstream mshFile;
   mshFile.open(filePath.c_str());
@@ -729,7 +729,7 @@ MeshPtr MeshFactory::readMesh(string filePath, Teuchos::RCP< BilinearForm > bili
   return mesh;
 }
 
-MeshPtr MeshFactory::readTriangle(string filePath, Teuchos::RCP< BilinearForm > bilinearForm, int H1Order, int pToAdd)
+MeshPtr MeshFactory::readTriangle(string filePath, BFPtr bilinearForm, int H1Order, int pToAdd)
 {
   ifstream nodeFile;
   ifstream eleFile;
@@ -777,7 +777,7 @@ MeshPtr MeshFactory::readTriangle(string filePath, Teuchos::RCP< BilinearForm > 
 
 MeshPtr MeshFactory::buildQuadMesh(const FieldContainer<double> &quadBoundaryPoints,
                                    int horizontalElements, int verticalElements,
-                                   Teuchos::RCP< BilinearForm > bilinearForm,
+                                   BFPtr bilinearForm,
                                    int H1Order, int pTest, bool triangulate, bool useConformingTraces,
                                    map<int,int> trialOrderEnhancements,
                                    map<int,int> testOrderEnhancements) {
@@ -823,7 +823,7 @@ MeshPtr MeshFactory::buildQuadMesh(const FieldContainer<double> &quadBoundaryPoi
 
 Teuchos::RCP<Mesh> MeshFactory::buildQuadMeshHybrid(const FieldContainer<double> &quadBoundaryPoints,
                                              int horizontalElements, int verticalElements,
-                                             Teuchos::RCP< BilinearForm > bilinearForm,
+                                             BFPtr bilinearForm,
                                              int H1Order, int pTest, bool useConformingTraces) {
   int pToAddToTest = pTest - H1Order;
   int spaceDim = 2;
@@ -1134,7 +1134,7 @@ MeshGeometryPtr MeshFactory::shiftedHemkerGeometry(double xLeft, double xRight, 
 }
 
 MeshPtr MeshFactory::shiftedHemkerMesh(double xLeft, double xRight, double meshHeight, double cylinderRadius, // cylinder is centered in quad mesh.
-                                BilinearFormPtr bilinearForm, int H1Order, int pToAddTest) {
+                                BFPtr bilinearForm, int H1Order, int pToAddTest) {
   MeshGeometryPtr geometry = MeshFactory::shiftedHemkerGeometry(xLeft, xRight, meshHeight, cylinderRadius);
   MeshPtr mesh = Teuchos::rcp( new Mesh(geometry->vertices(), geometry->elementVertices(),
                                         bilinearForm, H1Order, pToAddTest) );

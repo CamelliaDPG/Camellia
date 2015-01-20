@@ -56,6 +56,21 @@ using namespace Camellia;
 class BilinearForm {
 public:
   BilinearForm();
+  
+  // non-virtual methods:
+  void setUseSPDSolveForOptimalTestFunctions(bool value);
+  void setUseIterativeRefinementsWithSPDSolve(bool value);
+  void setUseExtendedPrecisionSolveForOptimalTestFunctions(bool value);
+  void setWarnAboutZeroRowsAndColumns(bool value);
+  
+  const vector< int > & trialIDs();
+  const vector< int > & testIDs();
+  
+  vector<int> trialVolumeIDs();
+  vector<int> trialBoundaryIDs();
+  
+  // virtual methods:
+  
   virtual bool trialTestOperator(int trialID, int testID, 
                                  Camellia::EOperator &trialOperator,
                                  Camellia::EOperator &testOperator) { 
@@ -97,9 +112,6 @@ public:
   virtual void stiffnessMatrix(FieldContainer<double> &stiffness, DofOrderingPtr trialOrdering, 
                                DofOrderingPtr testOrdering, FieldContainer<double> &cellSideParities,
                                BasisCachePtr basisCache);
-                           
-  const vector< int > & trialIDs();
-  const vector< int > & testIDs();
   
   virtual const string & testName(int testID) = 0;
   virtual const string & trialName(int trialID) = 0;
@@ -109,19 +121,8 @@ public:
   
   virtual bool isFluxOrTrace(int trialID) = 0;
   
-  static const string & operatorName(Camellia::EOperator op);
-  static int operatorRank(Camellia::EOperator op,
-                          Camellia::EFunctionSpace fs);
-  vector<int> trialVolumeIDs();
-  vector<int> trialBoundaryIDs();
-  
   virtual void printTrialTestInteractions();
-  
-  void setUseSPDSolveForOptimalTestFunctions(bool value);
-  void setUseIterativeRefinementsWithSPDSolve(bool value);
-  void setUseExtendedPrecisionSolveForOptimalTestFunctions(bool value);
-  void setWarnAboutZeroRowsAndColumns(bool value);
-  
+
   virtual VarFactory varFactory();
   
   virtual ~BilinearForm() {}

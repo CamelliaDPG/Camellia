@@ -6,7 +6,7 @@
  function, belonging to H(div,K).
  */
 
-TestBilinearFormFlux::TestBilinearFormFlux() {
+TestBilinearFormFlux::TestBilinearFormFlux() : BF(true) { // true: is legacy subclass
   _testIDs.push_back(0);
   _trialIDs.push_back(0);
 }

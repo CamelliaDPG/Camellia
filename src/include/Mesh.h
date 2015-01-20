@@ -56,7 +56,7 @@
 #include "ElementTypeFactory.h"
 #include "Element.h"
 #include "Boundary.h"
-#include "BilinearForm.h"
+#include "BF.h"
 #include "DofOrderingFactory.h"
 #include "RefinementPattern.h"
 #include "MeshPartitionPolicy.h"
@@ -96,7 +96,7 @@ class Mesh : public RefinementObserver, public DofInterpreter {
   bool _usePatchBasis; // use MultiBasis if this is false.
   bool _useConformingTraces; // if true, enforces vertex trace continuity
   
-  BilinearFormPtr _bilinearForm;
+  BFPtr _bilinearForm;
   // for now, just a uniform mesh, with a rectangular boundary and elements.
   Boundary _boundary;
 
@@ -155,32 +155,32 @@ public:
   RefinementHistory _refinementHistory;
   // legacy (max rule 2D) constructor:
   Mesh(const vector<vector<double> > &vertices, vector< vector<IndexType> > &elementVertices,
-       Teuchos::RCP< BilinearForm > bilinearForm, int H1Order, int pToAddTest, bool useConformingTraces = true,
+       BFPtr bilinearForm, int H1Order, int pToAddTest, bool useConformingTraces = true,
        map<int,int> trialOrderEnhancements=_emptyIntIntMap, map<int,int> testOrderEnhancements=_emptyIntIntMap,
        vector< PeriodicBCPtr > periodicBCs = vector< PeriodicBCPtr >());
   
   // new constructor (min rule, n-D):
-  Mesh(MeshTopologyPtr meshTopology, BilinearFormPtr bilinearForm, int H1Order, int pToAddTest,
+  Mesh(MeshTopologyPtr meshTopology, BFPtr bilinearForm, int H1Order, int pToAddTest,
        map<int,int> trialOrderEnhancements=_emptyIntIntMap, map<int,int> testOrderEnhancements=_emptyIntIntMap);
 
 #ifdef HAVE_EPETRAEXT_HDF5
   void saveToHDF5(string filename);
 #endif
 
-  static Teuchos::RCP<Mesh> readMsh(string filePath, Teuchos::RCP< BilinearForm > bilinearForm, int H1Order, int pToAdd);
+  static Teuchos::RCP<Mesh> readMsh(string filePath, BFPtr bilinearForm, int H1Order, int pToAdd);
 
-  static Teuchos::RCP<Mesh> readTriangle(string filePath, Teuchos::RCP< BilinearForm > bilinearForm, int H1Order, int pToAdd);
+  static Teuchos::RCP<Mesh> readTriangle(string filePath, BFPtr bilinearForm, int H1Order, int pToAdd);
 
   // deprecated static constructors (use MeshFactory methods instead):
   static Teuchos::RCP<Mesh> buildQuadMesh(const FieldContainer<double> &quadBoundaryPoints,
                                           int horizontalElements, int verticalElements,
-                                          Teuchos::RCP< BilinearForm > bilinearForm,
+                                          BFPtr bilinearForm,
                                           int H1Order, int pTest, bool triangulate=false, bool useConformingTraces=true,
                                           map<int,int> trialOrderEnhancements=_emptyIntIntMap,
                                           map<int,int> testOrderEnhancements=_emptyIntIntMap);
   static Teuchos::RCP<Mesh> buildQuadMeshHybrid(const FieldContainer<double> &quadBoundaryPoints,
                                                 int horizontalElements, int verticalElements,
-                                                Teuchos::RCP< BilinearForm > bilinearForm,
+                                                BFPtr bilinearForm,
                                                 int H1Order, int pTest, bool useConformingTraces=true);
   static void quadMeshCellIDs(FieldContainer<int> &cellIDs,
                               int horizontalElements, int verticalElements,
@@ -191,8 +191,8 @@ public:
   FieldContainer<double> cellSideParities( ElementTypePtr elemTypePtr);
   FieldContainer<double> cellSideParitiesForCell( GlobalIndexType cellID );
 
-  Teuchos::RCP<BilinearForm> bilinearForm();
-  void setBilinearForm( Teuchos::RCP<BilinearForm>);
+  BFPtr bilinearForm();
+  void setBilinearForm( BFPtr);
 
   //! This method should probably be moved to MeshTopology; its implementation is independent of Mesh.
 //  bool cellContainsPoint(GlobalIndexType cellID, vector<double> &point);

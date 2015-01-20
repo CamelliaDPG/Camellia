@@ -28,7 +28,7 @@ SpatialFilterPtr MeshUtilities::rampBoundary(double RAMP_HEIGHT){
 }
 
 // builds a [0,2]x[0,1] L shaped domain with 2 main blocks
-MeshPtr MeshUtilities::buildRampMesh(double rampHeight, Teuchos::RCP< BilinearForm > bilinearForm, int H1Order, int pTest){
+MeshPtr MeshUtilities::buildRampMesh(double rampHeight, BFPtr bilinearForm, int H1Order, int pTest){
 
   MeshPtr mesh;
   // L-shaped domain for double ramp problem
@@ -62,7 +62,7 @@ MeshPtr MeshUtilities::buildRampMesh(double rampHeight, Teuchos::RCP< BilinearFo
 
 
 // builds a [0,2]x[0,1] L shaped domain with 2 main blocks
-MeshPtr MeshUtilities::buildLongRampMesh(double rampHeight, Teuchos::RCP< BilinearForm > bilinearForm, int H1Order, int pTest){
+MeshPtr MeshUtilities::buildLongRampMesh(double rampHeight, BFPtr bilinearForm, int H1Order, int pTest){
 
   MeshPtr mesh;
   // L-shaped domain for double ramp problem
@@ -109,7 +109,7 @@ MeshPtr MeshUtilities::buildLongRampMesh(double rampHeight, Teuchos::RCP< Biline
 
 
 // builds a [0,2]x[0,2] L shaped domain with 3 main blocks
-MeshPtr MeshUtilities::buildFrontFacingStep(Teuchos::RCP< BilinearForm > bilinearForm, int H1Order, int pTest){
+MeshPtr MeshUtilities::buildFrontFacingStep(BFPtr bilinearForm, int H1Order, int pTest){
 
   MeshPtr mesh;
   // L-shaped domain for double ramp problem
@@ -150,7 +150,7 @@ MeshPtr MeshUtilities::buildFrontFacingStep(Teuchos::RCP< BilinearForm > bilinea
 
 
 // builds a [0,1]x[0,1] square mesh with evenly spaced horizontal/vertical cells
-MeshPtr MeshUtilities::buildUnitQuadMesh(int horizontalCells, int verticalCells, Teuchos::RCP< BilinearForm > bilinearForm, int H1Order, int pTest){
+MeshPtr MeshUtilities::buildUnitQuadMesh(int horizontalCells, int verticalCells, BFPtr bilinearForm, int H1Order, int pTest){
   FieldContainer<double> quadPoints(4,2);
   double squareSize = 1.0;
   quadPoints(0,0) = 0.0; // x1
@@ -166,7 +166,7 @@ MeshPtr MeshUtilities::buildUnitQuadMesh(int horizontalCells, int verticalCells,
   return MeshFactory::buildQuadMesh(quadPoints, horizontalCells, verticalCells, bilinearForm, H1Order, pTest);
 }
 
-MeshPtr MeshUtilities::buildUnitQuadMesh(int nCells, Teuchos::RCP< BilinearForm > bilinearForm, int H1Order, int pTest){
+MeshPtr MeshUtilities::buildUnitQuadMesh(int nCells, BFPtr bilinearForm, int H1Order, int pTest){
   return MeshUtilities::buildUnitQuadMesh(nCells,nCells, bilinearForm, H1Order, pTest);
 }
 

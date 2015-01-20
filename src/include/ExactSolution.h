@@ -57,7 +57,7 @@ typedef Teuchos::RCP<Function> FunctionPtr;
 
 class ExactSolution {
 protected:
-  Teuchos::RCP<BilinearForm> _bilinearForm;
+  BFPtr _bilinearForm;
   Teuchos::RCP<BC> _bc;
   Teuchos::RCP<RHS> _rhs;
   void squaredDifference(FieldContainer<double> &diffSquared, FieldContainer<double> &values1, FieldContainer<double> &values2);
@@ -66,8 +66,8 @@ protected:
   map< int, FunctionPtr > _exactFunctions; // var ID --> function
 public:
   ExactSolution();
-  ExactSolution(Teuchos::RCP<BilinearForm> bf, Teuchos::RCP<BC> bc, Teuchos::RCP<RHS> rhs, int H1Order = -1);
-  Teuchos::RCP<BilinearForm> bilinearForm();
+  ExactSolution(BFPtr bf, Teuchos::RCP<BC> bc, Teuchos::RCP<RHS> rhs, int H1Order = -1);
+  BFPtr bilinearForm();
   Teuchos::RCP<BC> bc();
   Teuchos::RCP<RHS> rhs();
   const map< int, FunctionPtr > exactFunctions(); // not supported by legacy subclasses

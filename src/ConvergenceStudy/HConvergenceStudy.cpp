@@ -45,7 +45,7 @@
 #include "MeshFactory.h"
 
 HConvergenceStudy::HConvergenceStudy(Teuchos::RCP<ExactSolution> exactSolution,
-                                     Teuchos::RCP<BilinearForm> bilinearForm,
+                                     BFPtr bilinearForm,
                                      Teuchos::RCP<RHS> rhs,
                                      Teuchos::RCP<BC> bc,
                                      IPPtr ip, 
@@ -154,7 +154,7 @@ int HConvergenceStudy::minNumElements() {
   return minNumElements;
 }
 
-Teuchos::RCP<BilinearForm> HConvergenceStudy::bilinearForm() {
+BFPtr HConvergenceStudy::bilinearForm() {
   return _bilinearForm;
 }
 
