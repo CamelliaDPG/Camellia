@@ -144,7 +144,7 @@ ENDIF()
 project(Camellia)
 
 # Find all library source files
-FILE(GLOB_RECURSE LIB_SOURCES "${CAMELLIA_SOURCE_DIR}/*.cpp")
+FILE(GLOB_RECURSE LIB_SOURCES "${CAMELLIA_SOURCE_DIR}/*.cpp" "${CAMELLIA_SOURCE_DIR}/include/*.h")
 set(HEADERS 
   ${CAMELLIA_SOURCE_DIR}/include
 )
