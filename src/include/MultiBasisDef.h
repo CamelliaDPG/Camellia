@@ -255,7 +255,7 @@ namespace Camellia {
       computeCellJacobians(cellJacobian,cellJacobInv,cellJacobDet, inputPointsRefCell,refCellIndex);
       
       Teuchos::RCP< ArrayScalar > transformedValues = BasisEvaluation::getTransformedValues(basis,
-                                                                                            (IntrepidExtendedTypes::EOperator)operatorType,
+                                                                                            (Camellia::EOperator)operatorType,
                                                                                             inputPointsRefCell,
                                                                                             cellJacobian, cellJacobInv, cellJacobDet);
       
@@ -406,9 +406,9 @@ namespace Camellia {
     int *tags = new int[ tagSize * N ];
 
     
-    if ((this->_functionSpace==IntrepidExtendedTypes::FUNCTION_SPACE_HVOL)
-        || (this->_functionSpace==IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HVOL)
-        || (this->_functionSpace==IntrepidExtendedTypes::FUNCTION_SPACE_TENSOR_HVOL)) {
+    if ((this->_functionSpace==Camellia::FUNCTION_SPACE_HVOL)
+        || (this->_functionSpace==Camellia::FUNCTION_SPACE_VECTOR_HVOL)
+        || (this->_functionSpace==Camellia::FUNCTION_SPACE_TENSOR_HVOL)) {
       int internal_dof = N; // all dofs are internal
       
       for (int i=0;i < N;i++) {

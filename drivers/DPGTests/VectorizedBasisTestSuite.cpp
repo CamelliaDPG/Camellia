@@ -105,10 +105,10 @@ bool VectorizedBasisTestSuite::testVectorizedBasisTags() {
   for (int polyOrder = 1; polyOrder<10; polyOrder++) {    
     BasisPtr hgradBasis =  BasisFactory::basisFactory()->getConformingBasis(polyOrder,
                                                             quad_4.getKey(),
-                                                            IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD);
+                                                            Camellia::FUNCTION_SPACE_HGRAD);
     BasisPtr vectorHGradBasis = BasisFactory::basisFactory()->getConformingBasis( polyOrder,
                                                                  quad_4.getKey(),
-                                                                 IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HGRAD);
+                                                                 Camellia::FUNCTION_SPACE_VECTOR_HGRAD);
     vector<int> vertexNodeFieldIndices;
     for (int vertexIndex=0; vertexIndex<numVertices; vertexIndex++) {
       for (int comp=0; comp<numComponents; comp++) {
@@ -137,7 +137,7 @@ bool VectorizedBasisTestSuite::testVectorizedBasis() {
   
   int polyOrder = 3, numPoints = 5, spaceDim = 2;
   
-  BasisPtr hgradBasis = BasisFactory::basisFactory()->getBasis(polyOrder, quad_4.getKey(), IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD);
+  BasisPtr hgradBasis = BasisFactory::basisFactory()->getBasis(polyOrder, quad_4.getKey(), Camellia::FUNCTION_SPACE_HGRAD);
   
   // first test: make a single-component vector basis.  This should agree in every entry with the basis itself, but its field container will have one higher rank...
   VectorizedBasis<> oneComp(hgradBasis, 1);
@@ -170,7 +170,7 @@ bool VectorizedBasisTestSuite::testVectorizedBasis() {
   vector< BasisPtr > twoComps;
   twoComps.push_back( Teuchos::rcp( new VectorizedBasis<>(hgradBasis, 2) ) );
   twoComps.push_back( BasisFactory::basisFactory()->getBasis( polyOrder,
-                                             quad_4.getKey(), IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HGRAD) );
+                                             quad_4.getKey(), Camellia::FUNCTION_SPACE_VECTOR_HGRAD) );
   
   
   vector< BasisPtr >::iterator twoCompIt;

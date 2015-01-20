@@ -75,10 +75,10 @@ namespace Camellia {
     this->_domainTopology = CellTopology::cellTopology( shards::CellTopology(shards::getCellTopologyData<shards::Quadrilateral<4> >() ) );
     if (this->_onlyDivFreeFunctions) {
       this->_basisCardinality = _degree_x * _degree_y + _degree_x + _degree_y;
-      this->_functionSpace = IntrepidExtendedTypes::FUNCTION_SPACE_HDIV_FREE;
+      this->_functionSpace = Camellia::FUNCTION_SPACE_HDIV_FREE;
     } else {
       this->_basisCardinality = 2 * _degree_x * _degree_y + _degree_x + _degree_y;
-      this->_functionSpace = IntrepidExtendedTypes::FUNCTION_SPACE_HDIV;
+      this->_functionSpace = Camellia::FUNCTION_SPACE_HDIV;
     }
     initializeL2normValues();
   }
@@ -96,10 +96,10 @@ namespace Camellia {
     this->_domainTopology = CellTopology::cellTopology( shards::CellTopology(shards::getCellTopologyData<shards::Quadrilateral<4> >() ) );
     if (this->_onlyDivFreeFunctions) {
       this->_basisCardinality = _degree_x * _degree_y + _degree_x + _degree_y;
-      this->_functionSpace = IntrepidExtendedTypes::FUNCTION_SPACE_HDIV_FREE;
+      this->_functionSpace = Camellia::FUNCTION_SPACE_HDIV_FREE;
     } else {
       this->_basisCardinality = 2 * _degree_x * _degree_y + _degree_x + _degree_y;
-      this->_functionSpace = IntrepidExtendedTypes::FUNCTION_SPACE_HDIV;
+      this->_functionSpace = Camellia::FUNCTION_SPACE_HDIV;
     }
     initializeL2normValues();
   }

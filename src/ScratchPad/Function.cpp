@@ -174,61 +174,61 @@ double Function::getTime()
   return _time;
 }
 
-void Function::values(FieldContainer<double> &values, IntrepidExtendedTypes::EOperator op, BasisCachePtr basisCache) {
+void Function::values(FieldContainer<double> &values, Camellia::EOperator op, BasisCachePtr basisCache) {
   switch (op) {
-    case IntrepidExtendedTypes::OP_VALUE:
+    case Camellia::OP_VALUE:
       this->values(values, basisCache);
       break;
-    case IntrepidExtendedTypes::OP_DX:
+    case Camellia::OP_DX:
       this->dx()->values(values, basisCache);
       break;
-    case IntrepidExtendedTypes::OP_DY:
+    case Camellia::OP_DY:
       this->dy()->values(values, basisCache);
       break;
-    case IntrepidExtendedTypes::OP_DZ:
+    case Camellia::OP_DZ:
       this->dz()->values(values, basisCache);
       break;
-    case IntrepidExtendedTypes::OP_GRAD:
+    case Camellia::OP_GRAD:
       this->grad()->values(values, basisCache);
       break;
-    case IntrepidExtendedTypes::OP_DIV:
+    case Camellia::OP_DIV:
       this->div()->values(values, basisCache);
       break;
     default:
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "unsupported operator");
       break;
   }
-  if (op==IntrepidExtendedTypes::OP_VALUE) {
+  if (op==Camellia::OP_VALUE) {
 
   } else {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "unsupported operator");
   }
 }
 
-FunctionPtr Function::op(FunctionPtr f, IntrepidExtendedTypes::EOperator op) {
+FunctionPtr Function::op(FunctionPtr f, Camellia::EOperator op) {
   if ( isNull(f) ) {
     return Function::null();
   }
   switch (op) {
-    case IntrepidExtendedTypes::OP_VALUE:
+    case Camellia::OP_VALUE:
       return f;
-    case IntrepidExtendedTypes::OP_DX:
+    case Camellia::OP_DX:
       return f->dx();
-    case IntrepidExtendedTypes::OP_DY:
+    case Camellia::OP_DY:
       return f->dy();
-    case IntrepidExtendedTypes::OP_DZ:
+    case Camellia::OP_DZ:
       return f->dz();
-    case IntrepidExtendedTypes::OP_X:
+    case Camellia::OP_X:
       return f->x();
-    case IntrepidExtendedTypes::OP_Y:
+    case Camellia::OP_Y:
       return f->y();
-    case IntrepidExtendedTypes::OP_Z:
+    case Camellia::OP_Z:
       return f->z();
-    case IntrepidExtendedTypes::OP_GRAD:
+    case Camellia::OP_GRAD:
       return f->grad();
-    case IntrepidExtendedTypes::OP_DIV:
+    case Camellia::OP_DIV:
       return f->div();
-    case IntrepidExtendedTypes::OP_DOT_NORMAL:
+    case Camellia::OP_DOT_NORMAL:
       return f * Function::normal();
     default:
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "unsupported operator");
@@ -2040,16 +2040,16 @@ FunctionPtr VectorizedFunction::z() {
 
 FunctionPtr VectorizedFunction::di(int i) {
   // derivative in the ith coordinate direction
-  IntrepidExtendedTypes::EOperator op;
+  Camellia::EOperator op;
   switch (i) {
     case 0:
-      op = IntrepidExtendedTypes::OP_DX;
+      op = Camellia::OP_DX;
       break;
     case 1:
-      op = IntrepidExtendedTypes::OP_DY;
+      op = Camellia::OP_DY;
       break;
     case 2:
-      op = IntrepidExtendedTypes::OP_DZ;
+      op = Camellia::OP_DZ;
       break;
     default:
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Invalid coordinate direction");
@@ -2483,7 +2483,7 @@ void SimpleSolutionFunction::values(FieldContainer<double> &values, BasisCachePt
 }
 
 FunctionPtr SimpleSolutionFunction::dx() {
-  if (_var->op() != IntrepidExtendedTypes::OP_VALUE) {
+  if (_var->op() != Camellia::OP_VALUE) {
     return Function::null();
   } else {
     return Function::solution(_var->dx(), _soln);
@@ -2491,7 +2491,7 @@ FunctionPtr SimpleSolutionFunction::dx() {
 }
 
 FunctionPtr SimpleSolutionFunction::dy() {
-  if (_var->op() != IntrepidExtendedTypes::OP_VALUE) {
+  if (_var->op() != Camellia::OP_VALUE) {
     return Function::null();
   } else {
     return Function::solution(_var->dy(), _soln);
@@ -2499,7 +2499,7 @@ FunctionPtr SimpleSolutionFunction::dy() {
 }
 
 FunctionPtr SimpleSolutionFunction::dz() {
-  if (_var->op() != IntrepidExtendedTypes::OP_VALUE) {
+  if (_var->op() != Camellia::OP_VALUE) {
     return Function::null();
   } else {
     return Function::solution(_var->dz(), _soln);
@@ -2507,7 +2507,7 @@ FunctionPtr SimpleSolutionFunction::dz() {
 }
 
 FunctionPtr SimpleSolutionFunction::x() {
-  if (_var->op() != IntrepidExtendedTypes::OP_VALUE) {
+  if (_var->op() != Camellia::OP_VALUE) {
     return Function::null();
   } else {
     return Function::solution(_var->x(), _soln);
@@ -2515,7 +2515,7 @@ FunctionPtr SimpleSolutionFunction::x() {
 }
 
 FunctionPtr SimpleSolutionFunction::y() {
-  if (_var->op() != IntrepidExtendedTypes::OP_VALUE) {
+  if (_var->op() != Camellia::OP_VALUE) {
     return Function::null();
   } else {
     return Function::solution(_var->y(), _soln);
@@ -2523,7 +2523,7 @@ FunctionPtr SimpleSolutionFunction::y() {
 }
 
 FunctionPtr SimpleSolutionFunction::z() {
-  if (_var->op() != IntrepidExtendedTypes::OP_VALUE) {
+  if (_var->op() != Camellia::OP_VALUE) {
     return Function::null();
   } else {
     return Function::solution(_var->z(), _soln);

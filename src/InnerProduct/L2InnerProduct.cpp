@@ -38,16 +38,16 @@
 #include "BasisCache.h"
 #include "AbstractFunction.h"
 
-using namespace IntrepidExtendedTypes;
+using namespace Camellia;
 
 void L2InnerProduct::operators(int testID1, int testID2, 
-			       vector<IntrepidExtendedTypes::EOperator> &testOp1,
-			       vector<IntrepidExtendedTypes::EOperator> &testOp2) {
+			       vector<Camellia::EOperator> &testOp1,
+			       vector<Camellia::EOperator> &testOp2) {
   testOp1.clear();
   testOp2.clear();
   if (testID1 == testID2) { //decouple the test inner products for each test function
-    testOp1.push_back( IntrepidExtendedTypes::OP_VALUE);
-    testOp2.push_back( IntrepidExtendedTypes::OP_VALUE);
+    testOp1.push_back( Camellia::OP_VALUE);
+    testOp2.push_back( Camellia::OP_VALUE);
   }
 }
 
@@ -94,8 +94,8 @@ void L2InnerProduct::computeInnerProductMatrix(FieldContainer<double> &innerProd
     for (trialIterator2= trialIDs.begin(); trialIterator2 != trialIDs.end(); trialIterator2++) {
       int trialID2 = *trialIterator2;
       
-      vector<IntrepidExtendedTypes::EOperator> trial1Operators;
-      vector<IntrepidExtendedTypes::EOperator> trial2Operators;
+      vector<Camellia::EOperator> trial1Operators;
+      vector<Camellia::EOperator> trial2Operators;
       
       operators(trialID1,trialID2,trial1Operators,trial2Operators);
       
@@ -104,12 +104,12 @@ void L2InnerProduct::computeInnerProductMatrix(FieldContainer<double> &innerProd
 			  std::invalid_argument,
 			  "trial1Operators.size() and trial2Operators.size() do not match.");
       
-      vector<IntrepidExtendedTypes::EOperator>::iterator op1It;
-      vector<IntrepidExtendedTypes::EOperator>::iterator op2It = trial2Operators.begin();
+      vector<Camellia::EOperator>::iterator op1It;
+      vector<Camellia::EOperator>::iterator op2It = trial2Operators.begin();
       int operatorIndex = 0;
       for (op1It=trial1Operators.begin(); op1It != trial1Operators.end(); op1It++) {
-        IntrepidExtendedTypes::EOperator op1 = *(op1It);
-        IntrepidExtendedTypes::EOperator op2 = *(op2It);
+        Camellia::EOperator op1 = *(op1It);
+        Camellia::EOperator op2 = *(op2It);
         FieldContainer<double> trial1Values; // these will be resized inside applyOperator..
         FieldContainer<double> trial2Values; // derivative values
         
@@ -205,8 +205,8 @@ void L2InnerProduct::computeInnerProductVector(FieldContainer<double> &innerProd
     for (trialIterator2= trialIDs.begin(); trialIterator2 != trialIDs.end(); trialIterator2++) {
       int trialID2 = *trialIterator2;
      
-      vector<IntrepidExtendedTypes::EOperator> trial1Operators;
-      vector<IntrepidExtendedTypes::EOperator> trial2Operators;
+      vector<Camellia::EOperator> trial1Operators;
+      vector<Camellia::EOperator> trial2Operators;
       
       operators(trialID1,trialID2,trial1Operators,trial2Operators);
       
@@ -215,12 +215,12 @@ void L2InnerProduct::computeInnerProductVector(FieldContainer<double> &innerProd
 			  std::invalid_argument,
 			  "trial1Operators.size() and trial2Operators.size() do not match.");
       
-      vector<IntrepidExtendedTypes::EOperator>::iterator op1It;
-      vector<IntrepidExtendedTypes::EOperator>::iterator op2It = trial2Operators.begin();
+      vector<Camellia::EOperator>::iterator op1It;
+      vector<Camellia::EOperator>::iterator op2It = trial2Operators.begin();
       int operatorIndex = 0;
       for (op1It=trial1Operators.begin(); op1It != trial1Operators.end(); op1It++) {
-        IntrepidExtendedTypes::EOperator op1 = *(op1It);
-        IntrepidExtendedTypes::EOperator op2 = *(op2It);
+        Camellia::EOperator op1 = *(op1It);
+        Camellia::EOperator op2 = *(op2It);
         
         trial1Basis = dofOrdering->getBasis(trialID1);
 	//        trial2Basis = dofOrdering->getBasis(trialID2);

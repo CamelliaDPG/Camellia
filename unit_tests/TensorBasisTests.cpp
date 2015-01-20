@@ -39,7 +39,7 @@ namespace {
     BasisFactoryPtr basisFactory = BasisFactory::basisFactory();
     CellTopoPtr line = CellTopology::line();
     
-    BasisPtr basis = basisFactory->getBasis(H1Order, line, IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD);
+    BasisPtr basis = basisFactory->getBasis(H1Order, line, Camellia::FUNCTION_SPACE_HGRAD);
     
     typedef Camellia::TensorBasis<double, FieldContainer<double> > TensorBasis;
     Teuchos::RCP<TensorBasis> tensorBasis = Teuchos::rcp( new TensorBasis(basis, basis) );
@@ -73,30 +73,30 @@ namespace {
     std::vector< BasisPtr > spatialBases;
     {
       int H1Order = spatialPolyOrder + 1;
-      BasisPtr basis = basisFactory->getBasis(H1Order, shards::Line<2>::key, IntrepidExtendedTypes::FUNCTION_SPACE_HVOL);
+      BasisPtr basis = basisFactory->getBasis(H1Order, shards::Line<2>::key, Camellia::FUNCTION_SPACE_HVOL);
       spatialBases.push_back(basis);
-      basis = basisFactory->getBasis(H1Order, shards::Line<2>::key, IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD);
+      basis = basisFactory->getBasis(H1Order, shards::Line<2>::key, Camellia::FUNCTION_SPACE_HGRAD);
       spatialBases.push_back(basis);
-      basis = basisFactory->getBasis(H1Order, shards::Quadrilateral<4>::key, IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD);
+      basis = basisFactory->getBasis(H1Order, shards::Quadrilateral<4>::key, Camellia::FUNCTION_SPACE_HGRAD);
       spatialBases.push_back(basis);
-      basis = basisFactory->getBasis(H1Order, shards::Quadrilateral<4>::key, IntrepidExtendedTypes::FUNCTION_SPACE_HCURL);
+      basis = basisFactory->getBasis(H1Order, shards::Quadrilateral<4>::key, Camellia::FUNCTION_SPACE_HCURL);
       spatialBases.push_back(basis);
-      basis = basisFactory->getBasis(H1Order, shards::Quadrilateral<4>::key, IntrepidExtendedTypes::FUNCTION_SPACE_HDIV);
+      basis = basisFactory->getBasis(H1Order, shards::Quadrilateral<4>::key, Camellia::FUNCTION_SPACE_HDIV);
       spatialBases.push_back(basis);
-      basis = basisFactory->getBasis(H1Order, shards::Quadrilateral<4>::key, IntrepidExtendedTypes::FUNCTION_SPACE_HVOL);
+      basis = basisFactory->getBasis(H1Order, shards::Quadrilateral<4>::key, Camellia::FUNCTION_SPACE_HVOL);
       spatialBases.push_back(basis);
-      basis = basisFactory->getBasis(H1Order, shards::Hexahedron<8>::key, IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD);
+      basis = basisFactory->getBasis(H1Order, shards::Hexahedron<8>::key, Camellia::FUNCTION_SPACE_HGRAD);
       spatialBases.push_back(basis);
-      basis = basisFactory->getBasis(H1Order, shards::Hexahedron<8>::key, IntrepidExtendedTypes::FUNCTION_SPACE_HCURL);
+      basis = basisFactory->getBasis(H1Order, shards::Hexahedron<8>::key, Camellia::FUNCTION_SPACE_HCURL);
       spatialBases.push_back(basis);
-      basis = basisFactory->getBasis(H1Order, shards::Hexahedron<8>::key, IntrepidExtendedTypes::FUNCTION_SPACE_HDIV);
+      basis = basisFactory->getBasis(H1Order, shards::Hexahedron<8>::key, Camellia::FUNCTION_SPACE_HDIV);
       spatialBases.push_back(basis);
-      basis = basisFactory->getBasis(H1Order, shards::Hexahedron<8>::key, IntrepidExtendedTypes::FUNCTION_SPACE_HVOL);
+      basis = basisFactory->getBasis(H1Order, shards::Hexahedron<8>::key, Camellia::FUNCTION_SPACE_HVOL);
       spatialBases.push_back(basis);
     }
     
     int timePolyOrder = 1;
-    BasisPtr timeBasis = basisFactory->getBasis(timePolyOrder + 1, shards::Line<2>::key, IntrepidExtendedTypes::FUNCTION_SPACE_HVOL);
+    BasisPtr timeBasis = basisFactory->getBasis(timePolyOrder + 1, shards::Line<2>::key, Camellia::FUNCTION_SPACE_HVOL);
     
     typedef Intrepid::FieldContainer<double> FC;
     int numSpacePoints = 3, numTimePoints = 3;

@@ -197,7 +197,7 @@ bool ParametricCurveTests::testCircularArc() {
   }
   
   shards::CellTopology line_2(shards::getCellTopologyData<shards::Line<2> >() );
-  BasisPtr quadraticBasis = BasisFactory::basisFactory()->getBasis(2, line_2.getKey(), IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD);
+  BasisPtr quadraticBasis = BasisFactory::basisFactory()->getBasis(2, line_2.getKey(), Camellia::FUNCTION_SPACE_HGRAD);
   
   // figure out what the weights for the quadratic "middle node" basis function should be:
   double expected_H1_weight_x, expected_H1_weight_y;
@@ -683,7 +683,7 @@ bool ParametricCurveTests::testProjectionBasedInterpolation() {
   
   /////////////////// TEST LINEAR CURVES RECOVERED //////////////////////
   
-  BasisPtr linearBasis = BasisFactory::basisFactory()->getBasis(1, line_2.getKey(), IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD);
+  BasisPtr linearBasis = BasisFactory::basisFactory()->getBasis(1, line_2.getKey(), Camellia::FUNCTION_SPACE_HGRAD);
   
   double x0=3, y0=-3, x1=5, y1=4;
 //  double dist = sqrt((x1-x0)*(x1-x0) + (y1-y0)*(y1-y0));
@@ -722,7 +722,7 @@ bool ParametricCurveTests::testProjectionBasedInterpolation() {
   
   ParametricCurvePtr myCurve = ParametricCurve::curve(x_t,y_t);
   
-  BasisPtr cubicBasis = BasisFactory::basisFactory()->getBasis(3, line_2.getKey(), IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD);
+  BasisPtr cubicBasis = BasisFactory::basisFactory()->getBasis(3, line_2.getKey(), Camellia::FUNCTION_SPACE_HGRAD);
   
   myCurve->projectionBasedInterpolant(basisCoefficients_x, cubicBasis, 0, lengthScale, useH1);
   myCurve->projectionBasedInterpolant(basisCoefficients_y, cubicBasis, 1, lengthScale, useH1);
@@ -740,7 +740,7 @@ bool ParametricCurveTests::testProjectionBasedInterpolation() {
   /////////////////// TEST UNRECOVERABLE CURVE INTERPOLATED //////////////////////
   
   // finally, project the cubic curve onto a quadratic basis, and check that it interpolates the endpoints
-  BasisPtr quadraticBasis = BasisFactory::basisFactory()->getBasis(2, line_2.getKey(), IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD);
+  BasisPtr quadraticBasis = BasisFactory::basisFactory()->getBasis(2, line_2.getKey(), Camellia::FUNCTION_SPACE_HGRAD);
   
   myCurve->projectionBasedInterpolant(basisCoefficients_x, quadraticBasis, 0, lengthScale, useH1);
   myCurve->projectionBasedInterpolant(basisCoefficients_y, quadraticBasis, 1, lengthScale, useH1);

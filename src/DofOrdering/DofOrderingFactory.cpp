@@ -65,7 +65,7 @@ DofOrderingPtr DofOrderingFactory::testOrdering(int polyOrder, CellTopoPtr cellT
   
   for (testIterator = testIDs.begin(); testIterator != testIDs.end(); testIterator++) {
     int testID = *testIterator;
-    IntrepidExtendedTypes::EFunctionSpace fs = _bilinearForm->functionSpaceForTest(testID);
+    Camellia::EFunctionSpace fs = _bilinearForm->functionSpaceForTest(testID);
     BasisPtr basis;
     int testIDPolyOrder = polyOrder + _testOrderEnhancements[testID]; // uses the fact that map defaults to 0 for entries that aren't found
     basis = BasisFactory::basisFactory()->getBasis( testIDPolyOrder, cellTopo, fs);
@@ -102,7 +102,7 @@ DofOrderingPtr DofOrderingFactory::trialOrdering(int polyOrder,
     int trialID = *trialIterator;
     int trialIDPolyOrder = polyOrder + _trialOrderEnhancements[trialID]; // uses the fact that map defaults to 0 for entries that aren't found
     
-    IntrepidExtendedTypes::EFunctionSpace fs = _bilinearForm->functionSpaceForTrial(trialID);
+    Camellia::EFunctionSpace fs = _bilinearForm->functionSpaceForTrial(trialID);
     
     BasisPtr basis;
     
@@ -119,7 +119,7 @@ DofOrderingPtr DofOrderingFactory::trialOrdering(int polyOrder,
         traceOrder->addEntry(trialID,basis,basisRank,sideOrdinal);
       }
       if ( conformingVertices
-          && fs == IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD) {
+          && fs == Camellia::FUNCTION_SPACE_HGRAD) {
         // then we want to identify basis dofs at the vertices...
         
         addConformingVertexPairings(trialID, trialOrder, cellTopo);
@@ -167,7 +167,7 @@ DofOrderingPtr DofOrderingFactory::getRelabeledDofOrdering(DofOrderingPtr dofOrd
     int varID = *idIt;
     int newVarID = oldKeysNewValues[varID];
     int numSides = dofOrdering->getNumSidesForVarID(varID);
-    IntrepidExtendedTypes::EFunctionSpace fs;
+    Camellia::EFunctionSpace fs;
     for (int sideIndex=0; sideIndex<numSides; sideIndex++) {
       BasisPtr basis = dofOrdering->getBasis(varID,sideIndex);
       
@@ -180,7 +180,7 @@ DofOrderingPtr DofOrderingFactory::getRelabeledDofOrdering(DofOrderingPtr dofOrd
         newTraceOrder->addEntry(newVarID, basis, basisRank, sideIndex);
       }
     }
-    if ((numSides > 1) && (fs == IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD) && (conforming)) {
+    if ((numSides > 1) && (fs == Camellia::FUNCTION_SPACE_HGRAD) && (conforming)) {
       addConformingVertexPairings(newVarID, newOrdering, cellTopoPtr);
       addConformingVertexPairings(newVarID, newTraceOrder, cellTopoPtr);
     }
@@ -500,7 +500,7 @@ DofOrderingPtr DofOrderingFactory::upgradeSide(DofOrderingPtr dofOrdering,
                          std::invalid_argument,
                          "upgradeSide requested for varID on interior.");
     }
-    IntrepidExtendedTypes::EFunctionSpace fs;
+    Camellia::EFunctionSpace fs;
     for (int sideIndex=0; sideIndex<numSides; sideIndex++) {
       BasisPtr basis = dofOrdering->getBasis(varID,sideIndex);
       fs = BasisFactory::basisFactory()->getBasisFunctionSpace(basis);
@@ -515,7 +515,7 @@ DofOrderingPtr DofOrderingFactory::upgradeSide(DofOrderingPtr dofOrdering,
       }
     }
 
-    if ((numSides > 1) && (fs == IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD) && (conforming)) {
+    if ((numSides > 1) && (fs == Camellia::FUNCTION_SPACE_HGRAD) && (conforming)) {
       addConformingVertexPairings(varID, newOrdering, cellTopo);
     }
   }
@@ -537,7 +537,7 @@ DofOrderingPtr DofOrderingFactory::pRefine(DofOrderingPtr dofOrdering, CellTopoP
   for (set<int>::iterator idIt = varIDs.begin(); idIt != varIDs.end(); idIt++) {
     int varID = *idIt;
     int numSides = dofOrdering->getNumSidesForVarID(varID);
-    IntrepidExtendedTypes::EFunctionSpace fs;
+    Camellia::EFunctionSpace fs;
     int newPolyOrderForVarID;
     if (isTestOrdering) {
       newPolyOrderForVarID = newPolyOrder + _testOrderEnhancements[varID];
@@ -556,7 +556,7 @@ DofOrderingPtr DofOrderingFactory::pRefine(DofOrderingPtr dofOrdering, CellTopoP
         newOrdering->addEntry(varID,basis,basisRank,sideIndex);
       }
     }
-    if ((numSides > 1) && (fs == IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD) && (conforming)) {
+    if ((numSides > 1) && (fs == Camellia::FUNCTION_SPACE_HGRAD) && (conforming)) {
       addConformingVertexPairings(varID, newOrdering, cellTopo);
     }
   }
@@ -610,14 +610,14 @@ DofOrderingPtr DofOrderingFactory::setBasisDegree(DofOrderingPtr dofOrdering, in
   for (set<int>::iterator idIt = varIDs.begin(); idIt != varIDs.end(); idIt++) {
     int varID = *idIt;
     int numSides = dofOrdering->getNumSidesForVarID(varID);
-    IntrepidExtendedTypes::EFunctionSpace fs;
+    Camellia::EFunctionSpace fs;
     for (int sideIndex=0; sideIndex<numSides; sideIndex++) {
       BasisPtr basis = dofOrdering->getBasis(varID,sideIndex);
       
       fs = BasisFactory::basisFactory()->getBasisFunctionSpace(basis);
       if (replaceDiscontinuousFSWithContinuous) {
-        if (IntrepidExtendedTypes::functionSpaceIsDiscontinuous(fs)) {
-          fs = IntrepidExtendedTypes::continuousSpaceForDiscontinuous(fs);
+        if (Camellia::functionSpaceIsDiscontinuous(fs)) {
+          fs = Camellia::continuousSpaceForDiscontinuous(fs);
         }
       }
       int basisRank = BasisFactory::basisFactory()->getBasisRank(basis);
@@ -634,7 +634,7 @@ DofOrderingPtr DofOrderingFactory::setBasisDegree(DofOrderingPtr dofOrdering, in
         newTraceOrder->addEntry(varID, basis, basisRank, sideIndex);
       }
     }
-    if ((numSides > 1) && (fs == IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD) && (conforming)) {
+    if ((numSides > 1) && (fs == Camellia::FUNCTION_SPACE_HGRAD) && (conforming)) {
       addConformingVertexPairings(varID, newOrdering, cellTopoPtr);
       addConformingVertexPairings(varID, newTraceOrder, cellTopoPtr);
     }
@@ -663,7 +663,7 @@ DofOrderingPtr DofOrderingFactory::setSidePolyOrder(DofOrderingPtr dofOrdering, 
   for (set<int>::iterator idIt = varIDs.begin(); idIt != varIDs.end(); idIt++) {
     int varID = *idIt;
     int numSides = dofOrdering->getNumSidesForVarID(varID);
-    IntrepidExtendedTypes::EFunctionSpace fs;
+    Camellia::EFunctionSpace fs;
     for (int sideIndex=0; sideIndex<numSides; sideIndex++) {
       BasisPtr basis = dofOrdering->getBasis(varID,sideIndex);
       if (replacePatchBasis) {
@@ -681,7 +681,7 @@ DofOrderingPtr DofOrderingFactory::setSidePolyOrder(DofOrderingPtr dofOrdering, 
       }
       newOrdering->addEntry(varID,basis,basisRank,sideIndex);
     }
-    if ((numSides > 1) && (fs == IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD) && (conforming)) {
+    if ((numSides > 1) && (fs == Camellia::FUNCTION_SPACE_HGRAD) && (conforming)) {
       addConformingVertexPairings(varID, newOrdering, cellTopoPtr);
     }
   }

@@ -208,10 +208,10 @@ bool LinearTermTests::testSums() {
   LinearSummand second_summand = sum->summands()[1];
   
   VarPtr first_var = first_summand.second;
-  IntrepidExtendedTypes::EOperator first_op = first_var->op();
+  Camellia::EOperator first_op = first_var->op();
   
   VarPtr second_var = second_summand.second;
-  IntrepidExtendedTypes::EOperator second_op = second_var->op();
+  Camellia::EOperator second_op = second_var->op();
   
   if (first_var->ID() != v1->ID()) {
     success = false;

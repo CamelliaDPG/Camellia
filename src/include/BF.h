@@ -35,8 +35,8 @@ public:
   const string & testName(int testID);
   const string & trialName(int trialID);
   
-  IntrepidExtendedTypes::EFunctionSpace functionSpaceForTest(int testID);
-  IntrepidExtendedTypes::EFunctionSpace functionSpaceForTrial(int trialID);
+  Camellia::EFunctionSpace functionSpaceForTest(int testID);
+  Camellia::EFunctionSpace functionSpaceForTrial(int trialID);
   
   IPPtr graphNorm(double weightForL2TestTerms = 1.0);
   IPPtr graphNorm(const map<int, double> &varWeights, double weightForL2TestTerms = 1.0);

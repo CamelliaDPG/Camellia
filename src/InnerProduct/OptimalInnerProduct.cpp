@@ -39,7 +39,7 @@
 #include "OptimalInnerProduct.h"
 #include "SerialDenseWrapper.h"
 
-typedef pair<IntrepidExtendedTypes::EOperator, int > OpOpIndexPair;
+typedef pair<Camellia::EOperator, int > OpOpIndexPair;
 
 OptimalInnerProduct::OptimalInnerProduct(Teuchos::RCP< BilinearForm > bf) : IP(bf) {
   _beta = 1; // TODO: allow this to be controlled from outside
@@ -51,25 +51,25 @@ OptimalInnerProduct::OptimalInnerProduct(Teuchos::RCP< BilinearForm > bf) : IP(b
     int trialID = *trialIt;
     cout << "*********** optimal test Interactions for trial variable " << _bilinearForm->trialName(trialID) << "************" << endl;
     vector<int> myTestIDs;
-    vector<vector<IntrepidExtendedTypes::EOperator> > ops;
+    vector<vector<Camellia::EOperator> > ops;
     for (vector<int>::iterator testIt=testIDs.begin();
          testIt != testIDs.end(); testIt++) {
       int testID = *testIt;
-      vector<IntrepidExtendedTypes::EOperator> trialOperators, testOperators;
+      vector<Camellia::EOperator> trialOperators, testOperators;
       bf->trialTestOperators(trialID, testID, trialOperators, testOperators);
-      vector<IntrepidExtendedTypes::EOperator>::iterator trialOpIt, testOpIt;
+      vector<Camellia::EOperator>::iterator trialOpIt, testOpIt;
       testOpIt = testOperators.begin();
       // NVR moved next two lines outside the for loop below 11/14/11
-      vector<IntrepidExtendedTypes::EOperator> testOps;
+      vector<Camellia::EOperator> testOps;
       myTestIDs.push_back(testID);
       for (trialOpIt = trialOperators.begin(); trialOpIt != trialOperators.end(); trialOpIt++) {
-        IntrepidExtendedTypes::EOperator op1 = *trialOpIt;
-        IntrepidExtendedTypes::EOperator op2 = *testOpIt;
+        Camellia::EOperator op1 = *trialOpIt;
+        Camellia::EOperator op2 = *testOpIt;
 
         // there is a live combination
         // op1 will always be value
-        if (( op1 !=  IntrepidExtendedTypes::OP_VALUE)
-         && ( op1 != IntrepidExtendedTypes::OP_VECTORIZE_VALUE)
+        if (( op1 !=  Camellia::OP_VALUE)
+         && ( op1 != Camellia::OP_VECTORIZE_VALUE)
          && ( !_bilinearForm->isFluxOrTrace(trialID)) ) {
           TEUCHOS_TEST_FOR_EXCEPTION(true,
                              std::invalid_argument,
@@ -77,7 +77,7 @@ OptimalInnerProduct::OptimalInnerProduct(Teuchos::RCP< BilinearForm > bf) : IP(b
         }
         if ( _bilinearForm->isFluxOrTrace(trialID) ) {
           // boundary value: push inside the element (take L2 norm there)
-          op2 =  IntrepidExtendedTypes::OP_VALUE;
+          op2 =  Camellia::OP_VALUE;
         }
         testOps.push_back(op2);
         testOpIt++;
@@ -100,29 +100,29 @@ OptimalInnerProduct::OptimalInnerProduct(Teuchos::RCP< BilinearForm > bf) : IP(b
         // just take L^2 norms of each test function
         pair<int,int> key = make_pair(testID1, testID1);
         int opIndex = -1; // placeholder; should not be used
-        OpOpIndexPair opPair = make_pair( IntrepidExtendedTypes::OP_VALUE,opIndex);
+        OpOpIndexPair opPair = make_pair( Camellia::OP_VALUE,opIndex);
         pair<pair<OpOpIndexPair,OpOpIndexPair>, int> entry = make_pair( make_pair(opPair,opPair), trialID);
         _testCombos[key].push_back(entry);
         if ( ! first) cout << " + ";
         cout << _bilinearForm->testName(testID1) << " " << _bilinearForm->testName(testID1);
         first = false;
       } else {
-        vector<IntrepidExtendedTypes::EOperator> ops1 = ops[test1Index];
+        vector<Camellia::EOperator> ops1 = ops[test1Index];
         int test2Index = -1;
         for (vector<int>::iterator testIt2=myTestIDs.begin();
              testIt2 != myTestIDs.end(); testIt2++) {
           test2Index++;
           int testID2 = *testIt2;
           pair<int,int> key = make_pair(testID1, testID2);
-          vector<IntrepidExtendedTypes::EOperator> ops2 = ops[test2Index];
-          vector<IntrepidExtendedTypes::EOperator>::iterator op1It, op2It;
+          vector<Camellia::EOperator> ops2 = ops[test2Index];
+          vector<Camellia::EOperator>::iterator op1It, op2It;
           int op1Index = -1;
           for (op1It = ops1.begin(); op1It != ops1.end(); op1It++) {
-            IntrepidExtendedTypes::EOperator op1 = *op1It;
+            Camellia::EOperator op1 = *op1It;
             op1Index++;
             int op2Index = -1;
             for (op2It = ops2.begin(); op2It != ops2.end(); op2It++) {
-              IntrepidExtendedTypes::EOperator op2 = *op2It;
+              Camellia::EOperator op2 = *op2It;
               op2Index++;
               OpOpIndexPair op1Pair = make_pair(op1,op1Index);
               OpOpIndexPair op2Pair = make_pair(op2,op2Index);
@@ -143,8 +143,8 @@ OptimalInnerProduct::OptimalInnerProduct(Teuchos::RCP< BilinearForm > bf) : IP(b
 
 
 void OptimalInnerProduct::operators(int testID1, int testID2, 
-               vector<IntrepidExtendedTypes::EOperator> &testOp1,
-               vector<IntrepidExtendedTypes::EOperator> &testOp2) {
+               vector<Camellia::EOperator> &testOp1,
+               vector<Camellia::EOperator> &testOp2) {
   testOp1.clear();
   testOp2.clear();
   pair<int, int> key = make_pair(testID1,testID2);

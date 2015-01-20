@@ -16,11 +16,11 @@
 
 class MeshTransformationFunction : public Function {
   map< GlobalIndexType, FunctionPtr > _cellTransforms; // cellID --> cell transformation function
-  IntrepidExtendedTypes::EOperator _op;
+  Camellia::EOperator _op;
   MeshPtr _mesh;
   int _maxPolynomialDegree;
 protected:
-  MeshTransformationFunction(MeshPtr mesh, map< GlobalIndexType, FunctionPtr > cellTransforms, IntrepidExtendedTypes::EOperator op);
+  MeshTransformationFunction(MeshPtr mesh, map< GlobalIndexType, FunctionPtr > cellTransforms, Camellia::EOperator op);
 public:
   MeshTransformationFunction(MeshPtr mesh, set<GlobalIndexType> cellIDsToTransform); // might be responsible for only a subset of the curved cells.
   

@@ -51,22 +51,22 @@ typedef Teuchos::RCP< RHS > RHSPtr;
 using namespace std;
 using namespace Intrepid;
 
-using namespace IntrepidExtendedTypes;
+using namespace Camellia;
 
 class BilinearForm {
 public:
   BilinearForm();
   virtual bool trialTestOperator(int trialID, int testID, 
-                                 IntrepidExtendedTypes::EOperator &trialOperator,
-                                 IntrepidExtendedTypes::EOperator &testOperator) { 
+                                 Camellia::EOperator &trialOperator,
+                                 Camellia::EOperator &testOperator) { 
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "You must override either trialTestOperator or trialTestOperators!");
     return false;
   }; // specifies differential operators to apply to trial and test (bool = false if no test-trial term)
   
   virtual void trialTestOperators(int trialID, int testID, 
-                                  vector<IntrepidExtendedTypes::EOperator> &trialOps,
+                                  vector<Camellia::EOperator> &trialOps,
                                   
-                                  vector<IntrepidExtendedTypes::EOperator> &testOps); // default implementation calls trialTestOperator
+                                  vector<Camellia::EOperator> &testOps); // default implementation calls trialTestOperator
   
   virtual void applyBilinearFormData(int trialID, int testID,
                                      FieldContainer<double> &trialValues, FieldContainer<double> &testValues, 
@@ -104,14 +104,14 @@ public:
   virtual const string & testName(int testID) = 0;
   virtual const string & trialName(int trialID) = 0;
   
-  virtual IntrepidExtendedTypes::EFunctionSpace functionSpaceForTest(int testID) = 0;
-  virtual IntrepidExtendedTypes::EFunctionSpace functionSpaceForTrial(int trialID) = 0;
+  virtual Camellia::EFunctionSpace functionSpaceForTest(int testID) = 0;
+  virtual Camellia::EFunctionSpace functionSpaceForTrial(int trialID) = 0;
   
   virtual bool isFluxOrTrace(int trialID) = 0;
   
-  static const string & operatorName(IntrepidExtendedTypes::EOperator op);
-  static int operatorRank(IntrepidExtendedTypes::EOperator op,
-                          IntrepidExtendedTypes::EFunctionSpace fs);
+  static const string & operatorName(Camellia::EOperator op);
+  static int operatorRank(Camellia::EOperator op,
+                          Camellia::EFunctionSpace fs);
   vector<int> trialVolumeIDs();
   vector<int> trialBoundaryIDs();
   

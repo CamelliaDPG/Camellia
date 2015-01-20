@@ -24,14 +24,14 @@ TimeMarchingProblem::TimeMarchingProblem(Teuchos::RCP<BilinearForm> bilinearForm
 }
 
 void TimeMarchingProblem::trialTestOperators(int trialID, int testID, 
-                                                  vector<IntrepidExtendedTypes::EOperator> &trialOps,
-                                                  vector<IntrepidExtendedTypes::EOperator> &testOps) {
+                                                  vector<Camellia::EOperator> &trialOps,
+                                                  vector<Camellia::EOperator> &testOps) {
   // each (trial,test) pair gets one extra operator, a VALUE on each, belonging to the time marching
   _bilinearForm->trialTestOperators(trialID,testID,trialOps,testOps);
   
   if (hasTimeDerivative(trialID,testID)) {
-    trialOps.insert(trialOps.begin(),  IntrepidExtendedTypes::OP_VALUE);
-    testOps.insert(testOps.begin(),  IntrepidExtendedTypes::OP_VALUE);
+    trialOps.insert(trialOps.begin(),  Camellia::OP_VALUE);
+    testOps.insert(testOps.begin(),  Camellia::OP_VALUE);
   }
 }
 
@@ -51,11 +51,11 @@ void TimeMarchingProblem::applyBilinearFormData(FieldContainer<double> &trialVal
   }
 }
 
-IntrepidExtendedTypes::EFunctionSpace TimeMarchingProblem::functionSpaceForTest(int testID) {
+Camellia::EFunctionSpace TimeMarchingProblem::functionSpaceForTest(int testID) {
   return _bilinearForm->functionSpaceForTest(testID);
 }
 
-IntrepidExtendedTypes::EFunctionSpace TimeMarchingProblem::functionSpaceForTrial(int trialID) {
+Camellia::EFunctionSpace TimeMarchingProblem::functionSpaceForTrial(int trialID) {
   return _bilinearForm->functionSpaceForTrial(trialID);
 }
 
@@ -67,11 +67,11 @@ bool TimeMarchingProblem::nonZeroRHS(int testVarID) {
   return _rhs->nonZeroRHS(testVarID);
 }
 
-vector<IntrepidExtendedTypes::EOperator> TimeMarchingProblem::operatorsForTestID(int testID) {
+vector<Camellia::EOperator> TimeMarchingProblem::operatorsForTestID(int testID) {
   // check whether there's time derivative-interaction with any trial function
-  vector< IntrepidExtendedTypes::EOperator > ops = _rhs->operatorsForTestID(testID);
+  vector< Camellia::EOperator > ops = _rhs->operatorsForTestID(testID);
   if ( testHasTimeDerivative(testID) ) {
-    ops.insert(ops.begin(), IntrepidExtendedTypes::OP_VALUE);
+    ops.insert(ops.begin(), Camellia::OP_VALUE);
   }
   return ops;
 }

@@ -108,7 +108,7 @@ class RieszRep {
 
   void distributeDofs();
 
-  void computeRepresentationValues(FieldContainer<double> &values, int testID, IntrepidExtendedTypes::EOperator op, BasisCachePtr basisCache);
+  void computeRepresentationValues(FieldContainer<double> &values, int testID, Camellia::EOperator op, BasisCachePtr basisCache);
 
   double computeAlternativeNormSqOnCell(IPPtr ip, ElementPtr elem);
   map<GlobalIndexType,double> computeAlternativeNormSqOnCells(IPPtr ip, vector<GlobalIndexType> cellIDs);
@@ -125,7 +125,7 @@ private:
   
   int _testID;
   Teuchos::RCP<RieszRep> _rep;
-  IntrepidExtendedTypes::EOperator _op;
+  Camellia::EOperator _op;
 public:
   RepFunction( VarPtr var, RieszRepPtr rep ) : Function( var->rank() ) {
     _testID = var->ID();
@@ -138,19 +138,19 @@ public:
   RepFunction(int testID,Teuchos::RCP<RieszRep> rep): Function(0){
     _testID = testID;
     _rep = rep;   
-    _op =  IntrepidExtendedTypes::OP_VALUE; // default to OPERATOR_VALUE
+    _op =  Camellia::OP_VALUE; // default to OPERATOR_VALUE
   }
   */
 
   // optional specification of operator to apply - default to rank 0
- RepFunction(int testID,Teuchos::RCP<RieszRep> rep, IntrepidExtendedTypes::EOperator op): Function(0){
+ RepFunction(int testID,Teuchos::RCP<RieszRep> rep, Camellia::EOperator op): Function(0){
     _testID = testID;
     _rep = rep;   
     _op = op;
   }   
  
   // specification of function rank
- RepFunction(int testID,Teuchos::RCP<RieszRep> rep, IntrepidExtendedTypes::EOperator op, int fxnRank): Function(fxnRank){
+ RepFunction(int testID,Teuchos::RCP<RieszRep> rep, Camellia::EOperator op, int fxnRank): Function(fxnRank){
     _testID = testID;
     _rep = rep;   
     _op = op;
@@ -158,22 +158,22 @@ public:
   
 
   FunctionPtr x(){
-    return Teuchos::rcp(new RepFunction(_testID,_rep,IntrepidExtendedTypes::OP_X));
+    return Teuchos::rcp(new RepFunction(_testID,_rep,Camellia::OP_X));
   }
   FunctionPtr y(){
-    return Teuchos::rcp(new RepFunction(_testID,_rep,IntrepidExtendedTypes::OP_Y));
+    return Teuchos::rcp(new RepFunction(_testID,_rep,Camellia::OP_Y));
   }
   FunctionPtr dx(){
-    return Teuchos::rcp(new RepFunction(_testID,_rep,IntrepidExtendedTypes::OP_DX));
+    return Teuchos::rcp(new RepFunction(_testID,_rep,Camellia::OP_DX));
   }
   FunctionPtr dy(){
-    return Teuchos::rcp(new RepFunction(_testID,_rep,IntrepidExtendedTypes::OP_DY));
+    return Teuchos::rcp(new RepFunction(_testID,_rep,Camellia::OP_DY));
   }  
   //  FunctionPtr grad(){
-  //    return Teuchos::rcp(new RepFunction(_testID,_rep,IntrepidExtendedTypes::OP_GRAD,2)); // default to 2 space dimensions
+  //    return Teuchos::rcp(new RepFunction(_testID,_rep,Camellia::OP_GRAD,2)); // default to 2 space dimensions
   //  }
   FunctionPtr div(){
-    return Teuchos::rcp(new RepFunction(_testID,_rep,IntrepidExtendedTypes::OP_DIV));
+    return Teuchos::rcp(new RepFunction(_testID,_rep,Camellia::OP_DIV));
   }
 
   void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
@@ -181,7 +181,7 @@ public:
   }
 
   // for specifying an operator
-  void values(FieldContainer<double> &values, IntrepidExtendedTypes::EOperator op, BasisCachePtr basisCache){
+  void values(FieldContainer<double> &values, Camellia::EOperator op, BasisCachePtr basisCache){
     _rep->computeRepresentationValues(values, _testID, op, basisCache);
   }
 };

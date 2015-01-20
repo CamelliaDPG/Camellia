@@ -40,7 +40,7 @@
 
 #include "Intrepid_FieldContainer.hpp"
 
-#include "BilinearForm.h" // defines IntrepidExtendedTypes::EOperator
+#include "BilinearForm.h" // defines Camellia::EOperator
 
 #include "BasisCache.h"
 
@@ -60,9 +60,9 @@ class RHS {
 public:
   RHS(bool legacySubclass) : _legacySubclass(legacySubclass) {}
   virtual bool nonZeroRHS(int testVarID);
-  virtual vector<IntrepidExtendedTypes::EOperator> operatorsForTestID(int testID) {
-    vector<IntrepidExtendedTypes::EOperator> ops;
-    ops.push_back( IntrepidExtendedTypes::OP_VALUE);
+  virtual vector<Camellia::EOperator> operatorsForTestID(int testID) {
+    vector<Camellia::EOperator> ops;
+    ops.push_back( Camellia::OP_VALUE);
     return ops;
   }
   // TODO: change the API here so that values is the first argument (fitting a convention in the rest of the code)

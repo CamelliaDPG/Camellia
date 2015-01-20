@@ -2,9 +2,9 @@
 
 #include "Teuchos_TestForException.hpp"
 
-using namespace IntrepidExtendedTypes;
+using namespace Camellia;
 
-bool IntrepidExtendedTypes::functionSpaceIsVectorized(EFunctionSpace fs) {
+bool Camellia::functionSpaceIsVectorized(EFunctionSpace fs) {
   return (FUNCTION_SPACE_VECTOR_HGRAD == fs)
   ||     (FUNCTION_SPACE_TENSOR_HGRAD == fs)
   ||     (FUNCTION_SPACE_VECTOR_HVOL  == fs)
@@ -13,7 +13,7 @@ bool IntrepidExtendedTypes::functionSpaceIsVectorized(EFunctionSpace fs) {
   ||     (FUNCTION_SPACE_TENSOR_HGRAD_DISC == fs);
 }
 
-bool IntrepidExtendedTypes::functionSpaceIsDiscontinuous(IntrepidExtendedTypes::EFunctionSpace fs) {
+bool Camellia::functionSpaceIsDiscontinuous(Camellia::EFunctionSpace fs) {
   switch (fs) {
     case FUNCTION_SPACE_HVOL:
     case FUNCTION_SPACE_VECTOR_HVOL:
@@ -31,7 +31,7 @@ bool IntrepidExtendedTypes::functionSpaceIsDiscontinuous(IntrepidExtendedTypes::
   return false;
 }
 
-EFunctionSpace IntrepidExtendedTypes::discontinuousSpaceForContinuous(IntrepidExtendedTypes::EFunctionSpace fs_continuous) {
+EFunctionSpace Camellia::discontinuousSpaceForContinuous(Camellia::EFunctionSpace fs_continuous) {
   switch (fs_continuous) {
     case FUNCTION_SPACE_HVOL:
     case FUNCTION_SPACE_VECTOR_HVOL:
@@ -55,7 +55,7 @@ EFunctionSpace IntrepidExtendedTypes::discontinuousSpaceForContinuous(IntrepidEx
   }
 }
 
-EFunctionSpace IntrepidExtendedTypes::continuousSpaceForDiscontinuous(IntrepidExtendedTypes::EFunctionSpace fs_disc) {
+EFunctionSpace Camellia::continuousSpaceForDiscontinuous(Camellia::EFunctionSpace fs_disc) {
   switch (fs_disc) {
     case FUNCTION_SPACE_HVOL:
     case FUNCTION_SPACE_VECTOR_HVOL:
@@ -79,7 +79,7 @@ EFunctionSpace IntrepidExtendedTypes::continuousSpaceForDiscontinuous(IntrepidEx
   }
 }
 
-const std::set<EOperator> & IntrepidExtendedTypes::normalOperators() {
+const std::set<EOperator> & Camellia::normalOperators() {
   static std::set<EOperator> _normalOperators;
   if (_normalOperators.size() == 0) {
     _normalOperators.insert(OP_CROSS_NORMAL);

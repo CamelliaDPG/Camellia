@@ -10,10 +10,10 @@ namespace Camellia {
   VectorizedBasis<Scalar,ArrayScalar>::VectorizedBasis(BasisPtr basis, int numComponents) {
     _componentBasis = basis;
     _numComponents = numComponents;
-    if (basis->functionSpace() == IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD) {
-      this->_functionSpace = IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HGRAD;
-    } else if (basis->functionSpace() == IntrepidExtendedTypes::FUNCTION_SPACE_HVOL) {
-      this->_functionSpace = IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HVOL;
+    if (basis->functionSpace() == Camellia::FUNCTION_SPACE_HGRAD) {
+      this->_functionSpace = Camellia::FUNCTION_SPACE_VECTOR_HGRAD;
+    } else if (basis->functionSpace() == Camellia::FUNCTION_SPACE_HVOL) {
+      this->_functionSpace = Camellia::FUNCTION_SPACE_VECTOR_HVOL;
     } else this->_functionSpace = basis->functionSpace();
   }
 

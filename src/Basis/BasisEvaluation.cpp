@@ -47,7 +47,7 @@ using namespace Camellia;
 typedef Teuchos::RCP< FieldContainer<double> > FCPtr;
 typedef Teuchos::RCP< const FieldContainer<double> > constFCPtr;
 
-FCPtr BasisEvaluation::getValues(BasisPtr basis, IntrepidExtendedTypes::EOperator op,
+FCPtr BasisEvaluation::getValues(BasisPtr basis, Camellia::EOperator op,
                                  const FieldContainer<double> &refPoints) {
   int numPoints = refPoints.dimension(0);
   int spaceDim = refPoints.dimension(1);  // points dimensions are (numPoints, spaceDim)
@@ -56,10 +56,10 @@ FCPtr BasisEvaluation::getValues(BasisPtr basis, IntrepidExtendedTypes::EOperato
   // test to make sure that the basis is known by BasisFactory--otherwise, throw exception
   int componentOfInterest = -1;
   // otherwise, lookup to see whether a related value is already known
-  IntrepidExtendedTypes::EFunctionSpace fs = basis->functionSpace();
+  Camellia::EFunctionSpace fs = basis->functionSpace();
   Intrepid::EOperator relatedOp = relatedOperator(op, fs, componentOfInterest);
   
-  if ((IntrepidExtendedTypes::EOperator)relatedOp != op) {
+  if ((Camellia::EOperator)relatedOp != op) {
       // we can assume relatedResults has dimensions (numPoints,basisCardinality,spaceDimOut)
     FCPtr relatedResults = Teuchos::rcp(new FieldContainer<double>(basisCardinality,numPoints,spaceDimOut));
     basis->getValues(*(relatedResults.get()), refPoints, relatedOp);
@@ -73,7 +73,7 @@ FCPtr BasisEvaluation::getValues(BasisPtr basis, IntrepidExtendedTypes::EOperato
   // be able to: size a FieldContainer appropriately, and then call basis->getValues
   
   // But let's do just check that we have a standard Intrepid operator
-  if ( (op >= IntrepidExtendedTypes::OP_X) || (op <  IntrepidExtendedTypes::OP_VALUE) ) {
+  if ( (op >= Camellia::OP_X) || (op <  Camellia::OP_VALUE) ) {
     TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument,"Unknown operator.");
   }
   
@@ -82,15 +82,15 @@ FCPtr BasisEvaluation::getValues(BasisPtr basis, IntrepidExtendedTypes::EOperato
   dimensions.push_back(basisCardinality);
   dimensions.push_back(numPoints);
   int basisRank = basis->rangeRank();
-  if ( ( ( basisRank == 1) && (op ==  IntrepidExtendedTypes::OP_VALUE) ) ){
+  if ( ( ( basisRank == 1) && (op ==  Camellia::OP_VALUE) ) ){
     dimensions.push_back(spaceDimOut);
   } else if (
-      ( ( basisRank == 0) && (op == IntrepidExtendedTypes::OP_GRAD) )
+      ( ( basisRank == 0) && (op == Camellia::OP_GRAD) )
       ||
-      ( ( basisRank == 0) && (op == IntrepidExtendedTypes::OP_CURL) ) )
+      ( ( basisRank == 0) && (op == Camellia::OP_CURL) ) )
   {
     dimensions.push_back(spaceDim);
-  } else if ( (basis->rangeRank() == 1) && (op == IntrepidExtendedTypes::OP_GRAD) ) {
+  } else if ( (basis->rangeRank() == 1) && (op == Camellia::OP_GRAD) ) {
     // grad of vector: a tensor
     dimensions.push_back(spaceDim);
     dimensions.push_back(spaceDimOut);
@@ -100,27 +100,27 @@ FCPtr BasisEvaluation::getValues(BasisPtr basis, IntrepidExtendedTypes::EOperato
   return result;
 }
 
-FCPtr BasisEvaluation::getTransformedValues(BasisPtr basis, IntrepidExtendedTypes::EOperator op,
+FCPtr BasisEvaluation::getTransformedValues(BasisPtr basis, Camellia::EOperator op,
                                             const FieldContainer<double> &referencePoints,
                                             const FieldContainer<double> &cellJacobian, 
                                             const FieldContainer<double> &cellJacobianInv,
                                             const FieldContainer<double> &cellJacobianDet) {
-  IntrepidExtendedTypes::EFunctionSpace fs = basis->functionSpace();
+  Camellia::EFunctionSpace fs = basis->functionSpace();
   int componentOfInterest;
   Intrepid::EOperator relatedOp;
   relatedOp = relatedOperator(op, fs, componentOfInterest);
   
-  FCPtr referenceValues = getValues(basis,(IntrepidExtendedTypes::EOperator) relatedOp, referencePoints);
+  FCPtr referenceValues = getValues(basis,(Camellia::EOperator) relatedOp, referencePoints);
   return getTransformedValuesWithBasisValues(basis,op,referenceValues,cellJacobian,cellJacobianInv,cellJacobianDet);
 }
 
-FCPtr BasisEvaluation::getTransformedVectorValuesWithComponentBasisValues(VectorBasisPtr basis, IntrepidExtendedTypes::EOperator op,
+FCPtr BasisEvaluation::getTransformedVectorValuesWithComponentBasisValues(VectorBasisPtr basis, Camellia::EOperator op,
                                                                           constFCPtr componentReferenceValuesTransformed) {
-  IntrepidExtendedTypes::EFunctionSpace fs = basis->functionSpace();
-  bool vectorizedBasis = IntrepidExtendedTypes::functionSpaceIsVectorized(fs);
+  Camellia::EFunctionSpace fs = basis->functionSpace();
+  bool vectorizedBasis = Camellia::functionSpaceIsVectorized(fs);
   if ( !vectorizedBasis || 
-      ((op !=  IntrepidExtendedTypes::OP_VALUE) && (op != IntrepidExtendedTypes::OP_CROSS_NORMAL) )) {
-    TEUCHOS_TEST_FOR_EXCEPTION( !vectorizedBasis || (op !=  IntrepidExtendedTypes::OP_VALUE),
+      ((op !=  Camellia::OP_VALUE) && (op != Camellia::OP_CROSS_NORMAL) )) {
+    TEUCHOS_TEST_FOR_EXCEPTION( !vectorizedBasis || (op !=  Camellia::OP_VALUE),
                        std::invalid_argument, "Only Vector HGRAD/HVOL with OP_VALUE supported by getTransformedVectorValuesWithComponentBasisValues.  Please use getTransformedValuesWithBasisValues instead.");
   }
   BasisPtr componentBasis = basis->getComponentBasis();
@@ -134,7 +134,7 @@ FCPtr BasisEvaluation::getTransformedVectorValuesWithComponentBasisValues(Vector
   return transformedValues;
 }
 
-FCPtr BasisEvaluation::getTransformedValuesWithBasisValues(BasisPtr basis, IntrepidExtendedTypes::EOperator op,
+FCPtr BasisEvaluation::getTransformedValuesWithBasisValues(BasisPtr basis, Camellia::EOperator op,
                                                            constFCPtr referenceValues,
                                                            const FieldContainer<double> &cellJacobian, 
                                                            const FieldContainer<double> &cellJacobianInv,
@@ -153,36 +153,36 @@ FCPtr BasisEvaluation::getTransformedValuesWithBasisValues(BasisPtr basis, Intre
   }
   
   int componentOfInterest;
-  IntrepidExtendedTypes::EFunctionSpace fs = basis->functionSpace();
+  Camellia::EFunctionSpace fs = basis->functionSpace();
   Intrepid::EOperator relatedOp = relatedOperator(op,fs, componentOfInterest);
   Teuchos::Array<int> dimensions;
   referenceValues->dimensions(dimensions);
   dimensions.insert(dimensions.begin(), numCells);
   Teuchos::RCP<FieldContainer<double> > transformedValues = Teuchos::rcp(new FieldContainer<double>(dimensions));
   bool vectorizedBasis = functionSpaceIsVectorized(fs);
-  if (vectorizedBasis && (op ==  IntrepidExtendedTypes::OP_VALUE)) {
-    TEUCHOS_TEST_FOR_EXCEPTION( vectorizedBasis && (op ==  IntrepidExtendedTypes::OP_VALUE),
+  if (vectorizedBasis && (op ==  Camellia::OP_VALUE)) {
+    TEUCHOS_TEST_FOR_EXCEPTION( vectorizedBasis && (op ==  Camellia::OP_VALUE),
                        std::invalid_argument, "Vector HGRAD/HVOL with OP_VALUE not supported by getTransformedValuesWithBasisValues.  Please use getTransformedVectorValuesWithComponentBasisValues instead.");
   }
   switch(relatedOp) {
     case(Intrepid::OPERATOR_VALUE):
       switch(fs) {
-        case IntrepidExtendedTypes::FUNCTION_SPACE_REAL_SCALAR:
+        case Camellia::FUNCTION_SPACE_REAL_SCALAR:
           //          cout << "Reference values for FUNCTION_SPACE_REAL_SCALAR: " << *referenceValues;
-        case IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD:
-        case IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD_DISC:
+        case Camellia::FUNCTION_SPACE_HGRAD:
+        case Camellia::FUNCTION_SPACE_HGRAD_DISC:
           fst::HGRADtransformVALUE<double>(*transformedValues,*referenceValues);
           break;
-        case IntrepidExtendedTypes::FUNCTION_SPACE_HCURL:
-        case IntrepidExtendedTypes::FUNCTION_SPACE_HCURL_DISC:
+        case Camellia::FUNCTION_SPACE_HCURL:
+        case Camellia::FUNCTION_SPACE_HCURL_DISC:
           fst::HCURLtransformVALUE<double>(*transformedValues,cellJacobianInv,*referenceValues);
           break;
-        case IntrepidExtendedTypes::FUNCTION_SPACE_HDIV:
-        case IntrepidExtendedTypes::FUNCTION_SPACE_HDIV_DISC:
-        case IntrepidExtendedTypes::FUNCTION_SPACE_HDIV_FREE:
+        case Camellia::FUNCTION_SPACE_HDIV:
+        case Camellia::FUNCTION_SPACE_HDIV_DISC:
+        case Camellia::FUNCTION_SPACE_HDIV_FREE:
           fst::HDIVtransformVALUE<double>(*transformedValues,cellJacobian,cellJacobianDet,*referenceValues);
           break;
-        case IntrepidExtendedTypes::FUNCTION_SPACE_HVOL:
+        case Camellia::FUNCTION_SPACE_HVOL:
 //        {
 //          static bool haveWarned = false;
 //          if (!haveWarned) {
@@ -202,14 +202,14 @@ FCPtr BasisEvaluation::getTransformedValuesWithBasisValues(BasisPtr basis, Intre
       break;
     case(Intrepid::OPERATOR_GRAD):
       switch(fs) {
-        case IntrepidExtendedTypes::FUNCTION_SPACE_HVOL:
-        case IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD:
-        case IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD_DISC:
+        case Camellia::FUNCTION_SPACE_HVOL:
+        case Camellia::FUNCTION_SPACE_HGRAD:
+        case Camellia::FUNCTION_SPACE_HGRAD_DISC:
           fst::HGRADtransformGRAD<double>(*transformedValues,cellJacobianInv,*referenceValues);
           break;
-        case IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HVOL:
-        case IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HGRAD:
-        case IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HGRAD_DISC:
+        case Camellia::FUNCTION_SPACE_VECTOR_HVOL:
+        case Camellia::FUNCTION_SPACE_VECTOR_HGRAD:
+        case Camellia::FUNCTION_SPACE_VECTOR_HGRAD_DISC:
           // referenceValues has dimensions (F,P,D1,D2).  D1 is our component dimension, and D2 is the one that came from the gradient.
           // HGRADtransformGRAD expects (F,P,D) for input, and (C,F,P,D) for output.
           // If we split referenceValues into (F,P,D1=0,D2) and (F,P,D1=1,D2), then we can transform each of those, and then interleave the results…
@@ -267,8 +267,8 @@ FCPtr BasisEvaluation::getTransformedValuesWithBasisValues(BasisPtr basis, Intre
       break;
     case(Intrepid::OPERATOR_CURL):
       switch(fs) {
-        case IntrepidExtendedTypes::FUNCTION_SPACE_HCURL:
-        case IntrepidExtendedTypes::FUNCTION_SPACE_HCURL_DISC:
+        case Camellia::FUNCTION_SPACE_HCURL:
+        case Camellia::FUNCTION_SPACE_HCURL_DISC:
           if (spaceDim == 2) {
             // TODO: confirm that this is correct
 //            static bool warningIssued = false;
@@ -281,14 +281,14 @@ FCPtr BasisEvaluation::getTransformedValuesWithBasisValues(BasisPtr basis, Intre
             fst::HCURLtransformCURL<double>(*transformedValues,cellJacobian,cellJacobianDet,*referenceValues);
           }
           break;
-        case IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD:
-        case IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD_DISC:
+        case Camellia::FUNCTION_SPACE_HGRAD:
+        case Camellia::FUNCTION_SPACE_HGRAD_DISC:
           // in 2D, HGRADtransformCURL == HDIVtransformVALUE (because curl(H1) --> H(div))
           fst::HDIVtransformVALUE<double>(*transformedValues,cellJacobian,cellJacobianDet,*referenceValues);
           break;
-        case IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HVOL:
-        case IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HGRAD:
-        case IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HGRAD_DISC: // shouldn't take the transform so late
+        case Camellia::FUNCTION_SPACE_VECTOR_HVOL:
+        case Camellia::FUNCTION_SPACE_VECTOR_HGRAD:
+        case Camellia::FUNCTION_SPACE_VECTOR_HGRAD_DISC: // shouldn't take the transform so late
         default:
           TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument, "unhandled transformation");
           break;
@@ -296,14 +296,14 @@ FCPtr BasisEvaluation::getTransformedValuesWithBasisValues(BasisPtr basis, Intre
       break;
     case(Intrepid::OPERATOR_DIV):
       switch(fs) {
-        case IntrepidExtendedTypes::FUNCTION_SPACE_HDIV:
-        case IntrepidExtendedTypes::FUNCTION_SPACE_HDIV_DISC:
-        case IntrepidExtendedTypes::FUNCTION_SPACE_HDIV_FREE:
+        case Camellia::FUNCTION_SPACE_HDIV:
+        case Camellia::FUNCTION_SPACE_HDIV_DISC:
+        case Camellia::FUNCTION_SPACE_HDIV_FREE:
           fst::HDIVtransformDIV<double>(*transformedValues,cellJacobianDet,*referenceValues);
           break;
-        case IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HVOL:
-        case IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HGRAD:
-        case IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HGRAD_DISC: // shouldn't take the transform so late
+        case Camellia::FUNCTION_SPACE_VECTOR_HVOL:
+        case Camellia::FUNCTION_SPACE_VECTOR_HGRAD:
+        case Camellia::FUNCTION_SPACE_VECTOR_HGRAD_DISC: // shouldn't take the transform so late
         default:
           TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument, "unhandled transformation");
           break;
@@ -321,14 +321,14 @@ FCPtr BasisEvaluation::getTransformedValuesWithBasisValues(BasisPtr basis, Intre
   return result;
 }
 
-Intrepid::EOperator BasisEvaluation::relatedOperator(IntrepidExtendedTypes::EOperator op, IntrepidExtendedTypes::EFunctionSpace fs, int &componentOfInterest) {
+Intrepid::EOperator BasisEvaluation::relatedOperator(Camellia::EOperator op, Camellia::EFunctionSpace fs, int &componentOfInterest) {
   Intrepid::EOperator relatedOp = (Intrepid::EOperator) op;
   componentOfInterest = -1;
 
-  bool vectorizedBasis = IntrepidExtendedTypes::functionSpaceIsVectorized(fs);
+  bool vectorizedBasis = Camellia::functionSpaceIsVectorized(fs);
 
   if (   vectorizedBasis
-      && ( (op == IntrepidExtendedTypes::OP_CURL) || (op == IntrepidExtendedTypes::OP_DIV) ) ) {
+      && ( (op == Camellia::OP_CURL) || (op == Camellia::OP_DIV) ) ) {
     relatedOp = Intrepid::OPERATOR_GRAD;
   } else if ((op==OP_X) || (op==OP_Y) || (op==OP_Z)) {
     componentOfInterest = op - OP_X;
@@ -344,11 +344,11 @@ Intrepid::EOperator BasisEvaluation::relatedOperator(IntrepidExtendedTypes::EOpe
   return relatedOp;
 }
 
-FCPtr BasisEvaluation::getComponentOfInterest(constFCPtr values, IntrepidExtendedTypes::EOperator op, IntrepidExtendedTypes::EFunctionSpace fs, int componentOfInterest) {
+FCPtr BasisEvaluation::getComponentOfInterest(constFCPtr values, Camellia::EOperator op, Camellia::EFunctionSpace fs, int componentOfInterest) {
   FCPtr result;
   bool vectorizedBasis = functionSpaceIsVectorized(fs);
   if (   vectorizedBasis
-      && ( (op == IntrepidExtendedTypes::OP_CURL) || (op == IntrepidExtendedTypes::OP_DIV)) ) {
+      && ( (op == Camellia::OP_CURL) || (op == Camellia::OP_DIV)) ) {
     TEUCHOS_TEST_FOR_EXCEPTION(values->rank() != 5, std::invalid_argument, "rank of values must be 5 for VECTOR_HGRAD_GRAD");
     int numCells  = values->dimension(0);
     int numFields = values->dimension(1);
@@ -357,9 +357,9 @@ FCPtr BasisEvaluation::getComponentOfInterest(constFCPtr values, IntrepidExtende
     for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
       for (int field=0; field<numFields; field++) {
         for (int point=0; point<numPoints; point++) {
-          if (op==IntrepidExtendedTypes::OP_DIV) {
+          if (op==Camellia::OP_DIV) {
             (*result)(cellIndex,field,point) = (*values)(cellIndex,field,point,0,0) + (*values)(cellIndex,field,point,1,1); 
-          } else if (op==IntrepidExtendedTypes::OP_CURL) {
+          } else if (op==Camellia::OP_CURL) {
             // curl of 2D vector: d(Fx)/dy - d(Fy)/dx
             (*result)(cellIndex,field,point) = (*values)(cellIndex,field,point,1,0) - (*values)(cellIndex,field,point,0,1); 
           }

@@ -113,9 +113,9 @@ void BilinearForm::applyBilinearFormData(FieldContainer<double> &trialValues, Fi
 }
 
 void BilinearForm::trialTestOperators(int testID1, int testID2, 
-                                      vector<IntrepidExtendedTypes::EOperator> &testOps1,
-                                      vector<IntrepidExtendedTypes::EOperator> &testOps2) {
-  IntrepidExtendedTypes::EOperator testOp1, testOp2;
+                                      vector<Camellia::EOperator> &testOps1,
+                                      vector<Camellia::EOperator> &testOps2) {
+  Camellia::EOperator testOp1, testOp2;
   testOps1.clear();
   testOps2.clear();
   if (trialTestOperator(testID1,testID2,testOp1,testOp2)) {
@@ -383,17 +383,17 @@ void BilinearForm::stiffnessMatrix(FieldContainer<double> &stiffness, Teuchos::R
     for (trialIterator = trialIDs.begin(); trialIterator != trialIDs.end(); trialIterator++) {
       int trialID = *trialIterator;
       
-      vector<IntrepidExtendedTypes::EOperator> trialOperators, testOperators;
+      vector<Camellia::EOperator> trialOperators, testOperators;
       this->trialTestOperators(trialID, testID, trialOperators, testOperators);
-      vector<IntrepidExtendedTypes::EOperator>::iterator trialOpIt, testOpIt;
+      vector<Camellia::EOperator>::iterator trialOpIt, testOpIt;
       testOpIt = testOperators.begin();
       TEUCHOS_TEST_FOR_EXCEPTION(trialOperators.size() != testOperators.size(), std::invalid_argument,
                          "trialOperators and testOperators must be the same length");
       int operatorIndex = -1;
       for (trialOpIt = trialOperators.begin(); trialOpIt != trialOperators.end(); trialOpIt++) {
         operatorIndex++;
-        IntrepidExtendedTypes::EOperator trialOperator = *trialOpIt;
-        IntrepidExtendedTypes::EOperator testOperator = *testOpIt;
+        Camellia::EOperator trialOperator = *trialOpIt;
+        Camellia::EOperator testOperator = *testOpIt;
         
         if (testOperator==OP_TIMES_NORMAL) {
           TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument,"OP_TIMES_NORMAL not supported for tests.  Use for trial only");
@@ -457,7 +457,7 @@ void BilinearForm::stiffnessMatrix(FieldContainer<double> &stiffness, Teuchos::R
             testBasis = testOrdering->getBasis(testID);
             
             bool isFlux = false; // i.e. the normal is "folded into" the variable definition, so that we must take parity into account
-            const set<IntrepidExtendedTypes::EOperator> normalOperators = IntrepidExtendedTypes::normalOperators();
+            const set<Camellia::EOperator> normalOperators = Camellia::normalOperators();
             if (   (normalOperators.find(testOperator)  == normalOperators.end() ) 
                 && (normalOperators.find(trialOperator) == normalOperators.end() ) ) {
               // normal not yet taken into account -- so it must be "hidden" in the trial variable
@@ -559,129 +559,129 @@ vector<int> BilinearForm::trialBoundaryIDs() {
   return ids;  
 }
 
-int BilinearForm::operatorRank(IntrepidExtendedTypes::EOperator op, IntrepidExtendedTypes::EFunctionSpace fs) {
+int BilinearForm::operatorRank(Camellia::EOperator op, Camellia::EFunctionSpace fs) {
   // returns the rank of basis functions in the function space fs when op is applied
   // 0 scalar, 1 vector
   int SCALAR = 0, VECTOR = 1;
   switch (op) {
-    case  IntrepidExtendedTypes::OP_VALUE:
-      if (   (fs == IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD) 
-          || (fs == IntrepidExtendedTypes::FUNCTION_SPACE_HVOL)
-          || (fs == IntrepidExtendedTypes::FUNCTION_SPACE_REAL_SCALAR) )
+    case  Camellia::OP_VALUE:
+      if (   (fs == Camellia::FUNCTION_SPACE_HGRAD) 
+          || (fs == Camellia::FUNCTION_SPACE_HVOL)
+          || (fs == Camellia::FUNCTION_SPACE_REAL_SCALAR) )
         return SCALAR; 
       else
         return VECTOR;
-    case IntrepidExtendedTypes::OP_GRAD:
-    case IntrepidExtendedTypes::OP_CURL:
+    case Camellia::OP_GRAD:
+    case Camellia::OP_CURL:
       return VECTOR;
-    case IntrepidExtendedTypes::OP_DIV:
-    case IntrepidExtendedTypes::OP_X:
-    case IntrepidExtendedTypes::OP_Y:
-    case IntrepidExtendedTypes::OP_Z:
-    case IntrepidExtendedTypes::OP_DX:
-    case IntrepidExtendedTypes::OP_DY:
-    case IntrepidExtendedTypes::OP_DZ:
+    case Camellia::OP_DIV:
+    case Camellia::OP_X:
+    case Camellia::OP_Y:
+    case Camellia::OP_Z:
+    case Camellia::OP_DX:
+    case Camellia::OP_DY:
+    case Camellia::OP_DZ:
       return SCALAR; 
-    case IntrepidExtendedTypes::OP_CROSS_NORMAL:
+    case Camellia::OP_CROSS_NORMAL:
       return VECTOR; 
-    case IntrepidExtendedTypes::OP_DOT_NORMAL:
+    case Camellia::OP_DOT_NORMAL:
       return SCALAR; 
-    case IntrepidExtendedTypes::OP_TIMES_NORMAL:
+    case Camellia::OP_TIMES_NORMAL:
       return VECTOR; 
-    case IntrepidExtendedTypes::OP_TIMES_NORMAL_X:
+    case Camellia::OP_TIMES_NORMAL_X:
       return SCALAR; 
-    case IntrepidExtendedTypes::OP_TIMES_NORMAL_Y:
+    case Camellia::OP_TIMES_NORMAL_Y:
       return SCALAR; 
-    case IntrepidExtendedTypes::OP_TIMES_NORMAL_Z:
+    case Camellia::OP_TIMES_NORMAL_Z:
       return SCALAR; 
-    case IntrepidExtendedTypes::OP_VECTORIZE_VALUE:
+    case Camellia::OP_VECTORIZE_VALUE:
       return VECTOR;
     default:
       return -1;
   }
 }
 
-const string & BilinearForm::operatorName(IntrepidExtendedTypes::EOperator op) {
+const string & BilinearForm::operatorName(Camellia::EOperator op) {
   switch (op) {
-    case  IntrepidExtendedTypes::OP_VALUE:
+    case  Camellia::OP_VALUE:
       return S_OP_VALUE; 
       break;
-    case IntrepidExtendedTypes::OP_GRAD:
+    case Camellia::OP_GRAD:
       return S_OP_GRAD; 
       break;
-    case IntrepidExtendedTypes::OP_CURL:
+    case Camellia::OP_CURL:
       return S_OP_CURL; 
       break;
-    case IntrepidExtendedTypes::OP_DIV:
+    case Camellia::OP_DIV:
       return S_OP_DIV; 
       break;
-    case IntrepidExtendedTypes::OP_D1:
+    case Camellia::OP_D1:
       return S_OP_D1; 
       break;
-    case IntrepidExtendedTypes::OP_D2:
+    case Camellia::OP_D2:
       return S_OP_D2; 
       break;
-    case IntrepidExtendedTypes::OP_D3:
+    case Camellia::OP_D3:
       return S_OP_D3; 
       break;
-    case IntrepidExtendedTypes::OP_D4:
+    case Camellia::OP_D4:
       return S_OP_D4; 
       break;
-    case IntrepidExtendedTypes::OP_D5:
+    case Camellia::OP_D5:
       return S_OP_D5; 
       break;
-    case IntrepidExtendedTypes::OP_D6:
+    case Camellia::OP_D6:
       return S_OP_D6; 
       break;
-    case IntrepidExtendedTypes::OP_D7:
+    case Camellia::OP_D7:
       return S_OP_D7; 
       break;
-    case IntrepidExtendedTypes::OP_D8:
+    case Camellia::OP_D8:
       return S_OP_D8; 
       break;
-    case IntrepidExtendedTypes::OP_D9:
+    case Camellia::OP_D9:
       return S_OP_D9; 
       break;
-    case IntrepidExtendedTypes::OP_D10:
+    case Camellia::OP_D10:
       return S_OP_D10; 
       break;
-    case IntrepidExtendedTypes::OP_X:
+    case Camellia::OP_X:
       return S_OP_X; 
       break;
-    case IntrepidExtendedTypes::OP_Y:
+    case Camellia::OP_Y:
       return S_OP_Y; 
       break;
-    case IntrepidExtendedTypes::OP_Z:
+    case Camellia::OP_Z:
       return S_OP_Z; 
       break;
-    case IntrepidExtendedTypes::OP_DX:
+    case Camellia::OP_DX:
       return S_OP_DX; 
       break;
-    case IntrepidExtendedTypes::OP_DY:
+    case Camellia::OP_DY:
       return S_OP_DY; 
       break;
-    case IntrepidExtendedTypes::OP_DZ:
+    case Camellia::OP_DZ:
       return S_OP_DZ; 
       break;
-    case IntrepidExtendedTypes::OP_CROSS_NORMAL:
+    case Camellia::OP_CROSS_NORMAL:
       return S_OP_CROSS_NORMAL; 
       break;
-    case IntrepidExtendedTypes::OP_DOT_NORMAL:
+    case Camellia::OP_DOT_NORMAL:
       return S_OP_DOT_NORMAL; 
       break;
-    case IntrepidExtendedTypes::OP_TIMES_NORMAL:
+    case Camellia::OP_TIMES_NORMAL:
       return S_OP_TIMES_NORMAL; 
       break;
-    case IntrepidExtendedTypes::OP_TIMES_NORMAL_X:
+    case Camellia::OP_TIMES_NORMAL_X:
       return S_OP_TIMES_NORMAL_X; 
       break;
-    case IntrepidExtendedTypes::OP_TIMES_NORMAL_Y:
+    case Camellia::OP_TIMES_NORMAL_Y:
       return S_OP_TIMES_NORMAL_Y; 
       break;
-    case IntrepidExtendedTypes::OP_TIMES_NORMAL_Z:
+    case Camellia::OP_TIMES_NORMAL_Z:
       return S_OP_TIMES_NORMAL_Z; 
       break;
-    case IntrepidExtendedTypes::OP_VECTORIZE_VALUE:
+    case Camellia::OP_VECTORIZE_VALUE:
       return S_OP_VECTORIZE_VALUE; 
       break;
     default:
@@ -704,14 +704,14 @@ void BilinearForm::printTrialTestInteractions() {
     FieldContainer<double> testValue, trialValue;
     for (vector<int>::iterator trialIt = _trialIDs.begin(); trialIt != _trialIDs.end(); trialIt++) {
       int trialID = *trialIt;
-      vector<IntrepidExtendedTypes::EOperator> trialOperators, testOperators;
+      vector<Camellia::EOperator> trialOperators, testOperators;
       trialTestOperators(trialID, testID, trialOperators, testOperators);
-      vector<IntrepidExtendedTypes::EOperator>::iterator trialOpIt, testOpIt;
+      vector<Camellia::EOperator>::iterator trialOpIt, testOpIt;
       testOpIt = testOperators.begin();
       int operatorIndex = 0;
       for (trialOpIt = trialOperators.begin(); trialOpIt != trialOperators.end(); trialOpIt++) {
-        IntrepidExtendedTypes::EOperator opTrial = *trialOpIt;
-        IntrepidExtendedTypes::EOperator opTest = *testOpIt;
+        Camellia::EOperator opTrial = *trialOpIt;
+        Camellia::EOperator opTest = *testOpIt;
         int trialRank = operatorRank(opTrial, functionSpaceForTrial(trialID));
         int testRank = operatorRank(opTest, functionSpaceForTest(testID));
         trialValue = ( trialRank == 0 ) ? trialValueScalar : trialValueVector;
@@ -865,7 +865,7 @@ VarFactory BilinearForm::varFactory() {
     string name = this->trialName(trialID);
     VarPtr trialVar;
     if (isFluxOrTrace(trialID)) {
-      bool isFlux = this->functionSpaceForTrial(trialID) == IntrepidExtendedTypes::FUNCTION_SPACE_HVOL;
+      bool isFlux = this->functionSpaceForTrial(trialID) == Camellia::FUNCTION_SPACE_HVOL;
       if (isFlux) {
         trialVar = vf.fluxVar(name);
       } else {
@@ -881,28 +881,28 @@ VarFactory BilinearForm::varFactory() {
     int testID = testIDs[testIndex];
     string name = this->testName(testID);
     VarPtr testVar;
-    IntrepidExtendedTypes::EFunctionSpace fs = this->functionSpaceForTest(testID);
+    Camellia::EFunctionSpace fs = this->functionSpaceForTest(testID);
     Space space;
     switch (fs) {
-      case IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD:
+      case Camellia::FUNCTION_SPACE_HGRAD:
         space = HGRAD;
         break;
-      case IntrepidExtendedTypes::FUNCTION_SPACE_HCURL:
+      case Camellia::FUNCTION_SPACE_HCURL:
         space = HCURL;
         break;
-      case IntrepidExtendedTypes::FUNCTION_SPACE_HDIV:
+      case Camellia::FUNCTION_SPACE_HDIV:
         space = HDIV;
         break;
-      case IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD_DISC:
+      case Camellia::FUNCTION_SPACE_HGRAD_DISC:
         space = HGRAD_DISC;
         break;
-      case IntrepidExtendedTypes::FUNCTION_SPACE_HCURL_DISC:
+      case Camellia::FUNCTION_SPACE_HCURL_DISC:
         space = HCURL_DISC;
         break;
-      case IntrepidExtendedTypes::FUNCTION_SPACE_HDIV_DISC:
+      case Camellia::FUNCTION_SPACE_HDIV_DISC:
         space = HDIV_DISC;
         break;
-      case IntrepidExtendedTypes::FUNCTION_SPACE_HVOL:
+      case Camellia::FUNCTION_SPACE_HVOL:
         space = L2;
         break;
         

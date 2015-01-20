@@ -334,15 +334,15 @@ void BilinearFormUtility::computeOptimalStiffnessMatrix(FieldContainer<double> &
       for (testIterator = testIDs.begin(); testIterator != testIDs.end(); testIterator++) {
         int testID = *testIterator;
         
-        vector<IntrepidExtendedTypes::EOperator> trialOperators, testOperators;
+        vector<Camellia::EOperator> trialOperators, testOperators;
         bilinearForm->trialTestOperators(trialID, testID, trialOperators, testOperators);
-        vector<IntrepidExtendedTypes::EOperator>::iterator trialOpIt, testOpIt;
+        vector<Camellia::EOperator>::iterator trialOpIt, testOpIt;
         testOpIt = testOperators.begin();
         
         int operatorIndex = -1;
         for (trialOpIt = trialOperators.begin(); trialOpIt != trialOperators.end(); trialOpIt++) {
-          IntrepidExtendedTypes::EOperator trialOperator = *trialOpIt;
-          IntrepidExtendedTypes::EOperator testOperator = *testOpIt;
+          Camellia::EOperator trialOperator = *trialOpIt;
+          Camellia::EOperator testOperator = *testOpIt;
           operatorIndex++;
           
           if (testOperator==OP_TIMES_NORMAL) {
@@ -396,7 +396,7 @@ void BilinearFormUtility::computeOptimalStiffnessMatrix(FieldContainer<double> &
                                "Boundary trial variable (flux or trace) given with non-scalar basis.  Unsupported.");
             
             bool isFlux = false; // i.e. the normal is "folded into" the variable definition, so that we must take parity into account
-            const set<IntrepidExtendedTypes::EOperator> normalOperators = IntrepidExtendedTypes::normalOperators();
+            const set<Camellia::EOperator> normalOperators = Camellia::normalOperators();
             if (   (normalOperators.find(testOperator)  == normalOperators.end() ) 
                 && (normalOperators.find(trialOperator) == normalOperators.end() ) ) {
               // normal not yet taken into account -- so it must be "hidden" in the trial variable

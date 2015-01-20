@@ -46,9 +46,9 @@ class TransfiniteInterpolatingSurface : public ParametricSurface {
   vector< ParametricCurvePtr > _curves;
   vector< pair<double, double> > _vertices;
   bool _neglectVertices; // if true, then the value returned by value() is a "bubble" value...
-  IntrepidExtendedTypes::EOperator _op;
+  Camellia::EOperator _op;
   
-  void init(const vector< ParametricCurvePtr > &curves, IntrepidExtendedTypes::EOperator op,
+  void init(const vector< ParametricCurvePtr > &curves, Camellia::EOperator op,
             const vector< pair<double, double> > &vertices) {
     if ((op != OP_VALUE) && (op != OP_DX) && (op != OP_DY)) {
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unsupported operator");
@@ -92,7 +92,7 @@ class TransfiniteInterpolatingSurface : public ParametricSurface {
     }
   }
 protected:
-  TransfiniteInterpolatingSurface(const vector< ParametricCurvePtr > &curves, IntrepidExtendedTypes::EOperator op,
+  TransfiniteInterpolatingSurface(const vector< ParametricCurvePtr > &curves, Camellia::EOperator op,
                                   const vector< pair<double, double> > &vertices) {
     init(curves, op, vertices);
   }
@@ -144,7 +144,7 @@ void ParametricSurface::basisWeightsForEdgeInterpolant(FieldContainer<double> &e
   int basisDegree = basis->getDegree();
   shards::CellTopology line_2(shards::getCellTopologyData<shards::Line<2> >() );
   BasisPtr basis1D = BasisFactory::basisFactory()->getBasis(basisDegree, line_2.getKey(),
-                                            IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD);
+                                            Camellia::FUNCTION_SPACE_HGRAD);
   
   BasisPtr compBasis = basis->getComponentBasis();
   int numComponents = basis->getNumComponents();

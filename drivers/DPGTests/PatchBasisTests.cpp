@@ -8,7 +8,7 @@
 
 #include "BasisFactory.h"
 
-#include "BilinearForm.h" // defines IntrepidExtendedTypes
+#include "BilinearForm.h" // defines Camellia
 #include "StokesBilinearForm.h"
 #include "BasisEvaluation.h"
 
@@ -500,7 +500,7 @@ void PatchBasisTests::setup() {
   // (for now, PatchBasis only supports 1D bases--sufficient for 2D DPG meshes)
   // setup bases:
   int polyOrder = 3;
-  _parentBasis = BasisFactory::basisFactory()->getBasis( polyOrder, shards::Line<2>::key, IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD );
+  _parentBasis = BasisFactory::basisFactory()->getBasis( polyOrder, shards::Line<2>::key, Camellia::FUNCTION_SPACE_HGRAD );
   FieldContainer<double> nodesLeft(2,1), nodesMiddle(2,1), nodesRight(2,1);
   nodesLeft(0,0)   = -1.0;
   nodesLeft(1,0)   = -1.0 / 3.0;

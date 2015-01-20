@@ -46,7 +46,7 @@
 
 using namespace std;
 using namespace Intrepid;
-using namespace IntrepidExtendedTypes;
+using namespace Camellia;
 
 class DPGTests;
 

@@ -154,7 +154,7 @@ namespace Camellia {
   int TensorBasis<Scalar,ArrayScalar>::rangeDimension() const {
     // two possibilities:
     // 1. We have a temporal basis which we won't take the derivative of--because it's in HVOL.  Then:
-    if (_temporalBasis->functionSpace() == IntrepidExtendedTypes::FUNCTION_SPACE_HVOL) {
+    if (_temporalBasis->functionSpace() == Camellia::FUNCTION_SPACE_HVOL) {
       return _spatialBasis->rangeDimension();
     } else {
       // 2. We can take derivatives of the temporal basis.  Then we sum the two range dimensions:

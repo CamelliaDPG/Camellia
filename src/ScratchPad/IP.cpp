@@ -118,8 +118,8 @@ void IP::computeInnerProductMatrix(FieldContainer<double> &innerProduct,
       for (testIterator2= testIDs.begin(); testIterator2 != testIDs.end(); testIterator2++) {
         int testID2 = *testIterator2;
         
-        vector<IntrepidExtendedTypes::EOperator> test1Operators;
-        vector<IntrepidExtendedTypes::EOperator> test2Operators;
+        vector<Camellia::EOperator> test1Operators;
+        vector<Camellia::EOperator> test2Operators;
         
         operators(testID1,testID2,test1Operators,test2Operators);
         
@@ -128,12 +128,12 @@ void IP::computeInnerProductMatrix(FieldContainer<double> &innerProduct,
                                    std::invalid_argument,
                                    "test1Operators.size() and test2Operators.size() do not match.");
         
-        vector<IntrepidExtendedTypes::EOperator>::iterator op1It;
-        vector<IntrepidExtendedTypes::EOperator>::iterator op2It = test2Operators.begin();
+        vector<Camellia::EOperator>::iterator op1It;
+        vector<Camellia::EOperator>::iterator op2It = test2Operators.begin();
         int operatorIndex = 0;
         for (op1It=test1Operators.begin(); op1It != test1Operators.end(); op1It++) {
-          IntrepidExtendedTypes::EOperator op1 = *(op1It);
-          IntrepidExtendedTypes::EOperator op2 = *(op2It);
+          Camellia::EOperator op1 = *(op1It);
+          Camellia::EOperator op2 = *(op2It);
           FieldContainer<double> test1Values; // these will be resized inside applyOperator..
           FieldContainer<double> test2Values; // derivative values
           
@@ -329,8 +329,8 @@ bool IP::hasBoundaryTerms() {
 }
 
 void IP::operators(int testID1, int testID2, 
-                   vector<IntrepidExtendedTypes::EOperator> &testOp1,
-                   vector<IntrepidExtendedTypes::EOperator> &testOp2) {
+                   vector<Camellia::EOperator> &testOp1,
+                   vector<Camellia::EOperator> &testOp2) {
   TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "IP::operators() not implemented.");
 }
 
@@ -344,7 +344,7 @@ void IP::printInteractions() {
       bool first = true;
       for (vector<int>::iterator testIt2 = testIDs.begin(); testIt2 != testIDs.end(); testIt2++) {
         int testID2 = *testIt2;
-        vector<IntrepidExtendedTypes::EOperator> ops1, ops2;
+        vector<Camellia::EOperator> ops1, ops2;
         operators(testID, testID2, ops1, ops2);
         int numOps = ops1.size();
         for (int i=0; i<numOps; i++) {
@@ -376,7 +376,7 @@ void IP::printInteractions() {
   }
 }
 
-pair<IPPtr, VarPtr> IP::standardInnerProductForFunctionSpace(IntrepidExtendedTypes::EFunctionSpace fs, bool useTraceVar, int spaceDim) {
+pair<IPPtr, VarPtr> IP::standardInnerProductForFunctionSpace(Camellia::EFunctionSpace fs, bool useTraceVar, int spaceDim) {
   IPPtr ip = Teuchos::rcp( new IP );
   VarFactory vf;
   VarFunctionSpaces::Space space = VarFunctionSpaces::spaceForEFS(fs);
@@ -385,20 +385,20 @@ pair<IPPtr, VarPtr> IP::standardInnerProductForFunctionSpace(IntrepidExtendedTyp
   ip->addTerm(var);
   
   switch (fs) {
-    case IntrepidExtendedTypes::FUNCTION_SPACE_HVOL:
-    case IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HVOL:
+    case Camellia::FUNCTION_SPACE_HVOL:
+    case Camellia::FUNCTION_SPACE_VECTOR_HVOL:
       break;
-    case IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD:
-    case IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HGRAD:
+    case Camellia::FUNCTION_SPACE_HGRAD:
+    case Camellia::FUNCTION_SPACE_VECTOR_HGRAD:
       ip->addTerm(var->grad());
       break;
-    case IntrepidExtendedTypes::FUNCTION_SPACE_HCURL:
+    case Camellia::FUNCTION_SPACE_HCURL:
       ip->addTerm(var->curl(spaceDim));
       break;
-    case IntrepidExtendedTypes::FUNCTION_SPACE_HDIV:
+    case Camellia::FUNCTION_SPACE_HDIV:
       ip->addTerm(var->div());
       break;
-    case IntrepidExtendedTypes::FUNCTION_SPACE_REAL_SCALAR:
+    case Camellia::FUNCTION_SPACE_REAL_SCALAR:
       break;
       
     default:

@@ -35,13 +35,13 @@ class NewBasisSumFunction : public Function {
  private:  
   BasisPtr _basis;
   FieldContainer<double> _coefficients;
-  IntrepidExtendedTypes::EOperator _op;
+  Camellia::EOperator _op;
   bool _boundaryValueOnly;
   BasisCachePtr _overridingBasisCache;
  public:
   NewBasisSumFunction(BasisPtr basis, const FieldContainer<double> &basisCoefficients,
                       BasisCachePtr overridingBasisCache = Teuchos::rcp((BasisCache*)NULL),
-                      IntrepidExtendedTypes::EOperator op = OP_VALUE, bool boundaryValueOnly = false);
+                      Camellia::EOperator op = OP_VALUE, bool boundaryValueOnly = false);
   void values(FieldContainer<double> &values, BasisCachePtr basisCache);
   
   FunctionPtr x();

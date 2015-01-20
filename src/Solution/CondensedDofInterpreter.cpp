@@ -197,7 +197,7 @@ bool CondensedDofInterpreter::varDofsAreCondensible(int varID, int sideOrdinal, 
   int sideCount = dofOrdering->getNumSidesForVarID(varID);
   BasisPtr basis = dofOrdering->getBasis(varID, sideOrdinal);
   
-  IntrepidExtendedTypes::EFunctionSpace fs = basis->functionSpace();
+  Camellia::EFunctionSpace fs = basis->functionSpace();
   
   bool isDiscontinuous = functionSpaceIsDiscontinuous(fs);
   

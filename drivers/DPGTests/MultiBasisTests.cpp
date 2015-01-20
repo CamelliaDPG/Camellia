@@ -6,7 +6,7 @@
 
 #include "BasisFactory.h"
 
-#include "BilinearForm.h" // defines IntrepidExtendedTypes
+#include "BilinearForm.h" // defines Camellia
 #include "PoissonBilinearForm.h"
 
 #include "BasisEvaluation.h"

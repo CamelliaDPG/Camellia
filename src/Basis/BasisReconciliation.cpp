@@ -186,10 +186,10 @@ SubBasisReconciliationWeights BasisReconciliation::computeConstrainedWeights(uns
   SubBasisReconciliationWeights weights;
   
   // use the functionSpace to determine what continuities should be enforced:
-  IntrepidExtendedTypes::EFunctionSpace fs = finerBasis->functionSpace();
+  Camellia::EFunctionSpace fs = finerBasis->functionSpace();
   TEUCHOS_TEST_FOR_EXCEPTION(fs != coarserBasis->functionSpace(), std::invalid_argument, "Bases must agree on functionSpace().");
   
-  if (fs==IntrepidExtendedTypes::FUNCTION_SPACE_REAL_SCALAR) {
+  if (fs==Camellia::FUNCTION_SPACE_REAL_SCALAR) {
     if (((finerBasisSubcellOrdinal==0) && (coarserBasisSubcellOrdinal==0)) && (subcellDimension==0) && (refinements.size()==0)
         && (finerBasis->getCardinality()==1) && (coarserBasis->getCardinality()==1)) {
       // then we're just matching a single scalar with another
@@ -376,7 +376,7 @@ SubBasisReconciliationWeights BasisReconciliation::computeConstrainedWeights(uns
   SubBasisReconciliationWeights weights;
   
   // use the functionSpace to determine what continuities should be enforced:
-  IntrepidExtendedTypes::EFunctionSpace fs = finerBasis->functionSpace();
+  Camellia::EFunctionSpace fs = finerBasis->functionSpace();
   TEUCHOS_TEST_FOR_EXCEPTION(fs != coarserBasis->functionSpace(), std::invalid_argument, "Bases must agree on functionSpace().");
   
   int domainDim = finerBasis->domainTopology()->getDimension();
@@ -895,7 +895,7 @@ SubBasisReconciliationWeights BasisReconciliation::filterToInclude(set<int> &row
 
 set<int> BasisReconciliation::interiorDofOrdinalsForBasis(BasisPtr basis) {
   // if L2, we include all dofs, not just the interior ones
-  bool isL2 = (basis->functionSpace() == IntrepidExtendedTypes::FUNCTION_SPACE_HVOL) || (basis->functionSpace() == IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HVOL);
+  bool isL2 = (basis->functionSpace() == Camellia::FUNCTION_SPACE_HVOL) || (basis->functionSpace() == Camellia::FUNCTION_SPACE_VECTOR_HVOL);
   int spaceDim = basis->domainTopology()->getDimension();
   set<int> interiorDofOrdinals = isL2 ? basis->dofOrdinalsForSubcells(spaceDim, true) : basis->dofOrdinalsForInterior();
   if (interiorDofOrdinals.size() == 0) {
@@ -919,7 +919,7 @@ set<unsigned> BasisReconciliation::internalDofOrdinalsForFinerBasis(BasisPtr fin
     return internalDofOrdinals;
   }
   
-  bool isL2 = (finerBasis->functionSpace() == IntrepidExtendedTypes::FUNCTION_SPACE_HVOL) || (finerBasis->functionSpace() == IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HVOL);
+  bool isL2 = (finerBasis->functionSpace() == Camellia::FUNCTION_SPACE_HVOL) || (finerBasis->functionSpace() == Camellia::FUNCTION_SPACE_VECTOR_HVOL);
   
   if (isL2) {
     // L2 basis, so everything is interior:
@@ -1006,32 +1006,32 @@ set<unsigned> BasisReconciliation::internalDofOrdinalsForFinerBasis(BasisPtr fin
 
 unsigned BasisReconciliation::minimumSubcellDimension(BasisPtr basis) {
   // use the functionSpace to determine what continuities should be enforced:
-  IntrepidExtendedTypes::EFunctionSpace fs = basis->functionSpace();
+  Camellia::EFunctionSpace fs = basis->functionSpace();
   
   int d = basis->domainTopology()->getDimension();
   int minSubcellDimension = d-1;
   switch (fs) {
-    case IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD:
-    case IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HGRAD:
-    case IntrepidExtendedTypes::FUNCTION_SPACE_TENSOR_HGRAD:
+    case Camellia::FUNCTION_SPACE_HGRAD:
+    case Camellia::FUNCTION_SPACE_VECTOR_HGRAD:
+    case Camellia::FUNCTION_SPACE_TENSOR_HGRAD:
       minSubcellDimension = 0; // vertices
       break;
-    case IntrepidExtendedTypes::FUNCTION_SPACE_HCURL:
+    case Camellia::FUNCTION_SPACE_HCURL:
       minSubcellDimension = 1; // edges
       break;
-    case IntrepidExtendedTypes::FUNCTION_SPACE_HDIV:
-    case IntrepidExtendedTypes::FUNCTION_SPACE_HDIV_FREE:
+    case Camellia::FUNCTION_SPACE_HDIV:
+    case Camellia::FUNCTION_SPACE_HDIV_FREE:
       minSubcellDimension = d-1; // faces in 3D, edges in 2D.  (Unsure if this is right in 4D)
       break;
-    case IntrepidExtendedTypes::FUNCTION_SPACE_HVOL:
-    case IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HVOL:
-    case IntrepidExtendedTypes::FUNCTION_SPACE_HDIV_DISC:
-    case IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD_DISC:
-    case IntrepidExtendedTypes::FUNCTION_SPACE_HCURL_DISC:
-    case IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HGRAD_DISC:
+    case Camellia::FUNCTION_SPACE_HVOL:
+    case Camellia::FUNCTION_SPACE_VECTOR_HVOL:
+    case Camellia::FUNCTION_SPACE_HDIV_DISC:
+    case Camellia::FUNCTION_SPACE_HGRAD_DISC:
+    case Camellia::FUNCTION_SPACE_HCURL_DISC:
+    case Camellia::FUNCTION_SPACE_VECTOR_HGRAD_DISC:
       minSubcellDimension = d; // i.e. no continuities enforced
       break;
-    case IntrepidExtendedTypes::FUNCTION_SPACE_REAL_SCALAR:
+    case Camellia::FUNCTION_SPACE_REAL_SCALAR:
       minSubcellDimension = 0;
       break;
     default:

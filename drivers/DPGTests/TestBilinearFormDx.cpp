@@ -16,8 +16,8 @@ const string & TestBilinearFormDx::trialName(int trialID) {
 }
 
 bool TestBilinearFormDx::trialTestOperator(int trialID, int testID, 
-                                           IntrepidExtendedTypes::EOperator &trialOperator,
-                                           IntrepidExtendedTypes::EOperator &testOperator) {
+                                           Camellia::EOperator &trialOperator,
+                                           Camellia::EOperator &testOperator) {
   trialOperator = OP_DX;
   testOperator  = OP_DX;
   return true;
@@ -29,12 +29,12 @@ void TestBilinearFormDx::applyBilinearFormData(int trialID, int testID,
   // leave values as they are...             
 }
 
-IntrepidExtendedTypes::EFunctionSpace TestBilinearFormDx::functionSpaceForTest(int testID) {
-  return IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD;
+Camellia::EFunctionSpace TestBilinearFormDx::functionSpaceForTest(int testID) {
+  return Camellia::FUNCTION_SPACE_HGRAD;
 }
 
-IntrepidExtendedTypes::EFunctionSpace TestBilinearFormDx::functionSpaceForTrial(int trialID) {
-  return IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD;
+Camellia::EFunctionSpace TestBilinearFormDx::functionSpaceForTrial(int trialID) {
+  return Camellia::FUNCTION_SPACE_HGRAD;
 }
 
 bool TestBilinearFormDx::isFluxOrTrace(int trialID) {

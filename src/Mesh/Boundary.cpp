@@ -219,7 +219,7 @@ void Boundary::bcsToImpose( map<  GlobalIndexType, double > &globalDofIndicesAnd
     BasisCachePtr basisCache = BasisCache::basisCacheForCell(meshPtr, cellID);
     for (vector< int >::iterator trialIt = trialIDs.begin(); trialIt != trialIDs.end(); trialIt++) {
       int trialID = *(trialIt);
-      bool isTrace = _mesh->bilinearForm()->functionSpaceForTrial(trialID) == IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD;
+      bool isTrace = _mesh->bilinearForm()->functionSpaceForTrial(trialID) == Camellia::FUNCTION_SPACE_HGRAD;
       // we assume if it's not a trace, then it's a flux (i.e. L2 projection is appropriate)
       if ( bc.bcsImposed(trialID) ) {
         // Determine global dof indices and values, in one pass per side
@@ -296,10 +296,10 @@ void Boundary::bcsToImpose( map<  GlobalIndexType, double > &globalDofIndicesAnd
     BasisPtr basis = trialOrderingPtr->getBasis(trialID,sideForVertex);
     
     // upgrade basis to continuous one of the same cardinality, if it is discontinuous.
-    if ((basis->functionSpace() == IntrepidExtendedTypes::FUNCTION_SPACE_HVOL) || (basis->functionSpace() == IntrepidExtendedTypes::FUNCTION_SPACE_HVOL_DISC)) {
-      basis = BasisFactory::basisFactory()->getBasis(basis->getDegree(), basis->domainTopology(), IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD);
-    } else if (IntrepidExtendedTypes::functionSpaceIsDiscontinuous(basis->functionSpace())) {
-      IntrepidExtendedTypes::EFunctionSpace fsContinuous = IntrepidExtendedTypes::continuousSpaceForDiscontinuous((basis->functionSpace()));
+    if ((basis->functionSpace() == Camellia::FUNCTION_SPACE_HVOL) || (basis->functionSpace() == Camellia::FUNCTION_SPACE_HVOL_DISC)) {
+      basis = BasisFactory::basisFactory()->getBasis(basis->getDegree(), basis->domainTopology(), Camellia::FUNCTION_SPACE_HGRAD);
+    } else if (Camellia::functionSpaceIsDiscontinuous(basis->functionSpace())) {
+      Camellia::EFunctionSpace fsContinuous = Camellia::continuousSpaceForDiscontinuous((basis->functionSpace()));
       basis = BasisFactory::basisFactory()->getBasis(basis->getDegree(), basis->domainTopology(), fsContinuous);
     }
     

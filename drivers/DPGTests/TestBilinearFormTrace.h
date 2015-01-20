@@ -59,9 +59,9 @@ public:
   }
   
   bool trialTestOperator(int trialID, int testID, 
-                         IntrepidExtendedTypes::EOperator &trialOperator, IntrepidExtendedTypes::EOperator &testOperator) {
-    trialOperator = IntrepidExtendedTypes::OP_VALUE;
-    testOperator  = IntrepidExtendedTypes::OP_DOT_NORMAL;
+                         Camellia::EOperator &trialOperator, Camellia::EOperator &testOperator) {
+    trialOperator = Camellia::OP_VALUE;
+    testOperator  = Camellia::OP_DOT_NORMAL;
     return true;
   }
   
@@ -71,12 +71,12 @@ public:
     // leave values as they are...             
   }
   
-  IntrepidExtendedTypes::EFunctionSpace functionSpaceForTest(int testID) {
-    return IntrepidExtendedTypes::FUNCTION_SPACE_HDIV;
+  Camellia::EFunctionSpace functionSpaceForTest(int testID) {
+    return Camellia::FUNCTION_SPACE_HDIV;
   }
   
-  IntrepidExtendedTypes::EFunctionSpace functionSpaceForTrial(int trialID) {
-    return IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD;
+  Camellia::EFunctionSpace functionSpaceForTrial(int trialID) {
+    return Camellia::FUNCTION_SPACE_HGRAD;
   }
   
   bool isFluxOrTrace(int trialID) {

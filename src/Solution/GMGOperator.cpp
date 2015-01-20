@@ -464,8 +464,8 @@ LocalDofMapperPtr GMGOperator::getLocalCoefficientMap(GlobalIndexType fineCellID
 
       VarPtr trialVar = vf.trialVars().find(trialID)->second;
       Space varSpace = trialVar->space();
-      IntrepidExtendedTypes::EFunctionSpace varFS = efsForSpace(varSpace);
-      if (! IntrepidExtendedTypes::functionSpaceIsDiscontinuous(varFS)) {
+      Camellia::EFunctionSpace varFS = efsForSpace(varSpace);
+      if (! Camellia::functionSpaceIsDiscontinuous(varFS)) {
         int rank = Teuchos::GlobalMPISession::getRank();
         if (rank == 0)
           cout << "WARNING: function space for var " << trialVar->name() << " is not discontinuous, and GMGOperator does not yet support continuous variables, even continuous trace variables (i.e. all trace variables must be in L^2 or some other discontinuous space, like HGRAD_DISC).\n";

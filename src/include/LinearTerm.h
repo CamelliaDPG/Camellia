@@ -90,7 +90,7 @@ public:
   const std::set<int> & varIDs() const;
   
   VarType termType() const;
-  //  vector< IntrepidExtendedTypes::EOperator > varOps(int varID);
+  //  vector< Camellia::EOperator > varOps(int varID);
   
   void evaluate(Intrepid::FieldContainer<double> &values, SolutionPtr solution, BasisCachePtr basisCache,
                 bool applyCubatureWeights = false);

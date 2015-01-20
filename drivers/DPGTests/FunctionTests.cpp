@@ -870,7 +870,7 @@ bool FunctionTests::testValuesDottedWithTensor() {
   
   DofOrderingPtr dofOrdering = Teuchos::rcp( new DofOrdering );
   shards::CellTopology quad_4(shards::getCellTopologyData<shards::Quadrilateral<4> >() );
-  BasisPtr basis = BasisFactory::basisFactory()->getBasis(h1Order, quad_4.getKey(), IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD);
+  BasisPtr basis = BasisFactory::basisFactory()->getBasis(h1Order, quad_4.getKey(), Camellia::FUNCTION_SPACE_HGRAD);
   dofOrdering->addEntry(v->ID(), basis, v->rank());
   
   int numCells = 1;
@@ -903,7 +903,7 @@ bool FunctionTests::testValuesDottedWithTensor() {
   }
   
 //  // finally, let's try the same sort of thing, but now with a vector-valued basis
-//  BasisPtr vectorBasisTemp = BasisFactory::basisFactory()->getBasis(h1Order, quad_4.getKey(), IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HGRAD);
+//  BasisPtr vectorBasisTemp = BasisFactory::basisFactory()->getBasis(h1Order, quad_4.getKey(), Camellia::FUNCTION_SPACE_VECTOR_HGRAD);
 //  VectorBasisPtr vectorBasis = Teuchos::rcp( (VectorizedBasis<double, FieldContainer<double> > *)vectorBasisTemp.get(),false);
 //
 //  BasisPtr compBasis = vectorBasis->getComponentBasis();

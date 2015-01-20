@@ -127,7 +127,7 @@ void PatchBasis<Scalar, ArrayScalar>::getValues(ArrayScalar &outputValues, const
   //  computeCellJacobians(cellJacobian,cellJacobInv,cellJacobDet, parentInputPoints);
   ////
   //  Teuchos::RCP< ArrayScalar > transformedValues = BasisEvaluation::getTransformedValues(_parentBasis,
-  //                                                                  (IntrepidExtendedTypes::EOperator)operatorType,
+  //                                                                  (Camellia::EOperator)operatorType,
   //                                                                  parentInputPoints,
   //                                                                  cellJacobian, cellJacobInv, cellJacobDet);
   // copy back to outputValues

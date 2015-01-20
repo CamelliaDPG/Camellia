@@ -469,7 +469,7 @@ bool MeshTestSuite::testBasisRefinement() {
   
   bool success = true;
   
-  IntrepidExtendedTypes::EFunctionSpace hgrad = IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD;
+  Camellia::EFunctionSpace hgrad = Camellia::FUNCTION_SPACE_HGRAD;
   
   shards::CellTopology quad_4(shards::getCellTopologyData<shards::Quadrilateral<4> >() );
   

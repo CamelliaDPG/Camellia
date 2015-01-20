@@ -745,8 +745,8 @@ bool CurvilinearMeshTests::testH1Projection() {
   
   shards::CellTopology quad_4(shards::getCellTopologyData<shards::Quadrilateral<4> >() );
   
-  BasisPtr quadraticScalarBasis = BasisFactory::basisFactory()->getBasis(2, quad_4.getKey(), IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD);
-  BasisPtr quadraticVectorBasis = BasisFactory::basisFactory()->getBasis(2, quad_4.getKey(), IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HGRAD);
+  BasisPtr quadraticScalarBasis = BasisFactory::basisFactory()->getBasis(2, quad_4.getKey(), Camellia::FUNCTION_SPACE_HGRAD);
+  BasisPtr quadraticVectorBasis = BasisFactory::basisFactory()->getBasis(2, quad_4.getKey(), Camellia::FUNCTION_SPACE_VECTOR_HGRAD);
   
   set<int> scalarEdgeNodes = BasisFactory::basisFactory()->sideFieldIndices(quadraticScalarBasis);
   set<int> vectorEdgeNodes = BasisFactory::basisFactory()->sideFieldIndices(quadraticVectorBasis);
@@ -926,7 +926,7 @@ bool CurvilinearMeshTests::testH1Projection() {
     int cellID = 0; // the only cell
     bool testVsTest = true;
     
-    BasisPtr basis = BasisFactory::basisFactory()->getBasis(H1Order, quad_4.getKey(), IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HGRAD);
+    BasisPtr basis = BasisFactory::basisFactory()->getBasis(H1Order, quad_4.getKey(), Camellia::FUNCTION_SPACE_VECTOR_HGRAD);
     
     int cubatureEnrichment = mesh->getElement(cellID)->elementType()->testOrderPtr->maxBasisDegree();
     BasisCachePtr basisCache = BasisCache::basisCacheForCell(mesh, cellID, testVsTest, cubatureEnrichment);

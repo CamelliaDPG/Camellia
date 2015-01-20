@@ -14,7 +14,7 @@ namespace Camellia {
   template<class Scalar, class ArrayScalar>
   Basis<Scalar,ArrayScalar>::Basis() {
     _basisTagsAreSet = false;
-    _functionSpace = IntrepidExtendedTypes::FUNCTION_SPACE_UNKNOWN;
+    _functionSpace = Camellia::FUNCTION_SPACE_UNKNOWN;
   }
 
   template<class Scalar, class ArrayScalar>
@@ -266,12 +266,12 @@ namespace Camellia {
   }
   
   template<class Scalar, class ArrayScalar>
-  IntrepidExtendedTypes::EFunctionSpace Basis<Scalar,ArrayScalar>::functionSpace() const {
+  Camellia::EFunctionSpace Basis<Scalar,ArrayScalar>::functionSpace() const {
     return this->_functionSpace;
   }
   
   template<class Scalar, class ArrayScalar>
-  IntrepidExtendedTypes::EFunctionSpace Basis<Scalar,ArrayScalar>::functionSpace(int tensorialRank) const {
+  Camellia::EFunctionSpace Basis<Scalar,ArrayScalar>::functionSpace(int tensorialRank) const {
     if (tensorialRank==0)
       return this->_functionSpace;
     else
@@ -311,7 +311,7 @@ namespace Camellia {
   template<class Scalar, class ArrayScalar>
   IntrepidBasisWrapper<Scalar,ArrayScalar>::IntrepidBasisWrapper(Teuchos::RCP< Intrepid::Basis<Scalar,ArrayScalar> > intrepidBasis,
                                                                  int rangeDimension, int rangeRank,
-                                                                 IntrepidExtendedTypes::EFunctionSpace fs) {
+                                                                 Camellia::EFunctionSpace fs) {
     _intrepidBasis = intrepidBasis;
     this->_rangeDimension = rangeDimension;
     this->_rangeRank = rangeRank;
@@ -327,7 +327,7 @@ namespace Camellia {
     this->_tagToOrdinal = _intrepidBasis->getDofOrdinalData();
     this->_ordinalToTag = _intrepidBasis->getAllDofTags();
     
-    bool isDiscontinuous =  IntrepidExtendedTypes::functionSpaceIsDiscontinuous(this->_functionSpace);
+    bool isDiscontinuous =  Camellia::functionSpaceIsDiscontinuous(this->_functionSpace);
 
     // if this is an L^2 basis (potentially wrapping a non-L^2 Intrepid basis--to date, Intrepid doesn't have any L^2 bases, so we usually use H^1 of one lower degree for L^2),
     // then we should rework the data structures a bit...

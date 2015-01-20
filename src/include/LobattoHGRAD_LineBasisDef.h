@@ -22,7 +22,7 @@ namespace Camellia {
     this->_basisDegree = degree;
     _conforming = conforming;
 
-    this->_functionSpace = IntrepidExtendedTypes::FUNCTION_SPACE_HVOL;
+    this->_functionSpace = Camellia::FUNCTION_SPACE_HVOL;
     this->_rangeDimension = 1;
     this->_rangeRank = 0; // scalar
     this->_domainTopology = CellTopology::cellTopology( shards::CellTopology(shards::getCellTopologyData<shards::Line<2> >() ) );

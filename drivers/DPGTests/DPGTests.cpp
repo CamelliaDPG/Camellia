@@ -157,8 +157,8 @@ void DPGTests::createBases() {
   shards::CellTopology line_2(shards::getCellTopologyData<shards::Line<2> >() );
   BasisPtr basis;
   int rangeDimension = 2, scalarRank = 0, vectorRank = 1;
-  IntrepidExtendedTypes::EFunctionSpace hgrad = IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD;
-  IntrepidExtendedTypes::EFunctionSpace hdiv = IntrepidExtendedTypes::FUNCTION_SPACE_HDIV;
+  Camellia::EFunctionSpace hgrad = Camellia::FUNCTION_SPACE_HGRAD;
+  Camellia::EFunctionSpace hdiv = Camellia::FUNCTION_SPACE_HDIV;
   
   basis = Teuchos::rcp( new IntrepidBasisWrapper<>(Teuchos::rcp( new Basis_HGRAD_QUAD_C1_FEM<double,FieldContainer<double> >()), rangeDimension, scalarRank, hgrad) );
   BasisFactory::basisFactory()->registerBasis(basis,0, C1_FAKE_POLY_ORDER, quad_4.getKey(), hgrad);
@@ -507,7 +507,7 @@ bool DPGTests::testDofOrdering() {
   BasisPtr traceBasis
   = 
   BasisFactory::basisFactory()->getBasis(C1_FAKE_POLY_ORDER,
-                         line_2.getKey(), IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD);
+                         line_2.getKey(), Camellia::FUNCTION_SPACE_HGRAD);
   
   int numSides = 4;
   
@@ -608,7 +608,7 @@ bool DPGTests::testComputeStiffnessDx() {
   CellTopoPtr quad_4 = Camellia::CellTopology::quad();
   
   BasisPtr basis = BasisFactory::basisFactory()->getBasis(C1_FAKE_POLY_ORDER,
-                                                          quad_4, IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD);
+                                                          quad_4, Camellia::FUNCTION_SPACE_HGRAD);
   
   lowestOrderHGRADOrdering.addEntry(0,basis,0);
   
@@ -741,7 +741,7 @@ bool DPGTests::testComputeStiffnessFlux() {
   BasisPtr traceBasis
   = 
   BasisFactory::basisFactory()->getBasis(C1_FAKE_POLY_ORDER,
-                         line_2.getKey(), IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD);
+                         line_2.getKey(), Camellia::FUNCTION_SPACE_HGRAD);
   
   int numSides = 4;
   
@@ -753,7 +753,7 @@ bool DPGTests::testComputeStiffnessFlux() {
   
   BasisPtr testBasis
   = 
-  BasisFactory::basisFactory()->getBasis(C1_FAKE_POLY_ORDER, quad_4, IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD);  
+  BasisFactory::basisFactory()->getBasis(C1_FAKE_POLY_ORDER, quad_4, Camellia::FUNCTION_SPACE_HGRAD);  
   testOrdering->addEntry(0,testBasis,0);
   
   int numTests = 1;  // 1. ref quad
@@ -865,7 +865,7 @@ bool DPGTests::testComputeStiffnessTrace() {
   shards::CellTopology line_2(shards::getCellTopologyData<shards::Line<2> >() );
   BasisPtr traceBasis 
   = BasisFactory::basisFactory()->getBasis(C1_FAKE_POLY_ORDER,
-                           line_2.getKey(), IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD);
+                           line_2.getKey(), Camellia::FUNCTION_SPACE_HGRAD);
   
   int numSides = 4;
   
@@ -875,7 +875,7 @@ bool DPGTests::testComputeStiffnessTrace() {
   
   CellTopoPtr quad_4 = Camellia::CellTopology::quad();
   BasisPtr testBasis = BasisFactory::basisFactory()->getBasis(C1_FAKE_POLY_ORDER,
-                                                              quad_4, IntrepidExtendedTypes::FUNCTION_SPACE_HDIV);
+                                                              quad_4, Camellia::FUNCTION_SPACE_HDIV);
   
   testOrdering->addEntry(0,testBasis,1,0);
   
@@ -1004,7 +1004,7 @@ bool DPGTests::testMathInnerProductDx() {
   
   DofOrdering lowestOrderHGRADOrdering;
   
-  BasisPtr basis = BasisFactory::basisFactory()->getBasis(C1_FAKE_POLY_ORDER, quad_4.getKey(), IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD);
+  BasisPtr basis = BasisFactory::basisFactory()->getBasis(C1_FAKE_POLY_ORDER, quad_4.getKey(), Camellia::FUNCTION_SPACE_HGRAD);
   
   lowestOrderHGRADOrdering.addEntry(0,basis,0);
   
@@ -1333,7 +1333,7 @@ bool DPGTests::testLowOrderTrialCubicTest() {
   
   BasisPtr basis
   = 
-  BasisFactory::basisFactory()->getBasis(C1_FAKE_POLY_ORDER, quad_4, IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD);
+  BasisFactory::basisFactory()->getBasis(C1_FAKE_POLY_ORDER, quad_4, Camellia::FUNCTION_SPACE_HGRAD);
   
   lowestOrderHGRADOrdering->addEntry(0,basis,0);
   
@@ -2165,7 +2165,7 @@ bool DPGTests::testComputeOptimalTest() {
     
     BasisPtr basis
     = 
-    BasisFactory::basisFactory()->getBasis(C1_FAKE_POLY_ORDER, cellTopo, IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD);
+    BasisFactory::basisFactory()->getBasis(C1_FAKE_POLY_ORDER, cellTopo, Camellia::FUNCTION_SPACE_HGRAD);
     
     DofOrdering lowestOrderHGRADOrdering;
     Teuchos::RCP<DofOrdering> lowestOrderHGRADOrderingPtr = Teuchos::rcp(&lowestOrderHGRADOrdering,false);
@@ -2489,7 +2489,7 @@ bool DPGTests::testProjection(){
   Projector::projectFunctionOntoBasis(basisCoefficients, simpleFunction, basis, physicalCellNodes);      
 
   int numDofs = basis->getCardinality();
-  IntrepidExtendedTypes::EOperator op = IntrepidExtendedTypes::OP_VALUE;
+  Camellia::EOperator op = Camellia::OP_VALUE;
   FieldContainer<double> cubPoints = basisCache.getPhysicalCubaturePoints();    
   FieldContainer<double> basisValues = *(basisCache.getTransformedValues(basis, op));
   int numPts = cubPoints.dimension(1);

@@ -51,7 +51,7 @@
  */
 
 class OptimalInnerProduct : public IP {
-  typedef pair<IntrepidExtendedTypes::EOperator, int > OpOpIndexPair;
+  typedef pair<Camellia::EOperator, int > OpOpIndexPair;
   map< pair<int, int>, 
        vector< pair < pair< OpOpIndexPair, OpOpIndexPair >, int> > > _testCombos;
   /*
@@ -66,8 +66,8 @@ public:
   OptimalInnerProduct(Teuchos::RCP< BilinearForm > bilinearForm);
   
   void operators(int testID1, int testID2, 
-                 vector<IntrepidExtendedTypes::EOperator> &testOp1,
-                 vector<IntrepidExtendedTypes::EOperator> &testOp2);
+                 vector<Camellia::EOperator> &testOp1,
+                 vector<Camellia::EOperator> &testOp2);
   
   void applyInnerProductData(FieldContainer<double> &testValues1,
                              FieldContainer<double> &testValues2,

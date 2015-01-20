@@ -87,12 +87,12 @@ void RHS::integrateAgainstStandardBasis(FieldContainer<double> &rhsVector,
       for (testIterator = testIDs.begin(); testIterator != testIDs.end(); testIterator++) {
         int testID = *testIterator;
         
-        vector<IntrepidExtendedTypes::EOperator> testOperators = this->operatorsForTestID(testID);
+        vector<Camellia::EOperator> testOperators = this->operatorsForTestID(testID);
         int operatorIndex = -1;
-        for (vector<IntrepidExtendedTypes::EOperator>::iterator testOpIt=testOperators.begin();
+        for (vector<Camellia::EOperator>::iterator testOpIt=testOperators.begin();
              testOpIt != testOperators.end(); testOpIt++) {
           operatorIndex++;
-          IntrepidExtendedTypes::EOperator testOperator = *testOpIt;
+          Camellia::EOperator testOperator = *testOpIt;
           bool notZero = this->nonZeroRHS(testID);
           if (notZero) { // compute the integral(s)
             

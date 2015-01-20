@@ -115,7 +115,7 @@ VarPtr VarFactory::testVar(string name, Space fs, int ID) {
   int rank = VarFunctionSpaces::rankForSpace(fs);
   
   _testVars[name] = Teuchos::rcp( new Var( ID, rank, name,
-                                          IntrepidExtendedTypes::OP_VALUE, fs, TEST) );
+                                          Camellia::OP_VALUE, fs, TEST) );
   _testVarsByID[ID] = _testVars[name];
   return _testVarsByID[ID];
 }
@@ -126,7 +126,7 @@ VarPtr VarFactory::fieldVar(string name, Space fs, int ID) {
   ID = getTrialID(ID);
   int rank = VarFunctionSpaces::rankForSpace(fs);
   _trialVars[name] = Teuchos::rcp( new Var( ID, rank, name,
-                                           IntrepidExtendedTypes::OP_VALUE, fs, FIELD) );
+                                           Camellia::OP_VALUE, fs, FIELD) );
   _trialVarsByID[ID] = _trialVars[name];
   return _trialVarsByID[ID];
 }
@@ -138,7 +138,7 @@ VarPtr VarFactory::fluxVar(string name, LinearTermPtr termTraced, Space fs, int 
   int rank = VarFunctionSpaces::rankForSpace(fs);
   ID = getTrialID(ID);
   _trialVars[name] = Teuchos::rcp( new Var( ID, rank, name,
-                                           IntrepidExtendedTypes::OP_VALUE, fs, FLUX, termTraced) );
+                                           Camellia::OP_VALUE, fs, FLUX, termTraced) );
   _trialVarsByID[ID] = _trialVars[name];
   return _trialVarsByID[ID];
 }
@@ -158,7 +158,7 @@ VarPtr VarFactory::traceVar(string name, LinearTermPtr termTraced, Space fs, int
   int rank = ((fs == HGRAD) || (fs == L2) || (fs == CONSTANT_SCALAR)) ? 0 : 1;
   ID = getTrialID(ID);
   _trialVars[name] = Teuchos::rcp( new Var( ID, rank, name,
-                                           IntrepidExtendedTypes::OP_VALUE, fs, TRACE, termTraced) );
+                                           Camellia::OP_VALUE, fs, TRACE, termTraced) );
   _trialVarsByID[ID] = _trialVars[name];
   return _trialVarsByID[ID];
 }

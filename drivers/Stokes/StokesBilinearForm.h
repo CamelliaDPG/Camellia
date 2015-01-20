@@ -50,14 +50,14 @@ public:
   const string & trialName(int trialID);
   
   bool trialTestOperator(int trialID, int testID, 
-                         IntrepidExtendedTypes::EOperator &trialOperator, IntrepidExtendedTypes::EOperator &testOperator);
+                         Camellia::EOperator &trialOperator, Camellia::EOperator &testOperator);
   
   void applyBilinearFormData(int trialID, int testID,
                              FieldContainer<double> &trialValues, FieldContainer<double> &testValues,
                              const FieldContainer<double> &points);
   
-  virtual IntrepidExtendedTypes::EFunctionSpace functionSpaceForTest(int testID);
-  virtual IntrepidExtendedTypes::EFunctionSpace functionSpaceForTrial(int trialID);
+  virtual Camellia::EFunctionSpace functionSpaceForTest(int testID);
+  virtual Camellia::EFunctionSpace functionSpaceForTrial(int trialID);
   
   bool isFluxOrTrace(int trialID);
   

@@ -51,7 +51,7 @@ void Solution::writeFieldsToVTK(const string& filePath, unsigned int num1DPts)
 
   for (int varIdx = 0; varIdx < numFieldVars; varIdx++)
   {
-    bool vectorized = IntrepidExtendedTypes::functionSpaceIsVectorized(_mesh->bilinearForm()->functionSpaceForTrial(fieldTrialIDs[varIdx]));
+    bool vectorized = Camellia::functionSpaceIsVectorized(_mesh->bilinearForm()->functionSpaceForTrial(fieldTrialIDs[varIdx]));
     if (vectorized)
       fieldData[varIdx]->SetNumberOfComponents(spaceDim);
     else

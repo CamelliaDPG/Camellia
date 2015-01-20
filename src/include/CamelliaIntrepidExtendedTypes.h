@@ -3,7 +3,7 @@
 
 #include <set>
 
-namespace IntrepidExtendedTypes {
+namespace Camellia {
   enum EOperator { // first 13 simply copied from Intrepid::EOperator
     OP_VALUE = 0,
     OP_GRAD,      // 1

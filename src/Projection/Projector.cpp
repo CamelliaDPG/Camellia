@@ -198,7 +198,7 @@ void Projector::projectFunctionOntoBasis(FieldContainer<double> &basisCoefficien
   DofOrderingPtr dofOrderPtr = Teuchos::rcp(new DofOrdering());
 
   // assume only L2 projections
-  IntrepidExtendedTypes::EOperator op =  IntrepidExtendedTypes::OP_VALUE;
+  Camellia::EOperator op =  Camellia::OP_VALUE;
   
   // have information, build inner product matrix
   int numDofs = basis->getCardinality();
@@ -300,7 +300,7 @@ void Projector::projectFunctionOntoBasis(FieldContainer<double> &basisCoefficien
   shards::CellTopology shardsTopo = cellTopo->getShardsTopology();
   BasisCache basisCache(physicalCellNodes, shardsTopo, *(dofOrderPtr), maxTrialDegree, false);
   // assume only L2 projections
-  IntrepidExtendedTypes::EOperator op =  IntrepidExtendedTypes::OP_VALUE;
+  Camellia::EOperator op =  Camellia::OP_VALUE;
 
   // have information, build inner product matrix
   int numDofs = basis->getCardinality();

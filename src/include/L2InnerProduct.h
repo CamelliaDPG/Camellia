@@ -50,8 +50,8 @@ class L2InnerProduct : public IP {
  L2InnerProduct(Teuchos::RCP< BilinearForm > bfs) : IP(bfs) {}
   
   void operators(int testID1, int testID2, 
-                 vector<IntrepidExtendedTypes::EOperator> &testOp1,
-                 vector<IntrepidExtendedTypes::EOperator> &testOp2);
+                 vector<Camellia::EOperator> &testOp1,
+                 vector<Camellia::EOperator> &testOp2);
   
   void applyInnerProductData(FieldContainer<double> &testValues1,
                              FieldContainer<double> &testValues2,

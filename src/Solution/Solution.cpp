@@ -2249,7 +2249,7 @@ void Solution::setStiffnessMatrix(Teuchos::RCP<Epetra_CrsMatrix> stiffness) {
 }
 
 void Solution::solutionValues(FieldContainer<double> &values, int trialID, BasisCachePtr basisCache,
-                              bool weightForCubature, IntrepidExtendedTypes::EOperator op) {
+                              bool weightForCubature, Camellia::EOperator op) {
   values.initialize(0.0);
   vector<GlobalIndexType> cellIDs = basisCache->cellIDs();
   int sideIndex = basisCache->getSideIndex();
@@ -2402,8 +2402,8 @@ void Solution::solutionValues(FieldContainer<double> &values, int trialID, const
     MPIWrapper::entryWiseSum(values);
   } else { // (P,D) physicalPoints
     // the following is due to the fact that we *do not* transform basis values.
-    IntrepidExtendedTypes::EFunctionSpace fs = _mesh->bilinearForm()->functionSpaceForTrial(trialID);
-    TEUCHOS_TEST_FOR_EXCEPTION( (fs != IntrepidExtendedTypes::FUNCTION_SPACE_HVOL) && (fs != IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD),
+    Camellia::EFunctionSpace fs = _mesh->bilinearForm()->functionSpaceForTrial(trialID);
+    TEUCHOS_TEST_FOR_EXCEPTION( (fs != Camellia::FUNCTION_SPACE_HVOL) && (fs != Camellia::FUNCTION_SPACE_HGRAD),
                                std::invalid_argument,
                                "This version of solutionValues only supports HVOL and HGRAD bases.");
 
@@ -3091,7 +3091,7 @@ void Solution::writeFluxesToFile(int trialID, const string &filePath){
             fout << physCubPoints(cellIndex,pointIndex,dimInd) << " ";
           }
           /* // if we can figure out how to undo the parity negation on fluxes, do so here
-           if (_mesh->bilinearForm()->functionSpaceForTrial(trialID)==IntrepidExtendedTypes::FUNCTION_SPACE_HVOL){
+           if (_mesh->bilinearForm()->functionSpaceForTrial(trialID)==Camellia::FUNCTION_SPACE_HVOL){
            computedValues(cellIndex,pointIndex) *= cellParities(sideIndex);
            }
            */

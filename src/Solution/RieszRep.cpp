@@ -276,7 +276,7 @@ void RieszRep::distributeDofs(){
 }
 
 // computes riesz representation over a single element - map is from int (testID) to FieldContainer of values (sized cellIndex, numPoints)
-void RieszRep::computeRepresentationValues(FieldContainer<double> &values, int testID, IntrepidExtendedTypes::EOperator op, BasisCachePtr basisCache){
+void RieszRep::computeRepresentationValues(FieldContainer<double> &values, int testID, Camellia::EOperator op, BasisCachePtr basisCache){
 
   if (_repsNotComputed){
     cout << "Computing riesz rep dofs" << endl;

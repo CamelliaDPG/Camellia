@@ -549,10 +549,10 @@ bool MeshTestUtility::neighborBasesAgreeOnSides(Teuchos::RCP<Mesh> mesh, Epetra_
           fineCache = fineCellBasisCache;
           coarseCache = coarseCellBasisCache;
           
-          IntrepidExtendedTypes::EFunctionSpace fs = fineBasis->functionSpace();
-          if ((fs == IntrepidExtendedTypes::FUNCTION_SPACE_HVOL)
-              || (fs == IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HVOL)
-              || (fs == IntrepidExtendedTypes::FUNCTION_SPACE_TENSOR_HVOL)) {
+          Camellia::EFunctionSpace fs = fineBasis->functionSpace();
+          if ((fs == Camellia::FUNCTION_SPACE_HVOL)
+              || (fs == Camellia::FUNCTION_SPACE_VECTOR_HVOL)
+              || (fs == Camellia::FUNCTION_SPACE_TENSOR_HVOL)) {
             // volume L^2 basis: no continuities expected...
             continue;
           }

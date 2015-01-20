@@ -24,12 +24,12 @@
 typedef pair< FunctionPtr, VarPtr > LinearSummand;
 
 bool linearSummandIsBoundaryValueOnly(LinearSummand &ls) {
-  bool opInvolvesNormal = (ls.second->op() == IntrepidExtendedTypes::OP_TIMES_NORMAL)   ||
-  (ls.second->op() == IntrepidExtendedTypes::OP_TIMES_NORMAL_X) ||
-  (ls.second->op() == IntrepidExtendedTypes::OP_TIMES_NORMAL_Y) ||
-  (ls.second->op() == IntrepidExtendedTypes::OP_TIMES_NORMAL_Z) ||
-  (ls.second->op() == IntrepidExtendedTypes::OP_CROSS_NORMAL)   ||
-  (ls.second->op() == IntrepidExtendedTypes::OP_DOT_NORMAL);
+  bool opInvolvesNormal = (ls.second->op() == Camellia::OP_TIMES_NORMAL)   ||
+  (ls.second->op() == Camellia::OP_TIMES_NORMAL_X) ||
+  (ls.second->op() == Camellia::OP_TIMES_NORMAL_Y) ||
+  (ls.second->op() == Camellia::OP_TIMES_NORMAL_Z) ||
+  (ls.second->op() == Camellia::OP_CROSS_NORMAL)   ||
+  (ls.second->op() == Camellia::OP_DOT_NORMAL);
   bool boundaryOnlyFunction = ls.first->boundaryValueOnly();
   return boundaryOnlyFunction || (ls.second->varType()==FLUX) || (ls.second->varType()==TRACE) || opInvolvesNormal;
 }
