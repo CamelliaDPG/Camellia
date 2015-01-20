@@ -47,7 +47,6 @@
 #endif
 
 #include "Mesh.h"
-#include "BilinearForm.h"
 #include "SpatialFilter.h"
 
 #include "IP.h"

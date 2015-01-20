@@ -10,7 +10,6 @@
 #define Camellia_VarFactory_h
 
 #include "Var.h"
-#include "BilinearForm.h"
 #include "LinearTerm.h"
 
 // The basic function of VarFactory is to assign unique test/trial IDs and keep track of the variables in play.

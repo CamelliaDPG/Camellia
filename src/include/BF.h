@@ -15,7 +15,11 @@
 
 #include "IP.h"
 
-#include "RHS.h"
+class RHS;
+typedef Teuchos::RCP<RHS> RHSPtr;
+
+class ElementType;
+typedef Teuchos::RCP<ElementType> ElementTypePtr;
 
 class BF {
   typedef pair< LinearTermPtr, LinearTermPtr > BilinearTerm;

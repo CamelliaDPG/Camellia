@@ -38,9 +38,9 @@
  *
  */
 
-#include "BilinearForm.h"
+#include "BF.h"
 
-class StokesBilinearForm : public BilinearForm {
+class StokesBilinearForm : public BF {
   double _mu; // viscosity (constant)
 public:
   StokesBilinearForm(double mu);

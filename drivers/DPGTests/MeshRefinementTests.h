@@ -20,7 +20,6 @@
 #include "Mesh.h"
 #include "Solution.h"
 #include "ExactSolution.h"
-#include "BilinearForm.h"
 #include "TestBilinearFormFlux.h"
 
 class MeshRefinementTests : public TestSuite {

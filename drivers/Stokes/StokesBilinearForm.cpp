@@ -64,7 +64,7 @@ static const string & S_V_2 = "v_2";
 static const string & S_V_3 = "v_3";
 static const string & S_DEFAULT_TEST = "invalid test";
 
-StokesBilinearForm::StokesBilinearForm(double mu) {
+StokesBilinearForm::StokesBilinearForm(double mu) : BF(true) { // true: legacy subclass
   _mu = mu;
   
   _testIDs.push_back(Q_1);

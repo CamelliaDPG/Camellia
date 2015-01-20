@@ -40,8 +40,6 @@
 
 #include "Intrepid_FieldContainer.hpp"
 
-#include "BilinearForm.h"
-
 /*
  This test bilinear form just has b(u,v) = Int_dK (u_hat, grad v \cdot n),
  where u_hat is a trace (belongs formally to H^(1/2)), and v is a test
