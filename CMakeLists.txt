@@ -170,10 +170,10 @@ endif()
 add_library(Camellia ${LIB_SOURCES} ${HEADERS})
 
 link_libraries(
+  Camellia
   ${Trilinos_LIBRARIES}
   ${Trilinos_TPL_LIBRARIES}
   ${ADDITIONAL_LIBRARIES}
-  Camellia
   # Xdmd
   # hdf5_cpp
   #  dmumps
