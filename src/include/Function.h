@@ -129,6 +129,12 @@ public:
   void writeBoundaryValuesToMATLABFile(Teuchos::RCP<Mesh> mesh, const string &filePath);
   void writeValuesToMATLABFile(Teuchos::RCP<Mesh> mesh, const string &filePath);
 
+  // Note that in general, repeated calls to Function::evaluate() would be significantly more expensive than a call with many points to Function::values().
+  // Also, evaluate() may fail for certain Function subclasses, including any that depend on the Mesh.
+  virtual double evaluate(double x);
+  virtual double evaluate(double x, double y);
+  virtual double evaluate(double x, double y, double z);
+  
   static double evaluate(FunctionPtr f, double x); // for testing
   static double evaluate(FunctionPtr f, double x, double y); // for testing
   static double evaluate(FunctionPtr f, double x, double y, double z); // for testing
@@ -172,8 +178,6 @@ private:
 
   void scalarModifyBasisValues(FieldContainer<double> &values, BasisCachePtr basisCache,
                                FunctionModificationType modType);
-
-
 };
 
 // restricts a given function to just the mesh skeleton
