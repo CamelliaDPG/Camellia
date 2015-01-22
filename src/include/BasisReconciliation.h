@@ -15,6 +15,8 @@
 
 #include "Basis.h"
 
+#include "LinearTerm.h"
+
 using namespace Intrepid;
 using namespace std;
 
@@ -45,6 +47,28 @@ private:
   
   // this is the only map that actually needs to remain, after the code simplification described above...
   map< pair< SubcellRefinedBasisPair, Permutation> , SubBasisReconciliationWeights > _subcellReconcilationWeights;
+  
+  // trace to field reconciliation:
+  // we do need a separate container for maps from fields to traces, because each can have a distinct LinearTerm describing
+  // the relationship of the trace to the fields
+  // in the _termTracedSubcellReconcilationWeights map below, notes:
+  // - key to outer map is the pointer contained in termTraced.
+  // - key to the inner map:
+  //   - key.first: the variable ID of the field variable in the LinearTerm.
+  //   - key.second.first: the SubcellRefinedBasisPair
+  //   - key.second.second: the permutation of the fine cell's ancestor relative to what is seen by the coarse basis
+  map< LinearTerm*, map< pair<int, pair< SubcellRefinedBasisPair, Permutation > >, SubBasisReconciliationWeights > > _termTracedSubcellReconcilationWeights;
+  
+  static void setupFineAndCoarseBasisCachesForReconciliation(BasisCachePtr &fineBasisCache, BasisCachePtr &coarseBasisCache,
+                                                             unsigned fineSubcellDimension,
+                                                             BasisPtr finerBasis,
+                                                             unsigned finerBasisSubcellOrdinalInFineDomain,
+                                                             RefinementBranch &cellRefinementBranch, // i.e. ref. branch is in volume, even for skeleton domains
+                                                             unsigned fineDomainOrdinalInRefinementLeaf,
+                                                             unsigned coarseSubcellDimension,
+                                                             BasisPtr coarserBasis, unsigned coarserBasisSubcellOrdinalInCoarseDomain,
+                                                             unsigned coarseDomainOrdinalInRefinementRoot, // we use the coarserBasis's domain topology to determine the domain's space dimension
+                                                             unsigned coarseSubcellPermutation);
   
   static FieldContainer<double> filterBasisValues(const FieldContainer<double> &basisValues, set<int> &filter);
   
@@ -81,8 +105,18 @@ public:
                                                                  unsigned coarseSubcellDimension,
                                                                  BasisPtr coarserBasis, unsigned coarserBasisSubcellOrdinalInCoarseDomain,
                                                                  unsigned coarseDomainOrdinalInRefinementRoot, // we use the coarserBasis's domain topology to determine the domain's space dimension
-                                                                 unsigned coarseDomainPermutation);  // coarseDomainPermutation: how to permute the nodes of the refinement root seen by the fine basis to get the domain as seen by the coarse basis.  (This is analogous to the one in the other computeConstrainedWeights, though here we have the whole *domain's* permutation, where there we have the subcell permutation)
+                                                                 unsigned coarseSubcellPermutation);  // coarseSubcellPermutation: how to permute the nodes of the refinement root seen by the fine basis to get the domain as seen by the coarse basis.  (This is like the one in the other computeConstrainedWeights.)
 
+  static SubBasisReconciliationWeights computeConstrainedWeightsForTermTraced(LinearTermPtr termTraced, int fieldID,
+                                                                              unsigned fineSubcellDimension,
+                                                                              BasisPtr finerBasis,
+                                                                              unsigned finerBasisSubcellOrdinalInFineDomain,
+                                                                              RefinementBranch &cellRefinementBranch, // i.e. ref. branch is in volume, even for skeleton domains
+                                                                              unsigned fineDomainOrdinalInRefinementLeaf,
+                                                                              unsigned coarseSubcellDimension,
+                                                                              BasisPtr coarserBasis, unsigned coarserBasisSubcellOrdinalInCoarseDomain,
+                                                                              unsigned coarseDomainOrdinalInRefinementRoot, // we use the coarserBasis's domain topology to determine the domain's space dimension
+                                                                              unsigned coarseSubcellPermutation);  // coarseSubcellPermutation: how to permute the nodes of the refinement root seen by the fine basis to get the domain as seen by the coarse basis.  (This is like the one in the other computeConstrainedWeights.)
   
   static SubBasisReconciliationWeights weightsForCoarseSubcell(SubBasisReconciliationWeights &weights, BasisPtr constrainingBasis, unsigned subcdim, unsigned subcord, bool includeSubsubcells);
   
