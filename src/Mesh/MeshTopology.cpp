@@ -21,7 +21,7 @@
 using namespace Camellia;
 
 void MeshTopology::init(unsigned spaceDim) {
-  RefinementPattern::initializeAnisotropicRelationships(); // not sure this is the optimal place for this call
+  if (spaceDim >= 2) RefinementPattern::initializeAnisotropicRelationships(); // not sure this is the optimal place for this call
   
   _spaceDim = spaceDim;
   // for nontrivial mesh topology, we store entities with dimension sideDim down to vertices, so _spaceDim total possibilities
