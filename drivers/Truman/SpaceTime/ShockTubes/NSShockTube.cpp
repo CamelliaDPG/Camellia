@@ -18,6 +18,17 @@ double pi = 2.0*acos(0.0);
 
 int H1Order = 3, pToAdd = 2;
 
+class IPScaling : public hFunction {
+  double _epsilon;
+  public:
+  IPScaling(double epsilon) {
+    _epsilon = epsilon;
+  }
+  double value(double x, double y, double h) {
+    return min(1./sqrt(_epsilon),1./h);
+  }
+};
+
 class ConstantXBoundary : public SpatialFilter {
    private:
       double xval;
@@ -233,20 +244,21 @@ class ErrorFunction : public Function {
     }
 };
 
-class PulseInitialCondition : public Function {
+class PulseInitialCondition : public hFunction {
    private:
       double _width;
       double _valI;
       double _valO;
       FunctionPtr _h;
    public:
-      PulseInitialCondition(double width, double valI, double valO, FunctionPtr h) : Function(0), _width(width), _valI(valI), _valO(valO), _h(h) {}
+      PulseInitialCondition(double width, double valI, double valO, FunctionPtr h) : hFunction(), _width(width), _valI(valI), _valO(valO), _h(h) {}
       void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
          int numCells = values.dimension(0);
          int numPoints = values.dimension(1);
 
          FieldContainer<double> h(values);
-         _h->values(h, basisCache);
+         // _h->values(h, basisCache);
+         hFunction::values(h, basisCache);
 
          const FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
          for (int cellIndex=0; cellIndex<numCells; cellIndex++)
@@ -256,8 +268,9 @@ class PulseInitialCondition : public Function {
             double x = (*points)(cellIndex,ptIndex,0);
             double y = (*points)(cellIndex,ptIndex,1);
             double w = 0.2*h(cellIndex, ptIndex);
+            // double w = 1./64;
             if (abs(x) <= w)
-              values(cellIndex, ptIndex) = _valI/w;
+              values(cellIndex, ptIndex) = 0.5*_valI/w;
             else
               values(cellIndex, ptIndex) = _valO;
           }
@@ -335,6 +348,17 @@ class RampedInitialCondition : public Function {
       }
 };
 
+enum NormType
+{
+  Graph,
+  ManualGraph,
+  Robust,
+  RobustL2Scaling,
+  NSDecoupled,
+  NSDecoupledL2Scaling,
+  MinNSDecoupled,
+};
+
 int main(int argc, char *argv[]) {
 #ifdef HAVE_MPI
   Teuchos::GlobalMPISession mpiSession(&argc, &argv,0);
@@ -352,7 +376,7 @@ int main(int argc, char *argv[]) {
    // Optional arguments (have defaults)
   int numRefs = args.Input("--numRefs", "number of refinement steps", 0);
   int numPreRefs = args.Input<int>("--numPreRefs","pre-refinements on singularity",0);
-  int norm = args.Input("--norm", "norm", 0);
+  string normString = args.Input<string>("--norm", "test norm", "Robust");
   double physicalViscosity = args.Input("--mu", "viscosity", 1e-2);
   double mu = physicalViscosity;
   double mu_sqrt = sqrt(mu);
@@ -367,6 +391,16 @@ int main(int argc, char *argv[]) {
   double nlTol = args.Input("--nlTol", "nonlinear tolerance", 1e-6);
 
   args.Process();
+
+  map<string, NormType> stringToNorm;
+  stringToNorm["Graph"] = Graph;
+  stringToNorm["ManualGraph"] = ManualGraph;
+  stringToNorm["Robust"] = Robust;
+  stringToNorm["RobustL2Scaling"] = RobustL2Scaling;
+  stringToNorm["NSDecoupled"] = NSDecoupled;
+  stringToNorm["NSDecoupledL2Scaling"] = NSDecoupledL2Scaling;
+  stringToNorm["MinNSDecoupled"] = MinNSDecoupled;
+  NormType norm = stringToNorm[normString];
 
    ////////////////////   PROBLEM DEFINITIONS   ///////////////////////
   int H1Order = polyOrder+1;
@@ -488,8 +522,8 @@ int main(int argc, char *argv[]) {
     case 6:
     // Strong shock tube
     problemName = "Sedov";
-    xmin = -3.;
-    xmax = 3;
+    xmin = -1.5;
+    xmax = 1.5;
     // xint = -.5+1./64;
     xint = 0;
     tmax = 1;
@@ -1041,15 +1075,18 @@ int main(int argc, char *argv[]) {
     rhs->addTerm( Ce * ve->dy() );
 
     ////////////////////   DEFINE INNER PRODUCT(S)   ///////////////////////
+    FunctionPtr visc_scaling = Teuchos::rcp( new IPScaling(mu) );
+    FunctionPtr temp_scaling = Teuchos::rcp( new IPScaling(Cp*mu/Pr) );
     switch (norm)
     {
       // Automatic graph norm
-      case 0:
+      case Graph:
       ips[slab] = bf->graphNorm();
       break;
 
       // Manual Graph Norm
-      case 1:
+      // Not Robust
+      case ManualGraph:
       ip->addTerm( adj_MD + adj_KD );
       ip->addTerm( adj_Mq + adj_Kq );
       ip->addTerm( adj_Gc - adj_Fc - adj_Cc );
@@ -1062,8 +1099,44 @@ int main(int argc, char *argv[]) {
       ip->addTerm( tau );
       break;
 
+      // Robust Norm
+      // Good for Sod
+      case Robust:
+      ip->addTerm( mu*visc_scaling*adj_MD );
+      ip->addTerm( Cp*mu/Pr*temp_scaling*adj_Mq );
+      ip->addTerm( sqrt(mu)*one*adj_KD );
+      ip->addTerm( sqrt(Cp*mu/Pr)*one*adj_Kq );
+      ip->addTerm( adj_Gc - adj_Fc - adj_Cc );
+      ip->addTerm( adj_Gm - adj_Fm - adj_Cm );
+      ip->addTerm( adj_Ge - adj_Fe - adj_Ce );
+      ip->addTerm( adj_Fc );
+      ip->addTerm( adj_Fm );
+      ip->addTerm( adj_Fe );
+      ip->addTerm( vc );
+      ip->addTerm( vm );
+      ip->addTerm( ve );
+      break;
+
+      // Original Coupled Robust with full L2 scaling
+      case RobustL2Scaling:
+      ip->addTerm( mu*visc_scaling*adj_MD );
+      ip->addTerm( Cp*mu/Pr*temp_scaling*adj_Mq );
+      ip->addTerm( sqrt(mu)*one*adj_KD );
+      ip->addTerm( sqrt(Cp*mu/Pr)*one*adj_Kq );
+      ip->addTerm( adj_Gc - adj_Fc - adj_Cc );
+      ip->addTerm( adj_Gm - adj_Fm - adj_Cm );
+      ip->addTerm( adj_Ge - adj_Fe - adj_Ce );
+      ip->addTerm( adj_Fc );
+      ip->addTerm( adj_Fm );
+      ip->addTerm( adj_Fe );
+      ip->addTerm( sqrt(mu)*visc_scaling*vc );
+      ip->addTerm( sqrt(mu)*visc_scaling*vm );
+      ip->addTerm( sqrt(mu)*visc_scaling*ve );
+      break;
+
       // Decoupled Norm
-      case 2:
+      // Good for Sod and Noh
+      case NSDecoupled:
       ip->addTerm( adj_MD );
       ip->addTerm( adj_Mq );
       ip->addTerm( adj_KD );
@@ -1077,9 +1150,93 @@ int main(int argc, char *argv[]) {
       ip->addTerm( vc );
       ip->addTerm( vm );
       ip->addTerm( ve );
-      // ip->addTerm( S );
-      // ip->addTerm( tau );
       break;
+
+      // Decoupled Norm with L2 scaling
+      case NSDecoupledL2Scaling:
+      ip->addTerm( adj_MD );
+      ip->addTerm( adj_Mq );
+      ip->addTerm( adj_KD );
+      ip->addTerm( adj_Kq );
+      ip->addTerm( adj_Fc + adj_Cc );
+      ip->addTerm( adj_Fm + adj_Cm );
+      ip->addTerm( adj_Fe + adj_Ce );
+      ip->addTerm( adj_Gc );
+      ip->addTerm( adj_Gm );
+      ip->addTerm( adj_Ge );
+      ip->addTerm( sqrt(mu)*visc_scaling*vc );
+      ip->addTerm( sqrt(mu)*visc_scaling*vm );
+      ip->addTerm( sqrt(mu)*visc_scaling*ve );
+      break;
+
+      // Decoupled Norm
+      // Good for Sod and Noh
+      case MinNSDecoupled:
+      ip->addTerm( mu*visc_scaling*visc_scaling*adj_MD );
+      ip->addTerm( Cp*mu/Pr*temp_scaling*temp_scaling*adj_Mq );
+      ip->addTerm( adj_KD );
+      ip->addTerm( adj_Kq );
+      ip->addTerm( adj_Fc + adj_Cc );
+      ip->addTerm( adj_Fm + adj_Cm );
+      ip->addTerm( adj_Fe + adj_Ce );
+      ip->addTerm( adj_Gc );
+      ip->addTerm( adj_Gm );
+      ip->addTerm( adj_Ge );
+      ip->addTerm( vc );
+      ip->addTerm( vm );
+      ip->addTerm( ve );
+      break;
+
+      // // Min max scaling
+      // case MinMaxL2Scaling:
+      // ip->addTerm( mu*visc_scaling*adj_MD );
+      // ip->addTerm( Cp*mu/Pr*temp_scaling*adj_Mq );
+      // ip->addTerm( 1./visc_scaling*adj_KD );
+      // ip->addTerm( 1./temp_scaling*one*adj_Kq );
+      // ip->addTerm( adj_Gc - adj_Fc - adj_Cc );
+      // ip->addTerm( adj_Gm - adj_Fm - adj_Cm );
+      // ip->addTerm( adj_Ge - adj_Fe - adj_Ce );
+      // ip->addTerm( adj_Fc );
+      // ip->addTerm( adj_Fm );
+      // ip->addTerm( adj_Fe );
+      // ip->addTerm( sqrt(mu)*visc_scaling*vc );
+      // ip->addTerm( sqrt(mu)*visc_scaling*vm );
+      // ip->addTerm( sqrt(mu)*visc_scaling*ve );
+      // break;
+
+      // // Good for Sod
+      // case MinMaxRobust:
+      // ip->addTerm( mu*visc_scaling*adj_MD );
+      // ip->addTerm( Cp*mu/Pr*temp_scaling*adj_Mq );
+      // ip->addTerm( 1./visc_scaling*adj_KD );
+      // ip->addTerm( 1./temp_scaling*adj_Kq );
+      // ip->addTerm( adj_Gc - adj_Fc - adj_Cc );
+      // ip->addTerm( adj_Gm - adj_Fm - adj_Cm );
+      // ip->addTerm( adj_Ge - adj_Fe - adj_Ce );
+      // ip->addTerm( adj_Fc );
+      // ip->addTerm( adj_Fm );
+      // ip->addTerm( adj_Fe );
+      // ip->addTerm( vc );
+      // ip->addTerm( vm );
+      // ip->addTerm( ve );
+      // break;
+
+      // // Good for Noh
+      // case MinMaxPartialCoupling:
+      // ip->addTerm( mu*visc_scaling*adj_MD );
+      // ip->addTerm( Cp*mu/Pr*temp_scaling*adj_Mq );
+      // ip->addTerm( 1./visc_scaling*adj_KD );
+      // ip->addTerm( 1./temp_scaling*adj_Kq );
+      // ip->addTerm( adj_Fc + adj_Cc );
+      // ip->addTerm( adj_Fm + adj_Cm );
+      // ip->addTerm( adj_Fe + adj_Ce );
+      // ip->addTerm( adj_Gc );
+      // ip->addTerm( adj_Gm );
+      // ip->addTerm( adj_Ge );
+      // ip->addTerm( vc );
+      // ip->addTerm( vm );
+      // ip->addTerm( ve );
+      // break;
 
       default:
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "invalid inner product");
@@ -1101,7 +1258,7 @@ int main(int argc, char *argv[]) {
     FunctionPtr mom0 = Teuchos::rcp( new DiscontinuousInitialCondition(xint, uL*rhoL, uR*rhoR) );
     FunctionPtr E0    = Teuchos::rcp( new DiscontinuousInitialCondition(xint, (rhoL*Cv*TL+0.5*rhoL*uL*uL), (rhoR*Cv*TR+0.5*rhoR*uR*uR)) );
     if (problem == 6)
-      E0 = Teuchos::rcp( new PulseInitialCondition(1./8, 1./Cv, 0, Function::h()) );
+      E0 = Teuchos::rcp( new PulseInitialCondition(1./128, 1./Cv, 0, Function::h()) );
     // FunctionPtr rho0  = Teuchos::rcp( new RampedInitialCondition(xint, rhoL, rhoR, (xmax-xmin)/numX) );
     // FunctionPtr mom0 = Teuchos::rcp( new RampedInitialCondition(xint, uL*rhoL, uR*rhoR, (xmax-xmin)/numX) );
     // FunctionPtr E0    = Teuchos::rcp( new RampedInitialCondition(xint, (rhoL*Cv*TL+0.5*rhoL*uL*uL), (rhoR*Cv*TR+0.5*rhoR*uR*uR), (xmax-xmin)/numX) );
@@ -1165,8 +1322,8 @@ int main(int argc, char *argv[]) {
       case 0:
       positiveFunctions.push_back(Function::solution(rho,backgroundFlows[slab]));
       positiveUpdates.push_back(Function::solution(rho,solution));
-      positiveFunctions.push_back(Function::solution(T,backgroundFlows[slab]));
-      positiveUpdates.push_back(Function::solution(T,solution));
+      // positiveFunctions.push_back(Function::solution(T,backgroundFlows[slab]));
+      // positiveUpdates.push_back(Function::solution(T,solution));
       break;
       case 1:
       positiveFunctions.push_back(Function::solution(rho,backgroundFlows[slab]));
@@ -1239,7 +1396,7 @@ int main(int argc, char *argv[]) {
       if (commRank == 0)
       {
         stringstream outfile;
-        outfile << problemName << formulation << "_" << norm << "_" << slab << "_" << refIndex;
+        outfile << problemName << formulation << "_" << normString << "_" << slab << "_" << refIndex;
         exporter.exportSolution(outfile.str());
         FunctionPtr density;
         FunctionPtr velocity;
@@ -1276,17 +1433,9 @@ int main(int argc, char *argv[]) {
           temperature = -1/(Cv*ze_prev);
           break;
         }
-        exporter.exportFunction(density,denFile.str());
-        exporter.exportFunction(velocity,velFile.str());
-        exporter.exportFunction(temperature,tempFile.str());
-        // FunctionPtr D_prev = Function::solution(D,backgroundFlows[slab]);
-        // FunctionPtr dDdx = Function::solution(D->dx(),backgroundFlows[slab]);
-        // FunctionPtr dudx = Function::solution(u->dx(),backgroundFlows[slab]);
-        // FunctionPtr div_indicator = Teuchos::rcp( new DivergenceIndicator(rho_prev, rho_prev, D_prev) );
-        // exporter.exportFunction(dDdx,"dDdx"+Teuchos::toString(refIndex));
-        // exporter.exportFunction(dudx,"dudx"+Teuchos::toString(refIndex));
-        // FunctionPtr errorFunction = Teuchos::rcp( new ErrorFunction(solution) );
-        // exporter.exportFunction(errorFunction,"Error"+Teuchos::toString(refIndex));
+        // exporter.exportFunction(density,denFile.str());
+        // exporter.exportFunction(velocity,velFile.str());
+        // exporter.exportFunction(temperature,tempFile.str());
       }
 
       if (refIndex < numRefs)

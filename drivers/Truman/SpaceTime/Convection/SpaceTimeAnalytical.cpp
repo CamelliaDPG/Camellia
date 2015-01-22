@@ -18,18 +18,29 @@
 int H1Order = 3, pToAdd = 2;
 double pi = 2.0*acos(0.0);
 
-class EpsilonScaling : public hFunction {
+class IPScaling : public hFunction {
   double _epsilon;
   public:
-  EpsilonScaling(double epsilon) {
+  IPScaling(double epsilon) {
     _epsilon = epsilon;
   }
   double value(double x, double y, double h) {
-    double scaling = min(_epsilon/(h*h), 1.0);
-    // since this is used in inner product term a like (a,a), take square root
-    return sqrt(scaling);
+    return min(1./sqrt(_epsilon),1./h);
   }
 };
+
+// class EpsilonScaling : public hFunction {
+//   double _epsilon;
+//   public:
+//   EpsilonScaling(double epsilon) {
+//     _epsilon = epsilon;
+//   }
+//   double value(double x, double y, double h) {
+//     double scaling = min(_epsilon/(h*h), 1.0);
+//     // since this is used in inner product term a like (a,a), take square root
+//     return sqrt(scaling);
+//   }
+// };
 
 class ConstantXBoundary : public SpatialFilter {
    private:
@@ -92,6 +103,20 @@ class UExact : public Function {
   }
 };
 
+enum NormType
+{
+  Graph,
+  Robust,
+  RobustL2Scaling,
+  SpaceTimeRobust,
+  SpaceTimeRobustL2Scaling,
+  DecoupledRobust,
+  MinMaxDecoupled,
+  MinMaxL2Scaling,
+  NSDecoupled,
+  MinNSDecoupled,
+};
+
 int main(int argc, char *argv[]) {
 #ifdef HAVE_MPI
   Teuchos::GlobalMPISession mpiSession(&argc, &argv,0);
@@ -105,10 +130,23 @@ int main(int argc, char *argv[]) {
   // Required arguments
 
   // Optional arguments (have defaults)
-  int norm = args.Input("--norm", "test norm", 1);
+  string normString = args.Input<string>("--norm", "test norm", "Robust");
   int numRefs = args.Input("--numRefs", "number of refinement steps", 0);
   double epsilon = args.Input<double>("--epsilon", "diffusion parameter");
   args.Process();
+
+  map<string, NormType> stringToNorm;
+  stringToNorm["Graph"] = Graph;
+  stringToNorm["Robust"] = Robust;
+  stringToNorm["RobustL2Scaling"] = RobustL2Scaling;
+  stringToNorm["SpaceTimeRobust"] = SpaceTimeRobust;
+  stringToNorm["SpaceTimeRobustL2Scaling"] = SpaceTimeRobustL2Scaling;
+  stringToNorm["DecoupledRobust"] = DecoupledRobust;
+  stringToNorm["MinMaxDecoupled"] = MinMaxDecoupled;
+  stringToNorm["MinMaxL2Scaling"] = MinMaxL2Scaling;
+  stringToNorm["NSDecoupled"] = NSDecoupled;
+  stringToNorm["MinNSDecoupled"] = MinNSDecoupled;
+  NormType norm = stringToNorm[normString];
 
   int numX = 4;
   int numY = 4;
@@ -169,37 +207,89 @@ int main(int argc, char *argv[]) {
 
   ////////////////////   DEFINE INNER PRODUCT(S)   ///////////////////////
   IPPtr ip = Teuchos::rcp(new IP);
-  FunctionPtr ip_scaling = Teuchos::rcp( new EpsilonScaling(epsilon) );
+  // FunctionPtr ip_scaling = Teuchos::rcp( new EpsilonScaling(epsilon) );
+  FunctionPtr ip_scaling = Teuchos::rcp( new IPScaling(epsilon) );
   vector<double> beta;
   beta.push_back(1.0);
   beta.push_back(1.0);
   switch (norm)
   {
     // Automatic graph norm
-    case 0:
+    // Not robust
+    case Graph:
     ip = bf->graphNorm();
     break;
 
-    // Modified Robust Norm
-    case 1:
-    ip->addTerm( ip_scaling/sqrt(epsilon) * tau );
+    // Original Coupled Robust
+    // Actually Robust
+    case Robust:
+    ip->addTerm( ip_scaling * tau );
+    ip->addTerm( sqrt(epsilon) * v->dx() );
+    ip->addTerm( tau->dx() - beta*v->grad() );
+    ip->addTerm( v->dx() );
+    ip->addTerm( v );
+    break;
+
+    // Original Coupled Robust with full L2 scaling
+    // 
+    case RobustL2Scaling:
+    ip->addTerm( ip_scaling * tau );
+    ip->addTerm( sqrt(epsilon) * v->dx() );
+    ip->addTerm( tau->dx() - beta*v->grad() );
+    ip->addTerm( v->dx() );
+    ip->addTerm( sqrt(epsilon)*ip_scaling*v );
+    break;
+
+    // Space-time gradient
+    // Robust
+    case SpaceTimeRobust:
+    ip->addTerm( ip_scaling * tau );
     ip->addTerm( sqrt(epsilon) * v->dx() );
     ip->addTerm( tau->dx() - beta*v->grad() );
     ip->addTerm( beta * v->grad() );
     ip->addTerm( v );
     break;
 
-    // Modified Robust Norm 2
-    case 2:
-    ip->addTerm( ip_scaling/sqrt(epsilon) * tau );
+    // Space-time gradient with full L2 scaling
+    case SpaceTimeRobustL2Scaling:
+    ip->addTerm( ip_scaling * tau );
+    ip->addTerm( sqrt(epsilon) * v->dx() );
+    ip->addTerm( tau->dx() - beta*v->grad() );
+    ip->addTerm( beta * v->grad() );
+    ip->addTerm( sqrt(epsilon)*ip_scaling*v );
+    break;
+
+    // Decoupled space-time gradient
+    // Almost robust
+    case DecoupledRobust:
+    ip->addTerm( ip_scaling * tau );
     ip->addTerm( sqrt(epsilon) * v->dx() );
     ip->addTerm( beta * v->grad() );
     ip->addTerm( tau->dx() );
     ip->addTerm( v );
     break;
 
-    // NS Robust Norm
-    case 3:
+    // Decoupled min max scaling
+    case MinMaxDecoupled:
+    ip->addTerm( ip_scaling * tau );
+    ip->addTerm( 1./ip_scaling * v->dx() );
+    ip->addTerm( beta * v->grad() );
+    ip->addTerm( tau->dx() );
+    ip->addTerm( v );
+    break;
+
+    // Min max scaling with full L2 scaling
+    case MinMaxL2Scaling:
+    ip->addTerm( ip_scaling * tau );
+    ip->addTerm( 1./ip_scaling * v->dx() );
+    ip->addTerm( tau->dx() - beta * v->grad() );
+    ip->addTerm( v->dx() );
+    ip->addTerm( sqrt(epsilon)*ip_scaling*v );
+    break;
+
+    // NS Decoupled
+    // Not Robust
+    case NSDecoupled:
     ip->addTerm( 1./epsilon * tau );
     ip->addTerm( v->dx() );
     ip->addTerm( beta * v->grad() );
@@ -207,26 +297,13 @@ int main(int argc, char *argv[]) {
     ip->addTerm( v );
     break;
 
-    // NS Robust Norm
-    case 4:
-    ip->addTerm( ip_scaling/sqrt(epsilon) * tau );
-    ip->addTerm( sqrt(epsilon) * v->dx() );
-    ip->addTerm( tau->dx() - beta*v->grad() );
+    // NS Decoupled with rescaled constitutive
+    case MinNSDecoupled:
+    ip->addTerm( ip_scaling*ip_scaling * tau );
     ip->addTerm( v->dx() );
+    ip->addTerm( beta * v->grad() );
+    ip->addTerm( tau->dx() );
     ip->addTerm( v );
-    // ip->addTerm( ip_scaling/sqrt(epsilon) * tau );
-    // ip->addTerm( Function::h()*v->dx() );
-    // ip->addTerm( beta*v->grad() );
-    // ip->addTerm( tau->dx() );
-    // ip->addTerm( v );
-    break;
-
-    // NS Robust Norm
-    case 5:
-    // ip->addTerm( ip_scaling/sqrt(epsilon) * tau );
-    // ip->addTerm( Function::h()*v->dx() );
-    // ip->addTerm( tau->dx() - beta*v->grad() );
-    // ip->addTerm( v );
     break;
 
     default:
