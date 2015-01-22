@@ -840,7 +840,7 @@ void BasisFactory::setUseLobattoForQuadHDiv(bool value) {
   _useLobattoForQuadHDIV = value;
 }
 
-Teuchos::RCP<BasisFactory> BasisFactory::basisFactory() {
+Teuchos::RCP<BasisFactory> BasisFactory::basisFactory() { // shared/static instance
   static Teuchos::RCP<BasisFactory> basisFactory = Teuchos::rcp( new BasisFactory() );
   return basisFactory;
 }
