@@ -10,7 +10,7 @@
 #include "LinearTerm.h"
 #include "BF.h"
 
-Camellia::EFunctionSpace VarFunctionSpaces::efsForSpace(Space space) {
+Camellia::EFunctionSpace Camellia::efsForSpace(Space space) {
   switch (space) {
     case HDIV:
       return Camellia::FUNCTION_SPACE_HDIV;
@@ -49,7 +49,7 @@ Camellia::EFunctionSpace VarFunctionSpaces::efsForSpace(Space space) {
   }
 }
 
-int VarFunctionSpaces::rankForSpace(Space space) {
+int Camellia::rankForSpace(Space space) {
   switch (space) {
     case HDIV:
       return 1;
@@ -88,7 +88,7 @@ int VarFunctionSpaces::rankForSpace(Space space) {
   }
 }
 
-Space VarFunctionSpaces::spaceForEFS(Camellia::EFunctionSpace efs) {
+Space Camellia::spaceForEFS(Camellia::EFunctionSpace efs) {
   switch (efs) {
     case Camellia::FUNCTION_SPACE_HDIV:
       return HDIV;

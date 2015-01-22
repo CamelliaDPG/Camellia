@@ -47,7 +47,7 @@ class LinearTerm {
   int _rank; // gets set after first var is added
   std::vector< LinearSummand > _summands;
   std::set<int> _varIDs;
-  VarType _termType; // shouldn't mix
+  Camellia::VarType _termType; // shouldn't mix
   
   // for the Riesz inversion evaluation
   std::map< ElementType*, Intrepid::FieldContainer<double> > _rieszRepresentationForElementType;
@@ -89,7 +89,7 @@ public:
   
   const std::set<int> & varIDs() const;
   
-  VarType termType() const;
+  Camellia::VarType termType() const;
   //  vector< Camellia::EOperator > varOps(int varID);
   
   void evaluate(Intrepid::FieldContainer<double> &values, SolutionPtr solution, BasisCachePtr basisCache,

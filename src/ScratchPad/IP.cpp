@@ -379,7 +379,7 @@ void IP::printInteractions() {
 pair<IPPtr, VarPtr> IP::standardInnerProductForFunctionSpace(Camellia::EFunctionSpace fs, bool useTraceVar, int spaceDim) {
   IPPtr ip = Teuchos::rcp( new IP );
   VarFactory vf;
-  VarFunctionSpaces::Space space = VarFunctionSpaces::spaceForEFS(fs);
+  Camellia::Space space = Camellia::spaceForEFS(fs);
   VarPtr var = useTraceVar ? vf.traceVar("v",space) : vf.testVar("v", space);
   
   ip->addTerm(var);
