@@ -2,6 +2,7 @@
 #define CAMELLIA_INTREPID_EXTENDED_TYPES
 
 #include <set>
+#include <string>
 
 namespace Camellia {
   enum EOperator { // first 13 simply copied from Intrepid::EOperator
