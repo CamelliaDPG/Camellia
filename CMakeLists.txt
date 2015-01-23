@@ -1,5 +1,13 @@
 cmake_minimum_required(VERSION 2.6)
 
+# Set TARGET_SUPPORTS_SHARED_LIBS -- otherwise problems building shared libs on Macs (at least)
+#SET_PROPERTY(GLOBAL PROPERTY TARGET_SUPPORTS_SHARED_LIBS TRUE)
+
+#IF(APPLE)
+#   SET(CMAKE_SHARED_MODULE_CREATE_C_FLAGS
+#       "${CMAKE_SHARED_MODULE_CREATE_C_FLAGS} -flat_namespace -undefined suppress")
+#ENDIF(APPLE)
+
 # Set Camellia directories
 set(CAMELLIA_SOURCE_DIR src)
 set(DRIVER_DIR drivers)
@@ -136,10 +144,10 @@ IF(NOT CMAKE_Fortran_COMPILER)
   SET(CMAKE_Fortran_COMPILER ${Trilinos_Fortran_COMPILER})
 ENDIF()
 
-#IF(NOT BUILD_SHARED_LIBS)
-#  MESSAGE("Setting BUILD_SHARED_LIBS to ${Trilinos_BUILD_SHARED_LIBS}")
-#  SET(BUILD_SHARED_LIBS ${Trilinos_BUILD_SHARED_LIBS})
-#ENDIF()
+IF(NOT BUILD_SHARED_LIBS)
+  MESSAGE("Setting BUILD_SHARED_LIBS to ${Trilinos_BUILD_SHARED_LIBS}")
+  SET(BUILD_SHARED_LIBS ${Trilinos_BUILD_SHARED_LIBS})
+ENDIF()
 
 project(Camellia)
 
@@ -166,6 +174,12 @@ if (MUMPS_DIR)
   include_directories(${MUMPS_DIR}/include)
   link_directories(${MUMPS_DIR})
 endif()
+
+link_libraries(
+  ${Trilinos_LIBRARIES}
+  ${Trilinos_TPL_LIBRARIES}
+  ${ADDITIONAL_LIBRARIES}
+)
 
 add_library(Camellia ${LIB_SOURCES} ${HEADERS})
 
