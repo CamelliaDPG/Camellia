@@ -112,7 +112,7 @@ VarPtr VarFactory::testVar(string name, Space fs, int ID) {
   }
   
   ID = getTestID(ID);
-  int rank = VarFunctionSpaces::rankForSpace(fs);
+  int rank = Camellia::rankForSpace(fs);
   
   _testVars[name] = Teuchos::rcp( new Var( ID, rank, name,
                                           Camellia::OP_VALUE, fs, TEST) );
@@ -124,7 +124,7 @@ VarPtr VarFactory::fieldVar(string name, Space fs, int ID) {
     return _trialVars[name];
   }
   ID = getTrialID(ID);
-  int rank = VarFunctionSpaces::rankForSpace(fs);
+  int rank = Camellia::rankForSpace(fs);
   _trialVars[name] = Teuchos::rcp( new Var( ID, rank, name,
                                            Camellia::OP_VALUE, fs, FIELD) );
   _trialVarsByID[ID] = _trialVars[name];
@@ -135,7 +135,7 @@ VarPtr VarFactory::fluxVar(string name, LinearTermPtr termTraced, Space fs, int 
   if (_trialVars.find(name) != _trialVars.end()) {
     return _trialVars[name];
   }
-  int rank = VarFunctionSpaces::rankForSpace(fs);
+  int rank = Camellia::rankForSpace(fs);
   ID = getTrialID(ID);
   _trialVars[name] = Teuchos::rcp( new Var( ID, rank, name,
                                            Camellia::OP_VALUE, fs, FLUX, termTraced) );

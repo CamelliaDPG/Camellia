@@ -22,7 +22,7 @@ typedef Teuchos::RCP<Var> VarPtr;
 class LinearTerm;
 typedef Teuchos::RCP<LinearTerm> LinearTermPtr;
 
-namespace VarFunctionSpaces {
+namespace Camellia {
   enum Space { HGRAD, HCURL, HDIV, HGRAD_DISC, HCURL_DISC, HDIV_DISC, HDIV_FREE, L2, CONSTANT_SCALAR, VECTOR_HGRAD, VECTOR_HGRAD_DISC, VECTOR_L2, UNKNOWN_FS };
   enum VarType { TEST, FIELD, TRACE, FLUX, UNKNOWN_TYPE, MIXED_TYPE };
   
@@ -31,21 +31,19 @@ namespace VarFunctionSpaces {
   int rankForSpace(Space space);
 }
 
-using namespace VarFunctionSpaces;
-
 class Var { // really Var x Operator
   int _rank;
   int _id;
   std::string _name;
-  Space _fs;
+  Camellia::Space _fs;
   Camellia::EOperator _op; // default is OP_VALUE
-  VarType _varType;
+  Camellia::VarType _varType;
   LinearTermPtr _termTraced; // for trace variables, optionally allows identification with fields
   //  map< Camellia::EOperator, VarPtr > _relatedVars; // grad, div, etc. could be cached here
   bool _definedOnTemporalInterfaces;
 public:
   Var(int ID, int rank, std::string name, Camellia::EOperator op =  Camellia::OP_VALUE,
-      Space fs = UNKNOWN_FS, VarType varType = UNKNOWN_TYPE, LinearTermPtr termTraced = Teuchos::rcp((LinearTerm*) NULL),
+      Camellia::Space fs = Camellia::UNKNOWN_FS, Camellia::VarType varType = Camellia::UNKNOWN_TYPE, LinearTermPtr termTraced = Teuchos::rcp((LinearTerm*) NULL),
       bool definedOnTemporalInterfaces = true);
   
   int ID() const;
@@ -53,8 +51,8 @@ public:
   std::string displayString() const;
   Camellia::EOperator op() const;
   int rank() const;  // 0 for scalar, 1 for vector, etc.
-  Space space() const;
-  VarType varType() const;
+  Camellia::Space space() const;
+  Camellia::VarType varType() const;
   
   VarPtr grad() const;
   VarPtr div() const;

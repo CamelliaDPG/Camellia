@@ -882,6 +882,8 @@ BasisMap GDAMinimumRule::getBasisMap(GlobalIndexType cellID, SubCellDofIndexInfo
 }
 
 // trace variable version
+// 1-22-15 NOTE: "getBasisMapOld" is the one for traces that is still in use!  The "new" getBasisMap() for traces has not yet been finished...
+//               (Intent was to fix issues related to refinements for conforming 3D, but for now we are just supporting non-conforming 3D)
 BasisMap GDAMinimumRule::getBasisMapOld(GlobalIndexType cellID, SubCellDofIndexInfo& dofIndexInfo, VarPtr var, int sideOrdinal) {
   vector<SubBasisMapInfo> subBasisMaps;
   
@@ -1141,7 +1143,7 @@ BasisMap GDAMinimumRule::getBasisMapOld(GlobalIndexType cellID, SubCellDofIndexI
           unsigned ancestralPermutation = ancestralCell->sideSubcellPermutation(ancestralSideOrdinal, ancestralSubcellDimension, ancestralSubcellOrdinalInSide); // subcell permutation as seen from the perspective of the fine cell's side's ancestor
           unsigned constrainingPermutation = constrainingCell->sideSubcellPermutation(subcellConstraint.sideOrdinal, subcellConstraint.dimension, subcellConstraint.subcellOrdinal); // subcell permutation as seen from the perspective of the constraining cell's side
           
-          CellTopoPtr constrainingSideTopo = constrainingCell->topology()->getSubcell(sideDim, subcellConstraint.sideOrdinal);
+//          CellTopoPtr constrainingSideTopo = constrainingCell->topology()->getSubcell(sideDim, subcellConstraint.sideOrdinal);
           
           unsigned constrainingPermutationInverse = CamelliaCellTools::permutationInverse(constrainingTopo, constrainingPermutation);
           

@@ -22,7 +22,6 @@ typedef Teuchos::RCP< SpatialFilter > SpatialFilterPtr;
 
 class SpatialFilter {
 public:
-  // just 2D for now:
   virtual bool matchesPoint(double x);
   virtual bool matchesPoint(double x, double y);
   virtual bool matchesPoint(double x, double y, double z);
@@ -52,6 +51,10 @@ public:
 
 class SpatialFilterUnfiltered : public SpatialFilter {
   bool matchesPoint(vector<double> &point);
+  
+  virtual bool matchesPoint(double x);
+  virtual bool matchesPoint(double x, double y);
+  virtual bool matchesPoint(double x, double y, double z);
 };
 
 class SpatialFilterLogicalOr : public SpatialFilter {
@@ -63,6 +66,9 @@ public:
 //  bool matchesPoint( double x, double y ) {
 //    return _sf1->matchesPoint(x,y) || _sf2->matchesPoint(x,y);
 //  }
+  virtual bool matchesPoint(double x);
+  virtual bool matchesPoint(double x, double y);
+  virtual bool matchesPoint(double x, double y, double z);
 };
 
 class SpatialFilterLogicalAnd : public SpatialFilter {
@@ -74,6 +80,9 @@ public:
 //  bool matchesPoint( double x, double y ) {
 //    return _sf1->matchesPoint(x,y) || _sf2->matchesPoint(x,y);
 //  }
+  virtual bool matchesPoint(double x);
+  virtual bool matchesPoint(double x, double y);
+  virtual bool matchesPoint(double x, double y, double z);
 };
 
 class NegatedSpatialFilter : public SpatialFilter {
@@ -81,6 +90,10 @@ class NegatedSpatialFilter : public SpatialFilter {
 public:
   NegatedSpatialFilter(SpatialFilterPtr FilterToNegate);
   bool matchesPoints(FieldContainer<bool> &pointsMatch, BasisCachePtr basisCache);
+  
+  virtual bool matchesPoint(double x);
+  virtual bool matchesPoint(double x, double y);
+  virtual bool matchesPoint(double x, double y, double z);
 };
 //
 //SpatialFilterPtr operator!(SpatialFilterPtr sf) {
