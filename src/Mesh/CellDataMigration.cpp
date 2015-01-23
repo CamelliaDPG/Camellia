@@ -126,7 +126,7 @@ void CellDataMigration::unpackData(Mesh *mesh, GlobalIndexType cellID, const cha
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "numSolutions != numSolutionsPacked");
   }
   dataLocation += sizeof(numSolutions);
-  for (int i=0; i<numSolutions; i++) {
+  for (int solnOrdinal=0; solnOrdinal<numSolutions; solnOrdinal++) {
     // # dofs per solution
     int localDofs;
     memcpy(&localDofs, dataLocation, sizeof(localDofs));
@@ -146,7 +146,7 @@ void CellDataMigration::unpackData(Mesh *mesh, GlobalIndexType cellID, const cha
     // the dofs themselves
     dataLocation += localDofs * sizeof(double);
     if (!coefficientsBelongToParent) {
-      solutions[i]->setSolnCoeffsForCellID(solnCoeffs, cellID);
+      solutions[solnOrdinal]->setSolnCoeffsForCellID(solnCoeffs, cellID);
 //      cout << "CellDataMigration: setting soln coefficients for cell " << cellID << endl;
     } else {
       CellPtr cell = mesh->getTopology()->getCell(cellID);
@@ -162,7 +162,7 @@ void CellDataMigration::unpackData(Mesh *mesh, GlobalIndexType cellID, const cha
         TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "child not found!");
       }
 //      cout << "determining cellID " << parent->cellIndex() << "'s child " << childOrdinal << "'s coefficients.\n";
-      solutions[i]->projectOldCellOntoNewCells(parent->cellIndex(), mesh->getElementType(parent->cellIndex()), solnCoeffs, childIndices);
+      solutions[solnOrdinal]->projectOldCellOntoNewCells(parent->cellIndex(), mesh->getElementType(parent->cellIndex()), solnCoeffs, childIndices);
     }
 //    cout << "setting solution coefficients for cellID " << cellID << endl << solnCoeffs;
   }
