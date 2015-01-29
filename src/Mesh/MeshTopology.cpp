@@ -1078,8 +1078,20 @@ unsigned MeshTopology::getEntityCount(unsigned int d) {
 }
 
 pair<IndexType, unsigned> MeshTopology::getEntityGeneralizedParent(unsigned int d, IndexType entityIndex) {
-  if (_generalizedParentEntities[d].find(entityIndex) == _generalizedParentEntities[d].end()) return make_pair(-1,-1);
-  return _generalizedParentEntities[d][entityIndex];
+  if ((d < _generalizedParentEntities.size()) && (_generalizedParentEntities[d].find(entityIndex) != _generalizedParentEntities[d].end()))
+    return _generalizedParentEntities[d][entityIndex];
+  else {
+    // generalized parent may be a cell
+    set< pair<IndexType, unsigned> > cellsForEntity = getCellsContainingEntity(d, entityIndex);
+    if (cellsForEntity.size() > 0) {
+      IndexType cellIndex = cellsForEntity.begin()->first;
+      if (_cells[cellIndex]->getParent() != Teuchos::null) {
+        return make_pair(_cells[cellIndex]->getParent()->cellIndex(), _spaceDim);
+      }
+    }
+  }
+  TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Entity generalized parent not found...");
+  return make_pair(-1,-1);
 }
 
 unsigned MeshTopology::getEntityIndex(unsigned d, const set<unsigned> &nodeSet) {
@@ -1117,13 +1129,24 @@ unsigned MeshTopology::getEntityParent(unsigned d, unsigned entityIndex, unsigne
 }
 
 CellTopoPtr MeshTopology::getEntityTopology(unsigned d, IndexType entityIndex) {
-  CellTopologyKey cellKey = _entityCellTopologyKeys[d][entityIndex];
-  return _knownTopologies[cellKey];
+  CellTopoPtr entityTopo;
+  if (d < _spaceDim) {
+    TEUCHOS_TEST_FOR_EXCEPTION(entityIndex >= _entityCellTopologyKeys[d].size(), std::invalid_argument, "entityIndex is out of bounds");
+    return _knownTopologies[_entityCellTopologyKeys[d][entityIndex]];
+  } else {
+    return getCell(entityIndex)->topology();
+  }
 }
 
 vector<unsigned> MeshTopology::getEntityVertexIndices(unsigned d, unsigned entityIndex) {
   if (d==0) {
     return vector<IndexType>(1,entityIndex);
+  }
+  if (d==_spaceDim) {
+    return getCell(entityIndex)->vertices();
+  }
+  if (d > _canonicalEntityOrdering.size()) {
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "d out of bounds");
   }
   if (_canonicalEntityOrdering[d].size() <= entityIndex) {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "entityIndex out of bounds");
@@ -1190,7 +1213,7 @@ unsigned MeshTopology::getSubEntityCount(unsigned int d, unsigned int entityInde
       return 0;
     }
   }
-  CellTopoPtr entityTopo = _knownTopologies[_entityCellTopologyKeys[d][entityIndex]];
+  CellTopoPtr entityTopo = getEntityTopology(d, entityIndex);
   return entityTopo->getSubcellCount(subEntityDim);
 }
 
@@ -1203,7 +1226,7 @@ unsigned MeshTopology::getSubEntityIndex(unsigned int d, unsigned int entityInde
     }
   }
   
-  CellTopoPtr entityTopo = _knownTopologies[_entityCellTopologyKeys[d][entityIndex]];
+  CellTopoPtr entityTopo = getEntityTopology(d, entityIndex);
   set<unsigned> subEntityNodes;
   unsigned subEntityNodeCount = (subEntityDim > 0) ? entityTopo->getNodeCount(subEntityDim, subEntityOrdinal) : 1; // vertices are by definition just one node
   vector<unsigned> entityNodes = getEntityVertexIndices(d, entityIndex);
@@ -1360,6 +1383,9 @@ vector<IndexType> MeshTopology::getVertexIndices(const vector< vector<double> > 
 vector<unsigned> MeshTopology::getChildEntities(unsigned int d, IndexType entityIndex) {
   vector<unsigned> childIndices;
   if (d==0) return childIndices;
+  if (d==_spaceDim) {
+    return getCell(entityIndex)->getChildIndices();
+  }
   if (_childEntities[d].find(entityIndex) == _childEntities[d].end()) return childIndices;
   vector< pair< RefinementPatternPtr, vector<unsigned> > > childEntries = _childEntities[d][entityIndex];
   for (vector< pair< RefinementPatternPtr, vector<unsigned> > >::iterator entryIt = childEntries.begin();
