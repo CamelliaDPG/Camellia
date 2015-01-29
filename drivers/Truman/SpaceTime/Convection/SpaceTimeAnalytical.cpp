@@ -115,6 +115,8 @@ enum NormType
   MinMaxL2Scaling,
   NSDecoupled,
   MinNSDecoupled,
+  h1NSDecoupled,
+  hAltNSDecoupled,
 };
 
 int main(int argc, char *argv[]) {
@@ -146,6 +148,8 @@ int main(int argc, char *argv[]) {
   stringToNorm["MinMaxL2Scaling"] = MinMaxL2Scaling;
   stringToNorm["NSDecoupled"] = NSDecoupled;
   stringToNorm["MinNSDecoupled"] = MinNSDecoupled;
+  stringToNorm["h1NSDecoupled"] = h1NSDecoupled;
+  stringToNorm["hAltNSDecoupled"] = hAltNSDecoupled;
   NormType norm = stringToNorm[normString];
 
   int numX = 4;
@@ -301,6 +305,24 @@ int main(int argc, char *argv[]) {
     case MinNSDecoupled:
     ip->addTerm( ip_scaling*ip_scaling * tau );
     ip->addTerm( v->dx() );
+    ip->addTerm( beta * v->grad() );
+    ip->addTerm( tau->dx() );
+    ip->addTerm( v );
+    break;
+
+    // NS Decoupled with rescaled constitutive
+    case h1NSDecoupled:
+    ip->addTerm( 1./(Function::h()) * tau );
+    ip->addTerm( v->dx() );
+    ip->addTerm( beta * v->grad() );
+    ip->addTerm( tau->dx() );
+    ip->addTerm( v );
+    break;
+
+    // NS Decoupled with rescaled constitutive
+    case hAltNSDecoupled:
+    ip->addTerm( 1./Function::h() * tau );
+    ip->addTerm( Function::h()*v->dx() );
     ip->addTerm( beta * v->grad() );
     ip->addTerm( tau->dx() );
     ip->addTerm( v );

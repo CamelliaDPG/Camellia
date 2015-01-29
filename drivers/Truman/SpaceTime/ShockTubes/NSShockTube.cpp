@@ -18,6 +18,8 @@ double pi = 2.0*acos(0.0);
 
 int H1Order = 3, pToAdd = 2;
 
+int refIndex = 0;
+
 class IPScaling : public hFunction {
   double _epsilon;
   public:
@@ -49,6 +51,54 @@ class ConstantYBoundary : public SpatialFilter {
          double tol = 1e-14;
          return (abs(y-yval) < tol);
       }
+};
+
+class MinFunction : public Function {
+  private:
+    FunctionPtr _f1;
+    FunctionPtr _f2;
+  public:
+    MinFunction(FunctionPtr f1, FunctionPtr f2) : Function(0), _f1(f1), _f2(f2) {}
+    void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
+      int numCells = values.dimension(0);
+      int numPoints = values.dimension(1);
+
+      FieldContainer<double> f1values(values);
+      FieldContainer<double> f2values(values);
+      _f1->values(f1values, basisCache);
+      _f2->values(f2values, basisCache);
+
+      const FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
+      for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
+        for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
+          values(cellIndex, ptIndex) = min(f1values(cellIndex, ptIndex),f2values(cellIndex, ptIndex));
+        }
+      }
+    }
+};
+
+class MaxFunction : public Function {
+  private:
+    FunctionPtr _f1;
+    FunctionPtr _f2;
+  public:
+    MaxFunction(FunctionPtr f1, FunctionPtr f2) : Function(0), _f1(f1), _f2(f2) {}
+    void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
+      int numCells = values.dimension(0);
+      int numPoints = values.dimension(1);
+
+      FieldContainer<double> f1values(values);
+      FieldContainer<double> f2values(values);
+      _f1->values(f1values, basisCache);
+      _f2->values(f2values, basisCache);
+
+      const FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
+      for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
+        for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
+          values(cellIndex, ptIndex) = max(f1values(cellIndex, ptIndex),f2values(cellIndex, ptIndex));
+        }
+      }
+    }
 };
 
 class PowerFunction : public Function {
@@ -112,6 +162,10 @@ class SqrtFunction : public Function {
     }
 };
 
+FunctionPtr sqrt(FunctionPtr f) {
+  return Teuchos::rcp( new SqrtFunction(f) );
+}
+
 class BoundedBelowFunction : public Function {
   private:
     FunctionPtr _function;
@@ -154,95 +208,6 @@ class BoundedSqrtFunction : public Function {
     }
 };
 
-class ArtificialViscosity : public Function {
-  private:
-    FunctionPtr _h;
-    FunctionPtr _rho;
-    FunctionPtr _dudx;
-    FunctionPtr _sqrtT;
-    FunctionPtr _D;
-    FunctionPtr _dDdx;
-    double _gamma;
-    double _R;
-    double _qlin;
-    double _qquad;
-  public:
-    ArtificialViscosity(FunctionPtr h, FunctionPtr rho, FunctionPtr dudx, FunctionPtr sqrtT, FunctionPtr D, FunctionPtr dDdx, double gamma, double R, double qlin=0.25, double qquad=2) : Function(0),
-      _h(h), _rho(rho), _dudx(dudx), _sqrtT(sqrtT), _D(D), _dDdx(dDdx), _gamma(gamma), _R(R), _qlin(qlin), _qquad(qquad) {}
-    void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
-      int numCells = values.dimension(0);
-      int numPoints = values.dimension(1);
-
-      FieldContainer<double> h(values);
-      FieldContainer<double> rho(values);
-      FieldContainer<double> dudx(values);
-      FieldContainer<double> sqrtT(values);
-      FieldContainer<double> D(values);
-      FieldContainer<double> dDdx(values);
-      _h->values(h, basisCache);
-      _rho->values(rho, basisCache);
-      _dudx->values(dudx, basisCache);
-      _sqrtT->values(sqrtT, basisCache);
-      _D->values(D, basisCache);
-      _dDdx->values(dDdx, basisCache);
-
-      const FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
-      for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
-        for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
-          double a0 = sqrt(_gamma*_R)*sqrtT(cellIndex, ptIndex);
-          double Vz = 0;
-          double Cz = dudx(cellIndex, ptIndex);
-          double psi0 = 1;
-          double psi1 = 1;
-          double psi2 = 1;
-          if (Cz >= 0)
-            psi1 = 0;
-          if (abs(dDdx(cellIndex, ptIndex)) < 1e-2)
-            psi1 = 0;
-          // if (Cz < 1e-6)
-          // {
-          //   psi1 = max(-Cz/abs(Cz),0.);
-          //   psi2 = Cz/(Cz+Vz);
-          // }
-          // else
-          // {
-          //   psi1 = 0;
-          //   psi2 = 0;
-          // }
-          double artViscScaling = 1e-0;
-          values(cellIndex, ptIndex) = 1e-4 + artViscScaling*psi0*psi1*rho(cellIndex, ptIndex)*h(cellIndex, ptIndex)*(_qquad*h(cellIndex, ptIndex)*Cz + psi2*_qlin*a0);
-          // values(cellIndex, ptIndex) = 1e-4 + rho(cellIndex, ptIndex)*h(cellIndex, ptIndex)*(_qquad*h(cellIndex, ptIndex)*Cz + psi2*_qlin*a0);
-        }
-      }
-    }
-};
-
-class ErrorFunction : public Function {
-  private:
-    SolutionPtr _solution;
-  public:
-    ErrorFunction(SolutionPtr solution) : Function(0), _solution(solution) {}
-    void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
-      int numCells = values.dimension(0);
-      int numPoints = values.dimension(1);
-
-      // _function->values(values, basisCache);
-      map<int, double> errorMap = _solution->energyError();
-
-      const FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
-      for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
-        map<int, double>::iterator it = errorMap.find(cellIndex);
-        if (it != errorMap.end())
-          cout << "cell " << cellIndex << " error " << errorMap[cellIndex] << endl;
-        else
-          cout << " Problem " << endl;
-        for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
-          // values(cellIndex, ptIndex) = errorMap[cellIndex];
-          values(cellIndex, ptIndex) = 0;
-        }
-      }
-    }
-};
 
 class PulseInitialCondition : public hFunction {
    private:
@@ -267,12 +232,15 @@ class PulseInitialCondition : public hFunction {
           {
             double x = (*points)(cellIndex,ptIndex,0);
             double y = (*points)(cellIndex,ptIndex,1);
-            double w = 0.2*h(cellIndex, ptIndex);
-            // double w = 1./64;
+            // double w = 0.2*h(cellIndex, ptIndex);
+            double w = max(1./pow(2,refIndex+1),1./64);
             if (abs(x) <= w)
-              values(cellIndex, ptIndex) = 0.5*_valI/w;
+              // values(cellIndex, ptIndex) = 0.5/w;
+              // values(cellIndex, ptIndex) = 1./w*(1-abs(x)/w);
+              // values(cellIndex, ptIndex) = 1.5/w*(1-abs(x)/w)*(1-abs(x)/w);
+              values(cellIndex, ptIndex) = 2*1.5/(w*w*w)*(w*w-2*w*abs(x)+x*x);
             else
-              values(cellIndex, ptIndex) = _valO;
+              values(cellIndex, ptIndex) = 0;
           }
                // double w = min(_width, 0.5*h(cellIndex, ptIndex));
                // double w;
@@ -353,9 +321,17 @@ enum NormType
   Graph,
   ManualGraph,
   Robust,
+  hRobust,
+  hRobust2,
   RobustL2Scaling,
   NSDecoupled,
   NSDecoupledL2Scaling,
+  h1NSDecoupled,
+  hCoupled,
+  hCoupled2,
+  hAltNSDecoupled,
+  hAlt2NSDecoupled,
+  hAlt3NSDecoupled,
   MinNSDecoupled,
 };
 
@@ -372,14 +348,14 @@ int main(int argc, char *argv[]) {
    // Required arguments
   int problem = args.Input<int>("--problem", "which problem to run");
   int formulation = args.Input<int>("--formulation", "which formulation to use: 0 = primitive, 1 = conservation, 2 = entropy");
+  string normString = args.Input<string>("--norm", "test norm");
 
    // Optional arguments (have defaults)
   int numRefs = args.Input("--numRefs", "number of refinement steps", 0);
   int numPreRefs = args.Input<int>("--numPreRefs","pre-refinements on singularity",0);
-  string normString = args.Input<string>("--norm", "test norm", "Robust");
   double physicalViscosity = args.Input("--mu", "viscosity", 1e-2);
   double mu = physicalViscosity;
-  double mu_sqrt = sqrt(mu);
+  // double mu_sqrt = sqrt(mu);
   int numSlabs = args.Input("--numSlabs", "number of time slabs", 1);
   bool useLineSearch = args.Input("--lineSearch", "use line search", true);
   int polyOrder = args.Input("--polyOrder", "polynomial order for field variables", 2);
@@ -396,9 +372,17 @@ int main(int argc, char *argv[]) {
   stringToNorm["Graph"] = Graph;
   stringToNorm["ManualGraph"] = ManualGraph;
   stringToNorm["Robust"] = Robust;
+  stringToNorm["hRobust"] = hRobust;
+  stringToNorm["hRobust2"] = hRobust2;
   stringToNorm["RobustL2Scaling"] = RobustL2Scaling;
   stringToNorm["NSDecoupled"] = NSDecoupled;
   stringToNorm["NSDecoupledL2Scaling"] = NSDecoupledL2Scaling;
+  stringToNorm["h1NSDecoupled"] = h1NSDecoupled;
+  stringToNorm["hCoupled"] = hCoupled;
+  stringToNorm["hCoupled2"] = hCoupled2;
+  stringToNorm["hAltNSDecoupled"] = hAltNSDecoupled;
+  stringToNorm["hAlt2NSDecoupled"] = hAlt2NSDecoupled;
+  stringToNorm["hAlt3NSDecoupled"] = hAlt3NSDecoupled;
   stringToNorm["MinNSDecoupled"] = MinNSDecoupled;
   NormType norm = stringToNorm[normString];
 
@@ -505,8 +489,8 @@ int main(int argc, char *argv[]) {
     Cv = 1./(gamma*(gamma-1)*M_inf*M_inf);
     Cp = gamma*Cv;
     R = Cp-Cv;
-    xmin = 0;
-    xmax = 1;
+    xmin = -.25;
+    xmax = 1.25;
     xint = .5;
     tmax = .25;
 
@@ -636,8 +620,10 @@ int main(int argc, char *argv[]) {
     FieldContainer<double> meshBoundary(4,2);
     // xmin = 0.0;
     // xmax = 1.0;
-    double tminslab = tmax*double(slab)/numSlabs;
-    double tmaxslab = tmax*double(slab+1)/numSlabs;
+    // double tminslab = tmax*double(slab)/numSlabs;
+    // double tmaxslab = tmax*double(slab+1)/numSlabs;
+    double tminslab = tmax*double(slab);
+    double tmaxslab = tmax*double(slab+1);
 
     meshBoundary(0,0) =  xmin; // x1
     meshBoundary(0,1) =  tminslab; // y1
@@ -726,6 +712,8 @@ int main(int argc, char *argv[]) {
     FunctionPtr Ue_prev   = Function::solution(Ue, backgroundFlows[slab]);
     FunctionPtr D_prev   = Function::solution(D, backgroundFlows[slab]);
     FunctionPtr q_prev   = Function::solution(q, backgroundFlows[slab]);
+    // FunctionPtr minFcn = Teuchos::rcp( new MinFunction(physicalViscosity*Function::constant(1), Function::h()) );
+    // FunctionPtr mu = Teuchos::rcp( new MaxFunction(Uc_prev * minFcn, 1e-3*one) );
     FunctionPtr rho_prev = Uc_prev;
     FunctionPtr u_prev = Um_prev;
     FunctionPtr T_prev = Ue_prev;
@@ -1075,8 +1063,8 @@ int main(int argc, char *argv[]) {
     rhs->addTerm( Ce * ve->dy() );
 
     ////////////////////   DEFINE INNER PRODUCT(S)   ///////////////////////
-    FunctionPtr visc_scaling = Teuchos::rcp( new IPScaling(mu) );
-    FunctionPtr temp_scaling = Teuchos::rcp( new IPScaling(Cp*mu/Pr) );
+    FunctionPtr visc_scaling = Teuchos::rcp( new IPScaling(physicalViscosity) );
+    FunctionPtr temp_scaling = Teuchos::rcp( new IPScaling(Cp*physicalViscosity/Pr) );
     switch (norm)
     {
       // Automatic graph norm
@@ -1134,6 +1122,42 @@ int main(int argc, char *argv[]) {
       ip->addTerm( sqrt(mu)*visc_scaling*ve );
       break;
 
+      // Robust Norm
+      // Good for Sod
+      case hRobust:
+      ip->addTerm( mu/Function::h()*adj_MD );
+      ip->addTerm( Cp*mu/Pr/Function::h()*adj_Mq );
+      ip->addTerm( Function::h()*adj_KD );
+      ip->addTerm( Function::h()*adj_Kq );
+      ip->addTerm( adj_Gc - adj_Fc - adj_Cc );
+      ip->addTerm( adj_Gm - adj_Fm - adj_Cm );
+      ip->addTerm( adj_Ge - adj_Fe - adj_Ce );
+      ip->addTerm( adj_Fc );
+      ip->addTerm( adj_Fm );
+      ip->addTerm( adj_Fe );
+      ip->addTerm( vc );
+      ip->addTerm( vm );
+      ip->addTerm( ve );
+      break;
+
+      // Robust Norm
+      // Good for Sod
+      case hRobust2:
+      ip->addTerm( sqrt(mu)/Function::h()*adj_MD );
+      ip->addTerm( sqrt(Cp*mu/Pr)/Function::h()*adj_Mq );
+      ip->addTerm( sqrt(mu)/Function::h()*adj_KD );
+      ip->addTerm( sqrt(Cp*mu/Pr)/Function::h()*adj_Kq );
+      ip->addTerm( adj_Gc - adj_Fc - adj_Cc );
+      ip->addTerm( adj_Gm - adj_Fm - adj_Cm );
+      ip->addTerm( adj_Ge - adj_Fe - adj_Ce );
+      ip->addTerm( adj_Fc );
+      ip->addTerm( adj_Fm );
+      ip->addTerm( adj_Fe );
+      ip->addTerm( vc );
+      ip->addTerm( vm );
+      ip->addTerm( ve );
+      break;
+
       // Decoupled Norm
       // Good for Sod and Noh
       case NSDecoupled:
@@ -1176,6 +1200,94 @@ int main(int argc, char *argv[]) {
       ip->addTerm( Cp*mu/Pr*temp_scaling*temp_scaling*adj_Mq );
       ip->addTerm( adj_KD );
       ip->addTerm( adj_Kq );
+      ip->addTerm( adj_Fc + adj_Cc );
+      ip->addTerm( adj_Fm + adj_Cm );
+      ip->addTerm( adj_Fe + adj_Ce );
+      ip->addTerm( adj_Gc );
+      ip->addTerm( adj_Gm );
+      ip->addTerm( adj_Ge );
+      ip->addTerm( vc );
+      ip->addTerm( vm );
+      ip->addTerm( ve );
+      break;
+
+      // Decoupled Norm
+      // Good for Sod and Noh
+      case h1NSDecoupled:
+      ip->addTerm( mu/Function::h()*adj_MD );
+      ip->addTerm( Cp*mu/Pr/Function::h()*adj_Mq );
+      ip->addTerm( adj_KD );
+      ip->addTerm( adj_Kq );
+      ip->addTerm( adj_Fc + adj_Cc );
+      ip->addTerm( adj_Fm + adj_Cm );
+      ip->addTerm( adj_Fe + adj_Ce );
+      ip->addTerm( adj_Gc );
+      ip->addTerm( adj_Gm );
+      ip->addTerm( adj_Ge );
+      ip->addTerm( vc );
+      ip->addTerm( vm );
+      ip->addTerm( ve );
+      break;
+
+      // Decoupled Norm
+      // Good for Sod and Noh
+      case hCoupled:
+      ip->addTerm( mu/Function::h()*adj_MD );
+      ip->addTerm( Cp*mu/Pr/Function::h()*adj_Mq );
+      ip->addTerm( adj_KD );
+      ip->addTerm( adj_Kq );
+      ip->addTerm( adj_Gc - adj_Fc + adj_Cc );
+      ip->addTerm( adj_Gc - adj_Fm + adj_Cm );
+      ip->addTerm( adj_Gc - adj_Fe + adj_Ce );
+      // ip->addTerm( adj_Gc );
+      // ip->addTerm( adj_Gm );
+      // ip->addTerm( adj_Ge );
+      ip->addTerm( vc );
+      ip->addTerm( vm );
+      ip->addTerm( ve );
+      break;
+
+      // Decoupled Norm
+      // Good for Sod and Noh
+      case hCoupled2:
+      ip->addTerm( mu/Function::h()*adj_MD );
+      ip->addTerm( Cp*mu/Pr/Function::h()*adj_Mq );
+      ip->addTerm( adj_KD );
+      ip->addTerm( adj_Kq );
+      ip->addTerm( adj_Gc - adj_Fc + adj_Cc );
+      ip->addTerm( adj_Gc - adj_Fm + adj_Cm );
+      ip->addTerm( adj_Gc - adj_Fe + adj_Ce );
+      ip->addTerm( adj_Gc );
+      ip->addTerm( adj_Gm );
+      ip->addTerm( adj_Ge );
+      ip->addTerm( vc );
+      ip->addTerm( vm );
+      ip->addTerm( ve );
+      break;
+
+      // Decoupled Norm
+      case hAlt2NSDecoupled:
+      ip->addTerm( mu/Function::h()*adj_MD );
+      ip->addTerm( Cp*mu/Pr/Function::h()*adj_Mq );
+      ip->addTerm( 1./Function::h()*adj_KD );
+      ip->addTerm( 1./Function::h()*adj_Kq );
+      ip->addTerm( adj_Fc + adj_Cc );
+      ip->addTerm( adj_Fm + adj_Cm );
+      ip->addTerm( adj_Fe + adj_Ce );
+      ip->addTerm( adj_Gc );
+      ip->addTerm( adj_Gm );
+      ip->addTerm( adj_Ge );
+      ip->addTerm( vc );
+      ip->addTerm( vm );
+      ip->addTerm( ve );
+      break;
+
+      // Decoupled Norm
+      case hAlt3NSDecoupled:
+      ip->addTerm( sqrt(mu)/Function::h()*adj_MD );
+      ip->addTerm( sqrt(Cp*mu/Pr)/Function::h()*adj_Mq );
+      ip->addTerm( sqrt(mu)/Function::h()*adj_KD );
+      ip->addTerm( sqrt(Cp*mu/Pr)/Function::h()*adj_Kq );
       ip->addTerm( adj_Fc + adj_Cc );
       ip->addTerm( adj_Fm + adj_Cm );
       ip->addTerm( adj_Fe + adj_Ce );
@@ -1258,7 +1370,7 @@ int main(int argc, char *argv[]) {
     FunctionPtr mom0 = Teuchos::rcp( new DiscontinuousInitialCondition(xint, uL*rhoL, uR*rhoR) );
     FunctionPtr E0    = Teuchos::rcp( new DiscontinuousInitialCondition(xint, (rhoL*Cv*TL+0.5*rhoL*uL*uL), (rhoR*Cv*TR+0.5*rhoR*uR*uR)) );
     if (problem == 6)
-      E0 = Teuchos::rcp( new PulseInitialCondition(1./128, 1./Cv, 0, Function::h()) );
+      E0 = Teuchos::rcp( new PulseInitialCondition(1./128, 1, 0, Function::h()) );
     // FunctionPtr rho0  = Teuchos::rcp( new RampedInitialCondition(xint, rhoL, rhoR, (xmax-xmin)/numX) );
     // FunctionPtr mom0 = Teuchos::rcp( new RampedInitialCondition(xint, uL*rhoL, uR*rhoR, (xmax-xmin)/numX) );
     // FunctionPtr E0    = Teuchos::rcp( new RampedInitialCondition(xint, (rhoL*Cv*TL+0.5*rhoL*uL*uL), (rhoR*Cv*TR+0.5*rhoR*uR*uR), (xmax-xmin)/numX) );
@@ -1340,7 +1452,7 @@ int main(int argc, char *argv[]) {
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "invalid formulation");
     }
 
-    for (int refIndex=0; refIndex<=numRefs; refIndex++)
+    for (refIndex=0; refIndex<=numRefs; refIndex++)
     {
       double L2Update = 1e7;
       int iterCount = 0;
