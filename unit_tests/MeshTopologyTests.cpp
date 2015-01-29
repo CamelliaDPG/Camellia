@@ -146,6 +146,39 @@ namespace {
       }
     }
   }
+
+  TEUCHOS_UNIT_TEST(MeshTopology, GetEntityGeneralizedParent_LineRefinement) {
+    int spaceDim = 1;
+    MeshTopologyPtr meshTopo = Teuchos::rcp( new MeshTopology(spaceDim) );
+    
+    CellTopoPtr lineTopo = CellTopology::line();
+    
+    vector< vector<double> > lineVertices;
+    double xLeft = 0.0;
+    double xRight = 1.0;
+    lineVertices.push_back(vector<double>(1, xLeft));
+    lineVertices.push_back(vector<double>(1, xRight));
+    
+    meshTopo->addCell(lineTopo, lineVertices); // cell from 0 to 1
+    
+    int cellIndex = 0;
+    CellPtr cell = meshTopo->getCell(cellIndex);
+    
+    RefinementPatternPtr refPattern = RefinementPattern::regularRefinementPattern(lineTopo);
+    
+    meshTopo->refineCell(cellIndex, refPattern);
+    
+    double xMiddle = (xLeft + xRight) / 2.0;
+    
+    unsigned vertexOrdinal;
+    meshTopo->getVertexIndex(vector<double>(1,xMiddle), vertexOrdinal);
+    
+    int vertexDim = 0, lineDim = 1;
+    pair<IndexType, unsigned> generalizedParent = meshTopo->getEntityGeneralizedParent(vertexDim, vertexOrdinal);
+    
+    TEST_EQUALITY(generalizedParent.first, cellIndex);
+    TEST_EQUALITY(generalizedParent.second, lineDim);
+  }
   
   TEUCHOS_UNIT_TEST(MeshTopology, GetRootMeshTopology) {
     int k = 1;
