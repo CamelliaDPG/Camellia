@@ -84,9 +84,8 @@ bool MeshTransferFunction::findAncestralPairForNewMeshCellSide(const CellSide &n
       pair<unsigned, unsigned> subcellInfo = parent->refinementPattern()->mapSubcellFromChildToParent(childOrdinalInParent, sideDim, newMeshCellSideAncestor.second);
       
       unsigned parentSideOrdinal = subcellInfo.second;
-      if (parentSideOrdinal == -1) {
+      if ((parentSideOrdinal == -1) || (subcellInfo.first != sideDim)) {
         return false;
-//        TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "No matching side in parent");
       }
       
       newMeshCellSideAncestor.first = parent->cellIndex();
