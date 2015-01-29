@@ -156,6 +156,10 @@ vector<unsigned> Cell::getChildIndices() {
 }
 
 unsigned Cell::entityIndex(unsigned subcdim, unsigned subcord) {
+  if ((subcdim == _cellTopo->getDimension()) && (subcord == 0)) {
+    return _cellIndex;
+  }
+  
   set< unsigned > nodes;
   if (subcdim != 0) {
     int entityNodeCount = _cellTopo->getNodeCount(subcdim, subcord);
