@@ -62,11 +62,11 @@ private:
   static void setupFineAndCoarseBasisCachesForReconciliation(BasisCachePtr &fineBasisCache, BasisCachePtr &coarseBasisCache,
                                                              unsigned fineSubcellDimension,
                                                              BasisPtr finerBasis,
-                                                             unsigned finerBasisSubcellOrdinalInFineDomain,
+                                                             unsigned fineSubcellOrdinalInFineDomain,
                                                              RefinementBranch &cellRefinementBranch, // i.e. ref. branch is in volume, even for skeleton domains
                                                              unsigned fineDomainOrdinalInRefinementLeaf,
                                                              unsigned coarseSubcellDimension,
-                                                             BasisPtr coarserBasis, unsigned coarserBasisSubcellOrdinalInCoarseDomain,
+                                                             BasisPtr coarserBasis, unsigned coarseSubcellOrdinalInCoarseDomain,
                                                              unsigned coarseDomainOrdinalInRefinementRoot, // we use the coarserBasis's domain topology to determine the domain's space dimension
                                                              unsigned coarseSubcellPermutation);
   
@@ -99,22 +99,22 @@ public:
                                                                  unsigned vertexNodePermutation);  // vertexNodePermutation: how to permute the subcell vertices as seen by finerBasis to get the one seen by coarserBasis.
 
   static SubBasisReconciliationWeights computeConstrainedWeights(unsigned fineSubcellDimension,
-                                                                 BasisPtr finerBasis, unsigned finerBasisSubcellOrdinalInFineDomain,
+                                                                 BasisPtr finerBasis, unsigned fineSubcellOrdinalInFineDomain,
                                                                  RefinementBranch &cellRefinementBranch, // i.e. ref. branch is in volume, even for skeleton domains
                                                                  unsigned fineDomainOrdinalInRefinementLeaf,
                                                                  unsigned coarseSubcellDimension,
-                                                                 BasisPtr coarserBasis, unsigned coarserBasisSubcellOrdinalInCoarseDomain,
+                                                                 BasisPtr coarserBasis, unsigned coarseSubcellOrdinalInCoarseDomain,
                                                                  unsigned coarseDomainOrdinalInRefinementRoot, // we use the coarserBasis's domain topology to determine the domain's space dimension
                                                                  unsigned coarseSubcellPermutation);  // coarseSubcellPermutation: how to permute the nodes of the refinement root seen by the fine basis to get the domain as seen by the coarse basis.  (This is like the one in the other computeConstrainedWeights.)
 
   static SubBasisReconciliationWeights computeConstrainedWeightsForTermTraced(LinearTermPtr termTraced, int fieldID,
                                                                               unsigned fineSubcellDimension,
                                                                               BasisPtr finerBasis,
-                                                                              unsigned finerBasisSubcellOrdinalInFineDomain,
+                                                                              unsigned fineSubcellOrdinalInFineDomain,
                                                                               RefinementBranch &cellRefinementBranch, // i.e. ref. branch is in volume, even for skeleton domains
                                                                               unsigned fineDomainOrdinalInRefinementLeaf,
                                                                               unsigned coarseSubcellDimension,
-                                                                              BasisPtr coarserBasis, unsigned coarserBasisSubcellOrdinalInCoarseDomain,
+                                                                              BasisPtr coarserBasis, unsigned coarseSubcellOrdinalInCoarseDomain,
                                                                               unsigned coarseDomainOrdinalInRefinementRoot, // we use the coarserBasis's domain topology to determine the domain's space dimension
                                                                               unsigned coarseSubcellPermutation);  // coarseSubcellPermutation: how to permute the nodes of the refinement root seen by the fine basis to get the domain as seen by the coarse basis.  (This is like the one in the other computeConstrainedWeights.)
   
