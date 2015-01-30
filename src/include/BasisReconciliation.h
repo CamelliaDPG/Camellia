@@ -132,6 +132,20 @@ public:
   static set<unsigned> internalDofOrdinalsForFinerBasis(BasisPtr finerBasis, RefinementBranch refinements, unsigned subcdim, unsigned subcord);
   
   static unsigned minimumSubcellDimension(BasisPtr basis); // for continuity enforcement
+  
+public:
+  // !! this method exposed publicly primarily for testing purposes.
+  static void mapFineSubcellPointsToCoarseDomain(FieldContainer<double> &coarseDomainPoints, const FieldContainer<double> &fineSubcellPoints,
+                                                  unsigned fineSubcellDimension,
+                                                  unsigned fineSubcellOrdinalInFineDomain,
+                                                  unsigned fineDomainDim,
+                                                  unsigned fineDomainOrdinalInRefinementLeaf,
+                                                  RefinementBranch &cellRefinementBranch,
+                                                  unsigned coarseSubcellDimension,
+                                                  unsigned coarseSubcellOrdinalInCoarseDomain,
+                                                  unsigned coarseDomainDim,
+                                                  unsigned coarseDomainOrdinalInRefinementRoot,
+                                                  unsigned coarseSubcellPermutation); // coarseSubcellPermutation: how to permute the nodes of the refinement root seen by the fine basis to get the domain as seen by the coarse basis.  (This is like the one in computeConstrainedWeights.)
 };
 
 #endif
