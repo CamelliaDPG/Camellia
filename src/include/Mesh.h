@@ -161,7 +161,8 @@ public:
   
   // new constructor (min rule, n-D):
   Mesh(MeshTopologyPtr meshTopology, BFPtr bilinearForm, int H1Order, int pToAddTest,
-       map<int,int> trialOrderEnhancements=_emptyIntIntMap, map<int,int> testOrderEnhancements=_emptyIntIntMap);
+       map<int,int> trialOrderEnhancements=_emptyIntIntMap, map<int,int> testOrderEnhancements=_emptyIntIntMap,
+       MeshPartitionPolicyPtr meshPartitionPolicy = Teuchos::null);
 
 #ifdef HAVE_EPETRAEXT_HDF5
   void saveToHDF5(string filename);

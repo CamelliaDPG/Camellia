@@ -73,14 +73,16 @@ using namespace Camellia;
 map<int,int> Mesh::_emptyIntIntMap;
 
 Mesh::Mesh(MeshTopologyPtr meshTopology, BFPtr bilinearForm, int H1Order, int pToAddTest,
-           map<int,int> trialOrderEnhancements, map<int,int> testOrderEnhancements) : DofInterpreter(Teuchos::rcp(this,false)) {
+           map<int,int> trialOrderEnhancements, map<int,int> testOrderEnhancements,
+           MeshPartitionPolicyPtr partitionPolicy) : DofInterpreter(Teuchos::rcp(this,false)) {
   
   _meshTopology = meshTopology;
   
   DofOrderingFactoryPtr dofOrderingFactoryPtr = Teuchos::rcp( new DofOrderingFactory(bilinearForm, trialOrderEnhancements,testOrderEnhancements) );
   _enforceMBFluxContinuity = false;
 //  MeshPartitionPolicyPtr partitionPolicy = Teuchos::rcp( new MeshPartitionPolicy() );
-  MeshPartitionPolicyPtr partitionPolicy = Teuchos::rcp( new ZoltanMeshPartitionPolicy() );
+  if ( partitionPolicy.get() == NULL )
+    partitionPolicy = Teuchos::rcp( new ZoltanMeshPartitionPolicy() );
   
   MeshPtr thisPtr = Teuchos::rcp(this, false);
   _gda = Teuchos::rcp( new GDAMinimumRule(thisPtr, bilinearForm->varFactory(), dofOrderingFactoryPtr,
