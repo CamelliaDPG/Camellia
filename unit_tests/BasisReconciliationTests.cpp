@@ -360,4 +360,293 @@ namespace {
       }
     }
   }
+  
+  TEUCHOS_UNIT_TEST( BasisReconciliation, TermTraced_3D_Hexahedron)
+  {
+    
+    VarFactory vf;
+    VarPtr u = vf.fieldVar("u");
+    LinearTermPtr termTraced = 3.0 * u;
+    VarPtr u_hat = vf.traceVar("\\widehat{u}", termTraced);
+    
+    // TODO: do flux tests...
+    //    LinearTermPtr fluxTermTraced = 3.0 * u * n;
+    //    VarPtr u_n = vf.traceVar("\\widehat{u}", termTraced);
+    
+    // in what follows, the fine basis belongs to the trace variable and the coarse to the field
+    
+    unsigned coarseSubcellOrdinalInCoarseDomain = 0;  // when the coarse domain is a side, this can be non-zero, but fields are always in the volume, so this will always be 0
+    unsigned coarseDomainOrdinalInRefinementRoot = 0; // again, since coarse domain is for a field variable, this will always be 0
+    unsigned coarseSubcellPermutation = 0;            // not sure if this will ever be nontrivial permutation in practice; we don't test anything else here
+    
+    // 3D tests
+    int H1Order = 2;
+    CellTopoPtr volumeTopo = CellTopology::hexahedron();
+    
+    BasisPtr volumeBasisQuadratic = BasisFactory::basisFactory()->getBasis(H1Order, volumeTopo, Camellia::FUNCTION_SPACE_HGRAD);
+    
+    CellTopoPtr sideTopo = CellTopology::quad();
+    BasisPtr traceBasis = BasisFactory::basisFactory()->getBasis(H1Order, sideTopo, Camellia::FUNCTION_SPACE_HGRAD);
+    
+    RefinementBranch noRefinements;
+    RefinementPatternPtr noRefinement = RefinementPattern::noRefinementPattern(volumeTopo);
+    noRefinements.push_back( make_pair(noRefinement.get(), 0) );
+    
+    RefinementBranch oneRefinement;
+    RefinementPatternPtr regularRefinement = RefinementPattern::regularRefinementPattern(volumeTopo);
+    oneRefinement.push_back( make_pair(regularRefinement.get(), 1) ); // 1: select child ordinal 1
+    
+    vector<RefinementBranch> refinementBranches;
+    refinementBranches.push_back(noRefinements);
+    refinementBranches.push_back(oneRefinement);
+    
+    FieldContainer<double> volumeRefNodes(volumeTopo->getVertexCount(), volumeTopo->getDimension());
+    
+    CamelliaCellTools::refCellNodesForTopology(volumeRefNodes, volumeTopo);
+    
+    bool createSideCache = true;
+    BasisCachePtr volumeBasisCache = BasisCache::basisCacheForReferenceCell(volumeTopo, 1, createSideCache);
+    
+    for (int i=0; i< refinementBranches.size(); i++) {
+      RefinementBranch refBranch = refinementBranches[i];
+      
+      out << "***** Refinement Type Number " << i << " *****\n";
+      
+      // compute some equispaced points on the reference quad:
+      int numPoints_x = 5, numPoints_y = 5;
+      FieldContainer<double> tracePointsSideReferenceSpace(numPoints_x * numPoints_y, sideTopo->getDimension());
+      int pointOrdinal = 0;
+      for (int pointOrdinal_x=0; pointOrdinal_x < numPoints_x; pointOrdinal_x++) {
+        double x = -1.0 + pointOrdinal_x * (2.0 / (numPoints_x - 1));
+        for (int pointOrdinal_y=0; pointOrdinal_y < numPoints_y; pointOrdinal_y++, pointOrdinal++) {
+          double y = -1.0 + pointOrdinal_y * (2.0 / (numPoints_y - 1));
+          tracePointsSideReferenceSpace(pointOrdinal,0) = x;
+          tracePointsSideReferenceSpace(pointOrdinal,1) = y;
+        }
+      }
+      
+      int numPoints = numPoints_x * numPoints_y;
+      
+      for (int traceSideOrdinal=0; traceSideOrdinal < volumeTopo->getSideCount(); traceSideOrdinal++) {
+        //      for (int traceSideOrdinal=1; traceSideOrdinal <= 1; traceSideOrdinal++) {
+        out << "\n\n*****      Side Ordinal " << traceSideOrdinal << "      *****\n\n\n";
+        
+        BasisCachePtr traceBasisCache = volumeBasisCache->getSideBasisCache(traceSideOrdinal);
+        traceBasisCache->setRefCellPoints(tracePointsSideReferenceSpace);
+        
+        //        out << "tracePointsSideReferenceSpace:\n" << tracePointsSideReferenceSpace;
+        
+        FieldContainer<double> tracePointsFineVolume(numPoints, volumeTopo->getDimension());
+        
+        CamelliaCellTools::mapToReferenceSubcell(tracePointsFineVolume, tracePointsSideReferenceSpace, sideTopo->getDimension(), traceSideOrdinal, volumeTopo);
+        
+        FieldContainer<double> pointsCoarseVolume(numPoints, volumeTopo->getDimension());
+        RefinementPattern::mapRefCellPointsToAncestor(refBranch, tracePointsFineVolume, pointsCoarseVolume);
+        
+        //        out << "pointsCoarseVolume:\n" << pointsCoarseVolume;
+        
+        volumeBasisCache->setRefCellPoints(pointsCoarseVolume);
+        
+        int fineSubcellOrdinalInFineDomain = 0; // since the side *is* both domain and subcell, it's necessarily ordinal 0 in the domain
+        SubBasisReconciliationWeights weights = BasisReconciliation::computeConstrainedWeightsForTermTraced(termTraced, u->ID(), sideTopo->getDimension(),
+                                                                                                            traceBasis, fineSubcellOrdinalInFineDomain, refBranch, traceSideOrdinal,
+                                                                                                            volumeTopo->getDimension(), volumeBasisQuadratic,
+                                                                                                            coarseSubcellOrdinalInCoarseDomain,
+                                                                                                            coarseDomainOrdinalInRefinementRoot,
+                                                                                                            coarseSubcellPermutation);
+        // fine basis is the point basis (the trace); coarse is the line basis (the field)
+        double tol = 1e-14; // for floating equality
+        
+        int oneCell = 1;
+        FieldContainer<double> coarseValuesExpected(oneCell,volumeBasisQuadratic->getCardinality(),numPoints);
+        termTraced->values(coarseValuesExpected, u->ID(), volumeBasisQuadratic, volumeBasisCache);
+        
+        //        out << "coarseValuesExpected:\n" << coarseValuesExpected;
+        
+        FieldContainer<double> fineValues(oneCell,traceBasis->getCardinality(),numPoints);
+        (1.0 * u_hat)->values(fineValues, u_hat->ID(), traceBasis, traceBasisCache);
+        fineValues.resize(traceBasis->getCardinality(),numPoints); // strip cell dimension
+        
+        //        out << "fineValues:\n" << fineValues;
+        
+        FieldContainer<double> coarseValuesActual(weights.coarseOrdinals.size(), numPoints);
+        SerialDenseWrapper::multiply(coarseValuesActual, weights.weights, fineValues, 'T', 'N');
+        
+        //        out << "coarseValuesActual:\n" << coarseValuesActual;
+        
+        for (int pointOrdinal = 0; pointOrdinal < numPoints; pointOrdinal++) {
+          int coarseOrdinalInWeights = 0;
+          for (int coarseOrdinal=0; coarseOrdinal < volumeBasisQuadratic->getCardinality(); coarseOrdinal++) {
+            double expectedValue = coarseValuesExpected(0,coarseOrdinal,pointOrdinal);
+            
+            double actualValue;
+            if (weights.coarseOrdinals.find(coarseOrdinal) != weights.coarseOrdinals.end()) {
+              actualValue = coarseValuesActual(coarseOrdinalInWeights,pointOrdinal);
+              coarseOrdinalInWeights++;
+            } else {
+              actualValue = 0.0;
+            }
+            
+            if ( abs(expectedValue) > tol ) {
+              TEST_FLOATING_EQUALITY(expectedValue, actualValue, tol);
+            } else {
+              TEST_ASSERT( abs(actualValue) < tol );
+              
+              if (abs(actualValue) >= tol) {
+                out << "coarseOrdinal " << coarseOrdinal << ", point " << pointOrdinal << " on side " << traceSideOrdinal << ", actualValue = " << actualValue << endl;
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+  
+  TEUCHOS_UNIT_TEST( BasisReconciliation, TermTraced_3D_Tetrahedron)
+  {
+    VarFactory vf;
+    VarPtr u = vf.fieldVar("u");
+    LinearTermPtr termTraced = 3.0 * u;
+    VarPtr u_hat = vf.traceVar("\\widehat{u}", termTraced);
+    
+    // TODO: do flux tests...
+    //    LinearTermPtr fluxTermTraced = 3.0 * u * n;
+    //    VarPtr u_n = vf.traceVar("\\widehat{u}", termTraced);
+    
+    // in what follows, the fine basis belongs to the trace variable and the coarse to the field
+    
+    unsigned coarseSubcellOrdinalInCoarseDomain = 0;  // when the coarse domain is a side, this can be non-zero, but fields are always in the volume, so this will always be 0
+    unsigned coarseDomainOrdinalInRefinementRoot = 0; // again, since coarse domain is for a field variable, this will always be 0
+    unsigned coarseSubcellPermutation = 0;            // not sure if this will ever be nontrivial permutation in practice; we don't test anything else here
+    
+    // 3D tests
+    int H1Order = 2;
+    CellTopoPtr volumeTopo = CellTopology::tetrahedron();
+    
+    BasisPtr volumeBasisQuadratic = BasisFactory::basisFactory()->getBasis(H1Order, volumeTopo, Camellia::FUNCTION_SPACE_HGRAD);
+    
+    CellTopoPtr sideTopo = CellTopology::triangle();
+    BasisPtr traceBasis = BasisFactory::basisFactory()->getBasis(H1Order, sideTopo, Camellia::FUNCTION_SPACE_HGRAD);
+    
+    RefinementBranch noRefinements;
+    RefinementPatternPtr noRefinement = RefinementPattern::noRefinementPattern(volumeTopo);
+    noRefinements.push_back( make_pair(noRefinement.get(), 0) );
+
+    // Once we have regular refinement patterns for tetrahedra, we can uncomment the following
+//    RefinementBranch oneRefinement;
+//    RefinementPatternPtr regularRefinement = RefinementPattern::regularRefinementPattern(volumeTopo);
+//    oneRefinement.push_back( make_pair(regularRefinement.get(), 1) ); // 1: select child ordinal 1
+    
+    vector<RefinementBranch> refinementBranches;
+    refinementBranches.push_back(noRefinements);
+//    refinementBranches.push_back(oneRefinement); // wait until we have refinements for tets
+    
+    FieldContainer<double> volumeRefNodes(volumeTopo->getVertexCount(), volumeTopo->getDimension());
+    
+    CamelliaCellTools::refCellNodesForTopology(volumeRefNodes, volumeTopo);
+    
+    bool createSideCache = true;
+    BasisCachePtr volumeBasisCache = BasisCache::basisCacheForReferenceCell(volumeTopo, 1, createSideCache);
+    
+    for (int i=0; i< refinementBranches.size(); i++) {
+      RefinementBranch refBranch = refinementBranches[i];
+      
+      out << "***** Refinement Type Number " << i << " *****\n";
+      
+      // compute some equispaced points on the reference triangle:
+      int numPoints_x = 5, numPoints_y = 5;
+      FieldContainer<double> tracePointsSideReferenceSpace(numPoints_x * numPoints_y, sideTopo->getDimension());
+      int pointOrdinal = 0;
+      for (int pointOrdinal_x=0; pointOrdinal_x < numPoints_x; pointOrdinal_x++) {
+        double x = 0.0 + pointOrdinal_x * (1.0 / (numPoints_x - 1));
+        for (int pointOrdinal_y=0; pointOrdinal_y < numPoints_y; pointOrdinal_y++, pointOrdinal++) {
+          double y = 0.0 + pointOrdinal_y * (1.0 / (numPoints_y - 1));
+          
+          // (x,y) lies in the unit quad.  Divide one coordinate by 2 to get into the ref. triangle...
+          if ((pointOrdinal % 2) == 0) {
+            tracePointsSideReferenceSpace(pointOrdinal,0) = x;
+            tracePointsSideReferenceSpace(pointOrdinal,1) = y / 2.0;
+          } else {
+            tracePointsSideReferenceSpace(pointOrdinal,0) = x / 2.0;
+            tracePointsSideReferenceSpace(pointOrdinal,1) = y;
+          }
+        }
+      }
+      
+      int numPoints = numPoints_x * numPoints_y;
+      
+      for (int traceSideOrdinal=0; traceSideOrdinal < volumeTopo->getSideCount(); traceSideOrdinal++) {
+        //      for (int traceSideOrdinal=1; traceSideOrdinal <= 1; traceSideOrdinal++) {
+        out << "\n\n*****      Side Ordinal " << traceSideOrdinal << "      *****\n\n\n";
+        
+        BasisCachePtr traceBasisCache = volumeBasisCache->getSideBasisCache(traceSideOrdinal);
+        traceBasisCache->setRefCellPoints(tracePointsSideReferenceSpace);
+        
+        //        out << "tracePointsSideReferenceSpace:\n" << tracePointsSideReferenceSpace;
+        
+        FieldContainer<double> tracePointsFineVolume(numPoints, volumeTopo->getDimension());
+        
+        CamelliaCellTools::mapToReferenceSubcell(tracePointsFineVolume, tracePointsSideReferenceSpace, sideTopo->getDimension(), traceSideOrdinal, volumeTopo);
+        
+        FieldContainer<double> pointsCoarseVolume(numPoints, volumeTopo->getDimension());
+        RefinementPattern::mapRefCellPointsToAncestor(refBranch, tracePointsFineVolume, pointsCoarseVolume);
+        
+        //        out << "pointsCoarseVolume:\n" << pointsCoarseVolume;
+        
+        volumeBasisCache->setRefCellPoints(pointsCoarseVolume);
+        
+        int fineSubcellOrdinalInFineDomain = 0; // since the side *is* both domain and subcell, it's necessarily ordinal 0 in the domain
+        SubBasisReconciliationWeights weights = BasisReconciliation::computeConstrainedWeightsForTermTraced(termTraced, u->ID(), sideTopo->getDimension(),
+                                                                                                            traceBasis, fineSubcellOrdinalInFineDomain, refBranch, traceSideOrdinal,
+                                                                                                            volumeTopo->getDimension(), volumeBasisQuadratic,
+                                                                                                            coarseSubcellOrdinalInCoarseDomain,
+                                                                                                            coarseDomainOrdinalInRefinementRoot,
+                                                                                                            coarseSubcellPermutation);
+        // fine basis is the point basis (the trace); coarse is the line basis (the field)
+        double tol = 1e-13; // for floating equality
+        
+        int oneCell = 1;
+        FieldContainer<double> coarseValuesExpected(oneCell,volumeBasisQuadratic->getCardinality(),numPoints);
+        termTraced->values(coarseValuesExpected, u->ID(), volumeBasisQuadratic, volumeBasisCache);
+        
+        //        out << "coarseValuesExpected:\n" << coarseValuesExpected;
+        
+        FieldContainer<double> fineValues(oneCell,traceBasis->getCardinality(),numPoints);
+        (1.0 * u_hat)->values(fineValues, u_hat->ID(), traceBasis, traceBasisCache);
+        fineValues.resize(traceBasis->getCardinality(),numPoints); // strip cell dimension
+        
+        //        out << "fineValues:\n" << fineValues;
+        
+        FieldContainer<double> coarseValuesActual(weights.coarseOrdinals.size(), numPoints);
+        SerialDenseWrapper::multiply(coarseValuesActual, weights.weights, fineValues, 'T', 'N');
+        
+        //        out << "coarseValuesActual:\n" << coarseValuesActual;
+        
+        for (int pointOrdinal = 0; pointOrdinal < numPoints; pointOrdinal++) {
+          int coarseOrdinalInWeights = 0;
+          for (int coarseOrdinal=0; coarseOrdinal < volumeBasisQuadratic->getCardinality(); coarseOrdinal++) {
+            double expectedValue = coarseValuesExpected(0,coarseOrdinal,pointOrdinal);
+            
+            double actualValue;
+            if (weights.coarseOrdinals.find(coarseOrdinal) != weights.coarseOrdinals.end()) {
+              actualValue = coarseValuesActual(coarseOrdinalInWeights,pointOrdinal);
+              coarseOrdinalInWeights++;
+            } else {
+              actualValue = 0.0;
+            }
+            
+            if ( abs(expectedValue) > tol ) {
+              TEST_FLOATING_EQUALITY(expectedValue, actualValue, tol);
+            } else {
+              TEST_ASSERT( abs(actualValue) < tol );
+              
+              if (abs(actualValue) >= tol) {
+                out << "coarseOrdinal " << coarseOrdinal << ", point " << pointOrdinal << " on side " << traceSideOrdinal << ", actualValue = " << actualValue << endl;
+              }
+            }
+          }
+        }
+      }
+    }
+  }
 } // namespace
