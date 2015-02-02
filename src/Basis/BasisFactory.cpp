@@ -43,6 +43,10 @@
 #include "Intrepid_HDIV_HEX_In_FEM.hpp"
 #include "Intrepid_HCURL_HEX_In_FEM.hpp"
 
+#include "Intrepid_HGRAD_TET_Cn_FEM.hpp"
+#include "Intrepid_HDIV_TET_In_FEM.hpp"
+#include "Intrepid_HCURL_TET_In_FEM.hpp"
+
 #include "Basis_HVOL_QUAD_C0_FEM.hpp"
 
 #include "VectorizedBasis.h"
@@ -109,7 +113,7 @@ BasisPtr BasisFactory::getBasis( int polyOrder, unsigned cellTopoKey, Camellia::
   }
   
   int spaceDim;
-  bool threeD = (cellTopoKey == shards::Hexahedron<8>::key);
+  bool threeD = (cellTopoKey == shards::Hexahedron<8>::key) || (cellTopoKey == shards::Tetrahedron<4>::key);
   bool twoD = (cellTopoKey == shards::Quadrilateral<4>::key) || (cellTopoKey == shards::Triangle<3>::key);
   bool oneD = (cellTopoKey == shards::Line<2>::key);
   bool zeroD = (cellTopoKey == shards::Node::key);
@@ -170,6 +174,31 @@ BasisPtr BasisFactory::getBasis( int polyOrder, unsigned cellTopoKey, Camellia::
             break;
           default:
             TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "unsupported function space for topology Hexahedron<8>");
+        }
+        break;
+      case shards::Tetrahedron<4>::key:
+        switch(fs) {
+          case Camellia::FUNCTION_SPACE_HGRAD:
+          case Camellia::FUNCTION_SPACE_HGRAD_DISC:
+            basis = Teuchos::rcp( new IntrepidBasisWrapper<>( Teuchos::rcp( new Basis_HGRAD_TET_Cn_FEM<double, Intrepid::FieldContainer<double> >(polyOrder,POINTTYPE_WARPBLEND)),
+                                                             spaceDim, scalarRank, fs) );
+            break;
+          case Camellia::FUNCTION_SPACE_HDIV:
+          case Camellia::FUNCTION_SPACE_HDIV_DISC:
+            basis = Teuchos::rcp( new IntrepidBasisWrapper<>( Teuchos::rcp( new Basis_HDIV_TET_In_FEM<double, Intrepid::FieldContainer<double> >(polyOrder,POINTTYPE_WARPBLEND)),
+                                                             spaceDim, vectorRank, fs) );
+            break;
+          case Camellia::FUNCTION_SPACE_HCURL:
+          case Camellia::FUNCTION_SPACE_HCURL_DISC:
+            basis = Teuchos::rcp( new IntrepidBasisWrapper<>( Teuchos::rcp( new Basis_HCURL_TET_In_FEM<double, Intrepid::FieldContainer<double> >(polyOrder,POINTTYPE_WARPBLEND)),
+                                                             spaceDim, vectorRank, fs) );
+            break;
+          case Camellia::FUNCTION_SPACE_HVOL:
+            basis = Teuchos::rcp( new IntrepidBasisWrapper<>( Teuchos::rcp( new Basis_HGRAD_TET_Cn_FEM<double, Intrepid::FieldContainer<double> >(polyOrder-1,POINTTYPE_WARPBLEND)),
+                                                             spaceDim, scalarRank, fs) );
+            break;
+          default:
+            TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "unsupported function space for topology Tetrahedron<4>");
         }
         break;
       case shards::Quadrilateral<4>::key:
