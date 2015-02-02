@@ -135,6 +135,10 @@ public:
   virtual double evaluate(double x, double y);
   virtual double evaluate(double x, double y, double z);
   
+  virtual double evaluate(Teuchos::RCP<Mesh> mesh, double x);
+  virtual double evaluate(Teuchos::RCP<Mesh> mesh, double x, double y);
+  virtual double evaluate(Teuchos::RCP<Mesh> mesh, double x, double y, double z);
+  
   static double evaluate(FunctionPtr f, double x); // for testing
   static double evaluate(FunctionPtr f, double x, double y); // for testing
   static double evaluate(FunctionPtr f, double x, double y, double z); // for testing

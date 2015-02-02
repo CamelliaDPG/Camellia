@@ -255,6 +255,105 @@ bool Function::equals(FunctionPtr f, BasisCachePtr basisCacheForCellsToCompare, 
   return sqrt(sum) < tol;
 }
 
+double Function::evaluate(MeshPtr mesh, double x) {
+  int spaceDim = 1;
+  FieldContainer<double> value(1,1); // (C,P)
+  FieldContainer<double> physPoint(1,spaceDim);
+
+  if (this->rank() != 0) {
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Function::evaluate requires a rank 0 Function.");
+  }
+  if (mesh->getTopology()->getSpaceDim() != 1) {
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Function::evaluate requires mesh to be 1D if only x is provided.");
+  }
+  
+  physPoint(0,0) = x;
+  
+  vector<GlobalIndexType> cellIDs = mesh->cellIDsForPoints(physPoint);
+  if (cellIDs.size() == 0) {
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "point not found in mesh");
+  }
+  GlobalIndexType cellID = cellIDs[0];
+  BasisCachePtr basisCache = BasisCache::basisCacheForCell(mesh, cellID);
+  
+  FieldContainer<double> refPoint(1,1,spaceDim);
+  physPoint.resize(1,1,spaceDim);
+  CamelliaCellTools::mapToReferenceFrame(refPoint, physPoint, mesh->getTopology(), cellID, basisCache->cubatureDegree());
+  refPoint.resize(1,spaceDim);
+  
+  basisCache->setRefCellPoints(refPoint);
+  
+  this->values(value,basisCache);
+  return value[0];
+}
+
+double Function::evaluate(MeshPtr mesh, double x, double y) {
+  int spaceDim = 2;
+  FieldContainer<double> value(1,1); // (C,P)
+  FieldContainer<double> physPoint(1,spaceDim);
+  
+  if (this->rank() != 0) {
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Function::evaluate requires a rank 0 Function.");
+  }
+  if (mesh->getTopology()->getSpaceDim() != spaceDim) {
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Function::evaluate requires mesh to be 2D if (x,y) is provided.");
+  }
+  
+  physPoint(0,0) = x;
+  physPoint(0,1) = y;
+  
+  vector<GlobalIndexType> cellIDs = mesh->cellIDsForPoints(physPoint);
+  if (cellIDs.size() == 0) {
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "point not found in mesh");
+  }
+  GlobalIndexType cellID = cellIDs[0];
+  BasisCachePtr basisCache = BasisCache::basisCacheForCell(mesh, cellID);
+  
+  FieldContainer<double> refPoint(1,1,spaceDim);
+  physPoint.resize(1,1,spaceDim);
+  CamelliaCellTools::mapToReferenceFrame(refPoint, physPoint, mesh->getTopology(), cellID, basisCache->cubatureDegree());
+  refPoint.resize(1,spaceDim);
+  
+  basisCache->setRefCellPoints(refPoint);
+  
+  this->values(value,basisCache);
+  return value[0];
+}
+
+double Function::evaluate(MeshPtr mesh, double x, double y, double z) {
+  int spaceDim = 3;
+  FieldContainer<double> value(1,1); // (C,P)
+  FieldContainer<double> physPoint(1,spaceDim);
+  
+  if (this->rank() != 0) {
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Function::evaluate requires a rank 0 Function.");
+  }
+  if (mesh->getTopology()->getSpaceDim() != spaceDim) {
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Function::evaluate requires mesh to be 3D if (x,y,z) is provided.");
+  }
+  
+  physPoint(0,0) = x;
+  physPoint(0,1) = y;
+  physPoint(0,2) = z;
+  
+  vector<GlobalIndexType> cellIDs = mesh->cellIDsForPoints(physPoint);
+  if (cellIDs.size() == 0) {
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "point not found in mesh");
+  }
+  GlobalIndexType cellID = cellIDs[0];
+  BasisCachePtr basisCache = BasisCache::basisCacheForCell(mesh, cellID);
+  
+  FieldContainer<double> refPoint(1,1,spaceDim);
+  
+  physPoint.resize(1,1,spaceDim);
+  CamelliaCellTools::mapToReferenceFrame(refPoint, physPoint, mesh->getTopology(), cellID, basisCache->cubatureDegree());
+  refPoint.resize(1,spaceDim);
+  basisCache->setRefCellPoints(refPoint);
+  
+  this->values(value,basisCache);
+  return value[0];
+}
+
 double Function::evaluate(double x) {
   static FieldContainer<double> value(1,1); // (C,P)
   static FieldContainer<double> physPoint(1,1,1);
