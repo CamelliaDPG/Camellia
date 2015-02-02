@@ -166,6 +166,14 @@ namespace {
     MeshPtr meshSlice_t0 = MeshTools::timeSliceMesh(initialMesh, tZero, cellMap_t0, H1Order);
     MeshPtr meshSlice_t1 = MeshTools::timeSliceMesh(initialMesh, tOne,  cellMap_t1, H1Order);
     
+//    int rank = Teuchos::GlobalMPISession::getRank();
+//    ostringstream rankStr;
+//    rankStr << "rank " << rank << " cellMap_t0";
+//    Camellia::print(rankStr.str(), cellMap_t0);
+//    rankStr.str("");
+//    rankStr << "rank " << rank << " cellMap_t1";
+//    Camellia::print(rankStr.str(), cellMap_t1);
+    
     SolutionPtr soln = Solution::solution(mesh,bc,RHS::rhs(), ip);
     
     // project u0 onto the whole spacetime mesh (i.e. it'll look like the initial value is a steady solution)
