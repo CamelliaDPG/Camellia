@@ -86,6 +86,8 @@
 #include "SerialDenseMatrixUtilityTests.h"
 #include "SolutionTests.h"
 
+#include "MeshTools.h"
+
 #include "CamelliaCellTools.h"
 
 #include "Projector.h"
@@ -2523,93 +2525,5 @@ vector< CellTopoPtr > getShardsTopologies() {
 }
 
 void DPGTests::runExceptionThrowingTest() {
-  vector<CellTopoPtr> shardsTopologies = getShardsTopologies();
-  for (int topoOrdinal=0; topoOrdinal < shardsTopologies.size(); topoOrdinal++) {
-    CellTopoPtr shardsTopo = shardsTopologies[topoOrdinal];
-    
-    int tensorialDegree = 1;
-    CellTopoPtr cellTopo = CellTopology::cellTopology(shardsTopo->getShardsTopology(), tensorialDegree);
-    
-    if (cellTopo->getDimension() < 1) continue; // side normals only defined when dimension >= 1
-    
-    cout << "Testing side normals for space-time topo " << cellTopo->getName() << endl;
-    
-    int cubatureDegree = 3;
-    
-    bool createSideCache = true;
-    BasisCachePtr volumeCacheSpaceTime = BasisCache::basisCacheForReferenceCell(cellTopo, cubatureDegree, createSideCache);
-    BasisCachePtr volumeCacheSpace = BasisCache::basisCacheForReferenceCell(shardsTopo, cubatureDegree, createSideCache);
-    
-    // for reference cells, we expect the space-time normals to go as follows:
-    //   - the first shardsTopo->getSideCount() sides will have normals identical to shardsTopo in its reference space, padded with 0 in time dimension
-    //   - the next side will have normal equal to 0 in every spatial dimension, -1 in temporal
-    //   - final side with have normal +1 in temporal dimension
-    
-    for (int sideOrdinal=0; sideOrdinal<cellTopo->getSideCount(); sideOrdinal++) {
-      int numCells = 1;
-      BasisCachePtr sideCacheSpaceTime = volumeCacheSpaceTime->getSideBasisCache(sideOrdinal);
-      int numCubPoints = sideCacheSpaceTime->getRefCellPoints().dimension(0);
-      int dim = sideCacheSpaceTime->getSpaceDim() + 1;
-      
-      FieldContainer<double> sideNormalsExpected(numCells, numCubPoints, dim);
-      
-      if (cellTopo->sideIsSpatial(sideOrdinal)) {
-        unsigned spatialSideOrdinal = cellTopo->getSpatialComponentSideOrdinal(sideOrdinal);
-        BasisCachePtr sideCacheSpace = volumeCacheSpace->getSideBasisCache(spatialSideOrdinal);
-        // set up cubature points for shards topo
-        FieldContainer<double> refPointsSpaceTime = sideCacheSpaceTime->getSideRefCellPointsInVolumeCoordinates();
-        FieldContainer<double> refPointsSpace(numCubPoints, shardsTopo->getDimension());
-        for (int ptOrdinal=0; ptOrdinal<numCubPoints; ptOrdinal++) {
-          for (int d=0; d<shardsTopo->getDimension(); d++) {
-            refPointsSpace(ptOrdinal,d) = refPointsSpaceTime(ptOrdinal,d);
-          }
-        }
-        sideCacheSpace->setRefCellPoints(refPointsSpace);
-        FieldContainer<double> sideNormalsSpace = sideCacheSpace->getSideNormals();
-        for (int cellOrdinal=0; cellOrdinal < numCells; cellOrdinal++) {
-          for (int ptOrdinal=0; ptOrdinal < numCubPoints; ptOrdinal++) {
-            for (int d=0; d<shardsTopo->getDimension(); d++) {
-              sideNormalsExpected(cellOrdinal,ptOrdinal,d) = sideNormalsSpace(cellOrdinal,ptOrdinal,d);
-            }
-          }
-        }
-        //          {
-        //            out << "sideNormalsSpace:\n" << sideNormalsSpace;
-        //            // DEBUGGING:
-        //            out << "refPointsSpaceTime:\n" << refPointsSpaceTime;
-        //            out << "refPointsSpace:\n" << refPointsSpace;
-        //          }
-        
-      } else {
-        unsigned temporalNodeOrdinal = cellTopo->getTemporalComponentSideOrdinal(sideOrdinal);
-        double timeNormal = (temporalNodeOrdinal == 0) ? -1 : 1;
-        FieldContainer<double> spaceTimeCellJacobian = sideCacheSpaceTime->getJacobian();
-        int d_time = shardsTopo->getDimension();
-        for (int cellOrdinal=0; cellOrdinal < numCells; cellOrdinal++) {
-          for (int ptOrdinal=0; ptOrdinal < numCubPoints; ptOrdinal++) {
-            double timeJacobian = spaceTimeCellJacobian(cellOrdinal,ptOrdinal,d_time,d_time);
-            if (timeJacobian > 0) {
-              sideNormalsExpected(cellOrdinal,ptOrdinal,d_time) = timeNormal;
-            } else {
-              sideNormalsExpected(cellOrdinal,ptOrdinal,d_time) = -timeNormal;
-            }
-          }
-        }
-      }
-      
-      FieldContainer<double> sideNormals = sideCacheSpaceTime->getSideNormalsSpaceTime();
-      
-//      {
-//        // DEBUGGING:
-//        out << "testing with sideOrdinal " << sideOrdinal << endl;
-//        out << "sideNormals:\n" << sideNormals;
-//        out << "sideNormalsExpected:\n" << sideNormalsExpected;
-//      }
-      
-      SerialDenseWrapper::roundZeros(sideNormals, 1e-15);
-      SerialDenseWrapper::roundZeros(sideNormalsExpected, 1e-15);
-      
-//      TEST_COMPARE_FLOATING_ARRAYS(sideNormalsExpected, sideNormals, 1e-15);
-    }
-  }
+  
 }
