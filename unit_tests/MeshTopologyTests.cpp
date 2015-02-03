@@ -178,6 +178,13 @@ namespace {
     
     TEST_EQUALITY(generalizedParent.first, cellIndex);
     TEST_EQUALITY(generalizedParent.second, lineDim);
+    
+    // try same for a child *cell*
+    CellPtr childCell = meshTopo->getCell(cellIndex)->children()[0];
+    generalizedParent = meshTopo->getEntityGeneralizedParent(spaceDim, childCell->cellIndex());
+    
+    TEST_EQUALITY(generalizedParent.first, cellIndex);
+    TEST_EQUALITY(generalizedParent.second, lineDim);
   }
   
   TEUCHOS_UNIT_TEST(MeshTopology, GetRootMeshTopology) {
