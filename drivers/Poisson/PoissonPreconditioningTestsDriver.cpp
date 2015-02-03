@@ -617,7 +617,13 @@ void run(ProblemChoice problemChoice, int &iterationCount, int spaceDim, int num
     if (coarseSolver != NULL) {
       if (rank==0) cout << "************   Coarse GMG Solver, timings   *************\n";
       coarseSolver->gmgOperator().reportTimings();
-      if (rank==0) Camellia::print("coarseSolver iteration counts:",coarseSolver->getIterationCountLog());
+      vector<int> iterationCountLog = coarseSolver->getIterationCountLog();
+      if (rank==0) Camellia::print("coarseSolver iteration counts:",iterationCountLog);
+      double totalIterationCount = 0;
+      for (int i=0; i<iterationCountLog.size(); i++) {
+        totalIterationCount += iterationCountLog[i];
+      }
+      if (rank==0) cout << "Average coarse solver iteration count: " << totalIterationCount / iterationCountLog.size() << endl;
     }
   }
   
