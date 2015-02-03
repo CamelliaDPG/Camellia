@@ -436,7 +436,8 @@ LocalDofMapperPtr GMGOperator::getLocalCoefficientMap(GlobalIndexType fineCellID
   }
 
   int fineSideCount = fineCell->getSideCount();
-  int sideDim = _fineMesh->getTopology()->getSpaceDim() - 1;
+  int spaceDim = _fineMesh->getTopology()->getSpaceDim();
+  int sideDim = spaceDim - 1;
   vector<unsigned> ancestralSideOrdinals(fineSideCount);
   vector< RefinementBranch > sideRefBranches(fineSideCount);
   for (int sideOrdinal=0; sideOrdinal<fineSideCount; sideOrdinal++) {
@@ -457,7 +458,6 @@ LocalDofMapperPtr GMGOperator::getLocalCoefficientMap(GlobalIndexType fineCellID
     set<int> trialIDs = coarseTrialOrdering->getVarIDs();
 
     // for the moment, we skip the mapping from traces to fields based on traceTerm
-    SubBasisReconciliationWeights weights;
     unsigned vertexNodePermutation = 0; // because we're "reconciling" to an ancestor, the views of the cells and sides are necessarily the same
     for (set<int>::iterator trialIDIt = trialIDs.begin(); trialIDIt != trialIDs.end(); trialIDIt++) {
       int trialID = *trialIDIt;
@@ -478,7 +478,7 @@ LocalDofMapperPtr GMGOperator::getLocalCoefficientMap(GlobalIndexType fineCellID
 //        cout << "Warning: for debugging purposes, skipping projection of fields in GMGOperator.\n";
         BasisPtr coarseBasis = coarseTrialOrdering->getBasis(trialID);
         BasisPtr fineBasis = fineTrialOrdering->getBasis(trialID);
-        weights = _br.constrainedWeights(fineBasis, refBranch, coarseBasis, vertexNodePermutation);
+        SubBasisReconciliationWeights weights = _br.constrainedWeights(fineBasis, refBranch, coarseBasis, vertexNodePermutation);
         set<unsigned> fineDofOrdinals(weights.fineOrdinals.begin(),weights.fineOrdinals.end());
 
         vector<GlobalIndexType> coarseDofIndices;
@@ -495,21 +495,53 @@ LocalDofMapperPtr GMGOperator::getLocalCoefficientMap(GlobalIndexType fineCellID
             if (condensedDofInterpreter->varDofsAreCondensible(trialID, sideOrdinal, fineTrialOrdering)) continue;
           }
           unsigned coarseSideOrdinal = ancestralSideOrdinals[sideOrdinal];
-          if (coarseSideOrdinal == -1) {
+          BasisPtr coarseBasis, fineBasis;
+          BasisMap basisMap;
+          if (coarseSideOrdinal == -1) { // the fine side falls inside a coarse volume
             // this is where we'd want to map trace to field using the traceTerm LinearTermPtr, which we're skipping for now.
-            continue;
+            VarPtr trialVar = vf.trial(trialID);
+
+            LinearTermPtr termTraced = trialVar->termTraced();
+            if (termTraced.get() == NULL) // nothing we can do if we don't know what term we're tracing
+              continue;
+          
+            fineBasis = fineTrialOrdering->getBasis(trialID, sideOrdinal);
+
+            set<int> varsTraced = termTraced->varIDs();
+            for (set<int>::iterator varTracedIt = varsTraced.begin(); varTracedIt != varsTraced.end(); varTracedIt++) {
+              int varTracedID = *varTracedIt;
+              coarseBasis = coarseTrialOrdering->getBasis(varTracedID);
+              
+              unsigned coarseSubcellOrdinal = 0, coarseDomainOrdinal = 0; // the volume
+              unsigned coarseSubcellPermutation = 0;
+              unsigned fineSubcellOrdinalInFineDomain = 0; // the side is the whole fine domain...
+              SubBasisReconciliationWeights weights = _br.computeConstrainedWeightsForTermTraced(termTraced, varTracedID,
+                                                                                                 sideDim, fineBasis, fineSubcellOrdinalInFineDomain, refBranch, sideOrdinal,
+                                                                                                 spaceDim, coarseBasis, coarseSubcellOrdinal, coarseDomainOrdinal, coarseSubcellPermutation);
+              set<unsigned> fineDofOrdinals(weights.fineOrdinals.begin(),weights.fineOrdinals.end());
+              vector<GlobalIndexType> coarseDofIndices;
+              for (set<int>::iterator coarseOrdinalIt=weights.coarseOrdinals.begin(); coarseOrdinalIt != weights.coarseOrdinals.end(); coarseOrdinalIt++) {
+                unsigned coarseDofIndex = coarseTrialOrdering->getDofIndex(varTracedID, *coarseOrdinalIt);
+                coarseDofIndices.push_back(coarseDofIndex);
+              }
+              
+              basisMap.push_back(SubBasisDofMapper::subBasisDofMapper(fineDofOrdinals, coarseDofIndices, weights.weights));
+            }
+          } else { // fine side maps to a coarse side
+            coarseBasis = coarseTrialOrdering->getBasis(trialID, coarseSideOrdinal);
+            fineBasis = fineTrialOrdering->getBasis(trialID, sideOrdinal);
+            SubBasisReconciliationWeights weights = _br.constrainedWeights(fineBasis, sideRefBranches[sideOrdinal], coarseBasis, vertexNodePermutation);
+            
+            set<unsigned> fineDofOrdinals(weights.fineOrdinals.begin(),weights.fineOrdinals.end());
+            vector<GlobalIndexType> coarseDofIndices;
+            for (set<int>::iterator coarseOrdinalIt=weights.coarseOrdinals.begin(); coarseOrdinalIt != weights.coarseOrdinals.end(); coarseOrdinalIt++) {
+              unsigned coarseDofIndex = coarseTrialOrdering->getDofIndex(trialID, *coarseOrdinalIt, coarseSideOrdinal);
+              coarseDofIndices.push_back(coarseDofIndex);
+            }
+            
+            basisMap.push_back(SubBasisDofMapper::subBasisDofMapper(fineDofOrdinals, coarseDofIndices, weights.weights));
           }
 
-          BasisPtr coarseBasis = coarseTrialOrdering->getBasis(trialID, coarseSideOrdinal);
-          BasisPtr fineBasis = fineTrialOrdering->getBasis(trialID, sideOrdinal);
-          weights = _br.constrainedWeights(fineBasis, sideRefBranches[sideOrdinal], coarseBasis, vertexNodePermutation);
-          set<unsigned> fineDofOrdinals(weights.fineOrdinals.begin(),weights.fineOrdinals.end());
-          vector<GlobalIndexType> coarseDofIndices;
-          for (set<int>::iterator coarseOrdinalIt=weights.coarseOrdinals.begin(); coarseOrdinalIt != weights.coarseOrdinals.end(); coarseOrdinalIt++) {
-            unsigned coarseDofIndex = coarseTrialOrdering->getDofIndex(trialID, *coarseOrdinalIt, coarseSideOrdinal);
-            coarseDofIndices.push_back(coarseDofIndex);
-          }
-          BasisMap basisMap(1,SubBasisDofMapper::subBasisDofMapper(fineDofOrdinals, coarseDofIndices, weights.weights));
           sideMaps[sideOrdinal][trialID] = basisMap;
         }
       }
@@ -546,9 +578,13 @@ LocalDofMapperPtr GMGOperator::getLocalCoefficientMap(GlobalIndexType fineCellID
         fineSidesToCorrect.insert(fineSideOrdinal);
       }
     } else {
-      // TODO: if/when we start using termTraced, should consider whether there is ever a case where the ref. space parities
-      //       will be reversed relative to what happens on the fine cells.  I think the answer is that there probably is such
-      //       a case; in this case, we will need to identify these and add them to fineSidesToCorrect.
+      // when we have done a map from field to trace, no parities have been taken into account; the termTraced will involve
+      // the outward facing normal, but not the potential negation of this to make neighbors agree.  Therefore, we need to "correct"
+      // any interior fine side whose parity is -1.
+
+      double fineParity = fineCellSideParities(0,fineSideOrdinal);
+      if (fineParity < 0)
+        fineSidesToCorrect.insert(fineSideOrdinal);
     }
   }
 
