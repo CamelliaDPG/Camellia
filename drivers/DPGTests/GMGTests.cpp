@@ -218,6 +218,13 @@ void GMGTests::setup() {
 
 void GMGTests::runTests(int &numTestsRun, int &numTestsPassed) {
   setup();
+  if (testProlongationOperator()) {
+    numTestsPassed++;
+  }
+  numTestsRun++;
+  teardown();
+  
+  setup();
   if (testGMGSolverIdentityUniformMeshes()) {
     numTestsPassed++;
   }
@@ -247,13 +254,6 @@ void GMGTests::runTests(int &numTestsRun, int &numTestsPassed) {
   
   setup();
   if (testGMGOperatorIdentityLocalCoefficientMap()) {
-    numTestsPassed++;
-  }
-  numTestsRun++;
-  teardown();
-  
-  setup();
-  if (testProlongationOperator()) {
     numTestsPassed++;
   }
   numTestsRun++;
@@ -1213,7 +1213,7 @@ bool GMGTests::testProlongationOperator() {
   GlobalIndexType cellID = 1; // the left cell in the fine mesh
   LocalDofMapperPtr localCoefficientMap = gmgSolver->gmgOperator().getLocalCoefficientMap(cellID);
   
-  bool traceToFieldsEnabled = false; // have not yet implemented the thing that will map fine traces to coarse fields
+  bool traceToFieldsEnabled = true; // have not yet implemented the thing that will map fine traces to coarse fields
   
   // just hard-coding the values we expect right now.  Rows are fine cell 1 local dofs.  Columns are coarse cell 0 dofs.
   
@@ -1231,26 +1231,37 @@ bool GMGTests::testProlongationOperator() {
   VarPtr psi_n = getPoissonPsi_n(spaceDim);
   VarPtr phi_hat = getPoissonPhiHat(spaceDim);
   
-  int phiLeft = trialPtr->getDofIndex(phi->ID(), 0);
-  int phiRight = trialPtr->getDofIndex(phi->ID(), 1);
+  int basisOrdinalLeft = 0, basisOrdinalRight = 1;
+  int leftSide = 0, rightSide = 1;
+  int pointBasisOrdinal = 0;
   
-  int psiLeft = trialPtr->getDofIndex(psi->ID(), 0);
-  int psiRight = trialPtr->getDofIndex(psi->ID(), 1);
+  int phiLeft = trialPtr->getDofIndex(phi->ID(), basisOrdinalLeft);
+  int phiRight = trialPtr->getDofIndex(phi->ID(), basisOrdinalRight);
   
-  int phiHatLeft = trialPtr->getDofIndex(phi_hat->ID(), 0, 0);
-  int phiHatRight = trialPtr->getDofIndex(phi_hat->ID(), 0, 1);
+  int psiLeft = trialPtr->getDofIndex(psi->ID(), basisOrdinalLeft);
+  int psiRight = trialPtr->getDofIndex(psi->ID(), basisOrdinalRight);
   
-  int psi_n_left = trialPtr->getDofIndex(psi_n->ID(), 0, 0);
-  int psi_n_right = trialPtr->getDofIndex(psi_n->ID(), 0, 1);
+  // the fine
+  int phiHatLeft = trialPtr->getDofIndex(phi_hat->ID(), pointBasisOrdinal, leftSide);
+  int phiHatRight = trialPtr->getDofIndex(phi_hat->ID(), pointBasisOrdinal, rightSide);
+  
+  int psi_n_left = trialPtr->getDofIndex(psi_n->ID(), pointBasisOrdinal, leftSide);
+  int psi_n_right = trialPtr->getDofIndex(psi_n->ID(), pointBasisOrdinal, rightSide);
   
   FieldContainer<double> expectedValues(8,8);
   
   if (traceToFieldsEnabled) {
-    expectedValues(phiHatLeft,phiLeft) = 0.5;
-    expectedValues(phiHatLeft,phiRight) = 0.5;
+    // phiHatLeft maps to the corresponding trace on the coarse element; hence no weight for (phiHatLeft,phiLeft)
+    expectedValues(phiHatRight,phiLeft) = 0.5;
+    
+    expectedValues(phiHatLeft,phiRight) = 0.0;
+    expectedValues(phiHatRight,phiRight) = 0.5;
   
-    expectedValues(psi_n_left,psiLeft) = 0.5;
-    expectedValues(psi_n_left,psiRight) = 0.5;
+    // psi_n_left maps to the corresponding flux on the coarse element; hence no weight for (psi_n_left,psiLeft)
+    expectedValues(psi_n_right,psiLeft) = 0.5;
+    
+    expectedValues(psi_n_left,psiRight) = 0.0;
+    expectedValues(psi_n_right,psiRight) = 0.5;
   }
   
   expectedValues(phiHatLeft,phiHatLeft) = 1.0;
@@ -1280,10 +1291,77 @@ bool GMGTests::testProlongationOperator() {
   double tol = 1e-12;
   double maxDiff;
   if (! fcsAgree(expectedValues, actualValues, tol, maxDiff)) {
-    cout << "expected differs from actual; maxDiff " << maxDiff << endl;
+    cout << "left child: expected differs from actual; maxDiff " << maxDiff << endl;
     success = false;
     
     cout << "actualValues:\n" << actualValues;
+    cout << "expectedValues:\n" << expectedValues;
+    
+    cout << "key:\n";
+    cout << "psi_n_left: " << psi_n_left << endl;
+    cout << "psi_n_right: " << psi_n_right << endl;
+    cout << "phiHatLeft: " << phiHatLeft << endl;
+    cout << "phiHatRight: " << phiHatRight << endl;
+  }
+  
+  cellID = 2; // the right cell in the fine mesh
+  localCoefficientMap = gmgSolver->gmgOperator().getLocalCoefficientMap(cellID);
+  
+  trialPtr = fineMesh->getElementType(cellID)->trialOrderPtr;
+  
+  expectedValues.initialize(0.0);
+  
+  if (traceToFieldsEnabled) { // in 1D, traces and fluxes are the same, and both need to be parity weighted....
+    expectedValues(phiHatLeft,phiLeft) = -0.5;
+    expectedValues(phiHatRight,phiLeft) = 0.0;
+
+    expectedValues(phiHatLeft,phiRight) = -0.5;
+    // phiHatRight maps to the corresponding trace on the coarse element; hence no weight for (phiHatRight,phiRight)
+  
+    expectedValues(psi_n_left,psiLeft) = -0.5;
+    expectedValues(psi_n_right,psiLeft) = 0.0;
+
+    expectedValues(psi_n_left,psiRight) = -0.5;
+    // psi_n_right maps to the corresponding flux on the coarse element; hence no weight for (psi_n_right,psiRight)
+  }
+  
+  expectedValues(phiHatRight,phiHatRight) = 1.0;
+  
+  expectedValues(psi_n_right,psi_n_right) = 1.0;
+  
+  expectedValues(phiRight,phiRight) = 1.0;
+  
+  expectedValues(phiLeft,phiLeft) = 0.5;
+  expectedValues(phiLeft,phiRight) = 0.5;
+  
+  expectedValues(psiRight,psiRight) = 1.0;
+  
+  expectedValues(psiLeft,psiLeft) = 0.5;
+  expectedValues(psiLeft,psiRight) = 0.5;
+  
+  actualValues.initialize(0.0);
+  for (int i=0; i<8; i++) {
+    FieldContainer<double> localData(8);
+    localData(i) = 1.0;
+    FieldContainer<double> globalData = localCoefficientMap->mapLocalData(localData, false);
+    for (int j=0; j<8; j++) {
+      actualValues(i,j) = globalData(j);
+    }
+  }
+  
+  maxDiff = 0;
+  if (! fcsAgree(expectedValues, actualValues, tol, maxDiff)) {
+    cout << "right child: expected differs from actual; maxDiff " << maxDiff << endl;
+    success = false;
+    
+    cout << "actualValues:\n" << actualValues;
+    cout << "expectedValues:\n" << expectedValues;
+    
+    cout << "key:\n";
+    cout << "psi_n_left: " << psi_n_left << endl;
+    cout << "psi_n_right: " << psi_n_right << endl;
+    cout << "phiHatLeft: " << phiHatLeft << endl;
+    cout << "phiHatRight: " << phiHatRight << endl;
   }
   
   return success;
