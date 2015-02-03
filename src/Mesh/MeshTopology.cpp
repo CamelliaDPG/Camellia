@@ -1081,12 +1081,23 @@ pair<IndexType, unsigned> MeshTopology::getEntityGeneralizedParent(unsigned int 
   if ((d < _generalizedParentEntities.size()) && (_generalizedParentEntities[d].find(entityIndex) != _generalizedParentEntities[d].end()))
     return _generalizedParentEntities[d][entityIndex];
   else {
-    // generalized parent may be a cell
-    set< pair<IndexType, unsigned> > cellsForEntity = getCellsContainingEntity(d, entityIndex);
-    if (cellsForEntity.size() > 0) {
-      IndexType cellIndex = cellsForEntity.begin()->first;
-      if (_cells[cellIndex]->getParent() != Teuchos::null) {
-        return make_pair(_cells[cellIndex]->getParent()->cellIndex(), _spaceDim);
+    // entity may be a cell, in which case parent is also a cell (if there is a parent)
+    if (d == _spaceDim) {
+      if (entityIndex >= _cells.size()) {
+        TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "entityIndex is out of bounds");
+      }
+      CellPtr cell = _cells[entityIndex];
+      if (cell->getParent() != Teuchos::null) {
+        return make_pair(cell->getParent()->cellIndex(), _spaceDim);
+      }
+    } else {
+      // generalized parent may be a cell
+      set< pair<IndexType, unsigned> > cellsForEntity = getCellsContainingEntity(d, entityIndex);
+      if (cellsForEntity.size() > 0) {
+        IndexType cellIndex = cellsForEntity.begin()->first;
+        if (_cells[cellIndex]->getParent() != Teuchos::null) {
+          return make_pair(_cells[cellIndex]->getParent()->cellIndex(), _spaceDim);
+        }
       }
     }
   }
