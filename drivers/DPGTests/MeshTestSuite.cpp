@@ -1589,11 +1589,11 @@ bool MeshTestSuite::testHUnrefinementForConfusion() {
       cellsToRefine.insert(cellID);
     }
     
-    cout << "b4 refining num edge cID entries = " << mesh->numEdgeToCellIDEntries() << endl;
+//    cout << "b4 refining num edge cID entries = " << mesh->numEdgeToCellIDEntries() << endl;
     mesh->hRefine(cellsToRefine, RefinementPattern::regularRefinementPatternQuad());
-    cout << "b4 unref num edge cID entries = " << mesh->numEdgeToCellIDEntries() << endl;
+//    cout << "b4 unref num edge cID entries = " << mesh->numEdgeToCellIDEntries() << endl;
     mesh->hUnrefine(cellsToRefine);
-    cout << "num edge cID entries = " << mesh->numEdgeToCellIDEntries() << endl;
+//    cout << "num edge cID entries = " << mesh->numEdgeToCellIDEntries() << endl;
     if (! MeshTestUtility::checkMeshConsistency(mesh) ) {
       success = false;
       cout << "FAILURE: after unrefinement, mesh fails consistency check.\n";
