@@ -23,6 +23,7 @@ using namespace Intrepid;
 using namespace std;
 
 class DofInterpreter {
+protected:
   MeshPtr _mesh;
 public:
   DofInterpreter(MeshPtr mesh) : _mesh(mesh) {}

@@ -1007,6 +1007,40 @@ void MeshTopology::deactivateCell(CellPtr cell) {
   _activeCells.erase(cell->cellIndex());
 }
 
+MeshTopologyPtr MeshTopology::deepCopy() {
+  MeshTopologyPtr meshTopoCopy = Teuchos::rcp( new MeshTopology(*this) );
+  meshTopoCopy->deepCopyCells();
+  return meshTopoCopy;
+}
+
+void MeshTopology::deepCopyCells() {
+  vector<CellPtr> oldCells = _cells;
+  
+  int numCells = oldCells.size();
+  
+  // first pass: construct cells
+  for (int cellOrdinal=0; cellOrdinal<numCells; cellOrdinal++) {
+    CellPtr oldCell = oldCells[cellOrdinal];
+    _cells[cellOrdinal] = Teuchos::rcp( new Cell(oldCell->topology(), oldCell->vertices(), oldCell->subcellPermutations(), oldCell->cellIndex(), this) );
+  }
+
+  // second pass: establish parent-child relationships
+  for (int cellOrdinal=0; cellOrdinal<numCells; cellOrdinal++) {
+    CellPtr oldCell = oldCells[cellOrdinal];
+    CellPtr oldParent = oldCell->getParent();
+    if (oldParent != Teuchos::null) {
+      CellPtr newParent = _cells[oldParent->cellIndex()];
+      _cells[cellOrdinal]->setParent(newParent);
+    }
+    vector<CellPtr> children;
+    for (int childOrdinal=0; childOrdinal<oldCell->children().size(); childOrdinal++) {
+      CellPtr newChild = _cells[oldCell->children()[childOrdinal]->cellIndex()];
+      children.push_back(newChild);
+    }
+    _cells[cellOrdinal]->setChildren(children);
+  }
+}
+
 set<unsigned> MeshTopology::descendants(unsigned d, unsigned entityIndex) {
   set<unsigned> allDescendants;
   

@@ -96,6 +96,37 @@ GlobalDofAssignment::GlobalDofAssignment(MeshPtr mesh, VarFactory varFactory,
   constructActiveCellMap();
 }
 
+GlobalDofAssignment::GlobalDofAssignment( GlobalDofAssignment &otherGDA ) : DofInterpreter(Teuchos::null) {  // subclass deepCopy() is responsible for filling this in post-construction
+  _activeCellOffset = otherGDA._activeCellOffset;
+  _cellSideParitiesForCellID = otherGDA._cellSideParitiesForCellID;
+  
+  _elementTypeFactory = otherGDA._elementTypeFactory;
+  _enforceConformityLocally = otherGDA._enforceConformityLocally;
+  
+  _mesh = Teuchos::null;         // subclass deepCopy() is responsible for filling this in post-construction
+  _meshTopology = Teuchos::null; // subclass deepCopy() is responsible for filling this in post-construction
+  _varFactory = otherGDA._varFactory;
+  _dofOrderingFactory = otherGDA._dofOrderingFactory;
+  _partitionPolicy = otherGDA._partitionPolicy;;
+  _initialH1OrderTrial = otherGDA._initialH1OrderTrial;
+  _testOrderEnhancement = otherGDA._testOrderEnhancement;
+  
+  _cellH1Orders = otherGDA._cellH1Orders;
+  _elementTypeForCell = otherGDA._elementTypeForCell;
+  
+  _cellIDsForElementType = otherGDA._cellIDsForElementType;
+  
+  _partitions = otherGDA._partitions;
+  _partitionForCellID = otherGDA._partitionForCellID;
+  
+  _activeCellMap = Teuchos::rcp( new Epetra_Map(*otherGDA._activeCellMap) );
+  
+  _numPartitions = otherGDA._numPartitions;
+  
+  // we leave _registeredSolutions empty
+  ///_registeredSolutions;
+}
+
 GlobalIndexType GlobalDofAssignment::activeCellOffset() {
   return _activeCellOffset;
 }
@@ -509,6 +540,14 @@ vector<Solution*> GlobalDofAssignment::getRegisteredSolutions() {
 
 void GlobalDofAssignment::registerSolution(Solution* solution) {
   _registeredSolutions.push_back( solution );
+}
+
+void GlobalDofAssignment::setMeshAndMeshTopology(MeshPtr mesh) {
+  // make copies of the RCPs that don't own memory.
+  _mesh = Teuchos::rcp(mesh.get(), false);
+  _meshTopology = Teuchos::rcp(mesh->getTopology().get(), false);
+  
+  this->DofInterpreter::_mesh = _mesh;
 }
 
 void GlobalDofAssignment::unregisterSolution(Solution* solution) {

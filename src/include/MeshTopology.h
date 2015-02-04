@@ -102,6 +102,9 @@ class MeshTopology {
   map<string, long long> approximateMemoryCosts(); // for each private variable
   
   void addSideForEntity(unsigned entityDim, IndexType entityIndex, IndexType sideEntityIndex); // maintains _sidesForEntities container
+  
+  // ! private method for deep-copying Cells during MeshToplogy::deepCopy()
+  void deepCopyCells();
 public:
   MeshTopology(unsigned spaceDim, vector<PeriodicBCPtr> periodicBCs=vector<PeriodicBCPtr>());
   MeshTopology(MeshGeometryPtr meshGeometry, vector<PeriodicBCPtr> periodicBCs=vector<PeriodicBCPtr>());
@@ -110,6 +113,9 @@ public:
   
   // ! This method only gets within a factor of 2 or so, but can give a rough estimate
   long long approximateMemoryFootprint();
+  
+  // ! creates a copy of this, deep-copying each Cell and all lookup tables (but does not deep copy any other objects, e.g. PeriodicBCPtrs and the
+  Teuchos::RCP<MeshTopology> deepCopy();
   
   // ! This method only gets within a factor of 2 or so, but can give rough estimates
   void printApproximateMemoryReport();

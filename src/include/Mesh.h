@@ -100,15 +100,17 @@ class Mesh : public RefinementObserver, public DofInterpreter {
   // for now, just a uniform mesh, with a rectangular boundary and elements.
   Boundary _boundary;
 
+  // private constructor to use during deepCopy();
+  Mesh(MeshTopologyPtr meshTopology, Teuchos::RCP<GlobalDofAssignment> gda, BFPtr bf,
+       int pToAddToTest, bool useConformingTraces, bool usePatchBasis, bool enforceMBFluxContinuity);
+  
   //set< pair<int,int> > _edges;
-  map< pair<GlobalIndexType,GlobalIndexType>, vector< pair<GlobalIndexType, GlobalIndexType> > > _edgeToCellIDs; //keys are (vertexIndex1, vertexIndex2)
+//  map< pair<GlobalIndexType,GlobalIndexType>, vector< pair<GlobalIndexType, GlobalIndexType> > > _edgeToCellIDs; //keys are (vertexIndex1, vertexIndex2)
                                                                   //values are (cellID, sideIndex)
                                                                   //( will need to do something else in 3D )
-  vector< vector<int> > _cellSideParitiesForCellID;
-
   // keep track of upgrades to the sides of cells since the last rebuild:
   // (used to remap solution coefficients)
-  map< GlobalIndexType, pair< ElementTypePtr, ElementTypePtr > > _cellSideUpgrades; // cellID --> (oldType, newType)
+//  map< GlobalIndexType, pair< ElementTypePtr, ElementTypePtr > > _cellSideUpgrades; // cellID --> (oldType, newType)
 
 //  map< pair<GlobalIndexType,IndexType>, pair<GlobalIndexType,IndexType> > _dofPairingIndex; // key/values are (cellID,localDofIndex)
   // note that the FieldContainer for cellSideParities has dimensions (numCellsForType,numSidesForType),
@@ -133,8 +135,6 @@ class Mesh : public RefinementObserver, public DofInterpreter {
 
 
   map<IndexType, GlobalIndexType> getGlobalVertexIDs(const FieldContainer<double> &vertexCoordinates);
-
-  ElementPtr _nullPtr;
 
   ElementPtr addElement(const vector<IndexType> & vertexIndices, ElementTypePtr elemType);
   void addChildren(ElementPtr parent, vector< vector<IndexType> > &children,
@@ -168,6 +168,9 @@ public:
   void saveToHDF5(string filename);
 #endif
 
+  // ! deepCopy makes a deep copy of both MeshTopology and GDA, but not bilinear form
+  Teuchos::RCP<Mesh> deepCopy();
+  
   static Teuchos::RCP<Mesh> readMsh(string filePath, BFPtr bilinearForm, int H1Order, int pToAdd);
 
   static Teuchos::RCP<Mesh> readTriangle(string filePath, BFPtr bilinearForm, int H1Order, int pToAdd);
@@ -239,9 +242,9 @@ public:
   vector< ElementPtr > activeElements();  // deprecated -- use getActiveElement instead
   ElementPtr ancestralNeighborForSide(ElementPtr elem, int sideOrdinal, int &elemSideOrdinalInNeighbor);
 
-  GlobalIndexType numEdgeToCellIDEntries(){
-    return _edgeToCellIDs.size();
-  }
+//  GlobalIndexType numEdgeToCellIDEntries(){
+//    return _edgeToCellIDs.size();
+//  }
 
   vector< ElementPtr > elementsOfType(PartitionIndexType partitionNumber, ElementTypePtr elemTypePtr);
   vector< ElementPtr > elementsOfTypeGlobal(ElementTypePtr elemTypePtr); // may want to deprecate in favor of cellIDsOfTypeGlobal()

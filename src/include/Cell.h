@@ -112,6 +112,8 @@ public:
   std::vector< Teuchos::RCP<Cell> > getNeighbors();
   
   void printApproximateMemoryReport(); // in bytes
+
+  const vector< vector< unsigned > > &subcellPermutations();
   
   const vector< unsigned > &vertices();
 };

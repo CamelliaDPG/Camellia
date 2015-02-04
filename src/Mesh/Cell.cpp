@@ -557,4 +557,8 @@ void Cell::printApproximateMemoryReport() {
   cout << "Total: " << memSize << " bytes.\n";
 }
 
+const vector< vector< unsigned > > &Cell::subcellPermutations() {
+  return _subcellPermutations;
+}
+
 const vector< unsigned > & Cell::vertices() {return _vertices;}

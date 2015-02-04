@@ -326,6 +326,10 @@ FieldContainer<double> & GDAMaximumRule2D::cellSideParities( ElementTypePtr elem
   return _partitionedCellSideParitiesForElementType[ partitionNumber ][ elemTypePtr.get() ];
 }
 
+GlobalDofAssignmentPtr GDAMaximumRule2D::deepCopy() {
+  return Teuchos::rcp(new GDAMaximumRule2D(*this) );
+}
+
 void GDAMaximumRule2D::determineDofPairings() {
   _dofPairingIndex.clear();
   

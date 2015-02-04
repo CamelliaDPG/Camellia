@@ -154,6 +154,21 @@ Mesh::Mesh(const vector<vector<double> > &vertices, vector< vector<unsigned> > &
   this->registerObserver(Teuchos::rcp( &_refinementHistory, false ));
 }
 
+// private constructor for use by deepCopy()
+Mesh::Mesh(MeshTopologyPtr meshTopology, Teuchos::RCP<GlobalDofAssignment> gda, BFPtr bf,
+           int pToAddToTest, bool useConformingTraces, bool usePatchBasis, bool enforceMBFluxContinuity) : DofInterpreter(Teuchos::rcp(this,false)) {
+  _meshTopology = meshTopology;
+  _gda = gda;
+  _bilinearForm = bf;
+  _pToAddToTest = pToAddToTest;
+  _useConformingTraces = useConformingTraces;
+  _usePatchBasis = usePatchBasis;
+  _enforceMBFluxContinuity = enforceMBFluxContinuity;
+  
+  _boundary.setMesh(this);
+
+}
+
 GlobalIndexType Mesh::numInitialElements(){
   return _meshTopology->getRootCellIndices().size();
 }
@@ -241,6 +256,15 @@ vector<GlobalIndexType> Mesh::cellIDsForPoints(const FieldContainer<double> &phy
     }
   }
   return cellIDs;
+}
+
+MeshPtr Mesh::deepCopy() {
+  MeshTopologyPtr meshTopoCopy = _meshTopology->deepCopy();
+  GlobalDofAssignmentPtr gdaCopy = _gda->deepCopy();
+  
+  MeshPtr meshCopy = Teuchos::rcp( new Mesh(meshTopoCopy, gdaCopy, _bilinearForm, _pToAddToTest, _useConformingTraces, _usePatchBasis, _enforceMBFluxContinuity ));
+  gdaCopy->setMeshAndMeshTopology(meshCopy);
+  return meshCopy;
 }
 
 vector<ElementPtr> Mesh::elementsForPoints(const FieldContainer<double> &physicalPoints, bool nullElementsIfOffRank) {

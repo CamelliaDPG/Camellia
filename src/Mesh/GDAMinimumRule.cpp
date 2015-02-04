@@ -37,6 +37,10 @@ vector<unsigned> GDAMinimumRule::allBasisDofOrdinalsVector(int basisCardinality)
   return ordinals;
 }
 
+GlobalDofAssignmentPtr GDAMinimumRule::deepCopy() {
+  return Teuchos::rcp(new GDAMinimumRule(*this) );
+}
+
 void GDAMinimumRule::didChangePartitionPolicy() {
   rebuildLookups();
 }

@@ -66,6 +66,9 @@ protected:
   
   void projectParentCoefficientsOntoUnsetChildren();
   virtual void rebuildLookups() = 0;
+  
+  // private constructor for subclass's implementation of deepCopy()
+  GlobalDofAssignment( GlobalDofAssignment& otherGDA );
 public:
   GlobalDofAssignment(MeshPtr mesh, VarFactory varFactory, DofOrderingFactoryPtr dofOrderingFactory,
                       MeshPartitionPolicyPtr partitionPolicy, unsigned initialH1OrderTrial, unsigned testOrderEnhancement,
@@ -73,6 +76,9 @@ public:
 
   GlobalIndexType activeCellOffset();
   Teuchos::RCP<Epetra_Map> getActiveCellMap();
+  
+  // ! copies
+  virtual GlobalDofAssignmentPtr deepCopy() = 0;
   
   virtual GlobalIndexType cellID(ElementTypePtr elemTypePtr, IndexType cellIndex, PartitionIndexType partitionNumber);
   virtual vector<GlobalIndexType> cellIDsOfElementType(unsigned partitionNumber, ElementTypePtr elemTypePtr);
@@ -120,6 +126,9 @@ public:
   virtual set<GlobalIndexType> globalDofIndicesForCell(GlobalIndexType cellID) = 0;
   
   virtual IndexType localDofCount() = 0; // local to the MPI node
+  
+  // ! method for setting mesh and meshTopology after a deep copy of GDA.  Doesn't rebuild anything!!
+  void setMeshAndMeshTopology(MeshPtr mesh);
   
   PartitionIndexType partitionForCellID( GlobalIndexType cellID );
   virtual IndexType partitionLocalCellIndex(GlobalIndexType cellID, int partitionNumber = -1); // partitionNumber == -1 means use MPI rank as partitionNumber

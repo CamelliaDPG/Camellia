@@ -84,6 +84,8 @@ public:
   GDAMinimumRule(MeshPtr mesh, VarFactory varFactory, DofOrderingFactoryPtr dofOrderingFactory, MeshPartitionPolicyPtr partitionPolicy,
                  unsigned initialH1OrderTrial, unsigned testOrderEnhancement);
   
+  GlobalDofAssignmentPtr deepCopy();
+  
   void didHRefine(const set<GlobalIndexType> &parentCellIDs);
   void didPRefine(const set<GlobalIndexType> &cellIDs, int deltaP);
   void didHUnrefine(const set<GlobalIndexType> &parentCellIDs);

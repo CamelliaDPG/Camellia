@@ -69,7 +69,9 @@ public:
   
 //  GlobalIndexType cellID(ElementTypePtr elemType, IndexType cellIndex, PartitionIndexType partitionNumber);
   FieldContainer<double> & cellSideParities( ElementTypePtr elemTypePtr );
-    
+  
+  GlobalDofAssignmentPtr deepCopy();
+  
   void didHRefine(const set<GlobalIndexType> &parentCellIDs);
   void didPRefine(const set<GlobalIndexType> &cellIDs, int deltaP);
   void didHUnrefine(const set<GlobalIndexType> &parentCellIDs);
