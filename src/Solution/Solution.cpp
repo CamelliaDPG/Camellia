@@ -426,6 +426,7 @@ void Solution::initializeLHSVector() {
   _lhsVector = Teuchos::rcp(new Epetra_FEVector(partMap,1,true));
 
   setGlobalSolutionFromCellLocalCoefficients();
+  clearComputedResiduals();
 }
 
 void Solution::initializeStiffnessAndLoad() {
@@ -3312,11 +3313,14 @@ void Solution::projectOntoMesh(const map<int, Teuchos::RCP<Function> > &function
 void Solution::projectOntoCell(const map<int, FunctionPtr > &functionMap, GlobalIndexType cellID, int side) {
   FieldContainer<double> physicalCellNodes = _mesh->physicalCellNodesForCell(cellID);
   vector<GlobalIndexType> cellIDs(1,cellID);
+  
+  VarFactory vf = _mesh->bilinearForm()->varFactory();
 
   for (map<int, FunctionPtr >::const_iterator functionIt = functionMap.begin(); functionIt !=functionMap.end(); functionIt++){
     int trialID = functionIt->first;
 
     bool fluxOrTrace = _mesh->bilinearForm()->isFluxOrTrace(trialID);
+    VarPtr trialVar = vf.trial(trialID);
     FunctionPtr function = functionIt->second;
     ElementPtr element = _mesh->getElement(cellID);
     ElementTypePtr elemTypePtr = element->elementType();
@@ -3343,6 +3347,13 @@ void Solution::projectOntoCell(const map<int, FunctionPtr > &functionMap, Global
         FieldContainer<double> basisCoefficients(1,basis->getCardinality());
         Projector::projectFunctionOntoBasis(basisCoefficients, function, basis, basisCache->getSideBasisCache(sideIndex));
         basisCoefficients.resize(basis->getCardinality());
+
+        // at present, we understand it to be caller's responsibility to include parity in Function if the varType is a flux.
+        // if we wanted to change that semantic, we'd use the below.
+//        if ((_mesh->parityForSide(cellID, sideIndex) == -1) && (trialVar->varType()==FLUX)) {
+//          SerialDenseWrapper::multiplyFCByWeight(basisCoefficients, -1);
+//        }
+        
         setSolnCoeffsForCellID(basisCoefficients,cellID,trialID,sideIndex);
       }
     } else {
