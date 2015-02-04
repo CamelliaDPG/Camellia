@@ -38,6 +38,24 @@ void sizeFCForBasisValues(FieldContainer<double> &fc, BasisPtr basis, int numPoi
   fc.resize(dim);
 }
 
+void sizeFCForTermTracedValues(FieldContainer<double> &fc, LinearTermPtr termTraced, BasisPtr basis, int numPoints, bool includeCellDimension = false, int numBasisFieldsToInclude = -1) {
+  // values should have shape: (F,P[,D,D,...]) where the # of D's = rank of the basis's range
+  Teuchos::Array<int> dim;
+  if (includeCellDimension) {
+    dim.push_back(1);
+  }
+  if (numBasisFieldsToInclude == -1) {
+    dim.push_back(basis->getCardinality()); // F
+  } else {
+    dim.push_back(numBasisFieldsToInclude);
+  }
+  dim.push_back(numPoints); // P
+  for (int d=0; d < termTraced->rank(); d++) {
+    dim.push_back(basis->rangeDimension()); // D
+  }
+  fc.resize(dim);
+}
+
 void filterFCValues(FieldContainer<double> &filteredFC, const FieldContainer<double> &fc, set<int> ordinals, int basisCardinality) {
   // we use pointer arithmetic here, which doesn't allow Intrepid's safety checks, for two reasons:
   // 1. It's easier to manage in a way that's independent of the rank of the basis
@@ -489,7 +507,7 @@ SubBasisReconciliationWeights BasisReconciliation::computeConstrainedWeightsForT
   FieldContainer<double> fineBasisValuesFiltered, fineBasisValuesFilteredWeighted, coarserBasisValuesFiltered;
   sizeFCForBasisValues(fineBasisValuesFiltered, finerBasis, numPoints, true, weights.fineOrdinals.size());
   sizeFCForBasisValues(fineBasisValuesFilteredWeighted, finerBasis, numPoints, true, weights.fineOrdinals.size());
-  sizeFCForBasisValues(coarserBasisValuesFiltered, coarserBasis, numPoints, true, weights.coarseOrdinals.size());
+  sizeFCForTermTracedValues(coarserBasisValuesFiltered, termTraced, coarserBasis, numPoints, true, weights.coarseOrdinals.size());
   
   filterFCValues(fineBasisValuesFiltered, *(finerBasisValues.get()), weights.fineOrdinals, finerBasis->getCardinality());
   filterFCValues(fineBasisValuesFilteredWeighted, *(finerBasisValuesWeighted.get()), weights.fineOrdinals, finerBasis->getCardinality());
