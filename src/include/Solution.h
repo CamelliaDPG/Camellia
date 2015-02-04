@@ -142,7 +142,6 @@ private:
 
   double _zmcRho;
 
-  void clearComputedResiduals();
   static double conditionNumberEstimate( Epetra_LinearProblem & problem );
 
   void setGlobalSolutionFromCellLocalCoefficients();
@@ -170,6 +169,7 @@ public:
   Epetra_MultiVector* getGlobalCoefficients();
 
   bool cellHasCoefficientsAssigned(GlobalIndexType cellID);
+  void clearComputedResiduals();
   
   // solve steps:
   void initializeLHSVector();
