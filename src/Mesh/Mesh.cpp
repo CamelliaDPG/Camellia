@@ -285,11 +285,16 @@ Teuchos::RCP<Mesh> Mesh::buildQuadMesh(const FieldContainer<double> &quadBoundar
   // set up vertices:
   // vertexIndices is for easy vertex lookup by (x,y) index for our Cartesian grid:
   vector< vector<int> > vertexIndices(horizontalElements+1, vector<int>(verticalElements+1));
-  for (int i=0; i<=horizontalElements; i++) {
-    for (int j=0; j<=verticalElements; j++) {
+  for (int j=0; j<=verticalElements; j++) {
+    for (int i=0; i<=horizontalElements; i++) {
       vertexIndices[i][j] = vertices.size();
       FieldContainer<double> vertex(spaceDim);
-      vertex(0) = southWest_x + elemWidth*i;
+      vertex(0) = southWest_x 
+        + (northWest_x-southWest_x)/verticalElements*j
+        + ((southEast_x-southWest_x) 
+          + ((northEast_x-northWest_x)-(southEast_x-southWest_x))/verticalElements*j)/horizontalElements*i;
+      // vertex(0) = southWest_x + (northWest_x-southWest_x)/verticalElements*j + (northEast_x-northWest_x)/horizontalElements*i;
+      // vertex(1) = southWest_y + (northWest_y-southWest_y)/verticalElements*j + (southEast_y-southWest_y)/horizontalElements*i;
       vertex(1) = southWest_y + elemHeight*j;
       vertices.push_back(vertex);
 //      cout << "Mesh: vertex " << vertices.size() - 1 << ": (" << vertex(0) << "," << vertex(1) << ")\n";

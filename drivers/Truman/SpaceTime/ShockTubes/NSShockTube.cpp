@@ -53,6 +53,14 @@ class ConstantYBoundary : public SpatialFilter {
       }
 };
 
+class PistonBoundary : public SpatialFilter {
+   public:
+      bool matchesPoint(double x, double y) {
+         double tol = 1e-14;
+         return (abs(y-x) < tol);
+      }
+};
+
 class MinFunction : public Function {
   private:
     FunctionPtr _f1;
@@ -519,6 +527,27 @@ int main(int argc, char *argv[]) {
     TL = 0;
     TR = 0;
     break;
+    case 7:
+    problemName = "Piston";
+    gamma = 5./3;
+    a0 = sqrt(gamma*p0/rho0);
+    M_inf = u0/a0;
+    Cv = 1./(gamma*(gamma-1)*M_inf*M_inf);
+    Cp = gamma*Cv;
+    R = Cp-Cv;
+    xmin = 0;
+    xmax = 1;
+    // xint = -.5+1./64;
+    xint = 0;
+    tmax = .5;
+
+    rhoL = 1;
+    rhoR = 1;
+    uL = 0;
+    uR = 0;
+    TL = 0;
+    TR = 0;
+    break;
     default:
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "invalid problem number");
   }
@@ -620,10 +649,10 @@ int main(int argc, char *argv[]) {
     FieldContainer<double> meshBoundary(4,2);
     // xmin = 0.0;
     // xmax = 1.0;
-    // double tminslab = tmax*double(slab)/numSlabs;
-    // double tmaxslab = tmax*double(slab+1)/numSlabs;
-    double tminslab = tmax*double(slab);
-    double tmaxslab = tmax*double(slab+1);
+    double tminslab = tmax*double(slab)/numSlabs;
+    double tmaxslab = tmax*double(slab+1)/numSlabs;
+    // double tminslab = tmax*double(slab);
+    // double tmaxslab = tmax*double(slab+1);
 
     meshBoundary(0,0) =  xmin; // x1
     meshBoundary(0,1) =  tminslab; // y1
@@ -633,6 +662,9 @@ int main(int argc, char *argv[]) {
     meshBoundary(2,1) =  tmaxslab;
     meshBoundary(3,0) =  xmin;
     meshBoundary(3,1) =  tmaxslab;
+
+    if (problem == 7)
+      meshBoundary(3,0) =  tmaxslab;
 
     // create a pointer to a new mesh:
     Teuchos::RCP<Mesh> mesh = Mesh::buildQuadMesh(meshBoundary, numX, numT,
@@ -712,8 +744,6 @@ int main(int argc, char *argv[]) {
     FunctionPtr Ue_prev   = Function::solution(Ue, backgroundFlows[slab]);
     FunctionPtr D_prev   = Function::solution(D, backgroundFlows[slab]);
     FunctionPtr q_prev   = Function::solution(q, backgroundFlows[slab]);
-    // FunctionPtr minFcn = Teuchos::rcp( new MinFunction(physicalViscosity*Function::constant(1), Function::h()) );
-    // FunctionPtr mu = Teuchos::rcp( new MaxFunction(Uc_prev * minFcn, 1e-3*one) );
     FunctionPtr rho_prev = Uc_prev;
     FunctionPtr u_prev = Um_prev;
     FunctionPtr T_prev = Ue_prev;
@@ -1366,6 +1396,7 @@ int main(int argc, char *argv[]) {
     SpatialFilterPtr left = Teuchos::rcp( new ConstantXBoundary(xmin) );
     SpatialFilterPtr right = Teuchos::rcp( new ConstantXBoundary(xmax) );
     SpatialFilterPtr init = Teuchos::rcp( new ConstantYBoundary(tmins[slab]) );
+    SpatialFilterPtr piston = Teuchos::rcp( new PistonBoundary() );
     FunctionPtr rho0  = Teuchos::rcp( new DiscontinuousInitialCondition(xint, rhoL, rhoR) );
     FunctionPtr mom0 = Teuchos::rcp( new DiscontinuousInitialCondition(xint, uL*rhoL, uR*rhoR) );
     FunctionPtr E0    = Teuchos::rcp( new DiscontinuousInitialCondition(xint, (rhoL*Cv*TL+0.5*rhoL*uL*uL), (rhoR*Cv*TR+0.5*rhoR*uR*uR)) );
@@ -1374,14 +1405,46 @@ int main(int argc, char *argv[]) {
     // FunctionPtr rho0  = Teuchos::rcp( new RampedInitialCondition(xint, rhoL, rhoR, (xmax-xmin)/numX) );
     // FunctionPtr mom0 = Teuchos::rcp( new RampedInitialCondition(xint, uL*rhoL, uR*rhoR, (xmax-xmin)/numX) );
     // FunctionPtr E0    = Teuchos::rcp( new RampedInitialCondition(xint, (rhoL*Cv*TL+0.5*rhoL*uL*uL), (rhoR*Cv*TR+0.5*rhoR*uR*uR), (xmax-xmin)/numX) );
-    bc->addDirichlet(tc, left, -rhoL*uL*one);
-    bc->addDirichlet(tc, right, rhoR*uR*one);
-    bc->addDirichlet(tm, left, -(rhoL*uL*uL+R*rhoL*TL)*one);
-    bc->addDirichlet(tm, right, (rhoR*uR*uR+R*rhoR*TR)*one);
-    // bc->addDirichlet(uhat, right, zero);
-    // bc->addDirichlet(uhat, left, zero);
-    bc->addDirichlet(te, left, -(rhoL*Cv*TL+0.5*rhoL*uL*uL+R*rhoL*TL)*uL*one);
-    bc->addDirichlet(te, right, (rhoR*Cv*TR+0.5*rhoR*uR*uR+R*rhoR*TR)*uR*one);
+    FunctionPtr Uc_prev = Function::solution(Uc, backgroundFlows[slab]);
+    FunctionPtr Um_prev   = Function::solution(Um, backgroundFlows[slab]);
+    FunctionPtr Ue_prev   = Function::solution(Ue, backgroundFlows[slab]);
+    FunctionPtr D_prev   = Function::solution(D, backgroundFlows[slab]);
+    FunctionPtr q_prev   = Function::solution(q, backgroundFlows[slab]);
+    FunctionPtr rho_prev = Uc_prev;
+    FunctionPtr u_prev = Um_prev;
+    FunctionPtr T_prev = Ue_prev;
+    if (problem != 7)
+    {
+      bc->addDirichlet(tc, left, -rhoL*uL*one);
+      bc->addDirichlet(tc, right, rhoR*uR*one);
+    }
+    else
+    {
+      bc->addDirichlet(tc, piston, zero);
+      bc->addDirichlet(tc, right, zero);
+      // bc->addDirichlet(tc, right, zero);
+    }
+    if (problem != 7)
+    {
+      bc->addDirichlet(tm, left, -(rhoL*uL*uL+R*rhoL*TL)*one);
+      bc->addDirichlet(tm, right, (rhoR*uR*uR+R*rhoR*TR)*one);
+    }
+    else
+    {
+      bc->addDirichlet(tm, piston, -sqrt(.5)*(R*rho_prev*T_prev-D_prev));
+      bc->addDirichlet(tm, right, R*rho_prev*T_prev-D_prev);
+    }
+    if (problem != 7)
+    {
+      bc->addDirichlet(te, left, -(rhoL*Cv*TL+0.5*rhoL*uL*uL+R*rhoL*TL)*uL*one);
+      bc->addDirichlet(te, right, (rhoR*Cv*TR+0.5*rhoR*uR*uR+R*rhoR*TR)*uR*one);
+    }
+    else
+    {
+      bc->addDirichlet(te, piston, -sqrt(.5)*(R*rho_prev*u_prev*T_prev + q_prev - u_prev*D_prev));
+      bc->addDirichlet(te, right, q_prev);
+      // bc->addDirichlet(te, right, zero);
+    }
     // cout << "R = " << R << " Cv = " << Cv << " Cp = " << Cp << " gamma = " << gamma << endl;
     // cout << "left " << rhoL*uL << " " << (rhoL*uL*uL+R*rhoL*TL) << " " << (rhoL*Cv*TL+0.5*rhoL*uL*uL+R*Cv*TL)*uL << endl;
     if (slab == 0)
