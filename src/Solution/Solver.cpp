@@ -54,3 +54,13 @@ Teuchos::RCP<Solver> Solver::getSolver(SolverChoice choice, bool saveFactorizati
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Solver choice not recognized!");
   }
 }
+
+SolverPtr Solver::getDirectSolver(bool saveFactorization) {
+#ifdef HAVE_AMESOS_SUPERLUDIST
+  return getSolver(Solver::SuperLUDist, saveFactorization);
+#elif defined(HAVE_AMESOS_MUMPS)
+  return getSolver(Solver::MUMPS, saveFactorization);
+#else
+  return getSolver(Solver::KLU, saveFactorization);
+#endif
+}
