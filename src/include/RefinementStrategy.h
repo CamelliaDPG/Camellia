@@ -78,4 +78,6 @@ public:
   GlobalIndexType getNumDofs(int refinementNumber);
 };
 
+typedef Teuchos::RCP<RefinementStrategy> RefinementStrategyPtr;
+
 #endif
