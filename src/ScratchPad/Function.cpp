@@ -1413,6 +1413,14 @@ FunctionPtr ConstantVectorFunction::y() {
   return Teuchos::rcp( new ConstantScalarFunction( _value[1] ) );
 }
 
+FunctionPtr ConstantVectorFunction::z() {
+  if (_value.size() > 2) {
+    return Teuchos::rcp( new ConstantScalarFunction( _value[2] ) );
+  } else {
+    return Teuchos::null;
+  }
+}
+
 vector<double> ConstantVectorFunction::value() {
   return _value;
 }
@@ -1429,8 +1437,12 @@ bool ConstantVectorFunction::isZero() {
 void ConstantVectorFunction::values(FieldContainer<double> &values, BasisCachePtr basisCache) {
   CHECK_VALUES_RANK(values);
   // values are stored in (C,P,D) order, the important thing here being that we can do this:
+  int spaceDim = basisCache->getSpaceDim();
+  if (spaceDim > _value.size()) {
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "spaceDim is greater than length of vector...");
+  }
   for (int i=0; i < values.size(); ) {
-    for (int d=0; d < _value.size(); d++) {
+    for (int d=0; d < spaceDim; d++) {
       values[i++] = _value[d];
     }
   }
