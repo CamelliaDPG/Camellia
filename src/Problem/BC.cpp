@@ -322,6 +322,12 @@ void BC::coefficientsForBC(FieldContainer<double> &basisCoefficients, Teuchos::R
 //  }
 }
 
+void BC::removeSinglePointBC(int fieldID) {
+  if (_singlePointBCs.find(fieldID) != _singlePointBCs.end()) {
+    _singlePointBCs.erase(fieldID);
+  }
+}
+
 double BC::valueForSinglePointBC(int varID) {
   if (_singlePointBCs.find(varID) != _singlePointBCs.end())
     return _singlePointBCs[varID].second;

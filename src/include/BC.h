@@ -53,6 +53,7 @@ public:
   
   void addDirichlet( VarPtr traceOrFlux, SpatialFilterPtr spatialPoints, FunctionPtr valueFunction );
   void addSinglePointBC( int fieldID, double value, GlobalIndexType meshVertexNumber = -1 );
+  void removeSinglePointBC( int fieldID );
   void addZeroMeanConstraint( VarPtr field );
   void removeZeroMeanConstraint( int fieldID );
   
