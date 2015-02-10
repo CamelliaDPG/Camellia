@@ -76,10 +76,10 @@ StokesVGPFormulation::StokesVGPFormulation(int spaceDim, bool useConformingTrace
   
   FunctionPtr n = Function::normal();
   LinearTermPtr t1n_lt, t2n_lt, t3n_lt;
-  t1n_lt = sigma1 * n - p * n->x();
-  t2n_lt = sigma2 * n - p * n->y();
+  t1n_lt = p * n->x() - sigma1 * n ;
+  t2n_lt = p * n->y() - sigma2 * n;
   if (spaceDim==3) {
-    t3n_lt = sigma3 * n - p * n->z();
+    t3n_lt = p * n->z() - sigma3 * n;
   }
   t1n = vf.fluxVar(S_TN1_HAT, t1n_lt);
   t2n = vf.fluxVar(S_TN2_HAT, t2n_lt);
