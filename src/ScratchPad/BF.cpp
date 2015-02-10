@@ -582,6 +582,10 @@ IPPtr BF::graphNorm(double weightForL2TestTerms) {
 IPPtr BF::graphNorm(const map<int, double> &varWeights, double weightForL2TestTerms) {
   typedef pair< FunctionPtr, VarPtr > LinearSummand;
   map<int, LinearTermPtr> testTermsForVarID;
+  vector<double> e1(3), e2(3), e3(3); // unit vectors
+  e1[0] = 1.0;
+  e2[1] = 1.0;
+  e3[2] = 1.0;
   for ( vector< BilinearTerm >:: iterator btIt = _terms.begin();
        btIt != _terms.end(); btIt++) {
     BilinearTerm bt = *btIt;
@@ -591,10 +595,16 @@ IPPtr BF::graphNorm(const map<int, double> &varWeights, double weightForL2TestTe
     for ( vector< LinearSummand >::iterator lsIt = summands.begin(); lsIt != summands.end(); lsIt++) {
       VarPtr trialVar = lsIt->second;
       if (trialVar->varType() == FIELD) {
-        if (trialVar->op() != OP_VALUE) {
+        FunctionPtr f = lsIt->first;
+        if (trialVar->op() == OP_X) {
+          f = e1 * f;
+        } else if (trialVar->op() == OP_Y) {
+          f = e2 * f;
+        } else if (trialVar->op() == OP_Z) {
+          f = e3 * f;
+        } else if (trialVar->op() != OP_VALUE) {
           TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "BF::graphNorm() doesn't support non-value ops on field variables");
         }
-        FunctionPtr f = lsIt->first;
         if (testTermsForVarID.find(trialVar->ID()) == testTermsForVarID.end()) {
           testTermsForVarID[trialVar->ID()] = Teuchos::rcp( new LinearTerm );
         }
