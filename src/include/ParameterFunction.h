@@ -1,3 +1,6 @@
+#ifndef Camellia_ParameterFunction_h
+#define Camellia_ParameterFunction_h
+
 //
 //  ParameterFunction.cpp
 //  Camellia-debug
@@ -39,3 +42,5 @@ public:
 };
 
 typedef Teuchos::RCP<ParameterFunction> ParameterFunctionPtr;
+
+#endif

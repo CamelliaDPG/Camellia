@@ -222,14 +222,12 @@ void Solution::addSolution(Teuchos::RCP<Solution> otherSoln, double weight, bool
     SerialDenseWrapper::addFCs(myCoefficients, otherCoefficients, weight);
 
     if (replaceBoundaryTerms) {
-      // then copy the flux/field terms from otherCoefficients, weighting with weight
-      //   (though it seems to me now that this option probably only really makes sense when weight = 1.0, this implementation is consistent
-      //    with the previous non-condensed version of addSolution)
+      // then copy the flux/field terms from otherCoefficients, without weighting with weight (used to weight with weight; changed 2/5/15)
       DofOrderingPtr trialOrder = _mesh->getElementType(cellID)->trialOrderPtr;
       set<int> traceDofIndices = trialOrder->getTraceDofIndices();
       for (set<int>::iterator traceDofIndexIt = traceDofIndices.begin(); traceDofIndexIt != traceDofIndices.end(); traceDofIndexIt++) {
         int traceDofIndex = *traceDofIndexIt;
-        myCoefficients[traceDofIndex] = weight * otherCoefficients[traceDofIndex];
+        myCoefficients[traceDofIndex] = otherCoefficients[traceDofIndex];
       }
     }
     _solutionForCellIDGlobal[cellID] = myCoefficients;
@@ -2216,8 +2214,15 @@ void Solution::computeResiduals() {
         residual(0,i) -= localCoefficients(j) * preStiffness(0,i,j);
       }
     }
-
+    
     _residualForCell[cellID] = residual;
+//    cout << "computed residual vector for cell " << cellID << "; nonzeros:\n";
+//    double tol = 1e-15;
+//    for (int i=0; i< _residualForCell[cellID].size(); i++) {
+//      if (abs(_residualForCell[cellID][i]) > tol) {
+//        cout << setw(10) << i << setw(25) << _residualForCell[cellID][i] << endl;
+//      }
+//    }
   }
   _residualsComputed = true;
 }

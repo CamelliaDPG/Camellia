@@ -305,7 +305,7 @@ public:
 
   FunctionPtr x();
   FunctionPtr y();
-//  FunctionPtr z();
+  FunctionPtr z();
 
   void values(FieldContainer<double> &values, BasisCachePtr basisCache);
   vector<double> value();

@@ -49,6 +49,8 @@ public:
                              SolutionPtr fineSolution = Teuchos::null, MeshPtr coarseMesh = Teuchos::null,
                              SolverPtr coarseSolver = Teuchos::null);
 
+  static SolverPtr getDirectSolver(bool saveFactorization=false);
+  
   static SolverChoice solverChoiceFromString(string choiceString) {
     if (choiceString=="KLU") return KLU;
     if (choiceString=="SuperLUDist") return SuperLUDist;

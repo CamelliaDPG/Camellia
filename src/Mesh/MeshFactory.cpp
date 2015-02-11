@@ -249,81 +249,79 @@ MeshPtr MeshFactory::quadMesh(Teuchos::ParameterList &parameters) {
   vector< PeriodicBCPtr > emptyPeriodicBCs;
   vector< PeriodicBCPtr >* periodicBCs = parameters.get< vector< PeriodicBCPtr >* >("periodicBCs",&emptyPeriodicBCs);
   
-  vector<vector<double> > vertices;
-  vector< vector<unsigned> > allElementVertices;
-  
-  int numElements = divideIntoTriangles ? horizontalElements * verticalElements * 2 : horizontalElements * verticalElements;
-  
-  CellTopoPtr topo;
-  if (divideIntoTriangles) {
-    topo = Camellia::CellTopology::triangle();
-  } else {
-    topo = Camellia::CellTopology::quad();
-  }
-  vector< CellTopoPtr > cellTopos(numElements, topo);
-  
-  FieldContainer<double> quadBoundaryPoints(4,2);
-  quadBoundaryPoints(0,0) = x0;
-  quadBoundaryPoints(0,1) = y0;
-  quadBoundaryPoints(1,0) = x0 + width;
-  quadBoundaryPoints(1,1) = y0;
-  quadBoundaryPoints(2,0) = x0 + width;
-  quadBoundaryPoints(2,1) = y0 + height;
-  quadBoundaryPoints(3,0) = x0;
-  quadBoundaryPoints(3,1) = y0 + height;
-  //  cout << "creating mesh with boundary points:\n" << quadBoundaryPoints;
-  
-  double southWest_x = quadBoundaryPoints(0,0),
-  southWest_y = quadBoundaryPoints(0,1);
-  
-  double elemWidth = width / horizontalElements;
-  double elemHeight = height / verticalElements;
-  
-  // set up vertices:
-  // vertexIndices is for easy vertex lookup by (x,y) index for our Cartesian grid:
-  vector< vector<int> > vertexIndices(horizontalElements+1, vector<int>(verticalElements+1));
-  for (int i=0; i<=horizontalElements; i++) {
-    for (int j=0; j<=verticalElements; j++) {
-      vertexIndices[i][j] = vertices.size();
-      vector<double> vertex(spaceDim);
-      vertex[0] = southWest_x + elemWidth*i;
-      vertex[1] = southWest_y + elemHeight*j;
-      vertices.push_back(vertex);
-    }
-  }
-  
-  for (int i=0; i<horizontalElements; i++) {
-    for (int j=0; j<verticalElements; j++) {
-      if (!divideIntoTriangles) {
-        vector<unsigned> elemVertices;
-        elemVertices.push_back(vertexIndices[i][j]);
-        elemVertices.push_back(vertexIndices[i+1][j]);
-        elemVertices.push_back(vertexIndices[i+1][j+1]);
-        elemVertices.push_back(vertexIndices[i][j+1]);
-        allElementVertices.push_back(elemVertices);
-      } else {
-        vector<unsigned> elemVertices1, elemVertices2; // elem1 is SE of quad, elem2 is NW
-        elemVertices1.push_back(vertexIndices[i][j]);     // SIDE1 is SOUTH side of quad
-        elemVertices1.push_back(vertexIndices[i+1][j]);   // SIDE2 is EAST
-        elemVertices1.push_back(vertexIndices[i+1][j+1]); // SIDE3 is diagonal
-        elemVertices2.push_back(vertexIndices[i][j+1]);   // SIDE1 is WEST
-        elemVertices2.push_back(vertexIndices[i][j]);     // SIDE2 is diagonal
-        elemVertices2.push_back(vertexIndices[i+1][j+1]); // SIDE3 is NORTH
-        
-        allElementVertices.push_back(elemVertices1);
-        allElementVertices.push_back(elemVertices2);
-      }
-    }
-  }
-  
-  MeshGeometryPtr geometry = Teuchos::rcp( new MeshGeometry(vertices, allElementVertices, cellTopos));
-  
   if (useMinRule) {
-    MeshTopologyPtr meshTopology = Teuchos::rcp( new MeshTopology(geometry, *periodicBCs) );
+    MeshTopologyPtr meshTopology = quadMeshTopology(width,height,horizontalElements,verticalElements,divideIntoTriangles,x0,y0,*periodicBCs);
     return Teuchos::rcp( new Mesh(meshTopology, bf, H1Order, delta_k, *trialOrderEnhancements, *testOrderEnhancements) );
   } else {
     bool useConformingTraces = parameters.get<bool>("useConformingTraces", true);
-//    cout << "periodicBCs size is " << periodicBCs->size() << endl;
+//  cout << "periodicBCs size is " << periodicBCs->size() << endl;
+    vector<vector<double> > vertices;
+    vector< vector<unsigned> > allElementVertices;
+    
+    int numElements = divideIntoTriangles ? horizontalElements * verticalElements * 2 : horizontalElements * verticalElements;
+    
+    CellTopoPtr topo;
+    if (divideIntoTriangles) {
+      topo = Camellia::CellTopology::triangle();
+    } else {
+      topo = Camellia::CellTopology::quad();
+    }
+    vector< CellTopoPtr > cellTopos(numElements, topo);
+    
+    FieldContainer<double> quadBoundaryPoints(4,2);
+    quadBoundaryPoints(0,0) = x0;
+    quadBoundaryPoints(0,1) = y0;
+    quadBoundaryPoints(1,0) = x0 + width;
+    quadBoundaryPoints(1,1) = y0;
+    quadBoundaryPoints(2,0) = x0 + width;
+    quadBoundaryPoints(2,1) = y0 + height;
+    quadBoundaryPoints(3,0) = x0;
+    quadBoundaryPoints(3,1) = y0 + height;
+    //  cout << "creating mesh with boundary points:\n" << quadBoundaryPoints;
+    
+    double southWest_x = quadBoundaryPoints(0,0),
+    southWest_y = quadBoundaryPoints(0,1);
+    
+    double elemWidth = width / horizontalElements;
+    double elemHeight = height / verticalElements;
+    
+    // set up vertices:
+    // vertexIndices is for easy vertex lookup by (x,y) index for our Cartesian grid:
+    vector< vector<int> > vertexIndices(horizontalElements+1, vector<int>(verticalElements+1));
+    for (int i=0; i<=horizontalElements; i++) {
+      for (int j=0; j<=verticalElements; j++) {
+        vertexIndices[i][j] = vertices.size();
+        vector<double> vertex(spaceDim);
+        vertex[0] = southWest_x + elemWidth*i;
+        vertex[1] = southWest_y + elemHeight*j;
+        vertices.push_back(vertex);
+      }
+    }
+    
+    for (int i=0; i<horizontalElements; i++) {
+      for (int j=0; j<verticalElements; j++) {
+        if (!divideIntoTriangles) {
+          vector<unsigned> elemVertices;
+          elemVertices.push_back(vertexIndices[i][j]);
+          elemVertices.push_back(vertexIndices[i+1][j]);
+          elemVertices.push_back(vertexIndices[i+1][j+1]);
+          elemVertices.push_back(vertexIndices[i][j+1]);
+          allElementVertices.push_back(elemVertices);
+        } else {
+          vector<unsigned> elemVertices1, elemVertices2; // elem1 is SE of quad, elem2 is NW
+          elemVertices1.push_back(vertexIndices[i][j]);     // SIDE1 is SOUTH side of quad
+          elemVertices1.push_back(vertexIndices[i+1][j]);   // SIDE2 is EAST
+          elemVertices1.push_back(vertexIndices[i+1][j+1]); // SIDE3 is diagonal
+          elemVertices2.push_back(vertexIndices[i][j+1]);   // SIDE1 is WEST
+          elemVertices2.push_back(vertexIndices[i][j]);     // SIDE2 is diagonal
+          elemVertices2.push_back(vertexIndices[i+1][j+1]); // SIDE3 is NORTH
+          
+          allElementVertices.push_back(elemVertices1);
+          allElementVertices.push_back(elemVertices2);
+        }
+      }
+    }
+    
     return Teuchos::rcp( new Mesh(vertices, allElementVertices, bf, H1Order, delta_k, useConformingTraces, *trialOrderEnhancements, *testOrderEnhancements, *periodicBCs) );
   }
 }
@@ -429,7 +427,87 @@ MeshPtr MeshFactory::quadMeshMinRule(BFPtr bf, int H1Order, int pToAddTest,
   return quadMesh(pl);
 }
 
+MeshTopologyPtr MeshFactory::quadMeshTopology(double width, double height, int horizontalElements, int verticalElements, bool divideIntoTriangles,
+                                              double x0, double y0, vector<PeriodicBCPtr> periodicBCs) {
+  vector<vector<double> > vertices;
+  vector< vector<unsigned> > allElementVertices;
+  
+  int numElements = divideIntoTriangles ? horizontalElements * verticalElements * 2 : horizontalElements * verticalElements;
+  
+  CellTopoPtr topo;
+  if (divideIntoTriangles) {
+    topo = Camellia::CellTopology::triangle();
+  } else {
+    topo = Camellia::CellTopology::quad();
+  }
+  vector< CellTopoPtr > cellTopos(numElements, topo);
+  
+  int spaceDim = 2;
+  
+  FieldContainer<double> quadBoundaryPoints(4,spaceDim);
+  quadBoundaryPoints(0,0) = x0;
+  quadBoundaryPoints(0,1) = y0;
+  quadBoundaryPoints(1,0) = x0 + width;
+  quadBoundaryPoints(1,1) = y0;
+  quadBoundaryPoints(2,0) = x0 + width;
+  quadBoundaryPoints(2,1) = y0 + height;
+  quadBoundaryPoints(3,0) = x0;
+  quadBoundaryPoints(3,1) = y0 + height;
+  //  cout << "creating mesh with boundary points:\n" << quadBoundaryPoints;
+  
+  double southWest_x = quadBoundaryPoints(0,0),
+  southWest_y = quadBoundaryPoints(0,1);
+  
+  double elemWidth = width / horizontalElements;
+  double elemHeight = height / verticalElements;
+  
+  // set up vertices:
+  // vertexIndices is for easy vertex lookup by (x,y) index for our Cartesian grid:
+  vector< vector<int> > vertexIndices(horizontalElements+1, vector<int>(verticalElements+1));
+  for (int i=0; i<=horizontalElements; i++) {
+    for (int j=0; j<=verticalElements; j++) {
+      vertexIndices[i][j] = vertices.size();
+      vector<double> vertex(spaceDim);
+      vertex[0] = southWest_x + elemWidth*i;
+      vertex[1] = southWest_y + elemHeight*j;
+      vertices.push_back(vertex);
+    }
+  }
+  
+  for (int i=0; i<horizontalElements; i++) {
+    for (int j=0; j<verticalElements; j++) {
+      if (!divideIntoTriangles) {
+        vector<unsigned> elemVertices;
+        elemVertices.push_back(vertexIndices[i][j]);
+        elemVertices.push_back(vertexIndices[i+1][j]);
+        elemVertices.push_back(vertexIndices[i+1][j+1]);
+        elemVertices.push_back(vertexIndices[i][j+1]);
+        allElementVertices.push_back(elemVertices);
+      } else {
+        vector<unsigned> elemVertices1, elemVertices2; // elem1 is SE of quad, elem2 is NW
+        elemVertices1.push_back(vertexIndices[i][j]);     
+        elemVertices1.push_back(vertexIndices[i+1][j]);   
+        elemVertices1.push_back(vertexIndices[i+1][j+1]); 
+        elemVertices2.push_back(vertexIndices[i][j+1]);   
+        elemVertices2.push_back(vertexIndices[i][j]);     
+        elemVertices2.push_back(vertexIndices[i+1][j+1]);
+        
+        allElementVertices.push_back(elemVertices1);
+        allElementVertices.push_back(elemVertices2);
+      }
+    }
+  }
+  
+  MeshGeometryPtr geometry = Teuchos::rcp( new MeshGeometry(vertices, allElementVertices, cellTopos));
+  return Teuchos::rcp( new MeshTopology(geometry, periodicBCs) );
+}
+
 MeshPtr MeshFactory::intervalMesh(BFPtr bf, double xLeft, double xRight, int numElements, int H1Order, int delta_k) {
+  MeshTopologyPtr meshTopology = intervalMeshTopology(xLeft, xRight, numElements);
+  return Teuchos::rcp( new Mesh(meshTopology, bf, H1Order, delta_k) );
+}
+
+MeshTopologyPtr MeshFactory::intervalMeshTopology(double xLeft, double xRight, int numElements) {
   int n = numElements;
   vector< vector<double> > vertices(n+1);
   vector<double> vertex(1);
@@ -438,7 +516,7 @@ MeshPtr MeshFactory::intervalMesh(BFPtr bf, double xLeft, double xRight, int num
   vector<IndexType> oneElement(2);
   for (int i=0; i<n+1; i++) {
     vertex[0] = xLeft + (i * length) / n;
-//    cout << "vertex " << i << ": " << vertex[0] << endl;
+    //    cout << "vertex " << i << ": " << vertex[0] << endl;
     vertices[i] = vertex;
     if (i != n) {
       oneElement[0] = i;
@@ -451,7 +529,7 @@ MeshPtr MeshFactory::intervalMesh(BFPtr bf, double xLeft, double xRight, int num
   MeshGeometryPtr geometry = Teuchos::rcp( new MeshGeometry(vertices, elementVertices, cellTopos));
   
   MeshTopologyPtr meshTopology = Teuchos::rcp( new MeshTopology(geometry) );
-  return Teuchos::rcp( new Mesh(meshTopology, bf, H1Order, delta_k) );
+  return meshTopology;
 }
 
 MeshPtr MeshFactory::rectilinearMesh(BFPtr bf, vector<double> dimensions, vector<int> elementCounts, int H1Order, int pToAddTest, vector<double> x0) {
@@ -459,6 +537,14 @@ MeshPtr MeshFactory::rectilinearMesh(BFPtr bf, vector<double> dimensions, vector
   if (pToAddTest==-1) {
     pToAddTest = spaceDim;
   }
+  
+  MeshTopologyPtr meshTopology = rectilinearMeshTopology(dimensions, elementCounts, x0);
+  
+  return Teuchos::rcp( new Mesh(meshTopology, bf, H1Order, pToAddTest) );
+}
+
+MeshTopologyPtr MeshFactory::rectilinearMeshTopology(vector<double> dimensions, vector<int> elementCounts, vector<double> x0) {
+  int spaceDim = dimensions.size();
   
   if (x0.size()==0) {
     for (int d=0; d<spaceDim; d++) {
@@ -474,11 +560,11 @@ MeshPtr MeshFactory::rectilinearMesh(BFPtr bf, vector<double> dimensions, vector
   if (spaceDim == 1) {
     double xLeft = x0[0];
     double xRight = dimensions[0] + xLeft;
-    return MeshFactory::intervalMesh(bf, xLeft, xRight, elementCounts[0], H1Order, pToAddTest);
+    return MeshFactory::intervalMeshTopology(xLeft, xRight, elementCounts[0]);
   }
   
   if (spaceDim == 2) {
-    return MeshFactory::quadMeshMinRule(bf, H1Order, pToAddTest, dimensions[0], dimensions[1], elementCounts[0], elementCounts[1], false, x0[0], x0[1]);
+    return MeshFactory::quadMeshTopology(dimensions[0], dimensions[1], elementCounts[0], elementCounts[1], false, x0[0], x0[1]);
   }
   
   if (spaceDim != 3) {
@@ -506,7 +592,7 @@ MeshPtr MeshFactory::rectilinearMesh(BFPtr bf, vector<double> dimensions, vector
     elemLinearMeasures[d] = dimensions[d] / elementCounts[d];
   }
   vector< CellTopoPtr > cellTopos(numElements, topo);
-    
+  
   map< vector<int>, unsigned> vertexLookup;
   vector< vector<double> > vertices;
   
@@ -576,88 +662,9 @@ MeshPtr MeshFactory::rectilinearMesh(BFPtr bf, vector<double> dimensions, vector
   }
   
   MeshGeometryPtr geometry = Teuchos::rcp( new MeshGeometry(vertices, elementVertices, cellTopos));
-
+  
   MeshTopologyPtr meshTopology = Teuchos::rcp( new MeshTopology(geometry) );
-  
-  return Teuchos::rcp( new Mesh(meshTopology, bf, H1Order, pToAddTest) );
-
-  // earlier attempt to handle all dimensions is below.  Part of the problem is that the quad
-  // node ordering isn't tensor-product (it's counterclockwise).  This makes dimension-independent code
-  // extra difficult.
-  
-//  vector< vector<double> > lineDivisions;
-//  vector< vector<double> > vertices;
-//
-//  vector< vector<int> > vertexIndices;
-//  
-//  // following for loop does a Cartesian product of the dimensions
-//  for (int d=0; d<spaceDim; d++) {
-//    vector<double> divisions;
-//    vector< vector<double> > newVertices;
-//    vector< vector<int> > newVertexIndices;
-//    for (int i=0; i<elementCounts[d] + 1; i++) {
-//      double xd_i = origin[d] + i * elemLinearMeasures[d];
-//      divisions.push_back(xd_i);
-//      if (d==0) {
-//        vector<int> vertexOrdinal(1,i);
-//        newVertexIndices.push_back(vertexOrdinal);
-//        newVertices.push_back(vector<double>(1,xd_i));
-//      } else {
-//        for (int j=0; j<vertices.size(); j++) { // these don't have a d-dimensional entry
-//          vector<double> vertex = vertices[j];
-//          vertex.push_back(xd_i);
-//          newVertices.push_back(vertex);
-//          
-//          vector<int> vertexIndex = vertexIndices[j];
-//          vertexIndex.push_back(i);
-//          newVertexIndices.push_back(vertexIndex);
-//        }
-//      }
-//    }
-//    vertices = newVertices;
-//    vertexIndices = newVertexIndices;
-//    lineDivisions.push_back(divisions);
-//  }
-//
-//  map< vector<int>, int> vertexOrdinalLookup;
-//  for (int i=0; i<vertexIndices.size(); i++) {
-//    vertexOrdinalLookup[vertexIndices[i]] = i;
-//  }
-//
-//  for (int i=0; i<vertexIndices.size(); i++) {
-//    vector<int> vertexIndex = vertexIndices[i];
-//    bool onMeshBackBoundary = false;
-//    for (int d=0; d<spaceDim; d++) {
-//      if (vertexIndex[d] == elementCounts[d]) {
-//        onMeshBackBoundary = true;
-//      }
-//    }
-//    if (onMeshBackBoundary) continue;
-//    // otherwise, we can build an element with this vertex as its bottom/left/near corner
-//    
-//    vector< vector<int> > elementVertexIndices;
-//    for (int d=0; d<spaceDim; d++) {
-//      vector< vector<int> > newElementVertexIndices;
-//      if (d==0) {
-//        vector<int> vi_d0(1,vertexIndex[d]);
-//        vector<int> vi_d1(1,vertexIndex[d]+1);
-//        newElementVertexIndices.push_back(vi_d0);
-//        newElementVertexIndices.push_back(vi_d1);
-//      } else {
-//        for (int j=0; j<elementVertexIndices.size(); j++) {
-//          vector<int> vj = elementVertexIndices[j];
-//          vector<int> vj_d0 = vj;
-//          vj_d0.push_back(<#const value_type &__x#>)
-//          vector<int> vj_d1 = vj;
-//          
-//        }
-//      }
-//      elementVertexIndices = newElementVertexIndices;
-//    }
-//    
-//    vector< int > elementVertexOrdinals;
-//    
-//  }
+  return meshTopology;
 }
 
 MeshGeometryPtr MeshFactory::shiftedHemkerGeometry(double xLeft, double xRight, double meshHeight, double cylinderRadius) {

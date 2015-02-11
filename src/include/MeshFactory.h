@@ -24,6 +24,8 @@ public:
 #endif
   static MeshPtr intervalMesh(BFPtr bf, double xLeft, double xRight, int numElements, int H1Order, int delta_k); // 1D equispaced
   
+  static MeshTopologyPtr intervalMeshTopology(double xLeft, double xRight, int numElements); // 1D equispaced
+  
   static MeshPtr quadMesh(Teuchos::ParameterList &parameters);
   
   static MeshPtr quadMesh(BFPtr bf, int H1Order, int pToAddTest=2,
@@ -36,7 +38,12 @@ public:
   
   static MeshPtr quadMesh(BFPtr bf, int H1Order, FieldContainer<double> &quadNodes, int pToAddTest=2);
   
+  static MeshTopologyPtr quadMeshTopology(double width=1.0, double height=1.0, int horizontalElements=1, int verticalElements=1, bool divideIntoTriangles=false,
+                                          double x0=0.0, double y0=0.0, vector<PeriodicBCPtr> periodicBCs=vector<PeriodicBCPtr>());
+  
   static MeshPtr rectilinearMesh(BFPtr bf, vector<double> dimensions, vector<int> elementCounts, int H1Order, int pToAddTest=-1, vector<double> x0 = vector<double>());
+  
+  static MeshTopologyPtr rectilinearMeshTopology(vector<double> dimensions, vector<int> elementCounts, vector<double> x0 = vector<double>());
   
   static MeshPtr hemkerMesh(double meshWidth, double meshHeight, double cylinderRadius, // cylinder is centered in quad mesh.
                             BFPtr bilinearForm, int H1Order, int pToAddTest)
