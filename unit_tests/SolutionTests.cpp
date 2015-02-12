@@ -175,14 +175,22 @@ namespace {
     Teuchos::RCP<Solution> spaceTimeSolution = Teuchos::rcp( new Solution(spaceTimeMesh) );
 
     map<int, Teuchos::RCP<Function> > functionMap;
-    functionMap[0] = Function::xn(1);
-    functionMap[1] = Function::xn(1);
-    functionMap[2] = Function::xn(1);
-    functionMap[3] = Function::xn(1);
+    functionMap[uhat->ID()] = Function::xn(1);
+    functionMap[fhat->ID()] = Function::xn(1);
+    functionMap[u->ID()] = Function::xn(1);
+    functionMap[sigma->ID()] = Function::xn(1);
     spaceTimeSolution->projectOntoMesh(functionMap);
 
-    // If you make it this far without throwing an exception, pass
-    TEST_ASSERT(true);
+    double tol = 1e-14;
+    for (map<int, Teuchos::RCP<Function> >::iterator entryIt = functionMap.begin(); entryIt != functionMap.end(); entryIt++) {
+      int trialID = entryIt->first;
+      VarPtr trialVar = varFactory.trial(trialID);
+      FunctionPtr f_expected = entryIt->second;
+      FunctionPtr f_actual = Function::solution(trialVar, spaceTimeSolution);
+      
+      double err_L2 = (f_actual - f_expected)->l2norm(spaceTimeMesh);
+      TEST_COMPARE(err_L2, <, tol);
+    }
   }  
 
   TEUCHOS_UNIT_TEST( Solution, ProjectOnTensorMesh2D )
@@ -273,14 +281,22 @@ namespace {
     Teuchos::RCP<Solution> spaceTimeSolution = Teuchos::rcp( new Solution(spaceTimeMesh) );
 
     map<int, Teuchos::RCP<Function> > functionMap;
-    functionMap[0] = Function::xn(1);
-    functionMap[1] = Function::xn(1);
-    functionMap[2] = Function::xn(1);
-    functionMap[3] = Function::xn(1);
+    functionMap[uhat->ID()] = Function::xn(1);
+    functionMap[fhat->ID()] = Function::xn(1);
+    functionMap[u->ID()] = Function::xn(1);
+    functionMap[sigma->ID()] = Function::xn(1);
     spaceTimeSolution->projectOntoMesh(functionMap);
-
-    // If you make it this far without throwing an exception, pass
-    TEST_ASSERT(true);
+    
+    double tol = 1e-14;
+    for (map<int, Teuchos::RCP<Function> >::iterator entryIt = functionMap.begin(); entryIt != functionMap.end(); entryIt++) {
+      int trialID = entryIt->first;
+      VarPtr trialVar = varFactory.trial(trialID);
+      FunctionPtr f_expected = entryIt->second;
+      FunctionPtr f_actual = Function::solution(trialVar, spaceTimeSolution);
+      
+      double err_L2 = (f_actual - f_expected)->l2norm(spaceTimeMesh);
+      TEST_COMPARE(err_L2, <, tol);
+    }
   }
 
   TEUCHOS_UNIT_TEST( Solution, ProjectOnTensorMesh3D )
@@ -381,13 +397,21 @@ namespace {
     Teuchos::RCP<Solution> spaceTimeSolution = Teuchos::rcp( new Solution(spaceTimeMesh) );
 
     map<int, Teuchos::RCP<Function> > functionMap;
-    functionMap[0] = Function::xn(1);
-    functionMap[1] = Function::xn(1);
-    functionMap[2] = Function::xn(1);
-    functionMap[3] = Function::xn(1);
+    functionMap[uhat->ID()] = Function::xn(1);
+    functionMap[fhat->ID()] = Function::xn(1);
+    functionMap[u->ID()] = Function::xn(1);
+    functionMap[sigma->ID()] = Function::xn(1);
     spaceTimeSolution->projectOntoMesh(functionMap);
-
-    // If you make it this far without throwing an exception, pass
-    TEST_ASSERT(true);
+    
+    double tol = 1e-14;
+    for (map<int, Teuchos::RCP<Function> >::iterator entryIt = functionMap.begin(); entryIt != functionMap.end(); entryIt++) {
+      int trialID = entryIt->first;
+      VarPtr trialVar = varFactory.trial(trialID);
+      FunctionPtr f_expected = entryIt->second;
+      FunctionPtr f_actual = Function::solution(trialVar, spaceTimeSolution);
+      
+      double err_L2 = (f_actual - f_expected)->l2norm(spaceTimeMesh);
+      TEST_COMPARE(err_L2, <, tol);
+    }
   }
 } // namespace
