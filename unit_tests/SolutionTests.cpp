@@ -22,10 +22,33 @@
 
 namespace {
 
+  vector<double> makeVertex(double v0) {
+    vector<double> v;
+    v.push_back(v0);
+    return v;
+  }
+
   vector<double> makeVertex(double v0, double v1) {
     vector<double> v;
     v.push_back(v0);
     v.push_back(v1);
+    return v;
+  }
+
+  vector<double> makeVertex(double v0, double v1, double v2) {
+    vector<double> v;
+    v.push_back(v0);
+    v.push_back(v1);
+    v.push_back(v2);
+    return v;
+  }
+
+  vector<double> makeVertex(double v0, double v1, double v2, double v3) {
+    vector<double> v;
+    v.push_back(v0);
+    v.push_back(v1);
+    v.push_back(v2);
+    v.push_back(v3);
     return v;
   }
 
@@ -79,6 +102,7 @@ namespace {
       }
     }
   }
+
   TEUCHOS_UNIT_TEST( Solution, ProjectOnTensorMesh1D )
   {
     int tensorialDegree = 1;
@@ -157,6 +181,213 @@ namespace {
     functionMap[3] = Function::xn(1);
     spaceTimeSolution->projectOntoMesh(functionMap);
 
+    // If you make it this far without throwing an exception, pass
+    TEST_ASSERT(true);
+  }  
+
+  TEUCHOS_UNIT_TEST( Solution, ProjectOnTensorMesh2D )
+  {
+    int tensorialDegree = 1;
+    CellTopoPtr quad_x_time = CellTopology::cellTopology(shards::getCellTopologyData<shards::Quadrilateral<4> >(), tensorialDegree);
+    CellTopoPtr tri_x_time = CellTopology::cellTopology(shards::getCellTopologyData<shards::Triangle<3> >(), tensorialDegree);
+
+    // let's draw a little house
+    vector<double> v00 = makeVertex(-1,0,0);
+    vector<double> v10 = makeVertex(1,0,0);
+    vector<double> v20 = makeVertex(1,2,0);
+    vector<double> v30 = makeVertex(-1,2,0);
+    vector<double> v40 = makeVertex(0.0,3,0);
+    vector<double> v01 = makeVertex(-1,0,1);
+    vector<double> v11 = makeVertex(1,0,1);
+    vector<double> v21 = makeVertex(1,2,1);
+    vector<double> v31 = makeVertex(-1,2,1);
+    vector<double> v41 = makeVertex(0.0,3,1);
+
+    vector< vector<double> > spaceTimeVertices;
+    spaceTimeVertices.push_back(v00);
+    spaceTimeVertices.push_back(v10);
+    spaceTimeVertices.push_back(v20);
+    spaceTimeVertices.push_back(v30);
+    spaceTimeVertices.push_back(v40);
+    spaceTimeVertices.push_back(v01);
+    spaceTimeVertices.push_back(v11);
+    spaceTimeVertices.push_back(v21);
+    spaceTimeVertices.push_back(v31);
+    spaceTimeVertices.push_back(v41);
+
+    vector<unsigned> spaceTimeQuadVertexList;
+    spaceTimeQuadVertexList.push_back(0);
+    spaceTimeQuadVertexList.push_back(1);
+    spaceTimeQuadVertexList.push_back(2);
+    spaceTimeQuadVertexList.push_back(3);
+    spaceTimeQuadVertexList.push_back(5);
+    spaceTimeQuadVertexList.push_back(6);
+    spaceTimeQuadVertexList.push_back(7);
+    spaceTimeQuadVertexList.push_back(8);
+    vector<unsigned> spaceTimeTriVertexList;
+    spaceTimeTriVertexList.push_back(3);
+    spaceTimeTriVertexList.push_back(2);
+    spaceTimeTriVertexList.push_back(4);
+    spaceTimeTriVertexList.push_back(8);
+    spaceTimeTriVertexList.push_back(7);
+    spaceTimeTriVertexList.push_back(9);
+
+    vector< vector<unsigned> > spaceTimeElementVertices;
+    spaceTimeElementVertices.push_back(spaceTimeQuadVertexList);
+    spaceTimeElementVertices.push_back(spaceTimeTriVertexList);
+
+    vector< CellTopoPtr > spaceTimeCellTopos;
+    spaceTimeCellTopos.push_back(quad_x_time);
+    spaceTimeCellTopos.push_back(tri_x_time);
+
+    MeshGeometryPtr spaceTimeMeshGeometry = Teuchos::rcp( new MeshGeometry(spaceTimeVertices, spaceTimeElementVertices, spaceTimeCellTopos) );
+    MeshTopologyPtr spaceTimeMeshTopology = Teuchos::rcp( new MeshTopology(spaceTimeMeshGeometry) );
+
+    ////////////////////   DECLARE VARIABLES   ///////////////////////
+    // define test variables
+    VarFactory varFactory;
+    VarPtr tau = varFactory.testVar("tau", HDIV);
+    VarPtr v = varFactory.testVar("v", HGRAD);
+
+    // define trial variables
+    VarPtr uhat = varFactory.traceVar("uhat");
+    VarPtr fhat = varFactory.fluxVar("fhat");
+    VarPtr u = varFactory.fieldVar("u");
+    VarPtr sigma = varFactory.fieldVar("sigma", VECTOR_L2);
+
+    ////////////////////   DEFINE BILINEAR FORM   ///////////////////////
+    BFPtr bf = Teuchos::rcp( new BF(varFactory) );
+    // tau terms:
+    bf->addTerm(sigma, tau);
+    bf->addTerm(u, tau->div());
+    bf->addTerm(-uhat, tau->dot_normal());
+
+    // v terms:
+    bf->addTerm( sigma, v->grad() );
+    bf->addTerm( fhat, v);
+
+    ////////////////////   BUILD MESH   ///////////////////////
+    int H1Order = 4, pToAdd = 2;
+    Teuchos::RCP<Mesh> spaceTimeMesh = Teuchos::rcp( new Mesh (spaceTimeMeshTopology, bf, H1Order, pToAdd) );
+
+    Teuchos::RCP<Solution> spaceTimeSolution = Teuchos::rcp( new Solution(spaceTimeMesh) );
+
+    map<int, Teuchos::RCP<Function> > functionMap;
+    functionMap[0] = Function::xn(1);
+    functionMap[1] = Function::xn(1);
+    functionMap[2] = Function::xn(1);
+    functionMap[3] = Function::xn(1);
+    spaceTimeSolution->projectOntoMesh(functionMap);
+
+    // If you make it this far without throwing an exception, pass
+    TEST_ASSERT(true);
+  }
+
+  TEUCHOS_UNIT_TEST( Solution, ProjectOnTensorMesh3D )
+  {
+    int tensorialDegree = 1;
+    CellTopoPtr hex_x_time = CellTopology::cellTopology(shards::getCellTopologyData<shards::Hexahedron<8> >(), tensorialDegree);
+
+    // let's draw a little box
+    vector<double> v00 = makeVertex(0,0,0,0);
+    vector<double> v10 = makeVertex(1,0,0,0);
+    vector<double> v20 = makeVertex(1,1,0,0);
+    vector<double> v30 = makeVertex(0,1,0,0);
+    vector<double> v40 = makeVertex(0,0,1,0);
+    vector<double> v50 = makeVertex(1,0,1,0);
+    vector<double> v60 = makeVertex(1,1,1,0);
+    vector<double> v70 = makeVertex(0,1,1,0);
+    vector<double> v01 = makeVertex(0,0,0,1);
+    vector<double> v11 = makeVertex(1,0,0,1);
+    vector<double> v21 = makeVertex(1,1,0,1);
+    vector<double> v31 = makeVertex(0,1,0,1);
+    vector<double> v41 = makeVertex(0,0,1,1);
+    vector<double> v51 = makeVertex(1,0,1,1);
+    vector<double> v61 = makeVertex(1,1,1,1);
+    vector<double> v71 = makeVertex(0,1,1,1);
+
+    vector< vector<double> > spaceTimeVertices;
+    spaceTimeVertices.push_back(v00);
+    spaceTimeVertices.push_back(v10);
+    spaceTimeVertices.push_back(v20);
+    spaceTimeVertices.push_back(v30);
+    spaceTimeVertices.push_back(v40);
+    spaceTimeVertices.push_back(v50);
+    spaceTimeVertices.push_back(v60);
+    spaceTimeVertices.push_back(v70);
+    spaceTimeVertices.push_back(v01);
+    spaceTimeVertices.push_back(v11);
+    spaceTimeVertices.push_back(v21);
+    spaceTimeVertices.push_back(v31);
+    spaceTimeVertices.push_back(v41);
+    spaceTimeVertices.push_back(v51);
+    spaceTimeVertices.push_back(v61);
+    spaceTimeVertices.push_back(v71);
+
+    vector<unsigned> spaceTimeHexVertexList;
+    spaceTimeHexVertexList.push_back(0);
+    spaceTimeHexVertexList.push_back(1);
+    spaceTimeHexVertexList.push_back(2);
+    spaceTimeHexVertexList.push_back(3);
+    spaceTimeHexVertexList.push_back(4);
+    spaceTimeHexVertexList.push_back(5);
+    spaceTimeHexVertexList.push_back(6);
+    spaceTimeHexVertexList.push_back(7);
+    spaceTimeHexVertexList.push_back(8);
+    spaceTimeHexVertexList.push_back(9);
+    spaceTimeHexVertexList.push_back(10);
+    spaceTimeHexVertexList.push_back(11);
+    spaceTimeHexVertexList.push_back(12);
+    spaceTimeHexVertexList.push_back(13);
+    spaceTimeHexVertexList.push_back(14);
+    spaceTimeHexVertexList.push_back(15);
+
+    vector< vector<unsigned> > spaceTimeElementVertices;
+    spaceTimeElementVertices.push_back(spaceTimeHexVertexList);
+
+    vector< CellTopoPtr > spaceTimeCellTopos;
+    spaceTimeCellTopos.push_back(hex_x_time);
+
+    MeshGeometryPtr spaceTimeMeshGeometry = Teuchos::rcp( new MeshGeometry(spaceTimeVertices, spaceTimeElementVertices, spaceTimeCellTopos) );
+    MeshTopologyPtr spaceTimeMeshTopology = Teuchos::rcp( new MeshTopology(spaceTimeMeshGeometry) );
+
+    ////////////////////   DECLARE VARIABLES   ///////////////////////
+    // define test variables
+    VarFactory varFactory;
+    VarPtr tau = varFactory.testVar("tau", HDIV);
+    VarPtr v = varFactory.testVar("v", HGRAD);
+
+    // define trial variables
+    VarPtr uhat = varFactory.traceVar("uhat");
+    VarPtr fhat = varFactory.fluxVar("fhat");
+    VarPtr u = varFactory.fieldVar("u");
+    VarPtr sigma = varFactory.fieldVar("sigma", VECTOR_L2);
+
+    ////////////////////   DEFINE BILINEAR FORM   ///////////////////////
+    BFPtr bf = Teuchos::rcp( new BF(varFactory) );
+    // tau terms:
+    bf->addTerm(sigma, tau);
+    bf->addTerm(u, tau->div());
+    bf->addTerm(-uhat, tau->dot_normal());
+
+    // v terms:
+    bf->addTerm( sigma, v->grad() );
+    bf->addTerm( fhat, v);
+
+    ////////////////////   BUILD MESH   ///////////////////////
+    int H1Order = 4, pToAdd = 2;
+    Teuchos::RCP<Mesh> spaceTimeMesh = Teuchos::rcp( new Mesh (spaceTimeMeshTopology, bf, H1Order, pToAdd) );
+
+    Teuchos::RCP<Solution> spaceTimeSolution = Teuchos::rcp( new Solution(spaceTimeMesh) );
+
+    map<int, Teuchos::RCP<Function> > functionMap;
+    functionMap[0] = Function::xn(1);
+    functionMap[1] = Function::xn(1);
+    functionMap[2] = Function::xn(1);
+    functionMap[3] = Function::xn(1);
+    spaceTimeSolution->projectOntoMesh(functionMap);
+
+    // If you make it this far without throwing an exception, pass
     TEST_ASSERT(true);
   }
 } // namespace
