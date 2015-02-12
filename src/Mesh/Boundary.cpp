@@ -126,7 +126,7 @@ void Boundary::bcsToImpose(FieldContainer<GlobalIndexType> &globalIndices, Field
 void Boundary::bcsToImpose(FieldContainer<GlobalIndexType> &globalIndices,
                            FieldContainer<double> &globalValues, BC &bc,
                            DofInterpreter* dofInterpreter, const Epetra_Map *globalDofMap) {
-  int rank = Teuchos::GlobalMPISession::getRank();
+//  int rank = Teuchos::GlobalMPISession::getRank();
   
   set< GlobalIndexType > rankLocalCells = _mesh->cellIDsInPartition();
   
