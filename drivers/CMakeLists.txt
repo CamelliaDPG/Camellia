@@ -2,6 +2,7 @@ project(DPGDrivers)
 
 option(BUILD_DPGTESTS_DRIVER "Build DPGTests driver" ON)
 option(BUILD_TRUMAN_DRIVERS "Build drivers in Truman directory" ON)
+option(BUILD_TRUMAN_TESTS_DRIVERS "Build drivers in Truman/Tests directory" OFF)
 option(BUILD_CONFUSION_JESSE_DRIVERS "Build drivers in Confusion_Jesse directory" ON)
 option(BUILD_CONVECTION_DRIVERS "Build drivers in Convection directory" ON)
 option(BUILD_INCOMPRESSIBLENS_DRIVERS "Build drivers in IncompressibleNS directory" ON)
@@ -52,6 +53,14 @@ if (BUILD_TRUMAN_DRIVERS)
 else()
   MESSAGE("Not setting up makefiles for drivers in drivers/Truman, because BUILD_TRUMAN_DRIVERS is OFF.")  
 endif(BUILD_TRUMAN_DRIVERS)
+
+if (BUILD_TRUMAN_TESTS_DRIVERS)
+  add_subdirectory(Truman/Tests)
+  MESSAGE("Setting up makefiles for drivers in drivers/Truman/Tests, because BUILD_TRUMAN_TESTS_DRIVERS is ON.")
+else()
+  MESSAGE("Not setting up makefiles for drivers in drivers/Truman/Tests, because BUILD_TRUMAN_TESTS_DRIVERS is OFF.")  
+endif(BUILD_TRUMAN_TESTS_DRIVERS)
+
 
 add_subdirectory(TutorialDriver)
 

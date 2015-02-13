@@ -535,12 +535,41 @@ unsigned CamelliaCellTools::permutationComposition( CellTopoPtr cellTopo, unsign
 }
 
 unsigned CamelliaCellTools::permutationInverse( CellTopoPtr cellTopo, unsigned permutation ) {
-  if (cellTopo->getTensorialDegree() == 0) {
-    return permutationInverse(cellTopo->getShardsTopology(), permutation);
-  } else {
-    cout << "CamelliaCellTools::permutationInverse() does not yet support tensorial degree > 0.\n";
-    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "CamelliaCellTools::permutationInverse() does not yet support tensorial degree > 0.");
+  // 2-12-15: the code below copied from the version of permutationInverse that takes a shards::CellTopology as argument,
+  //          modified slightly to accommodate Camellia::CellTopology
+  typedef unsigned Permutation;
+  static map< CellTopologyKey, map< Permutation, Permutation > > inverseMap;
+  
+  if (permutation==0) return 0;  // identity
+  
+  if (inverseMap.find(cellTopo->getKey()) == inverseMap.end()) { // build lookup table
+    int permCount = cellTopo->getNodePermutationCount();
+    int nodeCount = cellTopo->getNodeCount();
+    vector<unsigned> identityOrder;
+    for (unsigned node=0; node<nodeCount; node++) {
+      identityOrder.push_back(node);
+    }
+    for (int i=0; i<permCount; i++) {
+      vector<unsigned> inverseOrder(nodeCount);
+      for (unsigned node=0; node<nodeCount; node++) {
+        unsigned i_inverse_of_node = cellTopo->getNodePermutationInverse(i, node);
+        inverseOrder[node] = i_inverse_of_node;
+      }
+      inverseMap[cellTopo->getKey()][i] = permutationMatchingOrder(cellTopo, identityOrder, inverseOrder);
+    }
+    if (cellTopo->getKey() == CellTopology::point()->getKey()) {
+      // for consistency of interface, we treat this a bit differently than shards -- we support the identity permutation
+      // (we also consider a Node to have one node, index 0)
+      inverseMap[cellTopo->getKey()][0] = 0;
+    }
   }
+  
+  if (inverseMap[cellTopo->getKey()].find(permutation) == inverseMap[cellTopo->getKey()].end()) {
+    cout << "Permutation not found.\n";
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Permutation not found");
+  }
+  
+  return inverseMap[cellTopo->getKey()][permutation];
 }
 
 unsigned CamelliaCellTools::permutationInverse( const shards::CellTopology &cellTopo, unsigned permutation ) {

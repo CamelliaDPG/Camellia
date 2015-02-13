@@ -98,7 +98,8 @@ public:
   // return cell integrals specified in input argument cellIDs
   map<int,double> cellIntegrals(vector<GlobalIndexType> cellIDs, Teuchos::RCP<Mesh> mesh, int cubatureDegreeEnrichment = 0, bool testVsTest = false);
 
-  double integrate( Teuchos::RCP<Mesh> mesh, int cubatureDegreeEnrichment = 0, bool testVsTest = false, bool requireSideCaches = false);
+  double integrate( Teuchos::RCP<Mesh> mesh, int cubatureDegreeEnrichment = 0, bool testVsTest = false, bool requireSideCaches = false,
+                    bool spatialSidesOnly = false);
 
   // adaptive quadrature
   double integrate(Teuchos::RCP<Mesh> mesh, double tol, bool testVsTest = false);
@@ -106,7 +107,7 @@ public:
   bool isPositive(BasisCachePtr basisCache);
   bool isPositive(Teuchos::RCP<Mesh> mesh, int cubEnrich = 0, bool testVsTest = false);
 
-  double l2norm(Teuchos::RCP<Mesh> mesh, int cubatureDegreeEnrichment = 0);
+  double l2norm(Teuchos::RCP<Mesh> mesh, int cubatureDegreeEnrichment = 0, bool spatialSidesOnly = false);
 
   // divide values by this function (supported only when this is a scalar--otherwise values would change rank...)
   virtual void scalarMultiplyFunctionValues(FieldContainer<double> &functionValues, BasisCachePtr basisCache);

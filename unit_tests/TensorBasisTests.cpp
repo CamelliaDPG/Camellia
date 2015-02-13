@@ -33,6 +33,64 @@
 using namespace Camellia;
 
 namespace {
+  TEUCHOS_UNIT_TEST( TensorBasis, BasisOrdinalsForSubcell ) {
+    // TODO: write this test
+
+    int timeH1Order = 2, spaceH1Order = 2;
+    
+    CellTopoPtr line = CellTopology::line();
+    
+    BasisFactoryPtr basisFactory = BasisFactory::basisFactory();
+    BasisPtr lineBasis = basisFactory->getBasis(timeH1Order, line, Camellia::FUNCTION_SPACE_HGRAD);
+    
+    CellTopoPtr spaceTopo = CellTopology::line();
+    BasisPtr spaceBasis = basisFactory->getBasis(spaceH1Order, spaceTopo, Camellia::FUNCTION_SPACE_HGRAD);
+    
+    typedef Camellia::TensorBasis<double, FieldContainer<double> > TensorBasis;
+    Teuchos::RCP<TensorBasis> tensorBasis = Teuchos::rcp( new TensorBasis(spaceBasis, lineBasis) );
+    
+    // sanity check: tensorBasis should have cardinality = spaceBasis->getCardinality() * lineBasis->getCardinality()
+    TEST_EQUALITY(tensorBasis->getCardinality(), spaceBasis->getCardinality() * lineBasis->getCardinality());
+    
+    // if we get all dofOrdinals for all subcells, that should cover the whole tensor basis
+    int allSubcellDofOrdinalsCount = tensorBasis->dofOrdinalsForSubcells(spaceTopo->getDimension() + line->getDimension(), true).size();
+    TEST_EQUALITY(tensorBasis->getCardinality(), allSubcellDofOrdinalsCount);
+    
+    CellTopoPtr spaceTimeTopo = tensorBasis->domainTopology();
+    
+    map<unsigned, pair<unsigned,unsigned> > basisOrdinalMap; // maps spaceTime --> (space, time) basis ordinals for nodes
+    // check nodes
+    int vertexDim = 0;
+    int subcellDofOrdinal = 0;
+    for (unsigned spaceNode=0; spaceNode < spaceTopo->getNodeCount(); spaceNode++) {
+      unsigned spaceBasisOrdinal = spaceBasis->getDofOrdinal(vertexDim, spaceNode, subcellDofOrdinal);
+      for (unsigned timeNode=0; timeNode < line->getNodeCount(); timeNode++) {
+        unsigned timeBasisOrdinal = lineBasis->getDofOrdinal(vertexDim, timeNode, subcellDofOrdinal);
+        vector<unsigned> componentNodes(2);
+        componentNodes[0] = spaceNode;
+        componentNodes[1] = timeNode;
+        unsigned spaceTimeNode = spaceTimeTopo->getNodeFromTensorialComponentNodes(componentNodes);
+        unsigned spaceTimeBasisOrdinal = tensorBasis->getDofOrdinal(vertexDim, spaceTimeNode, subcellDofOrdinal);
+        
+        if ((spaceBasisOrdinal == (unsigned) -1) || (timeBasisOrdinal == (unsigned)-1)) {
+          // expect that spaceTimeBasisOrdinal is -1
+          TEST_EQUALITY((unsigned)-1, spaceTimeBasisOrdinal);
+        } else {
+          // otherwise, expect it's not
+          TEST_INEQUALITY((unsigned)-1, spaceTimeBasisOrdinal);
+        }
+        
+        basisOrdinalMap[spaceTimeBasisOrdinal] = make_pair(spaceBasisOrdinal, timeBasisOrdinal);
+      }
+    }
+    
+    // test that the basisOrdinalMap entries are unique
+    int spaceNodeOrdinalCount = spaceBasis->dofOrdinalsForVertices().size();
+    int timeNodeOrdinalCount = lineBasis->dofOrdinalsForVertices().size();
+    
+    TEST_EQUALITY(basisOrdinalMap.size(), spaceNodeOrdinalCount * timeNodeOrdinalCount);
+  }
+  
   TEUCHOS_UNIT_TEST( TensorBasis, TensorBasisOrderingAgreesWithTensorTopologyOrdering ) {
     int H1Order = 1;
     

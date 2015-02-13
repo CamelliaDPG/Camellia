@@ -184,20 +184,20 @@ NavierStokesVGPFormulation::NavierStokesVGPFormulation(MeshTopologyPtr meshTopol
   }
   
   if (spaceDim == 2) {
-    _navierStokesBF->addTerm(- Re * sigma1_prev->x() * u1 - Re * sigma1_prev->y() * u2, v1);
-    _navierStokesBF->addTerm(- Re * sigma2_prev->x() * u1 - Re * sigma2_prev->y() * u2, v2);
+    _navierStokesBF->addTerm( Re * sigma1_prev->x() * u1 + Re * sigma1_prev->y() * u2, v1);
+    _navierStokesBF->addTerm( Re * sigma2_prev->x() * u1 + Re * sigma2_prev->y() * u2, v2);
     
-    _navierStokesBF->addTerm( - Re * u1_prev * sigma1->x() - Re * u2_prev * sigma1->y(), v1);
-    _navierStokesBF->addTerm( - Re * u1_prev * sigma2->x() - Re * u2_prev * sigma2->y(), v2);
+    _navierStokesBF->addTerm( Re * u1_prev * sigma1->x() + Re * u2_prev * sigma1->y(), v1);
+    _navierStokesBF->addTerm( Re * u1_prev * sigma2->x() + Re * u2_prev * sigma2->y(), v2);
   } else {
 
-    _navierStokesBF->addTerm(- Re * sigma1_prev->x() * u1 - Re * sigma1_prev->y() * u2 - Re * sigma1_prev->z() * u3, v1);
-    _navierStokesBF->addTerm(- Re * sigma2_prev->x() * u1 - Re * sigma2_prev->y() * u2 - Re * sigma2_prev->z() * u3, v2);
-    _navierStokesBF->addTerm(- Re * sigma3_prev->x() * u1 - Re * sigma3_prev->y() * u2 - Re * sigma3_prev->z() * u3, v3);
+    _navierStokesBF->addTerm( Re * sigma1_prev->x() * u1 + Re * sigma1_prev->y() * u2 + Re * sigma1_prev->z() * u3, v1);
+    _navierStokesBF->addTerm( Re * sigma2_prev->x() * u1 + Re * sigma2_prev->y() * u2 + Re * sigma2_prev->z() * u3, v2);
+    _navierStokesBF->addTerm( Re * sigma3_prev->x() * u1 + Re * sigma3_prev->y() * u2 + Re * sigma3_prev->z() * u3, v3);
     
-    _navierStokesBF->addTerm( - Re * u1_prev * sigma1->x() - Re * u2_prev * sigma1->y() - Re * u3_prev * sigma1->z(), v1);
-    _navierStokesBF->addTerm( - Re * u1_prev * sigma2->x() - Re * u2_prev * sigma2->y() - Re * u3_prev * sigma2->z(), v2);
-    _navierStokesBF->addTerm( - Re * u1_prev * sigma3->x() - Re * u2_prev * sigma3->y() - Re * u3_prev * sigma3->z(), v3);
+    _navierStokesBF->addTerm( Re * u1_prev * sigma1->x() + Re * u2_prev * sigma1->y() + Re * u3_prev * sigma1->z(), v1);
+    _navierStokesBF->addTerm( Re * u1_prev * sigma2->x() + Re * u2_prev * sigma2->y() + Re * u3_prev * sigma2->z(), v2);
+    _navierStokesBF->addTerm( Re * u1_prev * sigma3->x() + Re * u2_prev * sigma3->y() + Re * u3_prev * sigma3->z(), v3);
   }
   
   // set the inner product to the graph norm:
@@ -209,26 +209,7 @@ NavierStokesVGPFormulation::NavierStokesVGPFormulation(MeshTopologyPtr meshTopol
     forcingFunction = Function::zero(vectorRank);
   }
   
-  RHSPtr rhs = RHS::rhs();
-  if (forcingFunction != Teuchos::null) {
-    rhs->addTerm( forcingFunction->x() * v1 );
-    rhs->addTerm( forcingFunction->y() * v2 );
-    if (spaceDim == 3) rhs->addTerm( forcingFunction->z() * v3 );
-  }
-  
-  // subtract the stokesBF from the RHS:
-  rhs->addTerm( -_stokesBF->testFunctional(backgroundFlowWeakReference, _neglectFluxesOnRHS) );
-  
-  // finally, add the u sigma term:
-  if (spaceDim == 2) {
-    rhs->addTerm( ((u1_prev / _mu) * sigma1_prev->x() + (u2_prev / _mu) * sigma1_prev->y()) * v1 );
-    rhs->addTerm( ((u1_prev / _mu) * sigma2_prev->x() + (u2_prev / _mu) * sigma2_prev->y()) * v2 );
-  } else {
-    rhs->addTerm( ((u1_prev / _mu) * sigma1_prev->x() + (u2_prev / _mu) * sigma1_prev->y() + (u3_prev / _mu) * sigma1_prev->z()) * v1 );
-    rhs->addTerm( ((u1_prev / _mu) * sigma2_prev->x() + (u2_prev / _mu) * sigma2_prev->y() + (u3_prev / _mu) * sigma2_prev->z()) * v2 );
-    rhs->addTerm( ((u1_prev / _mu) * sigma3_prev->x() + (u2_prev / _mu) * sigma3_prev->y() + (u3_prev / _mu) * sigma3_prev->z()) * v3 );
-  }
-  
+  RHSPtr rhs = this->rhs(forcingFunction, _neglectFluxesOnRHS);
   _solnIncrement->setRHS(rhs);
   
   BCPtr bcSolnIncrement = BC::bc();
@@ -407,10 +388,10 @@ Teuchos::RCP<ExactSolution> NavierStokesVGPFormulation::exactSolution(FunctionPt
   FunctionPtr n = Function::normal();
   FunctionPtr t1n_exact, t2n_exact, t3n_exact;
   
-  t1n_exact = sigma1_exact * n - p_exact * n->x();
-  t2n_exact = sigma2_exact * n - p_exact * n->y();
+  t1n_exact = p_exact * n->x() - sigma1_exact * n;
+  t2n_exact = p_exact * n->y() - sigma2_exact * n;
   if (spaceDim==3) {
-    t3n_exact = sigma3_exact * n - p_exact * n->z();
+    t3n_exact = p_exact * n->z() - sigma3_exact * n;
   }
   
   VarPtr t1n = this->tn_hat(1);
@@ -533,12 +514,12 @@ RHSPtr NavierStokesVGPFormulation::rhs(FunctionPtr f, bool excludeFluxesAndTrace
 
   // finally, add the u sigma term:
   if (spaceDim == 2) {
-    rhs->addTerm( ((u1_prev / _mu) * sigma1_prev->x() + (u2_prev / _mu) * sigma1_prev->y()) * v1 );
-    rhs->addTerm( ((u1_prev / _mu) * sigma2_prev->x() + (u2_prev / _mu) * sigma2_prev->y()) * v2 );
+    rhs->addTerm( -((u1_prev / _mu) * sigma1_prev->x() + (u2_prev / _mu) * sigma1_prev->y()) * v1 );
+    rhs->addTerm( -((u1_prev / _mu) * sigma2_prev->x() + (u2_prev / _mu) * sigma2_prev->y()) * v2 );
   } else {
-    rhs->addTerm( ((u1_prev / _mu) * sigma1_prev->x() + (u2_prev / _mu) * sigma1_prev->y() + (u3_prev / _mu) * sigma1_prev->z()) * v1 );
-    rhs->addTerm( ((u1_prev / _mu) * sigma2_prev->x() + (u2_prev / _mu) * sigma2_prev->y() + (u3_prev / _mu) * sigma2_prev->z()) * v2 );
-    rhs->addTerm( ((u1_prev / _mu) * sigma3_prev->x() + (u2_prev / _mu) * sigma3_prev->y() + (u3_prev / _mu) * sigma3_prev->z()) * v3 );
+    rhs->addTerm( -((u1_prev / _mu) * sigma1_prev->x() + (u2_prev / _mu) * sigma1_prev->y() + (u3_prev / _mu) * sigma1_prev->z()) * v1 );
+    rhs->addTerm( -((u1_prev / _mu) * sigma2_prev->x() + (u2_prev / _mu) * sigma2_prev->y() + (u3_prev / _mu) * sigma2_prev->z()) * v2 );
+    rhs->addTerm( -((u1_prev / _mu) * sigma3_prev->x() + (u2_prev / _mu) * sigma3_prev->y() + (u3_prev / _mu) * sigma3_prev->z()) * v3 );
   }
   return rhs;
 }

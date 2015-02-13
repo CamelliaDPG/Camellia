@@ -95,8 +95,8 @@ public:
   void evaluate(Intrepid::FieldContainer<double> &values, SolutionPtr solution, BasisCachePtr basisCache,
                 bool applyCubatureWeights = false);
   
-  FunctionPtr evaluate(Teuchos::map< int, FunctionPtr> &varFunctions);
-  FunctionPtr evaluate(Teuchos::map< int, FunctionPtr> &varFunctions, bool boundaryPart);
+  FunctionPtr evaluate(const Teuchos::map< int, FunctionPtr> &varFunctions);
+  FunctionPtr evaluate(const Teuchos::map< int, FunctionPtr> &varFunctions, bool boundaryPart);
   
   LinearTermPtr getBoundaryOnlyPart();
   LinearTermPtr getNonBoundaryOnlyPart();

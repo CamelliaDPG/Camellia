@@ -42,9 +42,6 @@ GlobalDofAssignment::GlobalDofAssignment(MeshPtr mesh, VarFactory varFactory,
   set<GlobalIndexType> activeCellIDs;
   activeCellIDs.insert(cellIndices.begin(),cellIndices.end()); // for distributed mesh, we'd do some logic with cellID offsets for each MPI rank.  (cellID = cellIndex + cellIDOffsetForRank)
   
-  unsigned spaceDim = _meshTopology->getSpaceDim();
-  unsigned sideDim = spaceDim - 1;
-  
   map<GlobalIndexType, unsigned> sideIndexParityAssignmentCount; // tracks the number of times each side in the mesh has been assigned a parity.
   for (set<GlobalIndexType>::iterator cellIDIt = activeCellIDs.begin(); cellIDIt != activeCellIDs.end(); cellIDIt++) {
     GlobalIndexType cellID = *cellIDIt;
@@ -57,39 +54,11 @@ GlobalDofAssignment::GlobalDofAssignment(MeshPtr mesh, VarFactory varFactory,
     
     assignInitialElementType(cellID);
     assignParities(cellID);
-//    unsigned sideCount = CamelliaCellTools::getSideCount(*cell->topology());
-//    
-//    vector<int> cellParities(sideCount);
-//    for (int sideOrdinal=0; sideOrdinal<sideCount; sideOrdinal++) {
-//      unsigned sideEntityIndex = cell->entityIndex(sideDim, sideOrdinal);
-//      if (sideIndexParityAssignmentCount[sideEntityIndex] == 0) {
-//        cellParities[sideOrdinal] = 1;
-//      } else if (sideIndexParityAssignmentCount[sideEntityIndex] == 1) {
-//        cellParities[sideOrdinal] = -1;
-//      } else {
-//        cout << "Internal error during GDAMaxRule2D construction: encountered side more than twice.\n";
-//        TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Internal error: encountered side more than twice.");
-//      }
-//      sideIndexParityAssignmentCount[sideEntityIndex]++;
-//    }
-//    _cellSideParitiesForCellID[cellID] = cellParities;
   }
   
   _numPartitions = Teuchos::GlobalMPISession::getNProc();
-  _partitions = vector<set<GlobalIndexType> >(_numPartitions);
   
-//  cout << "Experimentally (for debugging purposes) setting a more interesting initial partition in GlobalDofAssignment.\n";
-//  int cellsPerPartition = activeCellIDs.size() / _numPartitions;
-//  int extraCells = activeCellIDs.size() - cellsPerPartition * _numPartitions;
-//  int partitionNumber = 0;
-//  for (set<GlobalIndexType>::iterator cellIDIt = activeCellIDs.begin(); cellIDIt != activeCellIDs.end(); cellIDIt++) {
-//    GlobalIndexType cellID = *cellIDIt;
-//    _partitions[partitionNumber].insert(cellID);
-//    int numCellsForPartition = (partitionNumber >= extraCells) ? cellsPerPartition : cellsPerPartition + 1;
-//    if (_partitions[partitionNumber].size() == numCellsForPartition) {
-//      partitionNumber++;
-//    }
-//  }
+  _partitions = vector<set<GlobalIndexType> >(_numPartitions);
   
   // before repartitioning (which should happen immediately), put all active cells on rank 0
   _partitions[0] = _mesh->getActiveCellIDs();

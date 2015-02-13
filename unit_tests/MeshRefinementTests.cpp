@@ -107,6 +107,12 @@ namespace {
     bc->addDirichlet(phi_hat, boundary, phi_exact);
     solution = Solution::solution(mesh, bc, rhs, graphNorm);
     
+    // DEBUGGING:
+//    solution->setWriteMatrixToMatrixMarketFile(true, "/tmp/traceTermProjectionMatrix.dat");
+//    solution->setWriteRHSToMatrixMarketFile(true, "/tmp/traceTermProjection_RHS.dat");
+//    
+//    SolverPtr superLUSolver = Solver::getSolver(Solver::SuperLUDist, false);
+    
     solution->solve();
     
     FunctionPtr psi_exact = (spaceDim > 1) ? phi_exact->grad() : phi_exact->dx();
@@ -136,6 +142,11 @@ namespace {
     if (err_L2 > tol) {
       cout << "testTraceTermProjection error: psi in initial solution (prior to projection) differs from exact solution by " << err_L2 << " in L^2 norm.\n";
       success = false;
+      
+      double soln_l2 = psi_soln->l2norm(mesh);
+      double exact_l2 = psi_exact->l2norm(mesh);
+      
+      cout << "L^2 norm of exact solution: " << exact_l2 << ", versus " << soln_l2 << " for initial solution\n";
     }
     
     // psi_n error:

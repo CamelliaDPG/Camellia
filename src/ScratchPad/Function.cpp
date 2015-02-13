@@ -888,7 +888,8 @@ double Function::integralOfJump(Teuchos::RCP<Mesh> mesh, GlobalIndexType cellID,
   return sideParity * cellIntegral(0);
 }
 
-double Function::integrate(Teuchos::RCP<Mesh> mesh, int cubatureDegreeEnrichment, bool testVsTest, bool requireSideCache) {
+double Function::integrate(Teuchos::RCP<Mesh> mesh, int cubatureDegreeEnrichment, bool testVsTest, bool requireSideCache,
+                           bool spatialSidesOnly) {
   double integral = 0;
 
   int myPartition = Teuchos::GlobalMPISession::getRank();
@@ -908,10 +909,10 @@ double Function::integrate(Teuchos::RCP<Mesh> mesh, int cubatureDegreeEnrichment
 //    cout << "Function::integrate: basisCache has " << basisCache->getPhysicalCubaturePoints().dimension(1) << " cubature points per cell.\n";
     FieldContainer<double> cellIntegrals(numCells);
     if ( this->boundaryValueOnly() ) {
-      // sum the integral over the sides...
       int numSides = elemType->cellTopoPtr->getSideCount();
 
       for (int i=0; i<numSides; i++) {
+        if (spatialSidesOnly && !elemType->cellTopoPtr->sideIsSpatial(i)) continue; // skip non-spatial sides if spatialSidesOnly is true
         this->integrate(cellIntegrals, basisCache->getSideBasisCache(i), true);
       }
     } else {
@@ -926,9 +927,10 @@ double Function::integrate(Teuchos::RCP<Mesh> mesh, int cubatureDegreeEnrichment
   return MPIWrapper::sum(integral);
 }
 
-double Function::l2norm(Teuchos::RCP<Mesh> mesh, int cubatureDegreeEnrichment) {
+double Function::l2norm(Teuchos::RCP<Mesh> mesh, int cubatureDegreeEnrichment, bool spatialSidesOnly) {
   FunctionPtr thisPtr = Teuchos::rcp( this, false );
-  return sqrt( (thisPtr * thisPtr)->integrate(mesh, cubatureDegreeEnrichment) );
+  bool testVsTest = false, requireSideCaches = false;
+  return sqrt( (thisPtr * thisPtr)->integrate(mesh, cubatureDegreeEnrichment, testVsTest, requireSideCaches, spatialSidesOnly) );
 }
 
 // divide values by this function (supported only when this is a scalar--otherwise values would change rank...)

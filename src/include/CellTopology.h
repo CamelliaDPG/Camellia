@@ -111,6 +111,16 @@ namespace Camellia {
     unsigned getEdgeCount( const unsigned subcell_dim ,
                           const unsigned subcell_ord ) const;
     
+    /** \brief  Mapping from the tensorial component CellTopology's subcell ordinal to the corresponding
+     *          subcell ordinal of the extruded subcell in the tensor product topology; that is if
+     *              this = (shardsTopo x Line_2 x Line_2 ...) x Line_2,
+     *          the mapping takes the subcell of dimension subcell_dim_in_component_topo and ordinal subcell_ord_in_component_topo in
+     *              (shardsTopo x Line_2 x Line_2 ...)
+     *          and returns the ordinal of that subcell extruded in the final Line_2 dimension.
+     */
+    unsigned getExtrudedSubcellOrdinal( const unsigned subcell_dim_in_component_topo ,
+                                        const unsigned subcell_ord_in_component_topo ) const;
+    
     /** \brief  Side count of a subcell of the given dimension and ordinal.
      *  \param  subcell_dim    [in]  - spatial dimension of the subcell
      *  \param  subcell_ord    [in]  - subcell ordinal
@@ -179,6 +189,10 @@ namespace Camellia {
     
     CellTopoPtr getSubcell( unsigned scdim, unsigned scord ) const;
     
+    /** \brief  For cell topologies of positive tensorial degree, returns the cell topology of tensorial degree one less.
+                For cell topologies of tensorial degree zero, returns Teuchos::null.
+     */
+    CellTopoPtr getTensorialComponent() const;    
     
     /** \brief  For topologies with positive _tensorialDegree, spatial sides are those belonging to the tensorial components, extruded in the final tensorial direction; in the context of space-time elements, these are the spatial sides.  Temporal sides are those identified with the tensorial components; there will be two such sides for each space-time topology.  For topologies with zero _tensorialDegree, each side is a spatial side.
      *  \param  sideOrdinal [in] Ordinal of the side.

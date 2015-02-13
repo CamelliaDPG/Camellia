@@ -61,7 +61,7 @@ namespace {
     double energyError = coarseSoln->energyErrorTotal();
     
     // sanity check: our exact solution should give us 0 energy error
-    double tol = 1e-15;
+    double tol = 1e-14;
     TEST_COMPARE(energyError, <, tol);
     
     MeshPtr fineMesh = mesh->deepCopy();

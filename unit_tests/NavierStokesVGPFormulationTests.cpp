@@ -19,17 +19,17 @@ namespace {
     vector<int> elementCounts(spaceDim,1); // 1 x 1 mesh
     vector<double> x0(spaceDim,-1.0);
     MeshTopologyPtr meshTopo = MeshFactory::rectilinearMeshTopology(dimensions, elementCounts, x0);
-    double Re = 10.0;
-    int fieldPolyOrder = 2, delta_k = 1;
+    double Re = 1.0;
+    int fieldPolyOrder = 3, delta_k = 1;
     
     FunctionPtr x = Function::xn(1);
     FunctionPtr y = Function::yn(1);
     //    FunctionPtr u1 = x;
     //    FunctionPtr u2 = -y; // divergence 0
     //    FunctionPtr p = y * y * y; // zero average
-    FunctionPtr u1 = Function::constant(1.0);
-    FunctionPtr u2 = Function::constant(1.0);
-    FunctionPtr p = x;
+    FunctionPtr u1 = x * x * y;
+    FunctionPtr u2 = -x * y * y;
+    FunctionPtr p = y * y * y;
     
     FunctionPtr forcingFunction = NavierStokesVGPFormulation::forcingFunction(spaceDim, Re, Function::vectorize(u1,u2), p);
     NavierStokesVGPFormulation form(meshTopo, Re, fieldPolyOrder, delta_k, forcingFunction);
@@ -59,12 +59,13 @@ namespace {
     exactMap[form.u_hat(1)->ID()] = u1;
     exactMap[form.u_hat(2)->ID()] = u2;
     
-    form.solution()->projectOntoMesh(exactMap);
-    
+    map<int, FunctionPtr> zeroMap;
     for (map<int, FunctionPtr>::iterator exactMapIt = exactMap.begin(); exactMapIt != exactMap.end(); exactMapIt++) {
-      exactMapIt->second = Function::zero();
+      zeroMap[exactMapIt->first] = Function::zero();
     }
-    form.solutionIncrement()->projectOntoMesh(exactMap);
+    
+    form.solution()->projectOntoMesh(exactMap);
+    form.solutionIncrement()->projectOntoMesh(zeroMap);
     
     RHSPtr rhs = form.rhs(forcingFunction, false); // false: *include* boundary terms in the RHS -- important for computing energy error correctly
     form.solutionIncrement()->setRHS(rhs);
@@ -82,7 +83,7 @@ namespace {
     vector<int> elementCounts(spaceDim,1); // 1 x 1 mesh
     vector<double> x0(spaceDim,-1.0);
     MeshTopologyPtr meshTopo = MeshFactory::rectilinearMeshTopology(dimensions, elementCounts, x0);
-    double Re = 1.0;
+    double Re = 10.0;
     int fieldPolyOrder = 2, delta_k = 1;
     
     FunctionPtr x = Function::xn(1);
@@ -90,9 +91,9 @@ namespace {
 //    FunctionPtr u1 = x;
 //    FunctionPtr u2 = -y; // divergence 0
 //    FunctionPtr p = y * y * y; // zero average
-    FunctionPtr u1 = Function::constant(1.0);
-    FunctionPtr u2 = Function::constant(1.0);
-    FunctionPtr p = x;
+    FunctionPtr u1 = x;
+    FunctionPtr u2 = -y;
+    FunctionPtr p = y;
     
     FunctionPtr forcingFunction_x = p->dx() - (1.0/Re) * (u1->dx()->dx() + u1->dy()->dy());
     FunctionPtr forcingFunction_y = p->dy() - (1.0/Re) * (u2->dx()->dx() + u2->dy()->dy());
