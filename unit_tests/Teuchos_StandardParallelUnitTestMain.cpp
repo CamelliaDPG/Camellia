@@ -57,10 +57,26 @@ specific unit test suites.
 #include "Teuchos_UnitTestRepository.hpp"
 #include "Teuchos_GlobalMPISession.hpp"
 
+#ifdef HAVE_MPI
+#include "Epetra_MpiComm.h"
+#else
+#include "Epetra_SerialComm.h"
+#endif
 
 int main( int argc, char* argv[] )
 {
   Teuchos::GlobalMPISession mpiSession(&argc, &argv);
   Teuchos::UnitTestRepository::setGloballyReduceTestResult(true);
+  
+#ifdef HAVE_MPI
+  Epetra_MpiComm Comm(MPI_COMM_WORLD);
+  //cout << "rank: " << rank << " of " << numProcs << endl;
+#else
+  Epetra_SerialComm Comm;
+#endif
+  
+  Comm.Barrier(); // set breakpoint here to allow debugger attachment to other MPI processes than the one you automatically attached to.
+
+  
   return Teuchos::UnitTestRepository::runUnitTestsFromMain(argc, argv);
 }
