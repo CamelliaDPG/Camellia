@@ -13,6 +13,8 @@
 
 #include "CamelliaCellTools.h"
 
+#include "NavierStokesVGPFormulation.h"
+
 IncompressibleFormulationsTests::IncompressibleFormulationsTests(bool thorough) {
   _thoroughMode = thorough;
 }
@@ -771,161 +773,141 @@ bool IncompressibleFormulationsTests::testVGPNavierStokesFormulationConsistency(
   // consistency: check that solving using the BF, RHS, BCs, etc. in the Formulation
   //              gives the ExactSolution specified by the Formulation
   
-  // starting out with a single hard-coded solve, but will switch soon to
-  // doing several: varying meshes, pToAdd, mu, and which exact solutions we use...
-  
-  double nonlinearTol = 1e-15;
+  double nonlinearTol = 1e-11;
   double tol = 2e-11;
-  
-  bool useLineSearch = false;
-  bool useCondensedSolve = true;
-  bool enrichVelocity = false; // true would add an extra polynomial degree to the velocity.
-  
-  vector<bool> useHessianList;
-  useHessianList.push_back(false);
-  useHessianList.push_back(true);
   
   // exact solution functions: store these as vector< pair< Function, int > >
   // in the order u1, u2, p, where the paired int is the polynomial degree of the function
   
-  for (vector<bool>::iterator useHessianIt = useHessianList.begin();
-       useHessianIt != useHessianList.end(); useHessianIt++) {
-    bool useHessian = *useHessianIt;
-    for (vector< PolyExactFunctions >::iterator exactIt = polyExactFunctions.begin();
-         exactIt != polyExactFunctions.end(); exactIt++) {
-      PolyExactFunctions exactFxns = *exactIt;
+  for (vector< PolyExactFunctions >::iterator exactIt = polyExactFunctions.begin();
+       exactIt != polyExactFunctions.end(); exactIt++) {
+    PolyExactFunctions exactFxns = *exactIt;
+    
+    int maxPolyOrder = 0;
+    for (int i=0; i<exactFxns.size(); i++) {
+      int polyOrder = exactFxns[i].second;
+      maxPolyOrder = max(maxPolyOrder,polyOrder);
+    }
+    
+    FunctionPtr u1_exact = exactFxns[0].first;
+    FunctionPtr u2_exact = exactFxns[1].first;
+    FunctionPtr p_exact  = exactFxns[2].first;
+    
+    FunctionPtr u_exact = Function::vectorize(u1_exact, u2_exact);
+    
+    if (printToConsole) {
+      cout << "VGP Navier-Stokes consistency tests for exact solution:\n";
+      cout << "u1_exact: " << u1_exact->displayString() << endl;
+      cout << "u2_exact: " << u2_exact->displayString() << endl;
+      cout << "p_exact: " << p_exact->displayString() << endl;
+    }
+    
+    Teuchos::RCP<ExactSolution> exactSolution = Teuchos::rcp( new ExactSolution );
+    
+    int H1Order = maxPolyOrder + 1;
+    double width = 2.0, height = 2.0, x0 = -1.0, y0 = -1.0;
+    bool divideIntoTriangles = false;
+    for (vector<int>::iterator pToAddIt = pToAddValues.begin(); pToAddIt != pToAddValues.end(); pToAddIt++) {
+      int pToAdd = *pToAddIt;
       
-      int maxPolyOrder = 0;
-      for (int i=0; i<exactFxns.size(); i++) {
-        int polyOrder = exactFxns[i].second;
-        maxPolyOrder = max(maxPolyOrder,polyOrder);
-      }
-      
-      FunctionPtr u1_exact = exactFxns[0].first;
-      FunctionPtr u2_exact = exactFxns[1].first;
-      FunctionPtr p_exact  = exactFxns[2].first;
-
-      if (printToConsole) {
-        cout << "VGP Navier-Stokes consistency tests for exact solution:\n";
-        cout << "u1_exact: " << u1_exact->displayString() << endl;
-        cout << "u2_exact: " << u2_exact->displayString() << endl;
-        cout << "p_exact: " << p_exact->displayString() << endl;
-      }
-      
-      int H1Order = maxPolyOrder + 1;
-      for (vector<int>::iterator pToAddIt = pToAddValues.begin(); pToAddIt != pToAddValues.end(); pToAddIt++) {
-        int pToAdd = *pToAddIt;
+      for (vector< pair<int, int> >::iterator meshDimIt = meshDimensions.begin(); meshDimIt != meshDimensions.end(); meshDimIt++) {
+        int horizontalCells = meshDimIt->first, verticalCells = meshDimIt->second;
         
-        for (vector< pair<int, int> >::iterator meshDimIt = meshDimensions.begin(); meshDimIt != meshDimensions.end(); meshDimIt++) {
-          int horizontalCells = meshDimIt->first, verticalCells = meshDimIt->second;
+        MeshTopologyPtr meshTopo = MeshFactory::quadMeshTopology(width,height,horizontalCells,verticalCells,divideIntoTriangles,x0,y0);
+        
+        for (vector<double>::iterator muIt = muValues.begin(); muIt != muValues.end(); muIt++) {
+          double mu = *muIt;
+          double Re = 1 / mu;
           
-          for (vector<double>::iterator muIt = muValues.begin(); muIt != muValues.end(); muIt++) {
-            double mu = *muIt;
-            double Re = 1 / mu;
-            
-            bool dontEnhanceFluxes = false;
-            VGPNavierStokesProblem problem = VGPNavierStokesProblem(Re, quadPoints,
-                                                                    horizontalCells, verticalCells,
-                                                                    H1Order, pToAdd,
-                                                                    u1_exact, u2_exact, p_exact, enrichVelocity, dontEnhanceFluxes);
-            
-            
-            SolutionPtr solnIncrement = problem.solutionIncrement();
-            SolutionPtr backgroundFlow = problem.backgroundFlow();
-            
-            Teuchos::RCP<ExactSolution> exactSolution = problem.exactSolution();
-            MeshPtr mesh = problem.mesh();
-            
-            Teuchos::RCP< RieszRep > rieszRep;
-            if (useHessian) {
-              LinearTermPtr rhsLT = exactSolution->rhs()->linearTerm();
-              IPPtr ip = problem.bf()->graphNorm();
-              rieszRep = Teuchos::rcp( new RieszRep(mesh,ip,rhsLT));
-              FunctionPtr v1_rep = Teuchos::rcp( new RepFunction(v1_vgp, rieszRep) );
-              FunctionPtr v2_rep = Teuchos::rcp( new RepFunction(v2_vgp, rieszRep) );
-              // set up the hessian term itself:
-              // we want basically u * sigma * v where "*" is a dot product
-              // u * sigma = (u1 sigma11 + u2 sigma12, u1 sigma21 + u2 sigma22)
-              BFPtr hessianBF = Teuchos::rcp( new BF(vgpVarFactory.getBubnovFactory(VarFactory::BUBNOV_TRIAL)) );
-              hessianBF->addTerm(v1_rep * u1_vgp, sigma11_vgp);
-              hessianBF->addTerm(v1_rep * u2_vgp, sigma12_vgp);
-              hessianBF->addTerm(v2_rep * u1_vgp, sigma21_vgp);
-              hessianBF->addTerm(v2_rep * u2_vgp, sigma22_vgp);
-              // now the symmetric counterparts:
-              hessianBF->addTerm(sigma11_vgp, v1_rep * u1_vgp);
-              hessianBF->addTerm(sigma12_vgp, v1_rep * u2_vgp);
-              hessianBF->addTerm(sigma21_vgp, v2_rep * u1_vgp);
-              hessianBF->addTerm(sigma22_vgp, v2_rep * u2_vgp);
-              
-              Teuchos::RCP< HessianFilter > hessianFilter = Teuchos::rcp( new HessianFilter(hessianBF) );
-              solnIncrement->setFilter(hessianFilter);
-              rieszRep->computeRieszRep();
-            }
-            
-            int maxIters = 100;
+//          int delta_k = 2; // spaceDim
+          FunctionPtr forcingFunction = NavierStokesVGPFormulation::forcingFunction(meshTopo->getSpaceDim(), Re, u_exact, p_exact);
+          bool transientFormulation = false;
+          bool useConformingTraces = true;
+          NavierStokesVGPFormulation formulation(meshTopo, Re, H1Order-1, pToAdd, forcingFunction, transientFormulation, useConformingTraces);
+          
+          // impose Dirichlet conditions on the whole boundary
+          formulation.addInflowCondition(SpatialFilter::allSpace(), u_exact);
+//          // impose zero-mean condition on pressure
+          formulation.addZeroMeanPressureCondition();
 
-            FunctionPtr u1_incr = Function::solution(u1_vgp, solnIncrement);
-            FunctionPtr u2_incr = Function::solution(u2_vgp, solnIncrement);
-            FunctionPtr p_incr = Function::solution(p_vgp, solnIncrement);
+//          formulation.addPointPressureCondition();
+          
+          vgpFields.clear();
+          vgpFields.push_back(formulation.u(1));
+          vgpFields.push_back(formulation.u(2));
+          vgpFields.push_back(formulation.sigma(1));
+          vgpFields.push_back(formulation.sigma(2));
+          vgpFields.push_back(formulation.p());
+          
+          SolutionPtr solnIncrement = formulation.solutionIncrement();
+          SolutionPtr backgroundFlow = formulation.solution();
+          
+          FunctionPtr u_exact = Function::vectorize(u1_exact, u2_exact);
+          
+          Teuchos::RCP<ExactSolution> exactSolution = formulation.exactSolution(u_exact, p_exact);
+          MeshPtr mesh = backgroundFlow->mesh();
+          
+          int maxIters = 20;
+          
+          FunctionPtr u1_incr = Function::solution(formulation.u(1), solnIncrement);
+          FunctionPtr u2_incr = Function::solution(formulation.u(2), solnIncrement);
+          FunctionPtr p_incr = Function::solution(formulation.p(), solnIncrement);
+          
+          FunctionPtr l2_incr = u1_incr * u1_incr + u2_incr * u2_incr + p_incr * p_incr;
+          
+          double l2_incr_norm;
+          do {
+            formulation.solveAndAccumulate(1.0);
             
-            FunctionPtr l2_incr = u1_incr * u1_incr + u2_incr * u2_incr + p_incr * p_incr;
-            
-            double l2_incr_norm;
-            do {
-              problem.iterate(useLineSearch,useCondensedSolve);
-              if ( rieszRep.get() ) {
-                rieszRep->computeRieszRep();
-              }
-              l2_incr_norm = sqrt(l2_incr->integrate(mesh));
-//              cout << "l2_incr_norm: " << l2_incr_norm << endl;
-            }  while ( (l2_incr_norm > nonlinearTol) && (problem.iterationCount() < maxIters) );
-            if (printToConsole) {
-              string withHessian = useHessian ? "using hessian term" : "without hessian term";
-              cout << "with Re = " << 1.0 / mu << " and " << withHessian;
-              cout << ", # iters to converge: " << problem.iterationCount() << endl;
+            l2_incr_norm = sqrt(l2_incr->integrate(mesh));
+            if (printToConsole) cout << "iteration " << formulation.nonlinearIterationCount() << ", L^2 norm of increment: " << l2_incr_norm << endl;
+          }  while ( (l2_incr_norm > nonlinearTol) && (formulation.nonlinearIterationCount() < maxIters) );
+          if (printToConsole) {
+            cout << "with Re = " << 1.0 / mu;
+            cout << ", # iters to converge: " << formulation.nonlinearIterationCount() << endl;
+          }
+          
+          int cubatureDegree = maxPolyOrder;
+          for (vector< VarPtr >::iterator fieldIt = vgpFields.begin(); fieldIt != vgpFields.end(); fieldIt++ ) {
+            VarPtr field = *fieldIt;
+            double l2Error = exactSolution->L2NormOfError(*backgroundFlow, field->ID(), cubatureDegree);
+            if (l2Error > tol) {
+              success = false;
+              cout << "testVGPNavierStokesFormulationConsistency(): ";
+              cout << "L^2 error of " << l2Error << " for variable " << field->displayString();
+              cout << " exceeds tol " << tol << endl;
+              cout << "Failure for Re = " << 1.0 / mu;
+              cout << "; # iters to converge: " << formulation.nonlinearIterationCount() << endl;
+            } else {
+              //              cout << "PASS: testVGPStokesFormulationConsistency(): ";
+              //              cout << "L^2 error of " << l2Error << " for variable " << field->displayString();
+              //              cout << " is within tolerance! " << tol << endl;
             }
-            
-            int cubatureDegree = maxPolyOrder;
-            for (vector< VarPtr >::iterator fieldIt = vgpFields.begin(); fieldIt != vgpFields.end(); fieldIt++ ) {
-              VarPtr field = *fieldIt;
-              double l2Error = exactSolution->L2NormOfError(*backgroundFlow, field->ID(), cubatureDegree);
-              if (l2Error > tol) {
-                success = false;
-                cout << "testVGPNavierStokesFormulationConsistency(): ";
-                cout << "L^2 error of " << l2Error << " for variable " << field->displayString();
-                cout << " exceeds tol " << tol << endl;
-                string withHessian = useHessian ? "using hessian term" : "without hessian term";
-                cout << "Failure for Re = " << 1.0 / mu << " and " << withHessian;
-                cout << "; # iters to converge: " << problem.iterationCount() << endl;
-                
-                HDF5Exporter::exportSolution("/tmp", "incomp_tests_background_flow",backgroundFlow);
-                HDF5Exporter::exportSolution("/tmp", "incomp_tests_soln_increment",solnIncrement);
-                
-              } else {
-  //              cout << "PASS: testVGPStokesFormulationConsistency(): ";
-  //              cout << "L^2 error of " << l2Error << " for variable " << field->displayString();
-  //              cout << " is within tolerance! " << tol << endl;
-              }
-            }
-            
-            FunctionPtr u1_soln = Function::solution(u1_vgp, backgroundFlow);
-            FunctionPtr u2_soln = Function::solution(u2_vgp, backgroundFlow);
-            FunctionPtr p_soln  = Function::solution( p_vgp, backgroundFlow);
-            
-            if ( ! functionsAgree(u1_soln, u1_exact, mesh, tol) ) {
-              cout << "FAILURE: testVGPNavierStokesFormulationConsistency(): after solve, u1_soln != u1_exact.\n";
-            }
-            if ( ! functionsAgree(u2_soln, u2_exact, mesh, tol) ) {
-              cout << "FAILURE: testVGPNavierStokesFormulationConsistency(): after solve, u2_soln != u2_exact.\n";
-            }
-            if ( ! functionsAgree(p_soln, p_exact, mesh, tol) ) {
-              cout << "FAILURE: testVGPNavierStokesFormulationConsistency(): after solve, p_soln != p_exact.\n";
-            }
+          }
+          
+          if (success == false) {
+            HDF5Exporter::exportSolution("/tmp", "incomp_tests_background_flow",backgroundFlow);
+            HDF5Exporter::exportSolution("/tmp", "incomp_tests_soln_increment",solnIncrement);
+          }
+          
+          FunctionPtr u1_soln = Function::solution(formulation.u(1), backgroundFlow);
+          FunctionPtr u2_soln = Function::solution(formulation.u(2), backgroundFlow);
+          FunctionPtr p_soln  = Function::solution(formulation.p(),  backgroundFlow);
+          
+          if ( ! functionsAgree(u1_soln, u1_exact, mesh, tol) ) {
+            cout << "FAILURE: testVGPNavierStokesFormulationConsistency(): after solve, u1_soln != u1_exact.\n";
+          }
+          if ( ! functionsAgree(u2_soln, u2_exact, mesh, tol) ) {
+            cout << "FAILURE: testVGPNavierStokesFormulationConsistency(): after solve, u2_soln != u2_exact.\n";
+          }
+          if ( ! functionsAgree(p_soln, p_exact, mesh, tol) ) {
+            cout << "FAILURE: testVGPNavierStokesFormulationConsistency(): after solve, p_soln != p_exact.\n";
           }
         }
       }
     }
   }
+  
   return success;
 }
 
