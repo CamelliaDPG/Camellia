@@ -35,15 +35,20 @@ private:
 public:
   HDF5Exporter(MeshPtr mesh, string outputDirName="output", string outputDirSuperPath = ".");
   ~HDF5Exporter();
+  void setMesh(MeshPtr mesh) {_mesh = mesh;}
   void exportFunction(FunctionPtr function, string functionName="function", double timeVal=0,
     unsigned int defaultNum1DPts=4, map<int, int> cellIDToNum1DPts=map<int,int>(), set<GlobalIndexType> cellIndices=set<GlobalIndexType>());
   void exportFunction(vector<FunctionPtr> functions, vector<string> functionNames, double timeVal=0,
     unsigned int defaultNum1DPts=4, map<int, int> cellIDToNum1DPts=map<int,int>(), set<GlobalIndexType> cellIndices=set<GlobalIndexType>());
   void exportSolution(SolutionPtr solution, VarFactory varFactory, double timeVal=0,
     unsigned int defaultNum1DPts=4, map<int, int> cellIDToNum1DPts=map<int,int>(), set<GlobalIndexType> cellIndices=set<GlobalIndexType>());
+  void exportTimeSlab(FunctionPtr function, string functionName="function", double tInit=0, double tFinal=1, int numSlices=2,
+    unsigned int defaultNum1DPts=4, map<int, int> cellIDToNum1DPts=map<int,int>(), set<GlobalIndexType> cellIndices=set<GlobalIndexType>());
 
-  static void exportFunction(string directoryPath, string functionName, FunctionPtr function, MeshPtr mesh); // allows one-line export without storing an exporter object
-  static void exportSolution(string directoryPath, string solutionName, SolutionPtr solution); // allows one-line export without storing an exporter object
+  // allows one-line export without storing an exporter object
+  static void exportFunction(string directoryPath, string functionName, FunctionPtr function, MeshPtr mesh); 
+  // allows one-line export without storing an exporter object 
+  static void exportSolution(string directoryPath, string solutionName, SolutionPtr solution); 
 };
 
 // creates a map from cell index to number of 1D points (number of subdivisions + 1)
