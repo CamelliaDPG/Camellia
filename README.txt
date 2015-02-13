@@ -5,9 +5,9 @@ by Nathan V. Roberts
 ******** PREREQUISITES ********
 Trilinos is required for all builds of Camellia.  A couple of sample do-configure scripts for Trilinos can be found in distribution directory, under build/trilinos-do-configure-samples.  These include the packages within Trilinos that Camellia requires.
 
-For a serial debug build, Camellia requires Boost.  Building Trilinos (specifically Epetra)  with HDF5 is not absolutely required, but allows some useful visualization and other output (which can be read in ParaView, e.g.).
+Building Trilinos (specifically Epetra) with HDF5 is not absolutely required, but allows some useful visualization and other output (which can be read in ParaView, e.g.).
 
-For an MPI build, Camellia also requires some version of the MPI libraries.  Open MPI is what we use most of the time.  Additionally, Camellia supports MUMPS if both Camellia and Trilinos are built with the MUMPS libraries.  MUMPS also requires SCALAPACK to be installed.
+For an MPI build, Camellia also requires some version of the MPI libraries.  Open MPI is what we use most of the time.  Additionally, Camellia supports MUMPS and SuperLU_Dist if both Camellia and Trilinos are built with these libraries.  MUMPS also requires SCALAPACK to be installed.
 
 Instructions for building several of these libraries follow.
 
@@ -22,16 +22,6 @@ SWIG install (required to build Trilinos with support for PyTrilinos):
 	make -j6
 4. Install:
 	make install
-
-Boost install:
-1. Download source from http://sourceforge.net/projects/boost/files/boost/.
-2. cd into source dir.
-3. Configure:
-	./bootstrap.sh --prefix=/usr/local
-4. Build:
-	./b2
-5. Install
-	./b2 install
 
 OpenMPI install:
 1. Download source from http://www.open-mpi.org/software/ompi/.
