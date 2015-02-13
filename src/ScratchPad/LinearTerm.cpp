@@ -753,11 +753,11 @@ LinearTermPtr LinearTerm::getPartMatchingVariable( VarPtr varToMatch ) {
   return lt;
 }
 
-FunctionPtr LinearTerm::evaluate(map< int, FunctionPtr> &varFunctions) {
+FunctionPtr LinearTerm::evaluate(const map< int, FunctionPtr> &varFunctions) {
   return evaluate(varFunctions,false) + evaluate(varFunctions, true);
 }
 
-FunctionPtr LinearTerm::evaluate(map< int, FunctionPtr> &varFunctions, bool boundaryPart) {
+FunctionPtr LinearTerm::evaluate(const map< int, FunctionPtr> &varFunctions, bool boundaryPart) {
   // NOTE that if boundaryPart is false, then we exclude terms that are defined only on the boundary
   // and if boundaryPart is true, then we exclude terms that are defined everywhere
   // so that the whole LinearTerm is the sum of the two options
@@ -771,7 +771,7 @@ FunctionPtr LinearTerm::evaluate(map< int, FunctionPtr> &varFunctions, bool boun
     // if there isn't an entry for var, we take it to be zero:
     if (varFunctions.find(var->ID()) == varFunctions.end()) continue;
     
-    FunctionPtr varFunction = varFunctions[var->ID()];
+    FunctionPtr varFunction = varFunctions.find(var->ID())->second;
     
     if (!varFunction.get()) {
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "varFunctions entries cannot be null!");
