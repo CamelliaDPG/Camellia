@@ -6,7 +6,10 @@
 //
 //
 
-#define TENSOR_FIELD_ORDINAL(spaceFieldOrdinal,timeFieldOrdinal) timeFieldOrdinal * _spatialBasis->getCardinality() + spaceFieldOrdinal;
+#include "CamelliaCellTools.h"
+
+#define TENSOR_FIELD_ORDINAL(spaceFieldOrdinal,timeFieldOrdinal) timeFieldOrdinal * _spatialBasis->getCardinality() + spaceFieldOrdinal
+#define TENSOR_DOF_OFFSET_ORDINAL(spaceDofOffsetOrdinal,timeDofOffsetOrdinal,spaceDofsForSubcell) timeDofOffsetOrdinal * spaceDofsForSubcell + spaceDofOffsetOrdinal
 
 namespace Camellia {
   template<class Scalar, class ArrayScalar>
@@ -25,6 +28,17 @@ namespace Camellia {
     
     if (_spatialBasis->domainTopology()->getTensorialDegree() > 0) {
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "only spatial bases defined on toplogies with 0 tensorial degree are supported by TensorBasis at present.");
+    }
+    
+    if (_spatialBasis->domainTopology()->getDimension() == 0) {
+      this->_functionSpace = _temporalBasis->functionSpace();
+    } else if (_spatialBasis->functionSpace() == _temporalBasis->functionSpace()) {
+      // I doubt this would be right if the function spaces were HDIV or HCURL, but
+      // for HVOL AND HGRAD, it does hold, and since our temporal bases are always defined
+      // on line topologies, HVOL and HGRAD are the only ones for which we'll use this...
+      this->_functionSpace = _spatialBasis->functionSpace();
+    } else {
+      this->_functionSpace = FUNCTION_SPACE_UNKNOWN;
     }
     
     int tensorialDegree = 1;
@@ -307,41 +321,71 @@ namespace Camellia {
 
   template<class Scalar, class ArrayScalar>
   void TensorBasis<Scalar,ArrayScalar>::initializeTags() const {
-    // TODO: implement this
+    const std::vector<std::vector<std::vector<int> > > spatialTagToOrdinal = _spatialBasis->getDofOrdinalData();
+    const std::vector<std::vector<std::vector<int> > > temporalTagToOrdinal = _temporalBasis->getDofOrdinalData();
     
-    // get the component basis's tag data:
-//    const std::vector<std::vector<std::vector<int> > > compTagToOrdinal = _componentBasis->getDofOrdinalData();
-//    const std::vector<std::vector<int> > compOrdinalToTag = _componentBasis->getAllDofTags();
-//    
-//    int tagSize = 4;
-//    int posScDim = 0;        // position in the tag, counting from 0, of the subcell dim
-//    int posScOrd = 1;        // position in the tag, counting from 0, of the subcell ordinal
-//    int posDfOrd = 2;        // position in the tag, counting from 0, of DoF ordinal relative to the subcell
-//    
-//    std::vector<int> tags( tagSize * this->getCardinality() ); // flat array
-//    
-//    int componentCardinality = _componentBasis->getCardinality();
-//    // ordinalToTag_:
-//    for (int comp=0; comp<_numComponents; comp++) {
-//      for (int compFieldIndex=0; compFieldIndex<componentCardinality; compFieldIndex++) {
-//        int i=comp*componentCardinality + compFieldIndex; // i is the ordinal in the vector basis
-//        vector<int> tagData = compOrdinalToTag[compFieldIndex];
-//        tags[tagSize*i]   = tagData[0]; // spaceDim
-//        tags[tagSize*i+1] = tagData[1]; // subcell ordinal
-//        tags[tagSize*i+2] = tagData[2] + comp * tagData[3];  // ordinal of the specified DoF relative to the subcell (shifted)
-//        tags[tagSize*i+3] = tagData[3] * _numComponents;     // total number of DoFs associated with the subcell
-//      }
-//    }
-//    
-//    // call basis-independent method (declared in IntrepidUtil.hpp) to set up the data structures
-//    Intrepid::setOrdinalTagData(this -> _tagToOrdinal,
-//                                this -> _ordinalToTag,
-//                                &(tags[0]),
-//                                this -> getCardinality(),
-//                                tagSize,
-//                                posScDim,
-//                                posScOrd,
-//                                posDfOrd);
+    const std::vector<std::vector<int> > spatialOrdinalToTag = _spatialBasis->getAllDofTags();
+    const std::vector<std::vector<int> > temporalOrdinalToTag = _temporalBasis->getAllDofTags();
+    
+    int tagSize = 4;
+    int posScDim = 0;        // position in the tag, counting from 0, of the subcell dim
+    int posScOrd = 1;        // position in the tag, counting from 0, of the subcell ordinal
+    int posDfOrd = 2;        // position in the tag, counting from 0, of DoF ordinal relative to the subcell
+    int posDfCnt = 2;        // position in the tag, counting from 0, of DoF ordinal count for subcell
+    
+    std::vector<int> tags( tagSize * this->getCardinality() ); // flat array
+    
+    CellTopoPtr spaceTimeTopo = this->domainTopology();
+    
+    int sideDim = spaceTimeTopo->getDimension() - 1;
+    
+    for (int spaceFieldOrdinal=0; spaceFieldOrdinal<_spatialBasis->getCardinality(); spaceFieldOrdinal++) {
+      std::vector<int> spaceTagData = spatialOrdinalToTag[spaceFieldOrdinal];
+      unsigned spaceSubcellDim = spaceTagData[posScDim];
+      unsigned spaceSubcellOrd = spaceTagData[posScOrd];
+      for (int timeFieldOrdinal=0; timeFieldOrdinal<_temporalBasis->getCardinality(); timeFieldOrdinal++) {
+        std::vector<int> timeTagData = temporalOrdinalToTag[timeFieldOrdinal];
+        unsigned timeSubcellDim = timeTagData[posScDim];
+        unsigned timeSubcellOrd = timeTagData[posScOrd];
+        
+        unsigned spaceTimeSubcellDim = spaceSubcellDim + timeSubcellDim;
+        unsigned spaceTimeSubcellOrd;
+        if (timeSubcellDim == 0) {
+          // vertex node in time; the subcell is not extruded in time but belongs to one of the two "copies"
+          // of the spatial topology
+          unsigned spaceTimeSideOrdinal = this->domainTopology()->getTemporalComponentSideOrdinal(timeSubcellOrd);
+          spaceTimeSubcellOrd = CamelliaCellTools::subcellOrdinalMap(spaceTimeTopo, sideDim, spaceTimeSideOrdinal,
+                                                                     spaceSubcellDim, spaceSubcellOrd);
+        } else {
+          // line subcell in time; the subcell *is* extruded in time
+          spaceTimeSubcellOrd = spaceTimeTopo->getExtrudedSubcellOrdinal(spaceSubcellDim, spaceSubcellOrd);
+          if (spaceTimeSubcellOrd == (unsigned)-1) {
+            cout << "ERROR: -1 subcell ordinal.\n";
+            spaceTimeSubcellOrd = spaceTimeTopo->getExtrudedSubcellOrdinal(spaceSubcellDim, spaceSubcellOrd);
+          }
+        }
+        
+        int i = TENSOR_FIELD_ORDINAL(spaceFieldOrdinal, timeFieldOrdinal);
+        int spaceDofOffsetOrdinal = spaceTagData[posDfOrd];
+        int timeDofOffsetOrdinal = timeTagData[posDfOrd];
+        int spaceDofsForSubcell = spaceTagData[posDfCnt];
+        int spaceTimeDofOffsetOrdinal = TENSOR_DOF_OFFSET_ORDINAL(spaceDofOffsetOrdinal, timeDofOffsetOrdinal, spaceDofsForSubcell);
+        tags[tagSize*i + posScDim] = spaceTimeSubcellDim; // subcellDim
+        tags[tagSize*i + posScOrd] = spaceTimeSubcellOrd; // subcell ordinal
+        tags[tagSize*i + posDfOrd] = spaceTimeDofOffsetOrdinal;  // ordinal of the specified DoF relative to the subcell
+        tags[tagSize*i + posDfCnt] = spaceTagData[posDfCnt] * timeTagData[posDfCnt];     // total number of DoFs associated with the subcell
+      }
+    }
+    
+    // call basis-independent method (declared in IntrepidUtil.hpp) to set up the data structures
+    Intrepid::setOrdinalTagData(this -> _tagToOrdinal,
+                                this -> _ordinalToTag,
+                                &(tags[0]),
+                                this -> getCardinality(),
+                                tagSize,
+                                posScDim,
+                                posScOrd,
+                                posDfOrd);
   }
 
 } // namespace Camellia
