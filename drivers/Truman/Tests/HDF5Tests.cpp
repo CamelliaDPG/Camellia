@@ -210,7 +210,19 @@ int main(int argc, char *argv[])
 
 
     HDF5Exporter exporter(spaceTimeMesh, "SliceAnimation");
-    exporter.exportTimeSlab(Function::xn(1), "x", 0, 1, 4);
+    vector<FunctionPtr> fcns;
+    fcns.push_back(Function::xn(1));
+    fcns.push_back(Function::xn(2));
+    vector<string> fcnnames;
+    fcnnames.push_back("x");
+    fcnnames.push_back("x2");
+    exporter.exportTimeSlab(fcns, fcnnames, 0, 1, 4);
+    vector<FunctionPtr> bfcns;
+    bfcns.push_back(Function::restrictToCellBoundary(Function::constant(0)));
+    vector<string> bfcnnames;
+    bfcnnames.push_back("mesh");
+    // exporter.exportTimeSlab(bfcns, bfcnnames, 0, 1, 4);
+
     // map<GlobalIndexType,GlobalIndexType> cellMap_t0, cellMap_t1;
     // MeshPtr meshSlice_t0 = MeshTools::timeSliceMesh(spaceTimeMesh, 0, cellMap_t0, H1Order);
     // MeshPtr meshSlice_t1 = MeshTools::timeSliceMesh(spaceTimeMesh, 1,  cellMap_t1, H1Order);
