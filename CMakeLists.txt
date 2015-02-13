@@ -200,6 +200,7 @@ link_libraries(
 add_subdirectory(drivers)
 #add_subdirectory(tests)
 add_subdirectory(unit_tests)
+add_subdirectory(slow_tests)
 
 # Enable testing (see unit_tests directory)
 include(CTest)
