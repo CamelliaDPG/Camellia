@@ -20,6 +20,10 @@
 
 #include "GlobalDofAssignment.h"
 
+#include "MeshTools.h"
+
+#include "HDF5Exporter.h"
+
 namespace {
 
   vector<double> makeVertex(double v0) {
@@ -116,12 +120,12 @@ namespace {
     vector<double> v21 = makeVertex(2,1);
 
     vector< vector<double> > spaceTimeVertices;
-    spaceTimeVertices.push_back(v00);
-    spaceTimeVertices.push_back(v10);
-    spaceTimeVertices.push_back(v20);
-    spaceTimeVertices.push_back(v01);
-    spaceTimeVertices.push_back(v11);
-    spaceTimeVertices.push_back(v21);
+    spaceTimeVertices.push_back(v00); // 0
+    spaceTimeVertices.push_back(v10); // 1
+    spaceTimeVertices.push_back(v20); // 2
+    spaceTimeVertices.push_back(v01); // 3
+    spaceTimeVertices.push_back(v11); // 4
+    spaceTimeVertices.push_back(v21); // 5
 
     vector<unsigned> spaceTimeLine1VertexList;
     vector<unsigned> spaceTimeLine2VertexList;
@@ -174,12 +178,23 @@ namespace {
 
     Teuchos::RCP<Solution> spaceTimeSolution = Teuchos::rcp( new Solution(spaceTimeMesh) );
 
+    FunctionPtr n = Function::normal_1D();
+    FunctionPtr parity = Function::sideParity();
+    
     map<int, Teuchos::RCP<Function> > functionMap;
-    functionMap[uhat->ID()] = Function::xn(1);
-    functionMap[fhat->ID()] = Function::xn(1);
+    functionMap[uhat->ID()] = Function::xn(1); // * n * parity;
+    functionMap[fhat->ID()] = Function::xn(1); // * n * parity;
     functionMap[u->ID()] = Function::xn(1);
     functionMap[sigma->ID()] = Function::xn(1);
     spaceTimeSolution->projectOntoMesh(functionMap);
+
+//    for (GlobalIndexType cellID=0; cellID <= 1; cellID++) {
+//      cout << "CellID " << cellID << " info:\n";
+//      FieldContainer<double> localCoefficients = spaceTimeSolution->allCoefficientsForCellID(1);
+//      
+//      cout << "localCoefficients:\n" << localCoefficients;
+//      cout << "trialOrdering:\n" << *(spaceTimeMesh->getElementType(cellID)->trialOrderPtr);
+//    }
 
     double tol = 1e-14;
     for (map<int, Teuchos::RCP<Function> >::iterator entryIt = functionMap.begin(); entryIt != functionMap.end(); entryIt++) {
@@ -188,10 +203,19 @@ namespace {
       FunctionPtr f_expected = entryIt->second;
       FunctionPtr f_actual = Function::solution(trialVar, spaceTimeSolution);
       
-      double err_L2 = (f_actual - f_expected)->l2norm(spaceTimeMesh);
+      int cubDegreeEnrichment = 0;
+      bool spatialSidesOnly = true;
+      
+      double err_L2 = (f_actual - f_expected)->l2norm(spaceTimeMesh, cubDegreeEnrichment, spatialSidesOnly);
       TEST_COMPARE(err_L2, <, tol);
     }
-  }  
+    
+//    map<GlobalIndexType,GlobalIndexType> cellMap_t0, cellMap_t1;
+//    MeshPtr meshSlice_t0 = MeshTools::timeSliceMesh(spaceTimeMesh, 0, cellMap_t0, H1Order);
+//    FunctionPtr sliceFunction_t0 = MeshTools::timeSliceFunction(spaceTimeMesh, cellMap_t0, Function::xn(1), 0);
+//    HDF5Exporter exporter0(meshSlice_t0, "Function1D_t0");
+//    exporter0.exportFunction(sliceFunction_t0, "x");
+  }
 
   TEUCHOS_UNIT_TEST( Solution, ProjectOnTensorMesh2D )
   {
