@@ -205,6 +205,30 @@ unsigned CellTopology::getDimension() const {
   return _shardsBaseTopology.getDimension() + _tensorialDegree;
 }
 
+/** \brief  Mapping from the tensorial component CellTopology's subcell ordinal to the corresponding
+ *          subcell ordinal of the extruded subcell in the tensor product topology; that is if
+ *              this = (shardsTopo x Line_2 x Line_2 ...) x Line_2,
+ *          the mapping takes the subcell of dimension subcell_dim_in_component_topo and ordinal subcell_ord_in_component_topo in
+ *              (shardsTopo x Line_2 x Line_2 ...)
+ *          and returns the ordinal of that subcell extruded in the final Line_2 dimension.
+ */
+unsigned CellTopology::getExtrudedSubcellOrdinal( const unsigned subcell_dim_in_component_topo ,
+                                                  const unsigned subcell_ord_in_component_topo ) const {
+  // NOTE: code here is redundant with getSubcell(); safer way would be to have both compute the conversion
+  //       from component topology subcell ordinal to that in the tensor topology using a common method
+  //       In any case, the rule is that the two copies (unextruded) of subcells of dimension
+  //       (subcell_dim_in_component_topo + 1) come first, and then the ones built from the extrusion of
+  //       subcells of dimension subcell_dim_in_component_topo in the component topology.
+  
+  if (_tensorialDegree==0) {
+    return -1;
+  } else {
+    CellTopoPtr tensorComponentTopo = CellTopology::cellTopology(_shardsBaseTopology, _tensorialDegree - 1);
+    unsigned componentSubcellCount = tensorComponentTopo->getSubcellCount(subcell_dim_in_component_topo + 1);
+    return subcell_ord_in_component_topo + componentSubcellCount * 2;
+  }
+}
+
 std::pair<unsigned, unsigned> CellTopology::getKey() const {
   return make_pair(_shardsBaseTopology.getKey(), _tensorialDegree);
 }
@@ -658,7 +682,7 @@ CellTopoPtr CellTopology::getSubcell( unsigned scdim, unsigned scord ) const {
       return tensorComponentTopo->getSubcell(scdim, scord);
     }
     // otherwise, the subcell is a tensor product of one of the components (scdim-1)-dimensional subcells with the line topology.
-    scord = scord - componentSubcellCount *2;
+    scord = scord - componentSubcellCount * 2;
     scdim = scdim - 1;
     CellTopoPtr subcellTensorComponent = tensorComponentTopo->getSubcell(scdim, scord);
     return lineTensorTopology(subcellTensorComponent);
@@ -679,6 +703,11 @@ unsigned CellTopology::getTemporalComponentSideOrdinal(unsigned int thisSideOrdi
   }
   // TODO: if/when we change the subcell node ordering, change this to return thisSideOrdinal - spatialTopo->getSideCount();
   return thisSideOrdinal;
+}
+
+CellTopoPtr CellTopology::getTensorialComponent() const {
+  if (_tensorialDegree==0) return Teuchos::null;
+  else return CellTopology::cellTopology(_shardsBaseTopology, _tensorialDegree - 1);
 }
 
 void CellTopology::initializeNodes(const std::vector<Intrepid::FieldContainer<double> > &tensorComponentNodes, Intrepid::FieldContainer<double> &cellNodes) {
@@ -752,7 +781,7 @@ bool CellTopology::sideIsSpatial(unsigned sideOrdinal) const {
   int sideCount = getSideCount();
   if (_tensorialDegree == 0) return sideOrdinal < sideCount;
   // preferred ordering is what's commented out; need to revise getNodeMap() and getSubcell() to allow this ordering
-//  // otherwise, there are two temporal sides, and these are at the end
+//  // in the preferred ordering, there are two temporal sides, and these are at the end
 //  return sideOrdinal < sideCount - 2;
   
   // right now, we put the temporal sides at the beginning:
