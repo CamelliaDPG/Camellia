@@ -14,6 +14,7 @@ namespace Camellia {
   void print(std::string name, std::map<key_type, value_type> &data);
   
   void print(std::string name, std::map<unsigned, unsigned> data);
+  void print(std::string name, std::map<unsigned, double> data);
   void print(std::string name, std::map<int, double> data);
   
   void print(std::string name, std::vector<int> data);

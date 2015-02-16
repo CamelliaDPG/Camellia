@@ -44,6 +44,10 @@ namespace Camellia {
   void print(string name, map<int, double> data) {
     print<int, double>(name, data);
   }
+  
+  void print(string name, map<unsigned, double> data) {
+    print<unsigned, double>(name, data);
+  }
 
   void print(string name, map<unsigned, unsigned> data) {
     print<unsigned, unsigned>(name, data);
