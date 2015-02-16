@@ -52,15 +52,15 @@
 
 #include "../../drivers/DPGTests/TestSuite.h"
 
-LinearTermPtr RieszRep::getRHS(){
-  return _rhs;
+LinearTermPtr RieszRep::getFunctional(){
+  return _functional;
 }
 
 MeshPtr RieszRep::mesh() {
   return _mesh;
 }
 
-map<GlobalIndexType,FieldContainer<double> > RieszRep::integrateRHS() {
+map<GlobalIndexType,FieldContainer<double> > RieszRep::integrateFunctional() {
   // NVR: changed this to only return integrated values for rank-local cells.
 
   map<GlobalIndexType,FieldContainer<double> > cellRHS;
@@ -75,7 +75,7 @@ map<GlobalIndexType,FieldContainer<double> > RieszRep::integrateRHS() {
     BasisCachePtr basisCache = BasisCache::basisCacheForCell(_mesh,cellID,true,cubEnrich);
 
     FieldContainer<double> rhsValues(1,numTestDofs);
-    _rhs->integrate(rhsValues, testOrderingPtr, basisCache);
+    _functional->integrate(rhsValues, testOrderingPtr, basisCache);
 
     FieldContainer<double> rhsVals(numTestDofs);
     for (int i = 0;i<numTestDofs;i++){
@@ -105,7 +105,7 @@ void RieszRep::computeRieszRep(int cubatureEnrichment){
     BasisCachePtr basisCache = BasisCache::basisCacheForCell(_mesh,cellID,true,cubatureEnrichment);
 
     FieldContainer<double> rhsValues(1,numTestDofs);
-    _rhs->integrate(rhsValues, testOrderingPtr, basisCache);
+    _functional->integrate(rhsValues, testOrderingPtr, basisCache);
     if (_printAll){
       cout << "RieszRep: LinearTerm values for cell " << cellID << ":\n " << rhsValues << endl;
     }
@@ -169,7 +169,11 @@ double RieszRep::getNorm(){
   return sqrt(normSum);
 }
 
-const map<GlobalIndexType,double> & RieszRep::getNormsSquaredGlobal(){ // should be renamed getNormsSquaredGlobal()
+const map<GlobalIndexType,double> & RieszRep::getNormsSquared() {
+  return _rieszRepNormSquared;
+}
+
+const map<GlobalIndexType,double> & RieszRep::getNormsSquaredGlobal() { // should be renamed getNormsSquaredGlobal()
   return _rieszRepNormSquaredGlobal;
 }
 

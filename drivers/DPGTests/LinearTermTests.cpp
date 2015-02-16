@@ -794,7 +794,7 @@ bool LinearTermTests::testMixedTermConsistency() {
   IPPtr dummyIP = Teuchos::rcp(new IP);
   dummyIP->addTerm(v);
   Teuchos::RCP<RieszRep> riesz = Teuchos::rcp(new RieszRep(myMesh, dummyIP, integrandIBP));  
-  map<GlobalIndexType,FieldContainer<double> > rieszRHS = riesz->integrateRHS();
+  map<GlobalIndexType,FieldContainer<double> > rieszRHS = riesz->integrateFunctional();
 
   set<GlobalIndexType> cellIDs = myMesh->cellIDsInPartition();
   for (set<GlobalIndexType>::iterator cellIDIt=cellIDs.begin(); cellIDIt !=cellIDs.end(); cellIDIt++){
@@ -809,7 +809,7 @@ bool LinearTermTests::testMixedTermConsistency() {
     FieldContainer<double> rhsIBPValues(1,numTestDofs);
     integrandIBP->integrate(rhsIBPValues, testOrderingPtr, basisCache);
     FieldContainer<double> rieszValues(1,numTestDofs);
-    (riesz->getRHS())->integrate(rieszValues, testOrderingPtr, basisCache);
+    (riesz->getFunctional())->integrate(rieszValues, testOrderingPtr, basisCache);
     double maxDiff;
     double tol = 1e-13;
     FieldContainer<double> rhsIBPVals(numTestDofs);

@@ -1,36 +1,6 @@
 #ifndef RIESZ_REP
 #define RIESZ_REP
 
-// @HEADER
-//
-// Copyright © 2011 Sandia Corporation. All Rights Reserved.
-//
-// Redistribution and use in source and binary forms, with or without modification, are 
-// permitted provided that the following conditions are met:
-// 1. Redistributions of source code must retain the above copyright notice, this list of 
-// conditions and the following disclaimer.
-// 2. Redistributions in binary form must reproduce the above copyright notice, this list of 
-// conditions and the following disclaimer in the documentation and/or other materials 
-// provided with the distribution.
-// 3. The name of the author may not be used to endorse or promote products derived from 
-// this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY 
-// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE 
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR 
-// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR 
-// ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR 
-// CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT 
-// OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR 
-// BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF 
-// LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING 
-// NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS 
-// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-//
-// Questions? Contact Nate Roberts (nate@nateroberts.com).
-//
-// @HEADER
-
 /*
  *  RieszRep.h
  *
@@ -73,15 +43,15 @@ class RieszRep {
   
   MeshPtr _mesh;
   IPPtr _ip;
-  LinearTermPtr _rhs;  // the RHS stuff here and below is misnamed -- should just be called functional
+  LinearTermPtr _functional;  // the RHS stuff here and below is misnamed -- should just be called functional
   bool _printAll;
   bool _repsNotComputed;
  
  public:
-  RieszRep(MeshPtr mesh, IPPtr ip, LinearTermPtr rhs){
+  RieszRep(MeshPtr mesh, IPPtr ip, LinearTermPtr functional){
     _mesh = mesh;
     _ip = ip;
-    _rhs = rhs;
+    _functional = functional;
     _printAll = false;
     _repsNotComputed = true;
   }
@@ -90,20 +60,25 @@ class RieszRep {
     _printAll = printAll;
   }
 
-  void setFunctional(LinearTermPtr rhs){
-    _rhs = rhs;
+  void setFunctional(LinearTermPtr functional){
+    _functional = functional;
   }
 
-  LinearTermPtr getRHS(); // getFunctional()
+  LinearTermPtr getFunctional();
   
   MeshPtr mesh();
 
   // for testing
-  map<GlobalIndexType,FieldContainer<double> > integrateRHS(); // integrateFunctional()
+  map<GlobalIndexType,FieldContainer<double> > integrateFunctional();
 
   void computeRieszRep(int cubatureEnrichment=0);
 
   double getNorm();
+
+  // ! Returns reference to container for rank-local cells
+  const map<GlobalIndexType,double> &getNormsSquared();
+  
+  // ! Returns reference to redundantly stored container for *all* active cells
   const map<GlobalIndexType,double> &getNormsSquaredGlobal();
 
   void distributeDofs();
@@ -114,7 +89,7 @@ class RieszRep {
   map<GlobalIndexType,double> computeAlternativeNormSqOnCells(IPPtr ip, vector<GlobalIndexType> cellIDs);
   
   static FunctionPtr repFunction( VarPtr var, RieszRepPtr rep );
-  static RieszRepPtr rieszRep(MeshPtr mesh, IPPtr ip, LinearTermPtr rhs);
+  static RieszRepPtr rieszRep(MeshPtr mesh, IPPtr ip, LinearTermPtr functional);
 };
 
 class RepFunction;
@@ -132,15 +107,6 @@ public:
     _op = var->op();
     _rep = rep;
   }
-    
-  /*
-// WARNING: DOES NOT WORK FOR HIGHER RANK FUNCTIONS
-  RepFunction(int testID,Teuchos::RCP<RieszRep> rep): Function(0){
-    _testID = testID;
-    _rep = rep;   
-    _op =  Camellia::OP_VALUE; // default to OPERATOR_VALUE
-  }
-  */
 
   // optional specification of operator to apply - default to rank 0
  RepFunction(int testID,Teuchos::RCP<RieszRep> rep, Camellia::EOperator op): Function(0){
