@@ -104,7 +104,7 @@ class RieszRep {
   void computeRieszRep(int cubatureEnrichment=0);
 
   double getNorm();
-  const map<GlobalIndexType,double> &getNormsSquared();
+  const map<GlobalIndexType,double> &getNormsSquaredGlobal();
 
   void distributeDofs();
 

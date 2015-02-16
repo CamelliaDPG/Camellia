@@ -75,11 +75,13 @@ void RefinementStrategy::refine(bool printToConsole) {
   MeshPtr mesh = this->mesh();
   
   double totalEnergyError = 0.0;
-  
+
+  // NOTE 2/16/15: Both approaches, the RieszRep and the Solution, really do store on *each* MPI rank
+  //               information about *every* active cell in the mesh.  This should be corrected!!
   map<GlobalIndexType, double> energyError;
   if (_rieszRep.get() != NULL) {
     _rieszRep->computeRieszRep();
-    energyError = _rieszRep->getNormsSquared();
+    energyError = _rieszRep->getNormsSquaredGlobal();
     // take square roots:
     for (map<GlobalIndexType, double>::iterator energyEntryIt = energyError.begin();
          energyEntryIt != energyError.end(); energyEntryIt++) {
@@ -465,7 +467,6 @@ bool RefinementStrategy::enforceAnisotropicOneIrregularity(vector<GlobalIndexTyp
   }
   return success;
 }
-
 
 double RefinementStrategy::getEnergyError(int refinementNumber) {
   if (refinementNumber < _results.size()) {

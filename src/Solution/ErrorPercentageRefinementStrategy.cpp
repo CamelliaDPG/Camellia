@@ -24,7 +24,7 @@ void ErrorPercentageRefinementStrategy::refine(bool printToConsole) {
   map<GlobalIndexType, double> energyError;
   if (_rieszRep.get() != NULL) {
     _rieszRep->computeRieszRep();
-    energyError = _rieszRep->getNormsSquared();
+    energyError = _rieszRep->getNormsSquaredGlobal();
     // take square roots:
     for (map<GlobalIndexType, double>::iterator energyEntryIt = energyError.begin();
          energyEntryIt != energyError.end(); energyEntryIt++) {

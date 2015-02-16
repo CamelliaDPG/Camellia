@@ -48,6 +48,8 @@
 #include "CamelliaDebugUtility.h"
 #include "GlobalDofAssignment.h"
 
+#include "MPIWrapper.h"
+
 #include "../../drivers/DPGTests/TestSuite.h"
 
 LinearTermPtr RieszRep::getRHS(){
@@ -167,7 +169,7 @@ double RieszRep::getNorm(){
   return sqrt(normSum);
 }
 
-const map<GlobalIndexType,double> & RieszRep::getNormsSquared(){ // should be renamed getNormsSquaredGlobal()
+const map<GlobalIndexType,double> & RieszRep::getNormsSquaredGlobal(){ // should be renamed getNormsSquaredGlobal()
   return _rieszRepNormSquaredGlobal;
 }
 
