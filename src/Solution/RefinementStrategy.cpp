@@ -88,7 +88,6 @@ void RefinementStrategy::refine(bool printToConsole) {
       totalEnergyError += energyEntryIt->second;
       energyEntryIt->second = sqrt( energyEntryIt->second );
     }
-    MPIWrapper::sum(totalEnergyError);
     totalEnergyError = sqrt(totalEnergyError);
   } else {
     energyError = _solution->globalEnergyError();
