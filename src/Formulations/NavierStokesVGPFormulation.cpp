@@ -209,8 +209,9 @@ NavierStokesVGPFormulation::NavierStokesVGPFormulation(MeshTopologyPtr meshTopol
     forcingFunction = Function::zero(vectorRank);
   }
   
-  RHSPtr rhs = this->rhs(forcingFunction, _neglectFluxesOnRHS);
-  _solnIncrement->setRHS(rhs);
+  _rhsForSolve = this->rhs(forcingFunction, _neglectFluxesOnRHS);
+  _rhsForResidual = this->rhs(forcingFunction, false);
+  _solnIncrement->setRHS(_rhsForSolve);
   
   BCPtr bcSolnIncrement = BC::bc();
   
@@ -317,6 +318,12 @@ void NavierStokesVGPFormulation::addPointPressureCondition() {
   if (_solnIncrement->bc()->imposeZeroMeanConstraint(p->ID())) {
     _solnIncrement->bc()->removeZeroMeanConstraint(p->ID());
   }
+}
+
+void NavierStokesVGPFormulation::addWallCondition(SpatialFilterPtr wall) {
+  int spaceDim = _solnIncrement->mesh()->getTopology()->getSpaceDim();
+  vector<double> zero(spaceDim, 0.0);
+  addInflowCondition(wall, Function::constant(zero));
 }
 
 void NavierStokesVGPFormulation::addZeroMeanPressureCondition() {
@@ -469,7 +476,9 @@ void NavierStokesVGPFormulation::setRefinementStrategy(RefinementStrategyPtr ref
 
 void NavierStokesVGPFormulation::refine() {
   _nonlinearIterationCount = 0;
+  _solnIncrement->setRHS(_rhsForResidual);
   _refinementStrategy->refine();
+  _solnIncrement->setRHS(_rhsForSolve);
 }
                                   
 RHSPtr NavierStokesVGPFormulation::rhs(FunctionPtr f, bool excludeFluxesAndTraces) {

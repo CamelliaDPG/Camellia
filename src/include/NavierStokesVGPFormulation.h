@@ -26,8 +26,11 @@ class NavierStokesVGPFormulation {
   BFPtr _navierStokesBF, _stokesBF;
   bool _useConformingTraces;
   double _mu;
-  Teuchos::RCP<ParameterFunction> _dt; // use a ParameterFunction so that we can set value later and references (in BF, e.g.) automatically pick this up
-
+  ParameterFunctionPtr _dt; // use a ParameterFunction so that we can set value later and references (in BF, e.g.) automatically pick this up
+  ParameterFunctionPtr _theta; // selector for time step method; 0.5 is Crank-Nicolson
+  
+  RHSPtr _rhsForSolve, _rhsForResidual;
+  
   LinearTermPtr _t1, _t2, _t3; // tractions
   
   SolverPtr _solver;
