@@ -5,6 +5,7 @@
 #ifdef HAVE_EPETRAEXT_HDF5
 
 #include "CamelliaCellTools.h"
+#include "MeshTools.h"
 #include "GlobalDofAssignment.h"
 
 #ifdef HAVE_MPI
@@ -515,6 +516,7 @@ void HDF5Exporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
           TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "cellTopoKey unrecognized");
       }
       
+      // cout << topo->getName() << endl;
       // TODO: rework the code below to handle tensorial degree > 0.
       TEUCHOS_TEST_FOR_EXCEPTION(topo->getTensorialDegree() > 0, std::invalid_argument, "exportFunction does not yet support tensorial degree > 0.");
 
@@ -804,18 +806,52 @@ void HDF5Exporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
 
   if (commRank == 0)
   {
-    ofstream xmfFieldFile;
-    ofstream xmfTraceFile;
-    xmfFieldFile.open((_dirSuperPath + "/" + _dirName+"/"+_dirName+"-field.xmf").c_str());
-    xmfTraceFile.open((_dirSuperPath + "/" + _dirName+"/"+_dirName+"-trace.xmf").c_str());
-    xmfFieldFile << "<?xml version=\"1.0\" ?>" << endl
-    << "<!DOCTYPE Xdmf SYSTEM \"Xdmf.dtd\" []>" << endl;
-    xmfTraceFile << "<?xml version=\"1.0\" ?>" << endl
-    << "<!DOCTYPE Xdmf SYSTEM \"Xdmf.dtd\" []>" << endl;
-    xmfFieldFile << _fieldXdmf.toString();
-    xmfTraceFile << _traceXdmf.toString();
-    xmfFieldFile.close();
-    xmfTraceFile.close();
+    if (_fieldGrids.numChildren() > 0)
+    {
+      ofstream xmfFieldFile;
+      xmfFieldFile.open((_dirSuperPath + "/" + _dirName+"/"+_dirName+"-field.xmf").c_str());
+      xmfFieldFile << "<?xml version=\"1.0\" ?>" << endl
+      << "<!DOCTYPE Xdmf SYSTEM \"Xdmf.dtd\" []>" << endl;
+      xmfFieldFile << _fieldXdmf.toString();
+      xmfFieldFile.close();
+    }
+    if (_traceGrids.numChildren() > 0)
+    {
+      ofstream xmfTraceFile;
+      xmfTraceFile.open((_dirSuperPath + "/" + _dirName+"/"+_dirName+"-trace.xmf").c_str());
+      xmfTraceFile << "<?xml version=\"1.0\" ?>" << endl
+      << "<!DOCTYPE Xdmf SYSTEM \"Xdmf.dtd\" []>" << endl;
+      xmfTraceFile << _traceXdmf.toString();
+      xmfTraceFile.close();
+    }
+  }
+}
+
+void HDF5Exporter::exportTimeSlab(FunctionPtr function, string functionName, double tInit, double tFinal, unsigned int numSlices, unsigned int sliceH1Order, unsigned int defaultNum1DPts)
+{
+  vector<FunctionPtr> functions;
+  functions.push_back(function);
+  vector<string> functionNames;
+  functionNames.push_back(functionName);
+  exportTimeSlab(functions, functionNames, tInit, tFinal, numSlices, sliceH1Order, defaultNum1DPts);
+}
+
+void HDF5Exporter::exportTimeSlab(vector<FunctionPtr> functions, vector<string> functionNames, double tInit, double tFinal, unsigned int numSlices, unsigned int sliceH1Order, unsigned int defaultNum1DPts)
+{
+  HDF5Exporter exporter(_mesh, _dirName, _dirSuperPath);
+  for (int slice=0; slice < numSlices; slice++)
+  {
+    double sliceTime = tInit + slice*(tFinal-tInit)/(numSlices-1);
+    map<GlobalIndexType,GlobalIndexType> cellMap;
+    MeshPtr meshSlice = MeshTools::timeSliceMesh(_mesh, sliceTime, cellMap, sliceH1Order);
+    vector<FunctionPtr> functionSlices;
+    for (vector<FunctionPtr>::iterator fcnIt = functions.begin(); fcnIt != functions.end(); ++fcnIt)
+    {
+      FunctionPtr functionSlice = MeshTools::timeSliceFunction(_mesh, cellMap, *fcnIt, sliceTime);
+      functionSlices.push_back(functionSlice);
+    }
+    exporter.setMesh(meshSlice);
+    exporter.exportFunction(functionSlices, functionNames, sliceTime, defaultNum1DPts);
   }
 }
 

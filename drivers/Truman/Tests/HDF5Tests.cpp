@@ -5,6 +5,7 @@
 #include "InnerProductScratchPad.h"
 #include "RefinementStrategy.h"
 #include "Solution.h"
+#include "MeshTools.h"
 #include "HDF5Exporter.h"
 
 #ifdef HAVE_MPI
@@ -202,16 +203,39 @@ int main(int argc, char *argv[])
     functionMap[2] = Function::xn(1);
     functionMap[3] = Function::xn(1);
     solution->projectOntoMesh(functionMap);
-    spaceTimeSolution->projectOntoMesh(functionMap);
+    // spaceTimeSolution->projectOntoMesh(functionMap);
 
-    HDF5Exporter exporter(mesh, "Poisson1D");
-    map<int, int> cellIDToNum1DPts;
-    cellIDToNum1DPts[1] = 4;
-    exporter.exportSolution(solution, varFactory, 0, 2, cellIDToSubdivision(mesh, 4));
+    // HDF5Exporter exporter(mesh, "Poisson1D");
+    // exporter.exportSolution(solution, varFactory, 0, 2);
 
 
+    HDF5Exporter exporter(spaceTimeMesh, "SliceAnimation");
+    vector<FunctionPtr> fcns;
+    fcns.push_back(Function::xn(1));
+    fcns.push_back(Function::xn(2));
+    vector<string> fcnnames;
+    fcnnames.push_back("x");
+    fcnnames.push_back("x2");
+    exporter.exportTimeSlab(fcns, fcnnames, 0, 1, 4);
+    vector<FunctionPtr> bfcns;
+    bfcns.push_back(Function::restrictToCellBoundary(Function::constant(0)));
+    vector<string> bfcnnames;
+    bfcnnames.push_back("mesh");
+    // exporter.exportTimeSlab(bfcns, bfcnnames, 0, 1, 4);
 
-
+    // map<GlobalIndexType,GlobalIndexType> cellMap_t0, cellMap_t1;
+    // MeshPtr meshSlice_t0 = MeshTools::timeSliceMesh(spaceTimeMesh, 0, cellMap_t0, H1Order);
+    // MeshPtr meshSlice_t1 = MeshTools::timeSliceMesh(spaceTimeMesh, 1,  cellMap_t1, H1Order);
+    // FunctionPtr sliceFunction_t0 = MeshTools::timeSliceFunction(spaceTimeMesh, cellMap_t0, Function::xn(1), 0);
+    // FunctionPtr sliceFunction_t1 = MeshTools::timeSliceFunction(mesh, cellMap_t1, Function::xn(1), 1);
+    // HDF5Exporter exporter(spaceTimeMesh, "Function1D");
+    // HDF5Exporter exporter0(meshSlice_t0, "Function1D_t0");
+    // HDF5Exporter exporter1(meshSlice_t1, "Function1D_t1");
+    // exporter0.exportFunction(sliceFunction_t0, "x");
+    // exporter0.exportFunction(Function::xn(1), "x");
+    // exporter0.exportFunction(Function::restrictToCellBoundary(Function::constant(0)), "mesh");
+    // exporter1.exportFunction(sliceFunction_t1, "x");
+    // exporter1.exportFunction(Function::restrictToCellBoundary(Function::constant(0)), "mesh");
 
     // {
     //     HDF5Exporter exporter(mesh, "function1", false);
