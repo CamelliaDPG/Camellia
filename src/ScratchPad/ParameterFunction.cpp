@@ -18,6 +18,10 @@ ParameterFunction::ParameterFunction(FunctionPtr fxn) : Function(fxn->rank()) {
   setValue(fxn);
 }
 
+FunctionPtr ParameterFunction::getValue() const {
+  return _fxn;
+}
+
 void ParameterFunction::setValue(FunctionPtr fxn) {
   if ((_fxn.get() == NULL) || (fxn->rank() == _fxn->rank())) {
     _fxn = fxn;

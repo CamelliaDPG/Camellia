@@ -17,6 +17,9 @@ class ParameterFunction : public Function {
 public:
   ParameterFunction(double value);
   ParameterFunction(FunctionPtr value);
+  
+  FunctionPtr getValue() const;
+  
   void setValue(FunctionPtr fxn);
   void setValue(double value);
   
