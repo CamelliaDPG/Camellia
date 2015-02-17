@@ -37,6 +37,9 @@ bool RHS::nonZeroRHS(int testVarID) {
 }
 
 LinearTermPtr RHS::linearTerm() {
+  if (_lt == Teuchos::null) {
+    _lt = Teuchos::rcp( new LinearTerm );
+  }
   return _lt;
 }
 
