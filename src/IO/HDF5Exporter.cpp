@@ -74,13 +74,15 @@ HDF5Exporter::~HDF5Exporter()
 {
 }
 
-void HDF5Exporter::exportSolution(SolutionPtr solution, VarFactory varFactory, double timeVal, unsigned int defaultNum1DPts, map<int, int> cellIDToNum1DPts, set<GlobalIndexType> cellIndices)
+void HDF5Exporter::exportSolution(SolutionPtr solution, double timeVal, unsigned int defaultNum1DPts, map<int, int> cellIDToNum1DPts, set<GlobalIndexType> cellIndices)
 {
+  VarFactory varFactory = _mesh->bilinearForm()->varFactory();
+  
   vector<int> fieldTrialIDs = _mesh->bilinearForm()->trialVolumeIDs();
   vector<int> traceTrialIDs = _mesh->bilinearForm()->trialBoundaryIDs();
   vector<VarPtr> fieldVars;
   vector<VarPtr> traceVars;
-
+  
   vector<FunctionPtr> fieldFunctions;
   vector<string> fieldFunctionNames;
   for (int i=0; i < fieldTrialIDs.size(); i++)
@@ -103,6 +105,13 @@ void HDF5Exporter::exportSolution(SolutionPtr solution, VarFactory varFactory, d
   }
   exportFunction(fieldFunctions, fieldFunctionNames, timeVal, defaultNum1DPts, cellIDToNum1DPts, cellIndices);
   exportFunction(traceFunctions, traceFunctionNames, timeVal, defaultNum1DPts, cellIDToNum1DPts, cellIndices);
+}
+
+void HDF5Exporter::exportSolution(SolutionPtr solution, VarFactory varFactory, double timeVal, unsigned int defaultNum1DPts, map<int, int> cellIDToNum1DPts, set<GlobalIndexType> cellIndices)
+{
+  int rank = Teuchos::GlobalMPISession::getRank();
+  if (rank==0) cout << "NOTE: this version of HDF5Exporter::exportSolution() is deprecated.  Remove the VarFactory argument to get rid of this message.\n";
+  this->exportSolution(solution,varFactory,timeVal,defaultNum1DPts,cellIDToNum1DPts,cellIndices);
 }
 
 void HDF5Exporter::exportFunction(FunctionPtr function, string functionName, double timeVal, unsigned int defaultNum1DPts, map<int, int> cellIDToNum1DPts, set<GlobalIndexType> cellIndices)

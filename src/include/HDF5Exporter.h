@@ -40,13 +40,17 @@ public:
     unsigned int defaultNum1DPts=4, map<int, int> cellIDToNum1DPts=map<int,int>(), set<GlobalIndexType> cellIndices=set<GlobalIndexType>());
   void exportFunction(vector<FunctionPtr> functions, vector<string> functionNames, double timeVal=0,
     unsigned int defaultNum1DPts=4, map<int, int> cellIDToNum1DPts=map<int,int>(), set<GlobalIndexType> cellIndices=set<GlobalIndexType>());
-  void exportSolution(SolutionPtr solution, VarFactory varFactory, double timeVal=0,
-    unsigned int defaultNum1DPts=4, map<int, int> cellIDToNum1DPts=map<int,int>(), set<GlobalIndexType> cellIndices=set<GlobalIndexType>());
+  void exportSolution(SolutionPtr solution, double timeVal=0, unsigned int defaultNum1DPts=4,
+                      map<int, int> cellIDToNum1DPts=map<int,int>(), set<GlobalIndexType> cellIndices=set<GlobalIndexType>());
   void exportTimeSlab(FunctionPtr function, string functionName="function", double tInit=0, double tFinal=1, unsigned int numSlices=2,
     unsigned int sliceH1Order=2, unsigned int defaultNum1DPts=4);
   void exportTimeSlab(vector<FunctionPtr> functions, vector<string> functionNames, double tInit=0, double tFinal=1, unsigned int numSlices=2,
     unsigned int sliceH1Order=2, unsigned int defaultNum1DPts=4);
 
+  // DEPRECATED METHOD:
+  void exportSolution(SolutionPtr solution, VarFactory varFactory, double timeVal=0,
+                      unsigned int defaultNum1DPts=4, map<int, int> cellIDToNum1DPts=map<int,int>(), set<GlobalIndexType> cellIndices=set<GlobalIndexType>());
+  
   // allows one-line export without storing an exporter object
   static void exportFunction(string directoryPath, string functionName, FunctionPtr function, MeshPtr mesh); 
   // allows one-line export without storing an exporter object 
