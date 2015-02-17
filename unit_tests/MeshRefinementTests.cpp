@@ -117,13 +117,10 @@ namespace {
     
     FunctionPtr psi_exact = (spaceDim > 1) ? phi_exact->grad() : phi_exact->dx();
     
-    FunctionPtr psi_n_exact;
-    FunctionPtr n = Function::normal();
-    if (spaceDim > 1) {
-      psi_n_exact = psi_exact * n;
-    } else {
-      psi_n_exact = psi_exact;
-    }
+    map<int, FunctionPtr> psiMap;
+    psiMap[psi->ID()] = psi_exact;
+    
+    FunctionPtr psi_n_exact = psi_n->termTraced()->evaluate(psiMap);
     
     FunctionPtr psi_soln = Function::solution(psi, solution);
     FunctionPtr psi_n_soln = Function::solution(psi_n, solution); // includes (correction for) parity weighting
