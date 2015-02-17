@@ -138,14 +138,15 @@ namespace {
     IPPtr ip = bf->graphNorm();
     coarseSoln->setIP(ip);
     
-    FunctionPtr n = Function::normal();
-    FunctionPtr parity = Function::sideParity();
-    
     map<int, FunctionPtr> exactSolnMap;
     exactSolnMap[phi->ID()] = phi_exact;
     exactSolnMap[psi->ID()] = psi_exact;
-    exactSolnMap[phi_hat->ID()] = phi_exact;
-    exactSolnMap[psi_n_hat->ID()] = psi_exact * n * parity;
+    
+    FunctionPtr phi_hat_exact   =   phi_hat->termTraced()->evaluate(exactSolnMap);
+    FunctionPtr psi_n_hat_exact = psi_n_hat->termTraced()->evaluate(exactSolnMap);
+    
+    exactSolnMap[phi_hat->ID()]   = phi_hat_exact;
+    exactSolnMap[psi_n_hat->ID()] = psi_n_hat_exact;
     
     coarseSoln->projectOntoMesh(exactSolnMap);
     
