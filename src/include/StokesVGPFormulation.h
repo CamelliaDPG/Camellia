@@ -27,6 +27,7 @@ class StokesVGPFormulation {
   bool _transient;
 
   ParameterFunctionPtr _dt; // use a ParameterFunction so that we can set value later and references (in BF, e.g.) automatically pick this up
+  ParameterFunctionPtr _t;  // use a ParameterFunction so that user can easily "ramp up" BCs in time...
   
   ParameterFunctionPtr _theta; // selector for time step method; 0.5 is Crank-Nicolson
   
@@ -106,6 +107,9 @@ public:
   // ! Returns the sum of the time steps taken thus far.
   double getTime();
   
+  // ! Returns a FunctionPtr which gets updated with the current time.  Useful for setting BCs that vary in time.
+  FunctionPtr getTimeFunction();
+  
   // field variables:
   VarPtr sigma(int i);
   VarPtr u(int i);
@@ -118,6 +122,8 @@ public:
   // test variables:
   VarPtr tau(int i);
   VarPtr v(int i);
+  
+  static FunctionPtr forcingFunction(int spaceDim, double mu, FunctionPtr u, FunctionPtr p);
 };
 
 #endif
