@@ -319,7 +319,7 @@ void Mesh::enforceOneIrregularity() {
       }
       
       if (isIrregular) {
-        if (rank==0) cout << "cellID " << cellID << " is irregular.\n";
+//        if (rank==0) cout << "cellID " << cellID << " is irregular.\n";
         irregularCellIDs[cell->topology()->getKey()].insert(cellID);
       }
     }
