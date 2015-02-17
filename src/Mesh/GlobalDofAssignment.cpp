@@ -42,15 +42,14 @@ GlobalDofAssignment::GlobalDofAssignment(MeshPtr mesh, VarFactory varFactory,
   set<GlobalIndexType> activeCellIDs;
   activeCellIDs.insert(cellIndices.begin(),cellIndices.end()); // for distributed mesh, we'd do some logic with cellID offsets for each MPI rank.  (cellID = cellIndex + cellIDOffsetForRank)
   
-  map<GlobalIndexType, unsigned> sideIndexParityAssignmentCount; // tracks the number of times each side in the mesh has been assigned a parity.
   for (set<GlobalIndexType>::iterator cellIDIt = activeCellIDs.begin(); cellIDIt != activeCellIDs.end(); cellIDIt++) {
     GlobalIndexType cellID = *cellIDIt;
-    CellPtr cell = _meshTopology->getCell(cellID);
-    if (cell->isParent() || (cell->getParent().get() != NULL)) {
-      // enforcing this allows us to assume that each face that isn't on the boundary will be treated exactly twice...
-      cout << "GDAMaximumRule2D constructor only supports mesh topologies that are unrefined.\n";
-      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "GDAMaximumRule2D constructor only supports mesh topologies that are unrefined.\n");
-    }
+//    CellPtr cell = _meshTopology->getCell(cellID);
+//    if (cell->isParent() || (cell->getParent().get() != NULL)) {
+//      // enforcing this allows us to assume that each face that isn't on the boundary will be treated exactly twice...
+//      cout << "GlobalDofAssignment constructor only supports mesh topologies that are unrefined.\n";
+//      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "GlobalDofAssignment constructor only supports mesh topologies that are unrefined.\n");
+//    }
     
     assignInitialElementType(cellID);
     assignParities(cellID);
@@ -111,6 +110,12 @@ void GlobalDofAssignment::assignInitialElementType( GlobalIndexType cellID ) {
   DofOrderingPtr testOrdering = _dofOrderingFactory->testOrdering(testDegree, cell->topology());
   ElementTypePtr elemType = _elementTypeFactory.getElementType(trialOrdering,testOrdering,cell->topology());
   _elementTypeForCell[cellID] = elemType;
+  
+  if (cell->getParent() != Teuchos::null) {
+    GlobalIndexType parentCellID = cell->getParent()->cellIndex();
+    if (_elementTypeForCell.find(parentCellID) == _elementTypeForCell.end())
+      assignInitialElementType(parentCellID);
+  }
 }
 
 void GlobalDofAssignment::assignParities( GlobalIndexType cellID ) {
@@ -139,6 +144,9 @@ void GlobalDofAssignment::assignParities( GlobalIndexType cellID ) {
         // inherit parent's parity along the shared side:
         unsigned childOrdinal = parent->childOrdinal(cellID);
         unsigned parentSideOrdinal = parent->refinementPattern()->parentSideLookupForChild(childOrdinal)[sideOrdinal];
+        if (_cellSideParitiesForCellID.find(parent->cellIndex()) == _cellSideParitiesForCellID.end()) {
+          assignParities(parent->cellIndex());
+        }
         cellParities[sideOrdinal] = _cellSideParitiesForCellID[parent->cellIndex()][parentSideOrdinal];
       }
     }
