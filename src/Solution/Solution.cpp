@@ -206,6 +206,9 @@ void Solution::addSolution(Teuchos::RCP<Solution> otherSoln, double weight, bool
   // setGlobalSolutionFromCellLocalCoefficients() method.
 
   set<GlobalIndexType> myCellIDs = _mesh->cellIDsInPartition();
+  
+  // in case otherSoln has a distinct mesh partitioning, import data for this's cells that is off-rank in otherSoln
+  otherSoln->importSolutionForOffRankCells(myCellIDs);
 
   for (set<GlobalIndexType>::iterator cellIDIt = myCellIDs.begin(); cellIDIt != myCellIDs.end(); cellIDIt++) {
     GlobalIndexType cellID = *cellIDIt;
@@ -217,7 +220,8 @@ void Solution::addSolution(Teuchos::RCP<Solution> otherSoln, double weight, bool
       myCoefficients.resize(_mesh->getElementType(cellID)->trialOrderPtr->totalDofs());
     }
 
-    FieldContainer<double> otherCoefficients = otherSoln->allCoefficientsForCellID(cellID);
+    bool warnAboutOffRank = false;
+    FieldContainer<double> otherCoefficients = otherSoln->allCoefficientsForCellID(cellID, warnAboutOffRank);
 
     SerialDenseWrapper::addFCs(myCoefficients, otherCoefficients, weight);
 
