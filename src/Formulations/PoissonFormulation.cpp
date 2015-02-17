@@ -45,8 +45,10 @@ PoissonFormulation::PoissonFormulation(int spaceDim, bool useConformingTraces) {
     phi_hat = vf.fluxVar(S_PHI_HAT, phi, phi_hat_space); // for spaceDim==1, the "normal" component is in the flux-ness of phi_hat (it's a plus or minus 1)
   
   FunctionPtr n = Function::normal();
+  FunctionPtr parity = Function::sideParity();
+
   if (spaceDim > 1)
-    psi_n_hat = vf.fluxVar(S_PSI_N_HAT, psi * n);
+    psi_n_hat = vf.fluxVar(S_PSI_N_HAT, psi * (n * parity));
   else
     psi_n_hat = vf.fluxVar(S_PSI_N_HAT, psi);
   
