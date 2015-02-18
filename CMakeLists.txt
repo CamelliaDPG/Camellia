@@ -3,6 +3,14 @@ cmake_minimum_required(VERSION 2.6)
 # Set TARGET_SUPPORTS_SHARED_LIBS -- otherwise problems building shared libs on Macs (at least)
 SET_PROPERTY(GLOBAL PROPERTY TARGET_SUPPORTS_SHARED_LIBS TRUE)
 
+option(INCLUDE_DRIVERS_IN_ALL "Include drivers in make all (set to ON for IDE project generation)" OFF)
+
+IF(INCLUDE_DRIVERS_IN_ALL)
+  SET(EXCLUDE_DRIVERS_FROM_ALL "")
+ELSE()
+  SET(EXCLUDE_DRIVERS_FROM_ALL "EXCLUDE_FROM_ALL")
+ENDIF(INCLUDE_DRIVERS_IN_ALL)
+
 #IF(APPLE)
 #   SET(CMAKE_SHARED_MODULE_CREATE_C_FLAGS
 #       "${CMAKE_SHARED_MODULE_CREATE_C_FLAGS} -flat_namespace -undefined suppress")
@@ -11,14 +19,6 @@ SET_PROPERTY(GLOBAL PROPERTY TARGET_SUPPORTS_SHARED_LIBS TRUE)
 # Set Camellia directories
 set(CAMELLIA_SOURCE_DIR src)
 set(DRIVER_DIR drivers)
-
-# find_package(VTK REQUIRED)
-# include(${VTK_USE_FILE})
-# if(VTK_LIBRARIES)
-#   link_libraries(${VTK_LIBRARIES})
-# else()
-#   link_libraries(vtkHybrid)
-# endif()
 
 if (ZLIB_LIB)
   link_libraries(${ZLIB_LIB})
@@ -196,12 +196,16 @@ link_libraries(
 )
 # target_link_libraries(Camellia Xdmf)
 
-# Build Drivers
-add_subdirectory(drivers)
-add_subdirectory(examples)
-#add_subdirectory(tests)
-add_subdirectory(unit_tests)
-add_subdirectory(slow_tests)
+FILE(GLOB ALL_HEADER_FILES "${HEADERS}/*.h" "${HEADERS}/*.hpp")
+install (TARGETS Camellia DESTINATION lib)
+install (FILES ${ALL_HEADER_FILES} DESTINATION include/Camellia)
 
 # Enable testing (see unit_tests directory)
 include(CTest)
+enable_testing()
+
+# Build Drivers
+add_subdirectory(drivers ${EXCLUDE_DRIVERS_FROM_ALL})
+add_subdirectory(examples)
+add_subdirectory(unit_tests)
+add_subdirectory(slow_tests)

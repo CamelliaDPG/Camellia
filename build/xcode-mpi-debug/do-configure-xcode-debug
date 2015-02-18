@@ -13,6 +13,7 @@ cmake \
   -DMPI_LINK_FORTRAN="-Wl,-commons,use_dylibs -I/Users/nroberts/lib/openmpi-1.6.5/lib -L/Users/nroberts/lib/openmpi-1.6.5/lib -lmpi_f90 -lmpi_f77 -lmpi -lm -lmpi_cxx" \
   -DSCALAPACK_LIB="/Users/nroberts/lib/libscalapack.a" \
   -DBOOST_ROOT:FILEPATH=/usr/local \
+  -DINCLUDE_DRIVERS_IN_ALL:BOOL=ON \
   -DBUILD_TRUMAN_DRIVERS:BOOL=OFF \
   -DBUILD_CONFUSION_JESSE_DRIVERS:BOOL=OFF \
   -DBUILD_INCOMPRESSIBLENS_DRIVERS:BOOL=OFF \
