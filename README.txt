@@ -106,14 +106,11 @@ Instructions for a serial debug build:
 3. Edit do-configure-serial-debug in the following manner:
        - set the TRILINOS_PATH to your serial-debug Trilinos installation
        - set ZLIB_LIB to the path to the zlib library (for HDF5 support)
+       - set CMAKE_INSTALL_PREFIX:PATH to your preferred install location for Camellia
 4. Run the do-configure script:
 	./do-configure-cli-serial-debug
-5. Try building DPGTests (older tests that have not yet been moved to the new test environment):
-	make DPGTests
-6. Assuming it builds, try running it:
-	./DPGTests
-7. Try building runTests (the new test environment):
-	make runTests
-8. Run
+5. make
+6. make test
+7. make install
 
-All tests in DPGTests and runTests should pass, with the exception of the runTests test MeshTools_MeshSliceTimeZero_UnitTest, which is a test against some new space-time facilities still under development.
+As of this writing (2/18/15), all tests in DPGTests and runTests should pass, with the exception of four of the runTests tests, which test some new space-time and multigrid facilities still under development.
