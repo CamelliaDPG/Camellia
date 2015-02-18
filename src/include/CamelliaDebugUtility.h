@@ -6,6 +6,13 @@
 #include <map>
 #include <string>
 
+#include "Teuchos_RCP.hpp"
+#include "Intrepid_FieldContainer.hpp"
+
+class VarFactory;
+class DofOrdering;
+typedef Teuchos::RCP<DofOrdering> DofOrderingPtr;
+
 namespace Camellia {
   template<typename data_type>
   void print(std::string name, std::set<data_type> &data);
@@ -26,6 +33,13 @@ namespace Camellia {
   void print(std::string name, std::set<int> data);
   void print(std::string name, std::set<long long> data);
   void print(std::string name, std::set<double> data);
+  
+  // ! prints out the coefficients for each variable, labelled using the names from the VarFactory.
+  // ! If the trialSpaceDofs boolean is set to true, interprets the variable IDs as trial space variables;
+  // ! otherwise, interprets them as test space variables.
+  void printLabeledDofCoefficients(const VarFactory &vf, DofOrderingPtr dofOrdering,
+                                   const Intrepid::FieldContainer<double> &dofCoefficients,
+                                   bool trialSpaceDofs = true);
 }
 
 #endif
