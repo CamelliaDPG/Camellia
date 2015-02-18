@@ -60,17 +60,17 @@ public:
   VarPtr traceVar(std::string name, VarPtr termTraced, Space fs = HGRAD, int ID = -1);
   VarPtr traceVar(std::string name, Space fs = HGRAD, int ID = -1);
   
-  const std::map< int, VarPtr > & testVars();
-  const std::map< int, VarPtr > & trialVars();
+  const std::map< int, VarPtr > & testVars() const;
+  const std::map< int, VarPtr > & trialVars() const;
   
-  std::vector< VarPtr > fieldVars();
+  std::vector< VarPtr > fieldVars() const;
   
-  std::vector< VarPtr > fluxVars();
+  std::vector< VarPtr > fluxVars() const;
   
-  std::vector< VarPtr > traceVars();
+  std::vector< VarPtr > traceVars() const;
   
   // returns a new VarFactory with the same test space, and a subspace of the trial space
-  VarFactory trialSubFactory(std::vector< VarPtr > &trialVars);
+  VarFactory trialSubFactory(std::vector< VarPtr > &trialVars) const;
 };
 
 #endif

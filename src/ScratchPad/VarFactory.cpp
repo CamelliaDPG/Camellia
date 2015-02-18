@@ -171,18 +171,18 @@ VarPtr VarFactory::traceVar(string name, Space fs, int ID) {
   return traceVar(name, Teuchos::rcp((LinearTerm*)NULL), fs, ID);
 }
 
-const map< int, VarPtr > & VarFactory::testVars() {
+const map< int, VarPtr > & VarFactory::testVars() const {
   return _testVarsByID;
 }
 
-const map< int, VarPtr > & VarFactory::trialVars() {
+const map< int, VarPtr > & VarFactory::trialVars() const {
   return _trialVarsByID;
 }
 
-vector< VarPtr > VarFactory::fieldVars() {
+vector< VarPtr > VarFactory::fieldVars() const {
   vector< VarPtr > vars;
   
-  for ( map< int, VarPtr >::iterator trialIt = _trialVarsByID.begin();
+  for ( map< int, VarPtr >::const_iterator trialIt = _trialVarsByID.begin();
        trialIt != _trialVarsByID.end(); trialIt++) {
     if (trialIt->second->varType() == FIELD) {
       vars.push_back(trialIt->second);
@@ -191,10 +191,10 @@ vector< VarPtr > VarFactory::fieldVars() {
   return vars;
 }
 
-vector< VarPtr > VarFactory::fluxVars() {
+vector< VarPtr > VarFactory::fluxVars() const {
   vector< VarPtr > vars;
   
-  for ( map< int, VarPtr >::iterator trialIt = _trialVarsByID.begin();
+  for ( map< int, VarPtr >::const_iterator trialIt = _trialVarsByID.begin();
        trialIt != _trialVarsByID.end(); trialIt++) {
     if (trialIt->second->varType() == FLUX) {
       vars.push_back(trialIt->second);
@@ -203,10 +203,10 @@ vector< VarPtr > VarFactory::fluxVars() {
   return vars;
 }
 
-vector< VarPtr > VarFactory::traceVars() {
+vector< VarPtr > VarFactory::traceVars() const {
   vector< VarPtr > vars;
   
-  for ( map< int, VarPtr >::iterator trialIt = _trialVarsByID.begin();
+  for ( map< int, VarPtr >::const_iterator trialIt = _trialVarsByID.begin();
        trialIt != _trialVarsByID.end(); trialIt++) {
     if (trialIt->second->varType() == TRACE) {
       vars.push_back(trialIt->second);
@@ -215,14 +215,14 @@ vector< VarPtr > VarFactory::traceVars() {
   return vars;
 }
 
-VarFactory VarFactory::trialSubFactory(vector< VarPtr > &trialVars) {
+VarFactory VarFactory::trialSubFactory(vector< VarPtr > &trialVars) const {
   // returns a new VarFactory with the same test space, and a subspace of the trial space
   VarFactory subFactory;
   for (vector< VarPtr >::iterator trialVarIt=trialVars.begin(); trialVarIt != trialVars.end(); trialVarIt++) {
     VarPtr trialVar = *trialVarIt;
     subFactory.addTrialVar(trialVar);
   }
-  for (map<int, VarPtr>::iterator testVarIt=_testVarsByID.begin(); testVarIt != _testVarsByID.end(); testVarIt++) {
+  for (map<int, VarPtr>::const_iterator testVarIt=_testVarsByID.begin(); testVarIt != _testVarsByID.end(); testVarIt++) {
     VarPtr testVar = testVarIt->second;
     subFactory.addTestVar(testVar);
   }
