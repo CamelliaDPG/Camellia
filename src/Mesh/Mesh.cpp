@@ -1252,6 +1252,7 @@ void Mesh::saveToHDF5(string filename)
       testOrderEnhancementsVec.push_back(it->second);
     }
     int vertexIndicesSize = rootVertexIndices.size();
+    int topoKeysIntSize = rootKeys.size() * sizeof(Camellia::CellTopologyKey) / sizeof(int);
     int topoKeysSize = rootKeys.size();
     int verticesSize = rootVertices.size();
     int trialOrderEnhancementsSize = trialOrderEnhancementsVec.size();
@@ -1288,7 +1289,7 @@ void Mesh::saveToHDF5(string filename)
     hdf5.Write("Mesh", "testOrderEnhancementsSize", testOrderEnhancementsSize);
     hdf5.Write("Mesh", "dimension", getDimension());
     hdf5.Write("Mesh", "vertexIndices", H5T_NATIVE_INT, rootVertexIndices.size(), &rootVertexIndices[0]);
-    hdf5.Write("Mesh", "topoKeys", H5T_NATIVE_INT, rootKeys.size(), &rootKeys[0]);
+    hdf5.Write("Mesh", "topoKeys", H5T_NATIVE_INT, topoKeysIntSize, &rootKeys[0]);
     hdf5.Write("Mesh", "vertices", H5T_NATIVE_DOUBLE, rootVertices.size(), &rootVertices[0]);
     hdf5.Write("Mesh", "H1Order", globalDofAssignment()->getInitialH1Order());
     hdf5.Write("Mesh", "deltaP", globalDofAssignment()->getTestOrderEnrichment());

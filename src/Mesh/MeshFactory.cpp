@@ -8,15 +8,12 @@
 
 #include "MeshFactory.h"
 
-#include "ParametricCurve.h"
-
-#include "GnuPlotUtil.h"
-
-#include "RefinementHistory.h"
-
+#include "CamelliaCellTools.h"
 #include "CamelliaDebugUtility.h"
-
 #include "GlobalDofAssignment.h"
+#include "GnuPlotUtil.h"
+#include "ParametricCurve.h"
+#include "RefinementHistory.h"
 
 #ifdef HAVE_EPETRAEXT_HDF5
 #include <EpetraExt_HDF5.h>
@@ -49,6 +46,8 @@ static ParametricCurvePtr parametricRect(double width, double height, double x0,
     hdf5.Read("Mesh", "testOrderEnhancementsSize", testOrderEnhancementsSize);
     hdf5.Read("Mesh", "histArraySize", histArraySize);
 
+    int topoKeysIntSize = topoKeysSize * sizeof(Camellia::CellTopologyKey) / sizeof(int);
+    
     int numPartitions, maxPartitionSize;
     
     hdf5.Read("Mesh", "numPartitions", numPartitions);
@@ -68,7 +67,7 @@ static ParametricCurvePtr parametricRect(double width, double height, double x0,
     
     int dimension, H1Order, deltaP;
     vector<int> vertexIndices(vertexIndicesSize);
-    vector<int> topoKeys(topoKeysSize);
+    vector<Camellia::CellTopologyKey> topoKeys(topoKeysSize);
     vector<int> trialOrderEnhancementsVec(trialOrderEnhancementsSize);
     vector<int> testOrderEnhancementsVec(testOrderEnhancementsSize);
     vector<double> vertices(verticesSize);
@@ -76,7 +75,7 @@ static ParametricCurvePtr parametricRect(double width, double height, double x0,
     string GDARule;
     hdf5.Read("Mesh", "dimension", dimension);
     hdf5.Read("Mesh", "vertexIndices", H5T_NATIVE_INT, vertexIndicesSize, &vertexIndices[0]);
-    hdf5.Read("Mesh", "topoKeys", H5T_NATIVE_INT, topoKeysSize, &topoKeys[0]);
+    hdf5.Read("Mesh", "topoKeys", H5T_NATIVE_INT, topoKeysIntSize, &topoKeys[0]);
     hdf5.Read("Mesh", "vertices", H5T_NATIVE_DOUBLE, verticesSize, &vertices[0]);
     hdf5.Read("Mesh", "H1Order", H1Order);
     hdf5.Read("Mesh", "deltaP", deltaP);
@@ -104,43 +103,12 @@ static ParametricCurvePtr parametricRect(double width, double height, double x0,
     int vindx = 0;
     for (unsigned cellNumber = 0; cellNumber < topoKeysSize; cellNumber++)
     {
+      CellTopoPtr cellTopo = CamelliaCellTools::cellTopoForKey(topoKeys[cellNumber]);
+      cellTopos.push_back(cellTopo);
       vector<unsigned> elemVertices;
-      switch (topoKeys[cellNumber])
-      {
-        case shards::Line<2>::key:
-          cellTopos.push_back(line_2);
-          for (int i=0; i < 2; i++)
-          {
-            elemVertices.push_back(vertexIndices[vindx]);
-            vindx++;
-          }
-          break;
-        case shards::Quadrilateral<4>::key:
-          cellTopos.push_back(quad_4);
-          for (int i=0; i < 4; i++)
-          {
-            elemVertices.push_back(vertexIndices[vindx]);
-            vindx++;
-          }
-          break;
-        case shards::Triangle<3>::key:
-          cellTopos.push_back(tri_3);
-          for (int i=0; i < 3; i++)
-          {
-            elemVertices.push_back(vertexIndices[vindx]);
-            vindx++;
-          }
-          break;
-        case shards::Hexahedron<8>::key:
-          cellTopos.push_back(hex_8);
-          for (int i=0; i < 8; i++)
-          {
-            elemVertices.push_back(vertexIndices[vindx]);
-            vindx++;
-          }
-          break;
-        default:
-          TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "cellTopoKey unrecognized");
+      for (int i=0; i < cellTopo->getVertexCount(); i++) {
+        elemVertices.push_back(vertexIndices[vindx]);
+        vindx++;
       }
       elementVertices.push_back(elemVertices);
     }
