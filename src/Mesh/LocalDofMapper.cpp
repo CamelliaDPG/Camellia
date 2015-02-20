@@ -36,11 +36,6 @@ void LocalDofMapper::addSubBasisMapVectorContribution(int varID, int sideOrdinal
                                                       const FieldContainer<double> &localData,
                                                       FieldContainer<double> &globalData,
                                                       bool fittableGlobalDofsOnly) {
-  bool transposeConstraint = true; // local to global
-  
-  // NOTE: we spend a *LOT* of time in this method.  We can probably save something by eliminating the filterData
-  //       business, and having SubBasisDofMapper accumulate directly into globalData.  We might even save a lot that way.
-  
   FieldContainer<double> basisData(_dofOrdering->getDofIndices(varID, sideOrdinal).size());
   if (_varIDToMap == -1) {
     vector<int> varDofIndices = _dofOrdering->getDofIndices(varID, sideOrdinal);
@@ -57,18 +52,6 @@ void LocalDofMapper::addSubBasisMapVectorContribution(int varID, int sideOrdinal
   for (vector<SubBasisDofMapperPtr>::iterator subBasisMapIt = basisMap.begin(); subBasisMapIt != basisMap.end(); subBasisMapIt++) {
     SubBasisDofMapperPtr subBasisDofMapper = *subBasisMapIt;
     subBasisDofMapper->mapDataIntoGlobalContainer(basisData, _globalIndexToOrdinal, fittableGlobalDofsOnly, *fittableDofs, globalData);
-    // old version of the method below:
-//    vector<int> basisOrdinalFilter(subBasisDofMapper->basisDofOrdinalFilter().begin(), subBasisDofMapper->basisDofOrdinalFilter().end());
-//    FieldContainer<double> subBasisData(basisOrdinalFilter.size());
-//    filterData(basisOrdinalFilter, basisData, subBasisData);
-//    FieldContainer<double> mappedSubBasisData = (*subBasisMapIt)->mapData(transposeConstraint, subBasisData);
-//    vector<GlobalIndexType> globalIndices = (*subBasisMapIt)->mappedGlobalDofOrdinals();
-//    for (int sbGlobalOrdinal_i=0; sbGlobalOrdinal_i<globalIndices.size(); sbGlobalOrdinal_i++) {
-//      GlobalIndexType globalIndex_i = globalIndices[sbGlobalOrdinal_i];
-//      if (fittableGlobalDofsOnly && (fittableDofs->find(globalIndex_i) == fittableDofs->end())) continue; // skip this one
-//      unsigned globalOrdinal_i = _globalIndexToOrdinal[globalIndex_i];
-//      globalData(globalOrdinal_i) += mappedSubBasisData(sbGlobalOrdinal_i);
-//    }
   }
 }
 
