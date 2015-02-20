@@ -492,7 +492,18 @@ SubBasisReconciliationWeights BasisReconciliation::computeConstrainedWeightsForT
   } else {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "termTraced reconciliation does not yet support rank > 0 terms...");
   }
-  termTraced->values(coarserBasisValues, fieldID, coarserBasis, coarseDomainCache);
+//  termTraced->values(coarserBasisValues, fieldID, coarserBasis, coarseDomainCache);
+  
+  // TODO: consider this change that might make for a cleaner implementation:
+  // - Make BasisCache::fakeSideCache always (or by default) set up cellSideParities that are 1.0
+  int oneCell = 1;
+  int numSides = fineDomainCache->cellTopology()->getSideCount();
+  FieldContainer<double> cellSideParities(oneCell,numSides);
+  cellSideParities.initialize(1.0);
+  BasisCachePtr fakeSideCache = BasisCache::fakeSideCache(fineDomainCache->getSideIndex(), coarseDomainCache,
+                                                          coarseDomainCache->getRefCellPoints(),
+                                                          fineDomainCache->getSideNormals(), cellSideParities);
+  termTraced->values(coarserBasisValues, fieldID, coarserBasis, fakeSideCache);
   
   // reshape to get rid of cell dimension:
   if (termTraced->rank() == 0) {
