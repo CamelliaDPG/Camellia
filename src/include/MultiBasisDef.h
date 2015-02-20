@@ -254,9 +254,10 @@ namespace Camellia {
       ArrayScalar cellJacobian,cellJacobInv,cellJacobDet;
       computeCellJacobians(cellJacobian,cellJacobInv,cellJacobDet, inputPointsRefCell,refCellIndex);
       
+      int numCells = 1;
       Teuchos::RCP< ArrayScalar > transformedValues = BasisEvaluation::getTransformedValues(basis,
                                                                                             (Camellia::EOperator)operatorType,
-                                                                                            inputPointsRefCell,
+                                                                                            inputPointsRefCell, numCells,
                                                                                             cellJacobian, cellJacobInv, cellJacobDet);
       
       //    cout << "transformedValues for basis " << basisIndex << ":\n" << *transformedValues;
