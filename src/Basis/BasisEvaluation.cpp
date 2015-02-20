@@ -102,6 +102,7 @@ FCPtr BasisEvaluation::getValues(BasisPtr basis, Camellia::EOperator op,
 
 FCPtr BasisEvaluation::getTransformedValues(BasisPtr basis, Camellia::EOperator op,
                                             const FieldContainer<double> &referencePoints,
+                                            int numCells,
                                             const FieldContainer<double> &cellJacobian, 
                                             const FieldContainer<double> &cellJacobianInv,
                                             const FieldContainer<double> &cellJacobianDet) {
@@ -111,7 +112,7 @@ FCPtr BasisEvaluation::getTransformedValues(BasisPtr basis, Camellia::EOperator 
   relatedOp = relatedOperator(op, fs, componentOfInterest);
   
   FCPtr referenceValues = getValues(basis,(Camellia::EOperator) relatedOp, referencePoints);
-  return getTransformedValuesWithBasisValues(basis,op,referenceValues,cellJacobian,cellJacobianInv,cellJacobianDet);
+  return getTransformedValuesWithBasisValues(basis,op,referenceValues,numCells,cellJacobian,cellJacobianInv,cellJacobianDet);
 }
 
 FCPtr BasisEvaluation::getTransformedVectorValuesWithComponentBasisValues(VectorBasisPtr basis, Camellia::EOperator op,
@@ -135,22 +136,22 @@ FCPtr BasisEvaluation::getTransformedVectorValuesWithComponentBasisValues(Vector
 }
 
 FCPtr BasisEvaluation::getTransformedValuesWithBasisValues(BasisPtr basis, Camellia::EOperator op,
-                                                           constFCPtr referenceValues,
+                                                           constFCPtr referenceValues, int numCells,
                                                            const FieldContainer<double> &cellJacobian, 
                                                            const FieldContainer<double> &cellJacobianInv,
                                                            const FieldContainer<double> &cellJacobianDet) {
   typedef FunctionSpaceTools fst;
-  int numCells = cellJacobian.dimension(0);
+//  int numCells = cellJacobian.dimension(0);
   
-  int spaceDim;
-  // 6-16-14 NVR: getting the spaceDim from cellJacobian's dimensioning is the way we've historically done it.
-  // I think it might be better to do this using basis->domainTopology() generally, but for now we only make the
-  // switch in case the domain topology is a Node.
-  if (basis->domainTopology()->getDimension() == 0) {
-    spaceDim = 0;
-  } else {
-    spaceDim = cellJacobian.dimension(2);
-  }
+  int spaceDim = basis->domainTopology()->getDimension(); // changed 2/18/15
+//  // 6-16-14 NVR: getting the spaceDim from cellJacobian's dimensioning is the way we've historically done it.
+//  // I think it might be better to do this using basis->domainTopology() generally, but for now we only make the
+//  // switch in case the domain topology is a Node.
+//  if (basis->domainTopology()->getDimension() == 0) {
+//    spaceDim = 0;
+//  } else {
+//    spaceDim = cellJacobian.dimension(2);
+//  }
   
   int componentOfInterest;
   Camellia::EFunctionSpace fs = basis->functionSpace();
