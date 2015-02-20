@@ -57,14 +57,15 @@ public:
   static FCPtr getValues(BasisPtr basis, Camellia::EOperator op,
                          const Intrepid::FieldContainer<double> &refPoints);
   static FCPtr getTransformedValues(BasisPtr basis, Camellia::EOperator op,
-                                   const Intrepid::FieldContainer<double> &refPoints,
-                                   const Intrepid::FieldContainer<double> &cellJacobian, 
-                                   const Intrepid::FieldContainer<double> &cellJacobianInv,
-                                   const Intrepid::FieldContainer<double> &cellJacobianDet);
+                                    const Intrepid::FieldContainer<double> &refPoints,
+                                    int numCells,
+                                    const Intrepid::FieldContainer<double> &cellJacobian,
+                                    const Intrepid::FieldContainer<double> &cellJacobianInv,
+                                    const Intrepid::FieldContainer<double> &cellJacobianDet);
   static FCPtr getTransformedVectorValuesWithComponentBasisValues(Camellia::VectorBasisPtr basis, Camellia::EOperator op,
                                                                   constFCPtr componentReferenceValuesTransformed);
   static FCPtr getTransformedValuesWithBasisValues(BasisPtr basis, Camellia::EOperator op,
-                                                   constFCPtr referenceValues,                                 
+                                                   constFCPtr referenceValues, int numCells,
                                                    const Intrepid::FieldContainer<double> &cellJacobian, 
                                                    const Intrepid::FieldContainer<double> &cellJacobianInv,
                                                    const Intrepid::FieldContainer<double> &cellJacobianDet);
