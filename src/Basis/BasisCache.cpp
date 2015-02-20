@@ -216,8 +216,7 @@ BasisCache::BasisCache(ElementTypePtr elemType, Teuchos::RCP<Mesh> mesh, bool te
   init(createSideCacheToo, tensorProductTopologyMeansSpaceTime);
 }
 
-BasisCache::BasisCache(const FieldContainer<double> &physicalCellNodes,
-                       CellTopoPtr cellTopo,
+BasisCache::BasisCache(const FieldContainer<double> &physicalCellNodes, CellTopoPtr cellTopo,
                        DofOrdering &trialOrdering, int maxTestDegree, bool createSideCacheToo, bool tensorProductTopologyMeansSpaceTime) {
   _cellTopo = cellTopo;
   findMaximumDegreeBasisForSides(trialOrdering);
@@ -281,6 +280,39 @@ BasisCache::BasisCache(const FieldContainer<double> &physicalCellNodes, CellTopo
   init(createSideCacheToo, tensorProductTopologyMeansSpaceTime);
   
   setPhysicalCellNodes(physicalCellNodes,vector<GlobalIndexType>(),createSideCacheToo);
+}
+
+// "fake" side constructor
+BasisCache::BasisCache(int fakeSideOrdinal, BasisCachePtr volumeCache, const FieldContainer<double> &volumeRefPoints,
+                       const FieldContainer<double> &sideNormals, const FieldContainer<double> &cellSideParities) {
+  _cellTopo = volumeCache->cellTopology(); // VOLUME cell topo.
+  _isSideCache = true;
+  _sideIndex = fakeSideOrdinal;
+  _basisCacheVolume = volumeCache;
+  _spaceDim = _cellTopo->getDimension();
+  
+  _cubPoints.resize(0); // force an exception if true side reference points are ever accessed in fake side BasisCache
+
+  int numCells = volumeCache->getPhysicalCubaturePoints().dimension(0);
+  int numPoints = volumeRefPoints.dimension(0);
+  _physCubPoints.resize(numCells,numPoints,_spaceDim);
+  _cubPointsSideRefCell = volumeRefPoints;
+  _sideNormals = sideNormals;
+  _cellSideParities = cellSideParities;
+  _maxPointsPerCubaturePhase = -1; // default: -1 (infinite)
+  _cubaturePhase = 0; // index of the cubature phase; defaults to 0
+  _cubaturePhaseCount = 1; // how many phases to get through all the points
+  _phasePointOrdinalOffsets.push_back(0);
+  
+  // the assumption is that if you're using this constructor, the volume points provided are already in reference space
+  // so that the transformations are all identities
+  int cellDim = _cellTopo->getDimension(); // for space-time, cellDim = _spaceDim + 1
+  _cellJacobian.resize(numCells, numPoints, cellDim, cellDim);
+  _cellJacobInv.resize(numCells, numPoints, cellDim, cellDim);
+  _cellJacobDet.resize(numCells, numPoints);
+  _cellJacobian.initialize(1.0);
+  _cellJacobInv.initialize(1.0);
+  _cellJacobDet.initialize(1.0);
 }
 
 // side constructor
@@ -602,9 +634,10 @@ constFCPtr BasisCache::getTransformedValues(BasisPtr basis, Camellia::EOperator 
       constFCPtr referenceValues = getValues(basis,(Camellia::EOperator) relatedOp, useCubPointsSideRefCell);
 //      cout << "_cellJacobInv:\n" << _cellJacobInv;
 //      cout << "referenceValues:\n"  << *referenceValues;
+      int numCells = _physCubPoints.dimension(0);
       transformedValues =
       BasisEvaluation::getTransformedValuesWithBasisValues(basis, (Camellia::EOperator) relatedOp,
-                                                           referenceValues, _cellJacobian, 
+                                                           referenceValues, numCells, _cellJacobian,
                                                            _cellJacobInv,_cellJacobDet);
 //      cout << "transformedValues:\n" << *transformedValues;
     }
@@ -759,8 +792,8 @@ void BasisCache::setRefCellPoints(const FieldContainer<double> &pointsRefCell, c
   int numPoints = pointsRefCell.dimension(0);
   
   if ( isSideCache() ) { // then we need to map pointsRefCell (on side) into volume coordinates, and store in _cubPointsSideRefCell
-    int cellDim = _cellTopo->getDimension();
-    // for side cache, _spaceDim is the spatial dimension of the volume cache
+    int cellDim = _cellTopo->getDimension(); // will be _spaceDim + 1 for space-time CellTopologies.
+    // for side cache, cellDim is the spatial dimension of the volume cache's cellTopology
     _cubPointsSideRefCell.resize(numPoints, cellDim);
     // _cellTopo is the volume cell topology for side basis caches.
     int sideDim = cellDim - 1;
@@ -1211,5 +1244,17 @@ BasisCachePtr BasisCache::sideBasisCache(Teuchos::RCP<BasisCache> volumeCache, i
     }
   }
   BasisCachePtr sideCache = Teuchos::rcp( new BasisCache(sideOrdinal, volumeCache, maxTrialDegreeOnSide, maxTestDegree, multiBasisIfAny));
+  return sideCache;
+}
+
+// ! As the name suggests, this method is not meant for widespread use.  Intended mainly for flux-to-field mappings
+BasisCachePtr BasisCache::fakeSideCache(int fakeSideOrdinal, BasisCachePtr volumeCache, const FieldContainer<double> &volumeRefPoints,
+                                        const FieldContainer<double> &sideNormals, const FieldContainer<double> &cellSideParities) {
+  int spaceDim = volumeCache->cellTopology()->getDimension();
+  int numSides = volumeCache->cellTopology()->getSideCount();
+  
+  TEUCHOS_TEST_FOR_EXCEPTION(fakeSideOrdinal >= numSides, std::invalid_argument, "fakeSideOrdinal out of range");
+  
+  BasisCachePtr sideCache = Teuchos::rcp( new BasisCache(fakeSideOrdinal, volumeCache, volumeRefPoints, sideNormals, cellSideParities));
   return sideCache;
 }

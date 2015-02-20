@@ -139,6 +139,10 @@ private:
   // (private) side cache constructor:
   BasisCache(int sideIndex, Teuchos::RCP<BasisCache> volumeCache, int trialDegree, int testDegree, BasisPtr multiBasisIfAny);
   
+  // private "fake" side cache constructor:
+  BasisCache(int fakeSideOrdinal, BasisCachePtr volumeCache, const FieldContainer<double> &volumeRefPoints,
+             const FieldContainer<double> &sideNormals, const FieldContainer<double> &cellSideParities);
+  
   int maxTestDegree();
   void createSideCaches();
   
@@ -266,7 +270,11 @@ public:
   // note that this does not inform the volumeCache about the created side cache:
   // Intended for cases where you just want to create a BasisCache for one of the sides, not all of them.
   // If you want one for all of them, you should pass createSideCacheToo = true to an appropriate volumeCache method.
-  static BasisCachePtr sideBasisCache(Teuchos::RCP<BasisCache> volumeCache, int sideIndex);
+  static BasisCachePtr sideBasisCache(BasisCachePtr volumeCache, int sideIndex);
+  
+  // ! As the name suggests, this method is not meant for widespread use.  Intended mainly for flux-to-field mappings
+  static BasisCachePtr fakeSideCache(int fakeSideOrdinal, BasisCachePtr volumeCache, const FieldContainer<double> &volumeRefPoints,
+                                     const FieldContainer<double> &sideNormals, const FieldContainer<double> &cellSideParities);
 };
 
 #endif
