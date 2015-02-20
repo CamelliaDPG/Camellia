@@ -1903,9 +1903,10 @@ void Solution::solutionValues(FieldContainer<double> &values,
                              std::invalid_argument,
                              "physicalPoints.dimension(2) != spaceDim.");
 
-  FieldContainer<double> thisCellJacobian(1,numPoints, spaceDim, spaceDim);
-  FieldContainer<double> thisCellJacobInv(1,numPoints, spaceDim, spaceDim);
-  FieldContainer<double> thisCellJacobDet(1,numPoints);
+  int oneCell = 1;
+  FieldContainer<double> thisCellJacobian(oneCell,numPoints, spaceDim, spaceDim);
+  FieldContainer<double> thisCellJacobInv(oneCell,numPoints, spaceDim, spaceDim);
+  FieldContainer<double> thisCellJacobDet(oneCell,numPoints);
   FieldContainer<double> thisRefElemPoints(numPoints,spaceDim);
 
   CellTopoPtr side = cellTopo->getSubcell(spaceDim-1,sideIndex); // create relevant subcell (side) topology
@@ -1926,9 +1927,8 @@ void Solution::solutionValues(FieldContainer<double> &values,
     thisCellJacobInv.setValues(&cellJacobInv(cellIndex,0,0,0),numPoints*spaceDim*spaceDim);
     thisCellJacobDet.setValues(&cellJacobDet(cellIndex,0),numPoints);
     Teuchos::RCP< FieldContainer<double> > transformedValues;
-    transformedValues = BasisEvaluation::getTransformedValues(basis,  OP_VALUE,
-                                                              sideRefCellPoints, thisCellJacobian,
-                                                              thisCellJacobInv, thisCellJacobDet);
+    transformedValues = BasisEvaluation::getTransformedValues(basis,  OP_VALUE, sideRefCellPoints, oneCell,
+                                                              thisCellJacobian, thisCellJacobInv, thisCellJacobDet);
 
     //    cout << "cellIndex " << cellIndex << " thisRefElemPoints: " << thisRefElemPoints;
     //    cout << "cellIndex " << cellIndex << " transformedValues: " << *transformedValues;
