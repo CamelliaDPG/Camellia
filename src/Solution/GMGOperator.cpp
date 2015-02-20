@@ -498,7 +498,7 @@ LocalDofMapperPtr GMGOperator::getLocalCoefficientMap(GlobalIndexType fineCellID
           BasisPtr coarseBasis, fineBasis;
           BasisMap basisMap;
           if (coarseSideOrdinal == -1) { // the fine side falls inside a coarse volume
-            // this is where we'd want to map trace to field using the traceTerm LinearTermPtr, which we're skipping for now.
+            // we map trace to field using the traceTerm LinearTermPtr
             VarPtr trialVar = vf.trial(trialID);
 
             LinearTermPtr termTraced = trialVar->termTraced();
