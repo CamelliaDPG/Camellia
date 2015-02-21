@@ -1438,11 +1438,11 @@ bool ConstantVectorFunction::isZero() {
 
 void ConstantVectorFunction::values(FieldContainer<double> &values, BasisCachePtr basisCache) {
   CHECK_VALUES_RANK(values);
-  // values are stored in (C,P,D) order, the important thing here being that we can do this:
-  int spaceDim = basisCache->getSpaceDim();
+  int spaceDim = values.dimension(2);
   if (spaceDim > _value.size()) {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "spaceDim is greater than length of vector...");
   }
+  // values are stored in (C,P,D) order, the important thing here being that we can do this:
   for (int i=0; i < values.size(); ) {
     for (int d=0; d < spaceDim; d++) {
       values[i++] = _value[d];
