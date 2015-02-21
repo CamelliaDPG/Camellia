@@ -1761,7 +1761,7 @@ public:
 };
 
 FunctionPtr Function::composedFunction( FunctionPtr f, FunctionPtr arg_g) {
-  cout << "WARNING: Function::composedFunction() called, but its implementation is not yet complete.\n";
+//  cout << "WARNING: Function::composedFunction() called, but its implementation is not yet complete.\n";
   return Teuchos::rcp( new ComposedFunction(f,arg_g) );
 }
 

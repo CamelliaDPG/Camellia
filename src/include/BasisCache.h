@@ -242,7 +242,7 @@ public:
   
   int getSideIndex(); // -1 if not sideCache
   
-  int getSpaceDim();
+  virtual int getSpaceDim();
   
   void setMaxCubatureDegree(int value);
   
