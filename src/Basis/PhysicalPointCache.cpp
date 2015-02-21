@@ -14,6 +14,9 @@ PhysicalPointCache::PhysicalPointCache(const FieldContainer<double> &physCubPoin
 const FieldContainer<double> & PhysicalPointCache::getPhysicalCubaturePoints() { // overrides super
   return _physCubPoints;
 }
+int PhysicalPointCache::getSpaceDim() {
+  return _physCubPoints.dimension(2);
+}
 FieldContainer<double> & PhysicalPointCache::writablePhysicalCubaturePoints() { // allows overwriting the contents
   return _physCubPoints;
 }

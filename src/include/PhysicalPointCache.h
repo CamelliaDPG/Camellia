@@ -17,6 +17,7 @@ public:
   PhysicalPointCache(const FieldContainer<double> &physCubPoints);
   const FieldContainer<double> & getPhysicalCubaturePoints();
   FieldContainer<double> & writablePhysicalCubaturePoints();
+  int getSpaceDim(); // overrides BasisCache::getSpaceDim();
 };
 
 #endif
