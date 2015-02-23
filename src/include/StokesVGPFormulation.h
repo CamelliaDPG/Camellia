@@ -15,6 +15,7 @@
 #include "Solution.h"
 #include "RefinementStrategy.h"
 #include "ParameterFunction.h"
+#include "PoissonFormulation.h"
 
 class StokesVGPFormulation {
   BFPtr _stokesBF;
@@ -36,7 +37,10 @@ class StokesVGPFormulation {
   SolverPtr _solver;
   
   SolutionPtr _solution, _previousSolution; // solution at current and previous time steps
-    
+  SolutionPtr _streamSolution;
+  
+  Teuchos::RCP<PoissonFormulation> _streamFormulation;
+  
   RefinementStrategyPtr _refinementStrategy;
   
   VarFactory _vf;
@@ -100,6 +104,13 @@ public:
   
   // ! Solves
   void solve();
+  
+  // ! Returns the variable in the stream solution that represents the stream function.
+  VarPtr streamPhi();
+  
+  // ! Returns the stream solution (at current time).  (Stream solution is created during initializeSolution, but
+  // ! streamSolution->solve() must be called manually.)  Use streamPhi() to get a VarPtr for the streamfunction.
+  SolutionPtr streamSolution();
   
   // ! Takes a time step
   void takeTimeStep();
