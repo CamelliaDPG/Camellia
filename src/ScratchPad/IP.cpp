@@ -28,15 +28,15 @@ IP::IP(BFPtr bfs) {
 }
 
 // added by Nate
-LinearTermPtr IP::evaluate(map< int, FunctionPtr> &varFunctions) {
+LinearTermPtr IP::evaluate(const map< int, FunctionPtr> &varFunctions) {
   // include both the boundary and non-boundary parts
   return evaluate(varFunctions,true) + evaluate(varFunctions,false);
 }
 
 // added by Jesse - evaluate inner product at given varFunctions
-LinearTermPtr IP::evaluate(map< int, FunctionPtr> &varFunctions, bool boundaryPart) {
+LinearTermPtr IP::evaluate(const map< int, FunctionPtr> &varFunctions, bool boundaryPart) {
   LinearTermPtr ltEval = Teuchos::rcp(new LinearTerm);
-  for ( vector< LinearTermPtr >:: iterator ltIt = _linearTerms.begin(); ltIt != _linearTerms.end(); ltIt++) {
+  for ( vector< LinearTermPtr >:: const_iterator ltIt = _linearTerms.begin(); ltIt != _linearTerms.end(); ltIt++) {
     LinearTermPtr lt = *ltIt;
     FunctionPtr weight = lt->evaluate(varFunctions,boundaryPart);
     ltEval->addTerm(weight*lt);
