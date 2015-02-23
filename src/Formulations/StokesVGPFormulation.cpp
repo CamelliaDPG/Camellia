@@ -9,6 +9,10 @@
 #include "StokesVGPFormulation.h"
 #include "PenaltyConstraints.h"
 
+#include "PoissonFormulation.h"
+
+#include "PreviousSolutionFunction.h"
+
 const string StokesVGPFormulation::S_U1 = "u_1";
 const string StokesVGPFormulation::S_U2 = "u_2";
 const string StokesVGPFormulation::S_U3 = "u_3";
@@ -349,6 +353,33 @@ void StokesVGPFormulation::initializeSolution(MeshTopologyPtr meshTopo, int fiel
   
   _time = 0;
   _t->setTime(_time);
+  
+  if (_spaceDim==2) {
+    // finally, set up a stream function solve for 2D
+    _streamFormulation = Teuchos::rcp( new PoissonFormulation(_spaceDim,_useConformingTraces) );
+    
+    MeshTopologyPtr streamMeshTopo = meshTopo->deepCopy();
+    
+    MeshPtr streamMesh = Teuchos::rcp( new Mesh(streamMeshTopo, _streamFormulation->bf(), H1Order, delta_k) ) ;
+    mesh->registerObserver(streamMesh); // refine streamMesh whenever mesh is refined
+    
+    LinearTermPtr u1_dy = (1.0 / _mu) * this->sigma(1)->y();
+    LinearTermPtr u2_dx = (1.0 / _mu) * this->sigma(2)->x();
+    
+    FunctionPtr vorticity = Teuchos::rcp( new PreviousSolutionFunction(_solution, u1_dy - u2_dx) );
+    RHSPtr streamRHS = RHS::rhs();
+    VarPtr q_stream = _streamFormulation->q();
+    streamRHS->addTerm(vorticity * q_stream);
+    bool dontWarnAboutOverriding = true;
+    ((PreviousSolutionFunction*) vorticity.get())->setOverrideMeshCheck(true,dontWarnAboutOverriding);
+    
+    BCPtr streamBC = BC::bc();
+    VarPtr phi_hat = _streamFormulation->phi_hat();
+    streamBC->addDirichlet(phi_hat, SpatialFilter::allSpace(), Function::zero());
+    
+    IPPtr streamIP = _streamFormulation->bf()->graphNorm();
+    _streamSolution = Solution::solution(streamMesh,streamBC,streamRHS,streamIP);
+  }
 }
 
 VarPtr StokesVGPFormulation::p() {
@@ -495,6 +526,32 @@ SolutionPtr StokesVGPFormulation::solutionPreviousTimeStep() {
 // ! Solves
 void StokesVGPFormulation::solve() {
   _solution->solve();
+}
+
+VarPtr StokesVGPFormulation::streamPhi() {
+  if (_spaceDim == 2) {
+    if (_streamFormulation == Teuchos::null) {
+      cout << "ERROR: streamPhi() called before initializeSolution called.  Returning null.\n";
+      return Teuchos::null;
+    }
+    return _streamFormulation->phi();
+  } else {
+    cout << "ERROR: stream function is only supported on 2D solutions.  Returning null.\n";
+    return Teuchos::null;
+  }
+}
+
+SolutionPtr StokesVGPFormulation::streamSolution() {
+  if (_spaceDim == 2) {
+    if (_streamFormulation == Teuchos::null) {
+      cout << "ERROR: streamPhi() called before initializeSolution called.  Returning null.\n";
+      return Teuchos::null;
+    }
+    return _streamSolution;
+  } else {
+    cout << "ERROR: stream function is only supported on 2D solutions.  Returning null.\n";
+    return Teuchos::null;
+  }
 }
 
 // ! Takes a time step (assumes you have called solve() first)

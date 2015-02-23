@@ -38,11 +38,13 @@ PreviousSolutionFunction::PreviousSolutionFunction(SolutionPtr soln, VarPtr var,
 bool PreviousSolutionFunction::boundaryValueOnly() { // fluxes and traces are only defined on element boundaries
   return (_solnExpression->termType() == FLUX) || (_solnExpression->termType() == TRACE);
 }
-void PreviousSolutionFunction::setOverrideMeshCheck(bool value) {
+void PreviousSolutionFunction::setOverrideMeshCheck(bool value, bool dontWarn) {
   int rank = Teuchos::GlobalMPISession::getRank();
   if (rank==0) {
     if (value==true) {
-      cout << "Overriding mesh check in PreviousSolutionFunction.  This is intended as an optimization for cases where two distinct meshes have IDENTICAL geometry for each of their cellIDs.  If this is not your situation, the override will produce unpredictable results and should NOT be used.\n";
+      if (!dontWarn) {
+        cout << "Overriding mesh check in PreviousSolutionFunction.  This is intended as an optimization for cases where two distinct meshes have IDENTICAL geometry for each of their cellIDs.  If this is not your situation, the override will produce unpredictable results and should NOT be used.\n";
+      }
     }
   }
   _overrideMeshCheck = value;

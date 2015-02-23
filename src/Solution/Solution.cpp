@@ -57,8 +57,10 @@
 // Epetra includes
 #ifdef HAVE_MPI
 #include "Epetra_MpiComm.h"
+#include "Epetra_MpiDistributor.h"
 #else
 #include "Epetra_SerialComm.h"
+#include "Epetra_SerialDistributor.h"
 #endif
 #include "Epetra_Time.h"
 
@@ -3696,7 +3698,11 @@ void Solution::saveToHDF5(string filename)
   int commRank = Teuchos::GlobalMPISession::getRank();
   int nProcs = Teuchos::GlobalMPISession::getNProc();
 
+#ifdef HAVE_MPI
   Epetra_MpiComm Comm(MPI_COMM_WORLD);
+#else
+  Epetra_SerialComm Comm;
+#endif
   EpetraExt::HDF5 hdf5(Comm);
   hdf5.Create(filename);
   hdf5.Write("Solution", *_lhsVector);
@@ -3709,7 +3715,11 @@ void Solution::loadFromHDF5(string filename)
   int commRank = Teuchos::GlobalMPISession::getRank();
   int nProcs = Teuchos::GlobalMPISession::getNProc();
 
+#ifdef HAVE_MPI
   Epetra_MpiComm Comm(MPI_COMM_WORLD);
+#else
+  Epetra_SerialComm Comm;
+#endif
   EpetraExt::HDF5 hdf5(Comm);
   hdf5.Open(filename);
   Epetra_MultiVector *lhsVec;
