@@ -78,6 +78,17 @@ public:
   }
 };
 
+class HeavisideFunction : public SimpleFunction {
+  double _xShift;
+public:
+  HeavisideFunction(double xShift=0.0) {
+    _xShift = xShift;
+  }
+  double value(double x) {
+    return (x < _xShift) ? 0.0 : 1.0;
+  }
+};
+
 class MeshBoundaryCharacteristicFunction : public Function {
 
 public:
@@ -492,6 +503,10 @@ FunctionPtr Function::grad(int numComponents) {
 //FunctionPtr Function::inverse() {
 //  return Function::null();
 //}
+
+FunctionPtr Function::heaviside(double xShift) {
+  return Teuchos::rcp( new HeavisideFunction(xShift) );
+}
 
 bool Function::isNull(FunctionPtr f) {
   return f.get() == NULL;
