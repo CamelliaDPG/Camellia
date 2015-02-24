@@ -500,7 +500,7 @@ int main(int argc, char *argv[]) {
     xmin = -.25;
     xmax = 1.25;
     xint = .5;
-    tmax = .25;
+    tmax = 1;
 
     rhoL = 1;
     rhoR = 1;
@@ -577,12 +577,14 @@ int main(int argc, char *argv[]) {
     mR = rhoL*uR;
     EL = rhoL*(Cv*TL+0.5*uL*uL);
     ER = rhoR*(Cv*TR+0.5*uR*uR);
-    UcL = (-EL+(EL-0.5*mL*mL/rhoL)*(gamma+1-log(((gamma-1)*(EL-0.5*mL*mL/rhoL)/pow(rhoL,gamma)))))/(EL-0.5*mL*mL/rhoL);
-    UcR = (-ER+(ER-0.5*mR*mR/rhoR)*(gamma+1-log(((gamma-1)*(ER-0.5*mR*mR/rhoR)/pow(rhoR,gamma)))))/(ER-0.5*mR*mR/rhoR);
-    UmL = mL/(EL-0.5*mL*mL/rhoL);
-    UmR = mR/(ER-0.5*mR*mR/rhoR);
-    UeL = -rhoL/(EL-0.5*mL*mL/rhoL);
-    UeR = -rhoR/(ER-0.5*mR*mR/rhoR);
+    UcL = -1.+0.5*uL*uL/(Cv*TL)+((rhoL*Cv*TL)*(gamma+1-log(((gamma-1)*(rhoL*Cv*TL)/pow(rhoL,gamma)))))/(rhoL*Cv*TL);
+    UcR = -1.+0.5*uR*uR/(Cv*TR)+((rhoR*Cv*TR)*(gamma+1-log(((gamma-1)*(rhoR*Cv*TR)/pow(rhoR,gamma)))))/(rhoR*Cv*TR);
+    UmL = mL/(rhoL*Cv*TL);
+    UmR = mR/(rhoR*Cv*TR);
+    UeL = -1./(Cv*TL);
+    UeR = -1./(Cv*TR);
+    cout << mL << " " << mR << " " << EL << " " << ER << endl;
+    cout << UcL << " " << UcR << " " << UmL << " " << UmR << " " << UeL << " " << UeR << endl;
     break;
     default:
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "invalid formulation");
@@ -1470,13 +1472,32 @@ int main(int argc, char *argv[]) {
     if (slab > 0)
     {
       // fhat_prev = Function::solution(fhat, solutions[slab-1]);
-      FunctionPtr rho_prev = Teuchos::RCP<Function>( new PreviousSolutionFunction(backgroundFlows[slab-1], rho) );
-      FunctionPtr u_prev = Teuchos::RCP<Function>( new PreviousSolutionFunction(backgroundFlows[slab-1], u) );
-      FunctionPtr T_prev = Teuchos::RCP<Function>( new PreviousSolutionFunction(backgroundFlows[slab-1], T) );
+      FunctionPtr Uc_prev = Teuchos::RCP<Function>( new PreviousSolutionFunction(backgroundFlows[slab-1], Uc) );
+      FunctionPtr Um_prev = Teuchos::RCP<Function>( new PreviousSolutionFunction(backgroundFlows[slab-1], Um) );
+      FunctionPtr Ue_prev = Teuchos::RCP<Function>( new PreviousSolutionFunction(backgroundFlows[slab-1], Ue) );
       SpatialFilterPtr init = Teuchos::rcp( new ConstantYBoundary(tmins[slab]) );
-      bcs[slab]->addDirichlet(tc, init, -rho_prev);
-      bcs[slab]->addDirichlet(tm, init, -rho_prev*u_prev);
-      bcs[slab]->addDirichlet(te, init, -Cv*rho_prev*T_prev-0.5*rho_prev*u_prev*u_prev);
+      switch (formulation)
+      {
+        case 0:
+        bcs[slab]->addDirichlet(tc, init, -Uc_prev);
+        bcs[slab]->addDirichlet(tm, init, -Uc_prev*Um_prev);
+        bcs[slab]->addDirichlet(te, init, -Cv*Uc_prev*Ue_prev-0.5*Uc_prev*Um_prev*Um_prev);
+        break;
+        case 1:
+        bcs[slab]->addDirichlet(tc, init, -Uc_prev);
+        bcs[slab]->addDirichlet(tm, init, -Um_prev);
+        bcs[slab]->addDirichlet(te, init, -Ue_prev);
+        break;
+        case 2:
+        FunctionPtr zePow1 = Teuchos::rcp( new PowerFunction(-Ue_prev, gamma));
+        FunctionPtr alphaPow1 = Teuchos::rcp( new PowerFunction((gamma-1)/zePow1, 1./(gamma-1)));
+        FunctionPtr alphaExp = Teuchos::rcp( new ExpFunction((-gamma+Uc_prev-0.5*Um_prev*Um_prev/Ue_prev)/(gamma-1)) );
+        FunctionPtr alpha = alphaPow1*alphaExp;
+        bcs[slab]->addDirichlet(tc, init, alpha*Ue_prev);
+        bcs[slab]->addDirichlet(tm, init, -alpha*Um_prev);
+        bcs[slab]->addDirichlet(te, init, -alpha*(one-0.5*Um_prev*Um_prev/Ue_prev));
+        break;        
+      }
     }
     meshes[slab]->registerSolution(backgroundFlows[slab]);
     meshes[slab]->registerSolution(solutions[slab]);
