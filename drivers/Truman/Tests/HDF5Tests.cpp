@@ -208,20 +208,38 @@ int main(int argc, char *argv[])
     // HDF5Exporter exporter(mesh, "Poisson1D");
     // exporter.exportSolution(solution, varFactory, 0, 2);
 
-
-    HDF5Exporter exporter(spaceTimeMesh, "SliceAnimation");
-    vector<FunctionPtr> fcns;
-    fcns.push_back(Function::xn(1));
-    fcns.push_back(Function::xn(2));
-    vector<string> fcnnames;
-    fcnnames.push_back("x");
-    fcnnames.push_back("x2");
-    // exporter.exportTimeSlab(fcns, fcnnames, 0, 1, 4);
-    vector<FunctionPtr> bfcns;
-    bfcns.push_back(Function::restrictToCellBoundary(Function::constant(0)));
-    vector<string> bfcnnames;
-    bfcnnames.push_back("mesh");
-    exporter.exportTimeSlab(bfcns, bfcnnames, 0, 1, 4);
+    // {
+    //   HDF5Exporter exporter(spaceTimeMesh, "SliceAnimation");
+    //   vector<FunctionPtr> fcns;
+    //   fcns.push_back(Function::xn(1));
+    //   fcns.push_back(Function::xn(2));
+    //   vector<string> fcnnames;
+    //   fcnnames.push_back("x");
+    //   fcnnames.push_back("x2");
+    //   exporter.exportTimeSlab(fcns, fcnnames, 0, 1, 4);
+    //   vector<FunctionPtr> bfcns;
+    //   bfcns.push_back(Function::restrictToCellBoundary(Function::constant(0)));
+    //   vector<string> bfcnnames;
+    //   bfcnnames.push_back("mesh");
+    //   exporter.exportTimeSlab(bfcns, bfcnnames, 0, 1, 4);
+    // }
+    {
+      cout << "FIELD" << endl;
+      HDF5Exporter exporter(spaceTimeMesh, "SpaceTime");
+      vector<FunctionPtr> fcns;
+      fcns.push_back(Function::xn(1));
+      fcns.push_back(Function::xn(2));
+      vector<string> fcnnames;
+      fcnnames.push_back("x");
+      fcnnames.push_back("x2");
+      exporter.exportFunction(fcns, fcnnames, 0, 2);
+      cout << "TRACE" << endl;
+      vector<FunctionPtr> bfcns;
+      bfcns.push_back(Function::restrictToCellBoundary(Function::constant(0)));
+      vector<string> bfcnnames;
+      bfcnnames.push_back("mesh");
+      exporter.exportFunction(bfcns, bfcnnames, 0, 3);
+    }
 
     // map<GlobalIndexType,GlobalIndexType> cellMap_t0, cellMap_t1;
     // MeshPtr meshSlice_t0 = MeshTools::timeSliceMesh(spaceTimeMesh, 0, cellMap_t0, H1Order);
