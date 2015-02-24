@@ -857,6 +857,8 @@ void HDF5Exporter::exportTimeSlab(vector<FunctionPtr> functions, vector<string> 
     for (vector<FunctionPtr>::iterator fcnIt = functions.begin(); fcnIt != functions.end(); ++fcnIt)
     {
       FunctionPtr functionSlice = MeshTools::timeSliceFunction(_mesh, cellMap, *fcnIt, sliceTime);
+      if ((*fcnIt)->boundaryValueOnly())
+        functionSlice = Function::restrictToCellBoundary(functionSlice);
       functionSlices.push_back(functionSlice);
     }
     exporter.setMesh(meshSlice);
