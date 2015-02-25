@@ -266,6 +266,7 @@ void HDF5Exporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
     switch (baseCellTopoKey)
     {
       case shards::Node::key:
+        cout << "Base Node" << endl;
         switch (cell->topology()->getTensorialDegree())
         {
           case 0:
@@ -285,6 +286,7 @@ void HDF5Exporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
         }
         break;
       case shards::Line<2>::key:
+        cout << "Base Line" << endl;
         switch (cell->topology()->getTensorialDegree())
         {
           case 0:
@@ -301,6 +303,7 @@ void HDF5Exporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
         }
         break;
       case shards::Quadrilateral<4>::key:
+        cout << "Base Quad" << endl;
         switch (cell->topology()->getTensorialDegree())
         {
           case 0:
@@ -314,6 +317,7 @@ void HDF5Exporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
         }
         break;
       case shards::Triangle<3>::key:
+        cout << "Base Triangle" << endl;
         switch (cell->topology()->getTensorialDegree())
         {
           case 0:
@@ -327,6 +331,7 @@ void HDF5Exporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
         }
         break;
       case shards::Hexahedron<8>::key:
+        cout << "Base Hex" << endl;
         switch (cell->topology()->getTensorialDegree())
         {
           case 0:
@@ -401,7 +406,7 @@ void HDF5Exporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
 
   }
   totalSubcells = totalBoundaryPts + totalSubLines + totalSubTriangles + totalSubQuads + totalSubHexas;
-
+  cout << "totalSubcells " << totalSubcells << endl;
 
   // Topology
   XMLObject topology("Topology");
@@ -576,6 +581,7 @@ void HDF5Exporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
       switch (baseCellTopoKey)
       {
         case shards::Node::key:
+          cout << "side base Node" << endl;
           switch (cell->topology()->getTensorialDegree())
           {
             case 0:
@@ -595,15 +601,16 @@ void HDF5Exporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
           }
           break;
         case shards::Line<2>::key:
+          cout << "side base Line" << endl;
           switch (cell->topology()->getTensorialDegree())
           {
             case 0:
             cellTopoKey = shards::Line<2>::key;
             break;
             case 1:
-            if (!exportingBoundaryValues)
+            if (!exportingBoundaryValues || (exportingBoundaryValues && spaceDim == 3))
               cellTopoKey = shards::Quadrilateral<4>::key;
-            else
+            else if (spaceDim == 2)
               cellTopoKey = shards::Line<2>::key;
             // cellTopoKey = shards::Quadrilateral<4>::key;
             break;
@@ -615,6 +622,7 @@ void HDF5Exporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
           }
           break;
         case shards::Quadrilateral<4>::key:
+          cout << "side base Quad" << endl;
           switch (cell->topology()->getTensorialDegree())
           {
             case 0:
@@ -631,6 +639,7 @@ void HDF5Exporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
           }
           break;
         case shards::Triangle<3>::key:
+          cout << "side base Tri" << endl;
           switch (cell->topology()->getTensorialDegree())
           {
             case 0:
@@ -647,6 +656,7 @@ void HDF5Exporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
           }
           break;
         case shards::Hexahedron<8>::key:
+          cout << "side base Hex" << endl;
           switch (cell->topology()->getTensorialDegree())
           {
             case 0:
