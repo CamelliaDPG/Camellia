@@ -236,6 +236,8 @@ void HDF5Exporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
   int numQuads=0;
   // Number of hex elements in 3D mesh
   int numHexas=0;
+  // Number of wedge elements in 3D mesh
+  int numWedges=0;
   // Number of line subdivisions in 1D mesh
   int totalSubLines=0;
   // Number of triangle subdivisions in 2D mesh
@@ -244,6 +246,8 @@ void HDF5Exporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
   int totalSubQuads=0;
   // Number of hex subdivisions in 3D mesh
   int totalSubHexas=0;
+  // Number of hex subdivisions in 3D mesh
+  int totalSubWedges=0;
   // Total number of subdivisions
   int totalSubcells=0;
   // Total number of points needed to construct subdivisions
@@ -252,8 +256,10 @@ void HDF5Exporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
   int totalBoundaryPts=0;
   // Total number of boundary lines in 2D mesh
   int totalBoundaryLines=0;
-  // Total number of boundary faces in 3D mesh
-  int totalBoundaryFaces=0;
+  // Total number of boundary quads in 3D mesh
+  int totalBoundaryQuads=0;
+  // Total number of boundary tris in 3D mesh
+  int totalBoundaryTriangles=0;
   for (set<GlobalIndexType>::iterator cellIt = cellIndices.begin(); cellIt != cellIndices.end(); cellIt++) {
     CellPtr cell = _mesh->getTopology()->getCell(*cellIt);
     if (!cellIDToNum1DPts[cell->cellIndex()] || cellIDToNum1DPts[cell->cellIndex()] < 2)
@@ -266,7 +272,6 @@ void HDF5Exporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
     switch (baseCellTopoKey)
     {
       case shards::Node::key:
-        cout << "Base Node" << endl;
         switch (cell->topology()->getTensorialDegree())
         {
           case 0:
@@ -286,7 +291,6 @@ void HDF5Exporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
         }
         break;
       case shards::Line<2>::key:
-        cout << "Base Line" << endl;
         switch (cell->topology()->getTensorialDegree())
         {
           case 0:
@@ -303,7 +307,6 @@ void HDF5Exporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
         }
         break;
       case shards::Quadrilateral<4>::key:
-        cout << "Base Quad" << endl;
         switch (cell->topology()->getTensorialDegree())
         {
           case 0:
@@ -317,7 +320,6 @@ void HDF5Exporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
         }
         break;
       case shards::Triangle<3>::key:
-        cout << "Base Triangle" << endl;
         switch (cell->topology()->getTensorialDegree())
         {
           case 0:
@@ -331,7 +333,6 @@ void HDF5Exporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
         }
         break;
       case shards::Hexahedron<8>::key:
-        cout << "Base Hex" << endl;
         switch (cell->topology()->getTensorialDegree())
         {
           case 0:
@@ -388,6 +389,22 @@ void HDF5Exporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
         totalPts += 4*num1DPts;
       }
       break;
+      case shards::Wedge<6>::key:
+      numWedges++;
+      if (!exportingBoundaryValues)
+      {
+        totalSubWedges += (num1DPts-1)*(num1DPts-1)*(num1DPts-1);
+        totalPts += num1DPts*num1DPts*(num1DPts+1)/2;
+      }
+      else
+      {
+        totalBoundaryQuads += 3;
+        totalBoundaryTriangles += 2;
+        totalSubQuads += 3*(num1DPts-1)*(num1DPts-1);
+        totalSubTriangles += 2*(num1DPts-1)*(num1DPts-1);
+        totalPts += 2*num1DPts*(num1DPts+1)/2 + 3*num1DPts*num1DPts;
+      }
+      break;
       case shards::Hexahedron<8>::key:
       numHexas++;
       if (!exportingBoundaryValues)
@@ -397,7 +414,7 @@ void HDF5Exporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
       }
       else
       {
-        totalBoundaryFaces += 6;
+        totalBoundaryQuads += 6;
         totalSubQuads += 6*(num1DPts-1)*(num1DPts-1);
         totalPts += 6*num1DPts*num1DPts;
       }
@@ -405,8 +422,7 @@ void HDF5Exporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
     }
 
   }
-  totalSubcells = totalBoundaryPts + totalSubLines + totalSubTriangles + totalSubQuads + totalSubHexas;
-  cout << "totalSubcells " << totalSubcells << endl;
+  totalSubcells = totalBoundaryPts + totalSubLines + totalSubTriangles + totalSubQuads + totalSubHexas + totalSubWedges;
 
   // Topology
   XMLObject topology("Topology");
@@ -426,7 +442,7 @@ void HDF5Exporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
     else if (spaceDim == 2)
       topology.addInt("Dimensions", totalBoundaryLines);
     else if (spaceDim == 3)
-      topology.addInt("Dimensions", totalSubQuads);
+      topology.addInt("Dimensions", totalSubQuads + totalSubTriangles);
   }
   hsize_t connDimsf;
   if (!exportingBoundaryValues)
@@ -434,7 +450,7 @@ void HDF5Exporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
     if (spaceDim == 1)
       connDimsf = 2*numLines+totalPts;
     else
-      connDimsf = totalSubcells + 3*totalSubTriangles + 4*totalSubQuads + 8*totalSubHexas;
+      connDimsf = totalSubcells + 3*totalSubTriangles + 4*totalSubQuads + 8*totalSubHexas + 6*totalSubWedges;
   }
   else
   {
@@ -443,10 +459,9 @@ void HDF5Exporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
     if (spaceDim == 2)
       connDimsf = 2*totalBoundaryLines + totalPts;
     if (spaceDim == 3)
-      connDimsf = 5*totalSubQuads;
+      connDimsf = 5*totalSubQuads + 4*totalSubTriangles;
   }
   int connArray[connDimsf];
-//  cout << "connArray size: " << connDimsf << endl;
   XMLObject topoDataItem("DataItem");
   topology.addChild(topoDataItem);
   topoDataItem.addAttribute("ItemType", "Uniform");
@@ -471,7 +486,6 @@ void HDF5Exporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
   else
     ptDimsf = spaceDim * totalPts;
   double ptArray[ptDimsf];
-//  cout << "ptArray size: " << ptDimsf << endl;
 
   XMLObject geoDataItem("DataItem");
   geometry.addChild(geoDataItem);
@@ -495,7 +509,6 @@ void HDF5Exporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
   }
 
   vector< vector<double> > valArrays;
-//  cout << "valArrays size will be " << nFcns * totalPts << endl;
   valArrays.resize(nFcns);
   hsize_t valDimsf[nFcns];
   int numFcnComponents[nFcns];
@@ -581,7 +594,6 @@ void HDF5Exporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
       switch (baseCellTopoKey)
       {
         case shards::Node::key:
-          cout << "side base Node" << endl;
           switch (cell->topology()->getTensorialDegree())
           {
             case 0:
@@ -601,7 +613,6 @@ void HDF5Exporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
           }
           break;
         case shards::Line<2>::key:
-          cout << "side base Line" << endl;
           switch (cell->topology()->getTensorialDegree())
           {
             case 0:
@@ -622,7 +633,6 @@ void HDF5Exporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
           }
           break;
         case shards::Quadrilateral<4>::key:
-          cout << "side base Quad" << endl;
           switch (cell->topology()->getTensorialDegree())
           {
             case 0:
@@ -639,7 +649,6 @@ void HDF5Exporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
           }
           break;
         case shards::Triangle<3>::key:
-          cout << "side base Tri" << endl;
           switch (cell->topology()->getTensorialDegree())
           {
             case 0:
@@ -656,11 +665,20 @@ void HDF5Exporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
           }
           break;
         case shards::Hexahedron<8>::key:
-          cout << "side base Hex" << endl;
           switch (cell->topology()->getTensorialDegree())
           {
             case 0:
             cellTopoKey = shards::Hexahedron<8>::key;
+            break;
+            default:
+            TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "tensor degree not supported for this spatial topology");
+          }
+          break;
+        case shards::Wedge<6>::key:
+          switch (cell->topology()->getTensorialDegree())
+          {
+            case 0:
+            cellTopoKey = shards::Wedge<6>::key;
             break;
             default:
             TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "tensor degree not supported for this spatial topology");
@@ -695,14 +713,13 @@ void HDF5Exporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
         case shards::Hexahedron<8>::key:
           numPoints = num1DPts*num1DPts*num1DPts;
           break;
+        case shards::Wedge<6>::key:
+          numPoints = num1DPts*num1DPts*(num1DPts+1)/2;
+          break;
         default:
           TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "cellTopoKey unrecognized");
       }
       
-      // cout << topo->getName() << endl;
-      // TODO: rework the code below to handle tensorial degree > 0.
-      // TEUCHOS_TEST_FOR_EXCEPTION(topo->getTensorialDegree() > 0, std::invalid_argument, "exportFunction does not yet support tensorial degree > 0.");
-
       FieldContainer<double> refPoints(numPoints,domainDim);
       if (domainDim == 0)
         refPoints.resize(numPoints);
@@ -765,6 +782,23 @@ void HDF5Exporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
                   refPoints(pointIndex,2) = z;
                 }
               }
+          break;
+        case shards::Wedge<6>::key:
+          {
+            int pointIndex = 0;
+            for (int k = 0; k < num1DPts; k++)
+              for (int j = 0; j < num1DPts; j++)
+                for (int i=0; i < num1DPts-j; i++)
+                {
+                  double x = (double(i)/double(num1DPts-1));
+                  double y = (double(j)/double(num1DPts-1));
+                  double z = -1.0 + 2.0*(double(k)/double(num1DPts-1));
+                  refPoints(pointIndex,0) = x;
+                  refPoints(pointIndex,1) = y;
+                  refPoints(pointIndex,2) = z;
+                  pointIndex++;
+                }
+          }
           break;
         default:
           TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "cellTopoKey unrecognized");
@@ -901,6 +935,68 @@ void HDF5Exporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
                 connIndex++;
               }
             }
+          }
+        }
+        break;
+        case shards::Wedge<6>::key:
+        {
+          for (int k=0; k < num1DPts-1; k++)
+          {
+            for (int j=0; j < num1DPts-1; j++)
+            {
+              for (int i=0; i < num1DPts-1-j; i++)
+              {
+                int ind1 = subcellStartIndex;
+                int ind2 = ind1 + 1;
+                int ind3 = ind1 + num1DPts-j;
+                int ind4 = ind1 + num1DPts*(num1DPts+1)/2;
+                int ind5 = ind4 + 1;
+                int ind6 = ind4 + num1DPts-j;
+                connArray[connIndex] = 8;
+                connIndex++;
+                connArray[connIndex] = ind1;
+                connIndex++;
+                connArray[connIndex] = ind2;
+                connIndex++;
+                connArray[connIndex] = ind3;
+                connIndex++;
+                connArray[connIndex] = ind4;
+                connIndex++;
+                connArray[connIndex] = ind5;
+                connIndex++;
+                connArray[connIndex] = ind6;
+                connIndex++;
+
+                if (i < num1DPts-2-j)
+                {
+                  int ind1 = subcellStartIndex+1;
+                  int ind2 = ind1 + num1DPts - j;
+                  int ind3 = ind1 + num1DPts -j - 1;
+                  int ind4 = ind1 + num1DPts*(num1DPts+1)/2;
+                  int ind5 = ind4 + num1DPts - j;
+                  int ind6 = ind4 + num1DPts -j - 1;
+                  connArray[connIndex] = 8;
+                  connIndex++;
+                  connArray[connIndex] = ind1;
+                  connIndex++;
+                  connArray[connIndex] = ind2;
+                  connIndex++;
+                  connArray[connIndex] = ind3;
+                  connIndex++;
+                  connArray[connIndex] = ind4;
+                  connIndex++;
+                  connArray[connIndex] = ind5;
+                  connIndex++;
+                  connArray[connIndex] = ind6;
+                  connIndex++;
+                }
+
+                subcellStartIndex++;
+              }
+              subcellStartIndex++;
+            }
+            subcellStartIndex++;
+            // subcellStartIndex = total_vertices + k*num1DPts*(num1DPts+1)/2;
           }
         }
         break;

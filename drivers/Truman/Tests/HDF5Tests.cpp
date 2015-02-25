@@ -365,7 +365,7 @@ int main(int argc, char *argv[])
     // Space-time
     vector< vector<unsigned> > spaceTimeElementVertices;
     spaceTimeElementVertices.push_back(spaceTimeQuadVertexList);
-    // spaceTimeElementVertices.push_back(spaceTimeTriVertexList);
+    spaceTimeElementVertices.push_back(spaceTimeTriVertexList);
 
     vector< CellTopoPtr > cellTopos;
     cellTopos.push_back(quad_4);
@@ -373,7 +373,7 @@ int main(int argc, char *argv[])
     // Space-time
     vector< CellTopoPtr > spaceTimeCellTopos;
     spaceTimeCellTopos.push_back(quad_x_time);
-    // spaceTimeCellTopos.push_back(tri_x_time);
+    spaceTimeCellTopos.push_back(tri_x_time);
 
     MeshGeometryPtr meshGeometry = Teuchos::rcp( new MeshGeometry(vertices, elementVertices, cellTopos) );
     // Space-time
@@ -514,13 +514,13 @@ int main(int argc, char *argv[])
       vector<string> fcnnames;
       fcnnames.push_back("x");
       fcnnames.push_back("x2");
-      exporter.exportFunction(fcns, fcnnames, 0, 4);
+      exporter.exportFunction(fcns, fcnnames, 0, 6);
       cout << "TRACE" << endl;
       vector<FunctionPtr> bfcns;
       bfcns.push_back(Function::restrictToCellBoundary(Function::constant(0)));
       vector<string> bfcnnames;
       bfcnnames.push_back("mesh");
-      exporter.exportFunction(bfcns, bfcnnames, 0, 4);
+      exporter.exportFunction(bfcns, bfcnnames, 0, 6);
     }
 
   }
