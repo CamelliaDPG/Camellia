@@ -1789,6 +1789,8 @@ void Solution::integrateFlux(FieldContainer<double> &values, ElementTypePtr elem
   for (int sideIndex=0; sideIndex<numSides; sideIndex++) {
     // Get numerical integration points and weights
     CubatureFactory  cubFactory;
+    if (! dofOrdering.hasBasisEntry(trialID, sideIndex)) continue;
+
     BasisPtr basis = dofOrdering.getBasis(trialID,sideIndex);
     int basisRank = dofOrdering.getBasisRank(trialID);
     int cubDegree = 2*basis->getDegree();
@@ -2301,8 +2303,14 @@ void Solution::solutionValues(FieldContainer<double> &values, int trialID, Basis
 
     DofOrderingPtr trialOrder = _mesh->getElement(cellID)->elementType()->trialOrderPtr;
 
-    BasisPtr basis = fluxOrTrace ? trialOrder->getBasis(trialID, sideIndex)
-    : trialOrder->getBasis(trialID);
+    BasisPtr basis;
+    if (fluxOrTrace) {
+      if (! trialOrder->hasBasisEntry(trialID, sideIndex)) continue;
+      basis = trialOrder->getBasis(trialID, sideIndex);
+    } else {
+      basis = trialOrder->getBasis(trialID);
+    }
+
     int basisCardinality = basis->getCardinality();
 
     Teuchos::RCP<const FieldContainer<double> > transformedValues;
@@ -2748,6 +2756,11 @@ FieldContainer<double> Solution::solutionForElementTypeGlobal(ElementTypePtr ele
 void Solution::basisCoeffsForTrialOrder(FieldContainer<double> &basisCoeffs, DofOrderingPtr trialOrder,
                                         const FieldContainer<double> &allCoeffs,
                                         int trialID, int sideIndex) {
+  if (! trialOrder->hasBasisEntry(trialID, sideIndex)) {
+    basisCoeffs.resize(0);
+    return;
+  }
+  
   BasisPtr basis = trialOrder->getBasis(trialID,sideIndex);
 
   int basisCardinality = basis->getCardinality();
@@ -3354,6 +3367,7 @@ void Solution::projectOntoCell(const map<int, FunctionPtr > &functionMap, Global
           continue;
         }
 
+        if (! elemTypePtr->trialOrderPtr->hasBasisEntry(trialID, sideIndex)) continue;
         BasisPtr basis = elemTypePtr->trialOrderPtr->getBasis(trialID, sideIndex);
         FieldContainer<double> basisCoefficients(1,basis->getCardinality());
         Projector::projectFunctionOntoBasis(basisCoefficients, function, basis, basisCache->getSideBasisCache(sideIndex));
@@ -3508,6 +3522,7 @@ void Solution::projectOldCellOntoNewCells(GlobalIndexType cellID,
      for (set<int>::iterator trialIDIt = trialIDs.begin(); trialIDIt != trialIDs.end(); trialIDIt++) {
        int trialID = *trialIDIt;
        if (oldTrialOrdering->getNumSidesForVarID(trialID) != 1) { // trace (flux) variable
+         if (!oldTrialOrdering->hasBasisEntry(trialID, sideOrdinal)) continue;
          BasisPtr basis = oldTrialOrdering->getBasis(trialID, sideOrdinal);
          int basisCardinality = basis->getCardinality();
          FieldContainer<double> basisCoefficients(basisCardinality);
@@ -3597,6 +3612,7 @@ void Solution::projectOldCellOntoNewCells(GlobalIndexType cellID,
       for (map<int,FunctionPtr>::iterator traceFxnIt=traceMapForSide->begin(); traceFxnIt != traceMapForSide->end(); traceFxnIt++) {
         int varID = traceFxnIt->first;
         FunctionPtr traceFxn = traceFxnIt->second;
+        if (! childType->trialOrderPtr->hasBasisEntry(varID, sideOrdinal)) continue;
         BasisPtr childBasis = childType->trialOrderPtr->getBasis(varID, sideOrdinal);
         basisCoefficients.resize(1,childBasis->getCardinality());
         Projector::projectFunctionOntoBasisInterpolating(basisCoefficients, traceFxn, childBasis, basisCacheForSide);
