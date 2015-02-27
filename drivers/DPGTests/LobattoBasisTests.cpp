@@ -378,8 +378,8 @@ bool LobattoBasisTests::testSimpleStiffnessMatrix() {
   bf->addTerm(beta * u, v->grad());
   bf->addTerm(un, v);
   
-  DofOrderingPtr trialSpace = Teuchos::rcp( new DofOrdering );
-  DofOrderingPtr testSpace = Teuchos::rcp( new DofOrdering );
+  DofOrderingPtr trialSpace = Teuchos::rcp( new DofOrdering(CellTopology::quad()) );
+  DofOrderingPtr testSpace = Teuchos::rcp( new DofOrdering(CellTopology::quad()) );
   
   const int numSides = 4;
   const int spaceDim = 2;

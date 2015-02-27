@@ -140,7 +140,7 @@ bool RHSTests::testComputeRHSLegacy() {
     
     if (numSides == 4) {
       // now that we have a Lobatto basis, we need to hard-code the basis for which we have precomputed these values...
-      testOrdering = Teuchos::rcp( new DofOrdering );
+      testOrdering = Teuchos::rcp( new DofOrdering(CellTopology::quad()) );
       BasisPtr basis = Teuchos::rcp( new IntrepidBasisWrapper<>( Teuchos::rcp( new Basis_HGRAD_QUAD_Cn_FEM<double, Intrepid::FieldContainer<double> >(testOrder,POINTTYPE_SPECTRAL)), 2, 0, Camellia::FUNCTION_SPACE_HGRAD) );
       testOrdering->addEntry(0, basis, 0);
     }
