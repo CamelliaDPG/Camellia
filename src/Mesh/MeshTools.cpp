@@ -238,5 +238,8 @@ void MeshTools::timeSliceExport(std::string dirPath, MeshPtr mesh, FunctionPtr s
 }
 
 FunctionPtr MeshTools::timeSliceFunction(MeshPtr spaceTimeMesh, map<GlobalIndexType, GlobalIndexType> &cellIDMap, FunctionPtr spaceTimeFunction, double t) {
-  return Teuchos::rcp(new SliceFunction(spaceTimeMesh, cellIDMap, spaceTimeFunction, t) );
+  FunctionPtr timeSliceFunction = Teuchos::rcp(new SliceFunction(spaceTimeMesh, cellIDMap, spaceTimeFunction, t) );
+  if (spaceTimeFunction->boundaryValueOnly())
+    timeSliceFunction = Function::restrictToCellBoundary(timeSliceFunction);
+  return timeSliceFunction;
 }
