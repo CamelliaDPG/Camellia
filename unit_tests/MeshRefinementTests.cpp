@@ -183,9 +183,9 @@ namespace {
     
     if (success==false) { // then export
 #ifdef HAVE_EPETRAEXT_HDF5
-      HDF5Exporter solnExporter(mesh, "soln");
+      HDF5Exporter solnExporter(mesh, "soln", "/tmp");
       VarFactory vf = bf->varFactory();
-      solnExporter.exportSolution(solution, vf, 0, 10);
+      solnExporter.exportSolution(solution, 0, 10);
       
       HDF5Exporter fxnExporter(mesh, "fxn");
       vector<string> fxnNames;
