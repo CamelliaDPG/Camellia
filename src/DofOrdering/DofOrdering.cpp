@@ -61,6 +61,8 @@ void DofOrdering::addEntry(int varID, BasisPtr basis, int basisRank, int sideInd
   
   varIDs.insert(varID);
   
+  _sidesForVarID[varID].push_back(sideIndex);
+  
   numSidesForVarID[varID]++;
   //cout << "numSidesForVarID[" << varID << "]" << numSidesForVarID[varID] << endl;
   pair<int, int> basisKey = make_pair(varID,sideIndex);
@@ -189,6 +191,10 @@ int DofOrdering::getBasisCardinality(int varID, int sideIndex) {
 
 int DofOrdering::getNumSidesForVarID(int varID) {
   return numSidesForVarID[varID];
+}
+
+const vector<int> & DofOrdering::getSidesForVarID(int varID) const {
+  return _sidesForVarID.find(varID)->second;
 }
 
 int DofOrdering::getTotalBasisCardinality() { // total number of *distinct* basis functions

@@ -52,9 +52,10 @@ class DofOrdering {
   int _nextIndex;
 //  vector<int> varIDs;
   std::set<int> varIDs;
-  std::vector<int> varIDsVector;
+//  std::vector<int> varIDsVector;
   std::map< std::pair<int, std::pair<int, int> >, std::pair<int, int> > dofIdentifications; // keys: <varID, <sideIndex, dofOrdinal> >
                                                                         // values: <sideIndex, dofOrdinal>
+  std::map< int, std::vector<int> > _sidesForVarID; // to replace numSidesForVarID
   std::map<int,int> numSidesForVarID;
   std::map< std::pair<int,int>, std::vector<int> > indices; // keys for indices are <varID, sideIndex >, where sideIndex = 0 for field (volume) variables
   // values for indices: list of the indices used in the DofOrdering by this <varID, sideIndex> pair's basis, ordered according to that basis's ordering
@@ -82,8 +83,6 @@ public:
   
   std::set<int> getTraceDofIndices(); // returns dof indices corresponding to variables with numSides > 1.
   
-  int getNumSidesForVarID(int varID);
-  
   int getBasisCardinality(int varID, int sideIndex);
   
   BasisPtr getBasis(int varID, int sideIndex = 0);
@@ -91,6 +90,10 @@ public:
   int getBasisRank(int varID) {
     return basisRanks[varID];
   }
+  
+  int getNumSidesForVarID(int varID); // will be deprecated soon.  Use getSidesForVarID instead
+  
+  const vector<int> & getSidesForVarID(int varID) const;
   
   int getTotalBasisCardinality(); // sum of all the *distinct* bases' cardinalities
   
