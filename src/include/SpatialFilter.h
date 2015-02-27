@@ -95,10 +95,9 @@ public:
   virtual bool matchesPoint(double x, double y);
   virtual bool matchesPoint(double x, double y, double z);
 };
-//
-//SpatialFilterPtr operator!(SpatialFilterPtr sf) {
-//  return Teuchos::rcp( new NegatedSpatialFilter(sf) );
-//}
 
+SpatialFilterPtr operator!(SpatialFilterPtr sf);
+SpatialFilterPtr operator|(SpatialFilterPtr sf1, SpatialFilterPtr sf2);
+SpatialFilterPtr operator&(SpatialFilterPtr sf1, SpatialFilterPtr sf2);
 
 #endif
