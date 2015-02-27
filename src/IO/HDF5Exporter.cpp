@@ -111,7 +111,7 @@ void HDF5Exporter::exportSolution(SolutionPtr solution, VarFactory varFactory, d
 {
   int rank = Teuchos::GlobalMPISession::getRank();
   if (rank==0) cout << "NOTE: this version of HDF5Exporter::exportSolution() is deprecated.  Remove the VarFactory argument to get rid of this message.\n";
-  this->exportSolution(solution,varFactory,timeVal,defaultNum1DPts,cellIDToNum1DPts,cellIndices);
+  this->exportSolution(solution,timeVal,defaultNum1DPts,cellIDToNum1DPts,cellIndices);
 }
 
 void HDF5Exporter::exportFunction(FunctionPtr function, string functionName, double timeVal, unsigned int defaultNum1DPts, map<int, int> cellIDToNum1DPts, set<GlobalIndexType> cellIndices)
