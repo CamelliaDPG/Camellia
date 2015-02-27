@@ -803,11 +803,20 @@ bool GDAMinimumRuleTests::checkLocalGlobalConsistency(MeshPtr mesh) {
     DofOrderingPtr trialOrder = mesh->getElementType(cellID)->trialOrderPtr;
     set<int> varIDs = trialOrder->getVarIDs();
     
+    int sideCount = mesh->getElementType(cellID)->cellTopoPtr->getSideCount();
+    
     for (set<int>::iterator varIt=varIDs.begin(); varIt != varIDs.end(); varIt++) {
       int varID = *varIt;
       int numSides = trialOrder->getNumSidesForVarID(varID);
-      for (int sideOrdinal=0; sideOrdinal<numSides; sideOrdinal++) {
-        BasisPtr basis = (numSides==1) ? trialOrder->getBasis(varID) : trialOrder->getBasis(varID,sideOrdinal);
+      for (int sideOrdinal=0; sideOrdinal<sideCount; sideOrdinal++) {
+        if (! trialOrder->hasBasisEntry(varID, sideOrdinal)) continue;
+
+        BasisPtr basis;
+        if (numSides == 1) {
+          basis = trialOrder->getBasis(varID);
+        } else {
+          basis = trialOrder->getBasis(varID,sideOrdinal);
+        }
         
         FieldContainer<double> basisCoefficients(basis->getCardinality());
         
@@ -941,10 +950,12 @@ bool GDAMinimumRuleTests::testLocalInterpretationConsistency() {
     
     set<int> indicesForMappedData;
     
+    int sideCount = gda->elementType(cellID)->cellTopoPtr->getSideCount();
+    
     for (set<int>::iterator varIt = varIDs.begin(); varIt != varIDs.end(); varIt++) {
       int varID = *varIt;
-      int sideCount = trialOrdering->getNumSidesForVarID(varID);
       for (int sideOrdinal=0; sideOrdinal<sideCount; sideOrdinal++) {
+        if (! trialOrdering->hasBasisEntry(varID, sideOrdinal)) continue;
         BasisPtr basis = trialOrdering->getBasis(varID,sideOrdinal);
         FieldContainer<double> basisData(basis->getCardinality());
         // on the assumption that minimum rule does *not* enforce conformity locally, we can consistently pull basis data

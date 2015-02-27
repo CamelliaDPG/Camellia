@@ -780,11 +780,11 @@ bool GMGTests::testGMGSolverIdentityUniformMeshes() {
     vector<int> cellCounts;
     cellCounts.push_back(1);
     cellCounts.push_back(2);
-    cellCounts.push_back(4);
+//    cellCounts.push_back(4);
 
     for (int spaceDim=1; spaceDim<=3; spaceDim++) {
       for (int i=0; i<cellCounts.size(); i++) {
-        if ((spaceDim==3) && (i==cellCounts.size()-1)) continue; // skip the 4x4x4 case, in interest of time.
+//        if ((spaceDim==3) && (i==cellCounts.size()-1)) continue; // skip the 4x4x4 case, in interest of time.
         vector<int> cellCount;
         for (int d=0; d<spaceDim; d++) {
           cellCount.push_back(cellCounts[i]);
