@@ -35,9 +35,10 @@
 using namespace std;
 using namespace Camellia;
 
-DofOrdering::DofOrdering() { // constructor
+DofOrdering::DofOrdering(CellTopoPtr cellTopo) { // constructor
   _nextIndex = 0;
   _indexNeedsToBeRebuilt = false;
+  _cellTopologyForSide[-1] = cellTopo; // side -1 means volume, in this context.
 }
 
 void DofOrdering::addEntry(int varID, BasisPtr basis, int basisRank, int sideIndex) {
@@ -105,16 +106,18 @@ void DofOrdering::copyLikeCoefficients( FieldContainer<double> &newValues, Teuch
   
   for (set<int>::iterator varIDIt = varIDs.begin(); varIDIt != varIDs.end(); varIDIt++) {
     int varID = *varIDIt;
-    int numSides = getNumSidesForVarID(varID);
-    if ( numSides == oldDofOrdering->getNumSidesForVarID(varID) ) {
-      for (int sideIndex=0; sideIndex < numSides; sideIndex++) {
-        BasisPtr basis = getBasis(varID,sideIndex);
-        if (basis.get() == oldDofOrdering->getBasis(varID,sideIndex).get() ) {
+    int numSidesForVarID = getNumSidesForVarID(varID);
+    if ( numSidesForVarID == oldDofOrdering->getNumSidesForVarID(varID) ) {
+      int numSides = (numSidesForVarID==1) ? 1 : cellTopology()->getSideCount();
+      for (int sideOrdinal=0; sideOrdinal < numSides; sideOrdinal++) {
+        if (!hasBasisEntry(varID, sideOrdinal)) continue;
+        BasisPtr basis = getBasis(varID,sideOrdinal);
+        if (basis.get() == oldDofOrdering->getBasis(varID,sideOrdinal).get() ) {
           // bases alike: copy coefficients
           int cardinality = basis->getCardinality();
           for (int dofOrdinal=0; dofOrdinal < cardinality; dofOrdinal++) {
-            int dofIndex = getDofIndex(varID,dofOrdinal,sideIndex);
-            newValues(dofIndex) = oldValues( oldDofOrdering->getDofIndex(varID,dofOrdinal,sideIndex) );
+            int dofIndex = getDofIndex(varID,dofOrdinal,sideOrdinal);
+            newValues(dofIndex) = oldValues( oldDofOrdering->getDofIndex(varID,dofOrdinal,sideOrdinal) );
           }
         }
       }
@@ -277,10 +280,13 @@ void DofOrdering::rebuildIndex() {
   }
   set<int>::iterator varIDIterator;
   int numIdentificationsProcessed = 0;
+  int sideCount = cellTopology()->getSideCount();
   for (varIDIterator = varIDs.begin(); varIDIterator != varIDs.end(); varIDIterator++) {
     int varID = *varIDIterator;
     //cout << "rebuildIndex: varID=" << varID << endl;
-    for (int sideIndex=0; sideIndex<numSidesForVarID[varID]; sideIndex++) {
+    
+    for (int sideIndex=0; sideIndex<sideCount; sideIndex++) {
+      if (!hasBasisEntry(varID, sideIndex)) continue;
       BasisPtr basis = getBasis(varID,sideIndex);
       int cellTopoSideIndex = (numSidesForVarID[varID]==1) ? -1 : sideIndex;
       if ( _cellTopologyForSide.find(cellTopoSideIndex) == _cellTopologyForSide.end() ) {
@@ -342,8 +348,9 @@ std::ostream& operator << (std::ostream& os, DofOrdering& dofOrdering) {
   else {
     for (set<int>::iterator varIt = varIDs.begin(); varIt != varIDs.end(); varIt++) {
       int varID = *varIt;
-      int numSides = dofOrdering.getNumSidesForVarID(varID);
+      int numSides = dofOrdering.cellTopology()->getSideCount();
       for (int sideIndex=0; sideIndex<numSides; sideIndex++) {
+        if (! dofOrdering.hasBasisEntry(varID, sideIndex)) continue;
         os << "basis cardinality for varID=" << varID << ", side " << sideIndex << ": ";
         os << dofOrdering.getBasis(varID,sideIndex)->getCardinality() << endl;
         // TODO: output function space and/or the actual dofIndices for basis elements

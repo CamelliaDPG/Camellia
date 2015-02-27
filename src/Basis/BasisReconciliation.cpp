@@ -481,7 +481,7 @@ SubBasisReconciliationWeights BasisReconciliation::computeConstrainedWeightsForT
   
   // set up a dummy DofOrdering for the coarse domain:
   CellTopoPtr coarseDomainTopo = coarserBasis->domainTopology();
-  DofOrderingPtr dofOrderPtr = Teuchos::rcp(new DofOrdering());
+  DofOrderingPtr dofOrderPtr = Teuchos::rcp(new DofOrdering(coarseDomainTopo));
   
   dofOrderPtr->addEntry(fieldID,coarserBasis, coarserBasis->rangeRank());
   

@@ -61,7 +61,7 @@ DofOrderingPtr DofOrderingFactory::testOrdering(int polyOrder, CellTopoPtr cellT
   vector<int> testIDs = _bilinearForm->testIDs();
   vector<int>::iterator testIterator;
   
-  DofOrderingPtr testOrder = Teuchos::rcp(new DofOrdering());
+  DofOrderingPtr testOrder = Teuchos::rcp(new DofOrdering(cellTopo));
   
   for (testIterator = testIDs.begin(); testIterator != testIDs.end(); testIterator++) {
     int testID = *testIterator;
@@ -94,12 +94,15 @@ DofOrderingPtr DofOrderingFactory::trialOrdering(int polyOrder,
   vector<int> trialIDs = _bilinearForm->trialIDs();
   vector<int>::iterator trialIterator;
   
-  DofOrderingPtr trialOrder = Teuchos::rcp(new DofOrdering());
-  DofOrderingPtr traceOrder = Teuchos::rcp(new DofOrdering());
-  DofOrderingPtr fieldOrder = Teuchos::rcp(new DofOrdering());
+  DofOrderingPtr trialOrder = Teuchos::rcp(new DofOrdering(cellTopo));
+  DofOrderingPtr traceOrder = Teuchos::rcp(new DofOrdering(cellTopo));
+  DofOrderingPtr fieldOrder = Teuchos::rcp(new DofOrdering(cellTopo));
+  
+  VarFactory vf = _bilinearForm->varFactory();
   
   for (trialIterator = trialIDs.begin(); trialIterator != trialIDs.end(); trialIterator++) {
     int trialID = *trialIterator;
+    VarPtr trialVar = vf.trialVars().find(trialID)->second;
     int trialIDPolyOrder = polyOrder + _trialOrderEnhancements[trialID]; // uses the fact that map defaults to 0 for entries that aren't found
     
     Camellia::EFunctionSpace fs = _bilinearForm->functionSpaceForTrial(trialID);
@@ -108,13 +111,21 @@ DofOrderingPtr DofOrderingFactory::trialOrdering(int polyOrder,
     
     int basisRank;
     
-    if (_bilinearForm->isFluxOrTrace(trialID)) { //lines, in 2D case (TODO: extend to arbitrary dimension)
+    if (_bilinearForm->isFluxOrTrace(trialID)) {
       int sideDim = cellTopo->getDimension() - 1;
       int numSides = cellTopo->getSideCount();
       for (int sideOrdinal=0; sideOrdinal<numSides; sideOrdinal++) {
         CellTopoPtr sideTopo = cellTopo->getSubcell(sideDim, sideOrdinal);
         basis = BasisFactory::basisFactory()->getConformingBasis( trialIDPolyOrder, sideTopo, fs);
         basisRank = basis->rangeRank();
+        
+        bool temporalSide = ! cellTopo->sideIsSpatial(sideOrdinal);
+        
+        if ( temporalSide && !trialVar->isDefinedOnTemporalInterface() ) {
+          // skip adding on this side
+          continue;
+        }
+        
         trialOrder->addEntry(trialID,basis,basisRank,sideOrdinal);
         traceOrder->addEntry(trialID,basis,basisRank,sideOrdinal);
       }
@@ -156,19 +167,20 @@ DofOrderingPtr DofOrderingFactory::trialOrdering(int polyOrder,
 
 DofOrderingPtr DofOrderingFactory::getRelabeledDofOrdering(DofOrderingPtr dofOrdering, map<int, int> &oldKeysNewValues) {
   bool conforming = _isConforming[dofOrdering.get()];
-  DofOrderingPtr newOrdering = Teuchos::rcp(new DofOrdering());
+  DofOrderingPtr newOrdering = Teuchos::rcp(new DofOrdering(dofOrdering->cellTopology()));
   
-  DofOrderingPtr newTraceOrder = Teuchos::rcp(new DofOrdering());
-  DofOrderingPtr newFieldOrder = Teuchos::rcp(new DofOrdering());
+  DofOrderingPtr newTraceOrder = Teuchos::rcp(new DofOrdering(dofOrdering->cellTopology()));
+  DofOrderingPtr newFieldOrder = Teuchos::rcp(new DofOrdering(dofOrdering->cellTopology()));
   
   set<int> varIDs = dofOrdering->getVarIDs();
   CellTopoPtr cellTopoPtr = dofOrdering->cellTopology();
   for (set<int>::iterator idIt = varIDs.begin(); idIt != varIDs.end(); idIt++) {
     int varID = *idIt;
     int newVarID = oldKeysNewValues[varID];
-    int numSides = dofOrdering->getNumSidesForVarID(varID);
+    int numSides = cellTopoPtr->getSideCount();
     Camellia::EFunctionSpace fs;
     for (int sideIndex=0; sideIndex<numSides; sideIndex++) {
+      if (! dofOrdering->hasBasisEntry(varID, sideIndex)) continue;
       BasisPtr basis = dofOrdering->getBasis(varID,sideIndex);
       
       fs = BasisFactory::basisFactory()->getBasisFunctionSpace(basis);
@@ -281,6 +293,7 @@ int DofOrderingFactory::polyOrder(DofOrderingPtr dofOrdering, bool isTestOrderin
   int interiorVariable;
   bool interiorVariableFound = false;
   int minSidePolyOrder = INT_MAX;
+  int sideCount = dofOrdering->cellTopology()->getSideCount();
   for (idIt = varIDs.begin(); idIt != varIDs.end(); idIt++) {
     int varID = *idIt;
     int numSides = dofOrdering->getNumSidesForVarID(varID);
@@ -290,7 +303,8 @@ int DofOrderingFactory::polyOrder(DofOrderingPtr dofOrdering, bool isTestOrderin
       interiorVariableFound = true;
       break;
     } else {
-      for (int sideIndex=0; sideIndex<numSides; sideIndex++) {
+      for (int sideIndex=0; sideIndex<sideCount; sideIndex++) {
+        if (! dofOrdering->hasBasisEntry(varID, sideIndex)) continue;
         int polyOrder = BasisFactory::basisFactory()->basisPolyOrder( dofOrdering->getBasis(varID,sideIndex) ) - varIDEnhancement;
         minSidePolyOrder = min(minSidePolyOrder,polyOrder);
       }
@@ -487,7 +501,7 @@ DofOrderingPtr DofOrderingFactory::upgradeSide(DofOrderingPtr dofOrdering,
                                                map<int,BasisPtr> varIDsToUpgrade,
                                                int sideToUpgrade) {
   bool conforming = _isConforming[dofOrdering.get()];
-  DofOrderingPtr newOrdering = Teuchos::rcp(new DofOrdering());
+  DofOrderingPtr newOrdering = Teuchos::rcp(new DofOrdering(dofOrdering->cellTopology()));
   
   set<int> varIDs = dofOrdering->getVarIDs();
   set<int>::iterator idIt;
@@ -501,7 +515,9 @@ DofOrderingPtr DofOrderingFactory::upgradeSide(DofOrderingPtr dofOrdering,
                          "upgradeSide requested for varID on interior.");
     }
     Camellia::EFunctionSpace fs;
-    for (int sideIndex=0; sideIndex<numSides; sideIndex++) {
+    int sideCount = dofOrdering->cellTopology()->getSideCount();
+    for (int sideIndex=0; sideIndex<sideCount; sideIndex++) {
+      if (! dofOrdering->hasBasisEntry(varID, sideIndex)) continue;
       BasisPtr basis = dofOrdering->getBasis(varID,sideIndex);
       fs = BasisFactory::basisFactory()->getBasisFunctionSpace(basis);
       int basisRank = BasisFactory::basisFactory()->getBasisRank(basis);
@@ -533,7 +549,8 @@ DofOrderingPtr DofOrderingFactory::pRefine(DofOrderingPtr dofOrdering, CellTopoP
   int interiorPolyOrder = polyOrder(dofOrdering, isTestOrdering); // rule is, any bases with polyOrder < interiorPolyOrder+pToAdd get upgraded
   int newPolyOrder = interiorPolyOrder + pToAdd;
   bool conforming = _isConforming[dofOrdering.get()];
-  DofOrderingPtr newOrdering = Teuchos::rcp(new DofOrdering());
+  DofOrderingPtr newOrdering = Teuchos::rcp(new DofOrdering(dofOrdering->cellTopology()));
+  int sideCount = dofOrdering->cellTopology()->getSideCount();
   for (set<int>::iterator idIt = varIDs.begin(); idIt != varIDs.end(); idIt++) {
     int varID = *idIt;
     int numSides = dofOrdering->getNumSidesForVarID(varID);
@@ -544,7 +561,8 @@ DofOrderingPtr DofOrderingFactory::pRefine(DofOrderingPtr dofOrdering, CellTopoP
     } else {
       newPolyOrderForVarID = newPolyOrder + _trialOrderEnhancements[varID];
     }
-    for (int sideIndex=0; sideIndex<numSides; sideIndex++) {
+    for (int sideIndex=0; sideIndex<sideCount; sideIndex++) {
+      if (! dofOrdering->hasBasisEntry(varID, sideIndex)) continue;
       BasisPtr basis = dofOrdering->getBasis(varID,sideIndex);
       fs = BasisFactory::basisFactory()->getBasisFunctionSpace(basis);
       int basisRank = BasisFactory::basisFactory()->getBasisRank(basis);
@@ -600,10 +618,12 @@ int DofOrderingFactory::trialPolyOrder(DofOrderingPtr trialOrdering) {
 
 DofOrderingPtr DofOrderingFactory::setBasisDegree(DofOrderingPtr dofOrdering, int basisDegreeToSet, bool replaceDiscontinuousFSWithContinuous) {
   bool conforming = _isConforming[dofOrdering.get()];
-  DofOrderingPtr newOrdering = Teuchos::rcp(new DofOrdering());
+  DofOrderingPtr newOrdering = Teuchos::rcp(new DofOrdering(dofOrdering->cellTopology()));
   
-  DofOrderingPtr newTraceOrder = Teuchos::rcp(new DofOrdering());
-  DofOrderingPtr newFieldOrder = Teuchos::rcp(new DofOrdering());
+  DofOrderingPtr newTraceOrder = Teuchos::rcp(new DofOrdering(dofOrdering->cellTopology()));
+  DofOrderingPtr newFieldOrder = Teuchos::rcp(new DofOrdering(dofOrdering->cellTopology()));
+
+  int sideCount = dofOrdering->cellTopology()->getSideCount();
   
   set<int> varIDs = dofOrdering->getVarIDs();
   CellTopoPtr cellTopoPtr = dofOrdering->cellTopology();
@@ -611,7 +631,8 @@ DofOrderingPtr DofOrderingFactory::setBasisDegree(DofOrderingPtr dofOrdering, in
     int varID = *idIt;
     int numSides = dofOrdering->getNumSidesForVarID(varID);
     Camellia::EFunctionSpace fs;
-    for (int sideIndex=0; sideIndex<numSides; sideIndex++) {
+    for (int sideIndex=0; sideIndex<sideCount; sideIndex++) {
+      if (! dofOrdering->hasBasisEntry(varID, sideIndex)) continue;
       BasisPtr basis = dofOrdering->getBasis(varID,sideIndex);
       
       fs = BasisFactory::basisFactory()->getBasisFunctionSpace(basis);
@@ -657,14 +678,17 @@ DofOrderingPtr DofOrderingFactory::setBasisDegree(DofOrderingPtr dofOrdering, in
 DofOrderingPtr DofOrderingFactory::setSidePolyOrder(DofOrderingPtr dofOrdering, int sideIndexToSet,
                                                     int newPolyOrder, bool replacePatchBasis) {
   bool conforming = _isConforming[dofOrdering.get()];
-  DofOrderingPtr newOrdering = Teuchos::rcp(new DofOrdering());
+  DofOrderingPtr newOrdering = Teuchos::rcp(new DofOrdering(dofOrdering->cellTopology()));
   set<int> varIDs = dofOrdering->getVarIDs();
   CellTopoPtr cellTopoPtr = dofOrdering->cellTopology();
+  int sideCount = cellTopoPtr->getSideCount();
+  
   for (set<int>::iterator idIt = varIDs.begin(); idIt != varIDs.end(); idIt++) {
     int varID = *idIt;
     int numSides = dofOrdering->getNumSidesForVarID(varID);
     Camellia::EFunctionSpace fs;
-    for (int sideIndex=0; sideIndex<numSides; sideIndex++) {
+    for (int sideIndex=0; sideIndex<sideCount; sideIndex++) {
+      if (! dofOrdering->hasBasisEntry(varID, sideIndex)) continue;
       BasisPtr basis = dofOrdering->getBasis(varID,sideIndex);
       if (replacePatchBasis) {
         if (BasisFactory::basisFactory()->isPatchBasis(basis)) {

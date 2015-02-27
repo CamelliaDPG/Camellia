@@ -64,6 +64,13 @@ private:
       if ( lhsVarIDs.size() != rhsVarIDs.size() ) {
         return lhsVarIDs.size() < rhsVarIDs.size();
       }
+      CellTopoPtr lhsCellTopo = lhs->cellTopology();
+      CellTopoPtr rhsCellTopo = rhs->cellTopology();
+      
+      if (lhsCellTopo->getKey() != rhsCellTopo->getKey()) {
+        return lhsCellTopo->getKey() < rhsCellTopo->getKey();
+      }
+      
       set<int>::iterator lhsVarIterator;
       set<int>::iterator rhsVarIterator = rhsVarIDs.begin();
       for (lhsVarIterator = lhsVarIDs.begin(); lhsVarIterator != lhsVarIDs.end(); lhsVarIterator++) {
@@ -77,7 +84,11 @@ private:
         if (lhsSidesForVar != rhsSidesForVar) {
           return lhsSidesForVar < rhsSidesForVar;
         }
-        for (int i=0; i<lhsSidesForVar; i++) {
+        for (int i=0; i<lhsCellTopo->getSideCount(); i++) {
+          if (lhs->hasBasisEntry(lhsVarID, i) != rhs->hasBasisEntry(rhsVarID, i)) {
+            return lhs->hasBasisEntry(lhsVarID, i) < rhs->hasBasisEntry(rhsVarID, i);
+          }
+          if (! lhs->hasBasisEntry(lhsVarID, i)) continue;
           BasisPtr lhsBasis = lhs->getBasis(lhsVarID,i);
           BasisPtr rhsBasis = rhs->getBasis(rhsVarID,i);
           if ( lhsBasis.get() != rhsBasis.get() ) { // different pointers ==> different bases
