@@ -659,8 +659,9 @@ map< int, vector<DofInfo> > constructGlobalDofToLocalDofInfoMap(MeshPtr mesh) {
     info.totalDofs = trialOrder->totalDofs();
     for (set<int>::iterator trialIt=trialIDs.begin(); trialIt != trialIDs.end(); trialIt++) {
       info.trialID = *trialIt;
-      info.numSides = trialOrder->getNumSidesForVarID(info.trialID);
-      for (int sideIndex=0; sideIndex < info.numSides; sideIndex++) {
+      const vector<int>* sidesForVar = &trialOrder->getSidesForVarID(info.trialID);
+      for (vector<int>::const_iterator sideIt = sidesForVar->begin(); sideIt != sidesForVar->end(); sideIt++) {
+        int sideIndex = *sideIt;
         info.sideIndex = sideIndex;
         info.basisCardinality = trialOrder->getBasisCardinality(info.trialID, info.sideIndex);
         for (int basisOrdinal=0; basisOrdinal < info.basisCardinality; basisOrdinal++) {

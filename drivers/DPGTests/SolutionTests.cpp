@@ -113,9 +113,9 @@ bool SolutionTests::solutionCoefficientsAreConsistent(Teuchos::RCP<Solution> sol
       for (set<GlobalIndexType>::iterator cellIt = rankLocalCellIDs.begin(); cellIt != rankLocalCellIDs.end(); cellIt++) {
         GlobalIndexType cellID = *cellIt;
         DofOrderingPtr trialSpace = soln->mesh()->getElement(cellID)->elementType()->trialOrderPtr;
-        int numSides = trialSpace->getNumSidesForVarID(trialID);
-        for (int sideIndex=0; sideIndex<numSides; sideIndex++) {
-          
+        const vector<int>* sidesForVar = &trialSpace->getSidesForVarID(trialID);
+        for (vector<int>::const_iterator sideIt = sidesForVar->begin(); sideIt != sidesForVar->end(); sideIt++) {
+          int sideIndex = *sideIt;
           vector<int> localDofIndices = trialSpace->getDofIndices(trialID,sideIndex);
           int basisCardinality = localDofIndices.size();
           

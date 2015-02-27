@@ -354,7 +354,9 @@ void Solution::addSolution(Teuchos::RCP<Solution> otherSoln, double weight, set<
     DofOrderingPtr trialOrder = _mesh->getElementType(cellID)->trialOrderPtr;
     for (set<int>::iterator varIDIt = varsToAdd.begin(); varIDIt != varsToAdd.end(); varIDIt++) {
       int varID = *varIDIt;
-      for (int sideOrdinal=0; sideOrdinal<trialOrder->getNumSidesForVarID(varID); sideOrdinal++) {
+      const vector<int>* sidesForVar = &trialOrder->getSidesForVarID(varID);
+      for (vector<int>::const_iterator sideIt = sidesForVar->begin(); sideIt != sidesForVar->end(); sideIt++) {
+        int sideOrdinal = *sideIt;
         vector<int> dofIndices = trialOrder->getDofIndices(varID, sideOrdinal);
         for (vector<int>::iterator dofIndexIt = dofIndices.begin(); dofIndexIt != dofIndices.end(); dofIndexIt++) {
           int dofIndex = *dofIndexIt;
@@ -3477,7 +3479,7 @@ void Solution::projectOldCellOntoNewCells(GlobalIndexType cellID,
 
    for (set<int>::iterator trialIDIt = trialIDs.begin(); trialIDIt != trialIDs.end(); trialIDIt++) {
      int trialID = *trialIDIt;
-     if (oldTrialOrdering->getNumSidesForVarID(trialID) == 1) { // field variable, the only kind we honor right now
+     if (oldTrialOrdering->getSidesForVarID(trialID).size() == 1) { // field variable, the only kind we honor right now
        BasisPtr basis = oldTrialOrdering->getBasis(trialID);
        int basisCardinality = basis->getCardinality();
        FieldContainer<double> basisCoefficients(basisCardinality);
@@ -3498,7 +3500,7 @@ void Solution::projectOldCellOntoNewCells(GlobalIndexType cellID,
    map<int,FunctionPtr> interiorTraceMap; // functions to use on parent interior to represent traces there
    for (set<int>::iterator trialIDIt = trialIDs.begin(); trialIDIt != trialIDs.end(); trialIDIt++) {
      int trialID = *trialIDIt;
-     if (oldTrialOrdering->getNumSidesForVarID(trialID) != 1) { // trace (flux) variable
+     if (oldTrialOrdering->getSidesForVarID(trialID).size() != 1) { // trace (flux) variable
        VarPtr var = vf.trialVars().find(trialID)->second;
 
        LinearTermPtr termTraced = var->termTraced();
@@ -3521,7 +3523,7 @@ void Solution::projectOldCellOntoNewCells(GlobalIndexType cellID,
      BasisCachePtr parentSideTopoBasisCache = BasisCache::basisCacheForReferenceCell(sideTopo, dummyCubatureDegree);
      for (set<int>::iterator trialIDIt = trialIDs.begin(); trialIDIt != trialIDs.end(); trialIDIt++) {
        int trialID = *trialIDIt;
-       if (oldTrialOrdering->getNumSidesForVarID(trialID) != 1) { // trace (flux) variable
+       if (oldTrialOrdering->getSidesForVarID(trialID).size() != 1) { // trace (flux) variable
          if (!oldTrialOrdering->hasBasisEntry(trialID, sideOrdinal)) continue;
          BasisPtr basis = oldTrialOrdering->getBasis(trialID, sideOrdinal);
          int basisCardinality = basis->getCardinality();

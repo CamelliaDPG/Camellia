@@ -2167,8 +2167,9 @@ bool MeshTestSuite::checkDofOrderingHasNoOverlap(Teuchos::RCP<DofOrdering> dofOr
   set<int>::iterator varIDIt;
   for (varIDIt = varIDs.begin(); varIDIt != varIDs.end(); varIDIt++) {
     int varID = *varIDIt;
-    int numSides = dofOrdering->getNumSidesForVarID(varID);
-    for (int sideIndex=0; sideIndex<numSides; sideIndex++) {
+    const vector<int>* sidesForVar = &dofOrdering->getSidesForVarID(varID);
+    for (vector<int>::const_iterator sideIt = sidesForVar->begin(); sideIt != sidesForVar->end(); sideIt++) {
+      int sideIndex = *sideIt;
       BasisPtr basis = dofOrdering->getBasis(varID,sideIndex);
       int basisCardinality = basis->getCardinality();
       for (int basisOrdinal=0; basisOrdinal<basisCardinality; basisOrdinal++) {

@@ -79,26 +79,27 @@ private:
         if (lhsVarID != rhsVarID) {
           return lhsVarID < rhsVarID;
         }
-        int lhsSidesForVar = lhs->getNumSidesForVarID(lhsVarID);
-        int rhsSidesForVar = rhs->getNumSidesForVarID(rhsVarID);
-        if (lhsSidesForVar != rhsSidesForVar) {
-          return lhsSidesForVar < rhsSidesForVar;
+        const vector<int>* lhsSidesForVar = &lhs->getSidesForVarID(lhsVarID);
+        const vector<int>* rhsSidesForVar = &rhs->getSidesForVarID(rhsVarID);
+        if (lhsSidesForVar->size() != rhsSidesForVar->size()) {
+          return lhsSidesForVar->size() < rhsSidesForVar->size();
         }
-        for (int i=0; i<lhsCellTopo->getSideCount(); i++) {
-          if (lhs->hasBasisEntry(lhsVarID, i) != rhs->hasBasisEntry(rhsVarID, i)) {
-            return lhs->hasBasisEntry(lhsVarID, i) < rhs->hasBasisEntry(rhsVarID, i);
+        for (int i=0; i<lhsSidesForVar->size(); i++) {
+          int lhsSideIndex = (*lhsSidesForVar)[i];
+          int rhsSideIndex = (*rhsSidesForVar)[i];
+          if (lhsSideIndex != rhsSideIndex) {
+            return lhsSideIndex < rhsSideIndex;
           }
-          if (! lhs->hasBasisEntry(lhsVarID, i)) continue;
-          BasisPtr lhsBasis = lhs->getBasis(lhsVarID,i);
-          BasisPtr rhsBasis = rhs->getBasis(rhsVarID,i);
+          BasisPtr lhsBasis = lhs->getBasis(lhsVarID,lhsSideIndex);
+          BasisPtr rhsBasis = rhs->getBasis(rhsVarID,rhsSideIndex);
           if ( lhsBasis.get() != rhsBasis.get() ) { // different pointers ==> different bases
             return lhsBasis.get() < rhsBasis.get();
           }
           // the following loop is necessary for distinguishing between DofOrderings
           // that have conforming traces from those that do not...
           for (int basisOrdinal=0; basisOrdinal < lhsBasis->getCardinality(); basisOrdinal++) {
-            int lhsDofIndex = lhs->getDofIndex(lhsVarID,basisOrdinal,i);
-            int rhsDofIndex = rhs->getDofIndex(lhsVarID,basisOrdinal,i);
+            int lhsDofIndex = lhs->getDofIndex(lhsVarID,basisOrdinal,lhsSideIndex);
+            int rhsDofIndex = rhs->getDofIndex(lhsVarID,basisOrdinal,rhsSideIndex);
             if (lhsDofIndex != rhsDofIndex) {
               return lhsDofIndex < rhsDofIndex;
             }

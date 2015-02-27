@@ -125,8 +125,9 @@ namespace Camellia {
       cout << "\n\n ***************   TRACE coefficients   ***************\n";
       for (vector<VarPtr>::iterator varIt = traceVars.begin(); varIt != traceVars.end(); varIt++) {
         VarPtr var = *varIt;
-        int sideCount = dofOrdering->getNumSidesForVarID(var->ID());
-        for (int sideOrdinal=0; sideOrdinal < sideCount; sideOrdinal++) {
+        const vector<int>* sides = &dofOrdering->getSidesForVarID(var->ID());
+        for (vector<int>::const_iterator sideIt = sides->begin(); sideIt != sides->end(); sideIt++) {
+          int sideOrdinal = *sideIt;
           cout << var->displayString() << ", side " << sideOrdinal << ":\n";
           const std::vector<int>* dofIndices = &dofOrdering->getDofIndices(var->ID(), sideOrdinal);
           int basisDofOrdinal = 0;
@@ -145,8 +146,9 @@ namespace Camellia {
       cout << "\n\n ***************   FLUX coefficients   ***************\n";
       for (vector<VarPtr>::iterator varIt = fluxVars.begin(); varIt != fluxVars.end(); varIt++) {
         VarPtr var = *varIt;
-        int sideCount = dofOrdering->getNumSidesForVarID(var->ID());
-        for (int sideOrdinal=0; sideOrdinal < sideCount; sideOrdinal++) {
+        const vector<int>* sides = &dofOrdering->getSidesForVarID(var->ID());
+        for (vector<int>::const_iterator sideIt = sides->begin(); sideIt != sides->end(); sideIt++) {
+          int sideOrdinal = *sideIt;
           cout << var->displayString() << ", side " << sideOrdinal << ":\n";
           const std::vector<int>* dofIndices = &dofOrdering->getDofIndices(var->ID(), sideOrdinal);
           int basisDofOrdinal = 0;

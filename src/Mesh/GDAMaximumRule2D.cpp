@@ -725,8 +725,9 @@ set<GlobalIndexType> GDAMaximumRule2D::partitionOwnedIndicesForVariables(set<int
     set< int >::iterator varIt;
     for (varIt = varIDs.begin(); varIt != varIDs.end(); varIt++){
       int varID = *varIt;
-      int numSides = elemTypePtr->trialOrderPtr->getNumSidesForVarID(varID);
-      for (int sideOrdinal = 0; sideOrdinal<numSides; sideOrdinal++) {
+      const vector<int>* sidesForVar = &elemTypePtr->trialOrderPtr->getSidesForVarID(varID);
+      for (vector<int>::const_iterator sideIt = sidesForVar->begin(); sideIt != sidesForVar->end(); sideIt++) {
+        int sideOrdinal = *sideIt;
         int basisCardinality = elemTypePtr->trialOrderPtr->getBasisCardinality(varID,sideOrdinal);
         for (int basisOrdinal = 0; basisOrdinal<basisCardinality; basisOrdinal++) {
           int localDofIndex = elemTypePtr->trialOrderPtr->getDofIndex(varID, basisOrdinal, sideOrdinal);

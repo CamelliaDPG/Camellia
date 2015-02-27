@@ -249,12 +249,11 @@ bool FunctionTests::testBasisSumFunction() {
   
   for (set<int>::iterator trialIt=trialIDs.begin(); trialIt != trialIDs.end(); trialIt++) {
     int trialID = *trialIt;
-    int numSides = trialSpace->getNumSidesForVarID(trialID);
-    bool boundaryValued = numSides != 1;
+    const vector<int>* sidesForVar = &trialSpace->getSidesForVarID(trialID);
+    bool boundaryValued = sidesForVar->size() != 1;
     // note that for volume trialIDs, sideIndex = 0, and numSides = 1…
-    int sideCount = trialSpace->cellTopology()->getSideCount();
-    for (int sideIndex=0; sideIndex<sideCount; sideIndex++) {
-      if (! trialSpace->hasBasisEntry(trialID, sideIndex)) continue;
+    for (vector<int>::const_iterator sideIt = sidesForVar->begin(); sideIt != sidesForVar->end(); sideIt++) {
+      int sideIndex = *sideIt;
       
       BasisCachePtr sideCache = volumeCache->getSideBasisCache(sideIndex);
       BasisPtr basis = trialSpace->getBasis(trialID, sideIndex);

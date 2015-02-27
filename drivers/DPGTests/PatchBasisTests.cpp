@@ -397,8 +397,9 @@ bool PatchBasisTests::patchBasesAgreeWithParentInMesh() {
     set<int> varIDs = trialOrdering->getVarIDs();
     for (set<int>::iterator varIDIt = varIDs.begin(); varIDIt != varIDs.end(); varIDIt++) {
       int varID = *varIDIt;
-      int numSides = trialOrdering->getNumSidesForVarID(varID);
-      for (int sideIndex = 0; sideIndex < numSides; sideIndex++) {
+      const vector<int>* sidesForVar = &trialOrdering->getSidesForVarID(varID);
+      for (vector<int>::const_iterator sideIt = sidesForVar->begin(); sideIt != sidesForVar->end(); sideIt++) {
+        int sideIndex = *sideIt;
         BasisPtr basis = trialOrdering->getBasis(varID,sideIndex);
         if (BasisFactory::basisFactory()->isPatchBasis(basis)) {
           // get parent basis:

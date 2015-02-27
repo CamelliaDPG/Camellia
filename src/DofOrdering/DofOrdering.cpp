@@ -108,19 +108,22 @@ void DofOrdering::copyLikeCoefficients( FieldContainer<double> &newValues, Teuch
   
   for (set<int>::iterator varIDIt = varIDs.begin(); varIDIt != varIDs.end(); varIDIt++) {
     int varID = *varIDIt;
-    int numSidesForVarID = getNumSidesForVarID(varID);
-    if ( numSidesForVarID == oldDofOrdering->getNumSidesForVarID(varID) ) {
-      int numSides = (numSidesForVarID==1) ? 1 : cellTopology()->getSideCount();
-      for (int sideOrdinal=0; sideOrdinal < numSides; sideOrdinal++) {
-        if (!hasBasisEntry(varID, sideOrdinal)) continue;
-        BasisPtr basis = getBasis(varID,sideOrdinal);
-        if (basis.get() == oldDofOrdering->getBasis(varID,sideOrdinal).get() ) {
-          // bases alike: copy coefficients
-          int cardinality = basis->getCardinality();
-          for (int dofOrdinal=0; dofOrdinal < cardinality; dofOrdinal++) {
-            int dofIndex = getDofIndex(varID,dofOrdinal,sideOrdinal);
-            newValues(dofIndex) = oldValues( oldDofOrdering->getDofIndex(varID,dofOrdinal,sideOrdinal) );
-          }
+    // skip any varIDs that one or the other dofOrdering does not have:
+    if (! oldDofOrdering->hasEntryForVarID(varID)) continue;
+    if (! this->hasEntryForVarID(varID)) continue;
+    
+    const vector<int>* sides = &oldDofOrdering->getSidesForVarID(varID);
+    for (vector<int>::const_iterator sideIt = sides->begin(); sideIt != sides->end(); sideIt++) {
+      int sideOrdinal = *sideIt;
+      if (!hasBasisEntry(varID, sideOrdinal)) continue;
+      if (!oldDofOrdering->hasBasisEntry(varID, sideOrdinal)) continue;
+      BasisPtr basis = getBasis(varID,sideOrdinal);
+      if (basis.get() == oldDofOrdering->getBasis(varID,sideOrdinal).get() ) {
+        // bases alike: copy coefficients
+        int cardinality = basis->getCardinality();
+        for (int dofOrdinal=0; dofOrdinal < cardinality; dofOrdinal++) {
+          int dofIndex = getDofIndex(varID,dofOrdinal,sideOrdinal);
+          newValues(dofIndex) = oldValues( oldDofOrdering->getDofIndex(varID,dofOrdinal,sideOrdinal) );
         }
       }
     }
@@ -186,7 +189,6 @@ const vector<int> & DofOrdering::getDofIndices(int varID, int sideIndex) {
 int DofOrdering::getBasisCardinality(int varID, int sideIndex) {
   BasisPtr basis = getBasis(varID,sideIndex);
   return basis->getCardinality();
-//  return getBasis(varID,sideIndex)->getCardinality();
 }
 
 int DofOrdering::getNumSidesForVarID(int varID) {
@@ -233,6 +235,10 @@ bool DofOrdering::hasBasisEntry(int varID, int sideIndex) {
   pair<int,int> key = make_pair(varID,sideIndex);
   map< pair<int,int>, BasisPtr >::iterator entry = bases.find(key);
   return entry != bases.end();
+}
+
+bool DofOrdering::hasEntryForVarID(int varID) {
+  return varIDs.find(varID) != varIDs.end();
 }
 
 bool DofOrdering::hasSideVarIDs() {
@@ -344,7 +350,7 @@ std::ostream& operator << (std::ostream& os, DofOrdering& dofOrdering) {
   os << "\t Number of dofs = " << dofOrdering.totalDofs() << endl;
   for (set<int>::iterator varIt = varIDs.begin(); varIt != varIDs.end(); varIt++) {
     int varID = *varIt;
-    os << varID << " (" << dofOrdering.getNumSidesForVarID(varID) << " sides)" << endl;
+    os << varID << " (" << dofOrdering.getSidesForVarID(varID).size() << " sides)" << endl;
   }
   
   if( numVarIDs == 0 ) {

@@ -372,8 +372,9 @@ void GlobalDofAssignment::interpretLocalCoefficients(GlobalIndexType cellID, con
   FieldContainer<double> basisCoefficients; // declared here so that we can sometimes avoid mallocs, if we get lucky in terms of the resize()
   for (set<int>::iterator trialIDIt = trialOrder->getVarIDs().begin(); trialIDIt != trialOrder->getVarIDs().end(); trialIDIt++) {
     int trialID = *trialIDIt;
-    int sideCount = trialOrder->getNumSidesForVarID(trialID);
-    for (int sideOrdinal=0; sideOrdinal < sideCount; sideOrdinal++) {
+    const vector<int>* sidesForVar = &trialOrder->getSidesForVarID(trialID);
+    for (vector<int>::const_iterator sideIt = sidesForVar->begin(); sideIt != sidesForVar->end(); sideIt++) {
+      int sideOrdinal = *sideIt;
       int basisCardinality = trialOrder->getBasisCardinality(trialID, sideOrdinal);
       basisCoefficients.resize(basisCardinality);
       vector<int> localDofIndices = trialOrder->getDofIndices(trialID, sideOrdinal);

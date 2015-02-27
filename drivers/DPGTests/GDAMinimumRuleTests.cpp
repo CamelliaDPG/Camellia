@@ -802,17 +802,15 @@ bool GDAMinimumRuleTests::checkLocalGlobalConsistency(MeshPtr mesh) {
     
     DofOrderingPtr trialOrder = mesh->getElementType(cellID)->trialOrderPtr;
     set<int> varIDs = trialOrder->getVarIDs();
-    
-    int sideCount = mesh->getElementType(cellID)->cellTopoPtr->getSideCount();
-    
+        
     for (set<int>::iterator varIt=varIDs.begin(); varIt != varIDs.end(); varIt++) {
       int varID = *varIt;
-      int numSides = trialOrder->getNumSidesForVarID(varID);
-      for (int sideOrdinal=0; sideOrdinal<sideCount; sideOrdinal++) {
-        if (! trialOrder->hasBasisEntry(varID, sideOrdinal)) continue;
+      const vector<int>* sidesForVar = &trialOrder->getSidesForVarID(varID);
+      for (vector<int>::const_iterator sideIt = sidesForVar->begin(); sideIt != sidesForVar->end(); sideIt++) {
+        int sideOrdinal = *sideIt;
 
         BasisPtr basis;
-        if (numSides == 1) {
+        if (sidesForVar->size() == 1) {
           basis = trialOrder->getBasis(varID);
         } else {
           basis = trialOrder->getBasis(varID,sideOrdinal);
@@ -822,7 +820,7 @@ bool GDAMinimumRuleTests::checkLocalGlobalConsistency(MeshPtr mesh) {
         
         for (int dofOrdinal=0; dofOrdinal<basis->getCardinality(); dofOrdinal++) {
           int localDofIndex;
-          if (numSides == 1) {
+          if (sidesForVar->size() == 1) {
             localDofIndex = trialOrder->getDofIndex(varID, dofOrdinal);
           } else {
             localDofIndex = trialOrder->getDofIndex(varID, dofOrdinal, sideOrdinal);

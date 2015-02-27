@@ -467,7 +467,7 @@ void BasisCache::findMaximumDegreeBasisForSides(DofOrdering &trialOrdering) {
   set<int> trialIDs = trialOrdering.getVarIDs();
   for (set<int>::iterator trialIt = trialIDs.begin(); trialIt != trialIDs.end(); trialIt++) {
     int trialID = *trialIt;
-    if (trialOrdering.getNumSidesForVarID(trialID) > 1) {
+    if (trialOrdering.getSidesForVarID(trialID).size() > 1) {
       sideTrialIDs.push_back(trialID);
     }
   }

@@ -471,7 +471,7 @@ LocalDofMapperPtr GMGOperator::getLocalCoefficientMap(GlobalIndexType fineCellID
           cout << "WARNING: function space for var " << trialVar->name() << " is not discontinuous, and GMGOperator does not yet support continuous variables, even continuous trace variables (i.e. all trace variables must be in L^2 or some other discontinuous space, like HGRAD_DISC).\n";
       }
 
-      if (coarseTrialOrdering->getNumSidesForVarID(trialID) == 1) { // field variable
+      if (coarseTrialOrdering->getSidesForVarID(trialID).size() == 1) { // field variable
         if (condensedDofInterpreter != NULL) {
           if (condensedDofInterpreter->varDofsAreCondensible(trialID, 0, fineTrialOrdering)) continue;
         }

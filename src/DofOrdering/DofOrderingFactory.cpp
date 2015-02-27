@@ -296,16 +296,17 @@ int DofOrderingFactory::polyOrder(DofOrderingPtr dofOrdering, bool isTestOrderin
   int sideCount = dofOrdering->cellTopology()->getSideCount();
   for (idIt = varIDs.begin(); idIt != varIDs.end(); idIt++) {
     int varID = *idIt;
-    int numSides = dofOrdering->getNumSidesForVarID(varID);
+    const vector<int>* sidesForVar = &dofOrdering->getSidesForVarID(varID);
+    int numSides = sidesForVar->size();
     int varIDEnhancement = isTestOrdering ? _testOrderEnhancements[varID] : _trialOrderEnhancements[varID];
     if (numSides == 1) {
       interiorVariable = varID;
       interiorVariableFound = true;
       break;
     } else {
-      for (int sideIndex=0; sideIndex<sideCount; sideIndex++) {
-        if (! dofOrdering->hasBasisEntry(varID, sideIndex)) continue;
-        int polyOrder = BasisFactory::basisFactory()->basisPolyOrder( dofOrdering->getBasis(varID,sideIndex) ) - varIDEnhancement;
+      for (vector<int>::const_iterator sideIt = sidesForVar->begin(); sideIt != sidesForVar->end(); sideIt++) {
+        int sideOrdinal = *sideIt;
+        int polyOrder = BasisFactory::basisFactory()->basisPolyOrder( dofOrdering->getBasis(varID,sideOrdinal) ) - varIDEnhancement;
         minSidePolyOrder = min(minSidePolyOrder,polyOrder);
       }
     }
@@ -331,7 +332,7 @@ map<int, BasisPtr> DofOrderingFactory::getMultiBasisUpgradeMap(vector< pair< Dof
   set<int>::iterator idIt;
   for (idIt = varIDs.begin(); idIt != varIDs.end(); idIt++) {
     int varID = *idIt;
-    int numSides = childTrialOrdersForSide[0].first->getNumSidesForVarID(varID);
+    int numSides = childTrialOrdersForSide[0].first->getSidesForVarID(varID).size();
     if (numSides > 1) { // a variable that lives on the sides: we need to match basis
       int numBases = childTrialOrdersForSide.size();
       for (int i=numBases-1; i>=0; i-- ) {
@@ -360,7 +361,7 @@ map<int, BasisPtr> DofOrderingFactory::getPatchBasisUpgradeMap(const DofOrdering
   set<int>::iterator idIt;
   for (idIt = varIDs.begin(); idIt != varIDs.end(); idIt++) {
     int varID = *idIt;
-    int numSides = childTrialOrdering->getNumSidesForVarID(varID);
+    int numSides = childTrialOrdering->getSidesForVarID(varID).size();
     if (numSides > 1) { // a variable that lives on the sides: we need to match basis
       BasisPtr basis = parentTrialOrdering->getBasis(varID,parentSideIndex);
       FieldContainer<double> nodes(2,1); // just 1D patches supported right now
@@ -399,7 +400,7 @@ bool DofOrderingFactory::sideHasMultiBasis(DofOrderingPtr &trialOrdering, int si
   set<int>::iterator idIt;
   for (idIt = varIDs.begin(); idIt != varIDs.end(); idIt++) {
     int varID = *idIt;
-    int numSides = trialOrdering->getNumSidesForVarID(varID);
+    int numSides = trialOrdering->getSidesForVarID(varID).size();
     if (numSides > 1) { // a variable that lives on the sides
       BasisPtr basis = trialOrdering->getBasis(varID,sideIndex);
       // as one side basis goes, so go they all:
@@ -423,7 +424,7 @@ void DofOrderingFactory::childMatchParent(DofOrderingPtr &childTrialOrdering, in
     set<int>::iterator idIt;
     for (idIt = varIDs.begin(); idIt != varIDs.end(); idIt++) {
       int varID = *idIt;
-      int numSides = parentTrialOrdering->getNumSidesForVarID(varID);
+      int numSides = parentTrialOrdering->getSidesForVarID(varID).size();
       if (numSides > 1) { // a variable that lives on the sides: we need to match basis
         BasisPtr basis  = parentTrialOrdering->getBasis(varID,sideIndex);
         if (! BasisFactory::basisFactory()->isMultiBasis(basis) ) {
@@ -454,7 +455,7 @@ int DofOrderingFactory::matchSides(DofOrderingPtr &firstOrdering, int firstSideI
   set<int>::iterator idIt;
   for (idIt = varIDs.begin(); idIt != varIDs.end(); idIt++) {
     int varID = *idIt;
-    int numSides = firstOrdering->getNumSidesForVarID(varID);
+    int numSides = firstOrdering->getSidesForVarID(varID).size();
     if (numSides > 1) { // a variable that lives on the sides: we need to match basis
       BasisPtr firstBasis = firstOrdering->getBasis(varID,firstSideIndex);
       BasisPtr secondBasis = secondOrdering->getBasis(varID,secondSideIndex);
@@ -508,7 +509,7 @@ DofOrderingPtr DofOrderingFactory::upgradeSide(DofOrderingPtr dofOrdering,
   
   for (idIt = varIDs.begin(); idIt != varIDs.end(); idIt++) {
     int varID = *idIt;
-    int numSides = dofOrdering->getNumSidesForVarID(varID);
+    int numSides = dofOrdering->getSidesForVarID(varID).size();
     if ((varIDsToUpgrade.find(varID) != varIDsToUpgrade.end()) && numSides == 1) {
       TEUCHOS_TEST_FOR_EXCEPTION( true,
                          std::invalid_argument,
@@ -550,10 +551,10 @@ DofOrderingPtr DofOrderingFactory::pRefine(DofOrderingPtr dofOrdering, CellTopoP
   int newPolyOrder = interiorPolyOrder + pToAdd;
   bool conforming = _isConforming[dofOrdering.get()];
   DofOrderingPtr newOrdering = Teuchos::rcp(new DofOrdering(dofOrdering->cellTopology()));
-  int sideCount = dofOrdering->cellTopology()->getSideCount();
   for (set<int>::iterator idIt = varIDs.begin(); idIt != varIDs.end(); idIt++) {
     int varID = *idIt;
-    int numSides = dofOrdering->getNumSidesForVarID(varID);
+    const vector<int>* sidesForVar = &dofOrdering->getSidesForVarID(varID);
+    int numSides = sidesForVar->size();
     Camellia::EFunctionSpace fs;
     int newPolyOrderForVarID;
     if (isTestOrdering) {
@@ -561,8 +562,8 @@ DofOrderingPtr DofOrderingFactory::pRefine(DofOrderingPtr dofOrdering, CellTopoP
     } else {
       newPolyOrderForVarID = newPolyOrder + _trialOrderEnhancements[varID];
     }
-    for (int sideIndex=0; sideIndex<sideCount; sideIndex++) {
-      if (! dofOrdering->hasBasisEntry(varID, sideIndex)) continue;
+    for (vector<int>::const_iterator sideIt = sidesForVar->begin(); sideIt != sidesForVar->end(); sideIt++) {
+      int sideIndex = *sideIt;
       BasisPtr basis = dofOrdering->getBasis(varID,sideIndex);
       fs = BasisFactory::basisFactory()->getBasisFunctionSpace(basis);
       int basisRank = BasisFactory::basisFactory()->getBasisRank(basis);
@@ -629,9 +630,11 @@ DofOrderingPtr DofOrderingFactory::setBasisDegree(DofOrderingPtr dofOrdering, in
   CellTopoPtr cellTopoPtr = dofOrdering->cellTopology();
   for (set<int>::iterator idIt = varIDs.begin(); idIt != varIDs.end(); idIt++) {
     int varID = *idIt;
-    int numSides = dofOrdering->getNumSidesForVarID(varID);
+    const vector<int>* sidesForVar = &dofOrdering->getSidesForVarID(varID);
     Camellia::EFunctionSpace fs;
-    for (int sideIndex=0; sideIndex<sideCount; sideIndex++) {
+    for (vector<int>::const_iterator sideIt = sidesForVar->begin(); sideIt != sidesForVar->end(); sideIt++) {
+      int sideIndex = *sideIt;
+
       if (! dofOrdering->hasBasisEntry(varID, sideIndex)) continue;
       BasisPtr basis = dofOrdering->getBasis(varID,sideIndex);
       
@@ -649,13 +652,13 @@ DofOrderingPtr DofOrderingFactory::setBasisDegree(DofOrderingPtr dofOrdering, in
 //      basis = BasisFactory::basisFactory()->setPolyOrder(basis, currentPolyOrder + delta_k );
       basis = BasisFactory::basisFactory()->getBasis( currentPolyOrder + delta_k, basis->domainTopology(), fs );
       newOrdering->addEntry(varID,basis,basisRank,sideIndex);
-      if (numSides == 1) {
+      if (sidesForVar->size() == 1) {
         newFieldOrder->addEntry(varID, basis, basisRank, sideIndex);
       } else {
         newTraceOrder->addEntry(varID, basis, basisRank, sideIndex);
       }
     }
-    if ((numSides > 1) && (fs == Camellia::FUNCTION_SPACE_HGRAD) && (conforming)) {
+    if ((sidesForVar->size() > 1) && (fs == Camellia::FUNCTION_SPACE_HGRAD) && (conforming)) {
       addConformingVertexPairings(varID, newOrdering, cellTopoPtr);
       addConformingVertexPairings(varID, newTraceOrder, cellTopoPtr);
     }
@@ -685,9 +688,11 @@ DofOrderingPtr DofOrderingFactory::setSidePolyOrder(DofOrderingPtr dofOrdering, 
   
   for (set<int>::iterator idIt = varIDs.begin(); idIt != varIDs.end(); idIt++) {
     int varID = *idIt;
-    int numSides = dofOrdering->getNumSidesForVarID(varID);
+    const vector<int>* sidesForVar = &dofOrdering->getSidesForVarID(varID);
     Camellia::EFunctionSpace fs;
-    for (int sideIndex=0; sideIndex<sideCount; sideIndex++) {
+    for (vector<int>::const_iterator sideIt = sidesForVar->begin(); sideIt != sidesForVar->end(); sideIt++) {
+      int sideIndex = *sideIt;
+
       if (! dofOrdering->hasBasisEntry(varID, sideIndex)) continue;
       BasisPtr basis = dofOrdering->getBasis(varID,sideIndex);
       if (replacePatchBasis) {
@@ -699,13 +704,13 @@ DofOrderingPtr DofOrderingFactory::setSidePolyOrder(DofOrderingPtr dofOrdering, 
       fs = BasisFactory::basisFactory()->getBasisFunctionSpace(basis);
       int basisRank = BasisFactory::basisFactory()->getBasisRank(basis);
       int basisPolyOrder = BasisFactory::basisFactory()->basisPolyOrder(basis);
-      if ( (numSides > 1) && (sideIndex==sideIndexToSet) && (basisPolyOrder < newPolyOrder) ) {
+      if ( (sidesForVar->size() > 1) && (sideIndex==sideIndexToSet) && (basisPolyOrder < newPolyOrder) ) {
         // upgrade basis
         basis = BasisFactory::basisFactory()->setPolyOrder(basis, newPolyOrder);
       }
       newOrdering->addEntry(varID,basis,basisRank,sideIndex);
     }
-    if ((numSides > 1) && (fs == Camellia::FUNCTION_SPACE_HGRAD) && (conforming)) {
+    if ((sidesForVar->size() > 1) && (fs == Camellia::FUNCTION_SPACE_HGRAD) && (conforming)) {
       addConformingVertexPairings(varID, newOrdering, cellTopoPtr);
     }
   }

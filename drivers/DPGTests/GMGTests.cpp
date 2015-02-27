@@ -572,7 +572,7 @@ bool GMGTests::testGMGOperatorP() {
             FunctionPtr coarseBasisSumFunction = NewBasisSumFunction::basisSumFunction(coarseBasis, coarseBasisCoefficients);
             FunctionPtr diffFxn = fineBasisSumFunction - coarseBasisSumFunction;
             
-            BasisCachePtr basisCacheForIntegration = (coarseOrdering->getNumSidesForVarID(varID) == 1) ? basisCache : basisCache->getSideBasisCache(sideOrdinal);
+            BasisCachePtr basisCacheForIntegration = (coarseOrdering->getSidesForVarID(varID).size() == 1) ? basisCache : basisCache->getSideBasisCache(sideOrdinal);
             
             double l2diff = sqrt( (diffFxn * diffFxn)->integrate(basisCacheForIntegration) );
             
@@ -580,7 +580,7 @@ bool GMGTests::testGMGOperatorP() {
             if (l2diff > tol) {
               success = false;
               cout << "Test Failure: on cell " << cellID << ", for variable " << varID;
-              if (coarseOrdering->getNumSidesForVarID(varID) > 1) cout << " on side " << sideOrdinal << " ";
+              if (coarseOrdering->getSidesForVarID(varID).size() > 1) cout << " on side " << sideOrdinal << " ";
               cout << " for coarse basis ordinal " << coarseBasisOrdinal << ", ";
               cout << "the L^2 norm of difference between fine mesh representation and coarse representation exceeds tol: ";
               cout << l2diff << " > " << tol << "\n";

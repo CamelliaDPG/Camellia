@@ -91,6 +91,8 @@ public:
     return basisRanks[varID];
   }
   
+  bool hasEntryForVarID( int varID ); // returns true if we have any basis on any side for varID
+  
   int getNumSidesForVarID(int varID); // will be deprecated soon.  Use getSidesForVarID instead
   
   const vector<int> & getSidesForVarID(int varID) const;

@@ -210,6 +210,8 @@ void DPGTests::runTests() {
   // setup our TestSuite tests:
   vector< Teuchos::RCP< TestSuite > > testSuites;
   
+  testSuites.push_back( Teuchos::rcp( new LinearTermTests ) );
+  
   testSuites.push_back( Teuchos::rcp( new GDAMinimumRuleTests ) );
   
   testSuites.push_back( Teuchos::rcp( new GMGTests ) );
@@ -231,8 +233,6 @@ void DPGTests::runTests() {
   } else {
     testSuites.push_back( Teuchos::rcp( new IncompressibleFormulationsTests(false) ) ); // false: turn "thorough" off
   }
-  
-  testSuites.push_back( Teuchos::rcp( new LinearTermTests ) );
   
   testSuites.push_back( Teuchos::rcp( new ScratchPadTests ) );
   

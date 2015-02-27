@@ -1002,7 +1002,9 @@ bool LinearTermTests::testIntegrateMixedBasis() {
   DofOrderingPtr trialOrdering = elemType->trialOrderPtr;
   int dofForField = trialOrdering->getDofIndex(u->ID(), 0);
   vector<int> dofsForFlux;
-  for (int sideIndex=0; sideIndex < trialOrdering->getNumSidesForVarID(beta_n_u_hat->ID()); sideIndex++) {
+  const vector<int>* sidesForFlux = &trialOrdering->getSidesForVarID(beta_n_u_hat->ID());
+  for (vector<int>::const_iterator sideIt = sidesForFlux->begin(); sideIt != sidesForFlux->end(); sideIt++) {
+    int sideIndex = *sideIt;
     dofsForFlux.push_back(trialOrdering->getDofIndex(beta_n_u_hat->ID(), 0, sideIndex));
   }
   for (int cellIndex = 0; cellIndex < numCells; cellIndex++) {
