@@ -304,6 +304,7 @@ bool MeshTestSuite::neighborBasesAgreeOnSides(Teuchos::RCP<Mesh> mesh, const Fie
       
       for (vector<int>::iterator traceIt = traceIDs.begin(); traceIt != traceIDs.end(); traceIt++) {
         int traceID = *traceIt;
+        if (! trialOrder->hasBasisEntry(traceID, sideOrdinal)) continue;
         BasisPtr basis = trialOrder->getBasis(traceID,sideOrdinal);
         BasisPtr neighborBasis = neighborTrialOrder->getBasis(traceID,neighborSideOrdinal);
         

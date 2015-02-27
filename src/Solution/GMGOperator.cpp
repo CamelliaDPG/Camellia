@@ -505,6 +505,7 @@ LocalDofMapperPtr GMGOperator::getLocalCoefficientMap(GlobalIndexType fineCellID
             if (termTraced.get() == NULL) // nothing we can do if we don't know what term we're tracing
               continue;
           
+            if (! fineTrialOrdering->hasBasisEntry(trialID, sideOrdinal) ) continue;
             fineBasis = fineTrialOrdering->getBasis(trialID, sideOrdinal);
 
             set<int> varsTraced = termTraced->varIDs();
@@ -528,6 +529,14 @@ LocalDofMapperPtr GMGOperator::getLocalCoefficientMap(GlobalIndexType fineCellID
               basisMap.push_back(SubBasisDofMapper::subBasisDofMapper(fineDofOrdinals, coarseDofIndices, weights.weights));
             }
           } else { // fine side maps to a coarse side
+            if (! coarseTrialOrdering->hasBasisEntry(trialID, coarseSideOrdinal)) {
+              cout << "ERROR: no entry for trial var " << trialVar->name() << " on side " << coarseSideOrdinal << " in coarse mesh.\n";
+              TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Missing basis entry on coarse side!");
+            }
+            if (! fineTrialOrdering->hasBasisEntry(trialID, sideOrdinal)) {
+              cout << "ERROR: no entry for trial var " << trialVar->name() << " on side " << sideOrdinal << " in fine mesh.\n";
+              TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Missing basis entry on fine side!");
+            }
             coarseBasis = coarseTrialOrdering->getBasis(trialID, coarseSideOrdinal);
             fineBasis = fineTrialOrdering->getBasis(trialID, sideOrdinal);
             SubBasisReconciliationWeights weights = _br.constrainedWeights(fineBasis, sideRefBranches[sideOrdinal], coarseBasis, vertexNodePermutation);
