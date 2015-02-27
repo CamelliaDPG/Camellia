@@ -536,12 +536,18 @@ bool GMGTests::testGMGOperatorP() {
         fieldIDs.insert((*fieldIt)->ID());
       }
       
+      int sideCount = fineMesh->getElementType(cellID)->cellTopoPtr->getSideCount();
+      
       set<int> varIDs = coarseOrdering->getVarIDs();
       for (set<int>::iterator varIDIt = varIDs.begin(); varIDIt != varIDs.end(); varIDIt++) {
         int varID = *varIDIt;
-        int sideCount = coarseOrdering->getNumSidesForVarID(varID);
         if ((fieldIDs.find(varID) != fieldIDs.end()) && useStaticCondensation) continue; // skip field test for static condensation: these guys are mapped in that case...
         for (int sideOrdinal=0; sideOrdinal<sideCount; sideOrdinal++) {
+          if (coarseOrdering->hasBasisEntry(varID, sideOrdinal) != fineOrdering->hasBasisEntry(varID, sideOrdinal)) {
+            TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "coarse and fine orderings disagree on whether varID is defined on side sideOrdinal");
+          }
+          if (! coarseOrdering->hasBasisEntry(varID, sideOrdinal)) continue;
+          
           BasisPtr coarseBasis = coarseOrdering->getBasis(varID,sideOrdinal);
           BasisPtr fineBasis = fineOrdering->getBasis(varID,sideOrdinal);
           FieldContainer<double> coarseBasisCoefficients(coarseBasis->getCardinality());
