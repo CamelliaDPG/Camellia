@@ -225,6 +225,7 @@ void Boundary::bcsToImpose( map<  GlobalIndexType, double > &globalDofIndicesAnd
         // Determine global dof indices and values, in one pass per side
         for (int i=0; i<boundarySides.size(); i++) {
           unsigned sideOrdinal = boundarySides[i];
+          if (! trialOrderingPtr->hasBasisEntry(trialID, sideOrdinal)) continue;
           BasisPtr basis = trialOrderingPtr->getBasis(trialID,sideOrdinal);
           int numDofs = basis->getCardinality();
           GlobalIndexType numCells = 1;
@@ -277,6 +278,7 @@ void Boundary::bcsToImpose( map<  GlobalIndexType, double > &globalDofIndicesAnd
     } else {
       int vertexOrdinalInSide = -1;
       for (int sideOrdinal=0; sideOrdinal < numSides; sideOrdinal++) {
+        if (! cellTopo->sideIsSpatial(sideOrdinal)) continue; // because some fluxes are only defined on spatial sides, skip any that are not (i.e., we insist that sideForVertex is a spatial side).
         vector<IndexType> vertexIndicesForSide = cell->getEntityVertexIndices(sideDim, sideOrdinal);
         for (int vertexOrdinal=0; vertexOrdinal < vertexIndicesForSide.size(); vertexOrdinal++) {
           if (vertexIndicesForSide[vertexOrdinal] == vertexIndex) {

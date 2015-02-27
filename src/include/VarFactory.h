@@ -55,6 +55,11 @@ public:
   VarPtr fluxVar(std::string name, LinearTermPtr termTraced, Space fs = L2, int ID = -1);
   VarPtr fluxVar(std::string name, VarPtr termTraced, Space fs = L2, int ID = -1);
   VarPtr fluxVar(std::string name, Space fs = L2, int ID = -1);
+
+  // Methods for creating space-time fluxes that are not defined on purely temporal interfaces:
+  VarPtr fluxVarSpaceOnly(std::string name, LinearTermPtr termTraced, Space fs = L2, int ID = -1);
+  VarPtr fluxVarSpaceOnly(std::string name, VarPtr termTraced, Space fs = L2, int ID = -1);
+  VarPtr fluxVarSpaceOnly(std::string name, Space fs = L2, int ID = -1);
   
   VarPtr traceVar(std::string name, LinearTermPtr termTraced, Space fs = HGRAD, int ID = -1);
   VarPtr traceVar(std::string name, VarPtr termTraced, Space fs = HGRAD, int ID = -1);

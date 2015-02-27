@@ -252,7 +252,10 @@ bool FunctionTests::testBasisSumFunction() {
     int numSides = trialSpace->getNumSidesForVarID(trialID);
     bool boundaryValued = numSides != 1;
     // note that for volume trialIDs, sideIndex = 0, and numSides = 1…
-    for (int sideIndex=0; sideIndex<numSides; sideIndex++) {
+    int sideCount = trialSpace->cellTopology()->getSideCount();
+    for (int sideIndex=0; sideIndex<sideCount; sideIndex++) {
+      if (! trialSpace->hasBasisEntry(trialID, sideIndex)) continue;
+      
       BasisCachePtr sideCache = volumeCache->getSideBasisCache(sideIndex);
       BasisPtr basis = trialSpace->getBasis(trialID, sideIndex);
       int basisCardinality = basis->getCardinality();
@@ -868,7 +871,7 @@ bool FunctionTests::testValuesDottedWithTensor() {
   VarFactory vf;
   VarPtr v = vf.testVar("v", HGRAD);
   
-  DofOrderingPtr dofOrdering = Teuchos::rcp( new DofOrdering );
+  DofOrderingPtr dofOrdering = Teuchos::rcp( new DofOrdering(CellTopology::quad()) );
   shards::CellTopology quad_4(shards::getCellTopologyData<shards::Quadrilateral<4> >() );
   BasisPtr basis = BasisFactory::basisFactory()->getBasis(h1Order, quad_4.getKey(), Camellia::FUNCTION_SPACE_HGRAD);
   dofOrdering->addEntry(v->ID(), basis, v->rank());

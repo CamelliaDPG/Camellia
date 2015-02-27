@@ -151,6 +151,27 @@ VarPtr VarFactory::fluxVar(string name, Space fs, int ID) {
   return fluxVar(name, Teuchos::rcp((LinearTerm*)NULL), fs, ID);
 }
 
+VarPtr VarFactory::fluxVarSpaceOnly(string name, LinearTermPtr termTraced, Space fs, int ID) {
+  if (_trialVars.find(name) != _trialVars.end()) {
+    return _trialVars[name];
+  }
+  int rank = Camellia::rankForSpace(fs);
+  ID = getTrialID(ID);
+  bool isDefinedOnTemporalInterfaces = false;
+  _trialVars[name] = Teuchos::rcp( new Var( ID, rank, name,
+                                           Camellia::OP_VALUE, fs, FLUX, termTraced, isDefinedOnTemporalInterfaces) );
+  _trialVarsByID[ID] = _trialVars[name];
+  return _trialVarsByID[ID];
+}
+
+VarPtr VarFactory::fluxVarSpaceOnly(string name, VarPtr termTraced, Space fs, int ID) {
+  return fluxVarSpaceOnly(name, 1.0 * termTraced, fs, ID);
+}
+
+VarPtr VarFactory::fluxVarSpaceOnly(string name, Space fs, int ID) {
+  return fluxVarSpaceOnly(name, Teuchos::rcp((LinearTerm*)NULL), fs, ID);
+}
+
 VarPtr VarFactory::traceVar(string name, LinearTermPtr termTraced, Space fs, int ID) {
   if (_trialVars.find(name) != _trialVars.end() ) {
     return _trialVars[name];

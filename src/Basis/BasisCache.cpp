@@ -179,7 +179,7 @@ void BasisCache::createSideCaches() {
 BasisCache::BasisCache(CellTopoPtr cellTopo, int cubDegree, bool createSideCacheToo, bool tensorProductTopologyMeansSpaceTime) {
   _cellTopo = cellTopo;
 
-  DofOrdering trialOrdering; // dummy trialOrdering
+  DofOrdering trialOrdering(cellTopo); // dummy trialOrdering
   findMaximumDegreeBasisForSides(trialOrdering); // should fill with NULL ptrs
   
   _isSideCache = false;
@@ -244,7 +244,7 @@ BasisCache::BasisCache(shards::CellTopology &cellTopo, int cubDegree, bool creat
   // NOTE that this constructor's a bit dangerous, in that we lack information about the brokenness
   // of the sides; we may under-integrate for cells with broken sides...
   _cellTopo = CellTopology::cellTopology(cellTopo);
-  DofOrdering trialOrdering; // dummy trialOrdering
+  DofOrdering trialOrdering(_cellTopo); // dummy trialOrdering
   findMaximumDegreeBasisForSides(trialOrdering); // should fill with NULL ptrs
   
   _isSideCache = false;
@@ -257,7 +257,7 @@ BasisCache::BasisCache(const FieldContainer<double> &physicalCellNodes, shards::
   // NOTE that this constructor's a bit dangerous, in that we lack information about the brokenness
   // of the sides; we may under-integrate for cells with broken sides...
   _cellTopo = CellTopology::cellTopology(cellTopo);
-  DofOrdering trialOrdering; // dummy trialOrdering
+  DofOrdering trialOrdering(_cellTopo); // dummy trialOrdering
   findMaximumDegreeBasisForSides(trialOrdering); // should fill with NULL ptrs
   
   _isSideCache = false;
@@ -272,7 +272,7 @@ BasisCache::BasisCache(const FieldContainer<double> &physicalCellNodes, CellTopo
   // NOTE that this constructor's a bit dangerous, in that we lack information about the brokenness
   // of the sides; we may under-integrate for cells with broken sides...
   _cellTopo = cellTopo;
-  DofOrdering trialOrdering; // dummy trialOrdering
+  DofOrdering trialOrdering(_cellTopo); // dummy trialOrdering
   findMaximumDegreeBasisForSides(trialOrdering); // should fill with NULL ptrs
   
   _isSideCache = false;
@@ -479,9 +479,12 @@ void BasisCache::findMaximumDegreeBasisForSides(DofOrdering &trialOrdering) {
     // loop through looking for highest-degree basis
     int maxTrialDegree = -1;
     for (int i=0; i<numSideTrialIDs; i++) {
-      if (trialOrdering.getBasis(sideTrialIDs[i],sideOrdinal)->getDegree() > maxTrialDegree) {
-        maxDegreeBasisOnSide = trialOrdering.getBasis(sideTrialIDs[i],sideOrdinal);
-        maxTrialDegree = maxDegreeBasisOnSide->getDegree();
+      if (trialOrdering.hasBasisEntry(sideTrialIDs[i], sideOrdinal)) {
+        BasisPtr basis = trialOrdering.getBasis(sideTrialIDs[i],sideOrdinal);
+        if (basis->getDegree() > maxTrialDegree) {
+          maxDegreeBasisOnSide = basis;
+          maxTrialDegree = maxDegreeBasisOnSide->getDegree();
+        }
       }
     }
     _maxDegreeBasisForSide.push_back(maxDegreeBasisOnSide);

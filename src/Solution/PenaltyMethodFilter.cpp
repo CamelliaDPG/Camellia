@@ -62,6 +62,7 @@ void PenaltyMethodFilter::filter(FieldContainer<double> &localStiffnessMatrix, F
         pair<int,FieldContainer<double> > constrTestPair = *constrTestIDIt;
         int testTrialID = constrTestPair.first;
         
+        if (! trialOrderPtr->hasBasisEntry(testTrialID, sideIndex)) continue;
         // get basis to integrate for testing fxns
         BasisPtr testTrialBasis = trialOrderPtr->getBasis(testTrialID,sideIndex);
         FieldContainer<double> testTrialValuesTransformedWeighted = *(basisCache->getTransformedWeightedValues(testTrialBasis,trialOperator,
@@ -83,6 +84,8 @@ void PenaltyMethodFilter::filter(FieldContainer<double> &localStiffnessMatrix, F
              constrIDIt !=constrCoeffs.end(); constrIDIt++) {
           pair<int,FieldContainer<double> > constrPair = *constrIDIt;
           int trialID = constrPair.first;
+          
+          if (! trialOrderPtr->hasBasisEntry(testTrialID, sideIndex)) continue;
           
           // get basis to integrate
           BasisPtr trialBasis1 = trialOrderPtr->getBasis(trialID,sideIndex);

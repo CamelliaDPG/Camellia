@@ -72,14 +72,14 @@ public:
   }
   
   static DofOrderingPtr testOrdering(int polyOrder) {
-    Teuchos::RCP<DofOrdering> testOrdering = Teuchos::rcp( new DofOrdering );
+    Teuchos::RCP<DofOrdering> testOrdering = Teuchos::rcp( new DofOrdering(CellTopology::quad()) );
     int testID = 0;
     BasisPtr testBasis = Camellia::intrepidQuadHGRAD(polyOrder);
     testOrdering->addEntry(testID, testBasis, testBasis->rangeRank());
     return testOrdering;
   }
   static DofOrderingPtr trialOrdering(int polyOrder, int numSides, bool conforming) {
-    Teuchos::RCP<DofOrdering> trialOrdering = Teuchos::rcp( new DofOrdering );
+    Teuchos::RCP<DofOrdering> trialOrdering = Teuchos::rcp( new DofOrdering(CellTopology::quad()) );
     int trialID = 0;
     BasisPtr trialBasis = Camellia::intrepidLineHGRAD(polyOrder);
     for (int sideIndex=0; sideIndex<numSides; sideIndex++) {

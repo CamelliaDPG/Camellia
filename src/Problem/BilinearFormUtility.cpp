@@ -404,6 +404,8 @@ void BilinearFormUtility::computeOptimalStiffnessMatrix(FieldContainer<double> &
             }
             
             for (unsigned sideOrdinal=0; sideOrdinal<numSides; sideOrdinal++) {
+              if (! trialOrdering->hasBasisEntry(trialID, sideOrdinal)) continue;
+              
               trialBasis = trialOrdering->getBasis(trialID,sideOrdinal);
               testBasis = testOrdering->getBasis(testID);
               

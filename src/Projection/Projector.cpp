@@ -33,7 +33,7 @@ void Projector::projectFunctionOntoBasis(FieldContainer<double> &basisCoefficien
                                          BasisPtr basis, BasisCachePtr basisCache, IPPtr ip, VarPtr v,
                                          set<int> fieldIndicesToSkip) {
   CellTopoPtr cellTopo = basis->domainTopology();
-  DofOrderingPtr dofOrderPtr = Teuchos::rcp(new DofOrdering());
+  DofOrderingPtr dofOrderPtr = Teuchos::rcp(new DofOrdering(cellTopo));
   
   if (! fxn.get()) {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "fxn cannot be null!");
@@ -53,7 +53,7 @@ void Projector::projectFunctionOntoBasis(FieldContainer<double> &basisCoefficien
   FieldContainer<double> ipVector(numCells,cardinality);
 
   // fake a DofOrdering
-  DofOrderingPtr dofOrdering = Teuchos::rcp( new DofOrdering );
+  DofOrderingPtr dofOrdering = Teuchos::rcp( new DofOrdering(cellTopo) );
   if (! basisCache->isSideCache()) {
     dofOrdering->addEntry(v->ID(), basis, v->rank());
   } else {
@@ -197,7 +197,7 @@ void Projector::projectFunctionOntoBasis(FieldContainer<double> &basisCoefficien
                                          const FieldContainer<double> &physicalCellNodes) {
 
   CellTopoPtr cellTopo = basis->domainTopology();
-  DofOrderingPtr dofOrderPtr = Teuchos::rcp(new DofOrdering());
+  DofOrderingPtr dofOrderPtr = Teuchos::rcp(new DofOrdering(cellTopo));
 
   int basisRank = BasisFactory::basisFactory()->getBasisRank(basis);
   int ID = 0; // only one entry for this fake dofOrderPtr

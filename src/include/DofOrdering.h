@@ -63,7 +63,7 @@ class DofOrdering {
   
   std::map< int, CellTopoPtr > _cellTopologyForSide; // -1 is field variable
 public:
-  DofOrdering(); // constructor
+  DofOrdering(CellTopoPtr cellTopo = Teuchos::null); // constructor
   
   void addEntry(int varID, BasisPtr basis, int basisRank, int sideIndex = 0);
   
