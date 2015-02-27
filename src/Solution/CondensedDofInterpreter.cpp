@@ -195,8 +195,9 @@ bool CondensedDofInterpreter::varDofsAreCondensible(int varID, int sideOrdinal, 
   // condense out the truly discontinuous bases defined for variables on the element interior.
   
   int sideCount = dofOrdering->getNumSidesForVarID(varID);
-  BasisPtr basis = dofOrdering->getBasis(varID, sideOrdinal);
+  if (sideCount != 1) return false;
   
+  BasisPtr basis = dofOrdering->getBasis(varID); // sideOrdinal must be 0 since sideCount == 1
   Camellia::EFunctionSpace fs = basis->functionSpace();
   
   bool isDiscontinuous = functionSpaceIsDiscontinuous(fs);
@@ -224,11 +225,13 @@ map<GlobalIndexType, IndexType> CondensedDofInterpreter::interpretedFluxMapForPa
     
     DofOrderingPtr trialOrder = _mesh->getElementType(cellID)->trialOrderPtr;
     
+    int sideCount = _mesh->getElementType(cellID)->cellTopoPtr->getSideCount();
+    
     for (vector<int>::iterator idIt = trialIDs.begin();idIt!=trialIDs.end();idIt++){
       int trialID = *idIt;
-      int numSides = trialOrder->getNumSidesForVarID(trialID);
       
-      for (int sideOrdinal=0; sideOrdinal<numSides; sideOrdinal++) {
+      for (int sideOrdinal=0; sideOrdinal<sideCount; sideOrdinal++) {
+        if ( !trialOrder->hasBasisEntry(trialID, sideOrdinal) ) continue;
         BasisPtr basis = trialOrder->getBasis(trialID, sideOrdinal);
         
         FieldContainer<double> dummyLocalBasisData(basis->getCardinality());
