@@ -525,85 +525,195 @@ int main(int argc, char *argv[])
 
   }
 
-  // {
-  // // 3D tests
-  //   CellTopoPtr hex = CellTopology::hexahedron();
+  {
+    // 3D tests
+    CellTopoPtr hex = CellTopology::hexahedron();
+    CellTopoPtr tet = CellTopology::tetrahedron();
+    // Space-time
+    int tensorialDegree = 1;
+    CellTopoPtr hex_x_time = CellTopology::cellTopology(shards::getCellTopologyData<shards::Hexahedron<8> >(), tensorialDegree);
+    CellTopoPtr tet_x_time = CellTopology::cellTopology(shards::getCellTopologyData<shards::Tetrahedron<4> >(), tensorialDegree);
 
-  // // let's draw a little box
-  //   vector<double> v0 = makeVertex(0,0,0);
-  //   vector<double> v1 = makeVertex(1,0,0);
-  //   vector<double> v2 = makeVertex(1,1,0);
-  //   vector<double> v3 = makeVertex(0,1,0);
-  //   vector<double> v4 = makeVertex(0,0,1);
-  //   vector<double> v5 = makeVertex(1,0,1);
-  //   vector<double> v6 = makeVertex(1,1,1);
-  //   vector<double> v7 = makeVertex(0,1,1);
+    // let's draw a little house
+    vector<double> v0 = makeVertex(0,0,0);
+    vector<double> v1 = makeVertex(1,0,0);
+    vector<double> v2 = makeVertex(1,1,0);
+    vector<double> v3 = makeVertex(0,1,0);
+    vector<double> v4 = makeVertex(0,0,1);
+    vector<double> v5 = makeVertex(1,0,1);
+    vector<double> v6 = makeVertex(1,1,1);
+    vector<double> v7 = makeVertex(0,1,1);
+    vector<double> v8 = makeVertex(.5,.5,2);
+    // Space-time
+    vector<double> v00 = makeVertex(0,0,0,  0);
+    vector<double> v10 = makeVertex(1,0,0,  0);
+    vector<double> v20 = makeVertex(1,1,0,  0);
+    vector<double> v30 = makeVertex(0,1,0,  0);
+    vector<double> v40 = makeVertex(0,0,1,  0);
+    vector<double> v50 = makeVertex(1,0,1,  0);
+    vector<double> v60 = makeVertex(1,1,1,  0);
+    vector<double> v70 = makeVertex(0,1,1,  0);
+    vector<double> v80 = makeVertex(.5,.5,2,0);
+    vector<double> v01 = makeVertex(0,0,0,  1);
+    vector<double> v11 = makeVertex(1,0,0,  1);
+    vector<double> v21 = makeVertex(1,1,0,  1);
+    vector<double> v31 = makeVertex(0,1,0,  1);
+    vector<double> v41 = makeVertex(0,0,1,  1);
+    vector<double> v51 = makeVertex(1,0,1,  1);
+    vector<double> v61 = makeVertex(1,1,1,  1);
+    vector<double> v71 = makeVertex(0,1,1,  1);
+    vector<double> v81 = makeVertex(.5,.5,2,1);
 
-  //   vector< vector<double> > vertices;
-  //   vertices.push_back(v0);
-  //   vertices.push_back(v1);
-  //   vertices.push_back(v2);
-  //   vertices.push_back(v3);
-  //   vertices.push_back(v4);
-  //   vertices.push_back(v5);
-  //   vertices.push_back(v6);
-  //   vertices.push_back(v7);
+    vector< vector<double> > vertices;
+    vertices.push_back(v0);
+    vertices.push_back(v1);
+    vertices.push_back(v2);
+    vertices.push_back(v3);
+    vertices.push_back(v4);
+    vertices.push_back(v5);
+    vertices.push_back(v6);
+    vertices.push_back(v7);
+    vertices.push_back(v8);
+    // Space-time
+    vector< vector<double> > spaceTimeVertices;
+    spaceTimeVertices.push_back(v00);
+    spaceTimeVertices.push_back(v10);
+    spaceTimeVertices.push_back(v20);
+    spaceTimeVertices.push_back(v30);
+    spaceTimeVertices.push_back(v40);
+    spaceTimeVertices.push_back(v50);
+    spaceTimeVertices.push_back(v60);
+    spaceTimeVertices.push_back(v70);
+    spaceTimeVertices.push_back(v80);
+    spaceTimeVertices.push_back(v01);
+    spaceTimeVertices.push_back(v11);
+    spaceTimeVertices.push_back(v21);
+    spaceTimeVertices.push_back(v31);
+    spaceTimeVertices.push_back(v41);
+    spaceTimeVertices.push_back(v51);
+    spaceTimeVertices.push_back(v61);
+    spaceTimeVertices.push_back(v71);
+    spaceTimeVertices.push_back(v81);
 
-  //   vector<unsigned> hexVertexList;
-  //   hexVertexList.push_back(0);
-  //   hexVertexList.push_back(1);
-  //   hexVertexList.push_back(2);
-  //   hexVertexList.push_back(3);
-  //   hexVertexList.push_back(4);
-  //   hexVertexList.push_back(5);
-  //   hexVertexList.push_back(6);
-  //   hexVertexList.push_back(7);
+    vector<unsigned> hexVertexList;
+    hexVertexList.push_back(0);
+    hexVertexList.push_back(1);
+    hexVertexList.push_back(2);
+    hexVertexList.push_back(3);
+    hexVertexList.push_back(4);
+    hexVertexList.push_back(5);
+    hexVertexList.push_back(6);
+    hexVertexList.push_back(7);
+    // Space-time
+    vector<unsigned> spaceTimeHexVertexList;
+    spaceTimeHexVertexList.push_back(0);
+    spaceTimeHexVertexList.push_back(1);
+    spaceTimeHexVertexList.push_back(2);
+    spaceTimeHexVertexList.push_back(3);
+    spaceTimeHexVertexList.push_back(4);
+    spaceTimeHexVertexList.push_back(5);
+    spaceTimeHexVertexList.push_back(6);
+    spaceTimeHexVertexList.push_back(7);
+    spaceTimeHexVertexList.push_back(9);
+    spaceTimeHexVertexList.push_back(10);
+    spaceTimeHexVertexList.push_back(11);
+    spaceTimeHexVertexList.push_back(12);
+    spaceTimeHexVertexList.push_back(13);
+    spaceTimeHexVertexList.push_back(14);
+    spaceTimeHexVertexList.push_back(15);
+    spaceTimeHexVertexList.push_back(16);
 
-  //   // vector<unsigned> triVertexList;
-  //   // triVertexList.push_back(2);
-  //   // triVertexList.push_back(3);
-  //   // triVertexList.push_back(4);
+    vector<unsigned> tet1VertexList;
+    tet1VertexList.push_back(4);
+    tet1VertexList.push_back(5);
+    tet1VertexList.push_back(6);
+    tet1VertexList.push_back(8);
+    // Space-time
+    vector<unsigned> spaceTimeTet1VertexList;
+    spaceTimeTet1VertexList.push_back(4);
+    spaceTimeTet1VertexList.push_back(5);
+    spaceTimeTet1VertexList.push_back(6);
+    spaceTimeTet1VertexList.push_back(8);
+    spaceTimeTet1VertexList.push_back(13);
+    spaceTimeTet1VertexList.push_back(14);
+    spaceTimeTet1VertexList.push_back(15);
+    spaceTimeTet1VertexList.push_back(17);
 
-  //   vector< vector<unsigned> > elementVertices;
-  //   elementVertices.push_back(hexVertexList);
-  //   // elementVertices.push_back(triVertexList);
+    vector<unsigned> tet2VertexList;
+    tet2VertexList.push_back(4);
+    tet2VertexList.push_back(6);
+    tet2VertexList.push_back(7);
+    tet2VertexList.push_back(8);
+    // Space-time
+    vector<unsigned> spaceTimeTet2VertexList;
+    spaceTimeTet2VertexList.push_back(4);
+    spaceTimeTet2VertexList.push_back(6);
+    spaceTimeTet2VertexList.push_back(7);
+    spaceTimeTet2VertexList.push_back(8);
+    spaceTimeTet2VertexList.push_back(13);
+    spaceTimeTet2VertexList.push_back(15);
+    spaceTimeTet2VertexList.push_back(16);
+    spaceTimeTet2VertexList.push_back(17);
 
-  //   vector< CellTopoPtr > cellTopos;
-  //   cellTopos.push_back(hex);
-  //   // cellTopos.push_back(tri_3);
-  //   MeshGeometryPtr meshGeometry = Teuchos::rcp( new MeshGeometry(vertices, elementVertices, cellTopos) );
+    vector< vector<unsigned> > elementVertices;
+    elementVertices.push_back(hexVertexList);
+    elementVertices.push_back(tet1VertexList);
+    elementVertices.push_back(tet2VertexList);
+    // Space-time
+    vector< vector<unsigned> > spaceTimeElementVertices;
+    spaceTimeElementVertices.push_back(spaceTimeHexVertexList);
+    spaceTimeElementVertices.push_back(spaceTimeTet1VertexList);
+    spaceTimeElementVertices.push_back(spaceTimeTet2VertexList);
 
-  //   MeshTopologyPtr meshTopology = Teuchos::rcp( new MeshTopology(meshGeometry) );
+    vector< CellTopoPtr > cellTopos;
+    cellTopos.push_back(hex);
+    cellTopos.push_back(tet);
+    cellTopos.push_back(tet);
+    // Space-time
+    vector< CellTopoPtr > spaceTimeCellTopos;
+    spaceTimeCellTopos.push_back(hex_x_time);
+    spaceTimeCellTopos.push_back(tet_x_time);
+    spaceTimeCellTopos.push_back(tet_x_time);
 
-  //   ////////////////////   DECLARE VARIABLES   ///////////////////////
-  //   // define test variables
-  //   VarFactory varFactory;
-  //   VarPtr tau = varFactory.testVar("tau", HDIV);
-  //   VarPtr v = varFactory.testVar("v", HGRAD);
+    MeshGeometryPtr meshGeometry = Teuchos::rcp( new MeshGeometry(vertices, elementVertices, cellTopos) );
+    // Space-time
+    MeshGeometryPtr spaceTimeMeshGeometry = Teuchos::rcp( new MeshGeometry(spaceTimeVertices, spaceTimeElementVertices, spaceTimeCellTopos) );
 
-  //   // define trial variables
-  //   VarPtr uhat = varFactory.traceVar("uhat");
-  //   VarPtr fhat = varFactory.fluxVar("fhat");
-  //   VarPtr u = varFactory.fieldVar("u");
-  //   VarPtr sigma = varFactory.fieldVar("sigma", VECTOR_L2);
+    MeshTopologyPtr meshTopology = Teuchos::rcp( new MeshTopology(meshGeometry) );
+    // Space-time
+    MeshTopologyPtr spaceTimeMeshTopology = Teuchos::rcp( new MeshTopology(spaceTimeMeshGeometry) );
 
-  //   ////////////////////   DEFINE BILINEAR FORM   ///////////////////////
-  //   BFPtr bf = Teuchos::rcp( new BF(varFactory) );
-  //   // tau terms:
-  //   bf->addTerm(sigma, tau);
-  //   bf->addTerm(u, tau->div());
-  //   bf->addTerm(-uhat, tau->dot_normal());
+    ////////////////////   DECLARE VARIABLES   ///////////////////////
+    // define test variables
+    VarFactory varFactory;
+    VarPtr tau = varFactory.testVar("tau", HDIV);
+    VarPtr v = varFactory.testVar("v", HGRAD);
 
-  //   // v terms:
-  //   bf->addTerm( sigma, v->grad() );
-  //   bf->addTerm( fhat, v);
+    // define trial variables
+    VarPtr uhat = varFactory.traceVar("uhat");
+    VarPtr fhat = varFactory.fluxVar("fhat");
+    VarPtr u = varFactory.fieldVar("u");
+    VarPtr sigma = varFactory.fieldVar("sigma", VECTOR_L2);
 
-  //   ////////////////////   BUILD MESH   ///////////////////////
-  //   int H1Order = 2, pToAdd = 2;
-  //   Teuchos::RCP<Mesh> mesh = Teuchos::rcp( new Mesh (meshTopology, bf, H1Order, pToAdd) );
-  //   set<GlobalIndexType> cellIDs;
-  //   cellIDs.insert(0);
-  //   mesh->hRefine(cellIDs, RefinementPattern::regularRefinementPatternHexahedron());
+    ////////////////////   DEFINE BILINEAR FORM   ///////////////////////
+    BFPtr bf = Teuchos::rcp( new BF(varFactory) );
+    // tau terms:
+    bf->addTerm(sigma, tau);
+    bf->addTerm(u, tau->div());
+    bf->addTerm(-uhat, tau->dot_normal());
+
+    // v terms:
+    bf->addTerm( sigma, v->grad() );
+    bf->addTerm( fhat, v);
+
+    ////////////////////   BUILD MESH   ///////////////////////
+    int H1Order = 2, pToAdd = 2;
+    Teuchos::RCP<Mesh> mesh = Teuchos::rcp( new Mesh (meshTopology, bf, H1Order, pToAdd) );
+    // Space-time
+    Teuchos::RCP<Mesh> spaceTimeMesh = Teuchos::rcp( new Mesh (spaceTimeMeshTopology, bf, H1Order, pToAdd) );
+    // set<GlobalIndexType> cellIDs;
+    // cellIDs.insert(0);
+    // mesh->hRefine(cellIDs, RefinementPattern::regularRefinementPatternHexahedron());
 
   //   ////////////////////   DEFINE INNER PRODUCT(S)   ///////////////////////
   //   IPPtr ip = bf->graphNorm();
@@ -624,6 +734,38 @@ int main(int argc, char *argv[])
   //   ////////////////////   SOLVE & REFINE   ///////////////////////
   //   Teuchos::RCP<Solution> solution = Teuchos::rcp( new Solution(mesh, bc, rhs, ip) );
   //   solution->solve(false);
+
+    // {
+    //   HDF5Exporter exporter(mesh, "Spatial3D");
+    //   vector<FunctionPtr> fcns;
+    //   fcns.push_back(Function::xn(1));
+    //   fcns.push_back(Function::xn(2));
+    //   vector<string> fcnnames;
+    //   fcnnames.push_back("x");
+    //   fcnnames.push_back("x2");
+    //   exporter.exportFunction(fcns, fcnnames, 0, 2);
+    //   vector<FunctionPtr> bfcns;
+    //   bfcns.push_back(Function::restrictToCellBoundary(Function::constant(0)));
+    //   vector<string> bfcnnames;
+    //   bfcnnames.push_back("mesh");
+    //   // exporter.exportFunction(bfcns, bfcnnames, 0, 2);
+    // }
+    {
+      HDF5Exporter exporter(spaceTimeMesh, "SliceAnimation3D");
+      vector<FunctionPtr> fcns;
+      fcns.push_back(Function::tn(1)+Function::xn(1));
+      fcns.push_back(Function::tn(2)+Function::xn(2));
+      vector<string> fcnnames;
+      fcnnames.push_back("x");
+      fcnnames.push_back("x2");
+      // exporter.exportTimeSlab(fcns, fcnnames, 0, 1, 2, 2);
+      vector<FunctionPtr> bfcns;
+      bfcns.push_back(Function::restrictToCellBoundary(Function::xn(1)));
+      vector<string> bfcnnames;
+      bfcnnames.push_back("mesh");
+      exporter.exportTimeSlab(bfcns, bfcnnames, 0, 1, 4);
+    }
+
 
   //   {
   //       HDF5Exporter exporter(mesh, "Poisson3D");
@@ -660,5 +802,5 @@ int main(int argc, char *argv[])
   //   //     HDF5Exporter exporter(mesh, "functions3", false);
   //   //     exporter.exportFunction(functions, functionNames);
   //   // }
-  // }
+  }
 }
