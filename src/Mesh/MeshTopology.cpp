@@ -285,6 +285,11 @@ long long MeshTopology::approximateMemoryFootprint() {
 }
 
 CellPtr MeshTopology::addCell(CellTopoPtr cellTopo, const vector<vector<double> > &cellVertices) {
+  if (cellTopo->getNodeCount() != cellVertices.size()) {
+    cout << "ERROR: cellTopo->getNodeCount() != cellVertices.size().\n";
+    TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument,"cellTopo->getNodeCount() != cellVertices.size()");
+  }
+  
   vector<unsigned> vertexIndices = getVertexIndices(cellVertices);
   unsigned cellIndex = addCell(cellTopo, vertexIndices);
   return _cells[cellIndex];
