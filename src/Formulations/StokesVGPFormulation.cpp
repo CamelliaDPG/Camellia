@@ -251,10 +251,10 @@ void StokesVGPFormulation::addInflowCondition(SpatialFilterPtr inflowRegion, Fun
 void StokesVGPFormulation::addOutflowCondition(SpatialFilterPtr outflowRegion) {
   int spaceDim = _solution->mesh()->getTopology()->getSpaceDim();
 
-  for (int d=0; d<spaceDim; d++) {
-    VarPtr tn_hat = this->tn_hat(d+1);
-    _solution->bc()->addDirichlet(tn_hat, outflowRegion, Function::zero());
-  }
+//  for (int d=0; d<spaceDim; d++) {
+//    VarPtr tn_hat = this->tn_hat(d+1);
+//    _solution->bc()->addDirichlet(tn_hat, outflowRegion, Function::zero());
+//  }
   
   _haveOutflowConditionsImposed = true;
   
@@ -270,30 +270,29 @@ void StokesVGPFormulation::addOutflowCondition(SpatialFilterPtr outflowRegion) {
     _solution->bc()->removeSinglePointBC(p->ID());
   }
 
+  // my favorite way to do outflow conditions is via penalty constraints imposing a zero traction
+  Teuchos::RCP<LocalStiffnessMatrixFilter> filter_incr = _solution->filter();
   
-//  // my favorite way to do outflow conditions is via penalty constraints imposing a zero traction
-//  Teuchos::RCP<LocalStiffnessMatrixFilter> filter_incr = _solution->filter();
-//  
-//  Teuchos::RCP< PenaltyConstraints > pcRCP;
-//  PenaltyConstraints* pc;
-//  
-//  if (filter_incr.get() != NULL) {
-//    pc = dynamic_cast<PenaltyConstraints*>(filter_incr.get());
-//    if (pc == NULL) {
-//      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Can't add PenaltyConstraints when a non-PenaltyConstraints LocalStiffnessMatrixFilter already in place");
-//    }
-//  } else {
-//    pcRCP = Teuchos::rcp( new PenaltyConstraints );
-//    pc = pcRCP.get();
-//  }
-//  FunctionPtr zero = Function::zero();
-//  pc->addConstraint(_t1==zero, outflowRegion);
-//  pc->addConstraint(_t2==zero, outflowRegion);
-//  if (spaceDim==3) pc->addConstraint(_t3==zero, outflowRegion);
-//  
-//  if (pcRCP != Teuchos::null) { // i.e., we're not just adding to a prior PenaltyConstraints object
-//    _solution->setFilter(pcRCP);
-//  }
+  Teuchos::RCP< PenaltyConstraints > pcRCP;
+  PenaltyConstraints* pc;
+  
+  if (filter_incr.get() != NULL) {
+    pc = dynamic_cast<PenaltyConstraints*>(filter_incr.get());
+    if (pc == NULL) {
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Can't add PenaltyConstraints when a non-PenaltyConstraints LocalStiffnessMatrixFilter already in place");
+    }
+  } else {
+    pcRCP = Teuchos::rcp( new PenaltyConstraints );
+    pc = pcRCP.get();
+  }
+  FunctionPtr zero = Function::zero();
+  pc->addConstraint(_t1==zero, outflowRegion);
+  pc->addConstraint(_t2==zero, outflowRegion);
+  if (spaceDim==3) pc->addConstraint(_t3==zero, outflowRegion);
+  
+  if (pcRCP != Teuchos::null) { // i.e., we're not just adding to a prior PenaltyConstraints object
+    _solution->setFilter(pcRCP);
+  }
 }
 
 void StokesVGPFormulation::addPointPressureCondition() {
