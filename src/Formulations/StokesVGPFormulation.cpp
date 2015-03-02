@@ -383,6 +383,12 @@ void StokesVGPFormulation::initializeSolution(MeshTopologyPtr meshTopo, int fiel
   double energyThreshold = 0.2;
   _refinementStrategy = Teuchos::rcp( new RefinementStrategy( mesh, residual, ip, energyThreshold ) );
   
+  
+  double maxDouble = std::numeric_limits<double>::max();
+  double maxP = 20;
+  _hRefinementStrategy = Teuchos::rcp( new RefinementStrategy( mesh, residual, ip, energyThreshold, 0, 0, false ) );
+  _pRefinementStrategy = Teuchos::rcp( new RefinementStrategy( mesh, residual, ip, energyThreshold, maxDouble, maxP, true ) );
+  
   _time = 0;
   _t->setTime(_time);
   
@@ -461,6 +467,14 @@ void StokesVGPFormulation::setRefinementStrategy(RefinementStrategyPtr refStrate
 
 void StokesVGPFormulation::refine() {
   _refinementStrategy->refine();
+}
+
+void StokesVGPFormulation::hRefine() {
+  _hRefinementStrategy->refine();
+}
+
+void StokesVGPFormulation::pRefine() {
+  _pRefinementStrategy->refine();
 }
 
 RHSPtr StokesVGPFormulation::rhs(FunctionPtr f) {
