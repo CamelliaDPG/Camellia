@@ -24,6 +24,8 @@
 
 #include "HDF5Exporter.h"
 
+#include "CamelliaDebugUtility.h"
+
 namespace {
 
   vector<double> makeVertex(double v0) {
@@ -106,6 +108,13 @@ namespace {
       }
     }
   }
+  
+  void testProjectOnTensorMesh(CellTopoPtr spaceTopo, int H1Order, Teuchos::FancyOStream &out, bool &success) {
+    CellTopoPtr spaceTimeTopo = CellTopology::cellTopology(spaceTopo->getShardsTopology(), spaceTopo->getTensorialDegree() + 1);
+    
+    // TODO: write a generalization of the 1D/2D/3D tests below here, and invoke this method from each of those methods
+    // (reduce redundant code...)
+  }
 
   TEUCHOS_UNIT_TEST( Solution, ProjectOnTensorMesh1D )
   {
@@ -174,30 +183,34 @@ namespace {
 
     ////////////////////   BUILD MESH   ///////////////////////
     int H1Order = 4, pToAdd = 2;
-    Teuchos::RCP<Mesh> spaceTimeMesh = Teuchos::rcp( new Mesh (spaceTimeMeshTopology, bf, H1Order, pToAdd) );
+    MeshPtr spaceTimeMesh = Teuchos::rcp( new Mesh (spaceTimeMeshTopology, bf, H1Order, pToAdd) );
 
-    Teuchos::RCP<Solution> spaceTimeSolution = Teuchos::rcp( new Solution(spaceTimeMesh) );
+    SolutionPtr spaceTimeSolution = Solution::solution(spaceTimeMesh);
 
-    FunctionPtr n = Function::normal_1D();
+    FunctionPtr n = Function::normal();
     FunctionPtr parity = Function::sideParity();
     
-    map<int, Teuchos::RCP<Function> > functionMap;
-    functionMap[uhat->ID()] = Function::xn(1); // * n * parity;
-    functionMap[fhat->ID()] = Function::xn(1); // * n * parity;
-    functionMap[u->ID()] = Function::xn(1);
-    functionMap[sigma->ID()] = Function::xn(1);
+    map<int, FunctionPtr > functionMap;
+    FunctionPtr x = Function::xn(1);
+    FunctionPtr xx = Function::vectorize(x, x);
+    
+    functionMap[uhat->ID()] = xx * n * parity;
+    functionMap[fhat->ID()] = xx * n * parity;
+    functionMap[u->ID()] = x;
+    functionMap[sigma->ID()] = x;
     spaceTimeSolution->projectOntoMesh(functionMap);
 
-//    for (GlobalIndexType cellID=0; cellID <= 1; cellID++) {
-//      cout << "CellID " << cellID << " info:\n";
-//      FieldContainer<double> localCoefficients = spaceTimeSolution->allCoefficientsForCellID(1);
-//      
-//      cout << "localCoefficients:\n" << localCoefficients;
-//      cout << "trialOrdering:\n" << *(spaceTimeMesh->getElementType(cellID)->trialOrderPtr);
-//    }
+    for (GlobalIndexType cellID=0; cellID <= 1; cellID++) {
+      cout << "CellID " << cellID << " info:\n";
+      FieldContainer<double> localCoefficients = spaceTimeSolution->allCoefficientsForCellID(cellID);
+      
+      DofOrderingPtr trialOrder = spaceTimeMesh->getElementType(cellID)->trialOrderPtr;
+      
+      Camellia::printLabeledDofCoefficients(varFactory, trialOrder, localCoefficients);
+    }
 
     double tol = 1e-14;
-    for (map<int, Teuchos::RCP<Function> >::iterator entryIt = functionMap.begin(); entryIt != functionMap.end(); entryIt++) {
+    for (map<int, FunctionPtr >::iterator entryIt = functionMap.begin(); entryIt != functionMap.end(); entryIt++) {
       int trialID = entryIt->first;
       VarPtr trialVar = varFactory.trial(trialID);
       FunctionPtr f_expected = entryIt->second;

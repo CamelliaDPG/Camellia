@@ -7,6 +7,7 @@
 //
 
 #include "ParametricSurface.h"
+#include "BasisFactory.h"
 #include "IP.h"
 #include "VarFactory.h"
 #include "Projector.h"

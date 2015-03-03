@@ -82,36 +82,28 @@
 
 #include <stdlib.h>
 
+#include "Solution.h"
+
+// Camellia includes:
 #include "BilinearFormUtility.h"
 #include "BasisEvaluation.h"
 #include "BasisCache.h"
 #include "BasisSumFunction.h"
-
-#include "PreviousSolutionFunction.h"
-#include "LagrangeConstraints.h"
-
-#include "Solver.h"
-
-#include "Function.h"
-
-#include "Solution.h"
-#include "Projector.h"
-
+#include "CamelliaCellTools.h"
 #include "CondensedDofInterpreter.h"
-
+#include "CubatureFactory.h"
+#include "Function.h"
+#include "GlobalDofAssignment.h"
+#include "LagrangeConstraints.h"
+#include "MeshFactory.h"
+#include "MPIWrapper.h"
+#include "PreviousSolutionFunction.h"
+#include "Projector.h"
+#include "SerialDenseWrapper.h"
+#include "Solver.h"
 #include "Var.h"
 
-#include "CamelliaCellTools.h"
-
 #include "AztecOO_ConditionNumber.h"
-
-#include "SerialDenseWrapper.h"
-
-#include "MPIWrapper.h"
-
-#include "MeshFactory.h"
-
-#include "CubatureFactory.h"
 
 #ifdef HAVE_EPETRAEXT_HDF5
 #include <EpetraExt_HDF5.h>

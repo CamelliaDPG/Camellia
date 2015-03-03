@@ -11,6 +11,7 @@
 #include "MeshFactory.h"
 #include "Mesh.h"
 #include "Function.h"
+#include "BasisFactory.h"
 #include "BasisSumFunction.h"
 
 #include "GnuPlotUtil.h"

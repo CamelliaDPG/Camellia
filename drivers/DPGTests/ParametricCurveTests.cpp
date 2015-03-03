@@ -8,11 +8,11 @@
 
 #include "ParametricCurveTests.h"
 
+#include "BasisFactory.h"
 #include "BasisSumFunction.h"
-#include "ParametricSurface.h"
-
-#include "StokesFormulation.h"
 #include "MeshFactory.h"
+#include "ParametricSurface.h"
+#include "StokesFormulation.h"
 
 static const double PI  = 3.141592653589793238462;
 

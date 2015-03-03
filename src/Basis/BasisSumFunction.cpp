@@ -1,73 +1,9 @@
 #include "BasisSumFunction.h"
 #include "Intrepid_CellTools.hpp"
 
+#include "BasisFactory.h"
+
 typedef Teuchos::RCP< const FieldContainer<double> > constFCPtr;
-
-BasisSumFunction::BasisSumFunction(BasisPtr basis, const FieldContainer<double> &basisCoefficients, const FieldContainer<double> &physicalCellNodes){
-  _coefficients = basisCoefficients;
-  _basis = basis; // note - _basis->getBaseCellTopology
-  _physicalCellNodes = physicalCellNodes; // note - rank 3, but dim(0) = 1
-  TEUCHOS_TEST_FOR_EXCEPTION(_coefficients.dimension(0)!=basis->getCardinality(),std::invalid_argument,"BasisSumFunction: coefficients passed in do not match cardinality of basis.");
-}
-
-void BasisSumFunction::getValues(FieldContainer<double> &functionValues, const FieldContainer<double> &physicalPoints) {
-  int numCells = physicalPoints.dimension(0);
-  int numPoints = physicalPoints.dimension(1);
-  int spaceDim = physicalPoints.dimension(2);
-  TEUCHOS_TEST_FOR_EXCEPTION(numCells != 1,std::invalid_argument,"BasisSumFunction only projects one cell at a time (allowing for differing bases per cell)");
-
-  FieldContainer<double> refElemPoints(numCells, numPoints, spaceDim);
-  typedef CellTools<double>  CellTools;
-  CellTopoPtr domainTopo = _basis->domainTopology();
-  if (domainTopo->getTensorialDegree() == 0) {
-    CellTools::mapToReferenceFrame(refElemPoints,physicalPoints,_physicalCellNodes,_basis->domainTopology()->getShardsTopology());
-  } else {
-    cout << "ERROR: BasisSumFunction's mapToReferenceFrame doesn't yet support tensorial degree > 0.\n";
-    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "BasisSumFunction's mapToReferenceFrame doesn't yet support tensorial degree > 0.");
-  }
-  refElemPoints.resize(numPoints,spaceDim); // reshape for the single set of ref cell points
-  
-  int numDofs = _basis->getCardinality();
-
-  FieldContainer<double> basisValues;
-  if (_basis->rangeRank()==0) {
-    basisValues = FieldContainer<double>(numDofs,numPoints);
-  } else if (_basis->rangeRank()==1) {
-    basisValues = FieldContainer<double>(numDofs,numPoints,_basis->rangeDimension());
-  } else if (_basis->rangeRank()==2) {
-    basisValues = FieldContainer<double>(numDofs,numPoints,_basis->rangeDimension(),_basis->rangeDimension());
-  } else {
-    TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument,"BasisSumFunction only supports bases with ranks <= 2.");
-  }
-  _basis->getValues(basisValues, refElemPoints, Intrepid::OPERATOR_VALUE);
-  
-  Teuchos::Array<int> dim;
-  basisValues.dimensions(dim);
-  dim[0] = 1; // replace numDofs with numCells (which == 1).
-  
-  functionValues.resize(dim);
-  functionValues.initialize(0.0);
-  int cellIndex = 0;
-  for (int ptIndex=0;ptIndex<numPoints;ptIndex++) {
-    for (int i=0;i<numDofs;i++){
-      if (_basis->rangeRank()==0) {
-        functionValues(cellIndex,ptIndex) += basisValues(i,ptIndex)*_coefficients(i);
-      } else if (_basis->rangeRank()==1) {
-        for (int d=0; d<_basis->rangeDimension(); d++) {
-          functionValues(cellIndex,ptIndex,d) += basisValues(i,ptIndex,d)*_coefficients(i);
-        }
-      } else if (_basis->rangeRank()==2) {
-        for (int d1=0; d1<_basis->rangeDimension(); d1++) {
-          for (int d2=0; d2<_basis->rangeDimension(); d2++) {
-            functionValues(cellIndex,ptIndex,d1,d2) += basisValues(i,ptIndex,d1,d2)*_coefficients(i);
-          }
-        }
-      } else {
-        TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument,"BasisSumFunction only supports bases with ranks <= 2.");
-      }
-    }
-  }
-}
 
 NewBasisSumFunction::NewBasisSumFunction(BasisPtr basis, const FieldContainer<double> &basisCoefficients,
                                          BasisCachePtr overridingBasisCache, Camellia::EOperator op, bool boundaryValueOnly) : Function( BasisFactory::basisFactory()->getBasisRank(basis) ) {
