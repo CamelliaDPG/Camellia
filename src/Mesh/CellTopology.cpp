@@ -662,6 +662,11 @@ unsigned CellTopology::getNodePermutationInverse( const unsigned permutation_ord
   }
 }
 
+CellTopoPtr CellTopology::getSide( unsigned sideOrdinal ) const {
+  unsigned sideDim = this->getDimension() - 1;
+  return this->getSubcell( sideDim, sideOrdinal );
+}
+
 /** \brief  Get the subcell of dimension scdim with ordinal scord.
  *  \param  scdim        [in]
  *  \param  scord        [in]
