@@ -869,7 +869,7 @@ void HDF5Exporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
       basisCache->setRefCellPoints(refPoints);
       const FieldContainer<double> *physicalPoints = &basisCache->getPhysicalCubaturePoints();
       // Function Values
-      FieldContainer<double> computedValues[nFcns];
+      std::vector< FieldContainer<double> > computedValues(nFcns);
       for (int i = 0; i < nFcns; i++)
       {
         if (functions[i]->rank() == 0)
