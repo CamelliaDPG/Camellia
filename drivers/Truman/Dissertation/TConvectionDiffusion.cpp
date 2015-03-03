@@ -37,10 +37,12 @@ int main(int argc, char *argv[]) {
   double epsilon = 1e-8;
   int numRefs = 10;
   int k = 2, delta_k = 2;
+  string norm = "CoupledRobust";
   cmdp.setOption("polyOrder",&k,"polynomial order for field variable u");
   cmdp.setOption("delta_k", &delta_k, "test space polynomial order enrichment");
   cmdp.setOption("numRefs",&numRefs,"number of refinements");
   cmdp.setOption("epsilon", &epsilon, "epsilon");
+  cmdp.setOption("norm", &norm, "norm");
   
   if (cmdp.parse(argc,argv) != Teuchos::CommandLineProcessor::PARSE_SUCCESSFUL) {
 #ifdef HAVE_MPI
@@ -94,7 +96,17 @@ int main(int argc, char *argv[]) {
   
   MeshPtr mesh = MeshFactory::quadMesh(bf, k+1, delta_k);
   
-  IPPtr ip = bf->graphNorm();
+  map<string, IPPtr> confusionIPs;
+  confusionIPs["Graph"] = bf->graphNorm();
+
+  confusionIPs["CoupledRobust"] = Teuchos::rcp(new IP);
+  confusionIPs["CoupledRobust"]->addTerm(tau->div()-beta*v->grad());
+  confusionIPs["CoupledRobust"]->addTerm(min(1./Function::h(),1./sqrt(epsilon))*tau);
+  confusionIPs["CoupledRobust"]->addTerm(sqrt(epsilon)*v->grad());
+  confusionIPs["CoupledRobust"]->addTerm(beta*v->grad());
+  confusionIPs["CoupledRobust"]->addTerm(v);
+
+  IPPtr ip = confusionIPs[norm];
   
   SolutionPtr soln = Solution::solution(mesh, bc, rhs, ip);
   
@@ -110,7 +122,9 @@ int main(int argc, char *argv[]) {
     
     double energyError = soln->energyErrorTotal();
     if (commRank == 0)
-      cout << "After " << refIndex << " refinements, energy error is " << energyError << endl;
+    {
+      cout << "Refinement:\t" << refIndex << "\tElements:\t" << mesh->numActiveElements() << "\tEnergy Error:\t" << energyError << endl;
+    }
     
     exporter.exportSolution(soln, refIndex);
     

@@ -23,6 +23,21 @@ namespace {
     double tol = 1e-14;
     TEST_FLOATING_EQUALITY(expectedValue,actualValue,tol);
   }
+  TEUCHOS_UNIT_TEST( Function, MinAndMaxFunctions )
+  {
+    FunctionPtr one = Function::constant(1);
+    FunctionPtr two = Function::constant(2);
+    FunctionPtr minFcn = min(one,two);
+    FunctionPtr maxFcn = max(one,two);
+    double x0 = 0, y0 = 0;
+    double expectedValue = 1.0;
+    double actualValue = Function::evaluate(minFcn, x0, y0);
+    double tol = 1e-14;
+    TEST_FLOATING_EQUALITY(expectedValue,actualValue,tol);
+    expectedValue = 2.0;
+    actualValue = Function::evaluate(maxFcn, x0, y0);
+    TEST_FLOATING_EQUALITY(expectedValue,actualValue,tol);
+  }
 //  TEUCHOS_UNIT_TEST( Int, Assignment )
 //  {
 //    int i1 = 4;

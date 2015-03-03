@@ -1704,6 +1704,100 @@ FunctionPtr SumFunction::div() {
   }
 }
 
+MinFunction::MinFunction(FunctionPtr f1, FunctionPtr f2) : Function(f1->rank()) {
+  TEUCHOS_TEST_FOR_EXCEPTION( f1->rank() != f2->rank(), std::invalid_argument, "both functions must be of like rank.");
+  _f1 = f1;
+  _f2 = f2;
+}
+
+bool MinFunction::boundaryValueOnly() {
+  // if either summand is BVO, then so is the min...
+  return _f1->boundaryValueOnly() || _f2->boundaryValueOnly();
+}
+
+string MinFunction::displayString() {
+  ostringstream ss;
+  ss << "min( " << _f1->displayString() << " , " << _f2->displayString() << " )";
+  return ss.str();
+}
+
+void MinFunction::values(FieldContainer<double> &values, BasisCachePtr basisCache) {
+  CHECK_VALUES_RANK(values);
+  FieldContainer<double> values2(values);
+  _f1->values(values,basisCache);
+  _f2->values(values2,basisCache);
+  for(int i = 0; i < values.size(); i++) {
+    values[i] = min(values[i],values2[i]);
+  }
+}
+
+FunctionPtr MinFunction::x() {
+  if ( (_f1->x().get() == NULL) || (_f2->x().get() == NULL) ) {
+    return null();
+  }
+  return min(_f1->x(),_f2->x());
+}
+
+FunctionPtr MinFunction::y() {
+  if ( (_f1->y().get() == NULL) || (_f2->y().get() == NULL) ) {
+    return null();
+  }
+  return min(_f1->y(),_f2->y());
+}
+FunctionPtr MinFunction::z() {
+  if ( (_f1->z().get() == NULL) || (_f2->z().get() == NULL) ) {
+    return null();
+  }
+  return min(_f1->z(),_f2->z());
+}
+
+MaxFunction::MaxFunction(FunctionPtr f1, FunctionPtr f2) : Function(f1->rank()) {
+  TEUCHOS_TEST_FOR_EXCEPTION( f1->rank() != f2->rank(), std::invalid_argument, "both functions must be of like rank.");
+  _f1 = f1;
+  _f2 = f2;
+}
+
+bool MaxFunction::boundaryValueOnly() {
+  // if either summand is BVO, then so is the max...
+  return _f1->boundaryValueOnly() || _f2->boundaryValueOnly();
+}
+
+string MaxFunction::displayString() {
+  ostringstream ss;
+  ss << "max( " << _f1->displayString() << " , " << _f2->displayString() << " )";
+  return ss.str();
+}
+
+void MaxFunction::values(FieldContainer<double> &values, BasisCachePtr basisCache) {
+  CHECK_VALUES_RANK(values);
+  FieldContainer<double> values2(values);
+  _f1->values(values,basisCache);
+  _f2->values(values2,basisCache);
+  for(int i = 0; i < values.size(); i++) {
+    values[i] = max(values[i],values2[i]);
+  }
+}
+
+FunctionPtr MaxFunction::x() {
+  if ( (_f1->x().get() == NULL) || (_f2->x().get() == NULL) ) {
+    return null();
+  }
+  return max(_f1->x(),_f2->x());
+}
+
+FunctionPtr MaxFunction::y() {
+  if ( (_f1->y().get() == NULL) || (_f2->y().get() == NULL) ) {
+    return null();
+  }
+  return max(_f1->y(),_f2->y());
+}
+FunctionPtr MaxFunction::z() {
+  if ( (_f1->z().get() == NULL) || (_f2->z().get() == NULL) ) {
+    return null();
+  }
+  return max(_f1->z(),_f2->z());
+}
+
 string hFunction::displayString() {
   return "h";
 }
@@ -2332,6 +2426,30 @@ FunctionPtr operator-(double value, FunctionPtr f1) {
 
 FunctionPtr operator-(FunctionPtr f) {
   return -1.0 * f;
+}
+
+FunctionPtr min(FunctionPtr f1, FunctionPtr f2) {
+  return Teuchos::rcp( new MinFunction(f1, f2) );
+}
+
+FunctionPtr min(FunctionPtr f1, double value) {
+  return Teuchos::rcp( new MinFunction(f1, Function::constant(value)) );
+}
+
+FunctionPtr min(double value, FunctionPtr f2) {
+  return Teuchos::rcp( new MinFunction(f2, Function::constant(value)) );
+}
+
+FunctionPtr max(FunctionPtr f1, FunctionPtr f2) {
+  return Teuchos::rcp( new MaxFunction(f1, f2) );
+}
+
+FunctionPtr max(FunctionPtr f1, double value) {
+  return Teuchos::rcp( new MaxFunction(f1, Function::constant(value)) );
+}
+
+FunctionPtr max(double value, FunctionPtr f2) {
+  return Teuchos::rcp( new MaxFunction(f2, Function::constant(value)) );
 }
 
 string Sin_y::displayString() {
