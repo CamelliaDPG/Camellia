@@ -12,9 +12,9 @@
 
 #include "Basis.h"
 
-// NewBasisSumFunction should be renamed "BasisSumFunction", now that we've deleted the old BasisSumFunction that was based on AbstractFunction
+// BasisSumFunction should be renamed "BasisSumFunction", now that we've deleted the old BasisSumFunction that was based on AbstractFunction
 
-class NewBasisSumFunction : public Function {
+class BasisSumFunction : public Function {
  private:  
   BasisPtr _basis;
   Intrepid::FieldContainer<double> _coefficients;
@@ -22,7 +22,7 @@ class NewBasisSumFunction : public Function {
   bool _boundaryValueOnly;
   BasisCachePtr _overridingBasisCache;
  public:
-  NewBasisSumFunction(BasisPtr basis, const Intrepid::FieldContainer<double> &basisCoefficients,
+  BasisSumFunction(BasisPtr basis, const Intrepid::FieldContainer<double> &basisCoefficients,
                       BasisCachePtr overridingBasisCache = Teuchos::null,
                       Camellia::EOperator op = OP_VALUE, bool boundaryValueOnly = false);
   void values(FieldContainer<double> &values, BasisCachePtr basisCache);

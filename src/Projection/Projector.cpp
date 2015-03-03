@@ -327,7 +327,7 @@ void Projector::projectFunctionOntoBasisInterpolating(FieldContainer<double> &ba
   }
   
   for (int d=0; d<=domainDim; d++) {
-    FunctionPtr projectionThusFar = NewBasisSumFunction::basisSumFunction(basis, basisCoefficients);
+    FunctionPtr projectionThusFar = BasisSumFunction::basisSumFunction(basis, basisCoefficients);
     FunctionPtr fxnToApproximate = fxn - projectionThusFar;
     int subcellCount = domainTopo->getSubcellCount(d);
     for (int subcord=0; subcord<subcellCount; subcord++) {

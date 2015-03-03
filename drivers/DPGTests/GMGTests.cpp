@@ -568,8 +568,8 @@ bool GMGTests::testGMGOperatorP() {
               fineBasisCoefficients[basisOrdinal] = fineLocalCoefficients[fineDofIndex];
             }
             
-            FunctionPtr fineBasisSumFunction = NewBasisSumFunction::basisSumFunction(fineBasis, fineBasisCoefficients);
-            FunctionPtr coarseBasisSumFunction = NewBasisSumFunction::basisSumFunction(coarseBasis, coarseBasisCoefficients);
+            FunctionPtr fineBasisSumFunction = BasisSumFunction::basisSumFunction(fineBasis, fineBasisCoefficients);
+            FunctionPtr coarseBasisSumFunction = BasisSumFunction::basisSumFunction(coarseBasis, coarseBasisCoefficients);
             FunctionPtr diffFxn = fineBasisSumFunction - coarseBasisSumFunction;
             
             BasisCachePtr basisCacheForIntegration = (coarseOrdering->getSidesForVarID(varID).size() == 1) ? basisCache : basisCache->getSideBasisCache(sideOrdinal);
