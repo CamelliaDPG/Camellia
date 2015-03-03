@@ -169,7 +169,7 @@ public:
     }    
     
     // original implementation follows
-    // (the above adapted from NewBasisSumFunction)
+    // (the above adapted from BasisSumFunction)
 //    if (_op == OP_VALUE) {
 //      // here, we depend on the fact that our basis (HGRAD_transform_VALUE) doesn't actually change under transformation
 //      int cardinality = _basis->getCardinality();

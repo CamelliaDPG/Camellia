@@ -3483,7 +3483,7 @@ void Solution::projectOldCellOntoNewCells(GlobalIndexType cellID,
 
 //       cout << "basisCoefficients for parent volume trialID " << trialID << ":\n" << basisCoefficients;
 
-       FunctionPtr oldTrialFunction = Teuchos::rcp( new NewBasisSumFunction(basis, basisCoefficients, parentRefCellCache) );
+       FunctionPtr oldTrialFunction = Teuchos::rcp( new BasisSumFunction(basis, basisCoefficients, parentRefCellCache) );
        fieldMap[trialID] = oldTrialFunction;
      }
    }
@@ -3525,7 +3525,7 @@ void Solution::projectOldCellOntoNewCells(GlobalIndexType cellID,
            int dofIndex = oldElemType->trialOrderPtr->getDofIndex(trialID, dofOrdinal, sideOrdinal);
            basisCoefficients(dofOrdinal) = oldData(dofIndex);
          }
-         FunctionPtr oldTrialFunction = Teuchos::rcp( new NewBasisSumFunction(basis, basisCoefficients, parentSideTopoBasisCache) );
+         FunctionPtr oldTrialFunction = Teuchos::rcp( new BasisSumFunction(basis, basisCoefficients, parentSideTopoBasisCache) );
          traceMap[sideOrdinal][trialID] = oldTrialFunction;
        }
      }

@@ -269,8 +269,8 @@ bool ParametricCurveTests::testCircularArc() {
     cout << "expected " << expected_H1_weight_y << ", was " << basisCoefficients_y[middleBasisOrdinal] << endl;
   }
   /*
-  FunctionPtr projection_x = NewBasisSumFunction::basisSumFunction(quadraticBasis, basisCoefficients_x);
-  FunctionPtr projection_y = NewBasisSumFunction::basisSumFunction(quadraticBasis, basisCoefficients_y);
+  FunctionPtr projection_x = BasisSumFunction::basisSumFunction(quadraticBasis, basisCoefficients_x);
+  FunctionPtr projection_y = BasisSumFunction::basisSumFunction(quadraticBasis, basisCoefficients_y);
   
   FieldContainer<double> parametricPoint(1,1);
   parametricPoint[0] = t;
@@ -667,7 +667,7 @@ bool basisSumInterpolatesCurveEndPoints(FieldContainer<double> &basisCoefficient
 
 bool basisSumEqualsFunction(FieldContainer<double> &basisCoefficients, BasisPtr basis, FunctionPtr f) {
   // tests on [0,1]
-  FunctionPtr sumFunction = Teuchos::rcp( new NewBasisSumFunction(basis, basisCoefficients) );
+  FunctionPtr sumFunction = Teuchos::rcp( new BasisSumFunction(basis, basisCoefficients) );
   
   int cubatureDegree = basis->getDegree() * 2;
   BasisCachePtr basisCache = BasisCache::basisCache1D(0, 1, cubatureDegree);

@@ -849,7 +849,7 @@ bool CurvilinearMeshTests::testH1Projection() {
     // check that the middle node function is what we expect
     FieldContainer<double> scalarMiddleCoefficients(quadraticScalarBasis->getCardinality());
     scalarMiddleCoefficients[middleNodeScalar] = 1.0;
-    FunctionPtr middleNodeFunction = NewBasisSumFunction::basisSumFunction(quadraticScalarBasis, scalarMiddleCoefficients);
+    FunctionPtr middleNodeFunction = BasisSumFunction::basisSumFunction(quadraticScalarBasis, scalarMiddleCoefficients);
     FunctionPtr middleNodeFunction_expected = 4 * x * (1-x) * 4 * y * (1-y);
     // per Wolfram Alpha:
     // on unit quad, the L2 norm should be 64/225
@@ -937,7 +937,7 @@ bool CurvilinearMeshTests::testH1Projection() {
     
     // flatten basisCoefficients (remove the numCells dimension, which is 1)
     basisCoefficients.resize(basisCoefficients.size());
-    FunctionPtr projectedFunction = Teuchos::rcp( new NewBasisSumFunction(basis, basisCoefficients) );
+    FunctionPtr projectedFunction = Teuchos::rcp( new BasisSumFunction(basis, basisCoefficients) );
     
     double tol=1e-13;
     if (! projectedFunction->equals(tfi, basisCache, tol) ) {
@@ -988,7 +988,7 @@ bool CurvilinearMeshTests::testH1Projection() {
       edgeBasisFunctionWeights[fieldIndex] = 1.0;
       bool nonZeroSomewhere = false;
       
-      FunctionPtr edgeBasisFunction = NewBasisSumFunction::basisSumFunction(basis, edgeBasisFunctionWeights);
+      FunctionPtr edgeBasisFunction = BasisSumFunction::basisSumFunction(basis, edgeBasisFunctionWeights);
       int basisRank = BasisFactory::basisFactory()->getBasisRank(basis);
       
       for (int sideIndex=0; sideIndex<numEdges; sideIndex++) {
@@ -1014,7 +1014,7 @@ bool CurvilinearMeshTests::testH1Projection() {
       FieldContainer<double> nonEdgeBasisFunctionWeights(basis->getCardinality());
       nonEdgeBasisFunctionWeights[fieldIndex] = 1.0;
       
-      FunctionPtr nonEdgeBasisFunction = NewBasisSumFunction::basisSumFunction(basis, nonEdgeBasisFunctionWeights);
+      FunctionPtr nonEdgeBasisFunction = BasisSumFunction::basisSumFunction(basis, nonEdgeBasisFunctionWeights);
       int basisRank = BasisFactory::basisFactory()->getBasisRank(basis);
       
       for (int sideIndex=0; sideIndex<numEdges; sideIndex++) {
@@ -1026,7 +1026,7 @@ bool CurvilinearMeshTests::testH1Projection() {
       }
     }
     
-    FunctionPtr edgeFunction = Teuchos::rcp( new NewBasisSumFunction(basis, edgeInterpolantCoefficients) );
+    FunctionPtr edgeFunction = Teuchos::rcp( new BasisSumFunction(basis, edgeInterpolantCoefficients) );
     //
     //    VarFactory vf;
     //    VarPtr v = vf.testVar("v", VECTOR_HGRAD);
@@ -1118,7 +1118,7 @@ bool CurvilinearMeshTests::testH1Projection() {
     //    cout << "projection-based interpolant coefficients:\n" << basisCoefficients;
     
     expectedCoefficients.resize(expectedCoefficients.size()); // flatten
-    FunctionPtr expectedFunction = NewBasisSumFunction::basisSumFunction(basis, expectedCoefficients);
+    FunctionPtr expectedFunction = BasisSumFunction::basisSumFunction(basis, expectedCoefficients);
     if (! expectedFunction->equals(tfi, basisCache, tol) ) {
       cout << "For H1Order " << H1Order << ", ";
       cout << "Problem with test?? expected function does not match tfi.\n";
@@ -1135,7 +1135,7 @@ bool CurvilinearMeshTests::testH1Projection() {
       
     }
     
-    projectedFunction = Teuchos::rcp( new NewBasisSumFunction(basis, basisCoefficients) );
+    projectedFunction = Teuchos::rcp( new BasisSumFunction(basis, basisCoefficients) );
     
     if (! projectedFunction->equals(tfi, basisCache, tol) ) {
       success = false;

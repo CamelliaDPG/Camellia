@@ -257,7 +257,7 @@ void ParametricSurface::basisWeightsForProjectedInterpolant(FieldContainer<doubl
   
   set<int> edgeFieldIndices = BasisFactory::basisFactory()->sideFieldIndices(basis,true); // true: include vertex dofs
   
-  FunctionPtr edgeInterpolant = Teuchos::rcp( new NewBasisSumFunction(basis, edgeInterpolationCoefficients) );
+  FunctionPtr edgeInterpolant = Teuchos::rcp( new BasisSumFunction(basis, edgeInterpolationCoefficients) );
   
   IPPtr L2 = Teuchos::rcp( new IP );
   // we assume that basis is a vector HGRAD basis
