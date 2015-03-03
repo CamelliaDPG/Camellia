@@ -422,9 +422,9 @@ void HDF5Exporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
       }
       else
       {
-        totalBoundaryTriangles += 3;
-        totalSubTriangles += 3*(num1DPts-1)*(num1DPts-1);
-        totalPts += 3*num1DPts*(num1DPts+1)/2;
+        totalBoundaryTriangles += 4;
+        totalSubTriangles += 4*(num1DPts-1)*(num1DPts-1);
+        totalPts += 4*num1DPts*(num1DPts+1)/2;
       }
       break;
       case shards::Wedge<6>::key:
@@ -620,11 +620,6 @@ void HDF5Exporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
     for (int sideOrdinal = 0; sideOrdinal < numSides; sideOrdinal++)
     {
       CellTopoPtr topo = createSideCache ? cellTopoPtr->getSubcell(sideDim, sideOrdinal) : cellTopoPtr;
-      
-      // int lineTensorPoints = 1;
-      // for (int i=0; i<cell->topology()->getTensorialDegree(); i++) {
-      //   lineTensorPoints *= num1DPts;
-      // }
       
       unsigned baseCellTopoKey = topo->getKey().first;
       unsigned cellTopoKey;
@@ -873,7 +868,18 @@ void HDF5Exporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
 
       basisCache->setRefCellPoints(refPoints);
       const FieldContainer<double> *physicalPoints = &basisCache->getPhysicalCubaturePoints();
-
+      // Function Values
+      FieldContainer<double> computedValues[nFcns];
+      for (int i = 0; i < nFcns; i++)
+      {
+        if (functions[i]->rank() == 0)
+          computedValues[i].resize(1, numPoints);
+        else if (functions[i]->rank() == 1)
+          computedValues[i].resize(1, numPoints, spaceDim);
+        else
+          TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unhandled function rank");
+        functions[i]->values(computedValues[i], basisCache);
+      }
 
       int subcellStartIndex = total_vertices;
       switch (cellTopoKey)
@@ -1114,37 +1120,27 @@ void HDF5Exporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
         }
         for (int i = 0; i < nFcns; i++)
         {
-          // Function Values
-          FieldContainer<double> computedValues;
-          if (functions[i]->rank() == 0)
-            computedValues.resize(1, numPoints);
-          else if (functions[i]->rank() == 1)
-            computedValues.resize(1, numPoints, spaceDim);
-          else
-            TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unhandled function rank");
-
-          functions[i]->values(computedValues, basisCache);
 
           switch(numFcnComponents[i])
           {
             case 1:
-            valArrays[i][valIndex[i]] = computedValues(0, pointIndex);
+            valArrays[i][valIndex[i]] = computedValues[i](0, pointIndex);
             valIndex[i]++;
             break;
             case 2:
-            valArrays[i][valIndex[i]] = computedValues(0, pointIndex, 0);
+            valArrays[i][valIndex[i]] = computedValues[i](0, pointIndex, 0);
             valIndex[i]++;
-            valArrays[i][valIndex[i]] = computedValues(0, pointIndex, 1);
+            valArrays[i][valIndex[i]] = computedValues[i](0, pointIndex, 1);
             valIndex[i]++;
             valArrays[i][valIndex[i]] = 0;
             valIndex[i]++;
             break;
             case 3:
-            valArrays[i][valIndex[i]] = computedValues(0, pointIndex, 0);
+            valArrays[i][valIndex[i]] = computedValues[i](0, pointIndex, 0);
             valIndex[i]++;
-            valArrays[i][valIndex[i]] = computedValues(0, pointIndex, 1);
+            valArrays[i][valIndex[i]] = computedValues[i](0, pointIndex, 1);
             valIndex[i]++;
-            valArrays[i][valIndex[i]] = computedValues(0, pointIndex, 2);
+            valArrays[i][valIndex[i]] = computedValues[i](0, pointIndex, 2);
             valIndex[i]++;
             break;
             default:
