@@ -43,7 +43,7 @@ class StokesVGPFormulation {
   
   Teuchos::RCP<PoissonFormulation> _streamFormulation;
   
-  RefinementStrategyPtr _refinementStrategy;
+  RefinementStrategyPtr _refinementStrategy, _hRefinementStrategy, _pRefinementStrategy;
   
   VarFactory _vf;
   
@@ -91,6 +91,12 @@ public:
   
   // ! refine according to energy error in the solution
   void refine();
+  
+  // ! h-refine according to energy error in the solution
+  void hRefine();
+  
+  // ! p-refine according to energy error in the solution
+  void pRefine();
   
   // ! returns the RefinementStrategy object being used to drive refinements
   RefinementStrategyPtr getRefinementStrategy();
