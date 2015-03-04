@@ -6,11 +6,11 @@
 //
 //
 
-#include "MeshFactory.h"
-#include "GMGOperator.h"
-
-#include "PoissonFormulation.h"
 #include "CamelliaDebugUtility.h"
+#include "GMGOperator.h"
+#include "MeshFactory.h"
+#include "PoissonFormulation.h"
+#include "RHS.h"
 
 #include "Teuchos_UnitTestHarness.hpp"
 namespace {
