@@ -84,7 +84,7 @@ private:
         if (lhsSidesForVar->size() != rhsSidesForVar->size()) {
           return lhsSidesForVar->size() < rhsSidesForVar->size();
         }
-        for (int i=0; i<lhsSidesForVar->size(); i++) {
+        for (unsigned i=0; i<lhsSidesForVar->size(); i++) {
           int lhsSideIndex = (*lhsSidesForVar)[i];
           int rhsSideIndex = (*rhsSidesForVar)[i];
           if (lhsSideIndex != rhsSideIndex) {
