@@ -43,17 +43,12 @@ public:
   static void runTests();
   static void createBases();
   static bool testDofOrdering();
-  static bool testComputeStiffnessDx();
   static bool testAnalyticBoundaryIntegral(bool);
   static bool testComputeStiffnessConformingVertices();
   static bool testComputeStiffnessTrace();
   static bool testComputeStiffnessFlux();
   static bool testMathInnerProductDx();
-  static bool testLowOrderTrialCubicTest();
-//  static bool testOptimalStiffnessByIntegrating();
   static bool testOptimalStiffnessByMultiplying();
-  static bool testComputeOptimalTest();
-//  static bool testComputeOptimalTestPoisson();
   static bool testTestBilinearFormAnalyticBoundaryIntegralExpectedConformingMatrices();
   static bool testWeightBasis();
   static bool checkOptTestWeights(FieldContainer<double> &optWeights,

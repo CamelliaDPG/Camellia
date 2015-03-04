@@ -101,7 +101,7 @@ bool RHSTests::testComputeRHSLegacy() {
   int testOrder = 3;
   
   //cout << myName << ": testing with testOrder=" << testOrder << endl;
-  BFPtr bilinearForm = Teuchos::rcp( new TestBilinearFormDx() );
+  BFPtr bilinearForm = TestBilinearFormDx::bf();
   
   shards::CellTopology quad_4(shards::getCellTopologyData<shards::Quadrilateral<4> >() );
   shards::CellTopology tri_3(shards::getCellTopologyData<shards::Triangle<3> >() );

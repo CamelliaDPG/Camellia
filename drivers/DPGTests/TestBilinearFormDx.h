@@ -33,30 +33,9 @@
 
 #include "BF.h"
 
-class TestBilinearFormDx : public BF {
-private:
-  
+class TestBilinearFormDx {
 public:
-  TestBilinearFormDx();
-
-  // implement the virtual methods declared in super:
-  const string & testName(int testID);
-  const string & trialName(int trialID);
-  
-  bool trialTestOperator(int trialID, int testID, 
-                         Camellia::EOperator &trialOperator,
-                         Camellia::EOperator &testOperator);
-       
-  void applyBilinearFormData(int trialID, int testID,
-                           FieldContainer<double> &trialValues, FieldContainer<double> &testValues,
-                             const FieldContainer<double> &points);
-                           
-  Camellia::EFunctionSpace functionSpaceForTest(int testID);
-  
-  Camellia::EFunctionSpace functionSpaceForTrial(int trialID);
-
-  bool isFluxOrTrace(int trialID);
-  
+  static BFPtr bf();
 };
 
 #endif
