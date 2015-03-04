@@ -88,10 +88,10 @@
 
 #include "MeshTools.h"
 
-#include "CamelliaCellTools.h"
-
 #include "Basis.h"
 #include "BasisCache.h"
+#include "BasisSumFunction.h"
+#include "CamelliaCellTools.h"
 #include "HDF5Exporter.h"
 #include "PoissonFormulation.h"
 #include "Projector.h"
@@ -124,24 +124,6 @@ BasisCachePtr makeBasisCache(ElementTypePtr elemType, const FieldContainer<doubl
   basisCache->setPhysicalCellNodes(physicalCellNodes,cellIDs,createSideCacheToo);
   return basisCache;
 }
-
-class SimpleQuadraticFunction : public AbstractFunction {
-public:    
-  void getValues(FieldContainer<double> &functionValues, const FieldContainer<double> &physicalPoints) {
-    int numCells = physicalPoints.dimension(0);
-    int numPoints = physicalPoints.dimension(1);
-    int spaceDim = physicalPoints.dimension(2);
-    functionValues.resize(numCells,numPoints);
-    for (int i=0;i<numCells;i++){
-      for (int j=0;j<numPoints;j++){
-        double x = physicalPoints(i,j,0);
-        double y = physicalPoints(i,j,1);
-        functionValues(i,j) = x*y + 3.0*x*x;
-      }
-    }  
-  }
-  
-};
 
 int main(int argc, char *argv[]) {
 #ifdef HAVE_MPI
@@ -210,9 +192,9 @@ void DPGTests::runTests() {
   // setup our TestSuite tests:
   vector< Teuchos::RCP< TestSuite > > testSuites;
   
-  testSuites.push_back( Teuchos::rcp( new LinearTermTests ) );
-  
   testSuites.push_back( Teuchos::rcp( new GDAMinimumRuleTests ) );
+  
+  testSuites.push_back( Teuchos::rcp( new LinearTermTests ) );
   
   testSuites.push_back( Teuchos::rcp( new GMGTests ) );
   
@@ -410,16 +392,7 @@ void DPGTests::runTests() {
 //  } else {
 //    if (rank==0) cout << "Failed test testComputeOptimalTestPoisson." << endl;
 //  }
-  
-  success = testProjection();
-  ++numTestsTotal;
-  if (success) {
-    numTestsPassed++;
-    if (rank==0) cout << "Passed test testProjection." << endl;
-  } else {
-    if (rank==0) cout << "Failed test testProjection." << endl;
-  }
-  
+    
   if (rank==0) cout << "Passed " << numTestsPassed << " out of " << numTestsTotal << "." << endl;
 }
 
@@ -2455,63 +2428,6 @@ bool DPGTests::testTestBilinearFormAnalyticBoundaryIntegralExpectedConformingMat
   return success;
 }
 
-bool DPGTests::testProjection(){
-  double tol = 1e-14;
-  // reference cell physical cell nodes in counterclockwise order
-  FieldContainer<double> physicalCellNodes(1,4,2);
-  physicalCellNodes(0,0,0) = -1.0;
-  physicalCellNodes(0,0,1) = -1.0;
-
-  physicalCellNodes(0,1,0) = 1.0;
-  physicalCellNodes(0,1,1) = -1.0; 
-
-  physicalCellNodes(0,2,0) = 1.0;
-  physicalCellNodes(0,2,1) = 1.0;
-
-  physicalCellNodes(0,3,0) = -1.0;
-  physicalCellNodes(0,3,1) = 1.0;
-  
-  FieldContainer<double> basisCoefficients;
-  int polyOrder = 5; // some large number
-  BasisPtr basis = Camellia::intrepidQuadHGRAD(polyOrder);
-
-  // creating basisCache to compute values at certain points
-  shards::CellTopology cellTopo = basis->domainTopology()->getShardsTopology();
-  int basisRank = BasisFactory::basisFactory()->getBasisRank(basis);
-  DofOrderingPtr dofOrderPtr = Teuchos::rcp(new DofOrdering(basis->domainTopology()));
-  int ID = 0; // fake ID 
-  dofOrderPtr->addEntry(ID,basis,basisRank);  
-  int maxTrialDegree = dofOrderPtr->maxBasisDegree();
-
-  BasisCache basisCache(physicalCellNodes, cellTopo, *(dofOrderPtr), maxTrialDegree, false);
-
-  // simple function f(x,y) = x;
-  Teuchos::RCP<SimpleQuadraticFunction> simpleFunction = Teuchos::rcp(new SimpleQuadraticFunction());
-
-  Projector::projectFunctionOntoBasis(basisCoefficients, simpleFunction, basis, physicalCellNodes);      
-
-  int numDofs = basis->getCardinality();
-  Camellia::EOperator op = Camellia::OP_VALUE;
-  FieldContainer<double> cubPoints = basisCache.getPhysicalCubaturePoints();    
-  FieldContainer<double> basisValues = *(basisCache.getTransformedValues(basis, op));
-  int numPts = cubPoints.dimension(1);
-  FieldContainer<double> basisSum(numPts);
-  FieldContainer<double> functionValues;
-  simpleFunction->getValues(functionValues,cubPoints);
-  bool passedTest = true;
-  for (int i=0;i<numPts;i++){
-    double x = cubPoints(0,i,0);
-    for (int j = 0;j<numDofs;j++){
-      basisSum(i) += basisCoefficients(0,j)*basisValues(0,j,i);
-    }
-    if (abs(basisSum(i)-functionValues(0,i))>tol){
-      passedTest = false;
-    }
-  }
-
-  return passedTest;
-}
-
 vector< CellTopoPtr > getShardsTopologies() {
   vector< CellTopoPtr > shardsTopologies;
   
@@ -2525,206 +2441,45 @@ vector< CellTopoPtr > getShardsTopologies() {
 }
 
 void DPGTests::runExceptionThrowingTest() {
-  int spaceDim = 2;
-  bool success = true;
+  CellTopoPtr spaceTopo = CellTopology::line();
   
-  FunctionPtr x = Function::xn(1);
-  FunctionPtr y = Function::yn(1);
-  FunctionPtr z = Function::zn(1);
-  FunctionPtr phi_exact; // want an exactly representable solution with non-trivial psi_n (i.e. grad phi dot n should be non-trivial)
-  // for now, we just go very simple.  Linear in x,y,z.
-  switch (spaceDim) {
-    case 1:
-      phi_exact = x;
-      break;
-    case 2:
-      phi_exact = x + y;
-      break;
-    case 3:
-      phi_exact = x + y + z;
-      break;
-    default:
-      cout << "MeshRefinementTests::testTraceTermProjection(): unhandled space dimension.\n";
-      break;
-  }
+  int H1Order = 2;
+  FunctionPtr n = Function::normalSpaceTime();
+  FunctionPtr f = Function::xn(2) * n->x() + Function::yn(1) * n->y();
   
-  //  int H1Order = 5; // debugging
-  int H1Order = 2; // so field order is linear
+  int tensorialDegree = 1;
+  CellTopoPtr spaceTimeTopo = CellTopology::cellTopology(spaceTopo->getShardsTopology(), tensorialDegree);
   
-  bool useConformingTraces = true;
-  PoissonFormulation pf(spaceDim,useConformingTraces);
+  int cubatureDegree = H1Order * 2;
+  bool createSideCache = true;
+  BasisCachePtr basisCache = BasisCache::basisCacheForReferenceCell(spaceTimeTopo, cubatureDegree, createSideCache);
   
-  BFPtr bf = pf.bf();
+  BasisFactoryPtr basisFactory = BasisFactory::basisFactory();
   
-  // fields
-  VarPtr phi = pf.phi();
-  VarPtr psi = pf.psi();
+  Intrepid::FieldContainer<double> basisCoefficients;
   
-  // traces
-  VarPtr phi_hat = pf.phi_hat();
-  VarPtr psi_n = pf.psi_n_hat();
+  double tol = 1e-15;
   
-  // tests
-  VarPtr tau = pf.tau();
-  VarPtr q = pf.q();
-  
-  int testSpaceEnrichment = 1; //
-  //  double width = 1.0, height = 1.0, depth = 1.0;
-  
-  vector<double> dimensions;
-  for (int d=0; d<spaceDim; d++) {
-    dimensions.push_back(1.0);
-  }
-  
-  //  cout << "dimensions[0] = " << dimensions[0] << "; dimensions[1] = " << dimensions[1] << endl;
-  //  cout << "numCells[0] = " << numCells[0] << "; numCells[1] = " << numCells[1] << endl;
-  
-  vector<int> numCells(spaceDim, 1); // one element in each spatial direction
-  
-  MeshPtr mesh = MeshFactory::rectilinearMesh(bf, dimensions, numCells, H1Order, testSpaceEnrichment);
-  
-  // rhs = f * q, where f = \Delta phi
-  RHSPtr rhs = RHS::rhs();
-  FunctionPtr f;
-  switch (spaceDim) {
-    case 1:
-      f = phi_exact->dx()->dx();
-      break;
-    case 2:
-      f = phi_exact->dx()->dx() + phi_exact->dy()->dy();
-      break;
-    case 3:
-      f = phi_exact->dx()->dx() + phi_exact->dy()->dy() + phi_exact->dz()->dz();
-      break;
-    default:
-      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unhandled spaceDim");
-      break;
-  }
-  rhs->addTerm(f * q);
-  
-  IPPtr graphNorm = bf->graphNorm();
-  
-  BCPtr bc = BC::bc();
-  SpatialFilterPtr boundary = SpatialFilter::allSpace();
-  SolutionPtr solution;
-  
-  bc->addDirichlet(phi_hat, boundary, phi_exact);
-  solution = Solution::solution(mesh, bc, rhs, graphNorm);
-//  {
-//    cout << "mesh->globalDofCount() = " << mesh->globalDofCount() << endl;
-//    
-//    // DEBUGGING:
-//    solution->setWriteMatrixToMatrixMarketFile(true, "/tmp/traceTermProjectionMatrix.dat");
-//    solution->setWriteRHSToMatrixMarketFile(true, "/tmp/traceTermProjection_RHS.dat");
-//  }
-  
-  int err = solution->solve();
-  if (err != 0) {
-    cout << "solution->solve() returned error code " << err << endl;
-  }
-  
-  FunctionPtr psi_exact = (spaceDim > 1) ? phi_exact->grad() : phi_exact->dx();
-  
-  map<int, FunctionPtr> psiMap;
-  psiMap[psi->ID()] = psi_exact;
-  
-  FunctionPtr psi_n_exact = psi_n->termTraced()->evaluate(psiMap);
-  
-  FunctionPtr psi_soln = Function::solution(psi, solution);
-  FunctionPtr psi_n_soln = Function::solution(psi_n, solution); // includes (correction for) parity weighting
-  FunctionPtr phi_hat_soln = Function::solution(phi_hat, solution);
-  
-  FunctionPtr psi_err = psi_exact - psi_soln;
-  FunctionPtr psi_n_err = psi_n_exact - psi_n_soln;
-  FunctionPtr phi_hat_err = phi_exact - phi_hat_soln;
-  
-  double err_L2 = psi_err->l2norm(mesh);
-  
-  double tol = 1e-12;
-  
-  // SANITY CHECKS ON INITIAL SOLUTION
-  // psi error first
-  if (err_L2 > tol) {
-    cout << "testTraceTermProjection error: psi in initial solution (prior to projection) differs from exact solution by " << err_L2 << " in L^2 norm.\n";
-    success = false;
+  for (int sideOrdinal = 0; sideOrdinal < spaceTimeTopo->getSideCount(); sideOrdinal++) {
+    CellTopoPtr sideTopo = spaceTimeTopo->getSide(sideOrdinal);
+    BasisPtr sideBasis = basisFactory->getBasis(H1Order, sideTopo, Camellia::FUNCTION_SPACE_HGRAD);
+    BasisCachePtr sideBasisCache = basisCache->getSideBasisCache(sideOrdinal);
     
-    double soln_l2 = psi_soln->l2norm(mesh);
-    double exact_l2 = psi_exact->l2norm(mesh);
+    int numCells = 1;
+    basisCoefficients.resize(numCells,sideBasis->getCardinality());
     
-    cout << "L^2 norm of exact solution: " << exact_l2 << ", versus " << soln_l2 << " for initial solution\n";
-  }
-  
-  // psi_n error:
-  err_L2 = psi_n_err->l2norm(mesh);
-  if (err_L2 > tol) {
-    cout << "testTraceTermProjection error: psi_n in initial solution (prior to projection) differs from exact solution by " << err_L2 << " in L^2 norm.\n";
-    success = false;
-  }
-  
-  // phi_hat error:
-  err_L2 = phi_hat_err->l2norm(mesh);
-  if (err_L2 > tol) {
-    cout << "testTraceTermProjection error: phi_hat in initial solution (prior to projection) differs from exact solution by " << err_L2 << " in L^2 norm.\n";
-    success = false;
-  }
-  
-  // do a uniform refinement, then check that psi_n_soln and phi_hat_soln match the exact
-  CellPtr sampleCell = mesh->getTopology()->getCell(0);
-  CellTopoPtr cellTopo = sampleCell->topology();
-  RefinementPatternPtr refPattern = RefinementPattern::regularRefinementPattern(cellTopo->getKey());
-  
-  mesh->registerSolution(solution); // this way, solution will get the memo to project
-  mesh->hRefine(mesh->getActiveCellIDs(), refPattern);
-  
-  err_L2 = phi_hat_err->l2norm(mesh);
-  if (err_L2 > tol) {
-    cout << "testTraceTermProjection failure: projected phi_hat differs from exact by " << err_L2 << " in L^2 norm.\n";
-    success = false;
-  }
-  
-  err_L2 = psi_n_err->l2norm(mesh);
-  
-  if (err_L2 > tol) {
-    cout << "testTraceTermProjection failure: projected psi_n differs from exact by " << err_L2 << " in L^2 norm.\n";
-    success = false;
-  }
-  
-  if (success==false) { // then export
-#ifdef HAVE_EPETRAEXT_HDF5
-    HDF5Exporter solnExporter(mesh, "soln", "/tmp");
-    VarFactory vf = bf->varFactory();
-    solnExporter.exportSolution(solution, 0, 10);
+    Projector::projectFunctionOntoBasis(basisCoefficients, f, sideBasis, sideBasisCache);
     
-    HDF5Exporter fxnExporter(mesh, "fxn", "/tmp");
-    vector<string> fxnNames;
-    vector< FunctionPtr > fxns;
-    // fields:
-    fxnNames.push_back("psi_exact");
-    fxns.push_back(psi_exact);
-    fxnNames.push_back("psi_soln");
-    fxns.push_back(psi_soln);
+    basisCoefficients.resize(sideBasis->getCardinality());
+    FunctionPtr projectedFunction = BasisSumFunction::basisSumFunction(sideBasis, basisCoefficients);
     
-    fxnNames.push_back("psi_exact_x");
-    fxns.push_back(psi_exact->x());
-    fxnNames.push_back("psi_soln_x");
-    fxns.push_back(psi_soln->x());
+    double expectedIntegral = f->integrate(sideBasisCache);
+    double actualIntegral = projectedFunction->integrate(sideBasisCache);
     
-    fxnNames.push_back("psi_exact_y");
-    fxns.push_back(psi_exact->y());
-    fxnNames.push_back("psi_soln_y");
-    fxns.push_back(psi_soln->y());
-    fxnExporter.exportFunction(fxns, fxnNames, 0, 10);
+//    TEST_FLOATING_EQUALITY(expectedIntegral,actualIntegral,tol);
     
-    // traces:
-    fxnNames.clear();
-    fxns.clear();
-    fxnNames.push_back("psi_n_exact");
-    fxns.push_back(psi_n_exact);
-    fxnNames.push_back("psi_n_soln");
-    fxns.push_back(psi_n_soln);
-    fxnNames.push_back("psi_n_err");
-    fxns.push_back(psi_n_err);
-    fxnExporter.exportFunction(fxns, fxnNames, 0, 10);
-#endif
+    double integralOfDifference = (projectedFunction - f)->integrate(sideBasisCache);
+    
+//    TEST_ASSERT(abs(integralOfDifference) < tol);
   }
 }

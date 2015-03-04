@@ -1269,11 +1269,15 @@ FunctionPtr Function::normal_1D() { // unit outward-facing normal on each elemen
   return _normal_1D;
 }
 
+FunctionPtr Function::normalSpaceTime() { // unit outward-facing normal on each element boundary
+  static FunctionPtr _normalSpaceTime = Teuchos::rcp( new UnitNormalFunction(-1,true) );
+  return _normalSpaceTime;
+}
+
 FunctionPtr Function::sideParity() { // canonical direction on boundary (used for defining fluxes)
   static FunctionPtr _sideParity = Teuchos::rcp( new SideParityFunction );
   return _sideParity;
 }
-
 
 FunctionPtr Function::polarize(FunctionPtr f) {
   return Teuchos::rcp( new PolarizedFunction(f) );
@@ -2046,20 +2050,21 @@ void SideParityFunction::values(FieldContainer<double> &values, BasisCachePtr si
   }
 }
 
-UnitNormalFunction::UnitNormalFunction(int comp) : Function( (comp<0)? 1 : 0) {
+UnitNormalFunction::UnitNormalFunction(int comp, bool spaceTime) : Function( (comp<0)? 1 : 0) {
   _comp = comp;
+  _spaceTime = spaceTime;
 }
 
 FunctionPtr UnitNormalFunction::x() {
-  return Teuchos::rcp( new UnitNormalFunction(0) );
+  return Teuchos::rcp( new UnitNormalFunction(0,_spaceTime) );
 }
 
 FunctionPtr UnitNormalFunction::y() {
-  return Teuchos::rcp( new UnitNormalFunction(1) );
+  return Teuchos::rcp( new UnitNormalFunction(1,_spaceTime) );
 }
 
 FunctionPtr UnitNormalFunction::z() {
-  return Teuchos::rcp( new UnitNormalFunction(2) );
+  return Teuchos::rcp( new UnitNormalFunction(2,_spaceTime) );
 }
 
 bool UnitNormalFunction::boundaryValueOnly() {
@@ -2085,7 +2090,7 @@ string UnitNormalFunction::displayString() {
 
 void UnitNormalFunction::values(FieldContainer<double> &values, BasisCachePtr basisCache) {
   CHECK_VALUES_RANK(values);
-  const FieldContainer<double> *sideNormals = &(basisCache->getSideNormals());
+  const FieldContainer<double> *sideNormals = _spaceTime ? &(basisCache->getSideNormalsSpaceTime()) : &(basisCache->getSideNormals());
   int numCells = values.dimension(0);
   int numPoints = values.dimension(1);
   int spaceDim = basisCache->getSpaceDim();

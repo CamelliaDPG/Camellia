@@ -12,8 +12,6 @@
 
 #include "Basis.h"
 
-// BasisSumFunction should be renamed "BasisSumFunction", now that we've deleted the old BasisSumFunction that was based on AbstractFunction
-
 class BasisSumFunction : public Function {
  private:  
   BasisPtr _basis;

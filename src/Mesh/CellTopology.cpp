@@ -806,6 +806,13 @@ CellTopoPtr CellTopology::cellTopology(const shards::CellTopology &shardsCellTop
   return _tensorizedTrilinosTopologies[key];
 }
 
+CellTopoPtr CellTopology::cellTopology(CellTopoPtr baseTopo, unsigned tensorialDegree) {
+  if (baseTopo->getTensorialDegree() != 0) {
+    cout << "ERROR: this constructor does not support baseTopo's with tensorialDegree > 0.\n";
+  }
+  return cellTopology(baseTopo->getShardsTopology(),tensorialDegree);
+}
+
 CellTopoPtr CellTopology::lineTensorTopology(CellTopoPtr camelliaCellTopo) {
   return cellTopology(camelliaCellTopo->getShardsTopology(), camelliaCellTopo->getTensorialDegree() + 1);
 }

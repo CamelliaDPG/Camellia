@@ -17,6 +17,10 @@
 
 #include "SerialDenseWrapper.h"
 
+BFPtr BF::bf(VarFactory &vf) {
+  return Teuchos::rcp( new BF(vf) );
+}
+
 BF::BF(bool isLegacySubclass) {
   if (!isLegacySubclass) {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "This constructor is for legacy subclasses only!  Call a VarFactory version instead");

@@ -93,12 +93,15 @@
 #include "CondensedDofInterpreter.h"
 #include "CubatureFactory.h"
 #include "Function.h"
+#include "IP.h"
 #include "GlobalDofAssignment.h"
 #include "LagrangeConstraints.h"
+#include "Mesh.h"
 #include "MeshFactory.h"
 #include "MPIWrapper.h"
 #include "PreviousSolutionFunction.h"
 #include "Projector.h"
+#include "RHS.h"
 #include "SerialDenseWrapper.h"
 #include "Solver.h"
 #include "Var.h"
@@ -3316,7 +3319,7 @@ void Solution::processSideUpgrades( const map<GlobalIndexType, pair< ElementType
   }
 }
 
-void Solution::projectOntoMesh(const map<int, Teuchos::RCP<Function> > &functionMap){ // map: trialID -> function
+void Solution::projectOntoMesh(const map<int, FunctionPtr > &functionMap){ // map: trialID -> function
   if (_lhsVector.get()==NULL) {
     initializeLHSVector();
   }
@@ -3357,16 +3360,14 @@ void Solution::projectOntoCell(const map<int, FunctionPtr > &functionMap, Global
         lastSide = side;
       }
       for (int sideIndex=firstSide; sideIndex<=lastSide; sideIndex++) {
-        if (! elemTypePtr->trialOrderPtr->hasBasisEntry(trialID, sideIndex)) {
-          continue;
-        }
-
         if (! elemTypePtr->trialOrderPtr->hasBasisEntry(trialID, sideIndex)) continue;
         BasisPtr basis = elemTypePtr->trialOrderPtr->getBasis(trialID, sideIndex);
         FieldContainer<double> basisCoefficients(1,basis->getCardinality());
         Projector::projectFunctionOntoBasis(basisCoefficients, function, basis, basisCache->getSideBasisCache(sideIndex));
         basisCoefficients.resize(basis->getCardinality());
 
+//        cout << "basisCoefficients:\n" << basisCoefficients;
+        
         // at present, we understand it to be caller's responsibility to include parity in Function if the varType is a flux.
         // if we wanted to change that semantic, we'd use the below.
 //        if ((_mesh->parityForSide(cellID, sideIndex) == -1) && (trialVar->varType()==FLUX)) {
@@ -3390,18 +3391,6 @@ void Solution::projectOntoCell(const map<int, FunctionPtr > &functionMap, Global
   }
 }
 
-void Solution::projectOntoMesh(const map<int, Teuchos::RCP<AbstractFunction> > &functionMap){
-  if (_lhsVector.get()==NULL) {
-    initializeLHSVector();
-  }
-
-  set<GlobalIndexType> cellIDs = _mesh->globalDofAssignment()->cellsInPartition(-1);
-  for (set<GlobalIndexType>::iterator cellIDIt = cellIDs.begin(); cellIDIt != cellIDs.end(); cellIDIt++) {
-    GlobalIndexType cellID = *cellIDIt;
-    projectOntoCell(functionMap,cellID);
-  }
-}
-
 void Solution::projectFieldVariablesOntoOtherSolution(SolutionPtr otherSoln) {
   vector< int > fieldIDs = _mesh->bilinearForm()->trialVolumeIDs();
   vector< VarPtr > fieldVars;
@@ -3413,25 +3402,6 @@ void Solution::projectFieldVariablesOntoOtherSolution(SolutionPtr otherSoln) {
   Teuchos::RCP<Solution> thisPtr = Teuchos::rcp(this, false);
   map<int, FunctionPtr > solnMap = PreviousSolutionFunction::functionMap(fieldVars, thisPtr);
   otherSoln->projectOntoMesh(solnMap);
-}
-
-void Solution::projectOntoCell(const map<int, Teuchos::RCP<AbstractFunction> > &functionMap, GlobalIndexType cellID){
-  typedef Teuchos::RCP<AbstractFunction> AbstractFxnPtr;
-  FieldContainer<double> physicalCellNodes = _mesh->physicalCellNodesForCell(cellID);
-
-  for (map<int, AbstractFxnPtr >::const_iterator functionIt = functionMap.begin(); functionIt !=functionMap.end(); functionIt++){
-    int trialID = functionIt->first;
-    AbstractFxnPtr function = functionIt->second;
-    ElementPtr element = _mesh->getElement(cellID);
-    ElementTypePtr elemTypePtr = element->elementType();
-
-    BasisPtr basis = elemTypePtr->trialOrderPtr->getBasis(trialID);
-
-    FieldContainer<double> basisCoefficients;
-    Projector::projectFunctionOntoBasis(basisCoefficients, function, basis, physicalCellNodes);
-    basisCoefficients.resize(basisCoefficients.size());
-    setSolnCoeffsForCellID(basisCoefficients,cellID,trialID);
-  }
 }
 
 void Solution::projectOldCellOntoNewCells(GlobalIndexType cellID,

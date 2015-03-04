@@ -220,6 +220,7 @@ namespace Camellia {
     // constructor from Trilinos CellTopology:
     static CellTopoPtr cellTopology(const shards::CellTopology &shardsCellTopo);
     static CellTopoPtr cellTopology(const shards::CellTopology &shardsCellTopo, unsigned tensorialDegree);
+    static CellTopoPtr cellTopology(CellTopoPtr baseTopo, unsigned tensorialDegree);
     
     // constructor for tensor of existing topology with line topology
     static CellTopoPtr lineTensorTopology(CellTopoPtr camelliaCellTopo);

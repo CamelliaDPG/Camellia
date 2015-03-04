@@ -132,6 +132,8 @@ public:
   vector<int> trialBoundaryIDs();
 
   virtual ~BF() {}
+  
+  static Teuchos::RCP<BF> bf(VarFactory &vf);
 };
 
 typedef Teuchos::RCP<BF> BFPtr;

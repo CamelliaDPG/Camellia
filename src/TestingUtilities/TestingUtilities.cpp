@@ -1,6 +1,7 @@
 #include "TestingUtilities.h"
 #include "ElementType.h"
 #include "Element.h"
+#include "RHS.h"
 
 void TestingUtilities::initializeSolnCoeffs(SolutionPtr solution){
   map< pair<IndexType,IndexType>, IndexType> localToGlobalMap = solution->mesh()->getLocalToGlobalMap();

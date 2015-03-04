@@ -18,20 +18,16 @@
 using namespace Camellia;
 
 namespace {
-  TEUCHOS_UNIT_TEST( Projector, TensorTopologyTrace1D )
-  {
-    CellTopoPtr spaceTopo = CellTopology::line();
+  void testProjectFunctionOnTensorTopoSides(CellTopoPtr spaceTopo, int H1Order, FunctionPtr f,
+                                            Teuchos::FancyOStream &out, bool &success) {
     int tensorialDegree = 1;
     CellTopoPtr spaceTimeTopo = CellTopology::cellTopology(spaceTopo->getShardsTopology(), tensorialDegree);
     
-    int H1Order = 2;
     int cubatureDegree = H1Order * 2;
     bool createSideCache = true;
     BasisCachePtr basisCache = BasisCache::basisCacheForReferenceCell(spaceTimeTopo, cubatureDegree, createSideCache);
     
     BasisFactoryPtr basisFactory = BasisFactory::basisFactory();
-    
-    FunctionPtr f = Function::xn(2);
     
     Intrepid::FieldContainer<double> basisCoefficients;
     
@@ -59,5 +55,27 @@ namespace {
       
       TEST_ASSERT(abs(integralOfDifference) < tol);
     }
+  }
+  
+  TEUCHOS_UNIT_TEST( Projector, TensorTopologyTrace1D )
+  {
+    CellTopoPtr spaceTopo = CellTopology::line();
+    
+    int H1Order = 2;
+    FunctionPtr f = Function::xn(2);
+
+    testProjectFunctionOnTensorTopoSides(spaceTopo, H1Order, f, out, success);
+  }
+  
+  TEUCHOS_UNIT_TEST( Projector, TensorTopologyFlux1D )
+  {
+    // project a function that involves normal values
+    CellTopoPtr spaceTopo = CellTopology::line();
+    
+    int H1Order = 2;
+    FunctionPtr n = Function::normalSpaceTime();
+    FunctionPtr f = Function::xn(2) * n->x() + Function::yn(1) * n->y();
+    
+    testProjectFunctionOnTensorTopoSides(spaceTopo, H1Order, f, out, success);
   }
 } // namespace

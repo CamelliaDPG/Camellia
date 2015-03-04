@@ -304,7 +304,7 @@ void IP::computeInnerProductVector(FieldContainer<double> &ipVector,
   for ( vector< LinearTermPtr >:: iterator ltIt = _linearTerms.begin();
        ltIt != _linearTerms.end(); ltIt++) {
     LinearTermPtr lt = *ltIt;
-    // integrate lt against itself
+    // integrate lt against itself, evaluated at var = fxn
     lt->integrate(ipVector,dofOrdering,lt,var,fxn,basisCache);
   }
   

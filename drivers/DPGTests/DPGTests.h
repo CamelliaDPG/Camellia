@@ -67,7 +67,6 @@ public:
   static bool fcIsSymmetric(FieldContainer<double> &fc, double tol, 
                             int &cellOfAsymmetry,
                             int &rowOfAsymmetry, int &colOfAsymmetry);
-  static bool testProjection();
 };
 
 #endif

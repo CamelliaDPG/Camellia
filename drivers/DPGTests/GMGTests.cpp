@@ -8,27 +8,19 @@
 
 #include "GMGTests.h"
 
-#include "Var.h"
-#include "Solution.h"
-
-#include "BF.h"
-
-#include "MeshFactory.h"
-
-#include "PenaltyConstraints.h"
-
-#include "GMGSolver.h"
-
-#include "GDAMinimumRule.h"
-#include "SerialDenseWrapper.h"
-
 #include "BasisSumFunction.h"
-
+#include "BF.h"
 #include "CamelliaDebugUtility.h"
-
 #include "GnuPlotUtil.h"
-
+#include "GDAMinimumRule.h"
+#include "GMGSolver.h"
+#include "MeshFactory.h"
+#include "PenaltyConstraints.h"
 #include "PoissonFormulation.h"
+#include "RHS.h"
+#include "SerialDenseWrapper.h"
+#include "Solution.h"
+#include "Var.h"
 
 // EpetraExt includes
 #include "EpetraExt_RowMatrixOut.h"

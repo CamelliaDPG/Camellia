@@ -58,23 +58,6 @@ public:
   }
 };
 
-class QuadraticFunction : public AbstractFunction {
-public:    
-  void getValues(FieldContainer<double> &functionValues, const FieldContainer<double> &physicalPoints) {
-    int numCells = physicalPoints.dimension(0);
-    int numPoints = physicalPoints.dimension(1);
-    functionValues.resize(numCells,numPoints);
-    for (int i=0;i<numCells;i++){
-      for (int j=0;j<numPoints;j++){
-        double x = physicalPoints(i,j,0);
-        double y = physicalPoints(i,j,1);
-        functionValues(i,j) = x*y + 3.0*x*x;
-      }
-    }  
-  }
-  
-};
-
 class UnitSquareBoundary : public SpatialFilter {
 public:
   bool matchesPoint(double x, double y) {
@@ -731,8 +714,10 @@ bool SolutionTests::testAddSolution() {
 bool SolutionTests::testProjectFunction() {
   bool success = true;
   double tol = 1e-14;
-  Teuchos::RCP<QuadraticFunction> quadraticFunction = Teuchos::rcp(new QuadraticFunction );
-  map<int, Teuchos::RCP<AbstractFunction> > functionMap;
+
+  FunctionPtr x = Function::xn(1), y = Function::yn(1);
+  FunctionPtr quadraticFunction = x * y + 3 * x * x;
+  map<int, FunctionPtr > functionMap;
   functionMap[ConfusionBilinearForm::U_ID] = quadraticFunction;
   functionMap[ConfusionBilinearForm::SIGMA_1_ID] = quadraticFunction;
   functionMap[ConfusionBilinearForm::SIGMA_2_ID] = quadraticFunction;
@@ -747,24 +732,27 @@ bool SolutionTests::testProjectFunction() {
   _confusionUnsolved->solutionValues(valuesSIGMA1, ConfusionBilinearForm::SIGMA_1_ID, _testPoints);
   _confusionUnsolved->solutionValues(valuesSIGMA2, ConfusionBilinearForm::SIGMA_2_ID, _testPoints);
 
-  FieldContainer<double> allCellTestPoints = _testPoints;
-  allCellTestPoints.resize(1,_testPoints.dimension(0),_testPoints.dimension(1));
-  FieldContainer<double> functionValues(1,_testPoints.dimension(0));
-  quadraticFunction->getValues(functionValues,allCellTestPoints);
-  int numValues = functionValues.size();
+//  FieldContainer<double> allCellTestPoints = _testPoints;
+//  allCellTestPoints.resize(1,_testPoints.dimension(0),_testPoints.dimension(1));
+//  FieldContainer<double> functionValues(1,_testPoints.dimension(0));
+//  quadraticFunction->getValues(functionValues,allCellTestPoints);
+  int numValues = _testPoints.dimension(0);
   for (int valueIndex = 0;valueIndex<numValues;valueIndex++){
-    double diff = abs(functionValues[valueIndex]-valuesU[valueIndex]);
+    double x = _testPoints(valueIndex,0), y = _testPoints(valueIndex,1);
+    double functionValue = quadraticFunction->evaluate(x,y);
+    
+    double diff = abs(functionValue-valuesU[valueIndex]);
     if (diff>tol){
       success = false;
       cout << "Test failed: difference in projected and computed values is " << diff << endl;
     }
-    diff = abs(functionValues[valueIndex]-valuesSIGMA1[valueIndex]);
+    diff = abs(functionValue-valuesSIGMA1[valueIndex]);
     if (diff>tol){
       success = false;
       cout << "Test failed: difference in projected and computed values is " << diff << endl;
     }
 
-    diff = abs(functionValues[valueIndex]-valuesSIGMA2[valueIndex]);
+    diff = abs(functionValue-valuesSIGMA2[valueIndex]);
     if (diff>tol){
       success = false;
       cout << "Test failed: difference in projected and computed values is " << diff << endl;
@@ -1236,8 +1224,10 @@ bool SolutionTests::testProjectSolutionOntoOtherMesh() {
 bool SolutionTests::testAddRefinedSolutions() {
   bool success = true;
 
-  Teuchos::RCP<QuadraticFunction> quadraticFunction = Teuchos::rcp(new QuadraticFunction );
-  map<int, Teuchos::RCP<AbstractFunction> > functionMap;
+  FunctionPtr x = Function::xn(1), y = Function::yn(1);
+  FunctionPtr quadraticFunction = x * y + 3 * x * x;
+
+  map<int, FunctionPtr > functionMap;
   functionMap[ConfusionBilinearForm::U_ID] = quadraticFunction;
   functionMap[ConfusionBilinearForm::SIGMA_1_ID] = quadraticFunction;
   functionMap[ConfusionBilinearForm::SIGMA_2_ID] = quadraticFunction;
@@ -1270,9 +1260,7 @@ bool SolutionTests::testAddRefinedSolutions() {
   return success;  
 }
 
-
-bool SolutionTests::testEnergyError(){
-
+bool SolutionTests::testEnergyError() {
   double tol = 1e-11;
 
   bool success = true;
