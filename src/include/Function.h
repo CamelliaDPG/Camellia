@@ -378,6 +378,36 @@ public:
   string displayString();
 };
 
+class MinFunction : public Function {
+  FunctionPtr _f1, _f2;
+public:
+  MinFunction(FunctionPtr f1, FunctionPtr f2);
+
+  FunctionPtr x();
+  FunctionPtr y();
+  FunctionPtr z();
+
+  void values(FieldContainer<double> &values, BasisCachePtr basisCache);
+  bool boundaryValueOnly();
+
+  string displayString();
+};
+
+class MaxFunction : public Function {
+  FunctionPtr _f1, _f2;
+public:
+  MaxFunction(FunctionPtr f1, FunctionPtr f2);
+
+  FunctionPtr x();
+  FunctionPtr y();
+  FunctionPtr z();
+
+  void values(FieldContainer<double> &values, BasisCachePtr basisCache);
+  bool boundaryValueOnly();
+
+  string displayString();
+};
+
 class hFunction : public Function {
 public:
   virtual double value(double x, double y, double h);
@@ -469,6 +499,13 @@ FunctionPtr operator-(FunctionPtr f1, double value);
 FunctionPtr operator-(double value, FunctionPtr f1);
 
 FunctionPtr operator-(FunctionPtr f);
+
+FunctionPtr min(FunctionPtr f1, FunctionPtr f2);
+FunctionPtr min(FunctionPtr f1, double value);
+FunctionPtr min(double value, FunctionPtr f2);
+FunctionPtr max(FunctionPtr f1, FunctionPtr f2);
+FunctionPtr max(FunctionPtr f1, double value);
+FunctionPtr max(double value, FunctionPtr f2);
 
 // here, some particular functions
 // TODO: hide the classes here, and instead implement as static FunctionPtr Function::cos_y(), e.g.
