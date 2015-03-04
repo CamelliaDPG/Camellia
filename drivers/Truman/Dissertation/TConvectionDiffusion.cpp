@@ -1,4 +1,5 @@
 #include "Solution.h"
+#include "RHS.h"
 
 #include "MeshUtilities.h"
 #include "MeshFactory.h"
@@ -99,12 +100,20 @@ int main(int argc, char *argv[]) {
   map<string, IPPtr> confusionIPs;
   confusionIPs["Graph"] = bf->graphNorm();
 
+  confusionIPs["Robust"] = Teuchos::rcp(new IP);
+  confusionIPs["Robust"]->addTerm(tau->div());
+  confusionIPs["Robust"]->addTerm(beta*v->grad());
+  confusionIPs["Robust"]->addTerm(min(1./Function::h(),1./sqrt(epsilon))*tau);
+  confusionIPs["Robust"]->addTerm(sqrt(epsilon)*v->grad());
+  confusionIPs["Robust"]->addTerm(beta*v->grad());
+  confusionIPs["Robust"]->addTerm(min(sqrt(epsilon)/Function::h(),Function::constant(1.0))*v);
+
   confusionIPs["CoupledRobust"] = Teuchos::rcp(new IP);
   confusionIPs["CoupledRobust"]->addTerm(tau->div()-beta*v->grad());
   confusionIPs["CoupledRobust"]->addTerm(min(1./Function::h(),1./sqrt(epsilon))*tau);
   confusionIPs["CoupledRobust"]->addTerm(sqrt(epsilon)*v->grad());
   confusionIPs["CoupledRobust"]->addTerm(beta*v->grad());
-  confusionIPs["CoupledRobust"]->addTerm(v);
+  confusionIPs["CoupledRobust"]->addTerm(min(sqrt(epsilon)/Function::h(),Function::constant(1.0))*v);
 
   IPPtr ip = confusionIPs[norm];
   
@@ -123,7 +132,10 @@ int main(int argc, char *argv[]) {
     double energyError = soln->energyErrorTotal();
     if (commRank == 0)
     {
-      cout << "Refinement:\t" << refIndex << "\tElements:\t" << mesh->numActiveElements() << "\tEnergy Error:\t" << energyError << endl;
+      // if (refIndex > 0)
+        // refStrategy.printRefinementStatistics(refIndex-1);
+      cout << "Refinement:\t " << refIndex << " \tElements:\t " << mesh->numActiveElements() 
+        << " \tDOFs:\t " << mesh->numGlobalDofs() << " \tEnergy Error:\t " << energyError << endl;
     }
     
     exporter.exportSolution(soln, refIndex);
