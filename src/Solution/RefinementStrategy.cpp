@@ -121,8 +121,7 @@ void RefinementStrategy::refine(bool printToConsole) {
   }
   
   // record results prior to refinement
-  RefinementResults results;
-  setResults(results, mesh->numActiveElements(), mesh->numGlobalDofs(), totalEnergyError);
+  RefinementResults results = setResults(mesh->numActiveElements(), mesh->numGlobalDofs(), totalEnergyError);
   _results.push_back(results);
   
   vector<GlobalIndexType> cellsToRefine;
@@ -250,11 +249,12 @@ void RefinementStrategy::hRefineUniformly(Teuchos::RCP<Mesh> mesh) {
   hRefineCells(mesh, cellsToRefine);
 }
 
-void RefinementStrategy::setResults(RefinementResults &solnResults, GlobalIndexType numElements, GlobalIndexType numDofs,
-                                    double totalEnergyError) {
+RefinementResults RefinementStrategy::setResults(GlobalIndexType numElements, GlobalIndexType numDofs, double totalEnergyError) {
+  RefinementResults solnResults;
   solnResults.numElements = numElements;
   solnResults.numDofs = numDofs;
   solnResults.totalEnergyError = totalEnergyError;
+  return solnResults;
 }
 
 // without variable anisotropic threshholding
@@ -266,9 +266,8 @@ void RefinementStrategy::refine(bool printToConsole, map<GlobalIndexType,double>
   getAnisotropicCellsToRefine(xErr,yErr,xCells,yCells,regCells);
  
   // record results prior to refinement
-  RefinementResults results;
   double totalEnergyError = _solution->energyErrorTotal();
-  setResults(results, mesh->numElements(), mesh->numGlobalDofs(), totalEnergyError);
+  RefinementResults results = setResults(mesh->numElements(), mesh->numGlobalDofs(), totalEnergyError);
   _results.push_back(results);
   
   mesh->hRefine(xCells, RefinementPattern::xAnisotropicRefinementPatternQuad());    
@@ -304,9 +303,8 @@ void RefinementStrategy::refine(bool printToConsole, map<GlobalIndexType,double>
   getAnisotropicCellsToRefine(xErr,yErr,xCells,yCells,regCells, threshMap);
  
   // record results prior to refinement
-  RefinementResults results;
   double totalEnergyError = _solution->energyErrorTotal();
-  setResults(results, mesh->numElements(), mesh->numGlobalDofs(), totalEnergyError);
+  RefinementResults results = setResults(mesh->numElements(), mesh->numGlobalDofs(), totalEnergyError);
   _results.push_back(results);
 
   // check if any cells should be marked for p-refinement
