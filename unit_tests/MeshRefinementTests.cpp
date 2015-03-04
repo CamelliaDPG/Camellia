@@ -8,16 +8,14 @@
 
 #include "Teuchos_UnitTestHarness.hpp"
 
+#include "BC.h"
 #include "Function.h"
+#include "HDF5Exporter.h"
 #include "Mesh.h"
-
 #include "MeshFactory.h"
 #include "PoissonFormulation.h"
-
-#include "BC.h"
+#include "RHS.h"
 #include "Solution.h"
-
-#include "HDF5Exporter.h"
 
 namespace {
   TEUCHOS_UNIT_TEST( MeshRefinement, TraceTermProjection )
