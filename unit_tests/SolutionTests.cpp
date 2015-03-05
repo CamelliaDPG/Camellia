@@ -175,14 +175,14 @@ namespace {
 //    }
   }
 
-  TEUCHOS_UNIT_TEST( Solution, ProjectTraceOnTensorMesh1D )
+  TEUCHOS_UNIT_TEST( Solution, ProjectTraceOnOneElementTensorMesh1D )
   {
     int H1Order = 2;
     FunctionPtr f = Function::xn(1);
     testProjectTraceOnTensorMesh(CellTopology::line(), H1Order, f, TRACE, out, success);
   }
   
-  TEUCHOS_UNIT_TEST( Solution, ProjectFluxOnTensorMesh1D )
+  TEUCHOS_UNIT_TEST( Solution, ProjectFluxOnOneElementTensorMesh1D )
   {
     int H1Order = 3;
     FunctionPtr n = Function::normalSpaceTime();
@@ -196,10 +196,10 @@ namespace {
     int tensorialDegree = 1;
     CellTopoPtr line_x_time = CellTopology::cellTopology(CellTopology::line(), tensorialDegree);
 
-    vector<double> v00 = makeVertex(0,0);
-    vector<double> v10 = makeVertex(1,0);
-    vector<double> v20 = makeVertex(2,0);
-    vector<double> v01 = makeVertex(0,1);
+    vector<double> v00 = makeVertex(-1,-1);
+    vector<double> v10 = makeVertex(1,-1);
+    vector<double> v20 = makeVertex(2,-1);
+    vector<double> v01 = makeVertex(-1,1);
     vector<double> v11 = makeVertex(1,1);
     vector<double> v21 = makeVertex(2,1);
 
@@ -252,22 +252,21 @@ namespace {
 
     FunctionPtr n = Function::normalSpaceTime();
     FunctionPtr parity = Function::sideParity();
-    
+    FunctionPtr f = Function::xn(2) * n->x() * parity + Function::yn(1) * n->y() * parity;
+
     map<int, FunctionPtr > functionMap;
-    FunctionPtr x = Function::xn(1);
-    FunctionPtr xx = Function::vectorize(x, x);
     
-    functionMap[uhat->ID()] = xx * n * parity;
+    functionMap[uhat->ID()] = f;
     spaceTimeSolution->projectOntoMesh(functionMap);
 
-    for (GlobalIndexType cellID=0; cellID <= 1; cellID++) {
-      cout << "CellID " << cellID << " info:\n";
-      FieldContainer<double> localCoefficients = spaceTimeSolution->allCoefficientsForCellID(cellID);
-      
-      DofOrderingPtr trialOrder = spaceTimeMesh->getElementType(cellID)->trialOrderPtr;
-      
-      Camellia::printLabeledDofCoefficients(varFactory, trialOrder, localCoefficients);
-    }
+//    for (GlobalIndexType cellID=0; cellID <= 1; cellID++) {
+//      cout << "CellID " << cellID << " info:\n";
+//      FieldContainer<double> localCoefficients = spaceTimeSolution->allCoefficientsForCellID(cellID);
+//      
+//      DofOrderingPtr trialOrder = spaceTimeMesh->getElementType(cellID)->trialOrderPtr;
+//      
+//      Camellia::printLabeledDofCoefficients(varFactory, trialOrder, localCoefficients);
+//    }
 
     double tol = 1e-14;
     for (map<int, FunctionPtr >::iterator entryIt = functionMap.begin(); entryIt != functionMap.end(); entryIt++) {
@@ -275,12 +274,49 @@ namespace {
       VarPtr trialVar = varFactory.trial(trialID);
       FunctionPtr f_expected = entryIt->second;
       FunctionPtr f_actual = Function::solution(trialVar, spaceTimeSolution);
+      if (trialVar->varType() == FLUX) {
+        // then Function::solution() will have included a parity weight, basically on the idea that we're also multiplying by normals
+        // in our usage of the solution data.  (It may be that this is not the best way to do this.)
+        
+        // For this test, though, we want to reverse that:
+        f_actual = parity * f_actual;
+      }
       
       int cubDegreeEnrichment = 0;
       bool spatialSidesOnly = false;
       
       double err_L2 = (f_actual - f_expected)->l2norm(spaceTimeMesh, cubDegreeEnrichment, spatialSidesOnly);
       TEST_COMPARE(err_L2, <, tol);
+      
+      // pointwise comparison
+      set<GlobalIndexType> cellIDs = spaceTimeMesh->getActiveCellIDs();
+      for (set<GlobalIndexType>::iterator cellIDIt = cellIDs.begin(); cellIDIt != cellIDs.end(); cellIDIt++) {
+        GlobalIndexType cellID = *cellIDIt;
+        BasisCachePtr basisCache = BasisCache::basisCacheForCell(spaceTimeMesh, cellID);
+        if ((trialVar->varType() == FLUX) || (trialVar->varType() == TRACE)) {
+          int sideCount = spaceTimeMesh->getElementType(cellID)->cellTopoPtr->getSideCount();
+          for (int sideOrdinal=0; sideOrdinal<sideCount; sideOrdinal++) {
+            BasisCachePtr sideCache = basisCache->getSideBasisCache(sideOrdinal);
+            FieldContainer<double> physicalPoints = sideCache->getPhysicalCubaturePoints();
+            int numPoints = physicalPoints.dimension(1); // (C,P,D)
+            out << "physicalPoints for side " << sideOrdinal << ":\n" << physicalPoints;
+            FieldContainer<double> actualValues(1,numPoints); // assumes scalar-valued
+            FieldContainer<double> expectedValues(1,numPoints); // assumes scalar-valued
+            f_actual->values(actualValues, sideCache);
+            f_expected->values(expectedValues, sideCache);
+            TEST_COMPARE_FLOATING_ARRAYS(expectedValues, actualValues, tol);
+          }
+        } else {
+          FieldContainer<double> physicalPoints = basisCache->getPhysicalCubaturePoints();
+          int numPoints = physicalPoints.dimension(1); // (C,P,D)
+          out << "physicalPoints:\n" << physicalPoints;
+          FieldContainer<double> actualValues(1,numPoints); // assumes scalar-valued
+          FieldContainer<double> expectedValues(1,numPoints); // assumes scalar-valued
+          f_actual->values(actualValues, basisCache);
+          f_expected->values(expectedValues, basisCache);
+          TEST_COMPARE_FLOATING_ARRAYS(expectedValues, actualValues, tol);
+        }
+      }
     }
     
 //    map<GlobalIndexType,GlobalIndexType> cellMap_t0, cellMap_t1;
@@ -372,14 +408,18 @@ namespace {
     bf->addTerm( fhat, v);
 
     ////////////////////   BUILD MESH   ///////////////////////
-    int H1Order = 4, pToAdd = 2;
+    int H1Order = 3, pToAdd = 2;
     Teuchos::RCP<Mesh> spaceTimeMesh = Teuchos::rcp( new Mesh (spaceTimeMeshTopology, bf, H1Order, pToAdd) );
 
     Teuchos::RCP<Solution> spaceTimeSolution = Teuchos::rcp( new Solution(spaceTimeMesh) );
 
+    FunctionPtr n = Function::normalSpaceTime();
+    FunctionPtr parity = Function::sideParity();
+    FunctionPtr f_flux = Function::xn(2) * n->x() * parity + Function::yn(1) * n->y() * parity + Function::zn(1) * n->z() * parity;
+    
     map<int, Teuchos::RCP<Function> > functionMap;
     functionMap[uhat->ID()] = Function::xn(1);
-    functionMap[fhat->ID()] = Function::xn(1);
+    functionMap[fhat->ID()] = f_flux;
     functionMap[u->ID()] = Function::xn(1);
     functionMap[sigma->ID()] = Function::xn(1);
     spaceTimeSolution->projectOntoMesh(functionMap);
@@ -390,6 +430,14 @@ namespace {
       VarPtr trialVar = varFactory.trial(trialID);
       FunctionPtr f_expected = entryIt->second;
       FunctionPtr f_actual = Function::solution(trialVar, spaceTimeSolution);
+      
+      if (trialVar->varType() == FLUX) {
+        // then Function::solution() will have included a parity weight, basically on the idea that we're also multiplying by normals
+        // in our usage of the solution data.  (It may be that this is not the best way to do this.)
+        
+        // For this test, though, we want to reverse that:
+        f_actual = parity * f_actual;
+      }
       
       double err_L2 = (f_actual - f_expected)->l2norm(spaceTimeMesh);
       TEST_COMPARE(err_L2, <, tol);
@@ -493,9 +541,13 @@ namespace {
 
     Teuchos::RCP<Solution> spaceTimeSolution = Teuchos::rcp( new Solution(spaceTimeMesh) );
 
+    FunctionPtr n = Function::normalSpaceTime();
+    FunctionPtr parity = Function::sideParity();
+    FunctionPtr f_flux = Function::xn(2) * n->x() * parity + Function::yn(1) * n->y() * parity + Function::zn(1) * n->z() * parity;
+    
     map<int, Teuchos::RCP<Function> > functionMap;
     functionMap[uhat->ID()] = Function::xn(1);
-    functionMap[fhat->ID()] = Function::xn(1);
+    functionMap[fhat->ID()] = f_flux;
     functionMap[u->ID()] = Function::xn(1);
     functionMap[sigma->ID()] = Function::xn(1);
     spaceTimeSolution->projectOntoMesh(functionMap);
@@ -506,6 +558,14 @@ namespace {
       VarPtr trialVar = varFactory.trial(trialID);
       FunctionPtr f_expected = entryIt->second;
       FunctionPtr f_actual = Function::solution(trialVar, spaceTimeSolution);
+      
+      if (trialVar->varType() == FLUX) {
+        // then Function::solution() will have included a parity weight, basically on the idea that we're also multiplying by normals
+        // in our usage of the solution data.  (It may be that this is not the best way to do this.)
+        
+        // For this test, though, we want to reverse that:
+        f_actual = parity * f_actual;
+      }
       
       double err_L2 = (f_actual - f_expected)->l2norm(spaceTimeMesh);
       TEST_COMPARE(err_L2, <, tol);
