@@ -2213,7 +2213,6 @@ void Solution::computeResiduals() {
     FieldContainer<double> cellSideParitiesForCell = _mesh->cellSideParitiesForCell(cellID);
     _mesh->bilinearForm()->stiffnessMatrix(preStiffness, elemTypePtr, cellSideParitiesForCell, basisCache);
 
-
     for (int i=0; i<numTestDofs; i++) {
       for (int j=0; j<numTrialDofs; j++) {
         residual(0,i) -= localCoefficients(j) * preStiffness(0,i,j);
@@ -3343,12 +3342,10 @@ void Solution::projectOntoCell(const map<int, FunctionPtr > &functionMap, Global
     bool fluxOrTrace = _mesh->bilinearForm()->isFluxOrTrace(trialID);
     VarPtr trialVar = vf.trial(trialID);
     FunctionPtr function = functionIt->second;
-    ElementPtr element = _mesh->getElement(cellID);
-    ElementTypePtr elemTypePtr = element->elementType();
-
+    
     bool testVsTest = false; // in fact it's more trial vs trial, but this just means we'll over-integrate a bit
-    BasisCachePtr basisCache = Teuchos::rcp( new BasisCache(elemTypePtr,_mesh,testVsTest,_cubatureEnrichmentDegree) );
-    basisCache->setPhysicalCellNodes(physicalCellNodes,cellIDs,fluxOrTrace); // create side cache if it's a trace or flux
+    BasisCachePtr basisCache = BasisCache::basisCacheForCell(_mesh, cellID, testVsTest, _cubatureEnrichmentDegree);
+    ElementTypePtr elemTypePtr = _mesh->getElementType(cellID);
 
     if (fluxOrTrace) {
       int firstSide, lastSide;
@@ -3366,7 +3363,23 @@ void Solution::projectOntoCell(const map<int, FunctionPtr > &functionMap, Global
         Projector::projectFunctionOntoBasis(basisCoefficients, function, basis, basisCache->getSideBasisCache(sideIndex));
         basisCoefficients.resize(basis->getCardinality());
 
-//        cout << "basisCoefficients:\n" << basisCoefficients;
+//        { // DEBUGGING
+//          if ((sideIndex==2) || (sideIndex == 3)) {
+//            cout << "cell " << cellID << ", side " << sideIndex << ":\n";
+//            cout << "function: " << function->displayString() << endl;
+//            
+//            BasisCachePtr sideCache = basisCache->getSideBasisCache(sideIndex);
+//            
+//            cout << "basisCoefficients:\n" << basisCoefficients;
+//            cout << "physicalCubaturePoints:\n" << sideCache->getPhysicalCubaturePoints();
+//
+//            int numCells = 1;
+//            FieldContainer<double> values(numCells, basisCache->getSideBasisCache(sideIndex)->getPhysicalCubaturePoints().dimension(1));
+//            function->values(values, sideCache);
+//            
+//            cout << "function values:\n" << values;
+//          }
+//        }
         
         // at present, we understand it to be caller's responsibility to include parity in Function if the varType is a flux.
         // if we wanted to change that semantic, we'd use the below.
