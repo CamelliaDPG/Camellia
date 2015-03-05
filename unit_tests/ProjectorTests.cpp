@@ -18,7 +18,7 @@
 using namespace Camellia;
 
 namespace {
-  void testProjectFunctionOnTensorTopoSides(CellTopoPtr spaceTopo, int H1Order, FunctionPtr f,
+  void testProjectFunctionOnTensorTopoSides(CellTopoPtr spaceTopo, int H1Order, Camellia::EFunctionSpace fs, FunctionPtr f,
                                             Teuchos::FancyOStream &out, bool &success) {
     int tensorialDegree = 1;
     CellTopoPtr spaceTimeTopo = CellTopology::cellTopology(spaceTopo->getShardsTopology(), tensorialDegree);
@@ -35,7 +35,7 @@ namespace {
     
     for (int sideOrdinal = 0; sideOrdinal < spaceTimeTopo->getSideCount(); sideOrdinal++) {
       CellTopoPtr sideTopo = spaceTimeTopo->getSide(sideOrdinal);
-      BasisPtr sideBasis = basisFactory->getBasis(H1Order, sideTopo, Camellia::FUNCTION_SPACE_HGRAD);
+      BasisPtr sideBasis = basisFactory->getBasis(H1Order, sideTopo, fs);
       BasisCachePtr sideBasisCache = basisCache->getSideBasisCache(sideOrdinal);
       
       int numCells = 1;
@@ -49,6 +49,12 @@ namespace {
       double expectedIntegral = f->integrate(sideBasisCache);
       double actualIntegral = projectedFunction->integrate(sideBasisCache);
       
+      cout << "f: " << f->displayString() << endl;
+      cout << "basisCoefficients:\n" << basisCoefficients;
+      cout << "physicalCubaturePoints:\n" << sideBasisCache->getPhysicalCubaturePoints();
+      
+//      cout << "expectedIntegral: " << expectedIntegral << endl;
+      
       TEST_FLOATING_EQUALITY(expectedIntegral,actualIntegral,tol);
       
       double integralOfDifference = (projectedFunction - f)->integrate(sideBasisCache);
@@ -56,7 +62,19 @@ namespace {
       TEST_ASSERT(abs(integralOfDifference) < tol);
     }
   }
-  
+
+  TEUCHOS_UNIT_TEST( Projector, TensorTopologyFlux1D )
+  {
+    // project a function that involves normal values
+    CellTopoPtr spaceTopo = CellTopology::line();
+    
+    int H1Order = 3;
+    FunctionPtr n = Function::normalSpaceTime();
+    FunctionPtr f = Function::xn(2) * n->x() + Function::yn(1) * n->y();
+    
+    testProjectFunctionOnTensorTopoSides(spaceTopo, H1Order, Camellia::FUNCTION_SPACE_HVOL, f, out, success);
+  }
+
   TEUCHOS_UNIT_TEST( Projector, TensorTopologyTrace1D )
   {
     CellTopoPtr spaceTopo = CellTopology::line();
@@ -64,18 +82,7 @@ namespace {
     int H1Order = 2;
     FunctionPtr f = Function::xn(2);
 
-    testProjectFunctionOnTensorTopoSides(spaceTopo, H1Order, f, out, success);
+    testProjectFunctionOnTensorTopoSides(spaceTopo, H1Order, Camellia::FUNCTION_SPACE_HGRAD, f, out, success);
   }
   
-  TEUCHOS_UNIT_TEST( Projector, TensorTopologyFlux1D )
-  {
-    // project a function that involves normal values
-    CellTopoPtr spaceTopo = CellTopology::line();
-    
-    int H1Order = 2;
-    FunctionPtr n = Function::normalSpaceTime();
-    FunctionPtr f = Function::xn(2) * n->x() + Function::yn(1) * n->y();
-    
-    testProjectFunctionOnTensorTopoSides(spaceTopo, H1Order, f, out, success);
-  }
 } // namespace
