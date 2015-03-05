@@ -9,11 +9,12 @@
 #include "BasisReconciliation.h"
 
 #include "BasisCache.h"
-#include "SerialDenseMatrixUtility.h"
 #include "CamelliaCellTools.h"
-#include "SerialDenseWrapper.h"
-#include "CellTopology.h"
 #include "CamelliaDebugUtility.h" // includes print() methods
+#include "CellTopology.h"
+#include "SerialDenseMatrixUtility.h"
+#include "SerialDenseWrapper.h"
+#include "TensorBasis.h"
 
 #include "Intrepid_FunctionSpaceTools.hpp"
 #include "Intrepid_DefaultCubatureFactory.hpp"
@@ -812,6 +813,16 @@ set<unsigned> BasisReconciliation::internalDofOrdinalsForFinerBasis(BasisPtr fin
 unsigned BasisReconciliation::minimumSubcellDimension(BasisPtr basis) {
   // use the functionSpace to determine what continuities should be enforced:
   Camellia::EFunctionSpace fs = basis->functionSpace();
+  
+  typedef Camellia::TensorBasis<double, FieldContainer<double> > TensorBasis;
+  TensorBasis* tensorBasis = dynamic_cast<TensorBasis*>(basis.get());
+  
+  if (tensorBasis != NULL) {
+    // then the minimum subcell dimension is the sum of the minimum for the two components
+    BasisPtr spatialBasis = tensorBasis->getSpatialBasis();
+    BasisPtr temporalBasis = tensorBasis->getTemporalBasis();
+    return minimumSubcellDimension(spatialBasis) + minimumSubcellDimension(temporalBasis);
+  }
   
   int d = basis->domainTopology()->getDimension();
   int minSubcellDimension = d-1;
