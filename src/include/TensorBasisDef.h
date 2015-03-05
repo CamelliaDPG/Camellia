@@ -62,6 +62,16 @@ namespace Camellia {
   int TensorBasis<Scalar,ArrayScalar>::getDegree() const {
     return _spatialBasis->getDegree();
   }
+  
+  template<class Scalar, class ArrayScalar>
+  const Teuchos::RCP< Camellia::Basis<Scalar, ArrayScalar> > TensorBasis<Scalar, ArrayScalar>::getSpatialBasis() const {
+    return this->getComponentBasis(0);
+  }
+  
+  template<class Scalar, class ArrayScalar>
+  const Teuchos::RCP< Camellia::Basis<Scalar, ArrayScalar> > TensorBasis<Scalar, ArrayScalar>::getTemporalBasis() const {
+    return this->getComponentBasis(1);
+  }
 
   template<class Scalar, class ArrayScalar>
   void TensorBasis<Scalar,ArrayScalar>::getTensorValues(ArrayScalar& outputValues, std::vector< const ArrayScalar> & componentOutputValuesVector, std::vector<Intrepid::EOperator> operatorTypes) const {
