@@ -249,10 +249,12 @@ bool FunctionTests::testBasisSumFunction() {
   
   for (set<int>::iterator trialIt=trialIDs.begin(); trialIt != trialIDs.end(); trialIt++) {
     int trialID = *trialIt;
-    int numSides = trialSpace->getNumSidesForVarID(trialID);
-    bool boundaryValued = numSides != 1;
+    const vector<int>* sidesForVar = &trialSpace->getSidesForVarID(trialID);
+    bool boundaryValued = sidesForVar->size() != 1;
     // note that for volume trialIDs, sideIndex = 0, and numSides = 1…
-    for (int sideIndex=0; sideIndex<numSides; sideIndex++) {
+    for (vector<int>::const_iterator sideIt = sidesForVar->begin(); sideIt != sidesForVar->end(); sideIt++) {
+      int sideIndex = *sideIt;
+      
       BasisCachePtr sideCache = volumeCache->getSideBasisCache(sideIndex);
       BasisPtr basis = trialSpace->getBasis(trialID, sideIndex);
       int basisCardinality = basis->getCardinality();
@@ -263,7 +265,7 @@ bool FunctionTests::testBasisSumFunction() {
         
         VarPtr v = Var::varForTrialID(trialID, spectralConfusionMesh->bilinearForm());
         FunctionPtr solnFxn = Function::solution(v, soln);
-        FunctionPtr basisSumFxn = Teuchos::rcp( new NewBasisSumFunction(basis, basisCoefficients, Teuchos::rcp((BasisCache*)NULL), OP_VALUE, boundaryValued) );
+        FunctionPtr basisSumFxn = Teuchos::rcp( new BasisSumFunction(basis, basisCoefficients, Teuchos::rcp((BasisCache*)NULL), OP_VALUE, boundaryValued) );
         if (!boundaryValued) {
           double l2diff = (solnFxn - basisSumFxn)->l2norm(spectralConfusionMesh);
 //          cout << "l2diff = " << l2diff << endl;
@@ -868,7 +870,7 @@ bool FunctionTests::testValuesDottedWithTensor() {
   VarFactory vf;
   VarPtr v = vf.testVar("v", HGRAD);
   
-  DofOrderingPtr dofOrdering = Teuchos::rcp( new DofOrdering );
+  DofOrderingPtr dofOrdering = Teuchos::rcp( new DofOrdering(CellTopology::quad()) );
   shards::CellTopology quad_4(shards::getCellTopologyData<shards::Quadrilateral<4> >() );
   BasisPtr basis = BasisFactory::basisFactory()->getBasis(h1Order, quad_4.getKey(), Camellia::FUNCTION_SPACE_HGRAD);
   dofOrdering->addEntry(v->ID(), basis, v->rank());

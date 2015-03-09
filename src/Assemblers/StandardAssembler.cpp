@@ -22,6 +22,7 @@
 
 #include "Mesh.h"
 #include "Solution.h"
+#include "RHS.h"
 
 Epetra_Map StandardAssembler::getPartMap(){
   int rank = Teuchos::GlobalMPISession::getRank();

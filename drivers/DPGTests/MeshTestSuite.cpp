@@ -304,6 +304,7 @@ bool MeshTestSuite::neighborBasesAgreeOnSides(Teuchos::RCP<Mesh> mesh, const Fie
       
       for (vector<int>::iterator traceIt = traceIDs.begin(); traceIt != traceIDs.end(); traceIt++) {
         int traceID = *traceIt;
+        if (! trialOrder->hasBasisEntry(traceID, sideOrdinal)) continue;
         BasisPtr basis = trialOrder->getBasis(traceID,sideOrdinal);
         BasisPtr neighborBasis = neighborTrialOrder->getBasis(traceID,neighborSideOrdinal);
         
@@ -2166,8 +2167,9 @@ bool MeshTestSuite::checkDofOrderingHasNoOverlap(Teuchos::RCP<DofOrdering> dofOr
   set<int>::iterator varIDIt;
   for (varIDIt = varIDs.begin(); varIDIt != varIDs.end(); varIDIt++) {
     int varID = *varIDIt;
-    int numSides = dofOrdering->getNumSidesForVarID(varID);
-    for (int sideIndex=0; sideIndex<numSides; sideIndex++) {
+    const vector<int>* sidesForVar = &dofOrdering->getSidesForVarID(varID);
+    for (vector<int>::const_iterator sideIt = sidesForVar->begin(); sideIt != sidesForVar->end(); sideIt++) {
+      int sideIndex = *sideIt;
       BasisPtr basis = dofOrdering->getBasis(varID,sideIndex);
       int basisCardinality = basis->getCardinality();
       for (int basisOrdinal=0; basisOrdinal<basisCardinality; basisOrdinal++) {

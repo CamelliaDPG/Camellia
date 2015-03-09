@@ -17,6 +17,7 @@
 #include "Mesh.h"
 #include "InnerProductScratchPad.h"
 #include "BasisCache.h"
+#include "BasisFactory.h"
 
 /*
  For now, this is sort of a grab bag for tests against all the "new-style"

@@ -162,6 +162,7 @@ public:
   static FunctionPtr vectorize(FunctionPtr f1, FunctionPtr f2, FunctionPtr f3);
   static FunctionPtr normal();    // unit outward-facing normal on each element boundary
   static FunctionPtr normal_1D(); // -1 at left side of element, +1 at right
+  static FunctionPtr normalSpaceTime();
   static FunctionPtr null();
   static FunctionPtr sideParity();
   static FunctionPtr solution(VarPtr var, SolutionPtr soln);
@@ -377,6 +378,36 @@ public:
   string displayString();
 };
 
+class MinFunction : public Function {
+  FunctionPtr _f1, _f2;
+public:
+  MinFunction(FunctionPtr f1, FunctionPtr f2);
+
+  FunctionPtr x();
+  FunctionPtr y();
+  FunctionPtr z();
+
+  void values(FieldContainer<double> &values, BasisCachePtr basisCache);
+  bool boundaryValueOnly();
+
+  string displayString();
+};
+
+class MaxFunction : public Function {
+  FunctionPtr _f1, _f2;
+public:
+  MaxFunction(FunctionPtr f1, FunctionPtr f2);
+
+  FunctionPtr x();
+  FunctionPtr y();
+  FunctionPtr z();
+
+  void values(FieldContainer<double> &values, BasisCachePtr basisCache);
+  bool boundaryValueOnly();
+
+  string displayString();
+};
+
 class hFunction : public Function {
 public:
   virtual double value(double x, double y, double h);
@@ -386,8 +417,9 @@ public:
 
 class UnitNormalFunction : public Function {
   int _comp;
+  bool _spaceTime;
 public:
-  UnitNormalFunction(int comp=-1); // -1: the vector normal.  Otherwise, picks out the comp component
+  UnitNormalFunction(int comp=-1, bool spaceTime = false); // -1: the vector normal.  Otherwise, picks out the comp component
 
   FunctionPtr x();
   FunctionPtr y();
@@ -467,6 +499,13 @@ FunctionPtr operator-(FunctionPtr f1, double value);
 FunctionPtr operator-(double value, FunctionPtr f1);
 
 FunctionPtr operator-(FunctionPtr f);
+
+FunctionPtr min(FunctionPtr f1, FunctionPtr f2);
+FunctionPtr min(FunctionPtr f1, double value);
+FunctionPtr min(double value, FunctionPtr f2);
+FunctionPtr max(FunctionPtr f1, FunctionPtr f2);
+FunctionPtr max(FunctionPtr f1, double value);
+FunctionPtr max(double value, FunctionPtr f2);
 
 // here, some particular functions
 // TODO: hide the classes here, and instead implement as static FunctionPtr Function::cos_y(), e.g.

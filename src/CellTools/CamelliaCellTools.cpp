@@ -354,6 +354,20 @@ void CamelliaCellTools::refCellNodesForTopology(FieldContainer<double> &cellNode
   }
 }
 
+void CamelliaCellTools::refCellNodesForTopology(std::vector< vector<double> > &cellNodes, CellTopoPtr cellTopo, unsigned permutation) {
+  int vertexCount = cellTopo->getVertexCount();
+  int spaceDim = cellTopo->getDimension();
+  FieldContainer<double> cellNodesFC(vertexCount, spaceDim);
+  refCellNodesForTopology(cellNodesFC,cellTopo,permutation);
+  cellNodes.resize(vertexCount);
+  for (int vertexOrdinal=0; vertexOrdinal < vertexCount; vertexOrdinal++) {
+    cellNodes[vertexOrdinal].resize(cellTopo->getDimension());
+    for (int d=0; d<spaceDim; d++) {
+      cellNodes[vertexOrdinal][d] = cellNodesFC(vertexOrdinal,d);
+    }
+  }
+}
+
 void CamelliaCellTools::mapToPhysicalFrame(FieldContainer<double> &physPoints, const FieldContainer<double> &refPoints, const FieldContainer<double> &cellWorkset,
                                            CellTopoPtr cellTopo, const int & whichCell) {
   BasisPtr nodalBasis = BasisFactory::basisFactory()->getNodalBasisForCellTopology(cellTopo);

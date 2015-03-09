@@ -24,15 +24,16 @@ typedef Teuchos::RCP<Mesh> MeshPtr;
 
 using namespace std;
 
+struct RefinementResults {
+  int numElements;
+  int numDofs;
+  double totalEnergyError;
+};
+
 class RefinementStrategy {
 protected:
-  struct RefinementResults {
-    int numElements;
-    int numDofs;
-    double totalEnergyError;
-  };
   
-  static void setResults(RefinementResults &solnResults, GlobalIndexType numElements, GlobalIndexType numDofs, double totalEnergyError);
+  static RefinementResults setResults(GlobalIndexType numElements, GlobalIndexType numDofs, double totalEnergyError);
   SolutionPtr _solution;
   
   RieszRepPtr _rieszRep;

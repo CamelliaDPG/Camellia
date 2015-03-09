@@ -119,8 +119,9 @@ bool MeshTestUtility::checkMeshDofConnectivities(Teuchos::RCP<Mesh> mesh) {
     vector< int > trialIDs = mesh->bilinearForm()->trialIDs();
     for (vector< int >::iterator trialIt = trialIDs.begin(); trialIt != trialIDs.end(); trialIt++) {
       int trialID = *(trialIt);
-      int numSides = trialOrder.getNumSidesForVarID(trialID);
-      for (int sideIndex=0; sideIndex<numSides; sideIndex++) {
+      const vector<int>* sidesForVar = &trialOrder.getSidesForVarID(trialID);
+      for (vector<int>::const_iterator sideIt = sidesForVar->begin(); sideIt != sidesForVar->end(); sideIt++) {
+        int sideIndex = *sideIt;
         int numBasisDofs = trialOrder.getBasisCardinality(trialID, sideIndex);
         for (int dofOrdinal=0; dofOrdinal<numBasisDofs; dofOrdinal++) {
           // a very basic check on the mesh dof ordering: the globalDofIndices for all localDofs should not be negative!

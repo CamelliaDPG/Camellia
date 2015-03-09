@@ -1,6 +1,8 @@
 #include "FiniteDifferenceUtilities.h"
 #include "TestingUtilities.h"
 
+#include "RHS.h"
+
 double FiniteDifferenceUtilities::finiteDifferenceGradient(MeshPtr mesh, RieszRepPtr residual, SolutionPtr backgroundSoln, int dofIndex){
   residual->computeRieszRep();
   double fx =  residual->getNorm();

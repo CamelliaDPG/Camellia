@@ -8,16 +8,14 @@
 
 #include "Teuchos_UnitTestHarness.hpp"
 
+#include "BC.h"
 #include "Function.h"
+#include "HDF5Exporter.h"
 #include "Mesh.h"
-
 #include "MeshFactory.h"
 #include "PoissonFormulation.h"
-
-#include "BC.h"
+#include "RHS.h"
 #include "Solution.h"
-
-#include "HDF5Exporter.h"
 
 namespace {
   TEUCHOS_UNIT_TEST( MeshRefinement, TraceTermProjection )
@@ -183,9 +181,9 @@ namespace {
     
     if (success==false) { // then export
 #ifdef HAVE_EPETRAEXT_HDF5
-      HDF5Exporter solnExporter(mesh, "soln");
+      HDF5Exporter solnExporter(mesh, "soln", "/tmp");
       VarFactory vf = bf->varFactory();
-      solnExporter.exportSolution(solution, vf, 0, 10);
+      solnExporter.exportSolution(solution, 0, 10);
       
       HDF5Exporter fxnExporter(mesh, "fxn");
       vector<string> fxnNames;

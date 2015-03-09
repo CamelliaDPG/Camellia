@@ -101,7 +101,7 @@ bool RHSTests::testComputeRHSLegacy() {
   int testOrder = 3;
   
   //cout << myName << ": testing with testOrder=" << testOrder << endl;
-  BFPtr bilinearForm = Teuchos::rcp( new TestBilinearFormDx() );
+  BFPtr bilinearForm = TestBilinearFormDx::bf();
   
   shards::CellTopology quad_4(shards::getCellTopologyData<shards::Quadrilateral<4> >() );
   shards::CellTopology tri_3(shards::getCellTopologyData<shards::Triangle<3> >() );
@@ -140,7 +140,7 @@ bool RHSTests::testComputeRHSLegacy() {
     
     if (numSides == 4) {
       // now that we have a Lobatto basis, we need to hard-code the basis for which we have precomputed these values...
-      testOrdering = Teuchos::rcp( new DofOrdering );
+      testOrdering = Teuchos::rcp( new DofOrdering(CellTopology::quad()) );
       BasisPtr basis = Teuchos::rcp( new IntrepidBasisWrapper<>( Teuchos::rcp( new Basis_HGRAD_QUAD_Cn_FEM<double, Intrepid::FieldContainer<double> >(testOrder,POINTTYPE_SPECTRAL)), 2, 0, Camellia::FUNCTION_SPACE_HGRAD) );
       testOrdering->addEntry(0, basis, 0);
     }

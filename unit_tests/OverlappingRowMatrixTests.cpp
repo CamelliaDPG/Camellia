@@ -9,10 +9,12 @@
 #include "Teuchos_UnitTestHarness.hpp"
 #include "Teuchos_UnitTestHelpers.hpp"
 
-#include "OverlappingRowMatrix.h"
-
+#include "CamelliaDebugUtility.h"
 #include "Mesh.h"
 #include "MeshFactory.h"
+#include "OverlappingRowMatrix.h"
+#include "PoissonFormulation.h"
+#include "RHS.h"
 #include "Solution.h"
 
 #ifdef HAVE_MPI
@@ -20,10 +22,6 @@
 #else
 #include "Epetra_SerialComm.h"
 #endif
-
-#include "PoissonFormulation.h"
-
-#include "CamelliaDebugUtility.h"
 
 using namespace Camellia;
 

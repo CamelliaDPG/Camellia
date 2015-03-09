@@ -8,27 +8,19 @@
 
 #include "GMGTests.h"
 
-#include "Var.h"
-#include "Solution.h"
-
-#include "BF.h"
-
-#include "MeshFactory.h"
-
-#include "PenaltyConstraints.h"
-
-#include "GMGSolver.h"
-
-#include "GDAMinimumRule.h"
-#include "SerialDenseWrapper.h"
-
 #include "BasisSumFunction.h"
-
+#include "BF.h"
 #include "CamelliaDebugUtility.h"
-
 #include "GnuPlotUtil.h"
-
+#include "GDAMinimumRule.h"
+#include "GMGSolver.h"
+#include "MeshFactory.h"
+#include "PenaltyConstraints.h"
 #include "PoissonFormulation.h"
+#include "RHS.h"
+#include "SerialDenseWrapper.h"
+#include "Solution.h"
+#include "Var.h"
 
 // EpetraExt includes
 #include "EpetraExt_RowMatrixOut.h"
@@ -536,12 +528,18 @@ bool GMGTests::testGMGOperatorP() {
         fieldIDs.insert((*fieldIt)->ID());
       }
       
+      int sideCount = fineMesh->getElementType(cellID)->cellTopoPtr->getSideCount();
+      
       set<int> varIDs = coarseOrdering->getVarIDs();
       for (set<int>::iterator varIDIt = varIDs.begin(); varIDIt != varIDs.end(); varIDIt++) {
         int varID = *varIDIt;
-        int sideCount = coarseOrdering->getNumSidesForVarID(varID);
         if ((fieldIDs.find(varID) != fieldIDs.end()) && useStaticCondensation) continue; // skip field test for static condensation: these guys are mapped in that case...
         for (int sideOrdinal=0; sideOrdinal<sideCount; sideOrdinal++) {
+          if (coarseOrdering->hasBasisEntry(varID, sideOrdinal) != fineOrdering->hasBasisEntry(varID, sideOrdinal)) {
+            TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "coarse and fine orderings disagree on whether varID is defined on side sideOrdinal");
+          }
+          if (! coarseOrdering->hasBasisEntry(varID, sideOrdinal)) continue;
+          
           BasisPtr coarseBasis = coarseOrdering->getBasis(varID,sideOrdinal);
           BasisPtr fineBasis = fineOrdering->getBasis(varID,sideOrdinal);
           FieldContainer<double> coarseBasisCoefficients(coarseBasis->getCardinality());
@@ -562,11 +560,11 @@ bool GMGTests::testGMGOperatorP() {
               fineBasisCoefficients[basisOrdinal] = fineLocalCoefficients[fineDofIndex];
             }
             
-            FunctionPtr fineBasisSumFunction = NewBasisSumFunction::basisSumFunction(fineBasis, fineBasisCoefficients);
-            FunctionPtr coarseBasisSumFunction = NewBasisSumFunction::basisSumFunction(coarseBasis, coarseBasisCoefficients);
+            FunctionPtr fineBasisSumFunction = BasisSumFunction::basisSumFunction(fineBasis, fineBasisCoefficients);
+            FunctionPtr coarseBasisSumFunction = BasisSumFunction::basisSumFunction(coarseBasis, coarseBasisCoefficients);
             FunctionPtr diffFxn = fineBasisSumFunction - coarseBasisSumFunction;
             
-            BasisCachePtr basisCacheForIntegration = (coarseOrdering->getNumSidesForVarID(varID) == 1) ? basisCache : basisCache->getSideBasisCache(sideOrdinal);
+            BasisCachePtr basisCacheForIntegration = (coarseOrdering->getSidesForVarID(varID).size() == 1) ? basisCache : basisCache->getSideBasisCache(sideOrdinal);
             
             double l2diff = sqrt( (diffFxn * diffFxn)->integrate(basisCacheForIntegration) );
             
@@ -574,7 +572,7 @@ bool GMGTests::testGMGOperatorP() {
             if (l2diff > tol) {
               success = false;
               cout << "Test Failure: on cell " << cellID << ", for variable " << varID;
-              if (coarseOrdering->getNumSidesForVarID(varID) > 1) cout << " on side " << sideOrdinal << " ";
+              if (coarseOrdering->getSidesForVarID(varID).size() > 1) cout << " on side " << sideOrdinal << " ";
               cout << " for coarse basis ordinal " << coarseBasisOrdinal << ", ";
               cout << "the L^2 norm of difference between fine mesh representation and coarse representation exceeds tol: ";
               cout << l2diff << " > " << tol << "\n";
@@ -774,11 +772,11 @@ bool GMGTests::testGMGSolverIdentityUniformMeshes() {
     vector<int> cellCounts;
     cellCounts.push_back(1);
     cellCounts.push_back(2);
-    cellCounts.push_back(4);
+//    cellCounts.push_back(4);
 
     for (int spaceDim=1; spaceDim<=3; spaceDim++) {
       for (int i=0; i<cellCounts.size(); i++) {
-        if ((spaceDim==3) && (i==cellCounts.size()-1)) continue; // skip the 4x4x4 case, in interest of time.
+//        if ((spaceDim==3) && (i==cellCounts.size()-1)) continue; // skip the 4x4x4 case, in interest of time.
         vector<int> cellCount;
         for (int d=0; d<spaceDim; d++) {
           cellCount.push_back(cellCounts[i]);

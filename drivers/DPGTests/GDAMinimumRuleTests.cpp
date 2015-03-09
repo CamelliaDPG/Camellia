@@ -802,18 +802,25 @@ bool GDAMinimumRuleTests::checkLocalGlobalConsistency(MeshPtr mesh) {
     
     DofOrderingPtr trialOrder = mesh->getElementType(cellID)->trialOrderPtr;
     set<int> varIDs = trialOrder->getVarIDs();
-    
+        
     for (set<int>::iterator varIt=varIDs.begin(); varIt != varIDs.end(); varIt++) {
       int varID = *varIt;
-      int numSides = trialOrder->getNumSidesForVarID(varID);
-      for (int sideOrdinal=0; sideOrdinal<numSides; sideOrdinal++) {
-        BasisPtr basis = (numSides==1) ? trialOrder->getBasis(varID) : trialOrder->getBasis(varID,sideOrdinal);
+      const vector<int>* sidesForVar = &trialOrder->getSidesForVarID(varID);
+      for (vector<int>::const_iterator sideIt = sidesForVar->begin(); sideIt != sidesForVar->end(); sideIt++) {
+        int sideOrdinal = *sideIt;
+
+        BasisPtr basis;
+        if (sidesForVar->size() == 1) {
+          basis = trialOrder->getBasis(varID);
+        } else {
+          basis = trialOrder->getBasis(varID,sideOrdinal);
+        }
         
         FieldContainer<double> basisCoefficients(basis->getCardinality());
         
         for (int dofOrdinal=0; dofOrdinal<basis->getCardinality(); dofOrdinal++) {
           int localDofIndex;
-          if (numSides == 1) {
+          if (sidesForVar->size() == 1) {
             localDofIndex = trialOrder->getDofIndex(varID, dofOrdinal);
           } else {
             localDofIndex = trialOrder->getDofIndex(varID, dofOrdinal, sideOrdinal);
@@ -941,10 +948,12 @@ bool GDAMinimumRuleTests::testLocalInterpretationConsistency() {
     
     set<int> indicesForMappedData;
     
+    int sideCount = gda->elementType(cellID)->cellTopoPtr->getSideCount();
+    
     for (set<int>::iterator varIt = varIDs.begin(); varIt != varIDs.end(); varIt++) {
       int varID = *varIt;
-      int sideCount = trialOrdering->getNumSidesForVarID(varID);
       for (int sideOrdinal=0; sideOrdinal<sideCount; sideOrdinal++) {
+        if (! trialOrdering->hasBasisEntry(varID, sideOrdinal)) continue;
         BasisPtr basis = trialOrdering->getBasis(varID,sideOrdinal);
         FieldContainer<double> basisData(basis->getCardinality());
         // on the assumption that minimum rule does *not* enforce conformity locally, we can consistently pull basis data

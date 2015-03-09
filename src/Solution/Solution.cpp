@@ -82,36 +82,31 @@
 
 #include <stdlib.h>
 
+#include "Solution.h"
+
+// Camellia includes:
 #include "BilinearFormUtility.h"
 #include "BasisEvaluation.h"
 #include "BasisCache.h"
 #include "BasisSumFunction.h"
-
-#include "PreviousSolutionFunction.h"
-#include "LagrangeConstraints.h"
-
-#include "Solver.h"
-
-#include "Function.h"
-
-#include "Solution.h"
-#include "Projector.h"
-
+#include "CamelliaCellTools.h"
 #include "CondensedDofInterpreter.h"
-
+#include "CubatureFactory.h"
+#include "Function.h"
+#include "IP.h"
+#include "GlobalDofAssignment.h"
+#include "LagrangeConstraints.h"
+#include "Mesh.h"
+#include "MeshFactory.h"
+#include "MPIWrapper.h"
+#include "PreviousSolutionFunction.h"
+#include "Projector.h"
+#include "RHS.h"
+#include "SerialDenseWrapper.h"
+#include "Solver.h"
 #include "Var.h"
 
-#include "CamelliaCellTools.h"
-
 #include "AztecOO_ConditionNumber.h"
-
-#include "SerialDenseWrapper.h"
-
-#include "MPIWrapper.h"
-
-#include "MeshFactory.h"
-
-#include "CubatureFactory.h"
 
 #ifdef HAVE_EPETRAEXT_HDF5
 #include <EpetraExt_HDF5.h>
@@ -354,7 +349,9 @@ void Solution::addSolution(Teuchos::RCP<Solution> otherSoln, double weight, set<
     DofOrderingPtr trialOrder = _mesh->getElementType(cellID)->trialOrderPtr;
     for (set<int>::iterator varIDIt = varsToAdd.begin(); varIDIt != varsToAdd.end(); varIDIt++) {
       int varID = *varIDIt;
-      for (int sideOrdinal=0; sideOrdinal<trialOrder->getNumSidesForVarID(varID); sideOrdinal++) {
+      const vector<int>* sidesForVar = &trialOrder->getSidesForVarID(varID);
+      for (vector<int>::const_iterator sideIt = sidesForVar->begin(); sideIt != sidesForVar->end(); sideIt++) {
+        int sideOrdinal = *sideIt;
         vector<int> dofIndices = trialOrder->getDofIndices(varID, sideOrdinal);
         for (vector<int>::iterator dofIndexIt = dofIndices.begin(); dofIndexIt != dofIndices.end(); dofIndexIt++) {
           int dofIndex = *dofIndexIt;
@@ -1789,6 +1786,8 @@ void Solution::integrateFlux(FieldContainer<double> &values, ElementTypePtr elem
   for (int sideIndex=0; sideIndex<numSides; sideIndex++) {
     // Get numerical integration points and weights
     CubatureFactory  cubFactory;
+    if (! dofOrdering.hasBasisEntry(trialID, sideIndex)) continue;
+
     BasisPtr basis = dofOrdering.getBasis(trialID,sideIndex);
     int basisRank = dofOrdering.getBasisRank(trialID);
     int cubDegree = 2*basis->getDegree();
@@ -2214,7 +2213,6 @@ void Solution::computeResiduals() {
     FieldContainer<double> cellSideParitiesForCell = _mesh->cellSideParitiesForCell(cellID);
     _mesh->bilinearForm()->stiffnessMatrix(preStiffness, elemTypePtr, cellSideParitiesForCell, basisCache);
 
-
     for (int i=0; i<numTestDofs; i++) {
       for (int j=0; j<numTrialDofs; j++) {
         residual(0,i) -= localCoefficients(j) * preStiffness(0,i,j);
@@ -2301,8 +2299,14 @@ void Solution::solutionValues(FieldContainer<double> &values, int trialID, Basis
 
     DofOrderingPtr trialOrder = _mesh->getElement(cellID)->elementType()->trialOrderPtr;
 
-    BasisPtr basis = fluxOrTrace ? trialOrder->getBasis(trialID, sideIndex)
-    : trialOrder->getBasis(trialID);
+    BasisPtr basis;
+    if (fluxOrTrace) {
+      if (! trialOrder->hasBasisEntry(trialID, sideIndex)) continue;
+      basis = trialOrder->getBasis(trialID, sideIndex);
+    } else {
+      basis = trialOrder->getBasis(trialID);
+    }
+
     int basisCardinality = basis->getCardinality();
 
     Teuchos::RCP<const FieldContainer<double> > transformedValues;
@@ -2748,6 +2752,11 @@ FieldContainer<double> Solution::solutionForElementTypeGlobal(ElementTypePtr ele
 void Solution::basisCoeffsForTrialOrder(FieldContainer<double> &basisCoeffs, DofOrderingPtr trialOrder,
                                         const FieldContainer<double> &allCoeffs,
                                         int trialID, int sideIndex) {
+  if (! trialOrder->hasBasisEntry(trialID, sideIndex)) {
+    basisCoeffs.resize(0);
+    return;
+  }
+  
   BasisPtr basis = trialOrder->getBasis(trialID,sideIndex);
 
   int basisCardinality = basis->getCardinality();
@@ -3309,7 +3318,7 @@ void Solution::processSideUpgrades( const map<GlobalIndexType, pair< ElementType
   }
 }
 
-void Solution::projectOntoMesh(const map<int, Teuchos::RCP<Function> > &functionMap){ // map: trialID -> function
+void Solution::projectOntoMesh(const map<int, FunctionPtr > &functionMap){ // map: trialID -> function
   if (_lhsVector.get()==NULL) {
     initializeLHSVector();
   }
@@ -3333,12 +3342,10 @@ void Solution::projectOntoCell(const map<int, FunctionPtr > &functionMap, Global
     bool fluxOrTrace = _mesh->bilinearForm()->isFluxOrTrace(trialID);
     VarPtr trialVar = vf.trial(trialID);
     FunctionPtr function = functionIt->second;
-    ElementPtr element = _mesh->getElement(cellID);
-    ElementTypePtr elemTypePtr = element->elementType();
-
+    
     bool testVsTest = false; // in fact it's more trial vs trial, but this just means we'll over-integrate a bit
-    BasisCachePtr basisCache = Teuchos::rcp( new BasisCache(elemTypePtr,_mesh,testVsTest,_cubatureEnrichmentDegree) );
-    basisCache->setPhysicalCellNodes(physicalCellNodes,cellIDs,fluxOrTrace); // create side cache if it's a trace or flux
+    BasisCachePtr basisCache = BasisCache::basisCacheForCell(_mesh, cellID, testVsTest, _cubatureEnrichmentDegree);
+    ElementTypePtr elemTypePtr = _mesh->getElementType(cellID);
 
     if (fluxOrTrace) {
       int firstSide, lastSide;
@@ -3350,15 +3357,30 @@ void Solution::projectOntoCell(const map<int, FunctionPtr > &functionMap, Global
         lastSide = side;
       }
       for (int sideIndex=firstSide; sideIndex<=lastSide; sideIndex++) {
-        if (! elemTypePtr->trialOrderPtr->hasBasisEntry(trialID, sideIndex)) {
-          continue;
-        }
-
+        if (! elemTypePtr->trialOrderPtr->hasBasisEntry(trialID, sideIndex)) continue;
         BasisPtr basis = elemTypePtr->trialOrderPtr->getBasis(trialID, sideIndex);
         FieldContainer<double> basisCoefficients(1,basis->getCardinality());
         Projector::projectFunctionOntoBasis(basisCoefficients, function, basis, basisCache->getSideBasisCache(sideIndex));
         basisCoefficients.resize(basis->getCardinality());
 
+//        { // DEBUGGING
+//          if ((sideIndex==2) || (sideIndex == 3)) {
+//            cout << "cell " << cellID << ", side " << sideIndex << ":\n";
+//            cout << "function: " << function->displayString() << endl;
+//            
+//            BasisCachePtr sideCache = basisCache->getSideBasisCache(sideIndex);
+//            
+//            cout << "basisCoefficients:\n" << basisCoefficients;
+//            cout << "physicalCubaturePoints:\n" << sideCache->getPhysicalCubaturePoints();
+//
+//            int numCells = 1;
+//            FieldContainer<double> values(numCells, basisCache->getSideBasisCache(sideIndex)->getPhysicalCubaturePoints().dimension(1));
+//            function->values(values, sideCache);
+//            
+//            cout << "function values:\n" << values;
+//          }
+//        }
+        
         // at present, we understand it to be caller's responsibility to include parity in Function if the varType is a flux.
         // if we wanted to change that semantic, we'd use the below.
 //        if ((_mesh->parityForSide(cellID, sideIndex) == -1) && (trialVar->varType()==FLUX)) {
@@ -3382,18 +3404,6 @@ void Solution::projectOntoCell(const map<int, FunctionPtr > &functionMap, Global
   }
 }
 
-void Solution::projectOntoMesh(const map<int, Teuchos::RCP<AbstractFunction> > &functionMap){
-  if (_lhsVector.get()==NULL) {
-    initializeLHSVector();
-  }
-
-  set<GlobalIndexType> cellIDs = _mesh->globalDofAssignment()->cellsInPartition(-1);
-  for (set<GlobalIndexType>::iterator cellIDIt = cellIDs.begin(); cellIDIt != cellIDs.end(); cellIDIt++) {
-    GlobalIndexType cellID = *cellIDIt;
-    projectOntoCell(functionMap,cellID);
-  }
-}
-
 void Solution::projectFieldVariablesOntoOtherSolution(SolutionPtr otherSoln) {
   vector< int > fieldIDs = _mesh->bilinearForm()->trialVolumeIDs();
   vector< VarPtr > fieldVars;
@@ -3405,25 +3415,6 @@ void Solution::projectFieldVariablesOntoOtherSolution(SolutionPtr otherSoln) {
   Teuchos::RCP<Solution> thisPtr = Teuchos::rcp(this, false);
   map<int, FunctionPtr > solnMap = PreviousSolutionFunction::functionMap(fieldVars, thisPtr);
   otherSoln->projectOntoMesh(solnMap);
-}
-
-void Solution::projectOntoCell(const map<int, Teuchos::RCP<AbstractFunction> > &functionMap, GlobalIndexType cellID){
-  typedef Teuchos::RCP<AbstractFunction> AbstractFxnPtr;
-  FieldContainer<double> physicalCellNodes = _mesh->physicalCellNodesForCell(cellID);
-
-  for (map<int, AbstractFxnPtr >::const_iterator functionIt = functionMap.begin(); functionIt !=functionMap.end(); functionIt++){
-    int trialID = functionIt->first;
-    AbstractFxnPtr function = functionIt->second;
-    ElementPtr element = _mesh->getElement(cellID);
-    ElementTypePtr elemTypePtr = element->elementType();
-
-    BasisPtr basis = elemTypePtr->trialOrderPtr->getBasis(trialID);
-
-    FieldContainer<double> basisCoefficients;
-    Projector::projectFunctionOntoBasis(basisCoefficients, function, basis, physicalCellNodes);
-    basisCoefficients.resize(basisCoefficients.size());
-    setSolnCoeffsForCellID(basisCoefficients,cellID,trialID);
-  }
 }
 
 void Solution::projectOldCellOntoNewCells(GlobalIndexType cellID,
@@ -3463,7 +3454,7 @@ void Solution::projectOldCellOntoNewCells(GlobalIndexType cellID,
 
    for (set<int>::iterator trialIDIt = trialIDs.begin(); trialIDIt != trialIDs.end(); trialIDIt++) {
      int trialID = *trialIDIt;
-     if (oldTrialOrdering->getNumSidesForVarID(trialID) == 1) { // field variable, the only kind we honor right now
+     if (oldTrialOrdering->getSidesForVarID(trialID).size() == 1) { // field variable, the only kind we honor right now
        BasisPtr basis = oldTrialOrdering->getBasis(trialID);
        int basisCardinality = basis->getCardinality();
        FieldContainer<double> basisCoefficients(basisCardinality);
@@ -3475,7 +3466,7 @@ void Solution::projectOldCellOntoNewCells(GlobalIndexType cellID,
 
 //       cout << "basisCoefficients for parent volume trialID " << trialID << ":\n" << basisCoefficients;
 
-       FunctionPtr oldTrialFunction = Teuchos::rcp( new NewBasisSumFunction(basis, basisCoefficients, parentRefCellCache) );
+       FunctionPtr oldTrialFunction = Teuchos::rcp( new BasisSumFunction(basis, basisCoefficients, parentRefCellCache) );
        fieldMap[trialID] = oldTrialFunction;
      }
    }
@@ -3484,7 +3475,7 @@ void Solution::projectOldCellOntoNewCells(GlobalIndexType cellID,
    map<int,FunctionPtr> interiorTraceMap; // functions to use on parent interior to represent traces there
    for (set<int>::iterator trialIDIt = trialIDs.begin(); trialIDIt != trialIDs.end(); trialIDIt++) {
      int trialID = *trialIDIt;
-     if (oldTrialOrdering->getNumSidesForVarID(trialID) != 1) { // trace (flux) variable
+     if (oldTrialOrdering->getSidesForVarID(trialID).size() != 1) { // trace (flux) variable
        VarPtr var = vf.trialVars().find(trialID)->second;
 
        LinearTermPtr termTraced = var->termTraced();
@@ -3507,7 +3498,8 @@ void Solution::projectOldCellOntoNewCells(GlobalIndexType cellID,
      BasisCachePtr parentSideTopoBasisCache = BasisCache::basisCacheForReferenceCell(sideTopo, dummyCubatureDegree);
      for (set<int>::iterator trialIDIt = trialIDs.begin(); trialIDIt != trialIDs.end(); trialIDIt++) {
        int trialID = *trialIDIt;
-       if (oldTrialOrdering->getNumSidesForVarID(trialID) != 1) { // trace (flux) variable
+       if (oldTrialOrdering->getSidesForVarID(trialID).size() != 1) { // trace (flux) variable
+         if (!oldTrialOrdering->hasBasisEntry(trialID, sideOrdinal)) continue;
          BasisPtr basis = oldTrialOrdering->getBasis(trialID, sideOrdinal);
          int basisCardinality = basis->getCardinality();
          FieldContainer<double> basisCoefficients(basisCardinality);
@@ -3516,7 +3508,7 @@ void Solution::projectOldCellOntoNewCells(GlobalIndexType cellID,
            int dofIndex = oldElemType->trialOrderPtr->getDofIndex(trialID, dofOrdinal, sideOrdinal);
            basisCoefficients(dofOrdinal) = oldData(dofIndex);
          }
-         FunctionPtr oldTrialFunction = Teuchos::rcp( new NewBasisSumFunction(basis, basisCoefficients, parentSideTopoBasisCache) );
+         FunctionPtr oldTrialFunction = Teuchos::rcp( new BasisSumFunction(basis, basisCoefficients, parentSideTopoBasisCache) );
          traceMap[sideOrdinal][trialID] = oldTrialFunction;
        }
      }
@@ -3597,6 +3589,7 @@ void Solution::projectOldCellOntoNewCells(GlobalIndexType cellID,
       for (map<int,FunctionPtr>::iterator traceFxnIt=traceMapForSide->begin(); traceFxnIt != traceMapForSide->end(); traceFxnIt++) {
         int varID = traceFxnIt->first;
         FunctionPtr traceFxn = traceFxnIt->second;
+        if (! childType->trialOrderPtr->hasBasisEntry(varID, sideOrdinal)) continue;
         BasisPtr childBasis = childType->trialOrderPtr->getBasis(varID, sideOrdinal);
         basisCoefficients.resize(1,childBasis->getCardinality());
         Projector::projectFunctionOntoBasisInterpolating(basisCoefficients, traceFxn, childBasis, basisCacheForSide);

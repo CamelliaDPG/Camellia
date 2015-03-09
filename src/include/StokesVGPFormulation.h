@@ -27,6 +27,8 @@ class StokesVGPFormulation {
   double _time;
   bool _transient;
 
+  bool _haveOutflowConditionsImposed; // used to track whether we should impose point/zero mean conditions on pressure
+  
   ParameterFunctionPtr _dt; // use a ParameterFunction so that we can set value later and references (in BF, e.g.) automatically pick this up
   ParameterFunctionPtr _t;  // use a ParameterFunction so that user can easily "ramp up" BCs in time...
   
@@ -41,7 +43,7 @@ class StokesVGPFormulation {
   
   Teuchos::RCP<PoissonFormulation> _streamFormulation;
   
-  RefinementStrategyPtr _refinementStrategy;
+  RefinementStrategyPtr _refinementStrategy, _hRefinementStrategy, _pRefinementStrategy;
   
   VarFactory _vf;
   
@@ -81,8 +83,20 @@ public:
   void initializeSolution(MeshTopologyPtr meshTopo, int fieldPolyOrder, int delta_k = 1,
                           FunctionPtr forcingFunction = Teuchos::null);
   
+  // ! L^2 norm of the difference in u1, u2, and p from previous time step
+  double L2NormOfTimeStep();
+  
+  // ! Returns viscosity mu.
+  double mu();
+  
   // ! refine according to energy error in the solution
   void refine();
+  
+  // ! h-refine according to energy error in the solution
+  void hRefine();
+  
+  // ! p-refine according to energy error in the solution
+  void pRefine();
   
   // ! returns the RefinementStrategy object being used to drive refinements
   RefinementStrategyPtr getRefinementStrategy();
@@ -104,6 +118,9 @@ public:
   
   // ! Solves
   void solve();
+  
+  // ! Returns a reference to the Poisson formulation used for the stream solution.
+  PoissonFormulation &streamFormulation();
   
   // ! Returns the variable in the stream solution that represents the stream function.
   VarPtr streamPhi();

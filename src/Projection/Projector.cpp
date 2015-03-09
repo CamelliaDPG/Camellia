@@ -1,5 +1,13 @@
 #include "Projector.h"
-#include <stdlib.h> 
+
+#include "BasisCache.h"
+#include "BasisFactory.h"
+#include "BasisSumFunction.h"
+#include "CamelliaCellTools.h"
+#include "Function.h"
+#include "VarFactory.h"
+
+#include <stdlib.h>
 
 #include "Shards_CellTopology.hpp"
 
@@ -11,9 +19,6 @@
 // Teuchos includes
 #include "Teuchos_RCP.hpp"
 
-#include "BasisCache.h"
-#include "BasisFactory.h"
-
 #include <Epetra_SerialDenseVector.h>
 #include <Epetra_SerialDenseMatrix.h>
 #include <Epetra_LAPACK.h>
@@ -21,19 +26,13 @@
 #include "Epetra_SerialDenseSolver.h"
 #include "Epetra_DataAccess.h"
 
-#include "Function.h"
-#include "VarFactory.h"
-
-#include "BasisSumFunction.h"
-#include "CamelliaCellTools.h"
-
 typedef Teuchos::RCP< const FieldContainer<double> > constFCPtr;
 
 void Projector::projectFunctionOntoBasis(FieldContainer<double> &basisCoefficients, FunctionPtr fxn, 
                                          BasisPtr basis, BasisCachePtr basisCache, IPPtr ip, VarPtr v,
                                          set<int> fieldIndicesToSkip) {
   CellTopoPtr cellTopo = basis->domainTopology();
-  DofOrderingPtr dofOrderPtr = Teuchos::rcp(new DofOrdering());
+  DofOrderingPtr dofOrderPtr = Teuchos::rcp(new DofOrdering(cellTopo));
   
   if (! fxn.get()) {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "fxn cannot be null!");
@@ -53,7 +52,7 @@ void Projector::projectFunctionOntoBasis(FieldContainer<double> &basisCoefficien
   FieldContainer<double> ipVector(numCells,cardinality);
 
   // fake a DofOrdering
-  DofOrderingPtr dofOrdering = Teuchos::rcp( new DofOrdering );
+  DofOrderingPtr dofOrdering = Teuchos::rcp( new DofOrdering(cellTopo) );
   if (! basisCache->isSideCache()) {
     dofOrdering->addEntry(v->ID(), basis, v->rank());
   } else {
@@ -188,112 +187,9 @@ void Projector::projectFunctionOntoBasis(FieldContainer<double> &basisCoefficien
     // it's simpler all around to use traces.
     var = varFactory.traceVar("dummyTrace");
   }
-  IPPtr ip = Teuchos::rcp( new IP );
+  IPPtr ip = IP::ip();
   ip->addTerm(var); // simple L^2 IP
   projectFunctionOntoBasis(basisCoefficients, fxn, basis, basisCache, ip, var);
-}
-
-void Projector::projectFunctionOntoBasis(FieldContainer<double> &basisCoefficients, Teuchos::RCP<AbstractFunction> fxn, BasisPtr basis,
-                                         const FieldContainer<double> &physicalCellNodes) {
-
-  CellTopoPtr cellTopo = basis->domainTopology();
-  DofOrderingPtr dofOrderPtr = Teuchos::rcp(new DofOrdering());
-
-  int basisRank = BasisFactory::basisFactory()->getBasisRank(basis);
-  int ID = 0; // only one entry for this fake dofOrderPtr
-  dofOrderPtr->addEntry(ID,basis,basisRank);
-  int maxTrialDegree = dofOrderPtr->maxBasisDegree();
-
-  // do not build side caches - no projections for sides supported at the moment
-  if (cellTopo->getTensorialDegree() != 0) {
-    cout << "Projector::projectFunctionOntoBasis() does not yet support tensorial degree > 0.\n";
-    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Projector::projectFunctionOntoBasis() does not yet support tensorial degree > 0.");
-  }
-  shards::CellTopology shardsTopo = cellTopo->getShardsTopology();
-  BasisCache basisCache(physicalCellNodes, shardsTopo, *(dofOrderPtr), maxTrialDegree, false);
-  // assume only L2 projections
-  Camellia::EOperator op =  Camellia::OP_VALUE;
-
-  // have information, build inner product matrix
-  int numDofs = basis->getCardinality();
-  FieldContainer<double> cubPoints = basisCache.getPhysicalCubaturePoints();    
-
-  FieldContainer<double> basisValues = *(basisCache.getTransformedValues(basis, op));
-  FieldContainer<double> testBasisValues = *(basisCache.getTransformedWeightedValues(basis, op));
-
-  int numCells = physicalCellNodes.dimension(0);
-  int numPts = cubPoints.dimension(1);
-  FieldContainer<double> functionValues;
-  fxn->getValues(functionValues, cubPoints);  
-
-  FieldContainer<double> gramMatrix(numCells,numDofs,numDofs);
-  FieldContainer<double> ipVector(numCells,numDofs);
-  FunctionSpaceTools::integrate<double>(gramMatrix,basisValues,testBasisValues,COMP_BLAS);
-  FunctionSpaceTools::integrate<double>(ipVector,functionValues,testBasisValues,COMP_BLAS); 
-  
-  basisCoefficients.resize(numCells,numDofs);
-  for (int cellIndex=0; cellIndex<numCells; cellIndex++){
-
-    Epetra_SerialDenseSolver solver;
-
-    Epetra_SerialDenseMatrix A(Copy,
-			       &gramMatrix(cellIndex,0,0),
-			       gramMatrix.dimension(2), 
-			       gramMatrix.dimension(2),  
-			       gramMatrix.dimension(1)); // stride -- fc stores in row-major order (a.o.t. SDM)
-    
-    Epetra_SerialDenseVector b(Copy,
-			       &ipVector(cellIndex,0),
-			       ipVector.dimension(1));
-    
-    Epetra_SerialDenseVector x(gramMatrix.dimension(1));
-    
-    /*
-    cout << "matrix A = " << endl;
-    for (int i=0;i<gramMatrix.dimension(2);i++){
-      for (int j=0;j<gramMatrix.dimension(1);j++){
-	cout << A(i,j) << " ";
-      }
-      cout << endl;
-    }
-    cout << endl;
-
-    cout << "vector B = " << endl;
-    for (int i=0;i<functionValues.dimension(1);i++){
-      cout << b(i) << endl;
-    }
-    */
-
-    solver.SetMatrix(A);
-    int info = solver.SetVectors(x,b);
-    if (info!=0){
-      cout << "projectFunctionOntoBasis: failed to SetVectors with error " << info << endl;
-    }
-
-    bool equilibrated = false;
-    if (solver.ShouldEquilibrate()){
-      solver.EquilibrateMatrix();
-      solver.EquilibrateRHS();      
-      equilibrated = true;
-    }   
-
-    info = solver.Solve();
-    if (info!=0){
-      cout << "projectFunctionOntoBasis: failed to solve with error " << info << endl;
-    }
-
-    if (equilibrated) {
-      int successLocal = solver.UnequilibrateLHS();
-      if (successLocal != 0) {
-        cout << "projection: unequilibration FAILED with error: " << successLocal << endl;
-      }
-    }
-
-    for (int i=0;i<numDofs;i++){
-      basisCoefficients(cellIndex,i) = x(i);
-    }   
-    
-  } 
 }
 
 void Projector::projectFunctionOntoBasisInterpolating(FieldContainer<double> &basisCoefficients, FunctionPtr fxn,
@@ -327,7 +223,7 @@ void Projector::projectFunctionOntoBasisInterpolating(FieldContainer<double> &ba
   }
   
   for (int d=0; d<=domainDim; d++) {
-    FunctionPtr projectionThusFar = NewBasisSumFunction::basisSumFunction(basis, basisCoefficients);
+    FunctionPtr projectionThusFar = BasisSumFunction::basisSumFunction(basis, basisCoefficients);
     FunctionPtr fxnToApproximate = fxn - projectionThusFar;
     int subcellCount = domainTopo->getSubcellCount(d);
     for (int subcord=0; subcord<subcellCount; subcord++) {

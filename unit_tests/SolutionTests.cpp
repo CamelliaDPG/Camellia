@@ -11,18 +11,15 @@
 
 #include "Intrepid_FieldContainer.hpp"
 
-#include "MeshFactory.h"
+#include "CamelliaCellTools.h"
+#include "CamelliaDebugUtility.h"
 #include "Cell.h"
-
-#include "Solution.h"
-
-#include "PoissonFormulation.h"
-
 #include "GlobalDofAssignment.h"
-
-#include "MeshTools.h"
-
 #include "HDF5Exporter.h"
+#include "MeshFactory.h"
+#include "MeshTools.h"
+#include "PoissonFormulation.h"
+#include "Solution.h"
 
 namespace {
 
@@ -106,16 +103,103 @@ namespace {
       }
     }
   }
+  
+  void testProjectTraceOnTensorMesh(CellTopoPtr spaceTopo, int H1Order, FunctionPtr f, VarType traceOrFlux,
+                                    Teuchos::FancyOStream &out, bool &success) {
+    CellTopoPtr spaceTimeTopo = CellTopology::cellTopology(spaceTopo->getShardsTopology(), spaceTopo->getTensorialDegree() + 1);
+    
+    // very simply, take a one-element, reference space mesh, project a polynomial onto a trace variable,
+    // and check whether we correctly project a function onto it...
+    
+    // define a VarFactory with just a trace variable, and an HGRAD test
+    VarFactory vf;
+    VarPtr v = vf.testVar("v", HGRAD);
+    VarPtr uhat;
+    if (traceOrFlux == TRACE)
+      uhat = vf.traceVar("uhat");
+    else if (traceOrFlux == FLUX)
+      uhat = vf.fluxVar("u_n");
+    
+    BFPtr bf = BF::bf(vf);
+    
+    vector< vector<double> > refCellNodes;
+    CamelliaCellTools::refCellNodesForTopology(refCellNodes,spaceTimeTopo);
+    
+    int spaceDim = spaceTimeTopo->getDimension();
+    int pToAdd = 1; // for this test, doesn't really affect much
+    
+    MeshTopologyPtr meshTopo = Teuchos::rcp( new MeshTopology(spaceDim) );
+    meshTopo->addCell(spaceTimeTopo, refCellNodes);
+    
+    MeshPtr mesh = Teuchos::rcp( new Mesh (meshTopo, bf, H1Order, pToAdd) );
 
+    SolutionPtr soln = Solution::solution(mesh);
+    map<int, FunctionPtr > functionMap;
+    functionMap[uhat->ID()] = f;
+    
+    soln->projectOntoMesh(functionMap);
+    
+    // Now, manually project onto the basis for the trace to compute some expected coefficients
+    Intrepid::FieldContainer<double> basisCoefficientsExpected;
+    
+    double tol = 1e-15;
+    
+    GlobalIndexType cellID = 0;
+    DofOrderingPtr trialOrder = mesh->getElementType(cellID)->trialOrderPtr;
+    
+    BasisCachePtr basisCache = BasisCache::basisCacheForCell(mesh, cellID);
+    
+    for (int sideOrdinal = 0; sideOrdinal < spaceTimeTopo->getSideCount(); sideOrdinal++) {
+      CellTopoPtr sideTopo = spaceTimeTopo->getSide(sideOrdinal);
+      BasisPtr sideBasis = trialOrder->getBasis(uhat->ID(), sideOrdinal);
+      BasisCachePtr sideBasisCache = basisCache->getSideBasisCache(sideOrdinal);
+      
+      int numCells = 1;
+      basisCoefficientsExpected.resize(numCells,sideBasis->getCardinality());
+      
+      Projector::projectFunctionOntoBasis(basisCoefficientsExpected, f, sideBasis, sideBasisCache);
+      
+      FieldContainer<double> basisCoefficientsActual(sideBasis->getCardinality());
+      
+      soln->solnCoeffsForCellID(basisCoefficientsActual,cellID,uhat->ID(),sideOrdinal);
+      
+      for (int basisOrdinal=0; basisOrdinal < sideBasis->getCardinality(); basisOrdinal++) {
+        double diff = basisCoefficientsActual[basisOrdinal] - basisCoefficientsExpected[basisOrdinal];
+        TEST_COMPARE(abs(diff),<,tol);
+      }
+    }
+//    { // DEBUGGING:
+//      cout << "CellID " << cellID << " info:\n";
+//      FieldContainer<double> localCoefficients = soln->allCoefficientsForCellID(cellID);
+//      Camellia::printLabeledDofCoefficients(vf, trialOrder, localCoefficients);
+//    }
+  }
+
+  TEUCHOS_UNIT_TEST( Solution, ProjectTraceOnOneElementTensorMesh1D )
+  {
+    int H1Order = 2;
+    FunctionPtr f = Function::xn(1);
+    testProjectTraceOnTensorMesh(CellTopology::line(), H1Order, f, TRACE, out, success);
+  }
+  
+  TEUCHOS_UNIT_TEST( Solution, ProjectFluxOnOneElementTensorMesh1D )
+  {
+    int H1Order = 3;
+    FunctionPtr n = Function::normalSpaceTime();
+    FunctionPtr parity = Function::sideParity();
+    FunctionPtr f = Function::xn(2) * n->x() * parity + Function::yn(1) * n->y() * parity;
+    testProjectTraceOnTensorMesh(CellTopology::line(), H1Order, f, FLUX, out, success);
+  }
+  
   TEUCHOS_UNIT_TEST( Solution, ProjectOnTensorMesh1D )
   {
     int tensorialDegree = 1;
-    CellTopoPtr line_x_time = CellTopology::cellTopology(shards::getCellTopologyData<shards::Line<2> >(), tensorialDegree);
+    CellTopoPtr line_x_time = CellTopology::cellTopology(CellTopology::line(), tensorialDegree);
 
-    vector<double> v00 = makeVertex(0,0);
-    vector<double> v10 = makeVertex(1,0);
-    vector<double> v20 = makeVertex(2,0);
-    vector<double> v01 = makeVertex(0,1);
+    vector<double> v00 = makeVertex(-1,-1);
+    vector<double> v10 = makeVertex(1,-1);
+    vector<double> v20 = makeVertex(2,-1);
+    vector<double> v01 = makeVertex(-1,1);
     vector<double> v11 = makeVertex(1,1);
     vector<double> v21 = makeVertex(2,1);
 
@@ -152,62 +236,87 @@ namespace {
     ////////////////////   DECLARE VARIABLES   ///////////////////////
     // define test variables
     VarFactory varFactory;
-    VarPtr tau = varFactory.testVar("tau", HGRAD);
     VarPtr v = varFactory.testVar("v", HGRAD);
 
     // define trial variables
     VarPtr uhat = varFactory.fluxVar("uhat");
-    VarPtr fhat = varFactory.fluxVar("fhat");
-    VarPtr u = varFactory.fieldVar("u");
-    VarPtr sigma = varFactory.fieldVar("sigma");
 
     ////////////////////   DEFINE BILINEAR FORM   ///////////////////////
     BFPtr bf = Teuchos::rcp( new BF(varFactory) );
-    // tau terms:
-    bf->addTerm(sigma, tau);
-    bf->addTerm(u, tau->dx());
-    bf->addTerm(-uhat, tau);
-
-    // v terms:
-    bf->addTerm( sigma, v->dx() );
-    bf->addTerm( fhat, v);
 
     ////////////////////   BUILD MESH   ///////////////////////
-    int H1Order = 4, pToAdd = 2;
-    Teuchos::RCP<Mesh> spaceTimeMesh = Teuchos::rcp( new Mesh (spaceTimeMeshTopology, bf, H1Order, pToAdd) );
+    int H1Order = 3, pToAdd = 1;
+    MeshPtr spaceTimeMesh = Teuchos::rcp( new Mesh (spaceTimeMeshTopology, bf, H1Order, pToAdd) );
 
-    Teuchos::RCP<Solution> spaceTimeSolution = Teuchos::rcp( new Solution(spaceTimeMesh) );
+    SolutionPtr spaceTimeSolution = Solution::solution(spaceTimeMesh);
 
-    FunctionPtr n = Function::normal_1D();
+    FunctionPtr n = Function::normalSpaceTime();
     FunctionPtr parity = Function::sideParity();
+    FunctionPtr f = Function::xn(2) * n->x() * parity + Function::yn(1) * n->y() * parity;
+
+    map<int, FunctionPtr > functionMap;
     
-    map<int, Teuchos::RCP<Function> > functionMap;
-    functionMap[uhat->ID()] = Function::xn(1); // * n * parity;
-    functionMap[fhat->ID()] = Function::xn(1); // * n * parity;
-    functionMap[u->ID()] = Function::xn(1);
-    functionMap[sigma->ID()] = Function::xn(1);
+    functionMap[uhat->ID()] = f;
     spaceTimeSolution->projectOntoMesh(functionMap);
 
 //    for (GlobalIndexType cellID=0; cellID <= 1; cellID++) {
 //      cout << "CellID " << cellID << " info:\n";
-//      FieldContainer<double> localCoefficients = spaceTimeSolution->allCoefficientsForCellID(1);
+//      FieldContainer<double> localCoefficients = spaceTimeSolution->allCoefficientsForCellID(cellID);
 //      
-//      cout << "localCoefficients:\n" << localCoefficients;
-//      cout << "trialOrdering:\n" << *(spaceTimeMesh->getElementType(cellID)->trialOrderPtr);
+//      DofOrderingPtr trialOrder = spaceTimeMesh->getElementType(cellID)->trialOrderPtr;
+//      
+//      Camellia::printLabeledDofCoefficients(varFactory, trialOrder, localCoefficients);
 //    }
 
     double tol = 1e-14;
-    for (map<int, Teuchos::RCP<Function> >::iterator entryIt = functionMap.begin(); entryIt != functionMap.end(); entryIt++) {
+    for (map<int, FunctionPtr >::iterator entryIt = functionMap.begin(); entryIt != functionMap.end(); entryIt++) {
       int trialID = entryIt->first;
       VarPtr trialVar = varFactory.trial(trialID);
       FunctionPtr f_expected = entryIt->second;
       FunctionPtr f_actual = Function::solution(trialVar, spaceTimeSolution);
+      if (trialVar->varType() == FLUX) {
+        // then Function::solution() will have included a parity weight, basically on the idea that we're also multiplying by normals
+        // in our usage of the solution data.  (It may be that this is not the best way to do this.)
+        
+        // For this test, though, we want to reverse that:
+        f_actual = parity * f_actual;
+      }
       
       int cubDegreeEnrichment = 0;
-      bool spatialSidesOnly = true;
+      bool spatialSidesOnly = false;
       
       double err_L2 = (f_actual - f_expected)->l2norm(spaceTimeMesh, cubDegreeEnrichment, spatialSidesOnly);
       TEST_COMPARE(err_L2, <, tol);
+      
+      // pointwise comparison
+      set<GlobalIndexType> cellIDs = spaceTimeMesh->getActiveCellIDs();
+      for (set<GlobalIndexType>::iterator cellIDIt = cellIDs.begin(); cellIDIt != cellIDs.end(); cellIDIt++) {
+        GlobalIndexType cellID = *cellIDIt;
+        BasisCachePtr basisCache = BasisCache::basisCacheForCell(spaceTimeMesh, cellID);
+        if ((trialVar->varType() == FLUX) || (trialVar->varType() == TRACE)) {
+          int sideCount = spaceTimeMesh->getElementType(cellID)->cellTopoPtr->getSideCount();
+          for (int sideOrdinal=0; sideOrdinal<sideCount; sideOrdinal++) {
+            BasisCachePtr sideCache = basisCache->getSideBasisCache(sideOrdinal);
+            FieldContainer<double> physicalPoints = sideCache->getPhysicalCubaturePoints();
+            int numPoints = physicalPoints.dimension(1); // (C,P,D)
+            out << "physicalPoints for side " << sideOrdinal << ":\n" << physicalPoints;
+            FieldContainer<double> actualValues(1,numPoints); // assumes scalar-valued
+            FieldContainer<double> expectedValues(1,numPoints); // assumes scalar-valued
+            f_actual->values(actualValues, sideCache);
+            f_expected->values(expectedValues, sideCache);
+            TEST_COMPARE_FLOATING_ARRAYS(expectedValues, actualValues, tol);
+          }
+        } else {
+          FieldContainer<double> physicalPoints = basisCache->getPhysicalCubaturePoints();
+          int numPoints = physicalPoints.dimension(1); // (C,P,D)
+          out << "physicalPoints:\n" << physicalPoints;
+          FieldContainer<double> actualValues(1,numPoints); // assumes scalar-valued
+          FieldContainer<double> expectedValues(1,numPoints); // assumes scalar-valued
+          f_actual->values(actualValues, basisCache);
+          f_expected->values(expectedValues, basisCache);
+          TEST_COMPARE_FLOATING_ARRAYS(expectedValues, actualValues, tol);
+        }
+      }
     }
     
 //    map<GlobalIndexType,GlobalIndexType> cellMap_t0, cellMap_t1;
@@ -220,8 +329,8 @@ namespace {
   TEUCHOS_UNIT_TEST( Solution, ProjectOnTensorMesh2D )
   {
     int tensorialDegree = 1;
-    CellTopoPtr quad_x_time = CellTopology::cellTopology(shards::getCellTopologyData<shards::Quadrilateral<4> >(), tensorialDegree);
-    CellTopoPtr tri_x_time = CellTopology::cellTopology(shards::getCellTopologyData<shards::Triangle<3> >(), tensorialDegree);
+    CellTopoPtr quad_x_time = CellTopology::cellTopology(CellTopology::quad(), tensorialDegree);
+    CellTopoPtr tri_x_time = CellTopology::cellTopology(CellTopology::triangle(), tensorialDegree);
 
     // let's draw a little house
     vector<double> v00 = makeVertex(-1,0,0);
@@ -299,14 +408,18 @@ namespace {
     bf->addTerm( fhat, v);
 
     ////////////////////   BUILD MESH   ///////////////////////
-    int H1Order = 4, pToAdd = 2;
+    int H1Order = 3, pToAdd = 2;
     Teuchos::RCP<Mesh> spaceTimeMesh = Teuchos::rcp( new Mesh (spaceTimeMeshTopology, bf, H1Order, pToAdd) );
 
     Teuchos::RCP<Solution> spaceTimeSolution = Teuchos::rcp( new Solution(spaceTimeMesh) );
 
+    FunctionPtr n = Function::normalSpaceTime();
+    FunctionPtr parity = Function::sideParity();
+    FunctionPtr f_flux = Function::xn(2) * n->x() * parity + Function::yn(1) * n->y() * parity + Function::zn(1) * n->z() * parity;
+    
     map<int, Teuchos::RCP<Function> > functionMap;
     functionMap[uhat->ID()] = Function::xn(1);
-    functionMap[fhat->ID()] = Function::xn(1);
+    functionMap[fhat->ID()] = f_flux;
     functionMap[u->ID()] = Function::xn(1);
     functionMap[sigma->ID()] = Function::xn(1);
     spaceTimeSolution->projectOntoMesh(functionMap);
@@ -317,6 +430,14 @@ namespace {
       VarPtr trialVar = varFactory.trial(trialID);
       FunctionPtr f_expected = entryIt->second;
       FunctionPtr f_actual = Function::solution(trialVar, spaceTimeSolution);
+      
+      if (trialVar->varType() == FLUX) {
+        // then Function::solution() will have included a parity weight, basically on the idea that we're also multiplying by normals
+        // in our usage of the solution data.  (It may be that this is not the best way to do this.)
+        
+        // For this test, though, we want to reverse that:
+        f_actual = parity * f_actual;
+      }
       
       double err_L2 = (f_actual - f_expected)->l2norm(spaceTimeMesh);
       TEST_COMPARE(err_L2, <, tol);
@@ -420,9 +541,13 @@ namespace {
 
     Teuchos::RCP<Solution> spaceTimeSolution = Teuchos::rcp( new Solution(spaceTimeMesh) );
 
+    FunctionPtr n = Function::normalSpaceTime();
+    FunctionPtr parity = Function::sideParity();
+    FunctionPtr f_flux = Function::xn(2) * n->x() * parity + Function::yn(1) * n->y() * parity + Function::zn(1) * n->z() * parity;
+    
     map<int, Teuchos::RCP<Function> > functionMap;
     functionMap[uhat->ID()] = Function::xn(1);
-    functionMap[fhat->ID()] = Function::xn(1);
+    functionMap[fhat->ID()] = f_flux;
     functionMap[u->ID()] = Function::xn(1);
     functionMap[sigma->ID()] = Function::xn(1);
     spaceTimeSolution->projectOntoMesh(functionMap);
@@ -433,6 +558,14 @@ namespace {
       VarPtr trialVar = varFactory.trial(trialID);
       FunctionPtr f_expected = entryIt->second;
       FunctionPtr f_actual = Function::solution(trialVar, spaceTimeSolution);
+      
+      if (trialVar->varType() == FLUX) {
+        // then Function::solution() will have included a parity weight, basically on the idea that we're also multiplying by normals
+        // in our usage of the solution data.  (It may be that this is not the best way to do this.)
+        
+        // For this test, though, we want to reverse that:
+        f_actual = parity * f_actual;
+      }
       
       double err_L2 = (f_actual - f_expected)->l2norm(spaceTimeMesh);
       TEST_COMPARE(err_L2, <, tol);

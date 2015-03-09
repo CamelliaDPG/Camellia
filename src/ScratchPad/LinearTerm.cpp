@@ -181,20 +181,25 @@ void LinearTerm::integrate(FieldContainer<double> &values, DofOrderingPtr thisOr
       // first, compute volume integral
       int numPoints = basisCache->getPhysicalCubaturePoints().dimension(1);
       
-      basis = thisOrdering->getBasis(varID);
-      int basisCardinality = basis->getCardinality();
-      ltValueDim[1] = basisCardinality;
-      ltValueDim[2] = numPoints;
-      ltValues.resize(ltValueDim);
-      bool applyCubatureWeights = true;
-      this->values(ltValues, varID, basis, basisCache, applyCubatureWeights);
+      const vector<int>* sidesForVar = &thisOrdering->getSidesForVarID(varID);
       
-      // compute integrals:
-      for (int cellIndex = 0; cellIndex<numCells; cellIndex++) {
-        for (int basisOrdinal = 0; basisOrdinal < basisCardinality; basisOrdinal++) {
-          int varDofIndex = varDofIndices[basisOrdinal];
-          for (int ptIndex = 0; ptIndex < numPoints; ptIndex++) {
-            values(cellIndex,varDofIndex) += ltValues(cellIndex,basisOrdinal,ptIndex);
+      bool applyCubatureWeights = true;
+      int basisCardinality = -1;
+      if (sidesForVar->size() == 1) { // volume variable
+        basis = thisOrdering->getBasis(varID);
+        basisCardinality = basis->getCardinality();
+        ltValueDim[1] = basisCardinality;
+        ltValueDim[2] = numPoints;
+        ltValues.resize(ltValueDim);
+        this->values(ltValues, varID, basis, basisCache, applyCubatureWeights);
+        
+        // compute integrals:
+        for (int cellIndex = 0; cellIndex<numCells; cellIndex++) {
+          for (int basisOrdinal = 0; basisOrdinal < basisCardinality; basisOrdinal++) {
+            int varDofIndex = varDofIndices[basisOrdinal];
+            for (int ptIndex = 0; ptIndex < numPoints; ptIndex++) {
+              values(cellIndex,varDofIndex) += ltValues(cellIndex,basisOrdinal,ptIndex);
+            }
           }
         }
       }
@@ -203,12 +208,16 @@ void LinearTerm::integrate(FieldContainer<double> &values, DofOrderingPtr thisOr
       for (int sideIndex = 0; sideIndex < numSides; sideIndex++ ) {
         BasisCachePtr sideBasisCache = basisCache->getSideBasisCache(sideIndex);
         if ( sideBasisCache.get() != NULL ) {
+          if (sidesForVar->size() > 1) {
+            if (! thisOrdering->hasBasisEntry(varID, sideIndex)) continue;
+            basis = thisOrdering->getBasis(varID, sideIndex);
+            basisCardinality = basis->getCardinality();
+            ltValueDim[1] = basisCardinality;
+            varDofIndices = thisOrdering->getDofIndices(varID,sideIndex);
+          }
           numPoints = sideBasisCache->getPhysicalCubaturePoints().dimension(1);
           ltValueDim[2] = numPoints;
           ltValues.resize(ltValueDim);
-          if (thisOrdering->getNumSidesForVarID(varID) > 1) {
-            varDofIndices = thisOrdering->getDofIndices(varID,sideIndex);
-          }
           bool naturalBoundaryValuesOnly = true; // don't restrict volume summands to boundary
           this->values(ltValues, varID, basis, sideBasisCache, applyCubatureWeights, naturalBoundaryValuesOnly);
           // compute integrals:
@@ -261,7 +270,13 @@ void LinearTerm::integrate(FieldContainer<double> &values, DofOrderingPtr thisOr
       for (int sideIndex = startSideIndex; sideIndex <= endSideIndex; sideIndex++ ) {
         int numPoints = volumeCache->getPhysicalCubaturePointsForSide(sideIndex).dimension(1);
         
-        basis = thisFluxOrTrace ? thisOrdering->getBasis(varID,sideIndex) : thisOrdering->getBasis(varID);
+        if (thisFluxOrTrace) {
+          if (! thisOrdering->hasBasisEntry(varID, sideIndex)) continue;
+          basis = thisOrdering->getBasis(varID,sideIndex);
+        } else {
+          basis = thisOrdering->getBasis(varID);
+        }
+        
         int basisCardinality = basis->getCardinality();
         ltValueDim[1] = basisCardinality;
         ltValueDim[2] = numPoints;

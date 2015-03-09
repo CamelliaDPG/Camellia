@@ -186,7 +186,20 @@ namespace Camellia {
      */
     unsigned getNodePermutationInverse( const unsigned permutation_ord ,
                                        const unsigned node_ord ) const;
+
+    /** \brief  Returns a CellTopoPtr for the specified side.
+     */
+    CellTopoPtr getSide( unsigned sideOrdinal ) const;
     
+    /** \brief  Get the subcell of dimension scdim with ordinal scord.
+     *  \param  scdim        [in]
+     *  \param  scord        [in]
+     *  For tensor-product topologies T x L (L being the line topology), there are two "copies" of T, T0 and T1,
+     *  and the enumeration of subcells of dimension d goes as follows:
+     - d-dimensional subcells from T0
+     - d-dimensional subcells from T1
+     - ((d-1)-dimensional subcells of T) x L.
+     */
     CellTopoPtr getSubcell( unsigned scdim, unsigned scord ) const;
     
     /** \brief  For cell topologies of positive tensorial degree, returns the cell topology of tensorial degree one less.
@@ -207,6 +220,7 @@ namespace Camellia {
     // constructor from Trilinos CellTopology:
     static CellTopoPtr cellTopology(const shards::CellTopology &shardsCellTopo);
     static CellTopoPtr cellTopology(const shards::CellTopology &shardsCellTopo, unsigned tensorialDegree);
+    static CellTopoPtr cellTopology(CellTopoPtr baseTopo, unsigned tensorialDegree);
     
     // constructor for tensor of existing topology with line topology
     static CellTopoPtr lineTensorTopology(CellTopoPtr camelliaCellTopo);

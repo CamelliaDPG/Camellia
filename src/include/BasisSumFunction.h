@@ -7,40 +7,21 @@
 // Intrepid includes
 #include "Intrepid_FieldContainer.hpp"
 
-#include "BasisFactory.h"
 #include "Function.h"
 #include "BasisCache.h"
 
-#include "AbstractFunction.h"
-
 #include "Basis.h"
 
-using namespace Intrepid;
-using namespace std;
-
-// NewBasisSumFunction is meant to replace the old, but it's not working yet.
-
-class BasisSumFunction : public AbstractFunction {
-private:
-  BasisPtr _basis;
-  FieldContainer<double> _coefficients;
-  FieldContainer<double> _physicalCellNodes;
-public:
-  BasisSumFunction(BasisPtr basis, const FieldContainer<double> &basisCoefficients, const FieldContainer<double> &physicalCellNodes);
-  virtual void getValues(FieldContainer<double> &functionValues, const FieldContainer<double> &physicalPoints);
-  virtual ~BasisSumFunction() {}
-};
-
-class NewBasisSumFunction : public Function {
+class BasisSumFunction : public Function {
  private:  
   BasisPtr _basis;
-  FieldContainer<double> _coefficients;
+  Intrepid::FieldContainer<double> _coefficients;
   Camellia::EOperator _op;
   bool _boundaryValueOnly;
   BasisCachePtr _overridingBasisCache;
  public:
-  NewBasisSumFunction(BasisPtr basis, const FieldContainer<double> &basisCoefficients,
-                      BasisCachePtr overridingBasisCache = Teuchos::rcp((BasisCache*)NULL),
+  BasisSumFunction(BasisPtr basis, const Intrepid::FieldContainer<double> &basisCoefficients,
+                      BasisCachePtr overridingBasisCache = Teuchos::null,
                       Camellia::EOperator op = OP_VALUE, bool boundaryValueOnly = false);
   void values(FieldContainer<double> &values, BasisCachePtr basisCache);
   
@@ -54,7 +35,7 @@ class NewBasisSumFunction : public Function {
   
   bool boundaryValueOnly();
   
-  static FunctionPtr basisSumFunction(BasisPtr basis, const FieldContainer<double> &basisCoefficients);
+  static FunctionPtr basisSumFunction(BasisPtr basis, const Intrepid::FieldContainer<double> &basisCoefficients);
 };
 
 #endif

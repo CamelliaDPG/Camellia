@@ -9,22 +9,22 @@
 #ifndef Camellia_NavierStokesVGPFormulation_h
 #define Camellia_NavierStokesVGPFormulation_h
 
-#include "VarFactory.h"
 #include "BF.h"
-
-#include "MeshTopology.h"
-#include "Solution.h"
-
-#include "Solver.h"
-
-#include "ParameterFunction.h"
-#include "RefinementStrategy.h"
-
 #include "ExactSolution.h"
+#include "MeshTopology.h"
+#include "ParameterFunction.h"
+#include "PoissonFormulation.h"
+#include "RefinementStrategy.h"
+#include "Solution.h"
+#include "Solver.h"
+#include "VarFactory.h"
 
 class NavierStokesVGPFormulation {
   BFPtr _navierStokesBF, _stokesBF;
   bool _useConformingTraces;
+  
+  int _spaceDim;
+
   double _mu;
   ParameterFunctionPtr _dt; // use a ParameterFunction so that we can set value later and references (in BF, e.g.) automatically pick this up
   ParameterFunctionPtr _theta; // selector for time step method; 0.5 is Crank-Nicolson
@@ -39,7 +39,10 @@ class NavierStokesVGPFormulation {
   
   SolutionPtr _backgroundFlow, _solnIncrement;
   
-  RefinementStrategyPtr _refinementStrategy;
+  SolutionPtr _streamSolution;
+  Teuchos::RCP<PoissonFormulation> _streamFormulation;
+  
+  RefinementStrategyPtr _refinementStrategy, _hRefinementStrategy, _pRefinementStrategy;;
   
   bool _neglectFluxesOnRHS;
   
@@ -55,6 +58,8 @@ class NavierStokesVGPFormulation {
   static const string S_V1, S_V2, S_V3;
   static const string S_Q;
   static const string S_TAU1, S_TAU2, S_TAU3;
+  
+  void refine(RefinementStrategyPtr refStrategy);
 public:
   NavierStokesVGPFormulation(MeshTopologyPtr meshTopology, double Re,
                              int fieldPolyOrder,
@@ -96,6 +101,12 @@ public:
   // ! refine according to energy error in the accumulated solution
   void refine();
   
+  // ! h-refine according to energy error in the solution
+  void hRefine();
+  
+  // ! p-refine according to energy error in the solution
+  void pRefine();
+  
   // ! returns the RefinementStrategy object being used to drive refinements
   RefinementStrategyPtr getRefinementStrategy();
   
@@ -119,6 +130,13 @@ public:
   
   // ! The first time this is called, calls solution()->solve(), and the weight argument is ignored.  After the first call, solves for the next iterate, and adds to background flow with the specified weight.
   void solveAndAccumulate(double weight=1.0);
+  
+  // ! Returns the variable in the stream solution that represents the stream function.
+  VarPtr streamPhi();
+  
+  // ! Returns the stream solution (at current time).  (Stream solution is created during initializeSolution, but
+  // ! streamSolution->solve() must be called manually.)  Use streamPhi() to get a VarPtr for the streamfunction.
+  SolutionPtr streamSolution();
   
   BFPtr bf();
   

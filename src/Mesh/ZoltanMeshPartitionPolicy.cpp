@@ -65,6 +65,15 @@ void ZoltanMeshPartitionPolicy::partitionMesh(Mesh *mesh, PartitionIndexType num
     }
     bool useLocalIDs = false;
     
+    if (_debug_level == "0") {
+      // then suppress all debug output (in particular, the "ZOLTAN Load balancing method" messages) as follows:
+      ostringstream numProcStream;
+      numProcStream << numNodes;
+      // Zoltan issues warnings if you set DEBUG_PROCESSOR < 0 or > NumProc.
+      // But if we set it to be exactly NumProc, I think we'll avoid all messages.
+      zz->Set_Param( "DEBUG_PROCESSOR", numProcStream.str() );
+    }
+    
     /* Calling Zoltan Load-balancing routine */
     //cout << "Setting zoltan params" << endl;
     zz->Set_Param( "LB_METHOD", _ZoltanPartitioner.c_str());    /* Zoltan method */

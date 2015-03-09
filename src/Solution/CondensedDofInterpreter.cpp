@@ -194,9 +194,10 @@ bool CondensedDofInterpreter::varDofsAreCondensible(int varID, int sideOrdinal, 
   // eventually it would be nice to determine which sub-basis ordinals can be condensed, but right now we only
   // condense out the truly discontinuous bases defined for variables on the element interior.
   
-  int sideCount = dofOrdering->getNumSidesForVarID(varID);
-  BasisPtr basis = dofOrdering->getBasis(varID, sideOrdinal);
+  int sideCount = dofOrdering->getSidesForVarID(varID).size();
+  if (sideCount != 1) return false;
   
+  BasisPtr basis = dofOrdering->getBasis(varID); // sideOrdinal must be 0 since sideCount == 1
   Camellia::EFunctionSpace fs = basis->functionSpace();
   
   bool isDiscontinuous = functionSpaceIsDiscontinuous(fs);
@@ -224,11 +225,13 @@ map<GlobalIndexType, IndexType> CondensedDofInterpreter::interpretedFluxMapForPa
     
     DofOrderingPtr trialOrder = _mesh->getElementType(cellID)->trialOrderPtr;
     
+    int sideCount = _mesh->getElementType(cellID)->cellTopoPtr->getSideCount();
+    
     for (vector<int>::iterator idIt = trialIDs.begin();idIt!=trialIDs.end();idIt++){
       int trialID = *idIt;
-      int numSides = trialOrder->getNumSidesForVarID(trialID);
       
-      for (int sideOrdinal=0; sideOrdinal<numSides; sideOrdinal++) {
+      for (int sideOrdinal=0; sideOrdinal<sideCount; sideOrdinal++) {
+        if ( !trialOrder->hasBasisEntry(trialID, sideOrdinal) ) continue;
         BasisPtr basis = trialOrder->getBasis(trialID, sideOrdinal);
         
         FieldContainer<double> dummyLocalBasisData(basis->getCardinality());
@@ -380,8 +383,9 @@ void CondensedDofInterpreter::interpretLocalCoefficients(GlobalIndexType cellID,
   FieldContainer<double> basisCoefficients; // declared here so that we can sometimes avoid mallocs, if we get lucky in terms of the resize()
   for (set<int>::iterator trialIDIt = trialOrder->getVarIDs().begin(); trialIDIt != trialOrder->getVarIDs().end(); trialIDIt++) {
     int trialID = *trialIDIt;
-    int sideCount = trialOrder->getNumSidesForVarID(trialID);
-    for (int sideOrdinal=0; sideOrdinal < sideCount; sideOrdinal++) {
+    const vector<int>* sides = &trialOrder->getSidesForVarID(trialID);
+    for (vector<int>::const_iterator sideIt = sides->begin(); sideIt != sides->end(); sideIt++) {
+      int sideOrdinal = *sideIt;
       if (varDofsAreCondensible(trialID, sideOrdinal, trialOrder)) continue;
       int basisCardinality = trialOrder->getBasisCardinality(trialID, sideOrdinal);
       basisCoefficients.resize(basisCardinality);
@@ -621,8 +625,9 @@ void CondensedDofInterpreter::interpretGlobalCoefficients(GlobalIndexType cellID
   set<int> trialIDs = trialOrder->getVarIDs();
   for (set<int>::iterator trialIDIt = trialIDs.begin(); trialIDIt != trialIDs.end(); trialIDIt++) {
     int trialID = *trialIDIt;
-    int sideCount = trialOrder->getNumSidesForVarID(trialID);
-    for (int sideOrdinal=0; sideOrdinal<sideCount; sideOrdinal++) {
+    const vector<int>* sides = &trialOrder->getSidesForVarID(trialID);
+    for (vector<int>::const_iterator sideIt = sides->begin(); sideIt != sides->end(); sideIt++) {
+      int sideOrdinal = *sideIt;
       vector<int> varIndices = trialOrder->getDofIndices(trialID, sideOrdinal);
       if (varDofsAreCondensible(trialID, sideOrdinal, trialOrder)) {
         fieldIndices.insert(varIndices.begin(), varIndices.end());

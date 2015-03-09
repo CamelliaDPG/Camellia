@@ -10,23 +10,19 @@
 
 #include "Teuchos_UnitTestHarness.hpp"
 
-#include "Function.h"
-#include "VarFactory.h"
-
-#include "SpatialFilter.h"
-#include "BF.h"
-#include "IP.h"
 #include "BC.h"
-
-#include "Solution.h"
-
-#include "MeshTools.h"
+#include "BF.h"
+#include "CamelliaDebugUtility.h"
+#include "Function.h"
+#include "HDF5Exporter.h"
+#include "IP.h"
 #include "Mesh.h"
 #include "MeshFactory.h"
-
-#include "CamelliaDebugUtility.h"
-
-#include "HDF5Exporter.h"
+#include "MeshTools.h"
+#include "RHS.h"
+#include "SpatialFilter.h"
+#include "Solution.h"
+#include "VarFactory.h"
 
 namespace {
   class Cone_U0 : public SimpleFunction {

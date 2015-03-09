@@ -662,6 +662,11 @@ unsigned CellTopology::getNodePermutationInverse( const unsigned permutation_ord
   }
 }
 
+CellTopoPtr CellTopology::getSide( unsigned sideOrdinal ) const {
+  unsigned sideDim = this->getDimension() - 1;
+  return this->getSubcell( sideDim, sideOrdinal );
+}
+
 /** \brief  Get the subcell of dimension scdim with ordinal scord.
  *  \param  scdim        [in]
  *  \param  scord        [in]
@@ -799,6 +804,13 @@ CellTopoPtr CellTopology::cellTopology(const shards::CellTopology &shardsCellTop
     _tensorizedTrilinosTopologies[key] = Teuchos::rcp( new CellTopology(shardsCellTopo, tensorialDegree));
   }
   return _tensorizedTrilinosTopologies[key];
+}
+
+CellTopoPtr CellTopology::cellTopology(CellTopoPtr baseTopo, unsigned tensorialDegree) {
+  if (baseTopo->getTensorialDegree() != 0) {
+    cout << "ERROR: this constructor does not support baseTopo's with tensorialDegree > 0.\n";
+  }
+  return cellTopology(baseTopo->getShardsTopology(),tensorialDegree);
 }
 
 CellTopoPtr CellTopology::lineTensorTopology(CellTopoPtr camelliaCellTopo) {

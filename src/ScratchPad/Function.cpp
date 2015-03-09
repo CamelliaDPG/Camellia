@@ -1269,11 +1269,15 @@ FunctionPtr Function::normal_1D() { // unit outward-facing normal on each elemen
   return _normal_1D;
 }
 
+FunctionPtr Function::normalSpaceTime() { // unit outward-facing normal on each element boundary
+  static FunctionPtr _normalSpaceTime = Teuchos::rcp( new UnitNormalFunction(-1,true) );
+  return _normalSpaceTime;
+}
+
 FunctionPtr Function::sideParity() { // canonical direction on boundary (used for defining fluxes)
   static FunctionPtr _sideParity = Teuchos::rcp( new SideParityFunction );
   return _sideParity;
 }
-
 
 FunctionPtr Function::polarize(FunctionPtr f) {
   return Teuchos::rcp( new PolarizedFunction(f) );
@@ -1704,6 +1708,100 @@ FunctionPtr SumFunction::div() {
   }
 }
 
+MinFunction::MinFunction(FunctionPtr f1, FunctionPtr f2) : Function(f1->rank()) {
+  TEUCHOS_TEST_FOR_EXCEPTION( f1->rank() != f2->rank(), std::invalid_argument, "both functions must be of like rank.");
+  _f1 = f1;
+  _f2 = f2;
+}
+
+bool MinFunction::boundaryValueOnly() {
+  // if either summand is BVO, then so is the min...
+  return _f1->boundaryValueOnly() || _f2->boundaryValueOnly();
+}
+
+string MinFunction::displayString() {
+  ostringstream ss;
+  ss << "min( " << _f1->displayString() << " , " << _f2->displayString() << " )";
+  return ss.str();
+}
+
+void MinFunction::values(FieldContainer<double> &values, BasisCachePtr basisCache) {
+  CHECK_VALUES_RANK(values);
+  FieldContainer<double> values2(values);
+  _f1->values(values,basisCache);
+  _f2->values(values2,basisCache);
+  for(int i = 0; i < values.size(); i++) {
+    values[i] = min(values[i],values2[i]);
+  }
+}
+
+FunctionPtr MinFunction::x() {
+  if ( (_f1->x().get() == NULL) || (_f2->x().get() == NULL) ) {
+    return null();
+  }
+  return min(_f1->x(),_f2->x());
+}
+
+FunctionPtr MinFunction::y() {
+  if ( (_f1->y().get() == NULL) || (_f2->y().get() == NULL) ) {
+    return null();
+  }
+  return min(_f1->y(),_f2->y());
+}
+FunctionPtr MinFunction::z() {
+  if ( (_f1->z().get() == NULL) || (_f2->z().get() == NULL) ) {
+    return null();
+  }
+  return min(_f1->z(),_f2->z());
+}
+
+MaxFunction::MaxFunction(FunctionPtr f1, FunctionPtr f2) : Function(f1->rank()) {
+  TEUCHOS_TEST_FOR_EXCEPTION( f1->rank() != f2->rank(), std::invalid_argument, "both functions must be of like rank.");
+  _f1 = f1;
+  _f2 = f2;
+}
+
+bool MaxFunction::boundaryValueOnly() {
+  // if either summand is BVO, then so is the max...
+  return _f1->boundaryValueOnly() || _f2->boundaryValueOnly();
+}
+
+string MaxFunction::displayString() {
+  ostringstream ss;
+  ss << "max( " << _f1->displayString() << " , " << _f2->displayString() << " )";
+  return ss.str();
+}
+
+void MaxFunction::values(FieldContainer<double> &values, BasisCachePtr basisCache) {
+  CHECK_VALUES_RANK(values);
+  FieldContainer<double> values2(values);
+  _f1->values(values,basisCache);
+  _f2->values(values2,basisCache);
+  for(int i = 0; i < values.size(); i++) {
+    values[i] = max(values[i],values2[i]);
+  }
+}
+
+FunctionPtr MaxFunction::x() {
+  if ( (_f1->x().get() == NULL) || (_f2->x().get() == NULL) ) {
+    return null();
+  }
+  return max(_f1->x(),_f2->x());
+}
+
+FunctionPtr MaxFunction::y() {
+  if ( (_f1->y().get() == NULL) || (_f2->y().get() == NULL) ) {
+    return null();
+  }
+  return max(_f1->y(),_f2->y());
+}
+FunctionPtr MaxFunction::z() {
+  if ( (_f1->z().get() == NULL) || (_f2->z().get() == NULL) ) {
+    return null();
+  }
+  return max(_f1->z(),_f2->z());
+}
+
 string hFunction::displayString() {
   return "h";
 }
@@ -2046,20 +2144,21 @@ void SideParityFunction::values(FieldContainer<double> &values, BasisCachePtr si
   }
 }
 
-UnitNormalFunction::UnitNormalFunction(int comp) : Function( (comp<0)? 1 : 0) {
+UnitNormalFunction::UnitNormalFunction(int comp, bool spaceTime) : Function( (comp<0)? 1 : 0) {
   _comp = comp;
+  _spaceTime = spaceTime;
 }
 
 FunctionPtr UnitNormalFunction::x() {
-  return Teuchos::rcp( new UnitNormalFunction(0) );
+  return Teuchos::rcp( new UnitNormalFunction(0,_spaceTime) );
 }
 
 FunctionPtr UnitNormalFunction::y() {
-  return Teuchos::rcp( new UnitNormalFunction(1) );
+  return Teuchos::rcp( new UnitNormalFunction(1,_spaceTime) );
 }
 
 FunctionPtr UnitNormalFunction::z() {
-  return Teuchos::rcp( new UnitNormalFunction(2) );
+  return Teuchos::rcp( new UnitNormalFunction(2,_spaceTime) );
 }
 
 bool UnitNormalFunction::boundaryValueOnly() {
@@ -2085,7 +2184,7 @@ string UnitNormalFunction::displayString() {
 
 void UnitNormalFunction::values(FieldContainer<double> &values, BasisCachePtr basisCache) {
   CHECK_VALUES_RANK(values);
-  const FieldContainer<double> *sideNormals = &(basisCache->getSideNormals());
+  const FieldContainer<double> *sideNormals = _spaceTime ? &(basisCache->getSideNormalsSpaceTime()) : &(basisCache->getSideNormals());
   int numCells = values.dimension(0);
   int numPoints = values.dimension(1);
   int spaceDim = basisCache->getSpaceDim();
@@ -2332,6 +2431,30 @@ FunctionPtr operator-(double value, FunctionPtr f1) {
 
 FunctionPtr operator-(FunctionPtr f) {
   return -1.0 * f;
+}
+
+FunctionPtr min(FunctionPtr f1, FunctionPtr f2) {
+  return Teuchos::rcp( new MinFunction(f1, f2) );
+}
+
+FunctionPtr min(FunctionPtr f1, double value) {
+  return Teuchos::rcp( new MinFunction(f1, Function::constant(value)) );
+}
+
+FunctionPtr min(double value, FunctionPtr f2) {
+  return Teuchos::rcp( new MinFunction(f2, Function::constant(value)) );
+}
+
+FunctionPtr max(FunctionPtr f1, FunctionPtr f2) {
+  return Teuchos::rcp( new MaxFunction(f1, f2) );
+}
+
+FunctionPtr max(FunctionPtr f1, double value) {
+  return Teuchos::rcp( new MaxFunction(f1, Function::constant(value)) );
+}
+
+FunctionPtr max(double value, FunctionPtr f2) {
+  return Teuchos::rcp( new MaxFunction(f2, Function::constant(value)) );
 }
 
 string Sin_y::displayString() {
@@ -2616,7 +2739,52 @@ void SimpleSolutionFunction::importCellData(std::vector<GlobalIndexType> cells) 
 
 void SimpleSolutionFunction::values(FieldContainer<double> &values, BasisCachePtr basisCache) {
   bool dontWeightForCubature = false;
-  _soln->solutionValues(values, _var->ID(), basisCache, dontWeightForCubature, _var->op());
+  if (basisCache->mesh().get() != NULL) { // then we assume that the BasisCache is appropriate for solution's mesh...
+    _soln->solutionValues(values, _var->ID(), basisCache, dontWeightForCubature, _var->op());
+  } else {
+    // the following adapted from PreviousSolutionFunction.  Probably would do well to consolidate
+    // that class with this one at some point...
+    LinearTermPtr solnExpression = 1.0 * _var;
+    // get the physicalPoints, and make a basisCache for each...
+    FieldContainer<double> physicalPoints = basisCache->getPhysicalCubaturePoints();
+    FieldContainer<double> value(1,1); // assumes scalar-valued solution function.
+    int numCells = physicalPoints.dimension(0);
+    int numPoints = physicalPoints.dimension(1);
+    int spaceDim = physicalPoints.dimension(2);
+    physicalPoints.resize(numCells*numPoints,spaceDim);
+    vector< ElementPtr > elements = _soln->mesh()->elementsForPoints(physicalPoints, false); // false: don't make elements null just because they're off-rank.
+    FieldContainer<double> point(1,1,spaceDim);
+    FieldContainer<double> refPoint(1,spaceDim);
+    int combinedIndex = 0;
+    vector<GlobalIndexType> cellID;
+    cellID.push_back(-1);
+    BasisCachePtr basisCacheOnePoint;
+    for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
+      for (int ptIndex=0; ptIndex<numPoints; ptIndex++, combinedIndex++) {
+        if (elements[combinedIndex].get()==NULL) continue; // no element found for point; skip it…
+        ElementTypePtr elemType = elements[combinedIndex]->elementType();
+        for (int d=0; d<spaceDim; d++) {
+          point(0,0,d) = physicalPoints(combinedIndex,d);
+        }
+        if (elements[combinedIndex]->cellID() != cellID[0]) {
+          cellID[0] = elements[combinedIndex]->cellID();
+          basisCacheOnePoint = Teuchos::rcp( new BasisCache(elemType, _soln->mesh()) );
+          basisCacheOnePoint->setPhysicalCellNodes(_soln->mesh()->physicalCellNodesForCell(cellID[0]),cellID,false); // false: don't createSideCacheToo
+        }
+        refPoint.resize(1,1,spaceDim); // CamelliaCellTools::mapToReferenceFrame wants a numCells dimension...  (perhaps it shouldn't, though!)
+        // compute the refPoint:
+        CamelliaCellTools::mapToReferenceFrame(refPoint,point,_soln->mesh()->getTopology(), cellID[0],
+                                               _soln->mesh()->globalDofAssignment()->getCubatureDegree(cellID[0]));
+        refPoint.resize(1,spaceDim);
+        basisCacheOnePoint->setRefCellPoints(refPoint);
+        //          cout << "refCellPoints:\n " << refPoint;
+        //          cout << "physicalCubaturePoints:\n " << basisCacheOnePoint->getPhysicalCubaturePoints();
+        solnExpression->evaluate(value, _soln, basisCacheOnePoint);
+        //          cout << "value at point (" << point(0,0) << ", " << point(0,1) << ") = " << value(0,0) << endl;
+        values(cellIndex,ptIndex) = value(0,0);
+      }
+    }
+  }
   if (_var->varType()==FLUX) { // weight by sideParity
     sideParity()->scalarMultiplyFunctionValues(values, basisCache);
   }
