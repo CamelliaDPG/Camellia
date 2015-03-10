@@ -493,7 +493,7 @@ void run(ProblemChoice problemChoice, int &iterationCount, int spaceDim, int num
          bool useStaticCondensation, bool precondition, bool schwarzOnly, bool useCamelliaAdditiveSchwarz, int schwarzOverlap,
          GMGOperator::FactorType schwarzBlockFactorization, int schwarzLevelOfFill, double schwarzFillRatio,
          Solver::SolverChoice coarseSolverChoice, double cgTol, int cgMaxIterations, int AztecOutputLevel,
-         bool reportTimings, double &solveTime, bool reportEnergyError, int numCellsRootMesh) {
+         bool reportTimings, double &solveTime, bool reportEnergyError, int numCellsRootMesh, bool hOnly) {
   int rank = Teuchos::GlobalMPISession::getRank();
   
   if (numCellsRootMesh == -1) {
@@ -508,6 +508,13 @@ void run(ProblemChoice problemChoice, int &iterationCount, int spaceDim, int num
   
   MeshPtr mesh = solution->mesh();
   BCPtr bc = solution->bc();
+  
+  if (hOnly) {
+    // then replace the k0Mesh with the h-coarsened mesh:
+    MeshTopologyPtr coarseMeshTopo = mesh->getTopology()->getRootMeshTopology();
+    int H1OrderP0 = k + 1;
+    k0Mesh = Teuchos::rcp( new Mesh(coarseMeshTopo, mesh->bilinearForm(), H1OrderP0, delta_k) );
+  }
   
   Teuchos::RCP<Solver> solver;
   if (!precondition) {
@@ -687,7 +694,7 @@ void runMany(ProblemChoice problemChoice, int spaceDim, int delta_k, int minCell
              GMGOperator::FactorType schwarzBlockFactorization, int schwarzLevelOfFill, double schwarzFillRatio,
              Solver::SolverChoice coarseSolverChoice,
              double cgTol, int cgMaxIterations, int aztecOutputLevel, RunManyPreconditionerChoices preconditionerChoices,
-             int k, int overlapLevel, int numCellsRootMesh, bool reportTimings) {
+             int k, int overlapLevel, int numCellsRootMesh, bool reportTimings, bool hOnly) {
   int rank = Teuchos::GlobalMPISession::getRank();
   
   string problemChoiceString;
@@ -878,7 +885,7 @@ void runMany(ProblemChoice problemChoice, int spaceDim, int delta_k, int minCell
                   useStaticCondensation, precondition, schwarzOnly, useCamelliaSchwarz, overlapValue,
                   schwarzBlockFactorization, schwarzLevelOfFill, schwarzFillRatio, coarseSolverChoice,
                   cgTol, cgMaxIterations, aztecOutputLevel, reportTimings, solveTime,
-                  reportEnergyError, numCellsRootMesh);
+                  reportEnergyError, numCellsRootMesh, hOnly);
               
               int numCells = pow((double)numCells1D, spaceDim);
               
@@ -909,6 +916,10 @@ void runMany(ProblemChoice problemChoice, int spaceDim, int delta_k, int minCell
     }
     if (k != -1) {
       filename << "_k" << k;
+    }
+    
+    if (hOnly) {
+      filename << "_hOnly";
     }
     
     // if coarse solver is not direct, then include in the file name:
@@ -977,6 +988,8 @@ int main(int argc, char *argv[]) {
   
   bool reportTimings = false;
   
+  bool hOnly = false;
+  
   string schwarzFactorizationTypeString = "Direct";
   
   string problemChoiceString = "Poisson";
@@ -999,6 +1012,8 @@ int main(int argc, char *argv[]) {
   cmdp.setOption("useSchwarzPreconditioner", "useGMGPreconditioner", &schwarzOnly);
   cmdp.setOption("useCamelliaAdditiveSchwarz", "useIfPackAdditiveSchwarz", &useCamelliaAdditiveSchwarz);
 
+  cmdp.setOption("hOnly", "notHOnly", &hOnly);
+  
   cmdp.setOption("schwarzFactorization", &schwarzFactorizationTypeString, "Schwarz block factorization strategy: Direct, IC, ILU");
   cmdp.setOption("schwarzFillRatio", &fillRatio, "Schwarz block factorization: fill ratio for IC");
   cmdp.setOption("schwarzLevelOfFill", &levelOfFill, "Schwarz block factorization: level of fill for ILU");
@@ -1098,7 +1113,7 @@ int main(int argc, char *argv[]) {
     run(problemChoice, iterationCount, spaceDim, numCells, k, delta_k, conformingTraces,
         useCondensedSolve, precondition, schwarzOnly, useCamelliaAdditiveSchwarz, schwarzOverlap,
         schwarzFactorType, levelOfFill, fillRatio, coarseSolverChoice,
-        cgTol, cgMaxIterations, AztecOutputLevel, reportTimings, solveTime, reportEnergyError, numCellsRootMesh);
+        cgTol, cgMaxIterations, AztecOutputLevel, reportTimings, solveTime, reportEnergyError, numCellsRootMesh, hOnly);
     
     if (rank==0) cout << "Iteration count: " << iterationCount << "; solve time " << solveTime << " seconds." << endl;
   } else {
@@ -1118,7 +1133,7 @@ int main(int argc, char *argv[]) {
             schwarzFactorType, levelOfFill, fillRatio,
             coarseSolverChoice,
             cgTol, cgMaxIterations, AztecOutputLevel,
-            runManySubsetChoice, k, schwarzOverlap, numCellsRootMesh, reportTimings);
+            runManySubsetChoice, k, schwarzOverlap, numCellsRootMesh, reportTimings, hOnly);
   }
   return 0;
 }
