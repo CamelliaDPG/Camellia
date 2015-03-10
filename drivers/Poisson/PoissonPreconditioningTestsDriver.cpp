@@ -953,7 +953,7 @@ int main(int argc, char *argv[]) {
   int numCells = 2;
   int numCellsRootMesh = -1;
   
-  maxDofsForKLU = 2000; // used when defining coarsest solve on 3-level solver -- will use SuperLUDist if not KLU
+  maxDofsForKLU = 30; // used when defining coarsest solve on 3-level solver -- will use SuperLUDist if not KLU
   coarseCGTol = 1e-6;
   coarseMaxIterations = 2000;
   
