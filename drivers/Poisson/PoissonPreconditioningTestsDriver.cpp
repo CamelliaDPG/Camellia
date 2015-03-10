@@ -492,8 +492,8 @@ void initializeSolutionAndCoarseMesh(SolutionPtr &solution, MeshPtr &coarseMesh,
 void run(ProblemChoice problemChoice, int &iterationCount, int spaceDim, int numCells, int k, int delta_k, bool conformingTraces,
          bool useStaticCondensation, bool precondition, bool schwarzOnly, bool useCamelliaAdditiveSchwarz, int schwarzOverlap,
          GMGOperator::FactorType schwarzBlockFactorization, int schwarzLevelOfFill, double schwarzFillRatio,
-         Solver::SolverChoice coarseSolverChoice, double cgTol, int cgMaxIterations, int AztecOutputLevel, bool reportTimings, bool reportEnergyError,
-         int numCellsRootMesh) {
+         Solver::SolverChoice coarseSolverChoice, double cgTol, int cgMaxIterations, int AztecOutputLevel,
+         bool reportTimings, double &solveTime, bool reportEnergyError, int numCellsRootMesh) {
   int rank = Teuchos::GlobalMPISession::getRank();
   
   if (numCellsRootMesh == -1) {
@@ -591,7 +591,17 @@ void run(ProblemChoice problemChoice, int &iterationCount, int spaceDim, int num
 //    solution->setWriteMatrixToFile(true, "/tmp/A_stokes.dat");
 //  }
   
+#ifdef HAVE_MPI
+  Epetra_MpiComm Comm(MPI_COMM_WORLD);
+  //cout << "rank: " << rank << " of " << numProcs << endl;
+#else
+  Epetra_SerialComm Comm;
+#endif
+  Epetra_Time timer(Comm);
+  
   int result = solution->solve(solver);
+  
+  solveTime = timer.ElapsedTime();
   
   if (result == 0) {
     if (!precondition) {
@@ -677,7 +687,7 @@ void runMany(ProblemChoice problemChoice, int spaceDim, int delta_k, int minCell
              GMGOperator::FactorType schwarzBlockFactorization, int schwarzLevelOfFill, double schwarzFillRatio,
              Solver::SolverChoice coarseSolverChoice,
              double cgTol, int cgMaxIterations, int aztecOutputLevel, RunManyPreconditionerChoices preconditionerChoices,
-             int k, int overlapLevel, int numCellsRootMesh) {
+             int k, int overlapLevel, int numCellsRootMesh, bool reportTimings) {
   int rank = Teuchos::GlobalMPISession::getRank();
   
   string problemChoiceString;
@@ -799,7 +809,7 @@ void runMany(ProblemChoice problemChoice, int spaceDim, int delta_k, int minCell
   }
   
   ostringstream results;
-  results << "Preconditioner\tSmoother\tOverlap\tnum_cells\tmesh_width\tk\tIterations\n";
+  results << "Preconditioner\tSmoother\tOverlap\tnum_cells\tmesh_width\tk\tIterations\tSolve_time\n";
   
   for (vector<bool>::iterator preconditionChoiceIt = preconditionValues.begin(); preconditionChoiceIt != preconditionValues.end(); preconditionChoiceIt++) {
     bool precondition = *preconditionChoiceIt;
@@ -862,19 +872,20 @@ void runMany(ProblemChoice problemChoice, int spaceDim, int delta_k, int minCell
               int k = *kValueIt;
               
               int iterationCount;
-              bool reportTimings = false;
               bool reportEnergyError = false;
+              double solveTime;
               run(problemChoice, iterationCount, spaceDim, numCells1D, k, delta_k, conformingTraces,
                   useStaticCondensation, precondition, schwarzOnly, useCamelliaSchwarz, overlapValue,
                   schwarzBlockFactorization, schwarzLevelOfFill, schwarzFillRatio, coarseSolverChoice,
-                  cgTol, cgMaxIterations, aztecOutputLevel, reportTimings, reportEnergyError, numCellsRootMesh);
+                  cgTol, cgMaxIterations, aztecOutputLevel, reportTimings, solveTime,
+                  reportEnergyError, numCellsRootMesh);
               
               int numCells = pow((double)numCells1D, spaceDim);
               
               ostringstream thisResult;
 
               thisResult << M_str << "\t" << S_str << "\t" << overlapValue << "\t" << numCells << "\t";
-              thisResult << numCells1D << "\t" << k << "\t" << iterationCount << endl;
+              thisResult << numCells1D << "\t" << k << "\t" << iterationCount << "\t" << solveTime << endl;
               
               if (rank==0) cout << thisResult.str();
               
@@ -964,6 +975,8 @@ int main(int argc, char *argv[]) {
   
   bool runAutomatic = false;
   
+  bool reportTimings = false;
+  
   string schwarzFactorizationTypeString = "Direct";
   
   string problemChoiceString = "Poisson";
@@ -1005,6 +1018,8 @@ int main(int argc, char *argv[]) {
   
   cmdp.setOption("coarseCGTol", &coarseCGTol, "coarse solve CG tolerance");
   cmdp.setOption("coarseMaxIterations", &coarseMaxIterations, "coarse solve max iterations");
+  
+  cmdp.setOption("reportTimings", "dontReportTimings", &reportTimings, "Report timings in Solution");
   
   cmdp.setOption("runMany", "runOne", &runAutomatic, "Run in automatic mode (ignores several input parameters)");
   cmdp.setOption("runManySubset", &runManySubsetString, "DontPrecondition, AllGMG, AllSchwarz, or All");
@@ -1073,17 +1088,19 @@ int main(int argc, char *argv[]) {
   
   if (! runAutomatic) {
     int iterationCount;
-    bool reportTimings = true, reportEnergyError = true;
+    bool reportEnergyError = true;
     
     if (schwarzOverlap == -1) schwarzOverlap = 0;
     if (k == -1) k = 2;
     
+    double solveTime;
+    
     run(problemChoice, iterationCount, spaceDim, numCells, k, delta_k, conformingTraces,
         useCondensedSolve, precondition, schwarzOnly, useCamelliaAdditiveSchwarz, schwarzOverlap,
         schwarzFactorType, levelOfFill, fillRatio, coarseSolverChoice,
-        cgTol, cgMaxIterations, AztecOutputLevel, reportTimings, reportEnergyError, numCellsRootMesh);
+        cgTol, cgMaxIterations, AztecOutputLevel, reportTimings, solveTime, reportEnergyError, numCellsRootMesh);
     
-    if (rank==0) cout << "Iteration count: " << iterationCount << endl;
+    if (rank==0) cout << "Iteration count: " << iterationCount << "; solve time " << solveTime << " seconds." << endl;
   } else {
     if (rank==0) {
       cout << "Running " << problemChoiceString << " solver in automatic mode (subset: ";
@@ -1101,7 +1118,7 @@ int main(int argc, char *argv[]) {
             schwarzFactorType, levelOfFill, fillRatio,
             coarseSolverChoice,
             cgTol, cgMaxIterations, AztecOutputLevel,
-            runManySubsetChoice, k, schwarzOverlap, numCellsRootMesh);
+            runManySubsetChoice, k, schwarzOverlap, numCellsRootMesh, reportTimings);
   }
   return 0;
 }
