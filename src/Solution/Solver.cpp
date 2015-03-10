@@ -51,6 +51,7 @@ Teuchos::RCP<Solver> Solver::getSolver(SolverChoice choice, bool saveFactorizati
       return Teuchos::rcp(gmgSolver);
     }
     default:
+      cout << "Solver choice " << solverChoiceString(choice) << " not recognized.\n";
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Solver choice not recognized!");
   }
 }
