@@ -80,8 +80,6 @@ private:
   std::vector<int> _phasePointOrdinalOffsets;
   
   Teuchos::RCP<Mesh> _mesh;
-  std::vector< Teuchos::RCP<BasisCache> > _basisCacheSides;
-  Teuchos::RCP<BasisCache> _basisCacheVolume;
   Intrepid::FieldContainer<double> _cubPoints, _cubWeights;
   Intrepid::FieldContainer<double> _allCubPoints, _allCubWeights; // when using phased cubature points, these store the whole set
   
@@ -112,6 +110,22 @@ private:
   Intrepid::FieldContainer<double> _sideNormalsSpaceTime; // for space-time CellTopologies, a copy of _sideNormals that includes the temporal component
   
   CellTopoPtr _cellTopo;
+
+  void initCubatureDegree(int maxTrialDegree, int maxTestDegree);
+  void initCubatureDegree(std::vector<int> &maxTrialDegrees, std::vector<int> &maxTestDegrees);
+  
+  void init(bool createSideCacheToo, bool interpretTensorTopologyAsSpaceTime);
+
+  void determineJacobian();
+  void determinePhysicalPoints();
+  
+  int maxTestDegree();
+  
+  void findMaximumDegreeBasisForSides(DofOrdering &trialOrdering);
+  
+  void recomputeMeasures();
+protected:
+  BasisCache() { _isSideCache = false; } // for the sake of some hackish subclassing
   
   map< pair< Camellia::Basis<>*, Camellia::EOperator >,
   Teuchos::RCP< const Intrepid::FieldContainer<double> > > _knownValues;
@@ -127,30 +141,18 @@ private:
   
   map< pair< Camellia::Basis<>*, Camellia::EOperator >,
   Teuchos::RCP< const Intrepid::FieldContainer<double> > > _knownValuesTransformedWeightedDottedWithNormal;
-
-  void initCubatureDegree(int maxTrialDegree, int maxTestDegree);
-  void initCubatureDegree(std::vector<int> &maxTrialDegrees, std::vector<int> &maxTestDegrees);
   
-  void init(bool createSideCacheToo, bool interpretTensorTopologyAsSpaceTime);
-
-  void determineJacobian();
-  void determinePhysicalPoints();
+  std::vector< BasisCachePtr > _basisCacheSides;
+  BasisCachePtr _basisCacheVolume;
   
-  // (private) side cache constructor:
-  BasisCache(int sideIndex, Teuchos::RCP<BasisCache> volumeCache, int trialDegree, int testDegree, BasisPtr multiBasisIfAny);
+  virtual void createSideCaches();
   
-  // private "fake" side cache constructor:
+  // protected side cache constructor:
+  BasisCache(int sideIndex, BasisCachePtr volumeCache, int trialDegree, int testDegree, BasisPtr multiBasisIfAny);
+  
+  // protected "fake" side cache constructor:
   BasisCache(int fakeSideOrdinal, BasisCachePtr volumeCache, const FieldContainer<double> &volumeRefPoints,
              const FieldContainer<double> &sideNormals, const FieldContainer<double> &cellSideParities);
-  
-  int maxTestDegree();
-  void createSideCaches();
-  
-  void findMaximumDegreeBasisForSides(DofOrdering &trialOrdering);
-  
-  void recomputeMeasures();
-protected:
-  BasisCache() { _isSideCache = false; } // for the sake of some hackish subclassing
   
   std::vector< BasisPtr > _maxDegreeBasisForSide; // stored in volume cache so we can get cubature right on sides, including broken sides (if this is a multiBasis)
   int _maxTestDegree, _maxTrialDegree;
@@ -170,20 +172,21 @@ public:
              DofOrdering &trialOrdering, int maxTestDegree, bool createSideCacheToo = false);
   virtual ~BasisCache() {}
   
-  Teuchos::RCP< const Intrepid::FieldContainer<double> > getValues(BasisPtr basis, Camellia::EOperator op, bool useCubPointsSideRefCell = false);
   Intrepid::FieldContainer<double> & getWeightedMeasures();
   Intrepid::FieldContainer<double> getCellMeasures();
-  Teuchos::RCP< const Intrepid::FieldContainer<double> > getTransformedValues(BasisPtr basis, Camellia::EOperator op, bool useCubPointsSideRefCell = false);
-  Teuchos::RCP< const Intrepid::FieldContainer<double> > getTransformedWeightedValues(BasisPtr basis, Camellia::EOperator op, bool useCubPointsSideRefCell = false);
+  
+  virtual Teuchos::RCP< const Intrepid::FieldContainer<double> > getValues(BasisPtr basis, Camellia::EOperator op, bool useCubPointsSideRefCell = false);
+  virtual Teuchos::RCP< const Intrepid::FieldContainer<double> > getTransformedValues(BasisPtr basis, Camellia::EOperator op, bool useCubPointsSideRefCell = false);
+  virtual Teuchos::RCP< const Intrepid::FieldContainer<double> > getTransformedWeightedValues(BasisPtr basis, Camellia::EOperator op, bool useCubPointsSideRefCell = false);
   
   // side variants:
-  Teuchos::RCP< const Intrepid::FieldContainer<double> > getValues(BasisPtr basis, Camellia::EOperator op, int sideOrdinal, bool useCubPointsSideRefCell = false);
-  Teuchos::RCP< const Intrepid::FieldContainer<double> > getTransformedValues(BasisPtr basis, Camellia::EOperator op, int sideOrdinal, bool useCubPointsSideRefCell = false);
-  Teuchos::RCP< const Intrepid::FieldContainer<double> > getTransformedWeightedValues(BasisPtr basis, Camellia::EOperator op, int sideOrdinal, bool useCubPointsSideRefCell = false);
+  virtual Teuchos::RCP< const Intrepid::FieldContainer<double> > getValues(BasisPtr basis, Camellia::EOperator op, int sideOrdinal, bool useCubPointsSideRefCell = false);
+  virtual Teuchos::RCP< const Intrepid::FieldContainer<double> > getTransformedValues(BasisPtr basis, Camellia::EOperator op, int sideOrdinal, bool useCubPointsSideRefCell = false);
+  virtual Teuchos::RCP< const Intrepid::FieldContainer<double> > getTransformedWeightedValues(BasisPtr basis, Camellia::EOperator op, int sideOrdinal, bool useCubPointsSideRefCell = false);
   
   bool isSideCache();
-  Teuchos::RCP<BasisCache> getSideBasisCache(int sideOrdinal);
-  Teuchos::RCP<BasisCache> getVolumeBasisCache(); // from sideCache
+  BasisCachePtr getSideBasisCache(int sideOrdinal);
+  BasisCachePtr getVolumeBasisCache(); // from sideCache
   
   const std::vector<GlobalIndexType> & cellIDs();
   
