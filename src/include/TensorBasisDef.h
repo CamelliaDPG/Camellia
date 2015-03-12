@@ -8,6 +8,7 @@
 
 #include "CamelliaCellTools.h"
 
+#define TENSOR_POINT_ORDINAL(spacePointOrdinal,timePointOrdinal,numSpacePoints) timePointOrdinal * numSpacePoints + spacePointOrdinal
 #define TENSOR_FIELD_ORDINAL(spaceFieldOrdinal,timeFieldOrdinal) timeFieldOrdinal * _spatialBasis->getCardinality() + spaceFieldOrdinal
 #define TENSOR_DOF_OFFSET_ORDINAL(spaceDofOffsetOrdinal,timeDofOffsetOrdinal,spaceDofsForSubcell) timeDofOffsetOrdinal * spaceDofsForSubcell + spaceDofOffsetOrdinal
 
@@ -74,33 +75,36 @@ namespace Camellia {
   }
 
   template<class Scalar, class ArrayScalar>
-  void TensorBasis<Scalar,ArrayScalar>::getTensorValues(ArrayScalar& outputValues, std::vector< const ArrayScalar> & componentOutputValuesVector, std::vector<Intrepid::EOperator> operatorTypes) const {
+  void TensorBasis<Scalar,ArrayScalar>::getTensorValues(ArrayScalar& outputValues, std::vector< ArrayScalar> & componentOutputValuesVector,
+                                                        std::vector<Intrepid::EOperator> operatorTypes) const {
     // outputValues can have dimensions (C,F,P,...) or (F,P,...)
     
     if (operatorTypes.size() != 2) {
       TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument, "only two-component tensor bases supported right now");
     }
     
-    Intrepid::EOperator spatialOperator = operatorTypes[0];
-    int rankAdjustment;
-    switch (spatialOperator) {
-      case(OPERATOR_VALUE):
-        rankAdjustment = 0;
-        break;
-      case(OPERATOR_GRAD):
-        rankAdjustment = 1;
-        break;
-      case(OPERATOR_CURL):
-        if (this->rangeRank() == 1)
-        break;
-      case(OPERATOR_DIV):
-        rankAdjustment = -1;
-        break;
-      default:
-        TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unhandled operator type.");
+    Intrepid::EOperator spaceOp = operatorTypes[0], timeOp = operatorTypes[1];
+    
+    if (timeOp == OPERATOR_GRAD) {
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "getTensorBasisValues() doesn't support taking gradient of temporal basis.");
     }
     
-    int valuesRank = this->rangeRank() + rankAdjustment; // should have 2 additional dimensions, plus optionally the cell dimension
+    std::map<Intrepid::EOperator, int> rankAdjustmentForOperator;
+    
+    rankAdjustmentForOperator[OPERATOR_VALUE] = 0;
+    rankAdjustmentForOperator[OPERATOR_GRAD] = 1;
+    rankAdjustmentForOperator[OPERATOR_DIV] = -1;
+    rankAdjustmentForOperator[OPERATOR_CURL] = 0; // in 2D, this toggles between +1 and -1, depending on the current rank (scalar --> vector, vector --> scalar)
+    
+    int valuesRank = _spatialBasis->rangeRank() + rankAdjustmentForOperator[spaceOp];
+    if ((_spatialBasis->rangeDimension() == 2) && (spaceOp==OPERATOR_CURL)) {
+      if (_spatialBasis->rangeRank() == 0) valuesRank += 1;
+      if (_spatialBasis->rangeRank() == 1) valuesRank -= 1;
+    }
+
+    const ArrayScalar* spatialValues = &componentOutputValuesVector[0];
+    const ArrayScalar* temporalValues = &componentOutputValuesVector[1];
+    
     int fieldIndex;
     if (outputValues.rank() == valuesRank + 3) {
       fieldIndex = 1; // (C,F,...)
@@ -109,10 +113,11 @@ namespace Camellia {
     } else {
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "outputValues shape must be either (C,F,P,...) or (F,P,...)");
     }
-    
-    const ArrayScalar* spatialValues = &componentOutputValuesVector[0];
-    const ArrayScalar* temporalValues = &componentOutputValuesVector[1];
-    
+    int valuesPerPointSpace = 1;
+    for (int rankOrdinal=0; rankOrdinal < valuesRank; rankOrdinal++) {
+      valuesPerPointSpace *= spatialValues->dimension(rankOrdinal + fieldIndex + 2); // start with the dimension after the point dimension
+    }
+
     //cout << "componentOutputValues: \n" << componentOutputValues;
     TEUCHOS_TEST_FOR_EXCEPTION( outputValues.dimension(fieldIndex) != this->getCardinality(),
                                std::invalid_argument, "outputValues.dimension(fieldIndex) != this->getCardinality()");
@@ -126,51 +131,44 @@ namespace Camellia {
     Teuchos::Array<int> dimensions;
     outputValues.dimensions(dimensions);
     outputValues.initialize(0.0);
-    int numPoints = dimensions[fieldIndex+1];
-    int numComponents = dimensions[fieldIndex+2];
-    // TODO: finish writing this...
-    /*
-    if (_numComponents != numComponents) {
-      TEUCHOS_TEST_FOR_EXCEPTION ( _numComponents != numComponents, std::invalid_argument,
-                                  "fieldIndex+2 dimension of outputValues must match the number of vector components.");
-    }
-    int componentCardinality = _componentBasis->getCardinality();
+    int numPointsSpace = spatialValues->dimension(fieldIndex + 1);
+    int numPointsTime = temporalValues->dimension(fieldIndex + 1);
     
-    for (int i=fieldIndex+3; i<dimensions.size(); i++) {
-      dimensions[i] = 0;
-    }
+    Teuchos::Array<int> spaceTimeValueCoordinate(outputValues.rank(), 0);
+    Teuchos::Array<int> spatialValueCoordinate(outputValues.rank(), 0);
     
-    int numCells = (fieldIndex==1) ? dimensions[0] : 1;
+    int numCells = (fieldIndex==0) ? 1 : outputValues.dimension(0);
     
-    int compValuesPerPoint = componentOutputValues.size() / (numCells * componentCardinality * numPoints);
-    
-    for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
-      if (fieldIndex==1) {
-        dimensions[0] = cellIndex;
+    for (int cellOrdinal=0; cellOrdinal < numCells; cellOrdinal++) {
+      if (fieldIndex==1) { // have a cell index
+        spaceTimeValueCoordinate[0] = cellOrdinal;
+        spatialValueCoordinate[0] = cellOrdinal;
       }
-      for (int field=0; field<componentCardinality; field++) {
-        for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
-          dimensions[fieldIndex+1] = ptIndex;
-          dimensions[fieldIndex+2] = 0; // component dimension
-          Teuchos::Array<int> compIndexArray = dimensions;
-          compIndexArray.pop_back(); // removes the last 0 (conceptually it's fieldIndex + 2 that corresponds to the comp dimension, but it's all 0s from fieldIndex+2 on...)
-          compIndexArray[fieldIndex] = field;
-          int compEnumerationOffset = componentOutputValues.getEnumeration(compIndexArray);
-          for (int comp=0; comp<numComponents; comp++) {
-            dimensions[fieldIndex] = field + componentCardinality * comp;
-            dimensions[fieldIndex+2] = comp;
-            int outputEnumerationOffset = outputValues.getEnumeration(dimensions);
-            const double *compValue = &componentOutputValues[compEnumerationOffset];
-            double *outValue = &outputValues[outputEnumerationOffset];
-            for (int i=0; i<compValuesPerPoint; i++) {
-              *outValue++ = *compValue++;
+      // combine values:
+      for (int spaceFieldOrdinal=0; spaceFieldOrdinal<_spatialBasis->getCardinality(); spaceFieldOrdinal++) {
+        spatialValueCoordinate[0] = spaceFieldOrdinal;
+        for (int timeFieldOrdinal=0; timeFieldOrdinal<_temporalBasis->getCardinality(); timeFieldOrdinal++) {
+          int spaceTimeFieldOrdinal = TENSOR_FIELD_ORDINAL(spaceFieldOrdinal, timeFieldOrdinal);
+          spaceTimeValueCoordinate[0] = spaceTimeFieldOrdinal;
+          for (int timePointOrdinal=0; timePointOrdinal<numPointsTime; timePointOrdinal++) {
+            double temporalValue = (fieldIndex==0) ? (*temporalValues)(timeFieldOrdinal,timePointOrdinal) : (*temporalValues)(cellOrdinal,timeFieldOrdinal,timePointOrdinal);
+            for (int spacePointOrdinal=0; spacePointOrdinal<numPointsSpace; spacePointOrdinal++) {
+              int spaceTimePointOrdinal = TENSOR_POINT_ORDINAL(spacePointOrdinal, timePointOrdinal, numPointsSpace);
+              spatialValueCoordinate[fieldIndex+1] = spacePointOrdinal;
+              spaceTimeValueCoordinate[fieldIndex+1] = spaceTimePointOrdinal;
+              
+              int spatialValueEnumeration = spatialValues->getEnumeration(spatialValueCoordinate);
+              int spaceTimeValueEnumeration = outputValues.getEnumeration(spaceTimeValueCoordinate);
+              
+              for (int offset=0; offset<valuesPerPointSpace; offset++) {
+                double spatialValue = (*spatialValues)[spatialValueEnumeration+offset];
+                outputValues[spaceTimeValueEnumeration+offset] = spatialValue * temporalValue;
+              }
             }
           }
         }
       }
-    }*/
-    //    cout << "getVectorizedValues: componentOutputValues:\n" << componentOutputValues;
-    //    cout << "getVectorizedValues: outputValues:\n" << outputValues;
+    }
   }
 
   // range info for basis values:
