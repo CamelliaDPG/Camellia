@@ -33,9 +33,143 @@
 using namespace Camellia;
 
 namespace {
-  TEUCHOS_UNIT_TEST( TensorBasis, BasisOrdinalsForSubcell ) {
-    // TODO: write this test
+  typedef Intrepid::FieldContainer<double> FC;
+  
+  std::vector<BasisPtr> getSpatialBases(int spatialPolyOrder) {
+    BasisFactoryPtr basisFactory = BasisFactory::basisFactory();
+    
+    // set up some spatial bases to test against
+    std::vector< BasisPtr > spatialBases;
+    {
+      int H1Order = spatialPolyOrder + 1;
+      BasisPtr basis = basisFactory->getBasis(H1Order, shards::Line<2>::key, Camellia::FUNCTION_SPACE_HVOL);
+      spatialBases.push_back(basis);
+      basis = basisFactory->getBasis(H1Order, shards::Line<2>::key, Camellia::FUNCTION_SPACE_HGRAD);
+      spatialBases.push_back(basis);
+      basis = basisFactory->getBasis(H1Order, shards::Quadrilateral<4>::key, Camellia::FUNCTION_SPACE_HGRAD);
+      spatialBases.push_back(basis);
+      basis = basisFactory->getBasis(H1Order, shards::Quadrilateral<4>::key, Camellia::FUNCTION_SPACE_HCURL);
+      spatialBases.push_back(basis);
+      basis = basisFactory->getBasis(H1Order, shards::Quadrilateral<4>::key, Camellia::FUNCTION_SPACE_HDIV);
+      spatialBases.push_back(basis);
+      basis = basisFactory->getBasis(H1Order, shards::Quadrilateral<4>::key, Camellia::FUNCTION_SPACE_HVOL);
+      spatialBases.push_back(basis);
+      basis = basisFactory->getBasis(H1Order, shards::Hexahedron<8>::key, Camellia::FUNCTION_SPACE_HGRAD);
+      spatialBases.push_back(basis);
+      basis = basisFactory->getBasis(H1Order, shards::Hexahedron<8>::key, Camellia::FUNCTION_SPACE_HCURL);
+      spatialBases.push_back(basis);
+      basis = basisFactory->getBasis(H1Order, shards::Hexahedron<8>::key, Camellia::FUNCTION_SPACE_HDIV);
+      spatialBases.push_back(basis);
+      basis = basisFactory->getBasis(H1Order, shards::Hexahedron<8>::key, Camellia::FUNCTION_SPACE_HVOL);
+      spatialBases.push_back(basis);
+    }
+    return spatialBases;
+  }
+  
+  BasisPtr getTimeBasis(int timePolyOrder) {
+    BasisFactoryPtr basisFactory = BasisFactory::basisFactory();
+    BasisPtr timeBasis = basisFactory->getBasis(timePolyOrder + 1, shards::Line<2>::key, Camellia::FUNCTION_SPACE_HVOL);
+    return timeBasis;
+  }
+  
+  FC spacePointsForDimension(int spaceDim) {
+    int numSpacePoints = 3;
+    FC spatialPoints(numSpacePoints,spaceDim);
+    
+    switch (spaceDim) {
+      case 1:
+        spatialPoints(0,0) = -0.05;
+        spatialPoints(1,0) = 0.33;
+        spatialPoints(2,0) = 1.00;
+        break;
+      case 2:
+        spatialPoints(0,0) = -1.0;
+        spatialPoints(0,1) = 0.0;
+        spatialPoints(1,0) = 0.5;
+        spatialPoints(1,1) = -0.33;
+        spatialPoints(2,0) = 1.0;
+        spatialPoints(2,1) = 1.0;
+        break;
+      case 3:
+        spatialPoints(0,0) = -1.0;
+        spatialPoints(0,1) = 0.0;
+        spatialPoints(0,2) = 0.0;
+        spatialPoints(1,0) = 0.5;
+        spatialPoints(1,1) = -0.33;
+        spatialPoints(1,2) = 1.0;
+        spatialPoints(2,0) = 1.0;
+        spatialPoints(2,1) = 1.0;
+        spatialPoints(2,2) = 1.0;
+        break;
+      default:
+        break;
+    }
+    return spatialPoints;
+   }
+  
+  FC timePoints() {
+    int numTimePoints = 3;
+    
+    FC temporalPoints(numTimePoints, 1);
+    temporalPoints(0,0) = -0.5; // these are in reference space; we don't actually have negative time values
+    temporalPoints(1,0) = 0.33; // 0.33;
+    temporalPoints(2,0) = 1.0; // 1.0;
+    return temporalPoints;
+  }
+  
+  FC tensorPointsForDimension(int spaceDim) {
+    FC spatialPoints = spacePointsForDimension(spaceDim);
+    FC temporalPoints = timePoints();
+    
+    int numSpacePoints = spatialPoints.dimension(0);
+    int numTimePoints = temporalPoints.dimension(0);
+    
+    int numTensorPoints = numSpacePoints * numTimePoints;
+    FC tensorPoints = FC(numTensorPoints, spaceDim + 1);
+    for (int i=0; i<numSpacePoints; i++) {
+      FC spaceTimePoint(spaceDim + 1);
+      for (int d=0; d<spaceDim; d++) {
+        spaceTimePoint(d) = spatialPoints(i,d);
+      }
+      for (int j=0; j<numTimePoints; j++) {
+        spaceTimePoint(spaceDim) = temporalPoints(j,0);
+        int pointOrdinal = i + j * numSpacePoints;
+        for (int d=0; d<spaceDim+1; d++) {
+          tensorPoints(pointOrdinal,d) = spaceTimePoint(d);
+        }
+      }
+    }
+    return tensorPoints;
+  }
+  
+  void sizeFCForBasisValues(FC &values, BasisPtr basis, int numPoints, Intrepid::EOperator op) {
+    std::map<Intrepid::EOperator, int> rankAdjustmentForOperator;
+    
+    rankAdjustmentForOperator[OPERATOR_VALUE] = 0;
+    rankAdjustmentForOperator[OPERATOR_GRAD] = 1;
+    rankAdjustmentForOperator[OPERATOR_DIV] = -1;
+    rankAdjustmentForOperator[OPERATOR_CURL] = 0; // in 2D, this toggles between +1 and -1, depending on the current rank (scalar --> vector, vector --> scalar)
+    
+    int spaceDim = basis->domainTopology()->getDimension();
+    
+    int rank = basis->rangeRank() + rankAdjustmentForOperator[op];
+    if ((basis->rangeDimension() == 2) && (op==OPERATOR_CURL)) {
+      if (basis->rangeRank() == 0) rank += 1;
+      if (basis->rangeRank() == 1) rank -= 1;
+    }
+      
+    if (rank == 0) { // scalar
+      values.resize(basis->getCardinality(), numPoints);
+    } else if (rank == 1) { // vector
+      values.resize(basis->getCardinality(), numPoints, spaceDim);
+    } else if (rank == 2) { // tensor
+      values.resize(basis->getCardinality(), numPoints, spaceDim, spaceDim);
+    } else {
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unhandled tensorial degree");
+    }
+  }
 
+  TEUCHOS_UNIT_TEST( TensorBasis, BasisOrdinalsForSubcell ) {
     int timeH1Order = 2, spaceH1Order = 2;
     
     CellTopoPtr line = CellTopology::line();
@@ -91,6 +225,57 @@ namespace {
     TEST_EQUALITY(basisOrdinalMap.size(), spaceNodeOrdinalCount * timeNodeOrdinalCount);
   }
   
+  TEUCHOS_UNIT_TEST( TensorBasis, GetTensorValues ) {
+    int spatialPolyOrder = 1;
+    std::vector< BasisPtr > spatialBases = getSpatialBases(spatialPolyOrder);
+    
+    int timePolyOrder = 1;
+    BasisPtr timeBasis = getTimeBasis(timePolyOrder);
+    
+    double tol = 1e-15;
+    for (int i=0; i<spatialBases.size(); i++) {
+      BasisPtr spatialBasis = spatialBases[i];
+      int spaceDim = spatialBasis->domainTopology()->getDimension();
+      
+      FC temporalPoints = timePoints();
+      FC spatialPoints = spacePointsForDimension(spaceDim);
+      FC tensorPoints = tensorPointsForDimension(spaceDim);
+      
+      int numSpacePoints = spatialPoints.dimension(0);
+      int numTimePoints = temporalPoints.dimension(0);
+      int numTensorPoints = tensorPoints.dimension(0);
+      
+      typedef Camellia::TensorBasis<double, FieldContainer<double> > TensorBasis;
+      Teuchos::RCP<TensorBasis> tensorBasis = Teuchos::rcp( new TensorBasis(spatialBasis, timeBasis) );
+      FC spatialValues, temporalValues(timeBasis->getCardinality(), numTimePoints), tensorValuesExpected, tensorValuesActual;
+      Intrepid::EOperator op = OPERATOR_VALUE;
+      Intrepid::EOperator timeOp = OPERATOR_VALUE;
+      
+      sizeFCForBasisValues(spatialValues, spatialBasis, numSpacePoints, op);
+      sizeFCForBasisValues(tensorValuesExpected, tensorBasis, numTensorPoints, op);
+    
+      spatialBasis->getValues(spatialValues, spatialPoints, op);
+      timeBasis->getValues(temporalValues, temporalPoints, timeOp);
+      tensorBasis->getValues(tensorValuesExpected, tensorPoints, op, timeOp);
+      
+      out << "spatialValues:\n" << spatialValues;
+      out << "temporalValues:\n" << temporalValues;
+      
+      sizeFCForBasisValues(tensorValuesActual, tensorBasis, numTensorPoints, op);
+      vector<FC> componentValues(2);
+      componentValues[0] = spatialValues;
+      componentValues[1] = temporalValues;
+      
+      vector<Intrepid::EOperator> componentOps(2);
+      componentOps[0] = op;
+      componentOps[1] = timeOp;
+    
+      tensorBasis->getTensorValues(tensorValuesActual, componentValues, componentOps);
+      
+      TEST_COMPARE_FLOATING_ARRAYS(tensorValuesActual, tensorValuesExpected, tol);
+    }
+  }
+  
   TEUCHOS_UNIT_TEST( TensorBasis, TensorBasisOrderingAgreesWithTensorTopologyOrdering ) {
     int H1Order = 1;
     
@@ -124,148 +309,37 @@ namespace {
   
   TEUCHOS_UNIT_TEST( TensorBasis, TensorBasisBasicValues ) {
     int spatialPolyOrder = 1;
-    
-    BasisFactoryPtr basisFactory = BasisFactory::basisFactory();
-    
-    // set up some spatial bases to test against
-    std::vector< BasisPtr > spatialBases;
-    {
-      int H1Order = spatialPolyOrder + 1;
-      BasisPtr basis = basisFactory->getBasis(H1Order, shards::Line<2>::key, Camellia::FUNCTION_SPACE_HVOL);
-      spatialBases.push_back(basis);
-      basis = basisFactory->getBasis(H1Order, shards::Line<2>::key, Camellia::FUNCTION_SPACE_HGRAD);
-      spatialBases.push_back(basis);
-      basis = basisFactory->getBasis(H1Order, shards::Quadrilateral<4>::key, Camellia::FUNCTION_SPACE_HGRAD);
-      spatialBases.push_back(basis);
-      basis = basisFactory->getBasis(H1Order, shards::Quadrilateral<4>::key, Camellia::FUNCTION_SPACE_HCURL);
-      spatialBases.push_back(basis);
-      basis = basisFactory->getBasis(H1Order, shards::Quadrilateral<4>::key, Camellia::FUNCTION_SPACE_HDIV);
-      spatialBases.push_back(basis);
-      basis = basisFactory->getBasis(H1Order, shards::Quadrilateral<4>::key, Camellia::FUNCTION_SPACE_HVOL);
-      spatialBases.push_back(basis);
-      basis = basisFactory->getBasis(H1Order, shards::Hexahedron<8>::key, Camellia::FUNCTION_SPACE_HGRAD);
-      spatialBases.push_back(basis);
-      basis = basisFactory->getBasis(H1Order, shards::Hexahedron<8>::key, Camellia::FUNCTION_SPACE_HCURL);
-      spatialBases.push_back(basis);
-      basis = basisFactory->getBasis(H1Order, shards::Hexahedron<8>::key, Camellia::FUNCTION_SPACE_HDIV);
-      spatialBases.push_back(basis);
-      basis = basisFactory->getBasis(H1Order, shards::Hexahedron<8>::key, Camellia::FUNCTION_SPACE_HVOL);
-      spatialBases.push_back(basis);
-    }
+    std::vector< BasisPtr > spatialBases = getSpatialBases(spatialPolyOrder);
     
     int timePolyOrder = 1;
-    BasisPtr timeBasis = basisFactory->getBasis(timePolyOrder + 1, shards::Line<2>::key, Camellia::FUNCTION_SPACE_HVOL);
-    
-    typedef Intrepid::FieldContainer<double> FC;
-    int numSpacePoints = 3, numTimePoints = 3;
-    FC spatialPoints1D(numSpacePoints,1), spatialPoints2D(numSpacePoints,2), spatialPoints3D(numSpacePoints,3);
-    
-    spatialPoints1D(0,0) = -0.05;
-    spatialPoints1D(1,0) = 0.33;
-    spatialPoints1D(2,0) = 1.00;
-    
-    spatialPoints2D(0,0) = -1.0;
-    spatialPoints2D(0,1) = 0.0;
-    spatialPoints2D(1,0) = 0.5;
-    spatialPoints2D(1,1) = -0.33;
-    spatialPoints2D(2,0) = 1.0;
-    spatialPoints2D(2,1) = 1.0;
-    
-    spatialPoints3D(0,0) = -1.0;
-    spatialPoints3D(0,1) = 0.0;
-    spatialPoints3D(0,2) = 0.0;
-    spatialPoints3D(1,0) = 0.5;
-    spatialPoints3D(1,1) = -0.33;
-    spatialPoints3D(1,2) = 1.0;
-    spatialPoints3D(2,0) = 1.0;
-    spatialPoints3D(2,1) = 1.0;
-    spatialPoints3D(2,2) = 1.0;
-    
-    vector< FC > spacePointsForDimension(3), tensorPointsForDimension(3);
-    spacePointsForDimension[0] = spatialPoints1D;
-    spacePointsForDimension[1] = spatialPoints2D;
-    spacePointsForDimension[2] = spatialPoints3D;
-    
-    FC temporalPoints(numTimePoints, 1);
-    temporalPoints(0,0) = 0.5; // these are in reference space; we don't actually have negative time values
-    temporalPoints(1,0) = 0.5; // 0.33;
-    temporalPoints(2,0) = 0.5; // 1.0;
-    
-    int numTensorPoints = numSpacePoints * numTimePoints;
-    for (int spaceDim=1; spaceDim<=3; spaceDim++) {
-      FC spatialPoints = spacePointsForDimension[spaceDim - 1];
-      FC tensorPoints = FC(numTensorPoints, spaceDim + 1);
-      for (int i=0; i<numSpacePoints; i++) {
-        FC spaceTimePoint(spaceDim + 1);
-        for (int d=0; d<spaceDim; d++) {
-          spaceTimePoint(d) = spatialPoints(i,d);
-        }
-        for (int j=0; j<numTimePoints; j++) {
-          spaceTimePoint(spaceDim) = temporalPoints(j,0);
-          int pointOrdinal = i * numTimePoints + j;
-          for (int d=0; d<spaceDim+1; d++) {
-            tensorPoints(pointOrdinal,d) = spaceTimePoint(d);
-          }
-        }
-      }
-      tensorPointsForDimension[spaceDim-1] = tensorPoints;
-    }
-    
-    std::map<Intrepid::EOperator, int> rankAdjustmentForOperator;
-    
-    rankAdjustmentForOperator[OPERATOR_VALUE] = 0;
-    rankAdjustmentForOperator[OPERATOR_GRAD] = 1;
-    rankAdjustmentForOperator[OPERATOR_DIV] = -1;
-    rankAdjustmentForOperator[OPERATOR_CURL] = 0; // in 2D, this toggles between +1 and -1, depending on the current rank (scalar --> vector, vector --> scalar)
+    BasisPtr timeBasis = getTimeBasis(timePolyOrder);
     
     for (int i=0; i<spatialBases.size(); i++) {
       BasisPtr spatialBasis = spatialBases[i];
+      int spaceDim = spatialBasis->domainTopology()->getDimension();
+
+      FC temporalPoints = timePoints();
+      FC spatialPoints = spacePointsForDimension(spaceDim);
+      FC tensorPoints = tensorPointsForDimension(spaceDim);
+
+      int numSpacePoints = spatialPoints.dimension(0);
+      int numTimePoints = temporalPoints.dimension(0);
+      int numTensorPoints = tensorPoints.dimension(0);
+      
       typedef Camellia::TensorBasis<double, FieldContainer<double> > TensorBasis;
       Teuchos::RCP<TensorBasis> tensorBasis = Teuchos::rcp( new TensorBasis(spatialBasis, timeBasis) );
       FC spatialValues, temporalValues(timeBasis->getCardinality(), numTimePoints), tensorValues;
       Intrepid::EOperator op = OPERATOR_VALUE;
       Intrepid::EOperator timeOp = OPERATOR_VALUE;
       
-      int spaceDim = spatialBasis->domainTopology()->getDimension();
+      sizeFCForBasisValues(spatialValues, spatialBasis, numSpacePoints, op);
+      sizeFCForBasisValues(tensorValues, tensorBasis, numTensorPoints, op);
       
-      int tensorCardinality = spatialBasis->getCardinality() * timeBasis->getCardinality();
-      
-      int rank = spatialBasis->rangeRank() + rankAdjustmentForOperator[op];
-      if ((spatialBasis->rangeDimension() == 2) && (op==OPERATOR_CURL)) {
-        if (spaceDim == 0) rank += 1;
-        if (spaceDim == 1) rank -= 1;
-      }
-      
-      FC spatialPoints = spacePointsForDimension[spaceDim-1];
-      FC tensorPoints = tensorPointsForDimension[spaceDim-1];
-      
-      if (rank == 0) { // scalar
-        spatialValues.resize(spatialBasis->getCardinality(), numSpacePoints);
-        tensorValues.resize(tensorCardinality, numTensorPoints);
-      } else if (rank == 1) { // vector
-        spatialValues.resize(spatialBasis->getCardinality(), numSpacePoints, spaceDim);
-        tensorValues.resize(tensorCardinality, numTensorPoints, spaceDim);
-      } else if (rank == 2) { // tensor
-        spatialValues.resize(spatialBasis->getCardinality(), numSpacePoints, spaceDim, spaceDim);
-        tensorValues.resize(tensorCardinality, numTensorPoints, spaceDim, spaceDim);
-      } else {
-        TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unhandled tensorial degree");
-      }
       spatialBasis->getValues(spatialValues, spatialPoints, op);
       timeBasis->getValues(temporalValues, temporalPoints, timeOp);
-      
-      //      cout << "spatialPoints:\n" << spatialPoints;
-      //      cout << "temporalPoints:\n" << temporalPoints;
-      //
-      //      cout << "tensorPoints:\n" << tensorPoints;
-      //
-      //      cout << "spatialValues:\n" << spatialValues;
-      //      cout << "temporalValues:\n" << temporalValues;
-      
       tensorBasis->getValues(tensorValues, tensorPoints, op, timeOp);
       
-      //      cout << "tensorValues:\n" << tensorValues;
-      
+      int rank = tensorValues.rank() - 2; // (F,P,D,D,...) where # of D's is the rank.
       
       vector<int> fieldCoord(2);
       for (int fieldOrdinal_i = 0; fieldOrdinal_i < spatialBasis->getCardinality(); fieldOrdinal_i++) {
@@ -290,7 +364,7 @@ namespace {
             }
             for (int pointOrdinal_j = 0; pointOrdinal_j < numTimePoints; pointOrdinal_j++) {
               double timeValue = temporalValues(fieldOrdinal_j, pointOrdinal_j);
-              int pointOrdinal_tensor = pointOrdinal_i * numTimePoints + pointOrdinal_j;
+              int pointOrdinal_tensor = pointOrdinal_i + pointOrdinal_j * numSpacePoints;
               vector<double> tensorValue;
               if (rank == 0) {
                 tensorValue.push_back(tensorValues(fieldOrdinal_tensor, pointOrdinal_tensor));
