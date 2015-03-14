@@ -113,26 +113,26 @@ void SpaceTimeBasisCache::createSideCaches() {
   }
 }
 
-constFCPtr SpaceTimeBasisCache::getValues(BasisPtr basis, Camellia::EOperator op, bool useCubPointsSideRefCell) {
-  // determine key for value lookup
-  pair< Camellia::Basis<>*, Camellia::EOperator> key = make_pair(basis.get(), op);
+constFCPtr SpaceTimeBasisCache::getTensorBasisValues(TensorBasis<double>* tensorBasis,
+                                                     int fieldIndex, int pointIndex,
+                                                     constFCPtr spatialValues,
+                                                     constFCPtr temporalValues,
+                                                     Intrepid::EOperator spaceOpForSizing,
+                                                     Intrepid::EOperator timeOpForSizing) const {
+  Teuchos::Array<int> spatialValuesDim(spatialValues->rank()), temporalValuesDim(temporalValues->rank());
+  spatialValues->dimensions(spatialValuesDim);
+  temporalValues->dimensions(temporalValuesDim);
   
-  if (_knownValues.find(key) != _knownValues.end() ) {
-    return _knownValues[key];
-  }
+  int numSpaceFields = spatialValuesDim[fieldIndex];
+  int numTimeFields = temporalValuesDim[fieldIndex];
+  int numSpacePoints = spatialValuesDim[pointIndex];
+  int numTimePoints = temporalValuesDim[pointIndex];
   
-  // compute tensorial components:
-  TensorBasis<double>* tensorBasis = dynamic_cast<TensorBasis<double>*>(basis.get());
+  Teuchos::Array<int> spaceTimeValuesDim = spatialValuesDim;
+  spaceTimeValuesDim[fieldIndex] = numSpaceFields * numTimeFields;
+  spaceTimeValuesDim[pointIndex] = numSpacePoints * numTimePoints;
   
-  BasisPtr spatialBasis = tensorBasis->getSpatialBasis();
-  BasisPtr temporalBasis = tensorBasis->getTemporalBasis();
-  
-  Intrepid::EOperator spaceOp = this->spaceOp(op), timeOp = this->timeOp(op);
-  
-  constFCPtr spatialValues = _spatialCache->getValues(spatialBasis, (Camellia::EOperator)spaceOp, useCubPointsSideRefCell);
-  constFCPtr temporalValues = _temporalCache->getValues(temporalBasis, (Camellia::EOperator)timeOp, useCubPointsSideRefCell);
-  
-  Intrepid::FieldContainer<double> tensorValues;
+  Intrepid::FieldContainer<double>* tensorValues = new Intrepid::FieldContainer<double>(spaceTimeValuesDim);
   
   vector< Intrepid::FieldContainer<double> > componentValues;
   // not sure there's a clean way to avoid copying the spatial/temporal values here, but it's only a temporary copy
@@ -141,30 +141,121 @@ constFCPtr SpaceTimeBasisCache::getValues(BasisPtr basis, Camellia::EOperator op
   componentValues.push_back(*temporalValues);
   
   vector< Intrepid::EOperator > componentOps(2);
-  componentOps[0] = spaceOp;
-  componentOps[1] = timeOp;
+  componentOps[0] = spaceOpForSizing;
+  componentOps[1] = timeOpForSizing;
   
-  tensorBasis->getTensorValues(tensorValues, componentValues, componentOps);
+  tensorBasis->getTensorValues(*tensorValues, componentValues, componentOps);
   
+  return Teuchos::rcp( tensorValues );
+}
+
+constFCPtr SpaceTimeBasisCache::getValues(BasisPtr basis, Camellia::EOperator op, bool useCubPointsSideRefCell) {
+  // For now, in this and the methods below, we do *not* store the tensor values.
+  // Instead, we allow the tensor components to be stored by the component BasisCaches.
+  
+//  // determine key for value lookup
+//  pair< Camellia::Basis<>*, Camellia::EOperator> key = make_pair(basis.get(), op);
+//  
+//  if (_knownValues.find(key) != _knownValues.end() ) {
+//    return _knownValues[key];
+//  }
+  
+  const int FIELD_INDEX = 0, POINT_INDEX = 1;
+  
+  // compute tensorial components:
+  TensorBasis<double>* tensorBasis = dynamic_cast<TensorBasis<double>*>(basis.get());
+  
+  BasisPtr spatialBasis = tensorBasis->getSpatialBasis();
+  BasisPtr temporalBasis = tensorBasis->getTemporalBasis();
+  
+  Intrepid::EOperator spaceOpForSizing = this->spaceOpForSizing(op), timeOpForSizing = this->timeOpForSizing(op);
+  Camellia::EOperator spaceOp = this->spaceOp(op), timeOp = this->timeOp(op);
+  
+  constFCPtr spatialValues = _spatialCache->getValues(spatialBasis, (Camellia::EOperator)spaceOp, useCubPointsSideRefCell);
+  constFCPtr temporalValues = _temporalCache->getValues(temporalBasis, (Camellia::EOperator)timeOp, useCubPointsSideRefCell);
+  
+  return getTensorBasisValues(tensorBasis, FIELD_INDEX, POINT_INDEX, spatialValues, temporalValues, spaceOpForSizing, timeOpForSizing);
 }
 
 constFCPtr SpaceTimeBasisCache::getTransformedValues(BasisPtr basis, Camellia::EOperator op, bool useCubPointsSideRefCell) {
+  const int FIELD_INDEX = 1, POINT_INDEX = 2;
   
+  // compute tensorial components:
+  TensorBasis<double>* tensorBasis = dynamic_cast<TensorBasis<double>*>(basis.get());
+  
+  BasisPtr spatialBasis = tensorBasis->getSpatialBasis();
+  BasisPtr temporalBasis = tensorBasis->getTemporalBasis();
+  
+  Intrepid::EOperator spaceOpForSizing = this->spaceOpForSizing(op), timeOpForSizing = this->timeOpForSizing(op);
+  
+  Camellia::EOperator spaceOp = this->spaceOp(op), timeOp = this->timeOp(op);
+  
+  constFCPtr spatialValues = _spatialCache->getTransformedValues(spatialBasis, spaceOp, useCubPointsSideRefCell);
+  constFCPtr temporalValues = _temporalCache->getTransformedValues(temporalBasis, timeOp, useCubPointsSideRefCell);
+  
+  return getTensorBasisValues(tensorBasis, FIELD_INDEX, POINT_INDEX, spatialValues, temporalValues,
+                              spaceOpForSizing, timeOpForSizing);
 }
 
 constFCPtr SpaceTimeBasisCache::getTransformedWeightedValues(BasisPtr basis, Camellia::EOperator op, bool useCubPointsSideRefCell) {
+  const int FIELD_INDEX = 1, POINT_INDEX = 2;
   
+  // compute tensorial components:
+  TensorBasis<double>* tensorBasis = dynamic_cast<TensorBasis<double>*>(basis.get());
+  
+  BasisPtr spatialBasis = tensorBasis->getSpatialBasis();
+  BasisPtr temporalBasis = tensorBasis->getTemporalBasis();
+  
+  Intrepid::EOperator spaceOpForSizing = this->spaceOpForSizing(op), timeOpForSizing = this->timeOpForSizing(op);
+  Camellia::EOperator spaceOp = this->spaceOp(op), timeOp = this->timeOp(op);
+  
+  constFCPtr spatialValues = _spatialCache->getTransformedWeightedValues(spatialBasis, spaceOp, useCubPointsSideRefCell);
+  constFCPtr temporalValues = _temporalCache->getTransformedWeightedValues(temporalBasis, timeOp, useCubPointsSideRefCell);
+  
+  return getTensorBasisValues(tensorBasis, FIELD_INDEX, POINT_INDEX, spatialValues, temporalValues, spaceOpForSizing, timeOpForSizing);
 }
 
-// side variants:
-constFCPtr SpaceTimeBasisCache::getValues(BasisPtr basis, Camellia::EOperator op, int sideOrdinal, bool useCubPointsSideRefCell) {
-  
+Camellia::EOperator SpaceTimeBasisCache::spaceOp(Camellia::EOperator op) {
+  // the space op is just the op, unless it's a time-related op, in which case the space op is OP_VALUE
+  switch (op) {
+    case OP_T:
+    case OP_DT:
+      return OP_VALUE;
+    default:
+      return op;
+      break;
+  }
 }
 
-constFCPtr SpaceTimeBasisCache::getTransformedValues(BasisPtr basis, Camellia::EOperator op, int sideOrdinal, bool useCubPointsSideRefCell) {
-  
+Intrepid::EOperator SpaceTimeBasisCache::spaceOpForSizing(Camellia::EOperator op) {
+  switch (op) {
+    case OP_GRAD:
+      return OPERATOR_GRAD;
+    case OP_DIV:
+      return OPERATOR_DIV;
+    case OP_CURL:
+      return OPERATOR_CURL;
+      break;
+    default:
+      return OPERATOR_VALUE;
+      break;
+  }
 }
 
-constFCPtr SpaceTimeBasisCache::getTransformedWeightedValues(BasisPtr basis, Camellia::EOperator op, int sideOrdinal, bool useCubPointsSideRefCell) {
-  
+Camellia::EOperator SpaceTimeBasisCache::timeOp(Camellia::EOperator op) {
+  // the time op is just OP_VALUE, unless it's a time-related op, in which case we need to take the space equivalent here
+  switch (op) {
+    case OP_T:
+      return OP_X;
+    case OP_DT:
+      return OP_DX;
+    default:
+      return OP_VALUE;
+      break;
+  }
+}
+
+Intrepid::EOperator SpaceTimeBasisCache::timeOpForSizing(Camellia::EOperator op) {
+  // we do not support any rank-increasing or rank-decreasing operations in time.
+  return OPERATOR_VALUE;
 }

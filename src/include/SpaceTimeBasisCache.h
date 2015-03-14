@@ -10,16 +10,29 @@
 #define __Camellia__SpaceTimeBasisCache__
 
 #include "BasisCache.h"
+#include "TensorBasis.h"
 
 class SpaceTimeBasisCache : public BasisCache {
+  typedef Teuchos::RCP< Intrepid::FieldContainer<double> > FCPtr;
+  typedef Teuchos::RCP< const Intrepid::FieldContainer<double> > constFCPtr;
   
   BasisCachePtr _spatialCache, _temporalCache;
 
   // side constructor:
   SpaceTimeBasisCache(int sideIndex, BasisCachePtr volumeCache, int trialDegree, int testDegree);
+
+  Camellia::EOperator spaceOp(Camellia::EOperator op);
+  Camellia::EOperator timeOp(Camellia::EOperator op);
   
-  Intrepid::EOperator spaceOp(Camellia::EOperator op);
-  Intrepid::EOperator timeOp(Camellia::EOperator op);
+  Intrepid::EOperator spaceOpForSizing(Camellia::EOperator op);
+  Intrepid::EOperator timeOpForSizing(Camellia::EOperator op);
+  
+  constFCPtr getTensorBasisValues(TensorBasis<double>* tensorBasis,
+                                  int fieldIndex, int pointIndex,
+                                  constFCPtr spatialValues,
+                                  constFCPtr temporalValues,
+                                  Intrepid::EOperator spaceOp,
+                                  Intrepid::EOperator timeOp) const;
 public:
   // volume constructor:
   SpaceTimeBasisCache(MeshPtr spaceTimeMesh, ElementTypePtr spaceTimeElementType,
@@ -33,14 +46,9 @@ public:
   BasisCachePtr getSpatialBasisCache();
   BasisCachePtr getTemporalBasisCache();
   
-  virtual Teuchos::RCP< const Intrepid::FieldContainer<double> > getValues(BasisPtr basis, Camellia::EOperator op, bool useCubPointsSideRefCell = false);
-  virtual Teuchos::RCP< const Intrepid::FieldContainer<double> > getTransformedValues(BasisPtr basis, Camellia::EOperator op, bool useCubPointsSideRefCell = false);
-  virtual Teuchos::RCP< const Intrepid::FieldContainer<double> > getTransformedWeightedValues(BasisPtr basis, Camellia::EOperator op, bool useCubPointsSideRefCell = false);
-  
-  // side variants:
-  virtual Teuchos::RCP< const Intrepid::FieldContainer<double> > getValues(BasisPtr basis, Camellia::EOperator op, int sideOrdinal, bool useCubPointsSideRefCell = false);
-  virtual Teuchos::RCP< const Intrepid::FieldContainer<double> > getTransformedValues(BasisPtr basis, Camellia::EOperator op, int sideOrdinal, bool useCubPointsSideRefCell = false);
-  virtual Teuchos::RCP< const Intrepid::FieldContainer<double> > getTransformedWeightedValues(BasisPtr basis, Camellia::EOperator op, int sideOrdinal, bool useCubPointsSideRefCell = false);
+  virtual constFCPtr getValues(BasisPtr basis, Camellia::EOperator op, bool useCubPointsSideRefCell = false);
+  virtual constFCPtr getTransformedValues(BasisPtr basis, Camellia::EOperator op, bool useCubPointsSideRefCell = false);
+  virtual constFCPtr getTransformedWeightedValues(BasisPtr basis, Camellia::EOperator op, bool useCubPointsSideRefCell = false);
 };
 
 
