@@ -1232,3 +1232,31 @@ void CamelliaCellTools::mapToReferenceSubcell(FieldContainer<double>       &refS
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "CamelliaCellTools::mapToReferenceSubcell -- unsupported arguments.");
   }
 }
+
+void CamelliaCellTools::pointsVectorFromFC(std::vector< vector<double> > &pointsVector, const FieldContainer<double> &pointsFC) {
+  int numPoints = pointsFC.dimension(0);
+  int spaceDim = pointsFC.dimension(1);
+  pointsVector.resize(numPoints);
+  
+  for (int pointOrdinal=0; pointOrdinal < numPoints; pointOrdinal++) {
+    pointsVector[pointOrdinal].resize(spaceDim);
+    for (int d=0; d<spaceDim; d++) {
+      pointsVector[pointOrdinal][d] = pointsFC(pointOrdinal,d);
+    }
+  }
+}
+
+void CamelliaCellTools::pointsFCFromVector(FieldContainer<double> &pointsFC,
+                                           const std::vector< vector<double> > &pointsVector) {
+  int numPoints = pointsVector.size();
+  if (numPoints==0) {
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "pointsVector can't be empty");
+  }
+  int spaceDim = pointsVector[0].size();
+  pointsFC.resize(numPoints,spaceDim);
+  for (int pointOrdinal=0; pointOrdinal < numPoints; pointOrdinal++) {
+    for (int d=0; d<spaceDim; d++) {
+      pointsFC(pointOrdinal,d) = pointsVector[pointOrdinal][d];
+    }
+  }
+}

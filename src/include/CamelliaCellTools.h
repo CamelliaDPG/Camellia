@@ -190,7 +190,11 @@ public:
   static void refCellNodesForTopology(FieldContainer<double> &cellNodes, CellTopoPtr cellTopo, unsigned permutation = 0); // 0 permutation is the identity
   
   static void refCellNodesForTopology(std::vector< vector<double> > &cellNodes, CellTopoPtr cellTopo, unsigned permutation = 0); // 0 permutation is the identity
-
+  
+  static void pointsVectorFromFC(std::vector< vector<double> > &pointsVector, const FieldContainer<double> &pointsFC);
+  
+  static void pointsFCFromVector(FieldContainer<double> &pointsFC, const std::vector< vector<double> > &pointsVector);
+  
   static unsigned permutationMatchingOrder( CellTopoPtr cellTopo, const vector<unsigned> &fromOrder, const vector<unsigned> &toOrder);
 
   static unsigned permutationMatchingOrder( const shards::CellTopology &cellTopo, const vector<unsigned> &fromOrder, const vector<unsigned> &toOrder);
