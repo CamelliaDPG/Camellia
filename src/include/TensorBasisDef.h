@@ -75,6 +75,30 @@ namespace Camellia {
   }
 
   template<class Scalar, class ArrayScalar>
+  void TensorBasis<Scalar, ArrayScalar>::getTensorPoints(ArrayScalar& tensorPoints, const ArrayScalar & spatialPoints,
+                                                         const ArrayScalar & temporalPoints) const {
+    int numPointsSpace = spatialPoints.dimension(0);
+    int numPointsTime = temporalPoints.dimension(0);
+    
+    int spaceDim = spatialPoints.dimension(1);
+    int timeDim = temporalPoints.dimension(1);
+    
+    for (int timePointOrdinal=0; timePointOrdinal<numPointsTime; timePointOrdinal++) {
+      
+      for (int spacePointOrdinal=0; spacePointOrdinal<numPointsSpace; spacePointOrdinal++) {
+        int spaceTimePointOrdinal = TENSOR_POINT_ORDINAL(spacePointOrdinal, timePointOrdinal, numPointsSpace);
+        for (int d=0; d<spaceDim; d++) {
+          tensorPoints(spaceTimePointOrdinal,d) = spatialPoints(spacePointOrdinal,d);
+        }
+        for (int d=spaceDim; d<spaceDim+timeDim; d++) {
+          tensorPoints(spaceTimePointOrdinal,d) = temporalPoints(timePointOrdinal,d-spaceDim);
+        }
+      }
+    }
+  }
+
+  
+  template<class Scalar, class ArrayScalar>
   void TensorBasis<Scalar,ArrayScalar>::getTensorValues(ArrayScalar& outputValues, std::vector< ArrayScalar> & componentOutputValuesVector,
                                                         std::vector<Intrepid::EOperator> operatorTypes) const {
     // outputValues can have dimensions (C,F,P,...) or (F,P,...)

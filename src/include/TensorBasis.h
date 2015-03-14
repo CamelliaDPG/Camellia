@@ -69,6 +69,15 @@ public:
 
   /** \brief  Given a vector of component value arrays (one for space, one for time), generates the tensor product value array.
    
+   \param  tensorPoints  [out] - tensor product point array.  Ordered (P,D1+D2).
+   \param  spatialPoints  [in] - spatial point array.  Should be ordered (P,D1).
+   \param temporalPoints  [in] - spatial point array.  Should be ordered (P,D2).
+   
+   */
+  void getTensorPoints(ArrayScalar& tensorPoints, const ArrayScalar & spatialPoints, const ArrayScalar & temporalPoints) const;
+  
+  /** \brief  Given a vector of component value arrays (one for space, one for time), generates the tensor product value array.
+   
    \param  outputValues          [out] - tensor product value array.  Ordered (C,F,P,D,...) or (F,P,D,...).
    \param  componentOutputValues  [in] - values for each component.  Should be ordered (C,F,P,D,...) or (F,P,D,...).
    
