@@ -276,7 +276,7 @@ namespace {
     }
   }
   
-  TEUCHOS_UNIT_TEST( TensorBasis, TensorBasisOrderingAgreesWithTensorTopologyOrdering ) {
+  TEUCHOS_UNIT_TEST( TensorBasis, TensorBasisFieldOrderingAgreesWithTensorTopologyOrdering ) {
     int H1Order = 1;
     
     BasisFactoryPtr basisFactory = BasisFactory::basisFactory();
@@ -305,6 +305,44 @@ namespace {
         TEST_EQUALITY(topoOrdinal, basisOrdinal);
       }
     }
+  }
+  
+  TEUCHOS_UNIT_TEST( TensorBasis, TensorBasisPointOrderingAgreesWithTensorTopologyOrdering ) {
+    // check that the way points are ordered in tensor basis is the same as the way they're ordered in
+    // CellTopology
+    int H1Order = 1;
+    
+    BasisFactoryPtr basisFactory = BasisFactory::basisFactory();
+    CellTopoPtr timeTopo = CellTopology::line();
+    CellTopoPtr spaceTopo = CellTopology::triangle();
+    
+    BasisPtr spaceBasis = basisFactory->getBasis(H1Order, spaceTopo, Camellia::FUNCTION_SPACE_HGRAD);
+    BasisPtr timeBasis = basisFactory->getBasis(H1Order, timeTopo, Camellia::FUNCTION_SPACE_HGRAD);
+    
+    typedef Camellia::TensorBasis<double, FieldContainer<double> > TensorBasis;
+    Teuchos::RCP<TensorBasis> tensorBasis = Teuchos::rcp( new TensorBasis(spaceBasis, timeBasis) );
+    
+    int tensorialDegree = 1;
+    CellTopoPtr tensorTopo = CellTopology::cellTopology(spaceTopo->getShardsTopology(), tensorialDegree);
+    
+    FC spaceNodes(spaceTopo->getNodeCount(), spaceTopo->getDimension());
+    FC timeNodes(timeTopo->getNodeCount(), timeTopo->getDimension());
+    
+    CamelliaCellTools::refCellNodesForTopology(spaceNodes, spaceTopo);
+    CamelliaCellTools::refCellNodesForTopology(timeNodes, timeTopo);
+    
+    vector<FC> tensorComponentNodes;
+    tensorComponentNodes.push_back(spaceNodes);
+    tensorComponentNodes.push_back(timeNodes);
+    
+    FC tensorNodesExpected(spaceNodes.dimension(0) * timeNodes.dimension(0), spaceNodes.dimension(1) + timeNodes.dimension(1));
+    tensorTopo->initializeNodes(tensorComponentNodes, tensorNodesExpected);
+    
+    FC tensorNodesActual(spaceNodes.dimension(0) * timeNodes.dimension(0), spaceNodes.dimension(1) + timeNodes.dimension(1));
+    tensorBasis->getTensorPoints(tensorNodesActual, spaceNodes, timeNodes);
+    
+    double tol = 1e-15;
+    TEST_COMPARE_FLOATING_ARRAYS(tensorNodesActual, tensorNodesExpected, tol);
   }
   
   TEUCHOS_UNIT_TEST( TensorBasis, TensorBasisBasicValues ) {
