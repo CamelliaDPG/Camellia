@@ -49,9 +49,9 @@ namespace {
       double expectedIntegral = f->integrate(sideBasisCache);
       double actualIntegral = projectedFunction->integrate(sideBasisCache);
       
-      cout << "f: " << f->displayString() << endl;
-      cout << "basisCoefficients:\n" << basisCoefficients;
-      cout << "physicalCubaturePoints:\n" << sideBasisCache->getPhysicalCubaturePoints();
+//      cout << "f: " << f->displayString() << endl;
+//      cout << "basisCoefficients:\n" << basisCoefficients;
+//      cout << "physicalCubaturePoints:\n" << sideBasisCache->getPhysicalCubaturePoints();
       
 //      cout << "expectedIntegral: " << expectedIntegral << endl;
       
