@@ -147,8 +147,10 @@ namespace Camellia {
                                std::invalid_argument, "outputValues.dimension(fieldIndex) != this->getCardinality()");
     TEUCHOS_TEST_FOR_EXCEPTION( spatialValues->dimension(fieldIndex) != _spatialBasis->getCardinality(),
                                std::invalid_argument, "spatialValues->dimension(fieldIndex) != _spatialBasis->getCardinality()");
-    TEUCHOS_TEST_FOR_EXCEPTION( temporalValues->dimension(fieldIndex) != _temporalBasis->getCardinality(),
-                               std::invalid_argument, "temporalValues->dimension(fieldIndex) != _temporalBasis->getCardinality()");
+    if (temporalValues->dimension(fieldIndex) != _temporalBasis->getCardinality()) {
+      TEUCHOS_TEST_FOR_EXCEPTION( temporalValues->dimension(fieldIndex) != _temporalBasis->getCardinality(),
+                                 std::invalid_argument, "temporalValues->dimension(fieldIndex) != _temporalBasis->getCardinality()");
+    }
     int pointIndex = fieldIndex+1;
     TEUCHOS_TEST_FOR_EXCEPTION( outputValues.dimension(pointIndex) != spatialValues->dimension(pointIndex) * temporalValues->dimension(pointIndex),
                                std::invalid_argument, "outputValues.dimension(pointIndex) != spatialValues->dimension(pointIndex) * temporalValues->dimension(pointIndex)");
@@ -170,10 +172,10 @@ namespace Camellia {
       }
       // combine values:
       for (int spaceFieldOrdinal=0; spaceFieldOrdinal<_spatialBasis->getCardinality(); spaceFieldOrdinal++) {
-        spatialValueCoordinate[0] = spaceFieldOrdinal;
+        spatialValueCoordinate[fieldIndex] = spaceFieldOrdinal;
         for (int timeFieldOrdinal=0; timeFieldOrdinal<_temporalBasis->getCardinality(); timeFieldOrdinal++) {
           int spaceTimeFieldOrdinal = TENSOR_FIELD_ORDINAL(spaceFieldOrdinal, timeFieldOrdinal);
-          spaceTimeValueCoordinate[0] = spaceTimeFieldOrdinal;
+          spaceTimeValueCoordinate[fieldIndex] = spaceTimeFieldOrdinal;
           for (int timePointOrdinal=0; timePointOrdinal<numPointsTime; timePointOrdinal++) {
             double temporalValue = (fieldIndex==0) ? (*temporalValues)(timeFieldOrdinal,timePointOrdinal) : (*temporalValues)(cellOrdinal,timeFieldOrdinal,timePointOrdinal);
             for (int spacePointOrdinal=0; spacePointOrdinal<numPointsSpace; spacePointOrdinal++) {
