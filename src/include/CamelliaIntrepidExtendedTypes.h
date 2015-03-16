@@ -23,17 +23,19 @@ namespace Camellia {
     OP_X,         // 14 (pick up where EOperator left off...)
     OP_Y,         // 15
     OP_Z,         // 16
-    OP_DX,        // 17
-    OP_DY,        // 18
-    OP_DZ,        // 19
-    OP_CROSS_NORMAL,    // 20
-    OP_DOT_NORMAL,      // 21
-    OP_TIMES_NORMAL,    // 22
-    OP_TIMES_NORMAL_X,  // 23
-    OP_TIMES_NORMAL_Y,  // 24
-    OP_TIMES_NORMAL_Z,  // 25
-    OP_TIMES_NORMAL_T,  // 26
-    OP_VECTORIZE_VALUE  // 27
+    OP_T,         // 17
+    OP_DX,        // 18
+    OP_DY,        // 19
+    OP_DZ,        // 20
+    OP_DT,        // 21
+    OP_CROSS_NORMAL,    // 22
+    OP_DOT_NORMAL,      // 23
+    OP_TIMES_NORMAL,    // 24
+    OP_TIMES_NORMAL_X,  // 25
+    OP_TIMES_NORMAL_Y,  // 26
+    OP_TIMES_NORMAL_Z,  // 27
+    OP_TIMES_NORMAL_T,  // 28
+    OP_VECTORIZE_VALUE  // 29
   };
   
   enum EFunctionSpace { // the first four copied from Intrepid::EFunctionSpace
