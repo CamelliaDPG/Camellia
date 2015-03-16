@@ -1901,6 +1901,12 @@ void SimpleFunction::values(FieldContainer<double> &values, BasisCachePtr basisC
   int numPoints = values.dimension(1);
 
   const FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
+  
+  if (points->dimension(1) != numPoints) {
+    cout << "numPoints in values container does not match that in BasisCache's physical points.\n";
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "numPoints in values container does not match that in BasisCache's physical points.");
+  }
+  
   int spaceDim = points->dimension(2);
   for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
     for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
