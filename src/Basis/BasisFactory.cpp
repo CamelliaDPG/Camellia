@@ -72,7 +72,7 @@ BasisFactory::BasisFactory() {
 using namespace Camellia;
 
 BasisPtr BasisFactory::getBasis(int H1Order, CellTopoPtr cellTopo, Camellia::EFunctionSpace functionSpaceForSpatialTopology,
-                                int temporalPolyOrder, Camellia::EFunctionSpace functionSpaceForTemporalTopology) {
+                                int temporalH1Order, Camellia::EFunctionSpace functionSpaceForTemporalTopology) {
   if (cellTopo->getTensorialDegree() > 1) {
     cout << "BasisFactory::getBasis() only handles 0 or 1 tensorial degree elements.\n";
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "BasisFactory::getBasis() only handles 0 or 1 tensorial degree elements.");
@@ -85,11 +85,11 @@ BasisPtr BasisFactory::getBasis(int H1Order, CellTopoPtr cellTopo, Camellia::EFu
   // if we get here, have tensorial degree exactly 1.
   
   unsigned lineKey = shards::Line<2>::key;
-  pair< pair<Camellia::Basis<>*, int>, Camellia::EFunctionSpace> key = make_pair( make_pair(basisForShardsTopo.get(), temporalPolyOrder), functionSpaceForTemporalTopology );
+  pair< pair<Camellia::Basis<>*, int>, Camellia::EFunctionSpace> key = make_pair( make_pair(basisForShardsTopo.get(), temporalH1Order), functionSpaceForTemporalTopology );
   
   if (_spaceTimeBases.find(key) != _spaceTimeBases.end()) return _spaceTimeBases[key];
   
-  BasisPtr temporalBasis = getBasis(temporalPolyOrder + 1, lineKey, functionSpaceForTemporalTopology);
+  BasisPtr temporalBasis = getBasis(temporalH1Order, lineKey, functionSpaceForTemporalTopology);
   
   typedef Camellia::TensorBasis<double, FieldContainer<double> > TensorBasis;
   Teuchos::RCP<TensorBasis> tensorBasis = Teuchos::rcp( new TensorBasis(basisForShardsTopo, temporalBasis) );
