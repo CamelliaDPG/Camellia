@@ -886,6 +886,23 @@ void LinearTerm::values(FieldContainer<double> &values, int varID, BasisPtr basi
         basisValues = basisCache->getTransformedValues(basis, ls.second->op(), useVolumeCoords);
       }
       
+      if (basisValues->dimension(2) != numPoints) {
+        {
+          // DEBUGGING: repeat the call, so we can watch it:
+          if (applyCubatureWeights) {
+            // on sides, we use volume coords for test and field values
+            bool useVolumeCoords = (sideIndex != -1) && ((ls.second->varType() == TEST) || (ls.second->varType() == FIELD));
+            basisValues = basisCache->getTransformedWeightedValues(basis, ls.second->op(), useVolumeCoords);
+          } else {
+            // on sides, we use volume coords for test and field values
+            bool useVolumeCoords = (sideIndex != -1) && ((ls.second->varType() == TEST) || (ls.second->varType() == FIELD));
+            basisValues = basisCache->getTransformedValues(basis, ls.second->op(), useVolumeCoords);
+          }
+        }
+        
+        TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Error: transformed basisValues doesn't have the correct # of points.");
+      }
+      
       if ( ls.first->rank() == 0 ) { // scalar function -- we can speed things along in this case...
         // E.g. ConstantFunction::scalarMultiplyBasisValues() knows not to do anything at all if its value is 1.0...
         FieldContainer<double> weightedBasisValues = *basisValues; // weighted by the scalar function

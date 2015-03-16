@@ -77,21 +77,48 @@ namespace Camellia {
   template<class Scalar, class ArrayScalar>
   void TensorBasis<Scalar, ArrayScalar>::getTensorPoints(ArrayScalar& tensorPoints, const ArrayScalar & spatialPoints,
                                                          const ArrayScalar & temporalPoints) const {
-    int numPointsSpace = spatialPoints.dimension(0);
-    int numPointsTime = temporalPoints.dimension(0);
+    bool hasCellRank;
+    if ((spatialPoints.rank() != tensorPoints.rank()) || (temporalPoints.rank() != tensorPoints.rank())) {
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "temporalPoints and spatialPoints must have same rank as tensorPoints");
+    }
     
-    int spaceDim = spatialPoints.dimension(1);
-    int timeDim = temporalPoints.dimension(1);
+    if (tensorPoints.rank() == 3) {
+      hasCellRank = true;
+
+    } else if (tensorPoints.rank() == 2) {
+      hasCellRank = false;
+    } else {
+      TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument,"unsupported rank in tensorPoints");
+    }
     
-    for (int timePointOrdinal=0; timePointOrdinal<numPointsTime; timePointOrdinal++) {
-      
-      for (int spacePointOrdinal=0; spacePointOrdinal<numPointsSpace; spacePointOrdinal++) {
-        int spaceTimePointOrdinal = TENSOR_POINT_ORDINAL(spacePointOrdinal, timePointOrdinal, numPointsSpace);
-        for (int d=0; d<spaceDim; d++) {
-          tensorPoints(spaceTimePointOrdinal,d) = spatialPoints(spacePointOrdinal,d);
-        }
-        for (int d=spaceDim; d<spaceDim+timeDim; d++) {
-          tensorPoints(spaceTimePointOrdinal,d) = temporalPoints(timePointOrdinal,d-spaceDim);
+    int numCells = hasCellRank ? tensorPoints.dimension(0) : 1;
+    
+    int pointIndex = hasCellRank ? 1 : 0;
+    int spaceDimIndex = hasCellRank ? 2 : 1;
+    int numPointsSpace = spatialPoints.dimension(pointIndex);
+    int numPointsTime = temporalPoints.dimension(pointIndex);
+    
+    int spaceDim = spatialPoints.dimension(spaceDimIndex);
+    int timeDim = temporalPoints.dimension(spaceDimIndex);
+    
+    for (int cellOrdinal=0; cellOrdinal<numCells; cellOrdinal++) {
+      for (int timePointOrdinal=0; timePointOrdinal<numPointsTime; timePointOrdinal++) {
+        for (int spacePointOrdinal=0; spacePointOrdinal<numPointsSpace; spacePointOrdinal++) {
+          int spaceTimePointOrdinal = TENSOR_POINT_ORDINAL(spacePointOrdinal, timePointOrdinal, numPointsSpace);
+          for (int d=0; d<spaceDim; d++) {
+            if (hasCellRank) {
+              tensorPoints(cellOrdinal,spaceTimePointOrdinal,d) = spatialPoints(cellOrdinal,spacePointOrdinal,d);
+            } else {
+              tensorPoints(spaceTimePointOrdinal,d) = spatialPoints(spacePointOrdinal,d);
+            }
+          }
+          for (int d=spaceDim; d<spaceDim+timeDim; d++) {
+            if (hasCellRank) {
+              tensorPoints(cellOrdinal,spaceTimePointOrdinal,d) = temporalPoints(cellOrdinal,timePointOrdinal,d-spaceDim);
+            } else {
+              tensorPoints(spaceTimePointOrdinal,d) = temporalPoints(timePointOrdinal,d-spaceDim);
+            }
+          }
         }
       }
     }
@@ -145,8 +172,10 @@ namespace Camellia {
     //cout << "componentOutputValues: \n" << componentOutputValues;
     TEUCHOS_TEST_FOR_EXCEPTION( outputValues.dimension(fieldIndex) != this->getCardinality(),
                                std::invalid_argument, "outputValues.dimension(fieldIndex) != this->getCardinality()");
-    TEUCHOS_TEST_FOR_EXCEPTION( spatialValues->dimension(fieldIndex) != _spatialBasis->getCardinality(),
-                               std::invalid_argument, "spatialValues->dimension(fieldIndex) != _spatialBasis->getCardinality()");
+    if (spatialValues->dimension(fieldIndex) != _spatialBasis->getCardinality()) {
+      TEUCHOS_TEST_FOR_EXCEPTION( spatialValues->dimension(fieldIndex) != _spatialBasis->getCardinality(),
+                                 std::invalid_argument, "spatialValues->dimension(fieldIndex) != _spatialBasis->getCardinality()");
+    }
     if (temporalValues->dimension(fieldIndex) != _temporalBasis->getCardinality()) {
       TEUCHOS_TEST_FOR_EXCEPTION( temporalValues->dimension(fieldIndex) != _temporalBasis->getCardinality(),
                                  std::invalid_argument, "temporalValues->dimension(fieldIndex) != _temporalBasis->getCardinality()");

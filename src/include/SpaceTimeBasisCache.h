@@ -19,7 +19,7 @@ class SpaceTimeBasisCache : public BasisCache {
   BasisCachePtr _spatialCache, _temporalCache;
 
   // side constructor:
-  SpaceTimeBasisCache(int sideIndex, BasisCachePtr volumeCache, int trialDegree, int testDegree);
+  SpaceTimeBasisCache(int sideIndex, Teuchos::RCP<SpaceTimeBasisCache> volumeCache, int trialDegree, int testDegree);
 
   Camellia::EOperator spaceOp(Camellia::EOperator op);
   Camellia::EOperator timeOp(Camellia::EOperator op);
@@ -33,15 +33,20 @@ class SpaceTimeBasisCache : public BasisCache {
                                   constFCPtr temporalValues,
                                   Intrepid::EOperator spaceOp,
                                   Intrepid::EOperator timeOp) const;
+protected:
+  virtual void createSideCaches();
 public:
-  // volume constructor:
+  // volume constructors:
   SpaceTimeBasisCache(MeshPtr spaceTimeMesh, ElementTypePtr spaceTimeElementType,
-                      FieldContainer<double> &physicalNodesSpatial,
-                      FieldContainer<double> &physicalNodesTemporal,
+                      const FieldContainer<double> &physicalNodesSpatial,
+                      const FieldContainer<double> &physicalNodesTemporal,
+                      const FieldContainer<double> &physicalNodesSpaceTime,
                       const std::vector<GlobalIndexType> &cellIDs,
                       bool testVsTest, int cubatureDegreeEnrichment);
-  
-  void createSideCaches();
+  SpaceTimeBasisCache(const FieldContainer<double> &physicalNodesSpatial,
+                      const FieldContainer<double> &physicalNodesTemporal,
+                      const FieldContainer<double> &physicalCellNodes,
+                      CellTopoPtr cellTopo, int cubDegree);
   
   BasisCachePtr getSpatialBasisCache();
   BasisCachePtr getTemporalBasisCache();

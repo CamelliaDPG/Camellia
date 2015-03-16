@@ -261,21 +261,7 @@ SubBasisReconciliationWeights BasisReconciliation::computeConstrainedWeights(uns
   FieldContainer<double> fineVolumeCubaturePoints; // points at which the fine basis will be evaluated
   FieldContainer<double> cubatureWeights;
   
-  BasisCachePtr fineVolumeCache = Teuchos::rcp( new BasisCache(fineTopo, cubDegree, false) );
-  BasisCachePtr coarseVolumeCache = Teuchos::rcp( new BasisCache(coarseTopo, cubDegree, false));
-  
   if (subcellDimension > 0) {
-    BasisCachePtr fineSubcellCache = Teuchos::rcp( new BasisCache(fineSubcellTopo, cubDegree, false) );
-    int numPoints = fineSubcellCache->getRefCellPoints().dimension(0);
-    fineVolumeCubaturePoints.resize(numPoints,spaceDim);
-    FieldContainer<double> fineSubcellCubaturePoints = fineSubcellCache->getRefCellPoints();
-    cubatureWeights = fineSubcellCache->getCubatureWeights();
-    if (subcellDimension == spaceDim) {
-      fineVolumeCubaturePoints = fineSubcellCubaturePoints;
-    } else {
-      CamelliaCellTools::mapToReferenceSubcell(fineVolumeCubaturePoints, fineSubcellCubaturePoints, subcellDimension, finerBasisSubcellOrdinal, fineTopo);
-    }
-    
     RefinementBranch subcellRefinements = RefinementPattern::subcellRefinementBranch(refinements, subcellDimension, ancestralSubcellOrdinal);
     FieldContainer<double> fineSubcellRefNodes;
     if (subcellRefinements.size() > 0) {
@@ -285,7 +271,19 @@ SubBasisReconciliationWeights BasisReconciliation::computeConstrainedWeights(uns
       CamelliaCellTools::refCellNodesForTopology(fineSubcellRefNodes, fineSubcellTopo);
     }
     fineSubcellRefNodes.resize(1,fineSubcellRefNodes.dimension(0),fineSubcellRefNodes.dimension(1));
-    fineSubcellCache->setPhysicalCellNodes(fineSubcellRefNodes, vector<GlobalIndexType>(), false);
+//    fineSubcellCache->setPhysicalCellNodes(fineSubcellRefNodes, vector<GlobalIndexType>(), false);
+
+    BasisCachePtr fineSubcellCache = BasisCache::basisCacheForCellTopology(fineSubcellTopo, cubDegree, fineSubcellRefNodes);
+//    BasisCachePtr fineSubcellCache = Teuchos::rcp( new BasisCache(fineSubcellTopo, cubDegree, false) );
+    int numPoints = fineSubcellCache->getRefCellPoints().dimension(0);
+    fineVolumeCubaturePoints.resize(numPoints,spaceDim);
+    FieldContainer<double> fineSubcellCubaturePoints = fineSubcellCache->getRefCellPoints();
+    cubatureWeights = fineSubcellCache->getCubatureWeights();
+    if (subcellDimension == spaceDim) {
+      fineVolumeCubaturePoints = fineSubcellCubaturePoints;
+    } else {
+      CamelliaCellTools::mapToReferenceSubcell(fineVolumeCubaturePoints, fineSubcellCubaturePoints, subcellDimension, finerBasisSubcellOrdinal, fineTopo);
+    }
     
     // now, fineSubcellCache's physicalCubaturePoints are exactly the ones in the ancestral subcell
     FieldContainer<double> ancestralSubcellCubaturePoints = fineSubcellCache->getPhysicalCubaturePoints();
@@ -328,6 +326,7 @@ SubBasisReconciliationWeights BasisReconciliation::computeConstrainedWeights(uns
       coarseVolumeCubaturePoints(0,d) = coarseTopoRefNodes(coarserBasisSubcellOrdinal,d);
     }
   }
+  BasisCachePtr fineVolumeCache = Teuchos::rcp( new BasisCache(fineTopo, cubDegree, false) );
   fineVolumeCache->setRefCellPoints(fineVolumeCubaturePoints, cubatureWeights);
 
   if (refinements.size() > 0) {
@@ -339,6 +338,7 @@ SubBasisReconciliationWeights BasisReconciliation::computeConstrainedWeights(uns
     fineVolumeCache->setPhysicalCellNodes(fineTopoRefNodes, vector<GlobalIndexType>(), false);
     fineTopoRefNodes.resize(fineTopoRefNodes.dimension(1),fineTopoRefNodes.dimension(2));
   }
+  BasisCachePtr coarseVolumeCache = Teuchos::rcp( new BasisCache(coarseTopo, cubDegree, false));
   coarseVolumeCache->setRefCellPoints(coarseVolumeCubaturePoints);
   coarseTopoRefNodes.resize(1,coarseTopoRefNodes.dimension(0),coarseTopoRefNodes.dimension(1));
   coarseVolumeCache->setPhysicalCellNodes(coarseTopoRefNodes, vector<GlobalIndexType>(), false);

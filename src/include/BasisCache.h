@@ -154,6 +154,11 @@ protected:
   BasisCache(int fakeSideOrdinal, BasisCachePtr volumeCache, const FieldContainer<double> &volumeRefPoints,
              const FieldContainer<double> &sideNormals, const FieldContainer<double> &cellSideParities);
   
+  // protected constructor basically for the sake of the SpaceTimeBasisCache subclass, which wants to disable side cache creation during construction.
+  BasisCache(ElementTypePtr elemType, MeshPtr mesh, bool testVsTest,
+             int cubatureDegreeEnrichment, bool tensorProductTopologyMeansSpaceTime,
+             bool createSideCacheToo);
+  
   std::vector< BasisPtr > _maxDegreeBasisForSide; // stored in volume cache so we can get cubature right on sides, including broken sides (if this is a multiBasis)
   int _maxTestDegree, _maxTrialDegree;
 public:
@@ -243,7 +248,7 @@ public:
   
   int getMaxCubatureDegree();
   
-  int getSideIndex(); // -1 if not sideCache
+  int getSideIndex() const; // -1 if not sideCache
   
   virtual int getSpaceDim();
   
@@ -262,6 +267,11 @@ public:
                                              int cubatureDegreeEnrichment = 0, bool tensorProductTopologyMeansSpaceTime=true); // for cells on the local MPI node
   static BasisCachePtr basisCacheForReferenceCell(shards::CellTopology &cellTopo, int cubatureDegree, bool createSideCacheToo=false);
   static BasisCachePtr basisCacheForRefinedReferenceCell(shards::CellTopology &cellTopo, int cubatureDegree, RefinementBranch refinementBranch, bool createSideCacheToo=false);
+
+  static BasisCachePtr basisCacheForCellTopology(CellTopoPtr cellTopo, int cubatureDegree,
+                                                 const FieldContainer<double> &physicalCellNodes,
+                                                 bool createSideCacheToo=false,
+                                                 bool tensorProductTopologyMeansSpaceTime=true);
   
   static BasisCachePtr basisCacheForReferenceCell(CellTopoPtr cellTopo, int cubatureDegree, bool createSideCacheToo=false,
                                                   bool tensorProductTopologyMeansSpaceTime=true);

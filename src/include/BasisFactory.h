@@ -86,7 +86,7 @@ public:
   BasisFactory();
   
   // new getBasis: (handles 0 or 1 temporal dimensions; calls the other version)
-  BasisPtr getBasis(int H1Order, CellTopoPtr cellTopo, FSE functionSpaceForSpatialTopology, int temporalPolyOrder = 1,
+  BasisPtr getBasis(int H1Order, CellTopoPtr cellTopo, FSE functionSpaceForSpatialTopology, int temporalH1Order = 2,
                     FSE functionSpaceForTemporalTopology = Camellia::FUNCTION_SPACE_HVOL);
   BasisPtr getBasis( int polyOrder, unsigned cellTopoKey, FSE fs);
 //  static BasisPtr getBasis(int &basisRank, int polyOrder, unsigned cellTopoKey, Camellia::EFunctionSpace fs);

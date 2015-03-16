@@ -14,16 +14,14 @@ typedef Teuchos::RCP< const Intrepid::FieldContainer<double> > constFCPtr;
 
 // volume constructor
 SpaceTimeBasisCache::SpaceTimeBasisCache(MeshPtr spaceTimeMesh, ElementTypePtr spaceTimeElementType,
-                                         FieldContainer<double> &physicalNodesSpatial,
-                                         FieldContainer<double> &physicalNodesTemporal,
+                                         const FieldContainer<double> &physicalNodesSpatial,
+                                         const FieldContainer<double> &physicalNodesTemporal,
+                                         const FieldContainer<double> &physicalNodesSpaceTime,
                                          const std::vector<GlobalIndexType> &cellIDs,
-                                         bool testVsTest, int cubatureDegreeEnrichment) : BasisCache(spaceTimeElementType, spaceTimeMesh, testVsTest, cubatureDegreeEnrichment, true) {
-  bool createSideCache = true;
-  
+                                         bool testVsTest, int cubatureDegreeEnrichment)
+: BasisCache(spaceTimeElementType, spaceTimeMesh, testVsTest, cubatureDegreeEnrichment, true, false) {
   int cellCount = cellIDs.size();
   int sideCount = cellTopology()->getSideCount();
-  int vertexCount = cellTopology()->getVertexCount();
-  int spaceTimeDim = cellTopology()->getDimension();
   
   // TODO: construct the spatial basis cache and the temporal basis cache
   // determine space topology
@@ -42,6 +40,7 @@ SpaceTimeBasisCache::SpaceTimeBasisCache(MeshPtr spaceTimeMesh, ElementTypePtr s
   _spatialCache = Teuchos::rcp( new BasisCache(spaceElemType, Teuchos::null, testVsTest, cubatureDegreeEnrichment, tensorTopologyMeansSpaceTime) );
   _temporalCache = Teuchos::rcp( new BasisCache(timeElemType, Teuchos::null, testVsTest, cubatureDegreeEnrichment, tensorTopologyMeansSpaceTime) );
   
+  bool createSideCache = true;
   _spatialCache->setPhysicalCellNodes(physicalNodesSpatial, cellIDs, createSideCache);
   _temporalCache->setPhysicalCellNodes(physicalNodesTemporal, cellIDs, createSideCache);
   
@@ -49,37 +48,8 @@ SpaceTimeBasisCache::SpaceTimeBasisCache(MeshPtr spaceTimeMesh, ElementTypePtr s
   // everything can be done in terms of the spatial BasisCache and the temporal.  For now, we
   // construct space-time physical cell nodes, etc.
   
-  int spaceVertexCount = physicalNodesSpatial.dimension(1);
-  int spaceDim = physicalNodesSpatial.dimension(2);
+  setPhysicalCellNodes(physicalNodesSpaceTime, cellIDs, createSideCache);
   
-  int timeVertexCount = physicalNodesTemporal.dimension(1);
-  int timeDim = physicalNodesTemporal.dimension(2);
-  
-  FieldContainer<double> spaceTimePhysicalNodes(cellCount,vertexCount,spaceTimeDim);
-  
-  // initialize the space-time nodes:
-  Teuchos::Array<int> spaceNodeDim(2), timeNodeDim(2), spaceTimeNodeDim(2);
-  spaceNodeDim[0] = spaceVertexCount;
-  spaceNodeDim[1] = spaceDim;
-  timeNodeDim[0] = timeVertexCount;
-  timeNodeDim[1] = timeDim;
-  spaceTimeNodeDim[0] = vertexCount;
-  spaceTimeNodeDim[1] = spaceTimeDim;
-  
-  Teuchos::Array<int> spaceEnumeration(3), timeEnumeration(3), spaceTimeEnumeration(3);
-  
-  for (int cellOrdinal=0; cellOrdinal<cellCount; cellOrdinal++) {
-    FieldContainer<double> spaceNodes(spaceNodeDim, &physicalNodesSpatial(cellOrdinal,0,0));
-    FieldContainer<double> timeNodes(timeNodeDim, &physicalNodesTemporal(cellOrdinal,0,0));
-    vector< FieldContainer<double> > componentNodes(2);
-    componentNodes[0] = spaceNodes;
-    componentNodes[1] = timeNodes;
-    FieldContainer<double> spaceTimeNodes(spaceTimeNodeDim, &spaceTimePhysicalNodes(cellOrdinal,0,0));
-    cellTopology()->initializeNodes(componentNodes, spaceTimeNodes);
-  }
-  
-  setPhysicalCellNodes(spaceTimePhysicalNodes, cellIDs, createSideCache);
-
   FieldContainer<double> sideParities(cellCount, sideCount);
   for (int cellOrdinal=0; cellOrdinal<cellCount; cellOrdinal++) {
     GlobalIndexType cellID = cellIDs[cellOrdinal];
@@ -91,9 +61,58 @@ SpaceTimeBasisCache::SpaceTimeBasisCache(MeshPtr spaceTimeMesh, ElementTypePtr s
   setCellSideParities(sideParities);
 }
 
+//meshless volume constructor
+SpaceTimeBasisCache::SpaceTimeBasisCache(const FieldContainer<double> &physicalNodesSpatial,
+                                         const FieldContainer<double> &physicalNodesTemporal,
+                                         const FieldContainer<double> &physicalCellNodes,
+                                         CellTopoPtr cellTopo, int cubDegree)
+: BasisCache(physicalCellNodes,cellTopo,cubDegree,false,true) { // false: don't create side caches during construction; true: tensor product topology (which we should have here) --> space-time
+  bool createSideCache = true;
+  
+  int sideCount = cellTopology()->getSideCount();
+  
+  // determine space topology
+  CellTopoPtr spaceTopo;
+  for (int timeSideOrdinal=0; timeSideOrdinal<sideCount; timeSideOrdinal++) {
+    if (!cellTopology()->sideIsSpatial(timeSideOrdinal)) {
+      spaceTopo = cellTopology()->getSide(timeSideOrdinal);
+      break;
+    }
+  }
+  CellTopoPtr timeTopo = CellTopology::line();
+  
+  bool tensorTopologyMeansSpaceTime = false; // if space topology is tensor product, don't interpret as space-time
+  _spatialCache = Teuchos::rcp( new BasisCache(physicalNodesSpatial, spaceTopo, cubDegree, tensorTopologyMeansSpaceTime) );
+  _temporalCache = Teuchos::rcp( new BasisCache(physicalNodesTemporal, timeTopo, cubDegree, tensorTopologyMeansSpaceTime) );
+  
+  vector<GlobalIndexType> cellIDs; //empty
+  
+  _spatialCache->setPhysicalCellNodes(physicalNodesSpatial, cellIDs, createSideCache);
+  _temporalCache->setPhysicalCellNodes(physicalNodesTemporal, cellIDs, createSideCache);
+  
+  // create side caches
+  createSideCaches();
+  int numSides = cellTopo->getSideCount();
+  for (int sideOrdinal=0; sideOrdinal<numSides; sideOrdinal++) {
+    _basisCacheSides[sideOrdinal]->setPhysicalCellNodes(physicalCellNodes, cellIDs, false);
+  }
+}
+
 // side constructor
-SpaceTimeBasisCache::SpaceTimeBasisCache(int sideIndex, BasisCachePtr volumeCache, int trialDegree, int testDegree
-                                         ) : BasisCache(sideIndex, volumeCache, trialDegree, testDegree, (BasisPtr) Teuchos::null) {}
+SpaceTimeBasisCache::SpaceTimeBasisCache(int sideOrdinal, Teuchos::RCP<SpaceTimeBasisCache> volumeCache, int trialDegree, int testDegree
+                                         ) : BasisCache(sideOrdinal, volumeCache, trialDegree, testDegree, (BasisPtr) Teuchos::null) {
+  BasisCachePtr spatialCacheVolume = volumeCache->getSpatialBasisCache();
+  BasisCachePtr temporalCacheVolume = volumeCache->getTemporalBasisCache();
+  
+  if ( cellTopology()->sideIsSpatial(sideOrdinal) ) {
+    unsigned spatialSideOrdinal = cellTopology()->getSpatialComponentSideOrdinal(sideOrdinal);
+    _spatialCache = spatialCacheVolume->getSideBasisCache(spatialSideOrdinal);
+    _temporalCache = temporalCacheVolume;
+  } else {
+    _spatialCache = spatialCacheVolume;
+    _temporalCache = Teuchos::null;
+  }
+}
 
 void SpaceTimeBasisCache::createSideCaches() {
   _basisCacheSides.clear();
@@ -107,10 +126,18 @@ void SpaceTimeBasisCache::createSideCaches() {
       maxTrialDegreeOnSide = maxDegreeBasisOnSide->getDegree();
     }
     
-    BasisCachePtr thisPtr = Teuchos::rcp( this, false ); // presumption is that side cache doesn't outlive volume...
-    BasisCachePtr sideCache = Teuchos::rcp( new SpaceTimeBasisCache(sideOrdinal, thisPtr, maxTrialDegreeOnSide, _maxTestDegree));
+    Teuchos::RCP<SpaceTimeBasisCache> thisPtr = Teuchos::rcp( this, false ); // presumption is that side cache doesn't outlive volume...
+    SpaceTimeBasisCache* spaceTimeSideCache = new SpaceTimeBasisCache(sideOrdinal, thisPtr, maxTrialDegreeOnSide, _maxTestDegree);
+    BasisCachePtr sideCache = Teuchos::rcp( spaceTimeSideCache );
     _basisCacheSides.push_back(sideCache);
   }
+}
+
+BasisCachePtr SpaceTimeBasisCache::getSpatialBasisCache() {
+  return _spatialCache;
+}
+BasisCachePtr SpaceTimeBasisCache::getTemporalBasisCache() {
+  return _temporalCache;
 }
 
 constFCPtr SpaceTimeBasisCache::getTensorBasisValues(TensorBasis<double>* tensorBasis,
@@ -150,6 +177,11 @@ constFCPtr SpaceTimeBasisCache::getTensorBasisValues(TensorBasis<double>* tensor
 }
 
 constFCPtr SpaceTimeBasisCache::getValues(BasisPtr basis, Camellia::EOperator op, bool useCubPointsSideRefCell) {
+  if (_temporalCache == Teuchos::null) {
+    // then we must be a side cache for a temporal side
+    return this->BasisCache::getValues(basis, op, useCubPointsSideRefCell);
+  }
+  
   // For now, in this and the methods below, we do *not* store the tensor values.
   // Instead, we allow the tensor components to be stored by the component BasisCaches.
   
@@ -159,6 +191,7 @@ constFCPtr SpaceTimeBasisCache::getValues(BasisPtr basis, Camellia::EOperator op
 //  if (_knownValues.find(key) != _knownValues.end() ) {
 //    return _knownValues[key];
 //  }
+
   
   const int FIELD_INDEX = 0, POINT_INDEX = 1;
   
@@ -171,17 +204,32 @@ constFCPtr SpaceTimeBasisCache::getValues(BasisPtr basis, Camellia::EOperator op
   Intrepid::EOperator spaceOpForSizing = this->spaceOpForSizing(op), timeOpForSizing = this->timeOpForSizing(op);
   Camellia::EOperator spaceOp = this->spaceOp(op), timeOp = this->timeOp(op);
   
-  constFCPtr spatialValues = _spatialCache->getValues(spatialBasis, (Camellia::EOperator)spaceOp, useCubPointsSideRefCell);
-  constFCPtr temporalValues = _temporalCache->getValues(temporalBasis, (Camellia::EOperator)timeOp, useCubPointsSideRefCell);
+  constFCPtr spatialValues = _spatialCache->getValues(spatialBasis, spaceOp, useCubPointsSideRefCell);
+  if (_temporalCache == Teuchos::null) {
+    // then we must be a side cache for a temporal side
+    return spatialValues;
+  }
+  
+  constFCPtr temporalValues = _temporalCache->getValues(temporalBasis, timeOp, useCubPointsSideRefCell);
   
   return getTensorBasisValues(tensorBasis, FIELD_INDEX, POINT_INDEX, spatialValues, temporalValues, spaceOpForSizing, timeOpForSizing);
 }
 
 constFCPtr SpaceTimeBasisCache::getTransformedValues(BasisPtr basis, Camellia::EOperator op, bool useCubPointsSideRefCell) {
+  if (_temporalCache == Teuchos::null) {
+    // then we must be a side cache for a temporal side
+    return this->BasisCache::getTransformedValues(basis, op, useCubPointsSideRefCell);
+  }
+  
   const int FIELD_INDEX = 1, POINT_INDEX = 2;
   
   // compute tensorial components:
   TensorBasis<double>* tensorBasis = dynamic_cast<TensorBasis<double>*>(basis.get());
+  
+  if (tensorBasis == NULL) {
+    cout << "basis must be a subclass of TensorBasis<double>!\n";
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "basis must be a subclass of TensorBasis<double>!");
+  }
   
   BasisPtr spatialBasis = tensorBasis->getSpatialBasis();
   BasisPtr temporalBasis = tensorBasis->getTemporalBasis();
@@ -198,6 +246,11 @@ constFCPtr SpaceTimeBasisCache::getTransformedValues(BasisPtr basis, Camellia::E
 }
 
 constFCPtr SpaceTimeBasisCache::getTransformedWeightedValues(BasisPtr basis, Camellia::EOperator op, bool useCubPointsSideRefCell) {
+  if (_temporalCache == Teuchos::null) {
+    // then we must be a side cache for a temporal side
+    return this->BasisCache::getTransformedWeightedValues(basis, op, useCubPointsSideRefCell);
+  }
+  
   const int FIELD_INDEX = 1, POINT_INDEX = 2;
   
   // compute tensorial components:
