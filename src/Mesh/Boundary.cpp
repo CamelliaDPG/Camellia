@@ -297,20 +297,26 @@ void Boundary::bcsToImpose( map<  GlobalIndexType, double > &globalDofIndicesAnd
     }
     BasisPtr basis = trialOrderingPtr->getBasis(trialID,sideForVertex);
     
-    // upgrade basis to continuous one of the same cardinality, if it is discontinuous.
-    if ((basis->functionSpace() == Camellia::FUNCTION_SPACE_HVOL) || (basis->functionSpace() == Camellia::FUNCTION_SPACE_HVOL_DISC)) {
-      basis = BasisFactory::basisFactory()->getBasis(basis->getDegree(), basis->domainTopology(), Camellia::FUNCTION_SPACE_HGRAD);
-    } else if (Camellia::functionSpaceIsDiscontinuous(basis->functionSpace())) {
-      Camellia::EFunctionSpace fsContinuous = Camellia::continuousSpaceForDiscontinuous((basis->functionSpace()));
-      basis = BasisFactory::basisFactory()->getBasis(basis->getDegree(), basis->domainTopology(), fsContinuous);
-    }
+    int dofOrdinal;
     
-    std::set<int> dofOrdinals = basis->dofOrdinalsForVertex(vertexOrdinal);
-    if (dofOrdinals.size() != 1) {
-      cout << "ERROR: dofOrdinals.size() != 1 during singleton BC imposition.\n";
-      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "dofOrdinals.size() != 1 during singleton BC imposition");
+    if (basis->getCardinality() > 1) {
+      // upgrade basis to continuous one of the same cardinality, if it is discontinuous.
+      if ((basis->functionSpace() == Camellia::FUNCTION_SPACE_HVOL) || (basis->functionSpace() == Camellia::FUNCTION_SPACE_HVOL_DISC)) {
+        basis = BasisFactory::basisFactory()->getBasis(basis->getDegree(), basis->domainTopology(), Camellia::FUNCTION_SPACE_HGRAD);
+      } else if (Camellia::functionSpaceIsDiscontinuous(basis->functionSpace())) {
+        Camellia::EFunctionSpace fsContinuous = Camellia::continuousSpaceForDiscontinuous((basis->functionSpace()));
+        basis = BasisFactory::basisFactory()->getBasis(basis->getDegree(), basis->domainTopology(), fsContinuous);
+      }
+      
+      std::set<int> dofOrdinals = basis->dofOrdinalsForVertex(vertexOrdinal);
+      if (dofOrdinals.size() != 1) {
+        cout << "ERROR: dofOrdinals.size() != 1 during singleton BC imposition.\n";
+        TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "dofOrdinals.size() != 1 during singleton BC imposition");
+      }
+      dofOrdinal = *dofOrdinals.begin();
+    } else {
+      dofOrdinal = 0;
     }
-    int dofOrdinal = *dofOrdinals.begin();
     int basisCardinality = basis->getCardinality();
     FieldContainer<double> basisCoefficients(basisCardinality);
     basisCoefficients[dofOrdinal] = 1.0;
