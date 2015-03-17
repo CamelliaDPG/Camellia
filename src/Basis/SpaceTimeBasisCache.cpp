@@ -33,12 +33,16 @@ SpaceTimeBasisCache::SpaceTimeBasisCache(MeshPtr spaceTimeMesh, ElementTypePtr s
     }
   }
   CellTopoPtr timeTopo = CellTopology::line();
-  ElementTypePtr spaceElemType = Teuchos::rcp( new ElementType( spaceTimeElementType->trialOrderPtr, spaceTimeElementType->testOrderPtr, spaceTopo ) );
-  ElementTypePtr timeElemType = Teuchos::rcp( new ElementType( spaceTimeElementType->trialOrderPtr, spaceTimeElementType->testOrderPtr, timeTopo ) );
+  ElementTypePtr spaceElemType = Teuchos::rcp( new ElementType( spaceTimeElementType->trialOrderPtr,
+                                                               spaceTimeElementType->testOrderPtr, spaceTopo ) );
+  ElementTypePtr timeElemType = Teuchos::rcp( new ElementType( spaceTimeElementType->trialOrderPtr,
+                                                              spaceTimeElementType->testOrderPtr, timeTopo ) );
   
   bool tensorTopologyMeansSpaceTime = false; // if space topology is tensor product, don't interpret as space-time
-  _spatialCache = Teuchos::rcp( new BasisCache(spaceElemType, Teuchos::null, testVsTest, cubatureDegreeEnrichment, tensorTopologyMeansSpaceTime) );
-  _temporalCache = Teuchos::rcp( new BasisCache(timeElemType, Teuchos::null, testVsTest, cubatureDegreeEnrichment, tensorTopologyMeansSpaceTime) );
+  _spatialCache = Teuchos::rcp( new BasisCache(spaceElemType, Teuchos::null, testVsTest, cubatureDegreeEnrichment,
+                                               tensorTopologyMeansSpaceTime) );
+  _temporalCache = Teuchos::rcp( new BasisCache(timeElemType, Teuchos::null, testVsTest, cubatureDegreeEnrichment,
+                                                tensorTopologyMeansSpaceTime) );
   
   bool createSideCache = true;
   _spatialCache->setPhysicalCellNodes(physicalNodesSpatial, cellIDs, createSideCache);
@@ -99,8 +103,9 @@ SpaceTimeBasisCache::SpaceTimeBasisCache(const FieldContainer<double> &physicalN
 }
 
 // side constructor
-SpaceTimeBasisCache::SpaceTimeBasisCache(int sideOrdinal, Teuchos::RCP<SpaceTimeBasisCache> volumeCache, int trialDegree, int testDegree
-                                         ) : BasisCache(sideOrdinal, volumeCache, trialDegree, testDegree, (BasisPtr) Teuchos::null) {
+SpaceTimeBasisCache::SpaceTimeBasisCache(int sideOrdinal, Teuchos::RCP<SpaceTimeBasisCache> volumeCache,
+                                         int trialDegree, int testDegree)
+: BasisCache(sideOrdinal, volumeCache, trialDegree, testDegree, (BasisPtr) Teuchos::null) {
   BasisCachePtr spatialCacheVolume = volumeCache->getSpatialBasisCache();
   BasisCachePtr temporalCacheVolume = volumeCache->getTemporalBasisCache();
   
