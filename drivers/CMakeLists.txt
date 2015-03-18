@@ -6,6 +6,7 @@ option(BUILD_TRUMAN_TESTS_DRIVERS "Build drivers in Truman/Tests directory" OFF)
 option(BUILD_CONFUSION_JESSE_DRIVERS "Build drivers in Confusion_Jesse directory" ON)
 option(BUILD_CONVECTION_DRIVERS "Build drivers in Convection directory" ON)
 option(BUILD_INCOMPRESSIBLENS_DRIVERS "Build drivers in IncompressibleNS directory" ON)
+option(BUILD_PRECONDITIONING_DRIVERS "Build drivers in Preconditioning directory" ON)
 
 # Include headers from DPGTests for some drivers
 include_directories(DPGTests)
@@ -39,6 +40,13 @@ if (BUILD_INCOMPRESSIBLENS_DRIVERS)
 else()
   MESSAGE("Not setting up makefiles for drivers in drivers/IncompressibleNS, because BUILD_INCOMPRESSIBLENS_DRIVERS is OFF.")  
 endif(BUILD_INCOMPRESSIBLENS_DRIVERS)
+
+if (BUILD_PRECONDITIONING_DRIVERS)
+  add_subdirectory(Preconditioning)
+  MESSAGE("Setting up makefiles for drivers in drivers/Preconditioning, because BUILD_PRECONDITIONING_DRIVERS is ON.")
+else()
+  MESSAGE("Not setting up makefiles for drivers in drivers/Preconditioning, because BUILD_PRECONDITIONING_DRIVERS is OFF.")  
+endif(BUILD_PRECONDITIONING_DRIVERS)
 
 add_subdirectory(MeshMemorySize)
 add_subdirectory(NavierStokes)
