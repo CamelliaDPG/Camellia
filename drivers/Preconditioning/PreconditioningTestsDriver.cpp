@@ -450,15 +450,13 @@ void initializeSolutionAndCoarseMesh(SolutionPtr &solution, MeshPtr &coarseMesh,
   
   // now that we have mesh, add pressure constraint for Stokes (imposing zero at origin--want to aim for center of mesh)
   if ((problemChoice == Stokes) || (problemChoice==NavierStokes)) {
-    if (false) { // TESTING SOMETHING: in context of iteartive methods, do we need a pressure condition?
-      vector<double> origin(spaceDim,0);
-      IndexType vertexIndex;
-      
-      if (!mesh->getTopology()->getVertexIndex(origin, vertexIndex)) {
-        TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "origin vertex not found");
-      }
-      bc->addSinglePointBC(p->ID(), 0, vertexIndex);
+    vector<double> origin(spaceDim,0);
+    IndexType vertexIndex;
+    
+    if (!mesh->getTopology()->getVertexIndex(origin, vertexIndex)) {
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "origin vertex not found");
     }
+    bc->addSinglePointBC(p->ID(), 0, vertexIndex);
 //    bc->addZeroMeanConstraint(p);
   }
   
