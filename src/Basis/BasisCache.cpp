@@ -446,6 +446,29 @@ int BasisCache::getCubaturePhaseCount() {
   return _cubaturePhaseCount;
 }
 
+void BasisCache::cubatureDegreeForElementType(ElementTypePtr elemType, bool testVsTest, int &cubatureDegree) {
+  int maxTestDegree = elemType->testOrderPtr->maxBasisDegree();
+
+  int cubatureDegreeForMesh = 0;
+  if (_mesh.get()) {
+    _transformationFxn = _mesh->getTransformationFunction();
+    if (_transformationFxn.get()) {
+      // assuming isoparametric:
+      cubatureDegreeForMesh += _maxTestDegree;
+    }
+    // at least for now, what the Mesh's transformation function does is transform from a straight-lined mesh to
+    // one with potentially curved edges...
+    _composeTransformationFxnWithMeshTransformation = true;
+  }
+  
+  int maxTrialDegree = testVsTest ? maxTestDegree : elemType->trialOrderPtr->maxBasisDegree();
+  cubatureDegree = maxTrialDegree + maxTestDegree + cubatureDegreeForMesh;
+}
+
+void BasisCache::cubatureDegreeForElementType(ElementTypePtr elemType, bool testVsTest, int &cubatureDegreeSpace, int &cubatureDegreeTime) {
+  TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Method not yet implemented");
+}
+
 void BasisCache::setMaxPointsPerCubaturePhase(int maxPoints) {
   if (_maxPointsPerCubaturePhase == -1) {
     _allCubPoints = _cubPoints;
