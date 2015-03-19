@@ -157,6 +157,7 @@ Solution::Solution(const Solution &soln) {
   _writeMatrixToMatrixMarketFile = false;
   _writeRHSToMatrixMarketFile = false;
   _cubatureEnrichmentDegree = soln.cubatureEnrichmentDegree();
+  _zmcsAsLagrangeMultipliers = soln.getZMCsAsGlobalLagrange();
 }
 
 Solution::Solution(Teuchos::RCP<Mesh> mesh, Teuchos::RCP<BC> bc, Teuchos::RCP<RHS> rhs, IPPtr ip) {
@@ -190,6 +191,7 @@ void Solution::initialize() {
   _globalSystemConditionEstimate = -1;
   _cubatureEnrichmentDegree = 0;
 
+  _zmcsAsLagrangeMultipliers = true; // default -- when false, it's user's / Solver's responsibility to enforce ZMCs
   _zmcsAsRankOneUpdate = false; // I believe this works, but it's slow!
   _zmcRho = -1; // default value: stabilization parameter for zero-mean constraints
 }
@@ -752,35 +754,42 @@ void Solution::populateStiffnessAndLoad() {
   }
 
   // impose zero mean constraints:
-  for (vector< int >::iterator trialIt = zeroMeanConstraints.begin(); trialIt != zeroMeanConstraints.end(); trialIt++) {
-    int trialID = *trialIt;
+  if (!_zmcsAsRankOneUpdate) {
+    // if neither doing ZMCs as rank one update nor imposing as Lagrange, we nevertheless set up one global row per ZMC
+    // on rank 0.  The rationale is that this makes iterative solves using CG easier; it means that we don't need to have
+    // a different matrix shape for the case where we rely on the coarse grid solve to impose the ZMC via Lagrange constraints
+    // or when we have a rank-one update in an iterative solve to handle that.
+    // (We put 1's in the diagonals of the new rows, but otherwise leave them unpopulated.)
 
-    // sample an element to make sure that the basis used for trialID is nodal
-    // (this is assumed in our imposition mechanism)
-    GlobalIndexType firstActiveCellID = *_mesh->getActiveCellIDs().begin();
-    ElementTypePtr elemTypePtr = _mesh->getElement(firstActiveCellID)->elementType();
-    BasisPtr trialBasis = elemTypePtr->trialOrderPtr->getBasis(trialID);
-    if (!trialBasis->isNodal()) {
-      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Zero-mean constraint imposition assumes a nodal basis, and this basis isn't nodal.");
-    }
+    imposeZMCsUsingLagrange();
+  } else {
+    // NOTE: this code remains here as reference only; it's quite inefficient because it creates a lot of fill-in for A
+    // we may want to implement the same idea, but with a separate Epetra_Operator that simply stores the vector and the weight
+    for (vector< int >::iterator trialIt = zeroMeanConstraints.begin(); trialIt != zeroMeanConstraints.end(); trialIt++) {
+      int trialID = *trialIt;
 
-    GlobalIndexTypeToCast zmcIndex;
-    if (rank==0)
-      zmcIndex = partMap.GID(localRowIndex);
-    else
-      zmcIndex = 0;
+      // sample an element to make sure that the basis used for trialID is nodal
+      // (this is assumed in our imposition mechanism)
+      GlobalIndexType firstActiveCellID = *_mesh->getActiveCellIDs().begin();
+      ElementTypePtr elemTypePtr = _mesh->getElement(firstActiveCellID)->elementType();
+      BasisPtr trialBasis = elemTypePtr->trialOrderPtr->getBasis(trialID);
+      if (!trialBasis->isNodal()) {
+        TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Zero-mean constraint imposition assumes a nodal basis, and this basis isn't nodal.");
+      }
 
-    zmcIndex = MPIWrapper::sum(zmcIndex);
+      GlobalIndexTypeToCast zmcIndex;
+      if (rank==0)
+        zmcIndex = partMap.GID(localRowIndex);
+      else
+        zmcIndex = 0;
 
-//    cout << "Imposing zero-mean constraint for variable " << _mesh->bilinearForm()->trialName(trialID) << endl;
-    FieldContainer<double> basisIntegrals;
-    FieldContainer<GlobalIndexTypeToCast> globalIndices;
-    integrateBasisFunctions(globalIndices,basisIntegrals, trialID);
-    int numValues = globalIndices.size();
+      zmcIndex = MPIWrapper::sum(zmcIndex);
 
-    if (_zmcsAsRankOneUpdate) {
-      // TODO: debug this (not working)
-      // first pass; can make more efficient by implementing as a symmetric SerialDenseMatrix
+      FieldContainer<double> basisIntegrals;
+      FieldContainer<GlobalIndexTypeToCast> globalIndices;
+      integrateBasisFunctions(globalIndices,basisIntegrals, trialID);
+      int numValues = globalIndices.size();
+
       FieldContainer<double> product(numValues,numValues);
       double denominator = 0.0;
       for (int i=0; i<numValues; i++) {
@@ -794,21 +803,6 @@ void Solution::populateStiffnessAndLoad() {
         }
       }
       globalStiffness->SumIntoGlobalValues(numValues, &globalIndices(0), numValues, &globalIndices(0), &product(0,0));
-    } else { // otherwise, we increase the size of the system to accomodate the zmc...
-      if (numValues > 0) {
-        // insert row:
-        globalStiffness->InsertGlobalValues(1,&zmcIndex,numValues,&globalIndices(0),&basisIntegrals(0));
-        // insert column:
-        globalStiffness->InsertGlobalValues(numValues,&globalIndices(0),1,&zmcIndex,&basisIntegrals(0));
-      }
-
-      //      cout << "in zmc, diagonal entry: " << rho << endl;
-      //rho /= numValues;
-      if (rank==0) { // insert the diagonal entry on rank 0; other ranks insert basis integrals according to which cells they own
-        double rho_entry = - 1.0 / _zmcRho;
-        globalStiffness->InsertGlobalValues(1,&zmcIndex,1,&zmcIndex,&rho_entry);
-      }
-      if (rank==0) localRowIndex++;
     }
   }
   // end of ZMC imposition
@@ -1320,6 +1314,89 @@ void Solution::imposeBCs() {
   } else {
     ML_Epetra::Apply_OAZToMatrix(&bcLocalIndices(0), numBCs, *_globalStiffMatrix);
   }
+}
+
+
+void Solution::imposeZMCsUsingLagrange() {
+  int rank = Teuchos::GlobalMPISession::getRank();
+  
+  if (_zmcsAsRankOneUpdate) {
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "imposeZMCsUsingLagrange called when _zmcsAsRankOneUpdate is true!");
+  }
+  
+  Epetra_Map partMap = getPartitionMap();
+  
+  set<GlobalIndexType> myGlobalIndicesSet = _dofInterpreter->globalDofIndicesForPartition(rank);
+  int localRowIndex = myGlobalIndicesSet.size();
+  int numLocalActiveElements = _mesh->globalDofAssignment()->cellsInPartition(rank).size();
+  localRowIndex += numLocalActiveElements * _lagrangeConstraints->numElementConstraints() + _lagrangeConstraints->numGlobalConstraints();
+  
+//  Epetra_FECrsMatrix* globalStiffness = dynamic_cast<Epetra_FECrsMatrix*>(_globalStiffMatrix.get());
+//  if (globalStiffness==NULL) {
+//    
+//  }
+  
+  // order is: element-lagrange, then (on rank 0) global lagrange and ZMC
+  vector<int> zeroMeanConstraints = getZeroMeanConstraints();
+  for (vector< int >::iterator trialIt = zeroMeanConstraints.begin(); trialIt != zeroMeanConstraints.end(); trialIt++) {
+    int trialID = *trialIt;
+    
+    // sample an element to make sure that the basis used for trialID is nodal
+    // (this is assumed in our imposition mechanism)
+    GlobalIndexType firstActiveCellID = *_mesh->getActiveCellIDs().begin();
+    ElementTypePtr elemTypePtr = _mesh->getElement(firstActiveCellID)->elementType();
+    BasisPtr trialBasis = elemTypePtr->trialOrderPtr->getBasis(trialID);
+    if (!trialBasis->isNodal()) {
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Zero-mean constraint imposition assumes a nodal basis, and this basis isn't nodal.");
+    }
+    
+    GlobalIndexTypeToCast zmcIndex;
+    if (rank==0)
+      zmcIndex = partMap.GID(localRowIndex);
+    else
+      zmcIndex = 0;
+    
+    zmcIndex = MPIWrapper::sum(zmcIndex);
+    
+    if (_zmcsAsLagrangeMultipliers) {
+      //    cout << "Imposing zero-mean constraint for variable " << _mesh->bilinearForm()->trialName(trialID) << endl;
+      FieldContainer<double> basisIntegrals;
+      FieldContainer<GlobalIndexTypeToCast> globalIndices;
+      integrateBasisFunctions(globalIndices,basisIntegrals, trialID);
+      int numValues = globalIndices.size();
+      
+      // here, we increase the size of the system to accomodate the zmc...
+      if (numValues > 0) {
+        // insert row:
+        // int InsertGlobalValues(int GlobalRow, int NumEntries, const double* Values, const int* Indices);
+        _globalStiffMatrix->InsertGlobalValues(zmcIndex,numValues,&basisIntegrals(0),&globalIndices(0));
+        // insert column:
+        for (int valueOrdinal=0; valueOrdinal<globalIndices.size(); valueOrdinal++) {
+          _globalStiffMatrix->InsertGlobalValues(globalIndices(valueOrdinal),1,&basisIntegrals(valueOrdinal),&zmcIndex);
+        }
+
+        // old, FECrsMatrix version below:
+//        globalStiffness->InsertGlobalValues(1,&zmcIndex,numValues,&globalIndices(0),&basisIntegrals(0));
+//        // insert column:
+//        globalStiffness->InsertGlobalValues(numValues,&globalIndices(0),1,&zmcIndex,&basisIntegrals(0));
+      }
+      
+      //      cout << "in zmc, diagonal entry: " << rho << endl;
+      //rho /= numValues;
+      if (rank==0) { // insert the diagonal entry on rank 0; other ranks insert basis integrals according to which cells they own
+        double rho_entry = - 1.0 / _zmcRho;
+        _globalStiffMatrix->InsertGlobalValues(zmcIndex,1,&rho_entry,&zmcIndex);
+      }
+    } else {
+      // put ones in the diagonal on rank 0
+      if (rank==0) { // insert the diagonal entry on rank 0; other ranks insert basis integrals according to which cells they own
+        double one = 1.0;
+        _globalStiffMatrix->InsertGlobalValues(zmcIndex,1,&one,&zmcIndex);
+      }
+    }
+    if (rank==0) localRowIndex++;
+  }
+  // end of ZMC imposition
 }
 
 Teuchos::RCP<LocalStiffnessMatrixFilter> Solution::filter() const{
@@ -2255,7 +2332,8 @@ Teuchos::RCP<Epetra_CrsMatrix> Solution::getStiffnessMatrix() {
 }
 
 void Solution::setStiffnessMatrix(Teuchos::RCP<Epetra_CrsMatrix> stiffness) {
-  _globalStiffMatrix = stiffness;
+//  Epetra_FECrsMatrix* stiffnessFEMatrix = dynamic_cast<Epetra_FECrsMatrix*>(_globalStiffMatrix.get());
+    _globalStiffMatrix = stiffness;
 }
 
 void Solution::solutionValues(FieldContainer<double> &values, int trialID, BasisCachePtr basisCache,
@@ -3227,6 +3305,22 @@ Epetra_Map Solution::getPartitionMap() {
   return partMap;
 }
 
+Epetra_Map Solution::getPartitionMapSolutionDofsOnly() { // omits lagrange multipliers, ZMCs, etc.
+  Epetra_Map partMapWithZMC = getPartitionMap();
+  vector<int> myGlobalIndices(partMapWithZMC.NumMyElements());
+  partMapWithZMC.MyGlobalElements(&myGlobalIndices[0]);
+  GlobalIndexType numGlobalDofs = _dofInterpreter->globalDofCount();
+  vector<int> myGlobalDofs;
+  for (vector<int>::iterator myEntry = myGlobalIndices.begin(); myEntry != myGlobalIndices.end(); myEntry++) {
+    if (*myEntry < numGlobalDofs) {
+      myGlobalDofs.push_back(*myEntry);
+    }
+  }
+  int indexBase = 0;
+  Epetra_Map partMap(numGlobalDofs, myGlobalDofs.size(), &myGlobalDofs[0], indexBase, partMapWithZMC.Comm());
+  return partMap;
+}
+
 Epetra_Map Solution::getPartitionMap(PartitionIndexType rank, set<GlobalIndexType> & myGlobalIndicesSet, GlobalIndexType numGlobalDofs,
                                      int zeroMeanConstraintsSize, Epetra_Comm* Comm ) {
   int numGlobalLagrange = _lagrangeConstraints->numGlobalConstraints();
@@ -3799,4 +3893,12 @@ void Solution::setZeroMeanConstraintRho(double value) {
 
 double Solution::zeroMeanConstraintRho() {
   return _zmcRho;
+}
+
+bool Solution::getZMCsAsGlobalLagrange() const {
+  return _zmcsAsLagrangeMultipliers;
+}
+
+void Solution::setZMCsAsGlobalLagrange(bool value) {
+  _zmcsAsLagrangeMultipliers = value;
 }

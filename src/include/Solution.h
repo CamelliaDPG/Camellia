@@ -50,6 +50,7 @@
 
 #include "Epetra_FECrsMatrix.h"
 #include "Epetra_FEVector.h"
+#include "Epetra_Operator.h"
 #include "Epetra_SerialDenseMatrix.h"
 #include "Epetra_SerialDenseVector.h"
 
@@ -130,6 +131,7 @@ private:
   bool _writeMatrixToMatrixMarketFile;
   bool _writeRHSToMatrixMarketFile;
   bool _zmcsAsRankOneUpdate;
+  bool _zmcsAsLagrangeMultipliers;
   
   std::string _matrixFilePath;
   std::string _rhsFilePath;
@@ -159,6 +161,7 @@ public:
   void setDofInterpreter(Teuchos::RCP<DofInterpreter> dofInterpreter);
   
   Epetra_Map getPartitionMap();
+  Epetra_Map getPartitionMapSolutionDofsOnly(); // omits lagrange constraints, zmcs, etc.
   Epetra_Map getPartitionMap(PartitionIndexType rank, std::set<GlobalIndexType> &myGlobalIndicesSet,
                              GlobalIndexType numGlobalDofs, int zeroMeanConstraintsSize, Epetra_Comm* Comm );
   
@@ -167,11 +170,15 @@ public:
   bool cellHasCoefficientsAssigned(GlobalIndexType cellID);
   void clearComputedResiduals();
   
+  bool getZMCsAsGlobalLagrange() const;
+  void setZMCsAsGlobalLagrange(bool value); // should be set before call to initializeLHSVector(), initializeStiffnessAndLoad()
+  
   // solve steps:
   void initializeLHSVector();
   void initializeStiffnessAndLoad();
   void populateStiffnessAndLoad();
   void imposeBCs();
+  void imposeZMCsUsingLagrange(); // if not using Lagrange for ZMCs, puts 1's in the diagonal for these rows
   void setProblem(SolverPtr solver);
   int solveWithPrepopulatedStiffnessAndLoad(SolverPtr solver, bool callResolveInstead = false);
   void importSolution(); // imports for all rank-local cellIDs
