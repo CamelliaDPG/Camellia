@@ -450,14 +450,7 @@ void initializeSolutionAndCoarseMesh(SolutionPtr &solution, MeshPtr &coarseMesh,
   
   // now that we have mesh, add pressure constraint for Stokes (imposing zero at origin--want to aim for center of mesh)
   if ((problemChoice == Stokes) || (problemChoice==NavierStokes)) {
-    vector<double> origin(spaceDim,0);
-    IndexType vertexIndex;
-    
-    if (!mesh->getTopology()->getVertexIndex(origin, vertexIndex)) {
-      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "origin vertex not found");
-    }
-    bc->addSinglePointBC(p->ID(), 0, vertexIndex);
-//    bc->addZeroMeanConstraint(p);
+    bc->addZeroMeanConstraint(p);
   }
   
   int H1Order_coarse = 0 + 1;
@@ -487,6 +480,7 @@ void initializeSolutionAndCoarseMesh(SolutionPtr &solution, MeshPtr &coarseMesh,
   
   solution = Solution::solution(mesh, bc, rhs, graphNorm);
   solution->setUseCondensedSolve(useStaticCondensation);
+  solution->setZMCsAsGlobalLagrange(false); // fine grid solution shouldn't impose ZMCs (should be handled in coarse grid solve)
 }
 
 void run(ProblemChoice problemChoice, int &iterationCount, int spaceDim, int numCells, int k, int delta_k, bool conformingTraces,
@@ -499,6 +493,10 @@ void run(ProblemChoice problemChoice, int &iterationCount, int spaceDim, int num
   if (hOnly && (numCellsRootMesh == -1)) {
     // then use a single level of h-coarsening as the root mesh.
     numCellsRootMesh = numCells / 2;
+    if (numCellsRootMesh == 0) {
+      cout << "Too few cells in root mesh.  Aborting.\n";
+      exit(1);
+    }
   } else if (numCellsRootMesh == -1) {
     numCellsRootMesh = numCells;
   }
