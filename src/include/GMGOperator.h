@@ -83,7 +83,10 @@ public:
   //! @name Constructor
   //@{
   //! Constructor
-  GMGOperator(BCPtr zeroBCs, MeshPtr coarseMesh, IPPtr coarseIP, MeshPtr fineMesh, Teuchos::RCP<DofInterpreter> fineDofInterpreter, Epetra_Map finePartitionMap, Teuchos::RCP<Solver> coarseSolver, bool useStaticCondensation, bool fineSolverUsesDiagonalScaling = true);
+  GMGOperator(BCPtr zeroBCs, MeshPtr coarseMesh, IPPtr coarseIP, MeshPtr fineMesh,
+              Teuchos::RCP<DofInterpreter> fineDofInterpreter, Epetra_Map finePartitionMap,
+              Teuchos::RCP<Solver> coarseSolver, bool useStaticCondensation,
+              bool fineSolverUsesDiagonalScaling = true);
   //@}
   
   //! @name Attribute set methods
@@ -234,7 +237,6 @@ public:
 
   //! Returns the coarse stiffness matrix (an Epetra_CrsMatrix).
   Teuchos::RCP<Epetra_CrsMatrix> getCoarseStiffnessMatrix();
-  
   
   //! Returns the Solver used in the coarse solve.
   SolverPtr getCoarseSolver();
