@@ -26,6 +26,9 @@ class SpaceTimeBasisCache : public BasisCache {
   
   Intrepid::EOperator spaceOpForSizing(Camellia::EOperator op);
   Intrepid::EOperator timeOpForSizing(Camellia::EOperator op);
+
+  void getSpaceTimeCubatureDegrees(ElementTypePtr spaceTimeType, int &spaceCubature, int &timeCubature);
+//  void getSpaceTimeElementTypes(ElementTypePtr spaceTimeType, ElementTypePtr &spaceType, ElementTypePtr &timeType);
   
   constFCPtr getTensorBasisValues(TensorBasis<double>* tensorBasis,
                                   int fieldIndex, int pointIndex,
