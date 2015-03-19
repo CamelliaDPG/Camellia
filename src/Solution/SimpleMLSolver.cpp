@@ -26,7 +26,7 @@ SimpleMLSolver::SimpleMLSolver(bool saveFactorization, double residualTolerance,
 int SimpleMLSolver::solve() {
   AztecOO *solver = new AztecOO( problem() );
   // create a parameter list for ML options
-  ParameterList MLList;
+  Teuchos::ParameterList MLList;
   
   // Sets default parameters for classic smoothed aggregation. After this
   // call, MLList contains the default values for the ML parameters,

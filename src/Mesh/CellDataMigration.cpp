@@ -6,6 +6,8 @@
 //
 //
 
+#include <Teuchos_GlobalMPISession.hpp>
+
 #include "CellDataMigration.h"
 
 #include "GlobalDofAssignment.h"

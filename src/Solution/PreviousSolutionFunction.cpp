@@ -6,6 +6,8 @@
 //
 //
 
+#include <Teuchos_GlobalMPISession.hpp>
+
 #include "PreviousSolutionFunction.h"
 
 #include "Function.h"

@@ -130,7 +130,7 @@ void HDF5Exporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
 
   bool exportingBoundaryValues = functions[0]->boundaryValueOnly();
 
-  XMLObject partitionCollection("Grid");
+  Teuchos::XMLObject partitionCollection("Grid");
   if (commRank == 0)
   {
     if (!exportingBoundaryValues)
@@ -143,13 +143,13 @@ void HDF5Exporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
         partitionCollection.addAttribute("Name", timeName.str());
         partitionCollection.addAttribute("GridType", "Collection");
         partitionCollection.addAttribute("CollectionType", "Spatial");
-        XMLObject time("Time");
+        Teuchos::XMLObject time("Time");
         partitionCollection.addChild(time);
         time.addAttribute("TimeType", "Single");
         time.addDouble("Value", timeVal);
         for (int p=0; p < numProcs; p++)
         {
-          XMLObject xiinclude("xi:include");
+          Teuchos::XMLObject xiinclude("xi:include");
           partitionCollection.addChild(xiinclude);
           stringstream partitionFileName;
           partitionFileName << "XMF/field" << "-part" << p << "-time" << timeVal << ".xmf";
@@ -169,13 +169,13 @@ void HDF5Exporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
         partitionCollection.addAttribute("Name", timeName.str());
         partitionCollection.addAttribute("GridType", "Collection");
         partitionCollection.addAttribute("CollectionType", "Spatial");
-        XMLObject time("Time");
+        Teuchos::XMLObject time("Time");
         partitionCollection.addChild(time);
         time.addAttribute("TimeType", "Single");
         time.addDouble("Value", timeVal);
         for (int p=0; p < numProcs; p++)
         {
-          XMLObject xiinclude("xi:include");
+          Teuchos::XMLObject xiinclude("xi:include");
           partitionCollection.addChild(xiinclude);
           stringstream partitionFileName;
           partitionFileName << "XMF/trace" << "-part" << p << "-time" << timeVal << ".xmf";
@@ -193,7 +193,7 @@ void HDF5Exporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
   else
     partitionFileName << _dirSuperPath << "/" << _dirName << "/XMF/trace" << "-part" << commRank << "-time" << timeVal << ".xmf";
   gridFile.open(partitionFileName.str().c_str());
-  XMLObject grid("Grid");
+  Teuchos::XMLObject grid("Grid");
   stringstream gridName;
   gridName << "Time" << timeVal << "Partition" << commRank;
   grid.addAttribute("Name", gridName.str());
@@ -463,7 +463,7 @@ void HDF5Exporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
   totalSubcells = totalBoundaryPts + totalSubLines + totalSubTriangles + totalSubQuads + totalSubTets + totalSubWedges + totalSubHexas;
 
   // Topology
-  XMLObject topology("Topology");
+  Teuchos::XMLObject topology("Topology");
   grid.addChild(topology);
   topology.addAttribute("TopologyType", "Mixed");
   if (!exportingBoundaryValues)
@@ -500,7 +500,7 @@ void HDF5Exporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
       connDimsf = 5*totalSubQuads + 4*totalSubTriangles;
   }
   int connArray[connDimsf];
-  XMLObject topoDataItem("DataItem");
+  Teuchos::XMLObject topoDataItem("DataItem");
   topology.addChild(topoDataItem);
   topoDataItem.addAttribute("ItemType", "Uniform");
   topoDataItem.addAttribute("Format", "HDF");
@@ -512,7 +512,7 @@ void HDF5Exporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
   topoDataItem.addContent(connOutRel.str());
 
   // Geometry
-  XMLObject geometry("Geometry");
+  Teuchos::XMLObject geometry("Geometry");
   grid.addChild(geometry);
   if (spaceDim < 3)
     geometry.addAttribute("GeometryType", "XY");
@@ -525,7 +525,7 @@ void HDF5Exporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
     ptDimsf = spaceDim * totalPts;
   double ptArray[ptDimsf];
 
-  XMLObject geoDataItem("DataItem");
+  Teuchos::XMLObject geoDataItem("DataItem");
   geometry.addChild(geoDataItem);
   geoDataItem.addAttribute("ItemType", "Uniform");
   geoDataItem.addAttribute("Format", "HDF");
@@ -537,10 +537,10 @@ void HDF5Exporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
   geoDataItem.addContent(ptOutRel.str());
 
   // Node Data
-  vector<XMLObject> vals;
+  vector<Teuchos::XMLObject> vals;
   for (int i=0; i<nFcns; i++)
   {
-    vals.push_back( XMLObject("Attribute") );
+    vals.push_back( Teuchos::XMLObject("Attribute") );
     grid.addChild(vals[i]);
     vals[i].addAttribute("Name", functionNames[i].c_str());
     vals[i].addAttribute("Center", "Node");
@@ -577,7 +577,7 @@ void HDF5Exporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
       valDimsf[i] = 3*totalPts;
     }
     valArrays[i].resize(valDimsf[i], 0);
-    XMLObject valDataItem("DataItem");
+    Teuchos::XMLObject valDataItem("DataItem");
     vals[i].addChild(valDataItem);
     valDataItem.addAttribute("ItemType", "Uniform");
     valDataItem.addAttribute("Format", "HDF");

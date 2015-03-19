@@ -34,6 +34,8 @@
  *
  */
 
+#include <Teuchos_GlobalMPISession.hpp>
+ 
 #include "Intrepid_CellTools.hpp"
 #include "CamelliaCellTools.h"
 #include "Intrepid_DefaultCubatureFactory.hpp"
