@@ -57,6 +57,11 @@ class StokesVGPFormulation {
   static const string S_V1, S_V2, S_V3;
   static const string S_Q;
   static const string S_TAU1, S_TAU2, S_TAU3;
+  
+  // ! initialize the Solution object(s) using the provided MeshTopology
+  void initializeSolution(MeshTopologyPtr meshTopo, int fieldPolyOrder, int delta_k,
+                          FunctionPtr forcingFunction, std::string fileToLoadPrefix);
+  
 public:
   StokesVGPFormulation(int spaceDim, bool useConformingTraces, double mu = 1.0,
                        bool transient = false, double dt = 1.0);
@@ -83,8 +88,17 @@ public:
   void initializeSolution(MeshTopologyPtr meshTopo, int fieldPolyOrder, int delta_k = 1,
                           FunctionPtr forcingFunction = Teuchos::null);
   
+  // ! initialize the Solution object(s) using the provided MeshTopology
+  void initializeSolution(std::string filePrefix, int fieldPolyOrder, int delta_k = 1,
+                          FunctionPtr forcingFunction = Teuchos::null);
+  
   // ! L^2 norm of the difference in u1, u2, and p from previous time step
   double L2NormOfTimeStep();
+  
+  // ! Loads the mesh and solution from disk, if they were previously saved using save().  In the present
+  // ! implementation, assumes that the constructor arguments provided to StokesVGPFormulation were the same
+  // ! on the StokesVGPFormulation on which save() was invoked as they were for this StokesVGPFormulation.
+  void load(std::string prefixString);
   
   // ! Returns viscosity mu.
   double mu();
@@ -103,6 +117,9 @@ public:
   
   // ! Returns an RHSPtr corresponding to the vector forcing function f and the formulation.
   RHSPtr rhs(FunctionPtr f);
+  
+  // ! Saves the solution(s) and mesh to an HDF5 format.
+  void save(std::string prefixString);
   
   // ! set the RefinementStrategy to use for driving refinements
   void setRefinementStrategy(RefinementStrategyPtr refStrategy);

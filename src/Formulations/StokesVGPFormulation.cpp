@@ -7,10 +7,9 @@
 //
 
 #include "StokesVGPFormulation.h"
+#include "MeshFactory.h"
 #include "PenaltyConstraints.h"
-
 #include "PoissonFormulation.h"
-
 #include "PreviousSolutionFunction.h"
 
 const string StokesVGPFormulation::S_U1 = "u_1";
@@ -360,14 +359,34 @@ FunctionPtr StokesVGPFormulation::forcingFunction(int spaceDim, double mu, Funct
 
 void StokesVGPFormulation::initializeSolution(MeshTopologyPtr meshTopo, int fieldPolyOrder, int delta_k,
                                               FunctionPtr forcingFunction) {
-  int H1Order = fieldPolyOrder + 1;
-  MeshPtr mesh = Teuchos::rcp( new Mesh(meshTopo, _stokesBF, H1Order, delta_k) ) ;
- 
+  this->initializeSolution(meshTopo, fieldPolyOrder, delta_k, forcingFunction, "");
+}
+
+void StokesVGPFormulation::initializeSolution(std::string filePrefix, int fieldPolyOrder, int delta_k,
+                                              FunctionPtr forcingFunction) {
+  this->initializeSolution(Teuchos::null, fieldPolyOrder, delta_k, forcingFunction, filePrefix);
+}
+
+void StokesVGPFormulation::initializeSolution(MeshTopologyPtr meshTopo, int fieldPolyOrder, int delta_k,
+                                              FunctionPtr forcingFunction, string savedSolutionAndMeshPrefix) {
   _haveOutflowConditionsImposed = false;
   BCPtr bc = BC::bc();
   
-  _solution = Solution::solution(mesh,bc);
-  if (_transient) _previousSolution = Solution::solution(mesh,bc);
+  int H1Order = fieldPolyOrder + 1;
+  MeshPtr mesh;
+  if (savedSolutionAndMeshPrefix == "") {
+    mesh = Teuchos::rcp( new Mesh(meshTopo, _stokesBF, H1Order, delta_k) ) ;
+    _solution = Solution::solution(mesh,bc);
+    if (_transient) _previousSolution = Solution::solution(mesh,bc);
+  } else {
+    mesh = MeshFactory::loadFromHDF5(_stokesBF, savedSolutionAndMeshPrefix+".mesh");
+    _solution = Solution::solution(mesh, bc);
+    _solution->loadFromHDF5(savedSolutionAndMeshPrefix+".soln");
+    if (_transient) {
+      _previousSolution = Solution::solution(mesh,bc);
+      _previousSolution->loadFromHDF5(savedSolutionAndMeshPrefix+"_previous.soln");
+    }
+  }
   
   RHSPtr rhs = this->rhs(forcingFunction); // in transient case, this will refer to _previousSolution
   IPPtr ip = _stokesBF->graphNorm();
@@ -383,7 +402,6 @@ void StokesVGPFormulation::initializeSolution(MeshTopologyPtr meshTopo, int fiel
   double energyThreshold = 0.2;
   _refinementStrategy = Teuchos::rcp( new RefinementStrategy( mesh, residual, ip, energyThreshold ) );
   
-  
   double maxDouble = std::numeric_limits<double>::max();
   double maxP = 20;
   _hRefinementStrategy = Teuchos::rcp( new RefinementStrategy( mesh, residual, ip, energyThreshold, 0, 0, false ) );
@@ -396,9 +414,14 @@ void StokesVGPFormulation::initializeSolution(MeshTopologyPtr meshTopo, int fiel
     // finally, set up a stream function solve for 2D
     _streamFormulation = Teuchos::rcp( new PoissonFormulation(_spaceDim,_useConformingTraces) );
     
-    MeshTopologyPtr streamMeshTopo = meshTopo->deepCopy();
+    MeshPtr streamMesh;
+    if (savedSolutionAndMeshPrefix == "") {
+      MeshTopologyPtr streamMeshTopo = meshTopo->deepCopy();
+      streamMesh = Teuchos::rcp( new Mesh(streamMeshTopo, _streamFormulation->bf(), H1Order, delta_k) ) ;
+    } else {
+      streamMesh = MeshFactory::loadFromHDF5(_streamFormulation->bf(), savedSolutionAndMeshPrefix+"_stream.mesh");
+    }
     
-    MeshPtr streamMesh = Teuchos::rcp( new Mesh(streamMeshTopo, _streamFormulation->bf(), H1Order, delta_k) ) ;
     mesh->registerObserver(streamMesh); // refine streamMesh whenever mesh is refined
     
     LinearTermPtr u1_dy = (1.0 / _mu) * this->sigma(1)->y();
@@ -433,6 +456,10 @@ void StokesVGPFormulation::initializeSolution(MeshTopologyPtr meshTopo, int fiel
     
     IPPtr streamIP = _streamFormulation->bf()->graphNorm();
     _streamSolution = Solution::solution(streamMesh,streamBC,streamRHS,streamIP);
+
+    if (savedSolutionAndMeshPrefix != "") {
+      _streamSolution->loadFromHDF5(savedSolutionAndMeshPrefix + "_stream.soln");
+    }
   }
 }
 
@@ -585,6 +612,20 @@ VarPtr StokesVGPFormulation::tau(int i) {
       return _vf.testVar(S_TAU3, HDIV);
   }
   TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "unhandled i value");
+
+}
+
+// ! Saves the solution(s) and mesh to an HDF5 format.
+void StokesVGPFormulation::save(std::string prefixString) {
+  _solution->mesh()->saveToHDF5(prefixString+".mesh");
+  _solution->saveToHDF5(prefixString+".soln");
+  if (_transient) {
+    _previousSolution->saveToHDF5(prefixString+"_previous.soln");
+  }
+  if (_streamSolution != Teuchos::null) {
+    _streamSolution->mesh()->saveToHDF5(prefixString+"_stream.mesh");
+    _streamSolution->saveToHDF5(prefixString + "_stream.soln");
+  }
 }
 
 // ! set current time step used for transient solve
