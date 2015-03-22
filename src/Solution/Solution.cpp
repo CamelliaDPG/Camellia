@@ -3792,6 +3792,10 @@ void Solution::saveToHDF5(string filename)
 #endif
   EpetraExt::HDF5 hdf5(Comm);
   hdf5.Create(filename);
+  if (_lhsVector == Teuchos::null) {
+    // then we'll save the zero solution.
+    initializeLHSVector();
+  }
   hdf5.Write("Solution", *_lhsVector);
   hdf5.Close();
 }
