@@ -124,7 +124,7 @@ int main(int argc, char *argv[]) {
   HDF5Exporter exporter(mesh, "stokesInitialSolution", ".");
   exporter.exportSolution(form.solution());
 
-  double tol = 1e-2;
+  double tol = 8e-1;
   int refNumber = 0;
   do {
     refNumber++;
@@ -142,6 +142,17 @@ int main(int argc, char *argv[]) {
     if (rank==0) cout << "Energy error for refinement " << refNumber << ": " << energyError;
     if (rank==0) cout << " (mesh has " << activeElements << " elements and " << globalDofs << " global dofs)." << endl;
   } while (energyError > tol);
+  
+  // save the formulation for possible later reloading:
+  string savePrefix = "stokesExample";
+  cout << "Saving to " << savePrefix << endl;
+  form.save(savePrefix);
+  cout << "...saved.\n";
+  
+  // try loading:
+  cout << "loading saved solution...\n";
+  form.initializeSolution(savePrefix, polyOrder, delta_k);
+  cout << "...loaded.\n";
   
   /*   Now that we have a fine mesh, try the same problem, but transient, starting with a zero initial
    *   state, and with boundary conditions that "ramp up" in time (and which also are zero at time 0).
