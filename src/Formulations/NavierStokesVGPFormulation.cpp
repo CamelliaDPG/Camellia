@@ -7,6 +7,7 @@
 //
 
 #include "NavierStokesVGPFormulation.h"
+#include "MeshFactory.h"
 #include "PenaltyConstraints.h"
 #include "PreviousSolutionFunction.h"
 
@@ -33,15 +34,24 @@ const string NavierStokesVGPFormulation::S_TAU2 = "\\tau_{2}";
 const string NavierStokesVGPFormulation::S_TAU3 = "\\tau_{3}";
 const string NavierStokesVGPFormulation::S_Q = "q";
 
-NavierStokesVGPFormulation::NavierStokesVGPFormulation(MeshTopologyPtr meshTopology, double Re,
-                                                       int fieldPolyOrder, int delta_k,
-                                                       FunctionPtr forcingFunction,
-                                                       bool transientFormulation, bool useConformingTraces) {
+void NavierStokesVGPFormulation::initialize(MeshTopologyPtr meshTopology, std::string filePrefix,
+                                            int spaceDim, double Re, int fieldPolyOrder, int delta_k,
+                                            FunctionPtr forcingFunction, bool transientFormulation,
+                                            bool useConformingTraces) {
   if (transientFormulation) {
     cout << "WARNING: transientFormulation is not yet implemented.\n";
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "transientFormulation not yet supported in NavierStokesVGPFormulation");
   }
-  _spaceDim = meshTopology->getSpaceDim();
+  if (meshTopology != Teuchos::null) {
+    // then we take spaceDim from meshTopology
+    _spaceDim = meshTopology->getSpaceDim();
+  } else {
+    _spaceDim = spaceDim;
+    if (filePrefix == "") {
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "You must specify a non-null meshTopology or a file prefix");
+    }
+  }
+  
   _useConformingTraces = useConformingTraces;
   _mu = 1.0 / Re;
   
@@ -110,7 +120,13 @@ NavierStokesVGPFormulation::NavierStokesVGPFormulation(MeshTopologyPtr meshTopol
   
   _navierStokesBF = Teuchos::rcp( new BF(vf) );
   int H1Order = fieldPolyOrder + 1;
-  MeshPtr mesh = Teuchos::rcp( new Mesh(meshTopology, _navierStokesBF, H1Order, delta_k) ) ;
+  
+  MeshPtr mesh;
+  if (filePrefix == "") {
+    mesh = Teuchos::rcp( new Mesh(meshTopology, _navierStokesBF, H1Order, delta_k) ) ;
+  } else {
+    mesh = MeshFactory::loadFromHDF5(_navierStokesBF, filePrefix+".mesh");
+  }
   
   _backgroundFlow = Solution::solution(mesh);
   _solnIncrement = Solution::solution(mesh);
@@ -269,9 +285,14 @@ NavierStokesVGPFormulation::NavierStokesVGPFormulation(MeshTopologyPtr meshTopol
     // finally, set up a stream function solve for 2D
     _streamFormulation = Teuchos::rcp( new PoissonFormulation(_spaceDim,_useConformingTraces) );
     
-    MeshTopologyPtr streamMeshTopo = meshTopology->deepCopy();
+    MeshPtr streamMesh;
+    if (filePrefix == "") {
+      MeshTopologyPtr streamMeshTopo = meshTopology->deepCopy();
+      streamMesh = Teuchos::rcp( new Mesh(streamMeshTopo, _streamFormulation->bf(), H1Order, delta_k) ) ;
+    } else {
+      streamMesh = MeshFactory::loadFromHDF5(_streamFormulation->bf(), filePrefix+"_stream.mesh");
+    }
     
-    MeshPtr streamMesh = Teuchos::rcp( new Mesh(streamMeshTopo, _streamFormulation->bf(), H1Order, delta_k) ) ;
     mesh->registerObserver(streamMesh); // refine streamMesh whenever mesh is refined
     
     LinearTermPtr u1_dy = (1.0 / _mu) * this->sigma(1)->y();
@@ -306,7 +327,28 @@ NavierStokesVGPFormulation::NavierStokesVGPFormulation(MeshTopologyPtr meshTopol
     
     IPPtr streamIP = _streamFormulation->bf()->graphNorm();
     _streamSolution = Solution::solution(streamMesh,streamBC,streamRHS,streamIP);
+    
+    if (filePrefix != "") {
+      _streamSolution->loadFromHDF5(filePrefix + "_stream.soln");
+    }
   }
+}
+
+NavierStokesVGPFormulation::NavierStokesVGPFormulation(MeshTopologyPtr meshTopology, double Re,
+                                                       int fieldPolyOrder, int delta_k,
+                                                       FunctionPtr forcingFunction,
+                                                       bool transientFormulation, bool useConformingTraces) {
+  initialize(meshTopology, "", meshTopology->getSpaceDim(), Re, fieldPolyOrder, delta_k,
+             forcingFunction, transientFormulation, useConformingTraces);
+}
+
+NavierStokesVGPFormulation::NavierStokesVGPFormulation(std::string filePrefix, int spaceDim, double Re,
+                                                       int fieldPolyOrder, int delta_k,
+                                                       FunctionPtr forcingFunction,
+                                                       bool transientFormulation,
+                                                       bool useConformingTraces) {
+  initialize(Teuchos::null, filePrefix, spaceDim, Re, fieldPolyOrder, delta_k,
+             forcingFunction, transientFormulation, useConformingTraces);
 }
 
 void NavierStokesVGPFormulation::addInflowCondition(SpatialFilterPtr inflowRegion, FunctionPtr u) {
@@ -594,6 +636,18 @@ RHSPtr NavierStokesVGPFormulation::rhs(FunctionPtr f, bool excludeFluxesAndTrace
     rhs->addTerm( -((u1_prev / _mu) * sigma3_prev->x() + (u2_prev / _mu) * sigma3_prev->y() + (u3_prev / _mu) * sigma3_prev->z()) * v3 );
   }
   return rhs;
+}
+
+// ! Saves the solution(s) and mesh to an HDF5 format.
+void NavierStokesVGPFormulation::save(std::string prefixString) {
+  _backgroundFlow->mesh()->saveToHDF5(prefixString+".mesh");
+  _backgroundFlow->saveToHDF5(prefixString+".soln");
+  _solnIncrement->saveToHDF5(prefixString+"_previous.soln");
+  
+  if (_streamSolution != Teuchos::null) {
+    _streamSolution->mesh()->saveToHDF5(prefixString+"_stream.mesh");
+    _streamSolution->saveToHDF5(prefixString + "_stream.soln");
+  }
 }
 
 SolutionPtr NavierStokesVGPFormulation::solution() {
