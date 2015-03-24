@@ -522,7 +522,8 @@ void run(ProblemChoice problemChoice, int &iterationCount, int spaceDim, int num
          bool useStaticCondensation, bool precondition, bool schwarzOnly, GMGOperator::SmootherChoice smootherType,
          int schwarzOverlap, GMGOperator::FactorType schwarzBlockFactorization, int schwarzLevelOfFill, double schwarzFillRatio,
          Solver::SolverChoice coarseSolverChoice, double cgTol, int cgMaxIterations, int AztecOutputLevel,
-         bool reportTimings, double &solveTime, bool reportEnergyError, int numCellsRootMesh, bool hOnly, bool useZeroMeanConstraints) {
+         bool reportTimings, double &solveTime, bool reportEnergyError, int numCellsRootMesh, bool hOnly, bool useZeroMeanConstraints,
+         bool writeAndExit) {
   int rank = Teuchos::GlobalMPISession::getRank();
   
   if (hOnly && (numCellsRootMesh == -1)) {
@@ -677,39 +678,39 @@ void run(ProblemChoice problemChoice, int &iterationCount, int spaceDim, int num
     }
   }
   
-  //  Teuchos::RCP< Epetra_CrsMatrix > A = solution->getStiffnessMatrix();
-  //  Teuchos::RCP< Epetra_CrsMatrix > M;
-  //  if (schwarzOnly) {
-  //    M = ((AztecSolver*)solver.get())->getPreconditionerMatrix(A->DomainMap());
-  //  } else {
-  //    GMGOperator* op = &((GMGSolver*)solver.get())->gmgOperator();
-  //    M = Epetra_Operator_to_Epetra_Matrix::constructInverseMatrix(*op, A->DomainMap());
-  //    Teuchos::RCP< Epetra_CrsMatrix > A_coarse = op->getCoarseStiffnessMatrix();
-  //    Teuchos::RCP< Epetra_CrsMatrix > A_coarse_inverse = Epetra_Operator_to_Epetra_Matrix::constructInverseMatrix(*A_coarse, A_coarse->DomainMap());
-  //    if (rank==0) cout << "writing A_coarse to /tmp/A_coarse_poisson.dat.\n";
-  //    EpetraExt::RowMatrixToMatrixMarketFile("/tmp/A_coarse_poisson.dat",*A_coarse, NULL, NULL, false);
-  //    EpetraExt::RowMatrixToMatrixMarketFile("/tmp/A_coarse_inv_poisson.dat",*A_coarse_inverse, NULL, NULL, false);
-  
-  //    Teuchos::RCP< Epetra_CrsMatrix > S = op->getSmootherAsMatrix();
-  //    EpetraExt::RowMatrixToMatrixMarketFile("/tmp/S.dat",*S, NULL, NULL, false);
-  //  }
-  
-  //  if (rank==0) cout << "writing M (preconditioner) to /tmp/M_poisson.dat.\n";
-  //  EpetraExt::RowMatrixToMatrixMarketFile("/tmp/M_poisson.dat",*M, NULL, NULL, false);
-  
-  //  Epetra_CrsMatrix AM(::Copy, A->DomainMap(), 0);
-  //  int err = EpetraExt::MatrixMatrix::Multiply(*A, false, *M, false, AM);
-  //
-  //  AM.FillComplete();
-  //
-  //  EpetraExt::RowMatrixToMatrixMarketFile("/tmp/AM_poisson.dat",AM, NULL, NULL, false);
-  
   GlobalIndexType numFluxDofs = mesh->numFluxDofs();
   GlobalIndexType numGlobalDofs = mesh->numGlobalDofs();
   if ((rank==0) && reportEnergyError) {
     cout << "Mesh has " << mesh->numActiveElements() << " elements and " << numFluxDofs << " trace dofs (";
     cout << numGlobalDofs << " total dofs, including fields).\n";
     cout << "Energy error: " << energyErrorTotal << endl;
+  }
+  
+  if (writeAndExit) {
+    Teuchos::RCP< Epetra_CrsMatrix > A = solution->getStiffnessMatrix();
+    Teuchos::RCP< Epetra_CrsMatrix > M;
+    if (schwarzOnly) {
+      if (rank==0) cout << "writeAndExit not yet supported for schwarzOnly.\n";
+    } else {
+      GMGOperator* op = &((GMGSolver*)solver.get())->gmgOperator();
+      
+      Teuchos::RCP< Epetra_CrsMatrix > A_coarse = op->getCoarseStiffnessMatrix();
+      if (rank==0) cout << "writing A_coarse to A_coarse.dat.\n";
+      EpetraExt::RowMatrixToMatrixMarketFile("A_coarse.dat",*A_coarse, NULL, NULL, false);
+      
+      Teuchos::RCP< Epetra_CrsMatrix > P = op->getProlongationOperator();
+      if (rank==0) cout << "writing P to P.dat.\n";
+      EpetraExt::RowMatrixToMatrixMarketFile("P.dat",*P, NULL, NULL, false);
+      
+      if (rank==0) cout << "writing A to A_fine.dat.\n";
+      EpetraExt::RowMatrixToMatrixMarketFile("A_fine.dat",*A_coarse, NULL, NULL, false);
+      
+      if (rank==0) cout << "writing smoother to S.dat.\n";
+      Teuchos::RCP< Epetra_CrsMatrix > S = op->getSmootherAsMatrix();
+      EpetraExt::RowMatrixToMatrixMarketFile("S.dat",*S, NULL, NULL, false);
+      
+      return;
+    }
   }
   
 //  if (rank==0) cout << "NOTE: Exported solution for debugging.\n";
@@ -946,11 +947,12 @@ void runMany(ProblemChoice problemChoice, int spaceDim, int delta_k, int minCell
               int iterationCount;
               bool reportEnergyError = false;
               double solveTime;
+              bool writeAndExit = false; // not supported for runMany (since it always writes to the same disk location)
               run(problemChoice, iterationCount, spaceDim, numCells1D, k, delta_k, conformingTraces,
                   useStaticCondensation, precondition, schwarzOnly, smoother, overlapValue,
                   schwarzBlockFactorization, schwarzLevelOfFill, schwarzFillRatio, coarseSolverChoice,
                   cgTol, cgMaxIterations, aztecOutputLevel, reportTimings, solveTime,
-                  reportEnergyError, numCellsRootMesh, hOnly, useZeroMeanConstraints);
+                  reportEnergyError, numCellsRootMesh, hOnly, useZeroMeanConstraints, writeAndExit);
               
               int numCells = pow((double)numCells1D, spaceDim);
               
@@ -1058,6 +1060,8 @@ int main(int argc, char *argv[]) {
   
   bool useZeroMeanConstraints = false;
   
+  bool writeAndExit = false;
+  
   string schwarzFactorizationTypeString = "Direct";
   
   string problemChoiceString = "Poisson";
@@ -1109,6 +1113,8 @@ int main(int argc, char *argv[]) {
   cmdp.setOption("runManySubset", &runManySubsetString, "DontPrecondition, AllGMG, AllSchwarz, or All");
   cmdp.setOption("runManyMinCells", &runManyMinCells, "Minimum number of cells to use for mesh width");
   cmdp.setOption("runManyMaxCells", &maxCells, "Maximum number of cells to use for mesh width");
+  
+  cmdp.setOption("writeAndExit", "runNormally", &writeAndExit, "Write A, A_coarse, P, and S to disk, and exit without computing anything.");
   
   cmdp.setOption("useZeroMeanConstraint", "usePointConstraint", &useZeroMeanConstraints, "Use a zero-mean constraint for the pressure (otherwise, use a vertex constraint at the origin)");
   
@@ -1213,7 +1219,7 @@ int main(int argc, char *argv[]) {
     run(problemChoice, iterationCount, spaceDim, numCells, k, delta_k, conformingTraces,
         useCondensedSolve, precondition, schwarzOnly, smootherChoice, schwarzOverlap,
         schwarzFactorType, levelOfFill, fillRatio, coarseSolverChoice,
-        cgTol, cgMaxIterations, AztecOutputLevel, reportTimings, solveTime, reportEnergyError, numCellsRootMesh, hOnly, useZeroMeanConstraints);
+        cgTol, cgMaxIterations, AztecOutputLevel, reportTimings, solveTime, reportEnergyError, numCellsRootMesh, hOnly, useZeroMeanConstraints, writeAndExit);
     
     if (rank==0) cout << "Iteration count: " << iterationCount << "; solve time " << solveTime << " seconds." << endl;
   } else {
