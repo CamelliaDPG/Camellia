@@ -217,7 +217,8 @@ public:
     BLOCK_JACOBI,
     BLOCK_SYMMETRIC_GAUSS_SEIDEL,
     IFPACK_ADDITIVE_SCHWARZ,
-    CAMELLIA_ADDITIVE_SCHWARZ
+    CAMELLIA_ADDITIVE_SCHWARZ,
+    NONE
   };
   
   void setSmootherType(SmootherChoice smootherType);

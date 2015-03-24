@@ -674,6 +674,7 @@ int GMGOperator::ApplyInverse(const Epetra_MultiVector& X_in, Epetra_MultiVector
   timer.ResetStartTime();
   if (printVerboseOutput) cout << "calling _coarseSolution->getLHSVector()\n";
   Teuchos::RCP<Epetra_FEVector> coarseLHSVector = _coarseSolution->getLHSVector();
+  
   if (printVerboseOutput) cout << "finished _coarseSolution->getLHSVector()\n";
   if (printVerboseOutput) cout << "calling _P->Multiply(false, *coarseLHSVector, Y)\n";
   _P->Multiply(false, *coarseLHSVector, Y);
@@ -681,12 +682,15 @@ int GMGOperator::ApplyInverse(const Epetra_MultiVector& X_in, Epetra_MultiVector
   _timeMapCoarseToFine += timer.ElapsedTime();
 
   // if _applySmoothingOperator is set, add S^(-1)X to Y.
-  if (_applySmoothingOperator) {
+  if (_applySmoothingOperator && (_smootherType != NONE)) {
     if (printVerboseOutput) cout << "copying X into X2\n";
     Epetra_MultiVector X2(X); // copy, since I'm not sure ApplyInverse is generally OK with X and Y in same location (though Aztec seems to make that assumption, so it probably is OK).
     if (printVerboseOutput) cout << "finished copying X into X2\n";
     if (printVerboseOutput) cout << "calling _smoother->ApplyInverse(X2, X)\n";
-    _smoother->ApplyInverse(X2, X);
+    int err = _smoother->ApplyInverse(X2, X);
+    if (err != 0) {
+      cout << "_smoother->ApplyInverse returned non-zero error code " << err << endl;
+    }
     if (printVerboseOutput) cout << "finished _smoother->ApplyInverse(X2, X)\n";
     if (printVerboseOutput) cout << "calling Y.Update(1.0, X, 1.0)\n";
     Y.Update(1.0, X, 1.0);
@@ -695,13 +699,31 @@ int GMGOperator::ApplyInverse(const Epetra_MultiVector& X_in, Epetra_MultiVector
     //    cout << "_diag is NULL.\n";
   }
 
-
   if (_fineSolverUsesDiagonalScaling) {
     if (printVerboseOutput) cout << "calling Y.Multiply(1.0, *_diag_sqrt, Y, 0)\n";
     Y.Multiply(1.0, *_diag_sqrt, Y, 0);
     if (printVerboseOutput) cout << "finished Y.Multiply(1.0, *_diag_sqrt, Y, 0)\n";
   }
-
+  
+  /*
+   We zero out the lagrange multiplier solutions on the fine mesh, because we're relying on the coarse solve to impose these;
+   we just use an identity block in the lower right of the fine matrix for the Lagrange constraints themselves.
+   
+   The argument for this, at least for zero mean constraints:
+   If the coarse solution has zero mean, then the fact that the prolongation operator is exact (i.e. coarse mesh solution is
+   exactly reproduced on fine mesh) means that the fine mesh solution will have zero mean.
+   
+   This neglects the smoothing operator.  If the smoothing operator isn't guaranteed to produce an update with zero mean,
+   then this may not work.
+   */
+  GlobalIndexType firstFineConstraintRowIndex = _fineDofInterpreter->globalDofCount();
+  for (GlobalIndexTypeToCast fineRowIndex=firstFineConstraintRowIndex; fineRowIndex<Y.GlobalLength(); fineRowIndex++) {
+    int LID = Y.Map().LID(fineRowIndex);
+    if (LID != -1) {
+      Y[0][LID] = 0.0;
+    }
+  }
+  
   return 0;
 }
 
@@ -897,6 +919,11 @@ void GMGOperator::setSmootherOverlap(int overlap) {
 }
 
 void GMGOperator::setSmootherType(GMGOperator::SmootherChoice smootherType) {
+  if (smootherType != NONE) {
+    setApplySmoothingOperator(true);
+  } else {
+    setApplySmoothingOperator(false);
+  }
   _smootherType = smootherType;
 }
 
@@ -908,6 +935,9 @@ void GMGOperator::setUpSmoother(Epetra_CrsMatrix *fineStiffnessMatrix) {
   Teuchos::RCP<Ifpack_Preconditioner> smoother;
 
   switch (choice) {
+    case NONE:
+      _smoother = Teuchos::null;
+      return;
     case POINT_JACOBI:
     {
       List.set("relaxation: type", "Jacobi");
