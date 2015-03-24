@@ -322,6 +322,10 @@ enum RunManyPreconditionerChoices {
   DontPrecondition,
   GMGAlgebraicSchwarz, // GMG with algebraic Schwarz smoother
   GMGGeometricSchwarz, // GMG with geometric Schwarz smoother
+  GMGPointSymmetricGaussSeidel, // GMG with point symmetric Gauss Seidel smoother
+  GMGBlockSymmetricGaussSeidel, // GMG with block symmetric Gauss Seidel smoother
+  GMGPointJacobi, // GMG with point symmetric Jacobi smoother
+  GMGBlockJacobi, // GMG with block symmetric Jacobi smoother
   AlgebraicSchwarz, // algebraic Schwarz preconditioner
   GeometricSchwarz, // geometric Schwarz preconditioner
   AllGMG,     // Schwarz smoother, multiple overlap values, both algebraic and geometric Schwarz
@@ -329,9 +333,30 @@ enum RunManyPreconditionerChoices {
   All         // All of the above, including the DontPrecondition option
 };
 
+string smootherString(GMGOperator::SmootherChoice smoother) {
+  switch (smoother) {
+    case GMGOperator::IFPACK_ADDITIVE_SCHWARZ:
+      return "IfPack-Schwarz";
+    case GMGOperator::CAMELLIA_ADDITIVE_SCHWARZ:
+      return "Camellia-Schwarz";
+    case GMGOperator::NONE:
+      return "None";
+    case GMGOperator::BLOCK_SYMMETRIC_GAUSS_SEIDEL:
+      return "Block-Gauss-Seidel";
+    case GMGOperator::POINT_SYMMETRIC_GAUSS_SEIDEL:
+      return "Point-Gauss-Seidel";
+    case GMGOperator::BLOCK_JACOBI:
+      return "Block-Jacobi";
+    case GMGOperator::POINT_JACOBI:
+      return "Point-Jacobi";
+    default:
+      return "Unknown";
+  }
+}
+
 void initializeSolutionAndCoarseMesh(SolutionPtr &solution, MeshPtr &coarseMesh, IPPtr &graphNorm, ProblemChoice problemChoice,
                                      int spaceDim, bool conformingTraces, bool useStaticCondensation, int numCells, int k, int delta_k,
-                                     int rootMeshNumCells) {
+                                     int rootMeshNumCells, bool useZeroMeanConstraints = false) {
   BFPtr bf;
   BCPtr bc;
   RHSPtr rhs;
@@ -450,7 +475,17 @@ void initializeSolutionAndCoarseMesh(SolutionPtr &solution, MeshPtr &coarseMesh,
   
   // now that we have mesh, add pressure constraint for Stokes (imposing zero at origin--want to aim for center of mesh)
   if ((problemChoice == Stokes) || (problemChoice==NavierStokes)) {
-    bc->addZeroMeanConstraint(p);
+    if (!useZeroMeanConstraints) {
+      vector<double> origin(spaceDim,0);
+      IndexType vertexIndex;
+      
+      if (!mesh->getTopology()->getVertexIndex(origin, vertexIndex)) {
+        TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "origin vertex not found");
+      }
+      bc->addSinglePointBC(p->ID(), 0, vertexIndex);
+    } else {
+      bc->addZeroMeanConstraint(p);
+    }
   }
   
   int H1Order_coarse = 0 + 1;
@@ -484,10 +519,10 @@ void initializeSolutionAndCoarseMesh(SolutionPtr &solution, MeshPtr &coarseMesh,
 }
 
 void run(ProblemChoice problemChoice, int &iterationCount, int spaceDim, int numCells, int k, int delta_k, bool conformingTraces,
-         bool useStaticCondensation, bool precondition, bool schwarzOnly, bool useCamelliaAdditiveSchwarz, int schwarzOverlap,
-         GMGOperator::FactorType schwarzBlockFactorization, int schwarzLevelOfFill, double schwarzFillRatio,
+         bool useStaticCondensation, bool precondition, bool schwarzOnly, GMGOperator::SmootherChoice smootherType,
+         int schwarzOverlap, GMGOperator::FactorType schwarzBlockFactorization, int schwarzLevelOfFill, double schwarzFillRatio,
          Solver::SolverChoice coarseSolverChoice, double cgTol, int cgMaxIterations, int AztecOutputLevel,
-         bool reportTimings, double &solveTime, bool reportEnergyError, int numCellsRootMesh, bool hOnly) {
+         bool reportTimings, double &solveTime, bool reportEnergyError, int numCellsRootMesh, bool hOnly, bool useZeroMeanConstraints) {
   int rank = Teuchos::GlobalMPISession::getRank();
   
   if (hOnly && (numCellsRootMesh == -1)) {
@@ -505,7 +540,7 @@ void run(ProblemChoice problemChoice, int &iterationCount, int spaceDim, int num
   MeshPtr k0Mesh;
   IPPtr graphNorm;
   initializeSolutionAndCoarseMesh(solution, k0Mesh, graphNorm, problemChoice, spaceDim, conformingTraces, useStaticCondensation,
-                                  numCells, k, delta_k, numCellsRootMesh);
+                                  numCells, k, delta_k, numCellsRootMesh, useZeroMeanConstraints);
   
   MeshPtr mesh = solution->mesh();
   BCPtr bc = solution->bc();
@@ -522,11 +557,12 @@ void run(ProblemChoice problemChoice, int &iterationCount, int spaceDim, int num
     solver = Teuchos::rcp( new AztecSolver(cgMaxIterations,cgTol,schwarzOverlap,precondition, schwarzBlockFactorization, schwarzLevelOfFill, schwarzFillRatio) );
     ((AztecSolver*) solver.get())->setAztecOutputLevel(AztecOutputLevel);
   } else if (schwarzOnly) {
-    if (useCamelliaAdditiveSchwarz) {
+    if (smootherType==GMGOperator::CAMELLIA_ADDITIVE_SCHWARZ) {
       solver = Teuchos::rcp( new AztecSolver(cgMaxIterations,cgTol,schwarzOverlap, precondition, schwarzBlockFactorization,
                                              schwarzLevelOfFill, schwarzFillRatio, mesh, solution->getDofInterpreter()) );
     } else {
-      solver = Teuchos::rcp( new AztecSolver(cgMaxIterations,cgTol,schwarzOverlap,precondition, schwarzBlockFactorization, schwarzLevelOfFill, schwarzFillRatio) );
+      solver = Teuchos::rcp( new AztecSolver(cgMaxIterations,cgTol,schwarzOverlap,precondition, schwarzBlockFactorization,
+                                             schwarzLevelOfFill, schwarzFillRatio) );
     }
     ((AztecSolver*) solver.get())->setAztecOutputLevel(AztecOutputLevel);
   } else {
@@ -584,11 +620,7 @@ void run(ProblemChoice problemChoice, int &iterationCount, int spaceDim, int num
     gmgSolver->gmgOperator().setFillRatio(schwarzFillRatio);
 //    cout << "Set GMGOperator level of fill to " << schwarzLevelOfFill << endl;
 //    cout << "Set GMGOperator fill ratio to " << schwarzFillRatio << endl;
-    if (useCamelliaAdditiveSchwarz) {
-      gmgSolver->gmgOperator().setSmootherType(GMGOperator::CAMELLIA_ADDITIVE_SCHWARZ);
-    } else {
-      gmgSolver->gmgOperator().setSmootherType(GMGOperator::IFPACK_ADDITIVE_SCHWARZ);
-    }
+    gmgSolver->gmgOperator().setSmootherType(smootherType);
     gmgSolver->gmgOperator().setSmootherOverlap(schwarzOverlap);
     gmgSolver->gmgOperator().setDebugMode(runGMGOperatorInDebugMode);
     solver = Teuchos::rcp( gmgSolver ); // we use "new" above, so we can let this RCP own the memory
@@ -695,7 +727,7 @@ void runMany(ProblemChoice problemChoice, int spaceDim, int delta_k, int minCell
              GMGOperator::FactorType schwarzBlockFactorization, int schwarzLevelOfFill, double schwarzFillRatio,
              Solver::SolverChoice coarseSolverChoice,
              double cgTol, int cgMaxIterations, int aztecOutputLevel, RunManyPreconditionerChoices preconditionerChoices,
-             int k, int overlapLevel, int numCellsRootMesh, bool reportTimings, bool hOnly) {
+             int k, int overlapLevel, int numCellsRootMesh, bool reportTimings, bool hOnly, int maxCells, bool useZeroMeanConstraints) {
   int rank = Teuchos::GlobalMPISession::getRank();
   
   string problemChoiceString;
@@ -733,6 +765,18 @@ void runMany(ProblemChoice problemChoice, int spaceDim, int delta_k, int minCell
     case GMGGeometricSchwarz:
       preconditionerChoiceString = "GMGGeometricSchwarz";
       break;
+    case GMGBlockJacobi:
+      preconditionerChoiceString = "GMGBlockJacobi";
+      break;
+    case GMGPointJacobi:
+      preconditionerChoiceString = "GMGPointJacobi";
+      break;
+    case GMGBlockSymmetricGaussSeidel:
+      preconditionerChoiceString = "GMGBlockGaussSeidel";
+      break;
+    case GMGPointSymmetricGaussSeidel:
+      preconditionerChoiceString = "GMGPointGaussSeidel";
+      break;
     case AlgebraicSchwarz:
       preconditionerChoiceString = "AlgebraicSchwarz";
       break;
@@ -747,53 +791,81 @@ void runMany(ProblemChoice problemChoice, int spaceDim, int delta_k, int minCell
   vector<bool> preconditionValues;
   
   vector<bool> schwarzOnly_maxChoices;
-  vector<bool> useCamelliaSchwarz_maxChoices;
+  vector<GMGOperator::SmootherChoice> smootherChoices;
   
   switch (preconditionerChoices) {
     case DontPrecondition:
       preconditionValues.push_back(false);
       schwarzOnly_maxChoices.push_back(false);
-      useCamelliaSchwarz_maxChoices.push_back(false);
+      smootherChoices.push_back(GMGOperator::NONE);
       break;
     case GMGAlgebraicSchwarz:
       preconditionValues.push_back(true);
       schwarzOnly_maxChoices.push_back(false);
-      useCamelliaSchwarz_maxChoices.push_back(false);
+      smootherChoices.push_back(GMGOperator::IFPACK_ADDITIVE_SCHWARZ);
       break;
     case GMGGeometricSchwarz:
       preconditionValues.push_back(true);
       schwarzOnly_maxChoices.push_back(false);
-      useCamelliaSchwarz_maxChoices.push_back(true);
+      smootherChoices.push_back(GMGOperator::CAMELLIA_ADDITIVE_SCHWARZ);
+      break;
+    case GMGBlockJacobi:
+      preconditionValues.push_back(true);
+      schwarzOnly_maxChoices.push_back(false);
+      smootherChoices.push_back(GMGOperator::BLOCK_JACOBI);
+      break;
+    case GMGPointJacobi:
+      preconditionValues.push_back(true);
+      schwarzOnly_maxChoices.push_back(false);
+      smootherChoices.push_back(GMGOperator::POINT_JACOBI);
+      break;
+    case GMGBlockSymmetricGaussSeidel:
+      preconditionValues.push_back(true);
+      schwarzOnly_maxChoices.push_back(false);
+      smootherChoices.push_back(GMGOperator::BLOCK_SYMMETRIC_GAUSS_SEIDEL);
+      break;
+    case GMGPointSymmetricGaussSeidel:
+      preconditionValues.push_back(true);
+      schwarzOnly_maxChoices.push_back(false);
+      smootherChoices.push_back(GMGOperator::POINT_SYMMETRIC_GAUSS_SEIDEL);
       break;
     case AlgebraicSchwarz:
       preconditionValues.push_back(true);
       schwarzOnly_maxChoices.push_back(true);
-      useCamelliaSchwarz_maxChoices.push_back(false);
+      smootherChoices.push_back(GMGOperator::IFPACK_ADDITIVE_SCHWARZ);
       break;
     case GeometricSchwarz:
       preconditionValues.push_back(true);
       schwarzOnly_maxChoices.push_back(true);
-      useCamelliaSchwarz_maxChoices.push_back(true);
+      smootherChoices.push_back(GMGOperator::CAMELLIA_ADDITIVE_SCHWARZ);
       break;
     case AllGMG:
       preconditionValues.push_back(true);
       schwarzOnly_maxChoices.push_back(false);
-      useCamelliaSchwarz_maxChoices.push_back(false);
-      useCamelliaSchwarz_maxChoices.push_back(true);
+      smootherChoices.push_back(GMGOperator::IFPACK_ADDITIVE_SCHWARZ);
+      smootherChoices.push_back(GMGOperator::CAMELLIA_ADDITIVE_SCHWARZ);
+//      smootherChoices.push_back(GMGOperator::BLOCK_SYMMETRIC_GAUSS_SEIDEL);
+      smootherChoices.push_back(GMGOperator::POINT_SYMMETRIC_GAUSS_SEIDEL);
+//      smootherChoices.push_back(GMGOperator::BLOCK_JACOBI);
+      smootherChoices.push_back(GMGOperator::POINT_JACOBI);
       break;
     case AllSchwarz:
       preconditionValues.push_back(true);
       schwarzOnly_maxChoices.push_back(true);
-      useCamelliaSchwarz_maxChoices.push_back(false);
-      useCamelliaSchwarz_maxChoices.push_back(true);
+      smootherChoices.push_back(GMGOperator::IFPACK_ADDITIVE_SCHWARZ);
+      smootherChoices.push_back(GMGOperator::CAMELLIA_ADDITIVE_SCHWARZ);
       break;
     case All:
       preconditionValues.push_back(false);
       preconditionValues.push_back(true);
       schwarzOnly_maxChoices.push_back(false);
       schwarzOnly_maxChoices.push_back(true);
-      useCamelliaSchwarz_maxChoices.push_back(false);
-      useCamelliaSchwarz_maxChoices.push_back(true);
+      smootherChoices.push_back(GMGOperator::IFPACK_ADDITIVE_SCHWARZ);
+      smootherChoices.push_back(GMGOperator::CAMELLIA_ADDITIVE_SCHWARZ);
+//      smootherChoices.push_back(GMGOperator::BLOCK_SYMMETRIC_GAUSS_SEIDEL);
+      smootherChoices.push_back(GMGOperator::POINT_SYMMETRIC_GAUSS_SEIDEL);
+//      smootherChoices.push_back(GMGOperator::BLOCK_JACOBI);
+      smootherChoices.push_back(GMGOperator::POINT_JACOBI);
       break;
   }
   
@@ -810,7 +882,7 @@ void runMany(ProblemChoice problemChoice, int spaceDim, int delta_k, int minCell
   
   vector<int> numCellsValues;
   int numCells = minCells;
-  while (pow((double)numCells,spaceDim) <= Teuchos::GlobalMPISession::getNProc()) { // ensure max of 1 cell per MPI node
+  while (pow((double)numCells,spaceDim) <= maxCells) {
     // want to do as many as we can with just one cell per processor
     numCellsValues.push_back(numCells);
     numCells *= 2;
@@ -822,44 +894,36 @@ void runMany(ProblemChoice problemChoice, int spaceDim, int delta_k, int minCell
   for (vector<bool>::iterator preconditionChoiceIt = preconditionValues.begin(); preconditionChoiceIt != preconditionValues.end(); preconditionChoiceIt++) {
     bool precondition = *preconditionChoiceIt;
   
-    vector<int> overlapValues;
-    vector<bool> schwarzOnlyValues, useCamelliaSchwarzValues;
+    vector<bool> schwarzOnlyValues;
+    vector<GMGOperator::SmootherChoice> smootherChoiceValues;
     if (precondition) {
       schwarzOnlyValues = schwarzOnly_maxChoices;
-      useCamelliaSchwarzValues = useCamelliaSchwarz_maxChoices;
-      if (overlapLevel == -1) {
-        overlapValues.push_back(0);
-        overlapValues.push_back(1);
-        if (spaceDim < 3) overlapValues.push_back(2);
-      } else {
-        overlapValues.push_back(overlapLevel);
-      }
+      smootherChoiceValues = smootherChoices;
     } else {
-      // schwarzOnly and useCamelliaSchwarz ignored; just use one of them
+      // schwarzOnly and smootherChoice ignored; just use one of each
       schwarzOnlyValues.push_back(false);
-      useCamelliaSchwarzValues.push_back(false);
-      if (overlapLevel == -1) {
-        overlapValues.push_back(0);
-      } else {
-        overlapValues.push_back(overlapLevel);
-      }
+      smootherChoiceValues.push_back(GMGOperator::NONE);
     }
     for (vector<bool>::iterator schwarzOnlyChoiceIt = schwarzOnlyValues.begin(); schwarzOnlyChoiceIt != schwarzOnlyValues.end(); schwarzOnlyChoiceIt++) {
       bool schwarzOnly = *schwarzOnlyChoiceIt;
-      for (vector<bool>::iterator useCamelliaSchwarzChoiceIt = useCamelliaSchwarzValues.begin(); useCamelliaSchwarzChoiceIt != useCamelliaSchwarzValues.end(); useCamelliaSchwarzChoiceIt++) {
-        bool useCamelliaSchwarz = *useCamelliaSchwarzChoiceIt;
+      for (vector<GMGOperator::SmootherChoice>::iterator smootherIt = smootherChoiceValues.begin(); smootherIt != smootherChoiceValues.end(); smootherIt++) {
+        GMGOperator::SmootherChoice smoother = *smootherIt;
         
-        string S_str; // smoother choice description
-        if (!precondition) {
-          S_str = "None";
-        } else {
-          if (useCamelliaSchwarz) {
-            S_str = "Schwarz(geometric)";
+        vector<int> overlapValues;
+        if (precondition && ((smoother==GMGOperator::CAMELLIA_ADDITIVE_SCHWARZ) || (smoother==GMGOperator::IFPACK_ADDITIVE_SCHWARZ))) {
+          if (overlapLevel == -1) {
+            overlapValues.push_back(0);
+            overlapValues.push_back(1);
+            if (spaceDim < 3) overlapValues.push_back(2);
           } else {
-            S_str = "Schwarz(algebraic)";
+            overlapValues.push_back(overlapLevel);
           }
+        } else {
+          overlapValues.push_back(0);
         }
         
+        // smoother choice description
+        string S_str = smootherString(smoother);
         string M_str; // preconditioner descriptor for output
         if (!precondition) {
           M_str = "None";
@@ -883,10 +947,10 @@ void runMany(ProblemChoice problemChoice, int spaceDim, int delta_k, int minCell
               bool reportEnergyError = false;
               double solveTime;
               run(problemChoice, iterationCount, spaceDim, numCells1D, k, delta_k, conformingTraces,
-                  useStaticCondensation, precondition, schwarzOnly, useCamelliaSchwarz, overlapValue,
+                  useStaticCondensation, precondition, schwarzOnly, smoother, overlapValue,
                   schwarzBlockFactorization, schwarzLevelOfFill, schwarzFillRatio, coarseSolverChoice,
                   cgTol, cgMaxIterations, aztecOutputLevel, reportTimings, solveTime,
-                  reportEnergyError, numCellsRootMesh, hOnly);
+                  reportEnergyError, numCellsRootMesh, hOnly, useZeroMeanConstraints);
               
               int numCells = pow((double)numCells1D, spaceDim);
               
@@ -976,8 +1040,9 @@ int main(int argc, char *argv[]) {
   int spaceDim = 1;
   
   bool useCondensedSolve = false;
+
+  string smootherChoiceStr = "IfPack-Schwarz";
   
-  bool useCamelliaAdditiveSchwarz = false;
   bool schwarzOnly = false;
   
   double cgTol = 1e-10;
@@ -991,6 +1056,8 @@ int main(int argc, char *argv[]) {
   
   bool hOnly = false;
   
+  bool useZeroMeanConstraints = false;
+  
   string schwarzFactorizationTypeString = "Direct";
   
   string problemChoiceString = "Poisson";
@@ -1000,6 +1067,7 @@ int main(int argc, char *argv[]) {
   string runManySubsetString = "All";
   
   int runManyMinCells = 2;
+  int maxCells = -1;
 
   cmdp.setOption("problem",&problemChoiceString,"problem choice: Poisson, Stokes, Navier-Stokes");
   
@@ -1011,7 +1079,7 @@ int main(int argc, char *argv[]) {
   cmdp.setOption("useCondensedSolve", "useStandardSolve", &useCondensedSolve);
   
   cmdp.setOption("useSchwarzPreconditioner", "useGMGPreconditioner", &schwarzOnly);
-  cmdp.setOption("useCamelliaAdditiveSchwarz", "useIfPackAdditiveSchwarz", &useCamelliaAdditiveSchwarz);
+  cmdp.setOption("smoother", &smootherChoiceStr);
 
   cmdp.setOption("hOnly", "notHOnly", &hOnly);
   
@@ -1040,6 +1108,9 @@ int main(int argc, char *argv[]) {
   cmdp.setOption("runMany", "runOne", &runAutomatic, "Run in automatic mode (ignores several input parameters)");
   cmdp.setOption("runManySubset", &runManySubsetString, "DontPrecondition, AllGMG, AllSchwarz, or All");
   cmdp.setOption("runManyMinCells", &runManyMinCells, "Minimum number of cells to use for mesh width");
+  cmdp.setOption("runManyMaxCells", &maxCells, "Maximum number of cells to use for mesh width");
+  
+  cmdp.setOption("useZeroMeanConstraint", "usePointConstraint", &useZeroMeanConstraints, "Use a zero-mean constraint for the pressure (otherwise, use a vertex constraint at the origin)");
   
   cmdp.setOption("gmgOperatorDebug", "gmgOperatorNormal", &runGMGOperatorInDebugMode, "Run GMGOperator in a debug mode");
   
@@ -1070,6 +1141,30 @@ int main(int argc, char *argv[]) {
     return -1;
   }
   
+  GMGOperator::SmootherChoice smootherChoice;
+
+  if (smootherChoiceStr == "None") {
+    smootherChoice = GMGOperator::NONE;
+  } else if (smootherChoiceStr == "IfPack-Schwarz") {
+    smootherChoice = GMGOperator::IFPACK_ADDITIVE_SCHWARZ;
+  } else if (smootherChoiceStr == "Camellia-Schwarz") {
+    smootherChoice = GMGOperator::CAMELLIA_ADDITIVE_SCHWARZ;
+  } else if (smootherChoiceStr == "Point-Jacobi") {
+    smootherChoice = GMGOperator::POINT_JACOBI;
+  } else if (smootherChoiceStr == "Block-Jacobi") {
+    smootherChoice = GMGOperator::BLOCK_JACOBI;
+  } else if (smootherChoiceStr == "Point-Gauss-Seidel") {
+    smootherChoice = GMGOperator::POINT_SYMMETRIC_GAUSS_SEIDEL;
+  } else if (smootherChoiceStr == "Block-Gauss-Seidel") {
+    smootherChoice = GMGOperator::BLOCK_SYMMETRIC_GAUSS_SEIDEL;
+  } else {
+    if (rank==0) cout << "Smoother choice string not recognized.\n";
+#ifdef HAVE_MPI
+    MPI_Finalize();
+#endif
+    return -1;
+  }
+  
   Solver::SolverChoice coarseSolverChoice = Solver::solverChoiceFromString(coarseSolverChoiceString);
   
   RunManyPreconditionerChoices runManySubsetChoice;
@@ -1090,6 +1185,10 @@ int main(int argc, char *argv[]) {
     runManySubsetChoice = GMGAlgebraicSchwarz;
   } else if (runManySubsetString == "GMGGeometricSchwarz") {
     runManySubsetChoice = GMGGeometricSchwarz;
+  } else if (runManySubsetString == "GMGPointGaussSeidel") {
+    runManySubsetChoice = GMGPointSymmetricGaussSeidel;
+  } else if (runManySubsetString == "GMGPointJacobi") {
+    runManySubsetChoice = GMGPointJacobi;
   } else {
     if (rank==0) cout << "Run many subset string not recognized.\n";
 #ifdef HAVE_MPI
@@ -1112,9 +1211,9 @@ int main(int argc, char *argv[]) {
     double solveTime;
     
     run(problemChoice, iterationCount, spaceDim, numCells, k, delta_k, conformingTraces,
-        useCondensedSolve, precondition, schwarzOnly, useCamelliaAdditiveSchwarz, schwarzOverlap,
+        useCondensedSolve, precondition, schwarzOnly, smootherChoice, schwarzOverlap,
         schwarzFactorType, levelOfFill, fillRatio, coarseSolverChoice,
-        cgTol, cgMaxIterations, AztecOutputLevel, reportTimings, solveTime, reportEnergyError, numCellsRootMesh, hOnly);
+        cgTol, cgMaxIterations, AztecOutputLevel, reportTimings, solveTime, reportEnergyError, numCellsRootMesh, hOnly, useZeroMeanConstraints);
     
     if (rank==0) cout << "Iteration count: " << iterationCount << "; solve time " << solveTime << " seconds." << endl;
   } else {
@@ -1129,12 +1228,15 @@ int main(int argc, char *argv[]) {
       cout << "CG tolerance = " << cgTol << ", max iterations = " << cgMaxIterations << endl;
     }
     
+    if (maxCells == -1) {
+      maxCells = Teuchos::GlobalMPISession::getNProc(); // by default, ensure max of 1 cell per MPI node
+    }
     runMany(problemChoice, spaceDim, delta_k, runManyMinCells,
             conformingTraces, useCondensedSolve,
             schwarzFactorType, levelOfFill, fillRatio,
             coarseSolverChoice,
             cgTol, cgMaxIterations, AztecOutputLevel,
-            runManySubsetChoice, k, schwarzOverlap, numCellsRootMesh, reportTimings, hOnly);
+            runManySubsetChoice, k, schwarzOverlap, numCellsRootMesh, reportTimings, hOnly, maxCells, useZeroMeanConstraints);
   }
   return 0;
 }
