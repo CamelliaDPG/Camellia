@@ -679,7 +679,7 @@ bool GMGTests::testGMGSolverIdentity2DRefinedMeshes() {
         for (int i=0; i<fineDiagonalScalingValues.size(); i++) {
           bool fineSolverUsesDiagonalScaling = fineDiagonalScalingValues[i];
           Epetra_MultiVector gmg_lhsVector(rhsVectorCopy.Map(), 1); // lhs has same distribution structure as rhs
-          gmgSolver->setApplySmoothingOperator(false); // turn off for this next test, comparing direct solve to ApplyInverse
+          gmgSolver->gmgOperator().setSmootherType(GMGOperator::NONE); // turn off for this next test, comparing direct solve to ApplyInverse
           gmgSolver->gmgOperator().setFineSolverUsesDiagonalScaling(fineSolverUsesDiagonalScaling);
           
           if (fineSolverUsesDiagonalScaling) {
@@ -895,7 +895,12 @@ bool GMGTests::testGMGSolverIdentityUniformMeshes() {
               // if applySmoothing = false, then we expect exact agreement between direct solution and iterative.
               // If applySmoothing = true,  then we expect iterative = exact + D^-1 b
               
-              gmgSolver->gmgOperator().setSmootherType(GMGOperator::POINT_JACOBI);
+              if (applySmoothing) {
+                gmgSolver->gmgOperator().setSmootherType(GMGOperator::POINT_JACOBI);
+              } else {
+                gmgSolver->gmgOperator().setSmootherType(GMGOperator::NONE);
+              }
+              
               gmgSolver->gmgOperator().computeCoarseStiffnessMatrix(A);
               gmgSolver->gmgOperator().ApplyInverse(rhsVectorCopy2, gmg_lhsVector);
 
