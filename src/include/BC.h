@@ -66,6 +66,8 @@ public:
   
   FunctionPtr getSpatiallyFilteredFunctionForDirichletBC(int varID);
   
+  set<int> getZeroMeanConstraints();
+  
   static Teuchos::RCP<BC> bc();
 };
 

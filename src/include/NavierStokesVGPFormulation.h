@@ -59,11 +59,21 @@ class NavierStokesVGPFormulation {
   static const string S_Q;
   static const string S_TAU1, S_TAU2, S_TAU3;
   
+  void initialize(MeshTopologyPtr meshTopology, std::string filePrefix,
+                  int spaceDim, double Re, int fieldPolyOrder, int delta_k,
+                  FunctionPtr forcingFunction, bool transientFormulation, bool useConformingTraces);
+  
   void refine(RefinementStrategyPtr refStrategy);
 public:
   NavierStokesVGPFormulation(MeshTopologyPtr meshTopology, double Re,
                              int fieldPolyOrder,
                              int delta_k = 1,
+                             FunctionPtr forcingFunction = Teuchos::null,
+                             bool transientFormulation = false,
+                             bool useConformingTraces = false);
+  
+  NavierStokesVGPFormulation(std::string filePrefix, int spaceDim, double Re,
+                             int fieldPolyOrder, int delta_k = 1,
                              FunctionPtr forcingFunction = Teuchos::null,
                              bool transientFormulation = false,
                              bool useConformingTraces = false);
@@ -94,6 +104,9 @@ public:
   
   // ! returns the nonlinear iteration count (since last refinement)
   int nonlinearIterationCount();
+  
+  // ! Saves the solution(s) and mesh to an HDF5 format.
+  void save(std::string prefixString);
   
   // ! set the inner product to use during solve and during energy error determination
   void setIP( IPPtr ip );

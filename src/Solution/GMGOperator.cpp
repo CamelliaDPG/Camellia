@@ -86,6 +86,13 @@ GMGOperator::GMGOperator(BCPtr zeroBCs, MeshPtr coarseMesh, IPPtr coarseIP,
 
   _smootherType = IFPACK_ADDITIVE_SCHWARZ; // default
   _smootherOverlap = 0;
+  
+  { // DEBUGGING
+//    GlobalIndexType fineGlobalDofCount = _fineMesh->numGlobalDofs();
+//    GlobalIndexType coarseGlobalDofCount = _coarseMesh->numGlobalDofs();
+//    cout << "Global dof count for fine mesh: " << fineGlobalDofCount << endl;
+//    cout << "Global dof count for coarse mesh: " << coarseGlobalDofCount << endl;
+  }
 
   if (( coarseMesh->meshUsesMaximumRule()) || (! fineMesh->meshUsesMinimumRule()) ) {
     cout << "GMGOperator only supports minimum rule.\n";
@@ -161,6 +168,9 @@ void GMGOperator::computeCoarseStiffnessMatrix(Epetra_CrsMatrix *fineStiffnessMa
 #endif
   Epetra_Time coarseStiffnessTimer(Comm);
   
+//  cout << "Writing fine stiffness to disk before setting up smoother.\n";
+//  EpetraExt::RowMatrixToMatrixMarketFile("/tmp/A.dat",*fineStiffnessMatrix, NULL, NULL, false); // false: don't write header
+  
   setUpSmoother(fineStiffnessMatrix);
 
 //  EpetraExt::RowMatrixToMatrixMarketFile("/tmp/A.dat",*fineStiffnessMatrix, NULL, NULL, false); // false: don't write header
@@ -179,7 +189,8 @@ void GMGOperator::computeCoarseStiffnessMatrix(Epetra_CrsMatrix *fineStiffnessMa
   }
 //  EpetraExt::RowMatrixToMatrixMarketFile("/tmp/AP.dat", AP, NULL, NULL, false); // false: don't write header
 
-  Teuchos::RCP<Epetra_CrsMatrix> PT_A_P = Teuchos::rcp( new Epetra_CrsMatrix(::Copy, _P->DomainMap(), maxRowSize) );
+  Epetra_Map domain_P = _P->DomainMap();
+  Teuchos::RCP<Epetra_CrsMatrix> PT_A_P = Teuchos::rcp( new Epetra_CrsMatrix(::Copy, domain_P, maxRowSize) );
 
   // compute P^T * A * P
   err = EpetraExt::MatrixMatrix::Multiply(*_P, true, AP, false, *PT_A_P);
@@ -198,16 +209,12 @@ void GMGOperator::computeCoarseStiffnessMatrix(Epetra_CrsMatrix *fineStiffnessMa
 //  cout << "Writing P to disk at " << P_path << endl;
 //  EpetraExt::RowMatrixToMatrixMarketFile(P_path.c_str(),*_P, NULL, NULL, false); // false: don't write header
 
-  Epetra_Map targetMap = _coarseSolution->getPartitionMap();
-  Epetra_Import  coarseImporter(targetMap, PT_A_P->RowMap());
-
+  Epetra_Map coarsePartitionMap = _coarseSolution->getPartitionMap();
+  Epetra_Import  coarseImporter(coarsePartitionMap, PT_A_P->RowMap());
   Teuchos::RCP<Epetra_CrsMatrix> coarseStiffness = Teuchos::rcp( new Epetra_CrsMatrix(*PT_A_P, coarseImporter) );
 
   _coarseSolution->setStiffnessMatrix(coarseStiffness);
-
-//  cout << "type a number to continue:\n";
-//  int blah;
-//  cin >> blah;
+  _coarseSolution->imposeZMCsUsingLagrange(); // fills in the augmented matrix -- the ZMC rows that are at the end.
 
   _timeComputeCoarseStiffnessMatrix = coarseStiffnessTimer.ElapsedTime();
   
@@ -288,6 +295,12 @@ Teuchos::RCP<Epetra_CrsMatrix> GMGOperator::constructProlongationOperator() {
 
       if (globalRow >= firstFineConstraintRowIndex) {
         // belongs to a lagrange degree of freedom (zero-mean constraints are a special case), so we do a one-to-one map
+        // NOTE: this isn't going to work properly for element Lagrange constraints in the context of h-multigrid, since
+        //       for these we have one row per element, and the number of elements is reduced for the coarse mesh;
+        //       it's not entirely clear to me what we should do in the general case, though for zero-mean constraints
+        //       (even element-wise ones, like local conservation), probably simply weighting by relative element
+        //       volume will be fine.  But we need a bit more information here; we don't have access to the fine Solution's
+        //       Lagrange constraints on the present interface.
         int offset = globalRow - firstFineConstraintRowIndex;
         GlobalIndexType coarseGlobalRow = firstCoarseConstraintRowIndex + offset;
         coarseXVectorLocal[coarseGlobalRow] = 1.0;
@@ -330,11 +343,6 @@ Teuchos::RCP<Epetra_CrsMatrix> GMGOperator::constructProlongationOperator() {
           FieldContainer<GlobalIndexType> interpretedGlobalDofIndices;
           _coarseSolution->getDofInterpreter()->interpretLocalData(coarseCellID, coarseCellData, interpretedCoarseData, interpretedGlobalDofIndices);
 
-  //        if (globalRow==1) {
-  //          cout << "interpretedCoarseData:\n" << interpretedCoarseData;
-  //          cout << "interpretedGlobalDofIndices:\n" << interpretedGlobalDofIndices;
-  //        }
-
           for (int interpretedCoarseGlobalDofOrdinal=0; interpretedCoarseGlobalDofOrdinal < interpretedGlobalDofIndices.size(); interpretedCoarseGlobalDofOrdinal++) {
             GlobalIndexType globalDofIndex = interpretedGlobalDofIndices[interpretedCoarseGlobalDofOrdinal];
             coarseXVectorLocal[globalDofIndex] += interpretedCoarseData[interpretedCoarseGlobalDofOrdinal];
@@ -368,7 +376,7 @@ Teuchos::RCP<Epetra_CrsMatrix> GMGOperator::constructProlongationOperator() {
   Epetra_Map coarseMap = _coarseSolution->getPartitionMap();
 //  int rank = Teuchos::GlobalMPISession::getRank();
 //  cout << "On rank " << rank << ", coarseMap has " << coarseMap.NumGlobalElements() << " global elements.\n";
-
+  
   P->GlobalAssemble(coarseMap, _finePartitionMap);
 
   _P = P;
@@ -636,7 +644,13 @@ int GMGOperator::ApplyInverse(const Epetra_MultiVector& X_in, Epetra_MultiVector
   Teuchos::RCP<Epetra_FEVector> coarseRHSVector = _coarseSolution->getRHSVector();
   if (printVerboseOutput) cout << "returned from _coarseSolution->getRHSVector()\n";
 
+  if (coarseRHSVector->GlobalLength() != _P->NumGlobalCols()) {
+    // TODO: add support for coarseRHSVector that may have lagrange/zmc constraints applied even though fine solution neglects these...
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Still need to implement support for this");
+  }
+  
   timer.ResetStartTime();
+
   if (printVerboseOutput) cout << "calling _P->Multiply(true, X, *coarseRHSVector);\n";
   _P->Multiply(true, X, *coarseRHSVector);
   if (printVerboseOutput) cout << "finished _P->Multiply(true, X, *coarseRHSVector);\n";
@@ -660,6 +674,7 @@ int GMGOperator::ApplyInverse(const Epetra_MultiVector& X_in, Epetra_MultiVector
   timer.ResetStartTime();
   if (printVerboseOutput) cout << "calling _coarseSolution->getLHSVector()\n";
   Teuchos::RCP<Epetra_FEVector> coarseLHSVector = _coarseSolution->getLHSVector();
+  
   if (printVerboseOutput) cout << "finished _coarseSolution->getLHSVector()\n";
   if (printVerboseOutput) cout << "calling _P->Multiply(false, *coarseLHSVector, Y)\n";
   _P->Multiply(false, *coarseLHSVector, Y);
@@ -667,12 +682,15 @@ int GMGOperator::ApplyInverse(const Epetra_MultiVector& X_in, Epetra_MultiVector
   _timeMapCoarseToFine += timer.ElapsedTime();
 
   // if _applySmoothingOperator is set, add S^(-1)X to Y.
-  if (_applySmoothingOperator) {
+  if (_applySmoothingOperator && (_smootherType != NONE)) {
     if (printVerboseOutput) cout << "copying X into X2\n";
     Epetra_MultiVector X2(X); // copy, since I'm not sure ApplyInverse is generally OK with X and Y in same location (though Aztec seems to make that assumption, so it probably is OK).
     if (printVerboseOutput) cout << "finished copying X into X2\n";
     if (printVerboseOutput) cout << "calling _smoother->ApplyInverse(X2, X)\n";
-    _smoother->ApplyInverse(X2, X);
+    int err = _smoother->ApplyInverse(X2, X);
+    if (err != 0) {
+      cout << "_smoother->ApplyInverse returned non-zero error code " << err << endl;
+    }
     if (printVerboseOutput) cout << "finished _smoother->ApplyInverse(X2, X)\n";
     if (printVerboseOutput) cout << "calling Y.Update(1.0, X, 1.0)\n";
     Y.Update(1.0, X, 1.0);
@@ -681,13 +699,31 @@ int GMGOperator::ApplyInverse(const Epetra_MultiVector& X_in, Epetra_MultiVector
     //    cout << "_diag is NULL.\n";
   }
 
-
   if (_fineSolverUsesDiagonalScaling) {
     if (printVerboseOutput) cout << "calling Y.Multiply(1.0, *_diag_sqrt, Y, 0)\n";
     Y.Multiply(1.0, *_diag_sqrt, Y, 0);
     if (printVerboseOutput) cout << "finished Y.Multiply(1.0, *_diag_sqrt, Y, 0)\n";
   }
-
+  
+  /*
+   We zero out the lagrange multiplier solutions on the fine mesh, because we're relying on the coarse solve to impose these;
+   we just use an identity block in the lower right of the fine matrix for the Lagrange constraints themselves.
+   
+   The argument for this, at least for zero mean constraints:
+   If the coarse solution has zero mean, then the fact that the prolongation operator is exact (i.e. coarse mesh solution is
+   exactly reproduced on fine mesh) means that the fine mesh solution will have zero mean.
+   
+   This neglects the smoothing operator.  If the smoothing operator isn't guaranteed to produce an update with zero mean,
+   then this may not work.
+   */
+  GlobalIndexType firstFineConstraintRowIndex = _fineDofInterpreter->globalDofCount();
+  for (GlobalIndexTypeToCast fineRowIndex=firstFineConstraintRowIndex; fineRowIndex<Y.GlobalLength(); fineRowIndex++) {
+    int LID = Y.Map().LID(fineRowIndex);
+    if (LID != -1) {
+      Y[0][LID] = 0.0;
+    }
+  }
+  
   return 0;
 }
 
@@ -883,6 +919,11 @@ void GMGOperator::setSmootherOverlap(int overlap) {
 }
 
 void GMGOperator::setSmootherType(GMGOperator::SmootherChoice smootherType) {
+  if (smootherType != NONE) {
+    setApplySmoothingOperator(true);
+  } else {
+    setApplySmoothingOperator(false);
+  }
   _smootherType = smootherType;
 }
 
@@ -894,6 +935,9 @@ void GMGOperator::setUpSmoother(Epetra_CrsMatrix *fineStiffnessMatrix) {
   Teuchos::RCP<Ifpack_Preconditioner> smoother;
 
   switch (choice) {
+    case NONE:
+      _smoother = Teuchos::null;
+      return;
     case POINT_JACOBI:
     {
       List.set("relaxation: type", "Jacobi");

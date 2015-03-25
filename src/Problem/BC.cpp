@@ -343,6 +343,10 @@ GlobalIndexType BC::vertexForSinglePointBC(int varID) {
     return -1;
 }
 
+set<int> BC::getZeroMeanConstraints() {
+  return _zeroMeanConstraints;
+}
+
 BCPtr BC::bc() {
   return Teuchos::rcp(new BC(false)); // false: not legacy subclass
 }

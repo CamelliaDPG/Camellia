@@ -16,6 +16,7 @@
 #endif
 
 #include "Teuchos_GlobalMPISession.hpp"
+#include "Teuchos_Array.hpp"
 
 void MPIWrapper::allGather(FieldContainer<int> &allValues, int myValue) {
   FieldContainer<int> myValueFC(1);

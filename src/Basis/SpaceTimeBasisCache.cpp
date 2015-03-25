@@ -33,16 +33,26 @@ SpaceTimeBasisCache::SpaceTimeBasisCache(MeshPtr spaceTimeMesh, ElementTypePtr s
     }
   }
   CellTopoPtr timeTopo = CellTopology::line();
-  ElementTypePtr spaceElemType = Teuchos::rcp( new ElementType( spaceTimeElementType->trialOrderPtr,
-                                                               spaceTimeElementType->testOrderPtr, spaceTopo ) );
-  ElementTypePtr timeElemType = Teuchos::rcp( new ElementType( spaceTimeElementType->trialOrderPtr,
-                                                              spaceTimeElementType->testOrderPtr, timeTopo ) );
+//  ElementTypePtr spaceElemType = Teuchos::rcp( new ElementType(spaceTimeElementType->trialOrderPtr,
+//                                                               spaceTimeElementType->testOrderPtr, spaceTopo ) );
+//  ElementTypePtr timeElemType = Teuchos::rcp( new ElementType( spaceTimeElementType->trialOrderPtr,
+//                                                              spaceTimeElementType->testOrderPtr, timeTopo ) );
+  
+  // for the moment, we use same cubature degree in space as time.  By making this sharper, could reduce expense
+  
+  int cubDegreeSpaceTime;
+  cubatureDegreeForElementType(spaceTimeElementType, testVsTest, cubDegreeSpaceTime);
+  cubDegreeSpaceTime += cubatureDegreeEnrichment;
+  int cubDegreeSpace = cubDegreeSpaceTime;
+  int cubDegreeTime = cubDegreeSpaceTime;
   
   bool tensorTopologyMeansSpaceTime = false; // if space topology is tensor product, don't interpret as space-time
-  _spatialCache = Teuchos::rcp( new BasisCache(spaceElemType, Teuchos::null, testVsTest, cubatureDegreeEnrichment,
-                                               tensorTopologyMeansSpaceTime) );
-  _temporalCache = Teuchos::rcp( new BasisCache(timeElemType, Teuchos::null, testVsTest, cubatureDegreeEnrichment,
-                                                tensorTopologyMeansSpaceTime) );
+  _spatialCache = Teuchos::rcp( new BasisCache(physicalNodesSpatial, spaceTopo, cubDegreeSpace, tensorTopologyMeansSpaceTime) );
+  _temporalCache = Teuchos::rcp( new BasisCache(physicalNodesTemporal, timeTopo, cubDegreeTime, tensorTopologyMeansSpaceTime) );
+//  _spatialCache = Teuchos::rcp( new BasisCache(spaceElemType, Teuchos::null, testVsTest, cubatureDegreeEnrichment,
+//                                               tensorTopologyMeansSpaceTime) );
+//  _temporalCache = Teuchos::rcp( new BasisCache(timeElemType, Teuchos::null, testVsTest, cubatureDegreeEnrichment,
+//                                                tensorTopologyMeansSpaceTime) );
   
   bool createSideCache = true;
   _spatialCache->setPhysicalCellNodes(physicalNodesSpatial, cellIDs, createSideCache);
@@ -69,8 +79,8 @@ SpaceTimeBasisCache::SpaceTimeBasisCache(MeshPtr spaceTimeMesh, ElementTypePtr s
 SpaceTimeBasisCache::SpaceTimeBasisCache(const FieldContainer<double> &physicalNodesSpatial,
                                          const FieldContainer<double> &physicalNodesTemporal,
                                          const FieldContainer<double> &physicalCellNodes,
-                                         CellTopoPtr cellTopo, int cubDegree)
-: BasisCache(physicalCellNodes,cellTopo,cubDegree,false,true) { // false: don't create side caches during construction; true: tensor product topology (which we should have here) --> space-time
+                                         CellTopoPtr cellTopo, int cubDegreeSpaceTime)
+: BasisCache(physicalCellNodes,cellTopo,cubDegreeSpaceTime,false,true) { // false: don't create side caches during construction; true: tensor product topology (which we should have here) --> space-time
   bool createSideCache = true;
   
   int sideCount = cellTopology()->getSideCount();
@@ -86,8 +96,8 @@ SpaceTimeBasisCache::SpaceTimeBasisCache(const FieldContainer<double> &physicalN
   CellTopoPtr timeTopo = CellTopology::line();
   
   bool tensorTopologyMeansSpaceTime = false; // if space topology is tensor product, don't interpret as space-time
-  _spatialCache = Teuchos::rcp( new BasisCache(physicalNodesSpatial, spaceTopo, cubDegree, tensorTopologyMeansSpaceTime) );
-  _temporalCache = Teuchos::rcp( new BasisCache(physicalNodesTemporal, timeTopo, cubDegree, tensorTopologyMeansSpaceTime) );
+  _spatialCache = Teuchos::rcp( new BasisCache(physicalNodesSpatial, spaceTopo, cubDegreeSpaceTime, tensorTopologyMeansSpaceTime) );
+  _temporalCache = Teuchos::rcp( new BasisCache(physicalNodesTemporal, timeTopo, cubDegreeSpaceTime, tensorTopologyMeansSpaceTime) );
   
   vector<GlobalIndexType> cellIDs; //empty
   
@@ -123,19 +133,52 @@ void SpaceTimeBasisCache::createSideCaches() {
   _basisCacheSides.clear();
   int numSides = this->cellTopology()->getSideCount();
   
+  int cubatureDegree = this->cubatureDegree();
+  int maxTrialDegree = cubatureDegree / 2; // a bit hackish -- right now, just ensuring total cubature degree agrees with the spatial/temporal caches for volume.
+  int maxTestDegree = cubatureDegree - maxTrialDegree;
+  
   for (int sideOrdinal=0; sideOrdinal<numSides; sideOrdinal++) {
-    BasisPtr maxDegreeBasisOnSide = _maxDegreeBasisForSide[sideOrdinal];
-    
-    int maxTrialDegreeOnSide = _maxTrialDegree;
-    if (maxDegreeBasisOnSide.get() != NULL) {
-      maxTrialDegreeOnSide = maxDegreeBasisOnSide->getDegree();
-    }
-    
+//    BasisPtr maxDegreeBasisOnSide = _maxDegreeBasisForSide[sideOrdinal];
+//    
+//    int maxTrialDegreeOnSide = _maxTrialDegree;
+//    if (maxDegreeBasisOnSide.get() != NULL) {
+//      maxTrialDegreeOnSide = maxDegreeBasisOnSide->getDegree();
+//    }
+//    
     Teuchos::RCP<SpaceTimeBasisCache> thisPtr = Teuchos::rcp( this, false ); // presumption is that side cache doesn't outlive volume...
-    SpaceTimeBasisCache* spaceTimeSideCache = new SpaceTimeBasisCache(sideOrdinal, thisPtr, maxTrialDegreeOnSide, _maxTestDegree);
+    SpaceTimeBasisCache* spaceTimeSideCache = new SpaceTimeBasisCache(sideOrdinal, thisPtr, maxTrialDegree, maxTestDegree);
     BasisCachePtr sideCache = Teuchos::rcp( spaceTimeSideCache );
     _basisCacheSides.push_back(sideCache);
   }
+}
+
+void SpaceTimeBasisCache::getSpaceTimeCubatureDegrees(ElementTypePtr spaceTimeType, int &spaceDegree, int &timeDegree) {
+  DofOrderingPtr spaceTimeTrial = spaceTimeType->trialOrderPtr;
+  DofOrderingPtr spaceTimeTest = spaceTimeType->testOrderPtr;
+  
+  set<int> trialIDs = spaceTimeTrial->getVarIDs();
+  
+  int maxSpaceTrialDegree = 0, maxTimeTrialDegree = 0;
+  
+  TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "implementation incomplete");
+  
+  // TODO: finish this method
+//  for (set<int>::iterator trialIt = trialIDs.begin(); trialIt != trialIDs.end(); trialIt++) {
+//    int trialID = *trialIt;
+//    const vector<int> *sides = &spaceTimeTrial->getSidesForVarID(trialID);
+//    for (vector<int>::const_iterator sideIt = sides->begin(); sideIt != sides->end(); sideIt++) {
+//      int side = *sideIt;
+//      BasisPtr spaceTimeBasis = spaceTimeTrial->getBasis(trialID, side);
+//    }
+//    get the sides for each
+//    when it's a volume test var, decompose the basis into space and time components
+//    same thing when it's a variable that lives on a space x time side
+//    when it's a variable that lives on the temporal sides, add its basis there to the spatial ordering
+//  }
+//  
+//  then, do the same thing for trial IDs
+  
+//  void addEntry(int varID, BasisPtr basis, int basisRank, int sideIndex = 0);
 }
 
 BasisCachePtr SpaceTimeBasisCache::getSpatialBasisCache() {
