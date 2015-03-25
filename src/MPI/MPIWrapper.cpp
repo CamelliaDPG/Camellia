@@ -18,13 +18,15 @@
 #include "Teuchos_GlobalMPISession.hpp"
 #include "Teuchos_Array.hpp"
 
+using namespace Intrepid;
+
 void MPIWrapper::allGather(FieldContainer<int> &allValues, int myValue) {
   FieldContainer<int> myValueFC(1);
   myValueFC[0] = myValue;
-  MPIWrapper::allGather(allValues, myValueFC);
+  MPIWrapper::allGatherHomogeneous(allValues, myValueFC);
 }
 
-void MPIWrapper::allGather(FieldContainer<int> &allValues, FieldContainer<int> &myValues) {
+void MPIWrapper::allGatherHomogeneous(FieldContainer<int> &allValues, FieldContainer<int> &myValues) {
   int numProcs = Teuchos::GlobalMPISession::getNProc();
   if (numProcs != allValues.dimension(0)) {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "allValues first dimension must be #procs");
@@ -37,6 +39,48 @@ void MPIWrapper::allGather(FieldContainer<int> &allValues, FieldContainer<int> &
   Comm.GatherAll(&myValues[0], &allValues[0], allValues.size()/numProcs);
 #else
 #endif
+}
+
+// \brief Resizes gatheredValues to be the size of the sum of the myValues containers, and fills it with the values from those containers.
+//        Not necessarily super-efficient in terms of communication, but avoids allocating a big array like allGatherHomogeneous would.
+template<typename Scalar>
+void MPIWrapper::allGatherCompact(FieldContainer<Scalar> &gatheredValues, FieldContainer<Scalar> &myValues, FieldContainer<int> &offsets) {
+#ifdef HAVE_MPI
+  Epetra_MpiComm Comm(MPI_COMM_WORLD);
+#else
+  Epetra_SerialComm Comm;
+#endif
+  
+  int mySize = myValues.size();
+  int totalSize;
+  Comm.SumAll(&mySize, &totalSize, 1);
+  
+  int myOffset = 0;
+  Comm.ScanSum(&mySize,&myOffset,1);
+  
+  myOffset -= mySize;
+  
+  gatheredValues.resize(totalSize);
+  for (int i=0; i<mySize; i++) {
+    gatheredValues[myOffset+i] = myValues[i];
+  }
+  MPIWrapper::entryWiseSum(gatheredValues);
+  
+  offsets.resize(Teuchos::GlobalMPISession::getNProc());
+  offsets[Teuchos::GlobalMPISession::getRank()] = myOffset;
+  MPIWrapper::entryWiseSum(offsets);
+}
+
+void MPIWrapper::allGatherCompact(FieldContainer<int> &gatheredValues,
+                                  FieldContainer<int> &myValues,
+                                  FieldContainer<int> &offsets) {
+  MPIWrapper::allGatherCompact<int>(gatheredValues,myValues,offsets);
+}
+
+void MPIWrapper::allGatherCompact(FieldContainer<double> &gatheredValues,
+                                  FieldContainer<double> &myValues,
+                                  FieldContainer<int> &offsets) {
+  MPIWrapper::allGatherCompact<double>(gatheredValues,myValues,offsets);
 }
 
 int MPIWrapper::rank() {
