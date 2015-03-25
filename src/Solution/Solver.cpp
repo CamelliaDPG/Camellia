@@ -21,11 +21,11 @@ Teuchos::RCP<Solver> Solver::getSolver(SolverChoice choice, bool saveFactorizati
                                        SolverPtr coarseSolver) {
   switch (choice) {
     case KLU:
-      return Teuchos::rcp( new KluSolver(saveFactorization) );
+      return Teuchos::rcp( new Amesos2Solver(saveFactorization, "klu") );
       break;
 #ifdef HAVE_AMESOS_SUPERLUDIST
     case SuperLUDist:
-      return Teuchos::rcp( new SuperLUDistSolver(saveFactorization) );
+      return Teuchos::rcp( new Amesos2Solver(saveFactorization, "superlu_dist") );
 #endif
 #ifdef HAVE_AMESOS_MUMPS
     case MUMPS:

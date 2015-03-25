@@ -35,8 +35,8 @@ int main(int argc, char *argv[]) {
   Teuchos::CommandLineProcessor cmdp(false,true); // false: don't throw exceptions; true: do return errors for unrecognized options
   
   // problem parameters:
-  double epsilon = 1e-8;
-  int numRefs = 10;
+  double epsilon = 1e-2;
+  int numRefs = 0;
   int k = 2, delta_k = 2;
   string norm = "CoupledRobust";
   cmdp.setOption("polyOrder",&k,"polynomial order for field variable u");
@@ -126,8 +126,8 @@ int main(int argc, char *argv[]) {
   refName << "confusion";
   HDF5Exporter exporter(mesh,refName.str());
   
-  for (int refIndex=0; refIndex < numRefs; refIndex++) {
-    soln->solve();
+  for (int refIndex=0; refIndex <= numRefs; refIndex++) {
+    soln->solve(false);
     
     double energyError = soln->energyErrorTotal();
     if (commRank == 0)

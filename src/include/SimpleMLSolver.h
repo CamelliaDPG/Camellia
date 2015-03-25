@@ -15,6 +15,7 @@
 #include "ml_epetra_utils.h"
 
 #include "Teuchos_RCP.hpp"
+#include "AztecOO.h"
 
 #include "Solver.h"
 

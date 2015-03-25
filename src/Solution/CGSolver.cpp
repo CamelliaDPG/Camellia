@@ -7,6 +7,7 @@
 //
 
 #include "CGSolver.h"
+#include "AztecOO.h"
 
 CGSolver::CGSolver(int maxIters, double tol) {
   _maxIters = maxIters;

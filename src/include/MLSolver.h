@@ -14,6 +14,8 @@
 #include "ml_MultiLevelPreconditioner.h"
 #include "ml_epetra_utils.h"
 
+#include "AztecOO.h"
+
 using namespace std;
 
 class MLSolver : public Solver {

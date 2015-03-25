@@ -7,6 +7,7 @@
 //
 
 #include "GMGSolver.h"
+#include "AztecOO.h"
 
 // EpetraExt includes
 #include "EpetraExt_RowMatrixOut.h"

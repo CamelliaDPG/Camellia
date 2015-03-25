@@ -43,10 +43,6 @@
 #include "Intrepid_FunctionSpaceTools.hpp"
 #include "Intrepid_Basis.hpp"
 
-#include "Amesos_Klu.h"
-#include "Amesos.h"
-#include "Amesos_Utils.h"
-
 // only use MUMPS when we have MPI
 #ifdef HAVE_MPI
 #ifdef HAVE_AMESOS_MUMPS
@@ -63,6 +59,7 @@
 #include "Epetra_SerialDistributor.h"
 #endif
 #include "Epetra_Time.h"
+#include "Epetra_Import.h"
 
 // EpetraExt includes
 #include "EpetraExt_RowMatrixOut.h"
@@ -409,10 +406,10 @@ int Solution::solve(bool useMumps) {
   if (useMumps) {
     solver = Teuchos::rcp(new MumpsSolver());
   } else {
-    solver = Teuchos::rcp(new KluSolver());
+    solver = Teuchos::rcp(new Amesos2Solver());
   }
 #else
-  solver = Teuchos::rcp(new KluSolver());
+  solver = Teuchos::rcp(new Amesos2Solver());
 #endif
   return solve(solver);
 }

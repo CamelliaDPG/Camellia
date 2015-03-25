@@ -6,6 +6,7 @@
 //  Copyright (c) 2012 __MyCompanyName__. All rights reserved.
 //
 
+#include "AztecOO.h"
 #include "SchwarzSolver.h"
 
 SchwarzSolver::SchwarzSolver(int overlapLevel, int maxIters, double tol) {
