@@ -211,10 +211,24 @@ void GMGOperator::computeCoarseStiffnessMatrix(Epetra_CrsMatrix *fineStiffnessMa
 
   Epetra_Map coarsePartitionMap = _coarseSolution->getPartitionMap();
   Epetra_Import  coarseImporter(coarsePartitionMap, PT_A_P->RowMap());
-  Teuchos::RCP<Epetra_CrsMatrix> coarseStiffness = Teuchos::rcp( new Epetra_CrsMatrix(*PT_A_P, coarseImporter) );
-
-  _coarseSolution->setStiffnessMatrix(coarseStiffness);
-  _coarseSolution->imposeZMCsUsingLagrange(); // fills in the augmented matrix -- the ZMC rows that are at the end.
+  Teuchos::RCP<Epetra_CrsMatrix> coarseStiffness;
+  if (_coarseSolution->getZMCsAsGlobalLagrange() &&
+      (_P->NumGlobalCols() > _coarseSolution->getDofInterpreter()->globalDofCount())) {
+    // essentially: there are some lagrange constraints applied in coarse solve --> we shouldn't use the fused import,
+    //              since this will call FillComplete()
+    
+    int numEntriesPerRow = 0; // sub-optimal, but easy
+    coarseStiffness = Teuchos::rcp( new Epetra_CrsMatrix(::Copy, coarsePartitionMap, numEntriesPerRow) );
+    coarseStiffness->Import(*PT_A_P,coarseImporter,::Insert);
+    _coarseSolution->setStiffnessMatrix(coarseStiffness);
+    _coarseSolution->imposeZMCsUsingLagrange(); // fills in the augmented matrix -- the ZMC rows that are at the end.
+    // now can call FillComplete()
+    coarseStiffness->FillComplete();
+  } else {
+    coarseStiffness = Teuchos::rcp( new Epetra_CrsMatrix(*PT_A_P, coarseImporter) );
+    _coarseSolution->setStiffnessMatrix(coarseStiffness);
+    _coarseSolution->imposeZMCsUsingLagrange(); // fills in the augmented matrix -- the ZMC rows that are at the end.
+  }
 
   _timeComputeCoarseStiffnessMatrix = coarseStiffnessTimer.ElapsedTime();
   
