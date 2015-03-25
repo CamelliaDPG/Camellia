@@ -1368,24 +1368,24 @@ void Solution::imposeZMCsUsingLagrange() {
       FieldContainer<double> allBasisIntegrals;
       MPIWrapper::allGatherCompact(allBasisIntegrals,basisIntegrals,offsets);
       
-      if (rank==0) cout << "allBasisIntegrals:\n" << allBasisIntegrals;
+//      if (rank==0) cout << "allBasisIntegrals:\n" << allBasisIntegrals;
 
       FieldContainer<GlobalIndexTypeToCast> allGlobalIndices;
       MPIWrapper::allGatherCompact(allGlobalIndices,globalIndices,offsets);
       
-      if (rank==0) cout << "allGlobalIndices:\n" << allGlobalIndices;
+//      if (rank==0) cout << "allGlobalIndices:\n" << allGlobalIndices;
       
       if ((rank == 0) && (allBasisIntegrals.size() > 0)) {
         // insert the row at zmcIndex with the gathered basis integrals
         _globalStiffMatrix->InsertGlobalValues(zmcIndex,allBasisIntegrals.size(),&allBasisIntegrals(0),&allGlobalIndices(0));
-        cout << "Inserted globalValues for row " << zmcIndex << "; values:\n" << allBasisIntegrals << "indices:\n" << allGlobalIndices;
+//        cout << "Inserted globalValues for row " << zmcIndex << "; values:\n" << allBasisIntegrals << "indices:\n" << allGlobalIndices;
       }
       
       // here, we increase the size of the system to accommodate the zmc...
       if (basisIntegrals.size() > 0) {
         // insert column:
         for (int valueOrdinal=0; valueOrdinal<basisIntegrals.size(); valueOrdinal++) {
-          cout << "Inserting globalValues for (" << globalIndices(valueOrdinal)  << "," << zmcIndex << ") = " << basisIntegrals(valueOrdinal) << endl;
+//          cout << "Inserting globalValues for (" << globalIndices(valueOrdinal)  << "," << zmcIndex << ") = " << basisIntegrals(valueOrdinal) << endl;
           _globalStiffMatrix->InsertGlobalValues(globalIndices(valueOrdinal),1,&basisIntegrals(valueOrdinal),&zmcIndex);
         }
 
