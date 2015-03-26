@@ -26,8 +26,8 @@
 using namespace Camellia;
 
 namespace {
-  TEUCHOS_UNIT_TEST( OverlappingRowMatrix, OverlapDofOrdinalsTest )
-  {
+  void testOverlapDofOrdinals(bool hierarchical, Teuchos::FancyOStream &out, bool &success) {
+    
     // test that checks that the dof ordinals for overlap are correctly identified
     // when OverlappingRowMatrix is constructed by passing in a Mesh.
     
@@ -50,8 +50,8 @@ namespace {
       
       int H1Order = 1;
       int delta_k = 2;
-      int horizontalCells = 4;
-      int verticalCells = 4;
+      int horizontalCells = 1;
+      int verticalCells = 1;
       double width = 1.0;
       double height = 1.0;
       
@@ -72,6 +72,10 @@ namespace {
       
       MeshPtr mesh = MeshFactory::quadMesh(pl);
       
+      // refine uniformly twice:
+      mesh->hRefine(mesh->getTopology()->getActiveCellIndices());
+      mesh->hRefine(mesh->getTopology()->getActiveCellIndices());
+      
       SolutionPtr soln = Solution::solution(mesh, BC::bc(), RHS::rhs(), form.bf()->graphNorm());
       
       soln->setUseCondensedSolve(useStaticCondensation);
@@ -85,44 +89,78 @@ namespace {
       
       for (int overlap=0; overlap<3; overlap++) {
         set<GlobalIndexType> cells = mesh->cellIDsInPartition();
-        { // go outward #overlap levels of cells
-          set<GlobalIndexType> ghostCells;
-          set<GlobalIndexType> lastGhostCells = cells;
-          for (int i=0; i<overlap; i++) {
-            for (set<GlobalIndexType>::iterator cellIDIt = lastGhostCells.begin(); cellIDIt != lastGhostCells.end(); cellIDIt++) {
-              GlobalIndexType cellID = *cellIDIt;
-              CellPtr cell = mesh->getTopology()->getCell(cellID);
-              vector< CellPtr > neighbors = cell->getNeighbors();
-              for (vector< CellPtr >::iterator neighborIt = neighbors.begin(); neighborIt != neighbors.end(); neighborIt++) {
-                CellPtr neighbor = *neighborIt;
-                if (cells.find(neighbor->cellIndex()) == cells.end()) {
-                  ghostCells.insert(neighbor->cellIndex());
-                  cells.insert(neighbor->cellIndex());
+        if (!hierarchical) {
+          { // go outward #overlap levels of cells
+            set<GlobalIndexType> ghostCells;
+            set<GlobalIndexType> lastGhostCells = cells;
+            for (int i=0; i<overlap; i++) {
+              for (set<GlobalIndexType>::iterator cellIDIt = lastGhostCells.begin(); cellIDIt != lastGhostCells.end(); cellIDIt++) {
+                GlobalIndexType cellID = *cellIDIt;
+                CellPtr cell = mesh->getTopology()->getCell(cellID);
+                vector< CellPtr > neighbors = cell->getNeighbors();
+                for (vector< CellPtr >::iterator neighborIt = neighbors.begin(); neighborIt != neighbors.end(); neighborIt++) {
+                  CellPtr neighbor = *neighborIt;
+                  if (cells.find(neighbor->cellIndex()) == cells.end()) {
+                    ghostCells.insert(neighbor->cellIndex());
+                    cells.insert(neighbor->cellIndex());
+                  }
                 }
               }
+              lastGhostCells = ghostCells;
             }
-            lastGhostCells = ghostCells;
           }
+        } else {
+          // go upward #overlap levels of cells:
+          set<GlobalIndexType> ancestralCells = cells;
+          set<GlobalIndexType> lastAncestralCells = cells;
+          for (int i=0; i<overlap; i++) {
+            ancestralCells.clear();
+            for (set<GlobalIndexType>::iterator cellIDIt = lastAncestralCells.begin();
+                 cellIDIt != lastAncestralCells.end(); cellIDIt++) {
+              GlobalIndexType cellID = *cellIDIt;
+              CellPtr cell = mesh->getTopology()->getCell(cellID);
+              if (cell->getParent() == Teuchos::null) {
+                // no parent: cell is its own ancestor
+                ancestralCells.insert(cellID);
+              } else {
+                ancestralCells.insert(cell->getParent()->cellIndex());
+              }
+            }
+            lastAncestralCells = ancestralCells;
+          }
+          
+//          Camellia::print("ancestralCells", ancestralCells);
+          
+          // once we've determined our partition's cell ancestors, we want all their descendants
+          cells.clear();
+          for (set<GlobalIndexType>::iterator cellIDIt = ancestralCells.begin();
+               cellIDIt != ancestralCells.end(); cellIDIt++) {
+            GlobalIndexType cellID = *cellIDIt;
+            CellPtr cell = mesh->getTopology()->getCell(cellID);
+            set<IndexType> descendants = cell->getDescendants();
+            cells.insert(descendants.begin(),descendants.end());
+          }
+//          Camellia::print("cells", cells);
         }
         
         vector<GlobalIndexType> cellsVector(cells.begin(),cells.end());
         set<GlobalIndexType> expectedGlobalDofIndices = dofInterpreter->importGlobalIndicesForCells(cellsVector);
         
-//        set<GlobalIndexType> expectedGlobalDofIndices;
-//        for (set<GlobalIndexType>::iterator cellIDIt = cells.begin(); cellIDIt != cells.end(); cellIDIt++) {
-//          GlobalIndexType cellID = *cellIDIt;
-//          set<GlobalIndexType> cellIndices = dofInterpreter->globalDofIndicesForCell(cellID);
-//          expectedGlobalDofIndices.insert(cellIndices.begin(), cellIndices.end());
-//        }
+        //        set<GlobalIndexType> expectedGlobalDofIndices;
+        //        for (set<GlobalIndexType>::iterator cellIDIt = cells.begin(); cellIDIt != cells.end(); cellIDIt++) {
+        //          GlobalIndexType cellID = *cellIDIt;
+        //          set<GlobalIndexType> cellIndices = dofInterpreter->globalDofIndicesForCell(cellID);
+        //          expectedGlobalDofIndices.insert(cellIndices.begin(), cellIndices.end());
+        //        }
         
         // DEBUGGING output...
-//        if (useStaticCondensation) {
-//          ostringstream description;
-//          description << "expectedGlobalDofIndices for overlap " << overlap << " on rank " << rank;
-//          Camellia::print(description.str().c_str(), expectedGlobalDofIndices);
-//        }
+        //        if (useStaticCondensation) {
+        //          ostringstream description;
+        //          description << "expectedGlobalDofIndices for overlap " << overlap << " on rank " << rank;
+        //          Camellia::print(description.str().c_str(), expectedGlobalDofIndices);
+        //        }
         
-        OverlappingRowMatrix rowMatrix(stiffness, overlap, mesh, soln->getDofInterpreter());
+        OverlappingRowMatrix rowMatrix(stiffness, overlap, mesh, soln->getDofInterpreter(), hierarchical);
         set<GlobalIndexType> actualGlobalDofIndices = rowMatrix.RowIndices();
         
         TEST_EQUALITY(expectedGlobalDofIndices.size(), actualGlobalDofIndices.size());
@@ -139,6 +177,18 @@ namespace {
         }
       }
     }
+  }
+  
+  TEUCHOS_UNIT_TEST( OverlappingRowMatrix, OverlapDofOrdinalsTest )
+  {
+    bool hierarchical = false;
+    testOverlapDofOrdinals(hierarchical, out, success);
+  }
+  
+  TEUCHOS_UNIT_TEST( OverlappingRowMatrix, HierarchicalOverlapDofOrdinalsTest )
+  {
+    bool hierarchical = true;
+    testOverlapDofOrdinals(hierarchical, out, success);
   }
 
   TEUCHOS_UNIT_TEST( OverlappingRowMatrix, TestOverlapValues )

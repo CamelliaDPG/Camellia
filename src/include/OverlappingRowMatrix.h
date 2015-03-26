@@ -47,16 +47,30 @@ class Epetra_Comm;
  IfPack_OverlappingRowMatrix.
  
  Modifications support definitions of overlap level in terms of a Camellia
- Mesh.  Zero-level overlap means that the owner of each cell sees all the
+ Mesh.
+ 
+ Zero-level overlap means that the owner of each cell sees all the
  degrees of freedom for that cell--including all the traces, even when
- the cell owner does not own them.  One-level overlap means that the owner
- of a cell sees all degrees of freedom belonging to the neighbors of that
- cell (the cells that share sides with the owned cell).  Two-level overlap
- extends this to neighbors of neighbors, etc.
+ the cell owner does not own them.
+ 
+ Nonzero-level overlap has a different meaning depending on the value of 
+ hierarchical provided on construction.  Using hierarchical = true is often
+ appropriate when doing h-multigrid; while hierarchical = false would be
+ appropriate for p-multigrid.
+ 
+ When hierarchical is false, one-level overlap means that the owner of a
+ cell sees all degrees of freedom belonging to the neighbors of that cell
+ (the cells that share sides with the owned cell).  Two-level overlap extends
+ this to neighbors of neighbors, etc.
+ 
+ When hierarchical is true, one-level overlap means that the owner of a
+ cell sees all degrees of freedom belonging to its siblings (the children
+ of its parent).  Two-level overlap extends this to all descendants of its
+ grandparent, etc.
  
  \author Nathan V. Roberts, ALCF.  Based on IfPack_OverlappingRowMatrix.
  
- \date Last modified on 17-Nov-2014.
+ \date Last modified on 26-Mar-2015.
  */
 
 // Camellia includes:
@@ -70,8 +84,10 @@ namespace Camellia {
   public:
 
   //@{ Constructors/Destructors
+  //! Constructor for mesh-based overlap levels, hierarchical and otherwise.
   OverlappingRowMatrix(const Teuchos::RefCountPtr<const Epetra_RowMatrix>& Matrix_in,
-                              int OverlapLevel_in, MeshPtr mesh, Teuchos::RCP<DofInterpreter> dofInterpreter);
+                       int OverlapLevel_in, MeshPtr mesh, Teuchos::RCP<DofInterpreter> dofInterpreter,
+                       bool hierarchical = false);
   OverlappingRowMatrix(const Teuchos::RefCountPtr<const Epetra_RowMatrix>& Matrix_in, int OverlapLevel_in,
                        const std::set<GlobalIndexType> &rowIndicesForThisRank);
 
@@ -412,13 +428,13 @@ private:
 
   bool UseTranspose_;
 
-  Teuchos::RefCountPtr<const Epetra_Map> Map_;
-  Teuchos::RefCountPtr<const Epetra_Import> Importer_;
+  Teuchos::RCP<const Epetra_Map> Map_;
+  Teuchos::RCP<const Epetra_Import> Importer_;
 
-  Teuchos::RefCountPtr<const Epetra_RowMatrix> Matrix_;
-  Teuchos::RefCountPtr<Epetra_CrsMatrix> ExtMatrix_;
-  Teuchos::RefCountPtr<Epetra_Map> ExtMap_;
-  Teuchos::RefCountPtr<Epetra_Import> ExtImporter_;
+  Teuchos::RCP<const Epetra_RowMatrix> Matrix_;
+  Teuchos::RCP<Epetra_CrsMatrix> ExtMatrix_;
+  Teuchos::RCP<Epetra_Map> ExtMap_;
+  Teuchos::RCP<Epetra_Import> ExtImporter_;
 
   int OverlapLevel_;
   string Label_;
@@ -430,7 +446,7 @@ private:
   void BuildMap(int OverlapLevel_in, const set<GlobalIndexType> &rowIndices, bool filterByRowIndices = true);
   
   template<typename int_type>
-  void BuildMap(int OverlapLevel_in, MeshPtr mesh, Teuchos::RCP<DofInterpreter> dofInterpreter);
+  void BuildMap(int OverlapLevel_in, MeshPtr mesh, Teuchos::RCP<DofInterpreter> dofInterpreter, bool hierarchical);
 
 }; // class OverlappingRowMatrix
 

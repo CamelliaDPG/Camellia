@@ -42,24 +42,54 @@ using namespace Camellia;
 
 // ======================================================================
 template<typename int_type>
-void OverlappingRowMatrix::BuildMap(int OverlapLevel_in, MeshPtr mesh, Teuchos::RCP<DofInterpreter> dofInterpreter) {
+void OverlappingRowMatrix::BuildMap(int OverlapLevel_in, MeshPtr mesh, Teuchos::RCP<DofInterpreter> dofInterpreter,
+                                    bool hierarchical) {
   // Camellia revision/addition: determine the cell neighbors according to the overlap level
   std::set<GlobalIndexType> allCells = mesh->cellIDsInPartition();
-  std::set<GlobalIndexType> lastNeighbors = allCells;
-  for (int overlap = 0 ; overlap < OverlapLevel_in ; ++overlap) {
-    std::set<GlobalIndexType> cellNeighbors;
-    for (std::set<GlobalIndexType>::iterator cellIDIt = lastNeighbors.begin(); cellIDIt != lastNeighbors.end(); cellIDIt++) {
-      CellPtr cell = mesh->getTopology()->getCell(*cellIDIt);
-      int numSides = cell->getSideCount();
-      for (int sideOrdinal=0; sideOrdinal<numSides; sideOrdinal++) {
-        pair<GlobalIndexType, unsigned> neighborInfo = cell->getNeighborInfo(sideOrdinal);
-        if (neighborInfo.first != -1) { // -1 indicates boundary/no neighbor
-          cellNeighbors.insert(neighborInfo.first);
+  if (! hierarchical) {
+    std::set<GlobalIndexType> lastNeighbors = allCells;
+    for (int overlap = 0 ; overlap < OverlapLevel_in ; ++overlap) {
+      std::set<GlobalIndexType> cellNeighbors;
+      for (std::set<GlobalIndexType>::iterator cellIDIt = lastNeighbors.begin(); cellIDIt != lastNeighbors.end(); cellIDIt++) {
+        CellPtr cell = mesh->getTopology()->getCell(*cellIDIt);
+        int numSides = cell->getSideCount();
+        for (int sideOrdinal=0; sideOrdinal<numSides; sideOrdinal++) {
+          pair<GlobalIndexType, unsigned> neighborInfo = cell->getNeighborInfo(sideOrdinal);
+          if (neighborInfo.first != -1) { // -1 indicates boundary/no neighbor
+            cellNeighbors.insert(neighborInfo.first);
+          }
         }
       }
+      allCells.insert(cellNeighbors.begin(), cellNeighbors.end());
+      lastNeighbors = cellNeighbors;
     }
-    allCells.insert(cellNeighbors.begin(), cellNeighbors.end());
-    lastNeighbors = cellNeighbors;
+  } else {
+    // get ancestors up to overlap level above our cells:
+    std::set<GlobalIndexType> ancestors = allCells;
+    for (int overlap = 0 ; overlap < OverlapLevel_in ; ++overlap) {
+      std::set<GlobalIndexType> previousAncestors = ancestors;
+      ancestors.clear();
+      for (std::set<GlobalIndexType>::iterator cellIDIt = previousAncestors.begin(); cellIDIt != previousAncestors.end();
+           cellIDIt++) {
+        GlobalIndexType cellID = *cellIDIt;
+        CellPtr cell = mesh->getTopology()->getCell(cellID);
+        if (cell->getParent() == Teuchos::null) {
+          ancestors.insert(cellID);
+        } else {
+          ancestors.insert(cell->getParent()->cellIndex());
+        }
+      }
+      previousAncestors = ancestors;
+    }
+    // now, get all the descendants in ancestors:
+    allCells.clear();
+    for (std::set<GlobalIndexType>::iterator cellIDIt = ancestors.begin(); cellIDIt != ancestors.end();
+         cellIDIt++) {
+      GlobalIndexType cellID = *cellIDIt;
+      CellPtr cell = mesh->getTopology()->getCell(cellID);
+      std::set<GlobalIndexType> descendants = cell->getDescendants();
+      allCells.insert(descendants.begin(),descendants.end());
+    }
   }
   std::vector<GlobalIndexType> allCellsVector(allCells.begin(),allCells.end());
   // Next, determine all global degrees of freedom belonging to those cells
@@ -306,7 +336,8 @@ OverlapLevel_(OverlapLevel_in) {
 // Constructor for the case of one core per subdomain (the only case supported by this Camellia version)
 OverlappingRowMatrix::
 OverlappingRowMatrix(const RCP<const Epetra_RowMatrix>& Matrix_in,
-                     int OverlapLevel_in, MeshPtr mesh, Teuchos::RCP<DofInterpreter> dofInterpreter)  :
+                     int OverlapLevel_in, MeshPtr mesh, Teuchos::RCP<DofInterpreter> dofInterpreter,
+                     bool hierachical)  :
 Matrix_(Matrix_in),
 OverlapLevel_(OverlapLevel_in)
 {
@@ -316,13 +347,13 @@ OverlapLevel_(OverlapLevel_in)
 
 #ifndef EPETRA_NO_32BIT_GLOBAL_INDICES
     if(A().RowMatrixRowMap().GlobalIndicesInt()) {
-      BuildMap<int>(OverlapLevel_in, mesh, dofInterpreter);
+      BuildMap<int>(OverlapLevel_in, mesh, dofInterpreter, hierachical);
     }
     else
 #endif
 #ifndef EPETRA_NO_64BIT_GLOBAL_INDICES
     if(A().RowMatrixRowMap().GlobalIndicesLongLong()) {
-      BuildMap<long long>(OverlapLevel_in, mesh, dofInterpreter);
+      BuildMap<long long>(OverlapLevel_in, mesh, dofInterpreter, hierachical);
     }
     else
 #endif
