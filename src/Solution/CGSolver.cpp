@@ -38,7 +38,8 @@ int CGSolver::solve() {
 //    cout << "Condition number estimate: " << condest << endl;
 //  }
   
-  AztecOO solver(problem());
+  Epetra_LinearProblem problem(_stiffnessMatrix.get(), _lhs.get(), _rhs.get());
+  AztecOO solver(problem);
 
   // COMBO KNOWN TO WORK FOR STOKES (at least): GMRES + Jacobi.  It can be slow to converge, though.
   // (I've used a tol of 1e-6.)
@@ -79,7 +80,7 @@ int CGSolver::solve() {
       break;
   }
   
-  Epetra_RowMatrix *A = problem().GetMatrix();
+  Epetra_RowMatrix *A = problem.GetMatrix();
   double norminf = A->NormInf();
   double normone = A->NormOne(); 
   

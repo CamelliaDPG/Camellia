@@ -100,9 +100,10 @@ int GMGSolver::solve(bool buildCoarseStiffness) {
   // over to using Aztec's built-in scaling.  This appears to be functionally identical.
   bool useAztecToScaleDiagonally = true;
   
-  AztecOO solver(problem());
+  Epetra_LinearProblem problem(_stiffnessMatrix.get(), _lhs.get(), _rhs.get());
+  AztecOO solver(problem);
   
-  Epetra_CrsMatrix *A = dynamic_cast<Epetra_CrsMatrix *>( problem().GetMatrix() );
+  Epetra_CrsMatrix *A = dynamic_cast<Epetra_CrsMatrix *>( problem.GetMatrix() );
   
   if (A == NULL) {
     cout << "Error: GMGSolver requires an Epetra_CrsMatrix.\n";
@@ -132,8 +133,8 @@ int GMGSolver::solve(bool buildCoarseStiffness) {
     int length = scale_vector.MyLength();
     for (int i=0; i<length; i++) scale_vector[i] = 1.0 / sqrt(fabs(diagA[i]));
     
-    problem().LeftScale(scale_vector);
-    problem().RightScale(scale_vector);
+    problem.LeftScale(scale_vector);
+    problem.RightScale(scale_vector);
   }
   
   Teuchos::RCP<Epetra_MultiVector> diagA_ptr = Teuchos::rcp( &diagA, false );
@@ -222,8 +223,8 @@ int GMGSolver::solve(bool buildCoarseStiffness) {
   if (_diagonalScaling && !useAztecToScaleDiagonally) {
     // reverse the scaling here
     scale_vector.Reciprocal(scale_vector);
-    problem().LeftScale(scale_vector);
-    problem().RightScale(scale_vector);
+    problem.LeftScale(scale_vector);
+    problem.RightScale(scale_vector);
   }
   
   _gmgOperator.setStiffnessDiagonal(Teuchos::rcp((Epetra_MultiVector*) NULL ));

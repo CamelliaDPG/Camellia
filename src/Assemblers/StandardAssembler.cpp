@@ -1,3 +1,5 @@
+// NOTE: This is deprecated by the conversion to Tpetra
+
 #include "StandardAssembler.h"
 
 // Epetra includes

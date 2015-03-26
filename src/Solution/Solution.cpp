@@ -870,7 +870,8 @@ void Solution::populateStiffnessAndLoad() {
 
 void Solution::setProblem(Teuchos::RCP<Solver> solver) {
   Teuchos::RCP<Epetra_LinearProblem> problem = Teuchos::rcp( new Epetra_LinearProblem(&*_globalStiffMatrix, &*_lhsVector, &*_rhsVector));
-  solver->setProblem(problem);
+  solver->setProblem(_globalStiffMatrix, _lhsVector, _rhsVector);
+  // solver->setProblem(problem);
 }
 
 int Solution::solveWithPrepopulatedStiffnessAndLoad(Teuchos::RCP<Solver> solver, bool callResolveInsteadOfSolve) {

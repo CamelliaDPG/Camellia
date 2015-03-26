@@ -27,10 +27,11 @@ void SchwarzSolver::setTolerance(double tol) {
 int SchwarzSolver::solve() {
   // compute some statistics for the original problem
   double condest = -1;
-  AztecOO solverForConditionEstimate(problem());
+  Epetra_LinearProblem problem(_stiffnessMatrix.get(), _lhs.get(), _rhs.get());
+  AztecOO solverForConditionEstimate(problem);
   solverForConditionEstimate.SetAztecOption(AZ_solver, AZ_cg_condnum);
   solverForConditionEstimate.ConstructPreconditioner(condest);
-  Epetra_RowMatrix *A = problem().GetMatrix();
+  Epetra_RowMatrix *A = problem.GetMatrix();
   double norminf = A->NormInf();
   double normone = A->NormOne(); 
   if (_printToConsole) {
@@ -39,7 +40,7 @@ int SchwarzSolver::solve() {
     cout << "Condition number estimate: " << condest << endl;
   }
   
-  AztecOO solver(problem());
+  AztecOO solver(problem);
   
   int otherRows = A->NumGlobalRows() - A->NumMyRows();
   int overlapLevel = std::min(otherRows,_overlapLevel);

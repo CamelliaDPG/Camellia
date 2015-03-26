@@ -1,3 +1,4 @@
+// NOTE: This is deprecated by the conversion to Tpetra
 #ifndef ASSEMBLER
 #define ASSEMBLER
 

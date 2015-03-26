@@ -24,7 +24,8 @@ SimpleMLSolver::SimpleMLSolver(bool saveFactorization, double residualTolerance,
   _maxIters = maxIterations;
 }
 int SimpleMLSolver::solve() {
-  AztecOO *solver = new AztecOO( problem() );
+  Epetra_LinearProblem problem(_stiffnessMatrix.get(), _lhs.get(), _rhs.get());
+  AztecOO *solver = new AztecOO( problem );
   // create a parameter list for ML options
   Teuchos::ParameterList MLList;
   
@@ -41,7 +42,7 @@ int SimpleMLSolver::solve() {
   
   ML_Epetra::SetDefaults("SA",MLList);
   
-  Epetra_RowMatrix *A = problem().GetMatrix();
+  Epetra_RowMatrix *A = problem.GetMatrix();
   
 //  MLList.set("ML output", 10);
   
@@ -70,7 +71,7 @@ int SimpleMLSolver::resolve() {
     return solve();
   }
 }
-void SimpleMLSolver::setProblem(Teuchos::RCP< Epetra_LinearProblem > problem) {
-  _savedSolver = Teuchos::rcp((AztecOO*)NULL);
-  this->_problem = problem;
-}
+// void SimpleMLSolver::setProblem(Teuchos::RCP< Epetra_LinearProblem > problem) {
+//   _savedSolver = Teuchos::rcp((AztecOO*)NULL);
+//   this->_problem = problem;
+// }

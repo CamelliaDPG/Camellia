@@ -665,7 +665,7 @@ int GMGOperator::ApplyInverse(const Epetra_MultiVector& X_in, Epetra_MultiVector
     _haveSolvedOnCoarseMesh = true;
   } else {
     if (printVerboseOutput) cout << "resolving on coarse mesh\n";
-    _coarseSolver->problem().SetRHS(coarseRHSVector.get());
+    _coarseSolver->setRHS(coarseRHSVector);
     _coarseSolution->solveWithPrepopulatedStiffnessAndLoad(_coarseSolver, true); // call resolve() instead of solve() -- reuse factorization
     if (printVerboseOutput) cout << "finished resolving on coarse mesh\n";
   }

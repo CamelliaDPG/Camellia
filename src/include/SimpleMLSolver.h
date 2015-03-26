@@ -30,7 +30,7 @@ public:
   SimpleMLSolver(bool saveFactorization, double residualTolerance, int maxIterations);
   int solve();
   int resolve();
-  void setProblem(Teuchos::RCP< Epetra_LinearProblem > problem);
+  // void setProblem(Teuchos::RCP< Epetra_LinearProblem > problem);
 };
 
 #endif
