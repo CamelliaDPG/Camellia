@@ -29,6 +29,37 @@ vector< pair<GlobalIndexType, unsigned> > Cell::childrenForSide(unsigned sideInd
   return childIndicesForSide;
 }
 
+set<IndexType> Cell::getDescendants(bool leafNodesOnly) {
+  set<IndexType> descendants;
+  if (!isParent()) {
+    // no descendants save the present cell, which is a leaf node in any case
+    descendants.insert(_cellIndex);
+  } else {
+    vector< CellPtr > parentCells;
+    CellPtr thisPtr = Teuchos::rcp(this, false);
+    parentCells.push_back(thisPtr);
+    
+    while (parentCells.size() > 0) {
+      CellPtr parentCell = parentCells[parentCells.size()-1];
+      if (!leafNodesOnly) {
+        // then include this parent cell in the list
+        descendants.insert(parentCell->cellIndex());
+      }
+      parentCells.pop_back(); // delete last element
+      vector< CellPtr > children = parentCell->children();
+      for (int childOrdinal=0; childOrdinal < children.size(); childOrdinal++) {
+        CellPtr child = children[childOrdinal];
+        if (child->isParent()) {
+          parentCells.push_back(child);
+        } else {
+          descendants.insert(child->cellIndex());
+        }
+      }
+    }
+  }
+  return descendants;
+}
+
 vector< pair< GlobalIndexType, unsigned> > Cell::getDescendantsForSide(int sideIndex, bool leafNodesOnly) {
   // if leafNodesOnly == true,  returns a flat list of leaf nodes (descendants that are not themselves parents)
   // if leafNodesOnly == false, returns a list in descending order: immediate children, then their children, and so on.

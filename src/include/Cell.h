@@ -65,7 +65,8 @@ public:
   vector<IndexType> getChildIndices();
   vector< pair<IndexType, unsigned> > childrenForSide(unsigned sideOrdinal);
   int numChildren();
-  
+
+  set<IndexType> getDescendants(bool leafNodesOnly = true);
   vector< pair< IndexType, unsigned> > getDescendantsForSide(int sideOrdinal, bool leafNodesOnly = true);
   unsigned entityIndex(unsigned subcdim, unsigned subcord);
   vector<unsigned> getEntityIndices(unsigned subcdim);
