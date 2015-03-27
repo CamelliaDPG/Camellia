@@ -42,10 +42,6 @@ protected:
   Teuchos::RCP<Epetra_MultiVector> _rhs;
 public:
   virtual ~Solver() {}
-  // virtual Epetra_LinearProblem & problem() { return *(_problem.get()); }
-  // virtual void setProblem(Teuchos::RCP< Epetra_LinearProblem > problem) {
-  //   _problem = problem;
-  // }
   virtual void setProblem(Teuchos::RCP<Epetra_CrsMatrix> stiffnessMatrix, Teuchos::RCP<Epetra_MultiVector> lhs, Teuchos::RCP<Epetra_MultiVector> rhs) {
     _stiffnessMatrix = stiffnessMatrix;
     _lhs = lhs;
@@ -113,16 +109,10 @@ public:
   Amesos2Solver(bool saveFactorization = false, std::string solverString="klu"): _saveFactorization(saveFactorization), _solverString(solverString) {}
   int solve() {
     if (!_saveFactorization) {
-      // Teuchos::RCP<Epetra_CrsMatrix> A = Teuchos::rcp(dynamic_cast<Epetra_CrsMatrix*>(problem().GetMatrix()), false);
-      // Teuchos::RCP<Epetra_MultiVector> X = Teuchos::rcp(problem().GetLHS(), false);
-      // Teuchos::RCP<Epetra_MultiVector> B = Teuchos::rcp(problem().GetRHS(), false);
       Teuchos::RCP<Amesos2::Solver<Epetra_CrsMatrix,Epetra_MultiVector> > solver 
         = Amesos2::create<Epetra_CrsMatrix,Epetra_MultiVector>(_solverString, _stiffnessMatrix, _lhs, _rhs);
       solver->solve();
     } else {
-      // Teuchos::RCP<Epetra_CrsMatrix> A = Teuchos::rcp(dynamic_cast<Epetra_CrsMatrix*>(problem().GetMatrix()), false);
-      // Teuchos::RCP<Epetra_MultiVector> X = Teuchos::rcp(problem().GetLHS(), false);
-      // Teuchos::RCP<Epetra_MultiVector> B = Teuchos::rcp(problem().GetRHS(), false);
       _savedSolver = Amesos2::create<Epetra_CrsMatrix,Epetra_MultiVector>(_solverString, _stiffnessMatrix, _lhs, _rhs);
       _savedSolver->solve();
     }

@@ -84,6 +84,11 @@ class Epetra_LinearProblem;
 class Solution;
 typedef Teuchos::RCP<Solution> SolutionPtr;
 
+typedef double Scalar;
+typedef Teuchos::RCP< Tpetra::CrsMatrix<Scalar,IndexType,GlobalIndexType> > MatrixPtr;
+typedef Teuchos::RCP< Tpetra::MultiVector<Scalar,IndexType,GlobalIndexType> > VectorPtr;
+typedef Teuchos::RCP< Tpetra::Map<IndexType,GlobalIndexType> > MapPtr;
+
 class Solution {
 private:
   int _cubatureEnrichmentDegree;
@@ -109,6 +114,10 @@ private:
   Teuchos::RCP<Epetra_CrsMatrix> _globalStiffMatrix;
   Teuchos::RCP<Epetra_FEVector> _rhsVector;
   Teuchos::RCP<Epetra_FEVector> _lhsVector;
+
+  MatrixPtr _globalStiffMatrix2;
+  VectorPtr _rhsVector2;
+  VectorPtr _lhsVector2;
   
   bool _residualsComputed;
   bool _energyErrorComputed;
@@ -164,8 +173,14 @@ public:
   Epetra_Map getPartitionMapSolutionDofsOnly(); // omits lagrange constraints, zmcs, etc.
   Epetra_Map getPartitionMap(PartitionIndexType rank, std::set<GlobalIndexType> &myGlobalIndicesSet,
                              GlobalIndexType numGlobalDofs, int zeroMeanConstraintsSize, Epetra_Comm* Comm );
+
+  MapPtr getPartitionMap2();
+  MapPtr getPartitionMapSolutionDofsOnly2(); // omits lagrange constraints, zmcs, etc.
+  MapPtr getPartitionMap2(PartitionIndexType rank, std::set<GlobalIndexType> &myGlobalIndicesSet,
+                             GlobalIndexType numGlobalDofs, int zeroMeanConstraintsSize, Teuchos::RCP<const Teuchos::Comm<int> > Comm );
   
   Epetra_MultiVector* getGlobalCoefficients();
+  VectorPtr* getGlobalCoefficients2();
 
   bool cellHasCoefficientsAssigned(GlobalIndexType cellID);
   void clearComputedResiduals();
@@ -288,10 +303,15 @@ public:
   void setRHS( RHSPtr );
   
   Teuchos::RCP<Epetra_CrsMatrix> getStiffnessMatrix();
+  MatrixPtr getStiffnessMatrix2();
   void setStiffnessMatrix(Teuchos::RCP<Epetra_CrsMatrix> stiffness);
+  void setStiffnessMatrix2(MatrixPtr stiffness);
 
   Teuchos::RCP<Epetra_FEVector> getRHSVector();
   Teuchos::RCP<Epetra_FEVector> getLHSVector();
+
+  VectorPtr getRHSVector2();
+  VectorPtr getLHSVector2();
   
   void setIP( IPPtr);
 
