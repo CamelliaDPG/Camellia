@@ -9,11 +9,12 @@
 #ifndef __Camellia_debug__SubBasisDofMatrixMapper__
 #define __Camellia_debug__SubBasisDofMatrixMapper__
 
+#include "TypeDefs.h"
+
 #include <iostream>
 
 #include "Intrepid_FieldContainer.hpp"
 #include "SubBasisDofMapper.h"
-#include "IndexType.h"
 
 class SubBasisDofMatrixMapper : public SubBasisDofMapper { // subclass that multiplies by a matrix (as opposed to applying a permutation)
   std::set<unsigned> _basisDofOrdinalFilter;

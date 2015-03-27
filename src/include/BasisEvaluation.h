@@ -36,6 +36,8 @@
 #ifndef DPGTrilinos_BasisEvaluation_h
 #define DPGTrilinos_BasisEvaluation_h
 
+#include "TypeDefs.h"
+
 #include "Intrepid_FieldContainer.hpp"
 
 // Shards includes
@@ -50,9 +52,6 @@
 #include "CamelliaIntrepidExtendedTypes.h"
 
 class BasisEvaluation { 
-  typedef Teuchos::RCP< Intrepid::FieldContainer<double> > FCPtr;
-  typedef Teuchos::RCP< const Intrepid::FieldContainer<double> > constFCPtr;
-  
 public:
   static FCPtr getValues(BasisPtr basis, Camellia::EOperator op,
                          const Intrepid::FieldContainer<double> &refPoints);

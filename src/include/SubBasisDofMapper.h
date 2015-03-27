@@ -9,13 +9,12 @@
 #ifndef Camellia_debug_SubBasisDofMapper_h
 #define Camellia_debug_SubBasisDofMapper_h
 
+#include "TypeDefs.h"
 
 
 #include <set>
 #include "Intrepid_FieldContainer.hpp"
 #include "Teuchos_RCP.hpp"
-
-#include "IndexType.h"
 
 using namespace std;
 using namespace Intrepid;

@@ -9,9 +9,9 @@
 #ifndef Camellia_MeshGeometry_h
 #define Camellia_MeshGeometry_h
 
-#include "ParametricCurve.h"
+#include "TypeDefs.h"
 
-#include "IndexType.h"
+#include "ParametricCurve.h"
 
 #include "CellTopology.h"
 

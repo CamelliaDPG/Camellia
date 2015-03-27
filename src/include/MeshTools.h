@@ -10,7 +10,6 @@
 #define __Camellia_debug__MeshTools__
 
 #include "Mesh.h"
-#include "IndexType.h"
 #include <map>
 #include <string>
 

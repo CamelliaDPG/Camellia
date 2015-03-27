@@ -1,6 +1,3 @@
-#ifndef TEST_UTIL
-#define TEST_UTIL
-
 // @HEADER
 //
 // Copyright © 2011 Sandia Corporation. All Rights Reserved.
@@ -37,6 +34,11 @@
  *
  */
 
+#ifndef TEST_UTIL
+#define TEST_UTIL
+
+#include "TypeDefs.h"
+
 // Epetra includes
 #include <Epetra_Map.h>
 #ifdef HAVE_MPI
@@ -48,7 +50,6 @@
 #include "Mesh.h"
 #include "Solution.h"
 
-#include "IndexType.h"
 
 class TestingUtilities {
  public:

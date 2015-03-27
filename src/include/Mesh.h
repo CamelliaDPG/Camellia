@@ -1,6 +1,3 @@
-#ifndef DPG_MESH
-#define DPG_MESH
-
 // @HEADER
 //
 // Original version Copyright © 2011 Sandia Corporation. All Rights Reserved.
@@ -38,6 +35,11 @@
  *
  */
 
+#ifndef DPG_MESH
+#define DPG_MESH
+
+#include "TypeDefs.h"
+
 // Intrepid includes
 #include "Intrepid_FieldContainer.hpp"
 
@@ -70,8 +72,6 @@
 #include "MeshGeometry.h"
 
 #include "MeshTopology.h"
-
-#include "IndexType.h"
 
 class Mesh;
 typedef Teuchos::RCP<Mesh> MeshPtr;

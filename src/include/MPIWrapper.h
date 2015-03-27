@@ -9,12 +9,12 @@
 #ifndef __Camellia__MPIWrapper__
 #define __Camellia__MPIWrapper__
 
+#include "TypeDefs.h"
+
 #include <iostream>
 
 #include "Intrepid_FieldContainer.hpp"
 using namespace Intrepid;
-
-#include "IndexType.h"
 
 // static class to provide a FieldContainer-based interface to some common MPI tasks
 // (Can be used even with MPI disabled)

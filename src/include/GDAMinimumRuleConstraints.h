@@ -9,8 +9,9 @@
 #ifndef Camellia_GDAMinimumRuleConstraints_h
 #define Camellia_GDAMinimumRuleConstraints_h
 
+#include "TypeDefs.h"
+
 #include "Teuchos_RCP.hpp"
-#include "IndexType.h"
 #include "RefinementPattern.h"
 #include "BasisReconciliation.h"
 

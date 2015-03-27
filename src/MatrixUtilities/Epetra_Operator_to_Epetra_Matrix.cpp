@@ -10,8 +10,6 @@
 #include "Epetra_SerialComm.h"
 #include "Epetra_Vector.h"
 
-#include "IndexType.h"
-
 #include <set>
 #include <map>
 

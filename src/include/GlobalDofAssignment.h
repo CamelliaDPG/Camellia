@@ -9,6 +9,8 @@
 #ifndef __Camellia_debug__GlobalDofAssignment__
 #define __Camellia_debug__GlobalDofAssignment__
 
+#include "TypeDefs.h"
+
 #include <iostream>
 
 #include "MeshTopology.h"
@@ -21,7 +23,6 @@
 
 #include "Epetra_Vector.h"
 
-#include "IndexType.h"
 #include "DofInterpreter.h"
 
 #include "Epetra_Map.h"

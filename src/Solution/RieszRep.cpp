@@ -39,8 +39,6 @@
 #include "Epetra_Vector.h"
 #include "Epetra_Import.h"
 
-#include "IndexType.h"
-
 #include "Epetra_SerialSymDenseMatrix.h"
 #include "Epetra_SerialSpdDenseSolver.h"
 

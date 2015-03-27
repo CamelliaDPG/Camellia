@@ -37,6 +37,8 @@
 //
 // @HEADER 
 
+#include "TypeDefs.h"
+
 // only works properly with bases obtained from the BasisFactory.
 #include "Intrepid_FieldContainer.hpp"
 
@@ -54,18 +56,9 @@
 
 #include "Basis.h"
 
-#include "IndexType.h"
-
 #include "Mesh.h"
 
 #include "Function.h"
-
-class Mesh;
-class Function; // Function.h and BasisCache.h refer to each other...
-class BasisCache;
-
-typedef Teuchos::RCP<Function> FunctionPtr;
-typedef Teuchos::RCP<BasisCache> BasisCachePtr;
 
 class BasisCache {
 private:

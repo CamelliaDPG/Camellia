@@ -1,6 +1,3 @@
-#ifndef DPG_BOUNDARY
-#define DPG_BOUNDARY
-
 // @HEADER
 //
 // Original version Copyright © 2011 Sandia Corporation. All Rights Reserved.
@@ -36,14 +33,17 @@
  *
  */
 
+#ifndef DPG_BOUNDARY
+#define DPG_BOUNDARY
+
+#include "TypeDefs.h"
+
 // Teuchos includes
 #include "Teuchos_RCP.hpp"
 
 #include "Intrepid_FieldContainer.hpp"
 
 #include "Element.h"
-
-#include "IndexType.h"
 
 #include "DofInterpreter.h"
 

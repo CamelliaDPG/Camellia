@@ -9,11 +9,12 @@
 #ifndef __Camellia_debug__LocalDofMapper__
 #define __Camellia_debug__LocalDofMapper__
 
+#include "TypeDefs.h"
+
 #include <iostream>
 
 #include "DofOrdering.h"
 #include "SubBasisDofMapper.h"
-#include "IndexType.h"
 
 #include <Epetra_CrsMatrix.h>
 

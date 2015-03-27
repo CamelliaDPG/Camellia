@@ -9,10 +9,10 @@
 #ifndef Camellia_debug_DofInterpreter_h
 #define Camellia_debug_DofInterpreter_h
 
+#include "TypeDefs.h"
+
 #include "Intrepid_FieldContainer.hpp"
 #include "Epetra_Vector.h"
-
-#include "IndexType.h"
 
 #include <set>
 

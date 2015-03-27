@@ -38,6 +38,8 @@
  *
  */
 
+#include "TypeDefs.h"
+
 #include "Intrepid_FieldContainer.hpp"
 
 // Epetra includes
@@ -59,35 +61,6 @@
 #include "ElementType.h"
 #include "LocalStiffnessMatrixFilter.h"
 #include "Solver.h"
-
-class BC;
-typedef Teuchos::RCP<BC> BCPtr;
-
-class Element;
-typedef Teuchos::RCP<Element> ElementPtr;
-
-class Function;
-typedef Teuchos::RCP<Function> FunctionPtr;
-
-class IP;
-typedef Teuchos::RCP<IP> IPPtr;
-
-class Mesh;
-typedef Teuchos::RCP<Mesh> MeshPtr;
-
-class RHS;
-typedef Teuchos::RCP<RHS> RHSPtr;
-
-class LagrangeConstraints;
-class Epetra_LinearProblem;
-
-class Solution;
-typedef Teuchos::RCP<Solution> SolutionPtr;
-
-typedef double Scalar;
-typedef Teuchos::RCP< Tpetra::CrsMatrix<Scalar,IndexType,GlobalIndexType> > MatrixPtr;
-typedef Teuchos::RCP< Tpetra::MultiVector<Scalar,IndexType,GlobalIndexType> > VectorPtr;
-typedef Teuchos::RCP< Tpetra::Map<IndexType,GlobalIndexType> > MapPtr;
 
 class Solution {
 private:
@@ -175,7 +148,8 @@ public:
                              GlobalIndexType numGlobalDofs, int zeroMeanConstraintsSize, Epetra_Comm* Comm );
 
   MapPtr getPartitionMap2();
-  MapPtr getPartitionMapSolutionDofsOnly2(); // omits lagrange constraints, zmcs, etc.
+  // Not implemented for now
+  // MapPtr getPartitionMapSolutionDofsOnly2(); // omits lagrange constraints, zmcs, etc.
   MapPtr getPartitionMap2(PartitionIndexType rank, std::set<GlobalIndexType> &myGlobalIndicesSet,
                              GlobalIndexType numGlobalDofs, int zeroMeanConstraintsSize, Teuchos::RCP<const Teuchos::Comm<int> > Comm );
   

@@ -9,13 +9,13 @@
 #ifndef Camellia_debug_RefinementObserver_h
 #define Camellia_debug_RefinementObserver_h
 
+#include "TypeDefs.h"
+
 #include "Teuchos_RCP.hpp"
 #include "RefinementPattern.h"
 
 class MeshTopology;
 typedef Teuchos::RCP<MeshTopology> MeshTopologyPtr;
-
-#include "IndexType.h"
 
 using namespace std;
 

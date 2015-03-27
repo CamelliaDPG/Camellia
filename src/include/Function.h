@@ -9,6 +9,8 @@
 #ifndef Camellia_Function_h
 #define Camellia_Function_h
 
+#include "TypeDefs.h"
+
 class Mesh;
 class ExactSolution;
 class Var;
@@ -17,7 +19,6 @@ class Function;
 class Solution;
 
 #include "CamelliaIntrepidExtendedTypes.h"
-#include "IndexType.h"
 #include "Intrepid_FieldContainer.hpp"
 
 #include <string>

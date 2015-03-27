@@ -6,13 +6,14 @@
 //  Copyright (c) 2013 __MyCompanyName__. All rights reserved.
 //
 
+#include "TypeDefs.h"
+
 #include "Function.h"
 #include "Mesh.h"
 
 #ifndef Camellia_debug_MeshTransformationFunction_h
 #define Camellia_debug_MeshTransformationFunction_h
 
-#include "IndexType.h"
 
 class MeshTransformationFunction : public Function {
   map< GlobalIndexType, FunctionPtr > _cellTransforms; // cellID --> cell transformation function

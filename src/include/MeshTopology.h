@@ -18,8 +18,6 @@
 
 #include "Cell.h"
 
-#include "IndexType.h"
-
 #include "PeriodicBC.h"
 
 using namespace std;

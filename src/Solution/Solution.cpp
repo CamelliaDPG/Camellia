@@ -238,89 +238,6 @@ void Solution::addSolution(Teuchos::RCP<Solution> otherSoln, double weight, bool
   clearComputedResiduals();
 
   return;
-  // old implementation -- distinguishing between condensed case and other -- below
-  /*
-  { // treat the condensedDofInterpreter case:
-    CondensedDofInterpreter* condensedDofInterpreter = dynamic_cast<CondensedDofInterpreter*>( _dofInterpreter.get() );
-    CondensedDofInterpreter* otherCondensedDofInterpreter = dynamic_cast<CondensedDofInterpreter*>( otherSoln->getDofInterpreter().get() );
-
-    bool isCondensed = (condensedDofInterpreter != NULL);
-    bool otherIsCondensed = (otherCondensedDofInterpreter != NULL);
-
-    if (isCondensed || otherIsCondensed) {
-      // In many situations, we can't legitimately add two condensed solution _lhsVectors together and back out the other (field) dofs.
-      // E.g., consider a nonlinear problem in which the bilinear form (and therefore stiffness matrix) depends on background data.
-      // Even a linear problem with two solutions with different RHS data would require us to accumulate the local load vectors.
-      // For this reason, we don't attempt to add two condensed solutions together.  Instead, we add their respective cell-local
-      // (expanded, basically) coefficients together, and then glean the condensed representation from that using the private
-      // setGlobalSolutionFromCellLocalCoefficients() method.
-
-      set<GlobalIndexType> myCellIDs = _mesh->cellIDsInPartition();
-
-      for (set<GlobalIndexType>::iterator cellIDIt = myCellIDs.begin(); cellIDIt != myCellIDs.end(); cellIDIt++) {
-        GlobalIndexType cellID = *cellIDIt;
-
-        FieldContainer<double> myCoefficients;
-        if (_solutionForCellIDGlobal.find(cellID) != _solutionForCellIDGlobal.end()) {
-          myCoefficients = _solutionForCellIDGlobal[cellID];
-        } else {
-          myCoefficients.resize(_mesh->getElementType(cellID)->trialOrderPtr->totalDofs());
-        }
-
-        FieldContainer<double> otherCoefficients = otherSoln->allCoefficientsForCellID(cellID);
-
-        SerialDenseWrapper::addFCs(myCoefficients, otherCoefficients, weight);
-
-        if (replaceBoundaryTerms) {
-          // then copy the flux/field terms from otherCoefficients, weighting with weight
-          //   (though it seems to me now that this option probably only really makes sense when weight = 1.0, this implementation is consistent
-          //    with the previous non-condensed version of addSolution)
-          DofOrderingPtr trialOrder = _mesh->getElementType(cellID)->trialOrderPtr;
-          set<int> traceDofIndices = trialOrder->getTraceDofIndices();
-          for (set<int>::iterator traceDofIndexIt = traceDofIndices.begin(); traceDofIndexIt != traceDofIndices.end(); traceDofIndexIt++) {
-            int traceDofIndex = *traceDofIndexIt;
-            myCoefficients[traceDofIndex] = weight * otherCoefficients[traceDofIndex];
-          }
-        }
-        _solutionForCellIDGlobal[cellID] = myCoefficients;
-      }
-
-      setGlobalSolutionFromCellLocalCoefficients();
-
-      clearComputedResiduals();
-
-      return;
-    }
-  }
-
-  // first, add the global solution vectors together.
-  if (otherSoln->getLHSVector().get() != NULL) {
-    if (_lhsVector.get() != NULL) {
-      _lhsVector->Update(weight, *otherSoln->getLHSVector(), 1.0);
-    } else {
-      _lhsVector = Teuchos::rcp( new Epetra_FEVector( *otherSoln->getLHSVector() ) );
-      _lhsVector->Scale(weight);
-    }
-
-    if (replaceBoundaryTerms) {
-      Epetra_Map partMap = getPartitionMap();
-      set<GlobalIndexType> boundaryIndices;
-      set<GlobalIndexType> fluxIndices = _mesh->globalDofAssignment()->partitionOwnedGlobalFluxIndices();
-      set<GlobalIndexType> traceIndices = _mesh->globalDofAssignment()->partitionOwnedGlobalTraceIndices();
-      boundaryIndices.insert(fluxIndices.begin(), fluxIndices.end());
-      boundaryIndices.insert(traceIndices.begin(), traceIndices.end());
-      for (set<GlobalIndexType>::iterator traceIndexIt=boundaryIndices.begin(); traceIndexIt != boundaryIndices.end(); traceIndexIt++) {
-        GlobalIndexTypeToCast traceIndex = (GlobalIndexTypeToCast) *traceIndexIt;
-        int localIndex = partMap.LID(traceIndex);
-        double value = weight * (*otherSoln->getLHSVector())[0][localIndex];
-        _lhsVector->ReplaceGlobalValue(traceIndex, 0, value);
-      }
-    }
-    // now, interpret the global data
-    importSolution();
-
-    clearComputedResiduals();
-  }*/
 }
 
 void Solution::addSolution(Teuchos::RCP<Solution> otherSoln, double weight, set<int> varsToAdd, bool allowEmptyCells) {
@@ -365,27 +282,6 @@ void Solution::addSolution(Teuchos::RCP<Solution> otherSoln, double weight, set<
   setGlobalSolutionFromCellLocalCoefficients();
 
   clearComputedResiduals();
-
-  // old implementation below:
-/*  set<GlobalIndexType> globalIndicesForVars = _mesh->globalDofAssignment()->partitionOwnedIndicesForVariables(varsToAdd);
-  Epetra_Map partMap = getPartitionMap();
-
-  // add the global solution vectors together.
-  if (otherSoln->getLHSVector().get() != NULL) {
-    if (_lhsVector.get() == NULL) {
-      // then we treat this solution as 0
-      _lhsVector = Teuchos::rcp(new Epetra_FEVector(partMap,1,true));
-      _lhsVector->PutScalar(0); // unclear whether this is redundant with constructor or not
-    }
-    for (set<GlobalIndexType>::iterator gidIt = globalIndicesForVars.begin(); gidIt != globalIndicesForVars.end(); gidIt++) {
-      int lid = partMap.LID((GlobalIndexTypeToCast)*gidIt);
-      (*_lhsVector)[0][lid] += (*otherSoln->getLHSVector())[0][lid] * weight;
-    }
-    // now, interpret the global data
-    importSolution();
-
-    clearComputedResiduals();
-  }*/
 }
 
 bool Solution::cellHasCoefficientsAssigned(GlobalIndexType cellID) {
@@ -417,13 +313,16 @@ int Solution::solve(bool useMumps) {
 void Solution::setSolution(Teuchos::RCP<Solution> otherSoln) {
   _solutionForCellIDGlobal = otherSoln->solutionForCellIDGlobal();
   _lhsVector = Teuchos::rcp( new Epetra_FEVector(*otherSoln->getLHSVector()) );
+  _lhsVector2 = otherSoln->getLHSVector2();
   clearComputedResiduals();
 }
 
 void Solution::initializeLHSVector() {
 //  _lhsVector = Teuchos::rcp( (Epetra_FEVector*) NULL); // force a delete
   Epetra_Map partMap = getPartitionMap();
+  MapPtr partMap2 = getPartitionMap2();
   _lhsVector = Teuchos::rcp(new Epetra_FEVector(partMap,1,true));
+  _lhsVector2 = Teuchos::rcp(new Tpetra::MultiVector<Scalar,IndexType,GlobalIndexType>(partMap2,1));
 
   setGlobalSolutionFromCellLocalCoefficients();
   clearComputedResiduals();
@@ -431,6 +330,7 @@ void Solution::initializeLHSVector() {
 
 void Solution::initializeStiffnessAndLoad() {
   Epetra_Map partMap = getPartitionMap();
+  MapPtr partMap2 = getPartitionMap2();
 
   int maxRowSize = _mesh->rowSizeUpperBound();
 
@@ -458,6 +358,7 @@ void Solution::populateStiffnessAndLoad() {
 
   set<GlobalIndexType> myGlobalIndicesSet = _dofInterpreter->globalDofIndicesForPartition(rank);
   Epetra_Map partMap = getPartitionMap();
+  MapPtr partMap2 = getPartitionMap2();
 
   vector< ElementTypePtr > elementTypes = _mesh->elementTypes(rank);
   vector< ElementTypePtr >::iterator elemTypeIt;
@@ -832,7 +733,8 @@ void Solution::populateStiffnessAndLoad() {
 
   _rhsVector->GlobalAssemble();
 
-  Epetra_FEVector lhsVector(partMap, true);
+  // Epetra_FEVector lhsVector(partMap, true);
+  // VectorPtr lhsVector2 = Teuchos::rcp( new Tpetra::MultiVector<IndexType,GlobalIndexType>(partMap2, true));
 
   if (_writeRHSToMatrixMarketFile) {
     if (rank==0) {
@@ -869,8 +771,9 @@ void Solution::populateStiffnessAndLoad() {
 }
 
 void Solution::setProblem(Teuchos::RCP<Solver> solver) {
-  Teuchos::RCP<Epetra_LinearProblem> problem = Teuchos::rcp( new Epetra_LinearProblem(&*_globalStiffMatrix, &*_lhsVector, &*_rhsVector));
+  // Teuchos::RCP<Epetra_LinearProblem> problem = Teuchos::rcp( new Epetra_LinearProblem(&*_globalStiffMatrix, &*_lhsVector, &*_rhsVector));
   solver->setProblem(_globalStiffMatrix, _lhsVector, _rhsVector);
+  // solver->setProblem(_globalStiffMatrix2, _lhsVector2, _rhsVector2);
   // solver->setProblem(problem);
 }
 
@@ -888,6 +791,7 @@ int Solution::solveWithPrepopulatedStiffnessAndLoad(Teuchos::RCP<Solver> solver,
   set<GlobalIndexType> myGlobalIndicesSet = _dofInterpreter->globalDofIndicesForPartition(rank);
 //  cout << "rank " << rank << " has " << myGlobalIndicesSet.size() << " locally-owned dof indices.\n";
   Epetra_Map partMap = getPartitionMap();
+  MapPtr partMap2 = getPartitionMap2();
 
   vector< ElementTypePtr > elementTypes = _mesh->elementTypes(rank);
   vector< ElementTypePtr >::iterator elemTypeIt;
@@ -1065,6 +969,7 @@ void Solution::importSolution() {
 
   // Import solution onto current processor
   Epetra_Map partMap = getPartitionMap();
+  MapPtr partMap2 = getPartitionMap2();
   Epetra_Import  solnImporter(myCellsMap, partMap);
   Epetra_Vector  solnCoeff(myCellsMap);
 //  cout << "on rank " << rank << ", about to Import\n";
@@ -1223,6 +1128,7 @@ void Solution::importGlobalSolution() {
 
   // Import global solution onto each processor
   Epetra_Map partMap = getPartitionMap();
+  MapPtr partMap2 = getPartitionMap2();
   Epetra_Import  solnImporter(myCellsMap, partMap);
   Epetra_Vector  solnCoeff(myCellsMap);
   solnCoeff.Import(*_lhsVector, solnImporter, Insert);
@@ -1262,6 +1168,7 @@ void Solution::imposeBCs() {
   set<GlobalIndexType> myGlobalIndicesSet = _dofInterpreter->globalDofIndicesForPartition(rank);
   //  cout << "rank " << rank << " has " << myGlobalIndicesSet.size() << " locally-owned dof indices.\n";
   Epetra_Map partMap = getPartitionMap();
+  MapPtr partMap2 = getPartitionMap2();
 
   _mesh->boundary().bcsToImpose(bcGlobalIndices,bcGlobalValues,*(_bc.get()), myGlobalIndicesSet, _dofInterpreter.get(), &partMap);
   int numBCs = bcGlobalIndices.size();
@@ -1323,6 +1230,7 @@ void Solution::imposeZMCsUsingLagrange() {
   }
   
   Epetra_Map partMap = getPartitionMap();
+  MapPtr partMap2 = getPartitionMap2();
   
   set<GlobalIndexType> myGlobalIndicesSet = _dofInterpreter->globalDofIndicesForPartition(rank);
   int localRowIndex = myGlobalIndicesSet.size();
@@ -1408,6 +1316,7 @@ Teuchos::RCP<DofInterpreter> Solution::getDofInterpreter() const {
 void Solution::setDofInterpreter(Teuchos::RCP<DofInterpreter> dofInterpreter) {
   _dofInterpreter = dofInterpreter;
   Epetra_Map map = getPartitionMap();
+  MapPtr map2 = getPartitionMap2();
   Teuchos::RCP<Epetra_Map> mapPtr = Teuchos::rcp( new Epetra_Map(map) ); // copy map to RCP
 //  _mesh->boundary().setDofInterpreter(_dofInterpreter.get(), mapPtr);
   // TODO: notice that the above call to Boundary::setDofInterpreter() will cause incompatibilities if two solutions share
@@ -1768,6 +1677,10 @@ Teuchos::RCP<LagrangeConstraints> Solution::lagrangeConstraints() const {
 
 Teuchos::RCP<Epetra_FEVector> Solution::getLHSVector() {
   return _lhsVector;
+}
+
+VectorPtr Solution::getLHSVector2() {
+  return _lhsVector2;
 }
 
 double Solution::integrateSolution(int trialID) {
@@ -3389,19 +3302,19 @@ Epetra_Map Solution::getPartitionMap(PartitionIndexType rank, set<GlobalIndexTyp
   return partMap;
 }
 
-// MapPtr Solution::getPartitionMap2() {
-//   int rank = Teuchos::GlobalMPISession::getRank();
+MapPtr Solution::getPartitionMap2() {
+  int rank = Teuchos::GlobalMPISession::getRank();
 
-//   Teuchos::RCP<const Teuchos::Comm<int> > comm = Tpetra::DefaultPlatform::getDefaultPlatform().getComm();
+  Teuchos::RCP<const Teuchos::Comm<int> > comm = Tpetra::DefaultPlatform::getDefaultPlatform().getComm();
 
-//   vector<int> zeroMeanConstraints = getZeroMeanConstraints();
-//   GlobalIndexType numGlobalDofs = _dofInterpreter->globalDofCount();
-//   set<GlobalIndexType> myGlobalIndicesSet = _dofInterpreter->globalDofIndicesForPartition(rank);
-//   int numZMCDofs = _zmcsAsRankOneUpdate ? 0 : zeroMeanConstraints.size();
+  vector<int> zeroMeanConstraints = getZeroMeanConstraints();
+  GlobalIndexType numGlobalDofs = _dofInterpreter->globalDofCount();
+  set<GlobalIndexType> myGlobalIndicesSet = _dofInterpreter->globalDofIndicesForPartition(rank);
+  int numZMCDofs = _zmcsAsRankOneUpdate ? 0 : zeroMeanConstraints.size();
 
-//   MapPtr partMap = getPartitionMap2(rank, myGlobalIndicesSet,numGlobalDofs,numZMCDofs,Comm);
-//   return partMap;
-// }
+  MapPtr partMap = getPartitionMap2(rank, myGlobalIndicesSet,numGlobalDofs,numZMCDofs,comm);
+  return partMap;
+}
 
 // MapPtr Solution::getPartitionMapSolutionDofsOnly2() { // omits lagrange multipliers, ZMCs, etc.
 //   MapPtr partMapWithZMC = getPartitionMap2();

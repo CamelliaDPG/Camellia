@@ -9,6 +9,8 @@
 #ifndef Camellia_Solver_h
 #define Camellia_Solver_h
 
+#include "TypeDefs.h"
+
 #include "Teuchos_RCP.hpp"
 #include "Epetra_LinearProblem.h"
 #include "Epetra_Time.h"
@@ -28,11 +30,6 @@
 
 using namespace std;
 
-class Solution;
-class Mesh;
-typedef Teuchos::RCP<Solution> SolutionPtr;
-typedef Teuchos::RCP<Mesh> MeshPtr;
-
 // abstract class for solving Epetra_LinearProblem problems
 class Solver {
   typedef Teuchos::RCP<Solver> SolverPtr;
@@ -40,6 +37,10 @@ protected:
   Teuchos::RCP<Epetra_CrsMatrix> _stiffnessMatrix;
   Teuchos::RCP<Epetra_MultiVector> _lhs;
   Teuchos::RCP<Epetra_MultiVector> _rhs;
+
+  // MatrixPtr _stiffnessMatrix2;
+  // VectorPtr _lhs2;
+  // VectorPtr _rhs2;
 public:
   virtual ~Solver() {}
   virtual void setProblem(Teuchos::RCP<Epetra_CrsMatrix> stiffnessMatrix, Teuchos::RCP<Epetra_MultiVector> lhs, Teuchos::RCP<Epetra_MultiVector> rhs) {
@@ -47,15 +48,29 @@ public:
     _lhs = lhs;
     _rhs = rhs;
   }
+  // virtual void setProblem(MatrixPtr stiffnessMatrix, VectorPtr lhs, VectorPtr rhs) {
+  //   _stiffnessMatrix2 = stiffnessMatrix;
+  //   _lhs2 = lhs;
+  //   _rhs2 = rhs;
+  // }
   virtual void setStiffnessMatrix(Teuchos::RCP<Epetra_CrsMatrix> stiffnessMatrix) {
     _stiffnessMatrix = stiffnessMatrix;
   }
+  // virtual void setStiffnessMatrix(MatrixPtr stiffnessMatrix) {
+  //   _stiffnessMatrix2 = stiffnessMatrix;
+  // }
   virtual void setLHS(Teuchos::RCP<Epetra_MultiVector> lhs) {
     _lhs = lhs;
   }
+  // virtual void setLHS(VectorPtr lhs) {
+  //   _lhs2 = lhs;
+  // }
   virtual void setRHS(Teuchos::RCP<Epetra_MultiVector> rhs) {
     _rhs = rhs;
   }
+  // virtual void setRHS(VectorPtr rhs) {
+  //   _rhs2 = rhs;
+  // }
   virtual int solve() = 0; // solve with an error code response
   virtual int resolve() {
     // must be preceded by a call to solve(); caller attests that the system matrix has not been altered since last call to solve()

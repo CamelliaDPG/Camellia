@@ -15,8 +15,6 @@
 
 #include "GDAMaximumRule2D.h"
 
-#include "IndexType.h"
-
 #include "Epetra_SerialComm.h"
 
 #include "BasisCache.h"
