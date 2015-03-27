@@ -234,7 +234,7 @@ void OverlappingRowMatrix::BuildMap(int OverlapLevel_in)
 }
 
 OverlappingRowMatrix::
-OverlappingRowMatrix(const Teuchos::RefCountPtr<const Epetra_RowMatrix>& Matrix_in, int OverlapLevel_in,
+OverlappingRowMatrix(const Teuchos::RCP<const Epetra_RowMatrix>& Matrix_in, int OverlapLevel_in,
                      const std::set<GlobalIndexType> &rowIndicesForThisRank) :
 Matrix_(Matrix_in),
 OverlapLevel_(OverlapLevel_in)
@@ -283,7 +283,7 @@ OverlapLevel_(OverlapLevel_in)
 
 //! Constructor for an exact match to IfPack_OverlappingMatrix's behavior.
 OverlappingRowMatrix::
-OverlappingRowMatrix(const Teuchos::RefCountPtr<const Epetra_RowMatrix>& Matrix_in, int OverlapLevel_in) :
+OverlappingRowMatrix(const Teuchos::RCP<const Epetra_RowMatrix>& Matrix_in, int OverlapLevel_in) :
 Matrix_(Matrix_in),
 OverlapLevel_(OverlapLevel_in) {
   // nothing to do as well with one process

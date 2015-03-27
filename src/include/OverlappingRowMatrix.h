@@ -24,7 +24,7 @@
 #include "Ifpack_ConfigDefs.h"
 #include "Epetra_RowMatrix.h"
 #include "Epetra_CombineMode.h"
-#include "Teuchos_RefCountPtr.hpp"
+#include "Teuchos_RCP.hpp"
 #include "Epetra_Import.h"
 #include "Epetra_Map.h"
 #ifdef HAVE_IFPACK_PARALLEL_SUBDOMAIN_SOLVERS
@@ -85,14 +85,14 @@ namespace Camellia {
 
   //@{ Constructors/Destructors
   //! Constructor for mesh-based overlap levels, hierarchical and otherwise.
-  OverlappingRowMatrix(const Teuchos::RefCountPtr<const Epetra_RowMatrix>& Matrix_in,
+  OverlappingRowMatrix(const Teuchos::RCP<const Epetra_RowMatrix>& Matrix_in,
                        int OverlapLevel_in, MeshPtr mesh, Teuchos::RCP<DofInterpreter> dofInterpreter,
                        bool hierarchical = false);
-  OverlappingRowMatrix(const Teuchos::RefCountPtr<const Epetra_RowMatrix>& Matrix_in, int OverlapLevel_in,
+  OverlappingRowMatrix(const Teuchos::RCP<const Epetra_RowMatrix>& Matrix_in, int OverlapLevel_in,
                        const std::set<GlobalIndexType> &rowIndicesForThisRank);
 
   //! Constructor for an exact match to IfPack_OverlappingMatrix's behavior.
-  OverlappingRowMatrix(const Teuchos::RefCountPtr<const Epetra_RowMatrix>& Matrix_in, int OverlapLevel_in);
+  OverlappingRowMatrix(const Teuchos::RCP<const Epetra_RowMatrix>& Matrix_in, int OverlapLevel_in);
   ~OverlappingRowMatrix() {};
   //@}
 

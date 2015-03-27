@@ -43,7 +43,7 @@
 #include "Epetra_RowMatrix.h"
 #include "Epetra_CrsMatrix.h"
 #include "Teuchos_ParameterList.hpp"
-#include "Teuchos_RefCountPtr.hpp"
+#include "Teuchos_RCP.hpp"
 
 #ifdef HAVE_IFPACK_AMESOS
   #include "Ifpack_AMDReordering.h"
@@ -382,17 +382,17 @@ protected:
   Teuchos::RCP<DofInterpreter> dofInterpreter_;
   
   //! Pointers to the matrix to be preconditioned.
-  Teuchos::RefCountPtr<const Epetra_RowMatrix> Matrix_;
+  Teuchos::RCP<const Epetra_RowMatrix> Matrix_;
   //! Pointers to the overlapping matrix.
-  Teuchos::RefCountPtr<OverlappingRowMatrix> OverlappingMatrix_;
+  Teuchos::RCP<OverlappingRowMatrix> OverlappingMatrix_;
   //! Localized version of Matrix_ or OverlappingMatrix_.
 /*
   //TODO if we choose to expose the node aware code, i.e., no ifdefs,
   //TODO then we should switch to this definition.
-  Teuchos::RefCountPtr<Epetra_RowMatrix> LocalizedMatrix_;
+  Teuchos::RCP<Epetra_RowMatrix> LocalizedMatrix_;
 */
 
-  Teuchos::RefCountPtr<Ifpack_LocalFilter> LocalizedMatrix_;
+  Teuchos::RCP<Ifpack_LocalFilter> LocalizedMatrix_;
   //! Contains the label of \c this object.
   string Label_;
   //! If true, the preconditioner has been successfully initialized.
@@ -418,13 +418,13 @@ protected:
   //! Type of reordering of the local matrix.
   string ReorderingType_;
   //! Pointer to a reordering object.
-  Teuchos::RefCountPtr<Ifpack_Reordering> Reordering_;
+  Teuchos::RCP<Ifpack_Reordering> Reordering_;
   //! Pointer to the reorderd matrix.
-  Teuchos::RefCountPtr<Ifpack_ReorderFilter> ReorderedLocalizedMatrix_;
+  Teuchos::RCP<Ifpack_ReorderFilter> ReorderedLocalizedMatrix_;
   //! Filter for singletons.
   bool FilterSingletons_;
   //! filtering object.
-  Teuchos::RefCountPtr<Ifpack_SingletonFilter> SingletonFilter_;
+  Teuchos::RCP<Ifpack_SingletonFilter> SingletonFilter_;
   //! Contains the number of successful calls to Initialize().
   int NumInitialize_;
   //! Contains the number of successful call to Compute().
@@ -441,12 +441,12 @@ protected:
   double InitializeFlops_;
   //! Contains the number of flops for Compute().
   double ComputeFlops_;
-  //! Contain sthe number of flops for ApplyInverse().
+  //! Contains the number of flops for ApplyInverse().
   mutable double ApplyInverseFlops_;
   //! Object used for timing purposes.
-  Teuchos::RefCountPtr<Epetra_Time> Time_;
+  Teuchos::RCP<Epetra_Time> Time_;
   //! Pointer to the local solver.
-  Teuchos::RefCountPtr<T> Inverse_;
+  Teuchos::RCP<T> Inverse_;
 }; // class AdditiveSchwarz<T>
 
 //==============================================================================
@@ -837,9 +837,9 @@ ApplyInverse(const Epetra_MultiVector& X, Epetra_MultiVector& Y) const
 
   Time_->ResetStartTime();
 
-  Teuchos::RefCountPtr<Epetra_MultiVector> OverlappingX;
-  Teuchos::RefCountPtr<Epetra_MultiVector> OverlappingY;
-  Teuchos::RefCountPtr<Epetra_MultiVector> Xtmp;
+  Teuchos::RCP<Epetra_MultiVector> OverlappingX;
+  Teuchos::RCP<Epetra_MultiVector> OverlappingY;
+  Teuchos::RCP<Epetra_MultiVector> Xtmp;
 
   // for flop count, see bottom of this function
 #ifdef IFPACK_FLOPCOUNTERS
