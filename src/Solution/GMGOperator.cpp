@@ -84,7 +84,7 @@ GMGOperator::GMGOperator(BCPtr zeroBCs, MeshPtr coarseMesh, IPPtr coarseIP,
   _coarseSolver = coarseSolver;
   _haveSolvedOnCoarseMesh = false;
 
-  _smootherType = IFPACK_ADDITIVE_SCHWARZ; // default
+  setSmootherType(IFPACK_ADDITIVE_SCHWARZ); // default
   _smootherOverlap = 0;
   
   { // DEBUGGING
@@ -660,7 +660,7 @@ int GMGOperator::ApplyInverse(const Epetra_MultiVector& X_in, Epetra_MultiVector
 
   if (coarseRHSVector->GlobalLength() != _P->NumGlobalCols()) {
     // TODO: add support for coarseRHSVector that may have lagrange/zmc constraints applied even though fine solution neglects these...
-    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Still need to implement support for this");
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "coarseRHSVector->GlobalLength() != _P->NumGlobalCols()");
   }
   
   timer.ResetStartTime();
