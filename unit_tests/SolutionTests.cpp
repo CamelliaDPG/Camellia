@@ -421,7 +421,7 @@ namespace {
     functionMap[uhat->ID()] = Function::xn(1);
     functionMap[fhat->ID()] = f_flux;
     functionMap[u->ID()] = Function::xn(1);
-    functionMap[sigma->ID()] = Function::xn(1);
+    functionMap[sigma->ID()] = Function::vectorize(Function::xn(1), Function::yn(1));
     spaceTimeSolution->projectOntoMesh(functionMap);
     
     double tol = 1e-14;
@@ -549,7 +549,7 @@ namespace {
     functionMap[uhat->ID()] = Function::xn(1);
     functionMap[fhat->ID()] = f_flux;
     functionMap[u->ID()] = Function::xn(1);
-    functionMap[sigma->ID()] = Function::xn(1);
+    functionMap[sigma->ID()] = Function::vectorize(Function::xn(1), Function::yn(1), Function::zn(1));
     spaceTimeSolution->projectOntoMesh(functionMap);
     
     double tol = 1e-14;
