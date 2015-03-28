@@ -231,8 +231,9 @@ public:
   /*** Methods added for BC support below ***/
   // setRefCellPoints overwrites _cubPoints -- for when cubature is not your interest
   // (this comes up in imposeBC)
-  void setRefCellPoints(const Intrepid::FieldContainer<double> &pointsRefCell);
-  void setRefCellPoints(const Intrepid::FieldContainer<double> &pointsRefCell, const Intrepid::FieldContainer<double> &cubatureWeights);
+  virtual void setRefCellPoints(const Intrepid::FieldContainer<double> &pointsRefCell);
+  virtual void setRefCellPoints(const Intrepid::FieldContainer<double> &pointsRefCell,
+                                const Intrepid::FieldContainer<double> &cubatureWeights);
   const Intrepid::FieldContainer<double> &getRefCellPoints();
   const Intrepid::FieldContainer<double> &getSideRefCellPointsInVolumeCoordinates();
   
