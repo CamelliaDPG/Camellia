@@ -690,7 +690,13 @@ constFCPtr BasisCache::getTransformedValues(BasisPtr basis, Camellia::EOperator 
       constFCPtr referenceValues = getValues(basis,(Camellia::EOperator) relatedOp, useCubPointsSideRefCell);
 //      cout << "_cellJacobInv:\n" << _cellJacobInv;
 //      cout << "referenceValues:\n"  << *referenceValues;
+      // TODO: revisit the way we determine numCells....
       int numCells = _physCubPoints.dimension(0);
+      if (numCells == 0) { // can happen for certain BasisCaches used in SpaceTimeBasisCache
+        if (_physicalCellNodes.rank() > 0) {
+          numCells = _physicalCellNodes.dimension(0);
+        }
+      }
       transformedValues =
       BasisEvaluation::getTransformedValuesWithBasisValues(basis, (Camellia::EOperator) relatedOp,
                                                            referenceValues, numCells, _cellJacobian,
@@ -1189,33 +1195,41 @@ BasisCachePtr BasisCache::basisCacheForCellTopology(CellTopoPtr cellTopo, int cu
   if (tensorProductTopologyMeansSpaceTime && (cellTopo->getTensorialDegree() > 0)) {
     int numCells = physicalCellNodes.dimension(0);
     CellTopoPtr spaceTimeTopo = cellTopo;
+
     // check that the physical nodes are in fact in a tensor product structure:
     CellTopoPtr spaceTopo = spaceTimeTopo->getTensorialComponent();
+    FieldContainer<double> physicalCellNodesSpace(numCells, spaceTopo->getNodeCount(), max((int)spaceTopo->getDimension(),1));
+
     CellTopoPtr timeTopo = CellTopology::line();
-    FieldContainer<double> physicalCellNodesSpace(numCells, spaceTopo->getNodeCount(), spaceTopo->getDimension());
     FieldContainer<double> physicalCellNodesTime(numCells, timeTopo->getNodeCount(), timeTopo->getDimension());
-    
+
+    if (spaceTopo->getDimension()==0) { // spatial topology is just a Node; handle this separately
+      physicalCellNodesSpace.initialize(0.0);
+    }
     for (int cellOrdinal=0; cellOrdinal<numCells; cellOrdinal++) {
       vector<unsigned> componentNodes(2);
-      for (int spaceNodeOrdinal=0; spaceNodeOrdinal<spaceTopo->getNodeCount(); spaceNodeOrdinal++) {
-        componentNodes[0] = spaceNodeOrdinal;
-        componentNodes[1] = 0; // fix the 0 node ordinal in time
-        int spaceTimeNodeOrdinal = spaceTimeTopo->getNodeFromTensorialComponentNodes(componentNodes);
-        for (int d=0; d<spaceTopo->getDimension(); d++) {
-          physicalCellNodesSpace(cellOrdinal,spaceNodeOrdinal,d) = physicalCellNodes(cellOrdinal,spaceTimeNodeOrdinal,d);
-        }
-        // check that the time 1 node matches the time 0 node
-        componentNodes[1] = 1;
-        double tol = 1e-15;
-        spaceTimeNodeOrdinal = spaceTimeTopo->getNodeFromTensorialComponentNodes(componentNodes);
-        for (int d=0; d<spaceTopo->getDimension(); d++) {
-          double diff = abs(physicalCellNodesSpace(cellOrdinal,spaceNodeOrdinal,d) -physicalCellNodes(cellOrdinal,spaceTimeNodeOrdinal,d));
-          if (diff > tol) {
-            cout << "physical cell nodes are not in a tensor product structure; this is not supported.\n";
-            TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "non-tensor product space time mesh");
+      if (spaceTopo->getDimension() > 0) {
+        for (int spaceNodeOrdinal=0; spaceNodeOrdinal<spaceTopo->getNodeCount(); spaceNodeOrdinal++) {
+          componentNodes[0] = spaceNodeOrdinal;
+          componentNodes[1] = 0; // fix the 0 node ordinal in time
+          int spaceTimeNodeOrdinal = spaceTimeTopo->getNodeFromTensorialComponentNodes(componentNodes);
+          for (int d=0; d<physicalCellNodesSpace.dimension(2); d++) {
+            physicalCellNodesSpace(cellOrdinal,spaceNodeOrdinal,d) = physicalCellNodes(cellOrdinal,spaceTimeNodeOrdinal,d);
+          }
+          // check that the time 1 node matches the time 0 node
+          componentNodes[1] = 1;
+          double tol = 1e-15;
+          spaceTimeNodeOrdinal = spaceTimeTopo->getNodeFromTensorialComponentNodes(componentNodes);
+          for (int d=0; d<physicalCellNodesSpace.dimension(2); d++) {
+            double diff = abs(physicalCellNodesSpace(cellOrdinal,spaceNodeOrdinal,d) -physicalCellNodes(cellOrdinal,spaceTimeNodeOrdinal,d));
+            if (diff > tol) {
+              cout << "physical cell nodes are not in a tensor product structure; this is not supported.\n";
+              TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "non-tensor product space time mesh");
+            }
           }
         }
       }
+      
       for (int timeNodeOrdinal=0; timeNodeOrdinal<timeTopo->getNodeCount(); timeNodeOrdinal++) {
         componentNodes[0] = 0;
         componentNodes[1] = timeNodeOrdinal;
