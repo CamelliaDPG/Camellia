@@ -38,6 +38,14 @@ void Projector::projectFunctionOntoBasis(FieldContainer<double> &basisCoefficien
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "fxn cannot be null!");
   }
   
+  if (fxn->rank() != basis->rangeRank()) {
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Function rank must agree with basis rank");
+  }
+  
+  if (fxn->rank() != v->rank()) {
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Function rank must agree with variable rank");
+  }
+  
   int cardinality = basis->getCardinality();
   int numCells = basisCache->getPhysicalCubaturePoints().dimension(0);
   int numDofs = cardinality - fieldIndicesToSkip.size();
