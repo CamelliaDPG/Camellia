@@ -356,7 +356,7 @@ void LinearTerm::integrate(Epetra_CrsMatrix* valuesCrsMatrix, FieldContainer<dou
   
   // values has dimensions (numCells, uFields, vFields)
   int numPoints = basisCache->getPhysicalCubaturePoints().dimension(1);
-  int spaceDim = basisCache->getPhysicalCubaturePoints().dimension(2);
+  int spaceDim = basisCache->getSpaceDim();
   
   Teuchos::Array<int> ltValueDim;
   ltValueDim.push_back(numCells);
@@ -624,7 +624,7 @@ void LinearTerm::evaluate(FieldContainer<double> &values, SolutionPtr solution, 
                              "values FC does not have the expected rank" );
   int numCells = values.dimension(0);
   int numPoints = values.dimension(1);
-  int spaceDim = basisCache->getPhysicalCubaturePoints().dimension(2);
+  int spaceDim = basisCache->getSpaceDim();
   
   values.initialize(0.0);
   Teuchos::Array<int> scalarFunctionValueDim;
@@ -843,7 +843,7 @@ void LinearTerm::values(FieldContainer<double> &values, int varID, BasisPtr basi
   int numCells = values.dimension(0);
   int numFields = values.dimension(1);
   int numPoints = values.dimension(2);
-  int spaceDim = basisCache->getPhysicalCubaturePoints().dimension(2);
+  int basisRangeDimension = basis->rangeDimension();
   
   values.initialize(0.0);
   Teuchos::Array<int> scalarFunctionValueDim;
@@ -854,9 +854,9 @@ void LinearTerm::values(FieldContainer<double> &values, int varID, BasisPtr basi
   FieldContainer<double> fValues;
   
   Teuchos::Array<int> vectorFunctionValueDim = scalarFunctionValueDim;
-  vectorFunctionValueDim.append(spaceDim);
+  vectorFunctionValueDim.append(basisRangeDimension);
   Teuchos::Array<int> tensorFunctionValueDim = vectorFunctionValueDim;
-  tensorFunctionValueDim.append(spaceDim);
+  tensorFunctionValueDim.append(basisRangeDimension);
   
   TEUCHOS_TEST_FOR_EXCEPTION( numCells != basisCache->getPhysicalCubaturePoints().dimension(0),
                              std::invalid_argument, "values FC numCells disagrees with cubature points container");
@@ -922,47 +922,53 @@ void LinearTerm::values(FieldContainer<double> &values, int varID, BasisPtr basi
       } else {
         Teuchos::Array<int> fDim = tensorFunctionValueDim;
         for (int d=3; d < ls.first->rank(); d++) {
-          fDim.append(spaceDim);
+          fDim.append(basisRangeDimension);
         }
         fValues.resize(fDim);
       }
       
       ls.first->values(fValues,basisCache);
       
-      //      if (ls.first->rank() == 2) {
-      //        cout << "fValues:\n" << fValues;
-      //        cout << "basisValues:\n" << *basisValues;
-      //      }
-      
       int numFields = basis->getCardinality();
       
       Teuchos::Array<int> fDim(fValues.rank());
       Teuchos::Array<int> bDim(basisValues->rank());
+      
+      bool checkBounds = true;
       
       // compute f * basisValues
       if ( ls.first->rank() == ls.second->rank() ) { // scalar result
         int entriesPerPoint = 1;
         int fRank = ls.first->rank();
         for (int d=0; d<fRank; d++) {
-          entriesPerPoint *= spaceDim;
+          entriesPerPoint *= basisRangeDimension;
         }
-        //        if (fRank > 0) {
-        //          cout << "basisValues:\n" << *basisValues;
-        //          cout << "fValues:\n" << fValues;
-        //        }
+
         for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
           fDim[0] = cellIndex; bDim[0] = cellIndex;
           for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
             fDim[1] = ptIndex; bDim[2] = ptIndex;
             for (int fieldIndex=0; fieldIndex<numFields; fieldIndex++) {
-              const double *fValue = &fValues[fValues.getEnumeration(fDim)];
-              bDim[1] = fieldIndex;
-              const double *bValue = &((*basisValues)[basisValues->getEnumeration(bDim)]);
-              for (int entryIndex=0; entryIndex<entriesPerPoint; entryIndex++) {
-                values(cellIndex,fieldIndex,ptIndex) += *fValue * *bValue;
-                
-                fValue++;
-                bValue++;
+              if (!checkBounds) {
+                const double *fValue = &fValues[fValues.getEnumeration(fDim)];
+                bDim[1] = fieldIndex;
+                const double *bValue = &((*basisValues)[basisValues->getEnumeration(bDim)]);
+                for (int entryIndex=0; entryIndex<entriesPerPoint; entryIndex++) {
+                  values(cellIndex,fieldIndex,ptIndex) += *fValue * *bValue;
+                  
+                  fValue++;
+                  bValue++;
+                }
+              } else {
+                int fValueEnum = fValues.getEnumeration(fDim);
+                bDim[1] = fieldIndex;
+                int bValueEnum = basisValues->getEnumeration(bDim);
+                for (int entryIndex=0; entryIndex<entriesPerPoint; entryIndex++) {
+                  values(cellIndex,fieldIndex,ptIndex) += fValues[fValueEnum] * (*basisValues)[bValueEnum];
+                  
+                  fValueEnum++;
+                  bValueEnum++;
+                }
               }
             }
           }
@@ -980,7 +986,7 @@ void LinearTerm::values(FieldContainer<double> &values, int varID, BasisPtr basi
         bool scalarF = ls.first->rank() == 0;
         int resultRank = scalarF ? ls.second->rank() : ls.first->rank();
         for (int d=0; d<resultRank; d++) {
-          entriesPerPoint *= spaceDim;
+          entriesPerPoint *= basisRangeDimension;
         }
         Teuchos::Array<int> vDim( values.rank() );
         for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
@@ -988,19 +994,38 @@ void LinearTerm::values(FieldContainer<double> &values, int varID, BasisPtr basi
           for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
             fDim[1] = ptIndex; bDim[2] = ptIndex; vDim[2] = ptIndex;
             for (int fieldIndex=0; fieldIndex<numFields; fieldIndex++) {
-              const double *fValue = &fValues[fValues.getEnumeration(fDim)];
-              bDim[1] = fieldIndex; vDim[1] = fieldIndex;
-              const double *bValue = &(*basisValues)[basisValues->getEnumeration(bDim)];
-              
-              double *value = &values[values.getEnumeration(vDim)];
-              
-              for (int entryIndex=0; entryIndex<entriesPerPoint; entryIndex++) {
-                *value += *fValue * *bValue;
-                value++;
-                if (scalarF) {
-                  bValue++;
-                } else {
-                  fValue++;
+              if (!checkBounds) {
+                const double *fValue = &fValues[fValues.getEnumeration(fDim)];
+                bDim[1] = fieldIndex; vDim[1] = fieldIndex;
+                const double *bValue = &(*basisValues)[basisValues->getEnumeration(bDim)];
+                
+                double *value = &values[values.getEnumeration(vDim)];
+                
+                for (int entryIndex=0; entryIndex<entriesPerPoint; entryIndex++) {
+                  *value += *fValue * *bValue;
+                  value++;
+                  if (scalarF) {
+                    bValue++;
+                  } else {
+                    fValue++;
+                  }
+                }
+              } else {
+                int fValueEnum = fValues.getEnumeration(fDim);
+                bDim[1] = fieldIndex; vDim[1] = fieldIndex;
+                int bValueEnum = basisValues->getEnumeration(bDim);
+                int valueEnum = values.getEnumeration(vDim);
+                
+//                double *value = &values[values.getEnumeration(vDim)];
+                
+                for (int entryIndex=0; entryIndex<entriesPerPoint; entryIndex++) {
+                  values[valueEnum] += fValues[fValueEnum] * (*basisValues)[bValueEnum];
+                  valueEnum++;
+                  if (scalarF) {
+                    bValueEnum++;
+                  } else {
+                    fValueEnum++;
+                  }
                 }
               }
             }
@@ -1023,7 +1048,7 @@ void LinearTerm::values(FieldContainer<double> &values, int varID, FunctionPtr f
                              "values FC does not have the expected rank" );
   int numCells = values.dimension(0);
   int numPoints = values.dimension(1);
-  int spaceDim = basisCache->getPhysicalCubaturePoints().dimension(2);
+  int spaceDim = basisCache->getSpaceDim();
   
   values.initialize(0.0);
   Teuchos::Array<int> scalarFunctionValueDim;
@@ -1165,221 +1190,7 @@ void LinearTerm::values(FieldContainer<double> &values, int varID, FunctionPtr f
 int LinearTerm::rank() const {   // 0 for scalar, 1 for vector, etc.
   return _rank;
 }
-/*
- // added by Jesse --------------------
- 
- LinearTermPtr LinearTerm::rieszRep(VarPtr v){
- LinearTermPtr errorComponent = Teuchos::rcp( new LinearTerm);
- return errorComponent; // WARNING - FINISH THIS
- }
- 
- void LinearTerm::computeRieszRep(Teuchos::RCP<Mesh> mesh, IPPtr ip){
- int numProcs=1;
- int rank=0;
- 
- #ifdef HAVE_MPI
- rank     = Teuchos::GlobalMPISession::getRank();
- numProcs = Teuchos::GlobalMPISession::getNProc();
- Epetra_MpiComm Comm(MPI_COMM_WORLD);
- //cout << "rank: " << rank << " of " << numProcs << endl;
- #else
- Epetra_SerialComm Comm;
- #endif
- 
- computeRieszRHS(mesh);
- 
- vector<ElementTypePtr> elemTypes = mesh->elementTypes(rank);
- vector<ElementTypePtr>::iterator elemTypeIt;
- for (elemTypeIt = elemTypes.begin(); elemTypeIt != elemTypes.end(); elemTypeIt++) {
- ElementTypePtr elemTypePtr = *(elemTypeIt);
- BasisCachePtr ipBasisCache = Teuchos::rcp(new BasisCache(elemTypePtr,mesh,true));
- 
- Teuchos::RCP<DofOrdering> testOrdering = elemTypePtr->testOrderPtr;
- FieldContainer<double> physicalCellNodes = mesh->physicalCellNodes(elemTypePtr);
- 
- vector<Teuchos::RCP<Element> > elemsInPartitionOfType = mesh->elementsOfType(rank, elemTypePtr);
- int numCells = physicalCellNodes.dimension(0);
- int numTestDofs = testOrdering->totalDofs();
- 
- FieldContainer<double> ipMatrix(numCells,numTestDofs,numTestDofs);
- 
- // determine cellIDs
- vector<GlobalIndexType> cellIDs;
- for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
- int cellID = mesh->cellID(elemTypePtr, cellIndex, rank);
- cellIDs.push_back(cellID);
- }
- ipBasisCache->setPhysicalCellNodes(physicalCellNodes,cellIDs,ip->hasBoundaryTerms());
- 
- ip->computeInnerProductMatrix(ipMatrix,testOrdering, ipBasisCache);
- FieldContainer<double> rieszRepresentation(numCells,numTestDofs);
- 
- Epetra_SerialDenseSolver solver;
- 
- for (int localCellIndex=0; localCellIndex<numCells; localCellIndex++ ) {
- 
- Epetra_SerialDenseMatrix ipMatrixT(Copy, &ipMatrix(localCellIndex,0,0),
- ipMatrix.dimension(2), // stride -- fc stores in row-major order (a.o.t. SDM)
- ipMatrix.dimension(2),ipMatrix.dimension(1));
- 
- Epetra_SerialDenseMatrix rhs(Copy, & (_rieszRHSForElementType[elemTypePtr.get()](localCellIndex,0)),
- _rieszRHSForElementType[elemTypePtr.get()].dimension(1), // stride
- _rieszRHSForElementType[elemTypePtr.get()].dimension(1), 1);
- 
- Epetra_SerialDenseMatrix representationMatrix(numTestDofs,1);
- 
- solver.SetMatrix(ipMatrixT);
- int success = solver.SetVectors(representationMatrix, rhs);
- 
- bool equilibrated = false;
- if ( solver.ShouldEquilibrate() ) {
- solver.EquilibrateMatrix();
- solver.EquilibrateRHS();
- equilibrated = true;
- }
- 
- success = solver.Solve();
- 
- if (equilibrated) {
- success = solver.UnequilibrateLHS();
- }
- 
- for (int i=0; i<numTestDofs; i++) {
- rieszRepresentation(localCellIndex,i) = representationMatrix(i,0);
- }
- }
- _rieszRepresentationForElementType[elemTypePtr.get()] = rieszRepresentation;
- }
- }
- 
- void LinearTerm::computeRieszRHS(Teuchos::RCP<Mesh> mesh){
- int numProcs=1;
- int rank=0;
- 
- #ifdef HAVE_MPI
- rank     = Teuchos::GlobalMPISession::getRank();
- numProcs = Teuchos::GlobalMPISession::getNProc();
- Epetra_MpiComm Comm(MPI_COMM_WORLD);
- #else
- Epetra_SerialComm Comm;
- #endif
- vector<ElementTypePtr> elemTypes = mesh->elementTypes(rank);
- vector<ElementTypePtr>::iterator elemTypeIt;
- for (elemTypeIt = elemTypes.begin(); elemTypeIt != elemTypes.end(); elemTypeIt++) {
- ElementTypePtr elemTypePtr = *(elemTypeIt);
- 
- Teuchos::RCP<DofOrdering> trialOrdering = elemTypePtr->trialOrderPtr;
- Teuchos::RCP<DofOrdering> testOrdering = elemTypePtr->testOrderPtr;
- 
- vector< Teuchos::RCP< Element > > elemsInPartitionOfType = mesh->elementsOfType(rank, elemTypePtr);
- 
- FieldContainer<double> physicalCellNodes = mesh->physicalCellNodes(elemTypePtr);
- FieldContainer<double> cellSideParities  = mesh->cellSideParities(elemTypePtr);
- 
- int numTrialDofs = trialOrdering->totalDofs();
- int numTestDofs  = testOrdering->totalDofs();
- int numCells = physicalCellNodes.dimension(0); // partition-local cells
- 
- // determine cellIDs
- vector<GlobalIndexType> cellIDs;
- for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
- int cellID = mesh->cellID(elemTypePtr, cellIndex, rank);
- cellIDs.push_back(cellID);
- }
- 
- TEUCHOS_TEST_FOR_EXCEPTION( numCells!=elemsInPartitionOfType.size(), std::invalid_argument, "in computeResiduals::numCells does not match number of elems in partition.");
- 
- // prepare basisCache and cellIDs
- BasisCachePtr basisCache = Teuchos::rcp(new BasisCache(elemTypePtr,mesh));
- bool createSideCacheToo = true;
- FieldContainer<double> rhs(numCells,numTestDofs);
- basisCache->setPhysicalCellNodes(physicalCellNodes,cellIDs,createSideCacheToo);
- this->integrate(rhs, testOrdering, basisCache);
- 
- _rieszRHSForElementType[elemTypePtr.get()] = rhs;
- }
- //  _residualsComputed = true;
- }
- 
- const map<int,double> & LinearTerm::energyNorm(Teuchos::RCP<Mesh> mesh, IPPtr ip) {
- int numProcs = Teuchos::GlobalMPISession::getNProc();;
- int rank = Teuchos::GlobalMPISession::getRank();
- 
- #ifdef HAVE_MPI
- Epetra_MpiComm Comm(MPI_COMM_WORLD);
- #else
- Epetra_SerialComm Comm;
- #endif
- 
- int numActiveElements = mesh->activeElements().size();
- int numMyCells = mesh->elementsInPartition(rank).size();
- 
- computeRieszRep(mesh,ip);
- 
- FieldContainer<int> activeCellIDs(numActiveElements); // initialized to 0
- FieldContainer<double> norms(numActiveElements);
- FieldContainer<int> numCellsForMPINode(numProcs);
- 
- MPIWrapper::allGather(numCellsForMPINode, numMyCells);
- 
- int myCellIndexOffset = 0;
- for (int i=0; i<rank; i++) {
- myCellIndexOffset += numCellsForMPINode[i];
- }
- 
- vector<ElementTypePtr> elemTypes = mesh->elementTypes(rank);
- vector<ElementTypePtr>::iterator elemTypeIt;
- int myCellIndex = 0;
- for (elemTypeIt = elemTypes.begin(); elemTypeIt != elemTypes.end(); elemTypeIt++) {
- ElementTypePtr elemTypePtr = *(elemTypeIt);
- 
- vector< Teuchos::RCP< Element > > elemsInPartitionOfType = mesh->elementsOfType(rank, elemTypePtr);
- 
- // for error rep v_e, residual res, energyError = sqrt ( ve_^T * res)
- FieldContainer<double> rhs = _rieszRHSForElementType[elemTypePtr.get()];
- FieldContainer<double> rieszReps = _rieszRepresentationForElementType[elemTypePtr.get()];
- int numTestDofs = rhs.dimension(1);
- int numCells = rhs.dimension(0);
- TEUCHOS_TEST_FOR_EXCEPTION( numCells!=elemsInPartitionOfType.size(), std::invalid_argument, "In energyError::numCells does not match number of elems in partition.");
- 
- for (int cellIndex=0;cellIndex<numCells;cellIndex++){
- double normSquared = 0.0;
- for (int i=0; i<numTestDofs; i++) {
- normSquared += rhs(cellIndex,i) * rieszReps(cellIndex,i);
- }
- norms[myCellIndexOffset + myCellIndex] = sqrt(normSquared);
- int cellID = mesh->cellID(elemTypePtr,cellIndex,rank);
- activeCellIDs[myCellIndexOffset + myCellIndex] = cellID;
- myCellIndex++;
- }
- } // end of loop thru element types
- 
- MPIWrapper::entryWiseSum(activeCellIDs);
- MPIWrapper::entryWiseSum(norms);
- 
- // copy to energyError container
- for (int i=0; i<numActiveElements; i++){
- int cellID = activeCellIDs[i];
- _energyNormForCellIDGlobal[cellID] = norms[i];
- }
- 
- // TODO: figure out whether we actually need to keep this around...
- return _energyNormForCellIDGlobal;
- }
- 
- double LinearTerm::energyNormTotal(Teuchos::RCP<Mesh> mesh, IPPtr ip){
- double energyNormSquared = 0.0;
- const map<int,double>* energyNormPerCell = &(energyNorm(mesh, ip));
- for (map<int,double>::const_iterator cellEnergyIt = energyNormPerCell->begin();
- cellEnergyIt != energyNormPerCell->end(); cellEnergyIt++) {
- energyNormSquared += (cellEnergyIt->second) * (cellEnergyIt->second);
- }
- return sqrt(energyNormSquared);
- 
- }
- 
- // end of added by Jesse --------------------
- */
+
 // operator overloading niceties:
 
 LinearTerm& LinearTerm::operator=(const LinearTerm &rhs) {
