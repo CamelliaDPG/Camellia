@@ -85,6 +85,21 @@ SpaceTimeBasisCache::SpaceTimeBasisCache(const FieldContainer<double> &physicalN
   
   int sideCount = cellTopology()->getSideCount();
   
+  if (physicalNodesSpatial.dimension(0) != physicalNodesTemporal.dimension(0)) {
+    cout << "physicalNodesSpatial must have the same # of cells as physicalNodesTemporal\n";
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "physicalNodesSpatial must have the same # of cells as physicalNodesTemporal");
+  }
+  
+  if (physicalCellNodes.dimension(0) != physicalNodesTemporal.dimension(0)) {
+    cout << "physicalCellNodes must have the same # of cells as physicalNodesTemporal\n";
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "physicalCellNodes must have the same # of cells as physicalNodesTemporal");
+  }
+  
+  if (physicalCellNodes.dimension(0) <= 0) {
+    cout << "physicalCellNodes must have a positive # of cells\n";
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "physicalCellNodes must have a positive # of cells");
+  }
+  
   // determine space topology
   CellTopoPtr spaceTopo;
   for (int timeSideOrdinal=0; timeSideOrdinal<sideCount; timeSideOrdinal++) {
@@ -222,6 +237,141 @@ constFCPtr SpaceTimeBasisCache::getTensorBasisValues(TensorBasis<double>* tensor
   tensorBasis->getTensorValues(*tensorValues, componentValues, componentOps);
   
   return Teuchos::rcp( tensorValues );
+}
+
+void SpaceTimeBasisCache::getTensorialComponentPoints(CellTopoPtr spaceTimeTopo,
+                                                     const FieldContainer<double> &tensorPoints,
+                                                     FieldContainer<double> &spatialPoints,
+                                                     FieldContainer<double> &temporalPoints) {
+  
+  // note that this initial implementation is hackish; it's merely meant to be a placeholder
+  // until we can develop an abstraction that won't involve us *taking* the tensor product of
+  // points in the first place (which costs memory and computation, and prevents us from taking
+  // advantage of the tensor product structure to avoid further costs).
+  
+  // note also that we do assume that the tensorPoints are in a tensor product structure; we don't check
+  // that all the space points that should agree do agree, e.g.
+  
+  // tensor points should be shaped (P,D)
+  if (tensorPoints.rank() != 2) {
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "tensorPoints must have shape (P,D) or (C,P,D)");
+  }
+  if (tensorPoints.dimension(1) != spaceTimeTopo->getDimension()) {
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "tensorPoints must have shape (P,D) or (C,P,D)");
+  }
+  CellTopoPtr spaceTopo = spaceTimeTopo->getTensorialComponent();
+  CellTopoPtr timeTopo = CellTopology::line();
+  
+  int numSpaceTimePoints = tensorPoints.dimension(0);
+  
+  int d_time = spaceTopo->getDimension();
+  
+  set<double> timePoints;
+  for (int pointOrdinal=0; pointOrdinal<numSpaceTimePoints; pointOrdinal++) {
+    // round to 6 decimal places (we're just using this to determine uniqueness)
+    double timePoint = round(1.0e6 * tensorPoints(pointOrdinal,d_time)) / 1.0e6;
+    timePoints.insert(timePoint);
+  }
+  
+  int numTimePoints = timePoints.size(); // number of unique points in time
+  
+  int numSpacePoints = numSpaceTimePoints / numTimePoints;
+  
+  if (numSpacePoints * numTimePoints != numSpaceTimePoints) {
+    cout << "tensorPoints:\n" << tensorPoints;
+    Camellia::print("timePoints", timePoints);
+    cout << "ERROR: numSpaceTimePoints is not evenly divisible by the number of distinct temporal values.\n";
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "numSpaceTimePoints is not evenly divisible by the number of distinct temporal values");
+  }
+  
+  if (spaceTopo->getDimension()==0) {
+    spatialPoints.resize(0);
+    temporalPoints = tensorPoints;
+    return;
+  }
+  
+  spatialPoints.resize(numSpacePoints,spaceTopo->getDimension());
+  temporalPoints.resize(numTimePoints,timeTopo->getDimension());
+  
+  for (int spacePointOrdinal=0; spacePointOrdinal < numSpacePoints; spacePointOrdinal++) {
+    int timePointOrdinal = 0;
+    int spaceTimePointOrdinal = TENSOR_POINT_ORDINAL(spacePointOrdinal, timePointOrdinal, numSpacePoints);
+    for (int d=0; d<spaceTopo->getDimension(); d++) {
+      spatialPoints(spacePointOrdinal,d) = tensorPoints(spaceTimePointOrdinal,d);
+    }
+  }
+  
+  for (int timePointOrdinal=0; timePointOrdinal < numTimePoints; timePointOrdinal++) {
+    int spacePointOrdinal = 0;
+    int spaceTimePointOrdinal = TENSOR_POINT_ORDINAL(spacePointOrdinal, timePointOrdinal, numSpacePoints);
+    temporalPoints(timePointOrdinal,0) = tensorPoints(spaceTimePointOrdinal,d_time);
+  }
+}
+
+void SpaceTimeBasisCache::setRefCellPoints(const Intrepid::FieldContainer<double> &pointsRefCell) {
+  FieldContainer<double> spaceRefCellPoints, timeRefCellPoints;
+  
+  getTensorialComponentPoints(this->cellTopology(), pointsRefCell, spaceRefCellPoints, timeRefCellPoints);
+  
+  if (spaceRefCellPoints.size() > 0) { // if size is zero, it's a node, and we let _spatialCache do what it likes for setting up ref cell points.
+    _spatialCache->setRefCellPoints(spaceRefCellPoints);
+  }
+  _temporalCache->setRefCellPoints(timeRefCellPoints);
+  
+  this->BasisCache::setRefCellPoints(pointsRefCell);
+}
+
+void SpaceTimeBasisCache::setRefCellPoints(const Intrepid::FieldContainer<double> &pointsRefCell,
+                                           const Intrepid::FieldContainer<double> &cubatureWeights) {
+  FieldContainer<double> spaceRefCellPoints, timeRefCellPoints;
+  
+  getTensorialComponentPoints(this->cellTopology(), pointsRefCell, spaceRefCellPoints, timeRefCellPoints);
+  
+  if (spaceRefCellPoints.size() == 0) {
+    // then the cubature weights belong just to the temporal points:
+    _temporalCache->setRefCellPoints(timeRefCellPoints, cubatureWeights);
+    this->BasisCache::setRefCellPoints(pointsRefCell, cubatureWeights);
+  } else {
+    int numSpacePoints = spaceRefCellPoints.dimension(0);
+    int numTimePoints = timeRefCellPoints.dimension(0);
+    FieldContainer<double> cubatureWeightsSpace(numSpacePoints), cubatureWeightsTime(numTimePoints);
+
+    if (cubatureWeights.size() == 0) {
+      cubatureWeightsSpace.resize(0);
+      cubatureWeightsTime.resize(0);
+    } else {
+      // tease out the weights (note we assume here that they're nonzero everywhere)
+      // these are in an outer product structure
+      // we additionally constrain the temporal weights to sum to 2 (the measure of the reference line)
+      double timeSumAtSpace0 = 0;
+      for (int timePointOrdinal=0; timePointOrdinal < numTimePoints; timePointOrdinal++) {
+        int spacePointOrdinal = 0;
+        int spaceTimePointOrdinal = TENSOR_POINT_ORDINAL(spacePointOrdinal, timePointOrdinal, numSpacePoints);
+        timeSumAtSpace0 += cubatureWeights(spaceTimePointOrdinal);
+      }
+
+      double scalingFactor = 2.0 / timeSumAtSpace0;
+      for (int timePointOrdinal=0; timePointOrdinal < numTimePoints; timePointOrdinal++) {
+        int spacePointOrdinal = 0;
+        int spaceTimePointOrdinal = TENSOR_POINT_ORDINAL(spacePointOrdinal, timePointOrdinal, numSpacePoints);
+        cubatureWeightsTime(timePointOrdinal) = cubatureWeights(spaceTimePointOrdinal) * scalingFactor;
+      }
+
+      // the inverse of the scalingFactor for temporalWeights is just what we take the "true" values of the first spatial cubature
+      // weight to be.  Therefore we set the scalingFactor for the spatialWeights thus:
+      scalingFactor = 1.0 / (cubatureWeights(TENSOR_POINT_ORDINAL(0, 0, numSpacePoints)) / scalingFactor);
+      for (int spacePointOrdinal=0; spacePointOrdinal < numSpacePoints; spacePointOrdinal++) {
+        int timePointOrdinal = 0;
+        int spaceTimePointOrdinal = TENSOR_POINT_ORDINAL(spacePointOrdinal, timePointOrdinal, numSpacePoints);
+        cubatureWeightsSpace(spacePointOrdinal) = cubatureWeights(spaceTimePointOrdinal) * scalingFactor;
+      }
+    }
+    
+    _spatialCache->setRefCellPoints(spaceRefCellPoints, cubatureWeightsSpace);
+    _temporalCache->setRefCellPoints(timeRefCellPoints, cubatureWeightsTime);
+  }
+  
+  this->BasisCache::setRefCellPoints(pointsRefCell, cubatureWeights);
 }
 
 constFCPtr SpaceTimeBasisCache::getValues(BasisPtr basis, Camellia::EOperator op, bool useCubPointsSideRefCell) {
