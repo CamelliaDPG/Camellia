@@ -13,14 +13,27 @@
 
 #include "Teuchos_UnitTestHarness.hpp"
 namespace {
-  void projectExactSolution(StokesVGPFormulation &form, SolutionPtr stokesSolution, FunctionPtr u1, FunctionPtr u2, FunctionPtr p) {
+  void projectExactSolution(StokesVGPFormulation &form, SolutionPtr stokesSolution, FunctionPtr u, FunctionPtr p) {
     double mu = form.mu();
     
-    FunctionPtr sigma1 = mu * u1->grad();
-    FunctionPtr sigma2 = mu * u2->grad();
+    FunctionPtr u1, u2, u3, sigma1, sigma2, sigma3;
+    int spaceDim = stokesSolution->mesh()->getDimension();
     
-    LinearTermPtr t1_n_lt = form.tn_hat(1)->termTraced();
-    LinearTermPtr t2_n_lt = form.tn_hat(2)->termTraced();
+    u1 = u->x();
+    u2 = u->y();
+    sigma1 = mu * u1->grad();
+    sigma2 = mu * u2->grad();
+    if (spaceDim==3) {
+      u3 = u->z();
+      sigma3 = mu * u3->grad();
+    }
+    
+    LinearTermPtr t1_n_lt, t2_n_lt, t3_n_lt;
+    t1_n_lt = form.tn_hat(1)->termTraced();
+    t2_n_lt = form.tn_hat(2)->termTraced();
+    if (spaceDim==3) {
+      t3_n_lt = form.tn_hat(3)->termTraced();
+    }
     
     map<int, FunctionPtr> exactMap;
     // fields:
@@ -29,6 +42,11 @@ namespace {
     exactMap[form.p()->ID() ] =  p;
     exactMap[form.sigma(1)->ID()] = sigma1;
     exactMap[form.sigma(2)->ID()] = sigma2;
+    
+    if (spaceDim==3) {
+      exactMap[form.u(3)->ID()] = u3;
+      exactMap[form.sigma(3)->ID()] = sigma3;
+    }
     
     // fluxes:
     // use the exact field variable solution together with the termTraced to determine the flux traced
@@ -40,46 +58,59 @@ namespace {
     // traces:
     exactMap[form.u_hat(1)->ID()] = u1;
     exactMap[form.u_hat(2)->ID()] = u2;
+
+    if (spaceDim==3) {
+      FunctionPtr t3_n = t3_n_lt->evaluate(exactMap);
+      exactMap[form.tn_hat(3)->ID()] = t3_n;
+      exactMap[form.u_hat(3)->ID()] = u3;
+    }
     
     stokesSolution->projectOntoMesh(exactMap);
   }
   
-  void setupExactSolution(StokesVGPFormulation &form, FunctionPtr u1, FunctionPtr u2, FunctionPtr p,
+  void setupExactSolution(StokesVGPFormulation &form, FunctionPtr u, FunctionPtr p,
                           MeshTopologyPtr meshTopo, int fieldPolyOrder, int delta_k) {
-    int spaceDim = 2;
+    int spaceDim = meshTopo->getSpaceDim();
     double mu = form.mu();
-    FunctionPtr u = Function::vectorize(u1,u2);
     
     FunctionPtr forcingFunction = StokesVGPFormulation::forcingFunction(spaceDim, mu, u, p);
-
+    
     form.initializeSolution(meshTopo, fieldPolyOrder, delta_k, forcingFunction);
     
     form.addZeroMeanPressureCondition();
     form.addInflowCondition(SpatialFilter::allSpace(), u);
   }
   
-  TEUCHOS_UNIT_TEST( StokesVGPFormulation, Consistency_2D_Steady )
-  {
-    int spaceDim = 2;
+  void testStokesConsistencySteady(int spaceDim, Teuchos::FancyOStream &out, bool &success) {
     vector<double> dimensions(spaceDim,2.0); // 2x2 square domain
     vector<int> elementCounts(spaceDim,1); // 1 x 1 mesh
     vector<double> x0(spaceDim,-1.0);
     MeshTopologyPtr meshTopo = MeshFactory::rectilinearMeshTopology(dimensions, elementCounts, x0);
     double Re = 1.0;
-    int fieldPolyOrder = 3, delta_k = 1;
+    int fieldPolyOrder = 2, delta_k = 1;
     
+    FunctionPtr u, p;
     FunctionPtr x = Function::xn(1);
     FunctionPtr y = Function::yn(1);
-    FunctionPtr u1 = x;
-    FunctionPtr u2 = -y; // divergence 0
-    FunctionPtr u = Function::vectorize(u1,u2);
-    FunctionPtr p = y * y * y; // zero average
+    FunctionPtr z = Function::zn(1);
+    if (spaceDim == 2) {
+      FunctionPtr u1 = x;
+      FunctionPtr u2 = -y; // divergence 0
+      u = Function::vectorize(u1,u2);
+      p = x + 2 * y; // zero average
+    } else if (spaceDim == 3) {
+      FunctionPtr u1 = 2 * x;
+      FunctionPtr u2 = -y; // divergence 0
+      FunctionPtr u3 = -z;
+      u = Function::vectorize(u1,u2,u3);
+      p = x + 2 * y + 3 * z; // zero average
+    }
     
     bool useConformingTraces = true;
     StokesVGPFormulation form(spaceDim, useConformingTraces, 1.0 / Re);
     
-    setupExactSolution(form, u1, u2, p, meshTopo, fieldPolyOrder, delta_k);
-    projectExactSolution(form, form.solution(), u1, u2, p);
+    setupExactSolution(form, u, p, meshTopo, fieldPolyOrder, delta_k);
+    projectExactSolution(form, form.solution(), u, p);
     
     FunctionPtr pSoln = Function::solution(form.p(), form.solution());
     
@@ -91,9 +122,19 @@ namespace {
     TEST_COMPARE(energyError, <, tol);
   }
   
+  TEUCHOS_UNIT_TEST( StokesVGPFormulation, Consistency_2D_Steady )
+  {
+    int spaceDim = 2;
+    testStokesConsistencySteady(spaceDim,out,success);
+  }
+  
+  TEUCHOS_UNIT_TEST( StokesVGPFormulation, Consistency_3D_Steady )
+  {
+    int spaceDim = 3;
+    testStokesConsistencySteady(spaceDim,out,success);
+  }
+  
   TEUCHOS_UNIT_TEST( StokesVGPFormulation, StreamFormulationConsistency ) {
-    // TODO: implement this
-    
     /*
       The stream formulation's psi function should be (-u2, u1).  Here, we project that solution
       onto the stream formulation, and test that the residual is 0.
@@ -116,7 +157,7 @@ namespace {
     bool useConformingTraces = true;
     StokesVGPFormulation form(spaceDim, useConformingTraces, 1.0 / Re);
     
-    setupExactSolution(form, u1, u2, p, meshTopo, fieldPolyOrder, delta_k);
+    setupExactSolution(form, u, p, meshTopo, fieldPolyOrder, delta_k);
 
     SolutionPtr streamSoln = form.streamSolution();
     
@@ -170,6 +211,7 @@ namespace {
     FunctionPtr y = Function::yn(1);
     FunctionPtr u1 = x;
     FunctionPtr u2 = -y; // divergence 0
+    FunctionPtr u = Function::vectorize(u1,u2);
     FunctionPtr p = y * y * y; // zero average
     
     bool useConformingTraces = true;
@@ -177,9 +219,9 @@ namespace {
     double dt = 1.0;
     StokesVGPFormulation form(spaceDim, useConformingTraces, 1.0 / Re, transient, dt);
     
-    setupExactSolution(form, u1, u2, p, meshTopo, fieldPolyOrder, delta_k);
-    projectExactSolution(form, form.solution(), u1, u2, p);
-    projectExactSolution(form, form.solutionPreviousTimeStep(), u1, u2, p);
+    setupExactSolution(form, u, p, meshTopo, fieldPolyOrder, delta_k);
+    projectExactSolution(form, form.solution(), u, p);
+    projectExactSolution(form, form.solutionPreviousTimeStep(), u, p);
     
     double energyError = form.solution()->energyErrorTotal();
     
@@ -235,6 +277,8 @@ namespace {
     FunctionPtr y = Function::yn(1);
     FunctionPtr u1 = x;
     FunctionPtr u2 = -y; // divergence 0
+    FunctionPtr u = Function::vectorize(u1,u2);
+
 //    FunctionPtr p = y * y * y; // zero average
 //    FunctionPtr u1 = Function::constant(1.0);
 //    FunctionPtr u2 = Function::constant(1.0);
@@ -242,7 +286,7 @@ namespace {
     
     bool useConformingTraces = true;
     StokesVGPFormulation form(spaceDim, useConformingTraces, 1.0 / Re);
-    setupExactSolution(form,u1,u2,p,meshTopo,fieldPolyOrder,delta_k);
+    setupExactSolution(form,u,p,meshTopo,fieldPolyOrder,delta_k);
     
     MeshPtr stokesMesh = form.solution()->mesh();
     
@@ -254,7 +298,7 @@ namespace {
     form.solve();
     
     SolutionPtr stokesProjection = Solution::solution(stokesMesh);
-    projectExactSolution(form, stokesProjection, u1, u2, p);
+    projectExactSolution(form, stokesProjection, u, p);
     
     SolutionPtr stokesSolution = form.solution();
     stokesSolution->addSolution(stokesProjection, -1);
