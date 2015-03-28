@@ -61,7 +61,7 @@ namespace {
     
     map<int, FunctionPtr> zeroMap;
     for (map<int, FunctionPtr>::iterator exactMapIt = exactMap.begin(); exactMapIt != exactMap.end(); exactMapIt++) {
-      zeroMap[exactMapIt->first] = Function::zero();
+      zeroMap[exactMapIt->first] = Function::zero(exactMapIt->second->rank());
     }
     
     form.solution()->projectOntoMesh(exactMap);
