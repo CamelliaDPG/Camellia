@@ -310,9 +310,9 @@ SubBasisReconciliationWeights BasisReconciliation::computeConstrainedWeights(uns
     if (subcellDimension == spaceDim) {
       coarseVolumeCubaturePoints = coarseSubcellCubaturePoints;
     } else {
-      CamelliaCellTools::mapToReferenceSubcell(coarseVolumeCubaturePoints, coarseSubcellCubaturePoints, subcellDimension, coarserBasisSubcellOrdinal, coarseTopo);
+      CamelliaCellTools::mapToReferenceSubcell(coarseVolumeCubaturePoints, coarseSubcellCubaturePoints,
+                                               subcellDimension, coarserBasisSubcellOrdinal, coarseTopo);
     }
-
   } else { // subcellDimension == 0 --> vertex
     fineVolumeCubaturePoints.resize(1,spaceDim);
     for (int d=0; d<spaceDim; d++) {
@@ -326,23 +326,23 @@ SubBasisReconciliationWeights BasisReconciliation::computeConstrainedWeights(uns
       coarseVolumeCubaturePoints(0,d) = coarseTopoRefNodes(coarserBasisSubcellOrdinal,d);
     }
   }
-  BasisCachePtr fineVolumeCache = Teuchos::rcp( new BasisCache(fineTopo, cubDegree, false) );
-  fineVolumeCache->setRefCellPoints(fineVolumeCubaturePoints, cubatureWeights);
 
+  BasisCachePtr fineVolumeCache;
   if (refinements.size() > 0) {
     FieldContainer<double> fineVolumeNodes = RefinementPattern::descendantNodesRelativeToAncestorReferenceCell(refinements);
     fineVolumeNodes.resize(1, fineVolumeNodes.dimension(0), fineVolumeNodes.dimension(1));
-    fineVolumeCache->setPhysicalCellNodes(fineVolumeNodes, vector<GlobalIndexType>(), false);
+    fineVolumeCache = BasisCache::basisCacheForCellTopology(fineTopo, cubDegree, fineVolumeNodes);
   } else {
     fineTopoRefNodes.resize(1,fineTopoRefNodes.dimension(0),fineTopoRefNodes.dimension(1));
-    fineVolumeCache->setPhysicalCellNodes(fineTopoRefNodes, vector<GlobalIndexType>(), false);
+    fineVolumeCache = BasisCache::basisCacheForCellTopology(fineTopo, cubDegree, fineTopoRefNodes);
     fineTopoRefNodes.resize(fineTopoRefNodes.dimension(1),fineTopoRefNodes.dimension(2));
   }
-  BasisCachePtr coarseVolumeCache = Teuchos::rcp( new BasisCache(coarseTopo, cubDegree, false));
-  coarseVolumeCache->setRefCellPoints(coarseVolumeCubaturePoints);
+  fineVolumeCache->setRefCellPoints(fineVolumeCubaturePoints, cubatureWeights);
+
   coarseTopoRefNodes.resize(1,coarseTopoRefNodes.dimension(0),coarseTopoRefNodes.dimension(1));
-  coarseVolumeCache->setPhysicalCellNodes(coarseTopoRefNodes, vector<GlobalIndexType>(), false);
+  BasisCachePtr coarseVolumeCache = BasisCache::basisCacheForCellTopology(coarseTopo, cubDegree, coarseTopoRefNodes);
   coarseTopoRefNodes.resize(coarseTopoRefNodes.dimension(1),coarseTopoRefNodes.dimension(2));
+  coarseVolumeCache->setRefCellPoints(coarseVolumeCubaturePoints);
   
   int numPoints = cubatureWeights.size();
   
