@@ -129,28 +129,26 @@ bool MeshTopologyTests::test1DMesh() {
   return success;
 }
 
-vector<double> makeVertex(double v0) {
+vector<double> MeshTopologyTests::makeVertex(double v0) {
   vector<double> v;
   v.push_back(v0);
   return v;
 }
 
-vector<double> makeVertex(double v0, double v1) {
+vector<double> MeshTopologyTests::makeVertex(double v0, double v1) {
   vector<double> v;
   v.push_back(v0);
   v.push_back(v1);
   return v;
 }
 
-vector<double> makeVertex(double v0, double v1, double v2) {
+vector<double> MeshTopologyTests::makeVertex(double v0, double v1, double v2) {
   vector<double> v;
   v.push_back(v0);
   v.push_back(v1);
   v.push_back(v2);
   return v;
 }
-
-
 
 bool MeshTopologyTests::test2DMesh() {
   bool success = true;
@@ -316,7 +314,7 @@ bool MeshTopologyTests::test3DMesh() {
   return success;
 }
 
-vector< vector<double> > quadPoints(double x0, double y0, double width, double height) {
+vector< vector<double> > MeshTopologyTests::quadPoints(double x0, double y0, double width, double height) {
   vector< vector<double> > v(4); // defined counterclockwise
   v[0] = makeVertex(x0,y0);
   v[1] = makeVertex(x0 + width,y0);
@@ -325,7 +323,7 @@ vector< vector<double> > quadPoints(double x0, double y0, double width, double h
   return v;
 }
 
-vector< vector<double> > hexPoints(double x0, double y0, double z0, double width, double height, double depth) {
+vector< vector<double> > MeshTopologyTests::hexPoints(double x0, double y0, double z0, double width, double height, double depth) {
   vector< vector<double> > v(8);
   v[0] = makeVertex(x0,y0,z0);
   v[1] = makeVertex(x0 + width,y0,z0);
@@ -338,7 +336,8 @@ vector< vector<double> > hexPoints(double x0, double y0, double z0, double width
   return v;
 }
 
-Teuchos::RCP<MeshTopology> makeRectMesh(double x0, double y0, double width, double height, unsigned horizontalCells, unsigned verticalCells) {
+MeshTopologyPtr MeshTopologyTests::makeRectMesh(double x0, double y0, double width, double height,
+                                                unsigned horizontalCells, unsigned verticalCells) {
   unsigned spaceDim = 2;
   Teuchos::RCP<MeshTopology> mesh = Teuchos::rcp( new MeshTopology(spaceDim) );
   double dx = width / horizontalCells;
@@ -355,10 +354,10 @@ Teuchos::RCP<MeshTopology> makeRectMesh(double x0, double y0, double width, doub
   return mesh;
 }
 
-Teuchos::RCP<MeshTopology> makeHexMesh(double x0, double y0, double z0, double width, double height, double depth,
-                                  unsigned horizontalCells, unsigned verticalCells, unsigned depthCells) {
+MeshTopologyPtr MeshTopologyTests::makeHexMesh(double x0, double y0, double z0, double width, double height, double depth,
+                                               unsigned horizontalCells, unsigned verticalCells, unsigned depthCells) {
   unsigned spaceDim = 3;
-  Teuchos::RCP<MeshTopology> mesh = Teuchos::rcp( new MeshTopology(spaceDim) );
+  MeshTopologyPtr mesh = Teuchos::rcp( new MeshTopology(spaceDim) );
   double dx = width / horizontalCells;
   double dy = height / verticalCells;
   double dz = depth / depthCells;
