@@ -424,7 +424,7 @@ bool LinearTermTests::testBoundaryPlusVolumeTerms() {
     
     int numCells = basisCache->getPhysicalCubaturePoints().dimension(0);
     int numPoints = basisCache->getPhysicalCubaturePoints().dimension(1);
-    int spaceDim = basisCache->getPhysicalCubaturePoints().dimension(2);
+    int spaceDim = basisCache->getSpaceDim();
     FieldContainer<double> vector_fxn_values(numCells,numPoints,spaceDim);
     vector_fxn->values(vector_fxn_values,basisCache);
 //    cout << "vector_fxn values: \n" << vector_fxn_values;

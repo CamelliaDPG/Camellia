@@ -292,7 +292,7 @@ bool IncompressibleFormulationsTests::functionsAgree(FunctionPtr f1, FunctionPtr
       }
       int rank = f1->rank();
       int numPoints = basisCacheForTest->getPhysicalCubaturePoints().dimension(1);
-      int spaceDim = basisCacheForTest->getPhysicalCubaturePoints().dimension(2);
+      int spaceDim = basisCacheForTest->getSpaceDim();
       Teuchos::Array<int> dim;
       dim.append(numCells);
       dim.append(numPoints);

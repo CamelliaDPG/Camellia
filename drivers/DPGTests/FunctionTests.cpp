@@ -413,7 +413,7 @@ bool FunctionTests::functionsAgree(FunctionPtr f1, FunctionPtr f2, BasisCachePtr
   int rank = f1->rank();
   int numCells = basisCache->getPhysicalCubaturePoints().dimension(0);
   int numPoints = basisCache->getPhysicalCubaturePoints().dimension(1);
-  int spaceDim = basisCache->getPhysicalCubaturePoints().dimension(2);
+  int spaceDim = basisCache->getSpaceDim();
   Teuchos::Array<int> dim;
   dim.append(numCells);
   dim.append(numPoints);
