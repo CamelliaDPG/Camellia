@@ -32,7 +32,6 @@ using namespace std;
 
 // abstract class for solving Epetra_LinearProblem problems
 class Solver {
-  typedef Teuchos::RCP<Solver> SolverPtr;
 protected:
   Teuchos::RCP<Epetra_CrsMatrix> _stiffnessMatrix;
   Teuchos::RCP<Epetra_MultiVector> _lhs;
@@ -111,7 +110,6 @@ public:
   }
 };
 
-typedef Teuchos::RCP<Solver> SolverPtr;
 
 // some concrete implementations follow…
 class Amesos2Solver : public Solver {

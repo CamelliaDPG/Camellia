@@ -710,7 +710,7 @@ bool MeshTopology::cellContainsPoint(GlobalIndexType cellID, const vector<double
     // TODO: implement CamelliaCellTools::checkPointInclusion
   }
   
-  int result = CellTools<double>::checkPointInclusion(&refPoints[0], _spaceDim, cellTopo->getShardsTopology());
+  int result = Intrepid::CellTools<double>::checkPointInclusion(&refPoints[0], _spaceDim, cellTopo->getShardsTopology());
   return result == 1;
 }
 

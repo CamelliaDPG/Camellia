@@ -8,6 +8,8 @@
  *
  */
 
+#include "TypeDefs.h"
+
 // Epetra includes
 #include <Epetra_Map.h>
 #ifdef HAVE_MPI
@@ -29,9 +31,6 @@
 #include "LinearTerm.h"
 #include "BasisCache.h"
 #include "IP.h"
-
-class RieszRep;
-typedef Teuchos::RCP<RieszRep> RieszRepPtr;
 
 class RieszRep {
  private:

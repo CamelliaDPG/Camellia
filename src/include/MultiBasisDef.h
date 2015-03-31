@@ -112,7 +112,7 @@ namespace Camellia {
   // whenever side cubature is determined (e.g. in BasisCache; elsewhere??), make sure this gets called when basis is MultiBasis...
   template<class Scalar, class ArrayScalar>
   void MultiBasis<Scalar, ArrayScalar>::getCubature(ArrayScalar &cubaturePoints, ArrayScalar &cubatureWeights, int maxTestDegree) const {
-    typedef CellTools<Scalar>  CellTools;
+    typedef Intrepid::CellTools<Scalar>  CellTools;
     // maxTestDegree: the maximum degree of functions being integrated against us.
     int numBases = _bases.size();
     int spaceDim = _cellTopo->getDimension();
@@ -191,7 +191,7 @@ namespace Camellia {
     //map<int,int> subRefCellForPoint; // key: pointIndex; value: subRefCellIndex
     map<int,vector<int> > pointsForSubRefCell; // key: subRefCellIndex; values: vector<pointIndex>
     
-    typedef CellTools<Scalar>  CellTools;
+    typedef Intrepid::CellTools<Scalar>  CellTools;
     for (int pointIndex=0; pointIndex<numPoints; pointIndex++) {
       // TODO: extend this to a more general determination of whether the point is in the convex hull
       // (which would work for 2D or 3D--what's here is 1D specific)
@@ -384,7 +384,7 @@ namespace Camellia {
       }
     }
     
-    typedef CellTools<Scalar>  CellTools;
+    typedef Intrepid::CellTools<Scalar>  CellTools;
     CellTools::setJacobian(cellJacobian, inputPointsSubRefCell, thisSubRefNode, _cellTopo->getShardsTopology());
     CellTools::setJacobianInv(cellJacobInv, cellJacobian );
     CellTools::setJacobianDet(cellJacobDet, cellJacobian );

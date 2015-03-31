@@ -62,6 +62,4 @@ public: // TODO: create accessors for these Ptrs, and make them private...
   }
 };
 
-typedef Teuchos::RCP< ElementType > ElementTypePtr;
-
 #endif

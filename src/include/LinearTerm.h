@@ -9,6 +9,8 @@
 #ifndef Camellia_LinearTerm_h
 #define Camellia_LinearTerm_h
 
+#include "TypeDefs.h"
+
 #include "IP.h"
 
 #include <Epetra_Map.h>
@@ -28,19 +30,6 @@
 #include "DofOrdering.h"
 
 class Epetra_CrsMatrix;
-class BasisCache;
-class LinearTerm;
-class Mesh;
-class ElementType;
-
-class Solution;
-class Function;
-
-typedef Teuchos::RCP<LinearTerm> LinearTermPtr;
-typedef Teuchos::RCP<Solution> SolutionPtr;
-typedef Teuchos::RCP<Function> FunctionPtr;
-typedef Teuchos::RCP< const Intrepid::FieldContainer<double> > constFCPtr;
-typedef Teuchos::RCP<BasisCache> BasisCachePtr;
 
 class LinearTerm {
   typedef std::pair< FunctionPtr, VarPtr > LinearSummand;

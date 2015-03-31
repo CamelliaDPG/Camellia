@@ -11,12 +11,7 @@
 
 #include "TypeDefs.h"
 
-class Mesh;
 class ExactSolution;
-class Var;
-class Solution;
-class Function;
-class Solution;
 
 #include "CamelliaIntrepidExtendedTypes.h"
 #include "Intrepid_FieldContainer.hpp"
@@ -26,13 +21,6 @@ class Solution;
 using namespace Camellia;
 using namespace std;
 using namespace Intrepid;
-
-class BasisCache;
-typedef Teuchos::RCP<BasisCache> BasisCachePtr;
-
-typedef Teuchos::RCP<Function> FunctionPtr;
-typedef Teuchos::RCP<Var> VarPtr;
-typedef Teuchos::RCP<Solution> SolutionPtr;
 
 class Function {
 private:

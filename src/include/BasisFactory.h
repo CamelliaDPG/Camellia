@@ -31,6 +31,8 @@
 #ifndef BASIS_FACTORY
 #define BASIS_FACTORY
 
+#include "TypeDefs.h"
+
 // Intrepid includes
 #include "Intrepid_Basis.hpp"
 #include "Intrepid_FieldContainer.hpp"
@@ -50,8 +52,6 @@
 #include "CamelliaIntrepidExtendedTypes.h"
 
 #include "CellTopology.h"
-
-typedef Teuchos::RCP< Camellia::Basis<> > BasisPtr;
 
 class BasisFactory {
   typedef Camellia::EFunctionSpace FSE;
@@ -123,7 +123,5 @@ public:
   
   static Teuchos::RCP<BasisFactory> basisFactory(); // shared, global BasisFactory
 };
-
-typedef Teuchos::RCP<BasisFactory> BasisFactoryPtr;
 
 #endif

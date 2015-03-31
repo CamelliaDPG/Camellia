@@ -9,6 +9,8 @@
 #ifndef Camellia_SpatialFilter_h
 #define Camellia_SpatialFilter_h
 
+#include "TypeDefs.h"
+
 #include "BasisCache.h"
 
 // Teuchos includes
@@ -16,9 +18,6 @@
 #include "Intrepid_FieldContainer.hpp"
 
 using namespace Intrepid;
-
-class SpatialFilter;
-typedef Teuchos::RCP< SpatialFilter > SpatialFilterPtr;
 
 class SpatialFilter {
 public:

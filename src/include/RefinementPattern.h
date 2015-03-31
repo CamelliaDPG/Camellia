@@ -1,6 +1,8 @@
 #ifndef DPG_REFINEMENT_PATTERN
 #define DPG_REFINEMENT_PATTERN
 
+#include "TypeDefs.h"
+
 // Intrepid includes
 #include "Intrepid_FieldContainer.hpp"
 
@@ -16,9 +18,6 @@ class RefinementPattern;
 typedef Teuchos::RCP<RefinementPattern> RefinementPatternPtr;
 typedef vector< pair<RefinementPattern*, unsigned> > RefinementBranch; //unsigned: the child ordinal; order is from coarse to fine
 typedef vector< pair<RefinementPattern*, vector<unsigned> > > RefinementPatternRecipe;
-
-class MeshTopology;
-typedef Teuchos::RCP<MeshTopology> MeshTopologyPtr;
 
 #include "MeshTopology.h"
 

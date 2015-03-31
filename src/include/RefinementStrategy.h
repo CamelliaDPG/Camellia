@@ -9,6 +9,8 @@
 #ifndef Camellia_RefinementStrategy_h
 #define Camellia_RefinementStrategy_h
 
+#include "TypeDefs.h"
+
 #include "Teuchos_RCP.hpp"
 
 #include "LinearTerm.h"
@@ -16,11 +18,6 @@
 #include "IP.h"
 
 #include "RieszRep.h"
-
-class Solution;
-class Mesh;
-typedef Teuchos::RCP<Solution> SolutionPtr;
-typedef Teuchos::RCP<Mesh> MeshPtr;
 
 using namespace std;
 
@@ -78,7 +75,5 @@ public:
   GlobalIndexType getNumElements(int refinementNumber);
   GlobalIndexType getNumDofs(int refinementNumber);
 };
-
-typedef Teuchos::RCP<RefinementStrategy> RefinementStrategyPtr;
 
 #endif

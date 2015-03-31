@@ -9,17 +9,13 @@
 #ifndef Camellia_BF_h
 #define Camellia_BF_h
 
+#include "TypeDefs.h"
+
 #include "LinearTerm.h"
 
 #include "VarFactory.h"
 
 #include "IP.h"
-
-class RHS;
-typedef Teuchos::RCP<RHS> RHSPtr;
-
-class ElementType;
-typedef Teuchos::RCP<ElementType> ElementTypePtr;
 
 class BF {
   typedef pair< LinearTermPtr, LinearTermPtr > BilinearTerm;
@@ -135,7 +131,5 @@ public:
   
   static Teuchos::RCP<BF> bf(VarFactory &vf);
 };
-
-typedef Teuchos::RCP<BF> BFPtr;
 
 #endif

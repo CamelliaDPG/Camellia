@@ -13,9 +13,6 @@
 #include "TensorBasis.h"
 
 class SpaceTimeBasisCache : public BasisCache {
-  typedef Teuchos::RCP< Intrepid::FieldContainer<double> > FCPtr;
-  typedef Teuchos::RCP< const Intrepid::FieldContainer<double> > constFCPtr;
-  
   BasisCachePtr _spatialCache, _temporalCache;
 
   // side constructor:

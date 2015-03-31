@@ -9,6 +9,8 @@
 #ifndef Camellia_Formulation_h
 #define Camellia_Formulation_h
 
+#include "TypeDefs.h"
+
 #include "Teuchos_RCP.hpp"
 #include "BF.h"
 #include "BC.h"

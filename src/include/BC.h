@@ -71,7 +71,5 @@ public:
   static Teuchos::RCP<BC> bc();
 };
 
-typedef Teuchos::RCP<BC> BCPtr;
-
 
 #endif

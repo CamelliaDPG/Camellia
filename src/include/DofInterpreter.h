@@ -16,9 +16,6 @@
 
 #include <set>
 
-class Mesh;
-typedef Teuchos::RCP<Mesh> MeshPtr;
-
 using namespace Intrepid;
 using namespace std;
 

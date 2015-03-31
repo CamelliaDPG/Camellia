@@ -9,10 +9,9 @@
 #ifndef Camellia_debug_MeshPolyOrderFunction_h
 #define Camellia_debug_MeshPolyOrderFunction_h
 
-#include "Mesh.h"
+#include "TypeDefs.h"
 
-class Function;
-typedef Teuchos::RCP<Function> FunctionPtr;
+#include "Mesh.h"
 
 class MeshPolyOrderFunction : public Function {
   Teuchos::RCP<Mesh> _mesh;

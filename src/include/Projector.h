@@ -1,13 +1,11 @@
 #ifndef PROJECTOR
 #define PROJECTOR
 
+#include "TypeDefs.h"
+
 #include "IP.h"
 
 #include "Basis.h"
-
-class Function;
-
-typedef Teuchos::RCP<Function> FunctionPtr;
 
 class Projector {
  public:

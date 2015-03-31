@@ -38,6 +38,8 @@
  *
  */
 
+#include "TypeDefs.h"
+
 #include "Intrepid_FieldContainer.hpp"
 
 #include "BasisCache.h"
@@ -81,7 +83,5 @@ public:
   
   static Teuchos::RCP<RHS> rhs() { return Teuchos::rcp(new RHS(false) ); }
 };
-
-typedef Teuchos::RCP<RHS> RHSPtr;
 
 #endif

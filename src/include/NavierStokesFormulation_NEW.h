@@ -9,6 +9,8 @@
 #ifndef Camellia_NavierStokesFormulation_h
 #define Camellia_NavierStokesFormulation_h
 
+#include "TypeDefs.h"
+
 #include "RieszRep.h"
 
 #include "MeshFactory.h"

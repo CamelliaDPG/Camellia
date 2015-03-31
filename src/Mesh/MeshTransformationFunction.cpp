@@ -6,6 +6,8 @@
 //  Copyright (c) 2013 __MyCompanyName__. All rights reserved.
 //
 
+#include "TypeDefs.h"
+
 #include <iostream>
 
 #include "MeshTransformationFunction.h"
@@ -21,8 +23,6 @@
 #include "CamelliaCellTools.h"
 
 #include "BasisCache.h"
-
-typedef Teuchos::RCP< const FieldContainer<double> > constFCPtr;
 
 using namespace Camellia;
 

@@ -9,15 +9,11 @@
 #ifndef __Camellia_debug__PeriodicBC__
 #define __Camellia_debug__PeriodicBC__
 
+#include "TypeDefs.h"
+
 #include "Teuchos_RCP.hpp"
 
 #include <vector>
-
-class SpatialFilter;
-typedef Teuchos::RCP<SpatialFilter> SpatialFilterPtr;
-
-class Function;
-typedef Teuchos::RCP<Function> FunctionPtr;
 
 class PeriodicBC {
   SpatialFilterPtr _pointFilter0, _pointFilter1;

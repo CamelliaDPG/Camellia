@@ -9,6 +9,8 @@
 #ifndef Camellia_debug_QOIFilter_h
 #define Camellia_debug_QOIFilter_h
 
+#include "TypeDefs.h"
+
 #include "LocalStiffnessMatrixFilter.h"
 #include "LinearTerm.h"
 

@@ -1,15 +1,14 @@
 #ifndef CAMELLIA_BC_FUNCTION
 #define CAMELLIA_BC_FUNCTION
 
+#include "TypeDefs.h"
+
 #include "Intrepid_FieldContainer.hpp"
 #include "Projector.h"
 
 #include "Function.h"
 
 using namespace Intrepid;
-
-class BC;
-typedef Teuchos::RCP<BC> BCPtr;
 
 class BCFunction : public Function {
   FieldContainer<bool> _imposeHere;

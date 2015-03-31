@@ -9,6 +9,8 @@
 #ifndef Camellia_PressurelessStokesFormulation_h
 #define Camellia_PressurelessStokesFormulation_h
 
+#include "TypeDefs.h"
+
 #include "VarFactory.h"
 #include "BF.h"
 

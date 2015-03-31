@@ -38,14 +38,13 @@
  *
  */
 
+#include "TypeDefs.h"
+
 #include "Mesh.h"
 #include "ExactSolution.h"
 #include "Solver.h"
 #include "LinearTerm.h"
 #include "Constraint.h"
-
-class Function;
-typedef Teuchos::RCP<Function> FunctionPtr;
 
 using namespace std;
 

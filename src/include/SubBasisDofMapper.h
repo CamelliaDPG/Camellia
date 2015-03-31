@@ -11,7 +11,6 @@
 
 #include "TypeDefs.h"
 
-
 #include <set>
 #include "Intrepid_FieldContainer.hpp"
 #include "Teuchos_RCP.hpp"

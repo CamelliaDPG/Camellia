@@ -6,11 +6,10 @@
 //
 //
 
+#include "TypeDefs.h"
+
 #include "SpaceTimeBasisCache.h"
 #include "TensorBasis.h"
-
-typedef Teuchos::RCP< Intrepid::FieldContainer<double> > FCPtr;
-typedef Teuchos::RCP< const Intrepid::FieldContainer<double> > constFCPtr;
 
 // volume constructor
 SpaceTimeBasisCache::SpaceTimeBasisCache(MeshPtr spaceTimeMesh, ElementTypePtr spaceTimeElementType,

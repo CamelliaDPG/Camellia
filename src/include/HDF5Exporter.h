@@ -8,6 +8,8 @@
  *
  */
 
+ #include "TypeDefs.h"
+
 
 #include "EpetraExt_ConfigDefs.h"
 #ifdef HAVE_EPETRAEXT_HDF5

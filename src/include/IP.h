@@ -9,13 +9,13 @@
 #ifndef Camellia_IP_h
 #define Camellia_IP_h
 
+#include "TypeDefs.h"
+
 #include "LinearTerm.h"
 #include "Var.h"
 
 #include "Function.h"
 #include "DofOrdering.h"
-
-class BF;
 
 class IP {
   std::vector< LinearTermPtr > _linearTerms;
@@ -89,7 +89,5 @@ public:
   
   static pair<Teuchos::RCP<IP>, VarPtr > standardInnerProductForFunctionSpace(Camellia::EFunctionSpace fs, bool useTraceVar, int spaceDim);
 };
-
-typedef Teuchos::RCP<IP> IPPtr;
 
 #endif

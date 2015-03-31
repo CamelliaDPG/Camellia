@@ -9,6 +9,8 @@
 #ifndef Camellia_IP_SWITCH
 #define Camellia_IP_SWITCH
 
+#include "TypeDefs.h"
+
 #include "IP.h"
 
 using namespace std;
@@ -37,7 +39,5 @@ public:
     
   void printInteractions();
 };
-
-typedef Teuchos::RCP<IP> IPPtr;
 
 #endif

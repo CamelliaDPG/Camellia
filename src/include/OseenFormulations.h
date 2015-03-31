@@ -9,6 +9,8 @@
 #ifndef Camellia_debug_OseenFormulations_h
 #define Camellia_debug_OseenFormulations_h
 
+#include "TypeDefs.h"
+
 #include "StokesFormulation.h"
 #include "MeshFactory.h"
 

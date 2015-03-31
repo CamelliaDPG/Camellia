@@ -9,6 +9,8 @@
 #ifndef __Camellia_debug__MeshTools__
 #define __Camellia_debug__MeshTools__
 
+#include "TypeDefs.h"
+
 #include "Mesh.h"
 #include <map>
 #include <string>

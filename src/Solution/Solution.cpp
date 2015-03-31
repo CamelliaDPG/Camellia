@@ -36,6 +36,8 @@
  *
  */
 
+#include "TypeDefs.h"
+
 
 // Intrepid includes
 #include "Intrepid_FieldContainer.hpp"
@@ -1756,7 +1758,6 @@ void Solution::integrateFlux(FieldContainer<double> &values, int trialID) {
 }
 
 void Solution::integrateFlux(FieldContainer<double> &values, ElementTypePtr elemTypePtr, int trialID) {
-  typedef CellTools<double>  CellTools;
   typedef FunctionSpaceTools fst;
 
   values.initialize(0.0);
@@ -1851,7 +1852,6 @@ void Solution::solutionValues(FieldContainer<double> &values,
   CellTopoPtr cellTopo = elemTypePtr->cellTopoPtr;
   int spaceDim = cellTopo->getDimension();
 
-  typedef CellTools<double>  CellTools;
   typedef FunctionSpaceTools fst;
 
   //  cout << "physicalCellNodes: " << endl << physicalCellNodes;
@@ -1906,8 +1906,8 @@ void Solution::solutionValues(FieldContainer<double> &values,
   //cout << "computing geometric cell info for boundary integral." << endl;
   CamelliaCellTools::mapToReferenceSubcell(cubPointsSideRefCell, sideRefCellPoints, sideDim, (int)sideIndex, cellTopo);
   CamelliaCellTools::setJacobian(cellJacobian, cubPointsSideRefCell, physicalCellNodes, cellTopo);
-  CellTools::setJacobianDet(cellJacobDet, cellJacobian );
-  CellTools::setJacobianInv(cellJacobInv, cellJacobian );
+  Intrepid::CellTools<double>::setJacobianDet(cellJacobDet, cellJacobian );
+  Intrepid::CellTools<double>::setJacobianInv(cellJacobInv, cellJacobian );
 
   values.initialize(0.0);
 
@@ -2464,7 +2464,6 @@ void Solution::solutionValues(FieldContainer<double> &values, int trialID, const
       // 3. Transform those basis evaluations back into the physical space
       // 4. Multiply by the solnCoeffs
 
-      typedef CellTools<double>  CellTools;
       typedef FunctionSpaceTools fst;
 
       // 1. compute refElemPoints, the evaluation points mapped to reference cell:
@@ -2679,7 +2678,6 @@ void Solution::writeQuadSolutionToFile(int trialID, const string &filePath) {
         ptIndex++;
       }
     }
-    typedef CellTools<double>  CellTools;
 
     BasisCachePtr basisCache = BasisCache::basisCacheForCellType(_mesh, elemTypePtr);
 
@@ -2915,7 +2913,6 @@ void Solution::condensedSolve(Teuchos::RCP<Solver> globalSolver, bool reduceMemo
 
 // must write to .m file
 void Solution::writeFieldsToFile(int trialID, const string &filePath){
-  typedef CellTools<double>  CellTools;
 
   //  cout << "writeFieldsToFile for trialID: " << trialID << endl;
 
@@ -3030,7 +3027,6 @@ void Solution::writeFieldsToFile(int trialID, const string &filePath){
 }
 
 void Solution::writeFluxesToFile(int trialID, const string &filePath){
-  typedef CellTools<double>  CellTools;
 
   ofstream fout(filePath.c_str());
   fout << setprecision(15);

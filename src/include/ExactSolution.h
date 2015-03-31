@@ -37,6 +37,8 @@
  *  Created by Nathan Roberts on 7/5/11.
  */
 
+ #include "TypeDefs.h"
+
 // Intrepid includes
 #include "Intrepid_Basis.hpp"
 #include "Intrepid_FieldContainer.hpp"
@@ -51,9 +53,6 @@
 
 #include "BF.h"
 #include "BasisCache.h"
-
-class Function;
-typedef Teuchos::RCP<Function> FunctionPtr;
 
 class ExactSolution {
 protected:

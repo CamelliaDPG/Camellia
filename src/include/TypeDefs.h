@@ -5,6 +5,9 @@
 //  Created by Truman Ellis on 3/27/15.
 //
 
+#ifndef TypeDefs_h
+#define TypeDefs_h
+
 // #include <Teuchos_ScalarTraits.hpp>
 #include <Teuchos_RCP.hpp>
 // #include <Teuchos_GlobalMPISession.hpp>
@@ -17,7 +20,6 @@
 #include <Tpetra_CrsMatrix.hpp>
 
 #include <Intrepid_FieldContainer.hpp>
-
 // Basic typedefs
 typedef unsigned IndexType;
 typedef unsigned GlobalIndexType;
@@ -31,24 +33,58 @@ typedef Teuchos::RCP< Tpetra::CrsMatrix<Scalar,IndexType,GlobalIndexType> > Matr
 typedef Teuchos::RCP< Tpetra::MultiVector<Scalar,IndexType,GlobalIndexType> > VectorPtr;
 typedef Teuchos::RCP< Tpetra::Map<IndexType,GlobalIndexType> > MapPtr;
 
-typedef Teuchos::RCP< Intrepid::FieldContainer<double> > FCPtr;
-typedef Teuchos::RCP< const Intrepid::FieldContainer<double> > constFCPtr;
+typedef Teuchos::RCP< Intrepid::FieldContainer<Scalar> > FCPtr;
+typedef Teuchos::RCP< const Intrepid::FieldContainer<Scalar> > constFCPtr;
 
 // Camellia forward declarations and typedefs
 class BasisCache;
+class BasisFactory;
 class BC;
+class BF;
+class Cell;
+class DofOrdering;
+class DofOrderingFactory;
 class Element;
+class ElementType;
 class Function;
+class GlobalDofAssignment;
 class IP;
 class LagrangeConstraints;
+class LinearTerm;
 class Mesh;
+class MeshPartitionPolicy;
+class MeshTopology;
+class RefinementStrategy;
+class RieszRep;
 class RHS;
 class Solution;
+class Solver;
+class SpatialFilter;
+class Var;
+class VarFactory;
 
+typedef Teuchos::RCP<BasisCache> BasisCachePtr;
+typedef Teuchos::RCP<BasisFactory> BasisFactoryPtr;
 typedef Teuchos::RCP<BC> BCPtr;
+typedef Teuchos::RCP<BF> BFPtr;
+typedef Teuchos::RCP<Cell> CellPtr;
+typedef Teuchos::RCP<DofOrdering> DofOrderingPtr;
+typedef Teuchos::RCP<DofOrderingFactory> DofOrderingFactoryPtr;
 typedef Teuchos::RCP<Element> ElementPtr;
+typedef Teuchos::RCP<ElementType> ElementTypePtr;
 typedef Teuchos::RCP<Function> FunctionPtr;
+typedef Teuchos::RCP<GlobalDofAssignment> GlobalDofAssignmentPtr;
 typedef Teuchos::RCP<IP> IPPtr;
+typedef Teuchos::RCP<LinearTerm> LinearTermPtr;
 typedef Teuchos::RCP<Mesh> MeshPtr;
+typedef Teuchos::RCP<MeshPartitionPolicy> MeshPartitionPolicyPtr;
+typedef Teuchos::RCP<MeshTopology> MeshTopologyPtr;
+typedef Teuchos::RCP<RefinementStrategy> RefinementStrategyPtr;
+typedef Teuchos::RCP<RieszRep> RieszRepPtr;
 typedef Teuchos::RCP<RHS> RHSPtr;
 typedef Teuchos::RCP<Solution> SolutionPtr;
+typedef Teuchos::RCP<Solver> SolverPtr;
+typedef Teuchos::RCP<SpatialFilter> SpatialFilterPtr;
+typedef Teuchos::RCP<Var> VarPtr;
+
+#endif

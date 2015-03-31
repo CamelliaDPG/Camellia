@@ -9,6 +9,8 @@
 #ifndef Camellia_debug_MeshTopology_h
 #define Camellia_debug_MeshTopology_h
 
+#include "TypeDefs.h"
+
 #include "Shards_CellTopology.hpp"
 #include "Intrepid_FieldContainer.hpp"
 
@@ -23,13 +25,6 @@
 using namespace std;
 
 class MeshTransformationFunction;
-class GlobalDofAssignment;
-
-class Mesh;
-typedef Teuchos::RCP<Mesh> MeshPtr;
-
-class Cell;
-typedef Teuchos::RCP<Cell> CellPtr;
 
 class MeshTopology {
   unsigned _spaceDim; // dimension of the mesh
@@ -205,7 +200,5 @@ public:
   Teuchos::RCP<MeshTopology> getRootMeshTopology();
   
 };
-
-typedef Teuchos::RCP<MeshTopology> MeshTopologyPtr;
 
 #endif

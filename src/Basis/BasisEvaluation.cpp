@@ -33,6 +33,8 @@
 // @HEADER 
 //
 
+#include "TypeDefs.h"
+
 #include <iostream>
 
 #include "BasisEvaluation.h"
@@ -43,9 +45,6 @@
 #include "Intrepid_FunctionSpaceTools.hpp"
 
 using namespace Camellia;
-
-typedef Teuchos::RCP< FieldContainer<double> > FCPtr;
-typedef Teuchos::RCP< const FieldContainer<double> > constFCPtr;
 
 FCPtr BasisEvaluation::getValues(BasisPtr basis, Camellia::EOperator op,
                                  const FieldContainer<double> &refPoints) {

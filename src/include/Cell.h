@@ -118,6 +118,4 @@ public:
   const vector< unsigned > &vertices();
 };
 
-typedef Teuchos::RCP<Cell> CellPtr;
-
 #endif /* defined(__Camellia_debug__Cell__) */

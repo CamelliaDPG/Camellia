@@ -49,9 +49,6 @@
 
 #include "Epetra_Map.h"
 
-class Mesh;
-class BC;
-
 using namespace Intrepid;
 
 class Boundary {

@@ -9,6 +9,8 @@
 #ifndef Camellia_PoissonFormulation_h
 #define Camellia_PoissonFormulation_h
 
+#include "TypeDefs.h"
+
 #include "VarFactory.h"
 #include "BF.h"
 

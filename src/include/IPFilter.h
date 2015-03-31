@@ -9,6 +9,8 @@
 #ifndef Camellia_IPFilter_h
 #define Camellia_IPFilter_h
 
+#include "TypeDefs.h"
+
 #include "IP.h"
 #include "LocalStiffnessMatrixFilter.h"
 

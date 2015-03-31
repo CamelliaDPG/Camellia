@@ -9,6 +9,8 @@
 #ifndef Camellia_LagrangeConstraints_h
 #define Camellia_LagrangeConstraints_h
 
+#include "TypeDefs.h"
+
 #include "SpatialFilter.h"
 #include "Constraint.h"
 

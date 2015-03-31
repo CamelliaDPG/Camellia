@@ -114,8 +114,6 @@ public:
   void rebuildIndex();
 };
 
-typedef Teuchos::RCP< DofOrdering> DofOrderingPtr;
-
 std::ostream& operator << (std::ostream& os, DofOrdering& dofOrdering);
 
 #endif

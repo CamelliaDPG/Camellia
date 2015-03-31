@@ -73,14 +73,8 @@
 
 #include "MeshTopology.h"
 
-class Mesh;
-typedef Teuchos::RCP<Mesh> MeshPtr;
-
-class Solution;
 class MeshTransformationFunction;
 class MeshPartitionPolicy;
-class GlobalDofAssignment;
-typedef Teuchos::RCP<GlobalDofAssignment> GlobalDofAssignmentPtr;
 
 #include "DofInterpreter.h"
 

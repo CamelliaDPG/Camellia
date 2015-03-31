@@ -9,6 +9,8 @@
 #ifndef Camellia_PreviousSolutionFunction_h
 #define Camellia_PreviousSolutionFunction_h
 
+#include "TypeDefs.h"
+
 #include "Function.h"
 #include "Element.h"
 #include "Solution.h"

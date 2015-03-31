@@ -9,18 +9,11 @@
 #ifndef Camellia_Var_h
 #define Camellia_Var_h
 
+#include "TypeDefs.h"
+
 #include "Teuchos_RCP.hpp"
 
 #include "CamelliaIntrepidExtendedTypes.h"
-
-class BF;
-typedef Teuchos::RCP<BF> BFPtr;
-
-class Var;
-typedef Teuchos::RCP<Var> VarPtr;
-
-class LinearTerm;
-typedef Teuchos::RCP<LinearTerm> LinearTermPtr;
 
 namespace Camellia {
   enum Space { HGRAD, HCURL, HDIV, HGRAD_DISC, HCURL_DISC, HDIV_DISC, HDIV_FREE, L2, CONSTANT_SCALAR, VECTOR_HGRAD, VECTOR_HGRAD_DISC, VECTOR_L2, UNKNOWN_FS };

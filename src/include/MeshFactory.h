@@ -9,6 +9,8 @@
 #ifndef Camellia_debug_MeshFactory_h
 #define Camellia_debug_MeshFactory_h
 
+#include "TypeDefs.h"
+
 #include "Mesh.h"
 
 #include <Teuchos_ParameterList.hpp>

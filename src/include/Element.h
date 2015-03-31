@@ -36,18 +36,14 @@
  *
  */
 
+#include "TypeDefs.h"
+
 // Teuchos includes
 #include "Teuchos_RCP.hpp"
 #include "ElementType.h"
 #include "RefinementPattern.h"
 
 #include "Cell.h"
-
-class Element;
-typedef Teuchos::RCP< Element > ElementPtr;
-
-class Mesh;
-typedef Teuchos::RCP< Mesh > MeshPtr;
 
 using namespace std;
 

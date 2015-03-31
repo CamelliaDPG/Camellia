@@ -9,9 +9,9 @@
 #ifndef Camellia_TimeMarchingProblem_h
 #define Camellia_TimeMarchingProblem_h
 
-#include "RHS.h"
+#include "TypeDefs.h"
 
-class Solution;
+#include "RHS.h"
 
 class TimeMarchingProblem : public BF, public RHS {
   Teuchos::RCP<RHS> _rhs;

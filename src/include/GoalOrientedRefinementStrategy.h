@@ -9,6 +9,8 @@
 #ifndef __Camellia_debug__GoalOrientedRefinementStrategy__
 #define __Camellia_debug__GoalOrientedRefinementStrategy__
 
+#include "TypeDefs.h"
+
 #include <iostream>
 
 #include "RefinementStrategy.h"

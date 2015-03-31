@@ -6,6 +6,8 @@
 //  Copyright (c) 2012 __MyCompanyName__. All rights reserved.
 //
 
+#include "TypeDefs.h"
+
 #include "Function.h"
 #include "BasisCache.h"
 #include "ExactSolution.h"
@@ -1104,8 +1106,6 @@ void Function::scalarModifyBasisValues(FieldContainer<double> &values, BasisCach
 }
 
 void Function::writeBoundaryValuesToMATLABFile(Teuchos::RCP<Mesh> mesh, const string &filePath) {
-  typedef CellTools<double>  CellTools;
-
   ofstream fout(filePath.c_str());
   fout << setprecision(15);
   vector< ElementTypePtr > elementTypes = mesh->elementTypes();
@@ -1167,8 +1167,6 @@ void Function::writeBoundaryValuesToMATLABFile(Teuchos::RCP<Mesh> mesh, const st
 
 void Function::writeValuesToMATLABFile(Teuchos::RCP<Mesh> mesh, const string &filePath) {
   // MATLAB format, supports scalar functions defined inside 2D volume right now...
-  typedef CellTools<double>  CellTools;
-
   ofstream fout(filePath.c_str());
   fout << setprecision(15);
   int spaceDim = 2; // TODO: generalize to 3D...

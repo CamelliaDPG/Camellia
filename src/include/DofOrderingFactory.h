@@ -36,6 +36,8 @@
  *
  */
 
+#include "TypeDefs.h"
+
 
 // Intrepid includes
 #include "Intrepid_Basis.hpp"
@@ -188,6 +190,5 @@ public:
 //                                          bool conformingVertices = true);
 };
 
-typedef Teuchos::RCP<DofOrderingFactory> DofOrderingFactoryPtr;
 
 #endif

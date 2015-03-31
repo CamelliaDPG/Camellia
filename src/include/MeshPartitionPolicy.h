@@ -12,9 +12,6 @@
 // Intrepid includes
 #include "Intrepid_FieldContainer.hpp"
 
-class MeshPartitionPolicy;
-typedef Teuchos::RCP<MeshPartitionPolicy> MeshPartitionPolicyPtr;
-
 using namespace Intrepid;
 
 #include "Mesh.h"

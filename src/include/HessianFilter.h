@@ -1,6 +1,8 @@
 #ifndef HESSIAN_FILTER
 #define HESSIAN_FILTER
 
+#include "TypeDefs.h"
+
 #include "LocalStiffnessMatrixFilter.h"
 #include "BF.h" // has linearTerm,varfactory, and used to define the Hessian bilinear form
 

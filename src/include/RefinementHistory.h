@@ -9,15 +9,14 @@
 #ifndef Camellia_debug_RefinementHistory_h
 #define Camellia_debug_RefinementHistory_h
 
+#include "TypeDefs.h"
+
 #include "RefinementObserver.h"
 
 #include "EpetraExt_ConfigDefs.h"
 #ifdef HAVE_EPETRAEXT_HDF5
 #include <EpetraExt_HDF5.h>
 #endif
-
-class Mesh;
-typedef Teuchos::RCP<Mesh> MeshPtr;
 
 using namespace std;
 

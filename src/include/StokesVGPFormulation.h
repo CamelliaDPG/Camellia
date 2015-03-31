@@ -9,6 +9,8 @@
 #ifndef Camellia_StokesVGPFormulation_h
 #define Camellia_StokesVGPFormulation_h
 
+#include "TypeDefs.h"
+
 #include "VarFactory.h"
 #include "BF.h"
 #include "SpatialFilter.h"

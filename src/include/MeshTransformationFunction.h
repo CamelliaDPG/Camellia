@@ -14,6 +14,7 @@
 #ifndef Camellia_debug_MeshTransformationFunction_h
 #define Camellia_debug_MeshTransformationFunction_h
 
+#include "TypeDefs.h"
 
 class MeshTransformationFunction : public Function {
   map< GlobalIndexType, FunctionPtr > _cellTransforms; // cellID --> cell transformation function

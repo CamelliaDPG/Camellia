@@ -14,9 +14,6 @@
 #include "Teuchos_RCP.hpp"
 #include "RefinementPattern.h"
 
-class MeshTopology;
-typedef Teuchos::RCP<MeshTopology> MeshTopologyPtr;
-
 using namespace std;
 
 class RefinementObserver {

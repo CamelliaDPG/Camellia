@@ -38,6 +38,8 @@
  *
  */
 
+#include "TypeDefs.h"
+
 // Epetra includes
 #include <Epetra_Map.h>
 #ifdef HAVE_MPI

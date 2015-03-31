@@ -36,6 +36,8 @@
  *
  */
 
+ #include "TypeDefs.h"
+
 // Teuchos includes
 #include "Teuchos_RCP.hpp"
 
