@@ -42,7 +42,7 @@ public:
     fout.close();
   }
   
-  static void readMatrixFromSparseDataFile(FieldContainer<double> &matrix, string filename) {
+  static void readMatrixFromSparseDataFile(Intrepid::FieldContainer<double> &matrix, string filename) {
     ifstream fin(filename.c_str());
     
     long rows, cols;
@@ -82,7 +82,7 @@ public:
     fin.close();
   }
   
-  static void writeMatrixToSparseDataFile(const FieldContainer<double> &matrix, string filename) {
+  static void writeMatrixToSparseDataFile(const Intrepid::FieldContainer<double> &matrix, string filename) {
     // matlab-friendly format (use spconvert)
     int rows = matrix.dimension(0);
     int cols = matrix.dimension(1);

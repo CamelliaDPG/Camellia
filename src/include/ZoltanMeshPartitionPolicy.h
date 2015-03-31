@@ -13,7 +13,6 @@
 #include <zoltan_cpp.h>
 #include <string>
 
-using namespace Intrepid;
 using namespace std;
 
 class ZoltanMeshPartitionPolicy : public MeshPartitionPolicy {
@@ -22,9 +21,9 @@ class ZoltanMeshPartitionPolicy : public MeshPartitionPolicy {
   string _debug_level;
 
   //helper functions for query functions
-//  int getNextActiveIndex(FieldContainer<int> &partitionedActiveCells);
-//  static GlobalIndexType getIndexOfGID(int myNode, FieldContainer<GlobalIndexType> &partitionedActiveCells,GlobalIndexType globalID);
-//  vector<GlobalIndexType> getListOfActiveGlobalIDs(FieldContainer<GlobalIndexType> partitionedActiveCells);
+//  int getNextActiveIndex(Intrepid::FieldContainer<int> &partitionedActiveCells);
+//  static GlobalIndexType getIndexOfGID(int myNode, Intrepid::FieldContainer<GlobalIndexType> &partitionedActiveCells,GlobalIndexType globalID);
+//  vector<GlobalIndexType> getListOfActiveGlobalIDs(Intrepid::FieldContainer<GlobalIndexType> partitionedActiveCells);
 
   static set<GlobalIndexType> getRankLocalCellIDs(Mesh* mesh);
   

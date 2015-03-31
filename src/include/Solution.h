@@ -73,7 +73,7 @@ private:
   std::map< GlobalIndexType, Intrepid::FieldContainer<double> > _errorRepresentationForCell;
 
   // evaluates the inversion of the RHS
-  std::map< GlobalIndexType,FieldContainer<double> > _rhsRepresentationForCell;
+  std::map< GlobalIndexType,Intrepid::FieldContainer<double> > _rhsRepresentationForCell;
 
   MeshPtr _mesh;
   BCPtr _bc;
@@ -128,7 +128,7 @@ private:
   
   void gatherSolutionData(); // get all solution data onto every node (not what we should do in the end)
 protected:
-  FieldContainer<double> solutionForElementTypeGlobal(ElementTypePtr elemType); // probably should be deprecated…
+  Intrepid::FieldContainer<double> solutionForElementTypeGlobal(ElementTypePtr elemType); // probably should be deprecated…
   ElementTypePtr getEquivalentElementType(MeshPtr otherMesh, ElementTypePtr elemType);
 public:
   Solution(MeshPtr mesh, BCPtr bc = Teuchos::null,

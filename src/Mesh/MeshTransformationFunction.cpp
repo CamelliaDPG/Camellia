@@ -24,6 +24,7 @@
 
 #include "BasisCache.h"
 
+using namespace Intrepid;
 using namespace Camellia;
 
 // TODO: move all the stuff to do with transfinite interpolation into ParametricSurface.cpp

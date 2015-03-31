@@ -20,15 +20,15 @@ Teuchos::Tuple<double, 3> checkConservation(FunctionPtr flux, FunctionPtr source
     ElementPtr elem = *it;
     int cellID = elem->cellID();
     ElementTypePtr elemType = elem->elementType();
-    FieldContainer<double> physicalCellNodes = mesh->physicalCellNodesForCell(cellID);
+    Intrepid::FieldContainer<double> physicalCellNodes = mesh->physicalCellNodesForCell(cellID);
     BasisCachePtr basisCache = BasisCache::basisCacheForCell(mesh, cellID, cubatureEnrichment);
-    FieldContainer<double> volumeIntegral(1);
+    Intrepid::FieldContainer<double> volumeIntegral(1);
     source->integrate(volumeIntegral, basisCache, true);
     int numSides = CamelliaCellTools::getSideCount(basisCache->cellTopology());
     double surfaceIntegral = 0;
     for (int sideIndex = 0; sideIndex < numSides; sideIndex++)
     {
-      FieldContainer<double> sideIntegral(1);
+      Intrepid::FieldContainer<double> sideIntegral(1);
       flux->integrate(sideIntegral, basisCache->getSideBasisCache(sideIndex), true);
       surfaceIntegral += sideIntegral(0);
     }
@@ -57,10 +57,10 @@ double computeFluxOverElementSides(FunctionPtr flux, Teuchos::RCP<Mesh> mesh, ve
          int sideIndex = it->second;
          BasisCachePtr basisCache = BasisCache::basisCacheForCell(mesh, cellID, cubatureEnrichment);
          BasisCachePtr sideBasisCache = basisCache->getSideBasisCache(sideIndex);
-         // FieldContainer<double> physicalCubaturePoints = sideBasisCache->getPhysicalCubaturePoints();
+         // Intrepid::FieldContainer<double> physicalCubaturePoints = sideBasisCache->getPhysicalCubaturePoints();
          // double xCell0 = physicalCubaturePoints(0,0,0);
          // cout << physicalCubaturePoints << endl;
-         FieldContainer<double> sideIntegral(1);
+         Intrepid::FieldContainer<double> sideIntegral(1);
          flux->integrate(sideIntegral, sideBasisCache, true);
          totalMassFlux += sideIntegral(0);
       }

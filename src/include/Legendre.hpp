@@ -22,8 +22,8 @@ namespace Camellia {
   
   class LegendreFunction : public SimpleFunction {
     int _polyOrder;
-    FieldContainer<double> _values;
-    FieldContainer<double> _derivatives;
+    Intrepid::FieldContainer<double> _values;
+    Intrepid::FieldContainer<double> _derivatives;
     
     bool _derivative; // whether this is the derivative of the Lobatto function
   public:

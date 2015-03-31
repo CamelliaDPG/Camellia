@@ -35,8 +35,8 @@
 class RieszRep {
  private:
 
-  map<GlobalIndexType, FieldContainer<double> > _rieszRepDofs; // from cellID to dofs of riesz representation
-  map<GlobalIndexType, FieldContainer<double> > _rieszRepDofsGlobal; // from cellID to dofs of riesz representation
+  map<GlobalIndexType, Intrepid::FieldContainer<double> > _rieszRepDofs; // from cellID to dofs of riesz representation
+  map<GlobalIndexType, Intrepid::FieldContainer<double> > _rieszRepDofsGlobal; // from cellID to dofs of riesz representation
   map<GlobalIndexType, double > _rieszRepNormSquared; // from cellID to norm squared of riesz inversion
   map<GlobalIndexType, double > _rieszRepNormSquaredGlobal; // from cellID to norm squared of riesz inversion
   
@@ -68,7 +68,7 @@ class RieszRep {
   MeshPtr mesh();
 
   // for testing
-  map<GlobalIndexType,FieldContainer<double> > integrateFunctional();
+  map<GlobalIndexType,Intrepid::FieldContainer<double> > integrateFunctional();
 
   void computeRieszRep(int cubatureEnrichment=0);
 
@@ -82,7 +82,7 @@ class RieszRep {
 
   void distributeDofs();
 
-  void computeRepresentationValues(FieldContainer<double> &values, int testID, Camellia::EOperator op, BasisCachePtr basisCache);
+  void computeRepresentationValues(Intrepid::FieldContainer<double> &values, int testID, Camellia::EOperator op, BasisCachePtr basisCache);
 
   double computeAlternativeNormSqOnCell(IPPtr ip, ElementPtr elem);
   map<GlobalIndexType,double> computeAlternativeNormSqOnCells(IPPtr ip, vector<GlobalIndexType> cellIDs);
@@ -141,12 +141,12 @@ public:
     return Teuchos::rcp(new RepFunction(_testID,_rep,Camellia::OP_DIV));
   }
 
-  void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
+  void values(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache) {
     _rep->computeRepresentationValues(values, _testID, _op, basisCache);        
   }
 
   // for specifying an operator
-  void values(FieldContainer<double> &values, Camellia::EOperator op, BasisCachePtr basisCache){
+  void values(Intrepid::FieldContainer<double> &values, Camellia::EOperator op, BasisCachePtr basisCache){
     _rep->computeRepresentationValues(values, _testID, op, basisCache);
   }
 };

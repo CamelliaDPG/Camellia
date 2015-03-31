@@ -10,6 +10,8 @@
 #include "LinearTerm.h"
 #include "BF.h"
 
+using namespace Camellia;
+
 Camellia::EFunctionSpace Camellia::efsForSpace(Space space) {
   switch (space) {
     case HDIV:

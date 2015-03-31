@@ -45,8 +45,6 @@
 
 #include "CellTopology.h"
 
-using namespace Intrepid;
-
 class DofOrdering {
   int _indexNeedsToBeRebuilt;
   int _nextIndex;
@@ -71,8 +69,8 @@ public:
   bool hasBasisEntry(int varID, int sideIndex);
   bool hasSideVarIDs();
   
-  void copyLikeCoefficients( FieldContainer<double> &newValues, Teuchos::RCP<DofOrdering> oldDofOrdering,
-                            const FieldContainer<double> &oldValues );
+  void copyLikeCoefficients( Intrepid::FieldContainer<double> &newValues, Teuchos::RCP<DofOrdering> oldDofOrdering,
+                            const Intrepid::FieldContainer<double> &oldValues );
   
   // get the varIndex variable's dof with basis ordinal dofId in the Dof ordering:
   int getDofIndex(int varID, int basisDofOrdinal, int sideIndex=0, int subSideIndex = -1);

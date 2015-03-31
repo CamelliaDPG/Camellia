@@ -44,6 +44,7 @@
 #include "Intrepid_DefaultCubatureFactory.hpp"
 #include "Intrepid_FunctionSpaceTools.hpp"
 
+using namespace Intrepid;
 using namespace Camellia;
 
 FCPtr BasisEvaluation::getValues(BasisPtr basis, Camellia::EOperator op,

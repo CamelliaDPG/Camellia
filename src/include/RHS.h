@@ -50,8 +50,6 @@
 
 using namespace std;
 
-using namespace Intrepid;
-
 class RHS {
   bool _legacySubclass;
   
@@ -62,15 +60,15 @@ public:
   virtual bool nonZeroRHS(int testVarID);
   virtual vector<Camellia::EOperator> operatorsForTestID(int testID);
   // TODO: change the API here so that values is the first argument (fitting a convention in the rest of the code)
-  virtual void rhs(int testVarID, int operatorIndex, Teuchos::RCP<BasisCache> basisCache, FieldContainer<double> &values);
-  virtual void rhs(int testVarID, int operatorIndex, const FieldContainer<double> &physicalPoints, FieldContainer<double> &values);
-  virtual void rhs(int testVarID, const FieldContainer<double> &physicalPoints, FieldContainer<double> &values);
+  virtual void rhs(int testVarID, int operatorIndex, Teuchos::RCP<BasisCache> basisCache, Intrepid::FieldContainer<double> &values);
+  virtual void rhs(int testVarID, int operatorIndex, const Intrepid::FieldContainer<double> &physicalPoints, Intrepid::FieldContainer<double> &values);
+  virtual void rhs(int testVarID, const Intrepid::FieldContainer<double> &physicalPoints, Intrepid::FieldContainer<double> &values);
   // physPoints (numCells,numPoints,spaceDim)
   // values: either (numCells,numPoints) or (numCells,numPoints,spaceDim)
   
-  virtual void integrateAgainstStandardBasis(FieldContainer<double> &rhsVector, Teuchos::RCP<DofOrdering> testOrdering,
+  virtual void integrateAgainstStandardBasis(Intrepid::FieldContainer<double> &rhsVector, Teuchos::RCP<DofOrdering> testOrdering,
                                              BasisCachePtr basisCache);
-  virtual void integrateAgainstOptimalTests(FieldContainer<double> &rhsVector, const FieldContainer<double> &optimalTestWeights,
+  virtual void integrateAgainstOptimalTests(Intrepid::FieldContainer<double> &rhsVector, const Intrepid::FieldContainer<double> &optimalTestWeights,
                                             Teuchos::RCP<DofOrdering> testOrdering, BasisCachePtr basisCache);
 
   void addTerm( LinearTermPtr rhsTerm );

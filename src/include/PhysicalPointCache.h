@@ -12,11 +12,11 @@
 #include "BasisCache.h"
 
 class PhysicalPointCache : public BasisCache {
-  FieldContainer<double> _physCubPoints;
+  Intrepid::FieldContainer<double> _physCubPoints;
 public:
-  PhysicalPointCache(const FieldContainer<double> &physCubPoints);
-  const FieldContainer<double> & getPhysicalCubaturePoints();
-  FieldContainer<double> & writablePhysicalCubaturePoints();
+  PhysicalPointCache(const Intrepid::FieldContainer<double> &physCubPoints);
+  const Intrepid::FieldContainer<double> & getPhysicalCubaturePoints();
+  Intrepid::FieldContainer<double> & writablePhysicalCubaturePoints();
   int getSpaceDim(); // overrides BasisCache::getSpaceDim();
 };
 

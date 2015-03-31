@@ -47,7 +47,7 @@ class MeshTransferFunction : public Function, public RefinementObserver {
   void rebuildMaps();
 public:
   MeshTransferFunction(FunctionPtr originalFunction, MeshPtr originalMesh, MeshPtr newMesh, double interface_t);
-  virtual void values(FieldContainer<double> &values, BasisCachePtr basisCache);
+  virtual void values(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache);
   
   bool boundaryValueOnly();
   

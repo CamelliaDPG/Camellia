@@ -79,9 +79,9 @@ class MeshTopology {
   void determineGeneralizedParentsForRefinement(CellPtr cell, RefinementPatternPtr refPattern);
   
   IndexType getVertexIndexAdding(const vector<double> &vertex, double tol);
-  vector<IndexType> getVertexIndices(const FieldContainer<double> &vertices);
+  vector<IndexType> getVertexIndices(const Intrepid::FieldContainer<double> &vertices);
   vector<IndexType> getVertexIndices(const vector< vector<double> > &vertices);
-  map<unsigned, IndexType> getVertexIndicesMap(const FieldContainer<double> &vertices);
+  map<unsigned, IndexType> getVertexIndicesMap(const Intrepid::FieldContainer<double> &vertices);
   set<IndexType> getEntitiesForSide(IndexType sideEntityIndex, unsigned d);
   void init(unsigned spaceDim);
   unsigned maxConstraint(unsigned d, IndexType entityIndex1, IndexType entityIndex2);
@@ -124,7 +124,7 @@ public:
   bool cellHasCurvedEdges(IndexType cellIndex);
   
   bool cellContainsPoint(GlobalIndexType cellID, const std::vector<double> &point, int cubatureDegree);
-  std::vector<IndexType> cellIDsForPoints(const FieldContainer<double> &physicalPoints);
+  std::vector<IndexType> cellIDsForPoints(const Intrepid::FieldContainer<double> &physicalPoints);
   
   bool entityIsAncestor(unsigned d, IndexType ancestor, IndexType descendent);
   
@@ -162,7 +162,7 @@ public:
   unsigned getSubEntityPermutation(unsigned d, IndexType entityIndex, unsigned subEntityDim, unsigned subEntityOrdinal);
   bool getVertexIndex(const vector<double> &vertex, IndexType &vertexIndex, double tol=1e-14);
   const vector<double>& getVertex(IndexType vertexIndex);
-  FieldContainer<double> physicalCellNodesForCell(unsigned cellIndex, bool includeCellDimension = false);
+  Intrepid::FieldContainer<double> physicalCellNodesForCell(unsigned cellIndex, bool includeCellDimension = false);
   void refineCell(IndexType cellIndex, RefinementPatternPtr refPattern);
   IndexType cellCount();
   IndexType activeCellCount();

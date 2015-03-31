@@ -13,6 +13,9 @@
 
 #include "GlobalDofAssignment.h"
 
+using namespace Intrepid;
+using namespace Camellia;
+
 void MeshPartitionPolicy::partitionMesh(Mesh *mesh, PartitionIndexType numPartitions) {
   // default simply divides the active cells into equally-sized partitions, in the order listed in activeCells…
   MeshTopologyPtr meshTopology = mesh->getTopology();

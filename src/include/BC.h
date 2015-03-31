@@ -14,8 +14,6 @@
 #include "BCFunction.h"
 #include "SpatialFilter.h"
 
-using namespace Intrepid;
-
 class BC {
   bool _legacyBCSubclass;
   
@@ -30,13 +28,13 @@ protected:
 public:
   BC(bool legacySubclass) : _legacyBCSubclass(legacySubclass) {}
   virtual bool bcsImposed(int varID); // returns true if there are any BCs anywhere imposed on varID
-  virtual void imposeBC(FieldContainer<double> &dirichletValues, FieldContainer<bool> &imposeHere, 
-                        int varID, FieldContainer<double> &unitNormals, BasisCachePtr basisCache);
+  virtual void imposeBC(Intrepid::FieldContainer<double> &dirichletValues, Intrepid::FieldContainer<bool> &imposeHere, 
+                        int varID, Intrepid::FieldContainer<double> &unitNormals, BasisCachePtr basisCache);
   
-  virtual void imposeBC(int varID, FieldContainer<double> &physicalPoints, 
-                        FieldContainer<double> &unitNormals,
-                        FieldContainer<double> &dirichletValues,
-                        FieldContainer<bool> &imposeHere);
+  virtual void imposeBC(int varID, Intrepid::FieldContainer<double> &physicalPoints, 
+                        Intrepid::FieldContainer<double> &unitNormals,
+                        Intrepid::FieldContainer<double> &dirichletValues,
+                        Intrepid::FieldContainer<bool> &imposeHere);
   
   virtual bool singlePointBC(int varID); // override if you want to implement a BC at a single, arbitrary point (and nowhere else).
   virtual double valueForSinglePointBC(int varID); 
@@ -47,7 +45,7 @@ public:
   bool isLegacySubclass();
   
   // basisCoefficients has dimensions (C,F)
-  virtual void coefficientsForBC(FieldContainer<double> &basisCoefficients, Teuchos::RCP<BCFunction> bcFxn, BasisPtr basis, BasisCachePtr sideBasisCache);
+  virtual void coefficientsForBC(Intrepid::FieldContainer<double> &basisCoefficients, Teuchos::RCP<BCFunction> bcFxn, BasisPtr basis, BasisCachePtr sideBasisCache);
   
   virtual ~BC() {}
   

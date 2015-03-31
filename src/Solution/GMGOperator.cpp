@@ -43,6 +43,9 @@
 
 #include "AdditiveSchwarz.h"
 
+using namespace Intrepid;
+using namespace Camellia;
+
 #ifdef USE_HPCTW
 extern "C" void HPM_Start(char *);
 extern "C" void HPM_Stop(char *);

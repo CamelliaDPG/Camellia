@@ -17,15 +17,13 @@
 #include "Teuchos_RCP.hpp"
 #include "Intrepid_FieldContainer.hpp"
 
-using namespace Intrepid;
-
 class SpatialFilter {
 public:
   virtual bool matchesPoint(double x);
   virtual bool matchesPoint(double x, double y);
   virtual bool matchesPoint(double x, double y, double z);
   virtual bool matchesPoint(vector<double>&point);
-  virtual bool matchesPoints(FieldContainer<bool> &pointsMatch, BasisCachePtr basisCache);
+  virtual bool matchesPoints(Intrepid::FieldContainer<bool> &pointsMatch, BasisCachePtr basisCache);
 
   static SpatialFilterPtr allSpace();
   static SpatialFilterPtr unionFilter(SpatialFilterPtr a, SpatialFilterPtr b);
@@ -60,7 +58,7 @@ class SpatialFilterLogicalOr : public SpatialFilter {
   SpatialFilterPtr _sf1, _sf2;
 public:
   SpatialFilterLogicalOr(SpatialFilterPtr sf1, SpatialFilterPtr sf2);
-  bool matchesPoints(FieldContainer<bool> &pointsMatch, BasisCachePtr basisCache);
+  bool matchesPoints(Intrepid::FieldContainer<bool> &pointsMatch, BasisCachePtr basisCache);
 
 //  bool matchesPoint( double x, double y ) {
 //    return _sf1->matchesPoint(x,y) || _sf2->matchesPoint(x,y);
@@ -74,7 +72,7 @@ class SpatialFilterLogicalAnd : public SpatialFilter {
   SpatialFilterPtr _sf1, _sf2;
 public:
   SpatialFilterLogicalAnd(SpatialFilterPtr sf1, SpatialFilterPtr sf2);
-  bool matchesPoints(FieldContainer<bool> &pointsMatch, BasisCachePtr basisCache);
+  bool matchesPoints(Intrepid::FieldContainer<bool> &pointsMatch, BasisCachePtr basisCache);
 
 //  bool matchesPoint( double x, double y ) {
 //    return _sf1->matchesPoint(x,y) || _sf2->matchesPoint(x,y);
@@ -88,7 +86,7 @@ class NegatedSpatialFilter : public SpatialFilter {
   SpatialFilterPtr _filterToNegate;
 public:
   NegatedSpatialFilter(SpatialFilterPtr FilterToNegate);
-  bool matchesPoints(FieldContainer<bool> &pointsMatch, BasisCachePtr basisCache);
+  bool matchesPoints(Intrepid::FieldContainer<bool> &pointsMatch, BasisCachePtr basisCache);
   
   virtual bool matchesPoint(double x);
   virtual bool matchesPoint(double x, double y);

@@ -21,11 +21,11 @@ class IPSwitcher : public IP {
 public:
   IPSwitcher(IPPtr ip1, IPPtr ip2, double minH);
     
-  void computeInnerProductMatrix(FieldContainer<double> &innerProduct, 
+  void computeInnerProductMatrix(Intrepid::FieldContainer<double> &innerProduct, 
                                  Teuchos::RCP<DofOrdering> dofOrdering,
                                  Teuchos::RCP<BasisCache> basisCache);
   
-  void computeInnerProductVector(FieldContainer<double> &ipVector, 
+  void computeInnerProductVector(Intrepid::FieldContainer<double> &ipVector, 
                                  VarPtr var, FunctionPtr fxn,
                                  Teuchos::RCP<DofOrdering> dofOrdering, 
                                  Teuchos::RCP<BasisCache> basisCache);

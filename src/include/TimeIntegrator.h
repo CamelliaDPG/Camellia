@@ -19,7 +19,7 @@ class InvDtFunction : public Function
     double getDt(){
       return 1./__invDt;
     }
-    void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
+    void values(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache) {
       CHECK_VALUES_RANK(values);
       values.initialize(__invDt);
     }

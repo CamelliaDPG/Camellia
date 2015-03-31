@@ -17,7 +17,7 @@ class MeshPolyOrderFunction : public Function {
   Teuchos::RCP<Mesh> _mesh;
 public:
   MeshPolyOrderFunction(Teuchos::RCP<Mesh> mesh) : Function(0) { _mesh = mesh;} // scalar
-  void values(FieldContainer<double> &values, BasisCachePtr basisCache);
+  void values(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache);
 };
 
 #endif

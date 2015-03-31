@@ -23,7 +23,7 @@ class BasisSumFunction : public Function {
   BasisSumFunction(BasisPtr basis, const Intrepid::FieldContainer<double> &basisCoefficients,
                       BasisCachePtr overridingBasisCache = Teuchos::null,
                       Camellia::EOperator op = OP_VALUE, bool boundaryValueOnly = false);
-  void values(FieldContainer<double> &values, BasisCachePtr basisCache);
+  void values(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache);
   
   FunctionPtr x();
   FunctionPtr y();

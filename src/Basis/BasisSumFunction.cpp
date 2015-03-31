@@ -5,6 +5,9 @@
 
 #include "BasisFactory.h"
 
+using namespace Intrepid;
+using namespace Camellia;
+
 BasisSumFunction::BasisSumFunction(BasisPtr basis, const FieldContainer<double> &basisCoefficients,
                                          BasisCachePtr overridingBasisCache, Camellia::EOperator op, bool boundaryValueOnly) : Function( BasisFactory::basisFactory()->getBasisRank(basis) ) {
   // TODO: fix the rank setter here to take into account rank-changing ops (e.g. DIV, GRAD)

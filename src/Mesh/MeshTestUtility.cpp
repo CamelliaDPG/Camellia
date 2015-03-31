@@ -21,6 +21,7 @@
 
 #include "CubatureFactory.h"
 
+using namespace Intrepid;
 using namespace Camellia;
 
 bool MeshTestUtility::checkMeshConsistency(Teuchos::RCP<Mesh> mesh) {

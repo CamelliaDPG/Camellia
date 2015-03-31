@@ -144,8 +144,8 @@ protected:
   BasisCache(int sideIndex, BasisCachePtr volumeCache, int trialDegree, int testDegree, BasisPtr multiBasisIfAny);
   
   // protected "fake" side cache constructor:
-  BasisCache(int fakeSideOrdinal, BasisCachePtr volumeCache, const FieldContainer<double> &volumeRefPoints,
-             const FieldContainer<double> &sideNormals, const FieldContainer<double> &cellSideParities);
+  BasisCache(int fakeSideOrdinal, BasisCachePtr volumeCache, const Intrepid::FieldContainer<double> &volumeRefPoints,
+             const Intrepid::FieldContainer<double> &sideNormals, const Intrepid::FieldContainer<double> &cellSideParities);
   
   // protected constructor basically for the sake of the SpaceTimeBasisCache subclass, which wants to disable side cache creation during construction.
   BasisCache(ElementTypePtr elemType, MeshPtr mesh, bool testVsTest,
@@ -265,7 +265,7 @@ public:
   static BasisCachePtr basisCacheForRefinedReferenceCell(shards::CellTopology &cellTopo, int cubatureDegree, RefinementBranch refinementBranch, bool createSideCacheToo=false);
 
   static BasisCachePtr basisCacheForCellTopology(CellTopoPtr cellTopo, int cubatureDegree,
-                                                 const FieldContainer<double> &physicalCellNodes,
+                                                 const Intrepid::FieldContainer<double> &physicalCellNodes,
                                                  bool createSideCacheToo=false,
                                                  bool tensorProductTopologyMeansSpaceTime=true);
   
@@ -282,8 +282,8 @@ public:
   static BasisCachePtr sideBasisCache(BasisCachePtr volumeCache, int sideIndex);
   
   // ! As the name suggests, this method is not meant for widespread use.  Intended mainly for flux-to-field mappings
-  static BasisCachePtr fakeSideCache(int fakeSideOrdinal, BasisCachePtr volumeCache, const FieldContainer<double> &volumeRefPoints,
-                                     const FieldContainer<double> &sideNormals, const FieldContainer<double> &cellSideParities);
+  static BasisCachePtr fakeSideCache(int fakeSideOrdinal, BasisCachePtr volumeCache, const Intrepid::FieldContainer<double> &volumeRefPoints,
+                                     const Intrepid::FieldContainer<double> &sideNormals, const Intrepid::FieldContainer<double> &cellSideParities);
 };
 
 #endif

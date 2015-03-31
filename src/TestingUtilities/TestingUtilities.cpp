@@ -3,6 +3,9 @@
 #include "Element.h"
 #include "RHS.h"
 
+using namespace Intrepid;
+using namespace Camellia;
+
 void TestingUtilities::initializeSolnCoeffs(SolutionPtr solution){
   map< pair<IndexType,IndexType>, IndexType> localToGlobalMap = solution->mesh()->getLocalToGlobalMap();
   map< pair<IndexType,IndexType>, IndexType>::iterator it;

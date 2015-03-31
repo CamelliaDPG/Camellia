@@ -20,6 +20,11 @@
 #include <Tpetra_CrsMatrix.hpp>
 
 #include <Intrepid_FieldContainer.hpp>
+
+namespace Camellia {
+
+}
+
 // Basic typedefs
 typedef unsigned IndexType;
 typedef unsigned GlobalIndexType;

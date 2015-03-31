@@ -38,14 +38,14 @@ protected:
 public:
   // volume constructors:
   SpaceTimeBasisCache(MeshPtr spaceTimeMesh, ElementTypePtr spaceTimeElementType,
-                      const FieldContainer<double> &physicalNodesSpatial,
-                      const FieldContainer<double> &physicalNodesTemporal,
-                      const FieldContainer<double> &physicalNodesSpaceTime,
+                      const Intrepid::FieldContainer<double> &physicalNodesSpatial,
+                      const Intrepid::FieldContainer<double> &physicalNodesTemporal,
+                      const Intrepid::FieldContainer<double> &physicalNodesSpaceTime,
                       const std::vector<GlobalIndexType> &cellIDs,
                       bool testVsTest, int cubatureDegreeEnrichment);
-  SpaceTimeBasisCache(const FieldContainer<double> &physicalNodesSpatial,
-                      const FieldContainer<double> &physicalNodesTemporal,
-                      const FieldContainer<double> &physicalCellNodes,
+  SpaceTimeBasisCache(const Intrepid::FieldContainer<double> &physicalNodesSpatial,
+                      const Intrepid::FieldContainer<double> &physicalNodesTemporal,
+                      const Intrepid::FieldContainer<double> &physicalCellNodes,
                       CellTopoPtr cellTopo, int cubDegree);
   
   BasisCachePtr getSpatialBasisCache();

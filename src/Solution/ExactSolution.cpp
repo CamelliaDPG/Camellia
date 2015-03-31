@@ -49,6 +49,9 @@
 
 #include "MPIWrapper.h"
 
+using namespace Intrepid;
+using namespace Camellia;
+
 double ExactSolution::L2NormOfError(Solution &solution, int trialID, int cubDegree) {
   Teuchos::RCP<Mesh> mesh = solution.mesh();
   double totalErrorSquared = 0.0;

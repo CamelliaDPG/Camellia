@@ -35,7 +35,7 @@ protected:
 public:
   ParametricFunction(FunctionPtr fxn);
   void value(double t, double &x);
-  void values(FieldContainer<double> &values, BasisCachePtr basisCache);
+  void values(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache);
   
   FunctionPtr dx(); // same function as dt()
   ParametricFunctionPtr dt();
@@ -54,7 +54,7 @@ private:
   ParametricFunctionPtr _xFxn, _yFxn, _zFxn; // parametric functions (defined on ref line mapped to [0,1])
   FunctionPtr argumentMap();
   
-//  void mapRefCellPointsToParameterSpace(FieldContainer<double> &refPoints);
+//  void mapRefCellPointsToParameterSpace(Intrepid::FieldContainer<double> &refPoints);
 protected:
 //  ParametricCurve(ParametricCurvePtr fxn, double t0, double t1);
   public:
@@ -67,7 +67,7 @@ protected:
   ParametricCurvePtr interpolatingLine();
 
   double linearLength();
-  void projectionBasedInterpolant(FieldContainer<double> &basisCoefficients, BasisPtr basis1D, int component,
+  void projectionBasedInterpolant(Intrepid::FieldContainer<double> &basisCoefficients, BasisPtr basis1D, int component,
                                   double lengthScale, bool useH1); // component 0 for x, 1 for y, 2 for z
   
   // override one of these, according to the space dimension
@@ -75,7 +75,7 @@ protected:
   virtual void value(double t, double &x, double &y);
   virtual void value(double t, double &x, double &y, double &z);
   
-  virtual void values(FieldContainer<double> &values, BasisCachePtr basisCache);
+  virtual void values(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache);
   
   virtual ParametricCurvePtr dt(); // the curve differentiated in t in each component.
   

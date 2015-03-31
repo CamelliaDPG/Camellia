@@ -55,14 +55,14 @@ public:
 
   void distributeDofs(Epetra_FEVector dofs);
 
-  FieldContainer<double> getRHS(ElementPtr elem);
-  FieldContainer<double> getOverdeterminedStiffness(ElementPtr elem);
-  FieldContainer<double> getIPMatrix(ElementPtr elem);
+  Intrepid::FieldContainer<double> getRHS(ElementPtr elem);
+  Intrepid::FieldContainer<double> getOverdeterminedStiffness(ElementPtr elem);
+  Intrepid::FieldContainer<double> getIPMatrix(ElementPtr elem);
   int numTestDofsForElem(ElementPtr elem);
   int numTrialDofsForElem(ElementPtr elem);
   void applyBCs(Epetra_FECrsMatrix &globalStiffMatrix, Epetra_FEVector &rhsVector);
-  FieldContainer<double> getSubVector(Epetra_FEVector u, ElementPtr elem);
-  void getElemData(ElementPtr elem, FieldContainer<double> &K, FieldContainer<double> &f);
+  Intrepid::FieldContainer<double> getSubVector(Epetra_FEVector u, ElementPtr elem);
+  void getElemData(ElementPtr elem, Intrepid::FieldContainer<double> &K, Intrepid::FieldContainer<double> &f);
   SolutionPtr solution(){
     return _solution;
   }

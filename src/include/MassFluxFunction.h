@@ -26,7 +26,7 @@ public:
     _absoluteValue = takeAbsoluteValue;
   }
   
-  void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
+  void values(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache) {
     if (basisCache->isSideCache()) {
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "MassFluxFunction is only valid on element interiors");
     }
@@ -39,9 +39,9 @@ public:
     
     MeshPtr mesh = basisCache->mesh();
     vector<GlobalIndexType> cellIDs = basisCache->cellIDs();
-    FieldContainer<double> cellIntegrals(numCells);
+    Intrepid::FieldContainer<double> cellIntegrals(numCells);
     
-//    FieldContainer<double> cellIntegralsOnSide(numCells); // DEBUGGING
+//    Intrepid::FieldContainer<double> cellIntegralsOnSide(numCells); // DEBUGGING
     
     int numSides = CamelliaCellTools::getSideCount(basisCache->cellTopology());
     
@@ -57,7 +57,7 @@ public:
 //      }
     }
     
-    FieldContainer<double> cellMeasures = basisCache->getCellMeasures();
+    Intrepid::FieldContainer<double> cellMeasures = basisCache->getCellMeasures();
         
     // weight by cellMeasure (so that the integral of this function makes sense), and take absolute value if requested
     for (int cellIndex=0; cellIndex < numCells; cellIndex++) {

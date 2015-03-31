@@ -10,6 +10,8 @@
 
 #include "SimpleMLSolver.h"
 
+using namespace Camellia;
+
 SimpleMLSolver::SimpleMLSolver(bool saveFactorization, double residualTolerance, int maxIterations) {
 //  if (saveFactorization) {
 //    int rank = Teuchos::GlobalMPISession::getRank();

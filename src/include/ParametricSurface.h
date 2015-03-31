@@ -31,13 +31,13 @@ public:
   virtual FunctionPtr dt2();
   
   virtual void value(double t1, double t2, double &x, double &y) = 0;
-  virtual void values(FieldContainer<double> &values, BasisCachePtr basisCache);
+  virtual void values(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache);
   
-  static FieldContainer<double> &parametricQuadNodes(); // for CellTools cellWorkset argument
+  static Intrepid::FieldContainer<double> &parametricQuadNodes(); // for CellTools cellWorkset argument
   
-  static void basisWeightsForEdgeInterpolant(FieldContainer<double> &basisCoefficients,
+  static void basisWeightsForEdgeInterpolant(Intrepid::FieldContainer<double> &basisCoefficients,
                                              Camellia::VectorBasisPtr basis, MeshPtr mesh, int cellID);
-  static void basisWeightsForProjectedInterpolant(FieldContainer<double> &basisCoefficients,
+  static void basisWeightsForProjectedInterpolant(Intrepid::FieldContainer<double> &basisCoefficients,
                                                   Camellia::VectorBasisPtr basis, MeshPtr mesh, int cellID);
   static ParametricSurfacePtr linearInterpolant(const vector< ParametricCurvePtr > &curves);
   static ParametricSurfacePtr transfiniteInterpolant(const vector< ParametricCurvePtr > &curves);

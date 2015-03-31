@@ -15,6 +15,8 @@
 #include "Solution.h"
 #include "Mesh.h"
 
+using namespace Camellia;
+
 Teuchos::RCP<Solver> Solver::getSolver(SolverChoice choice, bool saveFactorization,
                                        double residualTolerance, int maxIterations,
                                        SolutionPtr fineSolution, MeshPtr coarseMesh,

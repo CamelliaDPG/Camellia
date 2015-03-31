@@ -19,6 +19,7 @@
 #include "Intrepid_FunctionSpaceTools.hpp"
 #include "Intrepid_DefaultCubatureFactory.hpp"
 
+using namespace Intrepid;
 using namespace Camellia;
 
 void sizeFCForBasisValues(FieldContainer<double> &fc, BasisPtr basis, int numPoints, bool includeCellDimension = false, int numBasisFieldsToInclude = -1) {

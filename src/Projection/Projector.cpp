@@ -28,6 +28,9 @@
 #include "Epetra_SerialDenseSolver.h"
 #include "Epetra_DataAccess.h"
 
+using namespace Intrepid;
+using namespace Camellia;
+
 void Projector::projectFunctionOntoBasis(FieldContainer<double> &basisCoefficients, FunctionPtr fxn, 
                                          BasisPtr basis, BasisCachePtr basisCache, IPPtr ip, VarPtr v,
                                          set<int> fieldIndicesToSkip) {

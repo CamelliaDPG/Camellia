@@ -18,6 +18,7 @@
 
 #include "CellTopology.h"
 
+using namespace Intrepid;
 using namespace Camellia;
 
 CellTopoPtr CamelliaCellTools::cellTopoForKey(Camellia::CellTopologyKey key) {
@@ -393,7 +394,7 @@ void CamelliaCellTools::mapToPhysicalFrame(FieldContainer<double> &physPoints, c
   switch(refPoints.rank()) {
     case 2:
     {
-      nodalBasis->getValues(basisValues, refPoints, OPERATOR_VALUE);
+      nodalBasis->getValues(basisValues, refPoints, Intrepid::OPERATOR_VALUE);
       // If whichCell = -1, ref pt. set is mapped to all cells, otherwise, the set is mapped to one cell only
       int cellLoop = (whichCell == -1) ? numCells : 1 ;
       
@@ -429,7 +430,7 @@ void CamelliaCellTools::mapToPhysicalFrame(FieldContainer<double> &physPoints, c
         }
         
         // Compute basis values for this set of ref. points
-        nodalBasis -> getValues(basisValues, refPointsForCell, OPERATOR_VALUE);
+        nodalBasis -> getValues(basisValues, refPointsForCell, Intrepid::OPERATOR_VALUE);
         
         for(int pointOrdinal = 0; pointOrdinal < numPoints; pointOrdinal++) {
           for(int d = 0; d < spaceDim; d++){
@@ -680,7 +681,7 @@ void CamelliaCellTools::setJacobian(FieldContainer<double> &jacobian, const Fiel
       // refPoints is (P,D): a single or multiple cell jacobians computed for a single set of ref. points
     case 2:
     {
-      nodalBasis -> getValues(basisGrads, points, OPERATOR_GRAD);
+      nodalBasis -> getValues(basisGrads, points, Intrepid::OPERATOR_GRAD);
       
       // The outer loops select the multi-index of the Jacobian entry: cell, point, row, col
       // If whichCell = -1, all jacobians are computed, otherwise a single cell jacobian is computed
@@ -735,7 +736,7 @@ void CamelliaCellTools::setJacobian(FieldContainer<double> &jacobian, const Fiel
         }//pt
         
         // Compute gradients of basis functions at this set of ref. points
-        nodalBasis -> getValues(basisGrads, tempPoints, OPERATOR_GRAD);
+        nodalBasis -> getValues(basisGrads, tempPoints, Intrepid::OPERATOR_GRAD);
         
         // Compute jacobians for the point set corresponding to the current cellordinal
         for(int pointOrd = 0; pointOrd < numPoints; pointOrd++) {

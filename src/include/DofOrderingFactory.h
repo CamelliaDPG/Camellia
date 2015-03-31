@@ -41,7 +41,6 @@
 
 // Intrepid includes
 #include "Intrepid_Basis.hpp"
-#include "Intrepid_FieldContainer.hpp"
 
 // Shards includes
 #include "Shards_CellTopology.hpp"

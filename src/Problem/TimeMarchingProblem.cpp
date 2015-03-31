@@ -14,6 +14,9 @@
 
 #include "SerialDenseWrapper.h"
 
+using namespace Intrepid;
+using namespace Camellia;
+
 TimeMarchingProblem::TimeMarchingProblem(BFPtr bilinearForm,
                                          Teuchos::RCP<RHS> rhs) : RHS(true), BF(true) { // true: legacy subclass
   _bilinearForm = bilinearForm;

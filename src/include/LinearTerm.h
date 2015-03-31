@@ -93,12 +93,12 @@ public:
   LinearTermPtr getPartMatchingVariable( VarPtr var );
   
   // integrate into values FieldContainers:
-  void integrate(FieldContainer<double> &values, DofOrderingPtr thisOrdering,
+  void integrate(Intrepid::FieldContainer<double> &values, DofOrderingPtr thisOrdering,
                  BasisCachePtr basisCache, bool forceBoundaryTerm = false, bool sumInto = true);
-  void integrate(FieldContainer<double> &values, DofOrderingPtr thisDofOrdering,
+  void integrate(Intrepid::FieldContainer<double> &values, DofOrderingPtr thisDofOrdering,
                  LinearTermPtr otherTerm, DofOrderingPtr otherDofOrdering,
                  BasisCachePtr basisCache, bool forceBoundaryTerm = false, bool sumInto = true);
-  void integrate(FieldContainer<double> &values, DofOrderingPtr thisDofOrdering,
+  void integrate(Intrepid::FieldContainer<double> &values, DofOrderingPtr thisDofOrdering,
                  LinearTermPtr otherTerm, VarPtr otherVarID, FunctionPtr fxn,
                  BasisCachePtr basisCache, bool forceBoundaryTerm = false);
   
@@ -112,12 +112,12 @@ public:
   
   // compute the value of linearTerm for non-zero varID at the cubature points, for each basis function in basis
   // values shape: (C,F,P), (C,F,P,D), or (C,F,P,D,D)
-  void values(FieldContainer<double> &values, int varID, BasisPtr basis, BasisCachePtr basisCache,
+  void values(Intrepid::FieldContainer<double> &values, int varID, BasisPtr basis, BasisCachePtr basisCache,
               bool applyCubatureWeights = false, bool naturalBoundaryTermsOnly = false);
   
   // compute the value of linearTerm for varID = fxn
   // values shape: (C,P), (C,P,D), or (C,P,D,D)
-  void values(FieldContainer<double> &values, int varID, FunctionPtr fxn, BasisCachePtr basisCache,
+  void values(Intrepid::FieldContainer<double> &values, int varID, FunctionPtr fxn, BasisCachePtr basisCache,
               bool applyCubatureWeights, bool naturalBoundaryTermsOnly = false);
   
   int rank() const;  // 0 for scalar, 1 for vector, etc.

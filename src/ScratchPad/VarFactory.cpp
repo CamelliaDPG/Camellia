@@ -10,6 +10,8 @@
 
 using namespace std;
 
+using namespace Camellia;
+
 VarFactory::VarFactory() {
   _nextTestID = 0;
   _nextTrialID = 0;

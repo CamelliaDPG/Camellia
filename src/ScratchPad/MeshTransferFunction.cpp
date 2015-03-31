@@ -10,6 +10,9 @@
 
 using namespace std;
 
+using namespace Intrepid;
+using namespace Camellia;
+
 MeshTransferFunction::MeshTransferFunction(FunctionPtr originalFunction, MeshPtr originalMesh,
                                            MeshPtr newMesh, double interface_t) : Function(originalFunction->rank()) {
   _originalFunction = originalFunction;

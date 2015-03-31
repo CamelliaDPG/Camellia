@@ -10,6 +10,9 @@
 
 #include "BasisCache.h"
 
+using namespace Intrepid;
+using namespace Camellia;
+
 FieldContainer<double> GnuPlotUtil::cellCentroids(MeshTopology* meshTopo) {
   // this only works on quads right now
   

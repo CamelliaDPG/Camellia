@@ -15,6 +15,7 @@
 #include "Intrepid_HDIV_QUAD_In_FEM.hpp"
 #include "Intrepid_HDIV_HEX_In_FEM.hpp"
 
+using namespace Intrepid;
 namespace Camellia {
 
   BasisPtr lobattoQuadHGRAD(int polyOrder, bool conforming=false) {

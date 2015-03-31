@@ -20,7 +20,6 @@ class ExactSolution;
 
 using namespace Camellia;
 using namespace std;
-using namespace Intrepid;
 
 class Function {
 private:
@@ -28,7 +27,7 @@ private:
 protected:
   int _rank;
   string _displayString; // this is here mostly for identifying functions in the debugger
-  void CHECK_VALUES_RANK(FieldContainer<double> &values); // throws exception on bad values rank
+  void CHECK_VALUES_RANK(Intrepid::FieldContainer<double> &values); // throws exception on bad values rank
   double _time;
 public:
   Function();
@@ -44,8 +43,8 @@ public:
 
   virtual bool boundaryValueOnly() { return false; } // if true, indicates a function defined only on element boundaries (mesh skeleton)
 
-  virtual void values(FieldContainer<double> &values, Camellia::EOperator op, BasisCachePtr basisCache);
-  virtual void values(FieldContainer<double> &values, BasisCachePtr basisCache) = 0;
+  virtual void values(Intrepid::FieldContainer<double> &values, Camellia::EOperator op, BasisCachePtr basisCache);
+  virtual void values(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache) = 0;
 
   static FunctionPtr op(FunctionPtr f, Camellia::EOperator op);
 
@@ -69,14 +68,14 @@ public:
 
   int rank();
 
-  virtual void addToValues(FieldContainer<double> &valuesToAddTo, BasisCachePtr basisCache);
+  virtual void addToValues(Intrepid::FieldContainer<double> &valuesToAddTo, BasisCachePtr basisCache);
 
   double integralOfJump(Teuchos::RCP<Mesh> mesh, GlobalIndexType cellID, int sideIndex, int cubatureDegreeEnrichment);
 
   double integralOfJump(Teuchos::RCP<Mesh> mesh, int cubatureDegreeEnrichment);
 
   double integrate(BasisCachePtr basisCache);
-  void integrate(FieldContainer<double> &cellIntegrals, BasisCachePtr basisCache, bool sumInto=false);
+  void integrate(Intrepid::FieldContainer<double> &cellIntegrals, BasisCachePtr basisCache, bool sumInto=false);
 
   // integrate over only one cell
   //  double integrate(int cellID, Teuchos::RCP<Mesh> mesh, int cubatureDegreeEnrichment = 0);
@@ -99,18 +98,18 @@ public:
   double l2norm(Teuchos::RCP<Mesh> mesh, int cubatureDegreeEnrichment = 0, bool spatialSidesOnly = false);
 
   // divide values by this function (supported only when this is a scalar--otherwise values would change rank...)
-  virtual void scalarMultiplyFunctionValues(FieldContainer<double> &functionValues, BasisCachePtr basisCache);
+  virtual void scalarMultiplyFunctionValues(Intrepid::FieldContainer<double> &functionValues, BasisCachePtr basisCache);
 
   // divide values by this function (supported only when this is a scalar)
-  virtual void scalarDivideFunctionValues(FieldContainer<double> &functionValues, BasisCachePtr basisCache);
+  virtual void scalarDivideFunctionValues(Intrepid::FieldContainer<double> &functionValues, BasisCachePtr basisCache);
 
   // divide values by this function (supported only when this is a scalar--otherwise values would change rank...)
-  virtual void scalarMultiplyBasisValues(FieldContainer<double> &basisValues, BasisCachePtr basisCache);
+  virtual void scalarMultiplyBasisValues(Intrepid::FieldContainer<double> &basisValues, BasisCachePtr basisCache);
 
   // divide values by this function (supported only when this is a scalar)
-  virtual void scalarDivideBasisValues(FieldContainer<double> &basisValues, BasisCachePtr basisCache);
+  virtual void scalarDivideBasisValues(Intrepid::FieldContainer<double> &basisValues, BasisCachePtr basisCache);
 
-  virtual void valuesDottedWithTensor(FieldContainer<double> &values,
+  virtual void valuesDottedWithTensor(Intrepid::FieldContainer<double> &values,
                                       FunctionPtr tensorFunctionOfLikeRank,
                                       BasisCachePtr basisCache);
 
@@ -171,10 +170,10 @@ public:
   static FunctionPtr yPart(FunctionPtr vectorFunction);
   static FunctionPtr zPart(FunctionPtr vectorFunction);
 private:
-  void scalarModifyFunctionValues(FieldContainer<double> &values, BasisCachePtr basisCache,
+  void scalarModifyFunctionValues(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache,
                                   FunctionModificationType modType);
 
-  void scalarModifyBasisValues(FieldContainer<double> &values, BasisCachePtr basisCache,
+  void scalarModifyBasisValues(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache,
                                FunctionModificationType modType);
 };
 
@@ -192,7 +191,7 @@ class BoundaryFunction : public Function{
   FunctionPtr getFunction(){
     return _f;
   }
-  void values(FieldContainer<double> &values, BasisCachePtr basisCache){
+  void values(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache){
     _f->values(values,basisCache);
   }
 };
@@ -201,7 +200,7 @@ class BoundaryFunction : public Function{
 class InternalBoundaryFunction : public BoundaryFunction{
  public:
  InternalBoundaryFunction(FunctionPtr f): BoundaryFunction(f){};
-  void values(FieldContainer<double> &values, BasisCachePtr basisCache){
+  void values(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache){
     this->getFunction()->values(values,basisCache);
 
     
@@ -209,7 +208,7 @@ class InternalBoundaryFunction : public BoundaryFunction{
 //    int sideIndex = basisCache->getSideIndex();
 //    vector<GlobalIndexType> cellIDs = basisCache->cellIDs();
 //    int numPoints = values.dimension(1);
-//    FieldContainer<double> points = basisCache->getPhysicalCubaturePoints();
+//    Intrepid::FieldContainer<double> points = basisCache->getPhysicalCubaturePoints();
 //    for (int i = 0;i<cellIDs.size();i++){
 //      //      for (int sideIndex = 0
 //      //      }
@@ -225,7 +224,7 @@ public:
   virtual double value(double x, double y);
   virtual double value(double x, double y, double z);
   virtual double value(double x, double y, double z, double t);
-  virtual void values(FieldContainer<double> &values, BasisCachePtr basisCache);
+  virtual void values(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache);
 };
 typedef Teuchos::RCP<SimpleFunction> SimpleFunctionPtr;
 
@@ -236,7 +235,7 @@ public:
   virtual vector<double> value(double x);
   virtual vector<double> value(double x, double y);
   virtual vector<double> value(double x, double y, double z);
-  virtual void values(FieldContainer<double> &values, BasisCachePtr basisCache);
+  virtual void values(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache);
 };
 typedef Teuchos::RCP<SimpleVectorFunction> SimpleVectorFunctionPtr;
 
@@ -248,7 +247,7 @@ class PolarizedFunction : public Function { // takes a 2D Function of x and y, i
   FunctionPtr _f;
 public:
   PolarizedFunction( FunctionPtr f_of_xAsR_yAsTheta );
-  void values(FieldContainer<double> &values, BasisCachePtr basisCache);
+  void values(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache);
 
   FunctionPtr dx();
   FunctionPtr dy();
@@ -273,11 +272,11 @@ public:
   ConstantScalarFunction(double value, string stringDisplay);
   string displayString();
   bool isZero();
-  void values(FieldContainer<double> &values, BasisCachePtr basisCache);
-  void scalarMultiplyFunctionValues(FieldContainer<double> &values, BasisCachePtr basisCache);
-  void scalarDivideFunctionValues(FieldContainer<double> &values, BasisCachePtr basisCache);
-  void scalarMultiplyBasisValues(FieldContainer<double> &basisValues, BasisCachePtr basisCache);
-  void scalarDivideBasisValues(FieldContainer<double> &basisValues, BasisCachePtr basisCache);
+  void values(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache);
+  void scalarMultiplyFunctionValues(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache);
+  void scalarDivideFunctionValues(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache);
+  void scalarMultiplyBasisValues(Intrepid::FieldContainer<double> &basisValues, BasisCachePtr basisCache);
+  void scalarDivideBasisValues(Intrepid::FieldContainer<double> &basisValues, BasisCachePtr basisCache);
   
   virtual double value(double x);
   virtual double value(double x, double y);
@@ -301,7 +300,7 @@ public:
   FunctionPtr y();
   FunctionPtr z();
 
-  void values(FieldContainer<double> &values, BasisCachePtr basisCache);
+  void values(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache);
   vector<double> value();
 };
 
@@ -310,7 +309,7 @@ class ExactSolutionFunction : public Function { // for scalars, for now
   int _trialID;
 public:
   ExactSolutionFunction(Teuchos::RCP<ExactSolution> exactSolution, int trialID);
-  void values(FieldContainer<double> &values, BasisCachePtr basisCache);
+  void values(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache);
 };
 
 class ProductFunction : public Function {
@@ -319,7 +318,7 @@ private:
   FunctionPtr _f1, _f2;
 public:
   ProductFunction(FunctionPtr f1, FunctionPtr f2);
-  void values(FieldContainer<double> &values, BasisCachePtr basisCache);
+  void values(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache);
   virtual bool boundaryValueOnly();
 
   FunctionPtr x();
@@ -337,7 +336,7 @@ class QuotientFunction : public Function {
   FunctionPtr _f, _scalarDivisor;
 public:
   QuotientFunction(FunctionPtr f, FunctionPtr scalarDivisor);
-  void values(FieldContainer<double> &values, BasisCachePtr basisCache);
+  void values(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache);
   virtual bool boundaryValueOnly();
   FunctionPtr dx();
   FunctionPtr dy();
@@ -361,7 +360,7 @@ public:
   FunctionPtr grad(int numComponents=-1); // gradient of sum is the sum of gradients
   FunctionPtr div();  // divergence of sum is sum of divergences
 
-  void values(FieldContainer<double> &values, BasisCachePtr basisCache);
+  void values(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache);
   bool boundaryValueOnly();
 
   string displayString();
@@ -376,7 +375,7 @@ public:
   FunctionPtr y();
   FunctionPtr z();
 
-  void values(FieldContainer<double> &values, BasisCachePtr basisCache);
+  void values(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache);
   bool boundaryValueOnly();
 
   string displayString();
@@ -391,7 +390,7 @@ public:
   FunctionPtr y();
   FunctionPtr z();
 
-  void values(FieldContainer<double> &values, BasisCachePtr basisCache);
+  void values(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache);
   bool boundaryValueOnly();
 
   string displayString();
@@ -400,7 +399,7 @@ public:
 class hFunction : public Function {
 public:
   virtual double value(double x, double y, double h);
-  void values(FieldContainer<double> &values, BasisCachePtr basisCache);
+  void values(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache);
   string displayString();
 };
 
@@ -416,14 +415,14 @@ public:
 
   bool boundaryValueOnly();
   string displayString();
-  void values(FieldContainer<double> &values, BasisCachePtr basisCache);
+  void values(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache);
 };
 
 class ScalarFunctionOfNormal : public Function { // 2D for now
 public:
   bool boundaryValueOnly();
   virtual double value(double x, double y, double n1, double n2) = 0;
-  void values(FieldContainer<double> &values, BasisCachePtr basisCache);
+  void values(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache);
 };
 
 class SideParityFunction : public Function {
@@ -431,7 +430,7 @@ public:
   SideParityFunction();
   bool boundaryValueOnly();
   string displayString();
-  void values(FieldContainer<double> &values, BasisCachePtr basisCache);
+  void values(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache);
 };
 
 class VectorizedFunction : public Function {
@@ -450,7 +449,7 @@ public:
   VectorizedFunction(const vector< FunctionPtr > &fxns);
   VectorizedFunction(FunctionPtr f1, FunctionPtr f2);
   VectorizedFunction(FunctionPtr f1, FunctionPtr f2, FunctionPtr f3);
-  void values(FieldContainer<double> &values, BasisCachePtr basisCache);
+  void values(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache);
 
   virtual string displayString();
   int dim();

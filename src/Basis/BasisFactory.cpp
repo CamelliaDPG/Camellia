@@ -61,6 +61,9 @@
 
 #include "TensorBasis.h"
 
+using namespace Intrepid;
+using namespace Camellia;
+
 BasisFactory::BasisFactory() {
   _useEnrichedTraces = true;
   _useLobattoForQuadHGRAD = false;
@@ -68,8 +71,6 @@ BasisFactory::BasisFactory() {
   _useLobattoForLineHGRAD = false;
   _useLegendreForLineHVOL = false;
 }
-
-using namespace Camellia;
 
 BasisPtr BasisFactory::getBasis(int H1Order, CellTopoPtr cellTopo, Camellia::EFunctionSpace functionSpaceForSpatialTopology,
                                 int temporalH1Order, Camellia::EFunctionSpace functionSpaceForTemporalTopology) {

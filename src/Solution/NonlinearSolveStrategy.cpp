@@ -8,6 +8,8 @@
 
 #include "NonlinearSolveStrategy.h"
 
+using namespace Camellia;
+
 NonlinearSolveStrategy::NonlinearSolveStrategy(Teuchos::RCP<Solution> backgroundFlow, Teuchos::RCP<Solution> solution, Teuchos::RCP<NonlinearStepSize> stepSize, double relativeEnergyTolerance) {
   _backgroundFlow = backgroundFlow;
   _solution = solution;

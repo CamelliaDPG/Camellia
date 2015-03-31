@@ -30,9 +30,9 @@ public:
   
   void updateCells(const set<GlobalIndexType> &cellIDs);
   
-  void values(FieldContainer<double> &values, BasisCachePtr basisCache);
+  void values(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache);
   
-  bool mapRefCellPointsUsingExactGeometry(FieldContainer<double> &cellPoints, const FieldContainer<double> &refCellPoints, GlobalIndexType cellID);
+  bool mapRefCellPointsUsingExactGeometry(Intrepid::FieldContainer<double> &cellPoints, const Intrepid::FieldContainer<double> &refCellPoints, GlobalIndexType cellID);
   
   FunctionPtr dx();
   FunctionPtr dy();

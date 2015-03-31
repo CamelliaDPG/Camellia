@@ -36,6 +36,7 @@
 #include "MathInnerProduct.h"
 #include "BilinearFormUtility.h"
 
+using namespace Intrepid;
 using namespace Camellia;
 
 void MathInnerProduct::operators(int testID1, int testID2, 

@@ -50,6 +50,9 @@
 
 #include "../../drivers/DPGTests/TestSuite.h"
 
+using namespace Intrepid;
+using namespace Camellia;
+
 LinearTermPtr RieszRep::getFunctional(){
   return _functional;
 }

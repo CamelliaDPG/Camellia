@@ -15,6 +15,7 @@
 
 #include <Teuchos_GlobalMPISession.hpp>
 
+using namespace Intrepid;
 using namespace Camellia;
 
 GDAMaximumRule2D::GDAMaximumRule2D(MeshPtr mesh, VarFactory varFactory, DofOrderingFactoryPtr dofOrderingFactory,

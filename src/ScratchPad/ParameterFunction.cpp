@@ -10,6 +10,9 @@
 
 #include "ParameterFunction.h"
 
+using namespace Intrepid;
+using namespace Camellia;
+
 ParameterFunction::ParameterFunction(double value) : Function(0) {
   setValue(value);
 }

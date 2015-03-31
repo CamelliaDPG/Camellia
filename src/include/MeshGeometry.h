@@ -24,7 +24,7 @@ class MeshGeometry {
   map< Edge, ParametricCurvePtr > _edgeToCurveMap;
   vector< CellTopoPtr > _cellTopos;
   
-  void initializeVerticesFromFieldContainer(const vector<FieldContainer<double> > &vertices) {
+  void initializeVerticesFromFieldContainer(const vector<Intrepid::FieldContainer<double> > &vertices) {
     IndexType numVertices = vertices.size();
     if (numVertices == 0) return;
     int spaceDim = vertices[0].size();

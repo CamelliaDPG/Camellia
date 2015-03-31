@@ -9,6 +9,8 @@
 #include "CGSolver.h"
 #include "AztecOO.h"
 
+using namespace Camellia;
+
 CGSolver::CGSolver(int maxIters, double tol) {
   _maxIters = maxIters;
   _printToConsole = false;

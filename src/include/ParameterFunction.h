@@ -35,7 +35,7 @@ public:
   FunctionPtr grad(int numComponents=-1); // gradient of sum is the sum of gradients
   FunctionPtr div();  // divergence of sum is sum of divergences
   
-  void values(FieldContainer<double> &values, BasisCachePtr basisCache);
+  void values(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache);
   bool boundaryValueOnly();
   
   string displayString();

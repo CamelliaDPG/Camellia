@@ -22,6 +22,9 @@
 
 #include "Intrepid_FunctionSpaceTools.hpp"
 
+using namespace Intrepid;
+using namespace Camellia;
+
 static const double PI  = 3.141592653589793238462;
 
 //  void mapRefCellPointsToParameterSpace(FieldContainer<double> &refPoints);

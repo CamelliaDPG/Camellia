@@ -14,7 +14,7 @@
 class ElementModifier {
 public:
   virtual const vector<unsigned> &modifiedGlobalDofIndices();
-  virtual void getModifiedValues(FieldContainer<double> &modifiedValues, FieldContainer<int> &dofIndicesForModifiedValues, const FieldContainer<double> &localValues);
+  virtual void getModifiedValues(Intrepid::FieldContainer<double> &modifiedValues, Intrepid::FieldContainer<int> &dofIndicesForModifiedValues, const Intrepid::FieldContainer<double> &localValues);
 };
 
 class DofIdentificationModifier : ElementModifier {
@@ -26,7 +26,7 @@ public:
   const vector<unsigned> &modifiedGlobalDofIndices() {
     return _globalDofIndices;
   }
-  void getModifiedValues(FieldContainer<double> &modifiedValues, FieldContainer<int> &dofIndicesForModifiedValues, const FieldContainer<double> &localValues) {
+  void getModifiedValues(Intrepid::FieldContainer<double> &modifiedValues, Intrepid::FieldContainer<int> &dofIndicesForModifiedValues, const Intrepid::FieldContainer<double> &localValues) {
     // two possibilities: shaped like stiffness (localDofs, localDofs) or shaped like load (localDofs)
     for (unsigned dofOrdinal=0; dofOrdinal < _globalDofIndices.size(); dofOrdinal++) {
       dofIndicesForModifiedValues[dofOrdinal] = _globalDofIndices[dofOrdinal];
@@ -67,7 +67,7 @@ public:
   const vector<unsigned> &modifiedGlobalDofIndices() {
     return _globalDofIndices;
   }
-  void getModifiedValues(FieldContainer<double> &modifiedValues, FieldContainer<int> &dofIndicesForModifiedValues, const FieldContainer<double> &localValues) {
+  void getModifiedValues(Intrepid::FieldContainer<double> &modifiedValues, Intrepid::FieldContainer<int> &dofIndicesForModifiedValues, const Intrepid::FieldContainer<double> &localValues) {
     // two possibilities: shaped like stiffness (localDofs, localDofs) or shaped like load (localDofs)
     for (unsigned dofOrdinal=0; dofOrdinal < _globalDofIndices.size(); dofOrdinal++) {
       dofIndicesForModifiedValues[dofOrdinal] = _globalDofIndices[dofOrdinal];

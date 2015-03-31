@@ -280,7 +280,7 @@ class VGPOseenProblem {
   
   Teuchos::RCP< VGPOseenFormulation > _vgpOseenFormulation;
   
-  void init(FunctionPtr Re, FieldContainer<double> &quadPoints, int horizontalCells,
+  void init(FunctionPtr Re, Intrepid::FieldContainer<double> &quadPoints, int horizontalCells,
             int verticalCells, int H1Order, int pToAdd,
             FunctionPtr u1_exact, FunctionPtr u2_exact, FunctionPtr p_exact, bool enrichVelocity, bool scaleSigmaByMu) {
     FunctionPtr mu = 1/Re;
@@ -324,12 +324,12 @@ class VGPOseenProblem {
     _soln->setIP( _vgpOseenFormulation->graphNorm() );
   }
 public:
-  VGPOseenProblem(FunctionPtr Re, FieldContainer<double> &quadPoints, int horizontalCells,
+  VGPOseenProblem(FunctionPtr Re, Intrepid::FieldContainer<double> &quadPoints, int horizontalCells,
                   int verticalCells, int H1Order, int pToAdd,
                   FunctionPtr u1_exact, FunctionPtr u2_exact, FunctionPtr p_exact, bool enrichVelocity, bool scaleSigmaByMu) {
     init(Re,quadPoints,horizontalCells,verticalCells,H1Order,pToAdd,u1_exact,u2_exact,p_exact, enrichVelocity, scaleSigmaByMu);
   }
-  VGPOseenProblem(double Re, FieldContainer<double> &quadPoints, int horizontalCells,
+  VGPOseenProblem(double Re, Intrepid::FieldContainer<double> &quadPoints, int horizontalCells,
                   int verticalCells, int H1Order, int pToAdd,
                   FunctionPtr u1_exact, FunctionPtr u2_exact, FunctionPtr p_exact, bool enrichVelocity, bool scaleSigmaByMu) {
     init(Function::constant(Re),quadPoints,horizontalCells,verticalCells,H1Order,pToAdd,u1_exact,u2_exact,p_exact,enrichVelocity, 

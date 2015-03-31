@@ -11,6 +11,9 @@
 
 #include "CamelliaCellTools.h"
 
+using namespace Intrepid;
+using namespace Camellia;
+
 void LagrangeConstraints::addConstraint(const Constraint &c) {
   _constraints.push_back(c);
 }

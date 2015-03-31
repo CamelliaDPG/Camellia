@@ -84,7 +84,7 @@ public:
   virtual GlobalIndexType cellID(ElementTypePtr elemTypePtr, IndexType cellIndex, PartitionIndexType partitionNumber);
   virtual vector<GlobalIndexType> cellIDsOfElementType(unsigned partitionNumber, ElementTypePtr elemTypePtr);
   const set< GlobalIndexType > &cellsInPartition(PartitionIndexType partitionNumber);
-  FieldContainer<double> cellSideParitiesForCell( GlobalIndexType cellID );
+  Intrepid::FieldContainer<double> cellSideParitiesForCell( GlobalIndexType cellID );
   
   // after calling any of these, must call rebuildLookups
   virtual void didHRefine(const set<GlobalIndexType> &parentCellIDs); // subclasses should call super
@@ -104,7 +104,7 @@ public:
   virtual int getH1Order(GlobalIndexType cellID) = 0;
   int getInitialH1Order();
   
-  bool getPartitions(FieldContainer<GlobalIndexType> &partitions);
+  bool getPartitions(Intrepid::FieldContainer<GlobalIndexType> &partitions);
   PartitionIndexType getPartitionCount();
 
   int getTestOrderEnrichment();
@@ -117,12 +117,12 @@ public:
   virtual set<GlobalIndexType> partitionOwnedGlobalFluxIndices() = 0;
   virtual set<GlobalIndexType> partitionOwnedGlobalTraceIndices() = 0;
   
-  virtual void interpretLocalData(GlobalIndexType cellID, const FieldContainer<double> &localData, FieldContainer<double> &globalData,
-                                  FieldContainer<GlobalIndexType> &globalDofIndices) = 0;
-  void interpretLocalCoefficients(GlobalIndexType cellID, const FieldContainer<double> &localCoefficients, Epetra_MultiVector &globalCoefficients);
-  virtual void interpretLocalBasisCoefficients(GlobalIndexType cellID, int varID, int sideOrdinal, const FieldContainer<double> &basisCoefficients,
-                                               FieldContainer<double> &globalCoefficients, FieldContainer<GlobalIndexType> &globalDofIndices) = 0;
-  virtual void interpretGlobalCoefficients(GlobalIndexType cellID, FieldContainer<double> &localCoefficients, const Epetra_MultiVector &globalCoefficients) = 0;
+  virtual void interpretLocalData(GlobalIndexType cellID, const Intrepid::FieldContainer<double> &localData, Intrepid::FieldContainer<double> &globalData,
+                                  Intrepid::FieldContainer<GlobalIndexType> &globalDofIndices) = 0;
+  void interpretLocalCoefficients(GlobalIndexType cellID, const Intrepid::FieldContainer<double> &localCoefficients, Epetra_MultiVector &globalCoefficients);
+  virtual void interpretLocalBasisCoefficients(GlobalIndexType cellID, int varID, int sideOrdinal, const Intrepid::FieldContainer<double> &basisCoefficients,
+                                               Intrepid::FieldContainer<double> &globalCoefficients, Intrepid::FieldContainer<GlobalIndexType> &globalDofIndices) = 0;
+  virtual void interpretGlobalCoefficients(GlobalIndexType cellID, Intrepid::FieldContainer<double> &localCoefficients, const Epetra_MultiVector &globalCoefficients) = 0;
 
   virtual set<GlobalIndexType> globalDofIndicesForCell(GlobalIndexType cellID) = 0;
   

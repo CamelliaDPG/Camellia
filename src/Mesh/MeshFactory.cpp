@@ -20,6 +20,9 @@
 #include <Epetra_SerialComm.h>
 #endif
 
+using namespace Intrepid;
+using namespace Camellia;
+
 map<int,int> MeshFactory::_emptyIntIntMap;
 
 static ParametricCurvePtr parametricRect(double width, double height, double x0, double y0) {

@@ -40,16 +40,15 @@
 
 #include "Intrepid_FieldContainer.hpp"
 
-using namespace Intrepid;
 using namespace std;
 
 class Constraints {
 public:  
   //given trialID, field container for constraint matrix gives one coeff per point
-  virtual void getConstraints(FieldContainer<double> &physicalPoints, 
-			      FieldContainer<double> &unitNormals,
-			      vector<map<int,FieldContainer<double > > > &constraintCoeffs,
-			      vector<FieldContainer<double > > &constraintValues){};
+  virtual void getConstraints(Intrepid::FieldContainer<double> &physicalPoints, 
+			      Intrepid::FieldContainer<double> &unitNormals,
+			      vector<map<int,Intrepid::FieldContainer<double > > > &constraintCoeffs,
+			      vector<Intrepid::FieldContainer<double > > &constraintValues){};
   // TODO - figure out some way to skip over edges, points, or variables we don't use
 };
 

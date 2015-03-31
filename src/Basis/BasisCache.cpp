@@ -53,6 +53,7 @@
 #include "Teuchos_GlobalMPISession.hpp"
 
 using namespace std;
+using namespace Intrepid;
 using namespace Camellia;
 
 typedef FunctionSpaceTools fst;

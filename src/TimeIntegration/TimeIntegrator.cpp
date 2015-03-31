@@ -8,6 +8,8 @@
 #include "choice.hpp"
 #endif
 
+using namespace Camellia;
+
 TimeIntegrator::TimeIntegrator(BFPtr steadyJacobian, SteadyResidual &steadyResidual, MeshPtr mesh,
     BCPtr bc, IPPtr ip, map<int, FunctionPtr> initialCondition, bool nonlinear) :
   _steadyJacobian(steadyJacobian), _steadyResidual(steadyResidual), _bc(bc), _nonlinear(nonlinear)

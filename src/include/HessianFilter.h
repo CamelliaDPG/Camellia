@@ -15,7 +15,7 @@ class HessianFilter : public LocalStiffnessMatrixFilter {
     _hessianBF = hessianBF;
   };
   
-  virtual void filter(FieldContainer<double> &localStiffnessMatrix, FieldContainer<double> &localRHSVector,
+  virtual void filter(Intrepid::FieldContainer<double> &localStiffnessMatrix, Intrepid::FieldContainer<double> &localRHSVector,
                       BasisCachePtr basisCache, Teuchos::RCP<Mesh> mesh, Teuchos::RCP<BC> bc) ;
 };
 

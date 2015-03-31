@@ -9,6 +9,7 @@
 #include "CellTopology.h"
 #include "CamelliaDebugUtility.h"
 
+using namespace Intrepid;
 using namespace Camellia;
 
 // define our static map:

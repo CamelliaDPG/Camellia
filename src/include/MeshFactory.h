@@ -38,7 +38,7 @@ public:
                                  double width=1.0, double height=1.0, int horizontalElements=1, int verticalElements=1, bool divideIntoTriangles=false,
                                  double x0=0.0, double y0=0.0, vector<PeriodicBCPtr> periodicBCs=vector<PeriodicBCPtr>());
   
-  static MeshPtr quadMesh(BFPtr bf, int H1Order, FieldContainer<double> &quadNodes, int pToAddTest=2);
+  static MeshPtr quadMesh(BFPtr bf, int H1Order, Intrepid::FieldContainer<double> &quadNodes, int pToAddTest=2);
   
   static MeshTopologyPtr quadMeshTopology(double width=1.0, double height=1.0, int horizontalElements=1, int verticalElements=1, bool divideIntoTriangles=false,
                                           double x0=0.0, double y0=0.0, vector<PeriodicBCPtr> periodicBCs=vector<PeriodicBCPtr>());
@@ -64,19 +64,19 @@ public:
 
   
   // legacy methods that originally belonged to Mesh:
-  static MeshPtr buildQuadMesh(const FieldContainer<double> &quadBoundaryPoints,
+  static MeshPtr buildQuadMesh(const Intrepid::FieldContainer<double> &quadBoundaryPoints,
                                int horizontalElements, int verticalElements,
                                BFPtr bilinearForm,
                                int H1Order, int pTest, bool triangulate=false, bool useConformingTraces=true,
                                map<int,int> trialOrderEnhancements=_emptyIntIntMap,
                                map<int,int> testOrderEnhancements=_emptyIntIntMap);
   
-  static MeshPtr buildQuadMeshHybrid(const FieldContainer<double> &quadBoundaryPoints,
+  static MeshPtr buildQuadMeshHybrid(const Intrepid::FieldContainer<double> &quadBoundaryPoints,
                                      int horizontalElements, int verticalElements,
                                      BFPtr bilinearForm,
                                      int H1Order, int pTest, bool useConformingTraces);
   
-  static void quadMeshCellIDs(FieldContainer<int> &cellIDs, int horizontalElements, int verticalElements, bool useTriangles);
+  static void quadMeshCellIDs(Intrepid::FieldContainer<int> &cellIDs, int horizontalElements, int verticalElements, bool useTriangles);
 
   static MeshPtr readMesh(string filePath, BFPtr bilinearForm, int H1Order, int pToAdd);
   

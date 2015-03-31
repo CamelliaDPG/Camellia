@@ -13,6 +13,8 @@
 #include "EpetraExt_RowMatrixOut.h"
 #include "EpetraExt_MultiVectorOut.h"
 
+using namespace Camellia;
+
 const bool DIAGONAL_SCALING_DEFAULT = false;
 
 GMGSolver::GMGSolver(BCPtr zeroBCs, MeshPtr coarseMesh, IPPtr coarseIP,

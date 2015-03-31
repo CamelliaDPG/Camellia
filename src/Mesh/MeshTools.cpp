@@ -21,6 +21,9 @@
 
 #include "MeshPartitionPolicy.h"
 
+using namespace Intrepid;
+using namespace Camellia;
+
 class InducedMeshPartitionPolicy : public MeshPartitionPolicy {
   // (note that the induced partition policy will break if either mesh is refined, since the cellID map will change...)
   

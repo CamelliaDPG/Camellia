@@ -27,6 +27,9 @@
 
 #include "Intrepid_CellTools.hpp"
 
+using namespace Intrepid;
+using namespace Camellia;
+
 // for adaptive quadrature
 struct CacheInfo {
   ElementTypePtr elemType;

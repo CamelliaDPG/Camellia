@@ -26,6 +26,9 @@
 #include "Solution.h"
 #include "RHS.h"
 
+using namespace Intrepid;
+using namespace Camellia;
+
 Epetra_Map StandardAssembler::getPartMap(){
   int rank = Teuchos::GlobalMPISession::getRank();
 #ifdef HAVE_MPI

@@ -18,7 +18,7 @@
 #include "Epetra_DataAccess.h"
 
 class SerialDenseMatrixUtility {
-  static void transposeSquareMatrix(FieldContainer<double> &A) {
+  static void transposeSquareMatrix(Intrepid::FieldContainer<double> &A) {
     int rows = A.dimension(0), cols = A.dimension(1);
     TEUCHOS_TEST_FOR_EXCEPTION(rows != cols, std::invalid_argument, "matrix not square");
     for (int i=0; i<rows; i++) {
@@ -31,7 +31,7 @@ class SerialDenseMatrixUtility {
   }
   
 public:
-  static int solveSystem(FieldContainer<double> &x, FieldContainer<double> &A, FieldContainer<double> &b, bool useATranspose = false) {
+  static int solveSystem(Intrepid::FieldContainer<double> &x, Intrepid::FieldContainer<double> &A, Intrepid::FieldContainer<double> &b, bool useATranspose = false) {
     // solves Ax = b, where
     // A = (N,N)
     // b = N
@@ -95,7 +95,7 @@ public:
     return 0;
   }
 
-  static void solveSystemMultipleRHS(FieldContainer<double> &x, FieldContainer<double> &A, FieldContainer<double> &b, bool useATranspose = false){
+  static void solveSystemMultipleRHS(Intrepid::FieldContainer<double> &x, Intrepid::FieldContainer<double> &A, Intrepid::FieldContainer<double> &b, bool useATranspose = false){
     // solves Ax = b, where
     // A = (N,N)
     // b = (N,M)
@@ -175,7 +175,7 @@ public:
     }
   }
   
-  static void jacobiScaleMatrix(FieldContainer<double> &A) {
+  static void jacobiScaleMatrix(Intrepid::FieldContainer<double> &A) {
     int N = A.dimension(0);
     if ((N != A.dimension(1)) || (A.rank() != 2)) {
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "badly shaped matrix");
@@ -191,7 +191,7 @@ public:
     }
   }
 
-  static double estimate2NormConditionNumber(FieldContainer<double> &A, bool ignoreZeroEigenvalues = true) {
+  static double estimate2NormConditionNumber(Intrepid::FieldContainer<double> &A, bool ignoreZeroEigenvalues = true) {
     Epetra_SerialDenseSVD svd;
     
     int N = A.dimension(0);
@@ -233,7 +233,7 @@ public:
   }
   
   
-  static double estimate1NormConditionNumber(FieldContainer<double> &A, bool useATranspose = false) {
+  static double estimate1NormConditionNumber(Intrepid::FieldContainer<double> &A, bool useATranspose = false) {
     Epetra_SerialDenseSolver solver;
     
     int N = A.dimension(0);

@@ -27,6 +27,9 @@
 
 #include "RHS.h"
 
+using namespace Intrepid;
+using namespace Camellia;
+
 CondensedDofInterpreter::CondensedDofInterpreter(Mesh* mesh, IPPtr ip, RHSPtr rhs, LagrangeConstraints* lagrangeConstraints, const set<int> &fieldIDsToExclude, bool storeLocalStiffnessMatrices) : DofInterpreter(Teuchos::rcp(mesh,false)) {
   _mesh = mesh;
   _ip = ip;

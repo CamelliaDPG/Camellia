@@ -18,7 +18,7 @@ class SpatiallyFilteredFunction : public Function {
   
 public:
   SpatiallyFilteredFunction(FunctionPtr f, SpatialFilterPtr sf);
-  virtual void values(FieldContainer<double> &values, BasisCachePtr basisCache);
+  virtual void values(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache);
   bool boundaryValueOnly();
   
   FunctionPtr curl();

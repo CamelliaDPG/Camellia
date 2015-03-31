@@ -28,6 +28,9 @@
 #include "Epetra_SerialComm.h"
 #endif
 
+using namespace Intrepid;
+using namespace Camellia;
+
 ZoltanMeshPartitionPolicy::ZoltanMeshPartitionPolicy(){
   string partitionerName = "HSFC"; // was "BLOCK"
   string debug_level = "0"; // was "10"

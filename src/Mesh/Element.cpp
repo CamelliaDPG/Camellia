@@ -40,6 +40,9 @@
 #include "CamelliaCellTools.h"
 #include "Mesh.h"
 
+using namespace Intrepid;
+using namespace Camellia;
+
 // constructor:
 Element::Element(Mesh* mesh, GlobalIndexType cellID, Teuchos::RCP< ElementType > elemTypePtr, IndexType cellIndex, GlobalIndexType globalCellIndex) {
   _mesh = mesh;

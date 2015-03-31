@@ -20,6 +20,7 @@
 
 #include "CellTopology.h"
 
+using namespace Intrepid;
 using namespace Camellia;
 
 HDF5Exporter::HDF5Exporter(MeshPtr mesh, string outputDirName, string outputDirSuperPath) : _mesh(mesh), _dirName(outputDirName),

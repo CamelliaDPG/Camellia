@@ -385,7 +385,7 @@ class VGPNavierStokesProblem {
     _solnIncrement->setIP( _vgpNavierStokesFormulation->graphNorm() );
   }
   
-  void init(FunctionPtr Re, FieldContainer<double> &quadPoints, int horizontalCells,
+  void init(FunctionPtr Re, Intrepid::FieldContainer<double> &quadPoints, int horizontalCells,
             int verticalCells, int H1Order, int pToAdd,
             FunctionPtr u1_0, FunctionPtr u2_0, FunctionPtr f1, FunctionPtr f2, bool useEnrichedVelocity) {
     _neglectFluxesOnRHS = true;
@@ -430,7 +430,7 @@ class VGPNavierStokesProblem {
     _solnIncrement->setRHS( _vgpNavierStokesFormulation->rhs(f1,f2, _neglectFluxesOnRHS) );
     _solnIncrement->setIP( _vgpNavierStokesFormulation->graphNorm() );
   }
-  void init(FunctionPtr Re, FieldContainer<double> &quadPoints, int horizontalCells,
+  void init(FunctionPtr Re, Intrepid::FieldContainer<double> &quadPoints, int horizontalCells,
              int verticalCells, int H1Order, int pToAdd,
              FunctionPtr u1_exact, FunctionPtr u2_exact, FunctionPtr p_exact, bool enrichVelocity) {
     _neglectFluxesOnRHS = false; // main reason we don't neglect fluxes is because exact solution isn't yet set up to handle that
@@ -485,28 +485,28 @@ public:
     // note that this constructor leaves BC enforcement up to the user
   }
   
-  VGPNavierStokesProblem(FunctionPtr Re, FieldContainer<double> &quadPoints, int horizontalCells,
+  VGPNavierStokesProblem(FunctionPtr Re, Intrepid::FieldContainer<double> &quadPoints, int horizontalCells,
                          int verticalCells, int H1Order, int pToAdd,
                          FunctionPtr u1_0, FunctionPtr u2_0, FunctionPtr f1, FunctionPtr f2,
                          bool enrichVelocity = false) {
     init(Re,quadPoints,horizontalCells,verticalCells,H1Order,pToAdd,u1_0,u2_0,f1,f2,enrichVelocity);
     // this constructor enforces Dirichlet BCs on the velocity at each iterate, and disregards accumulated trace and flux data
   }
-  VGPNavierStokesProblem(double Re, FieldContainer<double> &quadPoints, int horizontalCells,
+  VGPNavierStokesProblem(double Re, Intrepid::FieldContainer<double> &quadPoints, int horizontalCells,
                          int verticalCells, int H1Order, int pToAdd,
                          FunctionPtr u1_0, FunctionPtr u2_0, FunctionPtr f1, FunctionPtr f2,
                          bool enrichVelocity = false) {
     init(Function::constant(Re),quadPoints,horizontalCells,verticalCells,H1Order,pToAdd,u1_0,u2_0,f1,f2, enrichVelocity);
     // this constructor enforces Dirichlet BCs on the velocity at each iterate, and disregards accumulated trace and flux data
   }
-  VGPNavierStokesProblem(FunctionPtr Re, FieldContainer<double> &quadPoints, int horizontalCells,
+  VGPNavierStokesProblem(FunctionPtr Re, Intrepid::FieldContainer<double> &quadPoints, int horizontalCells,
                          int verticalCells, int H1Order, int pToAdd,
                          FunctionPtr u1_exact, FunctionPtr u2_exact, FunctionPtr p_exact, bool enrichVelocity) {
     init(Re,quadPoints,horizontalCells,verticalCells,H1Order,pToAdd,u1_exact,u2_exact,p_exact, enrichVelocity);
     // this constructor enforces Dirichlet BCs on the velocity on first iterate, and zero BCs on later (does *not* disregard accumulated trace and flux data)
   }
             
-  VGPNavierStokesProblem(double Re, FieldContainer<double> &quadPoints, int horizontalCells,
+  VGPNavierStokesProblem(double Re, Intrepid::FieldContainer<double> &quadPoints, int horizontalCells,
                          int verticalCells, int H1Order, int pToAdd,
                          FunctionPtr u1_exact, FunctionPtr u2_exact, FunctionPtr p_exact, bool enrichVelocity) {
     init(Function::constant(Re),quadPoints,horizontalCells,verticalCells,H1Order,pToAdd,u1_exact,u2_exact,p_exact,enrichVelocity);
@@ -570,7 +570,7 @@ public:
         for (set<int>::iterator cellIDIt = cellIDs.begin(); cellIDIt != cellIDs.end(); cellIDIt++) {
           int cellID = *cellIDIt;
           int numSides = _mesh->getElement(cellID)->numSides();
-          FieldContainer<double> solnCoeffs;
+          Intrepid::FieldContainer<double> solnCoeffs;
           for (int sideIndex=0; sideIndex<numSides; sideIndex++) {
             for (int i=0; i<fluxIDs.size(); i++) {
               int fluxID = fluxIDs[i];

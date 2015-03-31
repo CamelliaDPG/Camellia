@@ -9,6 +9,8 @@
 #include "AztecOO.h"
 #include "SchwarzSolver.h"
 
+using namespace Camellia;
+
 SchwarzSolver::SchwarzSolver(int overlapLevel, int maxIters, double tol) {
   _overlapLevel = overlapLevel;
   _maxIters = maxIters;

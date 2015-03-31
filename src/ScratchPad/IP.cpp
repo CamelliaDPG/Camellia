@@ -15,6 +15,7 @@
 #include "BasisCache.h"
 #include "CellTopology.h"
 
+using namespace Intrepid;
 using namespace Camellia;
 
 IP::IP() {

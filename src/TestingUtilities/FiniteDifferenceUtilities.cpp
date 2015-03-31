@@ -3,6 +3,8 @@
 
 #include "RHS.h"
 
+using namespace Camellia;
+
 double FiniteDifferenceUtilities::finiteDifferenceGradient(MeshPtr mesh, RieszRepPtr residual, SolutionPtr backgroundSoln, int dofIndex){
   residual->computeRieszRep();
   double fx =  residual->getNorm();

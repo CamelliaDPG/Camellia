@@ -70,10 +70,10 @@ public:
   int globalCellIndex() { return _globalCellIndex; }
   void setGlobalCellIndex(int globalCellIndex) { _globalCellIndex = globalCellIndex; }
   int numSides();
-  void getSidePointsInNeighborRefCoords(FieldContainer<double> &neighborRefPoints, int sideIndex,
-                                        const FieldContainer<double> &refPoints);
-  void getSidePointsInParentRefCoords(FieldContainer<double> &parentRefPoints, int sideIndex, 
-                                      const FieldContainer<double> &childRefPoints);
+  void getSidePointsInNeighborRefCoords(Intrepid::FieldContainer<double> &neighborRefPoints, int sideIndex,
+                                        const Intrepid::FieldContainer<double> &refPoints);
+  void getSidePointsInParentRefCoords(Intrepid::FieldContainer<double> &parentRefPoints, int sideIndex, 
+                                      const Intrepid::FieldContainer<double> &childRefPoints);
   ElementPtr getNeighbor(int & mySideIndexInNeighbor, int neighborsSideIndexInMe);
   int getNeighborCellID(int sideIndex);
   int getSideIndexInNeighbor(int sideIndex);

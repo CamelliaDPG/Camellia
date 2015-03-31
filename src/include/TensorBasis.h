@@ -16,8 +16,6 @@
 
 #include "Basis.h"
 
-typedef Intrepid::EOperator EOperator;
-
 namespace Camellia {
 
   /** \class Camellia::TensorBasis

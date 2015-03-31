@@ -13,6 +13,8 @@
 #include "MPIWrapper.h"
 #include "CamelliaDebugUtility.h"
 
+using namespace Camellia;
+
 RefinementStrategy::RefinementStrategy( SolutionPtr solution, double relativeEnergyThreshold, double min_h,
                                         int max_p, bool preferPRefinements) {
   _solution = solution;

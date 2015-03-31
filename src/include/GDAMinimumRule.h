@@ -36,7 +36,7 @@ class GDAMinimumRule : public GlobalDofAssignment {
   map<GlobalIndexType, GlobalIndexType> _globalCellDofOffsets; // (cellID -> first global dof index for that cell)
   GlobalIndexType _partitionDofOffset; // add to partition-local dof indices to get a global dof index
   GlobalIndexType _partitionDofCount; // how many dofs belong to the local partition
-  FieldContainer<IndexType> _partitionDofCounts; // how many dofs belong to each MPI rank.
+  Intrepid::FieldContainer<IndexType> _partitionDofCounts; // how many dofs belong to each MPI rank.
   GlobalIndexType _globalDofCount;
   
   set<IndexType> _partitionFluxIndexOffsets;
@@ -56,7 +56,7 @@ class GDAMinimumRule : public GlobalDofAssignment {
   vector<unsigned> allBasisDofOrdinalsVector(int basisCardinality);
   
   void filterSubBasisConstraintData(set<unsigned> &basisDofOrdinals,vector<GlobalIndexType> &globalDofOrdinals,
-                                    FieldContainer<double> &constraintMatrixSideInterior, FieldContainer<bool> &processedDofs,
+                                    Intrepid::FieldContainer<double> &constraintMatrixSideInterior, Intrepid::FieldContainer<bool> &processedDofs,
                                     DofOrderingPtr trialOrdering, VarPtr var, int sideOrdinal = 0);
   
   typedef vector< SubBasisDofMapperPtr > BasisMap;
@@ -106,11 +106,11 @@ public:
   set<GlobalIndexType> partitionOwnedGlobalTraceIndices();
   set<GlobalIndexType> partitionOwnedIndicesForVariables(set<int> varIDs);
   
-  void interpretLocalData(GlobalIndexType cellID, const FieldContainer<double> &localData, FieldContainer<double> &globalData,
-                          FieldContainer<GlobalIndexType> &globalDofIndices);
-  void interpretLocalBasisCoefficients(GlobalIndexType cellID, int varID, int sideOrdinal, const FieldContainer<double> &basisCoefficients,
-                               FieldContainer<double> &globalCoefficients, FieldContainer<GlobalIndexType> &globalDofIndices);
-  void interpretGlobalCoefficients(GlobalIndexType cellID, FieldContainer<double> &localCoefficients, const Epetra_MultiVector &globalCoefficients);
+  void interpretLocalData(GlobalIndexType cellID, const Intrepid::FieldContainer<double> &localData, Intrepid::FieldContainer<double> &globalData,
+                          Intrepid::FieldContainer<GlobalIndexType> &globalDofIndices);
+  void interpretLocalBasisCoefficients(GlobalIndexType cellID, int varID, int sideOrdinal, const Intrepid::FieldContainer<double> &basisCoefficients,
+                               Intrepid::FieldContainer<double> &globalCoefficients, Intrepid::FieldContainer<GlobalIndexType> &globalDofIndices);
+  void interpretGlobalCoefficients(GlobalIndexType cellID, Intrepid::FieldContainer<double> &localCoefficients, const Epetra_MultiVector &globalCoefficients);
   IndexType localDofCount(); // local to the MPI node
 
   PartitionIndexType partitionForGlobalDofIndex( GlobalIndexType globalDofIndex );

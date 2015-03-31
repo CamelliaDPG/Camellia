@@ -49,8 +49,6 @@
 
 #include "Epetra_Map.h"
 
-using namespace Intrepid;
-
 class Boundary {
   set< pair< GlobalIndexType, unsigned > > _boundaryElements; // first arg is cellID, second arg is sideOrdinal
   
@@ -59,10 +57,10 @@ class Boundary {
 public:
   Boundary();
   void setMesh(Mesh* mesh);
-  void bcsToImpose(FieldContainer<GlobalIndexType> &globalIndices, FieldContainer<double> &globalValues,
+  void bcsToImpose(Intrepid::FieldContainer<GlobalIndexType> &globalIndices, Intrepid::FieldContainer<double> &globalValues,
                    BC &bc, set<GlobalIndexType>& globalIndexFilter,
                    DofInterpreter* dofInterpreter, const Epetra_Map *globalDofMap);
-  void bcsToImpose(FieldContainer<GlobalIndexType> &globalIndices, FieldContainer<double> &globalValues, BC &bc,
+  void bcsToImpose(Intrepid::FieldContainer<GlobalIndexType> &globalIndices, Intrepid::FieldContainer<double> &globalValues, BC &bc,
                    DofInterpreter* dofInterpreter, const Epetra_Map *globalDofMap);
   //! Determine values to impose on a single cell.
   /*!

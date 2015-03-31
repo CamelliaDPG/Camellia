@@ -50,10 +50,10 @@ public:
                  vector<Camellia::EOperator> &testOp1,
                  vector<Camellia::EOperator> &testOp2);
   
-  void applyInnerProductData(FieldContainer<double> &testValues1,
-                             FieldContainer<double> &testValues2,
+  void applyInnerProductData(Intrepid::FieldContainer<double> &testValues1,
+                             Intrepid::FieldContainer<double> &testValues2,
                      int testID1, int testID2, int operatorIndex,
-                     const FieldContainer<double>& physicalPoints);
+                     const Intrepid::FieldContainer<double>& physicalPoints);
 };
 
 #endif

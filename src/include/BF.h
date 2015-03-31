@@ -31,7 +31,7 @@ protected:
   bool _useQRSolveForOptimalTestFunctions;
   bool _warnAboutZeroRowsAndColumns;
   
-  bool checkSymmetry(FieldContainer<double> &innerProductMatrix);
+  bool checkSymmetry(Intrepid::FieldContainer<double> &innerProductMatrix);
 public:
   BF( bool isLegacySubclass ); // legacy version; new code should use a VarFactory version of the constructor
   
@@ -45,16 +45,16 @@ public:
   
   // applyBilinearFormData() methods are all legacy methods
   virtual void applyBilinearFormData(int trialID, int testID,
-                                     FieldContainer<double> &trialValues, FieldContainer<double> &testValues,
-                                     const FieldContainer<double> &points) {
+                                     Intrepid::FieldContainer<double> &trialValues, Intrepid::FieldContainer<double> &testValues,
+                                     const Intrepid::FieldContainer<double> &points) {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "You must override either some version of applyBilinearFormData!");
   }
   
-  virtual void applyBilinearFormData(FieldContainer<double> &trialValues, FieldContainer<double> &testValues,
+  virtual void applyBilinearFormData(Intrepid::FieldContainer<double> &trialValues, Intrepid::FieldContainer<double> &testValues,
                                      int trialID, int testID, int operatorIndex,
-                                     const FieldContainer<double> &points); // default implementation calls operatorIndex-less version
+                                     const Intrepid::FieldContainer<double> &points); // default implementation calls operatorIndex-less version
   
-  virtual void applyBilinearFormData(FieldContainer<double> &trialValues, FieldContainer<double> &testValues,
+  virtual void applyBilinearFormData(Intrepid::FieldContainer<double> &trialValues, Intrepid::FieldContainer<double> &testValues,
                                      int trialID, int testID, int operatorIndex,
                                      BasisCachePtr basisCache);
   // default implementation calls BasisCache-less version
@@ -75,29 +75,29 @@ public:
   
   string displayString();
   
-  virtual void localStiffnessMatrixAndRHS(FieldContainer<double> &localStiffness, FieldContainer<double> &rhsVector,
+  virtual void localStiffnessMatrixAndRHS(Intrepid::FieldContainer<double> &localStiffness, Intrepid::FieldContainer<double> &rhsVector,
                                           IPPtr ip, BasisCachePtr ipBasisCache,
                                           RHSPtr rhs,  BasisCachePtr basisCache);
   
-  virtual int optimalTestWeights(FieldContainer<double> &optimalTestWeights, FieldContainer<double> &innerProductMatrix,
-                                 ElementTypePtr elemType, FieldContainer<double> &cellSideParities,
+  virtual int optimalTestWeights(Intrepid::FieldContainer<double> &optimalTestWeights, Intrepid::FieldContainer<double> &innerProductMatrix,
+                                 ElementTypePtr elemType, Intrepid::FieldContainer<double> &cellSideParities,
                                  BasisCachePtr stiffnessBasisCache);
   
   void printTrialTestInteractions();
   
-  void stiffnessMatrix(FieldContainer<double> &stiffness, Teuchos::RCP<ElementType> elemType,
-                       FieldContainer<double> &cellSideParities, Teuchos::RCP<BasisCache> basisCache);
-  void stiffnessMatrix(FieldContainer<double> &stiffness, Teuchos::RCP<ElementType> elemType,
-		       FieldContainer<double> &cellSideParities, Teuchos::RCP<BasisCache> basisCache,
+  void stiffnessMatrix(Intrepid::FieldContainer<double> &stiffness, Teuchos::RCP<ElementType> elemType,
+                       Intrepid::FieldContainer<double> &cellSideParities, Teuchos::RCP<BasisCache> basisCache);
+  void stiffnessMatrix(Intrepid::FieldContainer<double> &stiffness, Teuchos::RCP<ElementType> elemType,
+		       Intrepid::FieldContainer<double> &cellSideParities, Teuchos::RCP<BasisCache> basisCache,
 		       bool checkForZeroCols);
   
   // legacy version of stiffnessMatrix():
-  virtual void stiffnessMatrix(FieldContainer<double> &stiffness, DofOrderingPtr trialOrdering,
-                               DofOrderingPtr testOrdering, FieldContainer<double> &cellSideParities,
+  virtual void stiffnessMatrix(Intrepid::FieldContainer<double> &stiffness, DofOrderingPtr trialOrdering,
+                               DofOrderingPtr testOrdering, Intrepid::FieldContainer<double> &cellSideParities,
                                BasisCachePtr basisCache);
   
-  void bubnovStiffness(FieldContainer<double> &stiffness, Teuchos::RCP<ElementType> elemType,
-		       FieldContainer<double> &cellSideParities, Teuchos::RCP<BasisCache> basisCache);
+  void bubnovStiffness(Intrepid::FieldContainer<double> &stiffness, Teuchos::RCP<ElementType> elemType,
+		       Intrepid::FieldContainer<double> &cellSideParities, Teuchos::RCP<BasisCache> basisCache);
   
   LinearTermPtr testFunctional(SolutionPtr trialSolution, bool excludeBoundaryTerms=false, bool overrideMeshCheck=false);
   

@@ -12,6 +12,9 @@
 #include "Mesh.h"
 #include "BasisCache.h"
 
+using namespace Intrepid;
+using namespace Camellia;
+
 
 IPSwitcher::IPSwitcher(IPPtr ip1, IPPtr ip2, double minH){
   _ip1 = ip1;

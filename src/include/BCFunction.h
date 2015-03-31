@@ -8,17 +8,15 @@
 
 #include "Function.h"
 
-using namespace Intrepid;
-
 class BCFunction : public Function {
-  FieldContainer<bool> _imposeHere;
+  Intrepid::FieldContainer<bool> _imposeHere;
   int _varID;
   BCPtr _bc;
   bool _isTrace; // if false, it's a flux...
   FunctionPtr _spatiallyFilteredFunction;
 public:
   BCFunction(BCPtr bc, int varID, bool isTrace, FunctionPtr spatiallyFilteredFunction, int rank);
-  void values(FieldContainer<double> &values, BasisCachePtr basisCache);
+  void values(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache);
   bool imposeOnCell(int cellIndex);
   int varID();
   bool isTrace();

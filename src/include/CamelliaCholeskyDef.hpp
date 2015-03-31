@@ -1,9 +1,9 @@
 #include "cholesky.hpp"
 
 template<class Scalar>
-int Cholesky<Scalar>::solve(FieldContainer<double> &X_fc,
-                             const FieldContainer<double> &A_fc,
-                             const FieldContainer<double> &B_fc,
+int Cholesky<Scalar>::solve(Intrepid::FieldContainer<double> &X_fc,
+                             const Intrepid::FieldContainer<double> &A_fc,
+                             const Intrepid::FieldContainer<double> &B_fc,
                              bool transposeBandX) {
   // shapes:
   // A: (C,N,N)

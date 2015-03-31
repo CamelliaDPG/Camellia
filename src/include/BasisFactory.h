@@ -98,7 +98,7 @@ public:
   BasisPtr getNodalBasisForCellTopology(unsigned cellTopoKey);
   
   Camellia::MultiBasisPtr getMultiBasis(vector< BasisPtr > &bases);
-  PatchBasisPtr getPatchBasis(BasisPtr parent, FieldContainer<double> &patchNodesInParentRefCell, unsigned cellTopoKey = shards::Line<2>::key);
+  PatchBasisPtr getPatchBasis(BasisPtr parent, Intrepid::FieldContainer<double> &patchNodesInParentRefCell, unsigned cellTopoKey = shards::Line<2>::key);
 
   BasisPtr addToPolyOrder(BasisPtr basis, int pToAdd);
   BasisPtr setPolyOrder(BasisPtr basis, int polyOrderToSet);

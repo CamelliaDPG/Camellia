@@ -19,12 +19,12 @@ class SubBasisDofPermutationMapper : public SubBasisDofMapper {
 public:
   SubBasisDofPermutationMapper(const set<unsigned> &basisDofOrdinalFilter, const vector<GlobalIndexType> &globalDofOrdinals, bool negate=false);
   const set<unsigned> &basisDofOrdinalFilter();
-  FieldContainer<double> mapData(bool transposeConstraint, FieldContainer<double> &localData, bool applyOnLeftOnly = false);
-  void mapDataIntoGlobalContainer(const FieldContainer<double> &wholeBasisData, const map<GlobalIndexType, unsigned> &globalIndexToOrdinal,
-                                  bool fittableDofsOnly, const set<GlobalIndexType> &fittableDofIndices, FieldContainer<double> &globalData);
+  Intrepid::FieldContainer<double> mapData(bool transposeConstraint, Intrepid::FieldContainer<double> &localData, bool applyOnLeftOnly = false);
+  void mapDataIntoGlobalContainer(const Intrepid::FieldContainer<double> &wholeBasisData, const map<GlobalIndexType, unsigned> &globalIndexToOrdinal,
+                                  bool fittableDofsOnly, const set<GlobalIndexType> &fittableDofIndices, Intrepid::FieldContainer<double> &globalData);
   
   vector<GlobalIndexType> mappedGlobalDofOrdinals();
-  FieldContainer<double> getConstraintMatrix();
+  Intrepid::FieldContainer<double> getConstraintMatrix();
   
   SubBasisDofMapperPtr negatedDofMapper(); // this mapper, but negated.
 };

@@ -55,6 +55,9 @@
 
 #include "CamelliaDebugUtility.h"
 
+using namespace Intrepid;
+using namespace Camellia;
+
 Boundary::Boundary() {
   _mesh = NULL;
 }

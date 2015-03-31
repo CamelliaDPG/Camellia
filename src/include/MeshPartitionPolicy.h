@@ -9,11 +9,6 @@
 #ifndef Camellia_MeshPartitionPolicy_h
 #define Camellia_MeshPartitionPolicy_h
 
-// Intrepid includes
-#include "Intrepid_FieldContainer.hpp"
-
-using namespace Intrepid;
-
 #include "Mesh.h"
 
 class MeshPartitionPolicy {

@@ -23,7 +23,7 @@ public:
   CellCharacteristicFunction(set<GlobalIndexType> cellIDs) : Function(0) {
     _cellIDs = cellIDs;
   }
-  void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
+  void values(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache) {
     CHECK_VALUES_RANK(values);
     vector<GlobalIndexType> cellIDs = basisCache->cellIDs();
     int numCells = values.dimension(0);

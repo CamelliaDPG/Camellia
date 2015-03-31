@@ -12,6 +12,8 @@
 
 #include "GDAMinimumRule.h"
 
+using namespace Camellia;
+
 bool GDAMinimumRuleConstraints::constraintEntryExists(AnnotatedEntity &subcellInfo) {
   if (_constraintEntries.find(subcellInfo) != _constraintEntries.end()) {
     return _constraintEntries[subcellInfo].get() != NULL;

@@ -17,6 +17,9 @@
 
 #include "SerialDenseWrapper.h"
 
+using namespace Intrepid;
+using namespace Camellia;
+
 BFPtr BF::bf(VarFactory &vf) {
   return Teuchos::rcp( new BF(vf) );
 }

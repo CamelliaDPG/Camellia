@@ -26,7 +26,7 @@ public:
   bool boundaryValueOnly();
   void setOverrideMeshCheck(bool value, bool dontWarn=false);
   void importCellData(std::vector<GlobalIndexType> cells);
-  void values(FieldContainer<double> &values, BasisCachePtr basisCache);
+  void values(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache);
   static map<int, FunctionPtr > functionMap( vector< VarPtr > varPtrs, SolutionPtr soln);
   string displayString();
 };

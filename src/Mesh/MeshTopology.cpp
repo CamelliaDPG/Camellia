@@ -18,6 +18,7 @@
 
 #include "CellTopology.h"
 
+using namespace Intrepid;
 using namespace Camellia;
 
 void MeshTopology::init(unsigned spaceDim) {

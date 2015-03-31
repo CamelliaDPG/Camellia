@@ -18,6 +18,8 @@
 #include "Teuchos_GlobalMPISession.hpp"
 #include "Teuchos_Array.hpp"
 
+using namespace Intrepid;
+
 void MPIWrapper::allGather(FieldContainer<int> &allValues, int myValue) {
   FieldContainer<int> myValueFC(1);
   myValueFC[0] = myValue;

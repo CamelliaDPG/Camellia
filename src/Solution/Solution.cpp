@@ -112,6 +112,7 @@
 #include <Epetra_SerialComm.h>
 #endif
 
+using namespace Intrepid;
 using namespace Camellia;
 
 double Solution::conditionNumberEstimate( Epetra_LinearProblem & problem ) {

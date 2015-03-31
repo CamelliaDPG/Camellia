@@ -14,6 +14,9 @@
 
 #include "CamelliaCellTools.h"
 
+using namespace Intrepid;
+using namespace Camellia;
+
 PenaltyMethodFilter::PenaltyMethodFilter(Teuchos::RCP<Constraints> constraints){
   _constraints = constraints;
 }

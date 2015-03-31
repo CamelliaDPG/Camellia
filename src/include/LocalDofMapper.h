@@ -32,14 +32,14 @@ class LocalDofMapper { // maps a whole trial ordering
   int _sideOrdinalToMap;
   int _varIDToMap;
   
-  void filterData(const vector<int> dofIndices, const FieldContainer<double> &data, FieldContainer<double> &filteredData);
-  void addSubBasisMapVectorContribution(int varID, int sideIndex, BasisMap basisMap, const FieldContainer<double> &localData, FieldContainer<double> &globalData, bool fittableGlobalDofsOnly);
-//  void addSubBasisMapMatrixContribution(int varID, int sideOrdinal, BasisMap basisMap, const FieldContainer<double> &localData, FieldContainer<double> &globalData);
-  void addReverseSubBasisMapVectorContribution(int varID, int sideOrdinal, BasisMap basisMap, const FieldContainer<double> &globalData, FieldContainer<double> &localData);
-//  void addReverseSubBasisMapMatrixContribution(int varID, int sideOrdinal, BasisMap basisMap, const FieldContainer<double> &globalData, FieldContainer<double> &localData);
-  FieldContainer<double> mapLocalDataMatrix(const FieldContainer<double> &localData, bool fittableGlobalDofsOnly);
+  void filterData(const vector<int> dofIndices, const Intrepid::FieldContainer<double> &data, Intrepid::FieldContainer<double> &filteredData);
+  void addSubBasisMapVectorContribution(int varID, int sideIndex, BasisMap basisMap, const Intrepid::FieldContainer<double> &localData, Intrepid::FieldContainer<double> &globalData, bool fittableGlobalDofsOnly);
+//  void addSubBasisMapMatrixContribution(int varID, int sideOrdinal, BasisMap basisMap, const Intrepid::FieldContainer<double> &localData, Intrepid::FieldContainer<double> &globalData);
+  void addReverseSubBasisMapVectorContribution(int varID, int sideOrdinal, BasisMap basisMap, const Intrepid::FieldContainer<double> &globalData, Intrepid::FieldContainer<double> &localData);
+//  void addReverseSubBasisMapMatrixContribution(int varID, int sideOrdinal, BasisMap basisMap, const Intrepid::FieldContainer<double> &globalData, Intrepid::FieldContainer<double> &localData);
+  Intrepid::FieldContainer<double> mapLocalDataMatrix(const Intrepid::FieldContainer<double> &localData, bool fittableGlobalDofsOnly);
   
-  FieldContainer<double> _localCoefficientsFitMatrix; // used for fitLocalCoefficients
+  Intrepid::FieldContainer<double> _localCoefficientsFitMatrix; // used for fitLocalCoefficients
   
 public:
   LocalDofMapper(DofOrderingPtr dofOrdering, map< int, BasisMap > volumeMaps,
@@ -49,12 +49,12 @@ public:
                  set<GlobalIndexType> unmappedGlobalDofOrdinals = set<GlobalIndexType>(), // extra dof ordinals which aren't mapped as such but should be included in the mapper (used in GMGOperator)
                  int varIDToMap = -1, int sideOrdinalToMap = -1);
   
-  FieldContainer<double> mapLocalData(const FieldContainer<double> &localData, bool fittableGlobalDofsOnly);
-  void mapLocalDataSide(const FieldContainer<double> &localData, FieldContainer<double> &mappedData, bool fittableGlobalDofsOnly, int sideOrdinal);
-  void mapLocalDataVolume(const FieldContainer<double> &localData, FieldContainer<double> &mappedData, bool fittableGlobalDofsOnly);
+  Intrepid::FieldContainer<double> mapLocalData(const Intrepid::FieldContainer<double> &localData, bool fittableGlobalDofsOnly);
+  void mapLocalDataSide(const Intrepid::FieldContainer<double> &localData, Intrepid::FieldContainer<double> &mappedData, bool fittableGlobalDofsOnly, int sideOrdinal);
+  void mapLocalDataVolume(const Intrepid::FieldContainer<double> &localData, Intrepid::FieldContainer<double> &mappedData, bool fittableGlobalDofsOnly);
   
-  FieldContainer<double> fitLocalCoefficients(const FieldContainer<double> &localCoefficients); // solves normal equations (if the localCoefficients are in the range of the global-to-local operator, then the returned coefficients will be the preimage of localCoefficients under that operator)
-  FieldContainer<double> mapGlobalCoefficients(const FieldContainer<double> &globalCoefficients);
+  Intrepid::FieldContainer<double> fitLocalCoefficients(const Intrepid::FieldContainer<double> &localCoefficients); // solves normal equations (if the localCoefficients are in the range of the global-to-local operator, then the returned coefficients will be the preimage of localCoefficients under that operator)
+  Intrepid::FieldContainer<double> mapGlobalCoefficients(const Intrepid::FieldContainer<double> &globalCoefficients);
   
   vector<GlobalIndexType> fittableGlobalIndices();
   vector<GlobalIndexType> globalIndices();

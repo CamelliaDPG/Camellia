@@ -23,6 +23,9 @@
 
 #include "CondensedDofInterpreter.h"
 
+using namespace Intrepid;
+using namespace Camellia;
+
 GlobalDofAssignment::GlobalDofAssignment(MeshPtr mesh, VarFactory varFactory,
                                          DofOrderingFactoryPtr dofOrderingFactory, MeshPartitionPolicyPtr partitionPolicy,
                                          unsigned initialH1OrderTrial, unsigned testOrderEnhancement, bool enforceConformityLocally) : DofInterpreter(mesh) {

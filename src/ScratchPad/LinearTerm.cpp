@@ -21,6 +21,9 @@
 
 #include "Intrepid_FunctionSpaceTools.hpp"
 
+using namespace Intrepid;
+using namespace Camellia;
+
 typedef pair< FunctionPtr, VarPtr > LinearSummand;
 
 bool linearSummandIsBoundaryValueOnly(LinearSummand &ls) {

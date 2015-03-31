@@ -17,13 +17,10 @@
 
 #include "LinearTerm.h"
 
-using namespace Intrepid;
-using namespace std;
-
 struct SubBasisReconciliationWeights {
-  FieldContainer<double> weights; // indices are (fine, coarse)
-  set<int> fineOrdinals;
-  set<int> coarseOrdinals;
+  Intrepid::FieldContainer<double> weights; // indices are (fine, coarse)
+  std::set<int> fineOrdinals;
+  std::set<int> coarseOrdinals;
 };
 
 class BasisReconciliation {
@@ -36,13 +33,13 @@ class BasisReconciliation {
   // cached values:
   typedef unsigned Permutation;
   typedef pair< Camellia::Basis<>*, Camellia::Basis<>*> BasisPair; // fineBasis first.
-  map< pair<BasisPair, Permutation>, FieldContainer<double> > _simpleReconciliationWeights; // simple: no sides involved
+  map< pair<BasisPair, Permutation>, Intrepid::FieldContainer<double> > _simpleReconciliationWeights; // simple: no sides involved
   map< pair< pair< SideBasisRestriction, SideBasisRestriction >, Permutation >, SubBasisReconciliationWeights > _sideReconciliationWeights;
 private:
   typedef pair< BasisPair, RefinementBranch > RefinedBasisPair; // fineBasis (the one on the refined element) is first in the BasisPair
   typedef pair< pair< SideBasisRestriction, SideBasisRestriction >, RefinementBranch > SideRefinedBasisPair;
   typedef pair< pair< SubcellBasisRestriction, SubcellBasisRestriction >, RefinementBranch > SubcellRefinedBasisPair;
-  map< pair<RefinedBasisPair, Permutation>, FieldContainer<double> > _simpleReconcilationWeights_h;
+  map< pair<RefinedBasisPair, Permutation>, Intrepid::FieldContainer<double> > _simpleReconcilationWeights_h;
   map< pair< SideRefinedBasisPair, Permutation> , SubBasisReconciliationWeights > _sideReconcilationWeights_h;
   
   // this is the only map that actually needs to remain, after the code simplification described above...
@@ -70,9 +67,9 @@ private:
                                                              unsigned coarseDomainOrdinalInRefinementRoot, // we use the coarserBasis's domain topology to determine the domain's space dimension
                                                              unsigned coarseSubcellPermutation);
   
-  static FieldContainer<double> filterBasisValues(const FieldContainer<double> &basisValues, set<int> &filter);
+  static Intrepid::FieldContainer<double> filterBasisValues(const Intrepid::FieldContainer<double> &basisValues, std::set<int> &filter);
   
-  static SubBasisReconciliationWeights filterToInclude(set<int> &rowOrdinals, set<int> &colOrdinals, SubBasisReconciliationWeights &weights);
+  static SubBasisReconciliationWeights filterToInclude(std::set<int> &rowOrdinals, std::set<int> &colOrdinals, SubBasisReconciliationWeights &weights);
 public:
   BasisReconciliation(bool cacheResults = true) { _cacheResults = cacheResults; }
 
@@ -126,7 +123,7 @@ public:
   
   static SubBasisReconciliationWeights sumWeights(SubBasisReconciliationWeights aWeights, SubBasisReconciliationWeights bWeights);
   
-  static set<int> interiorDofOrdinalsForBasis(BasisPtr basis);
+  static std::set<int> interiorDofOrdinalsForBasis(BasisPtr basis);
   
   static set<unsigned> internalDofOrdinalsForFinerBasis(BasisPtr finerBasis, RefinementBranch refinements); // which degrees of freedom in the finer basis have empty support on the boundary of the coarser basis's reference element? -- these are the ones for which the constrained weights are determined in computeConstrainedWeights.
   static set<unsigned> internalDofOrdinalsForFinerBasis(BasisPtr finerBasis, RefinementBranch refinements, unsigned subcdim, unsigned subcord);
@@ -135,7 +132,7 @@ public:
   
 public:
   // !! this method exposed publicly primarily for testing purposes.
-  static void mapFineSubcellPointsToCoarseDomain(FieldContainer<double> &coarseDomainPoints, const FieldContainer<double> &fineSubcellPoints,
+  static void mapFineSubcellPointsToCoarseDomain(Intrepid::FieldContainer<double> &coarseDomainPoints, const Intrepid::FieldContainer<double> &fineSubcellPoints,
                                                   unsigned fineSubcellDimension,
                                                   unsigned fineSubcellOrdinalInFineDomain,
                                                   unsigned fineDomainDim,
