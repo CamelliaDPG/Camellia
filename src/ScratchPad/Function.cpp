@@ -903,41 +903,57 @@ double Function::integralOfJump(Teuchos::RCP<Mesh> mesh, GlobalIndexType cellID,
   return sideParity * cellIntegral(0);
 }
 
-double Function::integrate(Teuchos::RCP<Mesh> mesh, int cubatureDegreeEnrichment, bool testVsTest, bool requireSideCache,
+double Function::integrate(MeshPtr mesh, int cubatureDegreeEnrichment, bool testVsTest, bool requireSideCache,
                            bool spatialSidesOnly) {
   double integral = 0;
 
-  int myPartition = Teuchos::GlobalMPISession::getRank();
-  vector< ElementTypePtr > elementTypes = mesh->elementTypes(myPartition);
-
-  for (vector< ElementTypePtr >::iterator typeIt = elementTypes.begin(); typeIt != elementTypes.end(); typeIt++) {
-    ElementTypePtr elemType = *typeIt;
-    BasisCachePtr basisCache = Teuchos::rcp( new BasisCache( elemType, mesh, testVsTest, cubatureDegreeEnrichment) ); // all elements of same type
-    vector< ElementPtr > cells = mesh->elementsOfType(myPartition, elemType);
-
-    int numCells = cells.size();
-    vector<GlobalIndexType> cellIDs;
-    for (IndexType cellIndex = 0; cellIndex < numCells; cellIndex++) {
-      cellIDs.push_back( cells[cellIndex]->cellID() );
-    }
-    basisCache->setPhysicalCellNodes(mesh->physicalCellNodes(elemType), cellIDs, this->boundaryValueOnly() || requireSideCache);
-//    cout << "Function::integrate: basisCache has " << basisCache->getPhysicalCubaturePoints().dimension(1) << " cubature points per cell.\n";
-    FieldContainer<double> cellIntegrals(numCells);
+  set<GlobalIndexType> cellIDs = mesh->cellIDsInPartition();
+  for (set<GlobalIndexType>::iterator cellIDIt = cellIDs.begin(); cellIDIt != cellIDs.end(); cellIDIt++) {
+    BasisCachePtr basisCache = BasisCache::basisCacheForCell(mesh, *cellIDIt, testVsTest, cubatureDegreeEnrichment);
+    
     if ( this->boundaryValueOnly() ) {
+      ElementTypePtr elemType = mesh->getElementType(*cellIDIt);
       int numSides = elemType->cellTopoPtr->getSideCount();
-
-      for (int i=0; i<numSides; i++) {
-        if (spatialSidesOnly && !elemType->cellTopoPtr->sideIsSpatial(i)) continue; // skip non-spatial sides if spatialSidesOnly is true
-        this->integrate(cellIntegrals, basisCache->getSideBasisCache(i), true);
+      
+      for (int sideOrdinal=0; sideOrdinal<numSides; sideOrdinal++) {
+        if (spatialSidesOnly && !elemType->cellTopoPtr->sideIsSpatial(sideOrdinal)) continue; // skip non-spatial sides if spatialSidesOnly is true
+        integral += this->integrate(basisCache->getSideBasisCache(sideOrdinal));
       }
     } else {
-      this->integrate(cellIntegrals, basisCache);
-    }
-//    cout << "cellIntegrals:\n" << cellIntegrals;
-    for (IndexType cellIndex = 0; cellIndex < numCells; cellIndex++) {
-      integral += cellIntegrals(cellIndex);
+      integral += this->integrate(basisCache);
     }
   }
+//  int myPartition = Teuchos::GlobalMPISession::getRank();
+//  vector< ElementTypePtr > elementTypes = mesh->elementTypes(myPartition);
+//
+//  for (vector< ElementTypePtr >::iterator typeIt = elementTypes.begin(); typeIt != elementTypes.end(); typeIt++) {
+//    ElementTypePtr elemType = *typeIt;
+//    BasisCachePtr basisCache = Teuchos::rcp( new BasisCache( elemType, mesh, testVsTest, cubatureDegreeEnrichment) ); // all elements of same type
+//    vector< ElementPtr > cells = mesh->elementsOfType(myPartition, elemType);
+//
+//    int numCells = cells.size();
+//    vector<GlobalIndexType> cellIDs;
+//    for (IndexType cellIndex = 0; cellIndex < numCells; cellIndex++) {
+//      cellIDs.push_back( cells[cellIndex]->cellID() );
+//    }
+//    basisCache->setPhysicalCellNodes(mesh->physicalCellNodes(elemType), cellIDs, this->boundaryValueOnly() || requireSideCache);
+////    cout << "Function::integrate: basisCache has " << basisCache->getPhysicalCubaturePoints().dimension(1) << " cubature points per cell.\n";
+//    FieldContainer<double> cellIntegrals(numCells);
+//    if ( this->boundaryValueOnly() ) {
+//      int numSides = elemType->cellTopoPtr->getSideCount();
+//
+//      for (int i=0; i<numSides; i++) {
+//        if (spatialSidesOnly && !elemType->cellTopoPtr->sideIsSpatial(i)) continue; // skip non-spatial sides if spatialSidesOnly is true
+//        this->integrate(cellIntegrals, basisCache->getSideBasisCache(i), true);
+//      }
+//    } else {
+//      this->integrate(cellIntegrals, basisCache);
+//    }
+////    cout << "cellIntegrals:\n" << cellIntegrals;
+//    for (IndexType cellIndex = 0; cellIndex < numCells; cellIndex++) {
+//      integral += cellIntegrals(cellIndex);
+//    }
+//  }
 
   return MPIWrapper::sum(integral);
 }
@@ -983,7 +999,7 @@ void Function::valuesDottedWithTensor(FieldContainer<double> &values,
                      "values container should have size (numCells, numPoints" );
   int numCells = values.dimension(0);
   int numPoints = values.dimension(1);
-  int spaceDim = basisCache->getPhysicalCubaturePoints().dimension(2);
+  int spaceDim = basisCache->getSpaceDim();
 
   values.initialize(0.0);
 
@@ -1034,7 +1050,7 @@ void Function::scalarModifyFunctionValues(FieldContainer<double> &values, BasisC
   TEUCHOS_TEST_FOR_EXCEPTION( rank() != 0, std::invalid_argument, "scalarModifyFunctionValues only supported for scalar functions" );
   int numCells = values.dimension(0);
   int numPoints = values.dimension(1);
-  int spaceDim = basisCache->getPhysicalCubaturePoints().dimension(2);
+  int spaceDim = basisCache->getSpaceDim();
 
   FieldContainer<double> scalarValues(numCells,numPoints);
   this->values(scalarValues,basisCache);
@@ -1069,7 +1085,7 @@ void Function::scalarModifyBasisValues(FieldContainer<double> &values, BasisCach
   int numFields = values.dimension(1);
   int numPoints = values.dimension(2);
 
-  int spaceDim = basisCache->getPhysicalCubaturePoints().dimension(2);
+  int spaceDim = basisCache->getSpaceDim();
 
   FieldContainer<double> scalarValues(numCells,numPoints);
   this->values(scalarValues,basisCache);
@@ -1838,7 +1854,7 @@ public:
     CHECK_VALUES_RANK(values);
     int numCells = basisCache->getPhysicalCubaturePoints().dimension(0);
     int numPoints = basisCache->getPhysicalCubaturePoints().dimension(1);
-    int spaceDim = basisCache->getPhysicalCubaturePoints().dimension(2);
+    int spaceDim = basisCache->getSpaceDim();
     FieldContainer<double> fArgPoints(numCells,numPoints,spaceDim);
     if (spaceDim==1) { // special case: arg_g is then reasonably scalar-valued
       fArgPoints.resize(numCells,numPoints);
