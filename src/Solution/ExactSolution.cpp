@@ -126,7 +126,7 @@ void ExactSolution::L2NormOfError(FieldContainer<double> &errorSquaredPerCell, S
   
   int numCells = basisCache->getPhysicalCubaturePoints().dimension(0);
   int numCubPoints = basisCache->getPhysicalCubaturePoints().dimension(1);
-  int spaceDim = basisCache->getPhysicalCubaturePoints().dimension(2);
+  int spaceDim = basisCache->getSpaceDim();
   
   Teuchos::Array<int> dimensions;
   dimensions.push_back(numCells);
