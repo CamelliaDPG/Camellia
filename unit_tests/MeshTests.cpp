@@ -169,8 +169,8 @@ namespace {
     PoissonFormulation form(spaceDim,conformingTraces);
     int H1Order = 2;
     vector<int> elemCounts(2);
-    elemCounts[0] = 2;
-    elemCounts[1] = 3;
+    elemCounts[0] = 3;
+    elemCounts[1] = 2;
     
     vector<double> dims(2);
     dims[0] = 1.2;
@@ -186,5 +186,11 @@ namespace {
     
     // delete the file we created
     remove(meshFile.c_str());
+    
+    // just to confirm that we can manipulate the loaded mesh:
+    set<GlobalIndexType> cellsToRefine;
+    cellsToRefine.insert(0);
+    loadedMesh->pRefine(cellsToRefine);
+    
   }
 } // namespace

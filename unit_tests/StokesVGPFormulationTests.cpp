@@ -7,6 +7,7 @@
 //
 
 #include "StokesVGPFormulation.h"
+#include "GDAMinimumRule.h"
 #include "MeshFactory.h"
 #include "Solution.h"
 #include "HDF5Exporter.h"
@@ -321,6 +322,44 @@ namespace {
     TEST_COMPARE(u2_diff_l2, <, tol);
     TEST_COMPARE(sigma1_diff_l2, <, tol);
     TEST_COMPARE(sigma2_diff_l2, <, tol);
+  }
+  
+  TEUCHOS_UNIT_TEST( StokesVGPFormulation, SaveAndLoad ) {
+    int spaceDim = 2;
+    vector<double> dimensions(spaceDim); // 1x2 domain
+    dimensions[0] = 1.0;
+    dimensions[1] = 2.0;
+    
+    vector<int> elementCounts(spaceDim); // 3 x 2 mesh
+    elementCounts[0] = 3;
+    elementCounts[1] = 2;
+    vector<double> x0(spaceDim,0.0);
+    
+    double mu = 1.0;
+    bool useConformingTraces = true;
+    StokesVGPFormulation form(spaceDim, useConformingTraces, mu);
+    
+    MeshTopologyPtr meshTopo = MeshFactory::rectilinearMeshTopology(dimensions, elementCounts, x0);
+
+    int fieldPolyOrder = 1, delta_k = 1;
+    
+    form.initializeSolution(meshTopo, fieldPolyOrder, delta_k);
+
+    set<GlobalIndexType> cellsToRefine;
+    cellsToRefine.insert(0);
+    form.solution()->mesh()->pRefine(cellsToRefine);
+
+    string savePrefix = "stokesBackstep";
+    form.save(savePrefix);
+    
+    StokesVGPFormulation loadedForm(spaceDim,useConformingTraces, mu);
+    loadedForm.initializeSolution(savePrefix,fieldPolyOrder,delta_k);
+    
+    GDAMinimumRule* minRule = dynamic_cast<GDAMinimumRule*> (loadedForm.solution()->mesh()->globalDofAssignment().get());
+    
+    minRule->printConstraintInfo(0);
+    
+    loadedForm.solution()->mesh()->pRefine(cellsToRefine);
   }
   
 } // namespace
