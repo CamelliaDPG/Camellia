@@ -55,6 +55,11 @@ void ZoltanMeshPartitionPolicy::partitionMesh(Mesh *mesh, PartitionIndexType num
   
   MeshTopologyPtr meshTopology = mesh->getTopology();
   
+  if (meshTopology->getSpaceDim() > 3) {
+    cout << "WARNING: in ZoltanMeshPartitionPolicy, spaceDim > 3, but HSFC only supports spaceDim <= 3.  For the moment, as a stopgap, all cells will be placed on rank 0.  This should be changed!\n";
+    numNodes = 1;
+  }
+  
   if (numNodes>1){
 #ifdef HAVE_MPI
     Zoltan *zz = new Zoltan(MPI::COMM_WORLD);
