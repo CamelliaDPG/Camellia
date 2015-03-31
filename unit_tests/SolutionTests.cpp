@@ -144,35 +144,39 @@ namespace {
     
     double tol = 1e-15;
     
-    GlobalIndexType cellID = 0;
-    DofOrderingPtr trialOrder = mesh->getElementType(cellID)->trialOrderPtr;
-    
-    BasisCachePtr basisCache = BasisCache::basisCacheForCell(mesh, cellID);
-    
-    for (int sideOrdinal = 0; sideOrdinal < spaceTimeTopo->getSideCount(); sideOrdinal++) {
-      CellTopoPtr sideTopo = spaceTimeTopo->getSide(sideOrdinal);
-      BasisPtr sideBasis = trialOrder->getBasis(uhat->ID(), sideOrdinal);
-      BasisCachePtr sideBasisCache = basisCache->getSideBasisCache(sideOrdinal);
+    set<GlobalIndexType> cellIDs = mesh->cellIDsInPartition();
+
+    for (set<GlobalIndexType>::iterator cellIDIt = cellIDs.begin(); cellIDIt != cellIDs.end(); cellIDIt++) {
+      GlobalIndexType cellID = *cellIDIt;
+      DofOrderingPtr trialOrder = mesh->getElementType(cellID)->trialOrderPtr;
       
-      int numCells = 1;
-      basisCoefficientsExpected.resize(numCells,sideBasis->getCardinality());
+      BasisCachePtr basisCache = BasisCache::basisCacheForCell(mesh, cellID);
       
-      Projector::projectFunctionOntoBasis(basisCoefficientsExpected, f, sideBasis, sideBasisCache);
-      
-      FieldContainer<double> basisCoefficientsActual(sideBasis->getCardinality());
-      
-      soln->solnCoeffsForCellID(basisCoefficientsActual,cellID,uhat->ID(),sideOrdinal);
-      
-      for (int basisOrdinal=0; basisOrdinal < sideBasis->getCardinality(); basisOrdinal++) {
-        double diff = basisCoefficientsActual[basisOrdinal] - basisCoefficientsExpected[basisOrdinal];
-        TEST_COMPARE(abs(diff),<,tol);
+      for (int sideOrdinal = 0; sideOrdinal < spaceTimeTopo->getSideCount(); sideOrdinal++) {
+        CellTopoPtr sideTopo = spaceTimeTopo->getSide(sideOrdinal);
+        BasisPtr sideBasis = trialOrder->getBasis(uhat->ID(), sideOrdinal);
+        BasisCachePtr sideBasisCache = basisCache->getSideBasisCache(sideOrdinal);
+        
+        int numCells = 1;
+        basisCoefficientsExpected.resize(numCells,sideBasis->getCardinality());
+        
+        Projector::projectFunctionOntoBasis(basisCoefficientsExpected, f, sideBasis, sideBasisCache);
+        
+        FieldContainer<double> basisCoefficientsActual(sideBasis->getCardinality());
+        
+        soln->solnCoeffsForCellID(basisCoefficientsActual,cellID,uhat->ID(),sideOrdinal);
+        
+        for (int basisOrdinal=0; basisOrdinal < sideBasis->getCardinality(); basisOrdinal++) {
+          double diff = basisCoefficientsActual[basisOrdinal] - basisCoefficientsExpected[basisOrdinal];
+          TEST_COMPARE(abs(diff),<,tol);
+        }
       }
+//      { // DEBUGGING:
+//        cout << "CellID " << cellID << " info:\n";
+//        FieldContainer<double> localCoefficients = soln->allCoefficientsForCellID(cellID);
+//        Camellia::printLabeledDofCoefficients(vf, trialOrder, localCoefficients);
+//      }
     }
-//    { // DEBUGGING:
-//      cout << "CellID " << cellID << " info:\n";
-//      FieldContainer<double> localCoefficients = soln->allCoefficientsForCellID(cellID);
-//      Camellia::printLabeledDofCoefficients(vf, trialOrder, localCoefficients);
-//    }
   }
 
   TEUCHOS_UNIT_TEST( Solution, ProjectTraceOnOneElementTensorMesh1D )
@@ -289,7 +293,7 @@ namespace {
       TEST_COMPARE(err_L2, <, tol);
       
       // pointwise comparison
-      set<GlobalIndexType> cellIDs = spaceTimeMesh->getActiveCellIDs();
+      set<GlobalIndexType> cellIDs = spaceTimeMesh->cellIDsInPartition();
       for (set<GlobalIndexType>::iterator cellIDIt = cellIDs.begin(); cellIDIt != cellIDs.end(); cellIDIt++) {
         GlobalIndexType cellID = *cellIDIt;
         BasisCachePtr basisCache = BasisCache::basisCacheForCell(spaceTimeMesh, cellID);
