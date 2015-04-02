@@ -388,7 +388,7 @@ namespace {
             actualValue = 0.0;
           }
           
-          if (abs(expectedValue > tol) ) {
+          if (abs(expectedValue) > tol ) {
             TEST_FLOATING_EQUALITY(expectedValue, actualValue, tol);
           } else {
             TEST_ASSERT( abs(actualValue) < tol );
