@@ -38,13 +38,14 @@ static ParametricCurvePtr parametricRect(double width, double height, double x0,
     Epetra_SerialComm Comm;
     EpetraExt::HDF5 hdf5(Comm);
     hdf5.Open(filename);
-    int vertexIndicesSize, topoKeysSize, verticesSize, trialOrderEnhancementsSize, testOrderEnhancementsSize, histArraySize;
+    int vertexIndicesSize, topoKeysSize, verticesSize, trialOrderEnhancementsSize, testOrderEnhancementsSize, histArraySize, H1OrderSize;
     hdf5.Read("Mesh", "vertexIndicesSize", vertexIndicesSize);
     hdf5.Read("Mesh", "topoKeysSize", topoKeysSize);
     hdf5.Read("Mesh", "verticesSize", verticesSize);
     hdf5.Read("Mesh", "trialOrderEnhancementsSize", trialOrderEnhancementsSize);
     hdf5.Read("Mesh", "testOrderEnhancementsSize", testOrderEnhancementsSize);
     hdf5.Read("Mesh", "histArraySize", histArraySize);
+    hdf5.Read("Mesh", "H1OrderSize", H1OrderSize);
 
     int topoKeysIntSize = topoKeysSize * sizeof(Camellia::CellTopologyKey) / sizeof(int);
     
@@ -65,19 +66,19 @@ static ParametricCurvePtr parametricRect(double width, double height, double x0,
     } else {
     }
     
-    int dimension, H1Order, deltaP;
+    int dimension, deltaP;
     vector<int> vertexIndices(vertexIndicesSize);
     vector<Camellia::CellTopologyKey> topoKeys(topoKeysSize);
     vector<int> trialOrderEnhancementsVec(trialOrderEnhancementsSize);
     vector<int> testOrderEnhancementsVec(testOrderEnhancementsSize);
     vector<double> vertices(verticesSize);
     vector<int> histArray(histArraySize);
+    vector<int> H1Order(H1OrderSize);
     string GDARule;
     hdf5.Read("Mesh", "dimension", dimension);
     hdf5.Read("Mesh", "vertexIndices", H5T_NATIVE_INT, vertexIndicesSize, &vertexIndices[0]);
     hdf5.Read("Mesh", "topoKeys", H5T_NATIVE_INT, topoKeysIntSize, &topoKeys[0]);
     hdf5.Read("Mesh", "vertices", H5T_NATIVE_DOUBLE, verticesSize, &vertices[0]);
-    hdf5.Read("Mesh", "H1Order", H1Order);
     hdf5.Read("Mesh", "deltaP", deltaP);
     hdf5.Read("Mesh", "GDARule", GDARule);
     if (GDARule == "min")
@@ -90,6 +91,8 @@ static ParametricCurvePtr parametricRect(double width, double height, double x0,
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Invalid GDA");
     hdf5.Read("Mesh", "trialOrderEnhancements", H5T_NATIVE_INT, trialOrderEnhancementsSize, &trialOrderEnhancementsVec[0]);
     hdf5.Read("Mesh", "testOrderEnhancements", H5T_NATIVE_INT, testOrderEnhancementsSize, &testOrderEnhancementsVec[0]);
+    hdf5.Read("Mesh", "H1Order", H5T_NATIVE_INT, H1OrderSize, &H1Order[0]);
+
     if (histArraySize > 0) hdf5.Read("Mesh", "refinementHistory", H5T_NATIVE_INT, histArraySize, &histArray[0]);
     hdf5.Close();
 
@@ -468,6 +471,12 @@ MeshTopologyPtr MeshFactory::quadMeshTopology(double width, double height, int h
   
   MeshGeometryPtr geometry = Teuchos::rcp( new MeshGeometry(vertices, allElementVertices, cellTopos));
   return Teuchos::rcp( new MeshTopology(geometry, periodicBCs) );
+}
+
+MeshPtr MeshFactory::hemkerMesh(double meshWidth, double meshHeight, double cylinderRadius, // cylinder is centered in quad mesh.
+                                BFPtr bilinearForm, int H1Order, int pToAddTest)
+{
+  return shiftedHemkerMesh(-meshWidth/2, meshWidth/2, meshHeight, cylinderRadius, bilinearForm, H1Order, pToAddTest);
 }
 
 MeshPtr MeshFactory::intervalMesh(BFPtr bf, double xLeft, double xRight, int numElements, int H1Order, int delta_k) {
@@ -1119,3 +1128,17 @@ MeshPtr MeshFactory::shiftedHemkerMesh(double xLeft, double xRight, double meshH
   mesh->setEdgeToCurveMap(globalEdgeToCurveMap);
   return mesh;
 }
+
+MeshPtr MeshFactory::spaceTimeMesh(MeshTopologyPtr spatialMeshTopology, double t0, double t1,
+                                   BFPtr bf, int spatialH1Order, int temporalH1Order, int pToAdd) {
+  MeshTopologyPtr meshTopology = spaceTimeMeshTopology(spatialMeshTopology, t0, t1);
+//  MeshPtr mesh = Teuchos::rcp( new Mesh (meshTopology, bf, spatialH1Order, pToAdd, trialOrderEnhancements, testOrderEnhancements) );
+  // TODO: finish writing this!
+}
+
+MeshTopologyPtr MeshFactory::spaceTimeMeshTopology(MeshTopologyPtr spatialMeshTopology, double t0, double t1) {
+  // TODO: write this!
+}
+
+
+
