@@ -1129,15 +1129,132 @@ MeshPtr MeshFactory::shiftedHemkerMesh(double xLeft, double xRight, double meshH
   return mesh;
 }
 
+// TODO: test this!
 MeshPtr MeshFactory::spaceTimeMesh(MeshTopologyPtr spatialMeshTopology, double t0, double t1,
                                    BFPtr bf, int spatialH1Order, int temporalH1Order, int pToAdd) {
   MeshTopologyPtr meshTopology = spaceTimeMeshTopology(spatialMeshTopology, t0, t1);
-//  MeshPtr mesh = Teuchos::rcp( new Mesh (meshTopology, bf, spatialH1Order, pToAdd, trialOrderEnhancements, testOrderEnhancements) );
-  // TODO: finish writing this!
+  
+  vector<int> H1Order(2);
+  H1Order[0] = spatialH1Order;
+  H1Order[1] = temporalH1Order;
+  
+  MeshPtr mesh = Teuchos::rcp( new Mesh (meshTopology, bf, H1Order, pToAdd) );
+  
+  return mesh;
 }
 
+// TODO: test this!
 MeshTopologyPtr MeshFactory::spaceTimeMeshTopology(MeshTopologyPtr spatialMeshTopology, double t0, double t1) {
-  // TODO: write this!
+  // we allow spatialMeshTopology to have been refined; we start with a coarse space-time topology matching the root spatial topology,
+  // and then refine accordingly...
+  
+  // (For now, though, we do make the assumption that all refinements are regular (isotropic).)
+  
+  int spaceDim = spatialMeshTopology->getSpaceDim();
+  int spaceTimeDim = spaceDim + 1;
+  
+  MeshTopologyPtr rootSpatialTopology = spatialMeshTopology->getRootMeshTopology();
+  MeshTopologyPtr spaceTimeTopology = Teuchos::rcp( new MeshTopology( spaceTimeDim ));
+  
+  /* 
+   This is something of a conceit, but it's nice if the vertex indices in the space-time mesh topology are
+   in the following relationship to the spatialMeshTopology:
+   
+   If v is a vertexIndex in spatialMeshTopology and spatialMeshTopology has N vertices, then
+   - (v,t0) has vertexIndex v in spaceTimeMeshTopology, and
+   - (v,t1) has vertexIndex v+N in spaceTimeMeshTopology.
+  */
+  
+  IndexType N = spatialMeshTopology->getEntityCount(0);
+  vector<double> spaceTimeVertex(spaceTimeDim);
+  FieldContainer<double> timeValues(2,1);
+  timeValues[0] = t0;
+  timeValues[1] = t1;
+  for (int i=0; i<timeValues.size(); i++) {
+    for (IndexType vertexIndex=0; vertexIndex<N; vertexIndex++) {
+      const vector<double> *spaceVertex = &spatialMeshTopology->getVertex(vertexIndex);
+      for (int d=0; d<spaceDim; d++) {
+        spaceTimeVertex[d] = (*spaceVertex)[d];
+      }
+      spaceTimeVertex[spaceDim] = timeValues(i,0);
+      spaceTimeTopology->addVertex(spaceTimeVertex);
+    }
+  }
+  
+  set<IndexType> cellIndices = rootSpatialTopology->getRootCellIndices();
+  int tensorialDegree = 1;
+  vector< FieldContainer<double> > componentNodes(2);
+  componentNodes[1] = timeValues;
+  FieldContainer<double> spatialCellNodes;
+  FieldContainer<double> spaceTimeCellNodes;
+  
+  map<IndexType,IndexType> cellIDMap; // from space-time ID to corresponding spatial ID
+  
+  for (set<IndexType>::iterator cellIt = cellIndices.begin(); cellIt != cellIndices.end(); cellIt++) {
+    IndexType cellIndex = *cellIt;
+    CellPtr spatialCell = rootSpatialTopology->getCell(cellIndex);
+    CellTopoPtr spaceTimeCellTopology = CellTopology::cellTopology(spatialCell->topology(), tensorialDegree);
+    int vertexCount = spatialCell->topology()->getVertexCount();
+
+    spatialCellNodes.resize(vertexCount,spaceDim);
+    const vector<IndexType>* vertexIndices = &spatialCell->vertices();
+    for (int vertex=0; vertex<vertexCount; vertex++) {
+      IndexType vertexIndex = (*vertexIndices)[vertex];
+      for (int i=0; i<spaceDim; i++) {
+        spatialCellNodes(vertex,i) = spatialMeshTopology->getVertex(vertexIndex)[i];
+      }
+    }
+    componentNodes[0] = spatialCellNodes;
+    
+    spaceTimeCellNodes.resize(spaceTimeCellTopology->getVertexCount(),spaceTimeDim);
+    spaceTimeCellTopology->initializeNodes(componentNodes, spaceTimeCellNodes);
+    
+    CellPtr spaceTimeCell = spaceTimeTopology->addCell(spaceTimeCellTopology, spaceTimeCellNodes);
+    cellIDMap[spaceTimeCell->cellIndex()] = cellIndex;
+  }
+  
+  bool noCellsToRefine = false;
+  
+  while (!noCellsToRefine) {
+    noCellsToRefine = true;
+    
+    set<IndexType> activeSpaceTimeCellIndices = spaceTimeTopology->getActiveCellIndices();
+    for (set<IndexType>::iterator cellIt = activeSpaceTimeCellIndices.begin(); cellIt != activeSpaceTimeCellIndices.end(); cellIt++) {
+      IndexType spaceTimeCellIndex = *cellIt;
+      if (cellIDMap.find(spaceTimeCellIndex) != cellIDMap.end()) {
+        IndexType spatialCellIndex = cellIDMap[spaceTimeCellIndex];
+        CellPtr spatialCell = spatialMeshTopology->getCell(spatialCellIndex);
+        if (spatialCell->isParent()) {
+          noCellsToRefine = false; // indicate we refined some on this pass...
+          
+          CellPtr spaceTimeCell = spaceTimeTopology->getCell(*cellIt);
+          RefinementPatternPtr refPattern = RefinementPattern::regularRefinementPattern(spaceTimeCell->topology());
+          spaceTimeTopology->refineCell(spaceTimeCellIndex, refPattern);
+          
+          vector<CellPtr> spatialChildren = spatialCell->children();
+          for (int childOrdinal=0; childOrdinal<spatialChildren.size(); childOrdinal++) {
+            CellPtr spatialChild = spatialChildren[childOrdinal];
+            int vertexCount = spatialChild->topology()->getVertexCount();
+            
+            vector< vector<double> > childNodes(vertexCount);
+            
+            spatialCellNodes.resize(vertexCount,spaceDim);
+            const vector<IndexType>* vertexIndices = &spatialChild->vertices();
+            for (int vertex=0; vertex<vertexCount; vertex++) {
+              IndexType vertexIndex = (*vertexIndices)[vertex];
+              childNodes[vertex] = spatialMeshTopology->getVertex(vertexIndex);
+              childNodes[vertex].push_back(t0);
+            }
+            
+            CellPtr spaceTimeChild = spaceTimeTopology->findCellWithVertices(childNodes);
+            cellIDMap[spaceTimeChild->cellIndex()] = spatialChild->cellIndex();
+          }
+        }
+      }
+    }
+  }
+  
+  return spaceTimeTopology;
 }
 
 
