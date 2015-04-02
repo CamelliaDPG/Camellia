@@ -99,6 +99,7 @@ bool RHSTests::testComputeRHSLegacy() {
   int numTests = 1;
   double tol = 1e-14;
   int testOrder = 3;
+  vector<int> testOrderVector(1,testOrder);
   
   //cout << myName << ": testing with testOrder=" << testOrder << endl;
   BFPtr bilinearForm = TestBilinearFormDx::bf();
@@ -136,7 +137,7 @@ bool RHSTests::testComputeRHSLegacy() {
     }
     
     DofOrderingFactory dofOrderingFactory(bilinearForm);
-    Teuchos::RCP<DofOrdering> testOrdering = dofOrderingFactory.testOrdering(testOrder, cellTopo);
+    Teuchos::RCP<DofOrdering> testOrdering = dofOrderingFactory.testOrdering(testOrderVector, cellTopo);
     
     if (numSides == 4) {
       // now that we have a Lobatto basis, we need to hard-code the basis for which we have precomputed these values...
@@ -191,7 +192,8 @@ bool RHSTests::testComputeRHSLegacy() {
     }
     if (numSides==3) { // a quick triangle-only test for the lowest-order poly:
       int lowOrder = 1;
-      Teuchos::RCP<DofOrdering> lowOrderTestOrdering = dofOrderingFactory.testOrdering(lowOrder, cellTopo);
+      vector<int> lowOrderVector(1,lowOrder);
+      Teuchos::RCP<DofOrdering> lowOrderTestOrdering = dofOrderingFactory.testOrdering(lowOrderVector, cellTopo);
       int numLowOrderTrialDofs = lowOrderTestOrdering->totalDofs();
       FieldContainer<double> lowOrderRHSVector(numTests, numLowOrderTrialDofs);
       FieldContainer<double> lowOrderOptimalTestWeights(numTests, numLowOrderTrialDofs, numLowOrderTrialDofs);

@@ -85,6 +85,7 @@
 #include "ScratchPadTests.h"
 #include "SerialDenseMatrixUtilityTests.h"
 #include "SolutionTests.h"
+#include "TensorBasis.h"
 
 #include "MeshTools.h"
 
@@ -192,11 +193,20 @@ void DPGTests::runTests() {
   // setup our TestSuite tests:
   vector< Teuchos::RCP< TestSuite > > testSuites;
   
+  testSuites.push_back( Teuchos::rcp( new GMGTests ) );
+  
+  if (skipSlowTests) {
+    if (rank==0) {
+      cout << "skipping slow tests (IncompressibleFormulationsTests).\n";
+    }
+  } else {
+    testSuites.push_back( Teuchos::rcp( new IncompressibleFormulationsTests(false) ) ); // false: turn "thorough" off
+  }
+  
+  
   testSuites.push_back( Teuchos::rcp( new GDAMinimumRuleTests ) );
   
   testSuites.push_back( Teuchos::rcp( new LinearTermTests ) );
-  
-  testSuites.push_back( Teuchos::rcp( new GMGTests ) );
   
   testSuites.push_back( Teuchos::rcp( new MeshRefinementTests ) );
   
@@ -207,14 +217,6 @@ void DPGTests::runTests() {
   testSuites.push_back( Teuchos::rcp( new MeshTestSuite ) );
   
   testSuites.push_back( Teuchos::rcp( new BasisReconciliationTests ) );
-  
-  if (skipSlowTests) {
-    if (rank==0) {
-      cout << "skipping slow tests (IncompressibleFormulationsTests).\n";
-    }
-  } else {
-    testSuites.push_back( Teuchos::rcp( new IncompressibleFormulationsTests(false) ) ); // false: turn "thorough" off
-  }
   
   testSuites.push_back( Teuchos::rcp( new ScratchPadTests ) );
   
@@ -365,10 +367,12 @@ bool DPGTests::testComputeStiffnessConformingVertices() {
   
   DofOrderingFactory dofOrderingFactory(bilinearForm);
   
-  conformingOrdering = dofOrderingFactory.trialOrdering(polyOrder, quad_4, true);
-  nonConformingOrdering = dofOrderingFactory.trialOrdering(polyOrder, quad_4, false);
+  vector<int> polyOrderVector(1,polyOrder);
   
-  Teuchos::RCP<DofOrdering> testOrdering = dofOrderingFactory.testOrdering(polyOrder, quad_4);
+  conformingOrdering = dofOrderingFactory.trialOrdering(polyOrderVector, quad_4, true);
+  nonConformingOrdering = dofOrderingFactory.trialOrdering(polyOrderVector, quad_4, false);
+  
+  Teuchos::RCP<DofOrdering> testOrdering = dofOrderingFactory.testOrdering(polyOrderVector, quad_4);
   
   int numSides = 4;
   int numDofsPerSide = 4;
@@ -459,11 +463,12 @@ bool DPGTests::testDofOrdering() {
   numSides = 4;
   BFPtr bilinearForm = Teuchos::rcp(new TestBilinearFormTrace());
   int polyOrder = 1; // keep things simple
+  vector<int> polyOrderVector(1,polyOrder);
   Teuchos::RCP<DofOrdering> trialOrder;
   shards::CellTopology quad_4(shards::getCellTopologyData<shards::Quadrilateral<4> >() );
   
   DofOrderingFactory dofOrderingFactory(bilinearForm);
-  trialOrder = dofOrderingFactory.trialOrdering(polyOrder, quad_4);
+  trialOrder = dofOrderingFactory.trialOrdering(polyOrderVector, quad_4);
   
   FieldContainer<int> expectedDofIndices(numSides,dofsPerSide);
   expectedDofIndices(0,0) = 0;
@@ -491,11 +496,12 @@ bool DPGTests::testDofOrdering() {
   shards::CellTopology tri_3(shards::getCellTopologyData<shards::Triangle<3> >() );
   for (numSides=3; numSides <= 4; numSides++) {
     polyOrder = 3;
+    vector<int> polyOrderVector(1,polyOrder);
     dofsPerSide = polyOrder+1;
     if (numSides == 3) {
-      trialOrder = dofOrderingFactory.trialOrdering(polyOrder, tri_3);
+      trialOrder = dofOrderingFactory.trialOrdering(polyOrderVector, tri_3);
     } else {
-      trialOrder = dofOrderingFactory.trialOrdering(polyOrder, quad_4);
+      trialOrder = dofOrderingFactory.trialOrdering(polyOrderVector, quad_4);
     }
     
     // set up expected indices...
@@ -1174,11 +1180,12 @@ bool DPGTests::testTestBilinearFormAnalyticBoundaryIntegralExpectedConformingMat
   DofOrderingFactory dofOrderingFactory(bilinearForm);
   
   int polyOrder = 3;
+  vector<int> polyOrderVector(1,polyOrder);
 
   CellTopoPtr quad_4 = Camellia::CellTopology::quad();
   
-  conformingOrdering = dofOrderingFactory.trialOrdering(polyOrder, quad_4, true);
-  nonConformingOrdering = dofOrderingFactory.trialOrdering(polyOrder, quad_4, false);
+  conformingOrdering = dofOrderingFactory.trialOrdering(polyOrderVector, quad_4, true);
+  nonConformingOrdering = dofOrderingFactory.trialOrdering(polyOrderVector, quad_4, false);
   
   Teuchos::RCP<DofOrdering> testOrdering = Teuchos::rcp( new DofOrdering(quad_4) );
   int testID = 0;
@@ -1215,18 +1222,127 @@ bool DPGTests::testTestBilinearFormAnalyticBoundaryIntegralExpectedConformingMat
   return success;
 }
 
-vector< CellTopoPtr > getShardsTopologies() {
-  vector< CellTopoPtr > shardsTopologies;
-  
-  shardsTopologies.push_back(CellTopology::point());
-  shardsTopologies.push_back(CellTopology::line());
-  shardsTopologies.push_back(CellTopology::quad());
-  shardsTopologies.push_back(CellTopology::triangle());
-  shardsTopologies.push_back(CellTopology::hexahedron());
-  shardsTopologies.push_back(CellTopology::tetrahedron()); // tetrahedron not yet supported by permutation
-  return shardsTopologies;
+vector<double> makeVertex(double v0, double v1, double v2) {
+  vector<double> v;
+  v.push_back(v0);
+  v.push_back(v1);
+  v.push_back(v2);
+  return v;
 }
 
 void DPGTests::runExceptionThrowingTest() {
-  
+//  int tensorialDegree = 1;
+//  CellTopoPtr quad_x_time = CellTopology::cellTopology(CellTopology::quad(), tensorialDegree);
+//  CellTopoPtr tri_x_time = CellTopology::cellTopology(CellTopology::triangle(), tensorialDegree);
+//  
+//  // let's draw a little house
+//  vector<double> v00 = makeVertex(-1,0,0);
+//  vector<double> v10 = makeVertex(1,0,0);
+//  vector<double> v20 = makeVertex(1,2,0);
+//  vector<double> v30 = makeVertex(-1,2,0);
+//  vector<double> v40 = makeVertex(0.0,3,0);
+//  vector<double> v01 = makeVertex(-1,0,1);
+//  vector<double> v11 = makeVertex(1,0,1);
+//  vector<double> v21 = makeVertex(1,2,1);
+//  vector<double> v31 = makeVertex(-1,2,1);
+//  vector<double> v41 = makeVertex(0.0,3,1);
+//  
+//  vector< vector<double> > spaceTimeVertices;
+//  spaceTimeVertices.push_back(v00);
+//  spaceTimeVertices.push_back(v10);
+//  spaceTimeVertices.push_back(v20);
+//  spaceTimeVertices.push_back(v30);
+//  spaceTimeVertices.push_back(v40);
+//  spaceTimeVertices.push_back(v01);
+//  spaceTimeVertices.push_back(v11);
+//  spaceTimeVertices.push_back(v21);
+//  spaceTimeVertices.push_back(v31);
+//  spaceTimeVertices.push_back(v41);
+//  
+//  vector<unsigned> spaceTimeQuadVertexList;
+//  spaceTimeQuadVertexList.push_back(0);
+//  spaceTimeQuadVertexList.push_back(1);
+//  spaceTimeQuadVertexList.push_back(2);
+//  spaceTimeQuadVertexList.push_back(3);
+//  spaceTimeQuadVertexList.push_back(5);
+//  spaceTimeQuadVertexList.push_back(6);
+//  spaceTimeQuadVertexList.push_back(7);
+//  spaceTimeQuadVertexList.push_back(8);
+//  vector<unsigned> spaceTimeTriVertexList;
+//  spaceTimeTriVertexList.push_back(3);
+//  spaceTimeTriVertexList.push_back(2);
+//  spaceTimeTriVertexList.push_back(4);
+//  spaceTimeTriVertexList.push_back(8);
+//  spaceTimeTriVertexList.push_back(7);
+//  spaceTimeTriVertexList.push_back(9);
+//  
+//  vector< vector<unsigned> > spaceTimeElementVertices;
+//  spaceTimeElementVertices.push_back(spaceTimeQuadVertexList);
+//  spaceTimeElementVertices.push_back(spaceTimeTriVertexList);
+//  
+//  vector< CellTopoPtr > spaceTimeCellTopos;
+//  spaceTimeCellTopos.push_back(quad_x_time);
+//  spaceTimeCellTopos.push_back(tri_x_time);
+//  
+//  MeshGeometryPtr spaceTimeMeshGeometry = Teuchos::rcp( new MeshGeometry(spaceTimeVertices, spaceTimeElementVertices, spaceTimeCellTopos) );
+//  MeshTopologyPtr spaceTimeMeshTopology = Teuchos::rcp( new MeshTopology(spaceTimeMeshGeometry) );
+//  
+//  ////////////////////   DECLARE VARIABLES   ///////////////////////
+//  // define test variables
+//  VarFactory varFactory;
+//  VarPtr tau = varFactory.testVar("tau", HDIV);
+//  VarPtr v = varFactory.testVar("v", HGRAD);
+//  
+//  // define trial variables
+//  VarPtr uhat = varFactory.traceVar("uhat");
+//  VarPtr fhat = varFactory.fluxVar("fhat");
+//  VarPtr u = varFactory.fieldVar("u");
+//  VarPtr sigma = varFactory.fieldVar("sigma", VECTOR_L2);
+//  
+//  ////////////////////   DEFINE BILINEAR FORM   ///////////////////////
+//  BFPtr bf = Teuchos::rcp( new BF(varFactory) );
+//  // tau terms:
+//  bf->addTerm(sigma, tau);
+//  bf->addTerm(u, tau->div());
+//  bf->addTerm(-uhat, tau->dot_normal());
+//  
+//  // v terms:
+//  bf->addTerm( sigma, v->grad() );
+//  bf->addTerm( fhat, v);
+//  
+//  ////////////////////   BUILD MESH   ///////////////////////
+//  int H1Order = 3, pToAdd = 2;
+//  Teuchos::RCP<Mesh> spaceTimeMesh = Teuchos::rcp( new Mesh (spaceTimeMeshTopology, bf, H1Order, pToAdd) );
+//  
+//  Teuchos::RCP<Solution> spaceTimeSolution = Teuchos::rcp( new Solution(spaceTimeMesh) );
+//  
+//  FunctionPtr n = Function::normalSpaceTime();
+//  FunctionPtr parity = Function::sideParity();
+//  FunctionPtr f_flux = Function::xn(2) * n->x() * parity + Function::yn(1) * n->y() * parity + Function::zn(1) * n->z() * parity;
+//  
+//  map<int, Teuchos::RCP<Function> > functionMap;
+//  functionMap[uhat->ID()] = Function::xn(1);
+//  functionMap[fhat->ID()] = f_flux;
+//  functionMap[u->ID()] = Function::xn(1);
+//  functionMap[sigma->ID()] = Function::xn(1);
+//  spaceTimeSolution->projectOntoMesh(functionMap);
+//  
+//  double tol = 1e-14;
+//  for (map<int, Teuchos::RCP<Function> >::iterator entryIt = functionMap.begin(); entryIt != functionMap.end(); entryIt++) {
+//    int trialID = entryIt->first;
+//    VarPtr trialVar = varFactory.trial(trialID);
+//    FunctionPtr f_expected = entryIt->second;
+//    FunctionPtr f_actual = Function::solution(trialVar, spaceTimeSolution);
+//    
+//    if (trialVar->varType() == FLUX) {
+//      // then Function::solution() will have included a parity weight, basically on the idea that we're also multiplying by normals
+//      // in our usage of the solution data.  (It may be that this is not the best way to do this.)
+//      
+//      // For this test, though, we want to reverse that:
+//      f_actual = parity * f_actual;
+//    }
+//    
+//    double err_L2 = (f_actual - f_expected)->l2norm(spaceTimeMesh);
+////    TEST_COMPARE(err_L2, <, tol);
+//  }
 }

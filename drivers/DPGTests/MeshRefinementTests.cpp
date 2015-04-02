@@ -502,9 +502,12 @@ bool MeshRefinementTests::testMultiBasisSideParities() {
 bool cellsHaveH1Order(MeshPtr mesh, int H1Order, set<GlobalIndexType> cellIDs) {
   for (set<GlobalIndexType>::iterator cellIDIt = cellIDs.begin(); cellIDIt != cellIDs.end(); cellIDIt++) {
     GlobalIndexType cellID = *cellIDIt;
-    int cellOrder = mesh->globalDofAssignment()->getH1Order(cellID);
-    if (cellOrder != H1Order) {
-      cout << "cell " << cellID << "'s H1Order " << cellOrder << " does not match expected " << H1Order << endl;
+    vector<int> cellOrder = mesh->globalDofAssignment()->getH1Order(cellID);
+    if (cellOrder.size() != 1) {
+      cout << "cell " << cellID << "'s H1Order does not have exactly one value; has " << cellOrder.size() << endl;
+      return false;
+    } else if (cellOrder[0] != H1Order) {
+      cout << "cell " << cellID << "'s H1Order " << cellOrder[0] << " does not match expected " << H1Order << endl;
       return false;
     }
   }
