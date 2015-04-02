@@ -57,17 +57,21 @@ DofOrderingFactory::DofOrderingFactory(BFPtr bilinearForm,
   _testOrderEnhancements = testOrderEnhancements;
 }
 
-DofOrderingPtr DofOrderingFactory::testOrdering(int polyOrder, CellTopoPtr cellTopo) {
+DofOrderingPtr DofOrderingFactory::testOrdering(vector<int> &polyOrder, CellTopoPtr cellTopo) {
   vector<int> testIDs = _bilinearForm->testIDs();
   vector<int>::iterator testIterator;
   
   DofOrderingPtr testOrder = Teuchos::rcp(new DofOrdering(cellTopo));
   
+  vector<int> testIDPolyOrder(polyOrder.size());
+  
   for (testIterator = testIDs.begin(); testIterator != testIDs.end(); testIterator++) {
     int testID = *testIterator;
     Camellia::EFunctionSpace fs = _bilinearForm->functionSpaceForTest(testID);
     BasisPtr basis;
-    int testIDPolyOrder = polyOrder + _testOrderEnhancements[testID]; // uses the fact that map defaults to 0 for entries that aren't found
+    for (int pComponent = 0; pComponent < polyOrder.size(); pComponent++) {
+      testIDPolyOrder[pComponent] = polyOrder[pComponent] + _testOrderEnhancements[testID]; // uses the fact that map defaults to 0 for entries that aren't found
+    }
     basis = BasisFactory::basisFactory()->getBasis( testIDPolyOrder, cellTopo, fs);
     int basisRank = basis->rangeRank();
     testOrder->addEntry(testID,basis,basisRank);
@@ -77,13 +81,13 @@ DofOrderingPtr DofOrderingFactory::testOrdering(int polyOrder, CellTopoPtr cellT
   return *(_testOrderings.insert(testOrder).first);
 }
 
-DofOrderingPtr DofOrderingFactory::testOrdering(int polyOrder, 
+DofOrderingPtr DofOrderingFactory::testOrdering(vector<int> &polyOrder,
                                                 const shards::CellTopology &shardsTopo) {
   CellTopoPtr cellTopo = CellTopology::cellTopology(shardsTopo);
   return testOrdering(polyOrder, cellTopo);
 }
 
-DofOrderingPtr DofOrderingFactory::trialOrdering(int polyOrder,
+DofOrderingPtr DofOrderingFactory::trialOrdering(vector<int> &polyOrder,
                                                  CellTopoPtr cellTopo,
                                                  bool conformingVertices) {
   // conformingVertices = true only works for 2D topologies
@@ -91,6 +95,7 @@ DofOrderingPtr DofOrderingFactory::trialOrdering(int polyOrder,
     cout << "ERROR: DofOrderingFactory only supports conformingVertices = true for 2D topologies.\n";
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "DofOrderingFactory only supports conformingVertices = true for 2D topologies");
   }
+  
   vector<int> trialIDs = _bilinearForm->trialIDs();
   vector<int>::iterator trialIterator;
   
@@ -100,10 +105,14 @@ DofOrderingPtr DofOrderingFactory::trialOrdering(int polyOrder,
   
   VarFactory vf = _bilinearForm->varFactory();
   
+  vector<int> trialIDPolyOrder(polyOrder.size());
+  
   for (trialIterator = trialIDs.begin(); trialIterator != trialIDs.end(); trialIterator++) {
     int trialID = *trialIterator;
     VarPtr trialVar = vf.trialVars().find(trialID)->second;
-    int trialIDPolyOrder = polyOrder + _trialOrderEnhancements[trialID]; // uses the fact that map defaults to 0 for entries that aren't found
+    for (int pComponent = 0; pComponent < polyOrder.size(); pComponent++) {
+      trialIDPolyOrder[pComponent] = polyOrder[pComponent] + _trialOrderEnhancements[trialID]; // uses the fact that map defaults to 0 for entries that aren't found
+    }
     
     Camellia::EFunctionSpace fs = _bilinearForm->functionSpaceForTrial(trialID);
     
@@ -158,7 +167,7 @@ DofOrderingPtr DofOrderingFactory::trialOrdering(int polyOrder,
   return trialOrder;
 }
 
-DofOrderingPtr DofOrderingFactory::trialOrdering(int polyOrder, 
+DofOrderingPtr DofOrderingFactory::trialOrdering(vector<int> &polyOrder,
                                                  const shards::CellTopology &shardsTopo,
                                                  bool conformingVertices) {
   CellTopoPtr cellTopoPtr = CellTopology::cellTopology(shardsTopo);
@@ -293,7 +302,7 @@ int DofOrderingFactory::polyOrder(DofOrderingPtr dofOrdering, bool isTestOrderin
   int interiorVariable;
   bool interiorVariableFound = false;
   int minSidePolyOrder = INT_MAX;
-  int sideCount = dofOrdering->cellTopology()->getSideCount();
+
   for (idIt = varIDs.begin(); idIt != varIDs.end(); idIt++) {
     int varID = *idIt;
     const vector<int>* sidesForVar = &dofOrdering->getSidesForVarID(varID);
@@ -623,8 +632,6 @@ DofOrderingPtr DofOrderingFactory::setBasisDegree(DofOrderingPtr dofOrdering, in
   
   DofOrderingPtr newTraceOrder = Teuchos::rcp(new DofOrdering(dofOrdering->cellTopology()));
   DofOrderingPtr newFieldOrder = Teuchos::rcp(new DofOrdering(dofOrdering->cellTopology()));
-
-  int sideCount = dofOrdering->cellTopology()->getSideCount();
   
   set<int> varIDs = dofOrdering->getVarIDs();
   CellTopoPtr cellTopoPtr = dofOrdering->cellTopology();
@@ -684,7 +691,6 @@ DofOrderingPtr DofOrderingFactory::setSidePolyOrder(DofOrderingPtr dofOrdering, 
   DofOrderingPtr newOrdering = Teuchos::rcp(new DofOrdering(dofOrdering->cellTopology()));
   set<int> varIDs = dofOrdering->getVarIDs();
   CellTopoPtr cellTopoPtr = dofOrdering->cellTopology();
-  int sideCount = cellTopoPtr->getSideCount();
   
   for (set<int>::iterator idIt = varIDs.begin(); idIt != varIDs.end(); idIt++) {
     int varID = *idIt;

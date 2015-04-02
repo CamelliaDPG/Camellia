@@ -129,12 +129,12 @@ public:
   DofOrderingFactory(BFPtr bilinearForm,
                      map<int,int> trialOrderEnhancements,
                      map<int,int> testOrderEnhancements);
-  DofOrderingPtr testOrdering(int polyOrder, const shards::CellTopology &cellTopo);
-  DofOrderingPtr trialOrdering(int polyOrder, const shards::CellTopology &cellTopo,
+  DofOrderingPtr testOrdering(vector<int> &polyOrder, const shards::CellTopology &cellTopo);
+  DofOrderingPtr trialOrdering(vector<int> &polyOrder, const shards::CellTopology &cellTopo,
                                bool conformingVertices = true);
   
-  DofOrderingPtr testOrdering(int polyOrder, CellTopoPtr cellTopo);
-  DofOrderingPtr trialOrdering(int polyOrder, CellTopoPtr cellTopo, bool conformingVertices = true);
+  DofOrderingPtr testOrdering(vector<int> &polyOrder, CellTopoPtr cellTopo);
+  DofOrderingPtr trialOrdering(vector<int> &polyOrder, CellTopoPtr cellTopo, bool conformingVertices = true);
   
   int testPolyOrder(DofOrderingPtr testOrdering);
   int trialPolyOrder(DofOrderingPtr trialOrdering);

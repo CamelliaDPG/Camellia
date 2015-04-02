@@ -42,11 +42,11 @@ protected:
   VarFactory _varFactory;
   DofOrderingFactoryPtr _dofOrderingFactory;
   MeshPartitionPolicyPtr _partitionPolicy;
-  unsigned _initialH1OrderTrial;
-  unsigned _testOrderEnhancement;
+  std::vector<int> _initialH1OrderTrial;
+  int _testOrderEnhancement;
   
-  map<GlobalIndexType, unsigned> _cellH1Orders;
-  map<GlobalIndexType, ElementTypePtr> _elementTypeForCell; // keys are cellIDs
+  std::map<GlobalIndexType, std::vector<int> > _cellH1Orders;
+  std::map<GlobalIndexType, ElementTypePtr> _elementTypeForCell; // keys are cellIDs
   
   vector< map< ElementType*, vector<GlobalIndexType> > > _cellIDsForElementType; // divided by partition
   
@@ -71,8 +71,8 @@ protected:
   GlobalDofAssignment( GlobalDofAssignment& otherGDA );
 public:
   GlobalDofAssignment(MeshPtr mesh, VarFactory varFactory, DofOrderingFactoryPtr dofOrderingFactory,
-                      MeshPartitionPolicyPtr partitionPolicy, unsigned initialH1OrderTrial, unsigned testOrderEnhancement,
-                      bool enforceConformityLocally);
+                      MeshPartitionPolicyPtr partitionPolicy, std::vector<int> initialH1OrderTrial,
+                      int testOrderEnhancement, bool enforceConformityLocally);
 
   GlobalIndexType activeCellOffset();
   Teuchos::RCP<Epetra_Map> getActiveCellMap();
@@ -100,8 +100,8 @@ public:
   
   virtual int getCubatureDegree(GlobalIndexType cellID);
   
-  virtual int getH1Order(GlobalIndexType cellID) = 0;
-  int getInitialH1Order();
+  virtual std::vector<int> getH1Order(GlobalIndexType cellID);
+  std::vector<int> getInitialH1Order();
   
   bool getPartitions(FieldContainer<GlobalIndexType> &partitions);
   PartitionIndexType getPartitionCount();

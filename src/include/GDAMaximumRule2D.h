@@ -83,7 +83,7 @@ public:
   
   bool enforceConformityLocally() { return true; }
   
-  int getH1Order(GlobalIndexType cellID);
+  vector<int> getH1Order(GlobalIndexType cellID);
     
   GlobalIndexType globalDofIndex(GlobalIndexType cellID, IndexType localDofIndex);
   set<GlobalIndexType> globalDofIndicesForCell(GlobalIndexType cellID);

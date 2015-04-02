@@ -159,8 +159,13 @@ public:
        map<int,int> trialOrderEnhancements=_emptyIntIntMap, map<int,int> testOrderEnhancements=_emptyIntIntMap,
        vector< PeriodicBCPtr > periodicBCs = vector< PeriodicBCPtr >());
   
-  // new constructor (min rule, n-D):
+  // Constructor for min rule, n-D, single H1Order
   Mesh(MeshTopologyPtr meshTopology, BFPtr bilinearForm, int H1Order, int pToAddTest,
+       map<int,int> trialOrderEnhancements=_emptyIntIntMap, map<int,int> testOrderEnhancements=_emptyIntIntMap,
+       MeshPartitionPolicyPtr meshPartitionPolicy = Teuchos::null);
+  
+  // Constructor for min rule, n-D, vector H1Order for tensor topologies (tensorial degree 0 and 1 supported)
+  Mesh(MeshTopologyPtr meshTopology, BFPtr bilinearForm, vector<int> H1Order, int pToAddTest,
        map<int,int> trialOrderEnhancements=_emptyIntIntMap, map<int,int> testOrderEnhancements=_emptyIntIntMap,
        MeshPartitionPolicyPtr meshPartitionPolicy = Teuchos::null);
 
@@ -216,6 +221,7 @@ public:
   set<GlobalIndexType> cellIDsInPartition(); // rank-local cellIDs
 
   int cellPolyOrder(GlobalIndexType cellID);
+  vector<int> cellTensorPolyOrder(GlobalIndexType cellID);
 
   void enforceOneIrregularity();
 //  void enforceOneIrregularity(vector< Teuchos::RCP<Solution> > solutions);

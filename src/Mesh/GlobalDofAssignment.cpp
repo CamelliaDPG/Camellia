@@ -25,7 +25,7 @@
 
 GlobalDofAssignment::GlobalDofAssignment(MeshPtr mesh, VarFactory varFactory,
                                          DofOrderingFactoryPtr dofOrderingFactory, MeshPartitionPolicyPtr partitionPolicy,
-                                         unsigned initialH1OrderTrial, unsigned testOrderEnhancement, bool enforceConformityLocally) : DofInterpreter(mesh) {
+                                         vector<int> initialH1OrderTrial, int testOrderEnhancement, bool enforceConformityLocally) : DofInterpreter(mesh) {
 
   _mesh = mesh;
   _meshTopology = mesh->getTopology();
@@ -103,8 +103,11 @@ void GlobalDofAssignment::assignInitialElementType( GlobalIndexType cellID ) {
   if (_cellH1Orders.find(cellID) == _cellH1Orders.end()) {
     _cellH1Orders[cellID] = _initialH1OrderTrial;
   }
+  vector<int> testDegree(_cellH1Orders[cellID].size());
+  for (int pComponent=0; pComponent<_initialH1OrderTrial.size(); pComponent++) {
+    testDegree[pComponent] = _cellH1Orders[cellID][pComponent] + _testOrderEnhancement;
+  }
   
-  int testDegree = _cellH1Orders[cellID] + _testOrderEnhancement;
   CellPtr cell = _meshTopology->getCell(cellID);
   DofOrderingPtr trialOrdering = _dofOrderingFactory->trialOrdering(_cellH1Orders[cellID], cell->topology(), _enforceConformityLocally);
   DofOrderingPtr testOrdering = _dofOrderingFactory->testOrdering(testDegree, cell->topology());
@@ -271,7 +274,9 @@ void GlobalDofAssignment::didHRefine(const set<GlobalIndexType> &parentCellIDs) 
 
 void GlobalDofAssignment::didPRefine(const set<GlobalIndexType> &cellIDs, int deltaP) { // subclasses should call super
   for (set<GlobalIndexType>::const_iterator cellIDIt = cellIDs.begin(); cellIDIt != cellIDs.end(); cellIDIt++) {
-    _cellH1Orders[*cellIDIt] += deltaP;
+    for (int pComponent = 0; pComponent < _cellH1Orders[*cellIDIt].size(); pComponent++) {
+      _cellH1Orders[*cellIDIt][pComponent] += deltaP;
+    }
   }
   // the appropriate modifications to _elementTypeForCell are left to subclasses
 }
@@ -335,7 +340,11 @@ GlobalIndexType GlobalDofAssignment::globalCellIndex(GlobalIndexType cellID) {
   return cellIndex;
 }
 
-int GlobalDofAssignment::getInitialH1Order() {
+vector<int> GlobalDofAssignment::getH1Order(GlobalIndexType cellID) {
+  return _cellH1Orders[cellID];
+}
+
+vector<int> GlobalDofAssignment::getInitialH1Order() {
   return _initialH1OrderTrial;
 }
 

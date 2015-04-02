@@ -8,25 +8,29 @@
 
 #include "GDAMinimumRule.h"
 
-#include "MPIWrapper.h"
-
 #include "CamelliaCellTools.h"
-
+#include "CamelliaDebugUtility.h"
+#include "GDAMinimumRuleConstraints.h"
+#include "MPIWrapper.h"
 #include "SerialDenseWrapper.h"
+#include "Solution.h"
 
 #include "Teuchos_GlobalMPISession.hpp"
 
-#include "CamelliaDebugUtility.h"
-
-#include "Solution.h"
-
-#include "GDAMinimumRuleConstraints.h"
+using namespace std;
 
 GDAMinimumRule::GDAMinimumRule(MeshPtr mesh, VarFactory varFactory, DofOrderingFactoryPtr dofOrderingFactory, MeshPartitionPolicyPtr partitionPolicy,
                                unsigned initialH1OrderTrial, unsigned testOrderEnhancement)
-: GlobalDofAssignment(mesh,varFactory,dofOrderingFactory,partitionPolicy, initialH1OrderTrial, testOrderEnhancement, false)
+: GlobalDofAssignment(mesh,varFactory,dofOrderingFactory,partitionPolicy, vector<int>(1,initialH1OrderTrial), testOrderEnhancement, false)
 {
 
+}
+
+GDAMinimumRule::GDAMinimumRule(MeshPtr mesh, VarFactory varFactory, DofOrderingFactoryPtr dofOrderingFactory, MeshPartitionPolicyPtr partitionPolicy,
+                               vector<int> initialH1OrderTrial, unsigned testOrderEnhancement)
+: GlobalDofAssignment(mesh,varFactory,dofOrderingFactory,partitionPolicy, initialH1OrderTrial, testOrderEnhancement, false)
+{
+  
 }
 
 vector<unsigned> GDAMinimumRule::allBasisDofOrdinalsVector(int basisCardinality) {
@@ -52,7 +56,7 @@ void GDAMinimumRule::didHRefine(const set<GlobalIndexType> &parentCellIDs) {
 //    cout << "GDAMinimumRule: h-refining " << parentCellID << endl;
     CellPtr parentCell = _meshTopology->getCell(parentCellID);
     vector<IndexType> childIDs = parentCell->getChildIndices();
-    int parentH1Order = _cellH1Orders[parentCellID];
+    vector<int> parentH1Order = _cellH1Orders[parentCellID];
     for (vector<IndexType>::iterator childIDIt = childIDs.begin(); childIDIt != childIDs.end(); childIDIt++) {
       GlobalIndexType childCellID = *childIDIt;
       _cellH1Orders[childCellID] = parentH1Order;
@@ -98,12 +102,15 @@ void GDAMinimumRule::didPRefine(const set<GlobalIndexType> &cellIDs, int deltaP)
     CellPtr parent = cell->getParent();
     while (parent.get() != NULL) {
       vector<IndexType> childIndices = parent->getChildIndices();
-      unsigned minH1Order = _cellH1Orders[*cellIDIt];
+      vector<int> minH1Order = _cellH1Orders[*cellIDIt];
       for (int childOrdinal=0; childOrdinal<childIndices.size(); childOrdinal++) {
         if (_cellH1Orders.find(childIndices[childOrdinal])==_cellH1Orders.end()) {
           TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "sibling H1 order not found");
         } else {
-          minH1Order = min(minH1Order, _cellH1Orders[childIndices[childOrdinal]]);
+          // take minimum component-wise
+          for (int pComponent=0; pComponent < minH1Order.size(); pComponent++) {
+            minH1Order[pComponent] = min(minH1Order[pComponent],_cellH1Orders[childIndices[childOrdinal]][pComponent]);
+          }
         }
       }
       _cellH1Orders[parent->cellIndex()] = minH1Order;
@@ -221,10 +228,6 @@ void GDAMinimumRule::filterSubBasisConstraintData(set<unsigned> &basisDofOrdinal
   }
 }
 
-int GDAMinimumRule::getH1Order(GlobalIndexType cellID) {
-  return _cellH1Orders[cellID];
-}
-
 GlobalIndexType GDAMinimumRule::globalDofCount() {
   // assumes the lookups have been rebuilt since the last change that would affect the count
   
@@ -334,7 +337,7 @@ set<GlobalIndexType> GDAMinimumRule::partitionOwnedGlobalTraceIndices() {
   return traceIndices;
 }
 
-int GDAMinimumRule::H1Order(GlobalIndexType cellID, unsigned sideOrdinal) {
+vector<int> GDAMinimumRule::H1Order(GlobalIndexType cellID, unsigned sideOrdinal) {
   // this is meant to track the cell's interior idea of what the H^1 order is along that side.  We're isotropic for now, but eventually we might want to allow anisotropy in p...
   return _cellH1Orders[cellID];
 }
@@ -1515,15 +1518,18 @@ CellConstraints GDAMinimumRule::getCellConstraints(GlobalIndexType cellID) {
 
           set< CellPair > cellsForSubcell = _meshTopology->getCellsContainingEntity(constrainingEntityDimension, constrainingEntityIndex);
           
-          unsigned leastH1Order = (unsigned)-1;
+          // for now, we just use the first component of H1Order; this should be OK so long as refinements are isotropic,
+          // but if / when we support anisotropic refinements, we'll want to revisit this (probably we need a notion of the
+          // appropriate order along the *interface* in question)
+          int leastH1Order = INT_MAX;
           set< CellPair > cellsWithLeastH1Order;
           for (set< CellPair >::iterator cellForSubcellIt = cellsForSubcell.begin(); cellForSubcellIt != cellsForSubcell.end(); cellForSubcellIt++) {
             IndexType subcellCellID = cellForSubcellIt->first;
-            if (_cellH1Orders[subcellCellID] == leastH1Order) {
+            if (_cellH1Orders[subcellCellID][0] == leastH1Order) {
               cellsWithLeastH1Order.insert(*cellForSubcellIt);
-            } else if (_cellH1Orders[subcellCellID] < leastH1Order) {
+            } else if (_cellH1Orders[subcellCellID][0] < leastH1Order) {
               cellsWithLeastH1Order.clear();
-              leastH1Order = _cellH1Orders[subcellCellID];
+              leastH1Order = _cellH1Orders[subcellCellID][0];
               cellsWithLeastH1Order.insert(*cellForSubcellIt);
             }
             if (cellsWithLeastH1Order.size() == 0) {

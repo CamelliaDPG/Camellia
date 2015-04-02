@@ -19,7 +19,7 @@ using namespace Camellia;
 
 GDAMaximumRule2D::GDAMaximumRule2D(MeshPtr mesh, VarFactory varFactory, DofOrderingFactoryPtr dofOrderingFactory,
                                    MeshPartitionPolicyPtr partitionPolicy, unsigned initialH1OrderTrial, unsigned testOrderEnhancement, bool enforceMBFluxContinuity)
-: GlobalDofAssignment(mesh,varFactory,dofOrderingFactory,partitionPolicy, initialH1OrderTrial, testOrderEnhancement, true)
+: GlobalDofAssignment(mesh,varFactory,dofOrderingFactory,partitionPolicy, vector<int>(1,initialH1OrderTrial), testOrderEnhancement, true)
 {
 //  cout << "Entered constructor of GDAMaximumRule2D.\n";
   _enforceMBFluxContinuity = enforceMBFluxContinuity;
@@ -576,7 +576,8 @@ void GDAMaximumRule2D::didPRefine(const set<GlobalIndexType> &cellIDs, int delta
     int trialPolyOrder = _dofOrderingFactory->trialPolyOrder(newTrialOrdering);
     int testPolyOrder = _dofOrderingFactory->testPolyOrder(currentTestOrdering);
     if (testPolyOrder < trialPolyOrder + _testOrderEnhancement ) {
-      newTestOrdering = _dofOrderingFactory->testOrdering( trialPolyOrder + _testOrderEnhancement, cellTopo);
+      vector<int> enhancedTestOrder(1,trialPolyOrder + _testOrderEnhancement);
+      newTestOrdering = _dofOrderingFactory->testOrdering( enhancedTestOrder, cellTopo);
     } else {
       newTestOrdering = currentTestOrdering;
     }
@@ -641,8 +642,8 @@ vector< Teuchos::RCP< ElementType > > GDAMaximumRule2D::elementTypes(PartitionIn
   }
 }
 
-int GDAMaximumRule2D::getH1Order(GlobalIndexType cellID) {
-  return cellPolyOrder(cellID);
+vector<int> GDAMaximumRule2D::getH1Order(GlobalIndexType cellID) {
+  return vector<int>(1,cellPolyOrder(cellID));
 }
 
 void GDAMaximumRule2D::getMultiBasisOrdering(DofOrderingPtr &originalNonParentOrdering,
@@ -995,7 +996,8 @@ void GDAMaximumRule2D::matchNeighbor(GlobalIndexType cellID, int sideIndex) {
                                "After matchSides(), the appropriate sides don't have the same order.");
     int testPolyOrder = _dofOrderingFactory->testPolyOrder(elemTestOrdering);
     if (testPolyOrder < mySidePolyOrder + _testOrderEnhancement) {
-      elemTestOrdering = _dofOrderingFactory->testOrdering( mySidePolyOrder + _testOrderEnhancement, cellTopo);
+      vector<int> enhancedTestOrder(1,mySidePolyOrder + _testOrderEnhancement);
+      elemTestOrdering = _dofOrderingFactory->testOrdering( enhancedTestOrder, cellTopo);
     }
     ElementTypePtr newType = _elementTypeFactory.getElementType(elemTrialOrdering, elemTestOrdering,
                                                                 cell->topology() );
@@ -1024,7 +1026,8 @@ void GDAMaximumRule2D::matchNeighbor(GlobalIndexType cellID, int sideIndex) {
                                "After matchSides(), the appropriate sides don't have the same order.");
     int testPolyOrder = _dofOrderingFactory->testPolyOrder(neighborTestOrdering);
     if (testPolyOrder < sidePolyOrder + _testOrderEnhancement) {
-      neighborTestOrdering = _dofOrderingFactory->testOrdering( sidePolyOrder + _testOrderEnhancement, neighborTopo);
+      vector<int> enhancedPolyOrder(1,sidePolyOrder + _testOrderEnhancement);
+      neighborTestOrdering = _dofOrderingFactory->testOrdering( enhancedPolyOrder, neighborTopo);
     }
     ElementTypePtr newType = _elementTypeFactory.getElementType(neighborTrialOrdering, neighborTestOrdering,
                                                                 neighbor->topology() );

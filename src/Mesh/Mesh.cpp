@@ -72,6 +72,34 @@ using namespace Camellia;
 
 map<int,int> Mesh::_emptyIntIntMap;
 
+Mesh::Mesh(MeshTopologyPtr meshTopology, BFPtr bilinearForm, vector<int> H1Order, int pToAddTest,
+           map<int,int> trialOrderEnhancements, map<int,int> testOrderEnhancements,
+           MeshPartitionPolicyPtr partitionPolicy) : DofInterpreter(Teuchos::rcp(this,false)) {
+  
+  _meshTopology = meshTopology;
+  
+  DofOrderingFactoryPtr dofOrderingFactoryPtr = Teuchos::rcp( new DofOrderingFactory(bilinearForm, trialOrderEnhancements,testOrderEnhancements) );
+  _enforceMBFluxContinuity = false;
+  //  MeshPartitionPolicyPtr partitionPolicy = Teuchos::rcp( new MeshPartitionPolicy() );
+  if ( partitionPolicy.get() == NULL )
+    partitionPolicy = Teuchos::rcp( new ZoltanMeshPartitionPolicy() );
+  
+  MeshPtr thisPtr = Teuchos::rcp(this, false);
+  _gda = Teuchos::rcp( new GDAMinimumRule(thisPtr, bilinearForm->varFactory(), dofOrderingFactoryPtr,
+                                          partitionPolicy, H1Order, pToAddTest));
+  _gda->repartitionAndMigrate();
+  
+  setBilinearForm(bilinearForm);
+  _boundary.setMesh(this);
+  
+  _meshTopology->setGlobalDofAssignment(_gda.get());
+  
+  // Teuchos::RCP< RefinementHistory > refHist = Teuchos::rcp( &_refinementHistory, false );
+  // cout << "Has ownership " << refHist.has_ownership() << endl;
+  // this->registerObserver(refHist);
+  this->registerObserver(Teuchos::rcp( &_refinementHistory, false ));
+}
+
 Mesh::Mesh(MeshTopologyPtr meshTopology, BFPtr bilinearForm, int H1Order, int pToAddTest,
            map<int,int> trialOrderEnhancements, map<int,int> testOrderEnhancements,
            MeshPartitionPolicyPtr partitionPolicy) : DofInterpreter(Teuchos::rcp(this,false)) {
@@ -241,6 +269,10 @@ set<GlobalIndexType> Mesh::cellIDsInPartition() {
 }
 
 int Mesh::cellPolyOrder(GlobalIndexType cellID) { // aka H1Order
+  return _gda->getH1Order(cellID)[0];
+}
+
+vector<int> Mesh::cellTensorPolyOrder(GlobalIndexType cellID) { // aka H1Order
   return _gda->getH1Order(cellID);
 }
 
@@ -1278,6 +1310,8 @@ void Mesh::saveToHDF5(string filename)
         }
       }
     }
+    
+    vector<int> initialH1Order = globalDofAssignment()->getInitialH1Order();
 
     Epetra_SerialComm Comm;
     EpetraExt::HDF5 hdf5(Comm);
@@ -1291,7 +1325,7 @@ void Mesh::saveToHDF5(string filename)
     hdf5.Write("Mesh", "vertexIndices", H5T_NATIVE_INT, rootVertexIndices.size(), &rootVertexIndices[0]);
     hdf5.Write("Mesh", "topoKeys", H5T_NATIVE_INT, topoKeysIntSize, &rootKeys[0]);
     hdf5.Write("Mesh", "vertices", H5T_NATIVE_DOUBLE, rootVertices.size(), &rootVertices[0]);
-    hdf5.Write("Mesh", "H1Order", globalDofAssignment()->getInitialH1Order());
+    hdf5.Write("Mesh", "H1OrderSize", (int)initialH1Order.size());
     hdf5.Write("Mesh", "deltaP", globalDofAssignment()->getTestOrderEnrichment());
     hdf5.Write("Mesh", "numPartitions", numPartitions);
     hdf5.Write("Mesh", "maxPartitionSize", maxPartitionSize);
@@ -1308,6 +1342,7 @@ void Mesh::saveToHDF5(string filename)
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Invalid GDA");
     hdf5.Write("Mesh", "trialOrderEnhancements", H5T_NATIVE_INT, trialOrderEnhancementsVec.size(), &trialOrderEnhancementsVec[0]);
     hdf5.Write("Mesh", "testOrderEnhancements", H5T_NATIVE_INT, testOrderEnhancementsVec.size(), &testOrderEnhancementsVec[0]);
+    hdf5.Write("Mesh", "H1Order", H5T_NATIVE_INT, initialH1Order.size(), &initialH1Order[0]);
     _refinementHistory.saveToHDF5(hdf5);
     hdf5.Close();
   }

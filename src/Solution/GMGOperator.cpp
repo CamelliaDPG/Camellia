@@ -443,8 +443,11 @@ LocalDofMapperPtr GMGOperator::getLocalCoefficientMap(GlobalIndexType fineCellID
   }
   GlobalIndexType coarseCellID = ancestor->cellIndex();
   CellPtr coarseCell = ancestor;
-  int fineOrder = _fineMesh->globalDofAssignment()->getH1Order(fineCellID);
-  int coarseOrder = _coarseMesh->globalDofAssignment()->getH1Order(coarseCellID);
+  if (_fineMesh->globalDofAssignment()->getH1Order(fineCellID).size() > 1) {
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "tensor-product H1Orders not yet supported in GMGOperator");
+  }
+  int fineOrder = _fineMesh->globalDofAssignment()->getH1Order(fineCellID)[0];
+  int coarseOrder = _coarseMesh->globalDofAssignment()->getH1Order(coarseCellID)[0];
 
   DofOrderingPtr coarseTrialOrdering = _coarseMesh->getElementType(coarseCellID)->trialOrderPtr;
   DofOrderingPtr fineTrialOrdering = _fineMesh->getElementType(fineCellID)->trialOrderPtr;

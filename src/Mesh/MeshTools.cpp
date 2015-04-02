@@ -223,7 +223,8 @@ void MeshTools::timeSliceExport(std::string dirPath, MeshPtr mesh, FunctionPtr s
   // user is responsible for ensuring that tValues all generate the same slice.  It's a bit of a burden, but there it is...
 #ifdef HAVE_EPETRAEXT_HDF5
   map<GlobalIndexType, GlobalIndexType> cellIDMap;
-  MeshPtr meshSlice =  timeSliceMesh(mesh, tValues[0], cellIDMap, mesh->globalDofAssignment()->getInitialH1Order());
+  int spatialH1Order = mesh->globalDofAssignment()->getInitialH1Order()[0];
+  MeshPtr meshSlice =  timeSliceMesh(mesh, tValues[0], cellIDMap, spatialH1Order);
   
 //  cout << "At time " << t << ", slice has " << meshSlice->numActiveElements() << " active elements.\n";
   HDF5Exporter exporter(meshSlice,dirPath);

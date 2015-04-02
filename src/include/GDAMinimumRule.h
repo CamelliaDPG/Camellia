@@ -70,7 +70,7 @@ class GDAMinimumRule : public GlobalDofAssignment {
   
   set<GlobalIndexType> getFittableGlobalDofIndices(GlobalIndexType cellID, CellConstraints &constraints, int sideOrdinal); // returns the global dof indices for basis functions which have support on the given side (i.e. their support intersected with the side has positive measure).  This is determined by taking the union of the global dof indices defined on all the constraining sides for the given side (the constraining sides are by definition unconstrained).
   
-  int H1Order(GlobalIndexType cellID, unsigned sideOrdinal); // this is meant to track the cell's interior idea of what the H^1 order is along that side.  We're isotropic for now, but eventually we might want to allow anisotropy in p...
+  vector<int> H1Order(GlobalIndexType cellID, unsigned sideOrdinal); // this is meant to track the cell's interior idea of what the H^1 order is along that side.  We're isotropic for now, but eventually we might want to allow anisotropy in p...
   
   RefinementBranch volumeRefinementsForSideEntity(IndexType sideEntityIndex);
   
@@ -84,6 +84,9 @@ public:
   GDAMinimumRule(MeshPtr mesh, VarFactory varFactory, DofOrderingFactoryPtr dofOrderingFactory, MeshPartitionPolicyPtr partitionPolicy,
                  unsigned initialH1OrderTrial, unsigned testOrderEnhancement);
   
+  GDAMinimumRule(MeshPtr mesh, VarFactory varFactory, DofOrderingFactoryPtr dofOrderingFactory, MeshPartitionPolicyPtr partitionPolicy,
+                 vector<int> initialH1OrderTrial, unsigned testOrderEnhancement);
+  
   GlobalDofAssignmentPtr deepCopy();
   
   void didHRefine(const set<GlobalIndexType> &parentCellIDs);
@@ -94,7 +97,6 @@ public:
   
   ElementTypePtr elementType(GlobalIndexType cellID);
   
-  int getH1Order(GlobalIndexType cellID);
   GlobalIndexType globalDofCount();
   set<GlobalIndexType> globalDofIndicesForCell(GlobalIndexType cellID);
   set<GlobalIndexType> globalDofIndicesForPartition(PartitionIndexType partitionNumber);
