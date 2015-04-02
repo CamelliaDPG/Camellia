@@ -160,6 +160,11 @@ namespace Camellia {
      */
     unsigned getTemporalComponentSideOrdinal(unsigned thisSideOrdinal);
     
+    /** \brief  Returns the side corresponding to the provided temporal node.
+     *  \param  temporalNodeOrdinal      [in]  - 0 or 1, the node number for the temporal vertex.
+     */
+    unsigned getTemporalSideOrdinal(unsigned temporalNodeOrdinal);
+    
     /** \brief  Mapping from a subcell's node ordinal to a
      *          node ordinal of this parent cell topology.
      *  \param  subcell_dim      [in]  - spatial dimension of the subcell

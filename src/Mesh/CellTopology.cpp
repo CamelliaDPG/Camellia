@@ -710,6 +710,11 @@ unsigned CellTopology::getTemporalComponentSideOrdinal(unsigned int thisSideOrdi
   return thisSideOrdinal;
 }
 
+unsigned CellTopology::getTemporalSideOrdinal(unsigned int temporalNodeOrdinal) {
+  // TODO: if/when we change the subcell node ordering, change this to return spatialTopo->getSideCount() + temporalNodeOrdinal;
+  return temporalNodeOrdinal;
+}
+
 CellTopoPtr CellTopology::getTensorialComponent() const {
   if (_tensorialDegree==0) return Teuchos::null;
   else return CellTopology::cellTopology(_shardsBaseTopology, _tensorialDegree - 1);
