@@ -71,6 +71,23 @@ BasisFactory::BasisFactory() {
 
 using namespace Camellia;
 
+BasisPtr BasisFactory::getBasis(std::vector<int> &H1Order, CellTopoPtr cellTopo, Camellia::EFunctionSpace functionSpaceForSpatialTopology,
+                                Camellia::EFunctionSpace functionSpaceForTemporalTopology) {
+  if (H1Order.size() == 0) {
+    cout << "H1Order cannot be empty.\n";
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "H1Order cannot be empty.");
+  }
+  if (H1Order.size() > 2) {
+    cout << "BasisFactory does not yet support tensor product bases of tensorial degree > 1.\n";
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "BasisFactory does not yet support tensor product bases of tensorial degree > 1.");
+  }
+  if (H1Order.size() == 1) {
+    return getBasis(H1Order[0], cellTopo, functionSpaceForSpatialTopology);
+  } else {
+    return getBasis(H1Order[0], cellTopo, functionSpaceForSpatialTopology, H1Order[1], functionSpaceForTemporalTopology);
+  }
+}
+
 BasisPtr BasisFactory::getBasis(int H1Order, CellTopoPtr cellTopo, Camellia::EFunctionSpace functionSpaceForSpatialTopology,
                                 int temporalH1Order, Camellia::EFunctionSpace functionSpaceForTemporalTopology) {
   if (cellTopo->getTensorialDegree() > 1) {
@@ -348,6 +365,23 @@ BasisPtr BasisFactory::getBasis( int polyOrder, unsigned cellTopoKey, Camellia::
   return basis;
 }
 
+BasisPtr BasisFactory::getConformingBasis(std::vector<int> &H1Order, CellTopoPtr cellTopo, Camellia::EFunctionSpace functionSpaceForSpatialTopology,
+                                          Camellia::EFunctionSpace functionSpaceForTemporalTopology) {
+  if (H1Order.size() == 0) {
+    cout << "H1Order cannot be empty.\n";
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "H1Order cannot be empty.");
+  }
+  if (H1Order.size() > 2) {
+    cout << "BasisFactory does not yet support tensor product bases of tensorial degree > 1.\n";
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "BasisFactory does not yet support tensor product bases of tensorial degree > 1.");
+  }
+  if (H1Order.size() == 1) {
+    return getConformingBasis(H1Order[0], cellTopo, functionSpaceForSpatialTopology);
+  } else {
+    return getConformingBasis(H1Order[0], cellTopo, functionSpaceForSpatialTopology, H1Order[1], functionSpaceForTemporalTopology);
+  }
+}
+
 BasisPtr BasisFactory::getConformingBasis( int polyOrder, CellTopoPtr cellTopo, Camellia::EFunctionSpace fs,
                                           int temporalPolyOrder, FSE functionSpaceForTemporalTopology) {
   // this method is fairly redundant with getBasis(), but it provides the chance to offer different bases when a conforming basis is
@@ -364,7 +398,7 @@ BasisPtr BasisFactory::getConformingBasis( int polyOrder, CellTopoPtr cellTopo, 
   
   if (_conformingSpaceTimeBases.find(key) != _conformingSpaceTimeBases.end()) return _conformingSpaceTimeBases[key];
   
-  BasisPtr temporalBasis = getBasis(temporalPolyOrder + 1, lineKey, functionSpaceForTemporalTopology);
+  BasisPtr temporalBasis = getConformingBasis(temporalPolyOrder + 1, lineKey, functionSpaceForTemporalTopology);
   
   typedef Camellia::TensorBasis<double, FieldContainer<double> > TensorBasis;
   Teuchos::RCP<TensorBasis> tensorBasis = Teuchos::rcp( new TensorBasis(basisForShardsTopo, temporalBasis) );
