@@ -284,6 +284,21 @@ long long MeshTopology::approximateMemoryFootprint() {
   return memSize;
 }
 
+CellPtr MeshTopology::addCell(CellTopoPtr cellTopo, const FieldContainer<double> &cellVertices) {
+  TEUCHOS_TEST_FOR_EXCEPTION(cellTopo->getDimension() != _spaceDim, std::invalid_argument, "cellTopo dimension must match mesh topology dimension");
+  TEUCHOS_TEST_FOR_EXCEPTION(cellVertices.dimension(0) != cellTopo->getVertexCount(), std::invalid_argument, "cellVertices must have shape (P,D)");
+  TEUCHOS_TEST_FOR_EXCEPTION(cellVertices.dimension(1) != cellTopo->getDimension(), std::invalid_argument, "cellVertices must have shape (P,D)");
+  
+  int vertexCount = cellVertices.dimension(0);
+  vector< vector<double> > cellVertexVector(vertexCount,vector<double>(_spaceDim));
+  for (int vertexOrdinal=0; vertexOrdinal<vertexCount; vertexOrdinal++) {
+    for (int d=0; d<_spaceDim; d++) {
+      cellVertexVector[vertexOrdinal][d] = cellVertices(vertexOrdinal,d);
+    }
+  }
+  return addCell(cellTopo, cellVertexVector);
+}
+
 CellPtr MeshTopology::addCell(CellTopoPtr cellTopo, const vector<vector<double> > &cellVertices) {
   if (cellTopo->getNodeCount() != cellVertices.size()) {
     cout << "ERROR: cellTopo->getNodeCount() != cellVertices.size().\n";
@@ -613,6 +628,11 @@ void MeshTopology::addSideForEntity(unsigned int entityDim, IndexType entityInde
   if (searchResult == _sidesForEntities[entityDim][entityIndex].end()) {
     _sidesForEntities[entityDim][entityIndex].push_back(sideEntityIndex);
   }
+}
+
+void MeshTopology::addVertex(const vector<double> &vertex) {
+  double tol = 1e-15;
+  getVertexIndexAdding(vertex, tol);
 }
 
 vector<IndexType> MeshTopology::getCanonicalEntityNodesViaPeriodicBCs(unsigned d, const vector<IndexType> &myEntityNodes) {

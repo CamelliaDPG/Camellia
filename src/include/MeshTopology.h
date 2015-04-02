@@ -109,7 +109,11 @@ public:
   MeshTopology(unsigned spaceDim, vector<PeriodicBCPtr> periodicBCs=vector<PeriodicBCPtr>());
   MeshTopology(MeshGeometryPtr meshGeometry, vector<PeriodicBCPtr> periodicBCs=vector<PeriodicBCPtr>());
   CellPtr addCell(CellTopoPtr cellTopo, const vector< vector<double> > &cellVertices);
+  CellPtr addCell(CellTopoPtr cellTopo, const FieldContainer<double> &cellVertices);
+  
   CellPtr addCell(CellTopoPtrLegacy cellTopo, const vector< vector<double> > &cellVertices);
+  
+  void addVertex(const std::vector<double>& vertex);
   
   // ! This method only gets within a factor of 2 or so, but can give a rough estimate
   long long approximateMemoryFootprint();
