@@ -316,16 +316,16 @@ int Solution::solve(bool useMumps) {
 void Solution::setSolution(Teuchos::RCP<Solution> otherSoln) {
   _solutionForCellIDGlobal = otherSoln->solutionForCellIDGlobal();
   _lhsVector = Teuchos::rcp( new Epetra_FEVector(*otherSoln->getLHSVector()) );
-  // _lhsVector2 = otherSoln->getLHSVector2();
+  _lhsVector2 = otherSoln->getLHSVector2();
   clearComputedResiduals();
 }
 
 void Solution::initializeLHSVector() {
 //  _lhsVector = Teuchos::rcp( (Epetra_FEVector*) NULL); // force a delete
   Epetra_Map partMap = getPartitionMap();
-  // MapPtr partMap2 = getPartitionMap2();
+  MapPtr partMap2 = getPartitionMap2();
   _lhsVector = Teuchos::rcp(new Epetra_FEVector(partMap,1,true));
-  // _lhsVector2 = Teuchos::rcp(new Tpetra::MultiVector<Scalar,IndexType,GlobalIndexType>(partMap2,1));
+  _lhsVector2 = Teuchos::rcp(new Tpetra::MultiVector<Scalar,IndexType,GlobalIndexType>(partMap2,1));
 
   setGlobalSolutionFromCellLocalCoefficients();
   clearComputedResiduals();
@@ -333,7 +333,7 @@ void Solution::initializeLHSVector() {
 
 void Solution::initializeStiffnessAndLoad() {
   Epetra_Map partMap = getPartitionMap();
-  // MapPtr partMap2 = getPartitionMap2();
+  MapPtr partMap2 = getPartitionMap2();
 
   int maxRowSize = _mesh->rowSizeUpperBound();
 
@@ -361,7 +361,7 @@ void Solution::populateStiffnessAndLoad() {
 
   set<GlobalIndexType> myGlobalIndicesSet = _dofInterpreter->globalDofIndicesForPartition(rank);
   Epetra_Map partMap = getPartitionMap();
-  // MapPtr partMap2 = getPartitionMap2();
+  MapPtr partMap2 = getPartitionMap2();
 
   vector< ElementTypePtr > elementTypes = _mesh->elementTypes(rank);
   vector< ElementTypePtr >::iterator elemTypeIt;
@@ -776,7 +776,7 @@ void Solution::populateStiffnessAndLoad() {
 void Solution::setProblem(Teuchos::RCP<Solver> solver) {
   // Teuchos::RCP<Epetra_LinearProblem> problem = Teuchos::rcp( new Epetra_LinearProblem(&*_globalStiffMatrix, &*_lhsVector, &*_rhsVector));
   solver->setProblem(_globalStiffMatrix, _lhsVector, _rhsVector);
-  // solver->setProblem(_globalStiffMatrix2, _lhsVector2, _rhsVector2);
+  solver->setProblem(_globalStiffMatrix2, _lhsVector2, _rhsVector2);
   // solver->setProblem(problem);
 }
 
@@ -794,7 +794,7 @@ int Solution::solveWithPrepopulatedStiffnessAndLoad(Teuchos::RCP<Solver> solver,
   set<GlobalIndexType> myGlobalIndicesSet = _dofInterpreter->globalDofIndicesForPartition(rank);
 //  cout << "rank " << rank << " has " << myGlobalIndicesSet.size() << " locally-owned dof indices.\n";
   Epetra_Map partMap = getPartitionMap();
-  // MapPtr partMap2 = getPartitionMap2();
+  MapPtr partMap2 = getPartitionMap2();
 
   vector< ElementTypePtr > elementTypes = _mesh->elementTypes(rank);
   vector< ElementTypePtr >::iterator elemTypeIt;
@@ -972,7 +972,7 @@ void Solution::importSolution() {
 
   // Import solution onto current processor
   Epetra_Map partMap = getPartitionMap();
-  // MapPtr partMap2 = getPartitionMap2();
+  MapPtr partMap2 = getPartitionMap2();
   Epetra_Import  solnImporter(myCellsMap, partMap);
   Epetra_Vector  solnCoeff(myCellsMap);
 //  cout << "on rank " << rank << ", about to Import\n";
@@ -1131,7 +1131,7 @@ void Solution::importGlobalSolution() {
 
   // Import global solution onto each processor
   Epetra_Map partMap = getPartitionMap();
-  // MapPtr partMap2 = getPartitionMap2();
+  MapPtr partMap2 = getPartitionMap2();
   Epetra_Import  solnImporter(myCellsMap, partMap);
   Epetra_Vector  solnCoeff(myCellsMap);
   solnCoeff.Import(*_lhsVector, solnImporter, Insert);
@@ -1171,7 +1171,7 @@ void Solution::imposeBCs() {
   set<GlobalIndexType> myGlobalIndicesSet = _dofInterpreter->globalDofIndicesForPartition(rank);
   //  cout << "rank " << rank << " has " << myGlobalIndicesSet.size() << " locally-owned dof indices.\n";
   Epetra_Map partMap = getPartitionMap();
-  // MapPtr partMap2 = getPartitionMap2();
+  MapPtr partMap2 = getPartitionMap2();
 
   _mesh->boundary().bcsToImpose(bcGlobalIndices,bcGlobalValues,*(_bc.get()), myGlobalIndicesSet, _dofInterpreter.get(), &partMap);
   int numBCs = bcGlobalIndices.size();
@@ -1233,7 +1233,7 @@ void Solution::imposeZMCsUsingLagrange() {
   }
 
   Epetra_Map partMap = getPartitionMap();
-  // MapPtr partMap2 = getPartitionMap2();
+  MapPtr partMap2 = getPartitionMap2();
 
   set<GlobalIndexType> myGlobalIndicesSet = _dofInterpreter->globalDofIndicesForPartition(rank);
   int localRowIndex = myGlobalIndicesSet.size();
@@ -1349,6 +1349,10 @@ ElementTypePtr Solution::getEquivalentElementType(Teuchos::RCP<Mesh> otherMesh, 
 
 Epetra_MultiVector* Solution::getGlobalCoefficients() {
   return (*_lhsVector)(0);
+}
+
+VectorPtr Solution::getGlobalCoefficients2() {
+  return _lhsVector2;
 }
 
 double Solution::globalCondEstLastSolve() {
@@ -1682,9 +1686,9 @@ Teuchos::RCP<Epetra_FEVector> Solution::getLHSVector() {
   return _lhsVector;
 }
 
-// VectorPtr Solution::getLHSVector2() {
-//   return _lhsVector2;
-// }
+VectorPtr Solution::getLHSVector2() {
+  return _lhsVector2;
+}
 
 double Solution::integrateSolution(int trialID) {
   double value = 0.0;
@@ -2239,13 +2243,26 @@ Teuchos::RCP<Epetra_FEVector> Solution::getRHSVector() {
   return _rhsVector;
 }
 
+VectorPtr Solution::getRHSVector2() {
+  return _rhsVector2;
+}
+
 Teuchos::RCP<Epetra_CrsMatrix> Solution::getStiffnessMatrix() {
   return _globalStiffMatrix;
+}
+
+MatrixPtr Solution::getStiffnessMatrix2() {
+  return _globalStiffMatrix2;
 }
 
 void Solution::setStiffnessMatrix(Teuchos::RCP<Epetra_CrsMatrix> stiffness) {
 //  Epetra_FECrsMatrix* stiffnessFEMatrix = dynamic_cast<Epetra_FECrsMatrix*>(_globalStiffMatrix.get());
     _globalStiffMatrix = stiffness;
+}
+
+void Solution::setStiffnessMatrix2(MatrixPtr stiffness) {
+//  Epetra_FECrsMatrix* stiffnessFEMatrix = dynamic_cast<Epetra_FECrsMatrix*>(_globalStiffMatrix.get());
+    _globalStiffMatrix2 = stiffness;
 }
 
 void Solution::solutionValues(FieldContainer<double> &values, int trialID, BasisCachePtr basisCache,
@@ -3299,19 +3316,19 @@ Epetra_Map Solution::getPartitionMap(PartitionIndexType rank, set<GlobalIndexTyp
   return partMap;
 }
 
-// MapPtr Solution::getPartitionMap2() {
-//   int rank = Teuchos::GlobalMPISession::getRank();
-//
-//   Teuchos::RCP<const Teuchos::Comm<int> > comm = Tpetra::DefaultPlatform::getDefaultPlatform().getComm();
-//
-//   vector<int> zeroMeanConstraints = getZeroMeanConstraints();
-//   GlobalIndexType numGlobalDofs = _dofInterpreter->globalDofCount();
-//   set<GlobalIndexType> myGlobalIndicesSet = _dofInterpreter->globalDofIndicesForPartition(rank);
-//   int numZMCDofs = _zmcsAsRankOneUpdate ? 0 : zeroMeanConstraints.size();
-//
-//   MapPtr partMap = getPartitionMap2(rank, myGlobalIndicesSet,numGlobalDofs,numZMCDofs,comm);
-//   return partMap;
-// }
+MapPtr Solution::getPartitionMap2() {
+  int rank = Teuchos::GlobalMPISession::getRank();
+
+  Teuchos::RCP<const Teuchos::Comm<int> > comm = Tpetra::DefaultPlatform::getDefaultPlatform().getComm();
+
+  vector<int> zeroMeanConstraints = getZeroMeanConstraints();
+  GlobalIndexType numGlobalDofs = _dofInterpreter->globalDofCount();
+  set<GlobalIndexType> myGlobalIndicesSet = _dofInterpreter->globalDofIndicesForPartition(rank);
+  int numZMCDofs = _zmcsAsRankOneUpdate ? 0 : zeroMeanConstraints.size();
+
+  MapPtr partMap = getPartitionMap2(rank, myGlobalIndicesSet,numGlobalDofs,numZMCDofs,comm);
+  return partMap;
+}
 
 // MapPtr Solution::getPartitionMapSolutionDofsOnly2() { // omits lagrange multipliers, ZMCs, etc.
 //   MapPtr partMapWithZMC = getPartitionMap2();
@@ -3329,72 +3346,72 @@ Epetra_Map Solution::getPartitionMap(PartitionIndexType rank, set<GlobalIndexTyp
 //   return partMap;
 // }
 
-// MapPtr Solution::getPartitionMap2(PartitionIndexType rank, set<GlobalIndexType> & myGlobalIndicesSet, GlobalIndexType numGlobalDofs,
-//                                      int zeroMeanConstraintsSize, Teuchos::RCP<const Teuchos::Comm<int> > Comm ) {
-//   int numGlobalLagrange = _lagrangeConstraints->numGlobalConstraints();
-//   vector< ElementPtr > elements = _mesh->elementsInPartition(rank);
-//   IndexType numMyElements = elements.size();
-//   int numElementLagrange = _lagrangeConstraints->numElementConstraints() * numMyElements;
-//   int globalNumElementLagrange = _lagrangeConstraints->numElementConstraints() * _mesh->numActiveElements();
-//
-//   // ordering is:
-//   // - regular dofs
-//   // - element lagrange
-//   // - global lagrange
-//   // - zero-mean constraints
-//
-//   // determine the local dofs we have, and what their global indices are:
-//   int localDofsSize = myGlobalIndicesSet.size() + numElementLagrange;
-//   if (rank == 0) {
-//     // global Lagrange and zero-mean constraints belong to rank 0
-//     localDofsSize += zeroMeanConstraintsSize + numGlobalLagrange;
-//   }
-//
-//   GlobalIndexType *myGlobalIndices;
-//   if (localDofsSize!=0){
-//     myGlobalIndices = new GlobalIndexType[ localDofsSize ];
-//   } else {
-//     myGlobalIndices = NULL;
-//   }
-//
-//   // copy from set object into the allocated array
-//   GlobalIndexType offset = 0;
-//   for (set<GlobalIndexType>::iterator indexIt = myGlobalIndicesSet.begin(); indexIt != myGlobalIndicesSet.end(); indexIt++ ) {
-//     myGlobalIndices[offset++] = *indexIt;
-//   }
-//   GlobalIndexType cellOffset = _mesh->activeCellOffset() * _lagrangeConstraints->numElementConstraints();
-//   GlobalIndexType globalIndex = cellOffset + numGlobalDofs;
-//   for (int elemLagrangeIndex=0; elemLagrangeIndex<_lagrangeConstraints->numElementConstraints(); elemLagrangeIndex++) {
-//     for (IndexType cellIndex=0; cellIndex<numMyElements; cellIndex++) {
-//       myGlobalIndices[offset++] = globalIndex++;
-//     }
-//   }
-//
-//   if ( rank == 0 ) {
-//     // set up the zmcs and global Lagrange constraints, which come at the end...
-//     for (int i=0; i<numGlobalLagrange; i++) {
-//       myGlobalIndices[offset++] = i + numGlobalDofs + globalNumElementLagrange;
-//     }
-//     for (int i=0; i<zeroMeanConstraintsSize; i++) {
-//       myGlobalIndices[offset++] = i + numGlobalDofs + globalNumElementLagrange + numGlobalLagrange;
-//     }
-//   }
-//
-//   if (offset != localDofsSize) {
-//     cout << "WARNING: Apparent internal error in Solution::getPartitionMap.  # entries filled in myGlobalDofIndices does not match its size...\n";
-//   }
-//
-//   int totalRows = numGlobalDofs + globalNumElementLagrange + numGlobalLagrange + zeroMeanConstraintsSize;
-//
-//   int indexBase = 0;
-//   const Teuchos::ArrayView<const GlobalIndexType> rankGlobalIndices(myGlobalIndices, localDofsSize);
-//   MapPtr partMap = Teuchos::rcp( new Tpetra::Map<IndexType,GlobalIndexType>(totalRows, rankGlobalIndices, indexBase, Comm) );
-//
-//   if (localDofsSize!=0){
-//     delete[] myGlobalIndices;
-//   }
-//   return partMap;
-// }
+MapPtr Solution::getPartitionMap2(PartitionIndexType rank, set<GlobalIndexType> & myGlobalIndicesSet, GlobalIndexType numGlobalDofs,
+                                     int zeroMeanConstraintsSize, Teuchos::RCP<const Teuchos::Comm<int> > Comm ) {
+  int numGlobalLagrange = _lagrangeConstraints->numGlobalConstraints();
+  vector< ElementPtr > elements = _mesh->elementsInPartition(rank);
+  IndexType numMyElements = elements.size();
+  int numElementLagrange = _lagrangeConstraints->numElementConstraints() * numMyElements;
+  int globalNumElementLagrange = _lagrangeConstraints->numElementConstraints() * _mesh->numActiveElements();
+
+  // ordering is:
+  // - regular dofs
+  // - element lagrange
+  // - global lagrange
+  // - zero-mean constraints
+
+  // determine the local dofs we have, and what their global indices are:
+  int localDofsSize = myGlobalIndicesSet.size() + numElementLagrange;
+  if (rank == 0) {
+    // global Lagrange and zero-mean constraints belong to rank 0
+    localDofsSize += zeroMeanConstraintsSize + numGlobalLagrange;
+  }
+
+  GlobalIndexType *myGlobalIndices;
+  if (localDofsSize!=0){
+    myGlobalIndices = new GlobalIndexType[ localDofsSize ];
+  } else {
+    myGlobalIndices = NULL;
+  }
+
+  // copy from set object into the allocated array
+  GlobalIndexType offset = 0;
+  for (set<GlobalIndexType>::iterator indexIt = myGlobalIndicesSet.begin(); indexIt != myGlobalIndicesSet.end(); indexIt++ ) {
+    myGlobalIndices[offset++] = *indexIt;
+  }
+  GlobalIndexType cellOffset = _mesh->activeCellOffset() * _lagrangeConstraints->numElementConstraints();
+  GlobalIndexType globalIndex = cellOffset + numGlobalDofs;
+  for (int elemLagrangeIndex=0; elemLagrangeIndex<_lagrangeConstraints->numElementConstraints(); elemLagrangeIndex++) {
+    for (IndexType cellIndex=0; cellIndex<numMyElements; cellIndex++) {
+      myGlobalIndices[offset++] = globalIndex++;
+    }
+  }
+
+  if ( rank == 0 ) {
+    // set up the zmcs and global Lagrange constraints, which come at the end...
+    for (int i=0; i<numGlobalLagrange; i++) {
+      myGlobalIndices[offset++] = i + numGlobalDofs + globalNumElementLagrange;
+    }
+    for (int i=0; i<zeroMeanConstraintsSize; i++) {
+      myGlobalIndices[offset++] = i + numGlobalDofs + globalNumElementLagrange + numGlobalLagrange;
+    }
+  }
+
+  if (offset != localDofsSize) {
+    cout << "WARNING: Apparent internal error in Solution::getPartitionMap.  # entries filled in myGlobalDofIndices does not match its size...\n";
+  }
+
+  int totalRows = numGlobalDofs + globalNumElementLagrange + numGlobalLagrange + zeroMeanConstraintsSize;
+
+  int indexBase = 0;
+  const Teuchos::ArrayView<const GlobalIndexType> rankGlobalIndices(myGlobalIndices, localDofsSize);
+  MapPtr partMap = Teuchos::rcp( new Tpetra::Map<IndexType,GlobalIndexType>(totalRows, rankGlobalIndices, indexBase, Comm) );
+
+  if (localDofsSize!=0){
+    delete[] myGlobalIndices;
+  }
+  return partMap;
+}
 
 void Solution::processSideUpgrades( const map<GlobalIndexType, pair< ElementTypePtr, ElementTypePtr > > &cellSideUpgrades ) {
   set<GlobalIndexType> cellIDsToSkip; //empty
