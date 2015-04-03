@@ -7,19 +7,21 @@
 
 #include "Basis.h"
 
-class Projector {
- public:
+namespace Camellia {
+	class Projector {
+	 public:
 
-  // newest version:
-  static void projectFunctionOntoBasis(Intrepid::FieldContainer<double> &basisCoefficients,
-                                       FunctionPtr fxn, BasisPtr basis, BasisCachePtr basisCache,
-                                       IPPtr ip, VarPtr v,
-                                       std::set<int>fieldIndicesToSkip = std::set<int>());
-  
-  static void projectFunctionOntoBasis(Intrepid::FieldContainer<double> &basisCoefficients,
-                                       FunctionPtr fxn, BasisPtr basis, BasisCachePtr basisCache);
-  
-  static void projectFunctionOntoBasisInterpolating(Intrepid::FieldContainer<double> &basisCoefficients,
-                                                    FunctionPtr fxn, BasisPtr basis, BasisCachePtr domainBasisCache);
-};
+	  // newest version:
+	  static void projectFunctionOntoBasis(Intrepid::FieldContainer<double> &basisCoefficients,
+	                                       FunctionPtr fxn, BasisPtr basis, BasisCachePtr basisCache,
+	                                       IPPtr ip, VarPtr v,
+	                                       std::set<int>fieldIndicesToSkip = std::set<int>());
+	  
+	  static void projectFunctionOntoBasis(Intrepid::FieldContainer<double> &basisCoefficients,
+	                                       FunctionPtr fxn, BasisPtr basis, BasisCachePtr basisCache);
+	  
+	  static void projectFunctionOntoBasisInterpolating(Intrepid::FieldContainer<double> &basisCoefficients,
+	                                                    FunctionPtr fxn, BasisPtr basis, BasisCachePtr domainBasisCache);
+	};
+}
 #endif

@@ -15,19 +15,21 @@
 #include "LinearTerm.h"
 #include "SpatiallyFilteredFunction.h"
 
-class Constraint {
-  LinearTermPtr _linearTerm;
-  FunctionPtr _f;
-public:
-  Constraint(LinearTermPtr linearTerm, FunctionPtr f);
-  LinearTermPtr linearTerm() const;
-  FunctionPtr f() const;
-  static Constraint spatiallyFilteredConstraint(const Constraint &c, SpatialFilterPtr sf);
-};
+namespace Camellia {
+	class Constraint {
+	  LinearTermPtr _linearTerm;
+	  FunctionPtr _f;
+	public:
+	  Constraint(LinearTermPtr linearTerm, FunctionPtr f);
+	  LinearTermPtr linearTerm() const;
+	  FunctionPtr f() const;
+	  static Constraint spatiallyFilteredConstraint(const Constraint &c, SpatialFilterPtr sf);
+	};
 
-Constraint operator==(VarPtr v, FunctionPtr f);
-Constraint operator==(FunctionPtr f, VarPtr v);
-Constraint operator==(LinearTermPtr a, FunctionPtr f);
-Constraint operator==(FunctionPtr f, LinearTermPtr a);
+	Constraint operator==(VarPtr v, FunctionPtr f);
+	Constraint operator==(FunctionPtr f, VarPtr v);
+	Constraint operator==(LinearTermPtr a, FunctionPtr f);
+	Constraint operator==(FunctionPtr f, LinearTermPtr a);
+}
 
 #endif

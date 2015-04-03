@@ -76,7 +76,7 @@ bool MeshTestUtility::checkMeshConsistency(Teuchos::RCP<Mesh> mesh) {
           int numPoints = myVertices.dimension(0);
           for (int i=0; i<numPoints; i++) { // numPoints
             int neighborVertexIndex = numPoints - 1 - i; // should be in reverse order, based on our 2D layout strategy
-            if ( ( myVertices(i,0) != neighborVertices(neighborVertexIndex,0) ) 
+            if ( ( myVertices(i,0) != neighborVertices(neighborVertexIndex,0) )
                 || ( myVertices(i,0) != neighborVertices(neighborVertexIndex,0) ) ) {
               cout << "cellID " << cellID << " and " << neighborCellID << " do not agree on shared edge " << endl;
               cout << "cellID " << cellID << " vertices: " << endl;
@@ -94,15 +94,15 @@ bool MeshTestUtility::checkMeshConsistency(Teuchos::RCP<Mesh> mesh) {
   // setup test points:
   static const int NUM_POINTS_1D = 10;
   double x[NUM_POINTS_1D] = {0.11,-0.2,0.313,-0.4,0.54901,-0.6,0.73134,-0.810,0.912,-1.0};
-  
+
   FieldContainer<double> testPoints1D = FieldContainer<double>(NUM_POINTS_1D,1);
   for (int i=0; i<NUM_POINTS_1D; i++) {
     testPoints1D(i, 0) = x[i];
   }
-  
+
   // TODO: get this working for MultiBasis
   //neighborBasesAgreeOnSides(mesh,testPoints1D);
-  
+
   return success;
 }
 
@@ -136,7 +136,7 @@ bool MeshTestUtility::checkMeshDofConnectivities(Teuchos::RCP<Mesh> mesh) {
             globalDofIndexHitCount[globalDofIndex]++;
           }
         }
-        
+
         // now a more subtle check: given the mesh layout (that all vertices are specified CCW),
         // the dofs for boundary variables (fluxes & traces) should be reversed between element and its neighbor
         if (mesh->bilinearForm()->isFluxOrTrace(trialID)) {
@@ -145,7 +145,7 @@ bool MeshTestUtility::checkMeshDofConnectivities(Teuchos::RCP<Mesh> mesh) {
             //            if (neighbor->cellID() != -1) { // not boundary...
             int ancestralSideIndexInNeighbor;
             Teuchos::RCP<Element> neighbor = mesh->ancestralNeighborForSide(elem, sideIndex, ancestralSideIndexInNeighbor);
-            
+
             Teuchos::RCP<DofOrdering> neighborTrialOrder = neighbor->elementType()->trialOrderPtr;
             int neighborNumBasisDofs = neighborTrialOrder->getBasisCardinality(trialID,ancestralSideIndexInNeighbor);
             if (neighborNumBasisDofs != numBasisDofs) {
@@ -167,7 +167,7 @@ bool MeshTestUtility::checkMeshDofConnectivities(Teuchos::RCP<Mesh> mesh) {
                   int mySideIndexInNeighbor = (*entryIt).second;
                   neighbor = mesh->getElement(neighborCellID);
                   int neighborNumDofs = neighbor->elementType()->trialOrderPtr->getBasisCardinality(trialID,mySideIndexInNeighbor);
-                  
+
                   for (int dofOrdinal=0; dofOrdinal<neighborNumDofs; dofOrdinal++) {
                     int myLocalDofIndex;
                     if ((descendantsForSide.size() > 1) && !mesh->usePatchBasis()) {
@@ -176,14 +176,14 @@ bool MeshTestUtility::checkMeshDofConnectivities(Teuchos::RCP<Mesh> mesh) {
                       myLocalDofIndex = elem->elementType()->trialOrderPtr->getDofIndex(trialID,dofOrdinal,sideIndex);
                     }
                     int globalDofIndex = mesh->globalDofIndex(cellID,myLocalDofIndex);
-                    
+
                     // neighbor's dofs are in reverse order from mine along each side
                     int permutedDofOrdinal = GDAMaximumRule2D::neighborDofPermutation(dofOrdinal,neighborNumDofs);
-                    
+
                     int neighborLocalDofIndex = neighbor->elementType()->trialOrderPtr->getDofIndex(trialID,permutedDofOrdinal,mySideIndexInNeighbor);
-                    int neighborsGlobalDofIndex = mesh->globalDofIndex(neighbor->cellID(),neighborLocalDofIndex);                
+                    int neighborsGlobalDofIndex = mesh->globalDofIndex(neighbor->cellID(),neighborLocalDofIndex);
                     if (neighborsGlobalDofIndex != globalDofIndex) {
-                      
+
                       cout << "FAILURE: checkDofConnectivities--(cellID, localDofIndex) : (" << cellID << ", " << myLocalDofIndex << ") != (";
                       cout << neighborCellID << ", " << neighborLocalDofIndex << ") -- ";
                       cout << globalDofIndex << " != " << neighborsGlobalDofIndex << "\n";
@@ -200,7 +200,7 @@ bool MeshTestUtility::checkMeshDofConnectivities(Teuchos::RCP<Mesh> mesh) {
                 vector< pair<int,int> > descendantsForSide = ancestor->getDescendantsForSide(ancestorSideIndex);
                 int descendantIndex = 0;
                 int leafIndexInNeighbor = -1;
-                for (vector< pair<int,int> >::iterator entryIt = descendantsForSide.begin(); 
+                for (vector< pair<int,int> >::iterator entryIt = descendantsForSide.begin();
                      entryIt != descendantsForSide.end();  entryIt++, descendantIndex++) {
                   if (entryIt->first == cellID) {
                     leafIndexInNeighbor = GDAMaximumRule2D::neighborChildPermutation(descendantIndex, descendantsForSide.size());
@@ -225,7 +225,7 @@ bool MeshTestUtility::checkMeshDofConnectivities(Teuchos::RCP<Mesh> mesh) {
                   // cardinalities match, check that global dofs line up
                   for (int dofOrdinal = 0; dofOrdinal < numBasisDofs; dofOrdinal++) {
                     int permutedDofOrdinal = GDAMaximumRule2D::neighborDofPermutation(dofOrdinal, numBasisDofs);
-                    int neighborDofOrdinal = neighborMultiBasis->relativeToAbsoluteDofOrdinal(permutedDofOrdinal, 
+                    int neighborDofOrdinal = neighborMultiBasis->relativeToAbsoluteDofOrdinal(permutedDofOrdinal,
                                                                                               leafIndexInNeighbor);
                     int neighborLocalDofIndex = neighbor->elementType()->trialOrderPtr->getDofIndex(trialID, neighborDofOrdinal,ancestralSideIndexInNeighbor);
                     int neighborGlobalDofIndex = mesh->globalDofIndex(neighbor->cellID(), neighborLocalDofIndex);
@@ -248,7 +248,7 @@ bool MeshTestUtility::checkMeshDofConnectivities(Teuchos::RCP<Mesh> mesh) {
                 success = false;
               }
             } else { // (neighborNumBasisDofs == numBasisDofs)
-              if (! neighbor->isParent() ) { 
+              if (! neighbor->isParent() ) {
                 for (int dofOrdinal=0; dofOrdinal<numBasisDofs; dofOrdinal++) {
                   int permutedDofOrdinal = GDAMaximumRule2D::neighborDofPermutation(dofOrdinal,numBasisDofs);
                   int neighborsLocalDofIndex = neighborTrialOrder->getDofIndex(trialID, permutedDofOrdinal, ancestralSideIndexInNeighbor);
@@ -307,18 +307,18 @@ bool MeshTestUtility::determineRefTestPointsForNeighbors(MeshTopologyPtr meshTop
                                                          FieldContainer<double> &coarseSideRefPoints, FieldContainer<double> &coarseCellRefPoints) {
   unsigned spaceDim = meshTopo->getSpaceDim();
   unsigned sideDim = spaceDim - 1;
-  
+
   if (spaceDim == 1) {
     fineSideRefPoints.resize(0,0);
     coarseSideRefPoints.resize(0,0);
     fineCellRefPoints.resize(1,1);
     coarseCellRefPoints.resize(1,1);
-    
+
     FieldContainer<double> lineRefNodes(2,1);
     CellTopoPtr line = CellTopology::line();
 
     CamelliaCellTools::refCellNodesForTopology(lineRefNodes, line);
-    
+
     fineCellRefPoints[0] = lineRefNodes[sideOrdinal];
     unsigned neighborSideOrdinal = fineCell->getNeighborInfo(sideOrdinal).second;
     if (neighborSideOrdinal != -1) {
@@ -339,23 +339,23 @@ bool MeshTestUtility::determineRefTestPointsForNeighbors(MeshTopologyPtr meshTop
   }
 
   CellTopoPtr fineSideTopo = fineCell->topology()->getSubcell(sideDim, sideOrdinal);
-  
+
   CubatureFactory cubFactory;
   int cubDegree = 4; // fairly arbitrary choice: enough to get a decent number of test points...
   Teuchos::RCP<Cubature<double> > fineSideTopoCub = cubFactory.create(fineSideTopo, cubDegree);
-  
+
   int numCubPoints = fineSideTopoCub->getNumPoints();
-  
+
   FieldContainer<double> cubPoints(numCubPoints, sideDim);
   FieldContainer<double> cubWeights(numCubPoints); // we neglect these...
-  
+
   fineSideTopoCub->getCubature(cubPoints, cubWeights);
-  
+
   FieldContainer<double> sideRefCellNodes(fineSideTopo->getNodeCount(),sideDim);
   CamelliaCellTools::refCellNodesForTopology(sideRefCellNodes, fineSideTopo);
 
   int numTestPoints = numCubPoints + fineSideTopo->getNodeCount();
-  
+
   FieldContainer<double> testPoints(numTestPoints, sideDim);
   for (int ptOrdinal=0; ptOrdinal<testPoints.dimension(0); ptOrdinal++) {
     if (ptOrdinal<fineSideTopo->getNodeCount()) {
@@ -368,45 +368,45 @@ bool MeshTestUtility::determineRefTestPointsForNeighbors(MeshTopologyPtr meshTop
       }
     }
   }
-  
+
   fineSideRefPoints = testPoints;
   fineCellRefPoints.resize(numTestPoints, spaceDim);
-  
+
   CamelliaCellTools::mapToReferenceSubcell(fineCellRefPoints, testPoints, sideDim, sideOrdinal, fineCell->topology());
-  
+
   CellTopoPtr coarseSideTopo = neighborCell->topology()->getSubcell(sideDim, neighborInfo.second);
-  
+
   unsigned fineSideAncestorPermutation = fineCell->ancestralPermutationForSubcell(sideDim, sideOrdinal);
   unsigned coarseSidePermutation = neighborCell->subcellPermutation(sideDim, neighborInfo.second);
-  
+
   unsigned coarseSideAncestorPermutationInverse = CamelliaCellTools::permutationInverse(coarseSideTopo, coarseSidePermutation);
-  
+
   unsigned composedPermutation = CamelliaCellTools::permutationComposition(coarseSideTopo, fineSideAncestorPermutation, coarseSideAncestorPermutationInverse); // goes from coarse ordering to fine.
-  
+
   RefinementBranch fineRefBranch = fineCell->refinementBranchForSide(sideOrdinal);
-  
+
   FieldContainer<double> fineSideNodes(fineSideTopo->getNodeCount(), sideDim);  // relative to the ancestral cell whose neighbor is compatible
   if (fineRefBranch.size() == 0) {
     CamelliaCellTools::refCellNodesForTopology(fineSideNodes, coarseSideTopo, composedPermutation);
   } else {
     FieldContainer<double> ancestralSideNodes(coarseSideTopo->getNodeCount(), sideDim);
     CamelliaCellTools::refCellNodesForTopology(ancestralSideNodes, coarseSideTopo, composedPermutation);
-    
+
     RefinementBranch fineSideRefBranch = RefinementPattern::sideRefinementBranch(fineRefBranch, sideOrdinal);
     fineSideNodes = RefinementPattern::descendantNodes(fineSideRefBranch, ancestralSideNodes);
   }
-  
+
   BasisCachePtr sideTopoCache = Teuchos::rcp( new BasisCache(fineSideTopo, 1, false) );
   sideTopoCache->setRefCellPoints(testPoints);
-  
+
   // add cell dimension
   fineSideNodes.resize(1,fineSideNodes.dimension(0), fineSideNodes.dimension(1));
   sideTopoCache->setPhysicalCellNodes(fineSideNodes, vector<GlobalIndexType>(), false);
   coarseSideRefPoints = sideTopoCache->getPhysicalCubaturePoints();
-  
+
   // strip off the cell dimension:
   coarseSideRefPoints.resize(coarseSideRefPoints.dimension(1),coarseSideRefPoints.dimension(2));
-  
+
   coarseCellRefPoints.resize(numTestPoints,spaceDim);
   CamelliaCellTools::mapToReferenceSubcell(coarseCellRefPoints, coarseSideRefPoints, sideDim, neighborInfo.second, neighborCell->topology());
 
@@ -420,7 +420,7 @@ bool MeshTestUtility::fcsAgree(const FieldContainer<double> &fc1, const FieldCon
   }
   maxDiff = 0.0;
   for (int i=0; i<fc1.size(); i++) {
-    maxDiff = max(maxDiff, abs(fc1[i] - fc2[i]));
+    maxDiff = std::max(maxDiff, abs(fc1[i] - fc2[i]));
   }
   return (maxDiff <= tol);
 }
@@ -441,16 +441,16 @@ bool MeshTestUtility::neighborBasesAgreeOnSides(Teuchos::RCP<Mesh> mesh, Epetra_
   bool success = true;
   MeshTopologyPtr meshTopo = mesh->getTopology();
   int spaceDim = meshTopo->getSpaceDim();
-  
+
   set<IndexType> activeCellIndices = meshTopo->getActiveCellIndices();
   for (set<IndexType>::iterator cellIt=activeCellIndices.begin(); cellIt != activeCellIndices.end(); cellIt++) {
     IndexType cellIndex = *cellIt;
     CellPtr cell = meshTopo->getCell(cellIndex);
-    
+
     BasisCachePtr fineCellBasisCache = BasisCache::basisCacheForCell(mesh, cellIndex);
     ElementTypePtr fineElemType = mesh->getElementType(cellIndex);
     DofOrderingPtr fineElemTrialOrder = fineElemType->trialOrderPtr;
-    
+
     FieldContainer<double> fineSolutionCoefficients(fineElemTrialOrder->totalDofs());
     mesh->globalDofAssignment()->interpretGlobalCoefficients(cellIndex, fineSolutionCoefficients, globalSolutionCoefficients);
 //    if ((cellIndex==0) || (cellIndex==2)) {
@@ -462,32 +462,32 @@ bool MeshTestUtility::neighborBasesAgreeOnSides(Teuchos::RCP<Mesh> mesh, Epetra_
       FieldContainer<double> fineSideRefPoints, fineCellRefPoints, coarseSideRefPoints, coarseCellRefPoints;
       bool hasCoarserNeighbor = determineRefTestPointsForNeighbors(meshTopo, cell, sideOrdinal, fineSideRefPoints, fineCellRefPoints, coarseSideRefPoints, coarseCellRefPoints);
       if (!hasCoarserNeighbor) continue;
-      
+
       pair<GlobalIndexType, unsigned> neighborInfo = cell->getNeighborInfo(sideOrdinal);
-      
+
       CellPtr neighborCell = meshTopo->getCell(neighborInfo.first);
-      
+
       unsigned numTestPoints = coarseCellRefPoints.dimension(0);
-      
+
       //        cout << "testing neighbor agreement between cell " << cellIndex << " and " << neighborCell->cellIndex() << endl;
-      
+
       // if we get here, the cell has a neighbor on this side, and is at least as fine as that neighbor.
-      
+
       BasisCachePtr fineSideBasisCache = fineCellBasisCache->getSideBasisCache(sideOrdinal);
-      
+
       fineCellBasisCache->setRefCellPoints(fineCellRefPoints);
-      
+
       BasisCachePtr coarseCellBasisCache = BasisCache::basisCacheForCell(mesh, neighborInfo.first);
       BasisCachePtr coarseSideBasisCache = coarseCellBasisCache->getSideBasisCache(neighborInfo.second);
-    
+
       coarseCellBasisCache->setRefCellPoints(coarseCellRefPoints);
-      
+
       bool hasSidePoints = (fineSideRefPoints.size() > 0);
       if (hasSidePoints) {
         fineSideBasisCache->setRefCellPoints(fineSideRefPoints);
         coarseSideBasisCache->setRefCellPoints(coarseSideRefPoints);
       }
-      
+
       // sanity check: do physical points match?
 
       FieldContainer<double> fineCellPhysicalCubaturePoints = fineCellBasisCache->getPhysicalCubaturePoints();
@@ -500,11 +500,11 @@ bool MeshTestUtility::neighborBasesAgreeOnSides(Teuchos::RCP<Mesh> mesh, Epetra_
         success = false;
         continue;
       }
-      
+
       if (hasSidePoints) {
         FieldContainer<double> fineSidePhysicalCubaturePoints = fineSideBasisCache->getPhysicalCubaturePoints();
         FieldContainer<double> coarseSidePhysicalCubaturePoints = coarseSideBasisCache->getPhysicalCubaturePoints();
-        
+
         double tol = 1e-14;
         double maxDiff = 0;
         if (! fcsAgree(fineSidePhysicalCubaturePoints, fineCellPhysicalCubaturePoints, tol, maxDiff) ) {
@@ -523,13 +523,13 @@ bool MeshTestUtility::neighborBasesAgreeOnSides(Teuchos::RCP<Mesh> mesh, Epetra_
           continue;
         }
       }
-      
+
       ElementTypePtr coarseElementType = mesh->getElementType(neighborInfo.first);
       DofOrderingPtr coarseElemTrialOrder = coarseElementType->trialOrderPtr;
-      
+
       FieldContainer<double> coarseSolutionCoefficients(coarseElemTrialOrder->totalDofs());
       mesh->globalDofAssignment()->interpretGlobalCoefficients(neighborInfo.first, coarseSolutionCoefficients, globalSolutionCoefficients);
-      
+
       set<int> varIDs = fineElemTrialOrder->getVarIDs();
       for (set<int>::iterator varIt = varIDs.begin(); varIt != varIDs.end(); varIt++) {
         int varID = *varIt;
@@ -548,7 +548,7 @@ bool MeshTestUtility::neighborBasesAgreeOnSides(Teuchos::RCP<Mesh> mesh, Epetra_
           coarseBasis = coarseElemTrialOrder->getBasis(varID);
           fineCache = fineCellBasisCache;
           coarseCache = coarseCellBasisCache;
-          
+
           Camellia::EFunctionSpace fs = fineBasis->functionSpace();
           if ((fs == Camellia::FUNCTION_SPACE_HVOL)
               || (fs == Camellia::FUNCTION_SPACE_VECTOR_HVOL)
@@ -559,9 +559,9 @@ bool MeshTestUtility::neighborBasesAgreeOnSides(Teuchos::RCP<Mesh> mesh, Epetra_
         }
         FieldContainer<double> localValuesFine = *fineCache->getTransformedValues(fineBasis, OP_VALUE);
         FieldContainer<double> localValuesCoarse = *coarseCache->getTransformedValues(coarseBasis, OP_VALUE);
-        
+
         bool scalarValued = (localValuesFine.rank() == 3);
-        
+
         // the following used if vector or tensor-valued:
         Teuchos::Array<int> valueDim;
         unsigned componentsPerValue = 1;
@@ -575,34 +575,34 @@ bool MeshTestUtility::neighborBasesAgreeOnSides(Teuchos::RCP<Mesh> mesh, Epetra_
           valueContainer.resize(valueDim);
           componentsPerValue = valueContainer.size();
         }
-        
+
         //          if (localValuesFine.rank() != 3) {
         //            cout << "WARNING: MeshTestUtility::neighborBasesAgreeOnSides() only supports scalar-valued bases right now.  Skipping check for varID " << varID << endl;
         //            continue;
         //          }
-        
+
         FieldContainer<double> localPointValuesFine(fineElemTrialOrder->totalDofs());
         FieldContainer<double> localPointValuesCoarse(coarseElemTrialOrder->totalDofs());
-        
+
         for (int valueComponentOrdinal=0; valueComponentOrdinal<componentsPerValue; valueComponentOrdinal++) {
           Teuchos::Array<int> valueMultiIndex(valueContainer.rank());
-          
+
           if (!scalarValued)
             valueContainer.getMultiIndex(valueMultiIndex, valueComponentOrdinal);
-          
+
           Teuchos::Array<int> localValuesMultiIndex(localValuesFine.rank());
-          
+
           for (int r=0; r<valueMultiIndex.size(); r++) {
             localValuesMultiIndex[r+3] = valueMultiIndex[r];
           }
-          
+
           for (int ptOrdinal=0; ptOrdinal<numTestPoints; ptOrdinal++) {
             localPointValuesCoarse.initialize(0);
             localPointValuesFine.initialize(0);
             localValuesMultiIndex[2] = ptOrdinal;
-            
+
             double fineSolutionValue = 0, coarseSolutionValue = 0;
-            
+
             for (int basisOrdinal=0; basisOrdinal < fineBasis->getCardinality(); basisOrdinal++) {
               int fineDofIndex;
               if (isTraceVar)
@@ -615,7 +615,7 @@ bool MeshTestUtility::neighborBasesAgreeOnSides(Teuchos::RCP<Mesh> mesh, Epetra_
                 localValuesMultiIndex[1] = basisOrdinal;
                 localPointValuesFine(fineDofIndex) = localValuesFine.getValue(localValuesMultiIndex);
               }
-              
+
               fineSolutionValue += fineSolutionCoefficients(fineDofIndex) * localPointValuesFine(fineDofIndex);
             }
             for (int basisOrdinal=0; basisOrdinal < coarseBasis->getCardinality(); basisOrdinal++) {
@@ -632,7 +632,7 @@ bool MeshTestUtility::neighborBasesAgreeOnSides(Teuchos::RCP<Mesh> mesh, Epetra_
               }
               coarseSolutionValue += coarseSolutionCoefficients(coarseDofIndex) * localPointValuesCoarse(coarseDofIndex);
             }
-            
+
             if (abs(coarseSolutionValue - fineSolutionValue) > 1e-13) {
               success = false;
               cout << "coarseSolutionValue (" << coarseSolutionValue << ") and fineSolutionValue (" << fineSolutionValue << ") differ by " << abs(coarseSolutionValue - fineSolutionValue);
@@ -647,28 +647,28 @@ bool MeshTestUtility::neighborBasesAgreeOnSides(Teuchos::RCP<Mesh> mesh, Epetra_
 //              cout << fineSidePhysicalCubaturePoints(0,ptOrdinal,spaceDim-1) << "): ";
 //              cout << coarseSolutionValue << endl;
             }
-            
+
             FieldContainer<double> globalValuesFromFine, globalValuesFromCoarse;
             FieldContainer<GlobalIndexType> globalDofIndicesFromFine, globalDofIndicesFromCoarse;
-            
+
             mesh->globalDofAssignment()->interpretLocalData(cellIndex, localPointValuesFine, globalValuesFromFine, globalDofIndicesFromFine);
             mesh->globalDofAssignment()->interpretLocalData(neighborInfo.first, localPointValuesCoarse, globalValuesFromCoarse, globalDofIndicesFromCoarse);
-            
+
             std::map<GlobalIndexType, double> fineValuesMap;
             std::map<GlobalIndexType, double> coarseValuesMap;
-            
+
             for (int i=0; i<globalDofIndicesFromCoarse.size(); i++) {
               GlobalIndexType globalDofIndex = globalDofIndicesFromCoarse[i];
               coarseValuesMap[globalDofIndex] = globalValuesFromCoarse[i];
             }
-            
+
             double maxDiff = 0;
             for (int i=0; i<globalDofIndicesFromFine.size(); i++) {
               GlobalIndexType globalDofIndex = globalDofIndicesFromFine[i];
               fineValuesMap[globalDofIndex] = globalValuesFromFine[i];
-              
+
               double diff = abs( fineValuesMap[globalDofIndex] - coarseValuesMap[globalDofIndex]);
-              maxDiff = max(diff, maxDiff);
+              maxDiff = std::max(diff, maxDiff);
               if (diff > tol) {
                 success = false;
                 cout << "interpreted fine and coarse disagree at point (";
@@ -685,10 +685,10 @@ bool MeshTestUtility::neighborBasesAgreeOnSides(Teuchos::RCP<Mesh> mesh, Epetra_
               cout << "maxDiff: " << maxDiff << endl;
               cout << "globalValuesFromFine:\n" << globalValuesFromFine;
               cout << "globalValuesFromCoarse:\n" << globalValuesFromCoarse;
-              
+
               cout << "globalDofIndicesFromFine:\n" << globalDofIndicesFromFine;
               cout <<  "globalDofIndicesFromCoarse:\n" << globalDofIndicesFromCoarse;
-              
+
               continue; // only worth testing further if we passed the above
             }
           }
@@ -696,7 +696,7 @@ bool MeshTestUtility::neighborBasesAgreeOnSides(Teuchos::RCP<Mesh> mesh, Epetra_
       }
     }
   }
-  
+
 //  cout << "Completed neighborBasesAgreeOnSides.\n";
   return success;
 }

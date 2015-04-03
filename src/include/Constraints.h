@@ -42,14 +42,16 @@
 
 using namespace std;
 
-class Constraints {
-public:  
-  //given trialID, field container for constraint matrix gives one coeff per point
-  virtual void getConstraints(Intrepid::FieldContainer<double> &physicalPoints, 
-			      Intrepid::FieldContainer<double> &unitNormals,
-			      vector<map<int,Intrepid::FieldContainer<double > > > &constraintCoeffs,
-			      vector<Intrepid::FieldContainer<double > > &constraintValues){};
-  // TODO - figure out some way to skip over edges, points, or variables we don't use
-};
+namespace Camellia {
+	class Constraints {
+	public:  
+	  //given trialID, field container for constraint matrix gives one coeff per point
+	  virtual void getConstraints(Intrepid::FieldContainer<double> &physicalPoints, 
+				      Intrepid::FieldContainer<double> &unitNormals,
+				      vector<map<int,Intrepid::FieldContainer<double > > > &constraintCoeffs,
+				      vector<Intrepid::FieldContainer<double > > &constraintValues){};
+	  // TODO - figure out some way to skip over edges, points, or variables we don't use
+	};
+}
 
 #endif

@@ -46,20 +46,22 @@
 
 #include "CellTopology.h"
 
-class ElementType {
-public: // TODO: create accessors for these Ptrs, and make them private...
-  Teuchos::RCP< DofOrdering > trialOrderPtr;
-  Teuchos::RCP< DofOrdering > testOrderPtr;
-  CellTopoPtr cellTopoPtr;
-  
-  ElementType(Teuchos::RCP< DofOrdering > trialOrderPtr,
-              Teuchos::RCP< DofOrdering > testOrderPtr,
-              CellTopoPtr cellTopoPtr) {
-    // TODO: for adaptivity: add bool [] sidesBroken??
-    this->trialOrderPtr = trialOrderPtr;
-    this->testOrderPtr = testOrderPtr;
-    this->cellTopoPtr = cellTopoPtr;
-  }
-};
+namespace Camellia {
+  class ElementType {
+  public: // TODO: create accessors for these Ptrs, and make them private...
+    Teuchos::RCP< DofOrdering > trialOrderPtr;
+    Teuchos::RCP< DofOrdering > testOrderPtr;
+    CellTopoPtr cellTopoPtr;
+    
+    ElementType(Teuchos::RCP< DofOrdering > trialOrderPtr,
+                Teuchos::RCP< DofOrdering > testOrderPtr,
+                CellTopoPtr cellTopoPtr) {
+      // TODO: for adaptivity: add bool [] sidesBroken??
+      this->trialOrderPtr = trialOrderPtr;
+      this->testOrderPtr = testOrderPtr;
+      this->cellTopoPtr = cellTopoPtr;
+    }
+  };
+}
 
 #endif

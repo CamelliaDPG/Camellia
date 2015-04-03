@@ -20,29 +20,32 @@
 
 using namespace std;
 
-enum RefinementType {
-  H_REFINEMENT, P_REFINEMENT, H_X_REFINEMENT, H_Y_REFINEMENT, H_Z_REFINEMENT, H_UNREFINEMENT, NULL_REFINEMENT, UNKNOWN_REFINEMENT // X: cut vertically, Y: cut horizontally
-};
+namespace Camellia {
+  enum RefinementType {
+    H_REFINEMENT, P_REFINEMENT, H_X_REFINEMENT, H_Y_REFINEMENT, H_Z_REFINEMENT, H_UNREFINEMENT, NULL_REFINEMENT, UNKNOWN_REFINEMENT // X: cut vertically, Y: cut horizontally
+  };
 
-class RefinementHistory : public RefinementObserver {
-  typedef pair< RefinementType, set<GlobalIndexType> > Refinement;
-  vector< Refinement > _refinements;
-public:
-  void hRefine(const set<GlobalIndexType> &cellIDs, Teuchos::RCP<RefinementPattern> refPattern);
-  void hUnrefine(const set<GlobalIndexType> &cellIDs);
-  
-  void pRefine(const set<GlobalIndexType> &cellIDs);
-  
-  void playback(MeshPtr mesh);
-  
-  // file I/O
-  void saveToFile(string fileName);
-  void loadFromFile(string fileName);
-#ifdef HAVE_EPETRAEXT_HDF5
-  void saveToHDF5(EpetraExt::HDF5 &hdf5);
-#endif
-  
-  static RefinementPatternPtr refPatternForRefType(RefinementType refType, CellTopoPtr cellTopo);
-};
+  class RefinementHistory : public RefinementObserver {
+    typedef pair< RefinementType, set<GlobalIndexType> > Refinement;
+    vector< Refinement > _refinements;
+  public:
+    void hRefine(const set<GlobalIndexType> &cellIDs, Teuchos::RCP<RefinementPattern> refPattern);
+    void hUnrefine(const set<GlobalIndexType> &cellIDs);
+    
+    void pRefine(const set<GlobalIndexType> &cellIDs);
+    
+    void playback(MeshPtr mesh);
+    
+    // file I/O
+    void saveToFile(string fileName);
+    void loadFromFile(string fileName);
+  #ifdef HAVE_EPETRAEXT_HDF5
+    void saveToHDF5(EpetraExt::HDF5 &hdf5);
+  #endif
+    
+    static RefinementPatternPtr refPatternForRefType(RefinementType refType, CellTopoPtr cellTopo);
+  };
+}
+
 
 #endif

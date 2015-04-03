@@ -14,10 +14,10 @@
 
 #include "BasisCache.h"
 
-#include "EpetraExt_ConfigDefs.h"
-#ifdef HAVE_EPETRAEXT_HDF5
+// #include "EpetraExt_ConfigDefs.h"
+// #ifdef HAVE_EPETRAEXT_HDF5
 #include "HDF5Exporter.h"
-#endif
+// #endif
 
 #include "MeshPartitionPolicy.h"
 
@@ -26,7 +26,7 @@ using namespace Camellia;
 
 class InducedMeshPartitionPolicy : public MeshPartitionPolicy {
   // (note that the induced partition policy will break if either mesh is refined, since the cellID map will change...)
-  
+
   map<GlobalIndexType, GlobalIndexType> _cellIDMap; // keys are this mesh's cellIDs; values are otherMesh's
   MeshPtr _otherMesh;
 public:
@@ -34,16 +34,16 @@ public:
     _otherMesh = otherMesh;
     _cellIDMap = cellIDMap; // copy
   }
-  
+
   virtual void partitionMesh(Mesh *mesh, PartitionIndexType numPartitions) {
     int otherPartitionCount = _otherMesh->globalDofAssignment()->getPartitionCount();
     if (numPartitions < otherPartitionCount) {
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Induced partition count must be greater than or equal to otherMesh's");
     }
-    
+
     set<GlobalIndexType> activeCellIDs = mesh->getActiveCellIDs();
     vector< set<GlobalIndexType> > partitions(numPartitions);
-    
+
     for (set<GlobalIndexType>::iterator myCellIDIt = activeCellIDs.begin(); myCellIDIt != activeCellIDs.end(); myCellIDIt++) {
       GlobalIndexType myCellID = *myCellIDIt;
       if (_cellIDMap.find(myCellID) == _cellIDMap.end()) {
@@ -53,7 +53,7 @@ public:
       int otherPartitionNumber = _otherMesh->globalDofAssignment()->partitionForCellID(otherCellID);
       partitions[otherPartitionNumber].insert(myCellID);
     }
-    
+
     mesh->globalDofAssignment()->setPartitions(partitions);
   }
 };
@@ -120,11 +120,11 @@ MeshPtr MeshTools::timeSliceMesh(MeshPtr spaceTimeMesh, double t,
   MeshTopologyPtr meshTopo = spaceTimeMesh->getTopology();
   set<IndexType> cellIDsToCheck = meshTopo->getRootCellIndices();
   set<IndexType> activeCellIDsForTime;
-  
+
   set<IndexType> allActiveCellIDs = meshTopo->getActiveCellIndices();
-  
+
   int spaceDim = meshTopo->getSpaceDim() - 1;  // # of true spatial dimensions
-  
+
   MeshTopologyPtr sliceTopo = Teuchos::rcp( new MeshTopology(spaceDim) );
   set<IndexType> rootCellIDs = meshTopo->getRootCellIndices();
   for (set<IndexType>::iterator rootCellIt = rootCellIDs.begin(); rootCellIt != rootCellIDs.end(); rootCellIt++) {
@@ -137,16 +137,16 @@ MeshPtr MeshTools::timeSliceMesh(MeshPtr spaceTimeMesh, double t,
       sliceCellIDToSpaceTimeCellID[sliceCell->cellIndex()] = rootCellID;
     }
   }
-  
+
   MeshPtr sliceMesh = Teuchos::rcp( new Mesh(sliceTopo, spaceTimeMesh->bilinearForm(), H1OrderForSlice, spaceDim) );
-  
+
   // process refinements.  For now, we assume isotropic refinements, which means that each refinement in spacetime induces a refinement in the spatial slice
   set<IndexType> sliceCellIDsToCheckForRefinement = sliceTopo->getActiveCellIndices();
   while (sliceCellIDsToCheckForRefinement.size() > 0) {
     set<IndexType>::iterator cellIt = sliceCellIDsToCheckForRefinement.begin();
     IndexType sliceCellID = *cellIt;
     sliceCellIDsToCheckForRefinement.erase(cellIt);
-    
+
     CellPtr sliceCell = sliceTopo->getCell(sliceCellID);
     CellPtr spaceTimeCell = meshTopo->getCell(sliceCellIDToSpaceTimeCellID[sliceCellID]);
     if (spaceTimeCell->isParent()) {
@@ -166,11 +166,11 @@ MeshPtr MeshTools::timeSliceMesh(MeshPtr spaceTimeMesh, double t,
       }
     }
   }
-  
+
   MeshPartitionPolicyPtr partitionPolicy = Teuchos::rcp( new InducedMeshPartitionPolicy(spaceTimeMesh, sliceCellIDToSpaceTimeCellID) );
-  
+
   sliceMesh->setPartitionPolicy(partitionPolicy);
-  
+
   return sliceMesh;
 }
 
@@ -189,12 +189,12 @@ public:
   }
   void values(FieldContainer<double> &values, BasisCachePtr sliceBasisCache) {
     vector<GlobalIndexType> sliceCellIDs = sliceBasisCache->cellIDs();
-    
+
     Teuchos::Array<int> dim;
     values.dimensions(dim);
     dim[0] = 1; // one cell
     Teuchos::Array<int> offset(dim.size());
-    
+
     for (int cellOrdinal = 0; cellOrdinal < sliceCellIDs.size(); cellOrdinal++) {
       offset[0] = cellOrdinal;
       int enumeration = values.getEnumeration(offset);
@@ -209,10 +209,10 @@ public:
         }
         spaceTimePhysicalPoints(0,ptOrdinal,spaceDim) = _t;
       }
-      
+
       GlobalIndexType cellID = _cellIDMap[sliceCellID];
       BasisCachePtr spaceTimeBasisCache = BasisCache::basisCacheForCell(_spaceTimeMesh, cellID);
-      
+
       FieldContainer<double> spaceTimeRefPoints(1,numPoints,spaceDim+1);
       CamelliaCellTools::mapToReferenceFrame(spaceTimeRefPoints, spaceTimePhysicalPoints, _spaceTimeMesh->getTopology(), cellID, spaceTimeBasisCache->cubatureDegree());
       spaceTimeRefPoints.resize(numPoints,spaceDim+1);
@@ -224,20 +224,20 @@ public:
 
 void MeshTools::timeSliceExport(std::string dirPath, MeshPtr mesh, FunctionPtr spaceTimeFunction, std::vector<double> tValues, std::string functionName) {
   // user is responsible for ensuring that tValues all generate the same slice.  It's a bit of a burden, but there it is...
-#ifdef HAVE_EPETRAEXT_HDF5
+// #ifdef HAVE_EPETRAEXT_HDF5
   map<GlobalIndexType, GlobalIndexType> cellIDMap;
   MeshPtr meshSlice =  timeSliceMesh(mesh, tValues[0], cellIDMap, mesh->globalDofAssignment()->getInitialH1Order());
-  
+
 //  cout << "At time " << t << ", slice has " << meshSlice->numActiveElements() << " active elements.\n";
   HDF5Exporter exporter(meshSlice,dirPath);
-  
+
   for (int i=0; i<tValues.size(); i++) {
     FunctionPtr sliceFunction = Teuchos::rcp( new SliceFunction(mesh,cellIDMap,spaceTimeFunction,tValues[i]) );
     exporter.exportFunction(sliceFunction, functionName, tValues[i]);
   }
-#else
-  cout << "timeSliceExport requires Trilinos/Epetra to be built with HDF5 support.\n";
-#endif
+// #else
+//   cout << "timeSliceExport requires Trilinos/Epetra to be built with HDF5 support.\n";
+// #endif
 }
 
 FunctionPtr MeshTools::timeSliceFunction(MeshPtr spaceTimeMesh, map<GlobalIndexType, GlobalIndexType> &cellIDMap, FunctionPtr spaceTimeFunction, double t) {
@@ -246,3 +246,4 @@ FunctionPtr MeshTools::timeSliceFunction(MeshPtr spaceTimeMesh, map<GlobalIndexT
     timeSliceFunction = Function::restrictToCellBoundary(timeSliceFunction);
   return timeSliceFunction;
 }
+

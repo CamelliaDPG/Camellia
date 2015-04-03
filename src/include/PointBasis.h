@@ -25,17 +25,19 @@
 
 using namespace std;
 
-template<class Scalar=double, class ArrayScalar=Intrepid::FieldContainer<double> > class PointBasis;
-template<class Scalar, class ArrayScalar> class PointBasis : public Camellia::Basis<Scalar,ArrayScalar> {
-  void initializeTags() const;
-public:
-  PointBasis();
-  
-  void getValues(ArrayScalar &outputValues, const ArrayScalar &  inputPoints,
-                 const Intrepid::EOperator operatorType) const;
-};
+namespace Camellia {
+	template<class Scalar=double, class ArrayScalar=Intrepid::FieldContainer<double> > class PointBasis;
+	template<class Scalar, class ArrayScalar> class PointBasis : public Camellia::Basis<Scalar,ArrayScalar> {
+	  void initializeTags() const;
+	public:
+	  PointBasis();
+	  
+	  void getValues(ArrayScalar &outputValues, const ArrayScalar &  inputPoints,
+	                 const Intrepid::EOperator operatorType) const;
+	};
 
-typedef Teuchos::RCP< PointBasis<> > PointBasisPtr;
+	typedef Teuchos::RCP< PointBasis<> > PointBasisPtr;
+}
 
 #include "PointBasisDef.h"
 

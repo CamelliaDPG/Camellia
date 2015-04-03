@@ -15,11 +15,14 @@
 #endif
 
 #include "BF.h"
+#include "Function.h"
 
 #include "RefinementStrategy.h"
 
+using namespace Camellia;
+
 int main(int argc, char *argv[]) {
-  
+
 #ifdef HAVE_MPI
   Teuchos::GlobalMPISession mpiSession(&argc, &argv,0);
 
@@ -27,13 +30,13 @@ int main(int argc, char *argv[]) {
 #else
   Epetra_SerialComm Comm;
 #endif
-  
+
   int commRank = Teuchos::GlobalMPISession::getRank();
-  
+
   Comm.Barrier(); // set breakpoint here to allow debugger attachment to other MPI processes than the one you automatically attached to.
-  
+
   Teuchos::CommandLineProcessor cmdp(false,true); // false: don't throw exceptions; true: do return errors for unrecognized options
-  
+
   // problem parameters:
   double epsilon = 1e-2;
   int numRefs = 0;
@@ -44,49 +47,49 @@ int main(int argc, char *argv[]) {
   cmdp.setOption("numRefs",&numRefs,"number of refinements");
   cmdp.setOption("epsilon", &epsilon, "epsilon");
   cmdp.setOption("norm", &norm, "norm");
-  
+
   if (cmdp.parse(argc,argv) != Teuchos::CommandLineProcessor::PARSE_SUCCESSFUL) {
 #ifdef HAVE_MPI
     MPI_Finalize();
 #endif
     return -1;
   }
-  
+
   VarFactory vf;
   //fields:
   VarPtr sigma = vf.fieldVar("sigma", VECTOR_L2);
   VarPtr u = vf.fieldVar("u", L2);
-  
+
   // traces:
   VarPtr uhat = vf.traceVar("uhat");
   VarPtr tc = vf.fluxVar("tc");
-  
+
   // test:
   VarPtr v = vf.testVar("v", HGRAD);
   VarPtr tau = vf.testVar("tau", HDIV);
-  
+
   FunctionPtr beta_x = Function::constant(1);
   FunctionPtr beta_y = Function::constant(2);
   FunctionPtr beta = Function::vectorize(beta_x, beta_y);
-  
+
   BFPtr bf = Teuchos::rcp( new BF(vf) );
-  
+
   bf->addTerm((1/epsilon) * sigma, tau);
   bf->addTerm(u, tau->div());
   bf->addTerm(-uhat, tau->dot_normal());
-  
+
   bf->addTerm(sigma - beta * u, v->grad());
   bf->addTerm(tc, v);
 
   RHSPtr rhs = RHS::rhs();
 
   BCPtr bc = BC::bc();
-  
+
   SpatialFilterPtr y_equals_one = SpatialFilter::matchingY(1.0);
   SpatialFilterPtr y_equals_zero = SpatialFilter::matchingY(0);
   SpatialFilterPtr x_equals_one = SpatialFilter::matchingX(1.0);
   SpatialFilterPtr x_equals_zero = SpatialFilter::matchingX(0.0);
-  
+
   FunctionPtr zero = Function::zero();
   FunctionPtr x = Function::xn(1);
   FunctionPtr y = Function::yn(1);
@@ -94,55 +97,55 @@ int main(int argc, char *argv[]) {
   bc->addDirichlet(tc, x_equals_zero, -1 * (1-y));
   bc->addDirichlet(uhat, y_equals_one, zero);
   bc->addDirichlet(uhat, x_equals_one, zero);
-  
+
   MeshPtr mesh = MeshFactory::quadMesh(bf, k+1, delta_k);
-  
+
   map<string, IPPtr> confusionIPs;
   confusionIPs["Graph"] = bf->graphNorm();
 
   confusionIPs["Robust"] = Teuchos::rcp(new IP);
   confusionIPs["Robust"]->addTerm(tau->div());
   confusionIPs["Robust"]->addTerm(beta*v->grad());
-  confusionIPs["Robust"]->addTerm(min(1./Function::h(),1./sqrt(epsilon))*tau);
+  confusionIPs["Robust"]->addTerm(Function::min(1./Function::h(),Function::constant(1./sqrt(epsilon)))*tau);
   confusionIPs["Robust"]->addTerm(sqrt(epsilon)*v->grad());
   confusionIPs["Robust"]->addTerm(beta*v->grad());
-  confusionIPs["Robust"]->addTerm(min(sqrt(epsilon)/Function::h(),Function::constant(1.0))*v);
+  confusionIPs["Robust"]->addTerm(Function::min(sqrt(epsilon)/Function::h(),Function::constant(1.0))*v);
 
   confusionIPs["CoupledRobust"] = Teuchos::rcp(new IP);
   confusionIPs["CoupledRobust"]->addTerm(tau->div()-beta*v->grad());
-  confusionIPs["CoupledRobust"]->addTerm(min(1./Function::h(),1./sqrt(epsilon))*tau);
+  confusionIPs["CoupledRobust"]->addTerm(Function::min(1./Function::h(),Function::constant(1./sqrt(epsilon)))*tau);
   confusionIPs["CoupledRobust"]->addTerm(sqrt(epsilon)*v->grad());
   confusionIPs["CoupledRobust"]->addTerm(beta*v->grad());
-  confusionIPs["CoupledRobust"]->addTerm(min(sqrt(epsilon)/Function::h(),Function::constant(1.0))*v);
+  confusionIPs["CoupledRobust"]->addTerm(Function::min(sqrt(epsilon)/Function::h(),Function::constant(1.0))*v);
 
   IPPtr ip = confusionIPs[norm];
-  
+
   SolutionPtr soln = Solution::solution(mesh, bc, rhs, ip);
-  
+
   double threshold = 0.20;
   RefinementStrategy refStrategy(soln, threshold);
-  
+
   ostringstream refName;
   refName << "confusion";
   HDF5Exporter exporter(mesh,refName.str());
-  
+
   for (int refIndex=0; refIndex <= numRefs; refIndex++) {
     soln->solve(false);
-    
+
     double energyError = soln->energyErrorTotal();
     if (commRank == 0)
     {
       // if (refIndex > 0)
         // refStrategy.printRefinementStatistics(refIndex-1);
-      cout << "Refinement:\t " << refIndex << " \tElements:\t " << mesh->numActiveElements() 
+      cout << "Refinement:\t " << refIndex << " \tElements:\t " << mesh->numActiveElements()
         << " \tDOFs:\t " << mesh->numGlobalDofs() << " \tEnergy Error:\t " << energyError << endl;
     }
-    
+
     exporter.exportSolution(soln, refIndex);
-    
+
     if (refIndex != numRefs)
       refStrategy.refine();
   }
-  
+
   return 0;
 }

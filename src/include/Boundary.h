@@ -49,27 +49,29 @@
 
 #include "Epetra_Map.h"
 
-class Boundary {
-  set< pair< GlobalIndexType, unsigned > > _boundaryElements; // first arg is cellID, second arg is sideOrdinal
-  
-  Mesh *_mesh;
-  bool _imposeSingletonBCsOnThisRank; // this only governs singleton BCs which don't specify a vertex number.  Otherwise, the rule is that a singleton BC is imposed on the rank that owns the active cell of least ID that contains the vertex.
-public:
-  Boundary();
-  void setMesh(Mesh* mesh);
-  void bcsToImpose(Intrepid::FieldContainer<GlobalIndexType> &globalIndices, Intrepid::FieldContainer<double> &globalValues,
-                   BC &bc, set<GlobalIndexType>& globalIndexFilter,
-                   DofInterpreter* dofInterpreter, const Epetra_Map *globalDofMap);
-  void bcsToImpose(Intrepid::FieldContainer<GlobalIndexType> &globalIndices, Intrepid::FieldContainer<double> &globalValues, BC &bc,
-                   DofInterpreter* dofInterpreter, const Epetra_Map *globalDofMap);
-  //! Determine values to impose on a single cell.
-  /*!
-   \param
-   singletons - (In) pairs are (trialID, vertexOrdinalInCell).
-   */
-  void bcsToImpose( map< GlobalIndexType, double > &globalDofIndicesAndValues, BC &bc, GlobalIndexType cellID,
-                   set < pair<int, unsigned> > &singletons, DofInterpreter* dofInterpreter, const Epetra_Map *globalDofMap);
-  void buildLookupTables();
-};
+namespace Camellia {
+  class Boundary {
+    set< pair< GlobalIndexType, unsigned > > _boundaryElements; // first arg is cellID, second arg is sideOrdinal
+    
+    Mesh *_mesh;
+    bool _imposeSingletonBCsOnThisRank; // this only governs singleton BCs which don't specify a vertex number.  Otherwise, the rule is that a singleton BC is imposed on the rank that owns the active cell of least ID that contains the vertex.
+  public:
+    Boundary();
+    void setMesh(Mesh* mesh);
+    void bcsToImpose(Intrepid::FieldContainer<GlobalIndexType> &globalIndices, Intrepid::FieldContainer<double> &globalValues,
+                     BC &bc, set<GlobalIndexType>& globalIndexFilter,
+                     DofInterpreter* dofInterpreter, const Epetra_Map *globalDofMap);
+    void bcsToImpose(Intrepid::FieldContainer<GlobalIndexType> &globalIndices, Intrepid::FieldContainer<double> &globalValues, BC &bc,
+                     DofInterpreter* dofInterpreter, const Epetra_Map *globalDofMap);
+    //! Determine values to impose on a single cell.
+    /*!
+     \param
+     singletons - (In) pairs are (trialID, vertexOrdinalInCell).
+     */
+    void bcsToImpose( map< GlobalIndexType, double > &globalDofIndicesAndValues, BC &bc, GlobalIndexType cellID,
+                     set < pair<int, unsigned> > &singletons, DofInterpreter* dofInterpreter, const Epetra_Map *globalDofMap);
+    void buildLookupTables();
+  };
+}
 
 #endif

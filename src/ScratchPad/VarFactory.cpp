@@ -32,13 +32,13 @@ VarFactory::VarFactory(const map< string, VarPtr > &trialVars, const map< string
 void VarFactory::addTestVar(VarPtr var) {
   _testVars[var->name()] = var;
   _testVarsByID[var->ID()] = _testVars[var->name()];
-  _nextTestID = max(var->ID(), _nextTestID);
+  _nextTestID = std::max(var->ID(), _nextTestID);
 }
 
 void VarFactory::addTrialVar(VarPtr var) {
   _trialVars[var->name()] = var;
   _trialVarsByID[var->ID()] = _trialVars[var->name()];
-  _nextTrialID = max(var->ID(), _nextTrialID);
+  _nextTrialID = std::max(var->ID(), _nextTrialID);
 }
 
 VarFactory VarFactory::getBubnovFactory(BubnovChoice choice) {
@@ -55,7 +55,7 @@ int VarFactory::getTestID(int IDarg) {
   if (IDarg == -1) {
     IDarg = _nextTestID++;
   } else {
-    _nextTestID = max(IDarg + 1, _nextTestID); // ensures that automatically assigned IDs don't conflict with manually assigned ones…
+    _nextTestID = std::max(IDarg + 1, _nextTestID); // ensures that automatically assigned IDs don't conflict with manually assigned ones…
   }
   return IDarg;
 }
@@ -64,7 +64,7 @@ int VarFactory::getTrialID(int IDarg) {
   if (IDarg == -1) {
     IDarg = _nextTrialID++;
   } else {
-    _nextTrialID = max(IDarg + 1, _nextTrialID); // ensures that automatically assigned IDs don't conflict with manually assigned ones…
+    _nextTrialID = std::max(IDarg + 1, _nextTrialID); // ensures that automatically assigned IDs don't conflict with manually assigned ones…
   }
   return IDarg;
 }
@@ -112,10 +112,10 @@ VarPtr VarFactory::testVar(string name, Space fs, int ID) {
   if ( _testVars.find(name) != _testVars.end() ) {
     return _testVars[name];
   }
-  
+
   ID = getTestID(ID);
   int rank = Camellia::rankForSpace(fs);
-  
+
   _testVars[name] = Teuchos::rcp( new Var( ID, rank, name,
                                           Camellia::OP_VALUE, fs, TEST) );
   _testVarsByID[ID] = _testVars[name];
@@ -204,7 +204,7 @@ const map< int, VarPtr > & VarFactory::trialVars() const {
 
 vector< VarPtr > VarFactory::fieldVars() const {
   vector< VarPtr > vars;
-  
+
   for ( map< int, VarPtr >::const_iterator trialIt = _trialVarsByID.begin();
        trialIt != _trialVarsByID.end(); trialIt++) {
     if (trialIt->second->varType() == FIELD) {
@@ -216,7 +216,7 @@ vector< VarPtr > VarFactory::fieldVars() const {
 
 vector< VarPtr > VarFactory::fluxVars() const {
   vector< VarPtr > vars;
-  
+
   for ( map< int, VarPtr >::const_iterator trialIt = _trialVarsByID.begin();
        trialIt != _trialVarsByID.end(); trialIt++) {
     if (trialIt->second->varType() == FLUX) {
@@ -228,7 +228,7 @@ vector< VarPtr > VarFactory::fluxVars() const {
 
 vector< VarPtr > VarFactory::traceVars() const {
   vector< VarPtr > vars;
-  
+
   for ( map< int, VarPtr >::const_iterator trialIt = _trialVarsByID.begin();
        trialIt != _trialVarsByID.end(); trialIt++) {
     if (trialIt->second->varType() == TRACE) {

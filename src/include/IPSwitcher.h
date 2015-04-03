@@ -14,30 +14,33 @@
 #include "IP.h"
 
 using namespace std;
-class IPSwitcher : public IP {
-  IPPtr _ip1;
-  IPPtr _ip2;
-  double _minH; // min element  size for when to 
-public:
-  IPSwitcher(IPPtr ip1, IPPtr ip2, double minH);
-    
-  void computeInnerProductMatrix(Intrepid::FieldContainer<double> &innerProduct, 
-                                 Teuchos::RCP<DofOrdering> dofOrdering,
-                                 Teuchos::RCP<BasisCache> basisCache);
-  
-  void computeInnerProductVector(Intrepid::FieldContainer<double> &ipVector, 
-                                 VarPtr var, FunctionPtr fxn,
-                                 Teuchos::RCP<DofOrdering> dofOrdering, 
-                                 Teuchos::RCP<BasisCache> basisCache);
 
-  double computeMaxConditionNumber(DofOrderingPtr testSpace, BasisCachePtr basisCache);
-  
-  // added by Jesse
-  LinearTermPtr evaluate(map< int, FunctionPtr> &varFunctions, bool boundaryPart);
-
-  bool hasBoundaryTerms();
+namespace Camellia {
+  class IPSwitcher : public IP {
+    IPPtr _ip1;
+    IPPtr _ip2;
+    double _minH; // min element  size for when to 
+  public:
+    IPSwitcher(IPPtr ip1, IPPtr ip2, double minH);
+      
+    void computeInnerProductMatrix(Intrepid::FieldContainer<double> &innerProduct, 
+                                   Teuchos::RCP<DofOrdering> dofOrdering,
+                                   Teuchos::RCP<BasisCache> basisCache);
     
-  void printInteractions();
-};
+    void computeInnerProductVector(Intrepid::FieldContainer<double> &ipVector, 
+                                   VarPtr var, FunctionPtr fxn,
+                                   Teuchos::RCP<DofOrdering> dofOrdering, 
+                                   Teuchos::RCP<BasisCache> basisCache);
+
+    double computeMaxConditionNumber(DofOrderingPtr testSpace, BasisCachePtr basisCache);
+    
+    // added by Jesse
+    LinearTermPtr evaluate(map< int, FunctionPtr> &varFunctions, bool boundaryPart);
+
+    bool hasBoundaryTerms();
+      
+    void printInteractions();
+  };
+}
 
 #endif

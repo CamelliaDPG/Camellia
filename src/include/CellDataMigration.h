@@ -11,11 +11,13 @@
 
 #include "Mesh.h"
 
-class CellDataMigration {
-public:
-  static int dataSize(Mesh* mesh, GlobalIndexType cellID);
-  static void packData(Mesh* mesh, GlobalIndexType cellID, bool packParentDofs, char *dataBuffer, int size);
-  static void unpackData(Mesh* mesh, GlobalIndexType cellID, const char *dataBuffer, int size);
-};
+namespace Camellia {
+	class CellDataMigration {
+	public:
+	  static int dataSize(Mesh* mesh, GlobalIndexType cellID);
+	  static void packData(Mesh* mesh, GlobalIndexType cellID, bool packParentDofs, char *dataBuffer, int size);
+	  static void unpackData(Mesh* mesh, GlobalIndexType cellID, const char *dataBuffer, int size);
+	};
+}
 
 #endif /* defined(__Camellia_debug__CellDataMigration__) */

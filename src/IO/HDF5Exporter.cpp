@@ -12,15 +12,15 @@
 #include <Teuchos_GlobalMPISession.hpp>
 #endif
 
-#include <Epetra_SerialComm.h>
-#include <EpetraExt_HDF5.h>
+#include "Epetra_SerialComm.h"
+#include "Epetra_MpiComm.h"
+#include "EpetraExt_HDF5.h"
 
 #include <sys/types.h>
 #include <sys/stat.h>
 
 #include "CellTopology.h"
 
-using namespace Intrepid;
 using namespace Camellia;
 
 HDF5Exporter::HDF5Exporter(MeshPtr mesh, string outputDirName, string outputDirSuperPath) : _mesh(mesh), _dirName(outputDirName),
@@ -78,12 +78,12 @@ HDF5Exporter::~HDF5Exporter()
 void HDF5Exporter::exportSolution(SolutionPtr solution, double timeVal, unsigned int defaultNum1DPts, map<int, int> cellIDToNum1DPts, set<GlobalIndexType> cellIndices)
 {
   VarFactory varFactory = _mesh->bilinearForm()->varFactory();
-  
+
   vector<int> fieldTrialIDs = _mesh->bilinearForm()->trialVolumeIDs();
   vector<int> traceTrialIDs = _mesh->bilinearForm()->trialBoundaryIDs();
   vector<VarPtr> fieldVars;
   vector<VarPtr> traceVars;
-  
+
   vector<FunctionPtr> fieldFunctions;
   vector<string> fieldFunctionNames;
   for (int i=0; i < fieldTrialIDs.size(); i++)
@@ -228,7 +228,7 @@ void HDF5Exporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
 
   unsigned int total_vertices = 0;
 
-  if (cellIndices.size()==0) cellIndices = _mesh->globalDofAssignment()->cellsInPartition(commRank);
+  // if (cellIndices.size()==0) cellIndices = _mesh->globalDofAssignment()->cellsInPartition(commRank);
   // Number of line elements in 1D mesh
   int numLines=0;
   // Number of triangle elements in 2D mesh
@@ -270,7 +270,7 @@ void HDF5Exporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
     if (!cellIDToNum1DPts[cell->cellIndex()] || cellIDToNum1DPts[cell->cellIndex()] < 2)
       cellIDToNum1DPts[cell->cellIndex()] = defaultNum1DPts;
     int num1DPts = cellIDToNum1DPts[cell->cellIndex()];
-    
+
     unsigned baseCellTopoKey = cell->topology()->getKey().first;
     unsigned cellTopoKey;
     // Designate effective topologies for tensor meshes
@@ -369,7 +369,7 @@ void HDF5Exporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
         break;
       default:
         TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "cellTopoKey unrecognized");
-    }   
+    }
 
     switch (cellTopoKey)
     {
@@ -601,7 +601,7 @@ void HDF5Exporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
     GlobalIndexType cellIndex = *cellIt;
     CellPtr cell = _mesh->getTopology()->getCell(cellIndex);
 
-    FieldContainer<double> physicalCellNodes = _mesh->getTopology()->physicalCellNodesForCell(cellIndex);
+    Intrepid::FieldContainer<double> physicalCellNodes = _mesh->getTopology()->physicalCellNodesForCell(cellIndex);
 
     CellTopoPtr cellTopoPtr = cell->topology();
     int num1DPts = cellIDToNum1DPts[cell->cellIndex()];
@@ -621,7 +621,7 @@ void HDF5Exporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
     for (int sideOrdinal = 0; sideOrdinal < numSides; sideOrdinal++)
     {
       CellTopoPtr topo = createSideCache ? cellTopoPtr->getSubcell(sideDim, sideOrdinal) : cellTopoPtr;
-      
+
       unsigned baseCellTopoKey = topo->getKey().first;
       unsigned cellTopoKey;
       // Designate effective topologies for tensor meshes
@@ -766,8 +766,8 @@ void HDF5Exporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
         default:
           TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "cellTopoKey unrecognized");
       }
-      
-      FieldContainer<double> refPoints(numPoints,domainDim);
+
+      Intrepid::FieldContainer<double> refPoints(numPoints,domainDim);
       if (domainDim == 0)
         refPoints.resize(numPoints);
       switch (cellTopoKey)
@@ -868,9 +868,9 @@ void HDF5Exporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
       }
 
       basisCache->setRefCellPoints(refPoints);
-      const FieldContainer<double> *physicalPoints = &basisCache->getPhysicalCubaturePoints();
+      const Intrepid::FieldContainer<double> *physicalPoints = &basisCache->getPhysicalCubaturePoints();
       // Function Values
-      std::vector< FieldContainer<double> > computedValues(nFcns);
+      std::vector< Intrepid::FieldContainer<double> > computedValues(nFcns);
       for (int i = 0; i < nFcns; i++)
       {
         if (functions[i]->rank() == 0)

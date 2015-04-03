@@ -29,25 +29,25 @@ LinearTermPtr IPSwitcher::evaluate(map< int, FunctionPtr> &varFunctions, bool bo
   return Teuchos::rcp((LinearTerm *)NULL);
 }
 
-void IPSwitcher::computeInnerProductMatrix(FieldContainer<double> &innerProduct, 
+void IPSwitcher::computeInnerProductMatrix(FieldContainer<double> &innerProduct,
                                    Teuchos::RCP<DofOrdering> dofOrdering,
                                    Teuchos::RCP<BasisCache> basisCache) {
-  
+
   MeshPtr mesh = basisCache->mesh();
   vector<GlobalIndexType> cellIDs = basisCache->cellIDs();
   int numCells = innerProduct.dimension(0);
   unsigned numDofs = innerProduct.dimension(1);
   innerProduct.initialize(0.0);
-  for (int c = 0;c<numCells;c++){        
+  for (int c = 0;c<numCells;c++){
     int cellID = cellIDs[c];
     int cubatureEnrichment = 0; // maybe add some smart way to figure this out?
     BasisCachePtr cellCache = BasisCache::basisCacheForCell(mesh, cellID, true, cubatureEnrichment);
 
-    double h = min(mesh->getCellXSize(cellID),mesh->getCellYSize(cellID)); //mesh->getCellMeasure(cellID)); // getCellXSize or getCellYSize
+    double h = std::min(mesh->getCellXSize(cellID),mesh->getCellYSize(cellID)); //mesh->getCellMeasure(cellID)); // getCellXSize or getCellYSize
     FieldContainer<double> cellIP(1,numDofs,numDofs);
     if (h > _minH){
       _ip1->computeInnerProductMatrix(cellIP,dofOrdering,cellCache);
-    }else{ 
+    }else{
       _ip2->computeInnerProductMatrix(cellIP,dofOrdering,cellCache);
     }
 
@@ -55,28 +55,28 @@ void IPSwitcher::computeInnerProductMatrix(FieldContainer<double> &innerProduct,
       for (int j = 0;j<numDofs;j++){
 	innerProduct(c,i,j) += cellIP(0,i,j);
       }
-    }    
+    }
   }
 
 }
 
-// does some extra work and may not 
+// does some extra work and may not
 double IPSwitcher::computeMaxConditionNumber(DofOrderingPtr testSpace, BasisCachePtr basisCache) {
-  return max(_ip1->computeMaxConditionNumber(testSpace,basisCache),_ip2->computeMaxConditionNumber(testSpace,basisCache));
+  return std::max(_ip1->computeMaxConditionNumber(testSpace,basisCache),_ip2->computeMaxConditionNumber(testSpace,basisCache));
 }
 
 // compute IP vector when var==fxn
-void IPSwitcher::computeInnerProductVector(FieldContainer<double> &ipVector, 
+void IPSwitcher::computeInnerProductVector(FieldContainer<double> &ipVector,
                                    VarPtr var, FunctionPtr fxn,
-                                   Teuchos::RCP<DofOrdering> dofOrdering, 
+                                   Teuchos::RCP<DofOrdering> dofOrdering,
                                    Teuchos::RCP<BasisCache> basisCache) {
-  
+
   MeshPtr mesh = basisCache->mesh();
   vector<GlobalIndexType> cellIDs = basisCache->cellIDs();
   int numCells = cellIDs.size();
   unsigned numDofs = dofOrdering->totalDofs();
 
-  for (int c = 0;c<numCells;c++){        
+  for (int c = 0;c<numCells;c++){
     int cellID = cellIDs[c];
     int cubatureEnrichment = 0; // maybe add some smart way to figure this out?
     BasisCachePtr cellCache = BasisCache::basisCacheForCell(mesh, cellID, true, cubatureEnrichment);
@@ -91,9 +91,9 @@ void IPSwitcher::computeInnerProductVector(FieldContainer<double> &ipVector,
 
     for (int i = 0;i<numDofs;i++){
       ipVector(c,i) = cellVec(1,i);
-    }        
+    }
   }
-  
+
 }
 
 bool IPSwitcher::hasBoundaryTerms() {

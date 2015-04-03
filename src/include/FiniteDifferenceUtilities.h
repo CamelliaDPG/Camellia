@@ -50,10 +50,12 @@
 #include "Solution.h"
 #include "Mesh.h"
 
-class FiniteDifferenceUtilities {
- public:
- static double finiteDifferenceGradient(MeshPtr mesh, RieszRepPtr residual, SolutionPtr backgroundSoln, int dofIndex);
- static Intrepid::FieldContainer<double> getDPGGradient(); // assumes you only linearize in the field variables
-};
+namespace Camellia {
+	class FiniteDifferenceUtilities {
+	 public:
+	 static double finiteDifferenceGradient(MeshPtr mesh, RieszRepPtr residual, SolutionPtr backgroundSoln, int dofIndex);
+	 static Intrepid::FieldContainer<double> getDPGGradient(); // assumes you only linearize in the field variables
+	};
+}
 
 #endif

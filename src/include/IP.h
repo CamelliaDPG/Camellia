@@ -17,77 +17,79 @@
 #include "Function.h"
 #include "DofOrdering.h"
 
-class IP {
-  std::vector< LinearTermPtr > _linearTerms;
-  std::vector< LinearTermPtr > _boundaryTerms;
-  std::vector< LinearTermPtr > _zeroMeanTerms;
-  
-  bool _isLegacySubclass;
-protected:
-  Teuchos::RCP<BF> _bilinearForm; // for legacy subclasses (originally subclasses of DPGInnerProduct)
-public:
-  IP();
-  
-  // legacy subclass constructor:
-  IP(Teuchos::RCP< BF > bfs);
-  
-  // legacy DPGInnerProduct::applyInnerProductData() methods:
-  virtual void applyInnerProductData(Intrepid::FieldContainer<double> &testValues1,
-                                     Intrepid::FieldContainer<double> &testValues2,
-                                     int testID1, int testID2, int operatorIndex,
-                                     const Intrepid::FieldContainer<double>& physicalPoints);
-  virtual void applyInnerProductData(Intrepid::FieldContainer<double> &testValues1,
-                                     Intrepid::FieldContainer<double> &testValues2,
-                                     int testID1, int testID2, int operatorIndex,
-                                     BasisCachePtr basisCache);
-  
-  // legacy DPGInnerProduct::computeInnerProductMatrix() method
-  virtual void computeInnerProductMatrix(Intrepid::FieldContainer<double> &innerProduct,
-                                         Teuchos::RCP<DofOrdering> dofOrdering,
-                                         shards::CellTopology &cellTopo,
-                                         Intrepid::FieldContainer<double>& physicalCellNodes);
-  
-  virtual ~IP() {}
-  
-  // if the terms are a1, a2, ..., then the inner product is (a1,a1) + (a2,a2) + ...  
-  void addTerm( LinearTermPtr a);
-  void addTerm( VarPtr v );
-  void addZeroMeanTerm( LinearTermPtr a);
-  void addZeroMeanTerm( VarPtr v);
-  
-  void addBoundaryTerm( LinearTermPtr a );
-  void addBoundaryTerm( VarPtr v );
-  
-  virtual void computeInnerProductMatrix(Intrepid::FieldContainer<double> &innerProduct,
-                                         Teuchos::RCP<DofOrdering> dofOrdering,
-                                         Teuchos::RCP<BasisCache> basisCache);
-  
-  virtual void computeInnerProductVector(Intrepid::FieldContainer<double> &ipVector,
-                                         VarPtr var, FunctionPtr fxn,
-                                         Teuchos::RCP<DofOrdering> dofOrdering,
-                                         Teuchos::RCP<BasisCache> basisCache);
+namespace Camellia {
+  class IP {
+    std::vector< LinearTermPtr > _linearTerms;
+    std::vector< LinearTermPtr > _boundaryTerms;
+    std::vector< LinearTermPtr > _zeroMeanTerms;
+    
+    bool _isLegacySubclass;
+  protected:
+    Teuchos::RCP<BF> _bilinearForm; // for legacy subclasses (originally subclasses of DPGInnerProduct)
+  public:
+    IP();
+    
+    // legacy subclass constructor:
+    IP(Teuchos::RCP< BF > bfs);
+    
+    // legacy DPGInnerProduct::applyInnerProductData() methods:
+    virtual void applyInnerProductData(Intrepid::FieldContainer<double> &testValues1,
+                                       Intrepid::FieldContainer<double> &testValues2,
+                                       int testID1, int testID2, int operatorIndex,
+                                       const Intrepid::FieldContainer<double>& physicalPoints);
+    virtual void applyInnerProductData(Intrepid::FieldContainer<double> &testValues1,
+                                       Intrepid::FieldContainer<double> &testValues2,
+                                       int testID1, int testID2, int operatorIndex,
+                                       BasisCachePtr basisCache);
+    
+    // legacy DPGInnerProduct::computeInnerProductMatrix() method
+    virtual void computeInnerProductMatrix(Intrepid::FieldContainer<double> &innerProduct,
+                                           Teuchos::RCP<DofOrdering> dofOrdering,
+                                           shards::CellTopology &cellTopo,
+                                           Intrepid::FieldContainer<double>& physicalCellNodes);
+    
+    virtual ~IP() {}
+    
+    // if the terms are a1, a2, ..., then the inner product is (a1,a1) + (a2,a2) + ...  
+    void addTerm( LinearTermPtr a);
+    void addTerm( VarPtr v );
+    void addZeroMeanTerm( LinearTermPtr a);
+    void addZeroMeanTerm( VarPtr v);
+    
+    void addBoundaryTerm( LinearTermPtr a );
+    void addBoundaryTerm( VarPtr v );
+    
+    virtual void computeInnerProductMatrix(Intrepid::FieldContainer<double> &innerProduct,
+                                           Teuchos::RCP<DofOrdering> dofOrdering,
+                                           Teuchos::RCP<BasisCache> basisCache);
+    
+    virtual void computeInnerProductVector(Intrepid::FieldContainer<double> &ipVector,
+                                           VarPtr var, FunctionPtr fxn,
+                                           Teuchos::RCP<DofOrdering> dofOrdering,
+                                           Teuchos::RCP<BasisCache> basisCache);
 
-  double computeMaxConditionNumber(DofOrderingPtr testSpace, BasisCachePtr basisCache);
-  
-  // added by Nate
-  LinearTermPtr evaluate(const std::map< int, FunctionPtr> &varFunctions);
-  // added by Jesse
-  LinearTermPtr evaluate(const std::map< int, FunctionPtr> &varFunctions, bool boundaryPart);
-  //  FunctionPtr evaluate(map< int, FunctionPtr> &varFunctions1, map< int, FunctionPtr> &varFunctions2, bool boundaryPart);
+    double computeMaxConditionNumber(DofOrderingPtr testSpace, BasisCachePtr basisCache);
+    
+    // added by Nate
+    LinearTermPtr evaluate(const std::map< int, FunctionPtr> &varFunctions);
+    // added by Jesse
+    LinearTermPtr evaluate(const std::map< int, FunctionPtr> &varFunctions, bool boundaryPart);
+    //  FunctionPtr evaluate(map< int, FunctionPtr> &varFunctions1, map< int, FunctionPtr> &varFunctions2, bool boundaryPart);
 
-  virtual bool hasBoundaryTerms();
-  
-  virtual void operators(int testID1, int testID2,
-                         std::vector<Camellia::EOperator> &testOp1,
-                         std::vector<Camellia::EOperator> &testOp2);
-  
-  virtual void printInteractions();
-  
-  std::string displayString();
+    virtual bool hasBoundaryTerms();
+    
+    virtual void operators(int testID1, int testID2,
+                           std::vector<Camellia::EOperator> &testOp1,
+                           std::vector<Camellia::EOperator> &testOp2);
+    
+    virtual void printInteractions();
+    
+    std::string displayString();
 
-  static Teuchos::RCP<IP> ip();
-  
-  static pair<Teuchos::RCP<IP>, VarPtr > standardInnerProductForFunctionSpace(Camellia::EFunctionSpace fs, bool useTraceVar, int spaceDim);
-};
+    static Teuchos::RCP<IP> ip();
+    
+    static pair<Teuchos::RCP<IP>, VarPtr > standardInnerProductForFunctionSpace(Camellia::EFunctionSpace fs, bool useTraceVar, int spaceDim);
+  };
+}
 
 #endif

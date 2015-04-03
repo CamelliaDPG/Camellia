@@ -49,7 +49,7 @@ class TransfiniteInterpolatingSurface : public ParametricSurface {
   vector< pair<double, double> > _vertices;
   bool _neglectVertices; // if true, then the value returned by value() is a "bubble" value...
   Camellia::EOperator _op;
-  
+
   void init(const vector< ParametricCurvePtr > &curves, Camellia::EOperator op,
             const vector< pair<double, double> > &vertices) {
     if ((op != OP_VALUE) && (op != OP_DX) && (op != OP_DY)) {
@@ -58,11 +58,11 @@ class TransfiniteInterpolatingSurface : public ParametricSurface {
     if (curves.size() != 4) {
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Only quads supported for now...");
     }
-    
+
     _neglectVertices = false;
     _curves = curves;
     _op = op;
-    
+
     if (vertices.size() > 0) {
       _vertices = vertices;
     } else {
@@ -74,12 +74,12 @@ class TransfiniteInterpolatingSurface : public ParametricSurface {
     if (op==OP_VALUE) {
       // if op is not OP_VALUE, we assume that the functions passed in are already bubbles,
       // and that they already run parallel to each other...
-      
+
       // we assume that the curves go CCW around the element; we flip the two opposite edges
       // so both sets of opposite edges run parallel to each other:
       _curves[2] = ParametricCurve::reverse(_curves[2]);
       _curves[3] = ParametricCurve::reverse(_curves[3]);
-      
+
       // since we keep _vertices separately, can just store bubble functions in _curves
       _curves[0] = ParametricCurve::bubble(_curves[0]);
       _curves[1] = ParametricCurve::bubble(_curves[1]);
@@ -136,28 +136,28 @@ public:
   }
 };
 
-void ParametricSurface::basisWeightsForEdgeInterpolant(FieldContainer<double> &edgeInterpolationCoefficients, 
+void ParametricSurface::basisWeightsForEdgeInterpolant(FieldContainer<double> &edgeInterpolationCoefficients,
                                                        VectorBasisPtr basis,
                                                        MeshPtr mesh, int cellID) {
   vector< ParametricCurvePtr > curves = mesh->parametricEdgesForCell(cellID);
   Teuchos::RCP<TransfiniteInterpolatingSurface> exactSurface = Teuchos::rcp( new TransfiniteInterpolatingSurface(curves) );
   exactSurface->setNeglectVertices(false);
-  
+
   int basisDegree = basis->getDegree();
   shards::CellTopology line_2(shards::getCellTopologyData<shards::Line<2> >() );
   BasisPtr basis1D = BasisFactory::basisFactory()->getBasis(basisDegree, line_2.getKey(),
                                             Camellia::FUNCTION_SPACE_HGRAD);
-  
+
   BasisPtr compBasis = basis->getComponentBasis();
   int numComponents = basis->getNumComponents();
   if (numComponents != 2) {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Only 2D surfaces supported right now");
   }
-  
+
   edgeInterpolationCoefficients.resize(basis->getCardinality());
-  
+
   set<int> edgeNodeFieldIndices = BasisFactory::basisFactory()->sideFieldIndices(basis,true); // true: include vertex dofs
-  
+
   FieldContainer<double> dofCoords(compBasis->getCardinality(),2);
   IntrepidBasisWrapper< double, Intrepid::FieldContainer<double> >* intrepidBasisWrapper = dynamic_cast< IntrepidBasisWrapper< double, Intrepid::FieldContainer<double> >* >(compBasis.get());
   if (!intrepidBasisWrapper) {
@@ -168,10 +168,10 @@ void ParametricSurface::basisWeightsForEdgeInterpolant(FieldContainer<double> &e
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "IntrepidBasisWrapper does not appear to wrap Basis_HGRAD_QUAD_Cn_FEM.");
   }
   intrepidBasis->getDofCoords(dofCoords);
-  
+
   int edgeDim = 1;
   int vertexDim = 0;
-  
+
   // set vertex dofs:
   for (int vertexIndex=0; vertexIndex<curves.size(); vertexIndex++) {
     double x = exactSurface->vertices()[vertexIndex].first;
@@ -182,7 +182,7 @@ void ParametricSurface::basisWeightsForEdgeInterpolant(FieldContainer<double> &e
     edgeInterpolationCoefficients[basisDofOrdinal_x] = x;
     edgeInterpolationCoefficients[basisDofOrdinal_y] = y;
   }
-  
+
   for (int edgeIndex=0; edgeIndex<curves.size(); edgeIndex++) {
     bool edgeDofsFlipped = edgeIndex >= 2; // because Intrepid's ordering of dofs on the quad is not CCW but tensor-product, we need to flip for the opposite edges
     // (what makes things worse is that the vertex/edge numbering *is* CCW)
@@ -190,7 +190,7 @@ void ParametricSurface::basisWeightsForEdgeInterpolant(FieldContainer<double> &e
       cout << "WARNING: have not worked out the rule for flipping or not flipping edge dofs for anything but quads.\n";
     }
     double edgeLength = curves[edgeIndex]->linearLength();
-    
+
     //    cout << "edgeIndex " << edgeIndex << endl;
     for (int comp=0; comp<numComponents; comp++) {
       FieldContainer<double> basisCoefficients_comp;
@@ -201,13 +201,13 @@ void ParametricSurface::basisWeightsForEdgeInterpolant(FieldContainer<double> &e
       ////      cout << "basis dof coords:\n" << dofCoords;
       //      int basisDofOrdinal = basis->getDofOrdinalFromComponentDofOrdinal(v0_dofOrdinal_comp, comp);
       //      edgeInterpolationCoefficients[basisDofOrdinal] = basisCoefficients_comp[v0_dofOrdinal_1D];
-      
+
       if (compBasis->getDegree() >= 2) { // then there are some "middle" nodes on the edge
         // get the first dofOrdinal for the edge, so we can check the number of edge basis functions
         int firstEdgeDofOrdinal = compBasis->getDofOrdinal(edgeDim, edgeIndex, 0);
-        
+
         //        cout << "first edge dofOrdinal: " << firstEdgeDofOrdinal << endl;
-        
+
         int numEdgeDofs = compBasis->getDofTag(firstEdgeDofOrdinal)[3];
         if (numEdgeDofs != basis1D->getCardinality() - 2) {
           TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "numEdgeDofs does not match 1D basis cardinality");
@@ -220,18 +220,18 @@ void ParametricSurface::basisWeightsForEdgeInterpolant(FieldContainer<double> &e
           int compDofOrdinal = compBasis->getDofOrdinal(edgeDim, edgeIndex, edgeDofOrdinal);
           // now, determine its ordinal in the vector basis
           int basisDofOrdinal = basis->getDofOrdinalFromComponentDofOrdinal(compDofOrdinal, comp);
-          
+
           //          cout << "edge dof ordinal " << edgeDofOrdinal << " has basis weight " << basisCoefficients_comp[dofOrdinal1D] << " for component " << comp << endl;
           //          cout << "node on cell is at (" << dofCoords(compDofOrdinal,0) << ", " << dofCoords(compDofOrdinal,1) << ")\n";
           //          cout << "mapping to basisDofOrdinal " << basisDofOrdinal << endl;
-          
-          edgeInterpolationCoefficients[basisDofOrdinal] = basisCoefficients_comp[dofOrdinal1D];          
+
+          edgeInterpolationCoefficients[basisDofOrdinal] = basisCoefficients_comp[dofOrdinal1D];
         }
       }
     }
   }
   edgeInterpolationCoefficients.resize(edgeInterpolationCoefficients.size());
-  
+
   // print out a report of what the edge interpolation is doing:
   /*cout << "projection-based interpolation of edges maps the following points:\n";
   for (int compDofOrdinal=0; compDofOrdinal<compBasis->getCardinality(); compDofOrdinal++) {
@@ -252,42 +252,42 @@ void ParametricSurface::basisWeightsForProjectedInterpolant(FieldContainer<doubl
   vector< ParametricCurvePtr > curves = mesh->parametricEdgesForCell(cellID);
   Teuchos::RCP<TransfiniteInterpolatingSurface> exactSurface = Teuchos::rcp( new TransfiniteInterpolatingSurface(curves) );
   exactSurface->setNeglectVertices(false);
-  
+
   FieldContainer<double> edgeInterpolationCoefficients(basis->getCardinality());
   basisWeightsForEdgeInterpolant(edgeInterpolationCoefficients, basis, mesh, cellID);
-  
+
   set<int> edgeFieldIndices = BasisFactory::basisFactory()->sideFieldIndices(basis,true); // true: include vertex dofs
-  
+
   FunctionPtr edgeInterpolant = Teuchos::rcp( new BasisSumFunction(basis, edgeInterpolationCoefficients) );
-  
+
   IPPtr L2 = Teuchos::rcp( new IP );
   // we assume that basis is a vector HGRAD basis
   VarFactory vf;
   VarPtr v = vf.testVar("v", VECTOR_HGRAD);
   L2->addTerm(v);
-  
+
   IPPtr H1 = Teuchos::rcp( new IP );
 //  H1->addTerm(v); // experiment: seminorm is a norm when the edge dofs are excluded--and this is what LD does
   H1->addTerm(v->grad());
-  
+
   int maxTestDegree = mesh->getElement(cellID)->elementType()->testOrderPtr->maxBasisDegree();
   TEUCHOS_TEST_FOR_EXCEPTION(maxTestDegree < 1, std::invalid_argument, "Constant test spaces unsupported.");
-  
-  int cubatureDegree = max(maxTestDegree*2,15); // chosen to match that used in edge projection.
-  int cubatureEnrichment = max(cubatureDegree-maxTestDegree*2,0);
+
+  int cubatureDegree = std::max(maxTestDegree*2,15); // chosen to match that used in edge projection.
+  int cubatureEnrichment = std::max(cubatureDegree-maxTestDegree*2,0);
   BasisCachePtr basisCache = BasisCache::basisCacheForCell(mesh, cellID, true, cubatureEnrichment); // true: testVsTest
   // because we're determining the transformation function, disable it inside basisCache!
   basisCache->setTransformationFunction(Function::null());
-  
+
   // project, skipping edgeNodeFieldIndices:
   Projector::projectFunctionOntoBasis(basisCoefficients, exactSurface-edgeInterpolant, basis, basisCache, H1, v, edgeFieldIndices);
-  
+
   basisCoefficients.resize(basis->getCardinality()); // get rid of dummy numCells dimension
   // add the two sets of basis coefficients together
   for (int i=0; i<edgeInterpolationCoefficients.size(); i++) {
     basisCoefficients[i] += edgeInterpolationCoefficients[i];
   }
-  
+
 }
 
 FunctionPtr ParametricSurface::dt1() {
@@ -321,7 +321,7 @@ void TransfiniteInterpolatingSurface::value(double t1, double t2, double &x, dou
       x = -x0 + x1 * t1 + x2 + x3*(1-t1);
       y = -y0 + y1 * t1 + y2 + y3*(1-t1);
     }
-    
+
     if (! _neglectVertices) {
       if (_op == OP_VALUE) {
         x += _vertices[0].first*(1-t1)*(1-t2) + _vertices[1].first*   t1 *(1-t2)
@@ -346,7 +346,7 @@ void TransfiniteInterpolatingSurface::value(double t1, double t2, double &x, dou
   } else {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Only quads and (eventually) triangles supported...");
   }
-  
+
 }
 
 FieldContainer<double> & ParametricSurface::parametricQuadNodes() { // for CellTools cellWorkset argument
@@ -372,7 +372,7 @@ void ParametricSurface::values(FieldContainer<double> &values, BasisCachePtr bas
   FieldContainer<double> parametricPoints = basisCache->computeParametricPoints();
   int numCells = parametricPoints.dimension(0);
   int numPoints = parametricPoints.dimension(1);
-  
+
   for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
     double x, y;
     for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
