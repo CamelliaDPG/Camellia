@@ -1,6 +1,9 @@
 #include "SpatiallyFilteredFunction.h"
 
 
+using namespace Intrepid;
+using namespace Camellia;
+
 SpatiallyFilteredFunction::SpatiallyFilteredFunction(FunctionPtr f, SpatialFilterPtr sf) : Function(f->rank()) {
   _f = f;
   _sf = sf;

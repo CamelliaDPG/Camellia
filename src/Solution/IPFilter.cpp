@@ -8,6 +8,9 @@
 
 #include "IPFilter.h"
 
+using namespace Intrepid;
+using namespace Camellia;
+
 IPFilter::IPFilter(IPPtr ip) {
   _ip = ip;
 }

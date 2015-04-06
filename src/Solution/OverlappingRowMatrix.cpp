@@ -161,7 +161,7 @@ void OverlappingRowMatrix::BuildMap(int OverlapLevel_in, const set<GlobalIndexTy
     if ( ! list.empty() ) listptr = &list[0];
     TmpMap = rcp( new Epetra_Map(-1,count, listptr,0,Comm()) );
     
-    TmpMatrix = rcp( new Epetra_CrsMatrix(Copy,*TmpMap,0) );
+    TmpMatrix = rcp( new Epetra_CrsMatrix(::Copy,*TmpMap,0) );
     
     TmpImporter = rcp( new Epetra_Import(*TmpMap,A().RowMatrixRowMap()) );
     
@@ -257,7 +257,7 @@ OverlapLevel_(OverlapLevel_in)
 #endif
       throw "OverlappingRowMatrix::OverlappingRowMatrix: GlobalIndices type unknown";
   
-  ExtMatrix_ = rcp( new Epetra_CrsMatrix(Copy,*ExtMap_,*Map_,0) );
+  ExtMatrix_ = rcp( new Epetra_CrsMatrix(::Copy,*ExtMap_,*Map_,0) );
   
   ExtImporter_ = rcp( new Epetra_Import(*ExtMap_,A().RowMatrixRowMap()) );
   ExtMatrix_->Import(A(),*ExtImporter_,Insert);
@@ -308,7 +308,7 @@ OverlapLevel_(OverlapLevel_in) {
 #endif
       throw "OverlappingRowMatrix::OverlappingRowMatrix: GlobalIndices type unknown";
   
-  ExtMatrix_ = rcp( new Epetra_CrsMatrix(Copy,*ExtMap_,*Map_,0) );
+  ExtMatrix_ = rcp( new Epetra_CrsMatrix(::Copy,*ExtMap_,*Map_,0) );
   
   ExtImporter_ = rcp( new Epetra_Import(*ExtMap_,A().RowMatrixRowMap()) );
   ExtMatrix_->Import(A(),*ExtImporter_,Insert);
@@ -359,7 +359,7 @@ OverlapLevel_(OverlapLevel_in)
 #endif
       throw "OverlappingRowMatrix::OverlappingRowMatrix: GlobalIndices type unknown";
 
-  ExtMatrix_ = rcp( new Epetra_CrsMatrix(Copy,*ExtMap_,*Map_,0) ); 
+  ExtMatrix_ = rcp( new Epetra_CrsMatrix(::Copy,*ExtMap_,*Map_,0) ); 
 
   ExtImporter_ = rcp( new Epetra_Import(*ExtMap_,A().RowMatrixRowMap()) ); 
   ExtMatrix_->Import(A(),*ExtImporter_,Insert);

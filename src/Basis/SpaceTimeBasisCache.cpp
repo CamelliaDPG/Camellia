@@ -6,11 +6,13 @@
 //
 //
 
+#include "TypeDefs.h"
+
 #include "SpaceTimeBasisCache.h"
 #include "TensorBasis.h"
 
-typedef Teuchos::RCP< Intrepid::FieldContainer<double> > FCPtr;
-typedef Teuchos::RCP< const Intrepid::FieldContainer<double> > constFCPtr;
+using namespace Intrepid;
+using namespace Camellia;
 
 // volume constructor
 SpaceTimeBasisCache::SpaceTimeBasisCache(MeshPtr spaceTimeMesh, ElementTypePtr spaceTimeElementType,
@@ -481,14 +483,14 @@ Camellia::EOperator SpaceTimeBasisCache::spaceOp(Camellia::EOperator op) {
 Intrepid::EOperator SpaceTimeBasisCache::spaceOpForSizing(Camellia::EOperator op) {
   switch (op) {
     case OP_GRAD:
-      return OPERATOR_GRAD;
+      return Intrepid::OPERATOR_GRAD;
     case OP_DIV:
-      return OPERATOR_DIV;
+      return Intrepid::OPERATOR_DIV;
     case OP_CURL:
-      return OPERATOR_CURL;
+      return Intrepid::OPERATOR_CURL;
       break;
     default:
-      return OPERATOR_VALUE;
+      return Intrepid::OPERATOR_VALUE;
       break;
   }
 }
@@ -508,5 +510,5 @@ Camellia::EOperator SpaceTimeBasisCache::timeOp(Camellia::EOperator op) {
 
 Intrepid::EOperator SpaceTimeBasisCache::timeOpForSizing(Camellia::EOperator op) {
   // we do not support any rank-increasing or rank-decreasing operations in time.
-  return OPERATOR_VALUE;
+  return Intrepid::OPERATOR_VALUE;
 }

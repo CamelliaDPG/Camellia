@@ -9,6 +9,8 @@
 #include "Constraint.h"
 #include "Function.h"
 
+using namespace Camellia;
+
 typedef pair< FunctionPtr, VarPtr > LinearSummand;
 
 Constraint::Constraint(LinearTermPtr linearTerm, FunctionPtr f) {

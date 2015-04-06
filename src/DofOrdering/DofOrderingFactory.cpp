@@ -43,6 +43,7 @@
 
 #include "CamelliaCellTools.h"
 
+using namespace Intrepid;
 using namespace Camellia;
 
 DofOrderingFactory::DofOrderingFactory(BFPtr bilinearForm) {

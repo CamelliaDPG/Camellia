@@ -205,14 +205,14 @@ void Solution::addSolution(Teuchos::RCP<Solution> otherSoln, double weight, bool
   // setGlobalSolutionFromCellLocalCoefficients() method.
 
   set<GlobalIndexType> myCellIDs = _mesh->cellIDsInPartition();
-  
+
   // in case otherSoln has a distinct mesh partitioning, import data for this's cells that is off-rank in otherSoln
   otherSoln->importSolutionForOffRankCells(myCellIDs);
 
   for (set<GlobalIndexType>::iterator cellIDIt = myCellIDs.begin(); cellIDIt != myCellIDs.end(); cellIDIt++) {
     GlobalIndexType cellID = *cellIDIt;
 
-    FieldContainer<double> myCoefficients;
+    Intrepid::FieldContainer<double> myCoefficients;
     if (_solutionForCellIDGlobal.find(cellID) != _solutionForCellIDGlobal.end()) {
       myCoefficients = _solutionForCellIDGlobal[cellID];
     } else {
@@ -220,7 +220,7 @@ void Solution::addSolution(Teuchos::RCP<Solution> otherSoln, double weight, bool
     }
 
     bool warnAboutOffRank = false;
-    FieldContainer<double> otherCoefficients = otherSoln->allCoefficientsForCellID(cellID, warnAboutOffRank);
+    Intrepid::FieldContainer<double> otherCoefficients = otherSoln->allCoefficientsForCellID(cellID, warnAboutOffRank);
 
     SerialDenseWrapper::addFCs(myCoefficients, otherCoefficients, weight);
 
@@ -263,14 +263,14 @@ void Solution::addSolution(Teuchos::RCP<Solution> otherSoln, double weight, bool
       for (set<GlobalIndexType>::iterator cellIDIt = myCellIDs.begin(); cellIDIt != myCellIDs.end(); cellIDIt++) {
         GlobalIndexType cellID = *cellIDIt;
 
-        FieldContainer<double> myCoefficients;
+        Intrepid::FieldContainer<double> myCoefficients;
         if (_solutionForCellIDGlobal.find(cellID) != _solutionForCellIDGlobal.end()) {
           myCoefficients = _solutionForCellIDGlobal[cellID];
         } else {
           myCoefficients.resize(_mesh->getElementType(cellID)->trialOrderPtr->totalDofs());
         }
 
-        FieldContainer<double> otherCoefficients = otherSoln->allCoefficientsForCellID(cellID);
+        Intrepid::FieldContainer<double> otherCoefficients = otherSoln->allCoefficientsForCellID(cellID);
 
         SerialDenseWrapper::addFCs(myCoefficients, otherCoefficients, weight);
 
@@ -339,14 +339,14 @@ void Solution::addSolution(Teuchos::RCP<Solution> otherSoln, double weight, set<
   for (set<GlobalIndexType>::iterator cellIDIt = myCellIDs.begin(); cellIDIt != myCellIDs.end(); cellIDIt++) {
     GlobalIndexType cellID = *cellIDIt;
 
-    FieldContainer<double> myCoefficients;
+    Intrepid::FieldContainer<double> myCoefficients;
     if (_solutionForCellIDGlobal.find(cellID) != _solutionForCellIDGlobal.end()) {
       myCoefficients = _solutionForCellIDGlobal[cellID];
     } else {
       myCoefficients.resize(_mesh->getElementType(cellID)->trialOrderPtr->totalDofs());
     }
 
-    FieldContainer<double> otherCoefficients = otherSoln->allCoefficientsForCellID(cellID);
+    Intrepid::FieldContainer<double> otherCoefficients = otherSoln->allCoefficientsForCellID(cellID);
 
     DofOrderingPtr trialOrder = _mesh->getElementType(cellID)->trialOrderPtr;
     for (set<int>::iterator varIDIt = varsToAdd.begin(); varIDIt != varsToAdd.end(); varIDIt++) {
@@ -409,10 +409,10 @@ int Solution::solve(bool useMumps) {
   if (useMumps) {
     solver = Teuchos::rcp(new MumpsSolver());
   } else {
-    solver = Teuchos::rcp(new KluSolver());
+    solver = Teuchos::rcp(new Amesos2Solver(false, "klu"));
   }
 #else
-  solver = Teuchos::rcp(new KluSolver());
+  solver = Teuchos::rcp(new Amesos2Solver(false, "klu"));
 #endif
   return solve(solver);
 }
@@ -490,8 +490,8 @@ void Solution::populateStiffnessAndLoad() {
     //cout << "numTestDofs^2:" << numTestDofs*numTestDofs << endl;
     //cout << "maxCellBatch: " << maxCellBatch << endl;
 
-    FieldContainer<double> myPhysicalCellNodesForType = _mesh->physicalCellNodes(elemTypePtr);
-    FieldContainer<double> myCellSideParitiesForType = _mesh->cellSideParities(elemTypePtr);
+    Intrepid::FieldContainer<double> myPhysicalCellNodesForType = _mesh->physicalCellNodes(elemTypePtr);
+    Intrepid::FieldContainer<double> myCellSideParitiesForType = _mesh->cellSideParities(elemTypePtr);
     int totalCellsForType = myPhysicalCellNodesForType.dimension(0);
     int startCellIndexForBatch = 0;
     Teuchos::Array<int> nodeDimensions, parityDimensions;
@@ -512,8 +512,8 @@ void Solution::populateStiffnessAndLoad() {
       //cout << "trialDofOrdering: " << *trialOrderingPtr;
       nodeDimensions[0] = numCells;
       parityDimensions[0] = numCells;
-      FieldContainer<double> physicalCellNodes(nodeDimensions,&myPhysicalCellNodesForType(startCellIndexForBatch,0,0));
-      FieldContainer<double> cellSideParities(parityDimensions,&myCellSideParitiesForType(startCellIndexForBatch,0));
+      Intrepid::FieldContainer<double> physicalCellNodes(nodeDimensions,&myPhysicalCellNodesForType(startCellIndexForBatch,0,0));
+      Intrepid::FieldContainer<double> cellSideParities(parityDimensions,&myCellSideParitiesForType(startCellIndexForBatch,0));
 
       bool createSideCacheToo = true;
       basisCache->setPhysicalCellNodes(physicalCellNodes,cellIDs,createSideCacheToo);
@@ -527,12 +527,12 @@ void Solution::populateStiffnessAndLoad() {
 //      CellTopoPtrLegacy cellTopoPtr = elemTypePtr->cellTopoPtr;
 //
 //      //      { // this block is not necessary for the solution.  Here just to produce debugging output
-//      //        FieldContainer<double> preStiffness(numCells,numTestDofs,numTrialDofs );
+//      //        Intrepid::FieldContainer<double> preStiffness(numCells,numTestDofs,numTrialDofs );
 //      //
 //      //        BilinearFormUtility::computeStiffnessMatrix(preStiffness, _mesh->bilinearForm(),
 //      //                                                    trialOrderingPtr, testOrderingPtr, *(cellTopoPtr.get()),
 //      //                                                    physicalCellNodes, cellSideParities);
-//      //        FieldContainer<double> preStiffnessTransposed(numCells,numTrialDofs,numTestDofs );
+//      //        Intrepid::FieldContainer<double> preStiffnessTransposed(numCells,numTrialDofs,numTestDofs );
 //      //        BilinearFormUtility::transposeFCMatrices(preStiffnessTransposed,preStiffness);
 //      //
 //      ////        cout << "preStiffness:\n" << preStiffness;
@@ -540,7 +540,7 @@ void Solution::populateStiffnessAndLoad() {
 //
 //      subTimer.ResetStartTime();
 //
-//      FieldContainer<double> ipMatrix(numCells,numTestDofs,numTestDofs);
+//      Intrepid::FieldContainer<double> ipMatrix(numCells,numTestDofs,numTestDofs);
 //
 //      _ip->computeInnerProductMatrix(ipMatrix,testOrderingPtr, ipBasisCache);
 //
@@ -549,7 +549,7 @@ void Solution::populateStiffnessAndLoad() {
 //      //      cout << "ipMatrix:\n" << ipMatrix;
 //
 //      subTimer.ResetStartTime();
-//      FieldContainer<double> optTestCoeffs(numCells,numTrialDofs,numTestDofs);
+//      Intrepid::FieldContainer<double> optTestCoeffs(numCells,numTrialDofs,numTestDofs);
 //
 //      int optSuccess = _mesh->bilinearForm()->optimalTestWeights(optTestCoeffs, ipMatrix, elemTypePtr,
 //                                                                 cellSideParities, basisCache);
@@ -563,19 +563,19 @@ void Solution::populateStiffnessAndLoad() {
 //      //cout << "optTestCoeffs\n" << optTestCoeffs;
 //
 //      subTimer.ResetStartTime();
-//      FieldContainer<double> finalStiffness(numCells,numTrialDofs,numTrialDofs);
+//      Intrepid::FieldContainer<double> finalStiffness(numCells,numTrialDofs,numTrialDofs);
 //
 //      BilinearFormUtility::computeStiffnessMatrix(finalStiffness,ipMatrix,optTestCoeffs);
 //      localStiffnessDeterminationFromTestsTime += subTimer.ElapsedTime();
 ////      cout << "finalStiffness:\n" << finalStiffness;
 //
 //      subTimer.ResetStartTime();
-//      FieldContainer<double> localRHSVector(numCells, numTrialDofs);
+//      Intrepid::FieldContainer<double> localRHSVector(numCells, numTrialDofs);
 //      _rhs->integrateAgainstOptimalTests(localRHSVector, optTestCoeffs, testOrderingPtr, basisCache);
 //      rhsIntegrationAgainstOptimalTestsTime += subTimer.ElapsedTime();
 
-      FieldContainer<double> localStiffness(numCells,numTrialDofs,numTrialDofs);
-      FieldContainer<double> localRHSVector(numCells,numTrialDofs);
+      Intrepid::FieldContainer<double> localStiffness(numCells,numTrialDofs,numTrialDofs);
+      Intrepid::FieldContainer<double> localRHSVector(numCells,numTrialDofs);
 
       _mesh->bilinearForm()->localStiffnessMatrixAndRHS(localStiffness, localRHSVector, _ip, ipBasisCache, _rhs, basisCache);
 
@@ -592,22 +592,22 @@ void Solution::populateStiffnessAndLoad() {
 
       subTimer.ResetStartTime();
 
-      FieldContainer<GlobalIndexType> globalDofIndices;
+      Intrepid::FieldContainer<GlobalIndexType> globalDofIndices;
 
-      FieldContainer<GlobalIndexTypeToCast> globalDofIndicesCast;
+      Intrepid::FieldContainer<GlobalIndexTypeToCast> globalDofIndicesCast;
 
       Teuchos::Array<int> localStiffnessDim(2,numTrialDofs);
       Teuchos::Array<int> localRHSDim(1,numTrialDofs);
 
-      FieldContainer<double> interpretedStiffness;
-      FieldContainer<double> interpretedRHS;
+      Intrepid::FieldContainer<double> interpretedStiffness;
+      Intrepid::FieldContainer<double> interpretedRHS;
 
       Teuchos::Array<int> dim;
 
       for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
         GlobalIndexType cellID = _mesh->cellID(elemTypePtr,cellIndex+startCellIndexForBatch,rank);
-        FieldContainer<double> cellStiffness(localStiffnessDim,&localStiffness(cellIndex,0,0)); // shallow copy
-        FieldContainer<double> cellRHS(localRHSDim,&localRHSVector(cellIndex,0)); // shallow copy
+        Intrepid::FieldContainer<double> cellStiffness(localStiffnessDim,&localStiffness(cellIndex,0,0)); // shallow copy
+        Intrepid::FieldContainer<double> cellRHS(localRHSDim,&localRHSVector(cellIndex,0)); // shallow copy
 
         _dofInterpreter->interpretLocalData(cellID, cellStiffness, cellRHS, interpretedStiffness, interpretedRHS, globalDofIndices);
 
@@ -660,32 +660,32 @@ void Solution::populateStiffnessAndLoad() {
         cellIDs.push_back(cellID);
       }
       // set physical cell nodes:
-      FieldContainer<double> physicalCellNodes = _mesh->physicalCellNodes(elemTypePtr);
+      Intrepid::FieldContainer<double> physicalCellNodes = _mesh->physicalCellNodes(elemTypePtr);
       bool createSideCacheToo = true;
       basisCache->setPhysicalCellNodes(physicalCellNodes,cellIDs,createSideCacheToo);
       basisCache->setCellSideParities(_mesh->cellSideParities(elemTypePtr));
 
       int numTrialDofs = elemTypePtr->trialOrderPtr->totalDofs();
-      FieldContainer<double> lhs(numCells,numTrialDofs);
-      FieldContainer<double> rhs(numCells);
+      Intrepid::FieldContainer<double> lhs(numCells,numTrialDofs);
+      Intrepid::FieldContainer<double> rhs(numCells);
       _lagrangeConstraints->getCoefficients(lhs,rhs,elementConstraintIndex,
                                             elemTypePtr->trialOrderPtr,basisCache);
 
-      FieldContainer<GlobalIndexTypeToCast> globalDofIndices(numTrialDofs+1); // max # of nonzeros
-      FieldContainer<double> nonzeroValues(numTrialDofs+1);
+      Intrepid::FieldContainer<GlobalIndexTypeToCast> globalDofIndices(numTrialDofs+1); // max # of nonzeros
+      Intrepid::FieldContainer<double> nonzeroValues(numTrialDofs+1);
       Teuchos::Array<int> localLHSDim(1, numTrialDofs); // changed from (numTrialDofs) by NVR, 8/27/14
-      FieldContainer<double> interpretedLHS;
+      Intrepid::FieldContainer<double> interpretedLHS;
 
-      FieldContainer<GlobalIndexType> interpretedGlobalDofIndices;
+      Intrepid::FieldContainer<GlobalIndexType> interpretedGlobalDofIndices;
 
       // need to ask for local stiffness, too, for condensed dof interpreter, even though this is not used.
-      FieldContainer<double> dummyLocalStiffness(numTrialDofs, numTrialDofs);
-      FieldContainer<double> dummyInterpretedStiffness;
+      Intrepid::FieldContainer<double> dummyLocalStiffness(numTrialDofs, numTrialDofs);
+      Intrepid::FieldContainer<double> dummyInterpretedStiffness;
 
       for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
         GlobalIndexTypeToCast globalRowIndex = partMap.GID(localRowIndex);
         int nnz = 0;
-        FieldContainer<double> localLHS(localLHSDim,&lhs(cellIndex,0)); // shallow copy
+        Intrepid::FieldContainer<double> localLHS(localLHSDim,&lhs(cellIndex,0)); // shallow copy
         _dofInterpreter->interpretLocalData(cellIDs[cellIndex], dummyLocalStiffness, localLHS, dummyInterpretedStiffness,
                                             interpretedLHS, interpretedGlobalDofIndices);
 
@@ -728,10 +728,10 @@ void Solution::populateStiffnessAndLoad() {
   //    for (int i=0; i<elems.size(); i++) {
   //      cellIDs.push_back(elems[i]->cellID());
   //    }
-  //    FieldContainer<double> physicalCellNodes = _mesh->physicalCellNodesGlobal(elemType);
+  //    Intrepid::FieldContainer<double> physicalCellNodes = _mesh->physicalCellNodesGlobal(elemType);
   //    BasisCachePtr basisCache = Teuchos::rcp( new BasisCache(elemType,_mesh) );
   //    basisCache->setPhysicalCellNodes(physicalCellNodes,cellIDs,true); // true: create side caches
-  //    FieldContainer<double> cellMeasures = basisCache->getCellMeasures();
+  //    Intrepid::FieldContainer<double> cellMeasures = basisCache->getCellMeasures();
   //
   //    for (int i=0; i<elems.size(); i++) {
   //      maxCellMeasure = max(maxCellMeasure,cellMeasures(i));
@@ -785,12 +785,12 @@ void Solution::populateStiffnessAndLoad() {
 
       zmcIndex = MPIWrapper::sum(zmcIndex);
 
-      FieldContainer<double> basisIntegrals;
-      FieldContainer<GlobalIndexTypeToCast> globalIndices;
+      Intrepid::FieldContainer<double> basisIntegrals;
+      Intrepid::FieldContainer<GlobalIndexTypeToCast> globalIndices;
       integrateBasisFunctions(globalIndices,basisIntegrals, trialID);
       int numValues = globalIndices.size();
 
-      FieldContainer<double> product(numValues,numValues);
+      Intrepid::FieldContainer<double> product(numValues,numValues);
       double denominator = 0.0;
       for (int i=0; i<numValues; i++) {
         denominator += basisIntegrals(i);
@@ -873,7 +873,7 @@ void Solution::populateStiffnessAndLoad() {
 
 void Solution::setProblem(Teuchos::RCP<Solver> solver) {
   Teuchos::RCP<Epetra_LinearProblem> problem = Teuchos::rcp( new Epetra_LinearProblem(&*_globalStiffMatrix, &*_lhsVector, &*_rhsVector));
-  solver->setProblem(problem);
+  solver->setProblem(_globalStiffMatrix, _lhsVector, _rhsVector);
 }
 
 int Solution::solveWithPrepopulatedStiffnessAndLoad(Teuchos::RCP<Solver> solver, bool callResolveInsteadOfSolve) {
@@ -1077,7 +1077,7 @@ void Solution::importSolution() {
   for (set<GlobalIndexType>::iterator cellIDIt = myCellIDs.begin(); cellIDIt != myCellIDs.end(); cellIDIt++) {
     GlobalIndexType cellID = *cellIDIt;
 //    cout << "on rank " << rank << ", about to interpret data for cell " << cellID << "\n";
-    FieldContainer<double> cellDofs(_mesh->getElementType(cellID)->trialOrderPtr->totalDofs());
+    Intrepid::FieldContainer<double> cellDofs(_mesh->getElementType(cellID)->trialOrderPtr->totalDofs());
     _dofInterpreter->interpretGlobalCoefficients(cellID,cellDofs,solnCoeff);
     _solutionForCellIDGlobal[cellID] = cellDofs;
   }
@@ -1161,7 +1161,7 @@ void Solution::importSolutionForOffRankCells(std::set<GlobalIndexType> cellIDs) 
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "requested cellID does not belong to this rank!");
     }
 
-    FieldContainer<double>* solnCoeffs = &_solutionForCellIDGlobal[cellID];
+    Intrepid::FieldContainer<double>* solnCoeffs = &_solutionForCellIDGlobal[cellID];
     sizes[cellOrdinal] = solnCoeffs->size();
     for (int dofOrdinal=0; dofOrdinal < solnCoeffs->size(); dofOrdinal++) {
       dataToExport.push_back((*solnCoeffs)[dofOrdinal]);
@@ -1184,7 +1184,7 @@ void Solution::importSolutionForOffRankCells(std::set<GlobalIndexType> cellIDs) 
   int dofsImported = 0;
   for (vector<GlobalIndexTypeToCast>::iterator cellIDIt = myRequest.begin(); cellIDIt != myRequest.end(); cellIDIt++) {
     GlobalIndexType cellID = *cellIDIt;
-    FieldContainer<double> cellDofs(_mesh->getElementType(cellID)->trialOrderPtr->totalDofs());
+    Intrepid::FieldContainer<double> cellDofs(_mesh->getElementType(cellID)->trialOrderPtr->totalDofs());
     if (cellDofs.size() + dofsImported > numDofsImport) {
       cout << "ERROR: not enough dofs provided to this rank!\n";
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Attempt to go beyond array bounds because not enough dofs were imported.");
@@ -1233,7 +1233,7 @@ void Solution::importGlobalSolution() {
   // copy the dof coefficients into our data structure
   for (set<GlobalIndexType>::iterator cellIDIt = globalActiveCellIDs.begin(); cellIDIt != globalActiveCellIDs.end(); cellIDIt++) {
     GlobalIndexType cellID = *cellIDIt;
-    FieldContainer<double> cellDofs(_mesh->getElementType(cellID)->trialOrderPtr->totalDofs());
+    Intrepid::FieldContainer<double> cellDofs(_mesh->getElementType(cellID)->trialOrderPtr->totalDofs());
     _dofInterpreter->interpretGlobalCoefficients(cellID,cellDofs,solnCoeff);
     _solutionForCellIDGlobal[cellID] = cellDofs;
   }
@@ -1258,8 +1258,8 @@ IPPtr Solution::ip() const {
 void Solution::imposeBCs() {
   int rank     = Teuchos::GlobalMPISession::getRank();
 
-  FieldContainer<GlobalIndexType> bcGlobalIndices;
-  FieldContainer<double> bcGlobalValues;
+  Intrepid::FieldContainer<GlobalIndexType> bcGlobalIndices;
+  Intrepid::FieldContainer<double> bcGlobalValues;
 
   set<GlobalIndexType> myGlobalIndicesSet = _dofInterpreter->globalDofIndicesForPartition(rank);
   //  cout << "rank " << rank << " has " << myGlobalIndicesSet.size() << " locally-owned dof indices.\n";
@@ -1268,7 +1268,7 @@ void Solution::imposeBCs() {
   _mesh->boundary().bcsToImpose(bcGlobalIndices,bcGlobalValues,*(_bc.get()), myGlobalIndicesSet, _dofInterpreter.get(), &partMap);
   int numBCs = bcGlobalIndices.size();
 
-  FieldContainer<GlobalIndexTypeToCast> bcGlobalIndicesCast;
+  Intrepid::FieldContainer<GlobalIndexTypeToCast> bcGlobalIndicesCast;
   // cast whatever the global index type is to a type that Epetra supports
   Teuchos::Array<int> dim;
   bcGlobalIndices.dimensions(dim);
@@ -1305,7 +1305,7 @@ void Solution::imposeBCs() {
   }
   // Zero out rows and columns of stiffness matrix corresponding to Dirichlet edges
   //  and add one to diagonal.
-  FieldContainer<int> bcLocalIndices(bcGlobalIndices.dimension(0));
+  Intrepid::FieldContainer<int> bcLocalIndices(bcGlobalIndices.dimension(0));
   for (int i=0; i<bcGlobalIndices.dimension(0); i++) {
     bcLocalIndices(i) = _globalStiffMatrix->LRID(bcGlobalIndicesCast(i));
   }
@@ -1319,28 +1319,28 @@ void Solution::imposeBCs() {
 
 void Solution::imposeZMCsUsingLagrange() {
   int rank = Teuchos::GlobalMPISession::getRank();
-  
+
   if (_zmcsAsRankOneUpdate) {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "imposeZMCsUsingLagrange called when _zmcsAsRankOneUpdate is true!");
   }
-  
+
   Epetra_Map partMap = getPartitionMap();
-  
+
   set<GlobalIndexType> myGlobalIndicesSet = _dofInterpreter->globalDofIndicesForPartition(rank);
   int localRowIndex = myGlobalIndicesSet.size();
   int numLocalActiveElements = _mesh->globalDofAssignment()->cellsInPartition(rank).size();
   localRowIndex += numLocalActiveElements * _lagrangeConstraints->numElementConstraints() + _lagrangeConstraints->numGlobalConstraints();
-  
+
 //  Epetra_FECrsMatrix* globalStiffness = dynamic_cast<Epetra_FECrsMatrix*>(_globalStiffMatrix.get());
 //  if (globalStiffness==NULL) {
-//    
+//
 //  }
-  
+
   // order is: element-lagrange, then (on rank 0) global lagrange and ZMC
   vector<int> zeroMeanConstraints = getZeroMeanConstraints();
   for (vector< int >::iterator trialIt = zeroMeanConstraints.begin(); trialIt != zeroMeanConstraints.end(); trialIt++) {
     int trialID = *trialIt;
-    
+
     // sample an element to make sure that the basis used for trialID is nodal
     // (this is assumed in our imposition mechanism)
     GlobalIndexType firstActiveCellID = *_mesh->getActiveCellIDs().begin();
@@ -1349,38 +1349,38 @@ void Solution::imposeZMCsUsingLagrange() {
     if (!trialBasis->isNodal()) {
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Zero-mean constraint imposition assumes a nodal basis, and this basis isn't nodal.");
     }
-    
+
     GlobalIndexTypeToCast zmcIndex;
     if (rank==0)
       zmcIndex = partMap.GID(localRowIndex);
     else
       zmcIndex = 0;
-    
+
     zmcIndex = MPIWrapper::sum(zmcIndex);
-    
+
     if (_zmcsAsLagrangeMultipliers) {
       //    cout << "Imposing zero-mean constraint for variable " << _mesh->bilinearForm()->trialName(trialID) << endl;
-      FieldContainer<double> basisIntegrals;
-      FieldContainer<GlobalIndexTypeToCast> globalIndices;
+      Intrepid::FieldContainer<double> basisIntegrals;
+      Intrepid::FieldContainer<GlobalIndexTypeToCast> globalIndices;
       integrateBasisFunctions(globalIndices,basisIntegrals, trialID);
-      
-      FieldContainer<int> offsets;
-      FieldContainer<double> allBasisIntegrals;
+
+      Intrepid::FieldContainer<int> offsets;
+      Intrepid::FieldContainer<double> allBasisIntegrals;
       MPIWrapper::allGatherCompact(allBasisIntegrals,basisIntegrals,offsets);
-      
+
 //      if (rank==0) cout << "allBasisIntegrals:\n" << allBasisIntegrals;
 
-      FieldContainer<GlobalIndexTypeToCast> allGlobalIndices;
+      Intrepid::FieldContainer<GlobalIndexTypeToCast> allGlobalIndices;
       MPIWrapper::allGatherCompact(allGlobalIndices,globalIndices,offsets);
-      
+
 //      if (rank==0) cout << "allGlobalIndices:\n" << allGlobalIndices;
-      
+
       if ((rank == 0) && (allBasisIntegrals.size() > 0)) {
         // insert the row at zmcIndex with the gathered basis integrals
         _globalStiffMatrix->InsertGlobalValues(zmcIndex,allBasisIntegrals.size(),&allBasisIntegrals(0),&allGlobalIndices(0));
 //        cout << "Inserted globalValues for row " << zmcIndex << "; values:\n" << allBasisIntegrals << "indices:\n" << allGlobalIndices;
       }
-      
+
       // here, we increase the size of the system to accommodate the zmc...
       if (basisIntegrals.size() > 0) {
         // insert column:
@@ -1394,7 +1394,7 @@ void Solution::imposeZMCsUsingLagrange() {
 //        // insert column:
 //        globalStiffness->InsertGlobalValues(numValues,&globalIndices(0),1,&zmcIndex,&basisIntegrals(0));
       }
-      
+
       //      cout << "in zmc, diagonal entry: " << rho << endl;
       //rho /= numValues;
       if (rank==0) { // insert the diagonal entry on rank 0; other ranks insert basis integrals according to which cells they own
@@ -1460,7 +1460,7 @@ double Solution::globalCondEstLastSolve() {
   return _globalSystemConditionEstimate;
 }
 
-void Solution::integrateBasisFunctions(FieldContainer<GlobalIndexTypeToCast> &globalIndices, FieldContainer<double> &values, int trialID) {
+void Solution::integrateBasisFunctions(Intrepid::FieldContainer<GlobalIndexTypeToCast> &globalIndices, Intrepid::FieldContainer<double> &values, int trialID) {
   int rank = Teuchos::GlobalMPISession::getRank();
 
   // only supports scalar-valued field bases right now...
@@ -1474,17 +1474,17 @@ void Solution::integrateBasisFunctions(FieldContainer<GlobalIndexTypeToCast> &gl
     vector<GlobalIndexType> cellIDs = _mesh->globalDofAssignment()->cellIDsOfElementType(rank,elemTypePtr);
     int numCellsOfType = cellIDs.size();
     int basisCardinality = elemTypePtr->trialOrderPtr->getBasisCardinality(trialID,sideIndex);
-    FieldContainer<double> valuesForType(numCellsOfType, basisCardinality);
+    Intrepid::FieldContainer<double> valuesForType(numCellsOfType, basisCardinality);
     integrateBasisFunctions(valuesForType,elemTypePtr,trialID);
 
     int numTrialDofs = elemTypePtr->trialOrderPtr->totalDofs();
-    FieldContainer<double> localDiscreteValues(numTrialDofs);
-    FieldContainer<double> interpretedDiscreteValues;
-    FieldContainer<GlobalIndexType> globalDofIndices;
+    Intrepid::FieldContainer<double> localDiscreteValues(numTrialDofs);
+    Intrepid::FieldContainer<double> interpretedDiscreteValues;
+    Intrepid::FieldContainer<GlobalIndexType> globalDofIndices;
 
     // need to ask for local stiffness, too, for condensed dof interpreter, even though this is not used.
-    FieldContainer<double> dummyLocalStiffness(numTrialDofs, numTrialDofs);
-    FieldContainer<double> dummyInterpretedStiffness;
+    Intrepid::FieldContainer<double> dummyLocalStiffness(numTrialDofs, numTrialDofs);
+    Intrepid::FieldContainer<double> dummyInterpretedStiffness;
 
     CondensedDofInterpreter* condensedDofInterpreter = dynamic_cast<CondensedDofInterpreter*>(_dofInterpreter.get());
 
@@ -1496,7 +1496,7 @@ void Solution::integrateBasisFunctions(FieldContainer<GlobalIndexTypeToCast> &gl
         IndexType dofIndex = elemTypePtr->trialOrderPtr->getDofIndex(trialID, dofOrdinal);
         localDiscreteValues(dofIndex) = valuesForType(cellIndex,dofOrdinal);
       }
-      FieldContainer<double> storedLoad;
+      Intrepid::FieldContainer<double> storedLoad;
       if (condensedDofInterpreter != NULL) {
         // condensedDofInterpreter requires the *true* local stiffness, because it will invert part of it...
         // we assume that the condensedDofInterpreter already has the local stiffness stored:
@@ -1529,7 +1529,7 @@ void Solution::integrateBasisFunctions(FieldContainer<GlobalIndexTypeToCast> &gl
   }
 }
 
-void Solution::integrateBasisFunctions(FieldContainer<double> &values, ElementTypePtr elemTypePtr, int trialID) {
+void Solution::integrateBasisFunctions(Intrepid::FieldContainer<double> &values, ElementTypePtr elemTypePtr, int trialID) {
   int rank = Teuchos::GlobalMPISession::getRank();
   vector<GlobalIndexType> cellIDs = _mesh->globalDofAssignment()->cellIDsOfElementType(rank,elemTypePtr);
 
@@ -1551,7 +1551,7 @@ void Solution::integrateBasisFunctions(FieldContainer<double> &values, ElementTy
 
   BasisCache basisCache(_mesh->physicalCellNodes(elemTypePtr), elemTypePtr->cellTopoPtr, cubDegree);
 
-  Teuchos::RCP < const FieldContainer<double> > trialValuesTransformedWeighted;
+  Teuchos::RCP < const Intrepid::FieldContainer<double> > trialValuesTransformedWeighted;
 
   trialValuesTransformedWeighted = basisCache.getTransformedWeightedValues(trialBasis, OP_VALUE);
 
@@ -1583,7 +1583,7 @@ double Solution::meshMeasure() {
     int numCellsOfType = _mesh->numElementsOfType(elemTypePtr);
     int cubDegree = 1;
     BasisCache basisCache(_mesh->physicalCellNodesGlobal(elemTypePtr), elemTypePtr->cellTopoPtr, cubDegree);
-    FieldContainer<double> cellMeasures = basisCache.getCellMeasures();
+    Intrepid::FieldContainer<double> cellMeasures = basisCache.getCellMeasures();
     for (int cellIndex=0; cellIndex<numCellsOfType; cellIndex++) {
       value += cellMeasures(cellIndex);
     }
@@ -1645,12 +1645,12 @@ double Solution::InfNormOfSolution(int trialID){
       GlobalIndexType cellID = cells[cellIndex]->cellID();
       cellIDs.push_back(cellID);
     }
-    FieldContainer<double> physicalCellNodes = _mesh->physicalCellNodes(elemTypePtr);
+    Intrepid::FieldContainer<double> physicalCellNodes = _mesh->physicalCellNodes(elemTypePtr);
     bool createSideCacheToo = false;
     basisCache->setPhysicalCellNodes(physicalCellNodes,cellIDs,createSideCacheToo);
 
     int numPoints = basisCache->getPhysicalCubaturePoints().dimension(1);
-    FieldContainer<double> values(numCells,numPoints);
+    Intrepid::FieldContainer<double> values(numCells,numPoints);
     bool weightForCubature = false;
     solutionValues(values, trialID, basisCache, weightForCubature);
 
@@ -1701,16 +1701,16 @@ double Solution::L2NormOfSolutionInCell(int trialID, GlobalIndexType cellID) {
   vector<GlobalIndexType> cellIDs;
   cellIDs.push_back(cellID);
 
-  FieldContainer<double> physicalCellNodes = _mesh->physicalCellNodesForCell(cellID);
+  Intrepid::FieldContainer<double> physicalCellNodes = _mesh->physicalCellNodesForCell(cellID);
 
   bool createSideCacheToo = false;
   basisCache->setPhysicalCellNodes(physicalCellNodes,cellIDs,createSideCacheToo);
 
   int numPoints = basisCache->getPhysicalCubaturePoints().dimension(1);
-  FieldContainer<double> values(numCells,numPoints);
+  Intrepid::FieldContainer<double> values(numCells,numPoints);
   bool weightForCubature = false;
   solutionValues(values, trialID, basisCache, weightForCubature);
-  FieldContainer<double> weightedValues(numCells,numPoints);
+  Intrepid::FieldContainer<double> weightedValues(numCells,numPoints);
   weightForCubature = true;
   solutionValues(weightedValues, trialID, basisCache, weightForCubature);
 
@@ -1754,16 +1754,16 @@ double Solution::L2NormOfSolution(int trialID){
       cellIDs.push_back(cellID);
     }
 
-    FieldContainer<double> physicalCellNodes = _mesh->physicalCellNodes(elemTypePtr);
+    Intrepid::FieldContainer<double> physicalCellNodes = _mesh->physicalCellNodes(elemTypePtr);
 
     bool createSideCacheToo = false;
     basisCache->setPhysicalCellNodes(physicalCellNodes,cellIDs,createSideCacheToo);
 
     int numPoints = basisCache->getPhysicalCubaturePoints().dimension(1);
-    FieldContainer<double> values(numCells,numPoints);
+    Intrepid::FieldContainer<double> values(numCells,numPoints);
     bool weightForCubature = false;
     solutionValues(values, trialID, basisCache, weightForCubature);
-    FieldContainer<double> weightedValues(numCells,numPoints);
+    Intrepid::FieldContainer<double> weightedValues(numCells,numPoints);
     weightForCubature = true;
     solutionValues(weightedValues, trialID, basisCache, weightForCubature);
 
@@ -1793,7 +1793,7 @@ double Solution::integrateSolution(int trialID) {
   for (elemTypeIt = elemTypes.begin(); elemTypeIt != elemTypes.end(); elemTypeIt++) {
     ElementTypePtr elemTypePtr = *(elemTypeIt);
     int numCellsOfType = _mesh->numElementsOfType(elemTypePtr);
-    FieldContainer<double> valuesForType(numCellsOfType);
+    Intrepid::FieldContainer<double> valuesForType(numCellsOfType);
     integrateSolution(valuesForType,elemTypePtr,trialID);
     for (int cellIndex=0; cellIndex<numCellsOfType; cellIndex++) {
       value += valuesForType(cellIndex);
@@ -1802,7 +1802,7 @@ double Solution::integrateSolution(int trialID) {
   return value;
 }
 
-void Solution::integrateSolution(FieldContainer<double> &values, ElementTypePtr elemTypePtr, int trialID) {
+void Solution::integrateSolution(Intrepid::FieldContainer<double> &values, ElementTypePtr elemTypePtr, int trialID) {
   int numCellsOfType = _mesh->numElementsOfType(elemTypePtr);
   int sideIndex = 0;
   int basisCardinality = elemTypePtr->trialOrderPtr->getBasisCardinality(trialID,sideIndex);
@@ -1817,7 +1817,7 @@ void Solution::integrateSolution(FieldContainer<double> &values, ElementTypePtr 
 
   BasisCache basisCache(_mesh->physicalCellNodesGlobal(elemTypePtr), elemTypePtr->cellTopoPtr, cubDegree);
 
-  Teuchos::RCP < const FieldContainer<double> > trialValuesTransformedWeighted;
+  Teuchos::RCP < const Intrepid::FieldContainer<double> > trialValuesTransformedWeighted;
 
   trialValuesTransformedWeighted = basisCache.getTransformedWeightedValues(trialBasis, OP_VALUE);
 
@@ -1826,9 +1826,9 @@ void Solution::integrateSolution(FieldContainer<double> &values, ElementTypePtr 
   }
 
   // integrate:
-  FieldContainer<double> physicalCubaturePoints = basisCache.getPhysicalCubaturePoints();
+  Intrepid::FieldContainer<double> physicalCubaturePoints = basisCache.getPhysicalCubaturePoints();
 
-  FieldContainer<double> solnCoeffs(basisCardinality);
+  Intrepid::FieldContainer<double> solnCoeffs(basisCardinality);
 
   int numPoints = trialValuesTransformedWeighted->dimension(2);
   for (int cellIndex=0; cellIndex<numCellsOfType; cellIndex++) {
@@ -1842,13 +1842,13 @@ void Solution::integrateSolution(FieldContainer<double> &values, ElementTypePtr 
   }
 }
 
-void Solution::integrateFlux(FieldContainer<double> &values, int trialID) {
+void Solution::integrateFlux(Intrepid::FieldContainer<double> &values, int trialID) {
   vector<ElementTypePtr> elemTypes = _mesh->elementTypes();
   vector<ElementTypePtr>::iterator elemTypeIt;
   for (elemTypeIt = elemTypes.begin(); elemTypeIt != elemTypes.end(); elemTypeIt++) {
     ElementTypePtr elemTypePtr = *(elemTypeIt);
     int numCellsOfType = _mesh->numElementsOfType(elemTypePtr);
-    FieldContainer<double> valuesForType(numCellsOfType);
+    Intrepid::FieldContainer<double> valuesForType(numCellsOfType);
     integrateFlux(valuesForType,elemTypePtr,trialID);
     // copy into values:
     for (int cellIndex=0; cellIndex<numCellsOfType; cellIndex++) {
@@ -1858,13 +1858,10 @@ void Solution::integrateFlux(FieldContainer<double> &values, int trialID) {
   }
 }
 
-void Solution::integrateFlux(FieldContainer<double> &values, ElementTypePtr elemTypePtr, int trialID) {
-  typedef CellTools<double>  CellTools;
-  typedef FunctionSpaceTools fst;
-
+void Solution::integrateFlux(Intrepid::FieldContainer<double> &values, ElementTypePtr elemTypePtr, int trialID) {
   values.initialize(0.0);
 
-  FieldContainer<double> physicalCellNodes = _mesh()->physicalCellNodesGlobal(elemTypePtr);
+  Intrepid::FieldContainer<double> physicalCellNodes = _mesh()->physicalCellNodesGlobal(elemTypePtr);
 
   int numCells = physicalCellNodes.dimension(0);
   unsigned spaceDim = physicalCellNodes.dimension(2);
@@ -1892,10 +1889,10 @@ void Solution::integrateFlux(FieldContainer<double> &values, ElementTypePtr elem
     int sideDim = side->getDimension();
     Teuchos::RCP< Intrepid::Cubature<double> > sideCub = cubFactory.create(side, cubDegree);
     int numCubPoints = sideCub->getNumPoints();
-    FieldContainer<double> cubPointsSide(numCubPoints, sideDim); // cubature points from the pov of the side (i.e. a 1D set)
-    FieldContainer<double> cubWeightsSide(numCubPoints);
-    FieldContainer<double> cubPointsSideRefCell(numCubPoints, spaceDim); // cubPointsSide from the pov of the ref cell
-    FieldContainer<double> jacobianSideRefCell(numCells, numCubPoints, spaceDim, spaceDim);
+    Intrepid::FieldContainer<double> cubPointsSide(numCubPoints, sideDim); // cubature points from the pov of the side (i.e. a 1D set)
+    Intrepid::FieldContainer<double> cubWeightsSide(numCubPoints);
+    Intrepid::FieldContainer<double> cubPointsSideRefCell(numCubPoints, spaceDim); // cubPointsSide from the pov of the ref cell
+    Intrepid::FieldContainer<double> jacobianSideRefCell(numCells, numCubPoints, spaceDim, spaceDim);
 
     sideCub->getCubature(cubPointsSide, cubWeightsSide);
 
@@ -1905,18 +1902,18 @@ void Solution::integrateFlux(FieldContainer<double> &values, ElementTypePtr elem
     CamelliaCellTools::setJacobian(jacobianSideRefCell, cubPointsSideRefCell, physicalCellNodes, cellTopo);
 
     // map side cubature points in reference parent cell domain to physical space
-    FieldContainer<double> physCubPoints(numCells, numCubPoints, spaceDim);
+    Intrepid::FieldContainer<double> physCubPoints(numCells, numCubPoints, spaceDim);
     CamelliaCellTools::mapToPhysicalFrame(physCubPoints, cubPointsSideRefCell, physicalCellNodes, cellTopo);
 
     if (cellTopo->getTensorialDegree() > 0) {
       TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument,"integrateFlux() doesn't support tensorial degree > 0.");
     }
-    
-    FieldContainer<double> weightedMeasure(numCells, numCubPoints);
-    FunctionSpaceTools::computeEdgeMeasure<double>(weightedMeasure, jacobianSideRefCell,
+
+    Intrepid::FieldContainer<double> weightedMeasure(numCells, numCubPoints);
+    Intrepid::FunctionSpaceTools::computeEdgeMeasure<double>(weightedMeasure, jacobianSideRefCell,
                                                    cubWeightsSide, sideIndex, cellTopo->getShardsTopology());
 
-    FieldContainer<double> computedValues(numCells,numCubPoints);
+    Intrepid::FieldContainer<double> computedValues(numCells,numCubPoints);
 
     solutionValues(computedValues, elemTypePtr, trialID, physCubPoints, cubPointsSide, sideIndex);
 
@@ -1937,34 +1934,31 @@ void Solution::integrateFlux(FieldContainer<double> &values, ElementTypePtr elem
   }
 }
 
-void Solution::solutionValues(FieldContainer<double> &values,
+void Solution::solutionValues(Intrepid::FieldContainer<double> &values,
                               ElementTypePtr elemTypePtr,
                               int trialID,
-                              const FieldContainer<double> &physicalPoints,
-                              const FieldContainer<double> &sideRefCellPoints,
+                              const Intrepid::FieldContainer<double> &physicalPoints,
+                              const Intrepid::FieldContainer<double> &sideRefCellPoints,
                               int sideIndex) {
   // currently, we only support computing solution values on all the cells of a given type at once.
   // values(numCellsForType,numPoints[,spaceDim (for vector-valued)])
   // physicalPoints(numCellsForType,numPoints,spaceDim)
-  FieldContainer<double> solnCoeffs = solutionForElementTypeGlobal(elemTypePtr); // (numcells, numLocalTrialDofs)
-  FieldContainer<double> physicalCellNodes = _mesh->physicalCellNodesGlobal(elemTypePtr);
+  Intrepid::FieldContainer<double> solnCoeffs = solutionForElementTypeGlobal(elemTypePtr); // (numcells, numLocalTrialDofs)
+  Intrepid::FieldContainer<double> physicalCellNodes = _mesh->physicalCellNodesGlobal(elemTypePtr);
 
   int numCells = physicalCellNodes.dimension(0);
   int numPoints = physicalPoints.dimension(1);
   CellTopoPtr cellTopo = elemTypePtr->cellTopoPtr;
   int spaceDim = cellTopo->getDimension();
 
-  typedef CellTools<double>  CellTools;
-  typedef FunctionSpaceTools fst;
-
   //  cout << "physicalCellNodes: " << endl << physicalCellNodes;
   //  cout << "physicalPoints: " << endl << physicalPoints;
   //  cout << "refElemPoints: " << endl << refElemPoints;
 
   // Containers for Jacobian
-  FieldContainer<double> cellJacobian(numCells, numPoints, spaceDim, spaceDim);
-  FieldContainer<double> cellJacobInv(numCells, numPoints, spaceDim, spaceDim);
-  FieldContainer<double> cellJacobDet(numCells, numPoints);
+  Intrepid::FieldContainer<double> cellJacobian(numCells, numPoints, spaceDim, spaceDim);
+  Intrepid::FieldContainer<double> cellJacobInv(numCells, numPoints, spaceDim, spaceDim);
+  Intrepid::FieldContainer<double> cellJacobDet(numCells, numPoints);
 
   Teuchos::RCP<DofOrdering> trialOrder = elemTypePtr->trialOrderPtr;
 
@@ -1996,21 +1990,21 @@ void Solution::solutionValues(FieldContainer<double> &values,
                              "physicalPoints.dimension(2) != spaceDim.");
 
   int oneCell = 1;
-  FieldContainer<double> thisCellJacobian(oneCell,numPoints, spaceDim, spaceDim);
-  FieldContainer<double> thisCellJacobInv(oneCell,numPoints, spaceDim, spaceDim);
-  FieldContainer<double> thisCellJacobDet(oneCell,numPoints);
-  FieldContainer<double> thisRefElemPoints(numPoints,spaceDim);
+  Intrepid::FieldContainer<double> thisCellJacobian(oneCell,numPoints, spaceDim, spaceDim);
+  Intrepid::FieldContainer<double> thisCellJacobInv(oneCell,numPoints, spaceDim, spaceDim);
+  Intrepid::FieldContainer<double> thisCellJacobDet(oneCell,numPoints);
+  Intrepid::FieldContainer<double> thisRefElemPoints(numPoints,spaceDim);
 
   CellTopoPtr side = cellTopo->getSubcell(spaceDim-1,sideIndex); // create relevant subcell (side) topology
   int sideDim = spaceDim-1;
-  FieldContainer<double> cubPointsSideRefCell(numPoints, spaceDim); // cubPointsSide from the pov of the ref cell
+  Intrepid::FieldContainer<double> cubPointsSideRefCell(numPoints, spaceDim); // cubPointsSide from the pov of the ref cell
 
   // compute geometric cell information
   //cout << "computing geometric cell info for boundary integral." << endl;
   CamelliaCellTools::mapToReferenceSubcell(cubPointsSideRefCell, sideRefCellPoints, sideDim, (int)sideIndex, cellTopo);
   CamelliaCellTools::setJacobian(cellJacobian, cubPointsSideRefCell, physicalCellNodes, cellTopo);
-  CellTools::setJacobianDet(cellJacobDet, cellJacobian );
-  CellTools::setJacobianInv(cellJacobInv, cellJacobian );
+  Intrepid::CellTools<double>::setJacobianDet(cellJacobDet, cellJacobian );
+  Intrepid::CellTools<double>::setJacobianInv(cellJacobInv, cellJacobian );
 
   values.initialize(0.0);
 
@@ -2018,7 +2012,7 @@ void Solution::solutionValues(FieldContainer<double> &values,
     thisCellJacobian.setValues(&cellJacobian(cellIndex,0,0,0),numPoints*spaceDim*spaceDim);
     thisCellJacobInv.setValues(&cellJacobInv(cellIndex,0,0,0),numPoints*spaceDim*spaceDim);
     thisCellJacobDet.setValues(&cellJacobDet(cellIndex,0),numPoints);
-    Teuchos::RCP< FieldContainer<double> > transformedValues;
+    Teuchos::RCP< Intrepid::FieldContainer<double> > transformedValues;
     transformedValues = BasisEvaluation::getTransformedValues(basis,  OP_VALUE, sideRefCellPoints, oneCell,
                                                               thisCellJacobian, thisCellJacobInv, thisCellJacobDet);
 
@@ -2098,8 +2092,8 @@ void Solution::solutionValues(FieldContainer<double> &values,
 
  vector< Teuchos::RCP< Element > > elemsInPartitionOfType = _mesh->elementsOfType(rank, elemTypePtr);
 
- FieldContainer<double> rhs = _rhsForElementType[elemTypePtr.get()];
- FieldContainer<double> rhsReps = _rhsRepresentationForElementType[elemTypePtr.get()];
+ Intrepid::FieldContainer<double> rhs = _rhsForElementType[elemTypePtr.get()];
+ Intrepid::FieldContainer<double> rhsReps = _rhsRepresentationForElementType[elemTypePtr.get()];
  int numTestDofs = rhs.dimension(1);
  int numCells = rhs.dimension(0);
  TEUCHOS_TEST_FOR_EXCEPTION( numCells!=elemsInPartitionOfType.size(), std::invalid_argument, "In rhsNorm::numCells does not match number of elems in partition.");
@@ -2166,8 +2160,8 @@ const map<GlobalIndexType,double> & Solution::globalEnergyError() {
   Teuchos::RCP<Epetra_Map> cellMap = _mesh->globalDofAssignment()->getActiveCellMap();
 
   int cellCount = cellMap->NumGlobalElements();
-  FieldContainer<double> globalCellEnergyErrors(cellCount);
-  FieldContainer<GlobalIndexTypeToCast> globalCellIDs(cellCount);
+  Intrepid::FieldContainer<double> globalCellEnergyErrors(cellCount);
+  Intrepid::FieldContainer<GlobalIndexTypeToCast> globalCellIDs(cellCount);
 
   set<GlobalIndexType> rankLocalCells = _mesh->cellIDsInPartition();
   for (set<GlobalIndexType>::iterator cellIDIt = rankLocalCells.begin(); cellIDIt != rankLocalCells.end(); cellIDIt++) {
@@ -2210,8 +2204,8 @@ const map<GlobalIndexType,double> & Solution::rankLocalEnergyError() {
     GlobalIndexType cellID = *cellIDIt;
 
     // for error rep v_e, residual res, energyError = sqrt ( ve_^T * res)
-    FieldContainer<double> residual = _residualForCell[cellID];
-    FieldContainer<double> errorRep = _errorRepresentationForCell[cellID];
+    Intrepid::FieldContainer<double> residual = _residualForCell[cellID];
+    Intrepid::FieldContainer<double> errorRep = _errorRepresentationForCell[cellID];
     int numTestDofs = residual.dimension(1);
     int numCells = residual.dimension(0);
     TEUCHOS_TEST_FOR_EXCEPTION( numCells!=1, std::invalid_argument, "In energyError::numCells != 1.");
@@ -2246,12 +2240,12 @@ void Solution::computeErrorRepresentation() {
     int numCells = 1;
     int numTestDofs = testOrdering->totalDofs();
 
-    FieldContainer<double> representationMatrix(numTestDofs, 1);
-    FieldContainer<double> errorRepresentation(numCells,numTestDofs);
+    Intrepid::FieldContainer<double> representationMatrix(numTestDofs, 1);
+    Intrepid::FieldContainer<double> errorRepresentation(numCells,numTestDofs);
 
-    FieldContainer<double> ipMatrix(1,numTestDofs,numTestDofs);
+    Intrepid::FieldContainer<double> ipMatrix(1,numTestDofs,numTestDofs);
     _ip->computeInnerProductMatrix(ipMatrix,testOrdering, ipBasisCache);
-    FieldContainer<double> rhsMatrix = _residualForCell[cellID];
+    Intrepid::FieldContainer<double> rhsMatrix = _residualForCell[cellID];
     // transpose residual :
     rhsMatrix.resize(numTestDofs, 1);
 
@@ -2283,13 +2277,13 @@ void Solution::computeResiduals() {
     int numTestDofs  = testOrdering->totalDofs();
 
     // compute l(v) and store in residuals:
-    FieldContainer<double> residual(1,numTestDofs);
+    Intrepid::FieldContainer<double> residual(1,numTestDofs);
 
     Teuchos::Array<int> oneCellDim(2);
     oneCellDim[0] = 1;
     oneCellDim[1] = numTestDofs;
 
-    FieldContainer<double> localCoefficients;
+    Intrepid::FieldContainer<double> localCoefficients;
     if (_solutionForCellIDGlobal.find(cellID) != _solutionForCellIDGlobal.end()) {
       localCoefficients = _solutionForCellIDGlobal[cellID];
     } else {
@@ -2300,8 +2294,8 @@ void Solution::computeResiduals() {
     _rhs->integrateAgainstStandardBasis(residual, testOrdering, basisCache);
 
     // compute b(u, v):
-    FieldContainer<double> preStiffness(1,numTestDofs,numTrialDofs );
-    FieldContainer<double> cellSideParitiesForCell = _mesh->cellSideParitiesForCell(cellID);
+    Intrepid::FieldContainer<double> preStiffness(1,numTestDofs,numTrialDofs );
+    Intrepid::FieldContainer<double> cellSideParitiesForCell = _mesh->cellSideParitiesForCell(cellID);
     _mesh->bilinearForm()->stiffnessMatrix(preStiffness, elemTypePtr, cellSideParitiesForCell, basisCache);
 
     for (int i=0; i<numTestDofs; i++) {
@@ -2309,7 +2303,7 @@ void Solution::computeResiduals() {
         residual(0,i) -= localCoefficients(j) * preStiffness(0,i,j);
       }
     }
-    
+
     _residualForCell[cellID] = residual;
 //    cout << "computed residual vector for cell " << cellID << "; nonzeros:\n";
 //    double tol = 1e-15;
@@ -2325,7 +2319,7 @@ void Solution::computeResiduals() {
 void Solution::discardInactiveCellCoefficients() {
   set< GlobalIndexType > activeCellIDs = _mesh->getActiveCellIDs();
   vector<GlobalIndexType> cellIDsToErase;
-  for (map< GlobalIndexType, FieldContainer<double> >::iterator solnIt = _solutionForCellIDGlobal.begin();
+  for (map< GlobalIndexType, Intrepid::FieldContainer<double> >::iterator solnIt = _solutionForCellIDGlobal.begin();
        solnIt != _solutionForCellIDGlobal.end(); solnIt++) {
     GlobalIndexType cellID = solnIt->first;
     if ( activeCellIDs.find(cellID) == activeCellIDs.end() ) {
@@ -2350,7 +2344,7 @@ void Solution::setStiffnessMatrix(Teuchos::RCP<Epetra_CrsMatrix> stiffness) {
     _globalStiffMatrix = stiffness;
 }
 
-void Solution::solutionValues(FieldContainer<double> &values, int trialID, BasisCachePtr basisCache,
+void Solution::solutionValues(Intrepid::FieldContainer<double> &values, int trialID, BasisCachePtr basisCache,
                               bool weightForCubature, Camellia::EOperator op) {
   values.initialize(0.0);
   vector<GlobalIndexType> cellIDs = basisCache->cellIDs();
@@ -2387,7 +2381,7 @@ void Solution::solutionValues(FieldContainer<double> &values, int trialID, Basis
 //      cout << "In Solution::solutionValues() on rank " << rank << ", data for cellID " << cellID << " found; container size is " << _solutionForCellIDGlobal[cellID].size() << endl;
     }
 
-    FieldContainer<double>* solnCoeffs = &_solutionForCellIDGlobal[cellID];
+    Intrepid::FieldContainer<double>* solnCoeffs = &_solutionForCellIDGlobal[cellID];
 
     DofOrderingPtr trialOrder = _mesh->getElement(cellID)->elementType()->trialOrderPtr;
 
@@ -2401,7 +2395,7 @@ void Solution::solutionValues(FieldContainer<double> &values, int trialID, Basis
 
     int basisCardinality = basis->getCardinality();
 
-    Teuchos::RCP<const FieldContainer<double> > transformedValues;
+    Teuchos::RCP<const Intrepid::FieldContainer<double> > transformedValues;
     if (weightForCubature) {
       if (forceVolumeCoords) {
         transformedValues = basisCache->getVolumeBasisCache()->getTransformedWeightedValues(basis,op,sideIndex,true);
@@ -2448,7 +2442,7 @@ void Solution::solutionValues(FieldContainer<double> &values, int trialID, Basis
   }
 }
 
-void Solution::solutionValues(FieldContainer<double> &values, int trialID, const FieldContainer<double> &physicalPoints) {
+void Solution::solutionValues(Intrepid::FieldContainer<double> &values, int trialID, const Intrepid::FieldContainer<double> &physicalPoints) {
   // physicalPoints may have dimensions (C,P,D) or (P,D)
   // either way, this method requires searching the mesh for the points provided
   if (physicalPoints.rank()==3) { // dimensions (C,P,D)
@@ -2465,7 +2459,7 @@ void Solution::solutionValues(FieldContainer<double> &values, int trialID, const
     values.initialize(0.0);
     for (int cellIndex=0;cellIndex<numTotalCells;cellIndex++){
 
-      FieldContainer<double> cellPoint(1,spaceDim); // a single point to find elem we're in
+      Intrepid::FieldContainer<double> cellPoint(1,spaceDim); // a single point to find elem we're in
       for (int i=0;i<spaceDim;i++){cellPoint(0,i) = physicalPoints(cellIndex,0,i);}
       vector< ElementPtr > elements = _mesh->elementsForPoints(cellPoint); // operate under assumption that all points for a given cell index are in that cell
       ElementPtr elem = elements[0];
@@ -2473,14 +2467,14 @@ void Solution::solutionValues(FieldContainer<double> &values, int trialID, const
       ElementTypePtr elemTypePtr = elem->elementType();
       int cellID = elem->cellID();
 
-      FieldContainer<double> solnCoeffs = allCoefficientsForCellID(cellID);
+      Intrepid::FieldContainer<double> solnCoeffs = allCoefficientsForCellID(cellID);
       if (solnCoeffs.size()==0) continue; // cell ID not known: default to zero
       int numCells = 1; // do one cell at a time
 
-      FieldContainer<double> physicalCellNodes = _mesh->physicalCellNodesForCell(cellID);
+      Intrepid::FieldContainer<double> physicalCellNodes = _mesh->physicalCellNodesForCell(cellID);
 
       // store points in local container
-      FieldContainer<double> physicalPointsForCell(numCells,numPoints,spaceDim);
+      Intrepid::FieldContainer<double> physicalPointsForCell(numCells,numPoints,spaceDim);
       for (int ptIndex=0;ptIndex<numPoints;ptIndex++){
         for (int dim=0; dim<spaceDim; dim++) {
           physicalPointsForCell(0,ptIndex,dim) = physicalPoints(cellIndex,ptIndex,dim);
@@ -2488,7 +2482,7 @@ void Solution::solutionValues(FieldContainer<double> &values, int trialID, const
       }
 
       // 1. compute refElemPoints, the evaluation points mapped to reference cell:
-      FieldContainer<double> refElemPoints(numCells,numPoints, spaceDim);
+      Intrepid::FieldContainer<double> refElemPoints(numCells,numPoints, spaceDim);
       CamelliaCellTools::mapToReferenceFrame(refElemPoints,physicalPointsForCell,_mesh->getTopology(),cellID,_mesh->globalDofAssignment()->getCubatureDegree(cellID));
       refElemPoints.resize(numPoints,spaceDim);
 
@@ -2502,7 +2496,7 @@ void Solution::solutionValues(FieldContainer<double> &values, int trialID, const
       for (int containerRank=1; containerRank<cellOffset.size(); containerRank++) {
         cellOffset[containerRank] = 0;
       }
-      FieldContainer<double> cellValues(dim,&values[values.getEnumeration(cellOffset)]);
+      Intrepid::FieldContainer<double> cellValues(dim,&values[values.getEnumeration(cellOffset)]);
       this->solutionValues(cellValues, trialID, basisCache);
     }
     //  when the cell containing the point is off-rank, we have 0s.
@@ -2531,7 +2525,7 @@ void Solution::solutionValues(FieldContainer<double> &values, int trialID, const
     onePointDimensions.push_back(1); // P (point)
     onePointDimensions.push_back(spaceDim); // D (space)
     if (valueRank >= 1) oneValueDimensions.push_back(spaceDim);
-    FieldContainer<double> oneValue(oneValueDimensions);
+    Intrepid::FieldContainer<double> oneValue(oneValueDimensions);
     Teuchos::Array<int> oneCellDofsDimensions;
     oneCellDofsDimensions.push_back(0); // initialize according to elementType
     bool nullElementsOffRank = true;
@@ -2549,15 +2543,15 @@ void Solution::solutionValues(FieldContainer<double> &values, int trialID, const
       ElementTypePtr elemTypePtr = elem->elementType();
 
       int cellID = elem->cellID();
-      FieldContainer<double> solnCoeffs = allCoefficientsForCellID(cellID);
+      Intrepid::FieldContainer<double> solnCoeffs = allCoefficientsForCellID(cellID);
       if (solnCoeffs.size()==0) continue; // cell ID not known: default to zero
 
       int numCells = 1;
       int numPoints = 1;
 
-      FieldContainer<double> physicalCellNodes = _mesh->physicalCellNodesForCell(cellID);
+      Intrepid::FieldContainer<double> physicalCellNodes = _mesh->physicalCellNodesForCell(cellID);
 
-      FieldContainer<double> physicalPoint(onePointDimensions);
+      Intrepid::FieldContainer<double> physicalPoint(onePointDimensions);
       for (int dim=0; dim<spaceDim; dim++) {
         physicalPoint[dim] = physicalPoints(physicalPointIndex,dim);
       }
@@ -2567,11 +2561,8 @@ void Solution::solutionValues(FieldContainer<double> &values, int trialID, const
       // 3. Transform those basis evaluations back into the physical space
       // 4. Multiply by the solnCoeffs
 
-      typedef CellTools<double>  CellTools;
-      typedef FunctionSpaceTools fst;
-
       // 1. compute refElemPoints, the evaluation points mapped to reference cell:
-      FieldContainer<double> refElemPoint(numCells, numPoints, spaceDim);
+      Intrepid::FieldContainer<double> refElemPoint(numCells, numPoints, spaceDim);
       CellTopoPtr cellTopo = elemTypePtr->cellTopoPtr;
       CamelliaCellTools::mapToReferenceFrame(refElemPoint,physicalPoint,_mesh->getTopology(),cellID,_mesh->globalDofAssignment()->getCubatureDegree(cellID));
       refElemPoint.resize(numPoints,spaceDim);
@@ -2590,7 +2581,7 @@ void Solution::solutionValues(FieldContainer<double> &values, int trialID, const
       }
 
       Teuchos::Array<int> cellOffset = dim;
-      FieldContainer<double> cellValues(dim);
+      Intrepid::FieldContainer<double> cellValues(dim);
       this->solutionValues(cellValues, trialID, basisCache);
 
       if (basisRank == 0) {
@@ -2654,7 +2645,7 @@ void Solution::writeToFile(int trialID, const string &filePath) {
     ElementTypePtr elemTypePtr = *(elemTypeIt);
 
     CellTopoPtr cellTopo = elemTypePtr->cellTopoPtr;
-    FieldContainer<double> vertexPoints(cellTopo->getVertexCount(),cellTopo->getDimension());
+    Intrepid::FieldContainer<double> vertexPoints(cellTopo->getVertexCount(),cellTopo->getDimension());
     CamelliaCellTools::refCellNodesForTopology(vertexPoints, cellTopo);
 
     int numVertices = vertexPoints.dimension(1);
@@ -2662,14 +2653,14 @@ void Solution::writeToFile(int trialID, const string &filePath) {
     int numDivisionsPerEdge = 1; //basisDegree*basisDegree;
     int numPatchesPerCell = numDivisionsPerEdge*numDivisionsPerEdge;
 
-    FieldContainer<double> refPoints(numPatchesPerCell*numVertices,spaceDim);
+    Intrepid::FieldContainer<double> refPoints(numPatchesPerCell*numVertices,spaceDim);
 
     if (numVertices == 4) { // only quads supported by the multi-patch cell stuff below...
       //if (   ( elemTypePtr->cellTopoPtr->getKey() == shards::Quadrilateral<4>::key )
       //    || (elemTypePtr->cellTopoPtr->getKey() == shards::Triangle<3>::key ) ) {
 
-      FieldContainer<double> iVertex(spaceDim), jVertex(spaceDim);
-      FieldContainer<double> v1(spaceDim), v2(spaceDim), v3(spaceDim);
+      Intrepid::FieldContainer<double> iVertex(spaceDim), jVertex(spaceDim);
+      Intrepid::FieldContainer<double> v1(spaceDim), v2(spaceDim), v3(spaceDim);
 
       if (numVertices == 4) {
         double yWeights[numVertices], xWeights[numVertices];
@@ -2706,10 +2697,10 @@ void Solution::writeToFile(int trialID, const string &filePath) {
     basisCache->setRefCellPoints(refPoints);
     int numCells = basisCache->cellIDs().size();
 
-    FieldContainer<double> values(numCells, numPatchesPerCell * numVertices);
+    Intrepid::FieldContainer<double> values(numCells, numPatchesPerCell * numVertices);
     this->solutionValues(values, trialID, basisCache);
 
-    FieldContainer<double> physPoints = basisCache->getPhysicalCubaturePoints();
+    Intrepid::FieldContainer<double> physPoints = basisCache->getPhysicalCubaturePoints();
 
     for (int cellIndex=0; cellIndex < numCells; cellIndex++) {
       for (int patchIndex=0; patchIndex < numPatchesPerCell; patchIndex++) {
@@ -2747,13 +2738,13 @@ void Solution::writeQuadSolutionToFile(int trialID, const string &filePath) {
     // Get numerical integration points--these will be the points we compute the solution values for...
     CubatureFactory  cubFactory;
     int cubDegree = 2*basisDegree;
-    Teuchos::RCP<Cubature<double> > cellTopoCub = cubFactory.create(cellTopoPtr, cubDegree);
+    Teuchos::RCP<Intrepid::Cubature<double> > cellTopoCub = cubFactory.create(cellTopoPtr, cubDegree);
 
     int cubDim       = cellTopoCub->getDimension();
     int numCubPoints = cellTopoCub->getNumPoints();
 
-    FieldContainer<double> cubPoints(numCubPoints, cubDim);
-    FieldContainer<double> cubWeights(numCubPoints);
+    Intrepid::FieldContainer<double> cubPoints(numCubPoints, cubDim);
+    Intrepid::FieldContainer<double> cubWeights(numCubPoints);
 
     cellTopoCub->getCubature(cubPoints, cubWeights);
 
@@ -2782,16 +2773,14 @@ void Solution::writeQuadSolutionToFile(int trialID, const string &filePath) {
         ptIndex++;
       }
     }
-    typedef CellTools<double>  CellTools;
-
     BasisCachePtr basisCache = BasisCache::basisCacheForCellType(_mesh, elemTypePtr);
 
     basisCache->setPhysicalCellNodes(_mesh->physicalCellNodesGlobal(elemTypePtr), _mesh->cellIDsOfType(elemTypePtr), false);
     basisCache->setRefCellPoints(cubPoints);
 
-    FieldContainer<double> physCubPoints = basisCache->getPhysicalCubaturePoints();
+    Intrepid::FieldContainer<double> physCubPoints = basisCache->getPhysicalCubaturePoints();
 
-    FieldContainer<double> values(numCellsOfType, numCubPoints);
+    Intrepid::FieldContainer<double> values(numCellsOfType, numCubPoints);
     solutionValues(values,trialID,basisCache);
 
     map<float,int> xIndices;
@@ -2818,11 +2807,11 @@ void Solution::writeQuadSolutionToFile(int trialID, const string &filePath) {
   fout.close();
 }
 
-FieldContainer<double> Solution::solutionForElementTypeGlobal(ElementTypePtr elemType) {
+Intrepid::FieldContainer<double> Solution::solutionForElementTypeGlobal(ElementTypePtr elemType) {
   vector< ElementPtr > elementsOfType = _mesh->elementsOfTypeGlobal(elemType);
   int numDofsForType = elemType->trialOrderPtr->totalDofs();
   int numCellsOfType = elementsOfType.size();
-  FieldContainer<double> solutionCoeffs(numCellsOfType,numDofsForType);
+  Intrepid::FieldContainer<double> solutionCoeffs(numCellsOfType,numDofsForType);
   for (vector< ElementPtr >::iterator elemIt = elementsOfType.begin();
        elemIt != elementsOfType.end(); elemIt++) {
     int globalCellIndex = (*elemIt)->globalCellIndex();
@@ -2841,14 +2830,14 @@ FieldContainer<double> Solution::solutionForElementTypeGlobal(ElementTypePtr ele
 
 // static method interprets a set of trial ordering coefficients in terms of a specified DofOrdering
 // and returns a set of weights for the appropriate basis
-void Solution::basisCoeffsForTrialOrder(FieldContainer<double> &basisCoeffs, DofOrderingPtr trialOrder,
-                                        const FieldContainer<double> &allCoeffs,
+void Solution::basisCoeffsForTrialOrder(Intrepid::FieldContainer<double> &basisCoeffs, DofOrderingPtr trialOrder,
+                                        const Intrepid::FieldContainer<double> &allCoeffs,
                                         int trialID, int sideIndex) {
   if (! trialOrder->hasBasisEntry(trialID, sideIndex)) {
     basisCoeffs.resize(0);
     return;
   }
-  
+
   BasisPtr basis = trialOrder->getBasis(trialID,sideIndex);
 
   int basisCardinality = basis->getCardinality();
@@ -2860,7 +2849,7 @@ void Solution::basisCoeffsForTrialOrder(FieldContainer<double> &basisCoeffs, Dof
   }
 }
 
-void Solution::solnCoeffsForCellID(FieldContainer<double> &solnCoeffs, GlobalIndexType cellID, int trialID, int sideIndex) {
+void Solution::solnCoeffsForCellID(Intrepid::FieldContainer<double> &solnCoeffs, GlobalIndexType cellID, int trialID, int sideIndex) {
   Teuchos::RCP< DofOrdering > trialOrder = _mesh->getElement(cellID)->elementType()->trialOrderPtr;
 
   if (_solutionForCellIDGlobal.find(cellID) == _solutionForCellIDGlobal.end() ) {
@@ -2875,7 +2864,7 @@ void Solution::solnCoeffsForCellID(FieldContainer<double> &solnCoeffs, GlobalInd
   basisCoeffsForTrialOrder(solnCoeffs, trialOrder, _solutionForCellIDGlobal[cellID], trialID, sideIndex);
 }
 
-const FieldContainer<double>& Solution::allCoefficientsForCellID(GlobalIndexType cellID, bool warnAboutOffRankImports) {
+const Intrepid::FieldContainer<double>& Solution::allCoefficientsForCellID(GlobalIndexType cellID, bool warnAboutOffRankImports) {
   int myRank                    = Teuchos::GlobalMPISession::getRank();
   PartitionIndexType cellRank   = _mesh->globalDofAssignment()->partitionForCellID(cellID);
 
@@ -2913,7 +2902,7 @@ void Solution::setReportConditionNumber(bool value) {
   _reportConditionNumber = value;
 }
 
-void Solution::setLocalCoefficientsForCell(GlobalIndexType cellID, const FieldContainer<double> &coefficients) {
+void Solution::setLocalCoefficientsForCell(GlobalIndexType cellID, const Intrepid::FieldContainer<double> &coefficients) {
   if (coefficients.size() != _mesh->getElementType(cellID)->trialOrderPtr->totalDofs()) {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "coefficients container doesn't have the right # of dofs");
   }
@@ -2932,12 +2921,12 @@ void Solution::setRHS( Teuchos::RCP<RHS> rhs) {
   clearComputedResiduals();
 }
 
-void Solution::setSolnCoeffsForCellID(FieldContainer<double> &solnCoeffsToSet, GlobalIndexType cellID){
+void Solution::setSolnCoeffsForCellID(Intrepid::FieldContainer<double> &solnCoeffsToSet, GlobalIndexType cellID){
   _solutionForCellIDGlobal[cellID] = solnCoeffsToSet;
   _mesh->globalDofAssignment()->interpretLocalCoefficients(cellID,solnCoeffsToSet,*_lhsVector);
 }
 
-void Solution::setSolnCoeffsForCellID(FieldContainer<double> &solnCoeffsToSet, GlobalIndexType cellID, int trialID, int sideIndex) {
+void Solution::setSolnCoeffsForCellID(Intrepid::FieldContainer<double> &solnCoeffsToSet, GlobalIndexType cellID, int trialID, int sideIndex) {
   ElementTypePtr elemTypePtr = _mesh->getElement(cellID)->elementType();
 
   Teuchos::RCP< DofOrdering > trialOrder = elemTypePtr->trialOrderPtr;
@@ -2946,7 +2935,7 @@ void Solution::setSolnCoeffsForCellID(FieldContainer<double> &solnCoeffsToSet, G
   int basisCardinality = basis->getCardinality();
   if ( _solutionForCellIDGlobal.find(cellID) == _solutionForCellIDGlobal.end() ) {
     // allocate new storage
-    _solutionForCellIDGlobal[cellID] = FieldContainer<double>(trialOrder->totalDofs());
+    _solutionForCellIDGlobal[cellID] = Intrepid::FieldContainer<double>(trialOrder->totalDofs());
   }
   if (_solutionForCellIDGlobal[cellID].size() != trialOrder->totalDofs()) {
     // resize
@@ -2957,8 +2946,8 @@ void Solution::setSolnCoeffsForCellID(FieldContainer<double> &solnCoeffsToSet, G
     int localDofIndex = trialOrder->getDofIndex(trialID, dofOrdinal, sideIndex);
     _solutionForCellIDGlobal[cellID](localDofIndex) = solnCoeffsToSet[dofOrdinal];
   }
-  FieldContainer<double> globalCoefficients;
-  FieldContainer<GlobalIndexType> globalDofIndices;
+  Intrepid::FieldContainer<double> globalCoefficients;
+  Intrepid::FieldContainer<GlobalIndexType> globalDofIndices;
   _mesh->interpretLocalBasisCoefficients(cellID, trialID, sideIndex, solnCoeffsToSet, globalCoefficients, globalDofIndices);
 
   for (int i=0; i<globalCoefficients.size(); i++) {
@@ -2971,7 +2960,7 @@ void Solution::setSolnCoeffsForCellID(FieldContainer<double> &solnCoeffsToSet, G
 }
 
 // protected method; used for solution comparison...
-const map< GlobalIndexType, FieldContainer<double> > & Solution::solutionForCellIDGlobal() const {
+const map< GlobalIndexType, Intrepid::FieldContainer<double> > & Solution::solutionForCellIDGlobal() const {
   return _solutionForCellIDGlobal;
 }
 
@@ -3018,8 +3007,6 @@ void Solution::condensedSolve(Teuchos::RCP<Solver> globalSolver, bool reduceMemo
 
 // must write to .m file
 void Solution::writeFieldsToFile(int trialID, const string &filePath){
-  typedef CellTools<double>  CellTools;
-
   //  cout << "writeFieldsToFile for trialID: " << trialID << endl;
 
   ofstream fout(filePath.c_str());
@@ -3043,9 +3030,9 @@ void Solution::writeFieldsToFile(int trialID, const string &filePath){
     ElementTypePtr elemTypePtr = *(elemTypeIt);
     CellTopoPtr cellTopo = elemTypePtr->cellTopoPtr;
 
-    FieldContainer<double> vertexPoints, physPoints;
+    Intrepid::FieldContainer<double> vertexPoints, physPoints;
     _mesh->verticesForElementType(vertexPoints,elemTypePtr); //stores vertex points for this element
-    FieldContainer<double> physicalCellNodes = _mesh()->physicalCellNodesGlobal(elemTypePtr);
+    Intrepid::FieldContainer<double> physicalCellNodes = _mesh()->physicalCellNodesGlobal(elemTypePtr);
 
     int numCells = physicalCellNodes.dimension(0);
     bool createSideCacheToo = false;
@@ -3058,7 +3045,7 @@ void Solution::writeFieldsToFile(int trialID, const string &filePath){
     }
 
     int numPoints = num1DPts * num1DPts;
-    FieldContainer<double> refPoints(numPoints,spaceDim);
+    Intrepid::FieldContainer<double> refPoints(numPoints,spaceDim);
     for (int xPointIndex = 0; xPointIndex < num1DPts; xPointIndex++){
       for (int yPointIndex = 0; yPointIndex < num1DPts; yPointIndex++){
         int pointIndex = xPointIndex*num1DPts + yPointIndex;
@@ -3071,10 +3058,10 @@ void Solution::writeFieldsToFile(int trialID, const string &filePath){
 
     basisCache->setRefCellPoints(refPoints);
     basisCache->setPhysicalCellNodes(physicalCellNodes, cellIDs, createSideCacheToo);
-    FieldContainer<double> computedValues(numCells,numPoints);
+    Intrepid::FieldContainer<double> computedValues(numCells,numPoints);
 
     this->solutionValues(computedValues, trialID, basisCache);
-    const FieldContainer<double> *physicalPoints = &basisCache->getPhysicalCubaturePoints();
+    const Intrepid::FieldContainer<double> *physicalPoints = &basisCache->getPhysicalCubaturePoints();
 
     for (int cellIndex=0; cellIndex<numCells; cellIndex++ ) {
       for (int xPointIndex = 0; xPointIndex < num1DPts; xPointIndex++){
@@ -3104,19 +3091,19 @@ void Solution::writeFieldsToFile(int trialID, const string &filePath){
     //
     //        // for some odd reason, I cannot compute the ref-to-phys map for more than 1 point at a time
     //        int numPoints = 1;
-    //        FieldContainer<double> refPoints(numPoints,spaceDim);
+    //        Intrepid::FieldContainer<double> refPoints(numPoints,spaceDim);
     //        double x = -1.0 + 2.0*(double)xPointIndex/((double)num1DPts-1.0);
     //        double y = -1.0 + 2.0*(double)yPointIndex/((double)num1DPts-1.0);
     //        refPoints(0,0) = x;
     //        refPoints(0,1) = y;
     //
     //        // map side cubature points in reference parent cell domain to physical space
-    //        FieldContainer<double> physicalPoints(numCells, numPoints, spaceDim);
+    //        Intrepid::FieldContainer<double> physicalPoints(numCells, numPoints, spaceDim);
     //        CellTools::mapToPhysicalFrame(physicalPoints, refPoints, physicalCellNodes, cellTopo);
     //
     //        cout << "physicalPoints:\n" <<  physicalPoints;
     //
-    //        FieldContainer<double> computedValues(numCells,numPoints); // first arg = 1 cell only
+    //        Intrepid::FieldContainer<double> computedValues(numCells,numPoints); // first arg = 1 cell only
     //        solutionValues(computedValues, elemTypePtr, trialID, physicalPoints);
     //
     //        for (int cellIndex=0;cellIndex < numCells;cellIndex++){
@@ -3133,8 +3120,6 @@ void Solution::writeFieldsToFile(int trialID, const string &filePath){
 }
 
 void Solution::writeFluxesToFile(int trialID, const string &filePath){
-  typedef CellTools<double>  CellTools;
-
   ofstream fout(filePath.c_str());
   fout << setprecision(15);
   vector< ElementTypePtr > elementTypes = _mesh->elementTypes();
@@ -3147,16 +3132,16 @@ void Solution::writeFluxesToFile(int trialID, const string &filePath){
     CellTopoPtr cellTopo = elemTypePtr->cellTopoPtr;
     int numSides = cellTopo->getSideCount();
 
-    FieldContainer<double> vertexPoints, physPoints;
+    Intrepid::FieldContainer<double> vertexPoints, physPoints;
     _mesh->verticesForElementType(vertexPoints,elemTypePtr); //stores vertex points for this element
-    FieldContainer<double> physicalCellNodes = _mesh()->physicalCellNodesGlobal(elemTypePtr);
+    Intrepid::FieldContainer<double> physicalCellNodes = _mesh()->physicalCellNodesGlobal(elemTypePtr);
 
     int numCells = vertexPoints.dimension(0);
     // takes centroid of all cells
     int numVertices = vertexPoints.dimension(1);
-    FieldContainer<double> cellIDs(numCells);
+    Intrepid::FieldContainer<double> cellIDs(numCells);
     for (int cellIndex=0;cellIndex<numCells;cellIndex++){
-      FieldContainer<double> cellCentroid(spaceDim);
+      Intrepid::FieldContainer<double> cellCentroid(spaceDim);
       cellCentroid.initialize(0.0);
       for (int vertIndex=0;vertIndex<numVertices;vertIndex++){
         for (int dimIndex=0;dimIndex<spaceDim;dimIndex++){
@@ -3177,11 +3162,11 @@ void Solution::writeFluxesToFile(int trialID, const string &filePath){
       int cubDegree = 15;//arbitrary number of points per cell, make dep on basis degree?
       CellTopoPtr side = cellTopo->getSubcell(spaceDim-1,sideIndex);
       int sideDim = side->getDimension();
-      Teuchos::RCP<Cubature<double> > sideCub = cubFactory.create(side, cubDegree);
+      Teuchos::RCP<Intrepid::Cubature<double> > sideCub = cubFactory.create(side, cubDegree);
       int numCubPoints = sideCub->getNumPoints();
-      FieldContainer<double> cubPointsSideRefCell(numCubPoints, spaceDim); // just need the reference cell cubature points - map to physical space in n-D space
-      FieldContainer<double> cubPointsSide(numCubPoints, sideDim);
-      FieldContainer<double> cubWeightsSide(numCubPoints);// dummy for now
+      Intrepid::FieldContainer<double> cubPointsSideRefCell(numCubPoints, spaceDim); // just need the reference cell cubature points - map to physical space in n-D space
+      Intrepid::FieldContainer<double> cubPointsSide(numCubPoints, sideDim);
+      Intrepid::FieldContainer<double> cubWeightsSide(numCubPoints);// dummy for now
 
       sideCub->getCubature(cubPointsSide, cubWeightsSide);
 
@@ -3189,16 +3174,16 @@ void Solution::writeFluxesToFile(int trialID, const string &filePath){
       CamelliaCellTools::mapToReferenceSubcell(cubPointsSideRefCell, cubPointsSide, sideDim, sideIndex, cellTopo);
 
       // map side cubature points in reference parent cell domain to physical space
-      FieldContainer<double> physCubPoints(numCells, numCubPoints, spaceDim);
+      Intrepid::FieldContainer<double> physCubPoints(numCells, numCubPoints, spaceDim);
       CamelliaCellTools::mapToPhysicalFrame(physCubPoints, cubPointsSideRefCell, physicalCellNodes, cellTopo);
 
       // we now have cubPointsSideRefCell
-      FieldContainer<double> computedValues(numCells,numCubPoints); // first arg = 1 cell only
+      Intrepid::FieldContainer<double> computedValues(numCells,numCubPoints); // first arg = 1 cell only
       solutionValues(computedValues, elemTypePtr, trialID, physCubPoints, cubPointsSide, sideIndex);
 
       // NOW loop over all cells to write solution to file
       for (int cellIndex=0;cellIndex < numCells;cellIndex++){
-        FieldContainer<double> cellParities = _mesh->cellSideParitiesForCell( cellIDs(cellIndex) );
+        Intrepid::FieldContainer<double> cellParities = _mesh->cellSideParitiesForCell( cellIDs(cellIndex) );
         for (int pointIndex = 0; pointIndex < numCubPoints; pointIndex++){
           for (int dimInd=0;dimInd<spaceDim;dimInd++){
             fout << physCubPoints(cellIndex,pointIndex,dimInd) << " ";
@@ -3419,7 +3404,7 @@ void Solution::processSideUpgrades( const map<GlobalIndexType, pair< ElementType
       continue; // no previous solution for this cell
     DofOrderingPtr oldTrialOrdering = (upgradeIt->second).first->trialOrderPtr;
     DofOrderingPtr newTrialOrdering = (upgradeIt->second).second->trialOrderPtr;
-    FieldContainer<double> newCoefficients(newTrialOrdering->totalDofs());
+    Intrepid::FieldContainer<double> newCoefficients(newTrialOrdering->totalDofs());
     newTrialOrdering->copyLikeCoefficients( newCoefficients, oldTrialOrdering, _solutionForCellIDGlobal[cellID] );
     //    cout << "processSideUpgrades: setting solution for cell ID " << cellID << endl;
     _solutionForCellIDGlobal[cellID] = newCoefficients;
@@ -3439,9 +3424,9 @@ void Solution::projectOntoMesh(const map<int, FunctionPtr > &functionMap){ // ma
 }
 
 void Solution::projectOntoCell(const map<int, FunctionPtr > &functionMap, GlobalIndexType cellID, int side) {
-  FieldContainer<double> physicalCellNodes = _mesh->physicalCellNodesForCell(cellID);
+  Intrepid::FieldContainer<double> physicalCellNodes = _mesh->physicalCellNodesForCell(cellID);
   vector<GlobalIndexType> cellIDs(1,cellID);
-  
+
   VarFactory vf = _mesh->bilinearForm()->varFactory();
 
   for (map<int, FunctionPtr >::const_iterator functionIt = functionMap.begin(); functionIt !=functionMap.end(); functionIt++){
@@ -3450,7 +3435,7 @@ void Solution::projectOntoCell(const map<int, FunctionPtr > &functionMap, Global
     bool fluxOrTrace = _mesh->bilinearForm()->isFluxOrTrace(trialID);
     VarPtr trialVar = vf.trial(trialID);
     FunctionPtr function = functionIt->second;
-    
+
     bool testVsTest = false; // in fact it's more trial vs trial, but this just means we'll over-integrate a bit
     BasisCachePtr basisCache = BasisCache::basisCacheForCell(_mesh, cellID, testVsTest, _cubatureEnrichmentDegree);
     ElementTypePtr elemTypePtr = _mesh->getElementType(cellID);
@@ -3467,7 +3452,7 @@ void Solution::projectOntoCell(const map<int, FunctionPtr > &functionMap, Global
       for (int sideIndex=firstSide; sideIndex<=lastSide; sideIndex++) {
         if (! elemTypePtr->trialOrderPtr->hasBasisEntry(trialID, sideIndex)) continue;
         BasisPtr basis = elemTypePtr->trialOrderPtr->getBasis(trialID, sideIndex);
-        FieldContainer<double> basisCoefficients(1,basis->getCardinality());
+        Intrepid::FieldContainer<double> basisCoefficients(1,basis->getCardinality());
         Projector::projectFunctionOntoBasis(basisCoefficients, function, basis, basisCache->getSideBasisCache(sideIndex));
         basisCoefficients.resize(basis->getCardinality());
 
@@ -3475,26 +3460,26 @@ void Solution::projectOntoCell(const map<int, FunctionPtr > &functionMap, Global
 //          if ((sideIndex==2) || (sideIndex == 3)) {
 //            cout << "cell " << cellID << ", side " << sideIndex << ":\n";
 //            cout << "function: " << function->displayString() << endl;
-//            
+//
 //            BasisCachePtr sideCache = basisCache->getSideBasisCache(sideIndex);
-//            
+//
 //            cout << "basisCoefficients:\n" << basisCoefficients;
 //            cout << "physicalCubaturePoints:\n" << sideCache->getPhysicalCubaturePoints();
 //
 //            int numCells = 1;
-//            FieldContainer<double> values(numCells, basisCache->getSideBasisCache(sideIndex)->getPhysicalCubaturePoints().dimension(1));
+//            Intrepid::FieldContainer<double> values(numCells, basisCache->getSideBasisCache(sideIndex)->getPhysicalCubaturePoints().dimension(1));
 //            function->values(values, sideCache);
-//            
+//
 //            cout << "function values:\n" << values;
 //          }
 //        }
-        
+
         // at present, we understand it to be caller's responsibility to include parity in Function if the varType is a flux.
         // if we wanted to change that semantic, we'd use the below.
 //        if ((_mesh->parityForSide(cellID, sideIndex) == -1) && (trialVar->varType()==FLUX)) {
 //          SerialDenseWrapper::multiplyFCByWeight(basisCoefficients, -1);
 //        }
-        
+
         setSolnCoeffsForCellID(basisCoefficients,cellID,trialID,sideIndex);
       }
     } else {
@@ -3504,7 +3489,7 @@ void Solution::projectOntoCell(const map<int, FunctionPtr > &functionMap, Global
       }
 
       BasisPtr basis = elemTypePtr->trialOrderPtr->getBasis(trialID);
-      FieldContainer<double> basisCoefficients(1,basis->getCardinality());
+      Intrepid::FieldContainer<double> basisCoefficients(1,basis->getCardinality());
       Projector::projectFunctionOntoBasis(basisCoefficients, function, basis, basisCache);
       basisCoefficients.resize(basis->getCardinality());
       setSolnCoeffsForCellID(basisCoefficients,cellID,trialID);
@@ -3535,14 +3520,14 @@ void Solution::projectOldCellOntoNewCells(GlobalIndexType cellID,
     return; // zero solution on cell
   }
 //  cout << "on rank " << rank << ", projecting " << cellID << " data onto children.\n";
-  const FieldContainer<double>* oldData = &_solutionForCellIDGlobal[cellID];
+  const Intrepid::FieldContainer<double>* oldData = &_solutionForCellIDGlobal[cellID];
 //  cout << "cell " << cellID << " data: \n" << *oldData;
   projectOldCellOntoNewCells(cellID, oldElemType, *oldData, childIDs);
 }
 
 void Solution::projectOldCellOntoNewCells(GlobalIndexType cellID,
                                           ElementTypePtr oldElemType,
-                                          const FieldContainer<double> &oldData,
+                                          const Intrepid::FieldContainer<double> &oldData,
                                           const vector<GlobalIndexType> &childIDs)
  {
    VarFactory vf = _mesh->bilinearForm()->varFactory();
@@ -3565,7 +3550,7 @@ void Solution::projectOldCellOntoNewCells(GlobalIndexType cellID,
      if (oldTrialOrdering->getSidesForVarID(trialID).size() == 1) { // field variable, the only kind we honor right now
        BasisPtr basis = oldTrialOrdering->getBasis(trialID);
        int basisCardinality = basis->getCardinality();
-       FieldContainer<double> basisCoefficients(basisCardinality);
+       Intrepid::FieldContainer<double> basisCoefficients(basisCardinality);
 
        for (int dofOrdinal=0; dofOrdinal<basisCardinality; dofOrdinal++) {
          int dofIndex = oldElemType->trialOrderPtr->getDofIndex(trialID, dofOrdinal);
@@ -3610,7 +3595,7 @@ void Solution::projectOldCellOntoNewCells(GlobalIndexType cellID,
          if (!oldTrialOrdering->hasBasisEntry(trialID, sideOrdinal)) continue;
          BasisPtr basis = oldTrialOrdering->getBasis(trialID, sideOrdinal);
          int basisCardinality = basis->getCardinality();
-         FieldContainer<double> basisCoefficients(basisCardinality);
+         Intrepid::FieldContainer<double> basisCoefficients(basisCardinality);
 
          for (int dofOrdinal=0; dofOrdinal<basisCardinality; dofOrdinal++) {
            int dofIndex = oldElemType->trialOrderPtr->getDofIndex(trialID, dofOrdinal, sideOrdinal);
@@ -3663,9 +3648,9 @@ void Solution::projectOldCellOntoNewCells(GlobalIndexType cellID,
     }
 
     // (re)initialize the FieldContainer storing the solution--element type may have changed (in case of p-refinement)
-    _solutionForCellIDGlobal[childID] = FieldContainer<double>(childType->trialOrderPtr->totalDofs());
+    _solutionForCellIDGlobal[childID] = Intrepid::FieldContainer<double>(childType->trialOrderPtr->totalDofs());
     // project fields
-    FieldContainer<double> basisCoefficients;
+    Intrepid::FieldContainer<double> basisCoefficients;
     for (map<int,FunctionPtr>::iterator fieldFxnIt=fieldMap.begin(); fieldFxnIt != fieldMap.end(); fieldFxnIt++) {
       int varID = fieldFxnIt->first;
       FunctionPtr fieldFxn = fieldFxnIt->second;
@@ -3744,7 +3729,7 @@ void Solution::readFromFile(const string &filePath) {
         TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "wrong number of dofs for cell");
       }
 
-      FieldContainer<double> dofValues(numDofs);
+      Intrepid::FieldContainer<double> dofValues(numDofs);
       double dofValue;
       int dofOrdinal = 0;
       while (linestream.good()) {
@@ -3765,10 +3750,10 @@ SolutionPtr Solution::solution(MeshPtr mesh, BCPtr bc, RHSPtr rhs, IPPtr ip ) {
 void Solution::writeToFile(const string &filePath) {
   ofstream fout(filePath.c_str());
 
-  for (map<GlobalIndexType, FieldContainer<double> >::iterator solnEntryIt = _solutionForCellIDGlobal.begin();
+  for (map<GlobalIndexType, Intrepid::FieldContainer<double> >::iterator solnEntryIt = _solutionForCellIDGlobal.begin();
        solnEntryIt != _solutionForCellIDGlobal.end(); solnEntryIt++) {
     GlobalIndexType cellID = solnEntryIt->first;
-    FieldContainer<double>* solnCoeffs = &(solnEntryIt->second);
+    Intrepid::FieldContainer<double>* solnCoeffs = &(solnEntryIt->second);
     fout << cellID << " " << solnCoeffs->size() << " ";
     for (int i=0; i<solnCoeffs->size(); i++) {
       fout << (*solnCoeffs)[i] << " ";

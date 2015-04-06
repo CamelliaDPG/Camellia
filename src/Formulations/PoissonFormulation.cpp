@@ -8,6 +8,8 @@
 
 #include "PoissonFormulation.h"
 
+using namespace Camellia;
+
 const string PoissonFormulation::S_PHI = "\\phi";
 const string PoissonFormulation::S_PSI = "\\psi";
 

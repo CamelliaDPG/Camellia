@@ -8,6 +8,10 @@
 #include "choice.hpp"
 #endif
 
+// #include <algorithm>
+
+using namespace Camellia;
+
 TimeIntegrator::TimeIntegrator(BFPtr steadyJacobian, SteadyResidual &steadyResidual, MeshPtr mesh,
     BCPtr bc, IPPtr ip, map<int, FunctionPtr> initialCondition, bool nonlinear) :
   _steadyJacobian(steadyJacobian), _steadyResidual(steadyResidual), _bc(bc), _nonlinear(nonlinear)
@@ -140,7 +144,7 @@ void ImplicitEulerIntegrator::runToTime(double T, double dt)
 {
   while (_t < T)
   {
-    _dt = max(1e-9, min(dt, T-_t));
+    _dt = std::max<double>(1e-9, std::min<double>(dt, T-_t));
     printTimeStepMessage();
     calcNextTimeStep(_dt);
   }
@@ -353,14 +357,14 @@ void ESDIRKIntegrator::runToTime(double T, double dt)
   // be initialized correctly (which is not a problem for implicit Euler)
   if (_t == 0)
   {
-    _dt = max(1e-9, 1e-3*min(dt, T-_t));
+    _dt = std::max<double>(1e-9, 1e-3*std::min<double>(dt, T-_t));
     printTimeStepMessage();
     TimeIntegrator::calcNextTimeStep(_dt);
   }
   // Continue with expected timestepping
   while (_t < T)
   {
-    _dt = max(1e-9, min(dt, T-_t));
+    _dt = std::max<double>(1e-9, std::min<double>(dt, T-_t));
     printTimeStepMessage();
     calcNextTimeStep(_dt);
   }

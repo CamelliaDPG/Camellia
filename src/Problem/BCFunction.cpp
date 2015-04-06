@@ -5,6 +5,9 @@
 #include "BCFunction.h"
 #include "BC.h"
 
+using namespace Intrepid;
+using namespace Camellia;
+
 Teuchos::RCP<BCFunction> BCFunction::bcFunction(BCPtr bc, int varID, bool isTrace) {
   FunctionPtr spatiallyFilteredFunction;
   int rank = 0;

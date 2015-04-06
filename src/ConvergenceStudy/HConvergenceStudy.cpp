@@ -44,6 +44,9 @@
 #include "SerialDenseMatrixUtility.h"
 #include "MeshFactory.h"
 
+using namespace Intrepid;
+using namespace Camellia;
+
 HConvergenceStudy::HConvergenceStudy(Teuchos::RCP<ExactSolution> exactSolution,
                                      BFPtr bilinearForm,
                                      Teuchos::RCP<RHS> rhs,

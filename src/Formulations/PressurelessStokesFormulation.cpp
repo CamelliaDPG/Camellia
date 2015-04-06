@@ -8,6 +8,8 @@
 
 #include "PressurelessStokesFormulation.h"
 
+using namespace Camellia;
+
 const string PressurelessStokesFormulation::S_U1 = "u_1";
 const string PressurelessStokesFormulation::S_U2 = "u_2";
 const string PressurelessStokesFormulation::S_U3 = "u_3";

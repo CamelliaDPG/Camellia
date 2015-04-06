@@ -22,6 +22,9 @@
 
 #include "Intrepid_FunctionSpaceTools.hpp"
 
+using namespace Intrepid;
+using namespace Camellia;
+
 static const double PI  = 3.141592653589793238462;
 
 //  void mapRefCellPointsToParameterSpace(FieldContainer<double> &refPoints);
@@ -83,19 +86,19 @@ void ParametricFunction::values(FieldContainer<double> &values, BasisCachePtr ba
   dimensions[0] = numParametricCells;
   FieldContainer<double> parametricValues(dimensions);
   _underlyingFxn->values(parametricValues, parametricCache);
-  
+
   // parametricValues has dimensions (C,P) == (1,P)
   int numCells = values.dimension(0);
   typedef FunctionSpaceTools fst;
   if (_derivativeOrder > 0) {
     // HGRADtransformGRAD expects (F,P,D) for input, which here can be understood as (1,P,1)--one field
     parametricValues.resize(1,numPoints,1);
-    
+
     // HGRADtransformGRAD outputs to (C,F,P,D), and values has shape (C,P,D), so we should reshape it
     values.resize(numCells,1,numPoints,1);
-    
+
     FieldContainer<double> jacobianInverse = basisCache->getJacobianInv();
-    
+
     // modify the jacobianInverse to account for the fact that we're on [0,1], not [-1,1]
     // basisCache's transformation goes from [-1,1] to [x0,x1]
     // F(xi)  = xi * (x1-x0) / 2 + (x1+x0) / 2
@@ -106,7 +109,7 @@ void ParametricFunction::values(FieldContainer<double> &values, BasisCachePtr ba
     for (int i=0; i<jacobianInverse.size(); i++) {
       jacobianInverse[i] /= 2.0;
     }
-    
+
     for (int i=0; i<_derivativeOrder; i++) {
       // apply "Piola" transform to values
       fst::HGRADtransformGRAD<double>(values, jacobianInverse, parametricValues);
@@ -201,7 +204,7 @@ public:
 class ParametricUnion : public ParametricCurve {
   vector< ParametricCurvePtr > _curves;
   vector<double> _cutPoints;
-  
+
   int matchingCurve(double t) {
     for (int i=0; i<_curves.size(); i++) {
       if ((t >= _cutPoints[i]) && (t<=_cutPoints[i+1])) {
@@ -214,9 +217,9 @@ public:
   ParametricUnion(const vector< ParametricCurvePtr > &curves, const vector<double> &weights) {
     _curves = curves;
     int numCurves = _curves.size();
-    
+
     TEUCHOS_TEST_FOR_EXCEPTION(numCurves != weights.size(), std::invalid_argument, "must have same number of curves and weights");
-    
+
     // make the weights add to 1.0
     double weightSum = 0;
     for (int i=0; i<numCurves; i++) {
@@ -238,7 +241,7 @@ public:
     double curve_t = (t - curve_t0) / (curve_t1 - curve_t0);
     _curves[curveIndex]->value(curve_t, x,y);
   }
-  
+
   ParametricCurvePtr dt() {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unimplemented method!");
     return Teuchos::rcp((ParametricCurve*)NULL);
@@ -284,7 +287,7 @@ ParametricCurvePtr ParametricCurve::interpolatingLine() {
 
 void ParametricCurve::projectionBasedInterpolant(FieldContainer<double> &basisCoefficients, BasisPtr basis1D, int component,
                                                  double lengthScale, bool useH1) {
-  
+
   ParametricCurvePtr thisPtr = Teuchos::rcp(this,false);
   ParametricCurvePtr bubble = ParametricCurve::bubble(thisPtr);
   ParametricCurvePtr line = this->interpolatingLine();
@@ -296,20 +299,20 @@ void ParametricCurve::projectionBasedInterpolant(FieldContainer<double> &basisCo
   if (useH1) { // otherwise, stick with L2
     ip_H1->addTerm(v->dx());
   }
-  
+
   //  double x0,y0,x1,y1;
   //  line->value(0, x0,y0);
   //  line->value(1, x1,y1);
-  
+
   int basisDegree = basis1D->getDegree();
-  int cubatureDegree = max(basisDegree*2,15);
+  int cubatureDegree = std::max(basisDegree*2,15);
   BasisCachePtr basisCache = BasisCache::basisCache1D(0, lengthScale, cubatureDegree);
-  
+
   // confirm that the basis *is* conforming:
   if (! basis1D->isConforming()) {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "basis1D is not a conforming basis.");
   }
-  
+
   set<int> vertexNodeFieldIndices;
   int vertexDim = 0;
   int numVertices = 2;
@@ -333,16 +336,16 @@ void ParametricCurve::projectionBasedInterpolant(FieldContainer<double> &basisCo
     lineComponent = line->z();
   }
   Projector::projectFunctionOntoBasis(basisCoefficients, bubbleComponent, basis1D, basisCache, ip_H1, v, vertexNodeFieldIndices);
-  
+
   // the line should live in the space spanned by basis.  It would be a bit cheaper to solve a system
   // to interpolate pointwise, but since it's easy to code, we'll just do a projection.  Since the
   // exact function we're after is in the space, mathematically it amounts to the same thing.
   FieldContainer<double> linearBasisCoefficients;
   Projector::projectFunctionOntoBasis(linearBasisCoefficients, lineComponent, basis1D, basisCache, ip_H1, v);
-  
+
   //  cout << "linearBasisCoefficients:\n" << linearBasisCoefficients;
   //  cout << "basisCoefficients, before sum:\n" << basisCoefficients;
-  
+
   // add the two sets of basis coefficients together
   for (int i=0; i<linearBasisCoefficients.size(); i++) {
     basisCoefficients[i] += linearBasisCoefficients[i];
@@ -350,7 +353,7 @@ void ParametricCurve::projectionBasedInterpolant(FieldContainer<double> &basisCo
   //  cout << "basisCoefficients, after sum:\n" << basisCoefficients;
   basisCoefficients.resize(basis1D->getCardinality()); // get rid of dummy numCells dimension
   //  cout << "basisCoefficients, after resize:\n" << basisCoefficients;
-  
+
 }
 
 void ParametricCurve::value(double t, double &x) {
@@ -456,9 +459,9 @@ ParametricCurvePtr ParametricCurve::circle(double r, double x0, double y0) {
   FunctionPtr sin_2pi_t = Teuchos::rcp( new Sin_ax(2.0*PI) );
   FunctionPtr xFunction = r * cos_2pi_t + Function::constant(x0);
   FunctionPtr yFunction = r * sin_2pi_t + Function::constant(y0);
-  
+
   return curve(xFunction,yFunction);
-  
+
   //  return Teuchos::rcp( new ParametricCircle(r, x0, y0));
 }
 
@@ -473,7 +476,7 @@ ParametricCurvePtr ParametricCurve::curve(FunctionPtr xFxn_x_as_t, FunctionPtr y
   ParametricFunctionPtr xParametric = ParametricFunction::parametricFunction(xFxn_x_as_t);
   ParametricFunctionPtr yParametric = ParametricFunction::parametricFunction(yFxn_x_as_t);
   ParametricFunctionPtr zParametric = ParametricFunction::parametricFunction(zFxn_x_as_t);
-  
+
   return Teuchos::rcp( new ParametricCurve(xParametric,yParametric,zParametric) );
 }
 
@@ -494,7 +497,7 @@ ParametricCurvePtr ParametricCurve::curveUnion(vector< ParametricCurvePtr > curv
 
 ParametricCurvePtr ParametricCurve::dt() { // the curve differentiated in t in each component.
   ParametricFunctionPtr dxdt, dydt, dzdt;
-  
+
   if (_xFxn.get()) {
     dxdt = _xFxn->dt();
   }
@@ -539,7 +542,7 @@ ParametricCurvePtr ParametricCurve::line(double x0, double y0, double x1, double
   FunctionPtr y0_f = Function::constant(y0);
   FunctionPtr xFxn = (x1-x0) * t + x0_f;
   FunctionPtr yFxn = (y1-y0) * t + y0_f;
-  
+
   return ParametricCurve::curve(xFxn,yFxn);
 }
 //
@@ -568,7 +571,7 @@ public:
     if (basisCache->cellTopology()->getTensorialDegree() > 0) {
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "ParametricGradient wrapper does not yet support tensorial degree > 0.");
     }
-    
+
     unsigned cellTopoKey = basisCache->cellTopology()->getShardsTopology().getBaseKey();
     int numPoints = basisCache->getPhysicalCubaturePoints().dimension(1);
     Teuchos::Array<int> dimensions;
@@ -591,7 +594,7 @@ public:
       }
       _parametricGradient->values(parametricValuesMultiCell, parametricCache);
     }
-    
+
     int spaceDim = basisCache->getSpaceDim();
     int numCells = values.dimension(0);
     typedef FunctionSpaceTools fst;
@@ -601,7 +604,7 @@ public:
     FieldContainer<double> parametricValues(dimensions, &parametricValuesMultiCell[0]); // shallow copy
 
     FieldContainer<double> jacobianInverse = basisCache->getJacobianInv();
-    
+
     if ((cellTopoKey == shards::Line<2>::key) || (cellTopoKey == shards::Quadrilateral<4>::key)) {
       // modify the jacobianInverse to account for the fact that we're on [0,1], not [-1,1]
       // basisCache's transformation goes from [-1,1] to [x0,x1]
@@ -618,7 +621,7 @@ public:
     } else {
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unsupported CellTopology.");
     }
-    
+
     // apply "Piola" transform to values
     if (spaceDim==1) {
       // add field component to values/parametricValues:
@@ -696,7 +699,7 @@ ParametricCurvePtr ParametricCurve::subCurve(ParametricCurvePtr fxn, double t0, 
   ParametricFunctionPtr x = fxn->xPart();
   ParametricFunctionPtr y = fxn->yPart();
   ParametricFunctionPtr z = fxn->zPart();
-  
+
   if (x.get()) {
     x = x->subFunction(t0,t1);
   }

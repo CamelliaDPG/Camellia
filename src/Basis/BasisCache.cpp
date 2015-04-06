@@ -34,6 +34,8 @@
 //
 // @HEADER 
 
+#include "TypeDefs.h"
+
 #include "Intrepid_CellTools.hpp"
 #include "Intrepid_FunctionSpaceTools.hpp"
 
@@ -51,11 +53,10 @@
 #include "Teuchos_GlobalMPISession.hpp"
 
 using namespace std;
+using namespace Intrepid;
 using namespace Camellia;
 
 typedef FunctionSpaceTools fst;
-typedef Teuchos::RCP< FieldContainer<double> > FCPtr;
-typedef Teuchos::RCP< const FieldContainer<double> > constFCPtr;
 
 // TODO: add exceptions for side cache arguments to methods that don't make sense 
 // (e.g. useCubPointsSideRefCell==true when _isSideCache==false)
@@ -832,7 +833,7 @@ FieldContainer<double> BasisCache::getRefCellPointsForPhysicalPoints(const Field
   }
   
   FieldContainer<double> refCellPoints(numPoints,spaceDim);
-  CellTools<double>::mapToReferenceFrame(refCellPoints,physicalPoints,_physicalCellNodes,_cellTopo->getShardsTopology(),cellIndex);
+  Intrepid::CellTools<double>::mapToReferenceFrame(refCellPoints,physicalPoints,_physicalCellNodes,_cellTopo->getShardsTopology(),cellIndex);
   return refCellPoints;
 }
 
@@ -972,7 +973,6 @@ void BasisCache::determineJacobian() {
   _cellJacobInv.resize(_numCells, numCubPoints, cellDim, cellDim);
   _cellJacobDet.resize(_numCells, numCubPoints);
   
-  typedef CellTools<double>  CellTools;
   
   if ( Function::isNull(_transformationFxn) || _composeTransformationFxnWithMeshTransformation) {
     if (!isSideCache())
@@ -1379,7 +1379,7 @@ void BasisCache::recomputeMeasures() {
       if (_cellTopo->getTensorialDegree() == 0) {
         // recompute sideNormals
         _sideNormals.resize(_numCells, numPoints, _spaceDim);
-        CellTools<double>::getPhysicalSideNormals(_sideNormals, _cellJacobian, _sideIndex, _cellTopo->getShardsTopology());
+        Intrepid::CellTools<double>::getPhysicalSideNormals(_sideNormals, _cellJacobian, _sideIndex, _cellTopo->getShardsTopology());
         // make unit length
         RealSpaceTools<double>::vectorNorm(normalLengths, _sideNormals, NORM_TWO);
         FunctionSpaceTools::scalarMultiplyDataData<double>(_sideNormals, normalLengths, _sideNormals, true);

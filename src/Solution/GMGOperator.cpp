@@ -43,6 +43,9 @@
 
 #include "AdditiveSchwarz.h"
 
+using namespace Intrepid;
+using namespace Camellia;
+
 #ifdef USE_HPCTW
 extern "C" void HPM_Start(char *);
 extern "C" void HPM_Stop(char *);
@@ -682,7 +685,7 @@ int GMGOperator::ApplyInverse(const Epetra_MultiVector& X_in, Epetra_MultiVector
     _haveSolvedOnCoarseMesh = true;
   } else {
     if (printVerboseOutput) cout << "resolving on coarse mesh\n";
-    _coarseSolver->problem().SetRHS(coarseRHSVector.get());
+    _coarseSolver->setRHS(coarseRHSVector);
     _coarseSolution->solveWithPrepopulatedStiffnessAndLoad(_coarseSolver, true); // call resolve() instead of solve() -- reuse factorization
     if (printVerboseOutput) cout << "finished resolving on coarse mesh\n";
   }

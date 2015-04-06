@@ -37,6 +37,8 @@
  *  Created by Nathan Roberts on 7/5/11.
  */
 
+ #include "TypeDefs.h"
+
 // Intrepid includes
 #include "Intrepid_Basis.hpp"
 #include "Intrepid_FieldContainer.hpp"
@@ -52,45 +54,44 @@
 #include "BF.h"
 #include "BasisCache.h"
 
-class Function;
-typedef Teuchos::RCP<Function> FunctionPtr;
+namespace Camellia {
+  class ExactSolution {
+  protected:
+    BFPtr _bilinearForm;
+    Teuchos::RCP<BC> _bc;
+    Teuchos::RCP<RHS> _rhs;
+    void squaredDifference(Intrepid::FieldContainer<double> &diffSquared, Intrepid::FieldContainer<double> &values1, Intrepid::FieldContainer<double> &values2);
 
-class ExactSolution {
-protected:
-  BFPtr _bilinearForm;
-  Teuchos::RCP<BC> _bc;
-  Teuchos::RCP<RHS> _rhs;
-  void squaredDifference(FieldContainer<double> &diffSquared, FieldContainer<double> &values1, FieldContainer<double> &values2);
-
-  int _H1Order;
-  map< int, FunctionPtr > _exactFunctions; // var ID --> function
-public:
-  ExactSolution();
-  ExactSolution(BFPtr bf, Teuchos::RCP<BC> bc, Teuchos::RCP<RHS> rhs, int H1Order = -1);
-  BFPtr bilinearForm();
-  Teuchos::RCP<BC> bc();
-  Teuchos::RCP<RHS> rhs();
-  const map< int, FunctionPtr > exactFunctions(); // not supported by legacy subclasses
-  virtual bool functionDefined(int trialID); // not supported by legacy subclasses
-  void setSolutionFunction( VarPtr var, FunctionPtr varFunction );
-  void solutionValues(FieldContainer<double> &values, int trialID, BasisCachePtr basisCache);
-  void solutionValues(FieldContainer<double> &values, 
-                      int trialID,
-                      FieldContainer<double> &physicalPoints);
-  void solutionValues(FieldContainer<double> &values, 
-                      int trialID,
-                      FieldContainer<double> &physicalPoints,
-                      FieldContainer<double> &unitNormals);
-  virtual double solutionValue(int trialID,
-                              FieldContainer<double> &physicalPoint);
-  virtual double solutionValue(int trialID,
-                              FieldContainer<double> &physicalPoint,
-                              FieldContainer<double> &unitNormal);
-  virtual int H1Order(); // return -1 for non-polynomial solutions
-  double L2NormOfError(Solution &solution, int trialID, int cubDegree=-1);
-  void L2NormOfError(FieldContainer<double> &errorSquaredPerCell, Solution &solution, ElementTypePtr elemTypePtr, int trialID, int sideIndex=0, int cubDegree=-1, double solutionLift=0.0);
-  
-  virtual ~ExactSolution() {}
-};
+    int _H1Order;
+    map< int, FunctionPtr > _exactFunctions; // var ID --> function
+  public:
+    ExactSolution();
+    ExactSolution(BFPtr bf, Teuchos::RCP<BC> bc, Teuchos::RCP<RHS> rhs, int H1Order = -1);
+    BFPtr bilinearForm();
+    Teuchos::RCP<BC> bc();
+    Teuchos::RCP<RHS> rhs();
+    const map< int, FunctionPtr > exactFunctions(); // not supported by legacy subclasses
+    virtual bool functionDefined(int trialID); // not supported by legacy subclasses
+    void setSolutionFunction( VarPtr var, FunctionPtr varFunction );
+    void solutionValues(Intrepid::FieldContainer<double> &values, int trialID, BasisCachePtr basisCache);
+    void solutionValues(Intrepid::FieldContainer<double> &values, 
+                        int trialID,
+                        Intrepid::FieldContainer<double> &physicalPoints);
+    void solutionValues(Intrepid::FieldContainer<double> &values, 
+                        int trialID,
+                        Intrepid::FieldContainer<double> &physicalPoints,
+                        Intrepid::FieldContainer<double> &unitNormals);
+    virtual double solutionValue(int trialID,
+                                Intrepid::FieldContainer<double> &physicalPoint);
+    virtual double solutionValue(int trialID,
+                                Intrepid::FieldContainer<double> &physicalPoint,
+                                Intrepid::FieldContainer<double> &unitNormal);
+    virtual int H1Order(); // return -1 for non-polynomial solutions
+    double L2NormOfError(Solution &solution, int trialID, int cubDegree=-1);
+    void L2NormOfError(Intrepid::FieldContainer<double> &errorSquaredPerCell, Solution &solution, ElementTypePtr elemTypePtr, int trialID, int sideIndex=0, int cubDegree=-1, double solutionLift=0.0);
+    
+    virtual ~ExactSolution() {}
+  };
+}
 
 #endif

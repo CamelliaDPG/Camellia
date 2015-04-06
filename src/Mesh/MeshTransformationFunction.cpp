@@ -6,6 +6,8 @@
 //  Copyright (c) 2013 __MyCompanyName__. All rights reserved.
 //
 
+#include "TypeDefs.h"
+
 #include <iostream>
 
 #include "MeshTransformationFunction.h"
@@ -22,15 +24,14 @@
 
 #include "BasisCache.h"
 
-typedef Teuchos::RCP< const FieldContainer<double> > constFCPtr;
-
+using namespace Intrepid;
 using namespace Camellia;
 
 // TODO: move all the stuff to do with transfinite interpolation into ParametricSurface.cpp
 
 VectorBasisPtr basisForTransformation(ElementTypePtr cellType) {
-  int polyOrder = max(cellType->trialOrderPtr->maxBasisDegree(), cellType->testOrderPtr->maxBasisDegree());
-  
+  int polyOrder = std::max(cellType->trialOrderPtr->maxBasisDegree(), cellType->testOrderPtr->maxBasisDegree());
+
   BasisPtr basis = BasisFactory::basisFactory()->getBasis(polyOrder, cellType->cellTopoPtr, Camellia::FUNCTION_SPACE_VECTOR_HGRAD);
   VectorBasisPtr vectorBasis = Teuchos::rcp( (VectorizedBasis<> *)basis.get(),false); // dynamic cast would be better
   return vectorBasis;
@@ -64,13 +65,13 @@ class CellTransformationFunction : public Function {
   VectorBasisPtr _basis;
   Camellia::EOperator _op;
   int _cellIndex; // index into BasisCache's list of cellIDs; must be set prior to each call to values() (there's a reason why this is a private class!)
-  
+
   FieldContainer<double> pointLatticeQuad(int numPointsTotal, const vector< ParametricCurvePtr > &edgeFunctions) {
     int spaceDim = 2;
     FieldContainer<double> pointLattice(numPointsTotal,spaceDim);
-    
+
     ParametricSurfacePtr interpolant = ParametricSurface::transfiniteInterpolant(edgeFunctions);
-    
+
     // arg to numPoints corresponds to "t1" ("x" direction t), the value to t2 ("y" direction t)
     vector< int > numPoints;
     int approxPoints1D = (int) sqrt( numPointsTotal );
@@ -83,19 +84,19 @@ class CellTransformationFunction : public Function {
     if (edgeFunctions.size() != 4) {
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "wrong number of edgeFunctions");
     }
-    
+
     int numPoints_t1 = numPoints.size();
-    
+
     int pointIndex = 0;
     for (int t1_index = 0; t1_index < numPoints_t1; t1_index++) {
       int numPoints_t2 = numPoints[t1_index];
       double t1 = ((double)t1_index) / (double) (numPoints_t1 - 1);
-      
+
       for (int t2_index=0; t2_index < numPoints_t2; t2_index++) {
         double t2 = ((double)t2_index) / (double) (numPoints_t2 - 1);
-        
+
 //        cout << "(t1,t2) = (" << t1 << ", " << t2 << ")" << endl;
-        
+
         double x, y;
         interpolant->value(t1, t2, x, y);
         pointLattice(pointIndex,0) = x;
@@ -105,7 +106,7 @@ class CellTransformationFunction : public Function {
     }
     return pointLattice;
   }
-  
+
 protected:
   CellTransformationFunction(VectorBasisPtr basis, FieldContainer<double> &basisCoefficients, Camellia::EOperator op) : Function(1) {
     _basis = basis;
@@ -121,39 +122,39 @@ public:
     _basis = basisForTransformation(cell->elementType());
     ParametricSurface::basisWeightsForProjectedInterpolant(_basisCoefficients, _basis, mesh, cellID);
   }
-  
+
   void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
     // sets values(_cellIndex,P,D)
     TEUCHOS_TEST_FOR_EXCEPTION(_cellIndex == -1, std::invalid_argument, "must call setCellIndex before calling values!");
 
 //    cout << "_basisCoefficients:\n" << _basisCoefficients;
-        
+
     int numDofs = _basis->getCardinality();
-    
+
     int spaceDim = basisCache->getSpaceDim();
-    
+
     bool basisIsVolumeBasis = (spaceDim == _basis->domainTopology()->getDimension());
-    
+
     bool useCubPointsSideRefCell = basisIsVolumeBasis && basisCache->isSideCache();
-    
+
     constFCPtr transformedValues = basisCache->getTransformedValues(_basis, _op, useCubPointsSideRefCell);
-    
+
     // transformedValues has dimensions (C,F,P,[D,D])
     // therefore, the rank of the sum is transformedValues->rank() - 3
     int rank = transformedValues->rank() - 3;
     TEUCHOS_TEST_FOR_EXCEPTION(rank != values.rank()-2, std::invalid_argument, "values rank is incorrect.");
-    
-    
+
+
     int numCells = values.dimension(0);
     int numPoints = values.dimension(1);
-    
+
     // initialize the values we're responsible for setting
     for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
       for (int d=0; d<spaceDim; d++) {
         values(_cellIndex,ptIndex,d) = 0.0;
       }
     }
-    
+
     int entriesPerPoint = values.size() / (numCells * numPoints);
     for (int i=0;i<numDofs;i++){
       double weight = _basisCoefficients(i);
@@ -166,8 +167,8 @@ public:
           *value++ += *basisValue++ * weight;
         }
       }
-    }    
-    
+    }
+
     // original implementation follows
     // (the above adapted from BasisSumFunction)
 //    if (_op == OP_VALUE) {
@@ -192,22 +193,22 @@ public:
 ////      cout << "transformedValues:\n" << *transformedValues;
 //    }
 //    // (C,F,P,D)
-//    
+//
 //    // NOTE that it would be possible to refactor the below using pointer arithmetic to support _op values that don't
 //    // result in vector values (e.g. OP_X, OP_DIV).  But since there isn't any clear need for these as yet, we leave it for
 //    // later...
-//    
+//
 //    int cardinality = _basisCoefficients.size();
 //    int numPoints = values.dimension(1);
 //    int spaceDim = values.dimension(2);
-//    
+//
 //    // initialize the values we're responsible for setting
 //    for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
 //      for (int d=0; d<spaceDim; d++) {
 //        values(_cellIndex,ptIndex,d) = 0.0;
 //      }
 //    }
-//    
+//
 //    for (int i=0; i<cardinality; i++) {
 //      for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
 //        for (int d=0; d<spaceDim; d++) {
@@ -216,11 +217,11 @@ public:
 //      }
 //    }
   }
-  
+
   int basisDegree() {
     return _basis->getDegree();
   }
-  
+
   void setCellIndex(int cellIndex) {
     _cellIndex = cellIndex;
   }
@@ -228,15 +229,15 @@ public:
   FunctionPtr dx() {
     return Teuchos::rcp( new CellTransformationFunction(_basis,_basisCoefficients,OP_DX) );
   }
-  
+
   FunctionPtr dy() {
     return Teuchos::rcp( new CellTransformationFunction(_basis,_basisCoefficients,OP_DY) );
   }
-  
+
   FunctionPtr dz() {
     return Teuchos::rcp( new CellTransformationFunction(_basis,_basisCoefficients,OP_DZ) );
   }
-  
+
   static Teuchos::RCP<CellTransformationFunction> cellTransformation(MeshPtr mesh, GlobalIndexType cellID, const vector< ParametricCurvePtr > edgeFunctions) {
     return Teuchos::rcp( new CellTransformationFunction(mesh,cellID,edgeFunctions));
   }
@@ -271,9 +272,9 @@ bool MeshTransformationFunction::mapRefCellPointsUsingExactGeometry(FieldContain
     return false;
   }
 //  cout << "refCellPoints in mapRefCellPointsUsingExactGeometry():\n" << refCellPoints;
-//  
+//
 //  cout << "cellPoints prior to mapRefCellPointsUsingExactGeometry():\n" << cellPoints;
-  
+
   CellTopoPtr cellTopo = _mesh->getElement(cellID)->elementType()->cellTopoPtr;
   if (cellTopo->getTensorialDegree() > 0) {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "mapRefCellPointsUsingExactGeometry does not support tensorial degree > 0.");
@@ -287,13 +288,13 @@ bool MeshTransformationFunction::mapRefCellPointsUsingExactGeometry(FieldContain
     CamelliaCellTools::mapToPhysicalFrame(parametricPoints,refCellPoints,
                                           ParametricSurface::parametricQuadNodes(),
                                           cellTopo,whichCell);
-    
+
 //    cout << "parametricPoints in mapRefCellPointsUsingExactGeometry():\n" << parametricPoints;
 
     vector< ParametricCurvePtr > edgeFunctions = _mesh->parametricEdgesForCell(cellID);
-    
+
     ParametricSurfacePtr interpolant = ParametricSurface::transfiniteInterpolant(edgeFunctions);
-    
+
     for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
       double t1 = parametricPoints(ptIndex,0);
       double t2 = parametricPoints(ptIndex,1);
@@ -301,18 +302,18 @@ bool MeshTransformationFunction::mapRefCellPointsUsingExactGeometry(FieldContain
       double x,y;
       // transfinite interpolation:
       interpolant->value(t1, t2, x, y);
-      
+
       cellPoints(ptIndex,0) = x;
       cellPoints(ptIndex,1) = y;
     }
-    
+
   } else {
     // TODO: work out what to do for triangles (or perhaps even a general polygon)
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unhandled cell type");
   }
-  
+
 //  cout << "cellPoints after to mapRefCellPointsUsingExactGeometry():\n" << cellPoints;
-  
+
   return true;
 }
 
@@ -321,7 +322,7 @@ void MeshTransformationFunction::updateCells(const set<GlobalIndexType> &cellIDs
     GlobalIndexType cellID = *cellIDIt;
     CellTransformationFunctionPtr cellTransform =  CellTransformationFunction::cellTransformation(_mesh, cellID, _mesh->parametricEdgesForCell(cellID));
     _cellTransforms[cellID] = cellTransform;
-    _maxPolynomialDegree = max(_maxPolynomialDegree,cellTransform->basisDegree());
+    _maxPolynomialDegree = std::max(_maxPolynomialDegree,cellTransform->basisDegree());
   }
 }
 
@@ -400,9 +401,9 @@ FunctionPtr MeshTransformationFunction::dz() {
 
 void MeshTransformationFunction::didHRefine(const set<GlobalIndexType> &cellIDs) {
   set<GlobalIndexType> childrenWithCurvedEdges;
-  
+
   MeshTopologyPtr topology = _mesh->getTopology();
-  
+
   for (set<GlobalIndexType>::iterator cellIDIt = cellIDs.begin(); cellIDIt != cellIDs.end(); cellIDIt++) {
     GlobalIndexType parentCellID = *cellIDIt;
     vector<IndexType> childCells = topology->getCell(parentCellID)->getChildIndices();

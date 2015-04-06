@@ -9,6 +9,9 @@
 #include "RHS.h"
 #include "BasisCache.h"
 
+using namespace Intrepid;
+using namespace Camellia;
+
 void RHS::addTerm( LinearTermPtr rhsTerm ) {
   TEUCHOS_TEST_FOR_EXCEPTION( rhsTerm->termType() != TEST, std::invalid_argument, "RHS should only involve test functions (no trials)");
   TEUCHOS_TEST_FOR_EXCEPTION( rhsTerm->rank() != 0, std::invalid_argument, "RHS only handles scalar terms.");

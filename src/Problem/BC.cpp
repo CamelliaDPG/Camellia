@@ -9,6 +9,9 @@
 
 #include "PhysicalPointCache.h"
 
+using namespace Intrepid;
+using namespace Camellia;
+
 typedef pair< SpatialFilterPtr, FunctionPtr > DirichletBC;
 
 class BCLogicalOrFunction : public Function {

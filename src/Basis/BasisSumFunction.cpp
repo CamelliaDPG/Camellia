@@ -1,9 +1,12 @@
+#include "TypeDefs.h"
+
 #include "BasisSumFunction.h"
 #include "Intrepid_CellTools.hpp"
 
 #include "BasisFactory.h"
 
-typedef Teuchos::RCP< const FieldContainer<double> > constFCPtr;
+using namespace Intrepid;
+using namespace Camellia;
 
 BasisSumFunction::BasisSumFunction(BasisPtr basis, const FieldContainer<double> &basisCoefficients,
                                          BasisCachePtr overridingBasisCache, Camellia::EOperator op, bool boundaryValueOnly) : Function( BasisFactory::basisFactory()->getBasisRank(basis) ) {
@@ -38,10 +41,9 @@ void BasisSumFunction::values(FieldContainer<double> &values, BasisCachePtr basi
     int numNodes = physicalCellNodes->dimension(1);
     int spaceDim = physicalCellNodes->dimension(2);
     FieldContainer<double> relativeReferenceCellNodes(numCells, numNodes, spaceDim);
-    typedef CellTools<double>  CellTools;
     CellTopoPtr domainTopo = _basis->domainTopology();
     if (domainTopo->getTensorialDegree() == 0) {
-      CellTools::mapToReferenceFrame(relativeReferenceCellNodes,*physicalCellNodes,_overridingBasisCache->getPhysicalCellNodes(),_basis->domainTopology()->getShardsTopology());
+      Intrepid::CellTools<double>::mapToReferenceFrame(relativeReferenceCellNodes,*physicalCellNodes,_overridingBasisCache->getPhysicalCellNodes(),_basis->domainTopology()->getShardsTopology());
     } else {
       cout << "ERROR: BasisSumFunction's mapToReferenceFrame doesn't yet support tensorial degree > 0.\n";
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "BasisSumFunction's mapToReferenceFrame doesn't yet support tensorial degree > 0.");
@@ -57,7 +59,7 @@ void BasisSumFunction::values(FieldContainer<double> &values, BasisCachePtr basi
     FieldContainer<double> relativeReferencePoints = cachesAgreeOnSideness ? basisCache->getRefCellPoints() : basisCache->getSideRefCellPointsInVolumeCoordinates();
     FieldContainer<double> refPoints(1,relativeReferencePoints.dimension(0),relativeReferencePoints.dimension(1));
     if (domainTopo->getTensorialDegree() == 0) {
-      CellTools::mapToPhysicalFrame(refPoints, relativeReferencePoints, oneCellRelativeReferenceNodes, basisCache->cellTopology()->getShardsTopology());
+      Intrepid::CellTools<double>::mapToPhysicalFrame(refPoints, relativeReferencePoints, oneCellRelativeReferenceNodes, basisCache->cellTopology()->getShardsTopology());
     } else {
       cout << "ERROR: BasisSumFunction's mapToReferenceFrame doesn't yet support tensorial degree > 0.\n";
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "BasisSumFunction's mapToReferenceFrame doesn't yet support tensorial degree > 0.");

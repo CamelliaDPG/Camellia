@@ -8,6 +8,9 @@
 
 #include "SpatialFilter.h"
 
+using namespace Intrepid;
+using namespace Camellia;
+
 class SpatialFilterMatchingX : public SpatialFilter {
   double _tol;
   double _xToMatch;

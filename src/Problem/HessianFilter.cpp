@@ -3,6 +3,9 @@
 #include "BasisCache.h"
 #include "DofOrdering.h"
 
+using namespace Intrepid;
+using namespace Camellia;
+
 void HessianFilter::filter(FieldContainer<double> &localStiffnessMatrix, FieldContainer<double> &localRHSVector, BasisCachePtr basisCache, Teuchos::RCP<Mesh> mesh, Teuchos::RCP<BC> bc){
 
   //  cout << "numCells = " << localStiffnessMatrix.dimension(0) << ", numTestDofs = " << localStiffnessMatrix.dimension(1) << ", numTrialDofs = " << localStiffnessMatrix.dimension(2) << endl;

@@ -50,6 +50,9 @@
 
 #include "CamelliaCellTools.h"
 
+using namespace Intrepid;
+using namespace Camellia;
+
 bool BilinearFormUtility::_warnAboutZeroRowsAndColumns = true;
 
 void BilinearFormUtility::setWarnAboutZeroRowsAndColumns( bool value ) {

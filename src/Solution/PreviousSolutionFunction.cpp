@@ -6,6 +6,8 @@
 //
 //
 
+#include <Teuchos_GlobalMPISession.hpp>
+
 #include "PreviousSolutionFunction.h"
 
 #include "Function.h"
@@ -16,6 +18,9 @@
 #include "GlobalDofAssignment.h"
 
 #include "CamelliaCellTools.h"
+
+using namespace Intrepid;
+using namespace Camellia;
 
 PreviousSolutionFunction::PreviousSolutionFunction(SolutionPtr soln, LinearTermPtr solnExpression, bool multiplyFluxesByCellParity) : Function(solnExpression->rank()) {
   _soln = soln;

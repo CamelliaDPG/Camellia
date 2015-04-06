@@ -40,6 +40,9 @@
 #include "CamelliaCellTools.h"
 #include "Mesh.h"
 
+using namespace Intrepid;
+using namespace Camellia;
+
 // constructor:
 Element::Element(Mesh* mesh, GlobalIndexType cellID, Teuchos::RCP< ElementType > elemTypePtr, IndexType cellIndex, GlobalIndexType globalCellIndex) {
   _mesh = mesh;
@@ -72,7 +75,7 @@ void Element::getSidePointsInNeighborRefCoords(FieldContainer<double> &neighborR
   nodesInNeighborRef(0,0,0) = 1.0;
   nodesInNeighborRef(0,1,0) = -1.0;
   shards::CellTopology line_2(shards::getCellTopologyData<shards::Line<2> >() );
-  CellTools<double>::mapToPhysicalFrame(neighborRefPoints,refPoints,nodesInNeighborRef,line_2,0);
+  Intrepid::CellTools<double>::mapToPhysicalFrame(neighborRefPoints,refPoints,nodesInNeighborRef,line_2,0);
 }
 
 void Element::getSidePointsInParentRefCoords(FieldContainer<double> &parentRefPoints, int sideIndex, 
@@ -119,7 +122,7 @@ void Element::getSidePointsInParentRefCoords(FieldContainer<double> &parentRefPo
   }
   
   shards::CellTopology line_2(shards::getCellTopologyData<shards::Line<2> >() );
-  CellTools<double>::mapToPhysicalFrame(parentRefPoints,childRefPoints,childEdgeNodesInParentRef,line_2,0);
+  Intrepid::CellTools<double>::mapToPhysicalFrame(parentRefPoints,childRefPoints,childEdgeNodesInParentRef,line_2,0);
 }
 
 ElementPtr Element::getParent() {

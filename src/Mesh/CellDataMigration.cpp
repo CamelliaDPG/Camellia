@@ -6,11 +6,16 @@
 //
 //
 
+#include <Teuchos_GlobalMPISession.hpp>
+
 #include "CellDataMigration.h"
 
 #include "GlobalDofAssignment.h"
 
 #include "Solution.h"
+
+using namespace Intrepid;
+using namespace Camellia;
 
 int CellDataMigration::dataSize(Mesh *mesh, GlobalIndexType cellID) {
 //  cout << "CellDataMigration::dataSize() called for cell " << cellID << endl;

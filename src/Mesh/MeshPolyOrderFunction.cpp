@@ -10,6 +10,9 @@
 #include "MeshPolyOrderFunction.h"
 #include "BasisCache.h"
 
+using namespace Intrepid;
+using namespace Camellia;
+
 void MeshPolyOrderFunction::values(FieldContainer<double> &values, BasisCachePtr basisCache) {
   vector<GlobalIndexType> cellIDs = basisCache->cellIDs();
   IndexType cellIndex = 0;

@@ -1,3 +1,5 @@
+#include "TypeDefs.h"
+
 #include "Projector.h"
 
 #include "BasisCache.h"
@@ -26,7 +28,8 @@
 #include "Epetra_SerialDenseSolver.h"
 #include "Epetra_DataAccess.h"
 
-typedef Teuchos::RCP< const FieldContainer<double> > constFCPtr;
+using namespace Intrepid;
+using namespace Camellia;
 
 void Projector::projectFunctionOntoBasis(FieldContainer<double> &basisCoefficients, FunctionPtr fxn, 
                                          BasisPtr basis, BasisCachePtr basisCache, IPPtr ip, VarPtr v,

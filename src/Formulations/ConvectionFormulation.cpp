@@ -8,6 +8,8 @@
 
 #include "ConvectionFormulation.h"
 
+using namespace Camellia;
+
 const string ConvectionFormulation::S_U = "u";
 const string ConvectionFormulation::S_Q_N_HAT = "\\widehat{q}_n";
 const string ConvectionFormulation::S_V = "v";

@@ -34,6 +34,8 @@
  *
  */
 
+#include <Teuchos_GlobalMPISession.hpp>
+ 
 #include "Intrepid_CellTools.hpp"
 #include "CamelliaCellTools.h"
 #include "Intrepid_DefaultCubatureFactory.hpp"
@@ -46,6 +48,9 @@
 #include "Function.h"
 
 #include "MPIWrapper.h"
+
+using namespace Intrepid;
+using namespace Camellia;
 
 double ExactSolution::L2NormOfError(Solution &solution, int trialID, int cubDegree) {
   Teuchos::RCP<Mesh> mesh = solution.mesh();

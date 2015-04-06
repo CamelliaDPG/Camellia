@@ -19,6 +19,7 @@
 #include "Teuchos_Array.hpp"
 
 using namespace Intrepid;
+using namespace Camellia;
 
 void MPIWrapper::allGather(FieldContainer<int> &allValues, int myValue) {
   FieldContainer<int> myValueFC(1);
@@ -50,22 +51,22 @@ void MPIWrapper::allGatherCompact(FieldContainer<Scalar> &gatheredValues, FieldC
 #else
   Epetra_SerialComm Comm;
 #endif
-  
+
   int mySize = myValues.size();
   int totalSize;
   Comm.SumAll(&mySize, &totalSize, 1);
-  
+
   int myOffset = 0;
   Comm.ScanSum(&mySize,&myOffset,1);
-  
+
   myOffset -= mySize;
-  
+
   gatheredValues.resize(totalSize);
   for (int i=0; i<mySize; i++) {
     gatheredValues[myOffset+i] = myValues[i];
   }
   MPIWrapper::entryWiseSum(gatheredValues);
-  
+
   offsets.resize(Teuchos::GlobalMPISession::getNProc());
   offsets[Teuchos::GlobalMPISession::getRank()] = myOffset;
   MPIWrapper::entryWiseSum(offsets);
@@ -102,7 +103,7 @@ int MPIWrapper::rank() {
 //  for (int i=outRank; i<inValues.rank(); i++) {
 //    inEntriesPerOutEntry *= inValues.dimension(i);
 //  }
-//  
+//
 //}
 
 void MPIWrapper::entryWiseSum(FieldContainer<double> &values) { // sums values entry-wise across all processors
@@ -122,7 +123,7 @@ double MPIWrapper::sum(const FieldContainer<double> &valuesToSum) {
   for (int i=0; i<valuesToSum.size(); i++) {
     mySum += valuesToSum[i];
   }
-  
+
   return sum(mySum);
 }
 
@@ -153,7 +154,7 @@ int MPIWrapper::sum(const FieldContainer<int> &valuesToSum) {
   for (int i=0; i<valuesToSum.size(); i++) {
     mySum += valuesToSum[i];
   }
-  
+
   return sum(mySum);
 }
 
@@ -162,7 +163,7 @@ int MPIWrapper::sum(int mySum) {
   int mySumCopy = mySum;
   Epetra_MpiComm Comm(MPI_COMM_WORLD);
   Comm.SumAll(&mySumCopy, &mySum, 1);
-  
+
 #else
 #endif
   return mySum;
@@ -177,11 +178,11 @@ void MPIWrapper::entryWiseSum(FieldContainer<GlobalIndexType> &values) {
   for (int i=0; i<values.size(); i++) {
     valuesLongLong[i] = (long long) values[i];
   }
-  
+
   Epetra_MpiComm Comm(MPI_COMM_WORLD);
   FieldContainer<long long> valuesLongLongCopy = valuesLongLong; // it appears this copy is necessary
   Comm.SumAll(&valuesLongLongCopy[0], &valuesLongLong[0], valuesLongLong.size());
-  
+
   // copy back to original container:
   for (int i=0; i<values.size(); i++) {
     values[i] = (GlobalIndexType) valuesLongLong[i];
@@ -198,7 +199,7 @@ GlobalIndexType MPIWrapper::sum(const FieldContainer<GlobalIndexType> &valuesToS
   for (int i=0; i<valuesToSum.size(); i++) {
     mySum += valuesToSum[i];
   }
-  
+
   return sum(mySum);
 }
 

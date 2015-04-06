@@ -28,8 +28,8 @@ namespace Camellia {
   template<class Scalar>
   class LobattoFunction : public SimpleFunction {
     int _polyOrder;
-    FieldContainer<Scalar> _values;
-    FieldContainer<Scalar> _derivatives;
+    Intrepid::FieldContainer<Scalar> _values;
+    Intrepid::FieldContainer<Scalar> _derivatives;
     
     bool _conforming;
     bool _derivative; // whether this is the derivative of the Lobatto function

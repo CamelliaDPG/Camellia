@@ -12,21 +12,23 @@
 #include "Function.h"
 #include "SpatialFilter.h"
 
-class SpatiallyFilteredFunction : public Function {
-  FunctionPtr _f;
-  SpatialFilterPtr _sf;
-  
-public:
-  SpatiallyFilteredFunction(FunctionPtr f, SpatialFilterPtr sf);
-  virtual void values(FieldContainer<double> &values, BasisCachePtr basisCache);
-  bool boundaryValueOnly();
-  
-  FunctionPtr curl();
-  FunctionPtr div();
-  
-  FunctionPtr dx();
-  FunctionPtr dy();
-  FunctionPtr dz();
-};
+namespace Camellia {
+  class SpatiallyFilteredFunction : public Function {
+    FunctionPtr _f;
+    SpatialFilterPtr _sf;
+    
+  public:
+    SpatiallyFilteredFunction(FunctionPtr f, SpatialFilterPtr sf);
+    virtual void values(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache);
+    bool boundaryValueOnly();
+    
+    FunctionPtr curl();
+    FunctionPtr div();
+    
+    FunctionPtr dx();
+    FunctionPtr dy();
+    FunctionPtr dz();
+  };
+}
 
 #endif

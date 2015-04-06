@@ -11,6 +11,8 @@
 #include "PenaltyConstraints.h"
 #include "PreviousSolutionFunction.h"
 
+using namespace Camellia;
+
 const string NavierStokesVGPFormulation::S_U1 = "u_1";
 const string NavierStokesVGPFormulation::S_U2 = "u_2";
 const string NavierStokesVGPFormulation::S_U3 = "u_3";

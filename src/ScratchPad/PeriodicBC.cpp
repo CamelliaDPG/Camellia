@@ -13,6 +13,9 @@
 
 #include "PhysicalPointCache.h"
 
+using namespace Intrepid;
+using namespace Camellia;
+
 class TransformXFunction : public SimpleVectorFunction {
   double _xFrom, _xTo;
 public:

@@ -36,6 +36,8 @@
  *
  */
 
+ #include "TypeDefs.h"
+
 // Teuchos includes
 #include "Teuchos_RCP.hpp"
 
@@ -43,13 +45,15 @@
 
 #include "CellTopology.h"
 
-class ElementTypeFactory {
-  std::map< std::pair< Camellia::CellTopologyKey, std::pair<  DofOrdering*, DofOrdering* > >,
-  Teuchos::RCP< ElementType > > _elementTypes;
-  
-public:
-  Teuchos::RCP< ElementType > getElementType(DofOrderingPtr trialOrderPtr, DofOrderingPtr testOrderPtr, CellTopoPtr cellTopoPtr);
-  Teuchos::RCP< ElementType > getElementType(DofOrderingPtr trialOrderPtr, DofOrderingPtr testOrderPtr, CellTopoPtrLegacy cellTopoPtr);
-};
+namespace Camellia {
+	class ElementTypeFactory {
+	  std::map< std::pair< Camellia::CellTopologyKey, std::pair<  DofOrdering*, DofOrdering* > >,
+	  Teuchos::RCP< ElementType > > _elementTypes;
+	  
+	public:
+	  Teuchos::RCP< ElementType > getElementType(DofOrderingPtr trialOrderPtr, DofOrderingPtr testOrderPtr, CellTopoPtr cellTopoPtr);
+	  Teuchos::RCP< ElementType > getElementType(DofOrderingPtr trialOrderPtr, DofOrderingPtr testOrderPtr, CellTopoPtrLegacy cellTopoPtr);
+	};
+}
 
 #endif

@@ -1,6 +1,8 @@
 #ifndef CAMELLIA_DEBUG_UTILITY
 #define CAMELLIA_DEBUG_UTILITY
 
+#include "TypeDefs.h"
+
 #include <vector>
 #include <set>
 #include <map>
@@ -8,10 +10,6 @@
 
 #include "Teuchos_RCP.hpp"
 #include "Intrepid_FieldContainer.hpp"
-
-class VarFactory;
-class DofOrdering;
-typedef Teuchos::RCP<DofOrdering> DofOrderingPtr;
 
 namespace Camellia {
   template<typename data_type>

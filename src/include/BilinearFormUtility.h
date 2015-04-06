@@ -45,59 +45,59 @@
 #include "CamelliaIntrepidExtendedTypes.h"
 
 using namespace std;
-using namespace Intrepid;
-using namespace Camellia;
 
-class DPGTests;
+namespace Camellia {
+  class DPGTests;
 
-class BilinearFormUtility {
-private:
-  static bool _warnAboutZeroRowsAndColumns;
-  static void setWarnAboutZeroRowsAndColumns( bool value );
-  static bool warnAboutZeroRowsAndColumns();
-public:
-  friend class DPGTests;
-  
-  // the "pre-stiffness" (rectangular) matrix methods:
-  static void computeStiffnessMatrix(FieldContainer<double> &stiffness, BFPtr bilinearForm,
-                                     Teuchos::RCP<DofOrdering> trialOrdering, Teuchos::RCP<DofOrdering> testOrdering,
-                                     CellTopoPtr cellTopo, FieldContainer<double> &physicalCellNodes,
-                                     FieldContainer<double> &cellSideParities);
+  class BilinearFormUtility {
+  private:
+    static bool _warnAboutZeroRowsAndColumns;
+    static void setWarnAboutZeroRowsAndColumns( bool value );
+    static bool warnAboutZeroRowsAndColumns();
+  public:
+    friend class DPGTests;
+    
+    // the "pre-stiffness" (rectangular) matrix methods:
+    static void computeStiffnessMatrix(Intrepid::FieldContainer<double> &stiffness, BFPtr bilinearForm,
+                                       Teuchos::RCP<DofOrdering> trialOrdering, Teuchos::RCP<DofOrdering> testOrdering,
+                                       CellTopoPtr cellTopo, Intrepid::FieldContainer<double> &physicalCellNodes,
+                                       Intrepid::FieldContainer<double> &cellSideParities);
 
-  // the real one:
-//  static void computeStiffnessMatrix(FieldContainer<double> &stiffness, BFPtr bilinearForm,
-//                                     Teuchos::RCP<DofOrdering> trialOrdering, Teuchos::RCP<DofOrdering> testOrdering,
-//                                     FieldContainer<double> &cellSideParities, Teuchos::RCP<BasisCache> basisCache);
-  
-  static void computeStiffnessMatrixForCell(FieldContainer<double> &stiffness, Teuchos::RCP<Mesh> mesh, int cellID);
-  
-  // final (square) stiffness methods, with optimal test functions applied:
-  // the following is meant for testing; the three-argument computeStiffnessMatrix below will be more efficient...
-  static void computeOptimalStiffnessMatrix(FieldContainer<double> &stiffness, 
-                                            FieldContainer<double> &optimalTestWeights,
-                                            BFPtr bilinearForm,
-                                            Teuchos::RCP<DofOrdering> trialOrdering, Teuchos::RCP<DofOrdering> testOrdering,
-                                            CellTopoPtr cellTopo, FieldContainer<double> &physicalCellNodes,
-                                            FieldContainer<double> &cellSideParities);
-  
-  static void computeStiffnessMatrix(FieldContainer<double> &stiffness, FieldContainer<double> &innerProductMatrix,
-                                     FieldContainer<double> &optimalTestWeights);
-  
-  // this method is deprecated; use the next one
-  static void computeRHS(FieldContainer<double> &rhsVector, BFPtr bilinearForm, RHS &rhs, 
-                         FieldContainer<double> &optimalTestWeights, Teuchos::RCP<DofOrdering> testOrdering,
-                         shards::CellTopology &cellTopo, FieldContainer<double> &physicalCellNodes);
-  
-//  static void computeRHS(FieldContainer<double> &rhsVector, BFPtr bilinearForm, RHS &rhs, 
-//                  FieldContainer<double> &optimalTestWeights, Teuchos::RCP<DofOrdering> testOrdering,
-//                  BasisCachePtr basisCache);
+    // the real one:
+  //  static void computeStiffnessMatrix(Intrepid::FieldContainer<double> &stiffness, BFPtr bilinearForm,
+  //                                     Teuchos::RCP<DofOrdering> trialOrdering, Teuchos::RCP<DofOrdering> testOrdering,
+  //                                     Intrepid::FieldContainer<double> &cellSideParities, Teuchos::RCP<BasisCache> basisCache);
+    
+    static void computeStiffnessMatrixForCell(Intrepid::FieldContainer<double> &stiffness, Teuchos::RCP<Mesh> mesh, int cellID);
+    
+    // final (square) stiffness methods, with optimal test functions applied:
+    // the following is meant for testing; the three-argument computeStiffnessMatrix below will be more efficient...
+    static void computeOptimalStiffnessMatrix(Intrepid::FieldContainer<double> &stiffness, 
+                                              Intrepid::FieldContainer<double> &optimalTestWeights,
+                                              BFPtr bilinearForm,
+                                              Teuchos::RCP<DofOrdering> trialOrdering, Teuchos::RCP<DofOrdering> testOrdering,
+                                              CellTopoPtr cellTopo, Intrepid::FieldContainer<double> &physicalCellNodes,
+                                              Intrepid::FieldContainer<double> &cellSideParities);
+    
+    static void computeStiffnessMatrix(Intrepid::FieldContainer<double> &stiffness, Intrepid::FieldContainer<double> &innerProductMatrix,
+                                       Intrepid::FieldContainer<double> &optimalTestWeights);
+    
+    // this method is deprecated; use the next one
+    static void computeRHS(Intrepid::FieldContainer<double> &rhsVector, BFPtr bilinearForm, RHS &rhs, 
+                           Intrepid::FieldContainer<double> &optimalTestWeights, Teuchos::RCP<DofOrdering> testOrdering,
+                           shards::CellTopology &cellTopo, Intrepid::FieldContainer<double> &physicalCellNodes);
+    
+  //  static void computeRHS(Intrepid::FieldContainer<double> &rhsVector, BFPtr bilinearForm, RHS &rhs, 
+  //                  Intrepid::FieldContainer<double> &optimalTestWeights, Teuchos::RCP<DofOrdering> testOrdering,
+  //                  BasisCachePtr basisCache);
 
-  static void transposeFCMatrices(FieldContainer<double> &fcTranspose,
-                                  const FieldContainer<double> &fc);
-  
-  static bool checkForZeroRowsAndColumns(string name, FieldContainer<double> &array, bool checkRows = true, bool checkCols = true);
-  
-  static void weightCellBasisValues(FieldContainer<double> &basisValues, 
-                                    const FieldContainer<double> &weights, int offset); 
-};
+    static void transposeFCMatrices(Intrepid::FieldContainer<double> &fcTranspose,
+                                    const Intrepid::FieldContainer<double> &fc);
+    
+    static bool checkForZeroRowsAndColumns(string name, Intrepid::FieldContainer<double> &array, bool checkRows = true, bool checkCols = true);
+    
+    static void weightCellBasisValues(Intrepid::FieldContainer<double> &basisValues, 
+                                      const Intrepid::FieldContainer<double> &weights, int offset); 
+  };
+}
 #endif

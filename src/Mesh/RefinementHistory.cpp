@@ -14,6 +14,8 @@
 
 using namespace std;
 
+using namespace Camellia;
+
 RefinementType refinementTypeForString(string refTypeStr) {
   if (refTypeStr == "h") {
     return H_REFINEMENT;

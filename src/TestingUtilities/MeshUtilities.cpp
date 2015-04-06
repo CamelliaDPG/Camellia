@@ -8,6 +8,9 @@
 #include "MeshFactory.h"
 #include "LinearTerm.h"
 
+using namespace Intrepid;
+using namespace Camellia;
+
 //static const double RAMP_HEIGHT = 0.0;
 
 class RampWallBoundary : public SpatialFilter {

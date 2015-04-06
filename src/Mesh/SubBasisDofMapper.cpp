@@ -10,6 +10,9 @@
 #include "SubBasisDofPermutationMapper.h"
 #include "SubBasisDofMatrixMapper.h"
 
+using namespace Intrepid;
+using namespace Camellia;
+
 SubBasisDofMapperPtr SubBasisDofMapper::subBasisDofMapper(const set<unsigned> &dofOrdinalFilter, const vector<GlobalIndexType> &globalDofOrdinals) {
   if (dofOrdinalFilter.size() != globalDofOrdinals.size()) {
     cout << "ERROR: cannot make a permutation mapper for dof lists of different size.\n";
