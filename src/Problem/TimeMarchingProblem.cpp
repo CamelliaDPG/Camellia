@@ -26,12 +26,12 @@ TimeMarchingProblem::TimeMarchingProblem(BFPtr bilinearForm,
   _trialIDs = bilinearForm->trialIDs();
 }
 
-void TimeMarchingProblem::trialTestOperators(int trialID, int testID, 
+void TimeMarchingProblem::trialTestOperators(int trialID, int testID,
                                                   vector<Camellia::EOperator> &trialOps,
                                                   vector<Camellia::EOperator> &testOps) {
   // each (trial,test) pair gets one extra operator, a VALUE on each, belonging to the time marching
   _bilinearForm->trialTestOperators(trialID,testID,trialOps,testOps);
-  
+
   if (hasTimeDerivative(trialID,testID)) {
     trialOps.insert(trialOps.begin(),  Camellia::OP_VALUE);
     testOps.insert(testOps.begin(),  Camellia::OP_VALUE);
@@ -39,8 +39,8 @@ void TimeMarchingProblem::trialTestOperators(int trialID, int testID,
 }
 
 
-void TimeMarchingProblem::applyBilinearFormData(FieldContainer<double> &trialValues, 
-                                                     FieldContainer<double> &testValues, 
+void TimeMarchingProblem::applyBilinearFormData(FieldContainer<double> &trialValues,
+                                                     FieldContainer<double> &testValues,
                                                      int trialID, int testID, int operatorIndex,
                                                      Teuchos::RCP<BasisCache> basisCache) {
   if (hasTimeDerivative(trialID,testID)) {
@@ -92,7 +92,7 @@ bool TimeMarchingProblem::testHasTimeDerivative(int testID) {
   return testHasTimeDerivative;
 }
 
-void TimeMarchingProblem::rhs(int testID, int operatorIndex, Teuchos::RCP<BasisCache> basisCache, 
+void TimeMarchingProblem::rhs(int testID, int operatorIndex, Teuchos::RCP<BasisCache> basisCache,
                               FieldContainer<double> &values) {
   if (testHasTimeDerivative(testID)) {
     operatorIndex--;
@@ -129,10 +129,10 @@ const string & TimeMarchingProblem::trialName(int trialID) {
   return _bilinearForm->trialName(trialID);
 }
 
-Teuchos::RCP<Solution> TimeMarchingProblem::previousTimeSolution() {
+SolutionPtr TimeMarchingProblem::previousTimeSolution() {
   return _previousTimeSolution;
 }
 
-void TimeMarchingProblem::setPreviousTimeSolution(Teuchos::RCP<Solution> previousSolution) {
+void TimeMarchingProblem::setPreviousTimeSolution(SolutionPtr previousSolution) {
   _previousTimeSolution = previousSolution;
 }

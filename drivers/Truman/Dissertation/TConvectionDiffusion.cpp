@@ -120,7 +120,7 @@ int main(int argc, char *argv[]) {
 
   IPPtr ip = confusionIPs[norm];
 
-  SolutionPtr soln = Solution::solution(mesh, bc, rhs, ip);
+  SolutionPtr soln = Solution<double>::solution(mesh, bc, rhs, ip);
 
   double threshold = 0.20;
   RefinementStrategy refStrategy(soln, threshold);

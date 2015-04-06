@@ -326,7 +326,7 @@ namespace Camellia {
 
     void registerObserver(Teuchos::RCP<RefinementObserver> observer);
 
-    void registerSolution(Teuchos::RCP<Solution> solution);
+    void registerSolution(SolutionPtr solution);
 
     int condensedRowSizeUpperBound();
     int rowSizeUpperBound(); // accounts for multiplicity, but isn't a tight bound
@@ -353,7 +353,7 @@ namespace Camellia {
 
     void unregisterObserver(RefinementObserver* observer);
     void unregisterObserver(Teuchos::RCP<RefinementObserver> observer);
-    void unregisterSolution(Teuchos::RCP<Solution> solution);
+    void unregisterSolution(SolutionPtr solution);
 
     void writeMeshPartitionsToFile(const string & fileName);
 

@@ -63,6 +63,7 @@
 #include "Solver.h"
 
 namespace Camellia {
+  template <typename Scalar>
   class Solution {
   private:
     int _cubatureEnrichmentDegree;
@@ -181,10 +182,10 @@ namespace Camellia {
 
     int solve( SolverPtr solver );
 
-    void addSolution(SolutionPtr soln, double weight, bool allowEmptyCells = false, bool replaceBoundaryTerms=false); // thisSoln += weight * soln
+    void addSolution(Teuchos::RCP< Solution<Scalar> > soln, double weight, bool allowEmptyCells = false, bool replaceBoundaryTerms=false); // thisSoln += weight * soln
 
     // will add terms in varsToAdd, but will replace all other variables
-    void addSolution(SolutionPtr soln, double weight, set<int> varsToAdd, bool allowEmptyCells = false); // thisSoln += weight * soln
+    void addSolution(Teuchos::RCP< Solution<Scalar> > soln, double weight, set<int> varsToAdd, bool allowEmptyCells = false); // thisSoln += weight * soln
 
     // static method interprets a set of trial ordering coefficients in terms of a specified DofOrdering
     // and returns a set of weights for the appropriate basis
@@ -196,7 +197,7 @@ namespace Camellia {
     int cubatureEnrichmentDegree() const;
     void setCubatureEnrichmentDegree(int value);
 
-    void setSolution(SolutionPtr soln); // thisSoln = soln
+    void setSolution(Teuchos::RCP< Solution<Scalar> > soln); // thisSoln = soln
 
     void solutionValues(Intrepid::FieldContainer<double> &values, ElementTypePtr elemTypePtr, int trialID,
                         const Intrepid::FieldContainer<double> &physicalPoints,
@@ -236,7 +237,7 @@ namespace Camellia {
 
     void projectOntoMesh(const std::map<int, FunctionPtr > &functionMap);
     void projectOntoCell(const std::map<int, FunctionPtr > &functionMap, GlobalIndexType cellID, int sideIndex=-1);
-    void projectFieldVariablesOntoOtherSolution(SolutionPtr otherSoln);
+    void projectFieldVariablesOntoOtherSolution(Teuchos::RCP< Solution<Scalar> > otherSoln);
 
     void projectOldCellOntoNewCells(GlobalIndexType cellID,
                                     ElementTypePtr oldElemType,
@@ -300,7 +301,7 @@ namespace Camellia {
 
   #ifdef HAVE_EPETRAEXT_HDF5
     void save(std::string meshAndSolutionPrefix);
-    static SolutionPtr load(BFPtr bf, std::string meshAndSolutionPrefix);
+    static Teuchos::RCP< Solution<Scalar> > load(BFPtr bf, std::string meshAndSolutionPrefix);
     void saveToHDF5(std::string filename);
     void loadFromHDF5(std::string filename);
   #endif
@@ -349,7 +350,7 @@ namespace Camellia {
     void setZeroMeanConstraintRho(double value);
     double zeroMeanConstraintRho();
 
-    static SolutionPtr solution(MeshPtr mesh, BCPtr bc = Teuchos::null,
+    static Teuchos::RCP< Solution<Scalar> > solution(MeshPtr mesh, BCPtr bc = Teuchos::null,
                                 RHSPtr rhs = Teuchos::null,
                                 IPPtr ip = Teuchos::null);
   };

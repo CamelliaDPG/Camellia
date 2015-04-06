@@ -81,7 +81,7 @@ namespace Camellia {
     //  for (set<GlobalIndexType>::const_iterator cellIDIt = parentCellIDs.begin(); cellIDIt != parentCellIDs.end(); cellIDIt++) {
     //    GlobalIndexType parentCellID = *cellIDIt;
     //    ElementTypePtr elemType = elementType(parentCellID);
-    //    for (vector< Solution* >::iterator solutionIt = _registeredSolutions.begin();
+    //    for (vector< SolutionPtr >::iterator solutionIt = _registeredSolutions.begin();
     //         solutionIt != _registeredSolutions.end(); solutionIt++) {
     //      // do projection
     //      vector<IndexType> childIDsLocalIndexType = _meshTopology->getCell(parentCellID)->getChildIndices();
@@ -118,7 +118,7 @@ namespace Camellia {
     for (set<GlobalIndexType>::const_iterator cellIDIt = cellIDs.begin(); cellIDIt != cellIDs.end(); cellIDIt++) {
       ElementTypePtr oldType = elementType(*cellIDIt);
       assignInitialElementType(*cellIDIt);
-      for (vector< Solution* >::iterator solutionIt = _registeredSolutions.begin();
+      for (vector< SolutionPtr >::iterator solutionIt = _registeredSolutions.begin();
           solutionIt != _registeredSolutions.end(); solutionIt++) {
         // do projection
         vector<IndexType> childIDs(1,*cellIDIt); // "child" ID is just the cellID

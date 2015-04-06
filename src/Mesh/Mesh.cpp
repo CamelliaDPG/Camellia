@@ -518,7 +518,7 @@ set<GlobalIndexType> Mesh::globalDofIndicesForPartition(PartitionIndexType parti
 }
 
 //void Mesh::hRefine(vector<GlobalIndexType> cellIDs, Teuchos::RCP<RefinementPattern> refPattern) {
-//  hRefine(cellIDs,refPattern,vector< Teuchos::RCP<Solution> >());
+//  hRefine(cellIDs,refPattern,vector< SolutionPtr >());
 //}
 
 void Mesh::hRefine(const vector<GlobalIndexType> &cellIDs) {
@@ -852,8 +852,8 @@ void Mesh::registerObserver(Teuchos::RCP<RefinementObserver> observer) {
   _registeredObservers.push_back(observer);
 }
 
-void Mesh::registerSolution(Teuchos::RCP<Solution> solution) {
-  _gda->registerSolution(solution.get());
+void Mesh::registerSolution(SolutionPtr solution) {
+  _gda->registerSolution(solution);
 }
 
 void Mesh::unregisterObserver(RefinementObserver* observer) {
@@ -871,8 +871,8 @@ void Mesh::unregisterObserver(Teuchos::RCP<RefinementObserver> mesh) {
   this->unregisterObserver(mesh.get());
 }
 
-void Mesh::unregisterSolution(Teuchos::RCP<Solution> solution) {
-  _gda->unregisterSolution(solution.get());
+void Mesh::unregisterSolution(SolutionPtr solution) {
+  _gda->unregisterSolution(solution);
 }
 
 void Mesh::pRefine(const vector<GlobalIndexType> &cellIDsForPRefinements) {
