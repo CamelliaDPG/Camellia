@@ -1,14 +1,15 @@
 cmake \
   -G "Xcode" \
-  -DTRILINOS_PATH:FILEPATH="/Users/nroberts/lib/trilinos-11.13/mpi-debug" \
+  -DCMAKE_XCODE_ATTRIBUTE_CLANG_C_LANGUAGE_STANDARD="c11" \
+  -DCMAKE_XCODE_ATTRIBUTE_CLANG_CXX_LANGUAGE_STANDARD="c++11" \
+  -DCMAKE_XCODE_ATTRIBUTE_CLANG_CXX_LIBRARY="libc++" \
+  -DTRILINOS_PATH:FILEPATH="/Users/nroberts/lib/trilinos/mpi-debug" \
   -DCAMELLIA_SOURCE_DIR:FILEPATH="/Users/nroberts/Camellia/src" \
   -DCMAKE_BUILD_TYPE="DEBUG" \
   -D ZLIB_LIB="/usr/lib/libz.dylib" \
   -DMUMPS_DIR="/Users/nroberts/lib/mumps-4.10.0" \
-  -DMPI_DIR="$HOME/lib/openmpi-1.8.3" \
-  -DMPI_INCLUDE="/Users/nroberts/lib/openmpi-1.8.3/include" \
-  -DMPI_LINK_CC="-L/Users/nroberts/lib/openmpi-1.8.3/lib -lmpi -lm" \
-  -DMPI_LINK_FORTRAN="-Wl,-commons,use_dylibs -I/Users/nroberts/lib/openmpi-1.8.3/lib -L/Users/nroberts/lib/openmpi-1.8.3/lib -lmpi_mpifh -lmpi -lm -lmpi_cxx" \
+  -DMPI_DIR="$HOME/lib/openmpi-1.6.5" \
+  -DMPI_INCLUDE="/Users/nroberts/lib/openmpi-1.6.5/include" \
   -DSCALAPACK_LIB="/Users/nroberts/lib/libscalapack.a" \
   -DBUILD_TRUMAN_DRIVERS:BOOL=OFF \
   -DBUILD_TRUMAN_TESTS_DRIVERS:BOOL=ON \
