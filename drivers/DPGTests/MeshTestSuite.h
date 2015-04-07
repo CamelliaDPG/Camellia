@@ -34,13 +34,14 @@
 //
 // Questions? Contact Nate Roberts (nate@nateroberts.com).
 //
-// @HEADER 
-
-class Mesh;
+// @HEADER
 
 #include "DofOrderingFactory.h"
+#include "Mesh.h"
 
 #include "TestSuite.h"
+
+using namespace Camellia;
 
 class MeshTestSuite : public TestSuite {
 private:

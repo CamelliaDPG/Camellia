@@ -8,32 +8,24 @@
 
 #include "GDAMinimumRuleTests.h"
 
-#include "MeshFactory.h"
-
 #include "BF.h"
-
-#include "Solution.h"
-#include "PreviousSolutionFunction.h"
-
-#include "Epetra_SerialComm.h"
-
-#include "MeshTestSuite.h"
-
-#include "MeshTestUtility.h"
-
-#include "GnuPlotUtil.h"
-
-#include "PenaltyConstraints.h"
-
 #include "CamelliaDebugUtility.h"
-
-#include "Intrepid_HGRAD_QUAD_Cn_FEM.hpp"
-
 #include "GlobalDofAssignment.h"
+#include "GnuPlotUtil.h"
+#include "MeshFactory.h"
+#include "MeshTestSuite.h"
+#include "MeshTestUtility.h"
+#include "PenaltyConstraints.h"
+#include "PreviousSolutionFunction.h"
+#include "Solution.h"
 
 #include "PoissonFormulation.h"
 
+#include "Epetra_Import.h"
+#include "Epetra_SerialComm.h"
 #include "EpetraExt_ConfigDefs.h"
+#include "Intrepid_HGRAD_QUAD_Cn_FEM.hpp"
+
 #ifdef HAVE_EPETRAEXT_HDF5
 #include "HDF5Exporter.h"
 #endif

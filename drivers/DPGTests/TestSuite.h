@@ -15,6 +15,7 @@ using namespace std;
 
 #include "Teuchos_GlobalMPISession.hpp"
 
+using namespace Camellia;
 using namespace Intrepid;
 
 // abstract class for tests

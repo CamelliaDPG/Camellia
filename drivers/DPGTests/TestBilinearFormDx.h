@@ -33,6 +33,8 @@
 
 #include "BF.h"
 
+using namespace Camellia;
+
 class TestBilinearFormDx {
 public:
   static BFPtr bf();
