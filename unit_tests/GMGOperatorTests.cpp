@@ -5,6 +5,7 @@
 //  Created by Nate Roberts on 2/4/15.
 //
 //
+#include "Teuchos_UnitTestHarness.hpp"
 
 #include "CamelliaDebugUtility.h"
 #include "GMGOperator.h"
@@ -12,7 +13,9 @@
 #include "PoissonFormulation.h"
 #include "RHS.h"
 
-#include "Teuchos_UnitTestHarness.hpp"
+using namespace Camellia;
+using namespace Intrepid;
+
 namespace {
   TEUCHOS_UNIT_TEST( GMGOperator, ProlongationOperatorLine )
   {

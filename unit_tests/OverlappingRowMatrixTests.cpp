@@ -24,6 +24,7 @@
 #endif
 
 using namespace Camellia;
+using namespace Intrepid;
 
 namespace {
   void testOverlapDofOrdinals(bool hierarchical, Teuchos::FancyOStream &out, bool &success) {

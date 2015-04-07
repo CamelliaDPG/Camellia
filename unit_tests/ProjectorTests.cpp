@@ -16,6 +16,7 @@
 #include "Teuchos_UnitTestHarness.hpp"
 
 using namespace Camellia;
+using namespace Intrepid;
 
 namespace {
   void testProjectFunctionOnTensorTopoSides(CellTopoPtr spaceTopo, int H1Order, Camellia::EFunctionSpace fs, FunctionPtr f,

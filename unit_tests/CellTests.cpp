@@ -16,6 +16,9 @@
 
 #include "PoissonFormulation.h"
 
+using namespace Camellia;
+using namespace Intrepid;
+
 namespace {
   TEUCHOS_UNIT_TEST( Cell, Neighbors1D )
   {

@@ -8,11 +8,13 @@
 
 #include "Teuchos_UnitTestHarness.hpp"
 
-#include "PoissonFormulation.h"
-#include "MeshFactory.h"
-
-#include "MeshTransferFunction.h"
 #include "CamelliaDebugUtility.h"
+#include "MeshFactory.h"
+#include "MeshTransferFunction.h"
+#include "PoissonFormulation.h"
+
+using namespace Camellia;
+using namespace Intrepid;
 
 namespace {
   class CellIDFunction : public Function {

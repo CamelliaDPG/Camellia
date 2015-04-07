@@ -31,6 +31,7 @@
 #include "CellTopology.h"
 
 using namespace Camellia;
+using namespace Intrepid;
 
 namespace {
   typedef Intrepid::FieldContainer<double> FC;

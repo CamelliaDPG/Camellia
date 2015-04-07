@@ -21,6 +21,9 @@
 #include "PoissonFormulation.h"
 #include "Solution.h"
 
+using namespace Camellia;
+using namespace Intrepid;
+
 namespace {
 
   vector<double> makeVertex(double v0) {

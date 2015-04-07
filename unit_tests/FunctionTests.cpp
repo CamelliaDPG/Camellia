@@ -5,10 +5,13 @@
 //  Created by Nate Roberts on 2/20/15.
 //
 //
+#include "Teuchos_UnitTestHarness.hpp"
 
 #include "Function.h"
 
-#include "Teuchos_UnitTestHarness.hpp"
+using namespace Camellia;
+using namespace Intrepid;
+
 namespace {
   TEUCHOS_UNIT_TEST( Function, VectorMultiply )
   {
@@ -27,8 +30,8 @@ namespace {
   {
     FunctionPtr one = Function::constant(1);
     FunctionPtr two = Function::constant(2);
-    FunctionPtr minFcn = min(one,two);
-    FunctionPtr maxFcn = max(one,two);
+    FunctionPtr minFcn = Function::min(one,two);
+    FunctionPtr maxFcn = Function::max(one,two);
     double x0 = 0, y0 = 0;
     double expectedValue = 1.0;
     double actualValue = Function::evaluate(minFcn, x0, y0);

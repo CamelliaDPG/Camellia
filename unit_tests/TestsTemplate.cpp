@@ -9,6 +9,11 @@
 // empty test file.  Copy (naming "MyClassTests.cpp", typically) and then add your tests below.
 
 #include "Teuchos_UnitTestHarness.hpp"
+
+#include "TypeDefs.h"
+
+using namespace Camellia;
+
 namespace {
 //  TEUCHOS_UNIT_TEST( Int, Basic )
 //  {

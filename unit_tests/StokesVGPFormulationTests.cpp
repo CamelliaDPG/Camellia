@@ -6,13 +6,17 @@
 //
 //
 
+#include "Teuchos_UnitTestHarness.hpp"
+
 #include "StokesVGPFormulation.h"
 #include "GDAMinimumRule.h"
 #include "MeshFactory.h"
 #include "Solution.h"
 #include "HDF5Exporter.h"
 
-#include "Teuchos_UnitTestHarness.hpp"
+using namespace Camellia;
+using namespace Intrepid;
+
 namespace {
   void projectExactSolution(StokesVGPFormulation &form, SolutionPtr stokesSolution, FunctionPtr u, FunctionPtr p) {
     double mu = form.mu();

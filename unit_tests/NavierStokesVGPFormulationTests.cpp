@@ -10,6 +10,9 @@
 
 #include "MeshFactory.h"
 
+using namespace Camellia;
+using namespace Intrepid;
+
 #include "Teuchos_UnitTestHarness.hpp"
 namespace {
   TEUCHOS_UNIT_TEST( NavierStokesVGPFormulation, Consistency_2D )

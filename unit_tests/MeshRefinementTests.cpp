@@ -17,6 +17,9 @@
 #include "RHS.h"
 #include "Solution.h"
 
+using namespace Camellia;
+using namespace Intrepid;
+
 namespace {
   TEUCHOS_UNIT_TEST( MeshRefinement, TraceTermProjection )
   {

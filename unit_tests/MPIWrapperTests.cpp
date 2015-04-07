@@ -11,6 +11,7 @@
 #include "Intrepid_FieldContainer.hpp"
 #include "Teuchos_GlobalMPISession.hpp"
 
+using namespace Camellia;
 using namespace Intrepid;
 
 #include "Teuchos_UnitTestHarness.hpp"

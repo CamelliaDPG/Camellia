@@ -22,6 +22,9 @@
 
 #include "SerialDenseWrapper.h"
 
+using namespace Camellia;
+using namespace Intrepid;
+
 namespace {
   TEUCHOS_UNIT_TEST( BasisReconciliation, MapFineSubcellPointsToCoarseSubcell_Vertex)
   {

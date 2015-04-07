@@ -5,6 +5,7 @@
 //  Created by Nate Roberts on 2/19/15.
 //
 //
+#include "Teuchos_UnitTestHarness.hpp"
 
 #include "BasisCache.h"
 #include "GlobalDofAssignment.h"
@@ -13,7 +14,9 @@
 
 #include <cstdio>
 
-#include "Teuchos_UnitTestHarness.hpp"
+using namespace Camellia;
+using namespace Intrepid;
+
 namespace {
   vector<double> makeVertex(double v0, double v1) {
     vector<double> v;

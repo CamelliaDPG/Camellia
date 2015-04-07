@@ -6,8 +6,6 @@
 //
 //
 
-// the following copied from the Teuchos Unit tests documentation.  Just trying it out.
-
 #include "Teuchos_UnitTestHarness.hpp"
 
 #include "BC.h"
@@ -23,6 +21,12 @@
 #include "SpatialFilter.h"
 #include "Solution.h"
 #include "VarFactory.h"
+
+#include <algorithm>
+
+using namespace Camellia;
+using namespace Intrepid;
+using namespace std;
 
 namespace {
   class Cone_U0 : public SimpleFunction {
@@ -46,7 +50,7 @@ namespace {
         if (y > 0.5) y = y - 1;
       }
       double d = sqrt( (x-_x0) * (x-_x0) + (y-_y0) * (y-_y0) );
-      double u = max(0.0, _h * (1 - d/_r));
+      double u = std::max(0.0, _h * (1 - d/_r));
       
 //      if (u != 0)
 //        cout << "u(" << x << "," << y << ") = " << u << endl;
