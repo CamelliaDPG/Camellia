@@ -7,6 +7,8 @@
 //
 
 #include "StokesVGPFormulation.h"
+
+#include "Constraint.h"
 #include "MeshFactory.h"
 #include "PenaltyConstraints.h"
 #include "PoissonFormulation.h"
