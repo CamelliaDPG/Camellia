@@ -40,18 +40,20 @@ Constraint Constraint::spatiallyFilteredConstraint(const Constraint &c, SpatialF
   return Constraint(flt,ff);
 }
 
-Constraint operator==(VarPtr v, FunctionPtr f) {
-  return Constraint(1.0*v,f);
-}
+namespace Camellia {
+  Constraint operator==(VarPtr v, FunctionPtr f) {
+    return Constraint(1.0*v,f);
+  }
 
-Constraint operator==(FunctionPtr f, VarPtr v) {
-  return Constraint(1.0*v,f);
-}
+  Constraint operator==(FunctionPtr f, VarPtr v) {
+    return Constraint(1.0*v,f);
+  }
 
-Constraint operator==(LinearTermPtr a, FunctionPtr f) {
-  return Constraint(a,f);
-}
+  Constraint operator==(LinearTermPtr a, FunctionPtr f) {
+    return Constraint(a,f);
+  }
 
-Constraint operator==(FunctionPtr f, LinearTermPtr a) {
-  return Constraint(a,f);
-}
+  Constraint operator==(FunctionPtr f, LinearTermPtr a) {
+    return Constraint(a,f);
+  }
+} // namespace Camellia
