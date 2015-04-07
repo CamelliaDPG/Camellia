@@ -1,4 +1,5 @@
 project(examples)
 
+add_subdirectory(NavierStokesCavityFlow)
+add_subdirectory(StokesBackwardFacingStep)
 add_subdirectory(StokesCavityFlow)
-

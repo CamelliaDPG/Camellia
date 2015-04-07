@@ -1,8 +1,11 @@
 #include "Teuchos_GlobalMPISession.hpp"
-#include "StokesVGPFormulation.h"
+
 #include "Function.h"
-#include "MeshFactory.h"
 #include "HDF5Exporter.h"
+#include "MeshFactory.h"
+#include "StokesVGPFormulation.h"
+
+using namespace Camellia;
 
 // this Function will work for both 2D and 3D cavity flow top BC (matching y = 1)
 class RampBoundaryFunction_U1 : public SimpleFunction {
@@ -153,6 +156,13 @@ int main(int argc, char *argv[]) {
   cout << "loading saved solution...\n";
   form.initializeSolution(savePrefix, polyOrder, delta_k);
   cout << "...loaded.\n";
+  FunctionPtr u1_steady = Function::solution(form.u(1), form.solution());
+  cout << "u1(0.5, 0.5) = " << u1_steady->evaluate(0.5, 0.5) << endl;
+  
+  // now solve for the stream function on the fine mesh:
+  form.streamSolution()->solve();
+  HDF5Exporter steadyStreamExporter(form.streamSolution()->mesh(), "stokesSteadyCavityFlowStreamSolution", ".");
+  steadyStreamExporter.exportSolution(form.streamSolution());
   
   /*   Now that we have a fine mesh, try the same problem, but transient, starting with a zero initial
    *   state, and with boundary conditions that "ramp up" in time (and which also are zero at time 0).
@@ -177,22 +187,53 @@ int main(int argc, char *argv[]) {
 
   for (int timeStep=0; timeStep<numTimeSteps; timeStep++) {
     transientForm.solve();
+    double L2_step = transientForm.L2NormOfTimeStep();
     transientExporter.exportSolution(transientForm.solution(),transientForm.getTime());
+    
     transientForm.takeTimeStep();
-    if (rank==0) cout << "time step " << timeStep << " completed.\n";
+    if (rank==0) cout << "time step " << timeStep << " completed (L^2 norm of difference from prev: " << L2_step << ").\n";
+  }
+  
+  { // trying the same thing as below, but computing it differently:
+    FunctionPtr  p_transient = Function::solution( transientForm.p(), transientForm.solution());
+    FunctionPtr u1_transient = Function::solution(transientForm.u(1), transientForm.solution());
+    FunctionPtr u2_transient = Function::solution(transientForm.u(2), transientForm.solution());
+    FunctionPtr  p_steady = Function::solution( form.p(), form.solution());
+    FunctionPtr u1_steady = Function::solution(form.u(1), form.solution());
+    FunctionPtr u2_steady = Function::solution(form.u(2), form.solution());
+    
+    FunctionPtr squaredDiff = (p_transient-p_steady) * (p_transient-p_steady) + (u1_transient-u1_steady) * (u1_transient-u1_steady) + (u2_transient - u2_steady) * (u2_transient - u2_steady);
+    double valSquared = squaredDiff->integrate(form.solution()->mesh());
+    if (rank==0) cout << "L^2 norm of difference between converged transient and steady state solution (computed differently): " << sqrt(valSquared) << endl;
+    
+    FunctionPtr p_diff_squared  =   (p_transient-p_steady) *   (p_transient-p_steady);
+    FunctionPtr u1_diff_squared = (u1_transient-u1_steady) * (u1_transient-u1_steady);
+    FunctionPtr u2_diff_squared = (u2_transient-u2_steady) * (u2_transient-u2_steady);
+    
+    double p_diff_L2 = sqrt(p_diff_squared->integrate(form.solution()->mesh()));
+    double u1_diff_L2 = sqrt(u1_diff_squared->integrate(form.solution()->mesh()));
+    double u2_diff_L2 = sqrt(u2_diff_squared->integrate(form.solution()->mesh()));
+    
+    if (rank==0) cout << "L^2 norm (computed differently) for p: " << p_diff_L2 << endl;
+    if (rank==0) cout << "L^2 norm (computed differently) for u1: " << u1_diff_L2 << endl;
+    if (rank==0) cout << "L^2 norm (computed differently) for u2: " << u2_diff_L2 << endl;
   }
   
   // by this point, we should have recovered something close to the steady solution.  Did we?
   SolutionPtr transientSolution = transientForm.solution();
   transientSolution->addSolution(form.solution(), -1.0);
   
-  double u1_diff_L2 = transientSolution->L2NormOfSolutionGlobal(form.u(1)->ID());
-  double u2_diff_L2 = transientSolution->L2NormOfSolutionGlobal(form.u(2)->ID());
-  double p_diff_L2 = transientSolution->L2NormOfSolutionGlobal(form.p()->ID());
+  double u1_diff_L2 = sqrt(transientSolution->L2NormOfSolutionGlobal(form.u(1)->ID()));
+  double u2_diff_L2 = sqrt(transientSolution->L2NormOfSolutionGlobal(form.u(2)->ID()));
+  double p_diff_L2 = sqrt(transientSolution->L2NormOfSolutionGlobal(form.p()->ID()));
   
   double diff_L2 = sqrt(u1_diff_L2 * u1_diff_L2 + u2_diff_L2 * u2_diff_L2 + p_diff_L2 * p_diff_L2);
   
   if (rank==0) cout << "L^2 norm of difference between converged transient and steady state solution: " << diff_L2 << endl;
+  
+  if (rank==0) cout << "L^2 norm for p: " << p_diff_L2 << endl;
+  if (rank==0) cout << "L^2 norm for u1: " << u1_diff_L2 << endl;
+  if (rank==0) cout << "L^2 norm for u2: " << u2_diff_L2 << endl;
   
   return 0;
 }

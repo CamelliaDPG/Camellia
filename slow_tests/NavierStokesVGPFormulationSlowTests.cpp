@@ -11,6 +11,8 @@
 
 #include "HDF5Exporter.h"
 
+using namespace Camellia;
+
 #include "Teuchos_UnitTestHarness.hpp"
 namespace {
   TEUCHOS_UNIT_TEST( NavierStokesVGPFormulation, ExactSolution_2D )
