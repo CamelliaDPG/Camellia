@@ -374,8 +374,7 @@ namespace Camellia {
       _solnIncrement->setRHS( _vgpNavierStokesFormulation->rhs(f1,f2,_neglectFluxesOnRHS) );
       _solnIncrement->setIP( _vgpNavierStokesFormulation->graphNorm() );
       
-      _solver = Teuchos::rcp( new KluSolver() );
-
+      _solver = Teuchos::rcp( new Amesos2Solver() );
     }
     
     void init(FunctionPtr Re, Intrepid::FieldContainer<double> &quadPoints, int horizontalCells,
@@ -434,7 +433,7 @@ namespace Camellia {
       _solnIncrement->setRHS( _vgpNavierStokesFormulation->rhs(f1,f2, _neglectFluxesOnRHS) );
       _solnIncrement->setIP( _vgpNavierStokesFormulation->graphNorm() );
       
-      _solver = Teuchos::rcp( new KluSolver() );
+      _solver = Teuchos::rcp( new Amesos2Solver() );
     }
     void init(FunctionPtr Re, Intrepid::FieldContainer<double> &quadPoints, int horizontalCells,
                int verticalCells, int H1Order, int pToAdd,
@@ -494,7 +493,7 @@ namespace Camellia {
       _solnIncrement->setRHS( _exactSolution->rhs() );
       _solnIncrement->setIP( _vgpNavierStokesFormulation->graphNorm() );
       
-      _solver = Teuchos::rcp( new KluSolver() );
+      _solver = Teuchos::rcp( new Amesos2Solver() );
     }
   public:
     VGPNavierStokesProblem(FunctionPtr Re, MeshGeometryPtr geometry, int H1Order, int pToAdd,
