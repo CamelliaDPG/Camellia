@@ -10,10 +10,10 @@
 
 #ifdef HAVE_MPI
 #include <Teuchos_GlobalMPISession.hpp>
+#include "Epetra_MpiComm.h"
 #endif
 
 #include "Epetra_SerialComm.h"
-#include "Epetra_MpiComm.h"
 #include "EpetraExt_HDF5.h"
 
 #include <sys/types.h>
