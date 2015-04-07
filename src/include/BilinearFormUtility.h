@@ -33,30 +33,22 @@
 
 #include "DofOrdering.h"
 #include "BF.h"
+#include "CamelliaIntrepidExtendedTypes.h"
 #include "IP.h"
+#include "Mesh.h"
 #include "RHS.h"
 #include "BasisCache.h"
 
 // Shards includes
 #include "Shards_CellTopology.hpp"
 
-#include "Mesh.h"
-
-#include "CamelliaIntrepidExtendedTypes.h"
-
 using namespace std;
 
 namespace Camellia {
-  class DPGTests;
-
   class BilinearFormUtility {
   private:
     static bool _warnAboutZeroRowsAndColumns;
-    static void setWarnAboutZeroRowsAndColumns( bool value );
-    static bool warnAboutZeroRowsAndColumns();
   public:
-    friend class DPGTests;
-    
     // the "pre-stiffness" (rectangular) matrix methods:
     static void computeStiffnessMatrix(Intrepid::FieldContainer<double> &stiffness, BFPtr bilinearForm,
                                        Teuchos::RCP<DofOrdering> trialOrdering, Teuchos::RCP<DofOrdering> testOrdering,
@@ -97,7 +89,10 @@ namespace Camellia {
     static bool checkForZeroRowsAndColumns(string name, Intrepid::FieldContainer<double> &array, bool checkRows = true, bool checkCols = true);
     
     static void weightCellBasisValues(Intrepid::FieldContainer<double> &basisValues, 
-                                      const Intrepid::FieldContainer<double> &weights, int offset); 
+                                      const Intrepid::FieldContainer<double> &weights, int offset);
+    
+    static void setWarnAboutZeroRowsAndColumns( bool value );
+    static bool warnAboutZeroRowsAndColumns();
   };
 }
 #endif
