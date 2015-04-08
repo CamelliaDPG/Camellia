@@ -143,12 +143,13 @@ namespace Camellia {
       return 0;
     }
   };
-
+} // namespace
 
  // only use MUMPS when we have MPI
  #ifdef HAVE_AMESOS_MUMPS
  #ifdef HAVE_MPI
  #include "Amesos_Mumps.h"
+namespace Camellia {
  class MumpsSolver : public Solver {
    int _maxMemoryPerCoreMB;
    bool _saveFactorization;
@@ -265,7 +266,9 @@ namespace Camellia {
      }
    }
  };
+} // namespace
  #else
+namespace Camellia {
  class MumpsSolver : public Solver {
  public:
    int solve() {
@@ -273,10 +276,9 @@ namespace Camellia {
      return -1;
    }
  };
- #endif
+} // namespace
+#endif
 
- #endif
-}
-
+#endif
 
 #endif
