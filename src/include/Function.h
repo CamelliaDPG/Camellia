@@ -52,11 +52,12 @@ namespace Camellia {
     virtual FunctionPtr x();
     virtual FunctionPtr y();
     virtual FunctionPtr z();
+    virtual FunctionPtr t(); // defined to be the last dimension in a space-time context
 
     virtual FunctionPtr dx();
     virtual FunctionPtr dy();
     virtual FunctionPtr dz();
-  //  virtual FunctionPtr dt(); // TODO: rework ParametricCurve (Function subclass) so that we can define dt() thus.
+    virtual FunctionPtr dt();
 
     virtual FunctionPtr div();
     virtual FunctionPtr curl();

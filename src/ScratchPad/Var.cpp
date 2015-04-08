@@ -314,6 +314,12 @@ VarPtr Var::dz() const {
   return Teuchos::rcp( new Var(_id, _rank, _name, Camellia::OP_DZ, UNKNOWN_FS, _varType ) );
 }
 
+VarPtr Var::dt() const {
+  TEUCHOS_TEST_FOR_EXCEPTION( _op !=  Camellia::OP_VALUE, std::invalid_argument, "operators can only be applied to raw vars, not vars that have been operated on.");
+  TEUCHOS_TEST_FOR_EXCEPTION( _rank != 0, std::invalid_argument, "dt() only supported for vars of rank 0.");
+  return Teuchos::rcp( new Var(_id, _rank, _name, Camellia::OP_DT, UNKNOWN_FS, _varType ) );
+}
+
 VarPtr Var::x() const {
   TEUCHOS_TEST_FOR_EXCEPTION( _op !=  Camellia::OP_VALUE, std::invalid_argument, "operators can only be applied to raw vars, not vars that have been operated on.");
   TEUCHOS_TEST_FOR_EXCEPTION( _rank != 1, std::invalid_argument, "x() only supported for vars of rank 1.");
@@ -330,6 +336,12 @@ VarPtr Var::z() const {
   TEUCHOS_TEST_FOR_EXCEPTION( _op !=  Camellia::OP_VALUE, std::invalid_argument, "operators can only be applied to raw vars, not vars that have been operated on.");
   TEUCHOS_TEST_FOR_EXCEPTION( _rank != 1, std::invalid_argument, "z() only supported for vars of rank 1.");
   return Teuchos::rcp( new Var(_id, _rank-1, _name, OP_Z, UNKNOWN_FS, _varType ) );
+}
+
+VarPtr Var::t() const {
+  TEUCHOS_TEST_FOR_EXCEPTION( _op !=  Camellia::OP_VALUE, std::invalid_argument, "operators can only be applied to raw vars, not vars that have been operated on.");
+  TEUCHOS_TEST_FOR_EXCEPTION( _rank != 1, std::invalid_argument, "z() only supported for vars of rank 1.");
+  return Teuchos::rcp( new Var(_id, _rank-1, _name, OP_T, UNKNOWN_FS, _varType ) );
 }
 
 VarPtr Var::cross_normal() const {
@@ -370,4 +382,9 @@ VarPtr Var::times_normal_y() const {
 VarPtr Var::times_normal_z() const {
   TEUCHOS_TEST_FOR_EXCEPTION( _op !=  Camellia::OP_VALUE, std::invalid_argument, "operators can only be applied to raw vars, not vars that have been operated on.");
   return Teuchos::rcp( new Var(_id, _rank, _name, OP_TIMES_NORMAL_Z, UNKNOWN_FS, _varType ) );
+}
+
+VarPtr Var::times_normal_t() const {
+  TEUCHOS_TEST_FOR_EXCEPTION( _op !=  Camellia::OP_VALUE, std::invalid_argument, "operators can only be applied to raw vars, not vars that have been operated on.");
+  return Teuchos::rcp( new Var(_id, _rank, _name, OP_TIMES_NORMAL_T, UNKNOWN_FS, _varType ) );
 }

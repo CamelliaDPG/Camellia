@@ -86,11 +86,11 @@ class TransfiniteInterpolatingSurface : public ParametricSurface {
       _curves[2] = ParametricCurve::bubble(_curves[2]);
       _curves[3] = ParametricCurve::bubble(_curves[3]);
     } else if (op==OP_DX) {
-      _curves[0] = _curves[0]->dt();
-      _curves[2] = _curves[2]->dt();
+      _curves[0] = _curves[0]->dt_parametric();
+      _curves[2] = _curves[2]->dt_parametric();
     } else if (op==OP_DY) {
-      _curves[1] = _curves[1]->dt();
-      _curves[3] = _curves[3]->dt();
+      _curves[1] = _curves[1]->dt_parametric();
+      _curves[3] = _curves[3]->dt_parametric();
     }
   }
 protected:

@@ -38,8 +38,8 @@ namespace Camellia {
     void value(double t, double &x);
     void values(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache);
     
-    FunctionPtr dx(); // same function as dt()
-    ParametricFunctionPtr dt();
+    FunctionPtr dx(); // same function as dt_parametric()
+    ParametricFunctionPtr dt_parametric(); // not named dt() to avoid conflict with Function, which means space-time by this...
     
     ParametricFunctionPtr subFunction(double t0, double t1);
     
@@ -78,7 +78,7 @@ namespace Camellia {
     
     virtual void values(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache);
     
-    virtual ParametricCurvePtr dt(); // the curve differentiated in t in each component.
+    virtual ParametricCurvePtr dt_parametric(); // the curve differentiated in t in each component.
     
     virtual FunctionPtr x();
     virtual FunctionPtr y();

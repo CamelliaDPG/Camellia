@@ -129,7 +129,7 @@ FunctionPtr ParametricFunction::dx() {
   return Teuchos::rcp( new ParametricFunction(tScale * _underlyingFxn->dx(),_t0,_t1,_derivativeOrder+1) );
 }
 
-ParametricFunctionPtr ParametricFunction::dt() {
+ParametricFunctionPtr ParametricFunction::dt_parametric() {
   // dx() applies a piola transform (increments _derivativeOrder); dt() does not
   double tScale = _t1 - _t0;
   return Teuchos::rcp( new ParametricFunction(tScale * _underlyingFxn->dx(),_t0,_t1,_derivativeOrder) );
@@ -153,7 +153,7 @@ class ParametricBubble : public ParametricCurve {
   ParametricCurvePtr _edgeCurve;
   ParametricCurvePtr _edgeLine;
   double _x0, _y0, _x1, _y1;
-  // support for dt():
+  // support for dt_parametric():
   bool _isDerivative;
   double _xDiff, _yDiff;
   ParametricBubble(ParametricCurvePtr edgeCurve_dt, double xDiff, double yDiff) {
@@ -180,8 +180,8 @@ public:
       y -= _yDiff;
     }
   }
-  ParametricCurvePtr dt() {
-    return Teuchos::rcp( new ParametricBubble(_edgeCurve->dt(),_x1-_x0, _y1-_y0) );
+  ParametricCurvePtr dt_parametric() {
+    return Teuchos::rcp( new ParametricBubble(_edgeCurve->dt_parametric(),_x1-_x0, _y1-_y0) );
   }
   FunctionPtr x() {
     if (!_isDerivative) {
@@ -242,7 +242,7 @@ public:
     _curves[curveIndex]->value(curve_t, x,y);
   }
 
-  ParametricCurvePtr dt() {
+  ParametricCurvePtr dt_parametric() {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unimplemented method!");
     return Teuchos::rcp((ParametricCurve*)NULL);
   }
@@ -491,21 +491,21 @@ ParametricCurvePtr ParametricCurve::curveUnion(vector< ParametricCurvePtr > curv
   return Teuchos::rcp( new ParametricUnion(curves, weights) );
 }
 //
-//FunctionPtr ParametricCurve::dx() { // same as dt() (overrides Function::dx())
-//  return dt();
+//FunctionPtr ParametricCurve::dx() { // same as dt_parametric() (overrides Function::dx())
+//  return dt_parametric();
 //}
 
-ParametricCurvePtr ParametricCurve::dt() { // the curve differentiated in t in each component.
+ParametricCurvePtr ParametricCurve::dt_parametric() { // the curve differentiated in t in each component.
   ParametricFunctionPtr dxdt, dydt, dzdt;
 
   if (_xFxn.get()) {
-    dxdt = _xFxn->dt();
+    dxdt = _xFxn->dt_parametric();
   }
   if (_yFxn.get()) {
-    dydt = _yFxn->dt();
+    dydt = _yFxn->dt_parametric();
   }
   if (_zFxn.get()) {
-    dzdt = _zFxn->dt();
+    dzdt = _zFxn->dt_parametric();
   }
   return Teuchos::rcp( new ParametricCurve(dxdt,dydt,dzdt) );
 }

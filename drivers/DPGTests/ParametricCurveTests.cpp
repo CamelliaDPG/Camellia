@@ -155,11 +155,11 @@ bool ParametricCurveTests::testCircularArc() {
     success = false;
   }
   
-  if (! dx_dt->equals(circularArc->dt()->x(),basisCache)) {
+  if (! dx_dt->equals(circularArc->dt_parametric()->x(),basisCache)) {
     cout << "dx/dt of circularArc doesn't match expected.\n";
     success = false;
   }
-  if (! dy_dt->equals(circularArc->dt()->y(),basisCache)) {
+  if (! dy_dt->equals(circularArc->dt_parametric()->y(),basisCache)) {
     cout << "dy/dt of circularArc doesn't match expected.\n";
     success = false;
   }
@@ -189,7 +189,7 @@ bool ParametricCurveTests::testCircularArc() {
   // figuring out what the x derivative should be is a bit of work, I think,
   // but the y value is at a minimum, so its derivative should be zero
   y_expected = 0;
-  circularArc->dt()->value(t, x, y);
+  circularArc->dt_parametric()->value(t, x, y);
   yErr = abs(y-y_expected);
   if (yErr > tol) {
     cout << "exact arc dy/dt at t=0.5 is nonzero.\n";
@@ -467,7 +467,7 @@ bool ParametricCurveTests::testLine() {
   bool success = true;
   
   ParametricCurvePtr unitLine = ParametricCurve::line(0, 0, 1, 0);
-  ParametricCurvePtr unitLine_dt = unitLine->dt();
+  ParametricCurvePtr unitLine_dt = unitLine->dt_parametric();
   ParametricFunctionPtr unitLine_x = unitLine->xPart(); // x=t
   ParametricFunctionPtr unitLine_y = unitLine->yPart(); // 0
   

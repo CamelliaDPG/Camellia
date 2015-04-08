@@ -427,6 +427,9 @@ namespace Camellia {
   FunctionPtr Function::z() {
     return Function::null();
   }
+  FunctionPtr Function::t() {
+    return Function::null();
+  }
 
   FunctionPtr Function::dx() {
     return Function::null();
@@ -437,10 +440,9 @@ namespace Camellia {
   FunctionPtr Function::dz() {
     return Function::null();
   }
-   // TODO: rework ParametricCurve (Function subclass) so that we can define dt() thus.
-  //FunctionPtr Function::dt() {
-  //  return Function::null();
-  //}
+  FunctionPtr Function::dt() {
+    return Function::null();
+  }
   FunctionPtr Function::curl() {
     FunctionPtr dxFxn = dx();
     FunctionPtr dyFxn = dy();

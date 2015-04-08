@@ -52,9 +52,11 @@ namespace Camellia {
     VarPtr dx() const;
     VarPtr dy() const;
     VarPtr dz() const;
+    VarPtr dt() const;
     VarPtr x() const;
     VarPtr y() const;
     VarPtr z() const;
+    VarPtr t() const;
     
     VarPtr cross_normal() const;
     VarPtr dot_normal() const;
