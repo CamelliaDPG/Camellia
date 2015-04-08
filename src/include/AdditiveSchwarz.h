@@ -21,6 +21,7 @@
 #ifndef CAMELLIA_ADDITIVESCHWARZ_H
 #define CAMELLIA_ADDITIVESCHWARZ_H
 
+#include "Ifpack_Condest.h"
 #include "Ifpack_ConfigDefs.h"
 #include "Ifpack_Preconditioner.h"
 #include "Ifpack_ConfigDefs.h"
@@ -264,10 +265,10 @@ public:
   virtual int Compute();
 
   //! Computes the estimated condition number and returns its value.
-  virtual double Condest(const Ifpack_CondestType CT = Ifpack_Cheap,
-                         const int MaxIters = 1550,
-                         const double Tol = 1e-9,
-			 Epetra_RowMatrix* Matrix_in = 0);
+    virtual double Condest(const Ifpack_CondestType CT = Ifpack_Cheap,
+                           const int MaxIters = 1550,
+                           const double Tol = 1e-9,
+                           Epetra_RowMatrix* Matrix_in = 0);
 
   //! Returns the estimated condition number, or -1.0 if not computed.
   virtual double Condest() const
@@ -1004,12 +1005,11 @@ Print(std::ostream& os) const
   return(os);
 }
 
-#include "Ifpack_Condest.h"
 //==============================================================================
 template<typename T>
 double AdditiveSchwarz<T>::
-Condest(const Ifpack_CondestType CT, const int MaxIters, 
-        const double Tol, Epetra_RowMatrix* Matrix_in)
+  Condest(const Ifpack_CondestType CT, const int MaxIters,
+          const double Tol, Epetra_RowMatrix* Matrix_in)
 {
   if (!IsComputed()) // cannot compute right now
     return(-1.0);
