@@ -13,6 +13,7 @@
 #include "MeshFactory.h"
 #include "ParametricSurface.h"
 #include "StokesFormulation.h"
+#include "TrigFunctions.h"
 
 static const double PI  = 3.141592653589793238462;
 
@@ -205,7 +206,7 @@ bool ParametricCurveTests::testCircularArc() {
   
   FunctionPtr middleBasis;
   {
-    FunctionPtr t = Teuchos::rcp( new Xn(1) );
+    FunctionPtr t = Function::xn(1);
     middleBasis = 4 * t * (1-t);
   }
   
@@ -309,8 +310,8 @@ bool ParametricCurveTests::testGradientWrapper() {
   bool success = true;
   
   // create an artificial function whose gradient is "interesting" and known
-  FunctionPtr t1 = Teuchos::rcp( new Xn(1) );
-  FunctionPtr t2 = Teuchos::rcp( new Yn(1) );
+  FunctionPtr t1 = Function::xn(1);
+  FunctionPtr t2 = Function::yn(1);
   FunctionPtr xt = t1 + t1 * t2;
   FunctionPtr yt = t2 + 2 * t1 * t2;
   FunctionPtr xt_dt1 = 1 + t2;
@@ -348,8 +349,8 @@ bool ParametricCurveTests::testGradientWrapper() {
   // y = t2 + 2 * t1 * t2
   // which gives the result that our original function f(t1,t2) = (t1 + t1 * t2, t2 + 2 * t1 * t2) =  (x, y)
   
-  FunctionPtr x = Teuchos::rcp( new Xn(1) ); // understood in physical space
-  FunctionPtr y = Teuchos::rcp( new Yn(1) );
+  FunctionPtr x = Function::xn(1); // understood in physical space
+  FunctionPtr y = Function::yn(1);
   FunctionPtr f1_xy = x;
   FunctionPtr f2_xy = y;
   FunctionPtr f_xy = Function::vectorize(f1_xy, f2_xy);
@@ -715,7 +716,7 @@ bool ParametricCurveTests::testProjectionBasedInterpolation() {
   }
   
   /////////////////// TEST CUBIC CURVES RECOVERED //////////////////////
-  FunctionPtr t = Teuchos::rcp( new Xn(1) );
+  FunctionPtr t = Function::xn(1);
   // define x and y as functions of t:
   FunctionPtr x_t = t*t*t-2*t;
   FunctionPtr y_t = t*t*t+8*t*t;
@@ -792,8 +793,8 @@ bool ParametricCurveTests::testTransfiniteInterpolant() {
   }
   
   // the transfinite interpolant should be just (4t1, 3t2)
-  FunctionPtr t1 = Teuchos::rcp( new Xn(1) );
-  FunctionPtr t2 = Teuchos::rcp( new Yn(1) );
+  FunctionPtr t1 = Function::xn(1);
+  FunctionPtr t2 = Function::yn(1);
   FunctionPtr xPart = 4 * t1;
   FunctionPtr yPart = 3 * t2;
   FunctionPtr expected_tfi = Function::vectorize(xPart, yPart);

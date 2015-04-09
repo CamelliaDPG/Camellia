@@ -16,10 +16,10 @@
 #include "MeshTestSuite.h"
 #include "MeshTestUtility.h"
 #include "PenaltyConstraints.h"
-#include "PreviousSolutionFunction.h"
-#include "Solution.h"
-
 #include "PoissonFormulation.h"
+#include "PreviousSolutionFunction.h"
+#include "SimpleFunction.h"
+#include "Solution.h"
 
 #include "Epetra_Import.h"
 #include "Epetra_SerialComm.h"

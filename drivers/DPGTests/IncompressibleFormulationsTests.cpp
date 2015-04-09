@@ -1,19 +1,14 @@
 #include "IncompressibleFormulationsTests.h"
 
-#include "HessianFilter.h"
-#include "RieszRep.h"
-#include "ParameterFunction.h"
-#include "LagrangeConstraints.h"
-
-#include "MeshFactory.h"
-
-#include "GlobalDofAssignment.h"
-
-#include "HDF5Exporter.h"
-
 #include "CamelliaCellTools.h"
-
+#include "GlobalDofAssignment.h"
+#include "HDF5Exporter.h"
+#include "HessianFilter.h"
+#include "LagrangeConstraints.h"
+#include "MeshFactory.h"
 #include "NavierStokesVGPFormulation.h"
+#include "ParameterFunction.h"
+#include "RieszRep.h"
 
 IncompressibleFormulationsTests::IncompressibleFormulationsTests(bool thorough) {
   _thoroughMode = thorough;
@@ -21,13 +16,13 @@ IncompressibleFormulationsTests::IncompressibleFormulationsTests(bool thorough) 
 
 void IncompressibleFormulationsTests::setup() {
   
-  x = Teuchos::rcp ( new Xn(1) );
-  x2 = Teuchos::rcp( new Xn(2) );
-  x3 = Teuchos::rcp( new Xn(3) );
+  x = Function::xn(1);
+  x2 = Function::xn(2);
+  x3 = Function::xn(3);
   
-  y = Teuchos::rcp( new Yn(1) );
-  y2 = Teuchos::rcp( new Yn(2) );
-  y3 = Teuchos::rcp( new Yn(3) );
+  y = Function::yn(1);
+  y2 = Function::yn(2);
+  y3 = Function::yn(3);
   
   zero = Function::zero();
   

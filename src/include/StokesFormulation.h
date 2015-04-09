@@ -890,8 +890,8 @@ namespace Camellia {
       return _graphNorm;
     }
     IPPtr scaleCompliantGraphNorm() {
-      FunctionPtr h = Teuchos::rcp( new hFunction() );
-      IPPtr compliantGraphNorm = Teuchos::rcp( new IP );
+      FunctionPtr h = Function::h();
+      IPPtr compliantGraphNorm = IP::ip();
       FunctionPtr scaled_mu = _mu; // for experimenting: this is the factor that comes from the energy norm on the pressure
       
       compliantGraphNorm->addTerm( _mu * v1->dx() + tau1->x() ); // sigma11

@@ -298,13 +298,13 @@ bool VectorizedBasisTestSuite::testPoisson() {
 
   ////////////////////   SPECIFY RHS   ///////////////////////
   RHSPtr rhs = RHS::rhs();
-  FunctionPtr f = Teuchos::rcp( new ConstantScalarFunction(1.0) );
+  FunctionPtr f = Function::constant(1.0);
   rhs->addTerm( f * v );
 
   ////////////////////   CREATE BCs   ///////////////////////
   BCPtr bc = BC::bc();
   SpatialFilterPtr boundary = SpatialFilter::allSpace();
-  FunctionPtr zero = Teuchos::rcp( new ConstantScalarFunction(0.0) );
+  FunctionPtr zero = Function::zero();
   bc->addDirichlet(uhat, boundary, zero);
 
   ////////////////////   BUILD MESH   ///////////////////////

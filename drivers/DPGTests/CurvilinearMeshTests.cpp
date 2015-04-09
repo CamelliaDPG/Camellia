@@ -229,7 +229,7 @@ bool CurvilinearMeshTests::testCylinderMesh() {
 
 bool CurvilinearMeshTests::testAutomaticStraightEdgesMatchVertices() {
   bool success = true;
-  FunctionPtr t = Teuchos::rcp( new Xn(1) );
+  FunctionPtr t = Function::xn(1);
   
   // for the moment, try just ref to affine (parallelogram) map: 
   FunctionPtr x = 2 * t;
@@ -375,7 +375,7 @@ bool CurvilinearMeshTests::testEdgeLength() {
   // first test, before we get into the circular stuff: define a sloped edge
   // whose exact integral we know (and which is exactly representable by our geometry)
   {
-    FunctionPtr t = Teuchos::rcp( new Xn(1) );
+    FunctionPtr t = Function::xn(1);
 //    FunctionPtr x = 2 * t - 1;
 //    FunctionPtr y = x - 1;
     FunctionPtr x = 2 * t;
@@ -830,8 +830,8 @@ bool CurvilinearMeshTests::testH1Projection() {
     ip_scalar->addTerm(v_scalar->grad());
   }
   
-  FunctionPtr x = Teuchos::rcp( new Xn(1) );
-  FunctionPtr y = Teuchos::rcp( new Yn(1) );
+  FunctionPtr x = Function::xn(1);
+  FunctionPtr y = Function::yn(1);
   
   FunctionPtr fxnScalar = x*x;
   FunctionPtr fxnVector = Function::vectorize(fxnScalar,fxnScalar);

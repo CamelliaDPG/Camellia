@@ -35,10 +35,11 @@
  *
  */
 
+#include "ExpFunction.h"
 #include "PoissonBilinearForm.h"
 #include "PoissonExactSolution.h"
-
 #include "SpatialFilter.h"
+#include "TrigFunctions.h"
 
 PoissonExactSolution::PoissonExactSolution(PoissonExactSolutionType type, int polyOrder, bool useConformingTraces) {
   // poly order here means that of phi

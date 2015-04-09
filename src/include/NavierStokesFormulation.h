@@ -9,15 +9,13 @@
 #ifndef Camellia_NavierStokesFormulation_h
 #define Camellia_NavierStokesFormulation_h
 
-#include "TypeDefs.h"
-
-#include "RieszRep.h"
-
-#include "StokesFormulation.h"
-
-#include "Solver.h"
-
+#include "ExpFunction.h"
 #include "MeshFactory.h"
+#include "RieszRep.h"
+#include "Solver.h"
+#include "StokesFormulation.h"
+#include "TrigFunctions.h"
+#include "TypeDefs.h"
 
 namespace Camellia {
   // implementation of some standard Navier-Stokes Formulations.
@@ -199,8 +197,8 @@ namespace Camellia {
     }
     IPPtr scaleCompliantGraphNorm(FunctionPtr dt_inv = Function::zero()) {
       // corresponds to ||u||^2 + ||grad u||^2 + ||_p||^2
-      FunctionPtr h = Teuchos::rcp( new hFunction() );
-      IPPtr compliantGraphNorm = Teuchos::rcp( new IP );
+      FunctionPtr h = Function::h();
+      IPPtr compliantGraphNorm = IP::ip();
       
       compliantGraphNorm->addTerm( _mu * _v1->dx() + _tau1->x() - (u1_prev / _mu) * _v1 ); // _sigma11
       compliantGraphNorm->addTerm( _mu * _v1->dy() + _tau1->y() - (u2_prev / _mu) * _v1 ); // _sigma12

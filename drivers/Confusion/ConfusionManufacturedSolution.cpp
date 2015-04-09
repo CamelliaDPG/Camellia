@@ -1,5 +1,6 @@
 #include "ConfusionBilinearForm.h"
 #include "ConfusionManufacturedSolution.h"
+#include "ExpFunction.h"
 
 ConfusionManufacturedSolution::ConfusionManufacturedSolution(double epsilon, double beta_x, double beta_y) {
   _epsilon = epsilon;
