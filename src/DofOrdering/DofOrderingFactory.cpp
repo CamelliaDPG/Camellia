@@ -73,7 +73,8 @@ DofOrderingPtr DofOrderingFactory::testOrdering(vector<int> &polyOrder, CellTopo
     for (int pComponent = 0; pComponent < polyOrder.size(); pComponent++) {
       testIDPolyOrder[pComponent] = polyOrder[pComponent] + _testOrderEnhancements[testID]; // uses the fact that map defaults to 0 for entries that aren't found
     }
-    basis = BasisFactory::basisFactory()->getBasis( testIDPolyOrder, cellTopo, fs);
+    Camellia::EFunctionSpace fsTemporal = FUNCTION_SPACE_HGRAD; // tests should use HGRAD, so we can take time derivatives...
+    basis = BasisFactory::basisFactory()->getBasis( testIDPolyOrder, cellTopo, fs, fsTemporal);
     int basisRank = basis->rangeRank();
     testOrder->addEntry(testID,basis,basisRank);
   }
