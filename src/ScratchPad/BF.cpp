@@ -335,7 +335,7 @@ namespace Camellia{
       LinearTermPtr trialTerm = btIt->first;
       LinearTermPtr testTerm = btIt->second;
       trialTerm->integrate(stiffness, elemType->trialOrderPtr,
-          testTerm,  elemType->testOrderPtr, basisCache);
+                           testTerm,  elemType->testOrderPtr, basisCache);
     }
     if (checkForZeroCols){
       bool checkRows = false; // zero rows just mean a test basis function won't get used, which is fine
