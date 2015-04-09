@@ -10,14 +10,12 @@
 
 #include "PreviousSolutionFunction.h"
 
-#include "Function.h"
-#include "Element.h"
-#include "Solution.h"
-#include "InnerProductScratchPad.h"
-
-#include "GlobalDofAssignment.h"
-
 #include "CamelliaCellTools.h"
+#include "Element.h"
+#include "Function.h"
+#include "GlobalDofAssignment.h"
+#include "InnerProductScratchPad.h"
+#include "Solution.h"
 
 using namespace Intrepid;
 using namespace Camellia;
@@ -27,7 +25,7 @@ PreviousSolutionFunction::PreviousSolutionFunction(SolutionPtr soln, LinearTermP
   _solnExpression = solnExpression;
   _overrideMeshCheck = false;
   if ((solnExpression->termType() == FLUX) && multiplyFluxesByCellParity) {
-    FunctionPtr parity = Teuchos::rcp( new SideParityFunction );
+    FunctionPtr parity = Function::sideParity();
     _solnExpression = parity * solnExpression;
   }
 }
@@ -36,7 +34,7 @@ PreviousSolutionFunction::PreviousSolutionFunction(SolutionPtr soln, VarPtr var,
   _solnExpression = 1.0 * var;
   _overrideMeshCheck = false;
   if ((var->varType() == FLUX) && multiplyFluxesByCellParity) {
-    FunctionPtr parity = Teuchos::rcp( new SideParityFunction );
+    FunctionPtr parity = Function::sideParity();
     _solnExpression = parity * var;
   }
 }

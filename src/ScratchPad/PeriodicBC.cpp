@@ -8,10 +8,10 @@
 
 #include "PeriodicBC.h"
 
-#include "SpatialFilter.h"
 #include "Function.h"
-
 #include "PhysicalPointCache.h"
+#include "SimpleVectorFunction.h"
+#include "SpatialFilter.h"
 
 using namespace Intrepid;
 using namespace Camellia;

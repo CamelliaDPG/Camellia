@@ -18,6 +18,7 @@
 #include "MeshFactory.h"
 #include "MeshTools.h"
 #include "RHS.h"
+#include "SimpleFunction.h"
 #include "SpatialFilter.h"
 #include "Solution.h"
 #include "VarFactory.h"

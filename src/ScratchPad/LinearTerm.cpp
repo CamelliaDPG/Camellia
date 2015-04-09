@@ -6,20 +6,18 @@
 //  Copyright (c) 2012 __MyCompanyName__. All rights reserved.
 //
 
+#include "CamelliaCellTools.h"
+#include "ConstantScalarFunction.h"
+#include "ConstantVectorFunction.h"
+#include "Function.h"
 #include "LinearTerm.h"
 #include "Mesh.h"
+#include "MPIWrapper.h"
 #include "Solution.h"
 
-#include "MPIWrapper.h"
-#include <Teuchos_GlobalMPISession.hpp>
-
-#include "Function.h"
-
 #include "Epetra_CrsMatrix.h"
-
-#include "CamelliaCellTools.h"
-
 #include "Intrepid_FunctionSpaceTools.hpp"
+#include <Teuchos_GlobalMPISession.hpp>
 
 namespace Camellia {
   typedef pair< FunctionPtr, VarPtr > LinearSummand;

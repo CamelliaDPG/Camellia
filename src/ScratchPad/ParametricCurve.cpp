@@ -9,18 +9,17 @@
 #include <iostream>
 #include "ParametricCurve.h"
 
-#include "Shards_CellTopology.hpp"
-#include "Function.h"
-
-#include "VarFactory.h"
-#include "IP.h"
-
-#include "Projector.h"
-
 #include "BasisCache.h"
+#include "Function.h"
+#include "IP.h"
+#include "MonomialFunctions.h"
 #include "PhysicalPointCache.h"
+#include "Projector.h"
+#include "TrigFunctions.h"
+#include "VarFactory.h"
 
 #include "Intrepid_FunctionSpaceTools.hpp"
+#include "Shards_CellTopology.hpp"
 
 using namespace Intrepid;
 using namespace Camellia;

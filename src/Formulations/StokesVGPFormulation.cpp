@@ -13,6 +13,7 @@
 #include "PenaltyConstraints.h"
 #include "PoissonFormulation.h"
 #include "PreviousSolutionFunction.h"
+#include "SimpleFunction.h"
 
 using namespace Camellia;
 

@@ -37,6 +37,8 @@
 
 
 #include "HConvergenceStudy.h"
+
+#include "ExactSolutionFunction.h"
 #include "Function.h"
 #include "RefinementStrategy.h"
 
