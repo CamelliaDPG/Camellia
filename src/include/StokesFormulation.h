@@ -138,7 +138,7 @@ namespace Camellia {
       BCPtr bc = BC::bc();
       bc->addDirichlet(u1hat, entireBoundary, u1_fxn);
       bc->addDirichlet(u2hat, entireBoundary, u2_fxn);
-      FunctionPtr n = Teuchos::rcp( new UnitNormalFunction );
+      FunctionPtr n = Function::normal();
       //    bc->addDirichlet(unhat, entireBoundary, u1_fxn * n->x() + u2_fxn * n->y());
       bc->addZeroMeanConstraint(p);
       return bc;
@@ -591,7 +591,7 @@ namespace Camellia {
       return _graphNorm;
     }
     IPPtr scaleCompliantGraphNorm() {
-      FunctionPtr h = Teuchos::rcp( new hFunction() );
+      FunctionPtr h = Function::h();
       IPPtr compliantGraphNorm = Teuchos::rcp( new IP );
       FunctionPtr scaled_mu = _mu; // for experimenting: this is the factor that comes from the energy norm on the pressure
       
