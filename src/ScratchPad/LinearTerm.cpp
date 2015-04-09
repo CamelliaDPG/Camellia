@@ -935,7 +935,10 @@ namespace Camellia {
         Teuchos::Array<int> fDim(fValues.rank());
         Teuchos::Array<int> bDim(basisValues->rank());
 
-        bool checkBounds = true;
+        bool usePointerArithmetic = true; // slightly faster, but skips some bounds checks
+        if (usePointerArithmetic) { // do some bounds checks here
+          // TODO: do some bounds checks here
+        }
 
         // compute f * basisValues
         if ( ls.first->rank() == ls.second->rank() ) { // scalar result
@@ -950,7 +953,7 @@ namespace Camellia {
             for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
               fDim[1] = ptIndex; bDim[2] = ptIndex;
               for (int fieldIndex=0; fieldIndex<numFields; fieldIndex++) {
-                if (!checkBounds) {
+                if (usePointerArithmetic) {
                   const double *fValue = &fValues[fValues.getEnumeration(fDim)];
                   bDim[1] = fieldIndex;
                   const double *bValue = &((*basisValues)[basisValues->getEnumeration(bDim)]);
@@ -995,7 +998,7 @@ namespace Camellia {
             for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
               fDim[1] = ptIndex; bDim[2] = ptIndex; vDim[2] = ptIndex;
               for (int fieldIndex=0; fieldIndex<numFields; fieldIndex++) {
-                if (!checkBounds) {
+                if (usePointerArithmetic) {
                   const double *fValue = &fValues[fValues.getEnumeration(fDim)];
                   bDim[1] = fieldIndex; vDim[1] = fieldIndex;
                   const double *bValue = &(*basisValues)[basisValues->getEnumeration(bDim)];
