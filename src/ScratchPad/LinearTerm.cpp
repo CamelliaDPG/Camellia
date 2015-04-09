@@ -378,6 +378,10 @@ namespace Camellia {
       bool uVolVar = (uOrdering->getNumSidesForVarID(uID) == 1);
       int uSideIndex = uVolVar ? 0 : basisCache->getSideIndex();
 
+      if (! uOrdering->hasBasisEntry(uID, uSideIndex) && (uSideIndex == basisCache->getSideIndex())) {
+        // this variable doesn't live on this side, so its contribution is 0...
+        continue;
+      }
       if (! uOrdering->hasBasisEntry(uID, uSideIndex) ) {
         // this is a bit of a mess: a hack to allow us to do projections on side bases
         // we could avoid this if either LinearTerm or DofOrdering did things better, if either
@@ -420,6 +424,10 @@ namespace Camellia {
         //      cout << "vID: " << vID << endl;
         bool vVolVar = (vOrdering->getNumSidesForVarID(vID) == 1);
         int vSideIndex = vVolVar ? 0 : basisCache->getSideIndex();
+        if (! vOrdering->hasBasisEntry(vID, vSideIndex) && (vSideIndex == basisCache->getSideIndex())) {
+          // this variable doesn't live on this side, so its contribution is 0...
+          continue;
+        }
         if (! vOrdering->hasBasisEntry(vID, vSideIndex) ) {
           // this is a bit of a mess: a hack to allow us to do projections on side bases
           // we could avoid this if either LinearTerm or DofOrdering did things better, if either
@@ -431,6 +439,8 @@ namespace Camellia {
           }
           // now, test again, and throw an exception if the issue wasn't corrected:
           if (! vOrdering->hasBasisEntry(vID, vSideIndex) ) {
+            cout << "No entry for vID = " << vID << " with vSideIndex = " << vSideIndex << " in DofOrdering: \n";
+            cout << *vOrdering;
             TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "no entry for vSideIndex");
           }
         }
