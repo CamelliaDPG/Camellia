@@ -37,6 +37,10 @@ namespace Camellia {
                                     constFCPtr temporalValues,
                                     Intrepid::EOperator spaceOp,
                                     Intrepid::EOperator timeOp) const;
+    void getReferencePointComponents(const Intrepid::FieldContainer<double> &tensorRefPoints,
+                                     Intrepid::FieldContainer<double> &spaceRefPoints,
+                                     Intrepid::FieldContainer<double> &timeRefPoints);
+    double getTemporalNodeCoordinateRefSpace(); // for temporal sides
   protected:
     virtual void createSideCaches();
   public:
