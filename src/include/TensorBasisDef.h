@@ -44,6 +44,8 @@ namespace Camellia {
     
     int tensorialDegree = 1;
     this->_domainTopology = CellTopology::cellTopology(_spatialBasis->domainTopology()->getShardsTopology(), tensorialDegree);
+    
+    this->_basisCardinality = _spatialBasis->getCardinality() * _temporalBasis->getCardinality();
   }
 
   template<class Scalar, class ArrayScalar>
