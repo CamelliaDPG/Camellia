@@ -72,7 +72,8 @@ namespace Camellia {
     GlobalDofAssignment(MeshPtr mesh, VarFactory varFactory, DofOrderingFactoryPtr dofOrderingFactory,
                         MeshPartitionPolicyPtr partitionPolicy, std::vector<int> initialH1OrderTrial,
                         int testOrderEnhancement, bool enforceConformityLocally);
-
+    virtual ~GlobalDofAssignment() {}
+    
     GlobalIndexType activeCellOffset();
     Teuchos::RCP<Epetra_Map> getActiveCellMap();
 
