@@ -302,6 +302,30 @@ namespace {
     }
   }
 
+  TEUCHOS_UNIT_TEST( CellTopology, SpaceTimeGetSideDimension )
+  {
+    vector<CellTopoPtr> shardsTopologies = getShardsTopologies();
+    for (int topoOrdinal=0; topoOrdinal < shardsTopologies.size(); topoOrdinal++) {
+      CellTopoPtr shardsTopo = shardsTopologies[topoOrdinal];
+      unsigned tensorialDegree = 1;
+      CellTopoPtr spaceTimeTopo = CellTopology::cellTopology(shardsTopo->getShardsTopology(), tensorialDegree);
+      
+//      cout << "\nspaceTimeTopo: " << spaceTimeTopo->getName() << endl;
+      
+      out << "checking side dimension for " << spaceTimeTopo->getName() << endl;
+      
+      int sideCount = spaceTimeTopo->getSideCount();
+      TEST_EQUALITY(sideCount, shardsTopo->getSideCount() + 2);
+      
+      int sideDim = spaceTimeTopo->getDimension() - 1;
+      for (int sideOrdinal=0; sideOrdinal<sideCount; sideOrdinal++) {
+        CellTopoPtr sideTopo = spaceTimeTopo->getSubcell(sideDim, sideOrdinal);
+//        cout << "sideTopo: " << sideTopo->getName() << endl;
+        TEST_EQUALITY(sideTopo->getDimension(), sideDim);
+      }
+    }
+  }
+  
   TEUCHOS_UNIT_TEST( CellTopology, SpaceTimeSideNumbering )
   {
     vector<CellTopoPtr> shardsTopologies = getShardsTopologies();
