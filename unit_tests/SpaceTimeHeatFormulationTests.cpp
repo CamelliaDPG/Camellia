@@ -8,6 +8,7 @@
 
 #include "Teuchos_UnitTestHarness.hpp"
 
+#include "HDF5Exporter.h"
 #include "MeshFactory.h"
 #include "SpaceTimeHeatFormulation.h"
 #include "TypeDefs.h"
@@ -49,7 +50,8 @@ namespace {
   }
   
   void setupExactSolution(SpaceTimeHeatFormulation &form, FunctionPtr u,
-                          MeshTopologyPtr meshTopo, int fieldPolyOrder, int delta_k) {
+                          MeshTopologyPtr meshTopo, int fieldPolyOrder, int delta_k)
+  {
     double epsilon = form.epsilon();
     
     FunctionPtr sigma1, sigma2, sigma3;
@@ -61,9 +63,49 @@ namespace {
     form.initializeSolution(meshTopo, fieldPolyOrder, delta_k, forcingFunction);
   }
   
-  void testSpaceTimeHeatConsistency(int spaceDim, Teuchos::FancyOStream &out, bool &success) {
-    vector<double> dimensions(spaceDim,2.0); // 2x2 square domain
-    vector<int> elementCounts(spaceDim,1); // 1 x 1 mesh
+  void testSpaceTimeHeatConsistencyConstantSolution(int spaceDim, Teuchos::FancyOStream &out, bool &success)
+  {
+    vector<double> dimensions(spaceDim,2.0); // 2.0^d hypercube domain
+    vector<int> elementCounts(spaceDim,1);   // one-element mesh
+    vector<double> x0(spaceDim,-1.0);
+    MeshTopologyPtr spatialMeshTopo = MeshFactory::rectilinearMeshTopology(dimensions, elementCounts, x0);
+    
+    double t0 = 0.0, t1 = 1.0;
+    MeshTopologyPtr spaceTimeMeshTopo = MeshFactory::spaceTimeMeshTopology(spatialMeshTopo, t0, t1);
+    
+    double epsilon = .1;
+    int fieldPolyOrder = 1, delta_k = 1;
+    
+    FunctionPtr u = Function::constant(0.5);
+    
+    bool useConformingTraces = false;
+    SpaceTimeHeatFormulation form(spaceDim, useConformingTraces, epsilon);
+    
+    setupExactSolution(form, u, spaceTimeMeshTopo, fieldPolyOrder, delta_k);
+    projectExactSolution(form, form.solution(), u);
+    
+    form.solution()->clearComputedResiduals();
+    
+    double energyError = form.solution()->energyErrorTotal();
+    
+    if (spaceDim != 3)
+    {
+      MeshPtr mesh = form.solution()->mesh();
+      string outputDir = "/tmp";
+      string solnName = (spaceDim == 1) ? "spaceTimeHeatConstantSolution_1D" : "spaceTimeHeatConstantSolution_2D";
+      cout << "\nDebugging: Outputting spaceTimeHeatSolution to " << outputDir << "/" << solnName << endl;
+      HDF5Exporter exporter(mesh, solnName, outputDir);
+      exporter.exportSolution(form.solution());
+    }
+    
+    double tol = 1e-13;
+    TEST_COMPARE(energyError, <, tol);
+  }
+  
+  void testSpaceTimeHeatConsistency(int spaceDim, Teuchos::FancyOStream &out, bool &success)
+  {
+    vector<double> dimensions(spaceDim,2.0); // 2.0^d hypercube domain
+    vector<int> elementCounts(spaceDim,1);   // 1^d mesh
     vector<double> x0(spaceDim,-1.0);
     MeshTopologyPtr spatialMeshTopo = MeshFactory::rectilinearMeshTopology(dimensions, elementCounts, x0);
     
@@ -79,15 +121,20 @@ namespace {
     FunctionPtr z = Function::zn(1);
     FunctionPtr t = Function::tn(1);
     
-    if (spaceDim == 1) {
+    if (spaceDim == 1)
+    {
       u = x * t;
-    } else if (spaceDim == 2) {
+    }
+    else if (spaceDim == 2)
+    {
       u = x * t + y;
-    } else if (spaceDim == 3) {
+    }
+    else if (spaceDim == 3)
+    {
       u = x * t + y - z;
     }
     
-    bool useConformingTraces = true;
+    bool useConformingTraces = false;
     SpaceTimeHeatFormulation form(spaceDim, useConformingTraces, epsilon);
     
     setupExactSolution(form, u, spaceTimeMeshTopo, fieldPolyOrder, delta_k);
@@ -97,14 +144,41 @@ namespace {
     
     double energyError = form.solution()->energyErrorTotal();
     
+    if (spaceDim != 3)
+    {
+      MeshPtr mesh = form.solution()->mesh();
+      string outputDir = "/tmp";
+      string solnName = (spaceDim == 1) ? "spaceTimeHeatSolution_1D" : "spaceTimeHeatSolution_2D";
+      cout << "\nDebugging: Outputting spaceTimeHeatSolution to " << outputDir << "/" << solnName << endl;
+      HDF5Exporter exporter(mesh, solnName, outputDir);
+      exporter.exportSolution(form.solution());
+    }
+    
     double tol = 1e-13;
     TEST_COMPARE(energyError, <, tol);
   }
 
+  TEUCHOS_UNIT_TEST( SpaceTimeHeatFormulation, ConsistencyConstantSolution_1D )
+  {
+    // consistency test for space-time formulation with 1D space
+    testSpaceTimeHeatConsistencyConstantSolution(1, out, success);
+  }
   
+  TEUCHOS_UNIT_TEST( SpaceTimeHeatFormulation, ConsistencyConstantSolution_2D )
+  {
+    // consistency test for space-time formulation with 2D space
+    testSpaceTimeHeatConsistencyConstantSolution(2, out, success);
+  }
+
   TEUCHOS_UNIT_TEST( SpaceTimeHeatFormulation, Consistency_1D )
   {
     // consistency test for space-time formulation with 1D space
     testSpaceTimeHeatConsistency(1, out, success);
+  }
+  
+  TEUCHOS_UNIT_TEST( SpaceTimeHeatFormulation, Consistency_2D )
+  {
+    // consistency test for space-time formulation with 2D space
+    testSpaceTimeHeatConsistency(2, out, success);
   }
 } // namespace
