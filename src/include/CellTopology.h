@@ -153,8 +153,7 @@ namespace Camellia {
     /** \brief  Mapping from this CellTopology's side ordinal of dimension d-1 to the corresponding
      *          node ordinal in the Line_2 topology; that is, if
      *              this = (shardsTopo x Line_2 x Line_2 ...) x Line_2,
-     *          the mapping returns the corresponding node ordinal in
-     *              Line_2
+     *          the mapping returns the corresponding node ordinal in Line_2
      *          Note that the sideOrdinal must be one for which sideIsSpatial() returns false.
      *  \param  thisSideOrdinal      [in]  - sideOrdinal in this cell topology.
      */
