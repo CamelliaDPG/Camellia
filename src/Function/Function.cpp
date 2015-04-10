@@ -891,44 +891,13 @@ namespace Camellia {
 
         for (int sideOrdinal=0; sideOrdinal<numSides; sideOrdinal++) {
           if (spatialSidesOnly && !elemType->cellTopoPtr->sideIsSpatial(sideOrdinal)) continue; // skip non-spatial sides if spatialSidesOnly is true
-          integral += this->integrate(basisCache->getSideBasisCache(sideOrdinal));
+          double sideIntegral = this->integrate(basisCache->getSideBasisCache(sideOrdinal));
+          integral += sideIntegral;
         }
       } else {
         integral += this->integrate(basisCache);
       }
     }
-  //  int myPartition = Teuchos::GlobalMPISession::getRank();
-  //  vector< ElementTypePtr > elementTypes = mesh->elementTypes(myPartition);
-  //
-  //  for (vector< ElementTypePtr >::iterator typeIt = elementTypes.begin(); typeIt != elementTypes.end(); typeIt++) {
-  //    ElementTypePtr elemType = *typeIt;
-  //    BasisCachePtr basisCache = Teuchos::rcp( new BasisCache( elemType, mesh, testVsTest, cubatureDegreeEnrichment) ); // all elements of same type
-  //    vector< ElementPtr > cells = mesh->elementsOfType(myPartition, elemType);
-  //
-  //    int numCells = cells.size();
-  //    vector<GlobalIndexType> cellIDs;
-  //    for (IndexType cellIndex = 0; cellIndex < numCells; cellIndex++) {
-  //      cellIDs.push_back( cells[cellIndex]->cellID() );
-  //    }
-  //    basisCache->setPhysicalCellNodes(mesh->physicalCellNodes(elemType), cellIDs, this->boundaryValueOnly() || requireSideCache);
-  ////    cout << "Function::integrate: basisCache has " << basisCache->getPhysicalCubaturePoints().dimension(1) << " cubature points per cell.\n";
-  //    Intrepid::FieldContainer<double> cellIntegrals(numCells);
-  //    if ( this->boundaryValueOnly() ) {
-  //      int numSides = elemType->cellTopoPtr->getSideCount();
-  //
-  //      for (int i=0; i<numSides; i++) {
-  //        if (spatialSidesOnly && !elemType->cellTopoPtr->sideIsSpatial(i)) continue; // skip non-spatial sides if spatialSidesOnly is true
-  //        this->integrate(cellIntegrals, basisCache->getSideBasisCache(i), true);
-  //      }
-  //    } else {
-  //      this->integrate(cellIntegrals, basisCache);
-  //    }
-  ////    cout << "cellIntegrals:\n" << cellIntegrals;
-  //    for (IndexType cellIndex = 0; cellIndex < numCells; cellIndex++) {
-  //      integral += cellIntegrals(cellIndex);
-  //    }
-  //  }
-
     return MPIWrapper::sum(integral);
   }
 
