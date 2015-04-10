@@ -19,7 +19,7 @@ using namespace Intrepid;
 namespace {
   typedef Intrepid::FieldContainer<double> FC;
 
-  MeshPtr getSpaceTimeMesh(CellTopoPtr spaceTopo, int H1Order=2) {
+  MeshPtr getSpaceTimeMesh(CellTopoPtr spaceTopo, int H1Order=2, double refCellExpansionFactor=2.0) {
     CellTopoPtr timeTopo = CellTopology::line();
     int tensorialDegree = 1;
     CellTopoPtr tensorTopo = CellTopology::cellTopology(spaceTopo, tensorialDegree);
@@ -30,7 +30,7 @@ namespace {
     CamelliaCellTools::refCellNodesForTopology(spaceNodes, spaceTopo);
     // stretch the spaceNodes:
     for (int i=0; i<spaceNodes.size(); i++) {
-      spaceNodes[i] *= 2;
+      spaceNodes[i] *= refCellExpansionFactor;
     }
     // time will go from 0 to 1:
     timeNodes(0,0) = 0;
@@ -50,12 +50,55 @@ namespace {
     
     meshTopo->addCell(tensorTopo, tensorNodes);
     
-    PoissonFormulation form(spaceTopo->getDimension(), true); // arbitrary; we don't actually use the BF in any meaningful way
+    PoissonFormulation form(spaceTopo->getDimension(), false); // arbitrary; we don't actually use the BF in any meaningful way
     
     int delta_k = 1;
     MeshPtr mesh = Teuchos::rcp( new Mesh(meshTopo, form.bf(), H1Order, delta_k) );
     
     return mesh;
+  }
+  
+  void testSpaceTimeSideMeasure(CellTopoPtr spaceTopo, Teuchos::FancyOStream &out, bool &success)
+  {
+    int H1Order = 2;
+    int delta_k = 1;
+    bool createSideCaches = true;
+    BasisCachePtr spatialBasisCache = BasisCache::basisCacheForReferenceCell(spaceTopo, H1Order*2+delta_k, createSideCaches);
+    
+//    cout << "spatial cubature weights:\n" << spatialBasisCache->getCubatureWeights();
+    
+    double temporalExtent = 1.0; // getSpaceTimeMesh() goes from 0 to 1
+    double spatialMeasure = spatialBasisCache->getCellMeasures()(0); // measure of the reference-space cell
+    vector<double> spatialSideMeasures;
+    for (int sideOrdinal=0; sideOrdinal<spaceTopo->getSideCount(); sideOrdinal++) {
+      spatialSideMeasures.push_back(spatialBasisCache->getSideBasisCache(sideOrdinal)->getCellMeasures()(0));
+    }
+    
+    double refCellExpansionFactor = 1.0;
+    MeshPtr singleCellSpaceTimeMesh = getSpaceTimeMesh(spaceTopo,H1Order,refCellExpansionFactor); // reference spatial topo x (0,1) in time
+    IndexType cellIndex = 0;
+    CellPtr cell = singleCellSpaceTimeMesh->getTopology()->getCell(cellIndex);
+    
+    BasisCachePtr spaceTimeBasisCache = BasisCache::basisCacheForCell(singleCellSpaceTimeMesh, cellIndex);
+    
+    CellTopoPtr cellTopo = cell->topology();
+    for (int sideOrdinal=0; sideOrdinal<cellTopo->getSideCount(); sideOrdinal++) {
+      double expectedMeasure;
+      if (cellTopo->sideIsSpatial(sideOrdinal)) {
+        int spatialSideOrdinal = cellTopo->getSpatialComponentSideOrdinal(sideOrdinal);
+        expectedMeasure = spatialSideMeasures[spatialSideOrdinal] * temporalExtent;
+//        cout << "spatial weights:\n" << spatialBasisCache->getSideBasisCache(spatialSideOrdinal)->getWeightedMeasures();
+//        cout << "spatial cubature weights:\n" << spatialBasisCache->getSideBasisCache(spatialSideOrdinal)->getCubatureWeights();
+      } else {
+        expectedMeasure = spatialMeasure;
+//        cout << "spatial cubature weights:\n" << spatialBasisCache->getCubatureWeights();
+//        cout << "spatial weights:\n" << spatialBasisCache->getWeightedMeasures();
+      }
+//      cout << "sideOrdinal " << sideOrdinal << ", space-time cubature weights: \n" << spaceTimeBasisCache->getSideBasisCache(sideOrdinal)->getCubatureWeights();
+//      cout << "sideOrdinal " << sideOrdinal << ", space-time weights: \n" << spaceTimeBasisCache->getSideBasisCache(sideOrdinal)->getWeightedMeasures();
+      double actualMeasure = spaceTimeBasisCache->getSideBasisCache(sideOrdinal)->getCellMeasures()(0);
+      TEST_FLOATING_EQUALITY(actualMeasure, expectedMeasure, 1e-15);
+    }
   }
   
   void testPhysicalPointsForSpaceTimeBasisCache(int H1Order, CellTopoPtr spaceTopo,
@@ -261,10 +304,51 @@ namespace {
     transformedSpaceTimeValuesExpected.initialize(0.0);
     tensorBasis->getTensorValues(transformedSpaceTimeValuesExpected, componentValues, intrepidOperatorTypes);
   }
-//  TEUCHOS_UNIT_TEST( Int, Assignment )
-//  {
-//    int i1 = 4;
-//    int i2 = i1;
-//    TEST_EQUALITY( i2, i1 );
-//  }
+
+  TEUCHOS_UNIT_TEST( SpaceTimeBasisCache, VolumeMeasureLine )
+  {
+    CellTopoPtr spaceTopo = CellTopology::line();
+    int H1Order = 1;
+    bool createSideCaches = false;
+    BasisCachePtr spatialBasisCache = BasisCache::basisCacheForReferenceCell(spaceTopo, H1Order, createSideCaches);
+    
+    double temporalExtent = 1.0; // getSpaceTimeMesh() goes from 0 to 1
+    double spatialMeasure = spatialBasisCache->getCellMeasures()(0); // measure of the reference-space cell
+    
+    double refCellExpansionFactor = 1.0;
+    MeshPtr singleCellSpaceTimeMesh = getSpaceTimeMesh(spaceTopo,H1Order,refCellExpansionFactor); // reference spatial topo x (0,1) in time
+    IndexType cellIndex = 0;
+    CellPtr cell = singleCellSpaceTimeMesh->getTopology()->getCell(cellIndex);
+    
+    BasisCachePtr spaceTimeBasisCache = BasisCache::basisCacheForCell(singleCellSpaceTimeMesh, cellIndex);
+    double expectedMeasure = spatialMeasure * temporalExtent;
+    double actualMeasure = spaceTimeBasisCache->getCellMeasures()(0);
+    
+    TEST_FLOATING_EQUALITY(actualMeasure, expectedMeasure, 1e-15);
+  }
+
+  
+  TEUCHOS_UNIT_TEST( SpaceTimeBasisCache, SideMeasureLine )
+  {
+    CellTopoPtr spaceTopo = CellTopology::line();
+    testSpaceTimeSideMeasure(spaceTopo, out, success);
+  }
+  
+  TEUCHOS_UNIT_TEST( SpaceTimeBasisCache, SideMeasureTriangle )
+  {
+    CellTopoPtr spaceTopo = CellTopology::triangle();
+    testSpaceTimeSideMeasure(spaceTopo, out, success);
+  }
+  
+  TEUCHOS_UNIT_TEST( SpaceTimeBasisCache, SideMeasureQuad )
+  {
+    CellTopoPtr spaceTopo = CellTopology::quad();
+    testSpaceTimeSideMeasure(spaceTopo, out, success);
+  }
+  
+  TEUCHOS_UNIT_TEST( SpaceTimeBasisCache, SideMeasure_Hexahedron )
+  {
+    // TODO: implement this
+    success = false;
+  }
 } // namespace
