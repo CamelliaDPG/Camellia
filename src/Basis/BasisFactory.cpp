@@ -282,6 +282,7 @@ BasisPtr BasisFactory::getBasis( int polyOrder, unsigned cellTopoKey, Camellia::
         switch(fs) {
           case Camellia::FUNCTION_SPACE_HGRAD:
           case Camellia::FUNCTION_SPACE_HGRAD_DISC:
+            TEUCHOS_TEST_FOR_EXCEPTION(polyOrder <= 0, std::invalid_argument, "Constant basis not supported by Intrepid::Basis_HGRAD_TRI_Cn_FEM");
             basis = Teuchos::rcp( new IntrepidBasisWrapper<>(Teuchos::rcp( new Basis_HGRAD_TRI_Cn_FEM<double, Intrepid::FieldContainer<double> >(polyOrder,POINTTYPE_WARPBLEND)),
                                                              spaceDim, scalarRank, fs)
                                  ) ;
@@ -299,6 +300,7 @@ BasisPtr BasisFactory::getBasis( int polyOrder, unsigned cellTopoKey, Camellia::
                                  );
             break;
           case Camellia::FUNCTION_SPACE_HVOL:
+            TEUCHOS_TEST_FOR_EXCEPTION(polyOrder <= 1, std::invalid_argument, "Constant basis not supported by Intrepid::Basis_HGRAD_TRI_Cn_FEM");
             basis = Teuchos::rcp( new IntrepidBasisWrapper<>( Teuchos::rcp( new Intrepid::Basis_HGRAD_TRI_Cn_FEM<double, Intrepid::FieldContainer<double> >(polyOrder-1,POINTTYPE_WARPBLEND)),
                                                              spaceDim, scalarRank, fs)
                                  );
@@ -520,6 +522,7 @@ BasisPtr BasisFactory::getConformingBasis( int polyOrder, unsigned cellTopoKey, 
         switch(fs) {
           case Camellia::FUNCTION_SPACE_HGRAD:
           case Camellia::FUNCTION_SPACE_HGRAD_DISC:
+            TEUCHOS_TEST_FOR_EXCEPTION(polyOrder <= 0, std::invalid_argument, "Constant basis not supported by Intrepid::Basis_HGRAD_TRI_Cn_FEM");
             basis = Teuchos::rcp( new IntrepidBasisWrapper<>(Teuchos::rcp( new Basis_HGRAD_TRI_Cn_FEM<double, Intrepid::FieldContainer<double> >(polyOrder,POINTTYPE_WARPBLEND)),
                                                              spaceDim, scalarRank, fs)
                                  ) ;
@@ -537,6 +540,7 @@ BasisPtr BasisFactory::getConformingBasis( int polyOrder, unsigned cellTopoKey, 
                                  );
             break;
           case(Camellia::FUNCTION_SPACE_HVOL):
+            TEUCHOS_TEST_FOR_EXCEPTION(polyOrder <= 1, std::invalid_argument, "Constant basis not supported by Intrepid::Basis_HGRAD_TRI_Cn_FEM");
             basis = Teuchos::rcp( new IntrepidBasisWrapper<>( Teuchos::rcp( new Intrepid::Basis_HGRAD_TRI_Cn_FEM<double, Intrepid::FieldContainer<double> >(polyOrder-1,POINTTYPE_WARPBLEND)),
                                                              spaceDim, scalarRank, fs)
                                  );
