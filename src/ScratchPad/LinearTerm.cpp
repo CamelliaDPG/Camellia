@@ -74,6 +74,11 @@ namespace Camellia {
     _varIDs = a.varIDs();
   }
 
+  // destructor:
+  LinearTerm::~LinearTerm() {
+//    cout << "destroying LinearTerm: " << this->displayString() << endl;
+  }
+  
   void LinearTerm::addVar(FunctionPtr weight, VarPtr var) {
     // check ranks:
     int rank; // rank of weight * var

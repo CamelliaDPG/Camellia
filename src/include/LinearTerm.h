@@ -148,6 +148,8 @@ namespace Camellia {
     LinearTerm& operator+=(const LinearTerm &rhs);
 
     LinearTerm& operator+=(VarPtr v);
+    
+    ~LinearTerm();
   };
 
   // operator overloading for syntax sugar:
