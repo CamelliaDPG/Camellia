@@ -617,11 +617,12 @@ const FieldContainer<double> & BasisCache::getJacobianInv() {
 
 constFCPtr BasisCache::getValues(BasisPtr basis, Camellia::EOperator op,
                                  bool useCubPointsSideRefCell) {
-  FieldContainer<double> cubPoints;
+  const FieldContainer<double>* cubPoints;
   if (useCubPointsSideRefCell) {
-    cubPoints = _cubPointsSideRefCell; // unnecessary copy
+    TEUCHOS_TEST_FOR_EXCEPTION(_cubPointsSideRefCell.size()==0,std::invalid_argument,"useCubPointsSideRefCell = true, but _cubPointsSideRefCell is empty!");
+    cubPoints = &_cubPointsSideRefCell;
   } else {
-    cubPoints = _cubPoints;
+    cubPoints = &_cubPoints;
   }
   // first, let's check whether the exact request is already known
   pair< Camellia::Basis<>*, Camellia::EOperator> key = make_pair(basis.get(), op);
@@ -639,7 +640,7 @@ constFCPtr BasisCache::getValues(BasisPtr basis, Camellia::EOperator op,
     relatedKey = make_pair(basis.get(), (Camellia::EOperator) relatedOp);
     if (_knownValues.find(relatedKey) == _knownValues.end() ) {
       // we can assume relatedResults has dimensions (numPoints,basisCardinality,spaceDim)
-      FCPtr relatedResults = BasisEvaluation::getValues(basis,(Camellia::EOperator)relatedOp,cubPoints);
+      FCPtr relatedResults = BasisEvaluation::getValues(basis,(Camellia::EOperator)relatedOp,*cubPoints);
       _knownValues[relatedKey] = relatedResults;
     }
     
@@ -659,7 +660,7 @@ constFCPtr BasisCache::getValues(BasisPtr basis, Camellia::EOperator op,
   if ( (op >= Camellia::OP_X) || (op <  Camellia::OP_VALUE) ) {
     TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument,"Unknown operator.");
   }
-  FCPtr result = BasisEvaluation::getValues(basis,op,cubPoints);
+  FCPtr result = BasisEvaluation::getValues(basis,op,*cubPoints);
   _knownValues[key] = result;
   return result;
 }
