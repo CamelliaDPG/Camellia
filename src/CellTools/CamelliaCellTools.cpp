@@ -1058,6 +1058,54 @@ unsigned CamelliaCellTools::subcellReverseOrdinalMap(const shards::CellTopology 
   return -1; // NOT FOUND
 }
 
+void CamelliaCellTools::getTensorPoints(Intrepid::FieldContainer<double>& tensorPoints, const Intrepid::FieldContainer<double> & spatialPoints,
+                                        const Intrepid::FieldContainer<double> & temporalPoints) {
+  bool hasCellRank;
+  if ( spatialPoints.rank() != temporalPoints.rank() ) {
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "temporalPoints and spatialPoints must have same rank");
+  }
+  
+  if (tensorPoints.rank() == 3) {
+    hasCellRank = true;
+  } else if (tensorPoints.rank() == 2) {
+    hasCellRank = false;
+  } else {
+    TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument,"unsupported rank in tensorPoints");
+  }
+  
+  int numCells = hasCellRank ? tensorPoints.dimension(0) : 1;
+  
+  int pointIndex = hasCellRank ? 1 : 0;
+  int spaceDimIndex = hasCellRank ? 2 : 1;
+  int numPointsSpace = spatialPoints.dimension(pointIndex);
+  int numPointsTime = temporalPoints.dimension(pointIndex);
+  
+  int spaceDim = spatialPoints.dimension(spaceDimIndex);
+  int timeDim = temporalPoints.dimension(spaceDimIndex);
+  
+  for (int cellOrdinal=0; cellOrdinal<numCells; cellOrdinal++) {
+    for (int timePointOrdinal=0; timePointOrdinal<numPointsTime; timePointOrdinal++) {
+      for (int spacePointOrdinal=0; spacePointOrdinal<numPointsSpace; spacePointOrdinal++) {
+        int spaceTimePointOrdinal = TENSOR_POINT_ORDINAL(spacePointOrdinal, timePointOrdinal, numPointsSpace);
+        for (int d=0; d<spaceDim; d++) {
+          if (hasCellRank) {
+            tensorPoints(cellOrdinal,spaceTimePointOrdinal,d) = spatialPoints(cellOrdinal,spacePointOrdinal,d);
+          } else {
+            tensorPoints(spaceTimePointOrdinal,d) = spatialPoints(spacePointOrdinal,d);
+          }
+        }
+        for (int d=spaceDim; d<spaceDim+timeDim; d++) {
+          if (hasCellRank) {
+            tensorPoints(cellOrdinal,spaceTimePointOrdinal,d) = temporalPoints(cellOrdinal,timePointOrdinal,d-spaceDim);
+          } else {
+            tensorPoints(spaceTimePointOrdinal,d) = temporalPoints(timePointOrdinal,d-spaceDim);
+          }
+        }
+      }
+    }
+  }
+}
+
 // copied from Intrepid's CellTools and specialized to allow use when we have curvilinear geometry
 void CamelliaCellTools::mapToReferenceFrameInitGuess(       FieldContainer<double>  &        refPoints,
                                                      const FieldContainer<double>  &        initGuess,

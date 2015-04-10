@@ -227,6 +227,9 @@ namespace Camellia {
 
     static unsigned subcellReverseOrdinalMap(const shards::CellTopology &cellTopo, unsigned subcdim, unsigned subcord, unsigned subsubcdim, unsigned subsubcordInCell);
 
+    static void getTensorPoints(Intrepid::FieldContainer<double>& tensorPoints, const Intrepid::FieldContainer<double> & spatialPoints,
+                                const Intrepid::FieldContainer<double> & temporalPoints);
+    
     // copied from Intrepid's CellTools and specialized to allow use when we have curvilinear geometry
     static void mapToReferenceFrameInitGuess(       Intrepid::FieldContainer<double>  &        refPoints,
                                              const Intrepid::FieldContainer<double>  &        initGuess,
