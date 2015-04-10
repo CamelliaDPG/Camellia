@@ -65,11 +65,16 @@ SpaceTimeHeatFormulation::SpaceTimeHeatFormulation(int spaceDim, double epsilon,
   FunctionPtr n_xt = Function::normalSpaceTime();
   
   LinearTermPtr sigma_n_lt;
-  if (spaceDim == 1) {
+  if (spaceDim == 1)
+  {
     sigma_n_lt = sigma1 * n_x_parity->x();
-  } else if (spaceDim == 2) {
+  }
+  else if (spaceDim == 2)
+  {
     sigma_n_lt = sigma1 * n_x_parity->x() + sigma2 * n_x_parity->y();
-  } else if (spaceDim == 3) {
+  }
+  else if (spaceDim == 3)
+  {
     sigma_n_lt = sigma1 * n_x_parity->x() + sigma2 * n_x_parity->y() + sigma3 * n_x_parity->z();
   }
   sigma_n_hat = _vf.fluxVarSpaceOnly(S_SIGMA_N_HAT, sigma_n_lt);
