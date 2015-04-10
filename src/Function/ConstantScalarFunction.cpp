@@ -80,3 +80,7 @@ FunctionPtr ConstantScalarFunction::dy() {
 FunctionPtr ConstantScalarFunction::dz() {
   return Function::zero();
 }
+
+FunctionPtr ConstantScalarFunction::dt() {
+  return Function::zero();
+}
