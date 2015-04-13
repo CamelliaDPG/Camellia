@@ -89,7 +89,7 @@ void HDF5Exporter::exportSolution(SolutionPtr solution, double timeVal, unsigned
   for (int i=0; i < fieldTrialIDs.size(); i++)
   {
     fieldVars.push_back(varFactory.trial(fieldTrialIDs[i]));
-    FunctionPtr fieldFunction = Function::solution(fieldVars[i], solution);
+    FunctionPtr fieldFunction = Function<double>::solution(fieldVars[i], solution);
     string fieldFunctionName = fieldVars[i]->name();
     fieldFunctions.push_back(fieldFunction);
     fieldFunctionNames.push_back(fieldFunctionName);
@@ -99,7 +99,7 @@ void HDF5Exporter::exportSolution(SolutionPtr solution, double timeVal, unsigned
   for (int i=0; i < traceTrialIDs.size(); i++)
   {
     traceVars.push_back(varFactory.trial(traceTrialIDs[i]));
-    FunctionPtr traceFunction = Function::solution(traceVars[i], solution);
+    FunctionPtr traceFunction = Function<double>::solution(traceVars[i], solution);
     string traceFunctionName = traceVars[i]->name();
     traceFunctions.push_back(traceFunction);
     traceFunctionNames.push_back(traceFunctionName);

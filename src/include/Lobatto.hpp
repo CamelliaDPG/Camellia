@@ -14,7 +14,7 @@
 
 namespace Camellia {
   template<class Scalar=double, class ArrayScalar=Intrepid::FieldContainer<Scalar> > class Lobatto;
-  
+
   template<class Scalar, class ArrayScalar> class Lobatto {
   public:
     // n: poly order; valuesArray should have n+2 entries...
@@ -22,15 +22,15 @@ namespace Camellia {
     static void values(ArrayScalar &valuesArray, ArrayScalar &derivativeValuesArray, ArrayScalar &secondDerivativesArray, Scalar x, int n, bool conforming);
     static void l2norms(ArrayScalar &normValues, int n, bool conforming);  // should normValues be ArrayScalar, or hard-coded FieldContainer<double>?  I think the latter, actually...
   };
-  
+
   template<class Scalar=double> class LobattoFunction;
-  
+
   template<class Scalar>
-  class LobattoFunction : public SimpleFunction {
+  class LobattoFunction : public SimpleFunction<Scalar> {
     int _polyOrder;
     Intrepid::FieldContainer<Scalar> _values;
     Intrepid::FieldContainer<Scalar> _derivatives;
-    
+
     bool _conforming;
     bool _derivative; // whether this is the derivative of the Lobatto function
   public:
@@ -50,7 +50,7 @@ namespace Camellia {
         return _derivatives[_polyOrder];
       }
     }
-    
+
     FunctionPtr dx() {
       if (_derivative) {
         TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "LobattoFunction only supports first derivatives...");

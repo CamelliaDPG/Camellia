@@ -27,7 +27,7 @@ namespace Camellia {
     SolutionPtr _soln;
   public:
     NavierStokesFormulation(double Reynolds, SolutionPtr soln) {
-      _Re = Function::constant(Reynolds);
+      _Re = Function<double>::constant(Reynolds);
       // to break circular references (graphNorm to solution and back), make a new RCP that doesn't own memory...
       _soln = Teuchos::rcp(soln.get(), false);
     }
@@ -62,17 +62,17 @@ namespace Camellia {
       FunctionPtr sin_2pi_y = Teuchos::rcp( new Sin_ay( 2 * PI ) );
       FunctionPtr cos_2pi_y = Teuchos::rcp( new Cos_ay( 2 * PI ) );
 
-      u1_exact = Function::constant(1.0) - exp_lambda_x * cos_2pi_y;
+      u1_exact = Function<double>::constant(1.0) - exp_lambda_x * cos_2pi_y;
       u2_exact = (lambda / (2 * PI)) * exp_lambda_x * sin_2pi_y;
 
-      FunctionPtr one = Function::constant(1.0);
+      FunctionPtr one = Function<double>::constant(1.0);
       double meshMeasure = one->integrate(mesh);
 
       p_exact = 0.5 * exp_2lambda_x;
       // adjust p to have zero average:
       int cubatureEnrichment = 10;
       double pMeasure = p_exact->integrate(mesh, cubatureEnrichment);
-      p_exact = p_exact - Function::constant(pMeasure / meshMeasure);
+      p_exact = p_exact - Function<double>::constant(pMeasure / meshMeasure);
     }
 
     virtual ~NavierStokesFormulation() {}
@@ -119,12 +119,12 @@ namespace Camellia {
       _sigma22 = varFactory.fieldVar(VGP_SIGMA22_S);
       _p = varFactory.fieldVar(VGP_P_S);
 
-      sigma11_prev = Function::solution(_sigma11, _soln);
-      sigma12_prev = Function::solution(_sigma12, _soln);
-      sigma21_prev = Function::solution(_sigma21, _soln);
-      sigma22_prev = Function::solution(_sigma22, _soln);
-      u1_prev = Function::solution(_u1,_soln);
-      u2_prev = Function::solution(_u2,_soln);
+      sigma11_prev = Function<double>::solution(_sigma11, _soln);
+      sigma12_prev = Function<double>::solution(_sigma12, _soln);
+      sigma21_prev = Function<double>::solution(_sigma21, _soln);
+      sigma22_prev = Function<double>::solution(_sigma22, _soln);
+      u1_prev = Function<double>::solution(_u1,_soln);
+      u2_prev = Function<double>::solution(_u2,_soln);
     }
 
     void init(FunctionPtr Re, SolutionPtr soln) {
@@ -137,7 +137,7 @@ namespace Camellia {
       bool dontEnrichVelocity = false;
       _bf = stokesBF(_mu);
 
-      //    FunctionPtr u_prev = Function::vectorize(u1_prev, u2_prev);
+      //    FunctionPtr u_prev = Function<double>::vectorize(u1_prev, u2_prev);
       //
       //    _bf->addTerm( _u1, u_prev * _v1->grad() );
       //    _bf->addTerm( u1_prev * _u1, _v1->dx());
@@ -167,7 +167,7 @@ namespace Camellia {
     }
 
     VGPNavierStokesFormulation(double Re, SolutionPtr soln) : NavierStokesFormulation(Re, soln) {
-      init(Function::constant(Re), soln);
+      init(Function<double>::constant(Re), soln);
     }
     VGPNavierStokesFormulation(FunctionPtr Re, SolutionPtr soln) : NavierStokesFormulation(Re, soln) {
       init(Re,soln);
@@ -186,7 +186,7 @@ namespace Camellia {
       rhs->addTerm( -_stokesBF->testFunctional(_soln, excludeFluxesAndTraces) );
 
       //    // finally, add convective term:
-      //    FunctionPtr u_prev = Function::vectorize(u1_prev,u2_prev);
+      //    FunctionPtr u_prev = Function<double>::vectorize(u1_prev,u2_prev);
       //    rhs->addTerm( - u1_prev * u_prev * _v1->grad() );
       //    rhs->addTerm( - u2_prev * u_prev * _v2->grad() );
 
@@ -197,7 +197,7 @@ namespace Camellia {
 
       return rhs;
     }
-    IPPtr scaleCompliantGraphNorm(FunctionPtr dt_inv = Function::zero()) {
+    IPPtr scaleCompliantGraphNorm(FunctionPtr dt_inv = Function<double>::zero()) {
       // corresponds to ||u||^2 + ||grad u||^2 + ||_p||^2
       FunctionPtr h = Teuchos::rcp( new hFunction() );
       IPPtr compliantGraphNorm = Teuchos::rcp( new IP );
@@ -260,8 +260,8 @@ namespace Camellia {
       mySolution->setSolutionFunction(_sigma22, sigma22_exact);
 
       // tn = (mu sigma - pI)n
-      FunctionPtr sideParity = Function::sideParity();
-      FunctionPtr n = Function::normal();
+      FunctionPtr sideParity = Function<double>::sideParity();
+      FunctionPtr n = Function<double>::normal();
       FunctionPtr t1n_exact = (sigma11_exact - p_exact) * n->x() + sigma12_exact * n->y();
       FunctionPtr t2n_exact = sigma21_exact * n->x() + (sigma22_exact - p_exact) * n->y();
 
@@ -478,7 +478,7 @@ namespace Camellia {
       _backgroundFlow = Teuchos::rcp( new Solution<double>(_mesh, vgpBC) );
 
       // the incremental solutions have zero BCs enforced:
-      FunctionPtr zero = Function::zero();
+      FunctionPtr zero = Function<double>::zero();
       BCPtr zeroBC = vgpStokesFormulation->bc(zero, zero, entireBoundary);
       _solnIncrement = Teuchos::rcp( new Solution<double>(_mesh, zeroBC) );
       _solnIncrement->setCubatureEnrichmentDegree( H1Order-1 ); // can have weights with poly degree = trial degree
@@ -498,7 +498,7 @@ namespace Camellia {
     }
   public:
     VGPNavierStokesProblem(FunctionPtr Re, MeshGeometryPtr geometry, int H1Order, int pToAdd,
-                           FunctionPtr f1 = Function::zero(), FunctionPtr f2=Function::zero(),
+                           FunctionPtr f1 = Function<double>::zero(), FunctionPtr f2=Function<double>::zero(),
                            bool enrichVelocity = false, bool enhanceFluxes = false) {
       init(Re,geometry,H1Order,pToAdd, f1,f2, enrichVelocity, enhanceFluxes);
       // note that this constructor leaves BC enforcement up to the user
@@ -515,7 +515,7 @@ namespace Camellia {
                            int verticalCells, int H1Order, int pToAdd,
                            FunctionPtr u1_0, FunctionPtr u2_0, FunctionPtr f1, FunctionPtr f2,
                            bool enrichVelocity = false, bool enhanceFluxes = false) {
-      init(Function::constant(Re),quadPoints,horizontalCells,verticalCells,H1Order,pToAdd,u1_0,u2_0,f1,f2, enrichVelocity, enhanceFluxes);
+      init(Function<double>::constant(Re),quadPoints,horizontalCells,verticalCells,H1Order,pToAdd,u1_0,u2_0,f1,f2, enrichVelocity, enhanceFluxes);
       // this constructor enforces Dirichlet BCs on the velocity at each iterate, and disregards accumulated trace and flux data
     }
     VGPNavierStokesProblem(FunctionPtr Re, Intrepid::FieldContainer<double> &quadPoints, int horizontalCells,
@@ -529,7 +529,7 @@ namespace Camellia {
     VGPNavierStokesProblem(double Re, Intrepid::FieldContainer<double> &quadPoints, int horizontalCells,
                            int verticalCells, int H1Order, int pToAdd,
                            FunctionPtr u1_exact, FunctionPtr u2_exact, FunctionPtr p_exact, bool enrichVelocity, bool enhanceFluxes) {
-      init(Function::constant(Re),quadPoints,horizontalCells,verticalCells,H1Order,pToAdd,u1_exact,u2_exact,p_exact,enrichVelocity,enhanceFluxes);
+      init(Function<double>::constant(Re),quadPoints,horizontalCells,verticalCells,H1Order,pToAdd,u1_exact,u2_exact,p_exact,enrichVelocity,enhanceFluxes);
       // this constructor enforces Dirichlet BCs on the velocity on first iterate, and zero BCs on later (does *not* disregard accumulated trace and flux data)
     }
 

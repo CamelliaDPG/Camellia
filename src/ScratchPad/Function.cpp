@@ -39,11 +39,12 @@ namespace Camellia {
   };
 
   // private class ComponentFunction
-  class ComponentFunction : public Function {
-    FunctionPtr _vectorFxn;
+  template <typename Scalar>
+  class ComponentFunction : public Function<Scalar> {
+    Teuchos::RCP<Function<Scalar> > _vectorFxn;
     int _component;
     public:
-    ComponentFunction(FunctionPtr vectorFunction, int componentIndex) {
+    ComponentFunction(Teuchos::RCP<Function<Scalar> > vectorFunction, int componentIndex) {
       _vectorFxn = vectorFunction;
       _component = componentIndex;
       if (_vectorFxn->rank() < 1) {
@@ -53,14 +54,14 @@ namespace Camellia {
     bool boundaryValueOnly() {
       return _vectorFxn->boundaryValueOnly();
     }
-    void values(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache) {
+    void values(Intrepid::FieldContainer<Scalar> &values, BasisCachePtr basisCache) {
       // note this allocation.  There might be ways of reusing memory here, if we had a slightly richer API.
       int spaceDim = basisCache->getSpaceDim();
       Teuchos::Array<int> dim;
       values.dimensions(dim);
       dim.push_back(spaceDim);
 
-      Intrepid::FieldContainer<double> vectorValues(dim);
+      Intrepid::FieldContainer<Scalar> vectorValues(dim);
       _vectorFxn->values(vectorValues, basisCache);
 
       int numValues = values.size();
@@ -71,20 +72,21 @@ namespace Camellia {
   };
 
   // private class CellBoundaryRestrictedFunction
-  class CellBoundaryRestrictedFunction : public Function {
-    FunctionPtr _fxn;
+  template <typename Scalar>
+  class CellBoundaryRestrictedFunction : public Function<Scalar> {
+    Teuchos::RCP<Function<Scalar> > _fxn;
     public:
-    CellBoundaryRestrictedFunction(FunctionPtr fxn) : Function(fxn->rank()) {
+    CellBoundaryRestrictedFunction(Teuchos::RCP<Function<Scalar> > fxn) : Function<Scalar>(fxn->rank()) {
       _fxn = fxn;
     }
 
     bool boundaryValueOnly() { return true; }
-    void values(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache) {
+    void values(Intrepid::FieldContainer<Scalar> &values, BasisCachePtr basisCache) {
       _fxn->values(values, basisCache);
     }
   };
 
-  class HeavisideFunction : public SimpleFunction {
+  class HeavisideFunction : public SimpleFunction<double> {
     double _xShift;
     public:
     HeavisideFunction(double xShift=0.0) {
@@ -95,15 +97,12 @@ namespace Camellia {
     }
   };
 
-  class MeshBoundaryCharacteristicFunction : public Function {
-
+  class MeshBoundaryCharacteristicFunction : public Function<double> {
     public:
-      MeshBoundaryCharacteristicFunction() : Function(0) {
-
-      }
+      MeshBoundaryCharacteristicFunction() : Function<double>(0) {}
       bool boundaryValueOnly() { return true; }
       void values(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache) {
-        CHECK_VALUES_RANK(values);
+        this->CHECK_VALUES_RANK(values);
         // scalar: values shape is (C,P)
         int numCells = values.dimension(0);
         int numPoints = values.dimension(1);
@@ -120,40 +119,39 @@ namespace Camellia {
           }
         }
       }
-      FunctionPtr dx() {
-        return Function::zero();
+      Teuchos::RCP<Function<double> > dx() {
+        return Function<double>::zero();
       }
-      FunctionPtr dy() {
-        return Function::zero();
+      Teuchos::RCP<Function<double> > dy() {
+        return Function<double>::zero();
       }
-      //  FunctionPtr dz() {
-      //    return Function::zero();
+      //  Teuchos::RCP<Function<double> > dz() {
+      //    return Function<double>::zero();
       //  }
   };
 
-  class MeshSkeletonCharacteristicFunction : public ConstantScalarFunction {
-
+  class MeshSkeletonCharacteristicFunction : public ConstantScalarFunction<double> {
     public:
       MeshSkeletonCharacteristicFunction() : ConstantScalarFunction(1, "|_{\\Gamma_h}") {
-
       }
       bool boundaryValueOnly() { return true; }
   };
 
   // private class SimpleSolutionFunction:
-  class SimpleSolutionFunction : public Function {
-    SolutionPtr _soln;
+  template <typename Scalar>
+  class SimpleSolutionFunction : public Function<Scalar> {
+    Teuchos::RCP<Solution<Scalar> > _soln;
     VarPtr _var;
     public:
-    SimpleSolutionFunction(VarPtr var, SolutionPtr soln);
-    void values(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache);
-    FunctionPtr x();
-    FunctionPtr y();
-    FunctionPtr z();
+    SimpleSolutionFunction(VarPtr var, Teuchos::RCP<Solution<Scalar> > soln);
+    void values(Intrepid::FieldContainer<Scalar> &values, BasisCachePtr basisCache);
+    Teuchos::RCP<Function<Scalar> > x();
+    Teuchos::RCP<Function<Scalar> > y();
+    Teuchos::RCP<Function<Scalar> > z();
 
-    FunctionPtr dx();
-    FunctionPtr dy();
-    FunctionPtr dz();
+    Teuchos::RCP<Function<Scalar> > dx();
+    Teuchos::RCP<Function<Scalar> > dy();
+    Teuchos::RCP<Function<Scalar> > dz();
     // for reasons of efficiency, may want to implement div() and grad() as well
 
     void importCellData(std::vector<GlobalIndexType> cellIDs);
@@ -162,36 +160,43 @@ namespace Camellia {
     bool boundaryValueOnly();
   };
 
-  Function::Function() {
+  template <typename Scalar>
+  Function<Scalar>::Function() {
     _rank = 0;
     _displayString = this->displayString();
     _time = 0;
   }
-  Function::Function(int rank) {
+  template <typename Scalar>
+  Function<Scalar>::Function(int rank) {
     _rank = rank;
     _displayString = this->displayString();
     _time = 0;
   }
 
-  string Function::displayString() {
+  template <typename Scalar>
+  string Function<Scalar>::displayString() {
     return "f";
   }
 
-  int Function::rank() {
+  template <typename Scalar>
+  int Function<Scalar>::rank() {
     return _rank;
   }
 
-  void Function::setTime(double time)
+  template <typename Scalar>
+  void Function<Scalar>::setTime(double time)
   {
     _time = time;
   }
 
-  double Function::getTime()
+  template <typename Scalar>
+  double Function<Scalar>::getTime()
   {
     return _time;
   }
 
-  void Function::values(Intrepid::FieldContainer<double> &values, Camellia::EOperator op, BasisCachePtr basisCache) {
+  template <typename Scalar>
+  void Function<Scalar>::values(Intrepid::FieldContainer<Scalar> &values, Camellia::EOperator op, BasisCachePtr basisCache) {
     switch (op) {
       case Camellia::OP_VALUE:
         this->values(values, basisCache);
@@ -222,9 +227,10 @@ namespace Camellia {
     }
   }
 
-  FunctionPtr Function::op(FunctionPtr f, Camellia::EOperator op) {
-    if ( isNull(f) ) {
-      return Function::null();
+  template <typename Scalar>
+  Teuchos::RCP<Function<Scalar> > Function<Scalar>::op(Teuchos::RCP<Function<Scalar> > f, Camellia::EOperator op) {
+    if ( Function<Scalar>::isNull(f) ) {
+      return Function<Scalar>::null();
     }
     switch (op) {
       case Camellia::OP_VALUE:
@@ -246,42 +252,44 @@ namespace Camellia {
       case Camellia::OP_DIV:
         return f->div();
       case Camellia::OP_DOT_NORMAL:
-        return f * Function::normal();
+        return f * Function<Scalar>::normal();
       default:
         TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "unsupported operator");
         break;
     }
-    return Teuchos::rcp((Function*)NULL);
+    return Teuchos::rcp((Function<Scalar>*)NULL);
   }
 
-  bool Function::equals(FunctionPtr f, BasisCachePtr basisCacheForCellsToCompare, double tol) {
+  template <typename Scalar>
+  bool Function<Scalar>::equals(Teuchos::RCP<Function<Scalar> > f, BasisCachePtr basisCacheForCellsToCompare, double tol) {
     if (f->rank() != this->rank()) {
       return false;
     }
-    FunctionPtr thisPtr = Teuchos::rcp(this,false);
-    FunctionPtr diff = thisPtr-f;
+    Teuchos::RCP<Function<Scalar> > thisPtr = Teuchos::rcp(this,false);
+    Teuchos::RCP<Function<Scalar> > diff = thisPtr-f;
 
     int numCells = basisCacheForCellsToCompare->getPhysicalCubaturePoints().dimension(0);
     // compute L^2 norm of difference on the cells
-    Intrepid::FieldContainer<double> diffs_squared(numCells);
+    Intrepid::FieldContainer<Scalar> diffs_squared(numCells);
     (diff*diff)->integrate(diffs_squared, basisCacheForCellsToCompare);
-    double sum = 0;
+    Scalar sum = 0;
     for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
       sum += diffs_squared[cellIndex];
     }
-    return sqrt(sum) < tol;
+    return sqrt(abs(sum)) < tol;
   }
 
-  double Function::evaluate(MeshPtr mesh, double x) {
+  template <typename Scalar>
+  Scalar Function<Scalar>::evaluate(MeshPtr mesh, double x) {
     int spaceDim = 1;
-    Intrepid::FieldContainer<double> value(1,1); // (C,P)
+    Intrepid::FieldContainer<Scalar> value(1,1); // (C,P)
     Intrepid::FieldContainer<double> physPoint(1,spaceDim);
 
     if (this->rank() != 0) {
-      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Function::evaluate requires a rank 0 Function.");
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Function<Scalar>::evaluate requires a rank 0 Function.");
     }
     if (mesh->getTopology()->getSpaceDim() != 1) {
-      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Function::evaluate requires mesh to be 1D if only x is provided.");
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Function<Scalar>::evaluate requires mesh to be 1D if only x is provided.");
     }
 
     physPoint(0,0) = x;
@@ -304,16 +312,17 @@ namespace Camellia {
     return value[0];
   }
 
-  double Function::evaluate(MeshPtr mesh, double x, double y) {
+  template <typename Scalar>
+  Scalar Function<Scalar>::evaluate(MeshPtr mesh, double x, double y) {
     int spaceDim = 2;
-    Intrepid::FieldContainer<double> value(1,1); // (C,P)
+    Intrepid::FieldContainer<Scalar> value(1,1); // (C,P)
     Intrepid::FieldContainer<double> physPoint(1,spaceDim);
 
     if (this->rank() != 0) {
-      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Function::evaluate requires a rank 0 Function.");
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Function<Scalar>::evaluate requires a rank 0 Function.");
     }
     if (mesh->getTopology()->getSpaceDim() != spaceDim) {
-      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Function::evaluate requires mesh to be 2D if (x,y) is provided.");
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Function<Scalar>::evaluate requires mesh to be 2D if (x,y) is provided.");
     }
 
     physPoint(0,0) = x;
@@ -337,16 +346,17 @@ namespace Camellia {
     return value[0];
   }
 
-  double Function::evaluate(MeshPtr mesh, double x, double y, double z) {
+  template <typename Scalar>
+  Scalar Function<Scalar>::evaluate(MeshPtr mesh, double x, double y, double z) {
     int spaceDim = 3;
-    Intrepid::FieldContainer<double> value(1,1); // (C,P)
+    Intrepid::FieldContainer<Scalar> value(1,1); // (C,P)
     Intrepid::FieldContainer<double> physPoint(1,spaceDim);
 
     if (this->rank() != 0) {
-      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Function::evaluate requires a rank 0 Function.");
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Function<Scalar>::evaluate requires a rank 0 Function.");
     }
     if (mesh->getTopology()->getSpaceDim() != spaceDim) {
-      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Function::evaluate requires mesh to be 3D if (x,y,z) is provided.");
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Function<Scalar>::evaluate requires mesh to be 3D if (x,y,z) is provided.");
     }
 
     physPoint(0,0) = x;
@@ -371,170 +381,188 @@ namespace Camellia {
     return value[0];
   }
 
-  double Function::evaluate(double x) {
-    static Intrepid::FieldContainer<double> value(1,1); // (C,P)
+  template <typename Scalar>
+  Scalar Function<Scalar>::evaluate(double x) {
+    static Intrepid::FieldContainer<Scalar> value(1,1); // (C,P)
     static Intrepid::FieldContainer<double> physPoint(1,1,1);
 
     static Teuchos::RCP<PhysicalPointCache> dummyCache = Teuchos::rcp( new PhysicalPointCache(physPoint) );
     dummyCache->writablePhysicalCubaturePoints()(0,0,0) = x;
     if (this->rank() != 0) {
-      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Function::evaluate requires a rank 0 Function.");
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Function<Scalar>::evaluate requires a rank 0 Function.");
     }
     this->values(value,dummyCache);
     return value[0];
   }
 
-  double Function::evaluate(FunctionPtr f, double x) {
+  template <typename Scalar>
+  Scalar Function<Scalar>::evaluate(Teuchos::RCP<Function<Scalar> > f, double x) {
     return f->evaluate(x);
   }
 
-  double Function::evaluate(double x, double y) {
-    static Intrepid::FieldContainer<double> value(1,1);
+  template <typename Scalar>
+  Scalar Function<Scalar>::evaluate(double x, double y) {
+    static Intrepid::FieldContainer<Scalar> value(1,1);
     static Intrepid::FieldContainer<double> physPoint(1,1,2);
     static Teuchos::RCP<PhysicalPointCache> dummyCache = Teuchos::rcp( new PhysicalPointCache(physPoint) );
     dummyCache->writablePhysicalCubaturePoints()(0,0,0) = x;
     dummyCache->writablePhysicalCubaturePoints()(0,0,1) = y;
     if (this->rank() != 0) {
-      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Function::evaluate requires a rank 0 Function.");
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Function<Scalar>::evaluate requires a rank 0 Function.");
     }
     this->values(value,dummyCache);
     return value[0];
   }
 
-  double Function::evaluate(FunctionPtr f, double x, double y) { // for testing; this isn't super-efficient
+  template <typename Scalar>
+  Scalar Function<Scalar>::evaluate(Teuchos::RCP<Function<Scalar> > f, double x, double y) { // for testing; this isn't super-efficient
     return f->evaluate(x, y);
   }
 
-  double Function::evaluate(double x, double y, double z) { // for testing; this isn't super-efficient
-    static Intrepid::FieldContainer<double> value(1,1);
+  template <typename Scalar>
+  Scalar Function<Scalar>::evaluate(double x, double y, double z) { // for testing; this isn't super-efficient
+    static Intrepid::FieldContainer<Scalar> value(1,1);
     static Intrepid::FieldContainer<double> physPoint(1,1,3);
     static Teuchos::RCP<PhysicalPointCache> dummyCache = Teuchos::rcp( new PhysicalPointCache(physPoint) );
     dummyCache->writablePhysicalCubaturePoints()(0,0,0) = x;
     dummyCache->writablePhysicalCubaturePoints()(0,0,1) = y;
     dummyCache->writablePhysicalCubaturePoints()(0,0,2) = z;
     if (this->rank() != 0) {
-      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Function::evaluate requires a rank 1 Function.");
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Function<Scalar>::evaluate requires a rank 1 Function.");
     }
     this->values(value,dummyCache);
     return value[0];
   }
 
-  double Function::evaluate(FunctionPtr f, double x, double y, double z) { // for testing; this isn't super-efficient
+  template <typename Scalar>
+  Scalar Function<Scalar>::evaluate(Teuchos::RCP<Function<Scalar> > f, double x, double y, double z) { // for testing; this isn't super-efficient
     return f->evaluate(x,y,z);
   }
 
-  FunctionPtr Function::x() {
-    return Function::null();
+  template <typename Scalar>
+  Teuchos::RCP<Function<Scalar> > Function<Scalar>::x() {
+    return Function<Scalar>::null();
   }
-  FunctionPtr Function::y() {
-    return Function::null();
+  template <typename Scalar>
+  Teuchos::RCP<Function<Scalar> > Function<Scalar>::y() {
+    return Function<Scalar>::null();
   }
-  FunctionPtr Function::z() {
-    return Function::null();
+  template <typename Scalar>
+  Teuchos::RCP<Function<Scalar> > Function<Scalar>::z() {
+    return Function<Scalar>::null();
   }
 
-  FunctionPtr Function::dx() {
-    return Function::null();
+  template <typename Scalar>
+  Teuchos::RCP<Function<Scalar> > Function<Scalar>::dx() {
+    return Function<Scalar>::null();
   }
-  FunctionPtr Function::dy() {
-    return Function::null();
+  template <typename Scalar>
+  Teuchos::RCP<Function<Scalar> > Function<Scalar>::dy() {
+    return Function<Scalar>::null();
   }
-  FunctionPtr Function::dz() {
-    return Function::null();
+  template <typename Scalar>
+  Teuchos::RCP<Function<Scalar> > Function<Scalar>::dz() {
+    return Function<Scalar>::null();
   }
   // TODO: rework ParametricCurve (Function subclass) so that we can define dt() thus.
-  //FunctionPtr Function::dt() {
-  //  return Function::null();
+  //Teuchos::RCP<Function<Scalar> > Function<Scalar>::dt() {
+  //  return Function<Scalar>::null();
   //}
-  FunctionPtr Function::curl() {
-    FunctionPtr dxFxn = dx();
-    FunctionPtr dyFxn = dy();
-    FunctionPtr dzFxn = dz();
+  template <typename Scalar>
+  Teuchos::RCP<Function<Scalar> > Function<Scalar>::curl() {
+    Teuchos::RCP<Function<Scalar> > dxFxn = dx();
+    Teuchos::RCP<Function<Scalar> > dyFxn = dy();
+    Teuchos::RCP<Function<Scalar> > dzFxn = dz();
 
     if (dxFxn.get()==NULL) {
-      return Function::null();
+      return Function<Scalar>::null();
     } else if (dyFxn.get()==NULL) {
       // special case: in 1D, curl() returns a scalar
       return dxFxn;
     } else if (dzFxn.get() == NULL) {
       // in 2D, the rank of the curl operator depends on the rank of the Function
       if (_rank == 0) {
-        return Teuchos::rcp( new VectorizedFunction(dyFxn,-dxFxn) );
+        return Teuchos::rcp( new VectorizedFunction<Scalar>(dyFxn,-dxFxn) );
       } else if (_rank == 1) {
         return dyFxn->x() - dxFxn->y();
       } else {
         TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "curl() undefined for Functions of rank > 1");
       }
     } else {
-      return Teuchos::rcp( new VectorizedFunction(dyFxn->z() - dzFxn->y(),
+      return Teuchos::rcp( new VectorizedFunction<Scalar>(dyFxn->z() - dzFxn->y(),
             dzFxn->x() - dxFxn->z(),
             dxFxn->y() - dyFxn->x()) );
     }
   }
 
-  FunctionPtr Function::grad(int numComponents) {
-    FunctionPtr dxFxn = dx();
-    FunctionPtr dyFxn = dy();
-    FunctionPtr dzFxn = dz();
+  template <typename Scalar>
+  Teuchos::RCP<Function<Scalar> > Function<Scalar>::grad(int numComponents) {
+    Teuchos::RCP<Function<Scalar> > dxFxn = dx();
+    Teuchos::RCP<Function<Scalar> > dyFxn = dy();
+    Teuchos::RCP<Function<Scalar> > dzFxn = dz();
     if (numComponents==-1) { // default: just use as many non-null components as available
       if (dxFxn.get()==NULL) {
-        return Function::null();
+        return Function<Scalar>::null();
       } else if (dyFxn.get()==NULL) {
         // special case: in 1D, grad() returns a scalar
         return dxFxn;
       } else if (dzFxn.get() == NULL) {
-        return Teuchos::rcp( new VectorizedFunction(dxFxn,dyFxn) );
+        return Teuchos::rcp( new VectorizedFunction<Scalar>(dxFxn,dyFxn) );
       } else {
-        return Teuchos::rcp( new VectorizedFunction(dxFxn,dyFxn,dzFxn) );
+        return Teuchos::rcp( new VectorizedFunction<Scalar>(dxFxn,dyFxn,dzFxn) );
       }
     } else if (numComponents==1) {
       // special case: we don't "vectorize" in 1D
       return dxFxn;
     } else if (numComponents==2) {
       if ((dxFxn.get() == NULL) || (dyFxn.get()==NULL)) {
-        return Function::null();
+        return Function<Scalar>::null();
       } else {
-        return Function::vectorize(dxFxn, dyFxn);
+        return Function<Scalar>::vectorize(dxFxn, dyFxn);
       }
     } else if (numComponents==3) {
       if ((dxFxn.get() == NULL) || (dyFxn.get()==NULL) || (dzFxn.get()==NULL)) {
-        return Function::null();
+        return Function<Scalar>::null();
       } else {
-        return Teuchos::rcp( new VectorizedFunction(dxFxn,dyFxn,dzFxn) );
+        return Teuchos::rcp( new VectorizedFunction<Scalar>(dxFxn,dyFxn,dzFxn) );
       }
     }
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unsupported numComponents");
-    return Teuchos::rcp((Function*) NULL);
+    return Teuchos::rcp((Function<Scalar>*) NULL);
   }
-  //FunctionPtr Function::inverse() {
-  //  return Function::null();
+  //Teuchos::RCP<Function<Scalar> > Function<Scalar>::inverse() {
+  //  return Function<Scalar>::null();
   //}
 
-  FunctionPtr Function::heaviside(double xShift) {
+  template <typename Scalar>
+  Teuchos::RCP<Function<double> > Function<Scalar>::heaviside(double xShift) {
     return Teuchos::rcp( new HeavisideFunction(xShift) );
   }
 
-  bool Function::isNull(FunctionPtr f) {
+  template <typename Scalar>
+  bool Function<Scalar>::isNull(Teuchos::RCP<Function<Scalar> > f) {
     return f.get() == NULL;
   }
 
-  FunctionPtr Function::div() {
-    if ( isNull(x()) || isNull(y()) ) {
-      return null();
+  template <typename Scalar>
+  Teuchos::RCP<Function<Scalar> > Function<Scalar>::div() {
+    if ( Function<Scalar>::isNull(x()) || Function<Scalar>::isNull(y()) ) {
+      return Function<double>::null();
     }
-    FunctionPtr dxFxn = x()->dx();
-    FunctionPtr dyFxn = y()->dy();
-    FunctionPtr zFxn = z();
-    if ( isNull(dxFxn) || isNull(dyFxn) ) {
-      return null();
-    } else if ( isNull(zFxn) || isNull(zFxn->dz()) ) {
+    Teuchos::RCP<Function<Scalar> > dxFxn = x()->dx();
+    Teuchos::RCP<Function<Scalar> > dyFxn = y()->dy();
+    Teuchos::RCP<Function<Scalar> > zFxn = z();
+    if ( Function<Scalar>::isNull(dxFxn) || Function<Scalar>::isNull(dyFxn) ) {
+      return Function<double>::null();
+    } else if ( Function<Scalar>::isNull(zFxn) || Function<Scalar>::isNull(zFxn->dz()) ) {
       return dxFxn + dyFxn;
     } else {
       return dxFxn + dyFxn + zFxn->dz();
     }
   }
 
-  void Function::CHECK_VALUES_RANK(Intrepid::FieldContainer<double> &values) { // throws exception on bad values rank
+  template <typename Scalar>
+  void Function<Scalar>::CHECK_VALUES_RANK(Intrepid::FieldContainer<Scalar> &values) { // throws exception on bad values rank
     // values should have shape (C,P,D,D,D,...) where the # of D's = _rank
     if (values.rank() != _rank + 2) {
       cout << "values has incorrect rank.\n";
@@ -542,11 +570,12 @@ namespace Camellia {
     }
   }
 
-  void Function::addToValues(Intrepid::FieldContainer<double> &valuesToAddTo, BasisCachePtr basisCache) {
-    CHECK_VALUES_RANK(valuesToAddTo);
+  template <typename Scalar>
+  void Function<Scalar>::addToValues(Intrepid::FieldContainer<Scalar> &valuesToAddTo, BasisCachePtr basisCache) {
+    this->CHECK_VALUES_RANK(valuesToAddTo);
     Teuchos::Array<int> dim;
     valuesToAddTo.dimensions(dim);
-    Intrepid::FieldContainer<double> myValues(dim);
+    Intrepid::FieldContainer<Scalar> myValues(dim);
     this->values(myValues,basisCache);
     for (int i=0; i<myValues.size(); i++) {
       //cout << "otherValue = " << valuesToAddTo[i] << "; myValue = " << myValues[i] << endl;
@@ -554,11 +583,12 @@ namespace Camellia {
     }
   }
 
-  double Function::integrate(BasisCachePtr basisCache) {
+  template <typename Scalar>
+  Scalar Function<Scalar>::integrate(BasisCachePtr basisCache) {
     int numCells = basisCache->getPhysicalCubaturePoints().dimension(0);
-    Intrepid::FieldContainer<double> cellIntegrals(numCells);
+    Intrepid::FieldContainer<Scalar> cellIntegrals(numCells);
     this->integrate(cellIntegrals, basisCache);
-    double sum = 0;
+    Scalar sum = 0;
     for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
       sum += cellIntegrals[cellIndex];
     }
@@ -566,11 +596,13 @@ namespace Camellia {
   }
 
   // added by Jesse to check positivity of a function
-  bool Function::isPositive(BasisCachePtr basisCache){
+  template <typename Scalar>
+  bool Function<Scalar>::isPositive(BasisCachePtr basisCache){
+    // TEUCHOS_TEST_FOR_EXCEPTION(typeof(Scalar) != double, std::invalid_argument, "values has incorrect rank." );
     bool isPositive = true;
     int numCells = basisCache->getPhysicalCubaturePoints().dimension(0);
     int numPoints = basisCache->getPhysicalCubaturePoints().dimension(1);
-    Intrepid::FieldContainer<double> fxnValues(numCells,numPoints);
+    Intrepid::FieldContainer<Scalar> fxnValues(numCells,numPoints);
     this->values(fxnValues, basisCache);
 
     for (int i = 0;i<fxnValues.size();i++){
@@ -582,7 +614,8 @@ namespace Camellia {
     return isPositive;
   }
 
-  bool Function::isPositive(Teuchos::RCP<Mesh> mesh, int cubEnrich, bool testVsTest){
+  template <typename Scalar>
+  bool Function<Scalar>::isPositive(Teuchos::RCP<Mesh> mesh, int cubEnrich, bool testVsTest){
     bool isPositive = true;
     bool isPositiveOnPartition = true;
     int myPartition = Teuchos::GlobalMPISession::getRank();
@@ -628,32 +661,37 @@ namespace Camellia {
 
 
   // added by Jesse - integrate over only one cell
-  double Function::integrate(GlobalIndexType cellID, Teuchos::RCP<Mesh> mesh, int cubatureDegreeEnrichment, bool testVsTest){
+  template <typename Scalar>
+  Scalar Function<Scalar>::integrate(GlobalIndexType cellID, Teuchos::RCP<Mesh> mesh, int cubatureDegreeEnrichment, bool testVsTest){
     BasisCachePtr basisCache = BasisCache::basisCacheForCell(mesh,cellID,testVsTest,cubatureDegreeEnrichment);
-    Intrepid::FieldContainer<double> cellIntegral(1);
+    Intrepid::FieldContainer<Scalar> cellIntegral(1);
     this->integrate(cellIntegral,basisCache);
     return cellIntegral(0);
   }
 
-  FunctionPtr Function::cellCharacteristic(GlobalIndexType cellID) {
+  template <typename Scalar>
+  Teuchos::RCP<Function<double> > Function<Scalar>::cellCharacteristic(GlobalIndexType cellID) {
     return Teuchos::rcp( new CellCharacteristicFunction(cellID) );
   }
 
-  FunctionPtr Function::cellCharacteristic(set<GlobalIndexType> cellIDs) {
+  template <typename Scalar>
+  Teuchos::RCP<Function<double> > Function<Scalar>::cellCharacteristic(set<GlobalIndexType> cellIDs) {
     return Teuchos::rcp( new CellCharacteristicFunction(cellIDs) );
   }
 
-  map<int, double> Function::cellIntegrals(Teuchos::RCP<Mesh> mesh, int cubatureDegreeEnrichment, bool testVsTest){
+  template <typename Scalar>
+  map<int, Scalar> Function<Scalar>::cellIntegrals(Teuchos::RCP<Mesh> mesh, int cubatureDegreeEnrichment, bool testVsTest){
     set<GlobalIndexType> activeCellIDs = mesh->getActiveCellIDs();
     vector<GlobalIndexType> cellIDs(activeCellIDs.begin(),activeCellIDs.end());
     return cellIntegrals(cellIDs,mesh,cubatureDegreeEnrichment,testVsTest);
   }
 
-  map<int, double> Function::cellIntegrals(vector<GlobalIndexType> cellIDs, Teuchos::RCP<Mesh> mesh, int cubatureDegreeEnrichment, bool testVsTest){
+  template <typename Scalar>
+  map<int, Scalar> Function<Scalar>::cellIntegrals(vector<GlobalIndexType> cellIDs, Teuchos::RCP<Mesh> mesh, int cubatureDegreeEnrichment, bool testVsTest){
     int myPartition = Teuchos::GlobalMPISession::getRank();
 
     int numCells = cellIDs.size();
-    Intrepid::FieldContainer<double> integrals(numCells);
+    Intrepid::FieldContainer<Scalar> integrals(numCells);
     for (int i = 0;i<numCells;i++){
       int cellID = cellIDs[i];
       if (mesh->partitionForCellID(cellID) == myPartition){
@@ -661,7 +699,7 @@ namespace Camellia {
       }
     }
     MPIWrapper::entryWiseSum(integrals);
-    map<int,double> integralMap;
+    map<int,Scalar> integralMap;
     for (int i = 0;i<numCells;i++){
       integralMap[cellIDs[i]] = integrals(i);
     }
@@ -670,8 +708,9 @@ namespace Camellia {
 
 
   // added by Jesse - adaptive quadrature rules
-  double Function::integrate(Teuchos::RCP<Mesh> mesh, double tol, bool testVsTest) {
-    double integral = 0.0;
+  template <typename Scalar>
+  Scalar Function<Scalar>::integrate(Teuchos::RCP<Mesh> mesh, double tol, bool testVsTest) {
+    Scalar integral = 0.0;
     int myPartition = Teuchos::GlobalMPISession::getRank();
 
     vector<ElementPtr> elems = mesh->elementsInPartition(myPartition);
@@ -709,7 +748,7 @@ namespace Camellia {
         enrichedCache->setPhysicalCellNodes(nodes,cellIDs,true);
 
         // calculate relative error for this subcell
-        Intrepid::FieldContainer<double> cellIntegral(1),enrichedCellIntegral(1);
+        Intrepid::FieldContainer<Scalar> cellIntegral(1),enrichedCellIntegral(1);
         this->integrate(cellIntegral,basisCache);
         this->integrate(enrichedCellIntegral,enrichedCache);
         double error = abs(enrichedCellIntegral(0)-cellIntegral(0))/abs(enrichedCellIntegral(0)); // relative error
@@ -812,13 +851,13 @@ namespace Camellia {
     return MPIWrapper::sum(integral);
   }
 
-  void Function::integrate(Intrepid::FieldContainer<double> &cellIntegrals, BasisCachePtr basisCache,
-      bool sumInto) {
+  template <typename Scalar>
+  void Function<Scalar>::integrate(Intrepid::FieldContainer<Scalar> &cellIntegrals, BasisCachePtr basisCache, bool sumInto) {
     TEUCHOS_TEST_FOR_EXCEPTION(_rank != 0, std::invalid_argument, "can only integrate scalar functions.");
     int numCells = cellIntegrals.dimension(0);
     int numPoints = basisCache->getPhysicalCubaturePoints().dimension(1);
     //  cout << "integrate: basisCache->getPhysicalCubaturePoints():\n" << basisCache->getPhysicalCubaturePoints();
-    Intrepid::FieldContainer<double> values(numCells,numPoints);
+    Intrepid::FieldContainer<Scalar> values(numCells,numPoints);
     this->values(values,basisCache);
     if ( !sumInto ) {
       cellIntegrals.initialize(0);
@@ -831,7 +870,7 @@ namespace Camellia {
       }
       //    if ( (basisCache->cellIDs()[cellIndex]==0) && basisCache->isSideCache() && !sumInto)  {
       //      cout << "sideIndex: " << basisCache->getSideIndex() << endl;
-      //      cout << "Function::integrate() values:\n";
+      //      cout << "Function<Scalar>::integrate() values:\n";
       //      for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
       //        cout << ptIndex << ": " << values(cellIndex,ptIndex) << endl;
       //      }
@@ -853,15 +892,16 @@ namespace Camellia {
       //      weightedMeasures;
       //    }
       //    if (cellIndex==6) {
-      ////      cout << "Function::integrate() values:\n" << values;
+      ////      cout << "Function<Scalar>::integrate() values:\n" << values;
       //      cout << "weightedMeasures:\n" << *weightedMeasures;
       //    }
     }
   }
 
   // takes integral of jump over entire INTERIOR skeleton
-  double Function::integralOfJump(Teuchos::RCP<Mesh> mesh, int cubatureDegreeEnrichment) {
-    double integral = 0.0;
+  template <typename Scalar>
+  Scalar Function<Scalar>::integralOfJump(Teuchos::RCP<Mesh> mesh, int cubatureDegreeEnrichment) {
+    Scalar integral = 0.0;
     vector<ElementPtr> elems = mesh->activeElements();
     for (vector<ElementPtr>::iterator elemIt=elems.begin();elemIt!=elems.end();elemIt++){
       ElementPtr elem = *elemIt;
@@ -873,7 +913,8 @@ namespace Camellia {
     return integral;
   }
 
-  double Function::integralOfJump(Teuchos::RCP<Mesh> mesh, GlobalIndexType cellID, int sideIndex, int cubatureDegreeEnrichment) {
+  template <typename Scalar>
+  Scalar Function<Scalar>::integralOfJump(Teuchos::RCP<Mesh> mesh, GlobalIndexType cellID, int sideIndex, int cubatureDegreeEnrichment) {
     // for boundaries, the jump is 0
     if (mesh->getTopology()->getCell(cellID)->isBoundary(sideIndex)) {
       return 0;
@@ -898,7 +939,7 @@ namespace Camellia {
 
     double sideParity = mesh->cellSideParitiesForCell(cellID)[sideIndex];
     // cellIntegral will store the difference between my value and neighbor's
-    Intrepid::FieldContainer<double> cellIntegral(1);
+    Intrepid::FieldContainer<Scalar> cellIntegral(1);
     this->integrate(cellIntegral, neighborCache->getSideBasisCache(neighborSideIndex), true);
     //  cout << "Neighbor integral: " << cellIntegral[0] << endl;
     cellIntegral[0] *= -1;
@@ -909,9 +950,10 @@ namespace Camellia {
     return sideParity * cellIntegral(0);
   }
 
-  double Function::integrate(Teuchos::RCP<Mesh> mesh, int cubatureDegreeEnrichment, bool testVsTest, bool requireSideCache,
+  template <typename Scalar>
+  Scalar Function<Scalar>::integrate(Teuchos::RCP<Mesh> mesh, int cubatureDegreeEnrichment, bool testVsTest, bool requireSideCache,
       bool spatialSidesOnly) {
-    double integral = 0;
+    Scalar integral = 0;
 
     int myPartition = Teuchos::GlobalMPISession::getRank();
     vector< ElementTypePtr > elementTypes = mesh->elementTypes(myPartition);
@@ -927,8 +969,8 @@ namespace Camellia {
         cellIDs.push_back( cells[cellIndex]->cellID() );
       }
       basisCache->setPhysicalCellNodes(mesh->physicalCellNodes(elemType), cellIDs, this->boundaryValueOnly() || requireSideCache);
-      //    cout << "Function::integrate: basisCache has " << basisCache->getPhysicalCubaturePoints().dimension(1) << " cubature points per cell.\n";
-      Intrepid::FieldContainer<double> cellIntegrals(numCells);
+      //    cout << "Function<Scalar>::integrate: basisCache has " << basisCache->getPhysicalCubaturePoints().dimension(1) << " cubature points per cell.\n";
+      Intrepid::FieldContainer<Scalar> cellIntegrals(numCells);
       if ( this->boundaryValueOnly() ) {
         int numSides = elemType->cellTopoPtr->getSideCount();
 
@@ -948,26 +990,31 @@ namespace Camellia {
     return MPIWrapper::sum(integral);
   }
 
-  double Function::l2norm(Teuchos::RCP<Mesh> mesh, int cubatureDegreeEnrichment, bool spatialSidesOnly) {
-    FunctionPtr thisPtr = Teuchos::rcp( this, false );
+  // This needs work for complex
+  template <typename Scalar>
+  double Function<Scalar>::l2norm(Teuchos::RCP<Mesh> mesh, int cubatureDegreeEnrichment, bool spatialSidesOnly) {
+    Teuchos::RCP<Function<Scalar> > thisPtr = Teuchos::rcp( this, false );
     bool testVsTest = false, requireSideCaches = false;
     return sqrt( (thisPtr * thisPtr)->integrate(mesh, cubatureDegreeEnrichment, testVsTest, requireSideCaches, spatialSidesOnly) );
   }
 
   // divide values by this function (supported only when this is a scalar--otherwise values would change rank...)
-  void Function::scalarMultiplyFunctionValues(Intrepid::FieldContainer<double> &functionValues, BasisCachePtr basisCache) {
+  template <typename Scalar>
+  void Function<Scalar>::scalarMultiplyFunctionValues(Intrepid::FieldContainer<Scalar> &functionValues, BasisCachePtr basisCache) {
     // functionValues has dimensions (C,P,...)
     scalarModifyFunctionValues(functionValues,basisCache,MULTIPLY);
   }
 
   // divide values by this function (supported only when this is a scalar)
-  void Function::scalarDivideFunctionValues(Intrepid::FieldContainer<double> &functionValues, BasisCachePtr basisCache) {
+  template <typename Scalar>
+  void Function<Scalar>::scalarDivideFunctionValues(Intrepid::FieldContainer<Scalar> &functionValues, BasisCachePtr basisCache) {
     // functionValues has dimensions (C,P,...)
     scalarModifyFunctionValues(functionValues,basisCache,DIVIDE);
   }
 
   // divide values by this function (supported only when this is a scalar--otherwise values would change rank...)
-  void Function::scalarMultiplyBasisValues(Intrepid::FieldContainer<double> &basisValues, BasisCachePtr basisCache) {
+  template <typename Scalar>
+  void Function<Scalar>::scalarMultiplyBasisValues(Intrepid::FieldContainer<double> &basisValues, BasisCachePtr basisCache) {
     // basisValues has dimensions (C,F,P,...)
     //  cout << "scalarMultiplyBasisValues: basisValues:\n" << basisValues;
     scalarModifyBasisValues(basisValues,basisCache,MULTIPLY);
@@ -975,13 +1022,15 @@ namespace Camellia {
   }
 
   // divide values by this function (supported only when this is a scalar)
-  void Function::scalarDivideBasisValues(Intrepid::FieldContainer<double> &basisValues, BasisCachePtr basisCache) {
+  template <typename Scalar>
+  void Function<Scalar>::scalarDivideBasisValues(Intrepid::FieldContainer<double> &basisValues, BasisCachePtr basisCache) {
     // basisValues has dimensions (C,F,P,...)
     scalarModifyBasisValues(basisValues,basisCache,DIVIDE);
   }
 
-  void Function::valuesDottedWithTensor(Intrepid::FieldContainer<double> &values,
-      FunctionPtr tensorFunctionOfLikeRank,
+  template <typename Scalar>
+  void Function<Scalar>::valuesDottedWithTensor(Intrepid::FieldContainer<Scalar> &values,
+      Teuchos::RCP<Function<Scalar> > tensorFunctionOfLikeRank,
       BasisCachePtr basisCache) {
     TEUCHOS_TEST_FOR_EXCEPTION( _rank != tensorFunctionOfLikeRank->rank(),std::invalid_argument,
         "Can't dot functions of unlike rank");
@@ -1000,9 +1049,9 @@ namespace Camellia {
       tensorValueIndex[d+2] = spaceDim;
     }
 
-    Intrepid::FieldContainer<double> myTensorValues(tensorValueIndex);
+    Intrepid::FieldContainer<Scalar> myTensorValues(tensorValueIndex);
     this->values(myTensorValues,basisCache);
-    Intrepid::FieldContainer<double> otherTensorValues(tensorValueIndex);
+    Intrepid::FieldContainer<Scalar> otherTensorValues(tensorValueIndex);
     tensorFunctionOfLikeRank->values(otherTensorValues,basisCache);
 
     //  cout << "myTensorValues:\n" << myTensorValues;
@@ -1021,9 +1070,9 @@ namespace Camellia {
       tensorValueIndex[0] = cellIndex;
       for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
         tensorValueIndex[1] = ptIndex;
-        double *myValue = &myTensorValues[ myTensorValues.getEnumeration(tensorValueIndex) ];
-        double *otherValue = &otherTensorValues[ otherTensorValues.getEnumeration(tensorValueIndex) ];
-        double *value = &values(cellIndex,ptIndex);
+        Scalar *myValue = &myTensorValues[ myTensorValues.getEnumeration(tensorValueIndex) ];
+        Scalar *otherValue = &otherTensorValues[ otherTensorValues.getEnumeration(tensorValueIndex) ];
+        Scalar *value = &values(cellIndex,ptIndex);
 
         for (int entryIndex=0; entryIndex<entriesPerPoint; entryIndex++) {
           *value += *myValue * *otherValue;
@@ -1035,14 +1084,15 @@ namespace Camellia {
     }
   }
 
-  void Function::scalarModifyFunctionValues(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache,
+  template <typename Scalar>
+  void Function<Scalar>::scalarModifyFunctionValues(Intrepid::FieldContainer<Scalar> &values, BasisCachePtr basisCache,
       FunctionModificationType modType) {
     TEUCHOS_TEST_FOR_EXCEPTION( rank() != 0, std::invalid_argument, "scalarModifyFunctionValues only supported for scalar functions" );
     int numCells = values.dimension(0);
     int numPoints = values.dimension(1);
     int spaceDim = basisCache->getPhysicalCubaturePoints().dimension(2);
 
-    Intrepid::FieldContainer<double> scalarValues(numCells,numPoints);
+    Intrepid::FieldContainer<Scalar> scalarValues(numCells,numPoints);
     this->values(scalarValues,basisCache);
 
     Teuchos::Array<int> valueIndex(values.rank());
@@ -1055,8 +1105,8 @@ namespace Camellia {
       valueIndex[0] = cellIndex;
       for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
         valueIndex[1] = ptIndex;
-        double *value = &values[ values.getEnumeration(valueIndex) ];
-        double scalarValue = scalarValues(cellIndex,ptIndex);
+        Scalar *value = &values[ values.getEnumeration(valueIndex) ];
+        Scalar scalarValue = scalarValues(cellIndex,ptIndex);
         for (int entryIndex=0; entryIndex<entriesPerPoint; entryIndex++) {
           if (modType == MULTIPLY) {
             *value++ *= scalarValue;
@@ -1068,7 +1118,8 @@ namespace Camellia {
     }
   }
 
-  void Function::scalarModifyBasisValues(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache,
+  template <typename Scalar>
+  void Function<Scalar>::scalarModifyBasisValues(Intrepid::FieldContainer<Scalar> &values, BasisCachePtr basisCache,
       FunctionModificationType modType) {
     TEUCHOS_TEST_FOR_EXCEPTION( rank() != 0, std::invalid_argument, "scalarModifyBasisValues only supported for scalar functions" );
     int numCells = values.dimension(0);
@@ -1077,7 +1128,7 @@ namespace Camellia {
 
     int spaceDim = basisCache->getPhysicalCubaturePoints().dimension(2);
 
-    Intrepid::FieldContainer<double> scalarValues(numCells,numPoints);
+    Intrepid::FieldContainer<Scalar> scalarValues(numCells,numPoints);
     this->values(scalarValues,basisCache);
 
     //  cout << "scalarModifyBasisValues: scalarValues:\n" << scalarValues;
@@ -1094,8 +1145,8 @@ namespace Camellia {
         valueIndex[1] = fieldIndex;
         for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
           valueIndex[2] = ptIndex;
-          double scalarValue = scalarValues(cellIndex,ptIndex);
-          double *value = &values[ values.getEnumeration(valueIndex) ];
+          Scalar scalarValue = scalarValues(cellIndex,ptIndex);
+          Scalar *value = &values[ values.getEnumeration(valueIndex) ];
           for (int entryIndex=0; entryIndex<entriesPerPoint; entryIndex++) {
             if (modType == MULTIPLY) {
               *value++ *= scalarValue;
@@ -1109,7 +1160,8 @@ namespace Camellia {
     //  cout << "scalarModifyBasisValues: values:\n" << values;
   }
 
-  void Function::writeBoundaryValuesToMATLABFile(Teuchos::RCP<Mesh> mesh, const string &filePath) {
+  template <typename Scalar>
+  void Function<Scalar>::writeBoundaryValuesToMATLABFile(Teuchos::RCP<Mesh> mesh, const string &filePath) {
     ofstream fout(filePath.c_str());
     fout << setprecision(15);
     vector< ElementTypePtr > elementTypes = mesh->elementTypes();
@@ -1146,7 +1198,7 @@ namespace Camellia {
         int numCubPoints = sideBasisCache->getPhysicalCubaturePoints().dimension(1);
 
 
-        Intrepid::FieldContainer<double> computedValues(numCells,numCubPoints); // first arg = 1 cell only
+        Intrepid::FieldContainer<Scalar> computedValues(numCells,numCubPoints); // first arg = 1 cell only
         this->values(computedValues,sideBasisCache);
 
         // NOW loop over all cells to write solution to file
@@ -1169,7 +1221,8 @@ namespace Camellia {
     fout.close();
   }
 
-  void Function::writeValuesToMATLABFile(Teuchos::RCP<Mesh> mesh, const string &filePath) {
+  template <typename Scalar>
+  void Function<Scalar>::writeValuesToMATLABFile(Teuchos::RCP<Mesh> mesh, const string &filePath) {
     // MATLAB format, supports scalar functions defined inside 2D volume right now...
     ofstream fout(filePath.c_str());
     fout << setprecision(15);
@@ -1219,7 +1272,7 @@ namespace Camellia {
 
       Intrepid::FieldContainer<double> physCubPoints = basisCache->getPhysicalCubaturePoints();
 
-      Intrepid::FieldContainer<double> computedValues(numCells,numPoints);
+      Intrepid::FieldContainer<Scalar> computedValues(numCells,numPoints);
       this->values(computedValues, basisCache);
 
       // NOW loop over all cells to write solution to file
@@ -1239,216 +1292,261 @@ namespace Camellia {
     fout.close();
   }
 
-  FunctionPtr Function::constant(double value) {
-    return Teuchos::rcp( new ConstantScalarFunction(value) );
+  template <typename Scalar>
+  Teuchos::RCP<Function<Scalar> > Function<Scalar>::constant(Scalar value) {
+    return Teuchos::rcp( new ConstantScalarFunction<Scalar>(value) );
   }
 
-  FunctionPtr Function::constant(vector<double> &value) {
-    return Teuchos::rcp( new ConstantVectorFunction(value) );
+  template <typename Scalar>
+  Teuchos::RCP<Function<Scalar> > Function<Scalar>::constant(vector<Scalar> &value) {
+    return Teuchos::rcp( new ConstantVectorFunction<Scalar>(value) );
   }
 
-  FunctionPtr Function::meshBoundaryCharacteristic() {
+  template <typename Scalar>
+  Teuchos::RCP<Function<double> > Function<Scalar>::meshBoundaryCharacteristic() {
     // 1 on mesh boundary, 0 elsewhere
     return Teuchos::rcp( new MeshBoundaryCharacteristicFunction );
   }
 
-  FunctionPtr Function::h() {
+  template <typename Scalar>
+  Teuchos::RCP<Function<double> > Function<Scalar>::h() {
     return Teuchos::rcp( new hFunction );
   }
 
-  FunctionPtr Function::meshSkeletonCharacteristic() {
+  template <typename Scalar>
+  Teuchos::RCP<Function<double> > Function<Scalar>::meshSkeletonCharacteristic() {
     // 1 on mesh skeleton, 0 elsewhere
     return Teuchos::rcp( new MeshSkeletonCharacteristicFunction );
   }
 
-  FunctionPtr Function::normal() { // unit outward-facing normal on each element boundary
-    static FunctionPtr _normal = Teuchos::rcp( new UnitNormalFunction );
+  template <typename Scalar>
+  Teuchos::RCP<Function<double> > Function<Scalar>::normal() { // unit outward-facing normal on each element boundary
+    static Teuchos::RCP<Function<double> > _normal = Teuchos::rcp( new UnitNormalFunction );
     return _normal;
   }
 
-  FunctionPtr Function::normal_1D() { // unit outward-facing normal on each element boundary
-    static FunctionPtr _normal_1D = Teuchos::rcp( new UnitNormalFunction(0) );
+  template <typename Scalar>
+  Teuchos::RCP<Function<double> > Function<Scalar>::normal_1D() { // unit outward-facing normal on each element boundary
+    static Teuchos::RCP<Function<double> > _normal_1D = Teuchos::rcp( new UnitNormalFunction(0) );
     return _normal_1D;
   }
 
-  FunctionPtr Function::normalSpaceTime() { // unit outward-facing normal on each element boundary
-    static FunctionPtr _normalSpaceTime = Teuchos::rcp( new UnitNormalFunction(-1,true) );
+  template <typename Scalar>
+  Teuchos::RCP<Function<double> > Function<Scalar>::normalSpaceTime() { // unit outward-facing normal on each element boundary
+    static Teuchos::RCP<Function<double> > _normalSpaceTime = Teuchos::rcp( new UnitNormalFunction(-1,true) );
     return _normalSpaceTime;
   }
 
-  FunctionPtr Function::sideParity() { // canonical direction on boundary (used for defining fluxes)
-    static FunctionPtr _sideParity = Teuchos::rcp( new SideParityFunction );
+  template <typename Scalar>
+  Teuchos::RCP<Function<double> > Function<Scalar>::sideParity() { // canonical direction on boundary (used for defining fluxes)
+    static Teuchos::RCP<Function<double> > _sideParity = Teuchos::rcp( new SideParityFunction );
     return _sideParity;
   }
 
-  FunctionPtr Function::polarize(FunctionPtr f) {
-    return Teuchos::rcp( new PolarizedFunction(f) );
+  template <typename Scalar>
+  Teuchos::RCP<Function<Scalar> > Function<Scalar>::polarize(Teuchos::RCP<Function<Scalar> > f) {
+    return Teuchos::rcp( new PolarizedFunction<Scalar>(f) );
   }
 
-  FunctionPtr Function::restrictToCellBoundary(FunctionPtr f) {
-    return Teuchos::rcp( new CellBoundaryRestrictedFunction(f) );
+  template <typename Scalar>
+  Teuchos::RCP<Function<Scalar> > Function<Scalar>::restrictToCellBoundary(Teuchos::RCP<Function<Scalar> > f) {
+    return Teuchos::rcp( new CellBoundaryRestrictedFunction<Scalar>(f) );
   }
 
-  FunctionPtr Function::solution(VarPtr var, SolutionPtr soln) {
-    return Teuchos::rcp( new SimpleSolutionFunction(var, soln) );
+  template <typename Scalar>
+  Teuchos::RCP<Function<Scalar> > Function<Scalar>::solution(VarPtr var, SolutionPtr soln) {
+    return Teuchos::rcp( new SimpleSolutionFunction<Scalar>(var, soln) );
   }
 
-  FunctionPtr Function::vectorize(FunctionPtr f1, FunctionPtr f2) {
-    return Teuchos::rcp( new VectorizedFunction(f1,f2) );
+  template <typename Scalar>
+  Teuchos::RCP<Function<Scalar> > Function<Scalar>::vectorize(Teuchos::RCP<Function<Scalar> > f1, Teuchos::RCP<Function<Scalar> > f2) {
+    return Teuchos::rcp( new VectorizedFunction<Scalar>(f1,f2) );
   }
 
-  FunctionPtr Function::vectorize(FunctionPtr f1, FunctionPtr f2, FunctionPtr f3) {
-    return Teuchos::rcp( new VectorizedFunction(f1,f2,f3) );
+  template <typename Scalar>
+  Teuchos::RCP<Function<Scalar> > Function<Scalar>::vectorize(Teuchos::RCP<Function<Scalar> > f1, Teuchos::RCP<Function<Scalar> > f2, Teuchos::RCP<Function<Scalar> > f3) {
+    return Teuchos::rcp( new VectorizedFunction<Scalar>(f1,f2,f3) );
   }
 
-  FunctionPtr Function::null() {
-    static FunctionPtr _null = Teuchos::rcp( (Function*) NULL );
+  template <typename Scalar>
+  Teuchos::RCP<Function<Scalar> > Function<Scalar>::null() {
+    static Teuchos::RCP<Function<Scalar> > _null = Teuchos::rcp( (Function<Scalar>*) NULL );
     return _null;
   }
 
-  FunctionPtr Function::xn(int n) {
+  template <typename Scalar>
+  Teuchos::RCP<Function<double> > Function<Scalar>::xn(int n) {
     return Teuchos::rcp( new Xn(n) );
   }
 
-  FunctionPtr Function::yn(int n) {
+  template <typename Scalar>
+  Teuchos::RCP<Function<double> > Function<Scalar>::yn(int n) {
     return Teuchos::rcp( new Yn(n) );
   }
 
-  FunctionPtr Function::zn(int n) {
+  template <typename Scalar>
+  Teuchos::RCP<Function<double> > Function<Scalar>::zn(int n) {
     return Teuchos::rcp( new Zn(n) );
   }
 
-  FunctionPtr Function::tn(int n) {
+  template <typename Scalar>
+  Teuchos::RCP<Function<double> > Function<Scalar>::tn(int n) {
     return Teuchos::rcp( new Tn(n) );
   }
 
-  FunctionPtr Function::xPart(FunctionPtr vectorFxn) {
-    return Teuchos::rcp( new ComponentFunction(vectorFxn, 0) );
+  template <typename Scalar>
+  Teuchos::RCP<Function<Scalar> > Function<Scalar>::xPart(Teuchos::RCP<Function<Scalar> > vectorFxn) {
+    return Teuchos::rcp( new ComponentFunction<Scalar>(vectorFxn, 0) );
   }
 
-  FunctionPtr Function::yPart(FunctionPtr vectorFxn) {
-    return Teuchos::rcp( new ComponentFunction(vectorFxn, 1) );
+  template <typename Scalar>
+  Teuchos::RCP<Function<Scalar> > Function<Scalar>::yPart(Teuchos::RCP<Function<Scalar> > vectorFxn) {
+    return Teuchos::rcp( new ComponentFunction<Scalar>(vectorFxn, 1) );
   }
 
-  FunctionPtr Function::zPart(FunctionPtr vectorFxn) {
-    return Teuchos::rcp( new ComponentFunction(vectorFxn, 2) );
+  template <typename Scalar>
+  Teuchos::RCP<Function<Scalar> > Function<Scalar>::zPart(Teuchos::RCP<Function<Scalar> > vectorFxn) {
+    return Teuchos::rcp( new ComponentFunction<Scalar>(vectorFxn, 2) );
   }
 
-  FunctionPtr Function::zero(int rank) {
-    static FunctionPtr _zero = Teuchos::rcp( new ConstantScalarFunction(0.0) );
+  template <typename Scalar>
+  Teuchos::RCP<Function<double> > Function<Scalar>::zero(int rank) {
+    static Teuchos::RCP<Function<double> > _zero = Teuchos::rcp( new ConstantScalarFunction<double>(0.0) );
     if (rank==0) {
       return _zero;
     } else {
-      FunctionPtr zeroTensor = _zero;
+      Teuchos::RCP<Function<double> > zeroTensor = _zero;
       for (int i=0; i<rank; i++) {
-        // THIS ASSUMES 2D--3D would be Function::vectorize(zeroTensor, zeroTensor, zeroTensor)...
-        zeroTensor = Function::vectorize(zeroTensor, zeroTensor);
+        // THIS ASSUMES 2D--3D would be Function<Scalar>::vectorize(zeroTensor, zeroTensor, zeroTensor)...
+        zeroTensor = Function<double>::vectorize(zeroTensor, zeroTensor);
       }
       return zeroTensor;
     }
   }
 
-  ConstantScalarFunction::ConstantScalarFunction(double value) {
+  template <typename Scalar>
+  ConstantScalarFunction<Scalar>::ConstantScalarFunction(Scalar value) {
     _value = value;
     ostringstream valueStream;
     valueStream << value;
     _stringDisplay = valueStream.str();
   }
 
-  ConstantScalarFunction::ConstantScalarFunction(double value, string stringDisplay) {
+  template <typename Scalar>
+  ConstantScalarFunction<Scalar>::ConstantScalarFunction(Scalar value, string stringDisplay) {
     _value = value;
     _stringDisplay = stringDisplay;
   }
 
-  string ConstantScalarFunction::displayString() {
+  template <typename Scalar>
+  string ConstantScalarFunction<Scalar>::displayString() {
     return _stringDisplay;
   }
 
-  bool ConstantScalarFunction::isZero() {
+  template <typename Scalar>
+  bool ConstantScalarFunction<Scalar>::isZero() {
     return 0.0 == _value;
   }
 
-  void ConstantScalarFunction::values(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache) {
-    CHECK_VALUES_RANK(values);
+  template <typename Scalar>
+  void ConstantScalarFunction<Scalar>::values(Intrepid::FieldContainer<Scalar> &values, BasisCachePtr basisCache) {
+    this->CHECK_VALUES_RANK(values);
     for (int i=0; i < values.size(); i++) {
       values[i] = _value;
     }
   }
-  void ConstantScalarFunction::scalarMultiplyFunctionValues(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache) {
+  template <typename Scalar>
+  void ConstantScalarFunction<Scalar>::scalarMultiplyFunctionValues(Intrepid::FieldContainer<Scalar> &values, BasisCachePtr basisCache) {
     if (_value != 1.0) {
       for (int i=0; i < values.size(); i++) {
         values[i] *= _value;
       }
     }
   }
-  void ConstantScalarFunction::scalarDivideFunctionValues(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache) {
+  template <typename Scalar>
+  void ConstantScalarFunction<Scalar>::scalarDivideFunctionValues(Intrepid::FieldContainer<Scalar> &values, BasisCachePtr basisCache) {
     if (_value != 1.0) {
       for (int i=0; i < values.size(); i++) {
         values[i] /= _value;
       }
     }
   }
-  void ConstantScalarFunction::scalarMultiplyBasisValues(Intrepid::FieldContainer<double> &basisValues, BasisCachePtr basisCache) {
+  template <typename Scalar>
+  void ConstantScalarFunction<Scalar>::scalarMultiplyBasisValues(Intrepid::FieldContainer<double> &basisValues, BasisCachePtr basisCache) {
     // we don't actually care about the shape of basisValues--just use the FunctionValues versions:
     scalarMultiplyFunctionValues(basisValues,basisCache);
   }
-  void ConstantScalarFunction::scalarDivideBasisValues(Intrepid::FieldContainer<double> &basisValues, BasisCachePtr basisCache) {
+  template <typename Scalar>
+  void ConstantScalarFunction<Scalar>::scalarDivideBasisValues(Intrepid::FieldContainer<double> &basisValues, BasisCachePtr basisCache) {
     scalarDivideFunctionValues(basisValues,basisCache);
   }
 
-  double ConstantScalarFunction::value(double x) {
+  template <typename Scalar>
+  Scalar ConstantScalarFunction<Scalar>::value(double x) {
     return value();
   }
 
-  double ConstantScalarFunction::value(double x, double y) {
+  template <typename Scalar>
+  Scalar ConstantScalarFunction<Scalar>::value(double x, double y) {
     return value();
   }
 
-  double ConstantScalarFunction::value(double x, double y, double z) {
+  template <typename Scalar>
+  Scalar ConstantScalarFunction<Scalar>::value(double x, double y, double z) {
     return value();
   }
 
-  double ConstantScalarFunction::value() {
+  template <typename Scalar>
+  Scalar ConstantScalarFunction<Scalar>::value() {
     return _value;
   }
 
-  FunctionPtr ConstantScalarFunction::dx() {
-    return Function::zero();
+  template <typename Scalar>
+  Teuchos::RCP<Function<double> > ConstantScalarFunction<Scalar>::dx() {
+    return Function<double>::zero();
   }
 
-  FunctionPtr ConstantScalarFunction::dy() {
-    return Function::zero();
+  template <typename Scalar>
+  Teuchos::RCP<Function<double> > ConstantScalarFunction<Scalar>::dy() {
+    return Function<double>::zero();
   }
 
-  FunctionPtr ConstantScalarFunction::dz() {
-    return Function::zero();
+  template <typename Scalar>
+  Teuchos::RCP<Function<double> > ConstantScalarFunction<Scalar>::dz() {
+    return Function<double>::zero();
   }
 
-  ConstantVectorFunction::ConstantVectorFunction(vector<double> value) : Function(1) {
+  template <typename Scalar>
+  ConstantVectorFunction<Scalar>::ConstantVectorFunction(vector<Scalar> value) : Function<Scalar>(1) {
     _value = value;
   }
 
-  FunctionPtr ConstantVectorFunction::x() {
-    return Teuchos::rcp( new ConstantScalarFunction( _value[0] ) );
+  template <typename Scalar>
+  Teuchos::RCP<Function<Scalar> > ConstantVectorFunction<Scalar>::x() {
+    return Teuchos::rcp( new ConstantScalarFunction<Scalar>( _value[0] ) );
   }
 
-  FunctionPtr ConstantVectorFunction::y() {
-    return Teuchos::rcp( new ConstantScalarFunction( _value[1] ) );
+  template <typename Scalar>
+  Teuchos::RCP<Function<Scalar> > ConstantVectorFunction<Scalar>::y() {
+    return Teuchos::rcp( new ConstantScalarFunction<Scalar>( _value[1] ) );
   }
 
-  FunctionPtr ConstantVectorFunction::z() {
+  template <typename Scalar>
+  Teuchos::RCP<Function<Scalar> > ConstantVectorFunction<Scalar>::z() {
     if (_value.size() > 2) {
-      return Teuchos::rcp( new ConstantScalarFunction( _value[2] ) );
+      return Teuchos::rcp( new ConstantScalarFunction<Scalar>( _value[2] ) );
     } else {
       return Teuchos::null;
     }
   }
 
-  vector<double> ConstantVectorFunction::value() {
+  template <typename Scalar>
+  vector<Scalar> ConstantVectorFunction<Scalar>::value() {
     return _value;
   }
 
-  bool ConstantVectorFunction::isZero() {
+  template <typename Scalar>
+  bool ConstantVectorFunction<Scalar>::isZero() {
     for (int d=0; d < _value.size(); d++) {
       if (0.0 != _value[d]) {
         return false;
@@ -1457,8 +1555,9 @@ namespace Camellia {
     return true;
   }
 
-  void ConstantVectorFunction::values(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache) {
-    CHECK_VALUES_RANK(values);
+  template <typename Scalar>
+  void ConstantVectorFunction<Scalar>::values(Intrepid::FieldContainer<Scalar> &values, BasisCachePtr basisCache) {
+    this->CHECK_VALUES_RANK(values);
     int spaceDim = values.dimension(2);
     if (spaceDim > _value.size()) {
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "spaceDim is greater than length of vector...");
@@ -1472,7 +1571,7 @@ namespace Camellia {
   }
 
   ExactSolutionFunction::ExactSolutionFunction(Teuchos::RCP<ExactSolution> exactSolution, int trialID)
-    : Function(exactSolution->exactFunctions().find(trialID)->second->rank()) {
+    : Function<double>(exactSolution->exactFunctions().find(trialID)->second->rank()) {
       _exactSolution = exactSolution;
       _trialID = trialID;
     }
@@ -1480,70 +1579,78 @@ namespace Camellia {
     _exactSolution->solutionValues(values,_trialID,basisCache);
   }
 
-  string ProductFunction::displayString() {
+  template <typename Scalar>
+  string ProductFunction<Scalar>::displayString() {
     ostringstream ss;
     ss << _f1->displayString() << " \\cdot " << _f2->displayString();
     return ss.str();
   }
 
-  FunctionPtr ProductFunction::dx() {
+  template <typename Scalar>
+  Teuchos::RCP<Function<Scalar> > ProductFunction<Scalar>::dx() {
     if ( (_f1->dx().get() == NULL) || (_f2->dx().get() == NULL) ) {
-      return null();
+      return Function<double>::null();
     }
     // otherwise, apply product rule:
     return _f1 * _f2->dx() + _f2 * _f1->dx();
   }
 
-  FunctionPtr ProductFunction::dy() {
+  template <typename Scalar>
+  Teuchos::RCP<Function<Scalar> > ProductFunction<Scalar>::dy() {
     if ( (_f1->dy().get() == NULL) || (_f2->dy().get() == NULL) ) {
-      return null();
+      return Function<double>::null();
     }
     // otherwise, apply product rule:
     return _f1 * _f2->dy() + _f2 * _f1->dy();
   }
 
-  FunctionPtr ProductFunction::dz() {
+  template <typename Scalar>
+  Teuchos::RCP<Function<Scalar> > ProductFunction<Scalar>::dz() {
     if ( (_f1->dz().get() == NULL) || (_f2->dz().get() == NULL) ) {
-      return null();
+      return Function<double>::null();
     }
     // otherwise, apply product rule:
     return _f1 * _f2->dz() + _f2 * _f1->dz();
   }
 
-  FunctionPtr ProductFunction::x() {
+  template <typename Scalar>
+  Teuchos::RCP<Function<Scalar> > ProductFunction<Scalar>::x() {
     if (this->rank() == 0) {
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Can't take x component of scalar function.");
     }
     // otherwise, _f2 is the rank > 0 function
-    if (isNull(_f2->x())) {
-      return null();
+    if (Function<Scalar>::isNull(_f2->x())) {
+      return Function<double>::null();
     }
     return _f1 * _f2->x();
   }
 
-  FunctionPtr ProductFunction::y() {
+  template <typename Scalar>
+  Teuchos::RCP<Function<Scalar> > ProductFunction<Scalar>::y() {
     if (this->rank() == 0) {
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Can't take y component of scalar function.");
     }
     // otherwise, _f2 is the rank > 0 function
-    if (isNull(_f2->y())) {
-      return null();
+    if (Function<Scalar>::isNull(_f2->y())) {
+      return Function<double>::null();
     }
     return _f1 * _f2->y();
   }
 
-  FunctionPtr ProductFunction::z() {
+  template <typename Scalar>
+  Teuchos::RCP<Function<Scalar> > ProductFunction<Scalar>::z() {
     if (this->rank() == 0) {
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Can't take z component of scalar function.");
     }
     // otherwise, _f2 is the rank > 0 function
-    if (isNull(_f2->z())) {
-      return null();
+    if (Function<Scalar>::isNull(_f2->z())) {
+      return Function<double>::null();
     }
     return _f1 * _f2->z();
   }
 
-  int ProductFunction::productRank(FunctionPtr f1, FunctionPtr f2) {
+  template <typename Scalar>
+  int ProductFunction<Scalar>::productRank(Teuchos::RCP<Function<Scalar> > f1, Teuchos::RCP<Function<Scalar> > f2) {
     if (f1->rank() == f2->rank()) return 0;
     if (f1->rank() == 0) return f2->rank();
     if (f2->rank() == 0) return f1->rank();
@@ -1551,7 +1658,8 @@ namespace Camellia {
     return -1;
   }
 
-  ProductFunction::ProductFunction(FunctionPtr f1, FunctionPtr f2) : Function( productRank(f1,f2) ) {
+  template <typename Scalar>
+  ProductFunction<Scalar>::ProductFunction(Teuchos::RCP<Function<Scalar> > f1, Teuchos::RCP<Function<Scalar> > f2) : Function<Scalar>( productRank(f1,f2) ) {
     // for simplicity of values() code, ensure that rank of f1 ≤ rank of f2:
     if ( f1->rank() <= f2->rank() ) {
       _f1 = f1;
@@ -1566,12 +1674,14 @@ namespace Camellia {
     }
   }
 
-  bool ProductFunction::boundaryValueOnly() {
+  template <typename Scalar>
+  bool ProductFunction<Scalar>::boundaryValueOnly() {
     return _f1->boundaryValueOnly() || _f2->boundaryValueOnly();
   }
 
-  void ProductFunction::values(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache) {
-    CHECK_VALUES_RANK(values);
+  template <typename Scalar>
+  void ProductFunction<Scalar>::values(Intrepid::FieldContainer<Scalar> &values, BasisCachePtr basisCache) {
+    this->CHECK_VALUES_RANK(values);
     if (( _f2->rank() > 0) && (this->rank() == 0)) { // tensor product resulting in scalar value
       _f2->valuesDottedWithTensor(values, _f1, basisCache);
     } else { // scalar multiplication by f1, then
@@ -1580,7 +1690,8 @@ namespace Camellia {
     }
   }
 
-  QuotientFunction::QuotientFunction(FunctionPtr f, FunctionPtr scalarDivisor) : Function( f->rank() ) {
+  template <typename Scalar>
+  QuotientFunction<Scalar>::QuotientFunction(Teuchos::RCP<Function<Scalar> > f, Teuchos::RCP<Function<Scalar> > scalarDivisor) : Function<Scalar>( f->rank() ) {
     if ( scalarDivisor->rank() != 0 ) {
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unsupported rank combination.");
     }
@@ -1591,126 +1702,144 @@ namespace Camellia {
     }
   }
 
-  bool QuotientFunction::boundaryValueOnly() {
+  template <typename Scalar>
+  bool QuotientFunction<Scalar>::boundaryValueOnly() {
     return _f->boundaryValueOnly() || _scalarDivisor->boundaryValueOnly();
   }
 
-  string QuotientFunction::displayString() {
+  template <typename Scalar>
+  string QuotientFunction<Scalar>::displayString() {
     ostringstream ss;
     ss << _f->displayString() << " / " << _scalarDivisor->displayString();
     return ss.str();
   }
 
-  void QuotientFunction::values(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache) {
-    CHECK_VALUES_RANK(values);
+  template <typename Scalar>
+  void QuotientFunction<Scalar>::values(Intrepid::FieldContainer<Scalar> &values, BasisCachePtr basisCache) {
+    this->CHECK_VALUES_RANK(values);
     _f->values(values,basisCache);
     _scalarDivisor->scalarDivideFunctionValues(values, basisCache);
   }
 
-  FunctionPtr QuotientFunction::dx() {
+  template <typename Scalar>
+  Teuchos::RCP<Function<Scalar> > QuotientFunction<Scalar>::dx() {
     if ( (_f->dx().get() == NULL) || (_scalarDivisor->dx().get() == NULL) ) {
-      return null();
+      return Function<double>::null();
     }
     // otherwise, apply quotient rule:
     return _f->dx() / _scalarDivisor - _f * _scalarDivisor->dx() / (_scalarDivisor * _scalarDivisor);
   }
 
-  FunctionPtr QuotientFunction::dy() {
+  template <typename Scalar>
+  Teuchos::RCP<Function<Scalar> > QuotientFunction<Scalar>::dy() {
     if ( (_f->dy().get() == NULL) || (_scalarDivisor->dy().get() == NULL) ) {
-      return null();
+      return Function<double>::null();
     }
     // otherwise, apply quotient rule:
     return _f->dy() / _scalarDivisor - _f * _scalarDivisor->dy() / (_scalarDivisor * _scalarDivisor);
   }
 
-  FunctionPtr QuotientFunction::dz() {
+  template <typename Scalar>
+  Teuchos::RCP<Function<Scalar> > QuotientFunction<Scalar>::dz() {
     if ( (_f->dz().get() == NULL) || (_scalarDivisor->dz().get() == NULL) ) {
-      return null();
+      return Function<double>::null();
     }
     // otherwise, apply quotient rule:
     return _f->dz() / _scalarDivisor - _f * _scalarDivisor->dz() / (_scalarDivisor * _scalarDivisor);
   }
 
-  SumFunction::SumFunction(FunctionPtr f1, FunctionPtr f2) : Function(f1->rank()) {
+  template <typename Scalar>
+  SumFunction<Scalar>::SumFunction(Teuchos::RCP<Function<Scalar> > f1, Teuchos::RCP<Function<Scalar> > f2) : Function<Scalar>(f1->rank()) {
     TEUCHOS_TEST_FOR_EXCEPTION( f1->rank() != f2->rank(), std::invalid_argument, "summands must be of like rank.");
     _f1 = f1;
     _f2 = f2;
   }
 
-  bool SumFunction::boundaryValueOnly() {
+  template <typename Scalar>
+  bool SumFunction<Scalar>::boundaryValueOnly() {
     // if either summand is BVO, then so is the sum...
     return _f1->boundaryValueOnly() || _f2->boundaryValueOnly();
   }
 
-  string SumFunction::displayString() {
+  template <typename Scalar>
+  string SumFunction<Scalar>::displayString() {
     ostringstream ss;
     ss << "(" << _f1->displayString() << " + " << _f2->displayString() << ")";
     return ss.str();
   }
 
-  void SumFunction::values(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache) {
-    CHECK_VALUES_RANK(values);
+  template <typename Scalar>
+  void SumFunction<Scalar>::values(Intrepid::FieldContainer<Scalar> &values, BasisCachePtr basisCache) {
+    this->CHECK_VALUES_RANK(values);
     _f1->values(values,basisCache);
     _f2->addToValues(values,basisCache);
   }
 
-  FunctionPtr SumFunction::x() {
+  template <typename Scalar>
+  Teuchos::RCP<Function<Scalar> > SumFunction<Scalar>::x() {
     if ( (_f1->x().get() == NULL) || (_f2->x().get() == NULL) ) {
-      return null();
+      return Function<double>::null();
     }
     return _f1->x() + _f2->x();
   }
 
-  FunctionPtr SumFunction::y() {
+  template <typename Scalar>
+  Teuchos::RCP<Function<Scalar> > SumFunction<Scalar>::y() {
     if ( (_f1->y().get() == NULL) || (_f2->y().get() == NULL) ) {
-      return null();
+      return Function<double>::null();
     }
     return _f1->y() + _f2->y();
   }
-  FunctionPtr SumFunction::z() {
+  template <typename Scalar>
+  Teuchos::RCP<Function<Scalar> > SumFunction<Scalar>::z() {
     if ( (_f1->z().get() == NULL) || (_f2->z().get() == NULL) ) {
-      return null();
+      return Function<double>::null();
     }
     return _f1->z() + _f2->z();
   }
 
-  FunctionPtr SumFunction::dx() {
+  template <typename Scalar>
+  Teuchos::RCP<Function<Scalar> > SumFunction<Scalar>::dx() {
     if ( (_f1->dx().get() == NULL) || (_f2->dx().get() == NULL) ) {
-      return null();
+      return Function<double>::null();
     }
     return _f1->dx() + _f2->dx();
   }
 
-  FunctionPtr SumFunction::dy() {
+  template <typename Scalar>
+  Teuchos::RCP<Function<Scalar> > SumFunction<Scalar>::dy() {
     if ( (_f1->dy().get() == NULL) || (_f2->dy().get() == NULL) ) {
-      return null();
+      return Function<double>::null();
     }
     return _f1->dy() + _f2->dy();
   }
 
-  FunctionPtr SumFunction::dz() {
+  template <typename Scalar>
+  Teuchos::RCP<Function<Scalar> > SumFunction<Scalar>::dz() {
     if ( (_f1->dz().get() == NULL) || (_f2->dz().get() == NULL) ) {
-      return null();
+      return Function<double>::null();
     }
     return _f1->dz() + _f2->dz();
   }
 
-  FunctionPtr SumFunction::grad(int numComponents) {
-    if ( isNull(_f1->grad(numComponents)) || isNull(_f2->grad(numComponents)) ) {
-      return null();
+  template <typename Scalar>
+  Teuchos::RCP<Function<Scalar> > SumFunction<Scalar>::grad(int numComponents) {
+    if ( Function<Scalar>::isNull(_f1->grad(numComponents)) || Function<Scalar>::isNull(_f2->grad(numComponents)) ) {
+      return Function<double>::null();
     } else {
       return _f1->grad(numComponents) + _f2->grad(numComponents);
     }
   }
-  FunctionPtr SumFunction::div() {
-    if ( isNull(_f1->div()) || isNull(_f2->div()) ) {
-      return null();
+  template <typename Scalar>
+  Teuchos::RCP<Function<Scalar> > SumFunction<Scalar>::div() {
+    if ( Function<Scalar>::isNull(_f1->div()) || Function<Scalar>::isNull(_f2->div()) ) {
+      return Function<double>::null();
     } else {
       return _f1->div() + _f2->div();
     }
   }
 
-  MinFunction::MinFunction(FunctionPtr f1, FunctionPtr f2) : Function(f1->rank()) {
+  MinFunction::MinFunction(Teuchos::RCP<Function<double> > f1, Teuchos::RCP<Function<double> > f2) : Function<double>(f1->rank()) {
     TEUCHOS_TEST_FOR_EXCEPTION( f1->rank() != f2->rank(), std::invalid_argument, "both functions must be of like rank.");
     _f1 = f1;
     _f2 = f2;
@@ -1728,7 +1857,7 @@ namespace Camellia {
   }
 
   void MinFunction::values(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache) {
-    CHECK_VALUES_RANK(values);
+    this->CHECK_VALUES_RANK(values);
     Intrepid::FieldContainer<double> values2(values);
     _f1->values(values,basisCache);
     _f2->values(values2,basisCache);
@@ -1737,27 +1866,28 @@ namespace Camellia {
     }
   }
 
-  FunctionPtr MinFunction::x() {
+  Teuchos::RCP<Function<double> > MinFunction::x() {
     if ( (_f1->x().get() == NULL) || (_f2->x().get() == NULL) ) {
-      return null();
+      return Function<double>::null();
     }
-    return Function::min(_f1->x(),_f2->x());
+    return Function<double>::min(_f1->x(),_f2->x());
   }
 
-  FunctionPtr MinFunction::y() {
+  Teuchos::RCP<Function<double> > MinFunction::y() {
     if ( (_f1->y().get() == NULL) || (_f2->y().get() == NULL) ) {
-      return null();
+      return Function<double>::null();
     }
-    return Function::min(_f1->y(),_f2->y());
-  }
-  FunctionPtr MinFunction::z() {
-    if ( (_f1->z().get() == NULL) || (_f2->z().get() == NULL) ) {
-      return null();
-    }
-    return Function::min(_f1->z(),_f2->z());
+    return Function<double>::min(_f1->y(),_f2->y());
   }
 
-  MaxFunction::MaxFunction(FunctionPtr f1, FunctionPtr f2) : Function(f1->rank()) {
+  Teuchos::RCP<Function<double> > MinFunction::z() {
+    if ( (_f1->z().get() == NULL) || (_f2->z().get() == NULL) ) {
+      return Function<double>::null();
+    }
+    return Function<double>::min(_f1->z(),_f2->z());
+  }
+
+  MaxFunction::MaxFunction(Teuchos::RCP<Function<double> > f1, Teuchos::RCP<Function<double> > f2) : Function<double>(f1->rank()) {
     TEUCHOS_TEST_FOR_EXCEPTION( f1->rank() != f2->rank(), std::invalid_argument, "both functions must be of like rank.");
     _f1 = f1;
     _f2 = f2;
@@ -1775,7 +1905,7 @@ namespace Camellia {
   }
 
   void MaxFunction::values(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache) {
-    CHECK_VALUES_RANK(values);
+    this->CHECK_VALUES_RANK(values);
     Intrepid::FieldContainer<double> values2(values);
     _f1->values(values,basisCache);
     _f2->values(values2,basisCache);
@@ -1784,24 +1914,25 @@ namespace Camellia {
     }
   }
 
-  FunctionPtr MaxFunction::x() {
+  Teuchos::RCP<Function<double> > MaxFunction::x() {
     if ( (_f1->x().get() == NULL) || (_f2->x().get() == NULL) ) {
-      return null();
+      return Function<double>::null();
     }
-    return Function::max(_f1->x(),_f2->x());
+    return Function<double>::max(_f1->x(),_f2->x());
   }
 
-  FunctionPtr MaxFunction::y() {
+  Teuchos::RCP<Function<double> > MaxFunction::y() {
     if ( (_f1->y().get() == NULL) || (_f2->y().get() == NULL) ) {
-      return null();
+      return Function<double>::null();
     }
-    return Function::max(_f1->y(),_f2->y());
+    return Function<double>::max(_f1->y(),_f2->y());
   }
-  FunctionPtr MaxFunction::z() {
+
+  Teuchos::RCP<Function<double> > MaxFunction::z() {
     if ( (_f1->z().get() == NULL) || (_f2->z().get() == NULL) ) {
-      return null();
+      return Function<double>::null();
     }
-    return Function::max(_f1->z(),_f2->z());
+    return Function<double>::max(_f1->z(),_f2->z());
   }
 
   string hFunction::displayString() {
@@ -1812,7 +1943,7 @@ namespace Camellia {
     return h;
   }
   void hFunction::values(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache) {
-    CHECK_VALUES_RANK(values);
+    this->CHECK_VALUES_RANK(values);
     int numCells = values.dimension(0);
     int numPoints = values.dimension(1);
 
@@ -1829,15 +1960,15 @@ namespace Camellia {
   }
 
   // this is liable to be a bit slow!!
-  class ComposedFunction : public Function {
-    FunctionPtr _f, _arg_g;
+  class ComposedFunction : public Function<double> {
+    Teuchos::RCP<Function<double> > _f, _arg_g;
     public:
-    ComposedFunction(FunctionPtr f, FunctionPtr arg_g) : Function(f->rank()) {
+    ComposedFunction(Teuchos::RCP<Function<double> > f, Teuchos::RCP<Function<double> > arg_g) : Function<double>(f->rank()) {
       _f = f;
       _arg_g = arg_g;
     }
     void values(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache) {
-      CHECK_VALUES_RANK(values);
+      this->CHECK_VALUES_RANK(values);
       int numCells = basisCache->getPhysicalCubaturePoints().dimension(0);
       int numPoints = basisCache->getPhysicalCubaturePoints().dimension(1);
       int spaceDim = basisCache->getPhysicalCubaturePoints().dimension(2);
@@ -1852,53 +1983,58 @@ namespace Camellia {
       BasisCachePtr fArgCache = Teuchos::rcp( new PhysicalPointCache(fArgPoints) );
       _f->values(values, fArgCache);
     }
-    FunctionPtr dx() {
-      if (isNull(_f->dx()) || isNull(_arg_g->dx())) {
-        return Function::null();
+    Teuchos::RCP<Function<double> > dx() {
+      if (Function<double>::isNull(_f->dx()) || Function<double>::isNull(_arg_g->dx())) {
+        return Function<double>::null();
       }
       // chain rule:
-      return _arg_g->dx() * Function::composedFunction(_f->dx(),_arg_g);
+      return _arg_g->dx() * Function<double>::composedFunction(_f->dx(),_arg_g);
     }
-    FunctionPtr dy() {
-      if (isNull(_f->dy()) || isNull(_arg_g->dy())) {
-        return Function::null();
+    Teuchos::RCP<Function<double> > dy() {
+      if (Function<double>::isNull(_f->dy()) || Function<double>::isNull(_arg_g->dy())) {
+        return Function<double>::null();
       }
       // chain rule:
-      return _arg_g->dy() * Function::composedFunction(_f->dy(),_arg_g);
+      return _arg_g->dy() * Function<double>::composedFunction(_f->dy(),_arg_g);
     }
-    FunctionPtr dz() {
-      if (isNull(_f->dz()) || isNull(_arg_g->dz())) {
-        return Function::null();
+    Teuchos::RCP<Function<double> > dz() {
+      if (Function<double>::isNull(_f->dz()) || Function<double>::isNull(_arg_g->dz())) {
+        return Function<double>::null();
       }
       // chain rule:
-      return _arg_g->dz() * Function::composedFunction(_f->dz(),_arg_g);
+      return _arg_g->dz() * Function<double>::composedFunction(_f->dz(),_arg_g);
     }
   };
 
-  FunctionPtr Function::composedFunction( FunctionPtr f, FunctionPtr arg_g) {
-    //  cout << "WARNING: Function::composedFunction() called, but its implementation is not yet complete.\n";
+  template <typename Scalar>
+  Teuchos::RCP<Function<double> > Function<Scalar>::composedFunction( Teuchos::RCP<Function<double> > f, Teuchos::RCP<Function<double> > arg_g) {
     return Teuchos::rcp( new ComposedFunction(f,arg_g) );
   }
 
-  double SimpleFunction::value(double x) {
+  template <typename Scalar>
+  Scalar SimpleFunction<Scalar>::value(double x) {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unimplemented method. Subclasses of SimpleFunction must implement value() for some number of arguments < spaceDim");
     return 0;
   }
 
-  double SimpleFunction::value(double x, double y) {
+  template <typename Scalar>
+  Scalar SimpleFunction<Scalar>::value(double x, double y) {
     return value(x);
   }
 
-  double SimpleFunction::value(double x, double y, double z) {
+  template <typename Scalar>
+  Scalar SimpleFunction<Scalar>::value(double x, double y, double z) {
     return value(x,y);
   }
 
-  double SimpleFunction::value(double x, double y, double z, double t) {
+  template <typename Scalar>
+  Scalar SimpleFunction<Scalar>::value(double x, double y, double z, double t) {
     return value(x,y,z);
   }
 
-  void SimpleFunction::values(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache) {
-    CHECK_VALUES_RANK(values);
+  template <typename Scalar>
+  void SimpleFunction<Scalar>::values(Intrepid::FieldContainer<Scalar> &values, BasisCachePtr basisCache) {
+    this->CHECK_VALUES_RANK(values);
     int numCells = values.dimension(0);
     int numPoints = values.dimension(1);
 
@@ -1935,23 +2071,28 @@ namespace Camellia {
     }
   }
 
-  SimpleVectorFunction::SimpleVectorFunction() : Function(1) {}
+  template <typename Scalar>
+  SimpleVectorFunction<Scalar>::SimpleVectorFunction() : Function<Scalar>(1) {}
 
-  vector<double> SimpleVectorFunction::value(double x) {
+  template <typename Scalar>
+  vector<Scalar> SimpleVectorFunction<Scalar>::value(double x) {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unimplemented method. Subclasses of SimpleVectorFunction must implement value() for some number of arguments < spaceDim");
-    return vector<double>();
+    return vector<Scalar>();
   }
 
-  vector<double> SimpleVectorFunction::value(double x, double y) {
+  template <typename Scalar>
+  vector<Scalar> SimpleVectorFunction<Scalar>::value(double x, double y) {
     return value(x);
   }
 
-  vector<double> SimpleVectorFunction::value(double x, double y, double z) {
+  template <typename Scalar>
+  vector<Scalar> SimpleVectorFunction<Scalar>::value(double x, double y, double z) {
     return value(x,y);
   }
 
-  void SimpleVectorFunction::values(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache) {
-    CHECK_VALUES_RANK(values);
+  template <typename Scalar>
+  void SimpleVectorFunction<Scalar>::values(Intrepid::FieldContainer<Scalar> &values, BasisCachePtr basisCache) {
+    this->CHECK_VALUES_RANK(values);
     int numCells = values.dimension(0);
     int numPoints = values.dimension(1);
 
@@ -1979,22 +2120,26 @@ namespace Camellia {
     }
   }
 
-  PolarizedFunction::PolarizedFunction( FunctionPtr f_of_xAsR_yAsTheta ) : Function(f_of_xAsR_yAsTheta->rank()) {
+  template <typename Scalar>
+  PolarizedFunction<Scalar>::PolarizedFunction( Teuchos::RCP<Function<Scalar> > f_of_xAsR_yAsTheta ) : Function<Scalar>(f_of_xAsR_yAsTheta->rank()) {
     _f = f_of_xAsR_yAsTheta;
   }
 
-  Teuchos::RCP<PolarizedFunction> PolarizedFunction::r() {
-    static Teuchos::RCP<PolarizedFunction> _r = Teuchos::rcp( new PolarizedFunction( Teuchos::rcp( new Xn(1) ) ) );
+  template <typename Scalar>
+  Teuchos::RCP<PolarizedFunction<double> > PolarizedFunction<Scalar>::r() {
+    static Teuchos::RCP<PolarizedFunction<double> > _r = Teuchos::rcp( new PolarizedFunction<double>( Teuchos::rcp( new Xn(1) ) ) );
     return _r;
   }
 
-  Teuchos::RCP<PolarizedFunction> PolarizedFunction::sin_theta() {
-    static Teuchos::RCP<PolarizedFunction> _sin_theta = Teuchos::rcp( new PolarizedFunction( Teuchos::rcp( new Sin_y ) ) );
+  template <typename Scalar>
+  Teuchos::RCP<PolarizedFunction<double> > PolarizedFunction<Scalar>::sin_theta() {
+    static Teuchos::RCP<PolarizedFunction<double> > _sin_theta = Teuchos::rcp( new PolarizedFunction<double> ( Teuchos::rcp( new Sin_y ) ) );
     return _sin_theta;
   }
 
-  Teuchos::RCP<PolarizedFunction> PolarizedFunction::cos_theta() {
-    static Teuchos::RCP<PolarizedFunction> _cos_theta = Teuchos::rcp( new PolarizedFunction( Teuchos::rcp( new Cos_y ) ) );
+  template <typename Scalar>
+  Teuchos::RCP<PolarizedFunction<double> > PolarizedFunction<Scalar>::cos_theta() {
+    static Teuchos::RCP<PolarizedFunction<double> > _cos_theta = Teuchos::rcp( new PolarizedFunction<double> ( Teuchos::rcp( new Cos_y ) ) );
     return _cos_theta;
   }
 
@@ -2006,7 +2151,8 @@ namespace Camellia {
     }
   }
 
-  string PolarizedFunction::displayString() {
+  template <typename Scalar>
+  string PolarizedFunction<Scalar>::displayString() {
     string displayString = _f->displayString();
     findAndReplace(displayString, "x", "r");
     findAndReplace(displayString, "y", "\\theta");
@@ -2016,38 +2162,45 @@ namespace Camellia {
     //  return ss.str();
   }
 
-  FunctionPtr PolarizedFunction::dx() {
-    // cast everything to FunctionPtrs:
-    FunctionPtr sin_theta_fxn = sin_theta();
-    FunctionPtr dtheta_fxn = dtheta();
-    FunctionPtr dr_fxn = dr();
-    FunctionPtr r_fxn = r();
-    FunctionPtr cos_theta_fxn = cos_theta();
+  template <typename Scalar>
+  Teuchos::RCP<Function<Scalar> > PolarizedFunction<Scalar>::dx() {
+    // cast everything to Teuchos::RCP<Function<Scalar> >s:
+    Teuchos::RCP<Function<double> > sin_theta_fxn = sin_theta();
+    Teuchos::RCP<Function<Scalar> > dtheta_fxn = dtheta();
+    Teuchos::RCP<Function<Scalar> > dr_fxn = dr();
+    Teuchos::RCP<Function<double> > r_fxn = r();
+    Teuchos::RCP<Function<double> > cos_theta_fxn = cos_theta();
     return dr_fxn * cos_theta_fxn - dtheta_fxn * sin_theta_fxn / r_fxn;
   }
-  FunctionPtr PolarizedFunction::dy() {
-    FunctionPtr sin_theta_fxn = sin_theta();
-    FunctionPtr dtheta_fxn = dtheta();
-    FunctionPtr dr_fxn = dr();
-    FunctionPtr r_fxn = r();
-    FunctionPtr cos_theta_fxn = cos_theta();
+
+  template <typename Scalar>
+  Teuchos::RCP<Function<Scalar> > PolarizedFunction<Scalar>::dy() {
+    Teuchos::RCP<Function<double> > sin_theta_fxn = sin_theta();
+    Teuchos::RCP<Function<Scalar> > dtheta_fxn = dtheta();
+    Teuchos::RCP<Function<Scalar> > dr_fxn = dr();
+    Teuchos::RCP<Function<double> > r_fxn = r();
+    Teuchos::RCP<Function<double> > cos_theta_fxn = cos_theta();
     return dr_fxn * sin_theta_fxn + dtheta_fxn * cos_theta_fxn / r_fxn;
   }
 
-  Teuchos::RCP<PolarizedFunction> PolarizedFunction::dtheta() {
-    return Teuchos::rcp( new PolarizedFunction( _f->dy() ) );
+  template <typename Scalar>
+  Teuchos::RCP<PolarizedFunction<Scalar> > PolarizedFunction<Scalar>::dtheta() {
+    return Teuchos::rcp( new PolarizedFunction<Scalar>( _f->dy() ) );
   }
 
-  Teuchos::RCP<PolarizedFunction> PolarizedFunction::dr() {
-    return Teuchos::rcp( new PolarizedFunction( _f->dx() ) );
+  template <typename Scalar>
+  Teuchos::RCP<PolarizedFunction<Scalar> > PolarizedFunction<Scalar>::dr() {
+    return Teuchos::rcp( new PolarizedFunction<Scalar>( _f->dx() ) );
   }
 
-  bool PolarizedFunction::isZero() {
+  template <typename Scalar>
+  bool PolarizedFunction<Scalar>::isZero() {
     return _f->isZero();
   }
 
-  void PolarizedFunction::values(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache) {
-    CHECK_VALUES_RANK(values);
+  template <typename Scalar>
+  void PolarizedFunction<Scalar>::values(Intrepid::FieldContainer<Scalar> &values, BasisCachePtr basisCache) {
+    this->CHECK_VALUES_RANK(values);
     static const double PI  = 3.141592653589793238462;
 
     int numCells = values.dimension(0);
@@ -2081,12 +2234,14 @@ namespace Camellia {
     //  cout << "PolarizedFunction, values: \n" << values;
   }
 
-  bool ScalarFunctionOfNormal::boundaryValueOnly() {
+  template <typename Scalar>
+  bool ScalarFunctionOfNormal<Scalar>::boundaryValueOnly() {
     return true;
   }
 
-  void ScalarFunctionOfNormal::values(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache) {
-    CHECK_VALUES_RANK(values);
+  template <typename Scalar>
+  void ScalarFunctionOfNormal<Scalar>::values(Intrepid::FieldContainer<Scalar> &values, BasisCachePtr basisCache) {
+    this->CHECK_VALUES_RANK(values);
     const Intrepid::FieldContainer<double> *sideNormals = &(basisCache->getSideNormals());
     int numCells = values.dimension(0);
     int numPoints = values.dimension(1);
@@ -2102,7 +2257,7 @@ namespace Camellia {
     }
   }
 
-  SideParityFunction::SideParityFunction() : Function(0) {
+  SideParityFunction::SideParityFunction() : Function<double>(0) {
     //  cout << "SideParityFunction constructor.\n";
   }
 
@@ -2115,7 +2270,7 @@ namespace Camellia {
   }
 
   void SideParityFunction::values(Intrepid::FieldContainer<double> &values, BasisCachePtr sideBasisCache) {
-    CHECK_VALUES_RANK(values);
+    this->CHECK_VALUES_RANK(values);
     int numCells = values.dimension(0);
     int numPoints = values.dimension(1);
     int sideIndex = sideBasisCache->getSideIndex();
@@ -2152,20 +2307,20 @@ namespace Camellia {
     }
   }
 
-  UnitNormalFunction::UnitNormalFunction(int comp, bool spaceTime) : Function( (comp<0)? 1 : 0) {
+  UnitNormalFunction::UnitNormalFunction(int comp, bool spaceTime) : Function<double>( (comp<0)? 1 : 0) {
     _comp = comp;
     _spaceTime = spaceTime;
   }
 
-  FunctionPtr UnitNormalFunction::x() {
+  Teuchos::RCP<Function<double> > UnitNormalFunction::x() {
     return Teuchos::rcp( new UnitNormalFunction(0,_spaceTime) );
   }
 
-  FunctionPtr UnitNormalFunction::y() {
+  Teuchos::RCP<Function<double> > UnitNormalFunction::y() {
     return Teuchos::rcp( new UnitNormalFunction(1,_spaceTime) );
   }
 
-  FunctionPtr UnitNormalFunction::z() {
+  Teuchos::RCP<Function<double> > UnitNormalFunction::z() {
     return Teuchos::rcp( new UnitNormalFunction(2,_spaceTime) );
   }
 
@@ -2191,7 +2346,7 @@ namespace Camellia {
   }
 
   void UnitNormalFunction::values(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache) {
-    CHECK_VALUES_RANK(values);
+    this->CHECK_VALUES_RANK(values);
     const Intrepid::FieldContainer<double> *sideNormals = _spaceTime ? &(basisCache->getSideNormalsSpaceTime()) : &(basisCache->getSideNormals());
     int numCells = values.dimension(0);
     int numPoints = values.dimension(1);
@@ -2211,22 +2366,29 @@ namespace Camellia {
     }
   }
 
-  VectorizedFunction::VectorizedFunction(const vector< FunctionPtr > &fxns) : Function(fxns[0]->rank() + 1) {
+  template <typename Scalar>
+  VectorizedFunction<Scalar>::VectorizedFunction(const vector< Teuchos::RCP<Function<Scalar> > > &fxns) : Function<Scalar>(fxns[0]->rank() + 1) {
     _fxns = fxns;
   }
-  VectorizedFunction::VectorizedFunction(FunctionPtr f1, FunctionPtr f2) : Function(f1->rank() + 1) {
+
+  template <typename Scalar>
+  VectorizedFunction<Scalar>::VectorizedFunction(Teuchos::RCP<Function<Scalar> > f1, Teuchos::RCP<Function<Scalar> > f2) : Function<Scalar>(f1->rank() + 1) {
     TEUCHOS_TEST_FOR_EXCEPTION(f1->rank() != f2->rank(), std::invalid_argument, "function ranks do not match");
     _fxns.push_back(f1);
     _fxns.push_back(f2);
   }
-  VectorizedFunction::VectorizedFunction(FunctionPtr f1, FunctionPtr f2, FunctionPtr f3) : Function(f1->rank() + 1) {
+
+  template <typename Scalar>
+  VectorizedFunction<Scalar>::VectorizedFunction(Teuchos::RCP<Function<Scalar> > f1, Teuchos::RCP<Function<Scalar> > f2, Teuchos::RCP<Function<Scalar> > f3) : Function<Scalar>(f1->rank() + 1) {
     TEUCHOS_TEST_FOR_EXCEPTION(f1->rank() != f2->rank(), std::invalid_argument, "function ranks do not match");
     TEUCHOS_TEST_FOR_EXCEPTION(f3->rank() != f2->rank(), std::invalid_argument, "function ranks do not match");
     _fxns.push_back(f1);
     _fxns.push_back(f2);
     _fxns.push_back(f3);
   }
-  string VectorizedFunction::displayString() {
+
+  template <typename Scalar>
+  string VectorizedFunction<Scalar>::displayString() {
     ostringstream str;
     str << "(";
     for (int i=0; i<_fxns.size(); i++) {
@@ -2236,12 +2398,15 @@ namespace Camellia {
     str << ")";
     return str.str();
   }
-  int VectorizedFunction::dim() {
+
+  template <typename Scalar>
+  int VectorizedFunction<Scalar>::dim() {
     return _fxns.size();
   }
 
-  void VectorizedFunction::values(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache) {
-    CHECK_VALUES_RANK(values);
+  template <typename Scalar>
+  void VectorizedFunction<Scalar>::values(Intrepid::FieldContainer<Scalar> &values, BasisCachePtr basisCache) {
+    this->CHECK_VALUES_RANK(values);
     // this is not going to be particularly efficient, because values from the components need to be interleaved...
     Teuchos::Array<int> dims;
     values.dimensions(dims);
@@ -2257,11 +2422,11 @@ namespace Camellia {
       }
     }
     dims.pop_back(); // remove the last, dimensions argument
-    Intrepid::FieldContainer<double> compValues(dims);
+    Intrepid::FieldContainer<Scalar> compValues(dims);
     int valuesPerComponent = compValues.size();
 
     for (int comp=0; comp < numComponents; comp++) {
-      FunctionPtr fxn = _fxns[comp];
+      Teuchos::RCP<Function<Scalar> > fxn = _fxns[comp];
       fxn->values(compValues, basisCache);
       for (int i=0; i < valuesPerComponent; i++) {
         values[ numComponents * i + comp ] = compValues[ i ];
@@ -2269,23 +2434,27 @@ namespace Camellia {
     }
   }
 
-  FunctionPtr VectorizedFunction::x() {
+  template <typename Scalar>
+  Teuchos::RCP<Function<Scalar> > VectorizedFunction<Scalar>::x() {
     return _fxns[0];
   }
 
-  FunctionPtr VectorizedFunction::y() {
+  template <typename Scalar>
+  Teuchos::RCP<Function<Scalar> > VectorizedFunction<Scalar>::y() {
     return _fxns[1];
   }
 
-  FunctionPtr VectorizedFunction::z() {
+  template <typename Scalar>
+  Teuchos::RCP<Function<Scalar> > VectorizedFunction<Scalar>::z() {
     if (dim() >= 3) {
       return _fxns[2];
     } else {
-      return Function::null();
+      return Function<Scalar>::null();
     }
   }
 
-  FunctionPtr VectorizedFunction::di(int i) {
+  template <typename Scalar>
+  Teuchos::RCP<Function<Scalar> > VectorizedFunction<Scalar>::di(int i) {
     // derivative in the ith coordinate direction
     Camellia::EOperator op;
     switch (i) {
@@ -2302,31 +2471,35 @@ namespace Camellia {
         TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Invalid coordinate direction");
         break;
     }
-    vector< FunctionPtr > fxns;
+    vector< Teuchos::RCP<Function<Scalar> > > fxns;
     for (int j = 0; j< dim(); j++) {
-      FunctionPtr fj_di = Function::op(_fxns[j], op);
-      if (isNull(fj_di)) {
-        return Function::null();
+      Teuchos::RCP<Function<Scalar> > fj_di = Function<Scalar>::op(_fxns[j], op);
+      if (Function<Scalar>::isNull(fj_di)) {
+        return Function<Scalar>::null();
       }
       fxns.push_back(fj_di);
     }
     // if we made it this far, then all components aren't null:
-    return Teuchos::rcp( new VectorizedFunction(fxns) );
+    return Teuchos::rcp( new VectorizedFunction<Scalar>(fxns) );
   }
 
-  FunctionPtr VectorizedFunction::dx() {
+  template <typename Scalar>
+  Teuchos::RCP<Function<Scalar> > VectorizedFunction<Scalar>::dx() {
     return di(0);
   }
-  FunctionPtr VectorizedFunction::dy() {
+  template <typename Scalar>
+  Teuchos::RCP<Function<Scalar> > VectorizedFunction<Scalar>::dy() {
     return di(1);
   }
-  FunctionPtr VectorizedFunction::dz() {
+  template <typename Scalar>
+  Teuchos::RCP<Function<Scalar> > VectorizedFunction<Scalar>::dz() {
     return di(2);
   }
 
-  bool VectorizedFunction::isZero() {
+  template <typename Scalar>
+  bool VectorizedFunction<Scalar>::isZero() {
     // vector function is zero if each of its components is zero.
-    for (vector< FunctionPtr >::iterator fxnIt = _fxns.begin(); fxnIt != _fxns.end(); fxnIt++) {
+    for (typename vector< Teuchos::RCP<Function<Scalar> > >::iterator fxnIt = _fxns.begin(); fxnIt != _fxns.end(); fxnIt++) {
       if (! (*fxnIt)->isZero() ) {
         return false;
       }
@@ -2334,44 +2507,48 @@ namespace Camellia {
     return true;
   }
 
-  FunctionPtr operator*(FunctionPtr f1, FunctionPtr f2) {
+  template <typename Scalar>
+  Teuchos::RCP<Function<Scalar> > operator*(Teuchos::RCP<Function<Scalar> > f1, Teuchos::RCP<Function<Scalar> > f2) {
     if (f1->isZero() || f2->isZero()) {
       if ( f1->rank() == f2->rank() ) {
-        return Function::zero();
+        return Function<Scalar>::zero();
       } else if ((f1->rank() == 0) || (f2->rank() == 0)) {
         int result_rank = f1->rank() + f2->rank();
-        return Function::zero(result_rank);
+        return Function<Scalar>::zero(result_rank);
       } else {
         TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument,"functions have incompatible rank for product.");
       }
     }
-    return Teuchos::rcp( new ProductFunction(f1,f2) );
+    return Teuchos::rcp( new ProductFunction<Scalar>(f1,f2) );
   }
 
-  FunctionPtr operator/(FunctionPtr f1, FunctionPtr scalarDivisor) {
+  template <typename Scalar>
+  Teuchos::RCP<Function<Scalar> > operator/(Teuchos::RCP<Function<Scalar> > f1, Teuchos::RCP<Function<Scalar> > scalarDivisor) {
     if ( f1->isZero() ) {
-      return Function::zero(f1->rank());
+      return Function<Scalar>::zero(f1->rank());
     }
-    return Teuchos::rcp( new QuotientFunction(f1,scalarDivisor) );
+    return Teuchos::rcp( new QuotientFunction<Scalar>(f1,scalarDivisor) );
   }
 
-  FunctionPtr operator/(FunctionPtr f1, double divisor) {
-    return f1 / Teuchos::rcp( new ConstantScalarFunction(divisor) );
+  template <typename Scalar>
+  Teuchos::RCP<Function<Scalar> > operator/(Teuchos::RCP<Function<Scalar> > f1, Scalar divisor) {
+    return f1 / Teuchos::rcp( new ConstantScalarFunction<Scalar>(divisor) );
   }
 
-  FunctionPtr operator/(double value, FunctionPtr scalarDivisor) {
-    return Function::constant(value) / scalarDivisor;
+  template <typename Scalar>
+  Teuchos::RCP<Function<Scalar> > operator/(Scalar value, Teuchos::RCP<Function<Scalar> > scalarDivisor) {
+    return Function<Scalar>::constant(value) / scalarDivisor;
   }
 
-  //ConstantScalarFunctionPtr operator*(ConstantScalarFunctionPtr f1, ConstantScalarFunctionPtr f2) {
+  //ConstantScalarTeuchos::RCP<Function<Scalar> > operator*(ConstantScalarTeuchos::RCP<Function<Scalar> > f1, ConstantScalarTeuchos::RCP<Function<Scalar> > f2) {
   //  return Teuchos::rcp( new ConstantScalarFunction(f1->value() * f2->value()) );
   //}
   //
-  //ConstantScalarFunctionPtr operator/(ConstantScalarFunctionPtr f1, ConstantScalarFunctionPtr f2) {
+  //ConstantScalarTeuchos::RCP<Function<Scalar> > operator/(ConstantScalarTeuchos::RCP<Function<Scalar> > f1, ConstantScalarTeuchos::RCP<Function<Scalar> > f2) {
   //  return Teuchos::rcp( new ConstantScalarFunction(f1->value() / f2->value()) );
   //}
 
-  //ConstantVectorFunctionPtr operator*(ConstantVectorFunctionPtr f1, ConstantScalarFunctionPtr f2) {
+  //ConstantVectorTeuchos::RCP<Function<Scalar> > operator*(ConstantVectorTeuchos::RCP<Function<Scalar> > f1, ConstantScalarTeuchos::RCP<Function<Scalar> > f2) {
   //  vector<double> value = f1->value();
   //  for (int d=0; d<value.size(); d++) {
   //    value[d] *= f2->value();
@@ -2379,11 +2556,11 @@ namespace Camellia {
   //  return Teuchos::rcp( new ConstantVectorFunction(value) );
   //}
   //
-  //ConstantVectorFunctionPtr operator*(ConstantScalarFunctionPtr f1, ConstantVectorFunctionPtr f2) {
+  //ConstantVectorTeuchos::RCP<Function<Scalar> > operator*(ConstantScalarTeuchos::RCP<Function<Scalar> > f1, ConstantVectorTeuchos::RCP<Function<Scalar> > f2) {
   //  return f2 * f1;
   //}
   //
-  //ConstantVectorFunctionPtr operator/(ConstantVectorFunctionPtr f1, ConstantScalarFunctionPtr f2) {
+  //ConstantVectorTeuchos::RCP<Function<Scalar> > operator/(ConstantVectorTeuchos::RCP<Function<Scalar> > f1, ConstantScalarTeuchos::RCP<Function<Scalar> > f2) {
   //  vector<double> value = f1->value();
   //  for (int d=0; d<value.size(); d++) {
   //    value[d] /= f2->value();
@@ -2391,78 +2568,95 @@ namespace Camellia {
   //  return Teuchos::rcp( new ConstantVectorFunction(value) );
   //}
 
-  FunctionPtr operator*(double weight, FunctionPtr f) {
-    return Function::constant(weight) * f;
+  template <typename Scalar>
+  Teuchos::RCP<Function<Scalar> > operator*(Scalar weight, Teuchos::RCP<Function<Scalar> > f) {
+    return Function<Scalar>::constant(weight) * f;
   }
 
-  FunctionPtr operator*(FunctionPtr f, double weight) {
+  template <typename Scalar>
+  Teuchos::RCP<Function<Scalar> > operator*(Teuchos::RCP<Function<Scalar> > f, Scalar weight) {
     return weight * f;
   }
 
-  FunctionPtr operator*(vector<double> weight, FunctionPtr f) {
-    return Function::constant(weight) * f;
+  template <typename Scalar>
+  Teuchos::RCP<Function<Scalar> > operator*(vector<Scalar> weight, Teuchos::RCP<Function<Scalar> > f) {
+    return Function<Scalar>::constant(weight) * f;
   }
 
-  FunctionPtr operator*(FunctionPtr f, vector<double> weight) {
+  template <typename Scalar>
+  Teuchos::RCP<Function<Scalar> > operator*(Teuchos::RCP<Function<Scalar> > f, vector<Scalar> weight) {
     return weight * f;
   }
 
-  FunctionPtr operator+(FunctionPtr f1, FunctionPtr f2) {
+  template <typename Scalar>
+  Teuchos::RCP<Function<Scalar> > operator+(Teuchos::RCP<Function<Scalar> > f1, Teuchos::RCP<Function<Scalar> > f2) {
     if ( f1->isZero() ) {
       return f2;
     }
     if ( f2->isZero() ) {
       return f1;
     }
-    return Teuchos::rcp( new SumFunction(f1, f2) );
+    return Teuchos::rcp( new SumFunction<Scalar>(f1, f2) );
   }
 
-  FunctionPtr operator+(FunctionPtr f1, double value) {
-    return f1 + Function::constant(value);
+  template <typename Scalar>
+  Teuchos::RCP<Function<Scalar> > operator+(Teuchos::RCP<Function<Scalar> > f1, Scalar value) {
+    return f1 + Function<Scalar>::constant(value);
   }
 
-  FunctionPtr operator+(double value, FunctionPtr f1) {
-    return f1 + Function::constant(value);
+  template <typename Scalar>
+  Teuchos::RCP<Function<Scalar> > operator+(Scalar value, Teuchos::RCP<Function<Scalar> > f1) {
+    return f1 + Function<Scalar>::constant(value);
   }
 
-  FunctionPtr operator-(FunctionPtr f1, FunctionPtr f2) {
+  template <typename Scalar>
+  Teuchos::RCP<Function<Scalar> > operator-(Teuchos::RCP<Function<Scalar> > f1, Teuchos::RCP<Function<Scalar> > f2) {
     return f1 + -f2;
   }
 
-  FunctionPtr operator-(FunctionPtr f1, double value) {
-    return f1 - Function::constant(value);
+  template <typename Scalar>
+  Teuchos::RCP<Function<Scalar> > operator-(Teuchos::RCP<Function<Scalar> > f1, Scalar value) {
+    return f1 - Function<Scalar>::constant(value);
   }
 
-  FunctionPtr operator-(double value, FunctionPtr f1) {
-    return Function::constant(value) - f1;
+  template <typename Scalar>
+  Teuchos::RCP<Function<Scalar> > operator-(Scalar value, Teuchos::RCP<Function<Scalar> > f1) {
+    return Function<Scalar>::constant(value) - f1;
   }
 
-  FunctionPtr operator-(FunctionPtr f) {
+  template <typename Scalar>
+  Teuchos::RCP<Function<Scalar> > operator-(Teuchos::RCP<Function<Scalar> > f) {
     return -1.0 * f;
   }
 
-  FunctionPtr Function::min(FunctionPtr f1, FunctionPtr f2) {
+  template <typename Scalar>
+  Teuchos::RCP<Function<double> > Function<Scalar>::min(Teuchos::RCP<Function<double> > f1, Teuchos::RCP<Function<double> > f2) {
     return Teuchos::rcp( new MinFunction(f1, f2) );
   }
 
-  FunctionPtr Function::min(FunctionPtr f1, double value) {
-    return Teuchos::rcp( new MinFunction(f1, Function::constant(value)) );
+  template <typename Scalar>
+  Teuchos::RCP<Function<double> > Function<Scalar>::min(Teuchos::RCP<Function<double> > f1, double value) {
+    return Teuchos::rcp( new MinFunction(f1, Function<double>::constant(value)) );
   }
 
-  FunctionPtr Function::min(double value, FunctionPtr f2) {
-    return Teuchos::rcp( new MinFunction(f2, Function::constant(value)) );
+  template <typename Scalar>
+  Teuchos::RCP<Function<double> > Function<Scalar>::min(double value, Teuchos::RCP<Function<double> > f2) {
+    return Teuchos::rcp( new MinFunction(f2, Function<double>::constant(value)) );
   }
 
-  FunctionPtr Function::max(FunctionPtr f1, FunctionPtr f2) {
+  template <typename Scalar>
+  Teuchos::RCP<Function<double> > Function<Scalar>::max(Teuchos::RCP<Function<double> > f1, Teuchos::RCP<Function<double> > f2) {
     return Teuchos::rcp( new MaxFunction(f1, f2) );
   }
 
-  FunctionPtr Function::max(FunctionPtr f1, double value) {
-    return Teuchos::rcp( new MaxFunction(f1, Function::constant(value)) );
+  template <typename Scalar>
+  Teuchos::RCP<Function<double> > Function<Scalar>::max(Teuchos::RCP<Function<double> > f1, double value) {
+    return Teuchos::rcp( new MaxFunction(f1, Function<double>::constant(value)) );
   }
 
-  FunctionPtr Function::max(double value, FunctionPtr f2) {
-    return Teuchos::rcp( new MaxFunction(f2, Function::constant(value)) );
+  template <typename Scalar>
+  Teuchos::RCP<Function<double> > Function<Scalar>::max(double value, Teuchos::RCP<Function<double> > f2) {
+    return Teuchos::rcp( new MaxFunction(f2, Function<double>::constant(value)) );
   }
 
   string Sin_y::displayString() {
@@ -2472,14 +2666,14 @@ namespace Camellia {
   double Sin_y::value(double x, double y) {
     return sin(y);
   }
-  FunctionPtr Sin_y::dx() {
-    return Function::zero();
+  Teuchos::RCP<Function<double> > Sin_y::dx() {
+    return Function<double>::zero();
   }
-  FunctionPtr Sin_y::dy() {
+  Teuchos::RCP<Function<double> > Sin_y::dy() {
     return Teuchos::rcp( new Cos_y );
   }
-  FunctionPtr Sin_y::dz() {
-    return Function::zero();
+  Teuchos::RCP<Function<double> > Sin_y::dz() {
+    return Function<double>::zero();
   }
 
   string Cos_y::displayString() {
@@ -2488,15 +2682,15 @@ namespace Camellia {
   double Cos_y::value(double x, double y) {
     return cos(y);
   }
-  FunctionPtr Cos_y::dx() {
-    return Function::zero();
+  Teuchos::RCP<Function<double> > Cos_y::dx() {
+    return Function<double>::zero();
   }
-  FunctionPtr Cos_y::dy() {
-    FunctionPtr sin_y = Teuchos::rcp( new Sin_y );
+  Teuchos::RCP<Function<double> > Cos_y::dy() {
+    Teuchos::RCP<Function<double> > sin_y = Teuchos::rcp( new Sin_y );
     return - sin_y;
   }
-  FunctionPtr Cos_y::dz() {
-    return Function::zero();
+  Teuchos::RCP<Function<double> > Cos_y::dz() {
+    return Function<double>::zero();
   }
 
   string Sin_x::displayString() {
@@ -2506,14 +2700,14 @@ namespace Camellia {
   double Sin_x::value(double x, double y) {
     return sin(x);
   }
-  FunctionPtr Sin_x::dx() {
+  Teuchos::RCP<Function<double> > Sin_x::dx() {
     return Teuchos::rcp( new Cos_x );
   }
-  FunctionPtr Sin_x::dy() {
-    return Function::zero();
+  Teuchos::RCP<Function<double> > Sin_x::dy() {
+    return Function<double>::zero();
   }
-  FunctionPtr Sin_x::dz() {
-    return Function::zero();
+  Teuchos::RCP<Function<double> > Sin_x::dz() {
+    return Function<double>::zero();
   }
 
   string Cos_x::displayString() {
@@ -2522,15 +2716,15 @@ namespace Camellia {
   double Cos_x::value(double x, double y) {
     return cos(x);
   }
-  FunctionPtr Cos_x::dx() {
-    FunctionPtr sin_x = Teuchos::rcp( new Sin_x );
+  Teuchos::RCP<Function<double> > Cos_x::dx() {
+    Teuchos::RCP<Function<double> > sin_x = Teuchos::rcp( new Sin_x );
     return - sin_x;
   }
-  FunctionPtr Cos_x::dy() {
-    return Function::zero();
+  Teuchos::RCP<Function<double> > Cos_x::dy() {
+    return Function<double>::zero();
   }
-  FunctionPtr Cos_x::dz() {
-    return Function::zero();
+  Teuchos::RCP<Function<double> > Cos_x::dz() {
+    return Function<double>::zero();
   }
 
   string Exp_x::displayString() {
@@ -2539,14 +2733,14 @@ namespace Camellia {
   double Exp_x::value(double x, double y) {
     return exp(x);
   }
-  FunctionPtr Exp_x::dx() {
+  Teuchos::RCP<Function<double> > Exp_x::dx() {
     return Teuchos::rcp( new Exp_x );
   }
-  FunctionPtr Exp_x::dy() {
-    return Function::zero();
+  Teuchos::RCP<Function<double> > Exp_x::dy() {
+    return Function<double>::zero();
   }
-  FunctionPtr Exp_x::dz() {
-    return Function::zero();
+  Teuchos::RCP<Function<double> > Exp_x::dz() {
+    return Function<double>::zero();
   }
 
   string Exp_y::displayString() {
@@ -2555,14 +2749,14 @@ namespace Camellia {
   double Exp_y::value(double x, double y) {
     return exp(y);
   }
-  FunctionPtr Exp_y::dx() {
-    return Function::zero();
+  Teuchos::RCP<Function<double> > Exp_y::dx() {
+    return Function<double>::zero();
   }
-  FunctionPtr Exp_y::dy() {
+  Teuchos::RCP<Function<double> > Exp_y::dy() {
     return Teuchos::rcp( new Exp_y );
   }
-  FunctionPtr Exp_y::dz() {
-    return Function::zero();
+  Teuchos::RCP<Function<double> > Exp_y::dz() {
+    return Function<double>::zero();
   }
 
   string Exp_z::displayString() {
@@ -2571,13 +2765,13 @@ namespace Camellia {
   double Exp_z::value(double x, double y, double z) {
     return exp(z);
   }
-  FunctionPtr Exp_z::dx() {
-    return Function::zero();
+  Teuchos::RCP<Function<double> > Exp_z::dx() {
+    return Function<double>::zero();
   }
-  FunctionPtr Exp_z::dy() {
-    return Function::zero();
+  Teuchos::RCP<Function<double> > Exp_z::dy() {
+    return Function<double>::zero();
   }
-  FunctionPtr Exp_z::dz() {
+  Teuchos::RCP<Function<double> > Exp_z::dz() {
     return Teuchos::rcp( new Exp_z );
   }
 
@@ -2599,18 +2793,18 @@ namespace Camellia {
   double Xn::value(double x) {
     return pow(x,_n);
   }
-  FunctionPtr Xn::dx() {
+  Teuchos::RCP<Function<double> > Xn::dx() {
     if (_n == 0) {
-      return Function::zero();
+      return Function<double>::zero();
     }
-    FunctionPtr x_n_minus = Teuchos::rcp( new Xn(_n-1) );
-    return _n * x_n_minus;
+    Teuchos::RCP<Function<double> > x_n_minus = Teuchos::rcp( new Xn(_n-1) );
+    return (double)_n * x_n_minus;
   }
-  FunctionPtr Xn::dy() {
-    return Function::zero();
+  Teuchos::RCP<Function<double> > Xn::dy() {
+    return Function<double>::zero();
   }
-  FunctionPtr Xn::dz() {
-    return Function::zero();
+  Teuchos::RCP<Function<double> > Xn::dz() {
+    return Function<double>::zero();
   }
 
   string Yn::displayString() {
@@ -2631,18 +2825,18 @@ namespace Camellia {
     return pow(y,_n);
   }
 
-  FunctionPtr Yn::dx() {
-    return Function::zero();
+  Teuchos::RCP<Function<double> > Yn::dx() {
+    return Function<double>::zero();
   }
-  FunctionPtr Yn::dy() {
+  Teuchos::RCP<Function<double> > Yn::dy() {
     if (_n == 0) {
-      return Function::zero();
+      return Function<double>::zero();
     }
-    FunctionPtr y_n_minus = Teuchos::rcp( new Yn(_n-1) );
-    return _n * y_n_minus;
+    Teuchos::RCP<Function<double> > y_n_minus = Teuchos::rcp( new Yn(_n-1) );
+    return (double)_n * y_n_minus;
   }
-  FunctionPtr Yn::dz() {
-    return Function::zero();
+  Teuchos::RCP<Function<double> > Yn::dz() {
+    return Function<double>::zero();
   }
 
   string Zn::displayString() {
@@ -2663,18 +2857,18 @@ namespace Camellia {
     return pow(z,_n);
   }
 
-  FunctionPtr Zn::dx() {
-    return Function::zero();
+  Teuchos::RCP<Function<double> > Zn::dx() {
+    return Function<double>::zero();
   }
-  FunctionPtr Zn::dy() {
-    return Function::zero();
+  Teuchos::RCP<Function<double> > Zn::dy() {
+    return Function<double>::zero();
   }
-  FunctionPtr Zn::dz() {
+  Teuchos::RCP<Function<double> > Zn::dz() {
     if (_n == 0) {
-      return Function::zero();
+      return Function<double>::zero();
     }
-    FunctionPtr z_n_minus = Teuchos::rcp( new Zn(_n-1) );
-    return _n * z_n_minus;
+    Teuchos::RCP<Function<double> > z_n_minus = Teuchos::rcp( new Zn(_n-1) );
+    return (double)_n * z_n_minus;
   }
 
   string Tn::displayString() {
@@ -2701,39 +2895,43 @@ namespace Camellia {
     return pow(t,_n);
   }
 
-  FunctionPtr Tn::dx() {
-    return Function::zero();
+  Teuchos::RCP<Function<double> > Tn::dx() {
+    return Function<double>::zero();
   }
-  FunctionPtr Tn::dy() {
-    return Function::zero();
+  Teuchos::RCP<Function<double> > Tn::dy() {
+    return Function<double>::zero();
   }
-  FunctionPtr Tn::dz() {
-    return Function::zero();
+  Teuchos::RCP<Function<double> > Tn::dz() {
+    return Function<double>::zero();
   }
-  FunctionPtr Tn::dt() {
+  Teuchos::RCP<Function<double> > Tn::dt() {
     if (_n == 0) {
-      return Function::zero();
+      return Function<double>::zero();
     }
-    FunctionPtr z_n_minus = Teuchos::rcp( new Tn(_n-1) );
-    return _n * z_n_minus;
+    Teuchos::RCP<Function<double> > z_n_minus = Teuchos::rcp( new Tn(_n-1) );
+    return (double)_n * z_n_minus;
   }
 
-  SimpleSolutionFunction::SimpleSolutionFunction(VarPtr var, SolutionPtr soln) : Function(var->rank()) {
+  template <typename Scalar>
+  SimpleSolutionFunction<Scalar>::SimpleSolutionFunction(VarPtr var, Teuchos::RCP<Solution<Scalar> > soln) : Function<Scalar>(var->rank()) {
     _var = var;
     _soln = soln;
   }
 
-  bool SimpleSolutionFunction::boundaryValueOnly() {
+  template <typename Scalar>
+  bool SimpleSolutionFunction<Scalar>::boundaryValueOnly() {
     return (_var->varType() == FLUX) || (_var->varType() == TRACE);
   }
 
-  string SimpleSolutionFunction::displayString() {
+  template <typename Scalar>
+  string SimpleSolutionFunction<Scalar>::displayString() {
     ostringstream str;
     str << "\\overline{" << _var->displayString() << "} ";
     return str.str();
   }
 
-  void SimpleSolutionFunction::importCellData(std::vector<GlobalIndexType> cells) {
+  template <typename Scalar>
+  void SimpleSolutionFunction<Scalar>::importCellData(std::vector<GlobalIndexType> cells) {
     int rank = Teuchos::GlobalMPISession::getRank();
     set<GlobalIndexType> offRankCells;
     const set<GlobalIndexType>* rankLocalCells = &_soln->mesh()->globalDofAssignment()->cellsInPartition(rank);
@@ -2745,7 +2943,8 @@ namespace Camellia {
     _soln->importSolutionForOffRankCells(offRankCells);
   }
 
-  void SimpleSolutionFunction::values(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache) {
+  template <typename Scalar>
+  void SimpleSolutionFunction<Scalar>::values(Intrepid::FieldContainer<Scalar> &values, BasisCachePtr basisCache) {
     bool dontWeightForCubature = false;
     if (basisCache->mesh().get() != NULL) { // then we assume that the BasisCache is appropriate for solution's mesh...
       _soln->solutionValues(values, _var->ID(), basisCache, dontWeightForCubature, _var->op());
@@ -2755,7 +2954,7 @@ namespace Camellia {
       LinearTermPtr solnExpression = 1.0 * _var;
       // get the physicalPoints, and make a basisCache for each...
       Intrepid::FieldContainer<double> physicalPoints = basisCache->getPhysicalCubaturePoints();
-      Intrepid::FieldContainer<double> value(1,1); // assumes scalar-valued solution function.
+      Intrepid::FieldContainer<Scalar> value(1,1); // assumes scalar-valued solution function.
       int numCells = physicalPoints.dimension(0);
       int numPoints = physicalPoints.dimension(1);
       int spaceDim = physicalPoints.dimension(2);
@@ -2794,55 +2993,61 @@ namespace Camellia {
       }
     }
     if (_var->varType()==FLUX) { // weight by sideParity
-      sideParity()->scalarMultiplyFunctionValues(values, basisCache);
+      Function<double>::sideParity()->scalarMultiplyFunctionValues(values, basisCache);
     }
   }
 
-  FunctionPtr SimpleSolutionFunction::dx() {
+  template <typename Scalar>
+  Teuchos::RCP<Function<Scalar> > SimpleSolutionFunction<Scalar>::dx() {
     if (_var->op() != Camellia::OP_VALUE) {
-      return Function::null();
+      return Function<Scalar>::null();
     } else {
-      return Function::solution(_var->dx(), _soln);
+      return Function<Scalar>::solution(_var->dx(), _soln);
     }
   }
 
-  FunctionPtr SimpleSolutionFunction::dy() {
+  template <typename Scalar>
+  Teuchos::RCP<Function<Scalar> > SimpleSolutionFunction<Scalar>::dy() {
     if (_var->op() != Camellia::OP_VALUE) {
-      return Function::null();
+      return Function<Scalar>::null();
     } else {
-      return Function::solution(_var->dy(), _soln);
+      return Function<Scalar>::solution(_var->dy(), _soln);
     }
   }
 
-  FunctionPtr SimpleSolutionFunction::dz() {
+  template <typename Scalar>
+  Teuchos::RCP<Function<Scalar> > SimpleSolutionFunction<Scalar>::dz() {
     if (_var->op() != Camellia::OP_VALUE) {
-      return Function::null();
+      return Function<Scalar>::null();
     } else {
-      return Function::solution(_var->dz(), _soln);
+      return Function<Scalar>::solution(_var->dz(), _soln);
     }
   }
 
-  FunctionPtr SimpleSolutionFunction::x() {
+  template <typename Scalar>
+  Teuchos::RCP<Function<Scalar> > SimpleSolutionFunction<Scalar>::x() {
     if (_var->op() != Camellia::OP_VALUE) {
-      return Function::null();
+      return Function<Scalar>::null();
     } else {
-      return Function::solution(_var->x(), _soln);
+      return Function<Scalar>::solution(_var->x(), _soln);
     }
   }
 
-  FunctionPtr SimpleSolutionFunction::y() {
+  template <typename Scalar>
+  Teuchos::RCP<Function<Scalar> > SimpleSolutionFunction<Scalar>::y() {
     if (_var->op() != Camellia::OP_VALUE) {
-      return Function::null();
+      return Function<Scalar>::null();
     } else {
-      return Function::solution(_var->y(), _soln);
+      return Function<Scalar>::solution(_var->y(), _soln);
     }
   }
 
-  FunctionPtr SimpleSolutionFunction::z() {
+  template <typename Scalar>
+  Teuchos::RCP<Function<Scalar> > SimpleSolutionFunction<Scalar>::z() {
     if (_var->op() != Camellia::OP_VALUE) {
-      return Function::null();
+      return Function<Scalar>::null();
     } else {
-      return Function::solution(_var->z(), _soln);
+      return Function<Scalar>::solution(_var->z(), _soln);
     }
   }
 
@@ -2853,11 +3058,11 @@ namespace Camellia {
   double Cos_ax::value(double x) {
     return cos( _a * x + _b);
   }
-  FunctionPtr Cos_ax::dx() {
-    return -_a * (FunctionPtr) Teuchos::rcp(new Sin_ax(_a,_b));
+  Teuchos::RCP<Function<double> > Cos_ax::dx() {
+    return -_a * (Teuchos::RCP<Function<double> >) Teuchos::rcp(new Sin_ax(_a,_b));
   }
-  FunctionPtr Cos_ax::dy() {
-    return Function::zero();
+  Teuchos::RCP<Function<double> > Cos_ax::dy() {
+    return Function<double>::zero();
   }
 
   string Cos_ax::displayString() {
@@ -2873,11 +3078,11 @@ namespace Camellia {
   double Cos_ay::value(double x, double y) {
     return cos( _a * y );
   }
-  FunctionPtr Cos_ay::dx() {
-    return Function::zero();
+  Teuchos::RCP<Function<double> > Cos_ay::dx() {
+    return Function<double>::zero();
   }
-  FunctionPtr Cos_ay::dy() {
-    return -_a * (FunctionPtr) Teuchos::rcp(new Sin_ay(_a));
+  Teuchos::RCP<Function<double> > Cos_ay::dy() {
+    return -_a * (Teuchos::RCP<Function<double> >) Teuchos::rcp(new Sin_ay(_a));
   }
 
   string Cos_ay::displayString() {
@@ -2894,11 +3099,11 @@ namespace Camellia {
   double Sin_ax::value(double x) {
     return sin( _a * x + _b);
   }
-  FunctionPtr Sin_ax::dx() {
-    return _a * (FunctionPtr) Teuchos::rcp(new Cos_ax(_a,_b));
+  Teuchos::RCP<Function<double> > Sin_ax::dx() {
+    return _a * (Teuchos::RCP<Function<double> >) Teuchos::rcp(new Cos_ax(_a,_b));
   }
-  FunctionPtr Sin_ax::dy() {
-    return Function::zero();
+  Teuchos::RCP<Function<double> > Sin_ax::dy() {
+    return Function<double>::zero();
   }
   string Sin_ax::displayString() {
     ostringstream ss;
@@ -2912,11 +3117,11 @@ namespace Camellia {
   double Sin_ay::value(double x, double y) {
     return sin( _a * y);
   }
-  FunctionPtr Sin_ay::dx() {
-    return Function::zero();
+  Teuchos::RCP<Function<double> > Sin_ay::dx() {
+    return Function<double>::zero();
   }
-  FunctionPtr Sin_ay::dy() {
-    return _a * (FunctionPtr) Teuchos::rcp(new Cos_ay(_a));
+  Teuchos::RCP<Function<double> > Sin_ay::dy() {
+    return _a * (Teuchos::RCP<Function<double> >) Teuchos::rcp(new Cos_ay(_a));
   }
   string Sin_ay::displayString() {
     ostringstream ss;
@@ -2930,11 +3135,11 @@ namespace Camellia {
   double Exp_ax::value(double x, double y) {
     return exp( _a * x);
   }
-  FunctionPtr Exp_ax::dx() {
-    return _a * (FunctionPtr) Teuchos::rcp(new Exp_ax(_a));
+  Teuchos::RCP<Function<double> > Exp_ax::dx() {
+    return _a * (Teuchos::RCP<Function<double> >) Teuchos::rcp(new Exp_ax(_a));
   }
-  FunctionPtr Exp_ax::dy() {
-    return Function::zero();
+  Teuchos::RCP<Function<double> > Exp_ax::dy() {
+    return Function<double>::zero();
   }
   string Exp_ax::displayString() {
     ostringstream ss;
@@ -2948,15 +3153,29 @@ namespace Camellia {
   double Exp_ay::value(double x, double y) {
     return exp( _a * y);
   }
-  FunctionPtr Exp_ay::dx() {
-    return Function::zero();
+  Teuchos::RCP<Function<double> > Exp_ay::dx() {
+    return Function<double>::zero();
   }
-  FunctionPtr Exp_ay::dy() {
-    return _a * (FunctionPtr) Teuchos::rcp(new Exp_ay(_a));
+  Teuchos::RCP<Function<double> > Exp_ay::dy() {
+    return _a * (Teuchos::RCP<Function<double> >) Teuchos::rcp(new Exp_ay(_a));
   }
   string Exp_ay::displayString() {
     ostringstream ss;
     ss << "\\exp( " << _a << " y )";
     return ss.str();
   }
+  template class Function<double>;
+  template class ConstantScalarFunction<double>;
+  template class ConstantVectorFunction<double>;
+  template class SimpleFunction<double>;
+  template class SimpleVectorFunction<double>;
+  template Teuchos::RCP<Function<double> > operator+(double value, Teuchos::RCP<Function<double> > f1);
+  template Teuchos::RCP<Function<double> > operator+(Teuchos::RCP<Function<double> > f1, double value);
+  template Teuchos::RCP<Function<double> > operator-(double value, Teuchos::RCP<Function<double> > f1);
+  template Teuchos::RCP<Function<double> > operator-(Teuchos::RCP<Function<double> > f1, double value);
+  template Teuchos::RCP<Function<double> > operator*(double value, Teuchos::RCP<Function<double> > f1);
+  template Teuchos::RCP<Function<double> > operator*(Teuchos::RCP<Function<double> > f1, double value);
+  // template Teuchos::RCP<Function<double> > operator/(double value, Teuchos::RCP<Function<double> > f1);
+  // template Teuchos::RCP<Function<double> > operator/(Teuchos::RCP<Function<double> > f1, double value);
 }
+

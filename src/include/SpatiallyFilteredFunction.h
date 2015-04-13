@@ -13,18 +13,18 @@
 #include "SpatialFilter.h"
 
 namespace Camellia {
-  class SpatiallyFilteredFunction : public Function {
+  class SpatiallyFilteredFunction : public Function<double> {
     FunctionPtr _f;
     SpatialFilterPtr _sf;
-    
+
   public:
     SpatiallyFilteredFunction(FunctionPtr f, SpatialFilterPtr sf);
     virtual void values(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache);
     bool boundaryValueOnly();
-    
+
     FunctionPtr curl();
     FunctionPtr div();
-    
+
     FunctionPtr dx();
     FunctionPtr dy();
     FunctionPtr dz();

@@ -22,7 +22,7 @@
 using namespace Intrepid;
 using namespace Camellia;
 
-PreviousSolutionFunction::PreviousSolutionFunction(SolutionPtr soln, LinearTermPtr solnExpression, bool multiplyFluxesByCellParity) : Function(solnExpression->rank()) {
+PreviousSolutionFunction::PreviousSolutionFunction(SolutionPtr soln, LinearTermPtr solnExpression, bool multiplyFluxesByCellParity) : Function<double>(solnExpression->rank()) {
   _soln = soln;
   _solnExpression = solnExpression;
   _overrideMeshCheck = false;
@@ -31,7 +31,7 @@ PreviousSolutionFunction::PreviousSolutionFunction(SolutionPtr soln, LinearTermP
     _solnExpression = parity * solnExpression;
   }
 }
-PreviousSolutionFunction::PreviousSolutionFunction(SolutionPtr soln, VarPtr var, bool multiplyFluxesByCellParity) : Function(var->rank()) {
+PreviousSolutionFunction::PreviousSolutionFunction(SolutionPtr soln, VarPtr var, bool multiplyFluxesByCellParity) : Function<double>(var->rank()) {
   _soln = soln;
   _solnExpression = 1.0 * var;
   _overrideMeshCheck = false;
@@ -67,7 +67,7 @@ void PreviousSolutionFunction::importCellData(std::vector<GlobalIndexType> cells
 }
 void PreviousSolutionFunction::values(FieldContainer<double> &values, BasisCachePtr basisCache) {
   int rank = Teuchos::GlobalMPISession::getRank();
-  
+
   if (_overrideMeshCheck) {
     _solnExpression->evaluate(values, _soln, basisCache);
     return;

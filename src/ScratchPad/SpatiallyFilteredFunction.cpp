@@ -4,7 +4,7 @@
 using namespace Intrepid;
 using namespace Camellia;
 
-SpatiallyFilteredFunction::SpatiallyFilteredFunction(FunctionPtr f, SpatialFilterPtr sf) : Function(f->rank()) {
+SpatiallyFilteredFunction::SpatiallyFilteredFunction(FunctionPtr f, SpatialFilterPtr sf) : Function<double>(f->rank()) {
   _f = f;
   _sf = sf;
 }
@@ -18,7 +18,7 @@ void SpatiallyFilteredFunction::values(FieldContainer<double> &values, BasisCach
   int numCells = values.dimension(0);
   int numPoints = values.dimension(1);
   values.initialize(0.0);
-  
+
   Teuchos::Array<int> dim;
   values.dimensions(dim);
   Teuchos::Array<int> fValuesDim = dim;

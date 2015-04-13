@@ -76,8 +76,8 @@ SolutionPtr TimeIntegrator::solutionUpdate()
 
 void TimeIntegrator::addTimeTerm(VarPtr trialVar, VarPtr testVar, FunctionPtr multiplier)
 {
-  FunctionPtr trialPrevTime = Function::solution(trialVar, _prevTimeSolution);
-  FunctionPtr trialPrevNL = Function::solution(trialVar, _prevNLSolution);
+  FunctionPtr trialPrevTime = Function<double>::solution(trialVar, _prevTimeSolution);
+  FunctionPtr trialPrevNL = Function<double>::solution(trialVar, _prevNLSolution);
   _steadyJacobian->addTerm( _invDt*multiplier*trialVar, testVar );
   _rhs->addTerm( _invDt*multiplier*trialPrevTime*testVar );
   if (_nonlinear)
@@ -278,7 +278,7 @@ ESDIRKIntegrator::ESDIRKIntegrator(BFPtr steadyJacobian, SteadyResidual &steadyR
     {
       if (a[k][j] != 0)
       {
-        FunctionPtr aFunc = Function::constant(a[k][j]/a[k][k]);
+        FunctionPtr aFunc = Function<double>::constant(a[k][j]/a[k][k]);
         _stageRHS[k]->addTerm( -aFunc*_steadyLinearTerm[j] );
       }
     }
@@ -287,8 +287,8 @@ ESDIRKIntegrator::ESDIRKIntegrator(BFPtr steadyJacobian, SteadyResidual &steadyR
 
 void ESDIRKIntegrator::addTimeTerm(VarPtr trialVar, VarPtr testVar, FunctionPtr multiplier)
 {
-  FunctionPtr trialPrevTime = Function::solution(trialVar, _prevTimeSolution);
-  FunctionPtr trialPrevNL = Function::solution(trialVar, _prevNLSolution);
+  FunctionPtr trialPrevTime = Function<double>::solution(trialVar, _prevTimeSolution);
+  FunctionPtr trialPrevNL = Function<double>::solution(trialVar, _prevNLSolution);
   _steadyJacobian->addTerm( _invDt*multiplier*trialVar, testVar );
   for (int k=0; k < _numStages; k++)
   {

@@ -13,11 +13,11 @@
 using namespace Intrepid;
 using namespace Camellia;
 
-ParameterFunction::ParameterFunction(double value) : Function(0) {
+ParameterFunction::ParameterFunction(double value) : Function<double>(0) {
   setValue(value);
 }
 
-ParameterFunction::ParameterFunction(FunctionPtr fxn) : Function(fxn->rank()) {
+ParameterFunction::ParameterFunction(FunctionPtr fxn) : Function<double>(fxn->rank()) {
   setValue(fxn);
 }
 

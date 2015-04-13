@@ -15,11 +15,11 @@ Teuchos::RCP<BCFunction> BCFunction::bcFunction(BCPtr bc, int varID, bool isTrac
     spatiallyFilteredFunction = bc->getSpatiallyFilteredFunctionForDirichletBC(varID);
     rank = spatiallyFilteredFunction->rank();
   }
-  
+
   return Teuchos::rcp( new BCFunction(bc, varID, isTrace, spatiallyFilteredFunction, rank) );
 }
 
-BCFunction::BCFunction(BCPtr bc, int varID, bool isTrace, FunctionPtr spatiallyFilteredFunction, int rank) : Function(rank) {
+BCFunction::BCFunction(BCPtr bc, int varID, bool isTrace, FunctionPtr spatiallyFilteredFunction, int rank) : Function<double>(rank) {
   _bc = bc;
   _varID = varID;
   _isTrace = isTrace;

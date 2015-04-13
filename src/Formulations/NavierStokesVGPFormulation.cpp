@@ -97,7 +97,7 @@ void NavierStokesVGPFormulation::initialize(MeshTopologyPtr meshTopology, std::s
   u2_hat = vf.traceVar(S_U2_HAT, 1.0 * u2, uHatSpace);
   if (_spaceDim==3) u3_hat = vf.traceVar(S_U3_HAT, 1.0 * u3, uHatSpace);
 
-  FunctionPtr n = Function::normal();
+  FunctionPtr n = Function<double>::normal();
   LinearTermPtr t1n_lt, t2n_lt, t3n_lt;
   t1n_lt = p * n->x() - sigma1 * n;
   t2n_lt = p * n->y() - sigma2 * n;
@@ -190,15 +190,15 @@ void NavierStokesVGPFormulation::initialize(MeshTopologyPtr meshTopology, std::s
   SolutionPtr backgroundFlowWeakReference = Teuchos::rcp(_backgroundFlow.get(), false );
 
   // convective terms:
-  FunctionPtr sigma1_prev = Function::solution(sigma1, backgroundFlowWeakReference);
-  FunctionPtr sigma2_prev = Function::solution(sigma2, backgroundFlowWeakReference);
-  FunctionPtr u1_prev = Function::solution(u1,backgroundFlowWeakReference);
-  FunctionPtr u2_prev = Function::solution(u2,backgroundFlowWeakReference);
-  FunctionPtr p_prev = Function::solution(p, backgroundFlowWeakReference);
+  FunctionPtr sigma1_prev = Function<double>::solution(sigma1, backgroundFlowWeakReference);
+  FunctionPtr sigma2_prev = Function<double>::solution(sigma2, backgroundFlowWeakReference);
+  FunctionPtr u1_prev = Function<double>::solution(u1,backgroundFlowWeakReference);
+  FunctionPtr u2_prev = Function<double>::solution(u2,backgroundFlowWeakReference);
+  FunctionPtr p_prev = Function<double>::solution(p, backgroundFlowWeakReference);
   FunctionPtr u3_prev, sigma3_prev;
   if (_spaceDim == 3) {
-    u3_prev = Function::solution(u3,backgroundFlowWeakReference);
-    sigma3_prev = Function::solution(sigma3,backgroundFlowWeakReference);
+    u3_prev = Function<double>::solution(u3,backgroundFlowWeakReference);
+    sigma3_prev = Function<double>::solution(sigma3,backgroundFlowWeakReference);
   }
 
   if (_spaceDim == 2) {
@@ -224,7 +224,7 @@ void NavierStokesVGPFormulation::initialize(MeshTopologyPtr meshTopology, std::s
   // set the RHS:
   if (forcingFunction == Teuchos::null) {
     int vectorRank = 1;
-    forcingFunction = Function::zero(vectorRank);
+    forcingFunction = Function<double>::zero(vectorRank);
   }
 
   _rhsForSolve = this->rhs(forcingFunction, _neglectFluxesOnRHS);
@@ -256,15 +256,15 @@ void NavierStokesVGPFormulation::initialize(MeshTopologyPtr meshTopology, std::s
   _pRefinementStrategy = Teuchos::rcp( new RefinementStrategy( _solnIncrement, energyThreshold, maxDouble, maxP, true ) );
 
   // Set up Functions for L^2 norm computations
-  FunctionPtr sigma1_incr = Function::solution(sigma1, _solnIncrement);
-  FunctionPtr sigma2_incr = Function::solution(sigma2, _solnIncrement);
-  FunctionPtr u1_incr = Function::solution(u1,_solnIncrement);
-  FunctionPtr u2_incr = Function::solution(u2,_solnIncrement);
+  FunctionPtr sigma1_incr = Function<double>::solution(sigma1, _solnIncrement);
+  FunctionPtr sigma2_incr = Function<double>::solution(sigma2, _solnIncrement);
+  FunctionPtr u1_incr = Function<double>::solution(u1,_solnIncrement);
+  FunctionPtr u2_incr = Function<double>::solution(u2,_solnIncrement);
   FunctionPtr u3_incr, sigma3_incr;
-  FunctionPtr p_incr = Function::solution(p, _solnIncrement);
+  FunctionPtr p_incr = Function<double>::solution(p, _solnIncrement);
   if (_spaceDim == 3) {
-    u3_incr = Function::solution(u3,_solnIncrement);
-    sigma3_incr = Function::solution(sigma3,_solnIncrement);
+    u3_incr = Function<double>::solution(u3,_solnIncrement);
+    sigma3_incr = Function<double>::solution(sigma3,_solnIncrement);
   }
 
   if (_spaceDim == 2) {
@@ -318,7 +318,7 @@ void NavierStokesVGPFormulation::initialize(MeshTopologyPtr meshTopology, std::s
     ((PreviousSolutionFunction*) u1_soln.get())->setOverrideMeshCheck(true,dontWarnAboutOverriding);
     ((PreviousSolutionFunction*) u2_soln.get())->setOverrideMeshCheck(true,dontWarnAboutOverriding);
 
-    FunctionPtr n = Function::normal();
+    FunctionPtr n = Function<double>::normal();
 
     BCPtr streamBC = BC::bc();
     VarPtr phi = _streamFormulation->phi();
@@ -392,7 +392,7 @@ void NavierStokesVGPFormulation::addOutflowCondition(SpatialFilterPtr outflowReg
     pcRCP = Teuchos::rcp( new PenaltyConstraints );
     pc = pcRCP.get();
   }
-  FunctionPtr zero = Function::zero();
+  FunctionPtr zero = Function<double>::zero();
   pc->addConstraint(_t1==zero, outflowRegion);
   pc->addConstraint(_t2==zero, outflowRegion);
   if (spaceDim==3) pc->addConstraint(_t3==zero, outflowRegion);
@@ -415,7 +415,7 @@ void NavierStokesVGPFormulation::addPointPressureCondition() {
 void NavierStokesVGPFormulation::addWallCondition(SpatialFilterPtr wall) {
   int spaceDim = _solnIncrement->mesh()->getTopology()->getSpaceDim();
   vector<double> zero(spaceDim, 0.0);
-  addInflowCondition(wall, Function::constant(zero));
+  addInflowCondition(wall, Function<double>::constant(zero));
 }
 
 void NavierStokesVGPFormulation::addZeroMeanPressureCondition() {
@@ -436,7 +436,7 @@ Teuchos::RCP<ExactSolution> NavierStokesVGPFormulation::exactSolution(FunctionPt
   int spaceDim = _backgroundFlow->mesh()->getTopology()->getSpaceDim();
 
   // f1 and f2 are those for Stokes, but minus u \cdot \grad u
-  FunctionPtr mu = Function::constant(_mu);
+  FunctionPtr mu = Function<double>::constant(_mu);
   FunctionPtr u1_exact = u_exact->x();
   FunctionPtr u2_exact = u_exact->y();
   FunctionPtr u3_exact = u_exact->z();
@@ -483,8 +483,8 @@ Teuchos::RCP<ExactSolution> NavierStokesVGPFormulation::exactSolution(FunctionPt
   mySolution->setSolutionFunction(sigma1, sigma1_exact);
   mySolution->setSolutionFunction(sigma2, sigma2_exact);
   if (spaceDim==3)   mySolution->setSolutionFunction(sigma3, sigma3_exact);
-  FunctionPtr sideParity = Function::sideParity();
-  FunctionPtr n = Function::normal();
+  FunctionPtr sideParity = Function<double>::sideParity();
+  FunctionPtr n = Function<double>::normal();
   FunctionPtr t1n_exact, t2n_exact, t3n_exact;
 
   t1n_exact = p_exact * n->x() - sigma1_exact * n;
@@ -524,13 +524,13 @@ FunctionPtr NavierStokesVGPFormulation::forcingFunction(int spaceDim, double Re,
     FunctionPtr f1, f2;
     f1 = p_exact->dx() - mu * (u1_exact->dx()->dx() + u1_exact->dy()->dy()) + u1_exact * u1_exact->dx() + u2_exact * u1_exact->dy();
     f2 = p_exact->dy() - mu * (u2_exact->dx()->dx() + u2_exact->dy()->dy()) + u1_exact * u2_exact->dx() + u2_exact * u2_exact->dy();
-    f = Function::vectorize(f1, f2);
+    f = Function<double>::vectorize(f1, f2);
   } else {
     FunctionPtr f1, f2, f3;
     f1 = p_exact->dx() - mu * (u1_exact->dx()->dx() + u1_exact->dy()->dy() + u1_exact->dz()->dz()) + u1_exact * u1_exact->dx() + u2_exact * u1_exact->dy() + u3_exact * u1_exact->dz();
     f2 = p_exact->dy() - mu * (u2_exact->dx()->dx() + u2_exact->dy()->dy() + u2_exact->dz()->dz()) + u1_exact * u2_exact->dx() + u2_exact * u2_exact->dy() + u3_exact * u2_exact->dz();
     f3 = p_exact->dz() - mu * (u3_exact->dx()->dx() + u3_exact->dy()->dy() + u3_exact->dz()->dz()) + u1_exact * u3_exact->dx() + u2_exact * u3_exact->dy() + u3_exact * u3_exact->dz();
-    f = Function::vectorize(f1, f2, f3);
+    f = Function<double>::vectorize(f1, f2, f3);
   }
   return f;
 }
@@ -618,14 +618,14 @@ RHSPtr NavierStokesVGPFormulation::rhs(FunctionPtr f, bool excludeFluxesAndTrace
   VarPtr sigma2 = this->sigma(2);
   VarPtr sigma3;
   if (spaceDim==3) sigma3 = this->sigma(3);
-  FunctionPtr sigma1_prev = Function::solution(sigma1, backgroundFlowWeakReference);
-  FunctionPtr sigma2_prev = Function::solution(sigma2, backgroundFlowWeakReference);
-  FunctionPtr u1_prev = Function::solution(u1,backgroundFlowWeakReference);
-  FunctionPtr u2_prev = Function::solution(u2,backgroundFlowWeakReference);
+  FunctionPtr sigma1_prev = Function<double>::solution(sigma1, backgroundFlowWeakReference);
+  FunctionPtr sigma2_prev = Function<double>::solution(sigma2, backgroundFlowWeakReference);
+  FunctionPtr u1_prev = Function<double>::solution(u1,backgroundFlowWeakReference);
+  FunctionPtr u2_prev = Function<double>::solution(u2,backgroundFlowWeakReference);
   FunctionPtr u3_prev, sigma3_prev;
   if (spaceDim == 3) {
-    u3_prev = Function::solution(u3,backgroundFlowWeakReference);
-    sigma3_prev = Function::solution(sigma3,backgroundFlowWeakReference);
+    u3_prev = Function<double>::solution(u3,backgroundFlowWeakReference);
+    sigma3_prev = Function<double>::solution(sigma3,backgroundFlowWeakReference);
   }
 
   // finally, add the u sigma term:

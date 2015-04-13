@@ -48,6 +48,7 @@ namespace Camellia {
 	class DofOrderingFactory;
 	class Element;
 	class ElementType;
+  template <typename Scalar=double>
 	class Function;
 	class GlobalDofAssignment;
 	class IP;
@@ -76,7 +77,7 @@ namespace Camellia {
 	typedef Teuchos::RCP<DofOrderingFactory> DofOrderingFactoryPtr;
 	typedef Teuchos::RCP<Element> ElementPtr;
 	typedef Teuchos::RCP<ElementType> ElementTypePtr;
-	typedef Teuchos::RCP<Function> FunctionPtr;
+	typedef Teuchos::RCP<Function<double> > FunctionPtr;
 	typedef Teuchos::RCP<GlobalDofAssignment> GlobalDofAssignmentPtr;
 	typedef Teuchos::RCP<IP> IPPtr;
 	typedef Teuchos::RCP<LinearTerm> LinearTermPtr;

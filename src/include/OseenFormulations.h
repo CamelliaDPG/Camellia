@@ -20,7 +20,7 @@ namespace Camellia {
     FunctionPtr _Re;
   public:
     OseenFormulation(double Reynolds) {
-      _Re = Function::constant(Reynolds);
+      _Re = Function<double>::constant(Reynolds);
     }
     OseenFormulation(FunctionPtr Reynolds) {
       _Re = Reynolds;
@@ -101,7 +101,7 @@ namespace Camellia {
   //    // (u_i, v_i,j U_j) + < -u_hat_i, (U_j n_j) v_i >
       _bf->addTerm( u1, U1 * v1->dx() + U2 * v1->dy());
       _bf->addTerm( u2, U1 * v2->dx() + U2 * v2->dy());
-      FunctionPtr n = Function::normal();
+      FunctionPtr n = Function<double>::normal();
       FunctionPtr Un = U1 * n->x() + U2 * n->y();
       _bf->addTerm( -u1hat, Un * v1);
       _bf->addTerm( -u2hat, Un * v2);
@@ -124,7 +124,7 @@ namespace Camellia {
     }
 
     VGPOseenFormulation(double Re, FunctionPtr U1, FunctionPtr U2, bool scaleSigmaByMu = true) : OseenFormulation(Re) {
-      init(Function::constant(Re),U1,U2, scaleSigmaByMu);
+      init(Function<double>::constant(Re),U1,U2, scaleSigmaByMu);
       if (Re < 1) _small_Re = true;
       else _small_Re = false;
       if (_small_Re) {
@@ -227,7 +227,7 @@ namespace Camellia {
       if (_scale_sigma_by_mu) {
         sigma_weight = _mu;
       } else {
-        sigma_weight = Function::constant(1);
+        sigma_weight = Function<double>::constant(1);
       }
 
       FunctionPtr sigma11_exact = sigma_weight * u1_exact->dx();
@@ -241,8 +241,8 @@ namespace Camellia {
       mySolution->setSolutionFunction(sigma22, sigma22_exact);
 
       // tn = (mu sigma - pI)n
-      FunctionPtr sideParity = Function::sideParity();
-      FunctionPtr n = Function::normal();
+      FunctionPtr sideParity = Function<double>::sideParity();
+      FunctionPtr n = Function<double>::normal();
       FunctionPtr t1n_exact = (mu * sigma11_exact - p_exact) * n->x() + mu * sigma12_exact * n->y();
       FunctionPtr t2n_exact = mu * sigma21_exact * n->x() + (mu * sigma22_exact - p_exact) * n->y();
 
@@ -333,7 +333,7 @@ namespace Camellia {
     VGPOseenProblem(double Re, Intrepid::FieldContainer<double> &quadPoints, int horizontalCells,
                     int verticalCells, int H1Order, int pToAdd,
                     FunctionPtr u1_exact, FunctionPtr u2_exact, FunctionPtr p_exact, bool enrichVelocity, bool scaleSigmaByMu) {
-      init(Function::constant(Re),quadPoints,horizontalCells,verticalCells,H1Order,pToAdd,u1_exact,u2_exact,p_exact,enrichVelocity,
+      init(Function<double>::constant(Re),quadPoints,horizontalCells,verticalCells,H1Order,pToAdd,u1_exact,u2_exact,p_exact,enrichVelocity,
            scaleSigmaByMu);
       if (Re < 1) {
         _vgpOseenFormulation->setSmallRe(true);

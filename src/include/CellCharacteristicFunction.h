@@ -14,14 +14,14 @@
 using namespace std;
 
 namespace Camellia {
-  class CellCharacteristicFunction : public Function {
+  class CellCharacteristicFunction : public Function<double> {
     set<GlobalIndexType> _cellIDs;
   public:
-    CellCharacteristicFunction(GlobalIndexType cellID) : Function(0) {
+    CellCharacteristicFunction(GlobalIndexType cellID) : Function<double>(0) {
       _cellIDs.insert(cellID);
     }
-    
-    CellCharacteristicFunction(set<GlobalIndexType> cellIDs) : Function(0) {
+
+    CellCharacteristicFunction(set<GlobalIndexType> cellIDs) : Function<double>(0) {
       _cellIDs = cellIDs;
     }
     void values(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache) {
@@ -29,9 +29,9 @@ namespace Camellia {
       vector<GlobalIndexType> cellIDs = basisCache->cellIDs();
       int numCells = values.dimension(0);
       int numPoints = values.dimension(1);
-      
+
       values.initialize(0);
-      
+
       if (numCells != cellIDs.size()) {
         cout << "ERROR: CellCharacteristicFunction requires cellIDs to be defined in BasisCache\n";
         TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "CellCharacteristicFunction requires cellIDs to be defined in BasisCache");

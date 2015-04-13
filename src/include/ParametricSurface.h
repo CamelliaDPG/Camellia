@@ -23,19 +23,19 @@ namespace Camellia {
   class ParametricSurface;
   typedef Teuchos::RCP<ParametricSurface> ParametricSurfacePtr;
 
-  class ParametricSurface : public Function {
+  class ParametricSurface : public Function<double> {
   public:
-    ParametricSurface() : Function(1) { // vector valued
-      
+    ParametricSurface() : Function<double>(1) { // vector valued
+
     }
     virtual FunctionPtr dt1();
     virtual FunctionPtr dt2();
-    
+
     virtual void value(double t1, double t2, double &x, double &y) = 0;
     virtual void values(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache);
-    
+
     static Intrepid::FieldContainer<double> &parametricQuadNodes(); // for CellTools cellWorkset argument
-    
+
     static void basisWeightsForEdgeInterpolant(Intrepid::FieldContainer<double> &basisCoefficients,
                                                Camellia::VectorBasisPtr basis, MeshPtr mesh, int cellID);
     static void basisWeightsForProjectedInterpolant(Intrepid::FieldContainer<double> &basisCoefficients,

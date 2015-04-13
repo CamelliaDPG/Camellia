@@ -108,14 +108,14 @@ namespace Camellia {
   }
 
   void LinearTerm::addVar(double weight, VarPtr var) {
-    FunctionPtr weightFn = (weight != 1.0) ? Teuchos::rcp( new ConstantScalarFunction(weight) )
-      : Teuchos::rcp( new ConstantScalarFunction(weight, "") );
+    FunctionPtr weightFn = (weight != 1.0) ? Teuchos::rcp( new ConstantScalarFunction<double>(weight) )
+      : Teuchos::rcp( new ConstantScalarFunction<double>(weight, "") );
     // (suppress display of 1.0 weights)
     addVar( weightFn, var );
   }
 
   void LinearTerm::addVar(vector<double> vector_weight, VarPtr var) { // dots weight vector with vector var, makes a vector out of a scalar var
-    FunctionPtr weightFn = Teuchos::rcp( new ConstantVectorFunction(vector_weight) );
+    FunctionPtr weightFn = Teuchos::rcp( new ConstantVectorFunction<double>(vector_weight) );
     addVar( weightFn, var );
   }
 
@@ -780,7 +780,7 @@ namespace Camellia {
     // NOTE that if boundaryPart is false, then we exclude terms that are defined only on the boundary
     // and if boundaryPart is true, then we exclude terms that are defined everywhere
     // so that the whole LinearTerm is the sum of the two options
-    FunctionPtr fxn = Function::null();
+    FunctionPtr fxn = Function<double>::null();
     vector< LinearSummand > summands = this->getPart(boundaryPart)->summands();
     for (vector< LinearSummand >::iterator lsIt = summands.begin(); lsIt != summands.end(); lsIt++) {
       LinearSummand ls = *lsIt;
@@ -796,12 +796,12 @@ namespace Camellia {
         TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "varFunctions entries cannot be null!");
       }
 
-      FunctionPtr varEvaluation = Function::op(varFunction,var->op());
+      FunctionPtr varEvaluation = Function<double>::op(varFunction,var->op());
       {
         // DEBUGGING CODE:
         if (varEvaluation.get() == NULL) {
           // try that again, so we can step into the code
-          FunctionPtr varEvaluation = Function::op(varFunction,var->op());
+          FunctionPtr varEvaluation = Function<double>::op(varFunction,var->op());
         }
       }
 
@@ -812,7 +812,7 @@ namespace Camellia {
       }
     }
     if (!fxn.get()) {
-      fxn = Function::zero(this->rank());
+      fxn = Function<double>::zero(this->rank());
     }
     return fxn;
   }
@@ -908,7 +908,7 @@ namespace Camellia {
         }
 
         if ( ls.first->rank() == 0 ) { // scalar function -- we can speed things along in this case...
-          // E.g. ConstantFunction::scalarMultiplyBasisValues() knows not to do anything at all if its value is 1.0...
+          // E.g. ConstantFunction<double>::scalarMultiplyBasisValues() knows not to do anything at all if its value is 1.0...
           Intrepid::FieldContainer<double> weightedBasisValues = *basisValues; // weighted by the scalar function
           ls.first->scalarMultiplyBasisValues(weightedBasisValues,basisCache);
           for (int i=0; i<values.size(); i++) {
@@ -1077,7 +1077,7 @@ namespace Camellia {
         }
 
         if ( ls.first->rank() == 0 ) { // scalar function -- we can speed things along in this case...
-          // E.g. ConstantFunction::scalarMultiplyBasisValues() knows not to do anything at all if its value is 1.0...
+          // E.g. ConstantFunction<double>::scalarMultiplyBasisValues() knows not to do anything at all if its value is 1.0...
           fxnValues.resize(fxnValueAsBasisDim);
           ls.first->scalarMultiplyBasisValues(fxnValues,basisCache);
           for (int i=0; i<values.size(); i++) {
@@ -1508,12 +1508,12 @@ LinearTermPtr operator/(LinearTermPtr a, FunctionPtr f) {
 }
 
 LinearTermPtr operator/(VarPtr v, FunctionPtr scalarFunction) {
-  FunctionPtr one = Teuchos::rcp( new ConstantScalarFunction(1.0) );
+  FunctionPtr one = Teuchos::rcp( new ConstantScalarFunction<double>(1.0) );
   return (one / scalarFunction) * v;
 }
 
 LinearTermPtr operator+(VarPtr v1, VarPtr v2) {
-  FunctionPtr one = Teuchos::rcp( new ConstantScalarFunction(1.0, "") );
+  FunctionPtr one = Teuchos::rcp( new ConstantScalarFunction<double>(1.0, "") );
   return one * v1 + one * v2;
 }
 
@@ -1522,26 +1522,26 @@ LinearTermPtr operator/(VarPtr v, double weight) {
 }
 
 LinearTermPtr operator-(VarPtr v1, VarPtr v2) {
-  FunctionPtr minus_one = Teuchos::rcp( new ConstantScalarFunction(-1.0, "-") );
+  FunctionPtr minus_one = Teuchos::rcp( new ConstantScalarFunction<double>(-1.0, "-") );
   return v1 + minus_one * v2;
 }
 
 LinearTermPtr operator-(VarPtr v) {
-  FunctionPtr minus_one = Teuchos::rcp( new ConstantScalarFunction(-1.0, "-") );
+  FunctionPtr minus_one = Teuchos::rcp( new ConstantScalarFunction<double>(-1.0, "-") );
   return minus_one * v;
 }
 
 LinearTermPtr operator-(LinearTermPtr a) {
-  return Teuchos::rcp( new ConstantScalarFunction(-1.0, "-") ) * a;
+  return Teuchos::rcp( new ConstantScalarFunction<double>(-1.0, "-") ) * a;
 }
 
 LinearTermPtr operator-(LinearTermPtr a, VarPtr v) {
-  FunctionPtr minus_one = Teuchos::rcp( new ConstantScalarFunction(-1.0, "-") );
+  FunctionPtr minus_one = Teuchos::rcp( new ConstantScalarFunction<double>(-1.0, "-") );
   return a + minus_one * v;
 }
 
 LinearTermPtr operator-(VarPtr v, LinearTermPtr a) {
-  FunctionPtr minus_one = Teuchos::rcp( new ConstantScalarFunction(-1.0, "-") );
+  FunctionPtr minus_one = Teuchos::rcp( new ConstantScalarFunction<double>(-1.0, "-") );
   return v + minus_one * a;
 }
 

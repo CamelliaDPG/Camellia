@@ -85,8 +85,8 @@ StokesVGPFormulation::StokesVGPFormulation(int spaceDim, bool useConformingTrace
   u2_hat = _vf.traceVar(S_U2_HAT, 1.0 * u2, uHatSpace);
   if (spaceDim==3) u3_hat = _vf.traceVar(S_U3_HAT, 1.0 * u3, uHatSpace);
 
-  FunctionPtr n = Function::normal();
-  FunctionPtr n_parity = n * Function::sideParity();
+  FunctionPtr n = Function<double>::normal();
+  FunctionPtr n_parity = n * Function<double>::sideParity();
 
   LinearTermPtr t1n_lt, t2n_lt, t3n_lt;
   t1n_lt = p * n_parity->x() - sigma1 * n_parity ;
@@ -179,21 +179,22 @@ StokesVGPFormulation::StokesVGPFormulation(int spaceDim, bool useConformingTrace
       _stokesBF->addTerm(-u3_hat, tau3->dot_normal());
     }
 
+    FunctionPtr dtFxn = _dt; // cast to allow use of FunctionPtr operator overloads
     // v1:
-    _stokesBF->addTerm(u1 / _dt, v1);
+    _stokesBF->addTerm(u1 / dtFxn, v1);
     _stokesBF->addTerm(_theta * sigma1, v1->grad()); // (mu sigma1, grad v1)
     _stokesBF->addTerm(_theta * (-p), v1->dx() );
     _stokesBF->addTerm( t1n, v1);
 
     // v2:
-    _stokesBF->addTerm(u2 / _dt, v2);
+    _stokesBF->addTerm(u2 / dtFxn, v2);
     _stokesBF->addTerm(_theta * sigma2, v2->grad()); // (mu sigma2, grad v2)
     _stokesBF->addTerm(_theta * (-p), v2->dy());
     _stokesBF->addTerm( t2n, v2);
 
     // v3:
     if (spaceDim==3) {
-      _stokesBF->addTerm(u3 / _dt, v3);
+      _stokesBF->addTerm(u3 / dtFxn, v3);
       _stokesBF->addTerm(_theta * sigma3, v3->grad()); // (mu sigma3, grad v3)
       _stokesBF->addTerm(_theta * (- p), v3->dz());
       _stokesBF->addTerm( t3n, v3);
@@ -239,13 +240,13 @@ void StokesVGPFormulation::addInflowCondition(SpatialFilterPtr inflowRegion, Fun
     FunctionPtr u1_hat_prev, u2_hat_prev, u3_hat_prev;
     SolutionPtr prevSolnWeakRef = Teuchos::rcp( _previousSolution.get(), false ); // avoid circular references
 
-    u1_hat_prev = Function::solution(this->u_hat(1), prevSolnWeakRef);
-    u2_hat_prev = Function::solution(this->u_hat(2), prevSolnWeakRef);
-    if (spaceDim==3) u3_hat_prev = Function::solution(this->u_hat(3), prevSolnWeakRef);
+    u1_hat_prev = Function<double>::solution(this->u_hat(1), prevSolnWeakRef);
+    u2_hat_prev = Function<double>::solution(this->u_hat(2), prevSolnWeakRef);
+    if (spaceDim==3) u3_hat_prev = Function<double>::solution(this->u_hat(3), prevSolnWeakRef);
     FunctionPtr thetaFxn = _theta; // cast to allow use of FunctionPtr operator overloads
-    _solution->bc()->addDirichlet(u1_hat, inflowRegion, thetaFxn * u->x() + (1-_theta)* u1_hat_prev);
-    _solution->bc()->addDirichlet(u2_hat, inflowRegion, thetaFxn * u->y() + (1-_theta)* u2_hat_prev);
-    if (spaceDim==3) _solution->bc()->addDirichlet(u3_hat, inflowRegion, thetaFxn * u->z() + (1-_theta)* u3_hat_prev);
+    _solution->bc()->addDirichlet(u1_hat, inflowRegion, thetaFxn * u->x() + (1.-thetaFxn)* u1_hat_prev);
+    _solution->bc()->addDirichlet(u2_hat, inflowRegion, thetaFxn * u->y() + (1.-thetaFxn)* u2_hat_prev);
+    if (spaceDim==3) _solution->bc()->addDirichlet(u3_hat, inflowRegion, thetaFxn * u->z() + (1.-thetaFxn)* u3_hat_prev);
   }
 }
 
@@ -254,7 +255,7 @@ void StokesVGPFormulation::addOutflowCondition(SpatialFilterPtr outflowRegion) {
 
 //  for (int d=0; d<spaceDim; d++) {
 //    VarPtr tn_hat = this->tn_hat(d+1);
-//    _solution->bc()->addDirichlet(tn_hat, outflowRegion, Function::zero());
+//    _solution->bc()->addDirichlet(tn_hat, outflowRegion, Function<double>::zero());
 //  }
 
   _haveOutflowConditionsImposed = true;
@@ -286,7 +287,7 @@ void StokesVGPFormulation::addOutflowCondition(SpatialFilterPtr outflowRegion) {
     pcRCP = Teuchos::rcp( new PenaltyConstraints );
     pc = pcRCP.get();
   }
-  FunctionPtr zero = Function::zero();
+  FunctionPtr zero = Function<double>::zero();
   pc->addConstraint(_t1==zero, outflowRegion);
   pc->addConstraint(_t2==zero, outflowRegion);
   if (spaceDim==3) pc->addConstraint(_t3==zero, outflowRegion);
@@ -314,7 +315,7 @@ void StokesVGPFormulation::addPointPressureCondition() {
 void StokesVGPFormulation::addWallCondition(SpatialFilterPtr wall) {
   int spaceDim = _solution->mesh()->getTopology()->getSpaceDim();
   vector<double> zero(spaceDim, 0.0);
-  addInflowCondition(wall, Function::constant(zero));
+  addInflowCondition(wall, Function<double>::constant(zero));
 }
 
 void StokesVGPFormulation::addZeroMeanPressureCondition() {
@@ -348,13 +349,13 @@ FunctionPtr StokesVGPFormulation::forcingFunction(int spaceDim, double mu, Funct
     FunctionPtr f1, f2;
     f1 = p_exact->dx() - mu * (u1_exact->dx()->dx() + u1_exact->dy()->dy());
     f2 = p_exact->dy() - mu * (u2_exact->dx()->dx() + u2_exact->dy()->dy());
-    f = Function::vectorize(f1, f2);
+    f = Function<double>::vectorize(f1, f2);
   } else {
     FunctionPtr f1, f2, f3;
     f1 = p_exact->dx() - mu * (u1_exact->dx()->dx() + u1_exact->dy()->dy() + u1_exact->dz()->dz());
     f2 = p_exact->dy() - mu * (u2_exact->dx()->dx() + u2_exact->dy()->dy() + u2_exact->dz()->dz());
     f3 = p_exact->dz() - mu * (u3_exact->dx()->dx() + u3_exact->dy()->dy() + u3_exact->dz()->dz());
-    f = Function::vectorize(f1, f2, f3);
+    f = Function<double>::vectorize(f1, f2, f3);
   }
   return f;
 }
@@ -447,7 +448,7 @@ void StokesVGPFormulation::initializeSolution(MeshTopologyPtr meshTopo, int fiel
     ((PreviousSolutionFunction*) u1_soln.get())->setOverrideMeshCheck(true,dontWarnAboutOverriding);
     ((PreviousSolutionFunction*) u2_soln.get())->setOverrideMeshCheck(true,dontWarnAboutOverriding);
 
-    FunctionPtr n = Function::normal();
+    FunctionPtr n = Function<double>::normal();
 
     BCPtr streamBC = BC::bc();
     VarPtr phi = _streamFormulation->phi();
@@ -466,12 +467,12 @@ void StokesVGPFormulation::initializeSolution(MeshTopologyPtr meshTopo, int fiel
 }
 
 double StokesVGPFormulation::L2NormOfTimeStep() {
-  FunctionPtr  p_current = Function::solution( p(), _solution);
-  FunctionPtr u1_current = Function::solution(u(1), _solution);
-  FunctionPtr u2_current = Function::solution(u(2), _solution);
-  FunctionPtr  p_prev = Function::solution( p(), _previousSolution);
-  FunctionPtr u1_prev = Function::solution(u(1), _previousSolution);
-  FunctionPtr u2_prev = Function::solution(u(2), _previousSolution);
+  FunctionPtr  p_current = Function<double>::solution( p(), _solution);
+  FunctionPtr u1_current = Function<double>::solution(u(1), _solution);
+  FunctionPtr u2_current = Function<double>::solution(u(2), _solution);
+  FunctionPtr  p_prev = Function<double>::solution( p(), _previousSolution);
+  FunctionPtr u1_prev = Function<double>::solution(u(1), _previousSolution);
+  FunctionPtr u2_prev = Function<double>::solution(u(2), _previousSolution);
 
   FunctionPtr squaredDiff = (p_current-p_prev) * (p_current-p_prev) + (u1_current-u1_prev) * (u1_current-u1_prev) + (u2_current - u2_prev) * (u2_current - u2_prev);
   double valSquared = squaredDiff->integrate(_solution->mesh());
@@ -524,16 +525,18 @@ RHSPtr StokesVGPFormulation::rhs(FunctionPtr f) {
 
   if (_transient) {
     FunctionPtr u1_prev, u2_prev, u3_prev;
-    u1_prev = Function::solution(this->u(1), _previousSolution);
-    u2_prev = Function::solution(this->u(2), _previousSolution);
-    if (spaceDim==3) u3_prev = Function::solution(this->u(3), _previousSolution);
-    rhs->addTerm(u1_prev / _dt * v1);
-    rhs->addTerm(u2_prev / _dt * v2);
-    if (spaceDim==3) rhs->addTerm(u3_prev / _dt * v3);
+    u1_prev = Function<double>::solution(this->u(1), _previousSolution);
+    u2_prev = Function<double>::solution(this->u(2), _previousSolution);
+    if (spaceDim==3) u3_prev = Function<double>::solution(this->u(3), _previousSolution);
+    FunctionPtr dtFxn = _dt; // cast to allow use of FunctionPtr operator overloads
+    rhs->addTerm(u1_prev / dtFxn * v1);
+    rhs->addTerm(u2_prev / dtFxn * v2);
+    if (spaceDim==3) rhs->addTerm(u3_prev / dtFxn * v3);
 
     bool excludeFluxesAndTraces = true;
     LinearTermPtr prevTimeStepFunctional = _steadyStokesBF->testFunctional(_previousSolution,excludeFluxesAndTraces);
-    rhs->addTerm((_theta - 1.0) * prevTimeStepFunctional);
+    FunctionPtr thetaFxn = _theta; // cast to allow use of FunctionPtr operator overloads
+    rhs->addTerm((thetaFxn - 1.0) * prevTimeStepFunctional);
   }
 
   return rhs;
@@ -682,7 +685,7 @@ SolutionPtr StokesVGPFormulation::streamSolution() {
 
 // ! Takes a time step (assumes you have called solve() first)
 void StokesVGPFormulation::takeTimeStep() {
-  SimpleFunction* dtValueFxn = dynamic_cast<SimpleFunction*>(_dt->getValue().get());
+  ConstantScalarFunction<double>* dtValueFxn = dynamic_cast<ConstantScalarFunction<double>*>(_dt->getValue().get());
 
   double dt = dtValueFxn->value(0);
   _time += dt;

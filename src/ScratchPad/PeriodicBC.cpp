@@ -16,7 +16,7 @@
 using namespace Intrepid;
 using namespace Camellia;
 
-class TransformXFunction : public SimpleVectorFunction {
+class TransformXFunction : public SimpleVectorFunction<double> {
   double _xFrom, _xTo;
 public:
   TransformXFunction(double xFrom, double xTo) {
@@ -48,7 +48,7 @@ public:
   }
 };
 
-class TransformYFunction : public SimpleVectorFunction {
+class TransformYFunction : public SimpleVectorFunction<double> {
   double _yFrom, _yTo;
 public:
   TransformYFunction(double yFrom, double yTo) {
@@ -80,7 +80,7 @@ public:
   }
 };
 
-class TransformZFunction : public SimpleVectorFunction {
+class TransformZFunction : public SimpleVectorFunction<double> {
   double _zFrom, _zTo;
 public:
   TransformZFunction(double zFrom, double zTo) {
@@ -122,22 +122,22 @@ vector<double> PeriodicBC::getMatchingPoint(const std::vector<double> &point, in
   } else {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "whichSide must be 0 or 1!");
   }
-  
+
   int spaceDim = point.size();
   FieldContainer<double> value(1,1,spaceDim); // (C,P,D)
   FieldContainer<double> physPoint(1,1,spaceDim);
-  
+
   Teuchos::RCP<PhysicalPointCache> dummyCache = Teuchos::rcp( new PhysicalPointCache(physPoint) );
   for (int d=0; d<spaceDim; d++) {
     dummyCache->writablePhysicalCubaturePoints()(0,0,d) = point[d];
   }
   f->values(value,dummyCache);
-  
+
   vector<double> transformedPoint;
   for (int d=0; d<spaceDim; d++) {
     transformedPoint.push_back(value(0,0,d));
   }
-  
+
   return transformedPoint;
 }
 

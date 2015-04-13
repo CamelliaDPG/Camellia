@@ -597,6 +597,9 @@ namespace Camellia{
     e1[0] = 1.0;
     e2[1] = 1.0;
     e3[2] = 1.0;
+    FunctionPtr e1Fxn = Function<double>::constant(e1);
+    FunctionPtr e2Fxn = Function<double>::constant(e2);
+    FunctionPtr e3Fxn = Function<double>::constant(e3);
     for ( vector< BilinearTerm >:: iterator btIt = _terms.begin();
         btIt != _terms.end(); btIt++) {
       BilinearTerm bt = *btIt;
@@ -608,11 +611,11 @@ namespace Camellia{
         if (trialVar->varType() == FIELD) {
           FunctionPtr f = lsIt->first;
           if (trialVar->op() == OP_X) {
-            f = e1 * f;
+            f = e1Fxn * f;
           } else if (trialVar->op() == OP_Y) {
-            f = e2 * f;
+            f = e2Fxn * f;
           } else if (trialVar->op() == OP_Z) {
-            f = e3 * f;
+            f = e3Fxn * f;
           } else if (trialVar->op() != OP_VALUE) {
             TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "BF::graphNorm() doesn't support non-value ops on field variables");
           }
@@ -635,7 +638,7 @@ namespace Camellia{
         }
         weight = 1.0 / sqrt(trialWeight);
       }
-      ip->addTerm( Function::constant(weight) * testTermIt->second );
+      ip->addTerm( Function<double>::constant(weight) * testTermIt->second );
     }
     // L^2 terms:
     map< int, VarPtr > testVars = _varFactory.testVars();

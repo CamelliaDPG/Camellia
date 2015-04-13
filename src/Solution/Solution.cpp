@@ -3713,7 +3713,7 @@ void Solution<Scalar>::projectOldCellOntoNewCells(GlobalIndexType cellID,
      }
    }
 
-   FunctionPtr sideParity = Function::sideParity();
+   FunctionPtr sideParity = Function<double>::sideParity();
    map<int,FunctionPtr> interiorTraceMap; // functions to use on parent interior to represent traces there
    for (set<int>::iterator trialIDIt = trialIDs.begin(); trialIDIt != trialIDs.end(); trialIDIt++) {
      int trialID = *trialIDIt;

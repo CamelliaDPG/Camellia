@@ -9,7 +9,7 @@
 #include "Function.h"
 
 namespace Camellia {
-  class BCFunction : public Function {
+  class BCFunction : public Function<double> {
     Intrepid::FieldContainer<bool> _imposeHere;
     int _varID;
     BCPtr _bc;
@@ -21,13 +21,13 @@ namespace Camellia {
     bool imposeOnCell(int cellIndex);
     int varID();
     bool isTrace();
-    
+
     FunctionPtr curl();
     FunctionPtr div();
     FunctionPtr dx();
     FunctionPtr dy();
     FunctionPtr dz();
-    
+
     static Teuchos::RCP<BCFunction> bcFunction(BCPtr bc, int varID, bool isTrace);
   };
 }

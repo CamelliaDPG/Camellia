@@ -5,13 +5,13 @@
 // TODO: change L2 error to use different variables
 
 namespace Camellia {
-    class InvDtFunction : public Function
+    class InvDtFunction : public Function<double>
     {
       private:
         double __invDt;
 
       public:
-        InvDtFunction(double _dt) : Function(0){
+        InvDtFunction(double _dt) : Function<double>(0){
           __invDt = 1./_dt;
         }
         void setDt(double _dt){

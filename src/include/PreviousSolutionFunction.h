@@ -17,7 +17,7 @@
 #include "InnerProductScratchPad.h"
 
 namespace Camellia {
-  class PreviousSolutionFunction : public Function {
+  class PreviousSolutionFunction : public Function<double> {
     SolutionPtr _soln;
     LinearTermPtr _solnExpression;
     bool _overrideMeshCheck;

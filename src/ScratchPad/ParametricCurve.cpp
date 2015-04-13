@@ -31,7 +31,7 @@ static const double PI  = 3.141592653589793238462;
 
 static void CHECK_FUNCTION_ONLY_DEPENDS_ON_1D_SPACE(FunctionPtr fxn) {
   try {
-    Function::evaluate(fxn, 0);
+    Function<double>::evaluate(fxn, 0);
   } catch (...) {
     TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument,"Function threw an exception when evaluation at x=0 was attempted.  This can happen if your function depends on things other than 1D point values, e.g. if your function depends on a basis that requires points in reference space.");
   }
@@ -47,7 +47,7 @@ void ParametricFunction::setArgumentMap() {
   _argMap = _t0 + t * (_t1 - _t0);
 }
 
-ParametricFunction::ParametricFunction(FunctionPtr fxn, double t0, double t1, int derivativeOrder) : Function(fxn->rank()) {
+ParametricFunction::ParametricFunction(FunctionPtr fxn, double t0, double t1, int derivativeOrder) : Function<double>(fxn->rank()) {
   CHECK_FUNCTION_ONLY_DEPENDS_ON_1D_SPACE(fxn);
   _underlyingFxn = fxn;
   _t0 = t0;
@@ -55,7 +55,7 @@ ParametricFunction::ParametricFunction(FunctionPtr fxn, double t0, double t1, in
   _derivativeOrder = derivativeOrder;
   setArgumentMap();
 }
-ParametricFunction::ParametricFunction(FunctionPtr fxn) : Function(fxn->rank()) {
+ParametricFunction::ParametricFunction(FunctionPtr fxn) : Function<double>(fxn->rank()) {
   CHECK_FUNCTION_ONLY_DEPENDS_ON_1D_SPACE(fxn);
   _underlyingFxn = fxn;
   _t0 = 0;
@@ -187,14 +187,14 @@ public:
     if (!_isDerivative) {
       return _edgeCurve->x() - _edgeLine->x();
     } else {
-      return _edgeCurve->x() - Function::constant(_xDiff);
+      return _edgeCurve->x() - Function<double>::constant(_xDiff);
     }
   }
   FunctionPtr y() {
     if (!_isDerivative) {
       return _edgeCurve->y() - _edgeLine->y();
     } else {
-      return _edgeCurve->y() - Function::constant(_yDiff);
+      return _edgeCurve->y() - Function<double>::constant(_yDiff);
     }
   }
 };
@@ -248,17 +248,17 @@ public:
   }
 };
 
-ParametricCurve::ParametricCurve(ParametricFunctionPtr xFxn_x_as_t, ParametricFunctionPtr yFxn_x_as_t, ParametricFunctionPtr zFxn_x_as_t) : Function(1) {
+ParametricCurve::ParametricCurve(ParametricFunctionPtr xFxn_x_as_t, ParametricFunctionPtr yFxn_x_as_t, ParametricFunctionPtr zFxn_x_as_t) : Function<double>(1) {
   _xFxn = xFxn_x_as_t;
   _yFxn = yFxn_x_as_t;
   _zFxn = zFxn_x_as_t;
 }
 
-ParametricCurve::ParametricCurve() : Function(1) {
+ParametricCurve::ParametricCurve() : Function<double>(1) {
 //  cout << "ParametricCurve().\n";
 }
 
-//ParametricCurve::ParametricCurve(ParametricCurvePtr fxn, double t0, double t1) : Function(1) {
+//ParametricCurve::ParametricCurve(ParametricCurvePtr fxn, double t0, double t1) : Function<double>(1) {
 //  _xFxn = fxn->xPart();
 //  _yFxn = fxn->yPart();
 //  _zFxn = fxn->zPart();
@@ -457,8 +457,8 @@ ParametricCurvePtr ParametricCurve::bubble(ParametricCurvePtr edgeCurve) {
 ParametricCurvePtr ParametricCurve::circle(double r, double x0, double y0) {
   FunctionPtr cos_2pi_t = Teuchos::rcp( new Cos_ax(2.0*PI) );
   FunctionPtr sin_2pi_t = Teuchos::rcp( new Sin_ax(2.0*PI) );
-  FunctionPtr xFunction = r * cos_2pi_t + Function::constant(x0);
-  FunctionPtr yFunction = r * sin_2pi_t + Function::constant(y0);
+  FunctionPtr xFunction = r * cos_2pi_t + Function<double>::constant(x0);
+  FunctionPtr yFunction = r * sin_2pi_t + Function<double>::constant(y0);
 
   return curve(xFunction,yFunction);
 
@@ -538,8 +538,8 @@ ParametricCurvePtr ParametricCurve::polygon(vector< pair<double,double> > vertic
 
 ParametricCurvePtr ParametricCurve::line(double x0, double y0, double x1, double y1) {
   FunctionPtr t = Teuchos::rcp( new Xn(1) );
-  FunctionPtr x0_f = Function::constant(x0);
-  FunctionPtr y0_f = Function::constant(y0);
+  FunctionPtr x0_f = Function<double>::constant(x0);
+  FunctionPtr y0_f = Function<double>::constant(y0);
   FunctionPtr xFxn = (x1-x0) * t + x0_f;
   FunctionPtr yFxn = (y1-y0) * t + y0_f;
 
@@ -559,11 +559,11 @@ ParametricCurvePtr ParametricCurve::line(double x0, double y0, double x1, double
 //  }
 //}
 
-class ParametricGradientWrapper : public Function {
+class ParametricGradientWrapper : public Function<double> {
   FunctionPtr _parametricGradient;
   bool _convertBasisCacheToParametricSpace;
 public:
-  ParametricGradientWrapper(FunctionPtr parametricGradient, bool convertBasisCacheToParametricSpace = false) : Function(parametricGradient->rank()) {
+  ParametricGradientWrapper(FunctionPtr parametricGradient, bool convertBasisCacheToParametricSpace = false) : Function<double>(parametricGradient->rank()) {
     _parametricGradient = parametricGradient;
     _convertBasisCacheToParametricSpace = convertBasisCacheToParametricSpace;
   }

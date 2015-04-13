@@ -95,28 +95,28 @@ namespace Camellia {
   class RepFunction;
   typedef Teuchos::RCP<RepFunction> RepFunctionPtr;
 
-  class RepFunction : public Function {
+  class RepFunction : public Function<double> {
   private:
 
     int _testID;
     Teuchos::RCP<RieszRep> _rep;
     EOperator _op;
   public:
-    RepFunction( VarPtr var, RieszRepPtr rep ) : Function( var->rank() ) {
+    RepFunction( VarPtr var, RieszRepPtr rep ) : Function<double>( var->rank() ) {
       _testID = var->ID();
       _op = var->op();
       _rep = rep;
     }
 
     // optional specification of operator to apply - default to rank 0
-   RepFunction(int testID,Teuchos::RCP<RieszRep> rep, EOperator op): Function(0){
+   RepFunction(int testID,Teuchos::RCP<RieszRep> rep, EOperator op): Function<double>(0){
       _testID = testID;
       _rep = rep;
       _op = op;
     }
 
     // specification of function rank
-   RepFunction(int testID,Teuchos::RCP<RieszRep> rep, EOperator op, int fxnRank): Function(fxnRank){
+   RepFunction(int testID,Teuchos::RCP<RieszRep> rep, EOperator op, int fxnRank): Function<double>(fxnRank){
       _testID = testID;
       _rep = rep;
       _op = op;
