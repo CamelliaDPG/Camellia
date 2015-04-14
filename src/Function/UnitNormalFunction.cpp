@@ -74,6 +74,10 @@ void UnitNormalFunction::values(Intrepid::FieldContainer<double> &values, BasisC
           double nd = (*sideNormals)(cellIndex,ptIndex,d);
           values(cellIndex,ptIndex,d) = nd;
         }
+        if (_spaceTime) {
+          double nd = (*sideNormals)(cellIndex,ptIndex,spaceDim);
+          values(cellIndex,ptIndex,spaceDim) = nd;
+        }
       } else {
         double ni = (*sideNormals)(cellIndex,ptIndex,comp);
         values(cellIndex,ptIndex) = ni;
