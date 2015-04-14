@@ -98,7 +98,7 @@ namespace {
 //      cout << "sideOrdinal " << sideOrdinal << ", space-time cubature weights: \n" << spaceTimeBasisCache->getSideBasisCache(sideOrdinal)->getCubatureWeights();
 //      cout << "sideOrdinal " << sideOrdinal << ", space-time weights: \n" << spaceTimeBasisCache->getSideBasisCache(sideOrdinal)->getWeightedMeasures();
       double actualMeasure = spaceTimeBasisCache->getSideBasisCache(sideOrdinal)->getCellMeasures()(0);
-      TEST_FLOATING_EQUALITY(actualMeasure, expectedMeasure, 1e-15);
+      TEST_FLOATING_EQUALITY(actualMeasure, expectedMeasure, 1e-14);
     }
   }
   
@@ -349,7 +349,13 @@ namespace {
   
   TEUCHOS_UNIT_TEST( SpaceTimeBasisCache, SideMeasure_Hexahedron )
   {
-    // TODO: implement this
-    success = false;
+    CellTopoPtr spaceTopo = CellTopology::hexahedron();
+    testSpaceTimeSideMeasure(spaceTopo, out, success);
+  }
+  
+  TEUCHOS_UNIT_TEST( SpaceTimeBasisCache, SideMeasure_Tetrahedron )
+  {
+    CellTopoPtr spaceTopo = CellTopology::tetrahedron();
+    testSpaceTimeSideMeasure(spaceTopo, out, success);
   }
 } // namespace
