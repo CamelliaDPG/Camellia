@@ -680,8 +680,9 @@ BasisPtr BasisFactory::getNodalBasisForCellTopology(CellTopoPtr cellTopo) {
   typedef Camellia::TensorBasis<double, Intrepid::FieldContainer<double> > TensorBasis;
 
   BasisPtr nodalBasis = shardsNodalBasis;
+  bool rangeDimensionIsSum = true;
   for (int i=0; i<cellTopo->getTensorialDegree(); i++) {
-    nodalBasis = Teuchos::rcp( new TensorBasis(nodalBasis, lineNodalBasis) );
+    nodalBasis = Teuchos::rcp( new TensorBasis(nodalBasis, lineNodalBasis, rangeDimensionIsSum) );
   }
   return nodalBasis;
 }
