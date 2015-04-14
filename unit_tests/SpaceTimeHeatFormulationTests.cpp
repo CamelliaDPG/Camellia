@@ -63,6 +63,37 @@ namespace {
     form.initializeSolution(meshTopo, fieldPolyOrder, delta_k, forcingFunction);
   }
   
+  void testForcingFunctionForConstantU(int spaceDim, Teuchos::FancyOStream &out, bool &success)
+  {
+    // Forcing function should be zero for constant u
+    FunctionPtr f_expected = Function::zero();
+    
+    vector<double> dimensions(spaceDim,2.0); // 2.0^d hypercube domain
+    vector<int> elementCounts(spaceDim,1);   // one-element mesh
+    vector<double> x0(spaceDim,-1.0);
+    MeshTopologyPtr spatialMeshTopo = MeshFactory::rectilinearMeshTopology(dimensions, elementCounts, x0);
+    
+    double t0 = 0.0, t1 = 1.0;
+    MeshTopologyPtr spaceTimeMeshTopo = MeshFactory::spaceTimeMeshTopology(spatialMeshTopo, t0, t1);
+    
+    double epsilon = .1;
+    int fieldPolyOrder = 1, delta_k = 1;
+    
+    FunctionPtr u = Function::constant(0.5);
+    
+    bool useConformingTraces = true;
+    SpaceTimeHeatFormulation form(spaceDim, useConformingTraces, epsilon);
+    
+    setupExactSolution(form, u, spaceTimeMeshTopo, fieldPolyOrder, delta_k);
+    
+    MeshPtr mesh = form.solution()->mesh();
+    
+    FunctionPtr f_actual = form.forcingFunction(spaceDim, epsilon, u);
+    
+    double l2_diff = (f_expected-f_actual)->l2norm(mesh);
+    TEST_COMPARE(l2_diff, <, 1e-14);
+  }
+  
   void testSpaceTimeHeatConsistencyConstantSolution(int spaceDim, Teuchos::FancyOStream &out, bool &success)
   {
     vector<double> dimensions(spaceDim,2.0); // 2.0^d hypercube domain
@@ -78,7 +109,7 @@ namespace {
     
     FunctionPtr u = Function::constant(0.5);
     
-    bool useConformingTraces = false;
+    bool useConformingTraces = true;
     SpaceTimeHeatFormulation form(spaceDim, useConformingTraces, epsilon);
     
     setupExactSolution(form, u, spaceTimeMeshTopo, fieldPolyOrder, delta_k);
@@ -134,7 +165,7 @@ namespace {
       u = x * t + y - z;
     }
     
-    bool useConformingTraces = false;
+    bool useConformingTraces = true;
     SpaceTimeHeatFormulation form(spaceDim, useConformingTraces, epsilon);
     
     setupExactSolution(form, u, spaceTimeMeshTopo, fieldPolyOrder, delta_k);
@@ -169,6 +200,12 @@ namespace {
     // consistency test for space-time formulation with 2D space
     testSpaceTimeHeatConsistencyConstantSolution(2, out, success);
   }
+  
+//  TEUCHOS_UNIT_TEST( SpaceTimeHeatFormulation, ConsistencyConstantSolution_3D )
+//  {
+//    // consistency test for space-time formulation with 3D space
+//    testSpaceTimeHeatConsistencyConstantSolution(3, out, success);
+//  }
 
   TEUCHOS_UNIT_TEST( SpaceTimeHeatFormulation, Consistency_1D )
   {
@@ -180,5 +217,29 @@ namespace {
   {
     // consistency test for space-time formulation with 2D space
     testSpaceTimeHeatConsistency(2, out, success);
+  }
+  
+//  TEUCHOS_UNIT_TEST( SpaceTimeHeatFormulation, Consistency_3D )
+//  {
+//    // consistency test for space-time formulation with 3D space
+//    testSpaceTimeHeatConsistency(3, out, success);
+//  }
+  
+  TEUCHOS_UNIT_TEST( SpaceTimeHeatFormulation, ForcingFunctionForConstantU_1D )
+  {
+    // constant u should imply forcing function is zero
+    testForcingFunctionForConstantU(1, out, success);
+  }
+  
+  TEUCHOS_UNIT_TEST( SpaceTimeHeatFormulation, ForcingFunctionForConstantU_2D )
+  {
+    // constant u should imply forcing function is zero
+    testForcingFunctionForConstantU(2, out, success);
+  }
+  
+  TEUCHOS_UNIT_TEST( SpaceTimeHeatFormulation, ForcingFunctionForConstantU_3D )
+  {
+    // constant u should imply forcing function is zero
+    testForcingFunctionForConstantU(3, out, success);
   }
 } // namespace
