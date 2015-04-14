@@ -666,8 +666,9 @@ void CamelliaCellTools::setJacobian(FieldContainer<double> &jacobian, const Fiel
   typedef Camellia::TensorBasis<double, FieldContainer<double> > TensorBasis;
   
   BasisPtr nodalBasis = shardsNodalBasis;
+  bool rangeDimensionIsSum = true;
   for (int i=0; i<cellTopo->getTensorialDegree(); i++) {
-    nodalBasis = Teuchos::rcp( new TensorBasis(nodalBasis, lineNodalBasis) );
+    nodalBasis = Teuchos::rcp( new TensorBasis(nodalBasis, lineNodalBasis, rangeDimensionIsSum) );
   }
   
   int basisCardinality = nodalBasis -> getCardinality();
