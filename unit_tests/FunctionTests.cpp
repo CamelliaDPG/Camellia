@@ -15,6 +15,36 @@ using namespace Camellia;
 using namespace Intrepid;
 
 namespace {
+
+  void testSpaceTimeNormalTimeComponent(CellTopoPtr spaceTopo, Teuchos::FancyOStream &out, bool &success)
+  {
+    CellTopoPtr spaceTimeTopo = CellTopology::cellTopology(spaceTopo, 1);
+    int cubatureDegree = 1;
+    bool createSideCache = true;
+    BasisCachePtr spaceTimeBasisCache = BasisCache::basisCacheForReferenceCell(spaceTimeTopo, cubatureDegree, createSideCache);
+    FunctionPtr spaceTimeNormalComponent = Function::normalSpaceTime()->t();
+    for (int sideOrdinal=0; sideOrdinal<spaceTimeTopo->getSideCount(); sideOrdinal++) {
+      BasisCachePtr spaceTimeSideCache = spaceTimeBasisCache->getSideBasisCache(sideOrdinal);
+      
+      FieldContainer<double> spaceTimeNormals(1,spaceTimeSideCache->getRefCellPoints().dimension(0));
+      spaceTimeNormalComponent->values(spaceTimeNormals,spaceTimeSideCache);
+      
+      if (spaceTimeTopo->sideIsSpatial(sideOrdinal)) {
+        for (int spaceTimePointOrdinal=0; spaceTimePointOrdinal < spaceTimeNormals.dimension(1); spaceTimePointOrdinal++) {
+          double spaceTimeTemporalNormalComponent = spaceTimeNormals(0,spaceTimePointOrdinal);
+          TEST_COMPARE(abs(spaceTimeTemporalNormalComponent), <, 1e-15);
+        }
+      } else {
+        // otherwise, we expect 0 in every component, except the last, where we expect ±1
+        int temporalSideOrdinal = spaceTimeTopo->getTemporalComponentSideOrdinal(sideOrdinal);
+        double expectedValue = (temporalSideOrdinal == 0) ? -1.0 : 1.0;
+        for (int spaceTimePointOrdinal=0; spaceTimePointOrdinal < spaceTimeNormals.dimension(1); spaceTimePointOrdinal++) {
+          double spaceTimeTemporalNormalComponent = spaceTimeNormals(0,spaceTimePointOrdinal);
+          TEST_FLOATING_EQUALITY(spaceTimeTemporalNormalComponent, expectedValue, 1e-15);
+        }
+      }
+    }
+  }
   
   void testSpaceTimeNormal(CellTopoPtr spaceTopo, Teuchos::FancyOStream &out, bool &success) {
     CellTopoPtr spaceTimeTopo = CellTopology::cellTopology(spaceTopo, 1);
@@ -46,7 +76,7 @@ namespace {
             TEST_FLOATING_EQUALITY(spaceNormalComponent, spaceTimeNormalComponent, 1e-15);
           }
           double spaceTimeTemporalNormalComponent = spaceTimeNormals(0,spaceTimePointOrdinal,spaceTopo->getDimension());
-          TEST_COMPARE(spaceTimeTemporalNormalComponent, <, 1e-15);
+          TEST_COMPARE(abs(spaceTimeTemporalNormalComponent), <, 1e-15);
         }
       } else {
         // otherwise, we expect 0 in every component, except the last, where we expect ±1
@@ -56,7 +86,7 @@ namespace {
           // assume all normals are the same on the (spatial) side, and that there exists at least one point:
           for (int d=0; d<spaceTopo->getDimension(); d++) {
             double spaceTimeNormalComponent = spaceTimeNormals(0,spaceTimePointOrdinal,d);
-            TEST_COMPARE(spaceTimeNormalComponent, <, 1e-15);
+            TEST_COMPARE(abs(spaceTimeNormalComponent), <, 1e-15);
           }
           double spaceTimeTemporalNormalComponent = spaceTimeNormals(0,spaceTimePointOrdinal,spaceTopo->getDimension());
           
@@ -105,6 +135,31 @@ namespace {
   TEUCHOS_UNIT_TEST( Function, SpaceTimeNormalTetrahedron )
   {
     testSpaceTimeNormal(CellTopology::tetrahedron(), out, success);
+  }
+  
+  TEUCHOS_UNIT_TEST( Function, SpaceTimeNormalTimeComponentLine )
+  {
+    testSpaceTimeNormalTimeComponent(CellTopology::line(), out, success);
+  }
+  
+  TEUCHOS_UNIT_TEST( Function, SpaceTimeNormalTimeComponentQuad )
+  {
+    testSpaceTimeNormalTimeComponent(CellTopology::quad(), out, success);
+  }
+  
+  TEUCHOS_UNIT_TEST( Function, SpaceTimeNormalTimeComponentTriangle )
+  {
+    testSpaceTimeNormalTimeComponent(CellTopology::triangle(), out, success);
+  }
+  
+  TEUCHOS_UNIT_TEST( Function, SpaceTimeNormalTimeComponentHexahedron )
+  {
+    testSpaceTimeNormalTimeComponent(CellTopology::hexahedron(), out, success);
+  }
+  
+  TEUCHOS_UNIT_TEST( Function, SpaceTimeNormalTimeComponentTetrahedron )
+  {
+    testSpaceTimeNormalTimeComponent(CellTopology::tetrahedron(), out, success);
   }
   
   TEUCHOS_UNIT_TEST( Function, VectorMultiply )
