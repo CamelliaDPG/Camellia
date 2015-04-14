@@ -114,7 +114,7 @@ namespace {
     // on the sides that have x=-1 or x=1, f(x) = 1, so we just take the area
     double expectedIntegralSides_constant_x = pow(2.0,spaceDim-1) * temporalExtent;
     int numSides_constant_x = 2; // one where x=-1, one where x=1
-    double expectedIntegralSides_varying_x = expectedIntegral_f_x * temporalExtent;
+    double expectedIntegralSides_varying_x = expectedIntegral_f_x * pow(2.0,max(spaceDim-2,0)) * temporalExtent;
     int numSides_varying_x = 2 * (spaceDim - 1); // 1D: 0, 2D: 2, 3D: 4
     double expectedIntegral = expectedIntegralTemporalSides * numTemporalSides
                             + expectedIntegralSides_constant_x * numSides_constant_x
