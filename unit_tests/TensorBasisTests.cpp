@@ -36,32 +36,38 @@ using namespace Intrepid;
 namespace {
   typedef Intrepid::FieldContainer<double> FC;
   
+  BasisPtr getSpatialBasis(CellTopoPtr cellTopo, Camellia::EFunctionSpace fs, int spatialPolyOrder) {
+    BasisFactoryPtr basisFactory = BasisFactory::basisFactory();
+    int H1Order = spatialPolyOrder + 1;
+    BasisPtr basis = basisFactory->getBasis(H1Order, cellTopo, fs);
+    return basis;
+  }
+  
   std::vector<BasisPtr> getSpatialBases(int spatialPolyOrder) {
     BasisFactoryPtr basisFactory = BasisFactory::basisFactory();
     
     // set up some spatial bases to test against
     std::vector< BasisPtr > spatialBases;
     {
-      int H1Order = spatialPolyOrder + 1;
-      BasisPtr basis = basisFactory->getBasis(H1Order, shards::Line<2>::key, Camellia::FUNCTION_SPACE_HVOL);
+      BasisPtr basis = getSpatialBasis(CellTopology::line(), Camellia::FUNCTION_SPACE_HVOL, spatialPolyOrder);
       spatialBases.push_back(basis);
-      basis = basisFactory->getBasis(H1Order, shards::Line<2>::key, Camellia::FUNCTION_SPACE_HGRAD);
+      basis = getSpatialBasis(CellTopology::line(), Camellia::FUNCTION_SPACE_HGRAD, spatialPolyOrder);
       spatialBases.push_back(basis);
-      basis = basisFactory->getBasis(H1Order, shards::Quadrilateral<4>::key, Camellia::FUNCTION_SPACE_HGRAD);
+      basis = getSpatialBasis(CellTopology::quad(), Camellia::FUNCTION_SPACE_HGRAD, spatialPolyOrder);
       spatialBases.push_back(basis);
-      basis = basisFactory->getBasis(H1Order, shards::Quadrilateral<4>::key, Camellia::FUNCTION_SPACE_HCURL);
+      basis = getSpatialBasis(CellTopology::quad(), Camellia::FUNCTION_SPACE_HCURL, spatialPolyOrder);
       spatialBases.push_back(basis);
-      basis = basisFactory->getBasis(H1Order, shards::Quadrilateral<4>::key, Camellia::FUNCTION_SPACE_HDIV);
+      basis = getSpatialBasis(CellTopology::quad(), Camellia::FUNCTION_SPACE_HDIV, spatialPolyOrder);
       spatialBases.push_back(basis);
-      basis = basisFactory->getBasis(H1Order, shards::Quadrilateral<4>::key, Camellia::FUNCTION_SPACE_HVOL);
+      basis = getSpatialBasis(CellTopology::quad(), Camellia::FUNCTION_SPACE_HVOL, spatialPolyOrder);
       spatialBases.push_back(basis);
-      basis = basisFactory->getBasis(H1Order, shards::Hexahedron<8>::key, Camellia::FUNCTION_SPACE_HGRAD);
+      basis = getSpatialBasis(CellTopology::hexahedron(), Camellia::FUNCTION_SPACE_HGRAD, spatialPolyOrder);
       spatialBases.push_back(basis);
-      basis = basisFactory->getBasis(H1Order, shards::Hexahedron<8>::key, Camellia::FUNCTION_SPACE_HCURL);
+      basis = getSpatialBasis(CellTopology::hexahedron(), Camellia::FUNCTION_SPACE_HCURL, spatialPolyOrder);
       spatialBases.push_back(basis);
-      basis = basisFactory->getBasis(H1Order, shards::Hexahedron<8>::key, Camellia::FUNCTION_SPACE_HDIV);
+      basis = getSpatialBasis(CellTopology::hexahedron(), Camellia::FUNCTION_SPACE_HDIV, spatialPolyOrder);
       spatialBases.push_back(basis);
-      basis = basisFactory->getBasis(H1Order, shards::Hexahedron<8>::key, Camellia::FUNCTION_SPACE_HVOL);
+      basis = getSpatialBasis(CellTopology::hexahedron(), Camellia::FUNCTION_SPACE_HVOL, spatialPolyOrder);
       spatialBases.push_back(basis);
     }
     return spatialBases;
@@ -151,7 +157,7 @@ namespace {
     rankAdjustmentForOperator[OPERATOR_DIV] = -1;
     rankAdjustmentForOperator[OPERATOR_CURL] = 0; // in 2D, this toggles between +1 and -1, depending on the current rank (scalar --> vector, vector --> scalar)
     
-    int spaceDim = basis->domainTopology()->getDimension();
+    int spaceDim = basis->rangeDimension();
     
     int rank = basis->rangeRank() + rankAdjustmentForOperator[op];
     if ((basis->rangeDimension() == 2) && (op==OPERATOR_CURL)) {
@@ -167,6 +173,107 @@ namespace {
       values.resize(basis->getCardinality(), numPoints, spaceDim, spaceDim);
     } else {
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unhandled tensorial degree");
+    }
+  }
+  
+  void testTensorBasisFillsFieldContainer(BasisPtr spatialBasis, BasisPtr temporalBasis,
+                                          Teuchos::FancyOStream &out, bool &success) {
+    int spaceDim = spatialBasis->rangeDimension();
+    FC tensorPoints = tensorPointsForDimension(spaceDim);
+    FC myValues;
+    Intrepid::EOperator op = OPERATOR_VALUE;
+    typedef Camellia::TensorBasis<double, FieldContainer<double> > TensorBasis;
+    Teuchos::RCP<TensorBasis> tensorBasis = Teuchos::rcp( new TensorBasis(spatialBasis, temporalBasis) );
+
+    sizeFCForBasisValues(myValues, tensorBasis, tensorPoints.dimension(0), op);
+    double specialValue = 3.141592;
+    myValues.initialize(specialValue);
+    
+    tensorBasis->getValues(myValues, tensorPoints, op);
+    
+    for (int valueOrdinal=0; valueOrdinal<myValues.size(); valueOrdinal++) {
+      TEST_INEQUALITY(myValues[valueOrdinal], specialValue);
+    }
+  }
+  
+  void testTensorBasisValuesAreTensorProduct(BasisPtr spatialBasis, BasisPtr timeBasis,
+                                             Teuchos::FancyOStream &out, bool &success) {
+    int spaceDim = spatialBasis->domainTopology()->getDimension();
+    
+    FC temporalPoints = timePoints();
+    FC spatialPoints = spacePointsForDimension(spaceDim);
+    FC tensorPoints = tensorPointsForDimension(spaceDim);
+    
+    int numSpacePoints = spatialPoints.dimension(0);
+    int numTimePoints = temporalPoints.dimension(0);
+    int numTensorPoints = tensorPoints.dimension(0);
+    
+    typedef Camellia::TensorBasis<double, FieldContainer<double> > TensorBasis;
+    Teuchos::RCP<TensorBasis> tensorBasis = Teuchos::rcp( new TensorBasis(spatialBasis, timeBasis) );
+    FC spatialValues, temporalValues(timeBasis->getCardinality(), numTimePoints), tensorValues;
+    Intrepid::EOperator op = OPERATOR_VALUE;
+    Intrepid::EOperator timeOp = OPERATOR_VALUE;
+    
+    sizeFCForBasisValues(spatialValues, spatialBasis, numSpacePoints, op);
+    sizeFCForBasisValues(tensorValues, tensorBasis, numTensorPoints, op);
+    
+    spatialBasis->getValues(spatialValues, spatialPoints, op);
+    timeBasis->getValues(temporalValues, temporalPoints, timeOp);
+    tensorBasis->getValues(tensorValues, tensorPoints, op, timeOp);
+    
+    int rank = tensorValues.rank() - 2; // (F,P,D,D,...) where # of D's is the rank.
+    
+    vector<int> fieldCoord(2);
+    for (int fieldOrdinal_i = 0; fieldOrdinal_i < spatialBasis->getCardinality(); fieldOrdinal_i++) {
+      fieldCoord[0] = fieldOrdinal_i;
+      for (int fieldOrdinal_j = 0; fieldOrdinal_j < timeBasis->getCardinality(); fieldOrdinal_j++) {
+        fieldCoord[1] = fieldOrdinal_j;
+        int fieldOrdinal_tensor = tensorBasis->getDofOrdinalFromComponentDofOrdinals(fieldCoord);
+        for (int pointOrdinal_i = 0; pointOrdinal_i < numSpacePoints; pointOrdinal_i++) {
+          vector<double> spaceValue;
+          if (rank == 0) {
+            spaceValue.push_back(spatialValues(fieldOrdinal_i, pointOrdinal_i));
+          } else if (rank == 1) {
+            for (int d=0; d<spaceDim; d++) {
+              spaceValue.push_back(spatialValues(fieldOrdinal_i, pointOrdinal_i, d));
+            }
+          } else if (rank == 2) {
+            for (int d1=0; d1<spaceDim; d1++) {
+              for (int d2=0; d2<spaceDim; d2++) {
+                spaceValue.push_back(spatialValues(fieldOrdinal_i, pointOrdinal_i, d1, d2));
+              }
+            }
+          }
+          for (int pointOrdinal_j = 0; pointOrdinal_j < numTimePoints; pointOrdinal_j++) {
+            double timeValue = temporalValues(fieldOrdinal_j, pointOrdinal_j);
+            int pointOrdinal_tensor = pointOrdinal_i + pointOrdinal_j * numSpacePoints;
+            vector<double> tensorValue;
+            if (rank == 0) {
+              tensorValue.push_back(tensorValues(fieldOrdinal_tensor, pointOrdinal_tensor));
+            } else if (rank == 1) {
+              for (int d=0; d<spaceDim; d++) {
+                tensorValue.push_back(tensorValues(fieldOrdinal_tensor, pointOrdinal_tensor, d));
+              }
+            } else if (rank == 2) {
+              for (int d1=0; d1<spaceDim; d1++) {
+                for (int d2=0; d2<spaceDim; d2++) {
+                  tensorValue.push_back(tensorValues(fieldOrdinal_tensor, pointOrdinal_tensor, d1, d2));
+                }
+              }
+            }
+            
+            if (spaceValue.size() != tensorValue.size()) {
+              TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Internal test error: tensorValue size does not match spaceValue size");
+            }
+            double tol = 1e-15;
+            for (int i=0; i<spaceValue.size(); i++) {
+              double expectedValue = spaceValue[i] * timeValue;
+              double actualValue = tensorValue[i];
+              TEST_FLOATING_EQUALITY(expectedValue,actualValue,tol);
+            }
+          }
+        }
+      }
     }
   }
 
@@ -346,7 +453,7 @@ namespace {
     TEST_COMPARE_FLOATING_ARRAYS(tensorNodesActual, tensorNodesExpected, tol);
   }
   
-  TEUCHOS_UNIT_TEST( TensorBasis, TensorBasisBasicValues ) {
+  TEUCHOS_UNIT_TEST( TensorBasis, ValuesEqualTensorProduct ) {
     int spatialPolyOrder = 1;
     std::vector< BasisPtr > spatialBases = getSpatialBases(spatialPolyOrder);
     
@@ -355,84 +462,31 @@ namespace {
     
     for (int i=0; i<spatialBases.size(); i++) {
       BasisPtr spatialBasis = spatialBases[i];
-      int spaceDim = spatialBasis->domainTopology()->getDimension();
-
-      FC temporalPoints = timePoints();
-      FC spatialPoints = spacePointsForDimension(spaceDim);
-      FC tensorPoints = tensorPointsForDimension(spaceDim);
-
-      int numSpacePoints = spatialPoints.dimension(0);
-      int numTimePoints = temporalPoints.dimension(0);
-      int numTensorPoints = tensorPoints.dimension(0);
-      
-      typedef Camellia::TensorBasis<double, FieldContainer<double> > TensorBasis;
-      Teuchos::RCP<TensorBasis> tensorBasis = Teuchos::rcp( new TensorBasis(spatialBasis, timeBasis) );
-      FC spatialValues, temporalValues(timeBasis->getCardinality(), numTimePoints), tensorValues;
-      Intrepid::EOperator op = OPERATOR_VALUE;
-      Intrepid::EOperator timeOp = OPERATOR_VALUE;
-      
-      sizeFCForBasisValues(spatialValues, spatialBasis, numSpacePoints, op);
-      sizeFCForBasisValues(tensorValues, tensorBasis, numTensorPoints, op);
-      
-      spatialBasis->getValues(spatialValues, spatialPoints, op);
-      timeBasis->getValues(temporalValues, temporalPoints, timeOp);
-      tensorBasis->getValues(tensorValues, tensorPoints, op, timeOp);
-      
-      int rank = tensorValues.rank() - 2; // (F,P,D,D,...) where # of D's is the rank.
-      
-      vector<int> fieldCoord(2);
-      for (int fieldOrdinal_i = 0; fieldOrdinal_i < spatialBasis->getCardinality(); fieldOrdinal_i++) {
-        fieldCoord[0] = fieldOrdinal_i;
-        for (int fieldOrdinal_j = 0; fieldOrdinal_j < timeBasis->getCardinality(); fieldOrdinal_j++) {
-          fieldCoord[1] = fieldOrdinal_j;
-          int fieldOrdinal_tensor = tensorBasis->getDofOrdinalFromComponentDofOrdinals(fieldCoord);
-          for (int pointOrdinal_i = 0; pointOrdinal_i < numSpacePoints; pointOrdinal_i++) {
-            vector<double> spaceValue;
-            if (rank == 0) {
-              spaceValue.push_back(spatialValues(fieldOrdinal_i, pointOrdinal_i));
-            } else if (rank == 1) {
-              for (int d=0; d<spaceDim; d++) {
-                spaceValue.push_back(spatialValues(fieldOrdinal_i, pointOrdinal_i, d));
-              }
-            } else if (rank == 2) {
-              for (int d1=0; d1<spaceDim; d1++) {
-                for (int d2=0; d2<spaceDim; d2++) {
-                  spaceValue.push_back(spatialValues(fieldOrdinal_i, pointOrdinal_i, d1, d2));
-                }
-              }
-            }
-            for (int pointOrdinal_j = 0; pointOrdinal_j < numTimePoints; pointOrdinal_j++) {
-              double timeValue = temporalValues(fieldOrdinal_j, pointOrdinal_j);
-              int pointOrdinal_tensor = pointOrdinal_i + pointOrdinal_j * numSpacePoints;
-              vector<double> tensorValue;
-              if (rank == 0) {
-                tensorValue.push_back(tensorValues(fieldOrdinal_tensor, pointOrdinal_tensor));
-              } else if (rank == 1) {
-                for (int d=0; d<spaceDim; d++) {
-                  tensorValue.push_back(tensorValues(fieldOrdinal_tensor, pointOrdinal_tensor, d));
-                }
-              } else if (rank == 2) {
-                for (int d1=0; d1<spaceDim; d1++) {
-                  for (int d2=0; d2<spaceDim; d2++) {
-                    tensorValue.push_back(tensorValues(fieldOrdinal_tensor, pointOrdinal_tensor, d1, d2));
-                  }
-                }
-              }
-              
-              if (spaceValue.size() != tensorValue.size()) {
-                TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Internal test error: tensorValue size does not match spaceValue size");
-              }
-              double tol = 1e-15;
-              for (int i=0; i<spaceValue.size(); i++) {
-                double expectedValue = spaceValue[i] * timeValue;
-                double actualValue = tensorValue[i];
-                TEST_FLOATING_EQUALITY(expectedValue,actualValue,tol);
-              }
-            }
-          }
-        }
-      }
+      testTensorBasisValuesAreTensorProduct(spatialBasis, timeBasis, out, success);
     }
+  }
+  
+  TEUCHOS_UNIT_TEST( TensorBasis, BasisFillsContainer ) {
+    int spatialPolyOrder = 1;
+    std::vector< BasisPtr > spatialBases = getSpatialBases(spatialPolyOrder);
+    
+    int timePolyOrder = 1;
+    BasisPtr timeBasis = getTimeBasis(timePolyOrder);
+    
+    for (int i=0; i<spatialBases.size(); i++) {
+      BasisPtr spatialBasis = spatialBases[i];
+      testTensorBasisFillsFieldContainer(spatialBasis, timeBasis, out, success);
+    }
+  }
+  
+  TEUCHOS_UNIT_TEST( TensorBasis, BasisFillsContainerQuadHDIV_2D ) {
+    int spatialPolyOrder = 3;
+    BasisPtr spatialBasis = getSpatialBasis(CellTopology::quad(), Camellia::FUNCTION_SPACE_HDIV, spatialPolyOrder);
+    
+    int timePolyOrder = 2;
+    BasisPtr timeBasis = getTimeBasis(timePolyOrder);
+    
+    testTensorBasisFillsFieldContainer(spatialBasis, timeBasis, out, success);
   }
   
 } // namespace
