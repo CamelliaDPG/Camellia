@@ -82,6 +82,12 @@ namespace Camellia {
     Camellia::VarType termType() const;
     //  vector< Camellia::EOperator > varOps(int varID);
 
+    /** \brief  Computes the norm of the LinearTerm using the Riesz representation corresponding to the inner product ip on the specified mesh.
+     *  \param  ip        [in]  - inner product to use for the Riesz representation
+     *  \param  mesh      [in]  - mesh over which to measure
+     */
+    double computeNorm(IPPtr ip, MeshPtr mesh);
+    
     void evaluate(Intrepid::FieldContainer<double> &values, SolutionPtr solution, BasisCachePtr basisCache,
                   bool applyCubatureWeights = false);
 
@@ -171,6 +177,7 @@ namespace Camellia {
   LinearTermPtr operator*(VarPtr v, vector<double> weight);
 
   LinearTermPtr operator*(FunctionPtr f, LinearTermPtr a);
+  LinearTermPtr operator*(LinearTermPtr a, FunctionPtr f);
 
   LinearTermPtr operator+(VarPtr v1, VarPtr v2);
 

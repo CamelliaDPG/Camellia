@@ -13,7 +13,9 @@
 #include "LinearTerm.h"
 #include "Mesh.h"
 #include "MPIWrapper.h"
+#include "RieszRep.h"
 #include "Solution.h"
+#include "TensorBasis.h"
 
 #include "Epetra_CrsMatrix.h"
 #include "Intrepid_FunctionSpaceTools.hpp"
@@ -119,6 +121,13 @@ namespace Camellia {
     addVar( weightFn, var );
   }
 
+  double LinearTerm::computeNorm(IPPtr ip, MeshPtr mesh) {
+    LinearTermPtr thisPtr = Teuchos::rcp(this, false);
+    Teuchos::RCP<RieszRep> rieszRep = Teuchos::rcp( new RieszRep(mesh, ip, thisPtr) );
+    rieszRep->computeRieszRep();
+    return rieszRep->getNorm();
+  }
+  
   string LinearTerm::displayString() const {
     ostringstream dsStream;
     bool first = true;
@@ -630,7 +639,7 @@ namespace Camellia {
   //  if Var learned about its "base", and then in addition to tracking the varIDs set here, we also tracked vars.)
   void LinearTerm::evaluate(Intrepid::FieldContainer<double> &values, SolutionPtr solution, BasisCachePtr basisCache,
                             bool applyCubatureWeights) {
-    int sideIndex = basisCache->getSideIndex();
+    // int sideIndex = basisCache->getSideIndex();
     //  bool boundaryTerm = (sideIndex != -1);
 
     int valuesRankExpected = _rank + 2; // 2 for scalar, 3 for vector, etc.
@@ -945,10 +954,22 @@ namespace Camellia {
 
         int numFields = basis->getCardinality();
 
+//        { // DEBUGGING:
+//          typedef Camellia::TensorBasis<double, Intrepid::FieldContainer<double> > TensorBasis;
+//          TensorBasis* tensorBasis = dynamic_cast<TensorBasis*>(basis.get());
+//          if (tensorBasis != NULL) {
+//            BasisPtr spatialBasis = tensorBasis->getSpatialBasis();
+//            BasisPtr temporalBasis = tensorBasis->getTemporalBasis();
+//            cout << "Tensor basis has a degree-" << spatialBasis->getDegree() << " spatial basis and a degree-";
+//            cout << temporalBasis->getDegree() << " temporal basis.\n";
+//            cout << "Basis Values:\n" << *basisValues;
+//          }
+//        }
+        
         Teuchos::Array<int> fDim(fValues.rank());
         Teuchos::Array<int> bDim(basisValues->rank());
 
-        bool usePointerArithmetic = true; // slightly faster, but skips some bounds checks
+        bool usePointerArithmetic = false; // slightly faster, but skips some bounds checks
         if (usePointerArithmetic) { // do some bounds checks here
           // TODO: do some bounds checks here
         }
@@ -980,7 +1001,10 @@ namespace Camellia {
                   int fValueEnum = fValues.getEnumeration(fDim);
                   bDim[1] = fieldIndex;
                   int bValueEnum = basisValues->getEnumeration(bDim);
+//                  cout << ls.first->displayString() << " " << ls.second->displayString();
+//                  cout << ", basis cardinality: " << numFields << "; entriesPerPoint: " << entriesPerPoint << endl;
                   for (int entryIndex=0; entryIndex<entriesPerPoint; entryIndex++) {
+//                    cout << "bValue: " << (*basisValues)[bValueEnum] << endl;
                     values(cellIndex,fieldIndex,ptIndex) += fValues[fValueEnum] * (*basisValues)[bValueEnum];
 
                     fValueEnum++;
@@ -1310,6 +1334,21 @@ namespace Camellia {
       LinearSummand ls = *lsIt;
       FunctionPtr lsWeight = ls.first;
       FunctionPtr newWeight = f * lsWeight;
+      VarPtr var = ls.second;
+      bool bypassTypeCheck = true; // unless user bypassed it, there will already have been a type check in the construction of a.  If the user did bypass, we should bypass, too.
+      lt->addTerm(newWeight * var, bypassTypeCheck);
+    }
+    return lt;
+  }
+  
+  LinearTermPtr operator*(LinearTermPtr a, FunctionPtr f)
+  {
+    LinearTermPtr lt = Teuchos::rcp( new LinearTerm );
+    
+    for (vector< LinearSummand >::const_iterator lsIt = a->summands().begin(); lsIt != a->summands().end(); lsIt++) {
+      LinearSummand ls = *lsIt;
+      FunctionPtr lsWeight = ls.first;
+      FunctionPtr newWeight = lsWeight * f;
       VarPtr var = ls.second;
       bool bypassTypeCheck = true; // unless user bypassed it, there will already have been a type check in the construction of a.  If the user did bypass, we should bypass, too.
       lt->addTerm(newWeight * var, bypassTypeCheck);
