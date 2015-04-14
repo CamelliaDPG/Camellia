@@ -2251,6 +2251,14 @@ void Solution::computeErrorRepresentation() {
 
     // strip cell dimension:
     ipMatrix.resize(ipMatrix.dimension(1),ipMatrix.dimension(2));
+    
+    { // DEBUGGING
+//      cout << "\nIn computeErrorRepresentation, ipMatrix 2-norm condition number: " << SerialDenseWrapper::getMatrixConditionNumber2Norm(ipMatrix);
+      
+//      cout << "In computeErrorRepresentation, ipMatrix:\n" << ipMatrix;
+//      cout << "In computeErrorRepresentation, rhsMatrix:\n" << rhsMatrix;
+    }
+    
     int result = SerialDenseWrapper::solveSystemUsingQR(representationMatrix, ipMatrix, rhsMatrix);
     if (result != 0) {
       cout << "WARNING: computeErrorRepresentation: call to solveSystemUsingQR failed with error code " << result << endl;
@@ -2293,6 +2301,10 @@ void Solution::computeResiduals() {
     BasisCachePtr basisCache = BasisCache::basisCacheForCell(_mesh, cellID, false, _cubatureEnrichmentDegree);
     _rhs->integrateAgainstStandardBasis(residual, testOrdering, basisCache);
 
+//    cout << "computeResiduals(): testOrdering:\n" << *testOrdering;
+    
+//    cout << "computeResiduals(): RHS values:\n" << residual;
+    
     // compute b(u, v):
     Intrepid::FieldContainer<double> preStiffness(1,numTestDofs,numTrialDofs );
     Intrepid::FieldContainer<double> cellSideParitiesForCell = _mesh->cellSideParitiesForCell(cellID);
@@ -2304,6 +2316,8 @@ void Solution::computeResiduals() {
       }
     }
 
+//    cout << "computeResiduals(): residual values:\n" << residual;
+    
     _residualForCell[cellID] = residual;
 //    cout << "computed residual vector for cell " << cellID << "; nonzeros:\n";
 //    double tol = 1e-15;
