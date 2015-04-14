@@ -118,14 +118,14 @@ void CamelliaCellTools::computeSideMeasure(FieldContainer<double> &weightedMeasu
       }
     }
     // if we get here, cellJacobian satisfies the orthogonality requirement and spatialCellJacobian contains the appropriate submatrix of cellJacobian.
-    int spaceSideCount = parentCell->getSideCount() - 2;
-    if (sideOrdinal < spaceSideCount) {
+    if (parentCell->sideIsSpatial(sideOrdinal)) {
+      int spatialSideOrdinal = parentCell->getSpatialComponentSideOrdinal(sideOrdinal);
       // then the space-time side is comprised of space side x temporal line, and we can recurse:
       CellTopoPtr spatialCell = CellTopology::cellTopology(parentCell->getShardsTopology(), parentCell->getTensorialDegree()-1);
-      computeSideMeasure(weightedMeasure, spatialCellJacobian, cubWeights, sideOrdinal, spatialCell);
+      computeSideMeasure(weightedMeasure, spatialCellJacobian, cubWeights, spatialSideOrdinal, spatialCell);
       // next, we multiply the weights uniformly by the absolute value of the temporal Jacobian (which is just a scalar value for each point)
       ArrayTools::scalarMultiplyDataData<double>(weightedMeasure, weightedMeasure, temporalCellJacobianAbs);
-    } else { // sideOrdinal >= spaceSideCount
+    } else {
       // here, the space-time side is an instance of the spatial cell, so we want to use FunctionSpaceTools::computeCellMeasure
       FieldContainer<double> spatialCellJacobianDet(numCells,numPoints);
       Intrepid::CellTools<double>::setJacobianDet(spatialCellJacobianDet, spatialCellJacobian );
