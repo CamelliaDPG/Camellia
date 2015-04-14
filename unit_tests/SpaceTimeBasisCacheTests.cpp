@@ -19,7 +19,7 @@ using namespace Intrepid;
 namespace {
   typedef Intrepid::FieldContainer<double> FC;
 
-  MeshPtr getSpaceTimeMesh(CellTopoPtr spaceTopo, int H1Order=2, double refCellExpansionFactor=2.0) {
+  MeshPtr getSpaceTimeMesh(CellTopoPtr spaceTopo, int H1Order=2, double refCellExpansionFactor=2.0, double t0=0, double t1=1) {
     CellTopoPtr timeTopo = CellTopology::line();
     int tensorialDegree = 1;
     CellTopoPtr tensorTopo = CellTopology::cellTopology(spaceTopo, tensorialDegree);
@@ -32,9 +32,9 @@ namespace {
     for (int i=0; i<spaceNodes.size(); i++) {
       spaceNodes[i] *= refCellExpansionFactor;
     }
-    // time will go from 0 to 1:
-    timeNodes(0,0) = 0;
-    timeNodes(1,0) = 1;
+    // time will go from t0 to t1:
+    timeNodes(0,0) = t0;
+    timeNodes(1,0) = t1;
     
     vector<FC> tensorComponentNodes;
     tensorComponentNodes.push_back(spaceNodes);
@@ -67,7 +67,8 @@ namespace {
     
 //    cout << "spatial cubature weights:\n" << spatialBasisCache->getCubatureWeights();
     
-    double temporalExtent = 1.0; // getSpaceTimeMesh() goes from 0 to 1
+    double t0 = 0.0, t1 = 1.0;
+    double temporalExtent = t1-t0; // 1.0
     double spatialMeasure = spatialBasisCache->getCellMeasures()(0); // measure of the reference-space cell
     vector<double> spatialSideMeasures;
     for (int sideOrdinal=0; sideOrdinal<spaceTopo->getSideCount(); sideOrdinal++) {
@@ -75,7 +76,7 @@ namespace {
     }
     
     double refCellExpansionFactor = 1.0;
-    MeshPtr singleCellSpaceTimeMesh = getSpaceTimeMesh(spaceTopo,H1Order,refCellExpansionFactor); // reference spatial topo x (0,1) in time
+    MeshPtr singleCellSpaceTimeMesh = getSpaceTimeMesh(spaceTopo,H1Order,refCellExpansionFactor,t0,t1); // reference spatial topo x (0,1) in time
     IndexType cellIndex = 0;
     CellPtr cell = singleCellSpaceTimeMesh->getTopology()->getCell(cellIndex);
     
