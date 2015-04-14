@@ -14,9 +14,12 @@
 
 namespace Camellia {
   template<class Scalar, class ArrayScalar>
-  TensorBasis<Scalar,ArrayScalar>::TensorBasis(Teuchos::RCP< Camellia::Basis<Scalar,ArrayScalar> > spatialBasis, Teuchos::RCP< Camellia::Basis<Scalar,ArrayScalar> > temporalBasis) {
+  TensorBasis<Scalar,ArrayScalar>::TensorBasis(Teuchos::RCP< Camellia::Basis<Scalar,ArrayScalar> > spatialBasis,
+                                               Teuchos::RCP< Camellia::Basis<Scalar,ArrayScalar> > temporalBasis,
+                                               bool rangeDimensionIsSum) {
     _spatialBasis = spatialBasis;
     _temporalBasis = temporalBasis;
+    _rangeDimensionIsSum = rangeDimensionIsSum;
     
     if (temporalBasis->domainTopology()->getDimension() != 1) {
       cout << "temporalBasis must have a line topology as its domain.\n";
@@ -231,12 +234,11 @@ namespace Camellia {
   // range info for basis values:
   template<class Scalar, class ArrayScalar>
   int TensorBasis<Scalar,ArrayScalar>::rangeDimension() const {
-    // two possibilities:
-    // 1. We have a temporal basis which we won't take the derivative of--because it's in HVOL.  Then:
-    if (_temporalBasis->functionSpace() == Camellia::FUNCTION_SPACE_HVOL) {
+    // NVR changed this 4-14-15 to depend on the (new) _rangeDimensionIsSum member.
+    // Default is false; in general, when doing space-time, vector lengths are those of the spatial basis.
+    if (!_rangeDimensionIsSum) {
       return _spatialBasis->rangeDimension();
     } else {
-      // 2. We can take derivatives of the temporal basis.  Then we sum the two range dimensions:
       return _spatialBasis->rangeDimension() + _temporalBasis->rangeDimension();
     }
   }

@@ -30,6 +30,7 @@ namespace Camellia {
   template<class Scalar, class ArrayScalar> class TensorBasis : public Camellia::Basis<Scalar,ArrayScalar> {
   private:
     Teuchos::RCP< Camellia::Basis<Scalar,ArrayScalar> > _spatialBasis, _temporalBasis;
+    bool _rangeDimensionIsSum;
   protected:
     void initializeTags() const;
   public:
@@ -38,13 +39,15 @@ namespace Camellia {
      Returns values of <var>operatorType</var> acting on FEM basis functions for a set of
      points in the <strong>reference cell</strong> for which the basis is defined.
      
-     \param  spatialBasis      [in] - Basis for the spatial topology
-     \param  temporalBasis     [in] - Basis for the temporal topology (a line)
+     \param  spatialBasis         [in] - Basis for the spatial topology
+     \param  temporalBasis        [in] - Basis for the temporal topology (a line)
+     \param  rangeDimensionIsSum  [in] - If true, vector lengths (for gradients, e.g.) will be increased by 1 relative to those in the spatialBasis.
      
      At present, we anticipate only scalar bases being used in the temporal dimension, but bases of arbitrary rank might be used for the spatial basis.
      
      */
-    TensorBasis(Teuchos::RCP< Camellia::Basis<Scalar,ArrayScalar> > spatialBasis, Teuchos::RCP< Camellia::Basis<Scalar,ArrayScalar> > temporalBasis);
+    TensorBasis(Teuchos::RCP< Camellia::Basis<Scalar,ArrayScalar> > spatialBasis, Teuchos::RCP< Camellia::Basis<Scalar,ArrayScalar> > temporalBasis,
+                bool rangeDimensionIsSum = false);
     /** \brief Destructor.
      */
     virtual ~TensorBasis() {}
