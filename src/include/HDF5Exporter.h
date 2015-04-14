@@ -21,6 +21,7 @@
 #include "Teuchos_XMLObject.hpp"
 
 #include <string>
+#include <map>
 #include <vector>
 
 namespace Camellia {
@@ -37,16 +38,21 @@ namespace Camellia {
     Teuchos::XMLObject _traceGrids;
     set<double> _fieldTimeVals;
     set<double> _traceTimeVals;
+    
+    void getPoints(Intrepid::FieldContainer<double> &points, CellTopoPtr cellTopo, int num1DPts);
   public:
     HDF5Exporter(MeshPtr mesh, std::string outputDirName="output", std::string outputDirSuperPath = ".");
     ~HDF5Exporter();
     void setMesh(MeshPtr mesh) {_mesh = mesh;}
+    typedef std::map<int, int> map_int_int;
     void exportFunction(FunctionPtr function, std::string functionName="function", double timeVal=0,
-      unsigned int defaultNum1DPts=4, map<int, int> cellIDToNum1DPts=map<int,int>(), set<GlobalIndexType> cellIndices=set<GlobalIndexType>());
+                        unsigned int defaultNum1DPts=4, map_int_int cellIDToNum1DPts=map_int_int(),
+                        std::set<GlobalIndexType> cellIndices=std::set<GlobalIndexType>());
     void exportFunction(std::vector<FunctionPtr> functions, std::vector<std::string> functionNames, double timeVal=0,
-      unsigned int defaultNum1DPts=4, map<int, int> cellIDToNum1DPts=map<int,int>(), set<GlobalIndexType> cellIndices=set<GlobalIndexType>());
+                        unsigned int defaultNum1DPts=4, map_int_int cellIDToNum1DPts=map_int_int(),
+                        std::set<GlobalIndexType> cellIndices=std::set<GlobalIndexType>());
     void exportSolution(SolutionPtr solution, double timeVal=0, unsigned int defaultNum1DPts=4,
-                        map<int, int> cellIDToNum1DPts=map<int,int>(), set<GlobalIndexType> cellIndices=set<GlobalIndexType>());
+                        map_int_int cellIDToNum1DPts=map_int_int(), set<GlobalIndexType> cellIndices=set<GlobalIndexType>());
     void exportTimeSlab(FunctionPtr function, std::string functionName="function", double tInit=0, double tFinal=1, unsigned int numSlices=2,
       unsigned int sliceH1Order=2, unsigned int defaultNum1DPts=4);
     void exportTimeSlab(std::vector<FunctionPtr> functions, std::vector<std::string> functionNames, double tInit=0, double tFinal=1, unsigned int numSlices=2,
@@ -54,7 +60,7 @@ namespace Camellia {
 
     // DEPRECATED METHOD:
     void exportSolution(SolutionPtr solution, VarFactory varFactory, double timeVal=0,
-                        unsigned int defaultNum1DPts=4, map<int, int> cellIDToNum1DPts=map<int,int>(), set<GlobalIndexType> cellIndices=set<GlobalIndexType>());
+                        unsigned int defaultNum1DPts=4, map_int_int cellIDToNum1DPts=map_int_int(), set<GlobalIndexType> cellIndices=set<GlobalIndexType>());
 
     // allows one-line export without storing an exporter object
     static void exportFunction(std::string directoryPath, std::string functionName, FunctionPtr function, MeshPtr mesh);
@@ -65,23 +71,25 @@ namespace Camellia {
   // creates a map from cell index to number of 1D points (number of subdivisions + 1)
   // num1DPts = max(subdivisionFactor*(polyOrder-1) + 1, 2)
   map<int,int> cellIDToSubdivision(MeshPtr mesh, unsigned int subdivisionFactor=2, set<GlobalIndexType> cellIndices=set<GlobalIndexType>());
-
-  // /* DUMMY (NO-OP) IMPLEMENTATION FOR WHEN HDF5 IS UNAVAILABLE */
-  // class HDF5Exporter {
-  // private:
-  // public:
-  //   HDF5Exporter(MeshPtr mesh, std::string saveDirectory="output") {}
-  //   ~HDF5Exporter() {}
-  //   void exportFunction(FunctionPtr function, std::string functionName="function", double timeVal=0,
-  //                       unsigned int defaultNum1DPts=4, map<int, int> cellIDToNum1DPts=map<int,int>(), set<GlobalIndexType> cellIndices=set<GlobalIndexType>()) {}
-  //   void exportFunction(std::vector<FunctionPtr> functions, std::vector<std::string> functionNames, double timeVal=0,
-  //                       unsigned int defaultNum1DPts=4, map<int, int> cellIDToNum1DPts=map<int,int>(), set<GlobalIndexType> cellIndices=set<GlobalIndexType>()) {}
-  //   void exportSolution(SolutionPtr solution, VarFactory varFactory, double timeVal=0,
-  //                       unsigned int defaultNum1DPts=4, map<int, int> cellIDToNum1DPts=map<int,int>(), set<GlobalIndexType> cellIndices=set<GlobalIndexType>()) {}
-  //   static void exportSolution(std::string saveDirectory, SolutionPtr solution) {}
-  // };
-  /* END OF DUMMY IMPLEMENTATION */
 }
+
+#else
+
+/* DUMMY (NO-OP) IMPLEMENTATION FOR WHEN HDF5 IS UNAVAILABLE */
+// class HDF5Exporter {
+// private:
+// public:
+//   HDF5Exporter(MeshPtr mesh, std::string saveDirectory="output") {}
+//   ~HDF5Exporter() {}
+//   void exportFunction(FunctionPtr function, std::string functionName="function", double timeVal=0,
+//                       unsigned int defaultNum1DPts=4, map<int, int> cellIDToNum1DPts=map<int,int>(), set<GlobalIndexType> cellIndices=set<GlobalIndexType>()) {}
+//   void exportFunction(std::vector<FunctionPtr> functions, std::vector<std::string> functionNames, double timeVal=0,
+//                       unsigned int defaultNum1DPts=4, map<int, int> cellIDToNum1DPts=map<int,int>(), set<GlobalIndexType> cellIndices=set<GlobalIndexType>()) {}
+//   void exportSolution(SolutionPtr solution, VarFactory varFactory, double timeVal=0,
+//                       unsigned int defaultNum1DPts=4, map<int, int> cellIDToNum1DPts=map<int,int>(), set<GlobalIndexType> cellIndices=set<GlobalIndexType>()) {}
+//   static void exportSolution(std::string saveDirectory, SolutionPtr solution) {}
+// };
+/* END OF DUMMY IMPLEMENTATION */
 
 #endif
 
