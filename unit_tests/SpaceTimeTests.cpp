@@ -202,4 +202,14 @@ namespace {
     int spaceDim = 1;
     testIntegrateSpaceVaryingFunctionSides(spaceDim, out, success);
   }
+  TEUCHOS_UNIT_TEST( SpaceTime, IntegrateSpaceVaryingFunctionSides_2D )
+  {
+    int spaceDim = 2;
+    testIntegrateSpaceVaryingFunctionSides(spaceDim, out, success);
+  }
+  TEUCHOS_UNIT_TEST( SpaceTime, IntegrateSpaceVaryingFunctionSides_3D )
+  {
+    int spaceDim = 3;
+    testIntegrateSpaceVaryingFunctionSides(spaceDim, out, success);
+  }
 } // namespace
