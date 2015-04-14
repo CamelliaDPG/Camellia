@@ -49,10 +49,19 @@ string UnitNormalFunction::displayString() {
 
 void UnitNormalFunction::values(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache) {
   CHECK_VALUES_RANK(values);
-  const Intrepid::FieldContainer<double> *sideNormals = _spaceTime ? &(basisCache->getSideNormalsSpaceTime()) : &(basisCache->getSideNormals());
   int numCells = values.dimension(0);
   int numPoints = values.dimension(1);
   int spaceDim = basisCache->getSpaceDim();
+  if (_comp == -1) {
+    // check the the "D" dimension of values is correct:
+    if (_spaceTime) {
+      TEUCHOS_TEST_FOR_EXCEPTION(values.dimension(2) != spaceDim+1, std::invalid_argument, "For space-time normals, values.dimension(2) should be spaceDim + 1.");
+    } else {
+      TEUCHOS_TEST_FOR_EXCEPTION(values.dimension(2) != spaceDim, std::invalid_argument, "For spatial normals, values.dimension(2) should be spaceDim.");
+    }
+  }
+  const Intrepid::FieldContainer<double> *sideNormals = _spaceTime ? &(basisCache->getSideNormalsSpaceTime()) : &(basisCache->getSideNormals());
+
   int comp = _comp;
   if (comp == -2) {
     // want to select the temporal component, t()
