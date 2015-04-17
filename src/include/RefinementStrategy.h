@@ -30,25 +30,25 @@ namespace Camellia {
 
   class RefinementStrategy {
   protected:
-    
+
     static RefinementResults setResults(GlobalIndexType numElements, GlobalIndexType numDofs, double totalEnergyError);
-    SolutionPtr _solution;
-    
+    SolutionPtr<double> _solution;
+
     RieszRepPtr _rieszRep;
-    
+
     double _relativeEnergyThreshold;
     bool _enforceOneIrregularity;
-    bool _reportPerCellErrors;  
+    bool _reportPerCellErrors;
     double _anisotropicThreshhold;
     double _maxAspectRatio;
     vector< RefinementResults > _results;
     double _min_h;
     int _max_p;
     bool _preferPRefinements;
-    
+
     MeshPtr mesh();
   public:
-    RefinementStrategy( SolutionPtr solution, double relativeEnergyThreshold, double min_h = 0, int max_p = 10, bool preferPRefinements = false);
+    RefinementStrategy( SolutionPtr<double> solution, double relativeEnergyThreshold, double min_h = 0, int max_p = 10, bool preferPRefinements = false);
     RefinementStrategy( MeshPtr mesh, LinearTermPtr residual, IPPtr ip, double relativeEnergyThreshold, double min_h = 0, int max_p = 10, bool preferPRefinements = false);
     void setEnforceOneIrregularity(bool value);
     void setAnisotropicThreshhold(double value);
@@ -71,7 +71,7 @@ namespace Camellia {
     void getCellsAboveErrorThreshhold(vector<GlobalIndexType> &cellsToRefine);
     void setMinH(double value);
     void setReportPerCellErrors(bool value);
-    
+
     double getEnergyError(int refinementNumber);
     GlobalIndexType getNumElements(int refinementNumber);
     GlobalIndexType getNumDofs(int refinementNumber);

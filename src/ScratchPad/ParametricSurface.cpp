@@ -113,25 +113,25 @@ public:
   const vector< pair<double,double> > &vertices() {
     return _vertices;
   }
-  FunctionPtr dt1() {
+  FunctionPtr<double> dt1() {
     if (_op == OP_VALUE) {
       return Teuchos::rcp( new TransfiniteInterpolatingSurface(_curves, OP_DX, _vertices) );
     } else {
       return Function::null();
     }
   }
-  FunctionPtr dt2() {
+  FunctionPtr<double> dt2() {
     if (_op == OP_VALUE) {
       return Teuchos::rcp( new TransfiniteInterpolatingSurface(_curves, OP_DY, _vertices) );
     } else {
       return Function::null();
     }
   }
-  FunctionPtr grad(int numComponents) {
+  FunctionPtr<double> grad(int numComponents) {
     if ((numComponents != -1) && (numComponents != 2)) { // -1 means "however many components are available" (2, here)
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "TransfiniteInterpolatingSurface only supports gradients in 2D.");
     }
-    FunctionPtr parametricGradient = Function::vectorize(dt1(), dt2());
+    FunctionPtr<double> parametricGradient = Function::vectorize(dt1(), dt2());
     return ParametricCurve::parametricGradientWrapper(parametricGradient);
   }
 };
@@ -258,7 +258,7 @@ void ParametricSurface::basisWeightsForProjectedInterpolant(FieldContainer<doubl
 
   set<int> edgeFieldIndices = BasisFactory::basisFactory()->sideFieldIndices(basis,true); // true: include vertex dofs
 
-  FunctionPtr edgeInterpolant = Teuchos::rcp( new BasisSumFunction(basis, edgeInterpolationCoefficients) );
+  FunctionPtr<double> edgeInterpolant = Teuchos::rcp( new BasisSumFunction(basis, edgeInterpolationCoefficients) );
 
   IPPtr L2 = Teuchos::rcp( new IP );
   // we assume that basis is a vector HGRAD basis
@@ -280,7 +280,7 @@ void ParametricSurface::basisWeightsForProjectedInterpolant(FieldContainer<doubl
   basisCache->setTransformationFunction(Function::null());
 
   // project, skipping edgeNodeFieldIndices:
-  Projector::projectFunctionOntoBasis(basisCoefficients, exactSurface-edgeInterpolant, basis, basisCache, H1, v, edgeFieldIndices);
+  Projector::projectFunctionOntoBasis(basisCoefficients, FunctionPtr<double>(exactSurface)-edgeInterpolant, basis, basisCache, H1, v, edgeFieldIndices);
 
   basisCoefficients.resize(basis->getCardinality()); // get rid of dummy numCells dimension
   // add the two sets of basis coefficients together
@@ -290,12 +290,12 @@ void ParametricSurface::basisWeightsForProjectedInterpolant(FieldContainer<doubl
 
 }
 
-FunctionPtr ParametricSurface::dt1() {
+FunctionPtr<double> ParametricSurface::dt1() {
   // default: no dt1() defined
   return Function::null();
 }
 
-FunctionPtr ParametricSurface::dt2() {
+FunctionPtr<double> ParametricSurface::dt2() {
   // default: no dt2() defined
   return Function::null();
 }

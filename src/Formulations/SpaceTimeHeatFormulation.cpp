@@ -33,37 +33,37 @@ SpaceTimeHeatFormulation::SpaceTimeHeatFormulation(int spaceDim, double epsilon,
   if ((spaceDim != 1) && (spaceDim != 2) && (spaceDim != 3)) {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "spaceDim must be 1, 2, or 3");
   }
-  
+
   // declare all possible variables -- will only create the ones we need for spaceDim
   // fields
   VarPtr u;
   VarPtr sigma1, sigma2, sigma3;
-  
+
   // traces
   VarPtr u_hat;
   VarPtr sigma_n_hat;
-  
+
   // tests
   VarPtr v;
   VarPtr tau;
   VarPtr q;
-  
+
   u = _vf.fieldVar(S_U);
-  
+
   sigma1 = _vf.fieldVar(S_SIGMA1);
   if (spaceDim > 1) sigma2 = _vf.fieldVar(S_SIGMA2);
   if (spaceDim==3) {
     sigma3 = _vf.fieldVar(S_SIGMA3);
   }
-  
+
   Space uHatSpace = useConformingTraces ? HGRAD : L2;
-  
+
   u_hat = _vf.traceVar(S_U_HAT, 1.0 * u, uHatSpace);
-  
-  FunctionPtr n_x = Function::normal(); // spatial normal
-  FunctionPtr n_x_parity = n_x * Function::sideParity();
-  FunctionPtr n_xt = Function::normalSpaceTime();
-  
+
+  FunctionPtr<double> n_x = Function<double>::normal(); // spatial normal
+  FunctionPtr<double> n_x_parity = n_x * Function<double>::sideParity();
+  FunctionPtr<double> n_xt = Function<double>::normalSpaceTime();
+
   LinearTermPtr sigma_n_lt;
   if (spaceDim == 1)
   {
@@ -78,14 +78,14 @@ SpaceTimeHeatFormulation::SpaceTimeHeatFormulation(int spaceDim, double epsilon,
     sigma_n_lt = sigma1 * n_x_parity->x() + sigma2 * n_x_parity->y() + sigma3 * n_x_parity->z();
   }
   sigma_n_hat = _vf.fluxVarSpaceOnly(S_SIGMA_N_HAT, sigma_n_lt);
-  
+
   v = _vf.testVar(S_V, HGRAD);
 
   if (_spaceDim > 1)
     tau = _vf.testVar(S_TAU, HDIV); // vector
   else
     tau = _vf.testVar(S_TAU, HGRAD); // scalar
-  
+
   _bf = Teuchos::rcp( new BF(_vf) );
   // v terms
   _bf->addTerm(-u, v->dt());
@@ -94,7 +94,7 @@ SpaceTimeHeatFormulation::SpaceTimeHeatFormulation(int spaceDim, double epsilon,
   if (_spaceDim > 1) _bf->addTerm(sigma2, v->dy());
   if (_spaceDim > 2) _bf->addTerm(sigma3, v->dz());
   _bf->addTerm(-sigma_n_hat, v);
-  
+
   // tau terms
   if (_spaceDim > 1) {
     _bf->addTerm((1.0 / _epsilon) * sigma1, tau->x());
@@ -113,51 +113,51 @@ BFPtr SpaceTimeHeatFormulation::bf() {
   return _bf;
 }
 
-FunctionPtr SpaceTimeHeatFormulation::forcingFunction(int spaceDim, double epsilon, FunctionPtr u_exact) {
-  FunctionPtr f = u_exact->dt() - epsilon * u_exact->dx()->dx();
+FunctionPtr<double> SpaceTimeHeatFormulation::forcingFunction(int spaceDim, double epsilon, FunctionPtr<double> u_exact) {
+  FunctionPtr<double> f = u_exact->dt() - epsilon * u_exact->dx()->dx();
   if (spaceDim > 1) f = f - epsilon * u_exact->dy()->dy();
   if (spaceDim > 2) f = f - epsilon * u_exact->dz()->dz();
-  
+
   return f;
 }
 
 void SpaceTimeHeatFormulation::initializeSolution(MeshTopologyPtr meshTopo, int fieldPolyOrder, int delta_k,
-                                                  FunctionPtr forcingFunction) {
+                                                  FunctionPtr<double> forcingFunction) {
   this->initializeSolution(meshTopo, fieldPolyOrder, delta_k, forcingFunction, "");
 }
 
 void SpaceTimeHeatFormulation::initializeSolution(std::string filePrefix, int fieldPolyOrder, int delta_k,
-                                              FunctionPtr forcingFunction) {
+                                              FunctionPtr<double> forcingFunction) {
   this->initializeSolution(Teuchos::null, fieldPolyOrder, delta_k, forcingFunction, filePrefix);
 }
 
 void SpaceTimeHeatFormulation::initializeSolution(MeshTopologyPtr meshTopo, int fieldPolyOrder, int delta_k,
-                                                  FunctionPtr forcingFunction, string savedSolutionAndMeshPrefix) {
+                                                  FunctionPtr<double> forcingFunction, string savedSolutionAndMeshPrefix) {
   BCPtr bc = BC::bc();
-  
+
   vector<int> H1Order(2);
   H1Order[0] = fieldPolyOrder + 1;
   H1Order[1] = fieldPolyOrder + 1; // for now, use same poly. degree for temporal bases...
   MeshPtr mesh;
   if (savedSolutionAndMeshPrefix == "") {
     mesh = Teuchos::rcp( new Mesh(meshTopo, _bf, H1Order, delta_k) ) ;
-    _solution = Solution::solution(mesh,bc);
+    _solution = Solution<double>::solution(mesh,bc);
   } else {
     mesh = MeshFactory::loadFromHDF5(_bf, savedSolutionAndMeshPrefix+".mesh");
-    _solution = Solution::solution(mesh, bc);
+    _solution = Solution<double>::solution(mesh, bc);
     _solution->loadFromHDF5(savedSolutionAndMeshPrefix+".soln");
   }
-  
+
   RHSPtr rhs = this->rhs(forcingFunction); // in transient case, this will refer to _previousSolution
   IPPtr ip = _bf->graphNorm();
-  
+
   _solution->setRHS(rhs);
   _solution->setIP(ip);
-  
+
   mesh->registerSolution(_solution); // will project both time steps during refinements...
-  
+
   LinearTermPtr residual = rhs->linearTerm() - _bf->testFunctional(_solution,false); // false: don't exclude boundary terms
-  
+
   double energyThreshold = 0.2;
   _refinementStrategy = Teuchos::rcp( new RefinementStrategy( mesh, residual, ip, energyThreshold ) );
 }
@@ -178,15 +178,15 @@ void SpaceTimeHeatFormulation::refine() {
   _refinementStrategy->refine();
 }
 
-RHSPtr SpaceTimeHeatFormulation::rhs(FunctionPtr f) {
+RHSPtr SpaceTimeHeatFormulation::rhs(FunctionPtr<double> f) {
   RHSPtr rhs = RHS::rhs();
-  
+
   VarPtr v = this->v();
 
   if (f != Teuchos::null) {
     rhs->addTerm( f * v );
   }
-  
+
   return rhs;
 }
 
@@ -230,7 +230,7 @@ void SpaceTimeHeatFormulation::save(std::string prefixString) {
 }
 
 // ! Returns the solution
-SolutionPtr SpaceTimeHeatFormulation::solution() {
+SolutionPtr<double> SpaceTimeHeatFormulation::solution() {
   return _solution;
 }
 

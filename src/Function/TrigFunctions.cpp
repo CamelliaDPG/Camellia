@@ -15,14 +15,14 @@ string Sin_y::displayString() {
 double Sin_y::value(double x, double y) {
   return sin(y);
 }
-FunctionPtr Sin_y::dx() {
-  return Function::zero();
+FunctionPtr<double> Sin_y::dx() {
+  return Function<double>::zero();
 }
-FunctionPtr Sin_y::dy() {
+FunctionPtr<double> Sin_y::dy() {
   return Teuchos::rcp( new Cos_y );
 }
-FunctionPtr Sin_y::dz() {
-  return Function::zero();
+FunctionPtr<double> Sin_y::dz() {
+  return Function<double>::zero();
 }
 
 string Cos_y::displayString() {
@@ -31,15 +31,15 @@ string Cos_y::displayString() {
 double Cos_y::value(double x, double y) {
   return cos(y);
 }
-FunctionPtr Cos_y::dx() {
-  return Function::zero();
+FunctionPtr<double> Cos_y::dx() {
+  return Function<double>::zero();
 }
-FunctionPtr Cos_y::dy() {
-  FunctionPtr sin_y = Teuchos::rcp( new Sin_y );
+FunctionPtr<double> Cos_y::dy() {
+  FunctionPtr<double> sin_y = Teuchos::rcp( new Sin_y );
   return - sin_y;
 }
-FunctionPtr Cos_y::dz() {
-  return Function::zero();
+FunctionPtr<double> Cos_y::dz() {
+  return Function<double>::zero();
 }
 
 string Sin_x::displayString() {
@@ -49,14 +49,14 @@ string Sin_x::displayString() {
 double Sin_x::value(double x, double y) {
   return sin(x);
 }
-FunctionPtr Sin_x::dx() {
+FunctionPtr<double> Sin_x::dx() {
   return Teuchos::rcp( new Cos_x );
 }
-FunctionPtr Sin_x::dy() {
-  return Function::zero();
+FunctionPtr<double> Sin_x::dy() {
+  return Function<double>::zero();
 }
-FunctionPtr Sin_x::dz() {
-  return Function::zero();
+FunctionPtr<double> Sin_x::dz() {
+  return Function<double>::zero();
 }
 
 string Cos_x::displayString() {
@@ -65,15 +65,15 @@ string Cos_x::displayString() {
 double Cos_x::value(double x, double y) {
   return cos(x);
 }
-FunctionPtr Cos_x::dx() {
-  FunctionPtr sin_x = Teuchos::rcp( new Sin_x );
+FunctionPtr<double> Cos_x::dx() {
+  FunctionPtr<double> sin_x = Teuchos::rcp( new Sin_x );
   return - sin_x;
 }
-FunctionPtr Cos_x::dy() {
-  return Function::zero();
+FunctionPtr<double> Cos_x::dy() {
+  return Function<double>::zero();
 }
-FunctionPtr Cos_x::dz() {
-  return Function::zero();
+FunctionPtr<double> Cos_x::dz() {
+  return Function<double>::zero();
 }
 
 Cos_ax::Cos_ax(double a, double b) {
@@ -83,11 +83,11 @@ Cos_ax::Cos_ax(double a, double b) {
 double Cos_ax::value(double x) {
   return cos( _a * x + _b);
 }
-FunctionPtr Cos_ax::dx() {
-  return -_a * (FunctionPtr) Teuchos::rcp(new Sin_ax(_a,_b));
+FunctionPtr<double> Cos_ax::dx() {
+  return -_a * (FunctionPtr<double>) Teuchos::rcp(new Sin_ax(_a,_b));
 }
-FunctionPtr Cos_ax::dy() {
-  return Function::zero();
+FunctionPtr<double> Cos_ax::dy() {
+  return Function<double>::zero();
 }
 
 string Cos_ax::displayString() {
@@ -102,11 +102,11 @@ Cos_ay::Cos_ay(double a) {
 double Cos_ay::value(double x, double y) {
   return cos( _a * y );
 }
-FunctionPtr Cos_ay::dx() {
-  return Function::zero();
+FunctionPtr<double> Cos_ay::dx() {
+  return Function<double>::zero();
 }
-FunctionPtr Cos_ay::dy() {
-  return -_a * (FunctionPtr) Teuchos::rcp(new Sin_ay(_a));
+FunctionPtr<double> Cos_ay::dy() {
+  return -_a * (FunctionPtr<double>) Teuchos::rcp(new Sin_ay(_a));
 }
 
 string Cos_ay::displayString() {
@@ -123,11 +123,11 @@ Sin_ax::Sin_ax(double a, double b) {
 double Sin_ax::value(double x) {
   return sin( _a * x + _b);
 }
-FunctionPtr Sin_ax::dx() {
-  return _a * (FunctionPtr) Teuchos::rcp(new Cos_ax(_a,_b));
+FunctionPtr<double> Sin_ax::dx() {
+  return _a * (FunctionPtr<double>) Teuchos::rcp(new Cos_ax(_a,_b));
 }
-FunctionPtr Sin_ax::dy() {
-  return Function::zero();
+FunctionPtr<double> Sin_ax::dy() {
+  return Function<double>::zero();
 }
 string Sin_ax::displayString() {
   ostringstream ss;
@@ -141,11 +141,11 @@ Sin_ay::Sin_ay(double a) {
 double Sin_ay::value(double x, double y) {
   return sin( _a * y);
 }
-FunctionPtr Sin_ay::dx() {
-  return Function::zero();
+FunctionPtr<double> Sin_ay::dx() {
+  return Function<double>::zero();
 }
-FunctionPtr Sin_ay::dy() {
-  return _a * (FunctionPtr) Teuchos::rcp(new Cos_ay(_a));
+FunctionPtr<double> Sin_ay::dy() {
+  return _a * (FunctionPtr<double>) Teuchos::rcp(new Cos_ay(_a));
 }
 string Sin_ay::displayString() {
   ostringstream ss;

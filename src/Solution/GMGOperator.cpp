@@ -57,7 +57,7 @@ GMGOperator::GMGOperator(BCPtr zeroBCs, MeshPtr coarseMesh, IPPtr coarseIP,
   _useStaticCondensation = useStaticCondensation;
   _fineDofInterpreter = fineDofInterpreter;
   _fineSolverUsesDiagonalScaling = false;
-  
+
   _debugMode = false;
 
   _schwarzBlockFactorizationType = Direct;
@@ -81,7 +81,7 @@ GMGOperator::GMGOperator(BCPtr zeroBCs, MeshPtr coarseMesh, IPPtr coarseIP,
   _fineMesh = fineMesh;
   _coarseMesh = coarseMesh;
   _bc = zeroBCs;
-  _coarseSolution = Teuchos::rcp( new Solution(coarseMesh, zeroBCs, zeroRHS, coarseIP) );
+  _coarseSolution = Teuchos::rcp( new Solution<double>(coarseMesh, zeroBCs, zeroRHS, coarseIP) );
   _coarseSolution->setUseCondensedSolve(useStaticCondensation);
 
   _coarseSolver = coarseSolver;
@@ -89,7 +89,7 @@ GMGOperator::GMGOperator(BCPtr zeroBCs, MeshPtr coarseMesh, IPPtr coarseIP,
 
   setSmootherType(IFPACK_ADDITIVE_SCHWARZ); // default
   _smootherOverlap = 0;
-  
+
   { // DEBUGGING
 //    GlobalIndexType fineGlobalDofCount = _fineMesh->numGlobalDofs();
 //    GlobalIndexType coarseGlobalDofCount = _coarseMesh->numGlobalDofs();
@@ -140,7 +140,7 @@ GMGOperator::GMGOperator(BCPtr zeroBCs, MeshPtr coarseMesh, IPPtr coarseIP,
   if (rank==0) {
     cout << "Prolongation operator constructed in " << _timeProlongationOperatorConstruction << " seconds.\n";
   }
-  
+
   _fineSolverUsesDiagonalScaling = false;
   setFineSolverUsesDiagonalScaling(fineSolverUsesDiagonalScaling);
 
@@ -170,10 +170,10 @@ void GMGOperator::computeCoarseStiffnessMatrix(Epetra_CrsMatrix *fineStiffnessMa
   Epetra_SerialComm Comm;
 #endif
   Epetra_Time coarseStiffnessTimer(Comm);
-  
+
 //  cout << "Writing fine stiffness to disk before setting up smoother.\n";
 //  EpetraExt::RowMatrixToMatrixMarketFile("/tmp/A.dat",*fineStiffnessMatrix, NULL, NULL, false); // false: don't write header
-  
+
   setUpSmoother(fineStiffnessMatrix);
 
 //  EpetraExt::RowMatrixToMatrixMarketFile("/tmp/A.dat",*fineStiffnessMatrix, NULL, NULL, false); // false: don't write header
@@ -219,7 +219,7 @@ void GMGOperator::computeCoarseStiffnessMatrix(Epetra_CrsMatrix *fineStiffnessMa
       (_P->NumGlobalCols() > _coarseSolution->getDofInterpreter()->globalDofCount())) {
     // essentially: there are some lagrange constraints applied in coarse solve --> we shouldn't use the fused import,
     //              since this will call FillComplete()
-    
+
     int numEntriesPerRow = 0; // sub-optimal, but easy
     coarseStiffness = Teuchos::rcp( new Epetra_CrsMatrix(::Copy, coarsePartitionMap, numEntriesPerRow) );
     coarseStiffness->Import(*PT_A_P,coarseImporter,::Insert);
@@ -234,7 +234,7 @@ void GMGOperator::computeCoarseStiffnessMatrix(Epetra_CrsMatrix *fineStiffnessMa
   }
 
   _timeComputeCoarseStiffnessMatrix = coarseStiffnessTimer.ElapsedTime();
-  
+
   _haveSolvedOnCoarseMesh = false; // having recomputed coarseStiffness, any existing factorization is invalid
 }
 
@@ -393,7 +393,7 @@ Teuchos::RCP<Epetra_CrsMatrix> GMGOperator::constructProlongationOperator() {
   Epetra_Map coarseMap = _coarseSolution->getPartitionMap();
 //  int rank = Teuchos::GlobalMPISession::getRank();
 //  cout << "On rank " << rank << ", coarseMap has " << coarseMap.NumGlobalElements() << " global elements.\n";
-  
+
   P->GlobalAssemble(coarseMap, _finePartitionMap);
 
   _P = P;
@@ -422,7 +422,7 @@ GlobalIndexType GMGOperator::getCoarseCellID(GlobalIndexType fineCellID) const {
   return ancestor->cellIndex();
 }
 
-SolutionPtr GMGOperator::getCoarseSolution() {
+SolutionPtr<double> GMGOperator::getCoarseSolution() {
   return _coarseSolution;
 }
 
@@ -532,7 +532,7 @@ LocalDofMapperPtr GMGOperator::getLocalCoefficientMap(GlobalIndexType fineCellID
             LinearTermPtr termTraced = trialVar->termTraced();
             if (termTraced.get() == NULL) // nothing we can do if we don't know what term we're tracing
               continue;
-          
+
             if (! fineTrialOrdering->hasBasisEntry(trialID, sideOrdinal) ) continue;
             fineBasis = fineTrialOrdering->getBasis(trialID, sideOrdinal);
 
@@ -540,7 +540,7 @@ LocalDofMapperPtr GMGOperator::getLocalCoefficientMap(GlobalIndexType fineCellID
             for (set<int>::iterator varTracedIt = varsTraced.begin(); varTracedIt != varsTraced.end(); varTracedIt++) {
               int varTracedID = *varTracedIt;
               coarseBasis = coarseTrialOrdering->getBasis(varTracedID);
-              
+
               unsigned coarseSubcellOrdinal = 0, coarseDomainOrdinal = 0; // the volume
               unsigned coarseSubcellPermutation = 0;
               unsigned fineSubcellOrdinalInFineDomain = 0; // the side is the whole fine domain...
@@ -553,7 +553,7 @@ LocalDofMapperPtr GMGOperator::getLocalCoefficientMap(GlobalIndexType fineCellID
                 unsigned coarseDofIndex = coarseTrialOrdering->getDofIndex(varTracedID, *coarseOrdinalIt);
                 coarseDofIndices.push_back(coarseDofIndex);
               }
-              
+
               basisMap.push_back(SubBasisDofMapper::subBasisDofMapper(fineDofOrdinals, coarseDofIndices, weights.weights));
             }
           } else { // fine side maps to a coarse side
@@ -568,14 +568,14 @@ LocalDofMapperPtr GMGOperator::getLocalCoefficientMap(GlobalIndexType fineCellID
             coarseBasis = coarseTrialOrdering->getBasis(trialID, coarseSideOrdinal);
             fineBasis = fineTrialOrdering->getBasis(trialID, sideOrdinal);
             SubBasisReconciliationWeights weights = _br.constrainedWeights(fineBasis, sideRefBranches[sideOrdinal], coarseBasis, vertexNodePermutation);
-            
+
             set<unsigned> fineDofOrdinals(weights.fineOrdinals.begin(),weights.fineOrdinals.end());
             vector<GlobalIndexType> coarseDofIndices;
             for (set<int>::iterator coarseOrdinalIt=weights.coarseOrdinals.begin(); coarseOrdinalIt != weights.coarseOrdinals.end(); coarseOrdinalIt++) {
               unsigned coarseDofIndex = coarseTrialOrdering->getDofIndex(trialID, *coarseOrdinalIt, coarseSideOrdinal);
               coarseDofIndices.push_back(coarseDofIndex);
             }
-            
+
             basisMap.push_back(SubBasisDofMapper::subBasisDofMapper(fineDofOrdinals, coarseDofIndices, weights.weights));
           }
 
@@ -648,7 +648,7 @@ int GMGOperator::ApplyInverse(const Epetra_MultiVector& X_in, Epetra_MultiVector
 //  cout << "GMGOperator::ApplyInverse.\n";
   int rank = Teuchos::GlobalMPISession::getRank();
   bool printVerboseOutput = (rank==0) && _debugMode;
-  
+
   Epetra_Time timer(Comm());
 
   Epetra_MultiVector X(X_in); // looks like Y may be stored in the same location as X_in, so that changing Y will change X, too...
@@ -659,7 +659,7 @@ int GMGOperator::ApplyInverse(const Epetra_MultiVector& X_in, Epetra_MultiVector
     X.Multiply(1.0, *_diag_sqrt, X, 0);
     if (printVerboseOutput) cout << "finished multiplying X by _diag_sqrt\n";
   }
-  
+
   if (printVerboseOutput) cout << "calling _coarseSolution->getRHSVector()\n";
   Teuchos::RCP<Epetra_FEVector> coarseRHSVector = _coarseSolution->getRHSVector();
   if (printVerboseOutput) cout << "returned from _coarseSolution->getRHSVector()\n";
@@ -668,7 +668,7 @@ int GMGOperator::ApplyInverse(const Epetra_MultiVector& X_in, Epetra_MultiVector
     // TODO: add support for coarseRHSVector that may have lagrange/zmc constraints applied even though fine solution neglects these...
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "coarseRHSVector->GlobalLength() != _P->NumGlobalCols()");
   }
-  
+
   timer.ResetStartTime();
 
   if (printVerboseOutput) cout << "calling _P->Multiply(true, X, *coarseRHSVector);\n";
@@ -694,7 +694,7 @@ int GMGOperator::ApplyInverse(const Epetra_MultiVector& X_in, Epetra_MultiVector
   timer.ResetStartTime();
   if (printVerboseOutput) cout << "calling _coarseSolution->getLHSVector()\n";
   Teuchos::RCP<Epetra_FEVector> coarseLHSVector = _coarseSolution->getLHSVector();
-  
+
   if (printVerboseOutput) cout << "finished _coarseSolution->getLHSVector()\n";
   if (printVerboseOutput) cout << "calling _P->Multiply(false, *coarseLHSVector, Y)\n";
   _P->Multiply(false, *coarseLHSVector, Y);
@@ -724,15 +724,15 @@ int GMGOperator::ApplyInverse(const Epetra_MultiVector& X_in, Epetra_MultiVector
     Y.Multiply(1.0, *_diag_sqrt, Y, 0);
     if (printVerboseOutput) cout << "finished Y.Multiply(1.0, *_diag_sqrt, Y, 0)\n";
   }
-  
+
   /*
    We zero out the lagrange multiplier solutions on the fine mesh, because we're relying on the coarse solve to impose these;
    we just use an identity block in the lower right of the fine matrix for the Lagrange constraints themselves.
-   
+
    The argument for this, at least for zero mean constraints:
    If the coarse solution has zero mean, then the fact that the prolongation operator is exact (i.e. coarse mesh solution is
    exactly reproduced on fine mesh) means that the fine mesh solution will have zero mean.
-   
+
    This neglects the smoothing operator.  If the smoothing operator isn't guaranteed to produce an update with zero mean,
    then this may not work.
    */
@@ -743,7 +743,7 @@ int GMGOperator::ApplyInverse(const Epetra_MultiVector& X_in, Epetra_MultiVector
       Y[0][LID] = 0.0;
     }
   }
-  
+
   return 0;
 }
 

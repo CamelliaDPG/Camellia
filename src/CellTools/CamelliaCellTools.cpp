@@ -1141,7 +1141,7 @@ void CamelliaCellTools::mapToReferenceFrameInitGuess(       FieldContainer<doubl
   BasisCachePtr basisCache = BasisCache::basisCacheForReferenceCell(cell->topology(), cubatureDegree);
   
   if (meshTopo->transformationFunction().get() != NULL) {
-    FunctionPtr transformFunction = meshTopo->transformationFunction();
+    FunctionPtr<double> transformFunction = meshTopo->transformationFunction();
     basisCache->setTransformationFunction(transformFunction, true);
   }
   std::vector<GlobalIndexType> cellIDs;

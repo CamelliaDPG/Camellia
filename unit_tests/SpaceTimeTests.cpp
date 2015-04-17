@@ -22,10 +22,10 @@ namespace {
     vector<int> elementCounts(spaceDim,1);   // 1^d mesh
     vector<double> x0(spaceDim,-1.0);
     MeshTopologyPtr spatialMeshTopo = MeshFactory::rectilinearMeshTopology(dimensions, elementCounts, x0);
-    
+
     double t0 = 0.0, t1 = 1.0;
     MeshTopologyPtr spaceTimeMeshTopo = MeshFactory::spaceTimeMeshTopology(spatialMeshTopo, t0, t1);
-    
+
     double epsilon = 1.0;
     SpaceTimeHeatFormulation form(spaceDim, epsilon);
     int delta_k = 1;
@@ -38,18 +38,18 @@ namespace {
   void testIntegrateConstantFunctionVolume(int spaceDim, Teuchos::FancyOStream &out, bool &success)
   {
     int H1Order = 1;
-    FunctionPtr one = Function::constant(1.0);
+    FunctionPtr<double> one = Function<double>::constant(1.0);
     MeshPtr mesh = singleElementSpaceTimeMesh(spaceDim, H1Order);
     double timeExtent = 1.0;
     double actualIntegral = one->integrate(mesh);
     double expectedIntegral = pow(2.0,spaceDim) * timeExtent;
     TEST_FLOATING_EQUALITY(actualIntegral, expectedIntegral, 1e-15);
   }
-  
+
   void testIntegrateConstantFunctionSides(int spaceDim, Teuchos::FancyOStream &out, bool &success)
   {
     int H1Order = 1;
-    FunctionPtr oneOnSides = Function::meshSkeletonCharacteristic();
+    FunctionPtr<double> oneOnSides = Function<double>::meshSkeletonCharacteristic();
     MeshPtr mesh = singleElementSpaceTimeMesh(spaceDim, H1Order);
     double timeExtent = 1.0;
     double actualIntegral = oneOnSides->integrate(mesh);
@@ -60,23 +60,23 @@ namespace {
     double expectedIntegral = spatialIntegral * numTemporalSides + timeExtent * numSpatialSides * spatialSideIntegral;
     TEST_FLOATING_EQUALITY(actualIntegral, expectedIntegral, 1e-15);
   }
-  
+
   void testIntegrateTimeVaryingFunctionVolume(int spaceDim, Teuchos::FancyOStream &out, bool &success)
   {
     int H1Order = 2;
-    FunctionPtr t = Function::tn(1); // integral t^2 / 2; over [0,1] = 1/2
+    FunctionPtr<double> t = Function<double>::tn(1); // integral t^2 / 2; over [0,1] = 1/2
     MeshPtr mesh = singleElementSpaceTimeMesh(spaceDim, H1Order);
     double actualIntegral = t->integrate(mesh);
     double temporalIntegral = 0.5;
     double expectedIntegral = pow(2.0,spaceDim) * temporalIntegral;
     TEST_FLOATING_EQUALITY(actualIntegral, expectedIntegral, 1e-15);
   }
-  
+
   void testIntegrateTimeVaryingFunctionSides(int spaceDim, Teuchos::FancyOStream &out, bool &success)
   {
     int H1Order = 2;
-    FunctionPtr oneOnSides = Function::meshSkeletonCharacteristic();
-    FunctionPtr t = Function::tn(1); // integral t^2 / 2; over [0,1] = 1/2
+    FunctionPtr<double> oneOnSides = Function<double>::meshSkeletonCharacteristic();
+    FunctionPtr<double> t = Function<double>::tn(1); // integral t^2 / 2; over [0,1] = 1/2
     MeshPtr mesh = singleElementSpaceTimeMesh(spaceDim, H1Order);
     double actualIntegral = (oneOnSides * t)->integrate(mesh);
     double spatialIntegral = pow(2.0,spaceDim); // will pick up one of these (where t=1; where t=0 we have no contribution)
@@ -86,11 +86,11 @@ namespace {
     double expectedIntegral = spatialIntegral + temporalIntegral * numSpatialSides * spatialSideIntegral;
     TEST_FLOATING_EQUALITY(actualIntegral, expectedIntegral, 1e-15);
   }
-  
+
   void testIntegrateSpaceVaryingFunctionVolume(int spaceDim, Teuchos::FancyOStream &out, bool &success)
   {
     int H1Order = 3;
-    FunctionPtr f_x = Function::xn(2); // integral x^3 / 3; over [-1,1] = 2/3
+    FunctionPtr<double> f_x = Function<double>::xn(2); // integral x^3 / 3; over [-1,1] = 2/3
     MeshPtr mesh = singleElementSpaceTimeMesh(spaceDim, H1Order);
     double actualIntegral = f_x->integrate(mesh);
     double temporalExtent = 1.0;
@@ -98,12 +98,12 @@ namespace {
     double expectedIntegral = pow(2.0,spaceDim-1) * expectedIntegral_f_x * temporalExtent;
     TEST_FLOATING_EQUALITY(actualIntegral, expectedIntegral, 1e-15);
   }
-  
+
   void testIntegrateSpaceVaryingFunctionSides(int spaceDim, Teuchos::FancyOStream &out, bool &success)
   {
     int H1Order = 3;
-    FunctionPtr oneOnSides = Function::meshSkeletonCharacteristic();
-    FunctionPtr f_x = Function::xn(2); // integral x^3 / 3; over [-1,1] = 2/3
+    FunctionPtr<double> oneOnSides = Function<double>::meshSkeletonCharacteristic();
+    FunctionPtr<double> f_x = Function<double>::xn(2); // integral x^3 / 3; over [-1,1] = 2/3
     MeshPtr mesh = singleElementSpaceTimeMesh(spaceDim, H1Order);
     double actualIntegral = (f_x * oneOnSides)->integrate(mesh);
     double temporalExtent = 1.0;
@@ -121,7 +121,7 @@ namespace {
                             + expectedIntegralSides_varying_x * numSides_varying_x;
     TEST_FLOATING_EQUALITY(actualIntegral, expectedIntegral, 1e-15);
   }
-  
+
   TEUCHOS_UNIT_TEST( SpaceTime, IntegrateConstantFunctionSides_1D )
   {
     int spaceDim = 1;

@@ -39,33 +39,33 @@ const string PressurelessStokesFormulation::S_TAU33 = "\\tau_{33}";
 
 PressurelessStokesFormulation::PressurelessStokesFormulation(int spaceDim) {
   _spaceDim = spaceDim;
-  
+
   if ((spaceDim != 2) && (spaceDim != 3)) {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "spaceDim must be 2 or 3");
   }
-  
+
   // declare all possible variables -- will only create the ones we need for spaceDim
   // fields
   VarPtr u1, u2, u3;
   VarPtr sigma11, sigma12, sigma13;
   VarPtr sigma22, sigma23;
   VarPtr sigma33;
-  
+
   // traces
   VarPtr u1_hat, u2_hat, u3_hat;
   VarPtr t1n, t2n, t3n;
-  
+
   // tests
   VarPtr v1, v2, v3;
   VarPtr tau11, tau12, tau13;
   VarPtr tau22, tau23;
   VarPtr tau33;
-  
+
   VarFactory vf;
   u1 = vf.fieldVar(S_U1);
   u2 = vf.fieldVar(S_U2);
   if (spaceDim==3) u3 = vf.fieldVar(S_U3);
-  
+
   sigma11 = vf.fieldVar(S_SIGMA11);
   sigma12 = vf.fieldVar(S_SIGMA12);
   sigma22 = vf.fieldVar(S_SIGMA22);
@@ -74,12 +74,12 @@ PressurelessStokesFormulation::PressurelessStokesFormulation(int spaceDim) {
     sigma23 = vf.fieldVar(S_SIGMA23);
     sigma33 = vf.fieldVar(S_SIGMA33);
   }
-  
+
   u1_hat = vf.traceVar(S_U1_HAT, 1.0 * u1, L2);
   u2_hat = vf.traceVar(S_U2_HAT, 1.0 * u2, L2);
   if (spaceDim==3) u3_hat = vf.traceVar(S_U3_HAT, 1.0 * u3, L2);
-  
-  FunctionPtr n = Function::normal();
+
+  FunctionPtr<double> n = Function<double>::normal();
   LinearTermPtr sigma1n, sigma2n, sigma3n;
   if (spaceDim==2) {
     sigma1n = sigma11 * n->x() + sigma12 * n->y();
@@ -92,11 +92,11 @@ PressurelessStokesFormulation::PressurelessStokesFormulation(int spaceDim) {
   t1n = vf.fluxVar(S_TN1_HAT, sigma1n);
   t2n = vf.fluxVar(S_TN2_HAT, sigma2n);
   if (spaceDim==3) t3n = vf.fluxVar(S_TN3_HAT, sigma3n);
-  
+
   v1 = vf.testVar(S_V1, HGRAD);
   v2 = vf.testVar(S_V2, HGRAD);
   if (spaceDim==3) v3 = vf.testVar(S_V3, HGRAD);
-  
+
   tau11 = vf.testVar(S_TAU11, HGRAD);
   tau12 = vf.testVar(S_TAU12, HGRAD);
   tau22 = vf.testVar(S_TAU22, HGRAD);
@@ -105,7 +105,7 @@ PressurelessStokesFormulation::PressurelessStokesFormulation(int spaceDim) {
     tau23 = vf.testVar(S_TAU23, HGRAD);
     tau33 = vf.testVar(S_TAU33, HGRAD);
   }
-  
+
   _stokesBF = Teuchos::rcp( new BF(vf) );
   // v1
   _stokesBF->addTerm(-sigma11, v1->dx());
@@ -114,7 +114,7 @@ PressurelessStokesFormulation::PressurelessStokesFormulation(int spaceDim) {
     _stokesBF->addTerm(-sigma13, v1->dz());
   }
   _stokesBF->addTerm(t1n, v1);
-  
+
   // v2
   _stokesBF->addTerm(-sigma12, v2->dx());
   _stokesBF->addTerm(-sigma22, v2->dy());
@@ -122,7 +122,7 @@ PressurelessStokesFormulation::PressurelessStokesFormulation(int spaceDim) {
     _stokesBF->addTerm(-sigma23, v2->dz());
   }
   _stokesBF->addTerm(t2n, v2);
-  
+
   // v3
   if (spaceDim==3) {
     _stokesBF->addTerm(-sigma13, v3->dx());
@@ -130,32 +130,32 @@ PressurelessStokesFormulation::PressurelessStokesFormulation(int spaceDim) {
     _stokesBF->addTerm(-sigma33, v3->dz());
     _stokesBF->addTerm(t3n, v3);
   }
-  
+
   LinearTermPtr p; // pressure term, the negative weighted trace of tensor sigma
   if (spaceDim==2) {
     p = -0.5 * sigma11 + -0.5 * sigma22;
   } else {
     p = -(1.0/3.0) * sigma11 + -(1.0/3.0) * sigma22 + -(1.0/3.0) * sigma33;
   }
-  
+
   LinearTermPtr tau1n, tau2n, tau3n;
   LinearTermPtr div_tau1, div_tau2, div_tau3;
   if (spaceDim==2) {
     tau1n = tau11 * n->x() + tau12 * n->y();
     tau2n = tau12 * n->x() + tau22 * n->y();
-    
+
     div_tau1 = tau11->dx() + tau12->dy();
     div_tau2 = tau12->dx() + tau22->dy();
   } else {
     tau1n = tau11 * n->x() + tau12 * n->y() + tau13 * n->z();
     tau2n = tau12 * n->x() + tau22 * n->y() + tau23 * n->z();
     tau3n = tau13 * n->x() + tau23 * n->y() + tau33 * n->z();
-    
+
     div_tau1 = tau11->dx() + tau12->dy() + tau13->dz();
     div_tau2 = tau12->dx() + tau22->dy() + tau23->dz();
     div_tau3 = tau13->dx() + tau23->dy() + tau33->dz();
   }
-  
+
   // tau1j
   _stokesBF->addTerm(sigma11, tau11);
   _stokesBF->addTerm(sigma12, tau12);
@@ -163,7 +163,7 @@ PressurelessStokesFormulation::PressurelessStokesFormulation(int spaceDim) {
   _stokesBF->addTerm(2 * u1, div_tau1);
   _stokesBF->addTerm(-2 * u1_hat, tau1n);
   _stokesBF->addTerm(p, tau11);
-  
+
   // tau2j
   _stokesBF->addTerm(sigma12, tau12);
   _stokesBF->addTerm(sigma22, tau22);
@@ -171,7 +171,7 @@ PressurelessStokesFormulation::PressurelessStokesFormulation(int spaceDim) {
   _stokesBF->addTerm(2 * u2, div_tau2);
   _stokesBF->addTerm(-2 * u2_hat, tau2n);
   _stokesBF->addTerm(p, tau22);
-  
+
   // tau3j
   if (spaceDim==3) {
     _stokesBF->addTerm(sigma13, tau13);
@@ -190,7 +190,7 @@ BFPtr PressurelessStokesFormulation::bf() {
 LinearTermPtr PressurelessStokesFormulation::p() {
   VarPtr sigma11 = this->sigma(1, 1);
   VarPtr sigma22 = this->sigma(2, 2);
-  
+
   LinearTermPtr p; // pressure term, the negative weighted trace of tensor sigma
   if (_spaceDim==2) {
     p = -0.5 * sigma11 + -0.5 * sigma22;

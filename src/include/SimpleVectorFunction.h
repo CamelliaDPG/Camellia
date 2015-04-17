@@ -12,15 +12,15 @@
 #include "Function.h"
 
 namespace Camellia {
-  class SimpleVectorFunction : public Function {
+  template <typename Scalar>
+  class SimpleVectorFunction : public Function<Scalar> {
   public:
     SimpleVectorFunction();
     virtual ~SimpleVectorFunction() {}
-    virtual vector<double> value(double x);
-    virtual vector<double> value(double x, double y);
-    virtual vector<double> value(double x, double y, double z);
-    virtual void values(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache);
+    virtual vector<Scalar> value(double x);
+    virtual vector<Scalar> value(double x, double y);
+    virtual vector<Scalar> value(double x, double y, double z);
+    virtual void values(Intrepid::FieldContainer<Scalar> &values, BasisCachePtr basisCache);
   };
-  typedef Teuchos::RCP<SimpleVectorFunction> SimpleVectorFunctionPtr;
 }
 #endif

@@ -78,25 +78,25 @@ map<int,int> Mesh::_emptyIntIntMap;
 Mesh::Mesh(MeshTopologyPtr meshTopology, BFPtr bilinearForm, vector<int> H1Order, int pToAddTest,
            map<int,int> trialOrderEnhancements, map<int,int> testOrderEnhancements,
            MeshPartitionPolicyPtr partitionPolicy) : DofInterpreter(Teuchos::rcp(this,false)) {
-  
+
   _meshTopology = meshTopology;
-  
+
   DofOrderingFactoryPtr dofOrderingFactoryPtr = Teuchos::rcp( new DofOrderingFactory(bilinearForm, trialOrderEnhancements,testOrderEnhancements) );
   _enforceMBFluxContinuity = false;
   //  MeshPartitionPolicyPtr partitionPolicy = Teuchos::rcp( new MeshPartitionPolicy() );
   if ( partitionPolicy.get() == NULL )
     partitionPolicy = Teuchos::rcp( new ZoltanMeshPartitionPolicy() );
-  
+
   MeshPtr thisPtr = Teuchos::rcp(this, false);
   _gda = Teuchos::rcp( new GDAMinimumRule(thisPtr, bilinearForm->varFactory(), dofOrderingFactoryPtr,
                                           partitionPolicy, H1Order, pToAddTest));
   _gda->repartitionAndMigrate();
-  
+
   setBilinearForm(bilinearForm);
   _boundary.setMesh(this);
-  
+
   _meshTopology->setGlobalDofAssignment(_gda.get());
-  
+
   // Teuchos::RCP< RefinementHistory > refHist = Teuchos::rcp( &_refinementHistory, false );
   // cout << "Has ownership " << refHist.has_ownership() << endl;
   // this->registerObserver(refHist);
@@ -515,7 +515,7 @@ map<IndexType, GlobalIndexType> Mesh::getGlobalVertexIDs(const FieldContainer<do
   return localToGlobalVertexIndex;
 }
 
-FunctionPtr Mesh::getTransformationFunction() {
+FunctionPtr<double> Mesh::getTransformationFunction() {
   // will be NULL for meshes without edge curves defined
 
   // for now, we recompute the transformation function each time the edge curves get updated
@@ -550,7 +550,7 @@ set<GlobalIndexType> Mesh::globalDofIndicesForPartition(PartitionIndexType parti
 }
 
 //void Mesh::hRefine(vector<GlobalIndexType> cellIDs, Teuchos::RCP<RefinementPattern> refPattern) {
-//  hRefine(cellIDs,refPattern,vector< Teuchos::RCP<Solution> >());
+//  hRefine(cellIDs,refPattern,vector< SolutionPtr<double> >());
 //}
 
 void Mesh::hRefine(const vector<GlobalIndexType> &cellIDs) {
@@ -884,8 +884,8 @@ void Mesh::registerObserver(Teuchos::RCP<RefinementObserver> observer) {
   _registeredObservers.push_back(observer);
 }
 
-void Mesh::registerSolution(Teuchos::RCP<Solution> solution) {
-  _gda->registerSolution(solution.get());
+void Mesh::registerSolution(SolutionPtr<double> solution) {
+  _gda->registerSolution(solution);
 }
 
 void Mesh::unregisterObserver(RefinementObserver* observer) {
@@ -903,8 +903,8 @@ void Mesh::unregisterObserver(Teuchos::RCP<RefinementObserver> mesh) {
   this->unregisterObserver(mesh.get());
 }
 
-void Mesh::unregisterSolution(Teuchos::RCP<Solution> solution) {
-  _gda->unregisterSolution(solution.get());
+void Mesh::unregisterSolution(SolutionPtr<double> solution) {
+  _gda->unregisterSolution(solution);
 }
 
 void Mesh::pRefine(const vector<GlobalIndexType> &cellIDsForPRefinements) {
@@ -1313,7 +1313,7 @@ void Mesh::saveToHDF5(string filename)
         }
       }
     }
-    
+
     vector<int> initialH1Order = globalDofAssignment()->getInitialH1Order();
 
     Epetra_SerialComm Comm;

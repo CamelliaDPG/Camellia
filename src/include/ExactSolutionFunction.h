@@ -13,12 +13,13 @@
 #include "Function.h"
 
 namespace Camellia {
-  class ExactSolutionFunction : public Function { // for scalars, for now
+  template <typename Scalar>
+  class ExactSolutionFunction : public Function<Scalar> { // for scalars, for now
     Teuchos::RCP<ExactSolution> _exactSolution;
     int _trialID;
   public:
     ExactSolutionFunction(Teuchos::RCP<ExactSolution> exactSolution, int trialID);
-    void values(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache);
+    void values(Intrepid::FieldContainer<Scalar> &values, BasisCachePtr basisCache);
   };
 }
 #endif

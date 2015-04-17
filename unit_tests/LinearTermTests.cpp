@@ -22,10 +22,10 @@ namespace {
     vector<int> elementCounts(spaceDim,1);   // 1^d mesh
     vector<double> x0(spaceDim,-1.0);
     MeshTopologyPtr spatialMeshTopo = MeshFactory::rectilinearMeshTopology(dimensions, elementCounts, x0);
-    
+
     double t0 = 0.0, t1 = 1.0;
     MeshTopologyPtr spaceTimeMeshTopo = MeshFactory::spaceTimeMeshTopology(spatialMeshTopo, t0, t1);
-    
+
     double epsilon = 1.0;
     SpaceTimeHeatFormulation form(spaceDim, epsilon);
     int delta_k = 1;
@@ -39,69 +39,69 @@ namespace {
   void testSpaceTimeNonzeroTimeDerivative(int spaceDim, Teuchos::FancyOStream &out, bool &success)
   {
     // here, we simply test that v->dt() gives something nonzero
-    
+
     double epsilon = 1.0;
     SpaceTimeHeatFormulation form(spaceDim, epsilon);
     VarPtr v = form.v();
-    FunctionPtr f = Function::xn(1);
+    FunctionPtr<double> f = Function<double>::xn(1);
 
     LinearTermPtr lt = 1.0 * v->dt();
-    
+
     int H1Order = 2;
     MeshPtr mesh = singleElementSpaceTimeMesh(spaceDim, H1Order);
     double norm = lt->computeNorm(form.bf()->graphNorm(), mesh); // should be > 0
-    
+
 //    cout << "spaceDim, " << spaceDim << "; norm " << norm << endl;
-    
+
     TEST_COMPARE(norm, >, 1e-14);
   }
-  
+
   void testSpaceTimeIntegrationByPartsInTime(int spaceDim, Teuchos::FancyOStream &out, bool &success)
   {
     // we consider df/dt where f = x.
     // Integrating by parts 0 = (df/dt, v) = (-f, v->dt()) + < f, v * n->t() >
-    
+
     double epsilon = 1.0;
     SpaceTimeHeatFormulation form(spaceDim, epsilon);
     VarPtr v = form.v();
-    FunctionPtr f = Function::xn(1);
-    
-    FunctionPtr n_xt = Function::normalSpaceTime();
+    FunctionPtr<double> f = Function<double>::xn(1);
+
+    FunctionPtr<double> n_xt = Function<double>::normalSpaceTime();
 
     LinearTermPtr lt = -f * v->dt() + (f * v) * n_xt->t();
-    
+
     int H1Order = 2;
     MeshPtr mesh = singleElementSpaceTimeMesh(spaceDim, H1Order);
     double norm = lt->computeNorm(form.bf()->graphNorm(), mesh); // should be 0
-    
+
     TEST_COMPARE(norm, <, 1e-14);
   }
-  
+
   TEUCHOS_UNIT_TEST( LinearTerm, SpaceTimeIntegrationByPartsInTime_1D )
   {
     testSpaceTimeIntegrationByPartsInTime(1,out,success);
   }
-  
+
   TEUCHOS_UNIT_TEST( LinearTerm, SpaceTimeIntegrationByPartsInTime_2D )
   {
     testSpaceTimeIntegrationByPartsInTime(2,out,success);
   }
-  
+
 //  TEUCHOS_UNIT_TEST( LinearTerm, SpaceTimeIntegrationByPartsInTime_3D )
 //  {
 //    testSpaceTimeIntegrationByPartsInTime(3,out,success);
 //  }
-  
+
   TEUCHOS_UNIT_TEST( LinearTerm, SpaceTimeNonzeroTimeDerivative_1D )
   {
     testSpaceTimeNonzeroTimeDerivative(1,out,success);
   }
-  
+
   TEUCHOS_UNIT_TEST( LinearTerm, SpaceTimeNonzeroTimeDerivative_2D )
   {
     testSpaceTimeNonzeroTimeDerivative(2,out,success);
   }
-  
+
 //  TEUCHOS_UNIT_TEST( LinearTerm, SpaceTimeNonzeroTimeDerivative_3D )
 //  {
 //    testSpaceTimeNonzeroTimeDerivative(3,out,success);

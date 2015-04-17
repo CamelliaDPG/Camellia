@@ -12,33 +12,33 @@
 #include "Function.h"
 
 namespace Camellia {
-  class MinFunction : public Function {
-    FunctionPtr _f1, _f2;
+  class MinFunction : public Function<double> {
+    FunctionPtr<double> _f1, _f2;
   public:
-    MinFunction(FunctionPtr f1, FunctionPtr f2);
-    
-    FunctionPtr x();
-    FunctionPtr y();
-    FunctionPtr z();
-    
+    MinFunction(FunctionPtr<double> f1, FunctionPtr<double> f2);
+
+    FunctionPtr<double> x();
+    FunctionPtr<double> y();
+    FunctionPtr<double> z();
+
     void values(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache);
     bool boundaryValueOnly();
-    
+
     string displayString();
   };
-  
-  class MaxFunction : public Function {
-    FunctionPtr _f1, _f2;
+
+  class MaxFunction : public Function<double> {
+    FunctionPtr<double> _f1, _f2;
   public:
-    MaxFunction(FunctionPtr f1, FunctionPtr f2);
-    
-    FunctionPtr x();
-    FunctionPtr y();
-    FunctionPtr z();
-    
+    MaxFunction(FunctionPtr<double> f1, FunctionPtr<double> f2);
+
+    FunctionPtr<double> x();
+    FunctionPtr<double> y();
+    FunctionPtr<double> z();
+
     void values(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache);
     bool boundaryValueOnly();
-    
+
     string displayString();
   };
 }

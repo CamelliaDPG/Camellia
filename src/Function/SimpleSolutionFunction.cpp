@@ -9,22 +9,26 @@ using namespace Camellia;
 using namespace Intrepid;
 using namespace std;
 
-SimpleSolutionFunction::SimpleSolutionFunction(VarPtr var, SolutionPtr soln) : Function(var->rank()) {
+template <typename Scalar>
+SimpleSolutionFunction<Scalar>::SimpleSolutionFunction(VarPtr var, SolutionPtr<Scalar> soln) : Function<Scalar>(var->rank()) {
   _var = var;
   _soln = soln;
 }
 
-bool SimpleSolutionFunction::boundaryValueOnly() {
+template <typename Scalar>
+bool SimpleSolutionFunction<Scalar>::boundaryValueOnly() {
   return (_var->varType() == FLUX) || (_var->varType() == TRACE);
 }
 
-string SimpleSolutionFunction::displayString() {
+template <typename Scalar>
+string SimpleSolutionFunction<Scalar>::displayString() {
   ostringstream str;
   str << "\\overline{" << _var->displayString() << "} ";
   return str.str();
 }
 
-void SimpleSolutionFunction::importCellData(std::vector<GlobalIndexType> cells) {
+template <typename Scalar>
+void SimpleSolutionFunction<Scalar>::importCellData(std::vector<GlobalIndexType> cells) {
   int rank = Teuchos::GlobalMPISession::getRank();
   set<GlobalIndexType> offRankCells;
   const set<GlobalIndexType>* rankLocalCells = &_soln->mesh()->globalDofAssignment()->cellsInPartition(rank);
@@ -36,7 +40,8 @@ void SimpleSolutionFunction::importCellData(std::vector<GlobalIndexType> cells) 
   _soln->importSolutionForOffRankCells(offRankCells);
 }
 
-void SimpleSolutionFunction::values(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache) {
+template <typename Scalar>
+void SimpleSolutionFunction<Scalar>::values(Intrepid::FieldContainer<Scalar> &values, BasisCachePtr basisCache) {
   bool dontWeightForCubature = false;
   if (basisCache->mesh().get() != NULL) { // then we assume that the BasisCache is appropriate for solution's mesh...
     _soln->solutionValues(values, _var->ID(), basisCache, dontWeightForCubature, _var->op());
@@ -46,7 +51,7 @@ void SimpleSolutionFunction::values(Intrepid::FieldContainer<double> &values, Ba
     LinearTermPtr solnExpression = 1.0 * _var;
     // get the physicalPoints, and make a basisCache for each...
     Intrepid::FieldContainer<double> physicalPoints = basisCache->getPhysicalCubaturePoints();
-    Intrepid::FieldContainer<double> value(1,1); // assumes scalar-valued solution function.
+    Intrepid::FieldContainer<Scalar> value(1,1); // assumes scalar-valued solution function.
     int numCells = physicalPoints.dimension(0);
     int numPoints = physicalPoints.dimension(1);
     int spaceDim = physicalPoints.dimension(2);
@@ -70,7 +75,7 @@ void SimpleSolutionFunction::values(Intrepid::FieldContainer<double> &values, Ba
           basisCacheOnePoint = Teuchos::rcp( new BasisCache(elemType, _soln->mesh()) );
           basisCacheOnePoint->setPhysicalCellNodes(_soln->mesh()->physicalCellNodesForCell(cellID[0]),cellID,false); // false: don't createSideCacheToo
         }
-        refPoint.resize(1,1,spaceDim); // CamelliaCellTools::mapToReferenceFrame wants a numCells dimension...  (perhaps it shouldn't, though!)
+        refPoint.resize(1,1,spaceDim); // CamelliaCellTools<Scalar>::mapToReferenceFrame wants a numCells dimension...  (perhaps it shouldn't, though!)
         // compute the refPoint:
         CamelliaCellTools::mapToReferenceFrame(refPoint,point,_soln->mesh()->getTopology(), cellID[0],
                                                _soln->mesh()->globalDofAssignment()->getCubatureDegree(cellID[0]));
@@ -85,54 +90,63 @@ void SimpleSolutionFunction::values(Intrepid::FieldContainer<double> &values, Ba
     }
   }
   if (_var->varType()==FLUX) { // weight by sideParity
-    sideParity()->scalarMultiplyFunctionValues(values, basisCache);
+    this->sideParity()->scalarMultiplyFunctionValues(values, basisCache);
   }
 }
 
-FunctionPtr SimpleSolutionFunction::dx() {
+template <typename Scalar>
+FunctionPtr<Scalar> SimpleSolutionFunction<Scalar>::dx() {
   if (_var->op() != Camellia::OP_VALUE) {
-    return Function::null();
+    return Function<Scalar>::null();
   } else {
-    return Function::solution(_var->dx(), _soln);
+    return Function<Scalar>::solution(_var->dx(), _soln);
   }
 }
 
-FunctionPtr SimpleSolutionFunction::dy() {
+template <typename Scalar>
+FunctionPtr<Scalar> SimpleSolutionFunction<Scalar>::dy() {
   if (_var->op() != Camellia::OP_VALUE) {
-    return Function::null();
+    return Function<Scalar>::null();
   } else {
-    return Function::solution(_var->dy(), _soln);
+    return Function<Scalar>::solution(_var->dy(), _soln);
   }
 }
 
-FunctionPtr SimpleSolutionFunction::dz() {
+template <typename Scalar>
+FunctionPtr<Scalar> SimpleSolutionFunction<Scalar>::dz() {
   if (_var->op() != Camellia::OP_VALUE) {
-    return Function::null();
+    return Function<Scalar>::null();
   } else {
-    return Function::solution(_var->dz(), _soln);
+    return Function<Scalar>::solution(_var->dz(), _soln);
   }
 }
 
-FunctionPtr SimpleSolutionFunction::x() {
+template <typename Scalar>
+FunctionPtr<Scalar> SimpleSolutionFunction<Scalar>::x() {
   if (_var->op() != Camellia::OP_VALUE) {
-    return Function::null();
+    return Function<Scalar>::null();
   } else {
-    return Function::solution(_var->x(), _soln);
+    return Function<Scalar>::solution(_var->x(), _soln);
   }
 }
 
-FunctionPtr SimpleSolutionFunction::y() {
+template <typename Scalar>
+FunctionPtr<Scalar> SimpleSolutionFunction<Scalar>::y() {
   if (_var->op() != Camellia::OP_VALUE) {
-    return Function::null();
+    return Function<Scalar>::null();
   } else {
-    return Function::solution(_var->y(), _soln);
+    return Function<Scalar>::solution(_var->y(), _soln);
   }
 }
 
-FunctionPtr SimpleSolutionFunction::z() {
+template <typename Scalar>
+FunctionPtr<Scalar> SimpleSolutionFunction<Scalar>::z() {
   if (_var->op() != Camellia::OP_VALUE) {
-    return Function::null();
+    return Function<Scalar>::null();
   } else {
-    return Function::solution(_var->z(), _soln);
+    return Function<Scalar>::solution(_var->z(), _soln);
   }
 }
+
+template class SimpleSolutionFunction<double>;
+

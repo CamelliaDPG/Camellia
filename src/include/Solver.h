@@ -90,7 +90,7 @@ namespace Camellia {
 
     static SolverPtr getSolver(SolverChoice choice, bool saveFactorization,
                                double residualTolerance = 1e-12, int maxIterations = 50000,
-                               SolutionPtr fineSolution = Teuchos::null, MeshPtr coarseMesh = Teuchos::null,
+                               SolutionPtr<double> fineSolution = Teuchos::null, MeshPtr coarseMesh = Teuchos::null,
                                SolverPtr coarseSolver = Teuchos::null);
 
     static SolverPtr getDirectSolver(bool saveFactorization=false);

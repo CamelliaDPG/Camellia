@@ -23,21 +23,21 @@ Xn::Xn(int n) {
 double Xn::value(double x) {
   return pow(x,_n);
 }
-FunctionPtr Xn::dx() {
+FunctionPtr<double> Xn::dx() {
   if (_n == 0) {
-    return Function::zero();
+    return Function<double>::zero();
   }
-  FunctionPtr x_n_minus = Teuchos::rcp( new Xn(_n-1) );
-  return _n * x_n_minus;
+  FunctionPtr<double> x_n_minus = Teuchos::rcp( new Xn(_n-1) );
+  return (double)_n * x_n_minus;
 }
-FunctionPtr Xn::dy() {
-  return Function::zero();
+FunctionPtr<double> Xn::dy() {
+  return Function<double>::zero();
 }
-FunctionPtr Xn::dz() {
-  return Function::zero();
+FunctionPtr<double> Xn::dz() {
+  return Function<double>::zero();
 }
-FunctionPtr Xn::dt() {
-  return Function::zero();
+FunctionPtr<double> Xn::dt() {
+  return Function<double>::zero();
 }
 
 string Yn::displayString() {
@@ -58,21 +58,21 @@ double Yn::value(double x, double y) {
   return pow(y,_n);
 }
 
-FunctionPtr Yn::dx() {
-  return Function::zero();
+FunctionPtr<double> Yn::dx() {
+  return Function<double>::zero();
 }
-FunctionPtr Yn::dy() {
+FunctionPtr<double> Yn::dy() {
   if (_n == 0) {
-    return Function::zero();
+    return Function<double>::zero();
   }
-  FunctionPtr y_n_minus = Teuchos::rcp( new Yn(_n-1) );
-  return _n * y_n_minus;
+  FunctionPtr<double> y_n_minus = Teuchos::rcp( new Yn(_n-1) );
+  return (double)_n * y_n_minus;
 }
-FunctionPtr Yn::dz() {
-  return Function::zero();
+FunctionPtr<double> Yn::dz() {
+  return Function<double>::zero();
 }
-FunctionPtr Yn::dt() {
-  return Function::zero();
+FunctionPtr<double> Yn::dt() {
+  return Function<double>::zero();
 }
 
 string Zn::displayString() {
@@ -93,21 +93,21 @@ double Zn::value(double x, double y, double z) {
   return pow(z,_n);
 }
 
-FunctionPtr Zn::dx() {
-  return Function::zero();
+FunctionPtr<double> Zn::dx() {
+  return Function<double>::zero();
 }
-FunctionPtr Zn::dy() {
-  return Function::zero();
+FunctionPtr<double> Zn::dy() {
+  return Function<double>::zero();
 }
-FunctionPtr Zn::dz() {
+FunctionPtr<double> Zn::dz() {
   if (_n == 0) {
-    return Function::zero();
+    return Function<double>::zero();
   }
-  FunctionPtr z_n_minus = Teuchos::rcp( new Zn(_n-1) );
-  return _n * z_n_minus;
+  FunctionPtr<double> z_n_minus = Teuchos::rcp( new Zn(_n-1) );
+  return (double)_n * z_n_minus;
 }
-FunctionPtr Zn::dt() {
-  return Function::zero();
+FunctionPtr<double> Zn::dt() {
+  return Function<double>::zero();
 }
 
 string Tn::displayString() {
@@ -134,19 +134,19 @@ double Tn::value(double x, double y, double z, double t) {
   return pow(t,_n);
 }
 
-FunctionPtr Tn::dx() {
-  return Function::zero();
+FunctionPtr<double> Tn::dx() {
+  return Function<double>::zero();
 }
-FunctionPtr Tn::dy() {
-  return Function::zero();
+FunctionPtr<double> Tn::dy() {
+  return Function<double>::zero();
 }
-FunctionPtr Tn::dz() {
-  return Function::zero();
+FunctionPtr<double> Tn::dz() {
+  return Function<double>::zero();
 }
-FunctionPtr Tn::dt() {
+FunctionPtr<double> Tn::dt() {
   if (_n == 0) {
-    return Function::zero();
+    return Function<double>::zero();
   }
-  FunctionPtr t_n_minus = Teuchos::rcp( new Tn(_n-1) );
-  return _n * t_n_minus;
+  FunctionPtr<double> t_n_minus = Teuchos::rcp( new Tn(_n-1) );
+  return (double)_n * t_n_minus;
 }

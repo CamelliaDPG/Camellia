@@ -19,15 +19,15 @@ using namespace Camellia;
 
 int CellDataMigration::dataSize(Mesh *mesh, GlobalIndexType cellID) {
 //  cout << "CellDataMigration::dataSize() called for cell " << cellID << endl;
-  
+
   int size = 0;
-  
+
   ElementTypePtr elemType = mesh->getElementType(cellID);
-  
+
   int packedDofsBelongToParent = 0; // 0 for false, anything else for true
   size += sizeof(packedDofsBelongToParent);
-  
-  vector<Solution *> solutions = mesh->globalDofAssignment()->getRegisteredSolutions();
+
+  vector<SolutionPtr<double>> solutions = mesh->globalDofAssignment()->getRegisteredSolutions();
   // store # of solution objects
   int numSolutions = solutions.size();
   size += sizeof(numSolutions);
@@ -38,7 +38,7 @@ int CellDataMigration::dataSize(Mesh *mesh, GlobalIndexType cellID) {
     // the dofs themselves
     size += localDofs * sizeof(double);
   }
-  
+
   return size;
 }
 
@@ -54,18 +54,18 @@ void CellDataMigration::packData(Mesh *mesh, GlobalIndexType cellID, bool packPa
   if (size<dataSize(mesh, cellID)) {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "undersized dataBuffer");
   }
-  
+
   int packedDofsBelongToParent = packParentDofs ? 1 : 0;
   memcpy(dataLocation, &packedDofsBelongToParent, sizeof(packedDofsBelongToParent));
   dataLocation += sizeof(packedDofsBelongToParent);
 
 //  cout << "packed data for cell " << cellID << ": ";
 //  ElementTypePtr elemType = mesh->getElementType(cellID);
-  vector<Solution *> solutions = mesh->globalDofAssignment()->getRegisteredSolutions();
+  vector<SolutionPtr<double>> solutions = mesh->globalDofAssignment()->getRegisteredSolutions();
   int numSolutions = solutions.size();
   memcpy(dataLocation, &numSolutions, sizeof(numSolutions));
   dataLocation += sizeof(numSolutions);
-  
+
   GlobalIndexType cellIDForCoefficients;
   if (packParentDofs) {
     CellPtr cell = mesh->getTopology()->getCell(cellID);
@@ -102,7 +102,7 @@ void CellDataMigration::packData(Mesh *mesh, GlobalIndexType cellID, bool packPa
 
 void CellDataMigration::unpackData(Mesh *mesh, GlobalIndexType cellID, const char *dataBuffer, int size) {
   int myRank                    = Teuchos::GlobalMPISession::getRank();
-  
+
 //  cout << "CellDataMigration::unpackData() called for cell " << cellID << " on rank " << myRank << endl;
   const char* dataLocation = dataBuffer;
   if (size<dataSize(mesh, cellID)) {
@@ -114,7 +114,7 @@ void CellDataMigration::unpackData(Mesh *mesh, GlobalIndexType cellID, const cha
   memcpy(&parentDataPackedFlag, dataLocation, sizeof(parentDataPackedFlag));
   dataLocation += sizeof(parentDataPackedFlag);
   bool coefficientsBelongToParent = parentDataPackedFlag != 0;
-  
+
   set<GlobalIndexType> rankLocalCellIDs = mesh->cellIDsInPartition();
   if (rankLocalCellIDs.find(cellID) == rankLocalCellIDs.end()) {
     // it may be that when we do ghost cells, this shouldn't be an exception--or maybe the ghost cells will be packed in with the active cell
@@ -122,7 +122,7 @@ void CellDataMigration::unpackData(Mesh *mesh, GlobalIndexType cellID, const cha
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "unpackData called for a non-rank-local cellID");
   }
   ElementTypePtr elemType = mesh->getElementType(cellID);
-  vector<Solution *> solutions = mesh->globalDofAssignment()->getRegisteredSolutions();
+  vector<SolutionPtr<double>> solutions = mesh->globalDofAssignment()->getRegisteredSolutions();
   int numSolutions = solutions.size();
   int numSolutionsPacked;
   memcpy(&numSolutionsPacked, dataLocation, sizeof(numSolutionsPacked));
@@ -140,12 +140,12 @@ void CellDataMigration::unpackData(Mesh *mesh, GlobalIndexType cellID, const cha
       // no dofs assigned -- proceed to next solution
       continue;
     }
-    
+
     if (localDofs != elemType->trialOrderPtr->totalDofs()) {
       cout << "localDofs != elemType->trialOrderPtr->totalDofs().\n";
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "localDofs != elemType->trialOrderPtr->totalDofs()");
     }
-    
+
     FieldContainer<double> solnCoeffs(localDofs);
     memcpy(&solnCoeffs[0], dataLocation, localDofs * sizeof(double));
     // the dofs themselves

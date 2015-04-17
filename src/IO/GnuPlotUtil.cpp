@@ -15,18 +15,18 @@ using namespace Camellia;
 
 FieldContainer<double> GnuPlotUtil::cellCentroids(MeshTopology* meshTopo) {
   // this only works on quads right now
-  
+
   int spaceDim = meshTopo->getSpaceDim(); // not that this will really work in 3D...
   int numActiveElements = meshTopo->activeCellCount();
-  
+
   FieldContainer<double> cellCentroids(numActiveElements,spaceDim); // used for labelling cells
-  
+
   set<IndexType> cellIDset = meshTopo->getActiveCellIndices();
   vector<GlobalIndexType> cellIDs(cellIDset.begin(),cellIDset.end());
-  
+
   for (int cellIndex=0; cellIndex<numActiveElements; cellIndex++) {
     vector<double> cellCentroid = meshTopo->getCellCentroid(cellIDs[cellIndex]);
-    
+
     for (int i=0; i<spaceDim; i++) {
       cellCentroids(cellIndex,i) = cellCentroid[i];
     }
@@ -36,15 +36,15 @@ FieldContainer<double> GnuPlotUtil::cellCentroids(MeshTopology* meshTopo) {
 
 FieldContainer<double> GnuPlotUtil::cellCentroids(MeshPtr mesh) {
   // this only works on quads right now
-  
+
   int spaceDim = mesh->getDimension(); // not that this will really work in 3D...
   int numActiveElements = mesh->numActiveElements();
-  
+
   FieldContainer<double> cellCentroids(numActiveElements,spaceDim); // used for labelling cells
-  
+
   set<GlobalIndexType> cellIDset = mesh->getActiveCellIDs();
   vector<GlobalIndexType> cellIDs(cellIDset.begin(),cellIDset.end());
-  
+
   for (int cellOrdinal=0; cellOrdinal<numActiveElements; cellOrdinal++) {
     vector<double> centroid = mesh->getTopology()->getCellCentroid(cellIDs[cellOrdinal]);
     for (int d=0; d<spaceDim; d++) {
@@ -55,29 +55,29 @@ FieldContainer<double> GnuPlotUtil::cellCentroids(MeshPtr mesh) {
 }
 
 void GnuPlotUtil::writeComputationalMeshSkeleton(const string &filePath, MeshPtr mesh, bool labelCells, string rgbColor, string title) {
-  FunctionPtr transformationFunction = mesh->getTransformationFunction();
+  FunctionPtr<double> transformationFunction = mesh->getTransformationFunction();
   if (transformationFunction.get()==NULL) {
     // then the computational and exact meshes are the same: call the other method:
     writeExactMeshSkeleton(filePath,mesh,2,labelCells,rgbColor,title);
     return;
   }
-  
+
   int spaceDim = mesh->getDimension(); // not that this will really work in 3D...
-  
+
   ofstream fout(filePath.c_str());
   fout << setprecision(15);
-  
+
   fout << "# Camellia GnuPlotUtil Mesh Points\n";
   fout << "# x                  y\n";
-  
+
   int numActiveElements = mesh->numActiveElements();
-  
+
   double minX = 1e10, minY = 1e10, maxX = -1e10, maxY = -1e10;
-  
+
   FieldContainer<double> cellCentroids;
   set<GlobalIndexType> cellIDset = mesh->getActiveCellIDs();
   vector<GlobalIndexType> cellIDs(cellIDset.begin(),cellIDset.end());
-  
+
   for (int cellIndex=0; cellIndex<numActiveElements; cellIndex++) {
     ElementPtr cell = mesh->getElement(cellIDs[cellIndex]);
     vector< ParametricCurvePtr > edgeLines = ParametricCurve::referenceCellEdges(cell->elementType()->cellTopoPtr->getKey());
@@ -86,7 +86,7 @@ void GnuPlotUtil::writeComputationalMeshSkeleton(const string &filePath, MeshPtr
     // to start, compute edgePoints on the reference cell
     int numPointsTotal = numEdges*(numPointsPerEdge-1)+1; // -1 because edges share vertices, +1 because we repeat first vertex...
     FieldContainer<double> edgePoints(numPointsTotal,spaceDim);
-    
+
     int ptIndex = 0;
     for (int edgeIndex=0; edgeIndex < edgeLines.size(); edgeIndex++) {
       ParametricCurvePtr edge = edgeLines[edgeIndex];
@@ -106,16 +106,16 @@ void GnuPlotUtil::writeComputationalMeshSkeleton(const string &filePath, MeshPtr
     // make a one-cell BasisCache initialized with the edgePoints on the ref cell:
     BasisCachePtr basisCache = BasisCache::basisCacheForCell(mesh, cell->cellID());
     basisCache->setRefCellPoints(edgePoints);
-    
+
     //      cout << "--- cellID " << cell->cellID() << " ---\n";
     //      cout << "edgePoints:\n" << edgePoints;
-    
+
     FieldContainer<double> transformedPoints(1,numPointsTotal,spaceDim);
     // compute the transformed points:
     transformationFunction->values(transformedPoints,basisCache);
-    
+
     //      cout << "transformedPoints:\n" << transformedPoints;
-    
+
     ptIndex = 0;
     for (int i=0; i<numEdges; i++) {
       int thisEdgePoints = (i < edgeLines.size()-1) ? numPointsPerEdge-1 : numPointsPerEdge;
@@ -130,18 +130,18 @@ void GnuPlotUtil::writeComputationalMeshSkeleton(const string &filePath, MeshPtr
         maxY = max(y,maxY);
       }
     }
-    
+
     fout << endl; // line break to separate elements
-    
+
     if (labelCells) {
       // this only works on quads right now
       cellCentroids = GnuPlotUtil::cellCentroids(mesh);
     }
   }
-  
+
   double xDiff = maxX - minX;
   double yDiff = maxY - minY;
-  
+
   fout << "# Plot with:\n";
   fout << setprecision(2);
   fout << "# set size ratio -1\n";
@@ -160,7 +160,7 @@ void GnuPlotUtil::writeComputationalMeshSkeleton(const string &filePath, MeshPtr
   fout << "# replot\n";
   fout << "# set term pop\n";
   fout.close();
-  
+
   ofstream scriptOut((filePath + ".p").c_str());
   scriptOut << "set size ratio -1\n";
   scriptOut << "set xrange [" << minX- 0.1*xDiff << ":" << maxX+0.1*xDiff << "] \n";
@@ -188,21 +188,21 @@ void GnuPlotUtil::writeExactMeshSkeleton(const string &filePath, MeshTopology* m
                                          bool labelCells, string rgbColor, string title) {
   ofstream fout(filePath.c_str());
   fout << setprecision(15);
-  
+
   fout << "# Camellia GnuPlotUtil Mesh Points\n";
   fout << "# x                  y\n";
-  
+
   int numActiveElements = meshTopo->activeCellCount();
   FieldContainer<double> cellCentroids;
   if (labelCells) {
     cellCentroids = GnuPlotUtil::cellCentroids(meshTopo);
   }
-  
+
   double minX = 1e10, minY = 1e10, maxX = -1e10, maxY = -1e10;
-  
+
   set<IndexType> cellIDset = meshTopo->getActiveCellIndices();
   vector<GlobalIndexType> cellIDs(cellIDset.begin(),cellIDset.end());
-  
+
   for (int cellIndex=0; cellIndex<numActiveElements; cellIndex++) {
     CellPtr cell = meshTopo->getCell(cellIDs[cellIndex]);
     cellIDs.push_back(cell->cellIndex());
@@ -226,10 +226,10 @@ void GnuPlotUtil::writeExactMeshSkeleton(const string &filePath, MeshTopology* m
     }
     fout << endl; // line break to separate elements
   }
-  
+
   double xDiff = maxX - minX;
   double yDiff = maxY - minY;
-  
+
   fout << "# Plot with:\n";
   fout << setprecision(2);
   fout << "# set xrange [" << minX- 0.1*xDiff << ":" << maxX+0.1*xDiff << "] \n";
@@ -243,7 +243,7 @@ void GnuPlotUtil::writeExactMeshSkeleton(const string &filePath, MeshTopology* m
     }
   }
   fout.close();
-  
+
   ofstream scriptOut((filePath + ".p").c_str());
   scriptOut << "set size ratio -1\n";
   scriptOut << "set xrange [" << minX- 0.1*xDiff << ":" << maxX+0.1*xDiff << "] \n";
@@ -270,21 +270,21 @@ void GnuPlotUtil::writeExactMeshSkeleton(const string &filePath, MeshTopology* m
 void GnuPlotUtil::writeExactMeshSkeleton(const string &filePath, MeshPtr mesh, int numPointsPerEdge, bool labelCells, string rgbColor, string title) {
   ofstream fout(filePath.c_str());
   fout << setprecision(15);
-  
+
   fout << "# Camellia GnuPlotUtil Mesh Points\n";
   fout << "# x                  y\n";
-  
+
   int numActiveElements = mesh->numActiveElements();
   FieldContainer<double> cellCentroids;
   if (labelCells) {
     cellCentroids = GnuPlotUtil::cellCentroids(mesh);
   }
-  
+
   double minX = 1e10, minY = 1e10, maxX = -1e10, maxY = -1e10;
-  
+
   set<GlobalIndexType> cellIDset = mesh->getActiveCellIDs();
   vector<GlobalIndexType> cellIDs(cellIDset.begin(),cellIDset.end());
-  
+
   for (int cellIndex=0; cellIndex<numActiveElements; cellIndex++) {
     ElementPtr cell = mesh->getElement(cellIDs[cellIndex]);
     cellIDs.push_back(cell->cellID());
@@ -308,10 +308,10 @@ void GnuPlotUtil::writeExactMeshSkeleton(const string &filePath, MeshPtr mesh, i
     }
     fout << endl; // line break to separate elements
   }
-  
+
   double xDiff = maxX - minX;
   double yDiff = maxY - minY;
-  
+
   fout << "# Plot with:\n";
   fout << setprecision(2);
   fout << "# set xrange [" << minX- 0.1*xDiff << ":" << maxX+0.1*xDiff << "] \n";
@@ -325,7 +325,7 @@ void GnuPlotUtil::writeExactMeshSkeleton(const string &filePath, MeshPtr mesh, i
     }
   }
   fout.close();
-  
+
   ofstream scriptOut((filePath + ".p").c_str());
   scriptOut << "set size ratio -1\n";
   scriptOut << "set xrange [" << minX- 0.1*xDiff << ":" << maxX+0.1*xDiff << "] \n";
@@ -352,31 +352,31 @@ void GnuPlotUtil::writeExactMeshSkeleton(const string &filePath, MeshPtr mesh, i
 // badly named, maybe: we support arbitrary space dimension...
 void GnuPlotUtil::writeXYPoints(const string &filePath, const FieldContainer<double> &dataPoints) {
   FieldContainer<double> dataPointsCopy = dataPoints;
-  
+
   if (dataPoints.rank()==3) {
     int numCells = dataPoints.dimension(0);
     int numPoints = dataPoints.dimension(1);
     int spaceDim = dataPoints.dimension(2);
     dataPointsCopy.resize(numCells*numPoints, spaceDim);
   }
-  
+
   if (dataPointsCopy.rank() != 2) {
     TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument,"writeXYPoints only supports containers of rank 2 or 3");
   }
-  
+
   int numPoints = dataPointsCopy.dimension(0);
   int spaceDim = dataPointsCopy.dimension(1);
-  
+
   ofstream fout(filePath.c_str());
   fout << setprecision(15);
-  
+
   fout << "# Camellia GnuPlotUtil output\n";
   if (spaceDim==2) {
     fout << "# x                  y\n";
   } else if (spaceDim==3) {
     fout << "# x                  y                  z\n";
   }
-  
+
   for (int i=0; i<numPoints; i++) {
     if ((spaceDim==3) && (i>0)) {
       // for 3D point sets, separate new x values with a new line.
@@ -389,7 +389,7 @@ void GnuPlotUtil::writeXYPoints(const string &filePath, const FieldContainer<dou
     }
     fout << "\n";
   }
-  
+
   fout.close();
 }
 
@@ -437,6 +437,6 @@ void GnuPlotUtil::writeContourPlotScript(set<double> contourLevels, const vector
   fout << "replot\n";
   fout << "set term pop\n";
   fout << "replot" << endl;
-  
+
   fout.close();
 }

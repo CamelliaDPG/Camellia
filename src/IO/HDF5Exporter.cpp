@@ -75,7 +75,7 @@ HDF5Exporter::~HDF5Exporter()
 {
 }
 
-void HDF5Exporter::exportSolution(SolutionPtr solution, double timeVal, unsigned int defaultNum1DPts, map<int, int> cellIDToNum1DPts, set<GlobalIndexType> cellIndices)
+void HDF5Exporter::exportSolution(SolutionPtr<double> solution, double timeVal, unsigned int defaultNum1DPts, map<int, int> cellIDToNum1DPts, set<GlobalIndexType> cellIndices)
 {
   VarFactory varFactory = _mesh->bilinearForm()->varFactory();
 
@@ -84,22 +84,22 @@ void HDF5Exporter::exportSolution(SolutionPtr solution, double timeVal, unsigned
   vector<VarPtr> fieldVars;
   vector<VarPtr> traceVars;
 
-  vector<FunctionPtr> fieldFunctions;
+  vector<FunctionPtr<double>> fieldFunctions;
   vector<string> fieldFunctionNames;
   for (int i=0; i < fieldTrialIDs.size(); i++)
   {
     fieldVars.push_back(varFactory.trial(fieldTrialIDs[i]));
-    FunctionPtr fieldFunction = Function::solution(fieldVars[i], solution);
+    FunctionPtr<double> fieldFunction = Function<double>::solution(fieldVars[i], solution);
     string fieldFunctionName = fieldVars[i]->name();
     fieldFunctions.push_back(fieldFunction);
     fieldFunctionNames.push_back(fieldFunctionName);
   }
-  vector<FunctionPtr> traceFunctions;
+  vector<FunctionPtr<double>> traceFunctions;
   vector<string> traceFunctionNames;
   for (int i=0; i < traceTrialIDs.size(); i++)
   {
     traceVars.push_back(varFactory.trial(traceTrialIDs[i]));
-    FunctionPtr traceFunction = Function::solution(traceVars[i], solution);
+    FunctionPtr<double> traceFunction = Function<double>::solution(traceVars[i], solution);
     string traceFunctionName = traceVars[i]->name();
     traceFunctions.push_back(traceFunction);
     traceFunctionNames.push_back(traceFunctionName);
@@ -108,23 +108,23 @@ void HDF5Exporter::exportSolution(SolutionPtr solution, double timeVal, unsigned
   exportFunction(traceFunctions, traceFunctionNames, timeVal, defaultNum1DPts, cellIDToNum1DPts, cellIndices);
 }
 
-void HDF5Exporter::exportSolution(SolutionPtr solution, VarFactory varFactory, double timeVal, unsigned int defaultNum1DPts, map<int, int> cellIDToNum1DPts, set<GlobalIndexType> cellIndices)
+void HDF5Exporter::exportSolution(SolutionPtr<double> solution, VarFactory varFactory, double timeVal, unsigned int defaultNum1DPts, map<int, int> cellIDToNum1DPts, set<GlobalIndexType> cellIndices)
 {
   int rank = Teuchos::GlobalMPISession::getRank();
   if (rank==0) cout << "NOTE: this version of HDF5Exporter::exportSolution() is deprecated.  Remove the VarFactory argument to get rid of this message.\n";
   this->exportSolution(solution,timeVal,defaultNum1DPts,cellIDToNum1DPts,cellIndices);
 }
 
-void HDF5Exporter::exportFunction(FunctionPtr function, string functionName, double timeVal, unsigned int defaultNum1DPts, map<int, int> cellIDToNum1DPts, set<GlobalIndexType> cellIndices)
+void HDF5Exporter::exportFunction(FunctionPtr<double> function, string functionName, double timeVal, unsigned int defaultNum1DPts, map<int, int> cellIDToNum1DPts, set<GlobalIndexType> cellIndices)
 {
-  vector<FunctionPtr> functions;
+  vector<FunctionPtr<double>> functions;
   functions.push_back(function);
   vector<string> functionNames;
   functionNames.push_back(functionName);
   exportFunction(functions, functionNames, timeVal, defaultNum1DPts, cellIDToNum1DPts, cellIndices);
 }
 
-void HDF5Exporter::exportFunction(vector<FunctionPtr> functions, vector<string> functionNames, double timeVal, unsigned int defaultNum1DPts, map<int, int> cellIDToNum1DPts, set<GlobalIndexType> cellIndices)
+void HDF5Exporter::exportFunction(vector<FunctionPtr<double>> functions, vector<string> functionNames, double timeVal, unsigned int defaultNum1DPts, map<int, int> cellIDToNum1DPts, set<GlobalIndexType> cellIndices)
 {
   int commRank = Teuchos::GlobalMPISession::getRank();
   int numProcs = Teuchos::GlobalMPISession::getNProc();
@@ -623,7 +623,7 @@ void HDF5Exporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
 
       Intrepid::FieldContainer<double> refPoints;
       getPoints(refPoints, topo, num1DPts);
-      
+
       basisCache->setRefCellPoints(refPoints);
       int numPoints = refPoints.dimension(0);
       const Intrepid::FieldContainer<double> *physicalPoints = &basisCache->getPhysicalCubaturePoints();
@@ -1054,16 +1054,16 @@ void HDF5Exporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
   }
 }
 
-void HDF5Exporter::exportTimeSlab(FunctionPtr function, string functionName, double tInit, double tFinal, unsigned int numSlices, unsigned int sliceH1Order, unsigned int defaultNum1DPts)
+void HDF5Exporter::exportTimeSlab(FunctionPtr<double> function, string functionName, double tInit, double tFinal, unsigned int numSlices, unsigned int sliceH1Order, unsigned int defaultNum1DPts)
 {
-  vector<FunctionPtr> functions;
+  vector<FunctionPtr<double>> functions;
   functions.push_back(function);
   vector<string> functionNames;
   functionNames.push_back(functionName);
   exportTimeSlab(functions, functionNames, tInit, tFinal, numSlices, sliceH1Order, defaultNum1DPts);
 }
 
-void HDF5Exporter::exportTimeSlab(vector<FunctionPtr> functions, vector<string> functionNames, double tInit, double tFinal, unsigned int numSlices, unsigned int sliceH1Order, unsigned int defaultNum1DPts)
+void HDF5Exporter::exportTimeSlab(vector<FunctionPtr<double>> functions, vector<string> functionNames, double tInit, double tFinal, unsigned int numSlices, unsigned int sliceH1Order, unsigned int defaultNum1DPts)
 {
   HDF5Exporter exporter(_mesh, _dirName, _dirSuperPath);
   for (int slice=0; slice < numSlices; slice++)
@@ -1071,10 +1071,10 @@ void HDF5Exporter::exportTimeSlab(vector<FunctionPtr> functions, vector<string> 
     double sliceTime = tInit + slice*(tFinal-tInit)/(numSlices-1);
     map<GlobalIndexType,GlobalIndexType> cellMap;
     MeshPtr meshSlice = MeshTools::timeSliceMesh(_mesh, sliceTime, cellMap, sliceH1Order);
-    vector<FunctionPtr> functionSlices;
-    for (vector<FunctionPtr>::iterator fcnIt = functions.begin(); fcnIt != functions.end(); ++fcnIt)
+    vector<FunctionPtr<double>> functionSlices;
+    for (vector<FunctionPtr<double>>::iterator fcnIt = functions.begin(); fcnIt != functions.end(); ++fcnIt)
     {
-      FunctionPtr functionSlice = MeshTools::timeSliceFunction(_mesh, cellMap, *fcnIt, sliceTime);
+      FunctionPtr<double> functionSlice = MeshTools::timeSliceFunction(_mesh, cellMap, *fcnIt, sliceTime);
       functionSlices.push_back(functionSlice);
     }
     exporter.setMesh(meshSlice);
@@ -1082,12 +1082,12 @@ void HDF5Exporter::exportTimeSlab(vector<FunctionPtr> functions, vector<string> 
   }
 }
 
-void HDF5Exporter::exportFunction(string superDirectory, string functionName, FunctionPtr function, MeshPtr mesh) {
+void HDF5Exporter::exportFunction(string superDirectory, string functionName, FunctionPtr<double> function, MeshPtr mesh) {
   HDF5Exporter exporter(mesh, functionName, superDirectory);
   exporter.exportFunction(function);
 }
 
-void HDF5Exporter::exportSolution(std::string superDirectory, std::string solnName, SolutionPtr solution) {
+void HDF5Exporter::exportSolution(std::string superDirectory, std::string solnName, SolutionPtr<double> solution) {
   MeshPtr mesh = solution->mesh();
   HDF5Exporter exporter(mesh, solnName, superDirectory);
   exporter.exportSolution(solution, mesh->bilinearForm()->varFactory());
@@ -1095,7 +1095,7 @@ void HDF5Exporter::exportSolution(std::string superDirectory, std::string solnNa
 
 void HDF5Exporter::getPoints(Intrepid::FieldContainer<double> &points, CellTopoPtr cellTopo, int num1DPts) {
   int topoDim = cellTopo->getDimension();
-  
+
   if (cellTopo->getTensorialDegree() > 0) {
     Intrepid::FieldContainer<double> componentPoints;
     Intrepid::FieldContainer<double> linePoints;
@@ -1109,7 +1109,7 @@ void HDF5Exporter::getPoints(Intrepid::FieldContainer<double> &points, CellTopoP
     }
     return;
   }
-  
+
   // if we get here, tensorial degree = 0
   unsigned cellTopoKey = cellTopo->getShardsTopology().getKey();
   int numPoints;
@@ -1139,7 +1139,7 @@ void HDF5Exporter::getPoints(Intrepid::FieldContainer<double> &points, CellTopoP
     default:
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "cellTopoKey unrecognized");
   }
-  
+
   points.resize(numPoints,topoDim);
   if (topoDim == 0)
     points.resize(numPoints);

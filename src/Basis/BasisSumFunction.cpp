@@ -9,7 +9,7 @@ using namespace Intrepid;
 using namespace Camellia;
 
 BasisSumFunction::BasisSumFunction(BasisPtr basis, const FieldContainer<double> &basisCoefficients,
-                                         BasisCachePtr overridingBasisCache, Camellia::EOperator op, bool boundaryValueOnly) : Function( BasisFactory::basisFactory()->getBasisRank(basis) ) {
+                                         BasisCachePtr overridingBasisCache, Camellia::EOperator op, bool boundaryValueOnly) : Function<double>( BasisFactory::basisFactory()->getBasisRank(basis) ) {
   // TODO: fix the rank setter here to take into account rank-changing ops (e.g. DIV, GRAD)
   _coefficients = basisCoefficients;
   _overridingBasisCache = overridingBasisCache;
@@ -35,7 +35,7 @@ void BasisSumFunction::values(FieldContainer<double> &values, BasisCachePtr basi
     // set the points there, and then replace basisCache with _overridingBasisCache
     // we implicitly assume that the points given lie inside the physical cell nodes for _overridingBasisCache
     // Note that this transformation does not take curvilinearity into account.
-    
+
     const FieldContainer<double>* physicalCellNodes = &basisCache->getPhysicalCellNodes();
     int numCells = physicalCellNodes->dimension(0);
     int numNodes = physicalCellNodes->dimension(1);
@@ -68,25 +68,25 @@ void BasisSumFunction::values(FieldContainer<double> &values, BasisCachePtr basi
     _overridingBasisCache->setRefCellPoints(refPoints, basisCache->getCubatureWeights());
     basisCache = _overridingBasisCache;
   }
-  
+
   int numDofs = _basis->getCardinality();
-  
+
   int spaceDim = basisCache->getSpaceDim();
-  
+
   bool basisIsVolumeBasis = _basis->domainTopology()->getDimension() == spaceDim;
-  
+
   bool useCubPointsSideRefCell = basisIsVolumeBasis && basisCache->isSideCache();
-  
+
   constFCPtr transformedValues = basisCache->getTransformedValues(_basis, _op, useCubPointsSideRefCell);
-  
+
 //  cout << "BasisSumFunction: transformedValues:\n" << *transformedValues;
 //  cout << "BasisSumFunction: coefficients:\n" << _coefficients;
-  
+
   // transformedValues has dimensions (C,F,P,[D,D])
   // therefore, the rank of the sum is transformedValues->rank() - 3
   int rank = transformedValues->rank() - 3;
   TEUCHOS_TEST_FOR_EXCEPTION(rank != values.rank()-2, std::invalid_argument, "values rank is incorrect.");
-  
+
   values.initialize(0.0);
   bool singleCoefficientVector = _coefficients.dimension(0) == 1;
   int numCells = values.dimension(0);
@@ -104,44 +104,44 @@ void BasisSumFunction::values(FieldContainer<double> &values, BasisCachePtr basi
           *value++ += *basisValue++ * weight;
         }
       }
-    }    
+    }
   }
 }
 
-FunctionPtr BasisSumFunction::x() {
+FunctionPtr<double> BasisSumFunction::x() {
   if (_op != OP_VALUE) {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "component evaluation only supported for BasisSumFunction with op = OP_VALUE");
   }
   return Teuchos::rcp( new BasisSumFunction(_basis, _coefficients, _overridingBasisCache, OP_X));
 }
-FunctionPtr BasisSumFunction::y() {
+FunctionPtr<double> BasisSumFunction::y() {
   if (_op != OP_VALUE) {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "component evaluation only supported for BasisSumFunction with op = OP_VALUE");
   }
   return Teuchos::rcp( new BasisSumFunction(_basis, _coefficients, _overridingBasisCache, OP_Y));
 }
-FunctionPtr BasisSumFunction::z() {
+FunctionPtr<double> BasisSumFunction::z() {
   if (_op != OP_VALUE) {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "component evaluation only supported for BasisSumFunction with op = OP_VALUE");
   }
   return Teuchos::rcp( new BasisSumFunction(_basis, _coefficients, _overridingBasisCache, OP_Z));
 }
 
-FunctionPtr BasisSumFunction::dx() {
+FunctionPtr<double> BasisSumFunction::dx() {
   if (_op != OP_VALUE) {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "derivatives only supported for BasisSumFunction with op = OP_VALUE");
   }
   return Teuchos::rcp( new BasisSumFunction(_basis, _coefficients, _overridingBasisCache, OP_DX));
 }
 
-FunctionPtr BasisSumFunction::dy() {
+FunctionPtr<double> BasisSumFunction::dy() {
   if (_op != OP_VALUE) {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "derivatives only supported for BasisSumFunction with op = OP_VALUE");
   }
   return Teuchos::rcp( new BasisSumFunction(_basis, _coefficients, _overridingBasisCache, OP_DY));
 }
 
-FunctionPtr BasisSumFunction::dz() {
+FunctionPtr<double> BasisSumFunction::dz() {
   if (_op != OP_VALUE) {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "derivatives only supported for BasisSumFunction with op = OP_VALUE");
   }
@@ -149,7 +149,7 @@ FunctionPtr BasisSumFunction::dz() {
   if (_basis->domainTopology()->getDimension() > 2) {
     return Teuchos::rcp( new BasisSumFunction(_basis, _coefficients, _overridingBasisCache, OP_DZ));
   } else {
-    return Function::null();
+    return Function<double>::null();
   }
 }
 
@@ -157,6 +157,6 @@ bool BasisSumFunction::boundaryValueOnly() {
   return _boundaryValueOnly;
 }
 
-FunctionPtr BasisSumFunction::basisSumFunction(BasisPtr basis, const FieldContainer<double> &basisCoefficients) {
+FunctionPtr<double> BasisSumFunction::basisSumFunction(BasisPtr basis, const FieldContainer<double> &basisCoefficients) {
   return Teuchos::rcp( new BasisSumFunction(basis,basisCoefficients) );
 }

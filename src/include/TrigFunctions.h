@@ -12,77 +12,77 @@
 #include "SimpleFunction.h"
 
 namespace Camellia {
-  class Cos_y : public SimpleFunction {
+  class Cos_y : public SimpleFunction<double> {
     double value(double x, double y);
-    FunctionPtr dx();
-    FunctionPtr dy();
-    FunctionPtr dz();
+    FunctionPtr<double> dx();
+    FunctionPtr<double> dy();
+    FunctionPtr<double> dz();
     std::string displayString();
   };
-  
-  class Sin_y : public SimpleFunction {
+
+  class Sin_y : public SimpleFunction<double> {
     double value(double x, double y);
-    FunctionPtr dx();
-    FunctionPtr dy();
-    FunctionPtr dz();
+    FunctionPtr<double> dx();
+    FunctionPtr<double> dy();
+    FunctionPtr<double> dz();
     std::string displayString();
   };
-  
-  class Cos_x : public SimpleFunction {
+
+  class Cos_x : public SimpleFunction<double> {
     double value(double x, double y);
-    FunctionPtr dx();
-    FunctionPtr dy();
-    FunctionPtr dz();
+    FunctionPtr<double> dx();
+    FunctionPtr<double> dy();
+    FunctionPtr<double> dz();
     std::string displayString();
   };
-  
-  class Sin_x : public SimpleFunction {
+
+  class Sin_x : public SimpleFunction<double> {
     double value(double x, double y);
-    FunctionPtr dx();
-    FunctionPtr dy();
-    FunctionPtr dz();
+    FunctionPtr<double> dx();
+    FunctionPtr<double> dy();
+    FunctionPtr<double> dz();
     std::string displayString();
   };
-  
-  class Cos_ax : public SimpleFunction {
+
+  class Cos_ax : public SimpleFunction<double> {
     double _a,_b;
   public:
     Cos_ax(double a, double b=0);
     double value(double x);
-    FunctionPtr dx();
-    FunctionPtr dy();
-    
+    FunctionPtr<double> dx();
+    FunctionPtr<double> dy();
+
     std::string displayString();
   };
-  
-  class Sin_ax : public SimpleFunction {
+
+  class Sin_ax : public SimpleFunction<double> {
     double _a, _b;
   public:
     Sin_ax(double a, double b=0);
     double value(double x);
-    FunctionPtr dx();
-    FunctionPtr dy();
+    FunctionPtr<double> dx();
+    FunctionPtr<double> dy();
     std::string displayString();
   };
-  
-  class Cos_ay : public SimpleFunction {
+
+  class Cos_ay : public SimpleFunction<double> {
     double _a;
   public:
     Cos_ay(double a);
     double value(double x, double y);
-    FunctionPtr dx();
-    FunctionPtr dy();
-    
+    FunctionPtr<double> dx();
+    FunctionPtr<double> dy();
+
     std::string displayString();
   };
-  
-  class Sin_ay : public SimpleFunction {
+
+  class Sin_ay : public SimpleFunction<double> {
     double _a;
   public:
     Sin_ay(double a);
     double value(double x, double y);
-    FunctionPtr dx();
-    FunctionPtr dy();
+    FunctionPtr<double> dx();
+    FunctionPtr<double> dy();
     std::string displayString();
   };
 

@@ -12,40 +12,37 @@
 #include "Function.h"
 
 namespace Camellia {
-  class ParameterFunction : public Function {
-    FunctionPtr _fxn;
-    typedef Teuchos::RCP<ParameterFunction> ParameterFunctionPtr;
+  class ParameterFunction : public Function<double> {
+    FunctionPtr<double> _fxn;
   public:
     ParameterFunction(double value);
-    ParameterFunction(FunctionPtr value);
-    
-    FunctionPtr getValue() const;
-    
-    void setValue(FunctionPtr fxn);
+    ParameterFunction(FunctionPtr<double> value);
+
+    FunctionPtr<double> getValue() const;
+
+    void setValue(FunctionPtr<double> fxn);
     void setValue(double value);
-    
+
     // overridden from Function:
-    FunctionPtr x();
-    FunctionPtr y();
-    FunctionPtr z();
-    
-    FunctionPtr dx();
-    FunctionPtr dy();
-    FunctionPtr dz();
-    
-    FunctionPtr grad(int numComponents=-1); // gradient of sum is the sum of gradients
-    FunctionPtr div();  // divergence of sum is sum of divergences
-    
+    FunctionPtr<double> x();
+    FunctionPtr<double> y();
+    FunctionPtr<double> z();
+
+    FunctionPtr<double> dx();
+    FunctionPtr<double> dy();
+    FunctionPtr<double> dz();
+
+    FunctionPtr<double> grad(int numComponents=-1); // gradient of sum is the sum of gradients
+    FunctionPtr<double> div();  // divergence of sum is sum of divergences
+
     void values(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache);
     bool boundaryValueOnly();
-    
-    string displayString();
-    
-    static ParameterFunctionPtr parameterFunction(double value);
-    static ParameterFunctionPtr parameterFunction(FunctionPtr fxn);
-  };
 
-  typedef Teuchos::RCP<ParameterFunction> ParameterFunctionPtr;
+    string displayString();
+
+    static Teuchos::RCP<ParameterFunction> parameterFunction(double value);
+    static Teuchos::RCP<ParameterFunction> parameterFunction(FunctionPtr<double> fxn);
+  };
 }
 
 #endif

@@ -18,18 +18,18 @@
 namespace Camellia {
 	class Constraint {
 	  LinearTermPtr _linearTerm;
-	  FunctionPtr _f;
+	  FunctionPtr<double> _f;
 	public:
-	  Constraint(LinearTermPtr linearTerm, FunctionPtr f);
+	  Constraint(LinearTermPtr linearTerm, FunctionPtr<double> f);
 	  LinearTermPtr linearTerm() const;
-	  FunctionPtr f() const;
+	  FunctionPtr<double> f() const;
 	  static Constraint spatiallyFilteredConstraint(const Constraint &c, SpatialFilterPtr sf);
 	};
 
-	Constraint operator==(VarPtr v, FunctionPtr f);
-	Constraint operator==(FunctionPtr f, VarPtr v);
-	Constraint operator==(LinearTermPtr a, FunctionPtr f);
-	Constraint operator==(FunctionPtr f, LinearTermPtr a);
+	Constraint operator==(VarPtr v, FunctionPtr<double> f);
+	Constraint operator==(FunctionPtr<double> f, VarPtr v);
+	Constraint operator==(LinearTermPtr a, FunctionPtr<double> f);
+	Constraint operator==(FunctionPtr<double> f, LinearTermPtr a);
 }
 
 #endif

@@ -20,28 +20,32 @@
 using namespace Intrepid;
 using namespace Camellia;
 
-PreviousSolutionFunction::PreviousSolutionFunction(SolutionPtr soln, LinearTermPtr solnExpression, bool multiplyFluxesByCellParity) : Function(solnExpression->rank()) {
+template <typename Scalar>
+PreviousSolutionFunction<Scalar>::PreviousSolutionFunction(SolutionPtr<Scalar> soln, LinearTermPtr solnExpression, bool multiplyFluxesByCellParity) : Function<Scalar>(solnExpression->rank()) {
   _soln = soln;
   _solnExpression = solnExpression;
   _overrideMeshCheck = false;
   if ((solnExpression->termType() == FLUX) && multiplyFluxesByCellParity) {
-    FunctionPtr parity = Function::sideParity();
+    FunctionPtr<double> parity = Function<double>::sideParity();
     _solnExpression = parity * solnExpression;
   }
 }
-PreviousSolutionFunction::PreviousSolutionFunction(SolutionPtr soln, VarPtr var, bool multiplyFluxesByCellParity) : Function(var->rank()) {
+template <typename Scalar>
+PreviousSolutionFunction<Scalar>::PreviousSolutionFunction(SolutionPtr<Scalar> soln, VarPtr var, bool multiplyFluxesByCellParity) : Function<Scalar>(var->rank()) {
   _soln = soln;
   _solnExpression = 1.0 * var;
   _overrideMeshCheck = false;
   if ((var->varType() == FLUX) && multiplyFluxesByCellParity) {
-    FunctionPtr parity = Function::sideParity();
+    FunctionPtr<double> parity = Function<double>::sideParity();
     _solnExpression = parity * var;
   }
 }
-bool PreviousSolutionFunction::boundaryValueOnly() { // fluxes and traces are only defined on element boundaries
+template <typename Scalar>
+bool PreviousSolutionFunction<Scalar>::boundaryValueOnly() { // fluxes and traces are only defined on element boundaries
   return (_solnExpression->termType() == FLUX) || (_solnExpression->termType() == TRACE);
 }
-void PreviousSolutionFunction::setOverrideMeshCheck(bool value, bool dontWarn) {
+template <typename Scalar>
+void PreviousSolutionFunction<Scalar>::setOverrideMeshCheck(bool value, bool dontWarn) {
   int rank = Teuchos::GlobalMPISession::getRank();
   if (rank==0) {
     if (value==true) {
@@ -52,7 +56,8 @@ void PreviousSolutionFunction::setOverrideMeshCheck(bool value, bool dontWarn) {
   }
   _overrideMeshCheck = value;
 }
-void PreviousSolutionFunction::importCellData(std::vector<GlobalIndexType> cells) {
+template <typename Scalar>
+void PreviousSolutionFunction<Scalar>::importCellData(std::vector<GlobalIndexType> cells) {
   int rank = Teuchos::GlobalMPISession::getRank();
   set<GlobalIndexType> offRankCells;
   const set<GlobalIndexType>* rankLocalCells = &_soln->mesh()->globalDofAssignment()->cellsInPartition(rank);
@@ -63,9 +68,10 @@ void PreviousSolutionFunction::importCellData(std::vector<GlobalIndexType> cells
   }
   _soln->importSolutionForOffRankCells(offRankCells);
 }
-void PreviousSolutionFunction::values(FieldContainer<double> &values, BasisCachePtr basisCache) {
+template <typename Scalar>
+void PreviousSolutionFunction<Scalar>::values(FieldContainer<Scalar> &values, BasisCachePtr basisCache) {
   int rank = Teuchos::GlobalMPISession::getRank();
-  
+
   if (_overrideMeshCheck) {
     _solnExpression->evaluate(values, _soln, basisCache);
     return;
@@ -123,16 +129,21 @@ void PreviousSolutionFunction::values(FieldContainer<double> &values, BasisCache
     }
   }
 }
-map<int, FunctionPtr > PreviousSolutionFunction::functionMap( vector< VarPtr > varPtrs, SolutionPtr soln) {
-  map<int, FunctionPtr > functionMap;
+template <typename Scalar>
+map<int, FunctionPtr<Scalar> > PreviousSolutionFunction<Scalar>::functionMap( vector< VarPtr > varPtrs, SolutionPtr<Scalar> soln) {
+  map<int, FunctionPtr<Scalar> > functionMap;
   for (vector< VarPtr >::iterator varIt = varPtrs.begin(); varIt != varPtrs.end(); varIt++) {
     VarPtr var = *varIt;
-    functionMap[var->ID()] = Teuchos::rcp( new PreviousSolutionFunction(soln, var));
+    functionMap[var->ID()] = Teuchos::rcp( new PreviousSolutionFunction<Scalar>(soln, var));
   }
   return functionMap;
 }
-string PreviousSolutionFunction::displayString() {
+template <typename Scalar>
+string PreviousSolutionFunction<Scalar>::displayString() {
   ostringstream str;
   str << "\\overline{" << _solnExpression->displayString() << "} ";
   return str.str();
 }
+
+template class PreviousSolutionFunction<double>;
+

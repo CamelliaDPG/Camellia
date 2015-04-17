@@ -29,17 +29,17 @@ IP::IP(BFPtr bfs) {
 }
 
 // added by Nate
-LinearTermPtr IP::evaluate(const map< int, FunctionPtr> &varFunctions) {
+LinearTermPtr IP::evaluate(const map< int, FunctionPtr<double>> &varFunctions) {
   // include both the boundary and non-boundary parts
   return evaluate(varFunctions,true) + evaluate(varFunctions,false);
 }
 
 // added by Jesse - evaluate inner product at given varFunctions
-LinearTermPtr IP::evaluate(const map< int, FunctionPtr> &varFunctions, bool boundaryPart) {
+LinearTermPtr IP::evaluate(const map< int, FunctionPtr<double>> &varFunctions, bool boundaryPart) {
   LinearTermPtr ltEval = Teuchos::rcp(new LinearTerm);
   for ( vector< LinearTermPtr >:: const_iterator ltIt = _linearTerms.begin(); ltIt != _linearTerms.end(); ltIt++) {
     LinearTermPtr lt = *ltIt;
-    FunctionPtr weight = lt->evaluate(varFunctions,boundaryPart);
+    FunctionPtr<double> weight = lt->evaluate(varFunctions,boundaryPart);
     ltEval->addTerm(weight*lt);
   }
   return ltEval;
@@ -280,7 +280,7 @@ double IP::computeMaxConditionNumber(DofOrderingPtr testSpace, BasisCachePtr bas
 
 // compute IP vector when var==fxn
 void IP::computeInnerProductVector(FieldContainer<double> &ipVector,
-                                   VarPtr var, FunctionPtr fxn,
+                                   VarPtr var, FunctionPtr<double> fxn,
                                    Teuchos::RCP<DofOrdering> dofOrdering,
                                    Teuchos::RCP<BasisCache> basisCache) {
   // ipVector FC is sized as (C,F)
