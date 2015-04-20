@@ -162,7 +162,7 @@ namespace Camellia {
     static TFunctionPtr<double> normalSpaceTime();
     static TFunctionPtr<Scalar> null();
     static TFunctionPtr<double> sideParity();
-    static TFunctionPtr<Scalar> solution(VarPtr var, SolutionPtr<Scalar> soln);
+    static TFunctionPtr<Scalar> solution(VarPtr var, TSolutionPtr<Scalar> soln);
     static TFunctionPtr<double> zero(int rank=0);
     static TFunctionPtr<Scalar> restrictToCellBoundary(TFunctionPtr<Scalar> f);
 

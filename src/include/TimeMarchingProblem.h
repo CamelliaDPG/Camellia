@@ -17,7 +17,7 @@ namespace Camellia {
   class TimeMarchingProblem : public BF, public RHS {
     Teuchos::RCP<RHS> _rhs;
     double _dt;
-    SolutionPtr<double> _previousTimeSolution;
+    TSolutionPtr<double> _previousTimeSolution;
   protected:
     BFPtr _bilinearForm;
   public:
@@ -56,8 +56,8 @@ namespace Camellia {
     virtual bool hasTimeDerivative(int trialID, int testID) = 0;
     bool testHasTimeDerivative(int testID);
 
-    SolutionPtr<double> previousTimeSolution();
-    void setPreviousTimeSolution(SolutionPtr<double> previousSolution);
+    TSolutionPtr<double> previousTimeSolution();
+    void setPreviousTimeSolution(TSolutionPtr<double> previousSolution);
 
   };
 }

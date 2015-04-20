@@ -67,12 +67,12 @@ namespace Camellia {
     int _H1Order, _minLogElements, _maxLogElements, _pToAdd;
     int _cubatureDegreeForExact;
     int _cubatureEnrichmentForSolutions;
-    vector< SolutionPtr<double> > _solutions;
-    vector< SolutionPtr<double> > _bestApproximations;
+    vector< TSolutionPtr<double> > _solutions;
+    vector< TSolutionPtr<double> > _bestApproximations;
 
     map< int, TFunctionPtr<double> > _exactSolutionFunctions;
 
-    SolutionPtr<double> _fineZeroSolution;
+    TSolutionPtr<double> _fineZeroSolution;
     bool _randomRefinements;
     bool _useTriangles;
     bool _useHybrid;
@@ -101,7 +101,7 @@ namespace Camellia {
 
     int minNumElements();
 
-    SolutionPtr<double> bestApproximation(Teuchos::RCP<Mesh> mesh);
+    TSolutionPtr<double> bestApproximation(Teuchos::RCP<Mesh> mesh);
 
     Teuchos::RCP<Mesh> buildMesh(Teuchos::RCP<MeshGeometry> geometry, int numRefinements,
                                  bool useConformingTraces );
@@ -121,7 +121,7 @@ namespace Camellia {
                map<int,int> testOrderEnhancements);
     void solve(const Intrepid::FieldContainer<double> &quadPoints, bool useConformingTraces = true);
     void solve(Teuchos::RCP< MeshGeometry > geometry, bool useConformingTraces=true);
-    SolutionPtr<double> getSolution(int logElements); // logElements: a number between minLogElements and maxLogElements
+    TSolutionPtr<double> getSolution(int logElements); // logElements: a number between minLogElements and maxLogElements
     void writeToFiles(const string & filePathPrefix, int trialID, int traceID = -1, bool writeMATLABPlotData = false);
 
     void addDerivedVariable( LinearTermPtr derivedVar, const string & name );
@@ -129,7 +129,7 @@ namespace Camellia {
     BFPtr bilinearForm();
 
     vector<int> meshSizes();
-    vector< SolutionPtr<double> >& bestApproximations();
+    vector< TSolutionPtr<double> >& bestApproximations();
 
     map< int, vector<double> > bestApproximationErrors();
     map< int, vector<double> > solutionErrors();
@@ -154,7 +154,7 @@ namespace Camellia {
 
     void setCubatureEnrichmentForSolutions(int value);
 
-    void setSolutions( vector< SolutionPtr<double> > &solutions); // must be in the right order, from minLogElements to maxLogElements
+    void setSolutions( vector< TSolutionPtr<double> > &solutions); // must be in the right order, from minLogElements to maxLogElements
 
     void setSolver( Teuchos::RCP<Solver> solver);
 

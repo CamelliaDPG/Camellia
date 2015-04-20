@@ -1325,7 +1325,7 @@ namespace Camellia {
   }
 
   template <typename Scalar>
-  TFunctionPtr<Scalar> TFunction<Scalar>::solution(VarPtr var, SolutionPtr<Scalar> soln) {
+  TFunctionPtr<Scalar> TFunction<Scalar>::solution(VarPtr var, TSolutionPtr<Scalar> soln) {
     return Teuchos::rcp( new SimpleSolutionFunction<Scalar>(var, soln) );
   }
 

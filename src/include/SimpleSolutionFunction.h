@@ -14,10 +14,10 @@
 namespace Camellia {
   template <typename Scalar>
   class SimpleSolutionFunction : public TFunction<Scalar> {
-    SolutionPtr<Scalar> _soln;
+    TSolutionPtr<Scalar> _soln;
     VarPtr _var;
   public:
-    SimpleSolutionFunction(VarPtr var, SolutionPtr<Scalar> soln);
+    SimpleSolutionFunction(VarPtr var, TSolutionPtr<Scalar> soln);
     void values(Intrepid::FieldContainer<Scalar> &values, BasisCachePtr basisCache);
     TFunctionPtr<Scalar> x();
     TFunctionPtr<Scalar> y();

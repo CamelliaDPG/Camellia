@@ -10,7 +10,7 @@ using namespace Intrepid;
 using namespace std;
 
 template <typename Scalar>
-SimpleSolutionFunction<Scalar>::SimpleSolutionFunction(VarPtr var, SolutionPtr<Scalar> soln) : TFunction<Scalar>(var->rank()) {
+SimpleSolutionFunction<Scalar>::SimpleSolutionFunction(VarPtr var, TSolutionPtr<Scalar> soln) : TFunction<Scalar>(var->rank()) {
   _var = var;
   _soln = soln;
 }

@@ -71,7 +71,7 @@ namespace {
 
     MeshTopologyPtr meshTopo = mesh->getTopology();
 
-    SolutionPtr<double> soln = Solution<double>::solution(mesh);
+    SolutionPtr soln = Solution::solution(mesh);
 
     set<GlobalIndexType> myCells = mesh->cellIDsInPartition();
 
@@ -136,7 +136,7 @@ namespace {
 
     MeshPtr mesh = Teuchos::rcp( new Mesh (meshTopo, bf, H1Order, pToAdd) );
 
-    SolutionPtr<double> soln = Solution<double>::solution(mesh);
+    SolutionPtr soln = Solution::solution(mesh);
     map<int, FunctionPtr > functionMap;
     functionMap[uhat->ID()] = f;
 
@@ -255,7 +255,7 @@ namespace {
     int H1Order = 3, pToAdd = 1;
     MeshPtr spaceTimeMesh = Teuchos::rcp( new Mesh (spaceTimeMeshTopology, bf, H1Order, pToAdd) );
 
-    SolutionPtr<double> spaceTimeSolution = Solution<double>::solution(spaceTimeMesh);
+    SolutionPtr spaceTimeSolution = Solution::solution(spaceTimeMesh);
 
     FunctionPtr n = Function::normalSpaceTime();
     FunctionPtr parity = Function::sideParity();
@@ -418,7 +418,7 @@ namespace {
     int H1Order = 3, pToAdd = 2;
     Teuchos::RCP<Mesh> spaceTimeMesh = Teuchos::rcp( new Mesh (spaceTimeMeshTopology, bf, H1Order, pToAdd) );
 
-    SolutionPtr<double> spaceTimeSolution = Teuchos::rcp( new Solution<double>(spaceTimeMesh) );
+    SolutionPtr spaceTimeSolution = Teuchos::rcp( new Solution(spaceTimeMesh) );
 
     FunctionPtr n = Function::normalSpaceTime();
     FunctionPtr parity = Function::sideParity();
@@ -546,7 +546,7 @@ namespace {
     int H1Order = 4, pToAdd = 2;
     Teuchos::RCP<Mesh> spaceTimeMesh = Teuchos::rcp( new Mesh (spaceTimeMeshTopology, bf, H1Order, pToAdd) );
 
-    SolutionPtr<double> spaceTimeSolution = Teuchos::rcp( new Solution<double>(spaceTimeMesh) );
+    SolutionPtr spaceTimeSolution = Teuchos::rcp( new Solution(spaceTimeMesh) );
 
     FunctionPtr n = Function::normalSpaceTime();
     FunctionPtr parity = Function::sideParity();

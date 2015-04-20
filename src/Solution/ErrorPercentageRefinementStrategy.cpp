@@ -14,7 +14,7 @@
 
 using namespace Camellia;
 
-ErrorPercentageRefinementStrategy::ErrorPercentageRefinementStrategy(SolutionPtr<double> soln, double percentageThreshold, double min_h, int max_p, bool preferPRefinements)
+ErrorPercentageRefinementStrategy::ErrorPercentageRefinementStrategy(TSolutionPtr<double> soln, double percentageThreshold, double min_h, int max_p, bool preferPRefinements)
                                                 : RefinementStrategy(soln, 1.0, min_h, max_p, preferPRefinements) {
   // percentageThreshold should be a number in [0,1]
   _percentageThreshold = percentageThreshold;

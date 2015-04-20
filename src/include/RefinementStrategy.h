@@ -32,7 +32,7 @@ namespace Camellia {
   protected:
 
     static RefinementResults setResults(GlobalIndexType numElements, GlobalIndexType numDofs, double totalEnergyError);
-    SolutionPtr<double> _solution;
+    TSolutionPtr<double> _solution;
 
     RieszRepPtr _rieszRep;
 
@@ -48,7 +48,7 @@ namespace Camellia {
 
     MeshPtr mesh();
   public:
-    RefinementStrategy( SolutionPtr<double> solution, double relativeEnergyThreshold, double min_h = 0, int max_p = 10, bool preferPRefinements = false);
+    RefinementStrategy( TSolutionPtr<double> solution, double relativeEnergyThreshold, double min_h = 0, int max_p = 10, bool preferPRefinements = false);
     RefinementStrategy( MeshPtr mesh, LinearTermPtr residual, IPPtr ip, double relativeEnergyThreshold, double min_h = 0, int max_p = 10, bool preferPRefinements = false);
     void setEnforceOneIrregularity(bool value);
     void setAnisotropicThreshhold(double value);

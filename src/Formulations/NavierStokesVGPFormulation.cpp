@@ -130,8 +130,8 @@ void NavierStokesVGPFormulation::initialize(MeshTopologyPtr meshTopology, std::s
     mesh = MeshFactory::loadFromHDF5(_navierStokesBF, filePrefix+".mesh");
   }
 
-  _backgroundFlow = Solution<double>::solution(mesh);
-  _solnIncrement = Solution<double>::solution(mesh);
+  _backgroundFlow = TSolution<double>::solution(mesh);
+  _solnIncrement = TSolution<double>::solution(mesh);
 
   mesh->registerSolution(_backgroundFlow); // will project background flow during refinements...
   mesh->registerSolution(_solnIncrement);
@@ -187,7 +187,7 @@ void NavierStokesVGPFormulation::initialize(MeshTopologyPtr meshTopology, std::s
   _stokesBF = Teuchos::rcp( new BF(*_navierStokesBF) );
 
   // to avoid circular references, all previous solution references in BF won't own the memory:
-  SolutionPtr<double> backgroundFlowWeakReference = Teuchos::rcp(_backgroundFlow.get(), false );
+  TSolutionPtr<double> backgroundFlowWeakReference = Teuchos::rcp(_backgroundFlow.get(), false );
 
   // convective terms:
   TFunctionPtr<double> sigma1_prev = TFunction<double>::solution(sigma1, backgroundFlowWeakReference);
@@ -328,7 +328,7 @@ void NavierStokesVGPFormulation::initialize(MeshTopologyPtr meshTopology, std::s
     streamBC->addDirichlet(psi_n, SpatialFilter::allSpace(), u1_soln * n->y() - u2_soln * n->x());
 
     IPPtr streamIP = _streamFormulation->bf()->graphNorm();
-    _streamSolution = Solution<double>::solution(streamMesh,streamBC,streamRHS,streamIP);
+    _streamSolution = TSolution<double>::solution(streamMesh,streamBC,streamRHS,streamIP);
 
     if (filePrefix != "") {
       _streamSolution->loadFromHDF5(filePrefix + "_stream.soln");
@@ -605,7 +605,7 @@ RHSPtr NavierStokesVGPFormulation::rhs(TFunctionPtr<double> f, bool excludeFluxe
     if (spaceDim == 3) rhs->addTerm( f->z() * v3 );
   }
 
-  SolutionPtr<double> backgroundFlowWeakReference = Teuchos::rcp(_backgroundFlow.get(), false);
+  TSolutionPtr<double> backgroundFlowWeakReference = Teuchos::rcp(_backgroundFlow.get(), false);
   // subtract the stokesBF from the RHS:
   rhs->addTerm( -_stokesBF->testFunctional(backgroundFlowWeakReference, excludeFluxesAndTraces) );
 
@@ -652,11 +652,11 @@ void NavierStokesVGPFormulation::save(std::string prefixString) {
   }
 }
 
-SolutionPtr<double> NavierStokesVGPFormulation::solution() {
+TSolutionPtr<double> NavierStokesVGPFormulation::solution() {
   return _backgroundFlow;
 }
 
-SolutionPtr<double> NavierStokesVGPFormulation::solutionIncrement() {
+TSolutionPtr<double> NavierStokesVGPFormulation::solutionIncrement() {
   return _solnIncrement;
 }
 
@@ -680,7 +680,7 @@ VarPtr NavierStokesVGPFormulation::streamPhi() {
   }
 }
 
-SolutionPtr<double> NavierStokesVGPFormulation::streamSolution() {
+TSolutionPtr<double> NavierStokesVGPFormulation::streamSolution() {
   if (_spaceDim == 2) {
     if (_streamFormulation == Teuchos::null) {
       cout << "ERROR: streamPhi() called before initializeSolution called.  Returning null.\n";

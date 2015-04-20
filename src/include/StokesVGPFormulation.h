@@ -41,8 +41,8 @@ namespace Camellia {
 
     SolverPtr _solver;
 
-    SolutionPtr<double> _solution, _previousSolution; // solution at current and previous time steps
-    SolutionPtr<double> _streamSolution;
+    TSolutionPtr<double> _solution, _previousSolution; // solution at current and previous time steps
+    TSolutionPtr<double> _streamSolution;
 
     Teuchos::RCP<PoissonFormulation> _streamFormulation;
 
@@ -131,10 +131,10 @@ namespace Camellia {
     void setTimeStep(double dt);
 
     // ! Returns the solution (at current time)
-    SolutionPtr<double> solution();
+    TSolutionPtr<double> solution();
 
     // ! Returns the solution (at previous time)
-    SolutionPtr<double> solutionPreviousTimeStep();
+    TSolutionPtr<double> solutionPreviousTimeStep();
 
     // ! Solves
     void solve();
@@ -147,7 +147,7 @@ namespace Camellia {
 
     // ! Returns the stream solution (at current time).  (Stream solution is created during initializeSolution, but
     // ! streamSolution->solve() must be called manually.)  Use streamPhi() to get a VarPtr for the streamfunction.
-    SolutionPtr<double> streamSolution();
+    TSolutionPtr<double> streamSolution();
 
     // ! Takes a time step
     void takeTimeStep();

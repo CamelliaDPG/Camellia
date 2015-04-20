@@ -87,8 +87,8 @@ namespace Camellia {
                                 Intrepid::FieldContainer<double> &physicalPoint,
                                 Intrepid::FieldContainer<double> &unitNormal);
     virtual int H1Order(); // return -1 for non-polynomial solutions
-    double L2NormOfError(SolutionPtr<double> solution, int trialID, int cubDegree=-1);
-    void L2NormOfError(Intrepid::FieldContainer<double> &errorSquaredPerCell, SolutionPtr<double> solution, ElementTypePtr elemTypePtr, int trialID, int sideIndex=0, int cubDegree=-1, double solutionLift=0.0);
+    double L2NormOfError(TSolutionPtr<double> solution, int trialID, int cubDegree=-1);
+    void L2NormOfError(Intrepid::FieldContainer<double> &errorSquaredPerCell, TSolutionPtr<double> solution, ElementTypePtr elemTypePtr, int trialID, int sideIndex=0, int cubDegree=-1, double solutionLift=0.0);
 
     virtual ~ExactSolution() {}
   };

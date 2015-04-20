@@ -81,7 +81,7 @@ GMGOperator::GMGOperator(BCPtr zeroBCs, MeshPtr coarseMesh, IPPtr coarseIP,
   _fineMesh = fineMesh;
   _coarseMesh = coarseMesh;
   _bc = zeroBCs;
-  _coarseSolution = Teuchos::rcp( new Solution<double>(coarseMesh, zeroBCs, zeroRHS, coarseIP) );
+  _coarseSolution = Teuchos::rcp( new TSolution<double>(coarseMesh, zeroBCs, zeroRHS, coarseIP) );
   _coarseSolution->setUseCondensedSolve(useStaticCondensation);
 
   _coarseSolver = coarseSolver;
@@ -422,7 +422,7 @@ GlobalIndexType GMGOperator::getCoarseCellID(GlobalIndexType fineCellID) const {
   return ancestor->cellIndex();
 }
 
-SolutionPtr<double> GMGOperator::getCoarseSolution() {
+TSolutionPtr<double> GMGOperator::getCoarseSolution() {
   return _coarseSolution;
 }
 

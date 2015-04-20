@@ -18,7 +18,7 @@ using namespace Camellia;
 using namespace Intrepid;
 
 namespace {
-  void projectExactSolution(StokesVGPFormulation &form, SolutionPtr<double> stokesSolution, FunctionPtr u, FunctionPtr p) {
+  void projectExactSolution(StokesVGPFormulation &form, SolutionPtr stokesSolution, FunctionPtr u, FunctionPtr p) {
     double mu = form.mu();
 
     FunctionPtr u1, u2, u3, sigma1, sigma2, sigma3;
@@ -164,7 +164,7 @@ namespace {
 
     setupExactSolution(form, u, p, meshTopo, fieldPolyOrder, delta_k);
 
-    SolutionPtr<double> streamSoln = form.streamSolution();
+    SolutionPtr streamSoln = form.streamSolution();
 
     // to determine phi_exact, we solve the problem:
     //   d/dx phi = -u2
@@ -302,10 +302,10 @@ namespace {
 
     form.solve();
 
-    SolutionPtr<double> stokesProjection = Solution<double>::solution(stokesMesh);
+    SolutionPtr stokesProjection = Solution::solution(stokesMesh);
     projectExactSolution(form, stokesProjection, u, p);
 
-    SolutionPtr<double> stokesSolution = form.solution();
+    SolutionPtr stokesSolution = form.solution();
     stokesSolution->addSolution(stokesProjection, -1);
 
     FunctionPtr u1_diff = Function::solution(form.u(1), stokesSolution);

@@ -53,7 +53,7 @@
 namespace Camellia {
 	class FiniteDifferenceUtilities {
 	 public:
-	 static double finiteDifferenceGradient(MeshPtr mesh, RieszRepPtr residual, SolutionPtr<double> backgroundSoln, int dofIndex);
+	 static double finiteDifferenceGradient(MeshPtr mesh, RieszRepPtr residual, TSolutionPtr<double> backgroundSoln, int dofIndex);
 	 static Intrepid::FieldContainer<double> getDPGGradient(); // assumes you only linearize in the field variables
 	};
 }

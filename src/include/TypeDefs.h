@@ -62,7 +62,7 @@ namespace Camellia {
 	class RieszRep;
 	class RHS;
   template <typename Scalar=double>
-	class Solution;
+	class TSolution;
 	class Solver;
 	class SpatialFilter;
 	class Var;
@@ -92,9 +92,10 @@ namespace Camellia {
 	typedef Teuchos::RCP<RefinementStrategy> RefinementStrategyPtr;
 	typedef Teuchos::RCP<RieszRep> RieszRepPtr;
 	typedef Teuchos::RCP<RHS> RHSPtr;
-	// typedef Teuchos::RCP<Solution<double> > SolutionPtr;
   template <typename Scalar>
-    using SolutionPtr = Teuchos::RCP<Solution<Scalar> >;
+    using TSolutionPtr = Teuchos::RCP<TSolution<Scalar> >;
+  typedef TSolution<double> Solution;
+  typedef TSolutionPtr<double> SolutionPtr;
 	typedef Teuchos::RCP<Solver> SolverPtr;
 	typedef Teuchos::RCP<SpatialFilter> SpatialFilterPtr;
 	typedef Teuchos::RCP<Var> VarPtr;

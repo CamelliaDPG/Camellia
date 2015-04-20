@@ -242,7 +242,7 @@ void StokesVGPFormulation::addInflowCondition(SpatialFilterPtr inflowRegion, TFu
     if (spaceDim==3) _solution->bc()->addDirichlet(u3_hat, inflowRegion, u->z());
   } else {
     TFunctionPtr<double> u1_hat_prev, u2_hat_prev, u3_hat_prev;
-    SolutionPtr<double> prevSolnWeakRef = Teuchos::rcp( _previousSolution.get(), false ); // avoid circular references
+    TSolutionPtr<double> prevSolnWeakRef = Teuchos::rcp( _previousSolution.get(), false ); // avoid circular references
 
     u1_hat_prev = TFunction<double>::solution(this->u_hat(1), prevSolnWeakRef);
     u2_hat_prev = TFunction<double>::solution(this->u_hat(2), prevSolnWeakRef);
@@ -383,14 +383,14 @@ void StokesVGPFormulation::initializeSolution(MeshTopologyPtr meshTopo, int fiel
   MeshPtr mesh;
   if (savedSolutionAndMeshPrefix == "") {
     mesh = Teuchos::rcp( new Mesh(meshTopo, _stokesBF, H1Order, delta_k) ) ;
-    _solution = Solution<double>::solution(mesh,bc);
-    if (_transient) _previousSolution = Solution<double>::solution(mesh,bc);
+    _solution = TSolution<double>::solution(mesh,bc);
+    if (_transient) _previousSolution = TSolution<double>::solution(mesh,bc);
   } else {
     mesh = MeshFactory::loadFromHDF5(_stokesBF, savedSolutionAndMeshPrefix+".mesh");
-    _solution = Solution<double>::solution(mesh, bc);
+    _solution = TSolution<double>::solution(mesh, bc);
     _solution->loadFromHDF5(savedSolutionAndMeshPrefix+".soln");
     if (_transient) {
-      _previousSolution = Solution<double>::solution(mesh,bc);
+      _previousSolution = TSolution<double>::solution(mesh,bc);
       _previousSolution->loadFromHDF5(savedSolutionAndMeshPrefix+"_previous.soln");
     }
   }
@@ -462,7 +462,7 @@ void StokesVGPFormulation::initializeSolution(MeshTopologyPtr meshTopo, int fiel
     streamBC->addDirichlet(psi_n, SpatialFilter::allSpace(), u1_soln * n->y() - u2_soln * n->x());
 
     IPPtr streamIP = _streamFormulation->bf()->graphNorm();
-    _streamSolution = Solution<double>::solution(streamMesh,streamBC,streamRHS,streamIP);
+    _streamSolution = TSolution<double>::solution(streamMesh,streamBC,streamRHS,streamIP);
 
     if (savedSolutionAndMeshPrefix != "") {
       _streamSolution->loadFromHDF5(savedSolutionAndMeshPrefix + "_stream.soln");
@@ -643,12 +643,12 @@ void StokesVGPFormulation::setTimeStep(double dt) {
 }
 
 // ! Returns the solution (at current time)
-SolutionPtr<double> StokesVGPFormulation::solution() {
+TSolutionPtr<double> StokesVGPFormulation::solution() {
   return _solution;
 }
 
 // ! Returns the solution (at previous time)
-SolutionPtr<double> StokesVGPFormulation::solutionPreviousTimeStep() {
+TSolutionPtr<double> StokesVGPFormulation::solutionPreviousTimeStep() {
   return _previousSolution;
 }
 
@@ -674,7 +674,7 @@ VarPtr StokesVGPFormulation::streamPhi() {
   }
 }
 
-SolutionPtr<double> StokesVGPFormulation::streamSolution() {
+TSolutionPtr<double> StokesVGPFormulation::streamSolution() {
   if (_spaceDim == 2) {
     if (_streamFormulation == Teuchos::null) {
       cout << "ERROR: streamPhi() called before initializeSolution called.  Returning null.\n";

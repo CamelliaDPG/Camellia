@@ -37,7 +37,7 @@ namespace Camellia {
   class GMGOperator : public Epetra_Operator {
     bool _debugMode; // in debug mode, output verbose info about what we're doing on rank 0
 
-    SolutionPtr<double> _coarseSolution;
+    TSolutionPtr<double> _coarseSolution;
 
     bool _useStaticCondensation; // for both coarse and fine solves
     Teuchos::RCP<DofInterpreter> _fineDofInterpreter;
@@ -244,7 +244,7 @@ namespace Camellia {
     SolverPtr getCoarseSolver();
 
     //! Returns the Solution object used in the coarse solve.
-    SolutionPtr<double> getCoarseSolution();
+    TSolutionPtr<double> getCoarseSolution();
   private:
     SmootherChoice _smootherType;
     int _smootherOverlap;

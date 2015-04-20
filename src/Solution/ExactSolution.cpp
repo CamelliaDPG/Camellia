@@ -52,7 +52,7 @@
 using namespace Intrepid;
 using namespace Camellia;
 
-double ExactSolution::L2NormOfError(SolutionPtr<double> solution, int trialID, int cubDegree) {
+double ExactSolution::L2NormOfError(TSolutionPtr<double> solution, int trialID, int cubDegree) {
   Teuchos::RCP<Mesh> mesh = solution->mesh();
   double totalErrorSquared = 0.0;
   // check if the trialID is one for which a single-point BC was imposed:
@@ -92,7 +92,7 @@ double ExactSolution::L2NormOfError(SolutionPtr<double> solution, int trialID, i
   return sqrt(totalErrorSquared);
 }
 
-void ExactSolution::L2NormOfError(FieldContainer<double> &errorSquaredPerCell, SolutionPtr<double> solution, ElementTypePtr elemTypePtr, int trialID, int sideIndex, int cubDegree, double solutionLift) {
+void ExactSolution::L2NormOfError(FieldContainer<double> &errorSquaredPerCell, TSolutionPtr<double> solution, ElementTypePtr elemTypePtr, int trialID, int sideIndex, int cubDegree, double solutionLift) {
 //  BasisCache(ElementTypePtr elemType, Teuchos::RCP<Mesh> mesh = Teuchos::rcp( (Mesh*) NULL ), bool testVsTest=false, int cubatureDegreeEnrichment = 0)
 
   DofOrdering dofOrdering = *(elemTypePtr->trialOrderPtr.get());

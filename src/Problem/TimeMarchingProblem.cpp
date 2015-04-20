@@ -129,10 +129,10 @@ const string & TimeMarchingProblem::trialName(int trialID) {
   return _bilinearForm->trialName(trialID);
 }
 
-SolutionPtr<double> TimeMarchingProblem::previousTimeSolution() {
+TSolutionPtr<double> TimeMarchingProblem::previousTimeSolution() {
   return _previousTimeSolution;
 }
 
-void TimeMarchingProblem::setPreviousTimeSolution(SolutionPtr<double> previousSolution) {
+void TimeMarchingProblem::setPreviousTimeSolution(TSolutionPtr<double> previousSolution) {
   _previousTimeSolution = previousSolution;
 }

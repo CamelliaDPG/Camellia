@@ -5,11 +5,11 @@
 
 using namespace Camellia;
 
-double FiniteDifferenceUtilities::finiteDifferenceGradient(MeshPtr mesh, RieszRepPtr residual, SolutionPtr<double> backgroundSoln, int dofIndex){
+double FiniteDifferenceUtilities::finiteDifferenceGradient(MeshPtr mesh, RieszRepPtr residual, TSolutionPtr<double> backgroundSoln, int dofIndex){
   residual->computeRieszRep();
   double fx =  residual->getNorm();
 
-  SolutionPtr<double> solnPerturbation = TestingUtilities::makeNullSolution(mesh);
+  TSolutionPtr<double> solnPerturbation = TestingUtilities::makeNullSolution(mesh);
 
   // create perturbation in direction du
   solnPerturbation->clear(); // clear all solns

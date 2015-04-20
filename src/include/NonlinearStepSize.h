@@ -19,7 +19,7 @@ namespace Camellia {
     NonlinearStepSize(double fixedStepSize = 0.5) {
       _fixedStepSize = fixedStepSize;
     }
-    virtual double stepSize(SolutionPtr<double> u, SolutionPtr<double> du) {
+    virtual double stepSize(TSolutionPtr<double> u, TSolutionPtr<double> du) {
       return _fixedStepSize;
     }
   };
@@ -35,7 +35,7 @@ namespace Camellia {
     double getNLResidual(){
       return _nlRes;
     }
-    double stepSize(SolutionPtr<double> u, SolutionPtr<double> du){
+    double stepSize(TSolutionPtr<double> u, TSolutionPtr<double> du){
 
       int maxIter = 25;
       double stepLength = 1.0;
@@ -65,7 +65,7 @@ namespace Camellia {
     }
 
     // Modification of routine: in the event that your nonlinear error changes under solution->solve() (i.e. when your fluxes are not linearized)
-    double stepSize(SolutionPtr<double> u, SolutionPtr<double> du, double prevNLErr){
+    double stepSize(TSolutionPtr<double> u, TSolutionPtr<double> du, double prevNLErr){
 
       int maxIter = 25;
       double stepLength = 1.0;

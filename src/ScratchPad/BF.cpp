@@ -860,7 +860,7 @@ namespace Camellia{
     _warnAboutZeroRowsAndColumns = value;
   }
 
-  LinearTermPtr BF::testFunctional(SolutionPtr<double> trialSolution, bool excludeBoundaryTerms, bool overrideMeshCheck) {
+  LinearTermPtr BF::testFunctional(TSolutionPtr<double> trialSolution, bool excludeBoundaryTerms, bool overrideMeshCheck) {
     LinearTermPtr functional = Teuchos::rcp(new LinearTerm());
     for ( vector< BilinearTerm >:: iterator btIt = _terms.begin();
         btIt != _terms.end(); btIt++) {

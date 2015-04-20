@@ -16,7 +16,7 @@
 using namespace Camellia;
 
 namespace {
-  void projectExactSolution(SpaceTimeHeatFormulation &form, SolutionPtr<double> heatSolution, FunctionPtr u) {
+  void projectExactSolution(SpaceTimeHeatFormulation &form, SolutionPtr heatSolution, FunctionPtr u) {
     double epsilon = form.epsilon();
 
     FunctionPtr sigma1, sigma2, sigma3;

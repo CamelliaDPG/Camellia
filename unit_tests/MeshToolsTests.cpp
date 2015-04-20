@@ -175,7 +175,7 @@ namespace {
 //    rankStr << "rank " << rank << " cellMap_t1";
 //    Camellia::print(rankStr.str(), cellMap_t1);
 
-    SolutionPtr<double> soln = Solution<double>::solution(mesh,bc,RHS::rhs(), ip);
+    SolutionPtr soln = Solution::solution(mesh,bc,RHS::rhs(), ip);
 
     // project u0 onto the whole spacetime mesh (i.e. it'll look like the initial value is a steady solution)
     std::map<int, FunctionPtr> functionMap;
@@ -294,7 +294,7 @@ namespace {
     map<GlobalIndexType,GlobalIndexType> cellMap;
     MeshPtr meshSlice = MeshTools::timeSliceMesh(initialMesh, 0, cellMap, H1Order);
 
-    SolutionPtr<double> soln = Solution<double>::solution(mesh,bc,RHS::rhs(), ip);
+    SolutionPtr soln = Solution::solution(mesh,bc,RHS::rhs(), ip);
 
     // project u0 onto the whole spacetime mesh (i.e. it'll look like the initial value is a steady solution)
     std::map<int, FunctionPtr> functionMap;

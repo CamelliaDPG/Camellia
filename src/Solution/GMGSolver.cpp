@@ -36,7 +36,7 @@ GMGSolver::GMGSolver(BCPtr zeroBCs, MeshPtr coarseMesh, IPPtr coarseIP,
   _azConvergenceOption = AZ_rhs;
 }
 
-GMGSolver::GMGSolver(SolutionPtr<double> fineSolution, MeshPtr coarseMesh, int maxIters, double tol,
+GMGSolver::GMGSolver(TSolutionPtr<double> fineSolution, MeshPtr coarseMesh, int maxIters, double tol,
                      Teuchos::RCP<Solver> coarseSolver, bool useStaticCondensation) :
                     _finePartitionMap(fineSolution->getPartitionMap()),
                     _gmgOperator(fineSolution->bc()->copyImposingZero(),coarseMesh,

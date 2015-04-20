@@ -219,7 +219,7 @@ class MeshPartitionPolicy;
     vector<int> cellTensorPolyOrder(GlobalIndexType cellID);
 
     void enforceOneIrregularity();
-  //  void enforceOneIrregularity(vector< SolutionPtr<double> > solutions);
+  //  void enforceOneIrregularity(vector< TSolutionPtr<double> > solutions);
 
     vector<double> getCellCentroid(GlobalIndexType cellID);
 
@@ -287,7 +287,7 @@ class MeshPartitionPolicy;
     bool meshUsesMinimumRule();
 
     // for the case where we want to reproject the previous mesh solution onto the new one:
-  //  void hRefine(vector<GlobalIndexType> cellIDs, Teuchos::RCP<RefinementPattern> refPattern, vector< SolutionPtr<double> > solutions);
+  //  void hRefine(vector<GlobalIndexType> cellIDs, Teuchos::RCP<RefinementPattern> refPattern, vector< TSolutionPtr<double> > solutions);
 
   //  void matchNeighbor(const ElementPtr &elem, int sideIndex);
 
@@ -332,7 +332,7 @@ class MeshPartitionPolicy;
 
     void registerObserver(Teuchos::RCP<RefinementObserver> observer);
 
-    void registerSolution(SolutionPtr<double> solution);
+    void registerSolution(TSolutionPtr<double> solution);
 
     int condensedRowSizeUpperBound();
     int rowSizeUpperBound(); // accounts for multiplicity, but isn't a tight bound
@@ -359,7 +359,7 @@ class MeshPartitionPolicy;
 
     void unregisterObserver(RefinementObserver* observer);
     void unregisterObserver(Teuchos::RCP<RefinementObserver> observer);
-    void unregisterSolution(SolutionPtr<double> solution);
+    void unregisterSolution(TSolutionPtr<double> solution);
 
     void writeMeshPartitionsToFile(const string & fileName);
 

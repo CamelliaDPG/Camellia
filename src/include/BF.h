@@ -100,7 +100,7 @@ namespace Camellia {
     void bubnovStiffness(Intrepid::FieldContainer<double> &stiffness, Teuchos::RCP<ElementType> elemType,
              Intrepid::FieldContainer<double> &cellSideParities, Teuchos::RCP<BasisCache> basisCache);
 
-    LinearTermPtr testFunctional(SolutionPtr<double> trialSolution, bool excludeBoundaryTerms=false, bool overrideMeshCheck=false);
+    LinearTermPtr testFunctional(TSolutionPtr<double> trialSolution, bool excludeBoundaryTerms=false, bool overrideMeshCheck=false);
 
     virtual bool trialTestOperator(int trialID, int testID,
                                    Camellia::EOperator &trialOperator,

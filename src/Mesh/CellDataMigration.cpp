@@ -27,7 +27,7 @@ int CellDataMigration::dataSize(Mesh *mesh, GlobalIndexType cellID) {
   int packedDofsBelongToParent = 0; // 0 for false, anything else for true
   size += sizeof(packedDofsBelongToParent);
 
-  vector<SolutionPtr<double>> solutions = mesh->globalDofAssignment()->getRegisteredSolutions();
+  vector<TSolutionPtr<double>> solutions = mesh->globalDofAssignment()->getRegisteredSolutions();
   // store # of solution objects
   int numSolutions = solutions.size();
   size += sizeof(numSolutions);
@@ -61,7 +61,7 @@ void CellDataMigration::packData(Mesh *mesh, GlobalIndexType cellID, bool packPa
 
 //  cout << "packed data for cell " << cellID << ": ";
 //  ElementTypePtr elemType = mesh->getElementType(cellID);
-  vector<SolutionPtr<double>> solutions = mesh->globalDofAssignment()->getRegisteredSolutions();
+  vector<TSolutionPtr<double>> solutions = mesh->globalDofAssignment()->getRegisteredSolutions();
   int numSolutions = solutions.size();
   memcpy(dataLocation, &numSolutions, sizeof(numSolutions));
   dataLocation += sizeof(numSolutions);
@@ -122,7 +122,7 @@ void CellDataMigration::unpackData(Mesh *mesh, GlobalIndexType cellID, const cha
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "unpackData called for a non-rank-local cellID");
   }
   ElementTypePtr elemType = mesh->getElementType(cellID);
-  vector<SolutionPtr<double>> solutions = mesh->globalDofAssignment()->getRegisteredSolutions();
+  vector<TSolutionPtr<double>> solutions = mesh->globalDofAssignment()->getRegisteredSolutions();
   int numSolutions = solutions.size();
   int numSolutionsPacked;
   memcpy(&numSolutionsPacked, dataLocation, sizeof(numSolutionsPacked));

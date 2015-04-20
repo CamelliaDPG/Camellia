@@ -77,7 +77,7 @@ namespace {
       mesh->hRefine(mesh->getTopology()->getActiveCellIndices());
       mesh->hRefine(mesh->getTopology()->getActiveCellIndices());
 
-      SolutionPtr<double> soln = Solution<double>::solution(mesh, BC::bc(), RHS::rhs(), form.bf()->graphNorm());
+      SolutionPtr soln = Solution::solution(mesh, BC::bc(), RHS::rhs(), form.bf()->graphNorm());
 
       soln->setUseCondensedSolve(useStaticCondensation);
 

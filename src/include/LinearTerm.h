@@ -88,7 +88,7 @@ namespace Camellia {
      */
     double computeNorm(IPPtr ip, MeshPtr mesh);
 
-    void evaluate(Intrepid::FieldContainer<double> &values, SolutionPtr<double> solution, BasisCachePtr basisCache,
+    void evaluate(Intrepid::FieldContainer<double> &values, TSolutionPtr<double> solution, BasisCachePtr basisCache,
                   bool applyCubatureWeights = false);
 
     TFunctionPtr<double> evaluate(const Teuchos::map< int, TFunctionPtr<double>> &varFunctions);

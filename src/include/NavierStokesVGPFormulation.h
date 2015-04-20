@@ -38,9 +38,9 @@ namespace Camellia {
 
     TFunctionPtr<double> _L2IncrementFunction, _L2SolutionFunction;
 
-    SolutionPtr<double> _backgroundFlow, _solnIncrement;
+    TSolutionPtr<double> _backgroundFlow, _solnIncrement;
 
-    SolutionPtr<double> _streamSolution;
+    TSolutionPtr<double> _streamSolution;
     Teuchos::RCP<PoissonFormulation> _streamFormulation;
 
     RefinementStrategyPtr _refinementStrategy, _hRefinementStrategy, _pRefinementStrategy;;
@@ -94,7 +94,7 @@ namespace Camellia {
     // ! set a pressure condition at a point
     void addZeroMeanPressureCondition();
 
-    // ! return an ExactSolutionPtr<double> corresponding to specified velocity (a rank 1 Function) and pressure.
+    // ! return an ExactTSolutionPtr<double> corresponding to specified velocity (a rank 1 Function) and pressure.
     Teuchos::RCP<ExactSolution> exactSolution(TFunctionPtr<double> u, TFunctionPtr<double> p);
 
     // ! returns the L^2 norm of the incremental solution
@@ -137,10 +137,10 @@ namespace Camellia {
     void setTimeStep(double dt);
 
     // ! Returns the background flow, i.e. the accumulated solution thus far
-    SolutionPtr<double> solution();
+    TSolutionPtr<double> solution();
 
     // ! Returns the latest solution increment
-    SolutionPtr<double> solutionIncrement();
+    TSolutionPtr<double> solutionIncrement();
 
     // ! The first time this is called, calls solution()->solve(), and the weight argument is ignored.  After the first call, solves for the next iterate, and adds to background flow with the specified weight.
     void solveAndAccumulate(double weight=1.0);
@@ -150,7 +150,7 @@ namespace Camellia {
 
     // ! Returns the stream solution (at current time).  (Stream solution is created during initializeSolution, but
     // ! streamSolution->solve() must be called manually.)  Use streamPhi() to get a VarPtr for the streamfunction.
-    SolutionPtr<double> streamSolution();
+    TSolutionPtr<double> streamSolution();
 
     BFPtr bf();
 

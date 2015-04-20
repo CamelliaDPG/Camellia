@@ -107,7 +107,7 @@ namespace {
 
     MeshPtr stokesMesh = Teuchos::rcp( new Mesh(meshTopo,stokesBF,fieldPolyOrder+1, delta_k) );
 
-    SolutionPtr<double> stokesSolution = Solution<double>::solution(stokesMesh);
+    SolutionPtr stokesSolution = Solution::solution(stokesMesh);
     stokesSolution->setIP(stokesBF->graphNorm());
     RHSPtr rhs = RHS::rhs();
     rhs->addTerm(forcingFunction_x * form.v(1));

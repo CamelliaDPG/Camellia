@@ -15,7 +15,7 @@
 
 using namespace Camellia;
 
-RefinementStrategy::RefinementStrategy( SolutionPtr<double> solution, double relativeEnergyThreshold, double min_h,
+RefinementStrategy::RefinementStrategy( TSolutionPtr<double> solution, double relativeEnergyThreshold, double min_h,
                                         int max_p, bool preferPRefinements) {
   _solution = solution;
   _relativeEnergyThreshold = relativeEnergyThreshold;

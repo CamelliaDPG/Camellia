@@ -29,7 +29,7 @@ namespace Camellia {
 
     SolverPtr _solver;
 
-    SolutionPtr<double> _solution;
+    TSolutionPtr<double> _solution;
 
     RefinementStrategyPtr _refinementStrategy;
 
@@ -85,7 +85,7 @@ namespace Camellia {
     void setRefinementStrategy(RefinementStrategyPtr refStrategy);
 
     // ! Returns the solution (at current time)
-    SolutionPtr<double> solution();
+    TSolutionPtr<double> solution();
 
     // ! Solves
     void solve();

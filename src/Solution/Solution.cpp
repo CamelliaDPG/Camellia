@@ -116,7 +116,7 @@
 using namespace Camellia;
 
 template <typename Scalar>
-double Solution<Scalar>::conditionNumberEstimate( Epetra_LinearProblem & problem ) {
+double TSolution<Scalar>::conditionNumberEstimate( Epetra_LinearProblem & problem ) {
   // estimates the 2-norm condition number
   AztecOOConditionNumber conditionEstimator;
   conditionEstimator.initialize(*problem.GetOperator());
@@ -132,12 +132,12 @@ double Solution<Scalar>::conditionNumberEstimate( Epetra_LinearProblem & problem
 }
 
 template <typename Scalar>
-int Solution<Scalar>::cubatureEnrichmentDegree() const {
+int TSolution<Scalar>::cubatureEnrichmentDegree() const {
   return _cubatureEnrichmentDegree;
 }
 
 template <typename Scalar>
-void Solution<Scalar>::setCubatureEnrichmentDegree(int value) {
+void TSolution<Scalar>::setCubatureEnrichmentDegree(int value) {
   _cubatureEnrichmentDegree = value;
 }
 
@@ -146,7 +146,7 @@ static const int MIN_BATCH_SIZE_IN_CELLS = 1; // overrides the above, if it resu
 
 // copy constructor:
 template <typename Scalar>
-Solution<Scalar>::Solution(const Solution &soln) {
+TSolution<Scalar>::TSolution(const TSolution<Scalar> &soln) {
   _mesh = soln.mesh();
   _dofInterpreter = Teuchos::rcp( _mesh.get(), false ); // false: doesn't own memory
   _bc = soln.bc();
@@ -165,7 +165,7 @@ Solution<Scalar>::Solution(const Solution &soln) {
 }
 
 template <typename Scalar>
-Solution<Scalar>::Solution(Teuchos::RCP<Mesh> mesh, Teuchos::RCP<BC> bc, Teuchos::RCP<RHS> rhs, IPPtr ip) {
+TSolution<Scalar>::TSolution(Teuchos::RCP<Mesh> mesh, Teuchos::RCP<BC> bc, Teuchos::RCP<RHS> rhs, IPPtr ip) {
   _mesh = mesh;
   _dofInterpreter = Teuchos::rcp( _mesh.get(), false ); // false: doesn't own memory
   _bc = bc;
@@ -177,13 +177,13 @@ Solution<Scalar>::Solution(Teuchos::RCP<Mesh> mesh, Teuchos::RCP<BC> bc, Teuchos
 }
 
 template <typename Scalar>
-void Solution<Scalar>::clear() {
+void TSolution<Scalar>::clear() {
   // clears all solution values.  Leaves everything else intact.
   _solutionForCellIDGlobal.clear();
 }
 
 template <typename Scalar>
-void Solution<Scalar>::initialize() {
+void TSolution<Scalar>::initialize() {
   // clear the data structure in case it already stores some stuff
   _solutionForCellIDGlobal.clear();
 
@@ -204,7 +204,7 @@ void Solution<Scalar>::initialize() {
 }
 
 template <typename Scalar>
-void Solution<Scalar>::addSolution(Teuchos::RCP< Solution<Scalar> > otherSoln, double weight, bool allowEmptyCells, bool replaceBoundaryTerms) {
+void TSolution<Scalar>::addSolution(Teuchos::RCP< TSolution<Scalar> > otherSoln, double weight, bool allowEmptyCells, bool replaceBoundaryTerms) {
   // In many situations, we can't legitimately add two condensed solution _lhsVectors together and back out the other (field) dofs.
   // E.g., consider a nonlinear problem in which the bilinear form (and therefore stiffness matrix) depends on background data.
   // Even a linear problem with two solutions with different RHS data would require us to accumulate the local load vectors.
@@ -335,7 +335,7 @@ void Solution<Scalar>::addSolution(Teuchos::RCP< Solution<Scalar> > otherSoln, d
 }
 
 template <typename Scalar>
-void Solution<Scalar>::addSolution(Teuchos::RCP< Solution<Scalar> > otherSoln, double weight, set<int> varsToAdd, bool allowEmptyCells) {
+void TSolution<Scalar>::addSolution(Teuchos::RCP< TSolution<Scalar> > otherSoln, double weight, set<int> varsToAdd, bool allowEmptyCells) {
   // In many situations, we can't legitimately add two condensed solution _lhsVectors together and back out the other (field) dofs.
   // E.g., consider a nonlinear problem in which the bilinear form (and therefore stiffness matrix) depends on background data.
   // Even a linear problem with two solutions with different RHS data would require us to accumulate the local load vectors.
@@ -401,12 +401,12 @@ void Solution<Scalar>::addSolution(Teuchos::RCP< Solution<Scalar> > otherSoln, d
 }
 
 template <typename Scalar>
-bool Solution<Scalar>::cellHasCoefficientsAssigned(GlobalIndexType cellID) {
+bool TSolution<Scalar>::cellHasCoefficientsAssigned(GlobalIndexType cellID) {
   return _solutionForCellIDGlobal.find(cellID) != _solutionForCellIDGlobal.end();
 }
 
 template <typename Scalar>
-int Solution<Scalar>::solve() {
+int TSolution<Scalar>::solve() {
 #ifdef HAVE_MPI
   return solve(true);
 #else
@@ -415,7 +415,7 @@ int Solution<Scalar>::solve() {
 }
 
 template <typename Scalar>
-int Solution<Scalar>::solve(bool useMumps) {
+int TSolution<Scalar>::solve(bool useMumps) {
   Teuchos::RCP<Solver> solver;
 #ifdef HAVE_AMESOS_MUMPS
   if (useMumps) {
@@ -430,14 +430,14 @@ int Solution<Scalar>::solve(bool useMumps) {
 }
 
 template <typename Scalar>
-void Solution<Scalar>::setSolution(Teuchos::RCP< Solution<Scalar> > otherSoln) {
+void TSolution<Scalar>::setSolution(Teuchos::RCP< TSolution<Scalar> > otherSoln) {
   _solutionForCellIDGlobal = otherSoln->solutionForCellIDGlobal();
   _lhsVector = Teuchos::rcp( new Epetra_FEVector(*otherSoln->getLHSVector()) );
   clearComputedResiduals();
 }
 
 template <typename Scalar>
-void Solution<Scalar>::initializeLHSVector() {
+void TSolution<Scalar>::initializeLHSVector() {
 //  _lhsVector = Teuchos::rcp( (Epetra_FEVector*) NULL); // force a delete
   Epetra_Map partMap = getPartitionMap();
   _lhsVector = Teuchos::rcp(new Epetra_FEVector(partMap,1,true));
@@ -447,7 +447,7 @@ void Solution<Scalar>::initializeLHSVector() {
 }
 
 template <typename Scalar>
-void Solution<Scalar>::initializeStiffnessAndLoad() {
+void TSolution<Scalar>::initializeStiffnessAndLoad() {
   Epetra_Map partMap = getPartitionMap();
 
   int maxRowSize = _mesh->rowSizeUpperBound();
@@ -457,7 +457,7 @@ void Solution<Scalar>::initializeStiffnessAndLoad() {
 }
 
 template <typename Scalar>
-void Solution<Scalar>::populateStiffnessAndLoad() {
+void TSolution<Scalar>::populateStiffnessAndLoad() {
   int numProcs=Teuchos::GlobalMPISession::getNProc();;
   int rank = Teuchos::GlobalMPISession::getRank();
 
@@ -888,13 +888,13 @@ void Solution<Scalar>::populateStiffnessAndLoad() {
 }
 
 template <typename Scalar>
-void Solution<Scalar>::setProblem(Teuchos::RCP<Solver> solver) {
+void TSolution<Scalar>::setProblem(Teuchos::RCP<Solver> solver) {
   // Teuchos::RCP<Epetra_LinearProblem> problem = Teuchos::rcp( new Epetra_LinearProblem(&*_globalStiffMatrix, &*_lhsVector, &*_rhsVector));
   solver->setProblem(_globalStiffMatrix, _lhsVector, _rhsVector);
 }
 
 template <typename Scalar>
-int Solution<Scalar>::solveWithPrepopulatedStiffnessAndLoad(Teuchos::RCP<Solver> solver, bool callResolveInsteadOfSolve) {
+int TSolution<Scalar>::solveWithPrepopulatedStiffnessAndLoad(Teuchos::RCP<Solver> solver, bool callResolveInsteadOfSolve) {
   int rank = Teuchos::GlobalMPISession::getRank();
   int numProcs = Teuchos::GlobalMPISession::getNProc();
 
@@ -966,7 +966,7 @@ int Solution<Scalar>::solveWithPrepopulatedStiffnessAndLoad(Teuchos::RCP<Solver>
 }
 
 template <typename Scalar>
-int Solution<Scalar>::solve(Teuchos::RCP<Solver> solver) {
+int TSolution<Scalar>::solve(Teuchos::RCP<Solver> solver) {
 //  int rank = Teuchos::GlobalMPISession::getRank();
 
   if (_oldDofInterpreter.get() != NULL) { // proxy for having a condensation interpreter
@@ -997,7 +997,7 @@ int Solution<Scalar>::solve(Teuchos::RCP<Solver> solver) {
 }
 
 template <typename Scalar>
-void Solution<Scalar>::reportTimings() {
+void TSolution<Scalar>::reportTimings() {
   int rank = Teuchos::GlobalMPISession::getRank();
 
   if (rank == 0) {
@@ -1032,7 +1032,7 @@ void Solution<Scalar>::reportTimings() {
 }
 
 template <typename Scalar>
-void Solution<Scalar>::clearComputedResiduals() {
+void TSolution<Scalar>::clearComputedResiduals() {
   _residualsComputed = false;
   _energyErrorComputed = false;
   _rankLocalEnergyErrorComputed = false;
@@ -1042,21 +1042,21 @@ void Solution<Scalar>::clearComputedResiduals() {
 }
 
 template <typename Scalar>
-Teuchos::RCP<Mesh> Solution<Scalar>::mesh() const {
+Teuchos::RCP<Mesh> TSolution<Scalar>::mesh() const {
   return _mesh;
 }
 
 template <typename Scalar>
-Teuchos::RCP<BC> Solution<Scalar>::bc() const {
+Teuchos::RCP<BC> TSolution<Scalar>::bc() const {
   return _bc;
 }
 template <typename Scalar>
-Teuchos::RCP<RHS> Solution<Scalar>::rhs() const {
+Teuchos::RCP<RHS> TSolution<Scalar>::rhs() const {
   return _rhs;
 }
 
 template <typename Scalar>
-void Solution<Scalar>::importSolution() {
+void TSolution<Scalar>::importSolution() {
 #ifdef HAVE_MPI
   Epetra_MpiComm Comm(MPI_COMM_WORLD);
   //cout << "rank: " << rank << " of " << numProcs << endl;
@@ -1122,7 +1122,7 @@ void Solution<Scalar>::importSolution() {
 }
 
 template <typename Scalar>
-void Solution<Scalar>::importSolutionForOffRankCells(std::set<GlobalIndexType> cellIDs) {
+void TSolution<Scalar>::importSolutionForOffRankCells(std::set<GlobalIndexType> cellIDs) {
   // INITIAL, DRAFT implementation: aiming first for correctness.
   // (that's to say, there may be a better way to do some of this)
   int rank = Teuchos::GlobalMPISession::getRank();
@@ -1230,7 +1230,7 @@ void Solution<Scalar>::importSolutionForOffRankCells(std::set<GlobalIndexType> c
 }
 
 template <typename Scalar>
-void Solution<Scalar>::importGlobalSolution() {
+void TSolution<Scalar>::importGlobalSolution() {
 #ifdef HAVE_MPI
   Epetra_MpiComm Comm(MPI_COMM_WORLD);
   //cout << "rank: " << rank << " of " << numProcs << endl;
@@ -1279,12 +1279,12 @@ void Solution<Scalar>::importGlobalSolution() {
 }
 
 template <typename Scalar>
-IPPtr Solution<Scalar>::ip() const {
+IPPtr TSolution<Scalar>::ip() const {
   return _ip;
 }
 
 template <typename Scalar>
-void Solution<Scalar>::imposeBCs() {
+void TSolution<Scalar>::imposeBCs() {
   int rank     = Teuchos::GlobalMPISession::getRank();
 
   Intrepid::FieldContainer<GlobalIndexType> bcGlobalIndices;
@@ -1347,7 +1347,7 @@ void Solution<Scalar>::imposeBCs() {
 
 
 template <typename Scalar>
-void Solution<Scalar>::imposeZMCsUsingLagrange() {
+void TSolution<Scalar>::imposeZMCsUsingLagrange() {
   int rank = Teuchos::GlobalMPISession::getRank();
 
   if (_zmcsAsRankOneUpdate) {
@@ -1444,17 +1444,17 @@ void Solution<Scalar>::imposeZMCsUsingLagrange() {
 }
 
 template <typename Scalar>
-Teuchos::RCP<LocalStiffnessMatrixFilter> Solution<Scalar>::filter() const{
+Teuchos::RCP<LocalStiffnessMatrixFilter> TSolution<Scalar>::filter() const{
   return _filter;
 }
 
 template <typename Scalar>
-Teuchos::RCP<DofInterpreter> Solution<Scalar>::getDofInterpreter() const {
+Teuchos::RCP<DofInterpreter> TSolution<Scalar>::getDofInterpreter() const {
   return _dofInterpreter;
 }
 
 template <typename Scalar>
-void Solution<Scalar>::setDofInterpreter(Teuchos::RCP<DofInterpreter> dofInterpreter) {
+void TSolution<Scalar>::setDofInterpreter(Teuchos::RCP<DofInterpreter> dofInterpreter) {
   _dofInterpreter = dofInterpreter;
   Epetra_Map map = getPartitionMap();
   Teuchos::RCP<Epetra_Map> mapPtr = Teuchos::rcp( new Epetra_Map(map) ); // copy map to RCP
@@ -1469,7 +1469,7 @@ void Solution<Scalar>::setDofInterpreter(Teuchos::RCP<DofInterpreter> dofInterpr
 }
 
 template <typename Scalar>
-ElementTypePtr Solution<Scalar>::getEquivalentElementType(Teuchos::RCP<Mesh> otherMesh, ElementTypePtr elemType) {
+ElementTypePtr TSolution<Scalar>::getEquivalentElementType(Teuchos::RCP<Mesh> otherMesh, ElementTypePtr elemType) {
   DofOrderingPtr otherTrial = elemType->trialOrderPtr;
   DofOrderingPtr otherTest = elemType->testOrderPtr;
   DofOrderingPtr myTrial = _mesh->getDofOrderingFactory().getTrialOrdering(*otherTrial);
@@ -1486,23 +1486,23 @@ ElementTypePtr Solution<Scalar>::getEquivalentElementType(Teuchos::RCP<Mesh> oth
 }
 
 template <typename Scalar>
-Epetra_MultiVector* Solution<Scalar>::getGlobalCoefficients() {
+Epetra_MultiVector* TSolution<Scalar>::getGlobalCoefficients() {
   return (*_lhsVector)(0);
 }
 
 template <typename Scalar>
-VectorPtr Solution<Scalar>::getGlobalCoefficients2() {
+VectorPtr TSolution<Scalar>::getGlobalCoefficients2() {
   return _lhsVector2;
 }
 
 template <typename Scalar>
-double Solution<Scalar>::globalCondEstLastSolve() {
+double TSolution<Scalar>::globalCondEstLastSolve() {
   // the condition # estimate for the last system matrix used in a solve, if _reportConditionNumber is true.
   return _globalSystemConditionEstimate;
 }
 
 template <typename Scalar>
-void Solution<Scalar>::integrateBasisFunctions(Intrepid::FieldContainer<GlobalIndexTypeToCast> &globalIndices, Intrepid::FieldContainer<double> &values, int trialID) {
+void TSolution<Scalar>::integrateBasisFunctions(Intrepid::FieldContainer<GlobalIndexTypeToCast> &globalIndices, Intrepid::FieldContainer<double> &values, int trialID) {
   int rank = Teuchos::GlobalMPISession::getRank();
 
   // only supports scalar-valued field bases right now...
@@ -1572,7 +1572,7 @@ void Solution<Scalar>::integrateBasisFunctions(Intrepid::FieldContainer<GlobalIn
 }
 
 template <typename Scalar>
-void Solution<Scalar>::integrateBasisFunctions(Intrepid::FieldContainer<double> &values, ElementTypePtr elemTypePtr, int trialID) {
+void TSolution<Scalar>::integrateBasisFunctions(Intrepid::FieldContainer<double> &values, ElementTypePtr elemTypePtr, int trialID) {
   int rank = Teuchos::GlobalMPISession::getRank();
   vector<GlobalIndexType> cellIDs = _mesh->globalDofAssignment()->cellIDsOfElementType(rank,elemTypePtr);
 
@@ -1614,12 +1614,12 @@ void Solution<Scalar>::integrateBasisFunctions(Intrepid::FieldContainer<double> 
 }
 
 template <typename Scalar>
-double Solution<Scalar>::meanValue(int trialID) {
+double TSolution<Scalar>::meanValue(int trialID) {
   return integrateSolution(trialID) / meshMeasure();
 }
 
 template <typename Scalar>
-double Solution<Scalar>::meshMeasure() {
+double TSolution<Scalar>::meshMeasure() {
   double value = 0.0;
   vector<ElementTypePtr> elemTypes = _mesh->elementTypes();
   vector<ElementTypePtr>::iterator elemTypeIt;
@@ -1637,7 +1637,7 @@ double Solution<Scalar>::meshMeasure() {
 }
 
 template <typename Scalar>
-double Solution<Scalar>::InfNormOfSolutionGlobal(int trialID){
+double TSolution<Scalar>::InfNormOfSolutionGlobal(int trialID){
   int numProcs = Teuchos::GlobalMPISession::getNProc();
   int rank     = Teuchos::GlobalMPISession::getRank();
 
@@ -1662,7 +1662,7 @@ double Solution<Scalar>::InfNormOfSolutionGlobal(int trialID){
 }
 
 template <typename Scalar>
-double Solution<Scalar>::InfNormOfSolution(int trialID){
+double TSolution<Scalar>::InfNormOfSolution(int trialID){
 
   int numProcs=1;
   int rank=0;
@@ -1711,7 +1711,7 @@ double Solution<Scalar>::InfNormOfSolution(int trialID){
 }
 
 template <typename Scalar>
-double Solution<Scalar>::L2NormOfSolutionGlobal(int trialID){
+double TSolution<Scalar>::L2NormOfSolutionGlobal(int trialID){
   int numProcs=1;
   int rank=0;
 
@@ -1738,7 +1738,7 @@ double Solution<Scalar>::L2NormOfSolutionGlobal(int trialID){
 }
 
 template <typename Scalar>
-double Solution<Scalar>::L2NormOfSolutionInCell(int trialID, GlobalIndexType cellID) {
+double TSolution<Scalar>::L2NormOfSolutionInCell(int trialID, GlobalIndexType cellID) {
   double value = 0.0;
   ElementTypePtr elemTypePtr = _mesh->getElement(cellID)->elementType();
   int numCells = 1;
@@ -1773,7 +1773,7 @@ double Solution<Scalar>::L2NormOfSolutionInCell(int trialID, GlobalIndexType cel
 }
 
 template <typename Scalar>
-double Solution<Scalar>::L2NormOfSolution(int trialID){
+double TSolution<Scalar>::L2NormOfSolution(int trialID){
 
   int numProcs=1;
   int rank=0;
@@ -1829,22 +1829,22 @@ double Solution<Scalar>::L2NormOfSolution(int trialID){
 }
 
 template <typename Scalar>
-Teuchos::RCP<LagrangeConstraints> Solution<Scalar>::lagrangeConstraints() const {
+Teuchos::RCP<LagrangeConstraints> TSolution<Scalar>::lagrangeConstraints() const {
   return _lagrangeConstraints;
 }
 
 template <typename Scalar>
-Teuchos::RCP<Epetra_FEVector> Solution<Scalar>::getLHSVector() {
+Teuchos::RCP<Epetra_FEVector> TSolution<Scalar>::getLHSVector() {
   return _lhsVector;
 }
 
 template <typename Scalar>
-VectorPtr Solution<Scalar>::getLHSVector2() {
+VectorPtr TSolution<Scalar>::getLHSVector2() {
   return _lhsVector2;
 }
 
 template <typename Scalar>
-double Solution<Scalar>::integrateSolution(int trialID) {
+double TSolution<Scalar>::integrateSolution(int trialID) {
   double value = 0.0;
   vector<ElementTypePtr> elemTypes = _mesh->elementTypes();
   vector<ElementTypePtr>::iterator elemTypeIt;
@@ -1861,7 +1861,7 @@ double Solution<Scalar>::integrateSolution(int trialID) {
 }
 
 template <typename Scalar>
-void Solution<Scalar>::integrateSolution(Intrepid::FieldContainer<double> &values, ElementTypePtr elemTypePtr, int trialID) {
+void TSolution<Scalar>::integrateSolution(Intrepid::FieldContainer<double> &values, ElementTypePtr elemTypePtr, int trialID) {
   int numCellsOfType = _mesh->numElementsOfType(elemTypePtr);
   int sideIndex = 0;
   int basisCardinality = elemTypePtr->trialOrderPtr->getBasisCardinality(trialID,sideIndex);
@@ -1902,7 +1902,7 @@ void Solution<Scalar>::integrateSolution(Intrepid::FieldContainer<double> &value
 }
 
 template <typename Scalar>
-void Solution<Scalar>::integrateFlux(Intrepid::FieldContainer<double> &values, int trialID) {
+void TSolution<Scalar>::integrateFlux(Intrepid::FieldContainer<double> &values, int trialID) {
   vector<ElementTypePtr> elemTypes = _mesh->elementTypes();
   vector<ElementTypePtr>::iterator elemTypeIt;
   for (elemTypeIt = elemTypes.begin(); elemTypeIt != elemTypes.end(); elemTypeIt++) {
@@ -1919,7 +1919,7 @@ void Solution<Scalar>::integrateFlux(Intrepid::FieldContainer<double> &values, i
 }
 
 template <typename Scalar>
-void Solution<Scalar>::integrateFlux(Intrepid::FieldContainer<double> &values, ElementTypePtr elemTypePtr, int trialID) {
+void TSolution<Scalar>::integrateFlux(Intrepid::FieldContainer<double> &values, ElementTypePtr elemTypePtr, int trialID) {
   values.initialize(0.0);
 
   Intrepid::FieldContainer<double> physicalCellNodes = _mesh()->physicalCellNodesGlobal(elemTypePtr);
@@ -1996,7 +1996,7 @@ void Solution<Scalar>::integrateFlux(Intrepid::FieldContainer<double> &values, E
 }
 
 template <typename Scalar>
-void Solution<Scalar>::solutionValues(Intrepid::FieldContainer<double> &values,
+void TSolution<Scalar>::solutionValues(Intrepid::FieldContainer<double> &values,
                               ElementTypePtr elemTypePtr,
                               int trialID,
                               const Intrepid::FieldContainer<double> &physicalPoints,
@@ -2107,7 +2107,7 @@ void Solution<Scalar>::solutionValues(Intrepid::FieldContainer<double> &values,
 }
 /*
    template <typename Scalar>
- double Solution<Scalar>::totalRHSNorm(){
+ double TSolution<Scalar>::totalRHSNorm(){
  vector< Teuchos::RCP< Element > > activeElements = _mesh->activeElements();
  vector< Teuchos::RCP< Element > >::iterator activeElemIt;
 
@@ -2123,7 +2123,7 @@ void Solution<Scalar>::solutionValues(Intrepid::FieldContainer<double> &values,
 
 
  template <typename Scalar>
- void Solution<Scalar>::rhsNorm(map<int,double> &rhsNormMap){
+ void TSolution<Scalar>::rhsNorm(map<int,double> &rhsNormMap){
  int numProcs=1;
  int rank=0;
 
@@ -2203,7 +2203,7 @@ void Solution<Scalar>::solutionValues(Intrepid::FieldContainer<double> &values,
  */
 
 template <typename Scalar>
-double Solution<Scalar>::energyErrorTotal() {
+double TSolution<Scalar>::energyErrorTotal() {
   double energyErrorSquared = 0.0;
   const map<GlobalIndexType,double>* energyErrorPerCell = &(rankLocalEnergyError());
 
@@ -2216,7 +2216,7 @@ double Solution<Scalar>::energyErrorTotal() {
 }
 
 template <typename Scalar>
-const map<GlobalIndexType,double> & Solution<Scalar>::globalEnergyError() {
+const map<GlobalIndexType,double> & TSolution<Scalar>::globalEnergyError() {
   if ( _energyErrorComputed ) {
     return _energyErrorForCellGlobal;
   }
@@ -2259,7 +2259,7 @@ const map<GlobalIndexType,double> & Solution<Scalar>::globalEnergyError() {
 }
 
 template <typename Scalar>
-const map<GlobalIndexType,double> & Solution<Scalar>::rankLocalEnergyError() {
+const map<GlobalIndexType,double> & TSolution<Scalar>::rankLocalEnergyError() {
   if ( _rankLocalEnergyErrorComputed ) {
     return _energyErrorForCell;
   }
@@ -2290,7 +2290,7 @@ const map<GlobalIndexType,double> & Solution<Scalar>::rankLocalEnergyError() {
 }
 
 template <typename Scalar>
-void Solution<Scalar>::computeErrorRepresentation() {
+void TSolution<Scalar>::computeErrorRepresentation() {
   if (!_residualsComputed) {
     computeResiduals();
   }
@@ -2339,7 +2339,7 @@ void Solution<Scalar>::computeErrorRepresentation() {
 }
 
 template <typename Scalar>
-void Solution<Scalar>::computeResiduals() {
+void TSolution<Scalar>::computeResiduals() {
   set<GlobalIndexType> rankLocalCells = _mesh->cellIDsInPartition();
   for (set<GlobalIndexType>::iterator cellIDIt = rankLocalCells.begin(); cellIDIt != rankLocalCells.end(); cellIDIt++) {
     GlobalIndexType cellID = *cellIDIt;
@@ -2400,7 +2400,7 @@ void Solution<Scalar>::computeResiduals() {
 }
 
 template <typename Scalar>
-void Solution<Scalar>::discardInactiveCellCoefficients() {
+void TSolution<Scalar>::discardInactiveCellCoefficients() {
   set< GlobalIndexType > activeCellIDs = _mesh->getActiveCellIDs();
   vector<GlobalIndexType> cellIDsToErase;
   for (map< GlobalIndexType, Intrepid::FieldContainer<double> >::iterator solnIt = _solutionForCellIDGlobal.begin();
@@ -2416,39 +2416,39 @@ void Solution<Scalar>::discardInactiveCellCoefficients() {
 }
 
 template <typename Scalar>
-Teuchos::RCP<Epetra_FEVector> Solution<Scalar>::getRHSVector() {
+Teuchos::RCP<Epetra_FEVector> TSolution<Scalar>::getRHSVector() {
   return _rhsVector;
 }
 
 template <typename Scalar>
-VectorPtr Solution<Scalar>::getRHSVector2() {
+VectorPtr TSolution<Scalar>::getRHSVector2() {
   return _rhsVector2;
 }
 
 template <typename Scalar>
-Teuchos::RCP<Epetra_CrsMatrix> Solution<Scalar>::getStiffnessMatrix() {
+Teuchos::RCP<Epetra_CrsMatrix> TSolution<Scalar>::getStiffnessMatrix() {
   return _globalStiffMatrix;
 }
 
 template <typename Scalar>
-MatrixPtr Solution<Scalar>::getStiffnessMatrix2() {
+MatrixPtr TSolution<Scalar>::getStiffnessMatrix2() {
   return _globalStiffMatrix2;
 }
 
 template <typename Scalar>
-void Solution<Scalar>::setStiffnessMatrix(Teuchos::RCP<Epetra_CrsMatrix> stiffness) {
+void TSolution<Scalar>::setStiffnessMatrix(Teuchos::RCP<Epetra_CrsMatrix> stiffness) {
 //  Epetra_FECrsMatrix* stiffnessFEMatrix = dynamic_cast<Epetra_FECrsMatrix*>(_globalStiffMatrix.get());
     _globalStiffMatrix = stiffness;
 }
 
 template <typename Scalar>
-void Solution<Scalar>::setStiffnessMatrix2(MatrixPtr stiffness) {
+void TSolution<Scalar>::setStiffnessMatrix2(MatrixPtr stiffness) {
 //  Epetra_FECrsMatrix* stiffnessFEMatrix = dynamic_cast<Epetra_FECrsMatrix*>(_globalStiffMatrix.get());
     _globalStiffMatrix2 = stiffness;
 }
 
 template <typename Scalar>
-void Solution<Scalar>::solutionValues(Intrepid::FieldContainer<double> &values, int trialID, BasisCachePtr basisCache,
+void TSolution<Scalar>::solutionValues(Intrepid::FieldContainer<double> &values, int trialID, BasisCachePtr basisCache,
                               bool weightForCubature, Camellia::EOperator op) {
   values.initialize(0.0);
   vector<GlobalIndexType> cellIDs = basisCache->cellIDs();
@@ -2478,11 +2478,11 @@ void Solution<Scalar>::solutionValues(Intrepid::FieldContainer<double> &values, 
     if ( _solutionForCellIDGlobal.find(cellID) == _solutionForCellIDGlobal.end() ) {
       // cellID not known -- default values for that cell to 0
 //      int rank = Teuchos::GlobalMPISession::getRank();
-//      cout << "In Solution<Scalar>::solutionValues() on rank " << rank << ", data for cellID " << cellID << " not found; defaulting to 0.\n" ;
+//      cout << "In TSolution<Scalar>::solutionValues() on rank " << rank << ", data for cellID " << cellID << " not found; defaulting to 0.\n" ;
       continue;
     } else {
       int rank = Teuchos::GlobalMPISession::getRank();
-//      cout << "In Solution<Scalar>::solutionValues() on rank " << rank << ", data for cellID " << cellID << " found; container size is " << _solutionForCellIDGlobal[cellID].size() << endl;
+//      cout << "In TSolution<Scalar>::solutionValues() on rank " << rank << ", data for cellID " << cellID << " found; container size is " << _solutionForCellIDGlobal[cellID].size() << endl;
     }
 
     Intrepid::FieldContainer<double>* solnCoeffs = &_solutionForCellIDGlobal[cellID];
@@ -2547,7 +2547,7 @@ void Solution<Scalar>::solutionValues(Intrepid::FieldContainer<double> &values, 
 }
 
 template <typename Scalar>
-void Solution<Scalar>::solutionValues(Intrepid::FieldContainer<double> &values, int trialID, const Intrepid::FieldContainer<double> &physicalPoints) {
+void TSolution<Scalar>::solutionValues(Intrepid::FieldContainer<double> &values, int trialID, const Intrepid::FieldContainer<double> &physicalPoints) {
   // physicalPoints may have dimensions (C,P,D) or (P,D)
   // either way, this method requires searching the mesh for the points provided
   if (physicalPoints.rank()==3) { // dimensions (C,P,D)
@@ -2727,7 +2727,7 @@ void determineQuadEdgeWeights(double weights[], int edgeVertexNumber, int numDiv
 }
 
 template <typename Scalar>
-void Solution<Scalar>::writeStatsToFile(const string &filePath, int precision) {
+void TSolution<Scalar>::writeStatsToFile(const string &filePath, int precision) {
   // writes out rows of the format: "cellID patchID x y solnValue"
   ofstream fout(filePath.c_str());
   fout << setprecision(precision);
@@ -2740,7 +2740,7 @@ void Solution<Scalar>::writeStatsToFile(const string &filePath, int precision) {
 }
 
 template <typename Scalar>
-void Solution<Scalar>::writeToFile(int trialID, const string &filePath) {
+void TSolution<Scalar>::writeToFile(int trialID, const string &filePath) {
   // writes out rows of the format: "cellID patchID x y solnValue"
   ofstream fout(filePath.c_str());
   fout << setprecision(15);
@@ -2824,7 +2824,7 @@ void Solution<Scalar>::writeToFile(int trialID, const string &filePath) {
 }
 
 template <typename Scalar>
-void Solution<Scalar>::writeQuadSolutionToFile(int trialID, const string &filePath) {
+void TSolution<Scalar>::writeQuadSolutionToFile(int trialID, const string &filePath) {
   // writes out rows of the format: "cellID xIndex yIndex x y solnValue"
   // it's a goofy thing, largely because the MATLAB routine we're using
   // wants a cartesian product with every combo (x_i, y_j) somewhere in the mix...
@@ -2916,7 +2916,7 @@ void Solution<Scalar>::writeQuadSolutionToFile(int trialID, const string &filePa
 }
 
 template <typename Scalar>
-Intrepid::FieldContainer<double> Solution<Scalar>::solutionForElementTypeGlobal(ElementTypePtr elemType) {
+Intrepid::FieldContainer<double> TSolution<Scalar>::solutionForElementTypeGlobal(ElementTypePtr elemType) {
   vector< ElementPtr > elementsOfType = _mesh->elementsOfTypeGlobal(elemType);
   int numDofsForType = elemType->trialOrderPtr->totalDofs();
   int numCellsOfType = elementsOfType.size();
@@ -2940,7 +2940,7 @@ Intrepid::FieldContainer<double> Solution<Scalar>::solutionForElementTypeGlobal(
 // static method interprets a set of trial ordering coefficients in terms of a specified DofOrdering
 // and returns a set of weights for the appropriate basis
 template <typename Scalar>
-void Solution<Scalar>::basisCoeffsForTrialOrder(Intrepid::FieldContainer<double> &basisCoeffs, DofOrderingPtr trialOrder,
+void TSolution<Scalar>::basisCoeffsForTrialOrder(Intrepid::FieldContainer<double> &basisCoeffs, DofOrderingPtr trialOrder,
                                         const Intrepid::FieldContainer<double> &allCoeffs,
                                         int trialID, int sideIndex) {
   if (! trialOrder->hasBasisEntry(trialID, sideIndex)) {
@@ -2960,7 +2960,7 @@ void Solution<Scalar>::basisCoeffsForTrialOrder(Intrepid::FieldContainer<double>
 }
 
 template <typename Scalar>
-void Solution<Scalar>::solnCoeffsForCellID(Intrepid::FieldContainer<double> &solnCoeffs, GlobalIndexType cellID, int trialID, int sideIndex) {
+void TSolution<Scalar>::solnCoeffsForCellID(Intrepid::FieldContainer<double> &solnCoeffs, GlobalIndexType cellID, int trialID, int sideIndex) {
   Teuchos::RCP< DofOrdering > trialOrder = _mesh->getElement(cellID)->elementType()->trialOrderPtr;
 
   if (_solutionForCellIDGlobal.find(cellID) == _solutionForCellIDGlobal.end() ) {
@@ -2976,7 +2976,7 @@ void Solution<Scalar>::solnCoeffsForCellID(Intrepid::FieldContainer<double> &sol
 }
 
 template <typename Scalar>
-const Intrepid::FieldContainer<double>& Solution<Scalar>::allCoefficientsForCellID(GlobalIndexType cellID, bool warnAboutOffRankImports) {
+const Intrepid::FieldContainer<double>& TSolution<Scalar>::allCoefficientsForCellID(GlobalIndexType cellID, bool warnAboutOffRankImports) {
   int myRank                    = Teuchos::GlobalMPISession::getRank();
   PartitionIndexType cellRank   = _mesh->globalDofAssignment()->partitionForCellID(cellID);
 
@@ -2993,34 +2993,34 @@ const Intrepid::FieldContainer<double>& Solution<Scalar>::allCoefficientsForCell
 }
 
 template <typename Scalar>
-void Solution<Scalar>::setBC( Teuchos::RCP<BC> bc) {
+void TSolution<Scalar>::setBC( Teuchos::RCP<BC> bc) {
   _bc = bc;
 }
 
 template <typename Scalar>
-void Solution<Scalar>::setFilter(Teuchos::RCP<LocalStiffnessMatrixFilter> newFilter) {
+void TSolution<Scalar>::setFilter(Teuchos::RCP<LocalStiffnessMatrixFilter> newFilter) {
   _filter = newFilter;
 }
 
 template <typename Scalar>
-void Solution<Scalar>::setIP( IPPtr ip) {
+void TSolution<Scalar>::setIP( IPPtr ip) {
   _ip = ip;
   // any computed residuals will need to be recomputed with the new IP
   clearComputedResiduals();
 }
 
 template <typename Scalar>
-void Solution<Scalar>::setLagrangeConstraints( Teuchos::RCP<LagrangeConstraints> lagrangeConstraints) {
+void TSolution<Scalar>::setLagrangeConstraints( Teuchos::RCP<LagrangeConstraints> lagrangeConstraints) {
   _lagrangeConstraints = lagrangeConstraints;
 }
 
 template <typename Scalar>
-void Solution<Scalar>::setReportConditionNumber(bool value) {
+void TSolution<Scalar>::setReportConditionNumber(bool value) {
   _reportConditionNumber = value;
 }
 
 template <typename Scalar>
-void Solution<Scalar>::setLocalCoefficientsForCell(GlobalIndexType cellID, const Intrepid::FieldContainer<double> &coefficients) {
+void TSolution<Scalar>::setLocalCoefficientsForCell(GlobalIndexType cellID, const Intrepid::FieldContainer<double> &coefficients) {
   if (coefficients.size() != _mesh->getElementType(cellID)->trialOrderPtr->totalDofs()) {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "coefficients container doesn't have the right # of dofs");
   }
@@ -3031,24 +3031,24 @@ void Solution<Scalar>::setLocalCoefficientsForCell(GlobalIndexType cellID, const
 }
 
 template <typename Scalar>
-void Solution<Scalar>::setReportTimingResults(bool value) {
+void TSolution<Scalar>::setReportTimingResults(bool value) {
   _reportTimingResults = value;
 }
 
 template <typename Scalar>
-void Solution<Scalar>::setRHS( Teuchos::RCP<RHS> rhs) {
+void TSolution<Scalar>::setRHS( Teuchos::RCP<RHS> rhs) {
   _rhs = rhs;
   clearComputedResiduals();
 }
 
 template <typename Scalar>
-void Solution<Scalar>::setSolnCoeffsForCellID(Intrepid::FieldContainer<double> &solnCoeffsToSet, GlobalIndexType cellID){
+void TSolution<Scalar>::setSolnCoeffsForCellID(Intrepid::FieldContainer<double> &solnCoeffsToSet, GlobalIndexType cellID){
   _solutionForCellIDGlobal[cellID] = solnCoeffsToSet;
   _mesh->globalDofAssignment()->interpretLocalCoefficients(cellID,solnCoeffsToSet,*_lhsVector);
 }
 
 template <typename Scalar>
-void Solution<Scalar>::setSolnCoeffsForCellID(Intrepid::FieldContainer<double> &solnCoeffsToSet, GlobalIndexType cellID, int trialID, int sideIndex) {
+void TSolution<Scalar>::setSolnCoeffsForCellID(Intrepid::FieldContainer<double> &solnCoeffsToSet, GlobalIndexType cellID, int trialID, int sideIndex) {
   ElementTypePtr elemTypePtr = _mesh->getElement(cellID)->elementType();
 
   Teuchos::RCP< DofOrdering > trialOrder = elemTypePtr->trialOrderPtr;
@@ -3083,30 +3083,30 @@ void Solution<Scalar>::setSolnCoeffsForCellID(Intrepid::FieldContainer<double> &
 
 // protected method; used for solution comparison...
 template <typename Scalar>
-const map< GlobalIndexType, Intrepid::FieldContainer<double> > & Solution<Scalar>::solutionForCellIDGlobal() const {
+const map< GlobalIndexType, Intrepid::FieldContainer<double> > & TSolution<Scalar>::solutionForCellIDGlobal() const {
   return _solutionForCellIDGlobal;
 }
 
 template <typename Scalar>
-void Solution<Scalar>::setWriteMatrixToFile(bool value, const string &filePath) {
+void TSolution<Scalar>::setWriteMatrixToFile(bool value, const string &filePath) {
   _writeMatrixToMatlabFile = value;
   _matrixFilePath = filePath;
 }
 
 template <typename Scalar>
-void Solution<Scalar>::setWriteMatrixToMatrixMarketFile(bool value, const string &filePath) {
+void TSolution<Scalar>::setWriteMatrixToMatrixMarketFile(bool value, const string &filePath) {
   _writeMatrixToMatrixMarketFile = value;
   _matrixFilePath = filePath;
 }
 
 template <typename Scalar>
-void Solution<Scalar>::setWriteRHSToMatrixMarketFile(bool value, const string &filePath) {
+void TSolution<Scalar>::setWriteRHSToMatrixMarketFile(bool value, const string &filePath) {
   _writeRHSToMatrixMarketFile = value;
   _rhsFilePath = filePath;
 }
 
 template <typename Scalar>
-void Solution<Scalar>::condensedSolve(Teuchos::RCP<Solver> globalSolver, bool reduceMemoryFootprint) {
+void TSolution<Scalar>::condensedSolve(Teuchos::RCP<Solver> globalSolver, bool reduceMemoryFootprint) {
   // when reduceMemoryFootprint is true, local stiffness matrices will be computed twice, rather than stored for reuse
   vector<int> trialIDs = _mesh->bilinearForm()->trialIDs();
 
@@ -3134,7 +3134,7 @@ void Solution<Scalar>::condensedSolve(Teuchos::RCP<Solver> globalSolver, bool re
 
 // must write to .m file
 template <typename Scalar>
-void Solution<Scalar>::writeFieldsToFile(int trialID, const string &filePath){
+void TSolution<Scalar>::writeFieldsToFile(int trialID, const string &filePath){
 
   //  cout << "writeFieldsToFile for trialID: " << trialID << endl;
 
@@ -3249,7 +3249,7 @@ void Solution<Scalar>::writeFieldsToFile(int trialID, const string &filePath){
 }
 
 template <typename Scalar>
-void Solution<Scalar>::writeFluxesToFile(int trialID, const string &filePath){
+void TSolution<Scalar>::writeFluxesToFile(int trialID, const string &filePath){
 
   ofstream fout(filePath.c_str());
   fout << setprecision(15);
@@ -3338,107 +3338,107 @@ void Solution<Scalar>::writeFluxesToFile(int trialID, const string &filePath){
 }
 
 template <typename Scalar>
-double Solution<Scalar>::totalTimeLocalStiffness() {
+double TSolution<Scalar>::totalTimeLocalStiffness() {
   return _totalTimeLocalStiffness;
 }
 
 template <typename Scalar>
-double Solution<Scalar>::totalTimeGlobalAssembly() {
+double TSolution<Scalar>::totalTimeGlobalAssembly() {
   return _totalTimeGlobalAssembly;
 }
 
 template <typename Scalar>
-double Solution<Scalar>::totalTimeBCImposition() {
+double TSolution<Scalar>::totalTimeBCImposition() {
   return _totalTimeBCImposition;
 }
 
 template <typename Scalar>
-double Solution<Scalar>::totalTimeSolve() {
+double TSolution<Scalar>::totalTimeSolve() {
   return _totalTimeSolve;
 }
 
 template <typename Scalar>
-double Solution<Scalar>::totalTimeDistributeSolution() {
+double TSolution<Scalar>::totalTimeDistributeSolution() {
   return _totalTimeDistributeSolution;
 }
 
 template <typename Scalar>
-double Solution<Scalar>::meanTimeLocalStiffness() {
+double TSolution<Scalar>::meanTimeLocalStiffness() {
   return _meanTimeLocalStiffness;
 }
 
 template <typename Scalar>
-double Solution<Scalar>::meanTimeGlobalAssembly() {
+double TSolution<Scalar>::meanTimeGlobalAssembly() {
   return _meanTimeGlobalAssembly;
 }
 
 template <typename Scalar>
-double Solution<Scalar>::meanTimeBCImposition() {
+double TSolution<Scalar>::meanTimeBCImposition() {
   return _meanTimeBCImposition;
 }
 
 template <typename Scalar>
-double Solution<Scalar>::meanTimeSolve() {
+double TSolution<Scalar>::meanTimeSolve() {
   return _meanTimeSolve;
 }
 
 template <typename Scalar>
-double Solution<Scalar>::meanTimeDistributeSolution() {
+double TSolution<Scalar>::meanTimeDistributeSolution() {
   return _meanTimeDistributeSolution;
 }
 
 template <typename Scalar>
-double Solution<Scalar>::maxTimeLocalStiffness() {
+double TSolution<Scalar>::maxTimeLocalStiffness() {
   return _maxTimeLocalStiffness;
 }
 
 template <typename Scalar>
-double Solution<Scalar>::maxTimeGlobalAssembly() {
+double TSolution<Scalar>::maxTimeGlobalAssembly() {
   return _maxTimeGlobalAssembly;
 }
 
 template <typename Scalar>
-double Solution<Scalar>::maxTimeBCImposition() {
+double TSolution<Scalar>::maxTimeBCImposition() {
   return _maxTimeBCImposition;
 }
 
 template <typename Scalar>
-double Solution<Scalar>::maxTimeSolve() {
+double TSolution<Scalar>::maxTimeSolve() {
   return _maxTimeSolve;
 }
 
 template <typename Scalar>
-double Solution<Scalar>::maxTimeDistributeSolution() {
+double TSolution<Scalar>::maxTimeDistributeSolution() {
   return _maxTimeDistributeSolution;
 }
 
 template <typename Scalar>
-double Solution<Scalar>::minTimeLocalStiffness() {
+double TSolution<Scalar>::minTimeLocalStiffness() {
   return _minTimeLocalStiffness;
 }
 
 template <typename Scalar>
-double Solution<Scalar>::minTimeGlobalAssembly() {
+double TSolution<Scalar>::minTimeGlobalAssembly() {
   return _minTimeGlobalAssembly;
 }
 
 template <typename Scalar>
-double Solution<Scalar>::minTimeBCImposition() {
+double TSolution<Scalar>::minTimeBCImposition() {
   return _minTimeBCImposition;
 }
 
 template <typename Scalar>
-double Solution<Scalar>::minTimeSolve() {
+double TSolution<Scalar>::minTimeSolve() {
   return _minTimeSolve;
 }
 
 template <typename Scalar>
-double Solution<Scalar>::minTimeDistributeSolution() {
+double TSolution<Scalar>::minTimeDistributeSolution() {
   return _minTimeDistributeSolution;
 }
 
 template <typename Scalar>
-Epetra_Map Solution<Scalar>::getPartitionMap() {
+Epetra_Map TSolution<Scalar>::getPartitionMap() {
   int rank = Teuchos::GlobalMPISession::getRank();
 
 #ifdef HAVE_MPI
@@ -3457,7 +3457,7 @@ Epetra_Map Solution<Scalar>::getPartitionMap() {
 }
 
 template <typename Scalar>
-Epetra_Map Solution<Scalar>::getPartitionMapSolutionDofsOnly() { // omits lagrange multipliers, ZMCs, etc.
+Epetra_Map TSolution<Scalar>::getPartitionMapSolutionDofsOnly() { // omits lagrange multipliers, ZMCs, etc.
   Epetra_Map partMapWithZMC = getPartitionMap();
   vector<int> myGlobalIndices(partMapWithZMC.NumMyElements());
   partMapWithZMC.MyGlobalElements(&myGlobalIndices[0]);
@@ -3474,7 +3474,7 @@ Epetra_Map Solution<Scalar>::getPartitionMapSolutionDofsOnly() { // omits lagran
 }
 
 template <typename Scalar>
-Epetra_Map Solution<Scalar>::getPartitionMap(PartitionIndexType rank, set<GlobalIndexType> & myGlobalIndicesSet, GlobalIndexType numGlobalDofs,
+Epetra_Map TSolution<Scalar>::getPartitionMap(PartitionIndexType rank, set<GlobalIndexType> & myGlobalIndicesSet, GlobalIndexType numGlobalDofs,
                                      int zeroMeanConstraintsSize, Epetra_Comm* Comm ) {
   int numGlobalLagrange = _lagrangeConstraints->numGlobalConstraints();
   vector< ElementPtr > elements = _mesh->elementsInPartition(rank);
@@ -3526,7 +3526,7 @@ Epetra_Map Solution<Scalar>::getPartitionMap(PartitionIndexType rank, set<Global
   }
 
   if (offset != localDofsSize) {
-    cout << "WARNING: Apparent internal error in Solution<Scalar>::getPartitionMap.  # entries filled in myGlobalDofIndices does not match its size...\n";
+    cout << "WARNING: Apparent internal error in TSolution<Scalar>::getPartitionMap.  # entries filled in myGlobalDofIndices does not match its size...\n";
   }
 
   int totalRows = numGlobalDofs + globalNumElementLagrange + numGlobalLagrange + zeroMeanConstraintsSize;
@@ -3545,7 +3545,7 @@ Epetra_Map Solution<Scalar>::getPartitionMap(PartitionIndexType rank, set<Global
 }
 
 template <typename Scalar>
-MapPtr Solution<Scalar>::getPartitionMap2() {
+MapPtr TSolution<Scalar>::getPartitionMap2() {
   int rank = Teuchos::GlobalMPISession::getRank();
 
   Teuchos::RCP<const Teuchos::Comm<int> > comm = Tpetra::DefaultPlatform::getDefaultPlatform().getComm();
@@ -3559,7 +3559,7 @@ MapPtr Solution<Scalar>::getPartitionMap2() {
   return partMap;
 }
 
-// MapPtr Solution<Scalar>::getPartitionMapSolutionDofsOnly2() { // omits lagrange multipliers, ZMCs, etc.
+// MapPtr TSolution<Scalar>::getPartitionMapSolutionDofsOnly2() { // omits lagrange multipliers, ZMCs, etc.
 //   MapPtr partMapWithZMC = getPartitionMap2();
 //   vector<int> myGlobalIndices(partMapWithZMC.NumMyElements());
 //   partMapWithZMC.MyGlobalElements(&myGlobalIndices[0]);
@@ -3576,7 +3576,7 @@ MapPtr Solution<Scalar>::getPartitionMap2() {
 // }
 
 template <typename Scalar>
-MapPtr Solution<Scalar>::getPartitionMap2(PartitionIndexType rank, set<GlobalIndexType> & myGlobalIndicesSet, GlobalIndexType numGlobalDofs,
+MapPtr TSolution<Scalar>::getPartitionMap2(PartitionIndexType rank, set<GlobalIndexType> & myGlobalIndicesSet, GlobalIndexType numGlobalDofs,
                                      int zeroMeanConstraintsSize, Teuchos::RCP<const Teuchos::Comm<int> > Comm ) {
   int numGlobalLagrange = _lagrangeConstraints->numGlobalConstraints();
   vector< ElementPtr > elements = _mesh->elementsInPartition(rank);
@@ -3628,7 +3628,7 @@ MapPtr Solution<Scalar>::getPartitionMap2(PartitionIndexType rank, set<GlobalInd
   }
 
   if (offset != localDofsSize) {
-    cout << "WARNING: Apparent internal error in Solution<Scalar>::getPartitionMap.  # entries filled in myGlobalDofIndices does not match its size...\n";
+    cout << "WARNING: Apparent internal error in TSolution<Scalar>::getPartitionMap.  # entries filled in myGlobalDofIndices does not match its size...\n";
   }
 
   int totalRows = numGlobalDofs + globalNumElementLagrange + numGlobalLagrange + zeroMeanConstraintsSize;
@@ -3644,13 +3644,13 @@ MapPtr Solution<Scalar>::getPartitionMap2(PartitionIndexType rank, set<GlobalInd
 }
 
 template <typename Scalar>
-void Solution<Scalar>::processSideUpgrades( const map<GlobalIndexType, pair< ElementTypePtr, ElementTypePtr > > &cellSideUpgrades ) {
+void TSolution<Scalar>::processSideUpgrades( const map<GlobalIndexType, pair< ElementTypePtr, ElementTypePtr > > &cellSideUpgrades ) {
   set<GlobalIndexType> cellIDsToSkip; //empty
   processSideUpgrades(cellSideUpgrades,cellIDsToSkip);
 }
 
 template <typename Scalar>
-void Solution<Scalar>::processSideUpgrades( const map<GlobalIndexType, pair< ElementTypePtr, ElementTypePtr > > &cellSideUpgrades, const set<GlobalIndexType> &cellIDsToSkip ) {
+void TSolution<Scalar>::processSideUpgrades( const map<GlobalIndexType, pair< ElementTypePtr, ElementTypePtr > > &cellSideUpgrades, const set<GlobalIndexType> &cellIDsToSkip ) {
   for (map<GlobalIndexType, pair< ElementTypePtr, ElementTypePtr > >::const_iterator upgradeIt = cellSideUpgrades.begin();
        upgradeIt != cellSideUpgrades.end(); upgradeIt++) {
     GlobalIndexType cellID = upgradeIt->first;
@@ -3667,7 +3667,7 @@ void Solution<Scalar>::processSideUpgrades( const map<GlobalIndexType, pair< Ele
 }
 
 template <typename Scalar>
-void Solution<Scalar>::projectOntoMesh(const map<int, TFunctionPtr<Scalar> > &functionMap){ // map: trialID -> function
+void TSolution<Scalar>::projectOntoMesh(const map<int, TFunctionPtr<Scalar> > &functionMap){ // map: trialID -> function
   if (_lhsVector.get()==NULL) {
     initializeLHSVector();
   }
@@ -3680,7 +3680,7 @@ void Solution<Scalar>::projectOntoMesh(const map<int, TFunctionPtr<Scalar> > &fu
 }
 
 template <typename Scalar>
-void Solution<Scalar>::projectOntoCell(const map<int, TFunctionPtr<Scalar> > &functionMap, GlobalIndexType cellID, int side) {
+void TSolution<Scalar>::projectOntoCell(const map<int, TFunctionPtr<Scalar> > &functionMap, GlobalIndexType cellID, int side) {
   Intrepid::FieldContainer<double> physicalCellNodes = _mesh->physicalCellNodesForCell(cellID);
   vector<GlobalIndexType> cellIDs(1,cellID);
 
@@ -3755,7 +3755,7 @@ void Solution<Scalar>::projectOntoCell(const map<int, TFunctionPtr<Scalar> > &fu
 }
 
 template <typename Scalar>
-void Solution<Scalar>::projectFieldVariablesOntoOtherSolution(Teuchos::RCP< Solution<Scalar> > otherSoln) {
+void TSolution<Scalar>::projectFieldVariablesOntoOtherSolution(Teuchos::RCP< TSolution<Scalar> > otherSoln) {
   vector< int > fieldIDs = _mesh->bilinearForm()->trialVolumeIDs();
   vector< VarPtr > fieldVars;
   for (vector<int>::iterator fieldIt = fieldIDs.begin(); fieldIt != fieldIDs.end(); fieldIt++) {
@@ -3763,13 +3763,13 @@ void Solution<Scalar>::projectFieldVariablesOntoOtherSolution(Teuchos::RCP< Solu
     VarPtr var = Teuchos::rcp( new Var(fieldID, 0, "unspecified") );
     fieldVars.push_back(var);
   }
-  Teuchos::RCP< Solution<Scalar> > thisPtr = Teuchos::rcp(this, false);
+  Teuchos::RCP< TSolution<Scalar> > thisPtr = Teuchos::rcp(this, false);
   map<int, TFunctionPtr<Scalar> > solnMap = PreviousSolutionFunction<Scalar>::functionMap(fieldVars, thisPtr);
   otherSoln->projectOntoMesh(solnMap);
 }
 
 template <typename Scalar>
-void Solution<Scalar>::projectOldCellOntoNewCells(GlobalIndexType cellID,
+void TSolution<Scalar>::projectOldCellOntoNewCells(GlobalIndexType cellID,
                                           ElementTypePtr oldElemType,
                                           const vector<GlobalIndexType> &childIDs) {
   int rank = Teuchos::GlobalMPISession::getRank();
@@ -3785,7 +3785,7 @@ void Solution<Scalar>::projectOldCellOntoNewCells(GlobalIndexType cellID,
 }
 
 template <typename Scalar>
-void Solution<Scalar>::projectOldCellOntoNewCells(GlobalIndexType cellID,
+void TSolution<Scalar>::projectOldCellOntoNewCells(GlobalIndexType cellID,
                                           ElementTypePtr oldElemType,
                                           const Intrepid::FieldContainer<double> &oldData,
                                           const vector<GlobalIndexType> &childIDs)
@@ -3960,7 +3960,7 @@ void Solution<Scalar>::projectOldCellOntoNewCells(GlobalIndexType cellID,
 }
 
 template <typename Scalar>
-void Solution<Scalar>::readFromFile(const string &filePath) {
+void TSolution<Scalar>::readFromFile(const string &filePath) {
   ifstream fin(filePath.c_str());
 
   while (fin.good()) {
@@ -4005,12 +4005,12 @@ void Solution<Scalar>::readFromFile(const string &filePath) {
 }
 
 template <typename Scalar>
-Teuchos::RCP< Solution<Scalar> > Solution<Scalar>::solution(MeshPtr mesh, BCPtr bc, RHSPtr rhs, IPPtr ip ) {
-  return Teuchos::rcp( new Solution<Scalar>(mesh,bc,rhs,ip) );
+Teuchos::RCP< TSolution<Scalar> > TSolution<Scalar>::solution(MeshPtr mesh, BCPtr bc, RHSPtr rhs, IPPtr ip ) {
+  return Teuchos::rcp( new TSolution<Scalar>(mesh,bc,rhs,ip) );
 }
 
 template <typename Scalar>
-void Solution<Scalar>::writeToFile(const string &filePath) {
+void TSolution<Scalar>::writeToFile(const string &filePath) {
   ofstream fout(filePath.c_str());
 
   for (map<GlobalIndexType, Intrepid::FieldContainer<double> >::iterator solnEntryIt = _solutionForCellIDGlobal.begin();
@@ -4029,23 +4029,23 @@ void Solution<Scalar>::writeToFile(const string &filePath) {
 
 #ifdef HAVE_EPETRAEXT_HDF5
 template <typename Scalar>
-void Solution<Scalar>::save(string meshAndSolutionPrefix)
+void TSolution<Scalar>::save(string meshAndSolutionPrefix)
 {
   saveToHDF5(meshAndSolutionPrefix+".soln");
   mesh()->saveToHDF5(meshAndSolutionPrefix+".mesh");
 }
 
 template <typename Scalar>
-Teuchos::RCP< Solution<Scalar> > Solution<Scalar>::load(BFPtr bf, string meshAndSolutionPrefix)
+Teuchos::RCP< TSolution<Scalar> > TSolution<Scalar>::load(BFPtr bf, string meshAndSolutionPrefix)
 {
   MeshPtr mesh = MeshFactory::loadFromHDF5(bf, meshAndSolutionPrefix+".mesh");
-  Teuchos::RCP< Solution<Scalar> > solution = Solution<Scalar>::solution(mesh);
+  Teuchos::RCP< TSolution<Scalar> > solution = TSolution<Scalar>::solution(mesh);
   solution->loadFromHDF5(meshAndSolutionPrefix+".soln");
   return solution;
 }
 
 template <typename Scalar>
-void Solution<Scalar>::saveToHDF5(string filename)
+void TSolution<Scalar>::saveToHDF5(string filename)
 {
   int commRank = Teuchos::GlobalMPISession::getRank();
   int nProcs = Teuchos::GlobalMPISession::getNProc();
@@ -4066,7 +4066,7 @@ void Solution<Scalar>::saveToHDF5(string filename)
 }
 
 template <typename Scalar>
-void Solution<Scalar>::loadFromHDF5(string filename)
+void TSolution<Scalar>::loadFromHDF5(string filename)
 {
   initializeLHSVector();
   int commRank = Teuchos::GlobalMPISession::getRank();
@@ -4092,7 +4092,7 @@ void Solution<Scalar>::loadFromHDF5(string filename)
 #endif
 
 template <typename Scalar>
-vector<int> Solution<Scalar>::getZeroMeanConstraints() {
+vector<int> TSolution<Scalar>::getZeroMeanConstraints() {
   // determine any zero-mean constraints:
   vector< int > trialIDs = _mesh->bilinearForm()->trialIDs();
   vector< int > zeroMeanConstraints;
@@ -4107,7 +4107,7 @@ vector<int> Solution<Scalar>::getZeroMeanConstraints() {
 }
 
 template <typename Scalar>
-void Solution<Scalar>::setGlobalSolutionFromCellLocalCoefficients() {
+void TSolution<Scalar>::setGlobalSolutionFromCellLocalCoefficients() {
   if (_lhsVector.get() == NULL) {
     initializeLHSVector();
     return; // initializeLHSVector() calls setGlobalSolutionFromCellLocalCoefficients(), so return now to avoid redundant execution of the below.
@@ -4129,7 +4129,7 @@ void Solution<Scalar>::setGlobalSolutionFromCellLocalCoefficients() {
 }
 
 template <typename Scalar>
-void Solution<Scalar>::setUseCondensedSolve(bool value) {
+void TSolution<Scalar>::setUseCondensedSolve(bool value) {
   if (value) {
     if (_oldDofInterpreter.get()==NULL) {
       // when reduceMemoryFootprint is true, local stiffness matrices will be computed twice, rather than stored for reuse
@@ -4161,23 +4161,23 @@ void Solution<Scalar>::setUseCondensedSolve(bool value) {
 }
 
 template <typename Scalar>
-void Solution<Scalar>::setZeroMeanConstraintRho(double value) {
+void TSolution<Scalar>::setZeroMeanConstraintRho(double value) {
   _zmcRho = value;
 }
 
 template <typename Scalar>
-double Solution<Scalar>::zeroMeanConstraintRho() {
+double TSolution<Scalar>::zeroMeanConstraintRho() {
   return _zmcRho;
 }
 
 template <typename Scalar>
-bool Solution<Scalar>::getZMCsAsGlobalLagrange() const {
+bool TSolution<Scalar>::getZMCsAsGlobalLagrange() const {
   return _zmcsAsLagrangeMultipliers;
 }
 
 template <typename Scalar>
-void Solution<Scalar>::setZMCsAsGlobalLagrange(bool value) {
+void TSolution<Scalar>::setZMCsAsGlobalLagrange(bool value) {
   _zmcsAsLagrangeMultipliers = value;
 }
 
-template class Solution<double>;
+template class TSolution<double>;

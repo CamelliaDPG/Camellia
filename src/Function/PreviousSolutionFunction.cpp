@@ -21,7 +21,7 @@ using namespace Intrepid;
 using namespace Camellia;
 
 template <typename Scalar>
-PreviousSolutionFunction<Scalar>::PreviousSolutionFunction(SolutionPtr<Scalar> soln, LinearTermPtr solnExpression, bool multiplyFluxesByCellParity) : TFunction<Scalar>(solnExpression->rank()) {
+PreviousSolutionFunction<Scalar>::PreviousSolutionFunction(TSolutionPtr<Scalar> soln, LinearTermPtr solnExpression, bool multiplyFluxesByCellParity) : TFunction<Scalar>(solnExpression->rank()) {
   _soln = soln;
   _solnExpression = solnExpression;
   _overrideMeshCheck = false;
@@ -31,7 +31,7 @@ PreviousSolutionFunction<Scalar>::PreviousSolutionFunction(SolutionPtr<Scalar> s
   }
 }
 template <typename Scalar>
-PreviousSolutionFunction<Scalar>::PreviousSolutionFunction(SolutionPtr<Scalar> soln, VarPtr var, bool multiplyFluxesByCellParity) : TFunction<Scalar>(var->rank()) {
+PreviousSolutionFunction<Scalar>::PreviousSolutionFunction(TSolutionPtr<Scalar> soln, VarPtr var, bool multiplyFluxesByCellParity) : TFunction<Scalar>(var->rank()) {
   _soln = soln;
   _solnExpression = 1.0 * var;
   _overrideMeshCheck = false;
@@ -130,7 +130,7 @@ void PreviousSolutionFunction<Scalar>::values(FieldContainer<Scalar> &values, Ba
   }
 }
 template <typename Scalar>
-map<int, TFunctionPtr<Scalar> > PreviousSolutionFunction<Scalar>::functionMap( vector< VarPtr > varPtrs, SolutionPtr<Scalar> soln) {
+map<int, TFunctionPtr<Scalar> > PreviousSolutionFunction<Scalar>::functionMap( vector< VarPtr > varPtrs, TSolutionPtr<Scalar> soln) {
   map<int, TFunctionPtr<Scalar> > functionMap;
   for (vector< VarPtr >::iterator varIt = varPtrs.begin(); varIt != varPtrs.end(); varIt++) {
     VarPtr var = *varIt;

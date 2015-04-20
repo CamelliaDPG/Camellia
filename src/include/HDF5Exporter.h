@@ -51,7 +51,7 @@ namespace Camellia {
     void exportFunction(std::vector<TFunctionPtr<double>> functions, std::vector<std::string> functionNames, double timeVal=0,
                         unsigned int defaultNum1DPts=4, map_int_int cellIDToNum1DPts=map_int_int(),
                         std::set<GlobalIndexType> cellIndices=std::set<GlobalIndexType>());
-    void exportSolution(SolutionPtr<double> solution, double timeVal=0, unsigned int defaultNum1DPts=4,
+    void exportSolution(TSolutionPtr<double> solution, double timeVal=0, unsigned int defaultNum1DPts=4,
                         map_int_int cellIDToNum1DPts=map_int_int(), set<GlobalIndexType> cellIndices=set<GlobalIndexType>());
     void exportTimeSlab(TFunctionPtr<double> function, std::string functionName="function", double tInit=0, double tFinal=1, unsigned int numSlices=2,
       unsigned int sliceH1Order=2, unsigned int defaultNum1DPts=4);
@@ -59,13 +59,13 @@ namespace Camellia {
       unsigned int sliceH1Order=2, unsigned int defaultNum1DPts=4);
 
     // DEPRECATED METHOD:
-    void exportSolution(SolutionPtr<double> solution, VarFactory varFactory, double timeVal=0,
+    void exportSolution(TSolutionPtr<double> solution, VarFactory varFactory, double timeVal=0,
                         unsigned int defaultNum1DPts=4, map_int_int cellIDToNum1DPts=map_int_int(), set<GlobalIndexType> cellIndices=set<GlobalIndexType>());
 
     // allows one-line export without storing an exporter object
     static void exportFunction(std::string directoryPath, std::string functionName, TFunctionPtr<double> function, MeshPtr mesh);
     // allows one-line export without storing an exporter object
-    static void exportSolution(std::string directoryPath, std::string solutionName, SolutionPtr<double> solution);
+    static void exportSolution(std::string directoryPath, std::string solutionName, TSolutionPtr<double> solution);
   };
 
   // creates a map from cell index to number of 1D points (number of subdivisions + 1)
@@ -85,9 +85,9 @@ namespace Camellia {
 //                       unsigned int defaultNum1DPts=4, map<int, int> cellIDToNum1DPts=map<int,int>(), set<GlobalIndexType> cellIndices=set<GlobalIndexType>()) {}
 //   void exportFunction(std::vector<TFunctionPtr<double>> functions, std::vector<std::string> functionNames, double timeVal=0,
 //                       unsigned int defaultNum1DPts=4, map<int, int> cellIDToNum1DPts=map<int,int>(), set<GlobalIndexType> cellIndices=set<GlobalIndexType>()) {}
-//   void exportSolution(SolutionPtr<double> solution, VarFactory varFactory, double timeVal=0,
+//   void exportSolution(TSolutionPtr<double> solution, VarFactory varFactory, double timeVal=0,
 //                       unsigned int defaultNum1DPts=4, map<int, int> cellIDToNum1DPts=map<int,int>(), set<GlobalIndexType> cellIndices=set<GlobalIndexType>()) {}
-//   static void exportSolution(std::string saveDirectory, SolutionPtr<double> solution) {}
+//   static void exportSolution(std::string saveDirectory, TSolutionPtr<double> solution) {}
 // };
 /* END OF DUMMY IMPLEMENTATION */
 

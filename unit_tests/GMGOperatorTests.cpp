@@ -41,7 +41,7 @@ namespace {
     int H1Order = 3, delta_k = spaceDim;
     MeshPtr mesh = MeshFactory::intervalMesh(bf, xLeft, xRight, coarseElementCount, H1Order, delta_k);
 
-    SolutionPtr<double> coarseSoln = Solution<double>::solution(mesh);
+    SolutionPtr coarseSoln = Solution::solution(mesh);
 
     VarPtr q = form.q();
     RHSPtr rhs = RHS::rhs();
@@ -73,7 +73,7 @@ namespace {
     fineMesh->hRefine(fineMesh->getActiveCellIDs());
     fineMesh->hRefine(fineMesh->getActiveCellIDs());
 
-    SolutionPtr<double> fineSoln = Solution<double>::solution(fineMesh);
+    SolutionPtr fineSoln = Solution::solution(fineMesh);
     fineSoln->setIP(ip);
     fineSoln->setRHS(rhs);
 
@@ -136,7 +136,7 @@ namespace {
     vector<int> elementCounts(2,coarseElementCount);
     MeshPtr mesh = MeshFactory::rectilinearMesh(bf, dimensions, elementCounts, H1Order, delta_k);
 
-    SolutionPtr<double> coarseSoln = Solution<double>::solution(mesh);
+    SolutionPtr coarseSoln = Solution::solution(mesh);
 
     map<int, FunctionPtr> exactSolnMap;
     exactSolnMap[phi->ID()] = phi_exact;
@@ -153,10 +153,10 @@ namespace {
     MeshPtr fineMesh = mesh->deepCopy();
     fineMesh->hRefine(fineMesh->getActiveCellIDs());
 
-    SolutionPtr<double> exactSoln = Solution<double>::solution(fineMesh);
+    SolutionPtr exactSoln = Solution::solution(fineMesh);
     exactSoln->projectOntoMesh(exactSolnMap);
 
-    SolutionPtr<double> fineSoln = Solution<double>::solution(fineMesh);
+    SolutionPtr fineSoln = Solution::solution(fineMesh);
 
     BCPtr bc = BC::bc();
     SolverPtr coarseSolver = Solver::getSolver(Solver::KLU, true);
@@ -234,7 +234,7 @@ namespace {
     vector<int> elementCounts(2,coarseElementCount);
     MeshPtr mesh = MeshFactory::rectilinearMesh(bf, dimensions, elementCounts, H1Order, delta_k);
 
-    SolutionPtr<double> coarseSoln = Solution<double>::solution(mesh);
+    SolutionPtr coarseSoln = Solution::solution(mesh);
 
     VarPtr q = form.q();
     RHSPtr rhs = RHS::rhs();
@@ -267,7 +267,7 @@ namespace {
 
     fineMesh->hRefine(fineMesh->getActiveCellIDs());
 
-    SolutionPtr<double> exactSoln = Solution<double>::solution(fineMesh);
+    SolutionPtr exactSoln = Solution::solution(fineMesh);
     exactSoln->setIP(ip);
     exactSoln->setRHS(rhs);
 
@@ -276,7 +276,7 @@ namespace {
     energyError = exactSoln->energyErrorTotal();
     TEST_COMPARE(energyError, <, tol);
 
-    SolutionPtr<double> fineSoln = Solution<double>::solution(fineMesh);
+    SolutionPtr fineSoln = Solution::solution(fineMesh);
     fineSoln->setIP(ip);
     fineSoln->setRHS(rhs);
 

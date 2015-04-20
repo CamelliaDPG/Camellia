@@ -19,7 +19,7 @@ using namespace Camellia;
 
 Teuchos::RCP<Solver> Solver::getSolver(SolverChoice choice, bool saveFactorization,
                                        double residualTolerance, int maxIterations,
-                                       SolutionPtr<double> fineSolution, MeshPtr coarseMesh,
+                                       TSolutionPtr<double> fineSolution, MeshPtr coarseMesh,
                                        SolverPtr coarseSolver) {
   switch (choice) {
     case KLU:

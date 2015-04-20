@@ -637,7 +637,7 @@ namespace Camellia {
   // (The SimpleSolutionFunction class is now written, though untested.  What remains is to add something such that
   //  LinearTerm can determine its OP_VALUE VarPtrs so that it can construct the right map.  It would probably suffice
   //  if Var learned about its "base", and then in addition to tracking the varIDs set here, we also tracked vars.)
-  void LinearTerm::evaluate(Intrepid::FieldContainer<double> &values, SolutionPtr<double> solution, BasisCachePtr basisCache,
+  void LinearTerm::evaluate(Intrepid::FieldContainer<double> &values, TSolutionPtr<double> solution, BasisCachePtr basisCache,
                             bool applyCubatureWeights) {
     // int sideIndex = basisCache->getSideIndex();
     //  bool boundaryTerm = (sideIndex != -1);

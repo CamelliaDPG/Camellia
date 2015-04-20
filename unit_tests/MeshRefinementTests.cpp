@@ -103,10 +103,10 @@ namespace {
 
     BCPtr bc = BC::bc();
     SpatialFilterPtr boundary = SpatialFilter::allSpace();
-    SolutionPtr<double> solution;
+    SolutionPtr solution;
 
     bc->addDirichlet(phi_hat, boundary, phi_exact);
-    solution = Solution<double>::solution(mesh, bc, rhs, graphNorm);
+    solution = Solution::solution(mesh, bc, rhs, graphNorm);
 
     // DEBUGGING:
 //    solution->setWriteMatrixToMatrixMarketFile(true, "/tmp/traceTermProjectionMatrix.dat");

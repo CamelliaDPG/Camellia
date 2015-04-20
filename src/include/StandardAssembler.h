@@ -41,9 +41,9 @@
 
 namespace Camellia {
   class StandardAssembler : public Assembler {
-    SolutionPtr<double> _solution;
+    TSolutionPtr<double> _solution;
   public:
-    StandardAssembler(SolutionPtr<double> solution){
+    StandardAssembler(TSolutionPtr<double> solution){
       _solution = solution;
     };
     Epetra_Map getPartMap();
@@ -64,7 +64,7 @@ namespace Camellia {
     void applyBCs(Epetra_FECrsMatrix &globalStiffMatrix, Epetra_FEVector &rhsVector);
     Intrepid::FieldContainer<double> getSubVector(Epetra_FEVector u, ElementPtr elem);
     void getElemData(ElementPtr elem, Intrepid::FieldContainer<double> &K, Intrepid::FieldContainer<double> &f);
-    SolutionPtr<double> solution(){
+    TSolutionPtr<double> solution(){
       return _solution;
     }
   };

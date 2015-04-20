@@ -56,7 +56,7 @@ namespace Camellia {
 
     unsigned _numPartitions;
 
-    vector< SolutionPtr<double> > _registeredSolutions; // solutions that should be modified upon refinement (by subclasses--maximum rule has to worry about cell side upgrades, whereas minimum rule does not, so there's not a great way to do this in the abstract superclass.)
+    vector< TSolutionPtr<double> > _registeredSolutions; // solutions that should be modified upon refinement (by subclasses--maximum rule has to worry about cell side upgrades, whereas minimum rule does not, so there's not a great way to do this in the abstract superclass.)
 
     void assignInitialElementType( GlobalIndexType cellID ); // this is the "natural" element type, before side modifications for constraints (when using maximum rule)
     void assignParities( GlobalIndexType cellID );
@@ -137,9 +137,9 @@ namespace Camellia {
 
     void repartitionAndMigrate();
 
-    void registerSolution(SolutionPtr<double> solution);
-    vector<SolutionPtr<double>> getRegisteredSolutions();
-    void unregisterSolution(SolutionPtr<double> solution);
+    void registerSolution(TSolutionPtr<double> solution);
+    vector<TSolutionPtr<double>> getRegisteredSolutions();
+    void unregisterSolution(TSolutionPtr<double> solution);
 
     void setPartitions(std::vector< std::set<IndexType> > &partitions);
     void setPartitions(Intrepid::FieldContainer<GlobalIndexType> &partitions);

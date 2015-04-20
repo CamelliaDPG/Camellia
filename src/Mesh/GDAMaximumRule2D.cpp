@@ -526,7 +526,7 @@ void GDAMaximumRule2D::didHRefine(const set<GlobalIndexType> &parentCellIDs) {
         matchNeighbor(child->cellIndex(), sideIndex); // we'll do this more often than necessary.  Could be smarter about it.
       }
     }
-    for (vector< SolutionPtr<double> >::iterator solutionIt = _registeredSolutions.begin();
+    for (vector< TSolutionPtr<double> >::iterator solutionIt = _registeredSolutions.begin();
          solutionIt != _registeredSolutions.end(); solutionIt++) {
       // do projection
       vector<IndexType> childIDsLocalIndexType = _meshTopology->getCell(parentCellID)->getChildIndices();
@@ -600,7 +600,7 @@ void GDAMaximumRule2D::didPRefine(const set<GlobalIndexType> &cellIDs, int delta
         matchNeighbor(neighborToMatch,neighborSideIndex);
       }
     }
-    for (vector< SolutionPtr<double> >::iterator solutionIt = _registeredSolutions.begin();
+    for (vector< TSolutionPtr<double> >::iterator solutionIt = _registeredSolutions.begin();
          solutionIt != _registeredSolutions.end(); solutionIt++) {
       // do projection: for p-refinements, the "child" is the same cell
       vector<GlobalIndexType> childIDs(1,cellID);
@@ -1147,7 +1147,7 @@ void GDAMaximumRule2D::rebuildLookups() {
   determinePartitionDofIndices();
 
   // now discard any old coefficients
-  for (vector< SolutionPtr<double> >::iterator solutionIt = _registeredSolutions.begin();
+  for (vector< TSolutionPtr<double> >::iterator solutionIt = _registeredSolutions.begin();
        solutionIt != _registeredSolutions.end(); solutionIt++) {
     (*solutionIt)->discardInactiveCellCoefficients();
   }

@@ -24,16 +24,16 @@ TimeIntegrator::TimeIntegrator(BFPtr steadyJacobian, SteadyResidual &steadyResid
   _commRank = Teuchos::GlobalMPISession::getRank();
 
   _rhs = RHS::rhs();
-  _solution = Teuchos::rcp( new Solution<double>(mesh, _bc, _rhs, ip) );
+  _solution = Teuchos::rcp( new TSolution<double>(mesh, _bc, _rhs, ip) );
 
   BCPtr nullBC = Teuchos::rcp((BC*)NULL);
   RHSPtr nullRHS = Teuchos::rcp((RHS*)NULL);
   IPPtr nullIP = Teuchos::rcp((IP*)NULL);
-  _prevTimeSolution = Teuchos::rcp(new Solution<double>(mesh, nullBC, nullRHS, nullIP) );
+  _prevTimeSolution = Teuchos::rcp(new TSolution<double>(mesh, nullBC, nullRHS, nullIP) );
   _prevTimeSolution->projectOntoMesh(initialCondition);
   if (_nonlinear)
   {
-    _prevNLSolution = Teuchos::rcp(new Solution<double>(mesh, nullBC, nullRHS, nullIP) );
+    _prevNLSolution = Teuchos::rcp(new TSolution<double>(mesh, nullBC, nullRHS, nullIP) );
     _prevNLSolution->setSolution(_prevTimeSolution);
   }
 
@@ -53,12 +53,12 @@ TFunctionPtr<double> TimeIntegrator::invDt()
   return _invDt;
 }
 
-SolutionPtr<double> TimeIntegrator::prevSolution()
+TSolutionPtr<double> TimeIntegrator::prevSolution()
 {
   return _prevNLSolution;
 }
 
-SolutionPtr<double> TimeIntegrator::solution()
+TSolutionPtr<double> TimeIntegrator::solution()
 {
   if (_nonlinear)
     return _prevNLSolution;
@@ -66,7 +66,7 @@ SolutionPtr<double> TimeIntegrator::solution()
     return _solution;
 }
 
-SolutionPtr<double> TimeIntegrator::solutionUpdate()
+TSolutionPtr<double> TimeIntegrator::solutionUpdate()
 {
   if (_nonlinear)
     return _solution;
@@ -259,7 +259,7 @@ ESDIRKIntegrator::ESDIRKIntegrator(BFPtr steadyJacobian, SteadyResidual &steadyR
 
   for (int k=1; k < _numStages; k++)
   {
-    _stageSolution[k] = Teuchos::rcp(new Solution<double>(mesh, nullBC, nullRHS, nullIP) );
+    _stageSolution[k] = Teuchos::rcp(new TSolution<double>(mesh, nullBC, nullRHS, nullIP) );
     _stageRHS[k] = RHS::rhs();
   }
 

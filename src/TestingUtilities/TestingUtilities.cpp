@@ -6,7 +6,7 @@
 using namespace Intrepid;
 using namespace Camellia;
 
-void TestingUtilities::initializeSolnCoeffs(SolutionPtr<double> solution){
+void TestingUtilities::initializeSolnCoeffs(TSolutionPtr<double> solution){
   map< pair<IndexType,IndexType>, IndexType> localToGlobalMap = solution->mesh()->getLocalToGlobalMap();
   map< pair<IndexType,IndexType>, IndexType>::iterator it;
   for (it = localToGlobalMap.begin();it!=localToGlobalMap.end();it++){
@@ -20,7 +20,7 @@ void TestingUtilities::initializeSolnCoeffs(SolutionPtr<double> solution){
 }
 
 // checks if dof has a BC applied to it
-bool TestingUtilities::isBCDof(GlobalIndexType globalDofIndex, SolutionPtr<double> solution){
+bool TestingUtilities::isBCDof(GlobalIndexType globalDofIndex, TSolutionPtr<double> solution){
   FieldContainer<GlobalIndexType> globalIndices;
   FieldContainer<double> globalValues;
   solution->mesh()->boundary().bcsToImpose(globalIndices, globalValues, *(solution->bc()), NULL, NULL);
@@ -46,7 +46,7 @@ bool TestingUtilities::isFluxOrTraceDof(MeshPtr mesh, GlobalIndexType globalDofI
   }
   return value;
 }
-void TestingUtilities::setSolnCoeffForGlobalDofIndex(SolutionPtr<double> solution, double solnCoeff, GlobalIndexType dofIndex) {
+void TestingUtilities::setSolnCoeffForGlobalDofIndex(TSolutionPtr<double> solution, double solnCoeff, GlobalIndexType dofIndex) {
   map< pair<GlobalIndexType,IndexType>, GlobalIndexType> localToGlobalMap = solution->mesh()->getLocalToGlobalMap();
   map< pair<GlobalIndexType,IndexType>, GlobalIndexType>::iterator it;
   for (it = localToGlobalMap.begin();it!=localToGlobalMap.end();it++){

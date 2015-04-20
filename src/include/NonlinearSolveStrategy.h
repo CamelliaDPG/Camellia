@@ -14,11 +14,11 @@
 namespace Camellia {
 	class NonlinearSolveStrategy {
 	  Teuchos::RCP<NonlinearStepSize> _stepSize;
-	  SolutionPtr<double> _backgroundFlow, _solution;
+	  TSolutionPtr<double> _backgroundFlow, _solution;
 	  double _relativeEnergyTolerance;
 	  bool _usePicardIteration; // instead of Newton-Raphson (will just do background = new at each step)
 	public:
-	  NonlinearSolveStrategy(SolutionPtr<double> backgroundFlow, SolutionPtr<double> solution, Teuchos::RCP<NonlinearStepSize> stepSize, double relativeEnergyTolerance);
+	  NonlinearSolveStrategy(TSolutionPtr<double> backgroundFlow, TSolutionPtr<double> solution, Teuchos::RCP<NonlinearStepSize> stepSize, double relativeEnergyTolerance);
 	  void setUsePicardIteration(bool value);
 	  void solve(bool printToConsole=false);
 	};

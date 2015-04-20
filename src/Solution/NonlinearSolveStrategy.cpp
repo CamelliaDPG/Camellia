@@ -10,7 +10,7 @@
 
 using namespace Camellia;
 
-NonlinearSolveStrategy::NonlinearSolveStrategy(SolutionPtr<double> backgroundFlow, SolutionPtr<double> solution, Teuchos::RCP<NonlinearStepSize> stepSize, double relativeEnergyTolerance) {
+NonlinearSolveStrategy::NonlinearSolveStrategy(TSolutionPtr<double> backgroundFlow, TSolutionPtr<double> solution, Teuchos::RCP<NonlinearStepSize> stepSize, double relativeEnergyTolerance) {
   _backgroundFlow = backgroundFlow;
   _solution = solution;
   _stepSize = stepSize;

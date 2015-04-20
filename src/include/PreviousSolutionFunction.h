@@ -19,17 +19,17 @@
 namespace Camellia {
   template <typename Scalar>
   class PreviousSolutionFunction : public TFunction<Scalar> {
-    SolutionPtr<Scalar> _soln;
+    TSolutionPtr<Scalar> _soln;
     LinearTermPtr _solnExpression;
     bool _overrideMeshCheck;
   public:
-    PreviousSolutionFunction(SolutionPtr<Scalar> soln, LinearTermPtr solnExpression, bool multiplyFluxesByCellParity = true);
-    PreviousSolutionFunction(SolutionPtr<Scalar> soln, VarPtr var, bool multiplyFluxesByCellParity = true);
+    PreviousSolutionFunction(TSolutionPtr<Scalar> soln, LinearTermPtr solnExpression, bool multiplyFluxesByCellParity = true);
+    PreviousSolutionFunction(TSolutionPtr<Scalar> soln, VarPtr var, bool multiplyFluxesByCellParity = true);
     bool boundaryValueOnly();
     void setOverrideMeshCheck(bool value, bool dontWarn=false);
     void importCellData(std::vector<GlobalIndexType> cells);
     void values(Intrepid::FieldContainer<Scalar> &values, BasisCachePtr basisCache);
-    static map<int, TFunctionPtr<Scalar> > functionMap( vector< VarPtr > varPtrs, SolutionPtr<Scalar> soln);
+    static map<int, TFunctionPtr<Scalar> > functionMap( vector< VarPtr > varPtrs, TSolutionPtr<Scalar> soln);
     string displayString();
   };
 }

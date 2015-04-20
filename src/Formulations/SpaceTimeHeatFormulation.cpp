@@ -141,10 +141,10 @@ void SpaceTimeHeatFormulation::initializeSolution(MeshTopologyPtr meshTopo, int 
   MeshPtr mesh;
   if (savedSolutionAndMeshPrefix == "") {
     mesh = Teuchos::rcp( new Mesh(meshTopo, _bf, H1Order, delta_k) ) ;
-    _solution = Solution<double>::solution(mesh,bc);
+    _solution = TSolution<double>::solution(mesh,bc);
   } else {
     mesh = MeshFactory::loadFromHDF5(_bf, savedSolutionAndMeshPrefix+".mesh");
-    _solution = Solution<double>::solution(mesh, bc);
+    _solution = TSolution<double>::solution(mesh, bc);
     _solution->loadFromHDF5(savedSolutionAndMeshPrefix+".soln");
   }
 
@@ -230,7 +230,7 @@ void SpaceTimeHeatFormulation::save(std::string prefixString) {
 }
 
 // ! Returns the solution
-SolutionPtr<double> SpaceTimeHeatFormulation::solution() {
+TSolutionPtr<double> SpaceTimeHeatFormulation::solution() {
   return _solution;
 }
 

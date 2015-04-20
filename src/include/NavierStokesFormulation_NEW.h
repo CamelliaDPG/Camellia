@@ -23,13 +23,13 @@ namespace Camellia {
   class NavierStokesFormulation {
   protected:
     TFunctionPtr<double> _Re;
-    SolutionPtr<double> _soln;
+    TSolutionPtr<double> _soln;
   public:
-    NavierStokesFormulation(double Reynolds, SolutionPtr<double> soln) {
+    NavierStokesFormulation(double Reynolds, TSolutionPtr<double> soln) {
       _Re = TFunction<double>::constant(Reynolds);
       _soln = soln;
     }
-    NavierStokesFormulation(TFunctionPtr<double> Reynolds, SolutionPtr<double> soln) {
+    NavierStokesFormulation(TFunctionPtr<double> Reynolds, TSolutionPtr<double> soln) {
       _Re = Reynolds;
       _soln = soln;
     }
@@ -122,7 +122,7 @@ namespace Camellia {
       u2_prev = TFunction<double>::solution(u2,_soln);
     }
 
-    void init(TFunctionPtr<double> Re, SolutionPtr<double> soln) {
+    void init(TFunctionPtr<double> Re, TSolutionPtr<double> soln) {
       _mu = 1.0 / Re;
 
       initVars();
@@ -179,10 +179,10 @@ namespace Camellia {
       return stokesFormulation.bf();
     }
 
-    VGPNavierStokesFormulation(double Re, SolutionPtr<double> soln) : NavierStokesFormulation(Re, soln) {
+    VGPNavierStokesFormulation(double Re, TSolutionPtr<double> soln) : NavierStokesFormulation(Re, soln) {
       init(TFunction<double>::constant(Re), soln);
     }
-    VGPNavierStokesFormulation(TFunctionPtr<double> Re, SolutionPtr<double> soln) : NavierStokesFormulation(Re, soln) {
+    VGPNavierStokesFormulation(TFunctionPtr<double> Re, TSolutionPtr<double> soln) : NavierStokesFormulation(Re, soln) {
       init(Re,soln);
     }
 
@@ -333,7 +333,7 @@ namespace Camellia {
   };
 
   class VGPNavierStokesProblem {
-    SolutionPtr<double> _backgroundFlow, _solnIncrement;
+    TSolutionPtr<double> _backgroundFlow, _solnIncrement;
     Teuchos::RCP<Mesh> _mesh;
     Teuchos::RCP<BC> _bc, _bcForIncrement;
     Teuchos::RCP< ExactSolution > _exactSolution;
@@ -370,9 +370,9 @@ namespace Camellia {
 
       SpatialFilterPtr entireBoundary = Teuchos::rcp( new SpatialFilterUnfiltered ); // SpatialFilterUnfiltered returns true everywhere
 
-      _backgroundFlow = Teuchos::rcp( new Solution<double>(_mesh) );
+      _backgroundFlow = Teuchos::rcp( new TSolution<double>(_mesh) );
 
-      _solnIncrement = Teuchos::rcp( new Solution<double>(_mesh) );
+      _solnIncrement = Teuchos::rcp( new TSolution<double>(_mesh) );
       _solnIncrement->setCubatureEnrichmentDegree( H1Order-1 ); // can have weights with poly degree = trial degree
 
       _vgpNavierStokesFormulation = Teuchos::rcp( new VGPNavierStokesFormulation(Re, _backgroundFlow));
@@ -414,10 +414,10 @@ namespace Camellia {
 
       BCPtr vgpBC = vgpStokesFormulation->bc(u1_0, u2_0, entireBoundary);
 
-      _backgroundFlow = Teuchos::rcp( new Solution<double>(_mesh, vgpBC) );
+      _backgroundFlow = Teuchos::rcp( new TSolution<double>(_mesh, vgpBC) );
 
       // since we're disregarding accumulated fluxes, the incremental solutions have the usual BCs enforced:
-      _solnIncrement = Teuchos::rcp( new Solution<double>(_mesh, vgpBC) );
+      _solnIncrement = Teuchos::rcp( new TSolution<double>(_mesh, vgpBC) );
       _solnIncrement->setCubatureEnrichmentDegree( H1Order-1 ); // can have weights with poly degree = trial degree
 
       _vgpNavierStokesFormulation = Teuchos::rcp( new VGPNavierStokesFormulation(Re, _backgroundFlow));
@@ -459,12 +459,12 @@ namespace Camellia {
                                   vgpStokesFormulation->bf(), H1Order, H1Order+pToAdd,
                                   triangulate, useConformingTraces, trialOrderEnhancements);
 
-      _backgroundFlow = Teuchos::rcp( new Solution<double>(_mesh, vgpBC) );
+      _backgroundFlow = Teuchos::rcp( new TSolution<double>(_mesh, vgpBC) );
 
       // the incremental solutions have zero BCs enforced:
       TFunctionPtr<double> zero = TFunction<double>::zero();
       BCPtr zeroBC = vgpStokesFormulation->bc(zero, zero, entireBoundary);
-      _solnIncrement = Teuchos::rcp( new Solution<double>(_mesh, zeroBC) );
+      _solnIncrement = Teuchos::rcp( new TSolution<double>(_mesh, zeroBC) );
       _solnIncrement->setCubatureEnrichmentDegree( H1Order-1 ); // can have weights with poly degree = trial degree
 
       _vgpNavierStokesFormulation = Teuchos::rcp( new VGPNavierStokesFormulation(Re, _backgroundFlow));
@@ -514,7 +514,7 @@ namespace Camellia {
       // this constructor enforces Dirichlet BCs on the velocity on first iterate, and zero BCs on later (does *not* disregard accumulated trace and flux data)
     }
 
-    SolutionPtr<double> backgroundFlow() {
+    TSolutionPtr<double> backgroundFlow() {
       return _backgroundFlow;
     }
     BFPtr bf() {
@@ -523,7 +523,7 @@ namespace Camellia {
     Teuchos::RCP<ExactSolution> exactSolution() {
       return _exactSolution;
     }
-    SolutionPtr<double> solutionIncrement() {
+    TSolutionPtr<double> solutionIncrement() {
       return _solnIncrement;
     }
     double lineSearchWeight() {

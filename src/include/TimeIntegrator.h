@@ -32,7 +32,7 @@ namespace Camellia {
         VarFactory &varFactory;
       public:
         SteadyResidual(VarFactory &varFactory):varFactory(varFactory) {};
-        virtual LinearTermPtr createResidual(SolutionPtr<double> solution, bool includeBoundaryTerms) = 0;
+        virtual LinearTermPtr createResidual(TSolutionPtr<double> solution, bool includeBoundaryTerms) = 0;
     };
 
     class TimeIntegrator
@@ -43,10 +43,10 @@ namespace Camellia {
         SteadyResidual &_steadyResidual;
         RHSPtr _rhs;
         BCPtr _bc;
-        SolutionPtr<double> _solution;
-        SolutionPtr<double> _prevTimeSolution;
-        SolutionPtr<double> _prevNLSolution;
-        SolutionPtr<double> _zeroSolution;
+        TSolutionPtr<double> _solution;
+        TSolutionPtr<double> _prevTimeSolution;
+        TSolutionPtr<double> _prevNLSolution;
+        TSolutionPtr<double> _zeroSolution;
         TFunctionPtr<double> _invDt;
         double _t;
         double _dt;
@@ -62,9 +62,9 @@ namespace Camellia {
       public:
         TimeIntegrator(BFPtr steadyJacobian, SteadyResidual &steadyResidual, MeshPtr mesh,
             BCPtr bc, IPPtr ip, map<int, TFunctionPtr<double>> initialCondition, bool nonlinear);
-        SolutionPtr<double> solution();
-        SolutionPtr<double> solutionUpdate();
-        SolutionPtr<double> prevSolution();
+        TSolutionPtr<double> solution();
+        TSolutionPtr<double> solutionUpdate();
+        TSolutionPtr<double> prevSolution();
         TFunctionPtr<double> invDt();
         void setNLTolerance(double tol) { _nlTolerance = tol; }
         double getNLTolerance() { return _nlTolerance; }
@@ -97,7 +97,7 @@ namespace Camellia {
         vector<double> b;
         vector<double> c;
         // For ESDIRK schemes, first stage is _prevTimeSolution
-        vector< SolutionPtr<double> > _stageSolution;
+        vector< TSolutionPtr<double> > _stageSolution;
         vector< RHSPtr > _stageRHS;
         vector< LinearTermPtr > _steadyLinearTerm;
 

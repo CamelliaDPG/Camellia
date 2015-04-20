@@ -503,7 +503,7 @@ void ZoltanMeshPartitionPolicy::pack_elem_data(void *data,
   bool isChild = cell->getParent().get() != NULL;
   bool hasData = false;
   if (mesh->globalDofAssignment()->getRegisteredSolutions().size() > 0) {
-    SolutionPtr<double> soln = mesh->globalDofAssignment()->getRegisteredSolutions()[0];
+    TSolutionPtr<double> soln = mesh->globalDofAssignment()->getRegisteredSolutions()[0];
     hasData = soln->cellHasCoefficientsAssigned(cellID);
   }
   CellDataMigration::packData(mesh, cellID, isChild && !hasData, buf, size);

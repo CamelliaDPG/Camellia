@@ -75,7 +75,7 @@ HDF5Exporter::~HDF5Exporter()
 {
 }
 
-void HDF5Exporter::exportSolution(SolutionPtr<double> solution, double timeVal, unsigned int defaultNum1DPts, map<int, int> cellIDToNum1DPts, set<GlobalIndexType> cellIndices)
+void HDF5Exporter::exportSolution(TSolutionPtr<double> solution, double timeVal, unsigned int defaultNum1DPts, map<int, int> cellIDToNum1DPts, set<GlobalIndexType> cellIndices)
 {
   VarFactory varFactory = _mesh->bilinearForm()->varFactory();
 
@@ -108,7 +108,7 @@ void HDF5Exporter::exportSolution(SolutionPtr<double> solution, double timeVal, 
   exportFunction(traceFunctions, traceFunctionNames, timeVal, defaultNum1DPts, cellIDToNum1DPts, cellIndices);
 }
 
-void HDF5Exporter::exportSolution(SolutionPtr<double> solution, VarFactory varFactory, double timeVal, unsigned int defaultNum1DPts, map<int, int> cellIDToNum1DPts, set<GlobalIndexType> cellIndices)
+void HDF5Exporter::exportSolution(TSolutionPtr<double> solution, VarFactory varFactory, double timeVal, unsigned int defaultNum1DPts, map<int, int> cellIDToNum1DPts, set<GlobalIndexType> cellIndices)
 {
   int rank = Teuchos::GlobalMPISession::getRank();
   if (rank==0) cout << "NOTE: this version of HDF5Exporter::exportSolution() is deprecated.  Remove the VarFactory argument to get rid of this message.\n";
@@ -1087,7 +1087,7 @@ void HDF5Exporter::exportFunction(string superDirectory, string functionName, TF
   exporter.exportFunction(function);
 }
 
-void HDF5Exporter::exportSolution(std::string superDirectory, std::string solnName, SolutionPtr<double> solution) {
+void HDF5Exporter::exportSolution(std::string superDirectory, std::string solnName, TSolutionPtr<double> solution) {
   MeshPtr mesh = solution->mesh();
   HDF5Exporter exporter(mesh, solnName, superDirectory);
   exporter.exportSolution(solution, mesh->bilinearForm()->varFactory());

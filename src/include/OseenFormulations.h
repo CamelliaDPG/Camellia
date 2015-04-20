@@ -274,7 +274,7 @@ namespace Camellia {
   };
 
   class VGPOseenProblem {
-    SolutionPtr<double> _soln;
+    TSolutionPtr<double> _soln;
     Teuchos::RCP<Mesh> _mesh;
     Teuchos::RCP< ExactSolution > _exactSolution;
     Teuchos::RCP<BF> _bf;
@@ -318,7 +318,7 @@ namespace Camellia {
       }
 
       _mesh->setBilinearForm(_vgpOseenFormulation->bf());
-      _soln = Teuchos::rcp( new Solution<double>(_mesh, vgpBC) );
+      _soln = Teuchos::rcp( new TSolution<double>(_mesh, vgpBC) );
       _soln->setCubatureEnrichmentDegree( H1Order-1 ); // can have weights with poly degree = trial degree
 
       _soln->setRHS( _exactSolution->rhs() );
@@ -346,7 +346,7 @@ namespace Camellia {
     Teuchos::RCP<ExactSolution> exactSolution() {
       return _exactSolution;
     }
-    SolutionPtr<double> solution() {
+    TSolutionPtr<double> solution() {
       return _soln;
     }
     Teuchos::RCP<Mesh> mesh() {
