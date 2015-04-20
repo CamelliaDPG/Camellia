@@ -25,25 +25,25 @@ namespace {
     double Re = 1.0;
     int fieldPolyOrder = 3, delta_k = 1;
 
-    FunctionPtr<double> x = Function<double>::xn(1);
-    FunctionPtr<double> y = Function<double>::yn(1);
-    //    FunctionPtr<double> u1 = x;
-    //    FunctionPtr<double> u2 = -y; // divergence 0
-    //    FunctionPtr<double> p = y * y * y; // zero average
-    FunctionPtr<double> u1 = x * x * y;
-    FunctionPtr<double> u2 = -x * y * y;
-    FunctionPtr<double> p = y * y * y;
+    FunctionPtr x = Function::xn(1);
+    FunctionPtr y = Function::yn(1);
+    //    FunctionPtr u1 = x;
+    //    FunctionPtr u2 = -y; // divergence 0
+    //    FunctionPtr p = y * y * y; // zero average
+    FunctionPtr u1 = x * x * y;
+    FunctionPtr u2 = -x * y * y;
+    FunctionPtr p = y * y * y;
 
-    FunctionPtr<double> forcingFunction = NavierStokesVGPFormulation::forcingFunction(spaceDim, Re, Function<double>::vectorize(u1,u2), p);
+    FunctionPtr forcingFunction = NavierStokesVGPFormulation::forcingFunction(spaceDim, Re, Function::vectorize(u1,u2), p);
     NavierStokesVGPFormulation form(meshTopo, Re, fieldPolyOrder, delta_k, forcingFunction);
 
-    FunctionPtr<double> sigma1 = (1.0 / Re) * u1->grad();
-    FunctionPtr<double> sigma2 = (1.0 / Re) * u2->grad();
+    FunctionPtr sigma1 = (1.0 / Re) * u1->grad();
+    FunctionPtr sigma2 = (1.0 / Re) * u2->grad();
 
     LinearTermPtr t1_n_lt = form.tn_hat(1)->termTraced();
     LinearTermPtr t2_n_lt = form.tn_hat(2)->termTraced();
 
-    map<int, FunctionPtr<double>> exactMap;
+    map<int, FunctionPtr> exactMap;
     // fields:
     exactMap[form.u(1)->ID()] = u1;
     exactMap[form.u(2)->ID()] = u2;
@@ -53,8 +53,8 @@ namespace {
 
     // fluxes:
     // use the exact field variable solution together with the termTraced to determine the flux traced
-    FunctionPtr<double> t1_n = t1_n_lt->evaluate(exactMap);
-    FunctionPtr<double> t2_n = t2_n_lt->evaluate(exactMap);
+    FunctionPtr t1_n = t1_n_lt->evaluate(exactMap);
+    FunctionPtr t2_n = t2_n_lt->evaluate(exactMap);
     exactMap[form.tn_hat(1)->ID()] = t1_n;
     exactMap[form.tn_hat(2)->ID()] = t2_n;
 
@@ -62,9 +62,9 @@ namespace {
     exactMap[form.u_hat(1)->ID()] = u1;
     exactMap[form.u_hat(2)->ID()] = u2;
 
-    map<int, FunctionPtr<double>> zeroMap;
-    for (map<int, FunctionPtr<double>>::iterator exactMapIt = exactMap.begin(); exactMapIt != exactMap.end(); exactMapIt++) {
-      zeroMap[exactMapIt->first] = Function<double>::zero(exactMapIt->second->rank());
+    map<int, FunctionPtr> zeroMap;
+    for (map<int, FunctionPtr>::iterator exactMapIt = exactMap.begin(); exactMapIt != exactMap.end(); exactMapIt++) {
+      zeroMap[exactMapIt->first] = Function::zero(exactMapIt->second->rank());
     }
 
     form.solution()->projectOntoMesh(exactMap);
@@ -89,18 +89,18 @@ namespace {
     double Re = 10.0;
     int fieldPolyOrder = 2, delta_k = 1;
 
-    FunctionPtr<double> x = Function<double>::xn(1);
-    FunctionPtr<double> y = Function<double>::yn(1);
-//    FunctionPtr<double> u1 = x;
-//    FunctionPtr<double> u2 = -y; // divergence 0
-//    FunctionPtr<double> p = y * y * y; // zero average
-    FunctionPtr<double> u1 = x;
-    FunctionPtr<double> u2 = -y;
-    FunctionPtr<double> p = y;
+    FunctionPtr x = Function::xn(1);
+    FunctionPtr y = Function::yn(1);
+//    FunctionPtr u1 = x;
+//    FunctionPtr u2 = -y; // divergence 0
+//    FunctionPtr p = y * y * y; // zero average
+    FunctionPtr u1 = x;
+    FunctionPtr u2 = -y;
+    FunctionPtr p = y;
 
-    FunctionPtr<double> forcingFunction_x = p->dx() - (1.0/Re) * (u1->dx()->dx() + u1->dy()->dy());
-    FunctionPtr<double> forcingFunction_y = p->dy() - (1.0/Re) * (u2->dx()->dx() + u2->dy()->dy());
-    FunctionPtr<double> forcingFunction = Function<double>::vectorize(forcingFunction_x, forcingFunction_y);
+    FunctionPtr forcingFunction_x = p->dx() - (1.0/Re) * (u1->dx()->dx() + u1->dy()->dy());
+    FunctionPtr forcingFunction_y = p->dy() - (1.0/Re) * (u2->dx()->dx() + u2->dy()->dy());
+    FunctionPtr forcingFunction = Function::vectorize(forcingFunction_x, forcingFunction_y);
     NavierStokesVGPFormulation form(meshTopo, Re, fieldPolyOrder, delta_k, forcingFunction);
 
     BFPtr stokesBF = form.stokesBF();
@@ -115,13 +115,13 @@ namespace {
 
     stokesSolution->setRHS(rhs);
 
-    FunctionPtr<double> sigma1 = (1.0 / Re) * u1->grad();
-    FunctionPtr<double> sigma2 = (1.0 / Re) * u2->grad();
+    FunctionPtr sigma1 = (1.0 / Re) * u1->grad();
+    FunctionPtr sigma2 = (1.0 / Re) * u2->grad();
 
     LinearTermPtr t1_n_lt = form.tn_hat(1)->termTraced();
     LinearTermPtr t2_n_lt = form.tn_hat(2)->termTraced();
 
-    map<int, FunctionPtr<double>> exactMap;
+    map<int, FunctionPtr> exactMap;
     // fields:
     exactMap[form.u(1)->ID()] = u1;
     exactMap[form.u(2)->ID()] = u2;
@@ -131,8 +131,8 @@ namespace {
 
     // fluxes:
     // use the exact field variable solution together with the termTraced to determine the flux traced
-    FunctionPtr<double> t1_n = t1_n_lt->evaluate(exactMap);
-    FunctionPtr<double> t2_n = t2_n_lt->evaluate(exactMap);
+    FunctionPtr t1_n = t1_n_lt->evaluate(exactMap);
+    FunctionPtr t2_n = t2_n_lt->evaluate(exactMap);
     exactMap[form.tn_hat(1)->ID()] = t1_n;
     exactMap[form.tn_hat(2)->ID()] = t2_n;
 

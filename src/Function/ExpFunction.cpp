@@ -12,13 +12,13 @@ string Exp_x::displayString() {
 double Exp_x::value(double x, double y) {
   return exp(x);
 }
-FunctionPtr<double> Exp_x::dx() {
+TFunctionPtr<double> Exp_x::dx() {
   return Teuchos::rcp( new Exp_x );
 }
-FunctionPtr<double> Exp_x::dy() {
+TFunctionPtr<double> Exp_x::dy() {
   return Function::zero();
 }
-FunctionPtr<double> Exp_x::dz() {
+TFunctionPtr<double> Exp_x::dz() {
   return Function::zero();
 }
 
@@ -28,13 +28,13 @@ string Exp_y::displayString() {
 double Exp_y::value(double x, double y) {
   return exp(y);
 }
-FunctionPtr<double> Exp_y::dx() {
+TFunctionPtr<double> Exp_y::dx() {
   return Function::zero();
 }
-FunctionPtr<double> Exp_y::dy() {
+TFunctionPtr<double> Exp_y::dy() {
   return Teuchos::rcp( new Exp_y );
 }
-FunctionPtr<double> Exp_y::dz() {
+TFunctionPtr<double> Exp_y::dz() {
   return Function::zero();
 }
 
@@ -44,13 +44,13 @@ string Exp_z::displayString() {
 double Exp_z::value(double x, double y, double z) {
   return exp(z);
 }
-FunctionPtr<double> Exp_z::dx() {
+TFunctionPtr<double> Exp_z::dx() {
   return Function::zero();
 }
-FunctionPtr<double> Exp_z::dy() {
+TFunctionPtr<double> Exp_z::dy() {
   return Function::zero();
 }
-FunctionPtr<double> Exp_z::dz() {
+TFunctionPtr<double> Exp_z::dz() {
   return Teuchos::rcp( new Exp_z );
 }
 
@@ -60,10 +60,10 @@ Exp_ax::Exp_ax(double a) {
 double Exp_ax::value(double x, double y) {
   return exp( _a * x);
 }
-FunctionPtr<double> Exp_ax::dx() {
-  return _a * (FunctionPtr<double>) Teuchos::rcp(new Exp_ax(_a));
+TFunctionPtr<double> Exp_ax::dx() {
+  return _a * (TFunctionPtr<double>) Teuchos::rcp(new Exp_ax(_a));
 }
-FunctionPtr<double> Exp_ax::dy() {
+TFunctionPtr<double> Exp_ax::dy() {
   return Function::zero();
 }
 string Exp_ax::displayString() {
@@ -78,11 +78,11 @@ Exp_ay::Exp_ay(double a) {
 double Exp_ay::value(double x, double y) {
   return exp( _a * y);
 }
-FunctionPtr<double> Exp_ay::dx() {
+TFunctionPtr<double> Exp_ay::dx() {
   return Function::zero();
 }
-FunctionPtr<double> Exp_ay::dy() {
-  return _a * (FunctionPtr<double>) Teuchos::rcp(new Exp_ay(_a));
+TFunctionPtr<double> Exp_ay::dy() {
+  return _a * (TFunctionPtr<double>) Teuchos::rcp(new Exp_ay(_a));
 }
 string Exp_ay::displayString() {
   ostringstream ss;

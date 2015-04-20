@@ -14,33 +14,33 @@
 namespace Camellia {
   class Cos_y : public SimpleFunction<double> {
     double value(double x, double y);
-    FunctionPtr<double> dx();
-    FunctionPtr<double> dy();
-    FunctionPtr<double> dz();
+    TFunctionPtr<double> dx();
+    TFunctionPtr<double> dy();
+    TFunctionPtr<double> dz();
     std::string displayString();
   };
 
   class Sin_y : public SimpleFunction<double> {
     double value(double x, double y);
-    FunctionPtr<double> dx();
-    FunctionPtr<double> dy();
-    FunctionPtr<double> dz();
+    TFunctionPtr<double> dx();
+    TFunctionPtr<double> dy();
+    TFunctionPtr<double> dz();
     std::string displayString();
   };
 
   class Cos_x : public SimpleFunction<double> {
     double value(double x, double y);
-    FunctionPtr<double> dx();
-    FunctionPtr<double> dy();
-    FunctionPtr<double> dz();
+    TFunctionPtr<double> dx();
+    TFunctionPtr<double> dy();
+    TFunctionPtr<double> dz();
     std::string displayString();
   };
 
   class Sin_x : public SimpleFunction<double> {
     double value(double x, double y);
-    FunctionPtr<double> dx();
-    FunctionPtr<double> dy();
-    FunctionPtr<double> dz();
+    TFunctionPtr<double> dx();
+    TFunctionPtr<double> dy();
+    TFunctionPtr<double> dz();
     std::string displayString();
   };
 
@@ -49,8 +49,8 @@ namespace Camellia {
   public:
     Cos_ax(double a, double b=0);
     double value(double x);
-    FunctionPtr<double> dx();
-    FunctionPtr<double> dy();
+    TFunctionPtr<double> dx();
+    TFunctionPtr<double> dy();
 
     std::string displayString();
   };
@@ -60,8 +60,8 @@ namespace Camellia {
   public:
     Sin_ax(double a, double b=0);
     double value(double x);
-    FunctionPtr<double> dx();
-    FunctionPtr<double> dy();
+    TFunctionPtr<double> dx();
+    TFunctionPtr<double> dy();
     std::string displayString();
   };
 
@@ -70,8 +70,8 @@ namespace Camellia {
   public:
     Cos_ay(double a);
     double value(double x, double y);
-    FunctionPtr<double> dx();
-    FunctionPtr<double> dy();
+    TFunctionPtr<double> dx();
+    TFunctionPtr<double> dy();
 
     std::string displayString();
   };
@@ -81,8 +81,8 @@ namespace Camellia {
   public:
     Sin_ay(double a);
     double value(double x, double y);
-    FunctionPtr<double> dx();
-    FunctionPtr<double> dy();
+    TFunctionPtr<double> dx();
+    TFunctionPtr<double> dy();
     std::string displayString();
   };
 

@@ -12,28 +12,28 @@
 #include "Function.h"
 
 namespace Camellia {
-  class ParameterFunction : public Function<double> {
-    FunctionPtr<double> _fxn;
+  class ParameterFunction : public TFunction<double> {
+    TFunctionPtr<double> _fxn;
   public:
     ParameterFunction(double value);
-    ParameterFunction(FunctionPtr<double> value);
+    ParameterFunction(TFunctionPtr<double> value);
 
-    FunctionPtr<double> getValue() const;
+    TFunctionPtr<double> getValue() const;
 
-    void setValue(FunctionPtr<double> fxn);
+    void setValue(TFunctionPtr<double> fxn);
     void setValue(double value);
 
     // overridden from Function:
-    FunctionPtr<double> x();
-    FunctionPtr<double> y();
-    FunctionPtr<double> z();
+    TFunctionPtr<double> x();
+    TFunctionPtr<double> y();
+    TFunctionPtr<double> z();
 
-    FunctionPtr<double> dx();
-    FunctionPtr<double> dy();
-    FunctionPtr<double> dz();
+    TFunctionPtr<double> dx();
+    TFunctionPtr<double> dy();
+    TFunctionPtr<double> dz();
 
-    FunctionPtr<double> grad(int numComponents=-1); // gradient of sum is the sum of gradients
-    FunctionPtr<double> div();  // divergence of sum is sum of divergences
+    TFunctionPtr<double> grad(int numComponents=-1); // gradient of sum is the sum of gradients
+    TFunctionPtr<double> div();  // divergence of sum is sum of divergences
 
     void values(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache);
     bool boundaryValueOnly();
@@ -41,7 +41,7 @@ namespace Camellia {
     string displayString();
 
     static Teuchos::RCP<ParameterFunction> parameterFunction(double value);
-    static Teuchos::RCP<ParameterFunction> parameterFunction(FunctionPtr<double> fxn);
+    static Teuchos::RCP<ParameterFunction> parameterFunction(TFunctionPtr<double> fxn);
   };
 }
 

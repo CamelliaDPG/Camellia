@@ -18,10 +18,10 @@ using namespace Camellia;
 using namespace Intrepid;
 
 namespace {
-  void projectExactSolution(StokesVGPFormulation &form, SolutionPtr<double> stokesSolution, FunctionPtr<double> u, FunctionPtr<double> p) {
+  void projectExactSolution(StokesVGPFormulation &form, SolutionPtr<double> stokesSolution, FunctionPtr u, FunctionPtr p) {
     double mu = form.mu();
 
-    FunctionPtr<double> u1, u2, u3, sigma1, sigma2, sigma3;
+    FunctionPtr u1, u2, u3, sigma1, sigma2, sigma3;
     int spaceDim = stokesSolution->mesh()->getDimension();
 
     u1 = u->x();
@@ -40,7 +40,7 @@ namespace {
       t3_n_lt = form.tn_hat(3)->termTraced();
     }
 
-    map<int, FunctionPtr<double>> exactMap;
+    map<int, FunctionPtr> exactMap;
     // fields:
     exactMap[form.u(1)->ID()] = u1;
     exactMap[form.u(2)->ID()] = u2;
@@ -55,8 +55,8 @@ namespace {
 
     // fluxes:
     // use the exact field variable solution together with the termTraced to determine the flux traced
-    FunctionPtr<double> t1_n = t1_n_lt->evaluate(exactMap);
-    FunctionPtr<double> t2_n = t2_n_lt->evaluate(exactMap);
+    FunctionPtr t1_n = t1_n_lt->evaluate(exactMap);
+    FunctionPtr t2_n = t2_n_lt->evaluate(exactMap);
     exactMap[form.tn_hat(1)->ID()] = t1_n;
     exactMap[form.tn_hat(2)->ID()] = t2_n;
 
@@ -65,7 +65,7 @@ namespace {
     exactMap[form.u_hat(2)->ID()] = u2;
 
     if (spaceDim==3) {
-      FunctionPtr<double> t3_n = t3_n_lt->evaluate(exactMap);
+      FunctionPtr t3_n = t3_n_lt->evaluate(exactMap);
       exactMap[form.tn_hat(3)->ID()] = t3_n;
       exactMap[form.u_hat(3)->ID()] = u3;
     }
@@ -73,12 +73,12 @@ namespace {
     stokesSolution->projectOntoMesh(exactMap);
   }
 
-  void setupExactSolution(StokesVGPFormulation &form, FunctionPtr<double> u, FunctionPtr<double> p,
+  void setupExactSolution(StokesVGPFormulation &form, FunctionPtr u, FunctionPtr p,
                           MeshTopologyPtr meshTopo, int fieldPolyOrder, int delta_k) {
     int spaceDim = meshTopo->getSpaceDim();
     double mu = form.mu();
 
-    FunctionPtr<double> forcingFunction = StokesVGPFormulation::forcingFunction(spaceDim, mu, u, p);
+    FunctionPtr forcingFunction = StokesVGPFormulation::forcingFunction(spaceDim, mu, u, p);
 
     form.initializeSolution(meshTopo, fieldPolyOrder, delta_k, forcingFunction);
 
@@ -94,20 +94,20 @@ namespace {
     double Re = 1.0;
     int fieldPolyOrder = 2, delta_k = 1;
 
-    FunctionPtr<double> u, p;
-    FunctionPtr<double> x = Function<double>::xn(1);
-    FunctionPtr<double> y = Function<double>::yn(1);
-    FunctionPtr<double> z = Function<double>::zn(1);
+    FunctionPtr u, p;
+    FunctionPtr x = Function::xn(1);
+    FunctionPtr y = Function::yn(1);
+    FunctionPtr z = Function::zn(1);
     if (spaceDim == 2) {
-      FunctionPtr<double> u1 = x;
-      FunctionPtr<double> u2 = -y; // divergence 0
-      u = Function<double>::vectorize(u1,u2);
+      FunctionPtr u1 = x;
+      FunctionPtr u2 = -y; // divergence 0
+      u = Function::vectorize(u1,u2);
       p = x + 2. * y; // zero average
     } else if (spaceDim == 3) {
-      FunctionPtr<double> u1 = 2. * x;
-      FunctionPtr<double> u2 = -y; // divergence 0
-      FunctionPtr<double> u3 = -z;
-      u = Function<double>::vectorize(u1,u2,u3);
+      FunctionPtr u1 = 2. * x;
+      FunctionPtr u2 = -y; // divergence 0
+      FunctionPtr u3 = -z;
+      u = Function::vectorize(u1,u2,u3);
       p = x + 2. * y + 3. * z; // zero average
     }
 
@@ -117,7 +117,7 @@ namespace {
     setupExactSolution(form, u, p, meshTopo, fieldPolyOrder, delta_k);
     projectExactSolution(form, form.solution(), u, p);
 
-    FunctionPtr<double> pSoln = Function<double>::solution(form.p(), form.solution());
+    FunctionPtr pSoln = Function::solution(form.p(), form.solution());
 
     form.solution()->clearComputedResiduals();
 
@@ -152,12 +152,12 @@ namespace {
     double Re = 1.0;
     int fieldPolyOrder = 3, delta_k = 1;
 
-    FunctionPtr<double> x = Function<double>::xn(1);
-    FunctionPtr<double> y = Function<double>::yn(1);
-    FunctionPtr<double> u1 = x;
-    FunctionPtr<double> u2 = -y; // divergence 0
-    FunctionPtr<double> u = Function<double>::vectorize(u1,u2);
-    FunctionPtr<double> p = y * y * y; // zero average
+    FunctionPtr x = Function::xn(1);
+    FunctionPtr y = Function::yn(1);
+    FunctionPtr u1 = x;
+    FunctionPtr u2 = -y; // divergence 0
+    FunctionPtr u = Function::vectorize(u1,u2);
+    FunctionPtr p = y * y * y; // zero average
 
     bool useConformingTraces = true;
     StokesVGPFormulation form(spaceDim, useConformingTraces, 1.0 / Re);
@@ -172,10 +172,10 @@ namespace {
     // subject to the constraint that its integral on the domain is zero.
     // Here, phi = xy solves it.
 
-    FunctionPtr<double> phi_exact = x * y;
-    FunctionPtr<double> psi_exact = Function<double>::vectorize(-u2, u1);
+    FunctionPtr phi_exact = x * y;
+    FunctionPtr psi_exact = Function::vectorize(-u2, u1);
 
-    map<int, FunctionPtr<double>> exactMap;
+    map<int, FunctionPtr> exactMap;
     // fields:
     exactMap[form.streamFormulation().phi()->ID()] = phi_exact;
     exactMap[form.streamFormulation().psi()->ID()] = psi_exact;
@@ -185,8 +185,8 @@ namespace {
 
     // traces and fluxes:
     // use the exact field variable solution together with the termTraced to determine the flux traced
-    FunctionPtr<double> phi_hat_exact = phi_hat->termTraced()->evaluate(exactMap);
-    FunctionPtr<double> psi_n_hat_exact = psi_n_hat->termTraced()->evaluate(exactMap);
+    FunctionPtr phi_hat_exact = phi_hat->termTraced()->evaluate(exactMap);
+    FunctionPtr psi_n_hat_exact = psi_n_hat->termTraced()->evaluate(exactMap);
     exactMap[phi_hat->ID()] = phi_hat_exact;
     exactMap[psi_n_hat->ID()] = psi_n_hat_exact;
 
@@ -212,12 +212,12 @@ namespace {
     // if we project a steady solution onto the previous solution as well as the current solution,
     // we should have a zero residual
 
-    FunctionPtr<double> x = Function<double>::xn(1);
-    FunctionPtr<double> y = Function<double>::yn(1);
-    FunctionPtr<double> u1 = x;
-    FunctionPtr<double> u2 = -y; // divergence 0
-    FunctionPtr<double> u = Function<double>::vectorize(u1,u2);
-    FunctionPtr<double> p = y * y * y; // zero average
+    FunctionPtr x = Function::xn(1);
+    FunctionPtr y = Function::yn(1);
+    FunctionPtr u1 = x;
+    FunctionPtr u2 = -y; // divergence 0
+    FunctionPtr u = Function::vectorize(u1,u2);
+    FunctionPtr p = y * y * y; // zero average
 
     bool useConformingTraces = true;
     bool transient = true;
@@ -248,20 +248,20 @@ namespace {
     int delta_k = 1;
     MeshPtr stokesMesh = Teuchos::rcp( new Mesh(meshTopo,form.bf(),fieldPolyOrder+1, delta_k) );
 
-    FunctionPtr<double> x = Function<double>::xn(1);
-    FunctionPtr<double> y = Function<double>::yn(1);
-    FunctionPtr<double> u1 = x;
-    FunctionPtr<double> u2 = -y; // divergence 0
-    //    FunctionPtr<double> p = y * y * y; // zero average
-    //    FunctionPtr<double> u1 = Function<double>::constant(1.0);
-    //    FunctionPtr<double> u2 = Function<double>::constant(1.0);
-    FunctionPtr<double> p = x + y;
+    FunctionPtr x = Function::xn(1);
+    FunctionPtr y = Function::yn(1);
+    FunctionPtr u1 = x;
+    FunctionPtr u2 = -y; // divergence 0
+    //    FunctionPtr p = y * y * y; // zero average
+    //    FunctionPtr u1 = Function::constant(1.0);
+    //    FunctionPtr u2 = Function::constant(1.0);
+    FunctionPtr p = x + y;
 
-    FunctionPtr<double> forcingFunction_x = p->dx() - (1.0/Re) * (u1->dx()->dx() + u1->dy()->dy());
-    FunctionPtr<double> forcingFunction_y = p->dy() - (1.0/Re) * (u2->dx()->dx() + u2->dy()->dy());
-    FunctionPtr<double> forcingFunctionExpected = Function<double>::vectorize(forcingFunction_x, forcingFunction_y);
+    FunctionPtr forcingFunction_x = p->dx() - (1.0/Re) * (u1->dx()->dx() + u1->dy()->dy());
+    FunctionPtr forcingFunction_y = p->dy() - (1.0/Re) * (u2->dx()->dx() + u2->dy()->dy());
+    FunctionPtr forcingFunctionExpected = Function::vectorize(forcingFunction_x, forcingFunction_y);
 
-    FunctionPtr<double> forcingFunctionActual = StokesVGPFormulation::forcingFunction(spaceDim, 1.0 / Re, Function<double>::vectorize(u1, u2), p);
+    FunctionPtr forcingFunctionActual = StokesVGPFormulation::forcingFunction(spaceDim, 1.0 / Re, Function::vectorize(u1, u2), p);
 
     double tol = 1e-13;
     double err = (forcingFunctionExpected - forcingFunctionActual)->l2norm(stokesMesh);
@@ -278,16 +278,16 @@ namespace {
     double Re = 1.0;
     int fieldPolyOrder = 1, delta_k = 1;
 
-    FunctionPtr<double> x = Function<double>::xn(1);
-    FunctionPtr<double> y = Function<double>::yn(1);
-    FunctionPtr<double> u1 = x;
-    FunctionPtr<double> u2 = -y; // divergence 0
-    FunctionPtr<double> u = Function<double>::vectorize(u1,u2);
+    FunctionPtr x = Function::xn(1);
+    FunctionPtr y = Function::yn(1);
+    FunctionPtr u1 = x;
+    FunctionPtr u2 = -y; // divergence 0
+    FunctionPtr u = Function::vectorize(u1,u2);
 
-//    FunctionPtr<double> p = y * y * y; // zero average
-//    FunctionPtr<double> u1 = Function<double>::constant(1.0);
-//    FunctionPtr<double> u2 = Function<double>::constant(1.0);
-    FunctionPtr<double> p = x + y;
+//    FunctionPtr p = y * y * y; // zero average
+//    FunctionPtr u1 = Function::constant(1.0);
+//    FunctionPtr u2 = Function::constant(1.0);
+    FunctionPtr p = x + y;
 
     bool useConformingTraces = true;
     StokesVGPFormulation form(spaceDim, useConformingTraces, 1.0 / Re);
@@ -308,11 +308,11 @@ namespace {
     SolutionPtr<double> stokesSolution = form.solution();
     stokesSolution->addSolution(stokesProjection, -1);
 
-    FunctionPtr<double> u1_diff = Function<double>::solution(form.u(1), stokesSolution);
-    FunctionPtr<double> u2_diff = Function<double>::solution(form.u(2), stokesSolution);
-    FunctionPtr<double> sigma1_diff = Function<double>::solution(form.sigma(1), stokesSolution);
-    FunctionPtr<double> sigma2_diff = Function<double>::solution(form.sigma(2), stokesSolution);
-    FunctionPtr<double> p_diff = Function<double>::solution(form.p(), stokesSolution);
+    FunctionPtr u1_diff = Function::solution(form.u(1), stokesSolution);
+    FunctionPtr u2_diff = Function::solution(form.u(2), stokesSolution);
+    FunctionPtr sigma1_diff = Function::solution(form.sigma(1), stokesSolution);
+    FunctionPtr sigma2_diff = Function::solution(form.sigma(2), stokesSolution);
+    FunctionPtr p_diff = Function::solution(form.p(), stokesSolution);
 
     double p_diff_l2 = p_diff->l2norm(stokesMesh);
     double u1_diff_l2 = u1_diff->l2norm(stokesMesh);

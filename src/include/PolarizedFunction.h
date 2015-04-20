@@ -13,18 +13,18 @@
 
 namespace Camellia {
   template <typename Scalar>
-  class PolarizedFunction : public Function<Scalar> { // takes a 2D Function of x and y, interpreting it as function of r and theta
+  class PolarizedFunction : public TFunction<Scalar> { // takes a 2D Function of x and y, interpreting it as function of r and theta
     // i.e. to implement f(r,theta) = r sin theta
     // pass in a Function f(x,y) = x sin y.
     // Given the implementation, it is important that f depend *only* on x and y, and not on the mesh, etc.
     // (the only method in BasisCache that f may call is getPhysicalCubaturePoints())
-    FunctionPtr<Scalar> _f;
+    TFunctionPtr<Scalar> _f;
   public:
-    PolarizedFunction( FunctionPtr<Scalar> f_of_xAsR_yAsTheta );
+    PolarizedFunction( TFunctionPtr<Scalar> f_of_xAsR_yAsTheta );
     void values(Intrepid::FieldContainer<Scalar> &values, BasisCachePtr basisCache);
 
-    FunctionPtr<Scalar> dx();
-    FunctionPtr<Scalar> dy();
+    TFunctionPtr<Scalar> dx();
+    TFunctionPtr<Scalar> dy();
 
     Teuchos::RCP<PolarizedFunction<Scalar> > dtheta();
     Teuchos::RCP<PolarizedFunction<Scalar> > dr();

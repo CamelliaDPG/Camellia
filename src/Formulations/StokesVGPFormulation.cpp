@@ -89,8 +89,8 @@ StokesVGPFormulation::StokesVGPFormulation(int spaceDim, bool useConformingTrace
   u2_hat = _vf.traceVar(S_U2_HAT, 1.0 * u2, uHatSpace);
   if (spaceDim==3) u3_hat = _vf.traceVar(S_U3_HAT, 1.0 * u3, uHatSpace);
 
-  FunctionPtr<double> n = Function<double>::normal();
-  FunctionPtr<double> n_parity = n * Function<double>::sideParity();
+  TFunctionPtr<double> n = TFunction<double>::normal();
+  TFunctionPtr<double> n_parity = n * TFunction<double>::sideParity();
 
   LinearTermPtr t1n_lt, t2n_lt, t3n_lt;
   t1n_lt = p * n_parity->x() - sigma1 * n_parity ;
@@ -183,7 +183,7 @@ StokesVGPFormulation::StokesVGPFormulation(int spaceDim, bool useConformingTrace
       _stokesBF->addTerm(-u3_hat, tau3->dot_normal());
     }
 
-    FunctionPtr<double> dtFxn = _dt; // cast to allow use of FunctionPtr<double> operator overloads
+    TFunctionPtr<double> dtFxn = _dt; // cast to allow use of TFunctionPtr<double> operator overloads
     // v1:
     _stokesBF->addTerm(u1 / dtFxn, v1);
     _stokesBF->addTerm(_theta * sigma1, v1->grad()); // (mu sigma1, grad v1)
@@ -229,7 +229,7 @@ StokesVGPFormulation::StokesVGPFormulation(int spaceDim, bool useConformingTrace
   }
 }
 
-void StokesVGPFormulation::addInflowCondition(SpatialFilterPtr inflowRegion, FunctionPtr<double> u) {
+void StokesVGPFormulation::addInflowCondition(SpatialFilterPtr inflowRegion, TFunctionPtr<double> u) {
   int spaceDim = _solution->mesh()->getTopology()->getSpaceDim();
 
   VarPtr u1_hat = this->u_hat(1), u2_hat = this->u_hat(2);
@@ -241,13 +241,13 @@ void StokesVGPFormulation::addInflowCondition(SpatialFilterPtr inflowRegion, Fun
     _solution->bc()->addDirichlet(u2_hat, inflowRegion, u->y());
     if (spaceDim==3) _solution->bc()->addDirichlet(u3_hat, inflowRegion, u->z());
   } else {
-    FunctionPtr<double> u1_hat_prev, u2_hat_prev, u3_hat_prev;
+    TFunctionPtr<double> u1_hat_prev, u2_hat_prev, u3_hat_prev;
     SolutionPtr<double> prevSolnWeakRef = Teuchos::rcp( _previousSolution.get(), false ); // avoid circular references
 
-    u1_hat_prev = Function<double>::solution(this->u_hat(1), prevSolnWeakRef);
-    u2_hat_prev = Function<double>::solution(this->u_hat(2), prevSolnWeakRef);
-    if (spaceDim==3) u3_hat_prev = Function<double>::solution(this->u_hat(3), prevSolnWeakRef);
-    FunctionPtr<double> thetaFxn = _theta; // cast to allow use of FunctionPtr<double> operator overloads
+    u1_hat_prev = TFunction<double>::solution(this->u_hat(1), prevSolnWeakRef);
+    u2_hat_prev = TFunction<double>::solution(this->u_hat(2), prevSolnWeakRef);
+    if (spaceDim==3) u3_hat_prev = TFunction<double>::solution(this->u_hat(3), prevSolnWeakRef);
+    TFunctionPtr<double> thetaFxn = _theta; // cast to allow use of TFunctionPtr<double> operator overloads
     _solution->bc()->addDirichlet(u1_hat, inflowRegion, thetaFxn * u->x() + (1.-thetaFxn)* u1_hat_prev);
     _solution->bc()->addDirichlet(u2_hat, inflowRegion, thetaFxn * u->y() + (1.-thetaFxn)* u2_hat_prev);
     if (spaceDim==3) _solution->bc()->addDirichlet(u3_hat, inflowRegion, thetaFxn * u->z() + (1.-thetaFxn)* u3_hat_prev);
@@ -259,7 +259,7 @@ void StokesVGPFormulation::addOutflowCondition(SpatialFilterPtr outflowRegion) {
 
 //  for (int d=0; d<spaceDim; d++) {
 //    VarPtr tn_hat = this->tn_hat(d+1);
-//    _solution->bc()->addDirichlet(tn_hat, outflowRegion, Function<double>::zero());
+//    _solution->bc()->addDirichlet(tn_hat, outflowRegion, TFunction<double>::zero());
 //  }
 
   _haveOutflowConditionsImposed = true;
@@ -291,7 +291,7 @@ void StokesVGPFormulation::addOutflowCondition(SpatialFilterPtr outflowRegion) {
     pcRCP = Teuchos::rcp( new PenaltyConstraints );
     pc = pcRCP.get();
   }
-  FunctionPtr<double> zero = Function<double>::zero();
+  TFunctionPtr<double> zero = TFunction<double>::zero();
   pc->addConstraint(_t1==zero, outflowRegion);
   pc->addConstraint(_t2==zero, outflowRegion);
   if (spaceDim==3) pc->addConstraint(_t3==zero, outflowRegion);
@@ -319,7 +319,7 @@ void StokesVGPFormulation::addPointPressureCondition() {
 void StokesVGPFormulation::addWallCondition(SpatialFilterPtr wall) {
   int spaceDim = _solution->mesh()->getTopology()->getSpaceDim();
   vector<double> zero(spaceDim, 0.0);
-  addInflowCondition(wall, Function<double>::constant(zero));
+  addInflowCondition(wall, TFunction<double>::constant(zero));
 }
 
 void StokesVGPFormulation::addZeroMeanPressureCondition() {
@@ -341,41 +341,41 @@ BFPtr StokesVGPFormulation::bf() {
   return _stokesBF;
 }
 
-FunctionPtr<double> StokesVGPFormulation::forcingFunction(int spaceDim, double mu, FunctionPtr<double> u_exact, FunctionPtr<double> p_exact) {
+TFunctionPtr<double> StokesVGPFormulation::forcingFunction(int spaceDim, double mu, TFunctionPtr<double> u_exact, TFunctionPtr<double> p_exact) {
   // f1 and f2 are those for Navier-Stokes, but without the u \cdot \grad u term
-  FunctionPtr<double> u1_exact = u_exact->x();
-  FunctionPtr<double> u2_exact = u_exact->y();
-  FunctionPtr<double> u3_exact = u_exact->z();
+  TFunctionPtr<double> u1_exact = u_exact->x();
+  TFunctionPtr<double> u2_exact = u_exact->y();
+  TFunctionPtr<double> u3_exact = u_exact->z();
 
-  FunctionPtr<double> f;
+  TFunctionPtr<double> f;
 
   if (spaceDim == 2) {
-    FunctionPtr<double> f1, f2;
+    TFunctionPtr<double> f1, f2;
     f1 = p_exact->dx() - mu * (u1_exact->dx()->dx() + u1_exact->dy()->dy());
     f2 = p_exact->dy() - mu * (u2_exact->dx()->dx() + u2_exact->dy()->dy());
-    f = Function<double>::vectorize(f1, f2);
+    f = TFunction<double>::vectorize(f1, f2);
   } else {
-    FunctionPtr<double> f1, f2, f3;
+    TFunctionPtr<double> f1, f2, f3;
     f1 = p_exact->dx() - mu * (u1_exact->dx()->dx() + u1_exact->dy()->dy() + u1_exact->dz()->dz());
     f2 = p_exact->dy() - mu * (u2_exact->dx()->dx() + u2_exact->dy()->dy() + u2_exact->dz()->dz());
     f3 = p_exact->dz() - mu * (u3_exact->dx()->dx() + u3_exact->dy()->dy() + u3_exact->dz()->dz());
-    f = Function<double>::vectorize(f1, f2, f3);
+    f = TFunction<double>::vectorize(f1, f2, f3);
   }
   return f;
 }
 
 void StokesVGPFormulation::initializeSolution(MeshTopologyPtr meshTopo, int fieldPolyOrder, int delta_k,
-                                              FunctionPtr<double> forcingFunction) {
+                                              TFunctionPtr<double> forcingFunction) {
   this->initializeSolution(meshTopo, fieldPolyOrder, delta_k, forcingFunction, "");
 }
 
 void StokesVGPFormulation::initializeSolution(std::string filePrefix, int fieldPolyOrder, int delta_k,
-                                              FunctionPtr<double> forcingFunction) {
+                                              TFunctionPtr<double> forcingFunction) {
   this->initializeSolution(Teuchos::null, fieldPolyOrder, delta_k, forcingFunction, filePrefix);
 }
 
 void StokesVGPFormulation::initializeSolution(MeshTopologyPtr meshTopo, int fieldPolyOrder, int delta_k,
-                                              FunctionPtr<double> forcingFunction, string savedSolutionAndMeshPrefix) {
+                                              TFunctionPtr<double> forcingFunction, string savedSolutionAndMeshPrefix) {
   _haveOutflowConditionsImposed = false;
   BCPtr bc = BC::bc();
 
@@ -434,7 +434,7 @@ void StokesVGPFormulation::initializeSolution(MeshTopologyPtr meshTopo, int fiel
     LinearTermPtr u1_dy = (1.0 / _mu) * this->sigma(1)->y();
     LinearTermPtr u2_dx = (1.0 / _mu) * this->sigma(2)->x();
 
-    FunctionPtr<double> vorticity = Teuchos::rcp( new PreviousSolutionFunction<double>(_solution, u2_dx - u1_dy) );
+    TFunctionPtr<double> vorticity = Teuchos::rcp( new PreviousSolutionFunction<double>(_solution, u2_dx - u1_dy) );
     RHSPtr streamRHS = RHS::rhs();
     VarPtr q_stream = _streamFormulation->q();
     streamRHS->addTerm( -vorticity * q_stream );
@@ -447,12 +447,12 @@ void StokesVGPFormulation::initializeSolution(MeshTopologyPtr meshTopo, int fiel
      * Therefore, psi = grad phi = (-u2, u1), and psi * n = u1 n2 - u2 n1
      */
 
-    FunctionPtr<double> u1_soln = Teuchos::rcp( new PreviousSolutionFunction<double>(_solution, this->u(1) ) );
-    FunctionPtr<double> u2_soln = Teuchos::rcp( new PreviousSolutionFunction<double>(_solution, this->u(2) ) );
+    TFunctionPtr<double> u1_soln = Teuchos::rcp( new PreviousSolutionFunction<double>(_solution, this->u(1) ) );
+    TFunctionPtr<double> u2_soln = Teuchos::rcp( new PreviousSolutionFunction<double>(_solution, this->u(2) ) );
     ((PreviousSolutionFunction<double>*) u1_soln.get())->setOverrideMeshCheck(true,dontWarnAboutOverriding);
     ((PreviousSolutionFunction<double>*) u2_soln.get())->setOverrideMeshCheck(true,dontWarnAboutOverriding);
 
-    FunctionPtr<double> n = Function<double>::normal();
+    TFunctionPtr<double> n = TFunction<double>::normal();
 
     BCPtr streamBC = BC::bc();
     VarPtr phi = _streamFormulation->phi();
@@ -471,14 +471,14 @@ void StokesVGPFormulation::initializeSolution(MeshTopologyPtr meshTopo, int fiel
 }
 
 double StokesVGPFormulation::L2NormOfTimeStep() {
-  FunctionPtr<double>  p_current = Function<double>::solution( p(), _solution);
-  FunctionPtr<double> u1_current = Function<double>::solution(u(1), _solution);
-  FunctionPtr<double> u2_current = Function<double>::solution(u(2), _solution);
-  FunctionPtr<double>  p_prev = Function<double>::solution( p(), _previousSolution);
-  FunctionPtr<double> u1_prev = Function<double>::solution(u(1), _previousSolution);
-  FunctionPtr<double> u2_prev = Function<double>::solution(u(2), _previousSolution);
+  TFunctionPtr<double>  p_current = TFunction<double>::solution( p(), _solution);
+  TFunctionPtr<double> u1_current = TFunction<double>::solution(u(1), _solution);
+  TFunctionPtr<double> u2_current = TFunction<double>::solution(u(2), _solution);
+  TFunctionPtr<double>  p_prev = TFunction<double>::solution( p(), _previousSolution);
+  TFunctionPtr<double> u1_prev = TFunction<double>::solution(u(1), _previousSolution);
+  TFunctionPtr<double> u2_prev = TFunction<double>::solution(u(2), _previousSolution);
 
-  FunctionPtr<double> squaredDiff = (p_current-p_prev) * (p_current-p_prev) + (u1_current-u1_prev) * (u1_current-u1_prev) + (u2_current - u2_prev) * (u2_current - u2_prev);
+  TFunctionPtr<double> squaredDiff = (p_current-p_prev) * (p_current-p_prev) + (u1_current-u1_prev) * (u1_current-u1_prev) + (u2_current - u2_prev) * (u2_current - u2_prev);
   double valSquared = squaredDiff->integrate(_solution->mesh());
   return sqrt(valSquared);
 }
@@ -511,7 +511,7 @@ void StokesVGPFormulation::pRefine() {
   _pRefinementStrategy->refine();
 }
 
-RHSPtr StokesVGPFormulation::rhs(FunctionPtr<double> f) {
+RHSPtr StokesVGPFormulation::rhs(TFunctionPtr<double> f) {
   int spaceDim = _solution->mesh()->getTopology()->getSpaceDim();
 
   RHSPtr rhs = RHS::rhs();
@@ -528,18 +528,18 @@ RHSPtr StokesVGPFormulation::rhs(FunctionPtr<double> f) {
   }
 
   if (_transient) {
-    FunctionPtr<double> u1_prev, u2_prev, u3_prev;
-    u1_prev = Function<double>::solution(this->u(1), _previousSolution);
-    u2_prev = Function<double>::solution(this->u(2), _previousSolution);
-    if (spaceDim==3) u3_prev = Function<double>::solution(this->u(3), _previousSolution);
-    FunctionPtr<double> dtFxn = _dt; // cast to allow use of FunctionPtr<double> operator overloads
+    TFunctionPtr<double> u1_prev, u2_prev, u3_prev;
+    u1_prev = TFunction<double>::solution(this->u(1), _previousSolution);
+    u2_prev = TFunction<double>::solution(this->u(2), _previousSolution);
+    if (spaceDim==3) u3_prev = TFunction<double>::solution(this->u(3), _previousSolution);
+    TFunctionPtr<double> dtFxn = _dt; // cast to allow use of TFunctionPtr<double> operator overloads
     rhs->addTerm(u1_prev / dtFxn * v1);
     rhs->addTerm(u2_prev / dtFxn * v2);
     if (spaceDim==3) rhs->addTerm(u3_prev / dtFxn * v3);
 
     bool excludeFluxesAndTraces = true;
     LinearTermPtr prevTimeStepFunctional = _steadyStokesBF->testFunctional(_previousSolution,excludeFluxesAndTraces);
-    FunctionPtr<double> thetaFxn = _theta; // cast to allow use of FunctionPtr<double> operator overloads
+    TFunctionPtr<double> thetaFxn = _theta; // cast to allow use of TFunctionPtr<double> operator overloads
     rhs->addTerm((thetaFxn - 1.0) * prevTimeStepFunctional);
   }
 
@@ -705,7 +705,7 @@ double StokesVGPFormulation::getTime() {
   return _time;
 }
 
-FunctionPtr<double> StokesVGPFormulation::getTimeFunction() {
+TFunctionPtr<double> StokesVGPFormulation::getTimeFunction() {
   return _t;
 }
 

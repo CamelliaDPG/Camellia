@@ -19,7 +19,7 @@ using namespace Camellia;
 using namespace Intrepid;
 
 namespace {
-  void testProjectFunctionOnTensorTopoSides(CellTopoPtr spaceTopo, int H1Order, Camellia::EFunctionSpace fs, FunctionPtr<double> f,
+  void testProjectFunctionOnTensorTopoSides(CellTopoPtr spaceTopo, int H1Order, Camellia::EFunctionSpace fs, FunctionPtr f,
                                             Teuchos::FancyOStream &out, bool &success) {
     int tensorialDegree = 1;
     CellTopoPtr spaceTimeTopo = CellTopology::cellTopology(spaceTopo->getShardsTopology(), tensorialDegree);
@@ -45,7 +45,7 @@ namespace {
       Projector::projectFunctionOntoBasis(basisCoefficients, f, sideBasis, sideBasisCache);
 
       basisCoefficients.resize(sideBasis->getCardinality());
-      FunctionPtr<double> projectedFunction = BasisSumFunction::basisSumFunction(sideBasis, basisCoefficients);
+      FunctionPtr projectedFunction = BasisSumFunction::basisSumFunction(sideBasis, basisCoefficients);
 
       double expectedIntegral = f->integrate(sideBasisCache);
       double actualIntegral = projectedFunction->integrate(sideBasisCache);
@@ -70,8 +70,8 @@ namespace {
     CellTopoPtr spaceTopo = CellTopology::line();
 
     int H1Order = 3;
-    FunctionPtr<double> n = Function<double>::normalSpaceTime();
-    FunctionPtr<double> f = Function<double>::xn(2) * n->x() + Function<double>::yn(1) * n->y();
+    FunctionPtr n = Function::normalSpaceTime();
+    FunctionPtr f = Function::xn(2) * n->x() + Function::yn(1) * n->y();
 
     testProjectFunctionOnTensorTopoSides(spaceTopo, H1Order, Camellia::FUNCTION_SPACE_HVOL, f, out, success);
   }
@@ -81,7 +81,7 @@ namespace {
     CellTopoPtr spaceTopo = CellTopology::line();
 
     int H1Order = 2;
-    FunctionPtr<double> f = Function<double>::xn(2);
+    FunctionPtr f = Function::xn(2);
 
     testProjectFunctionOnTensorTopoSides(spaceTopo, H1Order, Camellia::FUNCTION_SPACE_HGRAD, f, out, success);
   }

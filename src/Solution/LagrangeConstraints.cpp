@@ -26,7 +26,7 @@ void LagrangeConstraints::getCoefficients(FieldContainer<double> &lhs, FieldCont
                                           int elemConstraintIndex, DofOrderingPtr trialOrdering,
                                           BasisCachePtr basisCache) {
   LinearTermPtr lt = _constraints[elemConstraintIndex].linearTerm();
-  FunctionPtr<double> f = _constraints[elemConstraintIndex].f();
+  TFunctionPtr<double> f = _constraints[elemConstraintIndex].f();
   lt->integrate(lhs, trialOrdering, basisCache);
   bool onBoundary = f->boundaryValueOnly();
   if ( !onBoundary ) {

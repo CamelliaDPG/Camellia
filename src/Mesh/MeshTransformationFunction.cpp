@@ -60,7 +60,7 @@ void roundToOneOrZero(double &value, double tol) {
   }
 }
 
-class CellTransformationFunction : public Function<double> {
+class CellTransformationFunction : public TFunction<double> {
   FieldContainer<double> _basisCoefficients;
   VectorBasisPtr _basis;
   Camellia::EOperator _op;
@@ -108,14 +108,14 @@ class CellTransformationFunction : public Function<double> {
   }
 
 protected:
-  CellTransformationFunction(VectorBasisPtr basis, FieldContainer<double> &basisCoefficients, Camellia::EOperator op) : Function<double>(1) {
+  CellTransformationFunction(VectorBasisPtr basis, FieldContainer<double> &basisCoefficients, Camellia::EOperator op) : TFunction<double>(1) {
     _basis = basis;
     _basisCoefficients = basisCoefficients;
     _op = op;
     _cellIndex = -1;
   }
 public:
-  CellTransformationFunction(MeshPtr mesh, int cellID, const vector< ParametricCurvePtr > &edgeFunctions) : Function<double>(1) {
+  CellTransformationFunction(MeshPtr mesh, int cellID, const vector< ParametricCurvePtr > &edgeFunctions) : TFunction<double>(1) {
     _cellIndex = -1;
     _op = OP_VALUE;
     ElementPtr cell = mesh->getElement(cellID);
@@ -226,15 +226,15 @@ public:
     _cellIndex = cellIndex;
   }
 
-  FunctionPtr<double> dx() {
+  TFunctionPtr<double> dx() {
     return Teuchos::rcp( new CellTransformationFunction(_basis,_basisCoefficients,OP_DX) );
   }
 
-  FunctionPtr<double> dy() {
+  TFunctionPtr<double> dy() {
     return Teuchos::rcp( new CellTransformationFunction(_basis,_basisCoefficients,OP_DY) );
   }
 
-  FunctionPtr<double> dz() {
+  TFunctionPtr<double> dz() {
     return Teuchos::rcp( new CellTransformationFunction(_basis,_basisCoefficients,OP_DZ) );
   }
 
@@ -244,7 +244,7 @@ public:
 };
 
 // protected method; used for dx(), dy(), dz():
-MeshTransformationFunction::MeshTransformationFunction(MeshPtr mesh, map< GlobalIndexType, FunctionPtr<double>> cellTransforms, Camellia::EOperator op) : Function<double>(1) {
+MeshTransformationFunction::MeshTransformationFunction(MeshPtr mesh, map< GlobalIndexType, TFunctionPtr<double>> cellTransforms, Camellia::EOperator op) : TFunction<double>(1) {
   _mesh = mesh;
   _cellTransforms = cellTransforms;
   _op = op;
@@ -252,7 +252,7 @@ MeshTransformationFunction::MeshTransformationFunction(MeshPtr mesh, map< Global
 
 }
 
-MeshTransformationFunction::MeshTransformationFunction(MeshPtr mesh, set<GlobalIndexType> cellIDsToTransform) : Function<double>(1) { // vector-valued Function
+MeshTransformationFunction::MeshTransformationFunction(MeshPtr mesh, set<GlobalIndexType> cellIDsToTransform) : TFunction<double>(1) { // vector-valued Function
   _op = OP_VALUE;
   _mesh = mesh;
   _maxPolynomialDegree = 1; // 1 is the degree of the identity transform (x,y) -> (x,y)
@@ -357,7 +357,7 @@ void MeshTransformationFunction::values(FieldContainer<double> &values, BasisCac
   for (int cellIndex=0; cellIndex < cellIDs.size(); cellIndex++) {
     GlobalIndexType cellID = cellIDs[cellIndex];
     if (_cellTransforms.find(cellID) == _cellTransforms.end()) continue;
-    FunctionPtr<double> cellTransformation = _cellTransforms[cellID];
+    TFunctionPtr<double> cellTransformation = _cellTransforms[cellID];
     ((CellTransformationFunction*)cellTransformation.get())->setCellIndex(cellIndex);
     cellTransformation->values(values, basisCache);
   }
@@ -366,32 +366,32 @@ void MeshTransformationFunction::values(FieldContainer<double> &values, BasisCac
 //  }
 }
 
-map< GlobalIndexType, FunctionPtr<double> > applyOperatorToCellTransforms(const map< GlobalIndexType, FunctionPtr<double> > &cellTransforms, Camellia::EOperator op) {
-  map<GlobalIndexType, FunctionPtr<double> > newTransforms;
-  for (map< GlobalIndexType, FunctionPtr<double> >::const_iterator cellTransformIt = cellTransforms.begin();
+map< GlobalIndexType, TFunctionPtr<double> > applyOperatorToCellTransforms(const map< GlobalIndexType, TFunctionPtr<double> > &cellTransforms, Camellia::EOperator op) {
+  map<GlobalIndexType, TFunctionPtr<double> > newTransforms;
+  for (map< GlobalIndexType, TFunctionPtr<double> >::const_iterator cellTransformIt = cellTransforms.begin();
        cellTransformIt != cellTransforms.end(); cellTransformIt++) {
     GlobalIndexType cellID = cellTransformIt->first;
-    newTransforms[cellID] = Function<double>::op(cellTransformIt->second, op);
+    newTransforms[cellID] = TFunction<double>::op(cellTransformIt->second, op);
   }
   return newTransforms;
 }
 
-FunctionPtr<double> MeshTransformationFunction::dx() {
+TFunctionPtr<double> MeshTransformationFunction::dx() {
   Camellia::EOperator op = OP_DX;
   return Teuchos::rcp( new MeshTransformationFunction(_mesh, applyOperatorToCellTransforms(_cellTransforms, op),op));
 }
 
-FunctionPtr<double> MeshTransformationFunction::dy() {
+TFunctionPtr<double> MeshTransformationFunction::dy() {
   if (_mesh->getDimension() < 2) {
-    return Function<double>::null();
+    return TFunction<double>::null();
   }
   Camellia::EOperator op = OP_DY;
   return Teuchos::rcp( new MeshTransformationFunction(_mesh, applyOperatorToCellTransforms(_cellTransforms, op),op));
 }
 
-FunctionPtr<double> MeshTransformationFunction::dz() {
+TFunctionPtr<double> MeshTransformationFunction::dz() {
   if (_mesh->getDimension() < 3) {
-    return Function<double>::null();
+    return TFunction<double>::null();
   }
   Camellia::EOperator op = OP_DZ;
   return Teuchos::rcp( new MeshTransformationFunction(_mesh, applyOperatorToCellTransforms(_cellTransforms, op),op));

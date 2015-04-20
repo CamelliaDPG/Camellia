@@ -146,14 +146,14 @@ namespace {
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "type must be flux or trace");
     } else if (spaceDim==1) {
       fieldVar = vf.fieldVar("psi", L2);
-      FunctionPtr<double> n = Function<double>::normal_1D();
-      FunctionPtr<double> parity = Function<double>::sideParity();
+      FunctionPtr n = Function::normal_1D();
+      FunctionPtr parity = Function::sideParity();
       LinearTermPtr fluxTermTraced = 3.0 * n * parity * fieldVar;
       traceVar = vf.fluxVar("\\widehat{\\psi}_n", fluxTermTraced);
     } else if (traceOrFluxType==FLUX) {
       fieldVar = vf.fieldVar("psi", VECTOR_L2);
-      FunctionPtr<double> n = Function<double>::normal();
-      FunctionPtr<double> parity = Function<double>::sideParity();
+      FunctionPtr n = Function::normal();
+      FunctionPtr parity = Function::sideParity();
       LinearTermPtr fluxTermTraced = 3.0 * n * parity * fieldVar;
       traceVar = vf.fluxVar("\\widehat{\\psi}_n", fluxTermTraced);
     } else {

@@ -13,23 +13,23 @@
 
 namespace Camellia {
   template <typename Scalar>
-  class SumFunction : public Function<Scalar> {
-    FunctionPtr<Scalar> _f1, _f2;
+  class SumFunction : public TFunction<Scalar> {
+    TFunctionPtr<Scalar> _f1, _f2;
   public:
-    SumFunction(FunctionPtr<Scalar> f1, FunctionPtr<Scalar> f2);
+    SumFunction(TFunctionPtr<Scalar> f1, TFunctionPtr<Scalar> f2);
 
-    FunctionPtr<Scalar> x();
-    FunctionPtr<Scalar> y();
-    FunctionPtr<Scalar> z();
-    FunctionPtr<Scalar> t();
+    TFunctionPtr<Scalar> x();
+    TFunctionPtr<Scalar> y();
+    TFunctionPtr<Scalar> z();
+    TFunctionPtr<Scalar> t();
 
-    FunctionPtr<Scalar> dx();
-    FunctionPtr<Scalar> dy();
-    FunctionPtr<Scalar> dz();
-    FunctionPtr<Scalar> dt();
+    TFunctionPtr<Scalar> dx();
+    TFunctionPtr<Scalar> dy();
+    TFunctionPtr<Scalar> dz();
+    TFunctionPtr<Scalar> dt();
 
-    FunctionPtr<Scalar> grad(int numComponents=-1); // gradient of sum is the sum of gradients
-    FunctionPtr<Scalar> div();  // divergence of sum is sum of divergences
+    TFunctionPtr<Scalar> grad(int numComponents=-1); // gradient of sum is the sum of gradients
+    TFunctionPtr<Scalar> div();  // divergence of sum is sum of divergences
 
     void values(Intrepid::FieldContainer<Scalar> &values, BasisCachePtr basisCache);
     bool boundaryValueOnly();

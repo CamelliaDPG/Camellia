@@ -13,24 +13,24 @@
 
 namespace Camellia {
   template <typename Scalar>
-  class ProductFunction : public Function<Scalar> {
+  class ProductFunction : public TFunction<Scalar> {
   private:
-    int productRank(FunctionPtr<Scalar> f1, FunctionPtr<Scalar> f2);
-    FunctionPtr<Scalar> _f1, _f2;
+    int productRank(TFunctionPtr<Scalar> f1, TFunctionPtr<Scalar> f2);
+    TFunctionPtr<Scalar> _f1, _f2;
   public:
-    ProductFunction(FunctionPtr<Scalar> f1, FunctionPtr<Scalar> f2);
+    ProductFunction(TFunctionPtr<Scalar> f1, TFunctionPtr<Scalar> f2);
     void values(Intrepid::FieldContainer<Scalar> &values, BasisCachePtr basisCache);
     virtual bool boundaryValueOnly();
 
-    FunctionPtr<Scalar> x();
-    FunctionPtr<Scalar> y();
-    FunctionPtr<Scalar> z();
-    FunctionPtr<Scalar> t();
+    TFunctionPtr<Scalar> x();
+    TFunctionPtr<Scalar> y();
+    TFunctionPtr<Scalar> z();
+    TFunctionPtr<Scalar> t();
 
-    FunctionPtr<Scalar> dx();
-    FunctionPtr<Scalar> dy();
-    FunctionPtr<Scalar> dz();
-    FunctionPtr<Scalar> dt();
+    TFunctionPtr<Scalar> dx();
+    TFunctionPtr<Scalar> dy();
+    TFunctionPtr<Scalar> dz();
+    TFunctionPtr<Scalar> dt();
 
     string displayString(); // _f1->displayString() << " " << _f2->displayString();
   };

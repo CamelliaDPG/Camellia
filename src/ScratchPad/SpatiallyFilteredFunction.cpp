@@ -5,7 +5,7 @@ using namespace Intrepid;
 using namespace Camellia;
 
 template <typename Scalar>
-SpatiallyFilteredFunction<Scalar>::SpatiallyFilteredFunction(FunctionPtr<Scalar> f, SpatialFilterPtr sf) : Function<Scalar>(f->rank()) {
+SpatiallyFilteredFunction<Scalar>::SpatiallyFilteredFunction(TFunctionPtr<Scalar> f, SpatialFilterPtr sf) : TFunction<Scalar>(f->rank()) {
   _f = f;
   _sf = sf;
 }
@@ -52,27 +52,27 @@ void SpatiallyFilteredFunction<Scalar>::values(FieldContainer<Scalar> &values, B
 }
 
 template <typename Scalar>
-FunctionPtr<Scalar> SpatiallyFilteredFunction<Scalar>::curl() {
+TFunctionPtr<Scalar> SpatiallyFilteredFunction<Scalar>::curl() {
   return Teuchos::rcp( new SpatiallyFilteredFunction<Scalar>(_f->curl(), _sf));
 }
 
 template <typename Scalar>
-FunctionPtr<Scalar> SpatiallyFilteredFunction<Scalar>::div() {
+TFunctionPtr<Scalar> SpatiallyFilteredFunction<Scalar>::div() {
   return Teuchos::rcp( new SpatiallyFilteredFunction<Scalar>(_f->div(), _sf));
 }
 
 template <typename Scalar>
-FunctionPtr<Scalar> SpatiallyFilteredFunction<Scalar>::dx() {
+TFunctionPtr<Scalar> SpatiallyFilteredFunction<Scalar>::dx() {
   return Teuchos::rcp( new SpatiallyFilteredFunction<Scalar>(_f->dx(), _sf));
 }
 
 template <typename Scalar>
-FunctionPtr<Scalar> SpatiallyFilteredFunction<Scalar>::dy() {
+TFunctionPtr<Scalar> SpatiallyFilteredFunction<Scalar>::dy() {
     return Teuchos::rcp( new SpatiallyFilteredFunction<Scalar>(_f->dy(), _sf));
 }
 
 template <typename Scalar>
-FunctionPtr<Scalar> SpatiallyFilteredFunction<Scalar>::dz() {
+TFunctionPtr<Scalar> SpatiallyFilteredFunction<Scalar>::dz() {
   return Teuchos::rcp( new SpatiallyFilteredFunction<Scalar>(_f->dz(), _sf));
 }
 

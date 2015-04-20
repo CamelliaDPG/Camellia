@@ -21,22 +21,22 @@ using namespace Intrepid;
 using namespace Camellia;
 
 template <typename Scalar>
-PreviousSolutionFunction<Scalar>::PreviousSolutionFunction(SolutionPtr<Scalar> soln, LinearTermPtr solnExpression, bool multiplyFluxesByCellParity) : Function<Scalar>(solnExpression->rank()) {
+PreviousSolutionFunction<Scalar>::PreviousSolutionFunction(SolutionPtr<Scalar> soln, LinearTermPtr solnExpression, bool multiplyFluxesByCellParity) : TFunction<Scalar>(solnExpression->rank()) {
   _soln = soln;
   _solnExpression = solnExpression;
   _overrideMeshCheck = false;
   if ((solnExpression->termType() == FLUX) && multiplyFluxesByCellParity) {
-    FunctionPtr<double> parity = Function<double>::sideParity();
+    TFunctionPtr<double> parity = TFunction<double>::sideParity();
     _solnExpression = parity * solnExpression;
   }
 }
 template <typename Scalar>
-PreviousSolutionFunction<Scalar>::PreviousSolutionFunction(SolutionPtr<Scalar> soln, VarPtr var, bool multiplyFluxesByCellParity) : Function<Scalar>(var->rank()) {
+PreviousSolutionFunction<Scalar>::PreviousSolutionFunction(SolutionPtr<Scalar> soln, VarPtr var, bool multiplyFluxesByCellParity) : TFunction<Scalar>(var->rank()) {
   _soln = soln;
   _solnExpression = 1.0 * var;
   _overrideMeshCheck = false;
   if ((var->varType() == FLUX) && multiplyFluxesByCellParity) {
-    FunctionPtr<double> parity = Function<double>::sideParity();
+    TFunctionPtr<double> parity = TFunction<double>::sideParity();
     _solnExpression = parity * var;
   }
 }
@@ -130,8 +130,8 @@ void PreviousSolutionFunction<Scalar>::values(FieldContainer<Scalar> &values, Ba
   }
 }
 template <typename Scalar>
-map<int, FunctionPtr<Scalar> > PreviousSolutionFunction<Scalar>::functionMap( vector< VarPtr > varPtrs, SolutionPtr<Scalar> soln) {
-  map<int, FunctionPtr<Scalar> > functionMap;
+map<int, TFunctionPtr<Scalar> > PreviousSolutionFunction<Scalar>::functionMap( vector< VarPtr > varPtrs, SolutionPtr<Scalar> soln) {
+  map<int, TFunctionPtr<Scalar> > functionMap;
   for (vector< VarPtr >::iterator varIt = varPtrs.begin(); varIt != varPtrs.end(); varIt++) {
     VarPtr var = *varIt;
     functionMap[var->ID()] = Teuchos::rcp( new PreviousSolutionFunction<Scalar>(soln, var));

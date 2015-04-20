@@ -10,7 +10,7 @@ using namespace Intrepid;
 using namespace std;
 
 template <typename Scalar>
-PolarizedFunction<Scalar>::PolarizedFunction( FunctionPtr<Scalar> f_of_xAsR_yAsTheta ) : Function<Scalar>(f_of_xAsR_yAsTheta->rank()) {
+PolarizedFunction<Scalar>::PolarizedFunction( TFunctionPtr<Scalar> f_of_xAsR_yAsTheta ) : TFunction<Scalar>(f_of_xAsR_yAsTheta->rank()) {
   _f = f_of_xAsR_yAsTheta;
 }
 
@@ -52,23 +52,23 @@ string PolarizedFunction<Scalar>::displayString() {
 }
 
 template <typename Scalar>
-FunctionPtr<Scalar> PolarizedFunction<Scalar>::dx() {
+TFunctionPtr<Scalar> PolarizedFunction<Scalar>::dx() {
   // cast everything to FunctionPtrs:
-  FunctionPtr<double> sin_theta_fxn = sin_theta();
-  FunctionPtr<Scalar> dtheta_fxn = dtheta();
-  FunctionPtr<Scalar> dr_fxn = dr();
-  FunctionPtr<double> r_fxn = r();
-  FunctionPtr<double> cos_theta_fxn = cos_theta();
+  TFunctionPtr<double> sin_theta_fxn = sin_theta();
+  TFunctionPtr<Scalar> dtheta_fxn = dtheta();
+  TFunctionPtr<Scalar> dr_fxn = dr();
+  TFunctionPtr<double> r_fxn = r();
+  TFunctionPtr<double> cos_theta_fxn = cos_theta();
   return dr_fxn * cos_theta_fxn - dtheta_fxn * sin_theta_fxn / r_fxn;
 }
 
 template <typename Scalar>
-FunctionPtr<Scalar> PolarizedFunction<Scalar>::dy() {
-  FunctionPtr<double> sin_theta_fxn = sin_theta();
-  FunctionPtr<Scalar> dtheta_fxn = dtheta();
-  FunctionPtr<Scalar> dr_fxn = dr();
-  FunctionPtr<double> r_fxn = r();
-  FunctionPtr<double> cos_theta_fxn = cos_theta();
+TFunctionPtr<Scalar> PolarizedFunction<Scalar>::dy() {
+  TFunctionPtr<double> sin_theta_fxn = sin_theta();
+  TFunctionPtr<Scalar> dtheta_fxn = dtheta();
+  TFunctionPtr<Scalar> dr_fxn = dr();
+  TFunctionPtr<double> r_fxn = r();
+  TFunctionPtr<double> cos_theta_fxn = cos_theta();
   return dr_fxn * sin_theta_fxn + dtheta_fxn * cos_theta_fxn / r_fxn;
 }
 

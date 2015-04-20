@@ -18,11 +18,11 @@
 using namespace std;
 
 namespace Camellia {
-  class ParametricFunction : public Function<double> {
+  class ParametricFunction : public TFunction<double> {
     typedef Teuchos::RCP<ParametricFunction> ParamatricFunctionPtr;
 
-    FunctionPtr<double> _underlyingFxn; // the original 0-to-1 function
-    FunctionPtr<double> _argMap; // maps the t values from (0,1) on sub-curve into (t0,t1) on curve
+    TFunctionPtr<double> _underlyingFxn; // the original 0-to-1 function
+    TFunctionPtr<double> _argMap; // maps the t values from (0,1) on sub-curve into (t0,t1) on curve
     double _derivativeOrder;
     double _t0, _t1;
 
@@ -30,30 +30,30 @@ namespace Camellia {
 
     double remapForSubCurve(double t);
   protected:
-    FunctionPtr<double> underlyingFunction();
+    TFunctionPtr<double> underlyingFunction();
 
-    ParametricFunction(FunctionPtr<double> fxn, double t0, double t1, int derivativeOrder=0);
+    ParametricFunction(TFunctionPtr<double> fxn, double t0, double t1, int derivativeOrder=0);
   public:
-    ParametricFunction(FunctionPtr<double> fxn);
+    ParametricFunction(TFunctionPtr<double> fxn);
     void value(double t, double &x);
     void values(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache);
 
-    FunctionPtr<double> dx(); // same function as dt_parametric()
+    TFunctionPtr<double> dx(); // same function as dt_parametric()
     ParamatricFunctionPtr dt_parametric(); // not named dt() to avoid conflict with Function, which means space-time by this...
 
     ParamatricFunctionPtr subFunction(double t0, double t1);
 
     // parametric function: function on refCellPoints mapped to [0,1]
-    static ParamatricFunctionPtr parametricFunction(FunctionPtr<double> fxn, double t0=0, double t1=1);
+    static ParamatricFunctionPtr parametricFunction(TFunctionPtr<double> fxn, double t0=0, double t1=1);
   };
   typedef Teuchos::RCP<ParametricFunction> ParamatricFunctionPtr;
 
-  class ParametricCurve : public Function<double> {
+  class ParametricCurve : public TFunction<double> {
   public:
     typedef Teuchos::RCP<ParametricCurve> ParametricCurvePtr;
   private:
     ParamatricFunctionPtr _xFxn, _yFxn, _zFxn; // parametric functions (defined on ref line mapped to [0,1])
-    FunctionPtr<double> argumentMap();
+    TFunctionPtr<double> argumentMap();
 
   //  void mapRefCellPointsToParameterSpace(Intrepid::FieldContainer<double> &refPoints);
   protected:
@@ -80,9 +80,9 @@ namespace Camellia {
 
     virtual ParametricCurvePtr dt_parametric(); // the curve differentiated in t in each component.
 
-    virtual FunctionPtr<double> x();
-    virtual FunctionPtr<double> y();
-    virtual FunctionPtr<double> z();
+    virtual TFunctionPtr<double> x();
+    virtual TFunctionPtr<double> y();
+    virtual TFunctionPtr<double> z();
 
     virtual ParamatricFunctionPtr xPart();
     virtual ParamatricFunctionPtr yPart();
@@ -95,7 +95,7 @@ namespace Camellia {
     static ParametricCurvePtr circle(double r, double x0, double y0);
     static ParametricCurvePtr circularArc(double r, double x0, double y0, double theta0, double theta1);
 
-    static ParametricCurvePtr curve(FunctionPtr<double> xFxn_x_as_t, FunctionPtr<double> yFxn_x_as_t = Function<double>::null(), FunctionPtr<double> zFxn_x_as_t = Function<double>::null());
+    static ParametricCurvePtr curve(TFunctionPtr<double> xFxn_x_as_t, TFunctionPtr<double> yFxn_x_as_t = TFunction<double>::null(), TFunctionPtr<double> zFxn_x_as_t = TFunction<double>::null());
     static ParametricCurvePtr curveUnion(vector< ParametricCurvePtr > curves, vector<double> weights = vector<double>());
 
     static ParametricCurvePtr polygon(vector< pair<double,double> > vertices, vector<double> weights = vector<double>());
@@ -107,7 +107,7 @@ namespace Camellia {
     static ParametricCurvePtr reverse(ParametricCurvePtr fxn);
     static ParametricCurvePtr subCurve(ParametricCurvePtr fxn, double t0, double t1); // t0: the start of the subcurve; t1: the end
 
-    static FunctionPtr<double> parametricGradientWrapper(FunctionPtr<double> parametricGradient, bool convertBasisCacheToParametricSpace = false); // translates gradients from parametric to physical space.  If convertBasisCacheToParametricSpace is false, that's essentially an assertion that the Function passed in does its own conversion to parametric space for the points, and the only responsibility of the wrapper is the Piola transform.  If convertBasisCacheToParametricSpace is true, then the points will be remapped by the wrapper as well.  Right now, the convertBasisCacheToParametricSpace = false is the one in active use in the production code, because there the FunctionPtr<double> is a ParametricSurface that does the spatial mapping, while we use convertBasisCacheToParametricSpace = true for a test where a Function is more manually constructed.
+    static TFunctionPtr<double> parametricGradientWrapper(TFunctionPtr<double> parametricGradient, bool convertBasisCacheToParametricSpace = false); // translates gradients from parametric to physical space.  If convertBasisCacheToParametricSpace is false, that's essentially an assertion that the Function passed in does its own conversion to parametric space for the points, and the only responsibility of the wrapper is the Piola transform.  If convertBasisCacheToParametricSpace is true, then the points will be remapped by the wrapper as well.  Right now, the convertBasisCacheToParametricSpace = false is the one in active use in the production code, because there the TFunctionPtr<double> is a ParametricSurface that does the spatial mapping, while we use convertBasisCacheToParametricSpace = true for a test where a Function is more manually constructed.
   };
   typedef Teuchos::RCP<ParametricCurve> ParametricCurvePtr;
 }

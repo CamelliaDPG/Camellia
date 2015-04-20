@@ -24,7 +24,7 @@ IPSwitcher::IPSwitcher(IPPtr ip1, IPPtr ip2, double minH){
 
 
 // added by Jesse - evaluate inner product at given varFunctions
-LinearTermPtr IPSwitcher::evaluate(map< int, FunctionPtr<double>> &varFunctions, bool boundaryPart) {
+LinearTermPtr IPSwitcher::evaluate(map< int, TFunctionPtr<double>> &varFunctions, bool boundaryPart) {
   TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Evaluation of switched IPs not supported yet");
   return Teuchos::rcp((LinearTerm *)NULL);
 }
@@ -67,7 +67,7 @@ double IPSwitcher::computeMaxConditionNumber(DofOrderingPtr testSpace, BasisCach
 
 // compute IP vector when var==fxn
 void IPSwitcher::computeInnerProductVector(FieldContainer<double> &ipVector,
-                                   VarPtr var, FunctionPtr<double> fxn,
+                                   VarPtr var, TFunctionPtr<double> fxn,
                                    Teuchos::RCP<DofOrdering> dofOrdering,
                                    Teuchos::RCP<BasisCache> basisCache) {
 

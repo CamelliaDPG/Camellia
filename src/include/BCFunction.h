@@ -10,24 +10,24 @@
 
 namespace Camellia {
   template <typename Scalar>
-  class BCFunction : public Function<Scalar> {
+  class BCFunction : public TFunction<Scalar> {
     Intrepid::FieldContainer<bool> _imposeHere;
     int _varID;
     BCPtr _bc;
     bool _isTrace; // if false, it's a flux...
-    FunctionPtr<Scalar> _spatiallyFilteredFunction;
+    TFunctionPtr<Scalar> _spatiallyFilteredFunction;
   public:
-    BCFunction(BCPtr bc, int varID, bool isTrace, FunctionPtr<Scalar> spatiallyFilteredFunction, int rank);
+    BCFunction(BCPtr bc, int varID, bool isTrace, TFunctionPtr<Scalar> spatiallyFilteredFunction, int rank);
     void values(Intrepid::FieldContainer<Scalar> &values, BasisCachePtr basisCache);
     bool imposeOnCell(int cellIndex);
     int varID();
     bool isTrace();
 
-    FunctionPtr<Scalar> curl();
-    FunctionPtr<Scalar> div();
-    FunctionPtr<Scalar> dx();
-    FunctionPtr<Scalar> dy();
-    FunctionPtr<Scalar> dz();
+    TFunctionPtr<Scalar> curl();
+    TFunctionPtr<Scalar> div();
+    TFunctionPtr<Scalar> dx();
+    TFunctionPtr<Scalar> dy();
+    TFunctionPtr<Scalar> dz();
 
     static Teuchos::RCP<BCFunction<Scalar>> bcFunction(BCPtr bc, int varID, bool isTrace);
   };

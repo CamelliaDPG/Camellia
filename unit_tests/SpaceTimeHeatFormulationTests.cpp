@@ -16,10 +16,10 @@
 using namespace Camellia;
 
 namespace {
-  void projectExactSolution(SpaceTimeHeatFormulation &form, SolutionPtr<double> heatSolution, FunctionPtr<double> u) {
+  void projectExactSolution(SpaceTimeHeatFormulation &form, SolutionPtr<double> heatSolution, FunctionPtr u) {
     double epsilon = form.epsilon();
 
-    FunctionPtr<double> sigma1, sigma2, sigma3;
+    FunctionPtr sigma1, sigma2, sigma3;
     int spaceTimeDim = heatSolution->mesh()->getDimension();
     int spaceDim = spaceTimeDim - 1;
 
@@ -30,7 +30,7 @@ namespace {
     LinearTermPtr sigma_n_lt = form.sigma_n_hat()->termTraced();
     LinearTermPtr u_lt = form.u_hat()->termTraced();
 
-    map<int, FunctionPtr<double>> exactMap;
+    map<int, FunctionPtr> exactMap;
     // fields:
     exactMap[form.u()->ID()] = u;
     exactMap[form.sigma(1)->ID()] = sigma1;
@@ -39,26 +39,26 @@ namespace {
 
     // flux:
     // use the exact field variable solution together with the termTraced to determine the flux traced
-    FunctionPtr<double> sigma_n = sigma_n_lt->evaluate(exactMap);
+    FunctionPtr sigma_n = sigma_n_lt->evaluate(exactMap);
     exactMap[form.sigma_n_hat()->ID()] = sigma_n;
 
     // traces:
-    FunctionPtr<double> u_hat = u_lt->evaluate(exactMap);
+    FunctionPtr u_hat = u_lt->evaluate(exactMap);
     exactMap[form.u_hat()->ID()] = u_hat;
 
     heatSolution->projectOntoMesh(exactMap);
   }
 
-  void setupExactSolution(SpaceTimeHeatFormulation &form, FunctionPtr<double> u,
+  void setupExactSolution(SpaceTimeHeatFormulation &form, FunctionPtr u,
                           MeshTopologyPtr meshTopo, int fieldPolyOrder, int delta_k)
   {
     double epsilon = form.epsilon();
 
-    FunctionPtr<double> sigma1, sigma2, sigma3;
+    FunctionPtr sigma1, sigma2, sigma3;
     int spaceTimeDim = meshTopo->getSpaceDim();
     int spaceDim = spaceTimeDim - 1;
 
-    FunctionPtr<double> forcingFunction = SpaceTimeHeatFormulation::forcingFunction(spaceDim, epsilon, u);
+    FunctionPtr forcingFunction = SpaceTimeHeatFormulation::forcingFunction(spaceDim, epsilon, u);
 
     form.initializeSolution(meshTopo, fieldPolyOrder, delta_k, forcingFunction);
   }
@@ -66,7 +66,7 @@ namespace {
   void testForcingFunctionForConstantU(int spaceDim, Teuchos::FancyOStream &out, bool &success)
   {
     // Forcing function should be zero for constant u
-    FunctionPtr<double> f_expected = Function<double>::zero();
+    FunctionPtr f_expected = Function::zero();
 
     vector<double> dimensions(spaceDim,2.0); // 2.0^d hypercube domain
     vector<int> elementCounts(spaceDim,1);   // one-element mesh
@@ -79,7 +79,7 @@ namespace {
     double epsilon = .1;
     int fieldPolyOrder = 1, delta_k = 1;
 
-    FunctionPtr<double> u = Function<double>::constant(0.5);
+    FunctionPtr u = Function::constant(0.5);
 
     bool useConformingTraces = true;
     SpaceTimeHeatFormulation form(spaceDim, useConformingTraces, epsilon);
@@ -88,7 +88,7 @@ namespace {
 
     MeshPtr mesh = form.solution()->mesh();
 
-    FunctionPtr<double> f_actual = form.forcingFunction(spaceDim, epsilon, u);
+    FunctionPtr f_actual = form.forcingFunction(spaceDim, epsilon, u);
 
     double l2_diff = (f_expected-f_actual)->l2norm(mesh);
     TEST_COMPARE(l2_diff, <, 1e-14);
@@ -107,7 +107,7 @@ namespace {
     double epsilon = .1;
     int fieldPolyOrder = 1, delta_k = 1;
 
-    FunctionPtr<double> u = Function<double>::constant(0.5);
+    FunctionPtr u = Function::constant(0.5);
 
     bool useConformingTraces = true;
     SpaceTimeHeatFormulation form(spaceDim, useConformingTraces, epsilon);
@@ -146,11 +146,11 @@ namespace {
     double epsilon = 0.1;
     int fieldPolyOrder = 2, delta_k = 1;
 
-    FunctionPtr<double> u;
-    FunctionPtr<double> x = Function<double>::xn(1);
-    FunctionPtr<double> y = Function<double>::yn(1);
-    FunctionPtr<double> z = Function<double>::zn(1);
-    FunctionPtr<double> t = Function<double>::tn(1);
+    FunctionPtr u;
+    FunctionPtr x = Function::xn(1);
+    FunctionPtr y = Function::yn(1);
+    FunctionPtr z = Function::zn(1);
+    FunctionPtr t = Function::tn(1);
 
     if (spaceDim == 1)
     {

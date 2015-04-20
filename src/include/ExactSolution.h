@@ -63,16 +63,16 @@ namespace Camellia {
     void squaredDifference(Intrepid::FieldContainer<double> &diffSquared, Intrepid::FieldContainer<double> &values1, Intrepid::FieldContainer<double> &values2);
 
     int _H1Order;
-    map< int, FunctionPtr<double> > _exactFunctions; // var ID --> function
+    map< int, TFunctionPtr<double> > _exactFunctions; // var ID --> function
   public:
     ExactSolution();
     ExactSolution(BFPtr bf, Teuchos::RCP<BC> bc, Teuchos::RCP<RHS> rhs, int H1Order = -1);
     BFPtr bilinearForm();
     Teuchos::RCP<BC> bc();
     Teuchos::RCP<RHS> rhs();
-    const map< int, FunctionPtr<double> > exactFunctions(); // not supported by legacy subclasses
+    const map< int, TFunctionPtr<double> > exactFunctions(); // not supported by legacy subclasses
     virtual bool functionDefined(int trialID); // not supported by legacy subclasses
-    void setSolutionFunction( VarPtr var, FunctionPtr<double> varFunction );
+    void setSolutionFunction( VarPtr var, TFunctionPtr<double> varFunction );
     void solutionValues(Intrepid::FieldContainer<double> &values, int trialID, BasisCachePtr basisCache);
     void solutionValues(Intrepid::FieldContainer<double> &values,
                         int trialID,

@@ -13,19 +13,19 @@
 
 namespace Camellia {
   template <typename Scalar>
-  class SimpleSolutionFunction : public Function<Scalar> {
+  class SimpleSolutionFunction : public TFunction<Scalar> {
     SolutionPtr<Scalar> _soln;
     VarPtr _var;
   public:
     SimpleSolutionFunction(VarPtr var, SolutionPtr<Scalar> soln);
     void values(Intrepid::FieldContainer<Scalar> &values, BasisCachePtr basisCache);
-    FunctionPtr<Scalar> x();
-    FunctionPtr<Scalar> y();
-    FunctionPtr<Scalar> z();
+    TFunctionPtr<Scalar> x();
+    TFunctionPtr<Scalar> y();
+    TFunctionPtr<Scalar> z();
 
-    FunctionPtr<Scalar> dx();
-    FunctionPtr<Scalar> dy();
-    FunctionPtr<Scalar> dz();
+    TFunctionPtr<Scalar> dx();
+    TFunctionPtr<Scalar> dy();
+    TFunctionPtr<Scalar> dz();
     // for reasons of efficiency, may want to implement div() and grad() as well
 
     void importCellData(std::vector<GlobalIndexType> cellIDs);

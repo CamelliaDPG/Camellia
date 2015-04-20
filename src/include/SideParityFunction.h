@@ -12,7 +12,7 @@
 #include "Function.h"
 
 namespace Camellia {
-  class SideParityFunction : public Function<double> {
+  class SideParityFunction : public TFunction<double> {
   public:
     SideParityFunction();
     bool boundaryValueOnly();

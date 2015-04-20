@@ -18,7 +18,7 @@ namespace Camellia {
   class BC {
     bool _legacyBCSubclass;
 
-    typedef pair< SpatialFilterPtr, FunctionPtr<double> > DirichletBC;
+    typedef pair< SpatialFilterPtr, TFunctionPtr<double> > DirichletBC;
     set< int > _zeroMeanConstraints; // variables on which ZMCs imposed
     map< int, pair<GlobalIndexType,double> > _singlePointBCs; // variables on which single-point conditions imposed
     map< int, DirichletBC > _dirichletBCs; // key: trialID
@@ -50,7 +50,7 @@ namespace Camellia {
 
     virtual ~BC() {}
 
-    void addDirichlet( VarPtr traceOrFlux, SpatialFilterPtr spatialPoints, FunctionPtr<double> valueFunction );
+    void addDirichlet( VarPtr traceOrFlux, SpatialFilterPtr spatialPoints, TFunctionPtr<double> valueFunction );
     void addSinglePointBC( int fieldID, double value, GlobalIndexType meshVertexNumber = -1 );
     void removeSinglePointBC( int fieldID );
     void addZeroMeanConstraint( VarPtr field );
@@ -61,9 +61,9 @@ namespace Camellia {
     void setTime(double time);
     double getTime() { return _time; }
 
-    pair< SpatialFilterPtr, FunctionPtr<double> > getDirichletBC(int varID);
+    pair< SpatialFilterPtr, TFunctionPtr<double> > getDirichletBC(int varID);
 
-    FunctionPtr<double> getSpatiallyFilteredFunctionForDirichletBC(int varID);
+    TFunctionPtr<double> getSpatiallyFilteredFunctionForDirichletBC(int varID);
 
     set<int> getZeroMeanConstraints();
 

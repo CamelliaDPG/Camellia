@@ -8,7 +8,7 @@ using namespace Intrepid;
 
 template <typename Scalar>
 ExactSolutionFunction<Scalar>::ExactSolutionFunction(Teuchos::RCP<ExactSolution> exactSolution, int trialID)
-: Function<Scalar>(exactSolution->exactFunctions().find(trialID)->second->rank()) {
+: TFunction<Scalar>(exactSolution->exactFunctions().find(trialID)->second->rank()) {
   _exactSolution = exactSolution;
   _trialID = trialID;
 }

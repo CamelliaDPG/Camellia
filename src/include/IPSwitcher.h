@@ -28,14 +28,14 @@ namespace Camellia {
                                    Teuchos::RCP<BasisCache> basisCache);
 
     void computeInnerProductVector(Intrepid::FieldContainer<double> &ipVector,
-                                   VarPtr var, FunctionPtr<double> fxn,
+                                   VarPtr var, TFunctionPtr<double> fxn,
                                    Teuchos::RCP<DofOrdering> dofOrdering,
                                    Teuchos::RCP<BasisCache> basisCache);
 
     double computeMaxConditionNumber(DofOrderingPtr testSpace, BasisCachePtr basisCache);
 
     // added by Jesse
-    LinearTermPtr evaluate(map< int, FunctionPtr<double>> &varFunctions, bool boundaryPart);
+    LinearTermPtr evaluate(map< int, TFunctionPtr<double>> &varFunctions, bool boundaryPart);
 
     bool hasBoundaryTerms();
 

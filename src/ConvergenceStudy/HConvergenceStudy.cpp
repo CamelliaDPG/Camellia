@@ -79,17 +79,17 @@ HConvergenceStudy::HConvergenceStudy(Teuchos::RCP<ExactSolution> exactSolution,
   vector<int> trialIDs = bilinearForm->trialVolumeIDs(); // so far, we don't have a good analytic way to measure flux and trace errors.
   for (vector<int>::iterator trialIt = trialIDs.begin(); trialIt != trialIDs.end(); trialIt++) {
     int trialID = *trialIt;
-    FunctionPtr<double> exactSoln = Teuchos::rcp( new ExactSolutionFunction<double>(_exactSolution,trialID) );
+    TFunctionPtr<double> exactSoln = Teuchos::rcp( new ExactSolutionFunction<double>(_exactSolution,trialID) );
     _exactSolutionFunctions[trialID] = exactSoln;
   }
   // in the past, we haven't done any projection of boundary Functions.
-  // here, we do so if it's a "modern" ExactSolution (defined in terms of FunctionPtr<double>s, etc.)
+  // here, we do so if it's a "modern" ExactSolution (defined in terms of TFunctionPtr<double>s, etc.)
   // and that ExactSolution defines a given boundary variable's Function.
   trialIDs = bilinearForm->trialBoundaryIDs();
   for (vector<int>::iterator trialIt = trialIDs.begin(); trialIt != trialIDs.end(); trialIt++) {
     int trialID = *trialIt;
     if (_exactSolution->functionDefined(trialID)) {
-      FunctionPtr<double> exactSoln = Teuchos::rcp( new ExactSolutionFunction<double>(_exactSolution,trialID) );
+      TFunctionPtr<double> exactSoln = Teuchos::rcp( new ExactSolutionFunction<double>(_exactSolution,trialID) );
       _exactSolutionFunctions[trialID] = exactSoln;
     }
   }
@@ -265,7 +265,7 @@ void HConvergenceStudy::computeErrors() {
 //      {
 //        VarPtr trialVar = Teuchos::rcp( new Var(trialID, 0, "dummyVar"));
 //
-//        FunctionPtr<double> bestFxnError = Function::solution(trialVar, bestApproximation) - _exactSolutionFunctions[trialID];
+//        TFunctionPtr<double> bestFxnError = Function::solution(trialVar, bestApproximation) - _exactSolutionFunctions[trialID];
 //        double l2error = bestFxnError->l2norm(bestApproximation->mesh(),_cubatureDegreeForExact); // here the cubature is actually an enrichment....
 //
 //        cout << "HConvergenceStudy: best l2Error for trial ID " << trialID << ": " << l2error << endl;

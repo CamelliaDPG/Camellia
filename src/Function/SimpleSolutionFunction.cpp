@@ -10,7 +10,7 @@ using namespace Intrepid;
 using namespace std;
 
 template <typename Scalar>
-SimpleSolutionFunction<Scalar>::SimpleSolutionFunction(VarPtr var, SolutionPtr<Scalar> soln) : Function<Scalar>(var->rank()) {
+SimpleSolutionFunction<Scalar>::SimpleSolutionFunction(VarPtr var, SolutionPtr<Scalar> soln) : TFunction<Scalar>(var->rank()) {
   _var = var;
   _soln = soln;
 }
@@ -95,56 +95,56 @@ void SimpleSolutionFunction<Scalar>::values(Intrepid::FieldContainer<Scalar> &va
 }
 
 template <typename Scalar>
-FunctionPtr<Scalar> SimpleSolutionFunction<Scalar>::dx() {
+TFunctionPtr<Scalar> SimpleSolutionFunction<Scalar>::dx() {
   if (_var->op() != Camellia::OP_VALUE) {
-    return Function<Scalar>::null();
+    return TFunction<Scalar>::null();
   } else {
-    return Function<Scalar>::solution(_var->dx(), _soln);
+    return TFunction<Scalar>::solution(_var->dx(), _soln);
   }
 }
 
 template <typename Scalar>
-FunctionPtr<Scalar> SimpleSolutionFunction<Scalar>::dy() {
+TFunctionPtr<Scalar> SimpleSolutionFunction<Scalar>::dy() {
   if (_var->op() != Camellia::OP_VALUE) {
-    return Function<Scalar>::null();
+    return TFunction<Scalar>::null();
   } else {
-    return Function<Scalar>::solution(_var->dy(), _soln);
+    return TFunction<Scalar>::solution(_var->dy(), _soln);
   }
 }
 
 template <typename Scalar>
-FunctionPtr<Scalar> SimpleSolutionFunction<Scalar>::dz() {
+TFunctionPtr<Scalar> SimpleSolutionFunction<Scalar>::dz() {
   if (_var->op() != Camellia::OP_VALUE) {
-    return Function<Scalar>::null();
+    return TFunction<Scalar>::null();
   } else {
-    return Function<Scalar>::solution(_var->dz(), _soln);
+    return TFunction<Scalar>::solution(_var->dz(), _soln);
   }
 }
 
 template <typename Scalar>
-FunctionPtr<Scalar> SimpleSolutionFunction<Scalar>::x() {
+TFunctionPtr<Scalar> SimpleSolutionFunction<Scalar>::x() {
   if (_var->op() != Camellia::OP_VALUE) {
-    return Function<Scalar>::null();
+    return TFunction<Scalar>::null();
   } else {
-    return Function<Scalar>::solution(_var->x(), _soln);
+    return TFunction<Scalar>::solution(_var->x(), _soln);
   }
 }
 
 template <typename Scalar>
-FunctionPtr<Scalar> SimpleSolutionFunction<Scalar>::y() {
+TFunctionPtr<Scalar> SimpleSolutionFunction<Scalar>::y() {
   if (_var->op() != Camellia::OP_VALUE) {
-    return Function<Scalar>::null();
+    return TFunction<Scalar>::null();
   } else {
-    return Function<Scalar>::solution(_var->y(), _soln);
+    return TFunction<Scalar>::solution(_var->y(), _soln);
   }
 }
 
 template <typename Scalar>
-FunctionPtr<Scalar> SimpleSolutionFunction<Scalar>::z() {
+TFunctionPtr<Scalar> SimpleSolutionFunction<Scalar>::z() {
   if (_var->op() != Camellia::OP_VALUE) {
-    return Function<Scalar>::null();
+    return TFunction<Scalar>::null();
   } else {
-    return Function<Scalar>::solution(_var->z(), _soln);
+    return TFunction<Scalar>::solution(_var->z(), _soln);
   }
 }
 

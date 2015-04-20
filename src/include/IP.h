@@ -64,17 +64,17 @@ namespace Camellia {
                                            Teuchos::RCP<BasisCache> basisCache);
 
     virtual void computeInnerProductVector(Intrepid::FieldContainer<double> &ipVector,
-                                           VarPtr var, FunctionPtr<double> fxn,
+                                           VarPtr var, TFunctionPtr<double> fxn,
                                            Teuchos::RCP<DofOrdering> dofOrdering,
                                            Teuchos::RCP<BasisCache> basisCache);
 
     double computeMaxConditionNumber(DofOrderingPtr testSpace, BasisCachePtr basisCache);
 
     // added by Nate
-    LinearTermPtr evaluate(const std::map< int, FunctionPtr<double>> &varFunctions);
+    LinearTermPtr evaluate(const std::map< int, TFunctionPtr<double>> &varFunctions);
     // added by Jesse
-    LinearTermPtr evaluate(const std::map< int, FunctionPtr<double>> &varFunctions, bool boundaryPart);
-    //  FunctionPtr<double> evaluate(map< int, FunctionPtr<double>> &varFunctions1, map< int, FunctionPtr<double>> &varFunctions2, bool boundaryPart);
+    LinearTermPtr evaluate(const std::map< int, TFunctionPtr<double>> &varFunctions, bool boundaryPart);
+    //  TFunctionPtr<double> evaluate(map< int, TFunctionPtr<double>> &varFunctions1, map< int, TFunctionPtr<double>> &varFunctions2, bool boundaryPart);
 
     virtual bool hasBoundaryTerms();
 

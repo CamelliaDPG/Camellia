@@ -46,7 +46,7 @@ namespace Camellia {
 
     // ! initialize the Solution object(s) using the provided MeshTopology
     void initializeSolution(MeshTopologyPtr meshTopo, int fieldPolyOrder, int delta_k,
-                            FunctionPtr<double> forcingFunction, std::string fileToLoadPrefix);
+                            TFunctionPtr<double> forcingFunction, std::string fileToLoadPrefix);
   public:
     SpaceTimeHeatFormulation(int spaceDim, double epsilon, bool useConformingTraces = false);
 
@@ -55,11 +55,11 @@ namespace Camellia {
 
     // ! initialize the Solution object(s) using the provided MeshTopology
     void initializeSolution(MeshTopologyPtr meshTopo, int fieldPolyOrder, int delta_k = 1,
-                            FunctionPtr<double> forcingFunction = Teuchos::null);
+                            TFunctionPtr<double> forcingFunction = Teuchos::null);
 
     // ! initialize the Solution object(s) from file
     void initializeSolution(std::string filePrefix, int fieldPolyOrder, int delta_k = 1,
-                            FunctionPtr<double> forcingFunction = Teuchos::null);
+                            TFunctionPtr<double> forcingFunction = Teuchos::null);
 
     // ! Loads the mesh and solution from disk, if they were previously saved using save().  In the present
     // ! implementation, assumes that the constructor arguments provided to SpaceTimeHeatFormulation were the same
@@ -76,7 +76,7 @@ namespace Camellia {
     RefinementStrategyPtr getRefinementStrategy();
 
     // ! Returns an RHSPtr corresponding to the scalar forcing function f and the formulation.
-    RHSPtr rhs(FunctionPtr<double> f);
+    RHSPtr rhs(TFunctionPtr<double> f);
 
     // ! Saves the solution(s) and mesh to an HDF5 format.
     void save(std::string prefixString);
@@ -102,7 +102,7 @@ namespace Camellia {
     VarPtr tau();
     VarPtr v();
 
-    static FunctionPtr<double> forcingFunction(int spaceDim, double epsilon, FunctionPtr<double> u);
+    static TFunctionPtr<double> forcingFunction(int spaceDim, double epsilon, TFunctionPtr<double> u);
   };
 }
 

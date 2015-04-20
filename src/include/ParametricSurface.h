@@ -23,13 +23,13 @@ namespace Camellia {
   class ParametricSurface;
   typedef Teuchos::RCP<ParametricSurface> ParametricSurfacePtr;
 
-  class ParametricSurface : public Function<double> {
+  class ParametricSurface : public TFunction<double> {
   public:
-    ParametricSurface() : Function<double>(1) { // vector valued
+    ParametricSurface() : TFunction<double>(1) { // vector valued
 
     }
-    virtual FunctionPtr<double> dt1();
-    virtual FunctionPtr<double> dt2();
+    virtual TFunctionPtr<double> dt1();
+    virtual TFunctionPtr<double> dt2();
 
     virtual void value(double t1, double t2, double &x, double &y) = 0;
     virtual void values(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache);

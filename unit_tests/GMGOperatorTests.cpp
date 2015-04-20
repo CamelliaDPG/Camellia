@@ -33,8 +33,8 @@ namespace {
     PoissonFormulation form(spaceDim, useConformingTraces);
     BFPtr bf = form.bf();
     VarPtr phi = form.phi(), psi = form.psi(), phi_hat = form.phi_hat(), psi_n_hat = form.psi_n_hat();
-    FunctionPtr<double> phi_exact = Function<double>::xn(2); // x^2 exact solution
-    FunctionPtr<double> psi_exact = phi_exact->dx();
+    FunctionPtr phi_exact = Function::xn(2); // x^2 exact solution
+    FunctionPtr psi_exact = phi_exact->dx();
 
     double xLeft = 0.0, xRight = 1.0;
     int coarseElementCount = 1;
@@ -51,10 +51,10 @@ namespace {
     IPPtr ip = bf->graphNorm();
     coarseSoln->setIP(ip);
 
-    FunctionPtr<double> n = Function<double>::normal_1D();
-    FunctionPtr<double> parity = Function<double>::sideParity();
+    FunctionPtr n = Function::normal_1D();
+    FunctionPtr parity = Function::sideParity();
 
-    map<int, FunctionPtr<double>> exactSolnMap;
+    map<int, FunctionPtr> exactSolnMap;
     exactSolnMap[phi->ID()] = phi_exact;
     exactSolnMap[psi->ID()] = psi_exact;
     exactSolnMap[phi_hat->ID()] = phi_exact * parity * n;
@@ -122,13 +122,13 @@ namespace {
     PoissonFormulation form(spaceDim, useConformingTraces);
     BFPtr bf = form.bf();
     VarPtr phi = form.phi(), psi = form.psi(), phi_hat = form.phi_hat(), psi_n_hat = form.psi_n_hat();
-    //    FunctionPtr<double> phi_exact = Function<double>::xn(2) * Function<double>::yn(1); // x^2 y exact solution
-    //    FunctionPtr<double> psi_exact = phi_exact->grad();
+    //    FunctionPtr phi_exact = Function::xn(2) * Function::yn(1); // x^2 y exact solution
+    //    FunctionPtr psi_exact = phi_exact->grad();
 
-    FunctionPtr<double> phi_exact = Function<double>::zero();
-    FunctionPtr<double> one = Function<double>::constant(1.0);
-    FunctionPtr<double> two = Function<double>::constant(2.0);
-    FunctionPtr<double> psi_exact = Function<double>::vectorize(one, two);
+    FunctionPtr phi_exact = Function::zero();
+    FunctionPtr one = Function::constant(1.0);
+    FunctionPtr two = Function::constant(2.0);
+    FunctionPtr psi_exact = Function::vectorize(one, two);
 
     int coarseElementCount = 1;
     int H1Order = 1, delta_k = spaceDim;
@@ -138,12 +138,12 @@ namespace {
 
     SolutionPtr<double> coarseSoln = Solution<double>::solution(mesh);
 
-    map<int, FunctionPtr<double>> exactSolnMap;
+    map<int, FunctionPtr> exactSolnMap;
     exactSolnMap[phi->ID()] = phi_exact;
     exactSolnMap[psi->ID()] = psi_exact;
 
-    FunctionPtr<double> phi_hat_exact   =   phi_hat->termTraced()->evaluate(exactSolnMap);
-    FunctionPtr<double> psi_n_hat_exact = psi_n_hat->termTraced()->evaluate(exactSolnMap);
+    FunctionPtr phi_hat_exact   =   phi_hat->termTraced()->evaluate(exactSolnMap);
+    FunctionPtr psi_n_hat_exact = psi_n_hat->termTraced()->evaluate(exactSolnMap);
 
     exactSolnMap[phi_hat->ID()]   = phi_hat_exact;
     exactSolnMap[psi_n_hat->ID()] = psi_n_hat_exact;
@@ -222,11 +222,11 @@ namespace {
     PoissonFormulation form(spaceDim, useConformingTraces);
     BFPtr bf = form.bf();
     VarPtr phi = form.phi(), psi = form.psi(), phi_hat = form.phi_hat(), psi_n_hat = form.psi_n_hat();
-//    FunctionPtr<double> phi_exact = Function<double>::xn(2) * Function<double>::yn(1); // x^2 y exact solution
-//    FunctionPtr<double> psi_exact = phi_exact->grad();
+//    FunctionPtr phi_exact = Function::xn(2) * Function::yn(1); // x^2 y exact solution
+//    FunctionPtr psi_exact = phi_exact->grad();
 
-    FunctionPtr<double> phi_exact = Function<double>::xn(1) + Function<double>::yn(1);
-    FunctionPtr<double> psi_exact = phi_exact->grad();
+    FunctionPtr phi_exact = Function::xn(1) + Function::yn(1);
+    FunctionPtr psi_exact = phi_exact->grad();
 
     int coarseElementCount = 1;
     int H1Order = 2, delta_k = spaceDim;
@@ -238,19 +238,19 @@ namespace {
 
     VarPtr q = form.q();
     RHSPtr rhs = RHS::rhs();
-    FunctionPtr<double> f = phi_exact->dx()->dx() + phi_exact->dy()->dy();
+    FunctionPtr f = phi_exact->dx()->dx() + phi_exact->dy()->dy();
     rhs->addTerm(f * q);
     coarseSoln->setRHS(rhs);
 
     IPPtr ip = bf->graphNorm();
     coarseSoln->setIP(ip);
 
-    map<int, FunctionPtr<double>> exactSolnMap;
+    map<int, FunctionPtr> exactSolnMap;
     exactSolnMap[phi->ID()] = phi_exact;
     exactSolnMap[psi->ID()] = psi_exact;
 
-    FunctionPtr<double> phi_hat_exact   =   phi_hat->termTraced()->evaluate(exactSolnMap);
-    FunctionPtr<double> psi_n_hat_exact = psi_n_hat->termTraced()->evaluate(exactSolnMap);
+    FunctionPtr phi_hat_exact   =   phi_hat->termTraced()->evaluate(exactSolnMap);
+    FunctionPtr psi_n_hat_exact = psi_n_hat->termTraced()->evaluate(exactSolnMap);
 
     exactSolnMap[phi_hat->ID()]   = phi_hat_exact;
     exactSolnMap[psi_n_hat->ID()] = psi_n_hat_exact;

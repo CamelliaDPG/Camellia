@@ -96,14 +96,14 @@ namespace {
   {
     // Mesh slicing test with exact polynomial data
 
-    FunctionPtr<double> x = Function<double>::xn(1);
-    FunctionPtr<double> y2 = Function<double>::yn(2);
-    FunctionPtr<double> t = Function<double>::zn(1);
-    FunctionPtr<double> u0 = x * y2 + t * x;
+    FunctionPtr x = Function::xn(1);
+    FunctionPtr y2 = Function::yn(2);
+    FunctionPtr t = Function::zn(1);
+    FunctionPtr u0 = x * y2 + t * x;
 
     // evaluate u0 at t=0, t=1:
-    FunctionPtr<double> u0_t0 = x * y2;
-    FunctionPtr<double> u0_t1 = x * y2 + x;
+    FunctionPtr u0_t0 = x * y2;
+    FunctionPtr u0_t1 = x * y2 + x;
 
     int k = 2;
     int delta_k = 0; // Projection is exact, and we're not actually solving...
@@ -152,7 +152,7 @@ namespace {
 
     MeshPtr mesh = MeshFactory::rectilinearMesh(bf, dimensions, elementCounts, H1Order, delta_k, origin);
 
-    FunctionPtr<double> sideParity = Function<double>::sideParity();
+    FunctionPtr sideParity = Function::sideParity();
 
     IPPtr ip;
     ip = bf->graphNorm();
@@ -178,14 +178,14 @@ namespace {
     SolutionPtr<double> soln = Solution<double>::solution(mesh,bc,RHS::rhs(), ip);
 
     // project u0 onto the whole spacetime mesh (i.e. it'll look like the initial value is a steady solution)
-    std::map<int, FunctionPtr<double>> functionMap;
+    std::map<int, FunctionPtr> functionMap;
     functionMap[u->ID()] = u0;
     soln->projectOntoMesh(functionMap);
 
-    FunctionPtr<double> u_spacetime = Function<double>::solution(u, soln);
+    FunctionPtr u_spacetime = Function::solution(u, soln);
 
-    FunctionPtr<double> sliceFunction_t0 = MeshTools::timeSliceFunction(mesh, cellMap_t0, u_spacetime, tZero);
-    FunctionPtr<double> sliceFunction_t1 = MeshTools::timeSliceFunction(mesh, cellMap_t1, u_spacetime, tOne);
+    FunctionPtr sliceFunction_t0 = MeshTools::timeSliceFunction(mesh, cellMap_t0, u_spacetime, tZero);
+    FunctionPtr sliceFunction_t1 = MeshTools::timeSliceFunction(mesh, cellMap_t1, u_spacetime, tOne);
 
     double tol = 1e-14;
     // expectation is that on the slice mesh, the sliceFunction matches u0
@@ -203,7 +203,7 @@ namespace {
     // doing this for the convecting cone problem, one of the early test cases for space-time meshes
 
     double cone_x0 = 0, cone_y0 = 0.25, r = 0.1, h = 1.0;
-    FunctionPtr<double> u0 = Teuchos::rcp( new Cone_U0(cone_x0, cone_y0, r, h, false) );
+    FunctionPtr u0 = Teuchos::rcp( new Cone_U0(cone_x0, cone_y0, r, h, false) );
 
     int k = 2;
     int delta_k = 5; // because the projection isn't exact, and this will enhance the cubature degree
@@ -219,11 +219,11 @@ namespace {
     // test functions:
     VarPtr v = varFactory.testVar("v", HGRAD);
 
-    FunctionPtr<double> x = Function<double>::xn(1);
-    FunctionPtr<double> y = Function<double>::yn(1);
+    FunctionPtr x = Function::xn(1);
+    FunctionPtr y = Function::yn(1);
 
-    FunctionPtr<double> c = Function<double>::vectorize(y-0.5, 0.5-x, Function<double>::constant(1.0));
-    FunctionPtr<double> n = Function<double>::normal();
+    FunctionPtr c = Function::vectorize(y-0.5, 0.5-x, Function::constant(1.0));
+    FunctionPtr n = Function::normal();
 
     BFPtr bf = Teuchos::rcp( new BF(varFactory) );
 
@@ -263,7 +263,7 @@ namespace {
 
     MeshPtr mesh = MeshFactory::rectilinearMesh(bf, dimensions, elementCounts, H1Order, delta_k, origin);
 
-    FunctionPtr<double> sideParity = Function<double>::sideParity();
+    FunctionPtr sideParity = Function::sideParity();
 
     IPPtr ip;
     ip = bf->graphNorm();
@@ -286,7 +286,7 @@ namespace {
     TEST_ASSERT(abs(u0->evaluate(cone_x0, cone_y0 + r + 1e-15, t0)) < tol);
 
     BCPtr bc = BC::bc();
-    bc->addDirichlet(qHat, inflowFilter, Function<double>::zero()); // zero BCs enforced at the inflow boundary.
+    bc->addDirichlet(qHat, inflowFilter, Function::zero()); // zero BCs enforced at the inflow boundary.
     bc->addDirichlet(qHat, SpatialFilter::matchingZ(t0), u0);
 
     MeshPtr initialMesh = mesh;
@@ -297,11 +297,11 @@ namespace {
     SolutionPtr<double> soln = Solution<double>::solution(mesh,bc,RHS::rhs(), ip);
 
     // project u0 onto the whole spacetime mesh (i.e. it'll look like the initial value is a steady solution)
-    std::map<int, FunctionPtr<double>> functionMap;
+    std::map<int, FunctionPtr> functionMap;
     functionMap[u->ID()] = u0;
     soln->projectOntoMesh(functionMap);
 
-    FunctionPtr<double> u_spacetime = Function<double>::solution(u, soln);
+    FunctionPtr u_spacetime = Function::solution(u, soln);
 
     double l2_u_spacetime = u_spacetime->l2norm(mesh);
     TEST_ASSERT(l2_u_spacetime > 0);
@@ -310,7 +310,7 @@ namespace {
     // TODO: add tests against Projector, for 3D / space-time meshes...
 
     double tZero = 0.0;
-    FunctionPtr<double> sliceFunction = MeshTools::timeSliceFunction(mesh, cellMap, u_spacetime, tZero);
+    FunctionPtr sliceFunction = MeshTools::timeSliceFunction(mesh, cellMap, u_spacetime, tZero);
 
 //    cout << "u_spacetime(cone_x0,cone_y0,t0) = " << u_spacetime->evaluate(mesh,cone_x0,cone_y0,t0) << endl;
 //    cout << "u0(cone_x0,cone_y0) = " << u0->evaluate(meshSlice, cone_x0, cone_y0) << endl;
@@ -321,8 +321,8 @@ namespace {
 
 //    HDF5Exporter exporter(meshSlice, "MeshToolsTests", "/tmp");
 //
-//    vector<FunctionPtr<double>> functions;
-//    functions.push_back(Function<double>::xn());
+//    vector<FunctionPtr> functions;
+//    functions.push_back(Function::xn());
 //    functions.push_back(u0);
 //    functions.push_back(sliceFunction);
 //    functions.push_back(u0 - sliceFunction);

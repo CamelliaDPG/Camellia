@@ -3667,7 +3667,7 @@ void Solution<Scalar>::processSideUpgrades( const map<GlobalIndexType, pair< Ele
 }
 
 template <typename Scalar>
-void Solution<Scalar>::projectOntoMesh(const map<int, FunctionPtr<Scalar> > &functionMap){ // map: trialID -> function
+void Solution<Scalar>::projectOntoMesh(const map<int, TFunctionPtr<Scalar> > &functionMap){ // map: trialID -> function
   if (_lhsVector.get()==NULL) {
     initializeLHSVector();
   }
@@ -3680,18 +3680,18 @@ void Solution<Scalar>::projectOntoMesh(const map<int, FunctionPtr<Scalar> > &fun
 }
 
 template <typename Scalar>
-void Solution<Scalar>::projectOntoCell(const map<int, FunctionPtr<Scalar> > &functionMap, GlobalIndexType cellID, int side) {
+void Solution<Scalar>::projectOntoCell(const map<int, TFunctionPtr<Scalar> > &functionMap, GlobalIndexType cellID, int side) {
   Intrepid::FieldContainer<double> physicalCellNodes = _mesh->physicalCellNodesForCell(cellID);
   vector<GlobalIndexType> cellIDs(1,cellID);
 
   VarFactory vf = _mesh->bilinearForm()->varFactory();
 
-  for (typename map<int, FunctionPtr<Scalar> >::const_iterator functionIt = functionMap.begin(); functionIt !=functionMap.end(); functionIt++){
+  for (typename map<int, TFunctionPtr<Scalar> >::const_iterator functionIt = functionMap.begin(); functionIt !=functionMap.end(); functionIt++){
     int trialID = functionIt->first;
 
     bool fluxOrTrace = _mesh->bilinearForm()->isFluxOrTrace(trialID);
     VarPtr trialVar = vf.trial(trialID);
-    FunctionPtr<Scalar> function = functionIt->second;
+    TFunctionPtr<Scalar> function = functionIt->second;
 
     bool testVsTest = false; // in fact it's more trial vs trial, but this just means we'll over-integrate a bit
     BasisCachePtr basisCache = BasisCache::basisCacheForCell(_mesh, cellID, testVsTest, _cubatureEnrichmentDegree);
@@ -3764,7 +3764,7 @@ void Solution<Scalar>::projectFieldVariablesOntoOtherSolution(Teuchos::RCP< Solu
     fieldVars.push_back(var);
   }
   Teuchos::RCP< Solution<Scalar> > thisPtr = Teuchos::rcp(this, false);
-  map<int, FunctionPtr<Scalar> > solnMap = PreviousSolutionFunction<Scalar>::functionMap(fieldVars, thisPtr);
+  map<int, TFunctionPtr<Scalar> > solnMap = PreviousSolutionFunction<Scalar>::functionMap(fieldVars, thisPtr);
   otherSoln->projectOntoMesh(solnMap);
 }
 
@@ -3797,7 +3797,7 @@ void Solution<Scalar>::projectOldCellOntoNewCells(GlobalIndexType cellID,
 
    TEUCHOS_TEST_FOR_EXCEPTION(oldTrialOrdering->totalDofs() != oldData.size(), std::invalid_argument,
                               "oldElemType trial space does not match old data coefficients size");
-   map<int, FunctionPtr<Scalar> > fieldMap;
+   map<int, TFunctionPtr<Scalar> > fieldMap;
 
    CellPtr parentCell = _mesh->getTopology()->getCell(cellID);
    int dummyCubatureDegree = 1;
@@ -3819,13 +3819,13 @@ void Solution<Scalar>::projectOldCellOntoNewCells(GlobalIndexType cellID,
 
 //       cout << "basisCoefficients for parent volume trialID " << trialID << ":\n" << basisCoefficients;
 
-       FunctionPtr<Scalar> oldTrialFunction = Teuchos::rcp( new BasisSumFunction(basis, basisCoefficients, parentRefCellCache) );
+       TFunctionPtr<Scalar> oldTrialFunction = Teuchos::rcp( new BasisSumFunction(basis, basisCoefficients, parentRefCellCache) );
        fieldMap[trialID] = oldTrialFunction;
      }
    }
 
-   FunctionPtr<Scalar> sideParity = Function<double>::sideParity();
-   map<int,FunctionPtr<Scalar>> interiorTraceMap; // functions to use on parent interior to represent traces there
+   TFunctionPtr<Scalar> sideParity = TFunction<double>::sideParity();
+   map<int,TFunctionPtr<Scalar>> interiorTraceMap; // functions to use on parent interior to represent traces there
    for (set<int>::iterator trialIDIt = trialIDs.begin(); trialIDIt != trialIDs.end(); trialIDIt++) {
      int trialID = *trialIDIt;
      if (oldTrialOrdering->getSidesForVarID(trialID).size() != 1) { // trace (flux) variable
@@ -3833,7 +3833,7 @@ void Solution<Scalar>::projectOldCellOntoNewCells(GlobalIndexType cellID,
 
        LinearTermPtr termTraced = var->termTraced();
        if (termTraced.get() != NULL) {
-         FunctionPtr<Scalar> fieldTrace = termTraced->evaluate(fieldMap, true) + termTraced->evaluate(fieldMap, false);
+         TFunctionPtr<Scalar> fieldTrace = termTraced->evaluate(fieldMap, true) + termTraced->evaluate(fieldMap, false);
          if (var->varType() == FLUX) { // then we do need to include side parity here
            fieldTrace = sideParity * fieldTrace;
          }
@@ -3845,7 +3845,7 @@ void Solution<Scalar>::projectOldCellOntoNewCells(GlobalIndexType cellID,
    int sideDim = _mesh->getTopology()->getSpaceDim() - 1;
 
    int sideCount = parentCell->topology()->getSideCount();
-   vector< map<int, FunctionPtr<Scalar>> > traceMap(sideCount);
+   vector< map<int, TFunctionPtr<Scalar>> > traceMap(sideCount);
    for (int sideOrdinal=0; sideOrdinal<sideCount; sideOrdinal++) {
      CellTopoPtr sideTopo = parentCell->topology()->getSubcell(sideDim, sideOrdinal);
      BasisCachePtr parentSideTopoBasisCache = BasisCache::basisCacheForReferenceCell(sideTopo, dummyCubatureDegree);
@@ -3861,7 +3861,7 @@ void Solution<Scalar>::projectOldCellOntoNewCells(GlobalIndexType cellID,
            int dofIndex = oldElemType->trialOrderPtr->getDofIndex(trialID, dofOrdinal, sideOrdinal);
            basisCoefficients(dofOrdinal) = oldData(dofIndex);
          }
-         FunctionPtr<Scalar> oldTrialFunction = Teuchos::rcp( new BasisSumFunction(basis, basisCoefficients, parentSideTopoBasisCache) );
+         TFunctionPtr<Scalar> oldTrialFunction = Teuchos::rcp( new BasisSumFunction(basis, basisCoefficients, parentSideTopoBasisCache) );
          traceMap[sideOrdinal][trialID] = oldTrialFunction;
        }
      }
@@ -3911,9 +3911,9 @@ void Solution<Scalar>::projectOldCellOntoNewCells(GlobalIndexType cellID,
     _solutionForCellIDGlobal[childID] = Intrepid::FieldContainer<double>(childType->trialOrderPtr->totalDofs());
     // project fields
     Intrepid::FieldContainer<double> basisCoefficients;
-    for (typename map<int,FunctionPtr<Scalar>>::iterator fieldFxnIt=fieldMap.begin(); fieldFxnIt != fieldMap.end(); fieldFxnIt++) {
+    for (typename map<int,TFunctionPtr<Scalar>>::iterator fieldFxnIt=fieldMap.begin(); fieldFxnIt != fieldMap.end(); fieldFxnIt++) {
       int varID = fieldFxnIt->first;
-      FunctionPtr<Scalar> fieldFxn = fieldFxnIt->second;
+      TFunctionPtr<Scalar> fieldFxn = fieldFxnIt->second;
       BasisPtr childBasis = childType->trialOrderPtr->getBasis(varID);
       basisCoefficients.resize(1,childBasis->getCardinality());
       Projector::projectFunctionOntoBasisInterpolating(basisCoefficients, fieldFxn, childBasis, volumeBasisCache);
@@ -3931,7 +3931,7 @@ void Solution<Scalar>::projectOldCellOntoNewCells(GlobalIndexType cellID,
       unsigned parentSideOrdinal = (childID==cellID) ? sideOrdinal
                                  : parentCell->refinementPattern()->mapSubcellOrdinalFromChildToParent(childOrdinal, sideDim, sideOrdinal);
 
-      map<int,FunctionPtr<Scalar>>* traceMapForSide = (parentSideOrdinal != -1) ? &traceMap[parentSideOrdinal] : &interiorTraceMap;
+      map<int,TFunctionPtr<Scalar>>* traceMapForSide = (parentSideOrdinal != -1) ? &traceMap[parentSideOrdinal] : &interiorTraceMap;
       // which BasisCache to use depends on whether we want the BasisCache's notion of "physical" space to be in the volume or on the side:
       // we want it to be on the side if parent shares the side (and we therefore have proper trace data)
       // and on the volume in parent doesn't share the side (in which case we use the interior trace map).
@@ -3939,9 +3939,9 @@ void Solution<Scalar>::projectOldCellOntoNewCells(GlobalIndexType cellID,
 
       basisCacheForSide->setCellSideParities(_mesh->cellSideParitiesForCell(childID));
 
-      for (typename map<int,FunctionPtr<Scalar>>::iterator traceFxnIt=traceMapForSide->begin(); traceFxnIt != traceMapForSide->end(); traceFxnIt++) {
+      for (typename map<int,TFunctionPtr<Scalar>>::iterator traceFxnIt=traceMapForSide->begin(); traceFxnIt != traceMapForSide->end(); traceFxnIt++) {
         int varID = traceFxnIt->first;
-        FunctionPtr<Scalar> traceFxn = traceFxnIt->second;
+        TFunctionPtr<Scalar> traceFxn = traceFxnIt->second;
         if (! childType->trialOrderPtr->hasBasisEntry(varID, sideOrdinal)) continue;
         BasisPtr childBasis = childType->trialOrderPtr->getBasis(varID, sideOrdinal);
         basisCoefficients.resize(1,childBasis->getCardinality());

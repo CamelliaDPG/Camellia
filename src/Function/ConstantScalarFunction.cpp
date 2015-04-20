@@ -83,23 +83,23 @@ Scalar ConstantScalarFunction<Scalar>::value() {
 }
 
 template <typename Scalar>
-FunctionPtr<Scalar> ConstantScalarFunction<Scalar>::dx() {
-  return Function<Scalar>::zero();
+TFunctionPtr<Scalar> ConstantScalarFunction<Scalar>::dx() {
+  return TFunction<Scalar>::zero();
 }
 
 template <typename Scalar>
-FunctionPtr<Scalar> ConstantScalarFunction<Scalar>::dy() {
-  return Function<Scalar>::zero();
+TFunctionPtr<Scalar> ConstantScalarFunction<Scalar>::dy() {
+  return TFunction<Scalar>::zero();
 }
 
 template <typename Scalar>
-FunctionPtr<Scalar> ConstantScalarFunction<Scalar>::dz() {
-  return Function<Scalar>::zero();
+TFunctionPtr<Scalar> ConstantScalarFunction<Scalar>::dz() {
+  return TFunction<Scalar>::zero();
 }
 
 template <typename Scalar>
-FunctionPtr<Scalar> ConstantScalarFunction<Scalar>::dt() {
-  return Function<Scalar>::zero();
+TFunctionPtr<Scalar> ConstantScalarFunction<Scalar>::dt() {
+  return TFunction<Scalar>::zero();
 }
 
 template class ConstantScalarFunction<double>;

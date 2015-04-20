@@ -13,15 +13,15 @@
 
 namespace Camellia {
   template <typename Scalar>
-  class ConstantVectorFunction : public Function<Scalar> {
+  class ConstantVectorFunction : public TFunction<Scalar> {
     std::vector<Scalar> _value;
   public:
     ConstantVectorFunction(std::vector<Scalar> value);
     bool isZero();
 
-    FunctionPtr<Scalar> x();
-    FunctionPtr<Scalar> y();
-    FunctionPtr<Scalar> z();
+    TFunctionPtr<Scalar> x();
+    TFunctionPtr<Scalar> y();
+    TFunctionPtr<Scalar> z();
 
     void values(Intrepid::FieldContainer<Scalar> &values, BasisCachePtr basisCache);
     std::vector<Scalar> value();

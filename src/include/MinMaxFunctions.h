@@ -12,14 +12,14 @@
 #include "Function.h"
 
 namespace Camellia {
-  class MinFunction : public Function<double> {
-    FunctionPtr<double> _f1, _f2;
+  class MinFunction : public TFunction<double> {
+    TFunctionPtr<double> _f1, _f2;
   public:
-    MinFunction(FunctionPtr<double> f1, FunctionPtr<double> f2);
+    MinFunction(TFunctionPtr<double> f1, TFunctionPtr<double> f2);
 
-    FunctionPtr<double> x();
-    FunctionPtr<double> y();
-    FunctionPtr<double> z();
+    TFunctionPtr<double> x();
+    TFunctionPtr<double> y();
+    TFunctionPtr<double> z();
 
     void values(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache);
     bool boundaryValueOnly();
@@ -27,14 +27,14 @@ namespace Camellia {
     string displayString();
   };
 
-  class MaxFunction : public Function<double> {
-    FunctionPtr<double> _f1, _f2;
+  class MaxFunction : public TFunction<double> {
+    TFunctionPtr<double> _f1, _f2;
   public:
-    MaxFunction(FunctionPtr<double> f1, FunctionPtr<double> f2);
+    MaxFunction(TFunctionPtr<double> f1, TFunctionPtr<double> f2);
 
-    FunctionPtr<double> x();
-    FunctionPtr<double> y();
-    FunctionPtr<double> z();
+    TFunctionPtr<double> x();
+    TFunctionPtr<double> y();
+    TFunctionPtr<double> z();
 
     void values(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache);
     bool boundaryValueOnly();

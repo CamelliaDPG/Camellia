@@ -9,7 +9,7 @@ using namespace Intrepid;
 using namespace Camellia;
 
 BasisSumFunction::BasisSumFunction(BasisPtr basis, const FieldContainer<double> &basisCoefficients,
-                                         BasisCachePtr overridingBasisCache, Camellia::EOperator op, bool boundaryValueOnly) : Function<double>( BasisFactory::basisFactory()->getBasisRank(basis) ) {
+                                         BasisCachePtr overridingBasisCache, Camellia::EOperator op, bool boundaryValueOnly) : TFunction<double>( BasisFactory::basisFactory()->getBasisRank(basis) ) {
   // TODO: fix the rank setter here to take into account rank-changing ops (e.g. DIV, GRAD)
   _coefficients = basisCoefficients;
   _overridingBasisCache = overridingBasisCache;
@@ -108,40 +108,40 @@ void BasisSumFunction::values(FieldContainer<double> &values, BasisCachePtr basi
   }
 }
 
-FunctionPtr<double> BasisSumFunction::x() {
+TFunctionPtr<double> BasisSumFunction::x() {
   if (_op != OP_VALUE) {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "component evaluation only supported for BasisSumFunction with op = OP_VALUE");
   }
   return Teuchos::rcp( new BasisSumFunction(_basis, _coefficients, _overridingBasisCache, OP_X));
 }
-FunctionPtr<double> BasisSumFunction::y() {
+TFunctionPtr<double> BasisSumFunction::y() {
   if (_op != OP_VALUE) {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "component evaluation only supported for BasisSumFunction with op = OP_VALUE");
   }
   return Teuchos::rcp( new BasisSumFunction(_basis, _coefficients, _overridingBasisCache, OP_Y));
 }
-FunctionPtr<double> BasisSumFunction::z() {
+TFunctionPtr<double> BasisSumFunction::z() {
   if (_op != OP_VALUE) {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "component evaluation only supported for BasisSumFunction with op = OP_VALUE");
   }
   return Teuchos::rcp( new BasisSumFunction(_basis, _coefficients, _overridingBasisCache, OP_Z));
 }
 
-FunctionPtr<double> BasisSumFunction::dx() {
+TFunctionPtr<double> BasisSumFunction::dx() {
   if (_op != OP_VALUE) {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "derivatives only supported for BasisSumFunction with op = OP_VALUE");
   }
   return Teuchos::rcp( new BasisSumFunction(_basis, _coefficients, _overridingBasisCache, OP_DX));
 }
 
-FunctionPtr<double> BasisSumFunction::dy() {
+TFunctionPtr<double> BasisSumFunction::dy() {
   if (_op != OP_VALUE) {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "derivatives only supported for BasisSumFunction with op = OP_VALUE");
   }
   return Teuchos::rcp( new BasisSumFunction(_basis, _coefficients, _overridingBasisCache, OP_DY));
 }
 
-FunctionPtr<double> BasisSumFunction::dz() {
+TFunctionPtr<double> BasisSumFunction::dz() {
   if (_op != OP_VALUE) {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "derivatives only supported for BasisSumFunction with op = OP_VALUE");
   }
@@ -149,7 +149,7 @@ FunctionPtr<double> BasisSumFunction::dz() {
   if (_basis->domainTopology()->getDimension() > 2) {
     return Teuchos::rcp( new BasisSumFunction(_basis, _coefficients, _overridingBasisCache, OP_DZ));
   } else {
-    return Function<double>::null();
+    return TFunction<double>::null();
   }
 }
 
@@ -157,6 +157,6 @@ bool BasisSumFunction::boundaryValueOnly() {
   return _boundaryValueOnly;
 }
 
-FunctionPtr<double> BasisSumFunction::basisSumFunction(BasisPtr basis, const FieldContainer<double> &basisCoefficients) {
+TFunctionPtr<double> BasisSumFunction::basisSumFunction(BasisPtr basis, const FieldContainer<double> &basisCoefficients) {
   return Teuchos::rcp( new BasisSumFunction(basis,basisCoefficients) );
 }

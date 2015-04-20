@@ -13,7 +13,7 @@ string ProductFunction<Scalar>::displayString() {
 }
 
 template <typename Scalar>
-FunctionPtr<Scalar> ProductFunction<Scalar>::dx() {
+TFunctionPtr<Scalar> ProductFunction<Scalar>::dx() {
   if ( (_f1->dx().get() == NULL) || (_f2->dx().get() == NULL) ) {
     return this->null();
   }
@@ -22,7 +22,7 @@ FunctionPtr<Scalar> ProductFunction<Scalar>::dx() {
 }
 
 template <typename Scalar>
-FunctionPtr<Scalar> ProductFunction<Scalar>::dy() {
+TFunctionPtr<Scalar> ProductFunction<Scalar>::dy() {
   if ( (_f1->dy().get() == NULL) || (_f2->dy().get() == NULL) ) {
     return this->null();
   }
@@ -31,7 +31,7 @@ FunctionPtr<Scalar> ProductFunction<Scalar>::dy() {
 }
 
 template <typename Scalar>
-FunctionPtr<Scalar> ProductFunction<Scalar>::dz() {
+TFunctionPtr<Scalar> ProductFunction<Scalar>::dz() {
   if ( (_f1->dz().get() == NULL) || (_f2->dz().get() == NULL) ) {
     return this->null();
   }
@@ -40,7 +40,7 @@ FunctionPtr<Scalar> ProductFunction<Scalar>::dz() {
 }
 
 template <typename Scalar>
-FunctionPtr<Scalar> ProductFunction<Scalar>::dt() {
+TFunctionPtr<Scalar> ProductFunction<Scalar>::dt() {
   if ( (_f1->dt().get() == NULL) || (_f2->dt().get() == NULL) ) {
     return this->null();
   }
@@ -49,7 +49,7 @@ FunctionPtr<Scalar> ProductFunction<Scalar>::dt() {
 }
 
 template <typename Scalar>
-FunctionPtr<Scalar> ProductFunction<Scalar>::x() {
+TFunctionPtr<Scalar> ProductFunction<Scalar>::x() {
   if (this->rank() == 0) {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Can't take x component of scalar function.");
   }
@@ -61,7 +61,7 @@ FunctionPtr<Scalar> ProductFunction<Scalar>::x() {
 }
 
 template <typename Scalar>
-FunctionPtr<Scalar> ProductFunction<Scalar>::y() {
+TFunctionPtr<Scalar> ProductFunction<Scalar>::y() {
   if (this->rank() == 0) {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Can't take y component of scalar function.");
   }
@@ -73,7 +73,7 @@ FunctionPtr<Scalar> ProductFunction<Scalar>::y() {
 }
 
 template <typename Scalar>
-FunctionPtr<Scalar> ProductFunction<Scalar>::z() {
+TFunctionPtr<Scalar> ProductFunction<Scalar>::z() {
   if (this->rank() == 0) {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Can't take z component of scalar function.");
   }
@@ -85,7 +85,7 @@ FunctionPtr<Scalar> ProductFunction<Scalar>::z() {
 }
 
 template <typename Scalar>
-FunctionPtr<Scalar> ProductFunction<Scalar>::t() {
+TFunctionPtr<Scalar> ProductFunction<Scalar>::t() {
   if (this->rank() == 0) {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Can't take t component of scalar function.");
   }
@@ -97,7 +97,7 @@ FunctionPtr<Scalar> ProductFunction<Scalar>::t() {
 }
 
 template <typename Scalar>
-int ProductFunction<Scalar>::productRank(FunctionPtr<Scalar> f1, FunctionPtr<Scalar> f2) {
+int ProductFunction<Scalar>::productRank(TFunctionPtr<Scalar> f1, TFunctionPtr<Scalar> f2) {
   if (f1->rank() == f2->rank()) return 0;
   if (f1->rank() == 0) return f2->rank();
   if (f2->rank() == 0) return f1->rank();
@@ -106,7 +106,7 @@ int ProductFunction<Scalar>::productRank(FunctionPtr<Scalar> f1, FunctionPtr<Sca
 }
 
 template <typename Scalar>
-ProductFunction<Scalar>::ProductFunction(FunctionPtr<Scalar> f1, FunctionPtr<Scalar> f2) : Function<Scalar>( productRank(f1,f2) ) {
+ProductFunction<Scalar>::ProductFunction(TFunctionPtr<Scalar> f1, TFunctionPtr<Scalar> f2) : TFunction<Scalar>( productRank(f1,f2) ) {
   // for simplicity of values() code, ensure that rank of f1 ≤ rank of f2:
   if ( f1->rank() <= f2->rank() ) {
     _f1 = f1;

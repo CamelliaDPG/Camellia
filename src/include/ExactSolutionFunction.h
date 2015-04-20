@@ -14,7 +14,7 @@
 
 namespace Camellia {
   template <typename Scalar>
-  class ExactSolutionFunction : public Function<Scalar> { // for scalars, for now
+  class ExactSolutionFunction : public TFunction<Scalar> { // for scalars, for now
     Teuchos::RCP<ExactSolution> _exactSolution;
     int _trialID;
   public:

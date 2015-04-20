@@ -28,9 +28,9 @@ static const double PI  = 3.141592653589793238462;
 
 //  void mapRefCellPointsToParameterSpace(FieldContainer<double> &refPoints);
 
-static void CHECK_FUNCTION_ONLY_DEPENDS_ON_1D_SPACE(FunctionPtr<double> fxn) {
+static void CHECK_FUNCTION_ONLY_DEPENDS_ON_1D_SPACE(TFunctionPtr<double> fxn) {
   try {
-    Function<double>::evaluate(fxn, 0);
+    TFunction<double>::evaluate(fxn, 0);
   } catch (...) {
     TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument,"Function threw an exception when evaluation at x=0 was attempted.  This can happen if your function depends on things other than 1D point values, e.g. if your function depends on a basis that requires points in reference space.");
   }
@@ -42,11 +42,11 @@ double ParametricFunction::remapForSubCurve(double t) {
 }
 
 void ParametricFunction::setArgumentMap() {
-  FunctionPtr<double> t = Teuchos::rcp( new Xn(1) );
+  TFunctionPtr<double> t = Teuchos::rcp( new Xn(1) );
   _argMap = _t0 + t * (_t1 - _t0);
 }
 
-ParametricFunction::ParametricFunction(FunctionPtr<double> fxn, double t0, double t1, int derivativeOrder) : Function<double>(fxn->rank()) {
+ParametricFunction::ParametricFunction(TFunctionPtr<double> fxn, double t0, double t1, int derivativeOrder) : TFunction<double>(fxn->rank()) {
   CHECK_FUNCTION_ONLY_DEPENDS_ON_1D_SPACE(fxn);
   _underlyingFxn = fxn;
   _t0 = t0;
@@ -54,7 +54,7 @@ ParametricFunction::ParametricFunction(FunctionPtr<double> fxn, double t0, doubl
   _derivativeOrder = derivativeOrder;
   setArgumentMap();
 }
-ParametricFunction::ParametricFunction(FunctionPtr<double> fxn) : Function<double>(fxn->rank()) {
+ParametricFunction::ParametricFunction(TFunctionPtr<double> fxn) : TFunction<double>(fxn->rank()) {
   CHECK_FUNCTION_ONLY_DEPENDS_ON_1D_SPACE(fxn);
   _underlyingFxn = fxn;
   _t0 = 0;
@@ -122,7 +122,7 @@ void ParametricFunction::values(FieldContainer<double> &values, BasisCachePtr ba
   }
 }
 
-FunctionPtr<double> ParametricFunction::dx() {
+TFunctionPtr<double> ParametricFunction::dx() {
   // dx() applies a piola transform (increments _derivativeOrder); dt() does not
   double tScale = _t1 - _t0;
   return Teuchos::rcp( new ParametricFunction(tScale * _underlyingFxn->dx(),_t0,_t1,_derivativeOrder+1) );
@@ -134,7 +134,7 @@ Teuchos::RCP<ParametricFunction> ParametricFunction::dt_parametric() {
   return Teuchos::rcp( new ParametricFunction(tScale * _underlyingFxn->dx(),_t0,_t1,_derivativeOrder) );
 }
 
-Teuchos::RCP<ParametricFunction> ParametricFunction::parametricFunction(FunctionPtr<double> fxn, double t0, double t1) {
+Teuchos::RCP<ParametricFunction> ParametricFunction::parametricFunction(TFunctionPtr<double> fxn, double t0, double t1) {
   if (!fxn.get()) {
     return Teuchos::rcp((ParametricFunction*)NULL);
   }
@@ -182,18 +182,18 @@ public:
   ParametricCurvePtr dt_parametric() {
     return Teuchos::rcp( new ParametricBubble(_edgeCurve->dt_parametric(),_x1-_x0, _y1-_y0) );
   }
-  FunctionPtr<double> x() {
+  TFunctionPtr<double> x() {
     if (!_isDerivative) {
       return _edgeCurve->x() - _edgeLine->x();
     } else {
-      return _edgeCurve->x() - Function<double>::constant(_xDiff);
+      return _edgeCurve->x() - TFunction<double>::constant(_xDiff);
     }
   }
-  FunctionPtr<double> y() {
+  TFunctionPtr<double> y() {
     if (!_isDerivative) {
       return _edgeCurve->y() - _edgeLine->y();
     } else {
-      return _edgeCurve->y() - Function<double>::constant(_yDiff);
+      return _edgeCurve->y() - TFunction<double>::constant(_yDiff);
     }
   }
 };
@@ -247,25 +247,25 @@ public:
   }
 };
 
-ParametricCurve::ParametricCurve(Teuchos::RCP<ParametricFunction> xFxn_x_as_t, Teuchos::RCP<ParametricFunction> yFxn_x_as_t, Teuchos::RCP<ParametricFunction> zFxn_x_as_t) : Function<double>(1) {
+ParametricCurve::ParametricCurve(Teuchos::RCP<ParametricFunction> xFxn_x_as_t, Teuchos::RCP<ParametricFunction> yFxn_x_as_t, Teuchos::RCP<ParametricFunction> zFxn_x_as_t) : TFunction<double>(1) {
   _xFxn = xFxn_x_as_t;
   _yFxn = yFxn_x_as_t;
   _zFxn = zFxn_x_as_t;
 }
 
-ParametricCurve::ParametricCurve() : Function<double>(1) {
+ParametricCurve::ParametricCurve() : TFunction<double>(1) {
 //  cout << "ParametricCurve().\n";
 }
 
-//ParametricCurve::ParametricCurve(ParametricCurvePtr fxn, double t0, double t1) : Function<double>(1) {
+//ParametricCurve::ParametricCurve(ParametricCurvePtr fxn, double t0, double t1) : TFunction<double>(1) {
 //  _xFxn = fxn->xPart();
 //  _yFxn = fxn->yPart();
 //  _zFxn = fxn->zPart();
 //}
 
-//FunctionPtr<double> ParametricCurve::argumentMap() {
-//  FunctionPtr<double> t = Teuchos::rcp( new Xn(1) );
-//  FunctionPtr<double> argMap = (1-t) * _t0 + t * _t1;
+//TFunctionPtr<double> ParametricCurve::argumentMap() {
+//  TFunctionPtr<double> t = Teuchos::rcp( new Xn(1) );
+//  TFunctionPtr<double> argMap = (1-t) * _t0 + t * _t1;
 //  return argMap;
 //}
 
@@ -323,7 +323,7 @@ void ParametricCurve::projectionBasedInterpolant(FieldContainer<double> &basisCo
     }
   }
   // project, skipping vertexNodeFieldIndices:
-  FunctionPtr<double> bubbleComponent, lineComponent;
+  TFunctionPtr<double> bubbleComponent, lineComponent;
   if (component==0){
     bubbleComponent = bubble->x();
     lineComponent = line->x();
@@ -420,15 +420,15 @@ void ParametricCurve::values(FieldContainer<double> &values, BasisCachePtr basis
   //  }
 }
 
-FunctionPtr<double> ParametricCurve::x() {
+TFunctionPtr<double> ParametricCurve::x() {
   return _xFxn;
 }
 
-FunctionPtr<double> ParametricCurve::y() {
+TFunctionPtr<double> ParametricCurve::y() {
   return _yFxn;
 }
 
-FunctionPtr<double> ParametricCurve::z() {
+TFunctionPtr<double> ParametricCurve::z() {
   return _zFxn;
 }
 
@@ -454,10 +454,10 @@ ParametricCurvePtr ParametricCurve::bubble(ParametricCurvePtr edgeCurve) {
 }
 
 ParametricCurvePtr ParametricCurve::circle(double r, double x0, double y0) {
-  FunctionPtr<double> cos_2pi_t = Teuchos::rcp( new Cos_ax(2.0*PI) );
-  FunctionPtr<double> sin_2pi_t = Teuchos::rcp( new Sin_ax(2.0*PI) );
-  FunctionPtr<double> xFunction = r * cos_2pi_t + Function<double>::constant(x0);
-  FunctionPtr<double> yFunction = r * sin_2pi_t + Function<double>::constant(y0);
+  TFunctionPtr<double> cos_2pi_t = Teuchos::rcp( new Cos_ax(2.0*PI) );
+  TFunctionPtr<double> sin_2pi_t = Teuchos::rcp( new Sin_ax(2.0*PI) );
+  TFunctionPtr<double> xFunction = r * cos_2pi_t + TFunction<double>::constant(x0);
+  TFunctionPtr<double> yFunction = r * sin_2pi_t + TFunction<double>::constant(y0);
 
   return curve(xFunction,yFunction);
 
@@ -471,7 +471,7 @@ ParametricCurvePtr ParametricCurve::circularArc(double r, double x0, double y0, 
   return subCurve(circleFxn, t0, t1);
 }
 
-ParametricCurvePtr ParametricCurve::curve(FunctionPtr<double> xFxn_x_as_t, FunctionPtr<double> yFxn_x_as_t, FunctionPtr<double> zFxn_x_as_t) {
+ParametricCurvePtr ParametricCurve::curve(TFunctionPtr<double> xFxn_x_as_t, TFunctionPtr<double> yFxn_x_as_t, TFunctionPtr<double> zFxn_x_as_t) {
   Teuchos::RCP<ParametricFunction> xParametric = ParametricFunction::parametricFunction(xFxn_x_as_t);
   Teuchos::RCP<ParametricFunction> yParametric = ParametricFunction::parametricFunction(yFxn_x_as_t);
   Teuchos::RCP<ParametricFunction> zParametric = ParametricFunction::parametricFunction(zFxn_x_as_t);
@@ -490,7 +490,7 @@ ParametricCurvePtr ParametricCurve::curveUnion(vector< ParametricCurvePtr > curv
   return Teuchos::rcp( new ParametricUnion(curves, weights) );
 }
 //
-//FunctionPtr<double> ParametricCurve::dx() { // same as dt_parametric() (overrides Function::dx())
+//TFunctionPtr<double> ParametricCurve::dx() { // same as dt_parametric() (overrides Function::dx())
 //  return dt_parametric();
 //}
 
@@ -536,11 +536,11 @@ ParametricCurvePtr ParametricCurve::polygon(vector< pair<double,double> > vertic
 }
 
 ParametricCurvePtr ParametricCurve::line(double x0, double y0, double x1, double y1) {
-  FunctionPtr<double> t = Teuchos::rcp( new Xn(1) );
-  FunctionPtr<double> x0_f = Function<double>::constant(x0);
-  FunctionPtr<double> y0_f = Function<double>::constant(y0);
-  FunctionPtr<double> xFxn = (x1-x0) * t + x0_f;
-  FunctionPtr<double> yFxn = (y1-y0) * t + y0_f;
+  TFunctionPtr<double> t = Teuchos::rcp( new Xn(1) );
+  TFunctionPtr<double> x0_f = TFunction<double>::constant(x0);
+  TFunctionPtr<double> y0_f = TFunction<double>::constant(y0);
+  TFunctionPtr<double> xFxn = (x1-x0) * t + x0_f;
+  TFunctionPtr<double> yFxn = (y1-y0) * t + y0_f;
 
   return ParametricCurve::curve(xFxn,yFxn);
 }
@@ -558,11 +558,11 @@ ParametricCurvePtr ParametricCurve::line(double x0, double y0, double x1, double
 //  }
 //}
 
-class ParametricGradientWrapper : public Function<double> {
-  FunctionPtr<double> _parametricGradient;
+class ParametricGradientWrapper : public TFunction<double> {
+  TFunctionPtr<double> _parametricGradient;
   bool _convertBasisCacheToParametricSpace;
 public:
-  ParametricGradientWrapper(FunctionPtr<double> parametricGradient, bool convertBasisCacheToParametricSpace = false) : Function<double>(parametricGradient->rank()) {
+  ParametricGradientWrapper(TFunctionPtr<double> parametricGradient, bool convertBasisCacheToParametricSpace = false) : TFunction<double>(parametricGradient->rank()) {
     _parametricGradient = parametricGradient;
     _convertBasisCacheToParametricSpace = convertBasisCacheToParametricSpace;
   }
@@ -654,7 +654,7 @@ public:
   }
 };
 
-FunctionPtr<double> ParametricCurve::parametricGradientWrapper(FunctionPtr<double> parametricGradient, bool convertBasisCacheToParametricSpace) {
+TFunctionPtr<double> ParametricCurve::parametricGradientWrapper(TFunctionPtr<double> parametricGradient, bool convertBasisCacheToParametricSpace) {
   // translates gradients from parametric to physical space
   return Teuchos::rcp( new ParametricGradientWrapper(parametricGradient, convertBasisCacheToParametricSpace) );
 }

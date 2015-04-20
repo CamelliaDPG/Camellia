@@ -13,16 +13,16 @@
 
 namespace Camellia {
   template <typename Scalar>
-  class QuotientFunction : public Function<Scalar> {
-    FunctionPtr<Scalar> _f, _scalarDivisor;
+  class QuotientFunction : public TFunction<Scalar> {
+    TFunctionPtr<Scalar> _f, _scalarDivisor;
   public:
-    QuotientFunction(FunctionPtr<Scalar> f, FunctionPtr<Scalar> scalarDivisor);
+    QuotientFunction(TFunctionPtr<Scalar> f, TFunctionPtr<Scalar> scalarDivisor);
     void values(Intrepid::FieldContainer<Scalar> &values, BasisCachePtr basisCache);
     virtual bool boundaryValueOnly();
-    FunctionPtr<Scalar> dx();
-    FunctionPtr<Scalar> dy();
-    FunctionPtr<Scalar> dz();
-    FunctionPtr<Scalar> dt();
+    TFunctionPtr<Scalar> dx();
+    TFunctionPtr<Scalar> dy();
+    TFunctionPtr<Scalar> dz();
+    TFunctionPtr<Scalar> dt();
     std::string displayString();
   };
 }

@@ -18,11 +18,11 @@ namespace Camellia {
   // the input function is integrated over each element's boundary.
   // the main idea is to allow easy visualization of where mass conservation
   // is violated in a solution.
-  class MassFluxFunction : public Function<double> {
+  class MassFluxFunction : public TFunction<double> {
     FunctionPtr _un;
     bool _absoluteValue;
   public:
-    MassFluxFunction(FunctionPtr un, bool takeAbsoluteValue = false) : Function<double>(0) {
+    MassFluxFunction(FunctionPtr un, bool takeAbsoluteValue = false) : TFunction<double>(0) {
       _un = un;
       _absoluteValue = takeAbsoluteValue;
     }

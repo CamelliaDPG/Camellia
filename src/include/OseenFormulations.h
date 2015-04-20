@@ -17,26 +17,26 @@
 namespace Camellia {
   class OseenFormulation {
   protected:
-    FunctionPtr<double> _Re;
+    TFunctionPtr<double> _Re;
   public:
     OseenFormulation(double Reynolds) {
-      _Re = Function<double>::constant(Reynolds);
+      _Re = TFunction<double>::constant(Reynolds);
     }
-    OseenFormulation(FunctionPtr<double> Reynolds) {
+    OseenFormulation(TFunctionPtr<double> Reynolds) {
       _Re = Reynolds;
     }
 
     virtual BFPtr bf() = 0;
-    virtual RHSPtr rhs(FunctionPtr<double> f1, FunctionPtr<double> f2, bool excludeFluxesAndTraces) = 0;
+    virtual RHSPtr rhs(TFunctionPtr<double> f1, TFunctionPtr<double> f2, bool excludeFluxesAndTraces) = 0;
     // so far, only have support for BCs defined on the entire boundary (i.e. no outflow type conditions)
-    virtual BCPtr bc(FunctionPtr<double> u1, FunctionPtr<double> u2, SpatialFilterPtr entireBoundary) = 0;
+    virtual BCPtr bc(TFunctionPtr<double> u1, TFunctionPtr<double> u2, SpatialFilterPtr entireBoundary) = 0;
     virtual IPPtr graphNorm() = 0;
     virtual void primaryTrialIDs(vector<int> &fieldIDs) = 0; // used for best approximation error TeX output (u1,u2) or (u1,u2,p)
     virtual void trialIDs(vector<int> &fieldIDs, vector<int> &correspondingTraceIDs, vector<string> &fileFriendlyNames) = 0; // corr. ID == -1 if there isn't one
-    virtual Teuchos::RCP<ExactSolution> exactSolution(FunctionPtr<double> u1, FunctionPtr<double> u2, FunctionPtr<double> p,
+    virtual Teuchos::RCP<ExactSolution> exactSolution(TFunctionPtr<double> u1, TFunctionPtr<double> u2, TFunctionPtr<double> p,
                                                       SpatialFilterPtr entireBoundary) = 0;
 
-    FunctionPtr<double> Re() {
+    TFunctionPtr<double> Re() {
       return _Re;
     }
   };
@@ -51,14 +51,14 @@ namespace Camellia {
     VarPtr tau1, tau2, q, v1, v2;
     BFPtr _bf, _stokesBF;
     IPPtr _graphNorm;
-    FunctionPtr<double> _mu;
+    TFunctionPtr<double> _mu;
 
     bool _scale_sigma_by_mu;
     bool _small_Re; // used for determining scale-compliant norm...
 
     // background flow Functions:
-    FunctionPtr<double> _U1;
-    FunctionPtr<double> _U2;
+    TFunctionPtr<double> _U1;
+    TFunctionPtr<double> _U2;
 
     void initVars() {
       varFactory = VGPStokesFormulation::vgpVarFactory();
@@ -82,7 +82,7 @@ namespace Camellia {
       p = varFactory.fieldVar(VGP_P_S);
     }
 
-    void init(FunctionPtr<double> Re, FunctionPtr<double> U1, FunctionPtr<double> U2, bool scaleSigmaByMu) {
+    void init(TFunctionPtr<double> Re, TFunctionPtr<double> U1, TFunctionPtr<double> U2, bool scaleSigmaByMu) {
       _mu = 1.0 / Re;
       _scale_sigma_by_mu = scaleSigmaByMu;
 
@@ -101,8 +101,8 @@ namespace Camellia {
   //    // (u_i, v_i,j U_j) + < -u_hat_i, (U_j n_j) v_i >
       _bf->addTerm( u1, U1 * v1->dx() + U2 * v1->dy());
       _bf->addTerm( u2, U1 * v2->dx() + U2 * v2->dy());
-      FunctionPtr<double> n = Function<double>::normal();
-      FunctionPtr<double> Un = U1 * n->x() + U2 * n->y();
+      TFunctionPtr<double> n = TFunction<double>::normal();
+      TFunctionPtr<double> Un = U1 * n->x() + U2 * n->y();
       _bf->addTerm( -u1hat, Un * v1);
       _bf->addTerm( -u2hat, Un * v2);
 
@@ -118,20 +118,20 @@ namespace Camellia {
       _graphNorm = _bf->graphNorm(); // just use the automatic for now
     }
   public:
-    static BFPtr stokesBF(FunctionPtr<double> mu, bool velocityAsH1, bool scaleSigmaByMu) {
+    static BFPtr stokesBF(TFunctionPtr<double> mu, bool velocityAsH1, bool scaleSigmaByMu) {
       VGPStokesFormulation stokesFormulation(mu, velocityAsH1, scaleSigmaByMu);
       return stokesFormulation.bf();
     }
 
-    VGPOseenFormulation(double Re, FunctionPtr<double> U1, FunctionPtr<double> U2, bool scaleSigmaByMu = true) : OseenFormulation(Re) {
-      init(Function<double>::constant(Re),U1,U2, scaleSigmaByMu);
+    VGPOseenFormulation(double Re, TFunctionPtr<double> U1, TFunctionPtr<double> U2, bool scaleSigmaByMu = true) : OseenFormulation(Re) {
+      init(TFunction<double>::constant(Re),U1,U2, scaleSigmaByMu);
       if (Re < 1) _small_Re = true;
       else _small_Re = false;
       if (_small_Re) {
         cout << "_small_Re = true -- scale-compliant norm will be scaled accordingly.\n";
       }
     }
-    VGPOseenFormulation(FunctionPtr<double> Re, FunctionPtr<double> U1, FunctionPtr<double> U2, bool scaleSigmaByMu = true) : OseenFormulation(Re) {
+    VGPOseenFormulation(TFunctionPtr<double> Re, TFunctionPtr<double> U1, TFunctionPtr<double> U2, bool scaleSigmaByMu = true) : OseenFormulation(Re) {
       init(Re,U1,U2,scaleSigmaByMu);
       _small_Re = false; // the default assumption
     }
@@ -141,7 +141,7 @@ namespace Camellia {
     IPPtr graphNorm() {
       return _graphNorm;
     }
-    RHSPtr rhs(FunctionPtr<double> f1, FunctionPtr<double> f2, bool excludeFluxesAndTraces) {
+    RHSPtr rhs(TFunctionPtr<double> f1, TFunctionPtr<double> f2, bool excludeFluxesAndTraces) {
       RHSPtr rhs = RHS::rhs();
       LinearTermPtr lt = f1 * v1 + f2 * v2;
   //    if (lt->isZero() ) {
@@ -154,8 +154,8 @@ namespace Camellia {
       return rhs;
     }
     IPPtr scaleCompliantGraphNorm() {
-      FunctionPtr<double> h = Teuchos::rcp( new hFunction() );
-      //    FunctionPtr<double> h = Teuchos::rcp( new hFunction() );
+      TFunctionPtr<double> h = Teuchos::rcp( new hFunction() );
+      //    TFunctionPtr<double> h = Teuchos::rcp( new hFunction() );
       IPPtr compliantGraphNorm = Teuchos::rcp( new IP );
 
       // old version (where the convective term had a sigma):
@@ -191,20 +191,20 @@ namespace Camellia {
       return compliantGraphNorm;
     }
 
-    BCPtr bc(FunctionPtr<double> u1_fxn, FunctionPtr<double> u2_fxn, SpatialFilterPtr entireBoundary) {
+    BCPtr bc(TFunctionPtr<double> u1_fxn, TFunctionPtr<double> u2_fxn, SpatialFilterPtr entireBoundary) {
       BCPtr bc = BC::bc();
       bc->addDirichlet(u1hat, entireBoundary, u1_fxn);
       bc->addDirichlet(u2hat, entireBoundary, u2_fxn);
       bc->addZeroMeanConstraint(p);
       return bc;
     }
-    Teuchos::RCP<ExactSolution> exactSolution(FunctionPtr<double> u1_exact, FunctionPtr<double> u2_exact, FunctionPtr<double> p_exact,
+    Teuchos::RCP<ExactSolution> exactSolution(TFunctionPtr<double> u1_exact, TFunctionPtr<double> u2_exact, TFunctionPtr<double> p_exact,
                                               SpatialFilterPtr entireBoundary) {
       // f1 and f2 are those for Stokes, but minus u \cdot \grad u
-      FunctionPtr<double> mu = 1.0 / _Re;
-      FunctionPtr<double> f1 = -p_exact->dx() + mu * (u1_exact->dx()->dx() + u1_exact->dy()->dy())
+      TFunctionPtr<double> mu = 1.0 / _Re;
+      TFunctionPtr<double> f1 = -p_exact->dx() + mu * (u1_exact->dx()->dx() + u1_exact->dy()->dy())
       - u1_exact * u1_exact->dx() - u2_exact * u1_exact->dy();
-      FunctionPtr<double> f2 = -p_exact->dy() + mu * (u2_exact->dx()->dx() + u2_exact->dy()->dy())
+      TFunctionPtr<double> f2 = -p_exact->dy() + mu * (u2_exact->dx()->dx() + u2_exact->dy()->dy())
       - u1_exact * u2_exact->dx() - u2_exact * u2_exact->dy();
 
   //    if (f1->isZero() ) {
@@ -223,17 +223,17 @@ namespace Camellia {
 
       mySolution->setSolutionFunction(p, p_exact);
 
-      FunctionPtr<double> sigma_weight;
+      TFunctionPtr<double> sigma_weight;
       if (_scale_sigma_by_mu) {
         sigma_weight = _mu;
       } else {
-        sigma_weight = Function<double>::constant(1);
+        sigma_weight = TFunction<double>::constant(1);
       }
 
-      FunctionPtr<double> sigma11_exact = sigma_weight * u1_exact->dx();
-      FunctionPtr<double> sigma12_exact = sigma_weight * u1_exact->dy();
-      FunctionPtr<double> sigma21_exact = sigma_weight * u2_exact->dx();
-      FunctionPtr<double> sigma22_exact = sigma_weight * u2_exact->dy();
+      TFunctionPtr<double> sigma11_exact = sigma_weight * u1_exact->dx();
+      TFunctionPtr<double> sigma12_exact = sigma_weight * u1_exact->dy();
+      TFunctionPtr<double> sigma21_exact = sigma_weight * u2_exact->dx();
+      TFunctionPtr<double> sigma22_exact = sigma_weight * u2_exact->dy();
 
       mySolution->setSolutionFunction(sigma11, sigma11_exact);
       mySolution->setSolutionFunction(sigma12, sigma12_exact);
@@ -241,10 +241,10 @@ namespace Camellia {
       mySolution->setSolutionFunction(sigma22, sigma22_exact);
 
       // tn = (mu sigma - pI)n
-      FunctionPtr<double> sideParity = Function<double>::sideParity();
-      FunctionPtr<double> n = Function<double>::normal();
-      FunctionPtr<double> t1n_exact = (mu * sigma11_exact - p_exact) * n->x() + mu * sigma12_exact * n->y();
-      FunctionPtr<double> t2n_exact = mu * sigma21_exact * n->x() + (mu * sigma22_exact - p_exact) * n->y();
+      TFunctionPtr<double> sideParity = TFunction<double>::sideParity();
+      TFunctionPtr<double> n = TFunction<double>::normal();
+      TFunctionPtr<double> t1n_exact = (mu * sigma11_exact - p_exact) * n->x() + mu * sigma12_exact * n->y();
+      TFunctionPtr<double> t2n_exact = mu * sigma21_exact * n->x() + (mu * sigma22_exact - p_exact) * n->y();
 
       mySolution->setSolutionFunction(u1hat, u1_exact);
       mySolution->setSolutionFunction(u2hat, u2_exact);
@@ -256,7 +256,7 @@ namespace Camellia {
 
     void primaryTrialIDs(vector<int> &fieldIDs) {
       // (u1,u2,p)
-      FunctionPtr<double> mu = 1.0 / _Re;
+      TFunctionPtr<double> mu = 1.0 / _Re;
       VGPStokesFormulation stokesFormulation(mu);
       stokesFormulation.primaryTrialIDs(fieldIDs);
     }
@@ -267,7 +267,7 @@ namespace Camellia {
       else cout << "false\n";
     }
     void trialIDs(vector<int> &fieldIDs, vector<int> &correspondingTraceIDs, vector<string> &fileFriendlyNames) {
-      FunctionPtr<double> mu = 1.0 / _Re;
+      TFunctionPtr<double> mu = 1.0 / _Re;
       VGPStokesFormulation stokesFormulation(mu);
       stokesFormulation.trialIDs(fieldIDs,correspondingTraceIDs,fileFriendlyNames);
     }
@@ -281,10 +281,10 @@ namespace Camellia {
 
     Teuchos::RCP< VGPOseenFormulation > _vgpOseenFormulation;
 
-    void init(FunctionPtr<double> Re, Intrepid::FieldContainer<double> &quadPoints, int horizontalCells,
+    void init(TFunctionPtr<double> Re, Intrepid::FieldContainer<double> &quadPoints, int horizontalCells,
               int verticalCells, int H1Order, int pToAdd,
-              FunctionPtr<double> u1_exact, FunctionPtr<double> u2_exact, FunctionPtr<double> p_exact, bool enrichVelocity, bool scaleSigmaByMu) {
-      FunctionPtr<double> mu = 1/Re;
+              TFunctionPtr<double> u1_exact, TFunctionPtr<double> u2_exact, TFunctionPtr<double> p_exact, bool enrichVelocity, bool scaleSigmaByMu) {
+      TFunctionPtr<double> mu = 1/Re;
 
       bool dontEnrichVelocity = false; // handle velocity enrichment through mesh "enhancements" instead of by implementing as HGRAD
       Teuchos::RCP< VGPStokesFormulation > vgpStokesFormulation = Teuchos::rcp( new VGPStokesFormulation(mu, dontEnrichVelocity,
@@ -325,15 +325,15 @@ namespace Camellia {
       _soln->setIP( _vgpOseenFormulation->graphNorm() );
     }
   public:
-    VGPOseenProblem(FunctionPtr<double> Re, Intrepid::FieldContainer<double> &quadPoints, int horizontalCells,
+    VGPOseenProblem(TFunctionPtr<double> Re, Intrepid::FieldContainer<double> &quadPoints, int horizontalCells,
                     int verticalCells, int H1Order, int pToAdd,
-                    FunctionPtr<double> u1_exact, FunctionPtr<double> u2_exact, FunctionPtr<double> p_exact, bool enrichVelocity, bool scaleSigmaByMu) {
+                    TFunctionPtr<double> u1_exact, TFunctionPtr<double> u2_exact, TFunctionPtr<double> p_exact, bool enrichVelocity, bool scaleSigmaByMu) {
       init(Re,quadPoints,horizontalCells,verticalCells,H1Order,pToAdd,u1_exact,u2_exact,p_exact, enrichVelocity, scaleSigmaByMu);
     }
     VGPOseenProblem(double Re, Intrepid::FieldContainer<double> &quadPoints, int horizontalCells,
                     int verticalCells, int H1Order, int pToAdd,
-                    FunctionPtr<double> u1_exact, FunctionPtr<double> u2_exact, FunctionPtr<double> p_exact, bool enrichVelocity, bool scaleSigmaByMu) {
-      init(Function<double>::constant(Re),quadPoints,horizontalCells,verticalCells,H1Order,pToAdd,u1_exact,u2_exact,p_exact,enrichVelocity,
+                    TFunctionPtr<double> u1_exact, TFunctionPtr<double> u2_exact, TFunctionPtr<double> p_exact, bool enrichVelocity, bool scaleSigmaByMu) {
+      init(TFunction<double>::constant(Re),quadPoints,horizontalCells,verticalCells,H1Order,pToAdd,u1_exact,u2_exact,p_exact,enrichVelocity,
            scaleSigmaByMu);
       if (Re < 1) {
         _vgpOseenFormulation->setSmallRe(true);
@@ -359,7 +359,7 @@ namespace Camellia {
       _soln->setIP( ip );
     }
     BFPtr stokesBF(bool scaleSigmaByMu) {
-      FunctionPtr<double> mu =  1.0 / _vgpOseenFormulation->Re();
+      TFunctionPtr<double> mu =  1.0 / _vgpOseenFormulation->Re();
       bool dontEnrichVelocity = false;
       return VGPOseenFormulation::stokesBF( mu, dontEnrichVelocity, scaleSigmaByMu );
     }

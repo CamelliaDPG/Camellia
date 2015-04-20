@@ -904,7 +904,7 @@ void BasisCache::setCellSideParities(const FieldContainer<double> &cellSideParit
   _cellSideParities = cellSideParities;
 }
 
-void BasisCache::setTransformationFunction(FunctionPtr<double> fxn, bool composeWithMeshTransformation) {
+void BasisCache::setTransformationFunction(TFunctionPtr<double> fxn, bool composeWithMeshTransformation) {
   _transformationFxn = fxn;
   _composeTransformationFxnWithMeshTransformation = composeWithMeshTransformation;
   // recompute physical points and jacobian values
@@ -916,7 +916,7 @@ void BasisCache::determinePhysicalPoints() {
   int cellDim = _cellTopo->getDimension();
   if (cellDim==0) return; // physical points not meaningful then...
   int numPoints = isSideCache() ? _cubPointsSideRefCell.dimension(0) : _cubPoints.dimension(0);
-  if ( Function<double>::isNull(_transformationFxn) || _composeTransformationFxnWithMeshTransformation) {
+  if ( TFunction<double>::isNull(_transformationFxn) || _composeTransformationFxnWithMeshTransformation) {
     // _spaceDim for side cache refers to the volume cache's spatial dimension
     _physCubPoints.resize(_numCells, numPoints, cellDim);
 
@@ -935,15 +935,15 @@ void BasisCache::determinePhysicalPoints() {
     //  simply call BasisCache->getRefCellPoints()...  On this idea, we don't even have to do anything special in
     //  BasisCache: the if clause above only serves to save us a little computational effort.)
   }
-  if ( ! Function<double>::isNull(_transformationFxn) ) {
+  if ( ! TFunction<double>::isNull(_transformationFxn) ) {
     FieldContainer<double> newPhysCubPoints(_numCells,numPoints,cellDim);
     BasisCachePtr thisPtr = Teuchos::rcp(this,false);
 
     // the usual story: we don't want to use the transformation Function inside the BasisCache
     // while the transformation Function is using the BasisCache to determine its values.
     // So we move _transformationFxn out of the way for a moment:
-    FunctionPtr<double> transformationFxn = _transformationFxn;
-    _transformationFxn = Function<double>::null();
+    TFunctionPtr<double> transformationFxn = _transformationFxn;
+    _transformationFxn = TFunction<double>::null();
     {
       // size cell Jacobian containers—the dimensions are used even for HGRAD basis OP_VALUE, which
       // may legitimately be invoked by transformationFxn, below...
@@ -975,7 +975,7 @@ void BasisCache::determineJacobian() {
   _cellJacobDet.resize(_numCells, numCubPoints);
 
 
-  if ( Function<double>::isNull(_transformationFxn) || _composeTransformationFxnWithMeshTransformation) {
+  if ( TFunction<double>::isNull(_transformationFxn) || _composeTransformationFxnWithMeshTransformation) {
     if (!isSideCache())
       CamelliaCellTools::setJacobian(_cellJacobian, _cubPoints, _physicalCellNodes, _cellTopo);
     else
@@ -988,15 +988,15 @@ void BasisCache::determineJacobian() {
 ////  cout << "On rank " << Teuchos::GlobalMPISession::getRank() << ", about to compute jacobian inverse for cellJacobian of size: " << _cellJacobian.size() << endl;
 //  CellTools::setJacobianInv(_cellJacobInv, _cellJacobian );
 
-  if (! Function<double>::isNull(_transformationFxn) ) {
+  if (! TFunction<double>::isNull(_transformationFxn) ) {
     BasisCachePtr thisPtr = Teuchos::rcp(this,false);
     if (_composeTransformationFxnWithMeshTransformation) {
       // then we need to multiply one Jacobian by the other
       FieldContainer<double> fxnJacobian(_numCells,numCubPoints,cellDim,cellDim);
       // a little quirky, but since _transformationFxn calls BasisCache in its values determination,
       // we disable the _transformationFxn during the call to grad()->values()
-      FunctionPtr<double> fxnCopy = _transformationFxn;
-      _transformationFxn = Function<double>::null();
+      TFunctionPtr<double> fxnCopy = _transformationFxn;
+      _transformationFxn = TFunction<double>::null();
       fxnCopy->grad()->values( fxnJacobian, thisPtr );
       _transformationFxn = fxnCopy;
 

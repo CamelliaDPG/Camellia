@@ -174,14 +174,14 @@ MeshPtr MeshTools::timeSliceMesh(MeshPtr spaceTimeMesh, double t,
   return sliceMesh;
 }
 
-class SliceFunction : public Function<double> {
+class SliceFunction : public TFunction<double> {
   MeshPtr _spaceTimeMesh;
   map<GlobalIndexType, GlobalIndexType> _cellIDMap;
-  FunctionPtr<double> _spaceTimeFunction;
+  TFunctionPtr<double> _spaceTimeFunction;
   double _t;
 public:
   SliceFunction(MeshPtr spaceTimeMesh, map<GlobalIndexType, GlobalIndexType> &cellIDMap,
-                FunctionPtr<double> spaceTimeFunction, double t) : Function<double>(spaceTimeFunction->rank()) {
+                TFunctionPtr<double> spaceTimeFunction, double t) : TFunction<double>(spaceTimeFunction->rank()) {
     _spaceTimeMesh = spaceTimeMesh;
     _cellIDMap = cellIDMap;
     _spaceTimeFunction = spaceTimeFunction;
@@ -222,7 +222,7 @@ public:
   }
 };
 
-void MeshTools::timeSliceExport(std::string dirPath, MeshPtr mesh, FunctionPtr<double> spaceTimeFunction, std::vector<double> tValues, std::string functionName) {
+void MeshTools::timeSliceExport(std::string dirPath, MeshPtr mesh, TFunctionPtr<double> spaceTimeFunction, std::vector<double> tValues, std::string functionName) {
   // user is responsible for ensuring that tValues all generate the same slice.  It's a bit of a burden, but there it is...
 // #ifdef HAVE_EPETRAEXT_HDF5
   map<GlobalIndexType, GlobalIndexType> cellIDMap;
@@ -233,7 +233,7 @@ void MeshTools::timeSliceExport(std::string dirPath, MeshPtr mesh, FunctionPtr<d
   HDF5Exporter exporter(meshSlice,dirPath);
 
   for (int i=0; i<tValues.size(); i++) {
-    FunctionPtr<double> sliceFunction = Teuchos::rcp( new SliceFunction(mesh,cellIDMap,spaceTimeFunction,tValues[i]) );
+    TFunctionPtr<double> sliceFunction = Teuchos::rcp( new SliceFunction(mesh,cellIDMap,spaceTimeFunction,tValues[i]) );
     exporter.exportFunction(sliceFunction, functionName, tValues[i]);
   }
 // #else
@@ -241,10 +241,10 @@ void MeshTools::timeSliceExport(std::string dirPath, MeshPtr mesh, FunctionPtr<d
 // #endif
 }
 
-FunctionPtr<double> MeshTools::timeSliceFunction(MeshPtr spaceTimeMesh, map<GlobalIndexType, GlobalIndexType> &cellIDMap, FunctionPtr<double> spaceTimeFunction, double t) {
-  FunctionPtr<double> timeSliceFunction = Teuchos::rcp(new SliceFunction(spaceTimeMesh, cellIDMap, spaceTimeFunction, t) );
+TFunctionPtr<double> MeshTools::timeSliceFunction(MeshPtr spaceTimeMesh, map<GlobalIndexType, GlobalIndexType> &cellIDMap, TFunctionPtr<double> spaceTimeFunction, double t) {
+  TFunctionPtr<double> timeSliceFunction = Teuchos::rcp(new SliceFunction(spaceTimeMesh, cellIDMap, spaceTimeFunction, t) );
   if (spaceTimeFunction->boundaryValueOnly())
-    timeSliceFunction = Function<double>::restrictToCellBoundary(timeSliceFunction);
+    timeSliceFunction = TFunction<double>::restrictToCellBoundary(timeSliceFunction);
   return timeSliceFunction;
 }
 

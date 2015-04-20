@@ -6,7 +6,7 @@ using namespace Camellia;
 using namespace Intrepid;
 using namespace std;
 
-MinFunction::MinFunction(FunctionPtr<double> f1, FunctionPtr<double> f2) : Function<double>(f1->rank()) {
+MinFunction::MinFunction(TFunctionPtr<double> f1, TFunctionPtr<double> f2) : TFunction<double>(f1->rank()) {
   TEUCHOS_TEST_FOR_EXCEPTION( f1->rank() != f2->rank(), std::invalid_argument, "both functions must be of like rank.");
   _f1 = f1;
   _f2 = f2;
@@ -33,27 +33,27 @@ void MinFunction::values(Intrepid::FieldContainer<double> &values, BasisCachePtr
   }
 }
 
-FunctionPtr<double> MinFunction::x() {
+TFunctionPtr<double> MinFunction::x() {
   if ( (_f1->x().get() == NULL) || (_f2->x().get() == NULL) ) {
     return null();
   }
   return min(_f1->x(),_f2->x());
 }
 
-FunctionPtr<double> MinFunction::y() {
+TFunctionPtr<double> MinFunction::y() {
   if ( (_f1->y().get() == NULL) || (_f2->y().get() == NULL) ) {
     return null();
   }
   return min(_f1->y(),_f2->y());
 }
-FunctionPtr<double> MinFunction::z() {
+TFunctionPtr<double> MinFunction::z() {
   if ( (_f1->z().get() == NULL) || (_f2->z().get() == NULL) ) {
     return null();
   }
   return min(_f1->z(),_f2->z());
 }
 
-MaxFunction::MaxFunction(FunctionPtr<double> f1, FunctionPtr<double> f2) : Function<double>(f1->rank()) {
+MaxFunction::MaxFunction(TFunctionPtr<double> f1, TFunctionPtr<double> f2) : TFunction<double>(f1->rank()) {
   TEUCHOS_TEST_FOR_EXCEPTION( f1->rank() != f2->rank(), std::invalid_argument, "both functions must be of like rank.");
   _f1 = f1;
   _f2 = f2;
@@ -80,20 +80,20 @@ void MaxFunction::values(Intrepid::FieldContainer<double> &values, BasisCachePtr
   }
 }
 
-FunctionPtr<double> MaxFunction::x() {
+TFunctionPtr<double> MaxFunction::x() {
   if ( (_f1->x().get() == NULL) || (_f2->x().get() == NULL) ) {
     return null();
   }
   return max(_f1->x(),_f2->x());
 }
 
-FunctionPtr<double> MaxFunction::y() {
+TFunctionPtr<double> MaxFunction::y() {
   if ( (_f1->y().get() == NULL) || (_f2->y().get() == NULL) ) {
     return null();
   }
   return max(_f1->y(),_f2->y());
 }
-FunctionPtr<double> MaxFunction::z() {
+TFunctionPtr<double> MaxFunction::z() {
   if ( (_f1->z().get() == NULL) || (_f2->z().get() == NULL) ) {
     return null();
   }

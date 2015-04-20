@@ -12,15 +12,15 @@
 using namespace Intrepid;
 using namespace Camellia;
 
-typedef pair< SpatialFilterPtr, FunctionPtr<double> > DirichletBC;
+typedef pair< SpatialFilterPtr, TFunctionPtr<double> > DirichletBC;
 
 template <typename Scalar>
-class BCLogicalOrFunction : public Function<Scalar> {
-  FunctionPtr<double> _f1, _f2;
+class BCLogicalOrFunction : public TFunction<Scalar> {
+  TFunctionPtr<double> _f1, _f2;
   SpatialFilterPtr _sf1, _sf2;
 
 public:
-  BCLogicalOrFunction(FunctionPtr<double> f1, SpatialFilterPtr sf1, FunctionPtr<double> f2, SpatialFilterPtr sf2) : Function<Scalar>(f1->rank()) {
+  BCLogicalOrFunction(TFunctionPtr<double> f1, SpatialFilterPtr sf1, TFunctionPtr<double> f2, SpatialFilterPtr sf2) : TFunction<Scalar>(f1->rank()) {
     _f1 = f1;
     _sf1 = sf1;
     _f2 = f2;
@@ -99,7 +99,7 @@ public:
 
 template class BCLogicalOrFunction<double>;
 
-void BC::addDirichlet( VarPtr traceOrFlux, SpatialFilterPtr spatialPoints, FunctionPtr<double> valueFunction ) {
+void BC::addDirichlet( VarPtr traceOrFlux, SpatialFilterPtr spatialPoints, TFunctionPtr<double> valueFunction ) {
   if ((traceOrFlux->varType() != TRACE) && (traceOrFlux->varType() != FLUX)) {
     cout << "WARNING: adding Dirichlet BC for variable that is neither a trace nor a flux.\n";
   }
@@ -107,7 +107,7 @@ void BC::addDirichlet( VarPtr traceOrFlux, SpatialFilterPtr spatialPoints, Funct
   if (_dirichletBCs.find( traceOrFlux->ID() ) != _dirichletBCs.end() ) {
     // "or" the existing condition with the new one:
     SpatialFilterPtr existingFilter = _dirichletBCs[ traceOrFlux->ID() ].first;
-    FunctionPtr<double> existingFunction = _dirichletBCs[ traceOrFlux->ID() ].second;
+    TFunctionPtr<double> existingFunction = _dirichletBCs[ traceOrFlux->ID() ].second;
     valueFunction = Teuchos::rcp( new BCLogicalOrFunction<double>(existingFunction, existingFilter,
                                                           valueFunction, spatialPoints) );
     spatialPoints = Teuchos::rcp( new SpatialFilterLogicalOr( existingFilter, spatialPoints ) );
@@ -143,7 +143,7 @@ BCPtr BC::copyImposingZero() {
   map< int, DirichletBC >* dirichletBCs = &(zeroBC->dirichletBCs());
   for (map< int, DirichletBC >::iterator bcIt = dirichletBCs->begin();
        bcIt != dirichletBCs->end(); ++bcIt) {
-    bcIt->second.second = Function<double>::zero();
+    bcIt->second.second = TFunction<double>::zero();
   }
 
   for (map< int, pair<GlobalIndexType,double> >::iterator singlePointIt = _singlePointBCs.begin(); singlePointIt != _singlePointBCs.end(); singlePointIt++) {
@@ -156,7 +156,7 @@ BCPtr BC::copyImposingZero() {
   return zeroBC;
 }
 
-pair< SpatialFilterPtr, FunctionPtr<double> > BC::getDirichletBC(int varID) {
+pair< SpatialFilterPtr, TFunctionPtr<double> > BC::getDirichletBC(int varID) {
   if (_dirichletBCs.find(varID) == _dirichletBCs.end()) {
     cout << "No Dirichlet BC for the indicated variable...\n";
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "No Dirichlet BC for the indicated variable...");
@@ -164,8 +164,8 @@ pair< SpatialFilterPtr, FunctionPtr<double> > BC::getDirichletBC(int varID) {
   return _dirichletBCs[varID];
 }
 
-FunctionPtr<double> BC::getSpatiallyFilteredFunctionForDirichletBC(int varID) {
-  pair< SpatialFilterPtr, FunctionPtr<double> > dirichletBC = getDirichletBC(varID);
+TFunctionPtr<double> BC::getSpatiallyFilteredFunctionForDirichletBC(int varID) {
+  pair< SpatialFilterPtr, TFunctionPtr<double> > dirichletBC = getDirichletBC(varID);
 
   return Teuchos::rcp( new SpatiallyFilteredFunction<double>(dirichletBC.second, dirichletBC.first) );
 }
@@ -237,7 +237,7 @@ void BC::imposeBC(FieldContainer<double> &dirichletValues, FieldContainer<bool> 
 
     DirichletBC bc = _dirichletBCs[varID];
     SpatialFilterPtr filter = bc.first;
-    FunctionPtr<double> f = bc.second;
+    TFunctionPtr<double> f = bc.second;
 
     filter->matchesPoints(imposeHere,basisCache);
 
@@ -262,7 +262,7 @@ void BC::imposeBC(int varID, FieldContainer<double> &physicalPoints,
 //    }
 //    DirichletBC bc = _singlePointBCs[varID];
 //    SpatialFilterPtr filter = bc.first;
-//    FunctionPtr<double> f = bc.second;
+//    TFunctionPtr<double> f = bc.second;
 //
 //
 //

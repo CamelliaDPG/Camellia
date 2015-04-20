@@ -17,7 +17,7 @@ using namespace Camellia;
 using namespace Intrepid;
 
 namespace {
-  class CellIDFunction : public Function<double> {
+  class CellIDFunction : public Function {
   public:
     CellIDFunction() : Function(0) {}
 
@@ -123,7 +123,7 @@ namespace {
       }
     }
 
-    MeshTransferFunction transferFunction(Function<double>::zero(), bottomMesh, topMesh, y_interface);
+    MeshTransferFunction transferFunction(Function::zero(), bottomMesh, topMesh, y_interface);
 
     const map< pair<GlobalIndexType, unsigned>, pair<GlobalIndexType, unsigned> >* actualMapToOriginal = &transferFunction.mapToOriginalMesh();
 
@@ -252,7 +252,7 @@ namespace {
     pl.set("y0",(double)y_interface);
     topMesh = MeshFactory::quadMesh(pl);
 
-    MeshTransferFunction transferFunction(Function<double>::zero(), bottomMesh, topMesh, y_interface);
+    MeshTransferFunction transferFunction(Function::zero(), bottomMesh, topMesh, y_interface);
 
     double elemHeight = height / verticalCells;
     double elemWidth = width / horizontalCells;
@@ -434,7 +434,7 @@ namespace {
     pl.set("y0",(double)y_interface);
     topMesh = MeshFactory::quadMesh(pl);
 
-    FunctionPtr<double> originalCellIDFunction = Teuchos::rcp( new CellIDFunction );
+    FunctionPtr originalCellIDFunction = Teuchos::rcp( new CellIDFunction );
 
     MeshTransferFunction transferFunction(originalCellIDFunction, bottomMesh, topMesh, y_interface);
 
@@ -577,7 +577,7 @@ namespace {
     pl.set("y0",(double)y_interface);
     topMesh = MeshFactory::quadMesh(pl);
 
-    FunctionPtr<double> myFunction = Function<double>::xn(1);
+    FunctionPtr myFunction = Function::xn(1);
     MeshTransferFunction transferFunction(myFunction, bottomMesh, topMesh, y_interface);
 
     double elemHeight = height / verticalCells;
@@ -717,7 +717,7 @@ namespace {
     pl.set("y0",(double)y_interface);
     topMesh = MeshFactory::quadMesh(pl);
 
-    FunctionPtr<double> myFunction = Function<double>::xn(1);
+    FunctionPtr myFunction = Function::xn(1);
     MeshTransferFunction transferFunction(myFunction, bottomMesh, topMesh, y_interface);
 
     double elemHeight = height / verticalCells;

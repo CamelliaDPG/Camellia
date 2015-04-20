@@ -17,10 +17,10 @@ namespace Camellia {
   public:
     Xn(int n);
     double value(double x);
-    FunctionPtr<double> dx();
-    FunctionPtr<double> dy();
-    FunctionPtr<double> dz();
-    FunctionPtr<double> dt();
+    TFunctionPtr<double> dx();
+    TFunctionPtr<double> dy();
+    TFunctionPtr<double> dz();
+    TFunctionPtr<double> dt();
     string displayString();
   };
 
@@ -29,10 +29,10 @@ namespace Camellia {
   public:
     Yn(int n);
     double value(double x, double y);
-    FunctionPtr<double> dx();
-    FunctionPtr<double> dy();
-    FunctionPtr<double> dz();
-    FunctionPtr<double> dt();
+    TFunctionPtr<double> dx();
+    TFunctionPtr<double> dy();
+    TFunctionPtr<double> dz();
+    TFunctionPtr<double> dt();
     string displayString();
   };
 
@@ -41,10 +41,10 @@ namespace Camellia {
   public:
     Zn(int n);
     double value(double x, double y, double z);
-    FunctionPtr<double> dx();
-    FunctionPtr<double> dy();
-    FunctionPtr<double> dz();
-    FunctionPtr<double> dt();
+    TFunctionPtr<double> dx();
+    TFunctionPtr<double> dy();
+    TFunctionPtr<double> dz();
+    TFunctionPtr<double> dt();
     string displayString();
   };
 
@@ -55,10 +55,10 @@ namespace Camellia {
     double value(double x, double t);
     double value(double x, double y, double t);
     double value(double x, double y, double z, double t);
-    FunctionPtr<double> dx();
-    FunctionPtr<double> dy();
-    FunctionPtr<double> dz();
-    FunctionPtr<double> dt();
+    TFunctionPtr<double> dx();
+    TFunctionPtr<double> dy();
+    TFunctionPtr<double> dz();
+    TFunctionPtr<double> dt();
     string displayString();
   };
 }

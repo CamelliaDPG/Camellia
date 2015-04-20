@@ -14,14 +14,14 @@
 using namespace std;
 
 namespace Camellia {
-  class CellCharacteristicFunction : public Function<double> {
+  class CellCharacteristicFunction : public TFunction<double> {
     set<GlobalIndexType> _cellIDs;
   public:
-    CellCharacteristicFunction(GlobalIndexType cellID) : Function<double>(0) {
+    CellCharacteristicFunction(GlobalIndexType cellID) : TFunction<double>(0) {
       _cellIDs.insert(cellID);
     }
 
-    CellCharacteristicFunction(set<GlobalIndexType> cellIDs) : Function<double>(0) {
+    CellCharacteristicFunction(set<GlobalIndexType> cellIDs) : TFunction<double>(0) {
       _cellIDs = cellIDs;
     }
     void values(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache) {

@@ -235,8 +235,8 @@ namespace Camellia {
     void processSideUpgrades( const std::map<GlobalIndexType, std::pair< ElementTypePtr, ElementTypePtr > > &cellSideUpgrades);
     void processSideUpgrades( const std::map<GlobalIndexType, std::pair< ElementTypePtr, ElementTypePtr > > &cellSideUpgrades, const std::set<GlobalIndexType> &cellIDsToSkip );
 
-    void projectOntoMesh(const std::map<int, FunctionPtr<Scalar> > &functionMap);
-    void projectOntoCell(const std::map<int, FunctionPtr<Scalar> > &functionMap, GlobalIndexType cellID, int sideIndex=-1);
+    void projectOntoMesh(const std::map<int, TFunctionPtr<Scalar> > &functionMap);
+    void projectOntoCell(const std::map<int, TFunctionPtr<Scalar> > &functionMap, GlobalIndexType cellID, int sideIndex=-1);
     void projectFieldVariablesOntoOtherSolution(SolutionPtr<Scalar> otherSoln);
 
     void projectOldCellOntoNewCells(GlobalIndexType cellID,

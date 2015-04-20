@@ -79,7 +79,7 @@ PressurelessStokesFormulation::PressurelessStokesFormulation(int spaceDim) {
   u2_hat = vf.traceVar(S_U2_HAT, 1.0 * u2, L2);
   if (spaceDim==3) u3_hat = vf.traceVar(S_U3_HAT, 1.0 * u3, L2);
 
-  FunctionPtr<double> n = Function<double>::normal();
+  TFunctionPtr<double> n = TFunction<double>::normal();
   LinearTermPtr sigma1n, sigma2n, sigma3n;
   if (spaceDim==2) {
     sigma1n = sigma11 * n->x() + sigma12 * n->y();

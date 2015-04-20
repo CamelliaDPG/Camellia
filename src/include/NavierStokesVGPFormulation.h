@@ -36,7 +36,7 @@ namespace Camellia {
 
     SolverPtr _solver;
 
-    FunctionPtr<double> _L2IncrementFunction, _L2SolutionFunction;
+    TFunctionPtr<double> _L2IncrementFunction, _L2SolutionFunction;
 
     SolutionPtr<double> _backgroundFlow, _solnIncrement;
 
@@ -62,20 +62,20 @@ namespace Camellia {
 
     void initialize(MeshTopologyPtr meshTopology, std::string filePrefix,
                     int spaceDim, double Re, int fieldPolyOrder, int delta_k,
-                    FunctionPtr<double> forcingFunction, bool transientFormulation, bool useConformingTraces);
+                    TFunctionPtr<double> forcingFunction, bool transientFormulation, bool useConformingTraces);
 
     void refine(RefinementStrategyPtr refStrategy);
   public:
     NavierStokesVGPFormulation(MeshTopologyPtr meshTopology, double Re,
                                int fieldPolyOrder,
                                int delta_k = 1,
-                               FunctionPtr<double> forcingFunction = Teuchos::null,
+                               TFunctionPtr<double> forcingFunction = Teuchos::null,
                                bool transientFormulation = false,
                                bool useConformingTraces = false);
 
     NavierStokesVGPFormulation(std::string filePrefix, int spaceDim, double Re,
                                int fieldPolyOrder, int delta_k = 1,
-                               FunctionPtr<double> forcingFunction = Teuchos::null,
+                               TFunctionPtr<double> forcingFunction = Teuchos::null,
                                bool transientFormulation = false,
                                bool useConformingTraces = false);
 
@@ -83,7 +83,7 @@ namespace Camellia {
     void addWallCondition(SpatialFilterPtr wall);
 
     // ! sets an inflow velocity boundary condition; in 2D and 3D, u should be a vector-valued function.
-    void addInflowCondition(SpatialFilterPtr inflowRegion, FunctionPtr<double> u);
+    void addInflowCondition(SpatialFilterPtr inflowRegion, TFunctionPtr<double> u);
 
     // ! sets an outflow velocity boundary condition
     void addOutflowCondition(SpatialFilterPtr outflowRegion);
@@ -95,7 +95,7 @@ namespace Camellia {
     void addZeroMeanPressureCondition();
 
     // ! return an ExactSolutionPtr<double> corresponding to specified velocity (a rank 1 Function) and pressure.
-    Teuchos::RCP<ExactSolution> exactSolution(FunctionPtr<double> u, FunctionPtr<double> p);
+    Teuchos::RCP<ExactSolution> exactSolution(TFunctionPtr<double> u, TFunctionPtr<double> p);
 
     // ! returns the L^2 norm of the incremental solution
     double L2NormSolutionIncrement();
@@ -125,7 +125,7 @@ namespace Camellia {
     RefinementStrategyPtr getRefinementStrategy();
 
     // ! returns an RHSPtr corresponding to the vector forcing function f and the accumulated solution
-    RHSPtr rhs(FunctionPtr<double> f, bool excludeFluxesAndTraces);
+    RHSPtr rhs(TFunctionPtr<double> f, bool excludeFluxesAndTraces);
 
     // ! set the RefinementStrategy to use for driving refinements
     void setRefinementStrategy(RefinementStrategyPtr refStrategy);
@@ -167,7 +167,7 @@ namespace Camellia {
     VarPtr tau(int i);
     VarPtr v(int i);
 
-    static FunctionPtr<double> forcingFunction(int spaceDim, double Re, FunctionPtr<double> u, FunctionPtr<double> p);
+    static TFunctionPtr<double> forcingFunction(int spaceDim, double Re, TFunctionPtr<double> u, TFunctionPtr<double> p);
   };
 }
 

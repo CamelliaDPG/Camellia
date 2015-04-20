@@ -84,22 +84,22 @@ void HDF5Exporter::exportSolution(SolutionPtr<double> solution, double timeVal, 
   vector<VarPtr> fieldVars;
   vector<VarPtr> traceVars;
 
-  vector<FunctionPtr<double>> fieldFunctions;
+  vector<TFunctionPtr<double>> fieldFunctions;
   vector<string> fieldFunctionNames;
   for (int i=0; i < fieldTrialIDs.size(); i++)
   {
     fieldVars.push_back(varFactory.trial(fieldTrialIDs[i]));
-    FunctionPtr<double> fieldFunction = Function<double>::solution(fieldVars[i], solution);
+    TFunctionPtr<double> fieldFunction = TFunction<double>::solution(fieldVars[i], solution);
     string fieldFunctionName = fieldVars[i]->name();
     fieldFunctions.push_back(fieldFunction);
     fieldFunctionNames.push_back(fieldFunctionName);
   }
-  vector<FunctionPtr<double>> traceFunctions;
+  vector<TFunctionPtr<double>> traceFunctions;
   vector<string> traceFunctionNames;
   for (int i=0; i < traceTrialIDs.size(); i++)
   {
     traceVars.push_back(varFactory.trial(traceTrialIDs[i]));
-    FunctionPtr<double> traceFunction = Function<double>::solution(traceVars[i], solution);
+    TFunctionPtr<double> traceFunction = TFunction<double>::solution(traceVars[i], solution);
     string traceFunctionName = traceVars[i]->name();
     traceFunctions.push_back(traceFunction);
     traceFunctionNames.push_back(traceFunctionName);
@@ -115,16 +115,16 @@ void HDF5Exporter::exportSolution(SolutionPtr<double> solution, VarFactory varFa
   this->exportSolution(solution,timeVal,defaultNum1DPts,cellIDToNum1DPts,cellIndices);
 }
 
-void HDF5Exporter::exportFunction(FunctionPtr<double> function, string functionName, double timeVal, unsigned int defaultNum1DPts, map<int, int> cellIDToNum1DPts, set<GlobalIndexType> cellIndices)
+void HDF5Exporter::exportFunction(TFunctionPtr<double> function, string functionName, double timeVal, unsigned int defaultNum1DPts, map<int, int> cellIDToNum1DPts, set<GlobalIndexType> cellIndices)
 {
-  vector<FunctionPtr<double>> functions;
+  vector<TFunctionPtr<double>> functions;
   functions.push_back(function);
   vector<string> functionNames;
   functionNames.push_back(functionName);
   exportFunction(functions, functionNames, timeVal, defaultNum1DPts, cellIDToNum1DPts, cellIndices);
 }
 
-void HDF5Exporter::exportFunction(vector<FunctionPtr<double>> functions, vector<string> functionNames, double timeVal, unsigned int defaultNum1DPts, map<int, int> cellIDToNum1DPts, set<GlobalIndexType> cellIndices)
+void HDF5Exporter::exportFunction(vector<TFunctionPtr<double>> functions, vector<string> functionNames, double timeVal, unsigned int defaultNum1DPts, map<int, int> cellIDToNum1DPts, set<GlobalIndexType> cellIndices)
 {
   int commRank = Teuchos::GlobalMPISession::getRank();
   int numProcs = Teuchos::GlobalMPISession::getNProc();
@@ -1054,16 +1054,16 @@ void HDF5Exporter::exportFunction(vector<FunctionPtr<double>> functions, vector<
   }
 }
 
-void HDF5Exporter::exportTimeSlab(FunctionPtr<double> function, string functionName, double tInit, double tFinal, unsigned int numSlices, unsigned int sliceH1Order, unsigned int defaultNum1DPts)
+void HDF5Exporter::exportTimeSlab(TFunctionPtr<double> function, string functionName, double tInit, double tFinal, unsigned int numSlices, unsigned int sliceH1Order, unsigned int defaultNum1DPts)
 {
-  vector<FunctionPtr<double>> functions;
+  vector<TFunctionPtr<double>> functions;
   functions.push_back(function);
   vector<string> functionNames;
   functionNames.push_back(functionName);
   exportTimeSlab(functions, functionNames, tInit, tFinal, numSlices, sliceH1Order, defaultNum1DPts);
 }
 
-void HDF5Exporter::exportTimeSlab(vector<FunctionPtr<double>> functions, vector<string> functionNames, double tInit, double tFinal, unsigned int numSlices, unsigned int sliceH1Order, unsigned int defaultNum1DPts)
+void HDF5Exporter::exportTimeSlab(vector<TFunctionPtr<double>> functions, vector<string> functionNames, double tInit, double tFinal, unsigned int numSlices, unsigned int sliceH1Order, unsigned int defaultNum1DPts)
 {
   HDF5Exporter exporter(_mesh, _dirName, _dirSuperPath);
   for (int slice=0; slice < numSlices; slice++)
@@ -1071,10 +1071,10 @@ void HDF5Exporter::exportTimeSlab(vector<FunctionPtr<double>> functions, vector<
     double sliceTime = tInit + slice*(tFinal-tInit)/(numSlices-1);
     map<GlobalIndexType,GlobalIndexType> cellMap;
     MeshPtr meshSlice = MeshTools::timeSliceMesh(_mesh, sliceTime, cellMap, sliceH1Order);
-    vector<FunctionPtr<double>> functionSlices;
-    for (vector<FunctionPtr<double>>::iterator fcnIt = functions.begin(); fcnIt != functions.end(); ++fcnIt)
+    vector<TFunctionPtr<double>> functionSlices;
+    for (vector<TFunctionPtr<double>>::iterator fcnIt = functions.begin(); fcnIt != functions.end(); ++fcnIt)
     {
-      FunctionPtr<double> functionSlice = MeshTools::timeSliceFunction(_mesh, cellMap, *fcnIt, sliceTime);
+      TFunctionPtr<double> functionSlice = MeshTools::timeSliceFunction(_mesh, cellMap, *fcnIt, sliceTime);
       functionSlices.push_back(functionSlice);
     }
     exporter.setMesh(meshSlice);
@@ -1082,7 +1082,7 @@ void HDF5Exporter::exportTimeSlab(vector<FunctionPtr<double>> functions, vector<
   }
 }
 
-void HDF5Exporter::exportFunction(string superDirectory, string functionName, FunctionPtr<double> function, MeshPtr mesh) {
+void HDF5Exporter::exportFunction(string superDirectory, string functionName, TFunctionPtr<double> function, MeshPtr mesh) {
   HDF5Exporter exporter(mesh, functionName, superDirectory);
   exporter.exportFunction(function);
 }

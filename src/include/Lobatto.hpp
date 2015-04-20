@@ -51,7 +51,7 @@ namespace Camellia {
       }
     }
 
-    FunctionPtr<double> dx() {
+    TFunctionPtr<double> dx() {
       if (_derivative) {
         TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "LobattoFunction only supports first derivatives...");
       }

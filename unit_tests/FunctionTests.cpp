@@ -22,7 +22,7 @@ namespace {
     int cubatureDegree = 1;
     bool createSideCache = true;
     BasisCachePtr spaceTimeBasisCache = BasisCache::basisCacheForReferenceCell(spaceTimeTopo, cubatureDegree, createSideCache);
-    FunctionPtr<double> spaceTimeNormalComponent = Function<double>::normalSpaceTime()->t();
+    FunctionPtr spaceTimeNormalComponent = Function::normalSpaceTime()->t();
     for (int sideOrdinal=0; sideOrdinal<spaceTimeTopo->getSideCount(); sideOrdinal++) {
       BasisCachePtr spaceTimeSideCache = spaceTimeBasisCache->getSideBasisCache(sideOrdinal);
 
@@ -52,8 +52,8 @@ namespace {
     bool createSideCache = true;
     BasisCachePtr spaceBasisCache = BasisCache::basisCacheForReferenceCell(spaceTopo, cubatureDegree, createSideCache);
     BasisCachePtr spaceTimeBasisCache = BasisCache::basisCacheForReferenceCell(spaceTimeTopo, cubatureDegree, createSideCache);
-    FunctionPtr<double> spaceTimeNormal = Function<double>::normalSpaceTime();
-    FunctionPtr<double> spaceNormal = Function<double>::normal();
+    FunctionPtr spaceTimeNormal = Function::normalSpaceTime();
+    FunctionPtr spaceNormal = Function::normal();
     for (int sideOrdinal=0; sideOrdinal<spaceTimeTopo->getSideCount(); sideOrdinal++) {
       BasisCachePtr spaceTimeSideCache = spaceTimeBasisCache->getSideBasisCache(sideOrdinal);
 
@@ -98,17 +98,17 @@ namespace {
 
   TEUCHOS_UNIT_TEST( Function, MinAndMaxFunctions )
   {
-    FunctionPtr<double> one = Function<double>::constant(1);
-    FunctionPtr<double> two = Function<double>::constant(2);
-    FunctionPtr<double> minFcn = Function<double>::min(one,two);
-    FunctionPtr<double> maxFcn = Function<double>::max(one,two);
+    FunctionPtr one = Function::constant(1);
+    FunctionPtr two = Function::constant(2);
+    FunctionPtr minFcn = Function::min(one,two);
+    FunctionPtr maxFcn = Function::max(one,two);
     double x0 = 0, y0 = 0;
     double expectedValue = 1.0;
-    double actualValue = Function<double>::evaluate(minFcn, x0, y0);
+    double actualValue = Function::evaluate(minFcn, x0, y0);
     double tol = 1e-14;
     TEST_FLOATING_EQUALITY(expectedValue,actualValue,tol);
     expectedValue = 2.0;
-    actualValue = Function<double>::evaluate(maxFcn, x0, y0);
+    actualValue = Function::evaluate(maxFcn, x0, y0);
     TEST_FLOATING_EQUALITY(expectedValue,actualValue,tol);
   }
 
@@ -164,14 +164,14 @@ namespace {
 
   TEUCHOS_UNIT_TEST( Function, VectorMultiply )
   {
-    FunctionPtr<double> x2 = Function<double>::xn(2);
-    FunctionPtr<double> y4 = Function<double>::yn(4);
+    FunctionPtr x2 = Function::xn(2);
+    FunctionPtr y4 = Function::yn(4);
     vector<double> weight(2);
     weight[0] = 3; weight[1] = 2;
-    FunctionPtr<double> g = Function<double>::vectorize(x2,y4);
+    FunctionPtr g = Function::vectorize(x2,y4);
     double x0 = 2, y0 = 3;
     double expectedValue = weight[0] * x0 * x0 + weight[1] * y0 * y0 * y0 * y0;
-    double actualValue = Function<double>::evaluate(g * weight, x0, y0);
+    double actualValue = Function::evaluate(g * weight, x0, y0);
     double tol = 1e-14;
     TEST_FLOATING_EQUALITY(expectedValue,actualValue,tol);
   }

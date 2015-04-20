@@ -31,9 +31,9 @@
  */
 
 namespace Camellia {
-  class MeshTransferFunction : public Function<double>, public RefinementObserver {
+  class MeshTransferFunction : public TFunction<double>, public RefinementObserver {
     MeshPtr _originalMesh, _newMesh;
-    FunctionPtr<double> _originalFunction;
+    TFunctionPtr<double> _originalFunction;
     double _interface_t;
 
     typedef std::pair<GlobalIndexType,unsigned> CellSide; // cellID, side ordinal
@@ -46,7 +46,7 @@ namespace Camellia {
 
     void rebuildMaps();
   public:
-    MeshTransferFunction(FunctionPtr<double> originalFunction, MeshPtr originalMesh, MeshPtr newMesh, double interface_t);
+    MeshTransferFunction(TFunctionPtr<double> originalFunction, MeshPtr originalMesh, MeshPtr newMesh, double interface_t);
     virtual void values(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache);
 
     bool boundaryValueOnly();

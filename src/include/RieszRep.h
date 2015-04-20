@@ -88,54 +88,54 @@ namespace Camellia {
     double computeAlternativeNormSqOnCell(IPPtr ip, ElementPtr elem);
     map<GlobalIndexType,double> computeAlternativeNormSqOnCells(IPPtr ip, vector<GlobalIndexType> cellIDs);
 
-    static FunctionPtr<double> repFunction( VarPtr var, RieszRepPtr rep );
+    static TFunctionPtr<double> repFunction( VarPtr var, RieszRepPtr rep );
     static RieszRepPtr rieszRep(MeshPtr mesh, IPPtr ip, LinearTermPtr functional);
   };
 
-  class RepFunction : public Function<double> {
+  class RepFunction : public TFunction<double> {
   private:
 
     int _testID;
     Teuchos::RCP<RieszRep> _rep;
     EOperator _op;
   public:
-    RepFunction( VarPtr var, RieszRepPtr rep ) : Function<double>( var->rank() ) {
+    RepFunction( VarPtr var, RieszRepPtr rep ) : TFunction<double>( var->rank() ) {
       _testID = var->ID();
       _op = var->op();
       _rep = rep;
     }
 
     // optional specification of operator to apply - default to rank 0
-   RepFunction(int testID,Teuchos::RCP<RieszRep> rep, EOperator op): Function<double>(0){
+   RepFunction(int testID,Teuchos::RCP<RieszRep> rep, EOperator op): TFunction<double>(0){
       _testID = testID;
       _rep = rep;
       _op = op;
     }
 
     // specification of function rank
-   RepFunction(int testID,Teuchos::RCP<RieszRep> rep, EOperator op, int fxnRank): Function<double>(fxnRank){
+   RepFunction(int testID,Teuchos::RCP<RieszRep> rep, EOperator op, int fxnRank): TFunction<double>(fxnRank){
       _testID = testID;
       _rep = rep;
       _op = op;
     }
 
 
-    FunctionPtr<double> x(){
+    TFunctionPtr<double> x(){
       return Teuchos::rcp(new RepFunction(_testID,_rep,OP_X));
     }
-    FunctionPtr<double> y(){
+    TFunctionPtr<double> y(){
       return Teuchos::rcp(new RepFunction(_testID,_rep,OP_Y));
     }
-    FunctionPtr<double> dx(){
+    TFunctionPtr<double> dx(){
       return Teuchos::rcp(new RepFunction(_testID,_rep,OP_DX));
     }
-    FunctionPtr<double> dy(){
+    TFunctionPtr<double> dy(){
       return Teuchos::rcp(new RepFunction(_testID,_rep,OP_DY));
     }
-    //  FunctionPtr<double> grad(){
+    //  TFunctionPtr<double> grad(){
     //    return Teuchos::rcp(new RepFunction(_testID,_rep,Camellia::OP_GRAD,2)); // default to 2 space dimensions
     //  }
-    FunctionPtr<double> div(){
+    TFunctionPtr<double> div(){
       return Teuchos::rcp(new RepFunction(_testID,_rep,OP_DIV));
     }
 

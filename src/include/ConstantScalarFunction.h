@@ -34,10 +34,10 @@ namespace Camellia {
     using SimpleFunction<Scalar>::value; // avoid compiler warnings about the value() method below.
     Scalar value();
 
-    FunctionPtr<Scalar> dx();
-    FunctionPtr<Scalar> dy();
-    FunctionPtr<Scalar> dz();  // Hmm... a design issue: if we implement dz() then grad() will return a 3D function, not what we want...  It may be that grad() should require a spaceDim argument.  I'm not sure.
-    FunctionPtr<Scalar> dt();
+    TFunctionPtr<Scalar> dx();
+    TFunctionPtr<Scalar> dy();
+    TFunctionPtr<Scalar> dz();  // Hmm... a design issue: if we implement dz() then grad() will return a 3D function, not what we want...  It may be that grad() should require a spaceDim argument.  I'm not sure.
+    TFunctionPtr<Scalar> dt();
   };
 }
 

@@ -13,25 +13,25 @@
 
 namespace Camellia {
   template <typename Scalar>
-  class VectorizedFunction : public Function<Scalar> {
+  class VectorizedFunction : public TFunction<Scalar> {
   private:
-    vector< FunctionPtr<Scalar> > _fxns;
-    FunctionPtr<Scalar> di(int i); // derivative in the ith coordinate direction
+    vector< TFunctionPtr<Scalar> > _fxns;
+    TFunctionPtr<Scalar> di(int i); // derivative in the ith coordinate direction
   public:
-    virtual FunctionPtr<Scalar> x();
-    virtual FunctionPtr<Scalar> y();
-    virtual FunctionPtr<Scalar> z();
-    virtual FunctionPtr<Scalar> t();
+    virtual TFunctionPtr<Scalar> x();
+    virtual TFunctionPtr<Scalar> y();
+    virtual TFunctionPtr<Scalar> z();
+    virtual TFunctionPtr<Scalar> t();
 
-    virtual FunctionPtr<Scalar> dx();
-    virtual FunctionPtr<Scalar> dy();
-    virtual FunctionPtr<Scalar> dz();
-    virtual FunctionPtr<Scalar> dt();
+    virtual TFunctionPtr<Scalar> dx();
+    virtual TFunctionPtr<Scalar> dy();
+    virtual TFunctionPtr<Scalar> dz();
+    virtual TFunctionPtr<Scalar> dt();
 
-    VectorizedFunction(const vector< FunctionPtr<Scalar> > &fxns);
-    VectorizedFunction(FunctionPtr<Scalar> f1, FunctionPtr<Scalar> f2);
-    VectorizedFunction(FunctionPtr<Scalar> f1, FunctionPtr<Scalar> f2, FunctionPtr<Scalar> f3);
-    VectorizedFunction(FunctionPtr<Scalar> f1, FunctionPtr<Scalar> f2, FunctionPtr<Scalar> f3, FunctionPtr<Scalar> f4);
+    VectorizedFunction(const vector< TFunctionPtr<Scalar> > &fxns);
+    VectorizedFunction(TFunctionPtr<Scalar> f1, TFunctionPtr<Scalar> f2);
+    VectorizedFunction(TFunctionPtr<Scalar> f1, TFunctionPtr<Scalar> f2, TFunctionPtr<Scalar> f3);
+    VectorizedFunction(TFunctionPtr<Scalar> f1, TFunctionPtr<Scalar> f2, TFunctionPtr<Scalar> f3, TFunctionPtr<Scalar> f4);
     void values(Intrepid::FieldContainer<Scalar> &values, BasisCachePtr basisCache);
 
     virtual string displayString();

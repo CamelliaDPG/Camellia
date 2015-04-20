@@ -8,22 +8,22 @@ using namespace Intrepid;
 using namespace std;
 
 template <typename Scalar>
-ConstantVectorFunction<Scalar>::ConstantVectorFunction(vector<Scalar> value) : Function<Scalar>(1) {
+ConstantVectorFunction<Scalar>::ConstantVectorFunction(vector<Scalar> value) : TFunction<Scalar>(1) {
   _value = value;
 }
 
 template <typename Scalar>
-FunctionPtr<Scalar> ConstantVectorFunction<Scalar>::x() {
+TFunctionPtr<Scalar> ConstantVectorFunction<Scalar>::x() {
   return Teuchos::rcp( new ConstantScalarFunction<Scalar>( _value[0] ) );
 }
 
 template <typename Scalar>
-FunctionPtr<Scalar> ConstantVectorFunction<Scalar>::y() {
+TFunctionPtr<Scalar> ConstantVectorFunction<Scalar>::y() {
   return Teuchos::rcp( new ConstantScalarFunction<Scalar>( _value[1] ) );
 }
 
 template <typename Scalar>
-FunctionPtr<Scalar> ConstantVectorFunction<Scalar>::z() {
+TFunctionPtr<Scalar> ConstantVectorFunction<Scalar>::z() {
   if (_value.size() > 2) {
     return Teuchos::rcp( new ConstantScalarFunction<Scalar>( _value[2] ) );
   } else {

@@ -10,7 +10,7 @@ using namespace Camellia;
 
 template <typename Scalar>
 Teuchos::RCP<BCFunction<Scalar>> BCFunction<Scalar>::bcFunction(BCPtr bc, int varID, bool isTrace) {
-  FunctionPtr<Scalar> spatiallyFilteredFunction;
+  TFunctionPtr<Scalar> spatiallyFilteredFunction;
   int rank = 0;
   if (! bc->isLegacySubclass()) {
     spatiallyFilteredFunction = bc->getSpatiallyFilteredFunctionForDirichletBC(varID);
@@ -21,7 +21,7 @@ Teuchos::RCP<BCFunction<Scalar>> BCFunction<Scalar>::bcFunction(BCPtr bc, int va
 }
 
 template <typename Scalar>
-BCFunction<Scalar>::BCFunction(BCPtr bc, int varID, bool isTrace, FunctionPtr<Scalar> spatiallyFilteredFunction, int rank) : Function<Scalar>(rank) {
+BCFunction<Scalar>::BCFunction(BCPtr bc, int varID, bool isTrace, TFunctionPtr<Scalar> spatiallyFilteredFunction, int rank) : TFunction<Scalar>(rank) {
   _bc = bc;
   _varID = varID;
   _isTrace = isTrace;
@@ -59,27 +59,27 @@ int BCFunction<Scalar>::varID() {
 }
 
 template <typename Scalar>
-FunctionPtr<Scalar> BCFunction<Scalar>::curl() {
+TFunctionPtr<Scalar> BCFunction<Scalar>::curl() {
   return _spatiallyFilteredFunction->curl();
 }
 
 template <typename Scalar>
-FunctionPtr<Scalar> BCFunction<Scalar>::div() {
+TFunctionPtr<Scalar> BCFunction<Scalar>::div() {
   return _spatiallyFilteredFunction->div();
 }
 
 template <typename Scalar>
-FunctionPtr<Scalar> BCFunction<Scalar>::dx() {
+TFunctionPtr<Scalar> BCFunction<Scalar>::dx() {
   return _spatiallyFilteredFunction->dx();
 }
 
 template <typename Scalar>
-FunctionPtr<Scalar> BCFunction<Scalar>::dy() {
+TFunctionPtr<Scalar> BCFunction<Scalar>::dy() {
   return _spatiallyFilteredFunction->dy();
 }
 
 template <typename Scalar>
-FunctionPtr<Scalar> BCFunction<Scalar>::dz() {
+TFunctionPtr<Scalar> BCFunction<Scalar>::dz() {
   return _spatiallyFilteredFunction->dz();
 }
 

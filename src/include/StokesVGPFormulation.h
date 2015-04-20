@@ -63,7 +63,7 @@ namespace Camellia {
 
     // ! initialize the Solution object(s) using the provided MeshTopology
     void initializeSolution(MeshTopologyPtr meshTopo, int fieldPolyOrder, int delta_k,
-                            FunctionPtr<double> forcingFunction, std::string fileToLoadPrefix);
+                            TFunctionPtr<double> forcingFunction, std::string fileToLoadPrefix);
 
   public:
     StokesVGPFormulation(int spaceDim, bool useConformingTraces, double mu = 1.0,
@@ -76,7 +76,7 @@ namespace Camellia {
     void addWallCondition(SpatialFilterPtr wall);
 
     // ! sets an inflow velocity boundary condition; in 2D and 3D, u should be a vector-valued function.
-    void addInflowCondition(SpatialFilterPtr inflowRegion, FunctionPtr<double> u);
+    void addInflowCondition(SpatialFilterPtr inflowRegion, TFunctionPtr<double> u);
 
     // ! sets an outflow velocity boundary condition
     void addOutflowCondition(SpatialFilterPtr outflowRegion);
@@ -89,11 +89,11 @@ namespace Camellia {
 
     // ! initialize the Solution object(s) using the provided MeshTopology
     void initializeSolution(MeshTopologyPtr meshTopo, int fieldPolyOrder, int delta_k = 1,
-                            FunctionPtr<double> forcingFunction = Teuchos::null);
+                            TFunctionPtr<double> forcingFunction = Teuchos::null);
 
     // ! initialize the Solution object(s) using the provided MeshTopology
     void initializeSolution(std::string filePrefix, int fieldPolyOrder, int delta_k = 1,
-                            FunctionPtr<double> forcingFunction = Teuchos::null);
+                            TFunctionPtr<double> forcingFunction = Teuchos::null);
 
     // ! L^2 norm of the difference in u1, u2, and p from previous time step
     double L2NormOfTimeStep();
@@ -119,7 +119,7 @@ namespace Camellia {
     RefinementStrategyPtr getRefinementStrategy();
 
     // ! Returns an RHSPtr corresponding to the vector forcing function f and the formulation.
-    RHSPtr rhs(FunctionPtr<double> f);
+    RHSPtr rhs(TFunctionPtr<double> f);
 
     // ! Saves the solution(s) and mesh to an HDF5 format.
     void save(std::string prefixString);
@@ -155,8 +155,8 @@ namespace Camellia {
     // ! Returns the sum of the time steps taken thus far.
     double getTime();
 
-    // ! Returns a FunctionPtr<double> which gets updated with the current time.  Useful for setting BCs that vary in time.
-    FunctionPtr<double> getTimeFunction();
+    // ! Returns a TFunctionPtr<double> which gets updated with the current time.  Useful for setting BCs that vary in time.
+    TFunctionPtr<double> getTimeFunction();
 
     // field variables:
     VarPtr sigma(int i);
@@ -171,7 +171,7 @@ namespace Camellia {
     VarPtr tau(int i);
     VarPtr v(int i);
 
-    static FunctionPtr<double> forcingFunction(int spaceDim, double mu, FunctionPtr<double> u, FunctionPtr<double> p);
+    static TFunctionPtr<double> forcingFunction(int spaceDim, double mu, TFunctionPtr<double> u, TFunctionPtr<double> p);
   };
 }
 

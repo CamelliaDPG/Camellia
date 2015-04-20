@@ -86,7 +86,7 @@ namespace Camellia {
     BasisCachePtr basisCache = BasisCache::basisCache1D(-1,1,cubDegree);
 
     for (int i=0; i<=n; i++) {
-      FunctionPtr<double> lobatto = Teuchos::rcp( new LobattoFunction<Scalar>(i, conforming) );
+      TFunctionPtr<double> lobatto = Teuchos::rcp( new LobattoFunction<Scalar>(i, conforming) );
       valuesArray(i) = sqrt((lobatto*lobatto)->integrate(basisCache));
     }
   }

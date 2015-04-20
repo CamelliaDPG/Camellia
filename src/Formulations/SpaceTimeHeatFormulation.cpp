@@ -60,9 +60,9 @@ SpaceTimeHeatFormulation::SpaceTimeHeatFormulation(int spaceDim, double epsilon,
 
   u_hat = _vf.traceVar(S_U_HAT, 1.0 * u, uHatSpace);
 
-  FunctionPtr<double> n_x = Function<double>::normal(); // spatial normal
-  FunctionPtr<double> n_x_parity = n_x * Function<double>::sideParity();
-  FunctionPtr<double> n_xt = Function<double>::normalSpaceTime();
+  TFunctionPtr<double> n_x = TFunction<double>::normal(); // spatial normal
+  TFunctionPtr<double> n_x_parity = n_x * TFunction<double>::sideParity();
+  TFunctionPtr<double> n_xt = TFunction<double>::normalSpaceTime();
 
   LinearTermPtr sigma_n_lt;
   if (spaceDim == 1)
@@ -113,8 +113,8 @@ BFPtr SpaceTimeHeatFormulation::bf() {
   return _bf;
 }
 
-FunctionPtr<double> SpaceTimeHeatFormulation::forcingFunction(int spaceDim, double epsilon, FunctionPtr<double> u_exact) {
-  FunctionPtr<double> f = u_exact->dt() - epsilon * u_exact->dx()->dx();
+TFunctionPtr<double> SpaceTimeHeatFormulation::forcingFunction(int spaceDim, double epsilon, TFunctionPtr<double> u_exact) {
+  TFunctionPtr<double> f = u_exact->dt() - epsilon * u_exact->dx()->dx();
   if (spaceDim > 1) f = f - epsilon * u_exact->dy()->dy();
   if (spaceDim > 2) f = f - epsilon * u_exact->dz()->dz();
 
@@ -122,17 +122,17 @@ FunctionPtr<double> SpaceTimeHeatFormulation::forcingFunction(int spaceDim, doub
 }
 
 void SpaceTimeHeatFormulation::initializeSolution(MeshTopologyPtr meshTopo, int fieldPolyOrder, int delta_k,
-                                                  FunctionPtr<double> forcingFunction) {
+                                                  TFunctionPtr<double> forcingFunction) {
   this->initializeSolution(meshTopo, fieldPolyOrder, delta_k, forcingFunction, "");
 }
 
 void SpaceTimeHeatFormulation::initializeSolution(std::string filePrefix, int fieldPolyOrder, int delta_k,
-                                              FunctionPtr<double> forcingFunction) {
+                                              TFunctionPtr<double> forcingFunction) {
   this->initializeSolution(Teuchos::null, fieldPolyOrder, delta_k, forcingFunction, filePrefix);
 }
 
 void SpaceTimeHeatFormulation::initializeSolution(MeshTopologyPtr meshTopo, int fieldPolyOrder, int delta_k,
-                                                  FunctionPtr<double> forcingFunction, string savedSolutionAndMeshPrefix) {
+                                                  TFunctionPtr<double> forcingFunction, string savedSolutionAndMeshPrefix) {
   BCPtr bc = BC::bc();
 
   vector<int> H1Order(2);
@@ -178,7 +178,7 @@ void SpaceTimeHeatFormulation::refine() {
   _refinementStrategy->refine();
 }
 
-RHSPtr SpaceTimeHeatFormulation::rhs(FunctionPtr<double> f) {
+RHSPtr SpaceTimeHeatFormulation::rhs(TFunctionPtr<double> f) {
   RHSPtr rhs = RHS::rhs();
 
   VarPtr v = this->v();

@@ -70,7 +70,7 @@ namespace Camellia {
     vector< SolutionPtr<double> > _solutions;
     vector< SolutionPtr<double> > _bestApproximations;
 
-    map< int, FunctionPtr<double> > _exactSolutionFunctions;
+    map< int, TFunctionPtr<double> > _exactSolutionFunctions;
 
     SolutionPtr<double> _fineZeroSolution;
     bool _randomRefinements;

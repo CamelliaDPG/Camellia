@@ -263,7 +263,7 @@ class MeshPartitionPolicy;
   //
   //  void getPatchBasisOrdering(DofOrderingPtr &originalChildOrdering, ElementPtr child, int sideIndex);
 
-    FunctionPtr<double> getTransformationFunction(); // will be NULL for meshes without edge curves defined
+    TFunctionPtr<double> getTransformationFunction(); // will be NULL for meshes without edge curves defined
 
     // method signature inherited from RefinementObserver:
     void hRefine(const set<GlobalIndexType> &cellIDs, Teuchos::RCP<RefinementPattern> refPattern);

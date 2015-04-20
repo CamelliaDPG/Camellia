@@ -31,7 +31,7 @@
 using namespace Intrepid;
 using namespace Camellia;
 
-void Projector::projectFunctionOntoBasis(FieldContainer<double> &basisCoefficients, FunctionPtr<double> fxn,
+void Projector::projectFunctionOntoBasis(FieldContainer<double> &basisCoefficients, TFunctionPtr<double> fxn,
                                          BasisPtr basis, BasisCachePtr basisCache, IPPtr ip, VarPtr v,
                                          set<int> fieldIndicesToSkip) {
   CellTopoPtr cellTopo = basis->domainTopology();
@@ -179,7 +179,7 @@ void Projector::projectFunctionOntoBasis(FieldContainer<double> &basisCoefficien
   }
 }
 
-void Projector::projectFunctionOntoBasis(FieldContainer<double> &basisCoefficients, FunctionPtr<double> fxn,
+void Projector::projectFunctionOntoBasis(FieldContainer<double> &basisCoefficients, TFunctionPtr<double> fxn,
                                          BasisPtr basis, BasisCachePtr basisCache) {
   VarFactory varFactory;
   VarPtr var;
@@ -203,7 +203,7 @@ void Projector::projectFunctionOntoBasis(FieldContainer<double> &basisCoefficien
   projectFunctionOntoBasis(basisCoefficients, fxn, basis, basisCache, ip, var);
 }
 
-void Projector::projectFunctionOntoBasisInterpolating(FieldContainer<double> &basisCoefficients, FunctionPtr<double> fxn,
+void Projector::projectFunctionOntoBasisInterpolating(FieldContainer<double> &basisCoefficients, TFunctionPtr<double> fxn,
                                                       BasisPtr basis, BasisCachePtr domainBasisCache) {
   basisCoefficients.initialize(0);
   CellTopoPtr domainTopo = basis->domainTopology();
@@ -234,8 +234,8 @@ void Projector::projectFunctionOntoBasisInterpolating(FieldContainer<double> &ba
   }
 
   for (int d=0; d<=domainDim; d++) {
-    FunctionPtr<double> projectionThusFar = BasisSumFunction::basisSumFunction(basis, basisCoefficients);
-    FunctionPtr<double> fxnToApproximate = fxn - projectionThusFar;
+    TFunctionPtr<double> projectionThusFar = BasisSumFunction::basisSumFunction(basis, basisCoefficients);
+    TFunctionPtr<double> fxnToApproximate = fxn - projectionThusFar;
     int subcellCount = domainTopo->getSubcellCount(d);
     for (int subcord=0; subcord<subcellCount; subcord++) {
       set<int> subcellDofOrdinals = basis->dofOrdinalsForSubcell(d, subcord);

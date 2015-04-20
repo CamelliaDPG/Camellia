@@ -107,7 +107,7 @@ namespace {
     }
   }
 
-  void testProjectTraceOnTensorMesh(CellTopoPtr spaceTopo, int H1Order, FunctionPtr<double> f, VarType traceOrFlux,
+  void testProjectTraceOnTensorMesh(CellTopoPtr spaceTopo, int H1Order, FunctionPtr f, VarType traceOrFlux,
                                     Teuchos::FancyOStream &out, bool &success) {
     CellTopoPtr spaceTimeTopo = CellTopology::cellTopology(spaceTopo->getShardsTopology(), spaceTopo->getTensorialDegree() + 1);
 
@@ -137,7 +137,7 @@ namespace {
     MeshPtr mesh = Teuchos::rcp( new Mesh (meshTopo, bf, H1Order, pToAdd) );
 
     SolutionPtr<double> soln = Solution<double>::solution(mesh);
-    map<int, FunctionPtr<double> > functionMap;
+    map<int, FunctionPtr > functionMap;
     functionMap[uhat->ID()] = f;
 
     soln->projectOntoMesh(functionMap);
@@ -185,16 +185,16 @@ namespace {
   TEUCHOS_UNIT_TEST( Solution, ProjectTraceOnOneElementTensorMesh1D )
   {
     int H1Order = 2;
-    FunctionPtr<double> f = Function<double>::xn(1);
+    FunctionPtr f = Function::xn(1);
     testProjectTraceOnTensorMesh(CellTopology::line(), H1Order, f, TRACE, out, success);
   }
 
   TEUCHOS_UNIT_TEST( Solution, ProjectFluxOnOneElementTensorMesh1D )
   {
     int H1Order = 3;
-    FunctionPtr<double> n = Function<double>::normalSpaceTime();
-    FunctionPtr<double> parity = Function<double>::sideParity();
-    FunctionPtr<double> f = Function<double>::xn(2) * n->x() * parity + Function<double>::yn(1) * n->y() * parity;
+    FunctionPtr n = Function::normalSpaceTime();
+    FunctionPtr parity = Function::sideParity();
+    FunctionPtr f = Function::xn(2) * n->x() * parity + Function::yn(1) * n->y() * parity;
     testProjectTraceOnTensorMesh(CellTopology::line(), H1Order, f, FLUX, out, success);
   }
 
@@ -257,11 +257,11 @@ namespace {
 
     SolutionPtr<double> spaceTimeSolution = Solution<double>::solution(spaceTimeMesh);
 
-    FunctionPtr<double> n = Function<double>::normalSpaceTime();
-    FunctionPtr<double> parity = Function<double>::sideParity();
-    FunctionPtr<double> f = Function<double>::xn(2) * n->x() * parity + Function<double>::yn(1) * n->y() * parity;
+    FunctionPtr n = Function::normalSpaceTime();
+    FunctionPtr parity = Function::sideParity();
+    FunctionPtr f = Function::xn(2) * n->x() * parity + Function::yn(1) * n->y() * parity;
 
-    map<int, FunctionPtr<double> > functionMap;
+    map<int, FunctionPtr > functionMap;
 
     functionMap[uhat->ID()] = f;
     spaceTimeSolution->projectOntoMesh(functionMap);
@@ -276,13 +276,13 @@ namespace {
 //    }
 
     double tol = 1e-14;
-    for (map<int, FunctionPtr<double> >::iterator entryIt = functionMap.begin(); entryIt != functionMap.end(); entryIt++) {
+    for (map<int, FunctionPtr >::iterator entryIt = functionMap.begin(); entryIt != functionMap.end(); entryIt++) {
       int trialID = entryIt->first;
       VarPtr trialVar = varFactory.trial(trialID);
-      FunctionPtr<double> f_expected = entryIt->second;
-      FunctionPtr<double> f_actual = Function<double>::solution(trialVar, spaceTimeSolution);
+      FunctionPtr f_expected = entryIt->second;
+      FunctionPtr f_actual = Function::solution(trialVar, spaceTimeSolution);
       if (trialVar->varType() == FLUX) {
-        // then Function<double>::solution() will have included a parity weight, basically on the idea that we're also multiplying by normals
+        // then Function::solution() will have included a parity weight, basically on the idea that we're also multiplying by normals
         // in our usage of the solution data.  (It may be that this is not the best way to do this.)
 
         // For this test, though, we want to reverse that:
@@ -328,7 +328,7 @@ namespace {
 
 //    map<GlobalIndexType,GlobalIndexType> cellMap_t0, cellMap_t1;
 //    MeshPtr meshSlice_t0 = MeshTools::timeSliceMesh(spaceTimeMesh, 0, cellMap_t0, H1Order);
-//    FunctionPtr<double> sliceFunction_t0 = MeshTools::timeSliceFunction(spaceTimeMesh, cellMap_t0, Function<double>::xn(1), 0);
+//    FunctionPtr sliceFunction_t0 = MeshTools::timeSliceFunction(spaceTimeMesh, cellMap_t0, Function::xn(1), 0);
 //    HDF5Exporter exporter0(meshSlice_t0, "Function1D_t0");
 //    exporter0.exportFunction(sliceFunction_t0, "x");
   }
@@ -420,26 +420,26 @@ namespace {
 
     SolutionPtr<double> spaceTimeSolution = Teuchos::rcp( new Solution<double>(spaceTimeMesh) );
 
-    FunctionPtr<double> n = Function<double>::normalSpaceTime();
-    FunctionPtr<double> parity = Function<double>::sideParity();
-    FunctionPtr<double> f_flux = Function<double>::xn(2) * n->x() * parity + Function<double>::yn(1) * n->y() * parity + Function<double>::zn(1) * n->z() * parity;
+    FunctionPtr n = Function::normalSpaceTime();
+    FunctionPtr parity = Function::sideParity();
+    FunctionPtr f_flux = Function::xn(2) * n->x() * parity + Function::yn(1) * n->y() * parity + Function::zn(1) * n->z() * parity;
 
-    map<int, FunctionPtr<double> > functionMap;
-    functionMap[uhat->ID()] = Function<double>::xn(1);
+    map<int, FunctionPtr > functionMap;
+    functionMap[uhat->ID()] = Function::xn(1);
     functionMap[fhat->ID()] = f_flux;
-    functionMap[u->ID()] = Function<double>::xn(1);
-    functionMap[sigma->ID()] = Function<double>::vectorize(Function<double>::xn(1), Function<double>::yn(1));
+    functionMap[u->ID()] = Function::xn(1);
+    functionMap[sigma->ID()] = Function::vectorize(Function::xn(1), Function::yn(1));
     spaceTimeSolution->projectOntoMesh(functionMap);
 
     double tol = 1e-14;
-    for (map<int, FunctionPtr<double> >::iterator entryIt = functionMap.begin(); entryIt != functionMap.end(); entryIt++) {
+    for (map<int, FunctionPtr >::iterator entryIt = functionMap.begin(); entryIt != functionMap.end(); entryIt++) {
       int trialID = entryIt->first;
       VarPtr trialVar = varFactory.trial(trialID);
-      FunctionPtr<double> f_expected = entryIt->second;
-      FunctionPtr<double> f_actual = Function<double>::solution(trialVar, spaceTimeSolution);
+      FunctionPtr f_expected = entryIt->second;
+      FunctionPtr f_actual = Function::solution(trialVar, spaceTimeSolution);
 
       if (trialVar->varType() == FLUX) {
-        // then Function<double>::solution() will have included a parity weight, basically on the idea that we're also multiplying by normals
+        // then Function::solution() will have included a parity weight, basically on the idea that we're also multiplying by normals
         // in our usage of the solution data.  (It may be that this is not the best way to do this.)
 
         // For this test, though, we want to reverse that:
@@ -548,26 +548,26 @@ namespace {
 
     SolutionPtr<double> spaceTimeSolution = Teuchos::rcp( new Solution<double>(spaceTimeMesh) );
 
-    FunctionPtr<double> n = Function<double>::normalSpaceTime();
-    FunctionPtr<double> parity = Function<double>::sideParity();
-    FunctionPtr<double> f_flux = Function<double>::xn(2) * n->x() * parity + Function<double>::yn(1) * n->y() * parity + Function<double>::zn(1) * n->z() * parity;
+    FunctionPtr n = Function::normalSpaceTime();
+    FunctionPtr parity = Function::sideParity();
+    FunctionPtr f_flux = Function::xn(2) * n->x() * parity + Function::yn(1) * n->y() * parity + Function::zn(1) * n->z() * parity;
 
-    map<int, FunctionPtr<double> > functionMap;
-    functionMap[uhat->ID()] = Function<double>::xn(1);
+    map<int, FunctionPtr > functionMap;
+    functionMap[uhat->ID()] = Function::xn(1);
     functionMap[fhat->ID()] = f_flux;
-    functionMap[u->ID()] = Function<double>::xn(1);
-    functionMap[sigma->ID()] = Function<double>::vectorize(Function<double>::xn(1), Function<double>::yn(1), Function<double>::zn(1));
+    functionMap[u->ID()] = Function::xn(1);
+    functionMap[sigma->ID()] = Function::vectorize(Function::xn(1), Function::yn(1), Function::zn(1));
     spaceTimeSolution->projectOntoMesh(functionMap);
 
     double tol = 1e-14;
-    for (map<int, FunctionPtr<double> >::iterator entryIt = functionMap.begin(); entryIt != functionMap.end(); entryIt++) {
+    for (map<int, FunctionPtr >::iterator entryIt = functionMap.begin(); entryIt != functionMap.end(); entryIt++) {
       int trialID = entryIt->first;
       VarPtr trialVar = varFactory.trial(trialID);
-      FunctionPtr<double> f_expected = entryIt->second;
-      FunctionPtr<double> f_actual = Function<double>::solution(trialVar, spaceTimeSolution);
+      FunctionPtr f_expected = entryIt->second;
+      FunctionPtr f_actual = Function::solution(trialVar, spaceTimeSolution);
 
       if (trialVar->varType() == FLUX) {
-        // then Function<double>::solution() will have included a parity weight, basically on the idea that we're also multiplying by normals
+        // then Function::solution() will have included a parity weight, basically on the idea that we're also multiplying by normals
         // in our usage of the solution data.  (It may be that this is not the best way to do this.)
 
         // For this test, though, we want to reverse that:

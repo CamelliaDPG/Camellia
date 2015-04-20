@@ -5,24 +5,24 @@
 using namespace Camellia;
 using namespace Intrepid;
 
-UnitNormalFunction::UnitNormalFunction(int comp, bool spaceTime) : Function<double>( (comp==-1)? 1 : 0) {
+UnitNormalFunction::UnitNormalFunction(int comp, bool spaceTime) : TFunction<double>( (comp==-1)? 1 : 0) {
   _comp = comp;
   _spaceTime = spaceTime;
 }
 
-FunctionPtr<double> UnitNormalFunction::x() {
+TFunctionPtr<double> UnitNormalFunction::x() {
   return Teuchos::rcp( new UnitNormalFunction(0,_spaceTime) );
 }
 
-FunctionPtr<double> UnitNormalFunction::y() {
+TFunctionPtr<double> UnitNormalFunction::y() {
   return Teuchos::rcp( new UnitNormalFunction(1,_spaceTime) );
 }
 
-FunctionPtr<double> UnitNormalFunction::z() {
+TFunctionPtr<double> UnitNormalFunction::z() {
   return Teuchos::rcp( new UnitNormalFunction(2,_spaceTime) );
 }
 
-FunctionPtr<double> UnitNormalFunction::t() {
+TFunctionPtr<double> UnitNormalFunction::t() {
   return Teuchos::rcp( new UnitNormalFunction(-2,_spaceTime) );
 }
 

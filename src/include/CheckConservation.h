@@ -10,7 +10,7 @@
 #include <Teuchos_Tuple.hpp>
 
 namespace Camellia {
-  Teuchos::Tuple<double, 3> checkConservation(FunctionPtr<double> flux, FunctionPtr<double> source, Teuchos::RCP<Mesh> mesh, int cubatureEnrichment = 0)
+  Teuchos::Tuple<double, 3> checkConservation(TFunctionPtr<double> flux, TFunctionPtr<double> source, Teuchos::RCP<Mesh> mesh, int cubatureEnrichment = 0)
   {
     double maxMassFluxIntegral = 0.0;
     double totalMassFlux = 0.0;
@@ -45,7 +45,7 @@ namespace Camellia {
     return fluxImbalances;
   }
 
-  double computeFluxOverElementSides(FunctionPtr<double> flux, Teuchos::RCP<Mesh> mesh, vector< pair<ElementPtr, int> > originalElemFaces, int cubatureEnrichment=0)
+  double computeFluxOverElementSides(TFunctionPtr<double> flux, Teuchos::RCP<Mesh> mesh, vector< pair<ElementPtr, int> > originalElemFaces, int cubatureEnrichment=0)
   {
      double totalMassFlux = 0.0;
      for (vector< pair<ElementPtr, int> >::iterator origIt = originalElemFaces.begin(); origIt != originalElemFaces.end(); ++origIt)

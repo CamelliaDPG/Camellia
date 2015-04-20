@@ -13,7 +13,7 @@
 
 namespace Camellia {
   template <typename Scalar>
-  class SimpleVectorFunction : public Function<Scalar> {
+  class SimpleVectorFunction : public TFunction<Scalar> {
   public:
     SimpleVectorFunction();
     virtual ~SimpleVectorFunction() {}

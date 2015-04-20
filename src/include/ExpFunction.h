@@ -16,27 +16,27 @@ namespace Camellia {
   class Exp_x : public SimpleFunction<double> {
   public:
     double value(double x, double y);
-    FunctionPtr<double> dx();
-    FunctionPtr<double> dy();
-    FunctionPtr<double> dz();
+    TFunctionPtr<double> dx();
+    TFunctionPtr<double> dy();
+    TFunctionPtr<double> dz();
     std::string displayString();
   };
 
   class Exp_y : public SimpleFunction<double> {
   public:
     double value(double x, double y);
-    FunctionPtr<double> dx();
-    FunctionPtr<double> dy();
-    FunctionPtr<double> dz();
+    TFunctionPtr<double> dx();
+    TFunctionPtr<double> dy();
+    TFunctionPtr<double> dz();
     std::string displayString();
   };
 
   class Exp_z : public SimpleFunction<double> {
   public:
     double value(double x, double y, double z);
-    FunctionPtr<double> dx();
-    FunctionPtr<double> dy();
-    FunctionPtr<double> dz();
+    TFunctionPtr<double> dx();
+    TFunctionPtr<double> dy();
+    TFunctionPtr<double> dz();
     std::string displayString();
   };
 
@@ -45,8 +45,8 @@ namespace Camellia {
   public:
     Exp_ax(double a);
     double value(double x, double y);
-    FunctionPtr<double> dx();
-    FunctionPtr<double> dy();
+    TFunctionPtr<double> dx();
+    TFunctionPtr<double> dy();
     std::string displayString();
   };
 
@@ -55,8 +55,8 @@ namespace Camellia {
   public:
     Exp_ay(double a);
     double value(double x, double y);
-    FunctionPtr<double> dx();
-    FunctionPtr<double> dy();
+    TFunctionPtr<double> dx();
+    TFunctionPtr<double> dy();
     string displayString();
   };
 }

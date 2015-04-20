@@ -25,7 +25,7 @@ namespace {
 
     IPPtr ip = bf->l2Norm();
 
-    FunctionPtr<double> weight = Function<double>::xn(1);
+    FunctionPtr weight = Function::xn(1);
     LinearTermPtr lt = weight * form.q();
     // Riesz rep should be simply (weight * q) (since the ip is (q,q) ).
 
@@ -39,9 +39,9 @@ namespace {
 
     rieszRep->computeRieszRep();
 
-    FunctionPtr<double> repFxn = RieszRep::repFunction(form.q(), rieszRep);
+    FunctionPtr repFxn = RieszRep::repFunction(form.q(), rieszRep);
 
-    FunctionPtr<double> expectedRepFxn = weight;
+    FunctionPtr expectedRepFxn = weight;
 
     double err = (repFxn - expectedRepFxn)->l2norm(mesh);
 

@@ -7,7 +7,7 @@ using namespace Intrepid;
 using namespace std;
 
 template <typename Scalar>
-SimpleVectorFunction<Scalar>::SimpleVectorFunction() : Function<Scalar>(1) {}
+SimpleVectorFunction<Scalar>::SimpleVectorFunction() : TFunction<Scalar>(1) {}
 
 template <typename Scalar>
 vector<Scalar> SimpleVectorFunction<Scalar>::value(double x) {

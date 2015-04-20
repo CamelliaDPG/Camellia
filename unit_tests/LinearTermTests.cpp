@@ -43,7 +43,7 @@ namespace {
     double epsilon = 1.0;
     SpaceTimeHeatFormulation form(spaceDim, epsilon);
     VarPtr v = form.v();
-    FunctionPtr<double> f = Function<double>::xn(1);
+    FunctionPtr f = Function::xn(1);
 
     LinearTermPtr lt = 1.0 * v->dt();
 
@@ -64,9 +64,9 @@ namespace {
     double epsilon = 1.0;
     SpaceTimeHeatFormulation form(spaceDim, epsilon);
     VarPtr v = form.v();
-    FunctionPtr<double> f = Function<double>::xn(1);
+    FunctionPtr f = Function::xn(1);
 
-    FunctionPtr<double> n_xt = Function<double>::normalSpaceTime();
+    FunctionPtr n_xt = Function::normalSpaceTime();
 
     LinearTermPtr lt = -f * v->dt() + (f * v) * n_xt->t();
 

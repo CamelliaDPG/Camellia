@@ -85,7 +85,7 @@ namespace Camellia {
     Intrepid::FieldContainer<double> _cellSideParities;
     Intrepid::FieldContainer<double> _physicalCellNodes;
 
-    FunctionPtr<double> _transformationFxn;
+    TFunctionPtr<double> _transformationFxn;
     bool _composeTransformationFxnWithMeshTransformation;
     // bool: compose with existing ref-to-mesh-cell transformation. (false means that the function goes from ref to the physical geometry;
     //                                                                true means it goes from the straight-edge mesh to the curvilinear one)
@@ -252,7 +252,7 @@ namespace Camellia {
 
     void setMaxCubatureDegree(int value);
 
-    void setTransformationFunction(FunctionPtr<double> fxn, bool composeWithMeshTransformation = true);
+    void setTransformationFunction(TFunctionPtr<double> fxn, bool composeWithMeshTransformation = true);
 
     // static convenience constructors:
     static BasisCachePtr parametric1DCache(int cubatureDegree);

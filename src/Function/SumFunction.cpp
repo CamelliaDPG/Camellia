@@ -6,7 +6,7 @@ using namespace Camellia;
 using namespace Intrepid;
 
 template <typename Scalar>
-SumFunction<Scalar>::SumFunction(FunctionPtr<Scalar> f1, FunctionPtr<Scalar> f2) : Function<Scalar>(f1->rank()) {
+SumFunction<Scalar>::SumFunction(TFunctionPtr<Scalar> f1, TFunctionPtr<Scalar> f2) : TFunction<Scalar>(f1->rank()) {
   TEUCHOS_TEST_FOR_EXCEPTION( f1->rank() != f2->rank(), std::invalid_argument, "summands must be of like rank.");
   _f1 = f1;
   _f2 = f2;
@@ -33,7 +33,7 @@ void SumFunction<Scalar>::values(Intrepid::FieldContainer<Scalar> &values, Basis
 }
 
 template <typename Scalar>
-FunctionPtr<Scalar> SumFunction<Scalar>::x() {
+TFunctionPtr<Scalar> SumFunction<Scalar>::x() {
   if ( (_f1->x() == Teuchos::null) || (_f2->x() == Teuchos::null) ) {
     return this->null();
   }
@@ -41,21 +41,21 @@ FunctionPtr<Scalar> SumFunction<Scalar>::x() {
 }
 
 template <typename Scalar>
-FunctionPtr<Scalar> SumFunction<Scalar>::y() {
+TFunctionPtr<Scalar> SumFunction<Scalar>::y() {
   if ( (_f1->y() == Teuchos::null) || (_f2->y() == Teuchos::null) ) {
     return this->null();
   }
   return _f1->y() + _f2->y();
 }
 template <typename Scalar>
-FunctionPtr<Scalar> SumFunction<Scalar>::z() {
+TFunctionPtr<Scalar> SumFunction<Scalar>::z() {
   if ( (_f1->z() == Teuchos::null) || (_f2->z() == Teuchos::null) ) {
     return Teuchos::null;
   }
   return _f1->z() + _f2->z();
 }
 template <typename Scalar>
-FunctionPtr<Scalar> SumFunction<Scalar>::t() {
+TFunctionPtr<Scalar> SumFunction<Scalar>::t() {
   if ( (_f1->t() == Teuchos::null) || (_f2->t() == Teuchos::null) ) {
     return Teuchos::null;
   }
@@ -63,7 +63,7 @@ FunctionPtr<Scalar> SumFunction<Scalar>::t() {
 }
 
 template <typename Scalar>
-FunctionPtr<Scalar> SumFunction<Scalar>::dx() {
+TFunctionPtr<Scalar> SumFunction<Scalar>::dx() {
   if ( (_f1->dx() == Teuchos::null) || (_f2->dx() == Teuchos::null) ) {
     return this->null();
   }
@@ -71,7 +71,7 @@ FunctionPtr<Scalar> SumFunction<Scalar>::dx() {
 }
 
 template <typename Scalar>
-FunctionPtr<Scalar> SumFunction<Scalar>::dy() {
+TFunctionPtr<Scalar> SumFunction<Scalar>::dy() {
   if ( (_f1->dy() == Teuchos::null) || (_f2->dy() == Teuchos::null) ) {
     return Teuchos::null;
   }
@@ -79,7 +79,7 @@ FunctionPtr<Scalar> SumFunction<Scalar>::dy() {
 }
 
 template <typename Scalar>
-FunctionPtr<Scalar> SumFunction<Scalar>::dz() {
+TFunctionPtr<Scalar> SumFunction<Scalar>::dz() {
   if ( (_f1->dz() == Teuchos::null) || (_f2->dz() == Teuchos::null) ) {
     return Teuchos::null;
   }
@@ -87,7 +87,7 @@ FunctionPtr<Scalar> SumFunction<Scalar>::dz() {
 }
 
 template <typename Scalar>
-FunctionPtr<Scalar> SumFunction<Scalar>::dt() {
+TFunctionPtr<Scalar> SumFunction<Scalar>::dt() {
   if ( (_f1->dt() == Teuchos::null) || (_f2->dt() == Teuchos::null) ) {
     return Teuchos::null;
   }
@@ -95,7 +95,7 @@ FunctionPtr<Scalar> SumFunction<Scalar>::dt() {
 }
 
 template <typename Scalar>
-FunctionPtr<Scalar> SumFunction<Scalar>::grad(int numComponents) {
+TFunctionPtr<Scalar> SumFunction<Scalar>::grad(int numComponents) {
   if ( (_f1->grad(numComponents) == Teuchos::null) || (_f2->grad(numComponents) == Teuchos::null) ) {
     return Teuchos::null;
   } else {
@@ -104,7 +104,7 @@ FunctionPtr<Scalar> SumFunction<Scalar>::grad(int numComponents) {
 }
 
 template <typename Scalar>
-FunctionPtr<Scalar> SumFunction<Scalar>::div() {
+TFunctionPtr<Scalar> SumFunction<Scalar>::div() {
   if ( (_f1->div() == Teuchos::null) || (_f2->div() == Teuchos::null) ) {
     return Teuchos::null;
   } else {

@@ -5,7 +5,7 @@
 using namespace Camellia;
 using namespace Intrepid;
 
-SideParityFunction::SideParityFunction() : Function<double>(0) {
+SideParityFunction::SideParityFunction() : TFunction<double>(0) {
   //  cout << "SideParityFunction constructor.\n";
 }
 

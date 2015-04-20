@@ -55,7 +55,7 @@ FieldContainer<double> GnuPlotUtil::cellCentroids(MeshPtr mesh) {
 }
 
 void GnuPlotUtil::writeComputationalMeshSkeleton(const string &filePath, MeshPtr mesh, bool labelCells, string rgbColor, string title) {
-  FunctionPtr<double> transformationFunction = mesh->getTransformationFunction();
+  TFunctionPtr<double> transformationFunction = mesh->getTransformationFunction();
   if (transformationFunction.get()==NULL) {
     // then the computational and exact meshes are the same: call the other method:
     writeExactMeshSkeleton(filePath,mesh,2,labelCells,rgbColor,title);

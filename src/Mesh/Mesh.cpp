@@ -515,7 +515,7 @@ map<IndexType, GlobalIndexType> Mesh::getGlobalVertexIDs(const FieldContainer<do
   return localToGlobalVertexIndex;
 }
 
-FunctionPtr<double> Mesh::getTransformationFunction() {
+TFunctionPtr<double> Mesh::getTransformationFunction() {
   // will be NULL for meshes without edge curves defined
 
   // for now, we recompute the transformation function each time the edge curves get updated

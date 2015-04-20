@@ -6,7 +6,7 @@ using namespace Camellia;
 using namespace Intrepid;
 
 template <typename Scalar>
-QuotientFunction<Scalar>::QuotientFunction(FunctionPtr<Scalar> f, FunctionPtr<Scalar> scalarDivisor) : Function<Scalar>( f->rank() ) {
+QuotientFunction<Scalar>::QuotientFunction(TFunctionPtr<Scalar> f, TFunctionPtr<Scalar> scalarDivisor) : TFunction<Scalar>( f->rank() ) {
   if ( scalarDivisor->rank() != 0 ) {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unsupported rank combination.");
   }
@@ -37,7 +37,7 @@ void QuotientFunction<Scalar>::values(Intrepid::FieldContainer<Scalar> &values, 
 }
 
 template <typename Scalar>
-FunctionPtr<Scalar> QuotientFunction<Scalar>::dx() {
+TFunctionPtr<Scalar> QuotientFunction<Scalar>::dx() {
   if ( (_f->dx().get() == NULL) || (_scalarDivisor->dx().get() == NULL) ) {
     return this->null();
   }
@@ -46,7 +46,7 @@ FunctionPtr<Scalar> QuotientFunction<Scalar>::dx() {
 }
 
 template <typename Scalar>
-FunctionPtr<Scalar> QuotientFunction<Scalar>::dy() {
+TFunctionPtr<Scalar> QuotientFunction<Scalar>::dy() {
   if ( (_f->dy().get() == NULL) || (_scalarDivisor->dy().get() == NULL) ) {
     return this->null();
   }
@@ -55,7 +55,7 @@ FunctionPtr<Scalar> QuotientFunction<Scalar>::dy() {
 }
 
 template <typename Scalar>
-FunctionPtr<Scalar> QuotientFunction<Scalar>::dz() {
+TFunctionPtr<Scalar> QuotientFunction<Scalar>::dz() {
   if ( (_f->dz().get() == NULL) || (_scalarDivisor->dz().get() == NULL) ) {
     return this->null();
   }
@@ -64,7 +64,7 @@ FunctionPtr<Scalar> QuotientFunction<Scalar>::dz() {
 }
 
 template <typename Scalar>
-FunctionPtr<Scalar> QuotientFunction<Scalar>::dt() {
+TFunctionPtr<Scalar> QuotientFunction<Scalar>::dt() {
   if ( (_f->dt().get() == NULL) || (_scalarDivisor->dt().get() == NULL) ) {
     return this->null();
   }

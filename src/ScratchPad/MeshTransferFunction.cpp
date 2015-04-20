@@ -13,8 +13,8 @@ using namespace std;
 using namespace Intrepid;
 using namespace Camellia;
 
-MeshTransferFunction::MeshTransferFunction(FunctionPtr<double> originalFunction, MeshPtr originalMesh,
-                                           MeshPtr newMesh, double interface_t) : Function<double>(originalFunction->rank()) {
+MeshTransferFunction::MeshTransferFunction(TFunctionPtr<double> originalFunction, MeshPtr originalMesh,
+                                           MeshPtr newMesh, double interface_t) : TFunction<double>(originalFunction->rank()) {
   _originalFunction = originalFunction;
   _originalMesh = originalMesh;
   _newMesh = newMesh;

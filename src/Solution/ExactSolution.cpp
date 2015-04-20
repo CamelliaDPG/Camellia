@@ -337,10 +337,10 @@ int ExactSolution::H1Order() { // return -1 for non-polynomial solutions
   return _H1Order;
 }
 
-const map< int, FunctionPtr<double> > ExactSolution::exactFunctions() {
+const map< int, TFunctionPtr<double> > ExactSolution::exactFunctions() {
   return _exactFunctions;
 }
 
-void ExactSolution::setSolutionFunction( VarPtr var, FunctionPtr<double> varFunction ) {
+void ExactSolution::setSolutionFunction( VarPtr var, TFunctionPtr<double> varFunction ) {
   _exactFunctions[var->ID()] = varFunction;
 }

@@ -13,7 +13,7 @@
 #include "Basis.h"
 
 namespace Camellia {
-  class BasisSumFunction : public Function<double> {
+  class BasisSumFunction : public TFunction<double> {
    private:
     BasisPtr _basis;
     Intrepid::FieldContainer<double> _coefficients;
@@ -26,17 +26,17 @@ namespace Camellia {
                         Camellia::EOperator op = OP_VALUE, bool boundaryValueOnly = false);
     void values(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache);
 
-    FunctionPtr<double> x();
-    FunctionPtr<double> y();
-    FunctionPtr<double> z();
+    TFunctionPtr<double> x();
+    TFunctionPtr<double> y();
+    TFunctionPtr<double> z();
 
-    FunctionPtr<double> dx();
-    FunctionPtr<double> dy();
-    FunctionPtr<double> dz();
+    TFunctionPtr<double> dx();
+    TFunctionPtr<double> dy();
+    TFunctionPtr<double> dz();
 
     bool boundaryValueOnly();
 
-    static FunctionPtr<double> basisSumFunction(BasisPtr basis, const Intrepid::FieldContainer<double> &basisCoefficients);
+    static TFunctionPtr<double> basisSumFunction(BasisPtr basis, const Intrepid::FieldContainer<double> &basisCoefficients);
   };
 }
 

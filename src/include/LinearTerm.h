@@ -33,7 +33,7 @@ class Epetra_CrsMatrix;
 namespace Camellia {
 
   class LinearTerm {
-    typedef std::pair< FunctionPtr<double>, VarPtr > LinearSummand;
+    typedef std::pair< TFunctionPtr<double>, VarPtr > LinearSummand;
     int _rank; // gets set after first var is added
     std::vector< LinearSummand > _summands;
     std::set<int> _varIDs;
@@ -60,20 +60,20 @@ namespace Camellia {
                    LinearTermPtr otherTerm, DofOrderingPtr otherDofOrdering,
                    BasisCachePtr basisCache, bool forceBoundaryTerm = false, bool sumInto = true);
     void integrate(Epetra_CrsMatrix *valuesCrsMatrix, Intrepid::FieldContainer<double> &valuesFC, DofOrderingPtr thisDofOrdering,
-                   LinearTermPtr otherTerm, VarPtr otherVarID, FunctionPtr<double> fxn,
+                   LinearTermPtr otherTerm, VarPtr otherVarID, TFunctionPtr<double> fxn,
                    BasisCachePtr basisCache, bool forceBoundaryTerm = false);
 
   public: // was protected; changed for debugging (no big deal either way, I think)
     const std::vector< LinearSummand > & summands() const;
   public:
     LinearTerm();
-    LinearTerm(FunctionPtr<double> weight, VarPtr var);
+    LinearTerm(TFunctionPtr<double> weight, VarPtr var);
     LinearTerm(double weight, VarPtr var);
     LinearTerm(std::vector<double> weight, VarPtr var);
     LinearTerm( VarPtr v );
     // copy constructor:
     LinearTerm( const LinearTerm &a );
-    void addVar(FunctionPtr<double> weight, VarPtr var);
+    void addVar(TFunctionPtr<double> weight, VarPtr var);
     void addVar(double weight, VarPtr var);
     void addVar(std::vector<double> vector_weight, VarPtr var);
 
@@ -91,8 +91,8 @@ namespace Camellia {
     void evaluate(Intrepid::FieldContainer<double> &values, SolutionPtr<double> solution, BasisCachePtr basisCache,
                   bool applyCubatureWeights = false);
 
-    FunctionPtr<double> evaluate(const Teuchos::map< int, FunctionPtr<double>> &varFunctions);
-    FunctionPtr<double> evaluate(const Teuchos::map< int, FunctionPtr<double>> &varFunctions, bool boundaryPart);
+    TFunctionPtr<double> evaluate(const Teuchos::map< int, TFunctionPtr<double>> &varFunctions);
+    TFunctionPtr<double> evaluate(const Teuchos::map< int, TFunctionPtr<double>> &varFunctions, bool boundaryPart);
 
     LinearTermPtr getBoundaryOnlyPart();
     LinearTermPtr getNonBoundaryOnlyPart();
@@ -106,7 +106,7 @@ namespace Camellia {
                    LinearTermPtr otherTerm, DofOrderingPtr otherDofOrdering,
                    BasisCachePtr basisCache, bool forceBoundaryTerm = false, bool sumInto = true);
     void integrate(Intrepid::FieldContainer<double> &values, DofOrderingPtr thisDofOrdering,
-                   LinearTermPtr otherTerm, VarPtr otherVarID, FunctionPtr<double> fxn,
+                   LinearTermPtr otherTerm, VarPtr otherVarID, TFunctionPtr<double> fxn,
                    BasisCachePtr basisCache, bool forceBoundaryTerm = false);
 
     // CrsMatrix versions (for the two-LT (matrix) variants of integrate)
@@ -114,7 +114,7 @@ namespace Camellia {
                    LinearTermPtr otherTerm, DofOrderingPtr otherDofOrdering,
                    BasisCachePtr basisCache, bool forceBoundaryTerm = false, bool sumInto = true);
     void integrate(Epetra_CrsMatrix *values, DofOrderingPtr thisDofOrdering,
-                   LinearTermPtr otherTerm, VarPtr otherVarID, FunctionPtr<double> fxn,
+                   LinearTermPtr otherTerm, VarPtr otherVarID, TFunctionPtr<double> fxn,
                    BasisCachePtr basisCache, bool forceBoundaryTerm = false);
 
     // compute the value of linearTerm for non-zero varID at the cubature points, for each basis function in basis
@@ -124,7 +124,7 @@ namespace Camellia {
 
     // compute the value of linearTerm for varID = fxn
     // values shape: (C,P), (C,P,D), or (C,P,D,D)
-    void values(Intrepid::FieldContainer<double> &values, int varID, FunctionPtr<double> fxn, BasisCachePtr basisCache,
+    void values(Intrepid::FieldContainer<double> &values, int varID, TFunctionPtr<double> fxn, BasisCachePtr basisCache,
                 bool applyCubatureWeights, bool naturalBoundaryTermsOnly = false);
 
     int rank() const;  // 0 for scalar, 1 for vector, etc.
@@ -165,8 +165,8 @@ namespace Camellia {
 
   LinearTermPtr operator+(LinearTermPtr a, VarPtr v);
 
-  LinearTermPtr operator*(FunctionPtr<double> f, VarPtr v);
-  LinearTermPtr operator*(VarPtr v, FunctionPtr<double> f);
+  LinearTermPtr operator*(TFunctionPtr<double> f, VarPtr v);
+  LinearTermPtr operator*(VarPtr v, TFunctionPtr<double> f);
 
   LinearTermPtr operator*(double weight, VarPtr v);
 
@@ -176,14 +176,14 @@ namespace Camellia {
 
   LinearTermPtr operator*(VarPtr v, vector<double> weight);
 
-  LinearTermPtr operator*(FunctionPtr<double> f, LinearTermPtr a);
-  LinearTermPtr operator*(LinearTermPtr a, FunctionPtr<double> f);
+  LinearTermPtr operator*(TFunctionPtr<double> f, LinearTermPtr a);
+  LinearTermPtr operator*(LinearTermPtr a, TFunctionPtr<double> f);
 
   LinearTermPtr operator+(VarPtr v1, VarPtr v2);
 
   LinearTermPtr operator/(VarPtr v, double weight);
 
-  LinearTermPtr operator/(VarPtr v, FunctionPtr<double> f);
+  LinearTermPtr operator/(VarPtr v, TFunctionPtr<double> f);
 
   LinearTermPtr operator-(VarPtr v1, VarPtr v2);
 

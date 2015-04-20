@@ -25,10 +25,10 @@ namespace {
   {
     int spaceDim = 2;
 
-    FunctionPtr<double> x = Function<double>::xn(1);
-    FunctionPtr<double> y = Function<double>::yn(1);
-    FunctionPtr<double> z = Function<double>::zn(1);
-    FunctionPtr<double> phi_exact; // want an exactly representable solution with non-trivial psi_n (i.e. grad phi dot n should be non-trivial)
+    FunctionPtr x = Function::xn(1);
+    FunctionPtr y = Function::yn(1);
+    FunctionPtr z = Function::zn(1);
+    FunctionPtr phi_exact; // want an exactly representable solution with non-trivial psi_n (i.e. grad phi dot n should be non-trivial)
     // for now, we just go very simple.  Linear in x,y,z.
     switch (spaceDim) {
       case 1:
@@ -82,7 +82,7 @@ namespace {
 
     // rhs = f * q, where f = \Delta phi
     RHSPtr rhs = RHS::rhs();
-    FunctionPtr<double> f;
+    FunctionPtr f;
     switch (spaceDim) {
       case 1:
         f = phi_exact->dx()->dx();
@@ -116,20 +116,20 @@ namespace {
 
     solution->solve();
 
-    FunctionPtr<double> psi_exact = (spaceDim > 1) ? phi_exact->grad() : phi_exact->dx();
+    FunctionPtr psi_exact = (spaceDim > 1) ? phi_exact->grad() : phi_exact->dx();
 
-    map<int, FunctionPtr<double>> psiMap;
+    map<int, FunctionPtr> psiMap;
     psiMap[psi->ID()] = psi_exact;
 
-    FunctionPtr<double> psi_n_exact = psi_n->termTraced()->evaluate(psiMap);
+    FunctionPtr psi_n_exact = psi_n->termTraced()->evaluate(psiMap);
 
-    FunctionPtr<double> psi_soln = Function<double>::solution(psi, solution);
-    FunctionPtr<double> psi_n_soln = Function<double>::solution(psi_n, solution); // includes (correction for) parity weighting
-    FunctionPtr<double> phi_hat_soln = Function<double>::solution(phi_hat, solution);
+    FunctionPtr psi_soln = Function::solution(psi, solution);
+    FunctionPtr psi_n_soln = Function::solution(psi_n, solution); // includes (correction for) parity weighting
+    FunctionPtr phi_hat_soln = Function::solution(phi_hat, solution);
 
-    FunctionPtr<double> psi_err = psi_exact - psi_soln;
-    FunctionPtr<double> psi_n_err = psi_n_exact - psi_n_soln;
-    FunctionPtr<double> phi_hat_err = phi_exact - phi_hat_soln;
+    FunctionPtr psi_err = psi_exact - psi_soln;
+    FunctionPtr psi_n_err = psi_n_exact - psi_n_soln;
+    FunctionPtr phi_hat_err = phi_exact - phi_hat_soln;
 
     double err_L2 = psi_err->l2norm(mesh);
 
@@ -190,7 +190,7 @@ namespace {
 
       HDF5Exporter fxnExporter(mesh, "fxn");
       vector<string> fxnNames;
-      vector< FunctionPtr<double> > fxns;
+      vector< FunctionPtr > fxns;
       // fields:
       fxnNames.push_back("psi_exact");
       fxns.push_back(psi_exact);

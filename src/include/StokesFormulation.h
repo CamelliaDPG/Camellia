@@ -27,13 +27,13 @@ namespace Camellia {
   class StokesFormulation {
   public:
     virtual BFPtr bf() = 0;
-    virtual RHSPtr rhs(FunctionPtr<double> f1, FunctionPtr<double> f2) = 0;
+    virtual RHSPtr rhs(TFunctionPtr<double> f1, TFunctionPtr<double> f2) = 0;
     // so far, only have support for BCs defined on the entire boundary (i.e. no outflow type conditions)
-    virtual BCPtr bc(FunctionPtr<double> u1, FunctionPtr<double> u2, SpatialFilterPtr entireBoundary) = 0;
+    virtual BCPtr bc(TFunctionPtr<double> u1, TFunctionPtr<double> u2, SpatialFilterPtr entireBoundary) = 0;
     virtual IPPtr graphNorm() = 0;
     virtual void primaryTrialIDs(vector<int> &fieldIDs) = 0; // used for best approximation error TeX output (u1,u2) or (u1,u2,p)
     virtual void trialIDs(vector<int> &fieldIDs, vector<int> &correspondingTraceIDs, vector<string> &fileFriendlyNames) = 0; // corr. ID == -1 if there isn't one
-    virtual Teuchos::RCP<ExactSolution> exactSolution(FunctionPtr<double> u1, FunctionPtr<double> u2, FunctionPtr<double> p,
+    virtual Teuchos::RCP<ExactSolution> exactSolution(TFunctionPtr<double> u1, TFunctionPtr<double> u2, TFunctionPtr<double> p,
                                                       SpatialFilterPtr entireBoundary) = 0;
 
     virtual ~StokesFormulation() {}
@@ -129,24 +129,24 @@ namespace Camellia {
     IPPtr graphNorm() {
       return _graphNorm;
     }
-    RHSPtr rhs(FunctionPtr<double> f1, FunctionPtr<double> f2) {
+    RHSPtr rhs(TFunctionPtr<double> f1, TFunctionPtr<double> f2) {
       RHSPtr rhs = RHS::rhs();
       rhs->addTerm( f1 * v1 + f2 * v2 );
       return rhs;
     }
-    BCPtr bc(FunctionPtr<double> u1_fxn, FunctionPtr<double> u2_fxn, SpatialFilterPtr entireBoundary) {
+    BCPtr bc(TFunctionPtr<double> u1_fxn, TFunctionPtr<double> u2_fxn, SpatialFilterPtr entireBoundary) {
       BCPtr bc = BC::bc();
       bc->addDirichlet(u1hat, entireBoundary, u1_fxn);
       bc->addDirichlet(u2hat, entireBoundary, u2_fxn);
-      FunctionPtr<double> n = Function<double>::normal();
+      TFunctionPtr<double> n = TFunction<double>::normal();
       //    bc->addDirichlet(unhat, entireBoundary, u1_fxn * n->x() + u2_fxn * n->y());
       bc->addZeroMeanConstraint(p);
       return bc;
     }
-    Teuchos::RCP<ExactSolution> exactSolution(FunctionPtr<double> u1_exact, FunctionPtr<double> u2_exact, FunctionPtr<double> p_exact,
+    Teuchos::RCP<ExactSolution> exactSolution(TFunctionPtr<double> u1_exact, TFunctionPtr<double> u2_exact, TFunctionPtr<double> p_exact,
                                               SpatialFilterPtr entireBoundary) {
-      FunctionPtr<double> f1 = p_exact->dx() - _mu * (u1_exact->dx()->dx() + u1_exact->dy()->dy());
-      FunctionPtr<double> f2 = p_exact->dy() - _mu * (u2_exact->dx()->dx() + u2_exact->dy()->dy());
+      TFunctionPtr<double> f1 = p_exact->dx() - _mu * (u1_exact->dx()->dx() + u1_exact->dy()->dy());
+      TFunctionPtr<double> f2 = p_exact->dy() - _mu * (u2_exact->dx()->dx() + u2_exact->dy()->dy());
 
       BCPtr bc = this->bc(u1_exact, u2_exact, entireBoundary);
 
@@ -343,28 +343,28 @@ namespace Camellia {
     IPPtr graphNorm() {
       return _graphNorm;
     }
-    RHSPtr rhs(FunctionPtr<double> f1, FunctionPtr<double> f2) {
+    RHSPtr rhs(TFunctionPtr<double> f1, TFunctionPtr<double> f2) {
       RHSPtr rhs = RHS::rhs();
       rhs->addTerm( f1 * v->x() + f2 * v->y() );
       return rhs;
     }
-    BCPtr bc(FunctionPtr<double> u1_fxn, FunctionPtr<double> u2_fxn, SpatialFilterPtr entireBoundary) {
+    BCPtr bc(TFunctionPtr<double> u1_fxn, TFunctionPtr<double> u2_fxn, SpatialFilterPtr entireBoundary) {
       BCPtr bc = BC::bc();
       if (!_trueTraces) {
         bc->addDirichlet(u1hat, entireBoundary, u1_fxn);
         bc->addDirichlet(u2hat, entireBoundary, u2_fxn);
       } else {
-        FunctionPtr<double> n = Function<double>::normal();
+        TFunctionPtr<double> n = TFunction<double>::normal();
         bc->addDirichlet(u_n,  entireBoundary, u1_fxn * n->x() + u2_fxn * n->y());
         bc->addDirichlet(u_xn, entireBoundary, u1_fxn * n->y() - u2_fxn * n->x());
       }
       bc->addZeroMeanConstraint(p);
       return bc;
     }
-    Teuchos::RCP<ExactSolution> exactSolution(FunctionPtr<double> u1_exact, FunctionPtr<double> u2_exact, FunctionPtr<double> p_exact,
+    Teuchos::RCP<ExactSolution> exactSolution(TFunctionPtr<double> u1_exact, TFunctionPtr<double> u2_exact, TFunctionPtr<double> p_exact,
                                               SpatialFilterPtr entireBoundary) {
-      FunctionPtr<double> f1 = - p_exact->dx() + _mu * (u1_exact->dx()->dx() + u1_exact->dy()->dy());
-      FunctionPtr<double> f2 = - p_exact->dy() + _mu * (u2_exact->dx()->dx() + u2_exact->dy()->dy());
+      TFunctionPtr<double> f1 = - p_exact->dx() + _mu * (u1_exact->dx()->dx() + u1_exact->dy()->dy());
+      TFunctionPtr<double> f2 = - p_exact->dy() + _mu * (u2_exact->dx()->dx() + u2_exact->dy()->dy());
 
       //    cout << "VVP rhs: f_1 = " << f1->displayString() << "; f_2 = " << f2->displayString() << endl;
 
@@ -442,7 +442,7 @@ namespace Camellia {
     VarPtr tau1, tau2, q, v1, v2;
     BFPtr _bf;
     IPPtr _graphNorm;
-    FunctionPtr<double> _mu;
+    TFunctionPtr<double> _mu;
     bool _enriched_velocity;
     bool _scale_sigma_by_mu; // true: sigma = mu * grad u; false: sigma = grad u
 
@@ -477,7 +477,7 @@ namespace Camellia {
       p = varFactory.fieldVar(VGP_P_S);
     }
 
-    void init(FunctionPtr<double> mu, bool enriched_velocity, bool scaleSigmaByMu) {
+    void init(TFunctionPtr<double> mu, bool enriched_velocity, bool scaleSigmaByMu) {
       _mu = mu;
       _enriched_velocity = enriched_velocity;
       _scale_sigma_by_mu = scaleSigmaByMu;
@@ -576,12 +576,12 @@ namespace Camellia {
       return varFactory;
     }
 
-    VGPStokesFormulation(FunctionPtr<double> mu, bool enriched_velocity = false, bool scaleSigmaByMu = true) {
+    VGPStokesFormulation(TFunctionPtr<double> mu, bool enriched_velocity = false, bool scaleSigmaByMu = true) {
       init(mu, enriched_velocity, scaleSigmaByMu);
     }
 
     VGPStokesFormulation(double mu, bool enriched_velocity = false, bool scaleSigmaByMu = true) {
-      init(Function<double>::constant(mu), enriched_velocity, scaleSigmaByMu);
+      init(TFunction<double>::constant(mu), enriched_velocity, scaleSigmaByMu);
     }
 
     BFPtr bf() {
@@ -591,9 +591,9 @@ namespace Camellia {
       return _graphNorm;
     }
     IPPtr scaleCompliantGraphNorm() {
-      FunctionPtr<double> h = Function<double>::h();
+      TFunctionPtr<double> h = TFunction<double>::h();
       IPPtr compliantGraphNorm = Teuchos::rcp( new IP );
-      FunctionPtr<double> scaled_mu = _mu; // for experimenting: this is the factor that comes from the energy norm on the pressure
+      TFunctionPtr<double> scaled_mu = _mu; // for experimenting: this is the factor that comes from the energy norm on the pressure
 
       compliantGraphNorm->addTerm( _mu * v1->dx() + tau1->x() ); // sigma11
       compliantGraphNorm->addTerm( _mu * v1->dy() + tau1->y() ); // sigma12
@@ -635,22 +635,22 @@ namespace Camellia {
       }
       return Teuchos::rcp( (LinearTerm*) NULL );
     }
-    RHSPtr rhs(FunctionPtr<double> f1, FunctionPtr<double> f2) {
+    RHSPtr rhs(TFunctionPtr<double> f1, TFunctionPtr<double> f2) {
       RHSPtr rhs = RHS::rhs();
       rhs->addTerm( f1 * v1 + f2 * v2 );
       return rhs;
     }
-    BCPtr bc(FunctionPtr<double> u1_fxn, FunctionPtr<double> u2_fxn, SpatialFilterPtr entireBoundary) {
+    BCPtr bc(TFunctionPtr<double> u1_fxn, TFunctionPtr<double> u2_fxn, SpatialFilterPtr entireBoundary) {
       BCPtr bc = BC::bc();
       bc->addDirichlet(u1hat, entireBoundary, u1_fxn);
       bc->addDirichlet(u2hat, entireBoundary, u2_fxn);
       bc->addZeroMeanConstraint(p);
       return bc;
     }
-    Teuchos::RCP<ExactSolution> exactSolution(FunctionPtr<double> u1_exact, FunctionPtr<double> u2_exact, FunctionPtr<double> p_exact,
+    Teuchos::RCP<ExactSolution> exactSolution(TFunctionPtr<double> u1_exact, TFunctionPtr<double> u2_exact, TFunctionPtr<double> p_exact,
                                               SpatialFilterPtr entireBoundary) {
-      FunctionPtr<double> f1 = -p_exact->dx() + _mu * (u1_exact->dx()->dx() + u1_exact->dy()->dy());
-      FunctionPtr<double> f2 = -p_exact->dy() + _mu * (u2_exact->dx()->dx() + u2_exact->dy()->dy());
+      TFunctionPtr<double> f1 = -p_exact->dx() + _mu * (u1_exact->dx()->dx() + u1_exact->dy()->dy());
+      TFunctionPtr<double> f2 = -p_exact->dy() + _mu * (u2_exact->dx()->dx() + u2_exact->dy()->dy());
 
       BCPtr bc = this->bc(u1_exact, u2_exact, entireBoundary);
 
@@ -661,11 +661,11 @@ namespace Camellia {
 
       mySolution->setSolutionFunction(p, p_exact);
 
-      FunctionPtr<double> sigma_weight;
+      TFunctionPtr<double> sigma_weight;
       if (_scale_sigma_by_mu) {
         sigma_weight = _mu;
       } else {
-        sigma_weight = Function<double>::constant(1);
+        sigma_weight = TFunction<double>::constant(1);
       }
 
       mySolution->setSolutionFunction(sigma11, sigma_weight * u1_exact->dx());
@@ -760,7 +760,7 @@ namespace Camellia {
     VarPtr tau1, tau2, q, v1, v2;
     BFPtr _bf;
     IPPtr _graphNorm;
-    FunctionPtr<double> _mu;
+    TFunctionPtr<double> _mu;
 
     void initVars() {
       // create the VarPtrs:
@@ -787,7 +787,7 @@ namespace Camellia {
       p = varFactory.fieldVar(VGPF_P_S);
     }
 
-    void init(FunctionPtr<double> mu) {
+    void init(TFunctionPtr<double> mu) {
       _mu = mu;
 
       initVars();
@@ -875,12 +875,12 @@ namespace Camellia {
       return varFactory;
     }
 
-    VGPFStokesFormulation(FunctionPtr<double> mu) {
+    VGPFStokesFormulation(TFunctionPtr<double> mu) {
       init(mu);
     }
 
     VGPFStokesFormulation(double mu) {
-      init(Function<double>::constant(mu));
+      init(TFunction<double>::constant(mu));
     }
 
     BFPtr bf() {
@@ -890,9 +890,9 @@ namespace Camellia {
       return _graphNorm;
     }
     IPPtr scaleCompliantGraphNorm() {
-      FunctionPtr<double> h = Function<double>::h();
+      TFunctionPtr<double> h = TFunction<double>::h();
       IPPtr compliantGraphNorm = IP::ip();
-      FunctionPtr<double> scaled_mu = _mu; // for experimenting: this is the factor that comes from the energy norm on the pressure
+      TFunctionPtr<double> scaled_mu = _mu; // for experimenting: this is the factor that comes from the energy norm on the pressure
 
       compliantGraphNorm->addTerm( _mu * v1->dx() + tau1->x() ); // sigma11
       compliantGraphNorm->addTerm( _mu * v1->dy() + tau1->y() ); // sigma12
@@ -909,28 +909,28 @@ namespace Camellia {
       compliantGraphNorm->addTerm( tau2 );
       return compliantGraphNorm;
     }
-    RHSPtr rhs(FunctionPtr<double> f1, FunctionPtr<double> f2) {
+    RHSPtr rhs(TFunctionPtr<double> f1, TFunctionPtr<double> f2) {
       RHSPtr rhs = RHS::rhs();
       rhs->addTerm( f1 * v1 + f2 * v2 );
       return rhs;
     }
-    BCPtr bc(FunctionPtr<double> u1_fxn, FunctionPtr<double> u2_fxn, SpatialFilterPtr entireBoundary) {
+    BCPtr bc(TFunctionPtr<double> u1_fxn, TFunctionPtr<double> u2_fxn, SpatialFilterPtr entireBoundary) {
       BCPtr bc = BC::bc();
       bc->addDirichlet(u1hat, entireBoundary, u1_fxn);
       bc->addDirichlet(u2hat, entireBoundary, u2_fxn);
       bc->addZeroMeanConstraint(p);
       return bc;
     }
-    Teuchos::RCP<ExactSolution> exactSolution(FunctionPtr<double> u1_exact, FunctionPtr<double> u2_exact, FunctionPtr<double> p_exact,
+    Teuchos::RCP<ExactSolution> exactSolution(TFunctionPtr<double> u1_exact, TFunctionPtr<double> u2_exact, TFunctionPtr<double> p_exact,
                                               SpatialFilterPtr entireBoundary) {
-      FunctionPtr<double> f1 = -p_exact->dx() + _mu * (u1_exact->dx()->dx() + u1_exact->dy()->dy());
-      FunctionPtr<double> f2 = -p_exact->dy() + _mu * (u2_exact->dx()->dx() + u2_exact->dy()->dy());
+      TFunctionPtr<double> f1 = -p_exact->dx() + _mu * (u1_exact->dx()->dx() + u1_exact->dy()->dy());
+      TFunctionPtr<double> f2 = -p_exact->dy() + _mu * (u2_exact->dx()->dx() + u2_exact->dy()->dy());
 
       BCPtr bc = this->bc(u1_exact, u2_exact, entireBoundary);
 
       RHSPtr rhs = this->rhs(f1,f2);
       Teuchos::RCP<ExactSolution> mySolution = Teuchos::rcp( new ExactSolution(_bf, bc, rhs) );
-      mySolution->setSolutionFunction(u, Function<double>::vectorize(u1_exact,u2_exact));
+      mySolution->setSolutionFunction(u, TFunction<double>::vectorize(u1_exact,u2_exact));
 
       mySolution->setSolutionFunction(p, p_exact);
 
@@ -1055,22 +1055,22 @@ namespace Camellia {
     IPPtr graphNorm() {
       return _graphNorm;
     }
-    RHSPtr rhs(FunctionPtr<double> f1, FunctionPtr<double> f2) {
+    RHSPtr rhs(TFunctionPtr<double> f1, TFunctionPtr<double> f2) {
       RHSPtr rhs = RHS::rhs();
       rhs->addTerm( f1 * v1 + f2 * v2 );
       return rhs;
     }
-    BCPtr bc(FunctionPtr<double> u1_fxn, FunctionPtr<double> u2_fxn, SpatialFilterPtr entireBoundary) {
+    BCPtr bc(TFunctionPtr<double> u1_fxn, TFunctionPtr<double> u2_fxn, SpatialFilterPtr entireBoundary) {
       BCPtr bc = BC::bc();
       bc->addDirichlet(u1hat, entireBoundary, u1_fxn);
       bc->addDirichlet(u2hat, entireBoundary, u2_fxn);
       //    bc->addZeroMeanConstraint(p);
       return bc;
     }
-    Teuchos::RCP<ExactSolution> exactSolution(FunctionPtr<double> u1_exact, FunctionPtr<double> u2_exact, FunctionPtr<double> p_exact,
+    Teuchos::RCP<ExactSolution> exactSolution(TFunctionPtr<double> u1_exact, TFunctionPtr<double> u2_exact, TFunctionPtr<double> p_exact,
                                               SpatialFilterPtr entireBoundary) {
-      FunctionPtr<double> f1 = -p_exact->dx() + _mu * (u1_exact->dx()->dx() + u1_exact->dy()->dy());
-      FunctionPtr<double> f2 = -p_exact->dy() + _mu * (u2_exact->dx()->dx() + u2_exact->dy()->dy());
+      TFunctionPtr<double> f1 = -p_exact->dx() + _mu * (u1_exact->dx()->dx() + u1_exact->dy()->dy());
+      TFunctionPtr<double> f2 = -p_exact->dy() + _mu * (u2_exact->dx()->dx() + u2_exact->dy()->dy());
 
       BCPtr bc = this->bc(u1_exact, u2_exact, entireBoundary);
 
@@ -1080,7 +1080,7 @@ namespace Camellia {
       mySolution->setSolutionFunction(u2, u2_exact);
       //    mySolution->setSolutionFunction(p, p_exact);
 
-      //      FunctionPtr<double> pTerm = 0.5 * sigma11 + 0.5 * sigma12; // p = tr(sigma) / n
+      //      TFunctionPtr<double> pTerm = 0.5 * sigma11 + 0.5 * sigma12; // p = tr(sigma) / n
       mySolution->setSolutionFunction(sigma11, - p_exact + 2 * _mu * u1_exact->dx());
       mySolution->setSolutionFunction(sigma12, _mu * u1_exact->dy() + _mu * u2_exact->dx());
       mySolution->setSolutionFunction(sigma22, - p_exact + 2 * _mu * u2_exact->dy());
@@ -1210,22 +1210,22 @@ namespace Camellia {
     IPPtr graphNorm() {
       return _graphNorm;
     }
-    RHSPtr rhs(FunctionPtr<double> f1, FunctionPtr<double> f2) {
+    RHSPtr rhs(TFunctionPtr<double> f1, TFunctionPtr<double> f2) {
       RHSPtr rhs = RHS::rhs();
       rhs->addTerm( f1 * v1 + f2 * v2 );
       return rhs;
     }
-    BCPtr bc(FunctionPtr<double> u1_fxn, FunctionPtr<double> u2_fxn, SpatialFilterPtr entireBoundary) {
+    BCPtr bc(TFunctionPtr<double> u1_fxn, TFunctionPtr<double> u2_fxn, SpatialFilterPtr entireBoundary) {
       BCPtr bc = BC::bc();
       bc->addDirichlet(u1hat, entireBoundary, u1_fxn);
       bc->addDirichlet(u2hat, entireBoundary, u2_fxn);
       bc->addZeroMeanConstraint(p);
       return bc;
     }
-    Teuchos::RCP<ExactSolution> exactSolution(FunctionPtr<double> u1_exact, FunctionPtr<double> u2_exact, FunctionPtr<double> p_exact,
+    Teuchos::RCP<ExactSolution> exactSolution(TFunctionPtr<double> u1_exact, TFunctionPtr<double> u2_exact, TFunctionPtr<double> p_exact,
                                               SpatialFilterPtr entireBoundary) {
-      FunctionPtr<double> f1 = -p_exact->dx() + _mu * (u1_exact->dx()->dx() + u1_exact->dy()->dy());
-      FunctionPtr<double> f2 = -p_exact->dy() + _mu * (u2_exact->dx()->dx() + u2_exact->dy()->dy());
+      TFunctionPtr<double> f1 = -p_exact->dx() + _mu * (u1_exact->dx()->dx() + u1_exact->dy()->dy());
+      TFunctionPtr<double> f2 = -p_exact->dy() + _mu * (u2_exact->dx()->dx() + u2_exact->dy()->dy());
 
       BCPtr bc = this->bc(u1_exact, u2_exact, entireBoundary);
 
@@ -1235,7 +1235,7 @@ namespace Camellia {
       mySolution->setSolutionFunction(u2, u2_exact);
       mySolution->setSolutionFunction(p, p_exact);
 
-      //      FunctionPtr<double> pTerm = 0.5 * sigma11 + 0.5 * sigma12; // p = tr(sigma) / n
+      //      TFunctionPtr<double> pTerm = 0.5 * sigma11 + 0.5 * sigma12; // p = tr(sigma) / n
       mySolution->setSolutionFunction(sigma11, - p_exact + 2 * _mu * u1_exact->dx());
       mySolution->setSolutionFunction(sigma12, _mu * u1_exact->dy() + _mu * u2_exact->dx());
       mySolution->setSolutionFunction(sigma22, - p_exact + 2 * _mu * u2_exact->dy());
@@ -1309,7 +1309,7 @@ namespace Camellia {
     VarPtr tau1, tau2, q, v1, v2;
     BFPtr _bf;
     IPPtr _graphNorm;
-    FunctionPtr<double> _mu;
+    TFunctionPtr<double> _mu;
 
     void initVars() {
       // create the VarPtrs:
@@ -1333,7 +1333,7 @@ namespace Camellia {
       p = varFactory.fieldVar(CE_P_S);
     }
 
-    void init(FunctionPtr<double> mu) {
+    void init(TFunctionPtr<double> mu) {
       _mu = mu;
 
       initVars();
@@ -1421,12 +1421,12 @@ namespace Camellia {
       return varFactory;
     }
 
-    CEStokesFormulation(FunctionPtr<double> mu) {
+    CEStokesFormulation(TFunctionPtr<double> mu) {
       init(mu);
     }
 
     CEStokesFormulation(double mu) {
-      init(Function<double>::constant(mu));
+      init(TFunction<double>::constant(mu));
     }
 
     BFPtr bf() {
@@ -1435,23 +1435,23 @@ namespace Camellia {
     IPPtr graphNorm() {
       return _graphNorm;
     }
-    RHSPtr rhs(FunctionPtr<double> f1, FunctionPtr<double> f2) {
+    RHSPtr rhs(TFunctionPtr<double> f1, TFunctionPtr<double> f2) {
       RHSPtr rhs = RHS::rhs();
       rhs->addTerm( f1 * v1 + f2 * v2 );
       return rhs;
     }
-    BCPtr bc(FunctionPtr<double> u1_fxn, FunctionPtr<double> u2_fxn, SpatialFilterPtr entireBoundary) {
+    BCPtr bc(TFunctionPtr<double> u1_fxn, TFunctionPtr<double> u2_fxn, SpatialFilterPtr entireBoundary) {
       BCPtr bc = BC::bc();
-      FunctionPtr<double> n = Function<double>::normal();
+      TFunctionPtr<double> n = TFunction<double>::normal();
       bc->addDirichlet(u1hat, entireBoundary, u1_fxn);
       bc->addDirichlet(u2hat, entireBoundary, u2_fxn);
       bc->addZeroMeanConstraint(p);
       return bc;
     }
-    Teuchos::RCP<ExactSolution> exactSolution(FunctionPtr<double> u1_exact, FunctionPtr<double> u2_exact, FunctionPtr<double> p_exact,
+    Teuchos::RCP<ExactSolution> exactSolution(TFunctionPtr<double> u1_exact, TFunctionPtr<double> u2_exact, TFunctionPtr<double> p_exact,
                                               SpatialFilterPtr entireBoundary) {
-      FunctionPtr<double> f1 = -p_exact->dx() + _mu * (u1_exact->dx()->dx() + u1_exact->dy()->dy());
-      FunctionPtr<double> f2 = -p_exact->dy() + _mu * (u2_exact->dx()->dx() + u2_exact->dy()->dy());
+      TFunctionPtr<double> f1 = -p_exact->dx() + _mu * (u1_exact->dx()->dx() + u1_exact->dy()->dy());
+      TFunctionPtr<double> f2 = -p_exact->dy() + _mu * (u2_exact->dx()->dx() + u2_exact->dy()->dy());
 
       BCPtr bc = this->bc(u1_exact, u2_exact, entireBoundary);
 

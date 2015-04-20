@@ -42,7 +42,7 @@ namespace Camellia {
       Intrepid::FieldContainer<double> constraintLoad(numCells,numFields);
       for (vector<Constraint>::iterator constIt = _constraints.begin(); constIt != _constraints.end(); constIt++) {
         LinearTermPtr lt = constIt->linearTerm();
-        FunctionPtr<double> f = constIt->f();
+        TFunctionPtr<double> f = constIt->f();
 
         lt->integrate(constraintMatrix,elemType->trialOrderPtr,lt,elemType->trialOrderPtr,basisCache);
         (f * lt)->integrate(constraintLoad,elemType->trialOrderPtr,basisCache);

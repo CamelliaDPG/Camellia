@@ -14,21 +14,21 @@
 
 namespace Camellia {
   template <typename Scalar>
-  class SpatiallyFilteredFunction : public Function<Scalar> {
-    FunctionPtr<Scalar> _f;
+  class SpatiallyFilteredFunction : public TFunction<Scalar> {
+    TFunctionPtr<Scalar> _f;
     SpatialFilterPtr _sf;
 
   public:
-    SpatiallyFilteredFunction(FunctionPtr<Scalar> f, SpatialFilterPtr sf);
+    SpatiallyFilteredFunction(TFunctionPtr<Scalar> f, SpatialFilterPtr sf);
     virtual void values(Intrepid::FieldContainer<Scalar> &values, BasisCachePtr basisCache);
     bool boundaryValueOnly();
 
-    FunctionPtr<Scalar> curl();
-    FunctionPtr<Scalar> div();
+    TFunctionPtr<Scalar> curl();
+    TFunctionPtr<Scalar> div();
 
-    FunctionPtr<Scalar> dx();
-    FunctionPtr<Scalar> dy();
-    FunctionPtr<Scalar> dz();
+    TFunctionPtr<Scalar> dx();
+    TFunctionPtr<Scalar> dy();
+    TFunctionPtr<Scalar> dz();
   };
 }
 

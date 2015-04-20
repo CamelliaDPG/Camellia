@@ -14,7 +14,7 @@ const string ConvectionFormulation::S_U = "u";
 const string ConvectionFormulation::S_Q_N_HAT = "\\widehat{q}_n";
 const string ConvectionFormulation::S_V = "v";
 
-ConvectionFormulation::ConvectionFormulation(int spaceDim, FunctionPtr<double> convectiveFunction) { // convectiveFunction should have zero divergence
+ConvectionFormulation::ConvectionFormulation(int spaceDim, TFunctionPtr<double> convectiveFunction) { // convectiveFunction should have zero divergence
   _spaceDim = spaceDim;
   
   if (_spaceDim != 2) {

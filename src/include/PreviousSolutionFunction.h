@@ -18,7 +18,7 @@
 
 namespace Camellia {
   template <typename Scalar>
-  class PreviousSolutionFunction : public Function<Scalar> {
+  class PreviousSolutionFunction : public TFunction<Scalar> {
     SolutionPtr<Scalar> _soln;
     LinearTermPtr _solnExpression;
     bool _overrideMeshCheck;
@@ -29,7 +29,7 @@ namespace Camellia {
     void setOverrideMeshCheck(bool value, bool dontWarn=false);
     void importCellData(std::vector<GlobalIndexType> cells);
     void values(Intrepid::FieldContainer<Scalar> &values, BasisCachePtr basisCache);
-    static map<int, FunctionPtr<Scalar> > functionMap( vector< VarPtr > varPtrs, SolutionPtr<Scalar> soln);
+    static map<int, TFunctionPtr<Scalar> > functionMap( vector< VarPtr > varPtrs, SolutionPtr<Scalar> soln);
     string displayString();
   };
 }

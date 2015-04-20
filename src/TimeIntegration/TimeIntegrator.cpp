@@ -13,7 +13,7 @@
 using namespace Camellia;
 
 TimeIntegrator::TimeIntegrator(BFPtr steadyJacobian, SteadyResidual &steadyResidual, MeshPtr mesh,
-    BCPtr bc, IPPtr ip, map<int, FunctionPtr<double>> initialCondition, bool nonlinear) :
+    BCPtr bc, IPPtr ip, map<int, TFunctionPtr<double>> initialCondition, bool nonlinear) :
   _steadyJacobian(steadyJacobian), _steadyResidual(steadyResidual), _bc(bc), _nonlinear(nonlinear)
 {
   _t = 0;
@@ -48,7 +48,7 @@ TimeIntegrator::TimeIntegrator(BFPtr steadyJacobian, SteadyResidual &steadyResid
   }
 }
 
-FunctionPtr<double> TimeIntegrator::invDt()
+TFunctionPtr<double> TimeIntegrator::invDt()
 {
   return _invDt;
 }
@@ -74,10 +74,10 @@ SolutionPtr<double> TimeIntegrator::solutionUpdate()
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "solution update only makes sense for nonlinear problems");
 }
 
-void TimeIntegrator::addTimeTerm(VarPtr trialVar, VarPtr testVar, FunctionPtr<double> multiplier)
+void TimeIntegrator::addTimeTerm(VarPtr trialVar, VarPtr testVar, TFunctionPtr<double> multiplier)
 {
-  FunctionPtr<double> trialPrevTime = Function<double>::solution(trialVar, _prevTimeSolution);
-  FunctionPtr<double> trialPrevNL = Function<double>::solution(trialVar, _prevNLSolution);
+  TFunctionPtr<double> trialPrevTime = TFunction<double>::solution(trialVar, _prevTimeSolution);
+  TFunctionPtr<double> trialPrevNL = TFunction<double>::solution(trialVar, _prevNLSolution);
   _steadyJacobian->addTerm( _invDt*multiplier*trialVar, testVar );
   _rhs->addTerm( _invDt*multiplier*trialPrevTime*testVar );
   if (_nonlinear)
@@ -137,7 +137,7 @@ void TimeIntegrator::printNLMessage()
 }
 
 ImplicitEulerIntegrator::ImplicitEulerIntegrator(BFPtr steadyJacobian, SteadyResidual &steadyResidual, MeshPtr mesh,
-    BCPtr bc, IPPtr ip, map<int, FunctionPtr<double>> initialCondition, bool nonlinear) :
+    BCPtr bc, IPPtr ip, map<int, TFunctionPtr<double>> initialCondition, bool nonlinear) :
   TimeIntegrator(steadyJacobian, steadyResidual, mesh, bc, ip, initialCondition, nonlinear) {}
 
 void ImplicitEulerIntegrator::runToTime(double T, double dt)
@@ -151,7 +151,7 @@ void ImplicitEulerIntegrator::runToTime(double T, double dt)
 }
 
 ESDIRKIntegrator::ESDIRKIntegrator(BFPtr steadyJacobian, SteadyResidual &steadyResidual, MeshPtr mesh,
-    BCPtr bc, IPPtr ip, map<int, FunctionPtr<double>> initialCondition, int numStages, bool nonlinear) :
+    BCPtr bc, IPPtr ip, map<int, TFunctionPtr<double>> initialCondition, int numStages, bool nonlinear) :
   TimeIntegrator(steadyJacobian, steadyResidual, mesh, bc, ip, initialCondition, nonlinear),
   _numStages(numStages)
 {
@@ -278,17 +278,17 @@ ESDIRKIntegrator::ESDIRKIntegrator(BFPtr steadyJacobian, SteadyResidual &steadyR
     {
       if (a[k][j] != 0)
       {
-        FunctionPtr<double> aFunc = Function<double>::constant(a[k][j]/a[k][k]);
+        TFunctionPtr<double> aFunc = TFunction<double>::constant(a[k][j]/a[k][k]);
         _stageRHS[k]->addTerm( -aFunc*_steadyLinearTerm[j] );
       }
     }
   }
 }
 
-void ESDIRKIntegrator::addTimeTerm(VarPtr trialVar, VarPtr testVar, FunctionPtr<double> multiplier)
+void ESDIRKIntegrator::addTimeTerm(VarPtr trialVar, VarPtr testVar, TFunctionPtr<double> multiplier)
 {
-  FunctionPtr<double> trialPrevTime = Function<double>::solution(trialVar, _prevTimeSolution);
-  FunctionPtr<double> trialPrevNL = Function<double>::solution(trialVar, _prevNLSolution);
+  TFunctionPtr<double> trialPrevTime = TFunction<double>::solution(trialVar, _prevTimeSolution);
+  TFunctionPtr<double> trialPrevNL = TFunction<double>::solution(trialVar, _prevNLSolution);
   _steadyJacobian->addTerm( _invDt*multiplier*trialVar, testVar );
   for (int k=0; k < _numStages; k++)
   {

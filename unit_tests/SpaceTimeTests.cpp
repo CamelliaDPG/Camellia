@@ -38,7 +38,7 @@ namespace {
   void testIntegrateConstantFunctionVolume(int spaceDim, Teuchos::FancyOStream &out, bool &success)
   {
     int H1Order = 1;
-    FunctionPtr<double> one = Function<double>::constant(1.0);
+    FunctionPtr one = Function::constant(1.0);
     MeshPtr mesh = singleElementSpaceTimeMesh(spaceDim, H1Order);
     double timeExtent = 1.0;
     double actualIntegral = one->integrate(mesh);
@@ -49,7 +49,7 @@ namespace {
   void testIntegrateConstantFunctionSides(int spaceDim, Teuchos::FancyOStream &out, bool &success)
   {
     int H1Order = 1;
-    FunctionPtr<double> oneOnSides = Function<double>::meshSkeletonCharacteristic();
+    FunctionPtr oneOnSides = Function::meshSkeletonCharacteristic();
     MeshPtr mesh = singleElementSpaceTimeMesh(spaceDim, H1Order);
     double timeExtent = 1.0;
     double actualIntegral = oneOnSides->integrate(mesh);
@@ -64,7 +64,7 @@ namespace {
   void testIntegrateTimeVaryingFunctionVolume(int spaceDim, Teuchos::FancyOStream &out, bool &success)
   {
     int H1Order = 2;
-    FunctionPtr<double> t = Function<double>::tn(1); // integral t^2 / 2; over [0,1] = 1/2
+    FunctionPtr t = Function::tn(1); // integral t^2 / 2; over [0,1] = 1/2
     MeshPtr mesh = singleElementSpaceTimeMesh(spaceDim, H1Order);
     double actualIntegral = t->integrate(mesh);
     double temporalIntegral = 0.5;
@@ -75,8 +75,8 @@ namespace {
   void testIntegrateTimeVaryingFunctionSides(int spaceDim, Teuchos::FancyOStream &out, bool &success)
   {
     int H1Order = 2;
-    FunctionPtr<double> oneOnSides = Function<double>::meshSkeletonCharacteristic();
-    FunctionPtr<double> t = Function<double>::tn(1); // integral t^2 / 2; over [0,1] = 1/2
+    FunctionPtr oneOnSides = Function::meshSkeletonCharacteristic();
+    FunctionPtr t = Function::tn(1); // integral t^2 / 2; over [0,1] = 1/2
     MeshPtr mesh = singleElementSpaceTimeMesh(spaceDim, H1Order);
     double actualIntegral = (oneOnSides * t)->integrate(mesh);
     double spatialIntegral = pow(2.0,spaceDim); // will pick up one of these (where t=1; where t=0 we have no contribution)
@@ -90,7 +90,7 @@ namespace {
   void testIntegrateSpaceVaryingFunctionVolume(int spaceDim, Teuchos::FancyOStream &out, bool &success)
   {
     int H1Order = 3;
-    FunctionPtr<double> f_x = Function<double>::xn(2); // integral x^3 / 3; over [-1,1] = 2/3
+    FunctionPtr f_x = Function::xn(2); // integral x^3 / 3; over [-1,1] = 2/3
     MeshPtr mesh = singleElementSpaceTimeMesh(spaceDim, H1Order);
     double actualIntegral = f_x->integrate(mesh);
     double temporalExtent = 1.0;
@@ -102,8 +102,8 @@ namespace {
   void testIntegrateSpaceVaryingFunctionSides(int spaceDim, Teuchos::FancyOStream &out, bool &success)
   {
     int H1Order = 3;
-    FunctionPtr<double> oneOnSides = Function<double>::meshSkeletonCharacteristic();
-    FunctionPtr<double> f_x = Function<double>::xn(2); // integral x^3 / 3; over [-1,1] = 2/3
+    FunctionPtr oneOnSides = Function::meshSkeletonCharacteristic();
+    FunctionPtr f_x = Function::xn(2); // integral x^3 / 3; over [-1,1] = 2/3
     MeshPtr mesh = singleElementSpaceTimeMesh(spaceDim, H1Order);
     double actualIntegral = (f_x * oneOnSides)->integrate(mesh);
     double temporalExtent = 1.0;
