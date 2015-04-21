@@ -38,7 +38,7 @@ public:
   }
 };
 
-class BoundaryLayerFunction : public SimpleFunction {
+class BoundaryLayerFunction : public SimpleFunction<double> {
   double _eps;
 public:
   BoundaryLayerFunction(double eps) {
@@ -465,7 +465,7 @@ bool FunctionTests::testPolarizedFunctions() {
   FunctionPtr one = Function::constant(1.0);
   FunctionPtr zero = Function::zero();
   
-  FunctionPtr f = Teuchos::rcp( new PolarizedFunction( x * cos_y ) );
+  FunctionPtr f = Teuchos::rcp( new PolarizedFunction<double>( x * cos_y ) );
   
   FunctionPtr df_dx = f->dx();
   FunctionPtr df_dy = f->dy();
@@ -490,7 +490,7 @@ bool FunctionTests::testPolarizedFunctions() {
   
   // take f = r sin theta.  Then: f==y, df/dx == 0, df/dy == 1
   FunctionPtr sin_y = Teuchos::rcp( new Sin_y );
-  f = Teuchos::rcp( new PolarizedFunction( x * sin_y ) );
+  f = Teuchos::rcp( new PolarizedFunction<double>( x * sin_y ) );
   df_dx = f->dx();
   df_dy = f->dy();
   
@@ -515,7 +515,7 @@ bool FunctionTests::testPolarizedFunctions() {
   // Something a little more complicated: f(x) = x^2
   // take f = r^2 cos^2 theta.  Then: f==x^2, df/dx == 2x, df/dy == 0
 
-  f = Teuchos::rcp( new PolarizedFunction( x * cos_y * x * cos_y ) );
+  f = Teuchos::rcp( new PolarizedFunction<double>( x * cos_y * x * cos_y ) );
   df_dx = f->dx();
   df_dy = f->dy();
   
@@ -572,7 +572,7 @@ bool FunctionTests::testQuotientRule() {
   FunctionPtr f = exp_x / x2;
   FunctionPtr f_prime = f->dx();
   
-  FunctionPtr f_prime_expected = f - 2 * x * exp_x / (x2 * x2);
+  FunctionPtr f_prime_expected = f - 2. * x * exp_x / (x2 * x2);
   
   
   // redo _testPoints to avoid 0 point (which would cause a division by 0)
