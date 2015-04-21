@@ -10,7 +10,7 @@
  //  Implemented for the purpose of space-time meshes, but might also be
  //  useful in the context of loosely coupled multiphysics implementations.
  //
- 
+
  // ***********************************************************************
  //@HEADER
  */
@@ -24,42 +24,42 @@
 //! MeshTransferFunction: Given two meshes with a shared interface...
 //
 /*!
- 
+
  \author Nathan V. Roberts, ALCF.
- 
+
  \date Last modified on 25-Nov-2014.
  */
 
 namespace Camellia {
-  class MeshTransferFunction : public Function, public RefinementObserver {
+  class MeshTransferFunction : public TFunction<double>, public RefinementObserver {
     MeshPtr _originalMesh, _newMesh;
-    FunctionPtr _originalFunction;
+    TFunctionPtr<double> _originalFunction;
     double _interface_t;
-    
+
     typedef std::pair<GlobalIndexType,unsigned> CellSide; // cellID, side ordinal
     std::map<CellSide,CellSide> _newToOriginalMap;
     std::map<CellSide,CellSide> _originalToNewMap;
-    
+
     std::map<CellSide,CellSide> _activeSideToAncestralSideInNewMesh;
-    
+
     std::map<CellSide, unsigned> _permutationForNewMeshCellSide; // permutation goes from cell side in _newMesh to that in _originalMesh
-    
+
     void rebuildMaps();
   public:
-    MeshTransferFunction(FunctionPtr originalFunction, MeshPtr originalMesh, MeshPtr newMesh, double interface_t);
+    MeshTransferFunction(TFunctionPtr<double> originalFunction, MeshPtr originalMesh, MeshPtr newMesh, double interface_t);
     virtual void values(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache);
-    
+
     bool boundaryValueOnly();
-    
+
     bool findAncestralPairForNewMeshCellSide(const CellSide &newMeshCellSide, CellSide &newMeshCellSideAncestor,
                                              CellSide &originalMeshCellSideAncestor, unsigned &newCellSideAncestorPermutation);
-    
+
     const std::map<CellSide,CellSide> & mapToOriginalMesh() { return _newToOriginalMap; }
     const std::map<CellSide,CellSide> & mapToNewMesh() { return _originalToNewMap; }
-      
+
     // RefinementObserver method:
     void didRepartition(MeshTopologyPtr meshTopology);
-    
+
     ~MeshTransferFunction();
   };
 }

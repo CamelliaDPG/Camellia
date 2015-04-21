@@ -6,7 +6,7 @@ using namespace Camellia;
 using namespace Intrepid;
 using namespace std;
 
-MinFunction::MinFunction(FunctionPtr f1, FunctionPtr f2) : Function(f1->rank()) {
+MinFunction::MinFunction(TFunctionPtr<double> f1, TFunctionPtr<double> f2) : TFunction<double>(f1->rank()) {
   TEUCHOS_TEST_FOR_EXCEPTION( f1->rank() != f2->rank(), std::invalid_argument, "both functions must be of like rank.");
   _f1 = f1;
   _f2 = f2;
@@ -19,12 +19,12 @@ bool MinFunction::boundaryValueOnly() {
 
 string MinFunction::displayString() {
   ostringstream ss;
-  ss << "min( " << _f1->displayString() << " , " << _f2->displayString() << " )";
+  ss << "\\min( " << _f1->displayString() << " , " << _f2->displayString() << " )";
   return ss.str();
 }
 
 void MinFunction::values(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache) {
-  CHECK_VALUES_RANK(values);
+  this->CHECK_VALUES_RANK(values);
   Intrepid::FieldContainer<double> values2(values);
   _f1->values(values,basisCache);
   _f2->values(values2,basisCache);
@@ -33,27 +33,27 @@ void MinFunction::values(Intrepid::FieldContainer<double> &values, BasisCachePtr
   }
 }
 
-FunctionPtr MinFunction::x() {
+TFunctionPtr<double> MinFunction::x() {
   if ( (_f1->x().get() == NULL) || (_f2->x().get() == NULL) ) {
     return null();
   }
   return min(_f1->x(),_f2->x());
 }
 
-FunctionPtr MinFunction::y() {
+TFunctionPtr<double> MinFunction::y() {
   if ( (_f1->y().get() == NULL) || (_f2->y().get() == NULL) ) {
     return null();
   }
   return min(_f1->y(),_f2->y());
 }
-FunctionPtr MinFunction::z() {
+TFunctionPtr<double> MinFunction::z() {
   if ( (_f1->z().get() == NULL) || (_f2->z().get() == NULL) ) {
     return null();
   }
   return min(_f1->z(),_f2->z());
 }
 
-MaxFunction::MaxFunction(FunctionPtr f1, FunctionPtr f2) : Function(f1->rank()) {
+MaxFunction::MaxFunction(TFunctionPtr<double> f1, TFunctionPtr<double> f2) : TFunction<double>(f1->rank()) {
   TEUCHOS_TEST_FOR_EXCEPTION( f1->rank() != f2->rank(), std::invalid_argument, "both functions must be of like rank.");
   _f1 = f1;
   _f2 = f2;
@@ -66,12 +66,12 @@ bool MaxFunction::boundaryValueOnly() {
 
 string MaxFunction::displayString() {
   ostringstream ss;
-  ss << "max( " << _f1->displayString() << " , " << _f2->displayString() << " )";
+  ss << "\\max( " << _f1->displayString() << " , " << _f2->displayString() << " )";
   return ss.str();
 }
 
 void MaxFunction::values(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache) {
-  CHECK_VALUES_RANK(values);
+  this->CHECK_VALUES_RANK(values);
   Intrepid::FieldContainer<double> values2(values);
   _f1->values(values,basisCache);
   _f2->values(values2,basisCache);
@@ -80,20 +80,20 @@ void MaxFunction::values(Intrepid::FieldContainer<double> &values, BasisCachePtr
   }
 }
 
-FunctionPtr MaxFunction::x() {
+TFunctionPtr<double> MaxFunction::x() {
   if ( (_f1->x().get() == NULL) || (_f2->x().get() == NULL) ) {
     return null();
   }
   return max(_f1->x(),_f2->x());
 }
 
-FunctionPtr MaxFunction::y() {
+TFunctionPtr<double> MaxFunction::y() {
   if ( (_f1->y().get() == NULL) || (_f2->y().get() == NULL) ) {
     return null();
   }
   return max(_f1->y(),_f2->y());
 }
-FunctionPtr MaxFunction::z() {
+TFunctionPtr<double> MaxFunction::z() {
   if ( (_f1->z().get() == NULL) || (_f2->z().get() == NULL) ) {
     return null();
   }

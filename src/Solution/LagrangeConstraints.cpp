@@ -23,10 +23,10 @@ void LagrangeConstraints::addGlobalConstraint(const Constraint &c) {
 }
 
 void LagrangeConstraints::getCoefficients(FieldContainer<double> &lhs, FieldContainer<double> &rhs,
-                                          int elemConstraintIndex, DofOrderingPtr trialOrdering, 
+                                          int elemConstraintIndex, DofOrderingPtr trialOrdering,
                                           BasisCachePtr basisCache) {
   LinearTermPtr lt = _constraints[elemConstraintIndex].linearTerm();
-  FunctionPtr f = _constraints[elemConstraintIndex].f();
+  TFunctionPtr<double> f = _constraints[elemConstraintIndex].f();
   lt->integrate(lhs, trialOrdering, basisCache);
   bool onBoundary = f->boundaryValueOnly();
   if ( !onBoundary ) {

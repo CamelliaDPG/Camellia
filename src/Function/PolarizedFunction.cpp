@@ -9,22 +9,26 @@ using namespace Camellia;
 using namespace Intrepid;
 using namespace std;
 
-PolarizedFunction::PolarizedFunction( FunctionPtr f_of_xAsR_yAsTheta ) : Function(f_of_xAsR_yAsTheta->rank()) {
+template <typename Scalar>
+PolarizedFunction<Scalar>::PolarizedFunction( TFunctionPtr<Scalar> f_of_xAsR_yAsTheta ) : TFunction<Scalar>(f_of_xAsR_yAsTheta->rank()) {
   _f = f_of_xAsR_yAsTheta;
 }
 
-Teuchos::RCP<PolarizedFunction> PolarizedFunction::r() {
-  static Teuchos::RCP<PolarizedFunction> _r = Teuchos::rcp( new PolarizedFunction( Teuchos::rcp( new Xn(1) ) ) );
+template <typename Scalar>
+Teuchos::RCP<PolarizedFunction<double>> PolarizedFunction<Scalar>::r() {
+  static Teuchos::RCP<PolarizedFunction<Scalar>> _r = Teuchos::rcp( new PolarizedFunction<Scalar>( Teuchos::rcp( new Xn(1) ) ) );
   return _r;
 }
 
-Teuchos::RCP<PolarizedFunction> PolarizedFunction::sin_theta() {
-  static Teuchos::RCP<PolarizedFunction> _sin_theta = Teuchos::rcp( new PolarizedFunction( Teuchos::rcp( new Sin_y ) ) );
+template <typename Scalar>
+Teuchos::RCP<PolarizedFunction<double>> PolarizedFunction<Scalar>::sin_theta() {
+  static Teuchos::RCP<PolarizedFunction<Scalar>> _sin_theta = Teuchos::rcp( new PolarizedFunction<Scalar>( Teuchos::rcp( new Sin_y ) ) );
   return _sin_theta;
 }
 
-Teuchos::RCP<PolarizedFunction> PolarizedFunction::cos_theta() {
-  static Teuchos::RCP<PolarizedFunction> _cos_theta = Teuchos::rcp( new PolarizedFunction( Teuchos::rcp( new Cos_y ) ) );
+template <typename Scalar>
+Teuchos::RCP<PolarizedFunction<double>> PolarizedFunction<Scalar>::cos_theta() {
+  static Teuchos::RCP<PolarizedFunction<Scalar>> _cos_theta = Teuchos::rcp( new PolarizedFunction<Scalar>( Teuchos::rcp( new Cos_y ) ) );
   return _cos_theta;
 }
 
@@ -36,7 +40,8 @@ void findAndReplace(string &str, const string &findStr, const string &replaceStr
   }
 }
 
-string PolarizedFunction::displayString() {
+template <typename Scalar>
+string PolarizedFunction<Scalar>::displayString() {
   string displayString = _f->displayString();
   findAndReplace(displayString, "x", "r");
   findAndReplace(displayString, "y", "\\theta");
@@ -46,43 +51,50 @@ string PolarizedFunction::displayString() {
   //  return ss.str();
 }
 
-FunctionPtr PolarizedFunction::dx() {
+template <typename Scalar>
+TFunctionPtr<Scalar> PolarizedFunction<Scalar>::dx() {
   // cast everything to FunctionPtrs:
-  FunctionPtr sin_theta_fxn = sin_theta();
-  FunctionPtr dtheta_fxn = dtheta();
-  FunctionPtr dr_fxn = dr();
-  FunctionPtr r_fxn = r();
-  FunctionPtr cos_theta_fxn = cos_theta();
+  TFunctionPtr<double> sin_theta_fxn = sin_theta();
+  TFunctionPtr<Scalar> dtheta_fxn = dtheta();
+  TFunctionPtr<Scalar> dr_fxn = dr();
+  TFunctionPtr<double> r_fxn = r();
+  TFunctionPtr<double> cos_theta_fxn = cos_theta();
   return dr_fxn * cos_theta_fxn - dtheta_fxn * sin_theta_fxn / r_fxn;
 }
-FunctionPtr PolarizedFunction::dy() {
-  FunctionPtr sin_theta_fxn = sin_theta();
-  FunctionPtr dtheta_fxn = dtheta();
-  FunctionPtr dr_fxn = dr();
-  FunctionPtr r_fxn = r();
-  FunctionPtr cos_theta_fxn = cos_theta();
+
+template <typename Scalar>
+TFunctionPtr<Scalar> PolarizedFunction<Scalar>::dy() {
+  TFunctionPtr<double> sin_theta_fxn = sin_theta();
+  TFunctionPtr<Scalar> dtheta_fxn = dtheta();
+  TFunctionPtr<Scalar> dr_fxn = dr();
+  TFunctionPtr<double> r_fxn = r();
+  TFunctionPtr<double> cos_theta_fxn = cos_theta();
   return dr_fxn * sin_theta_fxn + dtheta_fxn * cos_theta_fxn / r_fxn;
 }
 
-Teuchos::RCP<PolarizedFunction> PolarizedFunction::dtheta() {
-  return Teuchos::rcp( new PolarizedFunction( _f->dy() ) );
+template <typename Scalar>
+Teuchos::RCP<PolarizedFunction<Scalar>> PolarizedFunction<Scalar>::dtheta() {
+  return Teuchos::rcp( new PolarizedFunction<Scalar>( _f->dy() ) );
 }
 
-Teuchos::RCP<PolarizedFunction> PolarizedFunction::dr() {
-  return Teuchos::rcp( new PolarizedFunction( _f->dx() ) );
+template <typename Scalar>
+Teuchos::RCP<PolarizedFunction<Scalar>> PolarizedFunction<Scalar>::dr() {
+  return Teuchos::rcp( new PolarizedFunction<Scalar>( _f->dx() ) );
 }
 
-bool PolarizedFunction::isZero() {
+template <typename Scalar>
+bool PolarizedFunction<Scalar>::isZero() {
   return _f->isZero();
 }
 
-void PolarizedFunction::values(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache) {
-  CHECK_VALUES_RANK(values);
+template <typename Scalar>
+void PolarizedFunction<Scalar>::values(Intrepid::FieldContainer<Scalar> &values, BasisCachePtr basisCache) {
+  this->CHECK_VALUES_RANK(values);
   static const double PI  = 3.141592653589793238462;
-  
+
   int numCells = values.dimension(0);
   int numPoints = values.dimension(1);
-  
+
   const Intrepid::FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
   Intrepid::FieldContainer<double> polarPoints = *points;
   for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
@@ -94,7 +106,7 @@ void PolarizedFunction::values(Intrepid::FieldContainer<double> &values, BasisCa
       // now x = r cos theta, but need to guarantee that y = r sin theta (might differ in sign)
       // according to the acos docs, theta will be in [0, pi], so the rule is: (y < 0) ==> theta := 2 pi - theta;
       if (y < 0) theta = 2*PI-theta;
-      
+
       polarPoints(cellIndex, ptIndex, 0) = r;
       polarPoints(cellIndex, ptIndex, 1) = theta;
       //      if (r == 0) {
@@ -110,3 +122,6 @@ void PolarizedFunction::values(Intrepid::FieldContainer<double> &values, BasisCa
   //  cout << "polarPoints: \n" << polarPoints;
   //  cout << "PolarizedFunction, values: \n" << values;
 }
+
+template class PolarizedFunction<double>;
+

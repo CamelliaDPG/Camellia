@@ -5,82 +5,102 @@
 using namespace Camellia;
 using namespace Intrepid;
 
-ConstantScalarFunction::ConstantScalarFunction(double value) {
+template <typename Scalar>
+ConstantScalarFunction<Scalar>::ConstantScalarFunction(Scalar value) {
   _value = value;
   ostringstream valueStream;
   valueStream << value;
   _stringDisplay = valueStream.str();
 }
 
-ConstantScalarFunction::ConstantScalarFunction(double value, string stringDisplay) {
+template <typename Scalar>
+ConstantScalarFunction<Scalar>::ConstantScalarFunction(Scalar value, string stringDisplay) {
   _value = value;
   _stringDisplay = stringDisplay;
 }
 
-string ConstantScalarFunction::displayString() {
+template <typename Scalar>
+string ConstantScalarFunction<Scalar>::displayString() {
   return _stringDisplay;
 }
 
-bool ConstantScalarFunction::isZero() {
+template <typename Scalar>
+bool ConstantScalarFunction<Scalar>::isZero() {
   return 0.0 == _value;
 }
 
-void ConstantScalarFunction::values(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache) {
-  CHECK_VALUES_RANK(values);
+template <typename Scalar>
+void ConstantScalarFunction<Scalar>::values(Intrepid::FieldContainer<Scalar> &values, BasisCachePtr basisCache) {
+  this->CHECK_VALUES_RANK(values);
   for (int i=0; i < values.size(); i++) {
     values[i] = _value;
   }
 }
-void ConstantScalarFunction::scalarMultiplyFunctionValues(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache) {
+template <typename Scalar>
+void ConstantScalarFunction<Scalar>::scalarMultiplyFunctionValues(Intrepid::FieldContainer<Scalar> &values, BasisCachePtr basisCache) {
   if (_value != 1.0) {
     for (int i=0; i < values.size(); i++) {
       values[i] *= _value;
     }
   }
 }
-void ConstantScalarFunction::scalarDivideFunctionValues(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache) {
+template <typename Scalar>
+void ConstantScalarFunction<Scalar>::scalarDivideFunctionValues(Intrepid::FieldContainer<Scalar> &values, BasisCachePtr basisCache) {
   if (_value != 1.0) {
     for (int i=0; i < values.size(); i++) {
       values[i] /= _value;
     }
   }
 }
-void ConstantScalarFunction::scalarMultiplyBasisValues(Intrepid::FieldContainer<double> &basisValues, BasisCachePtr basisCache) {
+template <typename Scalar>
+void ConstantScalarFunction<Scalar>::scalarMultiplyBasisValues(Intrepid::FieldContainer<double> &basisValues, BasisCachePtr basisCache) {
   // we don't actually care about the shape of basisValues--just use the FunctionValues versions:
   scalarMultiplyFunctionValues(basisValues,basisCache);
 }
-void ConstantScalarFunction::scalarDivideBasisValues(Intrepid::FieldContainer<double> &basisValues, BasisCachePtr basisCache) {
+template <typename Scalar>
+void ConstantScalarFunction<Scalar>::scalarDivideBasisValues(Intrepid::FieldContainer<double> &basisValues, BasisCachePtr basisCache) {
   scalarDivideFunctionValues(basisValues,basisCache);
 }
 
-double ConstantScalarFunction::value(double x) {
+template <typename Scalar>
+Scalar ConstantScalarFunction<Scalar>::value(double x) {
   return value();
 }
 
-double ConstantScalarFunction::value(double x, double y) {
+template <typename Scalar>
+Scalar ConstantScalarFunction<Scalar>::value(double x, double y) {
   return value();
 }
 
-double ConstantScalarFunction::value(double x, double y, double z) {
+template <typename Scalar>
+Scalar ConstantScalarFunction<Scalar>::value(double x, double y, double z) {
   return value();
 }
 
-double ConstantScalarFunction::value() {
+template <typename Scalar>
+Scalar ConstantScalarFunction<Scalar>::value() {
   return _value;
 }
 
-FunctionPtr ConstantScalarFunction::dx() {
-  return Function::zero();
+template <typename Scalar>
+TFunctionPtr<Scalar> ConstantScalarFunction<Scalar>::dx() {
+  return TFunction<Scalar>::zero();
 }
 
-FunctionPtr ConstantScalarFunction::dy() {
-  return Function::zero();
+template <typename Scalar>
+TFunctionPtr<Scalar> ConstantScalarFunction<Scalar>::dy() {
+  return TFunction<Scalar>::zero();
 }
 
-FunctionPtr ConstantScalarFunction::dz() {
-  return Function::zero();
+template <typename Scalar>
+TFunctionPtr<Scalar> ConstantScalarFunction<Scalar>::dz() {
+  return TFunction<Scalar>::zero();
 }
 
-FunctionPtr ConstantScalarFunction::dt() {
-  return Function::zero();
+template <typename Scalar>
+TFunctionPtr<Scalar> ConstantScalarFunction<Scalar>::dt() {
+  return TFunction<Scalar>::zero();
 }
+
+template class ConstantScalarFunction<double>;
+

@@ -6,22 +6,26 @@ using namespace Camellia;
 using namespace Intrepid;
 using namespace std;
 
-VectorizedFunction::VectorizedFunction(const vector< FunctionPtr > &fxns) : Function(fxns[0]->rank() + 1) {
+template <typename Scalar>
+VectorizedFunction<Scalar>::VectorizedFunction(const vector< TFunctionPtr<Scalar> > &fxns) : TFunction<Scalar>(fxns[0]->rank() + 1) {
   _fxns = fxns;
 }
-VectorizedFunction::VectorizedFunction(FunctionPtr f1, FunctionPtr f2) : Function(f1->rank() + 1) {
+template <typename Scalar>
+VectorizedFunction<Scalar>::VectorizedFunction(TFunctionPtr<Scalar> f1, TFunctionPtr<Scalar> f2) : TFunction<Scalar>(f1->rank() + 1) {
   TEUCHOS_TEST_FOR_EXCEPTION(f1->rank() != f2->rank(), std::invalid_argument, "function ranks do not match");
   _fxns.push_back(f1);
   _fxns.push_back(f2);
 }
-VectorizedFunction::VectorizedFunction(FunctionPtr f1, FunctionPtr f2, FunctionPtr f3) : Function(f1->rank() + 1) {
+template <typename Scalar>
+VectorizedFunction<Scalar>::VectorizedFunction(TFunctionPtr<Scalar> f1, TFunctionPtr<Scalar> f2, TFunctionPtr<Scalar> f3) : TFunction<Scalar>(f1->rank() + 1) {
   TEUCHOS_TEST_FOR_EXCEPTION(f1->rank() != f2->rank(), std::invalid_argument, "function ranks do not match");
   TEUCHOS_TEST_FOR_EXCEPTION(f3->rank() != f2->rank(), std::invalid_argument, "function ranks do not match");
   _fxns.push_back(f1);
   _fxns.push_back(f2);
   _fxns.push_back(f3);
 }
-VectorizedFunction::VectorizedFunction(FunctionPtr f1, FunctionPtr f2, FunctionPtr f3, FunctionPtr f4) : Function(f1->rank() + 1) {
+template <typename Scalar>
+VectorizedFunction<Scalar>::VectorizedFunction(TFunctionPtr<Scalar> f1, TFunctionPtr<Scalar> f2, TFunctionPtr<Scalar> f3, TFunctionPtr<Scalar> f4) : TFunction<Scalar>(f1->rank() + 1) {
   TEUCHOS_TEST_FOR_EXCEPTION(f1->rank() != f2->rank(), std::invalid_argument, "function ranks do not match");
   TEUCHOS_TEST_FOR_EXCEPTION(f2->rank() != f3->rank(), std::invalid_argument, "function ranks do not match");
   TEUCHOS_TEST_FOR_EXCEPTION(f3->rank() != f4->rank(), std::invalid_argument, "function ranks do not match");
@@ -30,7 +34,8 @@ VectorizedFunction::VectorizedFunction(FunctionPtr f1, FunctionPtr f2, FunctionP
   _fxns.push_back(f3);
   _fxns.push_back(f4);
 }
-string VectorizedFunction::displayString() {
+template <typename Scalar>
+string VectorizedFunction<Scalar>::displayString() {
   ostringstream str;
   str << "(";
   for (int i=0; i<_fxns.size(); i++) {
@@ -40,12 +45,14 @@ string VectorizedFunction::displayString() {
   str << ")";
   return str.str();
 }
-int VectorizedFunction::dim() {
+template <typename Scalar>
+int VectorizedFunction<Scalar>::dim() {
   return _fxns.size();
 }
 
-void VectorizedFunction::values(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache) {
-  CHECK_VALUES_RANK(values);
+template <typename Scalar>
+void VectorizedFunction<Scalar>::values(Intrepid::FieldContainer<Scalar> &values, BasisCachePtr basisCache) {
+  this->CHECK_VALUES_RANK(values);
   // this is not going to be particularly efficient, because values from the components need to be interleaved...
   Teuchos::Array<int> dims;
   values.dimensions(dims);
@@ -61,11 +68,11 @@ void VectorizedFunction::values(Intrepid::FieldContainer<double> &values, BasisC
     }
   }
   dims.pop_back(); // remove the last, dimensions argument
-  Intrepid::FieldContainer<double> compValues(dims);
+  Intrepid::FieldContainer<Scalar> compValues(dims);
   int valuesPerComponent = compValues.size();
-  
+
   for (int comp=0; comp < numComponents; comp++) {
-    FunctionPtr fxn = _fxns[comp];
+    TFunctionPtr<Scalar> fxn = _fxns[comp];
     fxn->values(compValues, basisCache);
     for (int i=0; i < valuesPerComponent; i++) {
       values[ numComponents * i + comp ] = compValues[ i ];
@@ -73,27 +80,32 @@ void VectorizedFunction::values(Intrepid::FieldContainer<double> &values, BasisC
   }
 }
 
-FunctionPtr VectorizedFunction::x() {
+template <typename Scalar>
+TFunctionPtr<Scalar> VectorizedFunction<Scalar>::x() {
   return _fxns[0];
 }
 
-FunctionPtr VectorizedFunction::y() {
+template <typename Scalar>
+TFunctionPtr<Scalar> VectorizedFunction<Scalar>::y() {
   return _fxns[1];
 }
 
-FunctionPtr VectorizedFunction::z() {
+template <typename Scalar>
+TFunctionPtr<Scalar> VectorizedFunction<Scalar>::z() {
   if (dim() >= 3) {
     return _fxns[2];
   } else {
-    return Function::null();
+    return TFunction<Scalar>::null();
   }
 }
 
-FunctionPtr VectorizedFunction::t() {
+template <typename Scalar>
+TFunctionPtr<Scalar> VectorizedFunction<Scalar>::t() {
   return _fxns[dim()-1];
 }
 
-FunctionPtr VectorizedFunction::di(int i) {
+template <typename Scalar>
+TFunctionPtr<Scalar> VectorizedFunction<Scalar>::di(int i) {
   // derivative in the ith coordinate direction
   Camellia::EOperator op;
   switch (i) {
@@ -113,37 +125,45 @@ FunctionPtr VectorizedFunction::di(int i) {
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Invalid coordinate direction");
       break;
   }
-  vector< FunctionPtr > fxns;
+  vector< TFunctionPtr<Scalar> > fxns;
   for (int j = 0; j< dim(); j++) {
-    FunctionPtr fj_di = Function::op(_fxns[j], op);
-    if (isNull(fj_di)) {
-      return Function::null();
+    TFunctionPtr<Scalar> fj_di = TFunction<Scalar>::op(_fxns[j], op);
+    if (this->isNull(fj_di)) {
+      return TFunction<Scalar>::null();
     }
     fxns.push_back(fj_di);
   }
   // if we made it this far, then all components aren't null:
-  return Teuchos::rcp( new VectorizedFunction(fxns) );
+  return Teuchos::rcp( new VectorizedFunction<Scalar>(fxns) );
 }
 
-FunctionPtr VectorizedFunction::dx() {
+template <typename Scalar>
+TFunctionPtr<Scalar> VectorizedFunction<Scalar>::dx() {
   return di(0);
 }
-FunctionPtr VectorizedFunction::dy() {
+template <typename Scalar>
+TFunctionPtr<Scalar> VectorizedFunction<Scalar>::dy() {
   return di(1);
 }
-FunctionPtr VectorizedFunction::dz() {
+template <typename Scalar>
+TFunctionPtr<Scalar> VectorizedFunction<Scalar>::dz() {
   return di(2);
 }
-FunctionPtr VectorizedFunction::dt() {
+template <typename Scalar>
+TFunctionPtr<Scalar> VectorizedFunction<Scalar>::dt() {
   return di(dim()-1);
 }
 
-bool VectorizedFunction::isZero() {
+template <typename Scalar>
+bool VectorizedFunction<Scalar>::isZero() {
   // vector function is zero if each of its components is zero.
-  for (vector< FunctionPtr >::iterator fxnIt = _fxns.begin(); fxnIt != _fxns.end(); fxnIt++) {
+  for (typename vector< TFunctionPtr<Scalar> >::iterator fxnIt = _fxns.begin(); fxnIt != _fxns.end(); fxnIt++) {
     if (! (*fxnIt)->isZero() ) {
       return false;
     }
   }
   return true;
 }
+
+template class VectorizedFunction<double>;
+

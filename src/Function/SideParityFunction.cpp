@@ -5,7 +5,7 @@
 using namespace Camellia;
 using namespace Intrepid;
 
-SideParityFunction::SideParityFunction() : Function(0) {
+SideParityFunction::SideParityFunction() : TFunction<double>(0) {
   //  cout << "SideParityFunction constructor.\n";
 }
 
@@ -18,7 +18,7 @@ string SideParityFunction::displayString() {
 }
 
 void SideParityFunction::values(Intrepid::FieldContainer<double> &values, BasisCachePtr sideBasisCache) {
-  CHECK_VALUES_RANK(values);
+  this->CHECK_VALUES_RANK(values);
   int numCells = values.dimension(0);
   int numPoints = values.dimension(1);
   int sideIndex = sideBasisCache->getSideIndex();
@@ -30,7 +30,7 @@ void SideParityFunction::values(Intrepid::FieldContainer<double> &values, BasisC
     if (sideBasisCache->getCellSideParities().dimension(0) != numCells) {
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "sideBasisCache->getCellSideParities() is non-empty, but the cell dimension doesn't match that of the values FieldContainer.");
     }
-    
+
     for (int cellOrdinal=0; cellOrdinal<numCells; cellOrdinal++) {
       int parity = sideBasisCache->getCellSideParities()(cellOrdinal,sideIndex);
       for (int ptOrdinal=0; ptOrdinal<numPoints; ptOrdinal++) {

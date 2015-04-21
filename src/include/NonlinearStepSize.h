@@ -19,7 +19,7 @@ namespace Camellia {
     NonlinearStepSize(double fixedStepSize = 0.5) {
       _fixedStepSize = fixedStepSize;
     }
-    virtual double stepSize(SolutionPtr u, SolutionPtr du) {
+    virtual double stepSize(TSolutionPtr<double> u, TSolutionPtr<double> du) {
       return _fixedStepSize;
     }
   };
@@ -35,9 +35,9 @@ namespace Camellia {
     double getNLResidual(){
       return _nlRes;
     }
-    double stepSize(SolutionPtr u, SolutionPtr du){
-      
-      int maxIter = 25; 
+    double stepSize(TSolutionPtr<double> u, TSolutionPtr<double> du){
+
+      int maxIter = 25;
       double stepLength = 1.0;
       double c_decrease = .5; // decrease by this factor each time
       double tol = 1e-6;
@@ -51,7 +51,7 @@ namespace Camellia {
       while ((!NLErrorDecreased) && (iter<maxIter)){
         u->addSolution(du,stepLength); // add contribution to compute new NL residual
         _residual->computeRieszRep(); newNLErr = _residual->getNorm();
-        u->addSolution(du,-stepLength); // remove contribution     
+        u->addSolution(du,-stepLength); // remove contribution
         if (newNLErr > prevNLErr + tol){
     stepLength *= c_decrease;
     stepLength = max(stepLength,minStepSize);
@@ -65,9 +65,9 @@ namespace Camellia {
     }
 
     // Modification of routine: in the event that your nonlinear error changes under solution->solve() (i.e. when your fluxes are not linearized)
-    double stepSize(SolutionPtr u, SolutionPtr du, double prevNLErr){
-      
-      int maxIter = 25; 
+    double stepSize(TSolutionPtr<double> u, TSolutionPtr<double> du, double prevNLErr){
+
+      int maxIter = 25;
       double stepLength = 1.0;
       double c_decrease = .5; // decrease by this factor each time
       double tol = 1e-6;
@@ -79,7 +79,7 @@ namespace Camellia {
       while ((!NLErrorDecreased) && (iter<maxIter)){
         u->addSolution(du,stepLength); // add contribution to compute new NL residual
         _residual->computeRieszRep(); newNLErr = _residual->getNorm();
-        u->addSolution(du,-stepLength); // remove contribution   
+        u->addSolution(du,-stepLength); // remove contribution
         if (newNLErr > prevNLErr + tol){
     stepLength *= c_decrease;
     stepLength = max(stepLength,minStepSize);

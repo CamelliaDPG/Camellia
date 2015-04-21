@@ -30,13 +30,13 @@ namespace Camellia {
 	typedef int GlobalIndexTypeToCast; // for constructing Epetra_Maps, etc.  (these like either int or long long)
 
 	// Trilinos typedefs
-	typedef double Scalar;
-	typedef Teuchos::RCP< Tpetra::CrsMatrix<Scalar,IndexType,GlobalIndexType> > MatrixPtr;
-	typedef Teuchos::RCP< Tpetra::MultiVector<Scalar,IndexType,GlobalIndexType> > VectorPtr;
+	// typedef double Scalar;
+	typedef Teuchos::RCP< Tpetra::CrsMatrix<double,IndexType,GlobalIndexType> > MatrixPtr;
+	typedef Teuchos::RCP< Tpetra::MultiVector<double,IndexType,GlobalIndexType> > VectorPtr;
 	typedef Teuchos::RCP< Tpetra::Map<IndexType,GlobalIndexType> > MapPtr;
 
-	typedef Teuchos::RCP< Intrepid::FieldContainer<Scalar> > FCPtr;
-	typedef Teuchos::RCP< const Intrepid::FieldContainer<Scalar> > constFCPtr;
+	typedef Teuchos::RCP< Intrepid::FieldContainer<double> > FCPtr;
+	typedef Teuchos::RCP< const Intrepid::FieldContainer<double> > constFCPtr;
 
 	// Camellia forward declarations and typedefs
 	class BasisCache;
@@ -48,7 +48,8 @@ namespace Camellia {
 	class DofOrderingFactory;
 	class Element;
 	class ElementType;
-	class Function;
+  template <typename Scalar=double>
+	class TFunction;
 	class GlobalDofAssignment;
 	class IP;
 	class LagrangeConstraints;
@@ -60,7 +61,8 @@ namespace Camellia {
 	class RefinementStrategy;
 	class RieszRep;
 	class RHS;
-	class Solution;
+  template <typename Scalar=double>
+	class TSolution;
 	class Solver;
 	class SpatialFilter;
 	class Var;
@@ -75,7 +77,11 @@ namespace Camellia {
 	typedef Teuchos::RCP<DofOrderingFactory> DofOrderingFactoryPtr;
 	typedef Teuchos::RCP<Element> ElementPtr;
 	typedef Teuchos::RCP<ElementType> ElementTypePtr;
-	typedef Teuchos::RCP<Function> FunctionPtr;
+	// typedef Teuchos::RCP<TFunction<double> > FunctionPtr;
+  template <typename Scalar>
+    using TFunctionPtr = Teuchos::RCP<TFunction<Scalar> >;
+  typedef TFunction<double> Function;
+  typedef TFunctionPtr<double> FunctionPtr;
 	typedef Teuchos::RCP<GlobalDofAssignment> GlobalDofAssignmentPtr;
 	typedef Teuchos::RCP<IP> IPPtr;
 	typedef Teuchos::RCP<LinearTerm> LinearTermPtr;
@@ -86,7 +92,10 @@ namespace Camellia {
 	typedef Teuchos::RCP<RefinementStrategy> RefinementStrategyPtr;
 	typedef Teuchos::RCP<RieszRep> RieszRepPtr;
 	typedef Teuchos::RCP<RHS> RHSPtr;
-	typedef Teuchos::RCP<Solution> SolutionPtr;
+  template <typename Scalar>
+    using TSolutionPtr = Teuchos::RCP<TSolution<Scalar> >;
+  typedef TSolution<double> Solution;
+  typedef TSolutionPtr<double> SolutionPtr;
 	typedef Teuchos::RCP<Solver> SolverPtr;
 	typedef Teuchos::RCP<SpatialFilter> SpatialFilterPtr;
 	typedef Teuchos::RCP<Var> VarPtr;

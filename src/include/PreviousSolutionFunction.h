@@ -17,18 +17,19 @@
 #include "InnerProductScratchPad.h"
 
 namespace Camellia {
-  class PreviousSolutionFunction : public Function {
-    SolutionPtr _soln;
+  template <typename Scalar>
+  class PreviousSolutionFunction : public TFunction<Scalar> {
+    TSolutionPtr<Scalar> _soln;
     LinearTermPtr _solnExpression;
     bool _overrideMeshCheck;
   public:
-    PreviousSolutionFunction(SolutionPtr soln, LinearTermPtr solnExpression, bool multiplyFluxesByCellParity = true);
-    PreviousSolutionFunction(SolutionPtr soln, VarPtr var, bool multiplyFluxesByCellParity = true);
+    PreviousSolutionFunction(TSolutionPtr<Scalar> soln, LinearTermPtr solnExpression, bool multiplyFluxesByCellParity = true);
+    PreviousSolutionFunction(TSolutionPtr<Scalar> soln, VarPtr var, bool multiplyFluxesByCellParity = true);
     bool boundaryValueOnly();
     void setOverrideMeshCheck(bool value, bool dontWarn=false);
     void importCellData(std::vector<GlobalIndexType> cells);
-    void values(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache);
-    static map<int, FunctionPtr > functionMap( vector< VarPtr > varPtrs, SolutionPtr soln);
+    void values(Intrepid::FieldContainer<Scalar> &values, BasisCachePtr basisCache);
+    static map<int, TFunctionPtr<Scalar> > functionMap( vector< VarPtr > varPtrs, TSolutionPtr<Scalar> soln);
     string displayString();
   };
 }

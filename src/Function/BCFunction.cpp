@@ -8,25 +8,28 @@
 using namespace Intrepid;
 using namespace Camellia;
 
-Teuchos::RCP<BCFunction> BCFunction::bcFunction(BCPtr bc, int varID, bool isTrace) {
-  FunctionPtr spatiallyFilteredFunction;
+template <typename Scalar>
+Teuchos::RCP<BCFunction<Scalar>> BCFunction<Scalar>::bcFunction(BCPtr bc, int varID, bool isTrace) {
+  TFunctionPtr<Scalar> spatiallyFilteredFunction;
   int rank = 0;
   if (! bc->isLegacySubclass()) {
     spatiallyFilteredFunction = bc->getSpatiallyFilteredFunctionForDirichletBC(varID);
     rank = spatiallyFilteredFunction->rank();
   }
-  
-  return Teuchos::rcp( new BCFunction(bc, varID, isTrace, spatiallyFilteredFunction, rank) );
+
+  return Teuchos::rcp( new BCFunction<Scalar>(bc, varID, isTrace, spatiallyFilteredFunction, rank) );
 }
 
-BCFunction::BCFunction(BCPtr bc, int varID, bool isTrace, FunctionPtr spatiallyFilteredFunction, int rank) : Function(rank) {
+template <typename Scalar>
+BCFunction<Scalar>::BCFunction(BCPtr bc, int varID, bool isTrace, TFunctionPtr<Scalar> spatiallyFilteredFunction, int rank) : TFunction<Scalar>(rank) {
   _bc = bc;
   _varID = varID;
   _isTrace = isTrace;
   _spatiallyFilteredFunction = spatiallyFilteredFunction;
 }
 
-void BCFunction::values(FieldContainer<double> &values, BasisCachePtr basisCache) {
+template <typename Scalar>
+void BCFunction<Scalar>::values(FieldContainer<Scalar> &values, BasisCachePtr basisCache) {
   int numCells = basisCache->cellIDs().size();
   int numPoints = basisCache->getPhysicalCubaturePoints().dimension(1);
   _imposeHere.resize(numCells,numPoints);
@@ -34,7 +37,8 @@ void BCFunction::values(FieldContainer<double> &values, BasisCachePtr basisCache
   _bc->imposeBC(values, _imposeHere, _varID, unitNormals, basisCache);
 }
 
-bool BCFunction::imposeOnCell(int cellIndex) {
+template <typename Scalar>
+bool BCFunction<Scalar>::imposeOnCell(int cellIndex) {
   // returns true if at least one cubature point lies within the SpatialFilter or equivalent
   // MUST call values() with appropriate basisCache before calling this...
   int numPoints = _imposeHere.dimension(1);
@@ -44,30 +48,40 @@ bool BCFunction::imposeOnCell(int cellIndex) {
   return false;
 }
 
-bool BCFunction::isTrace() {
+template <typename Scalar>
+bool BCFunction<Scalar>::isTrace() {
   return _isTrace;
 }
 
-int BCFunction::varID() {
+template <typename Scalar>
+int BCFunction<Scalar>::varID() {
   return _varID;
 }
 
-FunctionPtr BCFunction::curl() {
+template <typename Scalar>
+TFunctionPtr<Scalar> BCFunction<Scalar>::curl() {
   return _spatiallyFilteredFunction->curl();
 }
 
-FunctionPtr BCFunction::div() {
+template <typename Scalar>
+TFunctionPtr<Scalar> BCFunction<Scalar>::div() {
   return _spatiallyFilteredFunction->div();
 }
 
-FunctionPtr BCFunction::dx() {
+template <typename Scalar>
+TFunctionPtr<Scalar> BCFunction<Scalar>::dx() {
   return _spatiallyFilteredFunction->dx();
 }
 
-FunctionPtr BCFunction::dy() {
+template <typename Scalar>
+TFunctionPtr<Scalar> BCFunction<Scalar>::dy() {
   return _spatiallyFilteredFunction->dy();
 }
 
-FunctionPtr BCFunction::dz() {
+template <typename Scalar>
+TFunctionPtr<Scalar> BCFunction<Scalar>::dz() {
   return _spatiallyFilteredFunction->dz();
 }
+
+template class BCFunction<double>;
+

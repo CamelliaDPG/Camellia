@@ -6,11 +6,16 @@
 using namespace Camellia;
 using namespace Intrepid;
 
-ExactSolutionFunction::ExactSolutionFunction(Teuchos::RCP<ExactSolution> exactSolution, int trialID)
-: Function(exactSolution->exactFunctions().find(trialID)->second->rank()) {
+template <typename Scalar>
+ExactSolutionFunction<Scalar>::ExactSolutionFunction(Teuchos::RCP<ExactSolution> exactSolution, int trialID)
+: TFunction<Scalar>(exactSolution->exactFunctions().find(trialID)->second->rank()) {
   _exactSolution = exactSolution;
   _trialID = trialID;
 }
-void ExactSolutionFunction::values(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache) {
+template <typename Scalar>
+void ExactSolutionFunction<Scalar>::values(Intrepid::FieldContainer<Scalar> &values, BasisCachePtr basisCache) {
   _exactSolution->solutionValues(values,_trialID,basisCache);
 }
+
+template class ExactSolutionFunction<double>;
+

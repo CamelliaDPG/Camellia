@@ -12,17 +12,17 @@
 #include "Function.h"
 
 namespace Camellia {
-  class UnitNormalFunction : public Function {
+  class UnitNormalFunction : public TFunction<double> {
     int _comp;
     bool _spaceTime;
   public:
     UnitNormalFunction(int comp=-1, bool spaceTime = false); // -1: the vector normal.  Otherwise, picks out the comp component
-    
-    FunctionPtr x();
-    FunctionPtr y();
-    FunctionPtr z();
-    FunctionPtr t();
-    
+
+    TFunctionPtr<double> x();
+    TFunctionPtr<double> y();
+    TFunctionPtr<double> z();
+    TFunctionPtr<double> t();
+
     bool boundaryValueOnly();
     string displayString();
     void values(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache);

@@ -14,10 +14,10 @@
 #include "Mesh.h"
 
 namespace Camellia {
-	class MeshPolyOrderFunction : public Function {
+	class MeshPolyOrderFunction : public TFunction<double> {
 	  Teuchos::RCP<Mesh> _mesh;
 	public:
-	  MeshPolyOrderFunction(Teuchos::RCP<Mesh> mesh) : Function(0) { _mesh = mesh;} // scalar
+	  MeshPolyOrderFunction(Teuchos::RCP<Mesh> mesh) : TFunction<double>(0) { _mesh = mesh;} // scalar
 	  void values(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache);
 	};
 }

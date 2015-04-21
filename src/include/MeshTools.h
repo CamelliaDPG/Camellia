@@ -20,10 +20,10 @@ namespace Camellia {
 	public:
 	  static MeshPtr timeSliceMesh(MeshPtr spaceTimeMesh, double t,
 	                               map<GlobalIndexType, GlobalIndexType> &sliceCellIDToSpaceTimeCellID, int H1OrderForSlice);
-	  
-	  static void timeSliceExport(std::string dirPath, MeshPtr mesh, FunctionPtr spaceTimeFunction, std::vector<double> tValues, std::string functionName="function");
-	  
-	  static FunctionPtr timeSliceFunction(MeshPtr spaceTimeMesh, map<GlobalIndexType, GlobalIndexType> &cellIDMap, FunctionPtr spaceTimeFunction, double t);
+
+	  static void timeSliceExport(std::string dirPath, MeshPtr mesh, TFunctionPtr<double> spaceTimeFunction, std::vector<double> tValues, std::string functionName="function");
+
+	  static TFunctionPtr<double> timeSliceFunction(MeshPtr spaceTimeMesh, map<GlobalIndexType, GlobalIndexType> &cellIDMap, TFunctionPtr<double> spaceTimeFunction, double t);
 	};
 }
 

@@ -11,49 +11,49 @@
 
 using namespace Camellia;
 
-typedef pair< FunctionPtr, VarPtr > LinearSummand;
+typedef pair< TFunctionPtr<double>, VarPtr > LinearSummand;
 
-Constraint::Constraint(LinearTermPtr linearTerm, FunctionPtr f) {
+Constraint::Constraint(LinearTermPtr linearTerm, TFunctionPtr<double> f) {
   _linearTerm = linearTerm;
   _f = f;
 }
 LinearTermPtr Constraint::linearTerm() const {
   return _linearTerm;
 }
-FunctionPtr Constraint::f() const {
+TFunctionPtr<double> Constraint::f() const {
   return _f;
 }
 Constraint Constraint::spatiallyFilteredConstraint(const Constraint &c, SpatialFilterPtr sf) {
   LinearTermPtr lt = c.linearTerm();
-  FunctionPtr f = c.f();
+  TFunctionPtr<double> f = c.f();
   LinearTermPtr flt = Teuchos::rcp( new LinearTerm ); // filtered linear term
-  FunctionPtr ff = Teuchos::rcp( new SpatiallyFilteredFunction(f,sf) );
-  
+  TFunctionPtr<double> ff = Teuchos::rcp( new SpatiallyFilteredFunction<double>(f,sf) );
+
   for (vector< LinearSummand >::const_iterator lsIt = lt->summands().begin(); lsIt != lt->summands().end(); lsIt++) {
     LinearSummand ls = *lsIt;
-    FunctionPtr lsWeight = ls.first;
-    FunctionPtr filteredWeight = Teuchos::rcp( new SpatiallyFilteredFunction(lsWeight,sf) );
+    TFunctionPtr<double> lsWeight = ls.first;
+    TFunctionPtr<double> filteredWeight = Teuchos::rcp( new SpatiallyFilteredFunction<double>(lsWeight,sf) );
     VarPtr var = ls.second;
     flt->addTerm(filteredWeight * var, true); //bypass type check...
   }
-  
+
   return Constraint(flt,ff);
 }
 
 namespace Camellia {
-  Constraint operator==(VarPtr v, FunctionPtr f) {
+  Constraint operator==(VarPtr v, TFunctionPtr<double> f) {
     return Constraint(1.0*v,f);
   }
 
-  Constraint operator==(FunctionPtr f, VarPtr v) {
+  Constraint operator==(TFunctionPtr<double> f, VarPtr v) {
     return Constraint(1.0*v,f);
   }
 
-  Constraint operator==(LinearTermPtr a, FunctionPtr f) {
+  Constraint operator==(LinearTermPtr a, TFunctionPtr<double> f) {
     return Constraint(a,f);
   }
 
-  Constraint operator==(FunctionPtr f, LinearTermPtr a) {
+  Constraint operator==(TFunctionPtr<double> f, LinearTermPtr a) {
     return Constraint(a,f);
   }
 } // namespace Camellia

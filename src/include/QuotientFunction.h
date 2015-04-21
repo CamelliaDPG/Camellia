@@ -12,16 +12,17 @@
 #include "Function.h"
 
 namespace Camellia {
-  class QuotientFunction : public Function {
-    FunctionPtr _f, _scalarDivisor;
+  template <typename Scalar>
+  class QuotientFunction : public TFunction<Scalar> {
+    TFunctionPtr<Scalar> _f, _scalarDivisor;
   public:
-    QuotientFunction(FunctionPtr f, FunctionPtr scalarDivisor);
-    void values(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache);
+    QuotientFunction(TFunctionPtr<Scalar> f, TFunctionPtr<Scalar> scalarDivisor);
+    void values(Intrepid::FieldContainer<Scalar> &values, BasisCachePtr basisCache);
     virtual bool boundaryValueOnly();
-    FunctionPtr dx();
-    FunctionPtr dy();
-    FunctionPtr dz();
-    FunctionPtr dt();
+    TFunctionPtr<Scalar> dx();
+    TFunctionPtr<Scalar> dy();
+    TFunctionPtr<Scalar> dz();
+    TFunctionPtr<Scalar> dt();
     std::string displayString();
   };
 }

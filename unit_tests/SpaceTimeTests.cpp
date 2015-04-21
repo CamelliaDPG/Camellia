@@ -22,10 +22,10 @@ namespace {
     vector<int> elementCounts(spaceDim,1);   // 1^d mesh
     vector<double> x0(spaceDim,-1.0);
     MeshTopologyPtr spatialMeshTopo = MeshFactory::rectilinearMeshTopology(dimensions, elementCounts, x0);
-    
+
     double t0 = 0.0, t1 = 1.0;
     MeshTopologyPtr spaceTimeMeshTopo = MeshFactory::spaceTimeMeshTopology(spatialMeshTopo, t0, t1);
-    
+
     double epsilon = 1.0;
     SpaceTimeHeatFormulation form(spaceDim, epsilon);
     int delta_k = 1;
@@ -45,7 +45,7 @@ namespace {
     double expectedIntegral = pow(2.0,spaceDim) * timeExtent;
     TEST_FLOATING_EQUALITY(actualIntegral, expectedIntegral, 1e-15);
   }
-  
+
   void testIntegrateConstantFunctionSides(int spaceDim, Teuchos::FancyOStream &out, bool &success)
   {
     int H1Order = 1;
@@ -60,7 +60,7 @@ namespace {
     double expectedIntegral = spatialIntegral * numTemporalSides + timeExtent * numSpatialSides * spatialSideIntegral;
     TEST_FLOATING_EQUALITY(actualIntegral, expectedIntegral, 1e-15);
   }
-  
+
   void testIntegrateTimeVaryingFunctionVolume(int spaceDim, Teuchos::FancyOStream &out, bool &success)
   {
     int H1Order = 2;
@@ -71,7 +71,7 @@ namespace {
     double expectedIntegral = pow(2.0,spaceDim) * temporalIntegral;
     TEST_FLOATING_EQUALITY(actualIntegral, expectedIntegral, 1e-15);
   }
-  
+
   void testIntegrateTimeVaryingFunctionSides(int spaceDim, Teuchos::FancyOStream &out, bool &success)
   {
     int H1Order = 2;
@@ -86,7 +86,7 @@ namespace {
     double expectedIntegral = spatialIntegral + temporalIntegral * numSpatialSides * spatialSideIntegral;
     TEST_FLOATING_EQUALITY(actualIntegral, expectedIntegral, 1e-15);
   }
-  
+
   void testIntegrateSpaceVaryingFunctionVolume(int spaceDim, Teuchos::FancyOStream &out, bool &success)
   {
     int H1Order = 3;
@@ -98,7 +98,7 @@ namespace {
     double expectedIntegral = pow(2.0,spaceDim-1) * expectedIntegral_f_x * temporalExtent;
     TEST_FLOATING_EQUALITY(actualIntegral, expectedIntegral, 1e-15);
   }
-  
+
   void testIntegrateSpaceVaryingFunctionSides(int spaceDim, Teuchos::FancyOStream &out, bool &success)
   {
     int H1Order = 3;
@@ -121,7 +121,7 @@ namespace {
                             + expectedIntegralSides_varying_x * numSides_varying_x;
     TEST_FLOATING_EQUALITY(actualIntegral, expectedIntegral, 1e-15);
   }
-  
+
   TEUCHOS_UNIT_TEST( SpaceTime, IntegrateConstantFunctionSides_1D )
   {
     int spaceDim = 1;

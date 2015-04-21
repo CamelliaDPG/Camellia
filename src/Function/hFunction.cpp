@@ -14,10 +14,10 @@ double hFunction::value(double x, double y, double h) {
   return h;
 }
 void hFunction::values(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache) {
-  CHECK_VALUES_RANK(values);
+  this->CHECK_VALUES_RANK(values);
   int numCells = values.dimension(0);
   int numPoints = values.dimension(1);
-  
+
   Intrepid::FieldContainer<double> cellMeasures = basisCache->getCellMeasures();
   const Intrepid::FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
   for (int cellIndex=0; cellIndex<numCells; cellIndex++) {

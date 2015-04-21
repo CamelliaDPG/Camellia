@@ -3,31 +3,31 @@
 //
 // Copyright © 2011 Sandia Corporation. All Rights Reserved.
 //
-// Redistribution and use in source and binary forms, with or without modification, are 
+// Redistribution and use in source and binary forms, with or without modification, are
 // permitted provided that the following conditions are met:
-// 1. Redistributions of source code must retain the above copyright notice, this list of 
+// 1. Redistributions of source code must retain the above copyright notice, this list of
 // conditions and the following disclaimer.
-// 2. Redistributions in binary form must reproduce the above copyright notice, this list of 
-// conditions and the following disclaimer in the documentation and/or other materials 
+// 2. Redistributions in binary form must reproduce the above copyright notice, this list of
+// conditions and the following disclaimer in the documentation and/or other materials
 // provided with the distribution.
-// 3. The name of the author may not be used to endorse or promote products derived from 
+// 3. The name of the author may not be used to endorse or promote products derived from
 // this software without specific prior written permission.
 //
-// THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY 
-// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE 
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR 
-// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR 
-// ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR 
-// CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT 
-// OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR 
-// BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF 
-// LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING 
-// NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS 
+// THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY
+// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+// ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+// CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT
+// OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR
+// BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
+// LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
+// NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 //
 // Questions? Contact Nate Roberts (nate@nateroberts.com).
 //
-// @HEADER 
+// @HEADER
 
 /*
  *  ExactSolution.cpp
@@ -35,7 +35,7 @@
  */
 
 #include <Teuchos_GlobalMPISession.hpp>
- 
+
 #include "Intrepid_CellTools.hpp"
 #include "CamelliaCellTools.h"
 #include "Intrepid_DefaultCubatureFactory.hpp"
@@ -52,8 +52,8 @@
 using namespace Intrepid;
 using namespace Camellia;
 
-double ExactSolution::L2NormOfError(Solution &solution, int trialID, int cubDegree) {
-  Teuchos::RCP<Mesh> mesh = solution.mesh();
+double ExactSolution::L2NormOfError(TSolutionPtr<double> solution, int trialID, int cubDegree) {
+  Teuchos::RCP<Mesh> mesh = solution->mesh();
   double totalErrorSquared = 0.0;
   // check if the trialID is one for which a single-point BC was imposed:
   // (in that case, we need to subtract off the average value of the solution when computing norm
@@ -62,19 +62,19 @@ double ExactSolution::L2NormOfError(Solution &solution, int trialID, int cubDegr
 //    solutionLift = -solution.meanValue(trialID);
 //    cout << "solutionLift for trialID " << trialID << ": " << solutionLift << endl;
 //  }
-  
+
   int rank = Teuchos::GlobalMPISession::getRank();
-  
+
   vector<ElementTypePtr> elemTypes = mesh->elementTypes(rank);
   vector<ElementTypePtr>::iterator elemTypeIt;
   for (elemTypeIt = elemTypes.begin(); elemTypeIt != elemTypes.end(); elemTypeIt++) {
     ElementTypePtr elemTypePtr = *(elemTypeIt);
     int numCells = mesh->cellIDsOfType(elemTypePtr).size();
     FieldContainer<double> errorSquaredPerCell(numCells);
-    
+
     int numSides;
-    
-    if (! solution.mesh()->bilinearForm()->isFluxOrTrace(trialID)) {
+
+    if (! solution->mesh()->bilinearForm()->isFluxOrTrace(trialID)) {
       numSides = 1;
     } else {
       numSides = elemTypePtr->cellTopoPtr->getSideCount();
@@ -82,7 +82,7 @@ double ExactSolution::L2NormOfError(Solution &solution, int trialID, int cubDegr
 
     for (int sideIndex=0; sideIndex<numSides; sideIndex++) {
       L2NormOfError(errorSquaredPerCell, solution, elemTypePtr,trialID,sideIndex, cubDegree, solutionLift);
-      
+
       for (int i=0; i<numCells; i++) {
         totalErrorSquared += errorSquaredPerCell(i);
       }
@@ -92,17 +92,17 @@ double ExactSolution::L2NormOfError(Solution &solution, int trialID, int cubDegr
   return sqrt(totalErrorSquared);
 }
 
-void ExactSolution::L2NormOfError(FieldContainer<double> &errorSquaredPerCell, Solution &solution, ElementTypePtr elemTypePtr, int trialID, int sideIndex, int cubDegree, double solutionLift) {
+void ExactSolution::L2NormOfError(FieldContainer<double> &errorSquaredPerCell, TSolutionPtr<double> solution, ElementTypePtr elemTypePtr, int trialID, int sideIndex, int cubDegree, double solutionLift) {
 //  BasisCache(ElementTypePtr elemType, Teuchos::RCP<Mesh> mesh = Teuchos::rcp( (Mesh*) NULL ), bool testVsTest=false, int cubatureDegreeEnrichment = 0)
 
   DofOrdering dofOrdering = *(elemTypePtr->trialOrderPtr.get());
   BasisPtr basis = dofOrdering.getBasis(trialID,sideIndex);
-  
-  bool boundaryIntegral = solution.mesh()->bilinearForm()->isFluxOrTrace(trialID);
-  
+
+  bool boundaryIntegral = solution->mesh()->bilinearForm()->isFluxOrTrace(trialID);
+
   BasisCachePtr basisCache;
   if (cubDegree <= 0) { // then take the default cub. degree
-    basisCache = Teuchos::rcp( new BasisCache( elemTypePtr, solution.mesh() ) );
+    basisCache = Teuchos::rcp( new BasisCache( elemTypePtr, solution->mesh() ) );
   } else {
     // we could eliminate the logic below if we just added BasisCache::setCubatureDegree()...
     // (the logic below is just to make the enriched cubature match the requested cubature degree...)
@@ -114,54 +114,54 @@ void ExactSolution::L2NormOfError(FieldContainer<double> &errorSquaredPerCell, S
     }
     int maxTestDegree = elemTypePtr->testOrderPtr->maxBasisDegree();
     int cubDegreeEnrichment = max(cubDegree - (maxTrialDegree + maxTestDegree), 0);
-    basisCache = Teuchos::rcp( new BasisCache( elemTypePtr, solution.mesh(), false, cubDegreeEnrichment) );
+    basisCache = Teuchos::rcp( new BasisCache( elemTypePtr, solution->mesh(), false, cubDegreeEnrichment) );
   }
-  
+
   // much of this code is the same as what's in the volume integration in computeStiffness...
-  FieldContainer<double> physicalCellNodes = solution.mesh()->physicalCellNodes(elemTypePtr);
-  vector<GlobalIndexType> cellIDs = solution.mesh()->cellIDsOfType(elemTypePtr);
+  FieldContainer<double> physicalCellNodes = solution->mesh()->physicalCellNodes(elemTypePtr);
+  vector<GlobalIndexType> cellIDs = solution->mesh()->cellIDsOfType(elemTypePtr);
   basisCache->setPhysicalCellNodes(physicalCellNodes, cellIDs, true);
-  
+
   if (boundaryIntegral) {
     basisCache = basisCache->getSideBasisCache(sideIndex);
   }
-  
+
   FieldContainer<double> weightedMeasure = basisCache->getWeightedMeasures();
   FieldContainer<double> weightedErrorSquared;
-  
+
   int numCells = basisCache->getPhysicalCubaturePoints().dimension(0);
   int numCubPoints = basisCache->getPhysicalCubaturePoints().dimension(1);
   int spaceDim = basisCache->getSpaceDim();
-  
+
   Teuchos::Array<int> dimensions;
   dimensions.push_back(numCells);
   dimensions.push_back(numCubPoints);
-  
+
   int basisRank = BasisFactory::basisFactory()->getBasisRank(basis);
   if (basisRank==1) {
     dimensions.push_back(spaceDim);
   }
-  
+
   FieldContainer<double> computedValues(dimensions);
   FieldContainer<double> exactValues(dimensions);
-  
+
   if (solutionLift != 0.0) {
     int size = computedValues.size();
     for (int i=0; i<size; i++) {
       computedValues[i] += solutionLift;
     }
   }
-  
-  solution.solutionValues(computedValues, trialID, basisCache);
+
+  solution->solutionValues(computedValues, trialID, basisCache);
   this->solutionValues(exactValues, trialID, basisCache);
-  
+
 //  cout << "ExactSolution: exact values:\n" << exactValues;
 //  cout << "ExactSolution: computed values:\n" << computedValues;
-  
+
   FieldContainer<double> errorSquared(numCells,numCubPoints);
-  
+
   squaredDifference(errorSquared,computedValues,exactValues);
-  
+
   weightedErrorSquared.resize(numCells,numCubPoints);
   for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
     for (int ptIndex=0; ptIndex<numCubPoints; ptIndex++) {
@@ -171,7 +171,7 @@ void ExactSolution::L2NormOfError(FieldContainer<double> &errorSquaredPerCell, S
       weightedErrorSquared(cellIndex,ptIndex) = errorSquared(cellIndex,ptIndex) * weightedMeasure(cellIndex,ptIndex);
     }
   }
-  
+
   // compute the integral
   errorSquaredPerCell.initialize(0.0);
   int numPoints = weightedErrorSquared.dimension(1);
@@ -215,12 +215,12 @@ void ExactSolution::solutionValues(FieldContainer<double> &values, int trialID,
   int numCells = physicalPoints.dimension(0);
   int numPoints = physicalPoints.dimension(1);
   int spaceDim = physicalPoints.dimension(2);
-  
+
   Teuchos::Array<int> pointDimensions;
   pointDimensions.push_back(spaceDim);
-  
+
 //  cout << "ExactSolution: physicalPoints:\n" << physicalPoints;
-  
+
   for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
     for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
       FieldContainer<double> point(pointDimensions,&physicalPoints(cellIndex,ptIndex,0));
@@ -235,7 +235,7 @@ void ExactSolution::solutionValues(FieldContainer<double> &values, int trialID, 
     _exactFunctions[trialID]->values(values,basisCache);
     return;
   }
-  
+
   // TODO: change ExactSolution::solutionValues (below) to take a *const* points FieldContainer, to avoid this copy:
   FieldContainer<double> points = basisCache->getPhysicalCubaturePoints();
   if (basisCache->getSideIndex() >= 0) {
@@ -246,19 +246,19 @@ void ExactSolution::solutionValues(FieldContainer<double> &values, int trialID, 
   }
 }
 
-void ExactSolution::solutionValues(FieldContainer<double> &values, 
+void ExactSolution::solutionValues(FieldContainer<double> &values,
                                    int trialID,
                                    FieldContainer<double> &physicalPoints,
                                    FieldContainer<double> &unitNormals) {
   int numCells = physicalPoints.dimension(0);
   int numPoints = physicalPoints.dimension(1);
   int spaceDim = physicalPoints.dimension(2);
-  
+
   Teuchos::Array<int> pointDimensions;
   pointDimensions.push_back(spaceDim);
-  
+
   //  cout << "ExactSolution: physicalPoints:\n" << physicalPoints;
-  
+
   for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
     for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
       FieldContainer<double> point(pointDimensions,&physicalPoints(cellIndex,ptIndex,0));
@@ -281,7 +281,7 @@ Teuchos::RCP<RHS> ExactSolution::rhs() {
 }
 
 ExactSolution::ExactSolution() {
-  
+
 }
 
 ExactSolution::ExactSolution(BFPtr bf, Teuchos::RCP<BC> bc, Teuchos::RCP<RHS> rhs, int H1Order) {
@@ -299,7 +299,7 @@ double ExactSolution::solutionValue(int trialID, FieldContainer<double> &physica
 //  double y = physicalPoint(1);
 //  if (spaceDim == 2) {
 //    if (_exactFunctions.find(trialID) != _exactFunctions.end() ) {
-//      SimpleFunctionPtr fxn = _exactFunctions.find(trialID)->second;
+//      SimpleFunctionPtr<double> fxn = _exactFunctions.find(trialID)->second;
 //      return fxn->value(x,y);
 //    } else {
 //      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "No function set for trialID.");
@@ -323,7 +323,7 @@ double ExactSolution::solutionValue(int trialID, FieldContainer<double> &physica
 //      ScalarFunctionOfNormalPtr fxn = _exactNormalFunctions.find(trialID)->second;
 //      return fxn->value(x,y,n1,n2);
 //    } else if (_exactFunctions.find(trialID) != _exactFunctions.end() ) {
-//      SimpleFunctionPtr fxn = _exactFunctions.find(trialID)->second;
+//      SimpleFunctionPtr<double> fxn = _exactFunctions.find(trialID)->second;
 //      return fxn->value(x,y);
 //    } else {
 //      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "No function set for trialID.");
@@ -337,10 +337,10 @@ int ExactSolution::H1Order() { // return -1 for non-polynomial solutions
   return _H1Order;
 }
 
-const map< int, FunctionPtr > ExactSolution::exactFunctions() {
+const map< int, TFunctionPtr<double> > ExactSolution::exactFunctions() {
   return _exactFunctions;
 }
 
-void ExactSolution::setSolutionFunction( VarPtr var, FunctionPtr varFunction ) {
+void ExactSolution::setSolutionFunction( VarPtr var, TFunctionPtr<double> varFunction ) {
   _exactFunctions[var->ID()] = varFunction;
 }

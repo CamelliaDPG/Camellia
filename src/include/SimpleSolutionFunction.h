@@ -12,23 +12,24 @@
 #include "Function.h"
 
 namespace Camellia {
-  class SimpleSolutionFunction : public Function {
-    SolutionPtr _soln;
+  template <typename Scalar>
+  class SimpleSolutionFunction : public TFunction<Scalar> {
+    TSolutionPtr<Scalar> _soln;
     VarPtr _var;
   public:
-    SimpleSolutionFunction(VarPtr var, SolutionPtr soln);
-    void values(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache);
-    FunctionPtr x();
-    FunctionPtr y();
-    FunctionPtr z();
-    
-    FunctionPtr dx();
-    FunctionPtr dy();
-    FunctionPtr dz();
+    SimpleSolutionFunction(VarPtr var, TSolutionPtr<Scalar> soln);
+    void values(Intrepid::FieldContainer<Scalar> &values, BasisCachePtr basisCache);
+    TFunctionPtr<Scalar> x();
+    TFunctionPtr<Scalar> y();
+    TFunctionPtr<Scalar> z();
+
+    TFunctionPtr<Scalar> dx();
+    TFunctionPtr<Scalar> dy();
+    TFunctionPtr<Scalar> dz();
     // for reasons of efficiency, may want to implement div() and grad() as well
-    
+
     void importCellData(std::vector<GlobalIndexType> cellIDs);
-    
+
     std::string displayString();
     bool boundaryValueOnly();
   };

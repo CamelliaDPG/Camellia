@@ -248,7 +248,7 @@ void GlobalDofAssignment::constructActiveCellMap() {
 
 void GlobalDofAssignment::repartitionAndMigrate() {
   _partitionPolicy->partitionMesh(_mesh.get(),_numPartitions);
-  for (vector< Solution* >::iterator solutionIt = _registeredSolutions.begin();
+  for (vector< TSolutionPtr<double> >::iterator solutionIt = _registeredSolutions.begin();
        solutionIt != _registeredSolutions.end(); solutionIt++) {
     // if solution has a condensed dof interpreter, we should reinitialize the mapping from interpreted to global dofs
     Teuchos::RCP<DofInterpreter> dofInterpreter = (*solutionIt)->getDofInterpreter();
@@ -410,9 +410,9 @@ void GlobalDofAssignment::interpretLocalCoefficients(GlobalIndexType cellID, con
 void GlobalDofAssignment::projectParentCoefficientsOntoUnsetChildren() {
   set<GlobalIndexType> rankLocalCellIDs = cellsInPartition(-1);
 
-  for (vector< Solution* >::iterator solutionIt = _registeredSolutions.begin();
+  for (vector< TSolutionPtr<double> >::iterator solutionIt = _registeredSolutions.begin();
        solutionIt != _registeredSolutions.end(); solutionIt++) {
-    Solution* soln = *solutionIt;
+    TSolutionPtr<double> soln = *solutionIt;
     for (set<GlobalIndexType>::iterator cellIDIt = rankLocalCellIDs.begin(); cellIDIt != rankLocalCellIDs.end(); cellIDIt++) {
       GlobalIndexType cellID = *cellIDIt;
       if (soln->cellHasCoefficientsAssigned(cellID)) continue;
@@ -525,11 +525,11 @@ IndexType GlobalDofAssignment::partitionLocalCellIndex(GlobalIndexType cellID, i
   return -1;
 }
 
-vector<Solution*> GlobalDofAssignment::getRegisteredSolutions() {
+vector<TSolutionPtr<double>> GlobalDofAssignment::getRegisteredSolutions() {
   return _registeredSolutions;
 }
 
-void GlobalDofAssignment::registerSolution(Solution* solution) {
+void GlobalDofAssignment::registerSolution(TSolutionPtr<double> solution) {
   _registeredSolutions.push_back( solution );
 }
 
@@ -541,8 +541,8 @@ void GlobalDofAssignment::setMeshAndMeshTopology(MeshPtr mesh) {
   this->DofInterpreter::_mesh = _mesh;
 }
 
-void GlobalDofAssignment::unregisterSolution(Solution* solution) {
-  for (vector< Solution* >::iterator solnIt = _registeredSolutions.begin();
+void GlobalDofAssignment::unregisterSolution(TSolutionPtr<double> solution) {
+  for (vector< TSolutionPtr<double> >::iterator solnIt = _registeredSolutions.begin();
        solnIt != _registeredSolutions.end(); solnIt++) {
     if ( *solnIt == solution ) {
       _registeredSolutions.erase(solnIt);

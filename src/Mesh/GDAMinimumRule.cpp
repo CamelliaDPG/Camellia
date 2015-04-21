@@ -82,7 +82,7 @@ void GDAMinimumRule::didHRefine(const set<GlobalIndexType> &parentCellIDs) {
 //  for (set<GlobalIndexType>::const_iterator cellIDIt = parentCellIDs.begin(); cellIDIt != parentCellIDs.end(); cellIDIt++) {
 //    GlobalIndexType parentCellID = *cellIDIt;
 //    ElementTypePtr elemType = elementType(parentCellID);
-//    for (vector< Solution* >::iterator solutionIt = _registeredSolutions.begin();
+//    for (vector< TSolution<double>* >::iterator solutionIt = _registeredSolutions.begin();
 //         solutionIt != _registeredSolutions.end(); solutionIt++) {
 //      // do projection
 //      vector<IndexType> childIDsLocalIndexType = _meshTopology->getCell(parentCellID)->getChildIndices();
@@ -122,7 +122,7 @@ void GDAMinimumRule::didPRefine(const set<GlobalIndexType> &cellIDs, int deltaP)
   for (set<GlobalIndexType>::const_iterator cellIDIt = cellIDs.begin(); cellIDIt != cellIDs.end(); cellIDIt++) {
     ElementTypePtr oldType = elementType(*cellIDIt);
     assignInitialElementType(*cellIDIt);
-    for (vector< Solution* >::iterator solutionIt = _registeredSolutions.begin();
+    for (typename vector< TSolutionPtr<double> >::iterator solutionIt = _registeredSolutions.begin();
          solutionIt != _registeredSolutions.end(); solutionIt++) {
       // do projection
       vector<IndexType> childIDs(1,*cellIDIt); // "child" ID is just the cellID

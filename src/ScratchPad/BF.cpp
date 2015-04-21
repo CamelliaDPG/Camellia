@@ -591,12 +591,15 @@ namespace Camellia{
   }
 
   IPPtr BF::graphNorm(const map<int, double> &varWeights, double weightForL2TestTerms) {
-    typedef pair< FunctionPtr, VarPtr > LinearSummand;
+    typedef pair< TFunctionPtr<double>, VarPtr > LinearSummand;
     map<int, LinearTermPtr> testTermsForVarID;
     vector<double> e1(3), e2(3), e3(3); // unit vectors
     e1[0] = 1.0;
     e2[1] = 1.0;
     e3[2] = 1.0;
+    TFunctionPtr<double> e1Fxn = TFunction<double>::constant(e1);
+    TFunctionPtr<double> e2Fxn = TFunction<double>::constant(e2);
+    TFunctionPtr<double> e3Fxn = TFunction<double>::constant(e3);
     for ( vector< BilinearTerm >:: iterator btIt = _terms.begin();
         btIt != _terms.end(); btIt++) {
       BilinearTerm bt = *btIt;
@@ -606,13 +609,13 @@ namespace Camellia{
       for ( vector< LinearSummand >::iterator lsIt = summands.begin(); lsIt != summands.end(); lsIt++) {
         VarPtr trialVar = lsIt->second;
         if (trialVar->varType() == FIELD) {
-          FunctionPtr f = lsIt->first;
+          TFunctionPtr<double> f = lsIt->first;
           if (trialVar->op() == OP_X) {
-            f = e1 * f;
+            f = e1Fxn * f;
           } else if (trialVar->op() == OP_Y) {
-            f = e2 * f;
+            f = e2Fxn * f;
           } else if (trialVar->op() == OP_Z) {
-            f = e3 * f;
+            f = e3Fxn * f;
           } else if (trialVar->op() != OP_VALUE) {
             TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "BF::graphNorm() doesn't support non-value ops on field variables");
           }
@@ -635,7 +638,7 @@ namespace Camellia{
         }
         weight = 1.0 / sqrt(trialWeight);
       }
-      ip->addTerm( Function::constant(weight) * testTermIt->second );
+      ip->addTerm( TFunction<double>::constant(weight) * testTermIt->second );
     }
     // L^2 terms:
     map< int, VarPtr > testVars = _varFactory.testVars();
@@ -857,15 +860,15 @@ namespace Camellia{
     _warnAboutZeroRowsAndColumns = value;
   }
 
-  LinearTermPtr BF::testFunctional(SolutionPtr trialSolution, bool excludeBoundaryTerms, bool overrideMeshCheck) {
+  LinearTermPtr BF::testFunctional(TSolutionPtr<double> trialSolution, bool excludeBoundaryTerms, bool overrideMeshCheck) {
     LinearTermPtr functional = Teuchos::rcp(new LinearTerm());
     for ( vector< BilinearTerm >:: iterator btIt = _terms.begin();
         btIt != _terms.end(); btIt++) {
       BilinearTerm bt = *btIt;
       LinearTermPtr trialTerm = btIt->first;
       LinearTermPtr testTerm = btIt->second;
-      FunctionPtr trialValue = Teuchos::rcp( new PreviousSolutionFunction(trialSolution, trialTerm) );
-      static_cast< PreviousSolutionFunction* >(trialValue.get())->setOverrideMeshCheck(overrideMeshCheck);
+      TFunctionPtr<double> trialValue = Teuchos::rcp( new PreviousSolutionFunction<double>(trialSolution, trialTerm) );
+      static_cast< PreviousSolutionFunction<double>* >(trialValue.get())->setOverrideMeshCheck(overrideMeshCheck);
       if ( (! excludeBoundaryTerms) || (! trialValue->boundaryValueOnly()) ) {
         functional = functional + trialValue * testTerm;
       }

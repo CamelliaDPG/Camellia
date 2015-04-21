@@ -5,13 +5,13 @@
 // TODO: change L2 error to use different variables
 
 namespace Camellia {
-    class InvDtFunction : public Function
+    class InvDtFunction : public TFunction<double>
     {
       private:
         double __invDt;
 
       public:
-        InvDtFunction(double _dt) : Function(0){
+        InvDtFunction(double _dt) : TFunction<double>(0){
           __invDt = 1./_dt;
         }
         void setDt(double _dt){
@@ -32,7 +32,7 @@ namespace Camellia {
         VarFactory &varFactory;
       public:
         SteadyResidual(VarFactory &varFactory):varFactory(varFactory) {};
-        virtual LinearTermPtr createResidual(SolutionPtr solution, bool includeBoundaryTerms) = 0;
+        virtual LinearTermPtr createResidual(TSolutionPtr<double> solution, bool includeBoundaryTerms) = 0;
     };
 
     class TimeIntegrator
@@ -43,11 +43,11 @@ namespace Camellia {
         SteadyResidual &_steadyResidual;
         RHSPtr _rhs;
         BCPtr _bc;
-        SolutionPtr _solution;
-        SolutionPtr _prevTimeSolution;
-        SolutionPtr _prevNLSolution;
-        SolutionPtr _zeroSolution;
-        FunctionPtr _invDt;
+        TSolutionPtr<double> _solution;
+        TSolutionPtr<double> _prevTimeSolution;
+        TSolutionPtr<double> _prevNLSolution;
+        TSolutionPtr<double> _zeroSolution;
+        TFunctionPtr<double> _invDt;
         double _t;
         double _dt;
         int _timestep;
@@ -61,16 +61,16 @@ namespace Camellia {
 
       public:
         TimeIntegrator(BFPtr steadyJacobian, SteadyResidual &steadyResidual, MeshPtr mesh,
-            BCPtr bc, IPPtr ip, map<int, FunctionPtr> initialCondition, bool nonlinear);
-        SolutionPtr solution();
-        SolutionPtr solutionUpdate();
-        SolutionPtr prevSolution();
-        FunctionPtr invDt();
+            BCPtr bc, IPPtr ip, map<int, TFunctionPtr<double>> initialCondition, bool nonlinear);
+        TSolutionPtr<double> solution();
+        TSolutionPtr<double> solutionUpdate();
+        TSolutionPtr<double> prevSolution();
+        TFunctionPtr<double> invDt();
         void setNLTolerance(double tol) { _nlTolerance = tol; }
         double getNLTolerance() { return _nlTolerance; }
         void setNLIterationMax(double nlIterationMax) { _nlIterationMax = nlIterationMax; }
         double getNLIterationMax() { return _nlIterationMax; }
-        virtual void addTimeTerm(VarPtr trialVar, VarPtr testVar, FunctionPtr multiplier);
+        virtual void addTimeTerm(VarPtr trialVar, VarPtr testVar, TFunctionPtr<double> multiplier);
         virtual void runToTime(double T, double dt) = 0;
         virtual void calcNextTimeStep(double dt);
         void printTimeStepMessage();
@@ -83,7 +83,7 @@ namespace Camellia {
 
       public:
         ImplicitEulerIntegrator(BFPtr steadyJacobian, SteadyResidual &steadyResidual, MeshPtr mesh,
-            BCPtr bc, IPPtr ip, map<int, FunctionPtr> initialCondition, bool nonlinear);
+            BCPtr bc, IPPtr ip, map<int, TFunctionPtr<double>> initialCondition, bool nonlinear);
         void runToTime(double T, double dt);
     };
 
@@ -97,15 +97,15 @@ namespace Camellia {
         vector<double> b;
         vector<double> c;
         // For ESDIRK schemes, first stage is _prevTimeSolution
-        vector< SolutionPtr > _stageSolution;
+        vector< TSolutionPtr<double> > _stageSolution;
         vector< RHSPtr > _stageRHS;
         vector< LinearTermPtr > _steadyLinearTerm;
 
       public:
 
         ESDIRKIntegrator(BFPtr steadyJacobian, SteadyResidual &steadyResidual, MeshPtr mesh,
-            BCPtr bc, IPPtr ip, map<int, FunctionPtr> initialCondition, int numStages, bool nonlinear);
-        virtual void addTimeTerm(VarPtr trialVar, VarPtr testVar, FunctionPtr multiplier);
+            BCPtr bc, IPPtr ip, map<int, TFunctionPtr<double>> initialCondition, int numStages, bool nonlinear);
+        virtual void addTimeTerm(VarPtr trialVar, VarPtr testVar, TFunctionPtr<double> multiplier);
         virtual void runToTime(double T, double dt);
         virtual void calcNextTimeStep(double dt);
     };

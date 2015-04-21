@@ -23,16 +23,16 @@ namespace Camellia {
 
     static const string S_V;
   public:
-    ConvectionFormulation(int spaceDim, FunctionPtr convectiveFunction);
-    
+    ConvectionFormulation(int spaceDim, TFunctionPtr<double> convectiveFunction);
+
     BFPtr bf();
-    
+
     // field variables:
     VarPtr u();
-    
+
     // traces:
     VarPtr q_n_hat();
-    
+
     // test variables:
     VarPtr v();
   };

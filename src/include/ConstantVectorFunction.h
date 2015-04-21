@@ -12,18 +12,19 @@
 #include "Function.h"
 
 namespace Camellia {
-  class ConstantVectorFunction : public Function {
-    std::vector<double> _value;
+  template <typename Scalar>
+  class ConstantVectorFunction : public TFunction<Scalar> {
+    std::vector<Scalar> _value;
   public:
-    ConstantVectorFunction(std::vector<double> value);
+    ConstantVectorFunction(std::vector<Scalar> value);
     bool isZero();
-    
-    FunctionPtr x();
-    FunctionPtr y();
-    FunctionPtr z();
-    
-    void values(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache);
-    std::vector<double> value();
+
+    TFunctionPtr<Scalar> x();
+    TFunctionPtr<Scalar> y();
+    TFunctionPtr<Scalar> z();
+
+    void values(Intrepid::FieldContainer<Scalar> &values, BasisCachePtr basisCache);
+    std::vector<Scalar> value();
   };
 }
 

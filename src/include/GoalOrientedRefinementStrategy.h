@@ -24,7 +24,7 @@ namespace Camellia {
 	private:
 	  LinearTermPtr _trialFunctional;
 	public:
-	  GoalOrientedRefinementStrategy( LinearTermPtr trialFunctional, SolutionPtr solution, double relativeErrorThreshold, double min_h = 0);
+	  GoalOrientedRefinementStrategy( LinearTermPtr trialFunctional, TSolutionPtr<double> solution, double relativeErrorThreshold, double min_h = 0);
 	  virtual void refine(bool printToConsole=false);
 	  void setTrialFunctional(LinearTermPtr trialFunctional);
 	};

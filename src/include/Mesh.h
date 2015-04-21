@@ -219,7 +219,7 @@ class MeshPartitionPolicy;
     vector<int> cellTensorPolyOrder(GlobalIndexType cellID);
 
     void enforceOneIrregularity();
-  //  void enforceOneIrregularity(vector< Teuchos::RCP<Solution> > solutions);
+  //  void enforceOneIrregularity(vector< TSolutionPtr<double> > solutions);
 
     vector<double> getCellCentroid(GlobalIndexType cellID);
 
@@ -263,7 +263,7 @@ class MeshPartitionPolicy;
   //
   //  void getPatchBasisOrdering(DofOrderingPtr &originalChildOrdering, ElementPtr child, int sideIndex);
 
-    FunctionPtr getTransformationFunction(); // will be NULL for meshes without edge curves defined
+    TFunctionPtr<double> getTransformationFunction(); // will be NULL for meshes without edge curves defined
 
     // method signature inherited from RefinementObserver:
     void hRefine(const set<GlobalIndexType> &cellIDs, Teuchos::RCP<RefinementPattern> refPattern);
@@ -287,7 +287,7 @@ class MeshPartitionPolicy;
     bool meshUsesMinimumRule();
 
     // for the case where we want to reproject the previous mesh solution onto the new one:
-  //  void hRefine(vector<GlobalIndexType> cellIDs, Teuchos::RCP<RefinementPattern> refPattern, vector< Teuchos::RCP<Solution> > solutions);
+  //  void hRefine(vector<GlobalIndexType> cellIDs, Teuchos::RCP<RefinementPattern> refPattern, vector< TSolutionPtr<double> > solutions);
 
   //  void matchNeighbor(const ElementPtr &elem, int sideIndex);
 
@@ -332,7 +332,7 @@ class MeshPartitionPolicy;
 
     void registerObserver(Teuchos::RCP<RefinementObserver> observer);
 
-    void registerSolution(Teuchos::RCP<Solution> solution);
+    void registerSolution(TSolutionPtr<double> solution);
 
     int condensedRowSizeUpperBound();
     int rowSizeUpperBound(); // accounts for multiplicity, but isn't a tight bound
@@ -359,7 +359,7 @@ class MeshPartitionPolicy;
 
     void unregisterObserver(RefinementObserver* observer);
     void unregisterObserver(Teuchos::RCP<RefinementObserver> observer);
-    void unregisterSolution(Teuchos::RCP<Solution> solution);
+    void unregisterSolution(TSolutionPtr<double> solution);
 
     void writeMeshPartitionsToFile(const string & fileName);
 

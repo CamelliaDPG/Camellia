@@ -12,25 +12,26 @@
 #include "Function.h"
 
 namespace Camellia {
-  class ProductFunction : public Function {
+  template <typename Scalar>
+  class ProductFunction : public TFunction<Scalar> {
   private:
-    int productRank(FunctionPtr f1, FunctionPtr f2);
-    FunctionPtr _f1, _f2;
+    int productRank(TFunctionPtr<Scalar> f1, TFunctionPtr<Scalar> f2);
+    TFunctionPtr<Scalar> _f1, _f2;
   public:
-    ProductFunction(FunctionPtr f1, FunctionPtr f2);
-    void values(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache);
+    ProductFunction(TFunctionPtr<Scalar> f1, TFunctionPtr<Scalar> f2);
+    void values(Intrepid::FieldContainer<Scalar> &values, BasisCachePtr basisCache);
     virtual bool boundaryValueOnly();
-    
-    FunctionPtr x();
-    FunctionPtr y();
-    FunctionPtr z();
-    FunctionPtr t();
-    
-    FunctionPtr dx();
-    FunctionPtr dy();
-    FunctionPtr dz();
-    FunctionPtr dt();
-    
+
+    TFunctionPtr<Scalar> x();
+    TFunctionPtr<Scalar> y();
+    TFunctionPtr<Scalar> z();
+    TFunctionPtr<Scalar> t();
+
+    TFunctionPtr<Scalar> dx();
+    TFunctionPtr<Scalar> dy();
+    TFunctionPtr<Scalar> dz();
+    TFunctionPtr<Scalar> dt();
+
     string displayString(); // _f1->displayString() << " " << _f2->displayString();
   };
 }

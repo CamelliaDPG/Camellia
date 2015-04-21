@@ -12,53 +12,53 @@
 #include "SimpleFunction.h"
 
 namespace Camellia {
-  class Xn : public SimpleFunction {
+  class Xn : public SimpleFunction<double> {
     int _n;
   public:
     Xn(int n);
     double value(double x);
-    FunctionPtr dx();
-    FunctionPtr dy();
-    FunctionPtr dz();
-    FunctionPtr dt();
+    TFunctionPtr<double> dx();
+    TFunctionPtr<double> dy();
+    TFunctionPtr<double> dz();
+    TFunctionPtr<double> dt();
     string displayString();
   };
-  
-  class Yn : public SimpleFunction {
+
+  class Yn : public SimpleFunction<double> {
     int _n;
   public:
     Yn(int n);
     double value(double x, double y);
-    FunctionPtr dx();
-    FunctionPtr dy();
-    FunctionPtr dz();
-    FunctionPtr dt();
+    TFunctionPtr<double> dx();
+    TFunctionPtr<double> dy();
+    TFunctionPtr<double> dz();
+    TFunctionPtr<double> dt();
     string displayString();
   };
-  
-  class Zn : public SimpleFunction {
+
+  class Zn : public SimpleFunction<double> {
     int _n;
   public:
     Zn(int n);
     double value(double x, double y, double z);
-    FunctionPtr dx();
-    FunctionPtr dy();
-    FunctionPtr dz();
-    FunctionPtr dt();
+    TFunctionPtr<double> dx();
+    TFunctionPtr<double> dy();
+    TFunctionPtr<double> dz();
+    TFunctionPtr<double> dt();
     string displayString();
   };
-  
-  class Tn : public SimpleFunction {
+
+  class Tn : public SimpleFunction<double> {
     int _n;
   public:
     Tn(int n);
     double value(double x, double t);
     double value(double x, double y, double t);
     double value(double x, double y, double z, double t);
-    FunctionPtr dx();
-    FunctionPtr dy();
-    FunctionPtr dz();
-    FunctionPtr dt();
+    TFunctionPtr<double> dx();
+    TFunctionPtr<double> dy();
+    TFunctionPtr<double> dz();
+    TFunctionPtr<double> dt();
     string displayString();
   };
 }

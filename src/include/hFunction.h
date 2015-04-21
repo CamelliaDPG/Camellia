@@ -12,7 +12,7 @@
 #include "Function.h"
 
 namespace Camellia {
-  class hFunction : public Function {
+  class hFunction : public TFunction<double> {
   public:
     virtual double value(double x, double y, double h);
     void values(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache);

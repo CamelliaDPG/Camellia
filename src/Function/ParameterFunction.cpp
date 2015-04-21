@@ -13,19 +13,19 @@
 using namespace Intrepid;
 using namespace Camellia;
 
-ParameterFunction::ParameterFunction(double value) : Function(0) {
+ParameterFunction::ParameterFunction(double value) : TFunction<double>(0) {
   setValue(value);
 }
 
-ParameterFunction::ParameterFunction(FunctionPtr fxn) : Function(fxn->rank()) {
+ParameterFunction::ParameterFunction(TFunctionPtr<double> fxn) : TFunction<double>(fxn->rank()) {
   setValue(fxn);
 }
 
-FunctionPtr ParameterFunction::getValue() const {
+TFunctionPtr<double> ParameterFunction::getValue() const {
   return _fxn;
 }
 
-void ParameterFunction::setValue(FunctionPtr fxn) {
+void ParameterFunction::setValue(TFunctionPtr<double> fxn) {
   if ((_fxn.get() == NULL) || (fxn->rank() == _fxn->rank())) {
     _fxn = fxn;
   } else {
@@ -37,30 +37,30 @@ void ParameterFunction::setValue(double value) {
   _fxn = Function::constant(value);
 }
 
-FunctionPtr ParameterFunction::x() {
+TFunctionPtr<double> ParameterFunction::x() {
   return _fxn->x();
 }
-FunctionPtr ParameterFunction::y() {
+TFunctionPtr<double> ParameterFunction::y() {
   return _fxn->y();
 }
-FunctionPtr ParameterFunction::z() {
+TFunctionPtr<double> ParameterFunction::z() {
   return _fxn->z();
 }
 
-FunctionPtr ParameterFunction::dx() {
+TFunctionPtr<double> ParameterFunction::dx() {
   return _fxn->dx();
 }
-FunctionPtr ParameterFunction::dy() {
+TFunctionPtr<double> ParameterFunction::dy() {
   return _fxn->dy();
 }
-FunctionPtr ParameterFunction::dz() {
+TFunctionPtr<double> ParameterFunction::dz() {
   return _fxn->dz();
 }
 
-FunctionPtr ParameterFunction::grad(int numComponents) {
+TFunctionPtr<double> ParameterFunction::grad(int numComponents) {
   return _fxn->grad(numComponents);
 }
-FunctionPtr ParameterFunction::div() {
+TFunctionPtr<double> ParameterFunction::div() {
   return _fxn->div();
 }
 
@@ -75,9 +75,9 @@ string ParameterFunction::displayString() {
   return _fxn->displayString();
 }
 
-ParameterFunctionPtr ParameterFunction::parameterFunction(double value) {
+Teuchos::RCP<ParameterFunction> ParameterFunction::parameterFunction(double value) {
   return Teuchos::rcp( new ParameterFunction(value) );
 }
-ParameterFunctionPtr ParameterFunction::parameterFunction(FunctionPtr fxn) {
+Teuchos::RCP<ParameterFunction> ParameterFunction::parameterFunction(TFunctionPtr<double> fxn) {
   return Teuchos::rcp( new ParameterFunction(fxn) );
 }

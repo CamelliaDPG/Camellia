@@ -6,26 +6,31 @@ using namespace Camellia;
 using namespace Intrepid;
 using namespace std;
 
-SimpleVectorFunction::SimpleVectorFunction() : Function(1) {}
+template <typename Scalar>
+SimpleVectorFunction<Scalar>::SimpleVectorFunction() : TFunction<Scalar>(1) {}
 
-vector<double> SimpleVectorFunction::value(double x) {
+template <typename Scalar>
+vector<Scalar> SimpleVectorFunction<Scalar>::value(double x) {
   TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unimplemented method. Subclasses of SimpleVectorFunction must implement value() for some number of arguments < spaceDim");
-  return vector<double>();
+  return vector<Scalar>();
 }
 
-vector<double> SimpleVectorFunction::value(double x, double y) {
+template <typename Scalar>
+vector<Scalar> SimpleVectorFunction<Scalar>::value(double x, double y) {
   return value(x);
 }
 
-vector<double> SimpleVectorFunction::value(double x, double y, double z) {
+template <typename Scalar>
+vector<Scalar> SimpleVectorFunction<Scalar>::value(double x, double y, double z) {
   return value(x,y);
 }
 
-void SimpleVectorFunction::values(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache) {
-  CHECK_VALUES_RANK(values);
+template <typename Scalar>
+void SimpleVectorFunction<Scalar>::values(Intrepid::FieldContainer<Scalar> &values, BasisCachePtr basisCache) {
+  this->CHECK_VALUES_RANK(values);
   int numCells = values.dimension(0);
   int numPoints = values.dimension(1);
-  
+
   const Intrepid::FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
   int spaceDim = points->dimension(2);
   for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
@@ -49,3 +54,6 @@ void SimpleVectorFunction::values(Intrepid::FieldContainer<double> &values, Basi
     }
   }
 }
+
+template class SimpleVectorFunction<double>;
+

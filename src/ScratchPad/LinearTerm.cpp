@@ -22,7 +22,7 @@
 #include <Teuchos_GlobalMPISession.hpp>
 
 namespace Camellia {
-  typedef pair< FunctionPtr, VarPtr > LinearSummand;
+  typedef pair< TFunctionPtr<double>, VarPtr > LinearSummand;
 
   bool linearSummandIsBoundaryValueOnly(LinearSummand &ls) {
     bool opInvolvesNormal = (ls.second->op() == Camellia::OP_TIMES_NORMAL)   ||
@@ -44,7 +44,7 @@ namespace Camellia {
     _termType = UNKNOWN_TYPE;
   }
 
-  LinearTerm::LinearTerm(FunctionPtr weight, VarPtr var) {
+  LinearTerm::LinearTerm(TFunctionPtr<double> weight, VarPtr var) {
     _rank = -1;
     _termType = UNKNOWN_TYPE;
     addVar(weight,var);
@@ -80,8 +80,8 @@ namespace Camellia {
   LinearTerm::~LinearTerm() {
 //    cout << "destroying LinearTerm: " << this->displayString() << endl;
   }
-  
-  void LinearTerm::addVar(FunctionPtr weight, VarPtr var) {
+
+  void LinearTerm::addVar(TFunctionPtr<double> weight, VarPtr var) {
     // check ranks:
     int rank; // rank of weight * var
     if (weight->rank() == var->rank() ) { // then we dot like terms together, getting a scalar
@@ -110,14 +110,14 @@ namespace Camellia {
   }
 
   void LinearTerm::addVar(double weight, VarPtr var) {
-    FunctionPtr weightFn = (weight != 1.0) ? Teuchos::rcp( new ConstantScalarFunction(weight) )
-                                           : Teuchos::rcp( new ConstantScalarFunction(weight, "") );
+    TFunctionPtr<double> weightFn = (weight != 1.0) ? Teuchos::rcp( new ConstantScalarFunction<double>(weight) )
+                                           : Teuchos::rcp( new ConstantScalarFunction<double>(weight, "") );
     // (suppress display of 1.0 weights)
     addVar( weightFn, var );
   }
 
   void LinearTerm::addVar(vector<double> vector_weight, VarPtr var) { // dots weight vector with vector var, makes a vector out of a scalar var
-    FunctionPtr weightFn = Teuchos::rcp( new ConstantVectorFunction(vector_weight) );
+    TFunctionPtr<double> weightFn = Teuchos::rcp( new ConstantVectorFunction<double>(vector_weight) );
     addVar( weightFn, var );
   }
 
@@ -127,7 +127,7 @@ namespace Camellia {
     rieszRep->computeRieszRep();
     return rieszRep->getNorm();
   }
-  
+
   string LinearTerm::displayString() const {
     ostringstream dsStream;
     bool first = true;
@@ -136,7 +136,7 @@ namespace Camellia {
         dsStream << " + ";
       }
       LinearSummand ls = *lsIt;
-      FunctionPtr f = ls.first;
+      TFunctionPtr<double> f = ls.first;
       VarPtr var = ls.second;
       dsStream << f->displayString() << " " << var->displayString();
       first = false;
@@ -598,7 +598,7 @@ namespace Camellia {
 
   // integrate this against otherTerm, where otherVar == fxn
   void LinearTerm::integrate(Intrepid::FieldContainer<double> &values, DofOrderingPtr thisOrdering,
-                             LinearTermPtr otherTerm, VarPtr otherVar, FunctionPtr fxn,
+                             LinearTermPtr otherTerm, VarPtr otherVar, TFunctionPtr<double> fxn,
                              BasisCachePtr basisCache, bool forceBoundaryTerm) {
     // values has dimensions (numCells, thisFields)
 
@@ -606,10 +606,10 @@ namespace Camellia {
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "fxn cannot be null!");
     }
 
-    map<int, FunctionPtr> otherVarMap;
+    map<int, TFunctionPtr<double>> otherVarMap;
     otherVarMap[otherVar->ID()] = fxn;
-    FunctionPtr otherFxnBoundaryPart = otherTerm->evaluate(otherVarMap, true);
-    FunctionPtr otherFxnVolumePart = otherTerm->evaluate(otherVarMap, false);
+    TFunctionPtr<double> otherFxnBoundaryPart = otherTerm->evaluate(otherVarMap, true);
+    TFunctionPtr<double> otherFxnVolumePart = otherTerm->evaluate(otherVarMap, false);
 
     LinearTermPtr thisPtr = Teuchos::rcp(this, false);
     LinearTermPtr lt = otherFxnVolumePart * thisPtr + otherFxnBoundaryPart * thisPtr;
@@ -622,7 +622,7 @@ namespace Camellia {
     //return false;
     for (vector< LinearSummand >::const_iterator lsIt = _summands.begin(); lsIt != _summands.end(); lsIt++) {
       LinearSummand ls = *lsIt;
-      FunctionPtr f = ls.first;
+      TFunctionPtr<double> f = ls.first;
       if (! f->isZero() ) {
         return false;
       }
@@ -637,7 +637,7 @@ namespace Camellia {
   // (The SimpleSolutionFunction class is now written, though untested.  What remains is to add something such that
   //  LinearTerm can determine its OP_VALUE VarPtrs so that it can construct the right map.  It would probably suffice
   //  if Var learned about its "base", and then in addition to tracking the varIDs set here, we also tracked vars.)
-  void LinearTerm::evaluate(Intrepid::FieldContainer<double> &values, SolutionPtr solution, BasisCachePtr basisCache,
+  void LinearTerm::evaluate(Intrepid::FieldContainer<double> &values, TSolutionPtr<double> solution, BasisCachePtr basisCache,
                             bool applyCubatureWeights) {
     // int sideIndex = basisCache->getSideIndex();
     //  bool boundaryTerm = (sideIndex != -1);
@@ -669,7 +669,7 @@ namespace Camellia {
                                std::invalid_argument, "values FC numPoints disagrees with cubature points container");
     for (vector< LinearSummand >::iterator lsIt = _summands.begin(); lsIt != _summands.end(); lsIt++) {
       LinearSummand ls = *lsIt;
-      FunctionPtr f = ls.first;
+      TFunctionPtr<double> f = ls.first;
       VarPtr var = ls.second;
       if (f->rank() == 0) {
         fValues.resize(scalarFunctionValueDim);
@@ -760,7 +760,7 @@ namespace Camellia {
       } else if (!linearSummandIsBoundaryValueOnly(ls) && boundaryOnlyPart) {
         continue;
       }
-      FunctionPtr f = ls.first;
+      TFunctionPtr<double> f = ls.first;
       VarPtr var = ls.second;
 
       if (lt.get()) {
@@ -777,7 +777,7 @@ namespace Camellia {
     for (vector< LinearSummand >::iterator lsIt = _summands.begin(); lsIt != _summands.end(); lsIt++) {
       LinearSummand ls = *lsIt;
 
-      FunctionPtr f = ls.first;
+      TFunctionPtr<double> f = ls.first;
       VarPtr var = ls.second;
 
       if (var->ID() == varToMatch->ID()) {
@@ -791,36 +791,36 @@ namespace Camellia {
     return lt;
   }
 
-  FunctionPtr LinearTerm::evaluate(const map< int, FunctionPtr> &varFunctions) {
+  TFunctionPtr<double> LinearTerm::evaluate(const map< int, TFunctionPtr<double>> &varFunctions) {
     return evaluate(varFunctions,false) + evaluate(varFunctions, true);
   }
 
-  FunctionPtr LinearTerm::evaluate(const map< int, FunctionPtr> &varFunctions, bool boundaryPart) {
+  TFunctionPtr<double> LinearTerm::evaluate(const map< int, TFunctionPtr<double>> &varFunctions, bool boundaryPart) {
     // NOTE that if boundaryPart is false, then we exclude terms that are defined only on the boundary
     // and if boundaryPart is true, then we exclude terms that are defined everywhere
     // so that the whole LinearTerm is the sum of the two options
-    FunctionPtr fxn = Function::null();
+    TFunctionPtr<double> fxn = TFunction<double>::null();
     vector< LinearSummand > summands = this->getPart(boundaryPart)->summands();
     for (vector< LinearSummand >::iterator lsIt = summands.begin(); lsIt != summands.end(); lsIt++) {
       LinearSummand ls = *lsIt;
-      FunctionPtr f = ls.first;
+      TFunctionPtr<double> f = ls.first;
       VarPtr var = ls.second;
 
       // if there isn't an entry for var, we take it to be zero:
       if (varFunctions.find(var->ID()) == varFunctions.end()) continue;
 
-      FunctionPtr varFunction = varFunctions.find(var->ID())->second;
+      TFunctionPtr<double> varFunction = varFunctions.find(var->ID())->second;
 
       if (!varFunction.get()) {
         TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "varFunctions entries cannot be null!");
       }
 
-      FunctionPtr varEvaluation = Function::op(varFunction,var->op());
+      TFunctionPtr<double> varEvaluation = TFunction<double>::op(varFunction,var->op());
       {
         // DEBUGGING CODE:
         if (varEvaluation.get() == NULL) {
           // try that again, so we can step into the code
-          FunctionPtr varEvaluation = Function::op(varFunction,var->op());
+          TFunctionPtr<double> varEvaluation = TFunction<double>::op(varFunction,var->op());
         }
       }
 
@@ -831,7 +831,7 @@ namespace Camellia {
       }
     }
     if (!fxn.get()) {
-      fxn = Function::zero(this->rank());
+      fxn = TFunction<double>::zero(this->rank());
     }
     return fxn;
   }
@@ -927,7 +927,7 @@ namespace Camellia {
         }
 
         if ( ls.first->rank() == 0 ) { // scalar function -- we can speed things along in this case...
-          // E.g. ConstantFunction::scalarMultiplyBasisValues() knows not to do anything at all if its value is 1.0...
+          // E.g. ConstantTFunction<double>::scalarMultiplyBasisValues() knows not to do anything at all if its value is 1.0...
           Intrepid::FieldContainer<double> weightedBasisValues = *basisValues; // weighted by the scalar function
           ls.first->scalarMultiplyBasisValues(weightedBasisValues,basisCache);
           for (int i=0; i<values.size(); i++) {
@@ -965,7 +965,7 @@ namespace Camellia {
 //            cout << "Basis Values:\n" << *basisValues;
 //          }
 //        }
-        
+
         Teuchos::Array<int> fDim(fValues.rank());
         Teuchos::Array<int> bDim(basisValues->rank());
 
@@ -1080,7 +1080,7 @@ namespace Camellia {
   // compute the value of linearTerm for non-zero varID at the cubature points, for var == fxn
   // values shape: (C,P), (C,P,D), or (C,P,D,D)
   // TODO: refactor this and the other values() to reduce code redundancy
-  void LinearTerm::values(Intrepid::FieldContainer<double> &values, int varID, FunctionPtr fxn, BasisCachePtr basisCache,
+  void LinearTerm::values(Intrepid::FieldContainer<double> &values, int varID, TFunctionPtr<double> fxn, BasisCachePtr basisCache,
                           bool applyCubatureWeights, bool naturalBoundaryTermsOnly) {
     int sideIndex = basisCache->getSideIndex();
 
@@ -1139,7 +1139,7 @@ namespace Camellia {
         }
 
         if ( ls.first->rank() == 0 ) { // scalar function -- we can speed things along in this case...
-          // E.g. ConstantFunction::scalarMultiplyBasisValues() knows not to do anything at all if its value is 1.0...
+          // E.g. ConstantTFunction<double>::scalarMultiplyBasisValues() knows not to do anything at all if its value is 1.0...
           fxnValues.resize(fxnValueAsBasisDim);
           ls.first->scalarMultiplyBasisValues(fxnValues,basisCache);
           for (int i=0; i<values.size(); i++) {
@@ -1303,11 +1303,11 @@ namespace Camellia {
     return v + a;
   }
 
-  LinearTermPtr operator*(FunctionPtr f, VarPtr v) {
+  LinearTermPtr operator*(TFunctionPtr<double> f, VarPtr v) {
     return Teuchos::rcp( new LinearTerm(f, v) );
   }
 
-  LinearTermPtr operator*(VarPtr v, FunctionPtr f) {
+  LinearTermPtr operator*(VarPtr v, TFunctionPtr<double> f) {
     return f * v;
   }
 
@@ -1327,28 +1327,28 @@ namespace Camellia {
     return weight * v;
   }
 
-  LinearTermPtr operator*(FunctionPtr f, LinearTermPtr a) {
+  LinearTermPtr operator*(TFunctionPtr<double> f, LinearTermPtr a) {
     LinearTermPtr lt = Teuchos::rcp( new LinearTerm );
 
     for (vector< LinearSummand >::const_iterator lsIt = a->summands().begin(); lsIt != a->summands().end(); lsIt++) {
       LinearSummand ls = *lsIt;
-      FunctionPtr lsWeight = ls.first;
-      FunctionPtr newWeight = f * lsWeight;
+      TFunctionPtr<double> lsWeight = ls.first;
+      TFunctionPtr<double> newWeight = f * lsWeight;
       VarPtr var = ls.second;
       bool bypassTypeCheck = true; // unless user bypassed it, there will already have been a type check in the construction of a.  If the user did bypass, we should bypass, too.
       lt->addTerm(newWeight * var, bypassTypeCheck);
     }
     return lt;
   }
-  
-  LinearTermPtr operator*(LinearTermPtr a, FunctionPtr f)
+
+  LinearTermPtr operator*(LinearTermPtr a, TFunctionPtr<double> f)
   {
     LinearTermPtr lt = Teuchos::rcp( new LinearTerm );
-    
+
     for (vector< LinearSummand >::const_iterator lsIt = a->summands().begin(); lsIt != a->summands().end(); lsIt++) {
       LinearSummand ls = *lsIt;
-      FunctionPtr lsWeight = ls.first;
-      FunctionPtr newWeight = lsWeight * f;
+      TFunctionPtr<double> lsWeight = ls.first;
+      TFunctionPtr<double> newWeight = lsWeight * f;
       VarPtr var = ls.second;
       bool bypassTypeCheck = true; // unless user bypassed it, there will already have been a type check in the construction of a.  If the user did bypass, we should bypass, too.
       lt->addTerm(newWeight * var, bypassTypeCheck);
@@ -1356,13 +1356,13 @@ namespace Camellia {
     return lt;
   }
 
-  LinearTermPtr operator/(LinearTermPtr a, FunctionPtr f) {
+  LinearTermPtr operator/(LinearTermPtr a, TFunctionPtr<double> f) {
     LinearTermPtr lt = Teuchos::rcp( new LinearTerm );
 
     for (vector< LinearSummand >::const_iterator lsIt = lt->summands().begin(); lsIt != lt->summands().end(); lsIt++) {
       LinearSummand ls = *lsIt;
-      FunctionPtr lsWeight = ls.first;
-      FunctionPtr newWeight = lsWeight / f;
+      TFunctionPtr<double> lsWeight = ls.first;
+      TFunctionPtr<double> newWeight = lsWeight / f;
       VarPtr var = ls.second;
       bool bypassTypeCheck = true; // unless user bypassed it, there will already have been a type check in the construction of a.  If the user did bypass, we should bypass, too.
       lt->addTerm(newWeight * var, bypassTypeCheck);
@@ -1370,13 +1370,13 @@ namespace Camellia {
     return lt;
   }
 
-  LinearTermPtr operator/(VarPtr v, FunctionPtr scalarFunction) {
-    FunctionPtr one = Teuchos::rcp( new ConstantScalarFunction(1.0) );
+  LinearTermPtr operator/(VarPtr v, TFunctionPtr<double> scalarFunction) {
+    TFunctionPtr<double> one = Teuchos::rcp( new ConstantScalarFunction<double>(1.0) );
     return (one / scalarFunction) * v;
   }
 
   LinearTermPtr operator+(VarPtr v1, VarPtr v2) {
-    FunctionPtr one = Teuchos::rcp( new ConstantScalarFunction(1.0, "") );
+    TFunctionPtr<double> one = Teuchos::rcp( new ConstantScalarFunction<double>(1.0, "") );
     return one * v1 + one * v2;
   }
 
@@ -1385,26 +1385,26 @@ namespace Camellia {
   }
 
   LinearTermPtr operator-(VarPtr v1, VarPtr v2) {
-    FunctionPtr minus_one = Teuchos::rcp( new ConstantScalarFunction(-1.0, "-") );
+    TFunctionPtr<double> minus_one = Teuchos::rcp( new ConstantScalarFunction<double>(-1.0, "-") );
     return v1 + minus_one * v2;
   }
 
   LinearTermPtr operator-(VarPtr v) {
-    FunctionPtr minus_one = Teuchos::rcp( new ConstantScalarFunction(-1.0, "-") );
+    TFunctionPtr<double> minus_one = Teuchos::rcp( new ConstantScalarFunction<double>(-1.0, "-") );
     return minus_one * v;
   }
 
   LinearTermPtr operator-(LinearTermPtr a) {
-    return Teuchos::rcp( new ConstantScalarFunction(-1.0, "-") ) * a;
+    return Teuchos::rcp( new ConstantScalarFunction<double>(-1.0, "-") ) * a;
   }
 
   LinearTermPtr operator-(LinearTermPtr a, VarPtr v) {
-    FunctionPtr minus_one = Teuchos::rcp( new ConstantScalarFunction(-1.0, "-") );
+    TFunctionPtr<double> minus_one = Teuchos::rcp( new ConstantScalarFunction<double>(-1.0, "-") );
     return a + minus_one * v;
   }
 
   LinearTermPtr operator-(VarPtr v, LinearTermPtr a) {
-    FunctionPtr minus_one = Teuchos::rcp( new ConstantScalarFunction(-1.0, "-") );
+    TFunctionPtr<double> minus_one = Teuchos::rcp( new ConstantScalarFunction<double>(-1.0, "-") );
     return v + minus_one * a;
   }
 

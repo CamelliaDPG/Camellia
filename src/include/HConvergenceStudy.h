@@ -5,31 +5,31 @@
 //
 // Copyright © 2011 Sandia Corporation. All Rights Reserved.
 //
-// Redistribution and use in source and binary forms, with or without modification, are 
+// Redistribution and use in source and binary forms, with or without modification, are
 // permitted provided that the following conditions are met:
-// 1. Redistributions of source code must retain the above copyright notice, this list of 
+// 1. Redistributions of source code must retain the above copyright notice, this list of
 // conditions and the following disclaimer.
-// 2. Redistributions in binary form must reproduce the above copyright notice, this list of 
-// conditions and the following disclaimer in the documentation and/or other materials 
+// 2. Redistributions in binary form must reproduce the above copyright notice, this list of
+// conditions and the following disclaimer in the documentation and/or other materials
 // provided with the distribution.
-// 3. The name of the author may not be used to endorse or promote products derived from 
+// 3. The name of the author may not be used to endorse or promote products derived from
 // this software without specific prior written permission.
 //
-// THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY 
-// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE 
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR 
-// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR 
-// ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR 
-// CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT 
-// OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR 
-// BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF 
-// LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING 
-// NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS 
+// THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY
+// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+// ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+// CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT
+// OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR
+// BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
+// LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
+// NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 //
 // Questions? Contact Nate Roberts (nate@nateroberts.com).
 //
-// @HEADER 
+// @HEADER
 
 /*
  *  HConvergenceStudy.h
@@ -57,52 +57,52 @@ namespace Camellia {
   class HConvergenceStudy {
     Teuchos::RCP<ExactSolution> _exactSolution;
     BFPtr _bilinearForm;
-    Teuchos::RCP<RHS> _rhs;  
+    Teuchos::RCP<RHS> _rhs;
     Teuchos::RCP<BC> _bc;
     IPPtr _ip;
     Teuchos::RCP<LagrangeConstraints> _lagrangeConstraints;
-    
+
     bool _reportConditionNumber;
-    
+
     int _H1Order, _minLogElements, _maxLogElements, _pToAdd;
     int _cubatureDegreeForExact;
     int _cubatureEnrichmentForSolutions;
-    vector< SolutionPtr > _solutions;
-    vector< SolutionPtr > _bestApproximations;
-    
-    map< int, FunctionPtr > _exactSolutionFunctions;
-    
-    Teuchos::RCP<Solution> _fineZeroSolution;
+    vector< TSolutionPtr<double> > _solutions;
+    vector< TSolutionPtr<double> > _bestApproximations;
+
+    map< int, TFunctionPtr<double> > _exactSolutionFunctions;
+
+    TSolutionPtr<double> _fineZeroSolution;
     bool _randomRefinements;
     bool _useTriangles;
     bool _useHybrid;
     void randomlyRefine(Teuchos::RCP<Mesh> mesh);
     bool _reportRelativeErrors;
-    
+
     bool _writeGlobalStiffnessToDisk;
     string _globalStiffnessFilePrefix;
-    
+
     map< int, vector<double> > _bestApproximationErrors; // trialID --> vector of errors for various meshes
     map< int, vector<double> > _solutionErrors;
     map< int, vector<double> > _bestApproximationErrorsDerivedVariables; // derived var index --> vector of errors for various meshes
     map< int, vector<double> > _solutionErrorsDerivedVariables;
-    
+
     map< int, vector<double> > _bestApproximationRates;
     map< int, vector<double> > _solutionRates;
     map< int, vector<double> > _bestApproximationRatesDerivedVariables;
     map< int, vector<double> > _solutionRatesDerivedVariables;
-    
+
     map< int, double > _exactSolutionNorm;
-    
+
     vector< DerivedVariable > _derivedVariables;
-    
+
     Teuchos::RCP<Solver> _solver;
     bool _useCondensedSolve;
-    
+
     int minNumElements();
-    
-    Teuchos::RCP<Solution> bestApproximation(Teuchos::RCP<Mesh> mesh);
-    
+
+    TSolutionPtr<double> bestApproximation(Teuchos::RCP<Mesh> mesh);
+
     Teuchos::RCP<Mesh> buildMesh(Teuchos::RCP<MeshGeometry> geometry, int numRefinements,
                                  bool useConformingTraces );
   public:
@@ -121,24 +121,24 @@ namespace Camellia {
                map<int,int> testOrderEnhancements);
     void solve(const Intrepid::FieldContainer<double> &quadPoints, bool useConformingTraces = true);
     void solve(Teuchos::RCP< MeshGeometry > geometry, bool useConformingTraces=true);
-    Teuchos::RCP<Solution> getSolution(int logElements); // logElements: a number between minLogElements and maxLogElements
+    TSolutionPtr<double> getSolution(int logElements); // logElements: a number between minLogElements and maxLogElements
     void writeToFiles(const string & filePathPrefix, int trialID, int traceID = -1, bool writeMATLABPlotData = false);
-    
+
     void addDerivedVariable( LinearTermPtr derivedVar, const string & name );
-    
+
     BFPtr bilinearForm();
-    
+
     vector<int> meshSizes();
-    vector< Teuchos::RCP<Solution> >& bestApproximations();
-    
+    vector< TSolutionPtr<double> >& bestApproximations();
+
     map< int, vector<double> > bestApproximationErrors();
     map< int, vector<double> > solutionErrors();
-    
+
     map< int, vector<double> > bestApproximationRates();
     map< int, vector<double> > solutionRates();
-    
+
     map< int, double > exactSolutionNorm();
-    
+
     vector<double> weightedL2Error(map<int, double> &weights, bool bestApproximation=false, bool relativeErrors=true);
 
     void computeErrors();
@@ -149,17 +149,17 @@ namespace Camellia {
     string TeXBestApproximationComparisonTable(const string &filePathPrefix="");
     string TeXBestApproximationComparisonTable(const vector<int> &trialIDs, const string &filePathPrefix="");
     string TeXNumGlobalDofsTable(const string &filePathPrefix="");
-    
+
     void setCubatureDegreeForExact(int value);
-    
+
     void setCubatureEnrichmentForSolutions(int value);
-      
-    void setSolutions( vector< SolutionPtr > &solutions); // must be in the right order, from minLogElements to maxLogElements
-    
+
+    void setSolutions( vector< TSolutionPtr<double> > &solutions); // must be in the right order, from minLogElements to maxLogElements
+
     void setSolver( Teuchos::RCP<Solver> solver);
-    
+
     void setUseCondensedSolve(bool value);
-    
+
     void setWriteGlobalStiffnessToDisk(bool value, string globalStiffnessFilePrefix);
   };
 }
