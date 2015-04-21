@@ -4,6 +4,8 @@
 #include "MeshFactory.h"
 #include "HDF5Exporter.h"
 
+using namespace Camellia;
+
 // this Function will work for both 2D and 3D cavity flow top BC (matching y = 1)
 class RampBoundaryFunction_U1 : public SimpleFunction {
   double _eps; // ramp width

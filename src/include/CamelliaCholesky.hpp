@@ -11,7 +11,7 @@
 
 namespace Camellia {
   template class<Scalar> Cholesky {
-    static int solve(FieldContainer<double> &X, const FieldContainer<double> &A, const FieldContainer<double> &B, bool transposeBandX = false);
+    static int solve(Intrepid::FieldContainer<double> &X, const Intrepid::FieldContainer<double> &A, const Intrepid::FieldContainer<double> &B, bool transposeBandX = false);
   };
 }
 

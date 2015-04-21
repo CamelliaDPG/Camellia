@@ -10,10 +10,11 @@
 
 #ifdef HAVE_MPI
 #include <Teuchos_GlobalMPISession.hpp>
+#include "Epetra_MpiComm.h"
 #endif
 
-#include <Epetra_SerialComm.h>
-#include <EpetraExt_HDF5.h>
+#include "Epetra_SerialComm.h"
+#include "EpetraExt_HDF5.h"
 
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -74,31 +75,31 @@ HDF5Exporter::~HDF5Exporter()
 {
 }
 
-void HDF5Exporter::exportSolution(SolutionPtr solution, double timeVal, unsigned int defaultNum1DPts, map<int, int> cellIDToNum1DPts, set<GlobalIndexType> cellIndices)
+void HDF5Exporter::exportSolution(TSolutionPtr<double> solution, double timeVal, unsigned int defaultNum1DPts, map<int, int> cellIDToNum1DPts, set<GlobalIndexType> cellIndices)
 {
   VarFactory varFactory = _mesh->bilinearForm()->varFactory();
-  
+
   vector<int> fieldTrialIDs = _mesh->bilinearForm()->trialVolumeIDs();
   vector<int> traceTrialIDs = _mesh->bilinearForm()->trialBoundaryIDs();
   vector<VarPtr> fieldVars;
   vector<VarPtr> traceVars;
-  
-  vector<FunctionPtr> fieldFunctions;
+
+  vector<TFunctionPtr<double>> fieldFunctions;
   vector<string> fieldFunctionNames;
   for (int i=0; i < fieldTrialIDs.size(); i++)
   {
     fieldVars.push_back(varFactory.trial(fieldTrialIDs[i]));
-    FunctionPtr fieldFunction = Function::solution(fieldVars[i], solution);
+    TFunctionPtr<double> fieldFunction = TFunction<double>::solution(fieldVars[i], solution);
     string fieldFunctionName = fieldVars[i]->name();
     fieldFunctions.push_back(fieldFunction);
     fieldFunctionNames.push_back(fieldFunctionName);
   }
-  vector<FunctionPtr> traceFunctions;
+  vector<TFunctionPtr<double>> traceFunctions;
   vector<string> traceFunctionNames;
   for (int i=0; i < traceTrialIDs.size(); i++)
   {
     traceVars.push_back(varFactory.trial(traceTrialIDs[i]));
-    FunctionPtr traceFunction = Function::solution(traceVars[i], solution);
+    TFunctionPtr<double> traceFunction = TFunction<double>::solution(traceVars[i], solution);
     string traceFunctionName = traceVars[i]->name();
     traceFunctions.push_back(traceFunction);
     traceFunctionNames.push_back(traceFunctionName);
@@ -107,30 +108,30 @@ void HDF5Exporter::exportSolution(SolutionPtr solution, double timeVal, unsigned
   exportFunction(traceFunctions, traceFunctionNames, timeVal, defaultNum1DPts, cellIDToNum1DPts, cellIndices);
 }
 
-void HDF5Exporter::exportSolution(SolutionPtr solution, VarFactory varFactory, double timeVal, unsigned int defaultNum1DPts, map<int, int> cellIDToNum1DPts, set<GlobalIndexType> cellIndices)
+void HDF5Exporter::exportSolution(TSolutionPtr<double> solution, VarFactory varFactory, double timeVal, unsigned int defaultNum1DPts, map<int, int> cellIDToNum1DPts, set<GlobalIndexType> cellIndices)
 {
   int rank = Teuchos::GlobalMPISession::getRank();
   if (rank==0) cout << "NOTE: this version of HDF5Exporter::exportSolution() is deprecated.  Remove the VarFactory argument to get rid of this message.\n";
   this->exportSolution(solution,timeVal,defaultNum1DPts,cellIDToNum1DPts,cellIndices);
 }
 
-void HDF5Exporter::exportFunction(FunctionPtr function, string functionName, double timeVal, unsigned int defaultNum1DPts, map<int, int> cellIDToNum1DPts, set<GlobalIndexType> cellIndices)
+void HDF5Exporter::exportFunction(TFunctionPtr<double> function, string functionName, double timeVal, unsigned int defaultNum1DPts, map<int, int> cellIDToNum1DPts, set<GlobalIndexType> cellIndices)
 {
-  vector<FunctionPtr> functions;
+  vector<TFunctionPtr<double>> functions;
   functions.push_back(function);
   vector<string> functionNames;
   functionNames.push_back(functionName);
   exportFunction(functions, functionNames, timeVal, defaultNum1DPts, cellIDToNum1DPts, cellIndices);
 }
 
-void HDF5Exporter::exportFunction(vector<FunctionPtr> functions, vector<string> functionNames, double timeVal, unsigned int defaultNum1DPts, map<int, int> cellIDToNum1DPts, set<GlobalIndexType> cellIndices)
+void HDF5Exporter::exportFunction(vector<TFunctionPtr<double>> functions, vector<string> functionNames, double timeVal, unsigned int defaultNum1DPts, map<int, int> cellIDToNum1DPts, set<GlobalIndexType> cellIndices)
 {
   int commRank = Teuchos::GlobalMPISession::getRank();
   int numProcs = Teuchos::GlobalMPISession::getNProc();
 
   bool exportingBoundaryValues = functions[0]->boundaryValueOnly();
 
-  XMLObject partitionCollection("Grid");
+  Teuchos::XMLObject partitionCollection("Grid");
   if (commRank == 0)
   {
     if (!exportingBoundaryValues)
@@ -143,13 +144,13 @@ void HDF5Exporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
         partitionCollection.addAttribute("Name", timeName.str());
         partitionCollection.addAttribute("GridType", "Collection");
         partitionCollection.addAttribute("CollectionType", "Spatial");
-        XMLObject time("Time");
+        Teuchos::XMLObject time("Time");
         partitionCollection.addChild(time);
         time.addAttribute("TimeType", "Single");
         time.addDouble("Value", timeVal);
         for (int p=0; p < numProcs; p++)
         {
-          XMLObject xiinclude("xi:include");
+          Teuchos::XMLObject xiinclude("xi:include");
           partitionCollection.addChild(xiinclude);
           stringstream partitionFileName;
           partitionFileName << "XMF/field" << "-part" << p << "-time" << timeVal << ".xmf";
@@ -169,13 +170,13 @@ void HDF5Exporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
         partitionCollection.addAttribute("Name", timeName.str());
         partitionCollection.addAttribute("GridType", "Collection");
         partitionCollection.addAttribute("CollectionType", "Spatial");
-        XMLObject time("Time");
+        Teuchos::XMLObject time("Time");
         partitionCollection.addChild(time);
         time.addAttribute("TimeType", "Single");
         time.addDouble("Value", timeVal);
         for (int p=0; p < numProcs; p++)
         {
-          XMLObject xiinclude("xi:include");
+          Teuchos::XMLObject xiinclude("xi:include");
           partitionCollection.addChild(xiinclude);
           stringstream partitionFileName;
           partitionFileName << "XMF/trace" << "-part" << p << "-time" << timeVal << ".xmf";
@@ -193,7 +194,7 @@ void HDF5Exporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
   else
     partitionFileName << _dirSuperPath << "/" << _dirName << "/XMF/trace" << "-part" << commRank << "-time" << timeVal << ".xmf";
   gridFile.open(partitionFileName.str().c_str());
-  XMLObject grid("Grid");
+  Teuchos::XMLObject grid("Grid");
   stringstream gridName;
   gridName << "Time" << timeVal << "Partition" << commRank;
   grid.addAttribute("Name", gridName.str());
@@ -269,7 +270,7 @@ void HDF5Exporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
     if (!cellIDToNum1DPts[cell->cellIndex()] || cellIDToNum1DPts[cell->cellIndex()] < 2)
       cellIDToNum1DPts[cell->cellIndex()] = defaultNum1DPts;
     int num1DPts = cellIDToNum1DPts[cell->cellIndex()];
-    
+
     unsigned baseCellTopoKey = cell->topology()->getKey().first;
     unsigned cellTopoKey;
     // Designate effective topologies for tensor meshes
@@ -368,7 +369,7 @@ void HDF5Exporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
         break;
       default:
         TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "cellTopoKey unrecognized");
-    }   
+    }
 
     switch (cellTopoKey)
     {
@@ -463,7 +464,7 @@ void HDF5Exporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
   totalSubcells = totalBoundaryPts + totalSubLines + totalSubTriangles + totalSubQuads + totalSubTets + totalSubWedges + totalSubHexas;
 
   // Topology
-  XMLObject topology("Topology");
+  Teuchos::XMLObject topology("Topology");
   grid.addChild(topology);
   topology.addAttribute("TopologyType", "Mixed");
   if (!exportingBoundaryValues)
@@ -500,7 +501,7 @@ void HDF5Exporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
       connDimsf = 5*totalSubQuads + 4*totalSubTriangles;
   }
   int connArray[connDimsf];
-  XMLObject topoDataItem("DataItem");
+  Teuchos::XMLObject topoDataItem("DataItem");
   topology.addChild(topoDataItem);
   topoDataItem.addAttribute("ItemType", "Uniform");
   topoDataItem.addAttribute("Format", "HDF");
@@ -512,7 +513,7 @@ void HDF5Exporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
   topoDataItem.addContent(connOutRel.str());
 
   // Geometry
-  XMLObject geometry("Geometry");
+  Teuchos::XMLObject geometry("Geometry");
   grid.addChild(geometry);
   if (spaceDim < 3)
     geometry.addAttribute("GeometryType", "XY");
@@ -525,7 +526,7 @@ void HDF5Exporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
     ptDimsf = spaceDim * totalPts;
   double ptArray[ptDimsf];
 
-  XMLObject geoDataItem("DataItem");
+  Teuchos::XMLObject geoDataItem("DataItem");
   geometry.addChild(geoDataItem);
   geoDataItem.addAttribute("ItemType", "Uniform");
   geoDataItem.addAttribute("Format", "HDF");
@@ -537,10 +538,10 @@ void HDF5Exporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
   geoDataItem.addContent(ptOutRel.str());
 
   // Node Data
-  vector<XMLObject> vals;
+  vector<Teuchos::XMLObject> vals;
   for (int i=0; i<nFcns; i++)
   {
-    vals.push_back( XMLObject("Attribute") );
+    vals.push_back( Teuchos::XMLObject("Attribute") );
     grid.addChild(vals[i]);
     vals[i].addAttribute("Name", functionNames[i].c_str());
     vals[i].addAttribute("Center", "Node");
@@ -577,7 +578,7 @@ void HDF5Exporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
       valDimsf[i] = 3*totalPts;
     }
     valArrays[i].resize(valDimsf[i], 0);
-    XMLObject valDataItem("DataItem");
+    Teuchos::XMLObject valDataItem("DataItem");
     vals[i].addChild(valDataItem);
     valDataItem.addAttribute("ItemType", "Uniform");
     valDataItem.addAttribute("Format", "HDF");
@@ -600,18 +601,16 @@ void HDF5Exporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
     GlobalIndexType cellIndex = *cellIt;
     CellPtr cell = _mesh->getTopology()->getCell(cellIndex);
 
-    FieldContainer<double> physicalCellNodes = _mesh->getTopology()->physicalCellNodesForCell(cellIndex);
+    Intrepid::FieldContainer<double> physicalCellNodes = _mesh->getTopology()->physicalCellNodesForCell(cellIndex);
 
     CellTopoPtr cellTopoPtr = cell->topology();
     int num1DPts = cellIDToNum1DPts[cell->cellIndex()];
-    int numPoints = 0;
 
     if (physicalCellNodes.rank() == 2)
       physicalCellNodes.resize(1,physicalCellNodes.dimension(0), physicalCellNodes.dimension(1));
     bool createSideCache = functions[0]->boundaryValueOnly();
 
-    BasisCachePtr volumeBasisCache = Teuchos::rcp( new BasisCache(cellTopoPtr, 1, createSideCache) );
-    volumeBasisCache->setPhysicalCellNodes(physicalCellNodes, vector<GlobalIndexType>(1,cellIndex), createSideCache);
+    BasisCachePtr volumeBasisCache = BasisCache::basisCacheForCell(_mesh, cellIndex);
 
     int numSides = createSideCache ? cellTopoPtr->getSideCount() : 1;
 
@@ -620,256 +619,16 @@ void HDF5Exporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
     for (int sideOrdinal = 0; sideOrdinal < numSides; sideOrdinal++)
     {
       CellTopoPtr topo = createSideCache ? cellTopoPtr->getSubcell(sideDim, sideOrdinal) : cellTopoPtr;
-      
-      unsigned baseCellTopoKey = topo->getKey().first;
-      unsigned cellTopoKey;
-      // Designate effective topologies for tensor meshes
-      switch (baseCellTopoKey)
-      {
-        case shards::Node::key:
-          switch (cell->topology()->getTensorialDegree())
-          {
-            case 0:
-            cellTopoKey = shards::Node::key;
-            break;
-            case 1:
-            cellTopoKey = shards::Line<2>::key;
-            break;
-            case 2:
-            cellTopoKey = shards::Quadrilateral<4>::key;
-            break;
-            case 3:
-            cellTopoKey = shards::Hexahedron<8>::key;
-            break;
-            default:
-            TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "tensor degree not supported for this spatial topology");
-          }
-          break;
-        case shards::Line<2>::key:
-          switch (cell->topology()->getTensorialDegree())
-          {
-            case 0:
-            cellTopoKey = shards::Line<2>::key;
-            break;
-            case 1:
-            if (!exportingBoundaryValues || (exportingBoundaryValues && spaceDim == 3))
-              cellTopoKey = shards::Quadrilateral<4>::key;
-            else if (spaceDim == 2)
-              cellTopoKey = shards::Line<2>::key;
-            // cellTopoKey = shards::Quadrilateral<4>::key;
-            break;
-            case 2:
-            cellTopoKey = shards::Hexahedron<8>::key;
-            break;
-            default:
-            TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "tensor degree not supported for this spatial topology");
-          }
-          break;
-        case shards::Triangle<3>::key:
-          switch (cell->topology()->getTensorialDegree())
-          {
-            case 0:
-            cellTopoKey = shards::Triangle<3>::key;
-            break;
-            case 1:
-            if (!exportingBoundaryValues)
-              cellTopoKey = shards::Wedge<6>::key;
-            else
-              cellTopoKey = shards::Triangle<3>::key;
-            break;
-            default:
-            TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "tensor degree not supported for this spatial topology");
-          }
-          break;
-        case shards::Quadrilateral<4>::key:
-          switch (cell->topology()->getTensorialDegree())
-          {
-            case 0:
-            cellTopoKey = shards::Quadrilateral<4>::key;
-            break;
-            case 1:
-            if (!exportingBoundaryValues)
-              cellTopoKey = shards::Hexahedron<8>::key;
-            else
-              cellTopoKey = shards::Quadrilateral<4>::key;
-            break;
-            default:
-            TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "tensor degree not supported for this spatial topology");
-          }
-          break;
-        case shards::Tetrahedron<4>::key:
-          switch (cell->topology()->getTensorialDegree())
-          {
-            case 0:
-            cellTopoKey = shards::Tetrahedron<4>::key;
-            break;
-            default:
-            TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "tensor degree not supported for this spatial topology");
-          }
-          break;
-        case shards::Wedge<6>::key:
-          switch (cell->topology()->getTensorialDegree())
-          {
-            case 0:
-            cellTopoKey = shards::Wedge<6>::key;
-            break;
-            default:
-            TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "tensor degree not supported for this spatial topology");
-          }
-          break;
-        case shards::Hexahedron<8>::key:
-          switch (cell->topology()->getTensorialDegree())
-          {
-            case 0:
-            cellTopoKey = shards::Hexahedron<8>::key;
-            break;
-            default:
-            TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "tensor degree not supported for this spatial topology");
-          }
-          break;
-        default:
-          TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "cellTopoKey unrecognized");
-      }
-
       BasisCachePtr basisCache = createSideCache ? volumeBasisCache->getSideBasisCache(sideOrdinal) : volumeBasisCache;
-      basisCache->setMesh(_mesh);
-      FunctionPtr transformFxn = _mesh->getTransformationFunction();
-      if (transformFxn.get())
-        basisCache->setTransformationFunction(transformFxn);
 
-      unsigned domainDim = createSideCache ? sideDim : spaceDim;
-
-      switch (cellTopoKey)
-      {
-        case shards::Node::key:
-          numPoints = 1;
-          break;
-        case shards::Line<2>::key:
-          numPoints = num1DPts;
-          break;
-        case shards::Triangle<3>::key:
-          numPoints = num1DPts*(num1DPts+1)/2;
-          break;
-        case shards::Quadrilateral<4>::key:
-          numPoints = num1DPts*num1DPts;
-          break;
-        case shards::Tetrahedron<4>::key:
-          numPoints = 4;
-          break;
-        case shards::Wedge<6>::key:
-          numPoints = num1DPts*num1DPts*(num1DPts+1)/2;
-          break;
-        case shards::Hexahedron<8>::key:
-          numPoints = num1DPts*num1DPts*num1DPts;
-          break;
-        default:
-          TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "cellTopoKey unrecognized");
-      }
-      
-      FieldContainer<double> refPoints(numPoints,domainDim);
-      if (domainDim == 0)
-        refPoints.resize(numPoints);
-      switch (cellTopoKey)
-      {
-        case shards::Node::key:
-          {
-            refPoints(0,0) = 0;
-          }
-          break;
-        case shards::Line<2>::key:
-          {
-            for (int i=0; i < num1DPts; i++)
-            {
-              int pointIndex = i;
-              double x = -1.0 + 2.0*(double(i)/double(num1DPts-1));
-              refPoints(pointIndex,0) = x;
-            }
-          }
-          break;
-        case shards::Triangle<3>::key:
-          {
-            int pointIndex = 0;
-            for (int j = 0; j < num1DPts; j++)
-              for (int i=0; i < num1DPts-j; i++)
-              {
-                double x = (double(i)/double(num1DPts-1));
-                double y = (double(j)/double(num1DPts-1));
-                refPoints(pointIndex,0) = x;
-                refPoints(pointIndex,1) = y;
-                pointIndex++;
-              }
-          }
-          break;
-        case shards::Quadrilateral<4>::key:
-          {
-            for (int j = 0; j < num1DPts; j++)
-              for (int i=0; i < num1DPts; i++)
-              {
-                int pointIndex = j*num1DPts + i;
-                double x = -1.0 + 2.0*(double(i)/double(num1DPts-1));
-                double y = -1.0 + 2.0*(double(j)/double(num1DPts-1));
-                refPoints(pointIndex,0) = x;
-                refPoints(pointIndex,1) = y;
-              }
-          }
-          break;
-        case shards::Tetrahedron<4>::key:
-          {
-            refPoints(0,0) = 0;
-            refPoints(0,1) = 0;
-            refPoints(0,2) = 0;
-            refPoints(1,0) = 1;
-            refPoints(1,1) = 0;
-            refPoints(1,2) = 0;
-            refPoints(2,0) = 0;
-            refPoints(2,1) = 1;
-            refPoints(2,2) = 0;
-            refPoints(3,0) = 0;
-            refPoints(3,1) = 0;
-            refPoints(3,2) = 1;
-          }
-          break;
-        case shards::Wedge<6>::key:
-          {
-            int pointIndex = 0;
-            for (int k = 0; k < num1DPts; k++)
-              for (int j = 0; j < num1DPts; j++)
-                for (int i=0; i < num1DPts-j; i++)
-                {
-                  double x = (double(i)/double(num1DPts-1));
-                  double y = (double(j)/double(num1DPts-1));
-                  double z = -1.0 + 2.0*(double(k)/double(num1DPts-1));
-                  refPoints(pointIndex,0) = x;
-                  refPoints(pointIndex,1) = y;
-                  refPoints(pointIndex,2) = z;
-                  pointIndex++;
-                }
-          }
-          break;
-        case shards::Hexahedron<8>::key:
-          {
-            for (int k = 0; k < num1DPts; k++)
-              for (int j=0; j < num1DPts; j++)
-                for (int i=0; i < num1DPts; i++)
-                {
-                  int pointIndex = k*num1DPts*num1DPts + j*num1DPts + i;
-                  double x = -1.0 + 2.0*(double(i)/double(num1DPts-1));
-                  double y = -1.0 + 2.0*(double(j)/double(num1DPts-1));
-                  double z = -1.0 + 2.0*(double(k)/double(num1DPts-1));
-                  refPoints(pointIndex,0) = x;
-                  refPoints(pointIndex,1) = y;
-                  refPoints(pointIndex,2) = z;
-                }
-              }
-          break;
-        default:
-          TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "cellTopoKey unrecognized");
-      }
+      Intrepid::FieldContainer<double> refPoints;
+      getPoints(refPoints, topo, num1DPts);
 
       basisCache->setRefCellPoints(refPoints);
-      const FieldContainer<double> *physicalPoints = &basisCache->getPhysicalCubaturePoints();
+      int numPoints = refPoints.dimension(0);
+      const Intrepid::FieldContainer<double> *physicalPoints = &basisCache->getPhysicalCubaturePoints();
       // Function Values
-      std::vector< FieldContainer<double> > computedValues(nFcns);
+      std::vector< Intrepid::FieldContainer<double> > computedValues(nFcns);
       for (int i = 0; i < nFcns; i++)
       {
         if (functions[i]->rank() == 0)
@@ -881,6 +640,115 @@ void HDF5Exporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
         functions[i]->values(computedValues[i], basisCache);
       }
 
+      unsigned baseCellTopoKey = topo->getKey().first;
+      unsigned cellTopoKey;
+      // Designate effective topologies for tensor meshes
+      switch (baseCellTopoKey)
+      {
+        case shards::Node::key:
+          switch (cell->topology()->getTensorialDegree())
+        {
+          case 0:
+            cellTopoKey = shards::Node::key;
+            break;
+          case 1:
+            cellTopoKey = shards::Line<2>::key;
+            break;
+          case 2:
+            cellTopoKey = shards::Quadrilateral<4>::key;
+            break;
+          case 3:
+            cellTopoKey = shards::Hexahedron<8>::key;
+            break;
+          default:
+            TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "tensor degree not supported for this spatial topology");
+        }
+          break;
+        case shards::Line<2>::key:
+          switch (cell->topology()->getTensorialDegree())
+        {
+          case 0:
+            cellTopoKey = shards::Line<2>::key;
+            break;
+          case 1:
+            if (!exportingBoundaryValues || (exportingBoundaryValues && spaceDim == 3))
+              cellTopoKey = shards::Quadrilateral<4>::key;
+            else if (spaceDim == 2)
+              cellTopoKey = shards::Line<2>::key;
+            // cellTopoKey = shards::Quadrilateral<4>::key;
+            break;
+          case 2:
+            cellTopoKey = shards::Hexahedron<8>::key;
+            break;
+          default:
+            TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "tensor degree not supported for this spatial topology");
+        }
+          break;
+        case shards::Triangle<3>::key:
+          switch (cell->topology()->getTensorialDegree())
+        {
+          case 0:
+            cellTopoKey = shards::Triangle<3>::key;
+            break;
+          case 1:
+            if (!exportingBoundaryValues)
+              cellTopoKey = shards::Wedge<6>::key;
+            else
+              cellTopoKey = shards::Triangle<3>::key;
+            break;
+          default:
+            TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "tensor degree not supported for this spatial topology");
+        }
+          break;
+        case shards::Quadrilateral<4>::key:
+          switch (cell->topology()->getTensorialDegree())
+        {
+          case 0:
+            cellTopoKey = shards::Quadrilateral<4>::key;
+            break;
+          case 1:
+            if (!exportingBoundaryValues)
+              cellTopoKey = shards::Hexahedron<8>::key;
+            else
+              cellTopoKey = shards::Quadrilateral<4>::key;
+            break;
+          default:
+            TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "tensor degree not supported for this spatial topology");
+        }
+          break;
+        case shards::Tetrahedron<4>::key:
+          switch (cell->topology()->getTensorialDegree())
+        {
+          case 0:
+            cellTopoKey = shards::Tetrahedron<4>::key;
+            break;
+          default:
+            TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "tensor degree not supported for this spatial topology");
+        }
+          break;
+        case shards::Wedge<6>::key:
+          switch (cell->topology()->getTensorialDegree())
+        {
+          case 0:
+            cellTopoKey = shards::Wedge<6>::key;
+            break;
+          default:
+            TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "tensor degree not supported for this spatial topology");
+        }
+          break;
+        case shards::Hexahedron<8>::key:
+          switch (cell->topology()->getTensorialDegree())
+        {
+          case 0:
+            cellTopoKey = shards::Hexahedron<8>::key;
+            break;
+          default:
+            TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "tensor degree not supported for this spatial topology");
+        }
+          break;
+        default:
+          TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "cellTopoKey unrecognized");
+      }
       int subcellStartIndex = total_vertices;
       switch (cellTopoKey)
       {
@@ -1186,16 +1054,16 @@ void HDF5Exporter::exportFunction(vector<FunctionPtr> functions, vector<string> 
   }
 }
 
-void HDF5Exporter::exportTimeSlab(FunctionPtr function, string functionName, double tInit, double tFinal, unsigned int numSlices, unsigned int sliceH1Order, unsigned int defaultNum1DPts)
+void HDF5Exporter::exportTimeSlab(TFunctionPtr<double> function, string functionName, double tInit, double tFinal, unsigned int numSlices, unsigned int sliceH1Order, unsigned int defaultNum1DPts)
 {
-  vector<FunctionPtr> functions;
+  vector<TFunctionPtr<double>> functions;
   functions.push_back(function);
   vector<string> functionNames;
   functionNames.push_back(functionName);
   exportTimeSlab(functions, functionNames, tInit, tFinal, numSlices, sliceH1Order, defaultNum1DPts);
 }
 
-void HDF5Exporter::exportTimeSlab(vector<FunctionPtr> functions, vector<string> functionNames, double tInit, double tFinal, unsigned int numSlices, unsigned int sliceH1Order, unsigned int defaultNum1DPts)
+void HDF5Exporter::exportTimeSlab(vector<TFunctionPtr<double>> functions, vector<string> functionNames, double tInit, double tFinal, unsigned int numSlices, unsigned int sliceH1Order, unsigned int defaultNum1DPts)
 {
   HDF5Exporter exporter(_mesh, _dirName, _dirSuperPath);
   for (int slice=0; slice < numSlices; slice++)
@@ -1203,10 +1071,10 @@ void HDF5Exporter::exportTimeSlab(vector<FunctionPtr> functions, vector<string> 
     double sliceTime = tInit + slice*(tFinal-tInit)/(numSlices-1);
     map<GlobalIndexType,GlobalIndexType> cellMap;
     MeshPtr meshSlice = MeshTools::timeSliceMesh(_mesh, sliceTime, cellMap, sliceH1Order);
-    vector<FunctionPtr> functionSlices;
-    for (vector<FunctionPtr>::iterator fcnIt = functions.begin(); fcnIt != functions.end(); ++fcnIt)
+    vector<TFunctionPtr<double>> functionSlices;
+    for (vector<TFunctionPtr<double>>::iterator fcnIt = functions.begin(); fcnIt != functions.end(); ++fcnIt)
     {
-      FunctionPtr functionSlice = MeshTools::timeSliceFunction(_mesh, cellMap, *fcnIt, sliceTime);
+      TFunctionPtr<double> functionSlice = MeshTools::timeSliceFunction(_mesh, cellMap, *fcnIt, sliceTime);
       functionSlices.push_back(functionSlice);
     }
     exporter.setMesh(meshSlice);
@@ -1214,15 +1082,171 @@ void HDF5Exporter::exportTimeSlab(vector<FunctionPtr> functions, vector<string> 
   }
 }
 
-void HDF5Exporter::exportFunction(string superDirectory, string functionName, FunctionPtr function, MeshPtr mesh) {
+void HDF5Exporter::exportFunction(string superDirectory, string functionName, TFunctionPtr<double> function, MeshPtr mesh) {
   HDF5Exporter exporter(mesh, functionName, superDirectory);
   exporter.exportFunction(function);
 }
 
-void HDF5Exporter::exportSolution(std::string superDirectory, std::string solnName, SolutionPtr solution) {
+void HDF5Exporter::exportSolution(std::string superDirectory, std::string solnName, TSolutionPtr<double> solution) {
   MeshPtr mesh = solution->mesh();
   HDF5Exporter exporter(mesh, solnName, superDirectory);
   exporter.exportSolution(solution, mesh->bilinearForm()->varFactory());
+}
+
+void HDF5Exporter::getPoints(Intrepid::FieldContainer<double> &points, CellTopoPtr cellTopo, int num1DPts) {
+  int topoDim = cellTopo->getDimension();
+
+  if (cellTopo->getTensorialDegree() > 0) {
+    Intrepid::FieldContainer<double> componentPoints;
+    Intrepid::FieldContainer<double> linePoints;
+    getPoints(linePoints, CellTopology::line(), num1DPts);
+    if (cellTopo->getTensorialComponent()->getDimension() == 0) {
+      points = linePoints;
+    } else {
+      getPoints(componentPoints, cellTopo->getTensorialComponent(), num1DPts);
+      points.resize(linePoints.dimension(0) * componentPoints.dimension(0), cellTopo->getDimension());
+      CamelliaCellTools::getTensorPoints(points, componentPoints, linePoints);
+    }
+    return;
+  }
+
+  // if we get here, tensorial degree = 0
+  unsigned cellTopoKey = cellTopo->getShardsTopology().getKey();
+  int numPoints;
+  switch (cellTopoKey)
+  {
+    case shards::Node::key:
+      numPoints = 1;
+      break;
+    case shards::Line<2>::key:
+      numPoints = num1DPts;
+      break;
+    case shards::Triangle<3>::key:
+      numPoints = num1DPts*(num1DPts+1)/2;
+      break;
+    case shards::Quadrilateral<4>::key:
+      numPoints = num1DPts*num1DPts;
+      break;
+    case shards::Tetrahedron<4>::key:
+      numPoints = 4;
+      break;
+    case shards::Wedge<6>::key:
+      numPoints = num1DPts*num1DPts*(num1DPts+1)/2;
+      break;
+    case shards::Hexahedron<8>::key:
+      numPoints = num1DPts*num1DPts*num1DPts;
+      break;
+    default:
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "cellTopoKey unrecognized");
+  }
+
+  points.resize(numPoints,topoDim);
+  if (topoDim == 0)
+    points.resize(numPoints);
+  switch (cellTopoKey)
+  {
+    case shards::Node::key:
+    {
+      points(0,0) = 0;
+    }
+      break;
+    case shards::Line<2>::key:
+    {
+      for (int i=0; i < num1DPts; i++)
+      {
+        int pointIndex = i;
+        double x = -1.0 + 2.0*(double(i)/double(num1DPts-1));
+        points(pointIndex,0) = x;
+      }
+    }
+      break;
+    case shards::Triangle<3>::key:
+    {
+      int pointIndex = 0;
+      for (int j = 0; j < num1DPts; j++)
+        for (int i=0; i < num1DPts-j; i++)
+        {
+          double x = (double(i)/double(num1DPts-1));
+          double y = (double(j)/double(num1DPts-1));
+          points(pointIndex,0) = x;
+          points(pointIndex,1) = y;
+          pointIndex++;
+        }
+    }
+      break;
+    case shards::Quadrilateral<4>::key:
+    {
+      for (int j = 0; j < num1DPts; j++)
+        for (int i=0; i < num1DPts; i++)
+        {
+          int pointIndex = j*num1DPts + i;
+          double x = -1.0 + 2.0*(double(i)/double(num1DPts-1));
+          double y = -1.0 + 2.0*(double(j)/double(num1DPts-1));
+          points(pointIndex,0) = x;
+          points(pointIndex,1) = y;
+        }
+    }
+      break;
+    case shards::Tetrahedron<4>::key:
+    {
+      points(0,0) = 0;
+      points(0,1) = 0;
+      points(0,2) = 0;
+      points(1,0) = 1;
+      points(1,1) = 0;
+      points(1,2) = 0;
+      points(2,0) = 0;
+      points(2,1) = 1;
+      points(2,2) = 0;
+      points(3,0) = 0;
+      points(3,1) = 0;
+      points(3,2) = 1;
+    }
+      break;
+    case shards::Wedge<6>::key:
+    {
+      int pointIndex = 0;
+      for (int k = 0; k < num1DPts; k++)
+      {
+        for (int j = 0; j < num1DPts; j++)
+        {
+          for (int i=0; i < num1DPts-j; i++)
+          {
+            double x = (double(i)/double(num1DPts-1));
+            double y = (double(j)/double(num1DPts-1));
+            double z = -1.0 + 2.0*(double(k)/double(num1DPts-1));
+            points(pointIndex,0) = x;
+            points(pointIndex,1) = y;
+            points(pointIndex,2) = z;
+            pointIndex++;
+          }
+        }
+      }
+    }
+      break;
+    case shards::Hexahedron<8>::key:
+    {
+      for (int k = 0; k < num1DPts; k++)
+      {
+        for (int j=0; j < num1DPts; j++)
+        {
+          for (int i=0; i < num1DPts; i++)
+          {
+            int pointIndex = k*num1DPts*num1DPts + j*num1DPts + i;
+            double x = -1.0 + 2.0*(double(i)/double(num1DPts-1));
+            double y = -1.0 + 2.0*(double(j)/double(num1DPts-1));
+            double z = -1.0 + 2.0*(double(k)/double(num1DPts-1));
+            points(pointIndex,0) = x;
+            points(pointIndex,1) = y;
+            points(pointIndex,2) = z;
+          }
+        }
+      }
+    }
+      break;
+    default:
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "cellTopoKey unrecognized");
+  }
 }
 
 map<int,int> cellIDToSubdivision(MeshPtr mesh, unsigned int subdivisionFactor, set<GlobalIndexType> cellIndices)

@@ -18,6 +18,7 @@
 
 #include "CellTopology.h"
 
+using namespace Intrepid;
 using namespace Camellia;
 
 CellTopoPtr CamelliaCellTools::cellTopoForKey(Camellia::CellTopologyKey key) {
@@ -117,17 +118,17 @@ void CamelliaCellTools::computeSideMeasure(FieldContainer<double> &weightedMeasu
       }
     }
     // if we get here, cellJacobian satisfies the orthogonality requirement and spatialCellJacobian contains the appropriate submatrix of cellJacobian.
-    int spaceSideCount = parentCell->getSideCount() - 2;
-    if (sideOrdinal < spaceSideCount) {
+    if (parentCell->sideIsSpatial(sideOrdinal)) {
+      int spatialSideOrdinal = parentCell->getSpatialComponentSideOrdinal(sideOrdinal);
       // then the space-time side is comprised of space side x temporal line, and we can recurse:
       CellTopoPtr spatialCell = CellTopology::cellTopology(parentCell->getShardsTopology(), parentCell->getTensorialDegree()-1);
-      computeSideMeasure(weightedMeasure, spatialCellJacobian, cubWeights, sideOrdinal, spatialCell);
+      computeSideMeasure(weightedMeasure, spatialCellJacobian, cubWeights, spatialSideOrdinal, spatialCell);
       // next, we multiply the weights uniformly by the absolute value of the temporal Jacobian (which is just a scalar value for each point)
       ArrayTools::scalarMultiplyDataData<double>(weightedMeasure, weightedMeasure, temporalCellJacobianAbs);
-    } else { // sideOrdinal >= spaceSideCount
+    } else {
       // here, the space-time side is an instance of the spatial cell, so we want to use FunctionSpaceTools::computeCellMeasure
       FieldContainer<double> spatialCellJacobianDet(numCells,numPoints);
-      CellTools<double>::setJacobianDet(spatialCellJacobianDet, spatialCellJacobian );
+      Intrepid::CellTools<double>::setJacobianDet(spatialCellJacobianDet, spatialCellJacobian );
       FunctionSpaceTools::computeCellMeasure<double>(weightedMeasure, spatialCellJacobianDet, cubWeights);
     }
   }
@@ -174,7 +175,7 @@ void CamelliaCellTools::getReferenceSideNormal(FieldContainer<double> &refSideNo
       // shouldn't get here, except for point topology.  Can't get side normals for point topology...
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "When tensorial degree == 0, spaceDim must be 2 or 3");
     }
-    CellTools<double>::getReferenceSideNormal(refSideNormal, sideOrdinal, parentCell->getShardsTopology());
+    Intrepid::CellTools<double>::getReferenceSideNormal(refSideNormal, sideOrdinal, parentCell->getShardsTopology());
   } else {
     refSideNormal.initialize(0.0);
     if (! parentCell->sideIsSpatial(sideOrdinal)) {
@@ -222,7 +223,7 @@ void CamelliaCellTools::getUnitSideNormals(FieldContainer<double> &unitSideNorma
       }
     }
   } else if (parentCell->getTensorialDegree() == 0) {
-    CellTools<double>::getPhysicalSideNormals(unitSideNormals, inCellJacobian, sideOrdinal, parentCell->getShardsTopology());      // make unit length
+    Intrepid::CellTools<double>::getPhysicalSideNormals(unitSideNormals, inCellJacobian, sideOrdinal, parentCell->getShardsTopology());      // make unit length
     FieldContainer<double> normalLengths(numCells, numPoints);
     RealSpaceTools<double>::vectorNorm(normalLengths, unitSideNormals, NORM_TWO);
     FunctionSpaceTools::scalarMultiplyDataData<double>(unitSideNormals, normalLengths, unitSideNormals, true); // true: divide
@@ -288,7 +289,7 @@ void CamelliaCellTools::refCellNodesForTopology(FieldContainer<double> &cellNode
   int dim = cellTopo.getDimension();
   
   for (int vertexOrdinal=0; vertexOrdinal<vertexCount; vertexOrdinal++) {
-    const double* v = CellTools<double>::getReferenceVertex(cellTopo, vertexOrdinal);
+    const double* v = Intrepid::CellTools<double>::getReferenceVertex(cellTopo, vertexOrdinal);
     for (int d=0; d<dim; d++) {
       cellNodes(vertexOrdinal,d) = v[d];
     }
@@ -393,7 +394,7 @@ void CamelliaCellTools::mapToPhysicalFrame(FieldContainer<double> &physPoints, c
   switch(refPoints.rank()) {
     case 2:
     {
-      nodalBasis->getValues(basisValues, refPoints, OPERATOR_VALUE);
+      nodalBasis->getValues(basisValues, refPoints, Intrepid::OPERATOR_VALUE);
       // If whichCell = -1, ref pt. set is mapped to all cells, otherwise, the set is mapped to one cell only
       int cellLoop = (whichCell == -1) ? numCells : 1 ;
       
@@ -429,7 +430,7 @@ void CamelliaCellTools::mapToPhysicalFrame(FieldContainer<double> &physPoints, c
         }
         
         // Compute basis values for this set of ref. points
-        nodalBasis -> getValues(basisValues, refPointsForCell, OPERATOR_VALUE);
+        nodalBasis -> getValues(basisValues, refPointsForCell, Intrepid::OPERATOR_VALUE);
         
         for(int pointOrdinal = 0; pointOrdinal < numPoints; pointOrdinal++) {
           for(int d = 0; d < spaceDim; d++){
@@ -637,7 +638,7 @@ void CamelliaCellTools::permutedReferenceCellPoints(const shards::CellTopology &
   
   permutedNodes.resize(1,permutedNodes.dimension(0), permutedNodes.dimension(1));
   int whichCell = 0;
-  CellTools<double>::mapToPhysicalFrame(permutedPoints,refPoints,permutedNodes,cellTopo, whichCell);
+  Intrepid::CellTools<double>::mapToPhysicalFrame(permutedPoints,refPoints,permutedNodes,cellTopo, whichCell);
 }
 
 void CamelliaCellTools::permutedReferenceCellPoints(CellTopoPtr cellTopo, unsigned int permutation,
@@ -665,8 +666,9 @@ void CamelliaCellTools::setJacobian(FieldContainer<double> &jacobian, const Fiel
   typedef Camellia::TensorBasis<double, FieldContainer<double> > TensorBasis;
   
   BasisPtr nodalBasis = shardsNodalBasis;
+  bool rangeDimensionIsSum = true;
   for (int i=0; i<cellTopo->getTensorialDegree(); i++) {
-    nodalBasis = Teuchos::rcp( new TensorBasis(nodalBasis, lineNodalBasis) );
+    nodalBasis = Teuchos::rcp( new TensorBasis(nodalBasis, lineNodalBasis, rangeDimensionIsSum) );
   }
   
   int basisCardinality = nodalBasis -> getCardinality();
@@ -680,7 +682,7 @@ void CamelliaCellTools::setJacobian(FieldContainer<double> &jacobian, const Fiel
       // refPoints is (P,D): a single or multiple cell jacobians computed for a single set of ref. points
     case 2:
     {
-      nodalBasis -> getValues(basisGrads, points, OPERATOR_GRAD);
+      nodalBasis -> getValues(basisGrads, points, Intrepid::OPERATOR_GRAD);
       
       // The outer loops select the multi-index of the Jacobian entry: cell, point, row, col
       // If whichCell = -1, all jacobians are computed, otherwise a single cell jacobian is computed
@@ -735,7 +737,7 @@ void CamelliaCellTools::setJacobian(FieldContainer<double> &jacobian, const Fiel
         }//pt
         
         // Compute gradients of basis functions at this set of ref. points
-        nodalBasis -> getValues(basisGrads, tempPoints, OPERATOR_GRAD);
+        nodalBasis -> getValues(basisGrads, tempPoints, Intrepid::OPERATOR_GRAD);
         
         // Compute jacobians for the point set corresponding to the current cellordinal
         for(int pointOrd = 0; pointOrd < numPoints; pointOrd++) {
@@ -1057,6 +1059,54 @@ unsigned CamelliaCellTools::subcellReverseOrdinalMap(const shards::CellTopology 
   return -1; // NOT FOUND
 }
 
+void CamelliaCellTools::getTensorPoints(Intrepid::FieldContainer<double>& tensorPoints, const Intrepid::FieldContainer<double> & spatialPoints,
+                                        const Intrepid::FieldContainer<double> & temporalPoints) {
+  bool hasCellRank;
+  if ( spatialPoints.rank() != temporalPoints.rank() ) {
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "temporalPoints and spatialPoints must have same rank");
+  }
+  
+  if (tensorPoints.rank() == 3) {
+    hasCellRank = true;
+  } else if (tensorPoints.rank() == 2) {
+    hasCellRank = false;
+  } else {
+    TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument,"unsupported rank in tensorPoints");
+  }
+  
+  int numCells = hasCellRank ? tensorPoints.dimension(0) : 1;
+  
+  int pointIndex = hasCellRank ? 1 : 0;
+  int spaceDimIndex = hasCellRank ? 2 : 1;
+  int numPointsSpace = spatialPoints.dimension(pointIndex);
+  int numPointsTime = temporalPoints.dimension(pointIndex);
+  
+  int spaceDim = spatialPoints.dimension(spaceDimIndex);
+  int timeDim = temporalPoints.dimension(spaceDimIndex);
+  
+  for (int cellOrdinal=0; cellOrdinal<numCells; cellOrdinal++) {
+    for (int timePointOrdinal=0; timePointOrdinal<numPointsTime; timePointOrdinal++) {
+      for (int spacePointOrdinal=0; spacePointOrdinal<numPointsSpace; spacePointOrdinal++) {
+        int spaceTimePointOrdinal = TENSOR_POINT_ORDINAL(spacePointOrdinal, timePointOrdinal, numPointsSpace);
+        for (int d=0; d<spaceDim; d++) {
+          if (hasCellRank) {
+            tensorPoints(cellOrdinal,spaceTimePointOrdinal,d) = spatialPoints(cellOrdinal,spacePointOrdinal,d);
+          } else {
+            tensorPoints(spaceTimePointOrdinal,d) = spatialPoints(spacePointOrdinal,d);
+          }
+        }
+        for (int d=spaceDim; d<spaceDim+timeDim; d++) {
+          if (hasCellRank) {
+            tensorPoints(cellOrdinal,spaceTimePointOrdinal,d) = temporalPoints(cellOrdinal,timePointOrdinal,d-spaceDim);
+          } else {
+            tensorPoints(spaceTimePointOrdinal,d) = temporalPoints(timePointOrdinal,d-spaceDim);
+          }
+        }
+      }
+    }
+  }
+}
+
 // copied from Intrepid's CellTools and specialized to allow use when we have curvilinear geometry
 void CamelliaCellTools::mapToReferenceFrameInitGuess(       FieldContainer<double>  &        refPoints,
                                                      const FieldContainer<double>  &        initGuess,
@@ -1091,7 +1141,7 @@ void CamelliaCellTools::mapToReferenceFrameInitGuess(       FieldContainer<doubl
   BasisCachePtr basisCache = BasisCache::basisCacheForReferenceCell(cell->topology(), cubatureDegree);
   
   if (meshTopo->transformationFunction().get() != NULL) {
-    FunctionPtr transformFunction = meshTopo->transformationFunction();
+    TFunctionPtr<double> transformFunction = meshTopo->transformationFunction();
     basisCache->setTransformationFunction(transformFunction, true);
   }
   std::vector<GlobalIndexType> cellIDs;
@@ -1213,7 +1263,7 @@ void CamelliaCellTools::mapToReferenceSubcell(FieldContainer<double>       &refS
   // for cells that Intrepid's CellTools supports, we just use that
   int cellDim = parentCell.getDimension();
   if ((subcellDim > 0) && ((cellDim == 2) || (cellDim == 3)) ) {
-    CellTools<double>::mapToReferenceSubcell(refSubcellPoints, paramPoints, subcellDim, subcellOrd, parentCell);
+    Intrepid::CellTools<double>::mapToReferenceSubcell(refSubcellPoints, paramPoints, subcellDim, subcellOrd, parentCell);
   } else if (subcellDim == 0) {
     // just looking for a vertex; neglect paramPoints argument here
     FieldContainer<double> refCellNodes(parentCell.getNodeCount(),cellDim);

@@ -13,18 +13,18 @@
 
 namespace Camellia {
   template<class Scalar=double, class ArrayScalar=Intrepid::FieldContainer<Scalar> > class Legendre;
-  
+
   template<class Scalar, class ArrayScalar> class Legendre {
   public:
     // n: poly order; valuesArray should have n+2 entries...
-    static void values(ArrayScalar &valuesArray, ArrayScalar &derivativeValuesArray, Scalar x, int n); 
+    static void values(ArrayScalar &valuesArray, ArrayScalar &derivativeValuesArray, Scalar x, int n);
   };
-  
-  class LegendreFunction : public SimpleFunction {
+
+  class LegendreFunction : public SimpleFunction<double> {
     int _polyOrder;
-    FieldContainer<double> _values;
-    FieldContainer<double> _derivatives;
-    
+    Intrepid::FieldContainer<double> _values;
+    Intrepid::FieldContainer<double> _derivatives;
+
     bool _derivative; // whether this is the derivative of the Lobatto function
   public:
     LegendreFunction(int polyOrder, bool derivative = false) {
@@ -42,8 +42,8 @@ namespace Camellia {
         return _derivatives[_polyOrder];
       }
     }
-    
-    FunctionPtr dx() {
+
+    TFunctionPtr<double> dx() {
       if (_derivative) {
         TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "LegendreFunction only supports first derivatives...");
       }

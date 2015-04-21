@@ -39,6 +39,9 @@
  function, belonging to H(div,K).
  */
 
+using namespace Camellia;
+using namespace Intrepid;
+
 class TestBilinearFormFlux : public BF {
 private:
 //  static const string & S_TEST;

@@ -1,7 +1,30 @@
+# Directions:
+# 1. Obtain Trilinos--a recent version is best.
+# 1. Place this script where you would like to build Trilinos--say, under <Trilinos-Source-Root>/build/release.
+# 2. Replace the final argument "../.." with the root Trilinos source directory (if you place in <Trilinos-Source-Root>/build/release, then "../.." will work).
+# 3. Delete any lines related to optional third-party library dependencies that you aren't using (see list of optional dependencies, below).
+# 4. Obtain and install any third-party libraries.  Some MPI library is highly recommended, as is HDF5.  Instructions for building OpenMPI and HDF5 in parallel can be found in the README in the top level of the Camellia git repository.
+# 5. Edit the file paths below to match your system.
+# 6. Edit the CMAKE_INSTALL_PREFIX path to indicate where you would like Trilinos installed.
+# 6. From the command line, invoke ./do-configure-release.  This will configure the Trilinos build.
+# 7. If the configuration concluded successfully, run make.
+# 8. If the build was successful, run make install.
+
 EXTRA_ARGS=$@
 
 rm -f CMakeCache.txt
 rm -rf CMakeFiles
+
+# The following are optional:
+# - MUMPS
+# - SuperLUDist
+# - METIS
+# - ParMETIS
+# If you do not want to use these with Camellia, you can delete the lines pertaining to them
+# below.  HDF5 is also optional, but this is highly recommended and may become a hard requirement
+# in the future.
+
+# complex support incompatible with SuperLU_Dist + Amesos2 combination -- hence the Teuchos_ENABLE_COMPLEX:BOOL=OFF line
 
 cmake \
 -D Trilinos_WARNINGS_AS_ERRORS_FLAGS:STRING="" \
@@ -13,15 +36,36 @@ cmake \
 -D TPL_ENABLE_MUMPS:STRING=ON \
 -D MUMPS_LIBRARY_DIRS:FILEPATH=/Users/nroberts/lib/mumps-4.10.0 \
 -D MUMPS_LIBRARY_NAMES:STRING="dmumps; pord; mumps_common" \
+-D MUMPS_INCLUDE_DIRS:FILEPATH=/Users/nroberts/lib/mumps-4.10.0/include \
+-D TPL_MUMPS_LIBRARY_DIRS:FILEPATH=/Users/nroberts/lib/mumps-4.10.0 \
+-D TPL_MUMPS_LIBRARY_NAMES:STRING="dmumps; pord; mumps_common" \
 -D TPL_MUMPS_INCLUDE_DIRS:FILEPATH=/Users/nroberts/lib/mumps-4.10.0/include \
--D CMAKE_CXX_COMPILER:FILEPATH=/Users/nroberts/lib/openmpi-1.6.5/bin/mpicxx \
--D CMAKE_C_COMPILER:FILEPATH=/Users/nroberts/lib/openmpi-1.6.5/bin/mpicc \
--D CMAKE_Fortran_COMPILER:FILEPATH=/Users/nroberts/lib/openmpi-1.6.5/bin/mpif90 \
--D MPI_BASE_DIR:PATH=/Users/nroberts/lib/openmpi-1.6.5 \
+-D TPL_ENABLE_SuperLUDist:STRING=ON \
+-D SuperLUDist_LIBRARY_DIRS:FILEPATH=/Users/nroberts/lib/petsc/lib \
+-D SuperLUDist_LIBRARY_NAMES:STRING="superlu_dist_3.3" \
+-D TPL_SuperLUDist_INCLUDE_DIRS:FILEPATH=/Users/nroberts/lib/petsc/include/ \
+-D TPL_ENABLE_METIS:STRING=ON \
+-D METIS_LIBRARY_DIRS:FILEPATH="/Users/nroberts/lib/petsc/lib/" \
+-D METIS_LIBRARY_NAMES:STRING="metis" \
+-D METIS_INCLUDE_DIRS:FILEPATH="/Users/nroberts/lib/petsc/include/" \
+-D TPL_ENABLE_ParMETIS:STRING=ON \
+-D ParMETIS_LIBRARY_DIRS:FILEPATH="/Users/nroberts/lib/petsc/lib/" \
+-D ParMETIS_LIBRARY_NAMES:STRING="parmetis" \
+-D ParMETIS_INCLUDE_DIRS:FILEPATH="/Users/nroberts/lib/petsc/include/" \
+-D CMAKE_CXX_COMPILER:FILEPATH=/Users/nroberts/lib/openmpi/bin/mpicxx \
+-D CMAKE_C_COMPILER:FILEPATH=/Users/nroberts/lib/openmpi/bin/mpicc \
+-D CMAKE_Fortran_COMPILER:FILEPATH=/Users/nroberts/lib/openmpi/bin/mpif90 \
+-D CMAKE_CXX_FLAGS_RELEASE:STRING="-g -O3 -stdlib=libc++ -std=c++11" \
+-D CMAKE_C_FLAGS_RELEASE:STRING="-g -O3" \
+-D MPI_BASE_DIR:PATH=/Users/nroberts/lib/openmpi \
 -D HAVE_GCC_ABI_DEMANGLE:BOOL=ON \
 -D DART_TESTING_TIMEOUT:STRING=600 \
 -D CMAKE_VERBOSE_MAKEFILE:BOOL=TRUE \
 -D Trilinos_ENABLE_Anasazi:BOOL=ON \
+-D Trilinos_ENABLE_Amesos:BOOL=ON \
+-D Trilinos_ENABLE_Amesos2:BOOL=ON \
+-D Teuchos_ENABLE_COMPLEX:BOOL=OFF \
+-D Amesos2_ENABLE_KLU2:BOOL=ON \
 -D Trilinos_ENABLE_Belos:BOOL=ON \
 -D Trilinos_ENABLE_Intrepid:BOOL=ON \
 -D Trilinos_ENABLE_Sacado:BOOL=ON \
@@ -30,12 +74,11 @@ cmake \
 -D EpetraExt_USING_HDF5:BOOL=ON \
 -D Trilinos_ENABLE_Teuchos:BOOL=ON \
 -D Trilinos_ENABLE_Shards:BOOL=ON \
--D Trilinos_ENABLE_Amesos:BOOL=ON \
 -D Trilinos_ENABLE_Zoltan:BOOL=ON \
 -D Trilinos_ENABLE_ML:BOOL=ON \
 -D Trilinos_ENABLE_TESTS:BOOL=OFF	 \
 -D Trilinos_SKIP_FORTRANCINTERFACE_VERIFY_TEST:BOOL=ON \
+-DTrilinos_ASSERT_MISSING_PACKAGES=OFF \
 -D CMAKE_INSTALL_PREFIX:PATH=/Users/nroberts/lib/trilinos/mpi-release/ \
 $EXTRA_ARGS \
 ../../
-

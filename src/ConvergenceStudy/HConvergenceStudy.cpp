@@ -2,31 +2,31 @@
 //
 // Copyright © 2011 Sandia Corporation. All Rights Reserved.
 //
-// Redistribution and use in source and binary forms, with or without modification, are 
+// Redistribution and use in source and binary forms, with or without modification, are
 // permitted provided that the following conditions are met:
-// 1. Redistributions of source code must retain the above copyright notice, this list of 
+// 1. Redistributions of source code must retain the above copyright notice, this list of
 // conditions and the following disclaimer.
-// 2. Redistributions in binary form must reproduce the above copyright notice, this list of 
-// conditions and the following disclaimer in the documentation and/or other materials 
+// 2. Redistributions in binary form must reproduce the above copyright notice, this list of
+// conditions and the following disclaimer in the documentation and/or other materials
 // provided with the distribution.
-// 3. The name of the author may not be used to endorse or promote products derived from 
+// 3. The name of the author may not be used to endorse or promote products derived from
 // this software without specific prior written permission.
 //
-// THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY 
-// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE 
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR 
-// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR 
-// ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR 
-// CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT 
-// OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR 
-// BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF 
-// LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING 
-// NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS 
+// THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY
+// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+// ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+// CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT
+// OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR
+// BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
+// LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
+// NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 //
 // Questions? Contact Nate Roberts (nate@nateroberts.com).
 //
-// @HEADER 
+// @HEADER
 
 /*
  *  HConvergenceStudy.cpp
@@ -37,6 +37,8 @@
 
 
 #include "HConvergenceStudy.h"
+
+#include "ExactSolutionFunction.h"
 #include "Function.h"
 #include "RefinementStrategy.h"
 
@@ -44,17 +46,20 @@
 #include "SerialDenseMatrixUtility.h"
 #include "MeshFactory.h"
 
+using namespace Intrepid;
+using namespace Camellia;
+
 HConvergenceStudy::HConvergenceStudy(Teuchos::RCP<ExactSolution> exactSolution,
                                      BFPtr bilinearForm,
                                      Teuchos::RCP<RHS> rhs,
                                      Teuchos::RCP<BC> bc,
-                                     IPPtr ip, 
-                                     int minLogElements, int maxLogElements, 
+                                     IPPtr ip,
+                                     int minLogElements, int maxLogElements,
                                      int H1Order, int pToAdd, bool randomRefinements,
                                      bool useTriangles, bool useHybrid) {
   _exactSolution = exactSolution;
   _bilinearForm = bilinearForm;
-  _rhs = rhs;  
+  _rhs = rhs;
   _bc = bc;
   _ip = ip;
   _minLogElements = minLogElements;
@@ -74,17 +79,17 @@ HConvergenceStudy::HConvergenceStudy(Teuchos::RCP<ExactSolution> exactSolution,
   vector<int> trialIDs = bilinearForm->trialVolumeIDs(); // so far, we don't have a good analytic way to measure flux and trace errors.
   for (vector<int>::iterator trialIt = trialIDs.begin(); trialIt != trialIDs.end(); trialIt++) {
     int trialID = *trialIt;
-    FunctionPtr exactSoln = Teuchos::rcp( new ExactSolutionFunction(_exactSolution,trialID) );
+    TFunctionPtr<double> exactSoln = Teuchos::rcp( new ExactSolutionFunction<double>(_exactSolution,trialID) );
     _exactSolutionFunctions[trialID] = exactSoln;
   }
   // in the past, we haven't done any projection of boundary Functions.
-  // here, we do so if it's a "modern" ExactSolution (defined in terms of FunctionPtrs, etc.)
+  // here, we do so if it's a "modern" ExactSolution (defined in terms of TFunctionPtr<double>s, etc.)
   // and that ExactSolution defines a given boundary variable's Function.
   trialIDs = bilinearForm->trialBoundaryIDs();
   for (vector<int>::iterator trialIt = trialIDs.begin(); trialIt != trialIDs.end(); trialIt++) {
     int trialID = *trialIt;
     if (_exactSolution->functionDefined(trialID)) {
-      FunctionPtr exactSoln = Teuchos::rcp( new ExactSolutionFunction(_exactSolution,trialID) );
+      TFunctionPtr<double> exactSoln = Teuchos::rcp( new ExactSolutionFunction<double>(_exactSolution,trialID) );
       _exactSolutionFunctions[trialID] = exactSoln;
     }
   }
@@ -99,7 +104,7 @@ void HConvergenceStudy::addDerivedVariable(LinearTermPtr derivedVar, const strin
   _derivedVariables.push_back(dv);
 }
 
-Teuchos::RCP<Solution> HConvergenceStudy::getSolution(int logElements) {
+TSolutionPtr<double> HConvergenceStudy::getSolution(int logElements) {
   int index = logElements - _minLogElements;
   return _solutions[index];
 }
@@ -138,7 +143,7 @@ void HConvergenceStudy::randomlyRefine(Teuchos::RCP<Mesh> mesh) {
     }
     if ( positiveX ) {
       elementsToRefineP.push_back(cellID);
-    } 
+    }
     if ( positiveY ) {
       elementsToRefineP.push_back(cellID);
     }
@@ -168,7 +173,7 @@ vector<int> HConvergenceStudy::meshSizes() {
   return sizes;
 }
 
-vector< SolutionPtr > & HConvergenceStudy::bestApproximations() {
+vector< TSolutionPtr<double> > & HConvergenceStudy::bestApproximations() {
   return _bestApproximations;
 }
 
@@ -215,31 +220,31 @@ double HConvergenceStudy::computeJacobiPreconditionedConditionNumber(int logElem
 }
 
 void HConvergenceStudy::computeErrors() {
-  SolutionPtr solution = _solutions[0];
+  TSolutionPtr<double> solution = _solutions[0];
   vector<int> trialIDs = _bilinearForm->trialVolumeIDs();
-  
+
   // clear all the data structures:
   _solutionErrors.clear();
   _solutionRates.clear();
   _bestApproximationErrors.clear();
   _bestApproximationRates.clear();
-  
-  
+
+
   for (vector<int>::iterator trialIt = trialIDs.begin(); trialIt != trialIDs.end(); trialIt++) {
     int trialID = *trialIt;
-    vector< Teuchos::RCP<Solution> >::iterator solutionIt;
-    
+    vector< TSolutionPtr<double> >::iterator solutionIt;
+
     int numElements = minNumElements();
-    
-    double l2norm = _exactSolution->L2NormOfError(*_fineZeroSolution, trialID, _cubatureDegreeForExact);
+
+    double l2norm = _exactSolution->L2NormOfError(_fineZeroSolution, trialID, _cubatureDegreeForExact);
     _exactSolutionNorm[trialID] = l2norm;
-    
+
     double previousL2Error = -1.0;
     for (solutionIt = _solutions.begin(); solutionIt != _solutions.end(); solutionIt++) {
-      SolutionPtr solution = *solutionIt;
-      double l2error = _exactSolution->L2NormOfError(*solution, trialID, _cubatureDegreeForExact);
+      TSolutionPtr<double> solution = *solutionIt;
+      double l2error = _exactSolution->L2NormOfError(solution, trialID, _cubatureDegreeForExact);
       _solutionErrors[trialID].push_back(l2error);
-      
+
       if (previousL2Error != -1.0) {
         double rate = - log(l2error/previousL2Error) / log(2.0);
         _solutionRates[trialID].push_back(rate);
@@ -247,33 +252,33 @@ void HConvergenceStudy::computeErrors() {
       numElements *= 2;
       previousL2Error = l2error;
     }
-    
+
     numElements = minNumElements();
     previousL2Error = -1;
     for (solutionIt = _bestApproximations.begin(); solutionIt != _bestApproximations.end(); solutionIt++) {
-      SolutionPtr bestApproximation = *solutionIt;
-      
+      TSolutionPtr<double> bestApproximation = *solutionIt;
+
       // OLD CODE: testing this by reimplementing in terms of Functions
-      double l2error = _exactSolution->L2NormOfError(*bestApproximation, trialID, _cubatureDegreeForExact);
+      double l2error = _exactSolution->L2NormOfError(bestApproximation, trialID, _cubatureDegreeForExact);
 
       // test code below--doesn't seem to be much difference
 //      {
 //        VarPtr trialVar = Teuchos::rcp( new Var(trialID, 0, "dummyVar"));
-//        
-//        FunctionPtr bestFxnError = Function::solution(trialVar, bestApproximation) - _exactSolutionFunctions[trialID];
+//
+//        TFunctionPtr<double> bestFxnError = Function::solution(trialVar, bestApproximation) - _exactSolutionFunctions[trialID];
 //        double l2error = bestFxnError->l2norm(bestApproximation->mesh(),_cubatureDegreeForExact); // here the cubature is actually an enrichment....
-//        
+//
 //        cout << "HConvergenceStudy: best l2Error for trial ID " << trialID << ": " << l2error << endl;
 //      }
-      
+
       _bestApproximationErrors[trialID].push_back(l2error);
-      
+
       if (previousL2Error != -1.0) {
         double rate = - log(l2error/previousL2Error) / log(2.0);
 //        cout << "HConvergenceStudy: best rate for trial ID " << trialID << ": " << rate << endl;
         _bestApproximationRates[trialID].push_back(rate);
       }
-      
+
       numElements *= 2;
       previousL2Error = l2error;
     }
@@ -296,27 +301,27 @@ Teuchos::RCP<Mesh> HConvergenceStudy::buildMesh( Teuchos::RCP<MeshGeometry> geom
   Teuchos::RCP<Mesh> mesh;
   mesh = Teuchos::rcp( new Mesh(geometry->vertices(), geometry->elementVertices(), _bilinearForm,
                                 _H1Order, _pToAdd, useConformingTraces) );
-  
+
   map< pair<IndexType,IndexType>, ParametricCurvePtr > localMap = geometry->edgeToCurveMap();
-  
+
   map< pair<GlobalIndexType,GlobalIndexType>, ParametricCurvePtr > globalMap(localMap.begin(),localMap.end());
   mesh->setEdgeToCurveMap(globalMap);
-  
+
   for (int i=0; i<numRefinements; i++) {
     RefinementStrategy::hRefineUniformly(mesh);
   }
   return mesh;
 }
 
-Teuchos::RCP<Solution> HConvergenceStudy::bestApproximation(Teuchos::RCP<Mesh> mesh) {
+TSolutionPtr<double> HConvergenceStudy::bestApproximation(Teuchos::RCP<Mesh> mesh) {
   // this probably should be a feature of ExactSolution
-  Teuchos::RCP<Solution> bestApproximation = Teuchos::rcp( new Solution(mesh, _bc, _rhs, _ip) );
+  TSolutionPtr<double> bestApproximation = Teuchos::rcp( new TSolution<double>(mesh, _bc, _rhs, _ip) );
   bestApproximation->setCubatureEnrichmentDegree(_cubatureDegreeForExact);
   bestApproximation->projectOntoMesh(_exactSolutionFunctions);
   return bestApproximation;
 }
 
-void HConvergenceStudy::setSolutions( vector< SolutionPtr > &solutions) {
+void HConvergenceStudy::setSolutions( vector< TSolutionPtr<double> > &solutions) {
   // alternative to solve() if you want to do your own solving (e.g. for nonlinear problems)
   //
   // must be in the right order, from minLogElements to maxLogElements
@@ -326,13 +331,13 @@ void HConvergenceStudy::setSolutions( vector< SolutionPtr > &solutions) {
   }
   _solutions = solutions;
   for (int i=_minLogElements; i<=_maxLogElements; i++) {
-    SolutionPtr soln = solutions[i-_minLogElements];
+    TSolutionPtr<double> soln = solutions[i-_minLogElements];
     Teuchos::RCP<Mesh> mesh = soln->mesh();
     _bestApproximations.push_back(bestApproximation(mesh));
-    
+
     if (i == _maxLogElements) {
       // We'll use solution to compute L2 norm of true Solution
-      _fineZeroSolution = Teuchos::rcp( new Solution(mesh, _bc, _rhs, _ip) );
+      _fineZeroSolution = Teuchos::rcp( new TSolution<double>(mesh, _bc, _rhs, _ip) );
     }
   }
   computeErrors();
@@ -345,14 +350,14 @@ void HConvergenceStudy::solve(Teuchos::RCP<MeshGeometry> geometry, bool useConfo
   for (int i=0; i<_minLogElements; i++) {
     minNumElements *= 2;
   }
-  
+
   int numElements = minNumElements;
   for (int i=_minLogElements; i<=_maxLogElements; i++) {
     Teuchos::RCP<Mesh> mesh = buildMesh(geometry, i, useConformingTraces);
     if (_randomRefinements) {
       randomlyRefine(mesh);
     }
-    Teuchos::RCP<Solution> solution = Teuchos::rcp( new Solution(mesh, _bc, _rhs, _ip) );
+    TSolutionPtr<double> solution = Teuchos::rcp( new TSolution<double>(mesh, _bc, _rhs, _ip) );
     if (_writeGlobalStiffnessToDisk) {
       ostringstream fileName;
       fileName << _globalStiffnessFilePrefix << "_" << i << ".dat";
@@ -363,16 +368,16 @@ void HConvergenceStudy::solve(Teuchos::RCP<MeshGeometry> geometry, bool useConfo
     solution->setReportConditionNumber(_reportConditionNumber);
     solution->setCubatureEnrichmentDegree(_cubatureEnrichmentForSolutions);
     _solutions.push_back(solution);
-    
+
     _bestApproximations.push_back(bestApproximation(mesh));
-    
+
     numElements *= 2;
     if (i == _maxLogElements) {
       // We'll use solution to compute L2 norm of true Solution
-      _fineZeroSolution = Teuchos::rcp( new Solution(mesh, _bc, _rhs, _ip) );
+      _fineZeroSolution = Teuchos::rcp( new TSolution<double>(mesh, _bc, _rhs, _ip) );
     }
   }
-  vector< Teuchos::RCP<Solution> >::iterator solutionIt;
+  vector< TSolutionPtr<double> >::iterator solutionIt;
   // now actually compute all the solutions:
   for (solutionIt = _solutions.begin(); solutionIt != _solutions.end(); solutionIt++) {
     if ( _solver.get() == NULL )
@@ -398,22 +403,22 @@ void HConvergenceStudy::solve(const FieldContainer<double> &quadPoints, bool use
   for (int i=0; i<_minLogElements; i++) {
     minNumElements *= 2;
   }
-  
+
   int numElements = minNumElements;
   for (int i=_minLogElements; i<=_maxLogElements; i++) {
     Teuchos::RCP<Mesh> mesh;
     if (! _useHybrid ) {
-      mesh = MeshFactory::buildQuadMesh(quadPoints, numElements, numElements, 
+      mesh = MeshFactory::buildQuadMesh(quadPoints, numElements, numElements,
                                  _bilinearForm, _H1Order, _H1Order + _pToAdd, _useTriangles, useConformingTraces,
                                  trialOrderEnhancements,testOrderEnhancements);
     } else {
-      mesh = MeshFactory::buildQuadMeshHybrid(quadPoints, numElements, numElements, 
+      mesh = MeshFactory::buildQuadMeshHybrid(quadPoints, numElements, numElements,
                                        _bilinearForm, _H1Order, _H1Order + _pToAdd, useConformingTraces);
     }
     if (_randomRefinements) {
       randomlyRefine(mesh);
     }
-    Teuchos::RCP<Solution> solution = Teuchos::rcp( new Solution(mesh, _bc, _rhs, _ip) );
+    TSolutionPtr<double> solution = Teuchos::rcp( new TSolution<double>(mesh, _bc, _rhs, _ip) );
     if (_writeGlobalStiffnessToDisk) {
       ostringstream fileName;
       fileName << _globalStiffnessFilePrefix << "_" << i << ".dat";
@@ -424,17 +429,17 @@ void HConvergenceStudy::solve(const FieldContainer<double> &quadPoints, bool use
     solution->setCubatureEnrichmentDegree(_cubatureEnrichmentForSolutions);
     solution->setReportConditionNumber(_reportConditionNumber);
     _solutions.push_back(solution);
-    
+
     _bestApproximations.push_back(bestApproximation(mesh));
 
 
     numElements *= 2;
     if (i == _maxLogElements) {
       // We'll use solution to compute L2 norm of true Solution
-      _fineZeroSolution = Teuchos::rcp( new Solution(mesh, _bc, _rhs, _ip) );
+      _fineZeroSolution = Teuchos::rcp( new TSolution<double>(mesh, _bc, _rhs, _ip) );
     }
   }
-  vector< Teuchos::RCP<Solution> >::iterator solutionIt;
+  vector< TSolutionPtr<double> >::iterator solutionIt;
   // now actually compute all the solutions:
   for (solutionIt = _solutions.begin(); solutionIt != _solutions.end(); solutionIt++) {
     if ( _solver.get() == NULL )
@@ -470,9 +475,9 @@ string HConvergenceStudy::TeXErrorRateTable( const string & filePathPrefix ) {
 string HConvergenceStudy::TeXErrorRateTable( const vector<int> &trialIDs, const string &filePathPrefix ) {
   ostringstream texString;
   texString << scientific;
-  
+
   bool reportCombinedRelativeError = true;
-  
+
   int numColumns = reportCombinedRelativeError ?  trialIDs.size() * 2 + 3 : trialIDs.size() * 2 + 1;
   string newLine = "\\\\\n";
   texString << "\\multicolumn{" << numColumns << "}{| c |}{k=" << _H1Order-1 << "} " << newLine;
@@ -530,7 +535,7 @@ string HConvergenceStudy::TeXErrorRateTable( const vector<int> &trialIDs, const 
     texString << newLine;
   }
   texString << "\\hline \n";
-  
+
   if (filePathPrefix.length() > 0) { // then write to file
     ostringstream fileName;
     fileName << filePathPrefix << "_error_rate_table.tex";
@@ -544,11 +549,11 @@ string HConvergenceStudy::TeXErrorRateTable( const vector<int> &trialIDs, const 
 string HConvergenceStudy::TeXNumGlobalDofsTable(const string &filePathPrefix) {
   ostringstream texString;
   texString << scientific;
-  
+
   int numColumns = 2;
   string newLine = "\\\\\n";
   texString << "\\multicolumn{" << numColumns << "}{| c |}{k=" << _H1Order-1 << "} " << newLine;
-  
+
   texString << "\\hline \n";
   texString << "Mesh Size & Global Dofs";
   texString << newLine << "\\cline{2-" << numColumns << "}" << "\n";
@@ -591,11 +596,11 @@ string HConvergenceStudy::convergenceDataMATLAB(int trialID, int minPolyOrder) {
     }
     ss << l2error << "\n";
   }
-  
+
   ss << "];\n";
 
   ss << _bilinearForm->trialName(trialID) << "BestError{" << matlabIndex << "} = [";
-  
+
   for (int i=0; i<meshSizes.size(); i++) {
     int size = meshSizes[i];
     double h = 1.0 / size;
@@ -606,7 +611,7 @@ string HConvergenceStudy::convergenceDataMATLAB(int trialID, int minPolyOrder) {
     }
     ss << bestError << "\n";
   }
-  
+
   ss << "];\n";
   return ss.str();
 }
@@ -633,11 +638,11 @@ string HConvergenceStudy::TeXBestApproximationComparisonTable( const vector<int>
    */
   ostringstream texString;
   texString << scientific;
-    
+
   int numColumns = trialIDs.size() * 2 + 1;
   string newLine = "\\\\\n";
   texString << "\\multicolumn{" << numColumns << "}{| c |}{k=" << _H1Order-1 << "} " << newLine;
-  
+
   texString << "\\hline \n";
   texString << "\\multirow{2}{*}{Mesh Size}";
   for (vector<int>::const_iterator trialIt = trialIDs.begin(); trialIt != trialIDs.end(); trialIt++) {
@@ -670,7 +675,7 @@ string HConvergenceStudy::TeXBestApproximationComparisonTable( const vector<int>
     texString << newLine;
   }
   texString << "\\hline \n";
-  
+
   if (filePathPrefix.length() > 0) { // then write to file
     ostringstream fileName;
     fileName << filePathPrefix << "_best_compare_table.tex";
@@ -686,33 +691,33 @@ void HConvergenceStudy::writeToFiles(const string & filePathPrefix, int trialID,
   for (int i=0; i<_minLogElements; i++) {
     minNumElements *= 2;
   }
-  
+
   int numElements = minNumElements;
-  
+
   ostringstream fileName;
   fileName << filePathPrefix << "_h1_convergence.txt";
   ofstream fout(fileName.str().c_str());
   fout << setprecision(15);
-  
+
   cout << "**************************************************************\n";
   if (_reportRelativeErrors) {
     cout << "Relative ";
   }
   cout << "L2 error for variable " << _bilinearForm->trialName(trialID) << ":" << endl;
-  
-  double l2norm = _exactSolution->L2NormOfError(*_fineZeroSolution, trialID, _cubatureDegreeForExact);
-  
+
+  double l2norm = _exactSolution->L2NormOfError(_fineZeroSolution, trialID, _cubatureDegreeForExact);
+
   for (int i=0; i<_solutions.size(); i++) {
-    SolutionPtr solution = _solutions[i];
-    SolutionPtr bestApproximation = _bestApproximations[i];
+    TSolutionPtr<double> solution = _solutions[i];
+    TSolutionPtr<double> bestApproximation = _bestApproximations[i];
     double l2error = _solutionErrors[trialID][i];
-    
+
     if (_reportRelativeErrors) {
       l2error /= l2norm;
     }
-    
+
     string spaces = (numElements > 10) ? " " : "   ";
-    
+
     cout << scientific;
     fout << scientific;
     cout << numElements << "x" << numElements << " mesh:" << spaces << setprecision(1) <<  l2error;
@@ -720,17 +725,17 @@ void HConvergenceStudy::writeToFiles(const string & filePathPrefix, int trialID,
     if (i > 0) {
       double rate = _solutionRates[trialID][i-1];
       cout << "\t(rate: " << setprecision(2) << fixed << rate << ")";
-      fout << "\t(rate: " << setprecision(2) << fixed << rate << ")"; 
+      fout << "\t(rate: " << setprecision(2) << fixed << rate << ")";
     }
     cout << endl;
     fout << endl;
-    
+
 //    for (int cellID=0; cellID<numElements; cellID++) {
 //      FieldContainer<double> solnCoeffs;
 //      solution.solnCoeffsForCellID(solnCoeffs, cellID, trialID);
 //      cout << "solnCoeffs for cell " << cellID << ":" << endl << solnCoeffs;
 //    }
-    
+
     if (writeMATLABPlotData) {
       // now write out the solution for MATLAB plotting...
       fileName.str(""); // clear out the filename
@@ -744,7 +749,7 @@ void HConvergenceStudy::writeToFiles(const string & filePathPrefix, int trialID,
       //    solution.writeToFile(trialID, fileName.str());
       bestApproximation->writeFieldsToFile(trialID, fileName.str());
       fileName.str("");
-      
+
       fileName << filePathPrefix << "_exact_" << numElements << "x" << numElements << ".m";
       _exactSolutionFunctions[trialID]->writeValuesToMATLABFile(solution->mesh(), fileName.str());
       fileName.str(""); // clear out the filename
@@ -756,13 +761,13 @@ void HConvergenceStudy::writeToFiles(const string & filePathPrefix, int trialID,
     numElements *= 2;
   }
   fout.close();
-  
+
   cout << "***********  BEST APPROXIMATION ERROR for : " << _bilinearForm->trialName(trialID) << " **************\n";
   numElements = minNumElements;
   for (int i=0; i<_bestApproximations.size(); i++) {
-    SolutionPtr bestApproximation = _bestApproximations[i];
+    TSolutionPtr<double> bestApproximation = _bestApproximations[i];
     double l2error = _bestApproximationErrors[trialID][i];
-    double newl2error = _exactSolution->L2NormOfError(*bestApproximation, trialID, _cubatureDegreeForExact); // 15 == cubature degree to use...
+    double newl2error = _exactSolution->L2NormOfError(bestApproximation, trialID, _cubatureDegreeForExact); // 15 == cubature degree to use...
     if (l2error != newl2error) {
       cout << "best L2 error has changed since computeErrors() was called.\n";
       cout << "old error: " << l2error << "; new: " << newl2error << endl;
@@ -770,7 +775,7 @@ void HConvergenceStudy::writeToFiles(const string & filePathPrefix, int trialID,
     if (_reportRelativeErrors) {
       l2error /= l2norm;
     }
-    
+
     string spaces = (numElements > 10) ? " " : "   ";
     cout << scientific;
     cout << numElements << "x" << numElements << " mesh:" << spaces << setprecision(1) <<  l2error;
@@ -783,7 +788,7 @@ void HConvergenceStudy::writeToFiles(const string & filePathPrefix, int trialID,
     numElements *= 2;
   }
   cout << "**************************************************************\n";
-  
+
   cout << scientific << setprecision(1);
   cout << "L2 norm of solution: " << l2norm  << endl;
 }
@@ -803,10 +808,10 @@ void HConvergenceStudy::setWriteGlobalStiffnessToDisk(bool value, string globalS
 
 vector<double> HConvergenceStudy::weightedL2Error(map<int, double> &weights, bool bestApproximation, bool relativeErrors) {
   map< int, vector<double> > errors = bestApproximation ? bestApproximationErrors() : solutionErrors();
-  
+
   vector<double> weightedError(_solutions.size());
   double weightedSolutionNorm = 0;
-  
+
   for (map<int, double>::iterator weightIt = weights.begin(); weightIt != weights.end(); weightIt++) {
     int trialID = weightIt->first;
     double weight = weightIt->second;

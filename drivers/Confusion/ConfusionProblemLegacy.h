@@ -2,13 +2,13 @@
 #define DPG_CONFUSION_PROBLEM
 
 #include "BC.h"
-#include "RHS.h"
-
 #include "BF.h"
-
+#include "Function.h"
+#include "RHS.h"
 #include "Var.h"
 
-#include "Function.h"
+using namespace Camellia;
+using namespace Intrepid;
 
 class ConfusionProblemLegacy : public RHS, public BC {
  private:

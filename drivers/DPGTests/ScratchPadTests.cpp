@@ -307,8 +307,8 @@ bool ScratchPadTests::testConstantFunctionProduct() {
   
   int numCells = _basisCache->getPhysicalCubaturePoints().dimension(0);
   int numPoints = _testPoints.dimension(0);
-  FunctionPtr three = Teuchos::rcp( new ConstantScalarFunction(3.0) );
-  FunctionPtr two = Teuchos::rcp( new ConstantScalarFunction(2.0) );
+  FunctionPtr three = Function::constant(3.0);
+  FunctionPtr two = Function::constant(2.0);
 
   FieldContainer<double> values(numCells,numPoints);
   two->values(values,basisCache);
@@ -329,7 +329,7 @@ bool ScratchPadTests::testConstantFunctionProduct() {
 bool ScratchPadTests::testPenaltyConstraints() {
   bool success = true;
   int numCells = 1;
-  FunctionPtr one = Teuchos::rcp( new ConstantScalarFunction(1.0) );
+  FunctionPtr one = Function::constant(1.0);
   
   SpatialFilterPtr entireBoundary = Teuchos::rcp( new UnitSquareBoundary );
   
@@ -406,7 +406,7 @@ bool ScratchPadTests::testPenaltyConstraints() {
 
 bool ScratchPadTests::testSpatiallyFilteredFunction() {
   bool success = true;
-  FunctionPtr one = Teuchos::rcp( new ConstantScalarFunction(1.0) );
+  FunctionPtr one = Function::constant(1.0);
   SpatialFilterPtr positiveX = Teuchos::rcp( new PositiveX );
   FunctionPtr heaviside = Teuchos::rcp( new SpatiallyFilteredFunction(one, positiveX) );
   
@@ -481,8 +481,8 @@ bool ScratchPadTests::testLinearTermEvaluationConsistency(){
 
   LinearTermPtr lt = Teuchos::rcp(new LinearTerm);
   FunctionPtr edgeFxn = Teuchos::rcp(new EdgeFunction);
-  FunctionPtr Xsq = Teuchos::rcp(new Xn(2));
-  FunctionPtr Ysq = Teuchos::rcp(new Yn(2));
+  FunctionPtr Xsq = Function::xn(2);
+  FunctionPtr Ysq = Function::yn(2);
   FunctionPtr XYsq = Xsq*Ysq;
   lt->addTerm(edgeFxn*v + (beta*XYsq)*v->grad());
 
@@ -593,7 +593,7 @@ bool ScratchPadTests::testIntegrateDiscontinuousFunction(){
   FunctionPtr indicator = Teuchos::rcp(new IndicatorFunction(cellIDs)); // should be 0 on cellID 0, 1 on cellID 1
   double jumpWeight = 13.3; // some random number
   FunctionPtr edgeRestrictionFxn = Teuchos::rcp(new EdgeFunction);
-  FunctionPtr X = Teuchos::rcp(new Xn(1));
+  FunctionPtr X = Function::xn(1);
   LinearTermPtr integrandLT = Function::constant(1.0)*v + Function::constant(jumpWeight)*X*edgeRestrictionFxn*v;
   
   // make riesz representation function to more closely emulate the error rep
@@ -738,7 +738,7 @@ bool ScratchPadTests::testGalerkinOrthogonality(){
 
   // make residual for riesz representation function
   LinearTermPtr residual = Teuchos::rcp(new LinearTerm);// residual 
-  FunctionPtr parity = Teuchos::rcp(new SideParityFunction);
+  FunctionPtr parity = Function::sideParity();
   residual->addTerm(-fnhatFxn*v + (beta*uFxn)*v->grad());
   Teuchos::RCP<RieszRep> riesz = Teuchos::rcp(new RieszRep(mesh, ip, residual));
   riesz->computeRieszRep();
@@ -879,11 +879,11 @@ bool ScratchPadTests::testRieszIntegration(){
 
   ////////////////////   SPECIFY RHS AND HELPFUL FUNCTIONS   ///////////////////////
 
-  FunctionPtr n = Teuchos::rcp( new UnitNormalFunction );
+  FunctionPtr n = Function::normal();
   vector<double> e1,e2;
   e1.push_back(1.0);e1.push_back(0.0);
   e2.push_back(0.0);e2.push_back(1.0);
-  FunctionPtr one = Teuchos::rcp( new ConstantScalarFunction(1.0) );
+  FunctionPtr one = Function::constant(1.0);
 
   FunctionPtr zero = Function::constant(0.0);
   RHSPtr rhs = RHS::rhs();
@@ -908,7 +908,7 @@ bool ScratchPadTests::testRieszIntegration(){
   ////////////////////   SOLVE & REFINE   ///////////////////////
 
   LinearTermPtr lt = Teuchos::rcp(new LinearTerm);  
-  FunctionPtr fxn = Teuchos::rcp(new Xn(1)); // fxn = x
+  FunctionPtr fxn = Function::xn(1); // fxn = x
   lt->addTerm(fxn*v + fxn->grad()*v->grad());
   lt->addTerm(fxn*tau->x() + fxn*tau->y() + (fxn->dx() + fxn->dy())*tau->div());
   Teuchos::RCP<RieszRep> rieszLT = Teuchos::rcp(new RieszRep(mesh, ip, lt));
@@ -970,11 +970,11 @@ bool ScratchPadTests::testLTResidualSimple(){
 
   ////////////////////   SPECIFY RHS AND HELPFUL FUNCTIONS   ///////////////////////
 
-  FunctionPtr n = Teuchos::rcp( new UnitNormalFunction );
+  FunctionPtr n = Function::normal();
   vector<double> e1,e2;
   e1.push_back(1.0);e1.push_back(0.0);
   e2.push_back(0.0);e2.push_back(1.0);
-  FunctionPtr one = Teuchos::rcp( new ConstantScalarFunction(1.0) );
+  FunctionPtr one = Function::constant(1.0);
 
   FunctionPtr zero = Function::constant(0.0);
   RHSPtr rhs = RHS::rhs();
@@ -1090,7 +1090,7 @@ bool ScratchPadTests::testLTResidual(){
 
   ////////////////////   SPECIFY RHS AND HELPFUL FUNCTIONS   ///////////////////////
 
-  FunctionPtr n = Teuchos::rcp( new UnitNormalFunction );
+  FunctionPtr n = Function::normal();
   vector<double> e1,e2;
   e1.push_back(1.0);e1.push_back(0.0);
   e2.push_back(0.0);e2.push_back(1.0);
@@ -1231,7 +1231,7 @@ bool ScratchPadTests::testResidualMemoryError(){
   SpatialFilterPtr inflowBoundary = Teuchos::rcp( new LRInflowSquareBoundary );
   SpatialFilterPtr outflowBoundary = Teuchos::rcp( new LROutflowSquareBoundary);
 
-  FunctionPtr n = Teuchos::rcp( new UnitNormalFunction );
+  FunctionPtr n = Function::normal();
 
   vector<double> e1,e2;
   e1.push_back(1.0);e1.push_back(0.0);

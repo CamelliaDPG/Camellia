@@ -33,8 +33,10 @@
 
 #include "BF.h"
 
-using namespace std;
+using namespace Camellia;
 using namespace Intrepid;
+
+using namespace std;
 
 class PoissonBilinearForm {
 public:

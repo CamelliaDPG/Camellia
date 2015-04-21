@@ -11,6 +11,9 @@
 #include <set>
 using namespace std;
 
+using namespace Intrepid;
+using namespace Camellia;
+
 SubBasisDofPermutationMapper::SubBasisDofPermutationMapper(const set<unsigned> &basisDofOrdinalFilter, const vector<GlobalIndexType> &globalDofOrdinals,
                                                            bool negate) {
   _basisDofOrdinalFilter = basisDofOrdinalFilter;

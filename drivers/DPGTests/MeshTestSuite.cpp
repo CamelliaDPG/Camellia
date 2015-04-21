@@ -1063,6 +1063,7 @@ bool MeshTestSuite::testMeshSolvePointwise() {
 bool MeshTestSuite::testDofOrderingFactory() {
   bool success = true;
   int polyOrder = 3;
+  vector<int> polyOrderVector(1,polyOrder);
   
   BFPtr bilinearForm = PoissonBilinearForm::poissonBilinearForm();
   
@@ -1073,11 +1074,11 @@ bool MeshTestSuite::testDofOrderingFactory() {
   
   DofOrderingFactory dofOrderingFactory(bilinearForm);
   
-  conformingOrdering = dofOrderingFactory.trialOrdering(polyOrder, quad_4, true);
-  nonConformingOrdering = dofOrderingFactory.trialOrdering(polyOrder, quad_4, false);
+  conformingOrdering = dofOrderingFactory.trialOrdering(polyOrderVector, quad_4, true);
+  nonConformingOrdering = dofOrderingFactory.trialOrdering(polyOrderVector, quad_4, false);
   
   Teuchos::RCP<DofOrdering> conformingOrderingCopy;
-  conformingOrderingCopy = dofOrderingFactory.trialOrdering(polyOrder, quad_4, true);
+  conformingOrderingCopy = dofOrderingFactory.trialOrdering(polyOrderVector, quad_4, true);
   
   if (conformingOrderingCopy.get() != conformingOrdering.get() ) {
     cout << "testDofOrderingFactory: created a second copy of conforming ordering (uniqueness violated)." << endl;
@@ -1096,7 +1097,8 @@ bool MeshTestSuite::testDofOrderingFactory() {
   
   conformingOrderingCopy = dofOrderingFactory.pRefineTrial(conformingOrdering, quad_4, pToAdd);
   
-  conformingOrdering = dofOrderingFactory.trialOrdering(polyOrder+pToAdd, quad_4, true);
+  vector<int> polyOrderVectorEnhanced(1,polyOrder + pToAdd);
+  conformingOrdering = dofOrderingFactory.trialOrdering(polyOrderVectorEnhanced, quad_4, true);
   
   if (conformingOrderingCopy.get() != conformingOrdering.get() ) {
     cout << "testDofOrderingFactory: conformingOrdering with pRefine==3 differs from fresh one with polyOrder+3." << endl;
@@ -1105,10 +1107,10 @@ bool MeshTestSuite::testDofOrderingFactory() {
   
   // TODO: add test of matchSides...
   // first, create two orderings of different polyOrder.  Then matchSides.  Then check that the higher-degree guy won, and that they do have the same Basis (pointer comparison).
-  Teuchos::RCP<DofOrdering> nonConformingOrderingLowerOrder = dofOrderingFactory.trialOrdering(polyOrder, quad_4, false);
-  Teuchos::RCP<DofOrdering> nonConformingOrderingHigherOrder = dofOrderingFactory.trialOrdering(polyOrder+pToAdd, quad_4, false);
-  Teuchos::RCP<DofOrdering> conformingOrderingLowerOrder = dofOrderingFactory.trialOrdering(polyOrder, quad_4, true);
-  Teuchos::RCP<DofOrdering> conformingOrderingHigherOrder = dofOrderingFactory.trialOrdering(polyOrder+pToAdd, quad_4, true);
+  Teuchos::RCP<DofOrdering> nonConformingOrderingLowerOrder = dofOrderingFactory.trialOrdering(polyOrderVector, quad_4, false);
+  Teuchos::RCP<DofOrdering> nonConformingOrderingHigherOrder = dofOrderingFactory.trialOrdering(polyOrderVectorEnhanced, quad_4, false);
+  Teuchos::RCP<DofOrdering> conformingOrderingLowerOrder = dofOrderingFactory.trialOrdering(polyOrderVector, quad_4, true);
+  Teuchos::RCP<DofOrdering> conformingOrderingHigherOrder = dofOrderingFactory.trialOrdering(polyOrderVectorEnhanced, quad_4, true);
   
   int higherSideInLowerElementConforming = 0; int lowerElementOtherSideNonConforming = 1;
   int lowerSideInHigherElementConforming = 2;
@@ -1175,14 +1177,14 @@ bool MeshTestSuite::testDofOrderingFactory() {
   
   // final test: take the upgraded ordering, and increase its polynomial order so that it matches that of the higher-degree guy.  Check that this is the same Ordering as a fresh one with that polynomial order.
   nonConformingOrderingLowerOrder = dofOrderingFactory.pRefineTrial(nonConformingOrderingLowerOrder, quad_4, pToAdd);
-  nonConformingOrderingHigherOrder = dofOrderingFactory.trialOrdering(polyOrder+pToAdd, quad_4, false);
+  nonConformingOrderingHigherOrder = dofOrderingFactory.trialOrdering(polyOrderVectorEnhanced, quad_4, false);
   if ( nonConformingOrderingLowerOrder.get() != nonConformingOrderingHigherOrder.get() ) {
     success = false;
     cout << "FAILURE: After p-refinement of upgraded Ordering (non-conforming), DofOrdering doesn't match a fresh one with that p-order." << endl;
   }
   
   conformingOrderingLowerOrder = dofOrderingFactory.pRefineTrial(conformingOrderingLowerOrder, quad_4, pToAdd);
-  conformingOrderingHigherOrder = dofOrderingFactory.trialOrdering(polyOrder+pToAdd, quad_4, true);
+  conformingOrderingHigherOrder = dofOrderingFactory.trialOrdering(polyOrderVectorEnhanced, quad_4, true);
   if ( conformingOrderingLowerOrder.get() != conformingOrderingHigherOrder.get() ) {
     success = false;
     cout << "FAILURE: After p-refinement of upgraded Ordering (conforming), DofOrdering doesn't match a fresh one with that p-order." << endl;

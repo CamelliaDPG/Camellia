@@ -38,6 +38,8 @@
  *
  */
 
+#include "TypeDefs.h"
+
 // Epetra includes
 #include <Epetra_Map.h>
 #ifdef HAVE_MPI
@@ -51,23 +53,25 @@
 
 #include "IP.h"
 
-class MeshUtilities {
- public:
+namespace Camellia {
+	class MeshUtilities {
+	 public:
 
-  static SpatialFilterPtr rampBoundary(double rampHeight);
-  static MeshPtr buildRampMesh(double rampHeight, BFPtr bilinearForm, int H1Order, int pTest);
+	  static SpatialFilterPtr rampBoundary(double rampHeight);
+	  static MeshPtr buildRampMesh(double rampHeight, BFPtr bilinearForm, int H1Order, int pTest);
 
-  static SpatialFilterPtr longRampBoundary(double rampHeight);
-  static MeshPtr buildLongRampMesh(double rampHeight, BFPtr bilinearForm, int H1Order, int pTest);
+	  static SpatialFilterPtr longRampBoundary(double rampHeight);
+	  static MeshPtr buildLongRampMesh(double rampHeight, BFPtr bilinearForm, int H1Order, int pTest);
 
-  static MeshPtr buildFrontFacingStep(BFPtr bilinearForm, int H1Order, int pTest);
+	  static MeshPtr buildFrontFacingStep(BFPtr bilinearForm, int H1Order, int pTest);
 
-  static MeshPtr buildUnitQuadMesh(int horizontalCells, int verticalCells, BFPtr bilinearForm, int H1Order, int pTest);
-  
-  static MeshPtr buildUnitQuadMesh(int nCells, BFPtr bilinearForm, int H1Order, int pTest);
+	  static MeshPtr buildUnitQuadMesh(int horizontalCells, int verticalCells, BFPtr bilinearForm, int H1Order, int pTest);
+	  
+	  static MeshPtr buildUnitQuadMesh(int nCells, BFPtr bilinearForm, int H1Order, int pTest);
 
-  static double computeMaxLocalConditionNumber(IPPtr ip, MeshPtr mesh, bool jacobiScaling=true, string sparseFileToWriteTo="");
-  
-};
+	  static double computeMaxLocalConditionNumber(IPPtr ip, MeshPtr mesh, bool jacobiScaling=true, string sparseFileToWriteTo="");
+	  
+	};
+}
 
 #endif

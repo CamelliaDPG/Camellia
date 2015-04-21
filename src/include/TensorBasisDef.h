@@ -14,9 +14,12 @@
 
 namespace Camellia {
   template<class Scalar, class ArrayScalar>
-  TensorBasis<Scalar,ArrayScalar>::TensorBasis(Teuchos::RCP< Camellia::Basis<Scalar,ArrayScalar> > spatialBasis, Teuchos::RCP< Camellia::Basis<Scalar,ArrayScalar> > temporalBasis) {
+  TensorBasis<Scalar,ArrayScalar>::TensorBasis(Teuchos::RCP< Camellia::Basis<Scalar,ArrayScalar> > spatialBasis,
+                                               Teuchos::RCP< Camellia::Basis<Scalar,ArrayScalar> > temporalBasis,
+                                               bool rangeDimensionIsSum) {
     _spatialBasis = spatialBasis;
     _temporalBasis = temporalBasis;
+    _rangeDimensionIsSum = rangeDimensionIsSum;
     
     if (temporalBasis->domainTopology()->getDimension() != 1) {
       cout << "temporalBasis must have a line topology as its domain.\n";
@@ -44,6 +47,8 @@ namespace Camellia {
     
     int tensorialDegree = 1;
     this->_domainTopology = CellTopology::cellTopology(_spatialBasis->domainTopology()->getShardsTopology(), tensorialDegree);
+    
+    this->_basisCardinality = _spatialBasis->getCardinality() * _temporalBasis->getCardinality();
   }
 
   template<class Scalar, class ArrayScalar>
@@ -136,19 +141,19 @@ namespace Camellia {
     
     Intrepid::EOperator spaceOp = operatorTypes[0], timeOp = operatorTypes[1];
     
-    if (timeOp == OPERATOR_GRAD) {
+    if (timeOp == Intrepid::OPERATOR_GRAD) {
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "getTensorBasisValues() doesn't support taking gradient of temporal basis.");
     }
     
     std::map<Intrepid::EOperator, int> rankAdjustmentForOperator;
     
-    rankAdjustmentForOperator[OPERATOR_VALUE] = 0;
-    rankAdjustmentForOperator[OPERATOR_GRAD] = 1;
-    rankAdjustmentForOperator[OPERATOR_DIV] = -1;
-    rankAdjustmentForOperator[OPERATOR_CURL] = 0; // in 2D, this toggles between +1 and -1, depending on the current rank (scalar --> vector, vector --> scalar)
+    rankAdjustmentForOperator[Intrepid::OPERATOR_VALUE] = 0;
+    rankAdjustmentForOperator[Intrepid::OPERATOR_GRAD] = 1;
+    rankAdjustmentForOperator[Intrepid::OPERATOR_DIV] = -1;
+    rankAdjustmentForOperator[Intrepid::OPERATOR_CURL] = 0; // in 2D, this toggles between +1 and -1, depending on the current rank (scalar --> vector, vector --> scalar)
     
     int valuesRank = _spatialBasis->rangeRank() + rankAdjustmentForOperator[spaceOp];
-    if ((_spatialBasis->rangeDimension() == 2) && (spaceOp==OPERATOR_CURL)) {
+    if ((_spatialBasis->rangeDimension() == 2) && (spaceOp==Intrepid::OPERATOR_CURL)) {
       if (_spatialBasis->rangeRank() == 0) valuesRank += 1;
       if (_spatialBasis->rangeRank() == 1) valuesRank -= 1;
     }
@@ -229,12 +234,11 @@ namespace Camellia {
   // range info for basis values:
   template<class Scalar, class ArrayScalar>
   int TensorBasis<Scalar,ArrayScalar>::rangeDimension() const {
-    // two possibilities:
-    // 1. We have a temporal basis which we won't take the derivative of--because it's in HVOL.  Then:
-    if (_temporalBasis->functionSpace() == Camellia::FUNCTION_SPACE_HVOL) {
+    // NVR changed this 4-14-15 to depend on the (new) _rangeDimensionIsSum member.
+    // Default is false; in general, when doing space-time, vector lengths are those of the spatial basis.
+    if (!_rangeDimensionIsSum) {
       return _spatialBasis->rangeDimension();
     } else {
-      // 2. We can take derivatives of the temporal basis.  Then we sum the two range dimensions:
       return _spatialBasis->rangeDimension() + _temporalBasis->rangeDimension();
     }
   }
@@ -247,12 +251,12 @@ namespace Camellia {
   template<class Scalar, class ArrayScalar>
   void TensorBasis<Scalar,ArrayScalar>::getValues(ArrayScalar &values, const ArrayScalar &refPoints,
                                                   Intrepid::EOperator operatorType) const {
-    Intrepid::EOperator temporalOperator = OPERATOR_VALUE; // default
-    if (operatorType==OPERATOR_GRAD) {
+    Intrepid::EOperator temporalOperator = Intrepid::OPERATOR_VALUE; // default
+    if (operatorType==Intrepid::OPERATOR_GRAD) {
       if (values.rank() == 3) { // F, P, D
         if (_spatialBasis->rangeDimension() + _temporalBasis->rangeDimension() == values.dimension(2)) {
           // then we can/should use OPERATOR_GRAD for the temporal operator as well
-          temporalOperator = OPERATOR_GRAD;
+          temporalOperator = Intrepid::OPERATOR_GRAD;
         }
       }
     }
@@ -262,7 +266,7 @@ namespace Camellia {
   template<class Scalar, class ArrayScalar>
   void TensorBasis<Scalar,ArrayScalar>::getValues(ArrayScalar &values, const ArrayScalar &refPoints,
                                                   Intrepid::EOperator spatialOperatorType, Intrepid::EOperator temporalOperatorType) const {
-    bool gradInBoth = (spatialOperatorType==OPERATOR_GRAD) && (temporalOperatorType==OPERATOR_GRAD);
+    bool gradInBoth = (spatialOperatorType==Intrepid::OPERATOR_GRAD) && (temporalOperatorType==Intrepid::OPERATOR_GRAD);
     this->CHECK_VALUES_ARGUMENTS(values,refPoints,spatialOperatorType);
     
     int numPoints = refPoints.dimension(0);
@@ -299,7 +303,7 @@ namespace Camellia {
     _spatialBasis->getValues(spatialValues, refPointsSpatial, spatialOperatorType);
     
     ArrayScalar temporalValues(_temporalBasis->getCardinality(), numPoints);
-    if (temporalOperatorType==OPERATOR_GRAD) {
+    if (temporalOperatorType==Intrepid::OPERATOR_GRAD) {
       temporalValues.resize(_temporalBasis->getCardinality(), numPoints, _temporalBasis->rangeDimension());
     }
     _temporalBasis->getValues(temporalValues, refPointsTemporal, temporalOperatorType);
@@ -309,8 +313,8 @@ namespace Camellia {
     if (gradInBoth) {
       spatialValues_opValue.resize(_spatialBasis->getCardinality(), numPoints);
       temporalValues_opValue.resize(_temporalBasis->getCardinality(), numPoints);
-      _spatialBasis->getValues(spatialValues_opValue, refPointsSpatial, OPERATOR_VALUE);
-      _temporalBasis->getValues(temporalValues_opValue, refPointsTemporal, OPERATOR_VALUE);
+      _spatialBasis->getValues(spatialValues_opValue, refPointsSpatial, Intrepid::OPERATOR_VALUE);
+      _temporalBasis->getValues(temporalValues_opValue, refPointsTemporal, Intrepid::OPERATOR_VALUE);
     }
     
 //    cout << "refPointsTemporal:\n" << refPointsTemporal;
@@ -331,7 +335,7 @@ namespace Camellia {
           spaceTimeValueCoordinate[1] = pointOrdinal;
           spatialValueCoordinate[1] = pointOrdinal;
           double temporalValue;
-          if (temporalOperatorType!=OPERATOR_GRAD)
+          if (temporalOperatorType!=Intrepid::OPERATOR_GRAD)
             temporalValue = temporalValues(timeFieldOrdinal,pointOrdinal);
           else
             temporalValue = temporalValues(timeFieldOrdinal,pointOrdinal, 0);

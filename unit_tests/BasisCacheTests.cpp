@@ -19,6 +19,7 @@
 #include "Intrepid_FunctionSpaceTools.hpp"
 
 using namespace Camellia;
+using namespace Intrepid;
 
 namespace {
   vector< CellTopoPtr > getShardsTopologies() {

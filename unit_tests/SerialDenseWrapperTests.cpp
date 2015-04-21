@@ -6,14 +6,16 @@
 //
 //
 
+#include "Teuchos_UnitTestHarness.hpp"
+
 #include "SerialDenseWrapper.h"
 
 #include "Intrepid_CellTools.hpp"
 #include "Intrepid_FieldContainer.hpp"
 
-#include "Teuchos_UnitTestHarness.hpp"
-
+using namespace Camellia;
 using namespace Intrepid;
+
 namespace {
   TEUCHOS_UNIT_TEST( SerialDenseWrapper, DeterminantAndInverse_Simple )
   {

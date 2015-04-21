@@ -44,6 +44,8 @@
 
 #include "Function.h"
 
+using namespace Camellia;
+
 class PoissonExactSolution : public ExactSolution {
 public:
   enum PoissonExactSolutionType {

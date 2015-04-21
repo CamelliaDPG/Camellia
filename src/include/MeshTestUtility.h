@@ -11,18 +11,20 @@
 
 #include "Mesh.h"
 
-class MeshTestUtility {
-  static bool determineRefTestPointsForNeighbors(MeshTopologyPtr meshTopo, CellPtr fineCell, unsigned sideOrdinal,
-                                                 FieldContainer<double> &fineSideRefPoints, FieldContainer<double> &fineCellRefPoints,
-                                                 FieldContainer<double> &coarseSideRefPoints, FieldContainer<double> &coarseCellRefPoints); // returns false if neighbor at sideOrdinal is broken
-  
-public:
-  static bool checkMeshDofConnectivities(Teuchos::RCP<Mesh> mesh);
-  static bool checkMeshConsistency(Teuchos::RCP<Mesh> mesh);
-  static bool fcsAgree(const FieldContainer<double> &fc1, const FieldContainer<double> &fc2, double tol, double &maxDiff); // redundant with / copied from TestSuite::fcsAgree()
-  static bool neighborBasesAgreeOnSides(Teuchos::RCP<Mesh> mesh);
-  
-  static bool neighborBasesAgreeOnSides(Teuchos::RCP<Mesh> mesh, Epetra_MultiVector &globalSolutionCoefficients);
-};
+namespace Camellia {
+	class MeshTestUtility {
+	  static bool determineRefTestPointsForNeighbors(MeshTopologyPtr meshTopo, CellPtr fineCell, unsigned sideOrdinal,
+	                                                 Intrepid::FieldContainer<double> &fineSideRefPoints, Intrepid::FieldContainer<double> &fineCellRefPoints,
+	                                                 Intrepid::FieldContainer<double> &coarseSideRefPoints, Intrepid::FieldContainer<double> &coarseCellRefPoints); // returns false if neighbor at sideOrdinal is broken
+	  
+	public:
+	  static bool checkMeshDofConnectivities(Teuchos::RCP<Mesh> mesh);
+	  static bool checkMeshConsistency(Teuchos::RCP<Mesh> mesh);
+	  static bool fcsAgree(const Intrepid::FieldContainer<double> &fc1, const Intrepid::FieldContainer<double> &fc2, double tol, double &maxDiff); // redundant with / copied from TestSuite::fcsAgree()
+	  static bool neighborBasesAgreeOnSides(Teuchos::RCP<Mesh> mesh);
+	  
+	  static bool neighborBasesAgreeOnSides(Teuchos::RCP<Mesh> mesh, Epetra_MultiVector &globalSolutionCoefficients);
+	};
+}
 
 #endif

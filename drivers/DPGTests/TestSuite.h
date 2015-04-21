@@ -15,6 +15,7 @@ using namespace std;
 
 #include "Teuchos_GlobalMPISession.hpp"
 
+using namespace Camellia;
 using namespace Intrepid;
 
 // abstract class for tests
@@ -22,7 +23,7 @@ class TestSuite {
 public:
   virtual void runTests(int &numTestsRun, int &numTestsPassed) = 0;
   virtual string testSuiteName() = 0;
-  
+
   static bool fcsAgree(const FieldContainer<double> &fc1, const FieldContainer<double> &fc2, double tol, double &maxDiff) {
     if (fc1.size() != fc2.size()) {
       maxDiff = -1.0; // a signal something's wrong…
@@ -40,7 +41,7 @@ public:
     int successSum = MPIWrapper::sum(mySuccessInt);
     return successSum == 0;
   }
-  
+
   static void reportFunctionValueDifferences(const FieldContainer<double> &physicalPoints, const FieldContainer<double> &values1, const FieldContainer<double> &values2, double tol) {
     int rank = MPIWrapper::rank();
     if (rank != 0) {
@@ -56,7 +57,7 @@ public:
     for (int i=0; i<extraRanks; i++) {
       indexArray[i+2] = 0;
     }
-    
+
     for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
       indexArray[0] = cellIndex;
       for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
@@ -78,7 +79,7 @@ public:
         if (valuesDiffer) {
           value1 = &values1[enumerationIndex];
           value2 = &values2[enumerationIndex];
-          
+
           cout << "Function values differ by " << diff << " at point (";
           for (int d=0; d<spaceDim; d++) {
             cout << physicalPoints(cellIndex,ptIndex,d);
@@ -98,10 +99,10 @@ public:
       }
     }
   }
-  
+
   static void reportFunctionValueDifferences(FunctionPtr f1, FunctionPtr f2, BasisCachePtr basisCache, double tol) {
     TEUCHOS_TEST_FOR_EXCEPTION(f1->rank() != f2->rank(), std::invalid_argument, "f1 and f2 must have same rank.");
-    
+
     const FieldContainer<double>* physPointsPtr = &(basisCache->getPhysicalCubaturePoints());
     Teuchos::Array<int> indexArray;
     int numCells = physPointsPtr->dimension(0);
@@ -118,27 +119,27 @@ public:
     f2->values(f2values,basisCache);
     reportFunctionValueDifferences(*physPointsPtr, f1values, f2values, tol);
   }
-  
+
   static void reportFCDifferences(const FieldContainer<double> &values1, const FieldContainer<double> &values2, double tol) {
     int rank = MPIWrapper::rank();
     if (rank != 0) {
       return;
     }
-    
+
     for (int i=0; i<values1.size(); i++) {
       double diff = abs(values1[i]-values2[i]);
-      
+
       if (diff > tol) {
         cout << "values differ by " << diff << " at index " << i << ": ";
         cout << values1[i] << " ≠ " << values2[i] << endl;
       }
     }
   }
-  
+
   static void serializeOutput(string label, const FieldContainer<double> &fc) {
     int numProcs=Teuchos::GlobalMPISession::getNProc();;
     int rank = Teuchos::GlobalMPISession::getRank();
-    
+
 #ifdef HAVE_MPI
     Epetra_MpiComm Comm(MPI_COMM_WORLD);
     //cout << "rank: " << rank << " of " << numProcs << endl;
@@ -156,7 +157,7 @@ public:
     }
     Comm.Barrier();
   }
-  
+
   virtual ~TestSuite() {}
 };
 

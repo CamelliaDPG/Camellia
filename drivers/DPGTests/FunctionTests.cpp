@@ -7,14 +7,16 @@
 //
 
 #include "FunctionTests.h"
+
+#include "BasisSumFunction.h"
+#include "CamelliaCellTools.h"
+#include "ExpFunction.h"
+#include "MeshFactory.h"
+#include "PolarizedFunction.h"
 #include "SpatiallyFilteredFunction.h"
 #include "Solution.h"
-#include "BasisSumFunction.h"
-
-#include "MeshFactory.h"
 #include "StokesFormulation.h"
-
-#include "CamelliaCellTools.h"
+#include "TrigFunctions.h"
 
 // "previous solution" value for u -- what Burgers would see, according to InitialGuess.h, in first linear step
 class UPrev : public Function {
@@ -35,7 +37,6 @@ public:
     }
   }
 };
-
 
 class BoundaryLayerFunction : public SimpleFunction {
   double _eps;
@@ -351,7 +352,7 @@ bool FunctionTests::testThatLikeFunctionsAgree() {
   FunctionPtr e1_f = Function::constant( e1 );
   FunctionPtr e2_f = Function::constant( e2 );
   FunctionPtr one  = Function::constant( 1.0 );
-  if (! functionsAgree( Teuchos::rcp( new ProductFunction(e1_f, (e1_f + e2_f)) ), // e1_f * (e1_f + e2_f)
+  if (! functionsAgree( e1_f * (e1_f + e2_f),
                        one,
                        _basisCache) ) {
     cout << "two like functions differ...\n";
@@ -376,7 +377,7 @@ bool FunctionTests::testThatLikeFunctionsAgree() {
   }
   
   if (! functionsAgree(e1 * u_prev_squared_div2 + e2 * u_prev, 
-                       (e1_div2 * beta * e1 + Teuchos::rcp( new ConstantVectorFunction( e2 ) )) * u_prev,
+                       (e1_div2 * beta * e1 + Function::constant( e2 ) ) * u_prev,
                        _basisCache) ) {
     cout << "two like functions differ...\n";
     success = false;
@@ -457,11 +458,11 @@ bool FunctionTests::testPolarizedFunctions() {
   _basisCache->setRefCellPoints(_testPoints);
   
   // take f = r cos theta.  Then: f==x, df/dx == 1, df/dy == 0
-  FunctionPtr x = Teuchos::rcp( new Xn(1) );
-  FunctionPtr y = Teuchos::rcp( new Yn(1) );
+  FunctionPtr x = Function::xn(1);
+  FunctionPtr y = Function::yn(1);
   FunctionPtr cos_y = Teuchos::rcp( new Cos_y );
   
-  FunctionPtr one = Teuchos::rcp( new ConstantScalarFunction(1) );
+  FunctionPtr one = Function::constant(1.0);
   FunctionPtr zero = Function::zero();
   
   FunctionPtr f = Teuchos::rcp( new PolarizedFunction( x * cos_y ) );
@@ -543,9 +544,9 @@ bool FunctionTests::testProductRule() {
   bool success = true;
   
   // take f = x^2 * exp(x).  f' = 2 x * exp(x) + f
-  FunctionPtr x2 = Teuchos::rcp( new Xn(2) );
+  FunctionPtr x2 = Function::xn(2);
   FunctionPtr exp_x = Teuchos::rcp( new Exp_x );
-  FunctionPtr x = Teuchos::rcp( new Xn(1) );
+  FunctionPtr x = Function::xn(1);
   
   FunctionPtr f = x2 * exp_x;
   FunctionPtr f_prime = f->dx();
@@ -564,9 +565,9 @@ bool FunctionTests::testProductRule() {
 bool FunctionTests::testQuotientRule() {
   bool success = true;
   // take f = exp(x) / x^2.  f' = f - 2 * x * exp(x) / x^4
-  FunctionPtr x2 = Teuchos::rcp( new Xn(2) );
+  FunctionPtr x2 = Function::xn(2);
   FunctionPtr exp_x = Teuchos::rcp( new Exp_x );
-  FunctionPtr x = Teuchos::rcp( new Xn(1) );
+  FunctionPtr x = Function::xn(1);
   
   FunctionPtr f = exp_x / x2;
   FunctionPtr f_prime = f->dx();
@@ -656,7 +657,7 @@ bool FunctionTests::testAdaptiveIntegrate(){
 bool FunctionTests::testJacobianOrdering() {
   bool success = true;
   
-  FunctionPtr y = Teuchos::rcp( new Yn(1) );
+  FunctionPtr y = Function::yn(1);
   
   FunctionPtr f = Function::vectorize(y, Function::zero());
   
@@ -838,8 +839,8 @@ bool FunctionTests::testValuesDottedWithTensor() {
   double xValue = 3, yValue = 4;
   FunctionPtr simpleVector = Function::vectorize(Function::constant(xValue), Function::constant(yValue));
   vectorFxns.push_back(simpleVector);
-  FunctionPtr x = Teuchos::rcp( new Xn(1) );
-  FunctionPtr y = Teuchos::rcp( new Yn(1) );
+  FunctionPtr x = Function::xn(1);
+  FunctionPtr y = Function::yn(1);
   vectorFxns.push_back( Function::vectorize(x*x, x*y) );
   
   VGPStokesFormulation vgpStokes = VGPStokesFormulation(1.0);
@@ -925,7 +926,7 @@ bool FunctionTests::testValuesDottedWithTensor() {
 bool FunctionTests::testVectorFunctionValuesOrdering() {
   bool success = true;
   
-  FunctionPtr x = Teuchos::rcp( new Xn(1) );
+  FunctionPtr x = Function::xn(1);
   FunctionPtr x_vector = Function::vectorize(x, Function::zero());
   
   BasisCachePtr basisCache = BasisCache::parametricQuadCache(10);

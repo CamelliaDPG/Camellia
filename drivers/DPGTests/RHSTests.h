@@ -14,10 +14,10 @@
 // Teuchos includes
 #include "Teuchos_RCP.hpp"
 
-class Mesh;
-class RHS;
-class RHSEasy;
+using namespace Camellia;
 
+#include "Mesh.h"
+#include "RHS.h"
 #include "Var.h"
 
 class RHSTests : public TestSuite {

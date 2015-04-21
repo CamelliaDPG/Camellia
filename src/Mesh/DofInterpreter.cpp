@@ -24,6 +24,9 @@
 #endif
 #include "Teuchos_GlobalMPISession.hpp"
 
+using namespace Intrepid;
+using namespace Camellia;
+
 void DofInterpreter::interpretLocalCoefficients(GlobalIndexType cellID, const FieldContainer<double> &localCoefficients, Epetra_MultiVector &globalCoefficients) {
   DofOrderingPtr trialOrder = _mesh->getElementType(cellID)->trialOrderPtr;
   FieldContainer<double> basisCoefficients; // declared here so that we can sometimes avoid mallocs, if we get lucky in terms of the resize()

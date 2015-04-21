@@ -12,21 +12,24 @@
 #include "Function.h"
 #include "SpatialFilter.h"
 
-class SpatiallyFilteredFunction : public Function {
-  FunctionPtr _f;
-  SpatialFilterPtr _sf;
-  
-public:
-  SpatiallyFilteredFunction(FunctionPtr f, SpatialFilterPtr sf);
-  virtual void values(FieldContainer<double> &values, BasisCachePtr basisCache);
-  bool boundaryValueOnly();
-  
-  FunctionPtr curl();
-  FunctionPtr div();
-  
-  FunctionPtr dx();
-  FunctionPtr dy();
-  FunctionPtr dz();
-};
+namespace Camellia {
+  template <typename Scalar>
+  class SpatiallyFilteredFunction : public TFunction<Scalar> {
+    TFunctionPtr<Scalar> _f;
+    SpatialFilterPtr _sf;
+
+  public:
+    SpatiallyFilteredFunction(TFunctionPtr<Scalar> f, SpatialFilterPtr sf);
+    virtual void values(Intrepid::FieldContainer<Scalar> &values, BasisCachePtr basisCache);
+    bool boundaryValueOnly();
+
+    TFunctionPtr<Scalar> curl();
+    TFunctionPtr<Scalar> div();
+
+    TFunctionPtr<Scalar> dx();
+    TFunctionPtr<Scalar> dy();
+    TFunctionPtr<Scalar> dz();
+  };
+}
 
 #endif

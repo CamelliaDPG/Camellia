@@ -14,7 +14,8 @@
 #include "PreviousSolutionFunction.h"
 #include "LagrangeConstraints.h"
 #include "GnuPlotUtil.h"
-#include "SolutionExporter.h"
+
+#include "HDF5Exporter.h"
 
 #include "StokesFormulation.h"
 #include "MeshUtilities.h"
@@ -71,6 +72,34 @@ bool inflow(double x, double y) {
 
 bool outflow(double x, double y) {
   return abs(x-RIGHT_OUTFLOW) < tol;
+}
+
+class ScalarFunctionOfNormal : public Function { // 2D for now
+public:
+  bool boundaryValueOnly();
+  virtual double value(double x, double y, double n1, double n2) = 0;
+  void values(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache);
+};
+
+bool ScalarFunctionOfNormal::boundaryValueOnly() {
+  return true;
+}
+
+void ScalarFunctionOfNormal::values(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache) {
+  CHECK_VALUES_RANK(values);
+  const Intrepid::FieldContainer<double> *sideNormals = &(basisCache->getSideNormals());
+  int numCells = values.dimension(0);
+  int numPoints = values.dimension(1);
+  const Intrepid::FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
+  for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
+    for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
+      double x = (*points)(cellIndex,ptIndex,0);
+      double y = (*points)(cellIndex,ptIndex,1);
+      double n1 = (*sideNormals)(cellIndex,ptIndex,0);
+      double n2 = (*sideNormals)(cellIndex,ptIndex,1);
+      values(cellIndex,ptIndex) = value(x,y,n1,n2);
+    }
+  }
 }
 
 class U1_0 : public SimpleFunction {
@@ -400,16 +429,16 @@ int main(int argc, char *argv[]) {
   int H1Order = polyOrder + 1;
   Teuchos::RCP<Mesh> mesh, streamMesh;
   
-  FieldContainer<double> A(2), B(2), C(2), D(2), E(2), F(2), G(2), H(2);
-  A(0) = LEFT_INFLOW; A(1) = 1.0;
-  B(0) = LEFT_INFLOW; B(1) = 2.0;
-  C(0) = 4.0; C(1) = 2.0;
-  D(0) = RIGHT_OUTFLOW; D(1) = 2.0;
-  E(0) = RIGHT_OUTFLOW; E(1) = 1.0;
-  F(0) = RIGHT_OUTFLOW; F(1) = MESH_BOTTOM;
-  G(0) = 4.0; G(1) = MESH_BOTTOM;
-  H(0) = 4.0; H(1) = 1.0;
-  vector<FieldContainer<double> > vertices;
+  vector<double> A(2), B(2), C(2), D(2), E(2), F(2), G(2), H(2);
+  A[0] = LEFT_INFLOW; A[1] = 1.0;
+  B[0] = LEFT_INFLOW; B[1] = 2.0;
+  C[0] = 4.0; C[1] = 2.0;
+  D[0] = RIGHT_OUTFLOW; D[1] = 2.0;
+  E[0] = RIGHT_OUTFLOW; E[1] = 1.0;
+  F[0] = RIGHT_OUTFLOW; F[1] = MESH_BOTTOM;
+  G[0] = 4.0; G[1] = MESH_BOTTOM;
+  H[0] = 4.0; H[1] = 1.0;
+  vector< vector<double> > vertices;
   vertices.push_back(A); int A_index = 0;
   vertices.push_back(B); int B_index = 1;
   vertices.push_back(C); int C_index = 2;
@@ -418,8 +447,8 @@ int main(int argc, char *argv[]) {
   vertices.push_back(F); int F_index = 5;
   vertices.push_back(G); int G_index = 6;
   vertices.push_back(H); int H_index = 7;
-  vector< vector<int> > elementVertices;
-  vector<int> el1, el2, el3, el4, el5;
+  vector< vector<IndexType> > elementVertices;
+  vector<IndexType> el1, el2, el3, el4, el5;
   // left patch:
   el1.push_back(A_index); el1.push_back(H_index); el1.push_back(C_index); el1.push_back(B_index);
   // top right:
@@ -433,8 +462,16 @@ int main(int argc, char *argv[]) {
   
   FieldContainer<double> bottomCornerPoint(1,2);
   // want to cheat just inside the bottom corner element:
-  bottomCornerPoint(0,0) = G(0) + 1e-10;
-  bottomCornerPoint(0,1) = G(1) + 1e-10;
+  bottomCornerPoint(0,0) = G[0] + 1e-10;
+  bottomCornerPoint(0,1) = G[1] + 1e-10;
+  
+  /*
+   Mesh(const vector<vector<double> > &vertices, vector< vector<IndexType> > &elementVertices,
+   BFPtr bilinearForm, int H1Order, int pToAddTest, bool useConformingTraces = true,
+   map<int,int> trialOrderEnhancements=_emptyIntIntMap, map<int,int> testOrderEnhancements=_emptyIntIntMap,
+   vector< PeriodicBCPtr > periodicBCs = vector< PeriodicBCPtr >());
+   */
+  
   
   mesh = Teuchos::rcp( new Mesh(vertices, elementVertices, stokesBF, H1Order, pToAdd) );
   
@@ -452,11 +489,11 @@ int main(int argc, char *argv[]) {
   } else {
     // for the Biswas geometry, the only thing we can conveniently do is approximate squares.
     FieldContainer<double> inflowPoint(1,2);
-    inflowPoint(0,0) = A(0) + 1e-10;
-    inflowPoint(0,1) = A(1) + 1e-10;
+    inflowPoint(0,0) = A[0] + 1e-10;
+    inflowPoint(0,1) = A[1] + 1e-10;
     
     int inflowCell = mesh->elementsForPoints(inflowPoint)[0]->cellID();
-    set<int> activeCellIDs = mesh->getActiveCellIDs();
+    set<GlobalIndexType> activeCellIDs = mesh->getActiveCellIDs();
     activeCellIDs.erase(activeCellIDs.find(inflowCell));
     mesh->hRefine(activeCellIDs, verticalCut);
   }
@@ -695,8 +732,8 @@ int main(int argc, char *argv[]) {
   Teuchos::RCP<BackwardFacingStepRefinementStrategy> bfsRefinementStrategy = Teuchos::rcp( new BackwardFacingStepRefinementStrategy(solution, energyThreshold,
                                                                                                                                     min_h, maxPolyOrder,
                                                                                                                                     (rank==0) && verboseRefinements) );
-  bfsRefinementStrategy->addCorner(G(0), G(1));
-  bfsRefinementStrategy->addCorner(H(0), H(1));
+  bfsRefinementStrategy->addCorner(G[0], G[1]);
+  bfsRefinementStrategy->addCorner(H[0], H[1]);
   
 //  Teuchos::RCP<RefinementStrategy> refinementStrategy( solution, energyThreshold, min_h );
   
@@ -733,23 +770,8 @@ int main(int argc, char *argv[]) {
     if (compareWithOverkill) {
       Teuchos::RCP<Solution> bestSoln = Teuchos::rcp( new Solution(solution->mesh(), bc, rhs, ip) );
       overkillSolution->projectFieldVariablesOntoOtherSolution(bestSoln);
-//      if (rank==0) {
-//        VTKExporter exporter(solution, mesh, varFactory);
-//        ostringstream cavityRefinement;
-//        cavityRefinement << "backstep_solution_refinement_" << refIndex;
-//        exporter.exportSolution(cavityRefinement.str());
-//        VTKExporter exporterBest(bestSoln, mesh, varFactory);
-//        ostringstream bestRefinement;
-//        bestRefinement << "backstep_best_refinement_" << refIndex;
-//        exporterBest.exportSolution(bestRefinement.str());
-//      }
       Teuchos::RCP<Solution> bestSolnOnOverkillMesh = Teuchos::rcp( new Solution(overkillMesh, bc, rhs, ip) );
       bestSoln->projectFieldVariablesOntoOtherSolution(bestSolnOnOverkillMesh);
-      
-//      FunctionPtr p_best = Teuchos::rcp( new PreviousSolutionFunction(bestSoln,p) );
-//      double p_avg = p_best->integrate(mesh);
-//      if (rank==0)
-//        cout << "Integral of best solution pressure: " << p_avg << endl;
       
       // determine error as difference between our solution and overkill
       bestSolnOnOverkillMesh->addSolution(overkillSolution,-1.0);
@@ -766,11 +788,6 @@ int main(int argc, char *argv[]) {
         VarPtr var = *fieldIt;
         int fieldID = var->ID();
         FunctionPtr fieldErrorFxn = Function::solution(var, adaptiveSolnOnOverkillMesh);
-//        if (var->ID() == p->ID()) {
-//          // pressure: subtract off the average difference:
-//          double pAvg = fieldErrorFxn->integrate(adaptiveSolnOnOverkillMesh->mesh()) / meshMeasure;
-//          fieldErrorFxn = fieldErrorFxn - pAvg;
-//        }
         
         double L2error = fieldErrorFxn->l2norm(adaptiveSolnOnOverkillMesh->mesh());
         L2errorSquared += L2error * L2error;
@@ -801,7 +818,7 @@ int main(int argc, char *argv[]) {
     if (induceCornerRefinements) {
       // induce refinements in bottom corner:
       vector< Teuchos::RCP<Element> > corners = mesh->elementsForPoints(bottomCornerPoint);
-      vector<int> cornerIDs;
+      vector<GlobalIndexType> cornerIDs;
       cornerIDs.push_back(corners[0]->cellID());
       mesh->hRefine(cornerIDs, RefinementPattern::regularRefinementPatternQuad());
     }
@@ -867,10 +884,10 @@ int main(int argc, char *argv[]) {
   BFPtr fakeBF = Teuchos::rcp( new BF(varFactory) );
   LinearTermPtr massFluxTerm = massFlux * testOne;
   
-  CellTopoPtr quadTopoPtr = Teuchos::rcp(new shards::CellTopology(shards::getCellTopologyData<shards::Quadrilateral<4> >() ));
+  CellTopoPtr quad = CellTopology::quad();
   DofOrderingFactory dofOrderingFactory(fakeBF);
   int fakeTestOrder = H1Order;
-  DofOrderingPtr testOrdering = dofOrderingFactory.testOrdering(fakeTestOrder, *quadTopoPtr);
+  DofOrderingPtr testOrdering = dofOrderingFactory.testOrdering(fakeTestOrder, quad);
   
   int testOneIndex = testOrdering->getDofIndex(testOne->ID(),0);
   vector< ElementTypePtr > elemTypes = mesh->elementTypes(); // global element types
@@ -883,61 +900,61 @@ int main(int argc, char *argv[]) {
   
   double maxCellMeasure = 0;
   double minCellMeasure = 1;
-  for (vector< ElementTypePtr >::iterator elemTypeIt = elemTypes.begin(); elemTypeIt != elemTypes.end(); elemTypeIt++) {
-    ElementTypePtr elemType = *elemTypeIt;
-    vector< ElementPtr > elems = mesh->elementsOfTypeGlobal(elemType);
-    vector<GlobalIndexType> cellIDs;
-    for (int i=0; i<elems.size(); i++) {
-      cellIDs.push_back(elems[i]->cellID());
-    }
-    FieldContainer<double> physicalCellNodes = mesh->physicalCellNodesGlobal(elemType);
-    BasisCachePtr basisCache = Teuchos::rcp( new BasisCache(elemType,mesh) );
-    basisCache->setPhysicalCellNodes(physicalCellNodes,cellIDs,true); // true: create side caches
-    FieldContainer<double> cellMeasures = basisCache->getCellMeasures();
-    FieldContainer<double> fakeRHSIntegrals(elems.size(),testOrdering->totalDofs());
-    massFluxTerm->integrate(fakeRHSIntegrals,testOrdering,basisCache,true); // true: force side evaluation
-    //      cout << "fakeRHSIntegrals:\n" << fakeRHSIntegrals;
-    for (int i=0; i<elems.size(); i++) {
-      int cellID = cellIDs[i];
-      // pick out the ones for testOne:
-      massFluxIntegral[cellID] = fakeRHSIntegrals(i,testOneIndex);
-    }
-    //      for (int sideIndex=0; sideIndex<numSides; sideIndex++) {
-    //        for (int i=0; i<elems.size(); i++) {
-    //          int cellID = cellIDs[i];
-    //          // pick out the ones for testOne:
-    //          massFluxIntegral[cellID] += fakeRHSIntegrals(i,testOneIndex);
-    //        }
-    //      }
-    // find the largest:
-    for (int i=0; i<elems.size(); i++) {
-      int cellID = cellIDs[i];
-      maxMassFluxIntegral = max(abs(massFluxIntegral[cellID]), maxMassFluxIntegral);
-    }
-    for (int i=0; i<elems.size(); i++) {
-      int cellID = cellIDs[i];
-      maxCellMeasure = max(maxCellMeasure,cellMeasures(i));
-      minCellMeasure = min(minCellMeasure,cellMeasures(i));
-      maxMassFluxIntegral = max(abs(massFluxIntegral[cellID]), maxMassFluxIntegral);
-      totalMassFlux += massFluxIntegral[cellID];
-      totalAbsMassFlux += abs( massFluxIntegral[cellID] );
-      if (mesh->boundary().boundaryElement(cellID)) {
-        totalAbsMassFluxBoundary += abs( massFluxIntegral[cellID] );
-      } else {
-        totalAbsMassFluxInterior += abs( massFluxIntegral[cellID] );
-      }
-    }
-  }
-  if (rank==0) {
-    cout << "largest mass flux: " << maxMassFluxIntegral << endl;
-    cout << "total mass flux: " << totalMassFlux << endl;
-    cout << "sum of mass flux absolute value: " << totalAbsMassFlux << endl;
-    cout << "sum of mass flux absolute value (interior elements): " << totalAbsMassFluxInterior << endl;
-    cout << "sum of mass flux absolute value (boundary elements): " << totalAbsMassFluxBoundary << endl;
-    cout << "largest h: " << sqrt(maxCellMeasure) << endl;
-    cout << "smallest h: " << sqrt(minCellMeasure) << endl;
-    cout << "ratio of largest / smallest h: " << sqrt(maxCellMeasure) / sqrt(minCellMeasure) << endl;
-  }
+//  for (vector< ElementTypePtr >::iterator elemTypeIt = elemTypes.begin(); elemTypeIt != elemTypes.end(); elemTypeIt++) {
+//    ElementTypePtr elemType = *elemTypeIt;
+//    vector< ElementPtr > elems = mesh->elementsOfTypeGlobal(elemType);
+//    vector<GlobalIndexType> cellIDs;
+//    for (int i=0; i<elems.size(); i++) {
+//      cellIDs.push_back(elems[i]->cellID());
+//    }
+//    FieldContainer<double> physicalCellNodes = mesh->physicalCellNodesGlobal(elemType);
+//    BasisCachePtr basisCache = Teuchos::rcp( new BasisCache(elemType,mesh) );
+//    basisCache->setPhysicalCellNodes(physicalCellNodes,cellIDs,true); // true: create side caches
+//    FieldContainer<double> cellMeasures = basisCache->getCellMeasures();
+//    FieldContainer<double> fakeRHSIntegrals(elems.size(),testOrdering->totalDofs());
+//    massFluxTerm->integrate(fakeRHSIntegrals,testOrdering,basisCache,true); // true: force side evaluation
+//    //      cout << "fakeRHSIntegrals:\n" << fakeRHSIntegrals;
+//    for (int i=0; i<elems.size(); i++) {
+//      int cellID = cellIDs[i];
+//      // pick out the ones for testOne:
+//      massFluxIntegral[cellID] = fakeRHSIntegrals(i,testOneIndex);
+//    }
+//    //      for (int sideIndex=0; sideIndex<numSides; sideIndex++) {
+//    //        for (int i=0; i<elems.size(); i++) {
+//    //          int cellID = cellIDs[i];
+//    //          // pick out the ones for testOne:
+//    //          massFluxIntegral[cellID] += fakeRHSIntegrals(i,testOneIndex);
+//    //        }
+//    //      }
+//    // find the largest:
+//    for (int i=0; i<elems.size(); i++) {
+//      int cellID = cellIDs[i];
+//      maxMassFluxIntegral = max(abs(massFluxIntegral[cellID]), maxMassFluxIntegral);
+//    }
+//    for (int i=0; i<elems.size(); i++) {
+//      int cellID = cellIDs[i];
+//      maxCellMeasure = max(maxCellMeasure,cellMeasures(i));
+//      minCellMeasure = min(minCellMeasure,cellMeasures(i));
+//      maxMassFluxIntegral = max(abs(massFluxIntegral[cellID]), maxMassFluxIntegral);
+//      totalMassFlux += massFluxIntegral[cellID];
+//      totalAbsMassFlux += abs( massFluxIntegral[cellID] );
+//      if (mesh->boundary().boundaryElement(cellID)) {
+//        totalAbsMassFluxBoundary += abs( massFluxIntegral[cellID] );
+//      } else {
+//        totalAbsMassFluxInterior += abs( massFluxIntegral[cellID] );
+//      }
+//    }
+//  }
+//  if (rank==0) {
+//    cout << "largest mass flux: " << maxMassFluxIntegral << endl;
+//    cout << "total mass flux: " << totalMassFlux << endl;
+//    cout << "sum of mass flux absolute value: " << totalAbsMassFlux << endl;
+//    cout << "sum of mass flux absolute value (interior elements): " << totalAbsMassFluxInterior << endl;
+//    cout << "sum of mass flux absolute value (boundary elements): " << totalAbsMassFluxBoundary << endl;
+//    cout << "largest h: " << sqrt(maxCellMeasure) << endl;
+//    cout << "smallest h: " << sqrt(minCellMeasure) << endl;
+//    cout << "ratio of largest / smallest h: " << sqrt(maxCellMeasure) / sqrt(minCellMeasure) << endl;
+//  }
   
   ///////// SET UP & SOLVE STREAM SOLUTION /////////
   streamSolution->setIP(streamIP);
@@ -961,129 +978,133 @@ int main(int argc, char *argv[]) {
 //    cout << "Recirculation region top: y=" << y << endl;
 //    cout << "Recirculation region right: x=" << x << endl;
   }
+
+  HDF5Exporter exporter(mesh, "backStepSoln", ".");
+  exporter.exportSolution(solution);
+
+  HDF5Exporter exporterVorticity(mesh, "backStepVorticity", ".");
+  exporterVorticity.exportFunction(vorticity, "vorticity");
   
-  if (rank==0){
-//    massFlux->writeBoundaryValuesToMATLABFile(solution->mesh(), "massFlux.dat");
-//    solution->writeFieldsToFile(u1->ID(), "u1.m");
-//    solution->writeFieldsToFile(u2->ID(), "u2.m");
-//    streamSolution->writeFieldsToFile(phi->ID(), "phi.m");
-    
-    VTKExporter exporter(solution, mesh, varFactory);
-    exporter.exportSolution("backStepSoln", H1Order*2);
-    
-    VTKExporter streamExporter(streamSolution, streamMesh, streamVarFactory);
-    streamExporter.exportSolution("backStepStreamSoln", H1Order*2);
-    
-    FunctionPtr polyOrderFunction = Teuchos::rcp( new MeshPolyOrderFunction(mesh) );
-    exporter.exportFunction(polyOrderFunction,"backStepPolyOrders");
-    
-//    solution->writeFluxesToFile(u1hat->ID(), "u1_hat.dat");
-//    solution->writeFluxesToFile(u2hat->ID(), "u2_hat.dat");
-//    solution->writeFieldsToFile(p->ID(), "p.m");
+  HDF5Exporter streamExporter(streamMesh, "backStepStreamSoln", ".");
+  streamExporter.exportSolution(streamSolution);
 
-//    writePatchValues(0, RIGHT_OUTFLOW, 0, 2, streamSolution, phi, "phi_patch.m");
-//    writePatchValues(4, 5, 0, 1, streamSolution, phi, "phi_patch_east.m");
-    
-    FieldContainer<double> eastPoints = pointGrid(4, RIGHT_OUTFLOW, 0, 2, 100);
-    FieldContainer<double> eastPointData = solutionData(eastPoints, streamSolution, phi);
-    GnuPlotUtil::writeXYPoints("phi_east.dat", eastPointData);
-
-    FieldContainer<double> westPoints = pointGrid(0, 4, 1, 2, 100);
-    FieldContainer<double> westPointData = solutionData(westPoints, streamSolution, phi);
-    GnuPlotUtil::writeXYPoints("phi_west.dat", westPointData);
-    
-    set<double> contourLevels = diagonalContourLevels(eastPointData,4);
-    
-    vector<string> dataPaths;
-    dataPaths.push_back("phi_east.dat");
-    dataPaths.push_back("phi_west.dat");
-    GnuPlotUtil::writeContourPlotScript(contourLevels, dataPaths, "backStepContourPlot.p");
-    
-    double xTics = 0.1, yTics = -1;
-    FieldContainer<double> eastPatchPoints = pointGrid(4, 4.4, 0, 0.45, 200);
-    FieldContainer<double> eastPatchPointData = solutionData(eastPatchPoints, streamSolution, phi);
-    GnuPlotUtil::writeXYPoints("phi_patch_east.dat", eastPatchPointData);
-    set<double> patchContourLevels = diagonalContourLevels(eastPatchPointData,4);
-    // be sure to the 0 contour, where the direction should change:
-    patchContourLevels.insert(0);
-    
-    vector<string> patchDataPath;
-    patchDataPath.push_back("phi_patch_east.dat");
-    GnuPlotUtil::writeContourPlotScript(patchContourLevels, patchDataPath, "backStepEastContourPlot.p", xTics, yTics);
-
-    {
-      map<double,string> scaleToName;
-      scaleToName[1]   = "bfsPatch";
-      scaleToName[0.4] = "bfsPatchEddy1";
-      scaleToName[0.05] = "bfsPatchEddy2";
-      scaleToName[0.005] = "bfsPatchEddy3";
-      
-      for (map<double,string>::iterator entryIt=scaleToName.begin(); entryIt != scaleToName.end(); entryIt++) {
-        double scale = entryIt->first;
-        string name = entryIt->second;
-        ostringstream fileNameStream;
-        fileNameStream << name << ".dat";
-        FieldContainer<double> patchPoints = pointGrid(4, 4+scale, MESH_BOTTOM, MESH_BOTTOM + scale, 200);
-        FieldContainer<double> patchPointData = solutionData(patchPoints, streamSolution, phi);
-        GnuPlotUtil::writeXYPoints(fileNameStream.str(), patchPointData);
-        ostringstream scriptNameStream;
-        scriptNameStream << name << ".p";
-        set<double> contourLevels = diagonalContourLevels(patchPointData,4);
-        vector<string> dataPaths;
-        dataPaths.push_back(fileNameStream.str());
-        GnuPlotUtil::writeContourPlotScript(contourLevels, dataPaths, scriptNameStream.str());
-      }
-      
-      double xTics = 0.1, yTics = -1;
-      FieldContainer<double> eastPatchPoints = pointGrid(4, 4.4, MESH_BOTTOM, MESH_BOTTOM + 0.45, 200);
-      FieldContainer<double> eastPatchPointData = solutionData(eastPatchPoints, streamSolution, phi);
-      GnuPlotUtil::writeXYPoints("phi_patch_east.dat", eastPatchPointData);
-      set<double> patchContourLevels = diagonalContourLevels(eastPatchPointData,4);
-      // be sure to the 0 contour, where the direction should change:
-      patchContourLevels.insert(0);
-      
-      vector<string> patchDataPath;
-      patchDataPath.push_back("phi_patch_east.dat");
-      GnuPlotUtil::writeContourPlotScript(patchContourLevels, patchDataPath, "backStepEastContourPlot.p", xTics, yTics);
-    }
-    
-    GnuPlotUtil::writeComputationalMeshSkeleton("backStepMesh", mesh);
-    
-//      ofstream fout("phiContourLevels.dat");
-//      fout << setprecision(15);
-//      for (set<double>::iterator levelIt = contourLevels.begin(); levelIt != contourLevels.end(); levelIt++) {
-//        fout << *levelIt << ", ";
+  
+//  if (rank==0){
+////    massFlux->writeBoundaryValuesToMATLABFile(solution->mesh(), "massFlux.dat");
+////    solution->writeFieldsToFile(u1->ID(), "u1.m");
+////    solution->writeFieldsToFile(u2->ID(), "u2.m");
+////    streamSolution->writeFieldsToFile(phi->ID(), "phi.m");
+//    
+////    FunctionPtr polyOrderFunction = Teuchos::rcp( new MeshPolyOrderFunction(mesh) );
+////    exporter.exportFunction(polyOrderFunction,"backStepPolyOrders");
+//    
+////    solution->writeFluxesToFile(u1hat->ID(), "u1_hat.dat");
+////    solution->writeFluxesToFile(u2hat->ID(), "u2_hat.dat");
+////    solution->writeFieldsToFile(p->ID(), "p.m");
+//
+////    writePatchValues(0, RIGHT_OUTFLOW, 0, 2, streamSolution, phi, "phi_patch.m");
+////    writePatchValues(4, 5, 0, 1, streamSolution, phi, "phi_patch_east.m");
+//    
+//    FieldContainer<double> eastPoints = pointGrid(4, RIGHT_OUTFLOW, 0, 2, 100);
+//    FieldContainer<double> eastPointData = solutionData(eastPoints, streamSolution, phi);
+//    GnuPlotUtil::writeXYPoints("phi_east.dat", eastPointData);
+//
+//    FieldContainer<double> westPoints = pointGrid(0, 4, 1, 2, 100);
+//    FieldContainer<double> westPointData = solutionData(westPoints, streamSolution, phi);
+//    GnuPlotUtil::writeXYPoints("phi_west.dat", westPointData);
+//    
+//    set<double> contourLevels = diagonalContourLevels(eastPointData,4);
+//    
+//    vector<string> dataPaths;
+//    dataPaths.push_back("phi_east.dat");
+//    dataPaths.push_back("phi_west.dat");
+//    GnuPlotUtil::writeContourPlotScript(contourLevels, dataPaths, "backStepContourPlot.p");
+//    
+//    double xTics = 0.1, yTics = -1;
+//    FieldContainer<double> eastPatchPoints = pointGrid(4, 4.4, 0, 0.45, 200);
+//    FieldContainer<double> eastPatchPointData = solutionData(eastPatchPoints, streamSolution, phi);
+//    GnuPlotUtil::writeXYPoints("phi_patch_east.dat", eastPatchPointData);
+//    set<double> patchContourLevels = diagonalContourLevels(eastPatchPointData,4);
+//    // be sure to the 0 contour, where the direction should change:
+//    patchContourLevels.insert(0);
+//    
+//    vector<string> patchDataPath;
+//    patchDataPath.push_back("phi_patch_east.dat");
+//    GnuPlotUtil::writeContourPlotScript(patchContourLevels, patchDataPath, "backStepEastContourPlot.p", xTics, yTics);
+//
+//    {
+//      map<double,string> scaleToName;
+//      scaleToName[1]   = "bfsPatch";
+//      scaleToName[0.4] = "bfsPatchEddy1";
+//      scaleToName[0.05] = "bfsPatchEddy2";
+//      scaleToName[0.005] = "bfsPatchEddy3";
+//      
+//      for (map<double,string>::iterator entryIt=scaleToName.begin(); entryIt != scaleToName.end(); entryIt++) {
+//        double scale = entryIt->first;
+//        string name = entryIt->second;
+//        ostringstream fileNameStream;
+//        fileNameStream << name << ".dat";
+//        FieldContainer<double> patchPoints = pointGrid(4, 4+scale, MESH_BOTTOM, MESH_BOTTOM + scale, 200);
+//        FieldContainer<double> patchPointData = solutionData(patchPoints, streamSolution, phi);
+//        GnuPlotUtil::writeXYPoints(fileNameStream.str(), patchPointData);
+//        ostringstream scriptNameStream;
+//        scriptNameStream << name << ".p";
+//        set<double> contourLevels = diagonalContourLevels(patchPointData,4);
+//        vector<string> dataPaths;
+//        dataPaths.push_back(fileNameStream.str());
+//        GnuPlotUtil::writeContourPlotScript(contourLevels, dataPaths, scriptNameStream.str());
 //      }
-//      fout.close();
-    //    writePatchValues(0, .01, 0, .01, streamSolution, phi, "phi_patch_minute_detail.m");
-    //    writePatchValues(0, .001, 0, .001, streamSolution, phi, "phi_patch_minute_minute_detail.m");
-    
-    
-    if (compareWithOverkill) {
-      if (rank==0) {
-        cout << "******* Adaptivity Convergence Report *******\n";
-        cout << "dofs\tL2 error\n";
-        for (map<int,double>::iterator entryIt=dofsToL2error.begin(); entryIt != dofsToL2error.end(); entryIt++) {
-          int dofs = entryIt->first;
-          double err = entryIt->second;
-          cout << dofs << "\t" << err;
-          double bestError = dofsToBestL2error[dofs];
-          cout << "\t" << bestError << endl;
-        }
-        ofstream fout("stokesBFSOverkillComparison.txt");
-        fout << "dofs\tsoln_error\tbest_error\n";
-        for (map<int,double>::iterator entryIt=dofsToL2error.begin(); entryIt != dofsToL2error.end(); entryIt++) {
-          int dofs = entryIt->first;
-          double err = entryIt->second;
-          fout << dofs << "\t" << err;
-          double bestError = dofsToBestL2error[dofs];
-          fout << "\t" << bestError << endl;
-        }
-        fout.close();
-      }
-    }
-    
-    cout << "wrote files.\n";
-  }
+//      
+//      double xTics = 0.1, yTics = -1;
+//      FieldContainer<double> eastPatchPoints = pointGrid(4, 4.4, MESH_BOTTOM, MESH_BOTTOM + 0.45, 200);
+//      FieldContainer<double> eastPatchPointData = solutionData(eastPatchPoints, streamSolution, phi);
+//      GnuPlotUtil::writeXYPoints("phi_patch_east.dat", eastPatchPointData);
+//      set<double> patchContourLevels = diagonalContourLevels(eastPatchPointData,4);
+//      // be sure to the 0 contour, where the direction should change:
+//      patchContourLevels.insert(0);
+//      
+//      vector<string> patchDataPath;
+//      patchDataPath.push_back("phi_patch_east.dat");
+//      GnuPlotUtil::writeContourPlotScript(patchContourLevels, patchDataPath, "backStepEastContourPlot.p", xTics, yTics);
+//    }
+//    
+//    GnuPlotUtil::writeComputationalMeshSkeleton("backStepMesh", mesh);
+//    
+////      ofstream fout("phiContourLevels.dat");
+////      fout << setprecision(15);
+////      for (set<double>::iterator levelIt = contourLevels.begin(); levelIt != contourLevels.end(); levelIt++) {
+////        fout << *levelIt << ", ";
+////      }
+////      fout.close();
+//    //    writePatchValues(0, .01, 0, .01, streamSolution, phi, "phi_patch_minute_detail.m");
+//    //    writePatchValues(0, .001, 0, .001, streamSolution, phi, "phi_patch_minute_minute_detail.m");
+//    
+//    
+//    if (compareWithOverkill) {
+//      if (rank==0) {
+//        cout << "******* Adaptivity Convergence Report *******\n";
+//        cout << "dofs\tL2 error\n";
+//        for (map<int,double>::iterator entryIt=dofsToL2error.begin(); entryIt != dofsToL2error.end(); entryIt++) {
+//          int dofs = entryIt->first;
+//          double err = entryIt->second;
+//          cout << dofs << "\t" << err;
+//          double bestError = dofsToBestL2error[dofs];
+//          cout << "\t" << bestError << endl;
+//        }
+//        ofstream fout("stokesBFSOverkillComparison.txt");
+//        fout << "dofs\tsoln_error\tbest_error\n";
+//        for (map<int,double>::iterator entryIt=dofsToL2error.begin(); entryIt != dofsToL2error.end(); entryIt++) {
+//          int dofs = entryIt->first;
+//          double err = entryIt->second;
+//          fout << dofs << "\t" << err;
+//          double bestError = dofsToBestL2error[dofs];
+//          fout << "\t" << bestError << endl;
+//        }
+//        fout.close();
+//      }
+//    }
+//    
+//    cout << "wrote files.\n";
+//  }
   return 0;
 }

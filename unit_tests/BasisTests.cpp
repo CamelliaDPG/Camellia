@@ -24,10 +24,11 @@
 #include "Intrepid_FieldContainer.hpp"
 
 #include "Basis.h"
-
+#include "BasisFactory.h"
 #include "TensorBasis.h"
 
-#include "BasisFactory.h"
+using namespace Camellia;
+using namespace Intrepid;
 
 namespace {
   TEUCHOS_UNIT_TEST( Basis, LineC1_Unisolvence )

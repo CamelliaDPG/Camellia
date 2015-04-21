@@ -33,6 +33,7 @@
 #include "BasisFactory.h"
 
 using namespace std;
+using namespace Intrepid;
 using namespace Camellia;
 
 DofOrdering::DofOrdering(CellTopoPtr cellTopo) { // constructor

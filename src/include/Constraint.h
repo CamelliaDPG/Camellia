@@ -9,26 +9,27 @@
 #ifndef Camellia_Constraint_h
 #define Camellia_Constraint_h
 
+#include "TypeDefs.h"
+
 #include "SpatialFilter.h"
 #include "LinearTerm.h"
 #include "SpatiallyFilteredFunction.h"
 
-class Function;
-typedef Teuchos::RCP<Function> FunctionPtr;
+namespace Camellia {
+	class Constraint {
+	  LinearTermPtr _linearTerm;
+	  TFunctionPtr<double> _f;
+	public:
+	  Constraint(LinearTermPtr linearTerm, TFunctionPtr<double> f);
+	  LinearTermPtr linearTerm() const;
+	  TFunctionPtr<double> f() const;
+	  static Constraint spatiallyFilteredConstraint(const Constraint &c, SpatialFilterPtr sf);
+	};
 
-class Constraint {
-  LinearTermPtr _linearTerm;
-  FunctionPtr _f;
-public:
-  Constraint(LinearTermPtr linearTerm, FunctionPtr f);
-  LinearTermPtr linearTerm() const;
-  FunctionPtr f() const;
-  static Constraint spatiallyFilteredConstraint(const Constraint &c, SpatialFilterPtr sf);
-};
-
-Constraint operator==(VarPtr v, FunctionPtr f);
-Constraint operator==(FunctionPtr f, VarPtr v);
-Constraint operator==(LinearTermPtr a, FunctionPtr f);
-Constraint operator==(FunctionPtr f, LinearTermPtr a);
+	Constraint operator==(VarPtr v, TFunctionPtr<double> f);
+	Constraint operator==(TFunctionPtr<double> f, VarPtr v);
+	Constraint operator==(LinearTermPtr a, TFunctionPtr<double> f);
+	Constraint operator==(TFunctionPtr<double> f, LinearTermPtr a);
+}
 
 #endif

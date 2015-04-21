@@ -30,12 +30,25 @@ namespace Camellia {
       rankChange = -1;
     } else if (operatorType == Intrepid::OPERATOR_GRAD) {
       rankChange = 1;
+    } if (operatorType == Intrepid::OPERATOR_CURL) {
+      if (this->rangeDimension() == 3) {
+        rankChange = 0;
+      } else if (this->rangeDimension() == 2) {
+        if (this->rangeRank() == 0) {
+          rankChange = 1;
+        } else if (this->rangeRank() == 1) {
+          rankChange = -1;
+        }
+      }
     }
     
     if (rankChange != UNKNOWN_RANK_CHANGE) {
       // values should have shape: (F,P[,D,D,...]) where the # of D's = rank of the basis's range
       if (values.rank() != 2 + rangeRank() + rankChange) {
         TEUCHOS_TEST_FOR_EXCEPTION(values.rank() != 2 + rangeRank() + rankChange, std::invalid_argument, "values should have shape (F,P,[D,D,...]).");
+      }
+      for (int d=0; d<rangeRank() + rankChange; d++) {
+        TEUCHOS_TEST_FOR_EXCEPTION(values.dimension(2+d) != rangeDimension(), std::invalid_argument, "values should have shape (F,P,[D,D,...]).");
       }
     }
     // refPoints should have shape: (P,D)

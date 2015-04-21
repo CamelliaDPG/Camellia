@@ -7,31 +7,31 @@
 //
 // Copyright © 2014 Nathan V. Roberts. All Rights Reserved.
 //
-// Redistribution and use in source and binary forms, with or without modification, are 
+// Redistribution and use in source and binary forms, with or without modification, are
 // permitted provided that the following conditions are met:
-// 1. Redistributions of source code must retain the above copyright notice, this list of 
+// 1. Redistributions of source code must retain the above copyright notice, this list of
 // conditions and the following disclaimer.
-// 2. Redistributions in binary form must reproduce the above copyright notice, this list of 
-// conditions and the following disclaimer in the documentation and/or other materials 
+// 2. Redistributions in binary form must reproduce the above copyright notice, this list of
+// conditions and the following disclaimer in the documentation and/or other materials
 // provided with the distribution.
 // 3. The name of the author may not be used to endorse or promote products derived from
 // this software without specific prior written permission.
 //
-// THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY 
-// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE 
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR 
-// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR 
-// ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR 
-// CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT 
-// OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR 
-// BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF 
-// LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING 
-// NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS 
+// THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY
+// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+// ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+// CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT
+// OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR
+// BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
+// LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
+// NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 //
 // Questions? Contact Nate Roberts (nate@nateroberts.com).
 //
-// @HEADER 
+// @HEADER
 
 #include "Boundary.h"
 #include "Intrepid_PointTools.hpp"
@@ -55,6 +55,9 @@
 
 #include "CamelliaDebugUtility.h"
 
+using namespace Intrepid;
+using namespace Camellia;
+
 Boundary::Boundary() {
   _mesh = NULL;
 }
@@ -66,9 +69,9 @@ void Boundary::setMesh(Mesh* mesh) {
 
 void Boundary::buildLookupTables() {
   _boundaryElements.clear();
-  
+
   int rank = Teuchos::GlobalMPISession::getRank();
-  
+
   set< GlobalIndexType > rankLocalCells = _mesh->cellIDsInPartition();
   for (set< GlobalIndexType >::iterator cellIDIt = rankLocalCells.begin(); cellIDIt != rankLocalCells.end(); cellIDIt++) {
     GlobalIndexType cellID = *cellIDIt;
@@ -78,7 +81,7 @@ void Boundary::buildLookupTables() {
       _boundaryElements.insert(make_pair(cellID, boundarySides[i]));
     }
   }
-  
+
   _imposeSingletonBCsOnThisRank = (_mesh->globalDofAssignment()->cellsInPartition(rank).size() > 0);  // want this to be true for the first rank that has some active cells
   for (int i=0; i<rank; i++) {
     int activeCellCount = _mesh->globalDofAssignment()->cellsInPartition(i).size();
@@ -95,7 +98,7 @@ void Boundary::bcsToImpose(FieldContainer<GlobalIndexType> &globalIndices, Field
 //  ostringstream rankLabel;
 //  rankLabel << "on rank " << rank << ", globalIndexFilter";
 //  Camellia::print(rankLabel.str(), globalIndexFilter);
-  
+
   FieldContainer<GlobalIndexType> allGlobalIndices; // "all" belonging to cells that belong to us...
   FieldContainer<double> allGlobalValues;
   this->bcsToImpose(allGlobalIndices,allGlobalValues,bc, dofInterpreter, globalDofMap);
@@ -111,7 +114,7 @@ void Boundary::bcsToImpose(FieldContainer<GlobalIndexType> &globalIndices, Field
   int numIndices = matchingFCIndices.size();
   globalIndices.resize(numIndices);
   globalValues.resize(numIndices);
-  
+
   i=-1;
   for (set<int>::iterator setIt = matchingFCIndices.begin();
        setIt != matchingFCIndices.end(); setIt++) {
@@ -127,12 +130,12 @@ void Boundary::bcsToImpose(FieldContainer<GlobalIndexType> &globalIndices,
                            FieldContainer<double> &globalValues, BC &bc,
                            DofInterpreter* dofInterpreter, const Epetra_Map *globalDofMap) {
 //  int rank = Teuchos::GlobalMPISession::getRank();
-  
+
   set< GlobalIndexType > rankLocalCells = _mesh->cellIDsInPartition();
-  
+
   // first, let's check for any singletons (one-point BCs)
   map<IndexType, set < pair<int, unsigned> > > singletonsForCell;
-  
+
   vector< int > trialIDs = _mesh->bilinearForm()->trialIDs();
   for (vector< int >::iterator trialIt = trialIDs.begin(); trialIt != trialIDs.end(); trialIt++) {
     int trialID = *trialIt;
@@ -160,10 +163,10 @@ void Boundary::bcsToImpose(FieldContainer<GlobalIndexType> &globalIndices,
       }
     }
   }
-  
+
   map< GlobalIndexType, double> bcGlobalIndicesAndValues;
   set < pair<int, unsigned> > noSingletons;
-  
+
   for (set< GlobalIndexType >::iterator cellIDIt = rankLocalCells.begin(); cellIDIt != rankLocalCells.end(); cellIDIt++) {
     if (singletonsForCell.find(*cellIDIt) != singletonsForCell.end()) {
       bcsToImpose(bcGlobalIndicesAndValues, bc, *cellIDIt, singletonsForCell[*cellIDIt], dofInterpreter, globalDofMap);
@@ -171,7 +174,7 @@ void Boundary::bcsToImpose(FieldContainer<GlobalIndexType> &globalIndices,
       bcsToImpose(bcGlobalIndicesAndValues, bc, *cellIDIt, noSingletons, dofInterpreter, globalDofMap);
     }
   }
-  
+
   globalIndices.resize(bcGlobalIndicesAndValues.size());
   globalValues.resize(bcGlobalIndicesAndValues.size());
   globalIndices.initialize(0);
@@ -181,7 +184,7 @@ void Boundary::bcsToImpose(FieldContainer<GlobalIndexType> &globalIndices,
     globalIndices[entryOrdinal] = bcEntry->first;
     globalValues[entryOrdinal] = bcEntry->second;
   }
-  
+
 //  // check to make sure all our singleton BCs got imposed:
 //  for (vector< int >::iterator trialIt = trialIDs.begin(); trialIt != trialIDs.end(); trialIt++) {
 //    int trialID = *trialIt;
@@ -191,7 +194,7 @@ void Boundary::bcsToImpose(FieldContainer<GlobalIndexType> &globalIndices,
 //      cout << ", but no BC was imposed for this variable (possibly because imposeHere never returned true for any point)." << endl;
 //    }
 //  }
-  
+
   //cout << "bcsToImpose: globalIndices:" << endl << globalIndices;
 }
 
@@ -199,7 +202,7 @@ void Boundary::bcsToImpose( map<  GlobalIndexType, double > &globalDofIndicesAnd
                            GlobalIndexType cellID, set < pair<int, unsigned> > &singletons,
                            DofInterpreter* dofInterpreter, const Epetra_Map *globalDofMap) {
   CellPtr cell = _mesh->getTopology()->getCell(cellID);
-  
+
   // define a couple of important inner products:
   IPPtr ipL2 = Teuchos::rcp( new IP );
   IPPtr ipH1 = Teuchos::rcp( new IP );
@@ -213,7 +216,7 @@ void Boundary::bcsToImpose( map<  GlobalIndexType, double > &globalDofIndicesAnd
   DofOrderingPtr trialOrderingPtr = elemType->trialOrderPtr;
   vector< int > trialIDs = _mesh->bilinearForm()->trialIDs();
   Teuchos::RCP<Mesh> meshPtr = Teuchos::rcp(_mesh,false); // create an RCP that doesn't own the memory....
-  
+
   vector<unsigned> boundarySides = cell->boundarySides();
   if (boundarySides.size() > 0) {
     BasisCachePtr basisCache = BasisCache::basisCacheForCell(meshPtr, cellID);
@@ -233,7 +236,7 @@ void Boundary::bcsToImpose( map<  GlobalIndexType, double > &globalDofIndicesAnd
             FieldContainer<double> dirichletValues(numCells,numDofs);
             // project bc function onto side basis:
             BCPtr bcPtr = Teuchos::rcp(&bc, false);
-            Teuchos::RCP<BCFunction> bcFunction = BCFunction::bcFunction(bcPtr, trialID, isTrace);
+            Teuchos::RCP<BCFunction<double>> bcFunction = BCFunction<double>::bcFunction(bcPtr, trialID, isTrace);
             bcPtr->coefficientsForBC(dirichletValues, bcFunction, basis, basisCache->getSideBasisCache(sideOrdinal));
             dirichletValues.resize(numDofs);
             if (bcFunction->imposeOnCell(0)) {
@@ -250,26 +253,26 @@ void Boundary::bcsToImpose( map<  GlobalIndexType, double > &globalDofIndicesAnd
         }
     }
   }
-  
+
   for (set<pair<int, unsigned> >::iterator singletonIt = singletons.begin(); singletonIt != singletons.end(); singletonIt++) {
     int trialID = singletonIt->first;
     unsigned vertexOrdinalInCell = singletonIt->second;
-    
+
     CellTopoPtr cellTopo = elemType->cellTopoPtr;
 
     // in some ways less nice than the previous version of singleton BC imposition; we don't impose a non-zero value (because
     // we don't figure out physical points, etc.), and we also neglect any spatial filtering.
-    
+
     // OTOH, here we do support traces and fluxes for single-point BCs, and this is significantly simpler
-    
+
     set<GlobalIndexType> globalIndicesForVariable;
     DofOrderingPtr trialOrderingPtr = elemType->trialOrderPtr;
-    
+
     IndexType vertexIndex = cell->vertices()[vertexOrdinalInCell];
     int numSides = cell->getSideCount();
-    
+
     int vertexOrdinal;
-    
+
     int sideForVertex = -1;
     int sideDim = cellTopo->getDimension() - 1;
     if (!_mesh->bilinearForm()->isFluxOrTrace(trialID)) {
@@ -296,9 +299,9 @@ void Boundary::bcsToImpose( map<  GlobalIndexType, double > &globalDofIndicesAnd
       vertexOrdinal = vertexOrdinalInSide;
     }
     BasisPtr basis = trialOrderingPtr->getBasis(trialID,sideForVertex);
-    
+
     int dofOrdinal;
-    
+
     if (basis->getCardinality() > 1) {
       // upgrade basis to continuous one of the same cardinality, if it is discontinuous.
       if ((basis->functionSpace() == Camellia::FUNCTION_SPACE_HVOL) || (basis->functionSpace() == Camellia::FUNCTION_SPACE_HVOL_DISC)) {
@@ -307,7 +310,7 @@ void Boundary::bcsToImpose( map<  GlobalIndexType, double > &globalDofIndicesAnd
         Camellia::EFunctionSpace fsContinuous = Camellia::continuousSpaceForDiscontinuous((basis->functionSpace()));
         basis = BasisFactory::basisFactory()->getBasis(basis->getDegree(), basis->domainTopology(), fsContinuous);
       }
-      
+
       std::set<int> dofOrdinals = basis->dofOrdinalsForVertex(vertexOrdinal);
       if (dofOrdinals.size() != 1) {
         cout << "ERROR: dofOrdinals.size() != 1 during singleton BC imposition.\n";

@@ -1,27 +1,27 @@
 #ifndef PROJECTOR
 #define PROJECTOR
 
+#include "TypeDefs.h"
+
 #include "IP.h"
 
 #include "Basis.h"
 
-class Function;
+namespace Camellia {
+	class Projector {
+	 public:
 
-typedef Teuchos::RCP<Function> FunctionPtr;
+	  // newest version:
+	  static void projectFunctionOntoBasis(Intrepid::FieldContainer<double> &basisCoefficients,
+	                                       TFunctionPtr<double> fxn, BasisPtr basis, BasisCachePtr basisCache,
+	                                       IPPtr ip, VarPtr v,
+	                                       std::set<int>fieldIndicesToSkip = std::set<int>());
 
-class Projector {
- public:
+	  static void projectFunctionOntoBasis(Intrepid::FieldContainer<double> &basisCoefficients,
+	                                       TFunctionPtr<double> fxn, BasisPtr basis, BasisCachePtr basisCache);
 
-  // newest version:
-  static void projectFunctionOntoBasis(Intrepid::FieldContainer<double> &basisCoefficients,
-                                       FunctionPtr fxn, BasisPtr basis, BasisCachePtr basisCache,
-                                       IPPtr ip, VarPtr v,
-                                       std::set<int>fieldIndicesToSkip = std::set<int>());
-  
-  static void projectFunctionOntoBasis(Intrepid::FieldContainer<double> &basisCoefficients,
-                                       FunctionPtr fxn, BasisPtr basis, BasisCachePtr basisCache);
-  
-  static void projectFunctionOntoBasisInterpolating(Intrepid::FieldContainer<double> &basisCoefficients,
-                                                    FunctionPtr fxn, BasisPtr basis, BasisCachePtr domainBasisCache);
-};
+	  static void projectFunctionOntoBasisInterpolating(Intrepid::FieldContainer<double> &basisCoefficients,
+	                                                    TFunctionPtr<double> fxn, BasisPtr basis, BasisCachePtr domainBasisCache);
+	};
+}
 #endif

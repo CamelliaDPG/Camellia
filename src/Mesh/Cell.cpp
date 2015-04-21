@@ -12,6 +12,8 @@
 
 #include "GnuPlotUtil.h"
 
+using namespace Camellia;
+
 vector< pair<GlobalIndexType, unsigned> > Cell::childrenForSide(unsigned sideIndex) {
   vector< pair<GlobalIndexType, unsigned> > childIndicesForSide;
   

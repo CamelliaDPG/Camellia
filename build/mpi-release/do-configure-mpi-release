@@ -1,5 +1,5 @@
 cmake \
-  -D TRILINOS_PATH:FILEPATH="/Users/nroberts/lib/trilinos-11.13/mpi-release" \
+  -D TRILINOS_PATH:FILEPATH="/Users/nroberts/lib/trilinos/mpi-release" \
   -D CAMELLIA_SOURCE_DIR:FILEPATH="/Users/nroberts/Camellia/src" \
   -D CMAKE_BUILD_TYPE="Release" \
   -D CMAKE_EXE_LINKER_FLAGS:STRING="-g -O3" \
@@ -8,6 +8,7 @@ cmake \
   -D ZLIB_LIB="/usr/lib/libz.dylib" \
   -DSCALAPACK_LIB="/Users/nroberts/lib/libscalapack.a" \
   -DBUILD_CONFUSION_JESSE_DRIVERS:BOOL=OFF \
+  -DBUILD_TRUMAN_TESTS_DRIVERS:BOOL=ON \
   -DBUILD_TRUMAN_DRIVERS:BOOL=OFF \
   -DUSE_MUMPS:BOOL=OFF \
   -DCMAKE_INSTALL_PREFIX:PATH="/tmp" \

@@ -11,9 +11,11 @@
 
 #include "HConvergenceStudy.h"
 
-class ConvergenceReport {
-public:
-  void writeReportToTeXFile(HConvergenceStudy &study, string fileName);
-};
+namespace Camellia {
+	class ConvergenceReport {
+	public:
+	  void writeReportToTeXFile(HConvergenceStudy &study, string fileName);
+	};
+}
 
 #endif

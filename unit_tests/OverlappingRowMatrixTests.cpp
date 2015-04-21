@@ -24,39 +24,40 @@
 #endif
 
 using namespace Camellia;
+using namespace Intrepid;
 
 namespace {
   void testOverlapDofOrdinals(bool hierarchical, Teuchos::FancyOStream &out, bool &success) {
-    
+
     // test that checks that the dof ordinals for overlap are correctly identified
     // when OverlappingRowMatrix is constructed by passing in a Mesh.
-    
+
     // to fully exploit this test, should be run in context of 1, 2, 4, 16 MPI ranks.
-    
+
     int rank = Teuchos::GlobalMPISession::getRank();
-    
+
     Teuchos::ParameterList pl;
-    
+
     int spaceDim = 2;
     bool useConformingTraces = true;
     PoissonFormulation form(spaceDim,useConformingTraces);
-    
+
     vector<bool> useStaticCondensationValues;
     useStaticCondensationValues.push_back(false);
     useStaticCondensationValues.push_back(true);
-    
+
     for (int condensationIndex=0; condensationIndex<useStaticCondensationValues.size(); condensationIndex++) {
       bool useStaticCondensation = useStaticCondensationValues[condensationIndex];
-      
+
       int H1Order = 1;
       int delta_k = 2;
       int horizontalCells = 1;
       int verticalCells = 1;
       double width = 1.0;
       double height = 1.0;
-      
+
       BFPtr poissonBilinearForm = form.bf();
-      
+
       pl.set("useMinRule", true);
       pl.set("bf",poissonBilinearForm);
       pl.set("H1Order", H1Order);
@@ -69,24 +70,24 @@ namespace {
       pl.set("y0",(double)0);
       pl.set("width", width);
       pl.set("height",height);
-      
+
       MeshPtr mesh = MeshFactory::quadMesh(pl);
-      
+
       // refine uniformly twice:
       mesh->hRefine(mesh->getTopology()->getActiveCellIndices());
       mesh->hRefine(mesh->getTopology()->getActiveCellIndices());
-      
+
       SolutionPtr soln = Solution::solution(mesh, BC::bc(), RHS::rhs(), form.bf()->graphNorm());
-      
+
       soln->setUseCondensedSolve(useStaticCondensation);
-      
+
       soln->initializeStiffnessAndLoad();
       soln->populateStiffnessAndLoad();
-      
+
       Teuchos::RCP<DofInterpreter> dofInterpreter = soln->getDofInterpreter();
-      
+
       Teuchos::RCP<Epetra_RowMatrix> stiffness = soln->getStiffnessMatrix();
-      
+
       for (int overlap=0; overlap<3; overlap++) {
         set<GlobalIndexType> cells = mesh->cellIDsInPartition();
         if (!hierarchical) {
@@ -128,9 +129,9 @@ namespace {
             }
             lastAncestralCells = ancestralCells;
           }
-          
+
 //          Camellia::print("ancestralCells", ancestralCells);
-          
+
           // once we've determined our partition's cell ancestors, we want all their descendants
           cells.clear();
           for (set<GlobalIndexType>::iterator cellIDIt = ancestralCells.begin();
@@ -142,32 +143,32 @@ namespace {
           }
 //          Camellia::print("cells", cells);
         }
-        
+
         vector<GlobalIndexType> cellsVector(cells.begin(),cells.end());
         set<GlobalIndexType> expectedGlobalDofIndices = dofInterpreter->importGlobalIndicesForCells(cellsVector);
-        
+
         //        set<GlobalIndexType> expectedGlobalDofIndices;
         //        for (set<GlobalIndexType>::iterator cellIDIt = cells.begin(); cellIDIt != cells.end(); cellIDIt++) {
         //          GlobalIndexType cellID = *cellIDIt;
         //          set<GlobalIndexType> cellIndices = dofInterpreter->globalDofIndicesForCell(cellID);
         //          expectedGlobalDofIndices.insert(cellIndices.begin(), cellIndices.end());
         //        }
-        
+
         // DEBUGGING output...
         //        if (useStaticCondensation) {
         //          ostringstream description;
         //          description << "expectedGlobalDofIndices for overlap " << overlap << " on rank " << rank;
         //          Camellia::print(description.str().c_str(), expectedGlobalDofIndices);
         //        }
-        
+
         OverlappingRowMatrix rowMatrix(stiffness, overlap, mesh, soln->getDofInterpreter(), hierarchical);
         set<GlobalIndexType> actualGlobalDofIndices = rowMatrix.RowIndices();
-        
+
         TEST_EQUALITY(expectedGlobalDofIndices.size(), actualGlobalDofIndices.size());
-        
+
         if (expectedGlobalDofIndices.size() == actualGlobalDofIndices.size()) {
           set<GlobalIndexType>::iterator actualIt = actualGlobalDofIndices.begin();
-          
+
           for (set<GlobalIndexType>::iterator expectedIt = expectedGlobalDofIndices.begin();
                expectedIt != expectedGlobalDofIndices.end(); expectedIt++, actualIt++) {
             GlobalIndexType expectedIndex = *expectedIt;
@@ -178,13 +179,13 @@ namespace {
       }
     }
   }
-  
+
   TEUCHOS_UNIT_TEST( OverlappingRowMatrix, OverlapDofOrdinalsTest )
   {
     bool hierarchical = false;
     testOverlapDofOrdinals(hierarchical, out, success);
   }
-  
+
   TEUCHOS_UNIT_TEST( OverlappingRowMatrix, HierarchicalOverlapDofOrdinalsTest )
   {
     bool hierarchical = true;
@@ -195,9 +196,9 @@ namespace {
   {
     // test checks that the rows in the overlapping matrix match what's expected
     // to fully exploit this test, should be run in context of 1, 2, 4, 16 MPI ranks.
-   
+
     int rank = Teuchos::GlobalMPISession::getRank();
-    
+
     int n = 16;
     FieldContainer<double> denseMatrix(n,n);
     double value = 0;
@@ -210,18 +211,18 @@ namespace {
         value += 1.0;
       }
     }
-    
+
 #ifdef HAVE_MPI
     Epetra_MpiComm Comm(MPI_COMM_WORLD);
     //cout << "rank: " << rank << " of " << numProcs << endl;
 #else
     Epetra_SerialComm Comm;
 #endif
-    
+
     Comm.Barrier(); // set breakpoint here to allow debugger attachment to other MPI processes than the one you automatically attached to.
-    
+
     set<GlobalIndexType> myGlobalDofs;
-    
+
     Epetra_Map map(n, 0, Comm); // define distribution
     Teuchos::RCP<Epetra_CrsMatrix> matrix = Teuchos::rcp( new Epetra_CrsMatrix(::Copy, map, n));
     for (int LID=0; LID<map.NumMyElements(); LID++) {
@@ -230,9 +231,9 @@ namespace {
       myGlobalDofs.insert(GID);
     }
     matrix->FillComplete();
-    
+
     double floatingTol = 1e-15;
-    
+
     // sanity check for this test: make sure that entries in matrix match denseMatrix
     for (int LID=0; LID<map.NumMyElements(); LID++) {
       int GID = map.GID(LID);
@@ -252,28 +253,28 @@ namespace {
     {
       set<GlobalIndexType> dist1 = myGlobalDofs;
       overlapDistributions.push_back(dist1);
-      
+
       set<GlobalIndexType> dist2 = myGlobalDofs;
       dist1.insert(0);
       dist1.insert(1);
       overlapDistributions.push_back(dist2);
-      
+
       set<GlobalIndexType> dist3 = myGlobalDofs;
       dist2.insert(n-2);
       dist2.insert(n-1);
       overlapDistributions.push_back(dist3);
     }
-    
+
     int maxOverlapLevel = 1;
     for (vector< set<GlobalIndexType> >::iterator distributionIt = overlapDistributions.begin(); distributionIt != overlapDistributions.end(); distributionIt++) {
       set<GlobalIndexType> myRowIndices = *distributionIt;
       OverlappingRowMatrix overlapMatrix(matrix, maxOverlapLevel, myRowIndices);
-      
+
       int expectedLocalRowCount = myRowIndices.size();
       int actualLocalRowCount = overlapMatrix.Map().NumMyElements();
-      
+
       TEST_EQUALITY(expectedLocalRowCount, actualLocalRowCount);
-      
+
       for (int localRowOrdinal=0; localRowOrdinal < actualLocalRowCount; localRowOrdinal++) {
         GlobalIndexType row = overlapMatrix.Map().GID(localRowOrdinal);
         FieldContainer<double> rowData(n);

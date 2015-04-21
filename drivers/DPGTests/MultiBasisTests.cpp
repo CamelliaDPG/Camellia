@@ -552,13 +552,14 @@ bool MultiBasisTests::testMultiBasisLegacyTest() {
   
   BFPtr bilinearForm = PoissonBilinearForm::poissonBilinearForm();
   
-  int polyOrder = 2; 
+  int polyOrder = 2;
+  vector<int> polyOrderVector(1,polyOrder);
   Teuchos::RCP<DofOrdering> trialOrdering;
   CellTopoPtr quad_4 = Camellia::CellTopology::quad();
   
   DofOrderingFactory dofOrderingFactory(bilinearForm);
   
-  trialOrdering = dofOrderingFactory.trialOrdering(polyOrder, quad_4, true);
+  trialOrdering = dofOrderingFactory.trialOrdering(polyOrderVector, quad_4, true);
   
   // suppose that the broken element is on the west side of the big element
   int parentSideIndexInNeighbor = 3;

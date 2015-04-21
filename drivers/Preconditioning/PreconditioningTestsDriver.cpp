@@ -1,32 +1,30 @@
-#include "RefinementStrategy.h"
-#include "PreviousSolutionFunction.h"
-#include "MeshFactory.h"
-#include <Teuchos_GlobalMPISession.hpp>
+#include "AdditiveSchwarz.h"
+#include "CamelliaDebugUtility.h"
+#include "GMGOperator.h"
 #include "GnuPlotUtil.h"
+#include "HDF5Exporter.h"
+#include "MeshFactory.h"
+#include "PreviousSolutionFunction.h"
+#include "RefinementStrategy.h"
+#include "Solver.h"
+#include "TypeDefs.h"
+
+#include "AztecOO.h"
 
 #include "Epetra_Operator_to_Epetra_Matrix.h"
 #include "EpetraExt_MatrixMatrix.h"
+#include "EpetraExt_RowMatrixOut.h"
+#include "EpetraExt_MultiVectorOut.h"
 
-#include "Solver.h"
 #include "Ifpack_AdditiveSchwarz.h"
 #include "Ifpack_Amesos.h"
 #include "Ifpack_IC.h"
 #include "Ifpack_ILU.h"
 
-// EpetraExt includes
-#include "EpetraExt_RowMatrixOut.h"
-#include "EpetraExt_MultiVectorOut.h"
-
-#include "AdditiveSchwarz.h"
-#include "MeshFactory.h"
-
-#include "GMGOperator.h"
-
-#include "HDF5Exporter.h"
-
-#include "CamelliaDebugUtility.h"
+#include <Teuchos_GlobalMPISession.hpp>
 
 using namespace Camellia;
+using namespace Intrepid;
 
 bool runGMGOperatorInDebugMode;
 int maxDofsForKLU;
@@ -56,7 +54,7 @@ GMGOperator::FactorType getFactorizationType(string factorizationTypeString) {
   TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "factorization type not recognized");
 }
 
-Teuchos::RCP<Epetra_Operator> CamelliaAdditiveSchwarzPreconditioner(Epetra_RowMatrix* A, int overlapLevel, MeshPtr mesh, Teuchos::RCP<DofInterpreter> dofInterpreter,
+Teuchos::RCP<Epetra_Operator> CamelliaAdditiveSchwarzPreconditioner(::Epetra_RowMatrix* A, int overlapLevel, MeshPtr mesh, Teuchos::RCP<DofInterpreter> dofInterpreter,
                                                                     GMGOperator::FactorType schwarzBlockFactorization,
                                                                     int levelOfFill, double fillRatio) {
   
@@ -186,15 +184,15 @@ public:
   }
   
   int solve() {
-    AztecOO solver(problem());
+    AztecOO solver(this->_stiffnessMatrix.get(), this->_lhs.get(), this->_rhs.get());
     
     solver.SetAztecOption(AZ_solver, AZ_cg);
     
-    Epetra_RowMatrix *A = problem().GetMatrix();
+    Teuchos::RCP<Epetra_CrsMatrix> A = this->_stiffnessMatrix;
     
     Teuchos::RCP<Epetra_Operator> preconditioner;
     if (_mesh != Teuchos::null) {
-      preconditioner = CamelliaAdditiveSchwarzPreconditioner(A, _schwarzOverlap, _mesh, _dofInterpreter, _schwarzBlockFactorization,
+      preconditioner = CamelliaAdditiveSchwarzPreconditioner(A.get(), _schwarzOverlap, _mesh, _dofInterpreter, _schwarzBlockFactorization,
                                                              _levelOfFill, _fillRatio);
       
 //      Teuchos::RCP< Epetra_CrsMatrix > M;
@@ -205,7 +203,7 @@ public:
 //      EpetraExt::RowMatrixToMatrixMarketFile("/tmp/preconditioner.dat",*M, NULL, NULL, false);
       
     } else {
-      preconditioner = IfPackAdditiveSchwarzPreconditioner(A, _schwarzOverlap, _schwarzBlockFactorization, _levelOfFill, _fillRatio);
+      preconditioner = IfPackAdditiveSchwarzPreconditioner(A.get(), _schwarzOverlap, _schwarzBlockFactorization, _levelOfFill, _fillRatio);
     }
     
     if (_useSchwarzPreconditioner) {
@@ -268,10 +266,11 @@ public:
     return solveResult;
   }
   Teuchos::RCP< Epetra_CrsMatrix > getPreconditionerMatrix(const Epetra_Map &map) {
-    Epetra_RowMatrix *A = problem().GetMatrix();
+    Teuchos::RCP<Epetra_CrsMatrix> A = this->_stiffnessMatrix;
     Teuchos::RCP<Epetra_Operator> preconditioner;
     if (_mesh != Teuchos::null) {
-      preconditioner = CamelliaAdditiveSchwarzPreconditioner(A, _schwarzOverlap, _mesh, _dofInterpreter, _schwarzBlockFactorization, _levelOfFill, _fillRatio);
+      preconditioner = CamelliaAdditiveSchwarzPreconditioner(A.get(), _schwarzOverlap, _mesh, _dofInterpreter,
+                                                             _schwarzBlockFactorization, _levelOfFill, _fillRatio);
       
 //      Teuchos::RCP< Epetra_CrsMatrix > M;
 //      M = Epetra_Operator_to_Epetra_Matrix::constructInverseMatrix(*preconditioner, A->RowMatrixRowMap());
@@ -281,7 +280,8 @@ public:
 //      EpetraExt::RowMatrixToMatrixMarketFile("/tmp/preconditioner.dat",*M, NULL, NULL, false);
       
     } else {
-      preconditioner = IfPackAdditiveSchwarzPreconditioner(A, _schwarzOverlap, _schwarzBlockFactorization, _levelOfFill, _fillRatio);
+      preconditioner = IfPackAdditiveSchwarzPreconditioner(A.get(), _schwarzOverlap, _schwarzBlockFactorization,
+                                                           _levelOfFill, _fillRatio);
     }
     
     return Epetra_Operator_to_Epetra_Matrix::constructInverseMatrix(*preconditioner, map);
@@ -703,7 +703,7 @@ void run(ProblemChoice problemChoice, int &iterationCount, int spaceDim, int num
       EpetraExt::RowMatrixToMatrixMarketFile("P.dat",*P, NULL, NULL, false);
       
       if (rank==0) cout << "writing A to A_fine.dat.\n";
-      EpetraExt::RowMatrixToMatrixMarketFile("A_fine.dat",*A_coarse, NULL, NULL, false);
+      EpetraExt::RowMatrixToMatrixMarketFile("A_fine.dat",*A, NULL, NULL, false);
       
       if (rank==0) cout << "writing smoother to S.dat.\n";
       Teuchos::RCP< Epetra_CrsMatrix > S = op->getSmootherAsMatrix();

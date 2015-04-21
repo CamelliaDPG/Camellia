@@ -303,7 +303,7 @@ bool GMGTests::testGMGOperatorIdentityLocalCoefficientMap() {
         IPPtr graphNorm = bf->graphNorm();
         
         // as a first test, do "multi" grid between mesh and itself.  Solution should match phiExact.
-        Teuchos::RCP<Solver> coarseSolver = Teuchos::rcp( new KluSolver(true) );
+        Teuchos::RCP<Solver> coarseSolver = Teuchos::rcp( new Amesos2Solver(true) );
         GMGOperator gmgOperator(zeroBCs, mesh, graphNorm, mesh, exactPoissonSolution->getDofInterpreter(),
                                 exactPoissonSolution->getPartitionMap(), coarseSolver, useStaticCondensation);
 
@@ -394,7 +394,7 @@ bool GMGTests::testGMGOperatorIdentityRHSMap() {
       IPPtr graphNorm = bf->graphNorm();
       
       // as a first test, do "multi" grid between mesh and itself.  Solution should match phiExact.
-      Teuchos::RCP<Solver> coarseSolver = Teuchos::rcp( new KluSolver(true) );
+      Teuchos::RCP<Solver> coarseSolver = Teuchos::rcp( new Amesos2Solver(true) );
 
       if (useStaticCondensation) {
         // need to populate local stiffness matrices before dealing with the RHS.
@@ -484,7 +484,7 @@ bool GMGTests::testGMGOperatorP() {
     int maxIters = 100;
     double iter_tol = 1e-6;
     
-    Teuchos::RCP<Solver> coarseSolver = Teuchos::rcp( new KluSolver(true) );
+    Teuchos::RCP<Solver> coarseSolver = Teuchos::rcp( new Amesos2Solver(true) );
     
     if (useStaticCondensation) {
       // need to populate local stiffness matrices for sake of condensed solver
@@ -622,7 +622,7 @@ bool GMGTests::testGMGSolverIdentity2DRefinedMeshes() {
       double iter_tol = 1e-11;
       bool applySmoothing = false;
       int maxIters = applySmoothing ? 100 : 1; // if smoothing not applied, then GMG should recover exactly the direct solution, in 1 iteration
-      Teuchos::RCP<Solver> coarseSolver = Teuchos::rcp( new KluSolver(true) );
+      Teuchos::RCP<Solver> coarseSolver = Teuchos::rcp( new Amesos2Solver(true) );
       
       //    solnFine->setWriteMatrixToFile(true, "/tmp/A_fine.dat");
       
@@ -804,7 +804,7 @@ bool GMGTests::testGMGSolverIdentityUniformMeshes() {
           exactPoissonSolution->populateStiffnessAndLoad();
         }
         
-        Teuchos::RCP<Solver> coarseSolver = Teuchos::rcp( new KluSolver(true) );
+        Teuchos::RCP<Solver> coarseSolver = Teuchos::rcp( new Amesos2Solver(true) );
         int maxIters = 100;
         double iter_tol = 1e-14;
         Teuchos::RCP<GMGSolver> gmgSolver = Teuchos::rcp( new GMGSolver(zeroBCs, mesh, graphNorm, mesh,
@@ -1020,7 +1020,7 @@ bool GMGTests::testGMGSolverTwoGrid() {
       double iter_tol = 1e-12;
       bool applySmoothing = true;
       int maxIters = 200;
-      Teuchos::RCP<Solver> coarseSolver = Teuchos::rcp( new KluSolver(true) );
+      Teuchos::RCP<Solver> coarseSolver = Teuchos::rcp( new Amesos2Solver(true) );
       Teuchos::RCP<GMGSolver> gmgSolver = Teuchos::rcp( new GMGSolver(zeroBCs, coarseMesh, graphNorm, fineMesh,
                                                                       exactPoissonSolution->getDofInterpreter(),
                                                                       exactPoissonSolution->getPartitionMap(),
@@ -1106,7 +1106,7 @@ bool GMGTests::testGMGSolverThreeGrid() {
       double iter_tol = 1e-10;
       bool applySmoothing = true;
       int maxIters = 200;
-      Teuchos::RCP<Solver> coarsestSolver = Teuchos::rcp( new KluSolver(true) );
+      Teuchos::RCP<Solver> coarsestSolver = Teuchos::rcp( new Amesos2Solver(true) );
       
       coarseSolution->setUseCondensedSolve(useStaticCondensation);
       exactPoissonSolution->setUseCondensedSolve(useStaticCondensation);
@@ -1206,7 +1206,7 @@ bool GMGTests::testProlongationOperator() {
   
   double iter_tol = 1e-8;
   int maxIters = 200;
-  Teuchos::RCP<Solver> coarseSolver = Teuchos::rcp( new KluSolver(true) );
+  Teuchos::RCP<Solver> coarseSolver = Teuchos::rcp( new Amesos2Solver(true) );
   Teuchos::RCP<GMGSolver> gmgSolver = Teuchos::rcp( new GMGSolver(zeroBCs, coarseMesh, graphNorm, fineMesh,
                                                                   exactPoissonSolution->getDofInterpreter(),
                                                                   exactPoissonSolution->getPartitionMap(),

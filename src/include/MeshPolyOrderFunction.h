@@ -9,16 +9,17 @@
 #ifndef Camellia_debug_MeshPolyOrderFunction_h
 #define Camellia_debug_MeshPolyOrderFunction_h
 
+#include "TypeDefs.h"
+
 #include "Mesh.h"
 
-class Function;
-typedef Teuchos::RCP<Function> FunctionPtr;
-
-class MeshPolyOrderFunction : public Function {
-  Teuchos::RCP<Mesh> _mesh;
-public:
-  MeshPolyOrderFunction(Teuchos::RCP<Mesh> mesh) : Function(0) { _mesh = mesh;} // scalar
-  void values(FieldContainer<double> &values, BasisCachePtr basisCache);
-};
+namespace Camellia {
+	class MeshPolyOrderFunction : public TFunction<double> {
+	  Teuchos::RCP<Mesh> _mesh;
+	public:
+	  MeshPolyOrderFunction(Teuchos::RCP<Mesh> mesh) : TFunction<double>(0) { _mesh = mesh;} // scalar
+	  void values(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache);
+	};
+}
 
 #endif

@@ -31,6 +31,7 @@
 //
 // @HEADER 
 
+using namespace Camellia;
 using namespace Intrepid;
 using namespace std;
 

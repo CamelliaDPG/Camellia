@@ -3,6 +3,8 @@
 
 #include "BF.h"
 
+using namespace Camellia;
+
 class ConfusionBilinearForm {
 private:
   double _epsilon, _beta_x, _beta_y;

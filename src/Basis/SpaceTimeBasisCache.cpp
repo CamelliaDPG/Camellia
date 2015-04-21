@@ -6,11 +6,13 @@
 //
 //
 
+#include "TypeDefs.h"
+
 #include "SpaceTimeBasisCache.h"
 #include "TensorBasis.h"
 
-typedef Teuchos::RCP< Intrepid::FieldContainer<double> > FCPtr;
-typedef Teuchos::RCP< const Intrepid::FieldContainer<double> > constFCPtr;
+using namespace Intrepid;
+using namespace Camellia;
 
 // volume constructor
 SpaceTimeBasisCache::SpaceTimeBasisCache(MeshPtr spaceTimeMesh, ElementTypePtr spaceTimeElementType,
@@ -140,7 +142,18 @@ SpaceTimeBasisCache::SpaceTimeBasisCache(int sideOrdinal, Teuchos::RCP<SpaceTime
     _temporalCache = temporalCacheVolume;
   } else {
     _spatialCache = spatialCacheVolume;
-    _temporalCache = Teuchos::null;
+    // copy the temporalCacheVolume so that we can set a single reference cell point:
+    _temporalCache = Teuchos::rcp( new BasisCache(temporalCacheVolume->getPhysicalCellNodes(), temporalCacheVolume->cellTopology(),
+                                                  temporalCacheVolume->cubatureDegree(), false) );
+    FieldContainer<double> temporalNode(1,1);
+    temporalNode(0,0) = getTemporalNodeCoordinateRefSpace();
+    FieldContainer<double> temporalWeight(1);
+    temporalWeight(0) = 1.0;
+    _temporalCache->setRefCellPoints(temporalNode, temporalWeight);
+    
+    bool createSideCache = true;
+    vector<GlobalIndexType> cellIDs; //empty
+    _temporalCache->setPhysicalCellNodes(temporalCacheVolume->getPhysicalCellNodes(), cellIDs, createSideCache);
   }
 }
 
@@ -199,8 +212,20 @@ void SpaceTimeBasisCache::getSpaceTimeCubatureDegrees(ElementTypePtr spaceTimeTy
 BasisCachePtr SpaceTimeBasisCache::getSpatialBasisCache() {
   return _spatialCache;
 }
+
 BasisCachePtr SpaceTimeBasisCache::getTemporalBasisCache() {
   return _temporalCache;
+}
+
+double SpaceTimeBasisCache::getTemporalNodeCoordinateRefSpace() {
+  TEUCHOS_TEST_FOR_EXCEPTION(!this->isSideCache(), std::invalid_argument, "getTemporalNodeCoordinateRefSpace() only supported for side caches for temporal sides");
+  TEUCHOS_TEST_FOR_EXCEPTION(this->cellTopology()->sideIsSpatial(this->getSideIndex()), std::invalid_argument,
+                             "getTemporalNodeCoordinateRefSpace() only supported for side caches for temporal sides");
+  
+  int temporalNodeOrdinal = this->cellTopology()->getTemporalComponentSideOrdinal(this->getSideIndex());
+  FieldContainer<double> lineRefNodes(2,1);
+  CamelliaCellTools::refCellNodesForTopology(lineRefNodes, CellTopology::line());
+  return lineRefNodes(temporalNodeOrdinal,0);
 }
 
 constFCPtr SpaceTimeBasisCache::getTensorBasisValues(TensorBasis<double>* tensorBasis,
@@ -308,10 +333,37 @@ void SpaceTimeBasisCache::getTensorialComponentPoints(CellTopoPtr spaceTimeTopo,
   }
 }
 
+void SpaceTimeBasisCache::getReferencePointComponents(const FieldContainer<double> &tensorPoints, FieldContainer<double> &spacePoints,
+                                                      FieldContainer<double> &timePoints) {
+  // this->cellTopology() refers to volume topology; set thisTopology to be side topology if this is a side cache
+  CellTopoPtr thisTopology = this->isSideCache() ? this->cellTopology()->getSide(this->getSideIndex()) : this->cellTopology();
+  
+  if (!this->isSideCache())
+  {
+    // volume cache
+    getTensorialComponentPoints(thisTopology, tensorPoints, spacePoints, timePoints);
+  }
+  else if ( this->cellTopology()->sideIsSpatial(this->getSideIndex()))
+  {
+    // side cache with spatial side
+    TEUCHOS_TEST_FOR_EXCEPTION(this->cellTopology()->getTensorialDegree() == 0, std::invalid_argument,
+                               "Spatial sides in SpaceTimeBasisCache should have tensorial degree > 0.");
+    getTensorialComponentPoints(thisTopology, tensorPoints, spacePoints, timePoints);
+  }
+  else
+  {
+    // side is temporal
+    // tensorial degree = 0 : spaceRefCellPoints = pointsRefCell, and timeRefCellPoints is a single point corresponding to the temporal node
+    spacePoints = tensorPoints;
+    timePoints.resize(1,1);
+    timePoints(0,0) = getTemporalNodeCoordinateRefSpace();
+  }
+}
+
 void SpaceTimeBasisCache::setRefCellPoints(const Intrepid::FieldContainer<double> &pointsRefCell) {
   FieldContainer<double> spaceRefCellPoints, timeRefCellPoints;
   
-  getTensorialComponentPoints(this->cellTopology(), pointsRefCell, spaceRefCellPoints, timeRefCellPoints);
+  getReferencePointComponents(pointsRefCell, spaceRefCellPoints, timeRefCellPoints);
   
   if (spaceRefCellPoints.size() > 0) { // if size is zero, it's a node, and we let _spatialCache do what it likes for setting up ref cell points.
     _spatialCache->setRefCellPoints(spaceRefCellPoints);
@@ -325,7 +377,7 @@ void SpaceTimeBasisCache::setRefCellPoints(const Intrepid::FieldContainer<double
                                            const Intrepid::FieldContainer<double> &cubatureWeights) {
   FieldContainer<double> spaceRefCellPoints, timeRefCellPoints;
   
-  getTensorialComponentPoints(this->cellTopology(), pointsRefCell, spaceRefCellPoints, timeRefCellPoints);
+  getReferencePointComponents(pointsRefCell, spaceRefCellPoints, timeRefCellPoints);
   
   if (spaceRefCellPoints.size() == 0) {
     // then the cubature weights belong just to the temporal points:
@@ -342,7 +394,7 @@ void SpaceTimeBasisCache::setRefCellPoints(const Intrepid::FieldContainer<double
     } else {
       // tease out the weights (note we assume here that they're nonzero everywhere)
       // these are in an outer product structure
-      // we additionally constrain the temporal weights to sum to 2 (the measure of the reference line)
+      // we additionally constrain the temporal weights to sum to 2.0
       double timeSumAtSpace0 = 0;
       for (int timePointOrdinal=0; timePointOrdinal < numTimePoints; timePointOrdinal++) {
         int spacePointOrdinal = 0;
@@ -414,6 +466,18 @@ constFCPtr SpaceTimeBasisCache::getValues(BasisPtr basis, Camellia::EOperator op
 }
 
 constFCPtr SpaceTimeBasisCache::getTransformedValues(BasisPtr basis, Camellia::EOperator op, bool useCubPointsSideRefCell) {
+  if ( isSideCache() && !cellTopology()->sideIsSpatial(getSideIndex()) ) {
+    // in this case, two possibilities:
+    // 1. basis is a volume basis, in which case we want to handle things in terms of tensor product, as usual
+    // 2. basis is a trace basis, defined on the spatial topology only
+    // In the second case, we want to use the spatial basis cache, and just pass in the basis.  In this case useCubPointsSideRefCell
+    // ought to be false: this is used when we evaluate a volume basis on the side.
+    if (_spatialCache->cellTopology()->getKey() == basis->domainTopology()->getKey()) {
+      TEUCHOS_TEST_FOR_EXCEPTION(useCubPointsSideRefCell == true, std::invalid_argument, "useCubPointsSideRefCell should not be true for a trace basis...");
+      return _spatialCache->getTransformedValues(basis, op);
+    }
+  }
+  
   if (_temporalCache == Teuchos::null) {
     // then we must be a side cache for a temporal side
     return this->BasisCache::getTransformedValues(basis, op, useCubPointsSideRefCell);
@@ -436,17 +500,34 @@ constFCPtr SpaceTimeBasisCache::getTransformedValues(BasisPtr basis, Camellia::E
   
   Camellia::EOperator spaceOp = this->spaceOp(op), timeOp = this->timeOp(op);
   
-  constFCPtr spatialValues = _spatialCache->getTransformedValues(spatialBasis, spaceOp, useCubPointsSideRefCell);
-  constFCPtr temporalValues = _temporalCache->getTransformedValues(temporalBasis, timeOp, useCubPointsSideRefCell);
+  constFCPtr spatialValues, temporalValues;
+  if (useCubPointsSideRefCell && !cellTopology()->sideIsSpatial(getSideIndex())) {
+    // then _spatialCache is a volume cache already, so we shouldn't tell it to use volume points...
+    spatialValues = _spatialCache->getTransformedValues(spatialBasis, spaceOp, false);
+  } else {
+    spatialValues = _spatialCache->getTransformedValues(spatialBasis, spaceOp, useCubPointsSideRefCell);
+  }
   
+  // _temporalCache is always a volume cache
+  temporalValues = _temporalCache->getTransformedValues(temporalBasis, timeOp, false);
   return getTensorBasisValues(tensorBasis, FIELD_INDEX, POINT_INDEX, spatialValues, temporalValues,
                               spaceOpForSizing, timeOpForSizing);
 }
 
 constFCPtr SpaceTimeBasisCache::getTransformedWeightedValues(BasisPtr basis, Camellia::EOperator op, bool useCubPointsSideRefCell) {
-  if (_temporalCache == Teuchos::null) {
-    // then we must be a side cache for a temporal side
-    return this->BasisCache::getTransformedWeightedValues(basis, op, useCubPointsSideRefCell);
+  
+//  cout << "Basis domainTopology: " << basis->domainTopology()->getName() << endl;
+  
+  if (isSideCache() && !cellTopology()->sideIsSpatial(getSideIndex()) ) {
+    // in this case, two possibilities:
+    // 1. basis is a volume basis, in which case we want to handle things in terms of tensor product, as usual
+    // 2. basis is a trace basis, defined on the spatial topology only
+    // In the second case, we want to use the spatial basis cache, and just pass in the basis.  In this case useCubPointsSideRefCell
+    // ought to be false: this is used when we evaluate a volume basis on the side.
+    if (_spatialCache->cellTopology()->getKey() == basis->domainTopology()->getKey()) {
+      TEUCHOS_TEST_FOR_EXCEPTION(useCubPointsSideRefCell == true, std::invalid_argument, "useCubPointsSideRefCell should not be true for a trace basis...");
+      return _spatialCache->getTransformedWeightedValues(basis, op);
+    }
   }
   
   const int FIELD_INDEX = 1, POINT_INDEX = 2;
@@ -454,14 +535,27 @@ constFCPtr SpaceTimeBasisCache::getTransformedWeightedValues(BasisPtr basis, Cam
   // compute tensorial components:
   TensorBasis<double>* tensorBasis = dynamic_cast<TensorBasis<double>*>(basis.get());
   
+  if (tensorBasis == NULL) {
+    cout << "basis must be a subclass of TensorBasis<double>!\n";
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "basis must be a subclass of TensorBasis<double>!");
+  }
+  
   BasisPtr spatialBasis = tensorBasis->getSpatialBasis();
   BasisPtr temporalBasis = tensorBasis->getTemporalBasis();
   
   Intrepid::EOperator spaceOpForSizing = this->spaceOpForSizing(op), timeOpForSizing = this->timeOpForSizing(op);
   Camellia::EOperator spaceOp = this->spaceOp(op), timeOp = this->timeOp(op);
   
-  constFCPtr spatialValues = _spatialCache->getTransformedWeightedValues(spatialBasis, spaceOp, useCubPointsSideRefCell);
-  constFCPtr temporalValues = _temporalCache->getTransformedWeightedValues(temporalBasis, timeOp, useCubPointsSideRefCell);
+  constFCPtr spatialValues, temporalValues;
+  if (useCubPointsSideRefCell && !cellTopology()->sideIsSpatial(getSideIndex())) {
+    // then _spatialCache is a volume cache already, so we shouldn't tell it to use volume points...
+    spatialValues = _spatialCache->getTransformedWeightedValues(spatialBasis, spaceOp, false);
+  } else {
+    spatialValues = _spatialCache->getTransformedWeightedValues(spatialBasis, spaceOp, useCubPointsSideRefCell);
+  }
+  
+  // _temporalCache is always a volume cache
+  temporalValues = _temporalCache->getTransformedWeightedValues(temporalBasis, timeOp, false);
   
   return getTensorBasisValues(tensorBasis, FIELD_INDEX, POINT_INDEX, spatialValues, temporalValues, spaceOpForSizing, timeOpForSizing);
 }
@@ -479,16 +573,25 @@ Camellia::EOperator SpaceTimeBasisCache::spaceOp(Camellia::EOperator op) {
 }
 
 Intrepid::EOperator SpaceTimeBasisCache::spaceOpForSizing(Camellia::EOperator op) {
+  // idea here is to return an Intrepid::EOperator that has the same effect on FieldContainer sizing (really, the
+  // rank of the value) as the Camellia::EOperator provided.
   switch (op) {
+    // rank-increasing:
     case OP_GRAD:
-      return OPERATOR_GRAD;
+      return Intrepid::OPERATOR_GRAD;
+    // rank-decreasing:
     case OP_DIV:
-      return OPERATOR_DIV;
+    case OP_X:
+    case OP_Y:
+    case OP_Z:
+      return Intrepid::OPERATOR_DIV;
+    // rank-switching (0 to 1, 1 to 0) in 2D, rank-preserving in 3D:
     case OP_CURL:
-      return OPERATOR_CURL;
+      return Intrepid::OPERATOR_CURL;
       break;
+    // rank-preserving:
     default:
-      return OPERATOR_VALUE;
+      return Intrepid::OPERATOR_VALUE;
       break;
   }
 }
@@ -508,5 +611,5 @@ Camellia::EOperator SpaceTimeBasisCache::timeOp(Camellia::EOperator op) {
 
 Intrepid::EOperator SpaceTimeBasisCache::timeOpForSizing(Camellia::EOperator op) {
   // we do not support any rank-increasing or rank-decreasing operations in time.
-  return OPERATOR_VALUE;
+  return Intrepid::OPERATOR_VALUE;
 }

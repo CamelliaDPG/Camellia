@@ -8,6 +8,9 @@
 
 #include "SpatialFilter.h"
 
+using namespace Intrepid;
+using namespace Camellia;
+
 class SpatialFilterMatchingX : public SpatialFilter {
   double _tol;
   double _xToMatch;
@@ -424,14 +427,16 @@ bool NegatedSpatialFilter::matchesPoints(FieldContainer<bool> &pointsMatch, Basi
   return somePointMatches;
 }
 
-SpatialFilterPtr operator!(SpatialFilterPtr sf) {
-  return SpatialFilter::negatedFilter(sf);
-}
+namespace Camellia {
+  SpatialFilterPtr operator!(SpatialFilterPtr sf) {
+    return SpatialFilter::negatedFilter(sf);
+  }
 
-SpatialFilterPtr operator|(SpatialFilterPtr sf1, SpatialFilterPtr sf2) {
-  return SpatialFilter::unionFilter(sf1, sf2);
-}
+  SpatialFilterPtr operator|(SpatialFilterPtr sf1, SpatialFilterPtr sf2) {
+    return SpatialFilter::unionFilter(sf1, sf2);
+  }
 
-SpatialFilterPtr operator&(SpatialFilterPtr sf1, SpatialFilterPtr sf2) {
-  return SpatialFilter::intersectionFilter(sf1, sf2);
+  SpatialFilterPtr operator&(SpatialFilterPtr sf1, SpatialFilterPtr sf2) {
+    return SpatialFilter::intersectionFilter(sf1, sf2);
+  }
 }

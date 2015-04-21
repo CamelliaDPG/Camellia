@@ -20,6 +20,9 @@
 #include <Epetra_SerialComm.h>
 #endif
 
+using namespace Intrepid;
+using namespace Camellia;
+
 map<int,int> MeshFactory::_emptyIntIntMap;
 
 static ParametricCurvePtr parametricRect(double width, double height, double x0, double y0) {
@@ -38,13 +41,14 @@ static ParametricCurvePtr parametricRect(double width, double height, double x0,
     Epetra_SerialComm Comm;
     EpetraExt::HDF5 hdf5(Comm);
     hdf5.Open(filename);
-    int vertexIndicesSize, topoKeysSize, verticesSize, trialOrderEnhancementsSize, testOrderEnhancementsSize, histArraySize;
+    int vertexIndicesSize, topoKeysSize, verticesSize, trialOrderEnhancementsSize, testOrderEnhancementsSize, histArraySize, H1OrderSize;
     hdf5.Read("Mesh", "vertexIndicesSize", vertexIndicesSize);
     hdf5.Read("Mesh", "topoKeysSize", topoKeysSize);
     hdf5.Read("Mesh", "verticesSize", verticesSize);
     hdf5.Read("Mesh", "trialOrderEnhancementsSize", trialOrderEnhancementsSize);
     hdf5.Read("Mesh", "testOrderEnhancementsSize", testOrderEnhancementsSize);
     hdf5.Read("Mesh", "histArraySize", histArraySize);
+    hdf5.Read("Mesh", "H1OrderSize", H1OrderSize);
 
     int topoKeysIntSize = topoKeysSize * sizeof(Camellia::CellTopologyKey) / sizeof(int);
     
@@ -65,19 +69,19 @@ static ParametricCurvePtr parametricRect(double width, double height, double x0,
     } else {
     }
     
-    int dimension, H1Order, deltaP;
+    int dimension, deltaP;
     vector<int> vertexIndices(vertexIndicesSize);
     vector<Camellia::CellTopologyKey> topoKeys(topoKeysSize);
     vector<int> trialOrderEnhancementsVec(trialOrderEnhancementsSize);
     vector<int> testOrderEnhancementsVec(testOrderEnhancementsSize);
     vector<double> vertices(verticesSize);
     vector<int> histArray(histArraySize);
+    vector<int> H1Order(H1OrderSize);
     string GDARule;
     hdf5.Read("Mesh", "dimension", dimension);
     hdf5.Read("Mesh", "vertexIndices", H5T_NATIVE_INT, vertexIndicesSize, &vertexIndices[0]);
     hdf5.Read("Mesh", "topoKeys", H5T_NATIVE_INT, topoKeysIntSize, &topoKeys[0]);
     hdf5.Read("Mesh", "vertices", H5T_NATIVE_DOUBLE, verticesSize, &vertices[0]);
-    hdf5.Read("Mesh", "H1Order", H1Order);
     hdf5.Read("Mesh", "deltaP", deltaP);
     hdf5.Read("Mesh", "GDARule", GDARule);
     if (GDARule == "min")
@@ -90,6 +94,8 @@ static ParametricCurvePtr parametricRect(double width, double height, double x0,
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Invalid GDA");
     hdf5.Read("Mesh", "trialOrderEnhancements", H5T_NATIVE_INT, trialOrderEnhancementsSize, &trialOrderEnhancementsVec[0]);
     hdf5.Read("Mesh", "testOrderEnhancements", H5T_NATIVE_INT, testOrderEnhancementsSize, &testOrderEnhancementsVec[0]);
+    hdf5.Read("Mesh", "H1Order", H5T_NATIVE_INT, H1OrderSize, &H1Order[0]);
+
     if (histArraySize > 0) hdf5.Read("Mesh", "refinementHistory", H5T_NATIVE_INT, histArraySize, &histArray[0]);
     hdf5.Close();
 
@@ -468,6 +474,12 @@ MeshTopologyPtr MeshFactory::quadMeshTopology(double width, double height, int h
   
   MeshGeometryPtr geometry = Teuchos::rcp( new MeshGeometry(vertices, allElementVertices, cellTopos));
   return Teuchos::rcp( new MeshTopology(geometry, periodicBCs) );
+}
+
+MeshPtr MeshFactory::hemkerMesh(double meshWidth, double meshHeight, double cylinderRadius, // cylinder is centered in quad mesh.
+                                BFPtr bilinearForm, int H1Order, int pToAddTest)
+{
+  return shiftedHemkerMesh(-meshWidth/2, meshWidth/2, meshHeight, cylinderRadius, bilinearForm, H1Order, pToAddTest);
 }
 
 MeshPtr MeshFactory::intervalMesh(BFPtr bf, double xLeft, double xRight, int numElements, int H1Order, int delta_k) {
@@ -1119,3 +1131,134 @@ MeshPtr MeshFactory::shiftedHemkerMesh(double xLeft, double xRight, double meshH
   mesh->setEdgeToCurveMap(globalEdgeToCurveMap);
   return mesh;
 }
+
+// TODO: test this!
+MeshPtr MeshFactory::spaceTimeMesh(MeshTopologyPtr spatialMeshTopology, double t0, double t1,
+                                   BFPtr bf, int spatialH1Order, int temporalH1Order, int pToAdd) {
+  MeshTopologyPtr meshTopology = spaceTimeMeshTopology(spatialMeshTopology, t0, t1);
+  
+  vector<int> H1Order(2);
+  H1Order[0] = spatialH1Order;
+  H1Order[1] = temporalH1Order;
+  
+  MeshPtr mesh = Teuchos::rcp( new Mesh (meshTopology, bf, H1Order, pToAdd) );
+  
+  return mesh;
+}
+
+// TODO: test this!
+MeshTopologyPtr MeshFactory::spaceTimeMeshTopology(MeshTopologyPtr spatialMeshTopology, double t0, double t1) {
+  // we allow spatialMeshTopology to have been refined; we start with a coarse space-time topology matching the root spatial topology,
+  // and then refine accordingly...
+  
+  // (For now, though, we do make the assumption that all refinements are regular (isotropic).)
+  
+  int spaceDim = spatialMeshTopology->getSpaceDim();
+  int spaceTimeDim = spaceDim + 1;
+  
+  MeshTopologyPtr rootSpatialTopology = spatialMeshTopology->getRootMeshTopology();
+  MeshTopologyPtr spaceTimeTopology = Teuchos::rcp( new MeshTopology( spaceTimeDim ));
+  
+  /* 
+   This is something of a conceit, but it's nice if the vertex indices in the space-time mesh topology are
+   in the following relationship to the spatialMeshTopology:
+   
+   If v is a vertexIndex in spatialMeshTopology and spatialMeshTopology has N vertices, then
+   - (v,t0) has vertexIndex v in spaceTimeMeshTopology, and
+   - (v,t1) has vertexIndex v+N in spaceTimeMeshTopology.
+  */
+  
+  IndexType N = spatialMeshTopology->getEntityCount(0);
+  vector<double> spaceTimeVertex(spaceTimeDim);
+  FieldContainer<double> timeValues(2,1);
+  timeValues[0] = t0;
+  timeValues[1] = t1;
+  for (int i=0; i<timeValues.size(); i++) {
+    for (IndexType vertexIndex=0; vertexIndex<N; vertexIndex++) {
+      const vector<double> *spaceVertex = &spatialMeshTopology->getVertex(vertexIndex);
+      for (int d=0; d<spaceDim; d++) {
+        spaceTimeVertex[d] = (*spaceVertex)[d];
+      }
+      spaceTimeVertex[spaceDim] = timeValues(i,0);
+      spaceTimeTopology->addVertex(spaceTimeVertex);
+    }
+  }
+  
+  set<IndexType> cellIndices = rootSpatialTopology->getRootCellIndices();
+  int tensorialDegree = 1;
+  vector< FieldContainer<double> > componentNodes(2);
+  componentNodes[1] = timeValues;
+  FieldContainer<double> spatialCellNodes;
+  FieldContainer<double> spaceTimeCellNodes;
+  
+  map<IndexType,IndexType> cellIDMap; // from space-time ID to corresponding spatial ID
+  
+  for (set<IndexType>::iterator cellIt = cellIndices.begin(); cellIt != cellIndices.end(); cellIt++) {
+    IndexType cellIndex = *cellIt;
+    CellPtr spatialCell = rootSpatialTopology->getCell(cellIndex);
+    CellTopoPtr spaceTimeCellTopology = CellTopology::cellTopology(spatialCell->topology(), tensorialDegree);
+    int vertexCount = spatialCell->topology()->getVertexCount();
+
+    spatialCellNodes.resize(vertexCount,spaceDim);
+    const vector<IndexType>* vertexIndices = &spatialCell->vertices();
+    for (int vertex=0; vertex<vertexCount; vertex++) {
+      IndexType vertexIndex = (*vertexIndices)[vertex];
+      for (int i=0; i<spaceDim; i++) {
+        spatialCellNodes(vertex,i) = spatialMeshTopology->getVertex(vertexIndex)[i];
+      }
+    }
+    componentNodes[0] = spatialCellNodes;
+    
+    spaceTimeCellNodes.resize(spaceTimeCellTopology->getVertexCount(),spaceTimeDim);
+    spaceTimeCellTopology->initializeNodes(componentNodes, spaceTimeCellNodes);
+    
+    CellPtr spaceTimeCell = spaceTimeTopology->addCell(spaceTimeCellTopology, spaceTimeCellNodes);
+    cellIDMap[spaceTimeCell->cellIndex()] = cellIndex;
+  }
+  
+  bool noCellsToRefine = false;
+  
+  while (!noCellsToRefine) {
+    noCellsToRefine = true;
+    
+    set<IndexType> activeSpaceTimeCellIndices = spaceTimeTopology->getActiveCellIndices();
+    for (set<IndexType>::iterator cellIt = activeSpaceTimeCellIndices.begin(); cellIt != activeSpaceTimeCellIndices.end(); cellIt++) {
+      IndexType spaceTimeCellIndex = *cellIt;
+      if (cellIDMap.find(spaceTimeCellIndex) != cellIDMap.end()) {
+        IndexType spatialCellIndex = cellIDMap[spaceTimeCellIndex];
+        CellPtr spatialCell = spatialMeshTopology->getCell(spatialCellIndex);
+        if (spatialCell->isParent()) {
+          noCellsToRefine = false; // indicate we refined some on this pass...
+          
+          CellPtr spaceTimeCell = spaceTimeTopology->getCell(*cellIt);
+          RefinementPatternPtr refPattern = RefinementPattern::regularRefinementPattern(spaceTimeCell->topology());
+          spaceTimeTopology->refineCell(spaceTimeCellIndex, refPattern);
+          
+          vector<CellPtr> spatialChildren = spatialCell->children();
+          for (int childOrdinal=0; childOrdinal<spatialChildren.size(); childOrdinal++) {
+            CellPtr spatialChild = spatialChildren[childOrdinal];
+            int vertexCount = spatialChild->topology()->getVertexCount();
+            
+            vector< vector<double> > childNodes(vertexCount);
+            
+            spatialCellNodes.resize(vertexCount,spaceDim);
+            const vector<IndexType>* vertexIndices = &spatialChild->vertices();
+            for (int vertex=0; vertex<vertexCount; vertex++) {
+              IndexType vertexIndex = (*vertexIndices)[vertex];
+              childNodes[vertex] = spatialMeshTopology->getVertex(vertexIndex);
+              childNodes[vertex].push_back(t0);
+            }
+            
+            CellPtr spaceTimeChild = spaceTimeTopology->findCellWithVertices(childNodes);
+            cellIDMap[spaceTimeChild->cellIndex()] = spatialChild->cellIndex();
+          }
+        }
+      }
+    }
+  }
+  
+  return spaceTimeTopology;
+}
+
+
+

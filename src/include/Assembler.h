@@ -1,3 +1,4 @@
+// NOTE: This is deprecated by the conversion to Tpetra
 #ifndef ASSEMBLER
 #define ASSEMBLER
 
@@ -41,10 +42,12 @@
 #include "Epetra_FEVector.h"
 #include "Epetra_LinearProblem.h"
 
-class Assembler {
-public:  
-  Epetra_LinearProblem assembleProblem();	   
-  void distributeDofs(Epetra_FEVector dofs);
-};
+namespace Camellia {
+	class Assembler {
+	public:  
+	  Epetra_LinearProblem assembleProblem();	   
+	  void distributeDofs(Epetra_FEVector dofs);
+	};
+}
 
 #endif

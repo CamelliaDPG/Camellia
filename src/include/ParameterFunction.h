@@ -11,39 +11,38 @@
 
 #include "Function.h"
 
-class ParameterFunction : public Function {
-  FunctionPtr _fxn;
-  typedef Teuchos::RCP<ParameterFunction> ParameterFunctionPtr;
-public:
-  ParameterFunction(double value);
-  ParameterFunction(FunctionPtr value);
-  
-  FunctionPtr getValue() const;
-  
-  void setValue(FunctionPtr fxn);
-  void setValue(double value);
-  
-  // overridden from Function:
-  FunctionPtr x();
-  FunctionPtr y();
-  FunctionPtr z();
-  
-  FunctionPtr dx();
-  FunctionPtr dy();
-  FunctionPtr dz();
-  
-  FunctionPtr grad(int numComponents=-1); // gradient of sum is the sum of gradients
-  FunctionPtr div();  // divergence of sum is sum of divergences
-  
-  void values(FieldContainer<double> &values, BasisCachePtr basisCache);
-  bool boundaryValueOnly();
-  
-  string displayString();
-  
-  static ParameterFunctionPtr parameterFunction(double value);
-  static ParameterFunctionPtr parameterFunction(FunctionPtr fxn);
-};
+namespace Camellia {
+  class ParameterFunction : public TFunction<double> {
+    TFunctionPtr<double> _fxn;
+  public:
+    ParameterFunction(double value);
+    ParameterFunction(TFunctionPtr<double> value);
 
-typedef Teuchos::RCP<ParameterFunction> ParameterFunctionPtr;
+    TFunctionPtr<double> getValue() const;
+
+    void setValue(TFunctionPtr<double> fxn);
+    void setValue(double value);
+
+    // overridden from Function:
+    TFunctionPtr<double> x();
+    TFunctionPtr<double> y();
+    TFunctionPtr<double> z();
+
+    TFunctionPtr<double> dx();
+    TFunctionPtr<double> dy();
+    TFunctionPtr<double> dz();
+
+    TFunctionPtr<double> grad(int numComponents=-1); // gradient of sum is the sum of gradients
+    TFunctionPtr<double> div();  // divergence of sum is sum of divergences
+
+    void values(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache);
+    bool boundaryValueOnly();
+
+    string displayString();
+
+    static Teuchos::RCP<ParameterFunction> parameterFunction(double value);
+    static Teuchos::RCP<ParameterFunction> parameterFunction(TFunctionPtr<double> fxn);
+  };
+}
 
 #endif

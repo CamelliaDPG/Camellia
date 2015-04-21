@@ -11,13 +11,15 @@
 
 #include "BasisCache.h"
 
-class PhysicalPointCache : public BasisCache {
-  FieldContainer<double> _physCubPoints;
-public:
-  PhysicalPointCache(const FieldContainer<double> &physCubPoints);
-  const FieldContainer<double> & getPhysicalCubaturePoints();
-  FieldContainer<double> & writablePhysicalCubaturePoints();
-  int getSpaceDim(); // overrides BasisCache::getSpaceDim();
-};
+namespace Camellia {
+	class PhysicalPointCache : public BasisCache {
+	  Intrepid::FieldContainer<double> _physCubPoints;
+	public:
+	  PhysicalPointCache(const Intrepid::FieldContainer<double> &physCubPoints);
+	  const Intrepid::FieldContainer<double> & getPhysicalCubaturePoints();
+	  Intrepid::FieldContainer<double> & writablePhysicalCubaturePoints();
+	  int getSpaceDim(); // overrides BasisCache::getSpaceDim();
+	};
+}
 
 #endif

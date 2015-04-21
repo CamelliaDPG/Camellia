@@ -8,7 +8,9 @@
 
 #include "NonlinearSolveStrategy.h"
 
-NonlinearSolveStrategy::NonlinearSolveStrategy(Teuchos::RCP<Solution> backgroundFlow, Teuchos::RCP<Solution> solution, Teuchos::RCP<NonlinearStepSize> stepSize, double relativeEnergyTolerance) {
+using namespace Camellia;
+
+NonlinearSolveStrategy::NonlinearSolveStrategy(TSolutionPtr<double> backgroundFlow, TSolutionPtr<double> solution, Teuchos::RCP<NonlinearStepSize> stepSize, double relativeEnergyTolerance) {
   _backgroundFlow = backgroundFlow;
   _solution = solution;
   _stepSize = stepSize;
@@ -25,17 +27,17 @@ void NonlinearSolveStrategy::solve(bool printToConsole) {
 
   vector< Teuchos::RCP< Element > > activeElements = mesh->activeElements();
   vector< Teuchos::RCP< Element > >::iterator activeElemIt;
-  
-  int i = 0;    
+
+  int i = 0;
   double prevError = 0.0;
   bool converged = false;
   while (!converged) { // while energy error has not stabilized
-    
+
     _solution->solve(false);
-  
+
     double totalErrorSquareRoot = _solution->energyErrorTotal();
     double totalError = totalErrorSquareRoot * totalErrorSquareRoot; // NVR 9-17-14: this is the energy error squared.  Is that what we want??
-    
+
     double relErrorDiff = abs(totalError-prevError)/max(totalError,prevError);
     if (printToConsole){
       cout << "on iter = " << i  << ", relative change in energy error is " << relErrorDiff;
@@ -44,21 +46,21 @@ void NonlinearSolveStrategy::solve(bool printToConsole) {
       }
       cout << endl;
     }
-    
+
     if (relErrorDiff < _relativeEnergyTolerance) {
       converged = true;
     } else {
       prevError = totalError; // reset previous error and continue
-    } 
-    
+    }
+
     if ( ! _usePicardIteration ) {
       double stepLength = _stepSize->stepSize(_solution,_backgroundFlow);
       _backgroundFlow->addSolution(_solution,stepLength);
     } else {
       _backgroundFlow->setSolution(_solution);
     }
-    
-    i++;            
+
+    i++;
   }
 
 }

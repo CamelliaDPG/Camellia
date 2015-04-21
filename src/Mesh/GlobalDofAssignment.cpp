@@ -23,9 +23,13 @@
 
 #include "CondensedDofInterpreter.h"
 
+using namespace Intrepid;
+using namespace Camellia;
+using namespace std;
+
 GlobalDofAssignment::GlobalDofAssignment(MeshPtr mesh, VarFactory varFactory,
                                          DofOrderingFactoryPtr dofOrderingFactory, MeshPartitionPolicyPtr partitionPolicy,
-                                         unsigned initialH1OrderTrial, unsigned testOrderEnhancement, bool enforceConformityLocally) : DofInterpreter(mesh) {
+                                         vector<int> initialH1OrderTrial, int testOrderEnhancement, bool enforceConformityLocally) : DofInterpreter(mesh) {
 
   _mesh = mesh;
   _meshTopology = mesh->getTopology();
@@ -35,13 +39,13 @@ GlobalDofAssignment::GlobalDofAssignment(MeshPtr mesh, VarFactory varFactory,
   _initialH1OrderTrial = initialH1OrderTrial;
   _testOrderEnhancement = testOrderEnhancement;
   _enforceConformityLocally = enforceConformityLocally;
-  
+
 //  unsigned testOrder = initialH1OrderTrial + testOrderEnhancement;
   // assign some initial element types:
   set<IndexType> cellIndices = _meshTopology->getActiveCellIndices();
   set<GlobalIndexType> activeCellIDs;
   activeCellIDs.insert(cellIndices.begin(),cellIndices.end()); // for distributed mesh, we'd do some logic with cellID offsets for each MPI rank.  (cellID = cellIndex + cellIDOffsetForRank)
-  
+
   for (set<GlobalIndexType>::iterator cellIDIt = activeCellIDs.begin(); cellIDIt != activeCellIDs.end(); cellIDIt++) {
     GlobalIndexType cellID = *cellIDIt;
 //    CellPtr cell = _meshTopology->getCell(cellID);
@@ -50,15 +54,15 @@ GlobalDofAssignment::GlobalDofAssignment(MeshPtr mesh, VarFactory varFactory,
 //      cout << "GlobalDofAssignment constructor only supports mesh topologies that are unrefined.\n";
 //      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "GlobalDofAssignment constructor only supports mesh topologies that are unrefined.\n");
 //    }
-    
+
     assignInitialElementType(cellID);
     assignParities(cellID);
   }
-  
+
   _numPartitions = Teuchos::GlobalMPISession::getNProc();
-  
+
   _partitions = vector<set<GlobalIndexType> >(_numPartitions);
-  
+
   // before repartitioning (which should happen immediately), put all active cells on rank 0
   _partitions[0] = _mesh->getActiveCellIDs();
   constructActiveCellMap();
@@ -67,10 +71,10 @@ GlobalDofAssignment::GlobalDofAssignment(MeshPtr mesh, VarFactory varFactory,
 GlobalDofAssignment::GlobalDofAssignment( GlobalDofAssignment &otherGDA ) : DofInterpreter(Teuchos::null) {  // subclass deepCopy() is responsible for filling this in post-construction
   _activeCellOffset = otherGDA._activeCellOffset;
   _cellSideParitiesForCellID = otherGDA._cellSideParitiesForCellID;
-  
+
   _elementTypeFactory = otherGDA._elementTypeFactory;
   _enforceConformityLocally = otherGDA._enforceConformityLocally;
-  
+
   _mesh = Teuchos::null;         // subclass deepCopy() is responsible for filling this in post-construction
   _meshTopology = Teuchos::null; // subclass deepCopy() is responsible for filling this in post-construction
   _varFactory = otherGDA._varFactory;
@@ -78,19 +82,19 @@ GlobalDofAssignment::GlobalDofAssignment( GlobalDofAssignment &otherGDA ) : DofI
   _partitionPolicy = otherGDA._partitionPolicy;;
   _initialH1OrderTrial = otherGDA._initialH1OrderTrial;
   _testOrderEnhancement = otherGDA._testOrderEnhancement;
-  
+
   _cellH1Orders = otherGDA._cellH1Orders;
   _elementTypeForCell = otherGDA._elementTypeForCell;
-  
+
   _cellIDsForElementType = otherGDA._cellIDsForElementType;
-  
+
   _partitions = otherGDA._partitions;
   _partitionForCellID = otherGDA._partitionForCellID;
-  
+
   _activeCellMap = Teuchos::rcp( new Epetra_Map(*otherGDA._activeCellMap) );
-  
+
   _numPartitions = otherGDA._numPartitions;
-  
+
   // we leave _registeredSolutions empty
   ///_registeredSolutions;
 }
@@ -103,14 +107,17 @@ void GlobalDofAssignment::assignInitialElementType( GlobalIndexType cellID ) {
   if (_cellH1Orders.find(cellID) == _cellH1Orders.end()) {
     _cellH1Orders[cellID] = _initialH1OrderTrial;
   }
-  
-  int testDegree = _cellH1Orders[cellID] + _testOrderEnhancement;
+  vector<int> testDegree(_cellH1Orders[cellID].size());
+  for (int pComponent=0; pComponent<_initialH1OrderTrial.size(); pComponent++) {
+    testDegree[pComponent] = _cellH1Orders[cellID][pComponent] + _testOrderEnhancement;
+  }
+
   CellPtr cell = _meshTopology->getCell(cellID);
   DofOrderingPtr trialOrdering = _dofOrderingFactory->trialOrdering(_cellH1Orders[cellID], cell->topology(), _enforceConformityLocally);
   DofOrderingPtr testOrdering = _dofOrderingFactory->testOrdering(testDegree, cell->topology());
   ElementTypePtr elemType = _elementTypeFactory.getElementType(trialOrdering,testOrdering,cell->topology());
   _elementTypeForCell[cellID] = elemType;
-  
+
   if (cell->getParent() != Teuchos::null) {
     GlobalIndexType parentCellID = cell->getParent()->cellIndex();
     if (_elementTypeForCell.find(parentCellID) == _elementTypeForCell.end())
@@ -122,7 +129,7 @@ void GlobalDofAssignment::assignParities( GlobalIndexType cellID ) {
   CellPtr cell = _meshTopology->getCell(cellID);
 
   unsigned sideCount = cell->getSideCount();
-  
+
   vector<int> cellParities(sideCount);
   for (int sideOrdinal=0; sideOrdinal<sideCount; sideOrdinal++) {
     pair<GlobalIndexType,unsigned> neighborInfo = cell->getNeighborInfo(sideOrdinal);
@@ -152,7 +159,7 @@ void GlobalDofAssignment::assignParities( GlobalIndexType cellID ) {
     }
   }
   _cellSideParitiesForCellID[cellID] = cellParities;
-  
+
   // if this cell is a parent, then we should treat its children as well (children without peer neighbors will inherit any parity flips)
   if (cell->isParent()) {
     vector<GlobalIndexType> childIndices = cell->getChildIndices();
@@ -220,12 +227,12 @@ FieldContainer<double> GlobalDofAssignment::cellSideParitiesForCell( GlobalIndex
 void GlobalDofAssignment::constructActiveCellMap() {
   const set<GlobalIndexType>* cellIDs = &cellsInPartition(-1);
   FieldContainer<GlobalIndexTypeToCast> myCellIDsFC(cellIDs->size());
-  
+
   int localIndex = 0;
   for (set<GlobalIndexType>::const_iterator cellIDIt = cellIDs->begin(); cellIDIt != cellIDs->end(); cellIDIt++, localIndex++) {
     myCellIDsFC(localIndex) = *cellIDIt;
   }
-  
+
   int indexBase = 0;
 #ifdef HAVE_MPI
   Epetra_MpiComm Comm(MPI_COMM_WORLD);
@@ -241,7 +248,7 @@ void GlobalDofAssignment::constructActiveCellMap() {
 
 void GlobalDofAssignment::repartitionAndMigrate() {
   _partitionPolicy->partitionMesh(_mesh.get(),_numPartitions);
-  for (vector< Solution* >::iterator solutionIt = _registeredSolutions.begin();
+  for (vector< TSolutionPtr<double> >::iterator solutionIt = _registeredSolutions.begin();
        solutionIt != _registeredSolutions.end(); solutionIt++) {
     // if solution has a condensed dof interpreter, we should reinitialize the mapping from interpreted to global dofs
     Teuchos::RCP<DofInterpreter> dofInterpreter = (*solutionIt)->getDofInterpreter();
@@ -249,7 +256,7 @@ void GlobalDofAssignment::repartitionAndMigrate() {
     if (condensedDofInterpreter != NULL) {
       condensedDofInterpreter->reinitialize();
     }
-    
+
     (*solutionIt)->initializeLHSVector(); // rebuild LHS vector; global dofs will have changed. (important for addSolution)
   }
 }
@@ -271,7 +278,9 @@ void GlobalDofAssignment::didHRefine(const set<GlobalIndexType> &parentCellIDs) 
 
 void GlobalDofAssignment::didPRefine(const set<GlobalIndexType> &cellIDs, int deltaP) { // subclasses should call super
   for (set<GlobalIndexType>::const_iterator cellIDIt = cellIDs.begin(); cellIDIt != cellIDs.end(); cellIDIt++) {
-    _cellH1Orders[*cellIDIt] += deltaP;
+    for (int pComponent = 0; pComponent < _cellH1Orders[*cellIDIt].size(); pComponent++) {
+      _cellH1Orders[*cellIDIt][pComponent] += deltaP;
+    }
   }
   // the appropriate modifications to _elementTypeForCell are left to subclasses
 }
@@ -335,7 +344,11 @@ GlobalIndexType GlobalDofAssignment::globalCellIndex(GlobalIndexType cellID) {
   return cellIndex;
 }
 
-int GlobalDofAssignment::getInitialH1Order() {
+vector<int> GlobalDofAssignment::getH1Order(GlobalIndexType cellID) {
+  return _cellH1Orders[cellID];
+}
+
+vector<int> GlobalDofAssignment::getInitialH1Order() {
   return _initialH1OrderTrial;
 }
 
@@ -344,7 +357,7 @@ bool GlobalDofAssignment::getPartitions(FieldContainer<GlobalIndexType> &partiti
   int numPartitions = _partitions.size();
   int maxSize = 0;
   for (int i=0; i<numPartitions; i++) {
-    maxSize = max((int)_partitions[i].size(),maxSize);
+    maxSize = std::max<int>((int)_partitions[i].size(),maxSize);
   }
   partitions.resize(numPartitions,maxSize);
   partitions.initialize(-1);
@@ -396,20 +409,20 @@ void GlobalDofAssignment::interpretLocalCoefficients(GlobalIndexType cellID, con
 
 void GlobalDofAssignment::projectParentCoefficientsOntoUnsetChildren() {
   set<GlobalIndexType> rankLocalCellIDs = cellsInPartition(-1);
-  
-  for (vector< Solution* >::iterator solutionIt = _registeredSolutions.begin();
+
+  for (vector< TSolutionPtr<double> >::iterator solutionIt = _registeredSolutions.begin();
        solutionIt != _registeredSolutions.end(); solutionIt++) {
-    Solution* soln = *solutionIt;
+    TSolutionPtr<double> soln = *solutionIt;
     for (set<GlobalIndexType>::iterator cellIDIt = rankLocalCellIDs.begin(); cellIDIt != rankLocalCellIDs.end(); cellIDIt++) {
       GlobalIndexType cellID = *cellIDIt;
       if (soln->cellHasCoefficientsAssigned(cellID)) continue;
-      
+
       CellPtr cell = _meshTopology->getCell(cellID);
       CellPtr parent = cell->getParent();
       if (parent.get()==NULL) continue;
       GlobalIndexType parentCellID = parent->cellIndex();
       if (! soln->cellHasCoefficientsAssigned(parentCellID)) continue;
-      
+
       int childOrdinal = -1;
       vector<IndexType> childIndices = parent->getChildIndices();
       for (int i=0; i<childIndices.size(); i++) {
@@ -428,13 +441,13 @@ void GlobalDofAssignment::projectParentCoefficientsOntoUnsetChildren() {
 
 void GlobalDofAssignment::setPartitions(FieldContainer<GlobalIndexType> &partitionedMesh) {
   set<unsigned> activeCellIDs = _meshTopology->getActiveCellIndices();
-  
+
   int partitionNumber     = Teuchos::GlobalMPISession::getRank();
-  
+
   //  cout << "determineActiveElements(): there are "  << activeCellIDs.size() << " active elements.\n";
   _partitions.clear();
   _partitionForCellID.clear();
-  
+
   _activeCellOffset = 0;
   for (PartitionIndexType i=0; i<partitionedMesh.dimension(0); i++) {
     set< GlobalIndexType > partition;
@@ -464,10 +477,10 @@ void GlobalDofAssignment::setPartitions(std::vector<std::set<GlobalIndexType> > 
   // so we require it here.
   int numProcs = Teuchos::GlobalMPISession::getNProc();
   TEUCHOS_TEST_FOR_EXCEPTION(numProcs != partitions.size(), std::invalid_argument, "partitions.size() must be equal to numProcs!");
-  
+
   _partitions = partitions;
   _partitionForCellID.clear();
-  
+
   _activeCellOffset = 0;
   for (PartitionIndexType i=0; i< _partitions.size(); i++) {
     set< GlobalIndexType > partition;
@@ -512,11 +525,11 @@ IndexType GlobalDofAssignment::partitionLocalCellIndex(GlobalIndexType cellID, i
   return -1;
 }
 
-vector<Solution*> GlobalDofAssignment::getRegisteredSolutions() {
+vector<TSolutionPtr<double>> GlobalDofAssignment::getRegisteredSolutions() {
   return _registeredSolutions;
 }
 
-void GlobalDofAssignment::registerSolution(Solution* solution) {
+void GlobalDofAssignment::registerSolution(TSolutionPtr<double> solution) {
   _registeredSolutions.push_back( solution );
 }
 
@@ -524,12 +537,12 @@ void GlobalDofAssignment::setMeshAndMeshTopology(MeshPtr mesh) {
   // make copies of the RCPs that don't own memory.
   _mesh = Teuchos::rcp(mesh.get(), false);
   _meshTopology = Teuchos::rcp(mesh->getTopology().get(), false);
-  
+
   this->DofInterpreter::_mesh = _mesh;
 }
 
-void GlobalDofAssignment::unregisterSolution(Solution* solution) {
-  for (vector< Solution* >::iterator solnIt = _registeredSolutions.begin();
+void GlobalDofAssignment::unregisterSolution(TSolutionPtr<double> solution) {
+  for (vector< TSolutionPtr<double> >::iterator solnIt = _registeredSolutions.begin();
        solnIt != _registeredSolutions.end(); solnIt++) {
     if ( *solnIt == solution ) {
       _registeredSolutions.erase(solnIt);

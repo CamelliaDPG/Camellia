@@ -13,6 +13,7 @@
 #include "BasisFactory.h"
 
 using namespace Camellia;
+using namespace Intrepid;
 
 namespace {
   vector< CellTopoPtr > getShardsTopologies() {

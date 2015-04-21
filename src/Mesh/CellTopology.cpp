@@ -9,6 +9,7 @@
 #include "CellTopology.h"
 #include "CamelliaDebugUtility.h"
 
+using namespace Intrepid;
 using namespace Camellia;
 
 // define our static map:
@@ -708,6 +709,11 @@ unsigned CellTopology::getTemporalComponentSideOrdinal(unsigned int thisSideOrdi
   }
   // TODO: if/when we change the subcell node ordering, change this to return thisSideOrdinal - spatialTopo->getSideCount();
   return thisSideOrdinal;
+}
+
+unsigned CellTopology::getTemporalSideOrdinal(unsigned int temporalNodeOrdinal) {
+  // TODO: if/when we change the subcell node ordering, change this to return spatialTopo->getSideCount() + temporalNodeOrdinal;
+  return temporalNodeOrdinal;
 }
 
 CellTopoPtr CellTopology::getTensorialComponent() const {

@@ -15,6 +15,9 @@
 
 #include "SerialDenseWrapper.h"
 
+using namespace Intrepid;
+using namespace Camellia;
+
 void LocalDofMapper::filterData(const vector<int> dofIndices, const FieldContainer<double> &data, FieldContainer<double> &filteredData) {
   int dofCount = dofIndices.size();
   if (data.rank()==1) {

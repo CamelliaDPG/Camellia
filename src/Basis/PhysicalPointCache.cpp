@@ -8,6 +8,9 @@
 
 #include "PhysicalPointCache.h"
 
+using namespace Intrepid;
+using namespace Camellia;
+
 PhysicalPointCache::PhysicalPointCache(const FieldContainer<double> &physCubPoints) : BasisCache() {
   _physCubPoints = physCubPoints;
 }

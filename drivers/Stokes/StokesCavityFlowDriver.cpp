@@ -39,6 +39,34 @@
 
 using namespace std;
 
+class ScalarFunctionOfNormal : public Function { // 2D for now
+public:
+  bool boundaryValueOnly();
+  virtual double value(double x, double y, double n1, double n2) = 0;
+  void values(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache);
+};
+
+bool ScalarFunctionOfNormal::boundaryValueOnly() {
+  return true;
+}
+
+void ScalarFunctionOfNormal::values(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache) {
+  CHECK_VALUES_RANK(values);
+  const Intrepid::FieldContainer<double> *sideNormals = &(basisCache->getSideNormals());
+  int numCells = values.dimension(0);
+  int numPoints = values.dimension(1);
+  const Intrepid::FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
+  for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
+    for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
+      double x = (*points)(cellIndex,ptIndex,0);
+      double y = (*points)(cellIndex,ptIndex,1);
+      double n1 = (*sideNormals)(cellIndex,ptIndex,0);
+      double n2 = (*sideNormals)(cellIndex,ptIndex,1);
+      values(cellIndex,ptIndex) = value(x,y,n1,n2);
+    }
+  }
+}
+
 //// just testing the mass flux integration
 //// this one should mean that a 1x1 mesh has mass flux of 2.0
 //class U1_0 : public SimpleFunction {
@@ -126,7 +154,6 @@ public:
     return u1 * n1 + u2 * n2;
   }
 };
-
 
 class U0_cross_n : public ScalarFunctionOfNormal {
   SimpleFunctionPtr _u1, _u2;

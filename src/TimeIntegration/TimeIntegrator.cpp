@@ -8,8 +8,12 @@
 #include "choice.hpp"
 #endif
 
+// #include <algorithm>
+
+using namespace Camellia;
+
 TimeIntegrator::TimeIntegrator(BFPtr steadyJacobian, SteadyResidual &steadyResidual, MeshPtr mesh,
-    BCPtr bc, IPPtr ip, map<int, FunctionPtr> initialCondition, bool nonlinear) :
+    BCPtr bc, IPPtr ip, map<int, TFunctionPtr<double>> initialCondition, bool nonlinear) :
   _steadyJacobian(steadyJacobian), _steadyResidual(steadyResidual), _bc(bc), _nonlinear(nonlinear)
 {
   _t = 0;
@@ -20,16 +24,16 @@ TimeIntegrator::TimeIntegrator(BFPtr steadyJacobian, SteadyResidual &steadyResid
   _commRank = Teuchos::GlobalMPISession::getRank();
 
   _rhs = RHS::rhs();
-  _solution = Teuchos::rcp( new Solution(mesh, _bc, _rhs, ip) );
+  _solution = Teuchos::rcp( new TSolution<double>(mesh, _bc, _rhs, ip) );
 
   BCPtr nullBC = Teuchos::rcp((BC*)NULL);
   RHSPtr nullRHS = Teuchos::rcp((RHS*)NULL);
   IPPtr nullIP = Teuchos::rcp((IP*)NULL);
-  _prevTimeSolution = Teuchos::rcp(new Solution(mesh, nullBC, nullRHS, nullIP) );
+  _prevTimeSolution = Teuchos::rcp(new TSolution<double>(mesh, nullBC, nullRHS, nullIP) );
   _prevTimeSolution->projectOntoMesh(initialCondition);
   if (_nonlinear)
   {
-    _prevNLSolution = Teuchos::rcp(new Solution(mesh, nullBC, nullRHS, nullIP) );
+    _prevNLSolution = Teuchos::rcp(new TSolution<double>(mesh, nullBC, nullRHS, nullIP) );
     _prevNLSolution->setSolution(_prevTimeSolution);
   }
 
@@ -44,17 +48,17 @@ TimeIntegrator::TimeIntegrator(BFPtr steadyJacobian, SteadyResidual &steadyResid
   }
 }
 
-FunctionPtr TimeIntegrator::invDt()
+TFunctionPtr<double> TimeIntegrator::invDt()
 {
   return _invDt;
 }
 
-SolutionPtr TimeIntegrator::prevSolution()
+TSolutionPtr<double> TimeIntegrator::prevSolution()
 {
   return _prevNLSolution;
 }
 
-SolutionPtr TimeIntegrator::solution()
+TSolutionPtr<double> TimeIntegrator::solution()
 {
   if (_nonlinear)
     return _prevNLSolution;
@@ -62,7 +66,7 @@ SolutionPtr TimeIntegrator::solution()
     return _solution;
 }
 
-SolutionPtr TimeIntegrator::solutionUpdate()
+TSolutionPtr<double> TimeIntegrator::solutionUpdate()
 {
   if (_nonlinear)
     return _solution;
@@ -70,10 +74,10 @@ SolutionPtr TimeIntegrator::solutionUpdate()
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "solution update only makes sense for nonlinear problems");
 }
 
-void TimeIntegrator::addTimeTerm(VarPtr trialVar, VarPtr testVar, FunctionPtr multiplier)
+void TimeIntegrator::addTimeTerm(VarPtr trialVar, VarPtr testVar, TFunctionPtr<double> multiplier)
 {
-  FunctionPtr trialPrevTime = Function::solution(trialVar, _prevTimeSolution);
-  FunctionPtr trialPrevNL = Function::solution(trialVar, _prevNLSolution);
+  TFunctionPtr<double> trialPrevTime = TFunction<double>::solution(trialVar, _prevTimeSolution);
+  TFunctionPtr<double> trialPrevNL = TFunction<double>::solution(trialVar, _prevNLSolution);
   _steadyJacobian->addTerm( _invDt*multiplier*trialVar, testVar );
   _rhs->addTerm( _invDt*multiplier*trialPrevTime*testVar );
   if (_nonlinear)
@@ -133,21 +137,21 @@ void TimeIntegrator::printNLMessage()
 }
 
 ImplicitEulerIntegrator::ImplicitEulerIntegrator(BFPtr steadyJacobian, SteadyResidual &steadyResidual, MeshPtr mesh,
-    BCPtr bc, IPPtr ip, map<int, FunctionPtr> initialCondition, bool nonlinear) :
+    BCPtr bc, IPPtr ip, map<int, TFunctionPtr<double>> initialCondition, bool nonlinear) :
   TimeIntegrator(steadyJacobian, steadyResidual, mesh, bc, ip, initialCondition, nonlinear) {}
 
 void ImplicitEulerIntegrator::runToTime(double T, double dt)
 {
   while (_t < T)
   {
-    _dt = max(1e-9, min(dt, T-_t));
+    _dt = std::max<double>(1e-9, std::min<double>(dt, T-_t));
     printTimeStepMessage();
     calcNextTimeStep(_dt);
   }
 }
 
 ESDIRKIntegrator::ESDIRKIntegrator(BFPtr steadyJacobian, SteadyResidual &steadyResidual, MeshPtr mesh,
-    BCPtr bc, IPPtr ip, map<int, FunctionPtr> initialCondition, int numStages, bool nonlinear) :
+    BCPtr bc, IPPtr ip, map<int, TFunctionPtr<double>> initialCondition, int numStages, bool nonlinear) :
   TimeIntegrator(steadyJacobian, steadyResidual, mesh, bc, ip, initialCondition, nonlinear),
   _numStages(numStages)
 {
@@ -255,7 +259,7 @@ ESDIRKIntegrator::ESDIRKIntegrator(BFPtr steadyJacobian, SteadyResidual &steadyR
 
   for (int k=1; k < _numStages; k++)
   {
-    _stageSolution[k] = Teuchos::rcp(new Solution(mesh, nullBC, nullRHS, nullIP) );
+    _stageSolution[k] = Teuchos::rcp(new TSolution<double>(mesh, nullBC, nullRHS, nullIP) );
     _stageRHS[k] = RHS::rhs();
   }
 
@@ -274,17 +278,17 @@ ESDIRKIntegrator::ESDIRKIntegrator(BFPtr steadyJacobian, SteadyResidual &steadyR
     {
       if (a[k][j] != 0)
       {
-        FunctionPtr aFunc = Function::constant(a[k][j]/a[k][k]);
+        TFunctionPtr<double> aFunc = TFunction<double>::constant(a[k][j]/a[k][k]);
         _stageRHS[k]->addTerm( -aFunc*_steadyLinearTerm[j] );
       }
     }
   }
 }
 
-void ESDIRKIntegrator::addTimeTerm(VarPtr trialVar, VarPtr testVar, FunctionPtr multiplier)
+void ESDIRKIntegrator::addTimeTerm(VarPtr trialVar, VarPtr testVar, TFunctionPtr<double> multiplier)
 {
-  FunctionPtr trialPrevTime = Function::solution(trialVar, _prevTimeSolution);
-  FunctionPtr trialPrevNL = Function::solution(trialVar, _prevNLSolution);
+  TFunctionPtr<double> trialPrevTime = TFunction<double>::solution(trialVar, _prevTimeSolution);
+  TFunctionPtr<double> trialPrevNL = TFunction<double>::solution(trialVar, _prevNLSolution);
   _steadyJacobian->addTerm( _invDt*multiplier*trialVar, testVar );
   for (int k=0; k < _numStages; k++)
   {
@@ -353,14 +357,14 @@ void ESDIRKIntegrator::runToTime(double T, double dt)
   // be initialized correctly (which is not a problem for implicit Euler)
   if (_t == 0)
   {
-    _dt = max(1e-9, 1e-3*min(dt, T-_t));
+    _dt = std::max<double>(1e-9, 1e-3*std::min<double>(dt, T-_t));
     printTimeStepMessage();
     TimeIntegrator::calcNextTimeStep(_dt);
   }
   // Continue with expected timestepping
   while (_t < T)
   {
-    _dt = max(1e-9, min(dt, T-_t));
+    _dt = std::max<double>(1e-9, std::min<double>(dt, T-_t));
     printTimeStepMessage();
     calcNextTimeStep(_dt);
   }

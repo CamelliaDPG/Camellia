@@ -1290,7 +1290,7 @@ bool SolutionTests::testEnergyError() {
   bf->addTerm(u,v); // L2 norm
   
   RHSPtr rhs = RHS::rhs();
-  FunctionPtr uSoln = Teuchos::rcp( new ConstantScalarFunction(3.0) );
+  FunctionPtr uSoln = Function::constant(3.0);
   rhs->addTerm(uSoln * v);
   
   BCPtr bc = BC::bc(); // no bcs
@@ -1667,9 +1667,9 @@ bool SolutionTests::testScratchPadSolution() {
   BCPtr bc = BC::bc();
   SpatialFilterPtr squareBoundary = Teuchos::rcp( new UnitSquareBoundary );
 
-  FunctionPtr n = Teuchos::rcp( new UnitNormalFunction );
+  FunctionPtr n = Function::normal();
 
-  FunctionPtr one = Teuchos::rcp( new ConstantScalarFunction(1.0) );
+  FunctionPtr one = Function::constant(1.0);
   bc->addDirichlet(uhat, squareBoundary, one);
 
   ////////////////////   BUILD MESH   ///////////////////////
@@ -1761,7 +1761,7 @@ bool SolutionTests::testCondensationSolve() {
   BCPtr bc = BC::bc();
   SpatialFilterPtr inflow = Teuchos::rcp( new InflowBoundary );
 
-  FunctionPtr n = Teuchos::rcp( new UnitNormalFunction );
+  FunctionPtr n = Function::normal();
 
   bc->addDirichlet(beta_n_u, inflow, Function::constant(1.0)*beta*n);
 
@@ -2068,7 +2068,7 @@ bool SolutionTests::testCondensationSolveWithSinglePointConstraint() {
   SpatialFilterPtr topBoundary = SpatialFilter::matchingY(1.0);
   SpatialFilterPtr wallBoundary = SpatialFilter::negatedFilter(topBoundary);
   
-  FunctionPtr n = Teuchos::rcp( new UnitNormalFunction );
+  FunctionPtr n = Function::normal();
   
   bc->addDirichlet(u1hat, topBoundary, Function::constant(1.0));
   bc->addDirichlet(u1hat, wallBoundary, Function::zero());
@@ -2299,7 +2299,7 @@ bool SolutionTests::testCondensationSolveWithZeroMeanConstraint() {
   SpatialFilterPtr topBoundary = SpatialFilter::matchingY(1.0);
   SpatialFilterPtr wallBoundary = SpatialFilter::negatedFilter(topBoundary);
   
-  FunctionPtr n = Teuchos::rcp( new UnitNormalFunction );
+  FunctionPtr n = Function::normal();
   
   bc->addDirichlet(u1hat, topBoundary, Function::constant(1.0));
   bc->addDirichlet(u1hat, wallBoundary, Function::zero());

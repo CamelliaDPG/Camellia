@@ -395,12 +395,12 @@ bool LinearTermTests::testBoundaryPlusVolumeTerms() {
   // (div f, v) = (1, v)
   // < f * n, v > - (f, grad v) = < x n1, v > - ( x, v->dx() )
   
-  FunctionPtr x = Teuchos::rcp( new Xn(1) );
-  FunctionPtr y = Teuchos::rcp( new Yn(1) );
-  FunctionPtr x2 = Teuchos::rcp( new Xn(2) );
-  FunctionPtr y2 = Teuchos::rcp( new Yn(2) );
-  FunctionPtr x3 = Teuchos::rcp( new Xn(3) );
-  FunctionPtr y3 = Teuchos::rcp( new Yn(3) );
+  FunctionPtr x = Function::xn(1);
+  FunctionPtr y = Function::yn(1);
+  FunctionPtr x2 = Function::xn(2);
+  FunctionPtr y2 = Function::yn(2);
+  FunctionPtr x3 = Function::xn(3);
+  FunctionPtr y3 = Function::yn(3);
   
   vector< FunctionPtr > f_fxns;
   f_fxns.push_back( Function::vectorize( x,    Function::zero() ) ); // div of this = 1
@@ -672,8 +672,8 @@ bool LinearTermTests::testRieszInversionAsProjection() {
 
   LinearTermPtr integrand = Teuchos::rcp(new LinearTerm); // residual
 
-  FunctionPtr x = Teuchos::rcp(new Xn(1));
-  FunctionPtr y = Teuchos::rcp(new Yn(1));
+  FunctionPtr x = Function::xn(1);
+  FunctionPtr y = Function::yn(1);
   FunctionPtr testFxn1 = x;
   FunctionPtr testFxn2 = y;
   FunctionPtr fxnToProject = x * y + 1.0;
@@ -780,9 +780,9 @@ bool LinearTermTests::testMixedTermConsistency() {
   vector<double> e2(2); // (0,1)
   e1[0] = 1;
   e2[1] = 1;  
-  FunctionPtr n = Teuchos::rcp(new UnitNormalFunction );
-  FunctionPtr X = Teuchos::rcp(new Xn(1));
-  FunctionPtr Y = Teuchos::rcp(new Yn(1));
+  FunctionPtr n = Function::normal();
+  FunctionPtr X = Function::xn(1);
+  FunctionPtr Y = Function::yn(1);
   FunctionPtr testFxn1 = X;
   FunctionPtr testFxn2 = Y;
   FunctionPtr divTestFxn = testFxn1->dx() + testFxn2->dy();
@@ -906,9 +906,9 @@ bool LinearTermTests::testRieszInversion() {
   vector<double> e2(2); // (0,1)
   e1[0] = 1;
   e2[1] = 1;  
-  FunctionPtr n = Teuchos::rcp( new UnitNormalFunction );
-  FunctionPtr X = Teuchos::rcp(new Xn(1));
-  FunctionPtr Y = Teuchos::rcp(new Yn(1));
+  FunctionPtr n = Function::normal();
+  FunctionPtr X = Function::xn(1);
+  FunctionPtr Y = Function::yn(1);
   FunctionPtr testFxn1 = X;
   FunctionPtr testFxn2 = Y;
   FunctionPtr divTestFxn = testFxn1->dx() + testFxn2->dy();
