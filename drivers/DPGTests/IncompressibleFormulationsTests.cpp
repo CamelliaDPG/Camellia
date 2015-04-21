@@ -9,6 +9,7 @@
 #include "NavierStokesVGPFormulation.h"
 #include "ParameterFunction.h"
 #include "RieszRep.h"
+#include "TypeDefs.h"
 
 IncompressibleFormulationsTests::IncompressibleFormulationsTests(bool thorough) {
   _thoroughMode = thorough;
@@ -518,7 +519,7 @@ bool IncompressibleFormulationsTests::testVGPStokesFormulationConsistency() {
           int cubatureDegree = maxPolyOrder;
           for (vector< VarPtr >::iterator fieldIt = vgpFields.begin(); fieldIt != vgpFields.end(); fieldIt++ ) {
             VarPtr field = *fieldIt;
-            double l2Error = vgpStokesExactSolution->L2NormOfError(*vgpStokesSolution, field->ID(), cubatureDegree);
+            double l2Error = vgpStokesExactSolution->L2NormOfError(vgpStokesSolution, field->ID(), cubatureDegree);
             if (l2Error > tol) {
               success = false;
               cout << "FAILURE: testVGPStokesFormulationConsistency(): ";
@@ -865,7 +866,7 @@ bool IncompressibleFormulationsTests::testVGPNavierStokesFormulationConsistency(
           int cubatureDegree = maxPolyOrder;
           for (vector< VarPtr >::iterator fieldIt = vgpFields.begin(); fieldIt != vgpFields.end(); fieldIt++ ) {
             VarPtr field = *fieldIt;
-            double l2Error = exactSolution->L2NormOfError(*backgroundFlow, field->ID(), cubatureDegree);
+            double l2Error = exactSolution->L2NormOfError(backgroundFlow, field->ID(), cubatureDegree);
             if (l2Error > tol) {
               success = false;
               cout << "testVGPNavierStokesFormulationConsistency(): ";
@@ -1228,7 +1229,7 @@ bool IncompressibleFormulationsTests::testVGPNavierStokesFormulationCorrectness(
 }
 
 // U1_0: used in lid-driven cavity flow BCs (for local conservation test below)
-class U1_0 : public SimpleFunction {
+class U1_0 : public SimpleFunction<double> {
   double _eps;
 public:
   U1_0(double eps) {
@@ -1574,7 +1575,7 @@ bool IncompressibleFormulationsTests::testVGPNavierStokesFormulationKovasnayConv
             }
             for (vector< VarPtr >::iterator fieldIt = vgpFields.begin(); fieldIt != vgpFields.end(); fieldIt++ ) {
               VarPtr field = *fieldIt;
-              double l2Error = kProblem.exactSolution()->L2NormOfError(*backgroundFlow, field->ID(), cubatureDegree);
+              double l2Error = kProblem.exactSolution()->L2NormOfError(backgroundFlow, field->ID(), cubatureDegree);
               if (printToConsole) {
                 cout << "L^2 error of " << l2Error << " for variable " << field->displayString() << "." << endl;
               }
