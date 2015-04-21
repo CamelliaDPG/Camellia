@@ -165,5 +165,7 @@ bool VectorizedFunction<Scalar>::isZero() {
   return true;
 }
 
-template class VectorizedFunction<double>;
+namespace Camellia {
+  template class VectorizedFunction<double>;
+}
 

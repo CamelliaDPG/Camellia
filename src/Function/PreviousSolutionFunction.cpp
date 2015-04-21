@@ -145,5 +145,6 @@ string PreviousSolutionFunction<Scalar>::displayString() {
   return str.str();
 }
 
-template class PreviousSolutionFunction<double>;
-
+namespace Camellia {
+  template class PreviousSolutionFunction<double>;
+}

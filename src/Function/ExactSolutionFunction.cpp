@@ -17,5 +17,6 @@ void ExactSolutionFunction<Scalar>::values(Intrepid::FieldContainer<Scalar> &val
   _exactSolution->solutionValues(values,_trialID,basisCache);
 }
 
-template class ExactSolutionFunction<double>;
-
+namespace Camellia {
+  template class ExactSolutionFunction<double>;
+}

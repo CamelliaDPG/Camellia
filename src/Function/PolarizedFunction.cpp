@@ -122,6 +122,7 @@ void PolarizedFunction<Scalar>::values(Intrepid::FieldContainer<Scalar> &values,
   //  cout << "polarPoints: \n" << polarPoints;
   //  cout << "PolarizedFunction, values: \n" << values;
 }
-
-template class PolarizedFunction<double>;
+namespace Camellia {
+  template class PolarizedFunction<double>;
+}
 

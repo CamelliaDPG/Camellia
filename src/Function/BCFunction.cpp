@@ -83,5 +83,6 @@ TFunctionPtr<Scalar> BCFunction<Scalar>::dz() {
   return _spatiallyFilteredFunction->dz();
 }
 
-template class BCFunction<double>;
-
+namespace Camellia {
+  template class BCFunction<double>;
+}

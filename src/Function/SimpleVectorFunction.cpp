@@ -55,5 +55,7 @@ void SimpleVectorFunction<Scalar>::values(Intrepid::FieldContainer<Scalar> &valu
   }
 }
 
-template class SimpleVectorFunction<double>;
+namespace Camellia {
+  template class SimpleVectorFunction<double>;
+}
 

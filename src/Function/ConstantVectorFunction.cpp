@@ -60,5 +60,7 @@ void ConstantVectorFunction<Scalar>::values(Intrepid::FieldContainer<Scalar> &va
     }
   }
 }
-template class ConstantVectorFunction<double>;
 
+namespace Camellia {
+  template class ConstantVectorFunction<double>;
+}

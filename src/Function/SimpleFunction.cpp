@@ -65,5 +65,7 @@ void SimpleFunction<Scalar>::values(Intrepid::FieldContainer<Scalar> &values, Ba
   }
 }
 
-template class SimpleFunction<double>;
+namespace Camellia {
+  template class SimpleFunction<double>;
+}
 
