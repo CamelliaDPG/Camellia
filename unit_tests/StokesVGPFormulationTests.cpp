@@ -330,14 +330,9 @@ namespace {
   
   TEUCHOS_UNIT_TEST( StokesVGPFormulation, SaveAndLoad ) {
     int spaceDim = 2;
-    vector<double> dimensions(spaceDim); // 1x2 domain
-    dimensions[0] = 1.0;
-    dimensions[1] = 2.0;
-    
-    vector<int> elementCounts(spaceDim); // 3 x 2 mesh
-    elementCounts[0] = 3;
-    elementCounts[1] = 2;
-    vector<double> x0(spaceDim,0.0);
+    vector<double> dimensions = {1.0, 2.0}; // 1 x 2 domain
+    vector<int> elementCounts = {3, 2}; // 3 x 2 mesh
+    vector<double> x0 = {0.0, 0.0};
     
     double mu = 1.0;
     bool useConformingTraces = true;
@@ -348,21 +343,20 @@ namespace {
     int fieldPolyOrder = 1, delta_k = 1;
     
     form.initializeSolution(meshTopo, fieldPolyOrder, delta_k);
-
-    set<GlobalIndexType> cellsToRefine;
-    cellsToRefine.insert(0);
-    form.solution()->mesh()->pRefine(cellsToRefine);
-
-    string savePrefix = "stokesBackstep";
+    
+    string savePrefix = "StokesVGPTest";
     form.save(savePrefix);
     
     StokesVGPFormulation loadedForm(spaceDim,useConformingTraces, mu);
     loadedForm.initializeSolution(savePrefix,fieldPolyOrder,delta_k);
     
-    GDAMinimumRule* minRule = dynamic_cast<GDAMinimumRule*> (loadedForm.solution()->mesh()->globalDofAssignment().get());
+    // delete the files we created
+    remove((savePrefix+".soln").c_str());
+    remove((savePrefix+".mesh").c_str());
     
-    minRule->printConstraintInfo(0);
-    
+//    GDAMinimumRule* minRule = dynamic_cast<GDAMinimumRule*> (loadedForm.solution()->mesh()->globalDofAssignment().get());
+
+    set<GlobalIndexType> cellsToRefine = {0};
     loadedForm.solution()->mesh()->pRefine(cellsToRefine);
   }
   
