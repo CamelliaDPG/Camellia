@@ -44,14 +44,14 @@
 #include "HDF5Exporter.h"
 #endif
 
-class NewQuadraticFunction : public SimpleFunction {
+class NewQuadraticFunction : public SimpleFunction<double> {
 public:
   double value(double x, double y) {
     return x*y + 3.0 * x * x;
   }
 };
 
-class SqrtFunction : public SimpleFunction {
+class SqrtFunction : public SimpleFunction<double> {
 public:
   double value(double x, double y) {
     return sqrt(abs(x));
@@ -1132,7 +1132,7 @@ bool SolutionTests::testNewProjectFunction() {
     Teuchos::RCP<ExactSolution> exactSoln = Teuchos::rcp( new ExactSolution );
     exactSoln->setSolutionFunction(trialVar, f);
     // test the L2 error measured in two ways
-    double l2errorActual = exactSoln->L2NormOfError(*soln, trialID, 15);
+    double l2errorActual = exactSoln->L2NormOfError(soln, trialID, 15);
     
     FunctionPtr bestFxnError = Function::solution(trialVar, soln) - f;
     int matchingCubatureEnrichment = 15 - (pTest + H1Order - 1); // chosen so that the effective cubature degree below will match that above
