@@ -408,7 +408,7 @@ bool ScratchPadTests::testSpatiallyFilteredFunction() {
   bool success = true;
   FunctionPtr one = Function::constant(1.0);
   SpatialFilterPtr positiveX = Teuchos::rcp( new PositiveX );
-  FunctionPtr heaviside = Teuchos::rcp( new SpatiallyFilteredFunction(one, positiveX) );
+  FunctionPtr heaviside = Teuchos::rcp( new SpatiallyFilteredFunction<double>(one, positiveX) );
   
   int numCells = _basisCache->getPhysicalCubaturePoints().dimension(0);
   int numPoints = _testPoints.dimension(0);
