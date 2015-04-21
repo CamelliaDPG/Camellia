@@ -1360,11 +1360,8 @@ bool MeshTestSuite::testHRefinement() {
     cout << "Difference of L2 error in refined vs. originally fine mesh: " << diff << endl;
     success = false;
     
-    SolutionPtr origSolnPtr = Teuchos::rcp(&origSolution, false);
-    SolutionPtr refinedSolnPtr = Teuchos::rcp(&solution, false);
-    
-    HDF5Exporter::exportSolution("/tmp/", "originalFine", origSolnPtr);
-    HDF5Exporter::exportSolution("/tmp/", "refinedSoln", refinedSolnPtr);
+    HDF5Exporter::exportSolution("/tmp/", "originalFine", origSolution);
+    HDF5Exporter::exportSolution("/tmp/", "refinedSoln", solution);
   }
   
   // TODO: work out how to fix solution.equals to work with meshes whose cells may be in different orders...
