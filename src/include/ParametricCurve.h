@@ -19,7 +19,7 @@ using namespace std;
 
 namespace Camellia {
   class ParametricFunction : public TFunction<double> {
-    typedef Teuchos::RCP<ParametricFunction> ParamatricFunctionPtr;
+    typedef Teuchos::RCP<ParametricFunction> ParametricFunctionPtr;
 
     TFunctionPtr<double> _underlyingFxn; // the original 0-to-1 function
     TFunctionPtr<double> _argMap; // maps the t values from (0,1) on sub-curve into (t0,t1) on curve
@@ -39,12 +39,12 @@ namespace Camellia {
     void values(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache);
 
     TFunctionPtr<double> dx(); // same function as dt_parametric()
-    ParamatricFunctionPtr dt_parametric(); // not named dt() to avoid conflict with Function, which means space-time by this...
+    ParametricFunctionPtr dt_parametric(); // not named dt() to avoid conflict with Function, which means space-time by this...
 
-    ParamatricFunctionPtr subFunction(double t0, double t1);
+    ParametricFunctionPtr subFunction(double t0, double t1);
 
     // parametric function: function on refCellPoints mapped to [0,1]
-    static ParamatricFunctionPtr parametricFunction(TFunctionPtr<double> fxn, double t0=0, double t1=1);
+    static ParametricFunctionPtr parametricFunction(TFunctionPtr<double> fxn, double t0=0, double t1=1);
   };
   typedef Teuchos::RCP<ParametricFunction> ParamatricFunctionPtr;
 
