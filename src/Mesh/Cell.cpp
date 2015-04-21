@@ -255,7 +255,12 @@ unsigned Cell::findSubcellOrdinal(unsigned subcdim, IndexType subcEntityIndex) {
 }
 
 unsigned Cell::findSubcellOrdinalInSide(unsigned int subcdim, IndexType subcEntityIndex, unsigned sideOrdinal) {
+  unsigned subcOrdinalInCell = findSubcellOrdinal(subcdim, subcEntityIndex);
   int sideDim = _cellTopo->getDimension() - 1;
+  if (subcOrdinalInCell == -1) return -1;
+  return CamelliaCellTools::subcellReverseOrdinalMap(topology(), sideDim, sideOrdinal, subcdim, subcOrdinalInCell);
+  
+/*
   IndexType sideEntityIndex = entityIndex(sideDim, sideOrdinal);
   int scCount = _meshTopo->getSubEntityCount(sideDim, sideEntityIndex, subcdim);
   for (unsigned scordInSide=0; scordInSide < scCount; scordInSide++) {
@@ -263,7 +268,7 @@ unsigned Cell::findSubcellOrdinalInSide(unsigned int subcdim, IndexType subcEnti
       return scordInSide;
     }
   }
-  return -1; // NOT FOUND
+  return -1; // NOT FOUND*/
 }
 
 Teuchos::RCP<Cell> Cell::getParent() {
