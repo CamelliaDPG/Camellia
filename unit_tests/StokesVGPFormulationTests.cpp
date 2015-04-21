@@ -332,6 +332,7 @@ namespace {
     vector<double> dimensions = {1.0, 2.0}; // 1 x 2 domain
     vector<int> elementCounts = {3, 2}; // 3 x 2 mesh
     vector<double> x0 = {0.0, 0.0};
+    int spaceDim = dimensions.size();
 
     double mu = 1.0;
     bool useConformingTraces = true;
