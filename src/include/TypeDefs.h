@@ -57,6 +57,7 @@ namespace Camellia {
 	class Mesh;
 	class MeshPartitionPolicy;
 	class MeshTopology;
+  class ParameterFunction;
   class RefinementPattern;
 	class RefinementStrategy;
 	class RieszRep;
@@ -88,6 +89,7 @@ namespace Camellia {
 	typedef Teuchos::RCP<Mesh> MeshPtr;
 	typedef Teuchos::RCP<MeshPartitionPolicy> MeshPartitionPolicyPtr;
 	typedef Teuchos::RCP<MeshTopology> MeshTopologyPtr;
+	typedef Teuchos::RCP<ParameterFunction> ParameterFunctionPtr;
   typedef Teuchos::RCP<RefinementPattern> RefinementPatternPtr;
 	typedef Teuchos::RCP<RefinementStrategy> RefinementStrategyPtr;
 	typedef Teuchos::RCP<RieszRep> RieszRepPtr;
