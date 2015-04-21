@@ -1469,15 +1469,25 @@ namespace Camellia {
     }
     return Teuchos::rcp( new QuotientFunction<Scalar>(f1,scalarDivisor) );
   }
-
+  
   template <typename Scalar>
   TFunctionPtr<Scalar> operator/(TFunctionPtr<Scalar> f1, Scalar divisor) {
     return f1 / TFunction<Scalar>::constant(divisor);
   }
-
+  
+  template <typename Scalar>
+  TFunctionPtr<Scalar> operator/(TFunctionPtr<Scalar> f1, int divisor) {
+    return f1 / Scalar(divisor);
+  }
+  
   template <typename Scalar>
   TFunctionPtr<Scalar> operator/(Scalar value, TFunctionPtr<Scalar> scalarDivisor) {
     return TFunction<Scalar>::constant(value) / scalarDivisor;
+  }
+  
+  template <typename Scalar>
+  TFunctionPtr<Scalar> operator/(int value, TFunctionPtr<Scalar> scalarDivisor) {
+    return Scalar(value) / scalarDivisor;
   }
 
   template <typename Scalar>
@@ -1488,6 +1498,16 @@ namespace Camellia {
   template <typename Scalar>
   TFunctionPtr<Scalar> operator*(TFunctionPtr<Scalar> f, Scalar weight) {
     return weight * f;
+  }
+  
+  template <typename Scalar>
+  TFunctionPtr<Scalar> operator*(int weight, TFunctionPtr<Scalar> f) {
+    return Scalar(weight) * f;
+  }
+  
+  template <typename Scalar>
+  TFunctionPtr<Scalar> operator*(TFunctionPtr<Scalar> f, int weight) {
+    return Scalar(weight) * f;
   }
 
   template <typename Scalar>
@@ -1520,20 +1540,40 @@ namespace Camellia {
   TFunctionPtr<Scalar> operator+(Scalar value, TFunctionPtr<Scalar> f1) {
     return f1 + TFunction<Scalar>::constant(value);
   }
+  
+  template <typename Scalar>
+  TFunctionPtr<Scalar> operator+(TFunctionPtr<Scalar> f1, int value) {
+    return f1 + Scalar(value);
+  }
+  
+  template <typename Scalar>
+  TFunctionPtr<Scalar> operator+(int value, TFunctionPtr<Scalar> f1) {
+    return f1 + Scalar(value);
+  }
 
   template <typename Scalar>
   TFunctionPtr<Scalar> operator-(TFunctionPtr<Scalar> f1, TFunctionPtr<Scalar> f2) {
     return f1 + -f2;
   }
-
+  
   template <typename Scalar>
   TFunctionPtr<Scalar> operator-(TFunctionPtr<Scalar> f1, Scalar value) {
     return f1 - TFunction<Scalar>::constant(value);
   }
-
+  
   template <typename Scalar>
   TFunctionPtr<Scalar> operator-(Scalar value, TFunctionPtr<Scalar> f1) {
     return TFunction<Scalar>::constant(value) - f1;
+  }
+  
+  template <typename Scalar>
+  TFunctionPtr<Scalar> operator-(TFunctionPtr<Scalar> f1, int value) {
+    return f1 - Scalar(value);
+  }
+  
+  template <typename Scalar>
+  TFunctionPtr<Scalar> operator-(int value, TFunctionPtr<Scalar> f1) {
+    return Scalar(value) - f1;
   }
 
   template <typename Scalar>
@@ -1577,19 +1617,27 @@ namespace Camellia {
   template TFunctionPtr<double> operator/(TFunctionPtr<double> f1, TFunctionPtr<double> scalarDivisor);
   template TFunctionPtr<double> operator/(TFunctionPtr<double> f1, double divisor);
   template TFunctionPtr<double> operator/(double value, TFunctionPtr<double> scalarDivisor);
+  template TFunctionPtr<double> operator/(TFunctionPtr<double> f1, int divisor);
+  template TFunctionPtr<double> operator/(int value, TFunctionPtr<double> scalarDivisor);
 
   template TFunctionPtr<double> operator*(double weight, TFunctionPtr<double> f);
   template TFunctionPtr<double> operator*(TFunctionPtr<double> f, double weight);
+  template TFunctionPtr<double> operator*(int weight, TFunctionPtr<double> f);
+  template TFunctionPtr<double> operator*(TFunctionPtr<double> f, int weight);
   template TFunctionPtr<double> operator*(vector<double> weight, TFunctionPtr<double> f);
   template TFunctionPtr<double> operator*(TFunctionPtr<double> f, vector<double> weight);
 
   template TFunctionPtr<double> operator+(TFunctionPtr<double> f1, TFunctionPtr<double> f2);
   template TFunctionPtr<double> operator+(TFunctionPtr<double> f1, double value);
   template TFunctionPtr<double> operator+(double value, TFunctionPtr<double> f1);
+  template TFunctionPtr<double> operator+(TFunctionPtr<double> f1, int value);
+  template TFunctionPtr<double> operator+(int value, TFunctionPtr<double> f1);
 
   template TFunctionPtr<double> operator-(TFunctionPtr<double> f1, TFunctionPtr<double> f2);
   template TFunctionPtr<double> operator-(TFunctionPtr<double> f1, double value);
   template TFunctionPtr<double> operator-(double value, TFunctionPtr<double> f1);
+  template TFunctionPtr<double> operator-(TFunctionPtr<double> f1, int value);
+  template TFunctionPtr<double> operator-(int value, TFunctionPtr<double> f1);
 
   template TFunctionPtr<double> operator-(TFunctionPtr<double> f);
 }
