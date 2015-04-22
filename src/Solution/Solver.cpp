@@ -17,17 +17,18 @@
 
 using namespace Camellia;
 
-Teuchos::RCP<Solver> Solver::getSolver(SolverChoice choice, bool saveFactorization,
+template <typename Scalar>
+TSolverPtr<Scalar> TSolver<Scalar>::getSolver(SolverChoice choice, bool saveFactorization,
                                        double residualTolerance, int maxIterations,
                                        TSolutionPtr<double> fineSolution, MeshPtr coarseMesh,
-                                       SolverPtr coarseSolver) {
+                                       TSolverPtr<Scalar> coarseSolver) {
   switch (choice) {
     case KLU:
-      return Teuchos::rcp( new Amesos2Solver(saveFactorization, "klu") );
+      return Teuchos::rcp( new TAmesos2Solver<Scalar>(saveFactorization, "klu") );
       break;
 #ifdef HAVE_AMESOS_SUPERLUDIST
     case SuperLUDist:
-      return Teuchos::rcp( new Amesos2Solver(saveFactorization, "superlu_dist") );
+      return Teuchos::rcp( new TAmesos2Solver<Scalar>(saveFactorization, "superlu_dist") );
 #endif
 #ifdef HAVE_AMESOS_MUMPS
     case MUMPS:
@@ -58,12 +59,18 @@ Teuchos::RCP<Solver> Solver::getSolver(SolverChoice choice, bool saveFactorizati
   }
 }
 
-SolverPtr Solver::getDirectSolver(bool saveFactorization) {
+template <typename Scalar>
+TSolverPtr<Scalar> TSolver<Scalar>::getDirectSolver(bool saveFactorization) {
 #ifdef HAVE_AMESOS_SUPERLUDIST
-  return getSolver(Solver::SuperLUDist, saveFactorization);
+  return getSolver(TSolver<Scalar>::SuperLUDist, saveFactorization);
 #elif defined(HAVE_AMESOS_MUMPS)
-  return getSolver(Solver::MUMPS, saveFactorization);
+  return getSolver(TSolver<Scalar>::MUMPS, saveFactorization);
 #else
-  return getSolver(Solver::KLU, saveFactorization);
+  return getSolver(TSolver<Scalar>::KLU, saveFactorization);
 #endif
+}
+
+namespace Camellia {
+  template class TSolver<double>;
+  template class TAmesos2Solver<double>;
 }

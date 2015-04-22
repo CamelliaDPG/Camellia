@@ -30,11 +30,6 @@ namespace Camellia {
 	typedef int GlobalIndexTypeToCast; // for constructing Epetra_Maps, etc.  (these like either int or long long)
 
 	// Trilinos typedefs
-	// typedef double Scalar;
-	typedef Teuchos::RCP< Tpetra::CrsMatrix<double,IndexType,GlobalIndexType> > MatrixPtr;
-	typedef Teuchos::RCP< Tpetra::MultiVector<double,IndexType,GlobalIndexType> > VectorPtr;
-	typedef Teuchos::RCP< Tpetra::Map<IndexType,GlobalIndexType> > MapPtr;
-
 	typedef Teuchos::RCP< Intrepid::FieldContainer<double> > FCPtr;
 	typedef Teuchos::RCP< const Intrepid::FieldContainer<double> > constFCPtr;
 
@@ -55,25 +50,26 @@ namespace Camellia {
   class RefinementPattern;
 	class RefinementStrategy;
 	class RieszRep;
-	class Solver;
 	class SpatialFilter;
 	class Var;
 	class VarFactory;
   // templates
   template <typename Scalar=double>
-	class TBC;
+    class TBC;
   template <typename Scalar=double>
-	class TBF;
+    class TBF;
   template <typename Scalar=double>
-	class TIP;
+    class TIP;
   template <typename Scalar=double>
-	class TFunction;
+    class TFunction;
   template <typename Scalar=double>
-	class TLinearTerm;
+    class TLinearTerm;
   template <typename Scalar=double>
-	class TRHS;
+    class TRHS;
   template <typename Scalar=double>
-	class TSolution;
+    class TSolution;
+  template <typename Scalar=double>
+    class TSolver;
 
 	typedef Teuchos::RCP<BasisCache> BasisCachePtr;
 	typedef Teuchos::RCP<BasisFactory> BasisFactoryPtr;
@@ -90,7 +86,6 @@ namespace Camellia {
   typedef Teuchos::RCP<RefinementPattern> RefinementPatternPtr;
 	typedef Teuchos::RCP<RefinementStrategy> RefinementStrategyPtr;
 	typedef Teuchos::RCP<RieszRep> RieszRepPtr;
-	typedef Teuchos::RCP<Solver> SolverPtr;
 	typedef Teuchos::RCP<SpatialFilter> SpatialFilterPtr;
 	typedef Teuchos::RCP<Var> VarPtr;
   // templates
@@ -122,6 +117,10 @@ namespace Camellia {
     using TSolutionPtr = Teuchos::RCP<TSolution<Scalar> >;
   typedef TSolution<double> Solution;
   typedef TSolutionPtr<double> SolutionPtr;
+  template <typename Scalar>
+    using TSolverPtr = Teuchos::RCP<TSolver<Scalar> >;
+  typedef TSolver<double> Solver;
+  typedef TSolverPtr<double> SolverPtr;
 
   // minor typedefs
   template <typename Scalar>
@@ -133,6 +132,18 @@ namespace Camellia {
   template <typename Scalar>
     using TDirichletBC = std::pair<SpatialFilterPtr,TFunctionPtr<Scalar>>;
   typedef TDirichletBC<double> DirichletBC;
+
+	typedef Teuchos::RCP< Tpetra::Map<IndexType,GlobalIndexType> > MapPtr;
+  template <typename Scalar>
+    using TMatrixPtr = Teuchos::RCP< Tpetra::CrsMatrix<Scalar,IndexType,GlobalIndexType> >;
+  typedef TMatrixPtr<double> MatrixPtr;
+  template <typename Scalar>
+    using TVectorPtr = Teuchos::RCP< Tpetra::MultiVector<Scalar,IndexType,GlobalIndexType> >;
+  typedef TVectorPtr<double> VectorPtr;
+
+  template <typename Scalar=double>
+    class TAmesos2Solver;
+  typedef TAmesos2Solver<double> Amesos2Solver;
 }
 
 

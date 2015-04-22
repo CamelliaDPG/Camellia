@@ -34,23 +34,24 @@ using namespace std;
 
 namespace Camellia {
   // abstract class for solving Epetra_LinearProblem problems
-  class Solver {
+  template <typename Scalar>
+  class TSolver {
   protected:
     Teuchos::RCP<Epetra_CrsMatrix> _stiffnessMatrix;
     Teuchos::RCP<Epetra_MultiVector> _lhs;
     Teuchos::RCP<Epetra_MultiVector> _rhs;
 
-    MatrixPtr _stiffnessMatrix2;
-    VectorPtr _lhs2;
-    VectorPtr _rhs2;
+    TMatrixPtr<Scalar> _stiffnessMatrix2;
+    TVectorPtr<Scalar> _lhs2;
+    TVectorPtr<Scalar> _rhs2;
   public:
-    virtual ~Solver() {}
+    virtual ~TSolver() {}
     virtual void setProblem(Teuchos::RCP<Epetra_CrsMatrix> stiffnessMatrix, Teuchos::RCP<Epetra_MultiVector> lhs, Teuchos::RCP<Epetra_MultiVector> rhs) {
       _stiffnessMatrix = stiffnessMatrix;
       _lhs = lhs;
       _rhs = rhs;
     }
-    virtual void setProblem(MatrixPtr stiffnessMatrix, VectorPtr lhs, VectorPtr rhs) {
+    virtual void setProblem(TMatrixPtr<Scalar> stiffnessMatrix, TVectorPtr<Scalar> lhs, TVectorPtr<Scalar> rhs) {
       _stiffnessMatrix2 = stiffnessMatrix;
       _lhs2 = lhs;
       _rhs2 = rhs;
@@ -58,19 +59,19 @@ namespace Camellia {
     virtual void setStiffnessMatrix(Teuchos::RCP<Epetra_CrsMatrix> stiffnessMatrix) {
       _stiffnessMatrix = stiffnessMatrix;
     }
-    virtual void setStiffnessMatrix(MatrixPtr stiffnessMatrix) {
+    virtual void setStiffnessMatrix(TMatrixPtr<Scalar> stiffnessMatrix) {
       _stiffnessMatrix2 = stiffnessMatrix;
     }
     virtual void setLHS(Teuchos::RCP<Epetra_MultiVector> lhs) {
       _lhs = lhs;
     }
-    virtual void setLHS2(VectorPtr lhs) {
+    virtual void setLHS2(TVectorPtr<Scalar> lhs) {
       _lhs2 = lhs;
     }
     virtual void setRHS(Teuchos::RCP<Epetra_MultiVector> rhs) {
       _rhs = rhs;
     }
-    virtual void setRHS2(VectorPtr rhs) {
+    virtual void setRHS2(TVectorPtr<Scalar> rhs) {
       _rhs2 = rhs;
     }
     virtual int solve() = 0; // solve with an error code response
@@ -88,12 +89,12 @@ namespace Camellia {
       GMGSolver_1_Level_h
     };
 
-    static SolverPtr getSolver(SolverChoice choice, bool saveFactorization,
+    static TSolverPtr<Scalar> getSolver(SolverChoice choice, bool saveFactorization,
                                double residualTolerance = 1e-12, int maxIterations = 50000,
                                TSolutionPtr<double> fineSolution = Teuchos::null, MeshPtr coarseMesh = Teuchos::null,
-                               SolverPtr coarseSolver = Teuchos::null);
+                               TSolverPtr<Scalar> coarseSolver = Teuchos::null);
 
-    static SolverPtr getDirectSolver(bool saveFactorization=false);
+    static TSolverPtr<Scalar> getDirectSolver(bool saveFactorization=false);
 
     static SolverChoice solverChoiceFromString(std::string choiceString) {
       if (choiceString=="KLU") return KLU;
@@ -115,21 +116,22 @@ namespace Camellia {
 
 
   // some concrete implementations follow…
-  class Amesos2Solver : public Solver {
+  template <typename Scalar>
+  class TAmesos2Solver : public TSolver<Scalar> {
     bool _saveFactorization;
     std::string _solverString;
     Teuchos::RCP<Amesos2::Solver<Epetra_CrsMatrix,Epetra_MultiVector> > _savedSolver;
   public:
     // Solver options available: klu superlu_dist superlu_mt superlu pardisomkl lapack amesos2_cholmod
     // May require specific instructions while building Trilinos
-    Amesos2Solver(bool saveFactorization = false, std::string solverString="klu"): _saveFactorization(saveFactorization), _solverString(solverString) {}
+    TAmesos2Solver(bool saveFactorization = false, std::string solverString="klu"): _saveFactorization(saveFactorization), _solverString(solverString) {}
     int solve() {
       if (!_saveFactorization) {
         Teuchos::RCP<Amesos2::Solver<Epetra_CrsMatrix,Epetra_MultiVector> > solver
-          = Amesos2::create<Epetra_CrsMatrix,Epetra_MultiVector>(_solverString, _stiffnessMatrix, _lhs, _rhs);
+          = Amesos2::create<Epetra_CrsMatrix,Epetra_MultiVector>(_solverString, this->_stiffnessMatrix, this->_lhs, this->_rhs);
         solver->solve();
       } else {
-        _savedSolver = Amesos2::create<Epetra_CrsMatrix,Epetra_MultiVector>(_solverString, _stiffnessMatrix, _lhs, _rhs);
+        _savedSolver = Amesos2::create<Epetra_CrsMatrix,Epetra_MultiVector>(_solverString, this->_stiffnessMatrix, this->_lhs, this->_rhs);
         _savedSolver->solve();
       }
       return 0;
@@ -150,7 +152,7 @@ namespace Camellia {
  #ifdef HAVE_MPI
  #include "Amesos_Mumps.h"
 namespace Camellia {
- class MumpsSolver : public Solver {
+ class MumpsSolver : public TSolver<double> {
    int _maxMemoryPerCoreMB;
    bool _saveFactorization;
    Teuchos::RCP<Amesos_Mumps> _savedSolver;
@@ -168,7 +170,7 @@ namespace Camellia {
    //   this->_problem = problem;
    // }
    int solve() {
-     Epetra_LinearProblem problem(_stiffnessMatrix.get(), _lhs.get(), _rhs.get());
+     Epetra_LinearProblem problem(this->_stiffnessMatrix.get(), this->_lhs.get(), this->_rhs.get());
      Teuchos::RCP<Amesos_Mumps> mumps = Teuchos::rcp(new Amesos_Mumps(problem));
      int numProcs=1;
      int rank=0;
@@ -269,7 +271,7 @@ namespace Camellia {
 } // namespace
  #else
 namespace Camellia {
- class MumpsSolver : public Solver {
+ class MumpsSolver : public TSolver<double> {
  public:
    int solve() {
      cout << "ERROR: no MUMPS support for non-MPI runs yet (because Nate hasn't built MUMPS for his serial-debug Trilinos).\n";
