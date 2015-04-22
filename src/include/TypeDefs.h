@@ -48,7 +48,6 @@ namespace Camellia {
 	class Element;
 	class ElementType;
 	class GlobalDofAssignment;
-	class IP;
 	class LagrangeConstraints;
 	class Mesh;
 	class MeshPartitionPolicy;
@@ -66,6 +65,8 @@ namespace Camellia {
   template <typename Scalar=double>
 	class TBF;
   template <typename Scalar=double>
+	class TIP;
+  template <typename Scalar=double>
 	class TFunction;
   template <typename Scalar=double>
 	class TLinearTerm;
@@ -81,7 +82,6 @@ namespace Camellia {
 	typedef Teuchos::RCP<Element> ElementPtr;
 	typedef Teuchos::RCP<ElementType> ElementTypePtr;
 	typedef Teuchos::RCP<GlobalDofAssignment> GlobalDofAssignmentPtr;
-	typedef Teuchos::RCP<IP> IPPtr;
 	typedef Teuchos::RCP<Mesh> MeshPtr;
 	typedef Teuchos::RCP<MeshPartitionPolicy> MeshPartitionPolicyPtr;
 	typedef Teuchos::RCP<MeshTopology> MeshTopologyPtr;
@@ -98,6 +98,10 @@ namespace Camellia {
     using TBFPtr = Teuchos::RCP<TBF<Scalar> >;
   typedef TBF<double> BF;
   typedef TBFPtr<double> BFPtr;
+  template <typename Scalar>
+    using TIPPtr = Teuchos::RCP<TIP<Scalar> >;
+  typedef TIP<double> IP;
+  typedef TIPPtr<double> IPPtr;
   template <typename Scalar>
     using TFunctionPtr = Teuchos::RCP<TFunction<Scalar> >;
   typedef TFunction<double> Function;
