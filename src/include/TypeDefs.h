@@ -41,7 +41,6 @@ namespace Camellia {
 	// Camellia forward declarations and typedefs
 	class BasisCache;
 	class BasisFactory;
-	class BC;
 	class Cell;
 	class DofOrdering;
 	class DofOrderingFactory;
@@ -62,6 +61,8 @@ namespace Camellia {
 	class VarFactory;
   // templates
   template <typename Scalar=double>
+	class TBC;
+  template <typename Scalar=double>
 	class TBF;
   template <typename Scalar=double>
 	class TIP;
@@ -76,7 +77,6 @@ namespace Camellia {
 
 	typedef Teuchos::RCP<BasisCache> BasisCachePtr;
 	typedef Teuchos::RCP<BasisFactory> BasisFactoryPtr;
-	typedef Teuchos::RCP<BC> BCPtr;
 	typedef Teuchos::RCP<Cell> CellPtr;
 	typedef Teuchos::RCP<DofOrdering> DofOrderingPtr;
 	typedef Teuchos::RCP<DofOrderingFactory> DofOrderingFactoryPtr;
@@ -94,6 +94,10 @@ namespace Camellia {
 	typedef Teuchos::RCP<SpatialFilter> SpatialFilterPtr;
 	typedef Teuchos::RCP<Var> VarPtr;
   // templates
+  template <typename Scalar>
+    using TBCPtr = Teuchos::RCP<TBC<Scalar> >;
+  typedef TBC<double> BC;
+  typedef TBCPtr<double> BCPtr;
   template <typename Scalar>
     using TBFPtr = Teuchos::RCP<TBF<Scalar> >;
   typedef TBF<double> BF;
@@ -126,6 +130,9 @@ namespace Camellia {
   template <typename Scalar>
     using TBilinearTerm = std::pair<TLinearTermPtr<Scalar>,TLinearTermPtr<Scalar>>;
   typedef TBilinearTerm<double> BilinearTerm;
+  template <typename Scalar>
+    using TDirichletBC = std::pair<SpatialFilterPtr,TFunctionPtr<Scalar>>;
+  typedef TDirichletBC<double> DirichletBC;
 }
 
 

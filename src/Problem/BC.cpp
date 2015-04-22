@@ -12,15 +12,13 @@
 using namespace Intrepid;
 using namespace Camellia;
 
-typedef pair< SpatialFilterPtr, TFunctionPtr<double> > DirichletBC;
-
 template <typename Scalar>
 class BCLogicalOrFunction : public TFunction<Scalar> {
-  TFunctionPtr<double> _f1, _f2;
+  TFunctionPtr<Scalar> _f1, _f2;
   SpatialFilterPtr _sf1, _sf2;
 
 public:
-  BCLogicalOrFunction(TFunctionPtr<double> f1, SpatialFilterPtr sf1, TFunctionPtr<double> f2, SpatialFilterPtr sf2) : TFunction<Scalar>(f1->rank()) {
+  BCLogicalOrFunction(TFunctionPtr<Scalar> f1, SpatialFilterPtr sf1, TFunctionPtr<Scalar> f2, SpatialFilterPtr sf2) : TFunction<Scalar>(f1->rank()) {
     _f1 = f1;
     _sf1 = sf1;
     _f2 = f2;
@@ -99,7 +97,8 @@ public:
 
 template class BCLogicalOrFunction<double>;
 
-void BC::addDirichlet( VarPtr traceOrFlux, SpatialFilterPtr spatialPoints, TFunctionPtr<double> valueFunction ) {
+template <typename Scalar>
+void TBC<Scalar>::addDirichlet( VarPtr traceOrFlux, SpatialFilterPtr spatialPoints, TFunctionPtr<Scalar> valueFunction ) {
   if ((traceOrFlux->varType() != TRACE) && (traceOrFlux->varType() != FLUX)) {
     cout << "WARNING: adding Dirichlet BC for variable that is neither a trace nor a flux.\n";
   }
@@ -107,8 +106,8 @@ void BC::addDirichlet( VarPtr traceOrFlux, SpatialFilterPtr spatialPoints, TFunc
   if (_dirichletBCs.find( traceOrFlux->ID() ) != _dirichletBCs.end() ) {
     // "or" the existing condition with the new one:
     SpatialFilterPtr existingFilter = _dirichletBCs[ traceOrFlux->ID() ].first;
-    TFunctionPtr<double> existingFunction = _dirichletBCs[ traceOrFlux->ID() ].second;
-    valueFunction = Teuchos::rcp( new BCLogicalOrFunction<double>(existingFunction, existingFilter,
+    TFunctionPtr<Scalar> existingFunction = _dirichletBCs[ traceOrFlux->ID() ].second;
+    valueFunction = Teuchos::rcp( new BCLogicalOrFunction<Scalar>(existingFunction, existingFilter,
                                                           valueFunction, spatialPoints) );
     spatialPoints = Teuchos::rcp( new SpatialFilterLogicalOr( existingFilter, spatialPoints ) );
     //    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Only one Dirichlet condition is allowed per variable.");
@@ -116,47 +115,53 @@ void BC::addDirichlet( VarPtr traceOrFlux, SpatialFilterPtr spatialPoints, TFunc
   _dirichletBCs[ traceOrFlux->ID() ] = make_pair( spatialPoints, valueFunction );
 }
 
-void BC::addZeroMeanConstraint( VarPtr field ) {
+template <typename Scalar>
+void TBC<Scalar>::addZeroMeanConstraint( VarPtr field ) {
   if ( field->varType() != FIELD ) {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Zero-mean constraints only supported for field vars");
   }
   _zeroMeanConstraints.insert( field->ID() );
 }
 
-void BC::removeZeroMeanConstraint( int fieldID ) {
+template <typename Scalar>
+void TBC<Scalar>::removeZeroMeanConstraint( int fieldID ) {
   if (_zeroMeanConstraints.find(fieldID) != _zeroMeanConstraints.end()) {
     _zeroMeanConstraints.erase( _zeroMeanConstraints.find(fieldID) );
   }
 }
 
-void BC::addSinglePointBC( int fieldID, double value, GlobalIndexType vertexNumber ) {
+template <typename Scalar>
+void TBC<Scalar>::addSinglePointBC( int fieldID, Scalar value, GlobalIndexType vertexNumber ) {
   _singlePointBCs[ fieldID ] = make_pair(vertexNumber, value);
 }
 
-map< int, DirichletBC > & BC::dirichletBCs() {
+template <typename Scalar>
+map< int, TDirichletBC<Scalar> > & TBC<Scalar>::dirichletBCs() {
   return _dirichletBCs;
 }
 
-BCPtr BC::copyImposingZero() {
+template <typename Scalar>
+TBCPtr<Scalar> TBC<Scalar>::copyImposingZero() {
   //returns a copy of this BC object, except with all zero Functions
-  BCPtr zeroBC = Teuchos::rcp( new BC(*this) );
-  map< int, DirichletBC >* dirichletBCs = &(zeroBC->dirichletBCs());
-  for (map< int, DirichletBC >::iterator bcIt = dirichletBCs->begin();
+  TBCPtr<Scalar> zeroBC = Teuchos::rcp( new TBC<Scalar>(*this) );
+  map< int, TDirichletBC<Scalar> >* dirichletBCs = &(zeroBC->dirichletBCs());
+  for (typename map< int, TDirichletBC<Scalar> >::iterator bcIt = dirichletBCs->begin();
        bcIt != dirichletBCs->end(); ++bcIt) {
-    bcIt->second.second = TFunction<double>::zero();
+    bcIt->second.second = TFunction<Scalar>::zero();
   }
 
-  for (map< int, pair<GlobalIndexType,double> >::iterator singlePointIt = _singlePointBCs.begin(); singlePointIt != _singlePointBCs.end(); singlePointIt++) {
+  for (typename map< int, pair<GlobalIndexType,Scalar> >::iterator singlePointIt = _singlePointBCs.begin(); singlePointIt != _singlePointBCs.end(); singlePointIt++) {
     int trialID = singlePointIt->first;
     GlobalIndexType vertexNumber = singlePointIt->second.first;
-    double zero = 0.0;
+    Scalar zero = 0.0;
     zeroBC->addSinglePointBC(trialID, zero, vertexNumber);
   }
 
   return zeroBC;
 }
 
-pair< SpatialFilterPtr, TFunctionPtr<double> > BC::getDirichletBC(int varID) {
+template <typename Scalar>
+pair< SpatialFilterPtr, TFunctionPtr<Scalar> > TBC<Scalar>::getDirichletBC(int varID) {
   if (_dirichletBCs.find(varID) == _dirichletBCs.end()) {
     cout << "No Dirichlet BC for the indicated variable...\n";
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "No Dirichlet BC for the indicated variable...");
@@ -164,27 +169,31 @@ pair< SpatialFilterPtr, TFunctionPtr<double> > BC::getDirichletBC(int varID) {
   return _dirichletBCs[varID];
 }
 
-TFunctionPtr<double> BC::getSpatiallyFilteredFunctionForDirichletBC(int varID) {
-  pair< SpatialFilterPtr, TFunctionPtr<double> > dirichletBC = getDirichletBC(varID);
+template <typename Scalar>
+TFunctionPtr<Scalar> TBC<Scalar>::getSpatiallyFilteredFunctionForDirichletBC(int varID) {
+  pair< SpatialFilterPtr, TFunctionPtr<Scalar> > dirichletBC = getDirichletBC(varID);
 
-  return Teuchos::rcp( new SpatiallyFilteredFunction<double>(dirichletBC.second, dirichletBC.first) );
+  return Teuchos::rcp( new SpatiallyFilteredFunction<Scalar>(dirichletBC.second, dirichletBC.first) );
 }
 
-bool BC::isLegacySubclass() {
+template <typename Scalar>
+bool TBC<Scalar>::isLegacySubclass() {
   return _legacyBCSubclass;
 }
 
-void BC::setTime(double time)
+template <typename Scalar>
+void TBC<Scalar>::setTime(double time)
 {
   _time = time;
-  for (map< int, DirichletBC >::iterator bcIt = dirichletBCs().begin();
+  for (typename map< int, TDirichletBC<Scalar> >::iterator bcIt = dirichletBCs().begin();
        bcIt != dirichletBCs().end(); ++bcIt)
   {
     bcIt->second.second->setTime(time);
   }
 }
 
-bool BC::bcsImposed(int varID) {
+template <typename Scalar>
+bool TBC<Scalar>::bcsImposed(int varID) {
   // returns true if there are any BCs anywhere imposed on varID
   if (_legacyBCSubclass)
   {
@@ -198,7 +207,8 @@ bool BC::bcsImposed(int varID) {
   }
 }
 
-void BC::imposeBC(FieldContainer<double> &dirichletValues, FieldContainer<bool> &imposeHere,
+template <typename Scalar>
+void TBC<Scalar>::imposeBC(FieldContainer<Scalar> &dirichletValues, FieldContainer<bool> &imposeHere,
                       int varID, FieldContainer<double> &unitNormals, BasisCachePtr basisCache) {
   if (_legacyBCSubclass)
   {
@@ -235,9 +245,9 @@ void BC::imposeBC(FieldContainer<double> &dirichletValues, FieldContainer<bool> 
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Attempt to impose BC on varID without BCs.");
     }
 
-    DirichletBC bc = _dirichletBCs[varID];
+    TDirichletBC<Scalar> bc = _dirichletBCs[varID];
     SpatialFilterPtr filter = bc.first;
-    TFunctionPtr<double> f = bc.second;
+    TFunctionPtr<Scalar> f = bc.second;
 
     filter->matchesPoints(imposeHere,basisCache);
 
@@ -245,20 +255,21 @@ void BC::imposeBC(FieldContainer<double> &dirichletValues, FieldContainer<bool> 
   }
 }
 
-void BC::imposeBC(int varID, FieldContainer<double> &physicalPoints,
+template <typename Scalar>
+void TBC<Scalar>::imposeBC(int varID, FieldContainer<double> &physicalPoints,
                       FieldContainer<double> &unitNormals,
-                      FieldContainer<double> &dirichletValues,
+                      FieldContainer<Scalar> &dirichletValues,
                       FieldContainer<bool> &imposeHere) {
   if (_legacyBCSubclass)
   {
-    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "BC::imposeBC unimplemented.");
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "TBC<Scalar>::imposeBC unimplemented.");
   }
   else
   {
     cout << "ERROR: this version of imposeBC (the singleton version) is only supported by legacy subclasses.\n";
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "this version of imposeBC (the singleton version) is only supported by legacy subclasses.");
 //    if (_singlePointBCs.find(varID) == _singlePointBCs.end()) {
-//      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "this version of BC::imposeBC only supports singleton points.");
+//      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "this version of TBC<Scalar>::imposeBC only supports singleton points.");
 //    }
 //    DirichletBC bc = _singlePointBCs[varID];
 //    SpatialFilterPtr filter = bc.first;
@@ -271,7 +282,7 @@ void BC::imposeBC(int varID, FieldContainer<double> &physicalPoints,
 //    filter->matchesPoints(imposeHere,basisCache);
 //    f->values(dirichletValues,basisCache);
 //
-////    cout << "BC::imposeBC (singleton BC implementation) called for varID " << varID << endl;
+////    cout << "TBC<Scalar>::imposeBC (singleton BC implementation) called for varID " << varID << endl;
 //
 //    bool pointMatched = false; // make sure we just impose this once
 //    for (int i=0; i<imposeHere.size(); i++) {
@@ -287,7 +298,8 @@ void BC::imposeBC(int varID, FieldContainer<double> &physicalPoints,
   }
 }
 
-bool BC::singlePointBC(int varID) { // override if you want to implement a BC at a single, arbitrary point (and nowhere else).
+template <typename Scalar>
+bool TBC<Scalar>::singlePointBC(int varID) { // override if you want to implement a BC at a single, arbitrary point (and nowhere else).
   if (_legacyBCSubclass)
   {
     return false;
@@ -298,7 +310,8 @@ bool BC::singlePointBC(int varID) { // override if you want to implement a BC at
   }
 }
 
-bool BC::imposeZeroMeanConstraint(int varID) {
+template <typename Scalar>
+bool TBC<Scalar>::imposeZeroMeanConstraint(int varID) {
   if (_legacyBCSubclass)
   {
     return false;
@@ -310,7 +323,8 @@ bool BC::imposeZeroMeanConstraint(int varID) {
 }
 
 // basisCoefficients has dimensions (C,F)
-void BC::coefficientsForBC(FieldContainer<double> &basisCoefficients, Teuchos::RCP<BCFunction<double>> bcFxn,
+template <typename Scalar>
+void TBC<Scalar>::coefficientsForBC(FieldContainer<double> &basisCoefficients, Teuchos::RCP<BCFunction<Scalar>> bcFxn,
                            BasisPtr basis, BasisCachePtr sideBasisCache) {
   int numFields = basis->getCardinality();
   TEUCHOS_TEST_FOR_EXCEPTION( basisCoefficients.dimension(1) != numFields, std::invalid_argument, "inconsistent basisCoefficients dimensions");
@@ -328,13 +342,15 @@ void BC::coefficientsForBC(FieldContainer<double> &basisCoefficients, Teuchos::R
 //  }
 }
 
-void BC::removeSinglePointBC(int fieldID) {
+template <typename Scalar>
+void TBC<Scalar>::removeSinglePointBC(int fieldID) {
   if (_singlePointBCs.find(fieldID) != _singlePointBCs.end()) {
     _singlePointBCs.erase(fieldID);
   }
 }
 
-double BC::valueForSinglePointBC(int varID) {
+template <typename Scalar>
+Scalar TBC<Scalar>::valueForSinglePointBC(int varID) {
   if (_singlePointBCs.find(varID) != _singlePointBCs.end())
     return _singlePointBCs[varID].second;
   else
@@ -342,17 +358,24 @@ double BC::valueForSinglePointBC(int varID) {
 }
 
 
-GlobalIndexType BC::vertexForSinglePointBC(int varID) {
+template <typename Scalar>
+GlobalIndexType TBC<Scalar>::vertexForSinglePointBC(int varID) {
   if (_singlePointBCs.find(varID) != _singlePointBCs.end())
     return _singlePointBCs[varID].first;
   else
     return -1;
 }
 
-set<int> BC::getZeroMeanConstraints() {
+template <typename Scalar>
+set<int> TBC<Scalar>::getZeroMeanConstraints() {
   return _zeroMeanConstraints;
 }
 
-BCPtr BC::bc() {
-  return Teuchos::rcp(new BC(false)); // false: not legacy subclass
+template <typename Scalar>
+TBCPtr<Scalar> TBC<Scalar>::bc() {
+  return Teuchos::rcp(new TBC<Scalar>(false)); // false: not legacy subclass
+}
+
+namespace Camellia {
+  template class TBC<double>;
 }
