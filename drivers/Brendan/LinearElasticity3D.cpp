@@ -24,6 +24,8 @@
 
 #include "RefinementStrategy.h"
 
+using namespace Camellia;
+
 int kronDelta(int i, int j) {
   return (i == j) ? 1 : 0;
 }
@@ -60,12 +62,16 @@ int main(int argc, char *argv[]) {
   int numRefs = 10;
   int k = 2, delta_k = 2;
   string norm = "Graph";
+  bool saveToFile = false;
+  string savePrefix = "elasticity_ref";
   cmdp.setOption("polyOrder",&k,"polynomial order for field variable u");
   cmdp.setOption("delta_k", &delta_k, "test space polynomial order enrichment");
   cmdp.setOption("numRefs",&numRefs,"number of refinements");
   cmdp.setOption("lambda", &lambda, "lambda");
   cmdp.setOption("mu", &mu, "mu");
   cmdp.setOption("norm", &norm, "norm");
+  cmdp.setOption("saveToFile", "skipSave", &saveToFile, "Save solution after each refinement/solve");
+  cmdp.setOption("savePrefix", &savePrefix, "Filename prefix for saved solutions if saveToFile option is selected");
 
   if (cmdp.parse(argc,argv) != Teuchos::CommandLineProcessor::PARSE_SUCCESSFUL) {
 #ifdef HAVE_MPI
@@ -107,7 +113,7 @@ int main(int argc, char *argv[]) {
   ////////////////    MISCELLANEOUS LOCAL VARIABLES    ////////////////
 
   // Compliance Tensor
-  int N = 3;
+  static const int N = 3;
   double C[N][N][N][N];
   for (int i = 0; i < N; ++i){
     for (int j = 0; j < N; ++j){
@@ -346,7 +352,7 @@ int main(int argc, char *argv[]) {
   ostringstream refName;
   refName << "elasticity";
   HDF5Exporter exporter(mesh,refName.str());
-
+  
   for (int refIndex=0; refIndex < numRefs; refIndex++) {
     soln->solve();
 
@@ -359,6 +365,12 @@ int main(int argc, char *argv[]) {
         << " \tDOFs:\t " << mesh->numGlobalDofs() << " \tEnergy Error:\t " << energyError << endl;
     }
 
+    // save solution to file
+    if (saveToFile) {
+      ostringstream filePrefix;
+      filePrefix << savePrefix << refIndex;
+      soln->save(filePrefix.str());
+    }
     exporter.exportSolution(soln, refIndex);
 
     if (refIndex != numRefs)
