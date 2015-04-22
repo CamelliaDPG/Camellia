@@ -18,9 +18,9 @@
 #include "IP.h"
 
 namespace Camellia {
-  class BF {
-    typedef pair< LinearTermPtr, LinearTermPtr > BilinearTerm;
-    vector< BilinearTerm > _terms;
+  template <typename Scalar>
+  class TBF {
+    vector< TBilinearTerm<Scalar> > _terms;
     VarFactory _varFactory;
 
     bool _isLegacySubclass;
@@ -32,30 +32,30 @@ namespace Camellia {
     bool _useQRSolveForOptimalTestFunctions;
     bool _warnAboutZeroRowsAndColumns;
 
-    bool checkSymmetry(Intrepid::FieldContainer<double> &innerProductMatrix);
+    bool checkSymmetry(Intrepid::FieldContainer<Scalar> &innerProductMatrix);
   public:
-    BF( bool isLegacySubclass ); // legacy version; new code should use a VarFactory version of the constructor
+    TBF( bool isLegacySubclass ); // legacy version; new code should use a VarFactory version of the constructor
 
-    BF( VarFactory varFactory ); // copies (note that external changes in VarFactory won't be registered by BF)
-    BF( VarFactory varFactory, VarFactory::BubnovChoice choice);
+    TBF( VarFactory varFactory ); // copies (note that external changes in VarFactory won't be registered by TBF)
+    TBF( VarFactory varFactory, VarFactory::BubnovChoice choice);
 
-    void addTerm( LinearTermPtr trialTerm, LinearTermPtr testTerm );
-    void addTerm( VarPtr trialVar, LinearTermPtr testTerm );
+    void addTerm( TLinearTermPtr<Scalar> trialTerm, TLinearTermPtr<Scalar> testTerm );
+    void addTerm( VarPtr trialVar, TLinearTermPtr<Scalar> testTerm );
     void addTerm( VarPtr trialVar, VarPtr testVar );
-    void addTerm( LinearTermPtr trialTerm, VarPtr testVar);
+    void addTerm( TLinearTermPtr<Scalar> trialTerm, VarPtr testVar);
 
     // applyBilinearFormData() methods are all legacy methods
     virtual void applyBilinearFormData(int trialID, int testID,
-                                       Intrepid::FieldContainer<double> &trialValues, Intrepid::FieldContainer<double> &testValues,
+                                       Intrepid::FieldContainer<Scalar> &trialValues, Intrepid::FieldContainer<Scalar> &testValues,
                                        const Intrepid::FieldContainer<double> &points) {
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "You must override either some version of applyBilinearFormData!");
     }
 
-    virtual void applyBilinearFormData(Intrepid::FieldContainer<double> &trialValues, Intrepid::FieldContainer<double> &testValues,
+    virtual void applyBilinearFormData(Intrepid::FieldContainer<Scalar> &trialValues, Intrepid::FieldContainer<Scalar> &testValues,
                                        int trialID, int testID, int operatorIndex,
                                        const Intrepid::FieldContainer<double> &points); // default implementation calls operatorIndex-less version
 
-    virtual void applyBilinearFormData(Intrepid::FieldContainer<double> &trialValues, Intrepid::FieldContainer<double> &testValues,
+    virtual void applyBilinearFormData(Intrepid::FieldContainer<Scalar> &trialValues, Intrepid::FieldContainer<Scalar> &testValues,
                                        int trialID, int testID, int operatorIndex,
                                        BasisCachePtr basisCache);
     // default implementation calls BasisCache-less version
@@ -76,31 +76,31 @@ namespace Camellia {
 
     string displayString();
 
-    virtual void localStiffnessMatrixAndRHS(Intrepid::FieldContainer<double> &localStiffness, Intrepid::FieldContainer<double> &rhsVector,
+    virtual void localStiffnessMatrixAndRHS(Intrepid::FieldContainer<Scalar> &localStiffness, Intrepid::FieldContainer<Scalar> &rhsVector,
                                             IPPtr ip, BasisCachePtr ipBasisCache,
                                             RHSPtr rhs,  BasisCachePtr basisCache);
 
-    virtual int optimalTestWeights(Intrepid::FieldContainer<double> &optimalTestWeights, Intrepid::FieldContainer<double> &innerProductMatrix,
+    virtual int optimalTestWeights(Intrepid::FieldContainer<Scalar> &optimalTestWeights, Intrepid::FieldContainer<Scalar> &innerProductMatrix,
                                    ElementTypePtr elemType, Intrepid::FieldContainer<double> &cellSideParities,
                                    BasisCachePtr stiffnessBasisCache);
 
     void printTrialTestInteractions();
 
-    void stiffnessMatrix(Intrepid::FieldContainer<double> &stiffness, Teuchos::RCP<ElementType> elemType,
+    void stiffnessMatrix(Intrepid::FieldContainer<Scalar> &stiffness, Teuchos::RCP<ElementType> elemType,
                          Intrepid::FieldContainer<double> &cellSideParities, Teuchos::RCP<BasisCache> basisCache);
-    void stiffnessMatrix(Intrepid::FieldContainer<double> &stiffness, Teuchos::RCP<ElementType> elemType,
+    void stiffnessMatrix(Intrepid::FieldContainer<Scalar> &stiffness, Teuchos::RCP<ElementType> elemType,
              Intrepid::FieldContainer<double> &cellSideParities, Teuchos::RCP<BasisCache> basisCache,
              bool checkForZeroCols);
 
     // legacy version of stiffnessMatrix():
-    virtual void stiffnessMatrix(Intrepid::FieldContainer<double> &stiffness, DofOrderingPtr trialOrdering,
+    virtual void stiffnessMatrix(Intrepid::FieldContainer<Scalar> &stiffness, DofOrderingPtr trialOrdering,
                                  DofOrderingPtr testOrdering, Intrepid::FieldContainer<double> &cellSideParities,
                                  BasisCachePtr basisCache);
 
-    void bubnovStiffness(Intrepid::FieldContainer<double> &stiffness, Teuchos::RCP<ElementType> elemType,
+    void bubnovStiffness(Intrepid::FieldContainer<Scalar> &stiffness, Teuchos::RCP<ElementType> elemType,
              Intrepid::FieldContainer<double> &cellSideParities, Teuchos::RCP<BasisCache> basisCache);
 
-    LinearTermPtr testFunctional(TSolutionPtr<double> trialSolution, bool excludeBoundaryTerms=false, bool overrideMeshCheck=false);
+    TLinearTermPtr<Scalar> testFunctional(TSolutionPtr<Scalar> trialSolution, bool excludeBoundaryTerms=false, bool overrideMeshCheck=false);
 
     virtual bool trialTestOperator(int trialID, int testID,
                                    Camellia::EOperator &trialOperator,
@@ -128,9 +128,9 @@ namespace Camellia {
     vector<int> trialVolumeIDs();
     vector<int> trialBoundaryIDs();
 
-    virtual ~BF() {}
+    virtual ~TBF() {}
 
-    static Teuchos::RCP<BF> bf(VarFactory &vf);
+    static TBFPtr<Scalar> bf(VarFactory &vf);
   };
 }
 

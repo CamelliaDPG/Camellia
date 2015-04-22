@@ -1,5 +1,5 @@
 //
-//  IP.cpp
+//  TIP.cpp
 //  Camellia
 //
 //  Created by Nathan Roberts on 3/30/12.
@@ -18,72 +18,85 @@
 using namespace Intrepid;
 using namespace Camellia;
 
-IP::IP() {
+template <typename Scalar>
+TIP<Scalar>::TIP() {
   _isLegacySubclass = false;
 }
 // if the terms are a1, a2, ..., then the inner product is (a1,a1) + (a2,a2) + ...
 
-IP::IP(BFPtr bfs) {
+template <typename Scalar>
+TIP<Scalar>::TIP(TBFPtr<Scalar> bfs) {
   _bilinearForm = bfs;
   _isLegacySubclass = true;
 }
 
 // added by Nate
-LinearTermPtr IP::evaluate(const map< int, TFunctionPtr<double>> &varFunctions) {
+template <typename Scalar>
+TLinearTermPtr<Scalar> TIP<Scalar>::evaluate(const map< int, TFunctionPtr<Scalar>> &varFunctions) {
   // include both the boundary and non-boundary parts
   return evaluate(varFunctions,true) + evaluate(varFunctions,false);
 }
 
 // added by Jesse - evaluate inner product at given varFunctions
-LinearTermPtr IP::evaluate(const map< int, TFunctionPtr<double>> &varFunctions, bool boundaryPart) {
-  LinearTermPtr ltEval = Teuchos::rcp(new LinearTerm);
-  for ( vector< LinearTermPtr >:: const_iterator ltIt = _linearTerms.begin(); ltIt != _linearTerms.end(); ltIt++) {
-    LinearTermPtr lt = *ltIt;
-    TFunctionPtr<double> weight = lt->evaluate(varFunctions,boundaryPart);
+template <typename Scalar>
+TLinearTermPtr<Scalar> TIP<Scalar>::evaluate(const map< int, TFunctionPtr<Scalar>> &varFunctions, bool boundaryPart) {
+  TLinearTermPtr<Scalar> ltEval = Teuchos::rcp(new LinearTerm);
+  for (typename vector< TLinearTermPtr<Scalar> >:: const_iterator ltIt = _linearTerms.begin(); ltIt != _linearTerms.end(); ltIt++) {
+    TLinearTermPtr<Scalar> lt = *ltIt;
+    TFunctionPtr<Scalar> weight = lt->evaluate(varFunctions,boundaryPart);
     ltEval->addTerm(weight*lt);
   }
   return ltEval;
 }
 
-void IP::addTerm( LinearTermPtr a ) {
+template <typename Scalar>
+void TIP<Scalar>::addTerm( TLinearTermPtr<Scalar> a ) {
   _linearTerms.push_back(a);
 }
 
-void IP::addTerm( VarPtr v ) {
+template <typename Scalar>
+void TIP<Scalar>::addTerm( VarPtr v ) {
   _linearTerms.push_back( Teuchos::rcp( new LinearTerm(v) ) );
 }
 
-void IP::addZeroMeanTerm( LinearTermPtr a) {
+template <typename Scalar>
+void TIP<Scalar>::addZeroMeanTerm( TLinearTermPtr<Scalar> a) {
   _zeroMeanTerms.push_back(a);
 }
 
-void IP::addZeroMeanTerm( VarPtr v ) {
+template <typename Scalar>
+void TIP<Scalar>::addZeroMeanTerm( VarPtr v ) {
   _zeroMeanTerms.push_back( Teuchos::rcp( new LinearTerm(v) ) );
 }
 
-void IP::addBoundaryTerm( LinearTermPtr a ) {
+template <typename Scalar>
+void TIP<Scalar>::addBoundaryTerm( TLinearTermPtr<Scalar> a ) {
   _boundaryTerms.push_back(a);
 }
 
-void IP::addBoundaryTerm( VarPtr v ) {
+template <typename Scalar>
+void TIP<Scalar>::addBoundaryTerm( VarPtr v ) {
   _boundaryTerms.push_back( Teuchos::rcp( new LinearTerm(v) ) );
 }
 
-void IP::applyInnerProductData(FieldContainer<double> &testValues1,
-                               FieldContainer<double> &testValues2,
+template <typename Scalar>
+void TIP<Scalar>::applyInnerProductData(FieldContainer<Scalar> &testValues1,
+                               FieldContainer<Scalar> &testValues2,
                                int testID1, int testID2, int operatorIndex,
                                Teuchos::RCP<BasisCache> basisCache) {
   applyInnerProductData(testValues1, testValues2, testID1, testID2, operatorIndex, basisCache->getPhysicalCubaturePoints());
 }
 
-void IP::applyInnerProductData(FieldContainer<double> &testValues1,
-                                   FieldContainer<double> &testValues2,
+template <typename Scalar>
+void TIP<Scalar>::applyInnerProductData(FieldContainer<Scalar> &testValues1,
+                                   FieldContainer<Scalar> &testValues2,
                                    int testID1, int testID2, int operatorIndex,
                                    const FieldContainer<double>& physicalPoints) {
   TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "You must override some version of applyInnerProductData!");
 }
 
-void IP::computeInnerProductMatrix(FieldContainer<double> &innerProduct,
+template <typename Scalar>
+void TIP<Scalar>::computeInnerProductMatrix(FieldContainer<Scalar> &innerProduct,
                                    Teuchos::RCP<DofOrdering> dofOrdering, shards::CellTopology &cellTopo,
                                    FieldContainer<double>& physicalCellNodes) {
   if (_isLegacySubclass) {
@@ -96,7 +109,8 @@ void IP::computeInnerProductMatrix(FieldContainer<double> &innerProduct,
   }
 }
 
-void IP::computeInnerProductMatrix(FieldContainer<double> &innerProduct,
+template <typename Scalar>
+void TIP<Scalar>::computeInnerProductMatrix(FieldContainer<Scalar> &innerProduct,
                                    Teuchos::RCP<DofOrdering> dofOrdering,
                                    Teuchos::RCP<BasisCache> basisCache) {
   if (_isLegacySubclass) {
@@ -135,8 +149,8 @@ void IP::computeInnerProductMatrix(FieldContainer<double> &innerProduct,
         for (op1It=test1Operators.begin(); op1It != test1Operators.end(); op1It++) {
           Camellia::EOperator op1 = *(op1It);
           Camellia::EOperator op2 = *(op2It);
-          FieldContainer<double> test1Values; // these will be resized inside applyOperator..
-          FieldContainer<double> test2Values; // derivative values
+          FieldContainer<Scalar> test1Values; // these will be resized inside applyOperator..
+          FieldContainer<Scalar> test2Values; // derivative values
 
           test1Basis = dofOrdering->getBasis(testID1);
           test2Basis = dofOrdering->getBasis(testID2);
@@ -144,21 +158,21 @@ void IP::computeInnerProductMatrix(FieldContainer<double> &innerProduct,
           int numDofs1 = test1Basis->getCardinality();
           int numDofs2 = test2Basis->getCardinality();
 
-          FieldContainer<double> miniMatrix( numCells, numDofs1, numDofs2 );
+          FieldContainer<Scalar> miniMatrix( numCells, numDofs1, numDofs2 );
 
-          Teuchos::RCP< const FieldContainer<double> > test1ValuesTransformedWeighted, test2ValuesTransformed;
+          Teuchos::RCP< const FieldContainer<Scalar> > test1ValuesTransformedWeighted, test2ValuesTransformed;
 
           test1ValuesTransformedWeighted = basisCache->getTransformedWeightedValues(test1Basis,op1);
           test2ValuesTransformed = basisCache->getTransformedValues(test2Basis,op2);
 
-          FieldContainer<double> innerProductDataAppliedToTest2 = *test2ValuesTransformed; // copy first
-          FieldContainer<double> innerProductDataAppliedToTest1 = *test1ValuesTransformedWeighted; // copy first
+          FieldContainer<Scalar> innerProductDataAppliedToTest2 = *test2ValuesTransformed; // copy first
+          FieldContainer<Scalar> innerProductDataAppliedToTest1 = *test1ValuesTransformedWeighted; // copy first
 
           //cout << "rank of test2ValuesTransformed: " << test2ValuesTransformed->rank() << endl;
           applyInnerProductData(innerProductDataAppliedToTest1, innerProductDataAppliedToTest2,
                                 testID1, testID2, operatorIndex, basisCache);
 
-          Intrepid::FunctionSpaceTools::integrate<double>(miniMatrix,innerProductDataAppliedToTest1,
+          Intrepid::FunctionSpaceTools::integrate<Scalar>(miniMatrix,innerProductDataAppliedToTest1,
                                                           innerProductDataAppliedToTest2,COMP_BLAS);
 
           int test1DofOffset = dofOrdering->getDofIndex(testID1,0);
@@ -208,9 +222,9 @@ void IP::computeInnerProductMatrix(FieldContainer<double> &innerProduct,
 
 //    for (int phase=0; phase < basisCache->getCubaturePhaseCount(); phase++) {
 //      basisCache->setCubaturePhase(phase);
-      for ( vector< LinearTermPtr >:: iterator ltIt = _linearTerms.begin();
+      for (typename vector< TLinearTermPtr<Scalar> >:: iterator ltIt = _linearTerms.begin();
            ltIt != _linearTerms.end(); ltIt++) {
-        LinearTermPtr lt = *ltIt;
+        TLinearTermPtr<Scalar> lt = *ltIt;
         // integrate lt against itself
         lt->integrate(innerProduct,dofOrdering,lt,dofOrdering,basisCache,basisCache->isSideCache());
       }
@@ -230,18 +244,18 @@ void IP::computeInnerProductMatrix(FieldContainer<double> &innerProduct,
     }
 
     // boundary terms:
-    for ( vector< LinearTermPtr >:: iterator btIt = _boundaryTerms.begin();
+    for (typename vector< TLinearTermPtr<Scalar> >:: iterator btIt = _boundaryTerms.begin();
          btIt != _boundaryTerms.end(); btIt++) {
-      LinearTermPtr bt = *btIt;
+      TLinearTermPtr<Scalar> bt = *btIt;
       bool forceBoundary = true; // force interpretation of this as a term on the element boundary
       bt->integrate(innerProduct,dofOrdering,bt,dofOrdering,basisCache,forceBoundary);
     }
 
     // zero mean terms:
-    for ( vector< LinearTermPtr >:: iterator ztIt = _zeroMeanTerms.begin();
+    for (typename vector< TLinearTermPtr<Scalar> >:: iterator ztIt = _zeroMeanTerms.begin();
          ztIt != _zeroMeanTerms.end(); ztIt++) {
-      LinearTermPtr zt = *ztIt;
-      FieldContainer<double> avgVector(numCells, numDofs);
+      TLinearTermPtr<Scalar> zt = *ztIt;
+      FieldContainer<Scalar> avgVector(numCells, numDofs);
       // Integrate against 1
       zt->integrate(avgVector, dofOrdering, basisCache);
 
@@ -253,7 +267,7 @@ void IP::computeInnerProductMatrix(FieldContainer<double> &innerProduct,
         for (unsigned int i=0; i < numDofs; i++)
           for (unsigned int j=0; j < numDofs; j++)
           {
-            double valAdd = avgVector(c, i) * avgVector(c, j);
+            Scalar valAdd = avgVector(c, i) * avgVector(c, j);
             // cout << "(" << innerProduct(c, i, j) << ", " << valAdd << ") ";
             innerProduct(c, i, j) += valAdd;
           }
@@ -261,26 +275,28 @@ void IP::computeInnerProductMatrix(FieldContainer<double> &innerProduct,
   }
 }
 
-double IP::computeMaxConditionNumber(DofOrderingPtr testSpace, BasisCachePtr basisCache) {
+template <typename Scalar>
+double TIP<Scalar>::computeMaxConditionNumber(DofOrderingPtr testSpace, BasisCachePtr basisCache) {
   int testDofs = testSpace->totalDofs();
   int numCells = basisCache->cellIDs().size();
-  FieldContainer<double> innerProduct(numCells,testDofs,testDofs);
+  FieldContainer<Scalar> innerProduct(numCells,testDofs,testDofs);
   this->computeInnerProductMatrix(innerProduct, testSpace, basisCache);
   double maxConditionNumber = -1;
   Teuchos::Array<int> cellIP_dim;
   cellIP_dim.push_back(testDofs);
   cellIP_dim.push_back(testDofs);
   for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
-    FieldContainer<double> cellIP = FieldContainer<double>(cellIP_dim,&innerProduct(cellIndex,0,0) );
+    FieldContainer<Scalar> cellIP = FieldContainer<Scalar>(cellIP_dim,&innerProduct(cellIndex,0,0) );
     double conditionNumber = SerialDenseMatrixUtility::estimate2NormConditionNumber(cellIP);
     maxConditionNumber = std::max(maxConditionNumber,conditionNumber);
   }
   return maxConditionNumber;
 }
 
-// compute IP vector when var==fxn
-void IP::computeInnerProductVector(FieldContainer<double> &ipVector,
-                                   VarPtr var, TFunctionPtr<double> fxn,
+// compute TIP vector when var==fxn
+template <typename Scalar>
+void TIP<Scalar>::computeInnerProductVector(FieldContainer<Scalar> &ipVector,
+                                   VarPtr var, TFunctionPtr<Scalar> fxn,
                                    Teuchos::RCP<DofOrdering> dofOrdering,
                                    Teuchos::RCP<BasisCache> basisCache) {
   // ipVector FC is sized as (C,F)
@@ -302,40 +318,43 @@ void IP::computeInnerProductVector(FieldContainer<double> &ipVector,
 
   ipVector.initialize(0.0);
 
-  for ( vector< LinearTermPtr >:: iterator ltIt = _linearTerms.begin();
+  for (typename vector< TLinearTermPtr<Scalar> >:: iterator ltIt = _linearTerms.begin();
        ltIt != _linearTerms.end(); ltIt++) {
-    LinearTermPtr lt = *ltIt;
+    TLinearTermPtr<Scalar> lt = *ltIt;
     // integrate lt against itself, evaluated at var = fxn
     lt->integrate(ipVector,dofOrdering,lt,var,fxn,basisCache);
   }
 
   // boundary terms:
-  for ( vector< LinearTermPtr >:: iterator btIt = _boundaryTerms.begin();
+  for (typename vector< TLinearTermPtr<Scalar> >:: iterator btIt = _boundaryTerms.begin();
        btIt != _boundaryTerms.end(); btIt++) {
-    LinearTermPtr bt = *btIt;
+    TLinearTermPtr<Scalar> bt = *btIt;
     bool forceBoundary = true; // force interpretation of this as a term on the element boundary
     bt->integrate(ipVector,dofOrdering,bt,var,fxn,basisCache,forceBoundary);
   }
 
   // zero mean terms:
-  for ( vector< LinearTermPtr >:: iterator ztIt = _zeroMeanTerms.begin();
+  for (typename vector< TLinearTermPtr<Scalar> >:: iterator ztIt = _zeroMeanTerms.begin();
        ztIt != _zeroMeanTerms.end(); ztIt++) {
-    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "zero mean terms not yet supported in IP vector computation");
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "zero mean terms not yet supported in TIP vector computation");
   }
 }
 
-bool IP::hasBoundaryTerms() {
+template <typename Scalar>
+bool TIP<Scalar>::hasBoundaryTerms() {
   if (_isLegacySubclass) return false;
   else return _boundaryTerms.size() > 0;
 }
 
-void IP::operators(int testID1, int testID2,
+template <typename Scalar>
+void TIP<Scalar>::operators(int testID1, int testID2,
                    vector<Camellia::EOperator> &testOp1,
                    vector<Camellia::EOperator> &testOp2) {
-  TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "IP::operators() not implemented.");
+  TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "TIP<Scalar>::operators() not implemented.");
 }
 
-void IP::printInteractions() {
+template <typename Scalar>
+void TIP<Scalar>::printInteractions() {
   if (_isLegacySubclass) {
     cout << "Inner product: test interactions\n";
     vector<int> testIDs = _bilinearForm->testIDs();
@@ -360,25 +379,26 @@ void IP::printInteractions() {
     return;
   } else {
     cout << "_linearTerms:\n";
-    for (vector< LinearTermPtr >::iterator ltIt = _linearTerms.begin();
+    for (typename vector< TLinearTermPtr<Scalar> >::iterator ltIt = _linearTerms.begin();
          ltIt != _linearTerms.end(); ltIt++) {
       cout << (*ltIt)->displayString() << endl;
     }
     cout << "_boundaryTerms:\n";
-    for (vector< LinearTermPtr >::iterator ltIt = _boundaryTerms.begin();
+    for (typename vector< TLinearTermPtr<Scalar> >::iterator ltIt = _boundaryTerms.begin();
          ltIt != _boundaryTerms.end(); ltIt++) {
       cout << (*ltIt)->displayString() << endl;
     }
     cout << "_zeroMeanTerms:\n";
-    for (vector< LinearTermPtr >::iterator ltIt = _zeroMeanTerms.begin();
+    for (typename vector< TLinearTermPtr<Scalar> >::iterator ltIt = _zeroMeanTerms.begin();
          ltIt != _zeroMeanTerms.end(); ltIt++) {
       cout << (*ltIt)->displayString() << endl;
     }
   }
 }
 
-pair<IPPtr, VarPtr> IP::standardInnerProductForFunctionSpace(Camellia::EFunctionSpace fs, bool useTraceVar, int spaceDim) {
-  IPPtr ip = Teuchos::rcp( new IP );
+template <typename Scalar>
+pair<TIPPtr<Scalar>, VarPtr> TIP<Scalar>::standardInnerProductForFunctionSpace(Camellia::EFunctionSpace fs, bool useTraceVar, int spaceDim) {
+  TIPPtr<Scalar> ip = Teuchos::rcp( new TIP<Scalar> );
   VarFactory vf;
   Camellia::Space space = Camellia::spaceForEFS(fs);
   VarPtr var = useTraceVar ? vf.traceVar("v",space) : vf.testVar("v", space);
@@ -410,6 +430,11 @@ pair<IPPtr, VarPtr> IP::standardInnerProductForFunctionSpace(Camellia::EFunction
   return make_pair(ip,var);
 }
 
-IPPtr IP::ip() {
-  return Teuchos::rcp( new IP );
+template <typename Scalar>
+TIPPtr<Scalar> TIP<Scalar>::ip() {
+  return Teuchos::rcp( new TIP<Scalar> );
+}
+
+namespace Camellia {
+  template class TIP<double>;
 }
