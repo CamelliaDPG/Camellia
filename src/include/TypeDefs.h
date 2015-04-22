@@ -42,7 +42,6 @@ namespace Camellia {
 	class BasisCache;
 	class BasisFactory;
 	class BC;
-	class BF;
 	class Cell;
 	class DofOrdering;
 	class DofOrderingFactory;
@@ -65,6 +64,8 @@ namespace Camellia {
 	class VarFactory;
   // templates
   template <typename Scalar=double>
+	class TBF;
+  template <typename Scalar=double>
 	class TFunction;
   template <typename Scalar=double>
 	class TLinearTerm;
@@ -74,7 +75,6 @@ namespace Camellia {
 	typedef Teuchos::RCP<BasisCache> BasisCachePtr;
 	typedef Teuchos::RCP<BasisFactory> BasisFactoryPtr;
 	typedef Teuchos::RCP<BC> BCPtr;
-	typedef Teuchos::RCP<BF> BFPtr;
 	typedef Teuchos::RCP<Cell> CellPtr;
 	typedef Teuchos::RCP<DofOrdering> DofOrderingPtr;
 	typedef Teuchos::RCP<DofOrderingFactory> DofOrderingFactoryPtr;
@@ -95,6 +95,10 @@ namespace Camellia {
 	typedef Teuchos::RCP<Var> VarPtr;
   // templates
   template <typename Scalar>
+    using TBFPtr = Teuchos::RCP<TBF<Scalar> >;
+  typedef TBF<double> BF;
+  typedef TBFPtr<double> BFPtr;
+  template <typename Scalar>
     using TFunctionPtr = Teuchos::RCP<TFunction<Scalar> >;
   typedef TFunction<double> Function;
   typedef TFunctionPtr<double> FunctionPtr;
@@ -107,9 +111,13 @@ namespace Camellia {
   typedef TSolution<double> Solution;
   typedef TSolutionPtr<double> SolutionPtr;
 
+  // minor typedefs
   template <typename Scalar>
     using TLinearSummand = std::pair<TFunctionPtr<Scalar>, VarPtr>;
   typedef TLinearSummand<double> LinearSummand;
+  template <typename Scalar>
+    using TBilinearTerm = std::pair<TLinearTermPtr<Scalar>,TLinearTermPtr<Scalar>>;
+  typedef TBilinearTerm<double> BilinearTerm;
 }
 
 

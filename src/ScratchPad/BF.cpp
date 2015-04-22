@@ -1,5 +1,5 @@
 //
-//  BF.cpp
+//  TBF.cpp
 //  Camellia
 //
 //  Created by Nathan Roberts on 3/30/12.
@@ -24,11 +24,13 @@ using namespace Intrepid;
 using namespace std;
 
 namespace Camellia{
-  BFPtr BF::bf(VarFactory &vf) {
-    return Teuchos::rcp( new BF(vf) );
+  template <typename Scalar>
+  TBFPtr<Scalar> TBF<Scalar>::bf(VarFactory &vf) {
+    return Teuchos::rcp( new TBF<Scalar>(vf) );
   }
 
-  BF::BF(bool isLegacySubclass) {
+  template <typename Scalar>
+  TBF<Scalar>::TBF(bool isLegacySubclass) {
     if (!isLegacySubclass) {
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "This constructor is for legacy subclasses only!  Call a VarFactory version instead");
     }
@@ -40,7 +42,8 @@ namespace Camellia{
     _isLegacySubclass = true;
   }
 
-  BF::BF( VarFactory varFactory ) { // copies (note that external changes in VarFactory won't be registered by BF)
+  template <typename Scalar>
+  TBF<Scalar>::TBF( VarFactory varFactory ) { // copies (note that external changes in VarFactory won't be registered by TBF)
     _varFactory = varFactory;
     // set super's ID containers:
     _trialIDs = _varFactory.trialIDs();
@@ -53,7 +56,8 @@ namespace Camellia{
     _warnAboutZeroRowsAndColumns = true;
   }
 
-  BF::BF( VarFactory varFactory, VarFactory::BubnovChoice choice ) {
+  template <typename Scalar>
+  TBF<Scalar>::TBF( VarFactory varFactory, VarFactory::BubnovChoice choice ) {
     _varFactory = varFactory.getBubnovFactory(choice);
     _trialIDs = _varFactory.trialIDs();
     _testIDs = _varFactory.testIDs();
@@ -65,35 +69,42 @@ namespace Camellia{
     _warnAboutZeroRowsAndColumns = true;
   }
 
-  void BF::addTerm( LinearTermPtr trialTerm, LinearTermPtr testTerm ) {
+  template <typename Scalar>
+  void TBF<Scalar>::addTerm( TLinearTermPtr<Scalar> trialTerm, TLinearTermPtr<Scalar> testTerm ) {
     _terms.push_back( make_pair( trialTerm, testTerm ) );
   }
 
-  void BF::addTerm( VarPtr trialVar, LinearTermPtr testTerm ) {
+  template <typename Scalar>
+  void TBF<Scalar>::addTerm( VarPtr trialVar, TLinearTermPtr<Scalar> testTerm ) {
     addTerm( Teuchos::rcp( new LinearTerm(trialVar) ), testTerm );
   }
 
-  void BF::addTerm( VarPtr trialVar, VarPtr testVar ) {
+  template <typename Scalar>
+  void TBF<Scalar>::addTerm( VarPtr trialVar, VarPtr testVar ) {
     addTerm( Teuchos::rcp( new LinearTerm(trialVar) ), Teuchos::rcp( new LinearTerm(testVar) ) );
   }
 
-  void BF::addTerm( LinearTermPtr trialTerm, VarPtr testVar) {
+  template <typename Scalar>
+  void TBF<Scalar>::addTerm( TLinearTermPtr<Scalar> trialTerm, VarPtr testVar) {
     addTerm( trialTerm, Teuchos::rcp( new LinearTerm(testVar) ) );
   }
 
-  void BF::applyBilinearFormData(FieldContainer<double> &trialValues, FieldContainer<double> &testValues,
+  template <typename Scalar>
+  void TBF<Scalar>::applyBilinearFormData(FieldContainer<Scalar> &trialValues, FieldContainer<Scalar> &testValues,
       int trialID, int testID, int operatorIndex,
       const FieldContainer<double> &points) {
     applyBilinearFormData(trialID,testID,trialValues,testValues,points);
   }
 
-  void BF::applyBilinearFormData(FieldContainer<double> &trialValues, FieldContainer<double> &testValues,
+  template <typename Scalar>
+  void TBF<Scalar>::applyBilinearFormData(FieldContainer<Scalar> &trialValues, FieldContainer<Scalar> &testValues,
       int trialID, int testID, int operatorIndex,
       Teuchos::RCP<BasisCache> basisCache) {
     applyBilinearFormData(trialValues, testValues, trialID, testID, operatorIndex, basisCache->getPhysicalCubaturePoints());
   }
 
-  bool BF::checkSymmetry(FieldContainer<double> &innerProductMatrix) {
+  template <typename Scalar>
+  bool TBF<Scalar>::checkSymmetry(FieldContainer<Scalar> &innerProductMatrix) {
     double tol = 1e-10;
     int numCells = innerProductMatrix.dimension(0);
     int numRows = innerProductMatrix.dimension(1);
@@ -115,22 +126,27 @@ namespace Camellia{
   }
 
   // BilinearForm implementation:
-  const string & BF::testName(int testID) {
+  template <typename Scalar>
+  const string & TBF<Scalar>::testName(int testID) {
     return _varFactory.test(testID)->name();
   }
-  const string & BF::trialName(int trialID) {
+  template <typename Scalar>
+  const string & TBF<Scalar>::trialName(int trialID) {
     return _varFactory.trial(trialID)->name();
   }
 
-  Camellia::EFunctionSpace BF::functionSpaceForTest(int testID) {
+  template <typename Scalar>
+  Camellia::EFunctionSpace TBF<Scalar>::functionSpaceForTest(int testID) {
     return efsForSpace(_varFactory.test(testID)->space());
   }
 
-  Camellia::EFunctionSpace BF::functionSpaceForTrial(int trialID) {
+  template <typename Scalar>
+  Camellia::EFunctionSpace TBF<Scalar>::functionSpaceForTrial(int trialID) {
     return efsForSpace(_varFactory.trial(trialID)->space());
   }
 
-  bool BF::isFluxOrTrace(int trialID) {
+  template <typename Scalar>
+  bool TBF<Scalar>::isFluxOrTrace(int trialID) {
     VarPtr trialVar = _varFactory.trial(trialID);
     if (trialVar.get() == NULL) { // if unknown trial ID, then it's not a flux or a trace!
       return false;
@@ -139,24 +155,26 @@ namespace Camellia{
     return (varType == FLUX) || (varType == TRACE);
   }
 
-  string BF::displayString() {
+  template <typename Scalar>
+  string TBF<Scalar>::displayString() {
     ostringstream bfStream;
     bool first = true;
-    for ( vector< BilinearTerm >:: iterator btIt = _terms.begin();
+    for (typename vector< TBilinearTerm<Scalar> >:: iterator btIt = _terms.begin();
         btIt != _terms.end(); btIt++) {
       if (! first ) {
         bfStream << " + ";
       }
-      BilinearTerm bt = *btIt;
-      LinearTermPtr trialTerm = btIt->first;
-      LinearTermPtr testTerm = btIt->second;
+      TBilinearTerm<Scalar> bt = *btIt;
+      TLinearTermPtr<Scalar> trialTerm = btIt->first;
+      TLinearTermPtr<Scalar> testTerm = btIt->second;
       bfStream << "( " << trialTerm->displayString() << ", " << testTerm->displayString() << ")";
       first = false;
     }
     return bfStream.str();
   }
 
-  void BF::printTrialTestInteractions() {
+  template <typename Scalar>
+  void TBF<Scalar>::printTrialTestInteractions() {
     if (!_isLegacySubclass) {
       cout << displayString() << endl;
     } else {
@@ -309,7 +327,8 @@ namespace Camellia{
     }
   }
 
-  void BF::stiffnessMatrix(FieldContainer<double> &stiffness, Teuchos::RCP<ElementType> elemType,
+  template <typename Scalar>
+  void TBF<Scalar>::stiffnessMatrix(FieldContainer<Scalar> &stiffness, Teuchos::RCP<ElementType> elemType,
       FieldContainer<double> &cellSideParities, Teuchos::RCP<BasisCache> basisCache) {
     if (!_isLegacySubclass) {
       stiffnessMatrix(stiffness, elemType, cellSideParities, basisCache, true); // default to checking
@@ -322,25 +341,26 @@ namespace Camellia{
   }
 
   // can override check for zero cols (i.e. in hessian matrix)
-  void BF::stiffnessMatrix(FieldContainer<double> &stiffness, Teuchos::RCP<ElementType> elemType,
+  template <typename Scalar>
+  void TBF<Scalar>::stiffnessMatrix(FieldContainer<Scalar> &stiffness, Teuchos::RCP<ElementType> elemType,
       FieldContainer<double> &cellSideParities, Teuchos::RCP<BasisCache> basisCache,
       bool checkForZeroCols) {
     // stiffness is sized as (C, FTest, FTrial)
     stiffness.initialize(0.0);
     basisCache->setCellSideParities(cellSideParities);
 
-    for ( vector< BilinearTerm >:: iterator btIt = _terms.begin();
+    for (typename vector< TBilinearTerm<Scalar> >:: iterator btIt = _terms.begin();
         btIt != _terms.end(); btIt++) {
-      BilinearTerm bt = *btIt;
-      LinearTermPtr trialTerm = btIt->first;
-      LinearTermPtr testTerm = btIt->second;
+      TBilinearTerm<Scalar> bt = *btIt;
+      TLinearTermPtr<Scalar> trialTerm = btIt->first;
+      TLinearTermPtr<Scalar> testTerm = btIt->second;
       trialTerm->integrate(stiffness, elemType->trialOrderPtr,
                            testTerm,  elemType->testOrderPtr, basisCache);
     }
     if (checkForZeroCols){
       bool checkRows = false; // zero rows just mean a test basis function won't get used, which is fine
       bool checkCols = true; // zero columns mean that a trial basis function doesn't enter the computation, which is bad
-      if (! BilinearFormUtility::checkForZeroRowsAndColumns("BF stiffness", stiffness, checkRows, checkCols) ) {
+      if (! BilinearFormUtility::checkForZeroRowsAndColumns("TBF stiffness", stiffness, checkRows, checkCols) ) {
         cout << "trial ordering:\n" << *(elemType->trialOrderPtr);
         //    cout << "test ordering:\n" << *(elemType->testOrderPtr);
         //    cout << "stiffness:\n" << stiffness;
@@ -349,7 +369,8 @@ namespace Camellia{
   }
 
   // Legacy stiffnessMatrix() method:
-  void BF::stiffnessMatrix(FieldContainer<double> &stiffness, Teuchos::RCP<DofOrdering> trialOrdering,
+  template <typename Scalar>
+  void TBF<Scalar>::stiffnessMatrix(FieldContainer<Scalar> &stiffness, Teuchos::RCP<DofOrdering> trialOrdering,
       Teuchos::RCP<DofOrdering> testOrdering,
       FieldContainer<double> &cellSideParities, Teuchos::RCP<BasisCache> basisCache) {
 
@@ -429,9 +450,9 @@ namespace Camellia{
             TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument,"OP_TIMES_NORMAL not supported for tests.  Use for trial only");
           }
 
-          Teuchos::RCP < const FieldContainer<double> > testValuesTransformed;
-          Teuchos::RCP < const FieldContainer<double> > trialValuesTransformed;
-          Teuchos::RCP < const FieldContainer<double> > testValuesTransformedWeighted;
+          Teuchos::RCP < const FieldContainer<Scalar> > testValuesTransformed;
+          Teuchos::RCP < const FieldContainer<Scalar> > trialValuesTransformed;
+          Teuchos::RCP < const FieldContainer<Scalar> > testValuesTransformedWeighted;
 
           //cout << "trial is " <<  this->trialName(trialID) << "; test is " << this->testName(testID) << endl;
 
@@ -439,19 +460,19 @@ namespace Camellia{
             trialBasis = trialOrdering->getBasis(trialID);
             testBasis = testOrdering->getBasis(testID);
 
-            FieldContainer<double> miniStiffness( numCells, testBasis->getCardinality(), trialBasis->getCardinality() );
+            FieldContainer<Scalar> miniStiffness( numCells, testBasis->getCardinality(), trialBasis->getCardinality() );
 
             trialValuesTransformed = basisCache->getTransformedValues(trialBasis,trialOperator);
             testValuesTransformedWeighted = basisCache->getTransformedWeightedValues(testBasis,testOperator);
 
             FieldContainer<double> physicalCubaturePoints = basisCache->getPhysicalCubaturePoints();
-            FieldContainer<double> materialDataAppliedToTrialValues = *trialValuesTransformed; // copy first
-            FieldContainer<double> materialDataAppliedToTestValues = *testValuesTransformedWeighted; // copy first
+            FieldContainer<Scalar> materialDataAppliedToTrialValues = *trialValuesTransformed; // copy first
+            FieldContainer<Scalar> materialDataAppliedToTestValues = *testValuesTransformedWeighted; // copy first
             this->applyBilinearFormData(materialDataAppliedToTrialValues, materialDataAppliedToTestValues,
                 trialID,testID,operatorIndex,basisCache);
 
             //integrate:
-            FunctionSpaceTools::integrate<double>(miniStiffness,materialDataAppliedToTestValues,materialDataAppliedToTrialValues,COMP_BLAS);
+            FunctionSpaceTools::integrate<Scalar>(miniStiffness,materialDataAppliedToTestValues,materialDataAppliedToTrialValues,COMP_BLAS);
             // place in the appropriate spot in the element-stiffness matrix
             // copy goes from (cell,trial_basis_dof,test_basis_dof) to (cell,element_trial_dof,element_test_dof)
 
@@ -494,7 +515,7 @@ namespace Camellia{
                 isFlux = true;
               }
 
-              FieldContainer<double> miniStiffness( numCells, testBasis->getCardinality(), trialBasis->getCardinality() );
+              FieldContainer<Scalar> miniStiffness( numCells, testBasis->getCardinality(), trialBasis->getCardinality() );
 
               // for trial: the value lives on the side, so we don't use the volume coords either:
               trialValuesTransformed = basisCache->getTransformedValues(trialBasis,trialOperator,sideOrdinal,false);
@@ -504,7 +525,7 @@ namespace Camellia{
               testValuesTransformedWeighted = basisCache->getTransformedWeightedValues(testBasis,testOperator,sideOrdinal,true);
 
               // copy before manipulating trialValues--these are the ones stored in the cache, so we're not allowed to change them!!
-              FieldContainer<double> materialDataAppliedToTrialValues = *trialValuesTransformed;
+              FieldContainer<Scalar> materialDataAppliedToTrialValues = *trialValuesTransformed;
 
               if (isFlux) {
                 // we need to multiply the trialValues by the parity of the normal, since
@@ -526,7 +547,7 @@ namespace Camellia{
               }
 
               FieldContainer<double> cubPointsSidePhysical = basisCache->getPhysicalCubaturePointsForSide(sideOrdinal);
-              FieldContainer<double> materialDataAppliedToTestValues = *testValuesTransformedWeighted; // copy first
+              FieldContainer<Scalar> materialDataAppliedToTestValues = *testValuesTransformedWeighted; // copy first
               this->applyBilinearFormData(materialDataAppliedToTrialValues,materialDataAppliedToTestValues,
                   trialID,testID,operatorIndex,basisCache);
 
@@ -534,7 +555,7 @@ namespace Camellia{
               //cout << "sideOrdinal: " << sideOrdinal << "; cubPointsSidePhysical" << endl << cubPointsSidePhysical;
 
               //   d. Sum up (integrate) and place in stiffness matrix according to DofOrdering indices
-              FunctionSpaceTools::integrate<double>(miniStiffness,materialDataAppliedToTestValues,materialDataAppliedToTrialValues,COMP_BLAS);
+              FunctionSpaceTools::integrate<Scalar>(miniStiffness,materialDataAppliedToTestValues,materialDataAppliedToTrialValues,COMP_BLAS);
 
               //checkForZeroRowsAndColumns("side miniStiffness for pre-stiffness", miniStiffness);
 
@@ -568,30 +589,33 @@ namespace Camellia{
   }
 
   // No cellSideParities required, no checking of columns, integrates in a bubnov fashion
-  void BF::bubnovStiffness(FieldContainer<double> &stiffness, Teuchos::RCP<ElementType> elemType,
+  template <typename Scalar>
+  void TBF<Scalar>::bubnovStiffness(FieldContainer<Scalar> &stiffness, Teuchos::RCP<ElementType> elemType,
       FieldContainer<double> &cellSideParities, Teuchos::RCP<BasisCache> basisCache) {
     // stiffness is sized as (C, FTrial, FTrial)
     stiffness.initialize(0.0);
     basisCache->setCellSideParities(cellSideParities);
 
-    for ( vector< BilinearTerm >:: iterator btIt = _terms.begin();
+    for (typename vector< TBilinearTerm<Scalar> >:: iterator btIt = _terms.begin();
         btIt != _terms.end(); btIt++) {
-      BilinearTerm bt = *btIt;
-      LinearTermPtr trialTerm = btIt->first;
-      LinearTermPtr testTerm = btIt->second;
+      TBilinearTerm<Scalar> bt = *btIt;
+      TLinearTermPtr<Scalar> trialTerm = btIt->first;
+      TLinearTermPtr<Scalar> testTerm = btIt->second;
       trialTerm->integrate(stiffness, elemType->trialOrderPtr,
           testTerm,  elemType->trialOrderPtr, basisCache);
     }
 
   }
 
-  IPPtr BF::graphNorm(double weightForL2TestTerms) {
+  template <typename Scalar>
+  IPPtr TBF<Scalar>::graphNorm(double weightForL2TestTerms) {
     map<int, double> varWeights;
     return graphNorm(varWeights, weightForL2TestTerms);
   }
 
-  IPPtr BF::graphNorm(const map<int, double> &varWeights, double weightForL2TestTerms) {
-    map<int, LinearTermPtr> testTermsForVarID;
+  template <typename Scalar>
+  IPPtr TBF<Scalar>::graphNorm(const map<int, double> &varWeights, double weightForL2TestTerms) {
+    map<int, TLinearTermPtr<Scalar>> testTermsForVarID;
     vector<double> e1(3), e2(3), e3(3); // unit vectors
     e1[0] = 1.0;
     e2[1] = 1.0;
@@ -599,16 +623,16 @@ namespace Camellia{
     TFunctionPtr<double> e1Fxn = TFunction<double>::constant(e1);
     TFunctionPtr<double> e2Fxn = TFunction<double>::constant(e2);
     TFunctionPtr<double> e3Fxn = TFunction<double>::constant(e3);
-    for ( vector< BilinearTerm >:: iterator btIt = _terms.begin();
+    for (typename vector< TBilinearTerm<Scalar> >:: iterator btIt = _terms.begin();
         btIt != _terms.end(); btIt++) {
-      BilinearTerm bt = *btIt;
-      LinearTermPtr trialTerm = btIt->first;
-      LinearTermPtr testTerm = btIt->second;
-      vector< LinearSummand > summands = trialTerm->summands();
-      for ( vector< LinearSummand >::iterator lsIt = summands.begin(); lsIt != summands.end(); lsIt++) {
+      TBilinearTerm<Scalar> bt = *btIt;
+      TLinearTermPtr<Scalar> trialTerm = btIt->first;
+      TLinearTermPtr<Scalar> testTerm = btIt->second;
+      vector< TLinearSummand<Scalar> > summands = trialTerm->summands();
+      for (typename vector< TLinearSummand<Scalar> >::iterator lsIt = summands.begin(); lsIt != summands.end(); lsIt++) {
         VarPtr trialVar = lsIt->second;
         if (trialVar->varType() == FIELD) {
-          TFunctionPtr<double> f = lsIt->first;
+          TFunctionPtr<Scalar> f = lsIt->first;
           if (trialVar->op() == OP_X) {
             f = e1Fxn * f;
           } else if (trialVar->op() == OP_Y) {
@@ -616,7 +640,7 @@ namespace Camellia{
           } else if (trialVar->op() == OP_Z) {
             f = e3Fxn * f;
           } else if (trialVar->op() != OP_VALUE) {
-            TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "BF::graphNorm() doesn't support non-value ops on field variables");
+            TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "TBF<Scalar>::graphNorm() doesn't support non-value ops on field variables");
           }
           if (testTermsForVarID.find(trialVar->ID()) == testTermsForVarID.end()) {
             testTermsForVarID[trialVar->ID()] = Teuchos::rcp( new LinearTerm );
@@ -626,7 +650,7 @@ namespace Camellia{
       }
     }
     IPPtr ip = Teuchos::rcp( new IP );
-    for ( map<int, LinearTermPtr>::iterator testTermIt = testTermsForVarID.begin();
+    for (typename map<int, TLinearTermPtr<Scalar>>::iterator testTermIt = testTermsForVarID.begin();
         testTermIt != testTermsForVarID.end(); testTermIt++ ) {
       double weight = 1.0;
       int varID = testTermIt->first;
@@ -648,7 +672,8 @@ namespace Camellia{
     return ip;
   }
 
-  IPPtr BF::l2Norm() {
+  template <typename Scalar>
+  IPPtr TBF<Scalar>::l2Norm() {
     // L2 norm on test space:
     IPPtr ip = Teuchos::rcp( new IP );
     map< int, VarPtr > testVars = _varFactory.testVars();
@@ -658,7 +683,8 @@ namespace Camellia{
     return ip;
   }
 
-  void BF::localStiffnessMatrixAndRHS(FieldContainer<double> &localStiffness, FieldContainer<double> &rhsVector,
+  template <typename Scalar>
+  void TBF<Scalar>::localStiffnessMatrixAndRHS(FieldContainer<Scalar> &localStiffness, FieldContainer<Scalar> &rhsVector,
       IPPtr ip, BasisCachePtr ipBasisCache, RHSPtr rhs, BasisCachePtr basisCache) {
     double testMatrixAssemblyTime = 0, testMatrixInversionTime = 0, localStiffnessDeterminationFromTestsTime = 0;
     double rhsIntegrationAgainstOptimalTestsTime = 0;
@@ -705,7 +731,7 @@ namespace Camellia{
       cout << "numTrialDofs: " << numTrialDofs << endl;
     }
 
-    FieldContainer<double> ipMatrix(numCells,numTestDofs,numTestDofs);
+    FieldContainer<Scalar> ipMatrix(numCells,numTestDofs,numTestDofs);
     ip->computeInnerProductMatrix(ipMatrix, testOrder, ipBasisCache);
 
     testMatrixAssemblyTime += timer.ElapsedTime();
@@ -713,7 +739,7 @@ namespace Camellia{
     //      cout << "ipMatrix:\n" << ipMatrix;
 
     timer.ResetStartTime();
-    FieldContainer<double> optTestCoeffs(numCells,numTrialDofs,numTestDofs);
+    FieldContainer<Scalar> optTestCoeffs(numCells,numTrialDofs,numTestDofs);
     FieldContainer<double> cellSideParities = basisCache->getCellSideParities();
 
     int optSuccess = this->optimalTestWeights(optTestCoeffs, ipMatrix, elemType,
@@ -745,7 +771,8 @@ namespace Camellia{
     }
   }
 
-  IPPtr BF::naiveNorm(int spaceDim) {
+  template <typename Scalar>
+  IPPtr TBF<Scalar>::naiveNorm(int spaceDim) {
     IPPtr ip = Teuchos::rcp( new IP );
     map< int, VarPtr > testVars = _varFactory.testVars();
     for ( map< int, VarPtr >::iterator testVarIt = testVars.begin(); testVarIt != testVars.end(); testVarIt++) {
@@ -765,8 +792,9 @@ namespace Camellia{
     return ip;
   }
 
-  int BF::optimalTestWeights(FieldContainer<double> &optimalTestWeights,
-      FieldContainer<double> &innerProductMatrix,
+  template <typename Scalar>
+  int TBF<Scalar>::optimalTestWeights(FieldContainer<Scalar> &optimalTestWeights,
+      FieldContainer<Scalar> &innerProductMatrix,
       ElementTypePtr elemType,
       FieldContainer<double> &cellSideParities,
       BasisCachePtr stiffnessBasisCache) {
@@ -791,7 +819,7 @@ namespace Camellia{
         std::invalid_argument,
         "testOrdering->totalDofs() and optimalTestWeights.dimension(2) do not match.");
 
-    FieldContainer<double> stiffnessMatrix(numCells,numTestDofs,numTrialDofs);
+    FieldContainer<Scalar> stiffnessMatrix(numCells,numTestDofs,numTrialDofs);
     //  FieldContainer<double> stiffnessMatrixT(numCells,numTrialDofs,numTestDofs);
 
     // RHS:
@@ -805,7 +833,7 @@ namespace Camellia{
 
     int solvedAll = 0;
 
-    FieldContainer<double> optimalWeightsT(numTestDofs, numTrialDofs);
+    FieldContainer<Scalar> optimalWeightsT(numTestDofs, numTrialDofs);
     Teuchos::Array<int> localIPDim(2);
     localIPDim[0] = numTestDofs;
     localIPDim[1] = numTestDofs;
@@ -815,8 +843,8 @@ namespace Camellia{
 
     for (int cellIndex=0; cellIndex < numCells; cellIndex++) {
       int result = 0;
-      FieldContainer<double> cellIPMatrix(localIPDim, &innerProductMatrix(cellIndex,0,0));
-      FieldContainer<double> cellStiffness(localStiffnessDim, &stiffnessMatrix(cellIndex,0,0));
+      FieldContainer<Scalar> cellIPMatrix(localIPDim, &innerProductMatrix(cellIndex,0,0));
+      FieldContainer<Scalar> cellStiffness(localStiffnessDim, &stiffnessMatrix(cellIndex,0,0));
       if (_useQRSolveForOptimalTestFunctions) {
         result = SerialDenseWrapper::solveSystemUsingQR(optimalWeightsT, cellIPMatrix, cellStiffness);
       } else if (_useSPDSolveForOptimalTestFunctions) {
@@ -843,31 +871,36 @@ namespace Camellia{
     return solvedAll;
   }
 
-  void BF::setUseSPDSolveForOptimalTestFunctions(bool value) {
+  template <typename Scalar>
+  void TBF<Scalar>::setUseSPDSolveForOptimalTestFunctions(bool value) {
     _useSPDSolveForOptimalTestFunctions = value;
   }
 
-  void BF::setUseIterativeRefinementsWithSPDSolve(bool value) {
+  template <typename Scalar>
+  void TBF<Scalar>::setUseIterativeRefinementsWithSPDSolve(bool value) {
     _useIterativeRefinementsWithSPDSolve = value;
   }
 
-  void BF::setUseExtendedPrecisionSolveForOptimalTestFunctions(bool value) {
+  template <typename Scalar>
+  void TBF<Scalar>::setUseExtendedPrecisionSolveForOptimalTestFunctions(bool value) {
     cout << "WARNING: BilinearForm no longer supports extended precision solve for optimal test functions.  Ignoring argument to setUseExtendedPrecisionSolveForOptimalTestFunctions().\n";
   }
 
-  void BF::setWarnAboutZeroRowsAndColumns(bool value) {
+  template <typename Scalar>
+  void TBF<Scalar>::setWarnAboutZeroRowsAndColumns(bool value) {
     _warnAboutZeroRowsAndColumns = value;
   }
 
-  LinearTermPtr BF::testFunctional(TSolutionPtr<double> trialSolution, bool excludeBoundaryTerms, bool overrideMeshCheck) {
-    LinearTermPtr functional = Teuchos::rcp(new LinearTerm());
-    for ( vector< BilinearTerm >:: iterator btIt = _terms.begin();
+  template <typename Scalar>
+  TLinearTermPtr<Scalar> TBF<Scalar>::testFunctional(TSolutionPtr<Scalar> trialSolution, bool excludeBoundaryTerms, bool overrideMeshCheck) {
+    TLinearTermPtr<Scalar> functional = Teuchos::rcp(new LinearTerm());
+    for (typename vector< TBilinearTerm<Scalar> >:: iterator btIt = _terms.begin();
         btIt != _terms.end(); btIt++) {
-      BilinearTerm bt = *btIt;
-      LinearTermPtr trialTerm = btIt->first;
-      LinearTermPtr testTerm = btIt->second;
-      TFunctionPtr<double> trialValue = Teuchos::rcp( new PreviousSolutionFunction<double>(trialSolution, trialTerm) );
-      static_cast< PreviousSolutionFunction<double>* >(trialValue.get())->setOverrideMeshCheck(overrideMeshCheck);
+      TBilinearTerm<Scalar> bt = *btIt;
+      TLinearTermPtr<Scalar> trialTerm = btIt->first;
+      TLinearTermPtr<Scalar> testTerm = btIt->second;
+      TFunctionPtr<Scalar> trialValue = Teuchos::rcp( new PreviousSolutionFunction<Scalar>(trialSolution, trialTerm) );
+      static_cast< PreviousSolutionFunction<Scalar>* >(trialValue.get())->setOverrideMeshCheck(overrideMeshCheck);
       if ( (! excludeBoundaryTerms) || (! trialValue->boundaryValueOnly()) ) {
         functional = functional + trialValue * testTerm;
       }
@@ -875,15 +908,18 @@ namespace Camellia{
     return functional;
   }
 
-  const vector< int > & BF::trialIDs() {
+  template <typename Scalar>
+  const vector< int > & TBF<Scalar>::trialIDs() {
     return _trialIDs;
   }
 
-  const vector< int > & BF::testIDs() {
+  template <typename Scalar>
+  const vector< int > & TBF<Scalar>::testIDs() {
     return _testIDs;
   }
 
-  void BF::trialTestOperators(int testID1, int testID2,
+  template <typename Scalar>
+  void TBF<Scalar>::trialTestOperators(int testID1, int testID2,
       vector<Camellia::EOperator> &testOps1,
       vector<Camellia::EOperator> &testOps2) {
     Camellia::EOperator testOp1, testOp2;
@@ -895,7 +931,8 @@ namespace Camellia{
     }
   }
 
-  vector<int> BF::trialVolumeIDs() {
+  template <typename Scalar>
+  vector<int> TBF<Scalar>::trialVolumeIDs() {
     vector<int> ids;
     for (vector<int>::iterator trialIt = _trialIDs.begin(); trialIt != _trialIDs.end(); trialIt++) {
       int trialID = *(trialIt);
@@ -906,7 +943,8 @@ namespace Camellia{
     return ids;
   }
 
-  vector<int> BF::trialBoundaryIDs() {
+  template <typename Scalar>
+  vector<int> TBF<Scalar>::trialBoundaryIDs() {
     vector<int> ids;
     for (vector<int>::iterator trialIt = _trialIDs.begin(); trialIt != _trialIDs.end(); trialIt++) {
       int trialID = *(trialIt);
@@ -918,12 +956,13 @@ namespace Camellia{
   }
 
 
-  VarFactory BF::varFactory() {
+  template <typename Scalar>
+  VarFactory TBF<Scalar>::varFactory() {
     if (! _isLegacySubclass) {
       return _varFactory;
     } else {
       // this is not meant to cover every possible subclass, but the known legacy subclasses.
-      // (just here to allow compatibility with subclasses in DPGTests, e.g.; new implementations should use BF)
+      // (just here to allow compatibility with subclasses in DPGTests, e.g.; new implementations should use TBF)
       VarFactory vf;
       vector<int> trialIDs = this->trialIDs();
       for (int trialIndex=0; trialIndex<trialIDs.size(); trialIndex++) {
@@ -982,4 +1021,5 @@ namespace Camellia{
       return vf;
     }
   }
+  template class TBF<double>;
 }
