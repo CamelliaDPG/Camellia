@@ -193,12 +193,20 @@ namespace Camellia {
   template <typename Scalar>
   TFunctionPtr<Scalar> operator/(TFunctionPtr<Scalar> f1, Scalar divisor);
   template <typename Scalar>
+  TFunctionPtr<Scalar> operator/(TFunctionPtr<Scalar> f1, int divisor);
+  template <typename Scalar>
   TFunctionPtr<Scalar> operator/(Scalar value, TFunctionPtr<Scalar> scalarDivisor);
+  template <typename Scalar>
+  TFunctionPtr<Scalar> operator/(int value, TFunctionPtr<Scalar> scalarDivisor);
 
+  template <typename Scalar>
+  TFunctionPtr<Scalar> operator*(int weight, TFunctionPtr<Scalar> f);
   template <typename Scalar>
   TFunctionPtr<Scalar> operator*(Scalar weight, TFunctionPtr<Scalar> f);
   template <typename Scalar>
   TFunctionPtr<Scalar> operator*(TFunctionPtr<Scalar> f, Scalar weight);
+  template <typename Scalar>
+  TFunctionPtr<Scalar> operator*(TFunctionPtr<Scalar> f, int weight);
   template <typename Scalar>
   TFunctionPtr<Scalar> operator*(vector<Scalar> weight, TFunctionPtr<Scalar> f);
   template <typename Scalar>
@@ -209,7 +217,11 @@ namespace Camellia {
   template <typename Scalar>
   TFunctionPtr<Scalar> operator+(TFunctionPtr<Scalar> f1, Scalar value);
   template <typename Scalar>
+  TFunctionPtr<Scalar> operator+(TFunctionPtr<Scalar> f1, int value);
+  template <typename Scalar>
   TFunctionPtr<Scalar> operator+(Scalar value, TFunctionPtr<Scalar> f1);
+  template <typename Scalar>
+  TFunctionPtr<Scalar> operator+(int value, TFunctionPtr<Scalar> f1);
 
   template <typename Scalar>
   TFunctionPtr<Scalar> operator-(TFunctionPtr<Scalar> f1, TFunctionPtr<Scalar> f2);
@@ -217,6 +229,10 @@ namespace Camellia {
   TFunctionPtr<Scalar> operator-(TFunctionPtr<Scalar> f1, Scalar value);
   template <typename Scalar>
   TFunctionPtr<Scalar> operator-(Scalar value, TFunctionPtr<Scalar> f1);
+  template <typename Scalar>
+  TFunctionPtr<Scalar> operator-(int value, TFunctionPtr<Scalar> f1);
+  template <typename Scalar>
+  TFunctionPtr<Scalar> operator-(TFunctionPtr<Scalar> f1, int value);
 
   template <typename Scalar>
   TFunctionPtr<Scalar> operator-(TFunctionPtr<Scalar> f);

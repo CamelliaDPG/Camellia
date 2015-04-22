@@ -53,7 +53,7 @@ public:
   }
 };
 
-class GDAMinimumRuleTests_ExampleFunction : public SimpleFunction {
+class GDAMinimumRuleTests_ExampleFunction : public SimpleFunction<double> {
 public:
   double value( double x ) {
     return 2 * x + 1;
@@ -101,7 +101,7 @@ public:
   }
 };
 
-class GDAMinimumRuleTests_RampBoundaryFunction_U1 : public SimpleFunction {
+class GDAMinimumRuleTests_RampBoundaryFunction_U1 : public SimpleFunction<double> {
   double _eps; // ramp width
 public:
   GDAMinimumRuleTests_RampBoundaryFunction_U1(double eps) {

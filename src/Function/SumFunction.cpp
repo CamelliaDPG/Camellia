@@ -112,5 +112,7 @@ TFunctionPtr<Scalar> SumFunction<Scalar>::div() {
   }
 }
 
-template class SumFunction<double>;
+namespace Camellia {
+  template class SumFunction<double>;
+}
 

@@ -11,31 +11,52 @@
 
 #include "Intrepid_FieldContainer.hpp"
 
-#include "MeshFactory.h"
+#include "CamelliaCellTools.h"
 #include "Cell.h"
-
-#include "PoissonFormulation.h"
+#include "MeshFactory.h"
 
 using namespace Camellia;
 using namespace Intrepid;
 
 namespace {
+  TEUCHOS_UNIT_TEST( Cell, FindSubcellOrdinalInSide )
+  {
+    double width=1.0, height=1.0;
+    int horizontalElements=2, verticalElements=1;
+    MeshTopologyPtr meshTopo = MeshFactory::quadMeshTopology(width,height,horizontalElements,verticalElements);
+    
+    int sideDim = meshTopo->getSpaceDim() - 1;
+    for (auto cellIndex : meshTopo->getActiveCellIndices())
+    {
+      CellPtr cell = meshTopo->getCell(cellIndex);
+      CellTopoPtr cellTopo = cell->topology();
+      for (int sideOrdinal=0; sideOrdinal<cell->getSideCount(); sideOrdinal++)
+      {
+        IndexType sideEntityIndex = cell->getEntityIndices(sideDim)[sideOrdinal];
+        for (int subcdim=0; subcdim <= sideDim; subcdim++)
+        {
+          int subcCount = meshTopo->getSubEntityCount(sideDim, sideEntityIndex, subcdim);
+          for (int subcOrdinalInGlobalSide=0; subcOrdinalInGlobalSide<subcCount; subcOrdinalInGlobalSide++)
+            // subcOrdinalGlobal as opposed to as ordered by the cell side
+          {
+            IndexType subcEntityIndex = meshTopo->getSubEntityIndex(sideDim, sideEntityIndex, subcdim, subcOrdinalInGlobalSide);
+            IndexType subcOrdinalInCellExpected = cell->findSubcellOrdinal(subcdim, subcEntityIndex);
+            IndexType subcOrdinalInCellSide = cell->findSubcellOrdinalInSide(subcdim, subcEntityIndex, sideOrdinal);
+            IndexType subcOrdinalInCellActual = CamelliaCellTools::subcellOrdinalMap(cellTopo, sideDim, sideOrdinal, subcdim, subcOrdinalInCellSide);
+            TEST_EQUALITY(subcOrdinalInCellActual, subcOrdinalInCellExpected);
+          }
+        }
+      }
+    }
+  }
+  
   TEUCHOS_UNIT_TEST( Cell, Neighbors1D )
   {
     int numCells = 8;
-    int spaceDim = 1;
-    // just want any bilinear form; we'll use Poisson
-    bool useConformingTraces = true;
-    PoissonFormulation form(spaceDim, useConformingTraces);
-    
     double xLeft = 0, xRight = 1;
-    
-    int H1Order = 1, delta_k = 1;
-    MeshPtr mesh = MeshFactory::intervalMesh(form.bf(), xLeft, xRight, numCells, H1Order, delta_k);
+    MeshTopologyPtr meshTopo = MeshFactory::intervalMeshTopology( xLeft, xRight, numCells );
     
     int numBoundarySides = 0;
-    
-    MeshTopologyPtr meshTopo = mesh->getTopology();
     
     for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
       CellPtr cell = meshTopo->getCell(cellIndex);

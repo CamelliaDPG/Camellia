@@ -76,5 +76,7 @@ TFunctionPtr<Scalar> SpatiallyFilteredFunction<Scalar>::dz() {
   return Teuchos::rcp( new SpatiallyFilteredFunction<Scalar>(_f->dz(), _sf));
 }
 
-template class SpatiallyFilteredFunction<double>;
+namespace Camellia {
+  template class SpatiallyFilteredFunction<double>;
+}
 

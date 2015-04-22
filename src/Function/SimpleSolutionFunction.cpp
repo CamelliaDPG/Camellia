@@ -148,5 +148,7 @@ TFunctionPtr<Scalar> SimpleSolutionFunction<Scalar>::z() {
   }
 }
 
-template class SimpleSolutionFunction<double>;
+namespace Camellia {
+  template class SimpleSolutionFunction<double>;
+}
 

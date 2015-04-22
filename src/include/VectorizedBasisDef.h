@@ -15,6 +15,7 @@ namespace Camellia {
     } else if (basis->functionSpace() == Camellia::FUNCTION_SPACE_HVOL) {
       this->_functionSpace = Camellia::FUNCTION_SPACE_VECTOR_HVOL;
     } else this->_functionSpace = basis->functionSpace();
+    this->_rangeDimension = numComponents; // may differ from _componentBasis->rangeDimension();
   }
 
   template<class Scalar, class ArrayScalar>
@@ -147,8 +148,10 @@ namespace Camellia {
   // range info for basis values:
   template<class Scalar, class ArrayScalar>
   int VectorizedBasis<Scalar,ArrayScalar>::rangeDimension() const {
-    return _componentBasis->rangeDimension();
+    // this may differ from _componentBasis->rangeDimension()
+    return _numComponents;
   }
+  
   template<class Scalar, class ArrayScalar>
   int VectorizedBasis<Scalar,ArrayScalar>::rangeRank() const {
     return _componentBasis->rangeRank() + 1;

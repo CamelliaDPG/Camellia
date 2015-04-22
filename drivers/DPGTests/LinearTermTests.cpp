@@ -348,9 +348,9 @@ bool LinearTermTests::testIntegration() {
   
   LinearTermPtr testFunctionalNoBoundaryValues = u1_proj * q1->x() + u2_proj * q1->y() + u3_proj * v1;
   
-  FunctionPtr u1_hat_prev = Teuchos::rcp( new PreviousSolutionFunction(solution, u1_hat) );
-  FunctionPtr u2_hat_prev = Teuchos::rcp( new PreviousSolutionFunction(solution, u2_hat) );
-  FunctionPtr u3_hat_prev = Teuchos::rcp( new PreviousSolutionFunction(solution, u3_hat_n) );
+  FunctionPtr u1_hat_prev = Teuchos::rcp( new PreviousSolutionFunction<double>(solution, u1_hat) );
+  FunctionPtr u2_hat_prev = Teuchos::rcp( new PreviousSolutionFunction<double>(solution, u2_hat) );
+  FunctionPtr u3_hat_prev = Teuchos::rcp( new PreviousSolutionFunction<double>(solution, u3_hat_n) );
   LinearTermPtr testFunctionalBoundaryValues = u1_hat_prev * q1->dot_normal() + u3_hat_prev * v1;
   
   if ( ! checkLTSumConsistency(testFunctionalNoBoundaryValues, testFunctionalBoundaryValues, 

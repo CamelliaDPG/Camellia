@@ -11,6 +11,7 @@
 #include "GlobalDofAssignment.h"
 #include "MeshFactory.h"
 #include "PoissonFormulation.h"
+#include "StokesVGPFormulation.h"
 
 #include <cstdio>
 
@@ -18,25 +19,18 @@ using namespace Camellia;
 using namespace Intrepid;
 
 namespace {
-  vector<double> makeVertex(double v0, double v1) {
-    vector<double> v;
-    v.push_back(v0);
-    v.push_back(v1);
-    return v;
-  }
-  
   MeshPtr makeTestMesh( int spaceDim, bool spaceTime ) {
     MeshPtr mesh;
     if ((spaceDim == 1) && spaceTime) {
       int tensorialDegree = 1;
       CellTopoPtr line_x_time = CellTopology::cellTopology(CellTopology::line(), tensorialDegree);
       
-      vector<double> v00 = makeVertex(-1,-1);
-      vector<double> v10 = makeVertex(1,-1);
-      vector<double> v20 = makeVertex(2,-1);
-      vector<double> v01 = makeVertex(-1,1);
-      vector<double> v11 = makeVertex(1,1);
-      vector<double> v21 = makeVertex(2,1);
+      vector<double> v00 = {-1,-1};
+      vector<double> v10 = { 1,-1};
+      vector<double> v20 = { 2,-1};
+      vector<double> v01 = {-1, 1};
+      vector<double> v11 = { 1, 1};
+      vector<double> v21 = { 2, 1};
       
       vector< vector<double> > spaceTimeVertices;
       spaceTimeVertices.push_back(v00); // 0
@@ -165,26 +159,18 @@ namespace {
     }
   }
   
-  TEUCHOS_UNIT_TEST( Mesh, SaveAndLoad )
+  void testSaveAndLoad2D(BFPtr bf, Teuchos::FancyOStream &out, bool &success)
   {
-    int spaceDim = 2;
-    bool conformingTraces = true;
-    PoissonFormulation form(spaceDim,conformingTraces);
     int H1Order = 2;
-    vector<int> elemCounts(2);
-    elemCounts[0] = 3;
-    elemCounts[1] = 2;
+    vector<int> elemCounts = {3,2};
+    vector<double> dims = {1.0,2.0};
     
-    vector<double> dims(2);
-    dims[0] = 1.2;
-    dims[1] = 1.4;
-    
-    MeshPtr mesh = MeshFactory::rectilinearMesh(form.bf(), dims, elemCounts, H1Order);
+    MeshPtr mesh = MeshFactory::rectilinearMesh(bf, dims, elemCounts, H1Order);
     
     string meshFile = "SavedMesh.HDF5";
     mesh->saveToHDF5(meshFile);
     
-    MeshPtr loadedMesh = MeshFactory::loadFromHDF5(form.bf(), meshFile);
+    MeshPtr loadedMesh = MeshFactory::loadFromHDF5(bf, meshFile);
     TEST_EQUALITY(loadedMesh->globalDofCount(), mesh->globalDofCount());
     
     // delete the file we created
@@ -194,6 +180,21 @@ namespace {
     set<GlobalIndexType> cellsToRefine;
     cellsToRefine.insert(0);
     loadedMesh->pRefine(cellsToRefine);
-    
+  }
+  
+  TEUCHOS_UNIT_TEST( Mesh, SaveAndLoadPoissonConforming )
+  {
+    int spaceDim = 2;
+    bool conformingTraces = true;
+    PoissonFormulation form(spaceDim,conformingTraces);
+    testSaveAndLoad2D(form.bf(), out, success);
+  }
+  
+  TEUCHOS_UNIT_TEST( Mesh, SaveAndLoadStokesConforming )
+  {
+    int spaceDim = 2;
+    bool conformingTraces = true;
+    StokesVGPFormulation form(spaceDim,conformingTraces);
+    testSaveAndLoad2D(form.bf(), out, success);
   }
 } // namespace

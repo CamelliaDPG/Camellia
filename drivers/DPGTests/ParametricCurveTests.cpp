@@ -14,6 +14,7 @@
 #include "ParametricSurface.h"
 #include "StokesFormulation.h"
 #include "TrigFunctions.h"
+#include "TypeDefs.h"
 
 static const double PI  = 3.141592653589793238462;
 

@@ -19,7 +19,7 @@ using namespace std;
 
 namespace Camellia {
   class ParametricFunction : public TFunction<double> {
-    typedef Teuchos::RCP<ParametricFunction> ParamatricFunctionPtr;
+    typedef Teuchos::RCP<ParametricFunction> ParametricFunctionPtr;
 
     TFunctionPtr<double> _underlyingFxn; // the original 0-to-1 function
     TFunctionPtr<double> _argMap; // maps the t values from (0,1) on sub-curve into (t0,t1) on curve
@@ -39,20 +39,20 @@ namespace Camellia {
     void values(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache);
 
     TFunctionPtr<double> dx(); // same function as dt_parametric()
-    ParamatricFunctionPtr dt_parametric(); // not named dt() to avoid conflict with Function, which means space-time by this...
+    ParametricFunctionPtr dt_parametric(); // not named dt() to avoid conflict with Function, which means space-time by this...
 
-    ParamatricFunctionPtr subFunction(double t0, double t1);
+    ParametricFunctionPtr subFunction(double t0, double t1);
 
     // parametric function: function on refCellPoints mapped to [0,1]
-    static ParamatricFunctionPtr parametricFunction(TFunctionPtr<double> fxn, double t0=0, double t1=1);
+    static ParametricFunctionPtr parametricFunction(TFunctionPtr<double> fxn, double t0=0, double t1=1);
   };
-  typedef Teuchos::RCP<ParametricFunction> ParamatricFunctionPtr;
+  typedef Teuchos::RCP<ParametricFunction> ParametricFunctionPtr;
 
   class ParametricCurve : public TFunction<double> {
   public:
     typedef Teuchos::RCP<ParametricCurve> ParametricCurvePtr;
   private:
-    ParamatricFunctionPtr _xFxn, _yFxn, _zFxn; // parametric functions (defined on ref line mapped to [0,1])
+    ParametricFunctionPtr _xFxn, _yFxn, _zFxn; // parametric functions (defined on ref line mapped to [0,1])
     TFunctionPtr<double> argumentMap();
 
   //  void mapRefCellPointsToParameterSpace(Intrepid::FieldContainer<double> &refPoints);
@@ -60,9 +60,9 @@ namespace Camellia {
   //  ParametricCurve(ParametricCurvePtr fxn, double t0, double t1);
     public:
     ParametricCurve();
-    ParametricCurve(ParamatricFunctionPtr xFxn_x_as_t,
-                    ParamatricFunctionPtr yFxn_x_as_t = Teuchos::rcp((ParametricFunction*)NULL),
-                    ParamatricFunctionPtr zFxn_x_as_t = Teuchos::rcp((ParametricFunction*)NULL));
+    ParametricCurve(ParametricFunctionPtr xFxn_x_as_t,
+                    ParametricFunctionPtr yFxn_x_as_t = Teuchos::rcp((ParametricFunction*)NULL),
+                    ParametricFunctionPtr zFxn_x_as_t = Teuchos::rcp((ParametricFunction*)NULL));
 
 
     ParametricCurvePtr interpolatingLine();
@@ -84,9 +84,9 @@ namespace Camellia {
     virtual TFunctionPtr<double> y();
     virtual TFunctionPtr<double> z();
 
-    virtual ParamatricFunctionPtr xPart();
-    virtual ParamatricFunctionPtr yPart();
-    virtual ParamatricFunctionPtr zPart();
+    virtual ParametricFunctionPtr xPart();
+    virtual ParametricFunctionPtr yPart();
+    virtual ParametricFunctionPtr zPart();
 
     static ParametricCurvePtr bubble(ParametricCurvePtr edgeCurve);
 

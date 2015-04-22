@@ -137,5 +137,6 @@ void ProductFunction<Scalar>::values(Intrepid::FieldContainer<Scalar> &values, B
   }
 }
 
-template class ProductFunction<double>;
-
+namespace Camellia {
+  template class ProductFunction<double>;
+}

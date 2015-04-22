@@ -4180,4 +4180,6 @@ void TSolution<Scalar>::setZMCsAsGlobalLagrange(bool value) {
   _zmcsAsLagrangeMultipliers = value;
 }
 
-template class TSolution<double>;
+namespace Camellia {
+  template class TSolution<double>;
+}

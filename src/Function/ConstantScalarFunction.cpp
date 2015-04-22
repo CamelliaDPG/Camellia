@@ -102,5 +102,7 @@ TFunctionPtr<Scalar> ConstantScalarFunction<Scalar>::dt() {
   return TFunction<Scalar>::zero();
 }
 
-template class ConstantScalarFunction<double>;
+namespace Camellia {
+  template class ConstantScalarFunction<double>;
+}
 
