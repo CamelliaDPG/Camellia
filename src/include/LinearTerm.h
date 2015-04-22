@@ -1,13 +1,13 @@
 //
-//  LinearTerm.h
+//  TLinearTerm.h
 //  Camellia
 //
 //  Created by Nathan Roberts on 3/30/12.
 //  Copyright (c) 2012 __MyCompanyName__. All rights reserved.
 //
 
-#ifndef Camellia_LinearTerm_h
-#define Camellia_LinearTerm_h
+#ifndef Camellia_TLinearTerm_h
+#define Camellia_TLinearTerm_h
 
 #include "TypeDefs.h"
 
@@ -32,10 +32,11 @@
 class Epetra_CrsMatrix;
 namespace Camellia {
 
-  class LinearTerm {
-    typedef std::pair< TFunctionPtr<double>, VarPtr > LinearSummand;
+  template <typename Scalar>
+  class TLinearTerm {
+    // typedef std::pair< TFunctionPtr<Scalar>, VarPtr > TLinearSummand;
     int _rank; // gets set after first var is added
-    std::vector< LinearSummand > _summands;
+    std::vector< TLinearSummand<Scalar> > _summands;
     std::set<int> _varIDs;
     Camellia::VarType _termType; // shouldn't mix
 
@@ -46,90 +47,90 @@ namespace Camellia {
 
     // some private utility methods:
     static void integrate(Epetra_CrsMatrix *valuesCrsMatrix, Intrepid::FieldContainer<double> &valuesFC,
-                          LinearTermPtr u, DofOrderingPtr uOrdering,
-                          LinearTermPtr v, DofOrderingPtr vOrdering,
+                          TLinearTermPtr<double> u, DofOrderingPtr uOrdering,
+                          TLinearTermPtr<double> v, DofOrderingPtr vOrdering,
                           BasisCachePtr basisCache, bool sumInto=true);
-    static void integrate(Intrepid::FieldContainer<double> &values,
-                          LinearTermPtr u, DofOrderingPtr uOrdering,
-                          LinearTermPtr v, DofOrderingPtr vOrdering,
+    static void integrate(Intrepid::FieldContainer<Scalar> &values,
+                          TLinearTermPtr<Scalar> u, DofOrderingPtr uOrdering,
+                          TLinearTermPtr<Scalar> v, DofOrderingPtr vOrdering,
                           BasisCachePtr basisCache, bool sumInto=true);
-    static void multiplyFluxValuesByParity(Intrepid::FieldContainer<double> &fluxValues, BasisCachePtr sideBasisCache);
+    static void multiplyFluxValuesByParity(Intrepid::FieldContainer<Scalar> &fluxValues, BasisCachePtr sideBasisCache);
 
     // poor man's templating: just provide both versions of the values argument, making the other version null or size 0
     void integrate(Epetra_CrsMatrix *valuesCrsMatrix, Intrepid::FieldContainer<double> &valuesFC, DofOrderingPtr thisDofOrdering,
-                   LinearTermPtr otherTerm, DofOrderingPtr otherDofOrdering,
+                   TLinearTermPtr<double> otherTerm, DofOrderingPtr otherDofOrdering,
                    BasisCachePtr basisCache, bool forceBoundaryTerm = false, bool sumInto = true);
     void integrate(Epetra_CrsMatrix *valuesCrsMatrix, Intrepid::FieldContainer<double> &valuesFC, DofOrderingPtr thisDofOrdering,
-                   LinearTermPtr otherTerm, VarPtr otherVarID, TFunctionPtr<double> fxn,
+                   TLinearTermPtr<double> otherTerm, VarPtr otherVarID, TFunctionPtr<double> fxn,
                    BasisCachePtr basisCache, bool forceBoundaryTerm = false);
 
   public: // was protected; changed for debugging (no big deal either way, I think)
-    const std::vector< LinearSummand > & summands() const;
+    const std::vector< TLinearSummand<Scalar> > & summands() const;
   public:
-    LinearTerm();
-    LinearTerm(TFunctionPtr<double> weight, VarPtr var);
-    LinearTerm(double weight, VarPtr var);
-    LinearTerm(std::vector<double> weight, VarPtr var);
-    LinearTerm( VarPtr v );
+    TLinearTerm();
+    TLinearTerm(TFunctionPtr<Scalar> weight, VarPtr var);
+    TLinearTerm(Scalar weight, VarPtr var);
+    TLinearTerm(std::vector<Scalar> weight, VarPtr var);
+    TLinearTerm( VarPtr v );
     // copy constructor:
-    LinearTerm( const LinearTerm &a );
-    void addVar(TFunctionPtr<double> weight, VarPtr var);
-    void addVar(double weight, VarPtr var);
-    void addVar(std::vector<double> vector_weight, VarPtr var);
+    TLinearTerm( const TLinearTerm &a );
+    void addVar(TFunctionPtr<Scalar> weight, VarPtr var);
+    void addVar(Scalar weight, VarPtr var);
+    void addVar(std::vector<Scalar> vector_weight, VarPtr var);
 
     const std::set<int> & varIDs() const;
 
     Camellia::VarType termType() const;
     //  vector< Camellia::EOperator > varOps(int varID);
 
-    /** \brief  Computes the norm of the LinearTerm using the Riesz representation corresponding to the inner product ip on the specified mesh.
+    /** \brief  Computes the norm of the TLinearTerm using the Riesz representation corresponding to the inner product ip on the specified mesh.
      *  \param  ip        [in]  - inner product to use for the Riesz representation
      *  \param  mesh      [in]  - mesh over which to measure
      */
     double computeNorm(IPPtr ip, MeshPtr mesh);
 
-    void evaluate(Intrepid::FieldContainer<double> &values, TSolutionPtr<double> solution, BasisCachePtr basisCache,
+    void evaluate(Intrepid::FieldContainer<Scalar> &values, TSolutionPtr<Scalar> solution, BasisCachePtr basisCache,
                   bool applyCubatureWeights = false);
 
-    TFunctionPtr<double> evaluate(const Teuchos::map< int, TFunctionPtr<double>> &varFunctions);
-    TFunctionPtr<double> evaluate(const Teuchos::map< int, TFunctionPtr<double>> &varFunctions, bool boundaryPart);
+    TFunctionPtr<Scalar> evaluate(const Teuchos::map< int, TFunctionPtr<Scalar>> &varFunctions);
+    TFunctionPtr<Scalar> evaluate(const Teuchos::map< int, TFunctionPtr<Scalar>> &varFunctions, bool boundaryPart);
 
-    LinearTermPtr getBoundaryOnlyPart();
-    LinearTermPtr getNonBoundaryOnlyPart();
-    LinearTermPtr getPart(bool boundaryOnlyPart);
-    LinearTermPtr getPartMatchingVariable( VarPtr var );
+    TLinearTermPtr<Scalar> getBoundaryOnlyPart();
+    TLinearTermPtr<Scalar> getNonBoundaryOnlyPart();
+    TLinearTermPtr<Scalar> getPart(bool boundaryOnlyPart);
+    TLinearTermPtr<Scalar> getPartMatchingVariable( VarPtr var );
 
     // integrate into values FieldContainers:
-    void integrate(Intrepid::FieldContainer<double> &values, DofOrderingPtr thisOrdering,
+    void integrate(Intrepid::FieldContainer<Scalar> &values, DofOrderingPtr thisOrdering,
                    BasisCachePtr basisCache, bool forceBoundaryTerm = false, bool sumInto = true);
-    void integrate(Intrepid::FieldContainer<double> &values, DofOrderingPtr thisDofOrdering,
-                   LinearTermPtr otherTerm, DofOrderingPtr otherDofOrdering,
+    void integrate(Intrepid::FieldContainer<Scalar> &values, DofOrderingPtr thisDofOrdering,
+                   TLinearTermPtr<Scalar> otherTerm, DofOrderingPtr otherDofOrdering,
                    BasisCachePtr basisCache, bool forceBoundaryTerm = false, bool sumInto = true);
-    void integrate(Intrepid::FieldContainer<double> &values, DofOrderingPtr thisDofOrdering,
-                   LinearTermPtr otherTerm, VarPtr otherVarID, TFunctionPtr<double> fxn,
+    void integrate(Intrepid::FieldContainer<Scalar> &values, DofOrderingPtr thisDofOrdering,
+                   TLinearTermPtr<Scalar> otherTerm, VarPtr otherVarID, TFunctionPtr<Scalar> fxn,
                    BasisCachePtr basisCache, bool forceBoundaryTerm = false);
 
     // CrsMatrix versions (for the two-LT (matrix) variants of integrate)
     void integrate(Epetra_CrsMatrix *values, DofOrderingPtr thisDofOrdering,
-                   LinearTermPtr otherTerm, DofOrderingPtr otherDofOrdering,
+                   TLinearTermPtr<double> otherTerm, DofOrderingPtr otherDofOrdering,
                    BasisCachePtr basisCache, bool forceBoundaryTerm = false, bool sumInto = true);
     void integrate(Epetra_CrsMatrix *values, DofOrderingPtr thisDofOrdering,
-                   LinearTermPtr otherTerm, VarPtr otherVarID, TFunctionPtr<double> fxn,
+                   TLinearTermPtr<double> otherTerm, VarPtr otherVarID, TFunctionPtr<Scalar> fxn,
                    BasisCachePtr basisCache, bool forceBoundaryTerm = false);
 
     // compute the value of linearTerm for non-zero varID at the cubature points, for each basis function in basis
     // values shape: (C,F,P), (C,F,P,D), or (C,F,P,D,D)
-    void values(Intrepid::FieldContainer<double> &values, int varID, BasisPtr basis, BasisCachePtr basisCache,
+    void values(Intrepid::FieldContainer<Scalar> &values, int varID, BasisPtr basis, BasisCachePtr basisCache,
                 bool applyCubatureWeights = false, bool naturalBoundaryTermsOnly = false);
 
     // compute the value of linearTerm for varID = fxn
     // values shape: (C,P), (C,P,D), or (C,P,D,D)
-    void values(Intrepid::FieldContainer<double> &values, int varID, TFunctionPtr<double> fxn, BasisCachePtr basisCache,
+    void values(Intrepid::FieldContainer<Scalar> &values, int varID, TFunctionPtr<Scalar> fxn, BasisCachePtr basisCache,
                 bool applyCubatureWeights, bool naturalBoundaryTermsOnly = false);
 
     int rank() const;  // 0 for scalar, 1 for vector, etc.
 
-    bool isZero() const; // true if the LinearTerm is identically zero
+    bool isZero() const; // true if the TLinearTerm is identically zero
 
     string displayString() const; // TeX by convention
 
@@ -138,7 +139,7 @@ namespace Camellia {
 
      void computeRieszRep(Teuchos::RCP<Mesh> mesh, Teuchos::RCP<IP> ip);
      void computeRieszRHS(Teuchos::RCP<Mesh> mesh);
-     LinearTermPtr rieszRep(VarPtr v);
+     TLinearTermPtr<Scalar> rieszRep(VarPtr v);
      double functionalNorm();
      const map<int,double> & energyNorm(Teuchos::RCP<Mesh> mesh, Teuchos::RCP<IP> ip);
      double energyNormTotal(Teuchos::RCP<Mesh> mesh, Teuchos::RCP<IP> ip); // global energy norm
@@ -146,56 +147,98 @@ namespace Camellia {
      // -------------- end of added by Jesse --------------------
      */
 
-    void addTerm(const LinearTerm &a, bool overrideTypeCheck=false);
-    void addTerm(LinearTermPtr aPtr, bool overrideTypeCheck=false);
+    void addTerm(const TLinearTerm<Scalar> &a, bool overrideTypeCheck=false);
+    void addTerm(TLinearTermPtr<Scalar> aPtr, bool overrideTypeCheck=false);
     // operator overloading niceties:
 
-    LinearTerm& operator=(const LinearTerm &rhs);
-    LinearTerm& operator+=(const LinearTerm &rhs);
+    TLinearTerm<Scalar>& operator=(const TLinearTerm<Scalar> &rhs);
+    TLinearTerm<Scalar>& operator+=(const TLinearTerm<Scalar> &rhs);
 
-    LinearTerm& operator+=(VarPtr v);
+    TLinearTerm<Scalar>& operator+=(VarPtr v);
 
-    ~LinearTerm();
+    ~TLinearTerm();
   };
 
   // operator overloading for syntax sugar:
-  LinearTermPtr operator+(LinearTermPtr a1, LinearTermPtr a2);
+  TLinearTermPtr<double> operator+(TLinearTermPtr<double> a1, TLinearTermPtr<double> a2);
+  TLinearTermPtr<double> operator+(VarPtr v, TLinearTermPtr<double> a);
+  TLinearTermPtr<double> operator+(TLinearTermPtr<double> a, VarPtr v);
+  TLinearTermPtr<double> operator+(VarPtr v1, VarPtr v2);
+  TLinearTermPtr<double> operator*(TFunctionPtr<double> f, VarPtr v);
+  TLinearTermPtr<double> operator*(VarPtr v, TFunctionPtr<double> f);
+  TLinearTermPtr<double> operator*(double weight, VarPtr v);
+  TLinearTermPtr<double> operator*(VarPtr v, double weight);
+  TLinearTermPtr<double> operator*(vector<double> weight, VarPtr v);
+  TLinearTermPtr<double> operator*(VarPtr v, vector<double> weight);
+  TLinearTermPtr<double> operator*(TFunctionPtr<double> f, TLinearTermPtr<double> a);
+  TLinearTermPtr<double> operator*(TLinearTermPtr<double> a, TFunctionPtr<double> f);
+  TLinearTermPtr<double> operator/(VarPtr v, double weight);
+  TLinearTermPtr<double> operator/(VarPtr v, TFunctionPtr<double> f);
+  TLinearTermPtr<double> operator-(TLinearTermPtr<double> a);
+  TLinearTermPtr<double> operator-(TLinearTermPtr<double> a, VarPtr v);
+  TLinearTermPtr<double> operator-(VarPtr v, TLinearTermPtr<double> a);
+  TLinearTermPtr<double> operator-(TLinearTermPtr<double> a1, TLinearTermPtr<double> a2);
+  TLinearTermPtr<double> operator-(VarPtr v1, VarPtr v2);
+  TLinearTermPtr<double> operator-(VarPtr v);
 
-  LinearTermPtr operator+(VarPtr v, LinearTermPtr a);
 
-  LinearTermPtr operator+(LinearTermPtr a, VarPtr v);
 
-  LinearTermPtr operator*(TFunctionPtr<double> f, VarPtr v);
-  LinearTermPtr operator*(VarPtr v, TFunctionPtr<double> f);
+  // template <typename Scalar>
+  // TLinearTermPtr<Scalar> operator+(TLinearTermPtr<Scalar> a1, TLinearTermPtr<Scalar> a2);
 
-  LinearTermPtr operator*(double weight, VarPtr v);
+  // template <typename Scalar>
+  // TLinearTermPtr<Scalar> operator+(VarPtr v, TLinearTermPtr<Scalar> a);
 
-  LinearTermPtr operator*(VarPtr v, double weight);
+  // template <typename Scalar>
+  // TLinearTermPtr<Scalar> operator+(TLinearTermPtr<Scalar> a, VarPtr v);
 
-  LinearTermPtr operator*(vector<double> weight, VarPtr v);
+  // TLinearTermPtr<double> operator+(VarPtr v1, VarPtr v2);
 
-  LinearTermPtr operator*(VarPtr v, vector<double> weight);
+  // template <typename Scalar>
+  // TLinearTermPtr<Scalar> operator*(TFunctionPtr<Scalar> f, VarPtr v);
 
-  LinearTermPtr operator*(TFunctionPtr<double> f, LinearTermPtr a);
-  LinearTermPtr operator*(LinearTermPtr a, TFunctionPtr<double> f);
+  // template <typename Scalar>
+  // TLinearTermPtr<Scalar> operator*(VarPtr v, TFunctionPtr<Scalar> f);
 
-  LinearTermPtr operator+(VarPtr v1, VarPtr v2);
+  // template <typename Scalar>
+  // TLinearTermPtr<Scalar> operator*(Scalar weight, VarPtr v);
 
-  LinearTermPtr operator/(VarPtr v, double weight);
+  // template <typename Scalar>
+  // TLinearTermPtr<Scalar> operator*(VarPtr v, Scalar weight);
 
-  LinearTermPtr operator/(VarPtr v, TFunctionPtr<double> f);
+  // template <typename Scalar>
+  // TLinearTermPtr<Scalar> operator*(vector<Scalar> weight, VarPtr v);
 
-  LinearTermPtr operator-(VarPtr v1, VarPtr v2);
+  // template <typename Scalar>
+  // TLinearTermPtr<Scalar> operator*(VarPtr v, vector<Scalar> weight);
 
-  LinearTermPtr operator-(VarPtr v);
+  // template <typename Scalar>
+  // TLinearTermPtr<Scalar> operator*(TFunctionPtr<Scalar> f, TLinearTermPtr<Scalar> a);
 
-  LinearTermPtr operator-(LinearTermPtr a);
+  // template <typename Scalar>
+  // TLinearTermPtr<Scalar> operator*(TLinearTermPtr<Scalar> a, TFunctionPtr<Scalar> f);
 
-  LinearTermPtr operator-(LinearTermPtr a, VarPtr v);
+  // template <typename Scalar>
+  // TLinearTermPtr<Scalar> operator/(VarPtr v, Scalar weight);
 
-  LinearTermPtr operator-(VarPtr v, LinearTermPtr a);
+  // template <typename Scalar>
+  // TLinearTermPtr<Scalar> operator/(VarPtr v, TFunctionPtr<Scalar> f);
 
-  LinearTermPtr operator-(LinearTermPtr a1, LinearTermPtr a2);
+  // template <typename Scalar>
+  // TLinearTermPtr<Scalar> operator-(TLinearTermPtr<Scalar> a);
+
+  // template <typename Scalar>
+  // TLinearTermPtr<Scalar> operator-(TLinearTermPtr<Scalar> a, VarPtr v);
+
+  // template <typename Scalar>
+  // TLinearTermPtr<Scalar> operator-(VarPtr v, TLinearTermPtr<Scalar> a);
+
+  // template <typename Scalar>
+  // TLinearTermPtr<Scalar> operator-(TLinearTermPtr<Scalar> a1, TLinearTermPtr<Scalar> a2);
+
+  // TLinearTermPtr<double> operator-(VarPtr v1, VarPtr v2);
+
+  // TLinearTermPtr<double> operator-(VarPtr v);
 }
 
 

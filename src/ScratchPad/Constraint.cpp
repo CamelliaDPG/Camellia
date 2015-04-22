@@ -11,8 +11,6 @@
 
 using namespace Camellia;
 
-typedef pair< TFunctionPtr<double>, VarPtr > LinearSummand;
-
 Constraint::Constraint(LinearTermPtr linearTerm, TFunctionPtr<double> f) {
   _linearTerm = linearTerm;
   _f = f;

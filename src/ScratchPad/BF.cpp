@@ -591,7 +591,6 @@ namespace Camellia{
   }
 
   IPPtr BF::graphNorm(const map<int, double> &varWeights, double weightForL2TestTerms) {
-    typedef pair< TFunctionPtr<double>, VarPtr > LinearSummand;
     map<int, LinearTermPtr> testTermsForVarID;
     vector<double> e1(3), e2(3), e3(3); // unit vectors
     e1[0] = 1.0;
