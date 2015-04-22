@@ -407,11 +407,7 @@ bool TSolution<Scalar>::cellHasCoefficientsAssigned(GlobalIndexType cellID) {
 
 template <typename Scalar>
 int TSolution<Scalar>::solve() {
-#ifdef HAVE_MPI
-  return solve(true);
-#else
-  return solve(false);
-#endif
+  return solve(Solver::getDirectSolver());
 }
 
 template <typename Scalar>

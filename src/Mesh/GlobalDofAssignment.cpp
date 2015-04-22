@@ -248,6 +248,7 @@ void GlobalDofAssignment::constructActiveCellMap() {
 
 void GlobalDofAssignment::repartitionAndMigrate() {
   _partitionPolicy->partitionMesh(_mesh.get(),_numPartitions);
+  rebuildLookups();
   for (vector< TSolutionPtr<double> >::iterator solutionIt = _registeredSolutions.begin();
        solutionIt != _registeredSolutions.end(); solutionIt++) {
     // if solution has a condensed dof interpreter, we should reinitialize the mapping from interpreted to global dofs
@@ -443,7 +444,11 @@ void GlobalDofAssignment::setPartitions(FieldContainer<GlobalIndexType> &partiti
   set<unsigned> activeCellIDs = _meshTopology->getActiveCellIndices();
 
   int partitionNumber     = Teuchos::GlobalMPISession::getRank();
+  int partitionCount      = Teuchos::GlobalMPISession::getNProc();
 
+  TEUCHOS_TEST_FOR_EXCEPTION(partitionedMesh.dimension(0) > partitionCount, std::invalid_argument,
+                             "Number of partitions exceeds the maximum MPI rank; this is unsupported");
+  
   //  cout << "determineActiveElements(): there are "  << activeCellIDs.size() << " active elements.\n";
   _partitions.clear();
   _partitionForCellID.clear();

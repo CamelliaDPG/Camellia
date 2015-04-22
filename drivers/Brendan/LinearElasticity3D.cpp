@@ -63,13 +63,17 @@ int main(int argc, char *argv[]) {
   int k = 2, delta_k = 2;
   string norm = "Graph";
   bool saveToFile = false;
+  int loadRefinementNumber = -1; // -1 means don't load from file
   string savePrefix = "elasticity_ref";
+  string loadPrefix = "elasticity_ref";
   cmdp.setOption("polyOrder",&k,"polynomial order for field variable u");
   cmdp.setOption("delta_k", &delta_k, "test space polynomial order enrichment");
   cmdp.setOption("numRefs",&numRefs,"number of refinements");
   cmdp.setOption("lambda", &lambda, "lambda");
   cmdp.setOption("mu", &mu, "mu");
   cmdp.setOption("norm", &norm, "norm");
+  cmdp.setOption("loadRefinement", &loadRefinementNumber, "Refinement number to load from previous run");
+  cmdp.setOption("loadPrefix", &loadPrefix, "Filename prefix for loading solution/mesh from previous run");
   cmdp.setOption("saveToFile", "skipSave", &saveToFile, "Save solution after each refinement/solve");
   cmdp.setOption("savePrefix", &savePrefix, "Filename prefix for saved solutions if saveToFile option is selected");
 
@@ -344,16 +348,35 @@ int main(int argc, char *argv[]) {
 
   IPPtr ip = elasticityIPs[norm];
 
-  SolutionPtr soln = Solution::solution(mesh, bc, rhs, ip);
-
-  double threshold = 0.20;
-  RefinementStrategy refStrategy(soln, threshold);
+  SolutionPtr soln;
+  
+  if (loadRefinementNumber == -1) {
+    soln = Solution::solution(mesh, bc, rhs, ip);
+  } else {
+    ostringstream filePrefix;
+    filePrefix << loadPrefix << loadRefinementNumber;
+    if (commRank==0) cout << "loading " << filePrefix.str() << endl;
+    soln = Solution::load(bf, filePrefix.str());
+    mesh = soln->mesh();
+    soln->setBC(bc);
+    soln->setRHS(rhs);
+    soln->setIP(ip);
+  }
 
   ostringstream refName;
   refName << "elasticity";
   HDF5Exporter exporter(mesh,refName.str());
+
+  double threshold = 0.20;
+  RefinementStrategy refStrategy(soln, threshold);
   
-  for (int refIndex=0; refIndex < numRefs; refIndex++) {
+  int startIndex = loadRefinementNumber + 1; // the first refinement we haven't computed (is 0 when we aren't loading from file)
+  if (startIndex > 0) {
+    // then refine first
+    refStrategy.refine();
+  }
+  
+  for (int refIndex=startIndex; refIndex < numRefs; refIndex++) {
     soln->solve();
 
     double energyError = soln->energyErrorTotal();
