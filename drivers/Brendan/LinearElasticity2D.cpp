@@ -28,6 +28,8 @@ int kronDelta(int i, int j) {
   return (i == j) ? 1 : 0;
 }
 
+using namespace Camellia;
+
 int main(int argc, char *argv[]) {
 
 #ifdef HAVE_MPI

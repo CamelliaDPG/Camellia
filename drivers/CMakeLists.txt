@@ -1,18 +1,26 @@
 project(DPGDrivers)
 
 option(BUILD_DPGTESTS_DRIVER "Build DPGTests driver" ON)
+option(BUILD_BRENDAN_DRIVERS "Build drivers in Brendan directory" OFF)
 option(BUILD_TRUMAN_DRIVERS "Build drivers in Truman directory" ON)
 option(BUILD_TRUMAN_TESTS_DRIVERS "Build drivers in Truman/Tests directory" OFF)
-option(BUILD_CONFUSION_JESSE_DRIVERS "Build drivers in Confusion_Jesse directory" ON)
-option(BUILD_CONVECTION_DRIVERS "Build drivers in Convection directory" ON)
-option(BUILD_INCOMPRESSIBLENS_DRIVERS "Build drivers in IncompressibleNS directory" ON)
-option(BUILD_PRECONDITIONING_DRIVERS "Build drivers in Preconditioning directory" ON)
+option(BUILD_CONFUSION_JESSE_DRIVERS "Build drivers in Confusion_Jesse directory" OFF)
+option(BUILD_CONVECTION_DRIVERS "Build drivers in Convection directory" OFF)
+option(BUILD_INCOMPRESSIBLENS_DRIVERS "Build drivers in IncompressibleNS directory" OFF)
+option(BUILD_PRECONDITIONING_DRIVERS "Build drivers in Preconditioning directory" OFF)
 
 # Include headers from DPGTests for some drivers
 include_directories(DPGTests)
 
 # Add each driver
 #add_subdirectory(Burgers)
+if (BUILD_BRENDAN_DRIVERS)
+  add_subdirectory(Brendan)
+  MESSAGE("Setting up makefiles for drivers in drivers/Brendan, because BUILD_BRENDAN_DRIVERS is ON.")
+else()
+  MESSAGE("Not setting up makefiles for drivers in drivers/Brendan, because BUILD_BRENDAN_DRIVERS is OFF.")  
+endif(BUILD_BRENDAN_DRIVERS)
+
 if (BUILD_CONFUSION_JESSE_DRIVERS)
   add_subdirectory(Confusion_Jesse)
   MESSAGE("Setting up makefiles for drivers in drivers/Confusion_Jesse, because BUILD_CONFUSION_JESSE_DRIVERS is ON.")

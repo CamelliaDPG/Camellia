@@ -3,9 +3,6 @@
 
 #ifdef HAVE_MPI
 #include <Teuchos_GlobalMPISession.hpp>
-#include "mpi_choice.hpp"
-#else
-#include "choice.hpp"
 #endif
 
 // #include <algorithm>
