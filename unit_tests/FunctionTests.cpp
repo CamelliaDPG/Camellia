@@ -8,6 +8,7 @@
 #include "Teuchos_UnitTestHarness.hpp"
 
 #include "BasisCache.h"
+#include <CamelliaCellTools.h>
 #include "CellTopology.h"
 #include "Function.h"
 
@@ -45,7 +46,66 @@ namespace {
       }
     }
   }
+  
+  FieldContainer<double> getScaledTranslatedRefNodes(CellTopoPtr topo, double nodeScaling, double nodeTranslation)
+  {
+    FieldContainer<double> nodes(topo->getNodeCount(),topo->getDimension());
+    CamelliaCellTools::refCellNodesForTopology(nodes, topo);
+    for (int nodeOrdinal=0; nodeOrdinal<topo->getNodeCount(); nodeOrdinal++) {
+      for (int d=0; d<topo->getDimension(); d++)
+      {
+        nodes(nodeOrdinal,d) *= nodeScaling;
+        nodes(nodeOrdinal,d) += nodeTranslation;
+      }
+    }
+    return nodes;
+  }
+  
+  void setTemporalNodes(CellTopoPtr spaceTimeTopo, FieldContainer<double> &spaceTimeNodes, double t0, double t1)
+  {
+    int d_time = spaceTimeTopo->getDimension() - 1;
+    CellTopoPtr spaceTopo = spaceTimeTopo->getTensorialComponent();
+    vector<unsigned> tensorComponentNodes = {0,0};
+    for (unsigned spaceNode=0; spaceNode<spaceTopo->getNodeCount(); spaceNode++) {
+      unsigned timeZeroNode = spaceTimeTopo->getNodeFromTensorialComponentNodes({spaceNode, 0});
+      unsigned timeOneNode = spaceTimeTopo->getNodeFromTensorialComponentNodes({spaceNode, 1});
+      spaceTimeNodes(timeZeroNode,d_time) = t0;
+      spaceTimeNodes(timeOneNode,d_time)  = t1;
+    }
+  }
 
+  void testSpaceTimeIntegralOfSpatiallyVaryingFunction(CellTopoPtr spaceTopo, FunctionPtr f_spatial, Teuchos::FancyOStream &out, bool &success) {
+    CellTopoPtr spaceTimeTopo = CellTopology::cellTopology(spaceTopo, 1);
+    int cubatureDegree = 2;
+    bool createSideCache = true;
+    double spaceNodeScaling = .5;
+    double spaceNodeTranslation = .5; // scale, then translate
+    BasisCachePtr spaceBasisCache = BasisCache::basisCacheForReferenceCell(spaceTopo, cubatureDegree, createSideCache);
+    FieldContainer<double> physicalNodesSpace = getScaledTranslatedRefNodes(spaceTopo, spaceNodeScaling, spaceNodeTranslation);
+    physicalNodesSpace.resize(1,physicalNodesSpace.dimension(0),physicalNodesSpace.dimension(1));
+    spaceBasisCache->setPhysicalCellNodes(physicalNodesSpace, vector<GlobalIndexType>(), createSideCache);
+    double spatialIntegral = f_spatial->integrate(spaceBasisCache);
+    BasisCachePtr spaceTimeBasisCache = BasisCache::basisCacheForReferenceCell(spaceTimeTopo, cubatureDegree, createSideCache);
+    FieldContainer<double> physicalNodesSpaceTime = getScaledTranslatedRefNodes(spaceTimeTopo, spaceNodeScaling, spaceNodeTranslation);
+    double t0 = 0.0, t1 = .5;
+    double temporalExtent = t1 - t0;
+    setTemporalNodes(spaceTimeTopo,physicalNodesSpaceTime,t0,t1);
+    physicalNodesSpaceTime.resize(1,physicalNodesSpaceTime.dimension(0),physicalNodesSpaceTime.dimension(1));
+    spaceTimeBasisCache->setPhysicalCellNodes(physicalNodesSpaceTime, vector<GlobalIndexType>(), createSideCache);
+    double temporalIntegralActual = f_spatial->integrate(spaceTimeBasisCache);
+    double temporalIntegralExpected = spatialIntegral * temporalExtent;
+    double diff = abs(temporalIntegralExpected - temporalIntegralActual);
+    
+    double tol = 1e-14;
+    TEST_COMPARE(diff, <, tol);
+    
+    if (diff > tol)
+    {
+      out << "temporalIntegralActual: " << temporalIntegralActual << endl;
+      out << "temporalIntegralExpected: " << temporalIntegralExpected << endl;
+    }
+  }
+  
   void testSpaceTimeNormal(CellTopoPtr spaceTopo, Teuchos::FancyOStream &out, bool &success) {
     CellTopoPtr spaceTimeTopo = CellTopology::cellTopology(spaceTopo, 1);
     int cubatureDegree = 1;
@@ -111,7 +171,43 @@ namespace {
     actualValue = Function::evaluate(maxFcn, x0, y0);
     TEST_FLOATING_EQUALITY(expectedValue,actualValue,tol);
   }
+  
+  TEUCHOS_UNIT_TEST( Function, SpaceTimeIntegralLine )
+  {
+    FunctionPtr x = Function::xn(1);
+    testSpaceTimeIntegralOfSpatiallyVaryingFunction(CellTopology::line(), x, out, success);
+  }
+  
+  TEUCHOS_UNIT_TEST( Function, SpaceTimeIntegralQuad )
+  {
+    FunctionPtr x = Function::xn(1);
+    FunctionPtr y = Function::yn(1);
+    testSpaceTimeIntegralOfSpatiallyVaryingFunction(CellTopology::quad(), x * y, out, success);
+  }
 
+  TEUCHOS_UNIT_TEST( Function, SpaceTimeIntegralTriangle )
+  {
+    FunctionPtr x = Function::xn(1);
+    FunctionPtr y = Function::yn(1);
+    testSpaceTimeIntegralOfSpatiallyVaryingFunction(CellTopology::triangle(), x * y, out, success);
+  }
+  
+  TEUCHOS_UNIT_TEST( Function, SpaceTimeIntegralHexahedron )
+  {
+    FunctionPtr x = Function::xn(1);
+    FunctionPtr y = Function::yn(1);
+    FunctionPtr z = Function::zn(1);
+    testSpaceTimeIntegralOfSpatiallyVaryingFunction(CellTopology::hexahedron(), x * y * z, out, success);
+  }
+  
+  TEUCHOS_UNIT_TEST( Function, SpaceTimeIntegralTetrahedron )
+  {
+    FunctionPtr x = Function::xn(1);
+    FunctionPtr y = Function::yn(1);
+    FunctionPtr z = Function::zn(1);
+    testSpaceTimeIntegralOfSpatiallyVaryingFunction(CellTopology::tetrahedron(), x * y * z, out, success);
+  }
+  
   TEUCHOS_UNIT_TEST( Function, SpaceTimeNormalLine )
   {
     testSpaceTimeNormal(CellTopology::line(), out, success);

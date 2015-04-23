@@ -68,13 +68,25 @@ namespace {
 
     FunctionPtr n_xt = Function::normalSpaceTime();
 
-    LinearTermPtr lt = -f * v->dt() + (f * v) * n_xt->t();
+    LinearTermPtr lt1 = -f * v->dt();
+    LinearTermPtr lt2 = (f * v) * n_xt->t();
+    
+    LinearTermPtr lt = lt1 + lt2;
 
     int H1Order = 2;
     MeshPtr mesh = singleElementSpaceTimeMesh(spaceDim, H1Order);
     double norm = lt->computeNorm(form.bf()->graphNorm(), mesh); // should be 0
 
-    TEST_COMPARE(norm, <, 1e-14);
+    double tol = 1e-14;
+    if (norm > tol)
+    {
+      double norm_lt1 = lt1->computeNorm(form.bf()->graphNorm(), mesh);
+      double norm_lt2 = lt2->computeNorm(form.bf()->graphNorm(), mesh);
+      out << "norm(lt1) = " << norm_lt1 << endl;
+      out << "norm(lt2) = " << norm_lt2 << endl;
+    }
+    
+    TEST_COMPARE(norm, <, tol);
   }
 
   TEUCHOS_UNIT_TEST( LinearTerm, SpaceTimeIntegrationByPartsInTime_1D )
