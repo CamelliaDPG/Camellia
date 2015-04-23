@@ -68,6 +68,8 @@ namespace Camellia {
 
     static TBCPtr<Scalar> bc();
   };
+
+  extern template class TBC<double>;
 }
 
 

@@ -132,6 +132,8 @@ namespace Camellia {
 
     static TBFPtr<Scalar> bf(VarFactory &vf);
   };
+
+  extern template class TBF<double>;
 }
 
 #endif

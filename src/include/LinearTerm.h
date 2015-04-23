@@ -239,6 +239,8 @@ namespace Camellia {
   // TLinearTermPtr<double> operator-(VarPtr v1, VarPtr v2);
 
   // TLinearTermPtr<double> operator-(VarPtr v);
+
+  extern template class TLinearTerm<double>;
 }
 
 
