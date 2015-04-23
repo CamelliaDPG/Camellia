@@ -145,6 +145,9 @@ namespace Camellia {
       return 0;
     }
   };
+
+  extern template class TSolver<double>;
+  extern template class TAmesos2Solver<double>;
 } // namespace
 
  // only use MUMPS when we have MPI

@@ -83,6 +83,8 @@ namespace Camellia {
 
     static TRHSPtr<Scalar> rhs() { return Teuchos::rcp(new TRHS<Scalar>(false) ); }
   };
+
+  extern template class TRHS<double>;
 }
 
 #endif

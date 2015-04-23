@@ -90,6 +90,8 @@ namespace Camellia {
 
     static pair<TIPPtr<Scalar>, VarPtr > standardInnerProductForFunctionSpace(Camellia::EFunctionSpace fs, bool useTraceVar, int spaceDim);
   };
+
+  extern template class TIP<double>;
 }
 
 #endif

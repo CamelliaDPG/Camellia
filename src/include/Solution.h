@@ -354,6 +354,8 @@ namespace Camellia {
                                 RHSPtr rhs = Teuchos::null,
                                 IPPtr ip = Teuchos::null);
   };
+
+  extern template class TSolution<double>;
 }
 
 

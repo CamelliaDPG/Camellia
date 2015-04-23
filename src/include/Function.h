@@ -236,5 +236,7 @@ namespace Camellia {
 
   template <typename Scalar>
   TFunctionPtr<Scalar> operator-(TFunctionPtr<Scalar> f);
+
+  extern template class TFunction<double>;
 }
 #endif
