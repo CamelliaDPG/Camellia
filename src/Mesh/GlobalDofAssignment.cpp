@@ -535,7 +535,9 @@ vector<TSolutionPtr<double>> GlobalDofAssignment::getRegisteredSolutions() {
 }
 
 void GlobalDofAssignment::registerSolution(TSolutionPtr<double> solution) {
-  _registeredSolutions.push_back( solution );
+  // Make a new, weak RCP, since Solution already has a pointer to Mesh, and Mesh has a pointer to us.
+  TSolutionPtr<double> weakSolnPtr = Teuchos::rcp(solution.get(),false);
+  _registeredSolutions.push_back( weakSolnPtr );
 }
 
 void GlobalDofAssignment::setMeshAndMeshTopology(MeshPtr mesh) {
