@@ -360,7 +360,7 @@ namespace Camellia{
     if (checkForZeroCols){
       bool checkRows = false; // zero rows just mean a test basis function won't get used, which is fine
       bool checkCols = true; // zero columns mean that a trial basis function doesn't enter the computation, which is bad
-      if (! BilinearFormUtility::checkForZeroRowsAndColumns("TBF stiffness", stiffness, checkRows, checkCols) ) {
+      if (! BilinearFormUtility<Scalar>::checkForZeroRowsAndColumns("TBF stiffness", stiffness, checkRows, checkCols) ) {
         cout << "trial ordering:\n" << *(elemType->trialOrderPtr);
         //    cout << "test ordering:\n" << *(elemType->testOrderPtr);
         //    cout << "stiffness:\n" << stiffness;
@@ -580,7 +580,7 @@ namespace Camellia{
     if (_warnAboutZeroRowsAndColumns) {
       bool checkRows = false; // zero rows just mean a test basis function won't get used, which is fine
       bool checkCols = true; // zero columns mean that a trial basis function doesn't enter the computation, which is bad
-      if (! BilinearFormUtility::checkForZeroRowsAndColumns("pre-stiffness", stiffness, checkRows, checkCols) ) {
+      if (! BilinearFormUtility<Scalar>::checkForZeroRowsAndColumns("pre-stiffness", stiffness, checkRows, checkCols) ) {
         cout << "pre-stiffness matrix in which zero columns were found:\n";
         cout << stiffness;
         cout << "trialOrdering: \n" << *trialOrdering;
@@ -755,7 +755,7 @@ namespace Camellia{
 
     timer.ResetStartTime();
 
-    BilinearFormUtility::computeStiffnessMatrix(localStiffness,ipMatrix,optTestCoeffs);
+    BilinearFormUtility<Scalar>::computeStiffnessMatrix(localStiffness,ipMatrix,optTestCoeffs);
     localStiffnessDeterminationFromTestsTime += timer.ElapsedTime();
     //      cout << "finalStiffness:\n" << finalStiffness;
 

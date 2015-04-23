@@ -85,7 +85,6 @@
 #include "Solution.h"
 
 // Camellia includes:
-#include "BilinearFormUtility.h"
 #include "BasisEvaluation.h"
 #include "BasisCache.h"
 #include "BasisSumFunction.h"

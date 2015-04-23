@@ -36,7 +36,6 @@
  */
 
 #include "Mesh.h"
-#include "BilinearFormUtility.h"
 #include "ElementType.h"
 #include "DofOrderingFactory.h"
 #include "BasisFactory.h"
