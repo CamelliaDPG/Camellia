@@ -165,7 +165,7 @@ TSolution<Scalar>::TSolution(const TSolution<Scalar> &soln) {
 }
 
 template <typename Scalar>
-TSolution<Scalar>::TSolution(Teuchos::RCP<Mesh> mesh, Teuchos::RCP<BC> bc, Teuchos::RCP<RHS> rhs, IPPtr ip) {
+TSolution<Scalar>::TSolution(Teuchos::RCP<Mesh> mesh, TBCPtr<Scalar> bc, TRHSPtr<Scalar> rhs, TIPPtr<Scalar> ip) {
   _mesh = mesh;
   _dofInterpreter = Teuchos::rcp( _mesh.get(), false ); // false: doesn't own memory
   _bc = bc;
@@ -407,20 +407,20 @@ bool TSolution<Scalar>::cellHasCoefficientsAssigned(GlobalIndexType cellID) {
 
 template <typename Scalar>
 int TSolution<Scalar>::solve() {
-  return solve(Solver::getDirectSolver());
+  return solve(TSolver<Scalar>::getDirectSolver());
 }
 
 template <typename Scalar>
 int TSolution<Scalar>::solve(bool useMumps) {
-  Teuchos::RCP<Solver> solver;
+  TSolverPtr<Scalar> solver;
 #ifdef HAVE_AMESOS_MUMPS
   if (useMumps) {
     solver = Teuchos::rcp(new MumpsSolver());
   } else {
-    solver = Teuchos::rcp(new Amesos2Solver(false, "klu"));
+    solver = Teuchos::rcp(new TAmesos2Solver<Scalar>(false, "klu"));
   }
 #else
-  solver = Teuchos::rcp(new Amesos2Solver(false, "klu"));
+  solver = Teuchos::rcp(new TAmesos2Solver<Scalar>(false, "klu"));
 #endif
   return solve(solver);
 }
@@ -884,13 +884,13 @@ void TSolution<Scalar>::populateStiffnessAndLoad() {
 }
 
 template <typename Scalar>
-void TSolution<Scalar>::setProblem(Teuchos::RCP<Solver> solver) {
+void TSolution<Scalar>::setProblem(TSolverPtr<Scalar> solver) {
   // Teuchos::RCP<Epetra_LinearProblem> problem = Teuchos::rcp( new Epetra_LinearProblem(&*_globalStiffMatrix, &*_lhsVector, &*_rhsVector));
   solver->setProblem(_globalStiffMatrix, _lhsVector, _rhsVector);
 }
 
 template <typename Scalar>
-int TSolution<Scalar>::solveWithPrepopulatedStiffnessAndLoad(Teuchos::RCP<Solver> solver, bool callResolveInsteadOfSolve) {
+int TSolution<Scalar>::solveWithPrepopulatedStiffnessAndLoad(TSolverPtr<Scalar> solver, bool callResolveInsteadOfSolve) {
   int rank = Teuchos::GlobalMPISession::getRank();
   int numProcs = Teuchos::GlobalMPISession::getNProc();
 
@@ -962,7 +962,7 @@ int TSolution<Scalar>::solveWithPrepopulatedStiffnessAndLoad(Teuchos::RCP<Solver
 }
 
 template <typename Scalar>
-int TSolution<Scalar>::solve(Teuchos::RCP<Solver> solver) {
+int TSolution<Scalar>::solve(TSolverPtr<Scalar> solver) {
 //  int rank = Teuchos::GlobalMPISession::getRank();
 
   if (_oldDofInterpreter.get() != NULL) { // proxy for having a condensation interpreter
@@ -1043,11 +1043,11 @@ Teuchos::RCP<Mesh> TSolution<Scalar>::mesh() const {
 }
 
 template <typename Scalar>
-Teuchos::RCP<BC> TSolution<Scalar>::bc() const {
+TBCPtr<Scalar> TSolution<Scalar>::bc() const {
   return _bc;
 }
 template <typename Scalar>
-Teuchos::RCP<RHS> TSolution<Scalar>::rhs() const {
+TRHSPtr<Scalar> TSolution<Scalar>::rhs() const {
   return _rhs;
 }
 
@@ -1275,7 +1275,7 @@ void TSolution<Scalar>::importGlobalSolution() {
 }
 
 template <typename Scalar>
-IPPtr TSolution<Scalar>::ip() const {
+TIPPtr<Scalar> TSolution<Scalar>::ip() const {
   return _ip;
 }
 
@@ -2989,7 +2989,7 @@ const Intrepid::FieldContainer<double>& TSolution<Scalar>::allCoefficientsForCel
 }
 
 template <typename Scalar>
-void TSolution<Scalar>::setBC( Teuchos::RCP<BC> bc) {
+void TSolution<Scalar>::setBC( TBCPtr<Scalar> bc) {
   _bc = bc;
 }
 
@@ -2999,7 +2999,7 @@ void TSolution<Scalar>::setFilter(Teuchos::RCP<LocalStiffnessMatrixFilter> newFi
 }
 
 template <typename Scalar>
-void TSolution<Scalar>::setIP( IPPtr ip) {
+void TSolution<Scalar>::setIP( TIPPtr<Scalar> ip) {
   _ip = ip;
   // any computed residuals will need to be recomputed with the new IP
   clearComputedResiduals();
@@ -3032,7 +3032,7 @@ void TSolution<Scalar>::setReportTimingResults(bool value) {
 }
 
 template <typename Scalar>
-void TSolution<Scalar>::setRHS( Teuchos::RCP<RHS> rhs) {
+void TSolution<Scalar>::setRHS( TRHSPtr<Scalar> rhs) {
   _rhs = rhs;
   clearComputedResiduals();
 }
@@ -3102,7 +3102,7 @@ void TSolution<Scalar>::setWriteRHSToMatrixMarketFile(bool value, const string &
 }
 
 template <typename Scalar>
-void TSolution<Scalar>::condensedSolve(Teuchos::RCP<Solver> globalSolver, bool reduceMemoryFootprint) {
+void TSolution<Scalar>::condensedSolve(TSolverPtr<Scalar> globalSolver, bool reduceMemoryFootprint) {
   // when reduceMemoryFootprint is true, local stiffness matrices will be computed twice, rather than stored for reuse
   vector<int> trialIDs = _mesh->bilinearForm()->trialIDs();
 
@@ -3827,7 +3827,7 @@ void TSolution<Scalar>::projectOldCellOntoNewCells(GlobalIndexType cellID,
      if (oldTrialOrdering->getSidesForVarID(trialID).size() != 1) { // trace (flux) variable
        VarPtr var = vf.trialVars().find(trialID)->second;
 
-       LinearTermPtr termTraced = var->termTraced();
+       TLinearTermPtr<Scalar> termTraced = var->termTraced();
        if (termTraced.get() != NULL) {
          TFunctionPtr<Scalar> fieldTrace = termTraced->evaluate(fieldMap, true) + termTraced->evaluate(fieldMap, false);
          if (var->varType() == FLUX) { // then we do need to include side parity here
@@ -4001,7 +4001,7 @@ void TSolution<Scalar>::readFromFile(const string &filePath) {
 }
 
 template <typename Scalar>
-Teuchos::RCP< TSolution<Scalar> > TSolution<Scalar>::solution(MeshPtr mesh, BCPtr bc, RHSPtr rhs, IPPtr ip ) {
+Teuchos::RCP< TSolution<Scalar> > TSolution<Scalar>::solution(MeshPtr mesh, TBCPtr<Scalar> bc, TRHSPtr<Scalar> rhs, TIPPtr<Scalar> ip ) {
   return Teuchos::rcp( new TSolution<Scalar>(mesh,bc,rhs,ip) );
 }
 
@@ -4032,7 +4032,7 @@ void TSolution<Scalar>::save(string meshAndSolutionPrefix)
 }
 
 template <typename Scalar>
-Teuchos::RCP< TSolution<Scalar> > TSolution<Scalar>::load(BFPtr bf, string meshAndSolutionPrefix)
+Teuchos::RCP< TSolution<Scalar> > TSolution<Scalar>::load(TBFPtr<Scalar> bf, string meshAndSolutionPrefix)
 {
   MeshPtr mesh = MeshFactory::loadFromHDF5(bf, meshAndSolutionPrefix+".mesh");
   Teuchos::RCP< TSolution<Scalar> > solution = TSolution<Scalar>::solution(mesh);

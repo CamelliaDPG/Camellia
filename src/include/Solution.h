@@ -78,11 +78,11 @@ namespace Camellia {
     std::map< GlobalIndexType,Intrepid::FieldContainer<double> > _rhsRepresentationForCell;
 
     MeshPtr _mesh;
-    BCPtr _bc;
+    TBCPtr<Scalar> _bc;
     Teuchos::RCP<DofInterpreter> _dofInterpreter; // defaults to Mesh
     Teuchos::RCP<DofInterpreter> _oldDofInterpreter; // the one saved when we turn on condensed solve
-    RHSPtr _rhs;
-    IPPtr _ip;
+    TRHSPtr<Scalar> _rhs;
+    TIPPtr<Scalar> _ip;
     Teuchos::RCP<LocalStiffnessMatrixFilter> _filter;
     Teuchos::RCP<LagrangeConstraints> _lagrangeConstraints;
 
@@ -133,8 +133,8 @@ namespace Camellia {
     Intrepid::FieldContainer<double> solutionForElementTypeGlobal(ElementTypePtr elemType); // probably should be deprecated…
     ElementTypePtr getEquivalentElementType(MeshPtr otherMesh, ElementTypePtr elemType);
   public:
-    TSolution(MeshPtr mesh, BCPtr bc = Teuchos::null,
-             RHSPtr rhs = Teuchos::null, IPPtr ip = Teuchos::null);
+    TSolution(MeshPtr mesh, TBCPtr<Scalar> bc = Teuchos::null,
+             TRHSPtr<Scalar> rhs = Teuchos::null, TIPPtr<Scalar> ip = Teuchos::null);
     TSolution(const TSolution &soln);
     virtual ~TSolution() {}
 
@@ -170,8 +170,8 @@ namespace Camellia {
     void populateStiffnessAndLoad();
     void imposeBCs();
     void imposeZMCsUsingLagrange(); // if not using Lagrange for ZMCs, puts 1's in the diagonal for these rows
-    void setProblem(SolverPtr solver);
-    int solveWithPrepopulatedStiffnessAndLoad(SolverPtr solver, bool callResolveInstead = false);
+    void setProblem(TSolverPtr<Scalar> solver);
+    int solveWithPrepopulatedStiffnessAndLoad(TSolverPtr<Scalar> solver, bool callResolveInstead = false);
     void importSolution(); // imports for all rank-local cellIDs
     void importSolutionForOffRankCells(std::set<GlobalIndexType> cellIDs);
     void importGlobalSolution(); // imports (and interprets!) global solution.  NOT scalable.
@@ -180,7 +180,7 @@ namespace Camellia {
 
     int solve(bool useMumps);
 
-    int solve( SolverPtr solver );
+    int solve( TSolverPtr<Scalar> solver );
 
     void addSolution(TSolutionPtr<Scalar> soln, double weight, bool allowEmptyCells = false, bool replaceBoundaryTerms=false); // thisSoln += weight * soln
 
@@ -270,13 +270,13 @@ namespace Camellia {
     void setWriteRHSToMatrixMarketFile(bool value, const std::string &filePath);
 
     MeshPtr mesh() const;
-    BCPtr bc() const;
-    RHSPtr rhs() const;
-    IPPtr ip() const;
+    TBCPtr<Scalar> bc() const;
+    TRHSPtr<Scalar> rhs() const;
+    TIPPtr<Scalar> ip() const;
     Teuchos::RCP<LocalStiffnessMatrixFilter> filter() const;
 
-    void setBC( BCPtr );
-    void setRHS( RHSPtr );
+    void setBC( TBCPtr<Scalar> );
+    void setRHS( TRHSPtr<Scalar> );
 
     Teuchos::RCP<Epetra_CrsMatrix> getStiffnessMatrix();
     MatrixPtr getStiffnessMatrix2();
@@ -289,19 +289,19 @@ namespace Camellia {
     VectorPtr getRHSVector2();
     VectorPtr getLHSVector2();
 
-    void setIP( IPPtr);
+    void setIP( TIPPtr<Scalar>);
 
   #if defined(HAVE_MPI) && defined(HAVE_AMESOS_MUMPS)
-    void condensedSolve(Teuchos::RCP<Solver> globalSolver = Teuchos::rcp(new MumpsSolver()), bool reduceMemoryFootprint = false); // when reduceMemoryFootprint is true, local stiffness matrices will be computed twice, rather than stored for reuse
+    void condensedSolve(TSolverPtr<Scalar> globalSolver = Teuchos::rcp(new MumpsSolver()), bool reduceMemoryFootprint = false); // when reduceMemoryFootprint is true, local stiffness matrices will be computed twice, rather than stored for reuse
   #else
-    void condensedSolve(Teuchos::RCP<Solver> globalSolver = Teuchos::rcp(new Amesos2Solver()), bool reduceMemoryFootprint = false); // when reduceMemoryFootprint is true, local stiffness matrices will be computed twice, rather than stored for reuse
+    void condensedSolve(TSolverPtr<Scalar> globalSolver = Teuchos::rcp(new TAmesos2Solver<Scalar>()), bool reduceMemoryFootprint = false); // when reduceMemoryFootprint is true, local stiffness matrices will be computed twice, rather than stored for reuse
   #endif
     void readFromFile(const std::string &filePath);
     void writeToFile(const std::string &filePath);
 
   #ifdef HAVE_EPETRAEXT_HDF5
     void save(std::string meshAndSolutionPrefix);
-    static TSolutionPtr<Scalar> load(BFPtr bf, std::string meshAndSolutionPrefix);
+    static TSolutionPtr<Scalar> load(TBFPtr<Scalar> bf, std::string meshAndSolutionPrefix);
     void saveToHDF5(std::string filename);
     void loadFromHDF5(std::string filename);
   #endif
@@ -350,9 +350,9 @@ namespace Camellia {
     void setZeroMeanConstraintRho(double value);
     double zeroMeanConstraintRho();
 
-    static TSolutionPtr<Scalar> solution(MeshPtr mesh, BCPtr bc = Teuchos::null,
-                                RHSPtr rhs = Teuchos::null,
-                                IPPtr ip = Teuchos::null);
+    static TSolutionPtr<Scalar> solution(MeshPtr mesh, TBCPtr<Scalar> bc = Teuchos::null,
+                                TRHSPtr<Scalar> rhs = Teuchos::null,
+                                TIPPtr<Scalar> ip = Teuchos::null);
   };
 
   extern template class TSolution<double>;
