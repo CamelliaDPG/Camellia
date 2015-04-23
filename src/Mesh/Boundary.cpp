@@ -92,7 +92,8 @@ void Boundary::buildLookupTables() {
   }
 }
 
-void Boundary::bcsToImpose(FieldContainer<GlobalIndexType> &globalIndices, FieldContainer<double> &globalValues, BC &bc,
+template <typename Scalar>
+void Boundary::bcsToImpose(FieldContainer<GlobalIndexType> &globalIndices, FieldContainer<Scalar> &globalValues, TBC<Scalar> &bc,
                            set<GlobalIndexType> &globalIndexFilter, DofInterpreter* dofInterpreter, const Epetra_Map *globalDofMap) {
 //  int rank = Teuchos::GlobalMPISession::getRank();
 //  ostringstream rankLabel;
@@ -126,8 +127,12 @@ void Boundary::bcsToImpose(FieldContainer<GlobalIndexType> &globalIndices, Field
   }
 }
 
+template void Boundary::bcsToImpose<double>(FieldContainer<GlobalIndexType> &globalIndices, FieldContainer<double> &globalValues, TBC<double> &bc,
+                           set<GlobalIndexType> &globalIndexFilter, DofInterpreter* dofInterpreter, const Epetra_Map *globalDofMap);
+
+template <typename Scalar>
 void Boundary::bcsToImpose(FieldContainer<GlobalIndexType> &globalIndices,
-                           FieldContainer<double> &globalValues, BC &bc,
+                           FieldContainer<Scalar> &globalValues, TBC<Scalar> &bc,
                            DofInterpreter* dofInterpreter, const Epetra_Map *globalDofMap) {
 //  int rank = Teuchos::GlobalMPISession::getRank();
 
@@ -198,7 +203,12 @@ void Boundary::bcsToImpose(FieldContainer<GlobalIndexType> &globalIndices,
   //cout << "bcsToImpose: globalIndices:" << endl << globalIndices;
 }
 
-void Boundary::bcsToImpose( map<  GlobalIndexType, double > &globalDofIndicesAndValues, BC &bc,
+template void Boundary::bcsToImpose<double>(FieldContainer<GlobalIndexType> &globalIndices,
+                           FieldContainer<double> &globalValues, TBC<double> &bc,
+                           DofInterpreter* dofInterpreter, const Epetra_Map *globalDofMap);
+
+template <typename Scalar>
+void Boundary::bcsToImpose( map<  GlobalIndexType, Scalar > &globalDofIndicesAndValues, TBC<Scalar> &bc,
                            GlobalIndexType cellID, set < pair<int, unsigned> > &singletons,
                            DofInterpreter* dofInterpreter, const Epetra_Map *globalDofMap) {
   CellPtr cell = _mesh->getTopology()->getCell(cellID);
@@ -358,3 +368,7 @@ void Boundary::bcsToImpose( map<  GlobalIndexType, double > &globalDofIndicesAnd
     }
   }
 }
+
+template void Boundary::bcsToImpose( map<  GlobalIndexType, double > &globalDofIndicesAndValues, TBC<double> &bc,
+                           GlobalIndexType cellID, set < pair<int, unsigned> > &singletons,
+                           DofInterpreter* dofInterpreter, const Epetra_Map *globalDofMap);

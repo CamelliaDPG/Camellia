@@ -55,7 +55,7 @@ namespace Camellia {
   };
 
   class HConvergenceStudy {
-    Teuchos::RCP<ExactSolution> _exactSolution;
+    Teuchos::RCP<ExactSolution<double>> _exactSolution;
     BFPtr _bilinearForm;
     Teuchos::RCP<RHS> _rhs;
     Teuchos::RCP<BC> _bc;
@@ -106,7 +106,7 @@ namespace Camellia {
     Teuchos::RCP<Mesh> buildMesh(Teuchos::RCP<MeshGeometry> geometry, int numRefinements,
                                  bool useConformingTraces );
   public:
-    HConvergenceStudy(Teuchos::RCP<ExactSolution> exactSolution,
+    HConvergenceStudy(Teuchos::RCP<ExactSolution<double>> exactSolution,
                       BFPtr bilinearForm,
                       Teuchos::RCP<RHS> rhs,
                       Teuchos::RCP<BC> bc,

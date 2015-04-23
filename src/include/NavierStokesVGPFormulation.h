@@ -95,7 +95,7 @@ namespace Camellia {
     void addZeroMeanPressureCondition();
 
     // ! return an ExactTSolutionPtr<double> corresponding to specified velocity (a rank 1 Function) and pressure.
-    Teuchos::RCP<ExactSolution> exactSolution(TFunctionPtr<double> u, TFunctionPtr<double> p);
+    Teuchos::RCP<ExactSolution<double>> exactSolution(TFunctionPtr<double> u, TFunctionPtr<double> p);
 
     // ! returns the L^2 norm of the incremental solution
     double L2NormSolutionIncrement();

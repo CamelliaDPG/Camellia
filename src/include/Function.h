@@ -19,8 +19,6 @@
 using namespace std;
 
 namespace Camellia {
-  class ExactSolution;
-
   template <typename Scalar>
   class TFunction {
   private:

@@ -49,7 +49,7 @@
 using namespace Intrepid;
 using namespace Camellia;
 
-HConvergenceStudy::HConvergenceStudy(Teuchos::RCP<ExactSolution> exactSolution,
+HConvergenceStudy::HConvergenceStudy(Teuchos::RCP<ExactSolution<double>> exactSolution,
                                      BFPtr bilinearForm,
                                      Teuchos::RCP<RHS> rhs,
                                      Teuchos::RCP<BC> bc,

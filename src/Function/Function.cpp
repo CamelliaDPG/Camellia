@@ -13,7 +13,6 @@
 #include "CellCharacteristicFunction.h"
 #include "ConstantScalarFunction.h"
 #include "ConstantVectorFunction.h"
-#include "ExactSolution.h"
 #include "GlobalDofAssignment.h"
 #include "hFunction.h"
 #include "Mesh.h"
@@ -1469,22 +1468,22 @@ namespace Camellia {
     }
     return Teuchos::rcp( new QuotientFunction<Scalar>(f1,scalarDivisor) );
   }
-  
+
   template <typename Scalar>
   TFunctionPtr<Scalar> operator/(TFunctionPtr<Scalar> f1, Scalar divisor) {
     return f1 / TFunction<Scalar>::constant(divisor);
   }
-  
+
   template <typename Scalar>
   TFunctionPtr<Scalar> operator/(TFunctionPtr<Scalar> f1, int divisor) {
     return f1 / Scalar(divisor);
   }
-  
+
   template <typename Scalar>
   TFunctionPtr<Scalar> operator/(Scalar value, TFunctionPtr<Scalar> scalarDivisor) {
     return TFunction<Scalar>::constant(value) / scalarDivisor;
   }
-  
+
   template <typename Scalar>
   TFunctionPtr<Scalar> operator/(int value, TFunctionPtr<Scalar> scalarDivisor) {
     return Scalar(value) / scalarDivisor;
@@ -1499,12 +1498,12 @@ namespace Camellia {
   TFunctionPtr<Scalar> operator*(TFunctionPtr<Scalar> f, Scalar weight) {
     return weight * f;
   }
-  
+
   template <typename Scalar>
   TFunctionPtr<Scalar> operator*(int weight, TFunctionPtr<Scalar> f) {
     return Scalar(weight) * f;
   }
-  
+
   template <typename Scalar>
   TFunctionPtr<Scalar> operator*(TFunctionPtr<Scalar> f, int weight) {
     return Scalar(weight) * f;
@@ -1540,12 +1539,12 @@ namespace Camellia {
   TFunctionPtr<Scalar> operator+(Scalar value, TFunctionPtr<Scalar> f1) {
     return f1 + TFunction<Scalar>::constant(value);
   }
-  
+
   template <typename Scalar>
   TFunctionPtr<Scalar> operator+(TFunctionPtr<Scalar> f1, int value) {
     return f1 + Scalar(value);
   }
-  
+
   template <typename Scalar>
   TFunctionPtr<Scalar> operator+(int value, TFunctionPtr<Scalar> f1) {
     return f1 + Scalar(value);
@@ -1555,22 +1554,22 @@ namespace Camellia {
   TFunctionPtr<Scalar> operator-(TFunctionPtr<Scalar> f1, TFunctionPtr<Scalar> f2) {
     return f1 + -f2;
   }
-  
+
   template <typename Scalar>
   TFunctionPtr<Scalar> operator-(TFunctionPtr<Scalar> f1, Scalar value) {
     return f1 - TFunction<Scalar>::constant(value);
   }
-  
+
   template <typename Scalar>
   TFunctionPtr<Scalar> operator-(Scalar value, TFunctionPtr<Scalar> f1) {
     return TFunction<Scalar>::constant(value) - f1;
   }
-  
+
   template <typename Scalar>
   TFunctionPtr<Scalar> operator-(TFunctionPtr<Scalar> f1, int value) {
     return f1 - Scalar(value);
   }
-  
+
   template <typename Scalar>
   TFunctionPtr<Scalar> operator-(int value, TFunctionPtr<Scalar> f1) {
     return Scalar(value) - f1;

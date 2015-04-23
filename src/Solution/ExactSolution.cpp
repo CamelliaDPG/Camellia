@@ -52,7 +52,8 @@
 using namespace Intrepid;
 using namespace Camellia;
 
-double ExactSolution::L2NormOfError(TSolutionPtr<double> solution, int trialID, int cubDegree) {
+template <typename Scalar>
+double ExactSolution<Scalar>::L2NormOfError(TSolutionPtr<Scalar> solution, int trialID, int cubDegree) {
   Teuchos::RCP<Mesh> mesh = solution->mesh();
   double totalErrorSquared = 0.0;
   // check if the trialID is one for which a single-point BC was imposed:
@@ -92,7 +93,8 @@ double ExactSolution::L2NormOfError(TSolutionPtr<double> solution, int trialID, 
   return sqrt(totalErrorSquared);
 }
 
-void ExactSolution::L2NormOfError(FieldContainer<double> &errorSquaredPerCell, TSolutionPtr<double> solution, ElementTypePtr elemTypePtr, int trialID, int sideIndex, int cubDegree, double solutionLift) {
+template <typename Scalar>
+void ExactSolution<Scalar>::L2NormOfError(FieldContainer<double> &errorSquaredPerCell, TSolutionPtr<Scalar> solution, ElementTypePtr elemTypePtr, int trialID, int sideIndex, int cubDegree, double solutionLift) {
 //  BasisCache(ElementTypePtr elemType, Teuchos::RCP<Mesh> mesh = Teuchos::rcp( (Mesh*) NULL ), bool testVsTest=false, int cubatureDegreeEnrichment = 0)
 
   DofOrdering dofOrdering = *(elemTypePtr->trialOrderPtr.get());
@@ -142,8 +144,8 @@ void ExactSolution::L2NormOfError(FieldContainer<double> &errorSquaredPerCell, T
     dimensions.push_back(spaceDim);
   }
 
-  FieldContainer<double> computedValues(dimensions);
-  FieldContainer<double> exactValues(dimensions);
+  FieldContainer<Scalar> computedValues(dimensions);
+  FieldContainer<Scalar> exactValues(dimensions);
 
   if (solutionLift != 0.0) {
     int size = computedValues.size();
@@ -182,12 +184,14 @@ void ExactSolution::L2NormOfError(FieldContainer<double> &errorSquaredPerCell, T
   }
 }
 
-bool ExactSolution::functionDefined(int trialID) {
+template <typename Scalar>
+bool ExactSolution<Scalar>::functionDefined(int trialID) {
   // not supported by legacy subclasses
   return _exactFunctions.find(trialID) != _exactFunctions.end();
 }
 
-void ExactSolution::squaredDifference(FieldContainer<double> &diffSquared, FieldContainer<double> &values1, FieldContainer<double> &values2) {
+template <typename Scalar>
+void ExactSolution<Scalar>::squaredDifference(FieldContainer<double> &diffSquared, FieldContainer<Scalar> &values1, FieldContainer<Scalar> &values2) {
   // two possibilities for values:
   // (C,P) or (C,P,D)
   // output is (C,P) regardless
@@ -196,7 +200,7 @@ void ExactSolution::squaredDifference(FieldContainer<double> &diffSquared, Field
   bool vectorValued = (values1.rank() == 3);
   for (int cellIndex = 0; cellIndex < numCells; cellIndex++) {
     for (int ptIndex = 0; ptIndex < numPoints; ptIndex++) {
-      double value = 0.0;
+      Scalar value = 0.0;
       if (vectorValued) {
         int spaceDim = values1.dimension(2);
         for (int i=0; i<spaceDim; i++) {
@@ -210,7 +214,8 @@ void ExactSolution::squaredDifference(FieldContainer<double> &diffSquared, Field
   }
 }
 
-void ExactSolution::solutionValues(FieldContainer<double> &values, int trialID,
+template <typename Scalar>
+void ExactSolution<Scalar>::solutionValues(FieldContainer<Scalar> &values, int trialID,
                                    FieldContainer<double> &physicalPoints) {
   int numCells = physicalPoints.dimension(0);
   int numPoints = physicalPoints.dimension(1);
@@ -224,19 +229,20 @@ void ExactSolution::solutionValues(FieldContainer<double> &values, int trialID,
   for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
     for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
       FieldContainer<double> point(pointDimensions,&physicalPoints(cellIndex,ptIndex,0));
-      double value = solutionValue(trialID, point);
+      Scalar value = solutionValue(trialID, point);
       values(cellIndex,ptIndex) = value;
     }
   }
 }
 
-void ExactSolution::solutionValues(FieldContainer<double> &values, int trialID, BasisCachePtr basisCache) {
+template <typename Scalar>
+void ExactSolution<Scalar>::solutionValues(FieldContainer<Scalar> &values, int trialID, BasisCachePtr basisCache) {
   if (_exactFunctions.find(trialID) != _exactFunctions.end() ) {
     _exactFunctions[trialID]->values(values,basisCache);
     return;
   }
 
-  // TODO: change ExactSolution::solutionValues (below) to take a *const* points FieldContainer, to avoid this copy:
+  // TODO: change ExactSolution<Scalar>::solutionValues (below) to take a *const* points FieldContainer, to avoid this copy:
   FieldContainer<double> points = basisCache->getPhysicalCubaturePoints();
   if (basisCache->getSideIndex() >= 0) {
     FieldContainer<double> unitNormals = basisCache->getSideNormals();
@@ -246,7 +252,8 @@ void ExactSolution::solutionValues(FieldContainer<double> &values, int trialID, 
   }
 }
 
-void ExactSolution::solutionValues(FieldContainer<double> &values,
+template <typename Scalar>
+void ExactSolution<Scalar>::solutionValues(FieldContainer<Scalar> &values,
                                    int trialID,
                                    FieldContainer<double> &physicalPoints,
                                    FieldContainer<double> &unitNormals) {
@@ -263,35 +270,41 @@ void ExactSolution::solutionValues(FieldContainer<double> &values,
     for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
       FieldContainer<double> point(pointDimensions,&physicalPoints(cellIndex,ptIndex,0));
       FieldContainer<double> unitNormal(pointDimensions,&unitNormals(cellIndex,ptIndex,0));
-      double value = solutionValue(trialID, point, unitNormal);
+      Scalar value = solutionValue(trialID, point, unitNormal);
       values(cellIndex,ptIndex) = value;
     }
   }
 }
 
-BFPtr ExactSolution::bilinearForm() {
+template <typename Scalar>
+TBFPtr<Scalar> ExactSolution<Scalar>::bilinearForm() {
   return _bilinearForm;
 }
 
-Teuchos::RCP<BC> ExactSolution::bc() {
+template <typename Scalar>
+TBCPtr<Scalar> ExactSolution<Scalar>::bc() {
   return _bc;
 }
-Teuchos::RCP<RHS> ExactSolution::rhs() {
+template <typename Scalar>
+TRHSPtr<Scalar> ExactSolution<Scalar>::rhs() {
   return _rhs;
 }
 
-ExactSolution::ExactSolution() {
+template <typename Scalar>
+ExactSolution<Scalar>::ExactSolution() {
 
 }
 
-ExactSolution::ExactSolution(BFPtr bf, Teuchos::RCP<BC> bc, Teuchos::RCP<RHS> rhs, int H1Order) {
+template <typename Scalar>
+ExactSolution<Scalar>::ExactSolution(TBFPtr<Scalar> bf, TBCPtr<Scalar> bc, TRHSPtr<Scalar> rhs, int H1Order) {
   _bilinearForm = bf;
   _bc = bc;
   _rhs = rhs;
   _H1Order = H1Order;
 }
 
-double ExactSolution::solutionValue(int trialID, FieldContainer<double> &physicalPoint) {
+template <typename Scalar>
+Scalar ExactSolution<Scalar>::solutionValue(int trialID, FieldContainer<double> &physicalPoint) {
   TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unimplemented method.");
   return 0;
 //  int spaceDim = physicalPoint.size();
@@ -309,7 +322,8 @@ double ExactSolution::solutionValue(int trialID, FieldContainer<double> &physica
 //  }
 }
 
-double ExactSolution::solutionValue(int trialID, FieldContainer<double> &physicalPoint,
+template <typename Scalar>
+Scalar ExactSolution<Scalar>::solutionValue(int trialID, FieldContainer<double> &physicalPoint,
                                     FieldContainer<double> &unitNormal) {
   TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unimplemented method.");
   return 0;
@@ -333,14 +347,19 @@ double ExactSolution::solutionValue(int trialID, FieldContainer<double> &physica
 //  }
 }
 
-int ExactSolution::H1Order() { // return -1 for non-polynomial solutions
+template <typename Scalar>
+int ExactSolution<Scalar>::H1Order() { // return -1 for non-polynomial solutions
   return _H1Order;
 }
 
-const map< int, TFunctionPtr<double> > ExactSolution::exactFunctions() {
+template <typename Scalar>
+const map< int, TFunctionPtr<Scalar> > ExactSolution<Scalar>::exactFunctions() {
   return _exactFunctions;
 }
 
-void ExactSolution::setSolutionFunction( VarPtr var, TFunctionPtr<double> varFunction ) {
+template <typename Scalar>
+void ExactSolution<Scalar>::setSolutionFunction( VarPtr var, TFunctionPtr<Scalar> varFunction ) {
   _exactFunctions[var->ID()] = varFunction;
 }
+
+template class ExactSolution<double>;

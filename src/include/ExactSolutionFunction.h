@@ -15,10 +15,10 @@
 namespace Camellia {
   template <typename Scalar>
   class ExactSolutionFunction : public TFunction<Scalar> { // for scalars, for now
-    Teuchos::RCP<ExactSolution> _exactSolution;
+    Teuchos::RCP<ExactSolution<Scalar>> _exactSolution;
     int _trialID;
   public:
-    ExactSolutionFunction(Teuchos::RCP<ExactSolution> exactSolution, int trialID);
+    ExactSolutionFunction(Teuchos::RCP<ExactSolution<Scalar>> exactSolution, int trialID);
     void values(Intrepid::FieldContainer<Scalar> &values, BasisCachePtr basisCache);
   };
 }

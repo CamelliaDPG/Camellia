@@ -33,7 +33,7 @@ namespace Camellia {
     virtual IPPtr graphNorm() = 0;
     virtual void primaryTrialIDs(vector<int> &fieldIDs) = 0; // used for best approximation error TeX output (u1,u2) or (u1,u2,p)
     virtual void trialIDs(vector<int> &fieldIDs, vector<int> &correspondingTraceIDs, vector<string> &fileFriendlyNames) = 0; // corr. ID == -1 if there isn't one
-    virtual Teuchos::RCP<ExactSolution> exactSolution(TFunctionPtr<double> u1, TFunctionPtr<double> u2, TFunctionPtr<double> p,
+    virtual Teuchos::RCP<ExactSolution<double>> exactSolution(TFunctionPtr<double> u1, TFunctionPtr<double> u2, TFunctionPtr<double> p,
                                                       SpatialFilterPtr entireBoundary) = 0;
 
     TFunctionPtr<double> Re() {
@@ -198,7 +198,7 @@ namespace Camellia {
       bc->addZeroMeanConstraint(p);
       return bc;
     }
-    Teuchos::RCP<ExactSolution> exactSolution(TFunctionPtr<double> u1_exact, TFunctionPtr<double> u2_exact, TFunctionPtr<double> p_exact,
+    Teuchos::RCP<ExactSolution<double>> exactSolution(TFunctionPtr<double> u1_exact, TFunctionPtr<double> u2_exact, TFunctionPtr<double> p_exact,
                                               SpatialFilterPtr entireBoundary) {
       // f1 and f2 are those for Stokes, but minus u \cdot \grad u
       TFunctionPtr<double> mu = 1.0 / _Re;
@@ -217,7 +217,7 @@ namespace Camellia {
       BCPtr bc = this->bc(u1_exact, u2_exact, entireBoundary);
 
       RHSPtr rhs = this->rhs(f1,f2,false);
-      Teuchos::RCP<ExactSolution> mySolution = Teuchos::rcp( new ExactSolution(_bf, bc, rhs) );
+      Teuchos::RCP<ExactSolution<double>> mySolution = Teuchos::rcp( new ExactSolution<double>(_bf, bc, rhs) );
       mySolution->setSolutionFunction(u1, u1_exact);
       mySolution->setSolutionFunction(u2, u2_exact);
 
@@ -276,7 +276,7 @@ namespace Camellia {
   class VGPOseenProblem {
     TSolutionPtr<double> _soln;
     Teuchos::RCP<Mesh> _mesh;
-    Teuchos::RCP< ExactSolution > _exactSolution;
+    Teuchos::RCP< ExactSolution<double> > _exactSolution;
     Teuchos::RCP<BF> _bf;
 
     Teuchos::RCP< VGPOseenFormulation > _vgpOseenFormulation;
@@ -343,7 +343,7 @@ namespace Camellia {
     BFPtr bf() {
       return _vgpOseenFormulation->bf();
     }
-    Teuchos::RCP<ExactSolution> exactSolution() {
+    Teuchos::RCP<ExactSolution<double>> exactSolution() {
       return _exactSolution;
     }
     TSolutionPtr<double> solution() {

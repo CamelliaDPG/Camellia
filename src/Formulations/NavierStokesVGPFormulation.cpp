@@ -432,7 +432,7 @@ BFPtr NavierStokesVGPFormulation::bf() {
   return _navierStokesBF;
 }
 
-Teuchos::RCP<ExactSolution> NavierStokesVGPFormulation::exactSolution(TFunctionPtr<double> u_exact, TFunctionPtr<double> p_exact) {
+Teuchos::RCP<ExactSolution<double>> NavierStokesVGPFormulation::exactSolution(TFunctionPtr<double> u_exact, TFunctionPtr<double> p_exact) {
   int spaceDim = _backgroundFlow->mesh()->getTopology()->getSpaceDim();
 
   // f1 and f2 are those for Stokes, but minus u \cdot \grad u
@@ -467,7 +467,7 @@ Teuchos::RCP<ExactSolution> NavierStokesVGPFormulation::exactSolution(TFunctionP
   if (spaceDim == 3) bc->addDirichlet(u3_hat, boundary, u3_exact);
 
   RHSPtr rhs = this->rhs(f,false);
-  Teuchos::RCP<ExactSolution> mySolution = Teuchos::rcp( new ExactSolution(_navierStokesBF, bc, rhs) );
+  Teuchos::RCP<ExactSolution<double>> mySolution = Teuchos::rcp( new ExactSolution<double>(_navierStokesBF, bc, rhs) );
   mySolution->setSolutionFunction(u1, u1_exact);
   mySolution->setSolutionFunction(u2, u2_exact);
 

@@ -7,7 +7,7 @@ using namespace Camellia;
 using namespace Intrepid;
 
 template <typename Scalar>
-ExactSolutionFunction<Scalar>::ExactSolutionFunction(Teuchos::RCP<ExactSolution> exactSolution, int trialID)
+ExactSolutionFunction<Scalar>::ExactSolutionFunction(Teuchos::RCP<ExactSolution<Scalar>> exactSolution, int trialID)
 : TFunction<Scalar>(exactSolution->exactFunctions().find(trialID)->second->rank()) {
   _exactSolution = exactSolution;
   _trialID = trialID;
