@@ -119,15 +119,15 @@ namespace {
 
     double energyError = form.solution()->energyErrorTotal();
 
-    if (spaceDim != 3)
-    {
-      MeshPtr mesh = form.solution()->mesh();
-      string outputDir = "/tmp";
-      string solnName = (spaceDim == 1) ? "spaceTimeHeatConstantSolution_1D" : "spaceTimeHeatConstantSolution_2D";
-      cout << "\nDebugging: Outputting spaceTimeHeatSolution to " << outputDir << "/" << solnName << endl;
-      HDF5Exporter exporter(mesh, solnName, outputDir);
-      exporter.exportSolution(form.solution());
-    }
+//    if (spaceDim != 3)
+//    {
+//      MeshPtr mesh = form.solution()->mesh();
+//      string outputDir = "/tmp";
+//      string solnName = (spaceDim == 1) ? "spaceTimeHeatConstantSolution_1D" : "spaceTimeHeatConstantSolution_2D";
+//      cout << "\nDebugging: Outputting spaceTimeHeatSolution to " << outputDir << "/" << solnName << endl;
+//      HDF5Exporter exporter(mesh, solnName, outputDir);
+//      exporter.exportSolution(form.solution());
+//    }
 
     double tol = 1e-13;
     TEST_COMPARE(energyError, <, tol);
@@ -175,15 +175,15 @@ namespace {
 
     double energyError = form.solution()->energyErrorTotal();
 
-    if (spaceDim != 3)
-    {
-      MeshPtr mesh = form.solution()->mesh();
-      string outputDir = "/tmp";
-      string solnName = (spaceDim == 1) ? "spaceTimeHeatSolution_1D" : "spaceTimeHeatSolution_2D";
-      cout << "\nDebugging: Outputting spaceTimeHeatSolution to " << outputDir << "/" << solnName << endl;
-      HDF5Exporter exporter(mesh, solnName, outputDir);
-      exporter.exportSolution(form.solution());
-    }
+//    if (spaceDim != 3)
+//    {
+//      MeshPtr mesh = form.solution()->mesh();
+//      string outputDir = "/tmp";
+//      string solnName = (spaceDim == 1) ? "spaceTimeHeatSolution_1D" : "spaceTimeHeatSolution_2D";
+//      cout << "\nDebugging: Outputting spaceTimeHeatSolution to " << outputDir << "/" << solnName << endl;
+//      HDF5Exporter exporter(mesh, solnName, outputDir);
+//      exporter.exportSolution(form.solution());
+//    }
 
     double tol = 1e-13;
     TEST_COMPARE(energyError, <, tol);
