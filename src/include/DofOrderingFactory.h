@@ -57,6 +57,7 @@
 using namespace std;
 
 namespace Camellia {
+  template <typename Scalar>
   class DofOrderingFactory {
   private:
     struct Comparator {
@@ -119,7 +120,7 @@ namespace Camellia {
     map<DofOrdering*, DofOrderingPtr > _fieldOrderingForTrial;
     map<DofOrdering*, DofOrderingPtr > _traceOrderingForTrial;
 
-    BFPtr _bilinearForm;
+    TBFPtr<Scalar> _bilinearForm;
     map<DofOrdering*,bool> _isConforming;
     map<int, int> _testOrderEnhancements;
     map<int, int> _trialOrderEnhancements;
@@ -128,8 +129,8 @@ namespace Camellia {
     DofOrderingPtr pRefine(DofOrderingPtr dofOrdering,
                            CellTopoPtr, int pToAdd, bool isTestOrdering);
   public:
-    DofOrderingFactory(BFPtr bilinearForm);
-    DofOrderingFactory(BFPtr bilinearForm,
+    DofOrderingFactory(TBFPtr<Scalar> bilinearForm);
+    DofOrderingFactory(TBFPtr<Scalar> bilinearForm,
                        map<int,int> trialOrderEnhancements,
                        map<int,int> testOrderEnhancements);
     DofOrderingPtr testOrdering(vector<int> &polyOrder, const shards::CellTopology &cellTopo);
@@ -190,6 +191,7 @@ namespace Camellia {
   //  DofOrderingPtr trialOrdering(int polyOrder, int* sidePolyOrder, const shards::CellTopology &cellTopo,
   //                                          bool conformingVertices = true);
   };
+  extern template class DofOrderingFactory<double>;
 }
 
 #endif

@@ -65,7 +65,7 @@ namespace Camellia {
 
     GlobalIndexType _numGlobalDofs;
   public:
-    GDAMaximumRule2D(MeshPtr mesh, VarFactory varFactory, DofOrderingFactoryPtr dofOrderingFactory, MeshPartitionPolicyPtr partitionPolicy,
+    GDAMaximumRule2D(MeshPtr mesh, VarFactory varFactory, DofOrderingFactoryPtr<double> dofOrderingFactory, MeshPartitionPolicyPtr partitionPolicy,
                      unsigned initialH1OrderTrial, unsigned testOrderEnhancement, bool enforceMBFluxContinuity = false);
 
   //  GlobalIndexType cellID(ElementTypePtr elemType, IndexType cellIndex, PartitionIndexType partitionNumber);

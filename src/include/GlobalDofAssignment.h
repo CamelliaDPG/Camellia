@@ -39,7 +39,7 @@ namespace Camellia {
     MeshPtr _mesh;
     MeshTopologyPtr _meshTopology;
     VarFactory _varFactory;
-    DofOrderingFactoryPtr _dofOrderingFactory;
+    DofOrderingFactoryPtr<double> _dofOrderingFactory;
     MeshPartitionPolicyPtr _partitionPolicy;
     std::vector<int> _initialH1OrderTrial;
     int _testOrderEnhancement;
@@ -69,7 +69,7 @@ namespace Camellia {
     // private constructor for subclass's implementation of deepCopy()
     GlobalDofAssignment( GlobalDofAssignment& otherGDA );
   public:
-    GlobalDofAssignment(MeshPtr mesh, VarFactory varFactory, DofOrderingFactoryPtr dofOrderingFactory,
+    GlobalDofAssignment(MeshPtr mesh, VarFactory varFactory, DofOrderingFactoryPtr<double> dofOrderingFactory,
                         MeshPartitionPolicyPtr partitionPolicy, std::vector<int> initialH1OrderTrial,
                         int testOrderEnhancement, bool enforceConformityLocally);
     virtual ~GlobalDofAssignment() {}
@@ -95,7 +95,7 @@ namespace Camellia {
     virtual ElementTypePtr elementType(GlobalIndexType cellID) = 0;
     virtual vector< ElementTypePtr > elementTypes(PartitionIndexType partitionNumber);
 
-    DofOrderingFactoryPtr getDofOrderingFactory();
+    DofOrderingFactoryPtr<double> getDofOrderingFactory();
     ElementTypeFactory & getElementTypeFactory();
 
     virtual int getCubatureDegree(GlobalIndexType cellID);
@@ -146,10 +146,10 @@ namespace Camellia {
     void setPartitionPolicy( MeshPartitionPolicyPtr partitionPolicy );
 
     // static constructors:
-    static GlobalDofAssignmentPtr maximumRule2D(MeshPtr mesh, VarFactory varFactory, DofOrderingFactoryPtr dofOrderingFactory,
+    static GlobalDofAssignmentPtr maximumRule2D(MeshPtr mesh, VarFactory varFactory, DofOrderingFactoryPtr<double> dofOrderingFactory,
                                                 MeshPartitionPolicyPtr partitionPolicy, unsigned initialH1OrderTrial, unsigned testOrderEnhancement);
     static GlobalDofAssignmentPtr minimumRule(MeshPtr mesh, VarFactory varFactory,
-                                              DofOrderingFactoryPtr dofOrderingFactory, MeshPartitionPolicyPtr partitionPolicy,
+                                              DofOrderingFactoryPtr<double> dofOrderingFactory, MeshPartitionPolicyPtr partitionPolicy,
                                               unsigned initialH1OrderTrial, unsigned testOrderEnhancement);
   };
 }

@@ -80,7 +80,7 @@ Mesh::Mesh(MeshTopologyPtr meshTopology, BFPtr bilinearForm, vector<int> H1Order
 
   _meshTopology = meshTopology;
 
-  DofOrderingFactoryPtr dofOrderingFactoryPtr = Teuchos::rcp( new DofOrderingFactory(bilinearForm, trialOrderEnhancements,testOrderEnhancements) );
+  DofOrderingFactoryPtr<double> dofOrderingFactoryPtr = Teuchos::rcp( new DofOrderingFactory<double>(bilinearForm, trialOrderEnhancements,testOrderEnhancements) );
   _enforceMBFluxContinuity = false;
   //  MeshPartitionPolicyPtr partitionPolicy = Teuchos::rcp( new MeshPartitionPolicy() );
   if ( partitionPolicy.get() == NULL )
@@ -108,7 +108,7 @@ Mesh::Mesh(MeshTopologyPtr meshTopology, BFPtr bilinearForm, int H1Order, int pT
 
   _meshTopology = meshTopology;
 
-  DofOrderingFactoryPtr dofOrderingFactoryPtr = Teuchos::rcp( new DofOrderingFactory(bilinearForm, trialOrderEnhancements,testOrderEnhancements) );
+  DofOrderingFactoryPtr<double> dofOrderingFactoryPtr = Teuchos::rcp( new DofOrderingFactory<double>(bilinearForm, trialOrderEnhancements,testOrderEnhancements) );
   _enforceMBFluxContinuity = false;
 //  MeshPartitionPolicyPtr partitionPolicy = Teuchos::rcp( new MeshPartitionPolicy() );
   if ( partitionPolicy.get() == NULL )
@@ -139,7 +139,7 @@ Mesh::Mesh(const vector<vector<double> > &vertices, vector< vector<unsigned> > &
   MeshGeometryPtr meshGeometry = Teuchos::rcp( new MeshGeometry(vertices, elementVertices) );
   _meshTopology = Teuchos::rcp( new MeshTopology(meshGeometry, periodicBCs) );
 
-  DofOrderingFactoryPtr dofOrderingFactoryPtr = Teuchos::rcp( new DofOrderingFactory(bilinearForm, trialOrderEnhancements,testOrderEnhancements) );
+  DofOrderingFactoryPtr<double> dofOrderingFactoryPtr = Teuchos::rcp( new DofOrderingFactory<double>(bilinearForm, trialOrderEnhancements,testOrderEnhancements) );
   _enforceMBFluxContinuity = false;
   MeshPartitionPolicyPtr partitionPolicy = Teuchos::rcp( new ZoltanMeshPartitionPolicy() );
 
@@ -445,7 +445,7 @@ int Mesh::getDimension() {
   return _meshTopology->getSpaceDim();
 }
 
-DofOrderingFactory & Mesh::getDofOrderingFactory() {
+DofOrderingFactory<double> & Mesh::getDofOrderingFactory() {
   return *_gda->getDofOrderingFactory().get();
 }
 

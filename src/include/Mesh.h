@@ -254,7 +254,7 @@ class MeshPartitionPolicy;
 
     int getDimension(); // spatial dimension of the mesh
     set<GlobalIndexType> globalDofIndicesForCell(GlobalIndexType cellID);
-    DofOrderingFactory & getDofOrderingFactory();
+    DofOrderingFactory<double> & getDofOrderingFactory();
 
     ElementTypeFactory & getElementTypeFactory();
   //  void getMultiBasisOrdering(DofOrderingPtr &originalNonParentOrdering,
