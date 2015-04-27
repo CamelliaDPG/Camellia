@@ -24,7 +24,7 @@ Camellia::EFunctionSpace Camellia::efsForSpace(Space space) {
       return Camellia::FUNCTION_SPACE_HVOL;
     case CONSTANT_SCALAR:
       return Camellia::FUNCTION_SPACE_REAL_SCALAR;
-      
+
     case HDIV_DISC:
       return Camellia::FUNCTION_SPACE_HDIV_DISC;
     case HGRAD_DISC:
@@ -36,15 +36,15 @@ Camellia::EFunctionSpace Camellia::efsForSpace(Space space) {
       return Camellia::FUNCTION_SPACE_VECTOR_HGRAD;
     case VECTOR_L2:
       return Camellia::FUNCTION_SPACE_VECTOR_HVOL;
-    
+
     case VECTOR_HGRAD_DISC:
       return Camellia::FUNCTION_SPACE_VECTOR_HGRAD_DISC;
-      
+
 //    case TENSOR_HGRAD:
-      
+
     case HDIV_FREE:
       return Camellia::FUNCTION_SPACE_HDIV_FREE;
-      
+
     default:
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unknown function space.");
       return Camellia::FUNCTION_SPACE_UNKNOWN;
@@ -63,27 +63,27 @@ int Camellia::rankForSpace(Space space) {
       return 0;
     case CONSTANT_SCALAR:
       return 0;
-      
+
     case HDIV_DISC:
       return 1;
     case HGRAD_DISC:
       return 0;
     case HCURL_DISC:
       return 1;
-      
+
     case VECTOR_HGRAD:
       return 1;
     case VECTOR_L2:
       return 1;
-      
+
     case VECTOR_HGRAD_DISC:
       return 1;
-      
+
       //    case TENSOR_HGRAD:
-      
+
     case HDIV_FREE:
       return 1;
-      
+
     default:
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unknown function space.");
       return Camellia::FUNCTION_SPACE_UNKNOWN;
@@ -102,33 +102,33 @@ Space Camellia::spaceForEFS(Camellia::EFunctionSpace efs) {
       return L2;
     case Camellia::FUNCTION_SPACE_REAL_SCALAR:
       return CONSTANT_SCALAR;
-      
+
     case Camellia::FUNCTION_SPACE_HDIV_DISC:
       return HDIV_DISC;
     case Camellia::FUNCTION_SPACE_HGRAD_DISC:
       return HGRAD_DISC;
     case Camellia::FUNCTION_SPACE_HCURL_DISC:
       return HCURL_DISC;
-      
+
     case Camellia::FUNCTION_SPACE_VECTOR_HGRAD:
       return VECTOR_HGRAD;
     case Camellia::FUNCTION_SPACE_VECTOR_HVOL:
       return VECTOR_L2;
-      
+
     case Camellia::FUNCTION_SPACE_VECTOR_HGRAD_DISC:
       return VECTOR_HGRAD_DISC;
-      
+
       //    case TENSOR_HGRAD:
-      
+
     case Camellia::FUNCTION_SPACE_HDIV_FREE:
       return HDIV_FREE;
-      
+
     default:
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unknown function space.");
       return UNKNOWN_FS;
   }
-  
-//  
+
+//
 //  if (efs == Camellia::FUNCTION_SPACE_HGRAD) {
 //    return HGRAD;
 //  }
@@ -153,7 +153,8 @@ Space Camellia::spaceForEFS(Camellia::EFunctionSpace efs) {
 //  TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unknown function space.");
 }
 
-VarPtr Var::varForTrialID(int trialID, BFPtr bf) {
+template <typename Scalar>
+VarPtr Var::varForTrialID(int trialID, TBFPtr<Scalar> bf) {
   Camellia::EFunctionSpace efs = bf->functionSpaceForTrial(trialID);
   Space space = spaceForEFS(efs);
   int rank = rankForSpace(space);
@@ -189,7 +190,7 @@ VarPtr Var::varForTrialID(int trialID, BFPtr bf) {
 //    space = VECTOR_L2;
 //    rank = 1;
 //  }
-  
+
   VarType varType;
   if (bf->isFluxOrTrace(trialID)) {
     if ((space==L2) || (space==VECTOR_L2)) {
@@ -202,9 +203,11 @@ VarPtr Var::varForTrialID(int trialID, BFPtr bf) {
   } else {
     varType = FIELD;
   }
-  
+
   return Teuchos::rcp(new Var(trialID, rank, "trial", OP_VALUE, space, varType));
 }
+
+template VarPtr Var::varForTrialID(int trialID, TBFPtr<double> bf);
 
 Var::Var(int ID, int rank, string name, Camellia::EOperator op, Space fs, VarType varType, LinearTermPtr termTraced,
          bool definedOnTemporalInterfaces) {
@@ -227,7 +230,7 @@ bool Var::isDefinedOnTemporalInterface() const {
 }
 
 const string & Var::name() const {
-  return _name; 
+  return _name;
 }
 
 bool isRightOperator(Camellia::EOperator op) { // as opposed to left
@@ -252,19 +255,19 @@ string Var::displayString() const {
 }
 
 Camellia::EOperator Var::op() const {
-  return _op; 
+  return _op;
 }
 
 int Var::rank() const {  // 0 for scalar, 1 for vector, etc.
-  return _rank; 
+  return _rank;
 }
 
 Space Var::space() const {
-  return _fs; 
+  return _fs;
 }
 
 VarType Var::varType() const {
-  return _varType; 
+  return _varType;
 }
 
 LinearTermPtr Var::termTraced() const {
