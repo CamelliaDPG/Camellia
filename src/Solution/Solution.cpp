@@ -3705,7 +3705,7 @@ void TSolution<Scalar>::projectOntoCell(const map<int, TFunctionPtr<Scalar> > &f
         if (! elemTypePtr->trialOrderPtr->hasBasisEntry(trialID, sideIndex)) continue;
         BasisPtr basis = elemTypePtr->trialOrderPtr->getBasis(trialID, sideIndex);
         Intrepid::FieldContainer<double> basisCoefficients(1,basis->getCardinality());
-        Projector::projectFunctionOntoBasis(basisCoefficients, function, basis, basisCache->getSideBasisCache(sideIndex));
+        Projector<Scalar>::projectFunctionOntoBasis(basisCoefficients, function, basis, basisCache->getSideBasisCache(sideIndex));
         basisCoefficients.resize(basis->getCardinality());
 
 //        { // DEBUGGING
@@ -3742,7 +3742,7 @@ void TSolution<Scalar>::projectOntoCell(const map<int, TFunctionPtr<Scalar> > &f
 
       BasisPtr basis = elemTypePtr->trialOrderPtr->getBasis(trialID);
       Intrepid::FieldContainer<double> basisCoefficients(1,basis->getCardinality());
-      Projector::projectFunctionOntoBasis(basisCoefficients, function, basis, basisCache);
+      Projector<Scalar>::projectFunctionOntoBasis(basisCoefficients, function, basis, basisCache);
       basisCoefficients.resize(basis->getCardinality());
       setSolnCoeffsForCellID(basisCoefficients,cellID,trialID);
     }
@@ -3911,7 +3911,7 @@ void TSolution<Scalar>::projectOldCellOntoNewCells(GlobalIndexType cellID,
       TFunctionPtr<Scalar> fieldFxn = fieldFxnIt->second;
       BasisPtr childBasis = childType->trialOrderPtr->getBasis(varID);
       basisCoefficients.resize(1,childBasis->getCardinality());
-      Projector::projectFunctionOntoBasisInterpolating(basisCoefficients, fieldFxn, childBasis, volumeBasisCache);
+      Projector<Scalar>::projectFunctionOntoBasisInterpolating(basisCoefficients, fieldFxn, childBasis, volumeBasisCache);
 
 //      cout << "projected basisCoefficients for child volume trialID " << varID << ":\n" << basisCoefficients;
 
@@ -3940,7 +3940,7 @@ void TSolution<Scalar>::projectOldCellOntoNewCells(GlobalIndexType cellID,
         if (! childType->trialOrderPtr->hasBasisEntry(varID, sideOrdinal)) continue;
         BasisPtr childBasis = childType->trialOrderPtr->getBasis(varID, sideOrdinal);
         basisCoefficients.resize(1,childBasis->getCardinality());
-        Projector::projectFunctionOntoBasisInterpolating(basisCoefficients, traceFxn, childBasis, basisCacheForSide);
+        Projector<Scalar>::projectFunctionOntoBasisInterpolating(basisCoefficients, traceFxn, childBasis, basisCacheForSide);
         for (int basisOrdinal=0; basisOrdinal<basisCoefficients.size(); basisOrdinal++) {
           int dofIndex = childType->trialOrderPtr->getDofIndex(varID, basisOrdinal, sideOrdinal);
           _solutionForCellIDGlobal[childID][dofIndex] = basisCoefficients[basisOrdinal];

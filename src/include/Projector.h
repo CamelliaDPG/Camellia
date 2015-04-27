@@ -8,20 +8,22 @@
 #include "Basis.h"
 
 namespace Camellia {
-	class Projector {
-	 public:
+  template <typename Scalar>
+  class Projector {
+  public:
+    // newest version:
+    static void projectFunctionOntoBasis(Intrepid::FieldContainer<Scalar> &basisCoefficients,
+        TFunctionPtr<Scalar> fxn, BasisPtr basis, BasisCachePtr basisCache,
+        TIPPtr<Scalar> ip, VarPtr v,
+        std::set<int>fieldIndicesToSkip = std::set<int>());
 
-	  // newest version:
-	  static void projectFunctionOntoBasis(Intrepid::FieldContainer<double> &basisCoefficients,
-	                                       TFunctionPtr<double> fxn, BasisPtr basis, BasisCachePtr basisCache,
-	                                       IPPtr ip, VarPtr v,
-	                                       std::set<int>fieldIndicesToSkip = std::set<int>());
+    static void projectFunctionOntoBasis(Intrepid::FieldContainer<Scalar> &basisCoefficients,
+        TFunctionPtr<Scalar> fxn, BasisPtr basis, BasisCachePtr basisCache);
 
-	  static void projectFunctionOntoBasis(Intrepid::FieldContainer<double> &basisCoefficients,
-	                                       TFunctionPtr<double> fxn, BasisPtr basis, BasisCachePtr basisCache);
+    static void projectFunctionOntoBasisInterpolating(Intrepid::FieldContainer<Scalar> &basisCoefficients,
+        TFunctionPtr<Scalar> fxn, BasisPtr basis, BasisCachePtr domainBasisCache);
+  };
 
-	  static void projectFunctionOntoBasisInterpolating(Intrepid::FieldContainer<double> &basisCoefficients,
-	                                                    TFunctionPtr<double> fxn, BasisPtr basis, BasisCachePtr domainBasisCache);
-	};
+  extern template class Projector<double>;
 }
 #endif

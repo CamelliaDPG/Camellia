@@ -57,8 +57,6 @@ namespace Camellia {
   template <typename Scalar=double>
     class TBF;
   template <typename Scalar=double>
-    class DofOrderingFactory;
-  template <typename Scalar=double>
     class TIP;
   template <typename Scalar=double>
     class TFunction;
@@ -156,6 +154,9 @@ namespace Camellia {
   template <typename Scalar=double>
     class TAmesos2Solver;
   typedef TAmesos2Solver<double> Amesos2Solver;
+
+  template <typename Scalar=double>
+    class DofOrderingFactory;
 
   template <typename Scalar>
     using DofOrderingFactoryPtr = Teuchos::RCP<DofOrderingFactory<Scalar> >;

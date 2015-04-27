@@ -42,7 +42,7 @@ namespace {
       int numCells = 1;
       basisCoefficients.resize(numCells,sideBasis->getCardinality());
 
-      Projector::projectFunctionOntoBasis(basisCoefficients, f, sideBasis, sideBasisCache);
+      Projector<double>::projectFunctionOntoBasis(basisCoefficients, f, sideBasis, sideBasisCache);
 
       basisCoefficients.resize(sideBasis->getCardinality());
       FunctionPtr projectedFunction = BasisSumFunction::basisSumFunction(sideBasis, basisCoefficients);

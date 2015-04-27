@@ -31,8 +31,9 @@
 using namespace Intrepid;
 using namespace Camellia;
 
-void Projector::projectFunctionOntoBasis(FieldContainer<double> &basisCoefficients, TFunctionPtr<double> fxn,
-                                         BasisPtr basis, BasisCachePtr basisCache, IPPtr ip, VarPtr v,
+template <typename Scalar>
+void Projector<Scalar>::projectFunctionOntoBasis(FieldContainer<Scalar> &basisCoefficients, TFunctionPtr<Scalar> fxn,
+                                         BasisPtr basis, BasisCachePtr basisCache, TIPPtr<Scalar> ip, VarPtr v,
                                          set<int> fieldIndicesToSkip) {
   CellTopoPtr cellTopo = basis->domainTopology();
   DofOrderingPtr dofOrderPtr = Teuchos::rcp(new DofOrdering(cellTopo));
@@ -59,8 +60,8 @@ void Projector::projectFunctionOntoBasis(FieldContainer<double> &basisCoefficien
     return;
   }
 
-  FieldContainer<double> gramMatrix(numCells,cardinality,cardinality);
-  FieldContainer<double> ipVector(numCells,cardinality);
+  FieldContainer<Scalar> gramMatrix(numCells,cardinality,cardinality);
+  FieldContainer<Scalar> ipVector(numCells,cardinality);
 
   // fake a DofOrdering
   DofOrderingPtr dofOrdering = Teuchos::rcp( new DofOrdering(cellTopo) );
@@ -93,8 +94,8 @@ void Projector::projectFunctionOntoBasis(FieldContainer<double> &basisCoefficien
       oldToNewIndices[i] = new_index;
     }
 
-    FieldContainer<double> gramMatrixFiltered(numCells,numDofs,numDofs);
-    FieldContainer<double> ipVectorFiltered(numCells,numDofs);
+    FieldContainer<Scalar> gramMatrixFiltered(numCells,numDofs,numDofs);
+    FieldContainer<Scalar> ipVectorFiltered(numCells,numDofs);
     // now filter out the values that we're to skip
 
     for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
@@ -179,7 +180,8 @@ void Projector::projectFunctionOntoBasis(FieldContainer<double> &basisCoefficien
   }
 }
 
-void Projector::projectFunctionOntoBasis(FieldContainer<double> &basisCoefficients, TFunctionPtr<double> fxn,
+template <typename Scalar>
+void Projector<Scalar>::projectFunctionOntoBasis(FieldContainer<Scalar> &basisCoefficients, TFunctionPtr<Scalar> fxn,
                                          BasisPtr basis, BasisCachePtr basisCache) {
   VarFactory varFactory;
   VarPtr var;
@@ -198,26 +200,27 @@ void Projector::projectFunctionOntoBasis(FieldContainer<double> &basisCoefficien
     // it's simpler all around to use traces.
     var = varFactory.traceVar("dummyTrace");
   }
-  IPPtr ip = IP::ip();
+  TIPPtr<Scalar> ip = IP::ip();
   ip->addTerm(var); // simple L^2 IP
   projectFunctionOntoBasis(basisCoefficients, fxn, basis, basisCache, ip, var);
 }
 
-void Projector::projectFunctionOntoBasisInterpolating(FieldContainer<double> &basisCoefficients, TFunctionPtr<double> fxn,
+template <typename Scalar>
+void Projector<Scalar>::projectFunctionOntoBasisInterpolating(FieldContainer<Scalar> &basisCoefficients, TFunctionPtr<Scalar> fxn,
                                                       BasisPtr basis, BasisCachePtr domainBasisCache) {
   basisCoefficients.initialize(0);
   CellTopoPtr domainTopo = basis->domainTopology();
   unsigned domainDim = domainTopo->getDimension();
 
-  IPPtr ip;
+  TIPPtr<Scalar> ip;
 
   bool traceVar = domainBasisCache->isSideCache();
 
-  pair<IPPtr, VarPtr> ipVarPair = IP::standardInnerProductForFunctionSpace(basis->functionSpace(), traceVar, domainDim);
+  pair<TIPPtr<Scalar>, VarPtr> ipVarPair = IP::standardInnerProductForFunctionSpace(basis->functionSpace(), traceVar, domainDim);
   ip = ipVarPair.first;
   VarPtr v = ipVarPair.second;
 
-  IPPtr ip_l2 = Teuchos::rcp( new IP );
+  TIPPtr<Scalar> ip_l2 = Teuchos::rcp( new IP );
   ip_l2->addTerm(v);
 
   // for now, make all projections use L^2... (having some issues with gradients and cell Jacobians--I think we need the restriction of the cell Jacobian to the subcell, e.g., and it's not clear how to do that...)
@@ -234,8 +237,8 @@ void Projector::projectFunctionOntoBasisInterpolating(FieldContainer<double> &ba
   }
 
   for (int d=0; d<=domainDim; d++) {
-    TFunctionPtr<double> projectionThusFar = BasisSumFunction::basisSumFunction(basis, basisCoefficients);
-    TFunctionPtr<double> fxnToApproximate = fxn - projectionThusFar;
+    TFunctionPtr<Scalar> projectionThusFar = BasisSumFunction::basisSumFunction(basis, basisCoefficients);
+    TFunctionPtr<Scalar> fxnToApproximate = fxn - projectionThusFar;
     int subcellCount = domainTopo->getSubcellCount(d);
     for (int subcord=0; subcord<subcellCount; subcord++) {
       set<int> subcellDofOrdinals = basis->dofOrdinalsForSubcell(d, subcord);
@@ -265,12 +268,12 @@ void Projector::projectFunctionOntoBasisInterpolating(FieldContainer<double> &ba
           }
         }
         domainBasisCache->setRefCellPoints(refCellPoints, cubatureWeightsSubcell);
-        IPPtr ipForProjection = (d==0) ? ip_l2 : ip; // just use values at vertices (ignore derivatives)
+        TIPPtr<Scalar> ipForProjection = (d==0) ? ip_l2 : ip; // just use values at vertices (ignore derivatives)
         set<int> dofsToSkip = allDofs;
         for (set<int>::iterator dofOrdinalIt=subcellDofOrdinals.begin(); dofOrdinalIt != subcellDofOrdinals.end(); dofOrdinalIt++) {
           dofsToSkip.erase(*dofOrdinalIt);
         }
-        FieldContainer<double> newBasisCoefficients;
+        FieldContainer<Scalar> newBasisCoefficients;
         projectFunctionOntoBasis(newBasisCoefficients, fxnToApproximate, basis, domainBasisCache, ipForProjection, v, dofsToSkip);
         for (int cellOrdinal=0; cellOrdinal<newBasisCoefficients.dimension(0); cellOrdinal++) {
           for (set<int>::iterator dofOrdinalIt=subcellDofOrdinals.begin(); dofOrdinalIt != subcellDofOrdinals.end(); dofOrdinalIt++) {
@@ -280,5 +283,9 @@ void Projector::projectFunctionOntoBasisInterpolating(FieldContainer<double> &ba
       }
     }
   }
+}
+
+namespace Camellia {
+  template class Projector<double>;
 }
 

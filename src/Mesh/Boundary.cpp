@@ -38,7 +38,6 @@
 #include "Intrepid_FunctionSpaceTools.hpp"
 #include "Mesh.h"
 #include "Function.h"
-#include "Projector.h"
 #include "VarFactory.h"
 
 #include "BasisFactory.h"
