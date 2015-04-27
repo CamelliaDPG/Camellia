@@ -100,9 +100,6 @@ namespace Camellia {
   typedef TBFPtr<double> BFPtr;
 
   template <typename Scalar>
-    using DofOrderingFactoryPtr = Teuchos::RCP<DofOrderingFactory<Scalar> >;
-
-  template <typename Scalar>
     using TIPPtr = Teuchos::RCP<TIP<Scalar> >;
   typedef TIP<double> IP;
   typedef TIPPtr<double> IPPtr;
@@ -159,6 +156,13 @@ namespace Camellia {
   template <typename Scalar=double>
     class TAmesos2Solver;
   typedef TAmesos2Solver<double> Amesos2Solver;
+
+  template <typename Scalar>
+    using DofOrderingFactoryPtr = Teuchos::RCP<DofOrderingFactory<Scalar> >;
+
+  template <typename Scalar=double>
+    class TMeshFactory;
+  typedef TMeshFactory<double> MeshFactory;
 }
 
 
