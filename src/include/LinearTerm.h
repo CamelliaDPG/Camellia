@@ -134,19 +134,6 @@ namespace Camellia {
 
     string displayString() const; // TeX by convention
 
-    /*
-     // -------------- added by Jesse --------------------
-
-     void computeRieszRep(Teuchos::RCP<Mesh> mesh, Teuchos::RCP<IP> ip);
-     void computeRieszRHS(Teuchos::RCP<Mesh> mesh);
-     TLinearTermPtr<Scalar> rieszRep(VarPtr v);
-     double functionalNorm();
-     const map<int,double> & energyNorm(Teuchos::RCP<Mesh> mesh, Teuchos::RCP<IP> ip);
-     double energyNormTotal(Teuchos::RCP<Mesh> mesh, Teuchos::RCP<IP> ip); // global energy norm
-
-     // -------------- end of added by Jesse --------------------
-     */
-
     void addTerm(const TLinearTerm<Scalar> &a, bool overrideTypeCheck=false);
     void addTerm(TLinearTermPtr<Scalar> aPtr, bool overrideTypeCheck=false);
     // operator overloading niceties:

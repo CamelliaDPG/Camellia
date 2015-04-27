@@ -51,18 +51,21 @@
 using namespace Intrepid;
 using namespace Camellia;
 
-LinearTermPtr RieszRep::getFunctional(){
+template <typename Scalar>
+TLinearTermPtr<Scalar> TRieszRep<Scalar>::getFunctional(){
   return _functional;
 }
 
-MeshPtr RieszRep::mesh() {
+template <typename Scalar>
+TMeshPtr<Scalar> TRieszRep<Scalar>::mesh() {
   return _mesh;
 }
 
-map<GlobalIndexType,FieldContainer<double> > RieszRep::integrateFunctional() {
+template <typename Scalar>
+map<GlobalIndexType,FieldContainer<Scalar> > TRieszRep<Scalar>::integrateFunctional() {
   // NVR: changed this to only return integrated values for rank-local cells.
 
-  map<GlobalIndexType,FieldContainer<double> > cellRHS;
+  map<GlobalIndexType,FieldContainer<Scalar> > cellRHS;
   set<GlobalIndexType> cellIDs = _mesh->cellIDsInPartition();
   for (set<GlobalIndexType>::iterator cellIDIt=cellIDs.begin(); cellIDIt !=cellIDs.end(); cellIDIt++){
     GlobalIndexType cellID = *cellIDIt;
@@ -73,10 +76,10 @@ map<GlobalIndexType,FieldContainer<double> > RieszRep::integrateFunctional() {
     int cubEnrich = 0; // set to zero for release
     BasisCachePtr basisCache = BasisCache::basisCacheForCell(_mesh,cellID,true,cubEnrich);
 
-    FieldContainer<double> rhsValues(1,numTestDofs);
+    FieldContainer<Scalar> rhsValues(1,numTestDofs);
     _functional->integrate(rhsValues, testOrderingPtr, basisCache);
 
-    FieldContainer<double> rhsVals(numTestDofs);
+    FieldContainer<Scalar> rhsVals(numTestDofs);
     for (int i = 0;i<numTestDofs;i++){
       rhsVals(i) = rhsValues(0,i);
     }
@@ -85,7 +88,8 @@ map<GlobalIndexType,FieldContainer<double> > RieszRep::integrateFunctional() {
   return cellRHS;
 }
 
-void RieszRep::computeRieszRep(int cubatureEnrichment){
+template <typename Scalar>
+void TRieszRep<Scalar>::computeRieszRep(int cubatureEnrichment){
 #ifdef HAVE_MPI
   Epetra_MpiComm Comm(MPI_COMM_WORLD);
   //cout << "rank: " << rank << " of " << numProcs << endl;
@@ -103,13 +107,13 @@ void RieszRep::computeRieszRep(int cubatureEnrichment){
 
     BasisCachePtr basisCache = BasisCache::basisCacheForCell(_mesh,cellID,true,cubatureEnrichment);
 
-    FieldContainer<double> rhsValues(1,numTestDofs);
+    FieldContainer<Scalar> rhsValues(1,numTestDofs);
     _functional->integrate(rhsValues, testOrderingPtr, basisCache);
     if (_printAll){
       cout << "RieszRep: LinearTerm values for cell " << cellID << ":\n " << rhsValues << endl;
     }
 
-    FieldContainer<double> ipMatrix(1,numTestDofs,numTestDofs);
+    FieldContainer<Scalar> ipMatrix(1,numTestDofs,numTestDofs);
     _ip->computeInnerProductMatrix(ipMatrix,testOrderingPtr, basisCache);
 
     bool printOutRiesz = false;
@@ -118,13 +122,13 @@ void RieszRep::computeRieszRep(int cubatureEnrichment){
       cout << "matrix: \n" << ipMatrix;
     }
 
-    FieldContainer<double> rieszRepDofs(numTestDofs,1);
+    FieldContainer<Scalar> rieszRepDofs(numTestDofs,1);
     ipMatrix.resize(numTestDofs,numTestDofs);
     rhsValues.resize(numTestDofs,1);
     int success = SerialDenseWrapper::solveSystemUsingQR(rieszRepDofs, ipMatrix, rhsValues);
 
     if (success != 0) {
-      cout << "RieszRep::computeRieszRep: Solve FAILED with error: " << success << endl;
+      cout << "TRieszRep<Scalar>::computeRieszRep: Solve FAILED with error: " << success << endl;
     }
 
 //    rieszRepDofs.Multiply(true,rhsVectorCopy, normSq); // equivalent to e^T * R_V * e
@@ -139,7 +143,7 @@ void RieszRep::computeRieszRep(int cubatureEnrichment){
       cout << " ================================================================" << endl;
     }
 
-    FieldContainer<double> dofs(numTestDofs);
+    FieldContainer<Scalar> dofs(numTestDofs);
     for (int i = 0;i<numTestDofs;i++){
       dofs(i) = rieszRepDofs(i,0);
     }
@@ -149,7 +153,8 @@ void RieszRep::computeRieszRep(int cubatureEnrichment){
   _repsNotComputed = false;
 }
 
-double RieszRep::getNorm(){
+template <typename Scalar>
+double TRieszRep<Scalar>::getNorm(){
 
   if (_repsNotComputed){
     cout << "Computing riesz rep dofs" << endl;
@@ -168,15 +173,18 @@ double RieszRep::getNorm(){
   return sqrt(normSum);
 }
 
-const map<GlobalIndexType,double> & RieszRep::getNormsSquared() {
+template <typename Scalar>
+const map<GlobalIndexType,double> & TRieszRep<Scalar>::getNormsSquared() {
   return _rieszRepNormSquared;
 }
 
-const map<GlobalIndexType,double> & RieszRep::getNormsSquaredGlobal() { // should be renamed getNormsSquaredGlobal()
+template <typename Scalar>
+const map<GlobalIndexType,double> & TRieszRep<Scalar>::getNormsSquaredGlobal() { // should be renamed getNormsSquaredGlobal()
   return _rieszRepNormSquaredGlobal;
 }
 
-void RieszRep::distributeDofs(){
+template <typename Scalar>
+void TRieszRep<Scalar>::distributeDofs(){
   int myRank = Teuchos::GlobalMPISession::getRank();
   int numRanks = Teuchos::GlobalMPISession::getNProc();
 #ifdef HAVE_MPI
@@ -211,7 +219,7 @@ void RieszRep::distributeDofs(){
     bool isInPartition = (cellIDPartition == myRank);
 
     int numMyDofs;
-    FieldContainer<double> dofs(numDofs);
+    FieldContainer<Scalar> dofs(numDofs);
     if (isInPartition){  // if in partition
       numMyDofs = numDofs;
       dofs = _rieszRepDofs[cellID];
@@ -264,7 +272,7 @@ void RieszRep::distributeDofs(){
   Epetra_Vector distributedRieszNorms(normMap);
   int err = distributedRieszNorms.ReplaceGlobalValues(numMyElems,rankLocalRieszNorms,(GlobalIndexTypeToCast *)myElems);
   if (err != 0) {
-    cout << "RieszRep::distributeDofs(): on rank" << myRank << ", ReplaceGlobalValues returned error code " << err << endl;
+    cout << "TRieszRep<Scalar>::distributeDofs(): on rank" << myRank << ", ReplaceGlobalValues returned error code " << err << endl;
   }
 
   Epetra_Map normImportMap((GlobalIndexTypeToCast)numElems,(GlobalIndexTypeToCast)numElems,0,Comm);
@@ -281,7 +289,8 @@ void RieszRep::distributeDofs(){
 }
 
 // computes riesz representation over a single element - map is from int (testID) to FieldContainer of values (sized cellIndex, numPoints)
-void RieszRep::computeRepresentationValues(FieldContainer<double> &values, int testID, Camellia::EOperator op, BasisCachePtr basisCache){
+template <typename Scalar>
+void TRieszRep<Scalar>::computeRepresentationValues(FieldContainer<Scalar> &values, int testID, Camellia::EOperator op, BasisCachePtr basisCache){
 
   if (_repsNotComputed){
     cout << "Computing riesz rep dofs" << endl;
@@ -334,7 +343,8 @@ void RieszRep::computeRepresentationValues(FieldContainer<double> &values, int t
 //  TestSuite::serializeOutput("rep values", values);
 }
 
-map<GlobalIndexType,double> RieszRep::computeAlternativeNormSqOnCells(IPPtr ip, vector<GlobalIndexType> cellIDs){
+template <typename Scalar>
+map<GlobalIndexType,double> TRieszRep<Scalar>::computeAlternativeNormSqOnCells(TIPPtr<Scalar> ip, vector<GlobalIndexType> cellIDs){
   map<GlobalIndexType,double> altNorms;
   int numCells = cellIDs.size();
   for (int i = 0;i<numCells;i++){
@@ -386,14 +396,15 @@ map<GlobalIndexType,double> RieszRep::computeAlternativeNormSqOnCells(IPPtr ip, 
   */
 }
 
-double RieszRep::computeAlternativeNormSqOnCell(IPPtr ip, ElementPtr elem){
+template <typename Scalar>
+double TRieszRep<Scalar>::computeAlternativeNormSqOnCell(TIPPtr<Scalar> ip, ElementPtr elem){
   GlobalIndexType cellID = elem->cellID();
   Teuchos::RCP<DofOrdering> testOrdering= elem->elementType()->testOrderPtr;
   bool testVsTest = true;
   Teuchos::RCP<BasisCache> basisCache =   BasisCache::basisCacheForCell(_mesh, cellID, testVsTest,1);
 
   int numDofs = testOrdering->totalDofs();
-  FieldContainer<double> ipMat(1,numDofs,numDofs);
+  FieldContainer<Scalar> ipMat(1,numDofs,numDofs);
   ip->computeInnerProductMatrix(ipMat,testOrdering,basisCache);
 
   double sum = 0.0;
@@ -406,10 +417,17 @@ double RieszRep::computeAlternativeNormSqOnCell(IPPtr ip, ElementPtr elem){
   return sum;
 }
 
-TFunctionPtr<double> RieszRep::repFunction( VarPtr var, RieszRepPtr rep ) {
-  return Teuchos::rcp( new RepFunction(var, rep) );
+template <typename Scalar>
+TFunctionPtr<Scalar> TRieszRep<Scalar>::repFunction( VarPtr var, TRieszRepPtr<Scalar> rep ) {
+  return Teuchos::rcp( new RepFunction<Scalar>(var, rep) );
 }
 
-RieszRepPtr RieszRep::rieszRep(MeshPtr mesh, IPPtr ip, LinearTermPtr rhs) {
-  return Teuchos::rcp( new RieszRep(mesh,ip,rhs) );
+template <typename Scalar>
+TRieszRepPtr<Scalar> TRieszRep<Scalar>::rieszRep(TMeshPtr<Scalar> mesh, TIPPtr<Scalar> ip, TLinearTermPtr<Scalar> rhs) {
+  return Teuchos::rcp( new TRieszRep<Scalar>(mesh,ip,rhs) );
+}
+
+namespace Camellia {
+  template class TRieszRep<double>;
+  template class RepFunction<double>;
 }

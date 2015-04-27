@@ -33,7 +33,7 @@ template <typename Scalar>
 TRefinementStrategy<Scalar>::TRefinementStrategy( TMeshPtr<Scalar> mesh, TLinearTermPtr<Scalar> residual, TIPPtr<Scalar> ip,
                                         double relativeEnergyThreshold, double min_h,
                                         int max_p, bool preferPRefinements) {
-  _rieszRep = Teuchos::rcp( new RieszRep(mesh, ip, residual) );
+  _rieszRep = Teuchos::rcp( new TRieszRep<Scalar>(mesh, ip, residual) );
   _relativeEnergyThreshold = relativeEnergyThreshold;
   _enforceOneIrregularity = true;
   _reportPerCellErrors = false;

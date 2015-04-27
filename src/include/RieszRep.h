@@ -33,22 +33,23 @@
 #include "IP.h"
 
 namespace Camellia {
-  class RieszRep {
+  template <typename Scalar>
+  class TRieszRep {
    private:
 
-    map<GlobalIndexType, Intrepid::FieldContainer<double> > _rieszRepDofs; // from cellID to dofs of riesz representation
-    map<GlobalIndexType, Intrepid::FieldContainer<double> > _rieszRepDofsGlobal; // from cellID to dofs of riesz representation
+    map<GlobalIndexType, Intrepid::FieldContainer<Scalar> > _rieszRepDofs; // from cellID to dofs of riesz representation
+    map<GlobalIndexType, Intrepid::FieldContainer<Scalar> > _rieszRepDofsGlobal; // from cellID to dofs of riesz representation
     map<GlobalIndexType, double > _rieszRepNormSquared; // from cellID to norm squared of riesz inversion
     map<GlobalIndexType, double > _rieszRepNormSquaredGlobal; // from cellID to norm squared of riesz inversion
 
-    MeshPtr _mesh;
-    IPPtr _ip;
-    LinearTermPtr _functional;  // the RHS stuff here and below is misnamed -- should just be called functional
+    TMeshPtr<Scalar> _mesh;
+    TIPPtr<Scalar> _ip;
+    TLinearTermPtr<Scalar> _functional;  // the RHS stuff here and below is misnamed -- should just be called functional
     bool _printAll;
     bool _repsNotComputed;
 
    public:
-    RieszRep(MeshPtr mesh, IPPtr ip, LinearTermPtr functional){
+    TRieszRep(TMeshPtr<Scalar> mesh, TIPPtr<Scalar> ip, TLinearTermPtr<Scalar> functional){
       _mesh = mesh;
       _ip = ip;
       _functional = functional;
@@ -60,16 +61,16 @@ namespace Camellia {
       _printAll = printAll;
     }
 
-    void setFunctional(LinearTermPtr functional){
+    void setFunctional(TLinearTermPtr<Scalar> functional){
       _functional = functional;
     }
 
-    LinearTermPtr getFunctional();
+    TLinearTermPtr<Scalar> getFunctional();
 
-    MeshPtr mesh();
+    TMeshPtr<Scalar> mesh();
 
     // for testing
-    map<GlobalIndexType,Intrepid::FieldContainer<double> > integrateFunctional();
+    map<GlobalIndexType,Intrepid::FieldContainer<Scalar> > integrateFunctional();
 
     void computeRieszRep(int cubatureEnrichment=0);
 
@@ -83,71 +84,76 @@ namespace Camellia {
 
     void distributeDofs();
 
-    void computeRepresentationValues(Intrepid::FieldContainer<double> &values, int testID, EOperator op, BasisCachePtr basisCache);
+    void computeRepresentationValues(Intrepid::FieldContainer<Scalar> &values, int testID, EOperator op, BasisCachePtr basisCache);
 
-    double computeAlternativeNormSqOnCell(IPPtr ip, ElementPtr elem);
-    map<GlobalIndexType,double> computeAlternativeNormSqOnCells(IPPtr ip, vector<GlobalIndexType> cellIDs);
+    double computeAlternativeNormSqOnCell(TIPPtr<Scalar> ip, ElementPtr elem);
+    map<GlobalIndexType,double> computeAlternativeNormSqOnCells(TIPPtr<Scalar> ip, vector<GlobalIndexType> cellIDs);
 
-    static TFunctionPtr<double> repFunction( VarPtr var, RieszRepPtr rep );
-    static RieszRepPtr rieszRep(MeshPtr mesh, IPPtr ip, LinearTermPtr functional);
+    static TFunctionPtr<Scalar> repFunction( VarPtr var, TRieszRepPtr<Scalar> rep );
+    static TRieszRepPtr<Scalar> rieszRep(TMeshPtr<Scalar> mesh, TIPPtr<Scalar> ip, TLinearTermPtr<Scalar> functional);
   };
 
-  class RepFunction : public TFunction<double> {
+  extern template class TRieszRep<double>;
+
+  template <typename Scalar>
+  class RepFunction : public TFunction<Scalar> {
   private:
 
     int _testID;
-    Teuchos::RCP<RieszRep> _rep;
+    TRieszRepPtr<Scalar> _rep;
     EOperator _op;
   public:
-    RepFunction( VarPtr var, RieszRepPtr rep ) : TFunction<double>( var->rank() ) {
+    RepFunction( VarPtr var, TRieszRepPtr<Scalar> rep ) : TFunction<Scalar>( var->rank() ) {
       _testID = var->ID();
       _op = var->op();
       _rep = rep;
     }
 
     // optional specification of operator to apply - default to rank 0
-   RepFunction(int testID,Teuchos::RCP<RieszRep> rep, EOperator op): TFunction<double>(0){
+   RepFunction(int testID, TRieszRepPtr<Scalar> rep, EOperator op): TFunction<Scalar>(0){
       _testID = testID;
       _rep = rep;
       _op = op;
     }
 
     // specification of function rank
-   RepFunction(int testID,Teuchos::RCP<RieszRep> rep, EOperator op, int fxnRank): TFunction<double>(fxnRank){
+   RepFunction(int testID, TRieszRepPtr<Scalar> rep, EOperator op, int fxnRank): TFunction<Scalar>(fxnRank){
       _testID = testID;
       _rep = rep;
       _op = op;
     }
 
 
-    TFunctionPtr<double> x(){
-      return Teuchos::rcp(new RepFunction(_testID,_rep,OP_X));
+    TFunctionPtr<Scalar> x(){
+      return Teuchos::rcp(new RepFunction<Scalar>(_testID,_rep,OP_X));
     }
-    TFunctionPtr<double> y(){
-      return Teuchos::rcp(new RepFunction(_testID,_rep,OP_Y));
+    TFunctionPtr<Scalar> y(){
+      return Teuchos::rcp(new RepFunction<Scalar>(_testID,_rep,OP_Y));
     }
-    TFunctionPtr<double> dx(){
-      return Teuchos::rcp(new RepFunction(_testID,_rep,OP_DX));
+    TFunctionPtr<Scalar> dx(){
+      return Teuchos::rcp(new RepFunction<Scalar>(_testID,_rep,OP_DX));
     }
-    TFunctionPtr<double> dy(){
-      return Teuchos::rcp(new RepFunction(_testID,_rep,OP_DY));
+    TFunctionPtr<Scalar> dy(){
+      return Teuchos::rcp(new RepFunction<Scalar>(_testID,_rep,OP_DY));
     }
-    //  TFunctionPtr<double> grad(){
+    //  TFunctionPtr<Scalar> grad(){
     //    return Teuchos::rcp(new RepFunction(_testID,_rep,Camellia::OP_GRAD,2)); // default to 2 space dimensions
     //  }
-    TFunctionPtr<double> div(){
-      return Teuchos::rcp(new RepFunction(_testID,_rep,OP_DIV));
+    TFunctionPtr<Scalar> div(){
+      return Teuchos::rcp(new RepFunction<Scalar>(_testID,_rep,OP_DIV));
     }
 
-    void values(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache) {
+    void values(Intrepid::FieldContainer<Scalar> &values, BasisCachePtr basisCache) {
       _rep->computeRepresentationValues(values, _testID, _op, basisCache);
     }
 
     // for specifying an operator
-    void values(Intrepid::FieldContainer<double> &values, EOperator op, BasisCachePtr basisCache){
+    void values(Intrepid::FieldContainer<Scalar> &values, EOperator op, BasisCachePtr basisCache){
       _rep->computeRepresentationValues(values, _testID, op, basisCache);
     }
   };
+
+  extern template class RepFunction<double>;
 }
 
 

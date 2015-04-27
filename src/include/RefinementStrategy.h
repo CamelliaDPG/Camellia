@@ -35,7 +35,7 @@ namespace Camellia {
     static RefinementResults setResults(GlobalIndexType numElements, GlobalIndexType numDofs, double totalEnergyError);
     TSolutionPtr<Scalar> _solution;
 
-    RieszRepPtr _rieszRep;
+    TRieszRepPtr<Scalar> _rieszRep;
 
     double _relativeEnergyThreshold;
     bool _enforceOneIrregularity;
