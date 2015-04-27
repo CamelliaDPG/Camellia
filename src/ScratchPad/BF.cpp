@@ -608,13 +608,13 @@ namespace Camellia{
   }
 
   template <typename Scalar>
-  IPPtr TBF<Scalar>::graphNorm(double weightForL2TestTerms) {
+  TIPPtr<Scalar> TBF<Scalar>::graphNorm(double weightForL2TestTerms) {
     map<int, double> varWeights;
     return graphNorm(varWeights, weightForL2TestTerms);
   }
 
   template <typename Scalar>
-  IPPtr TBF<Scalar>::graphNorm(const map<int, double> &varWeights, double weightForL2TestTerms) {
+  TIPPtr<Scalar> TBF<Scalar>::graphNorm(const map<int, double> &varWeights, double weightForL2TestTerms) {
     map<int, TLinearTermPtr<Scalar>> testTermsForVarID;
     vector<double> e1(3), e2(3), e3(3); // unit vectors
     e1[0] = 1.0;
@@ -649,7 +649,7 @@ namespace Camellia{
         }
       }
     }
-    IPPtr ip = Teuchos::rcp( new IP );
+    TIPPtr<Scalar> ip = Teuchos::rcp( new IP );
     for (typename map<int, TLinearTermPtr<Scalar>>::iterator testTermIt = testTermsForVarID.begin();
         testTermIt != testTermsForVarID.end(); testTermIt++ ) {
       double weight = 1.0;
@@ -673,9 +673,9 @@ namespace Camellia{
   }
 
   template <typename Scalar>
-  IPPtr TBF<Scalar>::l2Norm() {
+  TIPPtr<Scalar> TBF<Scalar>::l2Norm() {
     // L2 norm on test space:
-    IPPtr ip = Teuchos::rcp( new IP );
+    TIPPtr<Scalar> ip = Teuchos::rcp( new IP );
     map< int, VarPtr > testVars = _varFactory.testVars();
     for ( map< int, VarPtr >::iterator testVarIt = testVars.begin(); testVarIt != testVars.end(); testVarIt++) {
       ip->addTerm( testVarIt->second );
@@ -685,7 +685,7 @@ namespace Camellia{
 
   template <typename Scalar>
   void TBF<Scalar>::localStiffnessMatrixAndRHS(FieldContainer<Scalar> &localStiffness, FieldContainer<Scalar> &rhsVector,
-      IPPtr ip, BasisCachePtr ipBasisCache, RHSPtr rhs, BasisCachePtr basisCache) {
+      TIPPtr<Scalar> ip, BasisCachePtr ipBasisCache, TRHSPtr<Scalar> rhs, BasisCachePtr basisCache) {
     double testMatrixAssemblyTime = 0, testMatrixInversionTime = 0, localStiffnessDeterminationFromTestsTime = 0;
     double rhsIntegrationAgainstOptimalTestsTime = 0;
 
@@ -772,8 +772,8 @@ namespace Camellia{
   }
 
   template <typename Scalar>
-  IPPtr TBF<Scalar>::naiveNorm(int spaceDim) {
-    IPPtr ip = Teuchos::rcp( new IP );
+  TIPPtr<Scalar> TBF<Scalar>::naiveNorm(int spaceDim) {
+    TIPPtr<Scalar> ip = Teuchos::rcp( new IP );
     map< int, VarPtr > testVars = _varFactory.testVars();
     for ( map< int, VarPtr >::iterator testVarIt = testVars.begin(); testVarIt != testVars.end(); testVarIt++) {
       VarPtr var = testVarIt->second;

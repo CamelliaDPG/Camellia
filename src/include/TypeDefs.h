@@ -46,7 +46,6 @@ namespace Camellia {
 	class MeshTopology;
   class ParameterFunction;
   class RefinementPattern;
-	class RefinementStrategy;
 	class RieszRep;
 	class SpatialFilter;
 	class Var;
@@ -65,6 +64,8 @@ namespace Camellia {
   template <typename Scalar=double>
     class TMesh;
   template <typename Scalar=double>
+    class TRefinementStrategy;
+  template <typename Scalar=double>
     class TRHS;
   template <typename Scalar=double>
     class TSolution;
@@ -82,7 +83,6 @@ namespace Camellia {
 	typedef Teuchos::RCP<MeshTopology> MeshTopologyPtr;
 	typedef Teuchos::RCP<ParameterFunction> ParameterFunctionPtr;
   typedef Teuchos::RCP<RefinementPattern> RefinementPatternPtr;
-	typedef Teuchos::RCP<RefinementStrategy> RefinementStrategyPtr;
 	typedef Teuchos::RCP<RieszRep> RieszRepPtr;
 	typedef Teuchos::RCP<SpatialFilter> SpatialFilterPtr;
 	typedef Teuchos::RCP<Var> VarPtr;
@@ -116,6 +116,11 @@ namespace Camellia {
     using TMeshPtr = Teuchos::RCP<TMesh<Scalar> >;
   typedef TMesh<double> Mesh;
   typedef TMeshPtr<double> MeshPtr;
+
+  template <typename Scalar>
+    using TRefinementStrategyPtr = Teuchos::RCP<TRefinementStrategy<Scalar> >;
+  typedef TRefinementStrategy<double> RefinementStrategy;
+  typedef TRefinementStrategyPtr<double> RefinementStrategyPtr;
 
   template <typename Scalar>
     using TRHSPtr = Teuchos::RCP<TRHS<Scalar> >;

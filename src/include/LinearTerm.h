@@ -87,7 +87,7 @@ namespace Camellia {
      *  \param  ip        [in]  - inner product to use for the Riesz representation
      *  \param  mesh      [in]  - mesh over which to measure
      */
-    double computeNorm(IPPtr ip, MeshPtr mesh);
+    double computeNorm(TIPPtr<Scalar> ip, MeshPtr mesh);
 
     void evaluate(Intrepid::FieldContainer<Scalar> &values, TSolutionPtr<Scalar> solution, BasisCachePtr basisCache,
                   bool applyCubatureWeights = false);

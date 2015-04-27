@@ -28,11 +28,12 @@ namespace Camellia {
     double totalEnergyError;
   };
 
-  class RefinementStrategy {
+  template <typename Scalar>
+  class TRefinementStrategy {
   protected:
 
     static RefinementResults setResults(GlobalIndexType numElements, GlobalIndexType numDofs, double totalEnergyError);
-    TSolutionPtr<double> _solution;
+    TSolutionPtr<Scalar> _solution;
 
     RieszRepPtr _rieszRep;
 
@@ -46,10 +47,10 @@ namespace Camellia {
     int _max_p;
     bool _preferPRefinements;
 
-    MeshPtr mesh();
+    TMeshPtr<Scalar> mesh();
   public:
-    RefinementStrategy( TSolutionPtr<double> solution, double relativeEnergyThreshold, double min_h = 0, int max_p = 10, bool preferPRefinements = false);
-    RefinementStrategy( MeshPtr mesh, LinearTermPtr residual, IPPtr ip, double relativeEnergyThreshold, double min_h = 0, int max_p = 10, bool preferPRefinements = false);
+    TRefinementStrategy( TSolutionPtr<Scalar> solution, double relativeEnergyThreshold, double min_h = 0, int max_p = 10, bool preferPRefinements = false);
+    TRefinementStrategy( TMeshPtr<Scalar> mesh, TLinearTermPtr<Scalar> residual, TIPPtr<Scalar> ip, double relativeEnergyThreshold, double min_h = 0, int max_p = 10, bool preferPRefinements = false);
     void setEnforceOneIrregularity(bool value);
     void setAnisotropicThreshhold(double value);
     void setMaxAspectRatio(double value);
@@ -65,9 +66,9 @@ namespace Camellia {
     bool enforceAnisotropicOneIrregularity(vector<GlobalIndexType> &xCells, vector<GlobalIndexType> &yCells);
 
     virtual void refineCells(vector<GlobalIndexType> &cellIDs);
-    static void pRefineCells(Teuchos::RCP<Mesh> mesh, const vector<GlobalIndexType> &cellIDs);
-    static void hRefineCells(Teuchos::RCP<Mesh> mesh, const vector<GlobalIndexType> &cellIDs);
-    static void hRefineUniformly(Teuchos::RCP<Mesh> mesh);
+    static void pRefineCells(TMeshPtr<Scalar> mesh, const vector<GlobalIndexType> &cellIDs);
+    static void hRefineCells(TMeshPtr<Scalar> mesh, const vector<GlobalIndexType> &cellIDs);
+    static void hRefineUniformly(TMeshPtr<Scalar> mesh);
     void getCellsAboveErrorThreshhold(vector<GlobalIndexType> &cellsToRefine);
     void setMinH(double value);
     void setReportPerCellErrors(bool value);
@@ -76,6 +77,8 @@ namespace Camellia {
     GlobalIndexType getNumElements(int refinementNumber);
     GlobalIndexType getNumDofs(int refinementNumber);
   };
+
+  extern template class TRefinementStrategy<double>;
 }
 
 

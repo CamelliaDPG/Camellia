@@ -133,7 +133,7 @@ namespace Camellia {
   }
 
   template<typename Scalar>
-  double TLinearTerm<Scalar>::computeNorm(IPPtr ip, MeshPtr mesh) {
+  double TLinearTerm<Scalar>::computeNorm(TIPPtr<Scalar> ip, MeshPtr mesh) {
     TLinearTermPtr<Scalar> thisPtr = Teuchos::rcp(this, false);
     Teuchos::RCP<RieszRep> rieszRep = Teuchos::rcp( new RieszRep(mesh, ip, thisPtr) );
     rieszRep->computeRieszRep();
