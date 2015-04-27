@@ -6,10 +6,11 @@
 //
 //
 
-#include "TypeDefs.h"
+#include "Intrepid_FunctionSpaceTools.hpp"
 
 #include "SpaceTimeBasisCache.h"
 #include "TensorBasis.h"
+#include "TypeDefs.h"
 
 using namespace Intrepid;
 using namespace Camellia;
@@ -515,49 +516,12 @@ constFCPtr SpaceTimeBasisCache::getTransformedValues(BasisPtr basis, Camellia::E
 }
 
 constFCPtr SpaceTimeBasisCache::getTransformedWeightedValues(BasisPtr basis, Camellia::EOperator op, bool useCubPointsSideRefCell) {
-  
-//  cout << "Basis domainTopology: " << basis->domainTopology()->getName() << endl;
-  
-  if (isSideCache() && !cellTopology()->sideIsSpatial(getSideIndex()) ) {
-    // in this case, two possibilities:
-    // 1. basis is a volume basis, in which case we want to handle things in terms of tensor product, as usual
-    // 2. basis is a trace basis, defined on the spatial topology only
-    // In the second case, we want to use the spatial basis cache, and just pass in the basis.  In this case useCubPointsSideRefCell
-    // ought to be false: this is used when we evaluate a volume basis on the side.
-    if (_spatialCache->cellTopology()->getKey() == basis->domainTopology()->getKey()) {
-      TEUCHOS_TEST_FOR_EXCEPTION(useCubPointsSideRefCell == true, std::invalid_argument, "useCubPointsSideRefCell should not be true for a trace basis...");
-      return _spatialCache->getTransformedWeightedValues(basis, op);
-    }
-  }
-  
-  const int FIELD_INDEX = 1, POINT_INDEX = 2;
-  
-  // compute tensorial components:
-  TensorBasis<double>* tensorBasis = dynamic_cast<TensorBasis<double>*>(basis.get());
-  
-  if (tensorBasis == NULL) {
-    cout << "basis must be a subclass of TensorBasis<double>!\n";
-    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "basis must be a subclass of TensorBasis<double>!");
-  }
-  
-  BasisPtr spatialBasis = tensorBasis->getSpatialBasis();
-  BasisPtr temporalBasis = tensorBasis->getTemporalBasis();
-  
-  Intrepid::EOperator spaceOpForSizing = this->spaceOpForSizing(op), timeOpForSizing = this->timeOpForSizing(op);
-  Camellia::EOperator spaceOp = this->spaceOp(op), timeOp = this->timeOp(op);
-  
-  constFCPtr spatialValues, temporalValues;
-  if (useCubPointsSideRefCell && !cellTopology()->sideIsSpatial(getSideIndex())) {
-    // then _spatialCache is a volume cache already, so we shouldn't tell it to use volume points...
-    spatialValues = _spatialCache->getTransformedWeightedValues(spatialBasis, spaceOp, false);
-  } else {
-    spatialValues = _spatialCache->getTransformedWeightedValues(spatialBasis, spaceOp, useCubPointsSideRefCell);
-  }
-  
-  // _temporalCache is always a volume cache
-  temporalValues = _temporalCache->getTransformedWeightedValues(temporalBasis, timeOp, false);
-  
-  return getTensorBasisValues(tensorBasis, FIELD_INDEX, POINT_INDEX, spatialValues, temporalValues, spaceOpForSizing, timeOpForSizing);
+  constFCPtr unWeightedValues = getTransformedValues(basis,op, useCubPointsSideRefCell);
+  Teuchos::Array<int> dimensions;
+  unWeightedValues->dimensions(dimensions);
+  Teuchos::RCP< FieldContainer<double> > weightedValues = Teuchos::rcp( new FieldContainer<double>(dimensions) );
+  FunctionSpaceTools::multiplyMeasure<double>(*weightedValues, this->getWeightedMeasures(), *unWeightedValues);
+  return weightedValues;
 }
 
 Camellia::EOperator SpaceTimeBasisCache::spaceOp(Camellia::EOperator op) {

@@ -259,49 +259,57 @@ namespace Camellia {
               }
             }
 
-  //          bool DEBUGGING = true;
-  //          if (DEBUGGING) {
-  //            if (basisCache->cellIDs().size() > 0) {
-  //              if (basisCache->cellIDs()[0]==0) {
-  //                if (basisCardinality==1) {
-  //                  int cellIndex = 0;
-  //                  Intrepid::FieldContainer<double> valueOnSide(1, basisCardinality);
-  //                  for (int basisOrdinal = 0; basisOrdinal < basisCardinality; basisOrdinal++) {
-  //                    for (int ptIndex = 0; ptIndex < numPoints; ptIndex++) {
-  //                      valueOnSide(cellIndex,basisOrdinal) += ltValues(cellIndex,basisOrdinal,ptIndex);
-  //                    }
-  //                  }
-  //                  cout << "TLinearTerm<Scalar>::integrate: For cellID 0 on side " << sideIndex << ": " << valueOnSide(0,0) << endl;
-  //                  cout << "TLinearTerm<Scalar>::integrate: For cellID 0 on side " << sideIndex << ", ltValues:\n";
-  //                  for (int ptIndex = 0; ptIndex < numPoints; ptIndex++) {
-  //                    cout << ptIndex << ": " << ltValues(0,0,ptIndex) << endl;
-  //                  }
-  //                }
-  //              }
-  //            }
-  //          }
+//          bool DEBUGGING = true;
+//          if (DEBUGGING) {
+//            if (basisCache->cellIDs().size() > 0) {
+//              if (basisCache->cellIDs()[0]==0) {
+//                if (basisCardinality==1) {
+//                  int cellIndex = 0;
+//                  Intrepid::FieldContainer<double> valueOnSide(1, basisCardinality);
+//                  for (int basisOrdinal = 0; basisOrdinal < basisCardinality; basisOrdinal++) {
+//                    for (int ptIndex = 0; ptIndex < numPoints; ptIndex++) {
+//                      valueOnSide(cellIndex,basisOrdinal) += ltValues(cellIndex,basisOrdinal,ptIndex);
+//                    }
+//                  }
+//                  cout << "TLinearTerm<Scalar>::integrate: For cellID 0 on side " << sideIndex << ": " << valueOnSide(0,0) << endl;
+//                  cout << "TLinearTerm<Scalar>::integrate: For cellID 0 on side " << sideIndex << ", ltValues:\n";
+//                  for (int ptIndex = 0; ptIndex < numPoints; ptIndex++) {
+//                    cout << ptIndex << ": " << ltValues(0,0,ptIndex) << endl;
+//                  }
+//                }
+//              }
+//            }
+//          }
           }
         }
       } else {
         BasisCachePtr volumeCache;
-        int startSideIndex, endSideIndex;
+        vector<int> sideOrdinals;
         if ( basisCache->isSideCache() ) {
           // just one side, then:
-          startSideIndex = basisCache->getSideIndex();
-          endSideIndex = startSideIndex;
+          sideOrdinals = {basisCache->getSideIndex()};
           volumeCache = basisCache->getVolumeBasisCache();
         } else {
-          // all sides:
-          startSideIndex = 0;
-          endSideIndex = numSides - 1;
+          // determine all applicable sides
+          if (thisOrdering->getNumSidesForVarID(varID)==1) // volume
+          {
+            for (int i=0; i<numSides; i++)
+            {
+              sideOrdinals.push_back(i);
+            }
+          }
+          else
+          {
+            sideOrdinals = thisOrdering->getSidesForVarID(varID);
+          }
           volumeCache = basisCache;
         }
-        for (int sideIndex = startSideIndex; sideIndex <= endSideIndex; sideIndex++ ) {
-          int numPoints = volumeCache->getPhysicalCubaturePointsForSide(sideIndex).dimension(1);
+        for (int sideOrdinal : sideOrdinals ) {
+          int numPoints = volumeCache->getPhysicalCubaturePointsForSide(sideOrdinal).dimension(1);
 
           if (thisFluxOrTrace) {
-            if (! thisOrdering->hasBasisEntry(varID, sideIndex)) continue;
-            basis = thisOrdering->getBasis(varID,sideIndex);
+            if (! thisOrdering->hasBasisEntry(varID, sideOrdinal)) continue;
+            basis = thisOrdering->getBasis(varID,sideOrdinal);
           } else {
             basis = thisOrdering->getBasis(varID);
           }
@@ -310,14 +318,14 @@ namespace Camellia {
           ltValueDim[1] = basisCardinality;
           ltValueDim[2] = numPoints;
           ltValues.resize(ltValueDim);
-          BasisCachePtr sideBasisCache = volumeCache->getSideBasisCache(sideIndex);
+          BasisCachePtr sideBasisCache = volumeCache->getSideBasisCache(sideOrdinal);
           bool applyCubatureWeights = true;
           bool naturalBoundaryValuesOnly = false; // DO include volume summands restricted to boundary
           this->values(ltValues, varID, basis, sideBasisCache, applyCubatureWeights, naturalBoundaryValuesOnly);
           if ( this->termType() == FLUX ) {
             multiplyFluxValuesByParity(ltValues, sideBasisCache);
           }
-          vector<int> varDofIndices = thisFluxOrTrace ? thisOrdering->getDofIndices(varID,sideIndex)
+          vector<int> varDofIndices = thisFluxOrTrace ? thisOrdering->getDofIndices(varID,sideOrdinal)
           : thisOrdering->getDofIndices(varID);
           // compute integrals:
           for (int cellIndex = 0; cellIndex<numCells; cellIndex++) {
@@ -340,8 +348,8 @@ namespace Camellia {
   //                    valueOnSide(cellIndex,basisOrdinal) += ltValues(cellIndex,basisOrdinal,ptIndex);
   //                  }
   //                }
-  //                cout << "TLinearTerm<Scalar>::integrate: For cellID 0 on side " << sideIndex << ": " << valueOnSide(0,0) << endl;
-  //                cout << "TLinearTerm<Scalar>::integrate: For cellID 0 on side " << sideIndex << ", ltValues:\n";
+  //                cout << "TLinearTerm<Scalar>::integrate: For cellID 0 on side " << sideOrdinal << ": " << valueOnSide(0,0) << endl;
+  //                cout << "TLinearTerm<Scalar>::integrate: For cellID 0 on side " << sideOrdinal << ", ltValues:\n";
   //                for (int ptIndex = 0; ptIndex < numPoints; ptIndex++) {
   //                  cout << ptIndex << ": " << ltValues(0,0,ptIndex) << endl;
   //                }
@@ -609,10 +617,11 @@ namespace Camellia {
       // (u + du, v + dv) - (u,v) = (u + du, dv) + (du, v)
       int numSides = basisCache->cellTopology()->getSideCount();
       for (int sideIndex=0; sideIndex<numSides; sideIndex++) {
+        BasisCachePtr sideCache = basisCache->getSideBasisCache(sideIndex);
         // (u + du, dv)
-        integrate(valuesCrsMatrix, valuesFC, otherBoundaryOnly, otherOrdering, thisPtr, thisOrdering, basisCache->getSideBasisCache(sideIndex));
+        integrate(valuesCrsMatrix, valuesFC, otherBoundaryOnly, otherOrdering, thisPtr, thisOrdering, sideCache);
         // (du, v)
-        integrate(valuesCrsMatrix, valuesFC, otherNonBoundaryOnly, otherOrdering, thisBoundaryOnly, thisOrdering, basisCache->getSideBasisCache(sideIndex));
+        integrate(valuesCrsMatrix, valuesFC, otherNonBoundaryOnly, otherOrdering, thisBoundaryOnly, thisOrdering, sideCache);
       }
     }
   }

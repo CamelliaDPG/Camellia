@@ -74,6 +74,39 @@ namespace {
     }
   }
 
+  void testSpaceTimeIntegrateByPartsInTime(CellTopoPtr spaceTopo, FunctionPtr f, Teuchos::FancyOStream &out, bool &success)
+  {
+    /* Use the fact that
+       (df/dt, 1)_K = < f, n_t >_dK - (f, 0) = < f, n_t >_dK
+     */
+    CellTopoPtr spaceTimeTopo = CellTopology::cellTopology(spaceTopo, 1);
+    int cubatureDegree = 2;
+    bool createSideCache = true;
+    double spaceNodeScaling = 0.5;
+    double spaceNodeTranslation = 0.5; // scale, then translate
+    BasisCachePtr spaceTimeBasisCache = BasisCache::basisCacheForReferenceCell(spaceTimeTopo, cubatureDegree, createSideCache);
+    FieldContainer<double> physicalNodesSpaceTime = getScaledTranslatedRefNodes(spaceTimeTopo, spaceNodeScaling, spaceNodeTranslation);
+    double t0 = 0.0, t1 = 1.0;
+    setTemporalNodes(spaceTimeTopo,physicalNodesSpaceTime,t0,t1);
+    physicalNodesSpaceTime.resize(1,physicalNodesSpaceTime.dimension(0),physicalNodesSpaceTime.dimension(1));
+    spaceTimeBasisCache->setPhysicalCellNodes(physicalNodesSpaceTime, vector<GlobalIndexType>(), createSideCache);
+
+    FunctionPtr n_spacetime = Function::normalSpaceTime();
+    
+    double lhs_integral = f->dt()->integrate(spaceTimeBasisCache);
+    double rhs_integral = (f * n_spacetime->t())->integrate(spaceTimeBasisCache);
+    
+    double diff = abs(lhs_integral-rhs_integral);
+    double tol = 1e-14;
+    
+    TEST_COMPARE(diff, <, tol);
+    if (diff >= tol)
+    {
+      out << "lhs_integral: " << lhs_integral << endl;
+      out << "rhs_integral: " << rhs_integral << endl;
+    }
+  }
+  
   void testSpaceTimeIntegralOfSpatiallyVaryingFunction(CellTopoPtr spaceTopo, FunctionPtr f_spatial, Teuchos::FancyOStream &out, bool &success) {
     CellTopoPtr spaceTimeTopo = CellTopology::cellTopology(spaceTopo, 1);
     int cubatureDegree = 2;
@@ -206,6 +239,29 @@ namespace {
     FunctionPtr y = Function::yn(1);
     FunctionPtr z = Function::zn(1);
     testSpaceTimeIntegralOfSpatiallyVaryingFunction(CellTopology::tetrahedron(), x * y * z, out, success);
+  }
+  
+  TEUCHOS_UNIT_TEST( Function, SpaceTimeIntegrationByPartsInTimeLine )
+  {
+    FunctionPtr x = Function::xn(1);
+    FunctionPtr t = Function::tn(1);
+    testSpaceTimeIntegrateByPartsInTime(CellTopology::line(), x*t, out, success);
+  }
+  
+  TEUCHOS_UNIT_TEST( Function, SpaceTimeIntegrationByPartsInTimeQuad )
+  {
+    FunctionPtr x = Function::xn(1);
+    FunctionPtr y = Function::yn(1);
+    FunctionPtr t = Function::tn(1);
+    testSpaceTimeIntegrateByPartsInTime(CellTopology::quad(), x*y*t, out, success);
+  }
+  
+  TEUCHOS_UNIT_TEST( Function, SpaceTimeIntegrationByPartsInTimeTriangle )
+  {
+    FunctionPtr x = Function::xn(1);
+    FunctionPtr y = Function::yn(1);
+    FunctionPtr t = Function::tn(1);
+    testSpaceTimeIntegrateByPartsInTime(CellTopology::triangle(), x*y*t, out, success);
   }
   
   TEUCHOS_UNIT_TEST( Function, SpaceTimeNormalLine )

@@ -858,18 +858,45 @@ namespace Camellia {
                            bool sumInto) {
     TEUCHOS_TEST_FOR_EXCEPTION(_rank != 0, std::invalid_argument, "can only integrate scalar functions.");
     int numCells = cellIntegrals.dimension(0);
-    int numPoints = basisCache->getPhysicalCubaturePoints().dimension(1);
-  //  cout << "integrate: basisCache->getPhysicalCubaturePoints():\n" << basisCache->getPhysicalCubaturePoints();
-    Intrepid::FieldContainer<Scalar> values(numCells,numPoints);
-    this->values(values,basisCache);
-    if ( !sumInto ) {
+    if ( !sumInto )
+    {
       cellIntegrals.initialize(0);
     }
+    
+    if (this->boundaryValueOnly() && ! basisCache->isSideCache() )
+    {
+      int sideCount = basisCache->cellTopology()->getSideCount();
+      for (int sideOrdinal=0; sideOrdinal<sideCount; sideOrdinal++)
+      {
+        BasisCachePtr sideCache = basisCache->getSideBasisCache(sideOrdinal);
+        int numPoints = sideCache->getPhysicalCubaturePoints().dimension(1);
+        Intrepid::FieldContainer<Scalar> values(numCells,numPoints);
+        this->values(values,sideCache);
+        
+        Intrepid::FieldContainer<double> *weightedMeasures = &sideCache->getWeightedMeasures();
+        for (int cellIndex=0; cellIndex<numCells; cellIndex++)
+        {
+          for (int ptIndex=0; ptIndex<numPoints; ptIndex++)
+          {
+            cellIntegrals(cellIndex) += values(cellIndex,ptIndex) * (*weightedMeasures)(cellIndex,ptIndex);
+          }
+        }
+      }
+    }
+    else
+    {
+      int numPoints = basisCache->getPhysicalCubaturePoints().dimension(1);
+    //  cout << "integrate: basisCache->getPhysicalCubaturePoints():\n" << basisCache->getPhysicalCubaturePoints();
+      Intrepid::FieldContainer<Scalar> values(numCells,numPoints);
+      this->values(values,basisCache);
 
-    Intrepid::FieldContainer<double> *weightedMeasures = &basisCache->getWeightedMeasures();
-    for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
-      for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
-        cellIntegrals(cellIndex) += values(cellIndex,ptIndex) * (*weightedMeasures)(cellIndex,ptIndex);
+      Intrepid::FieldContainer<double> *weightedMeasures = &basisCache->getWeightedMeasures();
+      for (int cellIndex=0; cellIndex<numCells; cellIndex++)
+      {
+        for (int ptIndex=0; ptIndex<numPoints; ptIndex++)
+        {
+          cellIntegrals(cellIndex) += values(cellIndex,ptIndex) * (*weightedMeasures)(cellIndex,ptIndex);
+        }
       }
     }
   }
@@ -934,7 +961,6 @@ namespace Camellia {
     set<GlobalIndexType> cellIDs = mesh->cellIDsInPartition();
     for (set<GlobalIndexType>::iterator cellIDIt = cellIDs.begin(); cellIDIt != cellIDs.end(); cellIDIt++) {
       BasisCachePtr basisCache = BasisCache::basisCacheForCell(mesh, *cellIDIt, testVsTest, cubatureDegreeEnrichment);
-
       if ( this->boundaryValueOnly() ) {
         ElementTypePtr elemType = mesh->getElementType(*cellIDIt);
         int numSides = elemType->cellTopoPtr->getSideCount();

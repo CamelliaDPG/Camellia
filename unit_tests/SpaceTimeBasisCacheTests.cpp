@@ -12,26 +12,54 @@
 #include "CellTopology.h"
 #include "SpaceTimeBasisCache.h"
 #include "PoissonFormulation.h"
+#include "TensorBasis.h"
 
 using namespace Camellia;
 using namespace Intrepid;
 
 namespace {
   typedef Intrepid::FieldContainer<double> FC;
+  
+  void addCellDimension(FC &fc)
+  {
+    Teuchos::Array<int> dim(fc.rank());
+    fc.dimensions(dim);
+    
+    dim.insert(dim.begin(), 1);
+    fc.resize(dim);
+  }
+  
+  void stripCellDimension(FC &fc)
+  {
+    Teuchos::Array<int> dim(fc.rank());
+    fc.dimensions(dim);
+    
+    dim.erase(dim.begin());
+    fc.resize(dim);
+  }
+  
+  FieldContainer<double> getScaledTranslatedRefNodes(CellTopoPtr topo, double nodeScaling, double nodeTranslation)
+  {
+    FieldContainer<double> nodes(topo->getNodeCount(),topo->getDimension());
+    CamelliaCellTools::refCellNodesForTopology(nodes, topo);
+    for (int nodeOrdinal=0; nodeOrdinal<topo->getNodeCount(); nodeOrdinal++) {
+      for (int d=0; d<topo->getDimension(); d++)
+      {
+        nodes(nodeOrdinal,d) *= nodeScaling;
+        nodes(nodeOrdinal,d) += nodeTranslation;
+      }
+    }
+    return nodes;
+  }
 
-  MeshPtr getSpaceTimeMesh(CellTopoPtr spaceTopo, int H1Order=2, double refCellExpansionFactor=2.0, double t0=0, double t1=1) {
+  MeshPtr getSpaceTimeMesh(CellTopoPtr spaceTopo, int H1Order=2, double refCellExpansionFactor=2.0, double refCellTranslation=0.0, double t0=0, double t1=1) {
     CellTopoPtr timeTopo = CellTopology::line();
     int tensorialDegree = 1;
     CellTopoPtr tensorTopo = CellTopology::cellTopology(spaceTopo, tensorialDegree);
     
-    FC spaceNodes(spaceTopo->getNodeCount(), spaceTopo->getDimension());
+    FC spaceNodes = getScaledTranslatedRefNodes(spaceTopo, refCellExpansionFactor, refCellTranslation);
     FC timeNodes(timeTopo->getNodeCount(), timeTopo->getDimension());
     
-    CamelliaCellTools::refCellNodesForTopology(spaceNodes, spaceTopo);
-    // stretch the spaceNodes:
-    for (int i=0; i<spaceNodes.size(); i++) {
-      spaceNodes[i] *= refCellExpansionFactor;
-    }
     // time will go from t0 to t1:
     timeNodes(0,0) = t0;
     timeNodes(1,0) = t1;
@@ -58,15 +86,183 @@ namespace {
     return mesh;
   }
   
+  void testBasisTransformation(BasisPtr spaceTimeBasis, Camellia::EOperator op,
+                               CellTopoPtr spaceTopo, Teuchos::FancyOStream &out, bool &success)
+  {
+    /* three things to try:
+     1. volume values
+     2. spatial sides
+     3. temporal sides
+     */
+    
+    Camellia::EOperator spaceOp, timeOp;
+    
+    if (op == OP_DT)
+    {
+      spaceOp = OP_VALUE;
+      timeOp = OP_DX;
+    }
+    else
+    {
+     // every other op that interests us will split like this:
+      spaceOp = op;
+      timeOp = OP_VALUE;
+    }
+    Intrepid::EOperator spaceOpForSizing;
+    switch (spaceOp) {
+        // rank-increasing:
+      case OP_GRAD:
+        spaceOpForSizing = Intrepid::OPERATOR_GRAD;
+        // rank-decreasing:
+      case OP_DIV:
+      case OP_X:
+      case OP_Y:
+      case OP_Z:
+        spaceOpForSizing = Intrepid::OPERATOR_DIV;
+        // rank-switching (0 to 1, 1 to 0) in 2D, rank-preserving in 3D:
+      case OP_CURL:
+        spaceOpForSizing = Intrepid::OPERATOR_CURL;
+        break;
+        // rank-preserving:
+      default:
+        spaceOpForSizing = Intrepid::OPERATOR_VALUE;
+        break;
+    }
+    Intrepid::EOperator timeOpForSizing = Intrepid::OPERATOR_VALUE;
+    
+    bool createSideCaches = true;
+    
+    typedef Camellia::TensorBasis<double, FieldContainer<double> > TensorBasis;
+    TensorBasis* tensorBasis = dynamic_cast<TensorBasis*>(spaceTimeBasis.get());
+    
+    BasisPtr spatialBasis = tensorBasis->getSpatialBasis();
+    BasisPtr temporalBasis = tensorBasis->getTemporalBasis();
+
+    vector<FC> tensorComponentNodes;
+    int cubatureDegree = tensorBasis->getDegree();
+    double scaling = 0.5;
+    double translation = 0.5;
+    FC spaceNodes = getScaledTranslatedRefNodes(spaceTopo, scaling, translation);
+    tensorComponentNodes.push_back(spaceNodes);
+    addCellDimension(spaceNodes);
+    BasisCachePtr spatialBasisCache = BasisCache::basisCacheForCellTopology(spaceTopo, cubatureDegree, spaceNodes, createSideCaches);
+    
+    double t0 = 0.0, t1 = 0.5; // 0.25 scaling in time --> different from space (better test)
+    FC timeNodes(2,1);
+    timeNodes(0,0) = t0;
+    timeNodes(1,0) = t1;
+    tensorComponentNodes.push_back(timeNodes);
+    addCellDimension(timeNodes);
+    CellTopoPtr timeTopo = CellTopology::line();
+    BasisCachePtr temporalBasisCache = BasisCache::basisCacheForCellTopology(timeTopo, cubatureDegree, timeNodes, createSideCaches);
+    
+    CellTopoPtr spaceTimeTopo = CellTopology::cellTopology(spaceTopo, 1);
+    FC spaceTimeNodes(spaceTimeTopo->getNodeCount(), spaceTimeTopo->getDimension());
+    spaceTimeTopo->initializeNodes(tensorComponentNodes, spaceTimeNodes);
+    addCellDimension(spaceTimeNodes);
+    BasisCachePtr spaceTimeBasisCache = BasisCache::basisCacheForCellTopology(spaceTimeTopo, cubatureDegree,
+                                                                              spaceTimeNodes, createSideCaches);
+    
+    // Volume test:
+    FC spaceValues = *spatialBasisCache->getTransformedValues(spatialBasis, spaceOp);
+    FC timeValues = *temporalBasisCache->getTransformedValues(temporalBasis, timeOp);
+    FC spaceTimeValues = *spaceTimeBasisCache->getTransformedValues(spaceTimeBasis, op);
+    
+    // strip off cell dimensions
+    stripCellDimension(spaceValues);
+    stripCellDimension(timeValues);
+    stripCellDimension(spaceTimeValues);
+    
+    FC expectedValues = spaceTimeValues;
+    expectedValues.initialize(0.0); // zero out
+    vector<FC> componentValues = {spaceValues, timeValues};
+    vector<Intrepid::EOperator> componentOps = {spaceOpForSizing, timeOpForSizing};
+    tensorBasis->getTensorValues(expectedValues, componentValues, componentOps);
+
+    FC lineRefNodes(2,1);
+    CamelliaCellTools::refCellNodesForTopology(lineRefNodes, CellTopology::line());
+    
+    double tol = 1e-14;
+    TEST_COMPARE_FLOATING_ARRAYS(expectedValues, spaceTimeValues, tol);
+
+    for (int sideOrdinal = 0; sideOrdinal<spaceTimeTopo->getSideCount(); sideOrdinal++)
+    {
+      BasisCachePtr spaceTimeSideCache = spaceTimeBasisCache->getSideBasisCache(sideOrdinal);
+      if (spaceTimeTopo->sideIsSpatial(sideOrdinal))
+      {
+        // we get the time values just as usual for spatial sides:
+        FC timeValues = *temporalBasisCache->getTransformedValues(temporalBasis, timeOp);
+        
+        // we get the side values from the spatial side cache:
+        int spatialSideOrdinal = spaceTimeTopo->getSpatialComponentSideOrdinal(sideOrdinal);
+        BasisCachePtr spatialSideCache = spatialBasisCache->getSideBasisCache(spatialSideOrdinal);
+        bool useVolumeCoords = true; // because spatialBasis is defined on the spatial volume, and we're restricting to the side
+        FC spaceValues = *spatialSideCache->getTransformedValues(spatialBasis, spaceOp, useVolumeCoords);
+        
+        FC spaceTimeValues = *spaceTimeSideCache->getTransformedValues(spaceTimeBasis, op, useVolumeCoords);
+        
+        // strip off cell dimensions
+        stripCellDimension(spaceValues);
+        stripCellDimension(timeValues);
+        stripCellDimension(spaceTimeValues);
+        
+        expectedValues = spaceTimeValues;
+        expectedValues.initialize(0.0); // zero out
+        componentValues = {spaceValues, timeValues};
+        tensorBasis->getTensorValues(expectedValues, componentValues, componentOps);
+        TEST_COMPARE_FLOATING_ARRAYS(expectedValues, spaceTimeValues, tol);
+      }
+      else
+      {
+         // we get the spatial values just as usual for the temporal sides:
+        FC spaceValues = *spatialBasisCache->getTransformedValues(spatialBasis, spaceOp);
+        BasisCachePtr onePointTemporalBasisCache = BasisCache::basisCacheForCellTopology(timeTopo, cubatureDegree,
+                                                                                         timeNodes, createSideCaches);
+        unsigned temporalNodeOrdinal = spaceTimeTopo->getTemporalComponentSideOrdinal(sideOrdinal);
+        FC temporalRefPoint(1,1);
+        temporalRefPoint(0,0) = lineRefNodes(temporalNodeOrdinal,0);
+        FC temporalCubatureWeight(1);
+        temporalCubatureWeight(0) = 1.0;
+        onePointTemporalBasisCache->setRefCellPoints(temporalRefPoint, temporalCubatureWeight);
+        FC timeValues = *onePointTemporalBasisCache->getTransformedValues(temporalBasis, timeOp);
+        
+//        { // DEBUGGING
+//          if (timeOp==OP_DX) {
+//            FC refTimeValues = *onePointTemporalBasisCache->getValues(temporalBasis, timeOp);
+//            cout << "OP_DT, reference timeValues:\n" << refTimeValues;
+//            cout << "OP_DT, transformed timeValues:\n" << timeValues;
+//          }
+//        }
+        
+        bool useVolumeCoords = true; // because spaceTimeBasis is defined on the volume, and we're restricting to the side
+        FC spaceTimeValues = *spaceTimeSideCache->getTransformedValues(spaceTimeBasis, op, useVolumeCoords);
+        
+        stripCellDimension(spaceValues);
+        stripCellDimension(timeValues);
+        stripCellDimension(spaceTimeValues);
+        
+        expectedValues = spaceTimeValues;
+        expectedValues.initialize(0.0); // zero out
+        componentValues = {spaceValues, timeValues};
+        tensorBasis->getTensorValues(expectedValues, componentValues, componentOps);
+        TEST_COMPARE_FLOATING_ARRAYS(expectedValues, spaceTimeValues, tol);
+      }
+    }
+  }
+  
   void testSpaceTimeSideMeasure(CellTopoPtr spaceTopo, Teuchos::FancyOStream &out, bool &success)
   {
     int H1Order = 2;
     int delta_k = 1;
     bool createSideCaches = true;
+    double refCellExpansionFactor = 0.5;
+    double refCellTranslation = 0.5;
     BasisCachePtr spatialBasisCache = BasisCache::basisCacheForReferenceCell(spaceTopo, H1Order*2+delta_k, createSideCaches);
+    FC spaceNodes = getScaledTranslatedRefNodes(spaceTopo, refCellExpansionFactor, refCellTranslation);
+    spaceNodes.resize(1,spaceNodes.dimension(0),spaceNodes.dimension(1));
+    spatialBasisCache->setPhysicalCellNodes(spaceNodes, vector<GlobalIndexType>(), createSideCaches);
     
 //    cout << "spatial cubature weights:\n" << spatialBasisCache->getCubatureWeights();
-    
     double t0 = 0.0, t1 = 1.0;
     double temporalExtent = t1-t0; // 1.0
     double spatialMeasure = spatialBasisCache->getCellMeasures()(0); // measure of the reference-space cell
@@ -75,8 +271,7 @@ namespace {
       spatialSideMeasures.push_back(spatialBasisCache->getSideBasisCache(sideOrdinal)->getCellMeasures()(0));
     }
     
-    double refCellExpansionFactor = 1.0;
-    MeshPtr singleCellSpaceTimeMesh = getSpaceTimeMesh(spaceTopo,H1Order,refCellExpansionFactor,t0,t1); // reference spatial topo x (0,1) in time
+    MeshPtr singleCellSpaceTimeMesh = getSpaceTimeMesh(spaceTopo,H1Order,refCellExpansionFactor,refCellTranslation,t0,t1); // reference spatial topo x (0,1) in time
     IndexType cellIndex = 0;
     CellPtr cell = singleCellSpaceTimeMesh->getTopology()->getCell(cellIndex);
     
@@ -305,7 +500,62 @@ namespace {
     transformedSpaceTimeValuesExpected.initialize(0.0);
     tensorBasis->getTensorValues(transformedSpaceTimeValuesExpected, componentValues, intrepidOperatorTypes);
   }
+  
+  TEUCHOS_UNIT_TEST( SpaceTimeBasisCache, TransformedBasisValuesLine )
+  {
+    CellTopoPtr spaceTopo = CellTopology::line();
+    CellTopoPtr spaceTimeTopo = CellTopology::cellTopology(spaceTopo, 1);
+    int H1Order = 2;
+    BasisPtr basis = BasisFactory::basisFactory()->getBasis(H1Order, spaceTimeTopo, Camellia::FUNCTION_SPACE_HGRAD,
+                                                            H1Order, Camellia::FUNCTION_SPACE_HGRAD);
+    Camellia::EOperator op = OP_VALUE;
+    out << "testing with op = OP_VALUE\n";
+    testBasisTransformation(basis,op,spaceTopo,out,success);
+    op = OP_DT;
+    out << "testing with op = OP_DT\n";
+    testBasisTransformation(basis,op,spaceTopo,out,success);
+    op = OP_DX; // shouldn't do OP_GRAD yet because still 1D in space
+    out << "testing with op = OP_DX\n";
+    testBasisTransformation(basis,op,spaceTopo,out,success);
+  }
+  
+  TEUCHOS_UNIT_TEST( SpaceTimeBasisCache, TransformedBasisValuesQuadHGRAD )
+  {
+    CellTopoPtr spaceTopo = CellTopology::quad();
+    CellTopoPtr spaceTimeTopo = CellTopology::cellTopology(spaceTopo, 1);
+    int H1Order = 2;
+    BasisPtr basis = BasisFactory::basisFactory()->getBasis(H1Order, spaceTimeTopo, Camellia::FUNCTION_SPACE_HGRAD,
+                                                            H1Order, Camellia::FUNCTION_SPACE_HGRAD);
+    Camellia::EOperator op = OP_VALUE;
+    out << "testing with op = OP_VALUE\n";
+    testBasisTransformation(basis,op,spaceTopo,out,success);
+    op = OP_DT;
+    out << "testing with op = OP_DT\n";
+    testBasisTransformation(basis,op,spaceTopo,out,success);
+    op = OP_GRAD;
+    out << "testing with op = OP_GRAD\n";
+    testBasisTransformation(basis,op,spaceTopo,out,success);
+  }
 
+  TEUCHOS_UNIT_TEST( SpaceTimeBasisCache, TransformedBasisValuesQuadHDIV )
+  {
+    CellTopoPtr spaceTopo = CellTopology::quad();
+    CellTopoPtr spaceTimeTopo = CellTopology::cellTopology(spaceTopo, 1);
+    int H1Order = 2;
+    BasisPtr basis = BasisFactory::basisFactory()->getBasis(H1Order, spaceTimeTopo, Camellia::FUNCTION_SPACE_HDIV,
+                                                            H1Order, Camellia::FUNCTION_SPACE_HGRAD);
+    Camellia::EOperator op = OP_VALUE;
+    out << "testing with op = OP_VALUE\n";
+    testBasisTransformation(basis,op,spaceTopo,out,success);
+    op = OP_DT;
+    out << "testing with op = OP_DT\n";
+    testBasisTransformation(basis,op,spaceTopo,out,success);
+    op = OP_DIV;
+    out << "testing with op = OP_DIV\n";
+    testBasisTransformation(basis,op,spaceTopo,out,success);
+  }
+
+  
   TEUCHOS_UNIT_TEST( SpaceTimeBasisCache, VolumeMeasureLine )
   {
     CellTopoPtr spaceTopo = CellTopology::line();

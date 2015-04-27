@@ -362,4 +362,6 @@ void ExactSolution<Scalar>::setSolutionFunction( VarPtr var, TFunctionPtr<Scalar
   _exactFunctions[var->ID()] = varFunction;
 }
 
-template class ExactSolution<double>;
+namespace Camellia {
+  template class ExactSolution<double>;
+}
