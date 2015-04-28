@@ -250,7 +250,7 @@ void TMesh<Scalar>::setBilinearForm( TBFPtr<Scalar> bf) {
 }
 
 template <typename Scalar>
-Boundary<Scalar> & TMesh<Scalar>::boundary() {
+Boundary & TMesh<Scalar>::boundary() {
   return _boundary;
 }
 

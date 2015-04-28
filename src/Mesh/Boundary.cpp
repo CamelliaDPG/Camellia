@@ -57,19 +57,16 @@
 using namespace Intrepid;
 using namespace Camellia;
 
-template <typename Scalar>
-Boundary<Scalar>::Boundary() {
-  _mesh = Teuchos::rcp((TMesh<Scalar>*)NULL);
+Boundary::Boundary() {
+  _mesh = Teuchos::rcp((TMesh<double>*)NULL);
 }
 
-template <typename Scalar>
-void Boundary<Scalar>::setMesh(TMeshPtr<Scalar> mesh) {
+void Boundary::setMesh(TMeshPtr<double> mesh) {
   _mesh = mesh;
   buildLookupTables();
 }
 
-template <typename Scalar>
-void Boundary<Scalar>::buildLookupTables() {
+void Boundary::buildLookupTables() {
   _boundaryElements.clear();
 
   int rank = Teuchos::GlobalMPISession::getRank();
@@ -95,7 +92,7 @@ void Boundary<Scalar>::buildLookupTables() {
 }
 
 template <typename Scalar>
-void Boundary<Scalar>::bcsToImpose(FieldContainer<GlobalIndexType> &globalIndices, FieldContainer<Scalar> &globalValues, TBC<Scalar> &bc,
+void Boundary::bcsToImpose(FieldContainer<GlobalIndexType> &globalIndices, FieldContainer<Scalar> &globalValues, TBC<Scalar> &bc,
                            set<GlobalIndexType> &globalIndexFilter, DofInterpreter* dofInterpreter, const Epetra_Map *globalDofMap) {
 //  int rank = Teuchos::GlobalMPISession::getRank();
 //  ostringstream rankLabel;
@@ -130,7 +127,7 @@ void Boundary<Scalar>::bcsToImpose(FieldContainer<GlobalIndexType> &globalIndice
 }
 
 template <typename Scalar>
-void Boundary<Scalar>::bcsToImpose(FieldContainer<GlobalIndexType> &globalIndices,
+void Boundary::bcsToImpose(FieldContainer<GlobalIndexType> &globalIndices,
                            FieldContainer<Scalar> &globalValues, TBC<Scalar> &bc,
                            DofInterpreter* dofInterpreter, const Epetra_Map *globalDofMap) {
 //  int rank = Teuchos::GlobalMPISession::getRank();
@@ -203,7 +200,7 @@ void Boundary<Scalar>::bcsToImpose(FieldContainer<GlobalIndexType> &globalIndice
 }
 
 template <typename Scalar>
-void Boundary<Scalar>::bcsToImpose( map<  GlobalIndexType, Scalar > &globalDofIndicesAndValues, TBC<Scalar> &bc,
+void Boundary::bcsToImpose( map<  GlobalIndexType, Scalar > &globalDofIndicesAndValues, TBC<Scalar> &bc,
                            GlobalIndexType cellID, set < pair<int, unsigned> > &singletons,
                            DofInterpreter* dofInterpreter, const Epetra_Map *globalDofMap) {
   CellPtr cell = _mesh->getTopology()->getCell(cellID);
@@ -364,5 +361,11 @@ void Boundary<Scalar>::bcsToImpose( map<  GlobalIndexType, Scalar > &globalDofIn
 }
 
 namespace Camellia {
-  template class Boundary<double>;
+  template void Boundary::bcsToImpose(Intrepid::FieldContainer<GlobalIndexType> &globalIndices, Intrepid::FieldContainer<double> &globalValues,
+                     TBC<double> &bc, set<GlobalIndexType>& globalIndexFilter,
+                     DofInterpreter* dofInterpreter, const Epetra_Map *globalDofMap);
+  template void Boundary::bcsToImpose(Intrepid::FieldContainer<GlobalIndexType> &globalIndices, Intrepid::FieldContainer<double> &globalValues, TBC<double> &bc,
+                     DofInterpreter* dofInterpreter, const Epetra_Map *globalDofMap);
+  template void Boundary::bcsToImpose( map< GlobalIndexType, double > &globalDofIndicesAndValues, TBC<double> &bc, GlobalIndexType cellID,
+                     set < pair<int, unsigned> > &singletons, DofInterpreter* dofInterpreter, const Epetra_Map *globalDofMap);
 }

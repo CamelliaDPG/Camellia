@@ -94,7 +94,7 @@ class MeshPartitionPolicy;
 
     TBFPtr<Scalar> _bilinearForm;
     // for now, just a uniform mesh, with a rectangular boundary and elements.
-    Boundary<Scalar> _boundary;
+    Boundary _boundary;
 
     // private constructor to use during deepCopy();
     TMesh(MeshTopologyPtr meshTopology, Teuchos::RCP<GlobalDofAssignment> gda, TBFPtr<Scalar> bf,
@@ -206,7 +206,7 @@ class MeshPartitionPolicy;
 
     vector< Teuchos::RCP< ElementType > > elementTypes(PartitionIndexType partitionNumber=-1); // returns *all* elementTypes by default
 
-    Boundary<Scalar> &boundary();
+    Boundary &boundary();
 
     GlobalIndexType cellID(ElementTypePtr elemTypePtr, IndexType cellIndex, PartitionIndexType partitionNumber=-1);
 

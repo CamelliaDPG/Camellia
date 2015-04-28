@@ -50,18 +50,19 @@
 #include "Epetra_Map.h"
 
 namespace Camellia {
-  template <typename Scalar>
   class Boundary {
     set< pair< GlobalIndexType, unsigned > > _boundaryElements; // first arg is cellID, second arg is sideOrdinal
 
-    TMeshPtr<Scalar> _mesh;
+    TMeshPtr<double> _mesh;
     bool _imposeSingletonBCsOnThisRank; // this only governs singleton BCs which don't specify a vertex number.  Otherwise, the rule is that a singleton BC is imposed on the rank that owns the active cell of least ID that contains the vertex.
   public:
     Boundary();
-    void setMesh(TMeshPtr<Scalar> mesh);
+    void setMesh(TMeshPtr<double> mesh);
+    template <typename Scalar>
     void bcsToImpose(Intrepid::FieldContainer<GlobalIndexType> &globalIndices, Intrepid::FieldContainer<Scalar> &globalValues,
                      TBC<Scalar> &bc, set<GlobalIndexType>& globalIndexFilter,
                      DofInterpreter* dofInterpreter, const Epetra_Map *globalDofMap);
+    template <typename Scalar>
     void bcsToImpose(Intrepid::FieldContainer<GlobalIndexType> &globalIndices, Intrepid::FieldContainer<Scalar> &globalValues, TBC<Scalar> &bc,
                      DofInterpreter* dofInterpreter, const Epetra_Map *globalDofMap);
     //! Determine values to impose on a single cell.
@@ -69,12 +70,11 @@ namespace Camellia {
      \param
      singletons - (In) pairs are (trialID, vertexOrdinalInCell).
      */
+    template <typename Scalar>
     void bcsToImpose( map< GlobalIndexType, Scalar > &globalDofIndicesAndValues, TBC<Scalar> &bc, GlobalIndexType cellID,
                      set < pair<int, unsigned> > &singletons, DofInterpreter* dofInterpreter, const Epetra_Map *globalDofMap);
     void buildLookupTables();
   };
-
-  extern template class Boundary<double>;
 }
 
 #endif
