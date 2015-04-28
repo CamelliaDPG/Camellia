@@ -489,8 +489,17 @@ void TSolution<Scalar>::populateStiffnessAndLoad() {
   for (elemTypeIt = elementTypes.begin(); elemTypeIt != elementTypes.end(); elemTypeIt++) {
     //cout << "Solution: elementType loop, iteration: " << elemTypeNumber++ << endl;
     ElementTypePtr elemTypePtr = *(elemTypeIt);
-    BasisCachePtr basisCache = Teuchos::rcp(new BasisCache(elemTypePtr, _mesh, false, _cubatureEnrichmentDegree));
-    BasisCachePtr ipBasisCache = Teuchos::rcp(new BasisCache(elemTypePtr,_mesh,true, _cubatureEnrichmentDegree));
+    
+    Intrepid::FieldContainer<double> myPhysicalCellNodesForType = _mesh->physicalCellNodes(elemTypePtr);
+    Intrepid::FieldContainer<double> myCellSideParitiesForType = _mesh->cellSideParities(elemTypePtr);
+    int totalCellsForType = myPhysicalCellNodesForType.dimension(0);
+    int startCellIndexForBatch = 0;
+    
+    if (totalCellsForType == 0) continue;
+    // if we get here, there is at least one, so we find a sample cellID to help us set up prototype BasisCaches:
+    GlobalIndexType sampleCellID = _mesh->cellID(elemTypePtr, 0, rank);
+    BasisCachePtr basisCache = BasisCache::basisCacheForCell(_mesh,sampleCellID,false,_cubatureEnrichmentDegree);
+    BasisCachePtr ipBasisCache = BasisCache::basisCacheForCell(_mesh,sampleCellID,true,_cubatureEnrichmentDegree);
 
     DofOrderingPtr trialOrderingPtr = elemTypePtr->trialOrderPtr;
     DofOrderingPtr testOrderingPtr = elemTypePtr->testOrderPtr;
@@ -500,11 +509,7 @@ void TSolution<Scalar>::populateStiffnessAndLoad() {
     maxCellBatch = max( maxCellBatch, MIN_BATCH_SIZE_IN_CELLS );
     //cout << "numTestDofs^2:" << numTestDofs*numTestDofs << endl;
     //cout << "maxCellBatch: " << maxCellBatch << endl;
-
-    Intrepid::FieldContainer<double> myPhysicalCellNodesForType = _mesh->physicalCellNodes(elemTypePtr);
-    Intrepid::FieldContainer<double> myCellSideParitiesForType = _mesh->cellSideParities(elemTypePtr);
-    int totalCellsForType = myPhysicalCellNodesForType.dimension(0);
-    int startCellIndexForBatch = 0;
+    
     Teuchos::Array<int> nodeDimensions, parityDimensions;
     myPhysicalCellNodesForType.dimensions(nodeDimensions);
     myCellSideParitiesForType.dimensions(parityDimensions);
