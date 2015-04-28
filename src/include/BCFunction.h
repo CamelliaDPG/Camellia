@@ -4,7 +4,6 @@
 #include "TypeDefs.h"
 
 #include "Intrepid_FieldContainer.hpp"
-#include "Projector.h"
 
 #include "Function.h"
 

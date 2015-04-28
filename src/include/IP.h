@@ -26,7 +26,7 @@ namespace Camellia {
 
     bool _isLegacySubclass;
   protected:
-    Teuchos::RCP<BF> _bilinearForm; // for legacy subclasses (originally subclasses of DPGInnerProduct)
+    TBFPtr<Scalar> _bilinearForm; // for legacy subclasses (originally subclasses of DPGInnerProduct)
   public:
     TIP();
 

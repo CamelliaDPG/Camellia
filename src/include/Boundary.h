@@ -53,11 +53,11 @@ namespace Camellia {
   class Boundary {
     set< pair< GlobalIndexType, unsigned > > _boundaryElements; // first arg is cellID, second arg is sideOrdinal
 
-    Mesh *_mesh;
+    MeshPtr _mesh;
     bool _imposeSingletonBCsOnThisRank; // this only governs singleton BCs which don't specify a vertex number.  Otherwise, the rule is that a singleton BC is imposed on the rank that owns the active cell of least ID that contains the vertex.
   public:
     Boundary();
-    void setMesh(Mesh* mesh);
+    void setMesh(MeshPtr mesh);
     template <typename Scalar>
     void bcsToImpose(Intrepid::FieldContainer<GlobalIndexType> &globalIndices, Intrepid::FieldContainer<Scalar> &globalValues,
                      TBC<Scalar> &bc, set<GlobalIndexType>& globalIndexFilter,

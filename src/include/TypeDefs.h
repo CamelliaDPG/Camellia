@@ -1,9 +1,4 @@
 //
-//  TypeDefs.h
-//  Camellia
-//
-//  Created by Truman Ellis on 3/27/15.
-//
 
 #ifndef TypeDefs_h
 #define TypeDefs_h
@@ -38,7 +33,7 @@ namespace Camellia {
 	class BasisFactory;
 	class Cell;
 	class DofOrdering;
-	class DofOrderingFactory;
+  class DofOrderingFactory;
 	class Element;
 	class ElementType;
 	class GlobalDofAssignment;
@@ -48,8 +43,6 @@ namespace Camellia {
 	class MeshTopology;
   class ParameterFunction;
   class RefinementPattern;
-	class RefinementStrategy;
-	class RieszRep;
 	class SpatialFilter;
 	class Var;
 	class VarFactory;
@@ -65,7 +58,11 @@ namespace Camellia {
   template <typename Scalar=double>
     class TLinearTerm;
   template <typename Scalar=double>
+    class TRefinementStrategy;
+  template <typename Scalar=double>
     class TRHS;
+  template <typename Scalar=double>
+    class TRieszRep;
   template <typename Scalar=double>
     class TSolution;
   template <typename Scalar=double>
@@ -75,7 +72,7 @@ namespace Camellia {
 	typedef Teuchos::RCP<BasisFactory> BasisFactoryPtr;
 	typedef Teuchos::RCP<Cell> CellPtr;
 	typedef Teuchos::RCP<DofOrdering> DofOrderingPtr;
-	typedef Teuchos::RCP<DofOrderingFactory> DofOrderingFactoryPtr;
+  typedef Teuchos::RCP<DofOrderingFactory> DofOrderingFactoryPtr;
 	typedef Teuchos::RCP<Element> ElementPtr;
 	typedef Teuchos::RCP<ElementType> ElementTypePtr;
 	typedef Teuchos::RCP<GlobalDofAssignment> GlobalDofAssignmentPtr;
@@ -84,39 +81,55 @@ namespace Camellia {
 	typedef Teuchos::RCP<MeshTopology> MeshTopologyPtr;
 	typedef Teuchos::RCP<ParameterFunction> ParameterFunctionPtr;
   typedef Teuchos::RCP<RefinementPattern> RefinementPatternPtr;
-	typedef Teuchos::RCP<RefinementStrategy> RefinementStrategyPtr;
-	typedef Teuchos::RCP<RieszRep> RieszRepPtr;
 	typedef Teuchos::RCP<SpatialFilter> SpatialFilterPtr;
 	typedef Teuchos::RCP<Var> VarPtr;
+	typedef Teuchos::RCP<VarFactory> VarFactoryPtr;
   // templates
   template <typename Scalar>
     using TBCPtr = Teuchos::RCP<TBC<Scalar> >;
   typedef TBC<double> BC;
   typedef TBCPtr<double> BCPtr;
+
   template <typename Scalar>
     using TBFPtr = Teuchos::RCP<TBF<Scalar> >;
   typedef TBF<double> BF;
   typedef TBFPtr<double> BFPtr;
+
   template <typename Scalar>
     using TIPPtr = Teuchos::RCP<TIP<Scalar> >;
   typedef TIP<double> IP;
   typedef TIPPtr<double> IPPtr;
+
   template <typename Scalar>
     using TFunctionPtr = Teuchos::RCP<TFunction<Scalar> >;
   typedef TFunction<double> Function;
   typedef TFunctionPtr<double> FunctionPtr;
+
   template <typename Scalar>
     using TLinearTermPtr = Teuchos::RCP<TLinearTerm<Scalar> >;
   typedef TLinearTerm<double> LinearTerm;
   typedef TLinearTermPtr<double> LinearTermPtr;
+
+  template <typename Scalar>
+    using TRefinementStrategyPtr = Teuchos::RCP<TRefinementStrategy<Scalar> >;
+  typedef TRefinementStrategy<double> RefinementStrategy;
+  typedef TRefinementStrategyPtr<double> RefinementStrategyPtr;
+
   template <typename Scalar>
     using TRHSPtr = Teuchos::RCP<TRHS<Scalar> >;
   typedef TRHS<double> RHS;
   typedef TRHSPtr<double> RHSPtr;
+
+  template <typename Scalar>
+    using TRieszRepPtr = Teuchos::RCP<TRieszRep<Scalar> >;
+  typedef TRieszRep<double> RieszRep;
+  typedef TRieszRepPtr<double> RieszRepPtr;
+
   template <typename Scalar>
     using TSolutionPtr = Teuchos::RCP<TSolution<Scalar> >;
   typedef TSolution<double> Solution;
   typedef TSolutionPtr<double> SolutionPtr;
+
   template <typename Scalar>
     using TSolverPtr = Teuchos::RCP<TSolver<Scalar> >;
   typedef TSolver<double> Solver;

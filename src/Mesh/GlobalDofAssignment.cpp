@@ -448,7 +448,7 @@ void GlobalDofAssignment::setPartitions(FieldContainer<GlobalIndexType> &partiti
 
   TEUCHOS_TEST_FOR_EXCEPTION(partitionedMesh.dimension(0) > partitionCount, std::invalid_argument,
                              "Number of partitions exceeds the maximum MPI rank; this is unsupported");
-  
+
   //  cout << "determineActiveElements(): there are "  << activeCellIDs.size() << " active elements.\n";
   _partitions.clear();
   _partitionForCellID.clear();

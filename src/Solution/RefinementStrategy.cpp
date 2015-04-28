@@ -15,7 +15,8 @@
 
 using namespace Camellia;
 
-RefinementStrategy::RefinementStrategy( TSolutionPtr<double> solution, double relativeEnergyThreshold, double min_h,
+template <typename Scalar>
+TRefinementStrategy<Scalar>::TRefinementStrategy( TSolutionPtr<Scalar> solution, double relativeEnergyThreshold, double min_h,
                                         int max_p, bool preferPRefinements) {
   _solution = solution;
   _relativeEnergyThreshold = relativeEnergyThreshold;
@@ -28,10 +29,11 @@ RefinementStrategy::RefinementStrategy( TSolutionPtr<double> solution, double re
   _max_p = max_p;
 }
 
-RefinementStrategy::RefinementStrategy( MeshPtr mesh, LinearTermPtr residual, IPPtr ip,
+template <typename Scalar>
+TRefinementStrategy<Scalar>::TRefinementStrategy( MeshPtr mesh, TLinearTermPtr<Scalar> residual, TIPPtr<Scalar> ip,
                                         double relativeEnergyThreshold, double min_h,
                                         int max_p, bool preferPRefinements) {
-  _rieszRep = Teuchos::rcp( new RieszRep(mesh, ip, residual) );
+  _rieszRep = Teuchos::rcp( new TRieszRep<Scalar>(mesh, ip, residual) );
   _relativeEnergyThreshold = relativeEnergyThreshold;
   _enforceOneIrregularity = true;
   _reportPerCellErrors = false;
@@ -42,27 +44,33 @@ RefinementStrategy::RefinementStrategy( MeshPtr mesh, LinearTermPtr residual, IP
   _max_p = max_p;
 }
 
-void RefinementStrategy::setMinH(double value) {
+template <typename Scalar>
+void TRefinementStrategy<Scalar>::setMinH(double value) {
   _min_h = value;
 }
 
-void RefinementStrategy::setAnisotropicThreshhold(double value){
+template <typename Scalar>
+void TRefinementStrategy<Scalar>::setAnisotropicThreshhold(double value){
   _anisotropicThreshhold = value;
 }
 
-void RefinementStrategy::setMaxAspectRatio(double value){
+template <typename Scalar>
+void TRefinementStrategy<Scalar>::setMaxAspectRatio(double value){
   _maxAspectRatio = value;
 }
 
-void RefinementStrategy::setEnforceOneIrregularity(bool value) {
+template <typename Scalar>
+void TRefinementStrategy<Scalar>::setEnforceOneIrregularity(bool value) {
   _enforceOneIrregularity = value;
 }
 
-void RefinementStrategy::setReportPerCellErrors(bool value) {
+template <typename Scalar>
+void TRefinementStrategy<Scalar>::setReportPerCellErrors(bool value) {
   _reportPerCellErrors = value;
 }
 
-MeshPtr RefinementStrategy::mesh() {
+template <typename Scalar>
+MeshPtr TRefinementStrategy<Scalar>::mesh() {
   MeshPtr mesh;
   if (_solution.get()) {
     mesh = _solution->mesh();
@@ -72,7 +80,8 @@ MeshPtr RefinementStrategy::mesh() {
   return mesh;
 }
 
-void RefinementStrategy::refine(bool printToConsole) {
+template <typename Scalar>
+void TRefinementStrategy<Scalar>::refine(bool printToConsole) {
   // greedy refinement algorithm - mark cells for refinement
   MeshPtr mesh = this->mesh();
 
@@ -172,7 +181,8 @@ void RefinementStrategy::refine(bool printToConsole) {
   }
 }
 
-void RefinementStrategy::getCellsAboveErrorThreshhold(vector<GlobalIndexType> &cellsToRefine){
+template <typename Scalar>
+void TRefinementStrategy<Scalar>::getCellsAboveErrorThreshhold(vector<GlobalIndexType> &cellsToRefine){
   // greedy refinement algorithm - mark cells for refinement
   MeshPtr mesh = this->mesh();
   const map<GlobalIndexType, double>* energyError = &(_solution->globalEnergyError());
@@ -204,16 +214,19 @@ void RefinementStrategy::getCellsAboveErrorThreshhold(vector<GlobalIndexType> &c
 }
 
 // defaults to h-refinement
-void RefinementStrategy::refineCells(vector<GlobalIndexType> &cellIDs) {
+template <typename Scalar>
+void TRefinementStrategy<Scalar>::refineCells(vector<GlobalIndexType> &cellIDs) {
   MeshPtr mesh = this->mesh();
   hRefineCells(mesh, cellIDs);
 }
 
-void RefinementStrategy::pRefineCells(Teuchos::RCP<Mesh> mesh, const vector<GlobalIndexType> &cellIDs) {
+template <typename Scalar>
+void TRefinementStrategy<Scalar>::pRefineCells(MeshPtr mesh, const vector<GlobalIndexType> &cellIDs) {
   mesh->pRefine(cellIDs);
 }
 
-void RefinementStrategy::hRefineCells(Teuchos::RCP<Mesh> mesh, const vector<GlobalIndexType> &cellIDs) {
+template <typename Scalar>
+void TRefinementStrategy<Scalar>::hRefineCells(MeshPtr mesh, const vector<GlobalIndexType> &cellIDs) {
   map< Camellia::CellTopologyKey, vector<GlobalIndexType> > topologyCellsToRefine;
 
   MeshTopologyPtr meshTopology = mesh->getTopology();
@@ -240,7 +253,8 @@ void RefinementStrategy::hRefineCells(Teuchos::RCP<Mesh> mesh, const vector<Glob
 //  mesh->hRefine(hexCellsToRefine,RefinementPattern::regularRefinementPatternHexahedron());
 }
 
-void RefinementStrategy::hRefineUniformly(Teuchos::RCP<Mesh> mesh) {
+template <typename Scalar>
+void TRefinementStrategy<Scalar>::hRefineUniformly(MeshPtr mesh) {
   vector<GlobalIndexType> cellsToRefine;
   vector< Teuchos::RCP< Element > > activeElements = mesh->activeElements();
   for (vector< Teuchos::RCP< Element > >::iterator activeElemIt = activeElements.begin();
@@ -251,7 +265,8 @@ void RefinementStrategy::hRefineUniformly(Teuchos::RCP<Mesh> mesh) {
   hRefineCells(mesh, cellsToRefine);
 }
 
-RefinementResults RefinementStrategy::setResults(GlobalIndexType numElements, GlobalIndexType numDofs, double totalEnergyError) {
+template <typename Scalar>
+RefinementResults TRefinementStrategy<Scalar>::setResults(GlobalIndexType numElements, GlobalIndexType numDofs, double totalEnergyError) {
   RefinementResults solnResults;
   solnResults.numElements = numElements;
   solnResults.numDofs = numDofs;
@@ -260,7 +275,8 @@ RefinementResults RefinementStrategy::setResults(GlobalIndexType numElements, Gl
 }
 
 // without variable anisotropic threshholding
-void RefinementStrategy::refine(bool printToConsole, map<GlobalIndexType,double> &xErr, map<GlobalIndexType,double> &yErr) {
+template <typename Scalar>
+void TRefinementStrategy<Scalar>::refine(bool printToConsole, map<GlobalIndexType,double> &xErr, map<GlobalIndexType,double> &yErr) {
   // greedy refinement algorithm - mark cells for refinement
   MeshPtr mesh = this->mesh();
 
@@ -286,7 +302,8 @@ void RefinementStrategy::refine(bool printToConsole, map<GlobalIndexType,double>
   }
 }
 
-void RefinementStrategy::refine(bool printToConsole, map<GlobalIndexType,double> &xErr, map<GlobalIndexType,double> &yErr, map<GlobalIndexType,double> &threshMap) {
+template <typename Scalar>
+void TRefinementStrategy<Scalar>::refine(bool printToConsole, map<GlobalIndexType,double> &xErr, map<GlobalIndexType,double> &yErr, map<GlobalIndexType,double> &threshMap) {
   map<GlobalIndexType,bool> hRefMap;
   vector<ElementPtr> elems = _solution->mesh()->activeElements();
   for (vector<ElementPtr>::iterator elemIt = elems.begin();elemIt!=elems.end();elemIt++){
@@ -296,7 +313,8 @@ void RefinementStrategy::refine(bool printToConsole, map<GlobalIndexType,double>
 }
 
 // with variable anisotropic threshholding and p-refinement specification
-void RefinementStrategy::refine(bool printToConsole, map<GlobalIndexType,double> &xErr, map<GlobalIndexType,double> &yErr, map<GlobalIndexType,double> &threshMap, map<GlobalIndexType, bool> useHRefMap) {
+template <typename Scalar>
+void TRefinementStrategy<Scalar>::refine(bool printToConsole, map<GlobalIndexType,double> &xErr, map<GlobalIndexType,double> &yErr, map<GlobalIndexType,double> &threshMap, map<GlobalIndexType, bool> useHRefMap) {
 
   // greedy refinement algorithm - mark cells for refinement
   MeshPtr mesh = this->mesh();
@@ -349,7 +367,8 @@ void RefinementStrategy::refine(bool printToConsole, map<GlobalIndexType,double>
   }
 }
 
-void RefinementStrategy::getAnisotropicCellsToRefine(map<GlobalIndexType,double> &xErr, map<GlobalIndexType,double> &yErr, vector<GlobalIndexType> &xCells, vector<GlobalIndexType> &yCells, vector<GlobalIndexType> &regCells){
+template <typename Scalar>
+void TRefinementStrategy<Scalar>::getAnisotropicCellsToRefine(map<GlobalIndexType,double> &xErr, map<GlobalIndexType,double> &yErr, vector<GlobalIndexType> &xCells, vector<GlobalIndexType> &yCells, vector<GlobalIndexType> &regCells){
   map<GlobalIndexType,double> threshMap;
   vector<ElementPtr> elems = _solution->mesh()->activeElements();
   for (vector<ElementPtr>::iterator elemIt = elems.begin();elemIt!=elems.end();elemIt++){
@@ -359,7 +378,8 @@ void RefinementStrategy::getAnisotropicCellsToRefine(map<GlobalIndexType,double>
 }
 
 // anisotropy with variable threshholding
-void RefinementStrategy::getAnisotropicCellsToRefine(map<GlobalIndexType,double> &xErr, map<GlobalIndexType,double> &yErr, vector<GlobalIndexType> &xCells, vector<GlobalIndexType> &yCells, vector<GlobalIndexType> &regCells, map<GlobalIndexType,double> &threshMap){
+template <typename Scalar>
+void TRefinementStrategy<Scalar>::getAnisotropicCellsToRefine(map<GlobalIndexType,double> &xErr, map<GlobalIndexType,double> &yErr, vector<GlobalIndexType> &xCells, vector<GlobalIndexType> &yCells, vector<GlobalIndexType> &regCells, map<GlobalIndexType,double> &threshMap){
   map<GlobalIndexType,double> energyError = _solution->globalEnergyError();
   MeshPtr mesh = this->mesh();
   vector<GlobalIndexType> cellsToRefine;
@@ -398,7 +418,8 @@ void RefinementStrategy::getAnisotropicCellsToRefine(map<GlobalIndexType,double>
 }
 
 // enforcing one-irregularity with anisotropy - ONLY FOR QUADS RIGHT NOW.  ALSO NOT PARALLELIZED
-bool RefinementStrategy::enforceAnisotropicOneIrregularity(vector<GlobalIndexType> &xCells, vector<GlobalIndexType> &yCells){
+template <typename Scalar>
+bool TRefinementStrategy<Scalar>::enforceAnisotropicOneIrregularity(vector<GlobalIndexType> &xCells, vector<GlobalIndexType> &yCells){
   bool success = true;
   MeshPtr mesh = this->mesh();
   int maxIters = mesh->numActiveElements(); // should not refine more than the number of elements...
@@ -467,7 +488,8 @@ bool RefinementStrategy::enforceAnisotropicOneIrregularity(vector<GlobalIndexTyp
   return success;
 }
 
-double RefinementStrategy::getEnergyError(int refinementNumber) {
+template <typename Scalar>
+double TRefinementStrategy<Scalar>::getEnergyError(int refinementNumber) {
   if (refinementNumber < _results.size()) {
     return _results[refinementNumber].totalEnergyError;
   } else {
@@ -475,7 +497,8 @@ double RefinementStrategy::getEnergyError(int refinementNumber) {
   }
 }
 
-GlobalIndexType RefinementStrategy::getNumElements(int refinementNumber) {
+template <typename Scalar>
+GlobalIndexType TRefinementStrategy<Scalar>::getNumElements(int refinementNumber) {
   if (refinementNumber < _results.size()) {
     return _results[refinementNumber].numElements;
   } else {
@@ -483,10 +506,15 @@ GlobalIndexType RefinementStrategy::getNumElements(int refinementNumber) {
   }
 }
 
-GlobalIndexType RefinementStrategy::getNumDofs(int refinementNumber) {
+template <typename Scalar>
+GlobalIndexType TRefinementStrategy<Scalar>::getNumDofs(int refinementNumber) {
   if (refinementNumber < _results.size()) {
     return _results[refinementNumber].numDofs;
   } else {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "refinementNumber out of bounds!");
   }
+}
+
+namespace Camellia {
+  template class TRefinementStrategy<double>;
 }

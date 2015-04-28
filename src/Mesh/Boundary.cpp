@@ -38,7 +38,6 @@
 #include "Intrepid_FunctionSpaceTools.hpp"
 #include "Mesh.h"
 #include "Function.h"
-#include "Projector.h"
 #include "VarFactory.h"
 
 #include "BasisFactory.h"
@@ -59,10 +58,10 @@ using namespace Intrepid;
 using namespace Camellia;
 
 Boundary::Boundary() {
-  _mesh = NULL;
+  _mesh = Teuchos::rcp((Mesh*)NULL);
 }
 
-void Boundary::setMesh(Mesh* mesh) {
+void Boundary::setMesh(MeshPtr mesh) {
   _mesh = mesh;
   buildLookupTables();
 }
@@ -126,9 +125,6 @@ void Boundary::bcsToImpose(FieldContainer<GlobalIndexType> &globalIndices, Field
 //    cout << "BC: " << globalIndices(i) << " = " << globalValues(i) << endl;
   }
 }
-
-template void Boundary::bcsToImpose<double>(FieldContainer<GlobalIndexType> &globalIndices, FieldContainer<double> &globalValues, TBC<double> &bc,
-                           set<GlobalIndexType> &globalIndexFilter, DofInterpreter* dofInterpreter, const Epetra_Map *globalDofMap);
 
 template <typename Scalar>
 void Boundary::bcsToImpose(FieldContainer<GlobalIndexType> &globalIndices,
@@ -203,10 +199,6 @@ void Boundary::bcsToImpose(FieldContainer<GlobalIndexType> &globalIndices,
   //cout << "bcsToImpose: globalIndices:" << endl << globalIndices;
 }
 
-template void Boundary::bcsToImpose<double>(FieldContainer<GlobalIndexType> &globalIndices,
-                           FieldContainer<double> &globalValues, TBC<double> &bc,
-                           DofInterpreter* dofInterpreter, const Epetra_Map *globalDofMap);
-
 template <typename Scalar>
 void Boundary::bcsToImpose( map<  GlobalIndexType, Scalar > &globalDofIndicesAndValues, TBC<Scalar> &bc,
                            GlobalIndexType cellID, set < pair<int, unsigned> > &singletons,
@@ -214,8 +206,8 @@ void Boundary::bcsToImpose( map<  GlobalIndexType, Scalar > &globalDofIndicesAnd
   CellPtr cell = _mesh->getTopology()->getCell(cellID);
 
   // define a couple of important inner products:
-  IPPtr ipL2 = Teuchos::rcp( new IP );
-  IPPtr ipH1 = Teuchos::rcp( new IP );
+  TIPPtr<Scalar> ipL2 = Teuchos::rcp( new TIP<Scalar> );
+  TIPPtr<Scalar> ipH1 = Teuchos::rcp( new TIP<Scalar> );
   VarFactory varFactory;
   VarPtr trace = varFactory.traceVar("trace");
   VarPtr flux = varFactory.traceVar("flux");
@@ -225,11 +217,10 @@ void Boundary::bcsToImpose( map<  GlobalIndexType, Scalar > &globalDofIndicesAnd
   ElementTypePtr elemType = _mesh->getElementType(cellID);
   DofOrderingPtr trialOrderingPtr = elemType->trialOrderPtr;
   vector< int > trialIDs = _mesh->bilinearForm()->trialIDs();
-  Teuchos::RCP<Mesh> meshPtr = Teuchos::rcp(_mesh,false); // create an RCP that doesn't own the memory....
 
   vector<unsigned> boundarySides = cell->boundarySides();
   if (boundarySides.size() > 0) {
-    BasisCachePtr basisCache = BasisCache::basisCacheForCell(meshPtr, cellID);
+    BasisCachePtr basisCache = BasisCache::basisCacheForCell(_mesh, cellID);
     for (vector< int >::iterator trialIt = trialIDs.begin(); trialIt != trialIDs.end(); trialIt++) {
       int trialID = *(trialIt);
       bool isTrace = _mesh->bilinearForm()->functionSpaceForTrial(trialID) == Camellia::FUNCTION_SPACE_HGRAD;
@@ -369,6 +360,12 @@ void Boundary::bcsToImpose( map<  GlobalIndexType, Scalar > &globalDofIndicesAnd
   }
 }
 
-template void Boundary::bcsToImpose( map<  GlobalIndexType, double > &globalDofIndicesAndValues, TBC<double> &bc,
-                           GlobalIndexType cellID, set < pair<int, unsigned> > &singletons,
-                           DofInterpreter* dofInterpreter, const Epetra_Map *globalDofMap);
+namespace Camellia {
+  template void Boundary::bcsToImpose(Intrepid::FieldContainer<GlobalIndexType> &globalIndices, Intrepid::FieldContainer<double> &globalValues,
+                     TBC<double> &bc, set<GlobalIndexType>& globalIndexFilter,
+                     DofInterpreter* dofInterpreter, const Epetra_Map *globalDofMap);
+  template void Boundary::bcsToImpose(Intrepid::FieldContainer<GlobalIndexType> &globalIndices, Intrepid::FieldContainer<double> &globalValues, TBC<double> &bc,
+                     DofInterpreter* dofInterpreter, const Epetra_Map *globalDofMap);
+  template void Boundary::bcsToImpose( map< GlobalIndexType, double > &globalDofIndicesAndValues, TBC<double> &bc, GlobalIndexType cellID,
+                     set < pair<int, unsigned> > &singletons, DofInterpreter* dofInterpreter, const Epetra_Map *globalDofMap);
+}

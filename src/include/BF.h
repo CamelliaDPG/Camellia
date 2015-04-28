@@ -69,16 +69,16 @@ namespace Camellia {
 
     virtual bool isFluxOrTrace(int trialID);
 
-    IPPtr graphNorm(double weightForL2TestTerms = 1.0);
-    IPPtr graphNorm(const map<int, double> &varWeights, double weightForL2TestTerms = 1.0);
-    IPPtr l2Norm();
-    IPPtr naiveNorm(int spaceDim);
+    TIPPtr<Scalar> graphNorm(double weightForL2TestTerms = 1.0);
+    TIPPtr<Scalar> graphNorm(const map<int, double> &varWeights, double weightForL2TestTerms = 1.0);
+    TIPPtr<Scalar> l2Norm();
+    TIPPtr<Scalar> naiveNorm(int spaceDim);
 
     string displayString();
 
     virtual void localStiffnessMatrixAndRHS(Intrepid::FieldContainer<Scalar> &localStiffness, Intrepid::FieldContainer<Scalar> &rhsVector,
-                                            IPPtr ip, BasisCachePtr ipBasisCache,
-                                            RHSPtr rhs,  BasisCachePtr basisCache);
+                                            TIPPtr<Scalar> ip, BasisCachePtr ipBasisCache,
+                                            TRHSPtr<Scalar> rhs,  BasisCachePtr basisCache);
 
     virtual int optimalTestWeights(Intrepid::FieldContainer<Scalar> &optimalTestWeights, Intrepid::FieldContainer<Scalar> &innerProductMatrix,
                                    ElementTypePtr elemType, Intrepid::FieldContainer<double> &cellSideParities,

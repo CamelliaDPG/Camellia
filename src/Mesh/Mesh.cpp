@@ -74,7 +74,64 @@ using namespace std;
 
 map<int,int> Mesh::_emptyIntIntMap;
 
-Mesh::Mesh(MeshTopologyPtr meshTopology, BFPtr bilinearForm, vector<int> H1Order, int pToAddTest,
+Mesh::Mesh(MeshTopologyPtr meshTopology, VarFactory varFactory, vector<int> H1Order, int pToAddTest,
+           map<int,int> trialOrderEnhancements, map<int,int> testOrderEnhancements,
+           MeshPartitionPolicyPtr partitionPolicy) : DofInterpreter(Teuchos::rcp(this,false)) {
+
+  _meshTopology = meshTopology;
+
+  DofOrderingFactoryPtr dofOrderingFactoryPtr = Teuchos::rcp( new DofOrderingFactory(varFactory, trialOrderEnhancements,testOrderEnhancements) );
+  _enforceMBFluxContinuity = false;
+  //  MeshPartitionPolicyPtr partitionPolicy = Teuchos::rcp( new MeshPartitionPolicy() );
+  if ( partitionPolicy.get() == NULL )
+    partitionPolicy = Teuchos::rcp( new ZoltanMeshPartitionPolicy() );
+
+  MeshPtr thisPtr = Teuchos::rcp(this, false);
+  _gda = Teuchos::rcp( new GDAMinimumRule(thisPtr, varFactory, dofOrderingFactoryPtr,
+                                          partitionPolicy, H1Order, pToAddTest));
+  _gda->repartitionAndMigrate();
+
+  _varFactory = varFactory;
+  _boundary.setMesh(Teuchos::rcp(this,false));
+
+  _meshTopology->setGlobalDofAssignment(_gda.get());
+
+  // Teuchos::RCP< RefinementHistory > refHist = Teuchos::rcp( &_refinementHistory, false );
+  // cout << "Has ownership " << refHist.has_ownership() << endl;
+  // this->registerObserver(refHist);
+  this->registerObserver(Teuchos::rcp( &_refinementHistory, false ));
+}
+
+Mesh::Mesh(MeshTopologyPtr meshTopology, VarFactory varFactory, int H1Order, int pToAddTest,
+           map<int,int> trialOrderEnhancements, map<int,int> testOrderEnhancements,
+           MeshPartitionPolicyPtr partitionPolicy) : DofInterpreter(Teuchos::rcp(this,false)) {
+
+  _meshTopology = meshTopology;
+
+  DofOrderingFactoryPtr dofOrderingFactoryPtr = Teuchos::rcp( new DofOrderingFactory(varFactory, trialOrderEnhancements,testOrderEnhancements) );
+  _enforceMBFluxContinuity = false;
+//  MeshPartitionPolicyPtr partitionPolicy = Teuchos::rcp( new MeshPartitionPolicy() );
+  if ( partitionPolicy.get() == NULL )
+    partitionPolicy = Teuchos::rcp( new ZoltanMeshPartitionPolicy() );
+
+  MeshPtr thisPtr = Teuchos::rcp(this, false);
+  _gda = Teuchos::rcp( new GDAMinimumRule(thisPtr, varFactory, dofOrderingFactoryPtr,
+                                          partitionPolicy, H1Order, pToAddTest));
+  _gda->repartitionAndMigrate();
+
+  _varFactory = varFactory;
+  _boundary.setMesh(Teuchos::rcp(this,false));
+
+  _meshTopology->setGlobalDofAssignment(_gda.get());
+
+  // Teuchos::RCP< RefinementHistory > refHist = Teuchos::rcp( &_refinementHistory, false );
+  // cout << "Has ownership " << refHist.has_ownership() << endl;
+  // this->registerObserver(refHist);
+  this->registerObserver(Teuchos::rcp( &_refinementHistory, false ));
+}
+
+// Deprecated constructor
+Mesh::Mesh(MeshTopologyPtr meshTopology, TBFPtr<double> bilinearForm, vector<int> H1Order, int pToAddTest,
            map<int,int> trialOrderEnhancements, map<int,int> testOrderEnhancements,
            MeshPartitionPolicyPtr partitionPolicy) : DofInterpreter(Teuchos::rcp(this,false)) {
 
@@ -92,7 +149,8 @@ Mesh::Mesh(MeshTopologyPtr meshTopology, BFPtr bilinearForm, vector<int> H1Order
   _gda->repartitionAndMigrate();
 
   setBilinearForm(bilinearForm);
-  _boundary.setMesh(this);
+  _varFactory = bilinearForm->varFactory();
+  _boundary.setMesh(Teuchos::rcp(this,false));
 
   _meshTopology->setGlobalDofAssignment(_gda.get());
 
@@ -102,7 +160,8 @@ Mesh::Mesh(MeshTopologyPtr meshTopology, BFPtr bilinearForm, vector<int> H1Order
   this->registerObserver(Teuchos::rcp( &_refinementHistory, false ));
 }
 
-Mesh::Mesh(MeshTopologyPtr meshTopology, BFPtr bilinearForm, int H1Order, int pToAddTest,
+// Deprecated constructor
+Mesh::Mesh(MeshTopologyPtr meshTopology, TBFPtr<double> bilinearForm, int H1Order, int pToAddTest,
            map<int,int> trialOrderEnhancements, map<int,int> testOrderEnhancements,
            MeshPartitionPolicyPtr partitionPolicy) : DofInterpreter(Teuchos::rcp(this,false)) {
 
@@ -120,7 +179,8 @@ Mesh::Mesh(MeshTopologyPtr meshTopology, BFPtr bilinearForm, int H1Order, int pT
   _gda->repartitionAndMigrate();
 
   setBilinearForm(bilinearForm);
-  _boundary.setMesh(this);
+  _varFactory = bilinearForm->varFactory();
+  _boundary.setMesh(Teuchos::rcp(this,false));
 
   _meshTopology->setGlobalDofAssignment(_gda.get());
 
@@ -131,7 +191,7 @@ Mesh::Mesh(MeshTopologyPtr meshTopology, BFPtr bilinearForm, int H1Order, int pT
 }
 
 Mesh::Mesh(const vector<vector<double> > &vertices, vector< vector<unsigned> > &elementVertices,
-           Teuchos::RCP< BF > bilinearForm, int H1Order, int pToAddTest, bool useConformingTraces,
+           TBFPtr<double> bilinearForm, int H1Order, int pToAddTest, bool useConformingTraces,
            map<int,int> trialOrderEnhancements, map<int,int> testOrderEnhancements, vector<PeriodicBCPtr> periodicBCs) : DofInterpreter(Teuchos::rcp(this,false)) {
 
 //  cout << "in legacy mesh constructor, periodicBCs size is " << periodicBCs.size() << endl;
@@ -151,6 +211,7 @@ Mesh::Mesh(const vector<vector<double> > &vertices, vector< vector<unsigned> > &
   _meshTopology->setGlobalDofAssignment(_gda.get());
 
   setBilinearForm(bilinearForm);
+  _varFactory = bilinearForm->varFactory();
 
   _useConformingTraces = useConformingTraces;
   _usePatchBasis = false;
@@ -174,7 +235,7 @@ Mesh::Mesh(const vector<vector<double> > &vertices, vector< vector<unsigned> > &
     }
   }
 
-  _boundary.setMesh(this);
+  _boundary.setMesh(Teuchos::rcp(this,false));
 
   _pToAddToTest = pToAddTest;
 
@@ -185,7 +246,22 @@ Mesh::Mesh(const vector<vector<double> > &vertices, vector< vector<unsigned> > &
 }
 
 // private constructor for use by deepCopy()
-Mesh::Mesh(MeshTopologyPtr meshTopology, Teuchos::RCP<GlobalDofAssignment> gda, BFPtr bf,
+Mesh::Mesh(MeshTopologyPtr meshTopology, Teuchos::RCP<GlobalDofAssignment> gda, VarFactory varFactory,
+           int pToAddToTest, bool useConformingTraces, bool usePatchBasis, bool enforceMBFluxContinuity) : DofInterpreter(Teuchos::rcp(this,false)) {
+  _meshTopology = meshTopology;
+  _gda = gda;
+  _varFactory = varFactory;
+  _pToAddToTest = pToAddToTest;
+  _useConformingTraces = useConformingTraces;
+  _usePatchBasis = usePatchBasis;
+  _enforceMBFluxContinuity = enforceMBFluxContinuity;
+
+  _boundary.setMesh(Teuchos::rcp(this,false));
+
+}
+
+// deprecated private constructor for use by deepCopy()
+Mesh::Mesh(MeshTopologyPtr meshTopology, Teuchos::RCP<GlobalDofAssignment> gda, TBFPtr<double> bf,
            int pToAddToTest, bool useConformingTraces, bool usePatchBasis, bool enforceMBFluxContinuity) : DofInterpreter(Teuchos::rcp(this,false)) {
   _meshTopology = meshTopology;
   _gda = gda;
@@ -195,7 +271,7 @@ Mesh::Mesh(MeshTopologyPtr meshTopology, Teuchos::RCP<GlobalDofAssignment> gda, 
   _usePatchBasis = usePatchBasis;
   _enforceMBFluxContinuity = enforceMBFluxContinuity;
 
-  _boundary.setMesh(this);
+  _boundary.setMesh(Teuchos::rcp(this,false));
 
 }
 
@@ -229,11 +305,11 @@ ElementPtr Mesh::ancestralNeighborForSide(ElementPtr elem, int sideIndex, int &e
   return getElement(neighborInfo.first);
 }
 
-BFPtr Mesh::bilinearForm() {
+TBFPtr<double> Mesh::bilinearForm() {
   return _bilinearForm;
 }
 
-void Mesh::setBilinearForm( BFPtr bf) {
+void Mesh::setBilinearForm( TBFPtr<double> bf) {
   // must match the original in terms of variable IDs, etc...
   _bilinearForm = bf;
 }
@@ -883,7 +959,8 @@ void Mesh::registerObserver(Teuchos::RCP<RefinementObserver> observer) {
   _registeredObservers.push_back(observer);
 }
 
-void Mesh::registerSolution(TSolutionPtr<double> solution) {
+template <typename Scalar>
+void Mesh::registerSolution(TSolutionPtr<Scalar> solution) {
   _gda->registerSolution(solution);
 }
 
@@ -902,7 +979,8 @@ void Mesh::unregisterObserver(Teuchos::RCP<RefinementObserver> mesh) {
   this->unregisterObserver(mesh.get());
 }
 
-void Mesh::unregisterSolution(TSolutionPtr<double> solution) {
+template <typename Scalar>
+void Mesh::unregisterSolution(TSolutionPtr<Scalar> solution) {
   _gda->unregisterSolution(solution);
 }
 
@@ -1357,7 +1435,7 @@ void Mesh::saveToHDF5(string filename)
 #endif
 
 
-Teuchos::RCP<Mesh> Mesh::readMsh(string filePath, Teuchos::RCP< BF > bilinearForm, int H1Order, int pToAdd)
+MeshPtr Mesh::readMsh(string filePath, TBFPtr<double> bilinearForm, int H1Order, int pToAdd)
 {
   int rank = Teuchos::GlobalMPISession::getRank();
   if (rank==0) cout << "Warning: Mesh::readMsh() deprecated.  Use MeshFactory::readMesh() instead.\n";
@@ -1365,7 +1443,7 @@ Teuchos::RCP<Mesh> Mesh::readMsh(string filePath, Teuchos::RCP< BF > bilinearFor
   return MeshFactory::readMesh(filePath, bilinearForm, H1Order, pToAdd);
 }
 
-Teuchos::RCP<Mesh> Mesh::readTriangle(string filePath, Teuchos::RCP< BF > bilinearForm, int H1Order, int pToAdd)
+MeshPtr Mesh::readTriangle(string filePath, TBFPtr<double> bilinearForm, int H1Order, int pToAdd)
 {
   int rank = Teuchos::GlobalMPISession::getRank();
   if (rank==0) cout << "Warning: Mesh::readTriangle() deprecated.  Use MeshFactory::readTriangle() instead.\n";
@@ -1373,9 +1451,9 @@ Teuchos::RCP<Mesh> Mesh::readTriangle(string filePath, Teuchos::RCP< BF > biline
   return MeshFactory::readTriangle(filePath, bilinearForm, H1Order, pToAdd);
 }
 
-Teuchos::RCP<Mesh> Mesh::buildQuadMesh(const FieldContainer<double> &quadBoundaryPoints,
+MeshPtr Mesh::buildQuadMesh(const FieldContainer<double> &quadBoundaryPoints,
                                        int horizontalElements, int verticalElements,
-                                       Teuchos::RCP< BF > bilinearForm,
+                                       TBFPtr<double> bilinearForm,
                                        int H1Order, int pTest, bool triangulate, bool useConformingTraces,
                                        map<int,int> trialOrderEnhancements,
                                        map<int,int> testOrderEnhancements) {
@@ -1385,9 +1463,9 @@ Teuchos::RCP<Mesh> Mesh::buildQuadMesh(const FieldContainer<double> &quadBoundar
   return MeshFactory::buildQuadMesh(quadBoundaryPoints, horizontalElements, verticalElements, bilinearForm, H1Order, pTest, triangulate, useConformingTraces, trialOrderEnhancements, testOrderEnhancements);
 }
 
-Teuchos::RCP<Mesh> Mesh::buildQuadMeshHybrid(const FieldContainer<double> &quadBoundaryPoints,
+MeshPtr Mesh::buildQuadMeshHybrid(const FieldContainer<double> &quadBoundaryPoints,
                                              int horizontalElements, int verticalElements,
-                                             Teuchos::RCP< BF > bilinearForm,
+                                             TBFPtr<double> bilinearForm,
                                              int H1Order, int pTest, bool useConformingTraces) {
   int rank = Teuchos::GlobalMPISession::getRank();
   if (rank==0) cout << "Warning: Mesh::buildQuadMeshHybrid() deprecated.  Use MeshFactory::buildQuadMeshHybrid() instead.\n";
@@ -1405,3 +1483,7 @@ void Mesh::quadMeshCellIDs(FieldContainer<int> &cellIDs,
   MeshFactory::quadMeshCellIDs(cellIDs, horizontalElements, verticalElements, useTriangles);
 }
 
+namespace Camellia {
+  template void Mesh::registerSolution(TSolutionPtr<double> solution);
+  template void Mesh::unregisterSolution(TSolutionPtr<double> solution);
+}

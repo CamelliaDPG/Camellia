@@ -10,7 +10,6 @@
 
 #include "Intrepid_FieldContainer.hpp"
 #include "BasisCache.h"
-#include "Projector.h"
 #include "BCFunction.h"
 #include "SpatialFilter.h"
 

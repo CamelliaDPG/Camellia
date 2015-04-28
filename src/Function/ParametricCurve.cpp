@@ -334,13 +334,13 @@ void ParametricCurve::projectionBasedInterpolant(FieldContainer<double> &basisCo
     bubbleComponent = bubble->z();
     lineComponent = line->z();
   }
-  Projector::projectFunctionOntoBasis(basisCoefficients, bubbleComponent, basis1D, basisCache, ip_H1, v, vertexNodeFieldIndices);
+  Projector<double>::projectFunctionOntoBasis(basisCoefficients, bubbleComponent, basis1D, basisCache, ip_H1, v, vertexNodeFieldIndices);
 
   // the line should live in the space spanned by basis.  It would be a bit cheaper to solve a system
   // to interpolate pointwise, but since it's easy to code, we'll just do a projection.  Since the
   // exact function we're after is in the space, mathematically it amounts to the same thing.
   FieldContainer<double> linearBasisCoefficients;
-  Projector::projectFunctionOntoBasis(linearBasisCoefficients, lineComponent, basis1D, basisCache, ip_H1, v);
+  Projector<double>::projectFunctionOntoBasis(linearBasisCoefficients, lineComponent, basis1D, basisCache, ip_H1, v);
 
   //  cout << "linearBasisCoefficients:\n" << linearBasisCoefficients;
   //  cout << "basisCoefficients, before sum:\n" << basisCoefficients;

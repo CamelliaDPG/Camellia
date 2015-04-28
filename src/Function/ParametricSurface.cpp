@@ -280,7 +280,7 @@ void ParametricSurface::basisWeightsForProjectedInterpolant(FieldContainer<doubl
   basisCache->setTransformationFunction(Function::null());
 
   // project, skipping edgeNodeFieldIndices:
-  Projector::projectFunctionOntoBasis(basisCoefficients, TFunctionPtr<double>(exactSurface)-edgeInterpolant, basis, basisCache, H1, v, edgeFieldIndices);
+  Projector<double>::projectFunctionOntoBasis(basisCoefficients, TFunctionPtr<double>(exactSurface)-edgeInterpolant, basis, basisCache, H1, v, edgeFieldIndices);
 
   basisCoefficients.resize(basis->getCardinality()); // get rid of dummy numCells dimension
   // add the two sets of basis coefficients together

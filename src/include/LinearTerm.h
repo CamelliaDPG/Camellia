@@ -87,7 +87,7 @@ namespace Camellia {
      *  \param  ip        [in]  - inner product to use for the Riesz representation
      *  \param  mesh      [in]  - mesh over which to measure
      */
-    double computeNorm(IPPtr ip, MeshPtr mesh);
+    double computeNorm(TIPPtr<Scalar> ip, MeshPtr mesh);
 
     void evaluate(Intrepid::FieldContainer<Scalar> &values, TSolutionPtr<Scalar> solution, BasisCachePtr basisCache,
                   bool applyCubatureWeights = false);
@@ -133,19 +133,6 @@ namespace Camellia {
     bool isZero() const; // true if the TLinearTerm is identically zero
 
     string displayString() const; // TeX by convention
-
-    /*
-     // -------------- added by Jesse --------------------
-
-     void computeRieszRep(Teuchos::RCP<Mesh> mesh, Teuchos::RCP<IP> ip);
-     void computeRieszRHS(Teuchos::RCP<Mesh> mesh);
-     TLinearTermPtr<Scalar> rieszRep(VarPtr v);
-     double functionalNorm();
-     const map<int,double> & energyNorm(Teuchos::RCP<Mesh> mesh, Teuchos::RCP<IP> ip);
-     double energyNormTotal(Teuchos::RCP<Mesh> mesh, Teuchos::RCP<IP> ip); // global energy norm
-
-     // -------------- end of added by Jesse --------------------
-     */
 
     void addTerm(const TLinearTerm<Scalar> &a, bool overrideTypeCheck=false);
     void addTerm(TLinearTermPtr<Scalar> aPtr, bool overrideTypeCheck=false);

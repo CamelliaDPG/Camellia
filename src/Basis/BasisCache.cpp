@@ -187,7 +187,7 @@ BasisCache::BasisCache(CellTopoPtr cellTopo, int cubDegree, bool createSideCache
   init(createSideCacheToo, tensorProductTopologyMeansSpaceTime);
 }
 
-BasisCache::BasisCache(ElementTypePtr elemType, Teuchos::RCP<Mesh> mesh, bool testVsTest,
+BasisCache::BasisCache(ElementTypePtr elemType, MeshPtr mesh, bool testVsTest,
                        int cubatureDegreeEnrichment, bool tensorProductTopologyMeansSpaceTime) {
   // use testVsTest=true for test space inner product (won't create side caches, and will use higher cubDegree)
   _cellTopo = elemType->cellTopoPtr;
@@ -545,7 +545,7 @@ void BasisCache::findMaximumDegreeBasisForSides(DofOrdering &trialOrdering) {
   }
 }
 
-Teuchos::RCP<Mesh> BasisCache::mesh() {
+MeshPtr BasisCache::mesh() {
   if ( ! _isSideCache ) {
     return _mesh;
   } else {

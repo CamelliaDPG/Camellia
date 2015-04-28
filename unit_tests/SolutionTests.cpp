@@ -22,6 +22,7 @@
 #include "RHS.h"
 #include "Solution.h"
 #include "StokesVGPFormulation.h"
+#include "Projector.h"
 
 using namespace Camellia;
 using namespace Intrepid;
@@ -165,7 +166,7 @@ namespace {
         int numCells = 1;
         basisCoefficientsExpected.resize(numCells,sideBasis->getCardinality());
 
-        Projector::projectFunctionOntoBasis(basisCoefficientsExpected, f, sideBasis, sideBasisCache);
+        Projector<double>::projectFunctionOntoBasis(basisCoefficientsExpected, f, sideBasis, sideBasisCache);
 
         FieldContainer<double> basisCoefficientsActual(sideBasis->getCardinality());
 
@@ -580,37 +581,37 @@ namespace {
       TEST_COMPARE(err_L2, <, tol);
     }
   }
-  
+
   void testSaveAndLoad2D(BFPtr bf, Teuchos::FancyOStream &out, bool &success)
   {
     int H1Order = 2;
     vector<double> dimensions = {1.0, 2.0}; // 1 x 2 domain
     vector<int> elementCounts = {3, 2}; // 3 x 2 mesh
-    
+
     MeshPtr mesh = MeshFactory::rectilinearMesh(bf, dimensions, elementCounts, H1Order);
-    
+
     BCPtr bc = BC::bc();
     RHSPtr rhs = RHS::rhs();
     IPPtr ip = bf->graphNorm();
     SolutionPtr soln = Solution::solution(mesh,bc,rhs,ip);
-    
+
     string filePrefix = "SavedSolution";
     soln->save(filePrefix);
-    
+
     soln->load(bf, filePrefix);
     MeshPtr loadedMesh = soln->mesh();
     TEST_EQUALITY(loadedMesh->globalDofCount(), mesh->globalDofCount());
-    
+
     // delete the files we created
     remove((filePrefix+".soln").c_str());
     remove((filePrefix+".mesh").c_str());
-    
+
     // just to confirm that we can manipulate the loaded mesh:
     set<GlobalIndexType> cellsToRefine;
     cellsToRefine.insert(0);
     loadedMesh->pRefine(cellsToRefine);
   }
-  
+
   TEUCHOS_UNIT_TEST( Solution, SaveAndLoadPoissonConforming )
   {
     int spaceDim = 2;
@@ -618,7 +619,7 @@ namespace {
     PoissonFormulation form(spaceDim,conformingTraces);
     testSaveAndLoad2D(form.bf(), out, success);
   }
-  
+
   TEUCHOS_UNIT_TEST( Solution, SaveAndLoadStokesConforming )
   {
     int spaceDim = 2;

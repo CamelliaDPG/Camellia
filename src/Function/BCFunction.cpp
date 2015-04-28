@@ -1,6 +1,5 @@
 #include "Intrepid_FieldContainer.hpp"
 #include "BasisCache.h"
-#include "Projector.h"
 
 #include "BCFunction.h"
 #include "BC.h"

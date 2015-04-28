@@ -4,6 +4,7 @@
 #include "BC.h"
 #include "Var.h"
 #include "Function.h"
+#include "Projector.h"
 
 #include "SpatiallyFilteredFunction.h"
 
@@ -329,7 +330,7 @@ void TBC<Scalar>::coefficientsForBC(FieldContainer<double> &basisCoefficients, T
   int numFields = basis->getCardinality();
   TEUCHOS_TEST_FOR_EXCEPTION( basisCoefficients.dimension(1) != numFields, std::invalid_argument, "inconsistent basisCoefficients dimensions");
 
-  Projector::projectFunctionOntoBasisInterpolating(basisCoefficients, bcFxn, basis, sideBasisCache);
+  Projector<double>::projectFunctionOntoBasisInterpolating(basisCoefficients, bcFxn, basis, sideBasisCache);
 
 //  if (!bcFxn->isTrace()) {
 //    // L^2 projection
