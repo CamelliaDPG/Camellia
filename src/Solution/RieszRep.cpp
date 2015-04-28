@@ -57,7 +57,7 @@ TLinearTermPtr<Scalar> TRieszRep<Scalar>::getFunctional(){
 }
 
 template <typename Scalar>
-TMeshPtr<Scalar> TRieszRep<Scalar>::mesh() {
+MeshPtr TRieszRep<Scalar>::mesh() {
   return _mesh;
 }
 
@@ -423,7 +423,7 @@ TFunctionPtr<Scalar> TRieszRep<Scalar>::repFunction( VarPtr var, TRieszRepPtr<Sc
 }
 
 template <typename Scalar>
-TRieszRepPtr<Scalar> TRieszRep<Scalar>::rieszRep(TMeshPtr<Scalar> mesh, TIPPtr<Scalar> ip, TLinearTermPtr<Scalar> rhs) {
+TRieszRepPtr<Scalar> TRieszRep<Scalar>::rieszRep(MeshPtr mesh, TIPPtr<Scalar> ip, TLinearTermPtr<Scalar> rhs) {
   return Teuchos::rcp( new TRieszRep<Scalar>(mesh,ip,rhs) );
 }
 

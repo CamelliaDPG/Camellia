@@ -34,12 +34,10 @@ static ParametricCurvePtr parametricRect(double width, double height, double x0,
   return ParametricCurve::polygon(vertices);
 }
 
-template <typename Scalar>
-map<int,int> TMeshFactory<Scalar>::_emptyIntIntMap;
+map<int,int> MeshFactory::_emptyIntIntMap;
 
 #ifdef HAVE_EPETRAEXT_HDF5
-template <typename Scalar>
-TMeshPtr<Scalar> TMeshFactory<Scalar>::loadFromHDF5(TBFPtr<Scalar> bf, string filename) {
+MeshPtr MeshFactory::loadFromHDF5(TBFPtr<double> bf, string filename) {
     Epetra_SerialComm Comm;
     EpetraExt::HDF5 hdf5(Comm);
     hdf5.Open(filename);
@@ -156,7 +154,7 @@ TMeshPtr<Scalar> TMeshFactory<Scalar>::loadFromHDF5(TBFPtr<Scalar> bf, string fi
 
     MeshGeometryPtr meshGeometry = Teuchos::rcp( new MeshGeometry(verticesList, elementVertices, cellTopos) );
     MeshTopologyPtr meshTopology = Teuchos::rcp( new MeshTopology(meshGeometry) );
-    TMeshPtr<Scalar> mesh = Teuchos::rcp( new TMesh<Scalar> (meshTopology, bf, H1Order, deltaP, trialOrderEnhancements, testOrderEnhancements) );
+    MeshPtr mesh = Teuchos::rcp( new Mesh (meshTopology, bf, H1Order, deltaP, trialOrderEnhancements, testOrderEnhancements) );
 
     for (int i=0; i < histArraySize;)
     {
@@ -206,10 +204,9 @@ TMeshPtr<Scalar> TMeshFactory<Scalar>::loadFromHDF5(TBFPtr<Scalar> bf, string fi
   }
 #endif
 
-template <typename Scalar>
-TMeshPtr<Scalar> TMeshFactory<Scalar>::quadMesh(Teuchos::ParameterList &parameters) {
+MeshPtr MeshFactory::quadMesh(Teuchos::ParameterList &parameters) {
   bool useMinRule = parameters.get<bool>("useMinRule",true);
-  TBFPtr<Scalar> bf = parameters.get< TBFPtr<Scalar> >("bf");
+  TBFPtr<double> bf = parameters.get< TBFPtr<double> >("bf");
   int H1Order = parameters.get<int>("H1Order");
   int spaceDim = 2;
   int delta_k = parameters.get<int>("delta_k",spaceDim);
@@ -228,7 +225,7 @@ TMeshPtr<Scalar> TMeshFactory<Scalar>::quadMesh(Teuchos::ParameterList &paramete
 
   if (useMinRule) {
     MeshTopologyPtr meshTopology = quadMeshTopology(width,height,horizontalElements,verticalElements,divideIntoTriangles,x0,y0,*periodicBCs);
-    return Teuchos::rcp( new TMesh<Scalar>(meshTopology, bf, H1Order, delta_k, *trialOrderEnhancements, *testOrderEnhancements) );
+    return Teuchos::rcp( new Mesh(meshTopology, bf, H1Order, delta_k, *trialOrderEnhancements, *testOrderEnhancements) );
   } else {
     bool useConformingTraces = parameters.get<bool>("useConformingTraces", true);
 //  cout << "periodicBCs size is " << periodicBCs->size() << endl;
@@ -299,7 +296,7 @@ TMeshPtr<Scalar> TMeshFactory<Scalar>::quadMesh(Teuchos::ParameterList &paramete
       }
     }
 
-    return Teuchos::rcp( new TMesh<Scalar>(vertices, allElementVertices, bf, H1Order, delta_k, useConformingTraces, *trialOrderEnhancements, *testOrderEnhancements, *periodicBCs) );
+    return Teuchos::rcp( new Mesh(vertices, allElementVertices, bf, H1Order, delta_k, useConformingTraces, *trialOrderEnhancements, *testOrderEnhancements, *periodicBCs) );
   }
 }
 
@@ -337,8 +334,7 @@ public:
   }
 };*/
 
-template <typename Scalar>
-TMeshPtr<Scalar> TMeshFactory<Scalar>::quadMesh(TBFPtr<Scalar> bf, int H1Order, FieldContainer<double> &quadNodes, int pToAddTest) {
+MeshPtr MeshFactory::quadMesh(TBFPtr<double> bf, int H1Order, FieldContainer<double> &quadNodes, int pToAddTest) {
   if (quadNodes.size() != 8) {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "quadNodes must be 4 x 2");
   }
@@ -358,12 +354,11 @@ TMeshPtr<Scalar> TMeshFactory<Scalar>::quadMesh(TBFPtr<Scalar> bf, int H1Order, 
   cell0.push_back(3);
   elementVertices.push_back(cell0);
 
-  TMeshPtr<Scalar> mesh = Teuchos::rcp( new TMesh<Scalar>(vertices, elementVertices, bf, H1Order, pToAddTest) );
+  MeshPtr mesh = Teuchos::rcp( new Mesh(vertices, elementVertices, bf, H1Order, pToAddTest) );
   return mesh;
 }
 
-template <typename Scalar>
-TMeshPtr<Scalar> TMeshFactory<Scalar>::quadMesh(TBFPtr<Scalar> bf, int H1Order, int pToAddTest,
+MeshPtr MeshFactory::quadMesh(TBFPtr<double> bf, int H1Order, int pToAddTest,
                               double width, double height, int horizontalElements, int verticalElements, bool divideIntoTriangles,
                               double x0, double y0, vector<PeriodicBCPtr> periodicBCs) {
 
@@ -385,8 +380,7 @@ TMeshPtr<Scalar> TMeshFactory<Scalar>::quadMesh(TBFPtr<Scalar> bf, int H1Order, 
   return quadMesh(pl);
 }
 
-template <typename Scalar>
-TMeshPtr<Scalar> TMeshFactory<Scalar>::quadMeshMinRule(TBFPtr<Scalar> bf, int H1Order, int pToAddTest,
+MeshPtr MeshFactory::quadMeshMinRule(TBFPtr<double> bf, int H1Order, int pToAddTest,
                                       double width, double height, int horizontalElements, int verticalElements,
                                      bool divideIntoTriangles, double x0, double y0, vector<PeriodicBCPtr> periodicBCs) {
   Teuchos::ParameterList pl;
@@ -407,8 +401,7 @@ TMeshPtr<Scalar> TMeshFactory<Scalar>::quadMeshMinRule(TBFPtr<Scalar> bf, int H1
   return quadMesh(pl);
 }
 
-template <typename Scalar>
-MeshTopologyPtr TMeshFactory<Scalar>::quadMeshTopology(double width, double height, int horizontalElements, int verticalElements, bool divideIntoTriangles,
+MeshTopologyPtr MeshFactory::quadMeshTopology(double width, double height, int horizontalElements, int verticalElements, bool divideIntoTriangles,
                                               double x0, double y0, vector<PeriodicBCPtr> periodicBCs) {
   vector<vector<double> > vertices;
   vector< vector<unsigned> > allElementVertices;
@@ -483,21 +476,18 @@ MeshTopologyPtr TMeshFactory<Scalar>::quadMeshTopology(double width, double heig
   return Teuchos::rcp( new MeshTopology(geometry, periodicBCs) );
 }
 
-template <typename Scalar>
-TMeshPtr<Scalar> TMeshFactory<Scalar>::hemkerMesh(double meshWidth, double meshHeight, double cylinderRadius, // cylinder is centered in quad mesh.
-                                TBFPtr<Scalar> bilinearForm, int H1Order, int pToAddTest)
+MeshPtr MeshFactory::hemkerMesh(double meshWidth, double meshHeight, double cylinderRadius, // cylinder is centered in quad mesh.
+                                TBFPtr<double> bilinearForm, int H1Order, int pToAddTest)
 {
   return shiftedHemkerMesh(-meshWidth/2, meshWidth/2, meshHeight, cylinderRadius, bilinearForm, H1Order, pToAddTest);
 }
 
-template <typename Scalar>
-TMeshPtr<Scalar> TMeshFactory<Scalar>::intervalMesh(TBFPtr<Scalar> bf, double xLeft, double xRight, int numElements, int H1Order, int delta_k) {
+MeshPtr MeshFactory::intervalMesh(TBFPtr<double> bf, double xLeft, double xRight, int numElements, int H1Order, int delta_k) {
   MeshTopologyPtr meshTopology = intervalMeshTopology(xLeft, xRight, numElements);
-  return Teuchos::rcp( new TMesh<Scalar>(meshTopology, bf, H1Order, delta_k) );
+  return Teuchos::rcp( new Mesh(meshTopology, bf, H1Order, delta_k) );
 }
 
-template <typename Scalar>
-MeshTopologyPtr TMeshFactory<Scalar>::intervalMeshTopology(double xLeft, double xRight, int numElements) {
+MeshTopologyPtr MeshFactory::intervalMeshTopology(double xLeft, double xRight, int numElements) {
   int n = numElements;
   vector< vector<double> > vertices(n+1);
   vector<double> vertex(1);
@@ -522,8 +512,7 @@ MeshTopologyPtr TMeshFactory<Scalar>::intervalMeshTopology(double xLeft, double 
   return meshTopology;
 }
 
-template <typename Scalar>
-TMeshPtr<Scalar> TMeshFactory<Scalar>::rectilinearMesh(TBFPtr<Scalar> bf, vector<double> dimensions, vector<int> elementCounts, int H1Order, int pToAddTest, vector<double> x0) {
+MeshPtr MeshFactory::rectilinearMesh(TBFPtr<double> bf, vector<double> dimensions, vector<int> elementCounts, int H1Order, int pToAddTest, vector<double> x0) {
   int spaceDim = dimensions.size();
   if (pToAddTest==-1) {
     pToAddTest = spaceDim;
@@ -531,11 +520,10 @@ TMeshPtr<Scalar> TMeshFactory<Scalar>::rectilinearMesh(TBFPtr<Scalar> bf, vector
 
   MeshTopologyPtr meshTopology = rectilinearMeshTopology(dimensions, elementCounts, x0);
 
-  return Teuchos::rcp( new TMesh<Scalar>(meshTopology, bf, H1Order, pToAddTest) );
+  return Teuchos::rcp( new Mesh(meshTopology, bf, H1Order, pToAddTest) );
 }
 
-template <typename Scalar>
-MeshTopologyPtr TMeshFactory<Scalar>::rectilinearMeshTopology(vector<double> dimensions, vector<int> elementCounts, vector<double> x0) {
+MeshTopologyPtr MeshFactory::rectilinearMeshTopology(vector<double> dimensions, vector<int> elementCounts, vector<double> x0) {
   int spaceDim = dimensions.size();
 
   if (x0.size()==0) {
@@ -552,11 +540,11 @@ MeshTopologyPtr TMeshFactory<Scalar>::rectilinearMeshTopology(vector<double> dim
   if (spaceDim == 1) {
     double xLeft = x0[0];
     double xRight = dimensions[0] + xLeft;
-    return TMeshFactory<Scalar>::intervalMeshTopology(xLeft, xRight, elementCounts[0]);
+    return MeshFactory::intervalMeshTopology(xLeft, xRight, elementCounts[0]);
   }
 
   if (spaceDim == 2) {
-    return TMeshFactory<Scalar>::quadMeshTopology(dimensions[0], dimensions[1], elementCounts[0], elementCounts[1], false, x0[0], x0[1]);
+    return MeshFactory::quadMeshTopology(dimensions[0], dimensions[1], elementCounts[0], elementCounts[1], false, x0[0], x0[1]);
   }
 
   if (spaceDim != 3) {
@@ -659,13 +647,11 @@ MeshTopologyPtr TMeshFactory<Scalar>::rectilinearMeshTopology(vector<double> dim
   return meshTopology;
 }
 
-template <typename Scalar>
-MeshGeometryPtr TMeshFactory<Scalar>::shiftedHemkerGeometry(double xLeft, double xRight, double meshHeight, double cylinderRadius) {
+MeshGeometryPtr MeshFactory::shiftedHemkerGeometry(double xLeft, double xRight, double meshHeight, double cylinderRadius) {
   return shiftedHemkerGeometry(xLeft, xRight, -meshHeight/2.0, meshHeight/2.0, cylinderRadius);
 }
 
-template <typename Scalar>
-TMeshPtr<Scalar> TMeshFactory<Scalar>::readMesh(string filePath, TBFPtr<Scalar> bilinearForm, int H1Order, int pToAdd)
+MeshPtr MeshFactory::readMesh(string filePath, TBFPtr<double> bilinearForm, int H1Order, int pToAdd)
 {
   ifstream mshFile;
   mshFile.open(filePath.c_str());
@@ -726,12 +712,11 @@ TMeshPtr<Scalar> TMeshFactory<Scalar>::readMesh(string filePath, TBFPtr<Scalar> 
   }
   mshFile.close();
 
-  TMeshPtr<Scalar> mesh = Teuchos::rcp( new TMesh<Scalar>(vertices, elementIndices, bilinearForm, H1Order, pToAdd) );
+  MeshPtr mesh = Teuchos::rcp( new Mesh(vertices, elementIndices, bilinearForm, H1Order, pToAdd) );
   return mesh;
 }
 
-template <typename Scalar>
-TMeshPtr<Scalar> TMeshFactory<Scalar>::readTriangle(string filePath, TBFPtr<Scalar> bilinearForm, int H1Order, int pToAdd)
+MeshPtr MeshFactory::readTriangle(string filePath, TBFPtr<double> bilinearForm, int H1Order, int pToAdd)
 {
   ifstream nodeFile;
   ifstream eleFile;
@@ -773,14 +758,13 @@ TMeshPtr<Scalar> TMeshFactory<Scalar>::readTriangle(string filePath, TBFPtr<Scal
   }
   eleFile.close();
 
-  TMeshPtr<Scalar> mesh = Teuchos::rcp( new TMesh<Scalar>(vertices, elementIndices, bilinearForm, H1Order, pToAdd) );
+  MeshPtr mesh = Teuchos::rcp( new Mesh(vertices, elementIndices, bilinearForm, H1Order, pToAdd) );
   return mesh;
 }
 
-template <typename Scalar>
-TMeshPtr<Scalar> TMeshFactory<Scalar>::buildQuadMesh(const FieldContainer<double> &quadBoundaryPoints,
+MeshPtr MeshFactory::buildQuadMesh(const FieldContainer<double> &quadBoundaryPoints,
                                    int horizontalElements, int verticalElements,
-                                   TBFPtr<Scalar> bilinearForm,
+                                   TBFPtr<double> bilinearForm,
                                    int H1Order, int pTest, bool triangulate, bool useConformingTraces,
                                    map<int,int> trialOrderEnhancements,
                                    map<int,int> testOrderEnhancements) {
@@ -824,10 +808,9 @@ TMeshPtr<Scalar> TMeshFactory<Scalar>::buildQuadMesh(const FieldContainer<double
   return quadMesh(pl);
 }
 
-template <typename Scalar>
-TMeshPtr<Scalar> TMeshFactory<Scalar>::buildQuadMeshHybrid(const FieldContainer<double> &quadBoundaryPoints,
+MeshPtr MeshFactory::buildQuadMeshHybrid(const FieldContainer<double> &quadBoundaryPoints,
                                              int horizontalElements, int verticalElements,
-                                             TBFPtr<Scalar> bilinearForm,
+                                             TBFPtr<double> bilinearForm,
                                              int H1Order, int pTest, bool useConformingTraces) {
   int pToAddToTest = pTest - H1Order;
   int spaceDim = 2;
@@ -895,11 +878,10 @@ TMeshPtr<Scalar> TMeshFactory<Scalar>::buildQuadMeshHybrid(const FieldContainer<
       }
     }
   }
-  return Teuchos::rcp( new TMesh<Scalar>(vertices,allElementVertices,bilinearForm,H1Order,pToAddToTest,useConformingTraces));
+  return Teuchos::rcp( new Mesh(vertices,allElementVertices,bilinearForm,H1Order,pToAddToTest,useConformingTraces));
 }
 
-template <typename Scalar>
-void TMeshFactory<Scalar>::quadMeshCellIDs(FieldContainer<int> &cellIDs, int horizontalElements, int verticalElements, bool useTriangles) {
+void MeshFactory::quadMeshCellIDs(FieldContainer<int> &cellIDs, int horizontalElements, int verticalElements, bool useTriangles) {
   // populates cellIDs with either (h,v) or (h,v,2)
   // where h: horizontalElements (indexed by i, below)
   //       v: verticalElements   (indexed by j)
@@ -937,15 +919,13 @@ void TMeshFactory<Scalar>::quadMeshCellIDs(FieldContainer<int> &cellIDs, int hor
   }
 }
 
-template <typename Scalar>
-MeshGeometryPtr TMeshFactory<Scalar>::shiftedHemkerGeometry(double xLeft, double xRight, double yBottom, double yTop, double cylinderRadius) {
+MeshGeometryPtr MeshFactory::shiftedHemkerGeometry(double xLeft, double xRight, double yBottom, double yTop, double cylinderRadius) {
   double meshHeight = yTop - yBottom;
   double embeddedSquareSideLength = cylinderRadius+meshHeight/2;
   return shiftedHemkerGeometry(xLeft, xRight, yBottom, yTop, cylinderRadius, embeddedSquareSideLength);
 }
 
-template <typename Scalar>
-MeshGeometryPtr TMeshFactory<Scalar>::shiftedHemkerGeometry(double xLeft, double xRight, double yBottom, double yTop, double cylinderRadius, double embeddedSquareSideLength) {
+MeshGeometryPtr MeshFactory::shiftedHemkerGeometry(double xLeft, double xRight, double yBottom, double yTop, double cylinderRadius, double embeddedSquareSideLength) {
   // first, set up an 8-element mesh, centered at the origin
   ParametricCurvePtr circle = ParametricCurve::circle(cylinderRadius, 0, 0);
   double meshHeight = yTop - yBottom;
@@ -1140,11 +1120,10 @@ MeshGeometryPtr TMeshFactory<Scalar>::shiftedHemkerGeometry(double xLeft, double
   return Teuchos::rcp( new MeshGeometry(vertices, elementVertices, edgeToCurveMap) );
 }
 
-template <typename Scalar>
-TMeshPtr<Scalar> TMeshFactory<Scalar>::shiftedHemkerMesh(double xLeft, double xRight, double meshHeight, double cylinderRadius, // cylinder is centered in quad mesh.
-                                TBFPtr<Scalar> bilinearForm, int H1Order, int pToAddTest) {
-  MeshGeometryPtr geometry = TMeshFactory<Scalar>::shiftedHemkerGeometry(xLeft, xRight, meshHeight, cylinderRadius);
-  TMeshPtr<Scalar> mesh = Teuchos::rcp( new TMesh<Scalar>(geometry->vertices(), geometry->elementVertices(),
+MeshPtr MeshFactory::shiftedHemkerMesh(double xLeft, double xRight, double meshHeight, double cylinderRadius, // cylinder is centered in quad mesh.
+                                TBFPtr<double> bilinearForm, int H1Order, int pToAddTest) {
+  MeshGeometryPtr geometry = MeshFactory::shiftedHemkerGeometry(xLeft, xRight, meshHeight, cylinderRadius);
+  MeshPtr mesh = Teuchos::rcp( new Mesh(geometry->vertices(), geometry->elementVertices(),
                                         bilinearForm, H1Order, pToAddTest) );
 
   map< pair<IndexType, IndexType>, ParametricCurvePtr > localEdgeToCurveMap = geometry->edgeToCurveMap();
@@ -1154,23 +1133,21 @@ TMeshPtr<Scalar> TMeshFactory<Scalar>::shiftedHemkerMesh(double xLeft, double xR
 }
 
 // TODO: test this!
-template <typename Scalar>
-TMeshPtr<Scalar> TMeshFactory<Scalar>::spaceTimeMesh(MeshTopologyPtr spatialMeshTopology, double t0, double t1,
-                                   TBFPtr<Scalar> bf, int spatialH1Order, int temporalH1Order, int pToAdd) {
+MeshPtr MeshFactory::spaceTimeMesh(MeshTopologyPtr spatialMeshTopology, double t0, double t1,
+                                   TBFPtr<double> bf, int spatialH1Order, int temporalH1Order, int pToAdd) {
   MeshTopologyPtr meshTopology = spaceTimeMeshTopology(spatialMeshTopology, t0, t1);
 
   vector<int> H1Order(2);
   H1Order[0] = spatialH1Order;
   H1Order[1] = temporalH1Order;
 
-  TMeshPtr<Scalar> mesh = Teuchos::rcp( new TMesh<Scalar> (meshTopology, bf, H1Order, pToAdd) );
+  MeshPtr mesh = Teuchos::rcp( new Mesh (meshTopology, bf, H1Order, pToAdd) );
 
   return mesh;
 }
 
 // TODO: test this!
-template <typename Scalar>
-MeshTopologyPtr TMeshFactory<Scalar>::spaceTimeMeshTopology(MeshTopologyPtr spatialMeshTopology, double t0, double t1) {
+MeshTopologyPtr MeshFactory::spaceTimeMeshTopology(MeshTopologyPtr spatialMeshTopology, double t0, double t1) {
   // we allow spatialMeshTopology to have been refined; we start with a coarse space-time topology matching the root spatial topology,
   // and then refine accordingly...
 
@@ -1281,9 +1258,5 @@ MeshTopologyPtr TMeshFactory<Scalar>::spaceTimeMeshTopology(MeshTopologyPtr spat
   }
 
   return spaceTimeTopology;
-}
-
-namespace Camellia {
-  template class TMeshFactory<double>;
 }
 

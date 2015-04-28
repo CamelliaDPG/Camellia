@@ -62,6 +62,7 @@
 #include "DofOrderingFactory.h"
 #include "RefinementPattern.h"
 #include "MeshPartitionPolicy.h"
+#include "VarFactory.h"
 
 #include "RefinementObserver.h"
 #include "RefinementHistory.h"
@@ -79,8 +80,7 @@ namespace Camellia {
 class MeshTransformationFunction;
 class MeshPartitionPolicy;
 
-  template <typename Scalar>
-  class TMesh : public RefinementObserver, public DofInterpreter {
+  class Mesh : public RefinementObserver, public DofInterpreter {
     MeshTopologyPtr _meshTopology;
 
     Teuchos::RCP<GlobalDofAssignment> _gda;
@@ -92,12 +92,17 @@ class MeshPartitionPolicy;
     bool _usePatchBasis; // use MultiBasis if this is false.
     bool _useConformingTraces; // if true, enforces vertex trace continuity
 
-    TBFPtr<Scalar> _bilinearForm;
+    TBFPtr<double> _bilinearForm;
+    VarFactory _varFactory;
     // for now, just a uniform mesh, with a rectangular boundary and elements.
     Boundary _boundary;
 
-    // private constructor to use during deepCopy();
-    TMesh(MeshTopologyPtr meshTopology, Teuchos::RCP<GlobalDofAssignment> gda, TBFPtr<Scalar> bf,
+    // preferred private constructor to use during deepCopy();
+    Mesh(MeshTopologyPtr meshTopology, Teuchos::RCP<GlobalDofAssignment> gda, VarFactory varFactory,
+         int pToAddToTest, bool useConformingTraces, bool usePatchBasis, bool enforceMBFluxContinuity);
+
+    // deprecated private constructor to use during deepCopy();
+    Mesh(MeshTopologyPtr meshTopology, Teuchos::RCP<GlobalDofAssignment> gda, TBFPtr<double> bf,
          int pToAddToTest, bool useConformingTraces, bool usePatchBasis, bool enforceMBFluxContinuity);
 
     //set< pair<int,int> > _edges;
@@ -149,19 +154,30 @@ class MeshPartitionPolicy;
     static map<int,int> _emptyIntIntMap; // just defined here to implement a default argument to constructor (there's got to be a better way)
   public:
     RefinementHistory _refinementHistory;
-    // legacy (max rule 2D) constructor:
-    TMesh(const vector<vector<double> > &vertices, vector< vector<IndexType> > &elementVertices,
-         TBFPtr<Scalar> bilinearForm, int H1Order, int pToAddTest, bool useConformingTraces = true,
-         map<int,int> trialOrderEnhancements=_emptyIntIntMap, map<int,int> testOrderEnhancements=_emptyIntIntMap,
-         vector< PeriodicBCPtr > periodicBCs = vector< PeriodicBCPtr >());
 
-    // Constructor for min rule, n-D, single H1Order
-    TMesh(MeshTopologyPtr meshTopology, TBFPtr<Scalar> bilinearForm, int H1Order, int pToAddTest,
+    // Preferred Constructor for min rule, n-D, single H1Order
+    Mesh(MeshTopologyPtr meshTopology, VarFactory varFactory, int H1Order, int pToAddTest,
          map<int,int> trialOrderEnhancements=_emptyIntIntMap, map<int,int> testOrderEnhancements=_emptyIntIntMap,
          MeshPartitionPolicyPtr meshPartitionPolicy = Teuchos::null);
 
-    // Constructor for min rule, n-D, vector H1Order for tensor topologies (tensorial degree 0 and 1 supported)
-    TMesh(MeshTopologyPtr meshTopology, TBFPtr<Scalar> bilinearForm, vector<int> H1Order, int pToAddTest,
+    // Preferred Constructor for min rule, n-D, vector H1Order for tensor topologies (tensorial degree 0 and 1 supported)
+    Mesh(MeshTopologyPtr meshTopology, VarFactory varFactory, vector<int> H1Order, int pToAddTest,
+         map<int,int> trialOrderEnhancements=_emptyIntIntMap, map<int,int> testOrderEnhancements=_emptyIntIntMap,
+         MeshPartitionPolicyPtr meshPartitionPolicy = Teuchos::null);
+
+    // legacy (max rule 2D) constructor:
+    Mesh(const vector<vector<double> > &vertices, vector< vector<IndexType> > &elementVertices,
+         TBFPtr<double> bilinearForm, int H1Order, int pToAddTest, bool useConformingTraces = true,
+         map<int,int> trialOrderEnhancements=_emptyIntIntMap, map<int,int> testOrderEnhancements=_emptyIntIntMap,
+         vector< PeriodicBCPtr > periodicBCs = vector< PeriodicBCPtr >());
+
+    // Deprecated Constructor for min rule, n-D, single H1Order
+    Mesh(MeshTopologyPtr meshTopology, TBFPtr<double> bilinearForm, int H1Order, int pToAddTest,
+         map<int,int> trialOrderEnhancements=_emptyIntIntMap, map<int,int> testOrderEnhancements=_emptyIntIntMap,
+         MeshPartitionPolicyPtr meshPartitionPolicy = Teuchos::null);
+
+    // Deprecated Constructor for min rule, n-D, vector H1Order for tensor topologies (tensorial degree 0 and 1 supported)
+    Mesh(MeshTopologyPtr meshTopology, TBFPtr<double> bilinearForm, vector<int> H1Order, int pToAddTest,
          map<int,int> trialOrderEnhancements=_emptyIntIntMap, map<int,int> testOrderEnhancements=_emptyIntIntMap,
          MeshPartitionPolicyPtr meshPartitionPolicy = Teuchos::null);
 
@@ -170,22 +186,22 @@ class MeshPartitionPolicy;
 #endif
 
     // ! deepCopy makes a deep copy of both MeshTopology and GDA, but not bilinear form
-    TMeshPtr<Scalar> deepCopy();
+    MeshPtr deepCopy();
 
-    static TMeshPtr<Scalar> readMsh(string filePath, TBFPtr<Scalar> bilinearForm, int H1Order, int pToAdd);
+    static MeshPtr readMsh(string filePath, TBFPtr<double> bilinearForm, int H1Order, int pToAdd);
 
-    static TMeshPtr<Scalar> readTriangle(string filePath, TBFPtr<Scalar> bilinearForm, int H1Order, int pToAdd);
+    static MeshPtr readTriangle(string filePath, TBFPtr<double> bilinearForm, int H1Order, int pToAdd);
 
     // deprecated static constructors (use MeshFactory methods instead):
-    static TMeshPtr<Scalar> buildQuadMesh(const Intrepid::FieldContainer<double> &quadBoundaryPoints,
+    static MeshPtr buildQuadMesh(const Intrepid::FieldContainer<double> &quadBoundaryPoints,
                                             int horizontalElements, int verticalElements,
-                                            TBFPtr<Scalar> bilinearForm,
+                                            TBFPtr<double> bilinearForm,
                                             int H1Order, int pTest, bool triangulate=false, bool useConformingTraces=true,
                                             map<int,int> trialOrderEnhancements=_emptyIntIntMap,
                                             map<int,int> testOrderEnhancements=_emptyIntIntMap);
-    static TMeshPtr<Scalar> buildQuadMeshHybrid(const Intrepid::FieldContainer<double> &quadBoundaryPoints,
+    static MeshPtr buildQuadMeshHybrid(const Intrepid::FieldContainer<double> &quadBoundaryPoints,
                                                   int horizontalElements, int verticalElements,
-                                                  TBFPtr<Scalar> bilinearForm,
+                                                  TBFPtr<double> bilinearForm,
                                                   int H1Order, int pTest, bool useConformingTraces=true);
     static void quadMeshCellIDs(Intrepid::FieldContainer<int> &cellIDs,
                                 int horizontalElements, int verticalElements,
@@ -196,8 +212,8 @@ class MeshPartitionPolicy;
     Intrepid::FieldContainer<double> cellSideParities( ElementTypePtr elemTypePtr);
     Intrepid::FieldContainer<double> cellSideParitiesForCell( GlobalIndexType cellID );
 
-    TBFPtr<Scalar> bilinearForm();
-    void setBilinearForm( TBFPtr<Scalar>);
+    TBFPtr<double> bilinearForm();
+    void setBilinearForm( TBFPtr<double>);
 
     //! This method should probably be moved to MeshTopology; its implementation is independent of Mesh.
   //  bool cellContainsPoint(GlobalIndexType cellID, vector<double> &point);
@@ -333,7 +349,8 @@ class MeshPartitionPolicy;
 
     void registerObserver(Teuchos::RCP<RefinementObserver> observer);
 
-    void registerSolution(TSolutionPtr<Scalar> solution);
+    template <typename Scalar>
+      void registerSolution(TSolutionPtr<Scalar> solution);
 
     int condensedRowSizeUpperBound();
     int rowSizeUpperBound(); // accounts for multiplicity, but isn't a tight bound
@@ -360,7 +377,8 @@ class MeshPartitionPolicy;
 
     void unregisterObserver(RefinementObserver* observer);
     void unregisterObserver(Teuchos::RCP<RefinementObserver> observer);
-    void unregisterSolution(TSolutionPtr<Scalar> solution);
+    template <typename Scalar>
+      void unregisterSolution(TSolutionPtr<Scalar> solution);
 
     void writeMeshPartitionsToFile(const string & fileName);
 
@@ -369,8 +387,6 @@ class MeshPartitionPolicy;
     double getCellYSize(GlobalIndexType cellID);
     vector<double> getCellOrientation(GlobalIndexType cellID);
   };
-
-  extern template class TMesh<double>;
 }
 
 #endif

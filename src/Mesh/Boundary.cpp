@@ -58,10 +58,10 @@ using namespace Intrepid;
 using namespace Camellia;
 
 Boundary::Boundary() {
-  _mesh = Teuchos::rcp((TMesh<double>*)NULL);
+  _mesh = Teuchos::rcp((Mesh*)NULL);
 }
 
-void Boundary::setMesh(TMeshPtr<double> mesh) {
+void Boundary::setMesh(MeshPtr mesh) {
   _mesh = mesh;
   buildLookupTables();
 }

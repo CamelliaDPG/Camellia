@@ -1,9 +1,4 @@
 //
-//  TypeDefs.h
-//  Camellia
-//
-//  Created by Truman Ellis on 3/27/15.
-//
 
 #ifndef TypeDefs_h
 #define TypeDefs_h
@@ -43,6 +38,7 @@ namespace Camellia {
 	class ElementType;
 	class GlobalDofAssignment;
 	class LagrangeConstraints;
+	class Mesh;
 	class MeshPartitionPolicy;
 	class MeshTopology;
   class ParameterFunction;
@@ -62,8 +58,6 @@ namespace Camellia {
   template <typename Scalar=double>
     class TLinearTerm;
   template <typename Scalar=double>
-    class TMesh;
-  template <typename Scalar=double>
     class TRefinementStrategy;
   template <typename Scalar=double>
     class TRHS;
@@ -82,6 +76,7 @@ namespace Camellia {
 	typedef Teuchos::RCP<Element> ElementPtr;
 	typedef Teuchos::RCP<ElementType> ElementTypePtr;
 	typedef Teuchos::RCP<GlobalDofAssignment> GlobalDofAssignmentPtr;
+	typedef Teuchos::RCP<Mesh> MeshPtr;
 	typedef Teuchos::RCP<MeshPartitionPolicy> MeshPartitionPolicyPtr;
 	typedef Teuchos::RCP<MeshTopology> MeshTopologyPtr;
 	typedef Teuchos::RCP<ParameterFunction> ParameterFunctionPtr;
@@ -114,11 +109,6 @@ namespace Camellia {
     using TLinearTermPtr = Teuchos::RCP<TLinearTerm<Scalar> >;
   typedef TLinearTerm<double> LinearTerm;
   typedef TLinearTermPtr<double> LinearTermPtr;
-
-  template <typename Scalar>
-    using TMeshPtr = Teuchos::RCP<TMesh<Scalar> >;
-  typedef TMesh<double> Mesh;
-  typedef TMeshPtr<double> MeshPtr;
 
   template <typename Scalar>
     using TRefinementStrategyPtr = Teuchos::RCP<TRefinementStrategy<Scalar> >;
@@ -167,10 +157,6 @@ namespace Camellia {
   template <typename Scalar=double>
     class TAmesos2Solver;
   typedef TAmesos2Solver<double> Amesos2Solver;
-
-  template <typename Scalar=double>
-    class TMeshFactory;
-  typedef TMeshFactory<double> MeshFactory;
 }
 
 

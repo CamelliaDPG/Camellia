@@ -30,7 +30,7 @@ TRefinementStrategy<Scalar>::TRefinementStrategy( TSolutionPtr<Scalar> solution,
 }
 
 template <typename Scalar>
-TRefinementStrategy<Scalar>::TRefinementStrategy( TMeshPtr<Scalar> mesh, TLinearTermPtr<Scalar> residual, TIPPtr<Scalar> ip,
+TRefinementStrategy<Scalar>::TRefinementStrategy( MeshPtr mesh, TLinearTermPtr<Scalar> residual, TIPPtr<Scalar> ip,
                                         double relativeEnergyThreshold, double min_h,
                                         int max_p, bool preferPRefinements) {
   _rieszRep = Teuchos::rcp( new TRieszRep<Scalar>(mesh, ip, residual) );
@@ -70,8 +70,8 @@ void TRefinementStrategy<Scalar>::setReportPerCellErrors(bool value) {
 }
 
 template <typename Scalar>
-TMeshPtr<Scalar> TRefinementStrategy<Scalar>::mesh() {
-  TMeshPtr<Scalar> mesh;
+MeshPtr TRefinementStrategy<Scalar>::mesh() {
+  MeshPtr mesh;
   if (_solution.get()) {
     mesh = _solution->mesh();
   } else {
@@ -83,7 +83,7 @@ TMeshPtr<Scalar> TRefinementStrategy<Scalar>::mesh() {
 template <typename Scalar>
 void TRefinementStrategy<Scalar>::refine(bool printToConsole) {
   // greedy refinement algorithm - mark cells for refinement
-  TMeshPtr<Scalar> mesh = this->mesh();
+  MeshPtr mesh = this->mesh();
 
   double totalEnergyError = 0.0;
 
@@ -184,7 +184,7 @@ void TRefinementStrategy<Scalar>::refine(bool printToConsole) {
 template <typename Scalar>
 void TRefinementStrategy<Scalar>::getCellsAboveErrorThreshhold(vector<GlobalIndexType> &cellsToRefine){
   // greedy refinement algorithm - mark cells for refinement
-  TMeshPtr<Scalar> mesh = this->mesh();
+  MeshPtr mesh = this->mesh();
   const map<GlobalIndexType, double>* energyError = &(_solution->globalEnergyError());
   vector< Teuchos::RCP< Element > > activeElements = mesh->activeElements();
 
@@ -216,17 +216,17 @@ void TRefinementStrategy<Scalar>::getCellsAboveErrorThreshhold(vector<GlobalInde
 // defaults to h-refinement
 template <typename Scalar>
 void TRefinementStrategy<Scalar>::refineCells(vector<GlobalIndexType> &cellIDs) {
-  TMeshPtr<Scalar> mesh = this->mesh();
+  MeshPtr mesh = this->mesh();
   hRefineCells(mesh, cellIDs);
 }
 
 template <typename Scalar>
-void TRefinementStrategy<Scalar>::pRefineCells(TMeshPtr<Scalar> mesh, const vector<GlobalIndexType> &cellIDs) {
+void TRefinementStrategy<Scalar>::pRefineCells(MeshPtr mesh, const vector<GlobalIndexType> &cellIDs) {
   mesh->pRefine(cellIDs);
 }
 
 template <typename Scalar>
-void TRefinementStrategy<Scalar>::hRefineCells(TMeshPtr<Scalar> mesh, const vector<GlobalIndexType> &cellIDs) {
+void TRefinementStrategy<Scalar>::hRefineCells(MeshPtr mesh, const vector<GlobalIndexType> &cellIDs) {
   map< Camellia::CellTopologyKey, vector<GlobalIndexType> > topologyCellsToRefine;
 
   MeshTopologyPtr meshTopology = mesh->getTopology();
@@ -254,7 +254,7 @@ void TRefinementStrategy<Scalar>::hRefineCells(TMeshPtr<Scalar> mesh, const vect
 }
 
 template <typename Scalar>
-void TRefinementStrategy<Scalar>::hRefineUniformly(TMeshPtr<Scalar> mesh) {
+void TRefinementStrategy<Scalar>::hRefineUniformly(MeshPtr mesh) {
   vector<GlobalIndexType> cellsToRefine;
   vector< Teuchos::RCP< Element > > activeElements = mesh->activeElements();
   for (vector< Teuchos::RCP< Element > >::iterator activeElemIt = activeElements.begin();
@@ -278,7 +278,7 @@ RefinementResults TRefinementStrategy<Scalar>::setResults(GlobalIndexType numEle
 template <typename Scalar>
 void TRefinementStrategy<Scalar>::refine(bool printToConsole, map<GlobalIndexType,double> &xErr, map<GlobalIndexType,double> &yErr) {
   // greedy refinement algorithm - mark cells for refinement
-  TMeshPtr<Scalar> mesh = this->mesh();
+  MeshPtr mesh = this->mesh();
 
   vector<GlobalIndexType> xCells, yCells, regCells;
   getAnisotropicCellsToRefine(xErr,yErr,xCells,yCells,regCells);
@@ -317,7 +317,7 @@ template <typename Scalar>
 void TRefinementStrategy<Scalar>::refine(bool printToConsole, map<GlobalIndexType,double> &xErr, map<GlobalIndexType,double> &yErr, map<GlobalIndexType,double> &threshMap, map<GlobalIndexType, bool> useHRefMap) {
 
   // greedy refinement algorithm - mark cells for refinement
-  TMeshPtr<Scalar> mesh = this->mesh();
+  MeshPtr mesh = this->mesh();
 
   vector<GlobalIndexType> xCells, yCells, regCells;
   getAnisotropicCellsToRefine(xErr,yErr,xCells,yCells,regCells, threshMap);
@@ -381,7 +381,7 @@ void TRefinementStrategy<Scalar>::getAnisotropicCellsToRefine(map<GlobalIndexTyp
 template <typename Scalar>
 void TRefinementStrategy<Scalar>::getAnisotropicCellsToRefine(map<GlobalIndexType,double> &xErr, map<GlobalIndexType,double> &yErr, vector<GlobalIndexType> &xCells, vector<GlobalIndexType> &yCells, vector<GlobalIndexType> &regCells, map<GlobalIndexType,double> &threshMap){
   map<GlobalIndexType,double> energyError = _solution->globalEnergyError();
-  TMeshPtr<Scalar> mesh = this->mesh();
+  MeshPtr mesh = this->mesh();
   vector<GlobalIndexType> cellsToRefine;
   getCellsAboveErrorThreshhold(cellsToRefine);
   for (vector<GlobalIndexType>::iterator cellIt = cellsToRefine.begin();cellIt!=cellsToRefine.end();cellIt++){
@@ -421,7 +421,7 @@ void TRefinementStrategy<Scalar>::getAnisotropicCellsToRefine(map<GlobalIndexTyp
 template <typename Scalar>
 bool TRefinementStrategy<Scalar>::enforceAnisotropicOneIrregularity(vector<GlobalIndexType> &xCells, vector<GlobalIndexType> &yCells){
   bool success = true;
-  TMeshPtr<Scalar> mesh = this->mesh();
+  MeshPtr mesh = this->mesh();
   int maxIters = mesh->numActiveElements(); // should not refine more than the number of elements...
 
   // build children list - for use in "upgrading" refinements to prevent deadlocking

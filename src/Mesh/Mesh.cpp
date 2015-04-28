@@ -72,11 +72,66 @@ using namespace Intrepid;
 using namespace Camellia;
 using namespace std;
 
-template <typename Scalar>
-map<int,int> TMesh<Scalar>::_emptyIntIntMap;
+map<int,int> Mesh::_emptyIntIntMap;
 
-template <typename Scalar>
-TMesh<Scalar>::TMesh(MeshTopologyPtr meshTopology, TBFPtr<Scalar> bilinearForm, vector<int> H1Order, int pToAddTest,
+Mesh::Mesh(MeshTopologyPtr meshTopology, VarFactory varFactory, vector<int> H1Order, int pToAddTest,
+           map<int,int> trialOrderEnhancements, map<int,int> testOrderEnhancements,
+           MeshPartitionPolicyPtr partitionPolicy) : DofInterpreter(Teuchos::rcp(this,false)) {
+
+  _meshTopology = meshTopology;
+
+  DofOrderingFactoryPtr dofOrderingFactoryPtr = Teuchos::rcp( new DofOrderingFactory(varFactory, trialOrderEnhancements,testOrderEnhancements) );
+  _enforceMBFluxContinuity = false;
+  //  MeshPartitionPolicyPtr partitionPolicy = Teuchos::rcp( new MeshPartitionPolicy() );
+  if ( partitionPolicy.get() == NULL )
+    partitionPolicy = Teuchos::rcp( new ZoltanMeshPartitionPolicy() );
+
+  MeshPtr thisPtr = Teuchos::rcp(this, false);
+  _gda = Teuchos::rcp( new GDAMinimumRule(thisPtr, varFactory, dofOrderingFactoryPtr,
+                                          partitionPolicy, H1Order, pToAddTest));
+  _gda->repartitionAndMigrate();
+
+  _varFactory = varFactory;
+  _boundary.setMesh(Teuchos::rcp(this,false));
+
+  _meshTopology->setGlobalDofAssignment(_gda.get());
+
+  // Teuchos::RCP< RefinementHistory > refHist = Teuchos::rcp( &_refinementHistory, false );
+  // cout << "Has ownership " << refHist.has_ownership() << endl;
+  // this->registerObserver(refHist);
+  this->registerObserver(Teuchos::rcp( &_refinementHistory, false ));
+}
+
+Mesh::Mesh(MeshTopologyPtr meshTopology, VarFactory varFactory, int H1Order, int pToAddTest,
+           map<int,int> trialOrderEnhancements, map<int,int> testOrderEnhancements,
+           MeshPartitionPolicyPtr partitionPolicy) : DofInterpreter(Teuchos::rcp(this,false)) {
+
+  _meshTopology = meshTopology;
+
+  DofOrderingFactoryPtr dofOrderingFactoryPtr = Teuchos::rcp( new DofOrderingFactory(varFactory, trialOrderEnhancements,testOrderEnhancements) );
+  _enforceMBFluxContinuity = false;
+//  MeshPartitionPolicyPtr partitionPolicy = Teuchos::rcp( new MeshPartitionPolicy() );
+  if ( partitionPolicy.get() == NULL )
+    partitionPolicy = Teuchos::rcp( new ZoltanMeshPartitionPolicy() );
+
+  MeshPtr thisPtr = Teuchos::rcp(this, false);
+  _gda = Teuchos::rcp( new GDAMinimumRule(thisPtr, varFactory, dofOrderingFactoryPtr,
+                                          partitionPolicy, H1Order, pToAddTest));
+  _gda->repartitionAndMigrate();
+
+  _varFactory = varFactory;
+  _boundary.setMesh(Teuchos::rcp(this,false));
+
+  _meshTopology->setGlobalDofAssignment(_gda.get());
+
+  // Teuchos::RCP< RefinementHistory > refHist = Teuchos::rcp( &_refinementHistory, false );
+  // cout << "Has ownership " << refHist.has_ownership() << endl;
+  // this->registerObserver(refHist);
+  this->registerObserver(Teuchos::rcp( &_refinementHistory, false ));
+}
+
+// Deprecated constructor
+Mesh::Mesh(MeshTopologyPtr meshTopology, TBFPtr<double> bilinearForm, vector<int> H1Order, int pToAddTest,
            map<int,int> trialOrderEnhancements, map<int,int> testOrderEnhancements,
            MeshPartitionPolicyPtr partitionPolicy) : DofInterpreter(Teuchos::rcp(this,false)) {
 
@@ -88,12 +143,13 @@ TMesh<Scalar>::TMesh(MeshTopologyPtr meshTopology, TBFPtr<Scalar> bilinearForm, 
   if ( partitionPolicy.get() == NULL )
     partitionPolicy = Teuchos::rcp( new ZoltanMeshPartitionPolicy() );
 
-  TMeshPtr<Scalar> thisPtr = Teuchos::rcp(this, false);
+  MeshPtr thisPtr = Teuchos::rcp(this, false);
   _gda = Teuchos::rcp( new GDAMinimumRule(thisPtr, bilinearForm->varFactory(), dofOrderingFactoryPtr,
                                           partitionPolicy, H1Order, pToAddTest));
   _gda->repartitionAndMigrate();
 
   setBilinearForm(bilinearForm);
+  _varFactory = bilinearForm->varFactory();
   _boundary.setMesh(Teuchos::rcp(this,false));
 
   _meshTopology->setGlobalDofAssignment(_gda.get());
@@ -104,8 +160,8 @@ TMesh<Scalar>::TMesh(MeshTopologyPtr meshTopology, TBFPtr<Scalar> bilinearForm, 
   this->registerObserver(Teuchos::rcp( &_refinementHistory, false ));
 }
 
-template <typename Scalar>
-TMesh<Scalar>::TMesh(MeshTopologyPtr meshTopology, TBFPtr<Scalar> bilinearForm, int H1Order, int pToAddTest,
+// Deprecated constructor
+Mesh::Mesh(MeshTopologyPtr meshTopology, TBFPtr<double> bilinearForm, int H1Order, int pToAddTest,
            map<int,int> trialOrderEnhancements, map<int,int> testOrderEnhancements,
            MeshPartitionPolicyPtr partitionPolicy) : DofInterpreter(Teuchos::rcp(this,false)) {
 
@@ -117,12 +173,13 @@ TMesh<Scalar>::TMesh(MeshTopologyPtr meshTopology, TBFPtr<Scalar> bilinearForm, 
   if ( partitionPolicy.get() == NULL )
     partitionPolicy = Teuchos::rcp( new ZoltanMeshPartitionPolicy() );
 
-  TMeshPtr<Scalar> thisPtr = Teuchos::rcp(this, false);
+  MeshPtr thisPtr = Teuchos::rcp(this, false);
   _gda = Teuchos::rcp( new GDAMinimumRule(thisPtr, bilinearForm->varFactory(), dofOrderingFactoryPtr,
                                           partitionPolicy, H1Order, pToAddTest));
   _gda->repartitionAndMigrate();
 
   setBilinearForm(bilinearForm);
+  _varFactory = bilinearForm->varFactory();
   _boundary.setMesh(Teuchos::rcp(this,false));
 
   _meshTopology->setGlobalDofAssignment(_gda.get());
@@ -133,9 +190,8 @@ TMesh<Scalar>::TMesh(MeshTopologyPtr meshTopology, TBFPtr<Scalar> bilinearForm, 
   this->registerObserver(Teuchos::rcp( &_refinementHistory, false ));
 }
 
-template <typename Scalar>
-TMesh<Scalar>::TMesh(const vector<vector<double> > &vertices, vector< vector<unsigned> > &elementVertices,
-           TBFPtr<Scalar> bilinearForm, int H1Order, int pToAddTest, bool useConformingTraces,
+Mesh::Mesh(const vector<vector<double> > &vertices, vector< vector<unsigned> > &elementVertices,
+           TBFPtr<double> bilinearForm, int H1Order, int pToAddTest, bool useConformingTraces,
            map<int,int> trialOrderEnhancements, map<int,int> testOrderEnhancements, vector<PeriodicBCPtr> periodicBCs) : DofInterpreter(Teuchos::rcp(this,false)) {
 
 //  cout << "in legacy mesh constructor, periodicBCs size is " << periodicBCs.size() << endl;
@@ -147,7 +203,7 @@ TMesh<Scalar>::TMesh(const vector<vector<double> > &vertices, vector< vector<uns
   _enforceMBFluxContinuity = false;
   MeshPartitionPolicyPtr partitionPolicy = Teuchos::rcp( new ZoltanMeshPartitionPolicy() );
 
-  TMeshPtr<Scalar> thisPtr = Teuchos::rcp(this, false);
+  MeshPtr thisPtr = Teuchos::rcp(this, false);
   _gda = Teuchos::rcp( new GDAMaximumRule2D(thisPtr, bilinearForm->varFactory(), dofOrderingFactoryPtr,
                                             partitionPolicy, H1Order, pToAddTest, _enforceMBFluxContinuity) );
   _gda->repartitionAndMigrate();
@@ -155,6 +211,7 @@ TMesh<Scalar>::TMesh(const vector<vector<double> > &vertices, vector< vector<uns
   _meshTopology->setGlobalDofAssignment(_gda.get());
 
   setBilinearForm(bilinearForm);
+  _varFactory = bilinearForm->varFactory();
 
   _useConformingTraces = useConformingTraces;
   _usePatchBasis = false;
@@ -189,8 +246,22 @@ TMesh<Scalar>::TMesh(const vector<vector<double> > &vertices, vector< vector<uns
 }
 
 // private constructor for use by deepCopy()
-template <typename Scalar>
-TMesh<Scalar>::TMesh(MeshTopologyPtr meshTopology, Teuchos::RCP<GlobalDofAssignment> gda, TBFPtr<Scalar> bf,
+Mesh::Mesh(MeshTopologyPtr meshTopology, Teuchos::RCP<GlobalDofAssignment> gda, VarFactory varFactory,
+           int pToAddToTest, bool useConformingTraces, bool usePatchBasis, bool enforceMBFluxContinuity) : DofInterpreter(Teuchos::rcp(this,false)) {
+  _meshTopology = meshTopology;
+  _gda = gda;
+  _varFactory = varFactory;
+  _pToAddToTest = pToAddToTest;
+  _useConformingTraces = useConformingTraces;
+  _usePatchBasis = usePatchBasis;
+  _enforceMBFluxContinuity = enforceMBFluxContinuity;
+
+  _boundary.setMesh(Teuchos::rcp(this,false));
+
+}
+
+// deprecated private constructor for use by deepCopy()
+Mesh::Mesh(MeshTopologyPtr meshTopology, Teuchos::RCP<GlobalDofAssignment> gda, TBFPtr<double> bf,
            int pToAddToTest, bool useConformingTraces, bool usePatchBasis, bool enforceMBFluxContinuity) : DofInterpreter(Teuchos::rcp(this,false)) {
   _meshTopology = meshTopology;
   _gda = gda;
@@ -204,18 +275,15 @@ TMesh<Scalar>::TMesh(MeshTopologyPtr meshTopology, Teuchos::RCP<GlobalDofAssignm
 
 }
 
-template <typename Scalar>
-GlobalIndexType TMesh<Scalar>::numInitialElements(){
+GlobalIndexType Mesh::numInitialElements(){
   return _meshTopology->getRootCellIndices().size();
 }
 
-template <typename Scalar>
-GlobalIndexType TMesh<Scalar>::activeCellOffset() {
+GlobalIndexType Mesh::activeCellOffset() {
   return _gda->activeCellOffset();
 }
 
-template <typename Scalar>
-vector< ElementPtr > TMesh<Scalar>::activeElements() {
+vector< ElementPtr > Mesh::activeElements() {
   set< IndexType > activeCellIndices = _meshTopology->getActiveCellIndices();
 
   vector< ElementPtr > activeElements;
@@ -227,8 +295,7 @@ vector< ElementPtr > TMesh<Scalar>::activeElements() {
   return activeElements;
 }
 
-template <typename Scalar>
-ElementPtr TMesh<Scalar>::ancestralNeighborForSide(ElementPtr elem, int sideIndex, int &elemSideIndexInNeighbor) {
+ElementPtr Mesh::ancestralNeighborForSide(ElementPtr elem, int sideIndex, int &elemSideIndexInNeighbor) {
   CellPtr cell = _meshTopology->getCell(elem->cellID());
   pair<GlobalIndexType, unsigned> neighborInfo = cell->getNeighborInfo(sideIndex);
   elemSideIndexInNeighbor = neighborInfo.second;
@@ -238,41 +305,34 @@ ElementPtr TMesh<Scalar>::ancestralNeighborForSide(ElementPtr elem, int sideInde
   return getElement(neighborInfo.first);
 }
 
-template <typename Scalar>
-TBFPtr<Scalar> TMesh<Scalar>::bilinearForm() {
+TBFPtr<double> Mesh::bilinearForm() {
   return _bilinearForm;
 }
 
-template <typename Scalar>
-void TMesh<Scalar>::setBilinearForm( TBFPtr<Scalar> bf) {
+void Mesh::setBilinearForm( TBFPtr<double> bf) {
   // must match the original in terms of variable IDs, etc...
   _bilinearForm = bf;
 }
 
-template <typename Scalar>
-Boundary & TMesh<Scalar>::boundary() {
+Boundary & Mesh::boundary() {
   return _boundary;
 }
 
-template <typename Scalar>
-GlobalIndexType TMesh<Scalar>::cellID(Teuchos::RCP< ElementType > elemTypePtr, IndexType cellIndex, PartitionIndexType partitionNumber) {
+GlobalIndexType Mesh::cellID(Teuchos::RCP< ElementType > elemTypePtr, IndexType cellIndex, PartitionIndexType partitionNumber) {
   return _gda->cellID(elemTypePtr, cellIndex, partitionNumber);
 }
 
-template <typename Scalar>
-vector< GlobalIndexType > TMesh<Scalar>::cellIDsOfType(ElementTypePtr elemType) {
+vector< GlobalIndexType > Mesh::cellIDsOfType(ElementTypePtr elemType) {
   int rank = Teuchos::GlobalMPISession::getRank();
   return cellIDsOfType(rank,elemType);
 }
 
-template <typename Scalar>
-vector< GlobalIndexType > TMesh<Scalar>::cellIDsOfType(int partitionNumber, ElementTypePtr elemTypePtr) {
+vector< GlobalIndexType > Mesh::cellIDsOfType(int partitionNumber, ElementTypePtr elemTypePtr) {
   // returns the cell IDs for a given partition and element type
   return _gda->cellIDsOfElementType(partitionNumber, elemTypePtr);
 }
 
-template <typename Scalar>
-vector< GlobalIndexType > TMesh<Scalar>::cellIDsOfTypeGlobal(ElementTypePtr elemTypePtr) {
+vector< GlobalIndexType > Mesh::cellIDsOfTypeGlobal(ElementTypePtr elemTypePtr) {
   vector< GlobalIndexType > cellIDs;
   int partititionCount = _gda->getPartitionCount();
   for (int partitionNumber=0; partitionNumber<partititionCount; partitionNumber++) {
@@ -282,23 +342,19 @@ vector< GlobalIndexType > TMesh<Scalar>::cellIDsOfTypeGlobal(ElementTypePtr elem
   return cellIDs;
 }
 
-template <typename Scalar>
-set<GlobalIndexType> TMesh<Scalar>::cellIDsInPartition() {
+set<GlobalIndexType> Mesh::cellIDsInPartition() {
   return _gda->cellsInPartition(-1);
 }
 
-template <typename Scalar>
-int TMesh<Scalar>::cellPolyOrder(GlobalIndexType cellID) { // aka H1Order
+int Mesh::cellPolyOrder(GlobalIndexType cellID) { // aka H1Order
   return _gda->getH1Order(cellID)[0];
 }
 
-template <typename Scalar>
-vector<int> TMesh<Scalar>::cellTensorPolyOrder(GlobalIndexType cellID) { // aka H1Order
+vector<int> Mesh::cellTensorPolyOrder(GlobalIndexType cellID) { // aka H1Order
   return _gda->getH1Order(cellID);
 }
 
-template <typename Scalar>
-vector<GlobalIndexType> TMesh<Scalar>::cellIDsForPoints(const FieldContainer<double> &physicalPoints, bool minusOnesIfOffRank) {
+vector<GlobalIndexType> Mesh::cellIDsForPoints(const FieldContainer<double> &physicalPoints, bool minusOnesIfOffRank) {
   vector<GlobalIndexType> cellIDs = _meshTopology->cellIDsForPoints(physicalPoints);
 
   if (minusOnesIfOffRank) {
@@ -312,18 +368,16 @@ vector<GlobalIndexType> TMesh<Scalar>::cellIDsForPoints(const FieldContainer<dou
   return cellIDs;
 }
 
-template <typename Scalar>
-TMeshPtr<Scalar> TMesh<Scalar>::deepCopy() {
+MeshPtr Mesh::deepCopy() {
   MeshTopologyPtr meshTopoCopy = _meshTopology->deepCopy();
   GlobalDofAssignmentPtr gdaCopy = _gda->deepCopy();
 
-  TMeshPtr<Scalar> meshCopy = Teuchos::rcp( new TMesh<Scalar>(meshTopoCopy, gdaCopy, _bilinearForm, _pToAddToTest, _useConformingTraces, _usePatchBasis, _enforceMBFluxContinuity ));
+  MeshPtr meshCopy = Teuchos::rcp( new Mesh(meshTopoCopy, gdaCopy, _bilinearForm, _pToAddToTest, _useConformingTraces, _usePatchBasis, _enforceMBFluxContinuity ));
   gdaCopy->setMeshAndMeshTopology(meshCopy);
   return meshCopy;
 }
 
-template <typename Scalar>
-vector<ElementPtr> TMesh<Scalar>::elementsForPoints(const FieldContainer<double> &physicalPoints, bool nullElementsIfOffRank) {
+vector<ElementPtr> Mesh::elementsForPoints(const FieldContainer<double> &physicalPoints, bool nullElementsIfOffRank) {
 
   vector<GlobalIndexType> cellIDs = cellIDsForPoints(physicalPoints, nullElementsIfOffRank);
   vector<ElementPtr> elemsForPoints(cellIDs.size());
@@ -341,8 +395,7 @@ vector<ElementPtr> TMesh<Scalar>::elementsForPoints(const FieldContainer<double>
   return elemsForPoints;
 }
 
-template <typename Scalar>
-void TMesh<Scalar>::enforceOneIrregularity() {
+void Mesh::enforceOneIrregularity() {
   int rank = Teuchos::GlobalMPISession::getRank();
   bool meshIsNotRegular = true; // assume it's not regular and check elements
   while (meshIsNotRegular) {
@@ -393,8 +446,7 @@ void TMesh<Scalar>::enforceOneIrregularity() {
   }
 }
 
-template <typename Scalar>
-FieldContainer<double> TMesh<Scalar>::cellSideParities( ElementTypePtr elemTypePtr ) {
+FieldContainer<double> Mesh::cellSideParities( ElementTypePtr elemTypePtr ) {
   // old version (using lookup table)
   // return dynamic_cast<GDAMaximumRule2D*>(_gda.get())->cellSideParities(elemTypePtr);
 
@@ -416,18 +468,15 @@ FieldContainer<double> TMesh<Scalar>::cellSideParities( ElementTypePtr elemTypeP
   return sideParities;
 }
 
-template <typename Scalar>
-FieldContainer<double> TMesh<Scalar>::cellSideParitiesForCell( GlobalIndexType cellID ) {
+FieldContainer<double> Mesh::cellSideParitiesForCell( GlobalIndexType cellID ) {
   return _gda->cellSideParitiesForCell(cellID);
 }
 
-template <typename Scalar>
-vector<double> TMesh<Scalar>::getCellCentroid(GlobalIndexType cellID){
+vector<double> Mesh::getCellCentroid(GlobalIndexType cellID){
   return _meshTopology->getCellCentroid(cellID);
 }
 
-template <typename Scalar>
-vector< ElementPtr > TMesh<Scalar>::elementsInPartition(PartitionIndexType partitionNumber){
+vector< ElementPtr > Mesh::elementsInPartition(PartitionIndexType partitionNumber){
   set< GlobalIndexType > cellsInPartition = _gda->cellsInPartition(partitionNumber);
   vector< ElementPtr > elements;
   for (set< GlobalIndexType >::iterator cellIt = cellsInPartition.begin(); cellIt != cellsInPartition.end(); cellIt++) {
@@ -438,8 +487,7 @@ vector< ElementPtr > TMesh<Scalar>::elementsInPartition(PartitionIndexType parti
   return elements;
 }
 
-template <typename Scalar>
-vector< ElementPtr > TMesh<Scalar>::elementsOfType(PartitionIndexType partitionNumber, ElementTypePtr elemTypePtr) {
+vector< ElementPtr > Mesh::elementsOfType(PartitionIndexType partitionNumber, ElementTypePtr elemTypePtr) {
   // returns the elements for a given partition and element type
   vector< ElementPtr > elementsOfType;
   vector<GlobalIndexType> cellIDs = _gda->cellIDsOfElementType(partitionNumber, elemTypePtr);
@@ -449,8 +497,7 @@ vector< ElementPtr > TMesh<Scalar>::elementsOfType(PartitionIndexType partitionN
   return elementsOfType;
 }
 
-template <typename Scalar>
-vector< ElementPtr > TMesh<Scalar>::elementsOfTypeGlobal(ElementTypePtr elemTypePtr) {
+vector< ElementPtr > Mesh::elementsOfTypeGlobal(ElementTypePtr elemTypePtr) {
   vector< ElementPtr > elementsOfTypeVector;
   int partitionCount = _gda->getPartitionCount();
   for (int partitionNumber=0; partitionNumber<partitionCount; partitionNumber++) {
@@ -460,30 +507,25 @@ vector< ElementPtr > TMesh<Scalar>::elementsOfTypeGlobal(ElementTypePtr elemType
   return elementsOfTypeVector;
 }
 
-template <typename Scalar>
-vector< ElementTypePtr > TMesh<Scalar>::elementTypes(PartitionIndexType partitionNumber) {
+vector< ElementTypePtr > Mesh::elementTypes(PartitionIndexType partitionNumber) {
   return _gda->elementTypes(partitionNumber);
 }
 
-template <typename Scalar>
-set<GlobalIndexType> TMesh<Scalar>::getActiveCellIDs() {
+set<GlobalIndexType> Mesh::getActiveCellIDs() {
   set<IndexType> activeCellIndices = _meshTopology->getActiveCellIndices();
   set<GlobalIndexType> activeCellIDs(activeCellIndices.begin(), activeCellIndices.end());
   return activeCellIDs;
 }
 
-template <typename Scalar>
-int TMesh<Scalar>::getDimension() {
+int Mesh::getDimension() {
   return _meshTopology->getSpaceDim();
 }
 
-template <typename Scalar>
-DofOrderingFactory & TMesh<Scalar>::getDofOrderingFactory() {
+DofOrderingFactory & Mesh::getDofOrderingFactory() {
   return *_gda->getDofOrderingFactory().get();
 }
 
-template <typename Scalar>
-ElementPtr TMesh<Scalar>::getElement(GlobalIndexType cellID) {
+ElementPtr Mesh::getElement(GlobalIndexType cellID) {
   CellPtr cell = _meshTopology->getCell(cellID);
 
   ElementTypePtr elemType = _gda->elementType(cellID);
@@ -497,18 +539,15 @@ ElementPtr TMesh<Scalar>::getElement(GlobalIndexType cellID) {
   return element;
 }
 
-template <typename Scalar>
-ElementTypePtr TMesh<Scalar>::getElementType(GlobalIndexType cellID) {
+ElementTypePtr Mesh::getElementType(GlobalIndexType cellID) {
   return _gda->elementType(cellID);
 }
 
-template <typename Scalar>
-ElementTypeFactory & TMesh<Scalar>::getElementTypeFactory() {
+ElementTypeFactory & Mesh::getElementTypeFactory() {
   return _gda->getElementTypeFactory();
 }
 
-template <typename Scalar>
-GlobalIndexType TMesh<Scalar>::getVertexIndex(double x, double y, double tol) {
+GlobalIndexType Mesh::getVertexIndex(double x, double y, double tol) {
   vector<double> vertex;
   vertex.push_back(x);
   vertex.push_back(y);
@@ -521,8 +560,7 @@ GlobalIndexType TMesh<Scalar>::getVertexIndex(double x, double y, double tol) {
   }
 }
 
-template <typename Scalar>
-const map< pair<GlobalIndexType,IndexType>, GlobalIndexType>& TMesh<Scalar>::getLocalToGlobalMap() {
+const map< pair<GlobalIndexType,IndexType>, GlobalIndexType>& Mesh::getLocalToGlobalMap() {
   GDAMaximumRule2D* maxRule = dynamic_cast<GDAMaximumRule2D *>(_gda.get());
   if (maxRule == NULL) {
     cout << "getLocalToGlobalMap only supported for max rule.\n";
@@ -531,20 +569,17 @@ const map< pair<GlobalIndexType,IndexType>, GlobalIndexType>& TMesh<Scalar>::get
   return maxRule->getLocalToGlobalMap();
 }
 
-template <typename Scalar>
-bool TMesh<Scalar>::meshUsesMaximumRule() {
+bool Mesh::meshUsesMaximumRule() {
   GDAMaximumRule2D* maxRule = dynamic_cast<GDAMaximumRule2D *>(_gda.get());
   return (maxRule != NULL);
 }
 
-template <typename Scalar>
-bool TMesh<Scalar>::meshUsesMinimumRule() {
+bool Mesh::meshUsesMinimumRule() {
   GDAMinimumRule* minRule = dynamic_cast<GDAMinimumRule *>(_gda.get());
   return (minRule != NULL);
 }
 
-template <typename Scalar>
-map<IndexType, GlobalIndexType> TMesh<Scalar>::getGlobalVertexIDs(const FieldContainer<double> &vertices) {
+map<IndexType, GlobalIndexType> Mesh::getGlobalVertexIDs(const FieldContainer<double> &vertices) {
   double tol = 1e-12; // tolerance for vertex equality
 
   map<IndexType, GlobalIndexType> localToGlobalVertexIndex;
@@ -555,8 +590,7 @@ map<IndexType, GlobalIndexType> TMesh<Scalar>::getGlobalVertexIDs(const FieldCon
   return localToGlobalVertexIndex;
 }
 
-template <typename Scalar>
-TFunctionPtr<double> TMesh<Scalar>::getTransformationFunction() {
+TFunctionPtr<double> Mesh::getTransformationFunction() {
   // will be NULL for meshes without edge curves defined
 
   // for now, we recompute the transformation function each time the edge curves get updated
@@ -565,18 +599,15 @@ TFunctionPtr<double> TMesh<Scalar>::getTransformationFunction() {
   return _meshTopology->transformationFunction();
 }
 
-template <typename Scalar>
-GlobalDofAssignmentPtr TMesh<Scalar>::globalDofAssignment() {
+GlobalDofAssignmentPtr Mesh::globalDofAssignment() {
   return _gda;
 }
 
-template <typename Scalar>
-GlobalIndexType TMesh<Scalar>::globalDofCount() {
+GlobalIndexType Mesh::globalDofCount() {
   return numGlobalDofs(); // TODO: eliminate numGlobalDofs in favor of globalDofCount
 }
 
-template <typename Scalar>
-GlobalIndexType TMesh<Scalar>::globalDofIndex(GlobalIndexType cellID, IndexType localDofIndex) {
+GlobalIndexType Mesh::globalDofIndex(GlobalIndexType cellID, IndexType localDofIndex) {
   GDAMaximumRule2D* maxRule = dynamic_cast<GDAMaximumRule2D *>(_gda.get());
   if (maxRule == NULL) {
     cout << "globalDofIndex lookup only supported for max rule.\n";
@@ -585,28 +616,24 @@ GlobalIndexType TMesh<Scalar>::globalDofIndex(GlobalIndexType cellID, IndexType 
   return maxRule->globalDofIndex(cellID, localDofIndex);
 }
 
-template <typename Scalar>
-set<GlobalIndexType> TMesh<Scalar>::globalDofIndicesForCell(GlobalIndexType cellID) {
+set<GlobalIndexType> Mesh::globalDofIndicesForCell(GlobalIndexType cellID) {
   return _gda->globalDofIndicesForCell(cellID);
 }
 
-template <typename Scalar>
-set<GlobalIndexType> TMesh<Scalar>::globalDofIndicesForPartition(PartitionIndexType partitionNumber) {
+set<GlobalIndexType> Mesh::globalDofIndicesForPartition(PartitionIndexType partitionNumber) {
   return _gda->globalDofIndicesForPartition(partitionNumber);
 }
 
-//void TMesh<Scalar>::hRefine(vector<GlobalIndexType> cellIDs, Teuchos::RCP<RefinementPattern> refPattern) {
+//void Mesh::hRefine(vector<GlobalIndexType> cellIDs, Teuchos::RCP<RefinementPattern> refPattern) {
 //  hRefine(cellIDs,refPattern,vector< TSolutionPtr<double> >());
 //}
 
-template <typename Scalar>
-void TMesh<Scalar>::hRefine(const vector<GlobalIndexType> &cellIDs) {
+void Mesh::hRefine(const vector<GlobalIndexType> &cellIDs) {
   set<GlobalIndexType> cellSet(cellIDs.begin(),cellIDs.end());
   hRefine(cellSet);
 }
 
-template <typename Scalar>
-void TMesh<Scalar>::hRefine(const set<GlobalIndexType> &cellIDs) {
+void Mesh::hRefine(const set<GlobalIndexType> &cellIDs) {
   map< CellTopologyKey, set<GlobalIndexType> > cellIDsForTopo;
   for (set<GlobalIndexType>::iterator cellIDIt = cellIDs.begin(); cellIDIt != cellIDs.end();
        cellIDIt++) {
@@ -623,19 +650,16 @@ void TMesh<Scalar>::hRefine(const set<GlobalIndexType> &cellIDs) {
   }
 }
 
-template <typename Scalar>
-void TMesh<Scalar>::hRefine(const vector<GlobalIndexType> &cellIDs, Teuchos::RCP<RefinementPattern> refPattern) {
+void Mesh::hRefine(const vector<GlobalIndexType> &cellIDs, Teuchos::RCP<RefinementPattern> refPattern) {
   set<GlobalIndexType> cellSet(cellIDs.begin(),cellIDs.end());
   hRefine(cellSet,refPattern);
 }
 
-template <typename Scalar>
-void TMesh<Scalar>::hRefine(const set<GlobalIndexType> &cellIDs, Teuchos::RCP<RefinementPattern> refPattern) {
+void Mesh::hRefine(const set<GlobalIndexType> &cellIDs, Teuchos::RCP<RefinementPattern> refPattern) {
   hRefine(cellIDs, refPattern, true);
 }
 
-template <typename Scalar>
-void TMesh<Scalar>::hRefine(const set<GlobalIndexType> &cellIDs, Teuchos::RCP<RefinementPattern> refPattern, bool repartitionAndRebuild) {
+void Mesh::hRefine(const set<GlobalIndexType> &cellIDs, Teuchos::RCP<RefinementPattern> refPattern, bool repartitionAndRebuild) {
   if (cellIDs.size() == 0) return;
 
   // send h-refinement message any registered observers (may be meshes)
@@ -688,8 +712,7 @@ void TMesh<Scalar>::hRefine(const set<GlobalIndexType> &cellIDs, Teuchos::RCP<Re
   }
 }
 
-template <typename Scalar>
-void TMesh<Scalar>::hUnrefine(const set<GlobalIndexType> &cellIDs) {
+void Mesh::hUnrefine(const set<GlobalIndexType> &cellIDs) {
   if (cellIDs.size() == 0) return;
 
   // refine any registered meshes
@@ -784,35 +807,29 @@ void TMesh<Scalar>::hUnrefine(const set<GlobalIndexType> &cellIDs) {
   _boundary.buildLookupTables();
 }
 
-template <typename Scalar>
-void TMesh<Scalar>::interpretGlobalCoefficients(GlobalIndexType cellID, FieldContainer<double> &localCoefficients, const Epetra_MultiVector &globalCoefficients) {
+void Mesh::interpretGlobalCoefficients(GlobalIndexType cellID, FieldContainer<double> &localCoefficients, const Epetra_MultiVector &globalCoefficients) {
   _gda->interpretGlobalCoefficients(cellID, localCoefficients, globalCoefficients);
 }
 
-template <typename Scalar>
-void TMesh<Scalar>::interpretLocalBasisCoefficients(GlobalIndexType cellID, int varID, int sideOrdinal, const FieldContainer<double> &basisCoefficients,
+void Mesh::interpretLocalBasisCoefficients(GlobalIndexType cellID, int varID, int sideOrdinal, const FieldContainer<double> &basisCoefficients,
                                    FieldContainer<double> &globalCoefficients, FieldContainer<GlobalIndexType> &globalDofIndices) {
   _gda->interpretLocalBasisCoefficients(cellID, varID, sideOrdinal, basisCoefficients, globalCoefficients, globalDofIndices);
 }
 
-template <typename Scalar>
-void TMesh<Scalar>::interpretLocalData(GlobalIndexType cellID, const FieldContainer<double> &localDofs,
+void Mesh::interpretLocalData(GlobalIndexType cellID, const FieldContainer<double> &localDofs,
                               FieldContainer<double> &globalDofs, FieldContainer<GlobalIndexType> &globalDofIndices) {
   _gda->interpretLocalData(cellID, localDofs, globalDofs, globalDofIndices);
 }
 
-template <typename Scalar>
-GlobalIndexType TMesh<Scalar>::numActiveElements() {
+GlobalIndexType Mesh::numActiveElements() {
   return _meshTopology->activeCellCount();
 }
 
-template <typename Scalar>
-GlobalIndexType TMesh<Scalar>::numElements() {
+GlobalIndexType Mesh::numElements() {
   return _meshTopology->cellCount();
 }
 
-template <typename Scalar>
-GlobalIndexType TMesh<Scalar>::numElementsOfType( Teuchos::RCP< ElementType > elemTypePtr ) {
+GlobalIndexType Mesh::numElementsOfType( Teuchos::RCP< ElementType > elemTypePtr ) {
   // returns the global total (across all MPI nodes)
   int numElements = 0;
   PartitionIndexType partitionCount = _gda->getPartitionCount();
@@ -822,43 +839,36 @@ GlobalIndexType TMesh<Scalar>::numElementsOfType( Teuchos::RCP< ElementType > el
   return numElements;
 }
 
-template <typename Scalar>
-GlobalIndexType TMesh<Scalar>::numFluxDofs(){
+GlobalIndexType Mesh::numFluxDofs(){
   GlobalIndexType fluxDofsForPartition = _gda->partitionOwnedGlobalFluxIndices().size();
   GlobalIndexType traceDofsForPartition = _gda->partitionOwnedGlobalTraceIndices().size();
 
   return MPIWrapper::sum(fluxDofsForPartition + traceDofsForPartition);
 }
 
-template <typename Scalar>
-GlobalIndexType TMesh<Scalar>::numFieldDofs(){
+GlobalIndexType Mesh::numFieldDofs(){
   GlobalIndexType fieldDofsForPartition = _gda->partitionOwnedGlobalFieldIndices().size();
   return MPIWrapper::sum(fieldDofsForPartition);
 }
 
-template <typename Scalar>
-GlobalIndexType TMesh<Scalar>::numGlobalDofs() {
+GlobalIndexType Mesh::numGlobalDofs() {
   return _gda->globalDofCount();
 }
 
-template <typename Scalar>
-int TMesh<Scalar>::parityForSide(GlobalIndexType cellID, int sideOrdinal) {
+int Mesh::parityForSide(GlobalIndexType cellID, int sideOrdinal) {
   int parity = _gda->cellSideParitiesForCell(cellID)[sideOrdinal];
   return parity;
 }
 
-template <typename Scalar>
-PartitionIndexType TMesh<Scalar>::partitionForCellID( GlobalIndexType cellID ) {
+PartitionIndexType Mesh::partitionForCellID( GlobalIndexType cellID ) {
   return _gda->partitionForCellID(cellID);
 }
 
-template <typename Scalar>
-PartitionIndexType TMesh<Scalar>::partitionForGlobalDofIndex( GlobalIndexType globalDofIndex ) {
+PartitionIndexType Mesh::partitionForGlobalDofIndex( GlobalIndexType globalDofIndex ) {
   return _gda->partitionForGlobalDofIndex(globalDofIndex);
 }
 
-template <typename Scalar>
-GlobalIndexType TMesh<Scalar>::partitionLocalIndexForGlobalDofIndex( GlobalIndexType globalDofIndex ) {
+GlobalIndexType Mesh::partitionLocalIndexForGlobalDofIndex( GlobalIndexType globalDofIndex ) {
   GDAMaximumRule2D* maxRule = dynamic_cast<GDAMaximumRule2D *>(_gda.get());
   if (maxRule == NULL) {
     cout << "partitionLocalIndexForGlobalDofIndex only supported for max rule.\n";
@@ -867,16 +877,14 @@ GlobalIndexType TMesh<Scalar>::partitionLocalIndexForGlobalDofIndex( GlobalIndex
   return maxRule->partitionLocalIndexForGlobalDofIndex(globalDofIndex);
 }
 
-template <typename Scalar>
-FieldContainer<double> TMesh<Scalar>::physicalCellNodes( Teuchos::RCP< ElementType > elemTypePtr) {
+FieldContainer<double> Mesh::physicalCellNodes( Teuchos::RCP< ElementType > elemTypePtr) {
   int rank = Teuchos::GlobalMPISession::getRank();
   vector<GlobalIndexType> cellIDs = _gda->cellIDsOfElementType(rank, elemTypePtr);
 
   return physicalCellNodes(elemTypePtr, cellIDs);
 }
 
-template <typename Scalar>
-FieldContainer<double> TMesh<Scalar>::physicalCellNodes( Teuchos::RCP< ElementType > elemTypePtr, vector<GlobalIndexType> &cellIDs ) {
+FieldContainer<double> Mesh::physicalCellNodes( Teuchos::RCP< ElementType > elemTypePtr, vector<GlobalIndexType> &cellIDs ) {
   int numCells = cellIDs.size();
   int numVertices = elemTypePtr->cellTopoPtr->getVertexCount();
   int spaceDim = _meshTopology->getSpaceDim();
@@ -893,8 +901,7 @@ FieldContainer<double> TMesh<Scalar>::physicalCellNodes( Teuchos::RCP< ElementTy
   return physicalNodes;
 }
 
-template <typename Scalar>
-FieldContainer<double> TMesh<Scalar>::physicalCellNodesForCell( GlobalIndexType cellID ) {
+FieldContainer<double> Mesh::physicalCellNodesForCell( GlobalIndexType cellID ) {
   CellPtr cell = _meshTopology->getCell(cellID);
   int vertexCount = cell->topology()->getVertexCount();
   int spaceDim = _meshTopology->getSpaceDim();
@@ -912,8 +919,7 @@ FieldContainer<double> TMesh<Scalar>::physicalCellNodesForCell( GlobalIndexType 
   return physicalCellNodes;
 }
 
-template <typename Scalar>
-FieldContainer<double> TMesh<Scalar>::physicalCellNodesGlobal( Teuchos::RCP< ElementType > elemTypePtr ) {
+FieldContainer<double> Mesh::physicalCellNodesGlobal( Teuchos::RCP< ElementType > elemTypePtr ) {
 //  int numRanks = Teuchos::GlobalMPISession::getNProc();
 
   // user should call cellIDsOfTypeGlobal() to get the corresponding cell IDs (the cell nodes are *NOT* sorted by cell ID)
@@ -927,8 +933,7 @@ FieldContainer<double> TMesh<Scalar>::physicalCellNodesGlobal( Teuchos::RCP< Ele
   return physicalCellNodes(elemTypePtr, globalCellIDs);
 }
 
-template <typename Scalar>
-void TMesh<Scalar>::printLocalToGlobalMap() {
+void Mesh::printLocalToGlobalMap() {
   map< pair<GlobalIndexType,IndexType>, GlobalIndexType> localToGlobalMap = this->getLocalToGlobalMap();
 
   for (map< pair<GlobalIndexType,IndexType>, GlobalIndexType>::iterator entryIt = localToGlobalMap.begin();
@@ -940,8 +945,7 @@ void TMesh<Scalar>::printLocalToGlobalMap() {
   }
 }
 
-template <typename Scalar>
-void TMesh<Scalar>::printVertices() {
+void Mesh::printVertices() {
   cout << "Vertices:\n";
   unsigned vertexDim = 0;
   unsigned vertexCount = _meshTopology->getEntityCount(vertexDim);
@@ -951,18 +955,16 @@ void TMesh<Scalar>::printVertices() {
   }
 }
 
-template <typename Scalar>
-void TMesh<Scalar>::registerObserver(Teuchos::RCP<RefinementObserver> observer) {
+void Mesh::registerObserver(Teuchos::RCP<RefinementObserver> observer) {
   _registeredObservers.push_back(observer);
 }
 
 template <typename Scalar>
-void TMesh<Scalar>::registerSolution(TSolutionPtr<Scalar> solution) {
+void Mesh::registerSolution(TSolutionPtr<Scalar> solution) {
   _gda->registerSolution(solution);
 }
 
-template <typename Scalar>
-void TMesh<Scalar>::unregisterObserver(RefinementObserver* observer) {
+void Mesh::unregisterObserver(RefinementObserver* observer) {
   for (vector< Teuchos::RCP<RefinementObserver> >::iterator meshIt = _registeredObservers.begin();
        meshIt != _registeredObservers.end(); meshIt++) {
     if ( (*meshIt).get() == observer ) {
@@ -970,21 +972,19 @@ void TMesh<Scalar>::unregisterObserver(RefinementObserver* observer) {
       return;
     }
   }
-  cout << "WARNING: TMesh<Scalar>::unregisterObserver: Observer not found.\n";
+  cout << "WARNING: Mesh::unregisterObserver: Observer not found.\n";
 }
 
-template <typename Scalar>
-void TMesh<Scalar>::unregisterObserver(Teuchos::RCP<RefinementObserver> mesh) {
+void Mesh::unregisterObserver(Teuchos::RCP<RefinementObserver> mesh) {
   this->unregisterObserver(mesh.get());
 }
 
 template <typename Scalar>
-void TMesh<Scalar>::unregisterSolution(TSolutionPtr<Scalar> solution) {
+void Mesh::unregisterSolution(TSolutionPtr<Scalar> solution) {
   _gda->unregisterSolution(solution);
 }
 
-template <typename Scalar>
-void TMesh<Scalar>::pRefine(const vector<GlobalIndexType> &cellIDsForPRefinements) {
+void Mesh::pRefine(const vector<GlobalIndexType> &cellIDsForPRefinements) {
   set<GlobalIndexType> cellSet;
   for (vector<GlobalIndexType>::const_iterator cellIt=cellIDsForPRefinements.begin();
        cellIt != cellIDsForPRefinements.end(); cellIt++) {
@@ -993,13 +993,11 @@ void TMesh<Scalar>::pRefine(const vector<GlobalIndexType> &cellIDsForPRefinement
   pRefine(cellSet);
 }
 
-template <typename Scalar>
-void TMesh<Scalar>::pRefine(const set<GlobalIndexType> &cellIDsForPRefinements){
+void Mesh::pRefine(const set<GlobalIndexType> &cellIDsForPRefinements){
   pRefine(cellIDsForPRefinements,1);
 }
 
-template <typename Scalar>
-void TMesh<Scalar>::pRefine(const set<GlobalIndexType> &cellIDsForPRefinements, int pToAdd) {
+void Mesh::pRefine(const set<GlobalIndexType> &cellIDsForPRefinements, int pToAdd) {
   if (cellIDsForPRefinements.size() == 0) return;
 
   // refine any registered meshes
@@ -1019,8 +1017,7 @@ void TMesh<Scalar>::pRefine(const set<GlobalIndexType> &cellIDsForPRefinements, 
   _boundary.buildLookupTables();
 }
 
-template <typename Scalar>
-int TMesh<Scalar>::condensedRowSizeUpperBound() {
+int Mesh::condensedRowSizeUpperBound() {
   // includes multiplicity
   vector< Teuchos::RCP< ElementType > >::iterator elemTypeIt;
   int maxRowSize = 0;
@@ -1047,14 +1044,12 @@ int TMesh<Scalar>::condensedRowSizeUpperBound() {
   return maxRowSize;
 }
 
-template <typename Scalar>
-void TMesh<Scalar>::rebuildLookups() {
+void Mesh::rebuildLookups() {
   _gda->repartitionAndMigrate();
   _boundary.buildLookupTables();
 }
 
-template <typename Scalar>
-int TMesh<Scalar>::rowSizeUpperBound() {
+int Mesh::rowSizeUpperBound() {
   // includes multiplicity
   static const int MAX_SIZE_TO_PRESCRIBE = 100; // the below is a significant over-estimate.  Eventually, we want something more precise, that will analyze the BF to determine which variables actually talk to each other, and perhaps even provide a precise per-row count to the Epetra_CrsMatrix.  For now, we just cap the estimate.  (On construction, Epetra_CrsMatrix appears to be allocating the row size provided for every row, which is also wasteful.)
   vector< Teuchos::RCP< ElementType > >::iterator elemTypeIt;
@@ -1085,21 +1080,18 @@ int TMesh<Scalar>::rowSizeUpperBound() {
   return std::min(maxRowSize, MAX_SIZE_TO_PRESCRIBE);
 }
 
-template <typename Scalar>
-vector< ParametricCurvePtr > TMesh<Scalar>::parametricEdgesForCell(GlobalIndexType cellID, bool neglectCurves) {
+vector< ParametricCurvePtr > Mesh::parametricEdgesForCell(GlobalIndexType cellID, bool neglectCurves) {
   return _meshTopology->parametricEdgesForCell(cellID, neglectCurves);
 }
 
 // TODO: consider adding/moving this logic into MeshTopology
-template <typename Scalar>
-void TMesh<Scalar>::setEdgeToCurveMap(const map< pair<GlobalIndexType, GlobalIndexType>, ParametricCurvePtr > &edgeToCurveMap) {
-  TMeshPtr<Scalar> thisPtr = Teuchos::rcp(this, false);
+void Mesh::setEdgeToCurveMap(const map< pair<GlobalIndexType, GlobalIndexType>, ParametricCurvePtr > &edgeToCurveMap) {
+  MeshPtr thisPtr = Teuchos::rcp(this, false);
   map< pair<IndexType, IndexType>, ParametricCurvePtr > localMap(edgeToCurveMap.begin(),edgeToCurveMap.end());
   _meshTopology->setEdgeToCurveMap(localMap, thisPtr);
 }
 
-template <typename Scalar>
-void TMesh<Scalar>::setElementType(GlobalIndexType cellID, ElementTypePtr newType, bool sideUpgradeOnly) {
+void Mesh::setElementType(GlobalIndexType cellID, ElementTypePtr newType, bool sideUpgradeOnly) {
   GDAMaximumRule2D* maxRule = dynamic_cast<GDAMaximumRule2D *>(_gda.get());
   if (maxRule == NULL) {
     cout << "setElementType only supported for max rule.\n";
@@ -1108,39 +1100,32 @@ void TMesh<Scalar>::setElementType(GlobalIndexType cellID, ElementTypePtr newTyp
   maxRule->setElementType(cellID, newType, sideUpgradeOnly);
 }
 
-template <typename Scalar>
-void TMesh<Scalar>::setEnforceMultiBasisFluxContinuity( bool value ) {
+void Mesh::setEnforceMultiBasisFluxContinuity( bool value ) {
   _enforceMBFluxContinuity = value;
 }
 
-template <typename Scalar>
-void TMesh<Scalar>::setPartitionPolicy(  Teuchos::RCP< MeshPartitionPolicy > partitionPolicy ) {
+void Mesh::setPartitionPolicy(  Teuchos::RCP< MeshPartitionPolicy > partitionPolicy ) {
   _gda->setPartitionPolicy(partitionPolicy);
 }
 
-template <typename Scalar>
-void TMesh<Scalar>::setUsePatchBasis( bool value ) {
+void Mesh::setUsePatchBasis( bool value ) {
   // TODO: throw an exception if we've already been refined??
   _usePatchBasis = value;
 }
 
-template <typename Scalar>
-bool TMesh<Scalar>::usePatchBasis() {
+bool Mesh::usePatchBasis() {
   return _usePatchBasis;
 }
 
-template <typename Scalar>
-MeshTopologyPtr TMesh<Scalar>::getTopology() {
+MeshTopologyPtr Mesh::getTopology() {
   return _meshTopology;
 }
 
-template <typename Scalar>
-vector<unsigned> TMesh<Scalar>::vertexIndicesForCell(GlobalIndexType cellID) {
+vector<unsigned> Mesh::vertexIndicesForCell(GlobalIndexType cellID) {
   return _meshTopology->getCell(cellID)->vertices();
 }
 
-template <typename Scalar>
-FieldContainer<double> TMesh<Scalar>::vertexCoordinates(GlobalIndexType vertexIndex) {
+FieldContainer<double> Mesh::vertexCoordinates(GlobalIndexType vertexIndex) {
   int spaceDim = _meshTopology->getSpaceDim();
   FieldContainer<double> vertex(spaceDim);
   for (int d=0; d<spaceDim; d++) {
@@ -1149,8 +1134,7 @@ FieldContainer<double> TMesh<Scalar>::vertexCoordinates(GlobalIndexType vertexIn
   return vertex;
 }
 
-template <typename Scalar>
-vector< vector<double> > TMesh<Scalar>::verticesForCell(GlobalIndexType cellID) {
+vector< vector<double> > Mesh::verticesForCell(GlobalIndexType cellID) {
   CellPtr cell = _meshTopology->getCell(cellID);
   vector<unsigned> vertexIndices = cell->vertices();
   int numVertices = vertexIndices.size();
@@ -1163,8 +1147,7 @@ vector< vector<double> > TMesh<Scalar>::verticesForCell(GlobalIndexType cellID) 
   return vertices;
 }
 
-template <typename Scalar>
-void TMesh<Scalar>::verticesForCell(FieldContainer<double>& vertices, GlobalIndexType cellID) {
+void Mesh::verticesForCell(FieldContainer<double>& vertices, GlobalIndexType cellID) {
   CellPtr cell = _meshTopology->getCell(cellID);
   vector<unsigned> vertexIndices = cell->vertices();
   int numVertices = vertexIndices.size();
@@ -1179,8 +1162,7 @@ void TMesh<Scalar>::verticesForCell(FieldContainer<double>& vertices, GlobalInde
 }
 
 // global across all MPI nodes:
-template <typename Scalar>
-void TMesh<Scalar>::verticesForElementType(FieldContainer<double>& vertices, ElementTypePtr elemTypePtr) {
+void Mesh::verticesForElementType(FieldContainer<double>& vertices, ElementTypePtr elemTypePtr) {
   int spaceDim = _meshTopology->getSpaceDim();
   int numVertices = elemTypePtr->cellTopoPtr->getNodeCount();
   int numCells = numElementsOfType(elemTypePtr);
@@ -1197,8 +1179,7 @@ void TMesh<Scalar>::verticesForElementType(FieldContainer<double>& vertices, Ele
   }
 }
 
-template <typename Scalar>
-void TMesh<Scalar>::verticesForCells(FieldContainer<double>& vertices, vector<GlobalIndexType> &cellIDs) {
+void Mesh::verticesForCells(FieldContainer<double>& vertices, vector<GlobalIndexType> &cellIDs) {
   // all cells represented in cellIDs must have the same topology
   int spaceDim = _meshTopology->getSpaceDim();
   int numCells = cellIDs.size();
@@ -1223,8 +1204,7 @@ void TMesh<Scalar>::verticesForCells(FieldContainer<double>& vertices, vector<Gl
   }
 }
 
-template <typename Scalar>
-void TMesh<Scalar>::verticesForSide(FieldContainer<double>& vertices, GlobalIndexType cellID, int sideIndex) {
+void Mesh::verticesForSide(FieldContainer<double>& vertices, GlobalIndexType cellID, int sideIndex) {
   CellPtr cell = _meshTopology->getCell(cellID);
   int spaceDim = _meshTopology->getSpaceDim();
   int sideDim = spaceDim - 1;
@@ -1241,8 +1221,7 @@ void TMesh<Scalar>::verticesForSide(FieldContainer<double>& vertices, GlobalInde
   }
 }
 
-template <typename Scalar>
-void TMesh<Scalar>::writeMeshPartitionsToFile(const string & fileName){
+void Mesh::writeMeshPartitionsToFile(const string & fileName){
   // TODO: rewrite this code to only talk to rank-local cells.
 
   ofstream myFile;
@@ -1293,8 +1272,7 @@ void TMesh<Scalar>::writeMeshPartitionsToFile(const string & fileName){
   myFile.close();
 }
 
-template <typename Scalar>
-double TMesh<Scalar>::getCellMeasure(GlobalIndexType cellID)
+double Mesh::getCellMeasure(GlobalIndexType cellID)
 {
   FieldContainer<double> physicalCellNodes = physicalCellNodesForCell(cellID);
   ElementPtr elem = getElement(cellID);
@@ -1304,8 +1282,7 @@ double TMesh<Scalar>::getCellMeasure(GlobalIndexType cellID)
   return basisCache.getCellMeasures()(0);
 }
 
-template <typename Scalar>
-double TMesh<Scalar>::getCellXSize(GlobalIndexType cellID){
+double Mesh::getCellXSize(GlobalIndexType cellID){
   ElementPtr elem = getElement(cellID);
   int spaceDim = 2; // assuming 2D
   int numSides = elem->numSides();
@@ -1317,8 +1294,7 @@ double TMesh<Scalar>::getCellXSize(GlobalIndexType cellID){
   return sqrt(xDist*xDist + yDist*yDist);
 }
 
-template <typename Scalar>
-double TMesh<Scalar>::getCellYSize(GlobalIndexType cellID){
+double Mesh::getCellYSize(GlobalIndexType cellID){
   ElementPtr elem = getElement(cellID);
   int spaceDim = 2; // assuming 2D
   int numSides = elem->numSides();
@@ -1330,8 +1306,7 @@ double TMesh<Scalar>::getCellYSize(GlobalIndexType cellID){
   return sqrt(xDist*xDist + yDist*yDist);
 }
 
-template <typename Scalar>
-vector<double> TMesh<Scalar>::getCellOrientation(GlobalIndexType cellID){
+vector<double> Mesh::getCellOrientation(GlobalIndexType cellID){
   ElementPtr elem = getElement(cellID);
   int spaceDim = 2; // assuming 2D
   int numSides = elem->numSides();
@@ -1348,8 +1323,7 @@ vector<double> TMesh<Scalar>::getCellOrientation(GlobalIndexType cellID){
 
 
 #ifdef HAVE_EPETRAEXT_HDF5
-template <typename Scalar>
-void TMesh<Scalar>::saveToHDF5(string filename)
+void Mesh::saveToHDF5(string filename)
 {
   int commRank = Teuchos::GlobalMPISession::getRank();
 
@@ -1457,59 +1431,55 @@ void TMesh<Scalar>::saveToHDF5(string filename)
 #endif
 
 
-template <typename Scalar>
-TMeshPtr<Scalar> TMesh<Scalar>::readMsh(string filePath, TBFPtr<Scalar> bilinearForm, int H1Order, int pToAdd)
+MeshPtr Mesh::readMsh(string filePath, TBFPtr<double> bilinearForm, int H1Order, int pToAdd)
 {
   int rank = Teuchos::GlobalMPISession::getRank();
-  if (rank==0) cout << "Warning: TMesh<Scalar>::readMsh() deprecated.  Use MeshFactory::readMesh() instead.\n";
+  if (rank==0) cout << "Warning: Mesh::readMsh() deprecated.  Use MeshFactory::readMesh() instead.\n";
 
   return MeshFactory::readMesh(filePath, bilinearForm, H1Order, pToAdd);
 }
 
-template <typename Scalar>
-TMeshPtr<Scalar> TMesh<Scalar>::readTriangle(string filePath, TBFPtr<Scalar> bilinearForm, int H1Order, int pToAdd)
+MeshPtr Mesh::readTriangle(string filePath, TBFPtr<double> bilinearForm, int H1Order, int pToAdd)
 {
   int rank = Teuchos::GlobalMPISession::getRank();
-  if (rank==0) cout << "Warning: TMesh<Scalar>::readTriangle() deprecated.  Use MeshFactory::readTriangle() instead.\n";
+  if (rank==0) cout << "Warning: Mesh::readTriangle() deprecated.  Use MeshFactory::readTriangle() instead.\n";
 
   return MeshFactory::readTriangle(filePath, bilinearForm, H1Order, pToAdd);
 }
 
-template <typename Scalar>
-TMeshPtr<Scalar> TMesh<Scalar>::buildQuadMesh(const FieldContainer<double> &quadBoundaryPoints,
+MeshPtr Mesh::buildQuadMesh(const FieldContainer<double> &quadBoundaryPoints,
                                        int horizontalElements, int verticalElements,
-                                       TBFPtr<Scalar> bilinearForm,
+                                       TBFPtr<double> bilinearForm,
                                        int H1Order, int pTest, bool triangulate, bool useConformingTraces,
                                        map<int,int> trialOrderEnhancements,
                                        map<int,int> testOrderEnhancements) {
   int rank = Teuchos::GlobalMPISession::getRank();
-  if (rank==0) cout << "Warning: TMesh<Scalar>::buildQuadMesh() deprecated.  Use MeshFactory::buildQuadMesh() instead.\n";
+  if (rank==0) cout << "Warning: Mesh::buildQuadMesh() deprecated.  Use MeshFactory::buildQuadMesh() instead.\n";
 
   return MeshFactory::buildQuadMesh(quadBoundaryPoints, horizontalElements, verticalElements, bilinearForm, H1Order, pTest, triangulate, useConformingTraces, trialOrderEnhancements, testOrderEnhancements);
 }
 
-template <typename Scalar>
-TMeshPtr<Scalar> TMesh<Scalar>::buildQuadMeshHybrid(const FieldContainer<double> &quadBoundaryPoints,
+MeshPtr Mesh::buildQuadMeshHybrid(const FieldContainer<double> &quadBoundaryPoints,
                                              int horizontalElements, int verticalElements,
-                                             TBFPtr<Scalar> bilinearForm,
+                                             TBFPtr<double> bilinearForm,
                                              int H1Order, int pTest, bool useConformingTraces) {
   int rank = Teuchos::GlobalMPISession::getRank();
-  if (rank==0) cout << "Warning: TMesh<Scalar>::buildQuadMeshHybrid() deprecated.  Use MeshFactory::buildQuadMeshHybrid() instead.\n";
+  if (rank==0) cout << "Warning: Mesh::buildQuadMeshHybrid() deprecated.  Use MeshFactory::buildQuadMeshHybrid() instead.\n";
 
   return MeshFactory::buildQuadMeshHybrid(quadBoundaryPoints, horizontalElements, verticalElements, bilinearForm, \
                                           H1Order, pTest, useConformingTraces);
 }
 
-template <typename Scalar>
-void TMesh<Scalar>::quadMeshCellIDs(FieldContainer<int> &cellIDs,
+void Mesh::quadMeshCellIDs(FieldContainer<int> &cellIDs,
                            int horizontalElements, int verticalElements,
                            bool useTriangles) {
   int rank = Teuchos::GlobalMPISession::getRank();
-  if (rank==0) cout << "Warning: TMesh<Scalar>::quadMeshCellIDs() deprecated.  Use MeshFactory::quadMeshCellIDs() instead.\n";
+  if (rank==0) cout << "Warning: Mesh::quadMeshCellIDs() deprecated.  Use MeshFactory::quadMeshCellIDs() instead.\n";
 
   MeshFactory::quadMeshCellIDs(cellIDs, horizontalElements, verticalElements, useTriangles);
 }
 
 namespace Camellia {
-  template class TMesh<double>;
+  template void Mesh::registerSolution(TSolutionPtr<double> solution);
+  template void Mesh::unregisterSolution(TSolutionPtr<double> solution);
 }

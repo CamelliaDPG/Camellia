@@ -42,14 +42,14 @@ namespace Camellia {
     map<GlobalIndexType, double > _rieszRepNormSquared; // from cellID to norm squared of riesz inversion
     map<GlobalIndexType, double > _rieszRepNormSquaredGlobal; // from cellID to norm squared of riesz inversion
 
-    TMeshPtr<Scalar> _mesh;
+    MeshPtr _mesh;
     TIPPtr<Scalar> _ip;
     TLinearTermPtr<Scalar> _functional;  // the RHS stuff here and below is misnamed -- should just be called functional
     bool _printAll;
     bool _repsNotComputed;
 
    public:
-    TRieszRep(TMeshPtr<Scalar> mesh, TIPPtr<Scalar> ip, TLinearTermPtr<Scalar> functional){
+    TRieszRep(MeshPtr mesh, TIPPtr<Scalar> ip, TLinearTermPtr<Scalar> functional){
       _mesh = mesh;
       _ip = ip;
       _functional = functional;
@@ -67,7 +67,7 @@ namespace Camellia {
 
     TLinearTermPtr<Scalar> getFunctional();
 
-    TMeshPtr<Scalar> mesh();
+    MeshPtr mesh();
 
     // for testing
     map<GlobalIndexType,Intrepid::FieldContainer<Scalar> > integrateFunctional();
@@ -90,7 +90,7 @@ namespace Camellia {
     map<GlobalIndexType,double> computeAlternativeNormSqOnCells(TIPPtr<Scalar> ip, vector<GlobalIndexType> cellIDs);
 
     static TFunctionPtr<Scalar> repFunction( VarPtr var, TRieszRepPtr<Scalar> rep );
-    static TRieszRepPtr<Scalar> rieszRep(TMeshPtr<Scalar> mesh, TIPPtr<Scalar> ip, TLinearTermPtr<Scalar> functional);
+    static TRieszRepPtr<Scalar> rieszRep(MeshPtr mesh, TIPPtr<Scalar> ip, TLinearTermPtr<Scalar> functional);
   };
 
   extern template class TRieszRep<double>;
