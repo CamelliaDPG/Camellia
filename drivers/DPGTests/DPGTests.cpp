@@ -352,8 +352,8 @@ void DPGTests::runTests() {
 }
 
 bool DPGTests::testComputeStiffnessConformingVertices() {
-  bool oldWarnState = BilinearFormUtility::warnAboutZeroRowsAndColumns();
-  BilinearFormUtility::setWarnAboutZeroRowsAndColumns(false);
+  bool oldWarnState = BilinearFormUtility<double>::warnAboutZeroRowsAndColumns();
+  BilinearFormUtility<double>::setWarnAboutZeroRowsAndColumns(false);
   
   bool success = true;
   
@@ -403,10 +403,10 @@ bool DPGTests::testComputeStiffnessConformingVertices() {
   FieldContainer<double> cellSideParities(numTests,numSides);
   cellSideParities.initialize(1.0); // for 1-element meshes, all side parites are 1.0
   
-  BilinearFormUtility::computeStiffnessMatrix(conformingStiffness, bilinearForm,
+  BilinearFormUtility<double>::computeStiffnessMatrix(conformingStiffness, bilinearForm,
                                               conformingOrdering, testOrdering,
                                               quad_4, quadPoints,cellSideParities);
-  BilinearFormUtility::computeStiffnessMatrix(nonConformingStiffness, bilinearForm,
+  BilinearFormUtility<double>::computeStiffnessMatrix(nonConformingStiffness, bilinearForm,
                                               nonConformingOrdering, testOrdering,
                                               quad_4, quadPoints,cellSideParities);
   
@@ -424,7 +424,7 @@ bool DPGTests::testComputeStiffnessConformingVertices() {
   
   success = fcsAgree(myName,expectedConformingStiffness,conformingStiffness,tol);
 
-  BilinearFormUtility::setWarnAboutZeroRowsAndColumns(oldWarnState);
+  BilinearFormUtility<double>::setWarnAboutZeroRowsAndColumns(oldWarnState);
   return success;
 
 }
@@ -604,7 +604,7 @@ bool DPGTests::testComputeStiffnessFlux() {
   FieldContainer<double> cellSideParities(numTests,numSides);
   cellSideParities.initialize(1.0); // for 1-element meshes, all side parites are 1.0
   
-  BilinearFormUtility::computeStiffnessMatrix(stiffnessActual, bilinearForm,
+  BilinearFormUtility<double>::computeStiffnessMatrix(stiffnessActual, bilinearForm,
                                               traceOrdering, testOrdering,
                                               quad_4, quadPoints, cellSideParities);
   
@@ -690,7 +690,7 @@ bool DPGTests::testComputeStiffnessTrace() {
   FieldContainer<double> cellSideParities(numTests,numSides);
   cellSideParities.initialize(1.0); // for 1-element meshes, all side parites are 1.0
   
-  BilinearFormUtility::computeStiffnessMatrix(stiffnessActual, bilinearForm,
+  BilinearFormUtility<double>::computeStiffnessMatrix(stiffnessActual, bilinearForm,
                                               traceOrdering, testOrdering,
                                               quad_4, quadPoints,cellSideParities);
   
@@ -1011,7 +1011,7 @@ bool DPGTests::testAnalyticBoundaryIntegral(bool conforming) {
   
   TestBilinearFormAnalyticBoundaryIntegral::expectedFinalStiffnessForCubicsOnQuad(finalStiffnessExpected,conforming);
   
-  BilinearFormUtility::computeStiffnessMatrix(finalStiffnessActual1,ipMatrixExpected,ipWeightsExpected);
+  BilinearFormUtility<double>::computeStiffnessMatrix(finalStiffnessActual1,ipMatrixExpected,ipWeightsExpected);
   
   string myNameFinalByMultiplying = "testAnalyticBoundaryIntegral.finalStiffnessByMultiplying";
   successLocal = fcsAgree(myNameFinalByMultiplying, finalStiffnessExpected, finalStiffnessActual1, tol);
@@ -1072,7 +1072,7 @@ bool DPGTests::testOptimalStiffnessByMultiplying() {
     }
   }
   
-  BilinearFormUtility::computeStiffnessMatrix(stiffness,ipMatrix,optWeights);
+  BilinearFormUtility<double>::computeStiffnessMatrix(stiffness,ipMatrix,optWeights);
   return fcsAgree(myName,expectedStiffness,stiffness,tol);
 }
 
@@ -1094,7 +1094,7 @@ bool DPGTests::testWeightBasis() {
       }
     }
   }
-  BilinearFormUtility::weightCellBasisValues(basisValues, weights, offset);
+  BilinearFormUtility<double>::weightCellBasisValues(basisValues, weights, offset);
   bool success = true;
   for (int cellIndex = 0; cellIndex < numCells; cellIndex++) {
     for (int fieldIndex=0; fieldIndex < numBasisFields; fieldIndex++) {

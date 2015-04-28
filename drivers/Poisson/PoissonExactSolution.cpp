@@ -160,6 +160,6 @@ void PoissonExactSolution::setUseSinglePointBCForPHI(bool useSinglePointBCForPhi
   }
 }
 
-Teuchos::RCP<ExactSolution> PoissonExactSolution::poissonExactPolynomialSolution(int polyOrder, bool useConformingTraces) {
+Teuchos::RCP<ExactSolution<double>> PoissonExactSolution::poissonExactPolynomialSolution(int polyOrder, bool useConformingTraces) {
   return Teuchos::rcp( new PoissonExactSolution(POLYNOMIAL,polyOrder,useConformingTraces));
 }

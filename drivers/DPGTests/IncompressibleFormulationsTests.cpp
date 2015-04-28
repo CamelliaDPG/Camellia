@@ -506,7 +506,7 @@ bool IncompressibleFormulationsTests::testVGPStokesFormulationConsistency() {
           
           SpatialFilterPtr entireBoundary = Teuchos::rcp( new SpatialFilterUnfiltered ); // SpatialFilterUnfiltered returns true everywhere
           
-          Teuchos::RCP<ExactSolution> vgpStokesExactSolution = vgpStokesFormulation->exactSolution(u1_exact, u2_exact, p_exact, entireBoundary);
+          Teuchos::RCP<ExactSolution<double>> vgpStokesExactSolution = vgpStokesFormulation->exactSolution(u1_exact, u2_exact, p_exact, entireBoundary);
           
           BCPtr vgpBC = vgpStokesFormulation->bc(u1_exact, u2_exact, entireBoundary);
           
@@ -553,7 +553,7 @@ bool IncompressibleFormulationsTests::testVGPStokesFormulationCorrectness() {
   
   Teuchos::RCP< VGPStokesFormulation > vgpStokesFormulation;
   Teuchos::RCP< Solution > vgpStokesSolution;
-  Teuchos::RCP<ExactSolution> vgpStokesExactSolution;
+  Teuchos::RCP<ExactSolution<double>> vgpStokesExactSolution;
   
 //  cout << "Warning: testVGPStokesFormulationCorrectness() is trivial.\n";
   
@@ -798,7 +798,7 @@ bool IncompressibleFormulationsTests::testVGPNavierStokesFormulationConsistency(
       cout << "p_exact: " << p_exact->displayString() << endl;
     }
     
-    Teuchos::RCP<ExactSolution> exactSolution = Teuchos::rcp( new ExactSolution );
+    Teuchos::RCP<ExactSolution<double>> exactSolution = Teuchos::rcp( new ExactSolution<double> );
     
     int H1Order = maxPolyOrder + 1;
     double width = 2.0, height = 2.0, x0 = -1.0, y0 = -1.0;
@@ -840,7 +840,7 @@ bool IncompressibleFormulationsTests::testVGPNavierStokesFormulationConsistency(
           
           FunctionPtr u_exact = Function::vectorize(u1_exact, u2_exact);
           
-          Teuchos::RCP<ExactSolution> exactSolution = formulation.exactSolution(u_exact, p_exact);
+          Teuchos::RCP<ExactSolution<double>> exactSolution = formulation.exactSolution(u_exact, p_exact);
           MeshPtr mesh = backgroundFlow->mesh();
           
           int maxIters = 20;
@@ -915,7 +915,7 @@ bool IncompressibleFormulationsTests::testVGPNavierStokesFormulationCorrectness(
   
   Teuchos::RCP< VGPStokesFormulation > vgpStokesFormulation;
   Teuchos::RCP< Solution > vgpStokesSolution;
-  Teuchos::RCP<ExactSolution> vgpStokesExactSolution;
+  Teuchos::RCP<ExactSolution<double>> vgpStokesExactSolution;
   
   //  cout << "Warning: testVGPStokesFormulationCorrectness() is trivial.\n";
   

@@ -7,7 +7,7 @@
 
 #include "Var.h"
 
-class ConfusionManufacturedSolution : public ExactSolution {
+class ConfusionManufacturedSolution : public ExactSolution<double> {
 private:
   double _epsilon, _beta_x, _beta_y;
   
@@ -22,6 +22,6 @@ public:
   // ExactSolution:
   virtual int H1Order(); // polyOrder+1, for polynomial solutions...
   
-  static Teuchos::RCP<ExactSolution> confusionManufacturedSolution(double epsilon, double beta_x, double beta_y);
+  static Teuchos::RCP<ExactSolution<double>> confusionManufacturedSolution(double epsilon, double beta_x, double beta_y);
 };
 #endif

@@ -76,7 +76,7 @@ bool MeshRefinementTests::checkMultiElementStiffness(Teuchos::RCP<Mesh> mesh, in
   
   // get actual values:
   physicalCellNodes = mesh->physicalCellNodesForCell(cellID);
-  BilinearFormUtility::computeStiffnessMatrixForCell(actualValues, mesh, cellID);
+  BilinearFormUtility<double>::computeStiffnessMatrixForCell(actualValues, mesh, cellID);
   
   if ( !fcsAgree(expectedValues,actualValues,tol,maxDiff) ) {
     cout << "Failure in element " << cellID <<  " stiffness computation (using Multi-Basis); maxDiff = " << maxDiff << endl;
@@ -428,7 +428,7 @@ bool MeshRefinementTests::testUniformMeshStiffnessMatrices() {
   preStiffnessExpectedUniform(expectedValues,_h,elemType,sideParities);
   // get actual values:
   physicalCellNodes = _multiB->physicalCellNodesForCell(_B1multi->cellID());
-  BilinearFormUtility::computeStiffnessMatrixForCell(actualValues, _multiB, _B1multi->cellID());
+  BilinearFormUtility<double>::computeStiffnessMatrixForCell(actualValues, _multiB, _B1multi->cellID());
 
   if ( !fcsAgree(expectedValues,actualValues,tol,maxDiff) ) {
     cout << "Failure in uniform mesh B (with usePatchBasis=false) stiffness computation; maxDiff = " << maxDiff << endl;
@@ -445,7 +445,7 @@ bool MeshRefinementTests::testUniformMeshStiffnessMatrices() {
   preStiffnessExpectedUniform(expectedValues,_h_small,elemType,sideParities);
   // get actual values:
   physicalCellNodes = _multiC->physicalCellNodesForCell(_C4multi->cellID());
-  BilinearFormUtility::computeStiffnessMatrixForCell(actualValues, _multiC, _C4multi->cellID());
+  BilinearFormUtility<double>::computeStiffnessMatrixForCell(actualValues, _multiC, _C4multi->cellID());
   
   if ( !fcsAgree(expectedValues,actualValues,tol,maxDiff) ) {
     cout << "Failure in uniform mesh C (with usePatchBasis=false) stiffness computation; maxDiff = " << maxDiff << endl;

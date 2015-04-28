@@ -796,16 +796,16 @@ bool MeshTestSuite::testExactSolution(bool checkL2Norm) {
   quadPoints(3,0) = 0.0;
   quadPoints(3,1) = 1.0;
   
-  Teuchos::RCP<ExactSolution> exactLinear = PoissonExactSolution::poissonExactPolynomialSolution(1);
-  Teuchos::RCP<ExactSolution> exactQuadratic = PoissonExactSolution::poissonExactPolynomialSolution(2);
-  Teuchos::RCP<ExactSolution> exactCubic = PoissonExactSolution::poissonExactPolynomialSolution(3);
-  Teuchos::RCP<ExactSolution> exactQuartic = PoissonExactSolution::poissonExactPolynomialSolution(4);
+  Teuchos::RCP<ExactSolution<double>> exactLinear = PoissonExactSolution::poissonExactPolynomialSolution(1);
+  Teuchos::RCP<ExactSolution<double>> exactQuadratic = PoissonExactSolution::poissonExactPolynomialSolution(2);
+  Teuchos::RCP<ExactSolution<double>> exactCubic = PoissonExactSolution::poissonExactPolynomialSolution(3);
+  Teuchos::RCP<ExactSolution<double>> exactQuartic = PoissonExactSolution::poissonExactPolynomialSolution(4);
   
   //cout << "************************************************\n";
   //exactCubic->bilinearForm()->printTrialTestInteractions();
   //cout << "************************************************\n";
   
-  vector<Teuchos::RCP<ExactSolution> > exactSolutions;
+  vector<Teuchos::RCP<ExactSolution<double>> > exactSolutions;
   exactSolutions.push_back(exactLinear);
   exactSolutions.push_back(exactQuadratic);
   exactSolutions.push_back(exactCubic);
@@ -814,7 +814,7 @@ bool MeshTestSuite::testExactSolution(bool checkL2Norm) {
   VarPtr phi = PoissonBilinearForm::poissonBilinearForm()->varFactory().fieldVar(PoissonBilinearForm::S_PHI);
   
   for (int i=0; i<exactSolutions.size(); i++) {
-    Teuchos::RCP<ExactSolution> exactSolution = exactSolutions[i];
+    Teuchos::RCP<ExactSolution<double>> exactSolution = exactSolutions[i];
     int order = exactSolution->H1Order(); // matters for getting enough cubature points, and of course recovering the exact solution
     Teuchos::RCP<Mesh> myMesh = MeshFactory::buildQuadMesh(quadPoints, 3, 3, exactSolution->bilinearForm(), order, order+1);
     
@@ -924,7 +924,7 @@ bool MeshTestSuite::testMeshSolvePointwise() {
   
   Teuchos::RCP<Mesh> myMesh = MeshFactory::buildQuadMesh(quadPoints, 1, 1, bilinearForm, order, order+1);
   
-  Teuchos::RCP<ExactSolution> exactLinear = PoissonExactSolution::poissonExactPolynomialSolution(1);
+  Teuchos::RCP<ExactSolution<double>> exactLinear = PoissonExactSolution::poissonExactPolynomialSolution(1);
   
   BCPtr bc = exactLinear->bc();
   RHSPtr rhs = exactLinear->rhs();
