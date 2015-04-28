@@ -1108,15 +1108,14 @@ void CamelliaCellTools::getTensorPoints(Intrepid::FieldContainer<double>& tensor
 }
 
 // copied from Intrepid's CellTools and specialized to allow use when we have curvilinear geometry
-void CamelliaCellTools::mapToReferenceFrameInitGuess(       FieldContainer<double>  &        refPoints,
+void CamelliaCellTools::mapToReferenceFrameInitGuess(      FieldContainer<double>  &        refPoints,
                                                      const FieldContainer<double>  &        initGuess,
                                                      const FieldContainer<double>  &        physPoints,
-                                                     MeshTopologyPtr meshTopo, IndexType cellID, int cubatureDegree)
+                                                     BasisCachePtr basisCache)
 {
-  CellPtr cell = meshTopo->getCell(cellID);
-  int spaceDim  = meshTopo->getSpaceDim();
+  int spaceDim  = basisCache->cellTopology()->getDimension();
   int numPoints;
-  int numCells=1;
+  int numCells=physPoints.dimension(0);
   
   // Temp arrays for Newton iterates and Jacobians. Resize according to rank of ref. point array
   FieldContainer<double> xOld;
@@ -1137,19 +1136,6 @@ void CamelliaCellTools::mapToReferenceFrameInitGuess(       FieldContainer<doubl
       }// d
     }// p
   }// c
-  
-  BasisCachePtr basisCache = BasisCache::basisCacheForReferenceCell(cell->topology(), cubatureDegree);
-  
-  if (meshTopo->transformationFunction().get() != NULL) {
-    TFunctionPtr<double> transformFunction = meshTopo->transformationFunction();
-    basisCache->setTransformationFunction(transformFunction, true);
-  }
-  std::vector<GlobalIndexType> cellIDs;
-  cellIDs.push_back(cellID);
-  bool includeCellDimension = true;
-  basisCache->setPhysicalCellNodes(meshTopo->physicalCellNodesForCell(cellID, includeCellDimension), cellIDs, false);
-  
-//  BasisCachePtr basisCache = BasisCache::basisCacheForCell(mesh, cellID);
   
   // Newton method to solve the equation F(refPoints) - physPoints = 0:
   // refPoints = xOld - DF^{-1}(xOld)*(F(xOld) - physPoints) = xOld + DF^{-1}(xOld)*(physPoints - F(xOld))
@@ -1190,6 +1176,28 @@ void CamelliaCellTools::mapToReferenceFrameInitGuess(       FieldContainer<doubl
     // initialize next Newton step
     xOld = refPoints;
   } // for(iter)
+}
+
+// copied from Intrepid's CellTools and specialized to allow use when we have curvilinear geometry
+void CamelliaCellTools::mapToReferenceFrameInitGuess(       FieldContainer<double>  &        refPoints,
+                                                     const FieldContainer<double>  &        initGuess,
+                                                     const FieldContainer<double>  &        physPoints,
+                                                     MeshTopologyPtr meshTopo, IndexType cellID, int cubatureDegree)
+{
+  CellPtr cell = meshTopo->getCell(cellID);
+  
+  BasisCachePtr basisCache = BasisCache::basisCacheForReferenceCell(cell->topology(), cubatureDegree);
+  
+  if (meshTopo->transformationFunction().get() != NULL) {
+    TFunctionPtr<double> transformFunction = meshTopo->transformationFunction();
+    basisCache->setTransformationFunction(transformFunction, true);
+  }
+  std::vector<GlobalIndexType> cellIDs;
+  cellIDs.push_back(cellID);
+  bool includeCellDimension = true;
+  basisCache->setPhysicalCellNodes(meshTopo->physicalCellNodesForCell(cellID, includeCellDimension), cellIDs, false);
+  
+  mapToReferenceFrameInitGuess(refPoints, initGuess, physPoints, basisCache);
 }
 
 // copied from Intrepid's CellTools and specialized to allow use when we have curvilinear geometry
