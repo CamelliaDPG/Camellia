@@ -26,7 +26,7 @@ namespace {
     PoissonFormulation form(spaceDim, useConformingTraces);
     BFPtr bf = form.bf();
 
-    DofOrderingFactory<double> factory(bf);
+    DofOrderingFactory factory(bf);
 
     vector<int> polyOrder(2); // space, time
     polyOrder[0] = 2;

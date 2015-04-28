@@ -82,7 +82,7 @@ TMesh<Scalar>::TMesh(MeshTopologyPtr meshTopology, TBFPtr<Scalar> bilinearForm, 
 
   _meshTopology = meshTopology;
 
-  DofOrderingFactoryPtr<Scalar> dofOrderingFactoryPtr = Teuchos::rcp( new DofOrderingFactory<Scalar>(bilinearForm, trialOrderEnhancements,testOrderEnhancements) );
+  DofOrderingFactoryPtr dofOrderingFactoryPtr = Teuchos::rcp( new DofOrderingFactory(bilinearForm, trialOrderEnhancements,testOrderEnhancements) );
   _enforceMBFluxContinuity = false;
   //  MeshPartitionPolicyPtr partitionPolicy = Teuchos::rcp( new MeshPartitionPolicy() );
   if ( partitionPolicy.get() == NULL )
@@ -111,7 +111,7 @@ TMesh<Scalar>::TMesh(MeshTopologyPtr meshTopology, TBFPtr<Scalar> bilinearForm, 
 
   _meshTopology = meshTopology;
 
-  DofOrderingFactoryPtr<Scalar> dofOrderingFactoryPtr = Teuchos::rcp( new DofOrderingFactory<Scalar>(bilinearForm, trialOrderEnhancements,testOrderEnhancements) );
+  DofOrderingFactoryPtr dofOrderingFactoryPtr = Teuchos::rcp( new DofOrderingFactory(bilinearForm, trialOrderEnhancements,testOrderEnhancements) );
   _enforceMBFluxContinuity = false;
 //  MeshPartitionPolicyPtr partitionPolicy = Teuchos::rcp( new MeshPartitionPolicy() );
   if ( partitionPolicy.get() == NULL )
@@ -143,7 +143,7 @@ TMesh<Scalar>::TMesh(const vector<vector<double> > &vertices, vector< vector<uns
   MeshGeometryPtr meshGeometry = Teuchos::rcp( new MeshGeometry(vertices, elementVertices) );
   _meshTopology = Teuchos::rcp( new MeshTopology(meshGeometry, periodicBCs) );
 
-  DofOrderingFactoryPtr<Scalar> dofOrderingFactoryPtr = Teuchos::rcp( new DofOrderingFactory<Scalar>(bilinearForm, trialOrderEnhancements,testOrderEnhancements) );
+  DofOrderingFactoryPtr dofOrderingFactoryPtr = Teuchos::rcp( new DofOrderingFactory(bilinearForm, trialOrderEnhancements,testOrderEnhancements) );
   _enforceMBFluxContinuity = false;
   MeshPartitionPolicyPtr partitionPolicy = Teuchos::rcp( new ZoltanMeshPartitionPolicy() );
 
@@ -478,7 +478,7 @@ int TMesh<Scalar>::getDimension() {
 }
 
 template <typename Scalar>
-DofOrderingFactory<Scalar> & TMesh<Scalar>::getDofOrderingFactory() {
+DofOrderingFactory & TMesh<Scalar>::getDofOrderingFactory() {
   return *_gda->getDofOrderingFactory().get();
 }
 

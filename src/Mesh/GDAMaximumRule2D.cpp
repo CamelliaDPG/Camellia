@@ -18,7 +18,7 @@
 using namespace Intrepid;
 using namespace Camellia;
 
-GDAMaximumRule2D::GDAMaximumRule2D(MeshPtr mesh, VarFactory varFactory, DofOrderingFactoryPtr<double> dofOrderingFactory,
+GDAMaximumRule2D::GDAMaximumRule2D(MeshPtr mesh, VarFactory varFactory, DofOrderingFactoryPtr dofOrderingFactory,
                                    MeshPartitionPolicyPtr partitionPolicy, unsigned initialH1OrderTrial, unsigned testOrderEnhancement, bool enforceMBFluxContinuity)
 : GlobalDofAssignment(mesh,varFactory,dofOrderingFactory,partitionPolicy, vector<int>(1,initialH1OrderTrial), testOrderEnhancement, true)
 {

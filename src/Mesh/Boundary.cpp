@@ -209,8 +209,8 @@ void Boundary<Scalar>::bcsToImpose( map<  GlobalIndexType, Scalar > &globalDofIn
   CellPtr cell = _mesh->getTopology()->getCell(cellID);
 
   // define a couple of important inner products:
-  IPPtr ipL2 = Teuchos::rcp( new IP );
-  IPPtr ipH1 = Teuchos::rcp( new IP );
+  TIPPtr<Scalar> ipL2 = Teuchos::rcp( new TIP<Scalar> );
+  TIPPtr<Scalar> ipH1 = Teuchos::rcp( new TIP<Scalar> );
   VarFactory varFactory;
   VarPtr trace = varFactory.traceVar("trace");
   VarPtr flux = varFactory.traceVar("flux");

@@ -38,6 +38,7 @@ namespace Camellia {
 	class BasisFactory;
 	class Cell;
 	class DofOrdering;
+  class DofOrderingFactory;
 	class Element;
 	class ElementType;
 	class GlobalDofAssignment;
@@ -77,6 +78,7 @@ namespace Camellia {
 	typedef Teuchos::RCP<BasisFactory> BasisFactoryPtr;
 	typedef Teuchos::RCP<Cell> CellPtr;
 	typedef Teuchos::RCP<DofOrdering> DofOrderingPtr;
+  typedef Teuchos::RCP<DofOrderingFactory> DofOrderingFactoryPtr;
 	typedef Teuchos::RCP<Element> ElementPtr;
 	typedef Teuchos::RCP<ElementType> ElementTypePtr;
 	typedef Teuchos::RCP<GlobalDofAssignment> GlobalDofAssignmentPtr;
@@ -86,6 +88,7 @@ namespace Camellia {
   typedef Teuchos::RCP<RefinementPattern> RefinementPatternPtr;
 	typedef Teuchos::RCP<SpatialFilter> SpatialFilterPtr;
 	typedef Teuchos::RCP<Var> VarPtr;
+	typedef Teuchos::RCP<VarFactory> VarFactoryPtr;
   // templates
   template <typename Scalar>
     using TBCPtr = Teuchos::RCP<TBC<Scalar> >;
@@ -164,12 +167,6 @@ namespace Camellia {
   template <typename Scalar=double>
     class TAmesos2Solver;
   typedef TAmesos2Solver<double> Amesos2Solver;
-
-  template <typename Scalar=double>
-    class DofOrderingFactory;
-
-  template <typename Scalar>
-    using DofOrderingFactoryPtr = Teuchos::RCP<DofOrderingFactory<Scalar> >;
 
   template <typename Scalar=double>
     class TMeshFactory;

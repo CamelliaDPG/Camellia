@@ -84,10 +84,10 @@ namespace Camellia {
 
     set<GlobalIndexType> getGlobalDofIndicesForIntegralContribution(GlobalIndexType cellID, int sideOrdinal); // assuming an integral is being done over the whole mesh skeleton, returns either an empty set or the global dof indices associated with the given side, depending on whether the cell "owns" the side for the purpose of such contributions.
   public:
-    GDAMinimumRule(MeshPtr mesh, VarFactory varFactory, DofOrderingFactoryPtr<double> dofOrderingFactory, MeshPartitionPolicyPtr partitionPolicy,
+    GDAMinimumRule(MeshPtr mesh, VarFactory varFactory, DofOrderingFactoryPtr dofOrderingFactory, MeshPartitionPolicyPtr partitionPolicy,
                    unsigned initialH1OrderTrial, unsigned testOrderEnhancement);
 
-    GDAMinimumRule(MeshPtr mesh, VarFactory varFactory, DofOrderingFactoryPtr<double> dofOrderingFactory, MeshPartitionPolicyPtr partitionPolicy,
+    GDAMinimumRule(MeshPtr mesh, VarFactory varFactory, DofOrderingFactoryPtr dofOrderingFactory, MeshPartitionPolicyPtr partitionPolicy,
                    vector<int> initialH1OrderTrial, unsigned testOrderEnhancement);
 
     GlobalDofAssignmentPtr deepCopy();

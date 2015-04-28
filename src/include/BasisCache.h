@@ -73,7 +73,7 @@ namespace Camellia {
     int _cubaturePhaseCount; // how many phases to get through all the points
     std::vector<int> _phasePointOrdinalOffsets;
 
-    Teuchos::RCP<Mesh> _mesh;
+    MeshPtr _mesh;
     Intrepid::FieldContainer<double> _cubPoints, _cubWeights;
     Intrepid::FieldContainer<double> _allCubPoints, _allCubWeights; // when using phased cubature points, these store the whole set
 
@@ -159,7 +159,7 @@ namespace Camellia {
     void cubatureDegreeForElementType(ElementTypePtr elemType, bool testVsTest, int &cubatureDegree);
     void cubatureDegreeForElementType(ElementTypePtr elemType, bool testVsTest, int &cubatureDegreeSpace, int &cubatureDegreeTime);
   public:
-    BasisCache(ElementTypePtr elemType, Teuchos::RCP<Mesh> mesh = Teuchos::rcp( (Mesh*) NULL ), bool testVsTest=false,
+    BasisCache(ElementTypePtr elemType, MeshPtr mesh = Teuchos::rcp( (Mesh*) NULL ), bool testVsTest=false,
                int cubatureDegreeEnrichment = 0, bool tensorProductTopologyMeansSpaceTime = true); // use testVsTest=true for test space inner product
 
     BasisCache(CellTopoPtr cellTopo, int cubDegree, bool createSideCacheToo, bool tensorProductTopologyMeansSpaceTime=true);
@@ -200,8 +200,8 @@ namespace Camellia {
     void setMaxPointsPerCubaturePhase(int maxPoints);
     void setCubaturePhase(int phaseOrdinal);
 
-    Teuchos::RCP<Mesh> mesh();
-    void setMesh(Teuchos::RCP<Mesh> mesh);
+    MeshPtr mesh();
+    void setMesh(MeshPtr mesh);
 
     void discardPhysicalNodeInfo(); // discards physicalNodes and all transformed basis values.
 
@@ -259,9 +259,9 @@ namespace Camellia {
     static BasisCachePtr parametricQuadCache(int cubatureDegree);
     static BasisCachePtr parametricQuadCache(int cubatureDegree, const Intrepid::FieldContainer<double> &refCellPoints, int sideCacheIndex=-1);
     static BasisCachePtr basisCache1D(double x0, double x1, int cubatureDegree); // x0 and x1: physical space endpoints
-    static BasisCachePtr basisCacheForCell(Teuchos::RCP<Mesh> mesh, GlobalIndexType cellID, bool testVsTest = false,
+    static BasisCachePtr basisCacheForCell(MeshPtr mesh, GlobalIndexType cellID, bool testVsTest = false,
                                            int cubatureDegreeEnrichment = 0, bool tensorProductTopologyMeansSpaceTime=true);
-    static BasisCachePtr basisCacheForCellType(Teuchos::RCP<Mesh> mesh, ElementTypePtr elemType, bool testVsTest = false,
+    static BasisCachePtr basisCacheForCellType(MeshPtr mesh, ElementTypePtr elemType, bool testVsTest = false,
                                                int cubatureDegreeEnrichment = 0, bool tensorProductTopologyMeansSpaceTime=true); // for cells on the local MPI node
     static BasisCachePtr basisCacheForReferenceCell(shards::CellTopology &cellTopo, int cubatureDegree, bool createSideCacheToo=false);
     static BasisCachePtr basisCacheForRefinedReferenceCell(shards::CellTopology &cellTopo, int cubatureDegree, RefinementBranch refinementBranch, bool createSideCacheToo=false);

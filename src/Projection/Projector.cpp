@@ -220,7 +220,7 @@ void Projector<Scalar>::projectFunctionOntoBasisInterpolating(FieldContainer<Sca
   ip = ipVarPair.first;
   VarPtr v = ipVarPair.second;
 
-  TIPPtr<Scalar> ip_l2 = Teuchos::rcp( new IP );
+  TIPPtr<Scalar> ip_l2 = Teuchos::rcp( new TIP<Scalar> );
   ip_l2->addTerm(v);
 
   // for now, make all projections use L^2... (having some issues with gradients and cell Jacobians--I think we need the restriction of the cell Jacobian to the subcell, e.g., and it's not clear how to do that...)

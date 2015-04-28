@@ -53,11 +53,11 @@
 #include "CamelliaIntrepidExtendedTypes.h"
 #include "DofOrdering.h"
 #include "Var.h"
+#include "VarFactory.h"
 
 using namespace std;
 
 namespace Camellia {
-  template <typename Scalar>
   class DofOrderingFactory {
   private:
     struct Comparator {
@@ -120,7 +120,7 @@ namespace Camellia {
     map<DofOrdering*, DofOrderingPtr > _fieldOrderingForTrial;
     map<DofOrdering*, DofOrderingPtr > _traceOrderingForTrial;
 
-    TBFPtr<Scalar> _bilinearForm;
+    VarFactory _varFactory;
     map<DofOrdering*,bool> _isConforming;
     map<int, int> _testOrderEnhancements;
     map<int, int> _trialOrderEnhancements;
@@ -129,8 +129,13 @@ namespace Camellia {
     DofOrderingPtr pRefine(DofOrderingPtr dofOrdering,
                            CellTopoPtr, int pToAdd, bool isTestOrdering);
   public:
-    DofOrderingFactory(TBFPtr<Scalar> bilinearForm);
-    DofOrderingFactory(TBFPtr<Scalar> bilinearForm,
+    DofOrderingFactory(VarFactory varFactory);
+    DofOrderingFactory(VarFactory varFactory,
+                       map<int,int> trialOrderEnhancements,
+                       map<int,int> testOrderEnhancements);
+    // Deprecated constructors, use VarFactory version
+    DofOrderingFactory(TBFPtr<double> bilinearForm);
+    DofOrderingFactory(TBFPtr<double> bilinearForm,
                        map<int,int> trialOrderEnhancements,
                        map<int,int> testOrderEnhancements);
     DofOrderingPtr testOrdering(vector<int> &polyOrder, const shards::CellTopology &cellTopo);
@@ -191,7 +196,6 @@ namespace Camellia {
   //  DofOrderingPtr trialOrdering(int polyOrder, int* sidePolyOrder, const shards::CellTopology &cellTopo,
   //                                          bool conformingVertices = true);
   };
-  extern template class DofOrderingFactory<double>;
 }
 
 #endif

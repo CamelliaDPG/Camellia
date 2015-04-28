@@ -20,14 +20,14 @@
 using namespace std;
 using namespace Camellia;
 
-GDAMinimumRule::GDAMinimumRule(MeshPtr mesh, VarFactory varFactory, DofOrderingFactoryPtr<double> dofOrderingFactory, MeshPartitionPolicyPtr partitionPolicy,
+GDAMinimumRule::GDAMinimumRule(MeshPtr mesh, VarFactory varFactory, DofOrderingFactoryPtr dofOrderingFactory, MeshPartitionPolicyPtr partitionPolicy,
                                unsigned initialH1OrderTrial, unsigned testOrderEnhancement)
 : GlobalDofAssignment(mesh,varFactory,dofOrderingFactory,partitionPolicy, vector<int>(1,initialH1OrderTrial), testOrderEnhancement, false)
 {
 
 }
 
-GDAMinimumRule::GDAMinimumRule(MeshPtr mesh, VarFactory varFactory, DofOrderingFactoryPtr<double> dofOrderingFactory, MeshPartitionPolicyPtr partitionPolicy,
+GDAMinimumRule::GDAMinimumRule(MeshPtr mesh, VarFactory varFactory, DofOrderingFactoryPtr dofOrderingFactory, MeshPartitionPolicyPtr partitionPolicy,
                                vector<int> initialH1OrderTrial, unsigned testOrderEnhancement)
 : GlobalDofAssignment(mesh,varFactory,dofOrderingFactory,partitionPolicy, initialH1OrderTrial, testOrderEnhancement, false)
 {
