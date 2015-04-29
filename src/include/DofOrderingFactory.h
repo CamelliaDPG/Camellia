@@ -120,7 +120,7 @@ namespace Camellia {
     map<DofOrdering*, DofOrderingPtr > _fieldOrderingForTrial;
     map<DofOrdering*, DofOrderingPtr > _traceOrderingForTrial;
 
-    VarFactory _varFactory;
+    VarFactoryPtr _varFactory;
     map<DofOrdering*,bool> _isConforming;
     map<int, int> _testOrderEnhancements;
     map<int, int> _trialOrderEnhancements;
@@ -129,11 +129,11 @@ namespace Camellia {
     DofOrderingPtr pRefine(DofOrderingPtr dofOrdering,
                            CellTopoPtr, int pToAdd, bool isTestOrdering);
   public:
-    DofOrderingFactory(VarFactory varFactory);
-    DofOrderingFactory(VarFactory varFactory,
+    DofOrderingFactory(VarFactoryPtr varFactory);
+    DofOrderingFactory(VarFactoryPtr varFactory,
                        map<int,int> trialOrderEnhancements,
                        map<int,int> testOrderEnhancements);
-    // Deprecated constructors, use VarFactory version
+    // Deprecated constructors, use VarFactoryPtr version
     DofOrderingFactory(TBFPtr<double> bilinearForm);
     DofOrderingFactory(TBFPtr<double> bilinearForm,
                        map<int,int> trialOrderEnhancements,

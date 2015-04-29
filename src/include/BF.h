@@ -21,7 +21,7 @@ namespace Camellia {
   template <typename Scalar>
   class TBF {
     vector< TBilinearTerm<Scalar> > _terms;
-    VarFactory _varFactory;
+    VarFactoryPtr _varFactory;
 
     bool _isLegacySubclass;
     //members that used to be part of BilinearForm:
@@ -36,8 +36,8 @@ namespace Camellia {
   public:
     TBF( bool isLegacySubclass ); // legacy version; new code should use a VarFactory version of the constructor
 
-    TBF( VarFactory varFactory ); // copies (note that external changes in VarFactory won't be registered by TBF)
-    TBF( VarFactory varFactory, VarFactory::BubnovChoice choice);
+    TBF( VarFactoryPtr varFactory ); // copies (note that external changes in VarFactory won't be registered by TBF)
+    TBF( VarFactoryPtr varFactory, VarFactory::BubnovChoice choice);
 
     void addTerm( TLinearTermPtr<Scalar> trialTerm, TLinearTermPtr<Scalar> testTerm );
     void addTerm( VarPtr trialVar, TLinearTermPtr<Scalar> testTerm );
@@ -114,7 +114,7 @@ namespace Camellia {
 
                                     vector<Camellia::EOperator> &testOps); // default implementation calls trialTestOperator
 
-    virtual VarFactory varFactory();
+    virtual VarFactoryPtr varFactory();
 
     // non-virtual methods (originally from BilinearForm):
     void setUseSPDSolveForOptimalTestFunctions(bool value);
@@ -130,7 +130,7 @@ namespace Camellia {
 
     virtual ~TBF() {}
 
-    static TBFPtr<Scalar> bf(VarFactory &vf);
+    static TBFPtr<Scalar> bf(VarFactoryPtr &vf);
   };
 
   extern template class TBF<double>;

@@ -29,9 +29,9 @@ namespace Camellia {
     class SteadyResidual
     {
       protected:
-        VarFactory &varFactory;
+        VarFactoryPtr &varFactory;
       public:
-        SteadyResidual(VarFactory &varFactory):varFactory(varFactory) {};
+        SteadyResidual(VarFactoryPtr &varFactory):varFactory(varFactory) {};
         virtual LinearTermPtr createResidual(TSolutionPtr<double> solution, bool includeBoundaryTerms) = 0;
     };
 

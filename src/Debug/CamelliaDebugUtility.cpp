@@ -17,7 +17,7 @@ using namespace std;
 
 using namespace Intrepid;
 namespace Camellia {
-  
+
   template<typename data_type>
   void print(string name, vector<data_type> &data) {
     cout << name << ": ";
@@ -26,7 +26,7 @@ namespace Camellia {
     }
     cout << endl;
   }
-  
+
   template<typename data_type>
   void print(string name, set<data_type> &data) {
     cout << name << ": ";
@@ -35,7 +35,7 @@ namespace Camellia {
     }
     cout << endl;
   }
-  
+
   template<typename key_type, typename value_type>
   void print(string name, map<key_type, value_type> &data) {
     cout << name << ": ";
@@ -44,11 +44,11 @@ namespace Camellia {
     }
     cout << endl;
   }
-  
+
   void print(string name, map<int, double> data) {
     print<int, double>(name, data);
   }
-  
+
   void print(string name, map<unsigned, double> data) {
     print<unsigned, double>(name, data);
   }
@@ -56,11 +56,11 @@ namespace Camellia {
   void print(string name, map<unsigned, unsigned> data) {
     print<unsigned, unsigned>(name, data);
   }
-  
+
   void print(string name, vector<long long> data) {
     print<long long>(name, data);
   }
-  
+
   void print(string name, vector<int> data) {
     print<int>(name, data);
   }
@@ -82,29 +82,29 @@ namespace Camellia {
   void print(string name, set<double> data) {
     print<double>(name, data);
   }
-  
-  void printLabeledDofCoefficients(const VarFactory &vf, DofOrderingPtr dofOrdering,
+
+  void printLabeledDofCoefficients(const VarFactoryPtr vf, DofOrderingPtr dofOrdering,
                                    const Intrepid::FieldContainer<double> &dofCoefficients,
                                    bool trialSpaceDofs) {
     if (dofOrdering->totalDofs() != dofCoefficients.size()) {
       TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument,"dofOrdering size does not match dofCoefficients container size");
     }
-    
+
     if (!trialSpaceDofs) {
       TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument,"printLabeledCoefficients does not yet support test variables");
     }
-    
+
     Teuchos::oblackholestream oldFormatState;
     oldFormatState.copyfmt(cout);
-    
+
     int myprec = cout.precision();
     cout.setf(std::ios_base::scientific, std::ios_base::floatfield);
     cout.setf(std::ios_base::right);
 
-    vector< VarPtr > fieldVars = vf.fieldVars();
-    vector< VarPtr > traceVars = vf.traceVars();
-    vector< VarPtr > fluxVars = vf.fluxVars();
-    
+    vector< VarPtr > fieldVars = vf->fieldVars();
+    vector< VarPtr > traceVars = vf->traceVars();
+    vector< VarPtr > fluxVars = vf->fluxVars();
+
     if (fieldVars.size() > 0) {
       cout << "\n\n **************   FIELD coefficients   **************\n";
       for (vector<VarPtr>::iterator varIt = fieldVars.begin(); varIt != fieldVars.end(); varIt++) {
@@ -121,7 +121,7 @@ namespace Camellia {
         }
       }
     }
-    
+
     if (traceVars.size() > 0) {
       cout << "\n\n ***************   TRACE coefficients   ***************\n";
       for (vector<VarPtr>::iterator varIt = traceVars.begin(); varIt != traceVars.end(); varIt++) {
@@ -142,7 +142,7 @@ namespace Camellia {
         }
       }
     }
-    
+
     if (fluxVars.size() > 0) {
       cout << "\n\n ***************   FLUX coefficients   ***************\n";
       for (vector<VarPtr>::iterator varIt = fluxVars.begin(); varIt != fluxVars.end(); varIt++) {
@@ -163,7 +163,7 @@ namespace Camellia {
         }
       }
     }
-    
+
     cout.copyfmt(oldFormatState);
   }
 }

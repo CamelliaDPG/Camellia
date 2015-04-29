@@ -61,23 +61,23 @@ PressurelessStokesFormulation::PressurelessStokesFormulation(int spaceDim) {
   VarPtr tau22, tau23;
   VarPtr tau33;
 
-  VarFactory vf;
-  u1 = vf.fieldVar(S_U1);
-  u2 = vf.fieldVar(S_U2);
-  if (spaceDim==3) u3 = vf.fieldVar(S_U3);
+  VarFactoryPtr vf = VarFactory::varFactory();
+  u1 = vf->fieldVar(S_U1);
+  u2 = vf->fieldVar(S_U2);
+  if (spaceDim==3) u3 = vf->fieldVar(S_U3);
 
-  sigma11 = vf.fieldVar(S_SIGMA11);
-  sigma12 = vf.fieldVar(S_SIGMA12);
-  sigma22 = vf.fieldVar(S_SIGMA22);
+  sigma11 = vf->fieldVar(S_SIGMA11);
+  sigma12 = vf->fieldVar(S_SIGMA12);
+  sigma22 = vf->fieldVar(S_SIGMA22);
   if (spaceDim==3) {
-    sigma13 = vf.fieldVar(S_SIGMA13);
-    sigma23 = vf.fieldVar(S_SIGMA23);
-    sigma33 = vf.fieldVar(S_SIGMA33);
+    sigma13 = vf->fieldVar(S_SIGMA13);
+    sigma23 = vf->fieldVar(S_SIGMA23);
+    sigma33 = vf->fieldVar(S_SIGMA33);
   }
 
-  u1_hat = vf.traceVar(S_U1_HAT, 1.0 * u1, L2);
-  u2_hat = vf.traceVar(S_U2_HAT, 1.0 * u2, L2);
-  if (spaceDim==3) u3_hat = vf.traceVar(S_U3_HAT, 1.0 * u3, L2);
+  u1_hat = vf->traceVar(S_U1_HAT, 1.0 * u1, L2);
+  u2_hat = vf->traceVar(S_U2_HAT, 1.0 * u2, L2);
+  if (spaceDim==3) u3_hat = vf->traceVar(S_U3_HAT, 1.0 * u3, L2);
 
   TFunctionPtr<double> n = TFunction<double>::normal();
   LinearTermPtr sigma1n, sigma2n, sigma3n;
@@ -89,21 +89,21 @@ PressurelessStokesFormulation::PressurelessStokesFormulation(int spaceDim) {
     sigma2n = sigma12 * n->x() + sigma22 * n->y() + sigma23 * n->z();
     sigma3n = sigma13 * n->x() + sigma23 * n->y() + sigma33 * n->z();
   }
-  t1n = vf.fluxVar(S_TN1_HAT, sigma1n);
-  t2n = vf.fluxVar(S_TN2_HAT, sigma2n);
-  if (spaceDim==3) t3n = vf.fluxVar(S_TN3_HAT, sigma3n);
+  t1n = vf->fluxVar(S_TN1_HAT, sigma1n);
+  t2n = vf->fluxVar(S_TN2_HAT, sigma2n);
+  if (spaceDim==3) t3n = vf->fluxVar(S_TN3_HAT, sigma3n);
 
-  v1 = vf.testVar(S_V1, HGRAD);
-  v2 = vf.testVar(S_V2, HGRAD);
-  if (spaceDim==3) v3 = vf.testVar(S_V3, HGRAD);
+  v1 = vf->testVar(S_V1, HGRAD);
+  v2 = vf->testVar(S_V2, HGRAD);
+  if (spaceDim==3) v3 = vf->testVar(S_V3, HGRAD);
 
-  tau11 = vf.testVar(S_TAU11, HGRAD);
-  tau12 = vf.testVar(S_TAU12, HGRAD);
-  tau22 = vf.testVar(S_TAU22, HGRAD);
+  tau11 = vf->testVar(S_TAU11, HGRAD);
+  tau12 = vf->testVar(S_TAU12, HGRAD);
+  tau22 = vf->testVar(S_TAU22, HGRAD);
   if (spaceDim==3) {
-    tau13 = vf.testVar(S_TAU13, HGRAD);
-    tau23 = vf.testVar(S_TAU23, HGRAD);
-    tau33 = vf.testVar(S_TAU33, HGRAD);
+    tau13 = vf->testVar(S_TAU13, HGRAD);
+    tau23 = vf->testVar(S_TAU23, HGRAD);
+    tau33 = vf->testVar(S_TAU33, HGRAD);
   }
 
   _stokesBF = Teuchos::rcp( new BF(vf) );
@@ -210,28 +210,28 @@ VarPtr PressurelessStokesFormulation::sigma(int i, int j) {
   if (j > _spaceDim) {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "i and j must be less than or equal to _spaceDim");
   }
-  VarFactory vf = _stokesBF->varFactory();
+  VarFactoryPtr vf = _stokesBF->varFactory();
   switch (i) {
     case 1:
       switch (j) {
         case 1:
-          return vf.fieldVar(S_SIGMA11);
+          return vf->fieldVar(S_SIGMA11);
         case 2:
-          return vf.fieldVar(S_SIGMA12);
+          return vf->fieldVar(S_SIGMA12);
         case 3:
-          return vf.fieldVar(S_SIGMA13);
+          return vf->fieldVar(S_SIGMA13);
       }
     case 2:
       switch (j) {
         case 2:
-          return vf.fieldVar(S_SIGMA22);
+          return vf->fieldVar(S_SIGMA22);
         case 3:
-          return vf.fieldVar(S_SIGMA23);
+          return vf->fieldVar(S_SIGMA23);
       }
     case 3:
       switch (j) {
         case 3:
-          return vf.fieldVar(S_SIGMA23);
+          return vf->fieldVar(S_SIGMA23);
       }
   }
   TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "unhandled (i,j) pair");
@@ -241,14 +241,14 @@ VarPtr PressurelessStokesFormulation::u(int i) {
   if (i > _spaceDim) {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "i must be less than or equal to _spaceDim");
   }
-  VarFactory vf = _stokesBF->varFactory();
+  VarFactoryPtr vf = _stokesBF->varFactory();
   switch (i) {
     case 1:
-      return vf.fieldVar(S_U1);
+      return vf->fieldVar(S_U1);
     case 2:
-      return vf.fieldVar(S_U2);
+      return vf->fieldVar(S_U2);
     case 3:
-      return vf.fieldVar(S_U3);
+      return vf->fieldVar(S_U3);
   }
   TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "unhandled i value");
 }
@@ -258,14 +258,14 @@ VarPtr PressurelessStokesFormulation::tn_hat(int i) {
   if (i > _spaceDim) {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "i must be less than or equal to _spaceDim");
   }
-  VarFactory vf = _stokesBF->varFactory();
+  VarFactoryPtr vf = _stokesBF->varFactory();
   switch (i) {
     case 1:
-      return vf.fluxVar(S_TN1_HAT);
+      return vf->fluxVar(S_TN1_HAT);
     case 2:
-      return vf.fluxVar(S_TN2_HAT);
+      return vf->fluxVar(S_TN2_HAT);
     case 3:
-      return vf.fluxVar(S_TN3_HAT);
+      return vf->fluxVar(S_TN3_HAT);
   }
   TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "unhandled i value");
 }
@@ -274,14 +274,14 @@ VarPtr PressurelessStokesFormulation::u_hat(int i) {
   if (i > _spaceDim) {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "i must be less than or equal to _spaceDim");
   }
-  VarFactory vf = _stokesBF->varFactory();
+  VarFactoryPtr vf = _stokesBF->varFactory();
   switch (i) {
     case 1:
-      return vf.traceVar(S_U1_HAT);
+      return vf->traceVar(S_U1_HAT);
     case 2:
-      return vf.traceVar(S_U2_HAT);
+      return vf->traceVar(S_U2_HAT);
     case 3:
-      return vf.traceVar(S_U3_HAT);
+      return vf->traceVar(S_U3_HAT);
   }
   TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "unhandled i value");
 }
@@ -296,28 +296,28 @@ VarPtr PressurelessStokesFormulation::tau(int i, int j) {
   if (j > _spaceDim) {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "i and j must be less than or equal to _spaceDim");
   }
-  VarFactory vf = _stokesBF->varFactory();
+  VarFactoryPtr vf = _stokesBF->varFactory();
   switch (i) {
     case 1:
       switch (j) {
         case 1:
-          return vf.testVar(S_TAU11, HGRAD);
+          return vf->testVar(S_TAU11, HGRAD);
         case 2:
-          return vf.testVar(S_TAU12, HGRAD);
+          return vf->testVar(S_TAU12, HGRAD);
         case 3:
-          return vf.testVar(S_TAU13, HGRAD);
+          return vf->testVar(S_TAU13, HGRAD);
       }
     case 2:
       switch (j) {
         case 2:
-          return vf.testVar(S_TAU22, HGRAD);
+          return vf->testVar(S_TAU22, HGRAD);
         case 3:
-          return vf.testVar(S_TAU23, HGRAD);
+          return vf->testVar(S_TAU23, HGRAD);
       }
     case 3:
       switch (j) {
         case 3:
-          return vf.testVar(S_TAU23, HGRAD);
+          return vf->testVar(S_TAU23, HGRAD);
       }
   }
   TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "unhandled (i,j) pair");
@@ -327,14 +327,14 @@ VarPtr PressurelessStokesFormulation::v(int i) {
   if (i > _spaceDim) {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "i must be less than or equal to _spaceDim");
   }
-  VarFactory vf = _stokesBF->varFactory();
+  VarFactoryPtr vf = _stokesBF->varFactory();
   switch (i) {
     case 1:
-      return vf.testVar(S_V1, HGRAD);
+      return vf->testVar(S_V1, HGRAD);
     case 2:
-      return vf.testVar(S_V2, HGRAD);
+      return vf->testVar(S_V2, HGRAD);
     case 3:
-      return vf.testVar(S_V3, HGRAD);
+      return vf->testVar(S_V3, HGRAD);
   }
   TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "unhandled i value");
 }

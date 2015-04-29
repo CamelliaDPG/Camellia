@@ -183,13 +183,13 @@ void Projector<Scalar>::projectFunctionOntoBasis(FieldContainer<Scalar> &basisCo
 template <typename Scalar>
 void Projector<Scalar>::projectFunctionOntoBasis(FieldContainer<Scalar> &basisCoefficients, TFunctionPtr<Scalar> fxn,
                                          BasisPtr basis, BasisCachePtr basisCache) {
-  VarFactory varFactory;
+  VarFactoryPtr varFactory = VarFactory::varFactory();
   VarPtr var;
   if (! basisCache->isSideCache()) {
     if (fxn->rank()==0) {
-      var = varFactory.fieldVar("dummyField");
+      var = varFactory->fieldVar("dummyField");
     } else if (fxn->rank()==1) {
-      var = varFactory.fieldVar("dummyField",VECTOR_L2);
+      var = varFactory->fieldVar("dummyField",VECTOR_L2);
     } else {
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "projectFunctionOntoBasis does not yet support functions of rank > 1.");
     }
@@ -198,7 +198,7 @@ void Projector<Scalar>::projectFunctionOntoBasis(FieldContainer<Scalar> &basisCo
     // except that parities come into the IP computation for fluxes (even though they'll cancel),
     // and since basisCache doesn't necessarily have parities defined (especially in tests),
     // it's simpler all around to use traces.
-    var = varFactory.traceVar("dummyTrace");
+    var = varFactory->traceVar("dummyTrace");
   }
   TIPPtr<Scalar> ip = IP::ip();
   ip->addTerm(var); // simple L^2 IP

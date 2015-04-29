@@ -42,7 +42,7 @@ namespace Camellia {
   };
 
   class VGPOseenFormulation : public OseenFormulation {
-    VarFactory varFactory;
+    VarFactoryPtr varFactory = VarFactory::varFactory();
     // fields:
     VarPtr u1, u2, p, sigma11, sigma12, sigma21, sigma22;
     // fluxes & traces:
@@ -302,7 +302,7 @@ namespace Camellia {
         bool triangulate=false;
         bool useConformingTraces=true;
 
-        VarFactory vgpVarFactory = VGPStokesFormulation::vgpVarFactory();
+        VarFactoryPtr vgpVarFactory = VGPStokesFormulation::vgpVarFactory();
         VarPtr u1 = vgpVarFactory.fieldVar(VGP_U1_S);
         VarPtr u2 = vgpVarFactory.fieldVar(VGP_U2_S);
 

@@ -118,13 +118,13 @@ namespace {
     // and check whether we correctly project a function onto it...
 
     // define a VarFactory with just a trace variable, and an HGRAD test
-    VarFactory vf;
-    VarPtr v = vf.testVar("v", HGRAD);
+    VarFactoryPtr vf = VarFactory::varFactory();
+    VarPtr v = vf->testVar("v", HGRAD);
     VarPtr uhat;
     if (traceOrFlux == TRACE)
-      uhat = vf.traceVar("uhat");
+      uhat = vf->traceVar("uhat");
     else if (traceOrFlux == FLUX)
-      uhat = vf.fluxVar("u_n");
+      uhat = vf->fluxVar("u_n");
 
     BFPtr bf = BF::bf(vf);
 
@@ -245,11 +245,11 @@ namespace {
 
     ////////////////////   DECLARE VARIABLES   ///////////////////////
     // define test variables
-    VarFactory varFactory;
-    VarPtr v = varFactory.testVar("v", HGRAD);
+    VarFactoryPtr varFactory = VarFactory::varFactory();
+    VarPtr v = varFactory->testVar("v", HGRAD);
 
     // define trial variables
-    VarPtr uhat = varFactory.fluxVar("uhat");
+    VarPtr uhat = varFactory->fluxVar("uhat");
 
     ////////////////////   DEFINE BILINEAR FORM   ///////////////////////
     BFPtr bf = Teuchos::rcp( new BF(varFactory) );
@@ -281,7 +281,7 @@ namespace {
     double tol = 1e-14;
     for (map<int, FunctionPtr >::iterator entryIt = functionMap.begin(); entryIt != functionMap.end(); entryIt++) {
       int trialID = entryIt->first;
-      VarPtr trialVar = varFactory.trial(trialID);
+      VarPtr trialVar = varFactory->trial(trialID);
       FunctionPtr f_expected = entryIt->second;
       FunctionPtr f_actual = Function::solution(trialVar, spaceTimeSolution);
       if (trialVar->varType() == FLUX) {
@@ -396,15 +396,15 @@ namespace {
 
     ////////////////////   DECLARE VARIABLES   ///////////////////////
     // define test variables
-    VarFactory varFactory;
-    VarPtr tau = varFactory.testVar("tau", HDIV);
-    VarPtr v = varFactory.testVar("v", HGRAD);
+    VarFactoryPtr varFactory = VarFactory::varFactory();
+    VarPtr tau = varFactory->testVar("tau", HDIV);
+    VarPtr v = varFactory->testVar("v", HGRAD);
 
     // define trial variables
-    VarPtr uhat = varFactory.traceVar("uhat");
-    VarPtr fhat = varFactory.fluxVar("fhat");
-    VarPtr u = varFactory.fieldVar("u");
-    VarPtr sigma = varFactory.fieldVar("sigma", VECTOR_L2);
+    VarPtr uhat = varFactory->traceVar("uhat");
+    VarPtr fhat = varFactory->fluxVar("fhat");
+    VarPtr u = varFactory->fieldVar("u");
+    VarPtr sigma = varFactory->fieldVar("sigma", VECTOR_L2);
 
     ////////////////////   DEFINE BILINEAR FORM   ///////////////////////
     BFPtr bf = Teuchos::rcp( new BF(varFactory) );
@@ -437,7 +437,7 @@ namespace {
     double tol = 1e-14;
     for (map<int, FunctionPtr >::iterator entryIt = functionMap.begin(); entryIt != functionMap.end(); entryIt++) {
       int trialID = entryIt->first;
-      VarPtr trialVar = varFactory.trial(trialID);
+      VarPtr trialVar = varFactory->trial(trialID);
       FunctionPtr f_expected = entryIt->second;
       FunctionPtr f_actual = Function::solution(trialVar, spaceTimeSolution);
 
@@ -524,15 +524,15 @@ namespace {
 
     ////////////////////   DECLARE VARIABLES   ///////////////////////
     // define test variables
-    VarFactory varFactory;
-    VarPtr tau = varFactory.testVar("tau", HDIV);
-    VarPtr v = varFactory.testVar("v", HGRAD);
+    VarFactoryPtr varFactory = VarFactory::varFactory();
+    VarPtr tau = varFactory->testVar("tau", HDIV);
+    VarPtr v = varFactory->testVar("v", HGRAD);
 
     // define trial variables
-    VarPtr uhat = varFactory.traceVar("uhat");
-    VarPtr fhat = varFactory.fluxVar("fhat");
-    VarPtr u = varFactory.fieldVar("u");
-    VarPtr sigma = varFactory.fieldVar("sigma", VECTOR_L2);
+    VarPtr uhat = varFactory->traceVar("uhat");
+    VarPtr fhat = varFactory->fluxVar("fhat");
+    VarPtr u = varFactory->fieldVar("u");
+    VarPtr sigma = varFactory->fieldVar("sigma", VECTOR_L2);
 
     ////////////////////   DEFINE BILINEAR FORM   ///////////////////////
     BFPtr bf = Teuchos::rcp( new BF(varFactory) );
@@ -565,7 +565,7 @@ namespace {
     double tol = 1e-14;
     for (map<int, FunctionPtr >::iterator entryIt = functionMap.begin(); entryIt != functionMap.end(); entryIt++) {
       int trialID = entryIt->first;
-      VarPtr trialVar = varFactory.trial(trialID);
+      VarPtr trialVar = varFactory->trial(trialID);
       FunctionPtr f_expected = entryIt->second;
       FunctionPtr f_actual = Function::solution(trialVar, spaceTimeSolution);
 

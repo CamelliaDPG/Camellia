@@ -41,12 +41,12 @@ void VarFactory::addTrialVar(VarPtr var) {
   _nextTrialID = std::max(var->ID(), _nextTrialID);
 }
 
-VarFactory VarFactory::getBubnovFactory(BubnovChoice choice) {
-  VarFactory factory;
+VarFactoryPtr VarFactory::getBubnovFactory(BubnovChoice choice) {
+  VarFactoryPtr factory = VarFactory::varFactory();
   if (choice == BUBNOV_TRIAL) {
-    factory = VarFactory(_trialVars, _trialVars, _trialVarsByID, _trialVarsByID, _nextTrialID, _nextTrialID);
+    factory = Teuchos::rcp(new VarFactory(_trialVars, _trialVars, _trialVarsByID, _trialVarsByID, _nextTrialID, _nextTrialID));
   } else {
-    factory = VarFactory(_testVars, _testVars, _testVarsByID, _testVarsByID, _nextTestID, _nextTestID);
+    factory = Teuchos::rcp(new VarFactory(_testVars, _testVars, _testVarsByID, _testVarsByID, _nextTestID, _nextTestID));
   }
   return factory;
 }
@@ -238,16 +238,16 @@ vector< VarPtr > VarFactory::traceVars() const {
   return vars;
 }
 
-VarFactory VarFactory::trialSubFactory(vector< VarPtr > &trialVars) const {
+VarFactoryPtr VarFactory::trialSubFactory(vector< VarPtr > &trialVars) const {
   // returns a new VarFactory with the same test space, and a subspace of the trial space
-  VarFactory subFactory;
+  VarFactoryPtr subFactory = VarFactory::varFactory();
   for (vector< VarPtr >::iterator trialVarIt=trialVars.begin(); trialVarIt != trialVars.end(); trialVarIt++) {
     VarPtr trialVar = *trialVarIt;
-    subFactory.addTrialVar(trialVar);
+    subFactory->addTrialVar(trialVar);
   }
   for (map<int, VarPtr>::const_iterator testVarIt=_testVarsByID.begin(); testVarIt != _testVarsByID.end(); testVarIt++) {
     VarPtr testVar = testVarIt->second;
-    subFactory.addTestVar(testVar);
+    subFactory->addTestVar(testVar);
   }
   return subFactory;
 }

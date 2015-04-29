@@ -292,8 +292,8 @@ void ParametricCurve::projectionBasedInterpolant(FieldContainer<double> &basisCo
   ParametricCurvePtr line = this->interpolatingLine();
   IPPtr ip_H1 = Teuchos::rcp( new IP );
   // we assume that basis is a vector HGRAD basis
-  VarFactory vf;
-  VarPtr v = vf.testVar("v", HGRAD);
+  VarFactoryPtr vf = VarFactory::varFactory();
+  VarPtr v = vf->testVar("v", HGRAD);
   ip_H1->addTerm(v);
   if (useH1) { // otherwise, stick with L2
     ip_H1->addTerm(v->dx());

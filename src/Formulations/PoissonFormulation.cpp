@@ -37,25 +37,25 @@ PoissonFormulation::PoissonFormulation(int spaceDim, bool useConformingTraces) {
   VarPtr q;
   VarPtr tau;
 
-  VarFactory vf;
-  phi = vf.fieldVar(S_PHI);
-  psi = vf.fieldVar(S_PSI, psiSpace);
+  VarFactoryPtr vf = VarFactory::varFactory();
+  phi = vf->fieldVar(S_PHI);
+  psi = vf->fieldVar(S_PSI, psiSpace);
 
   if (spaceDim > 1)
-    phi_hat = vf.traceVar(S_PHI_HAT, phi, phi_hat_space);
+    phi_hat = vf->traceVar(S_PHI_HAT, phi, phi_hat_space);
   else
-    phi_hat = vf.fluxVar(S_PHI_HAT, phi, phi_hat_space); // for spaceDim==1, the "normal" component is in the flux-ness of phi_hat (it's a plus or minus 1)
+    phi_hat = vf->fluxVar(S_PHI_HAT, phi, phi_hat_space); // for spaceDim==1, the "normal" component is in the flux-ness of phi_hat (it's a plus or minus 1)
 
   TFunctionPtr<double> n = TFunction<double>::normal();
   TFunctionPtr<double> parity = TFunction<double>::sideParity();
 
   if (spaceDim > 1)
-    psi_n_hat = vf.fluxVar(S_PSI_N_HAT, psi * (n * parity));
+    psi_n_hat = vf->fluxVar(S_PSI_N_HAT, psi * (n * parity));
   else
-    psi_n_hat = vf.fluxVar(S_PSI_N_HAT, psi);
+    psi_n_hat = vf->fluxVar(S_PSI_N_HAT, psi);
 
-  q = vf.testVar(S_Q, HGRAD);
-  tau = vf.testVar(S_TAU, tauSpace);
+  q = vf->testVar(S_Q, HGRAD);
+  tau = vf->testVar(S_TAU, tauSpace);
 
   _poissonBF = Teuchos::rcp( new BF(vf) );
 
@@ -83,36 +83,36 @@ BFPtr PoissonFormulation::bf() {
 
 // field variables:
 VarPtr PoissonFormulation::phi() {
-  VarFactory vf = _poissonBF->varFactory();
-  return vf.fieldVar(S_PHI);
+  VarFactoryPtr vf = _poissonBF->varFactory();
+  return vf->fieldVar(S_PHI);
 }
 
 VarPtr PoissonFormulation::psi() {
-  VarFactory vf = _poissonBF->varFactory();
-  return vf.fieldVar(S_PSI);
+  VarFactoryPtr vf = _poissonBF->varFactory();
+  return vf->fieldVar(S_PSI);
 }
 
 // traces:
 VarPtr PoissonFormulation::psi_n_hat() {
-  VarFactory vf = _poissonBF->varFactory();
-  return vf.fluxVar(S_PSI_N_HAT);
+  VarFactoryPtr vf = _poissonBF->varFactory();
+  return vf->fluxVar(S_PSI_N_HAT);
 }
 
 VarPtr PoissonFormulation::phi_hat() {
-  VarFactory vf = _poissonBF->varFactory();
-  return vf.traceVar(S_PHI_HAT);
+  VarFactoryPtr vf = _poissonBF->varFactory();
+  return vf->traceVar(S_PHI_HAT);
 }
 
 // test variables:
 VarPtr PoissonFormulation::q() {
-  VarFactory vf = _poissonBF->varFactory();
-  return vf.testVar(S_Q, HGRAD);
+  VarFactoryPtr vf = _poissonBF->varFactory();
+  return vf->testVar(S_Q, HGRAD);
 }
 
 VarPtr PoissonFormulation::tau() {
-  VarFactory vf = _poissonBF->varFactory();
+  VarFactoryPtr vf = _poissonBF->varFactory();
   if (_spaceDim > 1)
-    return vf.testVar(S_TAU, HDIV);
+    return vf->testVar(S_TAU, HDIV);
   else
-    return vf.testVar(S_TAU, HGRAD);
+    return vf->testVar(S_TAU, HGRAD);
 }

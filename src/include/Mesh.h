@@ -93,12 +93,12 @@ class MeshPartitionPolicy;
     bool _useConformingTraces; // if true, enforces vertex trace continuity
 
     TBFPtr<double> _bilinearForm;
-    VarFactory _varFactory;
+    VarFactoryPtr _varFactory;
     // for now, just a uniform mesh, with a rectangular boundary and elements.
     Boundary _boundary;
 
     // preferred private constructor to use during deepCopy();
-    Mesh(MeshTopologyPtr meshTopology, Teuchos::RCP<GlobalDofAssignment> gda, VarFactory varFactory,
+    Mesh(MeshTopologyPtr meshTopology, Teuchos::RCP<GlobalDofAssignment> gda, VarFactoryPtr varFactory,
          int pToAddToTest, bool useConformingTraces, bool usePatchBasis, bool enforceMBFluxContinuity);
 
     // deprecated private constructor to use during deepCopy();
@@ -156,12 +156,12 @@ class MeshPartitionPolicy;
     RefinementHistory _refinementHistory;
 
     // Preferred Constructor for min rule, n-D, single H1Order
-    Mesh(MeshTopologyPtr meshTopology, VarFactory varFactory, int H1Order, int pToAddTest,
+    Mesh(MeshTopologyPtr meshTopology, VarFactoryPtr varFactory, int H1Order, int pToAddTest,
          map<int,int> trialOrderEnhancements=_emptyIntIntMap, map<int,int> testOrderEnhancements=_emptyIntIntMap,
          MeshPartitionPolicyPtr meshPartitionPolicy = Teuchos::null);
 
     // Preferred Constructor for min rule, n-D, vector H1Order for tensor topologies (tensorial degree 0 and 1 supported)
-    Mesh(MeshTopologyPtr meshTopology, VarFactory varFactory, vector<int> H1Order, int pToAddTest,
+    Mesh(MeshTopologyPtr meshTopology, VarFactoryPtr varFactory, vector<int> H1Order, int pToAddTest,
          map<int,int> trialOrderEnhancements=_emptyIntIntMap, map<int,int> testOrderEnhancements=_emptyIntIntMap,
          MeshPartitionPolicyPtr meshPartitionPolicy = Teuchos::null);
 

@@ -20,14 +20,14 @@
 using namespace std;
 using namespace Camellia;
 
-GDAMinimumRule::GDAMinimumRule(MeshPtr mesh, VarFactory varFactory, DofOrderingFactoryPtr dofOrderingFactory, MeshPartitionPolicyPtr partitionPolicy,
+GDAMinimumRule::GDAMinimumRule(MeshPtr mesh, VarFactoryPtr varFactory, DofOrderingFactoryPtr dofOrderingFactory, MeshPartitionPolicyPtr partitionPolicy,
                                unsigned initialH1OrderTrial, unsigned testOrderEnhancement)
 : GlobalDofAssignment(mesh,varFactory,dofOrderingFactory,partitionPolicy, vector<int>(1,initialH1OrderTrial), testOrderEnhancement, false)
 {
 
 }
 
-GDAMinimumRule::GDAMinimumRule(MeshPtr mesh, VarFactory varFactory, DofOrderingFactoryPtr dofOrderingFactory, MeshPartitionPolicyPtr partitionPolicy,
+GDAMinimumRule::GDAMinimumRule(MeshPtr mesh, VarFactoryPtr varFactory, DofOrderingFactoryPtr dofOrderingFactory, MeshPartitionPolicyPtr partitionPolicy,
                                vector<int> initialH1OrderTrial, unsigned testOrderEnhancement)
 : GlobalDofAssignment(mesh,varFactory,dofOrderingFactory,partitionPolicy, initialH1OrderTrial, testOrderEnhancement, false)
 {
@@ -1711,7 +1711,7 @@ SubCellDofIndexInfo GDAMinimumRule::getOwnedGlobalDofIndices(GlobalIndexType cel
   typedef vector< SubBasisDofMapperPtr > BasisMap;
 
   DofOrderingPtr trialOrdering = _elementTypeForCell[cellID]->trialOrderPtr;
-  map<int, VarPtr> trialVars = _varFactory.trialVars();
+  map<int, VarPtr> trialVars = _varFactory->trialVars();
 
 //  cout << "Owned global dof indices for cell " << cellID << endl;
 
@@ -1903,7 +1903,7 @@ LocalDofMapperPtr GDAMinimumRule::getDofMapper(GlobalIndexType cellID, CellConst
   int spaceDim = topo->getDimension();
 
   DofOrderingPtr trialOrdering = _elementTypeForCell[cellID]->trialOrderPtr;
-  map<int, VarPtr> trialVars = _varFactory.trialVars();
+  map<int, VarPtr> trialVars = _varFactory->trialVars();
 
 //  printConstraintInfo(cellID);
 
@@ -2027,7 +2027,7 @@ void GDAMinimumRule::rebuildLookups() {
 //  cout << "GDAMinimumRule: Rebuilding lookups on rank " << rank << endl;
   set<GlobalIndexType> myCellIDs = _partitions[rank];
 
-  map<int, VarPtr> trialVars = _varFactory.trialVars();
+  map<int, VarPtr> trialVars = _varFactory->trialVars();
 
   _cellDofOffsets.clear(); // within the partition, offsets for the owned dofs in cell
 

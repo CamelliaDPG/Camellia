@@ -74,7 +74,7 @@ using namespace std;
 
 map<int,int> Mesh::_emptyIntIntMap;
 
-Mesh::Mesh(MeshTopologyPtr meshTopology, VarFactory varFactory, vector<int> H1Order, int pToAddTest,
+Mesh::Mesh(MeshTopologyPtr meshTopology, VarFactoryPtr varFactory, vector<int> H1Order, int pToAddTest,
            map<int,int> trialOrderEnhancements, map<int,int> testOrderEnhancements,
            MeshPartitionPolicyPtr partitionPolicy) : DofInterpreter(Teuchos::rcp(this,false)) {
 
@@ -102,7 +102,7 @@ Mesh::Mesh(MeshTopologyPtr meshTopology, VarFactory varFactory, vector<int> H1Or
   this->registerObserver(Teuchos::rcp( &_refinementHistory, false ));
 }
 
-Mesh::Mesh(MeshTopologyPtr meshTopology, VarFactory varFactory, int H1Order, int pToAddTest,
+Mesh::Mesh(MeshTopologyPtr meshTopology, VarFactoryPtr varFactory, int H1Order, int pToAddTest,
            map<int,int> trialOrderEnhancements, map<int,int> testOrderEnhancements,
            MeshPartitionPolicyPtr partitionPolicy) : DofInterpreter(Teuchos::rcp(this,false)) {
 
@@ -246,7 +246,7 @@ Mesh::Mesh(const vector<vector<double> > &vertices, vector< vector<unsigned> > &
 }
 
 // private constructor for use by deepCopy()
-Mesh::Mesh(MeshTopologyPtr meshTopology, Teuchos::RCP<GlobalDofAssignment> gda, VarFactory varFactory,
+Mesh::Mesh(MeshTopologyPtr meshTopology, Teuchos::RCP<GlobalDofAssignment> gda, VarFactoryPtr varFactory,
            int pToAddToTest, bool useConformingTraces, bool usePatchBasis, bool enforceMBFluxContinuity) : DofInterpreter(Teuchos::rcp(this,false)) {
   _meshTopology = meshTopology;
   _gda = gda;

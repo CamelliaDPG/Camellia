@@ -40,7 +40,7 @@ namespace Camellia {
   };
 
   class VSPStokesFormulation : public StokesFormulation {
-    VarFactory varFactory;
+    VarFactoryPtr varFactory = VarFactory::varFactory();
     // fields:
     VarPtr u1, u2, p, sigma11, sigma12, sigma22, omega;
     // fluxes & traces:
@@ -218,7 +218,7 @@ namespace Camellia {
 
 
   class VVPStokesFormulation : public StokesFormulation {
-    VarFactory varFactory;
+    VarFactoryPtr varFactory = VarFactory::varFactory();
     // fields:
     VarPtr u1, u2, p, omega;
     // fluxes & traces:
@@ -235,12 +235,12 @@ namespace Camellia {
     int _spaceDim;
 
   public:
-    static VarFactory vvpVarFactory(bool trueTraces = false) {
+    static VarFactoryPtr vvpVarFactory(bool trueTraces = false) {
       // sets the order of the variables in a canonical way
       // uses the publicly accessible strings from above, so that VarPtrs
       // can be looked up...
 
-      VarFactory varFactory;
+      VarFactoryPtr varFactory = VarFactory::varFactory();
       VarPtr myVar;
       myVar = varFactory.testVar(VVP_V_S, VECTOR_HGRAD);
       myVar = varFactory.testVar(VVP_Q1_S, HGRAD);
@@ -433,7 +433,7 @@ namespace Camellia {
   const static string VGP_P_S = "p";
 
   class VGPStokesFormulation : public StokesFormulation {
-    VarFactory varFactory;
+    VarFactoryPtr varFactory = VarFactory::varFactory();
     // fields:
     VarPtr u1, u2, p, sigma11, sigma12, sigma21, sigma22;
     // fluxes & traces:
@@ -543,12 +543,12 @@ namespace Camellia {
     }
 
   public:
-    static VarFactory vgpVarFactory(bool enriched_velocity = false) {
+    static VarFactoryPtr vgpVarFactory(bool enriched_velocity = false) {
       // sets the order of the variables in a canonical way
       // uses the publicly accessible strings from above, so that VarPtrs
       // can be looked up...
 
-      VarFactory varFactory;
+      VarFactoryPtr varFactory = VarFactory::varFactory();
       VarPtr myVar;
       myVar = varFactory.testVar(VGP_V1_S, HGRAD);
       myVar = varFactory.testVar(VGP_V2_S, HGRAD);
@@ -751,7 +751,7 @@ namespace Camellia {
   const static string VGPF_P_S = "p";
 
   class VGPFStokesFormulation : public StokesFormulation {
-    VarFactory varFactory;
+    VarFactoryPtr varFactory = VarFactory::varFactory();
     // fields:
     VarPtr u, p, sigma11, sigma12, sigma21, sigma22;
     // fluxes & traces:
@@ -847,12 +847,12 @@ namespace Camellia {
     }
 
   public:
-    static VarFactory vgpfVarFactory() {
+    static VarFactoryPtr vgpfVarFactory() {
       // sets the order of the variables in a canonical way
       // uses the publicly accessible strings from above, so that VarPtrs
       // can be looked up...
 
-      VarFactory varFactory;
+      VarFactoryPtr varFactory = VarFactory::varFactory();
       VarPtr myVar;
       myVar = varFactory.testVar(VGPF_V1_S, HGRAD);
       myVar = varFactory.testVar(VGPF_V2_S, HGRAD);
@@ -974,7 +974,7 @@ namespace Camellia {
   };
 
   class DDSStokesFormulation : public StokesFormulation {
-    VarFactory varFactory;
+    VarFactoryPtr varFactory = VarFactory::varFactory();
     // fields:
     VarPtr u1, u2, sigma11, sigma12, sigma22;
     // fluxes & traces:
@@ -1118,7 +1118,7 @@ namespace Camellia {
 
   // DDSP formulation: the DDS plus an algebraically defined pressure (p = - 0.5 * (sigma11 + sigma22) )
   class DDSPStokesFormulation : public StokesFormulation {
-    VarFactory varFactory;
+    VarFactoryPtr varFactory = VarFactory::varFactory();
     // fields:
     VarPtr u1, u2, sigma11, sigma12, sigma22;
     // pressure (algebraically defined)
@@ -1300,7 +1300,7 @@ namespace Camellia {
   const static string CE_P_S = "p";
 
   class CEStokesFormulation : public StokesFormulation {
-    VarFactory varFactory;
+    VarFactoryPtr varFactory = VarFactory::varFactory();
     // fields:
     VarPtr u1, u2, p;
     // fluxes & traces:
@@ -1392,12 +1392,12 @@ namespace Camellia {
     }
 
   public:
-    static VarFactory ceVarFactory() {
+    static VarFactoryPtr ceVarFactory() {
       // sets the order of the variables in a canonical way
       // uses the publicly accessible strings from above, so that VarPtrs
       // can be looked up...
 
-      VarFactory varFactory;
+      VarFactoryPtr varFactory = VarFactory::varFactory();
       VarPtr myVar;
       // tests:
       myVar = varFactory.testVar(CE_V1_S, HGRAD);

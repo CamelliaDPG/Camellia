@@ -18,7 +18,7 @@
 using namespace Intrepid;
 using namespace Camellia;
 
-GDAMaximumRule2D::GDAMaximumRule2D(MeshPtr mesh, VarFactory varFactory, DofOrderingFactoryPtr dofOrderingFactory,
+GDAMaximumRule2D::GDAMaximumRule2D(MeshPtr mesh, VarFactoryPtr varFactory, DofOrderingFactoryPtr dofOrderingFactory,
                                    MeshPartitionPolicyPtr partitionPolicy, unsigned initialH1OrderTrial, unsigned testOrderEnhancement, bool enforceMBFluxContinuity)
 : GlobalDofAssignment(mesh,varFactory,dofOrderingFactory,partitionPolicy, vector<int>(1,initialH1OrderTrial), testOrderEnhancement, true)
 {
@@ -108,7 +108,7 @@ void GDAMaximumRule2D::buildLocalToGlobalMap() {
   determineDofPairings();
 
   GlobalIndexType globalIndex = 0;
-  vector< int > trialIDs = _varFactory.trialIDs();
+  vector< int > trialIDs = _varFactory->trialIDs();
 
   set<IndexType> activeCellIndices = _meshTopology->getActiveCellIndices();
   set<GlobalIndexType> activeCellIDs(activeCellIndices.begin(),activeCellIndices.end());
@@ -120,7 +120,7 @@ void GDAMaximumRule2D::buildLocalToGlobalMap() {
     for (vector<int>::iterator trialIt=trialIDs.begin(); trialIt != trialIDs.end(); trialIt++) {
       int trialID = *(trialIt);
 
-      VarPtr trialVar = _varFactory.trial(trialID);
+      VarPtr trialVar = _varFactory->trial(trialID);
       bool isFluxOrTrace = (trialVar->varType() == FLUX) || (trialVar->varType() == TRACE);
 
       if (! isFluxOrTrace ) {
@@ -334,7 +334,7 @@ GlobalDofAssignmentPtr GDAMaximumRule2D::deepCopy() {
 void GDAMaximumRule2D::determineDofPairings() {
   _dofPairingIndex.clear();
 
-  vector< int > trialIDs = _varFactory.trialIDs();
+  vector< int > trialIDs = _varFactory->trialIDs();
 
   set<unsigned> activeCellIDs = _meshTopology->getActiveCellIndices();
 
@@ -348,7 +348,7 @@ void GDAMaximumRule2D::determineDofPairings() {
     }
     for (vector<int>::iterator trialIt=trialIDs.begin(); trialIt != trialIDs.end(); trialIt++) {
       int trialID = *(trialIt);
-      VarPtr trialVar = _varFactory.trial(trialID);
+      VarPtr trialVar = _varFactory->trial(trialID);
       bool isFluxOrTrace = (trialVar->varType() == FLUX) || (trialVar->varType() == TRACE);
       if ( isFluxOrTrace ) {
         int numSides = cell->getSideCount();
@@ -435,7 +435,7 @@ void GDAMaximumRule2D::determineDofPairings() {
     for (vector<int>::iterator trialIt=trialIDs.begin(); trialIt != trialIDs.end(); trialIt++) {
       int trialID = *(trialIt);
 
-      VarPtr trialVar = _varFactory.trial(trialID);
+      VarPtr trialVar = _varFactory->trial(trialID);
       bool isFluxOrTrace = (trialVar->varType() == FLUX) || (trialVar->varType() == TRACE);
 
       if ( isFluxOrTrace ) {
@@ -695,7 +695,7 @@ set<GlobalIndexType> GDAMaximumRule2D::partitionOwnedGlobalFieldIndices() {
 
   set<GlobalIndexType> fieldIndices;
   set<GlobalIndexType> cellIDs = cellsInPartition(-1);
-  vector< VarPtr > fieldVars = _varFactory.fieldVars();
+  vector< VarPtr > fieldVars = _varFactory->fieldVars();
   for (set<GlobalIndexType>::iterator cellIt = cellIDs.begin(); cellIt != cellIDs.end(); cellIt++) {
     GlobalIndexType cellID = *cellIt;
     ElementTypePtr elemTypePtr = elementType(cellID);
@@ -748,7 +748,7 @@ set<GlobalIndexType> GDAMaximumRule2D::partitionOwnedGlobalFluxIndices() {
   int rank = Teuchos::GlobalMPISession::getRank();
 
   set<GlobalIndexType> fluxIndices;
-  vector< VarPtr > fluxVars = _varFactory.fluxVars();
+  vector< VarPtr > fluxVars = _varFactory->fluxVars();
   set<GlobalIndexType> cellIDs = cellsInPartition(-1);
   for (set<GlobalIndexType>::iterator cellIt = cellIDs.begin(); cellIt != cellIDs.end(); cellIt++) {
     GlobalIndexType cellID = *cellIt;
@@ -777,7 +777,7 @@ set<GlobalIndexType> GDAMaximumRule2D::partitionOwnedGlobalTraceIndices() {
   int rank = Teuchos::GlobalMPISession::getRank();
 
   set<GlobalIndexType> traceIndices;
-  vector< VarPtr > traceVars = _varFactory.traceVars();
+  vector< VarPtr > traceVars = _varFactory->traceVars();
   set<GlobalIndexType> cellIDs = cellsInPartition(-1);
   for (set<GlobalIndexType>::iterator cellIt = cellIDs.begin(); cellIt != cellIDs.end(); cellIt++) {
     GlobalIndexType cellID = *cellIt;
@@ -980,8 +980,8 @@ void GDAMaximumRule2D::matchNeighbor(GlobalIndexType cellID, int sideIndex) {
                                                 neighborTrialOrdering, sideIndexInNeighbor, neighborTopo);
   // changed == 1 for me, 2 for neighbor, 0 for neither, -1 for PatchBasis
   if (changed==1) {
-    vector< VarPtr > traces = _varFactory.traceVars();
-    vector< VarPtr > fluxes = _varFactory.fluxVars();
+    vector< VarPtr > traces = _varFactory->traceVars();
+    vector< VarPtr > fluxes = _varFactory->fluxVars();
     vector< VarPtr > tracesAndFluxes(traces.begin(),traces.end());
     tracesAndFluxes.insert(tracesAndFluxes.end(), fluxes.begin(), fluxes.end());
     int fluxTraceCount = tracesAndFluxes.size();
@@ -1008,8 +1008,8 @@ void GDAMaximumRule2D::matchNeighbor(GlobalIndexType cellID, int sideIndex) {
     //return ELEMENT_NEEDED_NEW;
   } else if (changed==2) {
     // if need be, upgrade neighborTestOrdering as well.
-    vector< VarPtr > traces = _varFactory.traceVars();
-    vector< VarPtr > fluxes = _varFactory.fluxVars();
+    vector< VarPtr > traces = _varFactory->traceVars();
+    vector< VarPtr > fluxes = _varFactory->fluxVars();
     vector< VarPtr > tracesAndFluxes(traces.begin(),traces.end());
     tracesAndFluxes.insert(tracesAndFluxes.end(), fluxes.begin(), fluxes.end());
     int fluxTraceCount = tracesAndFluxes.size();

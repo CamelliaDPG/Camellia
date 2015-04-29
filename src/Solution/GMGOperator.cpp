@@ -476,7 +476,7 @@ LocalDofMapperPtr GMGOperator::getLocalCoefficientMap(GlobalIndexType fineCellID
   }
 
   if (_localCoefficientMap.find(key) == _localCoefficientMap.end()) {
-    VarFactory vf = _fineMesh->bilinearForm()->varFactory();
+    VarFactoryPtr vf = _fineMesh->bilinearForm()->varFactory();
 
     typedef vector< SubBasisDofMapperPtr > BasisMap; // taken together, these maps map a whole basis
     map< int, BasisMap > volumeMaps;
@@ -490,7 +490,7 @@ LocalDofMapperPtr GMGOperator::getLocalCoefficientMap(GlobalIndexType fineCellID
     for (set<int>::iterator trialIDIt = trialIDs.begin(); trialIDIt != trialIDs.end(); trialIDIt++) {
       int trialID = *trialIDIt;
 
-      VarPtr trialVar = vf.trialVars().find(trialID)->second;
+      VarPtr trialVar = vf->trialVars().find(trialID)->second;
       Space varSpace = trialVar->space();
       Camellia::EFunctionSpace varFS = efsForSpace(varSpace);
       if (! Camellia::functionSpaceIsDiscontinuous(varFS)) {
@@ -527,7 +527,7 @@ LocalDofMapperPtr GMGOperator::getLocalCoefficientMap(GlobalIndexType fineCellID
           BasisMap basisMap;
           if (coarseSideOrdinal == -1) { // the fine side falls inside a coarse volume
             // we map trace to field using the traceTerm LinearTermPtr
-            VarPtr trialVar = vf.trial(trialID);
+            VarPtr trialVar = vf->trial(trialID);
 
             LinearTermPtr termTraced = trialVar->termTraced();
             if (termTraced.get() == NULL) // nothing we can do if we don't know what term we're tracing
@@ -629,8 +629,8 @@ LocalDofMapperPtr GMGOperator::getLocalCoefficientMap(GlobalIndexType fineCellID
     // copy before changing dofMapper:
     dofMapper = Teuchos::rcp( new LocalDofMapper(*dofMapper.get()) );
     set<int> fluxIDs;
-    VarFactory vf = _fineMesh->bilinearForm()->varFactory();
-    vector<VarPtr> fluxVars = vf.fluxVars();
+    VarFactoryPtr vf = _fineMesh->bilinearForm()->varFactory();
+    vector<VarPtr> fluxVars = vf->fluxVars();
     for (vector<VarPtr>::iterator fluxIt = fluxVars.begin(); fluxIt != fluxVars.end(); fluxIt++) {
       fluxIDs.insert((*fluxIt)->ID());
     }

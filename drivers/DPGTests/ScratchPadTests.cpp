@@ -107,9 +107,9 @@ public:
 // is zero except on the edge (.5, y) on a 2x1 unit quad mesh - an edge restriction function
 class EdgeFunction : public Function {
 public:
-  bool boundaryValueOnly() { 
-    return true; 
-  } 
+  bool boundaryValueOnly() {
+    return true;
+  }
   void values(FieldContainer<double> &values, BasisCachePtr basisCache){
     double tol = 1e-11;
     vector<GlobalIndexType> cellIDs = basisCache->cellIDs();
@@ -139,23 +139,23 @@ public:
 void ScratchPadTests::setup() {
   ////////////////////   DECLARE VARIABLES   ///////////////////////
   // define test variables
-  VarFactory varFactory; 
-  VarPtr tau = varFactory.testVar("\\tau", HDIV);
-  VarPtr v = varFactory.testVar("v", HGRAD);
-  
+  VarFactoryPtr varFactory = VarFactory::varFactory();
+  VarPtr tau = varFactory->testVar("\\tau", HDIV);
+  VarPtr v = varFactory->testVar("v", HGRAD);
+
   // define trial variables
-  VarPtr uhat = varFactory.traceVar("\\widehat{u}");
-  VarPtr beta_n_u_minus_sigma_n = varFactory.fluxVar("\\widehat{\\beta \\cdot n u - \\sigma_{n}}");
-  VarPtr u = varFactory.fieldVar("u");
-  VarPtr sigma1 = varFactory.fieldVar("\\sigma_1");
-  VarPtr sigma2 = varFactory.fieldVar("\\sigma_2");
-  
+  VarPtr uhat = varFactory->traceVar("\\widehat{u}");
+  VarPtr beta_n_u_minus_sigma_n = varFactory->fluxVar("\\widehat{\\beta \\cdot n u - \\sigma_{n}}");
+  VarPtr u = varFactory->fieldVar("u");
+  VarPtr sigma1 = varFactory->fieldVar("\\sigma_1");
+  VarPtr sigma2 = varFactory->fieldVar("\\sigma_2");
+
   vector<double> beta_const;
   beta_const.push_back(2.0);
   beta_const.push_back(1.0);
-  
+
   double eps = 1e-2;
-  
+
   // standard confusion bilinear form
   _confusionBF = Teuchos::rcp( new BF(varFactory) );
   // tau terms:
@@ -163,7 +163,7 @@ void ScratchPadTests::setup() {
   _confusionBF->addTerm(sigma2 / eps, tau->y());
   _confusionBF->addTerm(u, tau->div());
   _confusionBF->addTerm(-uhat, tau->dot_normal());
-  
+
   // v terms:
   _confusionBF->addTerm( sigma1, v->dx() );
   _confusionBF->addTerm( sigma2, v->dy() );
@@ -171,11 +171,11 @@ void ScratchPadTests::setup() {
   _confusionBF->addTerm( beta_n_u_minus_sigma_n, v);
 
   _uhat_confusion = uhat; // confusion variable u_hat
-  
+
   ////////////////////   BUILD MESH   ///////////////////////
   // define nodes for mesh
   FieldContainer<double> quadPoints(4,2);
-  
+
   quadPoints(0,0) = -1.0; // x1
   quadPoints(0,1) = -1.0; // y1
   quadPoints(1,0) = 1.0;
@@ -184,20 +184,20 @@ void ScratchPadTests::setup() {
   quadPoints(2,1) = 1.0;
   quadPoints(3,0) = -1.0;
   quadPoints(3,1) = 1.0;
-  
+
   int H1Order = 1, pToAdd = 0;
   int horizontalCells = 1, verticalCells = 1;
-  
+
   // create a pointer to a new mesh:
   _spectralConfusionMesh = MeshFactory::buildQuadMesh(quadPoints, horizontalCells, verticalCells,
                                                _confusionBF, H1Order, H1Order+pToAdd);
-  
+
   // some 2D test points:
   // setup test points:
   static const int NUM_POINTS_1D = 10;
   double x[NUM_POINTS_1D] = {-1.0,-0.8,-0.6,-.4,-.2,0,0.2,0.4,0.6,0.8};
   double y[NUM_POINTS_1D] = {-0.8,-0.6,-.4,-.2,0,0.2,0.4,0.6,0.8,1.0};
-  
+
   _testPoints = FieldContainer<double>(NUM_POINTS_1D*NUM_POINTS_1D,2);
   for (int i=0; i<NUM_POINTS_1D; i++) {
     for (int j=0; j<NUM_POINTS_1D; j++) {
@@ -205,20 +205,20 @@ void ScratchPadTests::setup() {
       _testPoints(i*NUM_POINTS_1D + j, 1) = y[i];
     }
   }
-  
+
   _elemType = _spectralConfusionMesh->getElement(0)->elementType();
   vector<GlobalIndexType> cellIDs;
   int cellID = 0;
   cellIDs.push_back(cellID);
   _basisCache = Teuchos::rcp( new BasisCache( _elemType, _spectralConfusionMesh ) );
   _basisCache->setRefCellPoints(_testPoints);
-  
+
   _basisCache->setPhysicalCellNodes( _spectralConfusionMesh->physicalCellNodesForCell(cellID), cellIDs, true );
 
 }
 
 void ScratchPadTests::teardown() {
-  
+
 }
 
 void ScratchPadTests::runTests(int &numTestsRun, int &numTestsPassed) {
@@ -228,70 +228,70 @@ void ScratchPadTests::runTests(int &numTestsRun, int &numTestsPassed) {
   }
   numTestsRun++;
   teardown();
-  
+
   setup();
   if (testPenaltyConstraints()) {
     numTestsPassed++;
   }
   numTestsRun++;
   teardown();
-  
+
   setup();
   if (testSpatiallyFilteredFunction()) {
     numTestsPassed++;
   }
   numTestsRun++;
   teardown();
-  
+
   setup();
   if (testConstantFunctionProduct()) {
     numTestsPassed++;
   }
   numTestsRun++;
   teardown();
-  
+
   setup();
   if (testLinearTermEvaluationConsistency()) {
     numTestsPassed++;
   }
   numTestsRun++;
-  teardown();   
+  teardown();
 
-     
+
   setup();
   if (testRieszIntegration()) {
     numTestsPassed++;
   }
   numTestsRun++;
-  teardown();     
+  teardown();
 
   setup();
   if (testLTResidualSimple()) {
     numTestsPassed++;
   }
   numTestsRun++;
-  teardown();     
+  teardown();
 
   setup();
   if (testLTResidual()) {
     numTestsPassed++;
   }
   numTestsRun++;
-  teardown();     
+  teardown();
 
   setup();
   if (testResidualMemoryError()) {
     numTestsPassed++;
   }
   numTestsRun++;
-  teardown();     
+  teardown();
   /*
   setup();
   if (testGalerkinOrthogonality()) {
     numTestsPassed++;
   }
   numTestsRun++;
-  teardown();     
+  teardown();
   */
 }
 
@@ -302,9 +302,9 @@ bool ScratchPadTests::testConstantFunctionProduct() {
   vector<GlobalIndexType> cellIDs;
   int cellID = 0;
   cellIDs.push_back(cellID);
-  basisCache->setPhysicalCellNodes( _spectralConfusionMesh->physicalCellNodesForCell(cellID), 
+  basisCache->setPhysicalCellNodes( _spectralConfusionMesh->physicalCellNodesForCell(cellID),
 				    cellIDs, true );
-  
+
   int numCells = _basisCache->getPhysicalCubaturePoints().dimension(0);
   int numPoints = _testPoints.dimension(0);
   FunctionPtr three = Function::constant(3.0);
@@ -313,10 +313,10 @@ bool ScratchPadTests::testConstantFunctionProduct() {
   FieldContainer<double> values(numCells,numPoints);
   two->values(values,basisCache);
   three->scalarMultiplyBasisValues( values, basisCache );
-  
+
   FieldContainer<double> expectedValues(numCells,numPoints);
   expectedValues.initialize( 3.0 * 2.0 );
-  
+
   double tol = 1e-15;
   double maxDiff = 0.0;
   if ( ! fcsAgree(expectedValues, values, tol, maxDiff) ) {
@@ -330,29 +330,29 @@ bool ScratchPadTests::testPenaltyConstraints() {
   bool success = true;
   int numCells = 1;
   FunctionPtr one = Function::constant(1.0);
-  
+
   SpatialFilterPtr entireBoundary = Teuchos::rcp( new UnitSquareBoundary );
-  
+
   Teuchos::RCP<PenaltyConstraints> pc = Teuchos::rcp(new PenaltyConstraints);
   pc->addConstraint(_uhat_confusion==one,entireBoundary);
-  
+
   FieldContainer<double> localRHSVector(numCells,_elemType->trialOrderPtr->totalDofs());
   FieldContainer<double> localStiffness(numCells,_elemType->trialOrderPtr->totalDofs(),
                                         _elemType->trialOrderPtr->totalDofs());
-  
+
   // Our basis for uhat is 1-x, 1+x -- we should figure out what that means for
   // the values of the integrals that go into expectedStiffness.  For now, focus
   // on the sparsity pattern.
-  
+
   int trialDofs = _elemType->trialOrderPtr->totalDofs();
   FieldContainer<double> expectedSparsity(numCells,_elemType->trialOrderPtr->totalDofs(),
                                           _elemType->trialOrderPtr->totalDofs());
   FieldContainer<double> expectedRHSSparsity(numCells,_elemType->trialOrderPtr->totalDofs());
-  
+
   for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
     for (int sideIndex=0; sideIndex<4; sideIndex++) {
       vector<int> uhat_dofIndices = _elemType->trialOrderPtr->getDofIndices(_uhat_confusion->ID(),sideIndex);
-    
+
       for (int dofOrdinal1=0; dofOrdinal1 < uhat_dofIndices.size(); dofOrdinal1++) {
         int dofIndex1 = uhat_dofIndices[dofOrdinal1];
         expectedRHSSparsity(cellIndex,dofIndex1) = 1.0;
@@ -363,17 +363,17 @@ bool ScratchPadTests::testPenaltyConstraints() {
       }
     }
   }
-  
+
   BCPtr bc = BC::bc();
 
   pc->filter(localStiffness, localRHSVector, _basisCache, _spectralConfusionMesh, bc);
-  
+
   //  cout << "testPenaltyConstraints: expectedStiffnessSparsity:\n" << expectedSparsity;
   //  cout << "testPenaltyConstraints: localStiffness:\n" << localStiffness;
-  //  
+  //
   //  cout << "testPenaltyConstraints: expectedRHSSparsity:\n" << expectedRHSSparsity;
   //  cout << "testPenaltyConstraints: localRHSVector:\n" << localRHSVector;
-  
+
   // compare sparsity
   for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
     for (int i=0; i<trialDofs; i++) {
@@ -409,13 +409,13 @@ bool ScratchPadTests::testSpatiallyFilteredFunction() {
   FunctionPtr one = Function::constant(1.0);
   SpatialFilterPtr positiveX = Teuchos::rcp( new PositiveX );
   FunctionPtr heaviside = Teuchos::rcp( new SpatiallyFilteredFunction<double>(one, positiveX) );
-  
+
   int numCells = _basisCache->getPhysicalCubaturePoints().dimension(0);
   int numPoints = _testPoints.dimension(0);
-  
+
   FieldContainer<double> values(numCells,numPoints);
   FieldContainer<double> expectedValues(numCells,numPoints);
-  
+
   for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
     for (int ptIndex=0; ptIndex<numPoints;ptIndex++) {
       double x = _basisCache->getPhysicalCubaturePoints()(cellIndex,ptIndex,0);
@@ -426,9 +426,9 @@ bool ScratchPadTests::testSpatiallyFilteredFunction() {
       }
     }
   }
-  
+
   heaviside->values(values,_basisCache);
-  
+
   double tol = 1e-15;
   double maxDiff = 0.0;
   if ( ! fcsAgree(expectedValues, values, tol, maxDiff) ) {
@@ -444,13 +444,13 @@ bool ScratchPadTests::testLinearTermEvaluationConsistency(){
 
   ////////////////////   DECLARE VARIABLES   ///////////////////////
   // define test variables
-  VarFactory varFactory; 
-  VarPtr v = varFactory.testVar("v", HGRAD);
-  
+  VarFactoryPtr varFactory = VarFactory::varFactory();
+  VarPtr v = varFactory->testVar("v", HGRAD);
+
   vector<double> beta;
   beta.push_back(1.0);
   beta.push_back(1.0);
-  
+
   ////////////////////   DEFINE INNER PRODUCT(S)   ///////////////////////
 
   // robust test norm
@@ -459,13 +459,13 @@ bool ScratchPadTests::testLinearTermEvaluationConsistency(){
   ip->addTerm(beta*v->grad());
 
   // define trial variables
-  VarPtr beta_n_u = varFactory.fluxVar("\\widehat{\\beta \\cdot n }");
-  VarPtr u = varFactory.fieldVar("u");
+  VarPtr beta_n_u = varFactory->fluxVar("\\widehat{\\beta \\cdot n }");
+  VarPtr u = varFactory->fieldVar("u");
 
   ////////////////////   BUILD MESH   ///////////////////////
 
   BFPtr convectionBF = Teuchos::rcp( new BF(varFactory) );
-  
+
   // v terms:
   convectionBF->addTerm( -u, beta * v->grad() );
   convectionBF->addTerm( beta_n_u, v);
@@ -473,10 +473,10 @@ bool ScratchPadTests::testLinearTermEvaluationConsistency(){
   // define nodes for mesh
   int order = 1;
   int H1Order = order+1; int pToAdd = 1;
-  
+
   // create a pointer to a new mesh:
   Teuchos::RCP<Mesh> mesh = MeshUtilities::buildUnitQuadMesh(1, convectionBF, H1Order, H1Order+pToAdd);
-  
+
   ////////////////////   get fake residual   ///////////////////////
 
   LinearTermPtr lt = Teuchos::rcp(new LinearTerm);
@@ -497,7 +497,7 @@ bool ScratchPadTests::testLinearTermEvaluationConsistency(){
 
   double edgeVal = edgeLt->integrate(mesh,10);
   double elemVal = elemLt->integrate(mesh,10);
-  LinearTermPtr edgeOnlyLt = Teuchos::rcp(new LinearTerm);// residual 
+  LinearTermPtr edgeOnlyLt = Teuchos::rcp(new LinearTerm);// residual
   edgeOnlyLt->addTerm(edgeFxn*v);
   FunctionPtr edgeOnly = edgeOnlyLt->evaluate(rep_map,true);
   double edgeOnlyVal = edgeOnly->integrate(mesh,10);
@@ -507,7 +507,7 @@ bool ScratchPadTests::testLinearTermEvaluationConsistency(){
     success = false;
     cout << "Failed testLinearTermEvaluationConsistency() with diff = " << diff << endl;
   }
-  
+
   return success;
 }
 
@@ -524,11 +524,11 @@ public:
     values.initialize(1.0);
     vector<GlobalIndexType> contextCellIDs = basisCache->cellIDs();
     int cellIndex=0; // keep track of index into values
-    
+
     int entryCount = values.size();
     int numCells = values.dimension(0);
     int numEntriesPerCell = entryCount / numCells;
-    
+
     for (vector<GlobalIndexType>::iterator cellIt = contextCellIDs.begin(); cellIt != contextCellIDs.end(); cellIt++) {
       GlobalIndexType cellID = *cellIt;
       if (_cellIDs.find(cellID) == _cellIDs.end()) {
@@ -548,13 +548,13 @@ bool ScratchPadTests::testIntegrateDiscontinuousFunction(){
 
   ////////////////////   DECLARE VARIABLES   ///////////////////////
   // define test variables
-  VarFactory varFactory; 
-  VarPtr v = varFactory.testVar("v", HGRAD);
-  
+  VarFactoryPtr varFactory = VarFactory::varFactory();
+  VarPtr v = varFactory->testVar("v", HGRAD);
+
   vector<double> beta;
   beta.push_back(1.0);
   beta.push_back(1.0);
-  
+
   ////////////////////   DEFINE INNER PRODUCT(S)   ///////////////////////
 
   // robust test norm
@@ -567,13 +567,13 @@ bool ScratchPadTests::testIntegrateDiscontinuousFunction(){
   ipL2->addTerm(v);
 
   // define trial variables
-  VarPtr beta_n_u = varFactory.fluxVar("\\widehat{\\beta \\cdot n }");
-  VarPtr u = varFactory.fieldVar("u");
+  VarPtr beta_n_u = varFactory->fluxVar("\\widehat{\\beta \\cdot n }");
+  VarPtr u = varFactory->fieldVar("u");
 
   ////////////////////   BUILD MESH   ///////////////////////
 
   BFPtr convectionBF = Teuchos::rcp( new BF(varFactory) );
-  
+
   // v terms:
   convectionBF->addTerm( -u, beta * v->grad() );
   convectionBF->addTerm( beta_n_u, v);
@@ -581,10 +581,10 @@ bool ScratchPadTests::testIntegrateDiscontinuousFunction(){
   // define nodes for mesh
   int order = 1;
   int H1Order = order+1; int pToAdd = 1;
-  
+
   // create a pointer to a new mesh:
   Teuchos::RCP<Mesh> mesh = MeshUtilities::buildUnitQuadMesh(2, 1, convectionBF, H1Order, H1Order+pToAdd);
-  
+
   ////////////////////   integrate discontinuous function - cellIDFunction   ///////////////////////
 
   //  FunctionPtr cellIDFxn = Teuchos::rcp(new CellIDFunction); // should be 0 on cellID 0, 1 on cellID 1
@@ -595,18 +595,18 @@ bool ScratchPadTests::testIntegrateDiscontinuousFunction(){
   FunctionPtr edgeRestrictionFxn = Teuchos::rcp(new EdgeFunction);
   FunctionPtr X = Function::xn(1);
   LinearTermPtr integrandLT = Function::constant(1.0)*v + Function::constant(jumpWeight)*X*edgeRestrictionFxn*v;
-  
+
   // make riesz representation function to more closely emulate the error rep
-  LinearTermPtr indicatorLT = Teuchos::rcp(new LinearTerm);// residual 
+  LinearTermPtr indicatorLT = Teuchos::rcp(new LinearTerm);// residual
   indicatorLT->addTerm(indicator*v);
   Teuchos::RCP<RieszRep> riesz = Teuchos::rcp(new RieszRep(mesh, ipL2, indicatorLT));
   riesz->computeRieszRep();
   map<int,FunctionPtr> vmap;
-  vmap[v->ID()] = Teuchos::rcp(new RepFunction(v,riesz)); // SHOULD BE L2 projection = same thing!!!  
+  vmap[v->ID()] = Teuchos::rcp(new RepFunction(v,riesz)); // SHOULD BE L2 projection = same thing!!!
 
-  FunctionPtr volumeIntegrand = integrandLT->evaluate(vmap,false); 
+  FunctionPtr volumeIntegrand = integrandLT->evaluate(vmap,false);
   FunctionPtr edgeRestrictedIntegrand = integrandLT->evaluate(vmap,true);
- 
+
   double edgeRestrictedValue = volumeIntegrand->integrate(mesh,10) + edgeRestrictedIntegrand->integrate(mesh,10);
 
   double expectedValue = .5 + .5*jumpWeight;
@@ -614,7 +614,7 @@ bool ScratchPadTests::testIntegrateDiscontinuousFunction(){
   if (abs(diff)>1e-11){
     success = false;
     cout << "Failed testIntegrateDiscontinuousFunction() with expectedValue = " << expectedValue << " and actual value = " << edgeRestrictedValue << endl;
-  }  
+  }
   return success;
 }
 
@@ -685,13 +685,13 @@ bool ScratchPadTests::testGalerkinOrthogonality(){
 
   ////////////////////   DECLARE VARIABLES   ///////////////////////
   // define test variables
-  VarFactory varFactory; 
-  VarPtr v = varFactory.testVar("v", HGRAD);
-  
+  VarFactoryPtr varFactory = VarFactory::varFactory();
+  VarPtr v = varFactory->testVar("v", HGRAD);
+
   vector<double> beta;
   beta.push_back(1.0);
   beta.push_back(1.0);
-  
+
   ////////////////////   DEFINE INNER PRODUCT(S)   ///////////////////////
 
   // robust test norm
@@ -700,8 +700,8 @@ bool ScratchPadTests::testGalerkinOrthogonality(){
   ip->addTerm(beta*v->grad());
 
   // define trial variables
-  VarPtr beta_n_u = varFactory.fluxVar("\\widehat{\\beta \\cdot n }");
-  VarPtr u = varFactory.fieldVar("u");
+  VarPtr beta_n_u = varFactory->fluxVar("\\widehat{\\beta \\cdot n }");
+  VarPtr u = varFactory->fieldVar("u");
 
   ////////////////////   BUILD MESH   ///////////////////////
 
@@ -715,29 +715,29 @@ bool ScratchPadTests::testGalerkinOrthogonality(){
   // define nodes for mesh
   int order = 2;
   int H1Order = order+1; int pToAdd = 1;
-  
+
   // create a pointer to a new mesh:
   Teuchos::RCP<Mesh> mesh = MeshUtilities::buildUnitQuadMesh(4, convectionBF, H1Order, H1Order+pToAdd);
-  
+
   ////////////////////   SOLVE   ///////////////////////
 
   RHSPtr rhs = RHS::rhs();
   BCPtr bc = BC::bc();
   SpatialFilterPtr inflowBoundary = Teuchos::rcp( new InflowSquareBoundary );
   SpatialFilterPtr outflowBoundary = Teuchos::rcp( new NegatedSpatialFilter(inflowBoundary) );
-  
+
   FunctionPtr uIn;
   uIn = Teuchos::rcp(new Uinflow); // uses a discontinuous piecewise-constant basis function on left and bottom sides of square
   bc->addDirichlet(beta_n_u, inflowBoundary, beta*n*uIn);
 
   Teuchos::RCP<Solution> solution;
-  solution = Teuchos::rcp( new Solution(mesh, bc, rhs, ip) );  
+  solution = Teuchos::rcp( new Solution(mesh, bc, rhs, ip) );
   solution->solve(false);
   FunctionPtr uFxn = Function::solution(u, solution);
   FunctionPtr fnhatFxn = Function::solution(beta_n_u,solution);
 
   // make residual for riesz representation function
-  LinearTermPtr residual = Teuchos::rcp(new LinearTerm);// residual 
+  LinearTermPtr residual = Teuchos::rcp(new LinearTerm);// residual
   FunctionPtr parity = Function::sideParity();
   residual->addTerm(-fnhatFxn*v + (beta*uFxn)*v->grad());
   Teuchos::RCP<RieszRep> riesz = Teuchos::rcp(new RieszRep(mesh, ip, residual));
@@ -761,7 +761,7 @@ bool ScratchPadTests::testGalerkinOrthogonality(){
   SolutionPtr solnPerturbation = Teuchos::rcp(new Solution(mesh, nullBC, nullRHS, nullIP) );
 
   map< int, vector<DofInfo> > infoMap = constructGlobalDofToLocalDofInfoMap(mesh);
-  
+
   for (map< int, vector<DofInfo> >::iterator mapIt = infoMap.begin();
        mapIt != infoMap.end(); mapIt++) {
     int dofIndex = mapIt->first;
@@ -775,9 +775,9 @@ bool ScratchPadTests::testGalerkinOrthogonality(){
       FieldContainer<double> solnCoeffs(info.basisCardinality);
       solnCoeffs(info.basisOrdinal) = 1.0;
       solnPerturbation->setSolnCoeffsForCellID(solnCoeffs, info.cellID, info.trialID, info.sideIndex);
-   } 
+   }
     //    solnPerturbation->setSolnCoeffForGlobalDofIndex(1.0,dofIndex);
-      
+
     LinearTermPtr b_du =  convectionBF->testFunctional(solnPerturbation);
     FunctionPtr gradient = b_du->evaluate(err_rep_map, TestingUtilities::isFluxOrTraceDof(mesh,dofIndex)); // use boundary part only if flux
     double grad = gradient->integrate(mesh,10);
@@ -791,7 +791,7 @@ bool ScratchPadTests::testGalerkinOrthogonality(){
   FieldContainer<double> errorJumps(mesh->numGlobalDofs()); //initialized to zero
   // just test fluxes ON INTERNAL SKELETON here
   vector<ElementPtr> elems = mesh->activeElements();
-  for (vector<ElementPtr>::iterator elemIt=elems.begin();elemIt!=elems.end();elemIt++){  
+  for (vector<ElementPtr>::iterator elemIt=elems.begin();elemIt!=elems.end();elemIt++){
     for (int sideIndex = 0;sideIndex < 4;sideIndex++){
       ElementPtr elem = *elemIt;
       ElementTypePtr elemType = elem->elementType();
@@ -801,11 +801,11 @@ bool ScratchPadTests::testGalerkinOrthogonality(){
         vector< DofInfo > dofInfoVector = infoMap[globalDofIndex];
 
 	solnPerturbation->clear();
-	TestingUtilities::setSolnCoeffForGlobalDofIndex(solnPerturbation,1.0,globalDofIndex);	
+	TestingUtilities::setSolnCoeffForGlobalDofIndex(solnPerturbation,1.0,globalDofIndex);
 	// also add in BCs
 	for (int i = 0;i<bcGlobalIndices.dimension(0);i++){
 	  TestingUtilities::setSolnCoeffForGlobalDofIndex(solnPerturbation,bcGlobalValues(i),bcGlobalIndices(i));
-	}	
+	}
 
         LinearTermPtr b_du =  convectionBF->testFunctional(solnPerturbation);
         FunctionPtr gradient = b_du->evaluate(err_rep_map, TestingUtilities::isFluxOrTraceDof(mesh,globalDofIndex)); // use boundary part only if flux
@@ -830,27 +830,27 @@ bool ScratchPadTests::testRieszIntegration(){
   double tol = 1e-11;
   bool success = true;
 
-  int nCells = 2; 
+  int nCells = 2;
   double eps = .25;
- 
+
   ////////////////////   DECLARE VARIABLES   ///////////////////////
 
   // define test variables
-  VarFactory varFactory; 
-  VarPtr tau = varFactory.testVar("\\tau", HDIV);
-  VarPtr v = varFactory.testVar("v", HGRAD);
-  
+  VarFactoryPtr varFactory = VarFactory::varFactory();
+  VarPtr tau = varFactory->testVar("\\tau", HDIV);
+  VarPtr v = varFactory->testVar("v", HGRAD);
+
   // define trial variables
-  VarPtr uhat = varFactory.traceVar("\\widehat{u}");
-  VarPtr beta_n_u_minus_sigma_n = varFactory.fluxVar("\\widehat{\\beta \\cdot n u - \\sigma_{n}}");
-  VarPtr u = varFactory.fieldVar("u");
-  VarPtr sigma1 = varFactory.fieldVar("\\sigma_1");
-  VarPtr sigma2 = varFactory.fieldVar("\\sigma_2");
+  VarPtr uhat = varFactory->traceVar("\\widehat{u}");
+  VarPtr beta_n_u_minus_sigma_n = varFactory->fluxVar("\\widehat{\\beta \\cdot n u - \\sigma_{n}}");
+  VarPtr u = varFactory->fieldVar("u");
+  VarPtr sigma1 = varFactory->fieldVar("\\sigma_1");
+  VarPtr sigma2 = varFactory->fieldVar("\\sigma_2");
 
   vector<double> beta;
   beta.push_back(1.0);
   beta.push_back(0.0);
-  
+
   ////////////////////   DEFINE BILINEAR FORM   ///////////////////////
 
   BFPtr confusionBF = Teuchos::rcp( new BF(varFactory) );
@@ -859,13 +859,13 @@ bool ScratchPadTests::testRieszIntegration(){
   confusionBF->addTerm(sigma2 / eps, tau->y());
   confusionBF->addTerm(u, tau->div());
   confusionBF->addTerm(uhat, -tau->dot_normal());
-  
+
   // v terms:
   confusionBF->addTerm( sigma1, v->dx() );
   confusionBF->addTerm( sigma2, v->dy() );
   confusionBF->addTerm( -u, beta * v->grad() );
   confusionBF->addTerm( beta_n_u_minus_sigma_n, v);
-  
+
   ////////////////////   DEFINE INNER PRODUCT(S)   ///////////////////////
 
    // robust test norm
@@ -901,13 +901,13 @@ bool ScratchPadTests::testRieszIntegration(){
   // define nodes for mesh
   int order = 2;
   int H1Order = order+1; int pToAdd = 2;
-   
+
   // create a pointer to a new mesh:
   Teuchos::RCP<Mesh> mesh = MeshUtilities::buildUnitQuadMesh(nCells,confusionBF, H1Order, H1Order+pToAdd);
-   
+
   ////////////////////   SOLVE & REFINE   ///////////////////////
 
-  LinearTermPtr lt = Teuchos::rcp(new LinearTerm);  
+  LinearTermPtr lt = Teuchos::rcp(new LinearTerm);
   FunctionPtr fxn = Function::xn(1); // fxn = x
   lt->addTerm(fxn*v + fxn->grad()*v->grad());
   lt->addTerm(fxn*tau->x() + fxn*tau->y() + (fxn->dx() + fxn->dy())*tau->div());
@@ -923,7 +923,7 @@ bool ScratchPadTests::testRieszIntegration(){
   double integratedNorm = sqrt((lt->evaluate(repFxns,false))->integrate(mesh,5,true));
   success = abs(rieszNorm-integratedNorm)<tol;
   if (success==false){
-    cout << "Failed testRieszIntegration; riesz norm is computed to be = " << rieszNorm << ", while using integration it's computed to be " << integratedNorm << endl;    
+    cout << "Failed testRieszIntegration; riesz norm is computed to be = " << rieszNorm << ", while using integration it's computed to be " << integratedNorm << endl;
     return success;
   }
   return success;
@@ -937,28 +937,28 @@ bool ScratchPadTests::testLTResidualSimple(){
   bool success = true;
 
   int nCells = 2;
- 
+
   ////////////////////   DECLARE VARIABLES   ///////////////////////
 
   // define test variables
-  VarFactory varFactory; 
-  VarPtr v = varFactory.testVar("v", HGRAD);
-  
+  VarFactoryPtr varFactory = VarFactory::varFactory();
+  VarPtr v = varFactory->testVar("v", HGRAD);
+
   // define trial variables
-  VarPtr beta_n_u = varFactory.fluxVar("\\widehat{\\beta \\cdot n u - \\sigma_{n}}");
-  VarPtr u = varFactory.fieldVar("u");
+  VarPtr beta_n_u = varFactory->fluxVar("\\widehat{\\beta \\cdot n u - \\sigma_{n}}");
+  VarPtr u = varFactory->fieldVar("u");
 
   vector<double> beta;
   beta.push_back(1.0);
   beta.push_back(1.0);
-  
+
   ////////////////////   DEFINE BILINEAR FORM   ///////////////////////
 
   BFPtr confusionBF = Teuchos::rcp( new BF(varFactory) );
   // v terms:
   confusionBF->addTerm( -u, beta * v->grad() );
   confusionBF->addTerm( beta_n_u, v);
-  
+
   ////////////////////   DEFINE INNER PRODUCT(S)   ///////////////////////
 
    // robust test norm
@@ -979,7 +979,7 @@ bool ScratchPadTests::testLTResidualSimple(){
   FunctionPtr zero = Function::constant(0.0);
   RHSPtr rhs = RHS::rhs();
   FunctionPtr f = one;
-  rhs->addTerm( f * v ); 
+  rhs->addTerm( f * v );
 
   ////////////////////   CREATE BCs   ///////////////////////
   BCPtr bc = BC::bc();
@@ -991,21 +991,21 @@ bool ScratchPadTests::testLTResidualSimple(){
   // define nodes for mesh
   int order = 2;
   int H1Order = order+1; int pToAdd = 2;
-   
+
   // create a pointer to a new mesh:
   Teuchos::RCP<Mesh> mesh = MeshUtilities::buildUnitQuadMesh(nCells,confusionBF, H1Order, H1Order+pToAdd);
-   
+
   ////////////////////   SOLVE & REFINE   ///////////////////////
 
   int cubEnrich = 0;
-  
+
   Teuchos::RCP<Solution> solution;
   solution = Teuchos::rcp( new Solution(mesh, bc, rhs, ip) );
   solution->solve(false);
   double energyError = solution->energyErrorTotal();
-  
+
   LinearTermPtr residual = rhs->linearTermCopy();
-  residual->addTerm(-confusionBF->testFunctional(solution),true); 
+  residual->addTerm(-confusionBF->testFunctional(solution),true);
 
   Teuchos::RCP<RieszRep> rieszResidual = Teuchos::rcp(new RieszRep(mesh, ip, residual));
   rieszResidual->computeRieszRep(cubEnrich);
@@ -1016,8 +1016,8 @@ bool ScratchPadTests::testLTResidualSimple(){
   map<int,FunctionPtr> errFxns;
   errFxns[v->ID()] = e_v;
   FunctionPtr err = (ip->evaluate(errFxns,false))->evaluate(errFxns,false); // don't need boundary terms unless they're in IP
-  double energyErrorIntegrated = sqrt(err->integrate(mesh,cubEnrich,testVsTest)); 
-  // check that energy error computed thru Solution and through rieszRep are the same  
+  double energyErrorIntegrated = sqrt(err->integrate(mesh,cubEnrich,testVsTest));
+  // check that energy error computed thru Solution and through rieszRep are the same
   success = abs(energyError-energyErrorLT) < tol;
   if (success==false) {
     if (rank==0)
@@ -1043,25 +1043,25 @@ bool ScratchPadTests::testLTResidual(){
 
   int nCells = 2;
   double eps = .1;
- 
+
   ////////////////////   DECLARE VARIABLES   ///////////////////////
 
   // define test variables
-  VarFactory varFactory; 
-  VarPtr tau = varFactory.testVar("\\tau", HDIV);
-  VarPtr v = varFactory.testVar("v", HGRAD);
-  
+  VarFactoryPtr varFactory = VarFactory::varFactory();
+  VarPtr tau = varFactory->testVar("\\tau", HDIV);
+  VarPtr v = varFactory->testVar("v", HGRAD);
+
   // define trial variables
-  VarPtr uhat = varFactory.traceVar("\\widehat{u}");
-  VarPtr beta_n_u_minus_sigma_n = varFactory.fluxVar("\\widehat{\\beta \\cdot n u - \\sigma_{n}}");
-  VarPtr u = varFactory.fieldVar("u");
-  VarPtr sigma1 = varFactory.fieldVar("\\sigma_1");
-  VarPtr sigma2 = varFactory.fieldVar("\\sigma_2");
+  VarPtr uhat = varFactory->traceVar("\\widehat{u}");
+  VarPtr beta_n_u_minus_sigma_n = varFactory->fluxVar("\\widehat{\\beta \\cdot n u - \\sigma_{n}}");
+  VarPtr u = varFactory->fieldVar("u");
+  VarPtr sigma1 = varFactory->fieldVar("\\sigma_1");
+  VarPtr sigma2 = varFactory->fieldVar("\\sigma_2");
 
   vector<double> beta;
   beta.push_back(1.0);
   beta.push_back(0.0);
-  
+
   ////////////////////   DEFINE BILINEAR FORM   ///////////////////////
 
   BFPtr confusionBF = Teuchos::rcp( new BF(varFactory) );
@@ -1070,13 +1070,13 @@ bool ScratchPadTests::testLTResidual(){
   confusionBF->addTerm(sigma2 / eps, tau->y());
   confusionBF->addTerm(u, tau->div());
   confusionBF->addTerm(uhat, -tau->dot_normal());
-  
+
   // v terms:
   confusionBF->addTerm( sigma1, v->dx() );
   confusionBF->addTerm( sigma2, v->dy() );
   confusionBF->addTerm( -u, beta * v->grad() );
   confusionBF->addTerm( beta_n_u_minus_sigma_n, v);
-  
+
   ////////////////////   DEFINE INNER PRODUCT(S)   ///////////////////////
 
    // robust test norm
@@ -1111,27 +1111,27 @@ bool ScratchPadTests::testLTResidual(){
   // define nodes for mesh
   int order = 2;
   int H1Order = order+1; int pToAdd = 2;
-   
+
   // create a pointer to a new mesh:
   Teuchos::RCP<Mesh> mesh = MeshUtilities::buildUnitQuadMesh(nCells,confusionBF, H1Order, H1Order+pToAdd);
-   
+
   ////////////////////   SOLVE & REFINE   ///////////////////////
 
   Teuchos::RCP<Solution> solution;
   solution = Teuchos::rcp( new Solution(mesh, bc, rhs, ip) );
   solution->solve(false);
   double energyError = solution->energyErrorTotal();
- 
+
   LinearTermPtr residual = rhs->linearTermCopy();
   residual->addTerm(-confusionBF->testFunctional(solution),true);
 
 //  FunctionPtr uh = Function::solution(uhat,solution);
 //  FunctionPtr fn = Function::solution(beta_n_u_minus_sigma_n,solution);
 //  FunctionPtr uF = Function::solution(u,solution);
-//  FunctionPtr sigma = e1*Function::solution(sigma1,solution)+e2*Function::solution(sigma2,solution);  
+//  FunctionPtr sigma = e1*Function::solution(sigma1,solution)+e2*Function::solution(sigma2,solution);
 //  residual->addTerm(- (fn*v - uh*tau->dot_normal()));
 //  residual->addTerm(- (uF*(tau->div() - beta*v->grad()) + sigma*((1/eps)*tau + v->grad())));
-//  residual->addTerm(-(fn*v - uF*beta*v->grad() + sigma*v->grad())); // just v portion 
+//  residual->addTerm(-(fn*v - uF*beta*v->grad() + sigma*v->grad())); // just v portion
 //  residual->addTerm(uh*tau->dot_normal() - uF*tau->div() - sigma*((1/eps)*tau)); // just tau portion
 
   Teuchos::RCP<RieszRep> rieszResidual = Teuchos::rcp(new RieszRep(mesh, ip, residual));
@@ -1151,7 +1151,7 @@ bool ScratchPadTests::testLTResidual(){
   double energyErrorIntegrated = sqrt(err->integrate(mesh,cubEnrich,testVsTest));
 
   // check that energy error computed thru Solution and through rieszRep are the same
-  bool success1 = abs(energyError-energyErrorLT)<tol; 
+  bool success1 = abs(energyError-energyErrorLT)<tol;
   // checks that matrix-computed and integrated errors are the same
   bool success2 = abs(energyErrorLT-energyErrorIntegrated)<tol;
   success = success1==true && success2==true;
@@ -1178,21 +1178,21 @@ bool ScratchPadTests::testResidualMemoryError(){
 
   ////////////////////   DECLARE VARIABLES   ///////////////////////
   // define test variables
-  VarFactory varFactory; 
-  VarPtr tau = varFactory.testVar("\\tau", HDIV);
-  VarPtr v = varFactory.testVar("v", HGRAD);
-  
+  VarFactoryPtr varFactory = VarFactory::varFactory();
+  VarPtr tau = varFactory->testVar("\\tau", HDIV);
+  VarPtr v = varFactory->testVar("v", HGRAD);
+
   // define trial variables
-  VarPtr uhat = varFactory.traceVar("\\widehat{u}");
-  VarPtr beta_n_u_minus_sigma_n = varFactory.fluxVar("\\widehat{\\beta \\cdot n u - \\sigma_{n}}");
-  VarPtr u = varFactory.fieldVar("u");
-  VarPtr sigma1 = varFactory.fieldVar("\\sigma_1");
-  VarPtr sigma2 = varFactory.fieldVar("\\sigma_2");
+  VarPtr uhat = varFactory->traceVar("\\widehat{u}");
+  VarPtr beta_n_u_minus_sigma_n = varFactory->fluxVar("\\widehat{\\beta \\cdot n u - \\sigma_{n}}");
+  VarPtr u = varFactory->fieldVar("u");
+  VarPtr sigma1 = varFactory->fieldVar("\\sigma_1");
+  VarPtr sigma2 = varFactory->fieldVar("\\sigma_2");
 
   vector<double> beta;
   beta.push_back(1.0);
   beta.push_back(0.0);
-  
+
   ////////////////////   DEFINE BILINEAR FORM   ///////////////////////
 
   BFPtr confusionBF = Teuchos::rcp( new BF(varFactory) );
@@ -1201,13 +1201,13 @@ bool ScratchPadTests::testResidualMemoryError(){
   confusionBF->addTerm(sigma2 / eps, tau->y());
   confusionBF->addTerm(u, tau->div());
   confusionBF->addTerm(uhat, -tau->dot_normal());
-  
+
   // v terms:
   confusionBF->addTerm( sigma1, v->dx() );
   confusionBF->addTerm( sigma2, v->dy() );
   confusionBF->addTerm( -u, beta * v->grad() );
   confusionBF->addTerm( beta_n_u_minus_sigma_n, v);
-  
+
   ////////////////////   DEFINE INNER PRODUCT(S)   ///////////////////////
 
    // robust test norm
@@ -1244,11 +1244,11 @@ bool ScratchPadTests::testResidualMemoryError(){
   // define nodes for mesh
   int order = 2;
   int H1Order = order+1; int pToAdd = 2;
-  
+
   // create a pointer to a new mesh:
   Teuchos::RCP<Mesh> mesh = MeshUtilities::buildUnitQuadMesh(nCells,confusionBF, H1Order, H1Order+pToAdd);
-  //  mesh->setPartitionPolicy(Teuchos::rcp(new ZoltanMeshPartitionPolicy("HSFC")));  
-  
+  //  mesh->setPartitionPolicy(Teuchos::rcp(new ZoltanMeshPartitionPolicy("HSFC")));
+
   ////////////////////   SOLVE & REFINE   ///////////////////////
 
   Teuchos::RCP<Solution> solution;
@@ -1258,14 +1258,14 @@ bool ScratchPadTests::testResidualMemoryError(){
   double energyErr1 = solution->energyErrorTotal();
 
   LinearTermPtr residual = rhs->linearTermCopy();
-  residual->addTerm(-confusionBF->testFunctional(solution));  
+  residual->addTerm(-confusionBF->testFunctional(solution));
   RieszRepPtr rieszResidual = Teuchos::rcp(new RieszRep(mesh, robIP, residual));
   rieszResidual->computeRieszRep();
   FunctionPtr e_v = Teuchos::rcp(new RepFunction(v,rieszResidual));
   FunctionPtr e_tau = Teuchos::rcp(new RepFunction(tau,rieszResidual));
- 
+
   double energyThreshold = 0.2; // for mesh refinements
-  RefinementStrategy refinementStrategy( solution, energyThreshold );  
+  RefinementStrategy refinementStrategy( solution, energyThreshold );
 
   refinementStrategy.refine();
   solution->solve(false);

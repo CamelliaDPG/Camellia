@@ -3679,13 +3679,13 @@ void TSolution<Scalar>::projectOntoCell(const map<int, TFunctionPtr<Scalar> > &f
   Intrepid::FieldContainer<double> physicalCellNodes = _mesh->physicalCellNodesForCell(cellID);
   vector<GlobalIndexType> cellIDs(1,cellID);
 
-  VarFactory vf = _mesh->bilinearForm()->varFactory();
+  VarFactoryPtr vf = _mesh->bilinearForm()->varFactory();
 
   for (typename map<int, TFunctionPtr<Scalar> >::const_iterator functionIt = functionMap.begin(); functionIt !=functionMap.end(); functionIt++){
     int trialID = functionIt->first;
 
     bool fluxOrTrace = _mesh->bilinearForm()->isFluxOrTrace(trialID);
-    VarPtr trialVar = vf.trial(trialID);
+    VarPtr trialVar = vf->trial(trialID);
     TFunctionPtr<Scalar> function = functionIt->second;
 
     bool testVsTest = false; // in fact it's more trial vs trial, but this just means we'll over-integrate a bit
@@ -3785,7 +3785,7 @@ void TSolution<Scalar>::projectOldCellOntoNewCells(GlobalIndexType cellID,
                                           const Intrepid::FieldContainer<double> &oldData,
                                           const vector<GlobalIndexType> &childIDs)
  {
-   VarFactory vf = _mesh->bilinearForm()->varFactory();
+   VarFactoryPtr vf = _mesh->bilinearForm()->varFactory();
 
    DofOrderingPtr oldTrialOrdering = oldElemType->trialOrderPtr;
    set<int> trialIDs = oldTrialOrdering->getVarIDs();
@@ -3824,7 +3824,7 @@ void TSolution<Scalar>::projectOldCellOntoNewCells(GlobalIndexType cellID,
    for (set<int>::iterator trialIDIt = trialIDs.begin(); trialIDIt != trialIDs.end(); trialIDIt++) {
      int trialID = *trialIDIt;
      if (oldTrialOrdering->getSidesForVarID(trialID).size() != 1) { // trace (flux) variable
-       VarPtr var = vf.trialVars().find(trialID)->second;
+       VarPtr var = vf->trialVars().find(trialID)->second;
 
        TLinearTermPtr<Scalar> termTraced = var->termTraced();
        if (termTraced.get() != NULL) {

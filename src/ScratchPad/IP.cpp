@@ -399,9 +399,9 @@ void TIP<Scalar>::printInteractions() {
 template <typename Scalar>
 pair<TIPPtr<Scalar>, VarPtr> TIP<Scalar>::standardInnerProductForFunctionSpace(Camellia::EFunctionSpace fs, bool useTraceVar, int spaceDim) {
   TIPPtr<Scalar> ip = Teuchos::rcp( new TIP<Scalar> );
-  VarFactory vf;
+  VarFactoryPtr vf = VarFactory::varFactory();
   Camellia::Space space = Camellia::spaceForEFS(fs);
-  VarPtr var = useTraceVar ? vf.traceVar("v",space) : vf.testVar("v", space);
+  VarPtr var = useTraceVar ? vf->traceVar("v",space) : vf->testVar("v", space);
 
   ip->addTerm(var);
 

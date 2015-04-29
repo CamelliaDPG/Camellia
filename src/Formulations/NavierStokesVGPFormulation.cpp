@@ -78,24 +78,24 @@ void NavierStokesVGPFormulation::initialize(MeshTopologyPtr meshTopology, std::s
   VarPtr tau1, tau2, tau3;
   VarPtr q;
 
-  VarFactory vf;
-  u1 = vf.fieldVar(S_U1);
-  u2 = vf.fieldVar(S_U2);
-  if (_spaceDim==3) u3 = vf.fieldVar(S_U3);
+  VarFactoryPtr vf = VarFactory::varFactory();
+  u1 = vf->fieldVar(S_U1);
+  u2 = vf->fieldVar(S_U2);
+  if (_spaceDim==3) u3 = vf->fieldVar(S_U3);
 
-  p = vf.fieldVar(S_P);
+  p = vf->fieldVar(S_P);
 
-  sigma1 = vf.fieldVar(S_SIGMA1, VECTOR_L2);
-  sigma2 = vf.fieldVar(S_SIGMA2, VECTOR_L2);
+  sigma1 = vf->fieldVar(S_SIGMA1, VECTOR_L2);
+  sigma2 = vf->fieldVar(S_SIGMA2, VECTOR_L2);
   if (_spaceDim==3) {
-    sigma3 = vf.fieldVar(S_SIGMA3, VECTOR_L2);
+    sigma3 = vf->fieldVar(S_SIGMA3, VECTOR_L2);
   }
 
   Space uHatSpace = useConformingTraces ? HGRAD : L2;
 
-  u1_hat = vf.traceVar(S_U1_HAT, 1.0 * u1, uHatSpace);
-  u2_hat = vf.traceVar(S_U2_HAT, 1.0 * u2, uHatSpace);
-  if (_spaceDim==3) u3_hat = vf.traceVar(S_U3_HAT, 1.0 * u3, uHatSpace);
+  u1_hat = vf->traceVar(S_U1_HAT, 1.0 * u1, uHatSpace);
+  u2_hat = vf->traceVar(S_U2_HAT, 1.0 * u2, uHatSpace);
+  if (_spaceDim==3) u3_hat = vf->traceVar(S_U3_HAT, 1.0 * u3, uHatSpace);
 
   TFunctionPtr<double> n = TFunction<double>::normal();
   LinearTermPtr t1n_lt, t2n_lt, t3n_lt;
@@ -104,21 +104,21 @@ void NavierStokesVGPFormulation::initialize(MeshTopologyPtr meshTopology, std::s
   if (_spaceDim==3) {
     t3n_lt = p * n->z() - sigma3 * n;
   }
-  t1n = vf.fluxVar(S_TN1_HAT, t1n_lt);
-  t2n = vf.fluxVar(S_TN2_HAT, t2n_lt);
-  if (_spaceDim==3) t3n = vf.fluxVar(S_TN3_HAT, t3n_lt);
+  t1n = vf->fluxVar(S_TN1_HAT, t1n_lt);
+  t2n = vf->fluxVar(S_TN2_HAT, t2n_lt);
+  if (_spaceDim==3) t3n = vf->fluxVar(S_TN3_HAT, t3n_lt);
 
-  v1 = vf.testVar(S_V1, HGRAD);
-  v2 = vf.testVar(S_V2, HGRAD);
-  if (_spaceDim==3) v3 = vf.testVar(S_V3, HGRAD);
+  v1 = vf->testVar(S_V1, HGRAD);
+  v2 = vf->testVar(S_V2, HGRAD);
+  if (_spaceDim==3) v3 = vf->testVar(S_V3, HGRAD);
 
-  tau1 = vf.testVar(S_TAU1, HDIV);
-  tau2 = vf.testVar(S_TAU2, HDIV);
+  tau1 = vf->testVar(S_TAU1, HDIV);
+  tau2 = vf->testVar(S_TAU2, HDIV);
   if (_spaceDim==3) {
-    tau3 = vf.testVar(S_TAU3, HDIV);
+    tau3 = vf->testVar(S_TAU3, HDIV);
   }
 
-  q = vf.testVar(S_Q, HGRAD);
+  q = vf->testVar(S_Q, HGRAD);
 
   _navierStokesBF = Teuchos::rcp( new BF(vf) );
   int H1Order = fieldPolyOrder + 1;
@@ -550,8 +550,8 @@ int NavierStokesVGPFormulation::nonlinearIterationCount() {
 }
 
 VarPtr NavierStokesVGPFormulation::p() {
-  VarFactory vf = _navierStokesBF->varFactory();
-  return vf.fieldVar(S_P);
+  VarFactoryPtr vf = _navierStokesBF->varFactory();
+  return vf->fieldVar(S_P);
 }
 
 void NavierStokesVGPFormulation::setIP(IPPtr ip) {
@@ -702,14 +702,14 @@ VarPtr NavierStokesVGPFormulation::sigma(int i) {
   if (i > spaceDim) {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "i must be less than or equal to spaceDim");
   }
-  VarFactory vf = _navierStokesBF->varFactory();
+  VarFactoryPtr vf = _navierStokesBF->varFactory();
   switch (i) {
     case 1:
-      return vf.fieldVar(S_SIGMA1);
+      return vf->fieldVar(S_SIGMA1);
     case 2:
-      return vf.fieldVar(S_SIGMA2);
+      return vf->fieldVar(S_SIGMA2);
     case 3:
-      return vf.fieldVar(S_SIGMA3);
+      return vf->fieldVar(S_SIGMA3);
   }
   TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "unhandled i value");
 }
@@ -723,14 +723,14 @@ VarPtr NavierStokesVGPFormulation::u(int i) {
   if (i > spaceDim) {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "i must be less than or equal to spaceDim");
   }
-  VarFactory vf = _navierStokesBF->varFactory();
+  VarFactoryPtr vf = _navierStokesBF->varFactory();
   switch (i) {
     case 1:
-      return vf.fieldVar(S_U1);
+      return vf->fieldVar(S_U1);
     case 2:
-      return vf.fieldVar(S_U2);
+      return vf->fieldVar(S_U2);
     case 3:
-      return vf.fieldVar(S_U3);
+      return vf->fieldVar(S_U3);
   }
   TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "unhandled i value");
 }
@@ -741,14 +741,14 @@ VarPtr NavierStokesVGPFormulation::tn_hat(int i) {
   if (i > spaceDim) {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "i must be less than or equal to spaceDim");
   }
-  VarFactory vf = _navierStokesBF->varFactory();
+  VarFactoryPtr vf = _navierStokesBF->varFactory();
   switch (i) {
     case 1:
-      return vf.fluxVar(S_TN1_HAT);
+      return vf->fluxVar(S_TN1_HAT);
     case 2:
-      return vf.fluxVar(S_TN2_HAT);
+      return vf->fluxVar(S_TN2_HAT);
     case 3:
-      return vf.fluxVar(S_TN3_HAT);
+      return vf->fluxVar(S_TN3_HAT);
   }
   TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "unhandled i value");
 }
@@ -758,14 +758,14 @@ VarPtr NavierStokesVGPFormulation::u_hat(int i) {
   if (i > spaceDim) {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "i must be less than or equal to spaceDim");
   }
-  VarFactory vf = _navierStokesBF->varFactory();
+  VarFactoryPtr vf = _navierStokesBF->varFactory();
   switch (i) {
     case 1:
-      return vf.traceVar(S_U1_HAT);
+      return vf->traceVar(S_U1_HAT);
     case 2:
-      return vf.traceVar(S_U2_HAT);
+      return vf->traceVar(S_U2_HAT);
     case 3:
-      return vf.traceVar(S_U3_HAT);
+      return vf->traceVar(S_U3_HAT);
   }
   TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "unhandled i value");
 }
@@ -776,14 +776,14 @@ VarPtr NavierStokesVGPFormulation::tau(int i) {
   if (i > spaceDim) {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "i must be less than or equal to spaceDim");
   }
-  VarFactory vf = _navierStokesBF->varFactory();
+  VarFactoryPtr vf = _navierStokesBF->varFactory();
   switch (i) {
     case 1:
-      return vf.testVar(S_TAU1, HDIV);
+      return vf->testVar(S_TAU1, HDIV);
     case 2:
-      return vf.testVar(S_TAU2, HDIV);
+      return vf->testVar(S_TAU2, HDIV);
     case 3:
-      return vf.testVar(S_TAU3, HDIV);
+      return vf->testVar(S_TAU3, HDIV);
   }
   TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "unhandled i value");
 }
@@ -793,14 +793,14 @@ VarPtr NavierStokesVGPFormulation::v(int i) {
   if (i > spaceDim) {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "i must be less than or equal to spaceDim");
   }
-  VarFactory vf = _navierStokesBF->varFactory();
+  VarFactoryPtr vf = _navierStokesBF->varFactory();
   switch (i) {
     case 1:
-      return vf.testVar(S_V1, HGRAD);
+      return vf->testVar(S_V1, HGRAD);
     case 2:
-      return vf.testVar(S_V2, HGRAD);
+      return vf->testVar(S_V2, HGRAD);
     case 3:
-      return vf.testVar(S_V3, HGRAD);
+      return vf->testVar(S_V3, HGRAD);
   }
   TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "unhandled i value");
 }

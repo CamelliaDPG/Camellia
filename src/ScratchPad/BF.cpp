@@ -25,7 +25,7 @@ using namespace std;
 
 namespace Camellia{
   template <typename Scalar>
-  TBFPtr<Scalar> TBF<Scalar>::bf(VarFactory &vf) {
+  TBFPtr<Scalar> TBF<Scalar>::bf(VarFactoryPtr &vf) {
     return Teuchos::rcp( new TBF<Scalar>(vf) );
   }
 
@@ -43,11 +43,11 @@ namespace Camellia{
   }
 
   template <typename Scalar>
-  TBF<Scalar>::TBF( VarFactory varFactory ) { // copies (note that external changes in VarFactory won't be registered by TBF)
+  TBF<Scalar>::TBF( VarFactoryPtr varFactory ) { // copies (note that external changes in VarFactory won't be registered by TBF)
     _varFactory = varFactory;
     // set super's ID containers:
-    _trialIDs = _varFactory.trialIDs();
-    _testIDs = _varFactory.testIDs();
+    _trialIDs = _varFactory->trialIDs();
+    _testIDs = _varFactory->testIDs();
     _isLegacySubclass = false;
 
     _useQRSolveForOptimalTestFunctions = true;
@@ -57,10 +57,10 @@ namespace Camellia{
   }
 
   template <typename Scalar>
-  TBF<Scalar>::TBF( VarFactory varFactory, VarFactory::BubnovChoice choice ) {
-    _varFactory = varFactory.getBubnovFactory(choice);
-    _trialIDs = _varFactory.trialIDs();
-    _testIDs = _varFactory.testIDs();
+  TBF<Scalar>::TBF( VarFactoryPtr varFactory, VarFactory::BubnovChoice choice ) {
+    _varFactory = varFactory->getBubnovFactory(choice);
+    _trialIDs = _varFactory->trialIDs();
+    _testIDs = _varFactory->testIDs();
     _isLegacySubclass = false;
 
     _useQRSolveForOptimalTestFunctions = true;
@@ -128,26 +128,26 @@ namespace Camellia{
   // BilinearForm implementation:
   template <typename Scalar>
   const string & TBF<Scalar>::testName(int testID) {
-    return _varFactory.test(testID)->name();
+    return _varFactory->test(testID)->name();
   }
   template <typename Scalar>
   const string & TBF<Scalar>::trialName(int trialID) {
-    return _varFactory.trial(trialID)->name();
+    return _varFactory->trial(trialID)->name();
   }
 
   template <typename Scalar>
   Camellia::EFunctionSpace TBF<Scalar>::functionSpaceForTest(int testID) {
-    return efsForSpace(_varFactory.test(testID)->space());
+    return efsForSpace(_varFactory->test(testID)->space());
   }
 
   template <typename Scalar>
   Camellia::EFunctionSpace TBF<Scalar>::functionSpaceForTrial(int trialID) {
-    return efsForSpace(_varFactory.trial(trialID)->space());
+    return efsForSpace(_varFactory->trial(trialID)->space());
   }
 
   template <typename Scalar>
   bool TBF<Scalar>::isFluxOrTrace(int trialID) {
-    VarPtr trialVar = _varFactory.trial(trialID);
+    VarPtr trialVar = _varFactory->trial(trialID);
     if (trialVar.get() == NULL) { // if unknown trial ID, then it's not a flux or a trace!
       return false;
     }
@@ -664,7 +664,7 @@ namespace Camellia{
       ip->addTerm( TFunction<double>::constant(weight) * testTermIt->second );
     }
     // L^2 terms:
-    map< int, VarPtr > testVars = _varFactory.testVars();
+    map< int, VarPtr > testVars = _varFactory->testVars();
     for ( map< int, VarPtr >::iterator testVarIt = testVars.begin(); testVarIt != testVars.end(); testVarIt++) {
       ip->addTerm( sqrt(weightForL2TestTerms) * testVarIt->second );
     }
@@ -676,7 +676,7 @@ namespace Camellia{
   TIPPtr<Scalar> TBF<Scalar>::l2Norm() {
     // L2 norm on test space:
     TIPPtr<Scalar> ip = Teuchos::rcp( new IP );
-    map< int, VarPtr > testVars = _varFactory.testVars();
+    map< int, VarPtr > testVars = _varFactory->testVars();
     for ( map< int, VarPtr >::iterator testVarIt = testVars.begin(); testVarIt != testVars.end(); testVarIt++) {
       ip->addTerm( testVarIt->second );
     }
@@ -774,7 +774,7 @@ namespace Camellia{
   template <typename Scalar>
   TIPPtr<Scalar> TBF<Scalar>::naiveNorm(int spaceDim) {
     TIPPtr<Scalar> ip = Teuchos::rcp( new IP );
-    map< int, VarPtr > testVars = _varFactory.testVars();
+    map< int, VarPtr > testVars = _varFactory->testVars();
     for ( map< int, VarPtr >::iterator testVarIt = testVars.begin(); testVarIt != testVars.end(); testVarIt++) {
       VarPtr var = testVarIt->second;
       ip->addTerm( var );
@@ -957,13 +957,13 @@ namespace Camellia{
 
 
   template <typename Scalar>
-  VarFactory TBF<Scalar>::varFactory() {
+  VarFactoryPtr TBF<Scalar>::varFactory() {
     if (! _isLegacySubclass) {
       return _varFactory;
     } else {
       // this is not meant to cover every possible subclass, but the known legacy subclasses.
       // (just here to allow compatibility with subclasses in DPGTests, e.g.; new implementations should use TBF)
-      VarFactory vf;
+      VarFactoryPtr vf = VarFactory::varFactory();
       vector<int> trialIDs = this->trialIDs();
       for (int trialIndex=0; trialIndex<trialIDs.size(); trialIndex++) {
         int trialID = trialIDs[trialIndex];
@@ -972,12 +972,12 @@ namespace Camellia{
         if (isFluxOrTrace(trialID)) {
           bool isFlux = this->functionSpaceForTrial(trialID) == Camellia::FUNCTION_SPACE_HVOL;
           if (isFlux) {
-            trialVar = vf.fluxVar(name);
+            trialVar = vf->fluxVar(name);
           } else {
-            trialVar = vf.traceVar(name);
+            trialVar = vf->traceVar(name);
           }
         } else {
-          trialVar = vf.fieldVar(name);
+          trialVar = vf->fieldVar(name);
         }
       }
 
@@ -1016,7 +1016,7 @@ namespace Camellia{
             TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "BilinearForm::varFactory(): unhandled function space.");
             break;
         }
-        testVar = vf.testVar(name, space);
+        testVar = vf->testVar(name, space);
       }
       return vf;
     }

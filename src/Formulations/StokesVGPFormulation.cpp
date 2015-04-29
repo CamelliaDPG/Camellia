@@ -71,23 +71,24 @@ StokesVGPFormulation::StokesVGPFormulation(int spaceDim, bool useConformingTrace
   VarPtr tau1, tau2, tau3;
   VarPtr q;
 
-  u1 = _vf.fieldVar(S_U1);
-  u2 = _vf.fieldVar(S_U2);
-  if (spaceDim==3) u3 = _vf.fieldVar(S_U3);
+  _vf = VarFactory::varFactory();
+  u1 = _vf->fieldVar(S_U1);
+  u2 = _vf->fieldVar(S_U2);
+  if (spaceDim==3) u3 = _vf->fieldVar(S_U3);
 
-  p = _vf.fieldVar(S_P);
+  p = _vf->fieldVar(S_P);
 
-  sigma1 = _vf.fieldVar(S_SIGMA1, VECTOR_L2);
-  sigma2 = _vf.fieldVar(S_SIGMA2, VECTOR_L2);
+  sigma1 = _vf->fieldVar(S_SIGMA1, VECTOR_L2);
+  sigma2 = _vf->fieldVar(S_SIGMA2, VECTOR_L2);
   if (spaceDim==3) {
-    sigma3 = _vf.fieldVar(S_SIGMA3, VECTOR_L2);
+    sigma3 = _vf->fieldVar(S_SIGMA3, VECTOR_L2);
   }
 
   Space uHatSpace = useConformingTraces ? HGRAD : L2;
 
-  u1_hat = _vf.traceVar(S_U1_HAT, 1.0 * u1, uHatSpace);
-  u2_hat = _vf.traceVar(S_U2_HAT, 1.0 * u2, uHatSpace);
-  if (spaceDim==3) u3_hat = _vf.traceVar(S_U3_HAT, 1.0 * u3, uHatSpace);
+  u1_hat = _vf->traceVar(S_U1_HAT, 1.0 * u1, uHatSpace);
+  u2_hat = _vf->traceVar(S_U2_HAT, 1.0 * u2, uHatSpace);
+  if (spaceDim==3) u3_hat = _vf->traceVar(S_U3_HAT, 1.0 * u3, uHatSpace);
 
   TFunctionPtr<double> n = TFunction<double>::normal();
   TFunctionPtr<double> n_parity = n * TFunction<double>::sideParity();
@@ -98,21 +99,21 @@ StokesVGPFormulation::StokesVGPFormulation(int spaceDim, bool useConformingTrace
   if (spaceDim==3) {
     t3n_lt = p * n_parity->z() - sigma3 * n_parity;
   }
-  t1n = _vf.fluxVar(S_TN1_HAT, t1n_lt);
-  t2n = _vf.fluxVar(S_TN2_HAT, t2n_lt);
-  if (spaceDim==3) t3n = _vf.fluxVar(S_TN3_HAT, t3n_lt);
+  t1n = _vf->fluxVar(S_TN1_HAT, t1n_lt);
+  t2n = _vf->fluxVar(S_TN2_HAT, t2n_lt);
+  if (spaceDim==3) t3n = _vf->fluxVar(S_TN3_HAT, t3n_lt);
 
-  v1 = _vf.testVar(S_V1, HGRAD);
-  v2 = _vf.testVar(S_V2, HGRAD);
-  if (spaceDim==3) v3 = _vf.testVar(S_V3, HGRAD);
+  v1 = _vf->testVar(S_V1, HGRAD);
+  v2 = _vf->testVar(S_V2, HGRAD);
+  if (spaceDim==3) v3 = _vf->testVar(S_V3, HGRAD);
 
-  tau1 = _vf.testVar(S_TAU1, HDIV);
-  tau2 = _vf.testVar(S_TAU2, HDIV);
+  tau1 = _vf->testVar(S_TAU1, HDIV);
+  tau2 = _vf->testVar(S_TAU2, HDIV);
   if (spaceDim==3) {
-    tau3 = _vf.testVar(S_TAU3, HDIV);
+    tau3 = _vf->testVar(S_TAU3, HDIV);
   }
 
-  q = _vf.testVar(S_Q, HGRAD);
+  q = _vf->testVar(S_Q, HGRAD);
 
   _steadyStokesBF = Teuchos::rcp( new BF(_vf) );
   // v1
@@ -488,7 +489,7 @@ double StokesVGPFormulation::mu() {
 }
 
 VarPtr StokesVGPFormulation::p() {
-  return _vf.fieldVar(S_P);
+  return _vf->fieldVar(S_P);
 }
 
 RefinementStrategyPtr StokesVGPFormulation::getRefinementStrategy() {
@@ -552,11 +553,11 @@ VarPtr StokesVGPFormulation::sigma(int i) {
   }
   switch (i) {
     case 1:
-      return _vf.fieldVar(S_SIGMA1);
+      return _vf->fieldVar(S_SIGMA1);
     case 2:
-      return _vf.fieldVar(S_SIGMA2);
+      return _vf->fieldVar(S_SIGMA2);
     case 3:
-      return _vf.fieldVar(S_SIGMA3);
+      return _vf->fieldVar(S_SIGMA3);
   }
   TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "unhandled i value");
 }
@@ -567,11 +568,11 @@ VarPtr StokesVGPFormulation::u(int i) {
   }
   switch (i) {
     case 1:
-      return _vf.fieldVar(S_U1);
+      return _vf->fieldVar(S_U1);
     case 2:
-      return _vf.fieldVar(S_U2);
+      return _vf->fieldVar(S_U2);
     case 3:
-      return _vf.fieldVar(S_U3);
+      return _vf->fieldVar(S_U3);
   }
   TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "unhandled i value");
 }
@@ -583,11 +584,11 @@ VarPtr StokesVGPFormulation::tn_hat(int i) {
   }
   switch (i) {
     case 1:
-      return _vf.fluxVar(S_TN1_HAT);
+      return _vf->fluxVar(S_TN1_HAT);
     case 2:
-      return _vf.fluxVar(S_TN2_HAT);
+      return _vf->fluxVar(S_TN2_HAT);
     case 3:
-      return _vf.fluxVar(S_TN3_HAT);
+      return _vf->fluxVar(S_TN3_HAT);
   }
   TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "unhandled i value");
 }
@@ -598,11 +599,11 @@ VarPtr StokesVGPFormulation::u_hat(int i) {
   }
   switch (i) {
     case 1:
-      return _vf.traceVar(S_U1_HAT);
+      return _vf->traceVar(S_U1_HAT);
     case 2:
-      return _vf.traceVar(S_U2_HAT);
+      return _vf->traceVar(S_U2_HAT);
     case 3:
-      return _vf.traceVar(S_U3_HAT);
+      return _vf->traceVar(S_U3_HAT);
   }
   TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "unhandled i value");
 }
@@ -614,11 +615,11 @@ VarPtr StokesVGPFormulation::tau(int i) {
   }
   switch (i) {
     case 1:
-      return _vf.testVar(S_TAU1, HDIV);
+      return _vf->testVar(S_TAU1, HDIV);
     case 2:
-      return _vf.testVar(S_TAU2, HDIV);
+      return _vf->testVar(S_TAU2, HDIV);
     case 3:
-      return _vf.testVar(S_TAU3, HDIV);
+      return _vf->testVar(S_TAU3, HDIV);
   }
   TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "unhandled i value");
 
@@ -715,11 +716,11 @@ VarPtr StokesVGPFormulation::v(int i) {
   }
   switch (i) {
     case 1:
-      return _vf.testVar(S_V1, HGRAD);
+      return _vf->testVar(S_V1, HGRAD);
     case 2:
-      return _vf.testVar(S_V2, HGRAD);
+      return _vf->testVar(S_V2, HGRAD);
     case 3:
-      return _vf.testVar(S_V3, HGRAD);
+      return _vf->testVar(S_V3, HGRAD);
   }
   TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "unhandled i value");
 }

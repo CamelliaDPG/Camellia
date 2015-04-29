@@ -140,26 +140,26 @@ namespace {
   void termTracedTest(Teuchos::FancyOStream &out, bool &success, CellTopoPtr volumeTopo, VarType traceOrFluxType) {
     int spaceDim = volumeTopo->getDimension();
 
-    VarFactory vf;
+    VarFactoryPtr vf = VarFactory::varFactory();
     VarPtr fieldVar, traceVar;
     if ((traceOrFluxType != FLUX) && (traceOrFluxType != TRACE)) {
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "type must be flux or trace");
     } else if (spaceDim==1) {
-      fieldVar = vf.fieldVar("psi", L2);
+      fieldVar = vf->fieldVar("psi", L2);
       FunctionPtr n = Function::normal_1D();
       FunctionPtr parity = Function::sideParity();
       LinearTermPtr fluxTermTraced = 3.0 * n * parity * fieldVar;
-      traceVar = vf.fluxVar("\\widehat{\\psi}_n", fluxTermTraced);
+      traceVar = vf->fluxVar("\\widehat{\\psi}_n", fluxTermTraced);
     } else if (traceOrFluxType==FLUX) {
-      fieldVar = vf.fieldVar("psi", VECTOR_L2);
+      fieldVar = vf->fieldVar("psi", VECTOR_L2);
       FunctionPtr n = Function::normal();
       FunctionPtr parity = Function::sideParity();
       LinearTermPtr fluxTermTraced = 3.0 * n * parity * fieldVar;
-      traceVar = vf.fluxVar("\\widehat{\\psi}_n", fluxTermTraced);
+      traceVar = vf->fluxVar("\\widehat{\\psi}_n", fluxTermTraced);
     } else {
-      fieldVar = vf.fieldVar("u");
+      fieldVar = vf->fieldVar("u");
       LinearTermPtr termTraced = 3.0 * fieldVar;
-      traceVar = vf.traceVar("\\widehat{u}", termTraced);
+      traceVar = vf->traceVar("\\widehat{u}", termTraced);
     }
 
     // in what follows, the fine basis belongs to the trace variable and the coarse to the field
@@ -293,10 +293,10 @@ namespace {
   TEUCHOS_UNIT_TEST( BasisReconciliation, TermTraced_1D )
   {
     // TODO: rewrite this to use termTracedTest(), as in TermTraced_2D tests, below
-    VarFactory vf;
-    VarPtr u = vf.fieldVar("u");
+    VarFactoryPtr vf = VarFactory::varFactory();
+    VarPtr u = vf->fieldVar("u");
     LinearTermPtr termTraced = 3.0 * u;
-    VarPtr u_hat = vf.traceVar("\\widehat{u}", termTraced);
+    VarPtr u_hat = vf->traceVar("\\widehat{u}", termTraced);
 
     // in what follows, the fine basis belongs to the trace variable and the coarse to the field
 
@@ -417,14 +417,14 @@ namespace {
   {
     // TODO: rewrite this to use termTracedTest(), as in TermTraced_2D tests, above
     // TODO: add Hexahedron flux test
-    VarFactory vf;
-    VarPtr u = vf.fieldVar("u");
+    VarFactoryPtr vf = VarFactory::varFactory();
+    VarPtr u = vf->fieldVar("u");
     LinearTermPtr termTraced = 3.0 * u;
-    VarPtr u_hat = vf.traceVar("\\widehat{u}", termTraced);
+    VarPtr u_hat = vf->traceVar("\\widehat{u}", termTraced);
 
     // TODO: do flux tests...
     //    LinearTermPtr fluxTermTraced = 3.0 * u * n;
-    //    VarPtr u_n = vf.traceVar("\\widehat{u}", termTraced);
+    //    VarPtr u_n = vf->traceVar("\\widehat{u}", termTraced);
 
     // in what follows, the fine basis belongs to the trace variable and the coarse to the field
 
@@ -559,14 +559,14 @@ namespace {
   {
     // TODO: rewrite this to use termTracedTest(), as in TermTraced_2D tests, above
     // TODO: add Tetrahedron flux test
-    VarFactory vf;
-    VarPtr u = vf.fieldVar("u");
+    VarFactoryPtr vf = VarFactory::varFactory();
+    VarPtr u = vf->fieldVar("u");
     LinearTermPtr termTraced = 3.0 * u;
-    VarPtr u_hat = vf.traceVar("\\widehat{u}", termTraced);
+    VarPtr u_hat = vf->traceVar("\\widehat{u}", termTraced);
 
     // TODO: do flux tests...
     //    LinearTermPtr fluxTermTraced = 3.0 * u * n;
-    //    VarPtr u_n = vf.traceVar("\\widehat{u}", termTraced);
+    //    VarPtr u_n = vf->traceVar("\\widehat{u}", termTraced);
 
     // in what follows, the fine basis belongs to the trace variable and the coarse to the field
 

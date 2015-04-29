@@ -10,12 +10,12 @@ namespace Camellia {
 	class HessianFilter : public LocalStiffnessMatrixFilter {
 	 private:
 	  BFPtr _hessianBF;
-	  VarFactory hessianVarFactory;
-	 public: 
+	  VarFactoryPtr hessianVarFactory;
+	 public:
 	  HessianFilter(BFPtr hessianBF ) {
 	    _hessianBF = hessianBF;
 	  };
-	  
+
 	  virtual void filter(Intrepid::FieldContainer<double> &localStiffnessMatrix, Intrepid::FieldContainer<double> &localRHSVector,
 	                      BasisCachePtr basisCache, Teuchos::RCP<Mesh> mesh, Teuchos::RCP<BC> bc) ;
 	};

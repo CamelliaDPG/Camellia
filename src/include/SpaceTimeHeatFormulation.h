@@ -33,7 +33,7 @@ namespace Camellia {
 
     RefinementStrategyPtr _refinementStrategy;
 
-    VarFactory _vf;
+    VarFactoryPtr _vf;
 
     static const string S_U;
     static const string S_SIGMA1, S_SIGMA2, S_SIGMA3;

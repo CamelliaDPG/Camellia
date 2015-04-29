@@ -187,7 +187,7 @@ namespace {
     exactSoln->importSolutionForOffRankCells(cellIDs);
 
 //    bool warnAboutOffRank = false;
-//    VarFactory vf = bf->varFactory();
+//    VarFactoryPtr vf = bf->varFactory();
 //    for (set<GlobalIndexType>::iterator cellIDIt = cellIDs.begin(); cellIDIt != cellIDs.end(); cellIDIt++) {
 //      cout << "\n\n******************** Dofs for cell " << *cellIDIt << " (fineSoln before subtracting exact) ********************\n";
 //      FieldContainer<double> coefficients = fineSoln->allCoefficientsForCellID(*cellIDIt, warnAboutOffRank);
@@ -309,7 +309,7 @@ namespace {
     exactSoln->importSolutionForOffRankCells(cellIDs);
 
     bool warnAboutOffRank = false;
-    VarFactory vf = bf->varFactory();
+    VarFactoryPtr vf = bf->varFactory();
 //    for (set<GlobalIndexType>::iterator cellIDIt = cellIDs.begin(); cellIDIt != cellIDs.end(); cellIDIt++) {
 //      cout << "\n\n******************** Dofs for cell " << *cellIDIt << " (fineSoln before subtracting exact) ********************\n";
 //      FieldContainer<double> coefficients = fineSoln->allCoefficientsForCellID(*cellIDIt, warnAboutOffRank);

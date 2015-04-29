@@ -262,8 +262,8 @@ void ParametricSurface::basisWeightsForProjectedInterpolant(FieldContainer<doubl
 
   IPPtr L2 = Teuchos::rcp( new IP );
   // we assume that basis is a vector HGRAD basis
-  VarFactory vf;
-  VarPtr v = vf.testVar("v", VECTOR_HGRAD);
+  VarFactoryPtr vf = VarFactory::varFactory();
+  VarPtr v = vf->testVar("v", VECTOR_HGRAD);
   L2->addTerm(v);
 
   IPPtr H1 = Teuchos::rcp( new IP );

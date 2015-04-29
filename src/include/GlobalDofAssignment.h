@@ -38,7 +38,7 @@ namespace Camellia {
 
     MeshPtr _mesh;
     MeshTopologyPtr _meshTopology;
-    VarFactory _varFactory;
+    VarFactoryPtr _varFactory;
     DofOrderingFactoryPtr _dofOrderingFactory;
     MeshPartitionPolicyPtr _partitionPolicy;
     std::vector<int> _initialH1OrderTrial;
@@ -69,7 +69,7 @@ namespace Camellia {
     // private constructor for subclass's implementation of deepCopy()
     GlobalDofAssignment( GlobalDofAssignment& otherGDA );
   public:
-    GlobalDofAssignment(MeshPtr mesh, VarFactory varFactory, DofOrderingFactoryPtr dofOrderingFactory,
+    GlobalDofAssignment(MeshPtr mesh, VarFactoryPtr varFactory, DofOrderingFactoryPtr dofOrderingFactory,
                         MeshPartitionPolicyPtr partitionPolicy, std::vector<int> initialH1OrderTrial,
                         int testOrderEnhancement, bool enforceConformityLocally);
     virtual ~GlobalDofAssignment() {}
@@ -146,9 +146,9 @@ namespace Camellia {
     void setPartitionPolicy( MeshPartitionPolicyPtr partitionPolicy );
 
     // static constructors:
-    static GlobalDofAssignmentPtr maximumRule2D(MeshPtr mesh, VarFactory varFactory, DofOrderingFactoryPtr dofOrderingFactory,
+    static GlobalDofAssignmentPtr maximumRule2D(MeshPtr mesh, VarFactoryPtr varFactory, DofOrderingFactoryPtr dofOrderingFactory,
                                                 MeshPartitionPolicyPtr partitionPolicy, unsigned initialH1OrderTrial, unsigned testOrderEnhancement);
-    static GlobalDofAssignmentPtr minimumRule(MeshPtr mesh, VarFactory varFactory,
+    static GlobalDofAssignmentPtr minimumRule(MeshPtr mesh, VarFactoryPtr varFactory,
                                               DofOrderingFactoryPtr dofOrderingFactory, MeshPartitionPolicyPtr partitionPolicy,
                                               unsigned initialH1OrderTrial, unsigned testOrderEnhancement);
   };

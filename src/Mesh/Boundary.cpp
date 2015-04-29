@@ -208,9 +208,9 @@ void Boundary::bcsToImpose( map<  GlobalIndexType, Scalar > &globalDofIndicesAnd
   // define a couple of important inner products:
   TIPPtr<Scalar> ipL2 = Teuchos::rcp( new TIP<Scalar> );
   TIPPtr<Scalar> ipH1 = Teuchos::rcp( new TIP<Scalar> );
-  VarFactory varFactory;
-  VarPtr trace = varFactory.traceVar("trace");
-  VarPtr flux = varFactory.traceVar("flux");
+  VarFactoryPtr varFactory = VarFactory::varFactory();
+  VarPtr trace = varFactory->traceVar("trace");
+  VarPtr flux = varFactory->traceVar("flux");
   ipL2->addTerm(flux);
   ipH1->addTerm(trace);
   ipH1->addTerm(trace->grad());

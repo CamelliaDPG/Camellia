@@ -48,17 +48,18 @@ SpaceTimeHeatFormulation::SpaceTimeHeatFormulation(int spaceDim, double epsilon,
   VarPtr tau;
   VarPtr q;
 
-  u = _vf.fieldVar(S_U);
+  _vf = VarFactory::varFactory();
+  u = _vf->fieldVar(S_U);
 
-  sigma1 = _vf.fieldVar(S_SIGMA1);
-  if (spaceDim > 1) sigma2 = _vf.fieldVar(S_SIGMA2);
+  sigma1 = _vf->fieldVar(S_SIGMA1);
+  if (spaceDim > 1) sigma2 = _vf->fieldVar(S_SIGMA2);
   if (spaceDim==3) {
-    sigma3 = _vf.fieldVar(S_SIGMA3);
+    sigma3 = _vf->fieldVar(S_SIGMA3);
   }
 
   Space uHatSpace = useConformingTraces ? HGRAD : L2;
 
-  u_hat = _vf.traceVar(S_U_HAT, 1.0 * u, uHatSpace);
+  u_hat = _vf->traceVar(S_U_HAT, 1.0 * u, uHatSpace);
 
   TFunctionPtr<double> n_x = TFunction<double>::normal(); // spatial normal
   TFunctionPtr<double> n_x_parity = n_x * TFunction<double>::sideParity();
@@ -77,14 +78,14 @@ SpaceTimeHeatFormulation::SpaceTimeHeatFormulation(int spaceDim, double epsilon,
   {
     sigma_n_lt = sigma1 * n_x_parity->x() + sigma2 * n_x_parity->y() + sigma3 * n_x_parity->z();
   }
-  sigma_n_hat = _vf.fluxVarSpaceOnly(S_SIGMA_N_HAT, sigma_n_lt);
+  sigma_n_hat = _vf->fluxVarSpaceOnly(S_SIGMA_N_HAT, sigma_n_lt);
 
-  v = _vf.testVar(S_V, HGRAD);
+  v = _vf->testVar(S_V, HGRAD);
 
   if (_spaceDim > 1)
-    tau = _vf.testVar(S_TAU, HDIV); // vector
+    tau = _vf->testVar(S_TAU, HDIV); // vector
   else
-    tau = _vf.testVar(S_TAU, HGRAD); // scalar
+    tau = _vf->testVar(S_TAU, HGRAD); // scalar
 
   _bf = Teuchos::rcp( new BF(_vf) );
   // v terms
@@ -196,31 +197,31 @@ VarPtr SpaceTimeHeatFormulation::sigma(int i) {
   }
   switch (i) {
     case 1:
-      return _vf.fieldVar(S_SIGMA1);
+      return _vf->fieldVar(S_SIGMA1);
     case 2:
-      return _vf.fieldVar(S_SIGMA2);
+      return _vf->fieldVar(S_SIGMA2);
     case 3:
-      return _vf.fieldVar(S_SIGMA3);
+      return _vf->fieldVar(S_SIGMA3);
   }
   TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "unhandled i value");
 }
 
 VarPtr SpaceTimeHeatFormulation::u() {
-  return _vf.fieldVar(S_U);
+  return _vf->fieldVar(S_U);
 }
 
 // traces:
 VarPtr SpaceTimeHeatFormulation::sigma_n_hat() {
-  return _vf.fluxVarSpaceOnly(S_SIGMA_N_HAT);
+  return _vf->fluxVarSpaceOnly(S_SIGMA_N_HAT);
 }
 
 VarPtr SpaceTimeHeatFormulation::u_hat() {
-  return _vf.traceVar(S_U_HAT);
+  return _vf->traceVar(S_U_HAT);
 }
 
 // test variables:
 VarPtr SpaceTimeHeatFormulation::tau() {
-  return _vf.testVar(S_TAU, HDIV);
+  return _vf->testVar(S_TAU, HDIV);
 }
 
 // ! Saves the solution(s) and mesh to an HDF5 format.
@@ -240,5 +241,5 @@ void SpaceTimeHeatFormulation::solve() {
 }
 
 VarPtr SpaceTimeHeatFormulation::v() {
-  return _vf.testVar(S_V, HGRAD);
+  return _vf->testVar(S_V, HGRAD);
 }

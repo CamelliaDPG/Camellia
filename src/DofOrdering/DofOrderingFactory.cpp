@@ -44,11 +44,11 @@
 using namespace Intrepid;
 using namespace Camellia;
 
-DofOrderingFactory::DofOrderingFactory(VarFactory varFactory) {
+DofOrderingFactory::DofOrderingFactory(VarFactoryPtr varFactory) {
   _varFactory = varFactory;
 }
 
-DofOrderingFactory::DofOrderingFactory(VarFactory varFactory,
+DofOrderingFactory::DofOrderingFactory(VarFactoryPtr varFactory,
                                        map<int,int> trialOrderEnhancements,
                                        map<int,int> testOrderEnhancements) {
   _varFactory = varFactory;
@@ -72,7 +72,7 @@ DofOrderingFactory::DofOrderingFactory(TBFPtr<double> bilinearForm,
 
 DofOrderingPtr DofOrderingFactory::testOrdering(vector<int> &polyOrder, CellTopoPtr cellTopo) {
   // vector<int> testIDs = _bilinearForm->testIDs();
-  vector<int> testIDs = _varFactory.testIDs();
+  vector<int> testIDs = _varFactory->testIDs();
   vector<int>::iterator testIterator;
 
   DofOrderingPtr testOrder = Teuchos::rcp(new DofOrdering(cellTopo));
@@ -82,7 +82,7 @@ DofOrderingPtr DofOrderingFactory::testOrdering(vector<int> &polyOrder, CellTopo
   for (testIterator = testIDs.begin(); testIterator != testIDs.end(); testIterator++) {
     int testID = *testIterator;
     // Camellia::EFunctionSpace fs = _bilinearForm->functionSpaceForTest(testID);
-    Camellia::EFunctionSpace fs = efsForSpace(_varFactory.test(testID)->space());
+    Camellia::EFunctionSpace fs = efsForSpace(_varFactory->test(testID)->space());
     BasisPtr basis;
     for (int pComponent = 0; pComponent < polyOrder.size(); pComponent++) {
       testIDPolyOrder[pComponent] = polyOrder[pComponent] + _testOrderEnhancements[testID]; // uses the fact that map defaults to 0 for entries that aren't found
@@ -113,7 +113,7 @@ DofOrderingPtr DofOrderingFactory::trialOrdering(vector<int> &polyOrder,
   }
 
   // vector<int> trialIDs = _bilinearForm->trialIDs();
-  vector<int> trialIDs = _varFactory.trialIDs();
+  vector<int> trialIDs = _varFactory->trialIDs();
   vector<int>::iterator trialIterator;
 
   DofOrderingPtr trialOrder = Teuchos::rcp(new DofOrdering(cellTopo));
@@ -126,20 +126,20 @@ DofOrderingPtr DofOrderingFactory::trialOrdering(vector<int> &polyOrder,
 
   for (trialIterator = trialIDs.begin(); trialIterator != trialIDs.end(); trialIterator++) {
     int trialID = *trialIterator;
-    VarPtr trialVar = _varFactory.trialVars().find(trialID)->second;
+    VarPtr trialVar = _varFactory->trialVars().find(trialID)->second;
     for (int pComponent = 0; pComponent < polyOrder.size(); pComponent++) {
       trialIDPolyOrder[pComponent] = polyOrder[pComponent] + _trialOrderEnhancements[trialID]; // uses the fact that map defaults to 0 for entries that aren't found
     }
 
     // Camellia::EFunctionSpace fs = _bilinearForm->functionSpaceForTrial(trialID);
-    Camellia::EFunctionSpace fs = efsForSpace(_varFactory.trial(trialID)->space());
+    Camellia::EFunctionSpace fs = efsForSpace(_varFactory->trial(trialID)->space());
 
     BasisPtr basis;
 
     int basisRank;
 
     // if (_bilinearForm->isFluxOrTrace(trialID)) {
-    VarType varType = _varFactory.trial(trialID)->varType();
+    VarType varType = _varFactory->trial(trialID)->varType();
     if ((varType == FLUX) || (varType == TRACE)) {
       int sideDim = cellTopo->getDimension() - 1;
       int numSides = cellTopo->getSideCount();

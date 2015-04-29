@@ -27,7 +27,7 @@ using namespace Intrepid;
 using namespace Camellia;
 using namespace std;
 
-GlobalDofAssignment::GlobalDofAssignment(MeshPtr mesh, VarFactory varFactory,
+GlobalDofAssignment::GlobalDofAssignment(MeshPtr mesh, VarFactoryPtr varFactory,
                                          DofOrderingFactoryPtr dofOrderingFactory, MeshPartitionPolicyPtr partitionPolicy,
                                          vector<int> initialH1OrderTrial, int testOrderEnhancement, bool enforceConformityLocally) : DofInterpreter(mesh) {
 
@@ -560,13 +560,13 @@ void GlobalDofAssignment::unregisterSolution(TSolutionPtr<double> solution) {
 }
 
 // maximumRule2D provides support for legacy (MultiBasis) meshes
-GlobalDofAssignmentPtr GlobalDofAssignment::maximumRule2D(MeshPtr mesh, VarFactory varFactory,
+GlobalDofAssignmentPtr GlobalDofAssignment::maximumRule2D(MeshPtr mesh, VarFactoryPtr varFactory,
                                                           DofOrderingFactoryPtr dofOrderingFactory, MeshPartitionPolicyPtr partitionPolicy,
                                                           unsigned initialH1OrderTrial, unsigned testOrderEnhancement) {
   return Teuchos::rcp( new GDAMaximumRule2D(mesh,varFactory,dofOrderingFactory,partitionPolicy, initialH1OrderTrial, testOrderEnhancement) );
 }
 
-GlobalDofAssignmentPtr GlobalDofAssignment::minimumRule(MeshPtr mesh, VarFactory varFactory,
+GlobalDofAssignmentPtr GlobalDofAssignment::minimumRule(MeshPtr mesh, VarFactoryPtr varFactory,
                                                         DofOrderingFactoryPtr dofOrderingFactory, MeshPartitionPolicyPtr partitionPolicy,
                                                         unsigned initialH1OrderTrial, unsigned testOrderEnhancement) {
   return Teuchos::rcp( new GDAMinimumRule(mesh,varFactory,dofOrderingFactory,partitionPolicy, initialH1OrderTrial, testOrderEnhancement) );

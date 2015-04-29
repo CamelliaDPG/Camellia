@@ -59,7 +59,7 @@ namespace Camellia {
       unsigned int sliceH1Order=2, unsigned int defaultNum1DPts=4);
 
     // DEPRECATED METHOD:
-    void exportSolution(TSolutionPtr<double> solution, VarFactory varFactory, double timeVal=0,
+    void exportSolution(TSolutionPtr<double> solution, VarFactoryPtr varFactory, double timeVal=0,
                         unsigned int defaultNum1DPts=4, map_int_int cellIDToNum1DPts=map_int_int(), set<GlobalIndexType> cellIndices=set<GlobalIndexType>());
 
     // allows one-line export without storing an exporter object
@@ -85,7 +85,7 @@ namespace Camellia {
 //                       unsigned int defaultNum1DPts=4, map<int, int> cellIDToNum1DPts=map<int,int>(), set<GlobalIndexType> cellIndices=set<GlobalIndexType>()) {}
 //   void exportFunction(std::vector<TFunctionPtr<double>> functions, std::vector<std::string> functionNames, double timeVal=0,
 //                       unsigned int defaultNum1DPts=4, map<int, int> cellIDToNum1DPts=map<int,int>(), set<GlobalIndexType> cellIndices=set<GlobalIndexType>()) {}
-//   void exportSolution(TSolutionPtr<double> solution, VarFactory varFactory, double timeVal=0,
+//   void exportSolution(TSolutionPtr<double> solution, VarFactoryPtr varFactory, double timeVal=0,
 //                       unsigned int defaultNum1DPts=4, map<int, int> cellIDToNum1DPts=map<int,int>(), set<GlobalIndexType> cellIndices=set<GlobalIndexType>()) {}
 //   static void exportSolution(std::string saveDirectory, TSolutionPtr<double> solution) {}
 // };

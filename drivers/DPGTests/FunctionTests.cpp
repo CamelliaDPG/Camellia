@@ -25,7 +25,7 @@ public:
   void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
     int numCells = values.dimension(0);
     int numPoints = values.dimension(1);
-    
+
     const FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
     double tol=1e-14;
     for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
@@ -51,23 +51,23 @@ public:
 void FunctionTests::setup() {
   ////////////////////   DECLARE VARIABLES   ///////////////////////
   // define test variables
-  VarFactory varFactory; 
-  VarPtr tau = varFactory.testVar("\\tau", HDIV);
-  VarPtr v = varFactory.testVar("v", HGRAD);
-  
+  VarFactoryPtr varFactory = VarFactory::varFactory();
+  VarPtr tau = varFactory->testVar("\\tau", HDIV);
+  VarPtr v = varFactory->testVar("v", HGRAD);
+
   // define trial variables
-  VarPtr uhat = varFactory.traceVar("\\widehat{u}");
-  VarPtr beta_n_u_minus_sigma_n = varFactory.fluxVar("\\widehat{\\beta \\cdot n u - \\sigma_{n}}");
-  VarPtr u = varFactory.fieldVar("u");
-  VarPtr sigma1 = varFactory.fieldVar("\\sigma_1");
-  VarPtr sigma2 = varFactory.fieldVar("\\sigma_2");
-  
+  VarPtr uhat = varFactory->traceVar("\\widehat{u}");
+  VarPtr beta_n_u_minus_sigma_n = varFactory->fluxVar("\\widehat{\\beta \\cdot n u - \\sigma_{n}}");
+  VarPtr u = varFactory->fieldVar("u");
+  VarPtr sigma1 = varFactory->fieldVar("\\sigma_1");
+  VarPtr sigma2 = varFactory->fieldVar("\\sigma_2");
+
   vector<double> beta_const;
   beta_const.push_back(2.0);
   beta_const.push_back(1.0);
-  
+
   double eps = 1e-2;
-  
+
   // standard confusion bilinear form
   _confusionBF = Teuchos::rcp( new BF(varFactory) );
   // tau terms:
@@ -75,17 +75,17 @@ void FunctionTests::setup() {
   _confusionBF->addTerm(sigma2 / eps, tau->y());
   _confusionBF->addTerm(u, tau->div());
   _confusionBF->addTerm(-uhat, tau->dot_normal());
-  
+
   // v terms:
   _confusionBF->addTerm( sigma1, v->dx() );
   _confusionBF->addTerm( sigma2, v->dy() );
   _confusionBF->addTerm( beta_const * u, - v->grad() );
   _confusionBF->addTerm( beta_n_u_minus_sigma_n, v);
-    
+
   ////////////////////   BUILD MESH   ///////////////////////
   // define nodes for mesh
   FieldContainer<double> quadPoints(4,2);
-  
+
   quadPoints(0,0) = -1.0; // x1
   quadPoints(0,1) = -1.0; // y1
   quadPoints(1,0) = 1.0;
@@ -94,20 +94,20 @@ void FunctionTests::setup() {
   quadPoints(2,1) = 1.0;
   quadPoints(3,0) = -1.0;
   quadPoints(3,1) = 1.0;
-  
+
   int H1Order = 1, pToAdd = 0;
   int horizontalCells = 1, verticalCells = 1;
-  
+
   // create a pointer to a new mesh:
   _spectralConfusionMesh = MeshFactory::buildQuadMesh(quadPoints, horizontalCells, verticalCells,
                                                _confusionBF, H1Order, H1Order+pToAdd);
-  
+
   // some 2D test points:
   // setup test points:
   static const int NUM_POINTS_1D = 10;
   double x[NUM_POINTS_1D] = {-1.0,-0.8,-0.6,-.4,-.2,0,0.2,0.4,0.6,0.8};
   double y[NUM_POINTS_1D] = {-0.8,-0.6,-.4,-.2,0,0.2,0.4,0.6,0.8,1.0};
-  
+
   _testPoints = FieldContainer<double>(NUM_POINTS_1D*NUM_POINTS_1D,2);
   for (int i=0; i<NUM_POINTS_1D; i++) {
     for (int j=0; j<NUM_POINTS_1D; j++) {
@@ -115,14 +115,14 @@ void FunctionTests::setup() {
       _testPoints(i*NUM_POINTS_1D + j, 1) = y[j];
     }
   }
-  
+
   _elemType = _spectralConfusionMesh->getElement(0)->elementType();
   vector<GlobalIndexType> cellIDs;
   GlobalIndexType cellID = 0;
   cellIDs.push_back(cellID);
   _basisCache = Teuchos::rcp( new BasisCache( _elemType, _spectralConfusionMesh ) );
   _basisCache->setRefCellPoints(_testPoints);
-  
+
   _basisCache->setPhysicalCellNodes( _spectralConfusionMesh->physicalCellNodesForCell(cellID), cellIDs, true );
 }
 
@@ -133,42 +133,42 @@ void FunctionTests::runTests(int &numTestsRun, int &numTestsPassed) {
   }
   numTestsRun++;
   teardown();
-  
+
   setup();
   if (testVectorFunctionValuesOrdering()) {
     numTestsPassed++;
   }
   numTestsRun++;
   teardown();
-  
+
   setup();
   if (testJacobianOrdering()) {
     numTestsPassed++;
   }
   numTestsRun++;
   teardown();
-  
+
   setup();
   if (testBasisSumFunction()) {
     numTestsPassed++;
   }
   numTestsRun++;
   teardown();
-  
+
   setup();
   if (testValuesDottedWithTensor()) {
     numTestsPassed++;
   }
   numTestsRun++;
   teardown();
-  
+
   setup();
   if (testJumpIntegral()) {
     numTestsPassed++;
   }
   numTestsRun++;
   teardown();
-  
+
   setup();
   if (testIntegrate()) {
     numTestsPassed++;
@@ -207,7 +207,7 @@ void FunctionTests::runTests(int &numTestsRun, int &numTestsPassed) {
   }
   numTestsRun++;
   teardown();
-  
+
 }
 
 bool FunctionTests::testBasisSumFunction() {
@@ -218,7 +218,7 @@ bool FunctionTests::testBasisSumFunction() {
   // define a new mesh: more interesting if we're not on the ref cell
   int spaceDim = 2;
   FieldContainer<double> quadPoints(4,2);
-  
+
   quadPoints(0,0) = 0.0; // x1
   quadPoints(0,1) = 0.0; // y1
   quadPoints(1,0) = 2.0;
@@ -227,27 +227,27 @@ bool FunctionTests::testBasisSumFunction() {
   quadPoints(2,1) = 1.0;
   quadPoints(3,0) = 0.0;
   quadPoints(3,1) = 1.0;
-  
+
   int H1Order = 1, pToAdd = 0;
   int horizontalCells = 1, verticalCells = 1;
-  
+
   // create a pointer to a new mesh:
   MeshPtr spectralConfusionMesh = MeshFactory::buildQuadMesh(quadPoints, horizontalCells, verticalCells,
                                                       _confusionBF, H1Order, H1Order+pToAdd);
-  
+
   BCPtr bc = BC::bc();
   SolutionPtr soln = Teuchos::rcp( new Solution(spectralConfusionMesh, bc) );
-  
+
   soln->initializeLHSVector();
-  
+
   int cellID = 0;
   double tol = 1e-16; // overly restrictive, just for now.
-  
+
   DofOrderingPtr trialSpace = spectralConfusionMesh->getElement(cellID)->elementType()->trialOrderPtr;
   set<int> trialIDs = trialSpace->getVarIDs();
-  
+
   BasisCachePtr volumeCache = BasisCache::basisCacheForCell(spectralConfusionMesh, cellID);
-  
+
   for (set<int>::iterator trialIt=trialIDs.begin(); trialIt != trialIDs.end(); trialIt++) {
     int trialID = *trialIt;
     const vector<int>* sidesForVar = &trialSpace->getSidesForVarID(trialID);
@@ -255,7 +255,7 @@ bool FunctionTests::testBasisSumFunction() {
     // note that for volume trialIDs, sideIndex = 0, and numSides = 1…
     for (vector<int>::const_iterator sideIt = sidesForVar->begin(); sideIt != sidesForVar->end(); sideIt++) {
       int sideIndex = *sideIt;
-      
+
       BasisCachePtr sideCache = volumeCache->getSideBasisCache(sideIndex);
       BasisPtr basis = trialSpace->getBasis(trialID, sideIndex);
       int basisCardinality = basis->getCardinality();
@@ -263,7 +263,7 @@ bool FunctionTests::testBasisSumFunction() {
         FieldContainer<double> basisCoefficients(basisCardinality);
         basisCoefficients(basisOrdinal) = 1.0;
         soln->setSolnCoeffsForCellID(basisCoefficients, cellID, trialID, sideIndex);
-        
+
         VarPtr v = Var::varForTrialID(trialID, spectralConfusionMesh->bilinearForm());
         FunctionPtr solnFxn = Function::solution(v, soln);
         FunctionPtr basisSumFxn = Teuchos::rcp( new BasisSumFunction(basis, basisCoefficients, Teuchos::rcp((BasisCache*)NULL), OP_VALUE, boundaryValued) );
@@ -284,7 +284,7 @@ bool FunctionTests::testBasisSumFunction() {
             cout << "l2norm of basisSumFxn->dx(): " << basisSumFxn->dx()->l2norm(spectralConfusionMesh) << endl;
             cout << "l2norm of solnFxn->dx(): " << solnFxn->dx()->l2norm(spectralConfusionMesh) << endl;
           }
-          
+
           // test that the restriction to a side works
           int numSides = volumeCache->cellTopology()->getSideCount();
           for (int i=0; i<numSides; i++) {
@@ -309,7 +309,7 @@ bool FunctionTests::testBasisSumFunction() {
           if (l2diff > tol) {
             success = false;
             cout << "testBasisSumFunction: on side " << sideIndex << ", l2diff of " << l2diff << " exceeds tol of " << tol << endl;
-            
+
             int numCubPoints = sideCache->getPhysicalCubaturePoints().dimension(1);
             FieldContainer<double> solnFxnValues(1,numCubPoints);
             FieldContainer<double> basisFxnValues(1,numCubPoints);
@@ -324,31 +324,31 @@ bool FunctionTests::testBasisSumFunction() {
       }
     }
   }
-  
+
   return success;
 }
 
 bool FunctionTests::testThatLikeFunctionsAgree() {
   bool success = true;
-  
+
   FunctionPtr u_prev = Teuchos::rcp( new UPrev );
-  
+
   vector<double> e1(2); // (1,0)
   e1[0] = 1;
   vector<double> e2(2); // (0,1)
   e2[1] = 1;
-  
+
   FunctionPtr beta = e1 * u_prev + Function::constant( e2 );
-  
+
   FunctionPtr u_prev_squared_div2 = 0.5 * u_prev * u_prev;
-  
-  if (! functionsAgree(e2 * u_prev, 
+
+  if (! functionsAgree(e2 * u_prev,
                        Function::constant( e2 ) * u_prev,
                        _basisCache) ) {
     cout << "two like functions differ...\n";
     success = false;
   }
-  
+
   FunctionPtr e1_f = Function::constant( e1 );
   FunctionPtr e2_f = Function::constant( e2 );
   FunctionPtr one  = Function::constant( 1.0 );
@@ -358,42 +358,42 @@ bool FunctionTests::testThatLikeFunctionsAgree() {
     cout << "two like functions differ...\n";
     success = false;
   }
-  
+
   vector<double> e1_div2 = e1;
   e1_div2[0] /= 2.0;
-  
-  if (! functionsAgree(u_prev_squared_div2, 
+
+  if (! functionsAgree(u_prev_squared_div2,
                        (e1_div2 * beta) * u_prev,
                        _basisCache) ) {
     cout << "two like functions differ...\n";
     success = false;
   }
-  
-  if (! functionsAgree(e1 * u_prev_squared_div2, 
+
+  if (! functionsAgree(e1 * u_prev_squared_div2,
                        (e1_div2 * beta * e1) * u_prev,
                        _basisCache) ) {
     cout << "two like functions differ...\n";
     success = false;
   }
-  
-  if (! functionsAgree(e1 * u_prev_squared_div2 + e2 * u_prev, 
+
+  if (! functionsAgree(e1 * u_prev_squared_div2 + e2 * u_prev,
                        (e1_div2 * beta * e1 + Function::constant( e2 ) ) * u_prev,
                        _basisCache) ) {
     cout << "two like functions differ...\n";
     success = false;
   }
-  
+
   return success;
 }
 
 bool FunctionTests::testComponentFunction() {
   FunctionPtr one = Function::constant(1);
   FunctionPtr two = Function::constant(2);
-  
+
   FunctionPtr vector = Function::vectorize(one, two);
   FunctionPtr xPart = Function::xPart(vector);
   FunctionPtr yPart = Function::yPart(vector);
-  
+
   bool success = true;
   if (! functionsAgree(one, xPart, _basisCache)) {
     success = false;
@@ -425,7 +425,7 @@ bool FunctionTests::functionsAgree(FunctionPtr f1, FunctionPtr f2, BasisCachePtr
   FieldContainer<double> f2Values(dim);
   f1->values(f1Values,basisCache);
   f2->values(f2Values,basisCache);
-  
+
   double tol = 1e-14;
   double maxDiff;
   bool functionsAgree = TestSuite::fcsAgree(f1Values,f2Values,tol,maxDiff);
@@ -442,12 +442,12 @@ bool FunctionTests::functionsAgree(FunctionPtr f1, FunctionPtr f2, BasisCachePtr
 
 bool FunctionTests::testPolarizedFunctions() {
   bool success = true;
-  
+
   // redo _testPoints to avoid 0 point (which might cause a division by 0??)
   static const int NUM_POINTS_1D = 10;
   double xVals[NUM_POINTS_1D] = {-1.0,-0.8,-0.6,-.4,-.2,0.1,0.2,0.4,0.6,0.8};
   double yVals[NUM_POINTS_1D] = {-0.8,-0.6,-.4,-.2,0.1,0.2,0.4,0.6,0.8,1.0};
-  
+
   _testPoints = FieldContainer<double>(NUM_POINTS_1D*NUM_POINTS_1D,2);
   for (int i=0; i<NUM_POINTS_1D; i++) {
     for (int j=0; j<NUM_POINTS_1D; j++) {
@@ -456,103 +456,103 @@ bool FunctionTests::testPolarizedFunctions() {
     }
   }
   _basisCache->setRefCellPoints(_testPoints);
-  
+
   // take f = r cos theta.  Then: f==x, df/dx == 1, df/dy == 0
   FunctionPtr x = Function::xn(1);
   FunctionPtr y = Function::yn(1);
   FunctionPtr cos_y = Teuchos::rcp( new Cos_y );
-  
+
   FunctionPtr one = Function::constant(1.0);
   FunctionPtr zero = Function::zero();
-  
+
   FunctionPtr f = Teuchos::rcp( new PolarizedFunction<double>( x * cos_y ) );
-  
+
   FunctionPtr df_dx = f->dx();
   FunctionPtr df_dy = f->dy();
-  
+
   // f == x
   if (! functionsAgree(f, x, _basisCache) ) {
     cout << "f != x...\n";
     success = false;
   }
-  
+
   // df/dx == 1
   if (! functionsAgree(df_dx, one, _basisCache) ) {
     cout << "df/dx != 1...\n";
     success = false;
   }
-  
+
   // df/dy == 0
   if (! functionsAgree(df_dy, zero, _basisCache) ) {
     cout << "df/dy != 0...\n";
     success = false;
   }
-  
+
   // take f = r sin theta.  Then: f==y, df/dx == 0, df/dy == 1
   FunctionPtr sin_y = Teuchos::rcp( new Sin_y );
   f = Teuchos::rcp( new PolarizedFunction<double>( x * sin_y ) );
   df_dx = f->dx();
   df_dy = f->dy();
-  
+
   // f == x
   if (! functionsAgree(f, y, _basisCache) ) {
     cout << "f != y...\n";
     success = false;
   }
-  
+
   // df/dx == 0
   if (! functionsAgree(df_dx, zero, _basisCache) ) {
     cout << "df/dx != 0...\n";
     success = false;
   }
-  
+
   // df/dy == 0
   if (! functionsAgree(df_dy, one, _basisCache) ) {
     cout << "df/dy != 1...\n";
     success = false;
   }
-  
+
   // Something a little more complicated: f(x) = x^2
   // take f = r^2 cos^2 theta.  Then: f==x^2, df/dx == 2x, df/dy == 0
 
   f = Teuchos::rcp( new PolarizedFunction<double>( x * cos_y * x * cos_y ) );
   df_dx = f->dx();
   df_dy = f->dy();
-  
+
   // f == x^2
   if (! functionsAgree(f, x * x, _basisCache) ) {
     cout << "f != x^2...\n";
     success = false;
   }
-  
+
   // df/dx == 2x
   if (! functionsAgree(df_dx, 2 * x, _basisCache) ) {
     cout << "df/dx != 2x...\n";
     success = false;
   }
-  
+
   // df/dy == 0
   if (! functionsAgree(df_dy, zero, _basisCache) ) {
     cout << "df/dy != 0...\n";
     success = false;
   }
-  
+
   return success;
 }
 
 bool FunctionTests::testProductRule() {
   bool success = true;
-  
+
   // take f = x^2 * exp(x).  f' = 2 x * exp(x) + f
   FunctionPtr x2 = Function::xn(2);
   FunctionPtr exp_x = Teuchos::rcp( new Exp_x );
   FunctionPtr x = Function::xn(1);
-  
+
   FunctionPtr f = x2 * exp_x;
   FunctionPtr f_prime = f->dx();
-  
+
   FunctionPtr f_prime_expected = 2.0 * x * exp_x + f;
-  
+
   if (! functionsAgree(f_prime, f_prime_expected,
                        _basisCache) ) {
     cout << "Product rule: expected and actual derivatives differ...\n";
@@ -568,13 +568,13 @@ bool FunctionTests::testQuotientRule() {
   FunctionPtr x2 = Function::xn(2);
   FunctionPtr exp_x = Teuchos::rcp( new Exp_x );
   FunctionPtr x = Function::xn(1);
-  
+
   FunctionPtr f = exp_x / x2;
   FunctionPtr f_prime = f->dx();
-  
+
   FunctionPtr f_prime_expected = f - 2. * x * exp_x / (x2 * x2);
-  
-  
+
+
   // redo _testPoints to avoid 0 point (which would cause a division by 0)
   static const int NUM_POINTS_1D = 10;
   double xVals[NUM_POINTS_1D] = {-1.0,-0.8,-0.6,-.4,-.2,0.1,0.2,0.4,0.6,0.8};
@@ -588,15 +588,15 @@ bool FunctionTests::testQuotientRule() {
     }
   }
   _basisCache->setRefCellPoints(_testPoints);
-  
+
   if (! functionsAgree(f_prime, f_prime_expected,
                        _basisCache) ) {
     cout << "Quotient rule: expected and actual derivatives differ...\n";
     success = false;
   }
-  
+
   return success;
-  
+
 }
 
 bool FunctionTests::testIntegrate(){
@@ -610,18 +610,18 @@ bool FunctionTests::testIntegrate(){
     success = false;
     cout << "failed testIntegrate() on function x" << endl;
   }
-  
+
   // now, let's try for the integral of the dot product of vector-valued functions
   FunctionPtr y = Function::yn(1);
   FunctionPtr f1 = 1 * Function::vectorize(x, y); // 1 * to trigger creation of a ProductFunction
-  
+
   value = (f1 * f1)->integrate(_spectralConfusionMesh,1); // enrich cubature to handle quadratics
   expectedValue = 8.0 / 3.0; // integral of x^2 + y^2 on (-1,1)^2
   if (abs(value-expectedValue)>tol){
     success = false;
     cout << "failing testIntegrate() on function (x,y) dot (x,y)" << endl;
   }
-  
+
   return success;
 }
 
@@ -635,8 +635,8 @@ bool FunctionTests::testAdaptiveIntegrate(){
   vector<GlobalIndexType> cellIDs;
   cellIDs.push_back(0);
   basisCache->setPhysicalCellNodes( _spectralConfusionMesh->physicalCellNodesForCell(0), cellIDs, true );
-  
-  double eps = .1; // 
+
+  double eps = .1; //
   FunctionPtr boundaryLayerFunction = Teuchos::rcp( new BoundaryLayerFunction(eps) );
   int numCells = basisCache->cellIDs().size();
   FieldContainer<double> integrals(numCells);
@@ -645,7 +645,7 @@ bool FunctionTests::testAdaptiveIntegrate(){
   double trueIntegral = (eps*(exp(1/eps) - exp(-1/eps)))*2.0;
   double diff = trueIntegral-computedIntegral;
   double relativeError = abs(diff)/abs(trueIntegral); // relative error
-  
+
   double tol = 1e-2;
   if (relativeError > tol){
     success = false;
@@ -656,22 +656,22 @@ bool FunctionTests::testAdaptiveIntegrate(){
 
 bool FunctionTests::testJacobianOrdering() {
   bool success = true;
-  
+
   FunctionPtr y = Function::yn(1);
-  
+
   FunctionPtr f = Function::vectorize(y, Function::zero());
-  
+
   // test 1: Jacobian ordering is f_i,j
   int spaceDim = 2;
   int cellID = 0;
   BasisCachePtr basisCache = BasisCache::basisCacheForCell(_spectralConfusionMesh, cellID);
-  
+
   FieldContainer<double> physicalPoints = basisCache->getPhysicalCubaturePoints();
   int numCells = physicalPoints.dimension(0);
   int numPoints = physicalPoints.dimension(1);
-  
+
   FieldContainer<double> expectedValues(numCells, numPoints, spaceDim, spaceDim);
-  
+
   for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
     for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
       expectedValues(cellIndex,ptIndex,0,0) = 0;
@@ -680,10 +680,10 @@ bool FunctionTests::testJacobianOrdering() {
       expectedValues(cellIndex,ptIndex,1,1) = 0;
     }
   }
-  
+
   FieldContainer<double> values(numCells, numPoints, spaceDim, spaceDim);
   f->grad(spaceDim)->values(values, basisCache);
-  
+
   double maxDiff = 0;
   double tol = 1e-14;
   if (! fcsAgree(expectedValues, values, tol, maxDiff)) {
@@ -691,10 +691,10 @@ bool FunctionTests::testJacobianOrdering() {
     reportFunctionValueDifferences(physicalPoints, expectedValues, values, tol);
     success = false;
   }
-  
+
   // test 2: ordering of VectorizedBasis agrees
   // (actually implemented where it belongs, in Vectorized_BasisTestSuite)
-  
+
   // test 3: ordering of CellTools::getJacobian
   FieldContainer<double> nodes(1,4,2);
   nodes(0,0,0) =  1;
@@ -705,15 +705,15 @@ bool FunctionTests::testJacobianOrdering() {
   nodes(0,2,1) =  2;
   nodes(0,3,0) = -1;
   nodes(0,3,1) = -2;
-  
+
   shards::CellTopology quad_4(shards::getCellTopologyData<shards::Quadrilateral<4> >() );
   int cubDegree = 4;
   BasisCachePtr rotatedCache = Teuchos::rcp( new BasisCache(nodes, quad_4, cubDegree) );
-  
+
   physicalPoints = rotatedCache->getPhysicalCubaturePoints();
   numCells = physicalPoints.dimension(0);
   numPoints = physicalPoints.dimension(1);
-  
+
   FieldContainer<double> expectedJacobian(numCells,numPoints,spaceDim,spaceDim);
   for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
     for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
@@ -723,16 +723,16 @@ bool FunctionTests::testJacobianOrdering() {
       expectedJacobian(cellIndex,ptIndex,1,1) = 0;
     }
   }
-  
+
   FieldContainer<double> jacobianValues = rotatedCache->getJacobian();
-  
+
   maxDiff = 0;
   if (! fcsAgree(expectedJacobian, jacobianValues, tol, maxDiff)) {
     cout << "expectedJacobian does not match jacobianValues in testJacobianOrdering().\n";
     reportFunctionValueDifferences(physicalPoints, expectedJacobian, jacobianValues, tol);
     success = false;
   }
-  
+
   return success;
 }
 
@@ -753,11 +753,11 @@ public:
     _fxn->values(values,basisCache);
     vector<GlobalIndexType> contextCellIDs = basisCache->cellIDs();
     int cellIndex=0; // keep track of index into values
-    
+
     int entryCount = values.size();
     int numCells = values.dimension(0);
     int numEntriesPerCell = entryCount / numCells;
-    
+
     for (vector<GlobalIndexType>::iterator cellIt = contextCellIDs.begin(); cellIt != contextCellIDs.end(); cellIt++) {
       GlobalIndexType cellID = *cellIt;
       if (_cellIDs.find(cellID) == _cellIDs.end()) {
@@ -774,10 +774,10 @@ public:
 bool FunctionTests::testJumpIntegral() {
   bool success = true;
   double tol = 1e-14;
-  
+
   // define nodes for mesh
   FieldContainer<double> quadPoints(4,2);
-  
+
   quadPoints(0,0) = 0.0; // x1
   quadPoints(0,1) = 0.0; // y1
   quadPoints(1,0) = 1.0;
@@ -786,31 +786,31 @@ bool FunctionTests::testJumpIntegral() {
   quadPoints(2,1) = 1.0;
   quadPoints(3,0) = 0.0;
   quadPoints(3,1) = 1.0;
-  
+
   int H1Order = 1, pToAdd = 0;
   int horizontalCells = 2, verticalCells = 2;
   int numSides = 4;
-  
+
   // create a pointer to a new mesh:
   Teuchos::RCP<Mesh> mesh = MeshFactory::buildQuadMesh(quadPoints, horizontalCells, verticalCells,
                                                 _confusionBF, H1Order, H1Order+pToAdd);
-  
+
   FieldContainer<double> points(1,2);
   // southwest center:
   points(0,0) = 0.25; points(0,1) = 0.25;
   vector< Teuchos::RCP<Element> > elements = mesh->elementsForPoints(points, false);
-  
+
   int swCellID = elements[0]->cellID();
-  
+
   double val = 1.0;
   FunctionPtr valFxn = Function::constant(val);
   FunctionPtr valOnSWCell = Teuchos::rcp( new CellIDFilteredFunction(valFxn,swCellID) );
-  
+
   // the jump for this should be 1 along the two interior edges, each of length 0.5
   double sideLength = 0.5;
-  
+
   int cubEnrichment = 0;
-  
+
   for (int sideIndex=0; sideIndex<numSides; sideIndex++) {
     double actualValue = valOnSWCell->integralOfJump(mesh, swCellID, sideIndex, cubEnrichment);
     double expectedValue;
@@ -820,35 +820,35 @@ bool FunctionTests::testJumpIntegral() {
       double sideParity = mesh->parityForSide(swCellID, sideIndex);
       expectedValue = sideParity * val * sideLength;
     }
-    
+
     double diff = abs(actualValue-expectedValue);
     if (diff > tol) {
       cout << "testJumpFunction(): expected " << expectedValue << " but actualValue was " << actualValue << endl;
       success = false;
     }
   }
-  
+
   return success;
 }
 
 bool FunctionTests::testValuesDottedWithTensor() {
   bool success = true;
-  
+
   vector< FunctionPtr > vectorFxns;
-  
+
   double xValue = 3, yValue = 4;
   FunctionPtr simpleVector = Function::vectorize(Function::constant(xValue), Function::constant(yValue));
   vectorFxns.push_back(simpleVector);
   FunctionPtr x = Function::xn(1);
   FunctionPtr y = Function::yn(1);
   vectorFxns.push_back( Function::vectorize(x*x, x*y) );
-  
+
   VGPStokesFormulation vgpStokes = VGPStokesFormulation(1.0);
   BFPtr bf = vgpStokes.bf();
-  
+
   int h1Order = 1;
   MeshPtr mesh = MeshFactory::quadMesh(bf, h1Order);
-  
+
   int cellID=0; // the only cell
   BasisCachePtr basisCache = BasisCache::basisCacheForCell(mesh, cellID);
 
@@ -866,19 +866,19 @@ bool FunctionTests::testValuesDottedWithTensor() {
       }
     }
   }
-  
+
   // now, let's try the same thing, but for a LinearTerm dot product
-  VarFactory vf;
+  VarFactoryPtr vf = VarFactory::varFactory();
   VarPtr v = vf.testVar("v", HGRAD);
-  
+
   DofOrderingPtr dofOrdering = Teuchos::rcp( new DofOrdering(CellTopology::quad()) );
   shards::CellTopology quad_4(shards::getCellTopologyData<shards::Quadrilateral<4> >() );
   BasisPtr basis = BasisFactory::basisFactory()->getBasis(h1Order, quad_4.getKey(), Camellia::FUNCTION_SPACE_HGRAD);
   dofOrdering->addEntry(v->ID(), basis, v->rank());
-  
+
   int numCells = 1;
   int numFields = basis->getCardinality();
-  
+
   for (int i=0; i<vectorFxns.size(); i++) {
     FunctionPtr f_i = vectorFxns[i];
     LinearTermPtr lt_i = f_i * v;
@@ -904,13 +904,13 @@ bool FunctionTests::testValuesDottedWithTensor() {
       }
     }
   }
-  
+
 //  // finally, let's try the same sort of thing, but now with a vector-valued basis
 //  BasisPtr vectorBasisTemp = BasisFactory::basisFactory()->getBasis(h1Order, quad_4.getKey(), Camellia::FUNCTION_SPACE_VECTOR_HGRAD);
 //  VectorBasisPtr vectorBasis = Teuchos::rcp( (VectorizedBasis<double, FieldContainer<double> > *)vectorBasisTemp.get(),false);
 //
 //  BasisPtr compBasis = vectorBasis->getComponentBasis();
-//  
+//
 //  // create a new v, and a new dofOrdering
 //  VarPtr v_vector = vf.testVar("v_vector", VECTOR_HGRAD);
 //  dofOrdering = Teuchos::rcp( new DofOrdering );
@@ -918,29 +918,29 @@ bool FunctionTests::testValuesDottedWithTensor() {
 //
 //  DofOrderingPtr dofOrderingComp = Teuchos::rcp( new DofOrdering );
 //  dofOrderingComp->addEntry(v->ID(), compBasis, v->rank());
-//  
-    
+//
+
   return success;
 }
 
 bool FunctionTests::testVectorFunctionValuesOrdering() {
   bool success = true;
-  
+
   FunctionPtr x = Function::xn(1);
   FunctionPtr x_vector = Function::vectorize(x, Function::zero());
-  
+
   BasisCachePtr basisCache = BasisCache::parametricQuadCache(10);
-  
+
   FieldContainer<double> points = basisCache->getPhysicalCubaturePoints();
   int numCells = points.dimension(0);
   int numPoints = points.dimension(1);
   int spaceDim = points.dimension(2);
   FieldContainer<double> values(numCells,numPoints,spaceDim);
-  
+
   x_vector->values(values, basisCache);
-  
+
 //  cout << "(x,0) function values:\n" << values;
-  
+
   double tol = 1e-14;
   for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
     for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
@@ -958,7 +958,7 @@ bool FunctionTests::testVectorFunctionValuesOrdering() {
       }
     }
   }
-  
+
   return success;
 }
 

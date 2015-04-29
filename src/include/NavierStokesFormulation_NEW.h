@@ -74,7 +74,7 @@ namespace Camellia {
   };
 
   class VGPNavierStokesFormulation : public NavierStokesFormulation {
-    VarFactory varFactory;
+    VarFactoryPtr varFactory = VarFactory::varFactory();
     // fields:
     VarPtr u1, u2, p, sigma11, sigma12, sigma21, sigma22;
     // fluxes & traces:

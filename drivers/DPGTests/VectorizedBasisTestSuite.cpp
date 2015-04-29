@@ -22,7 +22,7 @@ void VectorizedBasisTestSuite::runTests(int &numTestsRun, int &numTestsPassed) {
   if ( testVectorizedBasisTags() ) {
     numTestsPassed++;
   }
-  
+
   numTestsRun++;
   if ( testVectorizedBasis() ) {
     numTestsPassed++;
@@ -43,9 +43,9 @@ bool checkVertexNodalIndicesQuad(BasisPtr basis, vector<int> &vertexIndices) {
   // check that the given indices are exactly the vertex basis functions:
   // a) these are (1,0) or (0,1) at the corresponding vertices
   // b) others are (0,0) at the vertices
-  
+
   int numVertices = 4;
-  
+
   FieldContainer<double> refCellPoints(numVertices,2); // vertices, in order
   refCellPoints(0,0) = -1;
   refCellPoints(0,1) = -1;
@@ -58,8 +58,8 @@ bool checkVertexNodalIndicesQuad(BasisPtr basis, vector<int> &vertexIndices) {
 
   // assume 2D vector basis for now -- we'll throw an exception if not...
   FieldContainer<double> values(basis->getCardinality(), numVertices,2); // F, P, D
-  basis->getValues(values, refCellPoints, OPERATOR_VALUE); 
-  
+  basis->getValues(values, refCellPoints, OPERATOR_VALUE);
+
   double tol = 1e-14;
   for (int ptIndex=0; ptIndex<numVertices; ptIndex++) {
     int xNodeIndex = vertexIndices[2*ptIndex];
@@ -96,13 +96,13 @@ bool checkVertexNodalIndicesQuad(BasisPtr basis, vector<int> &vertexIndices) {
 
 bool VectorizedBasisTestSuite::testVectorizedBasisTags() {
   bool success = true;
-  
+
   shards::CellTopology quad_4(shards::getCellTopologyData<shards::Quadrilateral<4> >() );
   int numVertices = quad_4.getVertexCount();
   int numComponents = quad_4.getDimension();
   int vertexDim = 0;
-  
-  for (int polyOrder = 1; polyOrder<10; polyOrder++) {    
+
+  for (int polyOrder = 1; polyOrder<10; polyOrder++) {
     BasisPtr hgradBasis =  BasisFactory::basisFactory()->getConformingBasis(polyOrder,
                                                             quad_4.getKey(),
                                                             Camellia::FUNCTION_SPACE_HGRAD);
@@ -124,37 +124,37 @@ bool VectorizedBasisTestSuite::testVectorizedBasisTags() {
       cout << " of order " << polyOrder << " are incorrect.\n";
     }
   }
-  
+
   return success;
 }
 
 bool VectorizedBasisTestSuite::testVectorizedBasis() {
   bool success = true;
-  
+
   string myName = "testVectorizedBasis";
-  
+
   shards::CellTopology quad_4(shards::getCellTopologyData<shards::Quadrilateral<4> >() );
-  
+
   int polyOrder = 3, numPoints = 5, spaceDim = 2;
-  
+
   BasisPtr hgradBasis = BasisFactory::basisFactory()->getBasis(polyOrder, quad_4.getKey(), Camellia::FUNCTION_SPACE_HGRAD);
-  
+
   // first test: make a single-component vector basis.  This should agree in every entry with the basis itself, but its field container will have one higher rank...
   VectorizedBasis<> oneComp(hgradBasis, 1);
-  
+
   FieldContainer<double> linePoints(numPoints, spaceDim);
   for (int i=0; i<numPoints; i++) {
     for (int j=0; j<spaceDim; j++) {
       linePoints(i,j) = ((double)(i + j)) / (numPoints + spaceDim);
     }
   }
-  
+
   FieldContainer<double> compValues(hgradBasis->getCardinality(),numPoints);
   hgradBasis->getValues(compValues, linePoints, Intrepid::OPERATOR_VALUE);
-  
+
   FieldContainer<double> values(hgradBasis->getCardinality(),linePoints.dimension(0),1); // one component
   oneComp.getValues(values, linePoints, Intrepid::OPERATOR_VALUE);
-  
+
   for (int i=0; i<compValues.size(); i++) {
     double diff = abs(values[i]-compValues[i]);
     if (diff != 0.0) {
@@ -166,26 +166,26 @@ bool VectorizedBasisTestSuite::testVectorizedBasis() {
       return success;
     }
   }
-  
+
   vector< BasisPtr > twoComps;
   twoComps.push_back( Teuchos::rcp( new VectorizedBasis<>(hgradBasis, 2) ) );
   twoComps.push_back( BasisFactory::basisFactory()->getBasis( polyOrder,
                                              quad_4.getKey(), Camellia::FUNCTION_SPACE_VECTOR_HGRAD) );
-  
-  
+
+
   vector< BasisPtr >::iterator twoCompIt;
   for (twoCompIt = twoComps.begin(); twoCompIt != twoComps.end(); twoCompIt++) {
     BasisPtr twoComp = *twoCompIt;
-    
+
     int componentCardinality = hgradBasis->getCardinality();
-    
+
     if (twoComp->getCardinality() != 2 * hgradBasis->getCardinality() ) {
       success = false;
       cout << myName << ": two-component vector basis cardinality != one-component cardinality * 2." << endl;
       cout << "twoComp->getCardinality(): " << twoComp->getCardinality() << endl;
       cout << "oneComp->getCardinality(): " << oneComp.getCardinality() << endl;
     }
-    
+
     values.resize(twoComp->getCardinality(),linePoints.dimension(0),2); // two components
     twoComp->getValues(values, linePoints, Intrepid::OPERATOR_VALUE);
     for (int basisIndex=0; basisIndex<twoComp->getCardinality(); basisIndex++) {
@@ -203,10 +203,10 @@ bool VectorizedBasisTestSuite::testVectorizedBasis() {
         }
       }
     }
-    
+
     // test the mapping from oneComp dofOrdinal to twoComp:
     VectorizedBasis<>* twoCompAsVectorBasis = (VectorizedBasis<>  *) twoComp.get();
-    
+
     for (int compDofOrdinal=0; compDofOrdinal<oneComp.getCardinality(); compDofOrdinal++) {
       int dofOrdinal_0 = twoCompAsVectorBasis->getDofOrdinalFromComponentDofOrdinal(compDofOrdinal, 0);
       int dofOrdinal_1 = twoCompAsVectorBasis->getDofOrdinalFromComponentDofOrdinal(compDofOrdinal, 1);
@@ -222,25 +222,25 @@ bool VectorizedBasisTestSuite::testVectorizedBasis() {
         cout << "getDofOrdinalFromComponentDofOrdinal() not returning expected value in second component.\n";
       }
     }
-    
+
     // finally, test the ordering of gradient values
     // these should be in the order f_i,j
     FieldContainer<double> compGradValues(hgradBasis->getCardinality(),numPoints,spaceDim);
     FieldContainer<double> vectorGradValues(twoComp->getCardinality(),numPoints,spaceDim,spaceDim);
-    
+
     hgradBasis->getValues(compGradValues, linePoints, OPERATOR_GRAD);
     twoCompAsVectorBasis->getValues(vectorGradValues, linePoints, OPERATOR_GRAD);
-    
+
     for (int compDofOrdinal=0; compDofOrdinal<oneComp.getCardinality(); compDofOrdinal++) {
       for (int comp=0; comp<2; comp++) {
         int vectorDofOrdinal = twoCompAsVectorBasis->getDofOrdinalFromComponentDofOrdinal(compDofOrdinal, comp);
         for (int k=0; k<numPoints; k++) {
           double dfi_d0_expected = compGradValues(compDofOrdinal,k,0); // i: the comp index
           double dfi_d1_expected = compGradValues(compDofOrdinal,k,1);
-          
+
           double dfi_d0_actual = vectorGradValues(vectorDofOrdinal,k,comp,0);
           double dfi_d1_actual = vectorGradValues(vectorDofOrdinal,k,comp,1);
-          
+
           if ( ( abs(dfi_d0_expected - dfi_d0_actual) != 0) || ( abs(dfi_d1_expected - dfi_d1_actual) != 0) ) {
             success = false;
             cout << myName << ": expected gradient differs from actual\n";
@@ -252,7 +252,7 @@ bool VectorizedBasisTestSuite::testVectorizedBasis() {
       }
 
     }
-    
+
 
   }
   return success;
@@ -272,15 +272,15 @@ bool VectorizedBasisTestSuite::testPoisson() {
 
   ////////////////////   DECLARE VARIABLES   ///////////////////////
   // define test variables
-  VarFactory varFactory; 
-  VarPtr tau = varFactory.testVar("\\tau", HDIV);
-  VarPtr v = varFactory.testVar("v", HGRAD);
+  VarFactoryPtr varFactory = VarFactory::varFactory();
+  VarPtr tau = varFactory->testVar("\\tau", HDIV);
+  VarPtr v = varFactory->testVar("v", HGRAD);
 
   // define trial variables
-  VarPtr uhat = varFactory.traceVar("\\widehat{u}");
-  VarPtr sigma_n = varFactory.fluxVar("\\widehat{\\sigma_{n}}");
-  VarPtr u = varFactory.fieldVar("u");
-  VarPtr sigma = varFactory.fieldVar("\\sigma", VECTOR_L2);
+  VarPtr uhat = varFactory->traceVar("\\widehat{u}");
+  VarPtr sigma_n = varFactory->fluxVar("\\widehat{\\sigma_{n}}");
+  VarPtr u = varFactory->fieldVar("u");
+  VarPtr sigma = varFactory->fieldVar("\\sigma", VECTOR_L2);
 
   ////////////////////   DEFINE BILINEAR FORM   ///////////////////////
   BFPtr bf = Teuchos::rcp( new BF(varFactory) );

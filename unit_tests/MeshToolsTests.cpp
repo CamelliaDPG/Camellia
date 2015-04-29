@@ -109,15 +109,15 @@ namespace {
     int delta_k = 0; // Projection is exact, and we're not actually solving...
     int H1Order = k + 1;
 
-    VarFactory varFactory;
+    VarFactoryPtr varFactory = VarFactory::varFactory();
     // traces:
-    VarPtr qHat = varFactory.fluxVar("\\widehat{q}");
+    VarPtr qHat = varFactory->fluxVar("\\widehat{q}");
 
     // fields:
-    VarPtr u = varFactory.fieldVar("u", L2);
+    VarPtr u = varFactory->fieldVar("u", L2);
 
     // test functions:
-    VarPtr v = varFactory.testVar("v", HGRAD);
+    VarPtr v = varFactory->testVar("v", HGRAD);
 
     BFPtr bf = Teuchos::rcp( new BF(varFactory) );
 
@@ -209,15 +209,15 @@ namespace {
     int delta_k = 5; // because the projection isn't exact, and this will enhance the cubature degree
     int H1Order = k + 1;
 
-    VarFactory varFactory;
+    VarFactoryPtr varFactory = VarFactory::varFactory();
     // traces:
-    VarPtr qHat = varFactory.fluxVar("\\widehat{q}");
+    VarPtr qHat = varFactory->fluxVar("\\widehat{q}");
 
     // fields:
-    VarPtr u = varFactory.fieldVar("u", L2);
+    VarPtr u = varFactory->fieldVar("u", L2);
 
     // test functions:
-    VarPtr v = varFactory.testVar("v", HGRAD);
+    VarPtr v = varFactory->testVar("v", HGRAD);
 
     FunctionPtr x = Function::xn(1);
     FunctionPtr y = Function::yn(1);

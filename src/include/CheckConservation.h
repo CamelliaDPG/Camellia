@@ -2,7 +2,6 @@
 #define CHECKCONSERVATION_H
 
 #include "InnerProductScratchPad.h"
-#include "VarFactory.h"
 #include "Mesh.h"
 
 #include "CamelliaCellTools.h"
