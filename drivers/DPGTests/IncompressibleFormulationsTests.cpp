@@ -1521,8 +1521,8 @@ bool IncompressibleFormulationsTests::testVGPNavierStokesFormulationKovasnayConv
             LinearTermPtr rhsLT = rhs->linearTerm();
 
             rieszRep = Teuchos::rcp( new RieszRep(kProblem.mesh(),ip,rhsLT));
-            FunctionPtr v1_rep = Teuchos::rcp( new RepFunction(v1_vgp, rieszRep) );
-            FunctionPtr v2_rep = Teuchos::rcp( new RepFunction(v2_vgp, rieszRep) );
+            FunctionPtr v1_rep = RieszRep::repFunction(v1_vgp, rieszRep);
+            FunctionPtr v2_rep = RieszRep::repFunction(v2_vgp, rieszRep);
             // set up the hessian term itself:
             // we want basically u * sigma * v where "*" is a dot product
             // u * sigma = (u1 sigma11 + u2 sigma12, u1 sigma21 + u2 sigma22)

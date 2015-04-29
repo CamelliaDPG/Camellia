@@ -488,7 +488,7 @@ bool ScratchPadTests::testLinearTermEvaluationConsistency(){
 
   Teuchos::RCP<RieszRep> ltRiesz = Teuchos::rcp(new RieszRep(mesh, ip, lt));
   ltRiesz->computeRieszRep();
-  FunctionPtr repFxn = Teuchos::rcp(new RepFunction(v,ltRiesz));
+  FunctionPtr repFxn = RieszRep::repFunction(v,ltRiesz);
   map<int,FunctionPtr> rep_map;
   rep_map[v->ID()] = repFxn;
 
@@ -602,7 +602,7 @@ bool ScratchPadTests::testIntegrateDiscontinuousFunction(){
   Teuchos::RCP<RieszRep> riesz = Teuchos::rcp(new RieszRep(mesh, ipL2, indicatorLT));
   riesz->computeRieszRep();
   map<int,FunctionPtr> vmap;
-  vmap[v->ID()] = Teuchos::rcp(new RepFunction(v,riesz)); // SHOULD BE L2 projection = same thing!!!  
+  vmap[v->ID()] = RieszRep::repFunction(v,riesz); // SHOULD BE L2 projection = same thing!!!
 
   FunctionPtr volumeIntegrand = integrandLT->evaluate(vmap,false); 
   FunctionPtr edgeRestrictedIntegrand = integrandLT->evaluate(vmap,true);
@@ -743,7 +743,7 @@ bool ScratchPadTests::testGalerkinOrthogonality(){
   Teuchos::RCP<RieszRep> riesz = Teuchos::rcp(new RieszRep(mesh, ip, residual));
   riesz->computeRieszRep();
   map<int,FunctionPtr> err_rep_map;
-  err_rep_map[v->ID()] = Teuchos::rcp(new RepFunction(v,riesz));
+  err_rep_map[v->ID()] = RieszRep::repFunction(v,riesz);
 
   ////////////////////   GET BOUNDARY CONDITION DATA    ///////////////////////
 
@@ -914,8 +914,8 @@ bool ScratchPadTests::testRieszIntegration(){
   Teuchos::RCP<RieszRep> rieszLT = Teuchos::rcp(new RieszRep(mesh, ip, lt));
   rieszLT->computeRieszRep();
   double rieszNorm = rieszLT->getNorm();
-  FunctionPtr e_v = Teuchos::rcp(new RepFunction(v,rieszLT));
-  FunctionPtr e_tau = Teuchos::rcp(new RepFunction(tau,rieszLT));
+  FunctionPtr e_v = RieszRep::repFunction(v,rieszLT);
+  FunctionPtr e_tau = RieszRep::repFunction(tau,rieszLT);
   map<int,FunctionPtr> repFxns;
   repFxns[v->ID()] = e_v;
   repFxns[tau->ID()] = e_tau;
@@ -1012,7 +1012,7 @@ bool ScratchPadTests::testLTResidualSimple(){
   double energyErrorLT = rieszResidual->getNorm();
 
   bool testVsTest = true;
-  FunctionPtr e_v = Teuchos::rcp(new RepFunction(v,rieszResidual));
+  FunctionPtr e_v = RieszRep::repFunction(v,rieszResidual);
   map<int,FunctionPtr> errFxns;
   errFxns[v->ID()] = e_v;
   FunctionPtr err = (ip->evaluate(errFxns,false))->evaluate(errFxns,false); // don't need boundary terms unless they're in IP
@@ -1139,8 +1139,8 @@ bool ScratchPadTests::testLTResidual(){
   double energyErrorLT = rieszResidual->getNorm();
 
   int cubEnrich = 0; bool testVsTest = true;
-  FunctionPtr e_v = Teuchos::rcp(new RepFunction(v,rieszResidual));
-  FunctionPtr e_tau = Teuchos::rcp(new RepFunction(tau,rieszResidual));
+  FunctionPtr e_v = RieszRep::repFunction(v,rieszResidual);
+  FunctionPtr e_tau = RieszRep::repFunction(tau,rieszResidual);
   // experiment by Nate: manually specify the error (this appears to produce identical results, as it should)
 //  FunctionPtr err = e_v * e_v + e_tau * e_tau + e_v->grad() * e_v->grad() + e_tau->div() * e_tau->div();
   map<int,FunctionPtr> errFxns;
@@ -1261,8 +1261,8 @@ bool ScratchPadTests::testResidualMemoryError(){
   residual->addTerm(-confusionBF->testFunctional(solution));  
   RieszRepPtr rieszResidual = Teuchos::rcp(new RieszRep(mesh, robIP, residual));
   rieszResidual->computeRieszRep();
-  FunctionPtr e_v = Teuchos::rcp(new RepFunction(v,rieszResidual));
-  FunctionPtr e_tau = Teuchos::rcp(new RepFunction(tau,rieszResidual));
+  FunctionPtr e_v = RieszRep::repFunction(v,rieszResidual);
+  FunctionPtr e_tau = RieszRep::repFunction(tau,rieszResidual);
  
   double energyThreshold = 0.2; // for mesh refinements
   RefinementStrategy refinementStrategy( solution, energyThreshold );  

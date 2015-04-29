@@ -8,15 +8,14 @@
 
 #include "CurvilinearMeshTests.h"
 
-#include "MeshFactory.h"
-#include "Mesh.h"
-#include "Function.h"
 #include "BasisFactory.h"
 #include "BasisSumFunction.h"
-
+#include "Function.h"
 #include "GnuPlotUtil.h"
-
+#include "Mesh.h"
+#include "MeshFactory.h"
 #include "ParametricSurface.h"
+#include "Projector.h"
 #include "StokesFormulation.h"
 
 #include "Intrepid_HGRAD_QUAD_Cn_FEM.hpp"
@@ -878,8 +877,8 @@ bool CurvilinearMeshTests::testH1Projection() {
   
   FieldContainer<double> scalarCoefficients;
   FieldContainer<double> vectorCoefficients;
-  Projector::projectFunctionOntoBasis(scalarCoefficients, fxnScalar, quadraticScalarBasis, basisCache, ip_scalar, v_scalar, scalarEdgeNodes);
-  Projector::projectFunctionOntoBasis(vectorCoefficients, fxnVector, quadraticVectorBasis, basisCache, ip_vector, v_vector, vectorEdgeNodes);
+  Projector<double>::projectFunctionOntoBasis(scalarCoefficients, fxnScalar, quadraticScalarBasis, basisCache, ip_scalar, v_scalar, scalarEdgeNodes);
+  Projector<double>::projectFunctionOntoBasis(vectorCoefficients, fxnVector, quadraticVectorBasis, basisCache, ip_vector, v_vector, vectorEdgeNodes);
   
   FieldContainer<double> scalarCoefficients_expected(quadraticScalarBasis->getCardinality());
   scalarCoefficients_expected(middleNodeScalar) = rhs_ip / middleNode_norm;
@@ -933,7 +932,7 @@ bool CurvilinearMeshTests::testH1Projection() {
     BasisCachePtr basisCache = BasisCache::basisCacheForCell(mesh, cellID, testVsTest, cubatureEnrichment);
     
     FieldContainer<double> basisCoefficients;
-    Projector::projectFunctionOntoBasis(basisCoefficients, tfi, basis, basisCache, ip, v);
+    Projector<double>::projectFunctionOntoBasis(basisCoefficients, tfi, basis, basisCache, ip, v);
     
     // flatten basisCoefficients (remove the numCells dimension, which is 1)
     basisCoefficients.resize(basisCoefficients.size());
@@ -1033,7 +1032,7 @@ bool CurvilinearMeshTests::testH1Projection() {
     //    IPPtr ip = Teuchos::rcp(new IP);
     //    ip->addTerm(v->grad());
     //
-    //    Projector::projectFunctionOntoBasis(…)
+    //    Projector<double>::projectFunctionOntoBasis(…)
     
     for (int sideIndex=0; sideIndex<numEdges; sideIndex++) {
       BasisCachePtr sideCache = basisCache->getSideBasisCache(sideIndex);
@@ -1090,7 +1089,7 @@ bool CurvilinearMeshTests::testH1Projection() {
     IPPtr H1 = Teuchos::rcp(new IP); // here we need the full H1, not just the semi-norm
     H1->addTerm(v_vector);
     H1->addTerm(v_vector->grad());
-    Projector::projectFunctionOntoBasis(expectedCoefficients, tfi, basis, basisCache, H1, v);
+    Projector<double>::projectFunctionOntoBasis(expectedCoefficients, tfi, basis, basisCache, H1, v);
     
     tol = 5e-14;
     maxDiff = 0;
@@ -1101,13 +1100,13 @@ bool CurvilinearMeshTests::testH1Projection() {
     }
     
     FieldContainer<double> tfiCoefficients;
-    Projector::projectFunctionOntoBasis(tfiCoefficients, tfi, basis, basisCache, H1, v);
+    Projector<double>::projectFunctionOntoBasis(tfiCoefficients, tfi, basis, basisCache, H1, v);
     
     FieldContainer<double> edgeCoefficients;
-    Projector::projectFunctionOntoBasis(edgeCoefficients, edgeFunction, basis, basisCache, H1, v);
+    Projector<double>::projectFunctionOntoBasis(edgeCoefficients, edgeFunction, basis, basisCache, H1, v);
     
     FieldContainer<double> projectedDifferenceCoefficients;
-    Projector::projectFunctionOntoBasis(projectedDifferenceCoefficients, tfi-edgeFunction, basis, basisCache, H1, v);
+    Projector<double>::projectFunctionOntoBasis(projectedDifferenceCoefficients, tfi-edgeFunction, basis, basisCache, H1, v);
     
     //    cout << "tfiCoefficients:\n" << tfiCoefficients;
     //    cout << "edgeCoefficients:\n" << edgeCoefficients;
