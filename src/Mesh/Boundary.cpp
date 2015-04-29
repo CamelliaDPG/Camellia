@@ -55,6 +55,7 @@
 
 using namespace Intrepid;
 using namespace Camellia;
+using namespace std;
 
 Boundary::Boundary() {
   _mesh = Teuchos::rcp((Mesh*)NULL);
@@ -339,6 +340,15 @@ void Boundary::bcsToImpose( map<  GlobalIndexType, Scalar > &globalDofIndicesAnd
         }
         // nonzero entry: store the fact, and impose the constraint
         nonzeroEntryOrdinal = fieldOrdinal;
+        
+        // NOTE (NVR, 4-29-15): Pretty sure we can simplify the below and eliminate the globalDofMap argument if we simply do:
+/*        set<GlobalIndexType> rankLocalDofIndices = dofInterpreter->globalDofIndicesForPartition(-1); // current rank
+        if (rankLocalDofIndices.find(globalDofIndices[fieldOrdinal]) != rankLocalDofIndices.end()) {
+          globalDofIndicesAndValues[globalDofIndices[fieldOrdinal]] = bc.valueForSinglePointBC(trialID) * globalCoefficients[fieldOrdinal];;
+        } else {
+          TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "ERROR: global dof index for single-point BC is not locally owned");
+        }*/
+        
         if (globalDofMap != NULL) {
           if (globalDofMap->LID((GlobalIndexTypeToCast)globalDofIndices[fieldOrdinal]) != -1) {
             globalDofIndicesAndValues[globalDofIndices[fieldOrdinal]] = bc.valueForSinglePointBC(trialID) * globalCoefficients[fieldOrdinal];
