@@ -148,6 +148,7 @@ template <typename Scalar>
 TSolution<Scalar>::TSolution(const TSolution<Scalar> &soln) {
   _mesh = soln.mesh();
   _dofInterpreter = Teuchos::rcp( _mesh.get(), false ); // false: doesn't own memory
+  _bf = soln.bf();
   _bc = soln.bc();
   _rhs = soln.rhs();
   _ip = soln.ip();
@@ -164,7 +165,23 @@ TSolution<Scalar>::TSolution(const TSolution<Scalar> &soln) {
 }
 
 template <typename Scalar>
-TSolution<Scalar>::TSolution(Teuchos::RCP<Mesh> mesh, TBCPtr<Scalar> bc, TRHSPtr<Scalar> rhs, TIPPtr<Scalar> ip) {
+TSolution<Scalar>::TSolution(TBFPtr<Scalar> bf, MeshPtr mesh, TBCPtr<Scalar> bc, TRHSPtr<Scalar> rhs, TIPPtr<Scalar> ip) {
+  _bf = bf;
+  _mesh = mesh;
+  _dofInterpreter = Teuchos::rcp( _mesh.get(), false ); // false: doesn't own memory
+  _bc = bc;
+  _rhs = rhs;
+  _ip = ip;
+  _lagrangeConstraints = Teuchos::rcp( new LagrangeConstraints ); // empty
+
+  initialize();
+}
+
+// Deprecated constructor, use the one which explicitly passes in BF
+// Will eventually be removing BF reference from Mesh
+template <typename Scalar>
+TSolution<Scalar>::TSolution(MeshPtr mesh, TBCPtr<Scalar> bc, TRHSPtr<Scalar> rhs, TIPPtr<Scalar> ip) {
+  _bf = Teuchos::null;
   _mesh = mesh;
   _dofInterpreter = Teuchos::rcp( _mesh.get(), false ); // false: doesn't own memory
   _bc = bc;
@@ -489,12 +506,12 @@ void TSolution<Scalar>::populateStiffnessAndLoad() {
   for (elemTypeIt = elementTypes.begin(); elemTypeIt != elementTypes.end(); elemTypeIt++) {
     //cout << "Solution: elementType loop, iteration: " << elemTypeNumber++ << endl;
     ElementTypePtr elemTypePtr = *(elemTypeIt);
-    
+
     Intrepid::FieldContainer<double> myPhysicalCellNodesForType = _mesh->physicalCellNodes(elemTypePtr);
     Intrepid::FieldContainer<double> myCellSideParitiesForType = _mesh->cellSideParities(elemTypePtr);
     int totalCellsForType = myPhysicalCellNodesForType.dimension(0);
     int startCellIndexForBatch = 0;
-    
+
     if (totalCellsForType == 0) continue;
     // if we get here, there is at least one, so we find a sample cellID to help us set up prototype BasisCaches:
     GlobalIndexType sampleCellID = _mesh->cellID(elemTypePtr, 0, rank);
@@ -509,7 +526,7 @@ void TSolution<Scalar>::populateStiffnessAndLoad() {
     maxCellBatch = max( maxCellBatch, MIN_BATCH_SIZE_IN_CELLS );
     //cout << "numTestDofs^2:" << numTestDofs*numTestDofs << endl;
     //cout << "maxCellBatch: " << maxCellBatch << endl;
-    
+
     Teuchos::Array<int> nodeDimensions, parityDimensions;
     myPhysicalCellNodesForType.dimensions(nodeDimensions);
     myCellSideParitiesForType.dimensions(parityDimensions);
@@ -593,7 +610,10 @@ void TSolution<Scalar>::populateStiffnessAndLoad() {
       Intrepid::FieldContainer<double> localStiffness(numCells,numTrialDofs,numTrialDofs);
       Intrepid::FieldContainer<double> localRHSVector(numCells,numTrialDofs);
 
-      _mesh->bilinearForm()->localStiffnessMatrixAndRHS(localStiffness, localRHSVector, _ip, ipBasisCache, _rhs, basisCache);
+      if (_bf != Teuchos::null)
+        _bf->localStiffnessMatrixAndRHS(localStiffness, localRHSVector, _ip, ipBasisCache, _rhs, basisCache);
+      else
+        _mesh->bilinearForm()->localStiffnessMatrixAndRHS(localStiffness, localRHSVector, _ip, ipBasisCache, _rhs, basisCache);
 
       // apply filter(s) (e.g. penalty method, preconditioners, etc.)
       if (_filter.get()) {
@@ -1284,6 +1304,11 @@ TIPPtr<Scalar> TSolution<Scalar>::ip() const {
 }
 
 template <typename Scalar>
+TBFPtr<Scalar> TSolution<Scalar>::bf() const {
+  return _bf;
+}
+
+template <typename Scalar>
 void TSolution<Scalar>::imposeBCs() {
   int rank     = Teuchos::GlobalMPISession::getRank();
 
@@ -1941,7 +1966,11 @@ void TSolution<Scalar>::integrateFlux(Intrepid::FieldContainer<double> &values, 
     int basisRank = dofOrdering.getBasisRank(trialID);
     int cubDegree = 2*basis->getDegree();
 
-    bool boundaryIntegral = _mesh()->bilinearForm()->isFluxOrTrace(trialID);
+    bool boundaryIntegral;
+    if (_bf != Teuchos::null)
+      boundaryIntegral = _bf->isFluxOrTrace(trialID);
+    else
+      boundaryIntegral = _mesh()->bilinearForm()->isFluxOrTrace(trialID);
     if ( !boundaryIntegral ) {
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "integrateFlux() called for field variable.");
     }
@@ -2377,7 +2406,10 @@ void TSolution<Scalar>::computeResiduals() {
     // compute b(u, v):
     Intrepid::FieldContainer<double> preStiffness(1,numTestDofs,numTrialDofs );
     Intrepid::FieldContainer<double> cellSideParitiesForCell = _mesh->cellSideParitiesForCell(cellID);
-    _mesh->bilinearForm()->stiffnessMatrix(preStiffness, elemTypePtr, cellSideParitiesForCell, basisCache);
+    if (_bf != Teuchos::null)
+      _bf->stiffnessMatrix(preStiffness, elemTypePtr, cellSideParitiesForCell, basisCache);
+    else
+      _mesh->bilinearForm()->stiffnessMatrix(preStiffness, elemTypePtr, cellSideParitiesForCell, basisCache);
 
     for (int i=0; i<numTestDofs; i++) {
       for (int j=0; j<numTrialDofs; j++) {
@@ -2454,7 +2486,12 @@ void TSolution<Scalar>::solutionValues(Intrepid::FieldContainer<double> &values,
   vector<GlobalIndexType> cellIDs = basisCache->cellIDs();
   int sideIndex = basisCache->getSideIndex();
   bool forceVolumeCoords = false; // used for evaluating fields on sides...
-  if ( ( sideIndex != -1 ) && !_mesh->bilinearForm()->isFluxOrTrace(trialID)) {
+  bool fluxOrTrace;
+  if (_bf != Teuchos::null)
+    fluxOrTrace = _bf->isFluxOrTrace(trialID);
+  else
+    fluxOrTrace = _mesh->bilinearForm()->isFluxOrTrace(trialID);
+  if ( ( sideIndex != -1 ) && !fluxOrTrace) {
     forceVolumeCoords = true;
     //    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument,
     //                       "solutionValues doesn't support evaluation of field variables along sides (not yet anyway).");
@@ -2463,7 +2500,6 @@ void TSolution<Scalar>::solutionValues(Intrepid::FieldContainer<double> &values,
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument,
                                "solutionValues doesn't support evaluation of trace or flux variables on element interiors.");
   }
-  bool fluxOrTrace = _mesh->bilinearForm()->isFluxOrTrace(trialID);
 
   int numCells = cellIDs.size();
   if (numCells != values.dimension(0)) {
@@ -2609,7 +2645,11 @@ void TSolution<Scalar>::solutionValues(Intrepid::FieldContainer<double> &values,
     MPIWrapper::entryWiseSum(values);
   } else { // (P,D) physicalPoints
     // the following is due to the fact that we *do not* transform basis values.
-    Camellia::EFunctionSpace fs = _mesh->bilinearForm()->functionSpaceForTrial(trialID);
+    Camellia::EFunctionSpace fs;
+    if (_bf != Teuchos::null)
+      fs = _bf->functionSpaceForTrial(trialID);
+    else
+      fs = _mesh->bilinearForm()->functionSpaceForTrial(trialID);
     TEUCHOS_TEST_FOR_EXCEPTION( (fs != Camellia::FUNCTION_SPACE_HVOL) && (fs != Camellia::FUNCTION_SPACE_HGRAD),
                                std::invalid_argument,
                                "This version of solutionValues only supports HVOL and HGRAD bases.");
@@ -3108,7 +3148,11 @@ void TSolution<Scalar>::setWriteRHSToMatrixMarketFile(bool value, const string &
 template <typename Scalar>
 void TSolution<Scalar>::condensedSolve(TSolverPtr<Scalar> globalSolver, bool reduceMemoryFootprint) {
   // when reduceMemoryFootprint is true, local stiffness matrices will be computed twice, rather than stored for reuse
-  vector<int> trialIDs = _mesh->bilinearForm()->trialIDs();
+  vector<int> trialIDs;
+  if (_bf != Teuchos::null)
+    trialIDs = _bf->trialIDs();
+  else
+    trialIDs = _mesh->bilinearForm()->trialIDs();
 
   set< int > fieldsToExclude;
   for (vector< int >::iterator trialIt = trialIDs.begin(); trialIt != trialIDs.end(); trialIt++) {
@@ -3684,12 +3728,20 @@ void TSolution<Scalar>::projectOntoCell(const map<int, TFunctionPtr<Scalar> > &f
   Intrepid::FieldContainer<double> physicalCellNodes = _mesh->physicalCellNodesForCell(cellID);
   vector<GlobalIndexType> cellIDs(1,cellID);
 
-  VarFactoryPtr vf = _mesh->bilinearForm()->varFactory();
+  VarFactoryPtr vf;
+  if (_bf != Teuchos::null)
+    vf = _bf->varFactory();
+  else
+    vf = _mesh->bilinearForm()->varFactory();
 
   for (typename map<int, TFunctionPtr<Scalar> >::const_iterator functionIt = functionMap.begin(); functionIt !=functionMap.end(); functionIt++){
     int trialID = functionIt->first;
 
-    bool fluxOrTrace = _mesh->bilinearForm()->isFluxOrTrace(trialID);
+    bool fluxOrTrace;
+    if (_bf != Teuchos::null)
+      fluxOrTrace = _bf->isFluxOrTrace(trialID);
+    else
+      fluxOrTrace = _mesh->bilinearForm()->isFluxOrTrace(trialID);
     VarPtr trialVar = vf->trial(trialID);
     TFunctionPtr<Scalar> function = functionIt->second;
 
@@ -3756,7 +3808,11 @@ void TSolution<Scalar>::projectOntoCell(const map<int, TFunctionPtr<Scalar> > &f
 
 template <typename Scalar>
 void TSolution<Scalar>::projectFieldVariablesOntoOtherSolution(Teuchos::RCP< TSolution<Scalar> > otherSoln) {
-  vector< int > fieldIDs = _mesh->bilinearForm()->trialVolumeIDs();
+  vector< int > fieldIDs;
+  if (_bf != Teuchos::null)
+    fieldIDs = _bf->trialVolumeIDs();
+  else
+    fieldIDs = _mesh->bilinearForm()->trialVolumeIDs();
   vector< VarPtr > fieldVars;
   for (vector<int>::iterator fieldIt = fieldIDs.begin(); fieldIt != fieldIDs.end(); fieldIt++) {
     int fieldID = *fieldIt;
@@ -3790,7 +3846,11 @@ void TSolution<Scalar>::projectOldCellOntoNewCells(GlobalIndexType cellID,
                                           const Intrepid::FieldContainer<double> &oldData,
                                           const vector<GlobalIndexType> &childIDs)
  {
-   VarFactoryPtr vf = _mesh->bilinearForm()->varFactory();
+   VarFactoryPtr vf;
+   if (_bf != Teuchos::null)
+     vf = _bf->varFactory();
+   else
+     vf = _mesh->bilinearForm()->varFactory();
 
    DofOrderingPtr oldTrialOrdering = oldElemType->trialOrderPtr;
    set<int> trialIDs = oldTrialOrdering->getVarIDs();
@@ -4094,7 +4154,11 @@ void TSolution<Scalar>::loadFromHDF5(string filename)
 template <typename Scalar>
 vector<int> TSolution<Scalar>::getZeroMeanConstraints() {
   // determine any zero-mean constraints:
-  vector< int > trialIDs = _mesh->bilinearForm()->trialIDs();
+  vector< int > trialIDs;
+  if (_bf != Teuchos::null)
+    trialIDs = _bf->trialIDs();
+  else
+    trialIDs = _mesh->bilinearForm()->trialIDs();
   vector< int > zeroMeanConstraints;
   if (_bc.get()==NULL) return zeroMeanConstraints; //empty
   for (vector< int >::iterator trialIt = trialIDs.begin(); trialIt != trialIDs.end(); trialIt++) {
@@ -4133,7 +4197,11 @@ void TSolution<Scalar>::setUseCondensedSolve(bool value) {
   if (value) {
     if (_oldDofInterpreter.get()==NULL) {
       // when reduceMemoryFootprint is true, local stiffness matrices will be computed twice, rather than stored for reuse
-      vector<int> trialIDs = _mesh->bilinearForm()->trialIDs();
+      vector<int> trialIDs;
+      if (_bf != Teuchos::null)
+        trialIDs = _bf->trialIDs();
+      else
+        trialIDs = _mesh->bilinearForm()->trialIDs();
 
       set< int > fieldsToExclude;
       for (vector< int >::iterator trialIt = trialIDs.begin(); trialIt != trialIDs.end(); trialIt++) {

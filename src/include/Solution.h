@@ -81,6 +81,7 @@ namespace Camellia {
     TBCPtr<Scalar> _bc;
     Teuchos::RCP<DofInterpreter> _dofInterpreter; // defaults to Mesh
     Teuchos::RCP<DofInterpreter> _oldDofInterpreter; // the one saved when we turn on condensed solve
+    TBFPtr<Scalar> _bf;
     TRHSPtr<Scalar> _rhs;
     TIPPtr<Scalar> _ip;
     Teuchos::RCP<LocalStiffnessMatrixFilter> _filter;
@@ -133,6 +134,10 @@ namespace Camellia {
     Intrepid::FieldContainer<double> solutionForElementTypeGlobal(ElementTypePtr elemType); // probably should be deprecated…
     ElementTypePtr getEquivalentElementType(MeshPtr otherMesh, ElementTypePtr elemType);
   public:
+    TSolution(TBFPtr<Scalar> bf, MeshPtr mesh, TBCPtr<Scalar> bc = Teuchos::null,
+             TRHSPtr<Scalar> rhs = Teuchos::null, TIPPtr<Scalar> ip = Teuchos::null);
+    // Deprecated constructor, use the one which explicitly passes in BF
+    // Will eventually be removing BF reference from Mesh
     TSolution(MeshPtr mesh, TBCPtr<Scalar> bc = Teuchos::null,
              TRHSPtr<Scalar> rhs = Teuchos::null, TIPPtr<Scalar> ip = Teuchos::null);
     TSolution(const TSolution &soln);
@@ -270,6 +275,7 @@ namespace Camellia {
     void setWriteRHSToMatrixMarketFile(bool value, const std::string &filePath);
 
     MeshPtr mesh() const;
+    TBFPtr<Scalar> bf() const;
     TBCPtr<Scalar> bc() const;
     TRHSPtr<Scalar> rhs() const;
     TIPPtr<Scalar> ip() const;
