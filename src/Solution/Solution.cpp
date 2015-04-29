@@ -990,7 +990,7 @@ int TSolution<Scalar>::solve(TSolverPtr<Scalar> solver) {
 //  int rank = Teuchos::GlobalMPISession::getRank();
 
   if (_oldDofInterpreter.get() != NULL) { // proxy for having a condensation interpreter
-    CondensedDofInterpreter* condensedDofInterpreter = dynamic_cast<CondensedDofInterpreter*>(_dofInterpreter.get());
+    CondensedDofInterpreter<Scalar>* condensedDofInterpreter = dynamic_cast<CondensedDofInterpreter<Scalar>*>(_dofInterpreter.get());
     if (condensedDofInterpreter != NULL) {
       condensedDofInterpreter->reinitialize();
     }
@@ -1553,7 +1553,7 @@ void TSolution<Scalar>::integrateBasisFunctions(Intrepid::FieldContainer<GlobalI
     Intrepid::FieldContainer<double> dummyLocalStiffness(numTrialDofs, numTrialDofs);
     Intrepid::FieldContainer<double> dummyInterpretedStiffness;
 
-    CondensedDofInterpreter* condensedDofInterpreter = dynamic_cast<CondensedDofInterpreter*>(_dofInterpreter.get());
+    CondensedDofInterpreter<Scalar>* condensedDofInterpreter = dynamic_cast<CondensedDofInterpreter<Scalar>*>(_dofInterpreter.get());
 
     // copy into values:
     for (int cellIndex=0; cellIndex<numCellsOfType; cellIndex++) {
@@ -3165,7 +3165,7 @@ void TSolution<Scalar>::condensedSolve(TSolverPtr<Scalar> globalSolver, bool red
   // override reduceMemoryFootprint for now (since CondensedDofInterpreter doesn't yet support a true value)
   reduceMemoryFootprint = false;
 
-  Teuchos::RCP<DofInterpreter> dofInterpreter = Teuchos::rcp(new CondensedDofInterpreter(_mesh.get(), _ip, _rhs, _lagrangeConstraints.get(), fieldsToExclude, !reduceMemoryFootprint) );
+  Teuchos::RCP<DofInterpreter> dofInterpreter = Teuchos::rcp(new CondensedDofInterpreter<Scalar>(_mesh, _ip, _rhs, _lagrangeConstraints.get(), fieldsToExclude, !reduceMemoryFootprint) );
 
   Teuchos::RCP<DofInterpreter> oldDofInterpreter = _dofInterpreter;
 
@@ -4216,7 +4216,7 @@ void TSolution<Scalar>::setUseCondensedSolve(bool value) {
 
       _oldDofInterpreter = _dofInterpreter;
 
-      Teuchos::RCP<DofInterpreter> dofInterpreter = Teuchos::rcp(new CondensedDofInterpreter(_mesh.get(), _ip, _rhs, _lagrangeConstraints.get(), fieldsToExclude, !reduceMemoryFootprint) );
+      Teuchos::RCP<DofInterpreter> dofInterpreter = Teuchos::rcp(new CondensedDofInterpreter<Scalar>(_mesh, _ip, _rhs, _lagrangeConstraints.get(), fieldsToExclude, !reduceMemoryFootprint) );
 
       setDofInterpreter(dofInterpreter);
     }

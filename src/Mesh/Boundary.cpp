@@ -50,7 +50,6 @@
 #include "CamelliaCellTools.h"
 
 #include "GlobalDofAssignment.h"
-#include "CondensedDofInterpreter.h"
 
 #include "CamelliaDebugUtility.h"
 

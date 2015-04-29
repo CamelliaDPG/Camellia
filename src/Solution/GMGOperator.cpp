@@ -457,10 +457,10 @@ LocalDofMapperPtr GMGOperator::getLocalCoefficientMap(GlobalIndexType fineCellID
 
   pair< pair<int,int>, RefinementBranch > key = make_pair(make_pair(fineOrder, coarseOrder), refBranch);
 
-  CondensedDofInterpreter* condensedDofInterpreter = NULL;
+  CondensedDofInterpreter<double>* condensedDofInterpreter = NULL;
 
   if (_useStaticCondensation) {
-    condensedDofInterpreter = dynamic_cast<CondensedDofInterpreter*>(_fineDofInterpreter.get());
+    condensedDofInterpreter = dynamic_cast<CondensedDofInterpreter<double>*>(_fineDofInterpreter.get());
   }
 
   int fineSideCount = fineCell->getSideCount();

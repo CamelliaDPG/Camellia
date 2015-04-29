@@ -22,6 +22,7 @@ namespace Camellia {
   class MeshFactory {
     static map<int,int> _emptyIntIntMap; // just defined here to implement a default argument to constructor (there's likely a better way)
   public:
+    // These versions are all deprecated, new versions should take in a VarFactoryPtr instead of BFPtr
 #ifdef HAVE_EPETRAEXT_HDF5
     static MeshPtr loadFromHDF5(TBFPtr<double> bf, string filename);
 #endif

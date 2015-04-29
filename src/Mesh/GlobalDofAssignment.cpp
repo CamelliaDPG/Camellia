@@ -253,7 +253,7 @@ void GlobalDofAssignment::repartitionAndMigrate() {
        solutionIt != _registeredSolutions.end(); solutionIt++) {
     // if solution has a condensed dof interpreter, we should reinitialize the mapping from interpreted to global dofs
     Teuchos::RCP<DofInterpreter> dofInterpreter = (*solutionIt)->getDofInterpreter();
-    CondensedDofInterpreter* condensedDofInterpreter = dynamic_cast<CondensedDofInterpreter*>(dofInterpreter.get());
+    CondensedDofInterpreter<double>* condensedDofInterpreter = dynamic_cast<CondensedDofInterpreter<double>*>(dofInterpreter.get());
     if (condensedDofInterpreter != NULL) {
       condensedDofInterpreter->reinitialize();
     }
