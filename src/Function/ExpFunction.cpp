@@ -89,3 +89,33 @@ string Exp_ay::displayString() {
   ss << "\\exp( " << _a << " y )";
   return ss.str();
 }
+
+Exp_at::Exp_at(double a) {
+  _a = a;
+}
+double Exp_at::value(double x, double t) {
+  return exp( _a * t);
+}
+double Exp_at::value(double x, double y, double t) {
+  return exp( _a * t);
+}
+double Exp_at::value(double x, double y, double z, double t) {
+  return exp( _a * t);
+}
+TFunctionPtr<double> Exp_at::dx() {
+  return Function::zero();
+}
+TFunctionPtr<double> Exp_at::dy() {
+  return Function::zero();
+}
+TFunctionPtr<double> Exp_at::dz() {
+  return Function::zero();
+}
+TFunctionPtr<double> Exp_at::dt() {
+  return _a * (TFunctionPtr<double>) Teuchos::rcp(new Exp_at(_a));
+}
+string Exp_at::displayString() {
+  ostringstream ss;
+  ss << "\\exp( " << _a << " t )";
+  return ss.str();
+}

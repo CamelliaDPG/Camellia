@@ -1032,8 +1032,10 @@ int Mesh::condensedRowSizeUpperBound() {
       int numFluxDofs = 0;
       for (fluxIDIt = fluxIDs.begin(); fluxIDIt != fluxIDs.end(); fluxIDIt++) {
         int fluxID = *fluxIDIt;
-        for (int sideIndex=0; sideIndex<numSides; sideIndex++) {
-          int numDofs = elemTypePtr->trialOrderPtr->getBasisCardinality(fluxID,sideIndex);
+        vector<int> sidesForFlux = elemTypePtr->trialOrderPtr->getSidesForVarID(fluxID);
+        for (int sideOrdinal : sidesForFlux)
+        {
+          int numDofs = elemTypePtr->trialOrderPtr->getBasisCardinality(fluxID,sideOrdinal);
           numFluxDofs += numDofs;
         }
       }
@@ -1065,8 +1067,10 @@ int Mesh::rowSizeUpperBound() {
       int numFluxDofs = 0;
       for (fluxIDIt = fluxIDs.begin(); fluxIDIt != fluxIDs.end(); fluxIDIt++) {
         int fluxID = *fluxIDIt;
-        for (int sideIndex=0; sideIndex<numSides; sideIndex++) {
-          int numDofs = elemTypePtr->trialOrderPtr->getBasisCardinality(fluxID,sideIndex);
+        vector<int> sidesForFlux = elemTypePtr->trialOrderPtr->getSidesForVarID(fluxID);
+        for (int sideOrdinal : sidesForFlux)
+        {
+          int numDofs = elemTypePtr->trialOrderPtr->getBasisCardinality(fluxID,sideOrdinal);
           numFluxDofs += numDofs;
         }
       }

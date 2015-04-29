@@ -539,7 +539,7 @@ bool MeshTestSuite::testFluxIntegration() {
 
     FieldContainer<double> integral(myMesh->numElements());
 
-    VarPtr phi_hat = PoissonBilinearForm::poissonBilinearForm()->varFactory().traceVar(PoissonBilinearForm::S_PHI_HAT);
+    VarPtr phi_hat = PoissonBilinearForm::poissonBilinearForm()->varFactory()->traceVar(PoissonBilinearForm::S_PHI_HAT);
 
     solution.integrateFlux(integral,phi_hat->ID());
 
@@ -600,7 +600,7 @@ bool MeshTestSuite::testFluxNorm() {
     SolutionPtr solution = Solution::solution(myMesh, exactSolution.ExactSolution::bc(), exactSolution.ExactSolution::rhs(), ip);
     // Poisson is set up such that the solution should be x + 2y
 
-    VarPtr phi_hat = PoissonBilinearForm::poissonBilinearForm()->varFactory().traceVar(PoissonBilinearForm::S_PHI_HAT);
+    VarPtr phi_hat = PoissonBilinearForm::poissonBilinearForm()->varFactory()->traceVar(PoissonBilinearForm::S_PHI_HAT);
 
     double L2normFlux = exactSolution.L2NormOfError(solution, phi_hat->ID());
     //cout << "L2 norm of phi_hat " << L2normFlux << endl;
@@ -664,9 +664,9 @@ bool MeshTestSuite::testSacadoExactSolution() {
 
       double diff;
 
-      VarPtr phi = PoissonBilinearForm::poissonBilinearForm()->varFactory().fieldVar(PoissonBilinearForm::S_PHI);
+      VarPtr phi = PoissonBilinearForm::poissonBilinearForm()->varFactory()->fieldVar(PoissonBilinearForm::S_PHI);
 
-      VarPtr phi_hat = PoissonBilinearForm::poissonBilinearForm()->varFactory().traceVar(PoissonBilinearForm::S_PHI_HAT);
+      VarPtr phi_hat = PoissonBilinearForm::poissonBilinearForm()->varFactory()->traceVar(PoissonBilinearForm::S_PHI_HAT);
 
       double L2norm = exactSolution.L2NormOfError(solution, phi->ID());
       double L2normFlux = exactSolution.L2NormOfError(solution, phi_hat->ID());
@@ -796,25 +796,25 @@ bool MeshTestSuite::testExactSolution(bool checkL2Norm) {
   quadPoints(3,0) = 0.0;
   quadPoints(3,1) = 1.0;
 
-  Teuchos::RCP<ExactSolution> exactLinear = PoissonExactSolution::poissonExactPolynomialSolution(1);
-  Teuchos::RCP<ExactSolution> exactQuadratic = PoissonExactSolution::poissonExactPolynomialSolution(2);
-  Teuchos::RCP<ExactSolution> exactCubic = PoissonExactSolution::poissonExactPolynomialSolution(3);
-  Teuchos::RCP<ExactSolution> exactQuartic = PoissonExactSolution::poissonExactPolynomialSolution(4);
+  Teuchos::RCP<ExactSolution<double>> exactLinear = PoissonExactSolution::poissonExactPolynomialSolution(1);
+  Teuchos::RCP<ExactSolution<double>> exactQuadratic = PoissonExactSolution::poissonExactPolynomialSolution(2);
+  Teuchos::RCP<ExactSolution<double>> exactCubic = PoissonExactSolution::poissonExactPolynomialSolution(3);
+  Teuchos::RCP<ExactSolution<double>> exactQuartic = PoissonExactSolution::poissonExactPolynomialSolution(4);
 
   //cout << "************************************************\n";
   //exactCubic->bilinearForm()->printTrialTestInteractions();
   //cout << "************************************************\n";
 
-  vector<Teuchos::RCP<ExactSolution> > exactSolutions;
+  vector<Teuchos::RCP<ExactSolution<double>> > exactSolutions;
   exactSolutions.push_back(exactLinear);
   exactSolutions.push_back(exactQuadratic);
   exactSolutions.push_back(exactCubic);
   exactSolutions.push_back(exactQuartic);
 
-  VarPtr phi = PoissonBilinearForm::poissonBilinearForm()->varFactory().fieldVar(PoissonBilinearForm::S_PHI);
+  VarPtr phi = PoissonBilinearForm::poissonBilinearForm()->varFactory()->fieldVar(PoissonBilinearForm::S_PHI);
 
   for (int i=0; i<exactSolutions.size(); i++) {
-    Teuchos::RCP<ExactSolution> exactSolution = exactSolutions[i];
+    Teuchos::RCP<ExactSolution<double>> exactSolution = exactSolutions[i];
     int order = exactSolution->H1Order(); // matters for getting enough cubature points, and of course recovering the exact solution
     Teuchos::RCP<Mesh> myMesh = MeshFactory::buildQuadMesh(quadPoints, 3, 3, exactSolution->bilinearForm(), order, order+1);
 
@@ -924,13 +924,13 @@ bool MeshTestSuite::testMeshSolvePointwise() {
 
   Teuchos::RCP<Mesh> myMesh = MeshFactory::buildQuadMesh(quadPoints, 1, 1, bilinearForm, order, order+1);
 
-  Teuchos::RCP<ExactSolution> exactLinear = PoissonExactSolution::poissonExactPolynomialSolution(1);
+  Teuchos::RCP<ExactSolution<double>> exactLinear = PoissonExactSolution::poissonExactPolynomialSolution(1);
 
   BCPtr bc = exactLinear->bc();
   RHSPtr rhs = exactLinear->rhs();
   IPPtr ip = Teuchos::rcp( new MathInnerProduct(bilinearForm) );
 
-  VarPtr phi = PoissonBilinearForm::poissonBilinearForm()->varFactory().fieldVar(PoissonBilinearForm::S_PHI);
+  VarPtr phi = PoissonBilinearForm::poissonBilinearForm()->varFactory()->fieldVar(PoissonBilinearForm::S_PHI);
 
   SolutionPtr solution = Solution::solution(myMesh, bc, rhs, ip);
 
@@ -1067,7 +1067,7 @@ bool MeshTestSuite::testDofOrderingFactory() {
 
   BFPtr bilinearForm = PoissonBilinearForm::poissonBilinearForm();
 
-  VarPtr phi_hat = bilinearForm->varFactory().traceVar(PoissonBilinearForm::S_PHI_HAT);
+  VarPtr phi_hat = bilinearForm->varFactory()->traceVar(PoissonBilinearForm::S_PHI_HAT);
 
   Teuchos::RCP<DofOrdering> conformingOrdering,nonConformingOrdering;
   CellTopoPtr quad_4 = Camellia::CellTopology::quad();
@@ -1257,7 +1257,7 @@ bool MeshTestSuite::testHRefinement() {
       testPoints(i*NUM_POINTS_1D + j, 1) = y[i];
     }
   }
-  VarPtr phi = PoissonBilinearForm::poissonBilinearForm()->varFactory().fieldVar(PoissonBilinearForm::S_PHI);
+  VarPtr phi = PoissonBilinearForm::poissonBilinearForm()->varFactory()->fieldVar(PoissonBilinearForm::S_PHI);
 
   int trialID = phi->ID();
   FieldContainer<double> valuesOriginal(testPoints.dimension(0));
@@ -1700,7 +1700,7 @@ bool MeshTestSuite::testPRefinement() {
   SolutionPtr solution2 = Solution::solution(mesh2, exactPolynomial.ExactSolution::bc(), exactPolynomial.ExactSolution::rhs(), ip0);
   solution2->solve();
 
-  VarPtr phi = PoissonBilinearForm::poissonBilinearForm()->varFactory().fieldVar(PoissonBilinearForm::S_PHI);
+  VarPtr phi = PoissonBilinearForm::poissonBilinearForm()->varFactory()->fieldVar(PoissonBilinearForm::S_PHI);
 
   double error1 = exactPolynomial.L2NormOfError(solution1, phi->ID(),15); // high fidelity L2norm
   double error2 = exactPolynomial.L2NormOfError(solution2, phi->ID(),15); // high fidelity L2norm
@@ -1962,7 +1962,7 @@ bool MeshTestSuite::testSinglePointBC() {
   }
   IPPtr ip = Teuchos::rcp(new MathInnerProduct(exactPolynomial.bilinearForm()));
   SolutionPtr solution = Solution::solution(mesh, exactPolynomial.ExactSolution::bc(), exactPolynomial.ExactSolution::rhs(), ip);
-  VarPtr phi = PoissonBilinearForm::poissonBilinearForm()->varFactory().fieldVar(PoissonBilinearForm::S_PHI);
+  VarPtr phi = PoissonBilinearForm::poissonBilinearForm()->varFactory()->fieldVar(PoissonBilinearForm::S_PHI);
 
   double L2norm = exactPolynomial.L2NormOfError(solution, phi->ID());
   solution->solve();
@@ -2046,7 +2046,7 @@ bool MeshTestSuite::testSolutionForMultipleElementTypes() {
   IPPtr ip0 = Teuchos::rcp(new MathInnerProduct(exactPolynomial.bilinearForm()));
   SolutionPtr solution1 = Solution::solution(mesh, exactPolynomial.ExactSolution::bc(), exactPolynomial.ExactSolution::rhs(), ip0);
   solution1->solve();
-  VarPtr phi = PoissonBilinearForm::poissonBilinearForm()->varFactory().fieldVar(PoissonBilinearForm::S_PHI);
+  VarPtr phi = PoissonBilinearForm::poissonBilinearForm()->varFactory()->fieldVar(PoissonBilinearForm::S_PHI);
 
   double error1 = exactPolynomial.L2NormOfError(solution1, phi->ID(),15); // high fidelity L2norm
   if (error1 > tol) {
@@ -2107,7 +2107,7 @@ bool MeshTestSuite::testSolutionForSingleElementUpgradedSide() {
   SolutionPtr solution = Solution::solution(mesh, exactPolynomial.ExactSolution::bc(), exactPolynomial.ExactSolution::rhs(), ip);
   solution->solve();
 
-  VarPtr phi = PoissonBilinearForm::poissonBilinearForm()->varFactory().fieldVar(PoissonBilinearForm::S_PHI);
+  VarPtr phi = PoissonBilinearForm::poissonBilinearForm()->varFactory()->fieldVar(PoissonBilinearForm::S_PHI);
 
   double error = exactPolynomial.L2NormOfError(solution, phi->ID(),15); // high fidelity L2norm
   if (error > tol) {

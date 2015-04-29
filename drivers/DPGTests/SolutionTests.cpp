@@ -1129,7 +1129,7 @@ bool SolutionTests::testNewProjectFunction() {
 
     // this maybe doesn't exactly belong here (better to have an ExactSolution test),
     // but this is convenient for now:
-    Teuchos::RCP<ExactSolution> exactSoln = Teuchos::rcp( new ExactSolution );
+    Teuchos::RCP<ExactSolution<double>> exactSoln = Teuchos::rcp( new ExactSolution<double> );
     exactSoln->setSolutionFunction(trialVar, f);
     // test the L2 error measured in two ways
     double l2errorActual = exactSoln->L2NormOfError(soln, trialID, 15);
@@ -1386,9 +1386,9 @@ bool SolutionTests::testHRefinementInitialization() {
   map< int, FunctionPtr > fxnMap;
 
   VarFactoryPtr vf = PoissonBilinearForm::poissonBilinearForm()->varFactory();
-  VarPtr phi = vf.fieldVar(PoissonBilinearForm::S_PHI);
-  VarPtr psi_1 = vf.fieldVar(PoissonBilinearForm::S_PSI_1);
-  VarPtr psi_2 = vf.fieldVar(PoissonBilinearForm::S_PSI_2);
+  VarPtr phi = vf->fieldVar(PoissonBilinearForm::S_PHI);
+  VarPtr psi_1 = vf->fieldVar(PoissonBilinearForm::S_PSI_1);
+  VarPtr psi_2 = vf->fieldVar(PoissonBilinearForm::S_PSI_2);
 
   fxnMap[ phi->ID() ] = phiFxn;
   fxnMap[ psi_1->ID() ] = psiFxn->x();
@@ -1957,7 +1957,7 @@ bool SolutionTests::testCondensationSolveNonlinear() {
 
   SolutionPtr solnIncrement_condensed = problem_condensed.solutionIncrement();
 
-  Teuchos::RCP<ExactSolution> exactSolution = problem.exactSolution();
+  Teuchos::RCP<ExactSolution<double>> exactSolution = problem.exactSolution();
   MeshPtr mesh = problem.mesh();
 
   int maxIters = 3;

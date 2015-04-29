@@ -67,6 +67,7 @@ void LinearTermTests::setup() {
   sine_x = Teuchos::rcp( new Sine_x );
   cos_y = Teuchos::rcp( new Cosine_y );
 
+  VarFactoryPtr varFactory = VarFactory::varFactory();
   q1 = varFactory->testVar("q_1", HDIV);
   q2 = varFactory->testVar("q_2", HDIV);
   q3 = varFactory->testVar("q_3", HDIV);
@@ -687,7 +688,7 @@ bool LinearTermTests::testRieszInversionAsProjection() {
   Teuchos::RCP<RieszRep> riesz = Teuchos::rcp(new RieszRep(myMesh, ip_L2, integrand));
   riesz->computeRieszRep();
 
-  FunctionPtr rieszFxn = Teuchos::rcp(new RepFunction(v,riesz));
+  FunctionPtr rieszFxn = RieszRep::repFunction(v,riesz);
   int numCells = basisCache->getPhysicalCubaturePoints().dimension(0);
   int numPts = basisCache->getPhysicalCubaturePoints().dimension(1);
 
@@ -929,8 +930,8 @@ bool LinearTermTests::testRieszInversion() {
   //  rieszIBP->setPrintOption(true);
   rieszIBP->computeRieszRep();
 
-  FunctionPtr rieszOrigFxn = Teuchos::rcp(new RepFunction(v,riesz));
-  FunctionPtr rieszIBPFxn = Teuchos::rcp(new RepFunction(v,rieszIBP));
+  FunctionPtr rieszOrigFxn = RieszRep::repFunction(v,riesz);
+  FunctionPtr rieszIBPFxn = RieszRep::repFunction(v,rieszIBP);
   int numCells = basisCache->getPhysicalCubaturePoints().dimension(0);
   int numPts = basisCache->getPhysicalCubaturePoints().dimension(1);
 

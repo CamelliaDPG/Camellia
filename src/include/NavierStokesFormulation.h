@@ -98,24 +98,24 @@ namespace Camellia {
 
     void initVars() {
       varFactory = VGPStokesFormulation::vgpVarFactory();
-      _v1 = varFactory.testVar(VGP_V1_S, HGRAD);
-      _v2 = varFactory.testVar(VGP_V2_S, HGRAD);
-      _tau1 = varFactory.testVar(VGP_TAU1_S, HDIV);
-      _tau2 = varFactory.testVar(VGP_TAU2_S, HDIV);
-      _q = varFactory.testVar(VGP_Q_S, HGRAD);
+      _v1 = varFactory->testVar(VGP_V1_S, HGRAD);
+      _v2 = varFactory->testVar(VGP_V2_S, HGRAD);
+      _tau1 = varFactory->testVar(VGP_TAU1_S, HDIV);
+      _tau2 = varFactory->testVar(VGP_TAU2_S, HDIV);
+      _q = varFactory->testVar(VGP_Q_S, HGRAD);
 
-      _u1hat = varFactory.traceVar(VGP_U1HAT_S);
-      _u2hat = varFactory.traceVar(VGP_U2HAT_S);
+      _u1hat = varFactory->traceVar(VGP_U1HAT_S);
+      _u2hat = varFactory->traceVar(VGP_U2HAT_S);
 
-      _t1n = varFactory.fluxVar(VGP_T1HAT_S);
-      _t2n = varFactory.fluxVar(VGP_T2HAT_S);
-      _u1 = varFactory.fieldVar(VGP_U1_S);
-      _u2 = varFactory.fieldVar(VGP_U2_S);
-      _sigma11 = varFactory.fieldVar(VGP_SIGMA11_S);
-      _sigma12 = varFactory.fieldVar(VGP_SIGMA12_S);
-      _sigma21 = varFactory.fieldVar(VGP_SIGMA21_S);
-      _sigma22 = varFactory.fieldVar(VGP_SIGMA22_S);
-      _p = varFactory.fieldVar(VGP_P_S);
+      _t1n = varFactory->fluxVar(VGP_T1HAT_S);
+      _t2n = varFactory->fluxVar(VGP_T2HAT_S);
+      _u1 = varFactory->fieldVar(VGP_U1_S);
+      _u2 = varFactory->fieldVar(VGP_U2_S);
+      _sigma11 = varFactory->fieldVar(VGP_SIGMA11_S);
+      _sigma12 = varFactory->fieldVar(VGP_SIGMA12_S);
+      _sigma21 = varFactory->fieldVar(VGP_SIGMA21_S);
+      _sigma22 = varFactory->fieldVar(VGP_SIGMA22_S);
+      _p = varFactory->fieldVar(VGP_P_S);
 
       sigma11_prev = TFunction<double>::solution(_sigma11, _soln);
       sigma12_prev = TFunction<double>::solution(_sigma12, _soln);

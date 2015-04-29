@@ -27,6 +27,7 @@ void IncompressibleFormulationsTests::setup() {
 
   zero = Function::zero();
 
+  vgpVarFactory = VarFactory::varFactory();
   VarFactoryPtr varFactory = VGPStokesFormulation::vgpVarFactory();
   u1_vgp = varFactory->fieldVar(VGP_U1_S);
   u2_vgp = varFactory->fieldVar(VGP_U2_S);
@@ -36,10 +37,10 @@ void IncompressibleFormulationsTests::setup() {
   sigma22_vgp = varFactory->fieldVar(VGP_SIGMA22_S);
   p_vgp = varFactory->fieldVar(VGP_P_S);
 
-  u1hat_vgp = vgpVarFactory.traceVar(VGP_U1HAT_S);
-  u2hat_vgp = vgpVarFactory.traceVar(VGP_U2HAT_S);
-  t1n_vgp = vgpVarFactory.fluxVar(VGP_T1HAT_S);
-  t2n_vgp = vgpVarFactory.fluxVar(VGP_T2HAT_S);
+  u1hat_vgp = vgpVarFactory->traceVar(VGP_U1HAT_S);
+  u2hat_vgp = vgpVarFactory->traceVar(VGP_U2HAT_S);
+  t1n_vgp = vgpVarFactory->fluxVar(VGP_T1HAT_S);
+  t2n_vgp = vgpVarFactory->fluxVar(VGP_T2HAT_S);
 
   v1_vgp = varFactory->testVar(VGP_V1_S, HGRAD);
   v2_vgp = varFactory->testVar(VGP_V2_S, HGRAD);
@@ -506,7 +507,7 @@ bool IncompressibleFormulationsTests::testVGPStokesFormulationConsistency() {
 
           SpatialFilterPtr entireBoundary = Teuchos::rcp( new SpatialFilterUnfiltered ); // SpatialFilterUnfiltered returns true everywhere
 
-          Teuchos::RCP<ExactSolution> vgpStokesExactSolution = vgpStokesFormulation->exactSolution(u1_exact, u2_exact, p_exact, entireBoundary);
+          Teuchos::RCP<ExactSolution<double>> vgpStokesExactSolution = vgpStokesFormulation->exactSolution(u1_exact, u2_exact, p_exact, entireBoundary);
 
           BCPtr vgpBC = vgpStokesFormulation->bc(u1_exact, u2_exact, entireBoundary);
 
@@ -553,7 +554,7 @@ bool IncompressibleFormulationsTests::testVGPStokesFormulationCorrectness() {
 
   Teuchos::RCP< VGPStokesFormulation > vgpStokesFormulation;
   Teuchos::RCP< Solution > vgpStokesSolution;
-  Teuchos::RCP<ExactSolution> vgpStokesExactSolution;
+  Teuchos::RCP<ExactSolution<double>> vgpStokesExactSolution;
 
 //  cout << "Warning: testVGPStokesFormulationCorrectness() is trivial.\n";
 
@@ -692,9 +693,9 @@ bool IncompressibleFormulationsTests::testVVPStokesFormulationGraphNorm() {
   VarFactoryPtr vvpVarFactory = VVPStokesFormulation::vvpVarFactory(trueTraces);
 
   // look up the created VarPtrs:
-  VarPtr v = vvpVarFactory.testVar(VVP_V_S, VECTOR_HGRAD);
-  VarPtr q1 = vvpVarFactory.testVar(VVP_Q1_S, HGRAD);
-  VarPtr q2 = vvpVarFactory.testVar(VVP_Q2_S, HGRAD);
+  VarPtr v = vvpVarFactory->testVar(VVP_V_S, VECTOR_HGRAD);
+  VarPtr q1 = vvpVarFactory->testVar(VVP_Q1_S, HGRAD);
+  VarPtr q2 = vvpVarFactory->testVar(VVP_Q2_S, HGRAD);
 
 //  if (!trueTraces) {
 //    u1hat = varFactory->traceVar(VVP_U1HAT_S);
@@ -798,7 +799,7 @@ bool IncompressibleFormulationsTests::testVGPNavierStokesFormulationConsistency(
       cout << "p_exact: " << p_exact->displayString() << endl;
     }
 
-    Teuchos::RCP<ExactSolution> exactSolution = Teuchos::rcp( new ExactSolution );
+    Teuchos::RCP<ExactSolution<double>> exactSolution = Teuchos::rcp( new ExactSolution<double> );
 
     int H1Order = maxPolyOrder + 1;
     double width = 2.0, height = 2.0, x0 = -1.0, y0 = -1.0;
@@ -840,7 +841,7 @@ bool IncompressibleFormulationsTests::testVGPNavierStokesFormulationConsistency(
 
           FunctionPtr u_exact = Function::vectorize(u1_exact, u2_exact);
 
-          Teuchos::RCP<ExactSolution> exactSolution = formulation.exactSolution(u_exact, p_exact);
+          Teuchos::RCP<ExactSolution<double>> exactSolution = formulation.exactSolution(u_exact, p_exact);
           MeshPtr mesh = backgroundFlow->mesh();
 
           int maxIters = 20;
@@ -915,7 +916,7 @@ bool IncompressibleFormulationsTests::testVGPNavierStokesFormulationCorrectness(
 
   Teuchos::RCP< VGPStokesFormulation > vgpStokesFormulation;
   Teuchos::RCP< Solution > vgpStokesSolution;
-  Teuchos::RCP<ExactSolution> vgpStokesExactSolution;
+  Teuchos::RCP<ExactSolution<double>> vgpStokesExactSolution;
 
   //  cout << "Warning: testVGPStokesFormulationCorrectness() is trivial.\n";
 
@@ -1082,7 +1083,7 @@ bool IncompressibleFormulationsTests::testVGPNavierStokesFormulationCorrectness(
       if (maxPolyOrder < 10) { // polynomial solution: should be able to nail this
         for (map<int, FunctionPtr >::iterator varIt = solnMap.begin(); varIt != solnMap.end(); varIt++) {
           int varID = varIt->first;
-          VarPtr var = vgpVarFactory.trial(varID);
+          VarPtr var = vgpVarFactory->trial(varID);
           FunctionPtr exactSoln = varIt->second;
           FunctionPtr projectedSoln = Function::solution(var, backgroundFlow);
 
@@ -1521,12 +1522,12 @@ bool IncompressibleFormulationsTests::testVGPNavierStokesFormulationKovasnayConv
             LinearTermPtr rhsLT = rhs->linearTerm();
 
             rieszRep = Teuchos::rcp( new RieszRep(kProblem.mesh(),ip,rhsLT));
-            FunctionPtr v1_rep = Teuchos::rcp( new RepFunction(v1_vgp, rieszRep) );
-            FunctionPtr v2_rep = Teuchos::rcp( new RepFunction(v2_vgp, rieszRep) );
+            FunctionPtr v1_rep = RieszRep::repFunction(v1_vgp, rieszRep);
+            FunctionPtr v2_rep = RieszRep::repFunction(v2_vgp, rieszRep);
             // set up the hessian term itself:
             // we want basically u * sigma * v where "*" is a dot product
             // u * sigma = (u1 sigma11 + u2 sigma12, u1 sigma21 + u2 sigma22)
-            BFPtr hessianBF = Teuchos::rcp( new BF(vgpVarFactory.getBubnovFactory(VarFactory::BUBNOV_TRIAL)) );
+            BFPtr hessianBF = Teuchos::rcp( new BF(vgpVarFactory->getBubnovFactory(VarFactory::BUBNOV_TRIAL)) );
             hessianBF->addTerm(v1_rep * u1_vgp, sigma11_vgp);
             hessianBF->addTerm(v1_rep * u2_vgp, sigma12_vgp);
             hessianBF->addTerm(v2_rep * u1_vgp, sigma21_vgp);

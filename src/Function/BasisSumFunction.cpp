@@ -1,9 +1,9 @@
+#include "BasisFactory.h"
+#include "BasisSumFunction.h"
+#include "CamelliaCellTools.h"
 #include "TypeDefs.h"
 
-#include "BasisSumFunction.h"
 #include "Intrepid_CellTools.hpp"
-
-#include "BasisFactory.h"
 
 using namespace Intrepid;
 using namespace Camellia;
@@ -42,13 +42,35 @@ void BasisSumFunction::values(FieldContainer<double> &values, BasisCachePtr basi
     int spaceDim = physicalCellNodes->dimension(2);
     FieldContainer<double> relativeReferenceCellNodes(numCells, numNodes, spaceDim);
     CellTopoPtr domainTopo = _basis->domainTopology();
-    if (domainTopo->getTensorialDegree() == 0) {
-      Intrepid::CellTools<double>::mapToReferenceFrame(relativeReferenceCellNodes,*physicalCellNodes,_overridingBasisCache->getPhysicalCellNodes(),_basis->domainTopology()->getShardsTopology());
-    } else {
-      cout << "ERROR: BasisSumFunction's mapToReferenceFrame doesn't yet support tensorial degree > 0.\n";
-      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "BasisSumFunction's mapToReferenceFrame doesn't yet support tensorial degree > 0.");
+    CellTopoPtr cellTopo = basisCache->cellTopology();
+    FieldContainer<double> cellCenter(cellTopo->getDimension());
+    
+    FieldContainer<double> refCellNodes(cellTopo->getNodeCount(),cellTopo->getDimension());
+    CamelliaCellTools::refCellNodesForTopology(refCellNodes, cellTopo);
+    
+    int nodeCount = cellTopo->getNodeCount();
+    for (int node=0; node < nodeCount; node++) {
+      for (int d=0; d<cellTopo->getDimension(); d++) {
+        cellCenter(d) += refCellNodes(node,d) / nodeCount;
+      }
     }
-
+    
+    // Resize initial guess depending on the rank of the physical points array
+    FieldContainer<double> initGuess;
+    
+    // Default: map (C,P,D) array of physical pt. sets to (C,P,D) array. Requires (C,P,D) initial guess.
+    initGuess.resize(numCells, numNodes, spaceDim);
+    // Set initial guess:
+    for(int c = 0; c < numCells; c++){
+      for(int p = 0; p < numNodes; p++){
+        for(int d = 0; d < spaceDim; d++){
+          initGuess(c, p, d) = cellCenter(d);
+        }// d
+      }// p
+    }// c
+    
+    CamelliaCellTools::mapToReferenceFrameInitGuess(relativeReferenceCellNodes, initGuess, *physicalCellNodes, _overridingBasisCache);
+  
     FieldContainer<double> oneCellRelativeReferenceNodes(1,numNodes,spaceDim);
     for (int n=0; n<numNodes; n++) {
       for (int d=0; d<spaceDim; d++) {
@@ -58,12 +80,7 @@ void BasisSumFunction::values(FieldContainer<double> &values, BasisCachePtr basi
     bool cachesAgreeOnSideness = basisCache->isSideCache() == _overridingBasisCache->isSideCache();
     FieldContainer<double> relativeReferencePoints = cachesAgreeOnSideness ? basisCache->getRefCellPoints() : basisCache->getSideRefCellPointsInVolumeCoordinates();
     FieldContainer<double> refPoints(1,relativeReferencePoints.dimension(0),relativeReferencePoints.dimension(1));
-    if (domainTopo->getTensorialDegree() == 0) {
-      Intrepid::CellTools<double>::mapToPhysicalFrame(refPoints, relativeReferencePoints, oneCellRelativeReferenceNodes, basisCache->cellTopology()->getShardsTopology());
-    } else {
-      cout << "ERROR: BasisSumFunction's mapToReferenceFrame doesn't yet support tensorial degree > 0.\n";
-      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "BasisSumFunction's mapToReferenceFrame doesn't yet support tensorial degree > 0.");
-    }
+    CamelliaCellTools::mapToPhysicalFrame(refPoints, relativeReferencePoints, oneCellRelativeReferenceNodes, basisCache->cellTopology());
     refPoints.resize(refPoints.dimension(1),refPoints.dimension(2)); // strip cell dimension
     _overridingBasisCache->setRefCellPoints(refPoints, basisCache->getCubatureWeights());
     basisCache = _overridingBasisCache;
@@ -71,7 +88,7 @@ void BasisSumFunction::values(FieldContainer<double> &values, BasisCachePtr basi
 
   int numDofs = _basis->getCardinality();
 
-  int spaceDim = basisCache->getSpaceDim();
+  int spaceDim = basisCache->cellTopology()->getDimension();
 
   bool basisIsVolumeBasis = _basis->domainTopology()->getDimension() == spaceDim;
 

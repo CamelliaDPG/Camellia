@@ -73,6 +73,9 @@ namespace Camellia {
     virtual void setRefCellPoints(const Intrepid::FieldContainer<double> &pointsRefCell,
                                   const Intrepid::FieldContainer<double> &cubatureWeights);
 
+    virtual void setPhysicalCellNodes(const Intrepid::FieldContainer<double> &physicalCellNodes,
+                                      const std::vector<GlobalIndexType> &cellIDs, bool createSideCacheToo);
+    
     virtual constFCPtr getValues(BasisPtr basis, Camellia::EOperator op, bool useCubPointsSideRefCell = false);
     virtual constFCPtr getTransformedValues(BasisPtr basis, Camellia::EOperator op, bool useCubPointsSideRefCell = false);
     virtual constFCPtr getTransformedWeightedValues(BasisPtr basis, Camellia::EOperator op, bool useCubPointsSideRefCell = false);

@@ -71,6 +71,37 @@ public:
   }
 };
 
+class SpatialFilterMatchingT : public SpatialFilter {
+  double _tol;
+  double _tToMatch;
+public:
+  SpatialFilterMatchingT(double tToMatch, double tol=1e-14) {
+    _tToMatch = tToMatch;
+    _tol = tol;
+  }
+  bool matchesPoint(double x, double t) {
+    if (abs(t-_tToMatch)<_tol) {
+      return true;
+    } else {
+      return false;
+    }
+  }
+  bool matchesPoint(double x, double y, double t) {
+    if (abs(t-_tToMatch)<_tol) {
+      return true;
+    } else {
+      return false;
+    }
+  }
+  bool matchesPoint(double x, double y, double z, double t) {
+    if (abs(t-_tToMatch)<_tol) {
+      return true;
+    } else {
+      return false;
+    }
+  }
+};
+
 class SpatialFilterLessThanX : public SpatialFilter {
   double _tol;
   double _xToMatch;
@@ -208,8 +239,15 @@ bool SpatialFilter::matchesPoint(double x, double y, double z) {
   TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "matchesPoint(x,y,z) unimplemented.");
 }
 
+bool SpatialFilter::matchesPoint(double x, double y, double z, double t) {
+  cout << "matchesPoint(x,y,z,t) unimplemented.\n";
+  TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "matchesPoint(x,y,z,t) unimplemented.");
+}
+
 bool SpatialFilter::matchesPoint(vector<double>&point) {
-  if (point.size() == 3) {
+  if (point.size() == 4) {
+    return matchesPoint(point[0],point[1],point[2],point[3]);
+  } else if (point.size() == 3) {
     return matchesPoint(point[0],point[1],point[2]);
   } else if (point.size() == 2) {
     return matchesPoint(point[0],point[1]);
@@ -275,6 +313,10 @@ bool SpatialFilterUnfiltered::matchesPoint(double x, double y, double z) {
   return true;
 }
 
+bool SpatialFilterUnfiltered::matchesPoint(double x, double y, double z, double t) {
+  return true;
+}
+
 bool SpatialFilterUnfiltered::matchesPoint(vector<double> &point) {
   return true;
 }
@@ -289,6 +331,10 @@ SpatialFilterPtr SpatialFilter::matchingY(double y) {
 
 SpatialFilterPtr SpatialFilter::matchingZ(double z) {
   return Teuchos::rcp( new SpatialFilterMatchingZ(z) );
+}
+
+SpatialFilterPtr SpatialFilter::matchingT(double t) {
+  return Teuchos::rcp( new SpatialFilterMatchingT(t) );
 }
 
 SpatialFilterPtr SpatialFilter::lessThanX(double x) {
@@ -332,6 +378,10 @@ bool SpatialFilterLogicalOr::matchesPoint(double x, double y, double z) {
   return _sf1->matchesPoint(x,y,z) || _sf2->matchesPoint(x,y,z);
 }
 
+bool SpatialFilterLogicalOr::matchesPoint(double x, double y, double z, double t) {
+  return _sf1->matchesPoint(x,y,z,t) || _sf2->matchesPoint(x,y,z,t);
+}
+
 bool SpatialFilterLogicalOr::matchesPoints(FieldContainer<bool> &pointsMatch, BasisCachePtr basisCache) {
   const FieldContainer<double>* points = &(basisCache->getPhysicalCubaturePoints());
   int numCells = points->dimension(0);
@@ -373,6 +423,11 @@ bool SpatialFilterLogicalAnd::matchesPoint(double x, double y) {
 bool SpatialFilterLogicalAnd::matchesPoint(double x, double y, double z) {
   return _sf1->matchesPoint(x,y,z) && _sf2->matchesPoint(x,y,z);
 }
+
+bool SpatialFilterLogicalAnd::matchesPoint(double x, double y, double z, double t) {
+  return _sf1->matchesPoint(x,y,z,t) && _sf2->matchesPoint(x,y,z,t);
+}
+
 bool SpatialFilterLogicalAnd::matchesPoints(FieldContainer<bool> &pointsMatch, BasisCachePtr basisCache) {
   const FieldContainer<double>* points = &(basisCache->getPhysicalCubaturePoints());
   int numCells = points->dimension(0);
@@ -412,6 +467,11 @@ bool NegatedSpatialFilter::matchesPoint(double x, double y) {
 bool NegatedSpatialFilter::matchesPoint(double x, double y, double z) {
   return ! _filterToNegate->matchesPoint(x,y,z);
 }
+
+bool NegatedSpatialFilter::matchesPoint(double x, double y, double z, double t) {
+  return ! _filterToNegate->matchesPoint(x,y,z,t);
+}
+
 bool NegatedSpatialFilter::matchesPoints(FieldContainer<bool> &pointsMatch, BasisCachePtr basisCache) {
   const FieldContainer<double>* points = &(basisCache->getPhysicalCubaturePoints());
   int numCells = points->dimension(0);

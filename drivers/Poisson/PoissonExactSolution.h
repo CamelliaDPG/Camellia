@@ -46,7 +46,7 @@
 
 using namespace Camellia;
 
-class PoissonExactSolution : public ExactSolution {
+class PoissonExactSolution : public ExactSolution<double> {
 public:
   enum PoissonExactSolutionType {
     POLYNOMIAL = 0,
@@ -67,7 +67,7 @@ public:
   
   std::vector<double> getPointForBCImposition();
   
-  static Teuchos::RCP<ExactSolution> poissonExactPolynomialSolution(int polyOrder, bool useConformingTraces = true);
+  static Teuchos::RCP<ExactSolution<double>> poissonExactPolynomialSolution(int polyOrder, bool useConformingTraces = true);
 };
 
 #endif

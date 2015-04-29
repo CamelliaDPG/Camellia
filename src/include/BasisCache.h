@@ -220,7 +220,8 @@ namespace Camellia {
     const Intrepid::FieldContainer<double> & getSideUnitNormals(int sideOrdinal);
 
     const Intrepid::FieldContainer<double> &getPhysicalCellNodes();
-    void setPhysicalCellNodes(const Intrepid::FieldContainer<double> &physicalCellNodes, const std::vector<GlobalIndexType> &cellIDs, bool createSideCacheToo);
+    virtual void setPhysicalCellNodes(const Intrepid::FieldContainer<double> &physicalCellNodes,
+                                      const std::vector<GlobalIndexType> &cellIDs, bool createSideCacheToo);
 
     /*** Methods added for BC support below ***/
     // setRefCellPoints overwrites _cubPoints -- for when cubature is not your interest

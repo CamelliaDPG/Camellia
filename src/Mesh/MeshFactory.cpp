@@ -1147,7 +1147,7 @@ MeshPtr MeshFactory::spaceTimeMesh(MeshTopologyPtr spatialMeshTopology, double t
 }
 
 // TODO: test this!
-MeshTopologyPtr MeshFactory::spaceTimeMeshTopology(MeshTopologyPtr spatialMeshTopology, double t0, double t1) {
+MeshTopologyPtr MeshFactory::spaceTimeMeshTopology(MeshTopologyPtr spatialMeshTopology, double t0, double t1, int temporalDivisions) {
   // we allow spatialMeshTopology to have been refined; we start with a coarse space-time topology matching the root spatial topology,
   // and then refine accordingly...
 
@@ -1169,51 +1169,66 @@ MeshTopologyPtr MeshFactory::spaceTimeMeshTopology(MeshTopologyPtr spatialMeshTo
   */
 
   IndexType N = spatialMeshTopology->getEntityCount(0);
-  vector<double> spaceTimeVertex(spaceTimeDim);
-  FieldContainer<double> timeValues(2,1);
-  timeValues[0] = t0;
-  timeValues[1] = t1;
-  for (int i=0; i<timeValues.size(); i++) {
-    for (IndexType vertexIndex=0; vertexIndex<N; vertexIndex++) {
-      const vector<double> *spaceVertex = &spatialMeshTopology->getVertex(vertexIndex);
-      for (int d=0; d<spaceDim; d++) {
-        spaceTimeVertex[d] = (*spaceVertex)[d];
+  for (int timeSubdivision=0; timeSubdivision<temporalDivisions; timeSubdivision++)
+  {
+    vector<double> spaceTimeVertex(spaceTimeDim);
+    FieldContainer<double> timeValues(2,1);
+    timeValues[0] = t0 + timeSubdivision * (t1-t0) / temporalDivisions;
+    timeValues[1] = t0 + (timeSubdivision+1) * (t1-t0) / temporalDivisions;
+    for (int i=0; i<timeValues.size(); i++)
+    {
+      for (IndexType vertexIndex=0; vertexIndex<N; vertexIndex++)
+      {
+        const vector<double> *spaceVertex = &spatialMeshTopology->getVertex(vertexIndex);
+        for (int d=0; d<spaceDim; d++)
+        {
+          spaceTimeVertex[d] = (*spaceVertex)[d];
+        }
+        spaceTimeVertex[spaceDim] = timeValues(i,0);
+        spaceTimeTopology->addVertex(spaceTimeVertex);
       }
-      spaceTimeVertex[spaceDim] = timeValues(i,0);
-      spaceTimeTopology->addVertex(spaceTimeVertex);
     }
   }
-
+  
+  // for now, we only do refinements on the first temporal subdivision
+  // later, we might want to enforce 1-irregularity, at least
   set<IndexType> cellIndices = rootSpatialTopology->getRootCellIndices();
   int tensorialDegree = 1;
   vector< FieldContainer<double> > componentNodes(2);
-  componentNodes[1] = timeValues;
   FieldContainer<double> spatialCellNodes;
   FieldContainer<double> spaceTimeCellNodes;
+  
+  map<IndexType,IndexType> cellIDMap; // from space-time ID (in first temporal subdivision) to corresponding spatial ID
+  
+  for (int timeSubdivision=0; timeSubdivision<temporalDivisions; timeSubdivision++)
+  {
+    FieldContainer<double> timeValues(2,1);
+    timeValues[0] = t0 + timeSubdivision * (t1-t0) / temporalDivisions;
+    timeValues[1] = t0 + (timeSubdivision+1) * (t1-t0) / temporalDivisions;
+    componentNodes[1] = timeValues;
 
-  map<IndexType,IndexType> cellIDMap; // from space-time ID to corresponding spatial ID
+    for (set<IndexType>::iterator cellIt = cellIndices.begin(); cellIt != cellIndices.end(); cellIt++) {
+      IndexType cellIndex = *cellIt;
+      CellPtr spatialCell = rootSpatialTopology->getCell(cellIndex);
+      CellTopoPtr spaceTimeCellTopology = CellTopology::cellTopology(spatialCell->topology(), tensorialDegree);
+      int vertexCount = spatialCell->topology()->getVertexCount();
 
-  for (set<IndexType>::iterator cellIt = cellIndices.begin(); cellIt != cellIndices.end(); cellIt++) {
-    IndexType cellIndex = *cellIt;
-    CellPtr spatialCell = rootSpatialTopology->getCell(cellIndex);
-    CellTopoPtr spaceTimeCellTopology = CellTopology::cellTopology(spatialCell->topology(), tensorialDegree);
-    int vertexCount = spatialCell->topology()->getVertexCount();
-
-    spatialCellNodes.resize(vertexCount,spaceDim);
-    const vector<IndexType>* vertexIndices = &spatialCell->vertices();
-    for (int vertex=0; vertex<vertexCount; vertex++) {
-      IndexType vertexIndex = (*vertexIndices)[vertex];
-      for (int i=0; i<spaceDim; i++) {
-        spatialCellNodes(vertex,i) = spatialMeshTopology->getVertex(vertexIndex)[i];
+      spatialCellNodes.resize(vertexCount,spaceDim);
+      const vector<IndexType>* vertexIndices = &spatialCell->vertices();
+      for (int vertex=0; vertex<vertexCount; vertex++) {
+        IndexType vertexIndex = (*vertexIndices)[vertex];
+        for (int i=0; i<spaceDim; i++) {
+          spatialCellNodes(vertex,i) = spatialMeshTopology->getVertex(vertexIndex)[i];
+        }
       }
+      componentNodes[0] = spatialCellNodes;
+      
+      spaceTimeCellNodes.resize(spaceTimeCellTopology->getVertexCount(),spaceTimeDim);
+      spaceTimeCellTopology->initializeNodes(componentNodes, spaceTimeCellNodes);
+      
+      CellPtr spaceTimeCell = spaceTimeTopology->addCell(spaceTimeCellTopology, spaceTimeCellNodes);
+      if (timeSubdivision==0) cellIDMap[spaceTimeCell->cellIndex()] = cellIndex;
     }
-    componentNodes[0] = spatialCellNodes;
-
-    spaceTimeCellNodes.resize(spaceTimeCellTopology->getVertexCount(),spaceTimeDim);
-    spaceTimeCellTopology->initializeNodes(componentNodes, spaceTimeCellNodes);
-
-    CellPtr spaceTimeCell = spaceTimeTopology->addCell(spaceTimeCellTopology, spaceTimeCellNodes);
-    cellIDMap[spaceTimeCell->cellIndex()] = cellIndex;
   }
 
   bool noCellsToRefine = false;

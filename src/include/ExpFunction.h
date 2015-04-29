@@ -59,5 +59,19 @@ namespace Camellia {
     TFunctionPtr<double> dy();
     string displayString();
   };
+  
+  class Exp_at : public SimpleFunction<double> {
+    double _a;
+  public:
+    Exp_at(double a);
+    double value(double x, double t);
+    double value(double x, double y, double t);
+    double value(double x, double y, double z, double t);
+    TFunctionPtr<double> dx();
+    TFunctionPtr<double> dy();
+    TFunctionPtr<double> dz();
+    TFunctionPtr<double> dt();
+    string displayString();
+  };
 }
 #endif

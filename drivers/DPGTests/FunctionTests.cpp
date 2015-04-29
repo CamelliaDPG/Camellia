@@ -869,7 +869,7 @@ bool FunctionTests::testValuesDottedWithTensor() {
 
   // now, let's try the same thing, but for a LinearTerm dot product
   VarFactoryPtr vf = VarFactory::varFactory();
-  VarPtr v = vf.testVar("v", HGRAD);
+  VarPtr v = vf->testVar("v", HGRAD);
 
   DofOrderingPtr dofOrdering = Teuchos::rcp( new DofOrdering(CellTopology::quad()) );
   shards::CellTopology quad_4(shards::getCellTopologyData<shards::Quadrilateral<4> >() );
@@ -912,7 +912,7 @@ bool FunctionTests::testValuesDottedWithTensor() {
 //  BasisPtr compBasis = vectorBasis->getComponentBasis();
 //
 //  // create a new v, and a new dofOrdering
-//  VarPtr v_vector = vf.testVar("v_vector", VECTOR_HGRAD);
+//  VarPtr v_vector = vf->testVar("v_vector", VECTOR_HGRAD);
 //  dofOrdering = Teuchos::rcp( new DofOrdering );
 //  dofOrdering->addEntry(v_vector->ID(), vectorBasis, v_vector->rank());
 //

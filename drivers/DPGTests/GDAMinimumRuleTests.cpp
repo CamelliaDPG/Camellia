@@ -737,7 +737,7 @@ bool GDAMinimumRuleTests::subTestCompatibleSolutionsAgree(int horizontalCells, i
     double tol=1e-9; // OK, this is a very loose tolerance...
     for (set<int>::iterator varIt = varIDs.begin(); varIt != varIDs.end(); varIt++) {
       int varID = *varIt;
-      VarPtr var = vf.trial(varID);
+      VarPtr var = vf->trial(varID);
       string varName = var->name();
 
       FunctionPtr maxRuleSolnFxn = Function::solution(var, maxRuleSoln); //Teuchos::rcp( new PreviousSolutionFunction( maxRuleSoln, var ));
@@ -1353,8 +1353,8 @@ bool GDAMinimumRuleTests::testHangingNodeStokes(bool useQuads) {
   soln->solve();
 
   VarFactoryPtr vf = soln->mesh()->bilinearForm()->varFactory();
-  VarPtr u1 = vf.fieldVar(S_GDAMinimumRuleTests_U1);
-  VarPtr u2 = vf.fieldVar(S_GDAMinimumRuleTests_U2);
+  VarPtr u1 = vf->fieldVar(S_GDAMinimumRuleTests_U1);
+  VarPtr u2 = vf->fieldVar(S_GDAMinimumRuleTests_U2);
 
   FunctionPtr u1_soln = Function::solution(u1, soln);
   FunctionPtr u2_soln = Function::solution(u2, soln);

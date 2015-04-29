@@ -97,7 +97,7 @@ namespace Camellia {
     static MeshPtr spaceTimeMesh(MeshTopologyPtr spatialMeshTopology, double t0, double t1,
                                  TBFPtr<double> bf, int spatialH1Order, int temporalH1Order, int pToAdd);
 
-    static MeshTopologyPtr spaceTimeMeshTopology(MeshTopologyPtr spatialMeshTopology, double t0, double t1);
+    static MeshTopologyPtr spaceTimeMeshTopology(MeshTopologyPtr spatialMeshTopology, double t0, double t1, int temporalDivisions=1);
   };
 }
 

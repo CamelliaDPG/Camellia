@@ -159,9 +159,9 @@ bool RHSTests::testComputeRHSLegacy() {
 
     TestRHSOne rhs; // rhs == 1 => just integrate the test functions
     // compute with the fake optimal test weights:
-    BilinearFormUtility::computeRHS(actualRHSVector, bilinearForm, rhs,
-                                    optimalTestWeights, testOrdering,
-                                    cellTopo, nodePoints);
+    BilinearFormUtility<double>::computeRHS(actualRHSVector, bilinearForm, rhs,
+                                            optimalTestWeights, testOrdering,
+                                            cellTopo, nodePoints);
 
     if (numSides==3) {
       TestRHSOne::expectedRHSForCubicOnTri(expectedRHSVector);
@@ -201,9 +201,9 @@ bool RHSTests::testComputeRHSLegacy() {
       for (int i=0; i<numLowOrderTrialDofs; i++) {
         lowOrderOptimalTestWeights(0,i,i) = 1.0;
       }
-      BilinearFormUtility::computeRHS(lowOrderRHSVector, bilinearForm, rhs,
-                                      lowOrderOptimalTestWeights, lowOrderTestOrdering,
-                                      cellTopo, nodePoints);
+      BilinearFormUtility<double>::computeRHS(lowOrderRHSVector, bilinearForm, rhs,
+                                              lowOrderOptimalTestWeights, lowOrderTestOrdering,
+                                              cellTopo, nodePoints);
 
       TestRHSOne::expectedRHSForLinearOnUnitTri(expectedRHSVector);
 
@@ -214,9 +214,9 @@ bool RHSTests::testComputeRHSLegacy() {
       }
     }
 
-    BilinearFormUtility::computeRHS(actualRHSVector, bilinearForm, rhs,
-                                    optimalTestWeights, testOrdering,
-                                    cellTopo, nodePoints);
+    BilinearFormUtility<double>::computeRHS(actualRHSVector, bilinearForm, rhs,
+                                            optimalTestWeights, testOrdering,
+                                            cellTopo, nodePoints);
 
     if (numSides==3) {
       TestRHSOne::expectedRHSForCubicOnUnitTri(expectedRHSVector);
@@ -238,9 +238,9 @@ bool RHSTests::testComputeRHSLegacy() {
     }
 
     TestRHSLinear linearRHS;
-    BilinearFormUtility::computeRHS(actualRHSVector, bilinearForm, linearRHS,
-                                    optimalTestWeights, testOrdering,
-                                    cellTopo, nodePoints);
+    BilinearFormUtility<double>::computeRHS(actualRHSVector, bilinearForm, linearRHS,
+                                            optimalTestWeights, testOrdering,
+                                            cellTopo, nodePoints);
 
     if (numSides==3) {
       TestRHSLinear::expectedRHSForCubicOnTri(expectedRHSVector);
@@ -265,9 +265,9 @@ bool RHSTests::testComputeRHSLegacy() {
       nodePoints(0,3,0) = 0.0;
       nodePoints(0,3,1) = 1.0;
     }
-    BilinearFormUtility::computeRHS(actualRHSVector, bilinearForm, linearRHS,
-                                    optimalTestWeights, testOrdering,
-                                    cellTopo, nodePoints);
+    BilinearFormUtility<double>::computeRHS(actualRHSVector, bilinearForm, linearRHS,
+                                            optimalTestWeights, testOrdering,
+                                            cellTopo, nodePoints);
 
     if (numSides==3) {
       TestRHSLinear::expectedRHSForCubicOnUnitTri(expectedRHSVector);

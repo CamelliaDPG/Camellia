@@ -66,6 +66,11 @@ namespace Camellia {
     VarPtr traceVar(std::string name, VarPtr termTraced, Space fs = HGRAD, int ID = -1);
     VarPtr traceVar(std::string name, Space fs = HGRAD, int ID = -1);
 
+    // Methods for creating space-time traces that are not defined on purely temporal interfaces:
+    VarPtr traceVarSpaceOnly(std::string name, LinearTermPtr termTraced, Space fs = HGRAD, int ID = -1);
+    VarPtr traceVarSpaceOnly(std::string name, VarPtr termTraced, Space fs = HGRAD, int ID = -1);
+    VarPtr traceVarSpaceOnly(std::string name, Space fs = HGRAD, int ID = -1);
+
     const std::map< int, VarPtr > & testVars() const;
     const std::map< int, VarPtr > & trialVars() const;
 

@@ -55,25 +55,25 @@ namespace Camellia {
     VSPStokesFormulation(double mu) {
       _mu = mu;
 
-      tau1 = varFactory.testVar("\\tau_1", HDIV);
-      tau2 = varFactory.testVar("\\tau_2", HDIV);
-      v1 = varFactory.testVar("v_1", HGRAD);
-      v2 = varFactory.testVar("v_2", HGRAD);
-      v3 = varFactory.testVar("v_3", HGRAD);
+      tau1 = varFactory->testVar("\\tau_1", HDIV);
+      tau2 = varFactory->testVar("\\tau_2", HDIV);
+      v1 = varFactory->testVar("v_1", HGRAD);
+      v2 = varFactory->testVar("v_2", HGRAD);
+      v3 = varFactory->testVar("v_3", HGRAD);
 
-      u1hat = varFactory.traceVar("\\widehat{u}_1");
-      u2hat = varFactory.traceVar("\\widehat{u}_2");
-      sigma1n = varFactory.fluxVar("\\widehat{\\sigma}_{1n}");
-      sigma2n = varFactory.fluxVar("\\widehat{\\sigma}_{2n}");
-      //    unhat = varFactory.fluxVar("\\widehat{u}_n"); // TEMPORARY: added back in for testing
+      u1hat = varFactory->traceVar("\\widehat{u}_1");
+      u2hat = varFactory->traceVar("\\widehat{u}_2");
+      sigma1n = varFactory->fluxVar("\\widehat{\\sigma}_{1n}");
+      sigma2n = varFactory->fluxVar("\\widehat{\\sigma}_{2n}");
+      //    unhat = varFactory->fluxVar("\\widehat{u}_n"); // TEMPORARY: added back in for testing
 
-      u1 = varFactory.fieldVar("u_1");
-      u2 = varFactory.fieldVar("u_2");
-      sigma11 = varFactory.fieldVar("\\sigma_{11}");
-      sigma12 = varFactory.fieldVar("\\sigma_{12}");
-      sigma22 = varFactory.fieldVar("\\sigma_{22}");
-      omega = varFactory.fieldVar("\\omega");
-      p = varFactory.fieldVar("p");
+      u1 = varFactory->fieldVar("u_1");
+      u2 = varFactory->fieldVar("u_2");
+      sigma11 = varFactory->fieldVar("\\sigma_{11}");
+      sigma12 = varFactory->fieldVar("\\sigma_{12}");
+      sigma22 = varFactory->fieldVar("\\sigma_{22}");
+      omega = varFactory->fieldVar("\\omega");
+      p = varFactory->fieldVar("p");
 
       // construct bilinear form:
       _bf = Teuchos::rcp( new BF(varFactory) );
@@ -242,24 +242,24 @@ namespace Camellia {
 
       VarFactoryPtr varFactory = VarFactory::varFactory();
       VarPtr myVar;
-      myVar = varFactory.testVar(VVP_V_S, VECTOR_HGRAD);
-      myVar = varFactory.testVar(VVP_Q1_S, HGRAD);
-      myVar = varFactory.testVar(VVP_Q2_S, HGRAD);
+      myVar = varFactory->testVar(VVP_V_S, VECTOR_HGRAD);
+      myVar = varFactory->testVar(VVP_Q1_S, HGRAD);
+      myVar = varFactory->testVar(VVP_Q2_S, HGRAD);
 
       if (!trueTraces) {
-        myVar = varFactory.traceVar(VVP_U1HAT_S);
-        myVar = varFactory.traceVar(VVP_U2HAT_S);
+        myVar = varFactory->traceVar(VVP_U1HAT_S);
+        myVar = varFactory->traceVar(VVP_U2HAT_S);
       } else {
-        myVar = varFactory.fluxVar(VVP_U_DOT_HAT_S);
-        myVar = varFactory.fluxVar(VVP_U_CROSS_HAT_S);
+        myVar = varFactory->fluxVar(VVP_U_DOT_HAT_S);
+        myVar = varFactory->fluxVar(VVP_U_CROSS_HAT_S);
       }
-      myVar = varFactory.traceVar(VVP_OMEGA_HAT_S);
-      myVar = varFactory.traceVar(VVP_P_HAT_S);
+      myVar = varFactory->traceVar(VVP_OMEGA_HAT_S);
+      myVar = varFactory->traceVar(VVP_P_HAT_S);
 
-      myVar = varFactory.fieldVar(VVP_U1_S);
-      myVar = varFactory.fieldVar(VVP_U2_S);
-      myVar = varFactory.fieldVar(VVP_OMEGA_S);
-      myVar = varFactory.fieldVar(VVP_P_S);
+      myVar = varFactory->fieldVar(VVP_U1_S);
+      myVar = varFactory->fieldVar(VVP_U2_S);
+      myVar = varFactory->fieldVar(VVP_OMEGA_S);
+      myVar = varFactory->fieldVar(VVP_P_S);
 
       return varFactory;
     }
@@ -269,24 +269,24 @@ namespace Camellia {
       varFactory = vvpVarFactory(trueTraces);
 
       // look up the created VarPtrs:
-      v = varFactory.testVar(VVP_V_S, VECTOR_HGRAD);
-      q1 = varFactory.testVar(VVP_Q1_S, HGRAD);
-      q2 = varFactory.testVar(VVP_Q2_S, HGRAD);
+      v = varFactory->testVar(VVP_V_S, VECTOR_HGRAD);
+      q1 = varFactory->testVar(VVP_Q1_S, HGRAD);
+      q2 = varFactory->testVar(VVP_Q2_S, HGRAD);
 
       if (!trueTraces) {
-        u1hat = varFactory.traceVar(VVP_U1HAT_S);
-        u2hat = varFactory.traceVar(VVP_U2HAT_S);
+        u1hat = varFactory->traceVar(VVP_U1HAT_S);
+        u2hat = varFactory->traceVar(VVP_U2HAT_S);
       } else {
-        u_n = varFactory.fluxVar(VVP_U_DOT_HAT_S);
-        u_xn = varFactory.fluxVar(VVP_U_CROSS_HAT_S);
+        u_n = varFactory->fluxVar(VVP_U_DOT_HAT_S);
+        u_xn = varFactory->fluxVar(VVP_U_CROSS_HAT_S);
       }
-      omega_hat = varFactory.traceVar(VVP_OMEGA_HAT_S);
-      p_hat = varFactory.traceVar(VVP_P_HAT_S);
+      omega_hat = varFactory->traceVar(VVP_OMEGA_HAT_S);
+      p_hat = varFactory->traceVar(VVP_P_HAT_S);
 
-      u1 = varFactory.fieldVar(VVP_U1_S);
-      u2 = varFactory.fieldVar(VVP_U2_S);
-      omega = varFactory.fieldVar(VVP_OMEGA_S);
-      p = varFactory.fieldVar(VVP_P_S);
+      u1 = varFactory->fieldVar(VVP_U1_S);
+      u2 = varFactory->fieldVar(VVP_U2_S);
+      omega = varFactory->fieldVar(VVP_OMEGA_S);
+      p = varFactory->fieldVar(VVP_P_S);
     }
 
     VVPStokesFormulation(double mu, bool trueTraces = false) {
@@ -451,30 +451,30 @@ namespace Camellia {
       varFactory = vgpVarFactory(_enriched_velocity);
 
       // look up the created VarPtrs:
-      v1 = varFactory.testVar(VGP_V1_S, HGRAD);
-      v2 = varFactory.testVar(VGP_V2_S, HGRAD);
-      tau1 = varFactory.testVar(VGP_TAU1_S, HDIV);
-      tau2 = varFactory.testVar(VGP_TAU2_S, HDIV);
-      q = varFactory.testVar(VGP_Q_S, HGRAD);
+      v1 = varFactory->testVar(VGP_V1_S, HGRAD);
+      v2 = varFactory->testVar(VGP_V2_S, HGRAD);
+      tau1 = varFactory->testVar(VGP_TAU1_S, HDIV);
+      tau2 = varFactory->testVar(VGP_TAU2_S, HDIV);
+      q = varFactory->testVar(VGP_Q_S, HGRAD);
 
-      u1hat = varFactory.traceVar(VGP_U1HAT_S);
-      u2hat = varFactory.traceVar(VGP_U2HAT_S);
+      u1hat = varFactory->traceVar(VGP_U1HAT_S);
+      u2hat = varFactory->traceVar(VGP_U2HAT_S);
 
-      t1n = varFactory.fluxVar(VGP_T1HAT_S);
-      t2n = varFactory.fluxVar(VGP_T2HAT_S);
+      t1n = varFactory->fluxVar(VGP_T1HAT_S);
+      t2n = varFactory->fluxVar(VGP_T2HAT_S);
       if (! _enriched_velocity) {
-        u1 = varFactory.fieldVar(VGP_U1_S);
-        u2 = varFactory.fieldVar(VGP_U2_S);
+        u1 = varFactory->fieldVar(VGP_U1_S);
+        u2 = varFactory->fieldVar(VGP_U2_S);
       } else {
-        u1 = varFactory.fieldVar(VGP_U1_S, HGRAD);
-        u2 = varFactory.fieldVar(VGP_U2_S, HGRAD);
+        u1 = varFactory->fieldVar(VGP_U1_S, HGRAD);
+        u2 = varFactory->fieldVar(VGP_U2_S, HGRAD);
       }
 
-      sigma11 = varFactory.fieldVar(VGP_SIGMA11_S);
-      sigma12 = varFactory.fieldVar(VGP_SIGMA12_S);
-      sigma21 = varFactory.fieldVar(VGP_SIGMA21_S);
-      sigma22 = varFactory.fieldVar(VGP_SIGMA22_S);
-      p = varFactory.fieldVar(VGP_P_S);
+      sigma11 = varFactory->fieldVar(VGP_SIGMA11_S);
+      sigma12 = varFactory->fieldVar(VGP_SIGMA12_S);
+      sigma21 = varFactory->fieldVar(VGP_SIGMA21_S);
+      sigma22 = varFactory->fieldVar(VGP_SIGMA22_S);
+      p = varFactory->fieldVar(VGP_P_S);
     }
 
     void init(TFunctionPtr<double> mu, bool enriched_velocity, bool scaleSigmaByMu) {
@@ -550,29 +550,29 @@ namespace Camellia {
 
       VarFactoryPtr varFactory = VarFactory::varFactory();
       VarPtr myVar;
-      myVar = varFactory.testVar(VGP_V1_S, HGRAD);
-      myVar = varFactory.testVar(VGP_V2_S, HGRAD);
-      myVar = varFactory.testVar(VGP_TAU1_S, HDIV);
-      myVar = varFactory.testVar(VGP_TAU2_S, HDIV);
-      myVar = varFactory.testVar(VGP_Q_S, HGRAD);
+      myVar = varFactory->testVar(VGP_V1_S, HGRAD);
+      myVar = varFactory->testVar(VGP_V2_S, HGRAD);
+      myVar = varFactory->testVar(VGP_TAU1_S, HDIV);
+      myVar = varFactory->testVar(VGP_TAU2_S, HDIV);
+      myVar = varFactory->testVar(VGP_Q_S, HGRAD);
 
-      myVar = varFactory.traceVar(VGP_U1HAT_S);
-      myVar = varFactory.traceVar(VGP_U2HAT_S);
+      myVar = varFactory->traceVar(VGP_U1HAT_S);
+      myVar = varFactory->traceVar(VGP_U2HAT_S);
 
-      myVar = varFactory.fluxVar(VGP_T1HAT_S);
-      myVar = varFactory.fluxVar(VGP_T2HAT_S);
+      myVar = varFactory->fluxVar(VGP_T1HAT_S);
+      myVar = varFactory->fluxVar(VGP_T2HAT_S);
       if (! enriched_velocity) {
-        myVar = varFactory.fieldVar(VGP_U1_S);
-        myVar = varFactory.fieldVar(VGP_U2_S);
+        myVar = varFactory->fieldVar(VGP_U1_S);
+        myVar = varFactory->fieldVar(VGP_U2_S);
       } else {
-        myVar = varFactory.fieldVar(VGP_U1_S, HGRAD);
-        myVar = varFactory.fieldVar(VGP_U2_S, HGRAD);
+        myVar = varFactory->fieldVar(VGP_U1_S, HGRAD);
+        myVar = varFactory->fieldVar(VGP_U2_S, HGRAD);
       }
-      myVar = varFactory.fieldVar(VGP_SIGMA11_S);
-      myVar = varFactory.fieldVar(VGP_SIGMA12_S);
-      myVar = varFactory.fieldVar(VGP_SIGMA21_S);
-      myVar = varFactory.fieldVar(VGP_SIGMA22_S);
-      myVar = varFactory.fieldVar(VGP_P_S);
+      myVar = varFactory->fieldVar(VGP_SIGMA11_S);
+      myVar = varFactory->fieldVar(VGP_SIGMA12_S);
+      myVar = varFactory->fieldVar(VGP_SIGMA21_S);
+      myVar = varFactory->fieldVar(VGP_SIGMA22_S);
+      myVar = varFactory->fieldVar(VGP_P_S);
       return varFactory;
     }
 
@@ -767,24 +767,24 @@ namespace Camellia {
       varFactory = vgpfVarFactory();
 
       // look up the created VarPtrs:
-      v1 = varFactory.testVar(VGPF_V1_S, HGRAD);
-      v2 = varFactory.testVar(VGPF_V2_S, HGRAD);
-      tau1 = varFactory.testVar(VGPF_TAU1_S, HDIV);
-      tau2 = varFactory.testVar(VGPF_TAU2_S, HDIV);
-      q = varFactory.testVar(VGPF_Q_S, HGRAD);
+      v1 = varFactory->testVar(VGPF_V1_S, HGRAD);
+      v2 = varFactory->testVar(VGPF_V2_S, HGRAD);
+      tau1 = varFactory->testVar(VGPF_TAU1_S, HDIV);
+      tau2 = varFactory->testVar(VGPF_TAU2_S, HDIV);
+      q = varFactory->testVar(VGPF_Q_S, HGRAD);
 
-      u1hat = varFactory.traceVar(VGPF_U1HAT_S);
-      u2hat = varFactory.traceVar(VGPF_U2HAT_S);
+      u1hat = varFactory->traceVar(VGPF_U1HAT_S);
+      u2hat = varFactory->traceVar(VGPF_U2HAT_S);
 
-      t1n = varFactory.fluxVar(VGPF_T1HAT_S);
-      t2n = varFactory.fluxVar(VGPF_T2HAT_S);
-      u = varFactory.fieldVar(VGPF_U_S, HDIV_FREE);
+      t1n = varFactory->fluxVar(VGPF_T1HAT_S);
+      t2n = varFactory->fluxVar(VGPF_T2HAT_S);
+      u = varFactory->fieldVar(VGPF_U_S, HDIV_FREE);
 
-      sigma11 = varFactory.fieldVar(VGPF_SIGMA11_S);
-      sigma12 = varFactory.fieldVar(VGPF_SIGMA12_S);
-      sigma21 = varFactory.fieldVar(VGPF_SIGMA21_S);
-      sigma22 = varFactory.fieldVar(VGPF_SIGMA22_S);
-      p = varFactory.fieldVar(VGPF_P_S);
+      sigma11 = varFactory->fieldVar(VGPF_SIGMA11_S);
+      sigma12 = varFactory->fieldVar(VGPF_SIGMA12_S);
+      sigma21 = varFactory->fieldVar(VGPF_SIGMA21_S);
+      sigma22 = varFactory->fieldVar(VGPF_SIGMA22_S);
+      p = varFactory->fieldVar(VGPF_P_S);
     }
 
     void init(TFunctionPtr<double> mu) {
@@ -854,24 +854,24 @@ namespace Camellia {
 
       VarFactoryPtr varFactory = VarFactory::varFactory();
       VarPtr myVar;
-      myVar = varFactory.testVar(VGPF_V1_S, HGRAD);
-      myVar = varFactory.testVar(VGPF_V2_S, HGRAD);
-      myVar = varFactory.testVar(VGPF_TAU1_S, HDIV);
-      myVar = varFactory.testVar(VGPF_TAU2_S, HDIV);
-      myVar = varFactory.testVar(VGPF_Q_S, HGRAD);
+      myVar = varFactory->testVar(VGPF_V1_S, HGRAD);
+      myVar = varFactory->testVar(VGPF_V2_S, HGRAD);
+      myVar = varFactory->testVar(VGPF_TAU1_S, HDIV);
+      myVar = varFactory->testVar(VGPF_TAU2_S, HDIV);
+      myVar = varFactory->testVar(VGPF_Q_S, HGRAD);
 
-      myVar = varFactory.traceVar(VGPF_U1HAT_S);
-      myVar = varFactory.traceVar(VGPF_U2HAT_S);
+      myVar = varFactory->traceVar(VGPF_U1HAT_S);
+      myVar = varFactory->traceVar(VGPF_U2HAT_S);
 
-      myVar = varFactory.fluxVar(VGPF_T1HAT_S);
-      myVar = varFactory.fluxVar(VGPF_T2HAT_S);
+      myVar = varFactory->fluxVar(VGPF_T1HAT_S);
+      myVar = varFactory->fluxVar(VGPF_T2HAT_S);
 
-      myVar = varFactory.fieldVar(VGPF_U_S, HDIV_FREE);
-      myVar = varFactory.fieldVar(VGPF_SIGMA11_S);
-      myVar = varFactory.fieldVar(VGPF_SIGMA12_S);
-      myVar = varFactory.fieldVar(VGPF_SIGMA21_S);
-      myVar = varFactory.fieldVar(VGPF_SIGMA22_S);
-      myVar = varFactory.fieldVar(VGPF_P_S);
+      myVar = varFactory->fieldVar(VGPF_U_S, HDIV_FREE);
+      myVar = varFactory->fieldVar(VGPF_SIGMA11_S);
+      myVar = varFactory->fieldVar(VGPF_SIGMA12_S);
+      myVar = varFactory->fieldVar(VGPF_SIGMA21_S);
+      myVar = varFactory->fieldVar(VGPF_SIGMA22_S);
+      myVar = varFactory->fieldVar(VGPF_P_S);
       return varFactory;
     }
 
@@ -989,23 +989,23 @@ namespace Camellia {
     DDSStokesFormulation(double mu) {
       _mu = mu;
 
-      v1 = varFactory.testVar("v_1", HGRAD);
-      v2 = varFactory.testVar("v_2", HGRAD);
+      v1 = varFactory->testVar("v_1", HGRAD);
+      v2 = varFactory->testVar("v_2", HGRAD);
 
-      tau11 = varFactory.testVar("\\tau_{11}", HGRAD);
-      tau12 = varFactory.testVar("\\tau_{12}", HGRAD);
-      tau22 = varFactory.testVar("\\tau_{22}", HGRAD);
+      tau11 = varFactory->testVar("\\tau_{11}", HGRAD);
+      tau12 = varFactory->testVar("\\tau_{12}", HGRAD);
+      tau22 = varFactory->testVar("\\tau_{22}", HGRAD);
 
-      sigma1n = varFactory.fluxVar("\\widehat{\\sigma}_{1n}");
-      sigma2n = varFactory.fluxVar("\\widehat{\\sigma}_{2n}");
-      u1hat = varFactory.traceVar("\\widehat{u}_1");
-      u2hat = varFactory.traceVar("\\widehat{u}_2");
+      sigma1n = varFactory->fluxVar("\\widehat{\\sigma}_{1n}");
+      sigma2n = varFactory->fluxVar("\\widehat{\\sigma}_{2n}");
+      u1hat = varFactory->traceVar("\\widehat{u}_1");
+      u2hat = varFactory->traceVar("\\widehat{u}_2");
 
-      u1 = varFactory.fieldVar("u_1");
-      u2 = varFactory.fieldVar("u_2");
-      sigma11 = varFactory.fieldVar("\\sigma_{11}");
-      sigma12 = varFactory.fieldVar("\\sigma_{12}");
-      sigma22 = varFactory.fieldVar("\\sigma_{22}");
+      u1 = varFactory->fieldVar("u_1");
+      u2 = varFactory->fieldVar("u_2");
+      sigma11 = varFactory->fieldVar("\\sigma_{11}");
+      sigma12 = varFactory->fieldVar("\\sigma_{12}");
+      sigma22 = varFactory->fieldVar("\\sigma_{22}");
 
       // construct bilinear form:
       _bf = Teuchos::rcp( new BF(varFactory) );
@@ -1137,26 +1137,26 @@ namespace Camellia {
     DDSPStokesFormulation(double mu) {
       _mu = mu;
 
-      v1 = varFactory.testVar("v_1", HGRAD);
-      v2 = varFactory.testVar("v_2", HGRAD);
-      v3 = varFactory.testVar("v_3", HGRAD);
+      v1 = varFactory->testVar("v_1", HGRAD);
+      v2 = varFactory->testVar("v_2", HGRAD);
+      v3 = varFactory->testVar("v_3", HGRAD);
 
-      tau11 = varFactory.testVar("\\tau_{11}", HGRAD);
-      tau12 = varFactory.testVar("\\tau_{12}", HGRAD);
-      tau22 = varFactory.testVar("\\tau_{22}", HGRAD);
+      tau11 = varFactory->testVar("\\tau_{11}", HGRAD);
+      tau12 = varFactory->testVar("\\tau_{12}", HGRAD);
+      tau22 = varFactory->testVar("\\tau_{22}", HGRAD);
 
-      sigma1n = varFactory.fluxVar("\\widehat{\\sigma}_{1n}");
-      sigma2n = varFactory.fluxVar("\\widehat{\\sigma}_{2n}");
+      sigma1n = varFactory->fluxVar("\\widehat{\\sigma}_{1n}");
+      sigma2n = varFactory->fluxVar("\\widehat{\\sigma}_{2n}");
 
-      u1hat = varFactory.traceVar("\\widehat{u}_1");
-      u2hat = varFactory.traceVar("\\widehat{u}_2");
+      u1hat = varFactory->traceVar("\\widehat{u}_1");
+      u2hat = varFactory->traceVar("\\widehat{u}_2");
 
-      u1 = varFactory.fieldVar("u_1");
-      u2 = varFactory.fieldVar("u_2");
-      sigma11 = varFactory.fieldVar("\\sigma_{11}");
-      sigma12 = varFactory.fieldVar("\\sigma_{12}");
-      sigma22 = varFactory.fieldVar("\\sigma_{22}");
-      p = varFactory.fieldVar("p");
+      u1 = varFactory->fieldVar("u_1");
+      u2 = varFactory->fieldVar("u_2");
+      sigma11 = varFactory->fieldVar("\\sigma_{11}");
+      sigma12 = varFactory->fieldVar("\\sigma_{12}");
+      sigma22 = varFactory->fieldVar("\\sigma_{22}");
+      p = varFactory->fieldVar("p");
 
       // construct bilinear form:
       _bf = Teuchos::rcp( new BF(varFactory) );
@@ -1316,21 +1316,21 @@ namespace Camellia {
       varFactory = ceVarFactory();
 
       // look up the created VarPtrs:
-      v1 = varFactory.testVar(CE_V1_S, HGRAD);
-      v2 = varFactory.testVar(CE_V2_S, HGRAD);
-      q = varFactory.testVar(CE_Q_S, HGRAD);
-      tau1 = varFactory.testVar(CE_TAU1_S, HDIV);
-      tau2 = varFactory.testVar(CE_TAU2_S, HDIV);
+      v1 = varFactory->testVar(CE_V1_S, HGRAD);
+      v2 = varFactory->testVar(CE_V2_S, HGRAD);
+      q = varFactory->testVar(CE_Q_S, HGRAD);
+      tau1 = varFactory->testVar(CE_TAU1_S, HDIV);
+      tau2 = varFactory->testVar(CE_TAU2_S, HDIV);
 
-      u1hat = varFactory.traceVar(CE_U1HAT_S);
-      u2hat = varFactory.traceVar(CE_U2HAT_S);
+      u1hat = varFactory->traceVar(CE_U1HAT_S);
+      u2hat = varFactory->traceVar(CE_U2HAT_S);
 
-      t1n = varFactory.fluxVar(CE_T1HAT_S);
-      t2n = varFactory.fluxVar(CE_T2HAT_S);
+      t1n = varFactory->fluxVar(CE_T1HAT_S);
+      t2n = varFactory->fluxVar(CE_T2HAT_S);
 
-      u1 = varFactory.fieldVar(CE_U1_S, HGRAD);
-      u2 = varFactory.fieldVar(CE_U2_S, HGRAD);
-      p = varFactory.fieldVar(CE_P_S);
+      u1 = varFactory->fieldVar(CE_U1_S, HGRAD);
+      u2 = varFactory->fieldVar(CE_U2_S, HGRAD);
+      p = varFactory->fieldVar(CE_P_S);
     }
 
     void init(TFunctionPtr<double> mu) {
@@ -1400,24 +1400,24 @@ namespace Camellia {
       VarFactoryPtr varFactory = VarFactory::varFactory();
       VarPtr myVar;
       // tests:
-      myVar = varFactory.testVar(CE_V1_S, HGRAD);
-      myVar = varFactory.testVar(CE_V2_S, HGRAD);
-      myVar = varFactory.testVar(CE_Q_S, HGRAD);
-      myVar = varFactory.testVar(CE_TAU1_S, HDIV);
-      myVar = varFactory.testVar(CE_TAU2_S, HDIV);
+      myVar = varFactory->testVar(CE_V1_S, HGRAD);
+      myVar = varFactory->testVar(CE_V2_S, HGRAD);
+      myVar = varFactory->testVar(CE_Q_S, HGRAD);
+      myVar = varFactory->testVar(CE_TAU1_S, HDIV);
+      myVar = varFactory->testVar(CE_TAU2_S, HDIV);
 
       // traces:
-      myVar = varFactory.traceVar(CE_U1HAT_S);
-      myVar = varFactory.traceVar(CE_U2HAT_S);
+      myVar = varFactory->traceVar(CE_U1HAT_S);
+      myVar = varFactory->traceVar(CE_U2HAT_S);
 
       // fluxes:
-      myVar = varFactory.fluxVar(CE_T1HAT_S);
-      myVar = varFactory.fluxVar(CE_T2HAT_S);
+      myVar = varFactory->fluxVar(CE_T1HAT_S);
+      myVar = varFactory->fluxVar(CE_T2HAT_S);
 
       // fields:
-      myVar = varFactory.fieldVar(CE_U1_S, HGRAD);
-      myVar = varFactory.fieldVar(CE_U2_S, HGRAD);
-      myVar = varFactory.fieldVar(CE_P_S);
+      myVar = varFactory->fieldVar(CE_U1_S, HGRAD);
+      myVar = varFactory->fieldVar(CE_U2_S, HGRAD);
+      myVar = varFactory->fieldVar(CE_P_S);
       return varFactory;
     }
 

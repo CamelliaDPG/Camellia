@@ -23,6 +23,7 @@ namespace Camellia {
     virtual bool matchesPoint(double x);
     virtual bool matchesPoint(double x, double y);
     virtual bool matchesPoint(double x, double y, double z);
+    virtual bool matchesPoint(double x, double y, double z, double t);
     virtual bool matchesPoint(vector<double>&point);
     virtual bool matchesPoints(Intrepid::FieldContainer<bool> &pointsMatch, BasisCachePtr basisCache);
 
@@ -35,6 +36,7 @@ namespace Camellia {
     static SpatialFilterPtr matchingX(double x);
     static SpatialFilterPtr matchingY(double y);
     static SpatialFilterPtr matchingZ(double z);
+    static SpatialFilterPtr matchingT(double t);
 
     static SpatialFilterPtr lessThanX(double x);
     static SpatialFilterPtr lessThanY(double y);
@@ -53,6 +55,7 @@ namespace Camellia {
     virtual bool matchesPoint(double x);
     virtual bool matchesPoint(double x, double y);
     virtual bool matchesPoint(double x, double y, double z);
+    virtual bool matchesPoint(double x, double y, double z, double t);
   };
 
   class SpatialFilterLogicalOr : public SpatialFilter {
@@ -67,6 +70,7 @@ namespace Camellia {
     virtual bool matchesPoint(double x);
     virtual bool matchesPoint(double x, double y);
     virtual bool matchesPoint(double x, double y, double z);
+    virtual bool matchesPoint(double x, double y, double z, double t);
   };
 
   class SpatialFilterLogicalAnd : public SpatialFilter {
@@ -81,6 +85,7 @@ namespace Camellia {
     virtual bool matchesPoint(double x);
     virtual bool matchesPoint(double x, double y);
     virtual bool matchesPoint(double x, double y, double z);
+    virtual bool matchesPoint(double x, double y, double z, double t);
   };
 
   class NegatedSpatialFilter : public SpatialFilter {
@@ -92,6 +97,7 @@ namespace Camellia {
     virtual bool matchesPoint(double x);
     virtual bool matchesPoint(double x, double y);
     virtual bool matchesPoint(double x, double y, double z);
+    virtual bool matchesPoint(double x, double y, double z, double t);
   };
 
   SpatialFilterPtr operator!(SpatialFilterPtr sf);

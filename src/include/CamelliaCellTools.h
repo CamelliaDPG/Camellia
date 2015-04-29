@@ -231,10 +231,16 @@ namespace Camellia {
                                 const Intrepid::FieldContainer<double> & temporalPoints);
     
     // copied from Intrepid's CellTools and specialized to allow use when we have curvilinear geometry
-    static void mapToReferenceFrameInitGuess(       Intrepid::FieldContainer<double>  &        refPoints,
+    static void mapToReferenceFrameInitGuess(      Intrepid::FieldContainer<double>  &        refPoints,
                                              const Intrepid::FieldContainer<double>  &        initGuess,
                                              const Intrepid::FieldContainer<double>  &        physPoints,
                                              MeshTopologyPtr meshTopo, IndexType cellID, int cubatureDegree);
+    
+    // copied from Intrepid's CellTools and specialized to allow use when we have curvilinear geometry and/or space-time elements
+    static void mapToReferenceFrameInitGuess(      Intrepid::FieldContainer<double>  &        refPoints,
+                                             const Intrepid::FieldContainer<double>  &        initGuess,
+                                             const Intrepid::FieldContainer<double>  &        physPoints,
+                                             BasisCachePtr basisCache);
 
     // ! calls Intrepid's CellTools<double> when cellTopo is a non-tensorial topology
     static void mapToPhysicalFrame(Intrepid::FieldContainer<double>       &         physPoints,

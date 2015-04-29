@@ -2,26 +2,26 @@
 //
 // Copyright © 2014 Nathan V. Roberts. All Rights Reserved.
 //
-// Redistribution and use in source and binary forms, with or without modification, are 
+// Redistribution and use in source and binary forms, with or without modification, are
 // permitted provided that the following conditions are met:
-// 1. Redistributions of source code must retain the above copyright notice, this list of 
+// 1. Redistributions of source code must retain the above copyright notice, this list of
 // conditions and the following disclaimer.
-// 2. Redistributions in binary form must reproduce the above copyright notice, this list of 
-// conditions and the following disclaimer in the documentation and/or other materials 
+// 2. Redistributions in binary form must reproduce the above copyright notice, this list of
+// conditions and the following disclaimer in the documentation and/or other materials
 // provided with the distribution.
-// 3. The name of the author may not be used to endorse or promote products derived from 
+// 3. The name of the author may not be used to endorse or promote products derived from
 // this software without specific prior written permission.
 //
-// THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY 
-// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE 
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR 
-// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR 
-// ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR 
-// CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT 
-// OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR 
-// BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF 
-// LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING 
-// NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS 
+// THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY
+// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+// ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+// CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT
+// OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR
+// BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
+// LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
+// NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 //
 // Questions? Contact Nate Roberts (nate@nateroberts.com).
@@ -47,29 +47,29 @@ PoissonExactSolution::PoissonExactSolution(PoissonExactSolutionType type, int po
   _type = type;
   _bf = PoissonBilinearForm::poissonBilinearForm(useConformingTraces);
   this->_bilinearForm = _bf;
-  
+
   FunctionPtr phi_exact = phi();
-  
-  VarFactory vf = _bf->varFactory();
-  VarPtr psi_hat_n = vf.fluxVar(PoissonBilinearForm::S_PSI_HAT_N);
-  VarPtr phi_hat = vf.traceVar(PoissonBilinearForm::S_PHI_HAT);
-  VarPtr phi = vf.fieldVar(PoissonBilinearForm::S_PHI);
-  VarPtr psi_1 = vf.fieldVar(PoissonBilinearForm::S_PSI_1);
-  VarPtr psi_2 = vf.fieldVar(PoissonBilinearForm::S_PSI_2);
-  
-  VarPtr q = vf.testVar(PoissonBilinearForm::S_Q, HGRAD);
-  
+
+  VarFactoryPtr vf = _bf->varFactory();
+  VarPtr psi_hat_n = vf->fluxVar(PoissonBilinearForm::S_PSI_HAT_N);
+  VarPtr phi_hat = vf->traceVar(PoissonBilinearForm::S_PHI_HAT);
+  VarPtr phi = vf->fieldVar(PoissonBilinearForm::S_PHI);
+  VarPtr psi_1 = vf->fieldVar(PoissonBilinearForm::S_PSI_1);
+  VarPtr psi_2 = vf->fieldVar(PoissonBilinearForm::S_PSI_2);
+
+  VarPtr q = vf->testVar(PoissonBilinearForm::S_Q, HGRAD);
+
   FunctionPtr psi_exact = phi_exact->grad();
   FunctionPtr n = Function::normal();
-  
+
   this->setSolutionFunction(phi, phi_exact);
   this->setSolutionFunction(psi_1, psi_exact->x());
   this->setSolutionFunction(psi_2, psi_exact->y());
   this->setSolutionFunction(phi_hat, phi_exact);
   this->setSolutionFunction(psi_hat_n, psi_exact * n);
-  
+
   SpatialFilterPtr wholeBoundary = SpatialFilter::allSpace();
-  
+
   _rhs = RHS::rhs();
   FunctionPtr f = phi_exact->dx()->dx() + phi_exact->dy()->dy();
   _rhs->addTerm(f * q);
@@ -135,18 +135,18 @@ std::vector<double> PoissonExactSolution::getPointForBCImposition() {
 
 void PoissonExactSolution::setUseSinglePointBCForPHI(bool useSinglePointBCForPhi, IndexType vertexIndexForZeroValue) {
   FunctionPtr phi_exact = phi();
-  
-  VarFactory vf = _bf->varFactory();
-  VarPtr psi_hat_n = vf.fluxVar(PoissonBilinearForm::S_PSI_HAT_N);
-  VarPtr q = vf.testVar(PoissonBilinearForm::S_Q, HGRAD);
-  
-  VarPtr phi = vf.fieldVar(PoissonBilinearForm::S_PHI);
-  
+
+  VarFactoryPtr vf = _bf->varFactory();
+  VarPtr psi_hat_n = vf->fluxVar(PoissonBilinearForm::S_PSI_HAT_N);
+  VarPtr q = vf->testVar(PoissonBilinearForm::S_Q, HGRAD);
+
+  VarPtr phi = vf->fieldVar(PoissonBilinearForm::S_PHI);
+
   SpatialFilterPtr wholeBoundary = SpatialFilter::allSpace();
-  
+
   FunctionPtr n = Function::normal();
   FunctionPtr psi_n_exact = phi_exact->grad() * n;
-  
+
   _bc = BC::bc();
   _bc->addDirichlet(psi_hat_n, wholeBoundary, psi_n_exact);
   if (!useSinglePointBCForPhi) {
@@ -160,6 +160,6 @@ void PoissonExactSolution::setUseSinglePointBCForPHI(bool useSinglePointBCForPhi
   }
 }
 
-Teuchos::RCP<ExactSolution> PoissonExactSolution::poissonExactPolynomialSolution(int polyOrder, bool useConformingTraces) {
+Teuchos::RCP<ExactSolution<double>> PoissonExactSolution::poissonExactPolynomialSolution(int polyOrder, bool useConformingTraces) {
   return Teuchos::rcp( new PoissonExactSolution(POLYNOMIAL,polyOrder,useConformingTraces));
 }

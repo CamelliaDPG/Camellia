@@ -26,7 +26,6 @@ SpaceTimeBasisCache::SpaceTimeBasisCache(MeshPtr spaceTimeMesh, ElementTypePtr s
   int cellCount = cellIDs.size();
   int sideCount = cellTopology()->getSideCount();
   
-  // TODO: construct the spatial basis cache and the temporal basis cache
   // determine space topology
   CellTopoPtr spaceTopo;
   for (int timeSideOrdinal=0; timeSideOrdinal<sideCount; timeSideOrdinal++) {
@@ -36,10 +35,6 @@ SpaceTimeBasisCache::SpaceTimeBasisCache(MeshPtr spaceTimeMesh, ElementTypePtr s
     }
   }
   CellTopoPtr timeTopo = CellTopology::line();
-//  ElementTypePtr spaceElemType = Teuchos::rcp( new ElementType(spaceTimeElementType->trialOrderPtr,
-//                                                               spaceTimeElementType->testOrderPtr, spaceTopo ) );
-//  ElementTypePtr timeElemType = Teuchos::rcp( new ElementType( spaceTimeElementType->trialOrderPtr,
-//                                                              spaceTimeElementType->testOrderPtr, timeTopo ) );
   
   // for the moment, we use same cubature degree in space as time.  By making this sharper, could reduce expense
   
@@ -52,20 +47,12 @@ SpaceTimeBasisCache::SpaceTimeBasisCache(MeshPtr spaceTimeMesh, ElementTypePtr s
   bool tensorTopologyMeansSpaceTime = false; // if space topology is tensor product, don't interpret as space-time
   _spatialCache = Teuchos::rcp( new BasisCache(physicalNodesSpatial, spaceTopo, cubDegreeSpace, tensorTopologyMeansSpaceTime) );
   _temporalCache = Teuchos::rcp( new BasisCache(physicalNodesTemporal, timeTopo, cubDegreeTime, tensorTopologyMeansSpaceTime) );
-//  _spatialCache = Teuchos::rcp( new BasisCache(spaceElemType, Teuchos::null, testVsTest, cubatureDegreeEnrichment,
-//                                               tensorTopologyMeansSpaceTime) );
-//  _temporalCache = Teuchos::rcp( new BasisCache(timeElemType, Teuchos::null, testVsTest, cubatureDegreeEnrichment,
-//                                                tensorTopologyMeansSpaceTime) );
   
   bool createSideCache = true;
   _spatialCache->setPhysicalCellNodes(physicalNodesSpatial, cellIDs, createSideCache);
   _temporalCache->setPhysicalCellNodes(physicalNodesTemporal, cellIDs, createSideCache);
   
-  // it may be that ultimately we can get away without doing any space-time construction at all;
-  // everything can be done in terms of the spatial BasisCache and the temporal.  For now, we
-  // construct space-time physical cell nodes, etc.
-  
-  setPhysicalCellNodes(physicalNodesSpaceTime, cellIDs, createSideCache);
+  this->BasisCache::setPhysicalCellNodes(physicalNodesSpaceTime, cellIDs, createSideCache);
   
   FieldContainer<double> sideParities(cellCount, sideCount);
   for (int cellOrdinal=0; cellOrdinal<cellCount; cellOrdinal++) {
@@ -522,6 +509,66 @@ constFCPtr SpaceTimeBasisCache::getTransformedWeightedValues(BasisPtr basis, Cam
   Teuchos::RCP< FieldContainer<double> > weightedValues = Teuchos::rcp( new FieldContainer<double>(dimensions) );
   FunctionSpaceTools::multiplyMeasure<double>(*weightedValues, this->getWeightedMeasures(), *unWeightedValues);
   return weightedValues;
+}
+
+void SpaceTimeBasisCache::setPhysicalCellNodes(const Intrepid::FieldContainer<double> &physicalCellNodes,
+                                               const std::vector<GlobalIndexType> &cellIDs, bool createSideCacheToo)
+{
+  CellTopoPtr spaceTimeTopo = cellTopology();
+  // check that the physical nodes are in fact in a tensor product structure:
+  CellTopoPtr spaceTopo = spaceTimeTopo->getTensorialComponent();
+  CellTopoPtr timeTopo = CellTopology::line();
+  
+  int numCells = physicalCellNodes.dimension(0);
+  int spaceNodeDim = max(1,(int)spaceTopo->getDimension()); // if spaceTopo has dim 0, we still include a dummy entry -- but we don't actually store anything meaningful there.
+  FieldContainer<double> physicalCellNodesSpace(numCells, spaceTopo->getNodeCount(), spaceNodeDim);
+  FieldContainer<double> physicalCellNodesTime(numCells, timeTopo->getNodeCount(), timeTopo->getDimension());
+  for (int cellOrdinal=0; cellOrdinal<numCells; cellOrdinal++)
+  {
+    vector<unsigned> componentNodes(2);
+    for (int spaceNodeOrdinal=0; spaceNodeOrdinal<spaceTopo->getNodeCount(); spaceNodeOrdinal++) {
+      componentNodes[0] = spaceNodeOrdinal;
+      componentNodes[1] = 0; // fix the 0 node ordinal in time
+      int spaceTimeNodeOrdinal = spaceTimeTopo->getNodeFromTensorialComponentNodes(componentNodes);
+      for (int d=0; d<spaceTopo->getDimension(); d++) {
+        physicalCellNodesSpace(cellOrdinal,spaceNodeOrdinal,d) = physicalCellNodes(cellOrdinal,spaceTimeNodeOrdinal,d);
+      }
+      // check that the time 1 node matches the time 0 node
+      componentNodes[1] = 1;
+      double tol = 1e-15;
+      spaceTimeNodeOrdinal = spaceTimeTopo->getNodeFromTensorialComponentNodes(componentNodes);
+      for (int d=0; d<spaceTopo->getDimension(); d++) {
+        double diff = abs(physicalCellNodesSpace(cellOrdinal,spaceNodeOrdinal,d) - physicalCellNodes(cellOrdinal,spaceTimeNodeOrdinal,d));
+        if (diff > tol) {
+          cout << "physical cell nodes are not in a tensor product structure; this is not supported.\n";
+          TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "non-tensor product space time mesh");
+        }
+      }
+    }
+    for (int timeNodeOrdinal=0; timeNodeOrdinal<timeTopo->getNodeCount(); timeNodeOrdinal++) {
+      componentNodes[0] = 0;
+      componentNodes[1] = timeNodeOrdinal;
+      int spaceDim = spaceTopo->getDimension();
+      int spaceTimeNodeOrdinal = spaceTimeTopo->getNodeFromTensorialComponentNodes(componentNodes);
+      physicalCellNodesTime(cellOrdinal,timeNodeOrdinal,0) = physicalCellNodes(cellOrdinal,spaceTimeNodeOrdinal,spaceDim);
+      
+      for (int spaceNodeOrdinal=1; spaceNodeOrdinal<spaceTopo->getNodeCount(); spaceNodeOrdinal++) {
+        // check that the other nodes match
+        componentNodes[0] = spaceNodeOrdinal;
+        double tol = 1e-15;
+        spaceTimeNodeOrdinal = spaceTimeTopo->getNodeFromTensorialComponentNodes(componentNodes);
+        double diff = abs(physicalCellNodesTime(cellOrdinal,timeNodeOrdinal,0) - physicalCellNodes(cellOrdinal,spaceTimeNodeOrdinal,spaceDim));
+        if (diff > tol) {
+          cout << physicalCellNodes;
+          cout << "physical cell nodes are not in a tensor product structure; this is not supported.\n";
+          TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "non-tensor product space time mesh");
+        }
+      }
+    }
+  }
+  _spatialCache->setPhysicalCellNodes(physicalCellNodesSpace, cellIDs, true); // true: always create side caches for _spatialCache
+  _temporalCache->setPhysicalCellNodes(physicalCellNodesTime, cellIDs, true); // true: always create side caches for _temporalCache
+  this->BasisCache::setPhysicalCellNodes(physicalCellNodes, cellIDs, createSideCacheToo);
 }
 
 Camellia::EOperator SpaceTimeBasisCache::spaceOp(Camellia::EOperator op) {

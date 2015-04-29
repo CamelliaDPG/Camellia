@@ -134,6 +134,8 @@ void SpaceTimeHeatFormulation::initializeSolution(std::string filePrefix, int fi
 
 void SpaceTimeHeatFormulation::initializeSolution(MeshTopologyPtr meshTopo, int fieldPolyOrder, int delta_k,
                                                   TFunctionPtr<double> forcingFunction, string savedSolutionAndMeshPrefix) {
+  TEUCHOS_TEST_FOR_EXCEPTION(meshTopo->getSpaceDim() != _spaceDim + 1, std::invalid_argument, "MeshTopo must be space-time mesh");
+  
   BCPtr bc = BC::bc();
 
   vector<int> H1Order(2);
