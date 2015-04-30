@@ -67,7 +67,7 @@ namespace Camellia {
   class TSolution {
   private:
     int _cubatureEnrichmentDegree;
-    std::map< GlobalIndexType, Intrepid::FieldContainer<double> > _solutionForCellIDGlobal; // eventually, replace this with a distributed _solutionForCellID
+    std::map< GlobalIndexType, Intrepid::FieldContainer<Scalar> > _solutionForCellIDGlobal; // eventually, replace this with a distributed _solutionForCellID
     std::map< GlobalIndexType, double > _energyErrorForCell; // now rank local
     std::map< GlobalIndexType, double > _energyErrorForCellGlobal;
 
@@ -75,7 +75,7 @@ namespace Camellia {
     std::map< GlobalIndexType, Intrepid::FieldContainer<double> > _errorRepresentationForCell;
 
     // evaluates the inversion of the RHS
-    std::map< GlobalIndexType,Intrepid::FieldContainer<double> > _rhsRepresentationForCell;
+    std::map< GlobalIndexType,Intrepid::FieldContainer<Scalar> > _rhsRepresentationForCell;
 
     MeshPtr _mesh;
     TBCPtr<Scalar> _bc;
@@ -102,8 +102,8 @@ namespace Camellia {
 
     void initialize();
     void integrateBasisFunctions(Intrepid::FieldContainer<GlobalIndexTypeToCast> &globalIndices,
-                                 Intrepid::FieldContainer<double> &values, int trialID);
-    void integrateBasisFunctions(Intrepid::FieldContainer<double> &values, ElementTypePtr elemTypePtr, int trialID);
+                                 Intrepid::FieldContainer<Scalar> &values, int trialID);
+    void integrateBasisFunctions(Intrepid::FieldContainer<Scalar> &values, ElementTypePtr elemTypePtr, int trialID);
 
     // statistics for the last solve:
     double _totalTimeLocalStiffness, _totalTimeGlobalAssembly, _totalTimeBCImposition, _totalTimeSolve, _totalTimeDistributeSolution;
@@ -131,7 +131,7 @@ namespace Camellia {
 
     void gatherSolutionData(); // get all solution data onto every node (not what we should do in the end)
   protected:
-    Intrepid::FieldContainer<double> solutionForElementTypeGlobal(ElementTypePtr elemType); // probably should be deprecated…
+    Intrepid::FieldContainer<Scalar> solutionForElementTypeGlobal(ElementTypePtr elemType); // probably should be deprecated…
     ElementTypePtr getEquivalentElementType(MeshPtr otherMesh, ElementTypePtr elemType);
   public:
     TSolution(TBFPtr<Scalar> bf, MeshPtr mesh, TBCPtr<Scalar> bc = Teuchos::null,
@@ -143,8 +143,8 @@ namespace Camellia {
     TSolution(const TSolution &soln);
     virtual ~TSolution() {}
 
-    const Intrepid::FieldContainer<double>& allCoefficientsForCellID(GlobalIndexType cellID, bool warnAboutOffRankImports=true); // coefficients for all solution variables
-    void setLocalCoefficientsForCell(GlobalIndexType cellID, const Intrepid::FieldContainer<double> &coefficients);
+    const Intrepid::FieldContainer<Scalar>& allCoefficientsForCellID(GlobalIndexType cellID, bool warnAboutOffRankImports=true); // coefficients for all solution variables
+    void setLocalCoefficientsForCell(GlobalIndexType cellID, const Intrepid::FieldContainer<Scalar> &coefficients);
 
     Teuchos::RCP<DofInterpreter> getDofInterpreter() const;
     void setDofInterpreter(Teuchos::RCP<DofInterpreter> dofInterpreter);
@@ -194,8 +194,8 @@ namespace Camellia {
 
     // static method interprets a set of trial ordering coefficients in terms of a specified DofOrdering
     // and returns a set of weights for the appropriate basis
-    static void basisCoeffsForTrialOrder(Intrepid::FieldContainer<double> &basisCoeffs, DofOrderingPtr trialOrder,
-                                         const Intrepid::FieldContainer<double> &allCoeffs, int trialID, int sideIndex);
+    static void basisCoeffsForTrialOrder(Intrepid::FieldContainer<Scalar> &basisCoeffs, DofOrderingPtr trialOrder,
+                                         const Intrepid::FieldContainer<Scalar> &allCoeffs, int trialID, int sideIndex);
 
     void clear();
 
@@ -204,28 +204,28 @@ namespace Camellia {
 
     void setSolution(TSolutionPtr<Scalar> soln); // thisSoln = soln
 
-    void solutionValues(Intrepid::FieldContainer<double> &values, ElementTypePtr elemTypePtr, int trialID,
+    void solutionValues(Intrepid::FieldContainer<Scalar> &values, ElementTypePtr elemTypePtr, int trialID,
                         const Intrepid::FieldContainer<double> &physicalPoints,
                         const Intrepid::FieldContainer<double> &sideRefCellPoints,
                         int sideIndex);
-    void solutionValues(Intrepid::FieldContainer<double> &values, int trialID,
+    void solutionValues(Intrepid::FieldContainer<Scalar> &values, int trialID,
                         const Intrepid::FieldContainer<double> &physicalPoints); // searches for the elements that match the points provided
-    void solutionValues(Intrepid::FieldContainer<double> &values, int trialID, BasisCachePtr basisCache,
+    void solutionValues(Intrepid::FieldContainer<Scalar> &values, int trialID, BasisCachePtr basisCache,
                         bool weightForCubature = false, Camellia::EOperator op = OP_VALUE);
 
-    void solnCoeffsForCellID(Intrepid::FieldContainer<double> &solnCoeffs, GlobalIndexType cellID, int trialID, int sideIndex=0);
-    void setSolnCoeffsForCellID(Intrepid::FieldContainer<double> &solnCoeffsToSet, GlobalIndexType cellID, int trialID, int sideIndex=0);
-    void setSolnCoeffsForCellID(Intrepid::FieldContainer<double> &solnCoeffsToSet, GlobalIndexType cellID);
+    void solnCoeffsForCellID(Intrepid::FieldContainer<Scalar> &solnCoeffs, GlobalIndexType cellID, int trialID, int sideIndex=0);
+    void setSolnCoeffsForCellID(Intrepid::FieldContainer<Scalar> &solnCoeffsToSet, GlobalIndexType cellID, int trialID, int sideIndex=0);
+    void setSolnCoeffsForCellID(Intrepid::FieldContainer<Scalar> &solnCoeffsToSet, GlobalIndexType cellID);
 
-    const std::map< GlobalIndexType, Intrepid::FieldContainer<double> > & solutionForCellIDGlobal() const;
+    const std::map< GlobalIndexType, Intrepid::FieldContainer<Scalar> > & solutionForCellIDGlobal() const;
 
-    double integrateSolution(int trialID);
-    void integrateSolution(Intrepid::FieldContainer<double> &values, ElementTypePtr elemTypePtr, int trialID);
+    Scalar integrateSolution(int trialID);
+    void integrateSolution(Intrepid::FieldContainer<Scalar> &values, ElementTypePtr elemTypePtr, int trialID);
 
-    void integrateFlux(Intrepid::FieldContainer<double> &values, int trialID);
-    void integrateFlux(Intrepid::FieldContainer<double> &values, ElementTypePtr elemTypePtr, int trialID);
+    void integrateFlux(Intrepid::FieldContainer<Scalar> &values, int trialID);
+    void integrateFlux(Intrepid::FieldContainer<Scalar> &values, ElementTypePtr elemTypePtr, int trialID);
 
-    double meanValue(int trialID);
+    Scalar meanValue(int trialID);
     double meshMeasure();
 
     double InfNormOfSolution(int trialID);
@@ -249,7 +249,7 @@ namespace Camellia {
                                     const vector<GlobalIndexType> &childIDs);
     void projectOldCellOntoNewCells(GlobalIndexType cellID,
                                     ElementTypePtr oldElemType,
-                                    const Intrepid::FieldContainer<double> &oldData,
+                                    const Intrepid::FieldContainer<Scalar> &oldData,
                                     const std::vector<GlobalIndexType> &childIDs);
 
     void setLagrangeConstraints( Teuchos::RCP<LagrangeConstraints> lagrangeConstraints);
