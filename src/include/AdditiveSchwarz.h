@@ -65,7 +65,7 @@
   IfPack_AdditiveSchwarz.  The only changes are to support a slight modification
   of the definition of the overlapping matrix; we replace the IfPack_OverlappingRowMatrix
   with a OverlappingRowMatrix.
- 
+
   Modifications support definitions of overlap level in terms of a Camellia
   Mesh.  Zero-level overlap means that the owner of each cell sees all the
   degrees of freedom for that cell--including all the traces, even when
@@ -73,16 +73,16 @@
   of a cell sees all degrees of freedom belonging to the neighbors of that
   cell (the cells that share sides with the owned cell).  Two-level overlap
   extends this to neighbors of neighbors, etc.
- 
+
   Class AdditiveSchwarz enables the construction of Additive
-  Schwarz (one-level overlapping domain decomposition) preconditioners, 
+  Schwarz (one-level overlapping domain decomposition) preconditioners,
   for a given Epetra_RowMatrix based on a Camellia Mesh.
   AdditiveSchwarz is derived from Ifpack_Preconditioner,
   itself derived from Epetra_Operator. An application of
-  the Additive Schwarz preconditioner can be obtained 
+  the Additive Schwarz preconditioner can be obtained
   by calling method ApplyInverse().
 
-  One-level overlapping domain decomposition preconditioners use 
+  One-level overlapping domain decomposition preconditioners use
   local solvers, of Dirichlet type. This means that the inverse of
   the local matrix (with minimal or wider overlap) is applied to
   the residual to be preconditioned.
@@ -91,10 +91,10 @@
   \f[
   P_{AS}^{-1} = \sum_{i=1}^M P_i A_i^{-1} R_i ,
   \f]
-  where \f$M\f$ is the number of subdomains (that is, the number of 
+  where \f$M\f$ is the number of subdomains (that is, the number of
   processors in
   the computation), \f$R_i\f$ is an operator that restricts the global
-  vector to the vector lying on subdomain \f$i\f$, \f$P_i\f$ is the 
+  vector to the vector lying on subdomain \f$i\f$, \f$P_i\f$ is the
   prolongator operator, and
   \f[
   A_i = R_i A P_i.
@@ -117,7 +117,7 @@
   The local matrix \f$A_i\f$ can be filtered, to eliminate singletons, and
   reordered. At the present time, RCM and METIS can be used to reorder the
   local matrix.
-  
+
   The complete list of supported parameters is reported in page \ref ifp_params.
 
   \author Nathan V. Roberts, ALCF.  Based on IfPack_AdditiveSchwarz by Marzio Sala, SNL 9214.
@@ -129,7 +129,7 @@ namespace Camellia {
 
 template<typename T>
 class AdditiveSchwarz : public virtual Ifpack_Preconditioner {
-      
+
 public:
 
   //@{ \name Constructors/Destructors
@@ -146,7 +146,7 @@ public:
    *                     desired level of overlap.
    */
   AdditiveSchwarz(Epetra_RowMatrix* Matrix_in, int OverlapLevel_in, MeshPtr mesh, Teuchos::RCP<DofInterpreter> dofInterpreter);
-  
+
   //! Destructor
   virtual ~AdditiveSchwarz() {};
   //@}
@@ -154,27 +154,27 @@ public:
   //@{ \name Attribute set methods.
 
     //! If set true, transpose of this operator will be applied (not implemented).
-    /*! This flag allows the transpose of the given operator to be used 
-     * implicitly.  
-      
-    \param 
-	   UseTranspose_in - (In) If true, multiply by the transpose of operator, 
+    /*! This flag allows the transpose of the given operator to be used
+     * implicitly.
+
+    \param
+	   UseTranspose_in - (In) If true, multiply by the transpose of operator,
 	   otherwise just use operator.
 
     \return Integer error code, set to 0 if successful.  Set to -1 if this implementation does not support transpose.
   */
     virtual int SetUseTranspose(bool UseTranspose_in);
   //@}
-  
+
   //@{ \name Mathematical functions.
 
   //! Applies the matrix to X, returns the result in Y.
-  /*! 
+  /*!
     \param
-    X - (In) A Epetra_MultiVector of dimension NumVectors 
+    X - (In) A Epetra_MultiVector of dimension NumVectors
        to multiply with matrix.
     \param
-    Y -(Out) A Epetra_MultiVector of dimension NumVectors 
+    Y -(Out) A Epetra_MultiVector of dimension NumVectors
        containing the result.
 
     \return Integer error code, set to 0 if successful.
@@ -182,7 +182,7 @@ public:
     virtual int Apply(const Epetra_MultiVector& X, Epetra_MultiVector& Y) const;
 
     //! Applies the preconditioner to X, returns the result in Y.
-  /*! 
+  /*!
     \param
     X - (In) A Epetra_MultiVector of dimension NumVectors to be preconditioned.
     \param
@@ -190,7 +190,7 @@ public:
 
     \return Integer error code, set to 0 if successful.
 
-    \warning In order to work with AztecOO, any implementation of this method 
+    \warning In order to work with AztecOO, any implementation of this method
     must support the case where X and Y are the same object.
     */
     virtual int ApplyInverse(const Epetra_MultiVector& X, Epetra_MultiVector& Y) const;
@@ -198,7 +198,7 @@ public:
     //! Returns the infinity norm of the global matrix (not implemented)
     virtual double NormInf() const;
   //@}
-  
+
   //@{ \name Attribute access functions
 
     //! Returns a character string describing the operator
@@ -242,14 +242,14 @@ public:
    *     It Can be assume of the following values:
    *   - Add: Components on the receiving processor will be added together;
    *   - Zero: Off-processor components will be ignored;
-   *   - Insert: Off-processor components will be inserted into locations on 
+   *   - Insert: Off-processor components will be inserted into locations on
    *     receiving processor replacing existing values.
    *   - Average: Off-processor components will be averaged with existing;
-   *   - AbsMax: Magnitudes of Off-processor components will be 
-   *     maxed with magnitudes of existing components on the receiving 
+   *   - AbsMax: Magnitudes of Off-processor components will be
+   *     maxed with magnitudes of existing components on the receiving
    *     processor.
    * - \c "schwarz: compute condest" : if \c true, \c Compute() will
-   *    estimate the condition number of the preconditioner. 
+   *    estimate the condition number of the preconditioner.
    *    Default: \c true.
    */
   virtual int SetParameters(Teuchos::ParameterList& List);
@@ -257,7 +257,7 @@ public:
   // @}
 
   // @{ Query methods
-  
+
   //! Initialized the preconditioner.
   virtual int Initialize();
 
@@ -290,7 +290,7 @@ public:
 
   //! Prints major information about this preconditioner.
   virtual std::ostream& Print(std::ostream&) const;
-  
+
   virtual const T* Inverse() const
   {
     return(&*Inverse_);
@@ -365,23 +365,23 @@ protected:
   // @}
 
   // @{ Internal methods.
-  
+
   //! Copy constructor (should never be used)
   AdditiveSchwarz(const AdditiveSchwarz& RHS)
   { }
 
   //! Sets up the localized matrix and the singleton filter.
   int Setup();
-  
+
   // @}
 
   // @{ Internal data.
-  
+
   //! Camellia addition: the Mesh
   MeshPtr mesh_;
   //! Camellia addition: the DofInterpreter
   Teuchos::RCP<DofInterpreter> dofInterpreter_;
-  
+
   //! Pointers to the matrix to be preconditioned.
   Teuchos::RCP<const Epetra_RowMatrix> Matrix_;
   //! Pointers to the overlapping matrix.
@@ -530,7 +530,7 @@ int AdditiveSchwarz<T>::Setup()
       Reordering_ = Teuchos::rcp( new Ifpack_RCMReordering() );
     else if (ReorderingType_ == "metis")
       Reordering_ = Teuchos::rcp( new Ifpack_METISReordering() );
-#ifdef HAVE_IFPACK_AMESOS	
+#ifdef HAVE_IFPACK_AMESOS
     else if (ReorderingType_ == "amd" )
       Reordering_ = Teuchos::rcp( new Ifpack_AMDReordering() );
 #endif
@@ -544,7 +544,7 @@ int AdditiveSchwarz<T>::Setup()
     IFPACK_CHK_ERR(Reordering_->Compute(*MatrixPtr));
 
     // now create reordered localized matrix
-    ReorderedLocalizedMatrix_ = 
+    ReorderedLocalizedMatrix_ =
       Teuchos::rcp( new Ifpack_ReorderFilter(Teuchos::rcp( MatrixPtr, false ), Reordering_) );
 
     if (ReorderedLocalizedMatrix_ == Teuchos::null) IFPACK_CHK_ERR(-5);
@@ -560,17 +560,17 @@ int AdditiveSchwarz<T>::Setup()
 //  { // DEBUGGING
 //    Inverse_->Compute();
 //    Teuchos::RCP< Epetra_RowMatrix > inverseMatrix = Epetra_Operator_to_Epetra_Matrix::constructInverseMatrix(*Inverse_, MatrixPtr->RowMatrixRowMap());
-//    
+//
 //    ostringstream rankLabel;
 //    int rank = Teuchos::GlobalMPISession::getRank();
 //    rankLabel << "/tmp/OAS_" << rank << ".dat";
-//    
+//
 //    EpetraExt::RowMatrixToMatrixMarketFile(rankLabel.str().c_str(),*MatrixPtr, NULL, NULL, false);
-//    
+//
 //    rankLabel.str("");
 //    rankLabel << "/tmp/OAS_inv_" << rank << ".dat";
 //    EpetraExt::RowMatrixToMatrixMarketFile(rankLabel.str().c_str(),*inverseMatrix, NULL, NULL, false);
-//    
+//
 //    if (rank==2) {
 //      int numRowEntries;
 //      MatrixPtr->NumMyRowEntries(0, numRowEntries);
@@ -579,7 +579,7 @@ int AdditiveSchwarz<T>::Setup()
 //      cout << "On rank 2, OverlappingMatrix_ row 0 has " << numRowEntries << " entries.\n"; // expect 11, for the thing I'm debugging right now...
 //    }
 //  }
-  
+
   return(0);
 }
 
@@ -635,7 +635,7 @@ int AdditiveSchwarz<T>::SetParameters(Teuchos::ParameterList& List_in)
   ReorderingType_ = List_in.get("schwarz: reordering type", ReorderingType_);
   if (ReorderingType_ == "none")
     UseReordering_ = false;
-  else 
+  else
     UseReordering_ = true;
   // if true, filter singletons. NOTE: the filtered matrix can still have
   // singletons! A simple example: upper triangular matrix, if I remove
@@ -666,10 +666,10 @@ int AdditiveSchwarz<T>::Initialize()
   // compute the overlapping matrix if necessary
   if (IsOverlapping_) {
     OverlappingMatrix_ = Teuchos::rcp( new OverlappingRowMatrix(Matrix_, OverlapLevel_, mesh_, dofInterpreter_) );
-    
+
     if (OverlappingMatrix_ == Teuchos::null) {
       IFPACK_CHK_ERR(-5);
-    } 
+    }
   }
 
   IFPACK_CHK_ERR(Setup());
@@ -718,7 +718,7 @@ int AdditiveSchwarz<T>::Compute()
   Time_->ResetStartTime();
   IsComputed_ = false;
   Condest_ = -1.0;
-  
+
   IFPACK_CHK_ERR(Inverse_->Compute());
 
   IsComputed_ = true; // need this here for Condest(Ifpack_Cheap)
@@ -740,7 +740,7 @@ int AdditiveSchwarz<T>::Compute()
 
   if (ComputeCondest_)
     Condest(Ifpack_Cheap);
-  
+
   // add Condest() to label
   Label_ = "AdditiveSchwarz, ov = " + Ifpack_toString(OverlapLevel_)
     + ", local solver = \n\t\t***** `" + string(Inverse_->Label()) + "'"
@@ -924,7 +924,7 @@ ApplyInverse(const Epetra_MultiVector& X, Epetra_MultiVector& Y) const
   ApplyInverseTime_ += Time_->ElapsedTime();
 
   return(0);
- 
+
 }
 
 //==============================================================================
@@ -979,20 +979,20 @@ Print(std::ostream& os) const
   os << "Phase           # calls   Total Time (s)       Total MFlops     MFlops/s" << endl;
   os << "-----           -------   --------------       ------------     --------" << endl;
   os << "Initialize()    "   << std::setw(5) << NumInitialize()
-     << "  " << std::setw(15) << InitializeTime() 
+     << "  " << std::setw(15) << InitializeTime()
 #ifdef IFPACK_FLOPCOUNTERS
-     << "  " << std::setw(15) << 1.0e-6 * IF 
+     << "  " << std::setw(15) << 1.0e-6 * IF
      << "  " << std::setw(15) << 1.0e-6 * IFT
 #endif
      << endl;
-  os << "Compute()       "   << std::setw(5) << NumCompute() 
+  os << "Compute()       "   << std::setw(5) << NumCompute()
      << "  " << std::setw(15) << ComputeTime()
 #ifdef IFPACK_FLOPCOUNTERS
      << "  " << std::setw(15) << 1.0e-6 * CF
      << "  " << std::setw(15) << 1.0e-6 * CFT
 #endif
      << endl;
-  os << "ApplyInverse()  "   << std::setw(5) << NumApplyInverse() 
+  os << "ApplyInverse()  "   << std::setw(5) << NumApplyInverse()
      << "  " << std::setw(15) << ApplyInverseTime()
 #ifdef IFPACK_FLOPCOUNTERS
      << "  " << std::setw(15) << 1.0e-6 * AF
@@ -1018,7 +1018,7 @@ double AdditiveSchwarz<T>::
 
   return(Condest_);
 }
-  
+
 } // namespace Camellia
 
 #endif // CAMELLIA_ADDITIVESCHWARZ_H

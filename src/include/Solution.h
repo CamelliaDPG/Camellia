@@ -91,9 +91,9 @@ namespace Camellia {
     Teuchos::RCP<Epetra_FEVector> _rhsVector;
     Teuchos::RCP<Epetra_FEVector> _lhsVector;
 
-    MatrixPtr _globalStiffMatrix2;
-    VectorPtr _rhsVector2;
-    VectorPtr _lhsVector2;
+    TMatrixPtr<Scalar> _globalStiffMatrix2;
+    TVectorPtr<Scalar> _rhsVector2;
+    TVectorPtr<Scalar> _lhsVector2;
 
     bool _residualsComputed;
     bool _energyErrorComputed;
@@ -161,7 +161,7 @@ namespace Camellia {
                                GlobalIndexType numGlobalDofs, int zeroMeanConstraintsSize, Teuchos::RCP<const Teuchos::Comm<int> > Comm );
 
     Epetra_MultiVector* getGlobalCoefficients();
-    VectorPtr getGlobalCoefficients2();
+    TVectorPtr<Scalar> getGlobalCoefficients2();
 
     bool cellHasCoefficientsAssigned(GlobalIndexType cellID);
     void clearComputedResiduals();
@@ -285,15 +285,15 @@ namespace Camellia {
     void setRHS( TRHSPtr<Scalar> );
 
     Teuchos::RCP<Epetra_CrsMatrix> getStiffnessMatrix();
-    MatrixPtr getStiffnessMatrix2();
+    TMatrixPtr<Scalar> getStiffnessMatrix2();
     void setStiffnessMatrix(Teuchos::RCP<Epetra_CrsMatrix> stiffness);
-    void setStiffnessMatrix2(MatrixPtr stiffness);
+    void setStiffnessMatrix2(TMatrixPtr<Scalar> stiffness);
 
     Teuchos::RCP<Epetra_FEVector> getRHSVector();
     Teuchos::RCP<Epetra_FEVector> getLHSVector();
 
-    VectorPtr getRHSVector2();
-    VectorPtr getLHSVector2();
+    TVectorPtr<Scalar> getRHSVector2();
+    TVectorPtr<Scalar> getLHSVector2();
 
     void setIP( TIPPtr<Scalar>);
 

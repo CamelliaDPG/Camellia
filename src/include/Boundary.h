@@ -77,6 +77,16 @@ namespace Camellia {
     template <typename Scalar>
     void bcsToImpose(std::map<GlobalIndexType,Scalar> &globalDofIndicesAndValues, TBC<Scalar> &bc, GlobalIndexType cellID,
                      std::set<std::pair<int, unsigned>> &singletons, DofInterpreter* dofInterpreter, const Epetra_Map *globalDofMap);
+    template <typename Scalar>
+    void bcsToImpose2(Intrepid::FieldContainer<GlobalIndexType> &globalIndices, Intrepid::FieldContainer<Scalar> &globalValues,
+                     TBC<Scalar> &bc, std::set<GlobalIndexType> &globalIndexFilter,
+                     DofInterpreter* dofInterpreter, const MapPtr globalDofMap);
+    template <typename Scalar>
+    void bcsToImpose2(Intrepid::FieldContainer<GlobalIndexType> &globalIndices, Intrepid::FieldContainer<Scalar> &globalValues, TBC<Scalar> &bc,
+                     DofInterpreter* dofInterpreter, const MapPtr globalDofMap);
+    template <typename Scalar>
+    void bcsToImpose2(std::map<GlobalIndexType,Scalar> &globalDofIndicesAndValues, TBC<Scalar> &bc, GlobalIndexType cellID,
+                     std::set<std::pair<int, unsigned>> &singletons, DofInterpreter* dofInterpreter, const MapPtr globalDofMap);
     void buildLookupTables();
   };
 }

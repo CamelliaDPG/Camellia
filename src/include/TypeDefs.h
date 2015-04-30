@@ -146,6 +146,10 @@ namespace Camellia {
     using TDirichletBC = std::pair<SpatialFilterPtr,TFunctionPtr<Scalar>>;
   typedef TDirichletBC<double> DirichletBC;
 
+  template <typename Scalar=double>
+    class TAmesos2Solver;
+  typedef TAmesos2Solver<double> Amesos2Solver;
+
 	typedef Teuchos::RCP< Tpetra::Map<IndexType,GlobalIndexType> > MapPtr;
   template <typename Scalar>
     using TMatrixPtr = Teuchos::RCP< Tpetra::CrsMatrix<Scalar,IndexType,GlobalIndexType> >;
@@ -153,10 +157,6 @@ namespace Camellia {
   template <typename Scalar>
     using TVectorPtr = Teuchos::RCP< Tpetra::MultiVector<Scalar,IndexType,GlobalIndexType> >;
   typedef TVectorPtr<double> VectorPtr;
-
-  template <typename Scalar=double>
-    class TAmesos2Solver;
-  typedef TAmesos2Solver<double> Amesos2Solver;
 }
 
 

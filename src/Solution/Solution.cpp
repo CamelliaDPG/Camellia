@@ -1516,7 +1516,7 @@ Epetra_MultiVector* TSolution<Scalar>::getGlobalCoefficients() {
 }
 
 template <typename Scalar>
-VectorPtr TSolution<Scalar>::getGlobalCoefficients2() {
+TVectorPtr<Scalar> TSolution<Scalar>::getGlobalCoefficients2() {
   return _lhsVector2;
 }
 
@@ -1864,7 +1864,7 @@ Teuchos::RCP<Epetra_FEVector> TSolution<Scalar>::getLHSVector() {
 }
 
 template <typename Scalar>
-VectorPtr TSolution<Scalar>::getLHSVector2() {
+TVectorPtr<Scalar> TSolution<Scalar>::getLHSVector2() {
   return _lhsVector2;
 }
 
@@ -2453,7 +2453,7 @@ Teuchos::RCP<Epetra_FEVector> TSolution<Scalar>::getRHSVector() {
 }
 
 template <typename Scalar>
-VectorPtr TSolution<Scalar>::getRHSVector2() {
+TVectorPtr<Scalar> TSolution<Scalar>::getRHSVector2() {
   return _rhsVector2;
 }
 
@@ -2463,7 +2463,7 @@ Teuchos::RCP<Epetra_CrsMatrix> TSolution<Scalar>::getStiffnessMatrix() {
 }
 
 template <typename Scalar>
-MatrixPtr TSolution<Scalar>::getStiffnessMatrix2() {
+TMatrixPtr<Scalar> TSolution<Scalar>::getStiffnessMatrix2() {
   return _globalStiffMatrix2;
 }
 
@@ -2474,7 +2474,7 @@ void TSolution<Scalar>::setStiffnessMatrix(Teuchos::RCP<Epetra_CrsMatrix> stiffn
 }
 
 template <typename Scalar>
-void TSolution<Scalar>::setStiffnessMatrix2(MatrixPtr stiffness) {
+void TSolution<Scalar>::setStiffnessMatrix2(TMatrixPtr<Scalar> stiffness) {
 //  Epetra_FECrsMatrix* stiffnessFEMatrix = dynamic_cast<Epetra_FECrsMatrix*>(_globalStiffMatrix.get());
     _globalStiffMatrix2 = stiffness;
 }
