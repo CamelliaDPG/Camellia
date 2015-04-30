@@ -25,12 +25,20 @@
 
 #include "Basis.h"
 #include "BasisFactory.h"
+#include "PointBasis.h"
 #include "TensorBasis.h"
 
 using namespace Camellia;
 using namespace Intrepid;
 
 namespace {
+  void testBasisAllDofOrdinalsAssignedToSubcells(BasisPtr basis, Teuchos::FancyOStream &out, bool &success)
+  {
+    int domainDim = basis->domainTopology()->getDimension();
+    int allSubcellDofOrdinalsCount = basis->dofOrdinalsForSubcells(domainDim, true).size();
+    TEST_EQUALITY(basis->getCardinality(), allSubcellDofOrdinalsCount);
+  }
+  
   TEUCHOS_UNIT_TEST( Basis, LineC1_Unisolvence )
   {
     int polyOrder = 1;
@@ -59,6 +67,12 @@ namespace {
       }
     }
     TEST_ASSERT(knownNodes.size() == linearBasis->getCardinality());
+  }
+  
+  TEUCHOS_UNIT_TEST( Basis, DofOrdinalsAssigned_PointBasis )
+  {
+    BasisPtr pointBasis = Teuchos::rcp( new PointBasis<> );
+    testBasisAllDofOrdinalsAssignedToSubcells(pointBasis, out, success);
   }
 
   // Define the templated unit test.
