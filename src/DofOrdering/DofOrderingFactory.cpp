@@ -141,11 +141,12 @@ DofOrderingPtr DofOrderingFactory::trialOrdering(vector<int> &polyOrder,
     // if (_bilinearForm->isFluxOrTrace(trialID)) {
     VarType varType = _varFactory->trial(trialID)->varType();
     if ((varType == FLUX) || (varType == TRACE)) {
+      Camellia::EFunctionSpace temporalFS = (fs == FUNCTION_SPACE_HGRAD) ? FUNCTION_SPACE_HGRAD : FUNCTION_SPACE_HVOL;
       int sideDim = cellTopo->getDimension() - 1;
       int numSides = cellTopo->getSideCount();
       for (int sideOrdinal=0; sideOrdinal<numSides; sideOrdinal++) {
         CellTopoPtr sideTopo = cellTopo->getSubcell(sideDim, sideOrdinal);
-        basis = BasisFactory::basisFactory()->getConformingBasis( trialIDPolyOrder, sideTopo, fs);
+        basis = BasisFactory::basisFactory()->getConformingBasis( trialIDPolyOrder, sideTopo, fs, temporalFS );
         basisRank = basis->rangeRank();
 
         bool temporalSide = ! cellTopo->sideIsSpatial(sideOrdinal);

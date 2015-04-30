@@ -9,8 +9,11 @@
 #include "BasisCache.h"
 #include "BasisFactory.h"
 #include "BasisSumFunction.h"
+#include "CamelliaCellTools.h"
 #include "CellTopology.h"
 #include "Function.h"
+#include "MeshFactory.h"
+#include "MeshTopology.h"
 #include "Projector.h"
 
 #include "Teuchos_UnitTestHarness.hpp"
@@ -20,14 +23,30 @@ using namespace Intrepid;
 
 namespace {
   void testProjectFunctionOnTensorTopoSides(CellTopoPtr spaceTopo, int H1Order, Camellia::EFunctionSpace fs, FunctionPtr f,
-                                            Teuchos::FancyOStream &out, bool &success) {
-    int tensorialDegree = 1;
-    CellTopoPtr spaceTimeTopo = CellTopology::cellTopology(spaceTopo->getShardsTopology(), tensorialDegree);
+                                            bool interpolate, Teuchos::FancyOStream &out, bool &success) {
+    int spaceDim = spaceTopo->getDimension();
+    MeshTopologyPtr spatialMeshTopo = Teuchos::rcp( new MeshTopology(spaceDim) );
 
+    FieldContainer<double> cellNodes(spaceTopo->getNodeCount(),spaceTopo->getDimension());
+    CamelliaCellTools::refCellNodesForTopology(cellNodes, spaceTopo);
+    vector<vector<double>> cellVerticesVector;
+    CamelliaCellTools::pointsVectorFromFC(cellVerticesVector, cellNodes);
+    spatialMeshTopo->addCell(spaceTopo, cellVerticesVector);
+    
+    double t0 = 0.0, t1 = 1.0;
+    MeshTopologyPtr spaceTimeMeshTopo = MeshFactory::spaceTimeMeshTopology(spatialMeshTopo, t0, t1);
+    
+    CellTopoPtr spaceTimeTopo = CellTopology::cellTopology(spaceTopo, 1);
+    
     int cubatureDegree = H1Order * 2;
     bool createSideCache = true;
-    BasisCachePtr basisCache = BasisCache::basisCacheForReferenceCell(spaceTimeTopo, cubatureDegree, createSideCache);
 
+    IndexType cellID = 0;
+    FieldContainer<double> physicalCellNodes = spaceTimeMeshTopo->physicalCellNodesForCell(cellID);
+    physicalCellNodes.resize(1,spaceTimeTopo->getNodeCount(),spaceTimeTopo->getDimension());
+    BasisCachePtr basisCache = BasisCache::basisCacheForCellTopology(spaceTimeTopo, cubatureDegree,
+                                                                     physicalCellNodes, createSideCache);
+    
     BasisFactoryPtr basisFactory = BasisFactory::basisFactory();
 
     Intrepid::FieldContainer<double> basisCoefficients;
@@ -42,7 +61,14 @@ namespace {
       int numCells = 1;
       basisCoefficients.resize(numCells,sideBasis->getCardinality());
 
-      Projector<double>::projectFunctionOntoBasis(basisCoefficients, f, sideBasis, sideBasisCache);
+      if (interpolate)
+      {
+        Projector<double>::projectFunctionOntoBasisInterpolating(basisCoefficients, f, sideBasis, sideBasisCache);
+      }
+      else
+      {
+        Projector<double>::projectFunctionOntoBasis(basisCoefficients, f, sideBasis, sideBasisCache);
+      }
 
       basisCoefficients.resize(sideBasis->getCardinality());
       FunctionPtr projectedFunction = BasisSumFunction::basisSumFunction(sideBasis, basisCoefficients);
@@ -73,17 +99,43 @@ namespace {
     FunctionPtr n = Function::normalSpaceTime();
     FunctionPtr f = Function::xn(2) * n->x() + Function::yn(1) * n->y();
 
-    testProjectFunctionOnTensorTopoSides(spaceTopo, H1Order, Camellia::FUNCTION_SPACE_HVOL, f, out, success);
+    bool interpolate = false;
+    testProjectFunctionOnTensorTopoSides(spaceTopo, H1Order, Camellia::FUNCTION_SPACE_HVOL, f, interpolate, out, success);
   }
 
+  TEUCHOS_UNIT_TEST( Projector, TensorTopologyFluxInterpolating1D )
+  {
+    // project a function that involves normal values
+    CellTopoPtr spaceTopo = CellTopology::line();
+    
+    int H1Order = 3;
+    FunctionPtr n = Function::normalSpaceTime();
+    FunctionPtr f = Function::xn(2) * n->x() + Function::yn(1) * n->y();
+    
+    bool interpolate = true;
+    testProjectFunctionOnTensorTopoSides(spaceTopo, H1Order, Camellia::FUNCTION_SPACE_HVOL, f, interpolate, out, success);
+  }
+  
   TEUCHOS_UNIT_TEST( Projector, TensorTopologyTrace1D )
   {
     CellTopoPtr spaceTopo = CellTopology::line();
-
+    
     int H1Order = 2;
     FunctionPtr f = Function::xn(2);
-
-    testProjectFunctionOnTensorTopoSides(spaceTopo, H1Order, Camellia::FUNCTION_SPACE_HGRAD, f, out, success);
+    
+    bool interpolate = false;
+    testProjectFunctionOnTensorTopoSides(spaceTopo, H1Order, Camellia::FUNCTION_SPACE_HGRAD, f, interpolate, out, success);
+  }
+  
+  TEUCHOS_UNIT_TEST( Projector, TensorTopologyTraceInterpolating1D )
+  {
+    CellTopoPtr spaceTopo = CellTopology::line();
+    
+    int H1Order = 2;
+    FunctionPtr f = Function::xn(2);
+    
+    bool interpolate = true;
+    testProjectFunctionOnTensorTopoSides(spaceTopo, H1Order, Camellia::FUNCTION_SPACE_HGRAD, f, interpolate, out, success);
   }
 
 } // namespace

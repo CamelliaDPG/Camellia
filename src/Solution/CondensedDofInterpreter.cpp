@@ -350,6 +350,11 @@ GlobalIndexType CondensedDofInterpreter<Scalar>::globalDofCount() {
 
 template <typename Scalar>
 set<GlobalIndexType> CondensedDofInterpreter<Scalar>::globalDofIndicesForPartition(PartitionIndexType rank) {
+  if (rank == -1)
+  {
+    // default to current partition, just as Mesh does.
+    rank = Teuchos::GlobalMPISession::getRank();
+  }
   if (rank == Teuchos::GlobalMPISession::getRank()) {
     set<GlobalIndexType> myGlobalDofIndices;
     GlobalIndexType nextOffset = _myGlobalDofIndexOffset + _myGlobalDofIndexCount;

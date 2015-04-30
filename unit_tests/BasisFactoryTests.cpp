@@ -105,4 +105,43 @@ namespace {
 //      }
     }
   }
+  
+  TEUCHOS_UNIT_TEST( BasisFactory, GetConformingBasisDomainEqualsCellTopology_Shards )
+  {
+    std::vector< CellTopoPtr > shardsTopologies = getShardsTopologies();
+    
+    int polyOrder = 1;
+    Camellia::EFunctionSpace fs = Camellia::FUNCTION_SPACE_HGRAD; // HGRAD convenient because defined even on line topology
+    for (int topoOrdinal = 0; topoOrdinal < shardsTopologies.size(); topoOrdinal++) {
+      CellTopoPtr topo = shardsTopologies[topoOrdinal];
+      
+      FieldContainer<double> refNodes(topo->getNodeCount(),topo->getDimension());
+      CamelliaCellTools::refCellNodesForTopology(refNodes, topo);
+      
+      BasisPtr conformingBasis = BasisFactory::basisFactory()->getConformingBasis(polyOrder, topo, fs);
+      CellTopoPtr domainTopo = conformingBasis->domainTopology();
+      TEST_EQUALITY(domainTopo->getKey(), topo->getKey());
+    }
+  }
+  
+  TEUCHOS_UNIT_TEST( BasisFactory, GetConformingBasisDomainEqualsCellTopology_SpaceTime )
+  {
+    std::vector< CellTopoPtr > shardsTopologies = getShardsTopologies();
+    
+    int tensorialDegree = 1;
+    int polyOrder = 1;
+    Camellia::EFunctionSpace fs = Camellia::FUNCTION_SPACE_HGRAD; // HGRAD convenient because defined even on line topology
+    for (int topoOrdinal = 0; topoOrdinal < shardsTopologies.size(); topoOrdinal++) {
+      CellTopoPtr shardsTopo = shardsTopologies[topoOrdinal];
+      CellTopoPtr topo = CellTopology::cellTopology(shardsTopo->getShardsTopology(), tensorialDegree);
+      
+      FieldContainer<double> refNodes(topo->getNodeCount(),topo->getDimension());
+      CamelliaCellTools::refCellNodesForTopology(refNodes, topo);
+      
+      BasisPtr conformingBasis = BasisFactory::basisFactory()->getConformingBasis(polyOrder, topo, fs);
+      CellTopoPtr domainTopo = conformingBasis->domainTopology();
+      TEST_EQUALITY(domainTopo->getKey(), topo->getKey());
+    }
+  }
+  
 } // namespace

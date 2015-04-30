@@ -51,7 +51,7 @@
 
 namespace Camellia {
   class Boundary {
-    set< pair< GlobalIndexType, unsigned > > _boundaryElements; // first arg is cellID, second arg is sideOrdinal
+    std::set<std::pair<GlobalIndexType,unsigned>> _boundaryElements; // first arg is cellID, second arg is sideOrdinal
 
     MeshPtr _mesh;
     bool _imposeSingletonBCsOnThisRank; // this only governs singleton BCs which don't specify a vertex number.  Otherwise, the rule is that a singleton BC is imposed on the rank that owns the active cell of least ID that contains the vertex.
@@ -60,19 +60,23 @@ namespace Camellia {
     void setMesh(MeshPtr mesh);
     template <typename Scalar>
     void bcsToImpose(Intrepid::FieldContainer<GlobalIndexType> &globalIndices, Intrepid::FieldContainer<Scalar> &globalValues,
-                     TBC<Scalar> &bc, set<GlobalIndexType>& globalIndexFilter,
+                     TBC<Scalar> &bc, std::set<GlobalIndexType> &globalIndexFilter,
                      DofInterpreter* dofInterpreter, const Epetra_Map *globalDofMap);
     template <typename Scalar>
     void bcsToImpose(Intrepid::FieldContainer<GlobalIndexType> &globalIndices, Intrepid::FieldContainer<Scalar> &globalValues, TBC<Scalar> &bc,
                      DofInterpreter* dofInterpreter, const Epetra_Map *globalDofMap);
     //! Determine values to impose on a single cell.
     /*!
-     \param
-     singletons - (In) pairs are (trialID, vertexOrdinalInCell).
+     \param globalDofIndicesAndValues - (Out) keys are the global degree-of-freedom indices, values are their coefficients (weights).
+     \param bc - (In) the BC object specifying the boundary conditions
+     \param cellID - (In) the cell on which boundary conditions are requested
+     \param singletons - (In) "point" boundary conditions (e.g., a point condition on a pressure variable); pairs are (trialID, vertexOrdinalInCell).
+     \param dofInterpreter - (In) the DofInterpreter
+     \param globalDofMap  - (In) the Epetra_Map; may be NULL
      */
     template <typename Scalar>
-    void bcsToImpose( map< GlobalIndexType, Scalar > &globalDofIndicesAndValues, TBC<Scalar> &bc, GlobalIndexType cellID,
-                     set < pair<int, unsigned> > &singletons, DofInterpreter* dofInterpreter, const Epetra_Map *globalDofMap);
+    void bcsToImpose(std::map<GlobalIndexType,Scalar> &globalDofIndicesAndValues, TBC<Scalar> &bc, GlobalIndexType cellID,
+                     std::set<std::pair<int, unsigned>> &singletons, DofInterpreter* dofInterpreter, const Epetra_Map *globalDofMap);
     void buildLookupTables();
   };
 }

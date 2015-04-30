@@ -9,26 +9,21 @@
 #include "Teuchos_UnitTestHarness.hpp"
 #include "Teuchos_UnitTestHelpers.hpp"
 
-#include "Basis.h"
-#include "Intrepid_HGRAD_LINE_Cn_FEM.hpp"
+#include "Intrepid_FieldContainer.hpp"
 
+#include "Intrepid_HGRAD_LINE_Cn_FEM.hpp"
 #include "Intrepid_HGRAD_QUAD_Cn_FEM.hpp"
 #include "Intrepid_HDIV_QUAD_In_FEM.hpp"
-
 #include "Intrepid_HGRAD_HEX_Cn_FEM.hpp"
 #include "Intrepid_HDIV_HEX_In_FEM.hpp"
 
 #include "doubleBasisConstruction.h"
-#include "CamelliaCellTools.h"
-
-#include "Intrepid_FieldContainer.hpp"
-
 #include "Basis.h"
-
-#include "TensorBasis.h"
-
+#include "BasisCache.h"
 #include "BasisFactory.h"
+#include "CamelliaCellTools.h"
 #include "CellTopology.h"
+#include "TensorBasis.h"
 
 using namespace Camellia;
 using namespace Intrepid;
@@ -176,6 +171,109 @@ namespace {
     }
   }
   
+  void testBasisOrdinalsForSubcell(CellTopoPtr spaceTopo, Teuchos::FancyOStream &out, bool &success)
+  {
+    int timeH1Order = 2, spaceH1Order = 2;
+    CellTopoPtr line = CellTopology::line();
+    
+    BasisFactoryPtr basisFactory = BasisFactory::basisFactory();
+    BasisPtr lineBasis = basisFactory->getBasis(timeH1Order, line, Camellia::FUNCTION_SPACE_HGRAD);
+    BasisPtr spaceBasis = basisFactory->getBasis(spaceH1Order, spaceTopo, Camellia::FUNCTION_SPACE_HGRAD);
+    
+    typedef Camellia::TensorBasis<double, FieldContainer<double> > TensorBasis;
+    Teuchos::RCP<TensorBasis> tensorBasis = Teuchos::rcp( new TensorBasis(spaceBasis, lineBasis) );
+    
+    // sanity check: tensorBasis should have cardinality = spaceBasis->getCardinality() * lineBasis->getCardinality()
+    TEST_EQUALITY(tensorBasis->getCardinality(), spaceBasis->getCardinality() * lineBasis->getCardinality());
+    
+    // if we get all dofOrdinals for all subcells, that should cover the whole tensor basis
+    int allSubcellDofOrdinalsCount = tensorBasis->dofOrdinalsForSubcells(spaceTopo->getDimension() + line->getDimension(), true).size();
+    TEST_EQUALITY(tensorBasis->getCardinality(), allSubcellDofOrdinalsCount);
+    
+    CellTopoPtr spaceTimeTopo = tensorBasis->domainTopology();
+    
+    { /* ******** NODE TESTS ******** */
+      map<unsigned, pair<unsigned,unsigned> > basisOrdinalMap; // maps spaceTime --> (space, time) basis ordinals for nodes
+      // check nodes
+      int vertexDim = 0;
+      int subcellDofOrdinal = 0;
+      for (unsigned spaceNode=0; spaceNode < spaceTopo->getNodeCount(); spaceNode++) {
+        unsigned spaceBasisOrdinal = spaceBasis->getDofOrdinal(vertexDim, spaceNode, subcellDofOrdinal);
+        for (unsigned timeNode=0; timeNode < line->getNodeCount(); timeNode++) {
+          unsigned timeBasisOrdinal = lineBasis->getDofOrdinal(vertexDim, timeNode, subcellDofOrdinal);
+          vector<unsigned> componentNodes(2);
+          componentNodes[0] = spaceNode;
+          componentNodes[1] = timeNode;
+          unsigned spaceTimeNode = spaceTimeTopo->getNodeFromTensorialComponentNodes(componentNodes);
+          unsigned spaceTimeBasisOrdinal = tensorBasis->getDofOrdinal(vertexDim, spaceTimeNode, subcellDofOrdinal);
+          
+          if ((spaceBasisOrdinal == (unsigned) -1) || (timeBasisOrdinal == (unsigned)-1)) {
+            // expect that spaceTimeBasisOrdinal is -1
+            TEST_EQUALITY((unsigned)-1, spaceTimeBasisOrdinal);
+          } else {
+            // otherwise, expect it's not
+            TEST_INEQUALITY((unsigned)-1, spaceTimeBasisOrdinal);
+          }
+          
+          basisOrdinalMap[spaceTimeBasisOrdinal] = make_pair(spaceBasisOrdinal, timeBasisOrdinal);
+        }
+      }
+      
+      // test that the basisOrdinalMap entries are unique
+      int spaceNodeOrdinalCount = spaceBasis->dofOrdinalsForVertices().size();
+      int timeNodeOrdinalCount = lineBasis->dofOrdinalsForVertices().size();
+      
+      TEST_EQUALITY(basisOrdinalMap.size(), spaceNodeOrdinalCount * timeNodeOrdinalCount);
+    }
+    
+    { /* ********* TEST SUPPORT ********* */
+      // If a basis claims that a dof ordinal belongs to a subcell, then we expect it to have support on that subcell.
+      // If it has support on the subcell, then there should be at least one nonzero point among the cubature points
+      // on the subcell.
+      int cubDegree = max(timeH1Order, spaceH1Order);
+      
+      double tol = 1e-15;
+      for (unsigned subcellDim = 0; subcellDim < spaceTimeTopo->getDimension(); subcellDim++)
+      {
+        int subcellCount = spaceTimeTopo->getSubcellCount(subcellDim);
+        for (int subcellOrdinal=0; subcellOrdinal<subcellCount; subcellOrdinal++)
+        {
+          CellTopoPtr subcellTopo = spaceTimeTopo->getSubcell(subcellDim, subcellOrdinal);
+          // lazy way to get the cubature points for subcell:
+          BasisCachePtr subcellCache = BasisCache::basisCacheForReferenceCell(subcellTopo, cubDegree);
+          FieldContainer<double> subcellCubPoints = subcellCache->getRefCellPoints();
+          
+          int numPoints = subcellCubPoints.dimension(0);
+          FieldContainer<double> subcellPointsInParent(numPoints,spaceTimeTopo->getDimension());
+          CamelliaCellTools::mapToReferenceSubcell(subcellPointsInParent, subcellCubPoints, subcellDim, subcellOrdinal, spaceTimeTopo);
+          
+          set<int> dofOrdinals = tensorBasis->dofOrdinalsForSubcell(subcellDim, subcellOrdinal);
+          FieldContainer<double> values(tensorBasis->getCardinality(), numPoints);
+          tensorBasis->getValues(values, subcellPointsInParent, OPERATOR_VALUE);
+          
+          for (auto dofOrdinal : dofOrdinals)
+          {
+            bool hasSupport = false;
+            for (int ptOrdinal=0; ptOrdinal<numPoints; ptOrdinal++)
+            {
+              if (abs(values(dofOrdinal,ptOrdinal)) > tol)
+              {
+                hasSupport = true;
+                break;
+              }
+            }
+            if (!hasSupport)
+            {
+              out << "basis for " << spaceTimeTopo->getName() << " claims dof ordinal " << dofOrdinal << " has support on ";
+              out << "subcell " << subcellOrdinal << " of dimension " << subcellDim << ", but none found.\n";
+            }
+            TEST_ASSERT(hasSupport);
+          }
+        }
+      }
+    }
+  }
+  
   void testTensorBasisFillsFieldContainer(BasisPtr spatialBasis, BasisPtr temporalBasis,
                                           Teuchos::FancyOStream &out, bool &success) {
     int spaceDim = spatialBasis->rangeDimension();
@@ -276,61 +374,35 @@ namespace {
       }
     }
   }
-
-  TEUCHOS_UNIT_TEST( TensorBasis, BasisOrdinalsForSubcell ) {
-    int timeH1Order = 2, spaceH1Order = 2;
-    
-    CellTopoPtr line = CellTopology::line();
-    
-    BasisFactoryPtr basisFactory = BasisFactory::basisFactory();
-    BasisPtr lineBasis = basisFactory->getBasis(timeH1Order, line, Camellia::FUNCTION_SPACE_HGRAD);
-    
+  
+  TEUCHOS_UNIT_TEST( TensorBasis, BasisOrdinalsForSubcell_Point ) {
+    CellTopoPtr spaceTopo = CellTopology::point();
+    testBasisOrdinalsForSubcell(spaceTopo, out, success);
+  }
+  
+  TEUCHOS_UNIT_TEST( TensorBasis, BasisOrdinalsForSubcell_Line ) {
     CellTopoPtr spaceTopo = CellTopology::line();
-    BasisPtr spaceBasis = basisFactory->getBasis(spaceH1Order, spaceTopo, Camellia::FUNCTION_SPACE_HGRAD);
-    
-    typedef Camellia::TensorBasis<double, FieldContainer<double> > TensorBasis;
-    Teuchos::RCP<TensorBasis> tensorBasis = Teuchos::rcp( new TensorBasis(spaceBasis, lineBasis) );
-    
-    // sanity check: tensorBasis should have cardinality = spaceBasis->getCardinality() * lineBasis->getCardinality()
-    TEST_EQUALITY(tensorBasis->getCardinality(), spaceBasis->getCardinality() * lineBasis->getCardinality());
-    
-    // if we get all dofOrdinals for all subcells, that should cover the whole tensor basis
-    int allSubcellDofOrdinalsCount = tensorBasis->dofOrdinalsForSubcells(spaceTopo->getDimension() + line->getDimension(), true).size();
-    TEST_EQUALITY(tensorBasis->getCardinality(), allSubcellDofOrdinalsCount);
-    
-    CellTopoPtr spaceTimeTopo = tensorBasis->domainTopology();
-    
-    map<unsigned, pair<unsigned,unsigned> > basisOrdinalMap; // maps spaceTime --> (space, time) basis ordinals for nodes
-    // check nodes
-    int vertexDim = 0;
-    int subcellDofOrdinal = 0;
-    for (unsigned spaceNode=0; spaceNode < spaceTopo->getNodeCount(); spaceNode++) {
-      unsigned spaceBasisOrdinal = spaceBasis->getDofOrdinal(vertexDim, spaceNode, subcellDofOrdinal);
-      for (unsigned timeNode=0; timeNode < line->getNodeCount(); timeNode++) {
-        unsigned timeBasisOrdinal = lineBasis->getDofOrdinal(vertexDim, timeNode, subcellDofOrdinal);
-        vector<unsigned> componentNodes(2);
-        componentNodes[0] = spaceNode;
-        componentNodes[1] = timeNode;
-        unsigned spaceTimeNode = spaceTimeTopo->getNodeFromTensorialComponentNodes(componentNodes);
-        unsigned spaceTimeBasisOrdinal = tensorBasis->getDofOrdinal(vertexDim, spaceTimeNode, subcellDofOrdinal);
-        
-        if ((spaceBasisOrdinal == (unsigned) -1) || (timeBasisOrdinal == (unsigned)-1)) {
-          // expect that spaceTimeBasisOrdinal is -1
-          TEST_EQUALITY((unsigned)-1, spaceTimeBasisOrdinal);
-        } else {
-          // otherwise, expect it's not
-          TEST_INEQUALITY((unsigned)-1, spaceTimeBasisOrdinal);
-        }
-        
-        basisOrdinalMap[spaceTimeBasisOrdinal] = make_pair(spaceBasisOrdinal, timeBasisOrdinal);
-      }
-    }
-    
-    // test that the basisOrdinalMap entries are unique
-    int spaceNodeOrdinalCount = spaceBasis->dofOrdinalsForVertices().size();
-    int timeNodeOrdinalCount = lineBasis->dofOrdinalsForVertices().size();
-    
-    TEST_EQUALITY(basisOrdinalMap.size(), spaceNodeOrdinalCount * timeNodeOrdinalCount);
+    testBasisOrdinalsForSubcell(spaceTopo, out, success);
+  }
+  
+  TEUCHOS_UNIT_TEST( TensorBasis, BasisOrdinalsForSubcell_Quad ) {
+    CellTopoPtr spaceTopo = CellTopology::quad();
+    testBasisOrdinalsForSubcell(spaceTopo, out, success);
+  }
+  
+  TEUCHOS_UNIT_TEST( TensorBasis, BasisOrdinalsForSubcell_Triangle ) {
+    CellTopoPtr spaceTopo = CellTopology::triangle();
+    testBasisOrdinalsForSubcell(spaceTopo, out, success);
+  }
+  
+  TEUCHOS_UNIT_TEST( TensorBasis, BasisOrdinalsForSubcell_Hexahedron ) {
+    CellTopoPtr spaceTopo = CellTopology::hexahedron();
+    testBasisOrdinalsForSubcell(spaceTopo, out, success);
+  }
+  
+  TEUCHOS_UNIT_TEST( TensorBasis, BasisOrdinalsForSubcell_Tetrahedron ) {
+    CellTopoPtr spaceTopo = CellTopology::tetrahedron();
+    testBasisOrdinalsForSubcell(spaceTopo, out, success);
   }
   
   TEUCHOS_UNIT_TEST( TensorBasis, GetTensorValues ) {

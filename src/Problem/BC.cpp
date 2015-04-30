@@ -334,12 +334,12 @@ void TBC<Scalar>::coefficientsForBC(FieldContainer<double> &basisCoefficients, T
 
 //  if (!bcFxn->isTrace()) {
 //    // L^2 projection
-//    Projector::projectFunctionOntoBasis(basisCoefficients, bcFxn, basis, sideBasisCache);
+//    Projector<double>::projectFunctionOntoBasis(basisCoefficients, bcFxn, basis, sideBasisCache);
 //  } else {
 //    // TODO: projection-based interpolation
 //    // (start with L^2-projection-based interpolation; proceed to H^1 once we have a clear story on
 //    //  how to take derivatives of BCFunction)
-//    Projector::projectFunctionOntoBasis(basisCoefficients, bcFxn, basis, sideBasisCache);
+//    Projector<double>::projectFunctionOntoBasis(basisCoefficients, bcFxn, basis, sideBasisCache);
 //  }
 }
 
