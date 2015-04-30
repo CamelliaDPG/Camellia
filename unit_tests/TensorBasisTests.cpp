@@ -171,13 +171,14 @@ namespace {
     }
   }
   
-  void testBasisOrdinalsForSubcell(CellTopoPtr spaceTopo, Teuchos::FancyOStream &out, bool &success)
+  void testBasisOrdinalsForSubcell(CellTopoPtr spaceTopo, bool useHGRADInTime, Teuchos::FancyOStream &out, bool &success)
   {
     int timeH1Order = 2, spaceH1Order = 2;
     CellTopoPtr line = CellTopology::line();
     
     BasisFactoryPtr basisFactory = BasisFactory::basisFactory();
-    BasisPtr lineBasis = basisFactory->getBasis(timeH1Order, line, Camellia::FUNCTION_SPACE_HGRAD);
+    Camellia::EFunctionSpace timeFS = useHGRADInTime ? Camellia::FUNCTION_SPACE_HGRAD : Camellia::FUNCTION_SPACE_HVOL;
+    BasisPtr lineBasis = basisFactory->getBasis(timeH1Order, line, timeFS);
     BasisPtr spaceBasis = basisFactory->getBasis(spaceH1Order, spaceTopo, Camellia::FUNCTION_SPACE_HGRAD);
     
     typedef Camellia::TensorBasis<double, FieldContainer<double> > TensorBasis;
@@ -192,11 +193,17 @@ namespace {
     
     CellTopoPtr spaceTimeTopo = tensorBasis->domainTopology();
     
-    { /* ******** NODE TESTS ******** */
+    int spaceNodeOrdinalCount = spaceBasis->dofOrdinalsForVertices().size();
+    int timeNodeOrdinalCount = lineBasis->dofOrdinalsForVertices().size();
+    
+    /* ******** NODE TESTS ******** */
+    if ((timeNodeOrdinalCount != 0) && (spaceNodeOrdinalCount != 0))
+    {
       map<unsigned, pair<unsigned,unsigned> > basisOrdinalMap; // maps spaceTime --> (space, time) basis ordinals for nodes
       // check nodes
       int vertexDim = 0;
       int subcellDofOrdinal = 0;
+      
       for (unsigned spaceNode=0; spaceNode < spaceTopo->getNodeCount(); spaceNode++) {
         unsigned spaceBasisOrdinal = spaceBasis->getDofOrdinal(vertexDim, spaceNode, subcellDofOrdinal);
         for (unsigned timeNode=0; timeNode < line->getNodeCount(); timeNode++) {
@@ -219,11 +226,12 @@ namespace {
         }
       }
       
-      // test that the basisOrdinalMap entries are unique
-      int spaceNodeOrdinalCount = spaceBasis->dofOrdinalsForVertices().size();
-      int timeNodeOrdinalCount = lineBasis->dofOrdinalsForVertices().size();
-      
+      // check that the basisOrdinalMap entries are unique
       TEST_EQUALITY(basisOrdinalMap.size(), spaceNodeOrdinalCount * timeNodeOrdinalCount);
+    }
+    else // if either timeNodeOrdinalCount = 0 or spaceNodeOrdinalCount = 0, expect no vertex ordinals for tensorBasis
+    {
+      TEST_EQUALITY(0, tensorBasis->dofOrdinalsForVertices().size());
     }
     
     { /* ********* TEST SUPPORT ********* */
@@ -375,34 +383,76 @@ namespace {
     }
   }
   
-  TEUCHOS_UNIT_TEST( TensorBasis, BasisOrdinalsForSubcell_Point ) {
+  TEUCHOS_UNIT_TEST( TensorBasis, BasisOrdinalsForSubcell_HGRADInTime_Point ) {
     CellTopoPtr spaceTopo = CellTopology::point();
-    testBasisOrdinalsForSubcell(spaceTopo, out, success);
+    bool useHGRADForTime = true;
+    testBasisOrdinalsForSubcell(spaceTopo, useHGRADForTime, out, success);
   }
   
-  TEUCHOS_UNIT_TEST( TensorBasis, BasisOrdinalsForSubcell_Line ) {
+  TEUCHOS_UNIT_TEST( TensorBasis, BasisOrdinalsForSubcell_HGRADInTime_Line ) {
     CellTopoPtr spaceTopo = CellTopology::line();
-    testBasisOrdinalsForSubcell(spaceTopo, out, success);
+    bool useHGRADForTime = true;
+    testBasisOrdinalsForSubcell(spaceTopo, useHGRADForTime, out, success);
   }
   
-  TEUCHOS_UNIT_TEST( TensorBasis, BasisOrdinalsForSubcell_Quad ) {
+  TEUCHOS_UNIT_TEST( TensorBasis, BasisOrdinalsForSubcell_HGRADInTime_Quad ) {
     CellTopoPtr spaceTopo = CellTopology::quad();
-    testBasisOrdinalsForSubcell(spaceTopo, out, success);
+    bool useHGRADForTime = true;
+    testBasisOrdinalsForSubcell(spaceTopo, useHGRADForTime, out, success);
   }
   
-  TEUCHOS_UNIT_TEST( TensorBasis, BasisOrdinalsForSubcell_Triangle ) {
+  TEUCHOS_UNIT_TEST( TensorBasis, BasisOrdinalsForSubcell_HGRADInTime_Triangle ) {
     CellTopoPtr spaceTopo = CellTopology::triangle();
-    testBasisOrdinalsForSubcell(spaceTopo, out, success);
+    bool useHGRADForTime = true;
+    testBasisOrdinalsForSubcell(spaceTopo, useHGRADForTime, out, success);
   }
   
-  TEUCHOS_UNIT_TEST( TensorBasis, BasisOrdinalsForSubcell_Hexahedron ) {
+  TEUCHOS_UNIT_TEST( TensorBasis, BasisOrdinalsForSubcell_HGRADInTime_Hexahedron ) {
     CellTopoPtr spaceTopo = CellTopology::hexahedron();
-    testBasisOrdinalsForSubcell(spaceTopo, out, success);
+    bool useHGRADForTime = true;
+    testBasisOrdinalsForSubcell(spaceTopo, useHGRADForTime, out, success);
   }
   
-  TEUCHOS_UNIT_TEST( TensorBasis, BasisOrdinalsForSubcell_Tetrahedron ) {
+  TEUCHOS_UNIT_TEST( TensorBasis, BasisOrdinalsForSubcell_HGRADInTime_Tetrahedron ) {
     CellTopoPtr spaceTopo = CellTopology::tetrahedron();
-    testBasisOrdinalsForSubcell(spaceTopo, out, success);
+    bool useHGRADForTime = true;
+    testBasisOrdinalsForSubcell(spaceTopo, useHGRADForTime, out, success);
+  }
+
+  TEUCHOS_UNIT_TEST( TensorBasis, BasisOrdinalsForSubcell_HVOLInTime_Point ) {
+    CellTopoPtr spaceTopo = CellTopology::point();
+    bool useHGRADForTime = false;
+    testBasisOrdinalsForSubcell(spaceTopo, useHGRADForTime, out, success);
+  }
+  
+  TEUCHOS_UNIT_TEST( TensorBasis, BasisOrdinalsForSubcell_HVOLInTime_Line ) {
+    CellTopoPtr spaceTopo = CellTopology::line();
+    bool useHGRADForTime = false;
+    testBasisOrdinalsForSubcell(spaceTopo, useHGRADForTime, out, success);
+  }
+  
+  TEUCHOS_UNIT_TEST( TensorBasis, BasisOrdinalsForSubcell_HVOLInTime_Quad ) {
+    CellTopoPtr spaceTopo = CellTopology::quad();
+    bool useHGRADForTime = false;
+    testBasisOrdinalsForSubcell(spaceTopo, useHGRADForTime, out, success);
+  }
+  
+  TEUCHOS_UNIT_TEST( TensorBasis, BasisOrdinalsForSubcell_HVOLInTime_Triangle ) {
+    CellTopoPtr spaceTopo = CellTopology::triangle();
+    bool useHGRADForTime = false;
+    testBasisOrdinalsForSubcell(spaceTopo, useHGRADForTime, out, success);
+  }
+  
+  TEUCHOS_UNIT_TEST( TensorBasis, BasisOrdinalsForSubcell_HVOLInTime_Hexahedron ) {
+    CellTopoPtr spaceTopo = CellTopology::hexahedron();
+    bool useHGRADForTime = false;
+    testBasisOrdinalsForSubcell(spaceTopo, useHGRADForTime, out, success);
+  }
+  
+  TEUCHOS_UNIT_TEST( TensorBasis, BasisOrdinalsForSubcell_HVOLInTime_Tetrahedron ) {
+    CellTopoPtr spaceTopo = CellTopology::tetrahedron();
+    bool useHGRADForTime = false;
+    testBasisOrdinalsForSubcell(spaceTopo, useHGRADForTime, out, success);
   }
   
   TEUCHOS_UNIT_TEST( TensorBasis, GetTensorValues ) {
