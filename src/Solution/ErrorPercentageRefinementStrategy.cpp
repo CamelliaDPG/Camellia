@@ -14,26 +14,28 @@
 
 using namespace Camellia;
 
-ErrorPercentageRefinementStrategy::ErrorPercentageRefinementStrategy(TSolutionPtr<double> soln, double percentageThreshold, double min_h, int max_p, bool preferPRefinements)
-                                                : RefinementStrategy(soln, 1.0, min_h, max_p, preferPRefinements) {
+template <typename Scalar>
+ErrorPercentageRefinementStrategy<Scalar>::ErrorPercentageRefinementStrategy(TSolutionPtr<Scalar> soln, double percentageThreshold, double min_h, int max_p, bool preferPRefinements)
+                                                : TRefinementStrategy<Scalar>(soln, 1.0, min_h, max_p, preferPRefinements) {
   // percentageThreshold should be a number in [0,1]
   _percentageThreshold = percentageThreshold;
 }
 
-void ErrorPercentageRefinementStrategy::refine(bool printToConsole) {
+template <typename Scalar>
+void ErrorPercentageRefinementStrategy<Scalar>::refine(bool printToConsole) {
   MeshPtr mesh = this->mesh();
 
   map<GlobalIndexType, double> energyError;
-  if (_rieszRep.get() != NULL) {
-    _rieszRep->computeRieszRep();
-    energyError = _rieszRep->getNormsSquaredGlobal();
+  if (this->_rieszRep.get() != NULL) {
+    this->_rieszRep->computeRieszRep();
+    energyError = this->_rieszRep->getNormsSquaredGlobal();
     // take square roots:
     for (map<GlobalIndexType, double>::iterator energyEntryIt = energyError.begin();
          energyEntryIt != energyError.end(); energyEntryIt++) {
       energyEntryIt->second = sqrt( energyEntryIt->second );
     }
   } else {
-    energyError = _solution->globalEnergyError();
+    energyError = this->_solution->globalEnergyError();
   }
   vector< Teuchos::RCP< Element > > activeElements = mesh->activeElements();
 
@@ -58,13 +60,13 @@ void ErrorPercentageRefinementStrategy::refine(bool printToConsole) {
     errorReverseLookup[cellEnergyError].push_back(cellID);
 
     double h = sqrt(cellMeasures[cellID]);
-    if (h > _min_h) {
+    if (h > this->_min_h) {
       maxError = max(cellEnergyError,maxError);
     }
     totalEnergyErrorSquared += cellEnergyError * cellEnergyError;
   }
   double totalEnergyError = sqrt(totalEnergyErrorSquared);
-  if ( printToConsole && _reportPerCellErrors ) {
+  if ( printToConsole && this->_reportPerCellErrors ) {
     cout << "per-cell Energy Error Squared for cells with > 0.1% of squared energy error\n";
     for (vector< Teuchos::RCP< Element > >::iterator activeElemIt = activeElements.begin();
          activeElemIt != activeElements.end(); activeElemIt++) {
@@ -79,8 +81,8 @@ void ErrorPercentageRefinementStrategy::refine(bool printToConsole) {
   }
 
   // record results prior to refinement
-  RefinementResults results = setResults(mesh->numElements(), mesh->numGlobalDofs(), totalEnergyError);
-  _results.push_back(results);
+  RefinementResults results = this->setResults(mesh->numElements(), mesh->numGlobalDofs(), totalEnergyError);
+  this->_results.push_back(results);
 
   vector<GlobalIndexType> cellsToRefine;
   vector<GlobalIndexType> cellsToPRefine;
@@ -99,14 +101,14 @@ void ErrorPercentageRefinementStrategy::refine(bool printToConsole) {
         int p = mesh->cellPolyOrder(cellID);
 
         //      cout << "refining cellID " << cellID << endl;
-        if (!_preferPRefinements) {
-          if (h > _min_h) {
+        if (!this->_preferPRefinements) {
+          if (h > this->_min_h) {
             cellsToRefine.push_back(cellID);
           } else {
             cellsToPRefine.push_back(cellID);
           }
         } else {
-          if (p < _max_p) {
+          if (p < this->_max_p) {
             cellsToPRefine.push_back(cellID);
           } else {
             cellsToRefine.push_back(cellID);
@@ -120,14 +122,18 @@ void ErrorPercentageRefinementStrategy::refine(bool printToConsole) {
     if (cellsToRefine.size() > 0) Camellia::print("cells for h-refinement", cellsToRefine);
     if (cellsToPRefine.size() > 0) Camellia::print("cells for p-refinement", cellsToPRefine);
   }
-  refineCells(cellsToRefine);
-  pRefineCells(mesh, cellsToPRefine);
+  this->refineCells(cellsToRefine);
+  this->pRefineCells(mesh, cellsToPRefine);
 
-  if (_enforceOneIrregularity)
+  if (this->_enforceOneIrregularity)
     mesh->enforceOneIrregularity();
 
   if (printToConsole) {
     cout << "Prior to refinement, energy error: " << totalEnergyError << endl;
     cout << "After refinement, mesh has " << mesh->numActiveElements() << " elements and " << mesh->numGlobalDofs() << " global dofs" << endl;
   }
+}
+
+namespace Camellia {
+  template class ErrorPercentageRefinementStrategy<double>;
 }
