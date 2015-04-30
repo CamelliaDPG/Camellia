@@ -131,8 +131,10 @@ namespace {
   {
     CellTopoPtr spaceTopo = CellTopology::line();
     
-    int H1Order = 2;
-    FunctionPtr f = Function::xn(2);
+//    int H1Order = 2;
+//    FunctionPtr f = Function::xn(2);
+    int H1Order = 1;
+    FunctionPtr f = Function::constant(0.5);
     
     bool interpolate = true;
     testProjectFunctionOnTensorTopoSides(spaceTopo, H1Order, Camellia::FUNCTION_SPACE_HGRAD, f, interpolate, out, success);
