@@ -92,6 +92,7 @@ GlobalDofAssignment::GlobalDofAssignment( GlobalDofAssignment &otherGDA ) : DofI
   _partitionForCellID = otherGDA._partitionForCellID;
 
   _activeCellMap = Teuchos::rcp( new Epetra_Map(*otherGDA._activeCellMap) );
+  _activeCellMap2 = Teuchos::rcp( new Tpetra::Map<IndexType,GlobalIndexType>(*otherGDA._activeCellMap2) );
 
   _numPartitions = otherGDA._numPartitions;
 
@@ -246,6 +247,21 @@ void GlobalDofAssignment::constructActiveCellMap() {
     _activeCellMap = Teuchos::rcp( new Epetra_Map(-1, myCellIDsFC.size(), &myCellIDsFC[0], indexBase, Comm) );
 }
 
+void GlobalDofAssignment::constructActiveCellMap2() {
+  const set<GlobalIndexType> cellIDs = cellsInPartition(-1);
+  const vector<GlobalIndexType> myCellIDsVector(cellIDs.begin(), cellIDs.end());
+  Teuchos::ArrayView< const GlobalIndexType > myCellIDsAV(myCellIDsVector);
+
+  int indexBase = 0;
+  Teuchos::RCP<const Teuchos::Comm<int> > comm = Tpetra::DefaultPlatform::getDefaultPlatform ().getComm ();
+  if (myCellIDsVector.size()==0)
+    _activeCellMap2 = Teuchos::rcp( new Tpetra::Map<IndexType,GlobalIndexType>(Teuchos::OrdinalTraits<Tpetra::global_size_t>::invalid(),
+          myCellIDsVector.size(), indexBase, comm) );
+  else
+    _activeCellMap2 = Teuchos::rcp( new Tpetra::Map<IndexType,GlobalIndexType>(Teuchos::OrdinalTraits<Tpetra::global_size_t>::invalid(),
+          myCellIDsAV, indexBase, comm) );
+}
+
 void GlobalDofAssignment::repartitionAndMigrate() {
   _partitionPolicy->partitionMesh(_mesh.get(),_numPartitions);
   rebuildLookups();
@@ -319,6 +335,10 @@ vector< ElementTypePtr > GlobalDofAssignment::elementTypes(PartitionIndexType pa
 
 Teuchos::RCP<Epetra_Map> GlobalDofAssignment::getActiveCellMap() {
   return _activeCellMap;
+}
+
+MapPtr GlobalDofAssignment::getActiveCellMap2() {
+  return _activeCellMap2;
 }
 
 int GlobalDofAssignment::getCubatureDegree(GlobalIndexType cellID) {
@@ -407,6 +427,34 @@ void GlobalDofAssignment::interpretLocalCoefficients(GlobalIndexType cellID, con
     }
   }
 }
+
+template <typename Scalar>
+void GlobalDofAssignment::interpretLocalCoefficients(GlobalIndexType cellID, const FieldContainer<Scalar> &localCoefficients, TVectorPtr<Scalar> globalCoefficients) {
+  DofOrderingPtr trialOrder = elementType(cellID)->trialOrderPtr;
+  FieldContainer<Scalar> basisCoefficients; // declared here so that we can sometimes avoid mallocs, if we get lucky in terms of the resize()
+  for (set<int>::iterator trialIDIt = trialOrder->getVarIDs().begin(); trialIDIt != trialOrder->getVarIDs().end(); trialIDIt++) {
+    int trialID = *trialIDIt;
+    const vector<int>* sidesForVar = &trialOrder->getSidesForVarID(trialID);
+    for (vector<int>::const_iterator sideIt = sidesForVar->begin(); sideIt != sidesForVar->end(); sideIt++) {
+      int sideOrdinal = *sideIt;
+      int basisCardinality = trialOrder->getBasisCardinality(trialID, sideOrdinal);
+      basisCoefficients.resize(basisCardinality);
+      vector<int> localDofIndices = trialOrder->getDofIndices(trialID, sideOrdinal);
+      for (int basisOrdinal=0; basisOrdinal<basisCardinality; basisOrdinal++) {
+        int localDofIndex = localDofIndices[basisOrdinal];
+        basisCoefficients[basisOrdinal] = localCoefficients[localDofIndex];
+      }
+      FieldContainer<Scalar> fittedGlobalCoefficients;
+      FieldContainer<GlobalIndexType> fittedGlobalDofIndices;
+      interpretLocalBasisCoefficients(cellID, trialID, sideOrdinal, basisCoefficients, fittedGlobalCoefficients, fittedGlobalDofIndices);
+      for (int i=0; i<fittedGlobalCoefficients.size(); i++) {
+        GlobalIndexType globalDofIndex = fittedGlobalDofIndices[i];
+        globalCoefficients->replaceGlobalValue(globalDofIndex, 0, fittedGlobalCoefficients[i]); // for globalDofIndex not owned by this rank, doesn't do anything...
+      }
+    }
+  }
+}
+template void GlobalDofAssignment::interpretLocalCoefficients(GlobalIndexType cellID, const FieldContainer<double> &localCoefficients, TVectorPtr<double> globalCoefficients);
 
 void GlobalDofAssignment::projectParentCoefficientsOntoUnsetChildren() {
   set<GlobalIndexType> rankLocalCellIDs = cellsInPartition(-1);

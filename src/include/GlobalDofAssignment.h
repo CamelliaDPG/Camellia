@@ -53,6 +53,7 @@ namespace Camellia {
     map<GlobalIndexType, IndexType> _partitionForCellID;
 
     Teuchos::RCP<Epetra_Map> _activeCellMap;
+    MapPtr _activeCellMap2;
 
     unsigned _numPartitions;
 
@@ -62,6 +63,7 @@ namespace Camellia {
     void assignParities( GlobalIndexType cellID );
 
     void constructActiveCellMap();
+    void constructActiveCellMap2();
 
     void projectParentCoefficientsOntoUnsetChildren();
     virtual void rebuildLookups() = 0;
@@ -76,6 +78,7 @@ namespace Camellia {
 
     GlobalIndexType activeCellOffset();
     Teuchos::RCP<Epetra_Map> getActiveCellMap();
+    MapPtr getActiveCellMap2();
 
     // ! copies
     virtual GlobalDofAssignmentPtr deepCopy() = 0;
@@ -119,9 +122,13 @@ namespace Camellia {
     virtual void interpretLocalData(GlobalIndexType cellID, const Intrepid::FieldContainer<double> &localData, Intrepid::FieldContainer<double> &globalData,
                                     Intrepid::FieldContainer<GlobalIndexType> &globalDofIndices) = 0;
     void interpretLocalCoefficients(GlobalIndexType cellID, const Intrepid::FieldContainer<double> &localCoefficients, Epetra_MultiVector &globalCoefficients);
+    template <typename Scalar>
+      void interpretLocalCoefficients(GlobalIndexType cellID, const Intrepid::FieldContainer<Scalar> &localCoefficients, TVectorPtr<Scalar> globalCoefficients);
     virtual void interpretLocalBasisCoefficients(GlobalIndexType cellID, int varID, int sideOrdinal, const Intrepid::FieldContainer<double> &basisCoefficients,
                                                  Intrepid::FieldContainer<double> &globalCoefficients, Intrepid::FieldContainer<GlobalIndexType> &globalDofIndices) = 0;
     virtual void interpretGlobalCoefficients(GlobalIndexType cellID, Intrepid::FieldContainer<double> &localCoefficients, const Epetra_MultiVector &globalCoefficients) = 0;
+    // template <typename Scalar>
+    //   virtual void interpretGlobalCoefficients(GlobalIndexType cellID, Intrepid::FieldContainer<Scalar> &localCoefficients, const TVectorPtr<Scalar> globalCoefficients) = 0;
 
     virtual set<GlobalIndexType> globalDofIndicesForCell(GlobalIndexType cellID) = 0;
 
