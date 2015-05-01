@@ -398,7 +398,7 @@ namespace Camellia {
     int posScDim = 0;        // position in the tag, counting from 0, of the subcell dim
     int posScOrd = 1;        // position in the tag, counting from 0, of the subcell ordinal
     int posDfOrd = 2;        // position in the tag, counting from 0, of DoF ordinal relative to the subcell
-    int posDfCnt = 2;        // position in the tag, counting from 0, of DoF ordinal count for subcell
+    int posDfCnt = 3;        // position in the tag, counting from 0, of DoF ordinal count for subcell
     
     std::vector<int> tags( tagSize * this->getCardinality() ); // flat array
     
@@ -420,7 +420,7 @@ namespace Camellia {
         if (timeSubcellDim == 0) {
           // vertex node in time; the subcell is not extruded in time but belongs to one of the two "copies"
           // of the spatial topology
-          unsigned spaceTimeSideOrdinal = this->domainTopology()->getTemporalComponentSideOrdinal(timeSubcellOrd);
+          unsigned spaceTimeSideOrdinal = this->domainTopology()->getTemporalSideOrdinal(timeSubcellOrd); // timeSubcellOrd is a "side" of the line topology
           spaceTimeSubcellOrd = CamelliaCellTools::subcellOrdinalMap(spaceTimeTopo, sideDim, spaceTimeSideOrdinal,
                                                                      spaceSubcellDim, spaceSubcellOrd);
         } else {
@@ -433,6 +433,7 @@ namespace Camellia {
         }
         
         int i = TENSOR_FIELD_ORDINAL(spaceFieldOrdinal, timeFieldOrdinal);
+//        cout << "(" << spaceFieldOrdinal << "," << timeFieldOrdinal << ") --> " << i << endl;
         int spaceDofOffsetOrdinal = spaceTagData[posDfOrd];
         int timeDofOffsetOrdinal = timeTagData[posDfOrd];
         int spaceDofsForSubcell = spaceTagData[posDfCnt];

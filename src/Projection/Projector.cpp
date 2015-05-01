@@ -74,10 +74,6 @@ void Projector<Scalar>::projectFunctionOntoBasis(FieldContainer<Scalar> &basisCo
   ip->computeInnerProductMatrix(gramMatrix, dofOrdering, basisCache);
   ip->computeInnerProductVector(ipVector, v, fxn, dofOrdering, basisCache);
 
-//  cout << "physical points for projection:\n" << basisCache->getPhysicalCubaturePoints();
-//  cout << "gramMatrix:\n" << gramMatrix;
-//  cout << "ipVector:\n" << ipVector;
-
   map<int,int> oldToNewIndices;
   if (fieldIndicesToSkip.size() > 0) {
     // the code to do with fieldIndicesToSkip might not be terribly efficient...
@@ -121,6 +117,10 @@ void Projector<Scalar>::projectFunctionOntoBasis(FieldContainer<Scalar> &basisCo
     ipVector = ipVectorFiltered;
   }
 
+//  cout << "physical points for projection:\n" << basisCache->getPhysicalCubaturePoints();
+//  cout << "gramMatrix:\n" << gramMatrix;
+//  cout << "ipVector:\n" << ipVector;
+  
   for (int cellIndex=0; cellIndex<numCells; cellIndex++){
 
     // TODO: rewrite to take advantage of SerialDenseWrapper...
@@ -207,7 +207,7 @@ void Projector<Scalar>::projectFunctionOntoBasis(FieldContainer<Scalar> &basisCo
 
 template <typename Scalar>
 void Projector<Scalar>::projectFunctionOntoBasisInterpolating(FieldContainer<Scalar> &basisCoefficients, TFunctionPtr<Scalar> fxn,
-                                                      BasisPtr basis, BasisCachePtr domainBasisCache) {
+                                                              BasisPtr basis, BasisCachePtr domainBasisCache) {
   basisCoefficients.initialize(0);
   CellTopoPtr domainTopo = basis->domainTopology();
   unsigned domainDim = domainTopo->getDimension();
@@ -270,16 +270,22 @@ void Projector<Scalar>::projectFunctionOntoBasisInterpolating(FieldContainer<Sca
         domainBasisCache->setRefCellPoints(refCellPoints, cubatureWeightsSubcell);
         TIPPtr<Scalar> ipForProjection = (d==0) ? ip_l2 : ip; // just use values at vertices (ignore derivatives)
         set<int> dofsToSkip = allDofs;
-        for (set<int>::iterator dofOrdinalIt=subcellDofOrdinals.begin(); dofOrdinalIt != subcellDofOrdinals.end(); dofOrdinalIt++) {
-          dofsToSkip.erase(*dofOrdinalIt);
+        for (auto dofOrdinal : subcellDofOrdinals) {
+          dofsToSkip.erase(dofOrdinal);
         }
         FieldContainer<Scalar> newBasisCoefficients;
         projectFunctionOntoBasis(newBasisCoefficients, fxnToApproximate, basis, domainBasisCache, ipForProjection, v, dofsToSkip);
         for (int cellOrdinal=0; cellOrdinal<newBasisCoefficients.dimension(0); cellOrdinal++) {
-          for (set<int>::iterator dofOrdinalIt=subcellDofOrdinals.begin(); dofOrdinalIt != subcellDofOrdinals.end(); dofOrdinalIt++) {
-            basisCoefficients(cellOrdinal,*dofOrdinalIt) = newBasisCoefficients(cellOrdinal,*dofOrdinalIt);
+          for (auto dofOrdinal : subcellDofOrdinals) {
+            basisCoefficients(cellOrdinal,dofOrdinal) = newBasisCoefficients(cellOrdinal,dofOrdinal);
+//            cout << "Assigned dofOrdinal " << dofOrdinal << " " << " coefficient " << newBasisCoefficients(cellOrdinal,dofOrdinal);
+//            cout << " (subcord,d) = (" << subcord << "," << d << ")" << endl;
           }
         }
+      }
+      else
+      {
+//        cout << "no dof ordinals found for subcell " << subcord << " of dimension " << d << endl;
       }
     }
   }

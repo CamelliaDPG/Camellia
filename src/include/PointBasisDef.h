@@ -41,7 +41,7 @@ namespace Camellia {
     tags[0] = 0;
     tags[1] = 0;
     tags[2] = 0;
-    tags[3] = 0;
+    tags[3] = 1;
 
     Intrepid::setOrdinalTagData(this -> _tagToOrdinal,
                                 this -> _ordinalToTag,
