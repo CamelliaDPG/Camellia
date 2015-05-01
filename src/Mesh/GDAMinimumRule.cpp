@@ -389,6 +389,67 @@ void GDAMinimumRule::interpretGlobalCoefficients(GlobalIndexType cellID, Intrepi
 //  cout << " to localData:\n " << localDofs;
 }
 
+template <typename Scalar>
+void GDAMinimumRule::interpretGlobalCoefficients2(GlobalIndexType cellID, Intrepid::FieldContainer<Scalar> &localCoefficients, const TVectorPtr<Scalar> globalCoefficients) {
+  CellConstraints constraints = getCellConstraints(cellID);
+  LocalDofMapperPtr dofMapper = getDofMapper(cellID, constraints);
+  vector<GlobalIndexType> globalIndexVector = dofMapper->globalIndices();
+
+  // DEBUGGING
+//  if (cellID==4) {
+//    cout << "interpretGlobalData, mapping report for cell " << cellID << ":\n";
+//    dofMapper->printMappingReport();
+//  }
+
+  if (globalCoefficients->getNumVectors() == 1) {
+    // TODO: Test whether this is actually correct
+    Teuchos::ArrayRCP<Scalar> globalCoefficientsArray = globalCoefficients->getDataNonConst(globalIndexVector.size());
+    Intrepid::FieldContainer<Scalar> globalCoefficientsFC(globalIndexVector.size());
+    Teuchos::ArrayView<Scalar> arrayView = globalCoefficientsArray.view(0,globalIndexVector.size());
+    globalCoefficientsFC.setValues(arrayView);
+    // ConstMapPtr partMap = globalCoefficients->getMap();
+    // for (int i=0; i<globalIndexVector.size(); i++) {
+    //   GlobalIndexTypeToCast globalIndex = globalIndexVector[i];
+    //   int localIndex = partMap->getLocalElement(globalIndex);
+    //   if (localIndex != Teuchos::OrdinalTraits<IndexType>::invalid()) {
+    //     globalCoefficientsFC[i] = globalCoefficients[0][localIndex];
+    //   } else {
+    //     // non-local coefficient: ignore
+    //     globalCoefficientsFC[i] = 0;
+    //   }
+    // }
+    localCoefficients = dofMapper->mapGlobalCoefficients(globalCoefficientsFC);
+  } else {
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "InterpretGlobalCoefficients not implemented for more than one vector");
+    // Teuchos::ArrayRCP<Teuchos::ArrayRCP<Scalar>> globalCoefficients2DArray = globalCoefficients->get2dViewNonConst(globalIndexVector.size());
+    // Intrepid::FieldContainer<Scalar> globalCoefficientsFC(globalCoefficients.numVectors(), globalIndexVector.size());
+    // for (int vectorOrdinal=0; vectorOrdinal < globalCoefficients.numVectors(); vectorOrdinal++) {
+    //   Teuchos::ArrayRCP<Scalar> globalCoefficientsArray = globalCoefficients2DArray[vectorOrdinal];
+    //   Teuchos::ArrayView<Scalar> arrayView = globalCoefficientsArray.view(0,globalIndexVector.size());
+    //   globalCoefficientsFC.setValues(arrayView);
+    // }
+  //   Intrepid::FieldContainer<Scalar> globalCoefficientsFC(globalCoefficients.NumVectors(), globalIndexVector.size());
+  //   Epetra_BlockMap partMap = globalCoefficients.Map();
+  //   for (int vectorOrdinal=0; vectorOrdinal < globalCoefficients.NumVectors(); vectorOrdinal++) {
+  //     for (int i=0; i<globalIndexVector.size(); i++) {
+  //       GlobalIndexTypeToCast globalIndex = globalIndexVector[i];
+  //       int localIndex = partMap.LID(globalIndex);
+  //       if (localIndex != -1) {
+  //         globalCoefficientsFC(vectorOrdinal,i) = globalCoefficients[vectorOrdinal][localIndex];
+  //       } else {
+  //         // non-local coefficient: ignore
+  //         globalCoefficientsFC(vectorOrdinal,i) = 0;
+  //       }
+  //     }
+    // }
+    // localCoefficients = dofMapper->mapGlobalCoefficients(globalCoefficientsFC);
+  }
+//  cout << "For cellID " << cellID << ", mapping globalData:\n " << globalDataFC;
+//  cout << " to localData:\n " << localDofs;
+}
+
+template void GDAMinimumRule::interpretGlobalCoefficients2(GlobalIndexType cellID, Intrepid::FieldContainer<double> &localCoefficients, const TVectorPtr<double> globalCoefficients);
+
 void GDAMinimumRule::interpretLocalData(GlobalIndexType cellID, const Intrepid::FieldContainer<double> &localData,
                                         Intrepid::FieldContainer<double> &globalData, Intrepid::FieldContainer<GlobalIndexType> &globalDofIndices) {
   CellConstraints constraints = getCellConstraints(cellID);
