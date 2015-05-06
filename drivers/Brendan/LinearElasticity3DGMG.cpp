@@ -295,52 +295,6 @@ int main(int argc, char *argv[]) {
   // bc->addDirichlet(u2hat, y_equals_one,  x);
   // bc->addDirichlet(u2hat, x_equals_one,  y);
 
-  // Mesh
-  CellTopoPtr hex = CellTopology::hexahedron();
-  vector<double> V0 = makeVertex(0,0,0);
-  vector<double> V1 = makeVertex(1,0,0);
-  vector<double> V2 = makeVertex(1,1,0);
-  vector<double> V3 = makeVertex(0,1,0);
-  vector<double> V4 = makeVertex(0,0,1);
-  vector<double> V5 = makeVertex(1,0,1);
-  vector<double> V6 = makeVertex(1,1,1);
-  vector<double> V7 = makeVertex(0,1,1);
-
-  vector< vector<double> > vertices;
-  vertices.push_back(V0);
-  vertices.push_back(V1);
-  vertices.push_back(V2);
-  vertices.push_back(V3);
-  vertices.push_back(V4);
-  vertices.push_back(V5);
-  vertices.push_back(V6);
-  vertices.push_back(V7);
-
-  vector<unsigned> hexVertexList;
-  hexVertexList.push_back(0);
-  hexVertexList.push_back(1);
-  hexVertexList.push_back(2);
-  hexVertexList.push_back(3);
-  hexVertexList.push_back(4);
-  hexVertexList.push_back(5);
-  hexVertexList.push_back(6);
-  hexVertexList.push_back(7);
-
-  vector< vector<unsigned> > elementVertices;
-  elementVertices.push_back(hexVertexList);
-
-  vector< CellTopoPtr > cellTopos;
-  cellTopos.push_back(hex);
-
-  MeshGeometryPtr meshGeometry = Teuchos::rcp( new MeshGeometry(vertices, elementVertices, cellTopos) );
-
-  MeshTopologyPtr meshTopology = Teuchos::rcp( new MeshTopology(meshGeometry) );
-
-  MeshPtr mesh = Teuchos::rcp( new Mesh (meshTopology, bf, k+1, delta_k) );
-  MeshPtr k0Mesh = Teuchos::rcp( new Mesh (meshTopology->deepCopy(), bf, 1, delta_k) );
-  
-  mesh->registerObserver(k0Mesh);
-
   map<string, IPPtr> elasticityIPs;
   elasticityIPs["Graph"] = bf->graphNorm();
 
@@ -356,7 +310,38 @@ int main(int argc, char *argv[]) {
 
   SolutionPtr soln;
   
+  MeshPtr mesh, k0Mesh;
+  
   if (loadRefinementNumber == -1) {
+    // Mesh
+    CellTopoPtr hex = CellTopology::hexahedron();
+    vector<double> V0 = {0,0,0};
+    vector<double> V1 = {1,0,0};
+    vector<double> V2 = {1,1,0};
+    vector<double> V3 = {0,1,0};
+    vector<double> V4 = {0,0,1};
+    vector<double> V5 = {1,0,1};
+    vector<double> V6 = {1,1,1};
+    vector<double> V7 = {0,1,1};
+    
+    vector< vector<double> > vertices = {V0,V1,V2,V3,V4,V5,V6,V7};
+    vector<unsigned> hexVertexList = {0,1,2,3,4,5,6,7};
+    
+    vector< vector<unsigned> > elementVertices;
+    elementVertices.push_back(hexVertexList);
+    
+    vector< CellTopoPtr > cellTopos;
+    cellTopos.push_back(hex);
+    
+    MeshGeometryPtr meshGeometry = Teuchos::rcp( new MeshGeometry(vertices, elementVertices, cellTopos) );
+    
+    MeshTopologyPtr meshTopology = Teuchos::rcp( new MeshTopology(meshGeometry) );
+    
+    mesh = Teuchos::rcp( new Mesh (meshTopology, bf, k+1, delta_k) );
+    k0Mesh = Teuchos::rcp( new Mesh (meshTopology->deepCopy(), bf, 1, delta_k) );
+    
+    mesh->registerObserver(k0Mesh);
+    
     soln = Solution::solution(mesh, bc, rhs, ip);
   } else {
     ostringstream filePrefix;
@@ -364,6 +349,11 @@ int main(int argc, char *argv[]) {
     if (commRank==0) cout << "loading " << filePrefix.str() << endl;
     soln = Solution::load(bf, filePrefix.str());
     mesh = soln->mesh();
+    
+    MeshTopologyPtr meshTopo = mesh->getTopology();
+    k0Mesh = Teuchos::rcp( new Mesh (meshTopo->deepCopy(), bf, 1, delta_k) );
+    mesh->registerObserver(k0Mesh);
+    
     soln->setBC(bc);
     soln->setRHS(rhs);
     soln->setIP(ip);
