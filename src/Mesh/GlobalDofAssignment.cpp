@@ -92,7 +92,7 @@ GlobalDofAssignment::GlobalDofAssignment( GlobalDofAssignment &otherGDA ) : DofI
   _partitionForCellID = otherGDA._partitionForCellID;
 
   _activeCellMap = Teuchos::rcp( new Epetra_Map(*otherGDA._activeCellMap) );
-  _activeCellMap2 = Teuchos::rcp( new Tpetra::Map<IndexType,GlobalIndexType>(*otherGDA._activeCellMap2) );
+//  _activeCellMap2 = Teuchos::rcp( new Tpetra::Map<IndexType,GlobalIndexType>(*otherGDA._activeCellMap2) );
 
   _numPartitions = otherGDA._numPartitions;
 
