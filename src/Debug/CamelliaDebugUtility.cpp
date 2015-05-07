@@ -83,7 +83,7 @@ namespace Camellia {
     print<double>(name, data);
   }
 
-  void printLabeledDofCoefficients(const VarFactoryPtr vf, DofOrderingPtr dofOrdering,
+  void printLabeledDofCoefficients(VarFactoryPtr vf, DofOrderingPtr dofOrdering,
                                    const Intrepid::FieldContainer<double> &dofCoefficients,
                                    bool trialSpaceDofs) {
     if (dofOrdering->totalDofs() != dofCoefficients.size()) {
@@ -105,6 +105,9 @@ namespace Camellia {
     vector< VarPtr > traceVars = vf->traceVars();
     vector< VarPtr > fluxVars = vf->fluxVars();
 
+    bool printNonZerosOnly = true;
+    if (printNonZerosOnly) cout << "*** (printing only nonzeros) *** \n";
+    
     if (fieldVars.size() > 0) {
       cout << "\n\n **************   FIELD coefficients   **************\n";
       for (vector<VarPtr>::iterator varIt = fieldVars.begin(); varIt != fieldVars.end(); varIt++) {
@@ -113,6 +116,7 @@ namespace Camellia {
         const std::vector<int>* dofIndices = &dofOrdering->getDofIndices(var->ID());
         int basisDofOrdinal = 0;
         for (std::vector<int>::const_iterator dofIndexIt = dofIndices->begin(); dofIndexIt != dofIndices->end(); dofIndexIt++, basisDofOrdinal++) {
+          if (printNonZerosOnly && (dofCoefficients[*dofIndexIt]==0.0)) continue;
           cout.setf(std::ios::right, std::ios::adjustfield);
           cout << std::setw(3) << basisDofOrdinal;
           cout << "             ";
@@ -133,6 +137,7 @@ namespace Camellia {
           const std::vector<int>* dofIndices = &dofOrdering->getDofIndices(var->ID(), sideOrdinal);
           int basisDofOrdinal = 0;
           for (std::vector<int>::const_iterator dofIndexIt = dofIndices->begin(); dofIndexIt != dofIndices->end(); dofIndexIt++, basisDofOrdinal++) {
+            if (printNonZerosOnly && (dofCoefficients[*dofIndexIt]==0.0)) continue;
             cout.setf(std::ios::right, std::ios::adjustfield);
             cout << std::setw(3) << basisDofOrdinal;
             cout << "             ";
@@ -154,6 +159,7 @@ namespace Camellia {
           const std::vector<int>* dofIndices = &dofOrdering->getDofIndices(var->ID(), sideOrdinal);
           int basisDofOrdinal = 0;
           for (std::vector<int>::const_iterator dofIndexIt = dofIndices->begin(); dofIndexIt != dofIndices->end(); dofIndexIt++, basisDofOrdinal++) {
+            if (printNonZerosOnly && (dofCoefficients[*dofIndexIt]==0.0)) continue;
             cout.setf(std::ios::right, std::ios::adjustfield);
             cout << std::setw(3) << basisDofOrdinal;
             cout << "             ";
