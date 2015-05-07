@@ -9,6 +9,8 @@
 #include "Teuchos_UnitTestHarness.hpp"
 
 #include "Boundary.h"
+#include "CamelliaDebugUtility.h"
+#include "GDAMinimumRule.h"
 #include "HDF5Exporter.h"
 #include "MeshFactory.h"
 #include "SpaceTimeHeatFormulation.h"
@@ -95,7 +97,7 @@ namespace {
     TEST_COMPARE(l2_diff, <, 1e-14);
   }
 
-  void testSpaceTimeHeatConsistency(int spaceDim, Teuchos::FancyOStream &out, bool &success)
+  void testSpaceTimeHeatConsistency(int spaceDim, bool useConformingTraces, Teuchos::FancyOStream &out, bool &success)
   {
     vector<double> dimensions(spaceDim,2.0); // 2.0^d hypercube domain
     vector<int> elementCounts(spaceDim,1);   // 1^d mesh
@@ -127,10 +129,47 @@ namespace {
       u = x * t + y - z;
     }
     
-    bool useConformingTraces = true;
     SpaceTimeHeatFormulation form(spaceDim, useConformingTraces, epsilon);
     
     setupExactSolution(form, u, spaceTimeMeshTopo, fieldPolyOrder, delta_k);
+    
+    { // DEBUGGING
+      if (spaceDim == 2)
+      {
+        GlobalIndexType cellID = 0;
+
+        GlobalDofAssignmentPtr gda = form.solution()->mesh()->globalDofAssignment();
+        GDAMinimumRule* gdaMinRule = dynamic_cast<GDAMinimumRule*>(gda.get());
+        gdaMinRule->printConstraintInfo(cellID);
+        
+        DofOrderingPtr trialOrder = form.solution()->mesh()->getElementType(cellID)->trialOrderPtr;
+        Intrepid::FieldContainer<double> dofCoefficients(trialOrder->totalDofs());
+        dofCoefficients[82] = 1.0;
+        printLabeledDofCoefficients(form.bf()->varFactory(), trialOrder, dofCoefficients);
+        
+        
+        VarPtr uHat = form.u_hat();
+        int sideOrdinal = 0;
+        int basisOrdinal = 1; // the one we seek, corresponding to 82 above
+        BasisPtr uHatBasis = trialOrder->getBasis(uHat->ID(),sideOrdinal);
+        
+        int sideDim = uHatBasis->domainTopology()->getDimension();
+        for (int subcdim=0; subcdim<=sideDim; subcdim++)
+        {
+          int subcCount = uHatBasis->domainTopology()->getSubcellCount(subcdim);
+          for (int subcord=0; subcord<subcCount; subcord++)
+          {
+            set<int> dofOrdinalsForSubcell = uHatBasis->dofOrdinalsForSubcell(subcdim, subcord);
+            if (dofOrdinalsForSubcell.find(basisOrdinal) != dofOrdinalsForSubcell.end())
+            {
+              cout << "basisOrdinal " << basisOrdinal << " belongs to subcell " << subcord << " of dimension " << subcdim << endl;
+            }
+          }
+        }
+        
+      }
+    }
+  
     projectExactSolution(form, form.solution(), u);
     
     form.solution()->clearComputedResiduals();
@@ -323,23 +362,40 @@ namespace {
 //    testSpaceTimeHeatConsistencyConstantSolution(3, out, success);
 //  }
 
-  TEUCHOS_UNIT_TEST( SpaceTimeHeatFormulation, Consistency_1D )
+  TEUCHOS_UNIT_TEST( SpaceTimeHeatFormulation, Consistency_Conforming_1D )
   {
     // consistency test for space-time formulation with 1D space
-    testSpaceTimeHeatConsistency(1, out, success);
+    bool useConformingTraces = true; // conforming and non conforming are the same for 1D
+    testSpaceTimeHeatConsistency(1, useConformingTraces, out, success);
   }
 
-  TEUCHOS_UNIT_TEST( SpaceTimeHeatFormulation, Consistency_2D )
+  TEUCHOS_UNIT_TEST( SpaceTimeHeatFormulation, Consistency_Conforming_2D )
   {
     // consistency test for space-time formulation with 2D space
-    testSpaceTimeHeatConsistency(2, out, success);
+    bool useConformingTraces = true;
+    testSpaceTimeHeatConsistency(2, useConformingTraces, out, success);
   }
 
-//  TEUCHOS_UNIT_TEST( SpaceTimeHeatFormulation, Consistency_3D )
-//  {
-//    // consistency test for space-time formulation with 3D space
-//    testSpaceTimeHeatConsistency(3, out, success);
-//  }
+  TEUCHOS_UNIT_TEST( SpaceTimeHeatFormulation, Consistency_Conforming_3D_Slow )
+  {
+    // consistency test for space-time formulation with 3D space
+    bool useConformingTraces = true;
+    testSpaceTimeHeatConsistency(3, useConformingTraces, out, success);
+  }
+  
+  TEUCHOS_UNIT_TEST( SpaceTimeHeatFormulation, Consistency_Nonconforming_2D )
+  {
+    // consistency test for space-time formulation with 2D space
+    bool useConformingTraces = false;
+    testSpaceTimeHeatConsistency(2, useConformingTraces, out, success);
+  }
+  
+  TEUCHOS_UNIT_TEST( SpaceTimeHeatFormulation, Consistency_Nonconforming_3D_Slow )
+  {
+    // consistency test for space-time formulation with 3D space
+    bool useConformingTraces = false;
+    testSpaceTimeHeatConsistency(3, useConformingTraces, out, success);
+  }
 
   TEUCHOS_UNIT_TEST( SpaceTimeHeatFormulation, ForcingFunctionForConstantU_1D )
   {
