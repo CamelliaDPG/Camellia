@@ -1,5 +1,6 @@
 #include "AdditiveSchwarz.h"
 #include "CamelliaDebugUtility.h"
+#include "ExpFunction.h"
 #include "GMGOperator.h"
 #include "GnuPlotUtil.h"
 #include "HDF5Exporter.h"
@@ -7,6 +8,7 @@
 #include "PreviousSolutionFunction.h"
 #include "RefinementStrategy.h"
 #include "Solver.h"
+#include "TrigFunctions.h"
 #include "TypeDefs.h"
 
 #include "AztecOO.h"
@@ -56,20 +58,20 @@ GMGOperator::FactorType getFactorizationType(string factorizationTypeString) {
 
 Teuchos::RCP<Epetra_Operator> CamelliaAdditiveSchwarzPreconditioner(::Epetra_RowMatrix* A, int overlapLevel, MeshPtr mesh, Teuchos::RCP<DofInterpreter> dofInterpreter,
                                                                     GMGOperator::FactorType schwarzBlockFactorization,
-                                                                    int levelOfFill, double fillRatio) {
+                                                                    int levelOfFill, double fillRatio, bool hOnly) {
   
   Teuchos::RCP<Ifpack_Preconditioner> preconditioner;
   Teuchos::ParameterList List;
   switch (schwarzBlockFactorization) {
     case GMGOperator::Direct:
-      preconditioner = Teuchos::rcp(new AdditiveSchwarz<Ifpack_Amesos>(A, overlapLevel, mesh, dofInterpreter) );
+      preconditioner = Teuchos::rcp(new AdditiveSchwarz<Ifpack_Amesos>(A, overlapLevel, mesh, dofInterpreter, hOnly) );
       break;
     case GMGOperator::IC:
-      preconditioner = Teuchos::rcp(new AdditiveSchwarz<Ifpack_IC>(A, overlapLevel, mesh, dofInterpreter) );
+      preconditioner = Teuchos::rcp(new AdditiveSchwarz<Ifpack_IC>(A, overlapLevel, mesh, dofInterpreter, hOnly) );
       List.set("fact: ict level-of-fill", fillRatio);
       break;
     case GMGOperator::ILU:
-      preconditioner = Teuchos::rcp(new AdditiveSchwarz<Ifpack_ILU>(A, overlapLevel, mesh, dofInterpreter) );
+      preconditioner = Teuchos::rcp(new AdditiveSchwarz<Ifpack_ILU>(A, overlapLevel, mesh, dofInterpreter, hOnly) );
       List.set("fact: level-of-fill", levelOfFill);
       break;
     default:
@@ -141,6 +143,7 @@ class AztecSolver : public Solver {
   double _tol;
   int _schwarzOverlap;
   bool _useSchwarzPreconditioner;
+  bool _hierarchical; // for Camellia Schwarz preconditioners
   
   int _iterationCount;
   
@@ -163,11 +166,12 @@ public:
     _schwarzBlockFactorization = schwarzBlockFactorization;
     _levelOfFill = levelOfFill;
     _fillRatio = fillRatio;
+    _hierarchical = false;
   }
   
   AztecSolver(int maxIters, double tol, int schwarzOverlapLevel, bool useSchwarzPreconditioner,
               GMGOperator::FactorType schwarzBlockFactorization, int levelOfFill, double fillRatio,
-              MeshPtr mesh, Teuchos::RCP<DofInterpreter> dofInterpreter) {
+              MeshPtr mesh, Teuchos::RCP<DofInterpreter> dofInterpreter, bool hierarchical) {
     _mesh = mesh;
     _dofInterpreter = dofInterpreter;
     _maxIters = maxIters;
@@ -178,6 +182,7 @@ public:
     _azOutputLevel = 1;
     _levelOfFill = levelOfFill;
     _fillRatio = fillRatio;
+    _hierarchical = hierarchical;
   }
   void setAztecOutputLevel(int AztecOutputLevel) {
     _azOutputLevel = AztecOutputLevel;
@@ -193,7 +198,7 @@ public:
     Teuchos::RCP<Epetra_Operator> preconditioner;
     if (_mesh != Teuchos::null) {
       preconditioner = CamelliaAdditiveSchwarzPreconditioner(A.get(), _schwarzOverlap, _mesh, _dofInterpreter, _schwarzBlockFactorization,
-                                                             _levelOfFill, _fillRatio);
+                                                             _levelOfFill, _fillRatio, _hierarchical);
       
 //      Teuchos::RCP< Epetra_CrsMatrix > M;
 //      M = Epetra_Operator_to_Epetra_Matrix::constructInverseMatrix(*preconditioner, A->RowMatrixRowMap());
@@ -270,7 +275,7 @@ public:
     Teuchos::RCP<Epetra_Operator> preconditioner;
     if (_mesh != Teuchos::null) {
       preconditioner = CamelliaAdditiveSchwarzPreconditioner(A.get(), _schwarzOverlap, _mesh, _dofInterpreter,
-                                                             _schwarzBlockFactorization, _levelOfFill, _fillRatio);
+                                                             _schwarzBlockFactorization, _levelOfFill, _fillRatio,_hierarchical);
       
 //      Teuchos::RCP< Epetra_CrsMatrix > M;
 //      M = Epetra_Operator_to_Epetra_Matrix::constructInverseMatrix(*preconditioner, A->RowMatrixRowMap());
@@ -560,7 +565,7 @@ void run(ProblemChoice problemChoice, int &iterationCount, int spaceDim, int num
   } else if (schwarzOnly) {
     if (smootherType==GMGOperator::CAMELLIA_ADDITIVE_SCHWARZ) {
       solver = Teuchos::rcp( new AztecSolver(cgMaxIterations,cgTol,schwarzOverlap, precondition, schwarzBlockFactorization,
-                                             schwarzLevelOfFill, schwarzFillRatio, mesh, solution->getDofInterpreter()) );
+                                             schwarzLevelOfFill, schwarzFillRatio, mesh, solution->getDofInterpreter(), hOnly) );
     } else {
       solver = Teuchos::rcp( new AztecSolver(cgMaxIterations,cgTol,schwarzOverlap,precondition, schwarzBlockFactorization,
                                              schwarzLevelOfFill, schwarzFillRatio) );
@@ -607,6 +612,13 @@ void run(ProblemChoice problemChoice, int &iterationCount, int spaceDim, int num
     }
     
     gmgSolver->gmgOperator().setCoarseSolver(coarseSolver);
+    
+    if ((smootherType == GMGOperator::CAMELLIA_ADDITIVE_SCHWARZ) && hOnly)
+    {
+      // then use hierarchical neighbor relationship
+      gmgSolver->gmgOperator().setUseHierarchicalNeighborsForSchwarz(true);
+      if (rank==0) cout << "using new hierarchical Schwarz neighbors option";
+    }
     
 //    GMGSolver* gmgSolver = new GMGSolver(zeroBCs, k0Mesh, graphNorm, mesh, solution->getDofInterpreter(),
 //                                         solution->getPartitionMap(), cgMaxIterations, cgTol, coarseSolver,
