@@ -958,10 +958,10 @@ BasisMap GDAMinimumRule::getBasisMapOld(GlobalIndexType cellID, SubCellDofIndexI
 
   SubBasisMapInfo subBasisMap;
 
-//  const static int DEBUG_VAR_ID = 0;
-//  const static GlobalIndexType DEBUG_CELL_ID = 11;
-//  const static unsigned DEBUG_SIDE_ORDINAL = 1;
-//  const static GlobalIndexType DEBUG_GLOBAL_DOF = 3;
+//  const static int DEBUG_VAR_ID = 3;
+//  const static GlobalIndexType DEBUG_CELL_ID = 0;
+//  const static unsigned DEBUG_SIDE_ORDINAL = 2;
+//  const static GlobalIndexType DEBUG_GLOBAL_DOF = 82;
 
   const static int DEBUG_VAR_ID = -1;
   const static GlobalIndexType DEBUG_CELL_ID = -1;
@@ -1061,7 +1061,7 @@ BasisMap GDAMinimumRule::getBasisMapOld(GlobalIndexType cellID, SubCellDofIndexI
 
         CellConstraints cellConstraints = getCellConstraints(subcellInfo.cellID);
         AnnotatedEntity subcellConstraint = cellConstraints.subcellConstraints[d][subcordInAppliedConstraintCell];
-
+        
         CellPtr constrainingCell = _meshTopology->getCell(subcellConstraint.cellID);
 
         DofOrderingPtr constrainingTrialOrdering = _elementTypeForCell[subcellConstraint.cellID]->trialOrderPtr;
@@ -1070,54 +1070,20 @@ BasisMap GDAMinimumRule::getBasisMapOld(GlobalIndexType cellID, SubCellDofIndexI
 
         unsigned subcellOrdinalInConstrainingCell = CamelliaCellTools::subcellOrdinalMap(constrainingCell->topology(), sideDim, subcellConstraint.sideOrdinal,
                                                                                          subcellConstraint.dimension, subcellConstraint.subcellOrdinal);
-
-//        IndexType constrainingSubcellEntityIndex = constrainingCell->entityIndex(subcellConstraint.dimension, subcellOrdinalInConstrainingCell);
-//        IndexType appliedConstraintSubcellEntityIndex = appliedConstraintCell->entityIndex(subcellInfo.dimension, subcordInAppliedConstraintCell);
-
-        // have we already processed this guy?  If so, continue with the next.  (Might be better not to add it in the first place)
-//        if (processedEntities[subcellInfo.dimension].find(appliedConstraintSubcellEntityIndex)
-//            != processedEntities[subcellInfo.dimension].end()) {
-//          continue;
-//        }
-//
-//        if ((constrainingSubcellEntityIndex != appliedConstraintSubcellEntityIndex)
-//            || (subcellInfo.dimension != subcellConstraint.dimension)) {
-//          // non-trivial constraint; by the time we finish, we will have processed all the subcells of appliedConstraintSubcellEntityIndex, so we record that now:
-//          cout << CamelliaCellTools::entityTypeString(subcellInfo.dimension);
-//          cout << appliedConstraintSubcellEntityIndex << " is constrained by ";
-//          cout << CamelliaCellTools::entityTypeString(subcellConstraint.dimension);
-//          cout << constrainingSubcellEntityIndex << endl;
-//          processedEntities[subcellInfo.dimension].insert(appliedConstraintSubcellEntityIndex);
-//          cout << "Added " << CamelliaCellTools::entityTypeString(subcellInfo.dimension);
-//          cout << " " << appliedConstraintSubcellEntityIndex << " to processedEntities.\n";
-//          for (int sscDim=0; sscDim<subcellInfo.dimension; sscDim++) {
-//            int sscCount = _meshTopology->getSubEntityCount(subcellInfo.dimension, appliedConstraintSubcellEntityIndex, sscDim);
-//            for (int sscOrdinal=0; sscOrdinal<sscCount; sscOrdinal++) {
-//              GlobalIndexType sscEntityIndex = _meshTopology->getSubEntityIndex(subcellInfo.dimension,
-//                                                                                appliedConstraintSubcellEntityIndex,
-//                                                                                sscDim, sscOrdinal);
-//              processedEntities[sscDim].insert(sscEntityIndex);
-//              cout << "Added " << CamelliaCellTools::entityTypeString(sscDim);
-//              cout << " " << sscEntityIndex << " to processedEntities.\n";
-//            }
-//          }
-//        }
-
+        
         // DEBUGGING
         if ((cellID==DEBUG_CELL_ID) && (sideOrdinal==DEBUG_SIDE_ORDINAL) && (var->ID()==DEBUG_VAR_ID)) {
+          IndexType appliedConstraintSubcellEntityIndex = appliedConstraintCell->entityIndex(subcellInfo.dimension, subcordInAppliedConstraintCell);
+          IndexType constrainingSubcellEntityIndex = constrainingCell->entityIndex(subcellConstraint.dimension, subcellOrdinalInConstrainingCell);
+
           cout << "while getting basis map for cell " << DEBUG_CELL_ID << ", side " << DEBUG_SIDE_ORDINAL << ": cell " << subcellInfo.cellID << ", side " << subcellInfo.sideOrdinal;
           cout << ", subcell " << subcellInfo.subcellOrdinal << " of dimension " << subcellInfo.dimension << " is constrained by ";
           cout << "cell " << subcellConstraint.cellID << ", side " << subcellConstraint.sideOrdinal;
           cout << ", subcell " << subcellConstraint.subcellOrdinal << " of dimension " << subcellConstraint.dimension << endl;
-          IndexType appliedConstraintSubcellEntityIndex = appliedConstraintCell->entityIndex(subcellInfo.dimension, subcordInAppliedConstraintCell);
-          IndexType constrainingSubcellEntityIndex = constrainingCell->entityIndex(subcellConstraint.dimension, subcellOrdinalInConstrainingCell);
 
           cout << CamelliaCellTools::entityTypeString(subcellInfo.dimension) << " " << appliedConstraintSubcellEntityIndex;
           cout << " constrained by " << CamelliaCellTools::entityTypeString(subcellConstraint.dimension) << " " << constrainingSubcellEntityIndex;
           cout << endl;
-//          if ((appliedConstraintSubcellEntityIndex==34) && (constrainingSubcellEntityIndex==11)) {
-//            cout << "entity 34 constrained by entity 11.\n";
-//          }
         }
 
         CellTopoPtr constrainingTopo = constrainingCell->topology()->getSubcell(subcellConstraint.dimension, subcellOrdinalInConstrainingCell);
@@ -1202,24 +1168,18 @@ BasisMap GDAMinimumRule::getBasisMapOld(GlobalIndexType cellID, SubCellDofIndexI
         }
 
         if (subcellConstraint.dimension != d) {
-          // OLD (pre-8/9/14) code; computes *side* permutations (which is clearly wrong; the two sides could have different topologies)
-//          unsigned ancestralPermutation = ancestralCell->sideSubcellPermutation(ancestralSideOrdinal, sideDim, 0);// side permutation as seen from the perspective of the fine cell's side's ancestor
-//          unsigned constrainingPermutation = constrainingCell->sideSubcellPermutation(subcellConstraint.sideOrdinal, sideDim, 0); // side permutation as seen from the perspective of the constraining cell's side
-//
-          // new idea 8-9-14:
           unsigned ancestralSubcellOrdinalInSide = CamelliaCellTools::subcellReverseOrdinalMap(ancestralCell->topology(), sideDim, ancestralSideOrdinal, subcellConstraint.dimension, ancestralSubcellOrdinal);
 
           unsigned ancestralPermutation = ancestralCell->sideSubcellPermutation(ancestralSideOrdinal, ancestralSubcellDimension, ancestralSubcellOrdinalInSide); // subcell permutation as seen from the perspective of the fine cell's side's ancestor
           unsigned constrainingPermutation = constrainingCell->sideSubcellPermutation(subcellConstraint.sideOrdinal, subcellConstraint.dimension, subcellConstraint.subcellOrdinal); // subcell permutation as seen from the perspective of the constraining cell's side
-
-//          CellTopoPtr constrainingSideTopo = constrainingCell->topology()->getSubcell(sideDim, subcellConstraint.sideOrdinal);
 
           unsigned constrainingPermutationInverse = CamelliaCellTools::permutationInverse(constrainingTopo, constrainingPermutation);
 
           unsigned composedPermutation = CamelliaCellTools::permutationComposition(constrainingTopo, constrainingPermutationInverse, ancestralPermutation);
 
           SubBasisReconciliationWeights newWeightsToApply = BasisReconciliation::computeConstrainedWeights(d, appliedConstraintBasis, subcellInfo.subcellOrdinal,
-                                                                                                           volumeRefinements, subcellInfo.sideOrdinal, subcellConstraint.dimension,
+                                                                                                           volumeRefinements, subcellInfo.sideOrdinal,
+                                                                                                           ancestralCell->topology(), subcellConstraint.dimension,
                                                                                                            constrainingBasis, subcellConstraint.subcellOrdinal,
                                                                                                            ancestralSideOrdinal, composedPermutation);
 

@@ -68,13 +68,14 @@ namespace Camellia {
           BasisPtr constrainingBasis = constrainingTrialOrdering->getBasis(var->ID(), thisSubcellInfo.sideOrdinal);
           RefinementBranch volumeRefinements = priorEntry->volumeRefinements();
           unsigned composedPermutation = priorEntry->composedPermutation();
-
+          CellTopoPtr thisCellTopology = minRule->elementType(thisSubcellInfo.cellID)->cellTopoPtr;
+          
           // TODO: work out what to do here for volume basis--in particular, what happens to the sideOrdinal arguments??  It seems like these should not apply... (they should be redundant with subcell ordinal)  It may well be that what we should do is ensure that the sideOrdinal arguments are -1, and then BR should understand that as a flag indicating that volumeRefinements really does apply to the ancestral domain, etc.
           SubBasisReconciliationWeights newWeights = BasisReconciliation::computeConstrainedWeights(priorSubcellInfo.dimension, prevBasis, priorSubcellInfo.subcellOrdinal,
-              volumeRefinements, priorSubcellInfo.sideOrdinal,
-              thisSubcellInfo.dimension,
-              constrainingBasis, thisSubcellInfo.subcellOrdinal,
-              priorEntry->ancestralSideOrdinal(), composedPermutation);
+                                                                                                    volumeRefinements, priorSubcellInfo.sideOrdinal,
+                                                                                                    thisCellTopology, thisSubcellInfo.dimension,
+                                                                                                    constrainingBasis, thisSubcellInfo.subcellOrdinal,
+                                                                                                    priorEntry->ancestralSideOrdinal(), composedPermutation);
           composedWeights = BasisReconciliation::composedSubBasisReconciliationWeights(priorWeights, newWeights);
         }
         summedWeights = BasisReconciliation::sumWeights(summedWeights,composedWeights);
