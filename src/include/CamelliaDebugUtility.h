@@ -35,7 +35,7 @@ namespace Camellia {
   // ! prints out the coefficients for each variable, labelled using the names from the VarFactory.
   // ! If the trialSpaceDofs boolean is set to true, interprets the variable IDs as trial space variables;
   // ! otherwise, interprets them as test space variables.
-  void printLabeledDofCoefficients(const VarFactoryPtr &vf, DofOrderingPtr dofOrdering,
+  void printLabeledDofCoefficients(VarFactoryPtr vf, DofOrderingPtr dofOrdering,
                                    const Intrepid::FieldContainer<double> &dofCoefficients,
                                    bool trialSpaceDofs = true);
 }
