@@ -24,6 +24,108 @@
 using namespace Intrepid;
 using namespace Camellia;
 
+bool MeshTestUtility::checkLocalGlobalConsistency(MeshPtr mesh, double tol) {
+  bool success = true;
+  
+  set<GlobalIndexType> cellIDs = mesh->getActiveCellIDs();
+  
+  GlobalDofAssignmentPtr gda = mesh->globalDofAssignment();
+  
+  // TODO: make this only check the locally-owned cells (right now does the whole mesh on every rank)
+  
+  int numGlobalDofs = gda->globalDofCount();
+  FieldContainer<double> globalCoefficients(numGlobalDofs);
+  for (int i=0; i<numGlobalDofs; i++) {
+    globalCoefficients(i) = 2*i + 1; // arbitrary cofficients
+  }
+  FieldContainer<double> globalCoefficientsExpected = globalCoefficients;
+  FieldContainer<double> globalCoefficientsActual(numGlobalDofs);
+  FieldContainer<double> localCoefficients;
+  
+  Epetra_SerialComm Comm;
+  Epetra_BlockMap map(numGlobalDofs, 1, 0, Comm);
+  Epetra_Vector globalCoefficientsVector(map);
+  for (int i=0; i<numGlobalDofs; i++) {
+    globalCoefficientsVector[i] = globalCoefficients(i);
+  }
+  
+  cellIDs = mesh->getActiveCellIDs();
+  for (set<GlobalIndexType>::iterator cellIDIt = cellIDs.begin(); cellIDIt != cellIDs.end(); cellIDIt++) {
+    GlobalIndexType cellID = *cellIDIt;
+    gda->interpretGlobalCoefficients(cellID, localCoefficients, globalCoefficientsVector);
+    FieldContainer<GlobalIndexType> globalDofIndices;
+    FieldContainer<double> globalCoefficientsForCell;
+    
+    DofOrderingPtr trialOrder = mesh->getElementType(cellID)->trialOrderPtr;
+    set<int> varIDs = trialOrder->getVarIDs();
+    
+    for (set<int>::iterator varIt=varIDs.begin(); varIt != varIDs.end(); varIt++) {
+      int varID = *varIt;
+      const vector<int>* sidesForVar = &trialOrder->getSidesForVarID(varID);
+      for (vector<int>::const_iterator sideIt = sidesForVar->begin(); sideIt != sidesForVar->end(); sideIt++) {
+        int sideOrdinal = *sideIt;
+        
+        BasisPtr basis;
+        if (sidesForVar->size() == 1) {
+          basis = trialOrder->getBasis(varID);
+        } else {
+          basis = trialOrder->getBasis(varID,sideOrdinal);
+        }
+        
+        FieldContainer<double> basisCoefficients(basis->getCardinality());
+        
+        for (int dofOrdinal=0; dofOrdinal<basis->getCardinality(); dofOrdinal++) {
+          int localDofIndex;
+          if (sidesForVar->size() == 1) {
+            localDofIndex = trialOrder->getDofIndex(varID, dofOrdinal);
+          } else {
+            localDofIndex = trialOrder->getDofIndex(varID, dofOrdinal, sideOrdinal);
+          }
+          
+          basisCoefficients(dofOrdinal) = localCoefficients(localDofIndex);
+        }
+        
+        gda->interpretLocalBasisCoefficients(cellID, varID, sideOrdinal,
+                                             basisCoefficients, globalCoefficientsForCell, globalDofIndices);
+        
+        //        if ( (cellID==2) && (sideOrdinal==1) && (varID==0) ) {
+        //          cout << "DEBUGGING: (cellID==2) && (sideOrdinal==1).\n";
+        //          cout << "globalDofIndices:\n" << globalDofIndices;
+        //          cout << "globalCoefficientsForCell:\n" << globalCoefficientsForCell;
+        //          cout << "basisCoefficients:\n" << basisCoefficients;
+        //        }
+        
+        for (int dofOrdinal=0; dofOrdinal < globalDofIndices.size(); dofOrdinal++) {
+          GlobalIndexType dofIndex = globalDofIndices(dofOrdinal);
+          globalCoefficientsActual(dofIndex) = globalCoefficientsForCell(dofOrdinal);
+          
+          double diff = abs(globalCoefficientsForCell(dofOrdinal) - globalCoefficientsExpected(dofIndex)) / globalCoefficientsExpected(dofIndex);
+          if (diff > tol) {
+            cout << "In mapping for cell " << cellID << " and var " << varID << " on side " << sideOrdinal << ", ";
+            cout << "expected coefficient for global dof index " << dofIndex << " to be " << globalCoefficientsExpected(dofIndex);
+            cout << ", but was " << globalCoefficientsForCell(dofOrdinal);
+            cout << " (relative diff = " << diff << "; tol = " << tol << ")\n";
+            success = false;
+          }
+        }
+      }
+    }
+  }
+  
+  //  double maxDiff;
+  //  if (TestSuite::fcsAgree(globalCoefficientsActual, globalCoefficientsExpected, tol, maxDiff)) {
+  //    //    cout << "global data actual and expected AGREE; max difference is " << maxDiff << endl;
+  //    //    cout << "globalCoefficientsActual:\n" << globalCoefficientsActual;
+  //  } else {
+  //    cout << "global data actual and expected DISAGREE; max difference is " << maxDiff << endl;
+  //    success = false;
+  //    cout << "Expected:\n" << globalCoefficientsExpected;
+  //    cout << "Actual:\n" << globalCoefficientsActual;
+  //  }
+  
+  return success;
+}
+
 bool MeshTestUtility::checkMeshConsistency(Teuchos::RCP<Mesh> mesh) {
   bool success = true;
   success = checkMeshDofConnectivities(mesh);
