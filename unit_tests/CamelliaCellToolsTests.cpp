@@ -124,7 +124,7 @@ namespace {
     }
   }
 
-  TEUCHOS_UNIT_TEST( CamelliaCellTools, MapToReferenceSubcell_Shards)
+  TEUCHOS_UNIT_TEST( CamelliaCellTools, MapToReferenceSubcell_ShardsAndCamelliaAgree)
   {
     // for shards topologies supported by Intrepid::CellTools<double>::mapToReferenceSubcell(), test that
     // CamelliaCellTools::mapToReferenceSubcell() agrees with the Intrepid implementation.
@@ -150,6 +150,46 @@ namespace {
           CamelliaCellTools::mapToReferenceSubcell(camelliaParentNodes, refSubcellNodes, subcellDim, scord, simpleTopo);
           
           TEST_COMPARE_FLOATING_ARRAYS(intrepidParentNodes, camelliaParentNodes, 1e-15);
+        }
+      }
+    }
+  }
+  
+  TEUCHOS_UNIT_TEST( CamelliaCellTools, MapToReferenceSubcell_NodeOrderingAgrees)
+  {
+    // check that mapping subcell reference nodes to parent topology agrees with the
+    // node ordering reported by parent for the subcell topology
+    std::vector< CellTopoPtr > shardsTopologies = getShardsTopologies();
+    
+    for (int topoOrdinal = 0; topoOrdinal < shardsTopologies.size(); topoOrdinal++) {
+      CellTopoPtr simpleTopo = shardsTopologies[topoOrdinal];
+      shards::CellTopology shardsTopo = simpleTopo->getShardsTopology();
+      
+      if (shardsTopo.getDimension() == 0) continue; // don't bother testing point topology
+      
+      int maxSubcellDim = min((int)shardsTopo.getDimension()-1,2);
+      for (int subcellDim = 1; subcellDim <= maxSubcellDim; subcellDim++) {
+        for (unsigned scord=0; scord < shardsTopo.getSubcellCount(subcellDim); scord++) {
+          shards::CellTopology shardsSubcellTopo = shardsTopo.getCellTopologyData(subcellDim, scord);
+          FieldContainer<double> refSubcellNodes(shardsSubcellTopo.getVertexCount(), subcellDim);
+          CamelliaCellTools::refCellNodesForTopology(refSubcellNodes, shardsSubcellTopo);
+          
+          FieldContainer<double> nodesInParentActual(shardsSubcellTopo.getVertexCount(),shardsTopo.getDimension());
+          CamelliaCellTools::mapToReferenceSubcell(nodesInParentActual, refSubcellNodes, subcellDim, scord, simpleTopo);
+          
+          FieldContainer<double> refParentNodes(shardsTopo.getNodeCount(),shardsTopo.getDimension());
+          CamelliaCellTools::refCellNodesForTopology(refParentNodes, shardsTopo);
+          FieldContainer<double> nodesInParentExpected(shardsSubcellTopo.getVertexCount(),shardsTopo.getDimension());
+          for (int subcellNode=0; subcellNode<shardsSubcellTopo.getNodeCount(); subcellNode++)
+          {
+            int parentNode = simpleTopo->getNodeMap(subcellDim, scord, subcellNode);
+            for (int d=0; d<simpleTopo->getDimension(); d++)
+            {
+              nodesInParentExpected(subcellNode,d) = refParentNodes(parentNode,d);
+            }
+          }
+          
+          TEST_COMPARE_FLOATING_ARRAYS(nodesInParentExpected, nodesInParentActual, 1e-15);
         }
       }
     }

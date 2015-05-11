@@ -65,7 +65,6 @@
 #include "DPGTests.h"
 
 // test suite includes
-#include "BasisReconciliationTests.h"
 #include "CurvilinearMeshTests.h"
 #include "ElementTests.h"
 #include "FunctionTests.h"
@@ -216,8 +215,6 @@ void DPGTests::runTests() {
 
   testSuites.push_back( Teuchos::rcp( new MeshTestSuite ) );
 
-  testSuites.push_back( Teuchos::rcp( new BasisReconciliationTests ) );
-
   testSuites.push_back( Teuchos::rcp( new ScratchPadTests ) );
 
   testSuites.push_back( Teuchos::rcp( new ElementTests ) );
@@ -225,7 +222,6 @@ void DPGTests::runTests() {
   testSuites.push_back( Teuchos::rcp( new MultiBasisTests ) );
 
   testSuites.push_back( Teuchos::rcp( new FunctionTests ) );
-
 
   testSuites.push_back( Teuchos::rcp( new CurvilinearMeshTests) );
 

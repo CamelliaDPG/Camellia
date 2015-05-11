@@ -37,6 +37,8 @@ namespace Camellia {
   class GMGOperator : public Epetra_Operator {
     bool _debugMode; // in debug mode, output verbose info about what we're doing on rank 0
 
+    bool _hierarchicalNeighborsForSchwarz; // Applies only to Camellia Additive Schwarz
+    
     TSolutionPtr<double> _coarseSolution;
 
     bool _useStaticCondensation; // for both coarse and fine solves
@@ -87,7 +89,7 @@ namespace Camellia {
     GMGOperator(BCPtr zeroBCs, MeshPtr coarseMesh, IPPtr coarseIP, MeshPtr fineMesh,
                 Teuchos::RCP<DofInterpreter> fineDofInterpreter, Epetra_Map finePartitionMap,
                 Teuchos::RCP<Solver> coarseSolver, bool useStaticCondensation,
-                bool fineSolverUsesDiagonalScaling = true);
+                bool fineSolverUsesDiagonalScaling = true); // TODO: eliminate the fineSolverUsesDiagonalScaling option
     //@}
 
     //! @name Attribute set methods
@@ -229,6 +231,9 @@ namespace Camellia {
     void setFillRatio(double fillRatio);
 
     void setFineSolverUsesDiagonalScaling(bool value);
+
+    //! If true, use sibling/cousin relationships to define neighborhoods for Schwarz blocks.  Requires CAMELLIA_ADDITIVE_SCHWARZ as the smoother choice.
+    void setUseHierarchicalNeighborsForSchwarz(bool value);
     //@}
 
     //! Returns the prolongation operator (an Epetra_CrsMatrix).

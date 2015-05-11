@@ -1152,17 +1152,7 @@ vector< vector<double> > Mesh::verticesForCell(GlobalIndexType cellID) {
 }
 
 void Mesh::verticesForCell(FieldContainer<double>& vertices, GlobalIndexType cellID) {
-  CellPtr cell = _meshTopology->getCell(cellID);
-  vector<unsigned> vertexIndices = cell->vertices();
-  int numVertices = vertexIndices.size();
-  int spaceDim = _meshTopology->getSpaceDim();
-
-  //vertices.resize(numVertices,dimension);
-  for (unsigned vertexIndex = 0; vertexIndex < numVertices; vertexIndex++) {
-    for (int d=0; d<spaceDim; d++) {
-      vertices(vertexIndex,d) = _meshTopology->getVertex(vertexIndices[vertexIndex])[d];
-    }
-  }
+  _meshTopology->verticesForCell(vertices,cellID);
 }
 
 // global across all MPI nodes:

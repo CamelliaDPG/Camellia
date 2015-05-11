@@ -64,7 +64,7 @@
   Note: this class, and this documentation, are essentially copied from
   IfPack_AdditiveSchwarz.  The only changes are to support a slight modification
   of the definition of the overlapping matrix; we replace the IfPack_OverlappingRowMatrix
-  with a OverlappingRowMatrix.
+  with as OverlappingRowMatrix.
 
   Modifications support definitions of overlap level in terms of a Camellia
   Mesh.  Zero-level overlap means that the owner of each cell sees all the
@@ -144,8 +144,15 @@ public:
    * \param
    * OverlappingMatrix - (In) Pointer to the matrix extended with the
    *                     desired level of overlap.
+   * \param
+   * dofInterpreter - (In) the dofInterpreter for the problem
+   *
+   * \param
+   * hierarchical - (In) if true, use parent relationships (as opposed to neighbor relationships) to define Schwarz blocks.
+   *
    */
-  AdditiveSchwarz(Epetra_RowMatrix* Matrix_in, int OverlapLevel_in, MeshPtr mesh, Teuchos::RCP<DofInterpreter> dofInterpreter);
+  AdditiveSchwarz(Epetra_RowMatrix* Matrix_in, int OverlapLevel_in, MeshPtr mesh, Teuchos::RCP<DofInterpreter> dofInterpreter,
+                  bool hierarchical);
 
   //! Destructor
   virtual ~AdditiveSchwarz() {};
@@ -379,8 +386,12 @@ protected:
 
   //! Camellia addition: the Mesh
   MeshPtr mesh_;
+
   //! Camellia addition: the DofInterpreter
   Teuchos::RCP<DofInterpreter> dofInterpreter_;
+  
+  //! Camellia addition: whether to use "hierarchical" overlap definition
+  bool hierarchical_;
 
   //! Pointers to the matrix to be preconditioned.
   Teuchos::RCP<const Epetra_RowMatrix> Matrix_;
@@ -453,9 +464,11 @@ protected:
 //==============================================================================
 template<typename T>
 AdditiveSchwarz<T>::
-  AdditiveSchwarz(Epetra_RowMatrix* Matrix_in, int OverlapLevel_in, MeshPtr mesh, Teuchos::RCP<DofInterpreter> dofInterpreter) :
+  AdditiveSchwarz(Epetra_RowMatrix* Matrix_in, int OverlapLevel_in, MeshPtr mesh,
+                  Teuchos::RCP<DofInterpreter> dofInterpreter, bool hierarchical) :
   mesh_(mesh),
   dofInterpreter_(dofInterpreter),
+  hierarchical_(hierarchical),
   IsInitialized_(false),
   IsComputed_(false),
   UseTranspose_(false),

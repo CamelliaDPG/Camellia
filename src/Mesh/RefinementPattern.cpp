@@ -1310,7 +1310,8 @@ FieldContainer<double> RefinementPattern::descendantNodes(RefinementBranch refin
   for (int refIndex=0; refIndex<refinementBranch.size(); refIndex++) {
     RefinementPatternPtr tempRefPatternPtr = Teuchos::rcp(refinementBranch[refIndex].first, false);
     mesh->refineCell(cellIndex, tempRefPatternPtr);
-    cellIndex = mesh->getCell(cellIndex)->getChildIndices()[refinementBranch[refIndex].second];
+    unsigned childOrdinal = refinementBranch[refIndex].second;
+    cellIndex = mesh->getCell(cellIndex)->getChildIndices()[childOrdinal];
   }
 
   return mesh->physicalCellNodesForCell(cellIndex);

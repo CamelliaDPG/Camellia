@@ -8,6 +8,7 @@
 
 #include "Teuchos_UnitTestHarness.hpp"
 
+#include "CamelliaCellTools.h"
 #include "MeshTopology.h"
 #include "PoissonFormulation.h"
 
@@ -17,6 +18,88 @@ using namespace Camellia;
 using namespace Intrepid;
 
 namespace {
+  void testConstraints( MeshTopologyPtr mesh, unsigned entityDim, map<unsigned,pair<IndexType,unsigned> > &expectedConstraints, Teuchos::FancyOStream &out, bool &success) {
+    
+    string meshName = "mesh";
+    
+    // check constraints for entities belonging to active cells
+    set<unsigned> activeCells = mesh->getActiveCellIndices();
+    
+    for (set<unsigned>::iterator cellIt = activeCells.begin(); cellIt != activeCells.end(); cellIt++) {
+      unsigned cellIndex = *cellIt;
+      CellPtr cell = mesh->getCell(cellIndex);
+      vector<unsigned> entitiesForCell = cell->getEntityIndices(entityDim);
+      for (vector<unsigned>::iterator entityIt = entitiesForCell.begin(); entityIt != entitiesForCell.end(); entityIt++) {
+        unsigned entityIndex = *entityIt;
+        
+        pair<IndexType,unsigned> constrainingEntity = mesh->getConstrainingEntity(entityDim, entityIndex);
+        
+        unsigned constrainingEntityIndex = constrainingEntity.first;
+        unsigned constrainingEntityDim = constrainingEntity.second;
+        if ((constrainingEntityIndex==entityIndex) && (constrainingEntityDim == entityDim)) {
+          // then we should expect not to have an entry in expectedConstraints:
+          if (expectedConstraints.find(entityIndex) != expectedConstraints.end()) {
+            cout << "Expected entity constraint is not imposed in " << meshName << ".\n";
+            cout << "Expected " << CamelliaCellTools::entityTypeString(entityDim) << " " << entityIndex << " to be constrained by ";
+            cout << CamelliaCellTools::entityTypeString(expectedConstraints[entityIndex].second) << " " << expectedConstraints[entityIndex].first << endl;
+            cout << CamelliaCellTools::entityTypeString(entityDim) << " " << entityIndex << " vertices:\n";
+            mesh->printEntityVertices(entityDim, entityIndex);
+            cout << CamelliaCellTools::entityTypeString(expectedConstraints[entityIndex].second) << " " << expectedConstraints[entityIndex].first << " vertices:\n";
+            mesh->printEntityVertices(entityDim, expectedConstraints[entityIndex].first);
+            success = false;
+          }
+        } else {
+          if (expectedConstraints.find(entityIndex) == expectedConstraints.end()) {
+            cout << "Unexpected entity constraint is imposed in " << meshName << ".\n";
+            
+            string entityType;
+            if (entityDim==0) {
+              entityType = "Vertex ";
+            } else if (entityDim==1) {
+              entityType = "Edge ";
+            } else if (entityDim==2) {
+              entityType = "Face ";
+            } else if (entityDim==3) {
+              entityType = "Volume ";
+            }
+            string constrainingEntityType;
+            if (constrainingEntityDim==0) {
+              constrainingEntityType = "Vertex ";
+            } else if (constrainingEntityDim==1) {
+              constrainingEntityType = "Edge ";
+            } else if (constrainingEntityDim==2) {
+              constrainingEntityType = "Face ";
+            } else if (constrainingEntityDim==3) {
+              constrainingEntityType = "Volume ";
+            }
+            
+            cout << entityType << entityIndex << " unexpectedly constrained by " << constrainingEntityType << constrainingEntityIndex << endl;
+            cout << entityType << entityIndex << " vertices:\n";
+            mesh->printEntityVertices(entityDim, entityIndex);
+            cout << constrainingEntityType << constrainingEntityIndex << " vertices:\n";
+            mesh->printEntityVertices(constrainingEntityDim, constrainingEntityIndex);
+            success = false;
+          } else {
+            unsigned expectedConstrainingEntity = expectedConstraints[entityIndex].first;
+            if (expectedConstrainingEntity != constrainingEntityIndex) {
+              cout << "The constraining entity is not the expected one in " << meshName << ".\n";
+              cout << "Expected " << CamelliaCellTools::entityTypeString(entityDim) << " " << entityIndex << " to be constrained by ";
+              cout << CamelliaCellTools::entityTypeString(expectedConstraints[entityIndex].second) << " " << expectedConstrainingEntity;
+              cout << "; was constrained by " << constrainingEntityIndex << endl;
+              cout << CamelliaCellTools::entityTypeString(entityDim) << " " << entityIndex << " vertices:\n";
+              mesh->printEntityVertices(entityDim, entityIndex);
+              cout << CamelliaCellTools::entityTypeString(expectedConstraints[entityIndex].second) << " " << expectedConstrainingEntity << " vertices:\n";
+              mesh->printEntityVertices(entityDim, expectedConstrainingEntity);
+              cout << CamelliaCellTools::entityTypeString(constrainingEntityDim) << " " << constrainingEntityIndex << " vertices:\n";
+              mesh->printEntityVertices(constrainingEntityDim, constrainingEntityIndex);
+              success = false;
+            }
+          }
+        }
+      }
+    }
+  }
+  
   TEUCHOS_UNIT_TEST( MeshTopology, InitialMeshEntitiesActiveCellCount)
   {
     // one easy way to create a quad mesh topology is to use MeshFactory
@@ -258,6 +341,29 @@ namespace {
         
         TEST_COMPARE_FLOATING_ARRAYS(originalVertex, rootVertex, 1e-15);
       }
+    }
+  }
+  
+  TEUCHOS_UNIT_TEST( MeshTopology, UnrefinedSpaceTimeMeshTopologyIsUnconstrained )
+  {
+    // to start with, just a single-cell space-time MeshTopology
+    CellTopoPtr spaceTopo = CellTopology::line();
+    int spaceDim = spaceTopo->getDimension();
+    MeshTopologyPtr spatialMeshTopo = Teuchos::rcp( new MeshTopology(spaceDim) );
+    
+    FieldContainer<double> cellNodes(spaceTopo->getNodeCount(),spaceTopo->getDimension());
+    CamelliaCellTools::refCellNodesForTopology(cellNodes, spaceTopo);
+    vector<vector<double>> cellVerticesVector;
+    CamelliaCellTools::pointsVectorFromFC(cellVerticesVector, cellNodes);
+    spatialMeshTopo->addCell(spaceTopo, cellVerticesVector);
+    
+    double t0 = 0.0, t1 = 1.0;
+    MeshTopologyPtr spaceTimeMeshTopo = MeshFactory::spaceTimeMeshTopology(spatialMeshTopo, t0, t1);
+    
+    for (int d=0; d<spaceTimeMeshTopo->getSpaceDim(); d++)
+    {
+      map<unsigned,pair<IndexType,unsigned> > expectedConstraints;
+      testConstraints(spaceTimeMeshTopo, d, expectedConstraints, out, success);
     }
   }
 } // namespace

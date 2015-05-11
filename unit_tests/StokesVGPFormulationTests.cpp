@@ -133,7 +133,7 @@ namespace {
     testStokesConsistencySteady(spaceDim,out,success);
   }
 
-  TEUCHOS_UNIT_TEST( StokesVGPFormulation, Consistency_3D_Steady )
+  TEUCHOS_UNIT_TEST( StokesVGPFormulation, Consistency_3D_Steady_Slow )
   {
     int spaceDim = 3;
     testStokesConsistencySteady(spaceDim,out,success);
@@ -356,8 +356,8 @@ namespace {
     
 //    GDAMinimumRule* minRule = dynamic_cast<GDAMinimumRule*> (loadedForm.solution()->mesh()->globalDofAssignment().get());
 
-    set<GlobalIndexType> cellsToRefine = {0};
-    loadedForm.solution()->mesh()->pRefine(cellsToRefine);
+//    set<GlobalIndexType> cellsToRefine = {0};
+//    loadedForm.solution()->mesh()->pRefine(cellsToRefine);
   }
 
 } // namespace

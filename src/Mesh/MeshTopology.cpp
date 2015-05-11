@@ -1678,6 +1678,7 @@ unsigned MeshTopology::getEntityParentForSide(unsigned d, unsigned entityIndex,
   return -1;
 }
 
+// ! pairs are (cellIndex, sideOrdinal) where the sideOrdinal is a side that contains the entity
 set< pair<IndexType, unsigned> > MeshTopology::getCellsContainingEntity(unsigned d, unsigned entityIndex) { // not *all* cells, but within any refinement branch, the most refined cell that contains the entity will be present in this set.  The unsigned value is the ordinal of a *side* in the cell containing this entity.  There may be multiple sides in a cell that contain the entity; this method will return just one entry per cell.
   vector<IndexType> sidesForEntity = _sidesForEntities[d][entityIndex];
   typedef pair<IndexType,unsigned> CellPair;
@@ -2300,4 +2301,18 @@ void MeshTopology::setEntityGeneralizedParent(unsigned entityDim, IndexType enti
 
 Teuchos::RCP<MeshTransformationFunction> MeshTopology::transformationFunction() {
   return _transformationFunction;
+}
+
+void MeshTopology::verticesForCell(FieldContainer<double>& vertices, GlobalIndexType cellID) {
+  CellPtr cell = getCell(cellID);
+  vector<IndexType> vertexIndices = cell->vertices();
+  int numVertices = vertexIndices.size();
+  int spaceDim = getSpaceDim();
+  
+  //vertices.resize(numVertices,dimension);
+  for (unsigned vertexOrdinal = 0; vertexOrdinal < numVertices; vertexOrdinal++) {
+    for (int d=0; d<spaceDim; d++) {
+      vertices(vertexOrdinal,d) = getVertex(vertexIndices[vertexOrdinal])[d];
+    }
+  }
 }

@@ -57,6 +57,8 @@ GMGOperator::GMGOperator(BCPtr zeroBCs, MeshPtr coarseMesh, IPPtr coarseIP,
   _useStaticCondensation = useStaticCondensation;
   _fineDofInterpreter = fineDofInterpreter;
   _fineSolverUsesDiagonalScaling = false;
+  
+  _hierarchicalNeighborsForSchwarz = false;
 
   _debugMode = false;
 
@@ -158,7 +160,9 @@ void GMGOperator::computeCoarseStiffnessMatrix(Epetra_CrsMatrix *fineStiffnessMa
   } else if (_P->NumGlobalRows() != globalColCount) {
     constructProlongationOperator();
     if (_P->NumGlobalRows() != globalColCount) {
-      cout << "GMGOperator::computeCoarseStiffnessMatrix: Even after a fresh call to constructProlongationOperator, _P->NumGlobalRows() != globalColCount.\n";
+      cout << "GMGOperator::computeCoarseStiffnessMatrix: Even after a fresh call to constructProlongationOperator, _P->NumGlobalRows() != globalColCount (";
+      cout << _P->NumGlobalRows() << " != " << globalColCount << ").\n";
+      
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "_P->NumGlobalRows() != globalColCount");
     }
   }
@@ -546,6 +550,7 @@ LocalDofMapperPtr GMGOperator::getLocalCoefficientMap(GlobalIndexType fineCellID
               unsigned fineSubcellOrdinalInFineDomain = 0; // the side is the whole fine domain...
               SubBasisReconciliationWeights weights = _br.computeConstrainedWeightsForTermTraced(termTraced, varTracedID,
                                                                                                  sideDim, fineBasis, fineSubcellOrdinalInFineDomain, refBranch, sideOrdinal,
+                                                                                                 ancestor->topology(),
                                                                                                  spaceDim, coarseBasis, coarseSubcellOrdinal, coarseDomainOrdinal, coarseSubcellPermutation);
               set<unsigned> fineDofOrdinals(weights.fineOrdinals.begin(),weights.fineOrdinals.end());
               vector<GlobalIndexType> coarseDofIndices;
@@ -1057,14 +1062,14 @@ void GMGOperator::setUpSmoother(Epetra_CrsMatrix *fineStiffnessMatrix) {
       } else {
         switch (_schwarzBlockFactorizationType) {
           case Direct:
-            smoother = Teuchos::rcp(new Camellia::AdditiveSchwarz<Ifpack_Amesos>(fineStiffnessMatrix, OverlapLevel, _fineMesh, _fineDofInterpreter) );
+            smoother = Teuchos::rcp(new Camellia::AdditiveSchwarz<Ifpack_Amesos>(fineStiffnessMatrix, OverlapLevel, _fineMesh, _fineDofInterpreter, _hierarchicalNeighborsForSchwarz) );
             break;
           case ILU:
-            smoother = Teuchos::rcp(new Camellia::AdditiveSchwarz<Ifpack_ILU>(fineStiffnessMatrix, OverlapLevel, _fineMesh, _fineDofInterpreter) );
+            smoother = Teuchos::rcp(new Camellia::AdditiveSchwarz<Ifpack_ILU>(fineStiffnessMatrix, OverlapLevel, _fineMesh, _fineDofInterpreter, _hierarchicalNeighborsForSchwarz) );
             List.set("fact: level-of-fill", _levelOfFill);
             break;
           case IC:
-            smoother = Teuchos::rcp(new Camellia::AdditiveSchwarz<Ifpack_IC>(fineStiffnessMatrix, OverlapLevel, _fineMesh, _fineDofInterpreter) );
+            smoother = Teuchos::rcp(new Camellia::AdditiveSchwarz<Ifpack_IC>(fineStiffnessMatrix, OverlapLevel, _fineMesh, _fineDofInterpreter, _hierarchicalNeighborsForSchwarz) );
             List.set("fact: ict level-of-fill", _fillRatio);
             break;
           default:
@@ -1129,6 +1134,11 @@ void GMGOperator::setUpSmoother(Epetra_CrsMatrix *fineStiffnessMatrix) {
 
   _smoother = smoother;
 
+}
+
+void GMGOperator::setUseHierarchicalNeighborsForSchwarz(bool value)
+{
+  _hierarchicalNeighborsForSchwarz = value;
 }
 
 Teuchos::RCP<Epetra_CrsMatrix> GMGOperator::getProlongationOperator() {

@@ -381,11 +381,12 @@ SubBasisReconciliationWeights BasisReconciliation::computeConstrainedWeights(uns
 
 SubBasisReconciliationWeights BasisReconciliation::computeConstrainedWeights(unsigned fineSubcellDimension,
                                                                              BasisPtr finerBasis, unsigned fineSubcellOrdinalInFineDomain,
-                                                                             RefinementBranch &cellRefinementBranch, // i.e. ref. branch is in volume, even for skeleton domains
+                                                                             RefinementBranch &fineCellRefinementBranch, // i.e. ref. branch is in volume, even for skeleton domains
                                                                              unsigned fineDomainOrdinalInRefinementLeaf,
+                                                                             CellTopoPtr coarseCellTopo,
                                                                              unsigned coarseSubcellDimension,
                                                                              BasisPtr coarserBasis, unsigned coarseSubcellOrdinalInCoarseDomain,
-                                                                             unsigned coarseDomainOrdinalInRefinementRoot, // we use the coarserBasis's domain topology to determine the domain's space dimension
+                                                                             unsigned coarseDomainOrdinalInCoarseCellTopo, // we use the coarserBasis's domain topology to determine the domain's space dimension
                                                                              unsigned coarseSubcellPermutation) {
   SubBasisReconciliationWeights weights;
   
@@ -413,8 +414,20 @@ SubBasisReconciliationWeights BasisReconciliation::computeConstrainedWeights(uns
   
   BasisCachePtr fineDomainCache, coarseDomainCache;
   
-  setupFineAndCoarseBasisCachesForReconciliation(fineDomainCache, coarseDomainCache, fineSubcellDimension, finerBasis, fineSubcellOrdinalInFineDomain, cellRefinementBranch, fineDomainOrdinalInRefinementLeaf,
-                                                 coarseSubcellDimension, coarserBasis, coarseSubcellOrdinalInCoarseDomain, coarseDomainOrdinalInRefinementRoot, coarseSubcellPermutation);
+  setupFineAndCoarseBasisCachesForReconciliation(fineDomainCache, coarseDomainCache,
+                                                 fineSubcellDimension, finerBasis, fineSubcellOrdinalInFineDomain,
+                                                 fineCellRefinementBranch, fineDomainOrdinalInRefinementLeaf,
+                                                 coarseCellTopo, coarseSubcellDimension, coarserBasis,
+                                                 coarseSubcellOrdinalInCoarseDomain, coarseDomainOrdinalInCoarseCellTopo, coarseSubcellPermutation);
+  
+//  cout << "fineDomainCache->getPhysicalCubaturePoints():\n" << fineDomainCache->getPhysicalCubaturePoints();
+//  cout << "coarseDomainCache->getPhysicalCubaturePoints():\n" << coarseDomainCache->getPhysicalCubaturePoints();
+  
+//  cout << "fineDomainCache->getRefCellPoints():\n" << fineDomainCache->getRefCellPoints();
+//  cout << "coarseDomainCache->getRefCellPoints():\n" << coarseDomainCache->getRefCellPoints();
+  
+//  cout << "fineDomainCache->getPhysicalCellNodes():\n" << fineDomainCache->getPhysicalCellNodes();
+//  cout << "coarseDomainCache->getPhysicalCellNodes():\n" << coarseDomainCache->getPhysicalCellNodes();
   
   int numPoints = fineDomainCache->getPhysicalCubaturePoints().dimension(1); // (C,P,D): 1 is the points dimension
   
@@ -453,9 +466,10 @@ SubBasisReconciliationWeights BasisReconciliation::computeConstrainedWeightsForT
                                                                                           unsigned fineSubcellOrdinalInFineDomain,
                                                                                           RefinementBranch &cellRefinementBranch, // i.e. ref. branch is in volume, even for skeleton domains
                                                                                           unsigned fineDomainOrdinalInRefinementLeaf,
+                                                                                          CellTopoPtr coarseCellTopo,
                                                                                           unsigned coarseSubcellDimension,
                                                                                           BasisPtr coarserBasis, unsigned coarseSubcellOrdinalInCoarseDomain,
-                                                                                          unsigned coarseDomainOrdinalInRefinementRoot, // we use the coarserBasis's domain topology to determine the domain's space dimension
+                                                                                          unsigned coarseDomainOrdinalInCoarseCellTopo, // we use the coarserBasis's domain topology to determine the domain's space dimension
                                                                                           unsigned coarseSubcellPermutation) {
   SubBasisReconciliationWeights weights;
   
@@ -475,11 +489,11 @@ SubBasisReconciliationWeights BasisReconciliation::computeConstrainedWeightsForT
   
   setupFineAndCoarseBasisCachesForReconciliation(fineDomainCache, coarseDomainCache,
                                                  fineSubcellDimension, finerBasis, fineSubcellOrdinalInFineDomain,
-                                                 cellRefinementBranch, fineDomainOrdinalInRefinementLeaf,
+                                                 cellRefinementBranch, fineDomainOrdinalInRefinementLeaf, coarseCellTopo,
                                                  coarseSubcellDimension, coarserBasis, coarseSubcellOrdinalInCoarseDomain,
-                                                 coarseDomainOrdinalInRefinementRoot, coarseSubcellPermutation);
+                                                 coarseDomainOrdinalInCoarseCellTopo, coarseSubcellPermutation);
   
-  int numPoints = fineDomainCache->getPhysicalCubaturePoints().dimension(1); // (C,P,D): 1 is the points dimension
+  int numPoints = fineDomainCache->getRefCellPoints().dimension(0); // (P,D): 0 is the points dimension
   
   // set up a dummy DofOrdering for the coarse domain:
   CellTopoPtr coarseDomainTopo = coarserBasis->domainTopology();
@@ -865,13 +879,14 @@ void BasisReconciliation::mapFineSubcellPointsToCoarseDomain(FieldContainer<doub
                                                              unsigned fineSubcellOrdinalInFineDomain,
                                                              unsigned fineDomainDim,
                                                              unsigned fineDomainOrdinalInRefinementLeaf,
-                                                             RefinementBranch &cellRefinementBranch,
+                                                             RefinementBranch &fineCellRefinementBranch,
+                                                             CellTopoPtr coarseCellTopo,
                                                              unsigned coarseSubcellDimension,
                                                              unsigned coarseSubcellOrdinalInCoarseDomain,
                                                              unsigned coarseDomainDim,
-                                                             unsigned coarseDomainOrdinalInRefinementRoot,
+                                                             unsigned coarseDomainOrdinalInCoarseCellTopo,
                                                              unsigned coarseSubcellPermutation) {
-  if (cellRefinementBranch.size() == 0) {
+  if (fineCellRefinementBranch.size() == 0) {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "cellRefinementBranch must have at least one refinement!");
   }
   
@@ -879,13 +894,13 @@ void BasisReconciliation::mapFineSubcellPointsToCoarseDomain(FieldContainer<doub
   
   TEUCHOS_TEST_FOR_EXCEPTION((fineSubcellDimension == 0) && (numPoints != 1), std::invalid_argument, "When fine subcell is a point, numPoints must be 1!");
   
-  CellTopoPtr rootCellTopo = cellRefinementBranch[0].first->parentTopology();
-  CellTopoPtr leafCellTopo = RefinementPattern::descendantTopology(cellRefinementBranch);
+  CellTopoPtr fineRootCellTopo = fineCellRefinementBranch[0].first->parentTopology();
+  CellTopoPtr leafCellTopo = RefinementPattern::descendantTopology(fineCellRefinementBranch);
   
   CellTopoPtr fineTopo = leafCellTopo->getSubcell(fineDomainDim, fineDomainOrdinalInRefinementLeaf);
   CellTopoPtr fineSubcellTopo = fineTopo->getSubcell(fineSubcellDimension, fineSubcellOrdinalInFineDomain);
   
-  CellTopoPtr coarseTopo = rootCellTopo->getSubcell(coarseDomainDim, coarseDomainOrdinalInRefinementRoot);
+  CellTopoPtr coarseTopo = coarseCellTopo->getSubcell(coarseDomainDim, coarseDomainOrdinalInCoarseCellTopo);
   CellTopoPtr coarseSubcellTopo = coarseTopo->getSubcell(coarseSubcellDimension, coarseSubcellOrdinalInCoarseDomain);
   
   FieldContainer<double> fineTopoRefNodes(fineTopo->getVertexCount(), fineTopo->getDimension());
@@ -893,7 +908,7 @@ void BasisReconciliation::mapFineSubcellPointsToCoarseDomain(FieldContainer<doub
   FieldContainer<double> coarseTopoRefNodes(coarseTopo->getVertexCount(), coarseTopo->getDimension());
   CamelliaCellTools::refCellNodesForTopology(coarseTopoRefNodes, coarseTopo);
   
-  FieldContainer<double> leafCellNodes = RefinementPattern::descendantNodesRelativeToAncestorReferenceCell(cellRefinementBranch);
+  FieldContainer<double> leafCellNodes = RefinementPattern::descendantNodesRelativeToAncestorReferenceCell(fineCellRefinementBranch);
   
   FieldContainer<double> mappedFineSubcellPoints = fineSubcellPoints;
   
@@ -920,10 +935,10 @@ void BasisReconciliation::mapFineSubcellPointsToCoarseDomain(FieldContainer<doub
       // worth noting that this code is by design redundant with the first bit of the while (refOrdinal >= 0) loop below.
       // in the interest of eliminating said redundancy, it might be worthwhile to do the permutation determination inside that loop,
       // guarding it with an if (refOrdinal == cellRefinementBranch.size() - 1).
-      int lastRefOrdinal = cellRefinementBranch.size() - 1;
+      int lastRefOrdinal = fineCellRefinementBranch.size() - 1;
       
       RefinementBranch lastRefinementBranch;
-      lastRefinementBranch.push_back(cellRefinementBranch[lastRefOrdinal]);
+      lastRefinementBranch.push_back(fineCellRefinementBranch[lastRefOrdinal]);
       
       RefinementPattern* refPattern = lastRefinementBranch[0].first;
       unsigned childOrdinal = lastRefinementBranch[0].second;
@@ -986,7 +1001,7 @@ void BasisReconciliation::mapFineSubcellPointsToCoarseDomain(FieldContainer<doub
   unsigned fineSubcellAncestralOrdinal = fineSubcellOrdinalInLeafCell;
   unsigned fineSubcellAncestralDimension = fineSubcellDimension;
   
-  int refOrdinal = cellRefinementBranch.size() - 1;  // go in reverse order (fine to coarse)
+  int refOrdinal = fineCellRefinementBranch.size() - 1;  // go in reverse order (fine to coarse)
   
   RefinementBranch refinementBranchTier; // cell refinements for which the subcell has a same-dimensional parent
   
@@ -994,14 +1009,14 @@ void BasisReconciliation::mapFineSubcellPointsToCoarseDomain(FieldContainer<doub
   
   while (refOrdinal >= 0) {
     
-    RefinementPattern* refPattern = cellRefinementBranch[refOrdinal].first;
-    unsigned childOrdinal = cellRefinementBranch[refOrdinal].second;
+    RefinementPattern* refPattern = fineCellRefinementBranch[refOrdinal].first;
+    unsigned childOrdinal = fineCellRefinementBranch[refOrdinal].second;
     
     fineSubcellAncestralOrdinal = subcellAncestor.second;
     subcellAncestor = refPattern->mapSubcellFromChildToParent(childOrdinal, fineSubcellAncestralDimension, fineSubcellAncestralOrdinal);
     
     if (subcellAncestor.first == fineSubcellAncestralDimension) {
-      refinementBranchTier.insert(refinementBranchTier.begin(), cellRefinementBranch[refOrdinal]);
+      refinementBranchTier.insert(refinementBranchTier.begin(), fineCellRefinementBranch[refOrdinal]);
       fineSubcellAncestralOrdinal = subcellAncestor.second;
     } else {
       // then we're at a shift to higher dimensions: first, map along the same-dimensional refinement branch (if there are refinements there)
@@ -1021,7 +1036,7 @@ void BasisReconciliation::mapFineSubcellPointsToCoarseDomain(FieldContainer<doub
       refinementBranchTier.clear();
       
       // next, map mappedFineSubcellPoints into the ancestral subcell's child (which is of higher dimension)
-      refinementBranchTier.insert(refinementBranchTier.begin(), cellRefinementBranch[refOrdinal]);
+      refinementBranchTier.insert(refinementBranchTier.begin(), fineCellRefinementBranch[refOrdinal]);
       bool tolerateSubcellsWithoutDescendants = true;
       subcellRefinementBranch = RefinementPattern::subcellRefinementBranch(refinementBranchTier, subcellAncestor.first, subcellAncestor.second,
                                                                            tolerateSubcellsWithoutDescendants);
@@ -1089,7 +1104,9 @@ void BasisReconciliation::mapFineSubcellPointsToCoarseDomain(FieldContainer<doub
   
   // process any unprocessed subcell refinements
   bool tolerateSubcellsWithoutDescendants = true;
-  RefinementBranch subcellRefinementBranch = RefinementPattern::subcellRefinementBranch(refinementBranchTier, fineSubcellAncestralDimension, fineSubcellAncestralOrdinal,
+  RefinementBranch subcellRefinementBranch = RefinementPattern::subcellRefinementBranch(refinementBranchTier,
+                                                                                        fineSubcellAncestralDimension,
+                                                                                        fineSubcellAncestralOrdinal,
                                                                                         tolerateSubcellsWithoutDescendants);
   
   if (subcellRefinementBranch.size() > 0) {
@@ -1107,11 +1124,16 @@ void BasisReconciliation::mapFineSubcellPointsToCoarseDomain(FieldContainer<doub
   if ((coarseSubcellDimension > fineSubcellAncestralDimension) && (fineSubcellAncestralDimension > 0)) { // (we handle the (fineSubcellAncestralDimension == 0) case above)
     // then we need to determine the subcellAncestor's ordinal in the coarse subcell topology, and map the points
     
+    // the canonical use case for this is when we map a trace term to volume
+    // when this happens, the understanding is that the coarse cell is identified with the root of the
+    // fineCellRefinementBranch.  Therefore, fineRootCellTopo and coarseCellTopo should be identical topologies:
+    TEUCHOS_TEST_FOR_EXCEPTION(fineRootCellTopo != coarseCellTopo, std::invalid_argument, "When fine subcell ancestor is not identical to coarse subcell, then the coarse cell must be the root of the refinement branch.");
+    
     // subcellAncestor has dimension and ordinal in the *volume*
-    CellTopoPtr rootCellTopo = cellRefinementBranch[0].first->parentTopology();
-    unsigned coarseSubcellOrdinalInRootVolume = CamelliaCellTools::subcellOrdinalMap(rootCellTopo, coarseDomainDim, coarseDomainOrdinalInRefinementRoot, coarseSubcellDimension,
-                                                                                     coarseSubcellOrdinalInCoarseDomain);
-    unsigned ancestralSubcellOrdinalInCoarseSubcell = CamelliaCellTools::subcellReverseOrdinalMap(rootCellTopo, coarseSubcellDimension, coarseSubcellOrdinalInRootVolume,
+    unsigned coarseSubcellOrdinalInRootVolume = CamelliaCellTools::subcellOrdinalMap(coarseCellTopo,
+                                                                                     coarseDomainDim, coarseDomainOrdinalInCoarseCellTopo,
+                                                                                     coarseSubcellDimension, coarseSubcellOrdinalInCoarseDomain);
+    unsigned ancestralSubcellOrdinalInCoarseSubcell = CamelliaCellTools::subcellReverseOrdinalMap(coarseCellTopo, coarseSubcellDimension, coarseSubcellOrdinalInRootVolume,
                                                                                                   fineSubcellAncestralDimension, fineSubcellAncestralOrdinal);
     // copy
     FieldContainer<double> ancestralSubcellPoints = mappedFineSubcellPoints;
@@ -1139,28 +1161,24 @@ void BasisReconciliation::mapFineSubcellPointsToCoarseDomain(FieldContainer<doub
     coarseDomainPoints = coarseSubcellPoints;
   } else {
     // If fineSubcellAncestralDimension is *NOT* the same as the domain dimension, then the ancestral subcell is a subcell of the coarse domain
-    CellTopoPtr refinementRootCellTopo = cellRefinementBranch[0].first->parentTopology();
     
-    unsigned subcellOrdinalInCoarseDomain = CamelliaCellTools::subcellReverseOrdinalMap(refinementRootCellTopo,
-                                                                                        coarseDomainDim,
-                                                                                        coarseDomainOrdinalInRefinementRoot,
-                                                                                        fineSubcellAncestralDimension,
-                                                                                        fineSubcellAncestralOrdinal);
     coarseDomainPoints.resize(mappedFineSubcellPoints.dimension(0), coarseDomainDim);
     CamelliaCellTools::mapToReferenceSubcell(coarseDomainPoints, coarseSubcellPoints, fineSubcellAncestralDimension,
-                                             subcellOrdinalInCoarseDomain, coarseTopo);
+                                             coarseSubcellOrdinalInCoarseDomain, coarseTopo);
   }
 }
 
-void BasisReconciliation::setupFineAndCoarseBasisCachesForReconciliation(BasisCachePtr &fineDomainCache, BasisCachePtr &coarseDomainCache,
+void BasisReconciliation::setupFineAndCoarseBasisCachesForReconciliation(BasisCachePtr &fineDomainCache,
+                                                                         BasisCachePtr &coarseDomainCache,
                                                                          unsigned fineSubcellDimension,
                                                                          BasisPtr finerBasis,
                                                                          unsigned fineSubcellOrdinalInFineDomain,
-                                                                         RefinementBranch &cellRefinementBranch, // i.e. ref. branch is in volume, even for skeleton domains
+                                                                         RefinementBranch &fineCellRefinementBranch, // i.e. ref. branch is in volume, even for skeleton domains
                                                                          unsigned fineDomainOrdinalInRefinementLeaf,
+                                                                         CellTopoPtr coarseCellTopo,
                                                                          unsigned coarseSubcellDimension,
                                                                          BasisPtr coarserBasis, unsigned coarseSubcellOrdinalInCoarseDomain,
-                                                                         unsigned coarseDomainOrdinalInRefinementRoot, // we use the coarserBasis's domain topology to determine the domain's space dimension
+                                                                         unsigned coarseDomainOrdinalInCoarseCellTopo, // we use the coarserBasis's domain topology to determine the domain's space dimension
                                                                          unsigned coarseSubcellPermutation) {
   int fineDomainDim = finerBasis->domainTopology()->getDimension();
   int coarseDomainDim = coarserBasis->domainTopology()->getDimension();
@@ -1185,12 +1203,52 @@ void BasisReconciliation::setupFineAndCoarseBasisCachesForReconciliation(BasisCa
   
   coarseDomainCache = Teuchos::rcp( new BasisCache(coarseTopo, cubDegree, false));
   
-  if (cellRefinementBranch.size() == 0) {
+  if (fineCellRefinementBranch.size() == 0) {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "cellRefinementBranch must have at least one refinement!");
   }
+
+  FieldContainer<double> leafCellNodes = RefinementPattern::descendantNodesRelativeToAncestorReferenceCell(fineCellRefinementBranch);
+  CellTopoPtr leafCellTopo = RefinementPattern::descendantTopology(fineCellRefinementBranch);
   
-  FieldContainer<double> leafCellNodes = RefinementPattern::descendantNodesRelativeToAncestorReferenceCell(cellRefinementBranch);
-  CellTopoPtr leafCellTopo = RefinementPattern::descendantTopology(cellRefinementBranch);
+//  FieldContainer<double> leafDomainNodes;
+//  CellTopoPtr leafDomainTopo;
+//  
+//  if (fineCellRefinementBranch[0].first->parentTopology()->getDimension() == fineTopo->getDimension())
+//  {
+//    // i.e. fineBasis is a volume basis
+//    leafDomainNodes = RefinementPattern::descendantNodesRelativeToAncestorReferenceCell(fineCellRefinementBranch);
+//    leafDomainTopo = RefinementPattern::descendantTopology(fineCellRefinementBranch);
+//  }
+//  else if (fineCellRefinementBranch[0].first->parentTopology()->getDimension() == fineTopo->getDimension() + 1)
+//  {
+//    // i.e. fineBasis is a side basis
+//    if (fineTopo->getDimension()==0)
+//    {
+//      leafDomainTopo = CellTopology::point();
+//      leafDomainNodes.resize(1,1);
+//    }
+//    else
+//    {
+//      RefinementBranch fineDomainRefinementBranch;
+//      unsigned fineSideOrdinal = fineDomainOrdinalInRefinementLeaf;
+//      for (int refIndex=fineCellRefinementBranch.size()-1; refIndex >= 0; refIndex--)
+//      {
+//        RefinementPattern* volumeRefPattern = fineCellRefinementBranch[refIndex].first;
+//        unsigned volumeRefChildOrdinal = fineCellRefinementBranch[refIndex].second;
+//        unsigned sideRefChildOrdinal = volumeRefPattern->mapVolumeChildOrdinalToSubcellChildOrdinal(fineDomainDim, fineSideOrdinal, volumeRefChildOrdinal);
+//        fineSideOrdinal = volumeRefPattern->mapSubcellOrdinalFromChildToParent(volumeRefChildOrdinal,fineDomainDim,fineSideOrdinal);
+//        
+//        RefinementPattern* sideRefPattern = volumeRefPattern->sideRefinementPatterns()[fineSideOrdinal].get();
+//        fineDomainRefinementBranch.insert(fineDomainRefinementBranch.begin(), make_pair(sideRefPattern, sideRefChildOrdinal));
+//      }
+//      leafDomainNodes = RefinementPattern::descendantNodesRelativeToAncestorReferenceCell(fineDomainRefinementBranch);
+//      leafDomainTopo = RefinementPattern::descendantTopology(fineDomainRefinementBranch);
+//    }
+//  }
+//  else
+//  {
+//    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "basis domains that are not either on cells or cell sides are unsupported.");
+//  }
   
   FieldContainer<double> subcellCubaturePoints;
   int numPoints;
@@ -1218,19 +1276,32 @@ void BasisReconciliation::setupFineAndCoarseBasisCachesForReconciliation(BasisCa
     cubatureWeightsFineSubcell(0) = 1.0;
   }
   
-  mapFineSubcellPointsToCoarseDomain(coarseDomainPoints, subcellCubaturePoints, fineSubcellDimension, fineSubcellOrdinalInFineDomain, fineDomainDim, fineDomainOrdinalInRefinementLeaf, cellRefinementBranch, coarseSubcellDimension, coarseSubcellOrdinalInCoarseDomain, coarseDomainDim, coarseDomainOrdinalInRefinementRoot, coarseSubcellPermutation);
+  mapFineSubcellPointsToCoarseDomain(coarseDomainPoints, subcellCubaturePoints,
+                                     fineSubcellDimension, fineSubcellOrdinalInFineDomain,
+                                     fineDomainDim, fineDomainOrdinalInRefinementLeaf,
+                                     fineCellRefinementBranch, coarseCellTopo,
+                                     coarseSubcellDimension, coarseSubcellOrdinalInCoarseDomain,
+                                     coarseDomainDim, coarseDomainOrdinalInCoarseCellTopo,
+                                     coarseSubcellPermutation);
   
 //  cout << "coarseDomainPoints:\n" << coarseDomainPoints;
+
+//  fineDomainCache = Teuchos::rcp( new BasisCache(fineTopo, cubDegree, false) ); // false: don't create side cache
+//  leafDomainNodes.resize(1,leafDomainNodes.dimension(0),leafDomainNodes.dimension(1));
+//  fineDomainCache->setPhysicalCellNodes(leafDomainNodes, vector<GlobalIndexType>(), false);
   
-  BasisCachePtr fineCellCache = Teuchos::rcp( new BasisCache(leafCellTopo, cubDegree, true) ); // true: do create side cache
+  BasisCachePtr fineCellCache = Teuchos::rcp( new BasisCache(leafCellTopo, cubDegree, false) ); // false: don't create side cache
   leafCellNodes.resize(1,leafCellNodes.dimension(0),leafCellNodes.dimension(1));
-  fineCellCache->setPhysicalCellNodes(leafCellNodes, vector<GlobalIndexType>(), true);
-  
+  fineCellCache->setPhysicalCellNodes(leafCellNodes, {}, false);
+
   if (leafCellTopo->getDimension() > fineDomainDim) {
     if (leafCellTopo->getDimension() != fineDomainDim + 1) {
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "basis domains that are not either on cells or cell sides are unsupported.");
     }
-    fineDomainCache = fineCellCache->getSideBasisCache(fineDomainOrdinalInRefinementLeaf);
+    // need to use the following constructor so that the side cache will have a strong RCP to the volume one.
+    // (BasisCache::createSideCaches() uses weak RCPs from side cache to volume to avoid circular references.)
+    fineDomainCache = BasisCache::sideBasisCache(fineCellCache, fineDomainOrdinalInRefinementLeaf);
+    fineDomainCache->setPhysicalCellNodes(leafCellNodes, {}, false);
   } else {
     fineDomainCache = fineCellCache;
   }

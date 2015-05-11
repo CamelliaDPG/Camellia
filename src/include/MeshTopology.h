@@ -205,6 +205,8 @@ namespace Camellia {
     // ! Creates a new MeshTopology object containing only the root cells from this MeshTopology.
     Teuchos::RCP<MeshTopology> getRootMeshTopology();
 
+    // ! Fills the provided container with the vertices for the requested cell
+    void verticesForCell(Intrepid::FieldContainer<double>& vertices, IndexType cellID);
   };
 }
 
