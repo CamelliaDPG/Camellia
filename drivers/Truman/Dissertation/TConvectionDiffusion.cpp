@@ -55,22 +55,22 @@ int main(int argc, char *argv[]) {
     return -1;
   }
 
-  VarFactory vf;
+  VarFactoryPtr vf = VarFactory::varFactory();
   //fields:
-  VarPtr sigma = vf.fieldVar("sigma", VECTOR_L2);
-  VarPtr u = vf.fieldVar("u", L2);
+  VarPtr sigma = vf->fieldVar("sigma", VECTOR_L2);
+  VarPtr u = vf->fieldVar("u", L2);
 
   // traces:
-  VarPtr uhat = vf.traceVar("uhat");
-  VarPtr tc = vf.fluxVar("tc");
+  VarPtr uhat = vf->traceVar("uhat");
+  VarPtr tc = vf->fluxVar("tc");
 
   // test:
-  VarPtr v = vf.testVar("v", HGRAD);
-  VarPtr tau = vf.testVar("tau", HDIV);
+  VarPtr v = vf->testVar("v", HGRAD);
+  VarPtr tau = vf->testVar("tau", HDIV);
 
-  FunctionPtr beta_x = Function<double>::constant(1);
-  FunctionPtr beta_y = Function<double>::constant(2);
-  FunctionPtr beta = Function<double>::vectorize(beta_x, beta_y);
+  FunctionPtr beta_x = Function::constant(1);
+  FunctionPtr beta_y = Function::constant(2);
+  FunctionPtr beta = Function::vectorize(beta_x, beta_y);
 
   BFPtr bf = Teuchos::rcp( new BF(vf) );
 
@@ -90,10 +90,10 @@ int main(int argc, char *argv[]) {
   SpatialFilterPtr x_equals_one = SpatialFilter::matchingX(1.0);
   SpatialFilterPtr x_equals_zero = SpatialFilter::matchingX(0.0);
 
-  FunctionPtr zero = Function<double>::zero();
-  FunctionPtr one = Function<double>::constant(1);
-  FunctionPtr x = Function<double>::xn(1);
-  FunctionPtr y = Function<double>::yn(1);
+  FunctionPtr zero = Function::zero();
+  FunctionPtr one = Function::constant(1);
+  FunctionPtr x = Function::xn(1);
+  FunctionPtr y = Function::yn(1);
   bc->addDirichlet(tc, y_equals_zero, -2. * (one-x));
   bc->addDirichlet(tc, x_equals_zero, -1. * (one-y));
   bc->addDirichlet(uhat, y_equals_one, zero);
@@ -107,21 +107,21 @@ int main(int argc, char *argv[]) {
   confusionIPs["Robust"] = Teuchos::rcp(new IP);
   confusionIPs["Robust"]->addTerm(tau->div());
   confusionIPs["Robust"]->addTerm(beta*v->grad());
-  confusionIPs["Robust"]->addTerm(Function<double>::min(one/Function<double>::h(),Function<double>::constant(1./sqrt(epsilon)))*tau);
+  confusionIPs["Robust"]->addTerm(Function::min(one/Function::h(),Function::constant(1./sqrt(epsilon)))*tau);
   confusionIPs["Robust"]->addTerm(sqrt(epsilon)*v->grad());
   confusionIPs["Robust"]->addTerm(beta*v->grad());
-  confusionIPs["Robust"]->addTerm(Function<double>::min(sqrt(epsilon)*one/Function<double>::h(),one)*v);
+  confusionIPs["Robust"]->addTerm(Function::min(sqrt(epsilon)*one/Function::h(),one)*v);
 
   confusionIPs["CoupledRobust"] = Teuchos::rcp(new IP);
   confusionIPs["CoupledRobust"]->addTerm(tau->div()-beta*v->grad());
-  confusionIPs["CoupledRobust"]->addTerm(Function<double>::min(one/Function<double>::h(),Function<double>::constant(1./sqrt(epsilon)))*tau);
+  confusionIPs["CoupledRobust"]->addTerm(Function::min(one/Function::h(),Function::constant(1./sqrt(epsilon)))*tau);
   confusionIPs["CoupledRobust"]->addTerm(sqrt(epsilon)*v->grad());
   confusionIPs["CoupledRobust"]->addTerm(beta*v->grad());
-  confusionIPs["CoupledRobust"]->addTerm(Function<double>::min(sqrt(epsilon)*one/Function<double>::h(),one)*v);
+  confusionIPs["CoupledRobust"]->addTerm(Function::min(sqrt(epsilon)*one/Function::h(),one)*v);
 
   IPPtr ip = confusionIPs[norm];
 
-  SolutionPtr soln = Solution<double>::solution(mesh, bc, rhs, ip);
+  SolutionPtr soln = Solution::solution(mesh, bc, rhs, ip);
 
   double threshold = 0.20;
   RefinementStrategy refStrategy(soln, threshold);
