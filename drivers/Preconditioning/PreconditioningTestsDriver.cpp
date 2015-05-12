@@ -390,7 +390,7 @@ void initializeSolutionAndCoarseMesh(SolutionPtr &solution, MeshPtr &coarseMesh,
     VarPtr phi_hat = formulation.phi_hat();
     bc->addDirichlet(phi_hat, boundary, Function::zero());
   } else if (problemChoice == ConvectionDiffusion) {
-    double epsilon = 1e-2;
+    double epsilon = 1e-4;
     FunctionPtr beta;
     FunctionPtr beta_x = Function::constant(1);
     FunctionPtr beta_y = Function::constant(2);
@@ -425,13 +425,21 @@ void initializeSolutionAndCoarseMesh(SolutionPtr &solution, MeshPtr &coarseMesh,
     FunctionPtr x = Function::xn(1);
     FunctionPtr y = Function::yn(1);
     FunctionPtr z = Function::zn(1);
-    bc->addDirichlet(tc, inflowX, -1*.25*(one-y)*(one-z));
-    bc->addDirichlet(uhat, outflowX, zero);
-    if (spaceDim > 1) {
-      bc->addDirichlet(tc, inflowY, -2*.25*(one-x)*(one-z));
+    if (spaceDim == 1) {
+      bc->addDirichlet(tc, inflowX, -one);
+      bc->addDirichlet(uhat, outflowX, zero);
+    }
+    if (spaceDim == 2) {
+      bc->addDirichlet(tc, inflowX, -1*.5*(one-y));
+      bc->addDirichlet(uhat, outflowX, zero);
+      bc->addDirichlet(tc, inflowY, -2*.5*(one-x));
       bc->addDirichlet(uhat, outflowY, zero);
     }
-    if (spaceDim > 2) {
+    if (spaceDim == 3) {
+      bc->addDirichlet(tc, inflowX, -1*.25*(one-y)*(one-z));
+      bc->addDirichlet(uhat, outflowX, zero);
+      bc->addDirichlet(tc, inflowY, -2*.25*(one-x)*(one-z));
+      bc->addDirichlet(uhat, outflowY, zero);
       bc->addDirichlet(tc, inflowZ, -3*.25*(one-x)*(one-y));
       bc->addDirichlet(uhat, outflowZ, zero);
     }
