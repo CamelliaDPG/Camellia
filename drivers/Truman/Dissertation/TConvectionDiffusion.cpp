@@ -16,8 +16,9 @@
 
 #include "BF.h"
 #include "Function.h"
-
 #include "RefinementStrategy.h"
+#include "GMGSolver.h"
+#include "ConvectionDiffusionFormulation.h"
 
 using namespace Camellia;
 
@@ -38,15 +39,19 @@ int main(int argc, char *argv[]) {
   Teuchos::CommandLineProcessor cmdp(false,true); // false: don't throw exceptions; true: do return errors for unrecognized options
 
   // problem parameters:
+  int spaceDim = 2;
   double epsilon = 1e-2;
   int numRefs = 0;
   int k = 2, delta_k = 2;
+  bool useConformingTraces = true;
   string norm = "CoupledRobust";
+  cmdp.setOption("spaceDim", &spaceDim, "spatial dimension");
   cmdp.setOption("polyOrder",&k,"polynomial order for field variable u");
   cmdp.setOption("delta_k", &delta_k, "test space polynomial order enrichment");
   cmdp.setOption("numRefs",&numRefs,"number of refinements");
   cmdp.setOption("epsilon", &epsilon, "epsilon");
   cmdp.setOption("norm", &norm, "norm");
+  cmdp.setOption("conformingTraces", "nonconformingTraces", &useConformingTraces, "use conforming traces");
 
   if (cmdp.parse(argc,argv) != Teuchos::CommandLineProcessor::PARSE_SUCCESSFUL) {
 #ifdef HAVE_MPI
@@ -55,83 +60,91 @@ int main(int argc, char *argv[]) {
     return -1;
   }
 
-  VarFactoryPtr vf = VarFactory::varFactory();
-  //fields:
-  VarPtr sigma = vf->fieldVar("sigma", VECTOR_L2);
-  VarPtr u = vf->fieldVar("u", L2);
-
-  // traces:
-  VarPtr uhat = vf->traceVar("uhat");
-  VarPtr tc = vf->fluxVar("tc");
-
-  // test:
-  VarPtr v = vf->testVar("v", HGRAD);
-  VarPtr tau = vf->testVar("tau", HDIV);
-
+  FunctionPtr beta;
   FunctionPtr beta_x = Function::constant(1);
   FunctionPtr beta_y = Function::constant(2);
-  FunctionPtr beta = Function::vectorize(beta_x, beta_y);
+  FunctionPtr beta_z = Function::constant(3);
+  if (spaceDim == 1)
+    beta = beta_x;
+  else if (spaceDim == 2)
+    beta = Function::vectorize(beta_x, beta_y);
+  else if (spaceDim == 3)
+    beta = Function::vectorize(beta_x, beta_y, beta_z);
 
-  BFPtr bf = Teuchos::rcp( new BF(vf) );
+  ConvectionDiffusionFormulation form(spaceDim, useConformingTraces, beta, epsilon);
 
-  bf->addTerm((1/epsilon) * sigma, tau);
-  bf->addTerm(u, tau->div());
-  bf->addTerm(-uhat, tau->dot_normal());
-
-  bf->addTerm(sigma - beta * u, v->grad());
-  bf->addTerm(tc, v);
-
+  // Define right hand side
   RHSPtr rhs = RHS::rhs();
 
+  // Set up boundary conditions
   BCPtr bc = BC::bc();
-
-  SpatialFilterPtr y_equals_one = SpatialFilter::matchingY(1.0);
-  SpatialFilterPtr y_equals_zero = SpatialFilter::matchingY(0);
-  SpatialFilterPtr x_equals_one = SpatialFilter::matchingX(1.0);
-  SpatialFilterPtr x_equals_zero = SpatialFilter::matchingX(0.0);
-
+  VarPtr uhat = form.uhat();
+  VarPtr tc = form.tc();
+  SpatialFilterPtr inflowX = SpatialFilter::matchingX(-1);
+  SpatialFilterPtr inflowY = SpatialFilter::matchingY(-1);
+  SpatialFilterPtr inflowZ = SpatialFilter::matchingZ(-1);
+  SpatialFilterPtr outflowX = SpatialFilter::matchingX(1);
+  SpatialFilterPtr outflowY = SpatialFilter::matchingY(1);
+  SpatialFilterPtr outflowZ = SpatialFilter::matchingZ(1);
   FunctionPtr zero = Function::zero();
   FunctionPtr one = Function::constant(1);
   FunctionPtr x = Function::xn(1);
   FunctionPtr y = Function::yn(1);
-  bc->addDirichlet(tc, y_equals_zero, -2. * (one-x));
-  bc->addDirichlet(tc, x_equals_zero, -1. * (one-y));
-  bc->addDirichlet(uhat, y_equals_one, zero);
-  bc->addDirichlet(uhat, x_equals_one, zero);
+  FunctionPtr z = Function::zn(1);
+  if (spaceDim == 1) {
+    bc->addDirichlet(tc, inflowX, -one);
+    bc->addDirichlet(uhat, outflowX, zero);
+  }
+  if (spaceDim == 2) {
+    bc->addDirichlet(tc, inflowX, -1*.5*(one-y));
+    bc->addDirichlet(uhat, outflowX, zero);
+    bc->addDirichlet(tc, inflowY, -2*.5*(one-x));
+    bc->addDirichlet(uhat, outflowY, zero);
+  }
+  if (spaceDim == 3) {
+    bc->addDirichlet(tc, inflowX, -1*.25*(one-y)*(one-z));
+    bc->addDirichlet(uhat, outflowX, zero);
+    bc->addDirichlet(tc, inflowY, -2*.25*(one-x)*(one-z));
+    bc->addDirichlet(uhat, outflowY, zero);
+    bc->addDirichlet(tc, inflowZ, -3*.25*(one-x)*(one-y));
+    bc->addDirichlet(uhat, outflowZ, zero);
+  }
 
-  MeshPtr mesh = MeshFactory::quadMesh(bf, k+1, delta_k);
+  // Build mesh
+  vector<double> x0 = vector<double>(spaceDim,-1.0);
+  double width = 2.0;
+  int rootMeshNumCells = 1;
+  vector<double> dimensions;
+  vector<int> elementCounts;
+  for (int d=0; d<spaceDim; d++) {
+    dimensions.push_back(width);
+    elementCounts.push_back(rootMeshNumCells);
+  }
+  MeshPtr mesh = MeshFactory::rectilinearMesh(form.bf(), dimensions, elementCounts, k+1, delta_k, x0);
+  MeshPtr k0Mesh = Teuchos::rcp( new Mesh (mesh->getTopology()->deepCopy(), form.bf(), 1, delta_k) );
+  mesh->registerObserver(k0Mesh);
 
-  map<string, IPPtr> confusionIPs;
-  confusionIPs["Graph"] = bf->graphNorm();
-
-  confusionIPs["Robust"] = Teuchos::rcp(new IP);
-  confusionIPs["Robust"]->addTerm(tau->div());
-  confusionIPs["Robust"]->addTerm(beta*v->grad());
-  confusionIPs["Robust"]->addTerm(Function::min(one/Function::h(),Function::constant(1./sqrt(epsilon)))*tau);
-  confusionIPs["Robust"]->addTerm(sqrt(epsilon)*v->grad());
-  confusionIPs["Robust"]->addTerm(beta*v->grad());
-  confusionIPs["Robust"]->addTerm(Function::min(sqrt(epsilon)*one/Function::h(),one)*v);
-
-  confusionIPs["CoupledRobust"] = Teuchos::rcp(new IP);
-  confusionIPs["CoupledRobust"]->addTerm(tau->div()-beta*v->grad());
-  confusionIPs["CoupledRobust"]->addTerm(Function::min(one/Function::h(),Function::constant(1./sqrt(epsilon)))*tau);
-  confusionIPs["CoupledRobust"]->addTerm(sqrt(epsilon)*v->grad());
-  confusionIPs["CoupledRobust"]->addTerm(beta*v->grad());
-  confusionIPs["CoupledRobust"]->addTerm(Function::min(sqrt(epsilon)*one/Function::h(),one)*v);
-
-  IPPtr ip = confusionIPs[norm];
-
-  SolutionPtr soln = Solution::solution(mesh, bc, rhs, ip);
+  // Set up solution
+  SolutionPtr soln = Solution::solution(form.bf(), mesh, bc, rhs, form.ip(norm));
 
   double threshold = 0.20;
   RefinementStrategy refStrategy(soln, threshold);
 
   ostringstream refName;
-  refName << "confusion";
+  refName << "confusion" << spaceDim << "D_" << norm << "_" << epsilon;
   HDF5Exporter exporter(mesh,refName.str());
 
+  SolverPtr kluSolver = Solver::getSolver(Solver::KLU, true);
+  double tol = 1e-6;
+  int maxIters = 10000;
+  bool useStaticCondensation = false;
+  int azOutput = 20; // print residual every 20 CG iterations
+
   for (int refIndex=0; refIndex <= numRefs; refIndex++) {
-    soln->solve(false);
+    Teuchos::RCP<GMGSolver> gmgSolver = Teuchos::rcp( new GMGSolver(soln, k0Mesh, maxIters, tol, kluSolver, useStaticCondensation));
+    gmgSolver->setAztecOutput(azOutput);
+    soln->solve(gmgSolver);
+    // soln->solve(false);
 
     double energyError = soln->energyErrorTotal();
     if (commRank == 0)

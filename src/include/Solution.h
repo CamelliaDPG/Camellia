@@ -356,6 +356,10 @@ namespace Camellia {
     void setZeroMeanConstraintRho(double value);
     double zeroMeanConstraintRho();
 
+    static TSolutionPtr<Scalar> solution(TBFPtr<Scalar> bf, MeshPtr mesh, TBCPtr<Scalar> bc = Teuchos::null,
+                                TRHSPtr<Scalar> rhs = Teuchos::null,
+                                TIPPtr<Scalar> ip = Teuchos::null);
+    // Deprecated method, use the above one
     static TSolutionPtr<Scalar> solution(MeshPtr mesh, TBCPtr<Scalar> bc = Teuchos::null,
                                 TRHSPtr<Scalar> rhs = Teuchos::null,
                                 TIPPtr<Scalar> ip = Teuchos::null);
