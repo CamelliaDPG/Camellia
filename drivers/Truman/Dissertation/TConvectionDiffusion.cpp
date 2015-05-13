@@ -121,8 +121,8 @@ int main(int argc, char *argv[]) {
     elementCounts.push_back(rootMeshNumCells);
   }
   MeshPtr mesh = MeshFactory::rectilinearMesh(form.bf(), dimensions, elementCounts, k+1, delta_k, x0);
-  MeshPtr k0Mesh = Teuchos::rcp( new Mesh (mesh->getTopology()->deepCopy(), form.bf(), 1, delta_k) );
-  mesh->registerObserver(k0Mesh);
+  // MeshPtr k0Mesh = Teuchos::rcp( new Mesh (mesh->getTopology()->deepCopy(), form.bf(), 1, delta_k) );
+  // mesh->registerObserver(k0Mesh);
 
   // Set up solution
   SolutionPtr soln = Solution::solution(form.bf(), mesh, bc, rhs, form.ip(norm));
@@ -141,10 +141,10 @@ int main(int argc, char *argv[]) {
   int azOutput = 20; // print residual every 20 CG iterations
 
   for (int refIndex=0; refIndex <= numRefs; refIndex++) {
-    Teuchos::RCP<GMGSolver> gmgSolver = Teuchos::rcp( new GMGSolver(soln, k0Mesh, maxIters, tol, kluSolver, useStaticCondensation));
-    gmgSolver->setAztecOutput(azOutput);
-    soln->solve(gmgSolver);
-    // soln->solve(false);
+    // Teuchos::RCP<GMGSolver> gmgSolver = Teuchos::rcp( new GMGSolver(soln, k0Mesh, maxIters, tol, kluSolver, useStaticCondensation));
+    // gmgSolver->setAztecOutput(azOutput);
+    // soln->solve(gmgSolver);
+    soln->condensedSolve(kluSolver);
 
     double energyError = soln->energyErrorTotal();
     if (commRank == 0)
