@@ -4065,6 +4065,11 @@ void TSolution<Scalar>::readFromFile(const string &filePath) {
 }
 
 template <typename Scalar>
+Teuchos::RCP< TSolution<Scalar> > TSolution<Scalar>::solution(TBFPtr<Scalar> bf, MeshPtr mesh, TBCPtr<Scalar> bc, TRHSPtr<Scalar> rhs, TIPPtr<Scalar> ip ) {
+  return Teuchos::rcp( new TSolution<Scalar>(bf, mesh,bc,rhs,ip) );
+}
+
+template <typename Scalar>
 Teuchos::RCP< TSolution<Scalar> > TSolution<Scalar>::solution(MeshPtr mesh, TBCPtr<Scalar> bc, TRHSPtr<Scalar> rhs, TIPPtr<Scalar> ip ) {
   return Teuchos::rcp( new TSolution<Scalar>(mesh,bc,rhs,ip) );
 }

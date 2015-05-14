@@ -390,7 +390,7 @@ void initializeSolutionAndCoarseMesh(SolutionPtr &solution, MeshPtr &coarseMesh,
     VarPtr phi_hat = formulation.phi_hat();
     bc->addDirichlet(phi_hat, boundary, Function::zero());
   } else if (problemChoice == ConvectionDiffusion) {
-    double epsilon = 1e-4;
+    double epsilon = 1e-2;
     FunctionPtr beta;
     FunctionPtr beta_x = Function::constant(1);
     FunctionPtr beta_y = Function::constant(2);

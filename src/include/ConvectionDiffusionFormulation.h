@@ -16,10 +16,13 @@
 
 namespace Camellia {
   class ConvectionDiffusionFormulation {
-    BFPtr _convectionDiffusionBF;
     int _spaceDim;
     double _epsilon;
     FunctionPtr _beta;
+
+    VarFactoryPtr _vf;
+    BFPtr _bf;
+    map<string, IPPtr> _ips;
 
     static const string s_u;
     static const string s_sigma;
@@ -32,7 +35,9 @@ namespace Camellia {
   public:
     ConvectionDiffusionFormulation(int spaceDim, bool useConformingTraces, FunctionPtr beta, double epsilon=1e-2);
 
+    VarFactoryPtr vf();
     BFPtr bf();
+    IPPtr ip(string normName);
 
     // field variables:
     VarPtr u();
