@@ -121,8 +121,8 @@ int main(int argc, char *argv[]) {
     elementCounts.push_back(rootMeshNumCells);
   }
   MeshPtr mesh = MeshFactory::rectilinearMesh(form.bf(), dimensions, elementCounts, k+1, delta_k, x0);
-  // MeshPtr k0Mesh = Teuchos::rcp( new Mesh (mesh->getTopology()->deepCopy(), form.bf(), 1, delta_k) );
-  // mesh->registerObserver(k0Mesh);
+  MeshPtr k0Mesh = Teuchos::rcp( new Mesh (mesh->getTopology()->deepCopy(), form.bf(), 1, delta_k) );
+  mesh->registerObserver(k0Mesh);
 
   // Set up solution
   SolutionPtr soln = Solution::solution(form.bf(), mesh, bc, rhs, form.ip(norm));
@@ -131,8 +131,8 @@ int main(int argc, char *argv[]) {
   RefinementStrategy refStrategy(soln, threshold);
 
   ostringstream refName;
-  refName << "confusion" << spaceDim << "D_" << norm << "_" << epsilon;
-  HDF5Exporter exporter(mesh,refName.str());
+  refName << "confusion" << spaceDim << "D_" << norm << "_" << epsilon << "_k" << k;
+  // HDF5Exporter exporter(mesh,refName.str());
 
   SolverPtr kluSolver = Solver::getSolver(Solver::KLU, true);
   double tol = 1e-6;
@@ -140,26 +140,37 @@ int main(int argc, char *argv[]) {
   bool useStaticCondensation = false;
   int azOutput = 20; // print residual every 20 CG iterations
 
+  ofstream dataFile(refName.str()+".txt");
+  dataFile << "ref\t " << "iterations\t " << "elements\t " << "dofs\t " << "error\t " << endl;
   for (int refIndex=0; refIndex <= numRefs; refIndex++) {
-    // Teuchos::RCP<GMGSolver> gmgSolver = Teuchos::rcp( new GMGSolver(soln, k0Mesh, maxIters, tol, kluSolver, useStaticCondensation));
-    // gmgSolver->setAztecOutput(azOutput);
-    // soln->solve(gmgSolver);
-    soln->condensedSolve(kluSolver);
+    Teuchos::RCP<GMGSolver> gmgSolver = Teuchos::rcp( new GMGSolver(soln, k0Mesh, maxIters, tol, kluSolver, useStaticCondensation));
+    gmgSolver->setAztecOutput(azOutput);
+    soln->solve(gmgSolver);
+    // soln->condensedSolve(kluSolver);
 
     double energyError = soln->energyErrorTotal();
     if (commRank == 0)
     {
       // if (refIndex > 0)
         // refStrategy.printRefinementStatistics(refIndex-1);
-      cout << "Refinement:\t " << refIndex << " \tElements:\t " << mesh->numActiveElements()
-        << " \tDOFs:\t " << mesh->numGlobalDofs() << " \tEnergy Error:\t " << energyError << endl;
+      cout << "Refinement:\t " << refIndex
+        << " \tIteration Count:\t " << gmgSolver->iterationCount()
+        << " \tElements:\t " << mesh->numActiveElements()
+        << " \tDOFs:\t " << mesh->numGlobalDofs()
+        << " \tEnergy Error:\t " << energyError << endl;
+      dataFile << refIndex
+        << " " << gmgSolver->iterationCount()
+        << " " << mesh->numActiveElements()
+        << " " << mesh->numGlobalDofs()
+        << " " << energyError << endl;
     }
 
-    exporter.exportSolution(soln, refIndex);
+    // exporter.exportSolution(soln, refIndex);
 
     if (refIndex != numRefs)
       refStrategy.refine();
   }
+  dataFile.close();
 
   return 0;
 }
