@@ -1,4 +1,5 @@
 #include <mpi.h>
+#include <iostream>
 #include <vector>
 
 using namespace std;
@@ -25,7 +26,7 @@ int main(int argc, char *argv[]) {
   
   MPI_Barrier( MPI_COMM_WORLD ); // barrier for debugger
 
-  std::vector<int> partitionDofCounts(nProc);
+  std::vector<long long> partitionDofCounts(nProc);
 
   int myDofs = 0;
   if (rank==0)
@@ -35,10 +36,10 @@ int main(int argc, char *argv[]) {
   
   partitionDofCounts[rank] = myDofs;
   
-  std::vector<int> partitionDofCountsCopy = partitionDofCounts;
-  MPI_Allreduce(&partitionDofCountsCopy[0], &partitionDofCounts[0], partitionDofCounts.size(), MPI_INT, MPI_SUM, MPI_COMM_WORLD);
+  std::vector<long long> partitionDofCountsCopy = partitionDofCounts;
+  MPI_Allreduce(&partitionDofCountsCopy[0], &partitionDofCounts[0], partitionDofCounts.size(), MPI_LONG_LONG, MPI_SUM, MPI_COMM_WORLD);
   
-  int partitionDofOffset = 0; // add this to a local partition dof index to get the global dof index
+  unsigned partitionDofOffset = 0; // add this to a local partition dof index to get the global dof index
   for (int i=0; i<rank; i++) {
     partitionDofOffset += partitionDofCounts[i];
   }
