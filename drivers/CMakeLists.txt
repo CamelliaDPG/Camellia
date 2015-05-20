@@ -6,6 +6,7 @@ option(BUILD_TRUMAN_DRIVERS "Build drivers in Truman directory" ON)
 option(BUILD_TRUMAN_TESTS_DRIVERS "Build drivers in Truman/Tests directory" OFF)
 option(BUILD_CONFUSION_JESSE_DRIVERS "Build drivers in Confusion_Jesse directory" OFF)
 option(BUILD_CONVECTION_DRIVERS "Build drivers in Convection directory" OFF)
+option(BUILD_HPCTESTS_DRIVER "Build drivers in HPCToolkitTest directory" ON)
 option(BUILD_INCOMPRESSIBLENS_DRIVERS "Build drivers in IncompressibleNS directory" OFF)
 option(BUILD_PRECONDITIONING_DRIVERS "Build drivers in Preconditioning directory" OFF)
 
@@ -41,6 +42,10 @@ if (BUILD_DPGTESTS_DRIVER)
 else()
   MESSAGE("Not setting up makefile for DPGTests driver in drivers/DPGTests, because BUILD_DPGTESTS_DRIVER is OFF.")  
 endif(BUILD_DPGTESTS_DRIVER)
+
+if (BUILD_HPCTESTS_DRIVER)
+  add_subdirectory(HPCToolkitTest)
+endif(BUILD_HPCTESTS_DRIVER)
 
 if (BUILD_INCOMPRESSIBLENS_DRIVERS)
   add_subdirectory(IncompressibleNS)
