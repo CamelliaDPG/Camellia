@@ -204,6 +204,8 @@ namespace Camellia {
 
     static unsigned permutationComposition( const shards::CellTopology &cellTopo, unsigned a_permutation, unsigned b_permutation );
 
+    static unsigned permutationFromSubsubcellToParent(CellTopoPtr cellTopo, unsigned subcdim, unsigned subcord, unsigned subsubcdim, unsigned subsubcord);
+    
     static unsigned permutationInverse( CellTopoPtr cellTopo, unsigned permutation );
 
     static unsigned permutationInverse( const shards::CellTopology &cellTopo, unsigned permutation );

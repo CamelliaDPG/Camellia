@@ -455,6 +455,8 @@ unsigned CamelliaCellTools::permutationMatchingOrder( CellTopoPtr cellTopo, cons
   if (cellTopo->getDimension() == 0) {
     return 0;
   }
+  TEUCHOS_TEST_FOR_EXCEPTION(cellTopo->getNodeCount() != fromOrder.size(), std::invalid_argument, "fromOrder.size() != node count");
+  TEUCHOS_TEST_FOR_EXCEPTION(cellTopo->getNodeCount() != toOrder.size(), std::invalid_argument, "toOrder.size() != node count");
   unsigned permutationCount = cellTopo->getNodePermutationCount();
   unsigned nodeCount = fromOrder.size();
   for (unsigned permutation=0; permutation<permutationCount; permutation++) {
@@ -549,6 +551,32 @@ unsigned CamelliaCellTools::permutationComposition( CellTopoPtr cellTopo, unsign
   return compositionMap[cellTopo->getKey()][abPair];
 }
 
+unsigned CamelliaCellTools::permutationFromSubsubcellToParent(CellTopoPtr cellTopo, unsigned subcdim, unsigned subcord,
+                                                              unsigned subsubcdim, unsigned subsubcord)
+{
+  if ((cellTopo->getDimension()==subcdim) && (subcord == 0)) // subcell and cellTopo are the same
+  {
+    return 0;
+  }
+  if (subsubcdim == 0) // vertex
+  {
+    return 0;
+  }
+  
+  CellTopoPtr subcell = cellTopo->getSubcell(subcdim, subcord);
+  int subsubcellNodeCount = subcell->getNodeCount(subsubcdim,subsubcord);
+  vector<unsigned> subcellOrder(subsubcellNodeCount), parentOrder(subsubcellNodeCount);
+  unsigned subsubcordInParent = subcellOrdinalMap(cellTopo, subcdim, subcord, subsubcdim, subsubcord);
+  for (unsigned node=0; node<subsubcellNodeCount; node++)
+  {
+    parentOrder[node] = cellTopo->getNodeMap(subsubcdim, subsubcordInParent, node);
+    unsigned nodeInSubcell = subcell->getNodeMap(subsubcdim, subsubcord, node);
+    subcellOrder[node] = cellTopo->getNodeMap(subcdim, subcord, nodeInSubcell);
+  }
+  CellTopoPtr subsubcell = subcell->getSubcell(subsubcdim, subsubcord);
+  return permutationMatchingOrder(subsubcell, subcellOrder, parentOrder);
+}
+
 unsigned CamelliaCellTools::permutationInverse( CellTopoPtr cellTopo, unsigned permutation ) {
   // 2-12-15: the code below copied from the version of permutationInverse that takes a shards::CellTopology as argument,
   //          modified slightly to accommodate Camellia::CellTopology
@@ -631,6 +659,7 @@ unsigned CamelliaCellTools::permutationInverse( const shards::CellTopology &cell
   return inverseMap[cellTopo.getKey()][permutation];
 }
 
+// ! Note that permutedPoints container must be different from refPoints.
 void CamelliaCellTools::permutedReferenceCellPoints(const shards::CellTopology &cellTopo, unsigned int permutation,
                                                     const FieldContainer<double> &refPoints, FieldContainer<double> &permutedPoints) {
   FieldContainer<double> permutedNodes(cellTopo.getNodeCount(),cellTopo.getDimension());
@@ -643,6 +672,12 @@ void CamelliaCellTools::permutedReferenceCellPoints(const shards::CellTopology &
 
 void CamelliaCellTools::permutedReferenceCellPoints(CellTopoPtr cellTopo, unsigned int permutation,
                                                     const FieldContainer<double> &refPoints, FieldContainer<double> &permutedPoints) {
+  if (cellTopo->getDimension()==0)
+  {
+    permutedPoints = refPoints;
+    return;
+  }
+  TEUCHOS_TEST_FOR_EXCEPTION(refPoints.dimension(1) != cellTopo->getDimension(), std::invalid_argument, "refPoints must have shape (P,D), where D = cellTopo->getDimension()");
   FieldContainer<double> permutedNodes(cellTopo->getNodeCount(),cellTopo->getDimension());
   CamelliaCellTools::refCellNodesForTopology(permutedNodes, cellTopo, permutation);
   
@@ -1248,7 +1283,18 @@ void CamelliaCellTools::mapToReferenceSubcell(FieldContainer<double>       &refS
                                               const int                     subcellDim,
                                               const int                     subcellOrd,
                                               CellTopoPtr                   parentCell) {
+  TEUCHOS_TEST_FOR_EXCEPTION(subcellDim > parentCell->getDimension(), std::invalid_argument,
+                             "subcellDim cannot exceed parentCell dimension.");
+  if (parentCell->getDimension() == 0)
+  {
+    refSubcellPoints = paramPoints; // likely a (1,1)-sized container with a zero in it, but whatever it is, we copy it
+    return;
+  }
   const FieldContainer<double>& subcellMap = getSubcellParametrization(subcellDim, parentCell);
+  if (subcellDim != 0)
+  {
+    TEUCHOS_TEST_FOR_EXCEPTION(paramPoints.dimension(1) != subcellDim, std::invalid_argument, "paramPoints should have shape (P,D), where D is is the subcellDim, unless subcellDim = 0");
+  }
   
   int numPoints = paramPoints.dimension(0);
   int parentDim = parentCell->getDimension();
