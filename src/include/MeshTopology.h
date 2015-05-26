@@ -123,7 +123,7 @@ namespace Camellia {
     bool entityHasChildren(unsigned d, IndexType entityIndex);
     IndexType getActiveCellCount(unsigned d, IndexType entityIndex);
 
-    const vector< pair<IndexType,IndexType> > &getActiveCellIndices(unsigned d, IndexType entityIndex); // first entry in pair is the cellIndex, the second is the index of the entity in that cell (the subcord).
+    const vector< pair<IndexType,unsigned> > &getActiveCellIndices(unsigned d, IndexType entityIndex); // first entry in pair is the cellIndex, the second is the index of the entity in that cell (the subcord).
     CellPtr getCell(IndexType cellIndex);
     //  vector< pair< unsigned, unsigned > > getCellNeighbors(unsigned cellIndex, unsigned sideIndex); // second entry in return is the sideIndex in neighbor (note that in context of h-refinements, one or both of the sides may be broken)
     //  pair< CellPtr, unsigned > getCellAncestralNeighbor(unsigned cellIndex, unsigned sideIndex);
@@ -133,6 +133,8 @@ namespace Camellia {
     std::vector<IndexType> cellIDsForPoints(const Intrepid::FieldContainer<double> &physicalPoints);
 
     bool entityIsAncestor(unsigned d, IndexType ancestor, IndexType descendent);
+    bool entityIsGeneralizedAncestor(unsigned ancestorDimension, IndexType ancestor,
+                                     unsigned descendentDimension, IndexType descendent);
 
     CellPtr findCellWithVertices(const vector< vector<double> > &cellVertices);
 
