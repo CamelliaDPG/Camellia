@@ -268,7 +268,7 @@ namespace {
     TEST_COMPARE(err, <, tol);
   }
 
-  TEUCHOS_UNIT_TEST( StokesVGPFormulation, Projection_2D )
+  TEUCHOS_UNIT_TEST( StokesVGPFormulation, Projection_2D_Slow )
   {
     int spaceDim = 2;
     vector<double> dimensions(spaceDim,2.0); // 2x2 square domain

@@ -336,7 +336,7 @@ namespace {
 //    exporter0.exportFunction(sliceFunction_t0, "x");
   }
 
-  TEUCHOS_UNIT_TEST( Solution, ProjectOnTensorMesh2D )
+  TEUCHOS_UNIT_TEST( Solution, ProjectOnTensorMesh2D_Slow )
   {
     int tensorialDegree = 1;
     CellTopoPtr quad_x_time = CellTopology::cellTopology(CellTopology::quad(), tensorialDegree);
@@ -454,7 +454,7 @@ namespace {
     }
   }
 
-  TEUCHOS_UNIT_TEST( Solution, ProjectOnTensorMesh3D )
+  TEUCHOS_UNIT_TEST( Solution, ProjectOnTensorMesh3D_Slow )
   {
     int tensorialDegree = 1;
     CellTopoPtr hex_x_time = CellTopology::cellTopology(shards::getCellTopologyData<shards::Hexahedron<8> >(), tensorialDegree);

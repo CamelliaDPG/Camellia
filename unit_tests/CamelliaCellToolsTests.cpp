@@ -512,7 +512,7 @@ namespace {
     }
   }
   
-  TEUCHOS_UNIT_TEST( CamelliaCellTools, PermutationMatchingOrder_SpaceTime ) // tensorial degree 1 Camellia CellTopology
+  TEUCHOS_UNIT_TEST( CamelliaCellTools, PermutationMatchingOrder_SpaceTime_Slow ) // tensorial degree 1 Camellia CellTopology
   {
     int tensorialDegree = 1;
     
@@ -545,7 +545,7 @@ namespace {
     }
   }
   
-  TEUCHOS_UNIT_TEST( CamelliaCellTools, PermutedReferenceCellPoints_Space ) // tensorial degree 0 Camellia CellTopology
+  TEUCHOS_UNIT_TEST( CamelliaCellTools, PermutedReferenceCellPoints_Space_Slow ) // tensorial degree 0 Camellia CellTopology
   {
     // to begin, just a very simple test that *nodes* are permuted appropriately
    
@@ -584,7 +584,7 @@ namespace {
     }
   }
   
-  TEUCHOS_UNIT_TEST( CamelliaCellTools, PermutedReferenceCellPoints_SpaceTime ) // tensorial degree 1 Camellia CellTopology
+  TEUCHOS_UNIT_TEST( CamelliaCellTools, PermutedReferenceCellPoints_SpaceTime_Slow ) // tensorial degree 1 Camellia CellTopology
   {
     // to begin, just a very simple test that *nodes* are permuted appropriately
     
