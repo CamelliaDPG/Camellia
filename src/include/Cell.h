@@ -103,8 +103,10 @@ namespace Camellia {
      */
     unsigned getSideCount();
 
+    //! permutation that maps from MeshTopology's canonical ordering to the ordering seen by this cell
     unsigned subcellPermutation(unsigned d, unsigned scord);
 
+    //! permutation that maps from MeshTopology's canonical ordering to the ordering seen by this cell's side
     unsigned sideSubcellPermutation(unsigned sideOrdinal, unsigned sideSubcdim, unsigned sideSubcord);
 
     CellTopoPtr topology();
