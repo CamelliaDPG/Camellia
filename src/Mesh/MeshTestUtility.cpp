@@ -483,7 +483,7 @@ bool MeshTestUtility::determineRefTestPointsForNeighbors(MeshTopologyPtr meshTop
 
   unsigned coarseSideAncestorPermutationInverse = CamelliaCellTools::permutationInverse(coarseSideTopo, coarseSidePermutation);
 
-  unsigned composedPermutation = CamelliaCellTools::permutationComposition(coarseSideTopo, fineSideAncestorPermutation, coarseSideAncestorPermutationInverse); // goes from coarse ordering to fine.
+  unsigned composedPermutation = CamelliaCellTools::permutationComposition(coarseSideTopo, coarseSideAncestorPermutationInverse, fineSideAncestorPermutation); // goes from coarse ordering to fine.
 
   RefinementBranch fineRefBranch = fineCell->refinementBranchForSide(sideOrdinal);
 
