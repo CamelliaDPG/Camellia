@@ -45,6 +45,7 @@ FieldContainer<double> SubBasisDofPermutationMapper::mapData(bool transposeConst
     data.dimensions(dim);
     FieldContainer<double> dataPermuted(dim);
     if (dim.size() == 1) {
+      TEUCHOS_TEST_FOR_EXCEPTION(_inversePermutation.size() != dim[0], std::invalid_argument, "unexpected data length");
       for (int i=0; i<dim[0]; i++) {
         if (!_negate)
           dataPermuted(_inversePermutation[i]) = data(i);
@@ -52,6 +53,8 @@ FieldContainer<double> SubBasisDofPermutationMapper::mapData(bool transposeConst
           dataPermuted(_inversePermutation[i]) = -data(i);
       }
     } else if (dim.size() == 2) {
+      TEUCHOS_TEST_FOR_EXCEPTION(_inversePermutation.size() != dim[0], std::invalid_argument, "unexpected dimension 0");
+      TEUCHOS_TEST_FOR_EXCEPTION(_inversePermutation.size() != dim[1], std::invalid_argument, "unexpected dimension 1");
       for (int i=0; i<dim[0]; i++) {
         for (int j=0; j<dim[1]; j++) {
           if (!applyOnLeftOnly) {
