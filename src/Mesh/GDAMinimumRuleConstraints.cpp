@@ -241,13 +241,16 @@ namespace Camellia {
 
       unsigned ancestralSubcellOrdinalInSide = CamelliaCellTools::subcellReverseOrdinalMap(_ancestralCell->topology(), sideDim, _ancestralSideOrdinal, constrainingSubcellInfo.dimension, _ancestralSubcellOrdinal);
 
+      cout << "WARNING: using *side* subcell permutations to determine composed permutation for BasisReconciliation.  ";
+      cout << "This is only valid for the side-centric computeConstrainedWeights; need to make a distinction between the arguments here (in GDAMinimumRuleConstraints).\n";
+      
       unsigned ancestralPermutation = _ancestralCell->sideSubcellPermutation(_ancestralSideOrdinal, _ancestralSubcellDimension, ancestralSubcellOrdinalInSide); // subcell permutation as seen from the perspective of the fine cell's side's ancestor
       unsigned constrainingPermutation = constrainingCell->sideSubcellPermutation(constrainingSubcellInfo.sideOrdinal, constrainingSubcellInfo.dimension,
           constrainingSubcellInfo.subcellOrdinal); // subcell permutation as seen from the perspective of the domain on the constraining cell
 
       CellTopoPtr constrainingTopo = constrainingCell->topology()->getSubcell(constrainingSubcellInfo.dimension, _constrainingEntity->subcellOrdinalInCell());
-      unsigned constrainingPermutationInverse = CamelliaCellTools::permutationInverse(constrainingTopo, constrainingPermutation);
-      _composedPermutation = CamelliaCellTools::permutationComposition(constrainingTopo, constrainingPermutationInverse, ancestralPermutation);
+      unsigned ancestralPermutationInverse = CamelliaCellTools::permutationInverse(constrainingTopo, ancestralPermutation);
+      _composedPermutation = CamelliaCellTools::permutationComposition(constrainingTopo, ancestralPermutationInverse, constrainingPermutation);
 
       cout << "Adding red (constraining) edge from " << thisInfo << " to " << constrainingSubcellInfo << endl;
 
@@ -400,8 +403,7 @@ namespace Camellia {
     os << "cell " << annotatedEntity.cellID;
     if (annotatedEntity.sideOrdinal != -1) {
       os << "'s side " << annotatedEntity.sideOrdinal;
-    }
-
+    } 
     os << "'s " << CamelliaCellTools::entityTypeString(annotatedEntity.dimension);
     os << " " << annotatedEntity.subcellOrdinal;
 

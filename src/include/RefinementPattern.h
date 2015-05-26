@@ -21,6 +21,19 @@ namespace Camellia {
   typedef vector< pair<RefinementPattern*, unsigned> > RefinementBranch; //unsigned: the child ordinal; order is from coarse to fine
   typedef vector< pair<RefinementPattern*, vector<unsigned> > > RefinementPatternRecipe;
 
+  struct RefinementBranchTier
+  {
+    CellTopoPtr previousTierTopo;          // topology of the previous tier
+    unsigned rootDimension;                // dimension of the root of this tier
+    unsigned previousTierSubcellOrdinal;   // ordinal of the root of this tier in the leaf of the previous tier
+    RefinementBranch refBranch;            // refinement branch for the tier
+    unsigned leafSubcellDimension;         // leaf subcell dimension
+    unsigned leafSubcellOrdinal;           // subcell ordinal in the refBranch's leaf
+    unsigned leafSubcellPermutation;       // ordinal of the permutation that takes the leaf nodes as seen by refBranch to their order in topmost (volume) topology
+  };
+  
+  typedef std::vector<RefinementBranchTier> GeneralizedRefinementBranch; // allows mapping child points that may fall inside a volume, e.g.
+  
   class RefinementPattern {
     MeshTopologyPtr _refinementTopology;
 
@@ -128,10 +141,18 @@ namespace Camellia {
 
     static RefinementBranch sideRefinementBranch(RefinementBranch &volumeRefinementBranch, unsigned sideIndex);
 
+    // ! returns a refinement branch rooted in subcell ordinal of subcord and dimension of subcdim in the root of volumeRefinementBranch.
     static RefinementBranch subcellRefinementBranch(RefinementBranch &volumeRefinementBranch, unsigned subcdim, unsigned subcord,
                                                     bool tolerateSubcellsWithoutDescendants=false);
 
-    static void mapRefCellPointsToAncestor(RefinementBranch &refinementBranch, const Intrepid::FieldContainer<double> &leafRefCellPoints, Intrepid::FieldContainer<double> &rootRefCellPoints);
+    // ! returns a generalized refinement branch that has as its leaf the subcell (subcdim, subcord) in the leaf of the volumeRefinementBranch
+    static GeneralizedRefinementBranch generalizedRefinementBranchForLeafSubcell(RefinementBranch &volumeRefinementBranch, unsigned subcdim, unsigned subcord);
+    
+    static void mapRefCellPointsToAncestor(GeneralizedRefinementBranch &generalizedRefBranch, const Intrepid::FieldContainer<double> &leafRefCellPoints,
+                                           Intrepid::FieldContainer<double> &rootRefCellPoints);
+    
+    static void mapRefCellPointsToAncestor(RefinementBranch &refinementBranch, const Intrepid::FieldContainer<double> &leafRefCellPoints,
+                                           Intrepid::FieldContainer<double> &rootRefCellPoints);
   };
 
   typedef Teuchos::RCP<RefinementPattern> RefinementPatternPtr;
