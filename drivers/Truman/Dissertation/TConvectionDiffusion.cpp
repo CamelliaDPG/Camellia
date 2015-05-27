@@ -43,15 +43,21 @@ int main(int argc, char *argv[]) {
   double epsilon = 1e-2;
   int numRefs = 0;
   int k = 2, delta_k = 2;
+  int numXElems = 1;
   bool useConformingTraces = true;
+  int solverChoice = 0;
+  double solverTolerance = 1e-6;
   string norm = "CoupledRobust";
   cmdp.setOption("spaceDim", &spaceDim, "spatial dimension");
   cmdp.setOption("polyOrder",&k,"polynomial order for field variable u");
   cmdp.setOption("delta_k", &delta_k, "test space polynomial order enrichment");
   cmdp.setOption("numRefs",&numRefs,"number of refinements");
+  cmdp.setOption("numXElems",&numXElems,"number of elements in x direction");
   cmdp.setOption("epsilon", &epsilon, "epsilon");
   cmdp.setOption("norm", &norm, "norm");
   cmdp.setOption("conformingTraces", "nonconformingTraces", &useConformingTraces, "use conforming traces");
+  cmdp.setOption("solver", &solverChoice, "0=iterative, 1=KLI, 2=SuperLu");
+  cmdp.setOption("solverTolerance", &solverTolerance, "iterative solver tolerance");
 
   if (cmdp.parse(argc,argv) != Teuchos::CommandLineProcessor::PARSE_SUCCESSFUL) {
 #ifdef HAVE_MPI
@@ -113,12 +119,11 @@ int main(int argc, char *argv[]) {
   // Build mesh
   vector<double> x0 = vector<double>(spaceDim,-1.0);
   double width = 2.0;
-  int rootMeshNumCells = 1;
   vector<double> dimensions;
   vector<int> elementCounts;
   for (int d=0; d<spaceDim; d++) {
     dimensions.push_back(width);
-    elementCounts.push_back(rootMeshNumCells);
+    elementCounts.push_back(numXElems);
   }
   MeshPtr mesh = MeshFactory::rectilinearMesh(form.bf(), dimensions, elementCounts, k+1, delta_k, x0);
   MeshPtr k0Mesh = Teuchos::rcp( new Mesh (mesh->getTopology()->deepCopy(), form.bf(), 1, delta_k) );
@@ -135,7 +140,7 @@ int main(int argc, char *argv[]) {
   // HDF5Exporter exporter(mesh,refName.str());
 
   SolverPtr kluSolver = Solver::getSolver(Solver::KLU, true);
-  double tol = 1e-6;
+  SolverPtr superluSolver = Solver::getSolver(Solver::SuperLUDist, true);
   int maxIters = 10000;
   bool useStaticCondensation = false;
   int azOutput = 20; // print residual every 20 CG iterations
@@ -143,26 +148,50 @@ int main(int argc, char *argv[]) {
   ofstream dataFile(refName.str()+".txt");
   dataFile << "ref\t " << "iterations\t " << "elements\t " << "dofs\t " << "error\t " << endl;
   for (int refIndex=0; refIndex <= numRefs; refIndex++) {
-    Teuchos::RCP<GMGSolver> gmgSolver = Teuchos::rcp( new GMGSolver(soln, k0Mesh, maxIters, tol, kluSolver, useStaticCondensation));
-    gmgSolver->setAztecOutput(azOutput);
-    soln->solve(gmgSolver);
-    // soln->condensedSolve(kluSolver);
+    Teuchos::RCP<GMGSolver> gmgSolver;
+    if (solverChoice == 0) 
+    {
+      gmgSolver = Teuchos::rcp( new GMGSolver(soln, k0Mesh, maxIters, solverTolerance, kluSolver, useStaticCondensation));
+      gmgSolver->setAztecOutput(azOutput);
+    }
+    switch(solverChoice)
+    {
+      case 0:
+        soln->solve(gmgSolver);
+        break;
+      case 1:
+        soln->condensedSolve(kluSolver);
+        break;
+      case 2:
+        soln->condensedSolve(superluSolver);
+        break;
+    }
 
     double energyError = soln->energyErrorTotal();
     if (commRank == 0)
     {
       // if (refIndex > 0)
         // refStrategy.printRefinementStatistics(refIndex-1);
-      cout << "Refinement:\t " << refIndex
-        << " \tIteration Count:\t " << gmgSolver->iterationCount()
-        << " \tElements:\t " << mesh->numActiveElements()
-        << " \tDOFs:\t " << mesh->numGlobalDofs()
-        << " \tEnergy Error:\t " << energyError << endl;
-      dataFile << refIndex
-        << " " << gmgSolver->iterationCount()
-        << " " << mesh->numActiveElements()
-        << " " << mesh->numGlobalDofs()
-        << " " << energyError << endl;
+      if (solverChoice == 0) 
+      {
+        cout << "Refinement:\t " << refIndex
+          << " \tIteration Count:\t " << gmgSolver->iterationCount()
+          << " \tElements:\t " << mesh->numActiveElements()
+          << " \tDOFs:\t " << mesh->numGlobalDofs()
+          << " \tEnergy Error:\t " << energyError << endl;
+        dataFile << refIndex
+          << " " << gmgSolver->iterationCount()
+          << " " << mesh->numActiveElements()
+          << " " << mesh->numGlobalDofs()
+          << " " << energyError << endl;
+      }
+      else
+      {
+        cout << "Refinement:\t " << refIndex
+          << " \tElements:\t " << mesh->numActiveElements()
+          << " \tDOFs:\t " << mesh->numGlobalDofs()
+          << " \tEnergy Error:\t " << energyError << endl;
+      }
     }
 
     // exporter.exportSolution(soln, refIndex);
