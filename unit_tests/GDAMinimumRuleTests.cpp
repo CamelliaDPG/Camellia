@@ -208,7 +208,7 @@ void testCoarseBasisEqualsWeightedFineBasis(MeshPtr mesh, Teuchos::FancyOStream 
   MeshTopologyPtr meshTopo = mesh->getTopology();
 
 //    meshTopo->printAllEntities();
-  unsigned edgeDim = 1;
+//    unsigned edgeDim = 1;
 //    meshTopo->printConstraintReport(edgeDim);
 
   int sideDim = meshTopo->getSpaceDim() - 1;
@@ -283,8 +283,15 @@ void testCoarseBasisEqualsWeightedFineBasis(MeshPtr mesh, Teuchos::FancyOStream 
           unsigned canonicalToAncestralSubcellPermutation;
           FieldContainer<double> ancestralSubcellPoints;
           CellTopoPtr ancestralSubcellTopo;
-          if (cellRefinementBranch.size() > 0)
+          
+          if (cellRefinementBranch.size() == 0)
           {
+            RefinementPatternPtr noRefPattern = RefinementPattern::noRefinementPattern(cell->topology());
+            cellRefinementBranch = {{noRefPattern.get(), 0}};
+          }
+          
+//          if (cellRefinementBranch.size() > 0)
+//          {
             GeneralizedRefinementBranch genRefBranch = RefinementPattern::generalizedRefinementBranchForLeafSubcell(cellRefinementBranch, subcdim, subcordInCell);
             // genRefBranch will end in volume topology; we want it to end in the constraining subcell topology:
             CellTopoPtr ancestralCellTopo = genRefBranch[0].previousTierTopo;
@@ -294,14 +301,14 @@ void testCoarseBasisEqualsWeightedFineBasis(MeshPtr mesh, Teuchos::FancyOStream 
             genRefBranch[0].previousTierSubcellOrdinal = 0;
             RefinementPattern::mapRefCellPointsToAncestor(genRefBranch, subcellPoints, ancestralSubcellPoints);
             canonicalToAncestralSubcellPermutation = cell->ancestralPermutationForSubcell(subcdim, subcordInCell);
-          }
-          else
-          {
-            // no refinement branch:
-            ancestralSubcellTopo = subcell;
-            ancestralSubcellPoints = subcellPoints;
-            canonicalToAncestralSubcellPermutation = cell->subcellPermutation(subcdim, subcordInCell);
-          }
+//          }
+//          else
+//          {
+//            // no refinement branch:
+//            ancestralSubcellTopo = subcell;
+//            ancestralSubcellPoints = subcellPoints;
+//            canonicalToAncestralSubcellPermutation = cell->subcellPermutation(subcdim, subcordInCell);
+//          }
 
           // constraining subcell and side:
           AnnotatedEntity constrainingEntityInfo = cellConstraints.subcellConstraints[subcdim][subcordInCell];
@@ -387,17 +394,22 @@ void testCoarseBasisEqualsWeightedFineBasis(MeshPtr mesh, Teuchos::FancyOStream 
             map<GlobalIndexType,double> coarseGlobalValues;
             for (auto subBasisMap : coarseBasisMap)
             {
-              // filter constrainingBasisValues here according to what subBasisMap knows about.
-              set<unsigned> basisOrdinalFilter = subBasisMap->basisDofOrdinalFilter();
-              FieldContainer<double> filteredConstrainingValues(basisOrdinalFilter.size());
-              filterFCValues(filteredConstrainingValues, constrainingBasisValues, basisOrdinalFilter,
-                             constrainingBasis->getCardinality());
-              FieldContainer<double> mappedValues = subBasisMap->mapFineData(filteredConstrainingValues);
-              vector<GlobalIndexType> globalIndices = subBasisMap->mappedGlobalDofOrdinals();
-              for (int i=0; i<globalIndices.size(); i++)
               {
-                coarseGlobalValues[globalIndices[i]] += mappedValues(i);
+                // DEBUGGING
+                if ((cellID==16) && (sideOrdinal==2) && (subcdim==0) && (subcord==1))
+                {
+                  cout << "Set breakpoint here.\n";
+                }
               }
+              GeneralizedRefinementBranch genRefBranch = RefinementPattern::generalizedRefinementBranchForLeafSubcell(cellRefinementBranch, subcdim, subcordInCell);
+              // genRefBranch will end in volume topology; we want it to end in the constraining subcell topology:
+              CellTopoPtr ancestralCellTopo = genRefBranch[0].previousTierTopo;
+              ancestralSubcellTopo = ancestralCellTopo->getSubcell(genRefBranch[0].rootDimension,
+                                                                   genRefBranch[0].previousTierSubcellOrdinal);
+              genRefBranch[0].previousTierTopo = ancestralSubcellTopo;
+              genRefBranch[0].previousTierSubcellOrdinal = 0;
+              RefinementPattern::mapRefCellPointsToAncestor(genRefBranch, subcellPoints, ancestralSubcellPoints);
+              canonicalToAncestralSubcellPermutation = cell->ancestralPermutationForSubcell(subcdim, subcordInCell);
             }
 
             map<GlobalIndexType,double> nonzeroCoarseGlobalValues;
@@ -692,179 +704,180 @@ MeshPtr poisson3DUniformMesh()
 {
   return poissonUniformMesh(3, 2, 2, true);
 }
-
-TEUCHOS_UNIT_TEST( GDAMinimumRule, BasisMapsAgreePoisson1D)
-{
-  int spaceDim = 1;
-  int elementWidth = 2;
-  int H1Order = 2;
-  bool useConformingTraces = true;
-  MeshPtr mesh = poissonUniformMesh(spaceDim, elementWidth, H1Order, useConformingTraces);
-  testCoarseBasisEqualsWeightedFineBasis(mesh, out, success);
-}
-
-TEUCHOS_UNIT_TEST( GDAMinimumRule, BasisMapsAgreePoisson2DUniform)
-{
-  int spaceDim = 2;
-  int elementWidth = 2;
-  int H1Order = 2;
-  bool useConformingTraces = true;
-  MeshPtr mesh = poissonUniformMesh(spaceDim, elementWidth, H1Order, useConformingTraces);
-  testCoarseBasisEqualsWeightedFineBasis(mesh, out, success);
-}
-
-TEUCHOS_UNIT_TEST( GDAMinimumRule, BasisMapsAgreePoisson2DHangingNode1Irregular_Slow)
-{
-  int spaceDim = 2;
-  int H1Order = 2;
-  int irregularity = 1;
-  MeshPtr mesh = poissonIrregularMesh(spaceDim, irregularity, H1Order);
-  testCoarseBasisEqualsWeightedFineBasis(mesh, out, success);
-}
-
-TEUCHOS_UNIT_TEST( GDAMinimumRule, BasisMapsAgreePoisson2DHangingNode2Irregular_Slow)
-{
-  int spaceDim = 2;
-  int H1Order = 2;
-  int irregularity = 2;
-  MeshPtr mesh = poissonIrregularMesh(spaceDim, irregularity, H1Order);
-  testCoarseBasisEqualsWeightedFineBasis(mesh, out, success);
-}
-
-TEUCHOS_UNIT_TEST( GDAMinimumRule, BasisMapsAgreePoisson3DUniform_Slow)
-{
-  int spaceDim = 3;
-  int elementWidth = 2;
-  int H1Order = 2;
-  bool useConformingTraces = true;
-  MeshPtr mesh = poissonUniformMesh(spaceDim, elementWidth, H1Order, useConformingTraces);
-  testCoarseBasisEqualsWeightedFineBasis(mesh, out, success);
-}
-
-TEUCHOS_UNIT_TEST( GDAMinimumRule, BasisMapsAgreePoisson3DHangingNode1Irregular_Slow)
-{
-  int irregularity = 1;
-  int spaceDim = 3;
-  int H1Order = 2;
-  MeshPtr mesh = poissonIrregularMesh(spaceDim, irregularity, H1Order);
-  testCoarseBasisEqualsWeightedFineBasis(mesh, out, success);
-}
-
-TEUCHOS_UNIT_TEST( GDAMinimumRule, BasisMapsAgreePoisson3DHangingNode2Irregular_Slow)
-{
-  int irregularity = 2;
-  int spaceDim = 3;
-  int H1Order = 2;
-  MeshPtr mesh = poissonIrregularMesh(spaceDim, irregularity, H1Order);
-  testCoarseBasisEqualsWeightedFineBasis(mesh, out, success);
-}
-
-TEUCHOS_UNIT_TEST( GDAMinimumRule, CheckConstraintsPoisson3DUniform )
-{
-  MeshPtr mesh = poisson3DUniformMesh();
-  testSubcellConstraintIsAncestor(mesh, out, success);
-}
-
-TEUCHOS_UNIT_TEST( GDAMinimumRule, CheckConstraintsPoisson3DHangingNode1Irregular )
-{
-  int irregularity = 1;
-  int spaceDim = 3;
-  int H1Order = 2;
-  MeshPtr mesh = poissonIrregularMesh(spaceDim, irregularity, H1Order);
-  testSubcellConstraintIsAncestor(mesh, out, success);
-}
-
-TEUCHOS_UNIT_TEST( GDAMinimumRule, CheckConstraintsPoisson3DHangingNode2Irregular )
-{
-  int irregularity = 2;
-  int spaceDim = 3;
-  int H1Order = 2;
-  MeshPtr mesh = poissonIrregularMesh(spaceDim, irregularity, H1Order);
-  testSubcellConstraintIsAncestor(mesh, out, success);
-}
-
-TEUCHOS_UNIT_TEST( GDAMinimumRule, SolvePoisson3DHangingNode_Slow )
-{
-  // exact solution: for now, we just use a linear phi
-  FunctionPtr x = Function::xn(1);
-  FunctionPtr y = Function::yn(1);
-  FunctionPtr z = Function::zn(1);
-  //  FunctionPtr phi_exact = x + y;
-  FunctionPtr phi_exact = -x + y + z;
-  //  FunctionPtr phi_exact = Function::constant(3.14159);
-
-  int H1Order = 2; // 1 higher than the order of phi_exact, to get an exactly recoverable solution with L^2 fields.
-  int spaceDim = 3;
-  bool useConformingTraces = true;
-  PoissonFormulation poissonForm(spaceDim, useConformingTraces);
-  // TODO: try this with 2-irregular.  Once upon a time, there was an exception thrown for that case.
-  for (int irregularity = 1; irregularity<=1; irregularity++)
+  
+  
+  TEUCHOS_UNIT_TEST( GDAMinimumRule, BasisMapsAgreePoisson1D)
   {
-    SolutionPtr soln = poissonExactSolution3DHangingNodes(irregularity,phi_exact,H1Order);
-
-    MeshPtr mesh = soln->mesh();
-    VarFactoryPtr vf = soln->mesh()->bilinearForm()->varFactory();
-
-    if (! MeshTestUtility::checkLocalGlobalConsistency(mesh) )
+    int spaceDim = 1;
+    int elementWidth = 2;
+    int H1Order = 2;
+    bool useConformingTraces = true;
+    MeshPtr mesh = poissonUniformMesh(spaceDim, elementWidth, H1Order, useConformingTraces);
+    testCoarseBasisEqualsWeightedFineBasis(mesh, out, success);
+  }
+  
+  TEUCHOS_UNIT_TEST( GDAMinimumRule, BasisMapsAgreePoisson2DUniform)
+  {
+    int spaceDim = 2;
+    int elementWidth = 2;
+    int H1Order = 2;
+    bool useConformingTraces = true;
+    MeshPtr mesh = poissonUniformMesh(spaceDim, elementWidth, H1Order, useConformingTraces);
+    testCoarseBasisEqualsWeightedFineBasis(mesh, out, success);
+  }
+  
+  TEUCHOS_UNIT_TEST( GDAMinimumRule, BasisMapsAgreePoisson2DHangingNode1Irregular_Slow)
+  {
+    int spaceDim = 2;
+    int H1Order = 2;
+    int irregularity = 1;
+    MeshPtr mesh = poissonIrregularMesh(spaceDim, irregularity, H1Order);
+    testCoarseBasisEqualsWeightedFineBasis(mesh, out, success);
+  }
+  
+  TEUCHOS_UNIT_TEST( GDAMinimumRule, BasisMapsAgreePoisson2DHangingNode2Irregular_Slow)
+  {
+    int spaceDim = 2;
+    int H1Order = 2;
+    int irregularity = 2;
+    MeshPtr mesh = poissonIrregularMesh(spaceDim, irregularity, H1Order);
+    testCoarseBasisEqualsWeightedFineBasis(mesh, out, success);
+  }
+  
+  TEUCHOS_UNIT_TEST( GDAMinimumRule, BasisMapsAgreePoisson3DUniform_Slow)
+  {
+    int spaceDim = 3;
+    int elementWidth = 2;
+    int H1Order = 2;
+    bool useConformingTraces = true;
+    MeshPtr mesh = poissonUniformMesh(spaceDim, elementWidth, H1Order, useConformingTraces);
+    testCoarseBasisEqualsWeightedFineBasis(mesh, out, success);
+  }
+  
+  TEUCHOS_UNIT_TEST( GDAMinimumRule, BasisMapsAgreePoisson3DHangingNode1Irregular_Slow)
+  {
+    int irregularity = 1;
+    int spaceDim = 3;
+    int H1Order = 2;
+    MeshPtr mesh = poissonIrregularMesh(spaceDim, irregularity, H1Order);
+    testCoarseBasisEqualsWeightedFineBasis(mesh, out, success);
+  }
+  
+  TEUCHOS_UNIT_TEST( GDAMinimumRule, BasisMapsAgreePoisson3DHangingNode2Irregular_Slow)
+  {
+    int irregularity = 2;
+    int spaceDim = 3;
+    int H1Order = 2;
+    MeshPtr mesh = poissonIrregularMesh(spaceDim, irregularity, H1Order);
+    testCoarseBasisEqualsWeightedFineBasis(mesh, out, success);
+  }
+  
+  TEUCHOS_UNIT_TEST( GDAMinimumRule, CheckConstraintsPoisson3DUniform )
+  {
+    MeshPtr mesh = poisson3DUniformMesh();
+    testSubcellConstraintIsAncestor(mesh, out, success);
+  }
+  
+  TEUCHOS_UNIT_TEST( GDAMinimumRule, CheckConstraintsPoisson3DHangingNode1Irregular )
+  {
+    int irregularity = 1;
+    int spaceDim = 3;
+    int H1Order = 2;
+    MeshPtr mesh = poissonIrregularMesh(spaceDim, irregularity, H1Order);
+    testSubcellConstraintIsAncestor(mesh, out, success);
+  }
+  
+  TEUCHOS_UNIT_TEST( GDAMinimumRule, CheckConstraintsPoisson3DHangingNode2Irregular )
+  {
+    int irregularity = 2;
+    int spaceDim = 3;
+    int H1Order = 2;
+    MeshPtr mesh = poissonIrregularMesh(spaceDim, irregularity, H1Order);
+    testSubcellConstraintIsAncestor(mesh, out, success);
+  }
+  
+  TEUCHOS_UNIT_TEST( GDAMinimumRule, SolvePoisson3DHangingNode_Slow )
+  {
+    // exact solution: for now, we just use a linear phi
+    FunctionPtr x = Function::xn(1);
+    FunctionPtr y = Function::yn(1);
+    FunctionPtr z = Function::zn(1);
+    //  FunctionPtr phi_exact = x + y;
+    FunctionPtr phi_exact = -x + y + z;
+    //  FunctionPtr phi_exact = Function::constant(3.14159);
+    
+    int H1Order = 2; // 1 higher than the order of phi_exact, to get an exactly recoverable solution with L^2 fields.
+    int spaceDim = 3;
+    bool useConformingTraces = true;
+    PoissonFormulation poissonForm(spaceDim, useConformingTraces);
+    // TODO: try this with 2-irregular.  Once upon a time, there was an exception thrown for that case.
+    for (int irregularity = 1; irregularity<=1; irregularity++)
     {
-      cout << "FAILURE: " << irregularity << "-irregular Poisson 3D mesh fails local-to-global consistency check.\n";
-      success = false;
-      //    return success;
-    }
-
-    VarPtr phi = poissonForm.phi();
-    VarPtr phi_hat = poissonForm.phi_hat();
-
-    map<int, FunctionPtr> phi_exact_map;
-    phi_exact_map[phi->ID()] = phi_exact;
-    soln->projectOntoMesh(phi_exact_map);
-
-    FunctionPtr phi_soln = Function::solution(phi, soln);
-    FunctionPtr phi_err = phi_soln - phi_exact;
-
-    FunctionPtr phi_hat_soln = Function::solution(phi_hat, soln);
-
-    double tol = 1e-12;
-    double phi_err_l2 = phi_err->l2norm(mesh);
-
-    soln->clear();
-    soln->solve();
-
-    //    cout << irregularity << "-irregular 3D poisson w/hanging node solved.  About to check solution continuities.\n";
-
-    Epetra_MultiVector *lhsVector = soln->getGlobalCoefficients();
-    Epetra_SerialComm Comm;
-    Epetra_Map partMap = soln->getPartitionMap();
-
-    // Import solution onto current processor
-    GlobalIndexTypeToCast numNodesGlobal = mesh->numGlobalDofs();
-    GlobalIndexTypeToCast numMyNodes = numNodesGlobal;
-    Epetra_Map     solnMap(numNodesGlobal, numMyNodes, 0, Comm);
-    Epetra_Import  solnImporter(solnMap, partMap);
-    Epetra_Vector  solnCoeff(solnMap);
-    solnCoeff.Import(*lhsVector, solnImporter, Insert);
-
-    if ( ! MeshTestUtility::neighborBasesAgreeOnSides(mesh, solnCoeff))
-    {
-      cout << "GDAMinimumRuleTests failure: for" << irregularity << "-irregular 3D Poisson mesh with hanging nodes (after solving), neighboring bases do not agree on sides." << endl;
-      success = false;
-    }
-
-    //    cout << "...solution continuities checked.\n";
-
-    phi_err_l2 = phi_err->l2norm(mesh);
-    if (phi_err_l2 > tol)
-    {
-      success = false;
-      cout << "GDAMinimumRuleTests failure: for " << irregularity << "-irregular 3D mesh and exactly recoverable solution, phi error is " << phi_err_l2 << endl;
-
-      string outputSuperDir = ".";
-      string outputDir = "poisson3DHangingNode";
-      HDF5Exporter exporter(mesh, outputDir, outputSuperDir);
-      cout << "Writing phi err to " << outputSuperDir << "/" << outputDir << endl;
-
-      exporter.exportFunction(phi_err, "phi_err");
+      SolutionPtr soln = poissonExactSolution3DHangingNodes(irregularity,phi_exact,H1Order);
+      
+      MeshPtr mesh = soln->mesh();
+      VarFactoryPtr vf = soln->mesh()->bilinearForm()->varFactory();
+      
+      if (! MeshTestUtility::checkLocalGlobalConsistency(mesh) )
+      {
+        cout << "FAILURE: " << irregularity << "-irregular Poisson 3D mesh fails local-to-global consistency check.\n";
+        success = false;
+        //    return success;
+      }
+      
+      VarPtr phi = poissonForm.phi();
+      VarPtr phi_hat = poissonForm.phi_hat();
+      
+      map<int, FunctionPtr> phi_exact_map;
+      phi_exact_map[phi->ID()] = phi_exact;
+      soln->projectOntoMesh(phi_exact_map);
+      
+      FunctionPtr phi_soln = Function::solution(phi, soln);
+      FunctionPtr phi_err = phi_soln - phi_exact;
+      
+      FunctionPtr phi_hat_soln = Function::solution(phi_hat, soln);
+      
+      double tol = 1e-12;
+      double phi_err_l2 = phi_err->l2norm(mesh);
+      
+      soln->clear();
+      soln->solve();
+      
+      //    cout << irregularity << "-irregular 3D poisson w/hanging node solved.  About to check solution continuities.\n";
+      
+      Epetra_MultiVector *lhsVector = soln->getGlobalCoefficients();
+      Epetra_SerialComm Comm;
+      Epetra_Map partMap = soln->getPartitionMap();
+      
+      // Import solution onto current processor
+      GlobalIndexTypeToCast numNodesGlobal = mesh->numGlobalDofs();
+      GlobalIndexTypeToCast numMyNodes = numNodesGlobal;
+      Epetra_Map     solnMap(numNodesGlobal, numMyNodes, 0, Comm);
+      Epetra_Import  solnImporter(solnMap, partMap);
+      Epetra_Vector  solnCoeff(solnMap);
+      solnCoeff.Import(*lhsVector, solnImporter, Insert);
+      
+      if ( ! MeshTestUtility::neighborBasesAgreeOnSides(mesh, solnCoeff))
+      {
+        cout << "GDAMinimumRuleTests failure: for" << irregularity << "-irregular 3D Poisson mesh with hanging nodes (after solving), neighboring bases do not agree on sides." << endl;
+        success = false;
+      }
+      
+      //    cout << "...solution continuities checked.\n";
+      
+      phi_err_l2 = phi_err->l2norm(mesh);
+      if (phi_err_l2 > tol)
+      {
+        success = false;
+        cout << "GDAMinimumRuleTests failure: for " << irregularity << "-irregular 3D mesh and exactly recoverable solution, phi error is " << phi_err_l2 << endl;
+        
+        string outputSuperDir = ".";
+        string outputDir = "poisson3DHangingNode";
+        HDF5Exporter exporter(mesh, outputDir, outputSuperDir);
+        cout << "Writing phi err to " << outputSuperDir << "/" << outputDir << endl;
+        
+        exporter.exportFunction(phi_err, "phi_err");
+      }
     }
   }
-}
 } // namespace

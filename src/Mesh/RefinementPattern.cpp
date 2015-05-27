@@ -414,8 +414,107 @@ unsigned RefinementPattern::descendantSubcellOrdinal(RefinementBranch &refBranch
   return descendantSubcord;
 }
 
-map< unsigned, unsigned > RefinementPattern::parentSideLookupForChild(unsigned childIndex)
+void RefinementPattern::determineChildSubcellInfoInSubcellRefinement(unsigned &childSubcellDimension, unsigned &childSubcellOrdinal,
+                                                                     unsigned &childSubcellPermutation, unsigned &subcellRefChild,
+                                                                     unsigned subcdim, unsigned subcord, unsigned childOrdinal,
+                                                                     bool preferSubcellsBelongingToVolumeChild)
 {
+  // Here, we determine which child we select in the subcellRefPattern for the indicated child subcell
+  
+  // When parent subcell is of the same dimension as the child subcell, we can use RefinementPattern::mapVolumeChildOrdinalToSubcellChildOrdinal.
+  
+  // But otherwise it can happen that the child of the volume subcell does not belong to the volume child; consider e.g.
+  // triangle refinements where the interior triangle is under consideration; each vertex has as its parent an edge
+  // of the parent triangle which intersects the child in a vertex.
+  
+  // We want to determine the child ordinal (subcellRefChild) for the subcell refinement and
+  // childSubcellOrdinal, which is the subcell ordinal of the subcell we're interested in
+  // in the *subcell* refinement.
+  
+  // It can happen (see note about triangles above) that the children in the subcell refinement branch are not in
+  // the child selected in the volume refinement branch.  In this case, we require that the subcell have the same
+  // orientation in the volume child that we select instead.  It seems likely that this is always possible, but if
+  // it turns out not to be, we will at least fail loudly.
+  
+  // If, however, the volume child *does* contain a child of the parent subcell, then we want to select that one.
+  // We do a first pass in which we check for that possibility.
+  
+  // We may, however, want to turn the last preference off for now, since even with it on we fail one test in DPGTests GDAMinimumRuleTests,
+  // and with it on we fail more tests, even the ones that don't test for satisfaction of the above preference.  (And AFAIK, there is no
+  // reason to expect different geometric computations, e.g., regardless of the preference.)
+  
+  childSubcellDimension = subcdim;
+  
+  pair<unsigned,unsigned> parentSubcellEntry = this->mapSubcellFromChildToParent(childOrdinal, subcdim, subcord);
+  unsigned parentSubcellDimension = parentSubcellEntry.first;
+  unsigned parentSubcellOrdinal = parentSubcellEntry.second;
+  
+  pair<unsigned,unsigned> parentSubcellChild = this->mapSubcellFromParentToChild(childOrdinal,parentSubcellDimension,parentSubcellOrdinal);
+  if ((parentSubcellChild.first == parentSubcellDimension) && preferSubcellsBelongingToVolumeChild)
+  {
+    subcellRefChild = this->mapVolumeChildOrdinalToSubcellChildOrdinal(parentSubcellDimension, parentSubcellOrdinal, childOrdinal);
+    
+    // then volume child contains the parent subcell's child, and we can do this just as above:
+    pair<unsigned,unsigned> childSubcell = this->mapSubcellFromParentToChild(childOrdinal, parentSubcellEntry.first, parentSubcellEntry.second);
+    childSubcellOrdinal = CamelliaCellTools::subcellReverseOrdinalMap(this->childTopology(childOrdinal),
+                                                                      childSubcell.first, childSubcell.second,
+                                                                      subcdim, subcord);
+    childSubcellPermutation = CamelliaCellTools::permutationFromSubsubcellToParent(this->childTopology(childOrdinal),
+                                                                                   childSubcell.first, childSubcell.second,
+                                                                                   subcdim, childSubcellOrdinal);
+  }
+  else
+  {
+    // this is the interior-triangle type case.
+    MeshTopologyPtr refinementMeshTopology = _refinementTopology;
+    CellPtr parentCell = refinementMeshTopology->getCell(0);
+    CellPtr childCell = parentCell->children()[childOrdinal];
+    IndexType childSubcellEntityIndex = childCell->entityIndex(subcdim, subcord);
+    unsigned childSubcellOrientation = childCell->subcellPermutation(subcdim, subcord);
+    IndexType parentSubcellEntityIndex = parentCell->entityIndex(parentSubcellDimension, parentSubcellOrdinal);
+    set<pair<IndexType,unsigned>> cellPairsForChildEntity = refinementMeshTopology->getCellsContainingEntity(subcdim, childSubcellEntityIndex);
+    set<IndexType> cellsForChildEntity;
+    for (pair<IndexType,unsigned> cellPair : cellPairsForChildEntity)
+    {
+      cellsForChildEntity.insert(cellPair.first);
+    }
+    vector<IndexType> subcellChildEntities = refinementMeshTopology->getChildEntities(parentSubcellDimension, parentSubcellEntityIndex);
+    for (int subcellChildOrdinal=0; subcellChildOrdinal<subcellChildEntities.size(); subcellChildOrdinal++)
+    {
+      IndexType subcellChildEntityIndex = subcellChildEntities[subcellChildOrdinal];
+      set<pair<IndexType,unsigned>> cellPairsForParentSubcellChild = refinementMeshTopology->getCellsContainingEntity(parentSubcellDimension, subcellChildEntityIndex);
+      for (pair<IndexType,unsigned> cellPair : cellPairsForParentSubcellChild)
+      {
+        // we require two things:
+        //   First, that the child cell contains the child subcell entity
+        //   Second, that the child cell's orientation of the child subcell entity matches that of the original child cell above
+        IndexType cellIDForParentSubcellChild = cellPair.first;
+        if (cellsForChildEntity.find(cellIDForParentSubcellChild) != cellsForChildEntity.end())
+        {
+          CellPtr otherChildCell = refinementMeshTopology->getCell(cellIDForParentSubcellChild);
+          unsigned childSubcellOrdinalInOtherChild = otherChildCell->findSubcellOrdinal(subcdim, childSubcellEntityIndex);
+          unsigned childSubcellOrientationInOtherChild = otherChildCell->subcellPermutation(subcdim, childSubcellOrdinalInOtherChild);
+          if (childSubcellOrientationInOtherChild == childSubcellOrientation)
+          {
+            unsigned otherChildOrdinal = parentCell->childOrdinal(cellIDForParentSubcellChild);
+            subcellRefChild = this->mapVolumeChildOrdinalToSubcellChildOrdinal(parentSubcellDimension, parentSubcellOrdinal, otherChildOrdinal);
+            // need to set childSubcellOrdinal
+            unsigned childSubcellOrdinalInChildCell = otherChildCell->findSubcellOrdinal(subcdim, childSubcellEntityIndex);
+            unsigned subcellChildOrdinalInChildCell = otherChildCell->findSubcellOrdinal(parentSubcellDimension, subcellChildEntityIndex);
+            // childSubcellOrdinal is the ordinal of the child subcell in the refined child subcell:
+            CellTopoPtr otherChildTopo = otherChildCell->topology();
+            childSubcellOrdinal = CamelliaCellTools::subcellReverseOrdinalMap(otherChildTopo, parentSubcellDimension, subcellChildOrdinalInChildCell,
+                                                                             subcdim, childSubcellOrdinalInChildCell);
+            childSubcellPermutation = CamelliaCellTools::permutationFromSubsubcellToParent(otherChildTopo, parentSubcellDimension, subcellChildOrdinalInChildCell,
+                                                                                          subcdim, childSubcellOrdinal);
+          }
+        }
+      }
+    }
+  }
+}
+
+map< unsigned, unsigned > RefinementPattern::parentSideLookupForChild(unsigned childIndex) {
   // returns a map for the child: childSideIndex --> parentSideIndex
   // (only populated for childSideIndices that are shared with the parent)
   map<unsigned, unsigned> lookupTable;
@@ -552,10 +651,24 @@ GeneralizedRefinementBranch RefinementPattern::generalizedRefinementBranchForLea
     unsigned subcdim, unsigned subcord)
 {
   TEUCHOS_TEST_FOR_EXCEPTION(volumeRefinementBranch.size()==0, std::invalid_argument, "volumeRefinementBranch may not be empty!");
-
+  // It can happen (see note about triangles in determineChildSubcellInfoInSubcellRefinement comments) that
+  // the children in the subcell refinement branch are not in the child selected in the volume refinement branch.
+  // In this case, we require that the subcell have the same orientation in the volume child that we select instead.
+  // It seems likely that this is always possible, but if it turns out not to be, we will at least fail loudly.
+  
+  // If, however, the volume child *does* contain a child of the parent subcell, then we want to select that one.
+  // We do a first pass in which we check for that possibility.
+  
+  // We may sometimes  want to turn the last preference off sometimes for testing purposes.  (AFAIK, there is no
+  // reason to expect different geometric computations, e.g., regardless of the preference.)
+  
+  bool preferSubcellsBelongingToVolumeChild = true;
+  
   GeneralizedRefinementBranch genRefBranch;
 
   RefinementBranchTier tier;
+  tier.leafSubcellOrdinal = -1;
+  tier.leafSubcellDimension = -1;
 
   int refCount = volumeRefinementBranch.size();
   for (int refNumber = refCount - 1; refNumber >= 0; refNumber--)
@@ -577,14 +690,28 @@ GeneralizedRefinementBranch RefinementPattern::generalizedRefinementBranchForLea
       {
         // find the subcell
         pair<unsigned,unsigned> childSubcell = refPattern->mapSubcellFromParentToChild(childOrdinal, parentSubcellDimension, parentSubcellOrdinal);
-        tier.rootDimension = subcdim;
-        tier.previousTierSubcellOrdinal = CamelliaCellTools::subcellReverseOrdinalMap(refPattern->childTopology(childOrdinal),
-                                          childSubcell.first, childSubcell.second,
-                                          subcdim, subcord);
+        
+        unsigned dummyPermutation;
+        unsigned dummySubcellRefChild;
+        refPattern->determineChildSubcellInfoInSubcellRefinement(tier.rootDimension, tier.previousTierSubcellOrdinal,
+                                                                 dummyPermutation, dummySubcellRefChild,
+                                                                 subcdim, subcord, childOrdinal,
+                                                                 preferSubcellsBelongingToVolumeChild);        
+//        tier.rootDimension = subcdim;
+//        tier.previousTierSubcellOrdinal = CamelliaCellTools::subcellReverseOrdinalMap(refPattern->childTopology(childOrdinal),
+//                                                                                      childSubcell.first, childSubcell.second,
+//                                                                                      subcdim, subcord);
+        // from here on out, replace subcdim and subcord with those from childSubcell:
+        subcdim = childSubcell.first;
+        subcord = childSubcell.second;
       }
       genRefBranch.insert(genRefBranch.begin(), tier);
       // start new:
       tier.refBranch.clear();
+      tier.leafSubcellDimension = -1;
+      tier.leafSubcellOrdinal = -1;
+      tier.previousTierTopo = Teuchos::null;
+      tier.previousTierSubcellOrdinal = -1;
     }
 
     RefinementPattern* subcellRefPattern;
@@ -624,89 +751,11 @@ GeneralizedRefinementBranch RefinementPattern::generalizedRefinementBranchForLea
     {
       // We had better be working on a new tier, in this case:
       TEUCHOS_TEST_FOR_EXCEPTION(tier.refBranch.size() != 0, std::invalid_argument, "Should only have parentSubcellDimension > subcdim when working on a new tier");
-
-      // We want to determine the child ordinal for the subcell refinement branch and
-      // tier.leafSubcellOrdinal, which is the subcell ordinal of the subcell we're interested in
-      // in the leaf of the *subcell* refinement branch.
-
-      // It can happen (see note about triangles above) that the children in the subcell refinement branch are not in
-      // the child selected in the volume refinement branch.  In this case, we require that the subcell have the same
-      // orientation in the volume child that we select instead.  It seems likely that this is always possible, but if
-      // it turns out not to be, we will at least fail loudly.
-
-      // If, however, the volume child *does* contain a child of the parent subcell, then we want to select that one.
-      // We do a first pass in which we check for that possibility.
-
-      // We may, however, want to turn the last preference off for now, since even with it on we fail one test in DPGTests GDAMinimumRuleTests,
-      // and with it on we fail more tests, even the ones that don't test for satisfaction of the above preference.  (And AFAIK, there is no
-      // reason to expect different geometric computations, e.g., regardless of the preference.)
-      bool preferSubcellsBelongingToVolumeChild = true; // eventually for the sake of RefinementPatternTests, want to set to true
-
-      tier.leafSubcellDimension = subcdim;
       tier.leafSubcellOrdinal = -1; // allows us to detect whether this is unset, below
-
-      pair<unsigned,unsigned> parentSubcellChild = refPattern->mapSubcellFromParentToChild(childOrdinal,parentSubcellDimension,parentSubcellOrdinal);
-      if ((parentSubcellChild.first == parentSubcellDimension) && preferSubcellsBelongingToVolumeChild)
-      {
-        subcellRefChild = refPattern->mapVolumeChildOrdinalToSubcellChildOrdinal(parentSubcellDimension, parentSubcellOrdinal, childOrdinal);
-
-        // then volume child contains the parent subcell's child, and we can do this just as above:
-        pair<unsigned,unsigned> childSubcell = refPattern->mapSubcellFromParentToChild(childOrdinal, parentSubcellEntry.first, parentSubcellEntry.second);
-        tier.leafSubcellOrdinal = CamelliaCellTools::subcellReverseOrdinalMap(refPattern->childTopology(childOrdinal), childSubcell.first, childSubcell.second,
-                                  subcdim, subcord);
-        tier.leafSubcellPermutation = CamelliaCellTools::permutationFromSubsubcellToParent(refPattern->childTopology(childOrdinal),
-                                      childSubcell.first, childSubcell.second,
-                                      subcdim, tier.leafSubcellOrdinal);
-      }
-      else
-      {
-        // this is the interior-triangle type case.
-        MeshTopologyPtr refinementMeshTopology = refPattern->refinementMeshTopology();
-        CellPtr parentCell = refinementMeshTopology->getCell(0);
-        CellPtr childCell = parentCell->children()[childOrdinal];
-        IndexType leafSubcellEntityIndex = childCell->entityIndex(subcdim, subcord);
-        unsigned leafSubcellOrientation = childCell->subcellPermutation(subcdim, subcord);
-        IndexType parentSubcellEntityIndex = parentCell->entityIndex(parentSubcellDimension, parentSubcellOrdinal);
-        set<pair<IndexType,unsigned>> cellPairsForLeafEntity = refinementMeshTopology->getCellsContainingEntity(subcdim, leafSubcellEntityIndex);
-        set<IndexType> cellsForLeafEntity;
-        for (pair<IndexType,unsigned> cellPair : cellPairsForLeafEntity)
-        {
-          cellsForLeafEntity.insert(cellPair.first);
-        }
-        vector<IndexType> subcellChildEntities = refinementMeshTopology->getChildEntities(parentSubcellDimension, parentSubcellEntityIndex);
-        for (int subcellChildOrdinal=0; subcellChildOrdinal<subcellChildEntities.size(); subcellChildOrdinal++)
-        {
-          IndexType subcellChildEntityIndex = subcellChildEntities[subcellChildOrdinal];
-          set<pair<IndexType,unsigned>> cellPairsForParentSubcellChild = refinementMeshTopology->getCellsContainingEntity(parentSubcellDimension, subcellChildEntityIndex);
-          for (pair<IndexType,unsigned> cellPair : cellPairsForParentSubcellChild)
-          {
-            // we require two things:
-            //   First, that the child cell contains the leaf entity
-            //   Second, that the child cell's orientation of the leaf entity matches that of the original child cell above
-            IndexType cellIDForParentSubcellChild = cellPair.first;
-            if (cellsForLeafEntity.find(cellIDForParentSubcellChild) != cellsForLeafEntity.end())
-            {
-              CellPtr otherChildCell = refinementMeshTopology->getCell(cellIDForParentSubcellChild);
-              unsigned leafSubcellOrdinalInOtherChild = otherChildCell->findSubcellOrdinal(subcdim, leafSubcellEntityIndex);
-              unsigned leafSubcellOrientationInOtherChild = otherChildCell->subcellPermutation(subcdim, leafSubcellOrdinalInOtherChild);
-              if (leafSubcellOrientationInOtherChild == leafSubcellOrientation)
-              {
-                unsigned otherChildOrdinal = parentCell->childOrdinal(cellIDForParentSubcellChild);
-                subcellRefChild = refPattern->mapVolumeChildOrdinalToSubcellChildOrdinal(parentSubcellDimension, parentSubcellOrdinal, otherChildOrdinal);
-                // need to set tier.leafSubcellOrdinal
-                unsigned leafSubcellOrdinalInChildCell = otherChildCell->findSubcellOrdinal(subcdim, leafSubcellEntityIndex);
-                unsigned subcellChildOrdinalInChildCell = otherChildCell->findSubcellOrdinal(parentSubcellDimension, subcellChildEntityIndex);
-                // tier.leafSubcellOrdinal is the ordinal of the leaf subcell in the refined child subcell:
-                CellTopoPtr otherChildTopo = otherChildCell->topology();
-                tier.leafSubcellOrdinal = CamelliaCellTools::subcellReverseOrdinalMap(otherChildTopo, parentSubcellDimension, subcellChildOrdinalInChildCell,
-                                          subcdim, leafSubcellOrdinalInChildCell);
-                tier.leafSubcellPermutation = CamelliaCellTools::permutationFromSubsubcellToParent(otherChildTopo, parentSubcellDimension, subcellChildOrdinalInChildCell,
-                                              subcdim, tier.leafSubcellOrdinal);
-              }
-            }
-          }
-        }
-      }
+      refPattern->determineChildSubcellInfoInSubcellRefinement(tier.leafSubcellDimension, tier.leafSubcellOrdinal,
+                                                               tier.leafSubcellPermutation, subcellRefChild,
+                                                               subcdim, subcord, childOrdinal,
+                                                               preferSubcellsBelongingToVolumeChild);
     }
     TEUCHOS_TEST_FOR_EXCEPTION(tier.leafSubcellOrdinal == -1, std::invalid_argument, "tier.leafSubcellOrdinal could not be determined");
     tier.refBranch.insert(tier.refBranch.begin(), make_pair(subcellRefPattern, subcellRefChild));
